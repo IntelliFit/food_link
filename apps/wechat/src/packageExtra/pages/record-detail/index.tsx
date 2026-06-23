@@ -5,6 +5,7 @@ import {
   getSharedFoodRecord,
   getAccessToken,
   getUnlimitedQRCode,
+  getWeappEnvVersion,
   getFriendInviteProfile,
   acceptFriendInvite,
   getPosterCalorieCompare,
@@ -488,7 +489,7 @@ function RecordDetailPage() {
         const loadQRImage = async () => {
           const scene = posterInviteCode ? `fi=${posterInviteCode}` : 'share=1'
           try {
-            const { base64 } = await getUnlimitedQRCode(scene, 'pages/index/index', 'release')
+            const { base64 } = await getUnlimitedQRCode(scene, 'pages/index/index', getWeappEnvVersion())
             const img = await loadImage(base64)
             if (img) return img
           } catch (e) {

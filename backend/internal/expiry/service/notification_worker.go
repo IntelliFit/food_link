@@ -196,8 +196,8 @@ func (w *NotificationWorker) getAccessToken(ctx context.Context) (string, error)
 	if w.token != "" && time.Now().Before(w.tokenExpiry) {
 		return w.token, nil
 	}
-	appID := strings.TrimSpace(w.cfg.External.AppID)
-	secret := strings.TrimSpace(w.cfg.External.Secret)
+	appID := strings.TrimSpace(w.cfg.WechatMiniProgramAppID())
+	secret := strings.TrimSpace(w.cfg.WechatMiniProgramAppSecret())
 	if appID == "" || secret == "" {
 		return "", fmt.Errorf("缺少 APPID 或 SECRET 环境变量")
 	}

@@ -12,7 +12,10 @@ import (
 	"food_link/backend/pkg/storage"
 )
 
-const friendCacheTTL = 5 * time.Minute
+const (
+	friendCacheTTL                  = 5 * time.Minute
+	inviteReferralAcceptGracePeriod = 2 * time.Hour
+)
 
 type friendCacheEntry struct {
 	ids []string
@@ -67,6 +70,18 @@ func (s *FriendService) IsFriend(ctx context.Context, userID, friendID string) (
 	return s.friendRepo.IsFriend(ctx, userID, friendID)
 }
 
+func (s *FriendService) IsBlocked(ctx context.Context, blockerUserID, blockedUserID string) (bool, error) {
+	return s.friendRepo.IsBlocked(ctx, blockerUserID, blockedUserID)
+}
+
+func (s *FriendService) IsBlockedEither(ctx context.Context, userID, counterpartUserID string) (bool, error) {
+	return s.friendRepo.IsBlockedEither(ctx, userID, counterpartUserID)
+}
+
+func (s *FriendService) GetBlockedPairUserIDs(ctx context.Context, userID string) ([]string, error) {
+	return s.friendRepo.GetBlockedPairUserIDs(ctx, userID)
+}
+
 func (s *FriendService) SearchUsers(ctx context.Context, currentUserID, nickname, telephone string) ([]map[string]any, error) {
 	users, err := s.friendRepo.SearchUsers(ctx, currentUserID, nickname, telephone, 20)
 	if err != nil {
@@ -107,6 +122,13 @@ func (s *FriendService) SearchUsers(ctx context.Context, currentUserID, nickname
 func (s *FriendService) SendFriendRequest(ctx context.Context, fromUserID, toUserID string) (map[string]any, error) {
 	if fromUserID == toUserID {
 		return nil, &commonerrors.AppError{Code: 10002, Message: "不能添加自己为好友", HTTPStatus: 400}
+	}
+	blocked, err := s.IsBlockedEither(ctx, fromUserID, toUserID)
+	if err != nil {
+		return nil, err
+	}
+	if blocked {
+		return nil, blockedOperationError()
 	}
 	isFriend, err := s.IsFriend(ctx, fromUserID, toUserID)
 	if err != nil {
@@ -174,6 +196,22 @@ func (s *FriendService) RespondFriendRequest(ctx context.Context, requestID, toU
 	if action != "accept" && action != "reject" {
 		return &commonerrors.AppError{Code: 10002, Message: "action 必须为 accept 或 reject", HTTPStatus: 400}
 	}
+	if action == "accept" {
+		req, err := s.friendRepo.GetFriendRequestForReceiver(ctx, requestID, toUserID)
+		if err != nil {
+			return err
+		}
+		if req == nil {
+			return commonerrors.ErrNotFound
+		}
+		blocked, err := s.IsBlockedEither(ctx, req.FromUserID, req.ToUserID)
+		if err != nil {
+			return err
+		}
+		if blocked {
+			return blockedOperationError()
+		}
+	}
 	if err := s.friendRepo.RespondFriendRequest(ctx, requestID, toUserID, action == "accept"); err != nil {
 		if err.Error() == "请求不存在或无权操作" {
 			return commonerrors.ErrNotFound
@@ -237,6 +275,80 @@ func (s *FriendService) DeleteFriend(ctx context.Context, userID, friendID strin
 	s.invalidateFriendCache(userID)
 	s.invalidateFriendCache(friendID)
 	return nil
+}
+
+func (s *FriendService) BlockUser(ctx context.Context, blockerUserID, blockedUserID string) (map[string]any, error) {
+	blockerUserID = strings.TrimSpace(blockerUserID)
+	blockedUserID = strings.TrimSpace(blockedUserID)
+	if blockerUserID == "" || blockedUserID == "" {
+		return nil, &commonerrors.AppError{Code: 10002, Message: "用户 ID 不能为空", HTTPStatus: 400}
+	}
+	if blockerUserID == blockedUserID {
+		return nil, &commonerrors.AppError{Code: 10002, Message: "不能拉黑自己", HTTPStatus: 400}
+	}
+	block, err := s.friendRepo.BlockUser(ctx, blockerUserID, blockedUserID)
+	if err != nil {
+		return nil, err
+	}
+	s.invalidateFriendCache(blockerUserID)
+	s.invalidateFriendCache(blockedUserID)
+	return map[string]any{
+		"id":              block.ID,
+		"blocker_user_id": block.BlockerUserID,
+		"blocked_user_id": block.BlockedUserID,
+		"created_at":      block.CreatedAt,
+	}, nil
+}
+
+func (s *FriendService) UnblockUser(ctx context.Context, blockerUserID, blockedUserID string) error {
+	blockerUserID = strings.TrimSpace(blockerUserID)
+	blockedUserID = strings.TrimSpace(blockedUserID)
+	if blockerUserID == "" || blockedUserID == "" {
+		return &commonerrors.AppError{Code: 10002, Message: "用户 ID 不能为空", HTTPStatus: 400}
+	}
+	if blockerUserID == blockedUserID {
+		return &commonerrors.AppError{Code: 10002, Message: "不能操作自己", HTTPStatus: 400}
+	}
+	return s.friendRepo.UnblockUser(ctx, blockerUserID, blockedUserID)
+}
+
+func (s *FriendService) GetBlockedUsers(ctx context.Context, blockerUserID string) ([]map[string]any, error) {
+	rows, err := s.friendRepo.GetBlockedUsersWithProfile(ctx, blockerUserID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]map[string]any, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, map[string]any{
+			"id":              row.ID,
+			"blocked_user_id": row.BlockedUserID,
+			"nickname":        row.BlockedNickname,
+			"avatar":          s.resolveAvatarURL(row.BlockedAvatar),
+			"created_at":      row.CreatedAt,
+		})
+	}
+	return out, nil
+}
+
+func (s *FriendService) GetBlockStatus(ctx context.Context, userID, counterpartUserID string) (map[string]any, error) {
+	userID = strings.TrimSpace(userID)
+	counterpartUserID = strings.TrimSpace(counterpartUserID)
+	if userID == "" || counterpartUserID == "" {
+		return nil, &commonerrors.AppError{Code: 10002, Message: "用户 ID 不能为空", HTTPStatus: 400}
+	}
+	blockedByMe, err := s.IsBlocked(ctx, userID, counterpartUserID)
+	if err != nil {
+		return nil, err
+	}
+	hasBlockedMe, err := s.IsBlocked(ctx, counterpartUserID, userID)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{
+		"is_blocked_by_me": blockedByMe,
+		"has_blocked_me":   hasBlockedMe,
+		"blocked_either":   blockedByMe || hasBlockedMe,
+	}, nil
 }
 
 func (s *FriendService) GetFriendRequestsOverview(ctx context.Context, userID string) (map[string]any, error) {
@@ -333,6 +445,13 @@ func (s *FriendService) ResolveInviteWithRelation(ctx context.Context, userID, c
 	isSelf := inviterID == userID
 	isFriend := false
 	if !isSelf && inviterID != "" {
+		blocked, err := s.IsBlockedEither(ctx, userID, inviterID)
+		if err != nil {
+			return nil, err
+		}
+		if blocked {
+			return nil, commonerrors.ErrNotFound
+		}
 		isFriend, _ = s.IsFriend(ctx, userID, inviterID)
 	}
 	profile["is_self"] = isSelf
@@ -353,6 +472,16 @@ func (s *FriendService) AcceptInvite(ctx context.Context, userID, code string) (
 	if inviterID == userID {
 		return nil, &commonerrors.AppError{Code: 10002, Message: "不能添加自己为好友", HTTPStatus: 400}
 	}
+	blocked, err := s.IsBlockedEither(ctx, userID, inviterID)
+	if err != nil {
+		return nil, err
+	}
+	if blocked {
+		return nil, blockedOperationError()
+	}
+	if err := s.ensureInviteReferralFromAcceptedInvite(ctx, userID, inviterID, code); err != nil {
+		return nil, err
+	}
 	isFriend, _ := s.IsFriend(ctx, userID, inviterID)
 	if isFriend {
 		profile["status"] = "already_friend"
@@ -367,6 +496,37 @@ func (s *FriendService) AcceptInvite(ctx context.Context, userID, code string) (
 	profile["status"] = "request_sent"
 	profile["already_friend"] = false
 	return profile, nil
+}
+
+func (s *FriendService) ensureInviteReferralFromAcceptedInvite(ctx context.Context, inviteeUserID, inviterUserID, inviteCode string) error {
+	if strings.TrimSpace(inviteeUserID) == "" || strings.TrimSpace(inviterUserID) == "" || inviteeUserID == inviterUserID {
+		return nil
+	}
+	invitee, err := s.userRepo.FindByID(ctx, inviteeUserID)
+	if err != nil || invitee == nil {
+		return err
+	}
+	if invitee.ReferredByUserID != nil && strings.TrimSpace(*invitee.ReferredByUserID) != "" {
+		return nil
+	}
+	if invitee.CreatedAt == nil || time.Since(*invitee.CreatedAt) > inviteReferralAcceptGracePeriod {
+		return nil
+	}
+	if _, err := s.userRepo.UpdateFields(ctx, inviteeUserID, map[string]any{"referred_by_user_id": inviterUserID}); err != nil {
+		return err
+	}
+	if err := s.userRepo.CreateInviteReferralBinding(ctx, inviterUserID, inviteeUserID, inviteCode); err != nil && !isDuplicateInviteReferralError(err) {
+		return err
+	}
+	return nil
+}
+
+func isDuplicateInviteReferralError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "duplicate") || strings.Contains(msg, "unique") || strings.Contains(msg, "constraint")
 }
 
 func (s *FriendService) resolveAvatarURL(value string) string {
@@ -390,4 +550,8 @@ func buildInviteCode(userID string) string {
 		return raw
 	}
 	return raw[:8]
+}
+
+func blockedOperationError() error {
+	return &commonerrors.AppError{Code: 20003, Message: "无法操作", HTTPStatus: 403}
 }

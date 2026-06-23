@@ -302,11 +302,6 @@ export interface AnalyzeResponse {
     weight_applied_count?: number
     fallback_count?: number
   }
-  score_enabled?: boolean
-  micronutrient_score?: number
-  macro_balance_score?: number
-  calorie_score?: number
-  final_score?: number
 }
 
 const ANALYZE_LOCATION_CACHE_KEY = 'analyze_location_context_v1'
@@ -609,6 +604,21 @@ export interface FoodRecordItemRow {
   packageWeightReason?: string
   packaged_candidates?: Array<Record<string, unknown>>
   packagedCandidates?: Array<Record<string, unknown>>
+}
+
+/** 长文本运动解析后的单个运动项目 */
+export interface ExerciseActivityItem {
+  name?: string | null
+  duration_min?: number | null
+  sets?: number | null
+  reps?: number | null
+  intensity?: string | null
+  met?: number | null
+  calories_kcal?: number | null
+  source?: string | null
+  match_status?: string | null
+  library_id?: string | null
+  reasoning?: string | null
 }
 
 /** 单条饮食记录（列表接口返回） */
@@ -1426,6 +1436,19 @@ export interface LoginRequestParams {
   testOpenid?: string
 }
 
+export interface PasswordRegisterRequest {
+  username?: string
+  phone: string
+  password: string
+  nickname: string
+  /** 注册时填写邀请人码 */
+  inviteCode?: string
+}
+
+export interface PublicConfigResponse {
+  allow_debug_register: boolean
+}
+
 // 登录响应接口
 export interface LoginResponse {
   access_token: string
@@ -1494,6 +1517,7 @@ export interface MembershipPlan {
   savings?: number | null
   /** 排序权重 */
   sort_order?: number
+  is_test_plan?: boolean
 }
 
 export interface MembershipStatus {
@@ -1599,6 +1623,86 @@ export interface RewardCenterResponse {
     total_count: number
   }
   tasks: RewardCenterTask[]
+  invite_reward?: InviteRewardCenterSummary | null
+}
+
+export interface InviteRewardStatusItem {
+  referral_id: string
+  status: string
+  records_needed: number
+  reward_credits: number
+}
+
+export interface InviteRewardStatusAsInvitee extends InviteRewardStatusItem {
+  inviter_nickname: string
+}
+
+export interface InviteRewardStatusAsInviter extends InviteRewardStatusItem {
+  invitee_nickname: string
+}
+
+export type InviteRewardRole = 'invitee' | 'inviter'
+
+export type InviteRewardStatus =
+  | 'pending_qualified'
+  | 'reward_completed'
+  | 'reward_blocked'
+  | 'reward_active'
+  | 'cancelled'
+  | string
+
+export interface InviteRewardRecord {
+  referral_id: string
+  role: InviteRewardRole
+  status: InviteRewardStatus
+  status_label?: string | null
+  invite_code?: string | null
+  other_user_id?: string | null
+  other_nickname?: string | null
+  records_needed?: number | null
+  reward_credits?: number | null
+  requirement_text?: string | null
+  next_action_text?: string | null
+  first_effective_action_at?: string | null
+  first_effective_action_type?: string | null
+  reward_start_date?: string | null
+  reward_end_date?: string | null
+  blocked_reason?: string | null
+  blocked_reason_label?: string | null
+  created_at?: string | null
+  updated_at?: string | null
+}
+
+export interface InviteRewardInviterSummary {
+  invited_count: number
+  completed_count: number
+  pending_count: number
+  estimated_credits: number
+  earned_credits: number
+  reward_credits: number
+  records?: InviteRewardRecord[]
+}
+
+export interface InviteRewardInviteeSummary {
+  completed_days: number
+  required_days: number
+  remaining_days: number
+  reward_credits: number
+  deadline_text?: string | null
+  next_action_text?: string | null
+  record?: InviteRewardRecord | null
+}
+
+export interface InviteRewardCenterSummary {
+  as_inviter_summary?: InviteRewardInviterSummary | null
+  as_invitee_summary?: InviteRewardInviteeSummary | null
+  records?: InviteRewardRecord[]
+}
+
+export interface InviteRewardStatusResponse {
+  as_invitee: InviteRewardStatusAsInvitee | null
+  as_inviter: InviteRewardStatusAsInviter[]
+  records?: InviteRewardRecord[]
 }
 
 export interface MembershipPlansResponse {
@@ -3317,6 +3421,33 @@ export async function getSharedFoodRecord(recordId: string): Promise<{ record: F
 }
 
 /**
+ * 获取当前小程序运行环境版本（develop / trial / release）
+ */
+export function getWeappEnvVersion(): 'release' | 'trial' | 'develop' {
+  try {
+    const info = Taro.getAccountInfoSync()
+    const env = info?.miniProgram?.envVersion
+    if (env === 'develop' || env === 'trial' || env === 'release') {
+      return env
+    }
+  } catch {
+    // ignore
+  }
+  // 某些模拟器/低版本基础库可能 Taro 封装取不到，直接调原生 wx 兜底
+  try {
+    const globalWx = (globalThis as any).wx
+    const wxInfo = globalWx?.getAccountInfoSync?.()
+    const env = wxInfo?.miniProgram?.envVersion
+    if (env === 'develop' || env === 'trial' || env === 'release') {
+      return env
+    }
+  } catch {
+    // ignore
+  }
+  return 'release'
+}
+
+/**
  * 获取小程序无限拉新二维码（Base64）
  */
 export async function getUnlimitedQRCode(
@@ -4038,6 +4169,13 @@ export async function login(code: string, phoneCode?: string, inviteCode?: strin
     if (testOpenid?.trim()) {
       requestData.testOpenid = testOpenid.trim()
     }
+    console.log('[invite-debug][api] login 请求体邀请码状态', {
+      hasInviteCode: Boolean(requestData.inviteCode),
+      inviteCode: requestData.inviteCode || '',
+      hasPhoneCode: Boolean(requestData.phoneCode),
+      hasTestOpenid: Boolean(requestData.testOpenid),
+      requestKeys: Object.keys(requestData),
+    })
 
     const response = await Taro.request({
       url: `${API_BASE_URL}/api/login`,
@@ -4047,6 +4185,11 @@ export async function login(code: string, phoneCode?: string, inviteCode?: strin
       }),
       data: requestData,
       timeout: 10000 // 10秒超时
+    })
+    console.log('[invite-debug][api] login 响应状态', {
+      statusCode: response.statusCode,
+      responseKeys: Object.keys((response.data || {}) as Record<string, unknown>),
+      requestHadInviteCode: Boolean(requestData.inviteCode),
     })
 
     if (response.statusCode !== 200) {
@@ -4059,6 +4202,12 @@ export async function login(code: string, phoneCode?: string, inviteCode?: strin
     }
 
     const loginData = unwrapResponse<LoginResponse>(response)
+    console.log('[invite-debug][api] login 响应用户摘要', {
+      userId: loginData.user_id,
+      hasAccessToken: Boolean(loginData.access_token),
+      hasPhoneNumber: Boolean(loginData.purePhoneNumber || loginData.phoneNumber),
+      requestHadInviteCode: Boolean(requestData.inviteCode),
+    })
 
     // 保存 token 到本地存储
     saveTokens(loginData.access_token, loginData.refresh_token, loginData.user_id)
@@ -4131,6 +4280,108 @@ export async function debugImpersonateUser(userId: string, password: string): Pr
 }
 
 /**
+ * 获取公开配置（无需登录）
+ */
+async function requestPublicConfig(path: string): Promise<PublicConfigResponse> {
+  const response = await Taro.request({
+    url: `${API_BASE_URL}${path}`,
+    method: 'GET',
+    header: withNgrokBypassHeaders({
+      'Content-Type': 'application/json'
+    }),
+    timeout: 10000
+  })
+
+  if (response.statusCode !== 200) {
+    throwHttpErrorWithStatus(
+      response.statusCode,
+      response.data,
+      '获取配置失败',
+      response.header as Record<string, any> | undefined,
+      `${API_BASE_URL}${path}`
+    )
+  }
+
+  return unwrapResponse<PublicConfigResponse>(response)
+}
+
+export async function getPublicConfig(): Promise<PublicConfigResponse> {
+  try {
+    return await requestPublicConfig('/api/app/public-config')
+  } catch (err) {
+    if ((err as ErrorLike)?.statusCode !== 404) {
+      throw err
+    }
+    console.warn('[getPublicConfig] /api/app/public-config 返回 404，尝试兼容路径 /api/public-config')
+    return requestPublicConfig('/api/public-config')
+  }
+}
+
+/**
+ * 测试用手机号密码注册
+ */
+export async function registerWithPassword(
+  phone: string,
+  password: string,
+  nickname: string,
+  inviteCode?: string
+): Promise<LoginResponse> {
+  const requestData: PasswordRegisterRequest = {
+    phone: phone.trim(),
+    password: password.trim(),
+    nickname: nickname.trim()
+  }
+  if (inviteCode?.trim()) {
+    requestData.inviteCode = inviteCode.trim()
+  }
+  console.log('[invite-debug][api] registerWithPassword 请求体邀请码状态', {
+    phoneSuffix: phone.trim().slice(-4),
+    inviteCode: requestData.inviteCode || '',
+    hasInviteCode: Boolean(requestData.inviteCode),
+    requestKeys: Object.keys(requestData),
+  })
+
+  const response = await Taro.request({
+    url: `${API_BASE_URL}/api/app/register/password`,
+    method: 'POST',
+    header: withNgrokBypassHeaders({
+      'Content-Type': 'application/json'
+    }),
+    data: requestData,
+    timeout: 10000
+  })
+  console.log('[invite-debug][api] registerWithPassword 响应状态', {
+    statusCode: response.statusCode,
+    responseKeys: Object.keys((response.data || {}) as Record<string, unknown>),
+    requestHadInviteCode: Boolean(requestData.inviteCode),
+  })
+
+  if (response.statusCode !== 200) {
+    throwHttpErrorWithStatus(
+      response.statusCode,
+      response.data,
+      '注册失败',
+      response.header as Record<string, any> | undefined
+    )
+  }
+
+  const loginData = unwrapResponse<LoginResponse>(response)
+  console.log('[invite-debug][api] registerWithPassword 响应用户摘要', {
+    userId: loginData.user_id,
+    hasAccessToken: Boolean(loginData.access_token),
+    hasPhoneNumber: Boolean(loginData.purePhoneNumber || loginData.phoneNumber),
+    requestHadInviteCode: Boolean(requestData.inviteCode),
+  })
+  saveTokens(loginData.access_token, loginData.refresh_token, loginData.user_id)
+  if (loginData.diet_goal) {
+    Taro.setStorageSync('dietGoal', loginData.diet_goal)
+  } else {
+    Taro.removeStorageSync('dietGoal')
+  }
+  return loginData
+}
+
+/**
  * 获取用户信息
  * @returns Promise<UserInfo>
  */
@@ -4157,11 +4408,13 @@ export async function getUserProfile(): Promise<UserInfo> {
  */
 export async function getMembershipPlans(): Promise<MembershipPlan[]> {
   try {
+    const token = getAccessToken()
     const response = await Taro.request({
       url: `${API_BASE_URL}/api/membership/plans`,
       method: 'GET',
       header: withNgrokBypassHeaders({
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {})
       })
     })
 
@@ -4272,6 +4525,22 @@ export async function getRewardCenter(): Promise<RewardCenterResponse> {
   } catch (error: any) {
     console.error('获取赚积分任务失败:', error)
     throw new Error(error.message || '获取赚积分任务失败')
+  }
+}
+
+export async function getInviteRewardStatus(): Promise<InviteRewardStatusResponse> {
+  try {
+    const response = await authenticatedRequest('/api/membership/invite-reward-status', {
+      method: 'GET',
+    })
+    if (response.statusCode !== 200) {
+      const errorMsg = (response.data as any)?.detail || '获取邀请奖励进度失败'
+      throw new Error(errorMsg)
+    }
+    return response.data as InviteRewardStatusResponse
+  } catch (error: any) {
+    console.error('获取邀请奖励进度失败:', error)
+    throw new Error(error.message || '获取邀请奖励进度失败')
   }
 }
 
@@ -4519,6 +4788,28 @@ export async function getHealthProfile(): Promise<HealthProfile> {
   } catch (error: any) {
     console.error('获取健康档案失败:', error)
     throw new Error(error.message || '获取健康档案失败')
+  }
+}
+
+/**
+ * 从后端获取推荐的默认餐次（已结合作息与当天已有记录做顺延）。
+ * @param params.date 目标日期（YYYY-MM-DD），默认今天
+ * @returns Promise<{ meal_type: MealType; generated_by: string }>
+ */
+export async function getRecommendMealType(params?: { date?: string }): Promise<{ meal_type: MealType; generated_by: string }> {
+  try {
+    const query = params?.date ? `?date=${encodeURIComponent(params.date)}` : ''
+    const response = await authenticatedRequest(`/api/food-record/recommend-meal-type${query}`, {
+      method: 'GET'
+    })
+    if (response.statusCode !== 200) {
+      const errorMsg = (response.data as any)?.detail || '获取推荐餐次失败'
+      throw new Error(errorMsg)
+    }
+    return response.data as { meal_type: MealType; generated_by: string }
+  } catch (error: any) {
+    console.error('获取推荐餐次失败:', error)
+    throw new Error(error.message || '获取推荐餐次失败')
   }
 }
 
@@ -5187,6 +5478,20 @@ export interface FriendListItem {
   avatar: string
 }
 
+export interface FriendBlockItem {
+  id: string
+  blocked_user_id: string
+  nickname: string
+  avatar: string
+  created_at: string
+}
+
+export interface FriendBlockStatus {
+  is_blocked_by_me: boolean
+  has_blocked_me: boolean
+  blocked_either: boolean
+}
+
 /** 好友邀请码资料（公开） */
 export interface FriendInviteProfile {
   user_id: string
@@ -5263,6 +5568,7 @@ export type CommunityFeedRecord = FoodRecord & {
   calories_burned?: number | null
   duration_min?: number | null
   ai_reasoning?: string | null
+  exercise_items?: ExerciseActivityItem[] | null
   price?: number | null
   school?: string | null
   canteen?: string | null
@@ -5362,6 +5668,17 @@ export interface ContentSearchAuthor {
   avatar: string
 }
 
+export interface ContentSearchManualFoodItem {
+  name?: string
+  manual_source?: 'public_library' | 'nutrition_library' | 'packaged_food' | string | null
+  manual_source_id?: string | null
+  manual_source_title?: string | null
+  source_label?: string | null
+  image_path?: string | null
+  image_paths?: string[] | null
+  nutrients?: { calories?: number }
+}
+
 export interface ContentSearchResult {
   target_type: string
   target_id: string
@@ -5384,8 +5701,14 @@ export interface ContentSearchResult {
   exercise_type?: string
   calories_burned?: number
   duration_min?: number
+  exercise_items?: ExerciseActivityItem[] | null
   meal_type?: string
   diet_goal?: string
+  entry_type?: FoodRecordEntryType | null
+  source_task_id?: string | null
+  recipe_id?: string | null
+  items?: FoodRecordItemRow[] | null
+  manual_food_items?: ContentSearchManualFoodItem[]
   author: ContentSearchAuthor
   liked: boolean
   like_count: number
@@ -5486,6 +5809,35 @@ export async function friendDelete(friendId: string): Promise<void> {
   if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '删除失败')
 }
 
+/** 拉黑用户 */
+export async function friendBlockUser(userId: string): Promise<void> {
+  const response = await authenticatedRequest('/api/friend/block', {
+    method: 'POST',
+    data: { blocked_user_id: userId }
+  })
+  if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '无法操作')
+}
+
+/** 解除拉黑 */
+export async function friendUnblockUser(userId: string): Promise<void> {
+  const response = await authenticatedRequest(`/api/friend-blocks/${encodeURIComponent(userId)}`, { method: 'DELETE' })
+  if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '无法操作')
+}
+
+/** 黑名单列表 */
+export async function friendGetBlocks(): Promise<{ list: FriendBlockItem[] }> {
+  const response = await authenticatedRequest('/api/friend/blocks', { method: 'GET' })
+  if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '获取失败')
+  return response.data as { list: FriendBlockItem[] }
+}
+
+/** 与某用户的拉黑状态 */
+export async function friendGetBlockStatus(userId: string): Promise<FriendBlockStatus> {
+  const response = await authenticatedRequest(`/api/friend/block-status/${encodeURIComponent(userId)}`, { method: 'GET' })
+  if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '获取失败')
+  return response.data as FriendBlockStatus
+}
+
 /** @deprecated 兼容旧调用名，后续统一使用 friendDelete */
 export const friendRemove = friendDelete
 
@@ -5498,10 +5850,11 @@ export async function friendGetRequestsOverview(): Promise<FriendRequestsOvervie
 
 /** 公开获取邀请资料（用于分享海报昵称与邀请码） */
 export async function getFriendInviteProfile(userId: string): Promise<FriendInviteProfile> {
+  const token = getAccessToken()
   const response = await Taro.request({
     url: `${API_BASE_URL}/api/friend/invite/profile/${encodeURIComponent(userId)}`,
     method: 'GET',
-    header: withNgrokBypassHeaders(),
+    header: withNgrokBypassHeaders(token ? { Authorization: `Bearer ${token}` } : undefined),
     timeout: 10000
   })
   if (response.statusCode !== 200) {
@@ -5511,10 +5864,11 @@ export async function getFriendInviteProfile(userId: string): Promise<FriendInvi
 }
 
 export async function getFriendInviteProfileByCode(code: string): Promise<FriendInviteProfile> {
+  const token = getAccessToken()
   const response = await Taro.request({
     url: `${API_BASE_URL}/api/friend/invite/profile-by-code?code=${encodeURIComponent(code.trim())}`,
     method: 'GET',
-    header: withNgrokBypassHeaders(),
+    header: withNgrokBypassHeaders(token ? { Authorization: `Bearer ${token}` } : undefined),
     timeout: 10000
   })
   if (response.statusCode !== 200) {
@@ -5535,9 +5889,17 @@ export async function resolveFriendInvite(code: string): Promise<FriendInviteRes
 
 /** 接受邀请码并直接建立好友关系 */
 export async function acceptFriendInvite(code: string): Promise<FriendInviteAcceptResult> {
+  console.log('[invite-debug][api] acceptFriendInvite 请求', {
+    inviteCode: code.trim(),
+    hasAccessToken: Boolean(getAccessToken()),
+  })
   const response = await authenticatedRequest('/api/friend/invite/accept', {
     method: 'POST',
     data: { code: code.trim() }
+  })
+  console.log('[invite-debug][api] acceptFriendInvite 响应状态', {
+    statusCode: response.statusCode,
+    responseKeys: Object.keys((response.data || {}) as Record<string, unknown>),
   })
   if (response.statusCode !== 200) {
     const detail = (response.data as any)?.detail
@@ -5690,13 +6052,14 @@ export async function sendPrivateMessage(receiverId: string, content: string, co
 }
 
 /** 获取与某用户的聊天记录 */
-export async function getPrivateMessages(otherUserId: string, offset = 0, limit = 20): Promise<{ list: PrivateMessage[]; has_more: boolean }> {
+export async function getPrivateMessages(otherUserId: string, offset = 0, limit = 20): Promise<{ list: PrivateMessage[]; has_more: boolean; blocked?: boolean }> {
   const response = await authenticatedRequest(`/api/messages/conversation/${encodeURIComponent(otherUserId)}?offset=${offset}&limit=${limit}`, { method: 'GET' })
   if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '获取聊天记录失败')
   const data = (response.data || {}) as any
   return {
     list: (data.list || []).map(normalizePrivateMessage),
     has_more: data.has_more ?? data.HasMore ?? false,
+    blocked: data.blocked ?? data.Blocked ?? false,
   }
 }
 
@@ -5798,10 +6161,11 @@ export async function communityGetPublicFeed(
   if (params?.sort_by) q += `&sort_by=${encodeURIComponent(params.sort_by)}`
   if (params?.content_type) q += `&content_type=${encodeURIComponent(params.content_type)}`
   if (params?.author_id) q += `&author_id=${encodeURIComponent(params.author_id)}`
+  const token = getAccessToken()
   const response = await Taro.request({
     url: `${API_BASE_URL}/api/community/public-feed${q}`,
     method: 'GET',
-    header: withNgrokBypassHeaders(),
+    header: withNgrokBypassHeaders(token ? { Authorization: `Bearer ${token}` } : undefined),
     timeout: 10000
   })
   if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '获取动态失败')
@@ -6663,6 +7027,8 @@ export interface ExerciseLogItem {
   created_at?: string | null
   /** 模型估算时的思考过程（需库表含 ai_reasoning 列） */
   ai_reasoning?: string | null
+  /** 长文本运动解析后的分项运动列表 */
+  exercise_items?: ExerciseActivityItem[] | null
 }
 
 /** 获取运动记录列表 */

@@ -118,6 +118,7 @@
     align-items: center;
     gap: 10rpx;
     flex-shrink: 0;
+    min-width: 0;
   }
 
   .user-name {
@@ -125,6 +126,11 @@
     font-weight: 600;
     color: #111827;
     line-height: 52rpx;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .user-days-pill {
@@ -163,7 +169,7 @@
     line-height: 34rpx;
   }
 
-  .profile-chevron--small {
+  .user-meta-arrow {
     font-size: 22rpx;
     color: #9ca3af;
   }
@@ -172,6 +178,8 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    min-width: 0;
+    max-width: 160rpx;
     padding: 5rpx 12rpx;
     border-radius: 999rpx;
     background: rgba(92, 184, 150, 0.08);
@@ -189,6 +197,9 @@
     padding-top: 5rpx;
     padding-bottom: 5rpx;
     font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 }
 
@@ -658,13 +669,6 @@
   color: inherit;
 }
 
-.profile-chevron {
-  display: block;
-  font-size: 28rpx;
-  line-height: 1;
-  color: #c8c9cc;
-}
-
 // 列表卡片（微信风格）
 .list-card {
   padding: 0 32rpx;
@@ -711,13 +715,6 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-  }
-
-  .list-arrow {
-    flex-shrink: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
   }
 
   .list-badge {

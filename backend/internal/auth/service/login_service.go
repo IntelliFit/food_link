@@ -95,7 +95,7 @@ func (s *LoginService) Login(ctx context.Context, input LoginInput) (*LoginOutpu
 	if testOpenID != "" && s.cfg.App.Env == "development" {
 		openID = testOpenID
 	} else {
-		oid, uid, err := s.users.ExchangeCode(ctx, s.cfg.External.AppID, s.cfg.External.Secret, strings.TrimSpace(input.Code))
+		oid, uid, err := s.users.ExchangeCode(ctx, s.cfg.WechatMiniProgramAppID(), s.cfg.WechatMiniProgramAppSecret(), strings.TrimSpace(input.Code))
 		if err != nil {
 			return nil, err
 		}
@@ -188,10 +188,34 @@ func (s *LoginService) RegisterWithPassword(ctx context.Context, input PasswordR
 	if phone == "" {
 		return nil, fmt.Errorf("请输入手机号")
 	}
+	if !s.cfg.App.AllowDebugRegister {
+		return nil, fmt.Errorf("当前未开启测试注册")
+	}
+	if phone != "13511679220" {
+		return nil, fmt.Errorf("测试注册仅支持指定手机号")
+	}
+	trimmedInviteCode := strings.TrimSpace(input.InviteCode)
+	logger.Info(ctx, "App 账号密码测试注册请求已收到",
+		slog.String("phone", maskPhoneForLog(phone)),
+		slog.Bool("invite_code_present", trimmedInviteCode != ""),
+		slog.Int("invite_code_length", len(trimmedInviteCode)),
+	)
 	if existing, err := s.users.FindByTelephone(ctx, phone); err != nil {
 		return nil, err
 	} else if existing != nil {
-		return nil, fmt.Errorf("手机号已被使用")
+		if existing.PasswordHash == nil || !VerifyUserPassword(input.Password, *existing.PasswordHash) {
+			return nil, fmt.Errorf("手机号或密码错误")
+		}
+		existing, err = s.touchLogin(ctx, existing, "password")
+		if err != nil {
+			return nil, err
+		}
+		logger.Info(ctx, "App 账号密码测试注册命中已有账号，已按密码登录",
+			slog.String("user_id", existing.ID),
+			slog.String("identifier_type", loginIdentifierType(phone, "")),
+			slog.Bool("invite_code_present", trimmedInviteCode != ""),
+		)
+		return s.issueLoginOutput(existing, existing.OpenID, firstNonEmpty(derefString(existing.UnionID), derefString(existing.AppUnionID)))
 	}
 	passwordHash, err := HashUserPassword(input.Password)
 	if err != nil {
@@ -224,8 +248,15 @@ func (s *LoginService) RegisterWithPassword(ctx context.Context, input PasswordR
 		return nil, err
 	}
 	_ = s.ensureRegistrationInviteCode(ctx, user.ID)
-	if inviteCode := strings.ToUpper(strings.TrimSpace(input.InviteCode)); inviteCode != "" {
-		_ = s.bindInviteReferral(ctx, user.ID, inviteCode)
+	if inviteCode := strings.ToUpper(trimmedInviteCode); inviteCode != "" {
+		logger.Info(ctx, "App 账号密码注册开始绑定邀请关系", slog.String("user_id", user.ID), slog.String("invite_code", inviteCode))
+		if err := s.bindInviteReferral(ctx, user.ID, inviteCode); err != nil {
+			logger.Error(ctx, "App 账号密码注册绑定邀请关系失败", err, slog.String("user_id", user.ID), slog.String("invite_code", inviteCode))
+		} else {
+			logger.Info(ctx, "App 账号密码注册绑定邀请关系完成", slog.String("user_id", user.ID), slog.String("invite_code", inviteCode))
+		}
+	} else {
+		logger.Info(ctx, "App 账号密码注册未携带邀请码", slog.String("user_id", user.ID))
 	}
 	logger.Info(ctx, "App 账号密码注册成功", slog.String("user_id", user.ID), slog.String("identifier_type", loginIdentifierType(phone, "")))
 	return s.issueLoginOutput(user, user.OpenID, "")
@@ -367,7 +398,14 @@ func (s *LoginService) findOrCreateWechatUser(ctx context.Context, openID, union
 		}
 		_ = s.ensureRegistrationInviteCode(ctx, user.ID)
 		if inviteCode := strings.ToUpper(strings.TrimSpace(inviteCode)); inviteCode != "" {
-			_ = s.bindInviteReferral(ctx, user.ID, inviteCode)
+			logger.Info(ctx, "微信登录新用户开始绑定邀请关系", slog.String("user_id", user.ID), slog.String("invite_code", inviteCode))
+			if err := s.bindInviteReferral(ctx, user.ID, inviteCode); err != nil {
+				logger.Error(ctx, "微信登录新用户绑定邀请关系失败", err, slog.String("user_id", user.ID), slog.String("invite_code", inviteCode))
+			} else {
+				logger.Info(ctx, "微信登录新用户绑定邀请关系完成", slog.String("user_id", user.ID), slog.String("invite_code", inviteCode))
+			}
+		} else {
+			logger.Info(ctx, "微信登录新用户未携带邀请码", slog.String("user_id", user.ID))
 		}
 		return user, nil
 	}
@@ -416,7 +454,14 @@ func (s *LoginService) findOrCreateAppWechatUser(ctx context.Context, appOpenID,
 		}
 		_ = s.ensureRegistrationInviteCode(ctx, user.ID)
 		if inviteCode := strings.ToUpper(strings.TrimSpace(inviteCode)); inviteCode != "" {
-			_ = s.bindInviteReferral(ctx, user.ID, inviteCode)
+			logger.Info(ctx, "App 微信登录新用户开始绑定邀请关系", slog.String("user_id", user.ID), slog.String("invite_code", inviteCode))
+			if err := s.bindInviteReferral(ctx, user.ID, inviteCode); err != nil {
+				logger.Error(ctx, "App 微信登录新用户绑定邀请关系失败", err, slog.String("user_id", user.ID), slog.String("invite_code", inviteCode))
+			} else {
+				logger.Info(ctx, "App 微信登录新用户绑定邀请关系完成", slog.String("user_id", user.ID), slog.String("invite_code", inviteCode))
+			}
+		} else {
+			logger.Info(ctx, "App 微信登录新用户未携带邀请码", slog.String("user_id", user.ID))
 		}
 		return user, nil
 	}
@@ -442,7 +487,7 @@ func (s *LoginService) exchangeAppWechatCode(ctx context.Context, code string) (
 		return "", "", fmt.Errorf("code 不能为空")
 	}
 	if s.cfg.App.Env == "development" && s.cfg.AppAuth.DevelopmentMockLogin {
-		mockCode := strings.TrimSpace(s.cfg.AppAuth.DevelopmentMockWechatCode)
+		mockCode := strings.TrimSpace(s.cfg.WechatMobileAppDevelopmentMockCode())
 		if mockCode == "" {
 			mockCode = "expo-go-dev-wechat-code"
 		}
@@ -454,10 +499,12 @@ func (s *LoginService) exchangeAppWechatCode(ctx context.Context, code string) (
 			return defaultAppMockOpenID + "-" + suffix, defaultAppMockUnionID + "-" + suffix, nil
 		}
 	}
-	if strings.TrimSpace(s.cfg.AppAuth.WechatAppID) == "" || strings.TrimSpace(s.cfg.AppAuth.WechatAppSecret) == "" {
-		return "", "", fmt.Errorf("App 微信登录未配置 app_auth.wechat_app_id / app_auth.wechat_app_secret")
+	appID := s.cfg.WechatMobileAppID()
+	appSecret := s.cfg.WechatMobileAppSecret()
+	if appID == "" || appSecret == "" {
+		return "", "", fmt.Errorf("App 微信登录未配置 wechat.mobile_app.app_id / wechat.mobile_app.app_secret")
 	}
-	return s.users.ExchangeAppCode(ctx, s.cfg.AppAuth.WechatAppID, s.cfg.AppAuth.WechatAppSecret, code)
+	return s.users.ExchangeAppCode(ctx, appID, appSecret, code)
 }
 
 func (s *LoginService) touchLogin(ctx context.Context, user *repo.User, method string) (*repo.User, error) {
@@ -570,8 +617,8 @@ func (s *LoginService) getWechatAccessToken(ctx context.Context) (string, error)
 	url := "https://api.weixin.qq.com/cgi-bin/stable_token"
 	body, _ := json.Marshal(map[string]string{
 		"grant_type": "client_credential",
-		"appid":      s.cfg.External.AppID,
-		"secret":     s.cfg.External.Secret,
+		"appid":      s.cfg.WechatMiniProgramAppID(),
+		"secret":     s.cfg.WechatMiniProgramAppSecret(),
 	})
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
@@ -613,19 +660,34 @@ func (s *LoginService) ensureRegistrationInviteCode(ctx context.Context, userID 
 func (s *LoginService) bindInviteReferral(ctx context.Context, inviteeUserID, inviteCode string) error {
 	inviter, err := s.users.FindByRegistrationInviteCode(ctx, inviteCode)
 	if err != nil {
+		logger.Error(ctx, "通过 registration_invite_code 查询邀请人失败", err, slog.String("invite_code", inviteCode))
 		return err
 	}
 	if inviter == nil {
 		inviter, err = s.users.ResolveUserByInviteCode(ctx, inviteCode)
 		if err != nil {
+			logger.Error(ctx, "通过用户 ID 前缀解析邀请人失败", err, slog.String("invite_code", inviteCode))
 			return err
 		}
 	}
-	if inviter == nil || inviter.ID == "" || inviter.ID == inviteeUserID {
+	if inviter == nil {
+		logger.Warn(ctx, "未找到邀请人", slog.String("invite_code", inviteCode), slog.String("invitee_user_id", inviteeUserID))
 		return nil
 	}
-	_, _ = s.users.UpdateFields(ctx, inviteeUserID, map[string]any{"referred_by_user_id": inviter.ID})
-	return s.users.CreateInviteReferralBinding(ctx, inviter.ID, inviteeUserID, inviteCode)
+	if inviter.ID == "" || inviter.ID == inviteeUserID {
+		logger.Warn(ctx, "邀请人无效或自己邀请自己", slog.String("invite_code", inviteCode), slog.String("inviter_id", inviter.ID), slog.String("invitee_user_id", inviteeUserID))
+		return nil
+	}
+	if _, err := s.users.UpdateFields(ctx, inviteeUserID, map[string]any{"referred_by_user_id": inviter.ID}); err != nil {
+		logger.Error(ctx, "更新被邀请人 referred_by_user_id 失败", err, slog.String("invitee_user_id", inviteeUserID), slog.String("inviter_id", inviter.ID))
+		return err
+	}
+	if err := s.users.CreateInviteReferralBinding(ctx, inviter.ID, inviteeUserID, inviteCode); err != nil {
+		logger.Error(ctx, "创建邀请关系记录失败", err, slog.String("inviter_id", inviter.ID), slog.String("invitee_user_id", inviteeUserID), slog.String("invite_code", inviteCode))
+		return err
+	}
+	logger.Info(ctx, "邀请关系绑定成功", slog.String("inviter_id", inviter.ID), slog.String("invitee_user_id", inviteeUserID), slog.String("invite_code", inviteCode))
+	return nil
 }
 
 func randomInviteCode() string {

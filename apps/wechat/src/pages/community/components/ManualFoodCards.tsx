@@ -1,4 +1,5 @@
-import { View, Text, Image } from '@tarojs/components'
+import { View } from '@tarojs/components'
+import { FoodCard } from '../../../components/FoodCard'
 import {
   extractManualFoodDisplayItems,
   manualItemHasDisplayImage,
@@ -17,40 +18,18 @@ export function ManualFoodCards({ items, onItemClick }: ManualFoodCardsProps) {
 
   return (
     <View className='feed-manual-foods'>
-      {displayItems.map((row, idx) => (
-        <View
-          key={`manual-${idx}`}
-          className='feed-manual-food-row'
-          onClick={(e) => {
-            e.stopPropagation()
-            onItemClick?.(row)
-          }}
-        >
-          <View className={`feed-manual-food-thumb ${manualItemHasDisplayImage(row) ? 'has-image' : ''}`}>
-            {manualItemHasDisplayImage(row) ? (
-              <Image
-                className='feed-manual-food-image'
-                src={row.imageUrl}
-                mode='aspectFill'
-              />
-            ) : (
-              <Text className='iconfont icon-shiwu feed-manual-food-placeholder-icon' />
-            )}
-          </View>
-          <View className='feed-manual-food-info'>
-            <View className='feed-manual-food-title-row'>
-              <Text className='feed-manual-food-name'>{row.displayName}</Text>
-              {row.sourceLabel ? (
-                <View className={`feed-manual-food-badge source-${row.manual_source || 'unknown'}`}>
-                  <Text className='feed-manual-food-badge-text'>{row.sourceLabel}</Text>
-                </View>
-              ) : null}
-            </View>
-            <Text className='feed-manual-food-kcal'>
-              {Math.round(Number(row.nutrients?.calories || 0))} kcal
-            </Text>
-          </View>
-        </View>
+      {displayItems.map((row, index) => (
+        <FoodCard
+          key={`manual-${index}-${row.manual_source_id || row.displayName}`}
+          className='feed-manual-food-card'
+          imageUrl={manualItemHasDisplayImage(row) ? row.imageUrl : undefined}
+          title={row.displayName}
+          description={undefined}
+          calories={row.nutrients?.calories}
+          badge={row.sourceLabel}
+          badgeType={row.manual_source || undefined}
+          onClick={() => onItemClick?.(row)}
+        />
       ))}
     </View>
   )

@@ -159,6 +159,11 @@ const AUDIT_PREVIEW_MEMBERSHIP: MembershipStatus = {
 }
 
 const AUTO_RENEW_AUDIT_PREVIEW_STORAGE_KEY = 'auto_renew_audit_preview'
+const PAYMENT_TEST_PLAN_CODE = 'test_one_cent_monthly'
+
+function isPaymentTestPlan(plan?: MembershipPlan | null): boolean {
+  return Boolean(plan && (plan.is_test_plan || plan.code === PAYMENT_TEST_PLAN_CODE))
+}
 
 function isAutoRenewAuditRoute(): boolean {
   const routerParams = Taro.getCurrentInstance().router?.params || {}
@@ -181,6 +186,7 @@ function ProMembershipPage() {
   const [pageLoading, setPageLoading] = useState(false)
   const [selectedTier, setSelectedTier] = useState<MembershipTier>('standard')
   const [selectedPeriod, setSelectedPeriod] = useState<MembershipPeriod>('yearly')
+  const [selectedPlanCode, setSelectedPlanCode] = useState<string | null>(null)
   const [healthProfile, setHealthProfile] = useState<HealthProfile | null>(null)
   const [ageWarningDismissed, setAgeWarningDismissed] = useState(false)
   const [autoRenewRuleAccepted, setAutoRenewRuleAccepted] = useState(false)
@@ -257,18 +263,34 @@ function ProMembershipPage() {
     return { ok: true }
   }
 
+  const paymentTestPlan = useMemo<MembershipPlan | null>(() => {
+    return plans.find(p => isPaymentTestPlan(p)) || null
+  }, [plans])
+
   const selectedPlan = useMemo<MembershipPlan | null>(() => {
     if (!plans.length) return null
-    return plans.find(p => p.tier === selectedTier && p.period === selectedPeriod) || null
-  }, [plans, selectedTier, selectedPeriod])
+    if (selectedPlanCode) {
+      const explicit = plans.find(p => p.code === selectedPlanCode)
+      if (explicit) return explicit
+    }
+    return plans.find(p => !p.is_test_plan && p.code !== PAYMENT_TEST_PLAN_CODE && p.tier === selectedTier && p.period === selectedPeriod) || null
+  }, [plans, selectedPlanCode, selectedTier, selectedPeriod])
 
   const monthlyPlanForTier = useMemo<MembershipPlan | null>(() => {
-    return plans.find(p => p.tier === selectedTier && p.period === 'monthly') || null
+    return plans.find(p => !p.is_test_plan && p.code !== PAYMENT_TEST_PLAN_CODE && p.tier === selectedTier && p.period === 'monthly') || null
   }, [plans, selectedTier])
 
   const paymentEstimate = useMemo(() => {
     if (!selectedPlan) {
       return { mode: 'loading', amount: 0, disabled: false, hint: '' }
+    }
+    if (isPaymentTestPlan(selectedPlan)) {
+      return {
+        mode: 'payment_test',
+        amount: selectedPlan.amount,
+        disabled: false,
+        hint: '测试支付会走完整会员开通链路，仅对测试名单用户可见',
+      }
     }
     const currentCode = membership?.current_plan_code || null
     const currentPlan = plans.find(p => p.code === currentCode) || null
@@ -348,6 +370,14 @@ function ProMembershipPage() {
       setPlans(planList)
       setMembership(currentMembership)
       if (profile) setHealthProfile(profile)
+      const testPlan = planList.find(p => isPaymentTestPlan(p))
+      if (testPlan && !targetTier && !targetPeriod) {
+        setSelectedPlanCode(testPlan.code)
+        if (testPlan.tier) setSelectedTier(testPlan.tier)
+        if (testPlan.period) setSelectedPeriod(testPlan.period)
+      } else {
+        setSelectedPlanCode(null)
+      }
       if (targetTier) {
         setSelectedTier(targetTier)
       }
@@ -425,7 +455,9 @@ function ProMembershipPage() {
       return
     }
 
-    if (paymentEstimate.disabled) {
+    const selectedPlanIsPaymentTest = isPaymentTestPlan(selectedPlan)
+
+    if (!selectedPlanIsPaymentTest && paymentEstimate.disabled) {
       await Taro.showModal({
         title: '暂不可切换',
         content: paymentEstimate.hint || '当前套餐暂不支持这样切换，请选择更高档位或更长周期。',
@@ -437,7 +469,7 @@ function ProMembershipPage() {
     }
 
     // 年龄合规校验
-    if (!ageCompliance.ok) {
+    if (!selectedPlanIsPaymentTest && !ageCompliance.ok) {
       if (ageCompliance.severity === 'forbidden') {
         await Taro.showModal({
           title: '年龄限制',
@@ -464,12 +496,14 @@ function ProMembershipPage() {
     }
 
     const payAmount = paymentEstimate.amount || selectedPlan.amount
-    const confirmContent = paymentEstimate.mode === 'prorated_current_period_upgrade'
+    const confirmContent = selectedPlanIsPaymentTest
+      ? `支付测试套餐，¥${payAmount.toFixed(2)}。\n该订单用于验证真实微信支付与会员开通链路，支付成功后会开通测试会员。`
+      : paymentEstimate.mode === 'prorated_current_period_upgrade'
       ? `升级 ${selectedPlan.name}，本次补差 ¥${payAmount.toFixed(2)}。${paymentEstimate.hint || '已按当前会员剩余价值折抵'}。到期后需手动续费。`
       : `订阅 ${selectedPlan.name}，¥${payAmount.toFixed(2)}${PERIODS.find(p => p.key === selectedPeriod)?.unit || ''}，到期后需手动续费。`
 
     const modalRes = await Taro.showModal({
-      title: '订阅确认',
+      title: selectedPlanIsPaymentTest ? '测试支付确认' : '订阅确认',
       content: confirmContent,
       confirmText: '确认支付',
       confirmColor: '#00bc7d'
@@ -494,6 +528,10 @@ function ProMembershipPage() {
         }
       } catch (syncError) {
         console.error('主动同步会员支付状态失败:', syncError)
+      }
+      if (selectedPlanIsPaymentTest) {
+        Taro.showToast({ title: '测试会员已开通', icon: 'success' })
+        return
       }
       const confirmed = await pollMembershipStatus()
       if (!confirmed) {
@@ -601,6 +639,7 @@ function ProMembershipPage() {
   const actionButtonText = useMemo(() => {
     if (!selectedPlan) return '加载中...'
     if (autoRenewAuditMode) return '确认开通自动续费（审核预览）'
+    if (isPaymentTestPlan(selectedPlan)) return `支付测试套餐 · ¥${selectedPlan.amount.toFixed(2)}`
     if (paymentEstimate.disabled) return '当前套餐不可即时切换'
     const price = `¥${(paymentEstimate.amount || selectedPlan.amount).toFixed(2)}`
     if (!isPro) return `立即开通 · ${price}`
@@ -731,6 +770,26 @@ function ProMembershipPage() {
         </View>
       )}
 
+      {paymentTestPlan && (
+        <View
+          className={`payment-test-card ${selectedPlan?.code === paymentTestPlan.code ? 'payment-test-card--active' : ''}`}
+          onClick={() => {
+            setSelectedPlanCode(paymentTestPlan.code)
+            if (paymentTestPlan.tier) setSelectedTier(paymentTestPlan.tier)
+            if (paymentTestPlan.period) setSelectedPeriod(paymentTestPlan.period)
+          }}
+        >
+          <View className='payment-test-card-main'>
+            <Text className='payment-test-card-title'>支付测试套餐</Text>
+            <Text className='payment-test-card-desc'>仅测试名单账号可见，用于真实支付链路验证</Text>
+          </View>
+          <View className='payment-test-card-price'>
+            <Text className='payment-test-card-symbol'>¥</Text>
+            <Text className='payment-test-card-amount'>{paymentTestPlan.amount.toFixed(2)}</Text>
+          </View>
+        </View>
+      )}
+
       {/* 档位选择：3 列卡片 */}
       <View className='tier-section'>
         <View className='section-title'>
@@ -744,7 +803,10 @@ function ProMembershipPage() {
               <View
                 key={t.key}
                 className={`tier-card ${active ? 'tier-card--active' : ''} tier-card--${t.key}`}
-                onClick={() => setSelectedTier(t.key)}
+                onClick={() => {
+                  setSelectedPlanCode(null)
+                  setSelectedTier(t.key)
+                }}
               >
                 {isPro && currentPlanTier === t.key ? (
                   <View className='tier-card-badge tier-card-badge--current'>当前</View>
@@ -773,13 +835,13 @@ function ProMembershipPage() {
         <View className='period-tabs'>
           {PERIODS.map(p => {
             const active = p.key === selectedPeriod
-            const planForPeriod = plans.find(x => x.tier === selectedTier && x.period === p.key)
+            const planForPeriod = plans.find(x => !x.is_test_plan && x.code !== PAYMENT_TEST_PLAN_CODE && x.tier === selectedTier && x.period === p.key)
             // 立省：优先用 savings 字段
             let saveTxt: string | null = null
             if (planForPeriod?.savings && planForPeriod.savings > 0) {
               saveTxt = `立省¥${formatCurrencyCompact(planForPeriod.savings)}`
             } else if (p.key !== 'monthly') {
-              const monthly = plans.find(x => x.tier === selectedTier && x.period === 'monthly')
+              const monthly = plans.find(x => !x.is_test_plan && x.code !== PAYMENT_TEST_PLAN_CODE && x.tier === selectedTier && x.period === 'monthly')
               if (monthly && planForPeriod) {
                 const diff = monthly.amount * planForPeriod.duration_months - planForPeriod.amount
                 if (diff > 0) saveTxt = `立省¥${formatCurrencyCompact(diff)}`
@@ -789,7 +851,10 @@ function ProMembershipPage() {
               <View
                 key={p.key}
                 className={`period-tab ${active ? 'period-tab--active' : ''}`}
-                onClick={() => setSelectedPeriod(p.key)}
+                onClick={() => {
+                  setSelectedPlanCode(null)
+                  setSelectedPeriod(p.key)
+                }}
               >
                 {p.key === 'yearly' && saveTxt && (
                   <Text className='period-tab-recommend'>推荐</Text>
@@ -813,7 +878,6 @@ function ProMembershipPage() {
         </View>
       </View>
 
-      {/* 已选套餐价格卡 */}
       <View className='plan-card'>
         <View className='plan-card-left'>
           <Text className='plan-name'>{selectedPlan?.name || '食探会员'}</Text>

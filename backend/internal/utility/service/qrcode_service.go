@@ -51,8 +51,8 @@ func NewQRCodeService(cfg ...*config.Config) *QRCodeService {
 		urlLinkCache:   make(map[string]cachedURLLink),
 	}
 	if len(cfg) > 0 && cfg[0] != nil {
-		s.appID = strings.TrimSpace(cfg[0].External.AppID)
-		s.secret = strings.TrimSpace(cfg[0].External.Secret)
+		s.appID = strings.TrimSpace(cfg[0].WechatMiniProgramAppID())
+		s.secret = strings.TrimSpace(cfg[0].WechatMiniProgramAppSecret())
 	}
 	return s
 }

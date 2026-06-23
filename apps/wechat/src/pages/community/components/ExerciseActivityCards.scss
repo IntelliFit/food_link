@@ -1,0 +1,94 @@
+.feed-exercise-activities {
+  margin-top: 20rpx;
+  margin-bottom: 12rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 14rpx;
+}
+
+.feed-exercise-activity-card {
+  display: flex;
+  align-items: center;
+  gap: 14rpx;
+  min-height: 132rpx;
+  padding: 16rpx 18rpx;
+  border-radius: 20rpx;
+  background: #fff;
+  box-shadow: 0 2rpx 8rpx rgb(15 23 42 / 5%);
+}
+
+.feed-exercise-activity-thumb {
+  width: 108rpx;
+  height: 108rpx;
+  border-radius: 14rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+  color: #059669;
+}
+
+.feed-exercise-activity-icon {
+  font-size: 48rpx;
+  line-height: 1;
+}
+
+.feed-exercise-activity-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.feed-exercise-activity-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  margin-bottom: 6rpx;
+  min-width: 0;
+}
+
+.feed-exercise-activity-title {
+  min-width: 0;
+  flex: 1;
+  font-size: 27rpx;
+  line-height: 36rpx;
+  font-weight: 700;
+  color: #111827;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.feed-exercise-activity-badge {
+  flex-shrink: 0;
+  padding: 3rpx 10rpx;
+  border-radius: 999rpx;
+  background: #ecfdf5;
+}
+
+.feed-exercise-activity-badge-text {
+  font-size: 18rpx;
+  line-height: 24rpx;
+  font-weight: 600;
+  color: #047857;
+}
+
+.feed-exercise-activity-meta {
+  font-size: 22rpx;
+  line-height: 30rpx;
+  color: #6b7280;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.feed-exercise-activity-calories {
+  margin-top: 2rpx;
+  font-size: 24rpx;
+  line-height: 32rpx;
+  font-weight: 800;
+  color: #059669;
+}

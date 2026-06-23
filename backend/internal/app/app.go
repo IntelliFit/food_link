@@ -221,17 +221,22 @@ func New(cfg *config.Config) (*App, error) {
 	friendRepo := friendrepo.NewFriendRepo(db)
 	friendSvc := friendservice.NewFriendService(friendRepo, userRepo, storageClient)
 	friendHandler := friendhandler.NewFriendHandler(friendSvc)
+	followSvc.ConfigureBlockChecker(friendSvc)
+	messageSvc.ConfigureBlockChecker(friendSvc)
+	userSvc.ConfigureBlockChecker(friendSvc)
 
 	// Community module DI
 	feedRepo := communityrepo.NewFeedRepo(db)
 	notifRepo := communityrepo.NewNotificationRepo(db)
 	feedReportNotifier := communityservice.NewReportNotifier(cfg.Feishu.ReportWebhookURL, cfg.Feishu.ReportWebhookSecret, cfg.App.AdminBaseURL, cfg.Feishu.AppID, cfg.Feishu.AppSecret)
 	communitySvc := communityservice.NewCommunityService(feedRepo, notifRepo, userRepo, db, feedReportNotifier, messageSvc, storageClient)
+	communitySvc.ConfigureBlockChecker(friendSvc)
 	communityHandler := communityhandler.NewCommunityHandler(communitySvc)
 
 	// Search module DI
 	searchRepo := searchrepo.NewSearchRepo(db)
 	searchSvc := searchservice.NewSearchService(searchRepo, storageClient)
+	searchSvc.ConfigureBlockChecker(friendSvc)
 	searchHandler := searchhandler.NewSearchHandler(searchSvc)
 
 	// Health module DI
@@ -266,12 +271,14 @@ func New(cfg *config.Config) (*App, error) {
 	publicFoodSvc.ConfigureTaskPublisher(taskQueue)
 	publicFoodSvc.ConfigureCampusAnalyzeTaskSubmitter(analyzeTaskSvc)
 	publicFoodSvc.ConfigureRewardTaskAwarder(membershipSvc)
+	publicFoodSvc.ConfigureBlockChecker(friendSvc)
 	publicFoodHandler := publicfoodhandler.NewPublicFoodHandler(publicFoodSvc)
 
 	// Recipe module DI
 	recipeRepo := reciperepo.NewRecipeRepo(db)
 	recipeSvc := recipeservice.NewRecipeService(recipeRepo, storageClient)
 	recipeSvc.ConfigureWaterLogRecorder(bodyMetricsRepo)
+	recipeSvc.ConfigureBlockChecker(friendSvc)
 	recipeHandler := recipehandler.NewRecipeHandler(recipeSvc)
 
 	schoolHandler := schoolhandler.NewSchoolHandler(db, storageClient)
@@ -282,7 +289,7 @@ func New(cfg *config.Config) (*App, error) {
 	expiryRecognizer := expiryservice.NewRecognizer(cfg)
 	expiryNotifier := expiryservice.NewNotificationWorker(expiryRepo, cfg)
 	expirySvc := expiryservice.NewExpiryService(expiryRepo, expiryTaskRepo, expiryRecognizer)
-	expirySvc.ConfigureNotificationTemplate(cfg.WechatPay.ExpirySubscribeTemplateID)
+	expirySvc.ConfigureNotificationTemplate(cfg.ResolvedWechatPay().ExpirySubscribeTemplateID)
 	expirySvc.ConfigureCreditGuard(membershipSvc)
 	expirySvc.ConfigureStorage(storageClient)
 	expiryHandler := expiryhandler.NewExpiryHandler(expirySvc)
@@ -312,7 +319,7 @@ func New(cfg *config.Config) (*App, error) {
 	feedbackHandler := feedbackhandler.NewFeedbackHandler(feedbackSvc, feedbackUploadSvc)
 
 	commentHandler := communityhandler.NewCommentHandler(homeRepo, userRepo)
-	system := systemhandler.New()
+	system := systemhandler.New(cfg)
 
 	app := &App{
 		engine:        engine,
@@ -332,6 +339,7 @@ func New(cfg *config.Config) (*App, error) {
 	engine.POST("/api/app/account/password", authmw.RequireJWT(jwtSvc), loginHandler.SetPassword)
 	engine.GET("/api", system.Root)
 	engine.GET("/api/health", system.Health)
+	registerPublicConfigRoutes(engine, system)
 	engine.GET("/map-picker", system.MapPicker)
 	engine.GET("/test-backend", system.TestBackendPage)
 	engine.GET("/test-backend/login", system.TestBackendLoginPage)
@@ -394,6 +402,7 @@ func New(cfg *config.Config) (*App, error) {
 	engine.POST("/api/food-record/save", authmw.RequireJWT(jwtSvc), frHandler.SaveFoodRecord)
 	engine.GET("/api/food-record/list", authmw.RequireJWT(jwtSvc), frHandler.ListFoodRecords)
 	engine.GET("/api/food-record/entry-distribution", authmw.RequireJWT(jwtSvc), frHandler.EntryDistribution)
+	engine.GET("/api/food-record/recommend-meal-type", authmw.OptionalJWT(jwtSvc), frHandler.RecommendMealType)
 	engine.GET("/api/food-record/share/:record_id", frHandler.ShareFoodRecord)
 	engine.GET("/share/food-record/:record_id", frHandler.ShareFoodRecordPage)
 	engine.GET("/api/food-record/:record_id", authmw.RequireJWT(jwtSvc), frHandler.GetFoodRecord)
@@ -434,15 +443,19 @@ func New(cfg *config.Config) (*App, error) {
 	engine.GET("/api/friend/list", authmw.RequireJWT(jwtSvc), friendHandler.List)
 	engine.GET("/api/friend/count", authmw.RequireJWT(jwtSvc), friendHandler.Count)
 	engine.DELETE("/api/friend/:friend_id", authmw.RequireJWT(jwtSvc), friendHandler.DeleteFriend)
+	engine.GET("/api/friend/blocks", authmw.RequireJWT(jwtSvc), friendHandler.ListBlocks)
+	engine.GET("/api/friend/block-status/:user_id", authmw.RequireJWT(jwtSvc), friendHandler.BlockStatus)
+	engine.POST("/api/friend/block", authmw.RequireJWT(jwtSvc), friendHandler.BlockUser)
+	engine.DELETE("/api/friend-blocks/:user_id", authmw.RequireJWT(jwtSvc), friendHandler.UnblockUser)
 	engine.GET("/api/friend/requests/all", authmw.RequireJWT(jwtSvc), friendHandler.RequestsOverview)
 	engine.POST("/api/friend/cleanup-duplicates", authmw.RequireJWT(jwtSvc), friendHandler.CleanupDuplicates)
-	engine.GET("/api/friend/invite/profile/:user_id", friendHandler.InviteProfile)
-	engine.GET("/api/friend/invite/profile-by-code", friendHandler.InviteProfileByCode)
+	engine.GET("/api/friend/invite/profile/:user_id", authmw.OptionalJWT(jwtSvc), friendHandler.InviteProfile)
+	engine.GET("/api/friend/invite/profile-by-code", authmw.OptionalJWT(jwtSvc), friendHandler.InviteProfileByCode)
 	engine.GET("/api/friend/invite/resolve", authmw.RequireJWT(jwtSvc), friendHandler.InviteResolve)
 	engine.POST("/api/friend/invite/accept", authmw.RequireJWT(jwtSvc), friendHandler.InviteAccept)
 
 	// Community routes
-	engine.GET("/api/community/public-feed", communityHandler.PublicFeed)
+	engine.GET("/api/community/public-feed", authmw.OptionalJWT(jwtSvc), communityHandler.PublicFeed)
 	engine.GET("/api/community/feed", authmw.RequireJWT(jwtSvc), communityHandler.Feed)
 	engine.GET("/api/community/checkin-leaderboard", authmw.RequireJWT(jwtSvc), communityHandler.CheckinLeaderboard)
 	engine.POST("/api/community/feed/:record_id/like", authmw.RequireJWT(jwtSvc), communityHandler.LikeFeed)
@@ -491,9 +504,10 @@ func New(cfg *config.Config) (*App, error) {
 	engine.DELETE("/api/exercise-logs/:log_id", authmw.RequireJWT(jwtSvc), healthHandler.DeleteExerciseLog)
 
 	// Membership routes
-	engine.GET("/api/membership/plans", membershipHandler.ListPlans)
+	engine.GET("/api/membership/plans", authmw.OptionalJWT(jwtSvc), membershipHandler.ListPlans)
 	engine.GET("/api/membership/me", authmw.RequireJWT(jwtSvc), membershipHandler.GetMyMembership)
 	engine.GET("/api/membership/reward-center", authmw.RequireJWT(jwtSvc), membershipHandler.GetRewardCenter)
+	engine.GET("/api/membership/invite-reward-status", authmw.RequireJWT(jwtSvc), membershipHandler.GetInviteRewardStatus)
 	engine.POST("/api/membership/pay/create", authmw.RequireJWT(jwtSvc), membershipHandler.CreatePayment)
 	engine.POST("/api/membership/pay/sync", authmw.RequireJWT(jwtSvc), membershipHandler.SyncPayment)
 	engine.POST("/api/payment/wechat/notify/membership", membershipHandler.WechatNotify)
@@ -607,8 +621,11 @@ func New(cfg *config.Config) (*App, error) {
 	adminFeedReportHandler := adminhandler.NewFeedReportHandler(adminFeedReportSvc)
 	adminBenchmarkRepo := adminrepo.NewBenchmarkRepo(db)
 	adminAccountRepo := adminrepo.NewAdminAccountRepo(db)
-	adminBenchmarkSvc := adminservice.NewBenchmarkService(adminBenchmarkRepo, analyzeTaskSvc, adminAccountRepo, userRepo)
+	adminBenchmarkSvc := adminservice.NewBenchmarkService(adminBenchmarkRepo, analyzeTaskSvc, adminAccountRepo, userRepo, ofoxAIClient)
 	adminBenchmarkHandler := adminhandler.NewBenchmarkHandler(adminBenchmarkSvc)
+	adminPaymentTestRepo := adminrepo.NewPaymentTestRepo(db)
+	adminPaymentTestSvc := adminservice.NewPaymentTestService(adminPaymentTestRepo)
+	adminPaymentTestHandler := adminhandler.NewPaymentTestHandler(adminPaymentTestSvc)
 	adminAuthSvc := adminservice.NewAuthService(adminAccountRepo)
 	adminAuthHandler := adminhandler.NewAuthHandler(adminAuthSvc)
 	adminAuth := adminAuthHandler.AdminAuth()
@@ -655,6 +672,13 @@ func New(cfg *config.Config) (*App, error) {
 	adminAPI.DELETE("/benchmark/runs/:run_id", adminAuth, adminBenchmarkHandler.DeleteRun)
 	adminAPI.POST("/benchmark/runs/:run_id/cancel", adminAuth, adminBenchmarkHandler.CancelRun)
 	adminAPI.GET("/benchmark/runs/:run_id/samples", adminAuth, adminBenchmarkHandler.ListRunSamples)
+	adminAPI.GET("/payment-test/summary", adminAuth, adminPaymentTestHandler.Summary)
+	adminAPI.PATCH("/payment-test/settings", adminAuth, adminPaymentTestHandler.UpdateSettings)
+	adminAPI.GET("/payment-test/user-search", adminAuth, adminPaymentTestHandler.SearchUsers)
+	adminAPI.POST("/payment-test/users", adminAuth, adminPaymentTestHandler.AddUser)
+	adminAPI.POST("/payment-test/users/:user_id/cancel-membership", adminAuth, adminPaymentTestHandler.CancelUserMembership)
+	adminAPI.POST("/payment-test/users/:user_id/restore-membership", adminAuth, adminPaymentTestHandler.RestoreUserMembership)
+	adminAPI.DELETE("/payment-test/users/:user_id", adminAuth, adminPaymentTestHandler.RemoveUser)
 
 	routeMapPath := filepath.Join(".", "docs", "backend-api-prd", "ROUTE_MAP.md")
 	if _, err := os.Stat(routeMapPath); err == nil {
@@ -911,6 +935,12 @@ func wrap(mw gin.HandlerFunc, final gin.HandlerFunc) gin.HandlerFunc {
 		}
 		final(c)
 	}
+}
+
+func registerPublicConfigRoutes(engine *gin.Engine, system *systemhandler.Handler) {
+	engine.GET("/api/app/public-config", system.PublicConfig)
+	// 兼容旧本地代理或调试脚本中使用的短路径，正式小程序仍优先请求 /api/app/public-config。
+	engine.GET("/api/public-config", system.PublicConfig)
 }
 
 func statsInsightWebsocket(statsSvc *healthservice.StatsService) gin.HandlerFunc {

@@ -6,6 +6,9 @@ const ACCESS_TOKEN_KEY = 'food_link_mobile_access_token'
 const REFRESH_TOKEN_KEY = 'food_link_mobile_refresh_token'
 const USER_ID_KEY = 'food_link_mobile_user_id'
 export const RECENT_REQUEST_TRACE_LIMIT = 50
+const MOBILE_CLIENT_HEADERS = {
+  'X-Food-Link-Client': 'mobile_app',
+}
 
 const recentRequestTraces: RecentRequestTrace[] = []
 
@@ -134,7 +137,10 @@ export const apiClient = createFoodLinkApiClient({
       try {
         const response = await fetch(url, {
           method,
-          headers: options?.headers,
+          headers: {
+            ...MOBILE_CLIENT_HEADERS,
+            ...(options?.headers || {}),
+          },
           body: options?.body == null ? undefined : JSON.stringify(options.body),
           signal: timeoutSignal(options?.timeoutMs),
         })
@@ -193,7 +199,7 @@ function uploadMultipartWithXHR(input: UploadFileInput, formData: FormData): Pro
     xhr.open('POST', input.url)
     xhr.timeout = input.timeoutMs || 30000
 
-    for (const [key, value] of Object.entries(input.headers || {})) {
+    for (const [key, value] of Object.entries({ ...MOBILE_CLIENT_HEADERS, ...(input.headers || {}) })) {
       if (key.toLowerCase() === 'content-type') continue
       xhr.setRequestHeader(key, value)
     }

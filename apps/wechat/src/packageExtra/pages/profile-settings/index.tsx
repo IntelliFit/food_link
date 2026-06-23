@@ -18,6 +18,9 @@ import {
   getUserFavoriteRecipes,
   communityGetFeed,
   communityGetPublicFeed,
+  friendBlockUser,
+  friendGetBlockStatus,
+  friendUnblockUser,
   followUser,
   unfollowUser,
   getFollowStats,
@@ -26,6 +29,7 @@ import {
   type UserRecipe,
   type CommunityFeedItem,
   type FollowStats,
+  type FriendBlockStatus,
   type CommunityFeedTargetType,
 } from '../../../utils/api'
 import drawQrcode from 'weapp-qrcode-canvas-2d'
@@ -45,11 +49,14 @@ import { FeedReportMask } from '../../../pages/community/components/FeedReportMa
 import { FeedReportSheet } from '../../../pages/community/components/FeedReportSheet'
 import { FeedActionSheet } from '../../../pages/community/components/FeedActionSheet'
 import { ManualFoodCards } from '../../../pages/community/components/ManualFoodCards'
-import { isManualFoodFeedRecord } from '../../../utils/manual-food-source'
+import { ExerciseActivityCards, hasExerciseActivityCards } from '../../../pages/community/components/ExerciseActivityCards'
+import { shouldRenderManualFoodCards } from '../../../utils/manual-food-source'
 import { LOGIN_LOGO_URL } from '../../../utils/static-asset-cdn-url'
 import './index.scss'
 
 type TabKey = 'feed' | 'collections'
+
+const noop = () => {}
 
 function formatShortId(userId: string): string {
   if (!userId) return '—'
@@ -82,7 +89,7 @@ const MEAL_NAMES: Record<string, string> = {
 }
 
 export default function ProfileSettingsPage() {
-  const { scheme } = useAppColorScheme()
+  const { scheme, toggleScheme } = useAppColorScheme()
   const router = useRouter()
 
   const currentUserId = String(Taro.getStorageSync('user_id') || '').trim()
@@ -101,6 +108,7 @@ export default function ProfileSettingsPage() {
   const [followingCount, setFollowingCount] = useState(0)
   const [isFollowing, setIsFollowing] = useState(false)
   const [followLoading, setFollowLoading] = useState(false)
+  const [blockStatus, setBlockStatus] = useState<FriendBlockStatus | null>(null)
   const [pageLoading, setPageLoading] = useState(true)
 
   // 分享海报
@@ -185,6 +193,7 @@ export default function ProfileSettingsPage() {
     try {
       const followStatsPromise = getFollowStats(resolvedUserId).catch(() => ({ followers_count: 0, following_count: 0, is_following: false }))
       if (isOwner) {
+        setBlockStatus(null)
         const [profile, recordDaysRes, foodColls, recipeColls, followStats] = await Promise.all([
           getUserProfile().catch(() => null),
           getUserRecordDays().catch(() => ({ record_days: 0 })),
@@ -214,12 +223,33 @@ export default function ProfileSettingsPage() {
         // 加载动态（等用户基础数据落库后再请求，避免状态竞争）
         await loadFeed(true)
       } else {
-        const [publicProfile, foodColls, recipeColls, followStats] = await Promise.all([
+        const [publicProfile, foodColls, recipeColls, followStats, blockStatusRes] = await Promise.all([
           getPublicUserProfile(resolvedUserId).catch(() => null),
           getUserCollections(resolvedUserId).catch(() => ({ list: [] })),
           getUserFavoriteRecipes(resolvedUserId).catch(() => ({ recipes: [] })),
           followStatsPromise,
+          friendGetBlockStatus(resolvedUserId).catch(() => null),
         ])
+        setBlockStatus(blockStatusRes)
+        if (blockStatusRes?.blocked_either) {
+          setTempAvatar('')
+          setTempNickname(blockStatusRes.is_blocked_by_me ? '已拉黑用户' : '用户')
+          setEditAvatar('')
+          setEditNickname('')
+          setEditCoverImage('')
+          setUserId(resolvedUserId)
+          setRecordDays(0)
+          setCoverImage('')
+          setMotto('')
+          setFoodCollections([])
+          setRecipeCollections([])
+          setFavoriteCount(0)
+          applyFollowStats({ followers_count: 0, following_count: 0, is_following: false })
+          setFeedList([])
+          setFeedHasMore(false)
+          setFeedOffset(0)
+          return
+        }
         const avatar = publicProfile?.avatar || ''
         const nickname = publicProfile?.nickname || '用户'
         const cover = publicProfile?.cover_image || ''
@@ -284,6 +314,65 @@ export default function ProfileSettingsPage() {
   const handleGoPrivateChat = () => {
     if (!resolvedUserId) return
     Taro.navigateTo({ url: `${extraPkgUrl('/pages/private-chat/index')}?user_id=${encodeURIComponent(resolvedUserId)}` })
+  }
+
+  const refreshBlockStatus = async () => {
+    if (isOwner || !resolvedUserId) return
+    try {
+      const status = await friendGetBlockStatus(resolvedUserId)
+      setBlockStatus(status)
+      return status
+    } catch {
+      setBlockStatus(null)
+      return null
+    }
+  }
+
+  const handleBlockUser = async () => {
+    if (!resolvedUserId || isOwner) return
+    const ok = await Taro.showModal({
+      title: '拉黑用户',
+      content: `拉黑「${tempNickname || '用户'}」后会解除好友关系，双方无法私信、加好友，也不会在圈子里互相看到内容。`,
+      confirmText: '拉黑',
+      cancelText: '取消',
+      confirmColor: '#ef4444'
+    })
+    if (!ok.confirm) return
+    try {
+      Taro.showLoading({ title: '处理中...', mask: true })
+      await friendBlockUser(resolvedUserId)
+      Taro.hideLoading()
+      Taro.showToast({ title: '已拉黑', icon: 'success' })
+      setFeedList([])
+      setFeedHasMore(false)
+      await refreshBlockStatus()
+    } catch (err: any) {
+      Taro.hideLoading()
+      Taro.showToast({ title: err?.message || '无法操作', icon: 'none' })
+    }
+  }
+
+  const handleUnblockUser = async () => {
+    if (!resolvedUserId || isOwner) return
+    const ok = await Taro.showModal({
+      title: '解除拉黑',
+      content: `确定解除对「${tempNickname || '用户'}」的拉黑吗？解除后不会自动恢复好友关系。`,
+      confirmText: '解除',
+      cancelText: '取消',
+      confirmColor: '#00bc7d'
+    })
+    if (!ok.confirm) return
+    try {
+      Taro.showLoading({ title: '处理中...', mask: true })
+      await friendUnblockUser(resolvedUserId)
+      Taro.hideLoading()
+      Taro.showToast({ title: '已解除', icon: 'success' })
+      await refreshBlockStatus()
+      await loadFeed(true)
+    } catch (err: any) {
+      Taro.hideLoading()
+      Taro.showToast({ title: err?.message || '无法操作', icon: 'none' })
+    }
   }
 
   // 自动关注（邀请码场景）
@@ -370,6 +459,8 @@ export default function ProfileSettingsPage() {
     setEditMotto(motto)
     setShowEditSheet(true)
   }
+
+  const handleOwnerEditClick = isOwner ? handleOpenEdit : noop
 
   // 选择头像
   const handleChooseAvatar = async (e: any) => {
@@ -580,30 +671,17 @@ export default function ProfileSettingsPage() {
   const handleGoFeedDetail = (item: CommunityFeedItem) => {
     const record = item.record
     if (!record?.id) return
-    if (record.feed_type === 'campus_food') {
-      const targetId = item.target_id || record.id
-      Taro.navigateTo({ url: `/pages/food-library-detail/index?id=${encodeURIComponent(targetId)}` })
-      return
-    }
-    if (record.feed_type === 'exercise_log') {
-      const dateText = String(record.record_time || record.created_at || '').slice(0, 10)
-      Taro.navigateTo({ url: `/pages/exercise-record/index${dateText ? `?date=${encodeURIComponent(dateText)}` : ''}` })
-      return
-    }
-    if (record.recipe_id) {
-      Taro.navigateTo({ url: `${extraPkgUrl('/pages/recipe-detail/index')}?id=${encodeURIComponent(record.recipe_id)}` })
-      return
-    }
-    Taro.navigateTo({ url: `/pages/record-detail/index?id=${encodeURIComponent(record.id)}` })
+    const targetType = item.target_type || record.feed_type || 'food_record'
+    const targetId = item.target_id || record.id
+    const query = [
+      `targetType=${encodeURIComponent(targetType)}`,
+      `targetId=${encodeURIComponent(targetId)}`,
+      `recordId=${encodeURIComponent(record.id)}`
+    ].join('&')
+    Taro.navigateTo({ url: `${extraPkgUrl('/pages/interaction-feed-detail/index')}?${query}` })
   }
 
-  const handleManualFoodCardClick = (item: CommunityFeedItem, row: { manual_source?: string | null; manual_source_id?: string | null }) => {
-    const manualSourceId = row.manual_source_id
-    const manualSource = String(row.manual_source || '')
-    if (manualSourceId && (manualSource === 'public_library' || manualSource === 'nutrition_library' || manualSource === 'packaged_food')) {
-      Taro.navigateTo({ url: `${extraPkgUrl('/pages/food-library-detail/index')}?id=${encodeURIComponent(manualSourceId)}` })
-      return
-    }
+  const handleManualFoodCardClick = (item: CommunityFeedItem) => {
     handleGoFeedDetail(item)
   }
 
@@ -614,8 +692,9 @@ export default function ProfileSettingsPage() {
     const isCampus = record.feed_type === 'campus_food'
     const isCirclePost = record.feed_type === 'circle_post'
     const isCollectionRecord = !isExercise && !isCampus && !isCirclePost && !!record.recipe_id
-    const isManualRecord = !isExercise && !isCampus && !isCirclePost && !isCollectionRecord && isManualFoodFeedRecord(record)
-    const targetType = (record.feed_type || 'food_record') as CommunityFeedTargetType
+    const isManualRecord = !isExercise && !isCampus && !isCirclePost && !isCollectionRecord && shouldRenderManualFoodCards(record)
+    const useExerciseActivityCards = isExercise && hasExerciseActivityCards(record.exercise_items)
+    const targetType = (item.target_type || record.feed_type || 'food_record') as CommunityFeedTargetType
     const targetId = record.id
     const showReportMask = isCirclePost && reportMaskTarget?.targetType === targetType && reportMaskTarget?.targetId === targetId
     const feedTime = String(record.record_time || record.created_at || '')
@@ -625,6 +704,7 @@ export default function ProfileSettingsPage() {
         key={`${record.feed_type || 'food'}-${record.id}`}
         className='profile-feed-card'
         style={isCirclePost ? { position: 'relative' } : undefined}
+        onClick={() => handleGoFeedDetail(item)}
         onLongPress={() => {
           if (isCirclePost && !isOwner) {
             setReportMaskTarget({ targetType, targetId })
@@ -646,7 +726,7 @@ export default function ProfileSettingsPage() {
             {record.title ? <Text className='profile-feed-title'>{record.title}</Text> : null}
             {record.body ? <Text className='profile-feed-desc'>{record.body}</Text> : null}
           </>
-        ) : isExercise ? (
+        ) : isExercise && !useExerciseActivityCards ? (
           // 运动打卡：后端把 exercise_desc 同时映射为 description，避免同一文本渲染两次
           <Text className='profile-feed-desc'>
             {record.exercise_desc || record.description || record.exercise_type || '运动打卡'}
@@ -685,7 +765,12 @@ export default function ProfileSettingsPage() {
         ) : isManualRecord ? (
           <ManualFoodCards
             items={record.items}
-            onItemClick={(row) => handleManualFoodCardClick(item, row)}
+            onItemClick={() => handleManualFoodCardClick(item)}
+          />
+        ) : useExerciseActivityCards ? (
+          <ExerciseActivityCards
+            items={record.exercise_items}
+            onItemClick={() => handleGoFeedDetail(item)}
           />
         ) : isCirclePost && (record.image_paths || []).length > 0 ? (
           <View className='profile-feed-image-grid'>
@@ -820,6 +905,12 @@ export default function ProfileSettingsPage() {
                 <Text className='profile-top-action-text'>编辑资料</Text>
               </View>
               <View
+                className='profile-top-icon-btn profile-theme-toggle-btn'
+                onClick={toggleScheme}
+              >
+                <Text className={`iconfont ${scheme === 'dark' ? 'icon-zaoshang' : 'icon-wanshang'} profile-top-icon profile-theme-toggle-icon`} />
+              </View>
+              <View
                 className='profile-top-icon-btn'
                 onClick={handleShareProfile}
               >
@@ -832,7 +923,7 @@ export default function ProfileSettingsPage() {
           <View className='profile-user-row'>
             <View
               className='profile-avatar-wrap'
-              onClick={isOwner ? handleOpenEdit : undefined}
+              onClick={handleOwnerEditClick}
             >
               <View className='avatar-choose-wrapper'>
                 {tempAvatar ? (
@@ -846,10 +937,10 @@ export default function ProfileSettingsPage() {
             </View>
 
             <View className='profile-info-col'>
-              <View className='profile-name-row' onClick={isOwner ? handleOpenEdit : undefined}>
+              <View className='profile-name-row' onClick={handleOwnerEditClick}>
                 <Text className='profile-nickname'>{tempNickname || '用户昵称'}</Text>
               </View>
-              <View className='profile-id-row' onClick={isOwner ? handleOpenEdit : undefined}>
+              <View className='profile-id-row' onClick={handleOwnerEditClick}>
                 <Text className='profile-user-id'>ID: {formatShortId(userId)}</Text>
                 <View className='profile-id-copy-btn' onClick={(e) => { e.stopPropagation(); handleCopyUserId() }}>
                   <Text className='profile-id-copy-btn-text'>复制ID</Text>
@@ -878,7 +969,7 @@ export default function ProfileSettingsPage() {
 
           {/* 座右铭 */}
           {motto ? (
-            <View className='profile-motto-row' onClick={isOwner ? handleOpenEdit : undefined}>
+            <View className='profile-motto-row' onClick={handleOwnerEditClick}>
               <Text className='profile-motto-text'>{motto}</Text>
             </View>
           ) : isOwner ? (
@@ -890,17 +981,32 @@ export default function ProfileSettingsPage() {
           {/* 关注 + 私信操作行（仅他人主页） */}
           {!isOwner && (
             <View className='profile-action-row'>
-              <View
-                className={`profile-follow-btn ${isFollowing ? 'profile-follow-btn--active' : ''}`}
-                onClick={handleFollowToggle}
-              >
-                <Text className='profile-follow-btn-text'>
-                  {followLoading ? '...' : isFollowing ? '已关注' : '+ 关注'}
-                </Text>
-              </View>
-              <View className='profile-dm-btn' onClick={handleGoPrivateChat}>
-                <Text className='profile-dm-btn-text'>私信</Text>
-              </View>
+              {blockStatus?.is_blocked_by_me ? (
+                <View className='profile-dm-btn' onClick={handleUnblockUser}>
+                  <Text className='profile-dm-btn-text'>解除拉黑</Text>
+                </View>
+              ) : blockStatus?.blocked_either ? (
+                <View className='profile-blocked-pill'>
+                  <Text className='profile-blocked-pill-text'>内容不可见</Text>
+                </View>
+              ) : (
+                <>
+                  <View
+                    className={`profile-follow-btn ${isFollowing ? 'profile-follow-btn--active' : ''}`}
+                    onClick={handleFollowToggle}
+                  >
+                    <Text className='profile-follow-btn-text'>
+                      {followLoading ? '...' : isFollowing ? '已关注' : '+ 关注'}
+                    </Text>
+                  </View>
+                  <View className='profile-dm-btn' onClick={handleGoPrivateChat}>
+                    <Text className='profile-dm-btn-text'>私信</Text>
+                  </View>
+                  <View className='profile-block-btn' onClick={handleBlockUser}>
+                    <Text className='profile-block-btn-text'>拉黑</Text>
+                  </View>
+                </>
+              )}
             </View>
           )}
         </View>
@@ -1126,11 +1232,22 @@ export default function ProfileSettingsPage() {
       </View>
       <FeedActionSheet
         visible={!!feedActionSheetTarget}
-        actions={[{ id: 'report', label: '举报', iconClass: 'icon-jinggao', danger: true }]}
+        actions={[
+          { id: blockStatus?.is_blocked_by_me ? 'unblock-user' : 'block-user', label: blockStatus?.is_blocked_by_me ? '解除拉黑' : '拉黑用户', iconClass: 'icon-close', danger: !blockStatus?.is_blocked_by_me },
+          { id: 'report', label: '举报', iconClass: 'icon-jinggao', danger: true },
+        ]}
         onClose={() => setFeedActionSheetTarget(null)}
         onSelect={(id) => {
           if (id === 'report' && feedActionSheetTarget) {
             setReportTarget(feedActionSheetTarget)
+          }
+          if (id === 'block-user') {
+            setFeedActionSheetTarget(null)
+            handleBlockUser()
+          }
+          if (id === 'unblock-user') {
+            setFeedActionSheetTarget(null)
+            handleUnblockUser()
           }
         }}
       />

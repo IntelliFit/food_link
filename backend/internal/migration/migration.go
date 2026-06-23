@@ -74,6 +74,9 @@ func AutoMigrate(ctx context.Context, db *gorm.DB, schema string) error {
 	if err := ensureFoodWeightLabeledSamplesStructuredLabels(ctx, db); err != nil {
 		return err
 	}
+	if err := ensurePaymentTestConfig(ctx, db); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -150,6 +153,8 @@ func ensureConstraints(ctx context.Context, db *gorm.DB) error {
 		dropAndAddCheck("ai_custom_focus_cards", "ai_custom_focus_cards_range_type_check", `range_type = ANY (ARRAY['week'::text,'month'::text])`),
 		dropAndAddCheck("membership_plan_config", "membership_plan_config_tier_check", `tier IS NULL OR tier = ANY (ARRAY['light'::text,'standard'::text,'advanced'::text])`),
 		dropAndAddCheck("membership_plan_config", "membership_plan_config_period_check", `period IS NULL OR period = ANY (ARRAY['monthly'::text,'quarterly'::text,'yearly'::text])`),
+		dropAndAddCheck("pro_membership_payment_records", "pro_membership_payment_records_status_check", `status = ANY (ARRAY['pending'::text,'paid'::text,'failed'::text,'cancelled'::text,'expired'::text,'closed'::text,'refunded'::text])`),
+		dropAndAddCheck("membership_payment_test_settings", "membership_payment_test_settings_id_check", `id = 'default'`),
 		dropAndAddCheck("user_invite_referrals", "user_invite_referrals_status_check", `status = ANY (ARRAY['pending_qualified'::text,'reward_active'::text,'reward_completed'::text,'reward_blocked'::text,'cancelled'::text])`),
 		dropAndAddCheck("user_pets", "user_pets_level_check", `level >= 1`),
 		dropAndAddCheck("user_pets", "user_pets_experience_check", `experience >= 0`),
@@ -234,6 +239,7 @@ func ensureConstraints(ctx context.Context, db *gorm.DB) error {
 		addFK("user_pro_memberships_current_plan_code_fkey", "user_pro_memberships", "current_plan_code", "membership_plan_config", "code", "SET NULL"),
 		addFK("pro_membership_payment_records_user_id_fkey", "pro_membership_payment_records", "user_id", "weapp_user", "id", "CASCADE"),
 		addFK("pro_membership_payment_records_plan_code_fkey", "pro_membership_payment_records", "plan_code", "membership_plan_config", "code", "RESTRICT"),
+		addFK("membership_payment_test_users_user_id_fkey", "membership_payment_test_users", "user_id", "weapp_user", "id", "CASCADE"),
 		addFK("user_invite_referrals_inviter_user_id_fkey", "user_invite_referrals", "inviter_user_id", "weapp_user", "id", "CASCADE"),
 		addFK("user_invite_referrals_invitee_user_id_fkey", "user_invite_referrals", "invitee_user_id", "weapp_user", "id", "CASCADE"),
 		addFK("user_pets_user_id_fkey", "user_pets", "user_id", "weapp_user", "id", "CASCADE"),
@@ -286,6 +292,10 @@ CASE
   ELSE regexp_replace(trim(telephone), '[\s\-\(\)]', '', 'g')
 END
 )) WHERE telephone IS NOT NULL AND trim(telephone) <> ''`,
+		`ALTER TABLE membership_plan_config ADD COLUMN IF NOT EXISTS is_visible boolean NOT NULL DEFAULT true`,
+		`ALTER TABLE membership_plan_config ADD COLUMN IF NOT EXISTS is_test_plan boolean NOT NULL DEFAULT false`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_membership_payment_test_users_user_id ON membership_payment_test_users (user_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_membership_payment_test_users_created_at ON membership_payment_test_users (created_at DESC)`,
 		`ALTER TABLE packaged_food_library DROP CONSTRAINT IF EXISTS packaged_food_library_normalized_name_key`,
 		`DROP INDEX IF EXISTS uni_packaged_food_library_normalized_name`,
 		`ALTER TABLE packaged_food_library ADD COLUMN IF NOT EXISTS product_key text NOT NULL DEFAULT ''`,
@@ -322,6 +332,10 @@ END
 		`ALTER TABLE reward_task_uploads ADD COLUMN IF NOT EXISTS source_key text`,
 		`ALTER TABLE user_exercise_logs ADD COLUMN IF NOT EXISTS image_url text`,
 		`ALTER TABLE user_exercise_logs ADD COLUMN IF NOT EXISTS exercise_type text`,
+		`ALTER TABLE user_exercise_logs ADD COLUMN IF NOT EXISTS exercise_items jsonb NOT NULL DEFAULT '[]'::jsonb`,
+		`ALTER TABLE user_exercise_logs ALTER COLUMN exercise_items SET DEFAULT '[]'::jsonb`,
+		`UPDATE user_exercise_logs SET exercise_items = '[]'::jsonb WHERE exercise_items IS NULL`,
+		`ALTER TABLE user_exercise_logs ALTER COLUMN exercise_items SET NOT NULL`,
 		`ALTER TABLE user_exercise_logs ADD COLUMN IF NOT EXISTS hidden_from_feed boolean NOT NULL DEFAULT false`,
 		`ALTER TABLE user_food_records ADD COLUMN IF NOT EXISTS entry_type text`,
 		`ALTER TABLE feed_likes ADD COLUMN IF NOT EXISTS target_type text NOT NULL DEFAULT 'food_record'`,
@@ -863,6 +877,78 @@ func ensureFoodWeightLabeledSamplesStructuredLabels(ctx context.Context, db *gor
 	`
 	if err := db.WithContext(ctx).Exec(sql).Error; err != nil {
 		return fmt.Errorf("convert food_weight_labeled_samples items to structured labels: %w", err)
+	}
+	return nil
+}
+
+func ensurePaymentTestConfig(ctx context.Context, db *gorm.DB) error {
+	sqls := []string{
+		`INSERT INTO membership_payment_test_settings (id, enabled, created_at, updated_at)
+VALUES ('default', false, now(), now())
+ON CONFLICT (id) DO NOTHING`,
+		`ALTER TABLE membership_payment_test_users
+  ADD COLUMN IF NOT EXISTS membership_snapshot jsonb NOT NULL DEFAULT '{}'::jsonb`,
+		`ALTER TABLE membership_payment_test_users
+  ADD COLUMN IF NOT EXISTS membership_snapshot_taken_at timestamptz`,
+		`ALTER TABLE membership_payment_test_users
+  ADD COLUMN IF NOT EXISTS membership_cancelled_at timestamptz`,
+		`ALTER TABLE membership_payment_test_users
+  ADD COLUMN IF NOT EXISTS membership_cancelled_by text`,
+		`ALTER TABLE membership_payment_test_users
+  ADD COLUMN IF NOT EXISTS membership_restored_at timestamptz`,
+		`ALTER TABLE membership_payment_test_users
+  ADD COLUMN IF NOT EXISTS membership_restored_by text`,
+		`INSERT INTO membership_plan_config (
+  code,
+  name,
+  description,
+  amount,
+  duration_months,
+  is_active,
+  is_visible,
+  is_test_plan,
+  tier,
+  period,
+  daily_credits,
+  original_amount,
+  sort_order,
+  created_at,
+  updated_at
+) VALUES (
+  'test_one_cent_monthly',
+  'Pay Test - 0.01 CNY',
+  'Hidden one-cent payment test membership plan',
+  0.01,
+  1,
+  true,
+  false,
+  true,
+  'light',
+  'monthly',
+  8,
+  NULL,
+  9999,
+  now(),
+  now()
+) ON CONFLICT (code) DO UPDATE SET
+  name = EXCLUDED.name,
+  description = EXCLUDED.description,
+  amount = EXCLUDED.amount,
+  duration_months = EXCLUDED.duration_months,
+  is_active = true,
+  is_visible = false,
+  is_test_plan = true,
+  tier = EXCLUDED.tier,
+  period = EXCLUDED.period,
+  daily_credits = EXCLUDED.daily_credits,
+  original_amount = EXCLUDED.original_amount,
+  sort_order = EXCLUDED.sort_order,
+  updated_at = now()`,
+	}
+	for _, sql := range sqls {
+		if err := db.WithContext(ctx).Exec(sql).Error; err != nil {
+			return fmt.Errorf("ensure payment test config: %w", err)
+		}
 	}
 	return nil
 }

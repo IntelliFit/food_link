@@ -164,13 +164,13 @@ func (h *BenchmarkHandler) CancelRun(c *gin.Context) {
 func (h *BenchmarkHandler) ListRunSamples(c *gin.Context) {
 	page := positiveInt(c.Query("page"), 1)
 	limit := positiveInt(c.Query("limit"), 30)
-	result, err := h.svc.ListRunSamples(c.Request.Context(), c.Param("run_id"), page, limit)
+	result, err := h.svc.ListRunSamplesWithDataset(c.Request.Context(), c.Param("run_id"), page, limit)
 	if err != nil {
 		response.Error(c, err)
 		return
 	}
 	response.Success(c, gin.H{
-		"items": domain.ToBenchmarkRunSampleDTOList(result.Items),
+		"items": domain.ToBenchmarkRunSampleWithDatasetDTOList(result.Items),
 		"page":  result.Page,
 		"limit": result.Limit,
 		"total": result.Total,

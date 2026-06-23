@@ -81,7 +81,15 @@ func (r *NotificationRepo) ListNotifications(ctx context.Context, userID, notifi
 	var rows []domain.FeedInteractionNotification
 	q := r.db.WithContext(ctx).
 		Where("recipient_user_id = ?", userID).
-		Where("(actor_user_id IS NULL OR actor_user_id != recipient_user_id)")
+		Where("(actor_user_id IS NULL OR actor_user_id != recipient_user_id)").
+		Where(`NOT EXISTS (
+			SELECT 1 FROM user_blocks ub
+			WHERE actor_user_id IS NOT NULL
+			  AND (
+				(ub.blocker_user_id = ? AND ub.blocked_user_id = actor_user_id)
+				OR (ub.blocker_user_id = actor_user_id AND ub.blocked_user_id = ?)
+			  )
+		)`, userID, userID)
 	if notificationType != "" {
 		q = q.Where("notification_type = ?", notificationType)
 	}
@@ -96,6 +104,14 @@ func (r *NotificationRepo) CountUnread(ctx context.Context, userID string) (int6
 	var count int64
 	err := r.db.WithContext(ctx).Model(&domain.FeedInteractionNotification{}).
 		Where("recipient_user_id = ? AND is_read = ?", userID, false).
+		Where(`NOT EXISTS (
+			SELECT 1 FROM user_blocks ub
+			WHERE actor_user_id IS NOT NULL
+			  AND (
+				(ub.blocker_user_id = ? AND ub.blocked_user_id = actor_user_id)
+				OR (ub.blocker_user_id = actor_user_id AND ub.blocked_user_id = ?)
+			  )
+		)`, userID, userID).
 		Count(&count).Error
 	return count, err
 }

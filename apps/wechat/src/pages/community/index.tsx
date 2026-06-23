@@ -5,6 +5,7 @@ import Taro, { useShareAppMessage, useShareTimeline } from '@tarojs/taro'
 import {
   getAccessToken,
   friendSearch,
+  friendBlockUser,
   friendSendRequest,
   friendGetRequests,
   friendGetList,
@@ -44,10 +45,11 @@ import {
 } from '../../utils/api'
 import {
   extractManualFoodDisplayItems,
-  isManualFoodFeedRecord
+  shouldRenderManualFoodCards
 } from '../../utils/manual-food-source'
 import { FeedReportMask } from './components/FeedReportMask'
 import { ManualFoodCards } from './components/ManualFoodCards'
+import { ExerciseActivityCards, hasExerciseActivityCards } from './components/ExerciseActivityCards'
 import { FeedReportSheet } from './components/FeedReportSheet'
 import { FeedActionSheet, type FeedActionSheetAction } from './components/FeedActionSheet'
 import { Button as TaroifyButton } from '@taroify/core'
@@ -1351,7 +1353,10 @@ function CommunityPage() {
   const feedActionSheetActions = useMemo<FeedActionSheetAction[]>(() => {
     if (!feedActionSheet) return []
     if (feedActionSheet.mode === 'report') {
-      return [{ id: 'report', label: '举报', iconClass: 'icon-jinggao', danger: true }]
+      return [
+        { id: 'block-user', label: '拉黑用户', iconClass: 'icon-close', danger: true },
+        { id: 'report', label: '举报', iconClass: 'icon-jinggao', danger: true },
+      ]
     }
     const item = feedActionSheet.item
     const targetType = getFeedTargetType(item)
@@ -1363,28 +1368,61 @@ function CommunityPage() {
     return actions
   }, [feedActionSheet])
 
+  const handleEditFeedItem = useCallback((item: CommunityFeedItem) => {
+    const targetType = getFeedTargetType(item)
+    const targetId = getFeedTargetId(item)
+    if (targetType === 'circle_post') {
+      Taro.navigateTo({ url: extraPkgUrl(`/pages/circle-post-edit/index?id=${encodeURIComponent(targetId)}`) })
+    } else if (targetType === 'food_record') {
+      setEditSheetRecord(item.record)
+      setEditSheetVisible(true)
+    } else if (targetType === 'exercise_log') {
+      Taro.navigateTo({ url: extraPkgUrl(`/pages/exercise-record/index?log_id=${encodeURIComponent(targetId)}`) })
+    } else if (targetType === 'campus_food') {
+      Taro.navigateTo({ url: extraPkgUrl(`/pages/campus-food-share/index?item_id=${encodeURIComponent(targetId)}`) })
+    }
+  }, [])
+
+  const handleBlockFeedAuthor = async (item: CommunityFeedItem) => {
+    const authorId = item.author?.id || item.record?.user_id
+    if (!authorId) return
+    const ok = await Taro.showModal({
+      title: '拉黑用户',
+      content: `拉黑「${item.author?.nickname || '用户'}」后，双方无法私信、加好友，也不会在圈子里互相看到内容。`,
+      confirmText: '拉黑',
+      cancelText: '取消',
+      confirmColor: '#ef4444'
+    })
+    if (!ok.confirm) return
+    try {
+      Taro.showLoading({ title: '处理中...', mask: true })
+      await friendBlockUser(authorId)
+      Taro.hideLoading()
+      const next = feedList.filter((feed) => (feed.author?.id || feed.record?.user_id) !== authorId)
+      setFeedList(next)
+      saveToCache(next)
+      Taro.showToast({ title: '已拉黑', icon: 'success' })
+    } catch (e) {
+      Taro.hideLoading()
+      await showUnifiedApiError(e, '无法操作')
+    }
+  }
+
   const handleFeedActionSelect = (id: string) => {
     if (!feedActionSheet) return
     const { item, mode } = feedActionSheet
     if (mode === 'report') {
+      if (id === 'block-user') {
+        void handleBlockFeedAuthor(item)
+        return
+      }
       if (id === 'report') {
         setReportTarget({ targetType: getFeedTargetType(item), targetId: getFeedTargetId(item) })
       }
       return
     }
-    const targetType = getFeedTargetType(item)
-    const targetId = getFeedTargetId(item)
     if (id === 'edit') {
-      if (targetType === 'circle_post') {
-        Taro.navigateTo({ url: extraPkgUrl(`/pages/circle-post-edit/index?id=${encodeURIComponent(targetId)}`) })
-      } else if (targetType === 'food_record') {
-        setEditSheetRecord(item.record)
-        setEditSheetVisible(true)
-      } else if (targetType === 'exercise_log') {
-        Taro.navigateTo({ url: extraPkgUrl(`/pages/exercise-record/index?log_id=${encodeURIComponent(targetId)}`) })
-      } else if (targetType === 'campus_food') {
-        Taro.navigateTo({ url: extraPkgUrl(`/pages/campus-food-share/index?item_id=${encodeURIComponent(targetId)}`) })
-      }
+      handleEditFeedItem(feedActionSheet.item)
       return
     }
     if (id === 'delete') {
@@ -1467,35 +1505,30 @@ function CommunityPage() {
 
   /** 点击帖子图片/热量/营养进入识别记录详情 */
   const handleViewDetail = (itemOrRecord: CommunityFeedItem | CommunityFeedItem['record']) => {
-    let maybeItem: CommunityFeedItem | null = null
     let record: CommunityFeedItem['record']
+    let targetType: CommunityFeedTargetType = 'food_record'
+    let targetId = ''
     if (isCommunityFeedItem(itemOrRecord)) {
-      maybeItem = itemOrRecord
       record = itemOrRecord.record
+      targetType = getFeedTargetType(itemOrRecord)
+      targetId = getFeedTargetId(itemOrRecord)
     } else {
       record = itemOrRecord
+      targetType = (record.feed_type || 'food_record') as CommunityFeedTargetType
+      targetId = record.id
     }
     if (!record.id) {
       Taro.showToast({ title: '记录 ID 缺失', icon: 'none' })
       return
     }
+    const query = [
+      `targetType=${encodeURIComponent(targetType)}`,
+      `targetId=${encodeURIComponent(targetId)}`,
+      `recordId=${encodeURIComponent(record.id)}`
+    ].join('&')
     try {
-      if (maybeItem && isExerciseFeed(maybeItem)) {
-        const dateText = String(record.record_time || record.created_at || '').slice(0, 10)
-        Taro.navigateTo({
-          url: `${extraPkgUrl('/pages/exercise-record/index')}${dateText ? `?date=${encodeURIComponent(dateText)}` : ''}`
-        })
-        return
-      }
-      if (maybeItem && isCampusFoodFeed(maybeItem)) {
-        const targetId = maybeItem.target_id || record.id
-        Taro.navigateTo({
-          url: `${extraPkgUrl('/pages/food-library-detail/index')}?id=${encodeURIComponent(targetId)}`
-        })
-        return
-      }
       Taro.navigateTo({
-        url: `${extraPkgUrl('/pages/record-detail/index')}?id=${encodeURIComponent(record.id)}`
+        url: `${extraPkgUrl('/pages/interaction-feed-detail/index')}?${query}`
       })
     } catch (e) {
       void showUnifiedApiError(e, '打开详情失败')
@@ -2382,11 +2415,12 @@ function CommunityPage() {
                     const circlePostBody = isCirclePost ? (item.record.body || '') : ''
                     const circlePostText = circlePostTitle || circlePostBody
                     const exerciseKcal = Number(item.record.calories_burned ?? item.record.total_calories ?? 0)
-                    const isManualRecord = !exercise && !isCirclePost && isManualFoodFeedRecord(item.record)
+                    const isManualRecord = !exercise && !isCirclePost && shouldRenderManualFoodCards(item.record)
                     const manualFoodItems = isManualRecord
                       ? extractManualFoodDisplayItems(item.record.items)
                       : []
                     const useManualFoodCards = isManualRecord && manualFoodItems.length > 0
+                    const useExerciseActivityCards = exercise && hasExerciseActivityCards(item.record.exercise_items)
                     const feedImagePaths = !exercise && !isCirclePost && !useManualFoodCards
                       ? (item.record.image_paths?.length
                         ? item.record.image_paths
@@ -2396,10 +2430,10 @@ function CommunityPage() {
                       : []
                     const showReportMask = isCirclePost && reportMaskTarget?.targetType === targetType && reportMaskTarget?.targetId === targetId
                     return (
-                    <View key={targetKey}>
-                      <View
-                        id={`feed-card-${targetType}-${targetId}`}
-                        className={`feed-card${(item.record.description?.trim() || exerciseDesc || circlePostText.trim()) && !item.record.image_path && !useManualFoodCards ? ' feed-card-text-only' : ''} ${exercise ? 'feed-card-exercise' : ''} ${isCirclePost ? 'feed-card-circle-post' : ''}`}
+	                    <View key={targetKey}>
+	                      <View
+	                        id={`feed-card-${targetType}-${targetId}`}
+	                        className={`feed-card${(item.record.description?.trim() || exerciseDesc || circlePostText.trim()) && !item.record.image_path && !useManualFoodCards && !useExerciseActivityCards ? ' feed-card-text-only' : ''} ${exercise ? 'feed-card-exercise' : ''} ${isCirclePost ? 'feed-card-circle-post' : ''}`}
                         style={isCirclePost ? { position: 'relative' } : undefined}
                         onLongPress={() => {
                           if (isCirclePost && !item.is_mine) {
@@ -2407,7 +2441,10 @@ function CommunityPage() {
                           }
                         }}
                       >
-                        <View className='feed-card-moments'>
+                        <View
+                          className='feed-card-moments'
+                          onClick={() => handleViewDetail(item)}
+                        >
                           <View className='feed-card-avatar-col'>
                             <View
                               className='user-avatar'
@@ -2451,7 +2488,7 @@ function CommunityPage() {
                                 ) : null}
                               </View>
                             </View>
-                            {!useManualFoodCards && (exercise ? exerciseDesc : isCirclePost ? circlePostText : item.record.description) &&
+	                            {!useManualFoodCards && !useExerciseActivityCards && (exercise ? exerciseDesc : isCirclePost ? circlePostText : item.record.description) &&
                               (item.record.image_path && !isCirclePost ? (
                                 exercise
                                   ? renderCollapsibleFeedText(`${targetKey}-desc`, exerciseDesc)
@@ -2470,12 +2507,18 @@ function CommunityPage() {
                                   )}
                                 </View>
                               ))}
-                            {useManualFoodCards && (
-                              <ManualFoodCards
-                                items={item.record.items}
-                                onItemClick={() => handleViewDetail(item)}
-                              />
-                            )}
+	                            {useManualFoodCards && (
+	                              <ManualFoodCards
+	                                items={item.record.items}
+	                                onItemClick={() => handleViewDetail(item)}
+	                              />
+	                            )}
+	                            {useExerciseActivityCards && (
+	                              <ExerciseActivityCards
+	                                items={item.record.exercise_items}
+	                                onItemClick={() => handleViewDetail(item)}
+	                              />
+	                            )}
                             {feedImagePaths.length > 0 && !useManualFoodCards && !isCirclePost && (
                               <View
                                 className={`feed-image ${feedImagePaths.length <= 1 ? 'feed-tap-to-detail' : ''}`}
@@ -2658,6 +2701,17 @@ function CommunityPage() {
                                   <Text className='action-count'>评论 {item.comment_count || 0}</Text>
                                 </View>
                               </View>
+                              {item.is_mine && (
+                                <View
+                                  className='action-item action-edit'
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    handleEditFeedItem(item)
+                                  }}
+                                >
+                                  <Text className='action-icon iconfont icon-edit' />
+                                </View>
+                              )}
                               <View
                                 className='action-item action-manage'
                                 onClick={(e) => {

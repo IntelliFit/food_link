@@ -28,6 +28,7 @@ func setupFeedTestDB(t *testing.T) *gorm.DB {
 		recorded_on datetime,
 		recorded_at datetime,
 		ai_reasoning text,
+		exercise_items text,
 		hidden_from_feed boolean default false,
 		created_at datetime
 	)`).Error)

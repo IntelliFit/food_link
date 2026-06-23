@@ -11,6 +11,7 @@ import (
 	"food_link/backend/internal/membership/domain"
 
 	"github.com/google/uuid"
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -26,7 +27,7 @@ func NewMembershipRepo(db *gorm.DB) *MembershipRepo {
 func (r *MembershipRepo) ListActivePlans(ctx context.Context) ([]domain.MembershipPlan, error) {
 	var plans []domain.MembershipPlan
 	err := r.db.WithContext(ctx).
-		Where("is_active = ?", true).
+		Where("is_active = ? AND is_visible = ?", true, true).
 		Order("sort_order ASC").
 		Order("created_at ASC").
 		Find(&plans).Error
@@ -44,6 +45,31 @@ func (r *MembershipRepo) GetPlanByCode(ctx context.Context, planCode string) (*d
 		return nil, nil
 	}
 	return &plan, err
+}
+
+func (r *MembershipRepo) GetPaymentTestAccess(ctx context.Context, userID string) (*domain.PaymentTestAccess, error) {
+	var setting domain.PaymentTestSetting
+	err := r.db.WithContext(ctx).Where("id = ?", "default").First(&setting).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return &domain.PaymentTestAccess{Enabled: false, UserAllowed: false}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	access := &domain.PaymentTestAccess{Enabled: setting.Enabled}
+	if !setting.Enabled || strings.TrimSpace(userID) == "" {
+		return access, nil
+	}
+	var count int64
+	err = r.db.WithContext(ctx).
+		Model(&domain.PaymentTestUser{}).
+		Where("user_id = ?", strings.TrimSpace(userID)).
+		Count(&count).Error
+	if err != nil {
+		return nil, err
+	}
+	access.UserAllowed = count > 0
+	return access, nil
 }
 
 func (r *MembershipRepo) GetActiveMembership(ctx context.Context, userID string) (*domain.UserMembership, error) {
@@ -187,7 +213,7 @@ func (r *MembershipRepo) GetLatestPaidMembershipPayment(ctx context.Context, use
 		return nil, err
 	}
 	for _, row := range rows {
-		if isMembershipPlanCode(row.PlanCode) {
+		if isMembershipPlanCode(row.PlanCode) && !isPaymentTestPlanCode(row.PlanCode) {
 			return &row, nil
 		}
 	}
@@ -282,7 +308,7 @@ func (r *MembershipRepo) GetFirstPaidMembershipUserRank(ctx context.Context, use
 	seen := map[string]struct{}{}
 	rank := 0
 	for _, row := range rows {
-		if !isMembershipPlanCode(row.PlanCode) || row.UserID == "" {
+		if !isMembershipPlanCode(row.PlanCode) || isPaymentTestPlanCode(row.PlanCode) || row.UserID == "" {
 			continue
 		}
 		if _, ok := seen[row.UserID]; ok {
@@ -357,6 +383,24 @@ func (r *MembershipRepo) UpdateInviteReferral(ctx context.Context, id string, up
 	return &row, err
 }
 
+func (r *MembershipRepo) ListPendingInviteReferralsByInviter(ctx context.Context, inviterUserID string) ([]domain.UserInviteReferral, error) {
+	var rows []domain.UserInviteReferral
+	err := r.db.WithContext(ctx).
+		Where("inviter_user_id = ? AND status = ?", inviterUserID, "pending_qualified").
+		Order("created_at ASC").
+		Find(&rows).Error
+	return rows, err
+}
+
+func (r *MembershipRepo) ListInviteReferralsForUser(ctx context.Context, userID string) ([]domain.UserInviteReferral, error) {
+	var rows []domain.UserInviteReferral
+	err := r.db.WithContext(ctx).
+		Where("inviter_user_id = ? OR invitee_user_id = ?", userID, userID).
+		Order("created_at DESC").
+		Find(&rows).Error
+	return rows, err
+}
+
 func (r *MembershipRepo) CountCompletedInviteRewardsForInviterInMonth(ctx context.Context, inviterUserID, monthStart, nextMonthStart string) (int, error) {
 	start, err := time.ParseInLocation("2006-01-02", monthStart, chinaLocation())
 	if err != nil {
@@ -404,7 +448,20 @@ func (r *MembershipRepo) UpdatePaymentStatus(ctx context.Context, id string, sta
 
 func (r *MembershipRepo) UpdatePaymentByOrderNo(ctx context.Context, orderNo string, updates map[string]any) error {
 	updates["updated_at"] = time.Now()
+	normalizePaymentJSONUpdates(updates)
 	return r.db.WithContext(ctx).Model(&domain.MembershipPayment{}).Where("order_no = ?", orderNo).Updates(updates).Error
+}
+
+func normalizePaymentJSONUpdates(updates map[string]any) {
+	for _, key := range []string{"notify_payload", "extra"} {
+		value, ok := updates[key]
+		if !ok || value == nil {
+			continue
+		}
+		if jsonMap, ok := value.(map[string]any); ok {
+			updates[key] = datatypes.JSONMap(jsonMap)
+		}
+	}
 }
 
 func (r *MembershipRepo) ExpirePendingMembershipOrders(ctx context.Context, userID, excludeOrderNo, reason string) (int, error) {
@@ -445,9 +502,14 @@ func (r *MembershipRepo) ExpirePendingMembershipOrders(ctx context.Context, user
 func isMembershipPlanCode(planCode string) bool {
 	code := strings.TrimSpace(strings.ToLower(planCode))
 	return code == "pro_monthly" ||
+		code == domain.PaymentTestPlanCode ||
 		strings.HasPrefix(code, "light_") ||
 		strings.HasPrefix(code, "standard_") ||
 		strings.HasPrefix(code, "advanced_")
+}
+
+func isPaymentTestPlanCode(planCode string) bool {
+	return strings.EqualFold(strings.TrimSpace(planCode), domain.PaymentTestPlanCode)
 }
 
 func (r *MembershipRepo) CountAnalysisTasksToday(ctx context.Context, userID string) (int64, error) {
@@ -890,6 +952,7 @@ type User struct {
 	ID                   string     `gorm:"column:id"`
 	OpenID               string     `gorm:"column:openid"`
 	UnionID              *string    `gorm:"column:unionid"`
+	Nickname             *string    `gorm:"column:nickname"`
 	EarnedCreditsBalance int        `gorm:"column:earned_credits_balance"`
 	CreatedAt            *time.Time `gorm:"column:create_time"`
 	Birthday             *string    `gorm:"column:birthday"`

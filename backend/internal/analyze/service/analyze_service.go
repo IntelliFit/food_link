@@ -21,7 +21,6 @@ import (
 	"food_link/backend/internal/common/errors"
 	foodrecorddomain "food_link/backend/internal/foodrecord/domain"
 	foodrecordrepo "food_link/backend/internal/foodrecord/repo"
-	"food_link/backend/internal/nutrition"
 	"food_link/backend/pkg/logger"
 	"food_link/backend/pkg/metrics"
 	"food_link/backend/pkg/storage"
@@ -596,7 +595,6 @@ type AnalyzeInput struct {
 	ActivityTiming        string           `json:"activity_timing"`
 	RemainingCalories     *float64         `json:"remaining_calories"`
 	SuggestRatioEnabled   bool             `json:"suggest_ratio_enabled"`
-	ScoreEnabled          *bool            `json:"score_enabled"`
 	ExecutionMode         *string          `json:"execution_mode"`
 	ModelName             string           `json:"modelName"`
 	AnalysisEngine        string           `json:"analysis_engine"`
@@ -4515,49 +4513,7 @@ func (s *AnalyzeService) finalizeAnalyzeResponse(ctx context.Context, userID str
 		packagedExperimentCompatMode: isPackagedExperimentExecutionMode(executionMode),
 	})
 	resp = s.applySuggestedRatios(ctx, resp, input)
-	resp = s.applyScores(ctx, userID, resp, input)
 	return resp, nil
-}
-
-func (s *AnalyzeService) applyScores(ctx context.Context, userID string, resp map[string]any, input AnalyzeInput) map[string]any {
-	enabled := true
-	if input.ScoreEnabled != nil {
-		enabled = *input.ScoreEnabled
-	}
-	resp["score_enabled"] = enabled
-
-	var dashboardTargets map[string]any
-	var dailyCalorieTarget float64
-	if enabled && userID != "" && s.users != nil {
-		user, err := s.users.FindByID(ctx, userID)
-		if err == nil && user != nil {
-			dashboardTargets = dashboardTargetsAsAnyMap(user.HealthCondition["dashboard_targets"])
-			dailyCalorieTarget = nutrition.ResolveDailyCalorieTarget(dashboardTargets, user.TDEE)
-		}
-	}
-
-	items := toItems(resp["items"])
-	scores := ComputeAnalysisScores(items, dashboardTargets, dailyCalorieTarget, input.MealType, enabled)
-	resp["micronutrient_score"] = scores.MicronutrientScore
-	resp["macro_balance_score"] = scores.MacroBalanceScore
-	resp["calorie_score"] = scores.CalorieScore
-	resp["final_score"] = scores.FinalScore
-	return resp
-}
-
-func dashboardTargetsAsAnyMap(raw any) map[string]any {
-	switch value := raw.(type) {
-	case map[string]any:
-		return value
-	case map[string]float64:
-		out := make(map[string]any, len(value))
-		for key, val := range value {
-			out[key] = val
-		}
-		return out
-	default:
-		return map[string]any{}
-	}
 }
 
 func (s *AnalyzeService) applyEdiblePortionRatios(ctx context.Context, resp map[string]any, input AnalyzeInput) map[string]any {

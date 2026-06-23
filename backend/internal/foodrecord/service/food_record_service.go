@@ -1336,3 +1336,110 @@ func (s *FoodRecordService) inferMealTypeFromHealthRoutine(ctx context.Context, 
 	}
 	return inferMealTypeByRoutine(wakeHour, sleepHour, refTime), true
 }
+
+// RecommendMealType 根据用户作息/当前时间推断默认餐次，并结合当天已有记录做顺延。
+// 如果当前推荐餐次（仅限正餐）已在当天存在记录，且与当天最新记录间隔超过 1 小时，
+// 则按 breakfast → lunch → dinner → evening_snack 顺序顺延。
+func (s *FoodRecordService) RecommendMealType(ctx context.Context, userID string, dateStr string, refTime *time.Time) (string, string, error) {
+	t := time.Now().In(chinaTZ)
+	if refTime != nil {
+		t = refTime.In(chinaTZ)
+	}
+
+	var baseMeal, generatedBy string
+	if inferred, ok := s.inferMealTypeFromHealthRoutine(ctx, userID, &t); ok {
+		baseMeal = inferred
+		generatedBy = "health_routine"
+	} else {
+		baseMeal = inferDefaultMealTypeFromLocalTime(t)
+		generatedBy = "local_time"
+	}
+
+	date := dateStr
+	if date == "" {
+		date = t.Format("2006-01-02")
+	}
+
+	records, err := s.recordRepo.ListByUser(ctx, userID, date, 0)
+	if err != nil {
+		return baseMeal, generatedBy, nil
+	}
+
+	shifted := shiftMealTypeByExistingRecords(baseMeal, t, records)
+	if shifted != baseMeal {
+		generatedBy = "shifted_by_record"
+	}
+	return shifted, generatedBy, nil
+}
+
+func inferDefaultMealTypeFromLocalTime(t time.Time) string {
+	minutes := t.In(chinaTZ).Hour()*60 + t.In(chinaTZ).Minute()
+	if minutes < 5*60 {
+		return "evening_snack"
+	}
+	if minutes < 10*60+30 {
+		return "breakfast"
+	}
+	if minutes < 11*60+30 {
+		return "morning_snack"
+	}
+	if minutes < 14*60+30 {
+		return "lunch"
+	}
+	if minutes < 17*60 {
+		return "afternoon_snack"
+	}
+	if minutes < 21*60 {
+		return "dinner"
+	}
+	return "evening_snack"
+}
+
+func shiftMealTypeByExistingRecords(baseMeal string, refTime time.Time, records []domain.FoodRecord) string {
+	mainMeals := []string{"breakfast", "lunch", "dinner"}
+	mainMealSet := map[string]bool{}
+	for _, m := range mainMeals {
+		mainMealSet[m] = true
+	}
+	if !mainMealSet[baseMeal] {
+		return baseMeal
+	}
+
+	var latestRecordTime *time.Time
+	existingMeals := map[string]bool{}
+	for i := range records {
+		if records[i].RecordTime == nil {
+			continue
+		}
+		existingMeals[strings.ToLower(strings.TrimSpace(records[i].MealType))] = true
+		if latestRecordTime == nil || records[i].RecordTime.After(*latestRecordTime) {
+			latestRecordTime = records[i].RecordTime
+		}
+	}
+
+	if latestRecordTime == nil {
+		return baseMeal
+	}
+	if refTime.Sub(*latestRecordTime) <= time.Hour {
+		return baseMeal
+	}
+
+	baseIdx := -1
+	for i, m := range mainMeals {
+		if m == baseMeal {
+			baseIdx = i
+			break
+		}
+	}
+	if baseIdx < 0 {
+		return baseMeal
+	}
+
+	for i := baseIdx + 1; i < len(mainMeals); i++ {
+		next := mainMeals[i]
+		if !existingMeals[next] {
+			return next
+		}
+	}
+	return "evening_snack"
+}

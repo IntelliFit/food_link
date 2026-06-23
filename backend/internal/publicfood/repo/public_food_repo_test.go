@@ -6,6 +6,7 @@ import (
 	"time"
 
 	analyzedomain "food_link/backend/internal/analyze/domain"
+	frienddomain "food_link/backend/internal/friend/domain"
 	"food_link/backend/internal/publicfood/domain"
 
 	"github.com/stretchr/testify/require"
@@ -23,7 +24,7 @@ func setupPublicFoodRepoTestDB(t *testing.T) *gorm.DB {
 		DSN:        ":memory:",
 	}), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&domain.PublicFoodItem{}, &domain.PublicFoodComment{}, &analyzedomain.AnalysisTask{}))
+	require.NoError(t, db.AutoMigrate(&domain.PublicFoodItem{}, &domain.PublicFoodComment{}, &analyzedomain.AnalysisTask{}, &frienddomain.UserBlock{}))
 	require.NoError(t, db.Exec(`CREATE TABLE weapp_user (
 		id TEXT PRIMARY KEY,
 		nickname TEXT,
@@ -175,7 +176,7 @@ func TestPublicFoodRepo_ListSimilarCampusFoods(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, item)
 
-	rows, err := r.ListSimilarCampusFoods(ctx, *item, 10)
+	rows, err := r.ListSimilarCampusFoods(ctx, *item, 10, "")
 
 	require.NoError(t, err)
 	require.NotEmpty(t, rows)
@@ -194,7 +195,7 @@ func TestPublicFoodRepo_ListRelatedCampusFeeds(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, item)
 
-	rows, err := r.ListRelatedCampusFeeds(ctx, *item, 10)
+	rows, err := r.ListRelatedCampusFeeds(ctx, *item, 10, "")
 
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
@@ -231,7 +232,7 @@ func TestPublicFoodRepo_ListCommentsBuildsReplyTree(t *testing.T) {
 		CreatedAt:       &later,
 	}).Error)
 
-	rows, err := r.ListComments(ctx, "campus-1", 10)
+	rows, err := r.ListComments(ctx, "campus-1", 10, "")
 
 	require.NoError(t, err)
 	require.Len(t, rows, 1)

@@ -19,9 +19,10 @@ import (
 )
 
 type RecipeService struct {
-	repo      *repo.RecipeRepo
-	storage   *storage.Client
-	waterLogs WaterLogRecorder
+	repo         *repo.RecipeRepo
+	storage      *storage.Client
+	waterLogs    WaterLogRecorder
+	blockChecker BlockChecker
 }
 
 func NewRecipeService(repo *repo.RecipeRepo, storageClient ...*storage.Client) *RecipeService {
@@ -36,8 +37,16 @@ type WaterLogRecorder interface {
 	CreateWaterLog(ctx context.Context, log *healthdomain.BodyWaterLog) error
 }
 
+type BlockChecker interface {
+	IsBlockedEither(ctx context.Context, userA, userB string) (bool, error)
+}
+
 func (s *RecipeService) ConfigureWaterLogRecorder(recorder WaterLogRecorder) {
 	s.waterLogs = recorder
+}
+
+func (s *RecipeService) ConfigureBlockChecker(checker BlockChecker) {
+	s.blockChecker = checker
 }
 
 type CreateInput struct {
@@ -103,6 +112,13 @@ func (s *RecipeService) List(ctx context.Context, userID, mealType string, isFav
 		return nil, err
 	}
 	return s.normalizeRecipes(recipes), nil
+}
+
+func (s *RecipeService) ListForViewer(ctx context.Context, viewerUserID, ownerUserID, mealType string, isFavorite *bool) ([]domain.Recipe, error) {
+	if err := s.ensureUserVisible(ctx, viewerUserID, ownerUserID); err != nil {
+		return nil, err
+	}
+	return s.List(ctx, ownerUserID, mealType, isFavorite)
 }
 
 func (s *RecipeService) Count(ctx context.Context, userID string, isFavorite *bool) (int64, error) {
@@ -275,6 +291,20 @@ func (s *RecipeService) recordFoodWaterIntake(ctx context.Context, userID string
 		SourceType: sourceType,
 		CreatedAt:  &now,
 	})
+}
+
+func (s *RecipeService) ensureUserVisible(ctx context.Context, viewerUserID, ownerUserID string) error {
+	if s.blockChecker == nil || strings.TrimSpace(viewerUserID) == "" || strings.TrimSpace(ownerUserID) == "" || viewerUserID == ownerUserID {
+		return nil
+	}
+	blocked, err := s.blockChecker.IsBlockedEither(ctx, viewerUserID, ownerUserID)
+	if err != nil {
+		return err
+	}
+	if blocked {
+		return commonerrors.ErrNotFound
+	}
+	return nil
 }
 
 func (s *RecipeService) normalizeRecipes(recipes []domain.Recipe) []domain.Recipe {

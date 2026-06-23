@@ -28,7 +28,7 @@ import { withAuth } from '../../../utils/withAuth'
 import { HOME_INTAKE_DATA_CHANGED_EVENT } from '../../../utils/home-events'
 import { addWaterToBodyMetricsStorage, calculateFoodRecordItemsWaterMl, refreshHomeDashboardLocalSnapshotFromCloud } from '../../../utils/home-dashboard-local-cache'
 import {
-  inferDefaultMealTypeFromHealthProfile,
+  getRecommendedMealTypeWithFallback,
   inferDefaultMealTypeFromLocalTime,
 } from '../../../utils/infer-default-meal-type'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
@@ -482,13 +482,20 @@ function buildNutrientsFromWeight(
   weight: number
 ) {
   const safeWeight = Math.max(0.01, weight)
+  // 优先以 baseNutrients（即列表显示的能量）为基准进行比例缩放。
+  // 不同来源（nutrition_library / public_library / recent）的食物在 enrich/分享时
+  // 可能让 nutrients_per_100g 与 total_calories 不一致；以 baseNutrients 为基准可保证
+  // 列表显示能量和实际记录能量一致。
+  if (item.defaultWeight > 0) {
+    const ratio = safeWeight / item.defaultWeight
+    return scaledNutrients(item.baseNutrients, ratio)
+  }
   if (item.nutrientsPer100g) {
     const scale = safeWeight / 100
     return scaledNutrients(item.nutrientsPer100g, scale)
   }
 
-  const ratio = item.defaultWeight > 0 ? safeWeight / item.defaultWeight : 1
-  return scaledNutrients(item.baseNutrients, ratio)
+  return scaledNutrients(item.baseNutrients, 1)
 }
 
 function RecordManualPage() {
@@ -569,7 +576,8 @@ function RecordManualPage() {
       void (async () => {
         try {
           const profile = getAccessToken() ? await getHealthProfile() : null
-          setSelectedMeal(inferDefaultMealTypeFromHealthProfile(profile))
+          const mealType = await getRecommendedMealTypeWithFallback({ profile })
+          setSelectedMeal(mealType)
         } catch {
           setSelectedMeal(inferDefaultMealTypeFromLocalTime())
         }

@@ -114,6 +114,7 @@
   display: flex;
   align-items: center;
   gap: 16rpx;
+  min-width: 0;
 
   &:active {
     opacity: 0.7;
@@ -121,10 +122,15 @@
 }
 
 .profile-user-id {
+  flex: 1;
+  min-width: 0;
   font-size: 24rpx;
   color: rgba(255, 255, 255, 0.78);
   line-height: 34rpx;
   font-family: monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .profile-id-copy-btn {
@@ -281,6 +287,48 @@
   font-size: 26rpx;
   line-height: 36rpx;
   color: #111827;
+  font-weight: 600;
+}
+
+.profile-block-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 56rpx;
+  padding: 0 24rpx;
+  border-radius: 999rpx;
+  background: rgba(239, 68, 68, 0.12);
+  border: 1rpx solid rgba(239, 68, 68, 0.18);
+  flex: 0 0 auto;
+
+  &:active {
+    opacity: 0.8;
+    transform: scale(0.96);
+  }
+}
+
+.profile-block-btn-text {
+  font-size: 24rpx;
+  line-height: 34rpx;
+  color: #ef4444;
+  font-weight: 600;
+}
+
+.profile-blocked-pill {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 56rpx;
+  padding: 0 32rpx;
+  border-radius: 999rpx;
+  background: rgba(255, 255, 255, 0.86);
+  flex: 1;
+}
+
+.profile-blocked-pill-text {
+  font-size: 26rpx;
+  line-height: 36rpx;
+  color: #6b7280;
   font-weight: 600;
 }
 
@@ -1021,6 +1069,15 @@
   text-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.35);
 }
 
+.profile-theme-toggle-btn {
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 50%;
+}
+
+.profile-theme-toggle-icon {
+  font-size: 36rpx;
+}
+
 /* 编辑弹窗背景图 */
 .edit-sheet-cover-section {
   width: 100%;
@@ -1320,60 +1377,7 @@
 
   /* 动态里的手动来源食物卡片 */
   .feed-manual-foods {
-    gap: 16rpx;
-  }
-
-  .feed-manual-food-row {
-    background: #1e2624;
-    border-color: rgba(255, 255, 255, 0.08);
-  }
-
-  .feed-manual-food-thumb {
-    background: linear-gradient(152.3deg, #1f3a2e 0%, #173328 50%, #112a20 100%);
-
-    &.has-image {
-      background: #142921;
-    }
-  }
-
-  .feed-manual-food-placeholder-icon {
-    color: #7dd3b0;
-    opacity: 0.7;
-  }
-
-  .feed-manual-food-name {
-    color: #f2f7f4;
-  }
-
-  .feed-manual-food-badge {
-    background: rgba(125, 211, 176, 0.12);
-    border-color: rgba(125, 211, 176, 0.24);
-  }
-
-  .feed-manual-food-badge-text {
-    color: #7dd3b0;
-  }
-
-  .feed-manual-food-badge.source-packaged_food {
-    background: rgba(96, 165, 250, 0.12);
-    border-color: rgba(96, 165, 250, 0.24);
-
-    .feed-manual-food-badge-text {
-      color: #93c5fd;
-    }
-  }
-
-  .feed-manual-food-badge.source-public_library {
-    background: rgba(251, 191, 36, 0.12);
-    border-color: rgba(251, 191, 36, 0.24);
-
-    .feed-manual-food-badge-text {
-      color: #fcd34d;
-    }
-  }
-
-  .feed-manual-food-kcal {
-    color: #94a3b8;
+    gap: 24rpx;
   }
 
   /* 动态图片占位背景 */

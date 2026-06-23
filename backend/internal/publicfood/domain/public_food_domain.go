@@ -128,6 +128,7 @@ type CampusFoodMetric struct {
 
 type CampusRelatedFeedItem struct {
 	ID              string     `json:"id"`
+	UserID          string     `json:"user_id"`
 	FoodName        string     `json:"food_name"`
 	ImagePath       *string    `json:"image_path,omitempty"`
 	ImagePaths      []string   `gorm:"column:image_paths;serializer:json" json:"image_paths,omitempty"`

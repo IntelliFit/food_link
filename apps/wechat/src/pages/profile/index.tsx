@@ -18,6 +18,10 @@ import {
 import {
   getCurrentMembershipTier,
   getMembershipTierShortLabel,
+  getRewardLevelMeta,
+  getRewardLevelProgress,
+  formatRewardLevelRange,
+  type RewardLevelMeta,
 } from '../../utils/membership'
 import { extraPkgUrl } from '../../utils/subpackage-extra'
 import { useAppColorScheme } from '../../components/AppColorSchemeContext'
@@ -36,28 +40,12 @@ interface UserInfo {
   meta: string
 }
 
-type RewardLevelMeta = {
-  level: number
-  title: string
-  min: number
-  max: number | null
-}
-
 type ProfileListIconTone = {
   color: string
   backgroundColor: string
   darkColor: string
   darkBackgroundColor: string
 }
-
-const REWARD_LEVELS: RewardLevelMeta[] = [
-  { level: 1, title: '探味新芽', min: 0, max: 10 },
-  { level: 2, title: '零食巡逻队', min: 10, max: 50 },
-  { level: 3, title: '风味侦察员', min: 50, max: 200 },
-  { level: 4, title: '菜单收藏家', min: 200, max: 1000 },
-  { level: 5, title: '热量驯龙师', min: 1000, max: 3000 },
-  { level: 6, title: '传说食探长', min: 3000, max: null },
-]
 
 const SERVICE_ICON_TONES: Record<number, ProfileListIconTone> = {
   0: { color: '#41a17a', backgroundColor: '#ecfcf4', darkColor: '#6ff6bc', darkBackgroundColor: 'rgba(111, 246, 188, 0.16)' },
@@ -88,24 +76,6 @@ function getProfileListIconStyle(id: number, tones: Record<number, ProfileListIc
   }
 }
 
-function getRewardLevelMeta(points: number): RewardLevelMeta {
-  const normalized = Math.max(Number(points || 0), 0)
-  return REWARD_LEVELS.find(level => level.max == null ? normalized >= level.min : (normalized >= level.min && normalized < level.max)) || REWARD_LEVELS[0]
-}
-
-function getRewardLevelProgress(points: number, meta: RewardLevelMeta): number {
-  const normalized = Math.max(Number(points || 0), 0)
-  if (meta.max == null) return 100
-  const span = Math.max(meta.max - meta.min, 1)
-  return Math.max(0, Math.min(((normalized - meta.min) / span) * 100, 100))
-}
-
-function formatRewardLevelRange(points: number, meta: RewardLevelMeta): string {
-  const normalized = Math.max(Number(points || 0), 0)
-  if (meta.max == null) return `${normalized}+`
-  return `${normalized}/${meta.max}`
-}
-
 function formatExpiryPreviewText(dashboard: FoodExpiryDashboard | null): string {
   if (!dashboard) return '把牛奶、水果、剩菜记进来，快到期时会在这里提醒你。'
   if (dashboard.active_count <= 0) return '还没有记录保质期食物，点击开始添加。'
@@ -119,12 +89,8 @@ function ProfileListIcon({ name }: { name: string }) {
   return <Text className={`iconfont ${name} profile-list-icon-symbol`} />
 }
 
-function ProfileChevron({ small = false }: { small?: boolean }) {
-  return <Text className={`iconfont icon-ic_detail profile-chevron ${small ? 'profile-chevron--small' : ''}`} />
-}
-
 function ProfilePage() {
-  const { scheme, toggleScheme } = useAppColorScheme()
+  const { scheme } = useAppColorScheme()
   // 登录状态
   const [isLoggedIn, setIsLoggedIn] = React.useState(false)
   const [userId, setUserId] = React.useState('')
@@ -501,6 +467,14 @@ function ProfilePage() {
     redirectToLogin()
   }
 
+  // Taro 小程序端在同一节点上移除/替换事件时可能触发 removeEventListener 崩溃；
+  // 这里保持用户名节点始终使用同一个稳定 handler，登录后只做空操作。
+  const handleUserNameClick = React.useCallback(() => {
+    if (!getAccessToken()) {
+      redirectToLogin()
+    }
+  }, [])
+
   // 处理清除缓存
   const handleClearCache = () => {
     Taro.showModal({
@@ -637,13 +611,10 @@ function ProfilePage() {
             )}
           </View>
           <View className='user-info-main'>
-            <View className='profile-theme-chip' onClick={toggleScheme}>
-              <Text className={`iconfont ${scheme === 'dark' ? 'icon-zaoshang' : 'icon-wanshang'} profile-theme-chip-icon`} />
-            </View>
             {isLoggedIn ? (
               <>
                 <View className='user-name-row'>
-                  <Text className='user-name'>{userInfo.name}</Text>
+                  <Text className='user-name' onClick={handleUserNameClick}>{userInfo.name}</Text>
                   <View className='user-name-actions'>
                     <View className='user-days-pill'>
                       <Text className='user-days-pill-text'>已记录 {recordDays} 天</Text>
@@ -657,12 +628,12 @@ function ProfilePage() {
                 </View>
                 <View className='user-meta-row' onClick={handleSettings}>
                   <Text className='user-meta-text'>个人主页</Text>
-                  <ProfileChevron small />
+                  <Text className='iconfont icon-right user-meta-arrow' />
                 </View>
               </>
             ) : (
               <View className='user-name-row'>
-                <Text className='user-name' onClick={handleGoLogin}>点击登录</Text>
+                <Text className='user-name' onClick={handleUserNameClick}>点击登录</Text>
               </View>
             )}
           </View>
@@ -765,7 +736,7 @@ function ProfilePage() {
 
                   <View className='member-meter'>
                     <View className='member-meter__head'>
-                      <Text className='member-meter__label'>奖励可用（一直持有）</Text>
+                      <Text className='member-meter__label'>奖励积分（一直持有）</Text>
                       <Text className='member-meter__value'>{`${rewardRangeText} · Lv${rewardLevel.level} ${rewardLevel.title}`}</Text>
                     </View>
                     <View className='segmented-progress'>

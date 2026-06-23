@@ -34,7 +34,8 @@ import {
 } from '../../../utils/api'
 import { normalizeRuntimeExecutionMode } from '../../../utils/execution-mode'
 import { foodRecordFromSavePayload } from '../../../utils/dev-record-preview'
-import { inferDefaultMealTypeFromHealthProfile, inferDefaultMealTypeFromLocalTime } from '../../../utils/infer-default-meal-type'
+import { getRecommendedMealTypeWithFallback, inferDefaultMealTypeFromLocalTime } from '../../../utils/infer-default-meal-type'
+import { getAiInsightCollapsed, setAiInsightCollapsed } from '../../../utils/ai-insight-collapsed'
 import { withAuth } from '../../../utils/withAuth'
 import { HOME_INTAKE_DATA_CHANGED_EVENT } from '../../../utils/home-events'
 import {
@@ -526,22 +527,6 @@ const normalizePrecisionStringList = (value: unknown): string[] => (
     : []
 )
 
-type ScoreTone = 'positive' | 'neutral' | 'warning' | 'danger'
-
-function scoreToTone(score: number): ScoreTone {
-  if (score >= 78) return 'positive'
-  if (score >= 60) return 'neutral'
-  if (score >= 42) return 'warning'
-  return 'danger'
-}
-
-function scoreToLabel(score: number): string {
-  if (score >= 78) return '偏保护'
-  if (score >= 60) return '基本中性'
-  if (score >= 42) return '需要关注'
-  return '重点关注'
-}
-
 function toSafeNumber(value: unknown, fallback = 0): number {
   if (typeof value === 'number' && Number.isFinite(value)) return value
   if (typeof value === 'string') {
@@ -575,11 +560,6 @@ function ResultPage() {
     carbs: 0,
     fat: 0
   })
-  const [scoreEnabled, setScoreEnabled] = useState(false)
-  const [finalScore, setFinalScore] = useState(0)
-  const [micronutrientScore, setMicronutrientScore] = useState(0)
-  const [macroBalanceScore, setMacroBalanceScore] = useState(0)
-  const [calorieScore, setCalorieScore] = useState(0)
   const [healthAdvice, setHealthAdvice] = useState('')
   const [description, setDescription] = useState('')
   const [pfcRatioComment, setPfcRatioComment] = useState<string | null>(null)
@@ -616,6 +596,7 @@ function ResultPage() {
   const [precisionReferenceHeight, setPrecisionReferenceHeight] = useState('25')
   const [precisionReferencePlacement, setPrecisionReferencePlacement] = useState('')
   const [defaultMealType, setDefaultMealType] = useState<SelectableMealType>(() => inferDefaultMealTypeFromLocalTime())
+  const [insightCollapsed, setInsightCollapsed] = useState(false)
 
   useEffect(() => {
     if (imagePaths.length <= 1) {
@@ -664,7 +645,8 @@ function ResultPage() {
         const token = getAccessToken()
         if (!token) return
         const profile = await getHealthProfile()
-        setDefaultMealType(inferDefaultMealTypeFromHealthProfile(profile, new Date()))
+        const mealType = await getRecommendedMealTypeWithFallback({ profile })
+        setDefaultMealType(mealType)
       } catch {
         setDefaultMealType(inferDefaultMealTypeFromLocalTime())
       }
@@ -715,6 +697,10 @@ function ResultPage() {
   useEffect(() => {
     applyThemeNavigationBar(scheme, { lightBackground: '#f8fafc', darkBackground: '#101716' })
   }, [scheme])
+
+  useEffect(() => {
+    setInsightCollapsed(getAiInsightCollapsed())
+  }, [])
 
   useEffect(() => {
     const params = Taro.getCurrentInstance().router?.params
@@ -802,11 +788,6 @@ function ResultPage() {
     setEatingOrderAdvice(result.eating_order_advice ?? null)
     setAbsorptionNotes(result.absorption_notes ?? null)
     setContextAdvice(result.context_advice ?? null)
-    setScoreEnabled(Boolean(result.score_enabled))
-    setFinalScore(toSafeNumber(result.final_score, 0))
-    setMicronutrientScore(toSafeNumber(result.micronutrient_score, 0))
-    setMacroBalanceScore(toSafeNumber(result.macro_balance_score, 0))
-    setCalorieScore(toSafeNumber(result.calorie_score, 0))
     setRecognitionOutcome(normalizeRecognitionOutcome(result.recognitionOutcome))
     setRejectionReason(result.rejectionReason?.trim() || null)
     setRetakeGuidance(Array.isArray(result.retakeGuidance) ? result.retakeGuidance.filter(Boolean) : [])
@@ -2696,46 +2677,6 @@ function ResultPage() {
             </View>
           </View>
 
-          {scoreEnabled && (
-            <View className='score-overview-card'>
-              <View className='score-overview-main'>
-                <View className='score-overview-left'>
-                  <Text className='score-overview-title'>本餐评分</Text>
-                  <View className='score-overview-score-row'>
-                    <Text className='score-overview-score'>{finalScore}</Text>
-                    <Text className='score-overview-unit'>/ 100</Text>
-                  </View>
-                </View>
-                <View className={`score-overview-badge tone-${scoreToTone(finalScore)}`}>
-                  <Text className='score-overview-badge-label'>{scoreToLabel(finalScore)}</Text>
-                </View>
-              </View>
-              <View className='score-breakdown'>
-                <View className='score-breakdown-item'>
-                  <Text className='score-breakdown-label'>微量元素</Text>
-                  <View className='score-breakdown-track'>
-                    <View className='score-breakdown-fill micro' style={{ width: `${Math.min(100, Math.max(0, micronutrientScore))}%` }} />
-                  </View>
-                  <Text className='score-breakdown-value'>{micronutrientScore}</Text>
-                </View>
-                <View className='score-breakdown-item'>
-                  <Text className='score-breakdown-label'>宏量平衡</Text>
-                  <View className='score-breakdown-track'>
-                    <View className='score-breakdown-fill macro' style={{ width: `${Math.min(100, Math.max(0, macroBalanceScore))}%` }} />
-                  </View>
-                  <Text className='score-breakdown-value'>{macroBalanceScore}</Text>
-                </View>
-                <View className='score-breakdown-item'>
-                  <Text className='score-breakdown-label'>热量适配</Text>
-                  <View className='score-breakdown-track'>
-                    <View className='score-breakdown-fill calorie' style={{ width: `${Math.min(100, Math.max(0, calorieScore))}%` }} />
-                  </View>
-                  <Text className='score-breakdown-value'>{calorieScore}</Text>
-                </View>
-              </View>
-            </View>
-          )}
-
           {pendingPackagedChoiceCount > 0 && (
             <View className='packaged-pending-banner'>
               <Text className='packaged-pending-banner-text'>
@@ -2747,14 +2688,27 @@ function ResultPage() {
           {/* AI 饮食分析（隐藏调试文案，仅展示最终可读结论） */}
           {nutritionItems.length > 0 && (
             <View className='insight-card'>
-              <View className='card-header'>
+              <View
+                className='card-header insight-card-header-toggle'
+                onClick={() => {
+                  const next = !insightCollapsed
+                  setInsightCollapsed(next)
+                  setAiInsightCollapsed(next)
+                }}
+              >
                 <Text className='card-title'>
                   <Text className='iconfont icon-a-144-lvye'></Text>
                   AI 饮食分析
                 </Text>
+                <View className='insight-toggle-affordance'>
+                  <Text className={`insight-toggle-icon ${insightCollapsed ? 'collapsed' : ''}`}>▼</Text>
+                  <Text className='insight-toggle-text'>{insightCollapsed ? '展开' : '收起'}</Text>
+                </View>
               </View>
 
-              <View className='insight-item ratio-advice'>
+              {!insightCollapsed && (
+                <>
+                  <View className='insight-item ratio-advice'>
                 <View className='insight-icon-wrapper orange'>
                   <Text className='insight-icon iconfont icon-tubiao-zhuzhuangtu'></Text>
                 </View>
@@ -2804,6 +2758,8 @@ function ResultPage() {
                     <Text className='insight-content'>{contextAdvice}</Text>
                   </View>
                 </View>
+              )}
+                </>
               )}
             </View>
           )}
@@ -2990,36 +2946,36 @@ function ResultPage() {
                     </View>
 
                     <View className='ratio-control'>
-                      <View className='ratio-label-wrap'>
-                        <Text className='control-label'>实际摄入</Text>
-                        {item.suggestedRatioSource === 'ai' && (
-                          <Text className='ratio-suggestion-badge'>AI建议 {item.suggestedRatio ?? 100}%</Text>
-                        )}
-                      </View>
-                      <View className='ratio-control-right'>
-                        <View className='ratio-slider-shell'>
-                          <View className='ratio-slider-hitbox'>
-                            <Slider
-                              className='ratio-slider-modern'
-                              value={item.ratio}
-                              min={0}
-                              max={100}
-                              step={1}
-                              activeColor='#00bc7d'
-                              backgroundColor={scheme === 'dark' ? '#2d3935' : '#dbe4dd'}
-                              blockSize={24}
-                              blockColor='#ffffff'
-                              showValue={false}
-                              onChanging={(e) => handleRatioAdjust(item.id, e.detail.value)}
-                              onChange={(e) => handleRatioAdjust(item.id, e.detail.value)}
-                            />
-                          </View>
+                      <View className='ratio-control-main'>
+                        <View className='ratio-label-wrap'>
+                          <Text className='control-label'>实际摄入</Text>
                         </View>
-                        <Text className='ratio-display'>{item.ratio}%</Text>
+                        <View className='ratio-control-right'>
+                          <View className='ratio-slider-shell'>
+                            <View className='ratio-slider-hitbox'>
+                              <Slider
+                                className='ratio-slider-modern'
+                                value={item.ratio}
+                                min={0}
+                                max={100}
+                                step={1}
+                                activeColor='#00bc7d'
+                                backgroundColor={scheme === 'dark' ? '#2d3935' : '#dbe4dd'}
+                                blockSize={24}
+                                blockColor='#ffffff'
+                                showValue={false}
+                                onChanging={(e) => handleRatioAdjust(item.id, e.detail.value)}
+                                onChange={(e) => handleRatioAdjust(item.id, e.detail.value)}
+                              />
+                            </View>
+                          </View>
+                          <Text className='ratio-display'>{item.ratio}%</Text>
+                        </View>
                       </View>
                       {item.suggestedRatioSource === 'ai' && typeof item.suggestedRatio === 'number' && item.suggestedRatio !== item.ratio && (
-                        <View className='ratio-suggestion-action' onClick={() => applySuggestedRatio(item.id)}>
-                          <Text className='ratio-suggestion-action-text'>应用建议</Text>
+                        <View className='ratio-suggestion-row' onClick={() => applySuggestedRatio(item.id)}>
+                          <Text className='ratio-suggestion-text'>AI识别比例 {item.suggestedRatio}%</Text>
+                          <Text className='ratio-suggestion-apply'>一键应用</Text>
                         </View>
                       )}
                     </View>

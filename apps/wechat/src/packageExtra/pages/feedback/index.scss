@@ -225,13 +225,14 @@
   border-radius: 999rpx;
   font-size: 30rpx;
   font-weight: 650;
-  background: linear-gradient(135deg, #d4a574 0%, #e0c495 100%) !important;
-  border: 2rpx solid #d4a574 !important;
+  background: linear-gradient(135deg, #00bc7d 0%, #00a86b 100%) !important;
+  border: 2rpx solid #00bc7d !important;
   color: #fff !important;
 
   &[disabled] {
-    background: #e8d5b3 !important;
-    color: rgba(255, 255, 255, 0.85) !important;
+    background: #d0d5dd !important;
+    border-color: #d0d5dd !important;
+    color: rgba(255, 255, 255, 0.9) !important;
   }
 }
 

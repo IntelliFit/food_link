@@ -41,6 +41,7 @@ type FoodRecordService interface {
 	Share(ctx context.Context, recordID string) (*domain.FoodRecord, error)
 	SaveCriticalSamples(ctx context.Context, userID string, items []domain.CriticalSample) error
 	GetEntryDistribution(ctx context.Context, userID, startDate, endDate string) (*service.EntryDistributionResult, error)
+	RecommendMealType(ctx context.Context, userID string, date string, refTime *time.Time) (string, string, error)
 }
 
 type UploadService interface {
@@ -170,6 +171,28 @@ func (h *FoodRecordHandler) EntryDistribution(c *gin.Context) {
 		return
 	}
 	response.Success(c, result)
+}
+
+// GET /api/food-record/recommend-meal-type
+func (h *FoodRecordHandler) RecommendMealType(c *gin.Context) {
+	userID := c.GetString(authmw.ContextUserIDKey)
+	date := c.Query("date")
+	refTimeStr := c.Query("ref_time")
+	var refTime *time.Time
+	if refTimeStr != "" {
+		if parsed, err := time.Parse(time.RFC3339, refTimeStr); err == nil {
+			refTime = &parsed
+		}
+	}
+	mealType, generatedBy, err := h.recordSvc.RecommendMealType(c.Request.Context(), userID, date, refTime)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, gin.H{
+		"meal_type":    mealType,
+		"generated_by": generatedBy,
+	})
 }
 
 // GET /api/food-record/:record_id

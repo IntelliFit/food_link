@@ -22,6 +22,7 @@ type mockMembershipService struct {
 	getMyMembershipErr           error
 	createPaymentResult          map[string]any
 	createPaymentErr             error
+	createPaymentInput           service.CreateMembershipPaymentInput
 	wechatNotifyResult           map[string]any
 	wechatNotifyErr              error
 	rewardCenterResult           map[string]any
@@ -30,7 +31,7 @@ type mockMembershipService struct {
 	claimSharePosterRewardErr    error
 }
 
-func (m *mockMembershipService) ListPlans(ctx context.Context) ([]map[string]any, error) {
+func (m *mockMembershipService) ListPlans(ctx context.Context, userID string) ([]map[string]any, error) {
 	return m.listPlansResult, m.listPlansErr
 }
 func (m *mockMembershipService) GetMyMembership(ctx context.Context, userID string, date string) (map[string]any, error) {
@@ -39,7 +40,8 @@ func (m *mockMembershipService) GetMyMembership(ctx context.Context, userID stri
 func (m *mockMembershipService) GetRewardCenter(ctx context.Context, userID string) (map[string]any, error) {
 	return m.rewardCenterResult, m.rewardCenterErr
 }
-func (m *mockMembershipService) CreatePayment(ctx context.Context, userID, planCode string) (map[string]any, error) {
+func (m *mockMembershipService) CreatePaymentWithInput(ctx context.Context, userID string, input service.CreateMembershipPaymentInput) (map[string]any, error) {
+	m.createPaymentInput = input
 	return m.createPaymentResult, m.createPaymentErr
 }
 func (m *mockMembershipService) SyncWechatPayment(ctx context.Context, userID, orderNo string) (map[string]any, error) {
@@ -119,6 +121,45 @@ func TestMembershipHandler_CreatePayment(t *testing.T) {
 	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	data := resp["data"].(map[string]any)
 	assert.Equal(t, "PM1", data["order_no"])
+}
+
+func TestMembershipHandler_CreatePaymentPassesAppTradeType(t *testing.T) {
+	mockSvc := &mockMembershipService{createPaymentResult: map[string]any{"order_no": "PM2", "trade_type": "APP"}}
+	h := NewMembershipHandler(mockSvc)
+	r := setupRouter(h)
+
+	body, _ := json.Marshal(map[string]string{
+		"plan_code":   "standard_monthly",
+		"pay_channel": "wechat",
+		"trade_type":  "APP",
+		"client":      "mobile_app",
+	})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/membership/pay/create", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "standard_monthly", mockSvc.createPaymentInput.PlanCode)
+	assert.Equal(t, "wechat", mockSvc.createPaymentInput.PayChannel)
+	assert.Equal(t, "APP", mockSvc.createPaymentInput.TradeType)
+	assert.Equal(t, "mobile_app", mockSvc.createPaymentInput.Client)
+}
+
+func TestMembershipHandler_CreatePaymentReadsMobileClientHeader(t *testing.T) {
+	mockSvc := &mockMembershipService{createPaymentResult: map[string]any{"order_no": "PM3"}}
+	h := NewMembershipHandler(mockSvc)
+	r := setupRouter(h)
+
+	body, _ := json.Marshal(map[string]string{"plan_code": "standard_monthly"})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/membership/pay/create", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Food-Link-Client", "mobile_app")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "mobile_app", mockSvc.createPaymentInput.Client)
 }
 
 func TestMembershipHandler_CreatePaymentMissingPlanCode(t *testing.T) {

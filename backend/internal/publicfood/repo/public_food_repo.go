@@ -41,6 +41,7 @@ type ListFilter struct {
 	SchoolName         string
 	CanteenName        string
 	IsCampusHighlight  *bool
+	ViewerUserID       string
 }
 
 func (r *PublicFoodRepo) CreateItem(ctx context.Context, item *domain.PublicFoodItem) error {
@@ -98,6 +99,7 @@ func (r *PublicFoodRepo) ListPublished(ctx context.Context, f ListFilter) ([]dom
 		Joins("LEFT JOIN analysis_tasks rt ON CAST(rt.id AS TEXT) = (t.result ->> 'redirectTaskId')").
 		Joins("LEFT JOIN schools s ON s.name = p.school_name AND s.status = 'active'").
 		Where("p.status = ?", "published")
+	q = visiblePublicFoodToViewer(q, "p.user_id", f.ViewerUserID)
 	if f.City != "" {
 		q = q.Where("p.city = ?", f.City)
 	}
@@ -198,6 +200,20 @@ func applyLegacyPublicFoodTypeWhere(q *gorm.DB, alias string, itemType string) *
 	}
 }
 
+func visiblePublicFoodToViewer(q *gorm.DB, authorExpr string, viewerUserID string) *gorm.DB {
+	viewerUserID = strings.TrimSpace(viewerUserID)
+	if viewerUserID == "" || strings.TrimSpace(authorExpr) == "" {
+		return q
+	}
+	return q.Where(`
+		NOT EXISTS (
+			SELECT 1 FROM user_blocks ub
+			WHERE (ub.blocker_user_id = ? AND ub.blocked_user_id = `+authorExpr+`)
+			   OR (ub.blocker_user_id = `+authorExpr+` AND ub.blocked_user_id = ?)
+		)
+	`, viewerUserID, viewerUserID)
+}
+
 // ListCampusHighlights 查询精选校园内容，用于圈子默认流混入
 func (r *PublicFoodRepo) ListCampusHighlights(ctx context.Context, limit int) ([]domain.PublicFoodItem, error) {
 	var rows []domain.PublicFoodItem
@@ -212,7 +228,7 @@ func (r *PublicFoodRepo) ListCampusHighlights(ctx context.Context, limit int) ([
 	return rows, err
 }
 
-func (r *PublicFoodRepo) ListSimilarCampusFoods(ctx context.Context, item domain.PublicFoodItem, limit int) ([]domain.PublicFoodItem, error) {
+func (r *PublicFoodRepo) ListSimilarCampusFoods(ctx context.Context, item domain.PublicFoodItem, limit int, viewerUserID string) ([]domain.PublicFoodItem, error) {
 	var rows []domain.PublicFoodItem
 	if limit <= 0 || limit > 20 {
 		limit = 6
@@ -221,6 +237,7 @@ func (r *PublicFoodRepo) ListSimilarCampusFoods(ctx context.Context, item domain
 		Table("public_food_library AS p").
 		Select("p.*").
 		Where("id <> ? AND status = ?", item.ID, "published")
+	q = visiblePublicFoodToViewer(q, "p.user_id", viewerUserID)
 	q = applyLegacyPublicFoodTypeWhere(q, "p", "campus")
 	if strings.TrimSpace(item.SchoolName) != "" {
 		q = q.Where("p.school_name = ?", item.SchoolName)
@@ -239,16 +256,17 @@ func (r *PublicFoodRepo) ListSimilarCampusFoods(ctx context.Context, item domain
 	return rows, err
 }
 
-func (r *PublicFoodRepo) ListRelatedCampusFeeds(ctx context.Context, item domain.PublicFoodItem, limit int) ([]domain.CampusRelatedFeedItem, error) {
+func (r *PublicFoodRepo) ListRelatedCampusFeeds(ctx context.Context, item domain.PublicFoodItem, limit int, viewerUserID string) ([]domain.CampusRelatedFeedItem, error) {
 	var rows []domain.CampusRelatedFeedItem
 	if limit <= 0 || limit > 20 {
 		limit = 6
 	}
 	q := r.db.WithContext(ctx).
 		Table("public_food_library AS p").
-		Select("p.id, p.food_name, p.image_path, p.image_paths, p.school_name, p.canteen_name, p.campus_location_text AS campus_location, p.total_calories, p.total_protein, p.price, p.price_unit, p.like_count, p.comment_count, p.collection_count, p.published_at, s.logo_url AS school_logo_url").
+		Select("p.id, p.user_id, p.food_name, p.image_path, p.image_paths, p.school_name, p.canteen_name, p.campus_location_text AS campus_location, p.total_calories, p.total_protein, p.price, p.price_unit, p.like_count, p.comment_count, p.collection_count, p.published_at, s.logo_url AS school_logo_url").
 		Joins("LEFT JOIN schools s ON s.name = p.school_name AND s.status = 'active'").
 		Where("p.id <> ? AND p.status = ? AND p.is_campus_highlight = ?", item.ID, "published", true)
+	q = visiblePublicFoodToViewer(q, "p.user_id", viewerUserID)
 	q = applyLegacyPublicFoodTypeWhere(q, "p", "campus")
 	if strings.TrimSpace(item.SchoolName) != "" {
 		q = q.Where("p.school_name = ?", item.SchoolName)
@@ -277,7 +295,7 @@ func (r *PublicFoodRepo) ListMine(ctx context.Context, userID string, limit int)
 	return rows, err
 }
 
-func (r *PublicFoodRepo) ListCollected(ctx context.Context, userID string, limit int) ([]domain.PublicFoodItem, error) {
+func (r *PublicFoodRepo) ListCollected(ctx context.Context, userID string, limit int, viewerUserID string) ([]domain.PublicFoodItem, error) {
 	var rows []domain.PublicFoodItem
 	if limit <= 0 || limit > 100 {
 		limit = 50
@@ -287,6 +305,9 @@ func (r *PublicFoodRepo) ListCollected(ctx context.Context, userID string, limit
 		Select("p.*").
 		Joins("JOIN public_food_library_collections c ON c.library_item_id = p.id").
 		Where("c.user_id = ? AND p.status = ?", userID, "published").
+		Scopes(func(q *gorm.DB) *gorm.DB {
+			return visiblePublicFoodToViewer(q, "p.user_id", viewerUserID)
+		}).
 		Order("c.created_at desc").
 		Limit(limit).
 		Scan(&rows).Error
@@ -398,17 +419,28 @@ func (r *PublicFoodRepo) SoftDeleteOwned(ctx context.Context, itemID, userID, st
 		}).Error
 }
 
-func (r *PublicFoodRepo) ListComments(ctx context.Context, itemID string, limit int) ([]domain.PublicFoodComment, error) {
+func (r *PublicFoodRepo) ListComments(ctx context.Context, itemID string, limit int, viewerUserID string) ([]domain.PublicFoodComment, error) {
 	var rows []publicFoodCommentRow
 	if limit <= 0 || limit > 100 {
 		limit = 50
 	}
-	err := r.db.WithContext(ctx).
+	q := r.db.WithContext(ctx).
 		Table("public_food_library_comments AS c").
 		Select("c.id, c.user_id, c.library_item_id, c.parent_comment_id, c.reply_to_user_id, c.content, c.rating, c.created_at, COALESCE(u.nickname, '用户') AS nickname, COALESCE(u.avatar, '') AS avatar, COALESCE(ru.nickname, '') AS reply_to_nickname").
 		Joins("LEFT JOIN weapp_user u ON u.id = c.user_id").
 		Joins("LEFT JOIN weapp_user ru ON ru.id = c.reply_to_user_id").
-		Where("c.library_item_id = ?", itemID).
+		Where("c.library_item_id = ?", itemID)
+	q = visiblePublicFoodToViewer(q, "c.user_id", viewerUserID)
+	if strings.TrimSpace(viewerUserID) != "" {
+		q = q.Where(`
+			(c.reply_to_user_id IS NULL OR NOT EXISTS (
+				SELECT 1 FROM user_blocks ub
+				WHERE (ub.blocker_user_id = ? AND ub.blocked_user_id = c.reply_to_user_id)
+				   OR (ub.blocker_user_id = c.reply_to_user_id AND ub.blocked_user_id = ?)
+			))
+		`, viewerUserID, viewerUserID)
+	}
+	err := q.
 		Order("CASE WHEN c.parent_comment_id IS NULL THEN 0 ELSE 1 END asc").
 		Order("c.created_at desc").
 		Limit(limit).

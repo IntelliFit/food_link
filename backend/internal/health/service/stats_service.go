@@ -31,6 +31,7 @@ import (
 
 type StatsRepo interface {
 	GetFoodRecordsForDateRange(ctx context.Context, userID string, startUTC, endUTC time.Time) ([]domain.FoodRecord, error)
+	GetExerciseLogsForDateRange(ctx context.Context, userID string, startDate, endDate string) ([]domain.ExerciseLog, error)
 	GetUserProfile(ctx context.Context, userID string) (*domain.StatsUserProfile, error)
 	GetRecentFoodRecordDates(ctx context.Context, userID string, startUTC, endUTC time.Time) ([]string, error)
 	UpsertInsightCache(ctx context.Context, userID, rangeType, generatedDate, dataFingerprint, insightText string) error
@@ -168,9 +169,25 @@ type statsComputation struct {
 	RecordedDaily      []DailyCalories
 	MacroPercent       map[string]float64
 	MicronutrientDaily map[string]float64
+	ExerciseSummary    *statsExerciseSummary
 	RecordedDays       int
 	DataFingerprint    string
 	BodyMetrics        *BodyMetricsSummary
+}
+
+type statsExerciseSummary struct {
+	LoggedDays       int
+	SessionCount     int
+	TotalCalories    float64
+	TotalDurationMin int
+	RecentEntries    []statsExerciseEntry
+}
+
+type statsExerciseEntry struct {
+	Date           string
+	Title          string
+	CaloriesBurned float64
+	DurationMin    int
 }
 
 type statsInsightGeneration struct {
@@ -794,6 +811,11 @@ func (s *StatsService) generatePetChatAnswer(ctx context.Context, comp *statsCom
 			retryFeedback = fmt.Sprintf("上一次输出包含禁用身份措辞“%s”。请重新生成全文：不要自称任何身份，不要出现“专业营养师”“注册营养师”“持证营养师”等说法，也不要使用相近表达。", term)
 			continue
 		}
+		if term := findPetChatHarshToneTerm(generation.Content); term != "" {
+			lastErr = fmt.Errorf("DeepSeek 输出包含刺耳语气措辞: %s", term)
+			retryFeedback = fmt.Sprintf("上一次输出包含容易让用户感觉被责备的措辞“%s”。请重新生成全文：语气要温和陪伴，不要调侃、挖苦、训话、责备或评价用户本人；用“我们可以”“明天先试试”这类合作式表达。", term)
+			continue
+		}
 		generation.Content = sanitizeStatsInsightText(generation.Content)
 		if billing.HasTokenUsage(generation.Usage) {
 			pricing := billing.PriceTokenUsage(billing.PricingInput{Model: model, Usage: generation.Usage}, s.aiUsagePricingConfig())
@@ -826,6 +848,10 @@ func (s *StatsService) buildStatsComputation(ctx context.Context, userID string,
 	startDate, endDate, startUTC, endUTC := resolveStatsRangeUTC(statsRange)
 
 	records, err := s.repo.GetFoodRecordsForDateRange(ctx, userID, startUTC, endUTC)
+	if err != nil {
+		return nil, err
+	}
+	exerciseLogs, err := s.repo.GetExerciseLogsForDateRange(ctx, userID, startDate, endDate)
 	if err != nil {
 		return nil, err
 	}
@@ -907,7 +933,8 @@ func (s *StatsService) buildStatsComputation(ctx context.Context, userID string,
 	}
 	macroPercent := map[string]float64{"protein": pctP, "carbs": pctC, "fat": pctF}
 	micronutrientDaily := buildStatsMicronutrientDailyAverage(totalMicronutrients, recordedDays)
-	dataFingerprint := fmt.Sprintf("%.0f_%.1f_%d_%.1f_%.1f_%.1f_%s_%s",
+	exerciseSummary := buildStatsExerciseSummary(exerciseLogs)
+	dataFingerprint := fmt.Sprintf("%.0f_%.1f_%d_%.1f_%.1f_%.1f_%s_%s_%s",
 		totalCal,
 		avgCalPerDay,
 		recordedDays,
@@ -916,6 +943,7 @@ func (s *StatsService) buildStatsComputation(ctx context.Context, userID string,
 		pctF,
 		statsMicronutrientFingerprint(micronutrientDaily),
 		statsProfileFingerprint(user),
+		statsExerciseFingerprint(exerciseSummary),
 	)
 
 	return &statsComputation{
@@ -936,6 +964,7 @@ func (s *StatsService) buildStatsComputation(ctx context.Context, userID string,
 		RecordedDaily:      buildRecordedDailyList(dailyCal),
 		MacroPercent:       macroPercent,
 		MicronutrientDaily: micronutrientDaily,
+		ExerciseSummary:    exerciseSummary,
 		RecordedDays:       recordedDays,
 		DataFingerprint:    dataFingerprint,
 		BodyMetrics:        bodyMetricsSummary,
@@ -1110,6 +1139,33 @@ func sanitizeStatsInsightText(content string) string {
 func findStatsInsightForbiddenIdentityTerm(content string) string {
 	normalized := strings.ReplaceAll(strings.TrimSpace(content), " ", "")
 	for _, term := range statsInsightForbiddenIdentityTerms {
+		if strings.Contains(normalized, strings.ReplaceAll(term, " ", "")) {
+			return term
+		}
+	}
+	return ""
+}
+
+func findPetChatHarshToneTerm(content string) string {
+	normalized := strings.ReplaceAll(strings.TrimSpace(content), " ", "")
+	terms := []string{
+		"你这坎儿",
+		"坎儿得过一过",
+		"别一口气",
+		"这么猛",
+		"不争气",
+		"作息烂",
+		"乱吃",
+		"胡吃海塞",
+		"管不住嘴",
+		"你就是",
+		"你总是",
+		"你又",
+		"活该",
+		"骂醒",
+		"训你",
+	}
+	for _, term := range terms {
 		if strings.Contains(normalized, strings.ReplaceAll(term, " ", "")) {
 			return term
 		}
@@ -1358,6 +1414,7 @@ func buildPetChatPrompt(comp *statsComputation, question string, historyMessages
 	if micronutrientBlock == "" {
 		micronutrientBlock = "本期保存记录里没有可用的微量营养字段，不能判断钙、铁、锌、维生素、膳食纤维、钠钾等是否充足。"
 	}
+	exerciseBlock := buildPetChatExercisePromptBlock(comp)
 	historyBlock := buildPetChatHistoryPromptBlock(historyMessages)
 	customFocusBlock := buildPetChatCustomFocusPromptBlock(comp.User)
 	return fmt.Sprintf(`你是“食探”小程序里的宠物伙伴“小食探”，正在和用户进行自然对话式饮食分析。你只能基于已保存的饮食文本、营养汇总和身体趋势数据回答；不要声称看到了图片，不要做医学诊断，不要自称专业营养师。
@@ -1386,6 +1443,9 @@ func buildPetChatPrompt(comp *statsComputation, question string, historyMessages
 微量营养线索（按记录日均，参考普通成年人常见建议量，仅用于趋势判断）：
 %s
 
+训练/运动记录：
+%s
+
 健康档案：
 %s
 
@@ -1394,15 +1454,17 @@ func buildPetChatPrompt(comp *statsComputation, question string, historyMessages
 
 回答要求：
 1. 用宠物伙伴语气，亲近但不装可爱过头；像在和用户聊天，而不是写正式报告。
-2. 必须直接回答“用户当前追问”，并结合最近对话上下文；不要只说“我们继续刚才的话题”这种空话。
-3. 必须结合健康档案、身体指标、饮食目标、活动水平、作息、病史/过敏/忌口、体检摘要和用户当前关注；没有对应信息时明确说证据不足。
-4. 如果用户提到训练状态、饥饿感、减脂卡住、碳水、蛋白质，要围绕这些点解释可能原因。
-5. 如果用户提到微量元素、维生素、矿物质、钙、铁、锌、钠钾、膳食纤维，必须优先引用“微量营养线索”；如果对应字段缺失，要明确说是记录字段不足，而不是说你没有接入或完全没看。
-6. 如果当前追问很短，例如“为什么”“有什么关系”“只看微量元素”，要从最近对话里还原它指代的问题再回答。
-7. 必须说明证据边界：如果没有训练日志、睡眠或体感数据，要明确说“这部分只能推测”。
-8. 最后给 2-3 个明天能执行的小动作。
-9. 输出 Markdown 正文，不要 JSON，不要代码块，控制在 450-750 字。
-10. 严禁出现“专业营养师”“注册营养师”“持证营养师”等身份措辞。
+2. 语气边界：温和陪伴、就事论事，不要调侃、挖苦、训话、责备、阴阳怪气或评价用户本人；避免“你这”“坎儿”“别一口气这么猛”“管不住嘴”“不争气”等容易像骂人的表达。
+3. 用“我们可以”“明天先试试”“这个数据提示”这类合作式表达，少用命令式“你必须”“你别”；可以指出风险，但要把问题归因到数据和行为模式，不归因到用户性格。
+4. 必须直接回答“用户当前追问”，并结合最近对话上下文；不要只说“我们继续刚才的话题”这种空话。
+5. 必须结合健康档案、身体指标、饮食目标、活动水平、训练记录摘要、作息、病史/过敏/忌口、体检摘要和用户当前关注；没有对应信息时明确说证据不足。
+6. 如果用户提到训练状态、健身、运动表现、饥饿感、减脂卡住、碳水、蛋白质，要优先结合训练/运动记录和饮食数据解释可能原因。
+7. 如果用户提到微量元素、维生素、矿物质、钙、铁、锌、钠钾、膳食纤维，必须优先引用“微量营养线索”；如果对应字段缺失，要明确说是记录字段不足，而不是说你没有接入或完全没看。
+8. 如果当前追问很短，例如“为什么”“有什么关系”“只看微量元素”，要从最近对话里还原它指代的问题再回答。
+9. 必须说明证据边界：如果没有训练日志、睡眠或体感数据，要明确说“这部分只能推测”；如果有训练日志，也不要编造日志里没有的强度、配速或心率。
+10. 最后给 2-3 个明天能执行的小动作。
+11. 输出 Markdown 正文，不要 JSON，不要代码块，控制在 450-750 字。
+12. 严禁出现“专业营养师”“注册营养师”“持证营养师”等身份措辞。
 `,
 		question,
 		historyBlock,
@@ -1430,9 +1492,44 @@ func buildPetChatPrompt(comp *statsComputation, question string, historyMessages
 		dailyTrend,
 		weightBlock,
 		micronutrientBlock,
+		exerciseBlock,
 		formatStatsHealthProfile(comp.User, latestWeightFromBodyMetrics(comp.BodyMetrics)),
 		customFocusBlock,
 	)
+}
+
+func buildPetChatExercisePromptBlock(comp *statsComputation) string {
+	if comp == nil || comp.ExerciseSummary == nil || comp.ExerciseSummary.SessionCount == 0 {
+		return "本期没有运动/训练日志记录。"
+	}
+	summary := comp.ExerciseSummary
+	lines := []string{
+		fmt.Sprintf("- 共记录 %d 次训练，分布在 %d 天", summary.SessionCount, summary.LoggedDays),
+	}
+	if summary.TotalDurationMin > 0 || summary.TotalCalories > 0 {
+		details := make([]string, 0, 2)
+		if summary.TotalDurationMin > 0 {
+			details = append(details, fmt.Sprintf("总时长 %d 分钟", summary.TotalDurationMin))
+		}
+		if summary.TotalCalories > 0 {
+			details = append(details, fmt.Sprintf("总消耗约 %.0f kcal", summary.TotalCalories))
+		}
+		lines = append(lines, "- "+strings.Join(details, "；"))
+	}
+	if len(summary.RecentEntries) > 0 {
+		lines = append(lines, "- 最近训练：")
+		for _, entry := range summary.RecentEntries {
+			parts := []string{fmt.Sprintf("%s %s", entry.Date, entry.Title)}
+			if entry.DurationMin > 0 {
+				parts = append(parts, fmt.Sprintf("%d 分钟", entry.DurationMin))
+			}
+			if entry.CaloriesBurned > 0 {
+				parts = append(parts, fmt.Sprintf("约 %.0f kcal", entry.CaloriesBurned))
+			}
+			lines = append(lines, "  - "+strings.Join(parts, "，"))
+		}
+	}
+	return strings.Join(lines, "\n")
 }
 
 func buildPetChatCustomFocusPromptBlock(user *domain.StatsUserProfile) string {
@@ -1519,7 +1616,14 @@ func fallbackPetChatAnswer(comp *statsComputation, question string) string {
 	if microHint == "" && strings.ContainsAny(question, "微维钙铁锌钠钾纤") {
 		microHint = "；这轮本地统计没有足够微量营养字段，暂时不能判断钙、铁、锌、维生素、钠钾和膳食纤维是否充足。"
 	}
-	return fmt.Sprintf("我先用本地统计给你一个轻量判断：你问的是“%s”。%s里共有 %d 天饮食记录，日均摄入约 %.0f kcal，和日常消耗估算相差 %+.0f kcal。蛋白质总量 %.1fg、碳水 %.1fg、脂肪 %.1fg%s。\n\n这次没有调用到深度模型，所以我只能先看大方向：如果你感觉训练状态下滑，优先检查训练日前后有没有稳定主食、总热量是不是连续偏低、蛋白质是不是分散到每餐。明天可以先做一个小实验：训练前补一份主食，训练后补蛋白和碳水，然后记录体感。", question, statsRangeLabel(comp.StatsRange), comp.RecordedDays, comp.AvgCaloriesPerDay, comp.CalSurplusDeficit, comp.TotalProtein, comp.TotalCarbs, comp.TotalFat, microHint)
+	exerciseHint := ""
+	if comp != nil && comp.ExerciseSummary != nil && comp.ExerciseSummary.SessionCount > 0 {
+		exerciseHint = fmt.Sprintf("。这段时间你还记录了 %d 次训练，分布在 %d 天", comp.ExerciseSummary.SessionCount, comp.ExerciseSummary.LoggedDays)
+		if comp.ExerciseSummary.TotalDurationMin > 0 {
+			exerciseHint += fmt.Sprintf("，总时长约 %d 分钟", comp.ExerciseSummary.TotalDurationMin)
+		}
+	}
+	return fmt.Sprintf("我先用本地统计给你一个轻量判断：你问的是“%s”。%s里共有 %d 天饮食记录，日均摄入约 %.0f kcal，和日常消耗估算相差 %+.0f kcal。蛋白质总量 %.1fg、碳水 %.1fg、脂肪 %.1fg%s%s。\n\n这次没有调用到深度模型，所以我只能先看大方向：如果你感觉训练状态下滑，优先检查训练日前后有没有稳定主食、总热量是不是连续偏低、蛋白质是不是分散到每餐。明天可以先做一个小实验：训练前补一份主食，训练后补蛋白和碳水，然后记录体感。", question, statsRangeLabel(comp.StatsRange), comp.RecordedDays, comp.AvgCaloriesPerDay, comp.CalSurplusDeficit, comp.TotalProtein, comp.TotalCarbs, comp.TotalFat, microHint, exerciseHint)
 }
 
 func fallbackStatsInsight(comp *statsComputation) string {
@@ -1860,6 +1964,89 @@ func statsProfileFingerprint(user *domain.StatsUserProfile) string {
 		return "profile:none"
 	}
 	return "routine:" + statsRoutineText(user.HealthCondition["routine_type"])
+}
+
+func buildStatsExerciseSummary(logs []domain.ExerciseLog) *statsExerciseSummary {
+	if len(logs) == 0 {
+		return nil
+	}
+	loggedDays := map[string]struct{}{}
+	totalCalories := 0.0
+	totalDurationMin := 0
+	recentEntries := make([]statsExerciseEntry, 0, 3)
+	for _, log := range logs {
+		date := formatStatsExerciseDate(log)
+		if date != "" {
+			loggedDays[date] = struct{}{}
+		}
+		if log.CaloriesBurned != nil && *log.CaloriesBurned > 0 {
+			totalCalories += *log.CaloriesBurned
+		}
+		if log.DurationMin != nil && *log.DurationMin > 0 {
+			totalDurationMin += *log.DurationMin
+		}
+		if len(recentEntries) < 3 {
+			entry := statsExerciseEntry{
+				Date:  date,
+				Title: statsExerciseTitle(log),
+			}
+			if log.CaloriesBurned != nil && *log.CaloriesBurned > 0 {
+				entry.CaloriesBurned = round1(*log.CaloriesBurned)
+			}
+			if log.DurationMin != nil && *log.DurationMin > 0 {
+				entry.DurationMin = *log.DurationMin
+			}
+			recentEntries = append(recentEntries, entry)
+		}
+	}
+	return &statsExerciseSummary{
+		LoggedDays:       len(loggedDays),
+		SessionCount:     len(logs),
+		TotalCalories:    round1(totalCalories),
+		TotalDurationMin: totalDurationMin,
+		RecentEntries:    recentEntries,
+	}
+}
+
+func statsExerciseFingerprint(summary *statsExerciseSummary) string {
+	if summary == nil || summary.SessionCount == 0 {
+		return "exercise:none"
+	}
+	parts := []string{
+		fmt.Sprintf("days=%d", summary.LoggedDays),
+		fmt.Sprintf("sessions=%d", summary.SessionCount),
+		fmt.Sprintf("kcal=%.1f", summary.TotalCalories),
+		fmt.Sprintf("duration=%d", summary.TotalDurationMin),
+	}
+	for _, entry := range summary.RecentEntries {
+		parts = append(parts, fmt.Sprintf("%s:%s:%d:%.1f", entry.Date, entry.Title, entry.DurationMin, entry.CaloriesBurned))
+	}
+	return strings.Join(parts, "|")
+}
+
+func formatStatsExerciseDate(log domain.ExerciseLog) string {
+	if log.RecordedOn != nil && !log.RecordedOn.IsZero() {
+		return log.RecordedOn.In(chinaTZ).Format("01-02")
+	}
+	if log.RecordedAt != nil && !log.RecordedAt.IsZero() {
+		return log.RecordedAt.In(chinaTZ).Format("01-02")
+	}
+	if log.CreatedAt != nil && !log.CreatedAt.IsZero() {
+		return log.CreatedAt.In(chinaTZ).Format("01-02")
+	}
+	return "未知日期"
+}
+
+func statsExerciseTitle(log domain.ExerciseLog) string {
+	if log.ExerciseType != nil {
+		if value := trimStatsRunes(strings.TrimSpace(*log.ExerciseType), 24); value != "" {
+			return value
+		}
+	}
+	if value := trimStatsRunes(strings.TrimSpace(log.ExerciseDesc), 24); value != "" {
+		return value
+	}
+	return "运动记录"
 }
 
 func latestWeightFromBodyMetrics(summary *BodyMetricsSummary) *WeightEntry {

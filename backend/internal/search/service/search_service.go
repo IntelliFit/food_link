@@ -2,11 +2,29 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 
+	"food_link/backend/internal/foodmedia"
 	"food_link/backend/internal/search/repo"
 	"food_link/backend/pkg/storage"
 )
+
+type ManualFoodItem struct {
+	Name              string   `json:"name"`
+	ManualSource      string   `json:"manual_source"`
+	ManualSourceID    string   `json:"manual_source_id"`
+	ManualSourceTitle string   `json:"manual_source_title"`
+	SourceLabel       string   `json:"source_label"`
+	ImagePath         string   `json:"image_path"`
+	ImagePaths        []string `json:"image_paths"`
+	PackagedFoodID    string   `json:"packaged_food_id"`
+	MatchedFoodID     string   `json:"matched_food_id"`
+	NutritionSource   string   `json:"nutrition_source"`
+	Nutrients         struct {
+		Calories float64 `json:"calories"`
+	} `json:"nutrients"`
+}
 
 type ContentSearchResult struct {
 	TargetType string `json:"target_type"`
@@ -30,13 +48,19 @@ type ContentSearchResult struct {
 	Sugar         *float64 `json:"sugar"`
 	SodiumMg      *float64 `json:"sodium_mg"`
 
-	ExerciseDesc  *string  `json:"exercise_desc,omitempty"`
-	ExerciseType  *string  `json:"exercise_type,omitempty"`
+	ExerciseDesc   *string  `json:"exercise_desc,omitempty"`
+	ExerciseType   *string  `json:"exercise_type,omitempty"`
 	CaloriesBurned *float64 `json:"calories_burned"`
-	DurationMin   *int     `json:"duration_min"`
+	DurationMin    *int     `json:"duration_min"`
 
-	MealType *string `json:"meal_type,omitempty"`
-	DietGoal *string `json:"diet_goal,omitempty"`
+	MealType      *string          `json:"meal_type,omitempty"`
+	DietGoal      *string          `json:"diet_goal,omitempty"`
+	EntryType     *string          `json:"entry_type,omitempty"`
+	SourceTaskID  *string          `json:"source_task_id,omitempty"`
+	RecipeID      *string          `json:"recipe_id,omitempty"`
+	Items         []map[string]any `json:"items,omitempty"`
+	ManualItems   []ManualFoodItem `json:"manual_food_items,omitempty"`
+	ExerciseItems []map[string]any `json:"exercise_items,omitempty"`
 
 	Author map[string]string `json:"author"`
 
@@ -55,18 +79,23 @@ type UserSearchResult struct {
 
 type SearchRepo interface {
 	SearchContent(ctx context.Context, currentUserID, keyword string, offset, limit int) ([]repo.ContentRow, error)
-	SearchUsers(ctx context.Context, keyword string, offset, limit int) ([]repo.UserRow, error)
+	SearchUsers(ctx context.Context, currentUserID, keyword string, offset, limit int) ([]repo.UserRow, error)
 	GetUserProfiles(ctx context.Context, userIDs []string) (map[string]*repo.UserProfileRow, error)
 	GetFriendIDs(ctx context.Context, userID string) (map[string]bool, error)
 	CountContent(ctx context.Context, currentUserID, keyword string) (int64, error)
-	CountUsers(ctx context.Context, keyword string) (int64, error)
+	CountUsers(ctx context.Context, currentUserID, keyword string) (int64, error)
 	GetLikesForTargets(ctx context.Context, targets []repo.LikeTarget, currentUserID string) (map[string]*repo.TargetLikeInfo, error)
 	CountCommentsForTargets(ctx context.Context, targets []repo.LikeTarget) (map[string]int64, error)
 }
 
 type SearchService struct {
-	repo    SearchRepo
-	storage *storage.Client
+	repo         SearchRepo
+	storage      *storage.Client
+	blockChecker BlockChecker
+}
+
+type BlockChecker interface {
+	GetBlockedPairUserIDs(ctx context.Context, userID string) ([]string, error)
 }
 
 func NewSearchService(searchRepo SearchRepo, storageClient *storage.Client) *SearchService {
@@ -74,6 +103,10 @@ func NewSearchService(searchRepo SearchRepo, storageClient *storage.Client) *Sea
 		repo:    searchRepo,
 		storage: storageClient,
 	}
+}
+
+func (s *SearchService) ConfigureBlockChecker(checker BlockChecker) {
+	s.blockChecker = checker
 }
 
 func (s *SearchService) SearchContent(ctx context.Context, currentUserID, keyword string, offset, limit int) ([]ContentSearchResult, bool, error) {
@@ -86,6 +119,7 @@ func (s *SearchService) SearchContent(ctx context.Context, currentUserID, keywor
 	if err != nil {
 		return nil, false, err
 	}
+	rows = s.filterBlockedContentRows(ctx, currentUserID, rows)
 
 	hasMore := len(rows) > limit
 	if hasMore {
@@ -129,6 +163,18 @@ func (s *SearchService) SearchContent(ctx context.Context, currentUserID, keywor
 		if row.ImagePaths != nil && *row.ImagePaths != "" {
 			imagePaths = s.resolveImagePaths(*row.ImagePaths)
 		}
+		imagePath := cloneOptionalString(row.ImagePath)
+		var items []map[string]any
+		var manualItems []ManualFoodItem
+		if row.TargetType == "food_record" {
+			items = s.parseRecordItems(row.Items)
+			items = foodmedia.EnrichFoodRecordDisplayFields(ctx, nil, s.storage, &imagePath, &imagePaths, items)
+			manualItems = s.extractManualFoodItemsFromMaps(items)
+		}
+		var exerciseItems []map[string]any
+		if row.TargetType == "exercise_log" {
+			exerciseItems = s.parseRecordItems(row.ExerciseItems)
+		}
 
 		desc := row.Description
 		if row.TargetType == "circle_post" {
@@ -163,11 +209,19 @@ func (s *SearchService) SearchContent(ctx context.Context, currentUserID, keywor
 			DurationMin:    row.DurationMin,
 			MealType:       row.MealType,
 			DietGoal:       row.DietGoal,
-			Liked:        getLikeInfo(likeMap, row.TargetType, row.TargetID).Liked,
-			LikeCount:    getLikeInfo(likeMap, row.TargetType, row.TargetID).Count,
-			CommentCount: int(commentCountMap[row.TargetType+":"+row.TargetID]),
+			EntryType:      row.EntryType,
+			SourceTaskID:   row.SourceTaskID,
+			RecipeID:       row.RecipeID,
+			Items:          items,
+			ManualItems:    manualItems,
+			ExerciseItems:  exerciseItems,
+			Liked:          getLikeInfo(likeMap, row.TargetType, row.TargetID).Liked,
+			LikeCount:      getLikeInfo(likeMap, row.TargetType, row.TargetID).Count,
+			CommentCount:   int(commentCountMap[row.TargetType+":"+row.TargetID]),
 			Author:         author,
 		}
+		results[i].ImagePath = imagePath
+		results[i].ImagePaths = imagePaths
 	}
 	return results, hasMore, nil
 }
@@ -180,16 +234,145 @@ func getLikeInfo(likeMap map[string]*repo.TargetLikeInfo, targetType, targetID s
 	return &repo.TargetLikeInfo{}
 }
 
+func cloneOptionalString(value *string) *string {
+	if value == nil {
+		return nil
+	}
+	cloned := strings.TrimSpace(*value)
+	if cloned == "" {
+		return nil
+	}
+	return &cloned
+}
+
+func (s *SearchService) parseRecordItems(raw *string) []map[string]any {
+	if raw == nil || strings.TrimSpace(*raw) == "" {
+		return nil
+	}
+	var items []map[string]any
+	if err := json.Unmarshal([]byte(*raw), &items); err != nil {
+		return nil
+	}
+	return items
+}
+
+func (s *SearchService) extractManualFoodItemsFromMaps(items []map[string]any) []ManualFoodItem {
+	if len(items) == 0 {
+		return nil
+	}
+	payload, err := json.Marshal(items)
+	if err != nil {
+		return nil
+	}
+	var parsed []ManualFoodItem
+	if err := json.Unmarshal(payload, &parsed); err != nil {
+		return nil
+	}
+	out := make([]ManualFoodItem, 0, len(parsed))
+	for _, it := range parsed {
+		src, srcID := s.resolveManualSource(it)
+		if src == "" {
+			continue
+		}
+		resolved := s.resolveFoodImageURLs(it)
+		imagePath := ""
+		if len(resolved) > 0 {
+			imagePath = resolved[0]
+		}
+		title := strings.TrimSpace(it.ManualSourceTitle)
+		if title == "" {
+			title = strings.TrimSpace(it.Name)
+		}
+		label := strings.TrimSpace(it.SourceLabel)
+		if label == "" {
+			label = foodmedia.ManualSourceLabel(src)
+		}
+		out = append(out, ManualFoodItem{
+			Name:              it.Name,
+			ManualSource:      src,
+			ManualSourceID:    srcID,
+			ManualSourceTitle: title,
+			SourceLabel:       label,
+			ImagePath:         imagePath,
+			ImagePaths:        resolved,
+			Nutrients:         it.Nutrients,
+		})
+	}
+	return out
+}
+
+func (s *SearchService) resolveManualSource(it ManualFoodItem) (string, string) {
+	if src := strings.TrimSpace(it.ManualSource); src != "" {
+		return src, strings.TrimSpace(it.ManualSourceID)
+	}
+	if id := strings.TrimSpace(it.PackagedFoodID); id != "" {
+		return "packaged_food", id
+	}
+	if id := strings.TrimSpace(it.MatchedFoodID); id != "" {
+		return "nutrition_library", id
+	}
+	if strings.Contains(strings.ToLower(it.NutritionSource), "packaged") {
+		return "packaged_food", ""
+	}
+	return "", ""
+}
+
+func (s *SearchService) resolveFoodImageURLs(item ManualFoodItem) []string {
+	if s.storage == nil {
+		seen := make(map[string]struct{})
+		var out []string
+		collectRaw := func(v string) {
+			v = strings.TrimSpace(v)
+			if v == "" {
+				return
+			}
+			if _, ok := seen[v]; ok {
+				return
+			}
+			seen[v] = struct{}{}
+			out = append(out, v)
+		}
+		for _, p := range item.ImagePaths {
+			collectRaw(p)
+		}
+		collectRaw(item.ImagePath)
+		return out
+	}
+	seen := make(map[string]struct{})
+	var out []string
+	collect := func(v string) {
+		v = strings.TrimSpace(v)
+		if v == "" {
+			return
+		}
+		resolved := s.storage.ResolveReferenceURL("food-images", v)
+		if resolved == "" {
+			return
+		}
+		if _, ok := seen[resolved]; ok {
+			return
+		}
+		seen[resolved] = struct{}{}
+		out = append(out, resolved)
+	}
+	for _, p := range item.ImagePaths {
+		collect(p)
+	}
+	collect(item.ImagePath)
+	return out
+}
+
 func (s *SearchService) SearchUsers(ctx context.Context, currentUserID, keyword string, offset, limit int) ([]UserSearchResult, bool, error) {
 	keyword = strings.TrimSpace(keyword)
 	if keyword == "" {
 		return nil, false, nil
 	}
 
-	rows, err := s.repo.SearchUsers(ctx, keyword, offset, limit+1)
+	rows, err := s.repo.SearchUsers(ctx, currentUserID, keyword, offset, limit+1)
 	if err != nil {
 		return nil, false, err
 	}
+	rows = s.filterBlockedUserRows(ctx, currentUserID, rows)
 
 	hasMore := len(rows) > limit
 	if hasMore {
@@ -225,7 +408,7 @@ func (s *SearchService) GetSearchCounts(ctx context.Context, currentUserID, keyw
 	if err != nil {
 		return nil, err
 	}
-	userCount, err := s.repo.CountUsers(ctx, keyword)
+	userCount, err := s.repo.CountUsers(ctx, currentUserID, keyword)
 	if err != nil {
 		return nil, err
 	}
@@ -233,6 +416,52 @@ func (s *SearchService) GetSearchCounts(ctx context.Context, currentUserID, keyw
 		ContentCount: contentCount,
 		UserCount:    userCount,
 	}, nil
+}
+
+func (s *SearchService) blockedUserSet(ctx context.Context, userID string) map[string]bool {
+	userID = strings.TrimSpace(userID)
+	if s.blockChecker == nil || userID == "" {
+		return map[string]bool{}
+	}
+	ids, err := s.blockChecker.GetBlockedPairUserIDs(ctx, userID)
+	if err != nil {
+		return map[string]bool{}
+	}
+	out := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		if strings.TrimSpace(id) != "" {
+			out[id] = true
+		}
+	}
+	return out
+}
+
+func (s *SearchService) filterBlockedContentRows(ctx context.Context, currentUserID string, rows []repo.ContentRow) []repo.ContentRow {
+	blockedSet := s.blockedUserSet(ctx, currentUserID)
+	if len(blockedSet) == 0 {
+		return rows
+	}
+	out := make([]repo.ContentRow, 0, len(rows))
+	for _, row := range rows {
+		if row.UserID == currentUserID || !blockedSet[row.UserID] {
+			out = append(out, row)
+		}
+	}
+	return out
+}
+
+func (s *SearchService) filterBlockedUserRows(ctx context.Context, currentUserID string, rows []repo.UserRow) []repo.UserRow {
+	blockedSet := s.blockedUserSet(ctx, currentUserID)
+	if len(blockedSet) == 0 {
+		return rows
+	}
+	out := make([]repo.UserRow, 0, len(rows))
+	for _, row := range rows {
+		if row.ID == currentUserID || !blockedSet[row.ID] {
+			out = append(out, row)
+		}
+	}
+	return out
 }
 
 func (s *SearchService) resolveAvatarURL(value string) string {
@@ -248,6 +477,10 @@ func (s *SearchService) resolveAvatarURL(value string) string {
 }
 
 func (s *SearchService) resolveImagePaths(raw string) []string {
+	var jsonPaths []string
+	if err := json.Unmarshal([]byte(raw), &jsonPaths); err == nil {
+		return dedupeTrimmedStrings(jsonPaths)
+	}
 	parts := strings.Split(raw, ",")
 	result := make([]string, 0, len(parts))
 	for _, p := range parts {
@@ -257,5 +490,28 @@ func (s *SearchService) resolveImagePaths(raw string) []string {
 		}
 		result = append(result, p)
 	}
-	return result
+	return dedupeTrimmedStrings(result)
+}
+
+func dedupeTrimmedStrings(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(values))
+	seen := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }

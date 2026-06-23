@@ -3,11 +3,13 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
+	commonerrors "food_link/backend/internal/common/errors"
 	"food_link/backend/internal/membership/domain"
 	membershiprepo "food_link/backend/internal/membership/repo"
 	"food_link/backend/pkg/config"
@@ -31,6 +33,8 @@ type mockMembershipRepo struct {
 	payment                       *domain.MembershipPayment
 	latestPaidPayment             *domain.MembershipPayment
 	user                          *membershiprepo.User
+	paymentTestAccess             *domain.PaymentTestAccess
+	paymentTestAccessErr          error
 	trialEntitlement              *domain.UserTrialEntitlement
 	analysisCountToday            int64
 	usedByDate                    map[string]int
@@ -39,15 +43,19 @@ type mockMembershipRepo struct {
 	inviteBonusCredits            int
 	shareBonusCredits             int
 	inviteReferral                *domain.UserInviteReferral
+	pendingInviteReferrals        []domain.UserInviteReferral
+	inviteReferralsForUser        []domain.UserInviteReferral
 	activeInviteRewards           []domain.UserInviteReferral
 	shareEvents                   []domain.UserCreditBonusEvent
 	completedInviteRewardsInMonth int
+	users                         map[string]*membershiprepo.User
 	foodRecordOwner               string
 	foodRecordCountByDate         map[string]int
 	shareClaimsToday              int
 	shareClaim                    *domain.UserCreditBonusEvent
 	shareClaimBySourceKey         map[string]*domain.UserCreditBonusEvent
 	saveMembershipCalls           int
+	expirePendingOrdersCalls      int
 	ledgerByReasonSource          map[string]*domain.UserEarnedCreditLedger
 	sumPositiveEarnedCredits      int
 	rewardTaskUploads             map[string]*domain.RewardTaskUpload
@@ -97,6 +105,15 @@ func (m *mockMembershipRepo) GetPlanByCode(ctx context.Context, planCode string)
 		}
 	}
 	return nil, nil
+}
+func (m *mockMembershipRepo) GetPaymentTestAccess(ctx context.Context, userID string) (*domain.PaymentTestAccess, error) {
+	if m.paymentTestAccessErr != nil {
+		return nil, m.paymentTestAccessErr
+	}
+	if m.paymentTestAccess != nil {
+		return m.paymentTestAccess, nil
+	}
+	return &domain.PaymentTestAccess{}, nil
 }
 func (m *mockMembershipRepo) GetUserProMembership(ctx context.Context, userID string) (*domain.UserMembership, error) {
 	return m.membership, nil
@@ -172,6 +189,7 @@ func (m *mockMembershipRepo) UpdatePaymentByOrderNo(ctx context.Context, orderNo
 	return nil
 }
 func (m *mockMembershipRepo) ExpirePendingMembershipOrders(ctx context.Context, userID, excludeOrderNo, reason string) (int, error) {
+	m.expirePendingOrdersCalls++
 	return 0, nil
 }
 func (m *mockMembershipRepo) CountAnalysisTasksToday(ctx context.Context, userID string) (int64, error) {
@@ -222,7 +240,27 @@ func (m *mockMembershipRepo) UpdateInviteReferral(ctx context.Context, id string
 	} else if _, ok := updates["blocked_reason"]; ok {
 		m.inviteReferral.BlockedReason = nil
 	}
+	// Also update the matching item in inviteReferralsForUser slice.
+	for i := range m.inviteReferralsForUser {
+		if m.inviteReferralsForUser[i].ID == id {
+			if v, ok := updates["status"].(string); ok {
+				m.inviteReferralsForUser[i].Status = v
+			}
+			if v, ok := updates["blocked_reason"].(string); ok {
+				m.inviteReferralsForUser[i].BlockedReason = &v
+			} else if _, ok := updates["blocked_reason"]; ok {
+				m.inviteReferralsForUser[i].BlockedReason = nil
+			}
+			break
+		}
+	}
 	return m.inviteReferral, nil
+}
+func (m *mockMembershipRepo) ListPendingInviteReferralsByInviter(ctx context.Context, inviterUserID string) ([]domain.UserInviteReferral, error) {
+	return m.pendingInviteReferrals, nil
+}
+func (m *mockMembershipRepo) ListInviteReferralsForUser(ctx context.Context, userID string) ([]domain.UserInviteReferral, error) {
+	return m.inviteReferralsForUser, nil
 }
 func (m *mockMembershipRepo) CountCompletedInviteRewardsForInviterInMonth(ctx context.Context, inviterUserID, monthStart, nextMonthStart string) (int, error) {
 	return m.completedInviteRewardsInMonth, nil
@@ -234,6 +272,11 @@ func (m *mockMembershipRepo) ListSharePosterBonusEvents(ctx context.Context, use
 	return m.shareEvents, nil
 }
 func (m *mockMembershipRepo) GetUser(ctx context.Context, userID string) (*membershiprepo.User, error) {
+	if m.users != nil {
+		if user, ok := m.users[userID]; ok {
+			return user, nil
+		}
+	}
 	return m.user, nil
 }
 func (m *mockMembershipRepo) GetFoodRecordOwner(ctx context.Context, recordID string) (string, error) {
@@ -376,11 +419,43 @@ func TestMembershipService_ListPlans(t *testing.T) {
 		}},
 	})
 
-	plans, err := svc.ListPlans(context.Background())
+	plans, err := svc.ListPlans(context.Background(), "")
 	require.NoError(t, err)
 	require.Len(t, plans, 1)
 	assert.Equal(t, "standard_monthly", plans[0]["code"])
 	assert.Equal(t, float64(30), plans[0]["savings"])
+}
+
+func TestMembershipService_ListPlans_AppendsAllowedPaymentTestPlan(t *testing.T) {
+	testPlan := &domain.MembershipPlan{
+		Code:           domain.PaymentTestPlanCode,
+		Name:           "Pay Test - 0.01 CNY",
+		Amount:         0.01,
+		DurationMonths: 1,
+		DailyCredits:   8,
+		IsActive:       true,
+		IsVisible:      false,
+		IsTestPlan:     true,
+	}
+	svc := NewMembershipService(&mockMembershipRepo{
+		plans: []domain.MembershipPlan{{
+			Code:           "standard_monthly",
+			Name:           "Standard",
+			Amount:         19.9,
+			DurationMonths: 1,
+			DailyCredits:   20,
+			IsActive:       true,
+			IsVisible:      true,
+		}},
+		planByCode:        map[string]*domain.MembershipPlan{domain.PaymentTestPlanCode: testPlan},
+		paymentTestAccess: &domain.PaymentTestAccess{Enabled: true, UserAllowed: true},
+	})
+
+	plans, err := svc.ListPlans(context.Background(), "u1")
+	require.NoError(t, err)
+	require.Len(t, plans, 2)
+	assert.Equal(t, domain.PaymentTestPlanCode, plans[1]["code"])
+	assert.Equal(t, true, plans[1]["is_test_plan"])
 }
 
 func TestMembershipService_GetMyMembership_NoMembershipTrial(t *testing.T) {
@@ -821,6 +896,296 @@ func TestMembershipService_ActivateInviteReferralSecondDayAwardsBothSides(t *tes
 	assert.NotNil(t, ref.RewardStartDate)
 }
 
+func TestMembershipService_GetInviteRewardStatusRecordsInviteePendingNoAction(t *testing.T) {
+	created := time.Now().AddDate(0, 0, -1)
+	code := "8826BC8D"
+	nickname := "邀请人"
+	ref := domain.UserInviteReferral{
+		ID:            "ref1",
+		InviterUserID: "inviter",
+		InviteeUserID: "invitee",
+		InviteCode:    &code,
+		Status:        "pending_qualified",
+		CreatedAt:     &created,
+	}
+	repo := &mockMembershipRepo{
+		inviteReferral:         &ref,
+		inviteReferralsForUser: []domain.UserInviteReferral{ref},
+		users: map[string]*membershiprepo.User{
+			"inviter": {ID: "inviter", Nickname: &nickname},
+		},
+	}
+	svc := NewMembershipService(repo)
+
+	data, err := svc.GetInviteRewardStatus(context.Background(), "invitee")
+	require.NoError(t, err)
+	asInvitee := data["as_invitee"].(map[string]any)
+	assert.Equal(t, 2, asInvitee["records_needed"])
+	records := data["records"].([]any)
+	require.Len(t, records, 1)
+	row := records[0].(map[string]any)
+	assert.Equal(t, "invitee", row["role"])
+	assert.Equal(t, "进行中", row["status_label"])
+	assert.Equal(t, 2, row["records_needed"])
+	assert.Equal(t, "邀请人", row["other_nickname"])
+	assert.Contains(t, row["requirement_text"], "还需完成 2 个不同自然日")
+}
+
+func TestMembershipService_GetInviteRewardStatusRecordsInviteePendingOneAction(t *testing.T) {
+	created := time.Now().AddDate(0, 0, -2)
+	first := time.Now().AddDate(0, 0, -1)
+	ref := domain.UserInviteReferral{
+		ID:                     "ref1",
+		InviterUserID:          "inviter",
+		InviteeUserID:          "invitee",
+		Status:                 "pending_qualified",
+		FirstEffectiveActionAt: &first,
+		CreatedAt:              &created,
+	}
+	repo := &mockMembershipRepo{
+		inviteReferral:         &ref,
+		inviteReferralsForUser: []domain.UserInviteReferral{ref},
+	}
+	svc := NewMembershipService(repo)
+
+	data, err := svc.GetInviteRewardStatus(context.Background(), "invitee")
+	require.NoError(t, err)
+	records := data["records"].([]any)
+	require.Len(t, records, 1)
+	row := records[0].(map[string]any)
+	assert.Equal(t, 1, row["records_needed"])
+	assert.Contains(t, row["requirement_text"], "还需在另一个自然日再完成 1 次有效记录")
+}
+
+func TestMembershipService_GetInviteRewardStatusRecordsInviterAllStatuses(t *testing.T) {
+	now := time.Now()
+	blockedReason := "monthly_limit_reached"
+	inviteeOne := "好友一"
+	inviteeTwo := "好友二"
+	inviteeThree := "好友三"
+	rows := []domain.UserInviteReferral{
+		{
+			ID:            "ref-completed",
+			InviterUserID: "inviter",
+			InviteeUserID: "invitee1",
+			Status:        "reward_completed",
+			CreatedAt:     &now,
+		},
+		{
+			ID:            "ref-blocked",
+			InviterUserID: "inviter",
+			InviteeUserID: "invitee2",
+			Status:        "reward_blocked",
+			BlockedReason: &blockedReason,
+			CreatedAt:     &now,
+		},
+		{
+			ID:            "ref-pending",
+			InviterUserID: "inviter",
+			InviteeUserID: "invitee3",
+			Status:        "pending_qualified",
+			CreatedAt:     &now,
+		},
+	}
+	repo := &mockMembershipRepo{
+		pendingInviteReferrals: rows[2:],
+		inviteReferralsForUser: rows,
+		users: map[string]*membershiprepo.User{
+			"invitee1": {ID: "invitee1", Nickname: &inviteeOne},
+			"invitee2": {ID: "invitee2", Nickname: &inviteeTwo},
+			"invitee3": {ID: "invitee3", Nickname: &inviteeThree},
+		},
+	}
+	svc := NewMembershipService(repo)
+
+	data, err := svc.GetInviteRewardStatus(context.Background(), "inviter")
+	require.NoError(t, err)
+	asInviter := data["as_inviter"].([]any)
+	require.Len(t, asInviter, 1)
+	records := data["records"].([]any)
+	require.Len(t, records, 3)
+	assert.Equal(t, "已完成", records[0].(map[string]any)["status_label"])
+	assert.Equal(t, "好友一", records[0].(map[string]any)["other_nickname"])
+	assert.Contains(t, records[0].(map[string]any)["requirement_text"], "双方各 +15 积分")
+	assert.Equal(t, "未达成", records[1].(map[string]any)["status_label"])
+	assert.Equal(t, "邀请人当月奖励名额已满", records[1].(map[string]any)["blocked_reason_label"])
+	assert.Equal(t, "进行中", records[2].(map[string]any)["status_label"])
+}
+
+func TestMembershipService_GetInviteRewardStatusExpiredPendingDoesNotMutate(t *testing.T) {
+	created := time.Now().AddDate(0, 0, -8)
+	ref := domain.UserInviteReferral{
+		ID:            "ref-expired",
+		InviterUserID: "inviter",
+		InviteeUserID: "invitee",
+		Status:        "pending_qualified",
+		CreatedAt:     &created,
+	}
+	repo := &mockMembershipRepo{
+		inviteReferral:         &ref,
+		inviteReferralsForUser: []domain.UserInviteReferral{ref},
+	}
+	svc := NewMembershipService(repo)
+
+	data, err := svc.GetInviteRewardStatus(context.Background(), "invitee")
+	require.NoError(t, err)
+	assert.Nil(t, data["as_invitee"])
+	records := data["records"].([]any)
+	require.Len(t, records, 1)
+	row := records[0].(map[string]any)
+	assert.Equal(t, "pending_qualified", row["status"])
+	assert.Equal(t, "已过期", row["status_label"])
+	assert.Equal(t, "已超过有效期，无法获得奖励", row["next_action_text"])
+	assert.Equal(t, "pending_qualified", repo.inviteReferral.Status)
+}
+
+func TestMembershipService_GetRewardCenterInviteRewardInviterSummary(t *testing.T) {
+	now := time.Now()
+	rows := []domain.UserInviteReferral{
+		{
+			ID:            "ref-completed",
+			InviterUserID: "inviter",
+			InviteeUserID: "invitee1",
+			Status:        "reward_completed",
+			CreatedAt:     &now,
+		},
+		{
+			ID:            "ref-pending-1",
+			InviterUserID: "inviter",
+			InviteeUserID: "invitee2",
+			Status:        "pending_qualified",
+			CreatedAt:     &now,
+		},
+		{
+			ID:            "ref-pending-2",
+			InviterUserID: "inviter",
+			InviteeUserID: "invitee3",
+			Status:        "pending_qualified",
+			CreatedAt:     &now,
+		},
+	}
+	repo := &mockMembershipRepo{
+		user:                   &membershiprepo.User{ID: "inviter", CreatedAt: &now},
+		inviteReferralsForUser: rows,
+		trialEntitlement: &domain.UserTrialEntitlement{
+			FirstUserID:       strPtr("inviter"),
+			OpenID:            "openid-inviter",
+			FirstRegisteredAt: &now,
+			TrialDaysTotal:    regularUserTrialDays,
+			TrialPolicy:       "regular_new_user",
+		},
+	}
+	svc := NewMembershipService(repo)
+
+	data, err := svc.GetRewardCenter(context.Background(), "inviter")
+	require.NoError(t, err)
+	inviteReward := data["invite_reward"].(map[string]any)
+	summary := inviteReward["as_inviter_summary"].(map[string]any)
+	assert.Equal(t, 3, summary["invited_count"])
+	assert.Equal(t, 1, summary["completed_count"])
+	assert.Equal(t, 2, summary["pending_count"])
+	assert.Equal(t, 30, summary["estimated_credits"])
+	assert.Equal(t, 15, summary["earned_credits"])
+	require.Len(t, summary["records"].([]any), 3)
+}
+
+func TestMembershipService_GetRewardCenterInviteRewardInviteeNoAction(t *testing.T) {
+	now := time.Now()
+	ref := domain.UserInviteReferral{
+		ID:            "ref1",
+		InviterUserID: "inviter",
+		InviteeUserID: "invitee",
+		Status:        "pending_qualified",
+		CreatedAt:     &now,
+	}
+	repo := rewardCenterInviteeTestRepo("invitee", now, ref)
+	svc := NewMembershipService(repo)
+
+	data, err := svc.GetRewardCenter(context.Background(), "invitee")
+	require.NoError(t, err)
+	summary := data["invite_reward"].(map[string]any)["as_invitee_summary"].(map[string]any)
+	assert.Equal(t, 0, summary["completed_days"])
+	assert.Equal(t, 2, summary["remaining_days"])
+	assert.Equal(t, 15, summary["reward_credits"])
+}
+
+func TestMembershipService_GetRewardCenterInviteRewardInviteeOneAction(t *testing.T) {
+	now := time.Now()
+	first := now.AddDate(0, 0, -1)
+	ref := domain.UserInviteReferral{
+		ID:                     "ref1",
+		InviterUserID:          "inviter",
+		InviteeUserID:          "invitee",
+		Status:                 "pending_qualified",
+		FirstEffectiveActionAt: &first,
+		CreatedAt:              &now,
+	}
+	repo := rewardCenterInviteeTestRepo("invitee", now, ref)
+	svc := NewMembershipService(repo)
+
+	data, err := svc.GetRewardCenter(context.Background(), "invitee")
+	require.NoError(t, err)
+	summary := data["invite_reward"].(map[string]any)["as_invitee_summary"].(map[string]any)
+	assert.Equal(t, 1, summary["completed_days"])
+	assert.Equal(t, 1, summary["remaining_days"])
+}
+
+func TestMembershipService_GetRewardCenterInviteRewardInviteeCompleted(t *testing.T) {
+	now := time.Now()
+	ref := domain.UserInviteReferral{
+		ID:            "ref1",
+		InviterUserID: "inviter",
+		InviteeUserID: "invitee",
+		Status:        "reward_completed",
+		CreatedAt:     &now,
+	}
+	repo := rewardCenterInviteeTestRepo("invitee", now, ref)
+	svc := NewMembershipService(repo)
+
+	data, err := svc.GetRewardCenter(context.Background(), "invitee")
+	require.NoError(t, err)
+	summary := data["invite_reward"].(map[string]any)["as_invitee_summary"].(map[string]any)
+	assert.Equal(t, 2, summary["completed_days"])
+	assert.Equal(t, 0, summary["remaining_days"])
+	assert.Equal(t, "已达标", summary["deadline_text"])
+}
+
+func TestMembershipService_GetRewardCenterInviteRewardExpiredPendingCleansUp(t *testing.T) {
+	now := time.Now()
+	created := now.AddDate(0, 0, -8)
+	ref := domain.UserInviteReferral{
+		ID:            "ref-expired",
+		InviterUserID: "inviter",
+		InviteeUserID: "invitee",
+		Status:        "pending_qualified",
+		CreatedAt:     &created,
+	}
+	repo := rewardCenterInviteeTestRepo("invitee", now, ref)
+	svc := NewMembershipService(repo)
+
+	data, err := svc.GetRewardCenter(context.Background(), "invitee")
+	require.NoError(t, err)
+	// Expired pending referral is cleaned up — no invitee card shown.
+	assert.Nil(t, data["invite_reward"])
+	// The referral was marked as reward_blocked in the DB.
+	assert.Equal(t, "reward_blocked", repo.inviteReferralsForUser[0].Status)
+	assert.Equal(t, "qualification_window_expired", *repo.inviteReferralsForUser[0].BlockedReason)
+}
+
+func rewardCenterInviteeTestRepo(userID string, now time.Time, ref domain.UserInviteReferral) *mockMembershipRepo {
+	return &mockMembershipRepo{
+		user:                   &membershiprepo.User{ID: userID, CreatedAt: &now},
+		inviteReferralsForUser: []domain.UserInviteReferral{ref},
+		trialEntitlement: &domain.UserTrialEntitlement{
+			FirstUserID:       strPtr(userID),
+			OpenID:            "openid-" + userID,
+			FirstRegisteredAt: &now,
+			TrialDaysTotal:    regularUserTrialDays,
+			TrialPolicy:       "regular_new_user",
+		},
+	}
+}
+
 func TestMembershipService_GetMyMembershipMaterializesLegacyInviteAndShareRewards(t *testing.T) {
 	now := time.Now()
 	today := now.In(chinaLocation()).Format("2006-01-02")
@@ -1029,6 +1394,216 @@ func TestMembershipService_SyncWechatPayment_ActivatesPaidOrderFromQuery(t *test
 	assert.Equal(t, "active", mockRepo.membership.Status)
 	assert.Equal(t, "light_monthly", *mockRepo.membership.CurrentPlanCode)
 	assert.Equal(t, 16, mockRepo.membership.DailyCredits)
+}
+
+func TestMembershipService_CreatePaymentWithInput_ReturnsMobilePaymentUnavailable(t *testing.T) {
+	oldBaseURL := wechatPayAPIBaseURL
+	defer func() { wechatPayAPIBaseURL = oldBaseURL }()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, http.MethodPost, r.Method)
+		assert.Equal(t, "/v3/pay/transactions/app", r.URL.Path)
+		assert.NotEmpty(t, r.Header.Get("Authorization"))
+		var payload map[string]any
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&payload))
+		assert.Equal(t, "wx-app-pay", payload["appid"])
+		assert.Equal(t, "1100000000", payload["mchid"])
+		assert.NotEmpty(t, payload["out_trade_no"])
+		_, hasPayer := payload["payer"]
+		assert.False(t, hasPayer, "APP payment must not send JSAPI payer.openid")
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(map[string]string{"prepay_id": "wx-app-prepay"})
+	}))
+	defer server.Close()
+	wechatPayAPIBaseURL = server.URL
+
+	plan := &domain.MembershipPlan{Code: "standard_monthly", Name: "Standard", Amount: 19.9, DurationMonths: 1, DailyCredits: 20, IsActive: true}
+	mockRepo := &mockMembershipRepo{
+		planByCode: map[string]*domain.MembershipPlan{"standard_monthly": plan},
+		user:       &membershiprepo.User{ID: "u1"},
+	}
+	cfg := &config.Config{
+		WechatPay: config.WechatPayConfig{
+			AppPayAppID: "wx-app-pay",
+			MchID:       "1100000000",
+			NotifyURL:   "https://api.healthymax.cn/api/payment/wechat/notify/membership",
+			SerialNo:    "SERIAL",
+			APIV3Key:    "12345678901234567890123456789012",
+			PrivateKey:  testRSAPrivateKeyPEM,
+		},
+	}
+	svc := NewMembershipService(mockRepo, cfg)
+
+	data, err := svc.CreatePaymentWithInput(context.Background(), "u1", CreateMembershipPaymentInput{
+		PlanCode:   "standard_monthly",
+		PayChannel: "wechat",
+		TradeType:  "APP",
+		Client:     "mobile_app",
+	})
+	require.Error(t, err)
+	assert.Nil(t, data)
+	var appErr *commonerrors.AppError
+	require.True(t, errors.As(err, &appErr))
+	assert.Equal(t, http.StatusNotImplemented, appErr.HTTPStatus)
+	assert.Contains(t, appErr.Message, "App 支付暂未开放")
+	assert.Nil(t, mockRepo.payment)
+}
+
+func TestMembershipService_CreatePaymentWithInput_BlocksDisabledPaymentTestPlan(t *testing.T) {
+	plan := &domain.MembershipPlan{Code: domain.PaymentTestPlanCode, Name: "Pay Test", Amount: 0.01, DurationMonths: 1, DailyCredits: 8, IsActive: true, IsTestPlan: true}
+	mockRepo := &mockMembershipRepo{
+		planByCode:        map[string]*domain.MembershipPlan{domain.PaymentTestPlanCode: plan},
+		paymentTestAccess: &domain.PaymentTestAccess{Enabled: false, UserAllowed: true},
+	}
+	svc := NewMembershipService(mockRepo)
+
+	data, err := svc.CreatePaymentWithInput(context.Background(), "u1", CreateMembershipPaymentInput{PlanCode: domain.PaymentTestPlanCode})
+	require.Error(t, err)
+	assert.Nil(t, data)
+	var appErr *commonerrors.AppError
+	require.True(t, errors.As(err, &appErr))
+	assert.Equal(t, http.StatusForbidden, appErr.HTTPStatus)
+	assert.Nil(t, mockRepo.payment)
+}
+
+func TestMembershipService_CreatePaymentWithInput_BlocksUnlistedPaymentTestUser(t *testing.T) {
+	plan := &domain.MembershipPlan{Code: domain.PaymentTestPlanCode, Name: "Pay Test", Amount: 0.01, DurationMonths: 1, DailyCredits: 8, IsActive: true, IsTestPlan: true}
+	mockRepo := &mockMembershipRepo{
+		planByCode:        map[string]*domain.MembershipPlan{domain.PaymentTestPlanCode: plan},
+		paymentTestAccess: &domain.PaymentTestAccess{Enabled: true, UserAllowed: false},
+	}
+	svc := NewMembershipService(mockRepo)
+
+	data, err := svc.CreatePaymentWithInput(context.Background(), "u1", CreateMembershipPaymentInput{PlanCode: domain.PaymentTestPlanCode})
+	require.Error(t, err)
+	assert.Nil(t, data)
+	var appErr *commonerrors.AppError
+	require.True(t, errors.As(err, &appErr))
+	assert.Equal(t, http.StatusForbidden, appErr.HTTPStatus)
+	assert.Nil(t, mockRepo.payment)
+}
+
+func TestMembershipService_CreatePaymentWithInput_AllowsListedPaymentTestUserPastGate(t *testing.T) {
+	plan := &domain.MembershipPlan{Code: domain.PaymentTestPlanCode, Name: "Pay Test", Amount: 0.01, DurationMonths: 1, DailyCredits: 8, IsActive: true, IsTestPlan: true}
+	mockRepo := &mockMembershipRepo{
+		planByCode:        map[string]*domain.MembershipPlan{domain.PaymentTestPlanCode: plan},
+		paymentTestAccess: &domain.PaymentTestAccess{Enabled: true, UserAllowed: true},
+		user:              &membershiprepo.User{ID: "u1"},
+	}
+	svc := NewMembershipService(mockRepo)
+
+	data, err := svc.CreatePaymentWithInput(context.Background(), "u1", CreateMembershipPaymentInput{
+		PlanCode: domain.PaymentTestPlanCode,
+		Client:   "mobile_app",
+	})
+	require.Error(t, err)
+	assert.Nil(t, data)
+	var appErr *commonerrors.AppError
+	require.True(t, errors.As(err, &appErr))
+	assert.Equal(t, http.StatusNotImplemented, appErr.HTTPStatus)
+	assert.Nil(t, mockRepo.payment)
+}
+
+func TestMembershipService_CreatePaymentWithInput_TestPlanUsesNormalSwitchRules(t *testing.T) {
+	currentPlanCode := "advanced_yearly"
+	expiresAt := time.Now().AddDate(1, 0, 0)
+	currentPeriodStart := time.Now().AddDate(0, -1, 0)
+	testPlan := &domain.MembershipPlan{Code: domain.PaymentTestPlanCode, Name: "Pay Test", Amount: 0.01, DurationMonths: 1, DailyCredits: 8, IsActive: true, IsTestPlan: true}
+	currentPlan := &domain.MembershipPlan{Code: currentPlanCode, Name: "Advanced Yearly", Amount: 299, DurationMonths: 12, DailyCredits: 40, IsActive: true}
+	mockRepo := &mockMembershipRepo{
+		planByCode: map[string]*domain.MembershipPlan{
+			domain.PaymentTestPlanCode: testPlan,
+			currentPlanCode:            currentPlan,
+		},
+		membership: &domain.UserMembership{
+			UserID:             "u1",
+			Status:             "active",
+			CurrentPlanCode:    &currentPlanCode,
+			CurrentPeriodStart: &currentPeriodStart,
+			ExpiresAt:          &expiresAt,
+		},
+		paymentTestAccess: &domain.PaymentTestAccess{Enabled: true, UserAllowed: true},
+		user:              &membershiprepo.User{ID: "u1", OpenID: "openid-u1"},
+	}
+	cfg := &config.Config{
+		External: config.ExternalConfig{AppID: "wx-mini"},
+		WechatPay: config.WechatPayConfig{
+			MchID:      "1100000000",
+			NotifyURL:  "https://api.healthymax.cn/api/payment/wechat/notify/membership",
+			SerialNo:   "SERIAL",
+			APIV3Key:   "12345678901234567890123456789012",
+			PrivateKey: testRSAPrivateKeyPEM,
+		},
+	}
+	svc := NewMembershipService(mockRepo, cfg)
+
+	data, err := svc.CreatePaymentWithInput(context.Background(), "u1", CreateMembershipPaymentInput{PlanCode: domain.PaymentTestPlanCode})
+	require.Error(t, err)
+	assert.Nil(t, data)
+	var appErr *commonerrors.AppError
+	require.True(t, errors.As(err, &appErr))
+	assert.Equal(t, http.StatusBadRequest, appErr.HTTPStatus)
+	assert.Contains(t, appErr.Message, "周期")
+	assert.Nil(t, mockRepo.payment)
+	assert.Equal(t, 0, mockRepo.expirePendingOrdersCalls)
+}
+
+func TestMembershipService_ActivateMembershipFromPayment_TestPlanActivatesMembership(t *testing.T) {
+	testPlan := &domain.MembershipPlan{Code: domain.PaymentTestPlanCode, Name: "Pay Test", Amount: 0.01, DurationMonths: 1, DailyCredits: 8, IsActive: true, IsTestPlan: true}
+	membership := &domain.UserMembership{
+		UserID: "u1",
+		Status: "inactive",
+	}
+	mockRepo := &mockMembershipRepo{
+		planByCode: map[string]*domain.MembershipPlan{domain.PaymentTestPlanCode: testPlan},
+		membership: membership,
+	}
+	svc := NewMembershipService(mockRepo)
+
+	updated, err := svc.activateMembershipFromPayment(context.Background(), &domain.MembershipPayment{
+		ID:             "pay-test",
+		UserID:         "u1",
+		OrderNo:        "PMTEST",
+		PlanCode:       domain.PaymentTestPlanCode,
+		Amount:         0.01,
+		DurationMonths: 1,
+	}, time.Now())
+	require.NoError(t, err)
+	require.NotNil(t, updated)
+	require.NotNil(t, updated.CurrentPlanCode)
+	assert.Equal(t, domain.PaymentTestPlanCode, *updated.CurrentPlanCode)
+	assert.Equal(t, "active", updated.Status)
+	assert.Equal(t, 8, updated.DailyCredits)
+	assert.Equal(t, 1, mockRepo.saveMembershipCalls)
+}
+
+func TestMembershipService_CreatePaymentBlocksAppOnlyOpenIDDefaultJSAPI(t *testing.T) {
+	plan := &domain.MembershipPlan{Code: "standard_monthly", Name: "Standard", Amount: 19.9, DurationMonths: 1, DailyCredits: 20, IsActive: true}
+	mockRepo := &mockMembershipRepo{
+		planByCode: map[string]*domain.MembershipPlan{"standard_monthly": plan},
+		user:       &membershiprepo.User{ID: "u1", OpenID: "app-wx:mobile-openid"},
+	}
+	cfg := &config.Config{
+		External: config.ExternalConfig{AppID: "wx-mini-program"},
+		WechatPay: config.WechatPayConfig{
+			MchID:      "1100000000",
+			NotifyURL:  "https://api.healthymax.cn/api/payment/wechat/notify/membership",
+			SerialNo:   "SERIAL",
+			APIV3Key:   "12345678901234567890123456789012",
+			PrivateKey: testRSAPrivateKeyPEM,
+		},
+	}
+	svc := NewMembershipService(mockRepo, cfg)
+
+	data, err := svc.CreatePaymentWithInput(context.Background(), "u1", CreateMembershipPaymentInput{
+		PlanCode: "standard_monthly",
+	})
+	require.Error(t, err)
+	assert.Nil(t, data)
+	var appErr *commonerrors.AppError
+	require.True(t, errors.As(err, &appErr))
+	assert.Equal(t, http.StatusNotImplemented, appErr.HTTPStatus)
+	assert.Contains(t, appErr.Message, "App 支付暂未开放")
+	assert.Nil(t, mockRepo.payment)
 }
 
 func TestMembershipService_GetMyMembership_ManualUpgradeKeepsHigherTierOnReconcile(t *testing.T) {

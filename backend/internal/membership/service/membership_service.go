@@ -88,6 +88,8 @@ type MembershipRepo interface {
 	CountDailyMembershipBonusCredits(ctx context.Context, userID, chinaDate string) (inviteBonus int, shareBonus int, err error)
 	GetInviteReferralByInvitee(ctx context.Context, inviteeUserID string) (*domain.UserInviteReferral, error)
 	UpdateInviteReferral(ctx context.Context, id string, updates map[string]any) (*domain.UserInviteReferral, error)
+	ListPendingInviteReferralsByInviter(ctx context.Context, inviterUserID string) ([]domain.UserInviteReferral, error)
+	ListInviteReferralsForUser(ctx context.Context, userID string) ([]domain.UserInviteReferral, error)
 	CountCompletedInviteRewardsForInviterInMonth(ctx context.Context, inviterUserID, monthStart, nextMonthStart string) (int, error)
 	ListActiveInviteRewards(ctx context.Context, userID, chinaDate string) ([]domain.UserInviteReferral, error)
 	ListSharePosterBonusEvents(ctx context.Context, userID, chinaDate string) ([]domain.UserCreditBonusEvent, error)
@@ -108,16 +110,28 @@ type MembershipRepo interface {
 	UpdateRewardTaskUploadBySourceKey(ctx context.Context, userID, sourceKey string, updates map[string]any) (*domain.RewardTaskUpload, error)
 }
 
+type PaymentTestPolicyRepo interface {
+	GetPaymentTestAccess(ctx context.Context, userID string) (*domain.PaymentTestAccess, error)
+}
+
 type SharePosterRewardClaimInput struct {
 	RecordID   string `json:"record_id"`
 	ShareScope string `json:"share_scope"`
 	ShareDate  string `json:"share_date"`
 }
 
+type CreateMembershipPaymentInput struct {
+	PlanCode   string
+	PayChannel string
+	TradeType  string
+	Client     string
+}
+
 type MembershipService struct {
-	repo   MembershipRepo
-	cfg    *config.Config
-	client *http.Client
+	repo            MembershipRepo
+	paymentTestRepo PaymentTestPolicyRepo
+	cfg             *config.Config
+	client          *http.Client
 }
 
 type earlyUserMembershipMeta struct {
@@ -152,18 +166,38 @@ type membershipPaymentTerms struct {
 	UnusedCurrentCreditApplied float64
 }
 
+type membershipPaymentKind struct {
+	Channel       string
+	StoredChannel string
+	TradeType     string
+	CanonicalURL  string
+}
+
 func NewMembershipService(repo MembershipRepo, cfg ...*config.Config) *MembershipService {
 	var c *config.Config
 	if len(cfg) > 0 {
 		c = cfg[0]
 	}
-	return &MembershipService{repo: repo, cfg: c, client: &http.Client{Timeout: 15 * time.Second}}
+	svc := &MembershipService{repo: repo, cfg: c, client: &http.Client{Timeout: 15 * time.Second}}
+	if paymentTestRepo, ok := repo.(PaymentTestPolicyRepo); ok {
+		svc.paymentTestRepo = paymentTestRepo
+	}
+	return svc
 }
 
-func (s *MembershipService) ListPlans(ctx context.Context) ([]map[string]any, error) {
+func (s *MembershipService) ListPlans(ctx context.Context, userID string) ([]map[string]any, error) {
 	plans, err := s.repo.ListActivePlans(ctx)
 	if err != nil {
 		return nil, err
+	}
+	if strings.TrimSpace(userID) != "" && s.paymentTestRepo != nil {
+		testPlan, err := s.visiblePaymentTestPlan(ctx, userID)
+		if err != nil {
+			return nil, err
+		}
+		if testPlan != nil {
+			plans = append(plans, *testPlan)
+		}
 	}
 	out := make([]map[string]any, 0, len(plans))
 	for _, p := range plans {
@@ -183,9 +217,28 @@ func (s *MembershipService) ListPlans(ctx context.Context) ([]map[string]any, er
 			"original_amount": floatPtrValue(p.OriginalAmount),
 			"savings":         savings,
 			"sort_order":      p.SortOrder,
+			"is_test_plan":    p.IsTestPlan,
 		})
 	}
 	return out, nil
+}
+
+func (s *MembershipService) visiblePaymentTestPlan(ctx context.Context, userID string) (*domain.MembershipPlan, error) {
+	access, err := s.paymentTestRepo.GetPaymentTestAccess(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if access == nil || !access.Enabled || !access.UserAllowed {
+		return nil, nil
+	}
+	plan, err := s.repo.GetPlanByCode(ctx, domain.PaymentTestPlanCode)
+	if err != nil {
+		return nil, err
+	}
+	if plan == nil || !plan.IsActive || !plan.IsTestPlan {
+		return nil, nil
+	}
+	return plan, nil
 }
 
 func (s *MembershipService) GetMyMembership(ctx context.Context, userID string, date string) (map[string]any, error) {
@@ -238,7 +291,7 @@ func (s *MembershipService) getEffectiveMembership(ctx context.Context, userID s
 
 func (s *MembershipService) reconcileMembershipFromLatestPaidOrder(ctx context.Context, userID string, membership *domain.UserMembership) (*domain.UserMembership, error) {
 	latest, err := s.repo.GetLatestPaidMembershipPayment(ctx, userID)
-	if err != nil || latest == nil || !isMembershipPlanCode(latest.PlanCode) {
+	if err != nil || latest == nil || !isMembershipPlanCode(latest.PlanCode) || isPaymentTestPlanCode(latest.PlanCode) {
 		return membership, err
 	}
 	paidAt := latest.PaidAt
@@ -472,6 +525,221 @@ func (s *MembershipService) ActivatePendingInviteReferralOnFirstValidUse(ctx con
 	})
 }
 
+// GetInviteRewardStatus 返回当前用户作为被邀请人和邀请人的邀请奖励进度。
+func (s *MembershipService) GetInviteRewardStatus(ctx context.Context, userID string) (map[string]any, error) {
+	userID = strings.TrimSpace(userID)
+	result := map[string]any{
+		"as_invitee": nil,
+		"as_inviter": []any{},
+		"records":    []any{},
+	}
+	if userID == "" {
+		return result, nil
+	}
+
+	todayCN := dateOnly(time.Now().In(chinaLocation()))
+
+	referral, err := s.repo.GetInviteReferralByInvitee(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if ok, days := s.pendingInviteRecordsNeeded(referral, todayCN); ok {
+		inviterNickname := ""
+		if inviter, err := s.repo.GetUser(ctx, referral.InviterUserID); err == nil && inviter != nil && inviter.Nickname != nil {
+			inviterNickname = *inviter.Nickname
+		}
+		result["as_invitee"] = map[string]any{
+			"referral_id":      referral.ID,
+			"status":           referral.Status,
+			"records_needed":   days,
+			"reward_credits":   inviteRewardCreditsOnQualify,
+			"inviter_nickname": inviterNickname,
+		}
+	}
+
+	inviterRows, err := s.repo.ListPendingInviteReferralsByInviter(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	inviterList := make([]any, 0, len(inviterRows))
+	for _, ref := range inviterRows {
+		if ok, days := s.pendingInviteRecordsNeeded(&ref, todayCN); ok {
+			inviteeNickname := ""
+			if invitee, err := s.repo.GetUser(ctx, ref.InviteeUserID); err == nil && invitee != nil && invitee.Nickname != nil {
+				inviteeNickname = *invitee.Nickname
+			}
+			inviterList = append(inviterList, map[string]any{
+				"referral_id":      ref.ID,
+				"invitee_nickname": inviteeNickname,
+				"status":           ref.Status,
+				"records_needed":   days,
+				"reward_credits":   inviteRewardCreditsOnQualify,
+			})
+		}
+	}
+	result["as_inviter"] = inviterList
+
+	rows, err := s.repo.ListInviteReferralsForUser(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	records := make([]any, 0, len(rows))
+	for _, row := range rows {
+		records = append(records, s.buildInviteRewardRecord(ctx, userID, row, todayCN))
+	}
+	result["records"] = records
+	return result, nil
+}
+
+func (s *MembershipService) buildInviteRewardRecord(ctx context.Context, userID string, referral domain.UserInviteReferral, todayCN time.Time) map[string]any {
+	role := "invitee"
+	otherUserID := referral.InviterUserID
+	if referral.InviterUserID == userID {
+		role = "inviter"
+		otherUserID = referral.InviteeUserID
+	}
+	otherNickname := ""
+	if other, err := s.repo.GetUser(ctx, otherUserID); err == nil && other != nil && other.Nickname != nil {
+		otherNickname = strings.TrimSpace(*other.Nickname)
+	}
+
+	recordsNeeded, expired := inviteRewardProgress(referral, todayCN)
+	statusLabel := inviteRewardStatusLabel(referral.Status, expired)
+	blockedReasonLabel := inviteRewardBlockedReasonLabel(referral.BlockedReason)
+	requirementText, nextActionText := inviteRewardActionTexts(role, referral, recordsNeeded, expired, blockedReasonLabel)
+	return map[string]any{
+		"referral_id":                 referral.ID,
+		"role":                        role,
+		"status":                      referral.Status,
+		"status_label":                statusLabel,
+		"invite_code":                 stringValue(referral.InviteCode),
+		"other_user_id":               otherUserID,
+		"other_nickname":              otherNickname,
+		"records_needed":              recordsNeeded,
+		"reward_credits":              inviteRewardCreditsOnQualify,
+		"requirement_text":            requirementText,
+		"next_action_text":            nextActionText,
+		"first_effective_action_at":   timePtrISO(referral.FirstEffectiveActionAt),
+		"first_effective_action_type": stringValue(referral.FirstEffectiveActionType),
+		"reward_start_date":           datePtrValue(referral.RewardStartDate),
+		"reward_end_date":             datePtrValue(referral.RewardEndDate),
+		"blocked_reason":              stringValue(referral.BlockedReason),
+		"blocked_reason_label":        blockedReasonLabel,
+		"created_at":                  timePtrISO(referral.CreatedAt),
+		"updated_at":                  timePtrISO(referral.UpdatedAt),
+	}
+}
+
+func inviteRewardProgress(referral domain.UserInviteReferral, todayCN time.Time) (int, bool) {
+	if referral.Status != "pending_qualified" {
+		return 0, false
+	}
+	createdAt := time.Now().UTC()
+	if referral.CreatedAt != nil {
+		createdAt = *referral.CreatedAt
+	}
+	deadlineCN := dateOnly(createdAt.In(chinaLocation())).AddDate(0, 0, inviteRewardWindowDays-1)
+	if todayCN.After(deadlineCN) {
+		return 0, true
+	}
+	distinctDays := 0
+	if referral.FirstEffectiveActionAt != nil {
+		distinctDays = 1
+	}
+	return maxInt(inviteRewardRequiredDays-distinctDays, 0), false
+}
+
+func inviteRewardStatusLabel(status string, expired bool) string {
+	if expired {
+		return "已过期"
+	}
+	switch strings.TrimSpace(status) {
+	case "pending_qualified":
+		return "进行中"
+	case "reward_completed":
+		return "已完成"
+	case "reward_blocked":
+		return "未达成"
+	case "reward_active":
+		return "奖励中"
+	case "cancelled":
+		return "已取消"
+	default:
+		if strings.TrimSpace(status) == "" {
+			return "未知状态"
+		}
+		return status
+	}
+}
+
+func inviteRewardBlockedReasonLabel(reason *string) string {
+	raw := ""
+	if reason != nil {
+		raw = *reason
+	}
+	switch strings.TrimSpace(raw) {
+	case "qualification_window_expired":
+		return "7 天有效期已过"
+	case "monthly_limit_reached":
+		return "邀请人当月奖励名额已满"
+	default:
+		return ""
+	}
+}
+
+func inviteRewardActionTexts(role string, referral domain.UserInviteReferral, recordsNeeded int, expired bool, blockedReasonLabel string) (string, string) {
+	rewardText := fmt.Sprintf("完成后双方各得 %d 积分", inviteRewardCreditsOnQualify)
+	if role == "inviter" {
+		rewardText = fmt.Sprintf("好友完成后你们各得 %d 积分", inviteRewardCreditsOnQualify)
+	}
+	switch strings.TrimSpace(referral.Status) {
+	case "pending_qualified":
+		if expired {
+			return fmt.Sprintf("注册后 %d 天内完成 %d 个不同自然日有效记录", inviteRewardWindowDays, inviteRewardRequiredDays), "已超过有效期，无法获得奖励"
+		}
+		if recordsNeeded <= 1 {
+			return fmt.Sprintf("还需在另一个自然日再完成 1 次有效记录，%s", rewardText), "完成 1 个不同自然日的饮食或运动记录"
+		}
+		return fmt.Sprintf("还需完成 %d 个不同自然日的饮食或运动记录，%s", recordsNeeded, rewardText), "完成饮食或运动记录，先点亮第 1 个有效自然日"
+	case "reward_completed":
+		return fmt.Sprintf("已完成，双方各 +%d 积分", inviteRewardCreditsOnQualify), "奖励已进入奖励积分余额"
+	case "reward_blocked":
+		if blockedReasonLabel != "" {
+			return blockedReasonLabel, "该邀请奖励无法继续发放"
+		}
+		return "奖励条件未达成", "该邀请奖励无法继续发放"
+	case "reward_active":
+		return "旧版邀请奖励进行中", "系统会按旧版规则处理每日奖励"
+	case "cancelled":
+		return "邀请关系已取消", "无需继续处理"
+	default:
+		return "邀请奖励状态待确认", "请根据状态字段继续排查"
+	}
+}
+
+func (s *MembershipService) pendingInviteRecordsNeeded(referral *domain.UserInviteReferral, todayCN time.Time) (bool, int) {
+	if referral == nil || referral.Status != "pending_qualified" {
+		return false, 0
+	}
+	createdAt := time.Now().UTC()
+	if referral.CreatedAt != nil {
+		createdAt = *referral.CreatedAt
+	}
+	deadlineCN := dateOnly(createdAt.In(chinaLocation())).AddDate(0, 0, inviteRewardWindowDays-1)
+	if todayCN.After(deadlineCN) {
+		return false, 0
+	}
+	distinctDays := 0
+	if referral.FirstEffectiveActionAt != nil {
+		distinctDays = 1
+	}
+	needed := inviteRewardRequiredDays - distinctDays
+	if needed <= 0 {
+		return false, 0
+	}
+	return true, needed
+}
+
 func (s *MembershipService) materializeDailyBonusCredits(ctx context.Context, userID, chinaDate string) (int, int, error) {
 	inviteAwarded, err := s.materializeDailyInviteRewardCredits(ctx, userID, chinaDate)
 	if err != nil {
@@ -551,12 +819,20 @@ func (s *MembershipService) materializeDailySharePosterRewardCredits(ctx context
 }
 
 func (s *MembershipService) CreatePayment(ctx context.Context, userID, planCode string) (map[string]any, error) {
+	return s.CreatePaymentWithInput(ctx, userID, CreateMembershipPaymentInput{PlanCode: planCode})
+}
+
+func (s *MembershipService) CreatePaymentWithInput(ctx context.Context, userID string, input CreateMembershipPaymentInput) (map[string]any, error) {
+	planCode := strings.TrimSpace(input.PlanCode)
 	plan, err := s.repo.GetPlanByCode(ctx, planCode)
 	if err != nil {
 		return nil, err
 	}
 	if plan == nil || !plan.IsActive {
 		return nil, commonerrors.ErrNotFound
+	}
+	if err := s.ensurePlanPurchaseAllowed(ctx, userID, plan); err != nil {
+		return nil, err
 	}
 	user, err := s.repo.GetUser(ctx, userID)
 	if err != nil {
@@ -577,19 +853,41 @@ func (s *MembershipService) CreatePayment(ctx context.Context, userID, planCode 
 	if err := enforceMinorPaymentLimit(user, terms.ChargeAmount); err != nil {
 		return nil, err
 	}
+	paymentKind, err := normalizeMembershipPaymentKind(input.PayChannel, input.TradeType)
+	if err != nil {
+		return nil, err
+	}
+	if paymentKind.Channel == "alipay" {
+		return nil, &commonerrors.AppError{Code: 10004, Message: "支付宝 App 支付通道已预留，当前暂未接入支付宝下单接口", HTTPStatus: http.StatusNotImplemented}
+	}
+	if isMobileAppPaymentRequest(input, paymentKind) {
+		return nil, &commonerrors.AppError{Code: 10004, Message: "App 支付暂未开放，当前只支持在微信小程序中完成会员支付", HTTPStatus: http.StatusNotImplemented}
+	}
 	openID := strings.TrimSpace(user.OpenID)
-	if openID == "" {
+	if paymentKind.TradeType == "JSAPI" && isAppOnlyOpenID(openID) {
+		return nil, &commonerrors.AppError{Code: 10004, Message: "App 支付暂未开放，当前只支持在微信小程序中完成会员支付", HTTPStatus: http.StatusNotImplemented}
+	}
+	if paymentKind.TradeType == "JSAPI" && openID == "" {
 		return nil, &commonerrors.AppError{Code: 10002, Message: "当前用户缺少 openid，无法发起微信支付", HTTPStatus: 400}
 	}
 	payCfg, err := s.wechatPayConfig()
 	if err != nil {
 		return nil, err
 	}
+	appID, err := payCfg.appIDForTradeType(paymentKind.TradeType)
+	if err != nil {
+		return nil, err
+	}
 	orderNo := generateMembershipOrderNo()
-	canonicalURL := "/v3/pay/transactions/jsapi"
+	canonicalURL := paymentKind.CanonicalURL
 	orderExtra := buildPaymentExtra(plan, terms)
+	orderExtra["pay_channel"] = paymentKind.StoredChannel
+	orderExtra["trade_type"] = paymentKind.TradeType
+	if client := strings.TrimSpace(input.Client); client != "" {
+		orderExtra["client"] = client
+	}
 	requestPayload := map[string]any{
-		"appid":        payCfg.AppID,
+		"appid":        appID,
 		"mchid":        payCfg.MchID,
 		"description":  plan.Name,
 		"out_trade_no": orderNo,
@@ -598,7 +896,9 @@ func (s *MembershipService) CreatePayment(ctx context.Context, userID, planCode 
 			"total":    amountToFen(terms.ChargeAmount),
 			"currency": "CNY",
 		},
-		"payer": map[string]any{"openid": openID},
+	}
+	if paymentKind.TradeType == "JSAPI" {
+		requestPayload["payer"] = map[string]any{"openid": openID}
 	}
 	requestBody, _ := json.Marshal(requestPayload)
 	auth, err := buildWechatPayAuthorization(payCfg.MchID, payCfg.SerialNo, payCfg.PrivateKey, http.MethodPost, canonicalURL, string(requestBody))
@@ -639,19 +939,21 @@ func (s *MembershipService) CreatePayment(ctx context.Context, userID, planCode 
 		Amount:         terms.ChargeAmount,
 		Currency:       "CNY",
 		DurationMonths: plan.DurationMonths,
-		PayChannel:     "wechat_mini_program",
-		TradeType:      "JSAPI",
+		PayChannel:     paymentKind.StoredChannel,
+		TradeType:      paymentKind.TradeType,
 		Status:         "pending",
-		WxOpenID:       &openID,
 		WxPrepayID:     &wxResp.PrepayID,
 		Extra:          orderExtra,
+	}
+	if paymentKind.TradeType == "JSAPI" {
+		payment.WxOpenID = &openID
 	}
 	payment.Extra["create_order_payload"] = requestPayload
 	payment.Extra["wechat_create_order_response"] = wxResp
 	if err := s.repo.CreatePayment(ctx, payment); err != nil {
 		return nil, err
 	}
-	params, err := buildMiniProgramPayParams(payCfg.AppID, wxResp.PrepayID, payCfg.PrivateKey)
+	params, err := buildWechatPayParams(paymentKind.TradeType, appID, payCfg.MchID, wxResp.PrepayID, payCfg.PrivateKey)
 	if err != nil {
 		return nil, err
 	}
@@ -659,6 +961,8 @@ func (s *MembershipService) CreatePayment(ctx context.Context, userID, planCode 
 		slog.String("user_id", userID),
 		slog.String("order_no", orderNo),
 		slog.String("plan_code", plan.Code),
+		slog.String("pay_channel", paymentKind.StoredChannel),
+		slog.String("trade_type", paymentKind.TradeType),
 		slog.Float64("amount", terms.ChargeAmount),
 		slog.String("order_mode", terms.Mode),
 		slog.Int("duration_months", plan.DurationMonths),
@@ -670,8 +974,58 @@ func (s *MembershipService) CreatePayment(ctx context.Context, userID, planCode 
 		"original_amount": plan.Amount,
 		"order_mode":      terms.Mode,
 		"upgrade_terms":   orderExtra["upgrade_terms"],
+		"pay_channel":     paymentKind.StoredChannel,
+		"trade_type":      paymentKind.TradeType,
+		"prepay_id":       wxResp.PrepayID,
 		"pay_params":      params,
 	}, nil
+}
+
+func (s *MembershipService) ensurePlanPurchaseAllowed(ctx context.Context, userID string, plan *domain.MembershipPlan) error {
+	if plan == nil || !plan.IsTestPlan {
+		return nil
+	}
+	if s.paymentTestRepo == nil {
+		return &commonerrors.AppError{Code: 20003, Message: "支付测试套餐暂未开放", HTTPStatus: http.StatusForbidden}
+	}
+	access, err := s.paymentTestRepo.GetPaymentTestAccess(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if access == nil || !access.Enabled {
+		return &commonerrors.AppError{Code: 20003, Message: "支付测试套餐暂未启用", HTTPStatus: http.StatusForbidden}
+	}
+	if !access.UserAllowed {
+		return &commonerrors.AppError{Code: 20003, Message: "当前账号未加入支付测试名单", HTTPStatus: http.StatusForbidden}
+	}
+	return nil
+}
+
+func isPaymentTestPlan(plan *domain.MembershipPlan) bool {
+	if plan == nil {
+		return false
+	}
+	return plan.IsTestPlan || isPaymentTestPlanCode(plan.Code)
+}
+
+func isPaymentTestPlanCode(planCode string) bool {
+	return strings.TrimSpace(planCode) == domain.PaymentTestPlanCode
+}
+
+func isMobileAppPaymentRequest(input CreateMembershipPaymentInput, paymentKind *membershipPaymentKind) bool {
+	if paymentKind != nil && strings.EqualFold(paymentKind.TradeType, "APP") {
+		return true
+	}
+	client := strings.ToLower(strings.TrimSpace(input.Client))
+	return client == "mobile_app" || client == "app" || client == "android" || client == "ios"
+}
+
+func isAppOnlyOpenID(openID string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(openID))
+	return strings.HasPrefix(normalized, "app-wx:") ||
+		strings.HasPrefix(normalized, "app-phone:") ||
+		strings.HasPrefix(normalized, "app-pwd:") ||
+		strings.HasPrefix(normalized, "app-pwd-phone:")
 }
 
 func (s *MembershipService) buildMembershipPaymentTerms(ctx context.Context, targetPlan *domain.MembershipPlan, membership *domain.UserMembership, now time.Time) (*membershipPaymentTerms, error) {
@@ -740,6 +1094,9 @@ func buildPaymentExtra(plan *domain.MembershipPlan, terms *membershipPaymentTerm
 		"original_amount": plan.Amount,
 		"charge_amount":   terms.ChargeAmount,
 	}
+	if isPaymentTestPlan(plan) {
+		extra["is_payment_test_order"] = true
+	}
 	if terms.Mode == "prorated_current_period_upgrade" {
 		extra["upgrade_terms"] = map[string]any{
 			"mode":                          terms.Mode,
@@ -755,6 +1112,40 @@ func buildPaymentExtra(plan *domain.MembershipPlan, terms *membershipPaymentTerm
 		}
 	}
 	return extra
+}
+
+func normalizeMembershipPaymentKind(payChannel, tradeType string) (*membershipPaymentKind, error) {
+	channel := strings.ToLower(strings.TrimSpace(payChannel))
+	trade := strings.ToUpper(strings.TrimSpace(tradeType))
+	switch channel {
+	case "", "wechat":
+		channel = "wechat"
+	case "wechat_app":
+		channel = "wechat"
+		if trade == "" {
+			trade = "APP"
+		}
+	case "wechat_mini_program", "wechat_miniprogram", "wechat_jsapi":
+		channel = "wechat"
+		if trade == "" {
+			trade = "JSAPI"
+		}
+	case "alipay", "alipay_app":
+		return &membershipPaymentKind{Channel: "alipay", StoredChannel: "alipay_app", TradeType: "APP"}, nil
+	default:
+		return nil, &commonerrors.AppError{Code: 10002, Message: "不支持的会员支付渠道", HTTPStatus: 400}
+	}
+	if trade == "" {
+		trade = "JSAPI"
+	}
+	switch trade {
+	case "JSAPI":
+		return &membershipPaymentKind{Channel: channel, StoredChannel: "wechat_mini_program", TradeType: "JSAPI", CanonicalURL: "/v3/pay/transactions/jsapi"}, nil
+	case "APP":
+		return &membershipPaymentKind{Channel: channel, StoredChannel: "wechat_app", TradeType: "APP", CanonicalURL: "/v3/pay/transactions/app"}, nil
+	default:
+		return nil, &commonerrors.AppError{Code: 10002, Message: "不支持的微信支付交易类型", HTTPStatus: 400}
+	}
 }
 
 func (s *MembershipService) WechatNotify(ctx context.Context, paymentID string) error {
@@ -785,7 +1176,8 @@ func (s *MembershipService) WechatNotify(ctx context.Context, paymentID string) 
 	if err != nil {
 		return err
 	}
-	logger.Info(ctx, "手动标记微信支付并激活会员成功",
+	logMessage := "手动标记微信支付并激活会员成功"
+	logger.Info(ctx, logMessage,
 		slog.String("payment_id", payment.ID),
 		slog.String("user_id", payment.UserID),
 		slog.String("order_no", payment.OrderNo),
@@ -852,7 +1244,8 @@ func (s *MembershipService) SyncWechatPayment(ctx context.Context, userID, order
 	if err != nil {
 		return nil, err
 	}
-	logger.Info(ctx, "主动查询微信支付并同步会员成功",
+	logMessage := "主动查询微信支付并同步会员成功"
+	logger.Info(ctx, logMessage,
 		slog.String("user_id", userID),
 		slog.String("order_no", orderNo),
 		slog.String("plan_code", payment.PlanCode),
@@ -940,7 +1333,8 @@ func (s *MembershipService) HandleWechatNotify(ctx context.Context, headers http
 		return nil, err
 	}
 	_, _ = s.repo.ExpirePendingMembershipOrders(ctx, payment.UserID, orderNo, "superseded_by_paid_order")
-	logger.Info(ctx, "微信支付回调同步会员成功",
+	logMessage := "微信支付回调同步会员成功"
+	logger.Info(ctx, logMessage,
 		slog.String("payment_id", payment.ID),
 		slog.String("user_id", payment.UserID),
 		slog.String("order_no", payment.OrderNo),
@@ -1105,6 +1499,10 @@ func (s *MembershipService) GetRewardCenter(ctx context.Context, userID string) 
 			completed++
 		}
 	}
+	inviteReward, err := s.buildRewardCenterInviteReward(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
 	return map[string]any{
 		"earned_credits_balance": credits["earned_credits_balance"],
 		"today_earned_credits":   todayEarned,
@@ -1112,8 +1510,173 @@ func (s *MembershipService) GetRewardCenter(ctx context.Context, userID string) 
 			"completed_count": completed,
 			"total_count":     totalWithLimit,
 		},
-		"tasks": taskList,
+		"tasks":         taskList,
+		"invite_reward": inviteReward,
 	}, nil
+}
+
+func (s *MembershipService) buildRewardCenterInviteReward(ctx context.Context, userID string) (any, error) {
+	rows, err := s.repo.ListInviteReferralsForUser(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if len(rows) == 0 {
+		return nil, nil
+	}
+
+	todayCN := dateOnly(time.Now().In(chinaLocation()))
+
+	// Clean up expired pending referrals so they don't clutter the UI.
+	s.cleanupExpiredPendingReferrals(ctx, rows, todayCN)
+
+	records := make([]any, 0, len(rows))
+	inviterRecords := make([]any, 0)
+	var inviteeRecord map[string]any
+	invitedCount := 0
+	completedCount := 0
+	pendingCount := 0
+
+	for _, row := range rows {
+		record := s.buildInviteRewardRecord(ctx, userID, row, todayCN)
+		records = append(records, record)
+		if row.InviterUserID == userID {
+			invitedCount++
+			if isInviteRecordActionable(row, todayCN) {
+				inviterRecords = append(inviterRecords, record)
+			}
+			_, expired := inviteRewardProgress(row, todayCN)
+			switch row.Status {
+			case "reward_completed":
+				completedCount++
+			case "pending_qualified":
+				if !expired {
+					pendingCount++
+				}
+			}
+			continue
+		}
+		if row.InviteeUserID == userID && inviteeRecord == nil && isInviteeRecordActionable(row) {
+			inviteeRecord = record
+		}
+	}
+
+	var inviterSummary any
+	if invitedCount > 0 {
+		inviterSummary = map[string]any{
+			"invited_count":     invitedCount,
+			"completed_count":   completedCount,
+			"pending_count":     pendingCount,
+			"estimated_credits": pendingCount * inviteRewardCreditsOnQualify,
+			"earned_credits":    completedCount * inviteRewardCreditsOnQualify,
+			"reward_credits":    inviteRewardCreditsOnQualify,
+			"records":           inviterRecords,
+		}
+	}
+
+	var inviteeSummary any
+	if inviteeRecord != nil {
+		completedDays := inviteRewardCompletedDays(inviteeRecord)
+		remainingDays := maxInt(inviteRewardRequiredDays-completedDays, 0)
+		inviteeSummary = map[string]any{
+			"completed_days":   completedDays,
+			"required_days":    inviteRewardRequiredDays,
+			"remaining_days":   remainingDays,
+			"reward_credits":   inviteRewardCreditsOnQualify,
+			"deadline_text":    inviteRewardDeadlineText(inviteeRecord),
+			"next_action_text": inviteeRecord["next_action_text"],
+			"record":           inviteeRecord,
+		}
+	}
+
+	if inviterSummary == nil && inviteeSummary == nil {
+		return nil, nil
+	}
+	return map[string]any{
+		"as_inviter_summary": inviterSummary,
+		"as_invitee_summary": inviteeSummary,
+		"records":            records,
+	}, nil
+}
+
+func inviteRewardCompletedDays(record map[string]any) int {
+	status, _ := record["status"].(string)
+	if status == "reward_completed" {
+		return inviteRewardRequiredDays
+	}
+	if record["first_effective_action_at"] != nil {
+		return 1
+	}
+	return 0
+}
+
+func inviteRewardDeadlineText(record map[string]any) string {
+	statusLabel, _ := record["status_label"].(string)
+	if statusLabel == "已过期" {
+		return "已超过有效期"
+	}
+	status, _ := record["status"].(string)
+	switch status {
+	case "reward_completed":
+		return "已达标"
+	case "reward_blocked":
+		if label, _ := record["blocked_reason_label"].(string); label != "" {
+			return label
+		}
+		return "奖励条件未达成"
+	case "cancelled":
+		return "邀请关系已取消"
+	}
+	createdAt := parseTime(fmt.Sprintf("%v", record["created_at"]))
+	if createdAt == nil {
+		return fmt.Sprintf("%d 天内完成 %d 个自然日记录", inviteRewardWindowDays, inviteRewardRequiredDays)
+	}
+	deadline := dateOnly(createdAt.In(chinaLocation())).AddDate(0, 0, inviteRewardWindowDays-1)
+	return "有效期至 " + deadline.Format("2006-01-02")
+}
+
+// cleanupExpiredPendingReferrals marks any expired pending_qualified referrals as reward_blocked
+// so they don't accumulate and clutter the reward center UI over time.
+func (s *MembershipService) cleanupExpiredPendingReferrals(ctx context.Context, rows []domain.UserInviteReferral, todayCN time.Time) {
+	for _, row := range rows {
+		if row.Status != "pending_qualified" {
+			continue
+		}
+		_, expired := inviteRewardProgress(row, todayCN)
+		if !expired {
+			continue
+		}
+		if _, err := s.repo.UpdateInviteReferral(ctx, row.ID, map[string]any{
+			"status":        "reward_blocked",
+			"blocked_reason": "qualification_window_expired",
+		}); err != nil {
+			slog.Warn("cleanupExpiredPendingReferrals: failed to update referral", "id", row.ID, "err", err)
+		}
+	}
+}
+
+// isInviteRecordActionable returns true if the referral should be shown in the inviter's friend list.
+// Expired/blocked/cancelled records are hidden to prevent UI clutter.
+func isInviteRecordActionable(row domain.UserInviteReferral, todayCN time.Time) bool {
+	switch row.Status {
+	case "reward_completed", "pending_qualified":
+		return true
+	case "reward_active":
+		return true
+	default:
+		return false
+	}
+}
+
+// isInviteeRecordActionable returns true if the invitee card should be shown.
+// Pending (in progress) and completed referrals are shown; expired ones are cleaned up
+// elsewhere and won't appear as pending_qualified.
+func isInviteeRecordActionable(row domain.UserInviteReferral) bool {
+	switch row.Status {
+	case "pending_qualified", "reward_completed":
+		return true
+	default:
+		return false
+	}
 }
 
 func (s *MembershipService) AwardPackagedUpload(ctx context.Context, userID, sourceTaskID, packagedFoodID string, meta map[string]any) (map[string]any, error) {
@@ -2012,32 +2575,38 @@ func dateOnly(t time.Time) time.Time {
 }
 
 type wechatPayConfig struct {
-	AppID      string
-	MchID      string
-	NotifyURL  string
-	SerialNo   string
-	APIV3Key   string
-	PrivateKey string
-	PublicKey  string
+	MiniProgramAppID string
+	AppPayAppID      string
+	MchID            string
+	NotifyURL        string
+	SerialNo         string
+	APIV3Key         string
+	PrivateKey       string
+	PublicKey        string
 }
 
 func (s *MembershipService) wechatPayConfig() (*wechatPayConfig, error) {
 	if s.cfg == nil {
 		return nil, &commonerrors.AppError{Code: 10000, Message: "缺少微信支付配置", HTTPStatus: 500}
 	}
+	pay := s.cfg.ResolvedWechatPay()
 	cfg := &wechatPayConfig{
-		AppID:      strings.TrimSpace(s.cfg.External.AppID),
-		MchID:      strings.TrimSpace(s.cfg.WechatPay.MchID),
-		NotifyURL:  strings.TrimSpace(s.cfg.WechatPay.NotifyURL),
-		SerialNo:   strings.TrimSpace(s.cfg.WechatPay.SerialNo),
-		APIV3Key:   strings.TrimSpace(s.cfg.WechatPay.APIV3Key),
-		PrivateKey: normalizePEMValue(s.cfg.WechatPay.PrivateKey),
-		PublicKey:  normalizePEMValue(s.cfg.WechatPay.PublicKey),
+		MiniProgramAppID: strings.TrimSpace(s.cfg.WechatMiniProgramAppID()),
+		AppPayAppID:      strings.TrimSpace(pay.AppPayAppID),
+		MchID:            strings.TrimSpace(pay.MchID),
+		NotifyURL:        strings.TrimSpace(pay.NotifyURL),
+		SerialNo:         strings.TrimSpace(pay.SerialNo),
+		APIV3Key:         strings.TrimSpace(pay.APIV3Key),
+		PrivateKey:       normalizePEMValue(pay.PrivateKey),
+		PublicKey:        normalizePEMValue(pay.PublicKey),
+	}
+	if cfg.AppPayAppID == "" {
+		cfg.AppPayAppID = strings.TrimSpace(pay.AppID)
+	}
+	if cfg.AppPayAppID == "" {
+		cfg.AppPayAppID = strings.TrimSpace(s.cfg.WechatMobileAppID())
 	}
 	missing := []string{}
-	if cfg.AppID == "" {
-		missing = append(missing, "APPID")
-	}
 	if cfg.MchID == "" {
 		missing = append(missing, "WECHAT_PAY_MCHID")
 	}
@@ -2057,6 +2626,21 @@ func (s *MembershipService) wechatPayConfig() (*wechatPayConfig, error) {
 		return nil, &commonerrors.AppError{Code: 10000, Message: "缺少微信支付配置：" + strings.Join(missing, ", "), HTTPStatus: 500}
 	}
 	return cfg, nil
+}
+
+func (cfg *wechatPayConfig) appIDForTradeType(tradeType string) (string, error) {
+	switch strings.ToUpper(strings.TrimSpace(tradeType)) {
+	case "APP":
+		if cfg.AppPayAppID == "" {
+			return "", &commonerrors.AppError{Code: 10000, Message: "缺少微信 APP 支付 AppID 配置：wechat.mobile_app.app_id", HTTPStatus: 500}
+		}
+		return cfg.AppPayAppID, nil
+	default:
+		if cfg.MiniProgramAppID == "" {
+			return "", &commonerrors.AppError{Code: 10000, Message: "缺少微信小程序支付 AppID 配置：wechat.mini_program.app_id", HTTPStatus: 500}
+		}
+		return cfg.MiniProgramAppID, nil
+	}
 }
 
 func formatMembershipResponse(membership *domain.UserMembership) map[string]any {
@@ -2175,6 +2759,33 @@ func buildMiniProgramPayParams(appID, prepayID, privateKeyPEM string) (map[strin
 		"package":   packageValue,
 		"signType":  "RSA",
 		"paySign":   signature,
+	}, nil
+}
+
+func buildWechatPayParams(tradeType, appID, mchID, prepayID, privateKeyPEM string) (map[string]string, error) {
+	if strings.ToUpper(strings.TrimSpace(tradeType)) == "APP" {
+		return buildAppPayParams(appID, mchID, prepayID, privateKeyPEM)
+	}
+	return buildMiniProgramPayParams(appID, prepayID, privateKeyPEM)
+}
+
+func buildAppPayParams(appID, mchID, prepayID, privateKeyPEM string) (map[string]string, error) {
+	timestamp := fmt.Sprintf("%d", time.Now().Unix())
+	nonce := randomHex(16)
+	message := appID + "\n" + timestamp + "\n" + nonce + "\n" + prepayID + "\n"
+	signature, err := signWithRSASHA256(message, privateKeyPEM)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]string{
+		"appId":        appID,
+		"partnerId":    mchID,
+		"prepayId":     prepayID,
+		"package":      "Sign=WXPay",
+		"packageValue": "Sign=WXPay",
+		"nonceStr":     nonce,
+		"timeStamp":    timestamp,
+		"sign":         signature,
 	}, nil
 }
 
@@ -2341,6 +2952,13 @@ func timePtrISO(t *time.Time) any {
 	return t.Format(time.RFC3339)
 }
 
+func datePtrValue(t *time.Time) any {
+	if t == nil {
+		return nil
+	}
+	return t.In(chinaLocation()).Format("2006-01-02")
+}
+
 func parseTime(value string) *time.Time {
 	raw := strings.TrimSpace(value)
 	if raw == "" || raw == "<nil>" {
@@ -2447,6 +3065,7 @@ func maxInt(a, b int) int {
 func isMembershipPlanCode(planCode string) bool {
 	code := strings.TrimSpace(strings.ToLower(planCode))
 	return code == "pro_monthly" ||
+		code == domain.PaymentTestPlanCode ||
 		strings.HasPrefix(code, "light_") ||
 		strings.HasPrefix(code, "standard_") ||
 		strings.HasPrefix(code, "advanced_")

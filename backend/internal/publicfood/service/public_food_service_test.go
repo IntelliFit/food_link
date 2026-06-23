@@ -10,6 +10,7 @@ import (
 	analyzeservice "food_link/backend/internal/analyze/service"
 	authrepo "food_link/backend/internal/auth/repo"
 	commonerrors "food_link/backend/internal/common/errors"
+	frienddomain "food_link/backend/internal/friend/domain"
 	"food_link/backend/internal/publicfood/domain"
 	"food_link/backend/internal/publicfood/repo"
 	"food_link/backend/internal/taskqueue"
@@ -57,6 +58,7 @@ func setupPublicFoodServiceTestDB(t *testing.T) *gorm.DB {
 		&analyzedomain.PrecisionSession{},
 		&analyzedomain.PrecisionSessionRound{},
 		&authrepo.User{},
+		&frienddomain.UserBlock{},
 		&domain.PublicFoodLike{},
 		&domain.PublicFoodCollection{},
 		&domain.PublicFoodComment{},

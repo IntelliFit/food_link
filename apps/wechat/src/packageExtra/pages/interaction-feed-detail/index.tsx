@@ -15,7 +15,8 @@ import {
   type CommunityFeedTargetType,
   type CommunityFeedItem,
   type CommunityFeedRecord,
-  type FeedCommentItem
+  type FeedCommentItem,
+  type Nutrients
 } from '../../../utils/api'
 import { getAccessToken } from '../../../utils/api'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
@@ -24,6 +25,13 @@ import { CommunityFoodRecordEditSheet } from '../../../pages/community/component
 import { FeedReportMask } from '../../../pages/community/components/FeedReportMask'
 import { FeedReportSheet } from '../../../pages/community/components/FeedReportSheet'
 import { FeedActionSheet, type FeedActionSheetAction } from '../../../pages/community/components/FeedActionSheet'
+import { ManualFoodCards } from '../../../pages/community/components/ManualFoodCards'
+import { ExerciseActivityCards, hasExerciseActivityCards } from '../../../pages/community/components/ExerciseActivityCards'
+import {
+  extractManualFoodDisplayItems,
+  shouldRenderManualFoodCards,
+  type ManualFoodSourceItem
+} from '../../../utils/manual-food-source'
 
 import './index.scss'
 
@@ -93,6 +101,121 @@ function isCirclePostFeed(item: CommunityFeedItem | null | undefined): boolean {
   return getFeedTargetType(item) === 'circle_post'
 }
 
+function isCampusFoodFeed(item: CommunityFeedItem | null | undefined): boolean {
+  return getFeedTargetType(item) === 'campus_food'
+}
+
+type MicroNutrientKey =
+  | 'fiber' | 'sugar' | 'saturatedFat' | 'cholesterolMg' | 'sodiumMg' | 'potassiumMg'
+  | 'calciumMg' | 'ironMg' | 'magnesiumMg' | 'zincMg' | 'vitaminARaeMcg' | 'vitaminCMg'
+  | 'vitaminDMcg' | 'vitaminEMg' | 'vitaminKMcg' | 'thiaminMg' | 'riboflavinMg'
+  | 'niacinMg' | 'vitaminB6Mg' | 'folateMcg' | 'vitaminB12Mcg'
+
+interface MicroNutrientMeta {
+  key: MicroNutrientKey
+  label: string
+  unit: string
+}
+
+const MICRO_NUTRIENT_META: MicroNutrientMeta[] = [
+  { key: 'fiber', label: '膳食纤维', unit: 'g' },
+  { key: 'sugar', label: '糖', unit: 'g' },
+  { key: 'saturatedFat', label: '饱和脂肪', unit: 'g' },
+  { key: 'cholesterolMg', label: '胆固醇', unit: 'mg' },
+  { key: 'sodiumMg', label: '钠', unit: 'mg' },
+  { key: 'potassiumMg', label: '钾', unit: 'mg' },
+  { key: 'calciumMg', label: '钙', unit: 'mg' },
+  { key: 'ironMg', label: '铁', unit: 'mg' },
+  { key: 'magnesiumMg', label: '镁', unit: 'mg' },
+  { key: 'zincMg', label: '锌', unit: 'mg' },
+  { key: 'vitaminARaeMcg', label: '维生素A', unit: 'mcg' },
+  { key: 'vitaminCMg', label: '维生素C', unit: 'mg' },
+  { key: 'vitaminDMcg', label: '维生素D', unit: 'mcg' },
+  { key: 'vitaminEMg', label: '维生素E', unit: 'mg' },
+  { key: 'vitaminKMcg', label: '维生素K', unit: 'mcg' },
+  { key: 'thiaminMg', label: '维生素B1', unit: 'mg' },
+  { key: 'riboflavinMg', label: '维生素B2', unit: 'mg' },
+  { key: 'niacinMg', label: '烟酸', unit: 'mg' },
+  { key: 'vitaminB6Mg', label: '维生素B6', unit: 'mg' },
+  { key: 'folateMcg', label: '叶酸', unit: 'mcg' },
+  { key: 'vitaminB12Mcg', label: '维生素B12', unit: 'mcg' },
+]
+
+/** 与首页 MicrosSection 保持一致的颜色 */
+const MICRO_COLOR_MAP: Record<MicroNutrientKey, string> = {
+  fiber: '#5dbb8a',
+  sugar: '#e88cb8',
+  saturatedFat: '#d4a373',
+  cholesterolMg: '#bc8f8f',
+  sodiumMg: '#ef8b73',
+  potassiumMg: '#57a99a',
+  calciumMg: '#6aa7d8',
+  ironMg: '#d88d5a',
+  magnesiumMg: '#7eb8da',
+  zincMg: '#a8a4ce',
+  vitaminARaeMcg: '#e0a14a',
+  vitaminCMg: '#71c16f',
+  vitaminDMcg: '#8a7be0',
+  vitaminEMg: '#c0a46e',
+  vitaminKMcg: '#8fbc8f',
+  thiaminMg: '#d4a5a5',
+  riboflavinMg: '#9fb4cc',
+  niacinMg: '#b8a9c9',
+  vitaminB6Mg: '#a3c4a3',
+  folateMcg: '#d8b4a0',
+  vitaminB12Mcg: '#9ecae1',
+}
+
+function resolveRecordItemRatio(item: CommunityFeedRecord['items'][number]): number {
+  const ratio = Number(item.ratio)
+  if (Number.isFinite(ratio) && ratio > 0) return Math.min(100, ratio)
+  const intake = Number(item.intake)
+  const weight = Number(item.weight)
+  if (Number.isFinite(intake) && Number.isFinite(weight) && intake >= 0 && weight > 0) {
+    return Math.min(100, Math.round((intake / weight) * 1000) / 10)
+  }
+  return 100
+}
+
+function readNutrientValue(nutrients: Nutrients | undefined | null, key: MicroNutrientKey): number {
+  if (!nutrients) return 0
+  const raw = nutrients[key as keyof Nutrients]
+  if (raw !== undefined && raw !== null) return Number(raw)
+  if (key === 'sodiumMg') {
+    const fallback = (nutrients as any).sodium_mg
+    if (fallback !== undefined && fallback !== null) return Number(fallback)
+  }
+  return 0
+}
+
+function formatMicroValue(value: number): string {
+  if (value >= 10) return String(Math.round(value))
+  if (value >= 1) return String(Math.round(value * 10) / 10)
+  return String(Math.round(value * 100) / 100)
+}
+
+function aggregateMicroNutrients(record: CommunityFeedRecord | undefined | null): { meta: MicroNutrientMeta; value: number; color: string }[] {
+  if (!record) return []
+  if (record.feed_type === 'circle_post') {
+    return MICRO_NUTRIENT_META.map((meta) => {
+      let value = 0
+      if (meta.key === 'fiber') value = Number(record.fiber ?? 0)
+      else if (meta.key === 'sugar') value = Number(record.sugar ?? 0)
+      else if (meta.key === 'sodiumMg') value = Number(record.sodium_mg ?? 0)
+      return { meta, value, color: MICRO_COLOR_MAP[meta.key] }
+    }).filter(({ value }) => value > 0)
+  }
+  const items = record.items || []
+  if (items.length === 0) return []
+  return MICRO_NUTRIENT_META.map((meta) => {
+    const total = items.reduce((sum, item) => {
+      const ratio = resolveRecordItemRatio(item) / 100
+      return sum + readNutrientValue(item.nutrients, meta.key) * ratio
+    }, 0)
+    return { meta, value: total, color: MICRO_COLOR_MAP[meta.key] }
+  }).filter(({ value }) => value > 0)
+}
+
 function InteractionFeedDetailPage() {
   const [recordId, setRecordId] = useState('')
   const [targetType, setTargetType] = useState<CommunityFeedTargetType>('food_record')
@@ -108,7 +231,10 @@ function InteractionFeedDetailPage() {
   const [feedActionSheetVisible, setFeedActionSheetVisible] = useState(false)
   const [reportMaskVisible, setReportMaskVisible] = useState(false)
   const [feedTextExpanded, setFeedTextExpanded] = useState<Record<string, boolean>>({})
+  const [microsExpanded, setMicrosExpanded] = useState(false)
+  const [manualFoodsExpanded, setManualFoodsExpanded] = useState(false)
   const likePendingRef = useRef(false)
+  const INITIAL_VISIBLE_MANUAL_FOODS = 3
 
   const loadDetail = useCallback(async (nextRecordId: string, nextTargetType: CommunityFeedTargetType = 'food_record') => {
     if (!nextRecordId) {
@@ -245,8 +371,20 @@ function InteractionFeedDetailPage() {
       Taro.navigateTo({ url: `${extraPkgUrl('/pages/exercise-record/index')}${dateText ? `?date=${encodeURIComponent(dateText)}` : ''}` })
       return
     }
+    if (targetType === 'campus_food') {
+      Taro.navigateTo({ url: `${extraPkgUrl('/pages/food-library-detail/index')}?id=${encodeURIComponent(id)}` })
+      return
+    }
     Taro.navigateTo({ url: `${extraPkgUrl('/pages/record-detail/index')}?id=${encodeURIComponent(id)}` })
   }, [targetType, feedItem])
+
+  const handleManualFoodCardClick = useCallback((row: ManualFoodSourceItem & { displayName: string; sourceLabel: string; imageUrl: string }) => {
+    const manualSourceId = (row as any).manual_source_id as string | undefined
+    const manualSource = String(row.manual_source || '')
+    if (manualSourceId && (manualSource === 'public_library' || manualSource === 'nutrition_library' || manualSource === 'packaged_food')) {
+      Taro.navigateTo({ url: `${extraPkgUrl('/pages/food-library-detail/index')}?id=${encodeURIComponent(manualSourceId)}` })
+    }
+  }, [])
 
   const handleDeleteFeedItem = useCallback(async () => {
     if (!feedItem) return
@@ -366,12 +504,16 @@ function InteractionFeedDetailPage() {
                 const circlePostTitle = isCirclePost ? (feedItem.record.title || '') : ''
                 const circlePostBody = isCirclePost ? (feedItem.record.body || '') : ''
                 const circlePostText = circlePostTitle || circlePostBody
-                const exerciseKcal = Number(feedItem.record.calories_burned ?? feedItem.record.total_calories ?? 0)
-                const detailTargetKey = `${getFeedTargetType(feedItem)}-${getFeedTargetId(feedItem)}`
+	                const exerciseKcal = Number(feedItem.record.calories_burned ?? feedItem.record.total_calories ?? 0)
+	                const detailTargetKey = `${getFeedTargetType(feedItem)}-${getFeedTargetId(feedItem)}`
+	                const isManualRecord = !exercise && !isCirclePost && shouldRenderManualFoodCards(feedItem.record)
+	                const manualFoodItems = isManualRecord ? extractManualFoodDisplayItems(feedItem.record.items) : []
+	                const useExerciseActivityCards = exercise && hasExerciseActivityCards(feedItem.record.exercise_items)
+	                const visibleManualFoodItems = manualFoodsExpanded ? manualFoodItems : manualFoodItems.slice(0, INITIAL_VISIBLE_MANUAL_FOODS)
                 return (
-              <View
-                id={`feed-card-${getFeedTargetType(feedItem)}-${getFeedTargetId(feedItem)}`}
-                className={`feed-card${(feedItem.record.description?.trim() || exerciseDesc || circlePostText.trim()) && !feedItem.record.image_path ? ' feed-card-text-only' : ''} ${exercise ? 'feed-card-exercise' : ''} ${isCirclePost ? 'feed-card-circle-post' : ''}`}
+	              <View
+	                id={`feed-card-${getFeedTargetType(feedItem)}-${getFeedTargetId(feedItem)}`}
+	                className={`feed-card${(feedItem.record.description?.trim() || exerciseDesc || circlePostText.trim()) && !feedItem.record.image_path && !useExerciseActivityCards ? ' feed-card-text-only' : ''} ${exercise ? 'feed-card-exercise' : ''} ${isCirclePost ? 'feed-card-circle-post' : ''}`}
                 style={isCirclePost ? { position: 'relative' } : undefined}
                 onLongPress={() => {
                   if (isCirclePost && !feedItem.is_mine) {
@@ -410,11 +552,17 @@ function InteractionFeedDetailPage() {
                         {circlePostTitle ? <Text className='feed-circle-post-title'>{circlePostTitle}</Text> : null}
                         {circlePostBody ? <Text className='feed-content feed-circle-post-body'>{circlePostBody}</Text> : null}
                       </>
-                    ) : (exercise ? exerciseDesc : feedItem.record.description) ? (
-                      exercise
-                        ? renderCollapsibleFeedText(`${detailTargetKey}-desc`, exerciseDesc)
-                        : <Text className='feed-content'>{feedItem.record.description}</Text>
-                    ) : null}
+	                    ) : !useExerciseActivityCards && (exercise ? exerciseDesc : feedItem.record.description) ? (
+	                      exercise
+	                        ? renderCollapsibleFeedText(`${detailTargetKey}-desc`, exerciseDesc)
+	                        : <Text className='feed-content'>{feedItem.record.description}</Text>
+	                    ) : null}
+	                    {useExerciseActivityCards && (
+	                      <ExerciseActivityCards
+	                        items={feedItem.record.exercise_items}
+	                        onItemClick={() => handleViewDetail(feedItem.record.id)}
+	                      />
+	                    )}
                     {feedItem.record.image_path && !isCirclePost ? (
                       <View className='feed-image feed-tap-to-detail' onClick={() => handleViewDetail(feedItem.record.id)}>
                         <Image src={feedItem.record.image_path} mode='aspectFill' className='feed-image-content' />
@@ -436,6 +584,28 @@ function InteractionFeedDetailPage() {
                             <Image src={url} mode='aspectFill' className='feed-circle-post-image' />
                           </View>
                         ))}
+                      </View>
+                    )}
+                    {isManualRecord && manualFoodItems.length > 0 && (
+                      <View className='feed-manual-foods-detail'>
+                        <ManualFoodCards
+                          items={visibleManualFoodItems}
+                          onItemClick={handleManualFoodCardClick}
+                        />
+                        {manualFoodItems.length > INITIAL_VISIBLE_MANUAL_FOODS && (
+                          <View
+                            className='feed-manual-foods-expand'
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setManualFoodsExpanded((prev) => !prev)
+                            }}
+                          >
+                            <Text className='feed-manual-foods-expand-text'>
+                              {manualFoodsExpanded ? '收起' : `展开更多（${manualFoodItems.length - INITIAL_VISIBLE_MANUAL_FOODS}）`}
+                            </Text>
+                            <Text className={`iconfont ${manualFoodsExpanded ? 'icon-packup' : 'icon-unfold'} feed-manual-foods-expand-icon`} />
+                          </View>
+                        )}
                       </View>
                     )}
                     {isCirclePost && (() => {
@@ -483,6 +653,51 @@ function InteractionFeedDetailPage() {
                         </View>
                       </View>
                     )}
+
+                    {(() => {
+                      if (exercise) return null
+                      const microRows = aggregateMicroNutrients(feedItem.record)
+                      if (microRows.length === 0) return null
+                      return (
+                        <View className='feed-micros'>
+                          <View
+                            className='feed-micros-head'
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setMicrosExpanded((prev) => !prev)
+                            }}
+                          >
+                            <Text className='feed-micros-title'>微量元素</Text>
+                            <View className='feed-micros-toggle'>
+                              <Text className='feed-micros-toggle-text'>{microsExpanded ? '收起' : '展开'}</Text>
+                              <Text className={`iconfont ${microsExpanded ? 'icon-packup' : 'icon-unfold'} feed-micros-toggle-icon`} />
+                            </View>
+                          </View>
+                          {!microsExpanded ? (
+                            <Text className='feed-micros-summary'>
+                              {microRows.slice(0, 3).map((r) => `${r.meta.label} ${formatMicroValue(r.value)}${r.meta.unit}`).join(' · ')}
+                              {microRows.length > 3 ? ` 等 ${microRows.length} 项` : ''}
+                            </Text>
+                          ) : (
+                            <View className='feed-micros-grid'>
+                              {microRows.map(({ meta, value, color }) => (
+                                <View
+                                  key={meta.key}
+                                  className='feed-micros-cell'
+                                  style={{ background: `${color}14`, borderColor: `${color}33` }}
+                                >
+                                  <Text className='feed-micros-label' style={{ color: `${color}cc` }}>{meta.label}</Text>
+                                  <View className='feed-micros-value-row'>
+                                    <Text className='feed-micros-value' style={{ color }}>{formatMicroValue(value)}</Text>
+                                    <Text className='feed-micros-unit' style={{ color: `${color}cc` }}>{meta.unit}</Text>
+                                  </View>
+                                </View>
+                              ))}
+                            </View>
+                          )}
+                        </View>
+                      )
+                    })()}
 
                     <View className='feed-actions'>
                       <View className='feed-actions-left'>

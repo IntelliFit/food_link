@@ -10,7 +10,7 @@ import {
   type MembershipStatus,
 } from '../../../utils/api'
 import {
-  inferDefaultMealTypeFromHealthProfile,
+  getRecommendedMealTypeWithFallback,
   inferDefaultMealTypeFromLocalTime,
 } from '../../../utils/infer-default-meal-type'
 import {
@@ -97,7 +97,7 @@ function RecordTextPage() {
     ;(async () => {
       try {
         const profile = getAccessToken() ? await getHealthProfile() : null
-        const inferredMealType = inferDefaultMealTypeFromHealthProfile(profile)
+        const inferredMealType = await getRecommendedMealTypeWithFallback({ profile })
         setSelectedMeal(inferredMealType)
       } catch {
         setSelectedMeal(inferDefaultMealTypeFromLocalTime())

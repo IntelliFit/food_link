@@ -27,6 +27,7 @@ func setupExerciseTestDB(t *testing.T) *gorm.DB {
 		recorded_on TIMESTAMP,
 		recorded_at TIMESTAMP,
 		ai_reasoning TEXT,
+		exercise_items TEXT,
 		hidden_from_feed BOOLEAN DEFAULT FALSE,
 		created_at TIMESTAMP
 	)`).Error)

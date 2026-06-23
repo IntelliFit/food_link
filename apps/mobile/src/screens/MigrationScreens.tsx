@@ -32,6 +32,7 @@ import {
   type CommunityFeedTargetType,
   type ConversationSummary,
   type FeedCommentItem,
+  type FriendBlockStatus,
   type ManualFoodItem,
   type MealType,
   type MembershipPaymentOrder,
@@ -259,16 +260,10 @@ export function MembershipCenterScreen() {
   }, [load])
 
   const createPayment = async (plan: MembershipPlan) => {
-    setLoading(true)
-    try {
-      const order = await apiClient.createMembershipPayment(plan.code)
-      setLastOrder(order)
-      Alert.alert('订单已创建', '请在支付渠道完成付款；支付完成后可返回会员中心同步订单状态。')
-    } catch (error) {
-      showError('创建订单失败', error)
-    } finally {
-      setLoading(false)
-    }
+    Alert.alert(
+      'App 支付暂未开放',
+      `当前 App 会员支付还未完成接入，请先在微信小程序中完成开通或续费。\n\n套餐：${plan.name}`,
+    )
   }
 
   const previewPayment = () => {
@@ -2275,8 +2270,10 @@ export function PrivateChatScreen() {
   const [sendingText, setSendingText] = useState(false)
   const [sendingImage, setSendingImage] = useState(false)
   const [actionTarget, setActionTarget] = useState<PrivateMessageItem | null>(null)
+  const [blockStatus, setBlockStatus] = useState<FriendBlockStatus | null>(null)
   const pollingRef = useRef(false)
   const isSystemChat = route.params.userId === SYSTEM_MESSAGE_USER_ID
+  const chatBlocked = Boolean(blockStatus?.blocked_either)
 
   const scrollToBottom = useCallback((animated = true) => {
     setTimeout(() => {
@@ -2284,10 +2281,34 @@ export function PrivateChatScreen() {
     }, 80)
   }, [])
 
+  const refreshBlockStatus = useCallback(async () => {
+    if (isSystemChat) {
+      setBlockStatus(null)
+      return
+    }
+    try {
+      const status = await apiClient.getFriendBlockStatus(route.params.userId)
+      setBlockStatus(status)
+    } catch {
+      setBlockStatus(null)
+    }
+  }, [isSystemChat, route.params.userId])
+
   const loadLatest = useCallback(async (quiet = false) => {
     if (!quiet) setLoading(true)
     try {
       const data = await apiClient.getConversation(route.params.userId, 0, privateMessagePageSize)
+      if (typeof data.blocked === 'boolean') {
+        setBlockStatus((prev) => data.blocked ? ({
+          is_blocked_by_me: prev?.is_blocked_by_me || false,
+          has_blocked_me: prev?.has_blocked_me || false,
+          blocked_either: true,
+        }) : {
+          is_blocked_by_me: false,
+          has_blocked_me: false,
+          blocked_either: false,
+        })
+      }
       const next = normalizePrivateMessages(data.list || [])
       setMessages((prev) => quiet ? mergePrivateMessages(prev, next) : next)
       if (!quiet) {
@@ -2315,6 +2336,7 @@ export function PrivateChatScreen() {
     setCounterpartAvatar('')
     navigation.setOptions({ title: route.params.nickname || (isSystemChat ? '系统消息' : '用户') })
     if (isSystemChat) return
+    void refreshBlockStatus()
     void apiClient.getPublicProfile(route.params.userId)
       .then((profile) => {
         setCounterpartName(profile.nickname || route.params.nickname || '用户')
@@ -2322,7 +2344,7 @@ export function PrivateChatScreen() {
         navigation.setOptions({ title: profile.nickname || route.params.nickname || '用户' })
       })
       .catch(() => null)
-  }, [isSystemChat, navigation, route.params.nickname, route.params.userId])
+  }, [isSystemChat, navigation, refreshBlockStatus, route.params.nickname, route.params.userId])
 
   useFocusEffect(
     useCallback(() => {
@@ -2355,6 +2377,10 @@ export function PrivateChatScreen() {
   }, [hasMore, loadingMore, offset, route.params.userId])
 
   const send = async () => {
+    if (chatBlocked) {
+      Alert.alert('已无法继续发送消息')
+      return
+    }
     const text = content.trim()
     if (!text) {
       Alert.alert('请输入消息内容')
@@ -2375,6 +2401,10 @@ export function PrivateChatScreen() {
   }
 
   const sendImage = async () => {
+    if (chatBlocked) {
+      Alert.alert('已无法继续发送消息')
+      return
+    }
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync()
     if (!permission.granted) {
       Alert.alert('需要相册权限', '请选择图片后发送给对方。')
@@ -2406,6 +2436,43 @@ export function PrivateChatScreen() {
       setSendingImage(false)
     }
   }
+
+  const handleBlockUser = useCallback(() => {
+    if (isSystemChat) return
+    Alert.alert('拉黑用户', `拉黑后，你和「${counterpartName || '用户'}」将无法继续互发私信，也不能重新添加好友。`, [
+      { text: '取消', style: 'cancel' },
+      {
+        text: '拉黑',
+        style: 'destructive',
+        onPress: () => {
+          void apiClient.blockUser(route.params.userId)
+            .then(() => {
+              setContent('')
+              setBlockStatus({ is_blocked_by_me: true, has_blocked_me: false, blocked_either: true })
+              return loadLatest(true)
+            })
+            .then(() => Alert.alert('已加入黑名单'))
+            .catch((error) => showError('无法操作', error))
+        },
+      },
+    ])
+  }, [counterpartName, isSystemChat, loadLatest, route.params.userId])
+
+  const handleUnblockUser = useCallback(() => {
+    if (isSystemChat) return
+    Alert.alert('解除拉黑', '解除后，你们可以重新搜索、申请好友或发送私信。', [
+      { text: '取消', style: 'cancel' },
+      {
+        text: '解除',
+        onPress: () => {
+          void apiClient.unblockUser(route.params.userId)
+            .then(() => refreshBlockStatus())
+            .then(() => Alert.alert('已解除拉黑'))
+            .catch((error) => showError('无法操作', error))
+        },
+      },
+    ])
+  }, [isSystemChat, refreshBlockStatus, route.params.userId])
 
   const closeMessageActions = useCallback(() => {
     setActionTarget(null)
@@ -2481,6 +2548,21 @@ export function PrivateChatScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 88 : 0}
     >
+      {!isSystemChat ? (
+        <View style={styles.privateChatBlockBar}>
+          {blockStatus?.is_blocked_by_me ? (
+            <Pressable style={({ pressed }) => [styles.privateChatBlockButton, styles.privateChatUnblockButton, pressed && styles.privateChatBlockButtonPressed]} onPress={handleUnblockUser}>
+              <Text style={[styles.privateChatBlockButtonText, styles.privateChatUnblockButtonText]}>解除拉黑</Text>
+            </Pressable>
+          ) : chatBlocked ? (
+            <Text style={styles.privateChatBlockedHint}>已无法继续发送消息</Text>
+          ) : (
+            <Pressable style={({ pressed }) => [styles.privateChatBlockButton, pressed && styles.privateChatBlockButtonPressed]} onPress={handleBlockUser}>
+              <Text style={styles.privateChatBlockButtonText}>拉黑</Text>
+            </Pressable>
+          )}
+        </View>
+      ) : null}
       <ScrollView
         ref={chatScrollRef}
         style={styles.privateChatList}
@@ -2529,7 +2611,11 @@ export function PrivateChatScreen() {
           </>
         )}
       </ScrollView>
-      {isSystemChat ? null : (
+      {isSystemChat ? null : chatBlocked ? (
+        <View style={[styles.privateChatDisabledBar, { paddingBottom: Math.max(insets.bottom, 8) + 8 }]}>
+          <Text style={styles.privateChatDisabledText}>已无法继续发送消息</Text>
+        </View>
+      ) : (
         <View style={[styles.privateChatInputBar, { paddingBottom: Math.max(insets.bottom, 8) + 8 }]}>
           <Pressable
             disabled={sendingImage || sendingText}
@@ -6761,6 +6847,47 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     paddingBottom: 10,
   },
+  privateChatBlockBar: {
+    minHeight: 42,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+    backgroundColor: '#ffffff',
+  },
+  privateChatBlockButton: {
+    minHeight: 30,
+    borderRadius: 15,
+    paddingHorizontal: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#fecaca',
+    backgroundColor: '#fff7f7',
+  },
+  privateChatBlockButtonPressed: {
+    opacity: 0.74,
+  },
+  privateChatBlockButtonText: {
+    color: '#ef4444',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  privateChatUnblockButton: {
+    borderColor: '#bbf7d0',
+    backgroundColor: '#f0fdf4',
+  },
+  privateChatUnblockButtonText: {
+    color: '#059669',
+  },
+  privateChatBlockedHint: {
+    color: '#94a3b8',
+    fontSize: 12,
+    fontWeight: '700',
+  },
   privateChatState: {
     flex: 1,
     minHeight: 260,
@@ -6791,6 +6918,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingTop: 8,
     backgroundColor: '#ffffff',
+  },
+  privateChatDisabledBar: {
+    minHeight: 56,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderTopWidth: 1,
+    borderTopColor: '#e5e7eb',
+    paddingHorizontal: 12,
+    paddingTop: 8,
+    backgroundColor: '#ffffff',
+  },
+  privateChatDisabledText: {
+    color: '#94a3b8',
+    fontSize: 13,
+    fontWeight: '800',
   },
   privateChatImageButton: {
     width: 32,

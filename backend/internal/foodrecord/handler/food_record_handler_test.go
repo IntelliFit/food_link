@@ -21,20 +21,27 @@ import (
 )
 
 type mockFoodRecordService struct {
-	saveRecord             *domain.FoodRecord
-	saveErr                error
-	saveInput              *service.SaveFoodRecordInput
-	listRecords            []domain.FoodRecord
-	listErr                error
-	getRecord              *domain.FoodRecord
-	getErr                 error
-	updateRecord           *domain.FoodRecord
-	updateErr              error
-	updateInput            *service.UpdateFoodRecordInput
-	deleteErr              error
-	shareRecord            *domain.FoodRecord
-	shareErr               error
-	saveCriticalSamplesErr error
+	saveRecord              *domain.FoodRecord
+	saveErr                 error
+	saveInput               *service.SaveFoodRecordInput
+	listRecords             []domain.FoodRecord
+	listErr                 error
+	getRecord               *domain.FoodRecord
+	getErr                  error
+	updateRecord            *domain.FoodRecord
+	updateErr               error
+	updateInput             *service.UpdateFoodRecordInput
+	deleteErr               error
+	shareRecord             *domain.FoodRecord
+	shareErr                error
+	saveCriticalSamplesErr  error
+	recommendMealType       string
+	recommendMealTypeSource string
+	recommendMealTypeErr    error
+	recommendMealTypeInput  struct {
+		userID string
+		date   string
+	}
 }
 
 func (m *mockFoodRecordService) Save(ctx context.Context, userID string, input service.SaveFoodRecordInput) (*domain.FoodRecord, error) {
@@ -62,6 +69,11 @@ func (m *mockFoodRecordService) SaveCriticalSamples(ctx context.Context, userID 
 }
 func (m *mockFoodRecordService) GetEntryDistribution(ctx context.Context, userID, startDate, endDate string) (*service.EntryDistributionResult, error) {
 	return nil, nil
+}
+func (m *mockFoodRecordService) RecommendMealType(ctx context.Context, userID string, date string, refTime *time.Time) (string, string, error) {
+	m.recommendMealTypeInput.userID = userID
+	m.recommendMealTypeInput.date = date
+	return m.recommendMealType, m.recommendMealTypeSource, m.recommendMealTypeErr
 }
 
 type mockUploadService struct {
@@ -129,6 +141,7 @@ func setupRouter(h *FoodRecordHandler) *gin.Engine {
 	})
 	r.POST("/api/food-record/save", h.SaveFoodRecord)
 	r.GET("/api/food-record/list", h.ListFoodRecords)
+	r.GET("/api/food-record/recommend-meal-type", h.RecommendMealType)
 	r.GET("/api/food-record/:record_id", h.GetFoodRecord)
 	r.PUT("/api/food-record/:record_id", h.UpdateFoodRecord)
 	r.DELETE("/api/food-record/:record_id", h.DeleteFoodRecord)
@@ -891,4 +904,26 @@ func TestSaveCriticalSamplesError(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestRecommendMealType(t *testing.T) {
+	mockSvc := &mockFoodRecordService{
+		recommendMealType:       "lunch",
+		recommendMealTypeSource: "shifted_by_record",
+	}
+	h := NewFoodRecordHandler(mockSvc, nil, nil)
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/api/food-record/recommend-meal-type?date=2026-06-22&ref_time=2026-06-22T12:10:00%2B08:00", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	data := resp["data"].(map[string]any)
+	assert.Equal(t, "lunch", data["meal_type"])
+	assert.Equal(t, "shifted_by_record", data["generated_by"])
+	assert.Equal(t, "test-user-id", mockSvc.recommendMealTypeInput.userID)
+	assert.Equal(t, "2026-06-22", mockSvc.recommendMealTypeInput.date)
 }

@@ -131,6 +131,7 @@
   border: 4rpx solid #e5e7eb;
   position: relative;
   overflow: hidden;
+  cursor: pointer;
 
   .avatar-image {
     width: 100%;
@@ -151,36 +152,44 @@
   }
 }
 
-.nuo-modals .avatar-choose-btn {
+.nuo-modals .nickname-picker {
   width: 100%;
-  height: 100%;
-  padding: 0;
-  background: transparent;
-  border: none;
-  position: absolute;
-  top: 0;
-  left: 0;
-  z-index: 10;
-
-  &::after {
-    border: none;
-  }
-}
-
-.nuo-modals .nickname-input {
-  width: 100%;
-  height: 96rpx;
+  min-height: 96rpx;
   background: #f9fafb;
   border-radius: 16rpx;
-  padding: 0 32rpx;
-  font-size: 30rpx;
+  padding: 18rpx 28rpx;
   border: 2rpx solid #e5e7eb;
   box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20rpx;
 
-  &:focus {
+  &:active {
     border-color: #00bc7d;
     background: #fff;
   }
+}
+
+.nuo-modals .nickname-picker-value {
+  flex: 1;
+  min-width: 0;
+  font-size: 30rpx;
+  color: #111827;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
+  &.placeholder {
+    color: #9ca3af;
+  }
+}
+
+.nuo-modals .nickname-picker-action {
+  flex: none;
+  color: #00a86b;
+  font-size: 24rpx;
+  font-weight: 600;
 }
 
 .nuo-modals .save-btn {

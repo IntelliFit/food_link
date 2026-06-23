@@ -20,6 +20,7 @@ import { OverviewPage } from '@/pages/overview-page'
 import { PackagedFoodsPage } from '@/pages/packaged-foods-page'
 import { FoodNutritionPage } from '@/pages/food-nutrition-page'
 import { PublicFoodLibraryPage } from '@/pages/public-food-library-page'
+import { PaymentTestPage } from '@/pages/payment-test-page'
 import type { AdminMenuId } from '@/components/admin-sidebar'
 
 const MENU_PATHS: Record<AdminMenuId, string> = {
@@ -31,6 +32,7 @@ const MENU_PATHS: Record<AdminMenuId, string> = {
   'public-food-library': '/public-food-library',
   'exercise-energy': '/exercise-energy',
   'feed-reports': '/feed-reports',
+  'payment-test': '/payment-test',
   settings: '/settings',
 }
 
@@ -126,6 +128,7 @@ export function App() {
         <Route path='/packaged-foods' element={<PackagedFoodsPage {...pageProps} />} />
         <Route path='/food-nutrition' element={<FoodNutritionPage {...pageProps} />} />
         <Route path='/public-food-library' element={<PublicFoodLibraryPage {...pageProps} />} />
+        <Route path='/payment-test' element={<PaymentTestPage {...pageProps} />} />
         <Route path='*' element={<Navigate to='/overview' replace />} />
       </Routes>
       <Toaster richColors closeButton position='bottom-right' />

@@ -1,4 +1,4 @@
-﻿import { View, Text } from '@tarojs/components'
+import { View, Text } from '@tarojs/components'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Taro, { useDidShow, usePullDownRefresh } from '@tarojs/taro'
 import {
@@ -17,11 +17,9 @@ import { withAuth } from '../../../utils/withAuth'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
+import { PetAvatar } from '../../../components/PetAvatar'
 import './index.scss'
 
-const PET_COLORS = ['mint', 'berry', 'sunny', 'aqua', 'grape', 'peach', 'cream', 'matcha'] as const
-const PET_SHAPES = ['round', 'bean', 'puff', 'drop'] as const
-const PET_ANIMALS = ['cat', 'bunny', 'bear', 'fox', 'hamster'] as const
 const HOME_PET_HIDDEN_KEY = 'home_pet_companion_hidden_v1'
 const HOME_PET_HIDDEN_CHANGED_EVENT = 'home_pet_companion_hidden_changed'
 
@@ -31,14 +29,6 @@ function getStoredHomePetHidden(): boolean {
   } catch (_) {
     return false
   }
-}
-
-function stableHash(input: string): number {
-  let hash = 0
-  for (let i = 0; i < input.length; i += 1) {
-    hash = (hash * 31 + input.charCodeAt(i)) >>> 0
-  }
-  return hash
 }
 
 function moodText(mood?: string): string {
@@ -116,32 +106,6 @@ function candidateStyleText(style?: string): string {
   }
 }
 
-function CandidatePetFigure({ candidate }: { candidate: PetAppearanceCandidate }) {
-  const seed = candidate.pet_seed || 'candidate'
-  const animal = PET_ANIMALS[stableHash(`${seed}:animal`) % PET_ANIMALS.length]
-  return (
-    <View className={`pet-home-candidate-avatar ${candidate.color} ${candidate.shape} ${candidate.pattern} animal-${animal} mood-calm`}>
-      <View className='pet-home-shadow' />
-      <View className='pet-body'>
-        <View className='pet-tail' />
-        <View className='pet-ear left' />
-        <View className='pet-ear right' />
-        <View className='pet-accessory'>
-          <View className={`pet-accessory-shape ${candidate.accessory}`} />
-        </View>
-        <View className='pet-face'>
-          <View className='pet-snout' />
-          <View className='pet-eye left' />
-          <View className='pet-eye right' />
-          <View className='pet-cheek left' />
-          <View className='pet-cheek right' />
-          <View className='pet-mouth' />
-        </View>
-      </View>
-    </View>
-  )
-}
-
 function PetHomePage() {
   const { scheme } = useAppColorScheme()
   const [loading, setLoading] = useState(true)
@@ -182,12 +146,6 @@ function PetHomePage() {
     void loadData().finally(() => Taro.stopPullDownRefresh())
   })
 
-  const petSeed = useMemo(() => petSummary?.pet?.pet_seed || 'guest', [petSummary?.pet?.pet_seed])
-  const petColor = petSummary?.pet?.color || PET_COLORS[stableHash(`${petSeed}:color`) % PET_COLORS.length]
-  const petShape = petSummary?.pet?.shape || PET_SHAPES[stableHash(`${petSeed}:shape`) % PET_SHAPES.length]
-  const petAnimal = PET_ANIMALS[stableHash(`${petSeed}:animal`) % PET_ANIMALS.length]
-  const petPattern = petSummary?.pet?.pattern || `pattern-${stableHash(`${petSeed}:pattern`) % 5}`
-  const petAccessory = petSummary?.pet?.accessory || 'leaf'
   const petMood = petSummary?.status?.mood || 'calm'
   const petState = petSummary?.status?.state || petMood
   const petInactivityDays = petSummary?.status?.inactivity_days || 0
@@ -213,12 +171,13 @@ function PetHomePage() {
           is_claimed: true,
         },
       } : prev)
-      if (typeof result.earned_credits_balance === 'number') {
+      const earnedBalance = result.earned_credits_balance
+      if (typeof earnedBalance === 'number') {
         setMembership((prev) => prev ? {
           ...prev,
-          earned_credits_balance: result.earned_credits_balance,
-          total_credits_available: (prev.system_credits_remaining ?? 0) + result.earned_credits_balance,
-          daily_credits_remaining: (prev.system_credits_remaining ?? 0) + result.earned_credits_balance,
+          earned_credits_balance: earnedBalance,
+          total_credits_available: (prev.system_credits_remaining ?? 0) + earnedBalance,
+          daily_credits_remaining: (prev.system_credits_remaining ?? 0) + earnedBalance,
         } : prev)
       }
       Taro.showToast({
@@ -254,10 +213,11 @@ function PetHomePage() {
         ...prev,
         pet: result.pet,
       } : prev)
-      if (typeof result.earned_credits_balance === 'number') {
+      const earnedBalance = result.earned_credits_balance
+      if (typeof earnedBalance === 'number') {
         setMembership((prev) => prev ? {
           ...prev,
-          earned_credits_balance: result.earned_credits_balance,
+          earned_credits_balance: earnedBalance,
           total_credits_available: Math.max((prev.total_credits_available ?? totalCredits) - result.credits_cost, 0),
           daily_credits_remaining: Math.max((prev.daily_credits_remaining ?? totalCredits) - result.credits_cost, 0),
         } : prev)
@@ -315,25 +275,7 @@ function PetHomePage() {
     <View className={`pet-home-page ${scheme === 'dark' ? 'pet-home-page--dark' : ''}`}>
       <View className='pet-home-shell'>
         <View className='pet-home-hero'>
-          <View className={`pet-home-avatar ${petColor} ${petShape} ${petPattern} animal-${petAnimal} mood-${petMood} state-${petState}`}>
-            <View className='pet-home-shadow' />
-            <View className='pet-body'>
-              <View className='pet-tail' />
-              <View className='pet-ear left' />
-              <View className='pet-ear right' />
-              <View className='pet-accessory'>
-                <View className={`pet-accessory-shape ${petAccessory}`} />
-              </View>
-              <View className='pet-face'>
-                <View className='pet-snout' />
-                <View className='pet-eye left' />
-                <View className='pet-eye right' />
-                <View className='pet-cheek left' />
-                <View className='pet-cheek right' />
-                <View className='pet-mouth' />
-              </View>
-            </View>
-          </View>
+          <PetAvatar pet={petSummary?.pet} size='large' mood={petSummary?.status?.mood} state={petSummary?.status?.state} />
 
           <View className='pet-home-hero-copy'>
             <Text className='pet-home-name'>{petSummary?.pet?.name || '健康伙伴'}</Text>
@@ -401,7 +343,7 @@ function PetHomePage() {
                   className={`pet-home-candidate-card ${candidate.pet_seed === petSummary?.pet?.pet_seed ? 'active' : ''}`}
                   onClick={() => handleSelectCandidate(candidate)}
                 >
-                  <CandidatePetFigure candidate={candidate} />
+                  <PetAvatar pet={candidate} size='small' />
                   <Text className='pet-home-candidate-name'>{candidate.name}</Text>
                   <Text className='pet-home-candidate-style'>{candidateStyleText(candidate.style)} · {candidate.score || '--'}</Text>
                   <Text className='pet-home-candidate-action'>

@@ -19,6 +19,7 @@ type PublicFoodService interface {
 	List(ctx context.Context, userID string, filter repo.ListFilter) ([]domain.PublicFoodView, error)
 	Mine(ctx context.Context, userID string) ([]domain.PublicFoodItem, error)
 	Collections(ctx context.Context, userID string) ([]domain.PublicFoodView, error)
+	UserCollectionsForViewer(ctx context.Context, viewerUserID, targetUserID string) ([]domain.PublicFoodView, error)
 	Get(ctx context.Context, userID, itemID string) (*domain.PublicFoodView, error)
 	GetCampusDetail(ctx context.Context, userID, itemID string) (*domain.CampusFoodDetailView, error)
 	Like(ctx context.Context, userID, itemID string) error
@@ -27,7 +28,7 @@ type PublicFoodService interface {
 	Uncollect(ctx context.Context, userID, itemID string) error
 	Update(ctx context.Context, userID, itemID string, input service.CreateInput) error
 	Delete(ctx context.Context, userID, itemID string) error
-	Comments(ctx context.Context, itemID string) ([]domain.PublicFoodComment, error)
+	Comments(ctx context.Context, userID, itemID string) ([]domain.PublicFoodComment, error)
 	AddComment(ctx context.Context, userID, itemID string, input service.CommentInput) (*domain.PublicFoodComment, error)
 	DeleteComment(ctx context.Context, userID, itemID, commentID string) error
 	Feedback(ctx context.Context, userID, content string, itemID *string) (string, error)
@@ -246,7 +247,7 @@ func (h *PublicFoodHandler) Uncollect(c *gin.Context) {
 // GET /api/user/:user_id/collections
 func (h *PublicFoodHandler) UserCollections(c *gin.Context) {
 	targetUserID := c.Param("user_id")
-	items, err := h.svc.Collections(c.Request.Context(), targetUserID)
+	items, err := h.svc.UserCollectionsForViewer(c.Request.Context(), c.GetString(authmw.ContextUserIDKey), targetUserID)
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -340,7 +341,7 @@ func (h *PublicFoodHandler) Delete(c *gin.Context) {
 }
 
 func (h *PublicFoodHandler) Comments(c *gin.Context) {
-	items, err := h.svc.Comments(c.Request.Context(), c.Param("item_id"))
+	items, err := h.svc.Comments(c.Request.Context(), c.GetString(authmw.ContextUserIDKey), c.Param("item_id"))
 	if err != nil {
 		response.Error(c, err)
 		return
