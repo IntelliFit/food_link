@@ -32,6 +32,10 @@ func (m *mockRecipeService) List(ctx context.Context, userID, mealType string, i
 	return nil, nil
 }
 
+func (m *mockRecipeService) ListForViewer(ctx context.Context, viewerUserID, ownerUserID, mealType string, isFavorite *bool) ([]domain.Recipe, error) {
+	return m.List(ctx, ownerUserID, mealType, isFavorite)
+}
+
 func (m *mockRecipeService) Count(ctx context.Context, userID string, isFavorite *bool) (int64, error) {
 	return 0, nil
 }

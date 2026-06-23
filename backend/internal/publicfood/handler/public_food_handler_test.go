@@ -52,6 +52,10 @@ func (m *mockPublicFoodService) Collections(ctx context.Context, userID string) 
 	return nil, nil
 }
 
+func (m *mockPublicFoodService) UserCollectionsForViewer(ctx context.Context, viewerUserID, targetUserID string) ([]domain.PublicFoodView, error) {
+	return nil, nil
+}
+
 func (m *mockPublicFoodService) Get(ctx context.Context, userID, itemID string) (*domain.PublicFoodView, error) {
 	return nil, nil
 }
@@ -94,7 +98,7 @@ func (m *mockPublicFoodService) Delete(ctx context.Context, userID, itemID strin
 	return nil
 }
 
-func (m *mockPublicFoodService) Comments(ctx context.Context, itemID string) ([]domain.PublicFoodComment, error) {
+func (m *mockPublicFoodService) Comments(ctx context.Context, userID, itemID string) ([]domain.PublicFoodComment, error) {
 	return nil, nil
 }
 

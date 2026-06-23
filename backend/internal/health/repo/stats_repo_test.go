@@ -51,6 +51,34 @@ func TestStatsRepo_FoodRecordsForDateRange(t *testing.T) {
 	assert.Equal(t, 500.0, records[0].TotalCalories)
 }
 
+func TestStatsRepo_GetExerciseLogsForDateRange(t *testing.T) {
+	db := setupStatsTestDB(t)
+	r := NewStatsRepo(db)
+	ctx := context.Background()
+
+	require.NoError(t, db.Exec(`CREATE TABLE user_exercise_logs (
+		id TEXT PRIMARY KEY,
+		user_id TEXT,
+		exercise_desc TEXT,
+		recorded_on TIMESTAMP,
+		created_at TIMESTAMP
+	)`).Error)
+
+	require.NoError(t, db.Exec(`INSERT INTO user_exercise_logs
+		(id, user_id, exercise_desc, recorded_on, created_at)
+		VALUES (?, ?, ?, ?, ?)`,
+		"ex-in", "user-1", "跑步", "2024-06-15", time.Date(2024, 6, 15, 9, 0, 0, 0, time.UTC)).Error)
+	require.NoError(t, db.Exec(`INSERT INTO user_exercise_logs
+		(id, user_id, exercise_desc, recorded_on, created_at)
+		VALUES (?, ?, ?, ?, ?)`,
+		"ex-out", "user-1", "力量训练", "2024-06-13", time.Date(2024, 6, 13, 9, 0, 0, 0, time.UTC)).Error)
+
+	logs, err := r.GetExerciseLogsForDateRange(ctx, "user-1", "2024-06-14", "2024-06-15")
+	require.NoError(t, err)
+	require.Len(t, logs, 1)
+	assert.Equal(t, "ex-in", logs[0].ID)
+}
+
 func TestStatsRepo_Insight(t *testing.T) {
 	db := setupStatsTestDB(t)
 	r := NewStatsRepo(db)

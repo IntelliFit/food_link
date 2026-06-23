@@ -48,10 +48,10 @@ type ContentSearchResult struct {
 	Sugar         *float64 `json:"sugar"`
 	SodiumMg      *float64 `json:"sodium_mg"`
 
-	ExerciseDesc  *string  `json:"exercise_desc,omitempty"`
-	ExerciseType  *string  `json:"exercise_type,omitempty"`
+	ExerciseDesc   *string  `json:"exercise_desc,omitempty"`
+	ExerciseType   *string  `json:"exercise_type,omitempty"`
 	CaloriesBurned *float64 `json:"calories_burned"`
-	DurationMin   *int     `json:"duration_min"`
+	DurationMin    *int     `json:"duration_min"`
 
 	MealType *string `json:"meal_type,omitempty"`
 	DietGoal *string `json:"diet_goal,omitempty"`
@@ -75,18 +75,23 @@ type UserSearchResult struct {
 
 type SearchRepo interface {
 	SearchContent(ctx context.Context, currentUserID, keyword string, offset, limit int) ([]repo.ContentRow, error)
-	SearchUsers(ctx context.Context, keyword string, offset, limit int) ([]repo.UserRow, error)
+	SearchUsers(ctx context.Context, currentUserID, keyword string, offset, limit int) ([]repo.UserRow, error)
 	GetUserProfiles(ctx context.Context, userIDs []string) (map[string]*repo.UserProfileRow, error)
 	GetFriendIDs(ctx context.Context, userID string) (map[string]bool, error)
 	CountContent(ctx context.Context, currentUserID, keyword string) (int64, error)
-	CountUsers(ctx context.Context, keyword string) (int64, error)
+	CountUsers(ctx context.Context, currentUserID, keyword string) (int64, error)
 	GetLikesForTargets(ctx context.Context, targets []repo.LikeTarget, currentUserID string) (map[string]*repo.TargetLikeInfo, error)
 	CountCommentsForTargets(ctx context.Context, targets []repo.LikeTarget) (map[string]int64, error)
 }
 
 type SearchService struct {
-	repo    SearchRepo
-	storage *storage.Client
+	repo         SearchRepo
+	storage      *storage.Client
+	blockChecker BlockChecker
+}
+
+type BlockChecker interface {
+	GetBlockedPairUserIDs(ctx context.Context, userID string) ([]string, error)
 }
 
 func NewSearchService(searchRepo SearchRepo, storageClient *storage.Client) *SearchService {
@@ -94,6 +99,10 @@ func NewSearchService(searchRepo SearchRepo, storageClient *storage.Client) *Sea
 		repo:    searchRepo,
 		storage: storageClient,
 	}
+}
+
+func (s *SearchService) ConfigureBlockChecker(checker BlockChecker) {
+	s.blockChecker = checker
 }
 
 func (s *SearchService) SearchContent(ctx context.Context, currentUserID, keyword string, offset, limit int) ([]ContentSearchResult, bool, error) {
@@ -106,6 +115,7 @@ func (s *SearchService) SearchContent(ctx context.Context, currentUserID, keywor
 	if err != nil {
 		return nil, false, err
 	}
+	rows = s.filterBlockedContentRows(ctx, currentUserID, rows)
 
 	hasMore := len(rows) > limit
 	if hasMore {
@@ -183,9 +193,9 @@ func (s *SearchService) SearchContent(ctx context.Context, currentUserID, keywor
 			DurationMin:    row.DurationMin,
 			MealType:       row.MealType,
 			DietGoal:       row.DietGoal,
-			Liked:        getLikeInfo(likeMap, row.TargetType, row.TargetID).Liked,
-			LikeCount:    getLikeInfo(likeMap, row.TargetType, row.TargetID).Count,
-			CommentCount: int(commentCountMap[row.TargetType+":"+row.TargetID]),
+			Liked:          getLikeInfo(likeMap, row.TargetType, row.TargetID).Liked,
+			LikeCount:      getLikeInfo(likeMap, row.TargetType, row.TargetID).Count,
+			CommentCount:   int(commentCountMap[row.TargetType+":"+row.TargetID]),
 			Author:         author,
 		}
 		if row.TargetType == "food_record" && row.Items != nil && *row.Items != "" {
@@ -308,10 +318,11 @@ func (s *SearchService) SearchUsers(ctx context.Context, currentUserID, keyword 
 		return nil, false, nil
 	}
 
-	rows, err := s.repo.SearchUsers(ctx, keyword, offset, limit+1)
+	rows, err := s.repo.SearchUsers(ctx, currentUserID, keyword, offset, limit+1)
 	if err != nil {
 		return nil, false, err
 	}
+	rows = s.filterBlockedUserRows(ctx, currentUserID, rows)
 
 	hasMore := len(rows) > limit
 	if hasMore {
@@ -347,7 +358,7 @@ func (s *SearchService) GetSearchCounts(ctx context.Context, currentUserID, keyw
 	if err != nil {
 		return nil, err
 	}
-	userCount, err := s.repo.CountUsers(ctx, keyword)
+	userCount, err := s.repo.CountUsers(ctx, currentUserID, keyword)
 	if err != nil {
 		return nil, err
 	}
@@ -355,6 +366,52 @@ func (s *SearchService) GetSearchCounts(ctx context.Context, currentUserID, keyw
 		ContentCount: contentCount,
 		UserCount:    userCount,
 	}, nil
+}
+
+func (s *SearchService) blockedUserSet(ctx context.Context, userID string) map[string]bool {
+	userID = strings.TrimSpace(userID)
+	if s.blockChecker == nil || userID == "" {
+		return map[string]bool{}
+	}
+	ids, err := s.blockChecker.GetBlockedPairUserIDs(ctx, userID)
+	if err != nil {
+		return map[string]bool{}
+	}
+	out := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		if strings.TrimSpace(id) != "" {
+			out[id] = true
+		}
+	}
+	return out
+}
+
+func (s *SearchService) filterBlockedContentRows(ctx context.Context, currentUserID string, rows []repo.ContentRow) []repo.ContentRow {
+	blockedSet := s.blockedUserSet(ctx, currentUserID)
+	if len(blockedSet) == 0 {
+		return rows
+	}
+	out := make([]repo.ContentRow, 0, len(rows))
+	for _, row := range rows {
+		if row.UserID == currentUserID || !blockedSet[row.UserID] {
+			out = append(out, row)
+		}
+	}
+	return out
+}
+
+func (s *SearchService) filterBlockedUserRows(ctx context.Context, currentUserID string, rows []repo.UserRow) []repo.UserRow {
+	blockedSet := s.blockedUserSet(ctx, currentUserID)
+	if len(blockedSet) == 0 {
+		return rows
+	}
+	out := make([]repo.UserRow, 0, len(rows))
+	for _, row := range rows {
+		if row.ID == currentUserID || !blockedSet[row.ID] {
+			out = append(out, row)
+		}
+	}
+	return out
 }
 
 func (s *SearchService) resolveAvatarURL(value string) string {

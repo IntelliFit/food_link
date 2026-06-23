@@ -16,6 +16,7 @@ type MessageService interface {
 	SendMessage(ctx context.Context, senderID, receiverID, content, contentType, imageURL string) (*domain.PrivateMessage, error)
 	GetMessages(ctx context.Context, userA, userB string, offset, limit int) ([]domain.PrivateMessage, error)
 	GetConversations(ctx context.Context, userID string, offset, limit int) ([]repo.ConversationSummary, error)
+	IsBlockedBetween(ctx context.Context, userA, userB string) (bool, error)
 	MarkRead(ctx context.Context, userID, senderID string) error
 	CountUnread(ctx context.Context, userID string) (int64, error)
 	DeleteMessage(ctx context.Context, userID, messageID string) error
@@ -68,10 +69,16 @@ func (h *MessageHandler) GetConversation(c *gin.Context) {
 	if msgs == nil {
 		msgs = []domain.PrivateMessage{}
 	}
+	blocked, err := h.msgSvc.IsBlockedBetween(c.Request.Context(), currentUserID, otherUserID)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
 	response.Success(c, map[string]any{
 		"list":     msgs,
 		"has_more": len(msgs) >= limit,
 		"offset":   offset,
+		"blocked":  blocked,
 	})
 }
 

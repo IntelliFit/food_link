@@ -20,6 +20,7 @@ import {
   type FoodExpiryItem,
   type FoodRecord,
   type FoodRecordItemPayload,
+  type FriendBlockItem,
   type FriendRequestItem,
   type FriendUserItem,
   type HealthProfile,
@@ -46,7 +47,7 @@ const appIcon = require('../../assets/icon.png')
 
 const mealOptions: MealType[] = ['breakfast', 'morning_snack', 'lunch', 'afternoon_snack', 'dinner', 'evening_snack']
 type NotificationTab = 'all' | 'like' | 'comment'
-type FriendTab = 'friends' | 'received' | 'sent'
+type FriendTab = 'friends' | 'received' | 'sent' | 'blocks'
 const notificationPageSize = 20
 const commonTextFoods = ['米饭', '面条', '鸡蛋', '鸡胸肉', '苹果', '香蕉', '牛奶', '面包']
 type TextRecordDietGoal = 'fat_loss' | 'muscle_gain' | 'maintain' | 'none'
@@ -4125,6 +4126,7 @@ export function FriendsScreen() {
   const [friends, setFriends] = useState<FriendUserItem[]>([])
   const [received, setReceived] = useState<FriendRequestItem[]>([])
   const [sent, setSent] = useState<FriendRequestItem[]>([])
+  const [blocks, setBlocks] = useState<FriendBlockItem[]>([])
   const [friendQuery, setFriendQuery] = useState('')
   const [loading, setLoading] = useState(false)
   const [mutatingId, setMutatingId] = useState<string | null>(null)
@@ -4146,13 +4148,15 @@ export function FriendsScreen() {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const [friendData, requestData] = await Promise.all([
+      const [friendData, requestData, blockData] = await Promise.all([
         apiClient.listFriends(),
         apiClient.getFriendRequestsOverview().catch(() => ({ received: [], sent: [] })),
+        apiClient.listBlockedUsers().catch(() => ({ list: [] })),
       ])
       setFriends(friendData.list || [])
       setReceived(requestData.received || [])
       setSent(requestData.sent || [])
+      setBlocks(blockData.list || [])
     } catch (error) {
       await showError(dialog, '获取好友失败', error)
     } finally {
@@ -4211,6 +4215,58 @@ export function FriendsScreen() {
       await dialog.alert('已删除', undefined, 'success')
     } catch (error) {
       await showError(dialog, '删除失败', error)
+    } finally {
+      setMutatingId(null)
+    }
+  }
+
+  const confirmBlockFriend = async (friend: FriendUserItem) => {
+    const id = friendUserId(friend)
+    if (!id) return
+    const confirmed = await dialog.confirm({
+      title: '拉黑用户',
+      message: `拉黑后会自动解除与「${friendDisplayName(friend)}」的好友关系，双方将无法私信或重新加好友。`,
+      kind: 'danger',
+      confirmText: '拉黑',
+      cancelText: '取消',
+    })
+    if (confirmed) void blockUser(id)
+  }
+
+  const blockUser = async (userId: string) => {
+    setMutatingId(`block:${userId}`)
+    try {
+      await apiClient.blockUser(userId)
+      await load()
+      await dialog.alert('已加入黑名单', undefined, 'success')
+    } catch (error) {
+      await showError(dialog, '无法操作', error)
+    } finally {
+      setMutatingId(null)
+    }
+  }
+
+  const confirmUnblockUser = async (user: FriendBlockItem) => {
+    const id = friendBlockUserId(user)
+    if (!id) return
+    const confirmed = await dialog.confirm({
+      title: '解除拉黑',
+      message: `解除后，你们可以重新搜索、申请好友或发送私信。`,
+      kind: 'warning',
+      confirmText: '解除',
+      cancelText: '取消',
+    })
+    if (confirmed) void unblockUser(id)
+  }
+
+  const unblockUser = async (userId: string) => {
+    setMutatingId(`unblock:${userId}`)
+    try {
+      await apiClient.unblockUser(userId)
+      await load()
+      await dialog.alert('已解除拉黑', undefined, 'success')
+    } catch (error) {
+      await showError(dialog, '无法操作', error)
     } finally {
       setMutatingId(null)
     }
@@ -4289,13 +4345,22 @@ export function FriendsScreen() {
             subtitle="好友"
             onPress={() => openProfile(id)}
             actions={(
-              <FriendTextActionButton
-                label="删除"
-                danger
-                loading={mutatingId === `delete:${id}`}
-                disabled={mutatingId === `delete:${id}`}
-                onPress={() => void confirmDeleteFriend(friend)}
-              />
+              <>
+                <FriendTextActionButton
+                  label="拉黑"
+                  danger
+                  loading={mutatingId === `block:${id}`}
+                  disabled={mutatingId === `block:${id}`}
+                  onPress={() => void confirmBlockFriend(friend)}
+                />
+                <FriendTextActionButton
+                  label="删除"
+                  danger
+                  loading={mutatingId === `delete:${id}`}
+                  disabled={mutatingId === `delete:${id}`}
+                  onPress={() => void confirmDeleteFriend(friend)}
+                />
+              </>
             )}
           />
         )
@@ -4366,7 +4431,48 @@ export function FriendsScreen() {
     </>
   )
 
-  const currentPanel = activeTab === 'friends' ? renderFriendsMini() : activeTab === 'received' ? renderReceivedMini() : renderSentMini()
+  const renderBlocksMini = () => (
+    <>
+      {loading && blocks.length === 0 ? (
+        <View style={styles.friendsStateCard}>
+          <ActivityIndicator color={colors.brand} />
+        </View>
+      ) : null}
+      {!loading && blocks.length === 0 ? (
+        <FriendsEmptyState
+          variant="blocks"
+          title="暂无黑名单"
+          subtitle="被拉黑的用户会显示在这里，可随时解除。"
+        />
+      ) : null}
+      {blocks.map((user) => {
+        const id = friendBlockUserId(user)
+        return (
+          <FriendBlockCard
+            key={id || friendBlockDisplayName(user)}
+            user={user}
+            onPress={() => openProfile(id)}
+            actions={(
+              <FriendTextActionButton
+                label="解除"
+                loading={mutatingId === `unblock:${id}`}
+                disabled={mutatingId === `unblock:${id}`}
+                onPress={() => void confirmUnblockUser(user)}
+              />
+            )}
+          />
+        )
+      })}
+    </>
+  )
+
+  const currentPanel = activeTab === 'friends'
+    ? renderFriendsMini()
+    : activeTab === 'received'
+      ? renderReceivedMini()
+      : activeTab === 'sent'
+        ? renderSentMini()
+        : renderBlocksMini()
 
   return (
     <View style={styles.friendsPage}>
@@ -4389,6 +4495,7 @@ export function FriendsScreen() {
             <FriendsTabButton label="好友列表" badge={friends.length} active={activeTab === 'friends'} onPress={() => setActiveTab('friends')} />
             <FriendsTabButton label="收到请求" badge={receivedPendingCount} active={activeTab === 'received'} onPress={() => setActiveTab('received')} />
             <FriendsTabButton label="我发起的" badge={sentPendingCount} active={activeTab === 'sent'} onPress={() => setActiveTab('sent')} />
+            <FriendsTabButton label="黑名单" badge={blocks.length} active={activeTab === 'blocks'} onPress={() => setActiveTab('blocks')} />
           </View>
         </View>
 
@@ -5502,6 +5609,33 @@ function FriendRequestCard({
   )
 }
 
+function FriendBlockCard({
+  user,
+  onPress,
+  actions,
+}: {
+  user: FriendBlockItem
+  onPress?: () => void
+  actions?: ReactNode
+}) {
+  return (
+    <View style={styles.friendsCard}>
+      <View style={styles.friendsCardRow}>
+        <Pressable style={styles.friendsInfoRow} onPress={onPress}>
+          <FriendAvatar uri={user.avatar} label={friendBlockDisplayName(user)} />
+          <View style={styles.friendsMeta}>
+            <Text style={styles.friendsName} numberOfLines={1}>{friendBlockDisplayName(user)}</Text>
+            <Text style={styles.friendsSubtitle} numberOfLines={1}>
+              {user.blocked_at || user.created_at ? `拉黑于 ${formatDateTime(user.blocked_at || user.created_at)}` : '已加入黑名单'}
+            </Text>
+          </View>
+        </Pressable>
+        {actions ? <View style={styles.friendsActionRow}>{actions}</View> : null}
+      </View>
+    </View>
+  )
+}
+
 function FriendAvatar({ uri, label }: { uri?: string; label: string }) {
   if (uri) return <Image source={{ uri }} style={styles.friendAvatarImage} />
   return (
@@ -5591,11 +5725,11 @@ function FriendsEmptyState({
 }: {
   title: string
   subtitle: string
-  variant?: 'friends' | 'received' | 'sent' | 'search'
+  variant?: 'friends' | 'received' | 'sent' | 'search' | 'blocks'
   actionLabel?: string
   onAction?: () => void
 }) {
-  const Icon = variant === 'received' ? Inbox : variant === 'sent' ? Send : variant === 'search' ? Search : UserPlus
+  const Icon = variant === 'received' ? Inbox : variant === 'sent' ? Send : variant === 'search' ? Search : variant === 'blocks' ? X : UserPlus
   return (
     <View style={styles.friendsEmptyCard}>
       <View style={styles.friendsEmptyIcon}>
@@ -6874,6 +7008,14 @@ function friendUserId(user: FriendUserItem): string {
 }
 
 function friendDisplayName(user: FriendUserItem): string {
+  return String(user.nickname || '').trim() || '用户'
+}
+
+function friendBlockUserId(user: FriendBlockItem): string {
+  return String(user.blocked_user_id || user.id || '').trim()
+}
+
+function friendBlockDisplayName(user: FriendBlockItem): string {
   return String(user.nickname || '').trim() || '用户'
 }
 

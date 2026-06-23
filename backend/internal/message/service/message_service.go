@@ -14,8 +14,13 @@ import (
 )
 
 type MessageService struct {
-	msgRepo *repo.MessageRepo
-	storage *storage.Client
+	msgRepo      *repo.MessageRepo
+	storage      *storage.Client
+	blockChecker BlockChecker
+}
+
+type BlockChecker interface {
+	IsBlockedEither(ctx context.Context, userA, userB string) (bool, error)
 }
 
 func NewMessageService(msgRepo *repo.MessageRepo, storageClient ...*storage.Client) *MessageService {
@@ -29,10 +34,19 @@ func NewMessageService(msgRepo *repo.MessageRepo, storageClient ...*storage.Clie
 	}
 }
 
+func (s *MessageService) ConfigureBlockChecker(checker BlockChecker) {
+	s.blockChecker = checker
+}
+
 // SendMessage validates and creates a new private message
 func (s *MessageService) SendMessage(ctx context.Context, senderID, receiverID, content, contentType, imageURL string) (*domain.PrivateMessage, error) {
 	if senderID == receiverID {
 		return nil, &commonerrors.AppError{Code: 10002, Message: "不能给自己发送消息", HTTPStatus: 400}
+	}
+	if blocked, err := s.IsBlockedBetween(ctx, senderID, receiverID); err != nil {
+		return nil, err
+	} else if blocked {
+		return nil, &commonerrors.AppError{Code: 20003, Message: "无法发送消息", HTTPStatus: 403}
 	}
 	if contentType != "text" && contentType != "image" {
 		contentType = "text"
@@ -60,6 +74,13 @@ func (s *MessageService) SendMessage(ctx context.Context, senderID, receiverID, 
 		msg.ImageURL = s.resolveImageURL(msg.ImageURL)
 	}
 	return msg, nil
+}
+
+func (s *MessageService) IsBlockedBetween(ctx context.Context, userA, userB string) (bool, error) {
+	if s.blockChecker == nil || strings.TrimSpace(userA) == "" || strings.TrimSpace(userB) == "" || userA == userB {
+		return false, nil
+	}
+	return s.blockChecker.IsBlockedEither(ctx, userA, userB)
 }
 
 // SendSystemMessage 向指定用户发送一条系统消息。

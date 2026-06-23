@@ -24,10 +24,15 @@ type PublicFoodService struct {
 	taskQueue    taskqueue.Publisher
 	analyzeTasks CampusAnalyzeTaskSubmitter
 	rewards      RewardTaskAwarder
+	blockChecker BlockChecker
 }
 
 type RewardTaskAwarder interface {
 	AwardPublicFoodUpload(ctx context.Context, userID, publicFoodItemID string, meta map[string]any) (map[string]any, error)
+}
+
+type BlockChecker interface {
+	IsBlockedEither(ctx context.Context, userA, userB string) (bool, error)
 }
 
 type CampusAnalyzeTaskSubmitter interface {
@@ -59,6 +64,10 @@ func (s *PublicFoodService) ConfigureCampusAnalyzeTaskSubmitter(submitter Campus
 
 func (s *PublicFoodService) ConfigureRewardTaskAwarder(awarder RewardTaskAwarder) {
 	s.rewards = awarder
+}
+
+func (s *PublicFoodService) ConfigureBlockChecker(checker BlockChecker) {
+	s.blockChecker = checker
 }
 
 type CreateInput struct {
@@ -365,7 +374,12 @@ func (s *PublicFoodService) enqueueTask(ctx context.Context, taskID, taskType st
 }
 
 func (s *PublicFoodService) List(ctx context.Context, userID string, filter repo.ListFilter) ([]domain.PublicFoodView, error) {
+	filter.ViewerUserID = userID
 	items, err := s.repo.ListPublished(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+	items, err = s.filterVisibleItems(ctx, userID, items)
 	if err != nil {
 		return nil, err
 	}
@@ -381,11 +395,30 @@ func (s *PublicFoodService) Mine(ctx context.Context, userID string) ([]domain.P
 }
 
 func (s *PublicFoodService) Collections(ctx context.Context, userID string) ([]domain.PublicFoodView, error) {
-	items, err := s.repo.ListCollected(ctx, userID, 50)
+	items, err := s.repo.ListCollected(ctx, userID, 50, userID)
+	if err != nil {
+		return nil, err
+	}
+	items, err = s.filterVisibleItems(ctx, userID, items)
 	if err != nil {
 		return nil, err
 	}
 	return s.hydrate(ctx, userID, items, "")
+}
+
+func (s *PublicFoodService) UserCollectionsForViewer(ctx context.Context, viewerUserID, targetUserID string) ([]domain.PublicFoodView, error) {
+	if err := s.ensureUserVisible(ctx, viewerUserID, targetUserID); err != nil {
+		return nil, err
+	}
+	items, err := s.repo.ListCollected(ctx, targetUserID, 50, viewerUserID)
+	if err != nil {
+		return nil, err
+	}
+	items, err = s.filterVisibleItems(ctx, viewerUserID, items)
+	if err != nil {
+		return nil, err
+	}
+	return s.hydrate(ctx, viewerUserID, items, "")
 }
 
 func (s *PublicFoodService) Get(ctx context.Context, userID, itemID string) (*domain.PublicFoodView, error) {
@@ -395,6 +428,9 @@ func (s *PublicFoodService) Get(ctx context.Context, userID, itemID string) (*do
 	}
 	if item == nil || isDeletedStatus(item.Status) {
 		return nil, commonerrors.ErrNotFound
+	}
+	if err := s.ensureItemVisible(ctx, userID, item); err != nil {
+		return nil, err
 	}
 	views, err := s.hydrate(ctx, userID, []domain.PublicFoodItem{*item}, "")
 	if err != nil {
@@ -411,11 +447,18 @@ func (s *PublicFoodService) GetCampusDetail(ctx context.Context, userID, itemID 
 	if item == nil || isDeletedStatus(item.Status) || !isCampusPublicFood(item) {
 		return nil, commonerrors.ErrNotFound
 	}
+	if err := s.ensureItemVisible(ctx, userID, item); err != nil {
+		return nil, err
+	}
 	views, err := s.hydrate(ctx, userID, []domain.PublicFoodItem{*item}, "")
 	if err != nil {
 		return nil, err
 	}
-	similarItems, err := s.repo.ListSimilarCampusFoods(ctx, *item, 6)
+	similarItems, err := s.repo.ListSimilarCampusFoods(ctx, *item, 6, userID)
+	if err != nil {
+		return nil, err
+	}
+	similarItems, err = s.filterVisibleItems(ctx, userID, similarItems)
 	if err != nil {
 		return nil, err
 	}
@@ -423,7 +466,11 @@ func (s *PublicFoodService) GetCampusDetail(ctx context.Context, userID, itemID 
 	if err != nil {
 		return nil, err
 	}
-	relatedFeeds, err := s.repo.ListRelatedCampusFeeds(ctx, *item, 6)
+	relatedFeeds, err := s.repo.ListRelatedCampusFeeds(ctx, *item, 6, userID)
+	if err != nil {
+		return nil, err
+	}
+	relatedFeeds, err = s.filterVisibleRelatedFeeds(ctx, userID, relatedFeeds)
 	if err != nil {
 		return nil, err
 	}
@@ -437,6 +484,9 @@ func (s *PublicFoodService) GetCampusDetail(ctx context.Context, userID, itemID 
 }
 
 func (s *PublicFoodService) Like(ctx context.Context, userID, itemID string) error {
+	if err := s.ensureCanInteractWithItem(ctx, userID, itemID); err != nil {
+		return err
+	}
 	return s.repo.Like(ctx, userID, itemID)
 }
 
@@ -445,6 +495,9 @@ func (s *PublicFoodService) Unlike(ctx context.Context, userID, itemID string) e
 }
 
 func (s *PublicFoodService) Collect(ctx context.Context, userID, itemID string) error {
+	if err := s.ensureCanInteractWithItem(ctx, userID, itemID); err != nil {
+		return err
+	}
 	return s.repo.Collect(ctx, userID, itemID)
 }
 
@@ -578,8 +631,18 @@ func (s *PublicFoodService) Delete(ctx context.Context, userID, itemID string) e
 	return s.repo.SoftDeleteOwned(ctx, itemID, userID, statusUserDeleted)
 }
 
-func (s *PublicFoodService) Comments(ctx context.Context, itemID string) ([]domain.PublicFoodComment, error) {
-	comments, err := s.repo.ListComments(ctx, itemID, 50)
+func (s *PublicFoodService) Comments(ctx context.Context, userID, itemID string) ([]domain.PublicFoodComment, error) {
+	item, err := s.repo.GetItem(ctx, itemID)
+	if err != nil {
+		return nil, err
+	}
+	if item == nil || isDeletedStatus(item.Status) {
+		return nil, commonerrors.ErrNotFound
+	}
+	if err := s.ensureItemVisible(ctx, userID, item); err != nil {
+		return nil, err
+	}
+	comments, err := s.repo.ListComments(ctx, itemID, 50, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -588,6 +651,9 @@ func (s *PublicFoodService) Comments(ctx context.Context, itemID string) ([]doma
 }
 
 func (s *PublicFoodService) AddComment(ctx context.Context, userID, itemID string, input CommentInput) (*domain.PublicFoodComment, error) {
+	if err := s.ensureCanInteractWithItem(ctx, userID, itemID); err != nil {
+		return nil, err
+	}
 	content := strings.TrimSpace(input.Content)
 	if content == "" {
 		return nil, &commonerrors.AppError{Code: 10002, Message: "评论内容不能为空", HTTPStatus: 400}
@@ -611,11 +677,23 @@ func (s *PublicFoodService) AddComment(ctx context.Context, userID, itemID strin
 		if parent == nil {
 			return nil, commonerrors.ErrNotFound
 		}
+		if blocked, err := s.isBlockedEither(ctx, userID, parent.UserID); err != nil {
+			return nil, err
+		} else if blocked {
+			return nil, blockedOperationError()
+		}
 		if parent.ParentCommentID != nil && strings.TrimSpace(*parent.ParentCommentID) != "" {
 			parentCommentID = parent.ParentCommentID
 		}
 		if replyToUserID == nil {
 			replyToUserID = &parent.UserID
+		}
+	}
+	if replyToUserID != nil {
+		if blocked, err := s.isBlockedEither(ctx, userID, *replyToUserID); err != nil {
+			return nil, err
+		} else if blocked {
+			return nil, blockedOperationError()
 		}
 	}
 	comment := &domain.PublicFoodComment{
@@ -637,6 +715,87 @@ func (s *PublicFoodService) AddComment(ctx context.Context, userID, itemID strin
 		return &rows[0], nil
 	}
 	return comment, nil
+}
+
+func (s *PublicFoodService) ensureUserVisible(ctx context.Context, viewerUserID, targetUserID string) error {
+	blocked, err := s.isBlockedEither(ctx, viewerUserID, targetUserID)
+	if err != nil {
+		return err
+	}
+	if blocked {
+		return commonerrors.ErrNotFound
+	}
+	return nil
+}
+
+func (s *PublicFoodService) ensureItemVisible(ctx context.Context, viewerUserID string, item *domain.PublicFoodItem) error {
+	if item == nil {
+		return commonerrors.ErrNotFound
+	}
+	return s.ensureUserVisible(ctx, viewerUserID, item.UserID)
+}
+
+func (s *PublicFoodService) ensureCanInteractWithItem(ctx context.Context, userID, itemID string) error {
+	item, err := s.repo.GetItem(ctx, itemID)
+	if err != nil {
+		return err
+	}
+	if item == nil || isDeletedStatus(item.Status) {
+		return commonerrors.ErrNotFound
+	}
+	blocked, err := s.isBlockedEither(ctx, userID, item.UserID)
+	if err != nil {
+		return err
+	}
+	if blocked {
+		return blockedOperationError()
+	}
+	return nil
+}
+
+func (s *PublicFoodService) filterVisibleItems(ctx context.Context, viewerUserID string, items []domain.PublicFoodItem) ([]domain.PublicFoodItem, error) {
+	if s.blockChecker == nil || strings.TrimSpace(viewerUserID) == "" || len(items) == 0 {
+		return items, nil
+	}
+	out := items[:0]
+	for _, item := range items {
+		blocked, err := s.isBlockedEither(ctx, viewerUserID, item.UserID)
+		if err != nil {
+			return nil, err
+		}
+		if !blocked {
+			out = append(out, item)
+		}
+	}
+	return out, nil
+}
+
+func (s *PublicFoodService) filterVisibleRelatedFeeds(ctx context.Context, viewerUserID string, feeds []domain.CampusRelatedFeedItem) ([]domain.CampusRelatedFeedItem, error) {
+	if s.blockChecker == nil || strings.TrimSpace(viewerUserID) == "" || len(feeds) == 0 {
+		return feeds, nil
+	}
+	out := feeds[:0]
+	for _, feed := range feeds {
+		blocked, err := s.isBlockedEither(ctx, viewerUserID, feed.UserID)
+		if err != nil {
+			return nil, err
+		}
+		if !blocked {
+			out = append(out, feed)
+		}
+	}
+	return out, nil
+}
+
+func (s *PublicFoodService) isBlockedEither(ctx context.Context, userA, userB string) (bool, error) {
+	if s.blockChecker == nil || strings.TrimSpace(userA) == "" || strings.TrimSpace(userB) == "" || userA == userB {
+		return false, nil
+	}
+	return s.blockChecker.IsBlockedEither(ctx, userA, userB)
+}
+
+func blockedOperationError() error {
+	return &commonerrors.AppError{Code: 20003, Message: "无法操作", HTTPStatus: 403}
 }
 
 func (s *PublicFoodService) DeleteComment(ctx context.Context, userID, itemID, commentID string) error {

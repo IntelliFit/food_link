@@ -29,10 +29,10 @@ type ContentRow struct {
 	Sugar         *float64 `gorm:"column:sugar"`
 	SodiumMg      *float64 `gorm:"column:sodium_mg"`
 
-	ExerciseDesc  *string  `gorm:"column:exercise_desc"`
-	ExerciseType  *string  `gorm:"column:exercise_type"`
+	ExerciseDesc   *string  `gorm:"column:exercise_desc"`
+	ExerciseType   *string  `gorm:"column:exercise_type"`
 	CaloriesBurned *float64 `gorm:"column:calories_burned"`
-	DurationMin   *int     `gorm:"column:duration_min"`
+	DurationMin    *int     `gorm:"column:duration_min"`
 
 	MealType  *string `gorm:"column:meal_type"`
 	DietGoal  *string `gorm:"column:diet_goal"`
@@ -75,6 +75,11 @@ SELECT * FROM (
   FROM user_food_records ufr
   WHERE ufr.hidden_from_feed = false
     AND ufr.user_id IN (SELECT user_id FROM _search_visible_users)
+    AND NOT EXISTS (
+      SELECT 1 FROM user_blocks ub
+      WHERE (ub.blocker_user_id = ? AND ub.blocked_user_id = ufr.user_id)
+         OR (ub.blocker_user_id = ufr.user_id AND ub.blocked_user_id = ?)
+    )
     AND COALESCE(ufr.description, '') ILIKE '%' || ? || '%'
 
   UNION ALL
@@ -107,6 +112,11 @@ SELECT * FROM (
   FROM user_exercise_logs uel
   WHERE uel.hidden_from_feed = false
     AND uel.user_id IN (SELECT user_id FROM _search_visible_users)
+    AND NOT EXISTS (
+      SELECT 1 FROM user_blocks ub
+      WHERE (ub.blocker_user_id = ? AND ub.blocked_user_id = uel.user_id)
+         OR (ub.blocker_user_id = uel.user_id AND ub.blocked_user_id = ?)
+    )
     AND COALESCE(uel.exercise_desc, '') ILIKE '%' || ? || '%'
 
   UNION ALL
@@ -139,6 +149,11 @@ SELECT * FROM (
   FROM user_circle_posts ucp
   WHERE ucp.hidden_from_feed = false
     AND ucp.user_id IN (SELECT user_id FROM _search_visible_users)
+    AND NOT EXISTS (
+      SELECT 1 FROM user_blocks ub
+      WHERE (ub.blocker_user_id = ? AND ub.blocked_user_id = ucp.user_id)
+         OR (ub.blocker_user_id = ucp.user_id AND ub.blocked_user_id = ?)
+    )
     AND (
       COALESCE(ucp.title, '') ILIKE '%' || ? || '%'
       OR COALESCE(ucp.body, '') ILIKE '%' || ? || '%'
@@ -183,13 +198,15 @@ func (r *SearchRepo) SearchContent(ctx context.Context, currentUserID, keyword s
 	var rows []ContentRow
 	err := r.db.WithContext(ctx).Raw(fullQuery,
 		currentUserID, currentUserID, currentUserID, currentUserID,
-		keyword, keyword, keyword, keyword,
+		currentUserID, currentUserID, keyword,
+		currentUserID, currentUserID, keyword,
+		currentUserID, currentUserID, keyword, keyword,
 		limit, offset,
 	).Scan(&rows).Error
 	return rows, err
 }
 
-func (r *SearchRepo) SearchUsers(ctx context.Context, keyword string, offset, limit int) ([]UserRow, error) {
+func (r *SearchRepo) SearchUsers(ctx context.Context, currentUserID, keyword string, offset, limit int) ([]UserRow, error) {
 	if limit <= 0 {
 		limit = 20
 	}
@@ -199,6 +216,11 @@ func (r *SearchRepo) SearchUsers(ctx context.Context, keyword string, offset, li
 		Select("id, nickname, avatar").
 		Where("COALESCE(searchable, TRUE) = TRUE").
 		Where("LOWER(nickname) LIKE LOWER(?)", "%"+keyword+"%").
+		Where(`NOT EXISTS (
+			SELECT 1 FROM user_blocks ub
+			WHERE (ub.blocker_user_id = ? AND ub.blocked_user_id = weapp_user.id)
+			   OR (ub.blocker_user_id = weapp_user.id AND ub.blocked_user_id = ?)
+		)`, currentUserID, currentUserID).
 		Limit(limit).
 		Offset(offset).
 		Find(&rows).Error
@@ -253,43 +275,66 @@ func (r *SearchRepo) GetFriendIDs(ctx context.Context, userID string) (map[strin
 	}
 	return result, nil
 }
-		func (r *SearchRepo) CountContent(ctx context.Context, currentUserID, keyword string) (int64, error) {
-			cte := "WITH " + visibleUsersCTE + " "
-			countQuery := cte + `
+func (r *SearchRepo) CountContent(ctx context.Context, currentUserID, keyword string) (int64, error) {
+	cte := "WITH " + visibleUsersCTE + " "
+	countQuery := cte + `
 		SELECT COUNT(*) FROM (
 		  SELECT ufr.id FROM user_food_records ufr
 		  WHERE ufr.hidden_from_feed = false
 		    AND ufr.user_id IN (SELECT user_id FROM _search_visible_users)
+		    AND NOT EXISTS (
+		      SELECT 1 FROM user_blocks ub
+		      WHERE (ub.blocker_user_id = ? AND ub.blocked_user_id = ufr.user_id)
+		         OR (ub.blocker_user_id = ufr.user_id AND ub.blocked_user_id = ?)
+		    )
 		    AND COALESCE(ufr.description, '') ILIKE '%' || ? || '%'
 		  UNION ALL
 		  SELECT uel.id FROM user_exercise_logs uel
 		  WHERE uel.hidden_from_feed = false
 		    AND uel.user_id IN (SELECT user_id FROM _search_visible_users)
+		    AND NOT EXISTS (
+		      SELECT 1 FROM user_blocks ub
+		      WHERE (ub.blocker_user_id = ? AND ub.blocked_user_id = uel.user_id)
+		         OR (ub.blocker_user_id = uel.user_id AND ub.blocked_user_id = ?)
+		    )
 		    AND COALESCE(uel.exercise_desc, '') ILIKE '%' || ? || '%'
 		  UNION ALL
 		  SELECT ucp.id FROM user_circle_posts ucp
 		  WHERE ucp.hidden_from_feed = false
 		    AND ucp.user_id IN (SELECT user_id FROM _search_visible_users)
+		    AND NOT EXISTS (
+		      SELECT 1 FROM user_blocks ub
+		      WHERE (ub.blocker_user_id = ? AND ub.blocked_user_id = ucp.user_id)
+		         OR (ub.blocker_user_id = ucp.user_id AND ub.blocked_user_id = ?)
+		    )
 		    AND (COALESCE(ucp.title, '') ILIKE '%' || ? || '%' OR COALESCE(ucp.body, '') ILIKE '%' || ? || '%')
 		) sub
 		`
-			var count int64
-			err := r.db.WithContext(ctx).Raw(countQuery,
-				currentUserID, currentUserID, currentUserID, currentUserID,
-				keyword, keyword, keyword, keyword,
-			).Scan(&count).Error
-			return count, err
-		}
+	var count int64
+	err := r.db.WithContext(ctx).Raw(countQuery,
+		currentUserID, currentUserID, currentUserID, currentUserID,
+		currentUserID, currentUserID, keyword,
+		currentUserID, currentUserID, keyword,
+		currentUserID, currentUserID, keyword, keyword,
+	).Scan(&count).Error
+	return count, err
+}
 
-		func (r *SearchRepo) CountUsers(ctx context.Context, keyword string) (int64, error) {
-			var count int64
-			err := r.db.WithContext(ctx).
-				Table("weapp_user").
-				Where("COALESCE(searchable, TRUE) = TRUE").
-				Where("LOWER(nickname) LIKE LOWER(?)", "%"+keyword+"%").
-				Count(&count).Error
-			return count, err
-		}
+func (r *SearchRepo) CountUsers(ctx context.Context, currentUserID, keyword string) (int64, error) {
+	var count int64
+	err := r.db.WithContext(ctx).
+		Table("weapp_user").
+		Where("COALESCE(searchable, TRUE) = TRUE").
+		Where("LOWER(nickname) LIKE LOWER(?)", "%"+keyword+"%").
+		Where(`NOT EXISTS (
+					SELECT 1 FROM user_blocks ub
+					WHERE (ub.blocker_user_id = ? AND ub.blocked_user_id = weapp_user.id)
+					   OR (ub.blocker_user_id = weapp_user.id AND ub.blocked_user_id = ?)
+				)`, currentUserID, currentUserID).
+		Count(&count).Error
+	return count, err
+}
+
 type LikeTarget struct {
 	TargetType string
 	TargetID   string
@@ -311,10 +356,10 @@ func (r *SearchRepo) GetLikesForTargets(ctx context.Context, targets []LikeTarge
 	}
 
 	type likeRow struct {
-		TargetType string `gorm:"column:target_type"`
-		TargetID   string `gorm:"column:target_id"`
+		TargetType string  `gorm:"column:target_type"`
+		TargetID   string  `gorm:"column:target_id"`
 		RecordID   *string `gorm:"column:record_id"`
-		UserID     string `gorm:"column:user_id"`
+		UserID     string  `gorm:"column:user_id"`
 	}
 
 	// Build OR conditions for all targets
@@ -363,10 +408,10 @@ func (r *SearchRepo) CountCommentsForTargets(ctx context.Context, targets []Like
 	}
 
 	type countRow struct {
-		TargetType string `gorm:"column:target_type"`
-		TargetID   string `gorm:"column:target_id"`
+		TargetType string  `gorm:"column:target_type"`
+		TargetID   string  `gorm:"column:target_id"`
 		RecordID   *string `gorm:"column:record_id"`
-		Cnt        int64  `gorm:"column:cnt"`
+		Cnt        int64   `gorm:"column:cnt"`
 	}
 
 	var conditions []string

@@ -153,6 +153,26 @@ export function CommunityScreen() {
     }
   }, [dialog])
 
+  const handleBlockFeedAuthor = useCallback(async (item: CommunityFeedItem) => {
+    const authorId = String(item.author?.id || '').trim()
+    if (!authorId) return
+    const confirmed = await dialog.confirm({
+      title: '拉黑用户',
+      message: `拉黑后将不再看到「${item.author?.nickname || '用户'}」的内容，双方也不能私信或重新添加好友。`,
+      kind: 'danger',
+      confirmText: '拉黑',
+      cancelText: '取消',
+    })
+    if (!confirmed) return
+    try {
+      await apiClient.blockUser(authorId)
+      setFeed((prev) => prev.filter((entry) => String(entry.author?.id || '') !== authorId))
+      void dialog.alert('已加入黑名单', undefined, 'success')
+    } catch (error) {
+      void dialog.alert('无法操作', userFacingErrorMessage(error), 'danger')
+    }
+  }, [dialog])
+
   return (
     <View style={styles.page}>
       <View style={styles.topWash} pointerEvents="none" />
@@ -251,6 +271,7 @@ export function CommunityScreen() {
                   })}
                   onOpenAuthor={() => navigation.navigate('ProfileSettings', { userId: item.author.id })}
                   onLike={() => void toggleLike(item)}
+                  onBlockAuthor={() => void handleBlockFeedAuthor(item)}
                 />
               ))}
             </View>
@@ -445,11 +466,13 @@ function CommunityFeedCard({
   onOpen,
   onOpenAuthor,
   onLike,
+  onBlockAuthor,
 }: {
   item: CommunityFeedItem
   onOpen: () => void
   onOpenAuthor: () => void
   onLike: () => void
+  onBlockAuthor?: () => void
 }) {
   const image = feedImage(item)
   const body = feedBody(item)
@@ -504,9 +527,18 @@ function CommunityFeedCard({
                 <Text style={styles.actionCount}>评论 {commentsCount}</Text>
               </View>
             </View>
-            <View style={styles.actionManageBox}>
-              <MoreHorizontal size={19} color="#64748b" strokeWidth={2.3} />
-            </View>
+            {!item.is_mine && onBlockAuthor ? (
+              <Pressable
+                style={({ pressed }) => [styles.actionManageBox, pressed && styles.pressed]}
+                onPress={(event) => {
+                  event.stopPropagation()
+                  onBlockAuthor()
+                }}
+                hitSlop={8}
+              >
+                <MoreHorizontal size={19} color="#64748b" strokeWidth={2.3} />
+              </Pressable>
+            ) : null}
           </View>
 
           {(item.comments?.length ?? 0) > 0 ? (

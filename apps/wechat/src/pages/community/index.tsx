@@ -5,6 +5,7 @@ import Taro, { useShareAppMessage, useShareTimeline } from '@tarojs/taro'
 import {
   getAccessToken,
   friendSearch,
+  friendBlockUser,
   friendSendRequest,
   friendGetRequests,
   friendGetList,
@@ -1351,7 +1352,10 @@ function CommunityPage() {
   const feedActionSheetActions = useMemo<FeedActionSheetAction[]>(() => {
     if (!feedActionSheet) return []
     if (feedActionSheet.mode === 'report') {
-      return [{ id: 'report', label: '举报', iconClass: 'icon-jinggao', danger: true }]
+      return [
+        { id: 'block-user', label: '拉黑用户', iconClass: 'icon-close', danger: true },
+        { id: 'report', label: '举报', iconClass: 'icon-jinggao', danger: true },
+      ]
     }
     const item = feedActionSheet.item
     const targetType = getFeedTargetType(item)
@@ -1362,8 +1366,6 @@ function CommunityPage() {
     actions.push({ id: 'delete', label: '删除', iconClass: 'icon-shanchu', danger: true })
     return actions
   }, [feedActionSheet])
-
-
 
   const handleEditFeedItem = useCallback((item: CommunityFeedItem) => {
     const targetType = getFeedTargetType(item)
@@ -1380,10 +1382,39 @@ function CommunityPage() {
     }
   }, [])
 
+  const handleBlockFeedAuthor = async (item: CommunityFeedItem) => {
+    const authorId = item.author?.id || item.record?.user_id
+    if (!authorId) return
+    const ok = await Taro.showModal({
+      title: '拉黑用户',
+      content: `拉黑「${item.author?.nickname || '用户'}」后，双方无法私信、加好友，也不会在圈子里互相看到内容。`,
+      confirmText: '拉黑',
+      cancelText: '取消',
+      confirmColor: '#ef4444'
+    })
+    if (!ok.confirm) return
+    try {
+      Taro.showLoading({ title: '处理中...', mask: true })
+      await friendBlockUser(authorId)
+      Taro.hideLoading()
+      const next = feedList.filter((feed) => (feed.author?.id || feed.record?.user_id) !== authorId)
+      setFeedList(next)
+      saveToCache(next)
+      Taro.showToast({ title: '已拉黑', icon: 'success' })
+    } catch (e) {
+      Taro.hideLoading()
+      await showUnifiedApiError(e, '无法操作')
+    }
+  }
+
   const handleFeedActionSelect = (id: string) => {
     if (!feedActionSheet) return
     const { item, mode } = feedActionSheet
     if (mode === 'report') {
+      if (id === 'block-user') {
+        void handleBlockFeedAuthor(item)
+        return
+      }
       if (id === 'report') {
         setReportTarget({ targetType: getFeedTargetType(item), targetId: getFeedTargetId(item) })
       }

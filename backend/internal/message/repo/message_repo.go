@@ -130,12 +130,17 @@ LEFT JOIN LATERAL (
   SELECT COUNT(*) AS unread_count
   FROM private_messages
   WHERE sender_id = CASE WHEN m.sender_id = ? THEN m.receiver_id ELSE m.sender_id END AND receiver_id = ? AND is_read = false AND deleted_at IS NULL
+    AND NOT EXISTS (
+      SELECT 1 FROM user_blocks ub
+      WHERE (ub.blocker_user_id = ? AND ub.blocked_user_id = private_messages.sender_id)
+         OR (ub.blocker_user_id = private_messages.sender_id AND ub.blocked_user_id = ?)
+    )
 ) uc ON true
 ORDER BY m.created_at DESC
 LIMIT ? OFFSET ?
 `
 
-	err := r.db.WithContext(ctx).Raw(sql, userID, userID, domain.SystemSenderID, userID, userID, userID, userID, userID, limit, offset).Scan(&rows).Error
+	err := r.db.WithContext(ctx).Raw(sql, userID, userID, domain.SystemSenderID, userID, userID, userID, userID, userID, userID, userID, limit, offset).Scan(&rows).Error
 	if err != nil {
 		return nil, err
 	}
@@ -173,6 +178,11 @@ func (r *MessageRepo) CountUnread(ctx context.Context, userID string) (int64, er
 	var count int64
 	err := r.db.WithContext(ctx).Model(&privateMessageDO{}).
 		Where("receiver_id = ? AND is_read = false AND deleted_at IS NULL", userID).
+		Where(`NOT EXISTS (
+			SELECT 1 FROM user_blocks ub
+			WHERE (ub.blocker_user_id = ? AND ub.blocked_user_id = private_messages.sender_id)
+			   OR (ub.blocker_user_id = private_messages.sender_id AND ub.blocked_user_id = ?)
+		)`, userID, userID).
 		Count(&count).Error
 	return count, err
 }

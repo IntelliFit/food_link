@@ -19,6 +19,10 @@ type FriendService interface {
 	GetFriendList(ctx context.Context, userID string) ([]map[string]any, error)
 	CountFriends(ctx context.Context, userID string) (int64, error)
 	DeleteFriend(ctx context.Context, userID, friendID string) error
+	BlockUser(ctx context.Context, blockerUserID, blockedUserID string) (map[string]any, error)
+	UnblockUser(ctx context.Context, blockerUserID, blockedUserID string) error
+	GetBlockedUsers(ctx context.Context, blockerUserID string) ([]map[string]any, error)
+	GetBlockStatus(ctx context.Context, userID, counterpartUserID string) (map[string]any, error)
 	GetFriendRequestsOverview(ctx context.Context, userID string) (map[string]any, error)
 	CleanupDuplicateFriends(ctx context.Context, userID string) (map[string]any, error)
 	GetInviteProfile(ctx context.Context, userID string) (map[string]any, error)
@@ -151,6 +155,62 @@ func (h *FriendHandler) DeleteFriend(c *gin.Context) {
 	response.Success(c, map[string]bool{"success": true})
 }
 
+// GET /api/friend/blocks
+func (h *FriendHandler) ListBlocks(c *gin.Context) {
+	userID := c.GetString(authmw.ContextUserIDKey)
+	data, err := h.svc.GetBlockedUsers(c.Request.Context(), userID)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, gin.H{"list": data})
+}
+
+// GET /api/friend/block-status/:user_id
+func (h *FriendHandler) BlockStatus(c *gin.Context) {
+	userID := c.GetString(authmw.ContextUserIDKey)
+	targetUserID := c.Param("user_id")
+	data, err := h.svc.GetBlockStatus(c.Request.Context(), userID, targetUserID)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, data)
+}
+
+// POST /api/friend/block
+func (h *FriendHandler) BlockUser(c *gin.Context) {
+	var body struct {
+		BlockedUserID string `json:"blocked_user_id"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		response.Error(c, err)
+		return
+	}
+	if body.BlockedUserID == "" {
+		response.Error(c, &commonerrors.AppError{Code: 10002, Message: "blocked_user_id 不能为空", HTTPStatus: 400})
+		return
+	}
+	userID := c.GetString(authmw.ContextUserIDKey)
+	data, err := h.svc.BlockUser(c.Request.Context(), userID, body.BlockedUserID)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, data)
+}
+
+// DELETE /api/friend-blocks/:user_id
+func (h *FriendHandler) UnblockUser(c *gin.Context) {
+	userID := c.GetString(authmw.ContextUserIDKey)
+	targetUserID := c.Param("user_id")
+	if err := h.svc.UnblockUser(c.Request.Context(), userID, targetUserID); err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, map[string]bool{"success": true})
+}
+
 // GET /api/friend/requests/all
 func (h *FriendHandler) RequestsOverview(c *gin.Context) {
 	userID := c.GetString(authmw.ContextUserIDKey)
@@ -176,6 +236,10 @@ func (h *FriendHandler) CleanupDuplicates(c *gin.Context) {
 // GET /api/friend/invite/profile/:user_id
 func (h *FriendHandler) InviteProfile(c *gin.Context) {
 	userID := c.Param("user_id")
+	viewerUserID := c.GetString(authmw.ContextUserIDKey)
+	if h.isInviteProfileBlocked(c, viewerUserID, userID) {
+		return
+	}
 	data, err := h.svc.GetInviteProfile(c.Request.Context(), userID)
 	if err != nil {
 		response.Error(c, err)
@@ -191,12 +255,32 @@ func (h *FriendHandler) InviteProfileByCode(c *gin.Context) {
 		response.Error(c, &commonerrors.AppError{Code: 10002, Message: "code 不能为空", HTTPStatus: 400})
 		return
 	}
+	viewerUserID := c.GetString(authmw.ContextUserIDKey)
 	data, err := h.svc.ResolveUserByInviteCode(c.Request.Context(), code)
 	if err != nil {
 		response.Error(c, err)
 		return
 	}
+	if targetUserID, _ := data["id"].(string); h.isInviteProfileBlocked(c, viewerUserID, targetUserID) {
+		return
+	}
 	response.Success(c, data)
+}
+
+func (h *FriendHandler) isInviteProfileBlocked(c *gin.Context, viewerUserID, targetUserID string) bool {
+	if viewerUserID == "" || targetUserID == "" || viewerUserID == targetUserID {
+		return false
+	}
+	status, err := h.svc.GetBlockStatus(c.Request.Context(), viewerUserID, targetUserID)
+	if err != nil {
+		response.Error(c, err)
+		return true
+	}
+	if blocked, _ := status["blocked_either"].(bool); blocked {
+		response.Error(c, commonerrors.ErrNotFound)
+		return true
+	}
+	return false
 }
 
 // GET /api/friend/invite/resolve

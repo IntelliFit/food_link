@@ -15,6 +15,7 @@ import (
 type RecipeService interface {
 	Create(ctx context.Context, userID string, input service.CreateInput) (string, error)
 	List(ctx context.Context, userID, mealType string, isFavorite *bool) ([]domain.Recipe, error)
+	ListForViewer(ctx context.Context, viewerUserID, ownerUserID, mealType string, isFavorite *bool) ([]domain.Recipe, error)
 	Count(ctx context.Context, userID string, isFavorite *bool) (int64, error)
 	Get(ctx context.Context, userID, recipeID string) (*domain.Recipe, error)
 	Update(ctx context.Context, userID, recipeID string, input service.UpdateInput) (*domain.Recipe, error)
@@ -177,7 +178,7 @@ func (h *RecipeHandler) Use(c *gin.Context) {
 func (h *RecipeHandler) GetUserFavoriteRecipes(c *gin.Context) {
 	targetUserID := c.Param("user_id")
 	fav := true
-	recipes, err := h.svc.List(c.Request.Context(), targetUserID, "", &fav)
+	recipes, err := h.svc.ListForViewer(c.Request.Context(), c.GetString(authmw.ContextUserIDKey), targetUserID, "", &fav)
 	if err != nil {
 		response.Error(c, err)
 		return

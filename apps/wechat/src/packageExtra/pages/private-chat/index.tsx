@@ -6,12 +6,16 @@ import {
   sendPrivateMessage,
   markMessagesRead,
   getPublicUserProfile,
+  friendBlockUser,
+  friendGetBlockStatus,
+  friendUnblockUser,
   getAccessToken,
   API_BASE_URL,
   SYSTEM_MESSAGE_USER_ID,
   deletePrivateMessage,
   reportPrivateMessage,
   type PrivateMessage,
+  type FriendBlockStatus,
 } from '../../../utils/api'
 import { FlPageThemeRoot } from '../../../components/FlPageThemeRoot'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
@@ -79,6 +83,7 @@ export default function PrivateChatPage() {
   const [offset, setOffset] = useState(0)
   const [actionTarget, setActionTarget] = useState<PrivateMessage | null>(null)
   const [actionSheetVisible, setActionSheetVisible] = useState(false)
+  const [blockStatus, setBlockStatus] = useState<FriendBlockStatus | null>(null)
 
   const scrollRef = useRef<string>('')
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -96,6 +101,16 @@ export default function PrivateChatPage() {
   useEffect(() => {
     messagesRef.current = messages
   }, [messages])
+
+  const refreshBlockStatus = useCallback(async () => {
+    if (!otherUserId || isSystemChat || !getAccessToken()) return
+    try {
+      const status = await friendGetBlockStatus(otherUserId)
+      setBlockStatus(status)
+    } catch {
+      setBlockStatus(null)
+    }
+  }, [otherUserId, isSystemChat])
 
   // 加载对方信息
   useEffect(() => {
@@ -115,7 +130,8 @@ export default function PrivateChatPage() {
         setOtherUser({ nickname: '用户', avatar: '' })
         Taro.setNavigationBarTitle({ title: '用户' })
       })
-  }, [otherUserId, isSystemChat])
+    refreshBlockStatus()
+  }, [otherUserId, isSystemChat, refreshBlockStatus])
 
   // 加载消息
   const loadMessages = useCallback(async (reset = false) => {
@@ -127,6 +143,17 @@ export default function PrivateChatPage() {
     try {
       const res = await getPrivateMessages(otherUserId, currentOffset, 20)
       const list = res.list || []
+      if (typeof res.blocked === 'boolean') {
+        setBlockStatus((prev) => (res.blocked ? {
+          is_blocked_by_me: prev?.is_blocked_by_me ?? false,
+          has_blocked_me: prev?.has_blocked_me ?? false,
+          blocked_either: true,
+        } : {
+          is_blocked_by_me: false,
+          has_blocked_me: false,
+          blocked_either: false,
+        }))
+      }
       if (reset) {
         setMessages(list)
         // 标记已读
@@ -184,6 +211,10 @@ export default function PrivateChatPage() {
   const handleSendText = async () => {
     const text = inputText.trim()
     if (!text || !otherUserId || sending) return
+    if (blockStatus?.blocked_either) {
+      Taro.showToast({ title: '已无法继续发送消息', icon: 'none' })
+      return
+    }
     setSending(true)
     try {
       const msg = await sendPrivateMessage(otherUserId, text, 'text')
@@ -200,6 +231,10 @@ export default function PrivateChatPage() {
   // 发送图片消息
   const handleSendImage = async () => {
     if (!otherUserId || sending) return
+    if (blockStatus?.blocked_either) {
+      Taro.showToast({ title: '已无法继续发送消息', icon: 'none' })
+      return
+    }
     try {
       const chooseRes = await chooseImageWithPrivacy({ count: 1, sizeType: ['compressed'] })
       const tempFilePaths = (chooseRes as any)?.tempFilePaths || []
@@ -313,6 +348,50 @@ export default function PrivateChatPage() {
     Taro.previewImage({ urls: urls.length > 0 ? urls : [url], current: url })
   }
 
+  const handleBlockUser = async () => {
+    if (!otherUserId || isSystemChat) return
+    const ok = await Taro.showModal({
+      title: '拉黑用户',
+      content: `拉黑「${otherUser.nickname || '用户'}」后会解除好友关系，双方无法继续发送私信，也不会在圈子里互相看到内容。`,
+      confirmText: '拉黑',
+      cancelText: '取消',
+      confirmColor: '#ef4444'
+    })
+    if (!ok.confirm) return
+    try {
+      Taro.showLoading({ title: '处理中...', mask: true })
+      await friendBlockUser(otherUserId)
+      Taro.hideLoading()
+      Taro.showToast({ title: '已拉黑', icon: 'success' })
+      await refreshBlockStatus()
+    } catch (err: any) {
+      Taro.hideLoading()
+      Taro.showToast({ title: err?.message || '无法操作', icon: 'none' })
+    }
+  }
+
+  const handleUnblockUser = async () => {
+    if (!otherUserId || isSystemChat) return
+    const ok = await Taro.showModal({
+      title: '解除拉黑',
+      content: `确定解除对「${otherUser.nickname || '用户'}」的拉黑吗？解除后不会自动恢复好友关系。`,
+      confirmText: '解除',
+      cancelText: '取消',
+      confirmColor: '#00bc7d'
+    })
+    if (!ok.confirm) return
+    try {
+      Taro.showLoading({ title: '处理中...', mask: true })
+      await friendUnblockUser(otherUserId)
+      Taro.hideLoading()
+      Taro.showToast({ title: '已解除', icon: 'success' })
+      await refreshBlockStatus()
+    } catch (err: any) {
+      Taro.hideLoading()
+      Taro.showToast({ title: err?.message || '无法操作', icon: 'none' })
+    }
+  }
+
   const renderMessage = (msg: PrivateMessage, index: number) => {
     const isSelf = msg.sender_id === currentUserId
     const prevMsg = index < messages.length - 1 ? messages[index + 1] : null
@@ -368,6 +447,7 @@ export default function PrivateChatPage() {
   }
 
   const isSelfActionTarget = actionTarget ? actionTarget.sender_id === currentUserId : false
+  const chatBlocked = !isSystemChat && Boolean(blockStatus?.blocked_either)
 
   const actionItems: {
     key: 'copy' | 'recall' | 'report'
@@ -386,6 +466,21 @@ export default function PrivateChatPage() {
   return (
     <FlPageThemeRoot>
       <View className='private-chat-page'>
+        {!isSystemChat && (
+          <View className='chat-user-action-bar'>
+            {blockStatus?.is_blocked_by_me ? (
+              <Button className='chat-user-action-btn chat-user-action-btn--plain' onClick={handleUnblockUser}>
+                解除拉黑
+              </Button>
+            ) : blockStatus?.has_blocked_me || blockStatus?.blocked_either ? (
+              <Text className='chat-user-action-text'>已无法继续发送消息</Text>
+            ) : (
+              <Button className='chat-user-action-btn chat-user-action-btn--danger' onClick={handleBlockUser}>
+                拉黑
+              </Button>
+            )}
+          </View>
+        )}
         {/* 消息列表 */}
         <ScrollView
           className='chat-message-list'
@@ -414,30 +509,36 @@ export default function PrivateChatPage() {
 
         {/* 底部输入区 */}
         {!isSystemChat && (
-        <View className='chat-input-bar'>
-          <View className='chat-input-actions'>
-            <View className='chat-image-btn' onClick={handleSendImage}>
-              <Text className='iconfont icon-picture chat-image-btn-icon' />
+          chatBlocked ? (
+            <View className='chat-disabled-bar'>
+              <Text className='chat-disabled-text'>已无法继续发送消息</Text>
             </View>
-          </View>
-          <Input
-            className='chat-input'
-            placeholder='说点什么...'
-            placeholderClass='chat-input-placeholder'
-            value={inputText}
-            onInput={(e) => setInputText(e.detail.value)}
-            onConfirm={handleSendText}
-            confirmType='send'
-            disabled={sending}
-          />
-          <Button
-            className={`chat-send-btn ${inputText.trim() ? 'chat-send-btn--active' : ''}`}
-            onClick={handleSendText}
-            disabled={!inputText.trim() || sending}
-          >
-            <Text className='chat-send-btn-text'>发送</Text>
-          </Button>
-        </View>
+          ) : (
+            <View className='chat-input-bar'>
+              <View className='chat-input-actions'>
+                <View className='chat-image-btn' onClick={handleSendImage}>
+                  <Text className='iconfont icon-picture chat-image-btn-icon' />
+                </View>
+              </View>
+              <Input
+                className='chat-input'
+                placeholder='说点什么...'
+                placeholderClass='chat-input-placeholder'
+                value={inputText}
+                onInput={(e) => setInputText(e.detail.value)}
+                onConfirm={handleSendText}
+                confirmType='send'
+                disabled={sending}
+              />
+              <Button
+                className={`chat-send-btn ${inputText.trim() ? 'chat-send-btn--active' : ''}`}
+                onClick={handleSendText}
+                disabled={!inputText.trim() || sending}
+              >
+                <Text className='chat-send-btn-text'>发送</Text>
+              </Button>
+            </View>
+          )
         )}
       </View>
 

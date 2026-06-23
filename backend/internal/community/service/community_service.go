@@ -77,10 +77,16 @@ type CommunityService struct {
 	reportNotifier      ReportNotifier
 	systemMessageSender SystemMessageSender
 	storage             *storage.Client
+	blockChecker        BlockChecker
 }
 
 type UserFinder interface {
 	FindByID(ctx context.Context, userID string) (*authrepo.User, error)
+}
+
+type BlockChecker interface {
+	IsBlockedEither(ctx context.Context, userA, userB string) (bool, error)
+	GetBlockedPairUserIDs(ctx context.Context, userID string) ([]string, error)
 }
 
 type ReportNotifier interface {
@@ -107,6 +113,76 @@ func NewCommunityService(feedRepo FeedRepo, notifRepo NotificationRepo, userRepo
 	}
 }
 
+func (s *CommunityService) ConfigureBlockChecker(checker BlockChecker) {
+	s.blockChecker = checker
+}
+
+func (s *CommunityService) isBlockedEither(ctx context.Context, userA, userB string) (bool, error) {
+	userA = strings.TrimSpace(userA)
+	userB = strings.TrimSpace(userB)
+	if s.blockChecker == nil || userA == "" || userB == "" || userA == userB {
+		return false, nil
+	}
+	return s.blockChecker.IsBlockedEither(ctx, userA, userB)
+}
+
+func (s *CommunityService) blockedUserSet(ctx context.Context, userID string) map[string]bool {
+	userID = strings.TrimSpace(userID)
+	if s.blockChecker == nil || userID == "" {
+		return map[string]bool{}
+	}
+	ids, err := s.blockChecker.GetBlockedPairUserIDs(ctx, userID)
+	if err != nil {
+		logger.Warn(ctx, "查询黑名单关系失败，继续按空列表处理", logger.Err(err), slog.String("user_id", userID))
+		return map[string]bool{}
+	}
+	out := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		if strings.TrimSpace(id) != "" {
+			out[id] = true
+		}
+	}
+	return out
+}
+
+func (s *CommunityService) filterBlockedRecords(ctx context.Context, viewerUserID string, records []repo.FeedRecord) []repo.FeedRecord {
+	if viewerUserID == "" || len(records) == 0 {
+		return records
+	}
+	blockedSet := s.blockedUserSet(ctx, viewerUserID)
+	if len(blockedSet) == 0 {
+		return records
+	}
+	out := make([]repo.FeedRecord, 0, len(records))
+	for _, record := range records {
+		if record.UserID == viewerUserID || !blockedSet[record.UserID] {
+			out = append(out, record)
+		}
+	}
+	return out
+}
+
+func (s *CommunityService) filterBlockedComments(ctx context.Context, viewerUserID string, comments []domain.FeedComment) []domain.FeedComment {
+	if viewerUserID == "" || len(comments) == 0 {
+		return comments
+	}
+	blockedSet := s.blockedUserSet(ctx, viewerUserID)
+	if len(blockedSet) == 0 {
+		return comments
+	}
+	out := make([]domain.FeedComment, 0, len(comments))
+	for _, comment := range comments {
+		if blockedSet[comment.UserID] {
+			continue
+		}
+		if comment.ReplyToUserID != nil && blockedSet[*comment.ReplyToUserID] {
+			continue
+		}
+		out = append(out, comment)
+	}
+	return out
+}
+
 type FeedParams struct {
 	Offset            int
 	Limit             int
@@ -120,6 +196,7 @@ type FeedParams struct {
 	PriorityAuthorIDs []string
 	AuthorScope       string
 	AuthorID          string
+	ViewerUserID      string
 }
 
 type FeedItem struct {
@@ -191,7 +268,7 @@ type MarkReadResult struct {
 }
 
 func (s *CommunityService) PublicFeed(ctx context.Context, params FeedParams) ([]FeedItem, error) {
-	return s.publicFeed(ctx, params, "")
+	return s.publicFeed(ctx, params, params.ViewerUserID)
 }
 
 func (s *CommunityService) publicFeed(ctx context.Context, params FeedParams, viewerUserID string) ([]FeedItem, error) {
@@ -212,6 +289,10 @@ func (s *CommunityService) publicFeed(ctx context.Context, params FeedParams, vi
 	if len(records) == 0 {
 		return nil, nil
 	}
+	records = s.filterBlockedRecords(ctx, viewerUserID, records)
+	if len(records) == 0 {
+		return nil, nil
+	}
 
 	targets := feedTargetsFromRecords(records)
 
@@ -222,7 +303,7 @@ func (s *CommunityService) publicFeed(ctx context.Context, params FeedParams, vi
 
 	var commentCountMap map[string]int
 	if customRank {
-		commentCountMap = s.getCommentCountsForTargets(ctx, targets)
+		commentCountMap = s.getCommentCountsForTargets(ctx, viewerUserID, targets)
 	}
 
 	if customRank {
@@ -240,10 +321,10 @@ func (s *CommunityService) publicFeed(ctx context.Context, params FeedParams, vi
 
 	var commentsMap map[string][]CommentItem
 	if params.IncludeComments {
-		commentsMap = s.getCommentsMapForTargets(ctx, targets, params.CommentsLimit)
+		commentsMap = s.getCommentsMapForTargets(ctx, viewerUserID, targets, params.CommentsLimit)
 	}
 	if commentCountMap == nil {
-		commentCountMap = s.getCommentCountsForTargets(ctx, targets)
+		commentCountMap = s.getCommentCountsForTargets(ctx, viewerUserID, targets)
 	}
 
 	userIDs := make([]string, 0, len(records))
@@ -303,15 +384,19 @@ func (s *CommunityService) FriendFeed(ctx context.Context, userID string, params
 	if err != nil {
 		return nil, err
 	}
+	blockedSet := s.blockedUserSet(ctx, userID)
 	authorIDSet := make(map[string]bool)
 	authorIDSet[userID] = true
 	for _, fid := range friendIDs {
+		if blockedSet[fid] {
+			continue
+		}
 		authorIDSet[fid] = true
 	}
 
 	var authorIDs []string
 	if params.AuthorID != "" {
-		if !authorIDSet[params.AuthorID] {
+		if !authorIDSet[params.AuthorID] || blockedSet[params.AuthorID] {
 			return nil, nil
 		}
 		authorIDs = []string{params.AuthorID}
@@ -350,6 +435,10 @@ func (s *CommunityService) FriendFeed(ctx context.Context, userID string, params
 	if len(records) == 0 {
 		return nil, nil
 	}
+	records = s.filterBlockedRecords(ctx, userID, records)
+	if len(records) == 0 {
+		return nil, nil
+	}
 
 	targets := feedTargetsFromRecords(records)
 
@@ -360,7 +449,7 @@ func (s *CommunityService) FriendFeed(ctx context.Context, userID string, params
 
 	var commentCountMap map[string]int
 	if customRank {
-		commentCountMap = s.getCommentCountsForTargets(ctx, targets)
+		commentCountMap = s.getCommentCountsForTargets(ctx, userID, targets)
 	}
 
 	if customRank {
@@ -378,10 +467,10 @@ func (s *CommunityService) FriendFeed(ctx context.Context, userID string, params
 
 	var commentsMap map[string][]CommentItem
 	if params.IncludeComments {
-		commentsMap = s.getCommentsMapForTargets(ctx, targets, params.CommentsLimit)
+		commentsMap = s.getCommentsMapForTargets(ctx, userID, targets, params.CommentsLimit)
 	}
 	if commentCountMap == nil {
-		commentCountMap = s.getCommentCountsForTargets(ctx, targets)
+		commentCountMap = s.getCommentCountsForTargets(ctx, userID, targets)
 	}
 
 	userIDs := make([]string, 0, len(records))
@@ -462,12 +551,12 @@ func sliceRecords(records []repo.FeedRecord, offset, limit int) []repo.FeedRecor
 	return records[offset:end]
 }
 
-func (s *CommunityService) getCommentCounts(ctx context.Context, recordIDs []string) map[string]int {
+func (s *CommunityService) getCommentCounts(ctx context.Context, viewerUserID string, recordIDs []string) map[string]int {
 	targets := make([]repo.FeedTarget, 0, len(recordIDs))
 	for _, id := range recordIDs {
 		targets = append(targets, repo.FeedTarget{TargetType: repo.FeedTargetFoodRecord, TargetID: id})
 	}
-	targetCounts := s.getCommentCountsForTargets(ctx, targets)
+	targetCounts := s.getCommentCountsForTargets(ctx, viewerUserID, targets)
 	counts := map[string]int{}
 	for _, id := range recordIDs {
 		counts[id] = targetCounts[repo.FeedTargetKey(repo.FeedTargetFoodRecord, id)]
@@ -475,7 +564,7 @@ func (s *CommunityService) getCommentCounts(ctx context.Context, recordIDs []str
 	return counts
 }
 
-func (s *CommunityService) getCommentCountsForTargets(ctx context.Context, targets []repo.FeedTarget) map[string]int {
+func (s *CommunityService) getCommentCountsForTargets(ctx context.Context, viewerUserID string, targets []repo.FeedTarget) map[string]int {
 	if len(targets) == 0 {
 		return map[string]int{}
 	}
@@ -483,6 +572,7 @@ func (s *CommunityService) getCommentCountsForTargets(ctx context.Context, targe
 	if err != nil {
 		return map[string]int{}
 	}
+	comments = s.filterBlockedComments(ctx, viewerUserID, comments)
 	counts := make(map[string]int)
 	for _, c := range comments {
 		counts[commentTargetKey(c)]++
@@ -490,12 +580,12 @@ func (s *CommunityService) getCommentCountsForTargets(ctx context.Context, targe
 	return counts
 }
 
-func (s *CommunityService) getCommentsMap(ctx context.Context, recordIDs []string, commentsLimit int) map[string][]CommentItem {
+func (s *CommunityService) getCommentsMap(ctx context.Context, viewerUserID string, recordIDs []string, commentsLimit int) map[string][]CommentItem {
 	targets := make([]repo.FeedTarget, 0, len(recordIDs))
 	for _, id := range recordIDs {
 		targets = append(targets, repo.FeedTarget{TargetType: repo.FeedTargetFoodRecord, TargetID: id})
 	}
-	targetMap := s.getCommentsMapForTargets(ctx, targets, commentsLimit)
+	targetMap := s.getCommentsMapForTargets(ctx, viewerUserID, targets, commentsLimit)
 	result := map[string][]CommentItem{}
 	for _, id := range recordIDs {
 		result[id] = targetMap[repo.FeedTargetKey(repo.FeedTargetFoodRecord, id)]
@@ -503,7 +593,7 @@ func (s *CommunityService) getCommentsMap(ctx context.Context, recordIDs []strin
 	return result
 }
 
-func (s *CommunityService) getCommentsMapForTargets(ctx context.Context, targets []repo.FeedTarget, commentsLimit int) map[string][]CommentItem {
+func (s *CommunityService) getCommentsMapForTargets(ctx context.Context, viewerUserID string, targets []repo.FeedTarget, commentsLimit int) map[string][]CommentItem {
 	if len(targets) == 0 {
 		return map[string][]CommentItem{}
 	}
@@ -511,6 +601,7 @@ func (s *CommunityService) getCommentsMapForTargets(ctx context.Context, targets
 	if err != nil {
 		return map[string][]CommentItem{}
 	}
+	comments = s.filterBlockedComments(ctx, viewerUserID, comments)
 
 	userIDs := make(map[string]bool)
 	for _, c := range comments {
@@ -708,9 +799,18 @@ func (s *CommunityService) CheckinLeaderboard(ctx context.Context, viewerUserID 
 	if err != nil {
 		return nil, err
 	}
+	blockedSet := s.blockedUserSet(ctx, viewerUserID)
+	blockedIDs := make([]string, 0, len(blockedSet))
+	for id := range blockedSet {
+		blockedIDs = append(blockedIDs, id)
+	}
+	sort.Strings(blockedIDs)
 	authorIDSet := make(map[string]bool)
 	authorIDSet[viewerUserID] = true
 	for _, fid := range friendIDs {
+		if blockedSet[fid] {
+			continue
+		}
 		authorIDSet[fid] = true
 	}
 	authorIDs := make([]string, 0, len(authorIDSet))
@@ -720,7 +820,7 @@ func (s *CommunityService) CheckinLeaderboard(ctx context.Context, viewerUserID 
 
 	weekStartCN, weekEndCN, weekStartStr, weekEndStr := chinaWeekWindow(time.Now())
 
-	cacheKey := viewerUserID + ":" + weekStartStr
+	cacheKey := viewerUserID + ":" + weekStartStr + ":" + strings.Join(blockedIDs, ",")
 	if cached, ok := leaderboardCache.Load(cacheKey); ok {
 		entry := cached.(leaderboardCacheEntry)
 		if time.Now().Before(entry.expiresAt) {
@@ -856,15 +956,34 @@ func (s *CommunityService) HideFeedTarget(ctx context.Context, userID, targetTyp
 	return s.feedRepo.HideFeedTarget(ctx, userID, targetType, targetID)
 }
 
-func (s *CommunityService) ListComments(ctx context.Context, recordID string, limit int) ([]CommentItem, error) {
-	return s.ListTargetComments(ctx, repo.FeedTargetFoodRecord, recordID, limit)
+func (s *CommunityService) ListComments(ctx context.Context, viewerUserID, recordID string, limit int) ([]CommentItem, error) {
+	return s.ListTargetComments(ctx, viewerUserID, repo.FeedTargetFoodRecord, recordID, limit)
 }
 
-func (s *CommunityService) ListTargetComments(ctx context.Context, targetType, targetID string, limit int) ([]CommentItem, error) {
-	comments, err := s.feedRepo.ListCommentsForTarget(ctx, normalizeServiceTargetType(targetType), targetID, limit)
+func (s *CommunityService) ListTargetComments(ctx context.Context, viewerUserID, targetType, targetID string, limit int) ([]CommentItem, error) {
+	targetType = normalizeServiceTargetType(targetType)
+	record, err := s.feedRepo.GetFeedTargetByID(ctx, targetType, targetID)
 	if err != nil {
 		return nil, err
 	}
+	if record == nil {
+		return nil, commonerrors.ErrNotFound
+	}
+	ctxCheck, err := s.getFeedRecordInteractionContext(ctx, viewerUserID, record)
+	if err != nil {
+		return nil, err
+	}
+	if !ctxCheck.Allowed {
+		if ctxCheck.Reason == "not_found" {
+			return nil, commonerrors.ErrNotFound
+		}
+		return nil, commonerrors.ErrForbidden
+	}
+	comments, err := s.feedRepo.ListCommentsForTarget(ctx, targetType, targetID, limit)
+	if err != nil {
+		return nil, err
+	}
+	comments = s.filterBlockedComments(ctx, viewerUserID, comments)
 	if len(comments) == 0 {
 		return []CommentItem{}, nil
 	}
@@ -958,8 +1077,8 @@ func (s *CommunityService) FeedTargetContext(ctx context.Context, userID, target
 		likeInfo = &repo.LikeInfo{}
 	}
 
-	comments, _ := s.ListTargetComments(ctx, targetType, targetID, 5)
-	countMap := s.getCommentCountsForTargets(ctx, []repo.FeedTarget{{TargetType: targetType, TargetID: targetID}})
+	comments, _ := s.ListTargetComments(ctx, userID, targetType, targetID, 5)
+	countMap := s.getCommentCountsForTargets(ctx, userID, []repo.FeedTarget{{TargetType: targetType, TargetID: targetID}})
 
 	return &FeedContextResult{
 		Allowed:      true,
@@ -983,6 +1102,11 @@ func (s *CommunityService) getFeedRecordInteractionContext(ctx context.Context, 
 	}
 	if userID != "" && record.UserID == userID {
 		return &FeedContextResult{Allowed: true, Reason: "owner"}, nil
+	}
+	if blocked, err := s.isBlockedEither(ctx, userID, record.UserID); err != nil {
+		return nil, err
+	} else if blocked {
+		return &FeedContextResult{Allowed: false, Reason: "not_found"}, nil
 	}
 	owner, err := s.userRepo.FindByID(ctx, record.UserID)
 	if err != nil {
@@ -1032,6 +1156,27 @@ func (s *CommunityService) PostTargetComment(ctx context.Context, userID, target
 			return nil, commonerrors.ErrNotFound
 		}
 		return nil, commonerrors.ErrForbidden
+	}
+	if replyToUserID != nil {
+		if blocked, err := s.isBlockedEither(ctx, userID, *replyToUserID); err != nil {
+			return nil, err
+		} else if blocked {
+			return nil, &commonerrors.AppError{Code: 20003, Message: "无法操作", HTTPStatus: 403}
+		}
+	}
+	if parentCommentID != nil && strings.TrimSpace(*parentCommentID) != "" {
+		parentComment, err := s.feedRepo.GetCommentByID(ctx, *parentCommentID)
+		if err != nil {
+			return nil, err
+		}
+		if parentComment == nil || commentTargetKey(*parentComment) != repo.FeedTargetKey(targetType, targetID) {
+			return nil, commonerrors.ErrNotFound
+		}
+		if blocked, err := s.isBlockedEither(ctx, userID, parentComment.UserID); err != nil {
+			return nil, err
+		} else if blocked {
+			return nil, &commonerrors.AppError{Code: 20003, Message: "无法操作", HTTPStatus: 403}
+		}
 	}
 
 	normalizedContent := strings.TrimSpace(content)

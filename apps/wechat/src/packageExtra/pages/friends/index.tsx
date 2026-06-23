@@ -4,11 +4,15 @@ import Taro, { useDidShow, useDidHide, useRouter } from '@tarojs/taro'
 import { useMemo, useState } from 'react'
 import {
   friendCancelSentRequest,
+  friendBlockUser,
   friendDelete,
+  friendGetBlocks,
   friendGetList,
   friendGetRequestsOverview,
   friendRespondRequest,
+  friendUnblockUser,
   showUnifiedApiError,
+  FriendBlockItem,
   FriendListItem,
   FriendRequestOverviewItem
 } from '../../../utils/api'
@@ -16,7 +20,7 @@ import { DEFAULT_AVATAR_URL } from '../../../utils/static-asset-cdn-url'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import './index.scss'
 
-type ActiveTab = 'friends' | 'received' | 'sent'
+type ActiveTab = 'friends' | 'received' | 'sent' | 'blocks'
 
 const STATUS_LABEL: Record<string, string> = {
   pending: '',
@@ -130,6 +134,7 @@ function FriendsPage() {
   )
   const [loading, setLoading] = useState(false)
   const [friends, setFriends] = useState<FriendListItem[]>([])
+  const [blocks, setBlocks] = useState<FriendBlockItem[]>([])
   const [received, setReceived] = useState<FriendRequestOverviewItem[]>([])
   const [sent, setSent] = useState<FriendRequestOverviewItem[]>([])
   const [revokingId, setRevokingId] = useState<string | null>(null)
@@ -152,13 +157,15 @@ function FriendsPage() {
   const loadData = async () => {
     try {
       setLoading(true)
-      const [friendRes, requestRes] = await Promise.all([
+      const [friendRes, requestRes, blockRes] = await Promise.all([
         friendGetList(),
-        friendGetRequestsOverview()
+        friendGetRequestsOverview(),
+        friendGetBlocks()
       ])
       setFriends(friendRes.list || [])
       setReceived(requestRes.received || [])
       setSent(requestRes.sent || [])
+      setBlocks(blockRes.list || [])
     } catch (error: any) {
       await showUnifiedApiError(error, '加载失败')
     } finally {
@@ -201,6 +208,50 @@ function FriendsPage() {
     } catch (error: any) {
       Taro.hideLoading()
       await showUnifiedApiError(error, '删除失败')
+    }
+  }
+
+  const handleBlockFriend = async (friend: FriendListItem) => {
+    const confirm = await Taro.showModal({
+      title: '拉黑用户',
+      content: `拉黑「${friend.nickname || '用户'}」后会解除好友关系，双方无法私信、加好友，也不会在圈子里互相看到内容。`,
+      confirmColor: '#ef4444',
+      confirmText: '拉黑',
+      cancelText: '取消'
+    })
+    if (!confirm.confirm) return
+
+    try {
+      Taro.showLoading({ title: '处理中...', mask: true })
+      await friendBlockUser(friend.id)
+      Taro.hideLoading()
+      Taro.showToast({ title: '已拉黑', icon: 'success' })
+      await loadData()
+    } catch (error: any) {
+      Taro.hideLoading()
+      await showUnifiedApiError(error, '无法操作')
+    }
+  }
+
+  const handleUnblockUser = async (item: FriendBlockItem) => {
+    const confirm = await Taro.showModal({
+      title: '解除拉黑',
+      content: `确定解除对「${item.nickname || '用户'}」的拉黑吗？解除后不会自动恢复好友关系。`,
+      confirmColor: '#00bc7d',
+      confirmText: '解除',
+      cancelText: '取消'
+    })
+    if (!confirm.confirm) return
+
+    try {
+      Taro.showLoading({ title: '处理中...', mask: true })
+      await friendUnblockUser(item.blocked_user_id)
+      Taro.hideLoading()
+      Taro.showToast({ title: '已解除', icon: 'success' })
+      await loadData()
+    } catch (error: any) {
+      Taro.hideLoading()
+      await showUnifiedApiError(error, '无法操作')
     }
   }
 
@@ -277,8 +328,8 @@ function FriendsPage() {
     })
   }
 
-  const renderEmptyState = (type: 'friends' | 'received' | 'sent') => {
-    const configs: Record<'friends' | 'received' | 'sent', {
+  const renderEmptyState = (type: ActiveTab) => {
+    const configs: Record<ActiveTab, {
       icon: JSX.Element
       title: string
       desc: string
@@ -301,6 +352,11 @@ function FriendsPage() {
         icon: <SendIcon size={120} color='#00bc7d' />,
         title: '没有待处理的申请',
         desc: '你发起的好友申请会显示在这里，可随时撤销',
+      },
+      blocks: {
+        icon: <CloseIcon size={96} color='#64748b' />,
+        title: '黑名单为空',
+        desc: '被你拉黑的用户会显示在这里，可随时解除',
       }
     }
     const config = configs[type]
@@ -322,7 +378,6 @@ function FriendsPage() {
   const renderLoading = () => (
     <View className='loading-state'>
       <View className='loading-spinner' />
-      <Text className='loading-text'>加载中...</Text>
     </View>
   )
 
@@ -368,6 +423,15 @@ function FriendsPage() {
             onClick={() => setActiveTab('sent')}
           >
             我发起的
+          </View>
+          <View
+            className={`tab-item ${activeTab === 'blocks' ? 'active' : ''}`}
+            onClick={() => setActiveTab('blocks')}
+          >
+            黑名单
+            {blocks.length > 0 && (
+              <Text className='tab-badge'>{formatBadgeCount(blocks.length)}</Text>
+            )}
           </View>
         </View>
       </View>
@@ -425,9 +489,14 @@ function FriendsPage() {
                       <Text className='time'>好友</Text>
                     </View>
                   </View>
-                  <Button className='danger-btn' onClick={() => handleDeleteFriend(friend)}>
-                    删除
-                  </Button>
+                  <View className='friend-card-actions'>
+                    <Button className='plain-btn compact-btn' onClick={() => handleBlockFriend(friend)}>
+                      拉黑
+                    </Button>
+                    <Button className='danger-btn compact-btn' onClick={() => handleDeleteFriend(friend)}>
+                      删除
+                    </Button>
+                  </View>
                 </View>
               ))
             )}
@@ -527,6 +596,36 @@ function FriendsPage() {
                       </Button>
                     </View>
                   )}
+                </View>
+              ))
+            )}
+          </View>
+        )}
+
+        {!loading && activeTab === 'blocks' && (
+          <View className='list'>
+            {blocks.length === 0 ? (
+              renderEmptyState('blocks')
+            ) : (
+              blocks.map((item) => (
+                <View className='card friend-card' key={item.id || item.blocked_user_id}>
+                  <View className='left' onClick={() => goToUserProfile(item.blocked_user_id)}>
+                    <View className='avatar-wrapper'>
+                      <Image
+                        className='avatar'
+                        src={item.avatar || DEFAULT_AVATAR_URL}
+                        mode='aspectFill'
+                        lazyLoad
+                      />
+                    </View>
+                    <View className='meta'>
+                      <Text className='name'>{item.nickname || '用户'}</Text>
+                      <Text className='time'>{formatTime(item.created_at)}</Text>
+                    </View>
+                  </View>
+                  <Button className='plain-btn compact-btn' onClick={() => handleUnblockUser(item)}>
+                    解除
+                  </Button>
                 </View>
               ))
             )}

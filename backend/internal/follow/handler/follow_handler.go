@@ -13,8 +13,8 @@ import (
 type FollowService interface {
 	Follow(ctx context.Context, followerID, followeeID string) error
 	Unfollow(ctx context.Context, followerID, followeeID string) error
-	GetFollowers(ctx context.Context, userID string, offset, limit int) ([]map[string]any, error)
-	GetFollowing(ctx context.Context, userID string, offset, limit int) ([]map[string]any, error)
+	GetFollowers(ctx context.Context, viewerUserID, userID string, offset, limit int) ([]map[string]any, error)
+	GetFollowing(ctx context.Context, viewerUserID, userID string, offset, limit int) ([]map[string]any, error)
 	GetFollowStats(ctx context.Context, userID, currentUserID string) (map[string]any, error)
 }
 
@@ -51,12 +51,13 @@ func (h *FollowHandler) Unfollow(c *gin.Context) {
 // GET /api/user/:user_id/followers
 func (h *FollowHandler) GetFollowers(c *gin.Context) {
 	userID := c.Param("user_id")
+	viewerUserID := c.GetString(authmw.ContextUserIDKey)
 	offset, _ := strconv.Atoi(c.Query("offset"))
 	limit, _ := strconv.Atoi(c.Query("limit"))
 	if limit <= 0 || limit > 100 {
 		limit = 20
 	}
-	list, err := h.followSvc.GetFollowers(c.Request.Context(), userID, offset, limit)
+	list, err := h.followSvc.GetFollowers(c.Request.Context(), viewerUserID, userID, offset, limit)
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -65,21 +66,22 @@ func (h *FollowHandler) GetFollowers(c *gin.Context) {
 		list = []map[string]any{}
 	}
 	response.Success(c, map[string]any{
-		"list":      list,
-		"has_more":  len(list) >= limit,
-		"offset":    offset,
+		"list":     list,
+		"has_more": len(list) >= limit,
+		"offset":   offset,
 	})
 }
 
 // GET /api/user/:user_id/following
 func (h *FollowHandler) GetFollowing(c *gin.Context) {
 	userID := c.Param("user_id")
+	viewerUserID := c.GetString(authmw.ContextUserIDKey)
 	offset, _ := strconv.Atoi(c.Query("offset"))
 	limit, _ := strconv.Atoi(c.Query("limit"))
 	if limit <= 0 || limit > 100 {
 		limit = 20
 	}
-	list, err := h.followSvc.GetFollowing(c.Request.Context(), userID, offset, limit)
+	list, err := h.followSvc.GetFollowing(c.Request.Context(), viewerUserID, userID, offset, limit)
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -88,9 +90,9 @@ func (h *FollowHandler) GetFollowing(c *gin.Context) {
 		list = []map[string]any{}
 	}
 	response.Success(c, map[string]any{
-		"list":      list,
-		"has_more":  len(list) >= limit,
-		"offset":    offset,
+		"list":     list,
+		"has_more": len(list) >= limit,
+		"offset":   offset,
 	})
 }
 

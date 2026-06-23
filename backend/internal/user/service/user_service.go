@@ -39,6 +39,11 @@ type UserService struct {
 	healthDocs    *userrepo.HealthDocumentRepo
 	modeSwitchLog *userrepo.ModeSwitchLogRepo
 	storage       *storage.Client
+	blockChecker  BlockChecker
+}
+
+type BlockChecker interface {
+	IsBlockedEither(ctx context.Context, userA, userB string) (bool, error)
 }
 
 func NewUserService(users *repo.UserRepo, healthDocs *userrepo.HealthDocumentRepo, modeSwitchLog *userrepo.ModeSwitchLogRepo, storageClient ...*storage.Client) *UserService {
@@ -47,6 +52,10 @@ func NewUserService(users *repo.UserRepo, healthDocs *userrepo.HealthDocumentRep
 		client = storageClient[0]
 	}
 	return &UserService{users: users, healthDocs: healthDocs, modeSwitchLog: modeSwitchLog, storage: client}
+}
+
+func (s *UserService) ConfigureBlockChecker(checker BlockChecker) {
+	s.blockChecker = checker
 }
 
 func (s *UserService) GetProfile(ctx context.Context, userID string) (map[string]any, error) {
@@ -455,15 +464,26 @@ func (s *UserService) GetRecordDays(ctx context.Context, userID string) (int64, 
 }
 
 // GetPublicProfile 返回其他用户的公开信息（脱敏）
-func (s *UserService) GetPublicProfile(ctx context.Context, userID string) (map[string]any, error) {
-	user, err := s.users.FindByID(ctx, userID)
+func (s *UserService) GetPublicProfile(ctx context.Context, viewerUserID, targetUserID string) (map[string]any, error) {
+	viewerUserID = strings.TrimSpace(viewerUserID)
+	targetUserID = strings.TrimSpace(targetUserID)
+	if viewerUserID != "" && viewerUserID != targetUserID && s.blockChecker != nil {
+		blocked, err := s.blockChecker.IsBlockedEither(ctx, viewerUserID, targetUserID)
+		if err != nil {
+			return nil, err
+		}
+		if blocked {
+			return nil, commonerrors.ErrNotFound
+		}
+	}
+	user, err := s.users.FindByID(ctx, targetUserID)
 	if err != nil {
 		return nil, err
 	}
 	if user == nil {
 		return nil, commonerrors.ErrNotFound
 	}
-	recordDays, _ := s.users.CountFoodRecordDays(ctx, userID)
+	recordDays, _ := s.users.CountFoodRecordDays(ctx, targetUserID)
 	return map[string]any{
 		"id":          user.ID,
 		"nickname":    user.Nickname,
