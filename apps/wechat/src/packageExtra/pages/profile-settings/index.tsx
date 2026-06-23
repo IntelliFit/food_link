@@ -56,6 +56,8 @@ import './index.scss'
 
 type TabKey = 'feed' | 'collections'
 
+const noop = () => {}
+
 function formatShortId(userId: string): string {
   if (!userId) return '—'
   const parts = userId.split('-')
@@ -457,6 +459,8 @@ export default function ProfileSettingsPage() {
     setEditMotto(motto)
     setShowEditSheet(true)
   }
+
+  const handleOwnerEditClick = isOwner ? handleOpenEdit : noop
 
   // 选择头像
   const handleChooseAvatar = async (e: any) => {
@@ -919,7 +923,7 @@ export default function ProfileSettingsPage() {
           <View className='profile-user-row'>
             <View
               className='profile-avatar-wrap'
-              onClick={isOwner ? handleOpenEdit : undefined}
+              onClick={handleOwnerEditClick}
             >
               <View className='avatar-choose-wrapper'>
                 {tempAvatar ? (
@@ -933,10 +937,10 @@ export default function ProfileSettingsPage() {
             </View>
 
             <View className='profile-info-col'>
-              <View className='profile-name-row' onClick={isOwner ? handleOpenEdit : undefined}>
+              <View className='profile-name-row' onClick={handleOwnerEditClick}>
                 <Text className='profile-nickname'>{tempNickname || '用户昵称'}</Text>
               </View>
-              <View className='profile-id-row' onClick={isOwner ? handleOpenEdit : undefined}>
+              <View className='profile-id-row' onClick={handleOwnerEditClick}>
                 <Text className='profile-user-id'>ID: {formatShortId(userId)}</Text>
                 <View className='profile-id-copy-btn' onClick={(e) => { e.stopPropagation(); handleCopyUserId() }}>
                   <Text className='profile-id-copy-btn-text'>复制ID</Text>
@@ -965,7 +969,7 @@ export default function ProfileSettingsPage() {
 
           {/* 座右铭 */}
           {motto ? (
-            <View className='profile-motto-row' onClick={isOwner ? handleOpenEdit : undefined}>
+            <View className='profile-motto-row' onClick={handleOwnerEditClick}>
               <Text className='profile-motto-text'>{motto}</Text>
             </View>
           ) : isOwner ? (
