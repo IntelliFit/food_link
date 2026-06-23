@@ -7,6 +7,7 @@ import { createElement, type PropsWithChildren, useEffect } from 'react'
 import Taro, { useLaunch } from '@tarojs/taro'
 import { getAccessToken, acceptFriendInvite } from './utils/api'
 import { extraPkgUrl } from './utils/subpackage-extra'
+import { clearPendingFriendInviteCode, writePendingFriendInviteCode } from './utils/pending-friend-invite'
 import { AppColorSchemeProvider } from './components/AppColorSchemeContext'
 import { PrivacyAuthorizationModal } from './components/PrivacyAuthorizationModal'
 import { cleanupGeneratedUserFiles } from './utils/weapp-user-files'
@@ -66,19 +67,32 @@ function handleInviteScene(options?: any) {
     return
   }
 
-  const inviteCodeFromScene = (params.get('fi') || '').trim()
-  const inviteCodeFromQuery = String(options?.query?.fi || '').trim()
+  const inviteCodeFromScene = (params.get('fi') || params.get('invite_code') || '').trim()
+  const inviteCodeFromQuery = String(options?.query?.fi || options?.query?.invite_code || '').trim()
   const inviteCode = inviteCodeFromScene || inviteCodeFromQuery
+  console.log('[invite-debug][app] 扫码邀请参数解析', {
+    rawScene,
+    decodedScene,
+    inviteCodeFromScene,
+    inviteCodeFromQuery,
+    inviteCode,
+    query: options?.query,
+  })
   if (!inviteCode) return
 
   try {
-    Taro.setStorageSync('pending_friend_invite_code', inviteCode)
+    writePendingFriendInviteCode(inviteCode, 'app_scene')
+    console.log('[invite-debug][app] 已写入 pending_friend_invite_code', inviteCode)
   } catch {
     // ignore storage errors
   }
 
   if (getAccessToken()) {
-    acceptFriendInvite(inviteCode).catch(() => { /* ignore */ })
+    acceptFriendInvite(inviteCode)
+      .catch(() => { /* ignore */ })
+      .finally(() => {
+        clearPendingFriendInviteCode()
+      })
     return
   }
 

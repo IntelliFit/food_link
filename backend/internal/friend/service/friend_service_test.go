@@ -3,11 +3,13 @@ package service
 import (
 	"context"
 	"testing"
+	"time"
 
 	authrepo "food_link/backend/internal/auth/repo"
 	commonerrors "food_link/backend/internal/common/errors"
 	"food_link/backend/internal/friend/domain"
 	"food_link/backend/internal/friend/repo"
+	membershipdomain "food_link/backend/internal/membership/domain"
 
 	"github.com/stretchr/testify/assert"
 	"gorm.io/driver/sqlite"
@@ -19,7 +21,7 @@ func setupTestDB(t *testing.T) *gorm.DB {
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
-	if err := db.AutoMigrate(&domain.FriendRequest{}, &domain.UserFriend{}, &authrepo.User{}); err != nil {
+	if err := db.AutoMigrate(&domain.FriendRequest{}, &domain.UserFriend{}, &domain.UserBlock{}, &authrepo.User{}, &membershipdomain.UserInviteReferral{}); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
 	return db
@@ -311,21 +313,58 @@ func TestFriendService_ResolveInviteWithRelation(t *testing.T) {
 
 func TestFriendService_AcceptInvite(t *testing.T) {
 	db := setupTestDB(t)
+	now := time.Now()
 	db.Create(&authrepo.User{ID: "550e8400-e29b-41d4-a716-446655440001", Nickname: "Alice"})
-	db.Create(&authrepo.User{ID: "u2", Nickname: "Bob", OpenID: "o2"})
+	db.Create(&authrepo.User{ID: "660e8400-e29b-41d4-a716-446655440002", Nickname: "Bob", OpenID: "o2", CreatedAt: &now})
 
 	friendRepo := repo.NewFriendRepo(db)
 	userRepo := authrepo.NewUserRepo(db)
 	svc := NewFriendService(friendRepo, userRepo, nil)
 	ctx := context.Background()
 
-	res, err := svc.AcceptInvite(ctx, "u2", "550e8400")
+	res, err := svc.AcceptInvite(ctx, "660e8400-e29b-41d4-a716-446655440002", "550e8400")
 	assert.NoError(t, err)
-	assert.Equal(t, "pending", res["status"])
+	assert.Equal(t, "request_sent", res["status"])
+
+	invitee, err := userRepo.FindByID(ctx, "660e8400-e29b-41d4-a716-446655440002")
+	assert.NoError(t, err)
+	if assert.NotNil(t, invitee.ReferredByUserID) {
+		assert.Equal(t, "550e8400-e29b-41d4-a716-446655440001", *invitee.ReferredByUserID)
+	}
+	var referral membershipdomain.UserInviteReferral
+	assert.NoError(t, db.Where("invitee_user_id = ?", "660e8400-e29b-41d4-a716-446655440002").First(&referral).Error)
+	assert.Equal(t, "550e8400-e29b-41d4-a716-446655440001", referral.InviterUserID)
+	if assert.NotNil(t, referral.InviteCode) {
+		assert.Equal(t, "550E8400", *referral.InviteCode)
+	}
 
 	// self
 	_, err = svc.AcceptInvite(ctx, "550e8400-e29b-41d4-a716-446655440001", "550e8400")
 	assert.Error(t, err)
+}
+
+func TestFriendService_AcceptInviteDoesNotBindReferralForOldUser(t *testing.T) {
+	db := setupTestDB(t)
+	oldCreatedAt := time.Now().Add(-24 * time.Hour)
+	db.Create(&authrepo.User{ID: "550e8400-e29b-41d4-a716-446655440001", Nickname: "Alice"})
+	db.Create(&authrepo.User{ID: "660e8400-e29b-41d4-a716-446655440002", Nickname: "Bob", OpenID: "o2", CreatedAt: &oldCreatedAt})
+
+	friendRepo := repo.NewFriendRepo(db)
+	userRepo := authrepo.NewUserRepo(db)
+	svc := NewFriendService(friendRepo, userRepo, nil)
+	ctx := context.Background()
+
+	res, err := svc.AcceptInvite(ctx, "660e8400-e29b-41d4-a716-446655440002", "550e8400")
+	assert.NoError(t, err)
+	assert.Equal(t, "request_sent", res["status"])
+
+	invitee, err := userRepo.FindByID(ctx, "660e8400-e29b-41d4-a716-446655440002")
+	assert.NoError(t, err)
+	assert.Nil(t, invitee.ReferredByUserID)
+
+	var count int64
+	assert.NoError(t, db.Table("user_invite_referrals").Where("invitee_user_id = ?", "660e8400-e29b-41d4-a716-446655440002").Count(&count).Error)
+	assert.EqualValues(t, 0, count)
 }
 
 func TestFriendService_Cache(t *testing.T) {

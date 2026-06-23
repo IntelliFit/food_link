@@ -49,7 +49,7 @@ type UserRow struct {
 	Avatar   string `gorm:"column:avatar"`
 }
 
-const contentUnionQuery = `
+const contentUnionQueryTemplate = `
 SELECT * FROM (
   SELECT
     'food_record' AS target_type,
@@ -120,7 +120,7 @@ SELECT * FROM (
     NULL::text AS source_task_id,
     NULL::text AS recipe_id,
     NULL::text AS items,
-    uel.exercise_items::text AS exercise_items
+    __EXERCISE_ITEMS_SELECT__ AS exercise_items
   FROM user_exercise_logs uel
   WHERE uel.hidden_from_feed = false
     AND uel.user_id IN (SELECT user_id FROM _search_visible_users)
@@ -204,11 +204,19 @@ func NewSearchRepo(db *gorm.DB) *SearchRepo {
 	return &SearchRepo{db: db}
 }
 
+func (r *SearchRepo) exerciseItemsTextSelect(ctx context.Context) string {
+	if r.db.WithContext(ctx).Migrator().HasColumn("user_exercise_logs", "exercise_items") {
+		return "CAST(uel.exercise_items AS text)"
+	}
+	return "CAST('[]' AS text)"
+}
+
 func (r *SearchRepo) SearchContent(ctx context.Context, currentUserID, keyword string, offset, limit int) ([]ContentRow, error) {
 	if limit <= 0 {
 		limit = 20
 	}
 	cte := "WITH " + visibleUsersCTE + " "
+	contentUnionQuery := strings.Replace(contentUnionQueryTemplate, "__EXERCISE_ITEMS_SELECT__", r.exerciseItemsTextSelect(ctx), 1)
 	fullQuery := cte + contentUnionQuery
 
 	var rows []ContentRow

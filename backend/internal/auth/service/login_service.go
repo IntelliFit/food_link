@@ -194,10 +194,28 @@ func (s *LoginService) RegisterWithPassword(ctx context.Context, input PasswordR
 	if phone != "13511679220" {
 		return nil, fmt.Errorf("测试注册仅支持指定手机号")
 	}
+	trimmedInviteCode := strings.TrimSpace(input.InviteCode)
+	logger.Info(ctx, "App 账号密码测试注册请求已收到",
+		slog.String("phone", maskPhoneForLog(phone)),
+		slog.Bool("invite_code_present", trimmedInviteCode != ""),
+		slog.Int("invite_code_length", len(trimmedInviteCode)),
+	)
 	if existing, err := s.users.FindByTelephone(ctx, phone); err != nil {
 		return nil, err
 	} else if existing != nil {
-		return nil, fmt.Errorf("手机号已被使用")
+		if existing.PasswordHash == nil || !VerifyUserPassword(input.Password, *existing.PasswordHash) {
+			return nil, fmt.Errorf("手机号或密码错误")
+		}
+		existing, err = s.touchLogin(ctx, existing, "password")
+		if err != nil {
+			return nil, err
+		}
+		logger.Info(ctx, "App 账号密码测试注册命中已有账号，已按密码登录",
+			slog.String("user_id", existing.ID),
+			slog.String("identifier_type", loginIdentifierType(phone, "")),
+			slog.Bool("invite_code_present", trimmedInviteCode != ""),
+		)
+		return s.issueLoginOutput(existing, existing.OpenID, firstNonEmpty(derefString(existing.UnionID), derefString(existing.AppUnionID)))
 	}
 	passwordHash, err := HashUserPassword(input.Password)
 	if err != nil {
@@ -230,7 +248,7 @@ func (s *LoginService) RegisterWithPassword(ctx context.Context, input PasswordR
 		return nil, err
 	}
 	_ = s.ensureRegistrationInviteCode(ctx, user.ID)
-	if inviteCode := strings.ToUpper(strings.TrimSpace(input.InviteCode)); inviteCode != "" {
+	if inviteCode := strings.ToUpper(trimmedInviteCode); inviteCode != "" {
 		logger.Info(ctx, "App 账号密码注册开始绑定邀请关系", slog.String("user_id", user.ID), slog.String("invite_code", inviteCode))
 		if err := s.bindInviteReferral(ctx, user.ID, inviteCode); err != nil {
 			logger.Error(ctx, "App 账号密码注册绑定邀请关系失败", err, slog.String("user_id", user.ID), slog.String("invite_code", inviteCode))

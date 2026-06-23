@@ -27,7 +27,11 @@ func (r *ExerciseRepo) CreateExerciseLog(ctx context.Context, log *domain.Exerci
 	if log.ID == "" {
 		log.ID = uuid.New().String()
 	}
-	return r.db.WithContext(ctx).Create(log).Error
+	q := r.db.WithContext(ctx)
+	if !q.Migrator().HasColumn(&domain.ExerciseLog{}, "exercise_items") {
+		q = q.Omit("ExerciseItems")
+	}
+	return q.Create(log).Error
 }
 
 func (r *ExerciseRepo) ListExerciseLogsByDate(ctx context.Context, userID string, startDate, endDate string) ([]domain.ExerciseLog, error) {

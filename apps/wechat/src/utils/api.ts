@@ -4109,6 +4109,13 @@ export async function login(code: string, phoneCode?: string, inviteCode?: strin
     if (testOpenid?.trim()) {
       requestData.testOpenid = testOpenid.trim()
     }
+    console.log('[invite-debug][api] login 请求体邀请码状态', {
+      hasInviteCode: Boolean(requestData.inviteCode),
+      inviteCode: requestData.inviteCode || '',
+      hasPhoneCode: Boolean(requestData.phoneCode),
+      hasTestOpenid: Boolean(requestData.testOpenid),
+      requestKeys: Object.keys(requestData),
+    })
 
     const response = await Taro.request({
       url: `${API_BASE_URL}/api/login`,
@@ -4118,6 +4125,11 @@ export async function login(code: string, phoneCode?: string, inviteCode?: strin
       }),
       data: requestData,
       timeout: 10000 // 10秒超时
+    })
+    console.log('[invite-debug][api] login 响应状态', {
+      statusCode: response.statusCode,
+      responseKeys: Object.keys((response.data || {}) as Record<string, unknown>),
+      requestHadInviteCode: Boolean(requestData.inviteCode),
     })
 
     if (response.statusCode !== 200) {
@@ -4130,6 +4142,12 @@ export async function login(code: string, phoneCode?: string, inviteCode?: strin
     }
 
     const loginData = unwrapResponse<LoginResponse>(response)
+    console.log('[invite-debug][api] login 响应用户摘要', {
+      userId: loginData.user_id,
+      hasAccessToken: Boolean(loginData.access_token),
+      hasPhoneNumber: Boolean(loginData.purePhoneNumber || loginData.phoneNumber),
+      requestHadInviteCode: Boolean(requestData.inviteCode),
+    })
 
     // 保存 token 到本地存储
     saveTokens(loginData.access_token, loginData.refresh_token, loginData.user_id)
@@ -4256,6 +4274,12 @@ export async function registerWithPassword(
   if (inviteCode?.trim()) {
     requestData.inviteCode = inviteCode.trim()
   }
+  console.log('[invite-debug][api] registerWithPassword 请求体邀请码状态', {
+    phoneSuffix: phone.trim().slice(-4),
+    inviteCode: requestData.inviteCode || '',
+    hasInviteCode: Boolean(requestData.inviteCode),
+    requestKeys: Object.keys(requestData),
+  })
 
   const response = await Taro.request({
     url: `${API_BASE_URL}/api/app/register/password`,
@@ -4265,6 +4289,11 @@ export async function registerWithPassword(
     }),
     data: requestData,
     timeout: 10000
+  })
+  console.log('[invite-debug][api] registerWithPassword 响应状态', {
+    statusCode: response.statusCode,
+    responseKeys: Object.keys((response.data || {}) as Record<string, unknown>),
+    requestHadInviteCode: Boolean(requestData.inviteCode),
   })
 
   if (response.statusCode !== 200) {
@@ -4277,6 +4306,12 @@ export async function registerWithPassword(
   }
 
   const loginData = unwrapResponse<LoginResponse>(response)
+  console.log('[invite-debug][api] registerWithPassword 响应用户摘要', {
+    userId: loginData.user_id,
+    hasAccessToken: Boolean(loginData.access_token),
+    hasPhoneNumber: Boolean(loginData.purePhoneNumber || loginData.phoneNumber),
+    requestHadInviteCode: Boolean(requestData.inviteCode),
+  })
   saveTokens(loginData.access_token, loginData.refresh_token, loginData.user_id)
   if (loginData.diet_goal) {
     Taro.setStorageSync('dietGoal', loginData.diet_goal)
@@ -5794,9 +5829,17 @@ export async function resolveFriendInvite(code: string): Promise<FriendInviteRes
 
 /** 接受邀请码并直接建立好友关系 */
 export async function acceptFriendInvite(code: string): Promise<FriendInviteAcceptResult> {
+  console.log('[invite-debug][api] acceptFriendInvite 请求', {
+    inviteCode: code.trim(),
+    hasAccessToken: Boolean(getAccessToken()),
+  })
   const response = await authenticatedRequest('/api/friend/invite/accept', {
     method: 'POST',
     data: { code: code.trim() }
+  })
+  console.log('[invite-debug][api] acceptFriendInvite 响应状态', {
+    statusCode: response.statusCode,
+    responseKeys: Object.keys((response.data || {}) as Record<string, unknown>),
   })
   if (response.statusCode !== 200) {
     const detail = (response.data as any)?.detail

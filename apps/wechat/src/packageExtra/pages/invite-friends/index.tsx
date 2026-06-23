@@ -13,6 +13,7 @@ import {
 } from '../../../utils/api'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { withAuth } from '../../../utils/withAuth'
+import { writePendingFriendInviteCode } from '../../../utils/pending-friend-invite'
 
 import './index.scss'
 
@@ -62,6 +63,21 @@ function InviteFriendsPage() {
   })
 
   useEffect(() => {
+    if (!inviteCode) return
+    try {
+      writePendingFriendInviteCode(inviteCode, 'invite_page')
+      console.log('[invite-debug][invite-page] 已写入 pending_friend_invite_code', {
+        routeInviteCode,
+        routeFromUserId,
+        inviteCode,
+        storedInviteCode: String(Taro.getStorageSync('pending_friend_invite_code') || ''),
+      })
+    } catch {
+      // ignore storage errors
+    }
+  }, [inviteCode, routeFromUserId, routeInviteCode])
+
+  useEffect(() => {
     let cancelled = false
 
     const loadProfile = async () => {
@@ -79,10 +95,20 @@ function InviteFriendsPage() {
         if (!cancelled && nextProfile) {
           setProfile(nextProfile)
           setInviteCode(nextProfile.invite_code || routeInviteCode)
+          console.log('[invite-debug][invite-page] 邀请资料加载完成', {
+            routeInviteCode,
+            routeFromUserId,
+            nextInviteCode: nextProfile.invite_code || '',
+            finalInviteCode: nextProfile.invite_code || routeInviteCode,
+          })
         }
       } catch (error) {
         if (!cancelled) {
           setInviteCode(routeInviteCode)
+          console.log('[invite-debug][invite-page] 邀请资料加载失败，使用路由邀请码', {
+            routeInviteCode,
+            routeFromUserId,
+          })
           console.warn('[invite-friends] load profile failed', error)
         }
       } finally {
@@ -147,6 +173,10 @@ function InviteFriendsPage() {
     }
 
     if (!getAccessToken()) {
+      console.log('[invite-debug][invite-page] 未登录，跳转登录并透传邀请码', {
+        inviteCode,
+        sharePath,
+      })
       Taro.navigateTo({
         url: `${extraPkgUrl('/pages/login/index')}?invite_code=${encodeURIComponent(inviteCode)}&redirect=${encodeURIComponent(sharePath)}`,
       })

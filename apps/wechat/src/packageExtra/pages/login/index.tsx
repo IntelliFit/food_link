@@ -24,6 +24,7 @@ import { processChooseAvatarSelection, ensureAvatarUploadedForSave, getInitialRe
 import { shouldShowProfileFormFromApiUser } from '../../../utils/new-user-onboarding-scenarios'
 import { resolveRegistrationNickname, buildDefaultWechatNickname } from '../../../utils/default-user-profile'
 import { LOGIN_LOGO_URL } from '../../../utils/static-asset-cdn-url'
+import { clearPendingFriendInviteCode, readPendingFriendInviteCode } from '../../../utils/pending-friend-invite'
 import './index.scss'
 
 interface UserInfo {
@@ -67,6 +68,19 @@ function safeDecodeURIComponent(value: string): string {
         return decodeURIComponent(value || '')
     } catch {
         return value || ''
+    }
+}
+
+function getInviteCodeFromUrl(value: string): string {
+    const raw = normalizePath(value || '')
+    const queryIndex = raw.indexOf('?')
+    if (queryIndex < 0) return ''
+    const query = raw.slice(queryIndex + 1)
+    try {
+        const params = new URLSearchParams(query)
+        return (params.get('invite_code') || params.get('fi') || '').trim()
+    } catch {
+        return ''
     }
 }
 
@@ -119,6 +133,7 @@ export default function LoginPage() {
     const [envVersion, setEnvVersion] = useState<string>('release')
     const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     const allowDebugRegisterRef = useRef(allowDebugRegister)
+    const inviteAcceptHandledRef = useRef('')
     const DEBUG_PHONE = '13511679220'
 
     useEffect(() => {
@@ -127,26 +142,70 @@ export default function LoginPage() {
 
     const isDev = process.env.NODE_ENV === 'development'
 
-    const inviteCodeFromQuery = (router.params?.invite_code || '').trim()
-    const inviteCodeFromStorage = String(Taro.getStorageSync('pending_friend_invite_code') || '').trim()
-    const inviteCode = inviteCodeFromQuery || inviteCodeFromStorage
-    console.log('[login] inviteCodeFromQuery:', inviteCodeFromQuery, 'inviteCodeFromStorage:', inviteCodeFromStorage, 'final inviteCode:', inviteCode)
     const redirectFromQuery = safeDecodeURIComponent((router.params?.redirect || '').trim())
+    const inviteCodeFromQuery = (router.params?.invite_code || router.params?.fi || '').trim()
+    const inviteCodeFromRedirect = getInviteCodeFromUrl(redirectFromQuery)
+    const inviteCodeFromStorage = readPendingFriendInviteCode()
+    const canUseStoredInviteCode = Boolean(
+        inviteCodeFromStorage &&
+        !inviteCodeFromQuery &&
+        !inviteCodeFromRedirect &&
+        redirectFromQuery.includes('/pages/invite-friends/index')
+    )
+    const inviteCode = inviteCodeFromQuery || inviteCodeFromRedirect || (canUseStoredInviteCode ? inviteCodeFromStorage : '')
+    console.log('[login] inviteCodeFromQuery:', inviteCodeFromQuery, 'inviteCodeFromRedirect:', inviteCodeFromRedirect, 'inviteCodeFromStorage:', inviteCodeFromStorage, 'canUseStoredInviteCode:', canUseStoredInviteCode, 'final inviteCode:', inviteCode)
 
-    const finishLoginFlow = async () => {
+    useEffect(() => {
+        if (inviteCodeFromStorage && !inviteCode) {
+            clearPendingFriendInviteCode()
+        }
+    }, [inviteCodeFromStorage, inviteCode])
+
+    const acceptInviteAfterAuthenticated = async (reason: string, showToast = false) => {
         if (inviteCode) {
+            if (inviteAcceptHandledRef.current === inviteCode) {
+                console.log('[invite-debug][login] 邀请码 accept 已处理过，跳过重复调用', {
+                    reason,
+                    inviteCode,
+                })
+                return
+            }
             try {
+                console.log('[invite-debug][login] 准备调用邀请码 accept', { reason, inviteCode })
                 const res = await requestFriendByInviteCode(inviteCode)
-                if (res.status === 'requested') {
+                inviteAcceptHandledRef.current = inviteCode
+                console.log('[invite-debug][login] 邀请码 accept 成功', {
+                    reason,
+                    status: res.status,
+                    userId: res.user_id,
+                    nickname: res.nickname,
+                })
+                if (showToast && res.status === 'requested') {
                     Taro.showToast({ title: `已向${res.nickname || '对方'}发起好友请求`, icon: 'success' })
-                } else if (res.status === 'already_friend') {
+                } else if (showToast && res.status === 'already_friend') {
                     Taro.showToast({ title: `已和${res.nickname || '对方'}是好友`, icon: 'none' })
                 }
-                Taro.removeStorageSync('pending_friend_invite_code')
-            } catch {
+            } catch (error) {
+                console.warn('[invite-debug][login] 邀请码 accept 失败但不阻断登录', {
+                    reason,
+                    inviteCode,
+                    message: String((error as any)?.message || error || ''),
+                })
                 // 邀请处理失败不阻断登录跳转
+            } finally {
+                console.log('[invite-debug][login] 清理 pending 邀请码缓存', { inviteCode })
+                clearPendingFriendInviteCode()
             }
         }
+    }
+
+    const finishLoginFlow = async () => {
+        console.log('[invite-debug][login] finishLoginFlow 进入', {
+            inviteCode,
+            hasInviteCode: Boolean(inviteCode),
+            redirectFromQuery,
+        })
+        await acceptInviteAfterAuthenticated('finishLoginFlow', true)
 
         const target = normalizeRedirectUrlForSubpackage(normalizePath(redirectFromQuery))
         if (target) {
@@ -251,7 +310,22 @@ export default function LoginPage() {
         setLoading(true)
         try {
             const nickname = buildDebugNickname()
+            console.log('[invite-debug][login] 测试手机号注册提交前的邀请码状态', {
+                inviteCodeFromQuery,
+                inviteCodeFromRedirect,
+                inviteCodeFromStorage,
+                finalInviteCode: inviteCode,
+                redirectFromQuery,
+                routerParams: router.params,
+            })
             const loginData = await registerWithPassword(DEBUG_PHONE, password, nickname, inviteCode)
+            console.log('[invite-debug][login] 测试手机号注册返回', {
+                userId: loginData.user_id,
+                hasAccessToken: Boolean(loginData.access_token),
+                hasPhoneNumber: Boolean(loginData.purePhoneNumber || loginData.phoneNumber),
+                inviteCode,
+            })
+            await acceptInviteAfterAuthenticated('debugRegisterAfterTokenSaved')
             setShowDebugRegisterModal(false)
             await handleLoginSuccess(loginData)
         } catch (error: any) {
@@ -263,14 +337,22 @@ export default function LoginPage() {
     }
 
     const continueAfterAuthGates = (onboardingCompleted: boolean) => {
+        console.log('[invite-debug][login] continueAfterAuthGates', {
+            onboardingCompleted,
+            inviteCode,
+            hasInviteCode: Boolean(inviteCode),
+        })
         if (!onboardingCompleted) {
+            console.log('[invite-debug][login] 未完成健康档案，先跳转 health-profile，邀请码处理会延后', {
+                inviteCode,
+            })
             Taro.redirectTo({ url: extraPkgUrl('/pages/health-profile/index') })
             return
         }
         finishLoginFlow()
     }
 
-    /** 微信一键登录：同时请求微信头像/昵称，后端若已有手机号会直接带回，无需再授权 */
+    /** 微信一键登录：只完成登录，头像/昵称在完善信息弹窗中由用户点击授权复制 */
     const handleWxLogin = async () => {
         if (!agreed) {
             Taro.showToast({
@@ -284,21 +366,24 @@ export default function LoginPage() {
         try {
             await cleanupGeneratedUserFiles()
 
-            // 一键请求微信头像和昵称（用户点击登录按钮即触发授权）
-            let wxNickname = ''
-            let wxAvatarUrl = ''
-            try {
-                const profileRes = await Taro.getUserProfile({ desc: '用于完善个人资料' })
-                wxNickname = profileRes.userInfo?.nickName || ''
-                wxAvatarUrl = profileRes.userInfo?.avatarUrl || ''
-            } catch (profileErr: any) {
-                console.warn('获取微信资料失败或用户拒绝:', profileErr)
-            }
-
             const loginRes = await Taro.login()
             if (!loginRes.code) throw new Error('获取登录凭证失败')
+            console.log('[invite-debug][login] 微信一键登录提交前邀请码状态', {
+                inviteCodeFromQuery,
+                inviteCodeFromRedirect,
+                inviteCodeFromStorage,
+                finalInviteCode: inviteCode,
+                routerParams: router.params,
+            })
             const loginData: LoginResponse = await login(loginRes.code, undefined, inviteCode)
-            await handleLoginSuccess(loginData, wxNickname, wxAvatarUrl)
+            console.log('[invite-debug][login] 微信一键登录返回', {
+                userId: loginData.user_id,
+                hasAccessToken: Boolean(loginData.access_token),
+                hasPhoneNumber: Boolean(loginData.purePhoneNumber || loginData.phoneNumber),
+                inviteCode,
+            })
+            await acceptInviteAfterAuthenticated('wechatLoginAfterTokenSaved')
+            await handleLoginSuccess(loginData)
         } catch (error: any) {
             console.error('登录失败:', error)
             await showLoginErrorToast(error, '登录失败')
@@ -333,6 +418,12 @@ export default function LoginPage() {
 
     // 登录成功后的处理
     const handleLoginSuccess = async (loginData: LoginResponse, wxNickname?: string, wxAvatarUrl?: string) => {
+        console.log('[invite-debug][login] handleLoginSuccess 开始', {
+            userId: loginData.user_id,
+            hasPhoneNumber: Boolean(loginData.purePhoneNumber || loginData.phoneNumber),
+            inviteCode,
+            hasInviteCode: Boolean(inviteCode),
+        })
         // 保存基础信息
         Taro.setStorageSync('openid', loginData.openid)
         if (loginData.purePhoneNumber) {
@@ -363,10 +454,18 @@ export default function LoginPage() {
 
             const onboardingCompleted = apiUserInfo.onboarding_completed === true
             setPendingOnboardingCompleted(onboardingCompleted)
+            console.log('[invite-debug][login] 用户资料拉取完成', {
+                userId: loginData.user_id,
+                onboardingCompleted,
+                shouldShowProfileForm: shouldShowProfileFormFromApiUser(apiUserInfo),
+                hasPhoneNumber: Boolean(loginData.purePhoneNumber || loginData.phoneNumber),
+                inviteCode,
+            })
 
             // 检查是否需要完善头像/昵称
             // API 返回的 avatar 可能为空字符串，nickname 可能为空
             if (shouldShowProfileFormFromApiUser(apiUserInfo)) {
+                console.log('[invite-debug][login] 需要完善头像昵称，邀请码处理继续延后', { inviteCode })
                 // 优先使用一键授权获取的微信头像/昵称；微信默认名 fallback 为随机昵称
                 const initialAvatar = getInitialRegistrationAvatar(wxAvatarUrl || apiUserInfo.avatar)
                 const initialNickname = resolveRegistrationNickname(wxNickname || apiUserInfo.nickname, loginData.openid)
@@ -378,8 +477,10 @@ export default function LoginPage() {
                 setLoading(false)
                 // 库中已有手机号则直接返回；否则弹出授权手机号弹窗
                 if (loginData.purePhoneNumber) {
+                    console.log('[invite-debug][login] 已有手机号，准备继续登录后流程', { inviteCode })
                     setTimeout(() => { continueAfterAuthGates(onboardingCompleted) }, 1500)
                 } else {
+                    console.log('[invite-debug][login] 缺少手机号，先弹手机号绑定，邀请码处理继续延后', { inviteCode })
                     setShowPhoneBindModal(true)
                 }
             }
@@ -389,6 +490,10 @@ export default function LoginPage() {
             // 即使获取失败，也算登录成功
             Taro.setStorageSync('isLoggedIn', true)
             setLoading(false)
+            console.warn('[invite-debug][login] 用户资料拉取失败，进入资料完善兜底，邀请码处理延后', {
+                inviteCode,
+                message: String((error as any)?.message || error || ''),
+            })
             setTempAvatar(getInitialRegistrationAvatar(wxAvatarUrl || ''))
             setTempNickname(resolveRegistrationNickname(wxNickname, loginData.openid))
             setShowProfileForm(true) // 兜底：预填默认头像昵称，用户可直接进入
@@ -429,6 +534,22 @@ export default function LoginPage() {
         setTempNickname(e.detail.value)
     }
 
+    const handleUseWechatProfile = async () => {
+        try {
+            const profileRes = await Taro.getUserProfile({ desc: '用于完善个人资料' })
+            const wxNickname = profileRes.userInfo?.nickName || ''
+            const wxAvatarUrl = profileRes.userInfo?.avatarUrl || ''
+            if (wxNickname) {
+                setTempNickname(wxNickname)
+            }
+            if (wxAvatarUrl) {
+                await processChooseAvatarSelection(wxAvatarUrl, setTempAvatar)
+            }
+        } catch (err: unknown) {
+            console.warn('获取微信资料失败或用户拒绝:', err)
+        }
+    }
+
     // 保存完善的信息
     const handleSaveProfile = async () => {
         if (!tempAvatar || !tempNickname) {
@@ -456,6 +577,11 @@ export default function LoginPage() {
             setShowProfileForm(false)
             setTimeout(() => {
                 const hasPhone = String(Taro.getStorageSync('phoneNumber') || '').trim().length > 0
+                console.log('[invite-debug][login] 完善头像昵称保存后继续流程', {
+                    hasPhone,
+                    pendingOnboardingCompleted,
+                    inviteCode,
+                })
                 if (hasPhone) {
                     continueAfterAuthGates(pendingOnboardingCompleted)
                     return
@@ -579,6 +705,7 @@ export default function LoginPage() {
               tempAvatar={tempAvatar}
               tempNickname={tempNickname}
               onChooseAvatar={handleChooseAvatar}
+              onUseWechatProfile={handleUseWechatProfile}
               onNicknameInput={setTempNickname}
               onNicknameBlur={handleNicknameBlur}
               onSaveProfile={handleSaveProfile}

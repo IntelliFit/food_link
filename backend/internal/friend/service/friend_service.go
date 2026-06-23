@@ -12,7 +12,10 @@ import (
 	"food_link/backend/pkg/storage"
 )
 
-const friendCacheTTL = 5 * time.Minute
+const (
+	friendCacheTTL                  = 5 * time.Minute
+	inviteReferralAcceptGracePeriod = 2 * time.Hour
+)
 
 type friendCacheEntry struct {
 	ids []string
@@ -476,6 +479,9 @@ func (s *FriendService) AcceptInvite(ctx context.Context, userID, code string) (
 	if blocked {
 		return nil, blockedOperationError()
 	}
+	if err := s.ensureInviteReferralFromAcceptedInvite(ctx, userID, inviterID, code); err != nil {
+		return nil, err
+	}
 	isFriend, _ := s.IsFriend(ctx, userID, inviterID)
 	if isFriend {
 		profile["status"] = "already_friend"
@@ -490,6 +496,37 @@ func (s *FriendService) AcceptInvite(ctx context.Context, userID, code string) (
 	profile["status"] = "request_sent"
 	profile["already_friend"] = false
 	return profile, nil
+}
+
+func (s *FriendService) ensureInviteReferralFromAcceptedInvite(ctx context.Context, inviteeUserID, inviterUserID, inviteCode string) error {
+	if strings.TrimSpace(inviteeUserID) == "" || strings.TrimSpace(inviterUserID) == "" || inviteeUserID == inviterUserID {
+		return nil
+	}
+	invitee, err := s.userRepo.FindByID(ctx, inviteeUserID)
+	if err != nil || invitee == nil {
+		return err
+	}
+	if invitee.ReferredByUserID != nil && strings.TrimSpace(*invitee.ReferredByUserID) != "" {
+		return nil
+	}
+	if invitee.CreatedAt == nil || time.Since(*invitee.CreatedAt) > inviteReferralAcceptGracePeriod {
+		return nil
+	}
+	if _, err := s.userRepo.UpdateFields(ctx, inviteeUserID, map[string]any{"referred_by_user_id": inviterUserID}); err != nil {
+		return err
+	}
+	if err := s.userRepo.CreateInviteReferralBinding(ctx, inviterUserID, inviteeUserID, inviteCode); err != nil && !isDuplicateInviteReferralError(err) {
+		return err
+	}
+	return nil
+}
+
+func isDuplicateInviteReferralError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "duplicate") || strings.Contains(msg, "unique") || strings.Contains(msg, "constraint")
 }
 
 func (s *FriendService) resolveAvatarURL(value string) string {

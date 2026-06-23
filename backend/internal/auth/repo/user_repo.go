@@ -489,6 +489,7 @@ func (r *UserRepo) CreateInviteReferralBinding(ctx context.Context, inviterUserI
 	}
 	now := time.Now().In(time.FixedZone("Asia/Shanghai", 8*60*60))
 	row := map[string]any{
+		"id":                uuid.New().String(),
 		"inviter_user_id":   inviterUserID,
 		"invitee_user_id":   inviteeUserID,
 		"invite_code":       strings.ToUpper(strings.TrimSpace(inviteCode)),

@@ -181,6 +181,57 @@ func TestLoginService_RegisterAndLoginWithPhonePassword(t *testing.T) {
 	assert.Equal(t, registered.UserID, loggedIn.UserID)
 }
 
+func TestLoginService_RegisterWithPasswordExistingPhoneLogsIn(t *testing.T) {
+	_, userRepo := setupLoginTestDB(t)
+	cfg := &config.Config{
+		App: config.AppConfig{Env: "development", AllowDebugRegister: true},
+		JWT: config.JWTConfig{AccessTokenTTLSeconds: 3600, RefreshTokenTTLSeconds: 86400},
+	}
+	jwtSvc := NewJWTService("test-secret", 3600, 86400)
+	svc := NewLoginService(cfg, userRepo, jwtSvc)
+	ctx := context.Background()
+
+	registered, err := svc.RegisterWithPassword(ctx, PasswordRegisterInput{
+		Phone:    "13511679220",
+		Password: "password123",
+		Nickname: "测试用户",
+	})
+	require.NoError(t, err)
+
+	loggedIn, err := svc.RegisterWithPassword(ctx, PasswordRegisterInput{
+		Phone:    "13511679220",
+		Password: "password123",
+		Nickname: "不应覆盖昵称",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, registered.UserID, loggedIn.UserID)
+	assert.NotEmpty(t, loggedIn.AccessToken)
+}
+
+func TestLoginService_RegisterWithPasswordExistingPhoneRejectsWrongPassword(t *testing.T) {
+	_, userRepo := setupLoginTestDB(t)
+	cfg := &config.Config{
+		App: config.AppConfig{Env: "development", AllowDebugRegister: true},
+		JWT: config.JWTConfig{AccessTokenTTLSeconds: 3600, RefreshTokenTTLSeconds: 86400},
+	}
+	jwtSvc := NewJWTService("test-secret", 3600, 86400)
+	svc := NewLoginService(cfg, userRepo, jwtSvc)
+	ctx := context.Background()
+
+	_, err := svc.RegisterWithPassword(ctx, PasswordRegisterInput{
+		Phone:    "13511679220",
+		Password: "password123",
+	})
+	require.NoError(t, err)
+
+	_, err = svc.RegisterWithPassword(ctx, PasswordRegisterInput{
+		Phone:    "13511679220",
+		Password: "wrong-password",
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "手机号或密码错误")
+}
+
 func TestLoginService_LoginWithPassword_InvalidPassword(t *testing.T) {
 	_, userRepo := setupLoginTestDB(t)
 	cfg := &config.Config{
