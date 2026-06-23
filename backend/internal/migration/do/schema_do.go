@@ -863,18 +863,19 @@ type BodyMetricSettingsDO struct {
 func (BodyMetricSettingsDO) TableName() string { return "user_body_metric_settings" }
 
 type ExerciseLogDO struct {
-	ID             string    `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
-	UserID         string    `gorm:"column:user_id;type:uuid;not null;index:idx_user_exercise_logs_user_date,priority:1;index:idx_user_exercise_logs_user_recorded_at,priority:1"`
-	ExerciseDesc   string    `gorm:"column:exercise_desc;type:text;not null"`
-	ExerciseType   *string   `gorm:"column:exercise_type;type:text"`
-	ImageURL       *string   `gorm:"column:image_url;type:text"`
-	CaloriesBurned int       `gorm:"column:calories_burned;type:integer;not null"`
-	DurationMin    *int      `gorm:"column:duration_min;type:integer"`
-	RecordedOn     time.Time `gorm:"column:recorded_on;type:date;not null;index:idx_user_exercise_logs_user_date,priority:2"`
-	RecordedAt     time.Time `gorm:"column:recorded_at;type:timestamptz;not null;default:now();index:idx_user_exercise_logs_user_recorded_at,priority:2,sort:desc"`
-	AIReasoning    *string   `gorm:"column:ai_reasoning;type:text"`
-	HiddenFromFeed bool      `gorm:"column:hidden_from_feed;type:boolean;not null;default:false;index:idx_user_exercise_logs_hidden_from_feed"`
-	CreatedAt      time.Time `gorm:"column:created_at;type:timestamptz;not null;default:now()"`
+	ID             string           `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	UserID         string           `gorm:"column:user_id;type:uuid;not null;index:idx_user_exercise_logs_user_date,priority:1;index:idx_user_exercise_logs_user_recorded_at,priority:1"`
+	ExerciseDesc   string           `gorm:"column:exercise_desc;type:text;not null"`
+	ExerciseType   *string          `gorm:"column:exercise_type;type:text"`
+	ImageURL       *string          `gorm:"column:image_url;type:text"`
+	CaloriesBurned int              `gorm:"column:calories_burned;type:integer;not null"`
+	DurationMin    *int             `gorm:"column:duration_min;type:integer"`
+	RecordedOn     time.Time        `gorm:"column:recorded_on;type:date;not null;index:idx_user_exercise_logs_user_date,priority:2"`
+	RecordedAt     time.Time        `gorm:"column:recorded_at;type:timestamptz;not null;default:now();index:idx_user_exercise_logs_user_recorded_at,priority:2,sort:desc"`
+	AIReasoning    *string          `gorm:"column:ai_reasoning;type:text"`
+	ExerciseItems  []map[string]any `gorm:"column:exercise_items;type:jsonb;serializer:json;not null;default:'[]'::jsonb"`
+	HiddenFromFeed bool             `gorm:"column:hidden_from_feed;type:boolean;not null;default:false;index:idx_user_exercise_logs_hidden_from_feed"`
+	CreatedAt      time.Time        `gorm:"column:created_at;type:timestamptz;not null;default:now()"`
 }
 
 func (ExerciseLogDO) TableName() string { return "user_exercise_logs" }

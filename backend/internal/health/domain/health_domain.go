@@ -29,18 +29,19 @@ func (BodyWaterLog) TableName() string { return "user_water_logs" }
 
 // ExerciseLog — table: user_exercise_logs
 type ExerciseLog struct {
-	ID             string     `gorm:"column:id"`
-	UserID         string     `gorm:"column:user_id"`
-	ExerciseDesc   string     `gorm:"column:exercise_desc"`
-	ExerciseType   *string    `gorm:"column:exercise_type"`
-	ImageURL       *string    `gorm:"column:image_url"`
-	CaloriesBurned *float64   `gorm:"column:calories_burned"`
-	DurationMin    *int       `gorm:"column:duration_min"`
-	RecordedOn     *time.Time `gorm:"column:recorded_on"`
-	RecordedAt     *time.Time `gorm:"column:recorded_at"`
-	AIReasoning    *string    `gorm:"column:ai_reasoning"`
-	HiddenFromFeed bool       `gorm:"column:hidden_from_feed"`
-	CreatedAt      *time.Time `gorm:"column:created_at"`
+	ID             string           `gorm:"column:id"`
+	UserID         string           `gorm:"column:user_id"`
+	ExerciseDesc   string           `gorm:"column:exercise_desc"`
+	ExerciseType   *string          `gorm:"column:exercise_type"`
+	ImageURL       *string          `gorm:"column:image_url"`
+	CaloriesBurned *float64         `gorm:"column:calories_burned"`
+	DurationMin    *int             `gorm:"column:duration_min"`
+	RecordedOn     *time.Time       `gorm:"column:recorded_on"`
+	RecordedAt     *time.Time       `gorm:"column:recorded_at"`
+	AIReasoning    *string          `gorm:"column:ai_reasoning"`
+	ExerciseItems  []map[string]any `gorm:"column:exercise_items;serializer:json"`
+	HiddenFromFeed bool             `gorm:"column:hidden_from_feed"`
+	CreatedAt      *time.Time       `gorm:"column:created_at"`
 }
 
 func (ExerciseLog) TableName() string { return "user_exercise_logs" }

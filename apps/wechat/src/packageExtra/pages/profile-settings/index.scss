@@ -114,6 +114,7 @@
   display: flex;
   align-items: center;
   gap: 16rpx;
+  min-width: 0;
 
   &:active {
     opacity: 0.7;
@@ -121,10 +122,15 @@
 }
 
 .profile-user-id {
+  flex: 1;
+  min-width: 0;
   font-size: 24rpx;
   color: rgba(255, 255, 255, 0.78);
   line-height: 34rpx;
   font-family: monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .profile-id-copy-btn {
@@ -1061,6 +1067,15 @@
   color: #fff;
   line-height: 1;
   text-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.35);
+}
+
+.profile-theme-toggle-btn {
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 50%;
+}
+
+.profile-theme-toggle-icon {
+  font-size: 36rpx;
 }
 
 /* 编辑弹窗背景图 */

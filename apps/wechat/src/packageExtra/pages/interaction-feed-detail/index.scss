@@ -169,9 +169,17 @@
 
 /* 详情页评论区域不需要背景色（空态/有评论均透明） */
 .feed-empty {
-  background: transparent;
+  background: transparent !important;
+  background-color: transparent !important;
+  border-bottom: none !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
 }
 
 .feed-comments {
-  background: transparent;
+  background: transparent !important;
+  background-color: transparent !important;
+  border-bottom: none !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
 }

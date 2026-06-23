@@ -120,7 +120,7 @@ function ProfileListIcon({ name }: { name: string }) {
 }
 
 function ProfilePage() {
-  const { scheme, toggleScheme } = useAppColorScheme()
+  const { scheme } = useAppColorScheme()
   // 登录状态
   const [isLoggedIn, setIsLoggedIn] = React.useState(false)
   const [userId, setUserId] = React.useState('')
@@ -633,9 +633,6 @@ function ProfilePage() {
             )}
           </View>
           <View className='user-info-main'>
-            <View className='profile-theme-chip' onClick={toggleScheme}>
-              <Text className={`iconfont ${scheme === 'dark' ? 'icon-zaoshang' : 'icon-wanshang'} profile-theme-chip-icon`} />
-            </View>
             {isLoggedIn ? (
               <>
                 <View className='user-name-row'>

@@ -339,7 +339,7 @@ func New(cfg *config.Config) (*App, error) {
 	engine.POST("/api/app/account/password", authmw.RequireJWT(jwtSvc), loginHandler.SetPassword)
 	engine.GET("/api", system.Root)
 	engine.GET("/api/health", system.Health)
-	engine.GET("/api/app/public-config", system.PublicConfig)
+	registerPublicConfigRoutes(engine, system)
 	engine.GET("/map-picker", system.MapPicker)
 	engine.GET("/test-backend", system.TestBackendPage)
 	engine.GET("/test-backend/login", system.TestBackendLoginPage)
@@ -935,6 +935,12 @@ func wrap(mw gin.HandlerFunc, final gin.HandlerFunc) gin.HandlerFunc {
 		}
 		final(c)
 	}
+}
+
+func registerPublicConfigRoutes(engine *gin.Engine, system *systemhandler.Handler) {
+	engine.GET("/api/app/public-config", system.PublicConfig)
+	// 兼容旧本地代理或调试脚本中使用的短路径，正式小程序仍优先请求 /api/app/public-config。
+	engine.GET("/api/public-config", system.PublicConfig)
 }
 
 func statsInsightWebsocket(statsSvc *healthservice.StatsService) gin.HandlerFunc {

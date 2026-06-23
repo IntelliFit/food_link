@@ -24,8 +24,26 @@ type ResolvedManualSource = {
   sourceTitle?: string | null
 }
 
+export type ManualFoodDisplayRecordLike = {
+  entry_type?: string | null
+  source_task_id?: string | null
+  recipe_id?: string | null
+  description?: string | null
+  items?: ManualFoodSourceItem[] | null
+}
+
 const strOrEmpty = (value?: unknown): string =>
   typeof value === 'string' ? value.trim() : ''
+
+const MANUAL_CARD_ENTRY_TYPES = new Set(['food_library', 'public_food_library'])
+const NON_MANUAL_CARD_ENTRY_TYPES = new Set([
+  'food_image',
+  'food_text',
+  'analyze_history',
+  'favorite_recipe',
+  'campus_canteen',
+  'unknown'
+])
 
 /** 从 item 上各种可能的字段推断食物库来源（兼容未写 manual_source 的旧记录） */
 export function resolveManualSource(item?: ManualFoodSourceItem | null): ResolvedManualSource {
@@ -76,25 +94,49 @@ export function isManualFoodSourceItem(item?: ManualFoodSourceItem | null): bool
   return Boolean(resolveManualSource(item).source)
 }
 
-/** 是否为手动记录产生的圈子动态（拍照识别等不含 manual_source 的不算） */
+/** 旧数据回退：只有缺失 entry_type 的老手动记录才走这里。 */
 export function isManualFoodFeedRecord(
   record?: { description?: string | null; items?: ManualFoodSourceItem[] | null } | null
 ): boolean {
   if (!record) return false
   const desc = String(record.description || '').trim()
-  if (desc.startsWith('手动记录：') || desc.startsWith('手动记录:')) return true
-  if (!Array.isArray(record.items) || record.items.length === 0) return false
-  return record.items.some((item) => isManualFoodSourceItem(item))
+  if (!desc.startsWith('手动记录：') && !desc.startsWith('手动记录:')) return false
+  return hasManualFoodDisplayItems(record.items)
 }
 
-/** 是否应以「食物库来源卡片」形式展示（仅食物库输入模块、无用户上传图片） */
-export function shouldUseManualFoodCards(
-  record?: { image_path?: string | null; image_paths?: string[] | null; items?: ManualFoodSourceItem[] | null } | null
+/**
+ * 是否应展示逐食材卡片。
+ * 规则：
+ * - `food_library` / `public_food_library` 一律展示逐食材卡片
+ * - `food_image` / `food_text` / `analyze_history` / `favorite_recipe` 等显式非手动入口一律不展示
+ * - 仅当 `entry_type` 缺失时，才允许老数据按「手动记录：」+ 手动来源 items 回退
+ */
+export function shouldRenderManualFoodCards(
+  record?: ManualFoodDisplayRecordLike | null
 ): boolean {
   if (!record) return false
-  // 拍照 / 图片上传的 AI 识别记录直接展示原图，不使用食物库卡片
-  if (record.image_path || (record.image_paths?.length || 0) > 0) return false
-  return hasManualFoodDisplayItems(record.items)
+  const entryType = strOrEmpty(record.entry_type)
+  if (entryType) {
+    if (MANUAL_CARD_ENTRY_TYPES.has(entryType)) {
+      return hasManualFoodDisplayItems(record.items)
+    }
+    if (NON_MANUAL_CARD_ENTRY_TYPES.has(entryType)) {
+      return false
+    }
+    return false
+  }
+
+  if (strOrEmpty(record.source_task_id) || strOrEmpty(record.recipe_id)) {
+    return false
+  }
+  return isManualFoodFeedRecord(record)
+}
+
+/** 兼容旧调用名，内部已改为 entry_type 优先判定。 */
+export function shouldUseManualFoodCards(
+  record?: ManualFoodDisplayRecordLike | null
+): boolean {
+  return shouldRenderManualFoodCards(record)
 }
 
 /** 从饮食记录 items 中筛出手动记录条目（含来源标签与图片字段规范化） */
@@ -110,6 +152,9 @@ export function extractManualFoodDisplayItems(
       const urls = collectFoodDisplayImageUrls(item)
       return {
         ...item,
+        manual_source: (resolved.source || item.manual_source || '') as ManualFoodSourceItem['manual_source'],
+        manual_source_id: resolved.sourceId || item.manual_source_id || null,
+        manual_source_title: resolved.sourceTitle || item.manual_source_title || item.name || null,
         displayName,
         sourceLabel: manualFoodSourceLabel(resolved.source, item.source_label),
         imageUrl: urls[0] || '',

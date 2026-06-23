@@ -49,6 +49,7 @@ type FeedRecord struct {
 	CaloriesBurned   *float64         `gorm:"column:calories_burned" json:"calories_burned,omitempty"`
 	DurationMin      *int             `gorm:"column:duration_min" json:"duration_min,omitempty"`
 	AIReasoning      *string          `gorm:"column:ai_reasoning" json:"ai_reasoning,omitempty"`
+	ExerciseItems    []map[string]any `gorm:"column:exercise_items;serializer:json" json:"exercise_items,omitempty"`
 	// Campus food fields (for public_food_library entries appearing in feed)
 	Price             float64 `gorm:"column:price" json:"price,omitempty"`
 	PriceUnit         string  `gorm:"column:price_unit" json:"price_unit,omitempty"`
@@ -200,7 +201,7 @@ func (r *FeedRepo) listFoodFeedByAuthors(ctx context.Context, authorIDs []string
 
 func (r *FeedRepo) listExerciseFeedByAuthors(ctx context.Context, authorIDs []string, date, sortBy string, limit int) ([]FeedRecord, error) {
 	q := r.db.WithContext(ctx).Table("user_exercise_logs").
-		Select("'exercise_log' AS feed_type, id, user_id, '' AS meal_type, COALESCE(recorded_at, created_at, recorded_on::timestamptz) AS record_time, created_at, COALESCE(calories_burned, 0) AS total_calories, 0 AS total_protein, 0 AS total_carbs, 0 AS total_fat, image_url AS image_path, exercise_desc AS description, hidden_from_feed, exercise_type, exercise_desc, calories_burned, duration_min, ai_reasoning").
+		Select("'exercise_log' AS feed_type, id, user_id, '' AS meal_type, COALESCE(recorded_at, created_at, recorded_on::timestamptz) AS record_time, created_at, COALESCE(calories_burned, 0) AS total_calories, 0 AS total_protein, 0 AS total_carbs, 0 AS total_fat, image_url AS image_path, exercise_desc AS description, hidden_from_feed, exercise_type, exercise_desc, calories_burned, duration_min, ai_reasoning, COALESCE(exercise_items, '[]'::jsonb) AS exercise_items").
 		Where("user_id IN ? AND hidden_from_feed = ?", authorIDs, false)
 	if date != "" {
 		start, end, err := chinaDateWindow(date)
@@ -275,7 +276,7 @@ func (r *FeedRepo) GetFeedTargetByID(ctx context.Context, targetType, targetID s
 	if targetType == FeedTargetExerciseLog {
 		var row FeedRecord
 		err := r.db.WithContext(ctx).Table("user_exercise_logs").
-			Select("'exercise_log' AS feed_type, id, user_id, '' AS meal_type, COALESCE(recorded_at, created_at, recorded_on::timestamptz) AS record_time, created_at, COALESCE(calories_burned, 0) AS total_calories, 0 AS total_protein, 0 AS total_carbs, 0 AS total_fat, image_url AS image_path, exercise_desc AS description, hidden_from_feed, exercise_type, exercise_desc, calories_burned, duration_min, ai_reasoning").
+			Select("'exercise_log' AS feed_type, id, user_id, '' AS meal_type, COALESCE(recorded_at, created_at, recorded_on::timestamptz) AS record_time, created_at, COALESCE(calories_burned, 0) AS total_calories, 0 AS total_protein, 0 AS total_carbs, 0 AS total_fat, image_url AS image_path, exercise_desc AS description, hidden_from_feed, exercise_type, exercise_desc, calories_burned, duration_min, ai_reasoning, COALESCE(exercise_items, '[]'::jsonb) AS exercise_items").
 			Where("id = ?", targetID).
 			First(&row).Error
 		if err != nil {

@@ -3,5 +3,63 @@
   margin-bottom: 12rpx;
   display: flex;
   flex-direction: column;
-  gap: 24rpx;
+  gap: 14rpx;
+}
+
+.feed-manual-food-card {
+  .fl-food-card {
+    border-radius: 20rpx;
+    box-shadow: 0 2rpx 8rpx rgb(15 23 42 / 5%);
+  }
+
+  .fl-food-card-main {
+    padding: 16rpx 18rpx;
+    gap: 14rpx;
+    min-height: 132rpx;
+    align-items: center;
+  }
+
+  .fl-food-card-image-wrap {
+    width: 108rpx;
+    height: 108rpx;
+    border-radius: 14rpx;
+  }
+
+  .fl-food-card-image {
+    border-radius: 14rpx;
+  }
+
+  .fl-food-card-placeholder-icon {
+    font-size: 42rpx;
+  }
+
+  .fl-food-card-info {
+    padding-bottom: 0;
+    justify-content: center;
+  }
+
+  .fl-food-card-title-row {
+    gap: 10rpx;
+    margin-bottom: 6rpx;
+  }
+
+  .fl-food-card-title {
+    font-size: 27rpx;
+    line-height: 36rpx;
+  }
+
+  .fl-food-card-badge {
+    padding: 3rpx 10rpx;
+  }
+
+  .fl-food-card-badge-text {
+    font-size: 18rpx;
+  }
+
+  .fl-food-card-calories {
+    position: static;
+    font-size: 24rpx;
+    line-height: 32rpx;
+    margin-top: 2rpx;
+  }
 }

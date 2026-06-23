@@ -34,9 +34,13 @@ type ContentRow struct {
 	CaloriesBurned *float64 `gorm:"column:calories_burned"`
 	DurationMin    *int     `gorm:"column:duration_min"`
 
-	MealType  *string `gorm:"column:meal_type"`
-	DietGoal  *string `gorm:"column:diet_goal"`
-	Items     *string `gorm:"column:items"`
+	MealType      *string `gorm:"column:meal_type"`
+	DietGoal      *string `gorm:"column:diet_goal"`
+	EntryType     *string `gorm:"column:entry_type"`
+	SourceTaskID  *string `gorm:"column:source_task_id"`
+	RecipeID      *string `gorm:"column:recipe_id"`
+	Items         *string `gorm:"column:items"`
+	ExerciseItems *string `gorm:"column:exercise_items"`
 }
 
 type UserRow struct {
@@ -55,7 +59,7 @@ SELECT * FROM (
     NULL::text AS title,
     NULL::text AS body,
     ufr.image_path,
-    NULL::text AS image_paths,
+    ufr.image_paths::text AS image_paths,
     to_char(ufr.record_time, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS record_time,
     to_char(ufr.created_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS created_at,
     ufr.total_calories,
@@ -71,7 +75,11 @@ SELECT * FROM (
     NULL::int AS duration_min,
     ufr.meal_type,
     ufr.diet_goal,
-    ufr.items::text AS items
+    ufr.entry_type,
+    ufr.source_task_id::text AS source_task_id,
+    ufr.recipe_id::text AS recipe_id,
+    ufr.items::text AS items,
+    NULL::text AS exercise_items
   FROM user_food_records ufr
   WHERE ufr.hidden_from_feed = false
     AND ufr.user_id IN (SELECT user_id FROM _search_visible_users)
@@ -105,10 +113,14 @@ SELECT * FROM (
     uel.exercise_desc,
     uel.exercise_type,
     uel.calories_burned,
-    NULL::int AS duration_min,
+    uel.duration_min,
     NULL::text AS meal_type,
     NULL::text AS diet_goal,
-    NULL::text AS items
+    NULL::text AS entry_type,
+    NULL::text AS source_task_id,
+    NULL::text AS recipe_id,
+    NULL::text AS items,
+    uel.exercise_items::text AS exercise_items
   FROM user_exercise_logs uel
   WHERE uel.hidden_from_feed = false
     AND uel.user_id IN (SELECT user_id FROM _search_visible_users)
@@ -121,15 +133,15 @@ SELECT * FROM (
 
   UNION ALL
 
-  SELECT
-    'circle_post' AS target_type,
-    ucp.id::text AS target_id,
-    ucp.user_id,
+	  SELECT
+	    'circle_post' AS target_type,
+	    ucp.id::text AS target_id,
+	    ucp.user_id,
     '' AS description,
     ucp.title,
     ucp.body,
     NULL::text AS image_path,
-    ucp.image_paths::text,
+	    ucp.image_paths::text AS image_paths,
     to_char(ucp.created_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS record_time,
     to_char(ucp.created_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS created_at,
     ucp.total_calories,
@@ -145,7 +157,11 @@ SELECT * FROM (
     NULL::int AS duration_min,
     NULL::text AS meal_type,
     NULL::text AS diet_goal,
-    NULL::text AS items
+    NULL::text AS entry_type,
+    NULL::text AS source_task_id,
+    NULL::text AS recipe_id,
+    NULL::text AS items,
+    NULL::text AS exercise_items
   FROM user_circle_posts ucp
   WHERE ucp.hidden_from_feed = false
     AND ucp.user_id IN (SELECT user_id FROM _search_visible_users)

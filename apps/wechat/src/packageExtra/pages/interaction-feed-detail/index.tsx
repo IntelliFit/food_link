@@ -26,9 +26,10 @@ import { FeedReportMask } from '../../../pages/community/components/FeedReportMa
 import { FeedReportSheet } from '../../../pages/community/components/FeedReportSheet'
 import { FeedActionSheet, type FeedActionSheetAction } from '../../../pages/community/components/FeedActionSheet'
 import { ManualFoodCards } from '../../../pages/community/components/ManualFoodCards'
+import { ExerciseActivityCards, hasExerciseActivityCards } from '../../../pages/community/components/ExerciseActivityCards'
 import {
   extractManualFoodDisplayItems,
-  isManualFoodFeedRecord,
+  shouldRenderManualFoodCards,
   type ManualFoodSourceItem
 } from '../../../utils/manual-food-source'
 
@@ -503,15 +504,16 @@ function InteractionFeedDetailPage() {
                 const circlePostTitle = isCirclePost ? (feedItem.record.title || '') : ''
                 const circlePostBody = isCirclePost ? (feedItem.record.body || '') : ''
                 const circlePostText = circlePostTitle || circlePostBody
-                const exerciseKcal = Number(feedItem.record.calories_burned ?? feedItem.record.total_calories ?? 0)
-                const detailTargetKey = `${getFeedTargetType(feedItem)}-${getFeedTargetId(feedItem)}`
-                const isManualRecord = !exercise && !isCirclePost && isManualFoodFeedRecord(feedItem.record)
-                const manualFoodItems = isManualRecord ? extractManualFoodDisplayItems(feedItem.record.items) : []
-                const visibleManualFoodItems = manualFoodsExpanded ? manualFoodItems : manualFoodItems.slice(0, INITIAL_VISIBLE_MANUAL_FOODS)
+	                const exerciseKcal = Number(feedItem.record.calories_burned ?? feedItem.record.total_calories ?? 0)
+	                const detailTargetKey = `${getFeedTargetType(feedItem)}-${getFeedTargetId(feedItem)}`
+	                const isManualRecord = !exercise && !isCirclePost && shouldRenderManualFoodCards(feedItem.record)
+	                const manualFoodItems = isManualRecord ? extractManualFoodDisplayItems(feedItem.record.items) : []
+	                const useExerciseActivityCards = exercise && hasExerciseActivityCards(feedItem.record.exercise_items)
+	                const visibleManualFoodItems = manualFoodsExpanded ? manualFoodItems : manualFoodItems.slice(0, INITIAL_VISIBLE_MANUAL_FOODS)
                 return (
-              <View
-                id={`feed-card-${getFeedTargetType(feedItem)}-${getFeedTargetId(feedItem)}`}
-                className={`feed-card${(feedItem.record.description?.trim() || exerciseDesc || circlePostText.trim()) && !feedItem.record.image_path ? ' feed-card-text-only' : ''} ${exercise ? 'feed-card-exercise' : ''} ${isCirclePost ? 'feed-card-circle-post' : ''}`}
+	              <View
+	                id={`feed-card-${getFeedTargetType(feedItem)}-${getFeedTargetId(feedItem)}`}
+	                className={`feed-card${(feedItem.record.description?.trim() || exerciseDesc || circlePostText.trim()) && !feedItem.record.image_path && !useExerciseActivityCards ? ' feed-card-text-only' : ''} ${exercise ? 'feed-card-exercise' : ''} ${isCirclePost ? 'feed-card-circle-post' : ''}`}
                 style={isCirclePost ? { position: 'relative' } : undefined}
                 onLongPress={() => {
                   if (isCirclePost && !feedItem.is_mine) {
@@ -550,11 +552,17 @@ function InteractionFeedDetailPage() {
                         {circlePostTitle ? <Text className='feed-circle-post-title'>{circlePostTitle}</Text> : null}
                         {circlePostBody ? <Text className='feed-content feed-circle-post-body'>{circlePostBody}</Text> : null}
                       </>
-                    ) : (exercise ? exerciseDesc : feedItem.record.description) ? (
-                      exercise
-                        ? renderCollapsibleFeedText(`${detailTargetKey}-desc`, exerciseDesc)
-                        : <Text className='feed-content'>{feedItem.record.description}</Text>
-                    ) : null}
+	                    ) : !useExerciseActivityCards && (exercise ? exerciseDesc : feedItem.record.description) ? (
+	                      exercise
+	                        ? renderCollapsibleFeedText(`${detailTargetKey}-desc`, exerciseDesc)
+	                        : <Text className='feed-content'>{feedItem.record.description}</Text>
+	                    ) : null}
+	                    {useExerciseActivityCards && (
+	                      <ExerciseActivityCards
+	                        items={feedItem.record.exercise_items}
+	                        onItemClick={() => handleViewDetail(feedItem.record.id)}
+	                      />
+	                    )}
                     {feedItem.record.image_path && !isCirclePost ? (
                       <View className='feed-image feed-tap-to-detail' onClick={() => handleViewDetail(feedItem.record.id)}>
                         <Image src={feedItem.record.image_path} mode='aspectFill' className='feed-image-content' />
@@ -582,7 +590,6 @@ function InteractionFeedDetailPage() {
                       <View className='feed-manual-foods-detail'>
                         <ManualFoodCards
                           items={visibleManualFoodItems}
-                          mealType={feedItem.record.meal_type}
                           onItemClick={handleManualFoodCardClick}
                         />
                         {manualFoodItems.length > INITIAL_VISIBLE_MANUAL_FOODS && (

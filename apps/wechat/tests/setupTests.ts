@@ -41,6 +41,7 @@ global.wx = {
   scanCode: jest.fn(),
   getLocation: jest.fn(),
   openLocation: jest.fn(),
+  getCurrentPages: jest.fn(() => []),
   createAnimation: jest.fn(() => ({
     translateX: jest.fn().mockReturnThis(),
     translateY: jest.fn().mockReturnThis(),
@@ -53,74 +54,84 @@ global.wx = {
 } as any;
 
 // Mock Taro
-jest.mock('@tarojs/taro', () => ({
-  getSystemInfoSync: jest.fn(() => ({
-    windowWidth: 375,
-    windowHeight: 667,
-    screenWidth: 375,
-    screenHeight: 667,
-    statusBarHeight: 20,
-    platform: 'ios',
-    safeArea: { top: 44, bottom: 34, left: 0, right: 375, width: 375, height: 778 }
-  })),
-  getStorageSync: jest.fn(),
-  setStorageSync: jest.fn(),
-  removeStorageSync: jest.fn(),
-  getStorage: jest.fn(),
-  setStorage: jest.fn(),
-  removeStorage: jest.fn(),
-  login: jest.fn(),
-  request: jest.fn(),
-  showToast: jest.fn(),
-  showLoading: jest.fn(),
-  hideLoading: jest.fn(),
-  showModal: jest.fn(),
-  navigateTo: jest.fn(),
-  redirectTo: jest.fn(),
-  navigateBack: jest.fn(),
-  switchTab: jest.fn(),
-  reLaunch: jest.fn(),
-  chooseImage: jest.fn(),
-  uploadFile: jest.fn(),
-  downloadFile: jest.fn(),
-  scanCode: jest.fn(),
-  getLocation: jest.fn(),
-  openLocation: jest.fn(),
-  createAnimation: jest.fn(() => ({
-    translateX: jest.fn().mockReturnThis(),
-    translateY: jest.fn().mockReturnThis(),
-    scale: jest.fn().mockReturnThis(),
-    rotate: jest.fn().mockReturnThis(),
-    opacity: jest.fn().mockReturnThis(),
-    step: jest.fn().mockReturnThis(),
-    export: jest.fn(() => ({})),
-  })),
-  useLoad: jest.fn((callback) => callback()),
-  useDidShow: jest.fn((callback) => callback()),
-  useDidHide: jest.fn(),
-  useReady: jest.fn((callback) => callback()),
-  useUnload: jest.fn(),
-  usePullDownRefresh: jest.fn(),
-  useReachBottom: jest.fn(),
-  useShareAppMessage: jest.fn(),
-  useShareTimeline: jest.fn(),
-  useAddToFavorites: jest.fn(),
-  usePageScroll: jest.fn(),
-  useResize: jest.fn(),
-  useTabItemTap: jest.fn(),
-  useSaveExitState: jest.fn(),
-  eventCenter: {
-    on: jest.fn(),
-    off: jest.fn(),
-    trigger: jest.fn(),
-  },
-  Current: {
-    router: {
-      path: '/pages/index/index',
-      params: {}
+jest.mock('@tarojs/taro', () => {
+  const taroMock = {
+    getSystemInfoSync: jest.fn(() => ({
+      windowWidth: 375,
+      windowHeight: 667,
+      screenWidth: 375,
+      screenHeight: 667,
+      statusBarHeight: 20,
+      platform: 'ios',
+      safeArea: { top: 44, bottom: 34, left: 0, right: 375, width: 375, height: 778 }
+    })),
+    getStorageSync: jest.fn(),
+    setStorageSync: jest.fn(),
+    removeStorageSync: jest.fn(),
+    getStorage: jest.fn(),
+    setStorage: jest.fn(),
+    removeStorage: jest.fn(),
+    login: jest.fn(),
+    request: jest.fn(),
+    showToast: jest.fn(),
+    showLoading: jest.fn(),
+    hideLoading: jest.fn(),
+    showModal: jest.fn(),
+    navigateTo: jest.fn(),
+    redirectTo: jest.fn(),
+    navigateBack: jest.fn(),
+    switchTab: jest.fn(),
+    reLaunch: jest.fn(),
+    chooseImage: jest.fn(),
+    uploadFile: jest.fn(),
+    downloadFile: jest.fn(),
+    scanCode: jest.fn(),
+    getLocation: jest.fn(),
+    openLocation: jest.fn(),
+    getCurrentPages: jest.fn(() => []),
+    createAnimation: jest.fn(() => ({
+      translateX: jest.fn().mockReturnThis(),
+      translateY: jest.fn().mockReturnThis(),
+      scale: jest.fn().mockReturnThis(),
+      rotate: jest.fn().mockReturnThis(),
+      opacity: jest.fn().mockReturnThis(),
+      step: jest.fn().mockReturnThis(),
+      export: jest.fn(() => ({})),
+    })),
+    useLoad: jest.fn((callback) => callback()),
+    useDidShow: jest.fn((callback) => callback()),
+    useDidHide: jest.fn(),
+    useReady: jest.fn((callback) => callback()),
+    useUnload: jest.fn(),
+    usePullDownRefresh: jest.fn(),
+    useReachBottom: jest.fn(),
+    useRouter: jest.fn(() => ({ path: '/pages/index/index', params: {} })),
+    useShareAppMessage: jest.fn(),
+    useShareTimeline: jest.fn(),
+    useAddToFavorites: jest.fn(),
+    usePageScroll: jest.fn(),
+    useResize: jest.fn(),
+    useTabItemTap: jest.fn(),
+    useSaveExitState: jest.fn(),
+    eventCenter: {
+      on: jest.fn(),
+      off: jest.fn(),
+      trigger: jest.fn(),
+    },
+    Current: {
+      router: {
+        path: '/pages/index/index',
+        params: {}
+      }
     }
   }
-}));
+
+  return {
+    __esModule: true,
+    default: taroMock,
+    ...taroMock,
+  }
+});
 
 // Mock @tarojs/components
 jest.mock('@tarojs/components', () => {

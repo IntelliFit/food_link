@@ -45,10 +45,11 @@ import {
 } from '../../utils/api'
 import {
   extractManualFoodDisplayItems,
-  shouldUseManualFoodCards
+  shouldRenderManualFoodCards
 } from '../../utils/manual-food-source'
 import { FeedReportMask } from './components/FeedReportMask'
 import { ManualFoodCards } from './components/ManualFoodCards'
+import { ExerciseActivityCards, hasExerciseActivityCards } from './components/ExerciseActivityCards'
 import { FeedReportSheet } from './components/FeedReportSheet'
 import { FeedActionSheet, type FeedActionSheetAction } from './components/FeedActionSheet'
 import { Button as TaroifyButton } from '@taroify/core'
@@ -2414,11 +2415,12 @@ function CommunityPage() {
                     const circlePostBody = isCirclePost ? (item.record.body || '') : ''
                     const circlePostText = circlePostTitle || circlePostBody
                     const exerciseKcal = Number(item.record.calories_burned ?? item.record.total_calories ?? 0)
-                    const isManualRecord = !exercise && !isCirclePost && shouldUseManualFoodCards(item.record)
+                    const isManualRecord = !exercise && !isCirclePost && shouldRenderManualFoodCards(item.record)
                     const manualFoodItems = isManualRecord
                       ? extractManualFoodDisplayItems(item.record.items)
                       : []
                     const useManualFoodCards = isManualRecord && manualFoodItems.length > 0
+                    const useExerciseActivityCards = exercise && hasExerciseActivityCards(item.record.exercise_items)
                     const feedImagePaths = !exercise && !isCirclePost && !useManualFoodCards
                       ? (item.record.image_paths?.length
                         ? item.record.image_paths
@@ -2428,10 +2430,10 @@ function CommunityPage() {
                       : []
                     const showReportMask = isCirclePost && reportMaskTarget?.targetType === targetType && reportMaskTarget?.targetId === targetId
                     return (
-                    <View key={targetKey}>
-                      <View
-                        id={`feed-card-${targetType}-${targetId}`}
-                        className={`feed-card${(item.record.description?.trim() || exerciseDesc || circlePostText.trim()) && !item.record.image_path && !useManualFoodCards ? ' feed-card-text-only' : ''} ${exercise ? 'feed-card-exercise' : ''} ${isCirclePost ? 'feed-card-circle-post' : ''}`}
+	                    <View key={targetKey}>
+	                      <View
+	                        id={`feed-card-${targetType}-${targetId}`}
+	                        className={`feed-card${(item.record.description?.trim() || exerciseDesc || circlePostText.trim()) && !item.record.image_path && !useManualFoodCards && !useExerciseActivityCards ? ' feed-card-text-only' : ''} ${exercise ? 'feed-card-exercise' : ''} ${isCirclePost ? 'feed-card-circle-post' : ''}`}
                         style={isCirclePost ? { position: 'relative' } : undefined}
                         onLongPress={() => {
                           if (isCirclePost && !item.is_mine) {
@@ -2486,7 +2488,7 @@ function CommunityPage() {
                                 ) : null}
                               </View>
                             </View>
-                            {!useManualFoodCards && (exercise ? exerciseDesc : isCirclePost ? circlePostText : item.record.description) &&
+	                            {!useManualFoodCards && !useExerciseActivityCards && (exercise ? exerciseDesc : isCirclePost ? circlePostText : item.record.description) &&
                               (item.record.image_path && !isCirclePost ? (
                                 exercise
                                   ? renderCollapsibleFeedText(`${targetKey}-desc`, exerciseDesc)
@@ -2505,13 +2507,18 @@ function CommunityPage() {
                                   )}
                                 </View>
                               ))}
-                            {useManualFoodCards && (
-                              <ManualFoodCards
-                                items={item.record.items}
-                                mealType={item.record.meal_type}
-                                onItemClick={() => handleViewDetail(item)}
-                              />
-                            )}
+	                            {useManualFoodCards && (
+	                              <ManualFoodCards
+	                                items={item.record.items}
+	                                onItemClick={() => handleViewDetail(item)}
+	                              />
+	                            )}
+	                            {useExerciseActivityCards && (
+	                              <ExerciseActivityCards
+	                                items={item.record.exercise_items}
+	                                onItemClick={() => handleViewDetail(item)}
+	                              />
+	                            )}
                             {feedImagePaths.length > 0 && !useManualFoodCards && !isCirclePost && (
                               <View
                                 className={`feed-image ${feedImagePaths.length <= 1 ? 'feed-tap-to-detail' : ''}`}

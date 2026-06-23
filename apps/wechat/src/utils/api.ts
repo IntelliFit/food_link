@@ -606,6 +606,21 @@ export interface FoodRecordItemRow {
   packagedCandidates?: Array<Record<string, unknown>>
 }
 
+/** 长文本运动解析后的单个运动项目 */
+export interface ExerciseActivityItem {
+  name?: string | null
+  duration_min?: number | null
+  sets?: number | null
+  reps?: number | null
+  intensity?: string | null
+  met?: number | null
+  calories_kcal?: number | null
+  source?: string | null
+  match_status?: string | null
+  library_id?: string | null
+  reasoning?: string | null
+}
+
 /** 单条饮食记录（列表接口返回） */
 export interface FoodRecord {
   id: string
@@ -4189,9 +4204,9 @@ export async function debugImpersonateUser(userId: string, password: string): Pr
 /**
  * 获取公开配置（无需登录）
  */
-export async function getPublicConfig(): Promise<PublicConfigResponse> {
+async function requestPublicConfig(path: string): Promise<PublicConfigResponse> {
   const response = await Taro.request({
-    url: `${API_BASE_URL}/api/app/public-config`,
+    url: `${API_BASE_URL}${path}`,
     method: 'GET',
     header: withNgrokBypassHeaders({
       'Content-Type': 'application/json'
@@ -4204,11 +4219,24 @@ export async function getPublicConfig(): Promise<PublicConfigResponse> {
       response.statusCode,
       response.data,
       '获取配置失败',
-      response.header as Record<string, any> | undefined
+      response.header as Record<string, any> | undefined,
+      `${API_BASE_URL}${path}`
     )
   }
 
   return unwrapResponse<PublicConfigResponse>(response)
+}
+
+export async function getPublicConfig(): Promise<PublicConfigResponse> {
+  try {
+    return await requestPublicConfig('/api/app/public-config')
+  } catch (err) {
+    if ((err as ErrorLike)?.statusCode !== 404) {
+      throw err
+    }
+    console.warn('[getPublicConfig] /api/app/public-config 返回 404，尝试兼容路径 /api/public-config')
+    return requestPublicConfig('/api/public-config')
+  }
 }
 
 /**
@@ -5445,6 +5473,7 @@ export type CommunityFeedRecord = FoodRecord & {
   calories_burned?: number | null
   duration_min?: number | null
   ai_reasoning?: string | null
+  exercise_items?: ExerciseActivityItem[] | null
   price?: number | null
   school?: string | null
   canteen?: string | null
@@ -5577,8 +5606,13 @@ export interface ContentSearchResult {
   exercise_type?: string
   calories_burned?: number
   duration_min?: number
+  exercise_items?: ExerciseActivityItem[] | null
   meal_type?: string
   diet_goal?: string
+  entry_type?: FoodRecordEntryType | null
+  source_task_id?: string | null
+  recipe_id?: string | null
+  items?: FoodRecordItemRow[] | null
   manual_food_items?: ContentSearchManualFoodItem[]
   author: ContentSearchAuthor
   liked: boolean
@@ -6890,6 +6924,8 @@ export interface ExerciseLogItem {
   created_at?: string | null
   /** 模型估算时的思考过程（需库表含 ai_reasoning 列） */
   ai_reasoning?: string | null
+  /** 长文本运动解析后的分项运动列表 */
+  exercise_items?: ExerciseActivityItem[] | null
 }
 
 /** 获取运动记录列表 */

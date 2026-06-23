@@ -53,10 +53,14 @@ type ContentSearchResult struct {
 	CaloriesBurned *float64 `json:"calories_burned"`
 	DurationMin    *int     `json:"duration_min"`
 
-	MealType *string `json:"meal_type,omitempty"`
-	DietGoal *string `json:"diet_goal,omitempty"`
-
-	Items []ManualFoodItem `json:"manual_food_items,omitempty"`
+	MealType      *string          `json:"meal_type,omitempty"`
+	DietGoal      *string          `json:"diet_goal,omitempty"`
+	EntryType     *string          `json:"entry_type,omitempty"`
+	SourceTaskID  *string          `json:"source_task_id,omitempty"`
+	RecipeID      *string          `json:"recipe_id,omitempty"`
+	Items         []map[string]any `json:"items,omitempty"`
+	ManualItems   []ManualFoodItem `json:"manual_food_items,omitempty"`
+	ExerciseItems []map[string]any `json:"exercise_items,omitempty"`
 
 	Author map[string]string `json:"author"`
 
@@ -159,6 +163,18 @@ func (s *SearchService) SearchContent(ctx context.Context, currentUserID, keywor
 		if row.ImagePaths != nil && *row.ImagePaths != "" {
 			imagePaths = s.resolveImagePaths(*row.ImagePaths)
 		}
+		imagePath := cloneOptionalString(row.ImagePath)
+		var items []map[string]any
+		var manualItems []ManualFoodItem
+		if row.TargetType == "food_record" {
+			items = s.parseRecordItems(row.Items)
+			items = foodmedia.EnrichFoodRecordDisplayFields(ctx, nil, s.storage, &imagePath, &imagePaths, items)
+			manualItems = s.extractManualFoodItemsFromMaps(items)
+		}
+		var exerciseItems []map[string]any
+		if row.TargetType == "exercise_log" {
+			exerciseItems = s.parseRecordItems(row.ExerciseItems)
+		}
 
 		desc := row.Description
 		if row.TargetType == "circle_post" {
@@ -193,14 +209,19 @@ func (s *SearchService) SearchContent(ctx context.Context, currentUserID, keywor
 			DurationMin:    row.DurationMin,
 			MealType:       row.MealType,
 			DietGoal:       row.DietGoal,
+			EntryType:      row.EntryType,
+			SourceTaskID:   row.SourceTaskID,
+			RecipeID:       row.RecipeID,
+			Items:          items,
+			ManualItems:    manualItems,
+			ExerciseItems:  exerciseItems,
 			Liked:          getLikeInfo(likeMap, row.TargetType, row.TargetID).Liked,
 			LikeCount:      getLikeInfo(likeMap, row.TargetType, row.TargetID).Count,
 			CommentCount:   int(commentCountMap[row.TargetType+":"+row.TargetID]),
 			Author:         author,
 		}
-		if row.TargetType == "food_record" && row.Items != nil && *row.Items != "" {
-			results[i].Items = s.extractManualFoodItems(*row.Items)
-		}
+		results[i].ImagePath = imagePath
+		results[i].ImagePaths = imagePaths
 	}
 	return results, hasMore, nil
 }
@@ -213,13 +234,42 @@ func getLikeInfo(likeMap map[string]*repo.TargetLikeInfo, targetType, targetID s
 	return &repo.TargetLikeInfo{}
 }
 
-func (s *SearchService) extractManualFoodItems(raw string) []ManualFoodItem {
-	var items []ManualFoodItem
-	if err := json.Unmarshal([]byte(raw), &items); err != nil {
+func cloneOptionalString(value *string) *string {
+	if value == nil {
 		return nil
 	}
-	out := make([]ManualFoodItem, 0, len(items))
-	for _, it := range items {
+	cloned := strings.TrimSpace(*value)
+	if cloned == "" {
+		return nil
+	}
+	return &cloned
+}
+
+func (s *SearchService) parseRecordItems(raw *string) []map[string]any {
+	if raw == nil || strings.TrimSpace(*raw) == "" {
+		return nil
+	}
+	var items []map[string]any
+	if err := json.Unmarshal([]byte(*raw), &items); err != nil {
+		return nil
+	}
+	return items
+}
+
+func (s *SearchService) extractManualFoodItemsFromMaps(items []map[string]any) []ManualFoodItem {
+	if len(items) == 0 {
+		return nil
+	}
+	payload, err := json.Marshal(items)
+	if err != nil {
+		return nil
+	}
+	var parsed []ManualFoodItem
+	if err := json.Unmarshal(payload, &parsed); err != nil {
+		return nil
+	}
+	out := make([]ManualFoodItem, 0, len(parsed))
+	for _, it := range parsed {
 		src, srcID := s.resolveManualSource(it)
 		if src == "" {
 			continue
@@ -427,6 +477,10 @@ func (s *SearchService) resolveAvatarURL(value string) string {
 }
 
 func (s *SearchService) resolveImagePaths(raw string) []string {
+	var jsonPaths []string
+	if err := json.Unmarshal([]byte(raw), &jsonPaths); err == nil {
+		return dedupeTrimmedStrings(jsonPaths)
+	}
 	parts := strings.Split(raw, ",")
 	result := make([]string, 0, len(parts))
 	for _, p := range parts {
@@ -436,5 +490,28 @@ func (s *SearchService) resolveImagePaths(raw string) []string {
 		}
 		result = append(result, p)
 	}
-	return result
+	return dedupeTrimmedStrings(result)
+}
+
+func dedupeTrimmedStrings(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(values))
+	seen := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }

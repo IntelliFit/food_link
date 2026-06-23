@@ -49,7 +49,8 @@ import { FeedReportMask } from '../../../pages/community/components/FeedReportMa
 import { FeedReportSheet } from '../../../pages/community/components/FeedReportSheet'
 import { FeedActionSheet } from '../../../pages/community/components/FeedActionSheet'
 import { ManualFoodCards } from '../../../pages/community/components/ManualFoodCards'
-import { isManualFoodFeedRecord } from '../../../utils/manual-food-source'
+import { ExerciseActivityCards, hasExerciseActivityCards } from '../../../pages/community/components/ExerciseActivityCards'
+import { shouldRenderManualFoodCards } from '../../../utils/manual-food-source'
 import { LOGIN_LOGO_URL } from '../../../utils/static-asset-cdn-url'
 import './index.scss'
 
@@ -86,7 +87,7 @@ const MEAL_NAMES: Record<string, string> = {
 }
 
 export default function ProfileSettingsPage() {
-  const { scheme } = useAppColorScheme()
+  const { scheme, toggleScheme } = useAppColorScheme()
   const router = useRouter()
 
   const currentUserId = String(Taro.getStorageSync('user_id') || '').trim()
@@ -666,7 +667,7 @@ export default function ProfileSettingsPage() {
   const handleGoFeedDetail = (item: CommunityFeedItem) => {
     const record = item.record
     if (!record?.id) return
-    const targetType = record.feed_type || 'food_record'
+    const targetType = item.target_type || record.feed_type || 'food_record'
     const targetId = item.target_id || record.id
     const query = [
       `targetType=${encodeURIComponent(targetType)}`,
@@ -676,13 +677,7 @@ export default function ProfileSettingsPage() {
     Taro.navigateTo({ url: `${extraPkgUrl('/pages/interaction-feed-detail/index')}?${query}` })
   }
 
-  const handleManualFoodCardClick = (item: CommunityFeedItem, row: { manual_source?: string | null; manual_source_id?: string | null }) => {
-    const manualSourceId = row.manual_source_id
-    const manualSource = String(row.manual_source || '')
-    if (manualSourceId && (manualSource === 'public_library' || manualSource === 'nutrition_library' || manualSource === 'packaged_food')) {
-      Taro.navigateTo({ url: `${extraPkgUrl('/pages/food-library-detail/index')}?id=${encodeURIComponent(manualSourceId)}` })
-      return
-    }
+  const handleManualFoodCardClick = (item: CommunityFeedItem) => {
     handleGoFeedDetail(item)
   }
 
@@ -693,8 +688,9 @@ export default function ProfileSettingsPage() {
     const isCampus = record.feed_type === 'campus_food'
     const isCirclePost = record.feed_type === 'circle_post'
     const isCollectionRecord = !isExercise && !isCampus && !isCirclePost && !!record.recipe_id
-    const isManualRecord = !isExercise && !isCampus && !isCirclePost && !isCollectionRecord && isManualFoodFeedRecord(record)
-    const targetType = (record.feed_type || 'food_record') as CommunityFeedTargetType
+    const isManualRecord = !isExercise && !isCampus && !isCirclePost && !isCollectionRecord && shouldRenderManualFoodCards(record)
+    const useExerciseActivityCards = isExercise && hasExerciseActivityCards(record.exercise_items)
+    const targetType = (item.target_type || record.feed_type || 'food_record') as CommunityFeedTargetType
     const targetId = record.id
     const showReportMask = isCirclePost && reportMaskTarget?.targetType === targetType && reportMaskTarget?.targetId === targetId
     const feedTime = String(record.record_time || record.created_at || '')
@@ -726,7 +722,7 @@ export default function ProfileSettingsPage() {
             {record.title ? <Text className='profile-feed-title'>{record.title}</Text> : null}
             {record.body ? <Text className='profile-feed-desc'>{record.body}</Text> : null}
           </>
-        ) : isExercise ? (
+        ) : isExercise && !useExerciseActivityCards ? (
           // 运动打卡：后端把 exercise_desc 同时映射为 description，避免同一文本渲染两次
           <Text className='profile-feed-desc'>
             {record.exercise_desc || record.description || record.exercise_type || '运动打卡'}
@@ -765,8 +761,12 @@ export default function ProfileSettingsPage() {
         ) : isManualRecord ? (
           <ManualFoodCards
             items={record.items}
-            mealType={record.meal_type}
-            onItemClick={(row) => handleManualFoodCardClick(item, row)}
+            onItemClick={() => handleManualFoodCardClick(item)}
+          />
+        ) : useExerciseActivityCards ? (
+          <ExerciseActivityCards
+            items={record.exercise_items}
+            onItemClick={() => handleGoFeedDetail(item)}
           />
         ) : isCirclePost && (record.image_paths || []).length > 0 ? (
           <View className='profile-feed-image-grid'>
@@ -899,6 +899,12 @@ export default function ProfileSettingsPage() {
               >
                 <Text className='iconfont icon-edit profile-top-action-icon' />
                 <Text className='profile-top-action-text'>编辑资料</Text>
+              </View>
+              <View
+                className='profile-top-icon-btn profile-theme-toggle-btn'
+                onClick={toggleScheme}
+              >
+                <Text className={`iconfont ${scheme === 'dark' ? 'icon-zaoshang' : 'icon-wanshang'} profile-top-icon profile-theme-toggle-icon`} />
               </View>
               <View
                 className='profile-top-icon-btn'

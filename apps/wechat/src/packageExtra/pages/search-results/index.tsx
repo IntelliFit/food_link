@@ -5,6 +5,8 @@ import { communitySearch, communityLike, communityUnlike, showUnifiedApiError, t
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { withAuth } from '../../../utils/withAuth'
 import { ManualFoodCards } from '../../../pages/community/components/ManualFoodCards'
+import { ExerciseActivityCards, hasExerciseActivityCards } from '../../../pages/community/components/ExerciseActivityCards'
+import { shouldRenderManualFoodCards } from '../../../utils/manual-food-source'
 import './index.scss'
 
 type SearchTab = 'content' | 'users'
@@ -238,13 +240,7 @@ function SearchResultsPage() {
     Taro.navigateTo({ url: `${extraPkgUrl('/pages/interaction-feed-detail/index')}?${query}` })
   }
 
-  const handleManualFoodClick = (item: ContentSearchResult, row: any) => {
-    const manualSourceId = row.manual_source_id as string | undefined
-    const manualSource = String(row.manual_source || '')
-    if (manualSourceId && (manualSource === 'public_library' || manualSource === 'nutrition_library' || manualSource === 'packaged_food')) {
-      Taro.navigateTo({ url: `${extraPkgUrl('/pages/food-library-detail/index')}?id=${encodeURIComponent(manualSourceId)}` })
-      return
-    }
+  const handleManualFoodClick = (item: ContentSearchResult) => {
     navigateToDetail(item)
   }
 
@@ -278,65 +274,79 @@ function SearchResultsPage() {
     }
   }
 
-  const renderContentCard = (item: ContentSearchResult, idx: number) => (
-    <View key={`${item.target_type}-${item.target_id}-${idx}`} className='content-card' onClick={() => navigateToDetail(item)}>
-      <View className='card-author-row'>
-        <View className='card-author-avatar'>
-          {item.author.avatar ? (
-            <Image src={item.author.avatar} mode='aspectFill' className='avatar-img' />
-          ) : (
-            <Text className='avatar-placeholder'>{item.author.nickname?.charAt(0) || '?'}</Text>
-          )}
+  const renderContentCard = (item: ContentSearchResult, idx: number) => {
+    const useManualFoodCards = item.target_type === 'food_record' && shouldRenderManualFoodCards(item)
+    const useExerciseActivityCards = item.target_type === 'exercise_log' && hasExerciseActivityCards(item.exercise_items)
+    const feedImagePaths = item.image_paths?.length
+      ? item.image_paths
+      : item.image_path
+        ? [item.image_path]
+        : []
+
+    return (
+      <View key={`${item.target_type}-${item.target_id}-${idx}`} className='content-card' onClick={() => navigateToDetail(item)}>
+        <View className='card-author-row'>
+          <View className='card-author-avatar'>
+            {item.author.avatar ? (
+              <Image src={item.author.avatar} mode='aspectFill' className='avatar-img' />
+            ) : (
+              <Text className='avatar-placeholder'>{item.author.nickname?.charAt(0) || '?'}</Text>
+            )}
+          </View>
+          <View className='card-author-info'>
+            <Text className='card-author-name'>{item.author.nickname || '用户'}</Text>
+            <Text className='card-meta'>
+              <Text className='card-type-badge'>{targetTypeLabel(item.target_type)}</Text>
+              {item.record_time || item.created_at ? (
+                <Text className='card-time'> · {formatTime(item.record_time || item.created_at)}</Text>
+              ) : null}
+            </Text>
+          </View>
         </View>
-        <View className='card-author-info'>
-          <Text className='card-author-name'>{item.author.nickname || '用户'}</Text>
-          <Text className='card-meta'>
-            <Text className='card-type-badge'>{targetTypeLabel(item.target_type)}</Text>
-            {item.record_time || item.created_at ? (
-              <Text className='card-time'> · {formatTime(item.record_time || item.created_at)}</Text>
+        {useManualFoodCards ? (
+          <ManualFoodCards
+            items={item.items}
+            onItemClick={() => handleManualFoodClick(item)}
+          />
+        ) : useExerciseActivityCards ? (
+          <ExerciseActivityCards
+            items={item.exercise_items}
+            onItemClick={() => navigateToDetail(item)}
+          />
+        ) : (
+          <>
+            {item.description ? (
+              <View className='card-body'>
+                <Text className='card-desc'>{item.description}</Text>
+              </View>
             ) : null}
-          </Text>
+            {feedImagePaths.length === 1 ? (
+              <View className='card-image-wrap'>
+                <Image src={feedImagePaths[0]} mode='aspectFill' className='card-image' />
+              </View>
+            ) : null}
+            {feedImagePaths.length > 1 && (
+              <View className='card-images-wrap'>
+                {feedImagePaths.slice(0, 3).map((p, i) => (
+                  <Image key={i} src={p} mode='aspectFill' className='card-image-multi' />
+                ))}
+              </View>
+            )}
+          </>
+        )}
+        <View className='content-card-actions'>
+          <View className='content-action-item' onClick={(e) => handleSearchLike(item, e)}>
+            <Text className={`iconfont icon-good ${(searchLikeMap[`${item.target_type}:${item.target_id}`] ?? item.liked) ? 'liked' : ''}`} />
+            <Text className='content-action-count'>{(searchLikeCountMap[`${item.target_type}:${item.target_id}`] ?? item.like_count) || 0}</Text>
+          </View>
+          <View className='content-action-item' onClick={(e) => handleSearchComment(item, e)}>
+            <Text className='iconfont icon-pinglun' />
+            <Text className='content-action-count'>{item.comment_count || 0}</Text>
+          </View>
         </View>
       </View>
-      {item.manual_food_items && item.manual_food_items.length > 0 ? (
-        <ManualFoodCards
-          items={item.manual_food_items as any}
-          mealType={item.meal_type}
-          onItemClick={(row) => handleManualFoodClick(item, row)}
-        />
-      ) : (
-        <>
-          {item.description ? (
-            <View className='card-body'>
-              <Text className='card-desc'>{item.description}</Text>
-            </View>
-          ) : null}
-          {item.image_path ? (
-            <View className='card-image-wrap'>
-              <Image src={item.image_path} mode='aspectFill' className='card-image' />
-            </View>
-          ) : null}
-          {item.image_paths && item.image_paths.length > 0 && (
-            <View className='card-images-wrap'>
-              {item.image_paths.slice(0, 3).map((p, i) => (
-                <Image key={i} src={p} mode='aspectFill' className='card-image-multi' />
-              ))}
-            </View>
-          )}
-        </>
-      )}
-      <View className='content-card-actions'>
-        <View className='content-action-item' onClick={(e) => handleSearchLike(item, e)}>
-          <Text className={`iconfont icon-good ${(searchLikeMap[`${item.target_type}:${item.target_id}`] ?? item.liked) ? 'liked' : ''}`} />
-          <Text className='content-action-count'>{(searchLikeCountMap[`${item.target_type}:${item.target_id}`] ?? item.like_count) || 0}</Text>
-        </View>
-        <View className='content-action-item' onClick={(e) => handleSearchComment(item, e)}>
-          <Text className='iconfont icon-pinglun' />
-          <Text className='content-action-count'>{item.comment_count || 0}</Text>
-        </View>
-      </View>
-    </View>
-  )
+    )
+  }
 
   const renderUserCard = (item: UserSearchResult) => (
     <View key={item.id} className='user-card' onClick={() => navigateToUser(item.id, item.is_self)}>

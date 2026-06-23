@@ -174,6 +174,7 @@ func (s *ExerciseService) ListLogsByRange(ctx context.Context, userID string, da
 			"exercise_type":   nil,
 			"image_url":       nil,
 			"calories_burned": calories,
+			"exercise_items":  log.ExerciseItems,
 			"recorded_on":     nil,
 			"recorded_at":     nil,
 			"created_at":      nil,
@@ -483,6 +484,7 @@ func (s *ExerciseService) ProcessExerciseTask(ctx context.Context, userID, exerc
 	calories := float64(estimate.CaloriesKcal)
 	reasoning := estimate.Reasoning
 	logDesc := resolveExerciseLogDesc(desc, estimate)
+	exerciseItems := exerciseItemsFromEstimate(estimate)
 	var storedImageURL *string
 	if imageURL != "" {
 		storedImageURL = &imageURL
@@ -501,6 +503,7 @@ func (s *ExerciseService) ProcessExerciseTask(ctx context.Context, userID, exerc
 		RecordedOn:     &recordedDate,
 		RecordedAt:     &now,
 		AIReasoning:    &reasoning,
+		ExerciseItems:  exerciseItems,
 		CreatedAt:      &now,
 	}
 	if err := s.repo.CreateExerciseLog(ctx, log); err != nil {
@@ -519,6 +522,7 @@ func (s *ExerciseService) ProcessExerciseTask(ctx context.Context, userID, exerc
 		"exercise_type":   estimate.ExerciseType,
 		"image_url":       imageURL,
 		"calories_burned": int(calories),
+		"exercise_items":  exerciseItems,
 		"recorded_on":     recordedOn,
 		"recorded_at":     now.Format(time.RFC3339),
 		"ai_reasoning":    reasoning,
@@ -553,6 +557,38 @@ type ExerciseEstimate struct {
 	Reasoning    string
 	Source       string
 	ExerciseType string
+}
+
+func exerciseItemsFromEstimate(estimate ExerciseEstimate) []map[string]any {
+	if strings.TrimSpace(estimate.Raw) == "" {
+		return nil
+	}
+	var payload struct {
+		Mode  string           `json:"mode"`
+		Items []map[string]any `json:"items"`
+	}
+	if err := json.Unmarshal([]byte(estimate.Raw), &payload); err != nil {
+		return nil
+	}
+	if payload.Mode != "long_text_library_met" || len(payload.Items) == 0 {
+		return nil
+	}
+	items := make([]map[string]any, 0, len(payload.Items))
+	for _, row := range payload.Items {
+		name, _ := row["name"].(string)
+		if strings.TrimSpace(name) == "" {
+			continue
+		}
+		cloned := make(map[string]any, len(row))
+		for key, value := range row {
+			cloned[key] = value
+		}
+		items = append(items, cloned)
+	}
+	if len(items) == 0 {
+		return nil
+	}
+	return items
 }
 
 type extractedExerciseItem struct {
