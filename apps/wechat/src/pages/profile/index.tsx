@@ -497,6 +497,14 @@ function ProfilePage() {
     redirectToLogin()
   }
 
+  // Taro 小程序端在同一节点上移除/替换事件时可能触发 removeEventListener 崩溃；
+  // 这里保持用户名节点始终使用同一个稳定 handler，登录后只做空操作。
+  const handleUserNameClick = React.useCallback(() => {
+    if (!getAccessToken()) {
+      redirectToLogin()
+    }
+  }, [])
+
   // 处理清除缓存
   const handleClearCache = () => {
     Taro.showModal({
@@ -636,7 +644,7 @@ function ProfilePage() {
             {isLoggedIn ? (
               <>
                 <View className='user-name-row'>
-                  <Text className='user-name'>{userInfo.name}</Text>
+                  <Text className='user-name' onClick={handleUserNameClick}>{userInfo.name}</Text>
                   <View className='user-name-actions'>
                     <View className='user-days-pill'>
                       <Text className='user-days-pill-text'>已记录 {recordDays} 天</Text>
@@ -655,7 +663,7 @@ function ProfilePage() {
               </>
             ) : (
               <View className='user-name-row'>
-                <Text className='user-name' onClick={handleGoLogin}>点击登录</Text>
+                <Text className='user-name' onClick={handleUserNameClick}>点击登录</Text>
               </View>
             )}
           </View>
