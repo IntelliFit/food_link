@@ -5,6 +5,46 @@
   background: #f3f4f6;
 }
 
+.chat-user-action-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 12rpx 24rpx;
+  background: #fff;
+  border-bottom: 1rpx solid #e5e7eb;
+  flex-shrink: 0;
+}
+
+.chat-user-action-btn {
+  margin: 0;
+  height: 56rpx;
+  line-height: 56rpx;
+  padding: 0 24rpx;
+  border-radius: 28rpx;
+  font-size: 24rpx;
+  font-weight: 600;
+  border: none;
+
+  &::after {
+    border: none;
+  }
+}
+
+.chat-user-action-btn--danger {
+  color: #ef4444;
+  background: #fef2f2;
+}
+
+.chat-user-action-btn--plain {
+  color: #00a86b;
+  background: rgba(0, 188, 125, 0.1);
+}
+
+.chat-user-action-text {
+  color: #6b7280;
+  font-size: 24rpx;
+}
+
 /* 消息列表 */
 .chat-message-list {
   flex: 1;
@@ -250,6 +290,23 @@
   color: #fff;
 }
 
+.chat-disabled-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24rpx;
+  padding-bottom: calc(24rpx + constant(safe-area-inset-bottom));
+  padding-bottom: calc(24rpx + env(safe-area-inset-bottom));
+  background: #fff;
+  border-top: 1rpx solid #e5e7eb;
+  flex-shrink: 0;
+}
+
+.chat-disabled-text {
+  color: #6b7280;
+  font-size: 26rpx;
+}
+
 /* 消息操作面板 */
 .private-chat-action-sheet {
   position: fixed;
@@ -396,5 +453,16 @@
 
   .private-chat-action-sheet__cancel-text {
     color: rgba(214, 226, 220, 0.6);
+  }
+
+  .chat-user-action-bar,
+  .chat-disabled-bar {
+    background: #101716;
+    border-color: rgba(255, 255, 255, 0.08);
+  }
+
+  .chat-user-action-text,
+  .chat-disabled-text {
+    color: rgba(214, 226, 220, 0.7);
   }
 }

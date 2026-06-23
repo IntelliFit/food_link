@@ -18,11 +18,16 @@ type followCacheEntry struct {
 	ts  time.Time
 }
 
+type BlockChecker interface {
+	IsBlockedEither(ctx context.Context, userA, userB string) (bool, error)
+}
+
 type FollowService struct {
-	followRepo *repo.FollowRepo
-	cacheMu    sync.RWMutex
-	cache      map[string]followCacheEntry
-	storage    *storage.Client
+	followRepo   *repo.FollowRepo
+	blockChecker BlockChecker
+	cacheMu      sync.RWMutex
+	cache        map[string]followCacheEntry
+	storage      *storage.Client
 }
 
 func NewFollowService(followRepo *repo.FollowRepo, storageClient ...*storage.Client) *FollowService {
@@ -37,6 +42,19 @@ func NewFollowService(followRepo *repo.FollowRepo, storageClient ...*storage.Cli
 	}
 }
 
+func (s *FollowService) ConfigureBlockChecker(checker BlockChecker) {
+	s.blockChecker = checker
+}
+
+func (s *FollowService) isBlockedEither(ctx context.Context, userA, userB string) (bool, error) {
+	userA = strings.TrimSpace(userA)
+	userB = strings.TrimSpace(userB)
+	if s.blockChecker == nil || userA == "" || userB == "" || userA == userB {
+		return false, nil
+	}
+	return s.blockChecker.IsBlockedEither(ctx, userA, userB)
+}
+
 func (s *FollowService) invalidateFollowCache(userID string) {
 	s.cacheMu.Lock()
 	delete(s.cache, userID)
@@ -46,6 +64,13 @@ func (s *FollowService) invalidateFollowCache(userID string) {
 func (s *FollowService) Follow(ctx context.Context, followerID, followeeID string) error {
 	if followerID == followeeID {
 		return &commonerrors.AppError{Code: 10002, Message: "不能关注自己", HTTPStatus: 400}
+	}
+	blocked, err := s.isBlockedEither(ctx, followerID, followeeID)
+	if err != nil {
+		return err
+	}
+	if blocked {
+		return blockedOperationError()
 	}
 	if err := s.followRepo.Follow(ctx, followerID, followeeID); err != nil {
 		return err
@@ -63,19 +88,31 @@ func (s *FollowService) Unfollow(ctx context.Context, followerID, followeeID str
 }
 
 func (s *FollowService) IsFollowing(ctx context.Context, followerID, followeeID string) (bool, error) {
+	blocked, err := s.isBlockedEither(ctx, followerID, followeeID)
+	if err != nil {
+		return false, err
+	}
+	if blocked {
+		return false, nil
+	}
 	return s.followRepo.IsFollowing(ctx, followerID, followeeID)
 }
 
 func (s *FollowService) CountFollowers(ctx context.Context, userID string) (int64, error) {
-	return s.followRepo.CountFollowers(ctx, userID)
+	return s.followRepo.CountFollowers(ctx, userID, userID)
 }
 
 func (s *FollowService) CountFollowing(ctx context.Context, userID string) (int64, error) {
-	return s.followRepo.CountFollowing(ctx, userID)
+	return s.followRepo.CountFollowing(ctx, userID, userID)
 }
 
-func (s *FollowService) GetFollowers(ctx context.Context, userID string, offset, limit int) ([]map[string]any, error) {
-	users, err := s.followRepo.GetFollowers(ctx, userID, offset, limit)
+func (s *FollowService) GetFollowers(ctx context.Context, viewerUserID, userID string, offset, limit int) ([]map[string]any, error) {
+	if blocked, err := s.isBlockedEither(ctx, viewerUserID, userID); err != nil {
+		return nil, err
+	} else if blocked {
+		return nil, commonerrors.ErrNotFound
+	}
+	users, err := s.followRepo.GetFollowers(ctx, viewerUserID, userID, offset, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -90,8 +127,13 @@ func (s *FollowService) GetFollowers(ctx context.Context, userID string, offset,
 	return out, nil
 }
 
-func (s *FollowService) GetFollowing(ctx context.Context, userID string, offset, limit int) ([]map[string]any, error) {
-	users, err := s.followRepo.GetFollowing(ctx, userID, offset, limit)
+func (s *FollowService) GetFollowing(ctx context.Context, viewerUserID, userID string, offset, limit int) ([]map[string]any, error) {
+	if blocked, err := s.isBlockedEither(ctx, viewerUserID, userID); err != nil {
+		return nil, err
+	} else if blocked {
+		return nil, commonerrors.ErrNotFound
+	}
+	users, err := s.followRepo.GetFollowing(ctx, viewerUserID, userID, offset, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -107,17 +149,26 @@ func (s *FollowService) GetFollowing(ctx context.Context, userID string, offset,
 }
 
 func (s *FollowService) GetFollowStats(ctx context.Context, userID, currentUserID string) (map[string]any, error) {
-	followersCount, err := s.followRepo.CountFollowers(ctx, userID)
+	if blocked, err := s.isBlockedEither(ctx, currentUserID, userID); err != nil {
+		return nil, err
+	} else if blocked {
+		return nil, commonerrors.ErrNotFound
+	}
+	viewerUserID := strings.TrimSpace(currentUserID)
+	if viewerUserID == "" {
+		viewerUserID = userID
+	}
+	followersCount, err := s.followRepo.CountFollowers(ctx, viewerUserID, userID)
 	if err != nil {
 		return nil, err
 	}
-	followingCount, err := s.followRepo.CountFollowing(ctx, userID)
+	followingCount, err := s.followRepo.CountFollowing(ctx, viewerUserID, userID)
 	if err != nil {
 		return nil, err
 	}
 	isFollowing := false
 	if currentUserID != "" && currentUserID != userID {
-		isFollowing, _ = s.followRepo.IsFollowing(ctx, currentUserID, userID)
+		isFollowing, _ = s.IsFollowing(ctx, currentUserID, userID)
 	}
 	return map[string]any{
 		"followers_count": followersCount,
@@ -146,4 +197,8 @@ func defaultNickname(n string) string {
 		return "用户"
 	}
 	return n
+}
+
+func blockedOperationError() error {
+	return &commonerrors.AppError{Code: 20003, Message: "无法操作", HTTPStatus: 403}
 }

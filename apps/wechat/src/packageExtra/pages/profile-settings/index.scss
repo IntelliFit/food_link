@@ -284,6 +284,48 @@
   font-weight: 600;
 }
 
+.profile-block-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 56rpx;
+  padding: 0 24rpx;
+  border-radius: 999rpx;
+  background: rgba(239, 68, 68, 0.12);
+  border: 1rpx solid rgba(239, 68, 68, 0.18);
+  flex: 0 0 auto;
+
+  &:active {
+    opacity: 0.8;
+    transform: scale(0.96);
+  }
+}
+
+.profile-block-btn-text {
+  font-size: 24rpx;
+  line-height: 34rpx;
+  color: #ef4444;
+  font-weight: 600;
+}
+
+.profile-blocked-pill {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 56rpx;
+  padding: 0 32rpx;
+  border-radius: 999rpx;
+  background: rgba(255, 255, 255, 0.86);
+  flex: 1;
+}
+
+.profile-blocked-pill-text {
+  font-size: 26rpx;
+  line-height: 36rpx;
+  color: #6b7280;
+  font-weight: 600;
+}
+
 /* 底部内容抽屉 */
 .profile-bottom-drawer {
   position: relative;

@@ -1294,6 +1294,21 @@ export interface FriendUserItem {
   is_pending?: boolean
 }
 
+export interface FriendBlockItem {
+  id: string
+  blocked_user_id?: string
+  nickname?: string
+  avatar?: string
+  created_at?: string
+  blocked_at?: string
+}
+
+export interface FriendBlockStatus {
+  is_blocked_by_me: boolean
+  has_blocked_me: boolean
+  blocked_either: boolean
+}
+
 export interface PrivateMessageItem {
   ID?: string
   id?: string

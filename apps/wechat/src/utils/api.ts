@@ -5319,6 +5319,20 @@ export interface FriendListItem {
   avatar: string
 }
 
+export interface FriendBlockItem {
+  id: string
+  blocked_user_id: string
+  nickname: string
+  avatar: string
+  created_at: string
+}
+
+export interface FriendBlockStatus {
+  is_blocked_by_me: boolean
+  has_blocked_me: boolean
+  blocked_either: boolean
+}
+
 /** 好友邀请码资料（公开） */
 export interface FriendInviteProfile {
   user_id: string
@@ -5630,6 +5644,35 @@ export async function friendDelete(friendId: string): Promise<void> {
   if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '删除失败')
 }
 
+/** 拉黑用户 */
+export async function friendBlockUser(userId: string): Promise<void> {
+  const response = await authenticatedRequest('/api/friend/block', {
+    method: 'POST',
+    data: { blocked_user_id: userId }
+  })
+  if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '无法操作')
+}
+
+/** 解除拉黑 */
+export async function friendUnblockUser(userId: string): Promise<void> {
+  const response = await authenticatedRequest(`/api/friend-blocks/${encodeURIComponent(userId)}`, { method: 'DELETE' })
+  if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '无法操作')
+}
+
+/** 黑名单列表 */
+export async function friendGetBlocks(): Promise<{ list: FriendBlockItem[] }> {
+  const response = await authenticatedRequest('/api/friend/blocks', { method: 'GET' })
+  if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '获取失败')
+  return response.data as { list: FriendBlockItem[] }
+}
+
+/** 与某用户的拉黑状态 */
+export async function friendGetBlockStatus(userId: string): Promise<FriendBlockStatus> {
+  const response = await authenticatedRequest(`/api/friend/block-status/${encodeURIComponent(userId)}`, { method: 'GET' })
+  if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '获取失败')
+  return response.data as FriendBlockStatus
+}
+
 /** @deprecated 兼容旧调用名，后续统一使用 friendDelete */
 export const friendRemove = friendDelete
 
@@ -5642,10 +5685,11 @@ export async function friendGetRequestsOverview(): Promise<FriendRequestsOvervie
 
 /** 公开获取邀请资料（用于分享海报昵称与邀请码） */
 export async function getFriendInviteProfile(userId: string): Promise<FriendInviteProfile> {
+  const token = getAccessToken()
   const response = await Taro.request({
     url: `${API_BASE_URL}/api/friend/invite/profile/${encodeURIComponent(userId)}`,
     method: 'GET',
-    header: withNgrokBypassHeaders(),
+    header: withNgrokBypassHeaders(token ? { Authorization: `Bearer ${token}` } : undefined),
     timeout: 10000
   })
   if (response.statusCode !== 200) {
@@ -5655,10 +5699,11 @@ export async function getFriendInviteProfile(userId: string): Promise<FriendInvi
 }
 
 export async function getFriendInviteProfileByCode(code: string): Promise<FriendInviteProfile> {
+  const token = getAccessToken()
   const response = await Taro.request({
     url: `${API_BASE_URL}/api/friend/invite/profile-by-code?code=${encodeURIComponent(code.trim())}`,
     method: 'GET',
-    header: withNgrokBypassHeaders(),
+    header: withNgrokBypassHeaders(token ? { Authorization: `Bearer ${token}` } : undefined),
     timeout: 10000
   })
   if (response.statusCode !== 200) {
@@ -5834,13 +5879,14 @@ export async function sendPrivateMessage(receiverId: string, content: string, co
 }
 
 /** 获取与某用户的聊天记录 */
-export async function getPrivateMessages(otherUserId: string, offset = 0, limit = 20): Promise<{ list: PrivateMessage[]; has_more: boolean }> {
+export async function getPrivateMessages(otherUserId: string, offset = 0, limit = 20): Promise<{ list: PrivateMessage[]; has_more: boolean; blocked?: boolean }> {
   const response = await authenticatedRequest(`/api/messages/conversation/${encodeURIComponent(otherUserId)}?offset=${offset}&limit=${limit}`, { method: 'GET' })
   if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '获取聊天记录失败')
   const data = (response.data || {}) as any
   return {
     list: (data.list || []).map(normalizePrivateMessage),
     has_more: data.has_more ?? data.HasMore ?? false,
+    blocked: data.blocked ?? data.Blocked ?? false,
   }
 }
 
@@ -5942,10 +5988,11 @@ export async function communityGetPublicFeed(
   if (params?.sort_by) q += `&sort_by=${encodeURIComponent(params.sort_by)}`
   if (params?.content_type) q += `&content_type=${encodeURIComponent(params.content_type)}`
   if (params?.author_id) q += `&author_id=${encodeURIComponent(params.author_id)}`
+  const token = getAccessToken()
   const response = await Taro.request({
     url: `${API_BASE_URL}/api/community/public-feed${q}`,
     method: 'GET',
-    header: withNgrokBypassHeaders(),
+    header: withNgrokBypassHeaders(token ? { Authorization: `Bearer ${token}` } : undefined),
     timeout: 10000
   })
   if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '获取动态失败')

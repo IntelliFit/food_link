@@ -5,7 +5,7 @@ import * as ImagePicker from 'expo-image-picker'
 import { useFocusEffect, useNavigation, useRoute, type RouteProp } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import type { CommunityFeedItem, CommunityFeedTargetType, PublicFoodItem, PublicProfile, RecipeItem, UserInfo } from '@food-link/core'
+import type { CommunityFeedItem, CommunityFeedTargetType, FriendBlockStatus, PublicFoodItem, PublicProfile, RecipeItem, UserInfo } from '@food-link/core'
 import { apiClient, getStoredUserId } from '../api'
 import { AppButton } from '../components/AppButton'
 import type { RootStackParamList } from '../navigation/types'
@@ -37,6 +37,7 @@ export function ProfileSettingsScreen() {
   const [motto, setMotto] = useState('')
   const [avatar, setAvatar] = useState('')
   const [coverImage, setCoverImage] = useState('')
+  const [blockStatus, setBlockStatus] = useState<FriendBlockStatus | null>(null)
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const showError = useCallback((title: string, error: unknown) => {
@@ -51,6 +52,7 @@ export function ProfileSettingsScreen() {
     setLoading(true)
     try {
       if (isOwner) {
+        setBlockStatus(null)
         const [profileData, feedData, recipeData, foodData] = await Promise.all([
           apiClient.getUserProfile(),
           apiClient.communityGetFeed({ limit: 20, includeComments: false }).catch(() => ({ list: [] })),
@@ -63,6 +65,24 @@ export function ProfileSettingsScreen() {
         setFoods(foodData.list || [])
       } else {
         const userId = targetUserId || ''
+        const status = await apiClient.getFriendBlockStatus(userId).catch(() => null)
+        setBlockStatus(status)
+        if (status?.blocked_either) {
+          applyProfile({
+            id: userId,
+            nickname: status.is_blocked_by_me ? '已拉黑用户' : '用户',
+            avatar: '',
+            cover_image: '',
+            record_days: 0,
+            followers_count: 0,
+            following_count: 0,
+            is_following: false,
+          } as UserInfo & PublicProfile)
+          setFeed([])
+          setRecipes([])
+          setFoods([])
+          return
+        }
         const [profileData, feedData, recipeData, foodData, followStats] = await Promise.all([
           apiClient.getPublicProfile(userId),
           apiClient.communityGetPublicFeed({
@@ -169,6 +189,54 @@ export function ProfileSettingsScreen() {
     } catch (error) {
       setProfile(previous)
       await showError('关注失败', error)
+    }
+  }
+
+  const blockUser = async () => {
+    if (!targetUserId || !profile) return
+    const confirmed = await dialog.confirm({
+      title: '拉黑用户',
+      message: `拉黑后，你和「${profile.nickname || '用户'}」将无法互发私信，也不能重新添加好友。`,
+      kind: 'danger',
+      confirmText: '拉黑',
+      cancelText: '取消',
+    })
+    if (!confirmed) return
+    setSaving(true)
+    try {
+      await apiClient.blockUser(targetUserId)
+      setBlockStatus({ is_blocked_by_me: true, has_blocked_me: false, blocked_either: true })
+      setFeed([])
+      setRecipes([])
+      setFoods([])
+      await dialog.alert('已加入黑名单', undefined, 'success')
+    } catch (error) {
+      await showError('无法操作', error)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const unblockUser = async () => {
+    if (!targetUserId) return
+    const confirmed = await dialog.confirm({
+      title: '解除拉黑',
+      message: '解除后，你们可以重新搜索、申请好友或发送私信。',
+      kind: 'warning',
+      confirmText: '解除',
+      cancelText: '取消',
+    })
+    if (!confirmed) return
+    setSaving(true)
+    try {
+      await apiClient.unblockUser(targetUserId)
+      setBlockStatus({ is_blocked_by_me: false, has_blocked_me: false, blocked_either: false })
+      await load()
+      await dialog.alert('已解除拉黑', undefined, 'success')
+    } catch (error) {
+      await showError('无法操作', error)
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -312,14 +380,29 @@ export function ProfileSettingsScreen() {
 
         {!isOwner ? (
           <View style={styles.profileActionRow}>
-            <Pressable style={[styles.profileActionButton, profile?.is_following && styles.profileActionButtonGhost]} onPress={toggleFollow}>
-              <Text style={styles.profileActionButtonText}>{profile?.is_following ? '已关注' : '+ 关注'}</Text>
-            </Pressable>
-            {targetUserId ? (
-              <Pressable style={styles.profileActionButtonLight} onPress={() => navigation.navigate('PrivateChat', { userId: targetUserId, nickname: profile?.nickname })}>
-                <Text style={styles.profileActionButtonLightText}>私信</Text>
+            {blockStatus?.is_blocked_by_me ? (
+              <Pressable style={styles.profileActionButtonLight} onPress={() => void unblockUser()}>
+                <Text style={styles.profileActionButtonLightText}>解除拉黑</Text>
               </Pressable>
-            ) : null}
+            ) : blockStatus?.blocked_either ? (
+              <View style={styles.profileBlockedPill}>
+                <Text style={styles.profileBlockedPillText}>内容不可见</Text>
+              </View>
+            ) : (
+              <>
+                <Pressable style={[styles.profileActionButton, profile?.is_following && styles.profileActionButtonGhost]} onPress={toggleFollow}>
+                  <Text style={styles.profileActionButtonText}>{profile?.is_following ? '已关注' : '+ 关注'}</Text>
+                </Pressable>
+                {targetUserId ? (
+                  <Pressable style={styles.profileActionButtonLight} onPress={() => navigation.navigate('PrivateChat', { userId: targetUserId, nickname: profile?.nickname })}>
+                    <Text style={styles.profileActionButtonLightText}>私信</Text>
+                  </Pressable>
+                ) : null}
+                <Pressable style={styles.profileBlockButton} onPress={() => void blockUser()}>
+                  <Text style={styles.profileBlockButtonText}>拉黑</Text>
+                </Pressable>
+              </>
+            )}
           </View>
         ) : null}
       </View>
@@ -358,7 +441,9 @@ export function ProfileSettingsScreen() {
         </View>
 
         <View style={styles.contentBody}>
-          {activeTab === 'feed' ? (
+          {blockStatus?.blocked_either ? (
+            <EmptyState text="内容不可见" />
+          ) : activeTab === 'feed' ? (
             <>
               {feed.length === 0 ? <EmptyState text="暂无动态" /> : null}
               {feed.map((item, index) => (
@@ -822,6 +907,36 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 13,
     fontWeight: '700',
+  },
+  profileBlockButton: {
+    flex: 1,
+    minHeight: 32,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(239, 68, 68, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(254, 202, 202, 0.72)',
+  },
+  profileBlockButtonText: {
+    color: '#fecaca',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  profileBlockedPill: {
+    flex: 1,
+    minHeight: 32,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.16)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.24)',
+  },
+  profileBlockedPillText: {
+    color: 'rgba(255, 255, 255, 0.82)',
+    fontSize: 13,
+    fontWeight: '800',
   },
   bottomDrawer: {
     flex: 1,

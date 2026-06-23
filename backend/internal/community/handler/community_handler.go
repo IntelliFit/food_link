@@ -25,8 +25,8 @@ type CommunityService interface {
 	UnlikeFeedTarget(ctx context.Context, userID, targetType, targetID string) (string, error)
 	HideFeed(ctx context.Context, userID, recordID string) error
 	HideFeedTarget(ctx context.Context, userID, targetType, targetID string) error
-	ListComments(ctx context.Context, recordID string, limit int) ([]service.CommentItem, error)
-	ListTargetComments(ctx context.Context, targetType, targetID string, limit int) ([]service.CommentItem, error)
+	ListComments(ctx context.Context, viewerUserID, recordID string, limit int) ([]service.CommentItem, error)
+	ListTargetComments(ctx context.Context, viewerUserID, targetType, targetID string, limit int) ([]service.CommentItem, error)
 	FeedContext(ctx context.Context, userID, recordID string) (*service.FeedContextResult, error)
 	FeedTargetContext(ctx context.Context, userID, targetType, targetID string) (*service.FeedContextResult, error)
 	PostComment(ctx context.Context, userID, recordID, content string, parentCommentID, replyToUserID *string) (*service.CommentItem, error)
@@ -53,6 +53,7 @@ func NewCommunityHandler(svc CommunityService) *CommunityHandler {
 func (h *CommunityHandler) PublicFeed(c *gin.Context) {
 	params := parseFeedParams(c)
 	params.AuthorID = c.Query("author_id")
+	params.ViewerUserID = c.GetString(authmw.ContextUserIDKey)
 	items, err := h.svc.PublicFeed(c.Request.Context(), params)
 	if err != nil {
 		response.Error(c, err)
@@ -153,6 +154,7 @@ func (h *CommunityHandler) HideFeedTarget(c *gin.Context) {
 }
 
 func (h *CommunityHandler) ListComments(c *gin.Context) {
+	userID := c.GetString(authmw.ContextUserIDKey)
 	recordID := c.Param("record_id")
 	limit := 50
 	if l := c.Query("limit"); l != "" {
@@ -160,7 +162,7 @@ func (h *CommunityHandler) ListComments(c *gin.Context) {
 			limit = n
 		}
 	}
-	items, err := h.svc.ListComments(c.Request.Context(), recordID, limit)
+	items, err := h.svc.ListComments(c.Request.Context(), userID, recordID, limit)
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -169,13 +171,14 @@ func (h *CommunityHandler) ListComments(c *gin.Context) {
 }
 
 func (h *CommunityHandler) ListTargetComments(c *gin.Context) {
+	userID := c.GetString(authmw.ContextUserIDKey)
 	limit := 50
 	if l := c.Query("limit"); l != "" {
 		if n, err := strconv.Atoi(l); err == nil && n > 0 {
 			limit = n
 		}
 	}
-	items, err := h.svc.ListTargetComments(c.Request.Context(), c.Param("target_type"), c.Param("target_id"), limit)
+	items, err := h.svc.ListTargetComments(c.Request.Context(), userID, c.Param("target_type"), c.Param("target_id"), limit)
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -452,7 +455,7 @@ func (h *CommunityHandler) DeleteCirclePost(c *gin.Context) {
 
 func (h *CommunityHandler) ReportFeedTarget(c *gin.Context) {
 	var body struct {
-		Reason      string `json:"reason"`
+		Reason       string `json:"reason"`
 		ExtraContent string `json:"extra_content"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {

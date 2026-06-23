@@ -18,6 +18,9 @@ import {
   getUserFavoriteRecipes,
   communityGetFeed,
   communityGetPublicFeed,
+  friendBlockUser,
+  friendGetBlockStatus,
+  friendUnblockUser,
   followUser,
   unfollowUser,
   getFollowStats,
@@ -26,6 +29,7 @@ import {
   type UserRecipe,
   type CommunityFeedItem,
   type FollowStats,
+  type FriendBlockStatus,
   type CommunityFeedTargetType,
 } from '../../../utils/api'
 import drawQrcode from 'weapp-qrcode-canvas-2d'
@@ -101,6 +105,7 @@ export default function ProfileSettingsPage() {
   const [followingCount, setFollowingCount] = useState(0)
   const [isFollowing, setIsFollowing] = useState(false)
   const [followLoading, setFollowLoading] = useState(false)
+  const [blockStatus, setBlockStatus] = useState<FriendBlockStatus | null>(null)
   const [pageLoading, setPageLoading] = useState(true)
 
   // 分享海报
@@ -185,6 +190,7 @@ export default function ProfileSettingsPage() {
     try {
       const followStatsPromise = getFollowStats(resolvedUserId).catch(() => ({ followers_count: 0, following_count: 0, is_following: false }))
       if (isOwner) {
+        setBlockStatus(null)
         const [profile, recordDaysRes, foodColls, recipeColls, followStats] = await Promise.all([
           getUserProfile().catch(() => null),
           getUserRecordDays().catch(() => ({ record_days: 0 })),
@@ -214,12 +220,33 @@ export default function ProfileSettingsPage() {
         // 加载动态（等用户基础数据落库后再请求，避免状态竞争）
         await loadFeed(true)
       } else {
-        const [publicProfile, foodColls, recipeColls, followStats] = await Promise.all([
+        const [publicProfile, foodColls, recipeColls, followStats, blockStatusRes] = await Promise.all([
           getPublicUserProfile(resolvedUserId).catch(() => null),
           getUserCollections(resolvedUserId).catch(() => ({ list: [] })),
           getUserFavoriteRecipes(resolvedUserId).catch(() => ({ recipes: [] })),
           followStatsPromise,
+          friendGetBlockStatus(resolvedUserId).catch(() => null),
         ])
+        setBlockStatus(blockStatusRes)
+        if (blockStatusRes?.blocked_either) {
+          setTempAvatar('')
+          setTempNickname(blockStatusRes.is_blocked_by_me ? '已拉黑用户' : '用户')
+          setEditAvatar('')
+          setEditNickname('')
+          setEditCoverImage('')
+          setUserId(resolvedUserId)
+          setRecordDays(0)
+          setCoverImage('')
+          setMotto('')
+          setFoodCollections([])
+          setRecipeCollections([])
+          setFavoriteCount(0)
+          applyFollowStats({ followers_count: 0, following_count: 0, is_following: false })
+          setFeedList([])
+          setFeedHasMore(false)
+          setFeedOffset(0)
+          return
+        }
         const avatar = publicProfile?.avatar || ''
         const nickname = publicProfile?.nickname || '用户'
         const cover = publicProfile?.cover_image || ''
@@ -284,6 +311,65 @@ export default function ProfileSettingsPage() {
   const handleGoPrivateChat = () => {
     if (!resolvedUserId) return
     Taro.navigateTo({ url: `${extraPkgUrl('/pages/private-chat/index')}?user_id=${encodeURIComponent(resolvedUserId)}` })
+  }
+
+  const refreshBlockStatus = async () => {
+    if (isOwner || !resolvedUserId) return
+    try {
+      const status = await friendGetBlockStatus(resolvedUserId)
+      setBlockStatus(status)
+      return status
+    } catch {
+      setBlockStatus(null)
+      return null
+    }
+  }
+
+  const handleBlockUser = async () => {
+    if (!resolvedUserId || isOwner) return
+    const ok = await Taro.showModal({
+      title: '拉黑用户',
+      content: `拉黑「${tempNickname || '用户'}」后会解除好友关系，双方无法私信、加好友，也不会在圈子里互相看到内容。`,
+      confirmText: '拉黑',
+      cancelText: '取消',
+      confirmColor: '#ef4444'
+    })
+    if (!ok.confirm) return
+    try {
+      Taro.showLoading({ title: '处理中...', mask: true })
+      await friendBlockUser(resolvedUserId)
+      Taro.hideLoading()
+      Taro.showToast({ title: '已拉黑', icon: 'success' })
+      setFeedList([])
+      setFeedHasMore(false)
+      await refreshBlockStatus()
+    } catch (err: any) {
+      Taro.hideLoading()
+      Taro.showToast({ title: err?.message || '无法操作', icon: 'none' })
+    }
+  }
+
+  const handleUnblockUser = async () => {
+    if (!resolvedUserId || isOwner) return
+    const ok = await Taro.showModal({
+      title: '解除拉黑',
+      content: `确定解除对「${tempNickname || '用户'}」的拉黑吗？解除后不会自动恢复好友关系。`,
+      confirmText: '解除',
+      cancelText: '取消',
+      confirmColor: '#00bc7d'
+    })
+    if (!ok.confirm) return
+    try {
+      Taro.showLoading({ title: '处理中...', mask: true })
+      await friendUnblockUser(resolvedUserId)
+      Taro.hideLoading()
+      Taro.showToast({ title: '已解除', icon: 'success' })
+      await refreshBlockStatus()
+      await loadFeed(true)
+    } catch (err: any) {
+      Taro.hideLoading()
+      Taro.showToast({ title: err?.message || '无法操作', icon: 'none' })
+    }
   }
 
   // 自动关注（邀请码场景）
@@ -884,17 +970,32 @@ export default function ProfileSettingsPage() {
           {/* 关注 + 私信操作行（仅他人主页） */}
           {!isOwner && (
             <View className='profile-action-row'>
-              <View
-                className={`profile-follow-btn ${isFollowing ? 'profile-follow-btn--active' : ''}`}
-                onClick={handleFollowToggle}
-              >
-                <Text className='profile-follow-btn-text'>
-                  {followLoading ? '...' : isFollowing ? '已关注' : '+ 关注'}
-                </Text>
-              </View>
-              <View className='profile-dm-btn' onClick={handleGoPrivateChat}>
-                <Text className='profile-dm-btn-text'>私信</Text>
-              </View>
+              {blockStatus?.is_blocked_by_me ? (
+                <View className='profile-dm-btn' onClick={handleUnblockUser}>
+                  <Text className='profile-dm-btn-text'>解除拉黑</Text>
+                </View>
+              ) : blockStatus?.blocked_either ? (
+                <View className='profile-blocked-pill'>
+                  <Text className='profile-blocked-pill-text'>内容不可见</Text>
+                </View>
+              ) : (
+                <>
+                  <View
+                    className={`profile-follow-btn ${isFollowing ? 'profile-follow-btn--active' : ''}`}
+                    onClick={handleFollowToggle}
+                  >
+                    <Text className='profile-follow-btn-text'>
+                      {followLoading ? '...' : isFollowing ? '已关注' : '+ 关注'}
+                    </Text>
+                  </View>
+                  <View className='profile-dm-btn' onClick={handleGoPrivateChat}>
+                    <Text className='profile-dm-btn-text'>私信</Text>
+                  </View>
+                  <View className='profile-block-btn' onClick={handleBlockUser}>
+                    <Text className='profile-block-btn-text'>拉黑</Text>
+                  </View>
+                </>
+              )}
             </View>
           )}
         </View>
@@ -1120,11 +1221,22 @@ export default function ProfileSettingsPage() {
       </View>
       <FeedActionSheet
         visible={!!feedActionSheetTarget}
-        actions={[{ id: 'report', label: '举报', iconClass: 'icon-jinggao', danger: true }]}
+        actions={[
+          { id: blockStatus?.is_blocked_by_me ? 'unblock-user' : 'block-user', label: blockStatus?.is_blocked_by_me ? '解除拉黑' : '拉黑用户', iconClass: 'icon-close', danger: !blockStatus?.is_blocked_by_me },
+          { id: 'report', label: '举报', iconClass: 'icon-jinggao', danger: true },
+        ]}
         onClose={() => setFeedActionSheetTarget(null)}
         onSelect={(id) => {
           if (id === 'report' && feedActionSheetTarget) {
             setReportTarget(feedActionSheetTarget)
+          }
+          if (id === 'block-user') {
+            setFeedActionSheetTarget(null)
+            handleBlockUser()
+          }
+          if (id === 'unblock-user') {
+            setFeedActionSheetTarget(null)
+            handleUnblockUser()
           }
         }}
       />

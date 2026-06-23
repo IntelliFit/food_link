@@ -777,6 +777,15 @@ type UserFriendDO struct {
 
 func (UserFriendDO) TableName() string { return "user_friends" }
 
+type UserBlockDO struct {
+	ID            string     `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	BlockerUserID string     `gorm:"column:blocker_user_id;type:uuid;not null;uniqueIndex:idx_user_blocks_blocker_blocked,priority:1;index:idx_user_blocks_blocker"`
+	BlockedUserID string     `gorm:"column:blocked_user_id;type:uuid;not null;uniqueIndex:idx_user_blocks_blocker_blocked,priority:2;index:idx_user_blocks_blocked"`
+	CreatedAt     *time.Time `gorm:"column:created_at;type:timestamptz;default:now()"`
+}
+
+func (UserBlockDO) TableName() string { return "user_blocks" }
+
 type UserFollowDO struct {
 	ID         string     `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
 	FollowerID string     `gorm:"column:follower_id;type:uuid;not null;index:idx_user_follows_follower"`
@@ -1327,6 +1336,7 @@ func AllModels() []any {
 		&ExpiryNotificationJobDO{},
 		&FriendRequestDO{},
 		&UserFriendDO{},
+		&UserBlockDO{},
 		&UserFollowDO{},
 		&PrivateMessageDO{},
 		&PrivateMessageReportDO{},

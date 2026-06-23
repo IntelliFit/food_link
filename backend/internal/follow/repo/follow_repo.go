@@ -3,6 +3,7 @@ package repo
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"food_link/backend/internal/follow/domain"
 
@@ -59,51 +60,71 @@ func (r *FollowRepo) IsFollowing(ctx context.Context, followerID, followeeID str
 	return count > 0, err
 }
 
+func (r *FollowRepo) visibleToViewer(q *gorm.DB, viewerUserID string) *gorm.DB {
+	viewerUserID = strings.TrimSpace(viewerUserID)
+	if viewerUserID == "" {
+		return q
+	}
+	return q.Where(`NOT EXISTS (
+		SELECT 1 FROM user_blocks ub
+		WHERE (ub.blocker_user_id = ? AND ub.blocked_user_id = weapp_user.id)
+		   OR (ub.blocker_user_id = weapp_user.id AND ub.blocked_user_id = ?)
+	)`, viewerUserID, viewerUserID)
+}
+
 // CountFollowers returns the number of followers for a user
-func (r *FollowRepo) CountFollowers(ctx context.Context, userID string) (int64, error) {
+func (r *FollowRepo) CountFollowers(ctx context.Context, viewerUserID, userID string) (int64, error) {
 	var count int64
-	err := r.db.WithContext(ctx).Model(&domain.UserFollow{}).
-		Where("followee_id = ?", userID).
-		Count(&count).Error
+	q := r.db.WithContext(ctx).Model(&domain.UserFollow{}).
+		Joins("INNER JOIN weapp_user ON weapp_user.id = user_follows.follower_id").
+		Where("followee_id = ?", userID)
+	q = r.visibleToViewer(q, viewerUserID)
+	err := q.Count(&count).Error
 	return count, err
 }
 
 // CountFollowing returns the number of users that a user is following
-func (r *FollowRepo) CountFollowing(ctx context.Context, userID string) (int64, error) {
+func (r *FollowRepo) CountFollowing(ctx context.Context, viewerUserID, userID string) (int64, error) {
 	var count int64
-	err := r.db.WithContext(ctx).Model(&domain.UserFollow{}).
-		Where("follower_id = ?", userID).
-		Count(&count).Error
+	q := r.db.WithContext(ctx).Model(&domain.UserFollow{}).
+		Joins("INNER JOIN weapp_user ON weapp_user.id = user_follows.followee_id").
+		Where("follower_id = ?", userID)
+	q = r.visibleToViewer(q, viewerUserID)
+	err := q.Count(&count).Error
 	return count, err
 }
 
 // GetFollowers returns the list of followers for a user with pagination
-func (r *FollowRepo) GetFollowers(ctx context.Context, userID string, offset, limit int) ([]User, error) {
+func (r *FollowRepo) GetFollowers(ctx context.Context, viewerUserID, userID string, offset, limit int) ([]User, error) {
 	if limit <= 0 {
 		limit = 20
 	}
 	var followers []User
-	err := r.db.WithContext(ctx).Model(&User{}).
+	q := r.db.WithContext(ctx).Model(&User{}).
 		Select("weapp_user.id, weapp_user.nickname, weapp_user.avatar").
 		Joins("INNER JOIN user_follows ON user_follows.follower_id = weapp_user.id").
 		Where("user_follows.followee_id = ?", userID).
-		Order("user_follows.created_at DESC").
+		Order("user_follows.created_at DESC")
+	q = r.visibleToViewer(q, viewerUserID)
+	err := q.
 		Limit(limit).Offset(offset).
 		Find(&followers).Error
 	return followers, err
 }
 
 // GetFollowing returns the list of users that a user is following with pagination
-func (r *FollowRepo) GetFollowing(ctx context.Context, userID string, offset, limit int) ([]User, error) {
+func (r *FollowRepo) GetFollowing(ctx context.Context, viewerUserID, userID string, offset, limit int) ([]User, error) {
 	if limit <= 0 {
 		limit = 20
 	}
 	var following []User
-	err := r.db.WithContext(ctx).Model(&User{}).
+	q := r.db.WithContext(ctx).Model(&User{}).
 		Select("weapp_user.id, weapp_user.nickname, weapp_user.avatar").
 		Joins("INNER JOIN user_follows ON user_follows.followee_id = weapp_user.id").
 		Where("user_follows.follower_id = ?", userID).
-		Order("user_follows.created_at DESC").
+		Order("user_follows.created_at DESC")
+	q = r.visibleToViewer(q, viewerUserID)
+	err := q.
 		Limit(limit).Offset(offset).
 		Find(&following).Error
 	return following, err

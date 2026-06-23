@@ -23,6 +23,23 @@ type UserFriend struct {
 
 func (UserFriend) TableName() string { return "user_friends" }
 
+// UserBlock — table: user_blocks
+type UserBlock struct {
+	ID            string     `gorm:"column:id"`
+	BlockerUserID string     `gorm:"column:blocker_user_id"`
+	BlockedUserID string     `gorm:"column:blocked_user_id"`
+	CreatedAt     *time.Time `gorm:"column:created_at"`
+}
+
+func (UserBlock) TableName() string { return "user_blocks" }
+
+// UserBlockExt extends UserBlock with blocked user profile.
+type UserBlockExt struct {
+	UserBlock
+	BlockedNickname string `gorm:"-"`
+	BlockedAvatar   string `gorm:"-"`
+}
+
 // FriendRequestExt extends FriendRequest with counterpart profile
 type FriendRequestExt struct {
 	FriendRequest

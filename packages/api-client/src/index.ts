@@ -25,6 +25,8 @@ import type {
   FoodRecordItemPayload,
   HealthProfile,
   HealthReportExtract,
+  FriendBlockItem,
+  FriendBlockStatus,
   FriendInviteProfile,
   FriendInviteResolveResult,
   FriendRequestItem,
@@ -1327,7 +1329,7 @@ export class FoodLinkApiClient {
     params?: CommunityFeedQueryParams
   }): Promise<{ list: CommunityFeedItem[]; has_more?: boolean }> {
     const q = this.buildCommunityFeedQuery(options)
-    return this.publicRequest<{ list: CommunityFeedItem[]; has_more?: boolean }>(`/api/community/public-feed?${q}`, {
+    return this.optionalAuthenticatedRequest<{ list: CommunityFeedItem[]; has_more?: boolean }>(`/api/community/public-feed?${q}`, {
       method: 'GET',
       timeoutMs: 10000,
     })
@@ -1840,6 +1842,39 @@ export class FoodLinkApiClient {
     })
   }
 
+  async listBlockedUsers(): Promise<{ list: FriendBlockItem[] }> {
+    return this.authenticatedRequest<{ list: FriendBlockItem[] }>('/api/friend/blocks', {
+      method: 'GET',
+      timeoutMs: 10000,
+    })
+  }
+
+  async getFriendBlockStatus(userId: string): Promise<FriendBlockStatus> {
+    return this.authenticatedRequest<FriendBlockStatus>(`/api/friend/block-status/${encodeURIComponent(userId)}`, {
+      method: 'GET',
+      timeoutMs: 10000,
+    })
+  }
+
+  async blockUser(userId: string): Promise<Record<string, unknown>> {
+    const id = userId.trim()
+    if (!id) throw new Error('缺少用户 ID')
+    return this.authenticatedRequest<Record<string, unknown>>('/api/friend/block', {
+      method: 'POST',
+      body: { blocked_user_id: id },
+      timeoutMs: 10000,
+    })
+  }
+
+  async unblockUser(userId: string): Promise<Record<string, unknown>> {
+    const id = userId.trim()
+    if (!id) throw new Error('缺少用户 ID')
+    return this.authenticatedRequest<Record<string, unknown>>(`/api/friend-blocks/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      timeoutMs: 10000,
+    })
+  }
+
   async getPublicProfile(userId: string): Promise<PublicProfile> {
     return this.authenticatedRequest<PublicProfile>(`/api/user/${encodeURIComponent(userId)}/public-profile`, {
       method: 'GET',
@@ -1890,7 +1925,7 @@ export class FoodLinkApiClient {
   }
 
   async getInviteProfile(userId: string): Promise<FriendInviteProfile> {
-    return this.publicRequest<FriendInviteProfile>(`/api/friend/invite/profile/${encodeURIComponent(userId)}`, {
+    return this.optionalAuthenticatedRequest<FriendInviteProfile>(`/api/friend/invite/profile/${encodeURIComponent(userId)}`, {
       method: 'GET',
       timeoutMs: 10000,
     })
@@ -1899,7 +1934,7 @@ export class FoodLinkApiClient {
   async getInviteProfileByCode(code: string): Promise<FriendInviteProfile> {
     const inviteCode = code.trim()
     if (!inviteCode) throw new Error('请输入邀请码')
-    return this.publicRequest<FriendInviteProfile>(`/api/friend/invite/profile-by-code?code=${encodeURIComponent(inviteCode)}`, {
+    return this.optionalAuthenticatedRequest<FriendInviteProfile>(`/api/friend/invite/profile-by-code?code=${encodeURIComponent(inviteCode)}`, {
       method: 'GET',
       timeoutMs: 10000,
     })
@@ -2012,10 +2047,10 @@ export class FoodLinkApiClient {
     })
   }
 
-  async getConversation(userId: string, offset = 0, limit = 40): Promise<{ list: PrivateMessageItem[]; has_more?: boolean; offset?: number }> {
+  async getConversation(userId: string, offset = 0, limit = 40): Promise<{ list: PrivateMessageItem[]; has_more?: boolean; offset?: number; blocked?: boolean }> {
     const safeOffset = Math.max(0, Math.floor(offset))
     const safeLimit = Math.min(100, Math.max(1, Math.floor(limit)))
-    return this.authenticatedRequest<{ list: PrivateMessageItem[]; has_more?: boolean; offset?: number }>(
+    return this.authenticatedRequest<{ list: PrivateMessageItem[]; has_more?: boolean; offset?: number; blocked?: boolean }>(
       `/api/messages/conversation/${encodeURIComponent(userId)}?offset=${safeOffset}&limit=${safeLimit}`,
       { method: 'GET', timeoutMs: 10000 },
     )
@@ -2170,6 +2205,20 @@ export class FoodLinkApiClient {
       },
     })
     this.assertOk(res, '请求失败')
+    return this.unwrapResponseData<T>(res.data)
+  }
+
+  private async optionalAuthenticatedRequest<T>(path: string, options: ApiClientRequestOptions): Promise<T> {
+    const token = await this.adapters.tokenStorage.getAccessToken()
+    const res = await this.adapters.request(this.absoluteUrl(path), {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(options.headers || {}),
+      },
+    })
+    this.assertOk(res, '璇锋眰澶辫触')
     return this.unwrapResponseData<T>(res.data)
   }
 
