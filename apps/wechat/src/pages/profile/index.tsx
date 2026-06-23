@@ -119,10 +119,6 @@ function ProfileListIcon({ name }: { name: string }) {
   return <Text className={`iconfont ${name} profile-list-icon-symbol`} />
 }
 
-function ProfileChevron({ small = false }: { small?: boolean }) {
-  return <Text className={`iconfont icon-ic_detail profile-chevron ${small ? 'profile-chevron--small' : ''}`} />
-}
-
 function ProfilePage() {
   const { scheme, toggleScheme } = useAppColorScheme()
   // 登录状态
@@ -657,7 +653,7 @@ function ProfilePage() {
                 </View>
                 <View className='user-meta-row' onClick={handleSettings}>
                   <Text className='user-meta-text'>个人主页</Text>
-                  <ProfileChevron small />
+                  <Text className='iconfont icon-right user-meta-arrow' />
                 </View>
               </>
             ) : (

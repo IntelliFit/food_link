@@ -679,6 +679,7 @@ export default function ProfileSettingsPage() {
         ) : isManualRecord ? (
           <ManualFoodCards
             items={record.items}
+            mealType={record.meal_type}
             onItemClick={(row) => handleManualFoodCardClick(item, row)}
           />
         ) : isCirclePost && (record.image_paths || []).length > 0 ? (

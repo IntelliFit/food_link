@@ -582,6 +582,7 @@ function InteractionFeedDetailPage() {
                       <View className='feed-manual-foods-detail'>
                         <ManualFoodCards
                           items={visibleManualFoodItems}
+                          mealType={feedItem.record.meal_type}
                           onItemClick={handleManualFoodCardClick}
                         />
                         {manualFoodItems.length > INITIAL_VISIBLE_MANUAL_FOODS && (

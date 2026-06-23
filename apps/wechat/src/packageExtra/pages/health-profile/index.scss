@@ -101,6 +101,96 @@
   line-height: 1.5;
 }
 
+/* 头像昵称步骤 */
+.profile-step-card {
+  .profile-form-body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 36rpx;
+    flex: 1;
+    justify-content: center;
+  }
+
+  .profile-avatar-choose-wrapper {
+    position: relative;
+    width: 200rpx;
+    height: 200rpx;
+    border-radius: 50%;
+    background: #f1f5f9;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    box-shadow: 0 8rpx 32rpx rgb(0 188 125 / 12%);
+  }
+
+  .profile-avatar-image {
+    width: 200rpx;
+    height: 200rpx;
+    border-radius: 50%;
+  }
+
+  .profile-avatar-placeholder {
+    font-size: 80rpx;
+    line-height: 1;
+  }
+
+  .profile-avatar-choose-btn {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    width: 200rpx;
+    height: 200rpx;
+    border-radius: 50%;
+    padding: 0;
+    margin: 0;
+    background: transparent;
+    border: none;
+
+    &::after {
+      border: none;
+    }
+  }
+
+  .profile-avatar-tip {
+    position: absolute;
+    bottom: -40rpx;
+    font-size: 24rpx;
+    color: #64748b;
+    white-space: nowrap;
+  }
+
+  .profile-nickname-row {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 16rpx;
+  }
+
+  .profile-nickname-label {
+    font-size: 28rpx;
+    color: #334155;
+    font-weight: 500;
+  }
+
+  .profile-nickname-input {
+    width: 100%;
+    height: 96rpx;
+    padding: 0 28rpx;
+    border-radius: 24rpx;
+    background: #fff;
+    border: 2rpx solid #e2e8f0;
+    font-size: 30rpx;
+    color: #1a1a1a;
+    box-sizing: border-box;
+  }
+
+  .profile-wechat-fill-btn {
+    margin-top: 8rpx;
+  }
+}
+
 /* 单选项 - 纵向列表 */
 .choice-row {
   display: flex;

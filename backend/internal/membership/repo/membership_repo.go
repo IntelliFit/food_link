@@ -383,6 +383,15 @@ func (r *MembershipRepo) UpdateInviteReferral(ctx context.Context, id string, up
 	return &row, err
 }
 
+func (r *MembershipRepo) ListPendingInviteReferralsByInviter(ctx context.Context, inviterUserID string) ([]domain.UserInviteReferral, error) {
+	var rows []domain.UserInviteReferral
+	err := r.db.WithContext(ctx).
+		Where("inviter_user_id = ? AND status = ?", inviterUserID, "pending_qualified").
+		Order("created_at ASC").
+		Find(&rows).Error
+	return rows, err
+}
+
 func (r *MembershipRepo) CountCompletedInviteRewardsForInviterInMonth(ctx context.Context, inviterUserID, monthStart, nextMonthStart string) (int, error) {
 	start, err := time.ParseInLocation("2006-01-02", monthStart, chinaLocation())
 	if err != nil {
@@ -934,6 +943,7 @@ type User struct {
 	ID                   string     `gorm:"column:id"`
 	OpenID               string     `gorm:"column:openid"`
 	UnionID              *string    `gorm:"column:unionid"`
+	Nickname             *string    `gorm:"column:nickname"`
 	EarnedCreditsBalance int        `gorm:"column:earned_credits_balance"`
 	CreatedAt            *time.Time `gorm:"column:create_time"`
 	Birthday             *string    `gorm:"column:birthday"`

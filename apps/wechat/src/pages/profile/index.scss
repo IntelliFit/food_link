@@ -125,6 +125,11 @@
     font-weight: 600;
     color: #111827;
     line-height: 52rpx;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .user-days-pill {
@@ -163,7 +168,7 @@
     line-height: 34rpx;
   }
 
-  .profile-chevron--small {
+  .user-meta-arrow {
     font-size: 22rpx;
     color: #9ca3af;
   }

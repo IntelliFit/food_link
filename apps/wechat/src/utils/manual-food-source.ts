@@ -87,6 +87,16 @@ export function isManualFoodFeedRecord(
   return record.items.some((item) => isManualFoodSourceItem(item))
 }
 
+/** 是否应以「食物库来源卡片」形式展示（仅食物库输入模块、无用户上传图片） */
+export function shouldUseManualFoodCards(
+  record?: { image_path?: string | null; image_paths?: string[] | null; items?: ManualFoodSourceItem[] | null } | null
+): boolean {
+  if (!record) return false
+  // 拍照 / 图片上传的 AI 识别记录直接展示原图，不使用食物库卡片
+  if (record.image_path || (record.image_paths?.length || 0) > 0) return false
+  return hasManualFoodDisplayItems(record.items)
+}
+
 /** 从饮食记录 items 中筛出手动记录条目（含来源标签与图片字段规范化） */
 export function extractManualFoodDisplayItems(
   items?: ManualFoodSourceItem[] | null

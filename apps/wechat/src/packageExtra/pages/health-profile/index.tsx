@@ -1,21 +1,25 @@
-import { View, Text, Input, Textarea, Image } from '@tarojs/components'
+import { View, Text, Input, Textarea, Image, Button as NativeButton } from '@tarojs/components'
 import { Button } from '@taroify/core'
 import '@taroify/core/button/style'
 import { useState, useEffect } from 'react'
 import Taro from '@tarojs/taro'
 import {
   getHealthProfile,
+  getUserProfile,
   updateHealthProfile,
+  updateUserInfo,
   uploadReportImage,
   submitReportExtractionTask,
   imageToBase64,
   showUnifiedApiError,
   type HealthProfileUpdateRequest,
 } from '../../../utils/api'
+import { processChooseAvatarSelection, ensureAvatarUploadedForSave } from '../../../utils/new-user-profile-form'
 import { withAuth } from '../../../utils/withAuth'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
 import { chooseImageWithPrivacy, isPrivacyAuthorizeError, showPrivacyAuthorizeFailure } from '../../../utils/weapp-privacy'
+import { defaultAvatarImage } from '../../../utils/default-user-profile'
 
 import './index.scss'
 import HeightRuler from '../../../components/HeightRuler'
@@ -77,6 +81,7 @@ const GOAL_OPTIONS = [
 ]
 
 const PROFILE_STEPS = [
+  'profile',
   'gender',
   'age',
   'height',
@@ -116,6 +121,8 @@ function HealthProfilePage() {
   const [dietPreference, setDietPreference] = useState<string[]>([])
   const [allergyList, setAllergyList] = useState<string[]>([])
   const [reportImageUrls, setReportImageUrls] = useState<string[]>([])
+  const [avatarUrl, setAvatarUrl] = useState<string>('')
+  const [nickname, setNickname] = useState<string>('')
 
   const [customMedical, setCustomMedical] = useState<string>('') // 自定义病史输入
   const [customMedicalList, setCustomMedicalList] = useState<string[]>([]) // 用户添加的自定义病史列表
@@ -133,7 +140,16 @@ function HealthProfilePage() {
 
   const loadProfile = async () => {
     try {
-      const profile = await getHealthProfile()
+      const [profile, userInfo] = await Promise.all([
+        getHealthProfile(),
+        getUserProfile().catch(() => null),
+      ])
+      if (userInfo) {
+        setAvatarUrl(userInfo.avatar || defaultAvatarImage)
+        setNickname(userInfo.nickname || '')
+      } else {
+        setAvatarUrl(defaultAvatarImage)
+      }
       if (profile.gender) setGender(profile.gender)
       if (profile.birthday) {
         setBirthday(profile.birthday)
@@ -196,10 +212,12 @@ function HealthProfilePage() {
   const goNext = () => {
     if (currentStep >= TOTAL_STEPS - 1) return
     if (!canProceed()) {
-      if (currentStep === 2 && height) {
+      if (currentStep === 3 && height) {
         Taro.showToast({ title: '请输入 100～250 之间的身高 (cm)', icon: 'none' })
-      } else if (currentStep === 3 && weight) {
+      } else if (currentStep === 4 && weight) {
         Taro.showToast({ title: '请输入 30～200 之间的体重 (kg)', icon: 'none' })
+      } else if (currentStep === 0) {
+        Taro.showToast({ title: '请上传头像并填写昵称', icon: 'none' })
       } else {
         Taro.showToast({ title: '请先完成当前题目', icon: 'none' })
       }
@@ -374,6 +392,37 @@ function HealthProfilePage() {
     setGender(value)
   }
 
+  const handleChooseAvatar = (e: { detail?: { avatarUrl?: string } }) => {
+    const url = e.detail?.avatarUrl
+    if (!url) return
+    processChooseAvatarSelection(url, setAvatarUrl)
+  }
+
+  const handleNicknameInput = (value: string) => {
+    setNickname(value)
+  }
+
+  const handleUseWechatProfile = async () => {
+    try {
+      const res = await Taro.getUserProfile({ desc: '用于完善个人资料' })
+      const info = res.userInfo
+      if (info) {
+        if (info.avatarUrl) {
+          processChooseAvatarSelection(info.avatarUrl, setAvatarUrl)
+        }
+        if (info.nickName) {
+          setNickname(info.nickName)
+        }
+      }
+    } catch (err: any) {
+      if (err?.errMsg?.includes('cancel') || err?.errMsg?.includes('deny') || err?.errMsg?.includes('fail auth')) {
+        return
+      }
+      console.error('获取微信资料失败:', err)
+      Taro.showToast({ title: '获取微信资料失败', icon: 'none' })
+    }
+  }
+
   const handleSelectActivity = (value: string) => {
     setActivityLevel(value)
   }
@@ -390,23 +439,25 @@ function HealthProfilePage() {
   const canProceed = () => {
     switch (currentStep) {
       case 0:
-        return !!gender
+        return !!avatarUrl && !!nickname.trim()
       case 1:
-        return !!birthday
+        return !!gender
       case 2:
-        return isHeightValid
+        return !!birthday
       case 3:
-        return isWeightValid
+        return isHeightValid
       case 4:
-        return !!dietGoal
+        return isWeightValid
       case 5:
-        return !!activityLevel
+        return !!dietGoal
       case 6:
-        return Number.isFinite(routineHours.sleepHour) && Number.isFinite(routineHours.wakeHour)
+        return !!activityLevel
       case 7:
+        return Number.isFinite(routineHours.sleepHour) && Number.isFinite(routineHours.wakeHour)
       case 8:
       case 9:
       case 10:
+      case 11:
         return true
       default:
         return true
@@ -451,6 +502,12 @@ function HealthProfilePage() {
     if (!confirm) return
     setSaving(true)
     try {
+      // 先保存头像昵称到用户资料
+      const finalAvatar = await ensureAvatarUploadedForSave(avatarUrl)
+      await updateUserInfo({
+        nickname: nickname.trim(),
+        avatar: finalAvatar || undefined,
+      })
       await updateHealthProfile(req)
       // 若有上传的体检报告图片，提交后台病历提取任务（用户无感知）
       if (reportImageUrls.length > 0) {
@@ -536,7 +593,55 @@ function HealthProfilePage() {
             transition: 'transform 0.3s ease-out'
           }}
         >
-          {/* Step 0: 性别 */}
+          {/* Step 0: 头像昵称 */}
+          <View className='card step-card profile-step-card'>
+            <Text className='step-card-title'>完善资料</Text>
+            <Text className='step-card-subtitle'>设置头像和昵称，让朋友更容易认出你。</Text>
+            <View className='profile-form-body'>
+              <View className='profile-avatar-choose-wrapper'>
+                {avatarUrl ? (
+                  <Image src={avatarUrl} className='profile-avatar-image' mode='aspectFill' />
+                ) : (
+                  <Text className='profile-avatar-placeholder'>📷</Text>
+                )}
+                <NativeButton
+                  className='profile-avatar-choose-btn'
+                  openType='chooseAvatar'
+                  onChooseAvatar={handleChooseAvatar}
+                />
+                <Text className='profile-avatar-tip'>点击修改头像</Text>
+              </View>
+
+              <View className='profile-nickname-row'>
+                <Text className='profile-nickname-label'>昵称</Text>
+                <Input
+                  className='profile-nickname-input'
+                  type='nickname'
+                  placeholder='请输入昵称'
+                  value={nickname}
+                  onInput={(e) => handleNicknameInput(e.detail.value)}
+                />
+              </View>
+
+              <Button
+                className='profile-wechat-fill-btn'
+                variant='outlined'
+                color='primary'
+                shape='round'
+                block
+                onClick={handleUseWechatProfile}
+              >
+                一键使用微信头像和昵称
+              </Button>
+            </View>
+            <View className='card-footer card-footer-single'>
+              <Button block color='primary' shape='round' className={`card-next-btn ${canProceed() ? 'ready' : ''}`} onClick={goNext} disabled={!canProceed()}>
+                下一步 <Text className='iconfont icon-right' />
+              </Button>
+            </View>
+          </View>
+
+          {/* Step 1: 性别 */}
           <View className='card step-card'>
             <Text className='step-card-title'>基础信息</Text>
             <Text className='step-card-subtitle'>选择你的性别，让我们更了解你。</Text>

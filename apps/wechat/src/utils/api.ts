@@ -1610,6 +1610,26 @@ export interface RewardCenterResponse {
   tasks: RewardCenterTask[]
 }
 
+export interface InviteRewardStatusItem {
+  referral_id: string
+  status: string
+  records_needed: number
+  reward_credits: number
+}
+
+export interface InviteRewardStatusAsInvitee extends InviteRewardStatusItem {
+  inviter_nickname: string
+}
+
+export interface InviteRewardStatusAsInviter extends InviteRewardStatusItem {
+  invitee_nickname: string
+}
+
+export interface InviteRewardStatusResponse {
+  as_invitee: InviteRewardStatusAsInvitee | null
+  as_inviter: InviteRewardStatusAsInviter[]
+}
+
 export interface MembershipPlansResponse {
   list: MembershipPlan[]
 }
@@ -4382,6 +4402,22 @@ export async function getRewardCenter(): Promise<RewardCenterResponse> {
   } catch (error: any) {
     console.error('获取赚积分任务失败:', error)
     throw new Error(error.message || '获取赚积分任务失败')
+  }
+}
+
+export async function getInviteRewardStatus(): Promise<InviteRewardStatusResponse> {
+  try {
+    const response = await authenticatedRequest('/api/membership/invite-reward-status', {
+      method: 'GET',
+    })
+    if (response.statusCode !== 200) {
+      const errorMsg = (response.data as any)?.detail || '获取邀请奖励进度失败'
+      throw new Error(errorMsg)
+    }
+    return response.data as InviteRewardStatusResponse
+  } catch (error: any) {
+    console.error('获取邀请奖励进度失败:', error)
+    throw new Error(error.message || '获取邀请奖励进度失败')
   }
 }
 

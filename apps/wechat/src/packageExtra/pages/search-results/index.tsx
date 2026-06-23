@@ -301,6 +301,7 @@ function SearchResultsPage() {
       {item.manual_food_items && item.manual_food_items.length > 0 ? (
         <ManualFoodCards
           items={item.manual_food_items as any}
+          mealType={item.meal_type}
           onItemClick={(row) => handleManualFoodClick(item, row)}
         />
       ) : (

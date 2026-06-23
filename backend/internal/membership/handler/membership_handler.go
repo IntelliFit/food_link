@@ -23,6 +23,7 @@ type MembershipService interface {
 	ListPlans(ctx context.Context, userID string) ([]map[string]any, error)
 	GetMyMembership(ctx context.Context, userID string, date string) (map[string]any, error)
 	GetRewardCenter(ctx context.Context, userID string) (map[string]any, error)
+	GetInviteRewardStatus(ctx context.Context, userID string) (map[string]any, error)
 	CreatePaymentWithInput(ctx context.Context, userID string, input service.CreateMembershipPaymentInput) (map[string]any, error)
 	SyncWechatPayment(ctx context.Context, userID, orderNo string) (map[string]any, error)
 	WechatNotify(ctx context.Context, paymentID string) error
@@ -73,6 +74,21 @@ func (h *MembershipHandler) GetRewardCenter(c *gin.Context) {
 		return
 	}
 	data, err := h.svc.GetRewardCenter(c.Request.Context(), userID)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, data)
+}
+
+// GET /api/membership/invite-reward-status
+func (h *MembershipHandler) GetInviteRewardStatus(c *gin.Context) {
+	userID := c.GetString(authmw.ContextUserIDKey)
+	if userID == "" {
+		response.Error(c, commonerrors.ErrUnauthorized)
+		return
+	}
+	data, err := h.svc.GetInviteRewardStatus(c.Request.Context(), userID)
 	if err != nil {
 		response.Error(c, err)
 		return

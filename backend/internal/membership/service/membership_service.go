@@ -88,6 +88,7 @@ type MembershipRepo interface {
 	CountDailyMembershipBonusCredits(ctx context.Context, userID, chinaDate string) (inviteBonus int, shareBonus int, err error)
 	GetInviteReferralByInvitee(ctx context.Context, inviteeUserID string) (*domain.UserInviteReferral, error)
 	UpdateInviteReferral(ctx context.Context, id string, updates map[string]any) (*domain.UserInviteReferral, error)
+	ListPendingInviteReferralsByInviter(ctx context.Context, inviterUserID string) ([]domain.UserInviteReferral, error)
 	CountCompletedInviteRewardsForInviterInMonth(ctx context.Context, inviterUserID, monthStart, nextMonthStart string) (int, error)
 	ListActiveInviteRewards(ctx context.Context, userID, chinaDate string) ([]domain.UserInviteReferral, error)
 	ListSharePosterBonusEvents(ctx context.Context, userID, chinaDate string) ([]domain.UserCreditBonusEvent, error)
@@ -521,6 +522,84 @@ func (s *MembershipService) ActivatePendingInviteReferralOnFirstValidUse(ctx con
 		"blocked_reason":    nil,
 		"updated_at":        nowUTC,
 	})
+}
+
+// GetInviteRewardStatus 返回当前用户作为被邀请人和邀请人的 pending 邀请奖励进度。
+func (s *MembershipService) GetInviteRewardStatus(ctx context.Context, userID string) (map[string]any, error) {
+	userID = strings.TrimSpace(userID)
+	result := map[string]any{
+		"as_invitee": nil,
+		"as_inviter": []any{},
+	}
+	if userID == "" {
+		return result, nil
+	}
+
+	todayCN := dateOnly(time.Now().In(chinaLocation()))
+
+	referral, err := s.repo.GetInviteReferralByInvitee(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if ok, days := s.pendingInviteRecordsNeeded(referral, todayCN); ok {
+		inviterNickname := ""
+		if inviter, err := s.repo.GetUser(ctx, referral.InviterUserID); err == nil && inviter != nil && inviter.Nickname != nil {
+			inviterNickname = *inviter.Nickname
+		}
+		result["as_invitee"] = map[string]any{
+			"referral_id":      referral.ID,
+			"status":           referral.Status,
+			"records_needed":   days,
+			"reward_credits":   inviteRewardCreditsOnQualify,
+			"inviter_nickname": inviterNickname,
+		}
+	}
+
+	inviterRows, err := s.repo.ListPendingInviteReferralsByInviter(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	inviterList := make([]any, 0, len(inviterRows))
+	for _, ref := range inviterRows {
+		if ok, days := s.pendingInviteRecordsNeeded(&ref, todayCN); ok {
+			inviteeNickname := ""
+			if invitee, err := s.repo.GetUser(ctx, ref.InviteeUserID); err == nil && invitee != nil && invitee.Nickname != nil {
+				inviteeNickname = *invitee.Nickname
+			}
+			inviterList = append(inviterList, map[string]any{
+				"referral_id":      ref.ID,
+				"invitee_nickname": inviteeNickname,
+				"status":           ref.Status,
+				"records_needed":   days,
+				"reward_credits":   inviteRewardCreditsOnQualify,
+			})
+		}
+	}
+	result["as_inviter"] = inviterList
+	return result, nil
+}
+
+func (s *MembershipService) pendingInviteRecordsNeeded(referral *domain.UserInviteReferral, todayCN time.Time) (bool, int) {
+	if referral == nil || referral.Status != "pending_qualified" {
+		return false, 0
+	}
+	createdAt := time.Now().UTC()
+	if referral.CreatedAt != nil {
+		createdAt = *referral.CreatedAt
+	}
+	deadlineCN := dateOnly(createdAt.In(chinaLocation())).AddDate(0, 0, inviteRewardWindowDays-1)
+	if todayCN.After(deadlineCN) {
+		return false, 0
+	}
+	distinctDays := 0
+	if referral.FirstEffectiveActionAt != nil {
+		distinctDays = 1
+	}
+	needed := inviteRewardRequiredDays - distinctDays
+	if needed <= 0 {
+		return false, 0
+	}
+	return true, needed
 }
 
 func (s *MembershipService) materializeDailyBonusCredits(ctx context.Context, userID, chinaDate string) (int, int, error) {

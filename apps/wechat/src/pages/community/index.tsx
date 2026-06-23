@@ -44,7 +44,7 @@ import {
 } from '../../utils/api'
 import {
   extractManualFoodDisplayItems,
-  isManualFoodFeedRecord
+  shouldUseManualFoodCards
 } from '../../utils/manual-food-source'
 import { FeedReportMask } from './components/FeedReportMask'
 import { ManualFoodCards } from './components/ManualFoodCards'
@@ -2383,7 +2383,7 @@ function CommunityPage() {
                     const circlePostBody = isCirclePost ? (item.record.body || '') : ''
                     const circlePostText = circlePostTitle || circlePostBody
                     const exerciseKcal = Number(item.record.calories_burned ?? item.record.total_calories ?? 0)
-                    const isManualRecord = !exercise && !isCirclePost && isManualFoodFeedRecord(item.record)
+                    const isManualRecord = !exercise && !isCirclePost && shouldUseManualFoodCards(item.record)
                     const manualFoodItems = isManualRecord
                       ? extractManualFoodDisplayItems(item.record.items)
                       : []
@@ -2477,6 +2477,7 @@ function CommunityPage() {
                             {useManualFoodCards && (
                               <ManualFoodCards
                                 items={item.record.items}
+                                mealType={item.record.meal_type}
                                 onItemClick={() => handleViewDetail(item)}
                               />
                             )}
