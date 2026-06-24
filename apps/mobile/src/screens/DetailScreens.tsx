@@ -3,9 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import { ActivityIndicator, Image, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Switch, Text, TextInput, View } from 'react-native'
 import * as Clipboard from 'expo-clipboard'
 import * as ImagePicker from 'expo-image-picker'
-import * as Sharing from 'expo-sharing'
 import qrcode from 'qrcode-generator'
-import { captureRef } from 'react-native-view-shot'
 import { CommonActions, useFocusEffect, useNavigation, useRoute, type RouteProp } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { Apple, Check, Coffee, Cookie, Dumbbell, ImagePlus, Inbox, Link2, MessageCircle, Moon, MoreHorizontal, MoreVertical, Plus, QrCode, RefreshCw, Search, Send, Share2, Soup, Trash2, Undo2, UserPlus, Users, Utensils, X, type LucideIcon } from 'lucide-react-native'
@@ -51,6 +49,8 @@ const appIcon = require('../../assets/icon.png')
 const mealOptions: MealType[] = ['breakfast', 'morning_snack', 'lunch', 'afternoon_snack', 'dinner', 'evening_snack']
 type NotificationTab = 'all' | 'like' | 'comment'
 type FriendTab = 'friends' | 'received' | 'sent' | 'blocks'
+type ExpoSharingModule = typeof import('expo-sharing')
+type ViewShotModule = typeof import('react-native-view-shot')
 const notificationPageSize = 20
 const commonTextFoods = ['米饭', '面条', '鸡蛋', '鸡胸肉', '苹果', '香蕉', '牛奶', '面包']
 type TextRecordDietGoal = 'fat_loss' | 'muscle_gain' | 'maintain' | 'none'
@@ -521,7 +521,11 @@ function FoodRecordPosterModal({
     if (!share || busy) return
     setCapturing(true)
     try {
-      const uri = await captureRef(posterCardRef, {
+      const viewShot = getViewShotModule()
+      if (!viewShot?.captureRef) {
+        throw new Error('当前安装包暂不支持生成海报图片，请更新到最新版 App')
+      }
+      const uri = await viewShot.captureRef(posterCardRef, {
         format: 'png',
         quality: 0.96,
         result: 'tmpfile',
@@ -6763,12 +6767,32 @@ async function shareTextToSystem(title: string, message: string, url?: string): 
   return result.action !== Share.dismissedAction
 }
 
+function getExpoSharingModule(): ExpoSharingModule | null {
+  try {
+    return require('expo-sharing') as ExpoSharingModule
+  } catch {
+    return null
+  }
+}
+
+function getViewShotModule(): ViewShotModule | null {
+  try {
+    return require('react-native-view-shot') as ViewShotModule
+  } catch {
+    return null
+  }
+}
+
 async function sharePosterImageToSystem(title: string, imageUri: string): Promise<boolean> {
-  const available = await Sharing.isAvailableAsync()
+  const sharing = getExpoSharingModule()
+  if (!sharing?.isAvailableAsync || !sharing?.shareAsync) {
+    throw new Error('当前安装包暂不支持分享图片文件，请更新到最新版 App')
+  }
+  const available = await sharing.isAvailableAsync()
   if (!available) {
     throw new Error('当前运行环境暂时不支持分享图片文件')
   }
-  await Sharing.shareAsync(imageUri, {
+  await sharing.shareAsync(imageUri, {
     dialogTitle: title,
     mimeType: 'image/png',
     UTI: 'public.png',

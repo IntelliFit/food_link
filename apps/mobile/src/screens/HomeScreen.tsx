@@ -704,8 +704,8 @@ function HomeCalorieCard({
             <Text style={[styles.targetEnergyTargetNum, { color: themeColors.textSecondary }]}>{Math.round(target)}</Text>
           </View>
           <Pressable style={({ pressed }) => [styles.targetEditButton, pressed && styles.pressed]} onPress={onOpenTargetEditor}>
-            <IconfontText className="iconfont icon-target" size={12} color={isDark ? '#7dd3aa' : '#5cb896'} />
-            <Text style={[styles.targetEditButtonText, { color: isDark ? '#7dd3aa' : '#2f7f62' }]}>目标设置</Text>
+            <IconfontText className="iconfont icon-target" size={12} color={themeColors.bodyStatusChangeDown} />
+            <Text style={[styles.targetEditButtonText, { color: themeColors.bodyStatusChangeDown }]}>目标设置</Text>
           </Pressable>
         </View>
       </View>
@@ -722,7 +722,7 @@ function HomeCalorieCard({
               <IconfontText
                 className="iconfont icon-right-arrow"
                 size={14}
-                color={isDark ? '#7dd3aa' : '#5aa783'}
+                color={themeColors.nutritionAffordanceText}
                 style={{ transform: [{ rotate: nutritionExpanded ? '270deg' : '90deg' }] }}
               />
               <Text style={[styles.nutritionExpandAffordanceText, { color: themeColors.nutritionAffordanceText }]}>{nutritionExpanded ? '收起' : '展开更多'}</Text>
@@ -957,7 +957,7 @@ function HomeMealsSection({
       <View style={styles.mealsList}>
         {meals.length === 0 ? (
           <Pressable style={({ pressed }) => [styles.mealsEmpty, { backgroundColor: themeColors.emptyMealCard, borderColor: themeColors.emptyMealCardBorder }, pressed && styles.pressed]} onPress={onQuickRecord}>
-            <IconfontText className="iconfont icon-paizhao-xianxing" size={24} color={isDark ? '#7dd3aa' : colors.brand} />
+            <IconfontText className="iconfont icon-paizhao-xianxing" size={24} color={themeColors.mealIconText} />
             <Text style={[styles.mealsEmptyTitle, { color: themeColors.text }]}>暂无今日餐食</Text>
             <Text style={[styles.mealsEmptyDesc, { color: themeColors.textMuted }]}>点这里记录一餐</Text>
           </Pressable>
@@ -1006,24 +1006,33 @@ function HomeMealsSection({
 function HomeExpirySection({
   summary,
   onOpen,
+  themeColors,
 }: {
   summary: HomeDashboard['expirySummary'] | null
   onOpen: () => void
+  themeColors: ReturnType<typeof useHomeThemeColors>
 }) {
   const items = summary?.preview_items || []
   return (
     <View style={styles.expirySection}>
       <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>食物保质期</Text>
+        <Text style={[styles.sectionTitle, { color: themeColors.text }]}>食物保质期</Text>
         <Pressable style={styles.viewAllButton} onPress={onOpen}>
-          <IconfontText className="iconfont icon-right-arrow" size={18} color={colors.textSecondary} />
+          <IconfontText className="iconfont icon-right-arrow" size={18} color={themeColors.textSecondary} />
         </Pressable>
       </View>
-      <Pressable style={({ pressed }) => [styles.expiryCard, pressed && styles.pressed]} onPress={onOpen}>
+      <Pressable
+        style={({ pressed }) => [
+          styles.expiryCard,
+          { backgroundColor: themeColors.expiryCard, borderColor: themeColors.expiryCardBorder },
+          pressed && styles.pressed,
+        ]}
+        onPress={onOpen}
+      >
         {items.length === 0 ? (
           <View style={styles.expiryEmpty}>
-            <Text style={styles.expiryEmptyTitle}>{summary?.active_count ? '暂无紧急提醒' : '暂无待吃完记录'}</Text>
-            <Text style={styles.expiryEmptyDesc}>添加家中食物后，首页会展示最紧急的几项</Text>
+            <Text style={[styles.expiryEmptyTitle, { color: themeColors.text }]}>{summary?.active_count ? '暂无紧急提醒' : '暂无待吃完记录'}</Text>
+            <Text style={[styles.expiryEmptyDesc, { color: themeColors.textMuted }]}>添加家中食物后，首页会展示最紧急的几项</Text>
           </View>
         ) : (
           items.slice(0, 3).map((item) => (
@@ -1033,12 +1042,12 @@ function HomeExpirySection({
               </View>
               <View style={styles.expiryContent}>
                 <View style={styles.expiryHeaderBlock}>
-                  <Text style={styles.expiryName} numberOfLines={1}>{item.food_name}</Text>
-                  <View style={styles.expiryTimePill}>
-                    <Text style={styles.expiryTimePillText}>{item.urgency_label || getExpiryUrgencyText(item)}</Text>
+                  <Text style={[styles.expiryName, { color: themeColors.text }]} numberOfLines={1}>{item.food_name}</Text>
+                  <View style={[styles.expiryTimePill, { backgroundColor: themeColors.expiryPillBg }]}>
+                    <Text style={[styles.expiryTimePillText, { color: themeColors.textSecondary }]}>{item.urgency_label || getExpiryUrgencyText(item)}</Text>
                   </View>
                 </View>
-                <Text style={styles.expiryMetaText}>{formatExpiryMeta(item)}</Text>
+                <Text style={[styles.expiryMetaText, { color: themeColors.textMuted }]}>{formatExpiryMeta(item)}</Text>
               </View>
             </View>
           ))
@@ -1063,10 +1072,10 @@ function HomeStatsEntry({ onPress }: { onPress: () => void }) {
   )
 }
 
-function HomeMiniAction({ label, onPress }: { label: string; onPress: () => void }) {
+function HomeMiniAction({ label, onPress, themeColors }: { label: string; onPress: () => void; themeColors: ReturnType<typeof useHomeThemeColors> }) {
   return (
-    <Pressable style={({ pressed }) => [styles.homeMiniAction, pressed && styles.pressed]} onPress={onPress}>
-      <Text style={styles.homeMiniActionText}>{label}</Text>
+    <Pressable style={({ pressed }) => [styles.homeMiniAction, { backgroundColor: themeColors.miniActionBg }, pressed && styles.pressed]} onPress={onPress}>
+      <Text style={[styles.homeMiniActionText, { color: themeColors.miniActionText }]}>{label}</Text>
     </Pressable>
   )
 }
