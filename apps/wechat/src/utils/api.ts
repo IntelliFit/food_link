@@ -5359,6 +5359,11 @@ export interface PackagedProductExtractResult {
   product_name?: string
   flavor_text?: string
   package_category?: string
+  net_content_value?: number
+  net_content_unit?: string
+  unit_count?: number
+  unit_content_value?: number
+  unit_content_unit?: string
   net_weight_g?: number
   serving_weight_g?: number
   spec_text?: string

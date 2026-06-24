@@ -166,6 +166,8 @@ func computeHealthIndex(comp *statsComputation, statsRange string) *HealthIndex 
 	dailyCalories := comp.DailyCalories
 	recordedDays := comp.RecordedDays
 	streakDays := comp.StreakDays
+	dietGoal := healthIndexDietGoal(comp)
+	weightReferenceCalories, weightReferenceLabel := healthIndexWeightReferenceCalories(tdee, dietGoal)
 
 	if recordedDays < healthIndexMinRecordedDays {
 		return &HealthIndex{
@@ -185,15 +187,21 @@ func computeHealthIndex(comp *statsComputation, statsRange string) *HealthIndex 
 	}
 
 	surplusDays := 0
+	weightOverTargetDays := 0
 	for _, item := range dailyCalories {
 		if item.Calories > 0 && item.Calories > tdee {
 			surplusDays++
 		}
+		if item.Calories > 0 && weightReferenceCalories > 0 && item.Calories > weightReferenceCalories {
+			weightOverTargetDays++
+		}
 	}
 
 	var surplusRate float64
+	var weightOverTargetRate float64
 	if recordedDays > 0 {
 		surplusRate = float64(surplusDays) / float64(recordedDays)
+		weightOverTargetRate = float64(weightOverTargetDays) / float64(recordedDays)
 	}
 
 	breakfastCombined := byMeal["breakfast"] + byMeal["morning_snack"]
@@ -210,6 +218,10 @@ func computeHealthIndex(comp *statsComputation, statsRange string) *HealthIndex 
 	var energyOverRatio float64
 	if tdee > 0 {
 		energyOverRatio = math.Max(0, avgCaloriesPerDay-tdee) / tdee
+	}
+	var weightEnergyOverRatio float64
+	if weightReferenceCalories > 0 {
+		weightEnergyOverRatio = math.Max(0, avgCaloriesPerDay-weightReferenceCalories) / weightReferenceCalories
 	}
 
 	dinnerOver35 := math.Max(0, dinnerPct-35)
@@ -255,8 +267,8 @@ func computeHealthIndex(comp *statsComputation, statsRange string) *HealthIndex 
 
 	weightScore := clampScore(
 		100-
-			energyOverRatio*40-
-			surplusRate*25-
+			weightEnergyOverRatio*40-
+			weightOverTargetRate*25-
 			snackOver15*0.5-
 			dinnerOver38*4.0+
 			weightBonus,
@@ -308,6 +320,9 @@ func computeHealthIndex(comp *statsComputation, statsRange string) *HealthIndex 
 			carbOver50*1.0+
 			bonusIf(recordedDays >= thresholdDays(statsRange), 5),
 	)
+	weightOverTarget := weightEnergyOverRatio > 0.08
+	weightBrief, weightSummary, weightAction := healthIndexWeightCopy(dietGoal, weightOverTarget)
+	weightBasis := healthIndexWeightBasis(avgCaloriesPerDay, weightReferenceCalories, tdee, streakDays, weightReferenceLabel)
 
 	riskCards := []RiskCard{
 		{
@@ -348,11 +363,11 @@ func computeHealthIndex(comp *statsComputation, statsRange string) *HealthIndex 
 			Title:   "体重管理友好度",
 			Score:   weightScore,
 			Tone:    scoreToTone(weightScore),
-			Brief:   ifElseStr(energyOverRatio > 0.08, "重复超标在累积。", "总量接近目标。"),
-			Summary: ifElseStr(energyOverRatio > 0.08, "平均摄入已经高于当前消耗，体重管理压力主要来自重复性超标。", "热量总体接近目标，但餐次集中和加餐结构仍有优化空间。"),
-			Basis:   fmt.Sprintf("日均摄入 %.0f kcal，对比 TDEE %.0f kcal；饮食打卡 %d 天。", avgCaloriesPerDay, tdee, streakDays),
-			Action:  ifElseStr(energyOverRatio > 0.08, "先把最常超标的一餐减少约 1/4 主食或高油部分，再观察 1 周。", "保持总量不大改，优先优化睡前餐和加餐的时段分布。"),
-			Delta:   clampScore(ifElseFloat(energyOverRatio > 0.08, 13, 8) + ifElseFloat(dinnerPct > 40, 5, 0)),
+			Brief:   weightBrief,
+			Summary: weightSummary,
+			Basis:   weightBasis,
+			Action:  weightAction,
+			Delta:   clampScore(ifElseFloat(weightOverTarget, 13, 8) + ifElseFloat(dinnerPct > 40, 5, 0)),
 		},
 		{
 			Key:     "colorectal",
@@ -460,6 +475,67 @@ func computeHealthIndex(comp *statsComputation, statsRange string) *HealthIndex 
 		ActionList:        actionList,
 		ShowDisclaimer:    comp.User != nil && comp.User.HealthDisclaimerAcknowledgedAt == nil,
 	}
+}
+
+func healthIndexDietGoal(comp *statsComputation) string {
+	if comp == nil || comp.User == nil || comp.User.DietGoal == nil {
+		return ""
+	}
+	return strings.TrimSpace(*comp.User.DietGoal)
+}
+
+func healthIndexWeightReferenceCalories(tdee float64, dietGoal string) (float64, string) {
+	switch dietGoal {
+	case "fat_loss":
+		return tdee - clampHealthIndexFloat(tdee*0.16, 300, 500), "减脂参考目标"
+	case "muscle_gain":
+		return tdee + clampHealthIndexFloat(tdee*0.10, 150, 300), "增肌参考目标"
+	default:
+		return tdee, "TDEE"
+	}
+}
+
+func healthIndexWeightBasis(avgCaloriesPerDay, referenceCalories, tdee float64, streakDays int, referenceLabel string) string {
+	if referenceLabel == "TDEE" {
+		return fmt.Sprintf("日均摄入 %.0f kcal，对比 TDEE %.0f kcal；饮食打卡 %d 天。", avgCaloriesPerDay, tdee, streakDays)
+	}
+	return fmt.Sprintf("日均摄入 %.0f kcal，对比%s %.0f kcal（TDEE %.0f kcal）；饮食打卡 %d 天。", avgCaloriesPerDay, referenceLabel, referenceCalories, tdee, streakDays)
+}
+
+func healthIndexWeightCopy(dietGoal string, overTarget bool) (string, string, string) {
+	switch dietGoal {
+	case "muscle_gain":
+		if overTarget {
+			return "盈余略超计划。",
+				"日均摄入已经高于增肌参考目标，体重管理压力主要来自盈余过多或重复超出计划。",
+				"保留蛋白质和训练日前后主食，优先收紧最常超出的高油加餐或额外主食，再观察 1 周。"
+		}
+		return "增肌盈余基本可控。",
+			"热量总体接近增肌目标，当前更适合稳住蛋白、训练日前后主食和恢复节奏。",
+			"保持总量不大改，优先把盈余放在训练日前后，少让高油加餐承担主要热量。"
+	case "fat_loss":
+		if overTarget {
+			return "重复超标在累积。",
+				"日均摄入高于减脂参考目标，体重管理压力主要来自重复性超标。",
+				"先把最常超标的一餐减少约 1/4 主食或高油部分，再观察 1 周。"
+		}
+		return "接近减脂目标。",
+			"热量总体接近减脂目标，但餐次集中和加餐结构仍有优化空间。",
+			"保持总量不大改，优先优化睡前餐和加餐的时段分布。"
+	default:
+		if overTarget {
+			return "重复超标在累积。",
+				"平均摄入已经高于当前消耗，体重管理压力主要来自重复性超标。",
+				"先把最常超标的一餐减少约 1/4 主食或高油部分，再观察 1 周。"
+		}
+		return "总量接近目标。",
+			"热量总体接近目标，但餐次集中和加餐结构仍有优化空间。",
+			"保持总量不大改，优先优化睡前餐和加餐的时段分布。"
+	}
+}
+
+func clampHealthIndexFloat(value, minVal, maxVal float64) float64 {
+	return math.Max(minVal, math.Min(maxVal, value))
 }
 
 func clampScore(value float64) int {

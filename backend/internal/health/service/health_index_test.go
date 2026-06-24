@@ -3,6 +3,7 @@ package service
 import (
 	"testing"
 
+	"food_link/backend/internal/health/domain"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -123,6 +124,44 @@ func TestHealthIndex_IdealDietCanReachHighScore(t *testing.T) {
 		}
 	}
 	assert.True(t, len(idx.AllRiskOptions) > 0 && containsRiskOption(idx.AllRiskOptions, "micronutrient"), "micronutrient option should exist")
+}
+
+func TestHealthIndex_MuscleGainUsesGoalAdjustedWeightTarget(t *testing.T) {
+	goal := "muscle_gain"
+	comp := buildScreenshotLikeComputation()
+	comp.TDEE = 1693
+	comp.StreakDays = 90
+	comp.RecordedDays = 7
+	comp.TotalCalories = 13496
+	comp.AvgCaloriesPerDay = 1928
+	comp.DailyCalories = []DailyCalories{
+		{Date: "2026-06-17", Calories: 1810},
+		{Date: "2026-06-18", Calories: 1880},
+		{Date: "2026-06-19", Calories: 1910},
+		{Date: "2026-06-20", Calories: 1940},
+		{Date: "2026-06-21", Calories: 1960},
+		{Date: "2026-06-22", Calories: 1970},
+		{Date: "2026-06-23", Calories: 2026},
+	}
+	comp.User = &domain.StatsUserProfile{DietGoal: &goal}
+
+	idx := computeHealthIndex(comp, "week")
+	require.True(t, idx.HasEnoughData)
+
+	var weightCard RiskCard
+	for _, card := range idx.RiskCards {
+		if card.Key == "weight" {
+			weightCard = card
+			break
+		}
+	}
+	require.Equal(t, "weight", weightCard.Key)
+	assert.Contains(t, weightCard.Brief, "增肌盈余")
+	assert.Contains(t, weightCard.Summary, "增肌目标")
+	assert.Contains(t, weightCard.Basis, "增肌参考目标")
+	assert.Contains(t, weightCard.Basis, "TDEE")
+	assert.NotContains(t, weightCard.Action, "减少约 1/4")
+	assert.Contains(t, weightCard.Action, "训练日前后")
 }
 
 func containsRiskOption(options []RiskOption, key string) bool {

@@ -138,6 +138,20 @@ type PackagedLabelRawNutrition struct {
 	VitaminB12Mcg  PackagedLabelNutritionValue `json:"vitaminB12Mcg,omitempty"`
 }
 
+type packagedServingNutritionVariant struct {
+	Label          string
+	ServingWeightG float64
+	Count          float64
+	Nutrition      map[string]float64
+}
+
+var (
+	packagedNutritionNumberRE        = regexp.MustCompile(`[-+]?[0-9]+(\.[0-9]+)?`)
+	packagedServingWeightInTextRE    = regexp.MustCompile(`(?i)([0-9]+(\.[0-9]+)?)\s*(g|克)`)
+	packagedSpecCountServingWeightRE = regexp.MustCompile(`(?i)([0-9]+(\.[0-9]+)?)\s*(支|个|枚|条|包|袋|杯|份)[^0-9]{0,24}(每|单|/)[^0-9]{0,8}([0-9]+(\.[0-9]+)?)\s*(g|克)`)
+	packagedNutritionOutputFieldKeys = []string{"calories", "protein", "carbs", "fat", "fiber", "sugar", "saturatedFat", "cholesterolMg", "sodiumMg", "potassiumMg", "calciumMg", "ironMg", "magnesiumMg", "zincMg", "vitaminARaeMcg", "vitaminCMg", "vitaminDMcg", "vitaminEMg", "vitaminKMcg", "thiaminMg", "riboflavinMg", "niacinMg", "vitaminB6Mg", "folateMcg", "vitaminB12Mcg"}
+)
+
 type PackagedNutritionLabelResult struct {
 	ProductName           string  `json:"product_name,omitempty"`
 	Brand                 string  `json:"brand,omitempty"`
@@ -509,6 +523,7 @@ func buildPackagedProductExtractPrompt(recognizedNameHint string, imageCount int
 如果包装较大、弯曲、反光或一张图拍不全，请综合 1-3 张图片互相补全品牌、品名、净含量/规格和营养成分表；若不同图片信息冲突，只记录冲突，不要编造。
 请只提取图片中真实可见的信息，不要编造，不要根据常识补品牌和口味。
 不要在模型里做自由数学换算。你只负责提取标签上的原始数值、单位、口径（每100g/每100ml/每份）和份量信息。
+如果同一大包装是组合装/多口味，且营养成分表有两列或以上，请不要丢弃任一列：在 raw_label_payload 中按“口味/子商品名 + 每份重量”分别记录每列每份营养，例如“浓郁黑巧克力单支营养（42g）”。raw_nutrition_per_basis 仍只在标签只有一套营养表时填写。
 营养成分表、净含量/规格、品名是核心信息；配料表和条码是可选增强信息，缺失时不要放入 needs_more_images，也不要降低整体置信度。
 只有缺少营养成分表、净含量/规格、品名等核心信息，导致无法确定商品营养或规格时，才在 needs_more_images 里返回对应原因（如 ["nutrition_label"]、["net_weight"]、["front_package"]）。
 可参考的已识别名称提示：` + hint + `
@@ -914,6 +929,9 @@ func convertPackagedNutrition(result *PackagedProductExtractResult) {
 			conversionStatus = "converted"
 		}
 	}
+	if (conversionStatus != "converted" || (!hasValidPackagedNutrition(result.UnitNutritionPer100g) && !PackagedExtractHasVerifiedZeroNutritionEvidence(result))) && fillMultiServingNutritionFromRawPayload(result) {
+		conversionStatus = "converted"
+	}
 	if conversionStatus == "converted" && !hasValidPackagedNutrition(result.UnitNutritionPer100g) && !PackagedExtractHasVerifiedZeroNutritionEvidence(result) {
 		conversionStatus = "insufficient"
 	}
@@ -926,6 +944,271 @@ func convertPackagedNutrition(result *PackagedProductExtractResult) {
 			"energy_unit_raw":         result.EnergyUnitRaw,
 		}
 	}
+}
+
+func fillMultiServingNutritionFromRawPayload(result *PackagedProductExtractResult) bool {
+	if result == nil || len(result.RawLabelPayload) == 0 {
+		return false
+	}
+	variants := extractPackagedServingNutritionVariants(result.RawLabelPayload)
+	if len(variants) < 2 {
+		return false
+	}
+	applyVariantCounts(result, variants)
+	totalWeight := 0.0
+	totalCount := 0.0
+	for _, variant := range variants {
+		if variant.ServingWeightG <= 0 || variant.Count <= 0 {
+			return false
+		}
+		totalWeight += variant.ServingWeightG * variant.Count
+		totalCount += variant.Count
+	}
+	if totalWeight <= 0 {
+		return false
+	}
+	if result.NetWeightG > 0 {
+		tolerance := math.Max(5, result.NetWeightG*0.03)
+		if math.Abs(totalWeight-result.NetWeightG) > tolerance {
+			return false
+		}
+	} else {
+		result.NetWeightG = totalWeight
+		result.NetContentValue = totalWeight
+		result.NetContentUnit = "g"
+	}
+	unit := map[string]any{}
+	for _, key := range packagedNutritionOutputFieldKeys {
+		total := 0.0
+		for _, variant := range variants {
+			total += variant.Nutrition[key] * variant.Count
+		}
+		unit[key] = total * 100 / totalWeight
+	}
+	result.UnitNutritionPer100g = unit
+	result.NutritionBasisUnit = "100g"
+	if result.ServingWeightG <= 0 && totalCount > 0 {
+		result.ServingWeightG = totalWeight / totalCount
+	}
+	if result.RawLabelPayload == nil {
+		result.RawLabelPayload = map[string]any{}
+	}
+	result.RawLabelPayload["combined_nutrition_source"] = "multi_serving_weighted_average"
+	return true
+}
+
+func extractPackagedServingNutritionVariants(payload map[string]any) []packagedServingNutritionVariant {
+	variants := []packagedServingNutritionVariant{}
+	for label, raw := range payload {
+		rawMap := mapFromAny(raw)
+		if len(rawMap) == 0 {
+			continue
+		}
+		weightG := parseServingWeightFromText(label)
+		if weightG <= 0 {
+			weightG = parseServingWeightFromPayload(rawMap)
+		}
+		if weightG <= 0 {
+			continue
+		}
+		nutrition := parseServingNutritionFromPayload(rawMap)
+		if !hasCoreServingNutrition(nutrition) {
+			continue
+		}
+		variants = append(variants, packagedServingNutritionVariant{
+			Label:          label,
+			ServingWeightG: weightG,
+			Count:          0,
+			Nutrition:      nutrition,
+		})
+	}
+	return variants
+}
+
+func applyVariantCounts(result *PackagedProductExtractResult, variants []packagedServingNutritionVariant) {
+	countsByWeight := parseSpecVariantCountsByServingWeight(result.SpecText)
+	for i := range variants {
+		if count := countsByWeight[packagedServingWeightKey(variants[i].ServingWeightG)]; count > 0 {
+			variants[i].Count = count
+		}
+	}
+	missingCount := false
+	for _, variant := range variants {
+		if variant.Count <= 0 {
+			missingCount = true
+			break
+		}
+	}
+	if !missingCount {
+		return
+	}
+	fallbackCount := 1.0
+	if result != nil && result.UnitCount > 0 && len(variants) > 0 {
+		fallbackCount = result.UnitCount / float64(len(variants))
+	}
+	for i := range variants {
+		if variants[i].Count <= 0 {
+			variants[i].Count = fallbackCount
+		}
+	}
+}
+
+func parseSpecVariantCountsByServingWeight(spec string) map[int64]float64 {
+	out := map[int64]float64{}
+	spec = strings.TrimSpace(spec)
+	if spec == "" {
+		return out
+	}
+	for _, match := range packagedSpecCountServingWeightRE.FindAllStringSubmatch(spec, -1) {
+		if len(match) < 6 {
+			continue
+		}
+		count, errCount := strconv.ParseFloat(match[1], 64)
+		weight, errWeight := strconv.ParseFloat(match[5], 64)
+		if errCount != nil || errWeight != nil || count <= 0 || weight <= 0 {
+			continue
+		}
+		out[packagedServingWeightKey(weight)] += count
+	}
+	return out
+}
+
+func packagedServingWeightKey(weight float64) int64 {
+	return int64(math.Round(weight * 10))
+}
+
+func parseServingWeightFromPayload(raw map[string]any) float64 {
+	for _, key := range []string{"serving_weight_g", "servingWeightG", "每份重量", "单支重量", "每支重量"} {
+		if value := numberFromAny(raw[key]); value > 0 {
+			return value
+		}
+		if value := parseServingWeightFromText(fmt.Sprint(raw[key])); value > 0 {
+			return value
+		}
+	}
+	return 0
+}
+
+func parseServingWeightFromText(text string) float64 {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return 0
+	}
+	match := packagedServingWeightInTextRE.FindStringSubmatch(text)
+	if len(match) < 2 {
+		return 0
+	}
+	value, err := strconv.ParseFloat(match[1], 64)
+	if err != nil || value <= 0 {
+		return 0
+	}
+	return value
+}
+
+func parseServingNutritionFromPayload(raw map[string]any) map[string]float64 {
+	out := map[string]float64{}
+	for key, value := range raw {
+		nutritionKey := packagedServingNutritionKey(key)
+		if nutritionKey == "" {
+			continue
+		}
+		amount, unit := packagedNutritionAmountAndUnit(value)
+		if amount <= 0 {
+			continue
+		}
+		switch nutritionKey {
+		case "calories":
+			out[nutritionKey] = convertEnergyToKcal(amount, unit)
+		case "sodiumMg", "potassiumMg", "calciumMg", "ironMg", "magnesiumMg", "zincMg":
+			if isGramUnit(unit) {
+				amount *= 1000
+			}
+			out[nutritionKey] = amount
+		default:
+			out[nutritionKey] = amount
+		}
+	}
+	return out
+}
+
+func packagedServingNutritionKey(key string) string {
+	normalized := strings.ToLower(strings.TrimSpace(key))
+	normalized = strings.ReplaceAll(normalized, " ", "")
+	normalized = strings.ReplaceAll(normalized, "_", "")
+	normalized = strings.ReplaceAll(normalized, "-", "")
+	switch {
+	case strings.Contains(normalized, "能量") || strings.Contains(normalized, "energy") || strings.Contains(normalized, "calorie") || strings.Contains(normalized, "kcal"):
+		return "calories"
+	case strings.Contains(normalized, "饱和脂肪") || strings.Contains(normalized, "saturatedfat"):
+		return "saturatedFat"
+	case strings.Contains(normalized, "蛋白") || strings.Contains(normalized, "protein"):
+		return "protein"
+	case strings.Contains(normalized, "碳水") || strings.Contains(normalized, "carb"):
+		return "carbs"
+	case strings.Contains(normalized, "脂肪") || normalized == "fat":
+		return "fat"
+	case strings.Contains(normalized, "膳食纤维") || strings.Contains(normalized, "fiber") || strings.Contains(normalized, "fibre"):
+		return "fiber"
+	case strings.Contains(normalized, "糖") || strings.Contains(normalized, "sugar"):
+		return "sugar"
+	case strings.Contains(normalized, "胆固醇") || strings.Contains(normalized, "cholesterol"):
+		return "cholesterolMg"
+	case strings.Contains(normalized, "钠") || strings.Contains(normalized, "sodium"):
+		return "sodiumMg"
+	case strings.Contains(normalized, "钾") || strings.Contains(normalized, "potassium"):
+		return "potassiumMg"
+	case strings.Contains(normalized, "钙") || strings.Contains(normalized, "calcium"):
+		return "calciumMg"
+	case strings.Contains(normalized, "铁") || strings.Contains(normalized, "iron"):
+		return "ironMg"
+	case strings.Contains(normalized, "镁") || strings.Contains(normalized, "magnesium"):
+		return "magnesiumMg"
+	case strings.Contains(normalized, "锌") || strings.Contains(normalized, "zinc"):
+		return "zincMg"
+	default:
+		return ""
+	}
+}
+
+func packagedNutritionAmountAndUnit(value any) (float64, string) {
+	if raw := mapFromAny(value); len(raw) > 0 {
+		amount := numberFromAny(raw["value"])
+		unit := strings.ToLower(firstNonEmpty(stringFromAny(raw["unit"]), stringFromAny(raw["Unit"])))
+		if amount > 0 {
+			return amount, unit
+		}
+	}
+	text := strings.TrimSpace(fmt.Sprint(value))
+	if text == "" {
+		return 0, ""
+	}
+	number := packagedNutritionNumberRE.FindString(text)
+	if number == "" {
+		return 0, strings.ToLower(text)
+	}
+	amount, err := strconv.ParseFloat(number, 64)
+	if err != nil {
+		return 0, strings.ToLower(text)
+	}
+	return amount, strings.ToLower(text)
+}
+
+func isGramUnit(unit string) bool {
+	unit = strings.ToLower(strings.TrimSpace(unit))
+	if unit == "" {
+		return false
+	}
+	if strings.Contains(unit, "mg") || strings.Contains(unit, "毫克") {
+		return false
+	}
+	return strings.Contains(unit, "g") || strings.Contains(unit, "克")
+}
+
+func hasCoreServingNutrition(nutrition map[string]float64) bool {
+	if nutrition["calories"] > 0 {
+		return true
+	}
+	return nutrition["protein"]+nutrition["carbs"]+nutrition["fat"] > 0
 }
 
 func fillConvertedNutrition(out map[string]any, raw PackagedLabelRawNutrition, scale float64, energyUnitRaw string) {
@@ -960,12 +1243,11 @@ func fillConvertedNutrition(out map[string]any, raw PackagedLabelRawNutrition, s
 }
 
 func convertEnergyToKcal(value float64, unit string) float64 {
-	switch strings.ToLower(strings.TrimSpace(unit)) {
-	case "kj", "千焦":
+	normalized := strings.ToLower(strings.TrimSpace(unit))
+	if strings.Contains(normalized, "kj") || strings.Contains(normalized, "千焦") {
 		return value / 4.184
-	default:
-		return value
 	}
+	return value
 }
 
 func normalizeBasisUnit(basisType, basisUnit, fallback string) string {
