@@ -5,9 +5,9 @@ installConsoleLogCapture()
 
 import { createElement, type PropsWithChildren, useEffect } from 'react'
 import Taro, { useLaunch } from '@tarojs/taro'
-import { getAccessToken, acceptFriendInvite } from './utils/api'
+import { getAccessToken } from './utils/api'
 import { extraPkgUrl } from './utils/subpackage-extra'
-import { clearPendingFriendInviteCode, writePendingFriendInviteCode } from './utils/pending-friend-invite'
+import { writePendingFriendInviteCode } from './utils/pending-friend-invite'
 import { AppColorSchemeProvider } from './components/AppColorSchemeContext'
 import { PrivacyAuthorizationModal } from './components/PrivacyAuthorizationModal'
 import { cleanupGeneratedUserFiles } from './utils/weapp-user-files'
@@ -88,11 +88,11 @@ function handleInviteScene(options?: any) {
   }
 
   if (getAccessToken()) {
-    acceptFriendInvite(inviteCode)
-      .catch(() => { /* ignore */ })
-      .finally(() => {
-        clearPendingFriendInviteCode()
-      })
+    // 已登录用户也进入邀请页确认，不在 App 启动阶段静默发送好友申请。
+    // 新注册用户的好友申请会等头像昵称写入数据库后再触发。
+    Taro.navigateTo({
+      url: `${extraPkgUrl('/pages/invite-friends/index')}?invite_code=${encodeURIComponent(inviteCode)}`,
+    })
     return
   }
 

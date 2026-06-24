@@ -53,7 +53,10 @@ func setupTestDB(t *testing.T) *gorm.DB {
 		last_seen_analyze_history_at TIMESTAMP,
 		registration_invite_code TEXT,
 		referred_by_user_id TEXT,
-		points_balance REAL
+		points_balance REAL,
+		health_disclaimer_acknowledged_at TIMESTAMP,
+		motto TEXT,
+		cover_image TEXT
 	)`)
 	db.Exec(`CREATE TABLE user_daily_nutrition_targets (
 		id TEXT PRIMARY KEY,

@@ -47,7 +47,13 @@ func setupUserTestDB(t *testing.T) *gorm.DB {
 		mode_switch_count_30d INTEGER,
 		searchable BOOLEAN,
 		public_records BOOLEAN,
-		last_seen_analyze_history_at TIMESTAMP
+		last_seen_analyze_history_at TIMESTAMP,
+		registration_invite_code TEXT,
+		referred_by_user_id TEXT,
+		points_balance REAL,
+		health_disclaimer_acknowledged_at TIMESTAMP,
+		motto TEXT,
+		cover_image TEXT
 	)`)
 	db.Exec(`CREATE TABLE user_trial_entitlements (
 		id TEXT PRIMARY KEY,
@@ -221,6 +227,63 @@ func TestUserRepo_CountFoodRecordDays(t *testing.T) {
 	count, err := repo.CountFoodRecordDays(ctx, userID)
 	require.NoError(t, err)
 	assert.Equal(t, int64(1), count)
+}
+
+func TestUserRepo_DeleteByIDCleansOwnedPublicContent(t *testing.T) {
+	db := setupUserTestDB(t)
+	repo := NewUserRepo(db)
+	ctx := context.Background()
+	now := time.Now()
+	userID := "user-delete-cascade"
+	otherUserID := "other-user"
+	require.NoError(t, repo.Create(ctx, &User{ID: userID, OpenID: "openid-delete", Nickname: "DeleteMe", CreatedAt: &now}))
+	require.NoError(t, repo.Create(ctx, &User{ID: otherUserID, OpenID: "openid-other", Nickname: "Other", CreatedAt: &now}))
+
+	exec := func(sql string, args ...any) {
+		require.NoError(t, db.Exec(sql, args...).Error)
+	}
+	exec(`CREATE TABLE user_exercise_logs (id TEXT PRIMARY KEY, user_id TEXT)`)
+	exec(`CREATE TABLE user_circle_posts (id TEXT PRIMARY KEY, user_id TEXT)`)
+	exec(`CREATE TABLE feed_likes (id TEXT PRIMARY KEY, user_id TEXT, target_type TEXT, target_id TEXT)`)
+	exec(`CREATE TABLE feed_comments (id TEXT PRIMARY KEY, user_id TEXT, reply_to_user_id TEXT, target_type TEXT, target_id TEXT)`)
+	exec(`CREATE TABLE feed_interaction_notifications (id TEXT PRIMARY KEY, recipient_user_id TEXT, actor_user_id TEXT, target_type TEXT, target_id TEXT)`)
+	exec(`CREATE TABLE feed_reports (id TEXT PRIMARY KEY, reporter_user_id TEXT, reported_user_id TEXT, target_type TEXT, target_id TEXT)`)
+	exec(`CREATE TABLE public_food_library (id TEXT PRIMARY KEY, user_id TEXT)`)
+	exec(`CREATE TABLE public_food_library_collections (id TEXT PRIMARY KEY, user_id TEXT, library_item_id TEXT)`)
+	exec(`CREATE TABLE user_recipes (id TEXT PRIMARY KEY, user_id TEXT)`)
+
+	exec(`INSERT INTO user_food_records (id, user_id, record_time, total_calories) VALUES (?, ?, ?, ?)`, "food-1", userID, now, 100)
+	exec(`INSERT INTO user_exercise_logs (id, user_id) VALUES (?, ?)`, "exercise-1", userID)
+	exec(`INSERT INTO user_circle_posts (id, user_id) VALUES (?, ?)`, "post-1", userID)
+	exec(`INSERT INTO public_food_library (id, user_id) VALUES (?, ?)`, "public-food-1", userID)
+	exec(`INSERT INTO public_food_library_collections (id, user_id, library_item_id) VALUES (?, ?, ?)`, "coll-1", otherUserID, "public-food-1")
+	exec(`INSERT INTO user_recipes (id, user_id) VALUES (?, ?)`, "recipe-1", userID)
+	exec(`INSERT INTO feed_likes (id, user_id, target_type, target_id) VALUES (?, ?, ?, ?)`, "like-1", otherUserID, "food_record", "food-1")
+	exec(`INSERT INTO feed_comments (id, user_id, reply_to_user_id, target_type, target_id) VALUES (?, ?, ?, ?, ?)`, "comment-1", otherUserID, userID, "circle_post", "post-1")
+	exec(`INSERT INTO feed_interaction_notifications (id, recipient_user_id, actor_user_id, target_type, target_id) VALUES (?, ?, ?, ?, ?)`, "notice-1", otherUserID, userID, "exercise_log", "exercise-1")
+	exec(`INSERT INTO feed_reports (id, reporter_user_id, reported_user_id, target_type, target_id) VALUES (?, ?, ?, ?, ?)`, "report-1", otherUserID, userID, "campus_food", "public-food-1")
+
+	require.NoError(t, repo.DeleteByID(ctx, userID))
+
+	assert.Equal(t, int64(0), countTableRows(t, db, "weapp_user", "id = ?", userID))
+	assert.Equal(t, int64(0), countTableRows(t, db, "user_food_records", "user_id = ?", userID))
+	assert.Equal(t, int64(0), countTableRows(t, db, "user_exercise_logs", "user_id = ?", userID))
+	assert.Equal(t, int64(0), countTableRows(t, db, "user_circle_posts", "user_id = ?", userID))
+	assert.Equal(t, int64(0), countTableRows(t, db, "public_food_library", "user_id = ?", userID))
+	assert.Equal(t, int64(0), countTableRows(t, db, "public_food_library_collections", "library_item_id = ?", "public-food-1"))
+	assert.Equal(t, int64(0), countTableRows(t, db, "user_recipes", "user_id = ?", userID))
+	assert.Equal(t, int64(0), countTableRows(t, db, "feed_likes", "target_id = ?", "food-1"))
+	assert.Equal(t, int64(0), countTableRows(t, db, "feed_comments", "reply_to_user_id = ? OR target_id = ?", userID, "post-1"))
+	assert.Equal(t, int64(0), countTableRows(t, db, "feed_interaction_notifications", "actor_user_id = ? OR target_id = ?", userID, "exercise-1"))
+	assert.Equal(t, int64(0), countTableRows(t, db, "feed_reports", "reported_user_id = ? OR target_id = ?", userID, "public-food-1"))
+	assert.Equal(t, int64(1), countTableRows(t, db, "weapp_user", "id = ?", otherUserID))
+}
+
+func countTableRows(t *testing.T, db *gorm.DB, table, where string, args ...any) int64 {
+	t.Helper()
+	var count int64
+	require.NoError(t, db.Table(table).Where(where, args...).Count(&count).Error)
+	return count
 }
 
 func TestUserRepo_TrialEntitlementCRUD(t *testing.T) {

@@ -109,6 +109,7 @@ export default function ProfileSettingsPage() {
   const [isFollowing, setIsFollowing] = useState(false)
   const [followLoading, setFollowLoading] = useState(false)
   const [blockStatus, setBlockStatus] = useState<FriendBlockStatus | null>(null)
+  const [isDeletedUser, setIsDeletedUser] = useState(false)
   const [pageLoading, setPageLoading] = useState(true)
 
   // 分享海报
@@ -193,6 +194,7 @@ export default function ProfileSettingsPage() {
     try {
       const followStatsPromise = getFollowStats(resolvedUserId).catch(() => ({ followers_count: 0, following_count: 0, is_following: false }))
       if (isOwner) {
+        setIsDeletedUser(false)
         setBlockStatus(null)
         const [profile, recordDaysRes, foodColls, recipeColls, followStats] = await Promise.all([
           getUserProfile().catch(() => null),
@@ -223,15 +225,13 @@ export default function ProfileSettingsPage() {
         // 加载动态（等用户基础数据落库后再请求，避免状态竞争）
         await loadFeed(true)
       } else {
-        const [publicProfile, foodColls, recipeColls, followStats, blockStatusRes] = await Promise.all([
+        const [publicProfile, blockStatusRes] = await Promise.all([
           getPublicUserProfile(resolvedUserId).catch(() => null),
-          getUserCollections(resolvedUserId).catch(() => ({ list: [] })),
-          getUserFavoriteRecipes(resolvedUserId).catch(() => ({ recipes: [] })),
-          followStatsPromise,
           friendGetBlockStatus(resolvedUserId).catch(() => null),
         ])
         setBlockStatus(blockStatusRes)
         if (blockStatusRes?.blocked_either) {
+          setIsDeletedUser(false)
           setTempAvatar('')
           setTempNickname(blockStatusRes.is_blocked_by_me ? '已拉黑用户' : '用户')
           setEditAvatar('')
@@ -250,6 +250,32 @@ export default function ProfileSettingsPage() {
           setFeedOffset(0)
           return
         }
+        if (!publicProfile) {
+          setIsDeletedUser(true)
+          setTempAvatar('')
+          setTempNickname('用户已注销')
+          setEditAvatar('')
+          setEditNickname('')
+          setEditCoverImage('')
+          setUserId(resolvedUserId)
+          setRecordDays(0)
+          setCoverImage('')
+          setMotto('')
+          setFoodCollections([])
+          setRecipeCollections([])
+          setFavoriteCount(0)
+          applyFollowStats({ followers_count: 0, following_count: 0, is_following: false })
+          setFeedList([])
+          setFeedHasMore(false)
+          setFeedOffset(0)
+          return
+        }
+        setIsDeletedUser(false)
+        const [foodColls, recipeColls, followStats] = await Promise.all([
+          getUserCollections(resolvedUserId).catch(() => ({ list: [] })),
+          getUserFavoriteRecipes(resolvedUserId).catch(() => ({ recipes: [] })),
+          followStatsPromise,
+        ])
         const avatar = publicProfile?.avatar || ''
         const nickname = publicProfile?.nickname || '用户'
         const cover = publicProfile?.cover_image || ''
@@ -399,6 +425,7 @@ export default function ProfileSettingsPage() {
   // 加载动态
   const loadFeed = async (reset = false) => {
     if (!resolvedUserId) return
+    if (!reset && isDeletedUser) return
     if (feedLoading) return
     const offset = reset ? 0 : feedOffset
     if (!reset && !feedHasMore) return
@@ -981,7 +1008,11 @@ export default function ProfileSettingsPage() {
           {/* 关注 + 私信操作行（仅他人主页） */}
           {!isOwner && (
             <View className='profile-action-row'>
-              {blockStatus?.is_blocked_by_me ? (
+              {isDeletedUser ? (
+                <View className='profile-blocked-pill'>
+                  <Text className='profile-blocked-pill-text'>用户已注销</Text>
+                </View>
+              ) : blockStatus?.is_blocked_by_me ? (
                 <View className='profile-dm-btn' onClick={handleUnblockUser}>
                   <Text className='profile-dm-btn-text'>解除拉黑</Text>
                 </View>
@@ -1036,7 +1067,11 @@ export default function ProfileSettingsPage() {
           {/* 最新动态 */}
           {activeTab === 'feed' && (
             <View className='profile-content-body'>
-              {feedLoading && feedList.length === 0 ? (
+              {isDeletedUser ? (
+                <View className='profile-content-empty'>
+                  <Text className='profile-content-empty-text'>该用户已注销，动态不可见</Text>
+                </View>
+              ) : feedLoading && feedList.length === 0 ? (
                 <View className='profile-feed-loading'>
                   <View className='profile-feed-spinner' />
                 </View>
@@ -1065,7 +1100,11 @@ export default function ProfileSettingsPage() {
           {/* 食物收藏（原食谱收藏） */}
           {activeTab === 'collections' && (
             <View className='profile-content-body'>
-              {recipeCollections.length === 0 ? (
+              {isDeletedUser ? (
+                <View className='profile-content-empty'>
+                  <Text className='profile-content-empty-text'>该用户已注销，食物收藏不可见</Text>
+                </View>
+              ) : recipeCollections.length === 0 ? (
                 <View className='profile-content-empty'>
                   <Text className='profile-content-empty-text'>暂无食物收藏</Text>
                 </View>
