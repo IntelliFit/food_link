@@ -8,8 +8,8 @@ import {
   getFoodRecordList,
   getFriendInviteProfile,
   getHomeDashboard,
+  getShareQrEnvVersion,
   getUnlimitedQRCode,
-  getWeappEnvVersion,
   mapCalendarDateToApi,
   showUnifiedApiError,
   updateFoodRecord,
@@ -499,7 +499,7 @@ function DayRecordPage() {
               const inviteCode = uid ? uid.replace(/-/g, '').toLowerCase().slice(0, 8) : ''
               const scene = inviteCode ? `fi=${inviteCode}` : 'share=1'
               try {
-                const { base64 } = await getUnlimitedQRCode(scene, 'pages/index/index', getWeappEnvVersion())
+                const { base64 } = await getUnlimitedQRCode(scene, 'pages/index/index', getShareQrEnvVersion())
                 const img = await loadImage(base64)
                 if (img) return img
               } catch {

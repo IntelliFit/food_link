@@ -4,8 +4,8 @@ import Taro, { useRouter, useShareAppMessage, useShareTimeline } from '@tarojs/t
 import {
   getSharedFoodRecord,
   getAccessToken,
+  getShareQrEnvVersion,
   getUnlimitedQRCode,
-  getWeappEnvVersion,
   getFriendInviteProfile,
   acceptFriendInvite,
   getPosterCalorieCompare,
@@ -489,7 +489,7 @@ function RecordDetailPage() {
         const loadQRImage = async () => {
           const scene = posterInviteCode ? `fi=${posterInviteCode}` : 'share=1'
           try {
-            const { base64 } = await getUnlimitedQRCode(scene, 'pages/index/index', getWeappEnvVersion())
+            const { base64 } = await getUnlimitedQRCode(scene, 'pages/index/index', getShareQrEnvVersion())
             const img = await loadImage(base64)
             if (img) return img
           } catch (e) {
