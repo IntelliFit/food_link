@@ -2285,10 +2285,13 @@ func TestQwenNutritionEstimatorEstimateParsesNutrition(t *testing.T) {
 			map[string]any{
 				"index": 3,
 				"unitNutritionPer100g": map[string]any{
-					"calories": 80.0,
-					"protein":  3.0,
-					"carbs":    12.0,
-					"fat":      2.0,
+					"calories":      80.0,
+					"protein":       3.0,
+					"carbs":         12.0,
+					"fat":           2.0,
+					"calciumMg":     22.0,
+					"vitaminCMg":    6.0,
+					"vitaminB12Mcg": 0.2,
 				},
 			},
 		},
@@ -2303,8 +2306,16 @@ func TestQwenNutritionEstimatorEstimateParsesNutrition(t *testing.T) {
 	require.Equal(t, 1, client.calls)
 	assert.Contains(t, client.prompt, "测试上下文")
 	assert.Contains(t, client.prompt, "不要因为不确定就把热量或宏量营养填 0")
+	assert.Contains(t, client.prompt, "维生素和矿物质")
+	assert.Contains(t, client.prompt, "不要把微量元素随意填 0")
+	assert.Contains(t, client.prompt, "calciumMg")
+	assert.Contains(t, client.prompt, "vitaminCMg")
+	assert.Contains(t, client.prompt, "vitaminB12Mcg")
 	assert.Equal(t, 80.0, rows[3]["calories"])
 	assert.Equal(t, 3.0, rows[3]["protein"])
+	assert.Equal(t, 22.0, rows[3]["calciumMg"])
+	assert.Equal(t, 6.0, rows[3]["vitaminCMg"])
+	assert.Equal(t, 0.2, rows[3]["vitaminB12Mcg"])
 }
 
 func TestAnalyzeService_ApplyDBFirstToItemsIntegratesPackagedFoodForWorkerPrecision(t *testing.T) {

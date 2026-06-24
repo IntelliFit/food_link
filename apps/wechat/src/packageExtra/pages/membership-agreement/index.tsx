@@ -38,7 +38,7 @@ export default function MembershipAgreementPage() {
                         2. 「精准模式」与「标准模式」的区别：精准模式下，AI 会对食物照片进行更准确的分项重量估算，适合有减脂或增肌目标的用户；标准模式记录更便捷，但估算误差相对更大。轻度版不含精准模式。
                     </Text>
                     <Text className='paragraph'>
-                        3. 系统积分每日自动发放至您的账户，次日 00:00 刷新清零。通过邀请好友、生成分享海报等行为获得的奖励积分将计入累计余额，长期有效、不清零。
+                        3. 系统积分每日自动发放至您的账户，次日 00:00 刷新清零。通过生成分享海报等行为获得的奖励积分将计入累计余额，长期有效、不清零；邀请好友奖励以页面展示的会员权益为准。
                     </Text>
                 </View>
 
@@ -84,7 +84,7 @@ export default function MembershipAgreementPage() {
                 <View className='section'>
                     <Text className='section-title'>六、奖励积分规则</Text>
                     <Text className='paragraph'>
-                        1. 邀请好友：您通过专属邀请码邀请的好友，在注册后 7 天内完成 2 个自然日的有效使用，您与好友双方将各获得 15 奖励积分，自动转入累计余额。
+                        1. 邀请好友：您通过专属邀请码邀请的好友，在注册后 7 天内完成 2 个自然日的有效使用，您与好友双方将各获得一周轻度版会员权益。
                     </Text>
                     <Text className='paragraph'>
                         2. 每日分享：将饮食分析结果生成分享海报并分享，每日首次分享可获得 1 奖励积分，计入累计余额。
