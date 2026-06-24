@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom'
 import { absoluteUrl, resolvePageSeo, siteSeo } from '@/content/seo'
 
 const STRUCTURED_DATA_ID = 'structured-data'
+const GLOBAL_HEAD_CONFIG_ID = 'globalHeadConfig'
 
 function upsertMeta(selector: string, create: () => HTMLMetaElement, content: string) {
   let el = document.querySelector<HTMLMetaElement>(selector)
@@ -23,22 +24,23 @@ function upsertLink(rel: string, href: string) {
   el.href = href
 }
 
-function upsertStructuredData(data: Record<string, unknown>) {
-  let el = document.getElementById(STRUCTURED_DATA_ID) as HTMLScriptElement | null
+function upsertScript(id: string, type: string, textContent: string) {
+  let el = document.getElementById(id) as HTMLScriptElement | null
   if (!el) {
     el = document.createElement('script')
-    el.id = STRUCTURED_DATA_ID
-    el.type = 'application/ld+json'
+    el.id = id
+    el.type = type
     document.head.appendChild(el)
   }
-  el.textContent = JSON.stringify(data)
+  el.type = type
+  el.textContent = textContent
 }
 
 function buildStructuredData(pathname: string) {
   const page = resolvePageSeo(pathname)
   const pageUrl = absoluteUrl(page.path)
 
-  if (pathname === '/') {
+  if (page.path === '/') {
     return {
       '@context': 'https://schema.org',
       '@graph': [
@@ -50,11 +52,20 @@ function buildStructuredData(pathname: string) {
           description: siteSeo.defaultDescription,
           inLanguage: 'zh-CN',
           publisher: {
-            '@type': 'Organization',
-            name: siteSeo.author,
-            url: absoluteUrl('/'),
-            logo: siteSeo.ogImage,
+            '@id': `${absoluteUrl('/')}#organization`,
           },
+        },
+        {
+          '@type': 'Organization',
+          '@id': `${absoluteUrl('/')}#organization`,
+          name: siteSeo.author,
+          alternateName: siteSeo.fullName,
+          url: absoluteUrl('/'),
+          logo: {
+            '@type': 'ImageObject',
+            url: siteSeo.ogImage,
+          },
+          image: siteSeo.ogImage,
         },
         {
           '@type': 'SoftwareApplication',
@@ -80,12 +91,36 @@ function buildStructuredData(pathname: string) {
     url: pageUrl,
     name: page.title,
     description: page.description,
+    image: page.image ?? siteSeo.ogImage,
     inLanguage: 'zh-CN',
     isPartOf: {
       '@type': 'WebSite',
       url: absoluteUrl('/'),
       name: siteSeo.siteName,
     },
+  }
+}
+
+function buildGlobalHeadConfig(pathname: string) {
+  const page = resolvePageSeo(pathname)
+  const pageUrl = absoluteUrl(page.path)
+  const image = page.image ?? siteSeo.ogImage
+
+  return {
+    site_name: siteSeo.siteName,
+    site_url: absoluteUrl('/'),
+    title: page.title,
+    author: siteSeo.author,
+    description: page.description,
+    keywords: page.keywords ?? siteSeo.keywords,
+    og: {
+      url: pageUrl,
+      site_name: siteSeo.siteName,
+      title: page.title,
+      description: page.description,
+      cover_image: image,
+    },
+    structured: buildStructuredData(pathname),
   }
 }
 
@@ -97,7 +132,11 @@ export function PageHead() {
     const page = resolvePageSeo(pathname)
     const pageUrl = absoluteUrl(page.path)
     const robots = page.index === false ? 'noindex, nofollow' : 'index, follow'
+    const image = page.image ?? siteSeo.ogImage
+    const imageAlt = page.imageAlt ?? siteSeo.ogImageAlt
+    const keywords = page.keywords ?? siteSeo.keywords
 
+    document.documentElement.lang = 'zh-CN'
     document.title = page.title
 
     upsertMeta('meta[name="description"]', () => {
@@ -105,6 +144,30 @@ export function PageHead() {
       meta.name = 'description'
       return meta
     }, page.description)
+
+    upsertMeta('meta[name="keywords"]', () => {
+      const meta = document.createElement('meta')
+      meta.name = 'keywords'
+      return meta
+    }, keywords)
+
+    upsertMeta('meta[name="author"]', () => {
+      const meta = document.createElement('meta')
+      meta.name = 'author'
+      return meta
+    }, siteSeo.author)
+
+    upsertMeta('meta[name="application-name"]', () => {
+      const meta = document.createElement('meta')
+      meta.name = 'application-name'
+      return meta
+    }, siteSeo.siteName)
+
+    upsertMeta('meta[name="apple-mobile-web-app-title"]', () => {
+      const meta = document.createElement('meta')
+      meta.name = 'apple-mobile-web-app-title'
+      return meta
+    }, siteSeo.siteName)
 
     upsertMeta('meta[name="robots"]', () => {
       const meta = document.createElement('meta')
@@ -136,6 +199,36 @@ export function PageHead() {
       return meta
     }, page.ogType ?? 'website')
 
+    upsertMeta('meta[property="og:site_name"]', () => {
+      const meta = document.createElement('meta')
+      meta.setAttribute('property', 'og:site_name')
+      return meta
+    }, siteSeo.siteName)
+
+    upsertMeta('meta[property="og:locale"]', () => {
+      const meta = document.createElement('meta')
+      meta.setAttribute('property', 'og:locale')
+      return meta
+    }, 'zh_CN')
+
+    upsertMeta('meta[property="og:image"]', () => {
+      const meta = document.createElement('meta')
+      meta.setAttribute('property', 'og:image')
+      return meta
+    }, image)
+
+    upsertMeta('meta[property="og:image:alt"]', () => {
+      const meta = document.createElement('meta')
+      meta.setAttribute('property', 'og:image:alt')
+      return meta
+    }, imageAlt)
+
+    upsertMeta('meta[name="twitter:card"]', () => {
+      const meta = document.createElement('meta')
+      meta.name = 'twitter:card'
+      return meta
+    }, 'summary_large_image')
+
     upsertMeta('meta[name="twitter:title"]', () => {
       const meta = document.createElement('meta')
       meta.name = 'twitter:title'
@@ -148,8 +241,33 @@ export function PageHead() {
       return meta
     }, page.description)
 
+    upsertMeta('meta[name="twitter:image"]', () => {
+      const meta = document.createElement('meta')
+      meta.name = 'twitter:image'
+      return meta
+    }, image)
+
+    upsertMeta('meta[name="twitter:site"]', () => {
+      const meta = document.createElement('meta')
+      meta.name = 'twitter:site'
+      return meta
+    }, siteSeo.twitterSite)
+
+    upsertMeta('meta[name="twitter:url"]', () => {
+      const meta = document.createElement('meta')
+      meta.name = 'twitter:url'
+      return meta
+    }, pageUrl)
+
+    upsertMeta('meta[name="theme-color"]', () => {
+      const meta = document.createElement('meta')
+      meta.name = 'theme-color'
+      return meta
+    }, siteSeo.themeColor)
+
     upsertLink('canonical', pageUrl)
-    upsertStructuredData(buildStructuredData(pathname))
+    upsertScript(GLOBAL_HEAD_CONFIG_ID, 'text/javascript', `window._globalHeadConfig = ${JSON.stringify(buildGlobalHeadConfig(pathname))}`)
+    upsertScript(STRUCTURED_DATA_ID, 'application/ld+json', JSON.stringify(buildStructuredData(pathname)))
   }, [pathname])
 
   return null

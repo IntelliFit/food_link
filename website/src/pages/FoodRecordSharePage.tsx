@@ -41,9 +41,9 @@ type SharedFoodRecord = {
 }
 
 type LoadState =
-  | { status: 'loading' }
-  | { status: 'ready'; record: SharedFoodRecord }
-  | { status: 'error'; title: string; message: string }
+  | { status: 'loading'; requestKey: string }
+  | { status: 'ready'; requestKey: string; record: SharedFoodRecord }
+  | { status: 'error'; requestKey: string; title: string; message: string }
 
 const DEFAULT_API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'https://api.healthymax.cn'
 
@@ -156,10 +156,21 @@ function upsertMeta(selector: string, create: () => HTMLMetaElement, content: st
   el.content = content
 }
 
+function upsertLink(rel: string, href: string) {
+  let el = document.querySelector<HTMLLinkElement>(`link[rel="${rel}"]`)
+  if (!el) {
+    el = document.createElement('link')
+    el.rel = rel
+    document.head.appendChild(el)
+  }
+  el.href = href
+}
+
 function syncShareMeta(record: SharedFoodRecord, pageUrl: string) {
   const title = `${buildRecordTitle(record)}丨${brand.fullName}`
   const description = buildRecordDescription(record)
   const image = recordImageUrls(record)[0] || absoluteUrl(brand.assets.logoShitan)
+  const canonicalUrl = pageUrl.split('?')[0] || pageUrl
   document.title = title
   upsertMeta('meta[name="description"]', () => {
     const meta = document.createElement('meta')
@@ -186,6 +197,42 @@ function syncShareMeta(record: SharedFoodRecord, pageUrl: string) {
     meta.setAttribute('property', 'og:image')
     return meta
   }, image)
+  upsertMeta('meta[property="og:image:alt"]', () => {
+    const meta = document.createElement('meta')
+    meta.setAttribute('property', 'og:image:alt')
+    return meta
+  }, title)
+  upsertMeta('meta[name="twitter:card"]', () => {
+    const meta = document.createElement('meta')
+    meta.name = 'twitter:card'
+    return meta
+  }, 'summary_large_image')
+  upsertMeta('meta[name="twitter:title"]', () => {
+    const meta = document.createElement('meta')
+    meta.name = 'twitter:title'
+    return meta
+  }, title)
+  upsertMeta('meta[name="twitter:description"]', () => {
+    const meta = document.createElement('meta')
+    meta.name = 'twitter:description'
+    return meta
+  }, description)
+  upsertMeta('meta[name="twitter:image"]', () => {
+    const meta = document.createElement('meta')
+    meta.name = 'twitter:image'
+    return meta
+  }, image)
+  upsertMeta('meta[name="twitter:url"]', () => {
+    const meta = document.createElement('meta')
+    meta.name = 'twitter:url'
+    return meta
+  }, canonicalUrl)
+  upsertMeta('meta[name="robots"]', () => {
+    const meta = document.createElement('meta')
+    meta.name = 'robots'
+    return meta
+  }, 'noindex, nofollow')
+  upsertLink('canonical', canonicalUrl)
 }
 
 function ShareSkeleton() {
@@ -234,29 +281,30 @@ export function FoodRecordSharePage() {
   const { recordId = '' } = useParams()
   const [searchParams] = useSearchParams()
   const apiBaseUrl = useMemo(() => resolveShareApiBaseUrl(searchParams), [searchParams])
-  const [state, setState] = useState<LoadState>({ status: 'loading' })
+  const [state, setState] = useState<LoadState>({ status: 'loading', requestKey: '' })
   const [copied, setCopied] = useState(false)
   const trimmedRecordId = recordId.trim()
+  const requestKey = useMemo(() => `${apiBaseUrl}::${trimmedRecordId}`, [apiBaseUrl, trimmedRecordId])
+  const missingRecordState: Extract<LoadState, { status: 'error' }> | null = trimmedRecordId
+    ? null
+    : { status: 'error', requestKey, title: '缺少记录', message: '分享链接缺少饮食记录 ID。' }
 
   useEffect(() => {
-    if (!trimmedRecordId) {
-      setState({ status: 'error', title: '缺少记录', message: '分享链接缺少饮食记录 ID。' })
-      return
-    }
+    if (!trimmedRecordId) return
     const controller = new AbortController()
-    setState({ status: 'loading' })
     fetchSharedFoodRecord(trimmedRecordId, apiBaseUrl, controller.signal)
-      .then((record) => setState({ status: 'ready', record }))
+      .then((record) => setState({ status: 'ready', requestKey, record }))
       .catch((error) => {
         if (controller.signal.aborted) return
         setState({
           status: 'error',
+          requestKey,
           title: '暂时无法打开',
           message: error instanceof Error ? error.message : '分享页暂时无法打开，请稍后再试。',
         })
       })
     return () => controller.abort()
-  }, [apiBaseUrl, trimmedRecordId])
+  }, [apiBaseUrl, requestKey, trimmedRecordId])
 
   const pageUrl = useMemo(() => {
     if (typeof window === 'undefined') return absoluteUrl(`/share/food-record/${encodeURIComponent(trimmedRecordId)}`)
@@ -268,7 +316,10 @@ export function FoodRecordSharePage() {
     if (state.status === 'ready') syncShareMeta(state.record, pageUrl)
   }, [pageUrl, state])
 
-  if (state.status === 'loading') return <ShareSkeleton />
+  const isPendingRequest = Boolean(trimmedRecordId) && state.requestKey !== requestKey
+
+  if (missingRecordState) return <ErrorState title={missingRecordState.title} message={missingRecordState.message} />
+  if (state.status === 'loading' || isPendingRequest) return <ShareSkeleton />
   if (state.status === 'error') return <ErrorState title={state.title} message={state.message} />
 
   const { record } = state

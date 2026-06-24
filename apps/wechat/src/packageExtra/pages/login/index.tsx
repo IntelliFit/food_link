@@ -205,7 +205,6 @@ export default function LoginPage() {
             hasInviteCode: Boolean(inviteCode),
             redirectFromQuery,
         })
-        await acceptInviteAfterAuthenticated('finishLoginFlow', true)
 
         const target = normalizeRedirectUrlForSubpackage(normalizePath(redirectFromQuery))
         if (target) {
@@ -325,7 +324,6 @@ export default function LoginPage() {
                 hasPhoneNumber: Boolean(loginData.purePhoneNumber || loginData.phoneNumber),
                 inviteCode,
             })
-            await acceptInviteAfterAuthenticated('debugRegisterAfterTokenSaved')
             setShowDebugRegisterModal(false)
             await handleLoginSuccess(loginData)
         } catch (error: any) {
@@ -336,20 +334,21 @@ export default function LoginPage() {
         }
     }
 
-    const continueAfterAuthGates = (onboardingCompleted: boolean) => {
+    const continueAfterAuthGates = async (onboardingCompleted: boolean) => {
         console.log('[invite-debug][login] continueAfterAuthGates', {
             onboardingCompleted,
             inviteCode,
             hasInviteCode: Boolean(inviteCode),
         })
+        await acceptInviteAfterAuthenticated('afterProfileReadyBeforeNextGate', true)
         if (!onboardingCompleted) {
-            console.log('[invite-debug][login] 未完成健康档案，先跳转 health-profile，邀请码处理会延后', {
+            console.log('[invite-debug][login] 未完成健康档案，先跳转 health-profile，好友申请已在资料就绪后处理', {
                 inviteCode,
             })
             Taro.redirectTo({ url: extraPkgUrl('/pages/health-profile/index') })
             return
         }
-        finishLoginFlow()
+        await finishLoginFlow()
     }
 
     /** 微信一键登录：只完成登录，头像/昵称在完善信息弹窗中由用户点击授权复制 */
@@ -382,7 +381,6 @@ export default function LoginPage() {
                 hasPhoneNumber: Boolean(loginData.purePhoneNumber || loginData.phoneNumber),
                 inviteCode,
             })
-            await acceptInviteAfterAuthenticated('wechatLoginAfterTokenSaved')
             await handleLoginSuccess(loginData)
         } catch (error: any) {
             console.error('登录失败:', error)
@@ -398,7 +396,7 @@ export default function LoginPage() {
         if (!phoneCode) {
             setShowPhoneBindModal(false)
             Taro.showToast({ title: '未授权手机号', icon: 'none' })
-            setTimeout(() => { continueAfterAuthGates(pendingOnboardingCompleted) }, 800)
+            setTimeout(() => { void continueAfterAuthGates(pendingOnboardingCompleted) }, 800)
             return
         }
         try {
@@ -409,7 +407,7 @@ export default function LoginPage() {
             Taro.hideLoading()
             Taro.showToast({ title: '绑定成功', icon: 'success' })
             setShowPhoneBindModal(false)
-            setTimeout(() => { continueAfterAuthGates(pendingOnboardingCompleted) }, 1000)
+            setTimeout(() => { void continueAfterAuthGates(pendingOnboardingCompleted) }, 1000)
         } catch (err: any) {
             Taro.hideLoading()
             await showLoginErrorToast(err, '绑定失败')
@@ -478,7 +476,7 @@ export default function LoginPage() {
                 // 库中已有手机号则直接返回；否则弹出授权手机号弹窗
                 if (loginData.purePhoneNumber) {
                     console.log('[invite-debug][login] 已有手机号，准备继续登录后流程', { inviteCode })
-                    setTimeout(() => { continueAfterAuthGates(onboardingCompleted) }, 1500)
+                    setTimeout(() => { void continueAfterAuthGates(onboardingCompleted) }, 1500)
                 } else {
                     console.log('[invite-debug][login] 缺少手机号，先弹手机号绑定，邀请码处理继续延后', { inviteCode })
                     setShowPhoneBindModal(true)
@@ -564,6 +562,7 @@ export default function LoginPage() {
                 nickname: tempNickname,
                 avatar: avatarToSave
             })
+            await acceptInviteAfterAuthenticated('profileSavedAfterUpdateUserInfo')
 
             // 更新本地 storage
             const currentUser = Taro.getStorageSync('userInfo') || {}
@@ -583,7 +582,7 @@ export default function LoginPage() {
                     inviteCode,
                 })
                 if (hasPhone) {
-                    continueAfterAuthGates(pendingOnboardingCompleted)
+                    void continueAfterAuthGates(pendingOnboardingCompleted)
                     return
                 }
                 setShowPhoneBindModal(true)
@@ -712,7 +711,7 @@ export default function LoginPage() {
               onBindPhone={handleBindPhone}
               onSkipPhone={() => {
                 setShowPhoneBindModal(false)
-                continueAfterAuthGates(pendingOnboardingCompleted)
+                void continueAfterAuthGates(pendingOnboardingCompleted)
               }}
             />
 

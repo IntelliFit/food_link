@@ -209,14 +209,161 @@ func (r *UserRepo) FindTrialEntitlementByIdentity(ctx context.Context, openID, u
 }
 
 func (r *UserRepo) DeleteByID(ctx context.Context, userID string) error {
-	result := r.db.WithContext(ctx).Where("id = ?", userID).Delete(&User{})
-	if result.Error != nil {
-		return result.Error
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := deleteAccountOwnedData(tx, userID); err != nil {
+			return err
+		}
+		result := tx.Where("id = ?", userID).Delete(&User{})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			return gorm.ErrRecordNotFound
+		}
+		return nil
+	})
+}
+
+func deleteAccountOwnedData(tx *gorm.DB, userID string) error {
+	if tx == nil || strings.TrimSpace(userID) == "" {
+		return nil
 	}
-	if result.RowsAffected == 0 {
-		return gorm.ErrRecordNotFound
+	if err := deleteAccountFeedArtifacts(tx, userID); err != nil {
+		return err
+	}
+	if err := deleteAccountPublicFoodArtifacts(tx, userID); err != nil {
+		return err
+	}
+	cleanups := []struct {
+		table string
+		where string
+		args  []any
+	}{
+		{"private_message_reports", "reporter_user_id = ? OR reported_user_id = ?", []any{userID, userID}},
+		{"private_messages", "sender_id = ? OR receiver_id = ?", []any{userID, userID}},
+		{"user_friends", "user_id = ? OR friend_id = ?", []any{userID, userID}},
+		{"friend_requests", "from_user_id = ? OR to_user_id = ?", []any{userID, userID}},
+		{"user_blocks", "blocker_user_id = ? OR blocked_user_id = ?", []any{userID, userID}},
+		{"user_follows", "follower_id = ? OR followee_id = ?", []any{userID, userID}},
+		{"user_invite_referrals", "inviter_user_id = ? OR invitee_user_id = ?", []any{userID, userID}},
+		{"user_credit_bonus_events", "user_id = ?", []any{userID}},
+		{"user_earned_credit_ledger", "user_id = ?", []any{userID}},
+		{"membership_share_rewards", "user_id = ?", []any{userID}},
+		{"user_pro_memberships", "user_id = ?", []any{userID}},
+		{"pro_membership_payment_records", "user_id = ?", []any{userID}},
+		{"membership_payment_test_users", "user_id = ?", []any{userID}},
+		{"user_pets", "user_id = ?", []any{userID}},
+		{"user_pet_events", "user_id = ?", []any{userID}},
+		{"user_pet_daily_scores", "user_id = ?", []any{userID}},
+		{"pet_chat_messages", "user_id = ?", []any{userID}},
+		{"pet_chat_sessions", "user_id = ?", []any{userID}},
+		{"analysis_feedback_samples", "user_id = ?", []any{userID}},
+		{"precision_sessions", "user_id = ?", []any{userID}},
+		{"analysis_tasks", "user_id = ?", []any{userID}},
+		{"user_health_documents", "user_id = ?", []any{userID}},
+		{"user_mode_switch_logs", "user_id = ?", []any{userID}},
+		{"user_daily_nutrition_targets", "user_id = ?", []any{userID}},
+		{"user_feedback", "user_id = ?", []any{userID}},
+		{"user_weight_records", "user_id = ?", []any{userID}},
+		{"user_water_logs", "user_id = ?", []any{userID}},
+		{"user_body_metric_settings", "user_id = ?", []any{userID}},
+		{"user_exercise_logs", "user_id = ?", []any{userID}},
+		{"food_expiry_notification_jobs", "user_id = ?", []any{userID}},
+		{"food_expiry_items", "user_id = ?", []any{userID}},
+		{"user_recipes", "user_id = ?", []any{userID}},
+		{"user_custom_foods", "user_id = ?", []any{userID}},
+		{"manual_food_library", "user_id = ?", []any{userID}},
+		{"user_circle_posts", "user_id = ?", []any{userID}},
+		{"user_food_records", "user_id = ?", []any{userID}},
+		{"user_trial_entitlements", "first_user_id = ?", []any{userID}},
+	}
+	for _, cleanup := range cleanups {
+		if err := deleteFromTableIfExists(tx, cleanup.table, cleanup.where, cleanup.args...); err != nil {
+			return err
+		}
 	}
 	return nil
+}
+
+func deleteAccountFeedArtifacts(tx *gorm.DB, userID string) error {
+	targetClauses := accountFeedTargetClauses(tx, userID)
+	if err := deleteFromTableIfExists(tx, "feed_likes", combineAccountClauses("user_id = ?", targetClauses), userID); err != nil {
+		return err
+	}
+	if err := deleteFromTableIfExists(tx, "feed_comments", combineAccountClauses("user_id = ? OR reply_to_user_id = ?", targetClauses), userID, userID); err != nil {
+		return err
+	}
+	if err := deleteFromTableIfExists(tx, "feed_interaction_notifications", combineAccountClauses("recipient_user_id = ? OR actor_user_id = ?", targetClauses), userID, userID); err != nil {
+		return err
+	}
+	if err := deleteFromTableIfExists(tx, "feed_reports", combineAccountClauses("reporter_user_id = ? OR reported_user_id = ?", targetClauses), userID, userID); err != nil {
+		return err
+	}
+	return nil
+}
+
+func accountFeedTargetClauses(tx *gorm.DB, userID string) []string {
+	clauses := make([]string, 0, 4)
+	if tableExists(tx, "user_food_records") {
+		clauses = append(clauses, fmt.Sprintf("target_type = 'food_record' AND target_id IN (SELECT CAST(id AS TEXT) FROM user_food_records WHERE user_id = %s)", quoteSQLString(userID)))
+	}
+	if tableExists(tx, "user_exercise_logs") {
+		clauses = append(clauses, fmt.Sprintf("target_type = 'exercise_log' AND target_id IN (SELECT CAST(id AS TEXT) FROM user_exercise_logs WHERE user_id = %s)", quoteSQLString(userID)))
+	}
+	if tableExists(tx, "user_circle_posts") {
+		clauses = append(clauses, fmt.Sprintf("target_type = 'circle_post' AND target_id IN (SELECT CAST(id AS TEXT) FROM user_circle_posts WHERE user_id = %s)", quoteSQLString(userID)))
+	}
+	if tableExists(tx, "public_food_library") {
+		clauses = append(clauses, fmt.Sprintf("target_type = 'campus_food' AND target_id IN (SELECT CAST(id AS TEXT) FROM public_food_library WHERE user_id = %s)", quoteSQLString(userID)))
+	}
+	return clauses
+}
+
+func combineAccountClauses(primary string, extra []string) string {
+	clauses := make([]string, 0, len(extra)+1)
+	if strings.TrimSpace(primary) != "" {
+		clauses = append(clauses, primary)
+	}
+	clauses = append(clauses, extra...)
+	for i, clause := range clauses {
+		clauses[i] = "(" + clause + ")"
+	}
+	return strings.Join(clauses, " OR ")
+}
+
+func deleteAccountPublicFoodArtifacts(tx *gorm.DB, userID string) error {
+	if tableExists(tx, "public_food_library") {
+		itemSubquery := fmt.Sprintf("library_item_id IN (SELECT id FROM public_food_library WHERE user_id = %s)", quoteSQLString(userID))
+		if err := deleteFromTableIfExists(tx, "public_food_library_likes", "user_id = ? OR "+itemSubquery, userID); err != nil {
+			return err
+		}
+		if err := deleteFromTableIfExists(tx, "public_food_library_collections", "user_id = ? OR "+itemSubquery, userID); err != nil {
+			return err
+		}
+		if err := deleteFromTableIfExists(tx, "public_food_library_comments", "user_id = ? OR reply_to_user_id = ? OR "+itemSubquery, userID, userID); err != nil {
+			return err
+		}
+		if err := deleteFromTableIfExists(tx, "public_food_library_feedback", "user_id = ? OR "+itemSubquery, userID); err != nil {
+			return err
+		}
+	}
+	return deleteFromTableIfExists(tx, "public_food_library", "user_id = ?", userID)
+}
+
+func deleteFromTableIfExists(tx *gorm.DB, table, where string, args ...any) error {
+	if strings.TrimSpace(where) == "" || !tableExists(tx, table) {
+		return nil
+	}
+	result := tx.Exec("DELETE FROM "+table+" WHERE "+where, args...)
+	return result.Error
+}
+
+func tableExists(tx *gorm.DB, table string) bool {
+	return tx != nil && tx.Migrator().HasTable(table)
+}
+
+func quoteSQLString(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", "''") + "'"
 }
 
 func (r *UserRepo) Create(ctx context.Context, user *User) error {
