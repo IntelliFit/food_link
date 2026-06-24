@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { createFoodLinkApiClient, type ApiClientRequestOptions, type RecentRequestTrace, type UploadFileInput } from '@food-link/api-client'
-import { API_BASE_URL } from './config'
+import { API_BASE_URL, SHARE_BASE_URL } from './config'
 
 const ACCESS_TOKEN_KEY = 'food_link_mobile_access_token'
 const REFRESH_TOKEN_KEY = 'food_link_mobile_refresh_token'
@@ -130,6 +130,7 @@ export function clearRecentRequestTraces(): void {
 
 export const apiClient = createFoodLinkApiClient({
   baseUrl: API_BASE_URL,
+  shareBaseUrl: SHARE_BASE_URL,
   adapters: {
     async request(url: string, options?: ApiClientRequestOptions) {
       const method = options?.method || 'GET'

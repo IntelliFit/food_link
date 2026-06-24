@@ -1,11 +1,14 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { ActivityIndicator, Image, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Switch, Text, TextInput, View } from 'react-native'
 import * as Clipboard from 'expo-clipboard'
 import * as ImagePicker from 'expo-image-picker'
+import * as Sharing from 'expo-sharing'
+import qrcode from 'qrcode-generator'
+import { captureRef } from 'react-native-view-shot'
 import { CommonActions, useFocusEffect, useNavigation, useRoute, type RouteProp } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
-import { Apple, Check, Coffee, Cookie, Dumbbell, ImagePlus, Inbox, Link2, MessageCircle, Moon, MoreHorizontal, MoreVertical, Plus, RefreshCw, Search, Send, Share2, Soup, Trash2, Undo2, UserPlus, Users, Utensils, X, type LucideIcon } from 'lucide-react-native'
+import { Apple, Check, Coffee, Cookie, Dumbbell, ImagePlus, Inbox, Link2, MessageCircle, Moon, MoreHorizontal, MoreVertical, Plus, QrCode, RefreshCw, Search, Send, Share2, Soup, Trash2, Undo2, UserPlus, Users, Utensils, X, type LucideIcon } from 'lucide-react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
   getMealTypeLabel,
@@ -244,7 +247,7 @@ type EditableRecordItem = {
   source: FoodRecord['items'][number]
 }
 type AppDialog = ReturnType<typeof useAppDialog>
-type FoodRecordShareTarget = 'wechat_session' | 'wechat_timeline' | 'copy_link' | 'system' | 'cancel'
+type FoodRecordShareTarget = 'wechat_session' | 'wechat_timeline' | 'poster' | 'poster_image' | 'copy_link' | 'system' | 'cancel'
 
 type PendingFoodRecordShare = {
   record: FoodRecord
@@ -258,6 +261,7 @@ type PendingFoodRecordShare = {
 function useFoodRecordShareSheet(dialog: AppDialog) {
   const insets = useSafeAreaInsets()
   const [pendingShare, setPendingShare] = useState<PendingFoodRecordShare | null>(null)
+  const [posterShare, setPosterShare] = useState<PendingFoodRecordShare | null>(null)
 
   const finishShare = useCallback((current: PendingFoodRecordShare, shared: boolean) => {
     setPendingShare(null)
@@ -282,6 +286,11 @@ function useFoodRecordShareSheet(dialog: AppDialog) {
     const current = pendingShare
     if (!current || current.busyTarget || target === 'cancel') {
       if (current && target === 'cancel') finishShare(current, false)
+      return
+    }
+    if (target === 'poster') {
+      setPendingShare(null)
+      setPosterShare(current)
       return
     }
     setPendingShare((value) => (value ? { ...value, busyTarget: target } : value))
@@ -327,63 +336,128 @@ function useFoodRecordShareSheet(dialog: AppDialog) {
     }
   }, [dialog, finishShare, pendingShare])
 
+  const closePoster = useCallback(() => {
+    if (!posterShare || posterShare.busyTarget) return
+    setPosterShare(null)
+    posterShare.resolve(false)
+  }, [posterShare])
+
+  const finishPoster = useCallback((current: PendingFoodRecordShare, shared: boolean) => {
+    setPosterShare(null)
+    current.resolve(shared)
+  }, [])
+
+  const runPosterAction = useCallback(async (target: 'copy_link' | 'system') => {
+    const current = posterShare
+    if (!current || current.busyTarget) return
+    setPosterShare((value) => (value ? { ...value, busyTarget: target } : value))
+    try {
+      if (target === 'copy_link') {
+        await Clipboard.setStringAsync(current.shareUrl)
+        finishPoster(current, true)
+        await dialog.alert('链接已复制', '可以粘贴到微信聊天或其他 App。', 'success')
+        return
+      }
+      const shared = await shareTextToSystem(current.title, buildRecordShareMessage(current.record, current.shareUrl), current.shareUrl)
+      finishPoster(current, shared)
+    } catch (error) {
+      finishPoster(current, false)
+      await dialog.alert('分享失败', userFacingErrorMessage(error), 'danger')
+    }
+  }, [dialog, finishPoster, posterShare])
+
+  const runPosterImageShare = useCallback(async (imageUri: string) => {
+    const current = posterShare
+    if (!current || current.busyTarget) return
+    setPosterShare((value) => (value ? { ...value, busyTarget: 'poster_image' } : value))
+    try {
+      const shared = await sharePosterImageToSystem(current.title, imageUri)
+      finishPoster(current, shared)
+    } catch (error) {
+      setPosterShare((value) => (value ? { ...value, busyTarget: undefined } : value))
+      await dialog.alert('海报分享不可用', `${userFacingErrorMessage(error)}\n\n可以先直接扫码，或复制链接分享。`, 'danger')
+    }
+  }, [dialog, finishPoster, posterShare])
+
+  const handlePosterCaptureError = useCallback(async (error: unknown) => {
+    await dialog.alert('海报生成失败', `${userFacingErrorMessage(error)}\n\n可以先直接扫码，或复制链接分享。`, 'danger')
+  }, [dialog])
+
   const canShareToWechat = isNativeWechatShareAvailable()
   const shareSheet = (
-    <Modal visible={Boolean(pendingShare)} transparent animationType="fade" onRequestClose={closeShareSheet}>
-      <Pressable style={styles.foodShareBackdrop} onPress={closeShareSheet}>
-        <Pressable style={[styles.foodShareSheet, { paddingBottom: Math.max(insets.bottom, 16) + 18 }]} onPress={(event) => event.stopPropagation?.()}>
-          <View style={styles.foodShareHandle} />
-          <View style={styles.foodShareHeader}>
-            <View style={styles.foodShareHeaderSpacer} />
-            <Text style={styles.foodShareTitle}>分享至</Text>
-            <Pressable hitSlop={10} style={styles.foodShareCloseButton} disabled={Boolean(pendingShare?.busyTarget)} onPress={closeShareSheet}>
-              <X size={22} color="#374151" strokeWidth={2.4} />
-            </Pressable>
-          </View>
-          <View style={styles.foodShareGrid}>
-            {canShareToWechat ? (
-              <>
-                <FoodShareSheetAction
-                  label="微信好友"
-                  Icon={MessageCircle}
-                  color="#07c160"
-                  disabled={!pendingShare || Boolean(pendingShare.busyTarget)}
-                  busy={pendingShare?.busyTarget === 'wechat_session'}
-                  onPress={() => void runShareTarget('wechat_session')}
-                />
-                <FoodShareSheetAction
-                  label="朋友圈"
-                  Icon={Users}
-                  color="#63c62e"
-                  disabled={!pendingShare || Boolean(pendingShare.busyTarget)}
-                  busy={pendingShare?.busyTarget === 'wechat_timeline'}
-                  onPress={() => void runShareTarget('wechat_timeline')}
-                />
-              </>
-            ) : null}
-            <FoodShareSheetAction
-              label="更多方式"
-              Icon={MoreHorizontal}
-              color="#38bdf8"
-              disabled={!pendingShare || Boolean(pendingShare.busyTarget)}
-              busy={pendingShare?.busyTarget === 'system'}
-              onPress={() => void runShareTarget('system')}
-            />
-          </View>
-          <View style={styles.foodShareDivider} />
-          <View style={styles.foodShareGrid}>
-            <FoodShareSheetAction
-              label="复制链接"
-              Icon={Link2}
-              color="#94a3b8"
-              disabled={!pendingShare || Boolean(pendingShare.busyTarget)}
-              busy={pendingShare?.busyTarget === 'copy_link'}
-              onPress={() => void runShareTarget('copy_link')}
-            />
-          </View>
+    <>
+      <Modal visible={Boolean(pendingShare)} transparent animationType="fade" onRequestClose={closeShareSheet}>
+        <Pressable style={styles.foodShareBackdrop} onPress={closeShareSheet}>
+          <Pressable style={[styles.foodShareSheet, { paddingBottom: Math.max(insets.bottom, 16) + 18 }]} onPress={(event) => event.stopPropagation?.()}>
+            <View style={styles.foodShareHandle} />
+            <View style={styles.foodShareHeader}>
+              <View style={styles.foodShareHeaderSpacer} />
+              <Text style={styles.foodShareTitle}>分享至</Text>
+              <Pressable hitSlop={10} style={styles.foodShareCloseButton} disabled={Boolean(pendingShare?.busyTarget)} onPress={closeShareSheet}>
+                <X size={22} color="#374151" strokeWidth={2.4} />
+              </Pressable>
+            </View>
+            <View style={styles.foodShareGrid}>
+              {canShareToWechat ? (
+                <>
+                  <FoodShareSheetAction
+                    label="微信好友"
+                    Icon={MessageCircle}
+                    color="#07c160"
+                    disabled={!pendingShare || Boolean(pendingShare.busyTarget)}
+                    busy={pendingShare?.busyTarget === 'wechat_session'}
+                    onPress={() => void runShareTarget('wechat_session')}
+                  />
+                  <FoodShareSheetAction
+                    label="朋友圈"
+                    Icon={Users}
+                    color="#63c62e"
+                    disabled={!pendingShare || Boolean(pendingShare.busyTarget)}
+                    busy={pendingShare?.busyTarget === 'wechat_timeline'}
+                    onPress={() => void runShareTarget('wechat_timeline')}
+                  />
+                </>
+              ) : null}
+              <FoodShareSheetAction
+                label="二维码海报"
+                Icon={QrCode}
+                color="#00bc7d"
+                disabled={!pendingShare || Boolean(pendingShare.busyTarget)}
+                busy={false}
+                onPress={() => void runShareTarget('poster')}
+              />
+              <FoodShareSheetAction
+                label="更多方式"
+                Icon={MoreHorizontal}
+                color="#38bdf8"
+                disabled={!pendingShare || Boolean(pendingShare.busyTarget)}
+                busy={pendingShare?.busyTarget === 'system'}
+                onPress={() => void runShareTarget('system')}
+              />
+            </View>
+            <View style={styles.foodShareDivider} />
+            <View style={styles.foodShareGrid}>
+              <FoodShareSheetAction
+                label="复制链接"
+                Icon={Link2}
+                color="#94a3b8"
+                disabled={!pendingShare || Boolean(pendingShare.busyTarget)}
+                busy={pendingShare?.busyTarget === 'copy_link'}
+                onPress={() => void runShareTarget('copy_link')}
+              />
+            </View>
+          </Pressable>
         </Pressable>
-      </Pressable>
-    </Modal>
+      </Modal>
+      <FoodRecordPosterModal
+        share={posterShare}
+        bottomInset={insets.bottom}
+        onClose={closePoster}
+        onCopy={() => void runPosterAction('copy_link')}
+        onSharePoster={(uri) => void runPosterImageShare(uri)}
+        onCaptureError={(error) => void handlePosterCaptureError(error)}
+      />
+    </>
   )
 
   return { shareFoodRecord, shareSheet }
@@ -416,6 +490,174 @@ function FoodShareSheetAction({
       <Text style={styles.foodShareActionText} numberOfLines={1}>{label}</Text>
     </Pressable>
   )
+}
+
+function FoodRecordPosterModal({
+  share,
+  bottomInset,
+  onClose,
+  onCopy,
+  onSharePoster,
+  onCaptureError,
+}: {
+  share: PendingFoodRecordShare | null
+  bottomInset: number
+  onClose: () => void
+  onCopy: () => void
+  onSharePoster: (imageUri: string) => void
+  onCaptureError: (error: unknown) => void
+}) {
+  const posterCardRef = useRef<View>(null)
+  const [capturing, setCapturing] = useState(false)
+  const record = share?.record
+  const imageUrl = recordImageUrls(record || null)[0]
+  const foods = (record?.items || [])
+    .map((item) => String(item.name || '').trim())
+    .filter(Boolean)
+    .slice(0, 4)
+  const busy = Boolean(share?.busyTarget) || capturing
+
+  const handleSharePoster = useCallback(async () => {
+    if (!share || busy) return
+    setCapturing(true)
+    try {
+      const uri = await captureRef(posterCardRef, {
+        format: 'png',
+        quality: 0.96,
+        result: 'tmpfile',
+        fileName: `foodlink-record-${String(share.record.id || Date.now()).replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 48) || 'poster'}`,
+      })
+      onSharePoster(uri)
+    } catch (error) {
+      onCaptureError(error)
+    } finally {
+      setCapturing(false)
+    }
+  }, [busy, onCaptureError, onSharePoster, share])
+
+  return (
+    <Modal visible={Boolean(share)} transparent animationType="fade" onRequestClose={onClose}>
+      <View style={styles.foodPosterBackdrop}>
+        <View style={[styles.foodPosterSheet, { paddingBottom: Math.max(bottomInset, 14) + 14 }]}>
+          <View style={styles.foodPosterHeader}>
+            <Text style={styles.foodPosterHeaderTitle}>二维码海报</Text>
+            <Pressable hitSlop={10} style={styles.foodShareCloseButton} disabled={busy} onPress={onClose}>
+              <X size={22} color="#374151" strokeWidth={2.4} />
+            </Pressable>
+          </View>
+          <ScrollView style={styles.foodPosterScroll} contentContainerStyle={styles.foodPosterScrollContent} showsVerticalScrollIndicator={false}>
+            <View ref={posterCardRef} collapsable={false} style={styles.foodPosterCard}>
+              <View style={styles.foodPosterBrandRow}>
+                <Image source={appIcon} style={styles.foodPosterLogo} resizeMode="contain" />
+                <View style={styles.foodPosterBrandText}>
+                  <Text style={styles.foodPosterBrandName}>智健食探</Text>
+                  <Text style={styles.foodPosterBrandSub}>AI 饮食记录</Text>
+                </View>
+              </View>
+
+              <View style={styles.foodPosterImageWrap}>
+                {imageUrl ? (
+                  <Image source={{ uri: imageUrl }} style={styles.foodPosterImage} resizeMode="cover" />
+                ) : (
+                  <View style={styles.foodPosterImageFallback}>
+                    <Text style={styles.foodPosterImageFallbackText}>{mealLabelForPoster(record?.meal_type)}</Text>
+                  </View>
+                )}
+              </View>
+
+              <Text style={styles.foodPosterMeal}>{mealLabelForPoster(record?.meal_type)}</Text>
+              <Text style={styles.foodPosterTitle} numberOfLines={2}>
+                {record ? buildRecordShareTitle(record) : '饮食记录'}
+              </Text>
+              <Text style={styles.foodPosterDescription} numberOfLines={2}>
+                {record ? buildRecordShareDescription(record) : ''}
+              </Text>
+
+              <View style={styles.foodPosterMacroRow}>
+                <FoodPosterMacro label="热量" value={Math.round(Number(record?.total_calories || 0)).toString()} unit="kcal" />
+                <FoodPosterMacro label="蛋白" value={formatDisplayNumber(record?.total_protein || 0)} unit="g" />
+                <FoodPosterMacro label="碳水" value={formatDisplayNumber(record?.total_carbs || 0)} unit="g" />
+                <FoodPosterMacro label="脂肪" value={formatDisplayNumber(record?.total_fat || 0)} unit="g" />
+              </View>
+
+              {foods.length ? (
+                <Text style={styles.foodPosterFoods} numberOfLines={1}>{foods.join(' · ')}</Text>
+              ) : null}
+
+              <View style={styles.foodPosterQrPanel}>
+                <RecordShareQrCode value={share?.shareUrl || ''} />
+                <View style={styles.foodPosterQrText}>
+                  <Text style={styles.foodPosterQrTitle}>扫码查看这餐</Text>
+                  <Text style={styles.foodPosterQrHint}>打开网页后可继续跳转 App</Text>
+                </View>
+              </View>
+            </View>
+          </ScrollView>
+
+          <View style={styles.foodPosterActions}>
+            <Pressable
+              disabled={busy}
+              style={({ pressed }) => [styles.foodPosterActionButton, pressed && styles.pressed, busy && styles.foodShareActionDisabled]}
+              onPress={handleSharePoster}
+            >
+              {capturing || share?.busyTarget === 'poster_image' ? <ActivityIndicator color="#ffffff" size="small" /> : <Text style={styles.foodPosterActionText}>分享海报</Text>}
+            </Pressable>
+            <Pressable
+              disabled={busy}
+              style={({ pressed }) => [styles.foodPosterSecondaryButton, pressed && styles.pressed, busy && styles.foodShareActionDisabled]}
+              onPress={onCopy}
+            >
+              {share?.busyTarget === 'copy_link' ? <ActivityIndicator color={colors.brand} size="small" /> : <Text style={styles.foodPosterSecondaryText}>复制链接</Text>}
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  )
+}
+
+function FoodPosterMacro({ label, value, unit }: { label: string; value: string; unit: string }) {
+  return (
+    <View style={styles.foodPosterMacro}>
+      <Text style={styles.foodPosterMacroValue}>{value}</Text>
+      <Text style={styles.foodPosterMacroLabel}>{label} {unit}</Text>
+    </View>
+  )
+}
+
+function RecordShareQrCode({ value }: { value: string }) {
+  const matrix = useMemo(() => {
+    const link = value.trim()
+    if (!link) return []
+    const qr = qrcode(0, 'M')
+    qr.addData(link)
+    qr.make()
+    const size = qr.getModuleCount()
+    return Array.from({ length: size }, (_, row) =>
+      Array.from({ length: size }, (_, col) => qr.isDark(row, col)),
+    )
+  }, [value])
+
+  return (
+    <View style={styles.foodPosterQrOuter}>
+      <View style={styles.foodPosterQrMatrix}>
+        {matrix.map((row, rowIndex) => (
+          <View key={`record-qr-row-${rowIndex}`} style={styles.foodPosterQrRow}>
+            {row.map((dark, colIndex) => (
+              <View
+                key={`record-qr-cell-${rowIndex}-${colIndex}`}
+                style={[styles.foodPosterQrCell, dark ? styles.foodPosterQrCellDark : styles.foodPosterQrCellLight]}
+              />
+            ))}
+          </View>
+        ))}
+      </View>
+    </View>
+  )
+}
+
+function mealLabelForPoster(mealType?: string): string {
+  return getMealTypeLabel((mealType || 'lunch') as MealType)
 }
 
 type SelectedManualFood = {
@@ -951,7 +1193,7 @@ export function RecordDetailScreen() {
                 <Text style={styles.recordDetailSecondaryActionText}>修改记录</Text>
               </Pressable>
               <Pressable style={styles.recordDetailPrimaryAction} onPress={() => void shareRecord()}>
-                <Text style={styles.recordDetailPrimaryActionText}>生成分享卡片</Text>
+                <Text style={styles.recordDetailPrimaryActionText}>分享这餐</Text>
               </Pressable>
               <View style={styles.recordDetailActionRow}>
                 <Pressable style={styles.recordDetailPlainAction} onPress={openCommunityDetail}>
@@ -6521,6 +6763,19 @@ async function shareTextToSystem(title: string, message: string, url?: string): 
   return result.action !== Share.dismissedAction
 }
 
+async function sharePosterImageToSystem(title: string, imageUri: string): Promise<boolean> {
+  const available = await Sharing.isAvailableAsync()
+  if (!available) {
+    throw new Error('当前运行环境暂时不支持分享图片文件')
+  }
+  await Sharing.shareAsync(imageUri, {
+    dialogTitle: title,
+    mimeType: 'image/png',
+    UTI: 'public.png',
+  })
+  return true
+}
+
 function buildRecordShareTitle(record: FoodRecord): string {
   const calories = Math.round(record.total_calories || 0)
   const prefix = `${getMealTypeLabel(record.meal_type)}饮食记录`
@@ -7156,6 +7411,248 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     fontWeight: '700',
     textAlign: 'center',
+  },
+  foodPosterBackdrop: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(15, 23, 42, 0.54)',
+  },
+  foodPosterSheet: {
+    maxHeight: '92%',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    backgroundColor: '#f8fafc',
+    paddingTop: 14,
+    paddingHorizontal: 16,
+  },
+  foodPosterHeader: {
+    minHeight: 40,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingLeft: 4,
+  },
+  foodPosterHeaderTitle: {
+    color: '#111827',
+    fontSize: 18,
+    lineHeight: 24,
+    fontWeight: '900',
+  },
+  foodPosterScroll: {
+    marginTop: 6,
+  },
+  foodPosterScrollContent: {
+    alignItems: 'center',
+    paddingBottom: 14,
+  },
+  foodPosterCard: {
+    width: '100%',
+    maxWidth: 380,
+    borderRadius: 18,
+    padding: 18,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.14,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 8,
+  },
+  foodPosterBrandRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  foodPosterLogo: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+  },
+  foodPosterBrandText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  foodPosterBrandName: {
+    color: '#0f172a',
+    fontSize: 15,
+    lineHeight: 20,
+    fontWeight: '900',
+  },
+  foodPosterBrandSub: {
+    color: '#64748b',
+    fontSize: 11,
+    lineHeight: 16,
+    fontWeight: '700',
+  },
+  foodPosterImageWrap: {
+    marginTop: 15,
+    height: 178,
+    overflow: 'hidden',
+    borderRadius: 14,
+    backgroundColor: '#ecfdf5',
+  },
+  foodPosterImage: {
+    width: '100%',
+    height: '100%',
+  },
+  foodPosterImageFallback: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#e7f7ef',
+  },
+  foodPosterImageFallbackText: {
+    color: colors.brand,
+    fontSize: 34,
+    lineHeight: 42,
+    fontWeight: '900',
+  },
+  foodPosterMeal: {
+    marginTop: 16,
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(0, 188, 125, 0.1)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    color: colors.brand,
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '900',
+  },
+  foodPosterTitle: {
+    marginTop: 8,
+    color: '#0f172a',
+    fontSize: 24,
+    lineHeight: 30,
+    fontWeight: '900',
+  },
+  foodPosterDescription: {
+    marginTop: 8,
+    color: '#475569',
+    fontSize: 13,
+    lineHeight: 20,
+  },
+  foodPosterMacroRow: {
+    marginTop: 16,
+    flexDirection: 'row',
+    gap: 7,
+  },
+  foodPosterMacro: {
+    flex: 1,
+    minHeight: 58,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f1f5f9',
+    paddingHorizontal: 4,
+  },
+  foodPosterMacroValue: {
+    color: '#0f172a',
+    fontSize: 17,
+    lineHeight: 22,
+    fontWeight: '900',
+  },
+  foodPosterMacroLabel: {
+    marginTop: 2,
+    color: '#64748b',
+    fontSize: 10,
+    lineHeight: 14,
+    fontWeight: '700',
+  },
+  foodPosterFoods: {
+    marginTop: 12,
+    color: '#334155',
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: '700',
+  },
+  foodPosterQrPanel: {
+    marginTop: 16,
+    minHeight: 116,
+    borderRadius: 14,
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    padding: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 13,
+  },
+  foodPosterQrOuter: {
+    width: 92,
+    height: 92,
+    borderRadius: 10,
+    padding: 7,
+    backgroundColor: '#ffffff',
+  },
+  foodPosterQrMatrix: {
+    flex: 1,
+  },
+  foodPosterQrRow: {
+    flex: 1,
+    flexDirection: 'row',
+  },
+  foodPosterQrCell: {
+    flex: 1,
+  },
+  foodPosterQrCellDark: {
+    backgroundColor: '#0f172a',
+  },
+  foodPosterQrCellLight: {
+    backgroundColor: '#ffffff',
+  },
+  foodPosterQrText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  foodPosterQrTitle: {
+    color: '#0f172a',
+    fontSize: 15,
+    lineHeight: 21,
+    fontWeight: '900',
+  },
+  foodPosterQrHint: {
+    marginTop: 4,
+    color: '#64748b',
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  foodPosterActions: {
+    flexDirection: 'row',
+    gap: 10,
+    paddingTop: 4,
+  },
+  foodPosterActionButton: {
+    flex: 1,
+    minHeight: 48,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.brand,
+  },
+  foodPosterActionText: {
+    color: '#ffffff',
+    fontSize: 15,
+    lineHeight: 20,
+    fontWeight: '900',
+  },
+  foodPosterSecondaryButton: {
+    flex: 1,
+    minHeight: 48,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+  },
+  foodPosterSecondaryText: {
+    color: colors.brand,
+    fontSize: 15,
+    lineHeight: 20,
+    fontWeight: '900',
   },
   rowBetween: {
     flexDirection: 'row',
