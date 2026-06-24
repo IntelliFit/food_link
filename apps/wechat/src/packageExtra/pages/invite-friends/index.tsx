@@ -44,8 +44,8 @@ function InviteFriendsPage() {
   }, [inviterUserId, inviteCode])
 
   const shareTitle = inviterNickname
-    ? `${inviterNickname}邀请你加入食探，达标后各得15积分`
-    : '加入食探并完成2天打卡，双方各得15积分'
+    ? `${inviterNickname}邀请你加入食探，达标后各得一周轻度版会员`
+    : '加入食探并完成2天打卡，双方各得一周轻度版会员'
 
   useShareAppMessage(() => ({
     title: shareTitle,
@@ -220,7 +220,7 @@ function InviteFriendsPage() {
               ? '把食探分享给新朋友'
               : '加入食探并开始健康打卡'}
         </Text>
-        <Text className='invite-subtitle'>新用户 7 天内完成 2 个自然日有效记录，双方各得 15 积分，每月最多 10 人</Text>
+        <Text className='invite-subtitle'>新用户 7 天内完成 2 个自然日有效记录，双方各得一周轻度版会员，每月最多 10 人</Text>
       </View>
 
       <View className='invite-card inviter-card'>
@@ -260,7 +260,7 @@ function InviteFriendsPage() {
         </View>
         <View className='rule-item'>
           <Text className='rule-item__index'>03</Text>
-          <Text className='rule-item__text'>达标后双方各得 15 积分，邀请人每月上限 10 人</Text>
+          <Text className='rule-item__text'>达标后双方各得一周轻度版会员，邀请人每月上限 10 人</Text>
         </View>
       </View>
 

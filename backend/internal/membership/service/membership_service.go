@@ -50,6 +50,10 @@ const (
 	inviteRewardRequiredDays        = 2
 	inviteRewardWindowDays          = 7
 	inviteRewardCreditsOnQualify    = 15
+	inviteRewardMembershipGrantDays = 7
+	inviteRewardMembershipPlanCode  = "light_monthly"
+	inviteRewardMembershipType      = "membership_light_week"
+	inviteRewardMembershipLabel     = "一周轻度版会员"
 	inviteRewardMonthlyLimit        = 10
 	inviteRewardLegacyCreditsPerDay = 5
 	sharePosterRewardCredits        = 1
@@ -86,6 +90,8 @@ type MembershipRepo interface {
 	GetTrialEntitlementByUserID(ctx context.Context, userID string) (*domain.UserTrialEntitlement, error)
 	GetFirstPaidMembershipUserRank(ctx context.Context, userID string, limit int) (int, error)
 	CountDailyMembershipBonusCredits(ctx context.Context, userID, chinaDate string) (inviteBonus int, shareBonus int, err error)
+	GetMembershipGrantBySourceKey(ctx context.Context, sourceKey string) (*domain.UserMembershipGrant, error)
+	GrantMembership(ctx context.Context, input domain.MembershipGrantInput) (*domain.UserMembershipGrant, *domain.UserMembership, bool, error)
 	GetInviteReferralByInvitee(ctx context.Context, inviteeUserID string) (*domain.UserInviteReferral, error)
 	UpdateInviteReferral(ctx context.Context, id string, updates map[string]any) (*domain.UserInviteReferral, error)
 	ListPendingInviteReferralsByInviter(ctx context.Context, inviterUserID string) ([]domain.UserInviteReferral, error)
@@ -501,28 +507,82 @@ func (s *MembershipService) ActivatePendingInviteReferralOnFirstValidUse(ctx con
 		"inviter_user_id": referral.InviterUserID,
 		"invitee_user_id": referral.InviteeUserID,
 		"qualified_date":  qualifiedDate,
-		"rule":            fmt.Sprintf("%dd/%ddays/%dcredits", inviteRewardWindowDays, inviteRewardRequiredDays, inviteRewardCreditsOnQualify),
+		"rule":            fmt.Sprintf("%dd/%ddays/%ddays-light-membership", inviteRewardWindowDays, inviteRewardRequiredDays, inviteRewardMembershipGrantDays),
+		"reward_type":     inviteRewardMembershipType,
+		"reward_label":    inviteRewardMembershipLabel,
 	}
 	inviterMeta := copyMeta(baseMeta)
 	inviterMeta["role"] = "inviter"
-	_, _, err = s.repo.ChangeEarnedCredits(ctx, referral.InviterUserID, inviteRewardCreditsOnQualify, "invite_qualified_reward", "invite-qualified:"+referral.ID+":inviter", qualifiedDate, inviterMeta)
-	if err != nil {
+	if _, err := s.grantInviteRewardMembership(ctx, referral, "inviter", inviterMeta); err != nil {
 		return nil, err
 	}
 	inviteeMeta := copyMeta(baseMeta)
 	inviteeMeta["role"] = "invitee"
-	_, _, err = s.repo.ChangeEarnedCredits(ctx, referral.InviteeUserID, inviteRewardCreditsOnQualify, "invite_qualified_reward", "invite-qualified:"+referral.ID+":invitee", qualifiedDate, inviteeMeta)
-	if err != nil {
+	if _, err := s.grantInviteRewardMembership(ctx, referral, "invitee", inviteeMeta); err != nil {
 		return nil, err
 	}
 	rewardDate := todayCN
+	rewardEndDate := todayCN.AddDate(0, 0, inviteRewardMembershipGrantDays-1)
 	return s.repo.UpdateInviteReferral(ctx, referral.ID, map[string]any{
 		"status":            "reward_completed",
 		"reward_start_date": rewardDate,
-		"reward_end_date":   rewardDate,
+		"reward_end_date":   rewardEndDate,
 		"blocked_reason":    nil,
 		"updated_at":        nowUTC,
 	})
+}
+
+func (s *MembershipService) grantInviteRewardMembership(ctx context.Context, referral *domain.UserInviteReferral, role string, meta map[string]any) (*domain.UserMembershipGrant, error) {
+	if referral == nil {
+		return nil, nil
+	}
+	userID := referral.InviteeUserID
+	if role == "inviter" {
+		userID = referral.InviterUserID
+	}
+	userID = strings.TrimSpace(userID)
+	if userID == "" {
+		return nil, nil
+	}
+	plan, err := s.repo.GetPlanByCode(ctx, inviteRewardMembershipPlanCode)
+	if err != nil {
+		return nil, err
+	}
+	dailyCredits := trialDailyCredits
+	if plan != nil && plan.DailyCredits > 0 {
+		dailyCredits = plan.DailyCredits
+	}
+	sourceKey := inviteMembershipGrantSourceKey(referral.ID, role)
+	grant, membership, applied, err := s.repo.GrantMembership(ctx, domain.MembershipGrantInput{
+		UserID:       userID,
+		SourceType:   "invite_qualified_reward",
+		SourceKey:    sourceKey,
+		PlanCode:     inviteRewardMembershipPlanCode,
+		DailyCredits: dailyCredits,
+		GrantDays:    inviteRewardMembershipGrantDays,
+		ReferralID:   referral.ID,
+		Role:         role,
+		Meta:         meta,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if applied {
+		membershipExpiresAt := ""
+		if membership != nil {
+			membershipExpiresAt = fmt.Sprintf("%v", timePtrISO(membership.ExpiresAt))
+		}
+		logger.Info(ctx, "邀请达标会员奖励已发放",
+			slog.String("referral_id", referral.ID),
+			slog.String("user_id", userID),
+			slog.String("role", role),
+			slog.String("source_key", sourceKey),
+			slog.String("plan_code", grant.PlanCode),
+			slog.Int("grant_days", inviteRewardMembershipGrantDays),
+			slog.String("membership_expires_at", membershipExpiresAt),
+		)
+	}
+	return grant, nil
 }
 
 // GetInviteRewardStatus 返回当前用户作为被邀请人和邀请人的邀请奖励进度。
@@ -553,6 +613,10 @@ func (s *MembershipService) GetInviteRewardStatus(ctx context.Context, userID st
 			"status":           referral.Status,
 			"records_needed":   days,
 			"reward_credits":   inviteRewardCreditsOnQualify,
+			"reward_type":      inviteRewardMembershipType,
+			"reward_label":     inviteRewardMembershipLabel,
+			"reward_days":      inviteRewardMembershipGrantDays,
+			"reward_plan_code": inviteRewardMembershipPlanCode,
 			"inviter_nickname": inviterNickname,
 		}
 	}
@@ -574,6 +638,10 @@ func (s *MembershipService) GetInviteRewardStatus(ctx context.Context, userID st
 				"status":           ref.Status,
 				"records_needed":   days,
 				"reward_credits":   inviteRewardCreditsOnQualify,
+				"reward_type":      inviteRewardMembershipType,
+				"reward_label":     inviteRewardMembershipLabel,
+				"reward_days":      inviteRewardMembershipGrantDays,
+				"reward_plan_code": inviteRewardMembershipPlanCode,
 			})
 		}
 	}
@@ -606,7 +674,27 @@ func (s *MembershipService) buildInviteRewardRecord(ctx context.Context, userID 
 	recordsNeeded, expired := inviteRewardProgress(referral, todayCN)
 	statusLabel := inviteRewardStatusLabel(referral.Status, expired)
 	blockedReasonLabel := inviteRewardBlockedReasonLabel(referral.BlockedReason)
-	requirementText, nextActionText := inviteRewardActionTexts(role, referral, recordsNeeded, expired, blockedReasonLabel)
+	grant := s.inviteMembershipGrantForRecord(ctx, referral.ID, role)
+	hasMembershipGrant := grant != nil
+	requirementText, nextActionText := inviteRewardActionTexts(role, referral, recordsNeeded, expired, blockedReasonLabel, hasMembershipGrant)
+	rewardType := inviteRewardMembershipType
+	rewardLabel := inviteRewardMembershipLabel
+	rewardDays := inviteRewardMembershipGrantDays
+	rewardPlanCode := inviteRewardMembershipPlanCode
+	var membershipGrantStartAt any
+	var membershipGrantExpiresAt any
+	if grant != nil {
+		membershipGrantStartAt = timePtrISO(grant.StartsAt)
+		membershipGrantExpiresAt = timePtrISO(grant.ExpiresAt)
+		if strings.TrimSpace(grant.PlanCode) != "" {
+			rewardPlanCode = grant.PlanCode
+		}
+	} else if referral.Status == "reward_completed" {
+		rewardType = "earned_credits"
+		rewardLabel = fmt.Sprintf("%d 奖励积分", inviteRewardCreditsOnQualify)
+		rewardDays = 0
+		rewardPlanCode = ""
+	}
 	return map[string]any{
 		"referral_id":                 referral.ID,
 		"role":                        role,
@@ -617,6 +705,12 @@ func (s *MembershipService) buildInviteRewardRecord(ctx context.Context, userID 
 		"other_nickname":              otherNickname,
 		"records_needed":              recordsNeeded,
 		"reward_credits":              inviteRewardCreditsOnQualify,
+		"reward_type":                 rewardType,
+		"reward_label":                rewardLabel,
+		"reward_days":                 rewardDays,
+		"reward_plan_code":            rewardPlanCode,
+		"membership_grant_start_at":   membershipGrantStartAt,
+		"membership_grant_expires_at": membershipGrantExpiresAt,
 		"requirement_text":            requirementText,
 		"next_action_text":            nextActionText,
 		"first_effective_action_at":   timePtrISO(referral.FirstEffectiveActionAt),
@@ -628,6 +722,23 @@ func (s *MembershipService) buildInviteRewardRecord(ctx context.Context, userID 
 		"created_at":                  timePtrISO(referral.CreatedAt),
 		"updated_at":                  timePtrISO(referral.UpdatedAt),
 	}
+}
+
+func (s *MembershipService) inviteMembershipGrantForRecord(ctx context.Context, referralID, role string) *domain.UserMembershipGrant {
+	grant, err := s.repo.GetMembershipGrantBySourceKey(ctx, inviteMembershipGrantSourceKey(referralID, role))
+	if err != nil {
+		return nil
+	}
+	return grant
+}
+
+func inviteMembershipGrantSourceKey(referralID, role string) string {
+	referralID = strings.TrimSpace(referralID)
+	role = strings.TrimSpace(role)
+	if referralID == "" || role == "" {
+		return ""
+	}
+	return "invite-qualified:" + referralID + ":" + role
 }
 
 func inviteRewardProgress(referral domain.UserInviteReferral, todayCN time.Time) (int, bool) {
@@ -687,10 +798,10 @@ func inviteRewardBlockedReasonLabel(reason *string) string {
 	}
 }
 
-func inviteRewardActionTexts(role string, referral domain.UserInviteReferral, recordsNeeded int, expired bool, blockedReasonLabel string) (string, string) {
-	rewardText := fmt.Sprintf("完成后双方各得 %d 积分", inviteRewardCreditsOnQualify)
+func inviteRewardActionTexts(role string, referral domain.UserInviteReferral, recordsNeeded int, expired bool, blockedReasonLabel string, hasMembershipGrant bool) (string, string) {
+	rewardText := "完成后双方各得" + inviteRewardMembershipLabel
 	if role == "inviter" {
-		rewardText = fmt.Sprintf("好友完成后你们各得 %d 积分", inviteRewardCreditsOnQualify)
+		rewardText = "好友完成后你们各得" + inviteRewardMembershipLabel
 	}
 	switch strings.TrimSpace(referral.Status) {
 	case "pending_qualified":
@@ -702,6 +813,9 @@ func inviteRewardActionTexts(role string, referral domain.UserInviteReferral, re
 		}
 		return fmt.Sprintf("还需完成 %d 个不同自然日的饮食或运动记录，%s", recordsNeeded, rewardText), "完成饮食或运动记录，先点亮第 1 个有效自然日"
 	case "reward_completed":
+		if hasMembershipGrant {
+			return "已完成，双方已获得" + inviteRewardMembershipLabel, "会员奖励已发放"
+		}
 		return fmt.Sprintf("已完成，双方各 +%d 积分", inviteRewardCreditsOnQualify), "奖励已进入奖励积分余额"
 	case "reward_blocked":
 		if blockedReasonLabel != "" {
@@ -1563,13 +1677,19 @@ func (s *MembershipService) buildRewardCenterInviteReward(ctx context.Context, u
 	var inviterSummary any
 	if invitedCount > 0 {
 		inviterSummary = map[string]any{
-			"invited_count":     invitedCount,
-			"completed_count":   completedCount,
-			"pending_count":     pendingCount,
-			"estimated_credits": pendingCount * inviteRewardCreditsOnQualify,
-			"earned_credits":    completedCount * inviteRewardCreditsOnQualify,
-			"reward_credits":    inviteRewardCreditsOnQualify,
-			"records":           inviterRecords,
+			"invited_count":               invitedCount,
+			"completed_count":             completedCount,
+			"pending_count":               pendingCount,
+			"estimated_credits":           pendingCount * inviteRewardCreditsOnQualify,
+			"earned_credits":              completedCount * inviteRewardCreditsOnQualify,
+			"reward_credits":              inviteRewardCreditsOnQualify,
+			"reward_type":                 inviteRewardMembershipType,
+			"reward_label":                inviteRewardMembershipLabel,
+			"reward_days":                 inviteRewardMembershipGrantDays,
+			"reward_plan_code":            inviteRewardMembershipPlanCode,
+			"estimated_membership_grants": pendingCount,
+			"earned_membership_grants":    completedCount,
+			"records":                     inviterRecords,
 		}
 	}
 
@@ -1582,6 +1702,10 @@ func (s *MembershipService) buildRewardCenterInviteReward(ctx context.Context, u
 			"required_days":    inviteRewardRequiredDays,
 			"remaining_days":   remainingDays,
 			"reward_credits":   inviteRewardCreditsOnQualify,
+			"reward_type":      inviteeRecord["reward_type"],
+			"reward_label":     inviteeRecord["reward_label"],
+			"reward_days":      inviteeRecord["reward_days"],
+			"reward_plan_code": inviteeRecord["reward_plan_code"],
 			"deadline_text":    inviteRewardDeadlineText(inviteeRecord),
 			"next_action_text": inviteeRecord["next_action_text"],
 			"record":           inviteeRecord,
@@ -1646,7 +1770,7 @@ func (s *MembershipService) cleanupExpiredPendingReferrals(ctx context.Context, 
 			continue
 		}
 		if _, err := s.repo.UpdateInviteReferral(ctx, row.ID, map[string]any{
-			"status":        "reward_blocked",
+			"status":         "reward_blocked",
 			"blocked_reason": "qualification_window_expired",
 		}); err != nil {
 			slog.Warn("cleanupExpiredPendingReferrals: failed to update referral", "id", row.ID, "err", err)

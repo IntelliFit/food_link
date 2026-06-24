@@ -45,6 +45,8 @@ type mockMembershipRepo struct {
 	inviteReferral                *domain.UserInviteReferral
 	pendingInviteReferrals        []domain.UserInviteReferral
 	inviteReferralsForUser        []domain.UserInviteReferral
+	membershipGrantsBySourceKey   map[string]*domain.UserMembershipGrant
+	membershipsByUser             map[string]*domain.UserMembership
 	activeInviteRewards           []domain.UserInviteReferral
 	shareEvents                   []domain.UserCreditBonusEvent
 	completedInviteRewardsInMonth int
@@ -116,9 +118,19 @@ func (m *mockMembershipRepo) GetPaymentTestAccess(ctx context.Context, userID st
 	return &domain.PaymentTestAccess{}, nil
 }
 func (m *mockMembershipRepo) GetUserProMembership(ctx context.Context, userID string) (*domain.UserMembership, error) {
+	if m.membershipsByUser != nil {
+		return m.membershipsByUser[userID], nil
+	}
 	return m.membership, nil
 }
 func (m *mockMembershipRepo) GetActiveMembership(ctx context.Context, userID string) (*domain.UserMembership, error) {
+	if m.membershipsByUser != nil {
+		membership := m.membershipsByUser[userID]
+		if membership != nil && membership.Status == "active" {
+			return membership, nil
+		}
+		return nil, nil
+	}
 	if m.membership != nil && m.membership.Status == "active" {
 		return m.membership, nil
 	}
@@ -126,6 +138,13 @@ func (m *mockMembershipRepo) GetActiveMembership(ctx context.Context, userID str
 }
 func (m *mockMembershipRepo) SaveMembership(ctx context.Context, userID string, updates map[string]any) (*domain.UserMembership, error) {
 	m.saveMembershipCalls++
+	if m.membershipsByUser != nil {
+		if m.membershipsByUser[userID] == nil {
+			m.membershipsByUser[userID] = &domain.UserMembership{ID: "um-" + userID, UserID: userID}
+		}
+		m.membership = m.membershipsByUser[userID]
+		defer func() { m.membershipsByUser[userID] = m.membership }()
+	}
 	if m.membership == nil {
 		m.membership = &domain.UserMembership{ID: "um1", UserID: userID}
 	}
@@ -151,6 +170,75 @@ func (m *mockMembershipRepo) SaveMembership(ctx context.Context, userID string, 
 		m.membership.DailyCredits = v
 	}
 	return m.membership, nil
+}
+func (m *mockMembershipRepo) GetMembershipGrantBySourceKey(ctx context.Context, sourceKey string) (*domain.UserMembershipGrant, error) {
+	if m.membershipGrantsBySourceKey == nil {
+		return nil, nil
+	}
+	return m.membershipGrantsBySourceKey[sourceKey], nil
+}
+func (m *mockMembershipRepo) GrantMembership(ctx context.Context, input domain.MembershipGrantInput) (*domain.UserMembershipGrant, *domain.UserMembership, bool, error) {
+	if m.membershipGrantsBySourceKey == nil {
+		m.membershipGrantsBySourceKey = map[string]*domain.UserMembershipGrant{}
+	}
+	if existing := m.membershipGrantsBySourceKey[input.SourceKey]; existing != nil {
+		membership, _ := m.GetUserProMembership(ctx, input.UserID)
+		return existing, membership, false, nil
+	}
+	if m.membershipsByUser == nil {
+		m.membershipsByUser = map[string]*domain.UserMembership{}
+		if m.membership != nil && m.membership.UserID != "" {
+			m.membershipsByUser[m.membership.UserID] = m.membership
+		}
+	}
+	now := time.Now()
+	current := m.membershipsByUser[input.UserID]
+	start := now
+	firstActivatedAt := now
+	planCode := input.PlanCode
+	dailyCredits := input.DailyCredits
+	if current != nil && current.Status == "active" && current.ExpiresAt != nil && current.ExpiresAt.After(now) {
+		start = *current.ExpiresAt
+		if current.FirstActivatedAt != nil {
+			firstActivatedAt = *current.FirstActivatedAt
+		}
+		if current.CurrentPlanCode != nil && *current.CurrentPlanCode != "" {
+			planCode = *current.CurrentPlanCode
+		}
+		if current.DailyCredits > 0 {
+			dailyCredits = current.DailyCredits
+		}
+	}
+	expires := start.AddDate(0, 0, input.GrantDays)
+	referralID := input.ReferralID
+	role := input.Role
+	grant := &domain.UserMembershipGrant{
+		ID:         "grant-" + input.SourceKey,
+		UserID:     input.UserID,
+		SourceType: input.SourceType,
+		SourceKey:  input.SourceKey,
+		PlanCode:   planCode,
+		GrantDays:  input.GrantDays,
+		StartsAt:   &start,
+		ExpiresAt:  &expires,
+		ReferralID: &referralID,
+		Role:       &role,
+		Status:     "applied",
+		Meta:       input.Meta,
+	}
+	m.membershipGrantsBySourceKey[input.SourceKey] = grant
+	if current == nil {
+		current = &domain.UserMembership{ID: "um-" + input.UserID, UserID: input.UserID, FirstActivatedAt: &firstActivatedAt}
+	}
+	current.CurrentPlanCode = &planCode
+	current.Status = "active"
+	if current.CurrentPeriodStart == nil || current.ExpiresAt == nil || !current.ExpiresAt.After(now) {
+		current.CurrentPeriodStart = &start
+	}
+	current.ExpiresAt = &expires
+	current.DailyCredits = dailyCredits
+	m.membershipsByUser[input.UserID] = current
+	return grant, current, true, nil
 }
 func (m *mockMembershipRepo) CreatePayment(ctx context.Context, p *domain.MembershipPayment) error {
 	m.payment = p
@@ -878,6 +966,9 @@ func TestMembershipService_ActivateInviteReferralSecondDayAwardsBothSides(t *tes
 	created := time.Now().AddDate(0, 0, -2)
 	repo := &mockMembershipRepo{
 		user: &membershiprepo.User{ID: "invitee"},
+		planByCode: map[string]*domain.MembershipPlan{
+			"light_monthly": {Code: "light_monthly", DailyCredits: 8, IsActive: true},
+		},
 		inviteReferral: &domain.UserInviteReferral{
 			ID:                     "ref1",
 			InviterUserID:          "inviter",
@@ -894,6 +985,104 @@ func TestMembershipService_ActivateInviteReferralSecondDayAwardsBothSides(t *tes
 	require.NotNil(t, ref)
 	assert.Equal(t, "reward_completed", ref.Status)
 	assert.NotNil(t, ref.RewardStartDate)
+	assert.NotNil(t, ref.RewardEndDate)
+	require.Len(t, repo.membershipGrantsBySourceKey, 2)
+	inviterGrant := repo.membershipGrantsBySourceKey["invite-qualified:ref1:inviter"]
+	inviteeGrant := repo.membershipGrantsBySourceKey["invite-qualified:ref1:invitee"]
+	require.NotNil(t, inviterGrant)
+	require.NotNil(t, inviteeGrant)
+	assert.Equal(t, "light_monthly", inviterGrant.PlanCode)
+	assert.Equal(t, "light_monthly", inviteeGrant.PlanCode)
+	assert.Equal(t, 7, inviterGrant.GrantDays)
+	assert.Equal(t, 7, inviteeGrant.GrantDays)
+	assert.Empty(t, repo.ledgerByReasonSource)
+}
+
+func TestMembershipService_ActivateInviteReferralDoesNotDuplicateMembershipGrant(t *testing.T) {
+	first := time.Now().AddDate(0, 0, -1)
+	created := time.Now().AddDate(0, 0, -2)
+	ref := &domain.UserInviteReferral{
+		ID:                     "ref1",
+		InviterUserID:          "inviter",
+		InviteeUserID:          "invitee",
+		Status:                 "pending_qualified",
+		FirstEffectiveActionAt: &first,
+		CreatedAt:              &created,
+	}
+	repo := &mockMembershipRepo{
+		planByCode: map[string]*domain.MembershipPlan{
+			"light_monthly": {Code: "light_monthly", DailyCredits: 8, IsActive: true},
+		},
+		inviteReferral: ref,
+		membershipGrantsBySourceKey: map[string]*domain.UserMembershipGrant{
+			"invite-qualified:ref1:inviter": {
+				ID:        "existing-inviter",
+				UserID:    "inviter",
+				SourceKey: "invite-qualified:ref1:inviter",
+				PlanCode:  "light_monthly",
+				GrantDays: 7,
+				Status:    "applied",
+			},
+			"invite-qualified:ref1:invitee": {
+				ID:        "existing-invitee",
+				UserID:    "invitee",
+				SourceKey: "invite-qualified:ref1:invitee",
+				PlanCode:  "light_monthly",
+				GrantDays: 7,
+				Status:    "applied",
+			},
+		},
+	}
+	svc := NewMembershipService(repo)
+
+	_, err := svc.ActivatePendingInviteReferralOnFirstValidUse(context.Background(), "invitee", "exercise_log")
+	require.NoError(t, err)
+	require.Len(t, repo.membershipGrantsBySourceKey, 2)
+	assert.Equal(t, "existing-inviter", repo.membershipGrantsBySourceKey["invite-qualified:ref1:inviter"].ID)
+	assert.Equal(t, "existing-invitee", repo.membershipGrantsBySourceKey["invite-qualified:ref1:invitee"].ID)
+}
+
+func TestMembershipService_ActivateInviteReferralExtendsActiveHigherMembership(t *testing.T) {
+	first := time.Now().AddDate(0, 0, -1)
+	created := time.Now().AddDate(0, 0, -2)
+	standard := "standard_monthly"
+	expires := time.Now().AddDate(0, 0, 12)
+	repo := &mockMembershipRepo{
+		planByCode: map[string]*domain.MembershipPlan{
+			"light_monthly": {Code: "light_monthly", DailyCredits: 8, IsActive: true},
+		},
+		membershipsByUser: map[string]*domain.UserMembership{
+			"inviter": {
+				ID:              "um-inviter",
+				UserID:          "inviter",
+				CurrentPlanCode: &standard,
+				Status:          "active",
+				ExpiresAt:       &expires,
+				DailyCredits:    20,
+			},
+		},
+		inviteReferral: &domain.UserInviteReferral{
+			ID:                     "ref1",
+			InviterUserID:          "inviter",
+			InviteeUserID:          "invitee",
+			Status:                 "pending_qualified",
+			FirstEffectiveActionAt: &first,
+			CreatedAt:              &created,
+		},
+	}
+	svc := NewMembershipService(repo)
+
+	_, err := svc.ActivatePendingInviteReferralOnFirstValidUse(context.Background(), "invitee", "exercise_log")
+	require.NoError(t, err)
+	inviterMembership := repo.membershipsByUser["inviter"]
+	require.NotNil(t, inviterMembership)
+	require.NotNil(t, inviterMembership.CurrentPlanCode)
+	assert.Equal(t, "standard_monthly", *inviterMembership.CurrentPlanCode)
+	assert.Equal(t, 20, inviterMembership.DailyCredits)
+	assert.True(t, inviterMembership.ExpiresAt.Equal(expires.AddDate(0, 0, 7)))
+	inviterGrant := repo.membershipGrantsBySourceKey["invite-qualified:ref1:inviter"]
+	require.NotNil(t, inviterGrant)
+	assert.Equal(t, "standard_monthly", inviterGrant.PlanCode)
 }
 
 func TestMembershipService_GetInviteRewardStatusRecordsInviteePendingNoAction(t *testing.T) {

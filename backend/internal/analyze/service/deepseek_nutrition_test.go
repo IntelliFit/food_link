@@ -3,6 +3,7 @@ package service
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"testing"
@@ -10,6 +11,40 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestDeepSeekNutritionEstimator_EstimatePromptRequiresMicronutrients(t *testing.T) {
+	estimator := NewDeepSeekNutritionEstimator("test-key", "", "")
+	var promptBody map[string]any
+	estimator.client = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		require.NoError(t, json.NewDecoder(req.Body).Decode(&promptBody))
+		body := `{"choices":[{"message":{"content":"{\"items\":[{\"index\":0,\"unitNutritionPer100g\":{\"calories\":100,\"protein\":3,\"carbs\":20,\"fat\":1,\"fiber\":2,\"sugar\":4,\"sodiumMg\":15,\"calciumMg\":20,\"vitaminCMg\":8,\"vitaminB12Mcg\":0.3}}]}"}}]}`
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(bytes.NewBufferString(body)),
+			Header:     make(http.Header),
+		}, nil
+	})}
+
+	_, err := estimator.Estimate(context.Background(), []UnresolvedNutritionCandidate{{
+		Index:                0,
+		Name:                 "测试食物",
+		EstimatedWeightGrams: 100,
+	}}, "")
+	require.NoError(t, err)
+
+	messages, ok := promptBody["messages"].([]any)
+	require.True(t, ok)
+	require.Len(t, messages, 2)
+	userMessage, ok := messages[1].(map[string]any)
+	require.True(t, ok)
+	prompt, ok := userMessage["content"].(string)
+	require.True(t, ok)
+	assert.Contains(t, prompt, "维生素和矿物质")
+	assert.Contains(t, prompt, "不要把微量元素随意填 0")
+	assert.Contains(t, prompt, "calciumMg")
+	assert.Contains(t, prompt, "vitaminCMg")
+	assert.Contains(t, prompt, "vitaminB12Mcg")
+}
 
 func TestDeepSeekNutritionEstimator_EstimateParsesMicronutrients(t *testing.T) {
 	estimator := NewDeepSeekNutritionEstimator("test-key", "", "")

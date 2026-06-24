@@ -114,8 +114,9 @@ func (e *QwenNutritionEstimator) Estimate(ctx context.Context, candidates []Unre
 			"只返回 JSON，不要解释。",
 			"输出字段使用 camelCase。",
 			"所有字段必须为数字；不要因为不确定就把热量或宏量营养填 0，只有白水、无糖茶、黑咖啡等天然接近 0 时才可接近 0。",
+			aiNutritionMicronutrientRequirement,
 			"如果名称包含清炒、清蒸、炖、红烧、油麦菜、青菜、蔬菜等信息，请按常见熟制菜估算，不要误判成肉类或补剂。",
-			"热量单位 kcal，其余 protein/carbs/fat/fiber/sugar 单位 g。",
+			"热量单位 kcal；protein/carbs/fat/fiber/sugar/saturatedFat 单位 g；cholesterolMg、sodiumMg、potassiumMg、calciumMg、ironMg、magnesiumMg、zincMg 和维生素中以 Mg 结尾的字段单位为 mg；vitaminARaeMcg、vitaminDMcg、vitaminKMcg、folateMcg、vitaminB12Mcg 单位为 mcg。",
 			"热量必须与宏量营养基本自洽：calories 不应低于 protein*4 + carbs*4 + fat*9 太多。",
 			"每100g 的 protein/carbs/fat/fiber/sugar/saturatedFat 不得为负，也不得超过 100g；sugar 不得超过 carbs，saturatedFat 不得超过 fat。",
 		},
@@ -129,7 +130,7 @@ func (e *QwenNutritionEstimator) Estimate(ctx context.Context, candidates []Unre
 		},
 	}
 	bytes, _ := json.Marshal(userPrompt)
-	prompt := "你是营养数据库补全助手。请用常见营养数据库口径保守估算，避免 0 营养和宏量不闭合。\n" + string(bytes)
+	prompt := "你是营养数据库补全助手。请用常见营养数据库口径保守估算，补齐维生素和矿物质，避免 0 营养和宏量不闭合。\n" + string(bytes)
 	parsed, err := e.client.Analyze(ctx, prompt, "")
 	if err != nil {
 		return nil, err

@@ -160,7 +160,7 @@ function RewardCenterPage() {
           <View className='reward-invite-section__head'>
             <View>
               <Text className='reward-invite-section__title'>邀请奖励</Text>
-              <Text className='reward-invite-section__hint'>邀请好友或完成受邀记录，双方各得 15 积分</Text>
+              <Text className='reward-invite-section__hint'>邀请好友或完成受邀记录，双方各得一周轻度版会员</Text>
             </View>
           </View>
 
@@ -173,7 +173,7 @@ function RewardCenterPage() {
                     已记录 {inviteReward.as_invitee_summary.completed_days}/{inviteReward.as_invitee_summary.required_days} 个自然日
                   </Text>
                 </View>
-                <Text className='reward-invite-card__bonus'>+{inviteReward.as_invitee_summary.reward_credits} 积分</Text>
+                <Text className='reward-invite-card__bonus'>{formatInviteRewardLabel(inviteReward.as_invitee_summary.reward_label)}</Text>
               </View>
               <View className='reward-invite-progress'>
                 <View
@@ -191,7 +191,7 @@ function RewardCenterPage() {
               </View>
               <Text className='reward-invite-card__desc'>
                 {inviteReward.as_invitee_summary.remaining_days > 0
-                  ? `还差 ${inviteReward.as_invitee_summary.remaining_days} 个不同自然日，记满后你和邀请人各得 ${inviteReward.as_invitee_summary.reward_credits} 积分`
+                  ? `还差 ${inviteReward.as_invitee_summary.remaining_days} 个不同自然日，记满后你和邀请人各得${formatInviteRewardLabel(inviteReward.as_invitee_summary.reward_label)}`
                   : `已满足 2 个不同自然日记录条件，奖励状态：${inviteReward.as_invitee_summary.record?.status_label || '已完成'}`}
               </Text>
               <Text className='reward-invite-card__note'>
@@ -207,7 +207,7 @@ function RewardCenterPage() {
                   <Text className='reward-invite-card__eyebrow'>我是邀请人</Text>
                   <Text className='reward-invite-card__title'>成功完成 {inviteReward.as_inviter_summary.completed_count} 次邀请</Text>
                 </View>
-                <Text className='reward-invite-card__bonus'>预计 +{inviteReward.as_inviter_summary.estimated_credits} 积分</Text>
+                <Text className='reward-invite-card__bonus'>{formatInviteRewardLabel(inviteReward.as_inviter_summary.reward_label)}</Text>
               </View>
               <View className='reward-invite-stats'>
                 <View className='reward-invite-stat'>
@@ -219,12 +219,12 @@ function RewardCenterPage() {
                   <Text className='reward-invite-stat__label'>已达标</Text>
                 </View>
                 <View className='reward-invite-stat'>
-                  <Text className='reward-invite-stat__value'>{inviteReward.as_inviter_summary.estimated_credits}</Text>
-                  <Text className='reward-invite-stat__label'>预计可得</Text>
+                  <Text className='reward-invite-stat__value'>{inviteReward.as_inviter_summary.pending_count}</Text>
+                  <Text className='reward-invite-stat__label'>待达标</Text>
                 </View>
               </View>
               <Text className='reward-invite-card__desc'>
-                已到账 {inviteReward.as_inviter_summary.earned_credits} 积分，仍有 {inviteReward.as_inviter_summary.pending_count} 位好友达标后可继续获得奖励。
+                已送出 {inviteReward.as_inviter_summary.completed_count} 份{formatInviteRewardLabel(inviteReward.as_inviter_summary.reward_label)}，仍有 {inviteReward.as_inviter_summary.pending_count} 位好友达标后可继续获得。
               </Text>
               {Array.isArray(inviteReward.as_inviter_summary.records) && inviteReward.as_inviter_summary.records.length > 0 && (
                 <View className='reward-invite-friend-list'>
@@ -289,6 +289,11 @@ function formatTaskName(task: RewardCenterTask): string {
 
 function hasInviteReward(summary: InviteRewardCenterSummary | null): boolean {
   return Boolean(summary?.as_invitee_summary || summary?.as_inviter_summary)
+}
+
+function formatInviteRewardLabel(value?: string | null): string {
+  const label = String(value || '').trim()
+  return label || '一周轻度版会员'
 }
 
 function inviteeProgressPercent(completedDays: number, requiredDays: number): number {
