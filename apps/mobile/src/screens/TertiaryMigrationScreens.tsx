@@ -40,6 +40,7 @@ import { AppButton } from '../components/AppButton'
 import { InsightMarkdownView } from '../components/InsightMarkdownView'
 import { PetAvatar, petMoodLabel, petStateLabel } from '../components/PetAvatar'
 import { AppAlert as Alert } from '../providers/DialogProvider'
+import { emitFoodExpiryChangedEvent, emitHomeDashboardRefreshEvent } from '../utils/home-events'
 import type { LocationSelection, RootStackParamList } from '../navigation/types'
 import { colors } from '../theme'
 import { formatDateTime, todayKey } from '../utils/date'
@@ -1344,6 +1345,7 @@ export function TrendDetailScreen() {
     setMutatingId(recordId)
     try {
       await apiClient.deleteBodyWeightRecord(recordId)
+      emitHomeDashboardRefreshEvent({ date: entry.date, force: true })
       await load()
       Alert.alert('已删除', '体重记录已删除')
     } catch (error) {
@@ -1369,6 +1371,7 @@ export function TrendDetailScreen() {
     setMutatingId(logId)
     try {
       await apiClient.deleteBodyWaterLog(logId)
+      emitHomeDashboardRefreshEvent({ date: log.date || selectedWaterDate, force: true })
       await load()
       Alert.alert('已删除', '喝水记录已删除')
     } catch (error) {
@@ -1394,6 +1397,7 @@ export function TrendDetailScreen() {
     setMutatingId(logId)
     try {
       await apiClient.deleteExerciseLog(logId)
+      emitHomeDashboardRefreshEvent({ date: trendExerciseDate(log), force: true })
       await load()
       Alert.alert('已删除', '运动记录已删除')
     } catch (error) {
@@ -3439,6 +3443,7 @@ export function ExpiryEditScreen() {
         setItem(data.item)
         Alert.alert('已保存', '保质期记录已加入')
       }
+      emitFoodExpiryChangedEvent({ force: true })
       navigation.goBack()
     } catch (error) {
       showError('保存保质期失败', error)

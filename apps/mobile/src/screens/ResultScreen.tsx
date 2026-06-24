@@ -14,6 +14,7 @@ import type { RootStackParamList } from '../navigation/types'
 import { useAppDialog } from '../providers/DialogProvider'
 import { colors } from '../theme'
 import { userFacingErrorMessage } from '../utils/errors'
+import { emitHomeIntakeDataChangedEvent } from '../utils/home-events'
 
 type ResultRoute = RouteProp<RootStackParamList, 'Result'>
 
@@ -134,6 +135,7 @@ export function ResultScreen() {
       if (contextAdvice) payload.context_advice = contextAdvice
 
       const saved = await apiClient.saveFoodRecord(payload)
+      emitHomeIntakeDataChangedEvent({ date, force: true })
       const message = saved.already_saved ? '这条记录之前已经保存。' : '已记录到当天饮食。'
       if (!saved.id) {
         const result = await dialog.showDialog({

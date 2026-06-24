@@ -43,6 +43,11 @@ import { useAppDialog } from '../providers/DialogProvider'
 import { colors } from '../theme'
 import { formatDateTime, formatShortDate, todayKey } from '../utils/date'
 import { userFacingErrorMessage, userFacingMessage } from '../utils/errors'
+import {
+  emitFoodExpiryChangedEvent,
+  emitHomeDashboardRefreshEvent,
+  emitHomeIntakeDataChangedEvent,
+} from '../utils/home-events'
 
 const appIcon = require('../../assets/icon.png')
 
@@ -124,6 +129,11 @@ const expiryStorageOptions = [
   { value: 'room_temp', label: '常温' },
   { value: 'frozen', label: '冷冻' },
 ] as const
+
+function dateKeyFromDateTime(value?: string | null): string | undefined {
+  const match = String(value || '').match(/^\d{4}-\d{2}-\d{2}/)
+  return match?.[0]
+}
 const waterPresets = [150, 250, 350, 500]
 const exercisePresets = ['跑步30分钟', '游泳45分钟', '瑜伽1小时', '骑车20分钟', '健身40分钟', '跳绳15分钟', '散步45分钟', 'HIIT20分钟']
 const CIRCLE_POST_MAX_IMAGES = 3
@@ -796,6 +806,7 @@ export function DayRecordScreen() {
     if (!confirmed) return
     try {
       await apiClient.deleteFoodRecord(recordId)
+      emitHomeIntakeDataChangedEvent({ date, force: true })
       await load()
     } catch (error) {
       await showError(dialog, '删除失败', error)
@@ -827,6 +838,7 @@ export function DayRecordScreen() {
           ...summarizeFoodRecordRows(nextItems),
         })
       }
+      emitHomeIntakeDataChangedEvent({ date: dateKeyFromDateTime(record.record_time) || date, force: true })
       await load()
     } catch (error) {
       await showError(dialog, '删除失败', error)
@@ -1095,6 +1107,7 @@ export function RecordDetailScreen() {
       setRecord(data.record)
       syncEditor(data.record)
       setEditing(false)
+      emitHomeIntakeDataChangedEvent({ date: dateKeyFromDateTime(data.record.record_time || record.record_time), force: true })
       void dialog.alert('已保存', '记录已更新', 'success')
     } catch (error) {
       void dialog.alert('保存失败', userFacingErrorMessage(error), 'danger')
@@ -1115,6 +1128,7 @@ export function RecordDetailScreen() {
 
     try {
       await apiClient.deleteFoodRecord(route.params.recordId)
+      emitHomeIntakeDataChangedEvent({ date: dateKeyFromDateTime(record?.record_time), force: true })
       await dialog.alert('已删除', '记录已删除', 'success')
       navigation.goBack()
     } catch (error) {
@@ -1772,12 +1786,13 @@ export function AnalyzeHistoryScreen() {
 
 export function TextRecordScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
+  const route = useRoute<RouteProp<RootStackParamList, 'TextRecord'>>()
   const dialog = useAppDialog()
   const insets = useSafeAreaInsets()
   const [text, setText] = useState('')
   const [additionalContext, setAdditionalContext] = useState('')
-  const [date, setDate] = useState(todayKey())
-  const [mealType, setMealType] = useState<MealType>(inferDefaultMealTypeFromLocalTime())
+  const [date, setDate] = useState(route.params?.date || todayKey())
+  const [mealType, setMealType] = useState<MealType>(route.params?.mealType || inferDefaultMealTypeFromLocalTime())
   const [dietGoal, setDietGoal] = useState<TextRecordDietGoal>('none')
   const [activityTiming, setActivityTiming] = useState<TextRecordActivityTiming>('none')
   const [membership, setMembership] = useState<MembershipStatus | null>(null)
@@ -2172,6 +2187,7 @@ export function ManualRecordScreen() {
         mealType,
         date,
       })
+      emitHomeIntakeDataChangedEvent({ date, force: true })
       const message = `已将 ${selectedItems.length} 项食物写入${getMealTypeLabel(mealType)}。`
       if (!saved.id) {
         const result = await dialog.showDialog({
@@ -3251,6 +3267,7 @@ export function BodyMetricRecordScreen() {
           return
         }
         await apiClient.saveBodyWeightRecord(nextValue, date, `weight-${date}-${Date.now()}`)
+        emitHomeDashboardRefreshEvent({ date, force: true })
       } else if (type === 'water') {
         const amount = overrideValue ?? Number(value)
         if (!Number.isFinite(amount) || amount <= 0 || amount > 5000) {
@@ -3258,6 +3275,7 @@ export function BodyMetricRecordScreen() {
           return
         }
         await apiClient.addBodyWaterLog(Math.round(amount), date)
+        emitHomeDashboardRefreshEvent({ date, force: true })
       } else {
         const result = await apiClient.createExerciseLog({ exerciseDesc, date, imageUrl: exerciseImageUrl })
         const taskId = String(result.task_id || result.taskId || '').trim()
@@ -3289,6 +3307,7 @@ export function BodyMetricRecordScreen() {
           const task = await apiClient.getAnalyzeTask(taskId)
           if (task.status === 'done') {
             setExerciseTask({ taskId, desc, status: 'done' })
+            emitHomeDashboardRefreshEvent({ date, force: true })
             await load()
             return
           }
@@ -3349,6 +3368,7 @@ export function BodyMetricRecordScreen() {
     setMutatingId(recordId)
     try {
       await apiClient.deleteBodyWeightRecord(recordId)
+      emitHomeDashboardRefreshEvent({ date, force: true })
       await load()
     } catch (error) {
       await dialog.alert('删除体重记录失败', userFacingErrorMessage(error), 'danger')
@@ -3381,6 +3401,7 @@ export function BodyMetricRecordScreen() {
     setMutatingId(logId)
     try {
       await apiClient.deleteBodyWaterLog(logId)
+      emitHomeDashboardRefreshEvent({ date, force: true })
       await load()
     } catch (error) {
       await dialog.alert('删除喝水记录失败', userFacingErrorMessage(error), 'danger')
@@ -3411,6 +3432,7 @@ export function BodyMetricRecordScreen() {
     setMutatingId('water-reset')
     try {
       await apiClient.resetBodyWaterLogs(date)
+      emitHomeDashboardRefreshEvent({ date, force: true })
       await load()
     } catch (error) {
       await dialog.alert('清空喝水记录失败', userFacingErrorMessage(error), 'danger')
@@ -3435,6 +3457,7 @@ export function BodyMetricRecordScreen() {
     setMutatingId(logId)
     try {
       await apiClient.deleteExerciseLog(logId)
+      emitHomeDashboardRefreshEvent({ date, force: true })
       await load()
     } catch (error) {
       await dialog.alert('删除运动记录失败', userFacingErrorMessage(error), 'danger')
@@ -3810,6 +3833,7 @@ export function ExpiryScreen() {
     setLoading(true)
     try {
       await apiClient.updateFoodExpiryStatus(item.id, status)
+      emitFoodExpiryChangedEvent({ force: true })
       await load()
     } catch (error) {
       await dialog.alert('更新失败', userFacingErrorMessage(error), 'danger')

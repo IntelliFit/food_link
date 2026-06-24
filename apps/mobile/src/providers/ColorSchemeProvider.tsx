@@ -1,77 +1,64 @@
-import { createContext, useCallback, useContext, useEffect, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type PropsWithChildren } from 'react'
+import { Appearance, type ColorSchemeName } from 'react-native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 
-type ColorScheme = 'light' | 'dark'
-
-interface ColorSchemeContextValue {
-  scheme: ColorScheme
+export type ColorSchemeContextValue = {
   isDark: boolean
-  setScheme: (scheme: ColorScheme) => void
   toggleScheme: () => void
 }
 
-const ColorSchemeContext = createContext<ColorSchemeContextValue>({
-  scheme: 'light',
-  isDark: false,
-  setScheme: () => undefined,
-  toggleScheme: () => undefined,
-})
+const STORAGE_KEY = 'food_link_mobile_color_scheme'
 
-const STORAGE_KEY = 'food_link_color_scheme_v1'
+const ColorSchemeContext = createContext<ColorSchemeContextValue | null>(null)
 
-export function ColorSchemeProvider({ children }: { children: React.ReactNode }) {
-  const [scheme, setSchemeState] = useState<ColorScheme>('light')
-  const [ready, setReady] = useState(false)
+function isDarkScheme(scheme: ColorSchemeName | null | undefined): boolean {
+  return scheme === 'dark'
+}
+
+export function ColorSchemeProvider({ children }: PropsWithChildren<unknown>) {
+  const [isDark, setIsDark] = useState<boolean>(() => isDarkScheme(Appearance.getColorScheme()))
 
   useEffect(() => {
-    let active = true
-    AsyncStorage.getItem(STORAGE_KEY)
-      .then((value) => {
-        if (!active) return
-        if (value === 'dark' || value === 'light') {
-          setSchemeState(value)
-        }
-        setReady(true)
-      })
-      .catch(() => {
-        if (active) setReady(true)
-      })
+    let canceled = false
+    void AsyncStorage.getItem(STORAGE_KEY).then((stored) => {
+      if (canceled) return
+      if (!stored) return
+      setIsDark(stored === 'dark')
+    })
     return () => {
-      active = false
+      canceled = true
     }
   }, [])
 
-  const setScheme = useCallback((next: ColorScheme) => {
-    setSchemeState(next)
-    void AsyncStorage.setItem(STORAGE_KEY, next)
-  }, [])
+  useEffect(() => {
+    void AsyncStorage.setItem(STORAGE_KEY, isDark ? 'dark' : 'light').catch(() => {
+      // ignore persistence failures
+    })
+  }, [isDark])
 
   const toggleScheme = useCallback(() => {
-    setSchemeState((current) => {
-      const next = current === 'dark' ? 'light' : 'dark'
-      void AsyncStorage.setItem(STORAGE_KEY, next)
-      return next
-    })
+    setIsDark((current) => !current)
   }, [])
 
-  if (!ready) {
-    return null
-  }
-
-  return (
-    <ColorSchemeContext.Provider
-      value={{
-        scheme,
-        isDark: scheme === 'dark',
-        setScheme,
-        toggleScheme,
-      }}
-    >
-      {children}
-    </ColorSchemeContext.Provider>
+  const value = useMemo(
+    () => ({
+      isDark,
+      toggleScheme,
+    }),
+    [isDark, toggleScheme],
   )
+
+  return <ColorSchemeContext.Provider value={value}>{children}</ColorSchemeContext.Provider>
 }
 
-export function useColorScheme() {
-  return useContext(ColorSchemeContext)
+export function useColorScheme(): ColorSchemeContextValue {
+  const context = useContext(ColorSchemeContext)
+  if (context) return context
+
+  return {
+    isDark: isDarkScheme(Appearance.getColorScheme()),
+    toggleScheme: () => {
+      // fallback for tests/edge cases where provider is missing
+    },
+  }
 }

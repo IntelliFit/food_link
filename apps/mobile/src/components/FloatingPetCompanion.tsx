@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { PetSummary } from '@food-link/core'
-import { ChevronLeft, ChevronRight, MessageCircle, Minus, PawPrint } from 'lucide-react-native'
+import { ChevronLeft, ChevronRight, Gift, MessageCircle, Minus, PawPrint } from 'lucide-react-native'
 import { Animated, PanResponder, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { colors, shadow } from '../theme'
@@ -17,6 +17,8 @@ interface FloatingPetCompanionProps {
   onCollapsedChange: (collapsed: boolean) => void
   onOpenHome: () => void
   onOpenChat: () => void
+  onClaimEvent?: () => void
+  claiming?: boolean
 }
 
 type DockSide = 'left' | 'right'
@@ -34,6 +36,8 @@ export function FloatingPetCompanion({
   onCollapsedChange,
   onOpenHome,
   onOpenChat,
+  onClaimEvent,
+  claiming = false,
 }: FloatingPetCompanionProps) {
   const insets = useSafeAreaInsets()
   const { width: windowWidth, height: windowHeight } = useWindowDimensions()
@@ -164,6 +168,11 @@ export function FloatingPetCompanion({
     onCollapsedChange(true)
   }, [canPress, onCollapsedChange])
 
+  const claimEvent = useCallback(() => {
+    if (!canPress() || claiming) return
+    onClaimEvent?.()
+  }, [canPress, claiming, onClaimEvent])
+
   const pet = summary.pet
   const levelProgress = Math.max(0, Math.min(100, pet?.level_progress || 0))
   const moodText = petMoodLabel(summary.status?.mood).replace(/^状态：/, '')
@@ -226,6 +235,11 @@ export function FloatingPetCompanion({
             </View>
           </Pressable>
           <View style={styles.actions}>
+            {canClaim ? (
+              <Pressable accessibilityLabel="领取伙伴奖励" accessibilityRole="button" disabled={claiming} style={[styles.iconButton, styles.rewardIconButton, claiming && styles.disabledButton]} onPress={claimEvent}>
+                <Gift size={17} color="#b7791f" strokeWidth={2.5} />
+              </Pressable>
+            ) : null}
             <Pressable accessibilityLabel="打开伙伴主页" accessibilityRole="button" style={styles.iconButton} onPress={openHome}>
               <PawPrint size={17} color={colors.brandDark} strokeWidth={2.5} />
             </Pressable>
@@ -343,6 +357,9 @@ const styles = StyleSheet.create({
   pressed: {
     opacity: 0.72,
   },
+  disabledButton: {
+    opacity: 0.55,
+  },
   copy: {
     flex: 1,
     minWidth: 0,
@@ -407,6 +424,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(241, 245, 249, 0.82)',
+  },
+  rewardIconButton: {
+    backgroundColor: '#fff7e6',
   },
   collapsedButton: {
     width: COLLAPSED_SIZE,

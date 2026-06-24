@@ -306,6 +306,7 @@ export interface DashboardTargetsInput {
   carbs_target: number
   fat_target: number
   target_date?: string
+  micro_targets?: Record<string, number>
 }
 
 export interface CreateCirclePostInput {

@@ -113,13 +113,23 @@ function useMicronutrients(intakeData: HomeDashboard['intakeData'] | undefined) 
 
 export interface HomeMicrosSectionProps {
   intakeData?: HomeDashboard['intakeData']
+  dashboardBusy?: boolean
+  isGuest?: boolean
 }
 
 export function HomeMicrosSection({
   intakeData,
+  dashboardBusy = false,
+  isGuest = false,
 }: HomeMicrosSectionProps) {
   const micronutrients = useMicronutrients(intakeData)
-  const hasMicros = micronutrients.some((item) => item.current > 0)
+  const hasMicros = micronutrients.length > 0
+  const statusText = useMemo(() => {
+    if (dashboardBusy) return '同步中'
+    if (hasMicros) return `${micronutrients.length}项`
+    if (isGuest) return '登录后'
+    return '待记录'
+  }, [dashboardBusy, hasMicros, isGuest, micronutrients.length])
 
   return (
     <View style={styles.container}>
@@ -128,11 +138,21 @@ export function HomeMicrosSection({
           <Text style={styles.kicker}>微量营养</Text>
         </View>
         <View style={styles.status}>
-          <Text style={styles.statusText}>{hasMicros ? `${micronutrients.length}项` : '待记录'}</Text>
+          <Text style={styles.statusText}>{statusText}</Text>
         </View>
       </View>
 
-      {hasMicros ? (
+      {dashboardBusy ? (
+        <View style={styles.grid}>
+          {MICRONUTRIENT_CONFIGS.map((item) => (
+            <View key={item.key} style={[styles.card, styles.skeletonCard]}>
+              <View style={[styles.skeleton, styles.skeletonLabel]} />
+              <View style={[styles.skeleton, styles.skeletonValue]} />
+              <View style={[styles.skeleton, styles.skeletonProgress]} />
+            </View>
+          ))}
+        </View>
+      ) : hasMicros ? (
         <View style={styles.grid}>
           {micronutrients.map((item) => {
             const showTarget = item.target > 0
@@ -177,7 +197,7 @@ export function HomeMicrosSection({
         </View>
       ) : (
         <View style={styles.empty}>
-          <Text style={styles.emptyText}>记录饮食后显示微量营养</Text>
+          <Text style={styles.emptyText}>{isGuest ? '登录后显示微量营养' : '记录饮食后显示微量营养'}</Text>
         </View>
       )}
     </View>
@@ -233,6 +253,28 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'transparent',
     width: '24%',
+  },
+  skeletonCard: {
+    backgroundColor: '#f8fafc',
+    borderColor: '#eef2f7',
+  },
+  skeleton: {
+    borderRadius: 999,
+    backgroundColor: '#eef2f7',
+  },
+  skeletonLabel: {
+    width: 32,
+    height: 9,
+  },
+  skeletonValue: {
+    width: 36,
+    height: 14,
+    marginTop: 6,
+  },
+  skeletonProgress: {
+    width: '100%',
+    height: 3,
+    marginTop: 5,
   },
   label: {
     fontSize: 9,

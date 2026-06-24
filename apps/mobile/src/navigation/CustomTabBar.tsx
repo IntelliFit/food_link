@@ -1,13 +1,10 @@
-import { useState } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { CommonActions } from '@react-navigation/native'
 import { IconfontText } from '../components/Iconfont'
 import { useColorScheme } from '../providers/ColorSchemeProvider'
 import { colors, radius, shadow } from '../theme'
-import { RecordActionSheet, type RecordAction } from '../components/RecordActionSheet'
-import type { RootStackParamList } from './types'
+import { requestHomeRecordMenu } from '../utils/home-record-menu'
 
 const TAB_LABELS: Record<string, { label: string; iconClass: string }> = {
   HomeTab: { label: '首页', iconClass: 'iconfont icon-shouye' },
@@ -21,34 +18,13 @@ const TAB_SELECTED_COLOR = colors.tabSelected
 export function CustomTabBar({ state, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets()
   const bottomInset = Math.max(insets.bottom, 8)
-  const [recordMenuVisible, setRecordMenuVisible] = useState(false)
   const { isDark } = useColorScheme()
   const leftRoutes = state.routes.slice(0, 2)
   const rightRoutes = state.routes.slice(2)
 
-  const navigateRecordAction = (action: RecordAction) => {
-    setRecordMenuVisible(false)
-    const rootNavigation = navigation.getParent()
-    const target: keyof RootStackParamList =
-      action === 'camera' || action === 'library'
-        ? 'Analyze'
-        : action === 'text'
-          ? 'TextRecord'
-          : action === 'manual'
-            ? 'ManualRecord'
-            : action === 'packagedFood'
-              ? 'PackagedFoodEdit'
-              : action === 'history'
-                ? 'AnalyzeHistory'
-                : action === 'recipes'
-                  ? 'Recipes'
-                  : action === 'gooseDuckChicken'
-                    ? 'GooseDuckChicken'
-                    : 'FoodLibrary'
-    rootNavigation?.dispatch(CommonActions.navigate(
-      target,
-      action === 'camera' || action === 'library' ? { source: action } : undefined,
-    ))
+  const openHomeRecordMenu = () => {
+    navigation.getParent()?.navigate('HomeTab')
+    void requestHomeRecordMenu()
   }
 
   const renderTab = (route: BottomTabBarProps['state']['routes'][number]) => {
@@ -83,18 +59,13 @@ export function CustomTabBar({ state, navigation }: BottomTabBarProps) {
             accessibilityRole="button"
             accessibilityLabel="记录一餐"
             style={({ pressed }) => [styles.centerButton, pressed && styles.pressed]}
-            onPress={() => setRecordMenuVisible(true)}
+            onPress={() => openHomeRecordMenu()}
           >
             <IconfontText className="iconfont icon-paizhao-xianxing" size={29} color="#fff" />
           </Pressable>
           <View style={styles.side}>{rightRoutes.map(renderTab)}</View>
         </View>
       </View>
-      <RecordActionSheet
-        visible={recordMenuVisible}
-        onClose={() => setRecordMenuVisible(false)}
-        onSelect={navigateRecordAction}
-      />
     </>
   )
 }
