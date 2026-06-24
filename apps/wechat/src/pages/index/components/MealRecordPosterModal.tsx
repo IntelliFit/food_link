@@ -3,8 +3,8 @@ import React, { useCallback, useEffect, useState } from 'react'
 import Taro from '@tarojs/taro'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import {
+  getShareQrEnvVersion,
   getUnlimitedQRCode,
-  getWeappEnvVersion,
   getFriendInviteProfile,
   getPosterCalorieCompare,
   getMyMembership,
@@ -228,7 +228,7 @@ export function MealRecordPosterModal({ visible, record, onClose, onShareContext
         const loadQRImage = async () => {
           const scene = posterInviteCode ? `fi=${posterInviteCode}` : 'share=1'
           try {
-            const { base64 } = await getUnlimitedQRCode(scene, 'pages/index/index', getWeappEnvVersion())
+            const { base64 } = await getUnlimitedQRCode(scene, 'pages/index/index', getShareQrEnvVersion())
             const img = await loadImage(base64)
             if (img) return img
           } catch (e) {

@@ -6,8 +6,8 @@ import {
   getAccessToken,
   getFriendInviteProfile,
   getFriendInviteProfileByCode,
+  getShareQrEnvVersion,
   getUnlimitedQRCode,
-  getWeappEnvVersion,
   showUnifiedApiError,
   type FriendInviteProfile,
 } from '../../../utils/api'
@@ -136,7 +136,7 @@ function InviteFriendsPage() {
 
       try {
         try {
-          const { base64 } = await getUnlimitedQRCode(scene, 'pages/index/index', getWeappEnvVersion())
+          const { base64 } = await getUnlimitedQRCode(scene, 'pages/index/index', getShareQrEnvVersion())
           if (!cancelled) setQrCodeImage(base64)
         } catch (error) {
           console.warn('[invite-friends] qr load failed env=release', error)

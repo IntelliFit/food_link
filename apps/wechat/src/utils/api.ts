@@ -3448,6 +3448,14 @@ export function getWeappEnvVersion(): 'release' | 'trial' | 'develop' {
 }
 
 /**
+ * 分享卡片/海报二维码始终跳正式版小程序。
+ * 当前小程序自身仍按真实 envVersion 选择 API；这里只影响微信码扫码后的目标版本。
+ */
+export function getShareQrEnvVersion(): 'release' {
+  return 'release'
+}
+
+/**
  * 获取小程序无限拉新二维码（Base64）
  */
 export async function getUnlimitedQRCode(
