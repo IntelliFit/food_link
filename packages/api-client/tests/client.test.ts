@@ -957,7 +957,7 @@ describe('FoodLinkApiClient', () => {
 
     await client.loginWithAppWechat({ code: 'expo-go-dev-wechat-code' })
     await client.getFoodRecordById('record-1')
-    expect(client.buildFoodRecordShareUrl('record 1/中文')).toBe('https://api.example.com/share/food-record/record%201%2F%E4%B8%AD%E6%96%87')
+    expect(client.buildFoodRecordShareUrl('record 1/中文')).toBe('https://healthymax.cn/share/food-record/record%201%2F%E4%B8%AD%E6%96%87')
     await client.claimSharePosterReward({ recordId: 'record-1' })
     await client.claimSharePosterReward({ shareScope: 'daily_food', shareDate: '2026-06-15' })
     await client.updateFoodRecord('record-1', {
@@ -1012,6 +1012,17 @@ describe('FoodLinkApiClient', () => {
       ],
     })
     expect(requests.some((req) => req.url.endsWith('/api/food-record/record-1') && req.options?.method === 'DELETE')).toBe(true)
+  })
+
+  it('builds food record share URLs on the frontend domain with dev API hint', () => {
+    const { adapters } = createMockAdapters()
+    const client = createFoodLinkApiClient({
+      baseUrl: 'https://dev.api.healthymax.cn',
+      shareBaseUrl: 'https://healthymax.cn',
+      adapters,
+    })
+
+    expect(client.buildFoodRecordShareUrl('record-1')).toBe('https://healthymax.cn/share/food-record/record-1?api_env=dev')
   })
 
   it('saves custom manual food with full backend payload', async () => {

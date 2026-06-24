@@ -103,6 +103,7 @@ export interface ApiClientAdapters {
 
 export interface FoodLinkApiClientOptions {
   baseUrl: string
+  shareBaseUrl?: string
   adapters: ApiClientAdapters
 }
 
@@ -122,6 +123,23 @@ type UploadAnalyzeImageResponse = {
   imageUrl?: string
   image_url?: string
   url?: string
+}
+
+const DEFAULT_SHARE_BASE_URL = 'https://healthymax.cn'
+
+function normalizeBaseUrl(value: string): string {
+  return value.trim().replace(/\/+$/, '')
+}
+
+function inferShareApiEnv(baseUrl: string): string | undefined {
+  try {
+    const host = new URL(baseUrl).hostname.toLowerCase()
+    if (host === 'dev.api.healthymax.cn') return 'dev'
+    if (host === 'localhost' || host === '127.0.0.1' || host === '10.0.2.2') return 'local'
+  } catch {
+    return undefined
+  }
+  return undefined
 }
 
 export type GooseDuckChickenSpecies = 'goose' | 'duck' | 'chicken' | 'unknown'
@@ -522,14 +540,16 @@ export interface DietRecommendationInput {
 
 export class FoodLinkApiClient {
   private readonly baseUrl: string
+  private readonly shareBaseUrl: string
   private readonly adapters: ApiClientAdapters
 
   constructor(options: FoodLinkApiClientOptions) {
-    const baseUrl = options.baseUrl.trim().replace(/\/+$/, '')
+    const baseUrl = normalizeBaseUrl(options.baseUrl)
     if (!baseUrl) {
       throw new Error('FoodLinkApiClient requires a baseUrl')
     }
     this.baseUrl = baseUrl
+    this.shareBaseUrl = normalizeBaseUrl(options.shareBaseUrl || DEFAULT_SHARE_BASE_URL)
     this.adapters = options.adapters
   }
 
@@ -872,7 +892,10 @@ export class FoodLinkApiClient {
   buildFoodRecordShareUrl(recordId: string): string {
     const id = recordId.trim()
     if (!id) throw new Error('缺少饮食记录 ID')
-    return this.absoluteUrl(`/share/food-record/${encodeURIComponent(id)}`)
+    const url = new URL(`/share/food-record/${encodeURIComponent(id)}`, `${this.shareBaseUrl}/`)
+    const apiEnv = inferShareApiEnv(this.baseUrl)
+    if (apiEnv) url.searchParams.set('api_env', apiEnv)
+    return url.toString()
   }
 
   async updateFoodRecord(recordId: string, body: UpdateFoodRecordRequest): Promise<{ message: string; record: FoodRecord }> {

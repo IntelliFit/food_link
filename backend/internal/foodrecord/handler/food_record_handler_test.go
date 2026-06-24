@@ -7,7 +7,6 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
 
@@ -399,78 +398,18 @@ func TestShareFoodRecord(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 }
 
-func TestShareFoodRecordPage(t *testing.T) {
-	description := "鸡胸饭 <script>alert(1)</script>"
-	imageURL := "https://cdn.example.com/food.jpg"
-	recordTime := time.Date(2026, 6, 21, 12, 30, 0, 0, time.UTC)
-	mockSvc := &mockFoodRecordService{shareRecord: &domain.FoodRecord{
-		ID:            "r1",
-		MealType:      "lunch",
-		Description:   &description,
-		ImagePath:     &imageURL,
-		TotalCalories: 390,
-		TotalProtein:  31.5,
-		TotalCarbs:    43.5,
-		TotalFat:      9,
-		RecordTime:    &recordTime,
-		Items: []domain.FoodItem{{
-			Name:   "鸡胸饭",
-			Intake: 225,
-			Nutrients: domain.FoodItemNutrients{
-				Calories: 390,
-			},
-		}},
-	}}
+func TestShareFoodRecordPageRedirectsToFrontend(t *testing.T) {
+	mockSvc := &mockFoodRecordService{shareRecord: &domain.FoodRecord{ID: "r1", MealType: "lunch"}}
 	h := NewFoodRecordHandler(mockSvc, nil, nil)
 	r := setupRouter(h)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(http.MethodGet, "/share/food-record/r1", nil)
-	req.Host = "api.example.com"
-	req.Header.Set("X-Forwarded-Proto", "https")
+	req, _ := http.NewRequest(http.MethodGet, "/share/food-record/r%201%20%E4%B8%AD%E6%96%87", nil)
+	req.Host = "dev.api.healthymax.cn"
 	r.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusOK, w.Code)
-	assert.Contains(t, w.Header().Get("Content-Type"), "text/html")
-	body := w.Body.String()
-	assert.Contains(t, body, `property="og:title"`)
-	assert.Contains(t, body, `property="og:url" content="https://api.example.com/share/food-record/r1"`)
-	assert.Contains(t, body, `property="al:android:url" content="foodlink://food-record?record_id=r1"`)
-	assert.Contains(t, body, `property="al:android:package" content="cn.healthymax.foodlink"`)
-	assert.Contains(t, body, `href="foodlink://food-record?record_id=r1"`)
-	assert.Contains(t, body, "打开 App 查看")
-	assert.Contains(t, body, imageURL)
-	assert.Contains(t, body, "鸡胸饭")
-	assert.Contains(t, body, "&lt;script&gt;alert(1)&lt;/script&gt;")
-	assert.False(t, strings.Contains(body, "<script>alert(1)</script>"))
-}
-
-func TestShareFoodRecordPageNotFound(t *testing.T) {
-	mockSvc := &mockFoodRecordService{shareErr: commonerrors.ErrNotFound}
-	h := NewFoodRecordHandler(mockSvc, nil, nil)
-	r := setupRouter(h)
-
-	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(http.MethodGet, "/share/food-record/missing-record", nil)
-	r.ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusNotFound, w.Code)
-	assert.Contains(t, w.Header().Get("Content-Type"), "text/html")
-	assert.Contains(t, w.Body.String(), "记录不存在")
-}
-
-func TestShareFoodRecordPageForbidden(t *testing.T) {
-	mockSvc := &mockFoodRecordService{shareErr: commonerrors.ErrForbidden}
-	h := NewFoodRecordHandler(mockSvc, nil, nil)
-	r := setupRouter(h)
-
-	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(http.MethodGet, "/share/food-record/private-record", nil)
-	r.ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusForbidden, w.Code)
-	assert.Contains(t, w.Header().Get("Content-Type"), "text/html")
-	assert.Contains(t, w.Body.String(), "记录未公开")
+	assert.Equal(t, http.StatusFound, w.Code)
+	assert.Equal(t, "https://healthymax.cn/share/food-record/r%201%20%E4%B8%AD%E6%96%87?api_env=dev", w.Header().Get("Location"))
 }
 
 func TestShareFoodRecordForbidden(t *testing.T) {
