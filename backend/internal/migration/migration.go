@@ -77,6 +77,9 @@ func AutoMigrate(ctx context.Context, db *gorm.DB, schema string) error {
 	if err := ensurePaymentTestConfig(ctx, db); err != nil {
 		return err
 	}
+	if err := ensureMembershipGrantConfig(ctx, db); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -156,6 +159,9 @@ func ensureConstraints(ctx context.Context, db *gorm.DB) error {
 		dropAndAddCheck("pro_membership_payment_records", "pro_membership_payment_records_status_check", `status = ANY (ARRAY['pending'::text,'paid'::text,'failed'::text,'cancelled'::text,'expired'::text,'closed'::text,'refunded'::text])`),
 		dropAndAddCheck("membership_payment_test_settings", "membership_payment_test_settings_id_check", `id = 'default'`),
 		dropAndAddCheck("user_invite_referrals", "user_invite_referrals_status_check", `status = ANY (ARRAY['pending_qualified'::text,'reward_active'::text,'reward_completed'::text,'reward_blocked'::text,'cancelled'::text])`),
+		dropAndAddCheck("user_membership_grants", "user_membership_grants_grant_days_check", `grant_days > 0`),
+		dropAndAddCheck("user_membership_grants", "user_membership_grants_status_check", `status = ANY (ARRAY['applied'::text,'cancelled'::text])`),
+		dropAndAddCheck("user_membership_grants", "user_membership_grants_role_check", `role IS NULL OR role = ANY (ARRAY['inviter'::text,'invitee'::text])`),
 		dropAndAddCheck("user_pets", "user_pets_level_check", `level >= 1`),
 		dropAndAddCheck("user_pets", "user_pets_experience_check", `experience >= 0`),
 		dropAndAddCheck("user_pets", "user_pets_total_events_check", `total_events >= 0`),
@@ -237,6 +243,9 @@ func ensureConstraints(ctx context.Context, db *gorm.DB) error {
 		addFK("ai_custom_focus_cards_user_id_fkey", "ai_custom_focus_cards", "user_id", "weapp_user", "id", "CASCADE"),
 		addFK("user_pro_memberships_user_id_fkey", "user_pro_memberships", "user_id", "weapp_user", "id", "CASCADE"),
 		addFK("user_pro_memberships_current_plan_code_fkey", "user_pro_memberships", "current_plan_code", "membership_plan_config", "code", "SET NULL"),
+		addFK("user_membership_grants_user_id_fkey", "user_membership_grants", "user_id", "weapp_user", "id", "CASCADE"),
+		addFK("user_membership_grants_plan_code_fkey", "user_membership_grants", "plan_code", "membership_plan_config", "code", "RESTRICT"),
+		addFK("user_membership_grants_referral_id_fkey", "user_membership_grants", "referral_id", "user_invite_referrals", "id", "SET NULL"),
 		addFK("pro_membership_payment_records_user_id_fkey", "pro_membership_payment_records", "user_id", "weapp_user", "id", "CASCADE"),
 		addFK("pro_membership_payment_records_plan_code_fkey", "pro_membership_payment_records", "plan_code", "membership_plan_config", "code", "RESTRICT"),
 		addFK("membership_payment_test_users_user_id_fkey", "membership_payment_test_users", "user_id", "weapp_user", "id", "CASCADE"),
@@ -296,6 +305,9 @@ END
 		`ALTER TABLE membership_plan_config ADD COLUMN IF NOT EXISTS is_test_plan boolean NOT NULL DEFAULT false`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_membership_payment_test_users_user_id ON membership_payment_test_users (user_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_membership_payment_test_users_created_at ON membership_payment_test_users (created_at DESC)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_user_membership_grants_source_key ON user_membership_grants (source_key)`,
+		`CREATE INDEX IF NOT EXISTS idx_user_membership_grants_user_created ON user_membership_grants (user_id, created_at DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_user_membership_grants_referral_role ON user_membership_grants (referral_id, role)`,
 		`ALTER TABLE packaged_food_library DROP CONSTRAINT IF EXISTS packaged_food_library_normalized_name_key`,
 		`DROP INDEX IF EXISTS uni_packaged_food_library_normalized_name`,
 		`ALTER TABLE packaged_food_library ADD COLUMN IF NOT EXISTS product_key text NOT NULL DEFAULT ''`,
@@ -949,6 +961,46 @@ ON CONFLICT (id) DO NOTHING`,
 		if err := db.WithContext(ctx).Exec(sql).Error; err != nil {
 			return fmt.Errorf("ensure payment test config: %w", err)
 		}
+	}
+	return nil
+}
+
+func ensureMembershipGrantConfig(ctx context.Context, db *gorm.DB) error {
+	sql := `INSERT INTO membership_plan_config (
+  code,
+  name,
+  description,
+  amount,
+  duration_months,
+  is_active,
+  is_visible,
+  is_test_plan,
+  tier,
+  period,
+  daily_credits,
+  original_amount,
+  sort_order,
+  created_at,
+  updated_at
+) VALUES (
+  'light_monthly',
+  '轻度版月卡',
+  '邀请赠送会员兜底套餐：每日 8 积分',
+  0,
+  1,
+  true,
+  false,
+  false,
+  'light',
+  'monthly',
+  8,
+  NULL,
+  9000,
+  now(),
+  now()
+) ON CONFLICT (code) DO NOTHING`
+	if err := db.WithContext(ctx).Exec(sql).Error; err != nil {
+		return fmt.Errorf("ensure membership grant config: %w", err)
 	}
 	return nil
 }

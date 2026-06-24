@@ -1430,7 +1430,7 @@ export interface LoginRequest {
 export interface LoginRequestParams {
   code: string
   phoneCode?: string
-  /** 注册时填写邀请人码，双方各得积分（后端校验） */
+  /** 注册时填写邀请人码，达标后双方获得邀请权益（后端校验） */
   inviteCode?: string
   /** 开发环境测试用：模拟新用户的 openid */
   testOpenid?: string
@@ -1441,7 +1441,7 @@ export interface PasswordRegisterRequest {
   phone: string
   password: string
   nickname: string
-  /** 注册时填写邀请人码 */
+  /** 注册时填写邀请人码，达标后双方获得邀请权益 */
   inviteCode?: string
 }
 
@@ -1540,7 +1540,7 @@ export interface MembershipStatus {
   daily_credits_base?: number
   /** 今日额外奖励积分 */
   daily_bonus_credits?: number
-  /** 今日邀请奖励积分 */
+  /** 今日旧版邀请奖励积分 */
   invite_bonus_credits?: number
   /** 今日海报奖励积分 */
   share_bonus_credits?: number
@@ -1631,6 +1631,10 @@ export interface InviteRewardStatusItem {
   status: string
   records_needed: number
   reward_credits: number
+  reward_type?: string | null
+  reward_label?: string | null
+  reward_days?: number | null
+  reward_plan_code?: string | null
 }
 
 export interface InviteRewardStatusAsInvitee extends InviteRewardStatusItem {
@@ -1661,6 +1665,12 @@ export interface InviteRewardRecord {
   other_nickname?: string | null
   records_needed?: number | null
   reward_credits?: number | null
+  reward_type?: string | null
+  reward_label?: string | null
+  reward_days?: number | null
+  reward_plan_code?: string | null
+  membership_grant_start_at?: string | null
+  membership_grant_expires_at?: string | null
   requirement_text?: string | null
   next_action_text?: string | null
   first_effective_action_at?: string | null
@@ -1680,6 +1690,12 @@ export interface InviteRewardInviterSummary {
   estimated_credits: number
   earned_credits: number
   reward_credits: number
+  reward_type?: string | null
+  reward_label?: string | null
+  reward_days?: number | null
+  reward_plan_code?: string | null
+  estimated_membership_grants?: number | null
+  earned_membership_grants?: number | null
   records?: InviteRewardRecord[]
 }
 
@@ -1688,6 +1704,10 @@ export interface InviteRewardInviteeSummary {
   required_days: number
   remaining_days: number
   reward_credits: number
+  reward_type?: string | null
+  reward_label?: string | null
+  reward_days?: number | null
+  reward_plan_code?: string | null
   deadline_text?: string | null
   next_action_text?: string | null
   record?: InviteRewardRecord | null
@@ -5359,6 +5379,11 @@ export interface PackagedProductExtractResult {
   product_name?: string
   flavor_text?: string
   package_category?: string
+  net_content_value?: number
+  net_content_unit?: string
+  unit_count?: number
+  unit_content_value?: number
+  unit_content_unit?: string
   net_weight_g?: number
   serving_weight_g?: number
   spec_text?: string

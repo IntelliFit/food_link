@@ -75,6 +75,38 @@ type UserMembership struct {
 
 func (UserMembership) TableName() string { return "user_pro_memberships" }
 
+// UserMembershipGrant — table: user_membership_grants
+type UserMembershipGrant struct {
+	ID         string         `gorm:"column:id;primaryKey" json:"id"`
+	UserID     string         `gorm:"column:user_id" json:"user_id"`
+	SourceType string         `gorm:"column:source_type" json:"source_type"`
+	SourceKey  string         `gorm:"column:source_key;uniqueIndex:idx_user_membership_grants_source_key" json:"source_key"`
+	PlanCode   string         `gorm:"column:plan_code" json:"plan_code"`
+	GrantDays  int            `gorm:"column:grant_days" json:"grant_days"`
+	StartsAt   *time.Time     `gorm:"column:starts_at" json:"starts_at,omitempty"`
+	ExpiresAt  *time.Time     `gorm:"column:expires_at" json:"expires_at,omitempty"`
+	ReferralID *string        `gorm:"column:referral_id" json:"referral_id,omitempty"`
+	Role       *string        `gorm:"column:role" json:"role,omitempty"`
+	Status     string         `gorm:"column:status" json:"status"`
+	Meta       map[string]any `gorm:"column:meta;serializer:json" json:"meta,omitempty"`
+	CreatedAt  *time.Time     `gorm:"column:created_at" json:"created_at,omitempty"`
+	UpdatedAt  *time.Time     `gorm:"column:updated_at" json:"updated_at,omitempty"`
+}
+
+func (UserMembershipGrant) TableName() string { return "user_membership_grants" }
+
+type MembershipGrantInput struct {
+	UserID       string
+	SourceType   string
+	SourceKey    string
+	PlanCode     string
+	DailyCredits int
+	GrantDays    int
+	ReferralID   string
+	Role         string
+	Meta         map[string]any
+}
+
 // UserTrialEntitlement — table: user_trial_entitlements
 type UserTrialEntitlement struct {
 	ID                string     `gorm:"column:id;primaryKey" json:"id"`

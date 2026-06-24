@@ -1001,6 +1001,25 @@ type UserMembershipDO struct {
 
 func (UserMembershipDO) TableName() string { return "user_pro_memberships" }
 
+type UserMembershipGrantDO struct {
+	ID         string         `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	UserID     string         `gorm:"column:user_id;type:uuid;not null;index:idx_user_membership_grants_user_created,priority:1"`
+	SourceType string         `gorm:"column:source_type;type:text;not null;index:idx_user_membership_grants_source_type"`
+	SourceKey  string         `gorm:"column:source_key;type:text;not null;uniqueIndex:idx_user_membership_grants_source_key"`
+	PlanCode   string         `gorm:"column:plan_code;type:varchar(50);not null"`
+	GrantDays  int            `gorm:"column:grant_days;type:integer;not null"`
+	StartsAt   time.Time      `gorm:"column:starts_at;type:timestamptz;not null"`
+	ExpiresAt  time.Time      `gorm:"column:expires_at;type:timestamptz;not null"`
+	ReferralID *string        `gorm:"column:referral_id;type:uuid;index:idx_user_membership_grants_referral_role,priority:1"`
+	Role       *string        `gorm:"column:role;type:text;index:idx_user_membership_grants_referral_role,priority:2"`
+	Status     string         `gorm:"column:status;type:text;not null;default:'applied'"`
+	Meta       map[string]any `gorm:"column:meta;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
+	CreatedAt  time.Time      `gorm:"column:created_at;type:timestamptz;not null;default:now();index:idx_user_membership_grants_user_created,priority:2,sort:desc"`
+	UpdatedAt  time.Time      `gorm:"column:updated_at;type:timestamptz;not null;default:now()"`
+}
+
+func (UserMembershipGrantDO) TableName() string { return "user_membership_grants" }
+
 type MembershipPaymentDO struct {
 	ID              string         `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
 	UserID          string         `gorm:"column:user_id;type:uuid;not null"`
@@ -1350,6 +1369,7 @@ func AllModels() []any {
 		&StatsInsightDO{},
 		&CustomFocusCardDO{},
 		&UserMembershipDO{},
+		&UserMembershipGrantDO{},
 		&MembershipPaymentDO{},
 		&UserInviteReferralDO{},
 		&UserCreditBonusEventDO{},

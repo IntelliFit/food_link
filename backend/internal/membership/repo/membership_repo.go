@@ -159,6 +159,189 @@ func (r *MembershipRepo) SaveMembership(ctx context.Context, userID string, upda
 	return r.GetUserProMembership(ctx, userID)
 }
 
+func (r *MembershipRepo) GetMembershipGrantBySourceKey(ctx context.Context, sourceKey string) (*domain.UserMembershipGrant, error) {
+	sourceKey = strings.TrimSpace(sourceKey)
+	if sourceKey == "" {
+		return nil, nil
+	}
+	var row domain.UserMembershipGrant
+	err := r.db.WithContext(ctx).Where("source_key = ?", sourceKey).First(&row).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	return &row, err
+}
+
+func (r *MembershipRepo) GrantMembership(ctx context.Context, input domain.MembershipGrantInput) (*domain.UserMembershipGrant, *domain.UserMembership, bool, error) {
+	userID := strings.TrimSpace(input.UserID)
+	sourceKey := strings.TrimSpace(input.SourceKey)
+	planCode := strings.TrimSpace(input.PlanCode)
+	if userID == "" || sourceKey == "" || planCode == "" || input.GrantDays <= 0 {
+		return nil, nil, false, fmt.Errorf("invalid membership grant input")
+	}
+	dailyCredits := input.DailyCredits
+	if dailyCredits < 0 {
+		dailyCredits = 0
+	}
+	sourceType := strings.TrimSpace(input.SourceType)
+	if sourceType == "" {
+		sourceType = "manual"
+	}
+	var grant *domain.UserMembershipGrant
+	var membership *domain.UserMembership
+	applied := false
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var existingGrant domain.UserMembershipGrant
+		err := tx.Where("source_key = ?", sourceKey).First(&existingGrant).Error
+		if err == nil {
+			grant = &existingGrant
+			existingMembership, err := getUserMembershipInTx(tx, userID, false)
+			if err != nil {
+				return err
+			}
+			membership = existingMembership
+			return nil
+		}
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
+
+		now := time.Now()
+		current, err := getUserMembershipInTx(tx, userID, true)
+		if err != nil {
+			return err
+		}
+		start := now
+		firstActivatedAt := now
+		effectivePlanCode := planCode
+		effectiveDailyCredits := dailyCredits
+		if current != nil && current.Status == "active" && current.ExpiresAt != nil && current.ExpiresAt.After(now) {
+			start = *current.ExpiresAt
+			firstActivatedAt = membershipTimeOr(current.FirstActivatedAt, now)
+			if current.CurrentPlanCode != nil && strings.TrimSpace(*current.CurrentPlanCode) != "" {
+				effectivePlanCode = strings.TrimSpace(*current.CurrentPlanCode)
+			}
+			if current.DailyCredits > 0 {
+				effectiveDailyCredits = current.DailyCredits
+			}
+		} else if current != nil && current.FirstActivatedAt != nil {
+			firstActivatedAt = *current.FirstActivatedAt
+		}
+		expires := start.AddDate(0, 0, input.GrantDays)
+		referralID := strings.TrimSpace(input.ReferralID)
+		var referralIDPtr *string
+		if referralID != "" {
+			referralIDPtr = &referralID
+		}
+		role := strings.TrimSpace(input.Role)
+		var rolePtr *string
+		if role != "" {
+			rolePtr = &role
+		}
+		meta := input.Meta
+		if meta == nil {
+			meta = map[string]any{}
+		}
+		row := &domain.UserMembershipGrant{
+			ID:         uuid.New().String(),
+			UserID:     userID,
+			SourceType: sourceType,
+			SourceKey:  sourceKey,
+			PlanCode:   effectivePlanCode,
+			GrantDays:  input.GrantDays,
+			StartsAt:   &start,
+			ExpiresAt:  &expires,
+			ReferralID: referralIDPtr,
+			Role:       rolePtr,
+			Status:     "applied",
+			Meta:       meta,
+			CreatedAt:  &now,
+			UpdatedAt:  &now,
+		}
+		result := tx.Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "source_key"}},
+			DoNothing: true,
+		}).Create(row)
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			if err := tx.Where("source_key = ?", sourceKey).First(&existingGrant).Error; err != nil {
+				return err
+			}
+			grant = &existingGrant
+			existingMembership, err := getUserMembershipInTx(tx, userID, false)
+			if err != nil {
+				return err
+			}
+			membership = existingMembership
+			return nil
+		}
+		grant = row
+		applied = true
+
+		if current == nil {
+			current = &domain.UserMembership{
+				ID:                 uuid.New().String(),
+				UserID:             userID,
+				CurrentPlanCode:    &effectivePlanCode,
+				Status:             "active",
+				FirstActivatedAt:   &firstActivatedAt,
+				CurrentPeriodStart: &start,
+				ExpiresAt:          &expires,
+				AutoRenew:          false,
+				DailyCredits:       effectiveDailyCredits,
+				CreatedAt:          &now,
+				UpdatedAt:          &now,
+			}
+			if err := tx.Create(current).Error; err != nil {
+				return err
+			}
+			membership = current
+			return nil
+		}
+		updates := map[string]any{
+			"current_plan_code":    effectivePlanCode,
+			"status":               "active",
+			"first_activated_at":   firstActivatedAt,
+			"current_period_start": membershipTimeOr(current.CurrentPeriodStart, start),
+			"expires_at":           expires,
+			"auto_renew":           false,
+			"daily_credits":        effectiveDailyCredits,
+			"updated_at":           now,
+		}
+		if current.Status != "active" || current.ExpiresAt == nil || !current.ExpiresAt.After(now) {
+			updates["current_period_start"] = start
+		}
+		if err := tx.Model(&domain.UserMembership{}).Where("id = ?", current.ID).Updates(updates).Error; err != nil {
+			return err
+		}
+		membership, err = getUserMembershipInTx(tx, userID, false)
+		return err
+	})
+	return grant, membership, applied, err
+}
+
+func getUserMembershipInTx(tx *gorm.DB, userID string, lock bool) (*domain.UserMembership, error) {
+	var row domain.UserMembership
+	query := tx.Where("user_id = ?", userID)
+	if lock {
+		query = query.Clauses(clause.Locking{Strength: "UPDATE"})
+	}
+	err := query.First(&row).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	return &row, err
+}
+
+func membershipTimeOr(t *time.Time, fallback time.Time) time.Time {
+	if t != nil && !t.IsZero() {
+		return *t
+	}
+	return fallback
+}
+
 func (r *MembershipRepo) UpdateMembership(ctx context.Context, id string, updates map[string]any) error {
 	return r.db.WithContext(ctx).Model(&domain.UserMembership{}).Where("id = ?", id).Updates(updates).Error
 }

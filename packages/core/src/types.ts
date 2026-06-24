@@ -898,6 +898,72 @@ export interface RewardCenterTask {
   completed?: boolean
 }
 
+export type InviteRewardRole = 'invitee' | 'inviter'
+
+export interface InviteRewardRecord {
+  referral_id: string
+  role: InviteRewardRole
+  status: string
+  status_label?: string | null
+  invite_code?: string | null
+  other_user_id?: string | null
+  other_nickname?: string | null
+  records_needed?: number | null
+  reward_credits?: number | null
+  reward_type?: string | null
+  reward_label?: string | null
+  reward_days?: number | null
+  reward_plan_code?: string | null
+  membership_grant_start_at?: string | null
+  membership_grant_expires_at?: string | null
+  requirement_text?: string | null
+  next_action_text?: string | null
+  first_effective_action_at?: string | null
+  first_effective_action_type?: string | null
+  reward_start_date?: string | null
+  reward_end_date?: string | null
+  blocked_reason?: string | null
+  blocked_reason_label?: string | null
+  created_at?: string | null
+  updated_at?: string | null
+}
+
+export interface InviteRewardInviterSummary {
+  invited_count: number
+  completed_count: number
+  pending_count: number
+  estimated_credits: number
+  earned_credits: number
+  reward_credits: number
+  reward_type?: string | null
+  reward_label?: string | null
+  reward_days?: number | null
+  reward_plan_code?: string | null
+  estimated_membership_grants?: number | null
+  earned_membership_grants?: number | null
+  records?: InviteRewardRecord[]
+}
+
+export interface InviteRewardInviteeSummary {
+  completed_days: number
+  required_days: number
+  remaining_days: number
+  reward_credits: number
+  reward_type?: string | null
+  reward_label?: string | null
+  reward_days?: number | null
+  reward_plan_code?: string | null
+  deadline_text?: string | null
+  next_action_text?: string | null
+  record?: InviteRewardRecord | null
+}
+
+export interface InviteRewardCenterSummary {
+  as_inviter_summary?: InviteRewardInviterSummary | null
+  as_invitee_summary?: InviteRewardInviteeSummary | null
+  records?: InviteRewardRecord[]
+}
+
 export interface RewardCenterResponse {
   earned_credits_balance: number
   today_earned_credits: number
@@ -906,6 +972,7 @@ export interface RewardCenterResponse {
     total_count: number
   }
   tasks: RewardCenterTask[]
+  invite_reward?: InviteRewardCenterSummary | null
 }
 
 export interface FoodExpiryDashboard {

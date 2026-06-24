@@ -4,7 +4,8 @@ import type { LucideIcon } from 'lucide-react'
 const releaseBaseUrl = 'https://download.healthymax.cn'
 const fallbackReleaseVersion = '0.0.1'
 const fallbackReleaseBuild = '4'
-const fallbackReleasePath = `${releaseBaseUrl}/releases/android/${fallbackReleaseVersion}/${fallbackReleaseBuild}`
+const fallbackStableReleasePath = `${releaseBaseUrl}/releases/android/stable/${fallbackReleaseVersion}/${fallbackReleaseBuild}`
+const fallbackBetaReleasePath = `${releaseBaseUrl}/releases/android/beta/${fallbackReleaseVersion}/${fallbackReleaseBuild}`
 
 export type AppDownloadChannel = 'stable' | 'beta'
 export type AppDownloadArtifact = 'apk' | 'aab'
@@ -40,7 +41,7 @@ export const appDownload = {
       artifact: 'apk',
       label: 'Android APK 正式通道',
       description: '当前稳定版安装包，适合日常体验。',
-      href: `${fallbackReleasePath}/foodlink-${fallbackReleaseVersion}-${fallbackReleaseBuild}.apk`,
+      href: `${fallbackStableReleasePath}/foodlink-${fallbackReleaseVersion}-${fallbackReleaseBuild}.apk`,
       meta: `stable · v${fallbackReleaseVersion} (${fallbackReleaseBuild})`,
       icon: Download,
       primary: true,
@@ -51,7 +52,7 @@ export const appDownload = {
       artifact: 'apk',
       label: 'Android APK 内测通道',
       description: '最新内测安装包，用于提前体验。',
-      href: `${fallbackReleasePath}/foodlink-${fallbackReleaseVersion}-${fallbackReleaseBuild}.apk`,
+      href: `${fallbackBetaReleasePath}/foodlink-${fallbackReleaseVersion}-${fallbackReleaseBuild}.apk`,
       meta: `beta · v${fallbackReleaseVersion} (${fallbackReleaseBuild})`,
       icon: Smartphone,
     },
@@ -61,7 +62,7 @@ export const appDownload = {
       artifact: 'aab',
       label: 'Android AAB 商店包',
       description: '用于应用商店上传审核；未发布时隐藏。',
-      href: `${fallbackReleasePath}/foodlink-${fallbackReleaseVersion}-${fallbackReleaseBuild}.aab`,
+      href: `${fallbackStableReleasePath}/foodlink-${fallbackReleaseVersion}-${fallbackReleaseBuild}.aab`,
       meta: 'stable · app bundle',
       icon: Store,
     },
@@ -71,7 +72,7 @@ export const appDownload = {
       artifact: 'aab',
       label: 'Android AAB 内测包',
       description: '用于渠道侧测试和后续商店分发。',
-      href: `${fallbackReleasePath}/foodlink-${fallbackReleaseVersion}-${fallbackReleaseBuild}.aab`,
+      href: `${fallbackBetaReleasePath}/foodlink-${fallbackReleaseVersion}-${fallbackReleaseBuild}.aab`,
       meta: 'beta · app bundle',
       icon: Boxes,
     },
@@ -90,7 +91,7 @@ export const appDownload = {
     {
       id: 'release',
       label: 'manifest.json',
-      href: `${fallbackReleasePath}/manifest.json`,
+      href: `${fallbackStableReleasePath}/manifest.json`,
     },
   ],
   checksumLabel: 'SHA256 校验随版本目录发布',

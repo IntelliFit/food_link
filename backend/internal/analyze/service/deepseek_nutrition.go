@@ -16,6 +16,8 @@ var deepSeekFenceRe = regexp.MustCompile("(?s)```json?\\s*\\n?|```")
 
 const deepSeekNutritionFallbackModel = "deepseek-v4-flash"
 
+const aiNutritionMicronutrientRequirement = "必须尽量补齐维生素和矿物质等项目 21 项微量营养：fiber、sugar、saturatedFat、cholesterolMg、sodiumMg、potassiumMg、calciumMg、ironMg、magnesiumMg、zincMg、vitaminARaeMcg、vitaminCMg、vitaminDMcg、vitaminEMg、vitaminKMcg、thiaminMg、riboflavinMg、niacinMg、vitaminB6Mg、folateMcg、vitaminB12Mcg。不要把微量元素随意填 0；微量元素不确定时也要按同类食物保守估算，只有天然接近 0 或该食物确实几乎不含该营养时才填 0。"
+
 type DeepSeekNutritionEstimator struct {
 	APIKey  string
 	BaseURL string
@@ -94,8 +96,9 @@ func (e *DeepSeekNutritionEstimator) Estimate(ctx context.Context, candidates []
 			"根据食物名称和常见烹饪方式估算每100g营养，不需要重新判断重量。",
 			"输出字段使用 camelCase。",
 			"所有字段必须为数字；不要因为不确定就把热量或宏量营养随意填 0，只有该营养天然接近 0 时才填 0。",
+			aiNutritionMicronutrientRequirement,
 			"如果名称带有烹饪信息，例如 清炒/清蒸/炖/红烧，请结合该烹饪方式估算。",
-			"热量单位 kcal，其余蛋白质/碳水/脂肪/纤维/糖单位 g，微量元素单位按字段名中的 Mg/Mcg。",
+			"热量单位 kcal；protein/carbs/fat/fiber/sugar/saturatedFat 单位 g；cholesterolMg、sodiumMg、potassiumMg、calciumMg、ironMg、magnesiumMg、zincMg 和维生素中以 Mg 结尾的字段单位为 mg；vitaminARaeMcg、vitaminDMcg、vitaminKMcg、folateMcg、vitaminB12Mcg 单位为 mcg。",
 			"热量必须与宏量营养一致：calories 应大致不低于 protein*4 + carbs*4 + fat*9；如果无法确定热量，用该公式的结果作为下限。",
 			"每100g 的 protein/carbs/fat/fiber/sugar/saturatedFat 不得为负，也不得超过 100g；sugar 不得超过 carbs，saturatedFat 不得超过 fat。",
 			"无糖黑咖啡/美式咖啡/纯茶/白水每100g可接近 0 kcal；但如果名称包含拿铁、奶、糖、糖浆、奶油、椰乳等，应估算对应碳水/脂肪和热量。",

@@ -18,6 +18,8 @@ func TestBuildPackagedProductExtractPromptTreatsImagesAsOneProduct(t *testing.T)
 		"综合 1-3 张图片",
 		"弯曲",
 		"大包装",
+		"组合装/多口味",
+		"raw_label_payload",
 	} {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("prompt missing %q:\n%s", want, prompt)
@@ -267,6 +269,72 @@ func TestConvertPackagedNutrition_TreatsSolidBeverageServingAsPer100G(t *testing
 	}
 	if got := numberFromAny(result.UnitNutritionPer100g["carbs"]); got != 70 {
 		t.Fatalf("carbs=%v want 70", got)
+	}
+}
+
+func TestConvertPackagedNutrition_CombinesMultiFlavorServingPayload(t *testing.T) {
+	result := &PackagedProductExtractResult{
+		Brand:              "梦龙",
+		ProductName:        "迷你梦龙浓郁黑巧克力冰淇淋、松露巧克力口味冰淇淋组合装",
+		PackageCategory:    "冰淇淋",
+		NetWeightG:         255,
+		NetContentValue:    255,
+		NetContentUnit:     "g",
+		UnitCount:          6,
+		SpecText:           "6支装，其中浓郁黑巧克力冰淇淋3支（每支42克），松露巧克力口味冰淇淋3支（每支43克）",
+		NutritionBasisUnit: "100g",
+		RawNutritionBasis:  PackagedLabelNutritionBasis{Type: "每份"},
+		RawNutritionPerBasis: PackagedLabelRawNutrition{
+			Energy: PackagedLabelNutritionValue{},
+		},
+		RawLabelPayload: map[string]any{
+			"浓郁黑巧克力冰淇淋单支营养（42g）": map[string]any{
+				"能量":    "575千焦",
+				"蛋白质":   "1.8克",
+				"脂肪":    "10.5克",
+				"饱和脂肪":  "6.5克",
+				"碳水化合物": "9.0克",
+				"糖":     "8.4克",
+				"膳食纤维":  "0.3克",
+				"钠":     "18毫克",
+			},
+			"松露巧克力口味冰淇淋单支营养（43g）": map[string]any{
+				"能量":    "623千焦",
+				"蛋白质":   "1.6克",
+				"脂肪":    "10.4克",
+				"饱和脂肪":  "6.1克",
+				"碳水化合物": "12.1克",
+				"糖":     "11.1克",
+				"膳食纤维":  "0.7克",
+				"钠":     "24毫克",
+			},
+		},
+		UnitNutritionPer100g: map[string]any{},
+	}
+
+	convertPackagedNutrition(result)
+	auto := EvaluatePackagedProductExtract(result)
+
+	if result.ConversionStatus != "converted" || result.NutritionBasisUnit != "100g" {
+		t.Fatalf("status=%s basis=%s want converted/100g", result.ConversionStatus, result.NutritionBasisUnit)
+	}
+	if got := numberFromAny(result.UnitNutritionPer100g["calories"]); got < 336 || got > 337 {
+		t.Fatalf("calories=%v want about 336.8 kcal/100g", got)
+	}
+	if got := numberFromAny(result.UnitNutritionPer100g["protein"]); got < 3.9 || got > 4.1 {
+		t.Fatalf("protein=%v want about 4.0g/100g", got)
+	}
+	if got := numberFromAny(result.UnitNutritionPer100g["fat"]); got < 24.5 || got > 24.7 {
+		t.Fatalf("fat=%v want about 24.6g/100g", got)
+	}
+	if got := numberFromAny(result.UnitNutritionPer100g["sodiumMg"]); got < 49 || got > 50 {
+		t.Fatalf("sodium=%v want about 49.4mg/100g", got)
+	}
+	if got := result.ServingWeightG; got < 42.4 || got > 42.6 {
+		t.Fatalf("serving_weight_g=%v want package average 42.5g", got)
+	}
+	if auto.Status != "ready" || auto.Reason != "passed" {
+		t.Fatalf("auto=%#v want ready/passed", auto)
 	}
 }
 

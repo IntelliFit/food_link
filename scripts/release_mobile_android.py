@@ -645,7 +645,7 @@ def main() -> None:
     print(f"expo token: {'configured' if config['expo_token'] else 'not configured'}")
     print(f"version: {version}, build: {build_number}, channels: {', '.join(channels)}")
 
-    artifact_dir = args.dist_dir / "android" / version / build_number
+    artifact_dir = args.dist_dir / "android" / channel / version / build_number
     apk_path = args.artifact_apk
     aab_path = args.artifact_aab
     if args.build_eas_apk:
@@ -671,7 +671,7 @@ def main() -> None:
         fail("provide --artifact-apk/--artifact-aab or use --build-apk/--build-aab")
 
     artifacts: dict[str, Any] = {}
-    release_prefix = f"releases/android/{version}/{build_number}"
+    release_prefix = f"releases/android/{channel}/{version}/{build_number}"
 
     if apk_path:
         apk_path = apk_path.resolve()

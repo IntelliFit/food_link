@@ -21,8 +21,8 @@ func setupTestDB(t *testing.T) *gorm.DB {
 	require.NoError(t, db.AutoMigrate(
 		&domain.MembershipPlan{},
 		&domain.PaymentTestSetting{},
-		&domain.PaymentTestUser{},
 		&domain.UserMembership{},
+		&domain.UserMembershipGrant{},
 		&domain.MembershipPayment{},
 		&domain.UserCreditBonusEvent{},
 		&domain.UserEarnedCreditLedger{},
@@ -30,7 +30,108 @@ func setupTestDB(t *testing.T) *gorm.DB {
 		&analysisTask{},
 		&User{},
 	))
+	require.NoError(t, db.Exec(`
+CREATE TABLE membership_payment_test_users (
+	id text primary key,
+	user_id text,
+	note text,
+	created_by text,
+	membership_snapshot text,
+	membership_snapshot_taken_at datetime,
+	membership_cancelled_at datetime,
+	membership_cancelled_by text,
+	membership_restored_at datetime,
+	membership_restored_by text,
+	created_at datetime,
+	updated_at datetime
+)`).Error)
 	return db
+}
+
+func TestMembershipRepo_GrantMembershipCreatesLightWeekIdempotently(t *testing.T) {
+	db := setupTestDB(t)
+	r := NewMembershipRepo(db)
+	ctx := context.Background()
+
+	grant, membership, applied, err := r.GrantMembership(ctx, domain.MembershipGrantInput{
+		UserID:       "u1",
+		SourceType:   "invite_qualified_reward",
+		SourceKey:    "invite-qualified:ref1:invitee",
+		PlanCode:     "light_monthly",
+		DailyCredits: 8,
+		GrantDays:    7,
+		ReferralID:   "ref1",
+		Role:         "invitee",
+		Meta:         map[string]any{"referral_id": "ref1"},
+	})
+	require.NoError(t, err)
+	require.True(t, applied)
+	require.NotNil(t, grant)
+	require.NotNil(t, membership)
+	require.NotNil(t, membership.CurrentPlanCode)
+	assert.Equal(t, "light_monthly", *membership.CurrentPlanCode)
+	assert.Equal(t, "active", membership.Status)
+	assert.Equal(t, 8, membership.DailyCredits)
+	require.NotNil(t, grant.StartsAt)
+	require.NotNil(t, grant.ExpiresAt)
+	assert.Equal(t, 7, int(grant.ExpiresAt.Sub(*grant.StartsAt).Hours()/24))
+
+	secondGrant, secondMembership, secondApplied, err := r.GrantMembership(ctx, domain.MembershipGrantInput{
+		UserID:       "u1",
+		SourceType:   "invite_qualified_reward",
+		SourceKey:    "invite-qualified:ref1:invitee",
+		PlanCode:     "light_monthly",
+		DailyCredits: 8,
+		GrantDays:    7,
+	})
+	require.NoError(t, err)
+	assert.False(t, secondApplied)
+	require.NotNil(t, secondGrant)
+	require.NotNil(t, secondMembership)
+	assert.Equal(t, grant.ID, secondGrant.ID)
+	assert.True(t, secondMembership.ExpiresAt.Equal(*membership.ExpiresAt))
+}
+
+func TestMembershipRepo_GrantMembershipExtendsActiveHigherPlan(t *testing.T) {
+	db := setupTestDB(t)
+	r := NewMembershipRepo(db)
+	ctx := context.Background()
+	standard := "standard_monthly"
+	now := time.Now()
+	start := now.AddDate(0, 0, -2)
+	expires := now.AddDate(0, 0, 10)
+	require.NoError(t, db.Create(&domain.UserMembership{
+		ID:                 "um-standard",
+		UserID:             "u1",
+		CurrentPlanCode:    &standard,
+		Status:             "active",
+		FirstActivatedAt:   &start,
+		CurrentPeriodStart: &start,
+		ExpiresAt:          &expires,
+		DailyCredits:       20,
+	}).Error)
+
+	grant, membership, applied, err := r.GrantMembership(ctx, domain.MembershipGrantInput{
+		UserID:       "u1",
+		SourceType:   "invite_qualified_reward",
+		SourceKey:    "invite-qualified:ref2:inviter",
+		PlanCode:     "light_monthly",
+		DailyCredits: 8,
+		GrantDays:    7,
+		ReferralID:   "ref2",
+		Role:         "inviter",
+	})
+	require.NoError(t, err)
+	require.True(t, applied)
+	require.NotNil(t, grant)
+	require.NotNil(t, membership)
+	require.NotNil(t, membership.CurrentPlanCode)
+	assert.Equal(t, "standard_monthly", *membership.CurrentPlanCode)
+	assert.Equal(t, 20, membership.DailyCredits)
+	assert.True(t, membership.ExpiresAt.Equal(expires.AddDate(0, 0, 7)))
+	require.NotNil(t, grant.StartsAt)
+	assert.True(t, grant.StartsAt.Equal(expires))
+	assert.Equal(t, "standard_monthly", grant.PlanCode)
 }
 
 func TestNormalizePaymentJSONUpdates(t *testing.T) {
