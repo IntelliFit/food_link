@@ -220,7 +220,7 @@ func (r *Runner) runLoop(ctx context.Context, workerID string, taskTypes []strin
 			if ctx.Err() != nil {
 				return
 			}
-			r.errorLog(ctx, "工作器订阅任务队列失败", err, slog.String("worker_id", workerID), )
+			r.errorLog(ctx, "工作器订阅任务队列失败", err, slog.String("worker_id", workerID))
 			sleepContext(ctx, backoff)
 			continue
 		}
@@ -547,7 +547,7 @@ func (r *Runner) recoverQueueTasks(ctx context.Context, taskTypes []string) {
 	defer cancel()
 	tasks, err := r.tasks.ListRecoverableTasks(recoverCtx, taskTypes, taskRecoveryBatchSize, time.Now())
 	if err != nil {
-		r.errorLog(ctx, "恢复队列中的分析任务失败", nil, )
+		r.errorLog(ctx, "恢复队列中的分析任务失败", nil)
 		apm.RecordError(recoverCtx, err, attribute.String("analysis.stage", "queue_recovery"))
 		return
 	}
@@ -817,12 +817,12 @@ func (r *Runner) processFood(ctx context.Context, task *domain.AnalysisTask) err
 	}
 	err = r.completeTask(ctx, task, result)
 	if err != nil {
-		r.errorLog(ctx, "食物任务完成状态更新失败", nil, slog.String("task_id", task.ID), logger.AnalysisTaskID(task.ID), )
+		r.errorLog(ctx, "食物任务完成状态更新失败", nil, slog.String("task_id", task.ID), logger.AnalysisTaskID(task.ID))
 		apm.RecordError(ctx, err, attribute.String("analysis.stage", "complete_task"))
 		return err
 	}
 	if err := r.writeBackCampusPublicFood(ctx, task, result); err != nil {
-		r.errorLog(ctx, "校园食堂分析结果回写失败", err, slog.String("task_id", task.ID), logger.AnalysisTaskID(task.ID), )
+		r.errorLog(ctx, "校园食堂分析结果回写失败", err, slog.String("task_id", task.ID), logger.AnalysisTaskID(task.ID))
 		apm.RecordError(ctx, err, attribute.String("analysis.stage", "campus_public_food_writeback"))
 		return err
 	}
@@ -1627,6 +1627,7 @@ func applyCorrectionPostProcessingToResult(result map[string]any, correctionItem
 	}
 	if len(correctionItems) > 0 {
 		items = applyCorrectionIdentityAndWeightEditsToResultItems(items, correctionItems)
+		items = rescaleCorrectionWeightEditedNutrition(items, correctionItems)
 		items = applyCorrectionNutritionEditsToResultItems(items, correctionItems, previousItems)
 	}
 	if len(contextOverrides) > 0 {
@@ -1713,9 +1714,44 @@ func applyCorrectionNutritionEditsToResultItems(items, correctionItems, previous
 	return out
 }
 
+func rescaleCorrectionWeightEditedNutrition(items, correctionItems []map[string]any) []map[string]any {
+	if len(items) == 0 || len(correctionItems) == 0 {
+		return items
+	}
+	out := make([]map[string]any, len(items))
+	for index, item := range items {
+		out[index] = copyAnyMap(item)
+	}
+	used := map[int]bool{}
+	for correctionIndex, correctionItem := range correctionItems {
+		weightEdited := boolFromAny(firstNonNil(correctionItem["weightEdited"], correctionItem["weight_edited"]))
+		if !weightEdited {
+			continue
+		}
+		targetIndex := findCorrectionResultItemIndex(out, correctionContextOverride{
+			Index: correctionIndex,
+			Names: correctionCandidateNamesFromItem(correctionItem),
+		}, correctionIndex, used)
+		if targetIndex < 0 || targetIndex >= len(out) {
+			continue
+		}
+		unit := mapFromAny(firstNonNil(out[targetIndex]["unit_nutrition_per_100g"], out[targetIndex]["unitNutritionPer100g"]))
+		if len(unit) == 0 {
+			continue
+		}
+		weight, ok := firstPositiveFloat(out[targetIndex], "estimatedWeightGrams", "weight", "weight_g", "originalWeightGrams")
+		if !ok || weight <= 0 {
+			continue
+		}
+		applyScaledUnitNutritionToCorrectionItem(out[targetIndex], unit, weight)
+		used[targetIndex] = true
+	}
+	return out
+}
+
 func correctionItemNutritionEdited(item map[string]any, previousItems []map[string]any, fallbackIndex int) bool {
-	if boolFromAny(firstNonNil(item["nutritionEdited"], item["nutrition_edited"], item["nutrientsEdited"], item["nutrients_edited"])) {
-		return true
+	if edited, ok := explicitCorrectionNutritionEdited(item); ok {
+		return edited
 	}
 	previous := findPreviousCorrectionItem(item, previousItems, fallbackIndex)
 	if previous == nil {
@@ -1746,6 +1782,18 @@ func correctionItemNutritionEdited(item map[string]any, previousItems []map[stri
 		}
 	}
 	return false
+}
+
+func explicitCorrectionNutritionEdited(item map[string]any) (bool, bool) {
+	if item == nil {
+		return false, false
+	}
+	for _, key := range []string{"nutritionEdited", "nutrition_edited", "nutrientsEdited", "nutrients_edited"} {
+		if value, ok := item[key]; ok {
+			return boolFromAny(value), true
+		}
+	}
+	return false, false
 }
 
 func hasPositiveCorrectionNutrientOverride(item map[string]any) bool {
@@ -1824,6 +1872,31 @@ func correctionNutrientValue(item map[string]any, key string) (float64, bool) {
 		return value, true
 	}
 	return 0, false
+}
+
+func applyScaledUnitNutritionToCorrectionItem(item map[string]any, unit map[string]any, weight float64) {
+	if len(unit) == 0 || weight <= 0 {
+		return
+	}
+	nutrients := mapFromAny(item["nutrients"])
+	if len(nutrients) == 0 {
+		nutrients = map[string]any{}
+	}
+	factor := weight / 100.0
+	for key, value := range unit {
+		if number, ok := floatFromAny(value); ok {
+			nutrients[key] = round2(number * factor)
+		}
+	}
+	item["nutrients"] = nutrients
+	if value, ok := floatFromAny(nutrients["calories"]); ok {
+		item["calorie"] = value
+	}
+	for _, key := range []string{"protein", "carbs", "fat"} {
+		if value, ok := floatFromAny(nutrients[key]); ok {
+			item[key] = value
+		}
+	}
 }
 
 func applyNutritionOverridesToCorrectionItem(item map[string]any, overrides map[string]float64) {
@@ -2310,7 +2383,7 @@ func (r *Runner) processPrecisionAggregate(ctx context.Context, task *domain.Ana
 		return err
 	}
 	if err := r.writeBackCampusPublicFood(ctx, task, finalResult); err != nil {
-		r.errorLog(ctx, "校园食堂精准分析结果回写失败", err, slog.String("task_id", task.ID), logger.AnalysisTaskID(task.ID), )
+		r.errorLog(ctx, "校园食堂精准分析结果回写失败", err, slog.String("task_id", task.ID), logger.AnalysisTaskID(task.ID))
 		apm.RecordError(ctx, err, attribute.String("analysis.stage", "campus_public_food_precision_writeback"))
 		return err
 	}
@@ -4489,7 +4562,7 @@ func (r *Runner) refundTaskCredits(ctx context.Context, task *domain.AnalysisTas
 		"task_id":         task.ID,
 		"task_type":       task.TaskType,
 	}); err != nil {
-		r.warn(ctx, "任务失败后退还预扣积分失败", slog.String("task_id", task.ID), logger.AnalysisTaskID(task.ID), slog.String("credit_group_id", groupID), )
+		r.warn(ctx, "任务失败后退还预扣积分失败", slog.String("task_id", task.ID), logger.AnalysisTaskID(task.ID), slog.String("credit_group_id", groupID))
 	}
 }
 
