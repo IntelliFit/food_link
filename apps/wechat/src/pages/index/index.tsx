@@ -1,7 +1,7 @@
 import { View, Text, Input, Image, Canvas, PageMeta, Swiper, SwiperItem } from '@tarojs/components'
 import { CAFETERIA_HERO_BG_URL, GOOSE_DUCK_CHICKEN_BG_URL } from '../../utils/static-asset-cdn-url'
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import Taro, { useShareAppMessage, useShareTimeline } from '@tarojs/taro'
+import React from 'react'
+import Taro, { useDidShow, useShareAppMessage, useShareTimeline } from '@tarojs/taro'
 import { Empty, Button } from '@taroify/core'
 import {
   getHomeDashboard,
@@ -768,26 +768,26 @@ function IndexPage() {
   const initialSelectedDate = formatDateKey(new Date())
   const initialHomeSelectedDate = initialSelectedDate
   const initialLocalSnapshot = getStoredHomeDashboardSnapshotByDate(initialHomeSelectedDate)
-  const [intakeData, setIntakeData] = useState<HomeIntakeData>(initialLocalSnapshot?.intakeData || DEFAULT_INTAKE)
-  const [nutritionTarget, setNutritionTarget] = useState<HomeNutritionTarget | null>(initialLocalSnapshot?.nutritionTarget || null)
-  const [meals, setMeals] = useState<HomeMealItem[]>(initialLocalSnapshot?.meals || [])
-  const [expirySummary, setExpirySummary] = useState<HomeFoodExpirySummary>(initialLocalSnapshot?.expirySummary || DEFAULT_EXPIRY_SUMMARY)
-  const [weekHeatmapCells, setWeekHeatmapCells] = useState<WeekHeatmapCell[]>(() => buildWeekHeatmapCellsFromStorage())
-  const [loading, setLoading] = useState(!initialLocalSnapshot)
-  const [isSwitchingDate, setIsSwitchingDate] = useState(false)
+  const [intakeData, setIntakeData] = React.useState<HomeIntakeData>(initialLocalSnapshot?.intakeData || DEFAULT_INTAKE)
+  const [nutritionTarget, setNutritionTarget] = React.useState<HomeNutritionTarget | null>(initialLocalSnapshot?.nutritionTarget || null)
+  const [meals, setMeals] = React.useState<HomeMealItem[]>(initialLocalSnapshot?.meals || [])
+  const [expirySummary, setExpirySummary] = React.useState<HomeFoodExpirySummary>(initialLocalSnapshot?.expirySummary || DEFAULT_EXPIRY_SUMMARY)
+  const [weekHeatmapCells, setWeekHeatmapCells] = React.useState<WeekHeatmapCell[]>(() => buildWeekHeatmapCellsFromStorage())
+  const [loading, setLoading] = React.useState(!initialLocalSnapshot)
+  const [isSwitchingDate, setIsSwitchingDate] = React.useState(false)
   /** 后台静默同步中：左上角微型 spinner，不占文档流 */
-  const [dataSyncing, setDataSyncing] = useState(false)
-  const [petCollapsed, setPetCollapsed] = useState(getStoredPetCollapsed)
-  const [petHidden, setPetHidden] = useState(getStoredPetHidden)
-  const [petFloatPosition, setPetFloatPosition] = useState(() => getStoredPetFloatPosition(getStoredPetCollapsed()))
-  const [petDragging, setPetDragging] = useState(false)
-  const [petSummary, setPetSummary] = useState<PetSummary | null>(null)
-  const [petClaiming, setPetClaiming] = useState(false)
-  const [membershipStatus, setMembershipStatus] = useState<MembershipStatus | null>(null)
-  const [rewardCenter, setRewardCenter] = useState<RewardCenterResponse | null>(null)
-  const [rewardHintIndex, setRewardHintIndex] = useState(0)
-  const petSummarySeqRef = useRef(0)
-  const petDragRef = useRef<{
+  const [dataSyncing, setDataSyncing] = React.useState(false)
+  const [petCollapsed, setPetCollapsed] = React.useState(getStoredPetCollapsed)
+  const [petHidden, setPetHidden] = React.useState(getStoredPetHidden)
+  const [petFloatPosition, setPetFloatPosition] = React.useState(() => getStoredPetFloatPosition(getStoredPetCollapsed()))
+  const [petDragging, setPetDragging] = React.useState(false)
+  const [petSummary, setPetSummary] = React.useState<PetSummary | null>(null)
+  const [petClaiming, setPetClaiming] = React.useState(false)
+  const [membershipStatus, setMembershipStatus] = React.useState<MembershipStatus | null>(null)
+  const [rewardCenter, setRewardCenter] = React.useState<RewardCenterResponse | null>(null)
+  const [rewardHintIndex, setRewardHintIndex] = React.useState(0)
+  const petSummarySeqRef = React.useRef(0)
+  const petDragRef = React.useRef<{
     pointerId: number
     startClientX: number
     startClientY: number
@@ -796,55 +796,55 @@ function IndexPage() {
     moved: boolean
   } | null>(null)
   /** 标记本次 touch 是否已经在 touchend 里处理过展开/收起，避免 touchend 后又触发 card onClick */
-  const petClickHandledRef = useRef(false)
-  const [showTargetEditor, setShowTargetEditor] = useState(false)
-  const [savingTargets, setSavingTargets] = useState(false)
-  const [nutritionExpanded, setNutritionExpanded] = useState(false)
-  const [targetForm, setTargetForm] = useState<TargetFormState>(createTargetForm(DEFAULT_INTAKE))
-  const targetScaleBaseMacrosRef = useRef<MacroTargets>(getMacroTargetsFromIntake(DEFAULT_INTAKE))
+  const petClickHandledRef = React.useRef(false)
+  const [showTargetEditor, setShowTargetEditor] = React.useState(false)
+  const [savingTargets, setSavingTargets] = React.useState(false)
+  const [nutritionExpanded, setNutritionExpanded] = React.useState(false)
+  const [targetForm, setTargetForm] = React.useState<TargetFormState>(createTargetForm(DEFAULT_INTAKE))
+  const targetScaleBaseMacrosRef = React.useRef<MacroTargets>(getMacroTargetsFromIntake(DEFAULT_INTAKE))
 
-  const [selectedDate, setSelectedDate] = useState(initialHomeSelectedDate)
+  const [selectedDate, setSelectedDate] = React.useState(initialHomeSelectedDate)
 
   // 体重/喝水状态
-  const [bodyMetrics, setBodyMetrics] = useState<BodyMetricsStorage>(getStoredBodyMetrics())
+  const [bodyMetrics, setBodyMetrics] = React.useState<BodyMetricsStorage>(getStoredBodyMetrics())
   /** 首页「运动」卡片：当日消耗千卡（与 dashboard 同步） */
-  const [exerciseBurnedKcal, setExerciseBurnedKcal] = useState(initialLocalSnapshot?.exerciseBurnedKcal || 0)
-  const [showWeightEditor, setShowWeightEditor] = useState(false)
-  const [weightInput, setWeightInput] = useState('')
-  const [savingWeight, setSavingWeight] = useState(false)
-  const [showWaterEditor, setShowWaterEditor] = useState(false)
-  const [waterEditorDate, setWaterEditorDate] = useState(initialHomeSelectedDate)
-  const [waterInput, setWaterInput] = useState('')
+  const [exerciseBurnedKcal, setExerciseBurnedKcal] = React.useState(initialLocalSnapshot?.exerciseBurnedKcal || 0)
+  const [showWeightEditor, setShowWeightEditor] = React.useState(false)
+  const [weightInput, setWeightInput] = React.useState('')
+  const [savingWeight, setSavingWeight] = React.useState(false)
+  const [showWaterEditor, setShowWaterEditor] = React.useState(false)
+  const [waterEditorDate, setWaterEditorDate] = React.useState(initialHomeSelectedDate)
+  const [waterInput, setWaterInput] = React.useState('')
   /** 自定义水量输入框聚焦（与草稿数字共同决定是否显示「添加」） */
-  const [waterInputFocused, setWaterInputFocused] = useState(false)
-  const [savingWater, setSavingWater] = useState(false)
-  const waterBlurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [waterInputFocused, setWaterInputFocused] = React.useState(false)
+  const [savingWater, setSavingWater] = React.useState(false)
+  const waterBlurTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
   /** 快速切换日期时忽略非最新一次 dashboard 的响应（微信小程序无 AbortController，无法掐断请求） */
-  const loadDashboardSeqRef = useRef(0)
+  const loadDashboardSeqRef = React.useRef(0)
   /** 切日同步专用的 seq ref，避免与 loadDashboard 共用导致竞态丢弃 */
-  const syncDashboardSeqRef = useRef(0)
+  const syncDashboardSeqRef = React.useRef(0)
   /** 防止并发重复请求：同日期 dashboard 正在加载中时跳过新调用 */
-  const loadDashboardPendingRef = useRef<{ date: string; seq: number } | null>(null)
+  const loadDashboardPendingRef = React.useRef<{ date: string; seq: number } | null>(null)
   /** 防止并发重复请求：切日同步专用的 pending ref */
-  const syncDashboardPendingRef = useRef<{ date: string; seq: number } | null>(null)
+  const syncDashboardPendingRef = React.useRef<{ date: string; seq: number } | null>(null)
   /** 最近一次成功拉取 dashboard 的日期与时间戳（用于回到首页时跳过重复请求） */
-  const homeLastLoadRef = useRef<{ date: string; ts: number } | null>(null)
+  const homeLastLoadRef = React.useRef<{ date: string; ts: number } | null>(null)
   /** 为 true 时下次「今日」展示必须重拉（饮食/运动/保质期等变更） */
-  const homeDataStaleRef = useRef(true)
+  const homeDataStaleRef = React.useRef(true)
 
   // 记录菜单弹窗状态
-  const [showRecordMenu, setShowRecordMenu] = useState(false)
-  const [showHomeOnboardingGuide, setShowHomeOnboardingGuide] = useState(false)
-  const [dismissedBackfillDates, setDismissedBackfillDates] = useState<string[]>(() => getDismissedBackfillDates())
-  const selectedDateRef = useRef(selectedDate)
-  const commitSelectedDate = useCallback((date: string) => {
+  const [showRecordMenu, setShowRecordMenu] = React.useState(false)
+  const [showHomeOnboardingGuide, setShowHomeOnboardingGuide] = React.useState(false)
+  const [dismissedBackfillDates, setDismissedBackfillDates] = React.useState<string[]>(() => getDismissedBackfillDates())
+  const selectedDateRef = React.useRef(selectedDate)
+  const commitSelectedDate = React.useCallback((date: string) => {
     const nextDate = isValidHomeDate(date) ? date : formatDateKey(new Date())
     selectedDateRef.current = nextDate
     saveLastHomeSelectedDate(nextDate)
     setSelectedDate(nextDate)
     return nextDate
   }, [])
-  const openRecordMenuFromRequest = useCallback(() => {
+  const openRecordMenuFromRequest = React.useCallback(() => {
     const pendingDate = consumeHomeRecordMenuDate()
     if (pendingDate) {
       commitSelectedDate(pendingDate)
@@ -852,7 +852,7 @@ function IndexPage() {
     setShowRecordMenu(true)
   }, [commitSelectedDate])
 
-  const handleHomeGuideBeforeNext = useCallback(async (stepIndex: number, nextIndex: number) => {
+  const handleHomeGuideBeforeNext = React.useCallback(async (stepIndex: number, nextIndex: number) => {
     if (nextIndex >= 1 && nextIndex <= 4) {
       setShowRecordMenu(true)
       await new Promise<void>((resolve) => setTimeout(resolve, stepIndex === 0 ? 400 : 220))
@@ -860,16 +860,16 @@ function IndexPage() {
   }, [])
 
   /** 首页仪表盘返回的成就（连续记录 / 全绿天数） */
-  const [homeAchievement, setHomeAchievement] = useState<HomeAchievement>(initialLocalSnapshot?.achievement || { streak_days: 0, green_days: 0 })
-  const [dailyPosterGenerating, setDailyPosterGenerating] = useState(false)
-  const [dailyPosterImageUrl, setDailyPosterImageUrl] = useState<string | null>(null)
-  const [showDailyPosterModal, setShowDailyPosterModal] = useState(false)
-  const [dietRecVisible, setDietRecVisible] = useState(false)
-  const [dietRecScene, setDietRecScene] = useState<DietRecommendationScene>('eat_out')
-  const [dietRecLoading, setDietRecLoading] = useState(false)
-  const [dietRecResult, setDietRecResult] = useState<DietRecommendationResult | null>(null)
+  const [homeAchievement, setHomeAchievement] = React.useState<HomeAchievement>(initialLocalSnapshot?.achievement || { streak_days: 0, green_days: 0 })
+  const [dailyPosterGenerating, setDailyPosterGenerating] = React.useState(false)
+  const [dailyPosterImageUrl, setDailyPosterImageUrl] = React.useState<string | null>(null)
+  const [showDailyPosterModal, setShowDailyPosterModal] = React.useState(false)
+  const [dietRecVisible, setDietRecVisible] = React.useState(false)
+  const [dietRecScene, setDietRecScene] = React.useState<DietRecommendationScene>('eat_out')
+  const [dietRecLoading, setDietRecLoading] = React.useState(false)
+  const [dietRecResult, setDietRecResult] = React.useState<DietRecommendationResult | null>(null)
 
-  const loadRewardHintData = useCallback(async () => {
+  const loadRewardHintData = React.useCallback(async () => {
     if (!getAccessToken()) {
       setMembershipStatus(null)
       setRewardCenter(null)
@@ -888,30 +888,30 @@ function IndexPage() {
   }, [])
 
   // 餐食卡片操作状态
-  const [mealActionSheetVisible, setMealActionSheetVisible] = useState(false)
-  const [mealActionRecordId, setMealActionRecordId] = useState<string | null>(null)
-  const [mealActionRecord, setMealActionRecord] = useState<FoodRecord | null>(null)
-  const [showRecordEditModal, setShowRecordEditModal] = useState(false)
+  const [mealActionSheetVisible, setMealActionSheetVisible] = React.useState(false)
+  const [mealActionRecordId, setMealActionRecordId] = React.useState<string | null>(null)
+  const [mealActionRecord, setMealActionRecord] = React.useState<FoodRecord | null>(null)
+  const [showRecordEditModal, setShowRecordEditModal] = React.useState(false)
   const homePageScrollLocked = showRecordEditModal || showHomeOnboardingGuide || dietRecVisible
-  const [showRecordPosterModal, setShowRecordPosterModal] = useState(false)
+  const [showRecordPosterModal, setShowRecordPosterModal] = React.useState(false)
   /** 同一餐次多条记录时的选择面板 */
-  const [mealRecordsDialogVisible, setMealRecordsDialogVisible] = useState(false)
-  const [mealRecordsDialogMeal, setMealRecordsDialogMeal] = useState<HomeMealItem | null>(null)
+  const [mealRecordsDialogVisible, setMealRecordsDialogVisible] = React.useState(false)
+  const [mealRecordsDialogMeal, setMealRecordsDialogMeal] = React.useState<HomeMealItem | null>(null)
 
-  const showRecordPosterModalRef = useRef(false)
-  const showDailyPosterModalRef = useRef(false)
-  const mealPosterShareForAppMessageRef = useRef<MealPosterSharePayload | null>(null)
-  const dailyPosterShareForAppMessageRef = useRef<{ imageUrl: string } | null>(null)
+  const showRecordPosterModalRef = React.useRef(false)
+  const showDailyPosterModalRef = React.useRef(false)
+  const mealPosterShareForAppMessageRef = React.useRef<MealPosterSharePayload | null>(null)
+  const dailyPosterShareForAppMessageRef = React.useRef<{ imageUrl: string } | null>(null)
 
-  useEffect(() => {
+  React.useEffect(() => {
     showRecordPosterModalRef.current = showRecordPosterModal
   }, [showRecordPosterModal])
 
-  useEffect(() => {
+  React.useEffect(() => {
     showDailyPosterModalRef.current = showDailyPosterModal
   }, [showDailyPosterModal])
 
-  useEffect(() => {
+  React.useEffect(() => {
     const handleHiddenChanged = (hidden?: boolean) => {
       setPetHidden(typeof hidden === 'boolean' ? hidden : getStoredPetHidden())
     }
@@ -921,11 +921,11 @@ function IndexPage() {
     }
   }, [])
 
-  const handleMealPosterShareContext = useCallback((ctx: MealPosterSharePayload | null) => {
+  const handleMealPosterShareContext = React.useCallback((ctx: MealPosterSharePayload | null) => {
     mealPosterShareForAppMessageRef.current = ctx
   }, [])
 
-  useEffect(() => {
+  React.useEffect(() => {
     if (showDailyPosterModal && dailyPosterImageUrl) {
       dailyPosterShareForAppMessageRef.current = { imageUrl: dailyPosterImageUrl }
     } else {
@@ -934,7 +934,7 @@ function IndexPage() {
   }, [showDailyPosterModal, dailyPosterImageUrl])
 
   // 加载指定日期的首页数据
-  const loadDashboard = useCallback(async (targetDate?: string, silent = false) => {
+  const loadDashboard = React.useCallback(async (targetDate?: string, silent = false) => {
     const resolvedDate =
       targetDate !== undefined && targetDate !== ''
         ? targetDate
@@ -1206,9 +1206,9 @@ function IndexPage() {
   }
 
   // 每次显示页面时刷新数据
-  const skipNextRefreshRef = useRef(false)
+  const skipNextRefreshRef = React.useRef(false)
 
-  Taro.useDidShow(() => {
+  useDidShow(() => {
     setPetHidden(getStoredPetHidden())
     const today = formatDateKey(new Date())
     const currentSelected = selectedDateRef.current
@@ -1333,7 +1333,7 @@ function IndexPage() {
     title: '食探 - AI 智能饮食记录'
   }))
 
-  useEffect(() => {
+  React.useEffect(() => {
     Taro.showShareMenu({
       withShareTicket: true,
       menus: ['shareAppMessage', 'shareTimeline']
@@ -1347,14 +1347,14 @@ function IndexPage() {
     }
   }, [])
 
-  useEffect(() => () => {
+  React.useEffect(() => () => {
     if (waterBlurTimerRef.current) {
       clearTimeout(waterBlurTimerRef.current)
     }
   }, [])
 
   /** 「今日小结」预览：自定义 tabBar 通过 storage 隐藏底栏（见 custom-tab-bar/updateHidden） */
-  useEffect(() => {
+  React.useEffect(() => {
     if (showDailyPosterModal) {
       try {
         Taro.setStorageSync('home_poster_modal_visible', '1')
@@ -1378,7 +1378,7 @@ function IndexPage() {
   }, [showDailyPosterModal])
 
   /** 饮食/运动/保质期等变更：标记脏数据，并在需要时立即同步首页与身体指标 */
-  useEffect(() => {
+  React.useEffect(() => {
     const markHomeStale = (payload?: { date?: string; force?: boolean }): void => {
       skipNextRefreshRef.current = false
       homeDataStaleRef.current = true
@@ -1420,7 +1420,7 @@ function IndexPage() {
   }, [])
 
   // 监听记录菜单标记变化（解决首页直接点击绿色按钮无响应问题）
-  useEffect(() => {
+  React.useEffect(() => {
     const checkRecordMenuFlag = () => {
       const shouldShow = Taro.getStorageSync(HOME_RECORD_MENU_FLAG_KEY)
       if (shouldShow) {
@@ -1448,7 +1448,7 @@ function IndexPage() {
   }, [openRecordMenuFromRequest])
 
   // 额外：监听全局事件（备用方案，确保可靠性）
-  useEffect(() => {
+  React.useEffect(() => {
     const showRecordMenuHandler = () => {
       console.log('[DEBUG] 通过全局事件触发显示记录菜单')
       openRecordMenuFromRequest()
@@ -1460,7 +1460,7 @@ function IndexPage() {
   }, [openRecordMenuFromRequest])
 
   // 额外方案：监听 app 实例上的事件中心（供原生组件如 custom-tab-bar 使用）
-  useEffect(() => {
+  React.useEffect(() => {
     const showRecordMenuHandler = () => {
       console.log('[DEBUG] 通过 app eventCenter 触发显示记录菜单')
       openRecordMenuFromRequest()
@@ -1708,7 +1708,7 @@ function IndexPage() {
   }
 
   /** 「查看饮食统计」入口：进入当日记录列表 */
-  const openDayRecordForSelectedDate = useCallback(() => {
+  const openDayRecordForSelectedDate = React.useCallback(() => {
     if (!getAccessToken()) {
       redirectToLogin()
       return
@@ -1718,7 +1718,7 @@ function IndexPage() {
   }, [selectedDate])
 
   /** 今日餐食单条 → 弹出记录操作菜单（多条同餐时先选记录） */
-  const openMealRecordDetail = useCallback((meal: HomeMealItem) => {
+  const openMealRecordDetail = React.useCallback((meal: HomeMealItem) => {
     if (!getAccessToken()) {
       redirectToLogin()
       return
@@ -1751,7 +1751,7 @@ function IndexPage() {
   }, [])
 
   /** 从多记录面板中选择一条 → 关闭面板 → 打开操作菜单 */
-  const handleSelectMealRecord = useCallback((recordId: string) => {
+  const handleSelectMealRecord = React.useCallback((recordId: string) => {
     setMealRecordsDialogVisible(false)
     setMealActionRecordId(recordId)
     setMealActionSheetVisible(true)
@@ -1953,7 +1953,7 @@ function IndexPage() {
     })
   }
 
-  const buildDietRecommendationPayload = useCallback((scene: DietRecommendationScene) => {
+  const buildDietRecommendationPayload = React.useCallback((scene: DietRecommendationScene) => {
     const macros = intakeData.macros
     const calorieRemaining = Math.max(0, Number((intakeData.target - intakeData.current).toFixed(1)))
     const proteinGap = Math.max(0, Number(((macros.protein?.target || 0) - (macros.protein?.current || 0)).toFixed(1)))
@@ -1993,7 +1993,7 @@ function IndexPage() {
     }
   }, [intakeData, meals, selectedDate])
 
-  const requestDietRecommendation = useCallback(async (scene: DietRecommendationScene) => {
+  const requestDietRecommendation = React.useCallback(async (scene: DietRecommendationScene) => {
     if (!getAccessToken()) {
       redirectToLogin()
       return
@@ -2011,21 +2011,21 @@ function IndexPage() {
     }
   }, [buildDietRecommendationPayload])
 
-  const openDietRecommendation = useCallback((scene: DietRecommendationScene) => {
+  const openDietRecommendation = React.useCallback((scene: DietRecommendationScene) => {
     void requestDietRecommendation(scene)
   }, [requestDietRecommendation])
 
-  const handleDietRecommendationSceneChange = useCallback((scene: DietRecommendationScene) => {
+  const handleDietRecommendationSceneChange = React.useCallback((scene: DietRecommendationScene) => {
     if (scene === dietRecScene && dietRecResult) return
     void requestDietRecommendation(scene)
   }, [dietRecScene, dietRecResult, requestDietRecommendation])
 
-  const refreshDietRecommendation = useCallback(() => {
+  const refreshDietRecommendation = React.useCallback(() => {
     void requestDietRecommendation(dietRecScene)
   }, [dietRecScene, requestDietRecommendation])
 
   // 切日专用轻量同步：仅拉取该日 dashboard + 运动，不重复请求周统计/身体指标
-  const syncDashboardForDate = useCallback(async (date: string) => {
+  const syncDashboardForDate = React.useCallback(async (date: string) => {
     // 若同日期请求已在进行中，跳过本次调用
     if (
       syncDashboardPendingRef.current &&
@@ -2287,7 +2287,7 @@ function IndexPage() {
   }
 
   // 刷新身体指标数据
-  const refreshBodyMetrics = useCallback(async () => {
+  const refreshBodyMetrics = React.useCallback(async () => {
     if (!getAccessToken()) return
     try {
       const res = await getBodyMetricsSummary('week')
@@ -2337,17 +2337,17 @@ function IndexPage() {
   const isRelationAligned = calorieGap != null && Math.abs(calorieGap) <= 1
 
   // 体重/喝水计算
-  const weightSummary = useMemo(() =>
+  const weightSummary = React.useMemo(() =>
     deriveWeightSummary(bodyMetrics.weightEntries, selectedDate),
     [bodyMetrics.weightEntries, selectedDate]
   )
 
-  const todayWater = useMemo(() =>
+  const todayWater = React.useMemo(() =>
     getTodayWater(bodyMetrics, selectedDate),
     [bodyMetrics, selectedDate]
   )
 
-  const waterEditorWater = useMemo(() =>
+  const waterEditorWater = React.useMemo(() =>
     getTodayWater(bodyMetrics, waterEditorDate || selectedDate),
     [bodyMetrics, selectedDate, waterEditorDate]
   )
@@ -2394,7 +2394,7 @@ function IndexPage() {
   /** 运动消耗：切换日期时不播放动画，直接显示最终数字 */
   const exerciseAnimTarget = dashboardBusy ? 0 : exerciseBurnedKcal
   const animatedExerciseBurnedKcal = useAnimatedNumber(exerciseAnimTarget, 600, 0, dashboardAnimResetKey, true)
-  const loadPetSummary = useCallback(async (date: string) => {
+  const loadPetSummary = React.useCallback(async (date: string) => {
     if (!getAccessToken()) {
       setPetSummary(null)
       return
@@ -2413,12 +2413,12 @@ function IndexPage() {
     }
   }, [])
 
-  useEffect(() => {
+  React.useEffect(() => {
     void loadPetSummary(selectedDate)
   }, [loadPetSummary, selectedDate])
 
   const petName = petSummary?.pet?.name || '成长伙伴'
-  const healthyHabitScore = useMemo(() => {
+  const healthyHabitScore = React.useMemo(() => {
     if (dashboardBusy || isGuest) return 0
     let score = 0
     if (totalCurrent > 0 && totalTarget > 0 && totalCurrent <= totalTarget) score += 1
@@ -2468,7 +2468,7 @@ function IndexPage() {
           : totalCurrent <= 0
             ? '记录一餐'
             : '保持今日节奏')
-  const handleClaimPetEvent = useCallback(async () => {
+  const handleClaimPetEvent = React.useCallback(async () => {
     if (!petEvent || petClaiming) return
     setPetClaiming(true)
     try {
@@ -2484,7 +2484,7 @@ function IndexPage() {
       setPetClaiming(false)
     }
   }, [petClaiming, petEvent])
-  const togglePetCollapsed = useCallback(() => {
+  const togglePetCollapsed = React.useCallback(() => {
     setPetCollapsed((prev) => {
       const next = !prev
       try {
@@ -2498,10 +2498,10 @@ function IndexPage() {
       return next
     })
   }, [])
-  const openPetChat = useCallback(() => {
+  const openPetChat = React.useCallback(() => {
     Taro.navigateTo({ url: extraPkgUrl('/pages/pet-chat/index') })
   }, [])
-  const handlePetTouchStart = useCallback((event) => {
+  const handlePetTouchStart = React.useCallback((event) => {
     const touch = event.touches?.[0]
     if (!touch) return
     petDragRef.current = {
@@ -2515,7 +2515,7 @@ function IndexPage() {
     setPetDragging(true)
   }, [petFloatPosition.left, petFloatPosition.top])
 
-  const handlePetTouchMove = useCallback((event) => {
+  const handlePetTouchMove = React.useCallback((event) => {
     const drag = petDragRef.current
     if (!drag) return
     const touches = Array.from(event.touches || []) as Array<{ identifier?: number; clientX: number; clientY: number }>
@@ -2529,7 +2529,7 @@ function IndexPage() {
     setPetFloatPosition(clampPetFloatPosition(drag.startLeft + dx, drag.startTop + dy, petCollapsed))
   }, [petCollapsed])
 
-  const handlePetTouchEnd = useCallback(() => {
+  const handlePetTouchEnd = React.useCallback(() => {
     const drag = petDragRef.current
     petDragRef.current = null
     setPetDragging(false)
@@ -2551,7 +2551,7 @@ function IndexPage() {
     }
   }, [petCollapsed, togglePetCollapsed])
 
-  const handleShareDailyPosterImage = useCallback(() => {
+  const handleShareDailyPosterImage = React.useCallback(() => {
     if (!dailyPosterImageUrl) return
     // @ts-ignore
     Taro.showShareImageMenu({
@@ -2567,7 +2567,7 @@ function IndexPage() {
     })
   }, [dailyPosterImageUrl, selectedDate])
 
-  const handleSaveDailyPoster = useCallback(() => {
+  const handleSaveDailyPoster = React.useCallback(() => {
     if (!dailyPosterImageUrl) return
     Taro.showShareImageMenu({
       path: dailyPosterImageUrl,
@@ -2579,7 +2579,7 @@ function IndexPage() {
     })
   }, [dailyPosterImageUrl])
 
-  const handleShareDailySummary = useCallback(() => {
+  const handleShareDailySummary = React.useCallback(() => {
     if (!getAccessToken()) {
       redirectToLogin()
       return
@@ -2850,14 +2850,14 @@ function IndexPage() {
   const activeRewardHintIndex = rewardHintBanners.length > 0 ? rewardHintIndex % rewardHintBanners.length : 0
 
   // 首页轮播图自动轮播
-  useEffect(() => {
+  React.useEffect(() => {
     const timer = setInterval(() => {
       setRewardHintIndex((current) => (current + 1) % Math.max(rewardHintBanners.length, 1))
     }, 5000)
     return () => clearInterval(timer)
   }, [rewardHintBanners.length])
 
-  const handleRewardHintClick = useCallback((url: string) => {
+  const handleRewardHintClick = React.useCallback((url: string) => {
     Taro.navigateTo({
       url,
       fail: (error) => {
