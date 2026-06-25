@@ -3,6 +3,7 @@ package migration
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"regexp"
@@ -11,6 +12,7 @@ import (
 	migrationdo "food_link/backend/internal/migration/do"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 var identifierPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
@@ -57,6 +59,18 @@ func AutoMigrate(ctx context.Context, db *gorm.DB, schema string) error {
 		return err
 	}
 	if err := ensureSchoolsSeed(ctx, db); err != nil {
+		return err
+	}
+	if err := ensureCampusDirectorySeed(ctx, db); err != nil {
+		return err
+	}
+	if err := ensureCampusDirectoryImportBatchSeed(ctx, db); err != nil {
+		return err
+	}
+	if err := ensureCampusDirectoryPendingResearchSeed(ctx, db); err != nil {
+		return err
+	}
+	if err := ensurePublicFoodCampusDirectoryBackfill(ctx, db); err != nil {
 		return err
 	}
 	if err := ensureMottoColumn(ctx, db); err != nil {
@@ -123,6 +137,14 @@ func ensureConstraints(ctx context.Context, db *gorm.DB) error {
 		dropAndAddCheck("public_food_library", "public_food_library_taste_rating_check", `taste_rating IS NULL OR (taste_rating >= 1 AND taste_rating <= 5)`),
 		dropAndAddCheck("public_food_library", "public_food_library_price_type_check", `price_type IS NULL OR price_type = ANY (ARRAY['fixed'::text,'weight'::text,'range'::text,'combo'::text,'unknown'::text])`),
 		dropAndAddCheck("public_food_library_comments", "public_food_library_comments_rating_check", `rating IS NULL OR (rating >= 1 AND rating <= 5)`),
+		dropAndAddCheck("school_campuses", "school_campuses_status_check", `status = ANY (ARRAY['pending_review'::text,'active'::text,'inactive'::text,'deleted'::text])`),
+		dropAndAddCheck("school_canteens", "school_canteens_status_check", `status = ANY (ARRAY['pending_review'::text,'active'::text,'inactive'::text,'rejected'::text,'deleted'::text])`),
+		dropAndAddCheck("school_canteens", "school_canteens_confidence_level_check", `confidence_level IS NULL OR confidence_level = ANY (ARRAY['A'::text,'B'::text,'C'::text,'D'::text])`),
+		dropAndAddCheck("canteen_windows", "canteen_windows_status_check", `status = ANY (ARRAY['active'::text,'inactive'::text,'deleted'::text])`),
+		dropAndAddCheck("campus_canteen_applications", "campus_canteen_applications_status_check", `status = ANY (ARRAY['pending'::text,'approved'::text,'rejected'::text])`),
+		dropAndAddCheck("campus_directory_import_batches", "campus_directory_import_batches_status_check", `status = ANY (ARRAY['pending_review'::text,'collecting'::text,'ready_for_review'::text,'approved'::text,'rejected'::text,'archived'::text])`),
+		dropAndAddCheck("campus_directory_sources", "campus_directory_sources_review_status_check", `review_status = ANY (ARRAY['pending_review'::text,'approved'::text,'rejected'::text])`),
+		dropAndAddCheck("campus_directory_sources", "campus_directory_sources_evidence_level_check", `evidence_level IS NULL OR evidence_level = ANY (ARRAY['A'::text,'B'::text,'C'::text,'D'::text])`),
 		dropAndAddCheck("user_custom_foods", "user_custom_foods_status_check", `status = ANY (ARRAY['active'::text,'deleted'::text])`),
 		dropAndAddCheck("user_custom_foods", "user_custom_foods_public_status_check", `public_status = ANY (ARRAY['private'::text,'pending'::text,'published'::text,'rejected'::text])`),
 		dropAndAddCheck("feed_interaction_notifications", "feed_interaction_notifications_type_check", `notification_type = ANY (ARRAY['like_received'::text,'comment_received'::text,'reply_received'::text,'comment_rejected'::text])`),
@@ -203,6 +225,24 @@ func ensureConstraints(ctx context.Context, db *gorm.DB) error {
 		addFK("public_food_library_user_id_fkey", "public_food_library", "user_id", "weapp_user", "id", "CASCADE"),
 		addFK("public_food_library_source_record_id_fkey", "public_food_library", "source_record_id", "user_food_records", "id", "SET NULL"),
 		addFK("public_food_library_analysis_task_id_fkey", "public_food_library", "analysis_task_id", "analysis_tasks", "id", "SET NULL"),
+		addFK("school_campuses_school_id_fkey", "school_campuses", "school_id", "schools", "id", "CASCADE"),
+		addFK("school_canteens_school_id_fkey", "school_canteens", "school_id", "schools", "id", "CASCADE"),
+		addFK("school_canteens_campus_id_fkey", "school_canteens", "campus_id", "school_campuses", "id", "SET NULL"),
+		addFK("canteen_windows_school_id_fkey", "canteen_windows", "school_id", "schools", "id", "CASCADE"),
+		addFK("canteen_windows_campus_id_fkey", "canteen_windows", "campus_id", "school_campuses", "id", "SET NULL"),
+		addFK("canteen_windows_canteen_id_fkey", "canteen_windows", "canteen_id", "school_canteens", "id", "CASCADE"),
+		addFK("campus_canteen_applications_user_id_fkey", "campus_canteen_applications", "user_id", "weapp_user", "id", "CASCADE"),
+		addFK("campus_canteen_applications_school_id_fkey", "campus_canteen_applications", "school_id", "schools", "id", "CASCADE"),
+		addFK("campus_canteen_applications_campus_id_fkey", "campus_canteen_applications", "campus_id", "school_campuses", "id", "SET NULL"),
+		addFK("campus_canteen_applications_canteen_id_fkey", "campus_canteen_applications", "canteen_id", "school_canteens", "id", "SET NULL"),
+		addFK("campus_directory_sources_batch_id_fkey", "campus_directory_sources", "batch_id", "campus_directory_import_batches", "id", "SET NULL"),
+		addFK("campus_directory_sources_school_id_fkey", "campus_directory_sources", "school_id", "schools", "id", "CASCADE"),
+		addFK("campus_directory_sources_campus_id_fkey", "campus_directory_sources", "campus_id", "school_campuses", "id", "SET NULL"),
+		addFK("campus_directory_sources_canteen_id_fkey", "campus_directory_sources", "canteen_id", "school_canteens", "id", "SET NULL"),
+		addFK("public_food_library_school_id_fkey", "public_food_library", "school_id", "schools", "id", "SET NULL"),
+		addFK("public_food_library_campus_id_fkey", "public_food_library", "campus_id", "school_campuses", "id", "SET NULL"),
+		addFK("public_food_library_canteen_id_fkey", "public_food_library", "canteen_id", "school_canteens", "id", "SET NULL"),
+		addFK("public_food_library_window_id_fkey", "public_food_library", "window_id", "canteen_windows", "id", "SET NULL"),
 		addFK("public_food_library_likes_user_id_fkey", "public_food_library_likes", "user_id", "weapp_user", "id", "CASCADE"),
 		addFK("public_food_library_likes_library_item_id_fkey", "public_food_library_likes", "library_item_id", "public_food_library", "id", "CASCADE"),
 		addFK("public_food_library_collections_user_id_fkey", "public_food_library_collections", "user_id", "weapp_user", "id", "CASCADE"),
@@ -483,6 +523,10 @@ WHERE COALESCE(display_name, '') = ''
 		`CREATE INDEX IF NOT EXISTS idx_user_food_records_hidden_from_feed ON user_food_records (hidden_from_feed) WHERE hidden_from_feed = false`,
 		// Campus food library columns
 		`ALTER TABLE public_food_library ADD COLUMN IF NOT EXISTS is_campus_food boolean NOT NULL DEFAULT false`,
+		`ALTER TABLE public_food_library ADD COLUMN IF NOT EXISTS school_id uuid`,
+		`ALTER TABLE public_food_library ADD COLUMN IF NOT EXISTS campus_id uuid`,
+		`ALTER TABLE public_food_library ADD COLUMN IF NOT EXISTS canteen_id uuid`,
+		`ALTER TABLE public_food_library ADD COLUMN IF NOT EXISTS window_id uuid`,
 		`ALTER TABLE public_food_library ADD COLUMN IF NOT EXISTS school_name text`,
 		`ALTER TABLE public_food_library ADD COLUMN IF NOT EXISTS campus_name text`,
 		`ALTER TABLE public_food_library ADD COLUMN IF NOT EXISTS canteen_name text`,
@@ -498,11 +542,26 @@ WHERE COALESCE(display_name, '') = ''
 		`ALTER TABLE public_food_library ADD COLUMN IF NOT EXISTS is_campus_highlight boolean NOT NULL DEFAULT false`,
 		`ALTER TABLE public_food_library ADD COLUMN IF NOT EXISTS campus_location_text text`,
 		`CREATE INDEX IF NOT EXISTS idx_public_food_library_is_campus ON public_food_library (is_campus_food)`,
+		`CREATE INDEX IF NOT EXISTS idx_public_food_library_school_id ON public_food_library (school_id) WHERE school_id IS NOT NULL`,
+		`CREATE INDEX IF NOT EXISTS idx_public_food_library_campus_id ON public_food_library (campus_id) WHERE campus_id IS NOT NULL`,
+		`CREATE INDEX IF NOT EXISTS idx_public_food_library_canteen_id ON public_food_library (canteen_id) WHERE canteen_id IS NOT NULL`,
+		`CREATE INDEX IF NOT EXISTS idx_public_food_library_window_id ON public_food_library (window_id) WHERE window_id IS NOT NULL`,
 		`CREATE INDEX IF NOT EXISTS idx_public_food_library_school ON public_food_library (school_name) WHERE school_name IS NOT NULL`,
 		`CREATE INDEX IF NOT EXISTS idx_public_food_library_canteen ON public_food_library (canteen_name) WHERE canteen_name IS NOT NULL`,
 		`CREATE INDEX IF NOT EXISTS idx_public_food_library_campus_highlight ON public_food_library (is_campus_highlight) WHERE is_campus_highlight = true`,
 		`CREATE INDEX IF NOT EXISTS idx_public_food_library_campus_published ON public_food_library (is_campus_food, status, published_at) WHERE is_campus_food = true`,
 		`CREATE INDEX IF NOT EXISTS idx_public_food_library_price_type ON public_food_library (price_type) WHERE price_type IS NOT NULL`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_school_campuses_school_name_active ON school_campuses (school_id, lower(name)) WHERE status <> 'deleted'`,
+		`DROP INDEX IF EXISTS idx_school_canteens_campus_name_active`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_school_canteens_campus_name_active ON school_canteens (school_id, COALESCE(campus_id, '00000000-0000-0000-0000-000000000000'::uuid), lower(name)) WHERE status NOT IN ('deleted', 'rejected')`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_canteen_windows_canteen_name_active ON canteen_windows (canteen_id, lower(name)) WHERE status <> 'deleted'`,
+		`CREATE INDEX IF NOT EXISTS idx_school_canteens_school_status ON school_canteens (school_id, status, sort_order, name)`,
+		`CREATE INDEX IF NOT EXISTS idx_school_campuses_school_status ON school_campuses (school_id, status, sort_order, name)`,
+		`CREATE INDEX IF NOT EXISTS idx_campus_canteen_applications_school_status ON campus_canteen_applications (school_id, status, created_at DESC)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_campus_directory_import_batches_name_unique ON campus_directory_import_batches (name)`,
+		`CREATE INDEX IF NOT EXISTS idx_campus_directory_import_batches_status ON campus_directory_import_batches (status, created_at DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_campus_directory_sources_batch_status ON campus_directory_sources (batch_id, review_status, created_at DESC) WHERE batch_id IS NOT NULL`,
+		`CREATE INDEX IF NOT EXISTS idx_campus_directory_sources_url ON campus_directory_sources (source_url)`,
 		// Analysis tasks search text column + index for name-based search
 		`ALTER TABLE analysis_tasks ADD COLUMN IF NOT EXISTS search_text text`,
 		`UPDATE analysis_tasks SET search_text = COALESCE(NULLIF(text_input, ''), result->'items'->0->>'name', result->>'description', '') WHERE search_text IS NULL OR search_text = ''`,
@@ -695,6 +754,550 @@ func ensureSchoolsSeed(ctx context.Context, db *gorm.DB) error {
 		}
 	}
 	return nil
+}
+
+type campusDirectorySeed struct {
+	School    string              `json:"school"`
+	SourceURL string              `json:"source_url"`
+	Campuses  []campusSeed        `json:"campuses"`
+	Canteens  []campusCanteenSeed `json:"canteens"`
+}
+
+type campusSeed struct {
+	Name      string `json:"name"`
+	SourceURL string `json:"source_url"`
+}
+
+type campusCanteenSeed struct {
+	Campus string `json:"campus"`
+	Name   string `json:"name"`
+}
+
+type campusDirectoryImportBatchSeed struct {
+	Name          string `json:"name"`
+	Region        string `json:"region"`
+	SourceScope   string `json:"source_scope"`
+	Status        string `json:"status"`
+	TotalSchools  int    `json:"total_schools"`
+	TotalCampuses int    `json:"total_campuses"`
+	TotalCanteens int    `json:"total_canteens"`
+	TotalWindows  int    `json:"total_windows"`
+	TotalSources  int    `json:"total_sources"`
+	Notes         string `json:"notes"`
+}
+
+type campusDirectoryPendingResearchSeed struct {
+	BatchName   string                        `json:"batch_name"`
+	Region      string                        `json:"region"`
+	SourceScope string                        `json:"source_scope"`
+	Schools     []campusDirectoryResearchItem `json:"schools"`
+}
+
+type campusDirectoryResearchItem struct {
+	School       string                           `json:"school"`
+	ReviewStatus string                           `json:"review_status"`
+	Campuses     []campusDirectoryResearchCampus  `json:"campuses"`
+	Canteens     []campusDirectoryResearchCanteen `json:"canteens"`
+	Notes        []string                         `json:"notes"`
+}
+
+type campusDirectoryResearchCampus struct {
+	Name      string   `json:"name"`
+	Aliases   []string `json:"aliases"`
+	Address   string   `json:"address"`
+	SourceURL string   `json:"source_url"`
+}
+
+type campusDirectoryResearchCanteen struct {
+	Campus          string   `json:"campus"`
+	Name            string   `json:"name"`
+	Aliases         []string `json:"aliases"`
+	LocationText    string   `json:"location_text"`
+	BuildingOrFloor string   `json:"building_or_floor"`
+	ServiceType     string   `json:"service_type"`
+	Audience        string   `json:"audience"`
+	OpeningHoursRaw string   `json:"opening_hours_raw"`
+	SourceURL       string   `json:"source_url"`
+	SourceTitle     string   `json:"source_title"`
+	SourceOrg       string   `json:"source_org"`
+	SourceType      string   `json:"source_type"`
+	EvidenceLevel   string   `json:"evidence_level"`
+	EvidenceExcerpt string   `json:"evidence_excerpt"`
+	ReviewStatus    string   `json:"review_status"`
+}
+
+func ensureCampusDirectoryImportBatchSeed(ctx context.Context, db *gorm.DB) error {
+	data, err := os.ReadFile("data/campus_directory_import_batches_seed.json")
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("read campus directory import batch seed file: %w", err)
+	}
+	var seeds []campusDirectoryImportBatchSeed
+	if err := json.Unmarshal(data, &seeds); err != nil {
+		return fmt.Errorf("parse campus directory import batch seed file: %w", err)
+	}
+	for _, seed := range seeds {
+		name := strings.TrimSpace(seed.Name)
+		if name == "" {
+			continue
+		}
+		status := strings.TrimSpace(seed.Status)
+		if status == "" {
+			status = "pending_review"
+		}
+		row := migrationdo.CampusDirectoryImportBatchDO{
+			Name:          name,
+			Region:        stringPtr(strings.TrimSpace(seed.Region)),
+			SourceScope:   stringPtr(strings.TrimSpace(seed.SourceScope)),
+			Status:        status,
+			TotalSchools:  seed.TotalSchools,
+			TotalCampuses: seed.TotalCampuses,
+			TotalCanteens: seed.TotalCanteens,
+			TotalWindows:  seed.TotalWindows,
+			TotalSources:  seed.TotalSources,
+			Notes:         stringPtr(strings.TrimSpace(seed.Notes)),
+		}
+		if err := db.WithContext(ctx).Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "name"}}, DoNothing: true}).Create(&row).Error; err != nil {
+			return fmt.Errorf("insert campus directory import batch %q: %w", name, err)
+		}
+	}
+	return nil
+}
+
+func ensureCampusDirectoryPendingResearchSeed(ctx context.Context, db *gorm.DB) error {
+	data, err := os.ReadFile("data/campus_directory_pending_research_seed.json")
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("read campus directory pending research seed file: %w", err)
+	}
+	var seeds []campusDirectoryPendingResearchSeed
+	if err := json.Unmarshal(data, &seeds); err != nil {
+		return fmt.Errorf("parse campus directory pending research seed file: %w", err)
+	}
+	for _, batchSeed := range seeds {
+		batchName := strings.TrimSpace(batchSeed.BatchName)
+		if batchName == "" {
+			continue
+		}
+		batchID, err := ensureCampusDirectoryPendingBatch(ctx, db, batchSeed)
+		if err != nil {
+			return err
+		}
+		for _, schoolSeed := range batchSeed.Schools {
+			if err := ensureCampusDirectoryPendingSchoolResearch(ctx, db, batchID, schoolSeed); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func ensureCampusDirectoryPendingBatch(ctx context.Context, db *gorm.DB, seed campusDirectoryPendingResearchSeed) (string, error) {
+	totalCampuses := 0
+	totalCanteens := 0
+	totalSources := 0
+	noteParts := make([]string, 0, len(seed.Schools))
+	for _, school := range seed.Schools {
+		totalCampuses += len(school.Campuses)
+		totalCanteens += len(school.Canteens)
+		for _, canteen := range school.Canteens {
+			if strings.TrimSpace(canteen.SourceURL) != "" {
+				totalSources++
+			}
+		}
+		for _, note := range school.Notes {
+			if trimmed := strings.TrimSpace(note); trimmed != "" {
+				noteParts = append(noteParts, strings.TrimSpace(school.School)+": "+trimmed)
+			}
+		}
+	}
+	row := migrationdo.CampusDirectoryImportBatchDO{
+		Name:          strings.TrimSpace(seed.BatchName),
+		Region:        stringPtr(strings.TrimSpace(seed.Region)),
+		SourceScope:   stringPtr(strings.TrimSpace(seed.SourceScope)),
+		Status:        "pending_review",
+		TotalSchools:  len(seed.Schools),
+		TotalCampuses: totalCampuses,
+		TotalCanteens: totalCanteens,
+		TotalSources:  totalSources,
+		Notes:         stringPtr(strings.Join(noteParts, "\n")),
+	}
+	if row.SourceScope == nil {
+		row.SourceScope = stringPtr("学校官网、后勤/总务、餐饮服务中心、校园地图、迎新指南、官方采购公告")
+	}
+	if err := db.WithContext(ctx).Clauses(clause.OnConflict{
+		Columns: []clause.Column{{Name: "name"}},
+		DoUpdates: clause.AssignmentColumns([]string{
+			"region", "source_scope", "status", "total_schools", "total_campuses", "total_canteens", "total_sources", "notes", "updated_at",
+		}),
+	}).Create(&row).Error; err != nil {
+		return "", fmt.Errorf("upsert campus directory pending batch %q: %w", row.Name, err)
+	}
+	var saved struct {
+		ID string
+	}
+	if err := db.WithContext(ctx).Table("campus_directory_import_batches").Select("id").Where("name = ?", row.Name).Take(&saved).Error; err != nil {
+		return "", fmt.Errorf("find campus directory pending batch %q: %w", row.Name, err)
+	}
+	return saved.ID, nil
+}
+
+func ensureCampusDirectoryPendingSchoolResearch(ctx context.Context, db *gorm.DB, batchID string, seed campusDirectoryResearchItem) error {
+	schoolName := strings.TrimSpace(seed.School)
+	if schoolName == "" {
+		return nil
+	}
+	var school struct {
+		ID string
+	}
+	if err := db.WithContext(ctx).Table("schools").Select("id").Where("name = ? AND status = ?", schoolName, "active").Take(&school).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil
+		}
+		return fmt.Errorf("find school %q for pending research: %w", schoolName, err)
+	}
+	campusIDs := map[string]string{}
+	for i, campus := range seed.Campuses {
+		name := strings.TrimSpace(campus.Name)
+		if name == "" {
+			continue
+		}
+		status := normalizePendingReviewStatus(seed.ReviewStatus)
+		row := migrationdo.SchoolCampusDO{
+			SchoolID:  school.ID,
+			Name:      name,
+			Aliases:   campus.Aliases,
+			Address:   stringPtr(strings.TrimSpace(campus.Address)),
+			SourceURL: stringPtr(strings.TrimSpace(campus.SourceURL)),
+			Status:    status,
+			SortOrder: i + 1,
+		}
+		if err := db.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&row).Error; err != nil {
+			return fmt.Errorf("insert pending campus %q/%q: %w", schoolName, name, err)
+		}
+		var saved struct {
+			ID string
+		}
+		if err := db.WithContext(ctx).Table("school_campuses").Select("id").Where("school_id = ? AND lower(name) = lower(?) AND status <> ?", school.ID, name, "deleted").Take(&saved).Error; err != nil {
+			return fmt.Errorf("find pending campus %q/%q: %w", schoolName, name, err)
+		}
+		campusIDs[name] = saved.ID
+		for _, alias := range campus.Aliases {
+			alias = strings.TrimSpace(alias)
+			if alias != "" {
+				campusIDs[alias] = saved.ID
+			}
+		}
+	}
+	for i, canteen := range seed.Canteens {
+		name := strings.TrimSpace(canteen.Name)
+		if name == "" {
+			continue
+		}
+		var campusID *string
+		if id := campusIDs[strings.TrimSpace(canteen.Campus)]; id != "" {
+			campusID = &id
+		}
+		confidence := normalizeCampusEvidenceLevel(canteen.EvidenceLevel)
+		row := migrationdo.SchoolCanteenDO{
+			SchoolID:        school.ID,
+			CampusID:        campusID,
+			Name:            name,
+			Aliases:         canteen.Aliases,
+			LocationText:    stringPtr(strings.TrimSpace(canteen.LocationText)),
+			BuildingOrFloor: stringPtr(strings.TrimSpace(canteen.BuildingOrFloor)),
+			ServiceType:     stringPtr(strings.TrimSpace(canteen.ServiceType)),
+			Audience:        stringPtr(strings.TrimSpace(canteen.Audience)),
+			MealPeriods:     []string{},
+			OpeningHoursRaw: stringPtr(strings.TrimSpace(canteen.OpeningHoursRaw)),
+			PaymentMethods:  []string{},
+			SourceURL:       stringPtr(strings.TrimSpace(canteen.SourceURL)),
+			SourceOrg:       stringPtr(strings.TrimSpace(canteen.SourceOrg)),
+			SourceType:      stringPtr(strings.TrimSpace(canteen.SourceType)),
+			ConfidenceLevel: &confidence,
+			Status:          normalizePendingReviewStatus(canteen.ReviewStatus),
+			ReviewNote:      stringPtr("公开资料采集待后台审核"),
+			SortOrder:       i + 1,
+		}
+		if row.Status == "" {
+			row.Status = "pending_review"
+		}
+		if err := db.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&row).Error; err != nil {
+			return fmt.Errorf("insert pending canteen %q/%q: %w", schoolName, name, err)
+		}
+		canteenID, err := findCampusDirectoryCanteenID(ctx, db, school.ID, campusID, name)
+		if err != nil {
+			return fmt.Errorf("find pending canteen %q/%q: %w", schoolName, name, err)
+		}
+		if err := ensureCampusDirectoryPendingSource(ctx, db, batchID, school.ID, campusID, canteenID, canteen); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func findCampusDirectoryCanteenID(ctx context.Context, db *gorm.DB, schoolID string, campusID *string, name string) (*string, error) {
+	query := db.WithContext(ctx).Table("school_canteens").Select("id").Where("school_id = ? AND lower(name) = lower(?) AND status NOT IN ?", schoolID, name, []string{"deleted", "rejected"})
+	if campusID == nil {
+		query = query.Where("campus_id IS NULL")
+	} else {
+		query = query.Where("campus_id = ?", *campusID)
+	}
+	var saved struct {
+		ID string
+	}
+	if err := query.Take(&saved).Error; err != nil {
+		return nil, err
+	}
+	return &saved.ID, nil
+}
+
+func ensureCampusDirectoryPendingSource(ctx context.Context, db *gorm.DB, batchID string, schoolID string, campusID *string, canteenID *string, seed campusDirectoryResearchCanteen) error {
+	sourceURL := strings.TrimSpace(seed.SourceURL)
+	if sourceURL == "" {
+		return nil
+	}
+	var count int64
+	query := db.WithContext(ctx).Table("campus_directory_sources").Where("school_id = ? AND source_url = ?", schoolID, sourceURL)
+	if canteenID == nil {
+		query = query.Where("canteen_id IS NULL")
+	} else {
+		query = query.Where("canteen_id = ?", *canteenID)
+	}
+	if err := query.Count(&count).Error; err != nil {
+		return fmt.Errorf("count campus directory source %q: %w", sourceURL, err)
+	}
+	evidenceLevel := normalizeCampusEvidenceLevel(seed.EvidenceLevel)
+	batchIDPtr := batchID
+	row := migrationdo.CampusDirectorySourceDO{
+		BatchID:         &batchIDPtr,
+		SchoolID:        schoolID,
+		CampusID:        campusID,
+		CanteenID:       canteenID,
+		SourceURL:       sourceURL,
+		SourceTitle:     stringPtr(strings.TrimSpace(seed.SourceTitle)),
+		SourceOrg:       stringPtr(strings.TrimSpace(seed.SourceOrg)),
+		SourceType:      stringPtr(strings.TrimSpace(seed.SourceType)),
+		EvidenceLevel:   &evidenceLevel,
+		EvidenceExcerpt: stringPtr(strings.TrimSpace(seed.EvidenceExcerpt)),
+		ReviewStatus:    "pending_review",
+	}
+	if count > 0 {
+		updates := map[string]any{
+			"batch_id":         row.BatchID,
+			"source_title":     row.SourceTitle,
+			"source_org":       row.SourceOrg,
+			"source_type":      row.SourceType,
+			"evidence_level":   row.EvidenceLevel,
+			"evidence_excerpt": row.EvidenceExcerpt,
+			"review_status":    row.ReviewStatus,
+			"updated_at":       gorm.Expr("now()"),
+		}
+		return query.Updates(updates).Error
+	}
+	if err := db.WithContext(ctx).Create(&row).Error; err != nil {
+		return fmt.Errorf("insert campus directory source %q: %w", sourceURL, err)
+	}
+	return nil
+}
+
+func normalizePendingReviewStatus(status string) string {
+	switch strings.TrimSpace(status) {
+	case "active", "inactive", "rejected", "deleted":
+		return strings.TrimSpace(status)
+	default:
+		return "pending_review"
+	}
+}
+
+func normalizeCampusEvidenceLevel(level string) string {
+	switch strings.ToLower(strings.TrimSpace(level)) {
+	case "a", "high", "official", "official_high", "official_direct", "official_dining_page", "official_logistics", "official_logistics_page", "official_campus_dining_page", "official_named_with_hours", "official_named_status", "official_named_location", "official_procurement_named", "official_freshman_guide", "official_welcome_guide", "official_service_guide", "official_logistics_service_guide":
+		return "A"
+	case "b", "medium", "official_medium", "official_news", "official_procurement", "official_procurement_notice", "official_logistics_procurement", "official_logistics_notice", "official_logistics_news", "official_logistics_homepage", "official_campus_notice", "official_notice", "official_exam_notice", "official_phone_directory", "official_account_named_list", "official_facility_location", "official_index", "official_planned", "official_campus_status_only", "official_campus_construction_procurement", "official_logistics_notice_index", "official_service_portal":
+		return "B"
+	case "c", "low", "secondary", "secondary_procurement_direct", "procurement_proxy_pdf", "official_department_news", "official_college_news", "official_career_notice", "official_indirect":
+		return "C"
+	default:
+		return "D"
+	}
+}
+
+func ensureCampusDirectorySeed(ctx context.Context, db *gorm.DB) error {
+	data, err := os.ReadFile("data/campus_directory_seed.json")
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("read campus directory seed file: %w", err)
+	}
+	var seeds []campusDirectorySeed
+	if err := json.Unmarshal(data, &seeds); err != nil {
+		return fmt.Errorf("parse campus directory seed file: %w", err)
+	}
+	for _, schoolSeed := range seeds {
+		schoolName := strings.TrimSpace(schoolSeed.School)
+		if schoolName == "" {
+			continue
+		}
+		var school struct {
+			ID string
+		}
+		if err := db.WithContext(ctx).Table("schools").Select("id").Where("name = ? AND status = ?", schoolName, "active").Take(&school).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				continue
+			}
+			return fmt.Errorf("find school %q: %w", schoolName, err)
+		}
+		campusIDs := map[string]string{}
+		for i, campus := range schoolSeed.Campuses {
+			name := strings.TrimSpace(campus.Name)
+			if name == "" {
+				continue
+			}
+			sourceURL := strings.TrimSpace(campus.SourceURL)
+			row := migrationdo.SchoolCampusDO{
+				SchoolID:  school.ID,
+				Name:      name,
+				Aliases:   []string{},
+				Status:    "active",
+				SortOrder: i + 1,
+			}
+			if sourceURL != "" {
+				row.SourceURL = &sourceURL
+			}
+			if err := db.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&row).Error; err != nil {
+				return fmt.Errorf("insert campus %q/%q: %w", schoolName, name, err)
+			}
+			var saved struct {
+				ID string
+			}
+			if err := db.WithContext(ctx).Table("school_campuses").Select("id").Where("school_id = ? AND lower(name) = lower(?) AND status <> ?", school.ID, name, "deleted").Take(&saved).Error; err != nil {
+				return fmt.Errorf("find campus %q/%q: %w", schoolName, name, err)
+			}
+			campusIDs[name] = saved.ID
+		}
+		for i, canteen := range schoolSeed.Canteens {
+			name := strings.TrimSpace(canteen.Name)
+			if name == "" {
+				continue
+			}
+			var campusID *string
+			if id := campusIDs[strings.TrimSpace(canteen.Campus)]; id != "" {
+				campusID = &id
+			}
+			sourceURL := strings.TrimSpace(schoolSeed.SourceURL)
+			sourceOrg := schoolName
+			confidence := "B"
+			row := migrationdo.SchoolCanteenDO{
+				SchoolID:        school.ID,
+				CampusID:        campusID,
+				Name:            name,
+				Aliases:         []string{},
+				MealPeriods:     []string{},
+				PaymentMethods:  []string{},
+				Status:          "active",
+				SortOrder:       i + 1,
+				SourceOrg:       &sourceOrg,
+				SourceType:      stringPtr("official"),
+				ConfidenceLevel: &confidence,
+			}
+			if sourceURL != "" {
+				row.SourceURL = &sourceURL
+			}
+			if err := db.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&row).Error; err != nil {
+				return fmt.Errorf("insert canteen %q/%q: %w", schoolName, name, err)
+			}
+		}
+	}
+	return nil
+}
+
+func ensurePublicFoodCampusDirectoryBackfill(ctx context.Context, db *gorm.DB) error {
+	statements := []string{
+		`
+		UPDATE public_food_library p
+		SET school_id = s.id
+		FROM schools s
+		WHERE p.school_id IS NULL
+		  AND NULLIF(trim(p.school_name), '') IS NOT NULL
+		  AND s.status = 'active'
+		  AND lower(trim(p.school_name)) = lower(s.name)
+		`,
+		`
+		UPDATE public_food_library p
+		SET campus_id = sc.id
+		FROM school_campuses sc
+		WHERE p.campus_id IS NULL
+		  AND p.school_id IS NOT NULL
+		  AND NULLIF(trim(p.campus_name), '') IS NOT NULL
+		  AND sc.school_id = p.school_id
+		  AND sc.status = 'active'
+		  AND lower(trim(p.campus_name)) = lower(sc.name)
+		`,
+		`
+		UPDATE public_food_library p
+		SET canteen_id = (
+			SELECT c.id
+			FROM school_canteens c
+			WHERE c.school_id = p.school_id
+			  AND c.status = 'active'
+			  AND lower(trim(p.canteen_name)) = lower(c.name)
+			  AND (p.campus_id IS NULL OR c.campus_id = p.campus_id OR c.campus_id IS NULL)
+			ORDER BY CASE WHEN c.campus_id = p.campus_id THEN 0 ELSE 1 END, c.sort_order ASC, c.name ASC
+			LIMIT 1
+		)
+		WHERE p.canteen_id IS NULL
+		  AND p.school_id IS NOT NULL
+		  AND NULLIF(trim(p.canteen_name), '') IS NOT NULL
+		  AND EXISTS (
+			SELECT 1
+			FROM school_canteens c
+			WHERE c.school_id = p.school_id
+			  AND c.status = 'active'
+			  AND lower(trim(p.canteen_name)) = lower(c.name)
+			  AND (p.campus_id IS NULL OR c.campus_id = p.campus_id OR c.campus_id IS NULL)
+		  )
+		`,
+		`
+		UPDATE public_food_library p
+		SET window_id = (
+			SELECT w.id
+			FROM canteen_windows w
+			WHERE w.canteen_id = p.canteen_id
+			  AND w.status = 'active'
+			  AND lower(trim(p.window_name)) = lower(w.name)
+			  AND (NULLIF(trim(p.floor), '') IS NULL OR NULLIF(trim(w.floor), '') IS NULL OR lower(trim(p.floor)) = lower(trim(w.floor)))
+			ORDER BY CASE WHEN lower(trim(p.floor)) = lower(trim(w.floor)) THEN 0 ELSE 1 END, w.sort_order ASC, w.name ASC
+			LIMIT 1
+		)
+		WHERE p.window_id IS NULL
+		  AND p.canteen_id IS NOT NULL
+		  AND NULLIF(trim(p.window_name), '') IS NOT NULL
+		  AND EXISTS (
+			SELECT 1
+			FROM canteen_windows w
+			WHERE w.canteen_id = p.canteen_id
+			  AND w.status = 'active'
+			  AND lower(trim(p.window_name)) = lower(w.name)
+			  AND (NULLIF(trim(p.floor), '') IS NULL OR NULLIF(trim(w.floor), '') IS NULL OR lower(trim(p.floor)) = lower(trim(w.floor)))
+		  )
+		`,
+	}
+	for _, sql := range statements {
+		if err := db.WithContext(ctx).Exec(sql).Error; err != nil {
+			return fmt.Errorf("backfill public food campus directory ids: %w", err)
+		}
+	}
+	return nil
+}
+
+func stringPtr(value string) *string {
+	return &value
 }
 
 type exerciseEnergySeed struct {

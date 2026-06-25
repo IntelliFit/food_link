@@ -97,6 +97,10 @@ type CreateInput struct {
 	Type               string
 	// Campus fields
 	IsCampusFood       bool
+	SchoolID           *string
+	CampusID           *string
+	CanteenID          *string
+	WindowID           *string
 	SchoolName         *string
 	CampusName         *string
 	CanteenName        *string
@@ -121,6 +125,9 @@ type CommentInput struct {
 func (s *PublicFoodService) Create(ctx context.Context, userID string, input CreateInput) (string, error) {
 	normalizePublicFoodTypeInput(&input)
 	if err := normalizePublicFoodLocationInput(&input); err != nil {
+		return "", err
+	}
+	if err := s.applyCampusDirectoryRef(ctx, &input); err != nil {
 		return "", err
 	}
 	var src map[string]any
@@ -212,6 +219,10 @@ func (s *PublicFoodService) Create(ctx context.Context, userID string, input Cre
 		Status:             "pending",
 		Type:               input.Type,
 		IsCampusFood:       input.IsCampusFood,
+		SchoolID:           trimPtr(input.SchoolID),
+		CampusID:           trimPtr(input.CampusID),
+		CanteenID:          trimPtr(input.CanteenID),
+		WindowID:           trimPtr(input.WindowID),
 		SchoolName:         ptrString(input.SchoolName),
 		CampusName:         ptrString(input.CampusName),
 		CanteenName:        ptrString(input.CanteenName),
@@ -507,6 +518,9 @@ func (s *PublicFoodService) Uncollect(ctx context.Context, userID, itemID string
 
 func (s *PublicFoodService) Update(ctx context.Context, userID, itemID string, input CreateInput) error {
 	normalizePublicFoodTypeInput(&input)
+	if err := s.applyCampusDirectoryRef(ctx, &input); err != nil {
+		return err
+	}
 	item, err := s.repo.GetItem(ctx, itemID)
 	if err != nil {
 		return err
@@ -575,6 +589,18 @@ func (s *PublicFoodService) Update(ctx context.Context, userID, itemID string, i
 	updates["type"] = input.Type
 	updates["is_campus_food"] = input.IsCampusFood
 	if input.Type == publicFoodTypeCampus {
+		if input.SchoolID != nil {
+			updates["school_id"] = strings.TrimSpace(*input.SchoolID)
+		}
+		if input.CampusID != nil {
+			updates["campus_id"] = strings.TrimSpace(*input.CampusID)
+		}
+		if input.CanteenID != nil {
+			updates["canteen_id"] = strings.TrimSpace(*input.CanteenID)
+		}
+		if input.WindowID != nil {
+			updates["window_id"] = strings.TrimSpace(*input.WindowID)
+		}
 		if input.SchoolName != nil {
 			updates["school_name"] = *input.SchoolName
 		}
@@ -1171,6 +1197,52 @@ func normalizePublicFoodLocationInput(input *CreateInput) error {
 	return nil
 }
 
+func (s *PublicFoodService) applyCampusDirectoryRef(ctx context.Context, input *CreateInput) error {
+	if input == nil {
+		return nil
+	}
+	normalizePublicFoodTypeInput(input)
+	if input.Type != publicFoodTypeCampus {
+		return nil
+	}
+	ref, err := s.repo.GetCampusDirectoryRef(ctx, ptrString(input.SchoolID), ptrString(input.CampusID), ptrString(input.CanteenID), ptrString(input.WindowID))
+	if err != nil {
+		return err
+	}
+	if ref == nil {
+		if input.SchoolID != nil || input.CampusID != nil || input.CanteenID != nil || input.WindowID != nil {
+			return &commonerrors.AppError{Code: 10002, Message: "请选择已审核的校园食堂", HTTPStatus: 400}
+		}
+		return nil
+	}
+	if ref.SchoolID != "" {
+		input.SchoolID = strPtr(ref.SchoolID)
+		input.SchoolName = strPtr(ref.SchoolName)
+	}
+	if ref.CampusID != "" {
+		input.CampusID = strPtr(ref.CampusID)
+	}
+	if ref.CampusName != "" {
+		input.CampusName = strPtr(ref.CampusName)
+	}
+	if ref.CanteenID != "" {
+		input.CanteenID = strPtr(ref.CanteenID)
+	}
+	if ref.CanteenName != "" {
+		input.CanteenName = strPtr(ref.CanteenName)
+	}
+	if ref.WindowID != "" {
+		input.WindowID = strPtr(ref.WindowID)
+	}
+	if ref.WindowName != "" {
+		input.WindowName = strPtr(ref.WindowName)
+	}
+	if ref.Floor != "" && input.Floor == nil {
+		input.Floor = strPtr(ref.Floor)
+	}
+	return nil
+}
+
 func clearCampusPriceInput(input *CreateInput) {
 	input.Price = nil
 	input.PriceType = nil
@@ -1179,6 +1251,21 @@ func clearCampusPriceInput(input *CreateInput) {
 	input.PriceUnit = nil
 	input.PriceCollectedAt = nil
 	input.PortionDescription = nil
+}
+
+func trimPtr(value *string) *string {
+	if value == nil {
+		return nil
+	}
+	trimmed := strings.TrimSpace(*value)
+	if trimmed == "" {
+		return nil
+	}
+	return &trimmed
+}
+
+func strPtr(value string) *string {
+	return &value
 }
 
 func validateCampusCreateInput(input CreateInput, imagePaths []string) error {

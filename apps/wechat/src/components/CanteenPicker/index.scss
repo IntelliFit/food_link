@@ -1,0 +1,262 @@
+.canteen-picker-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1002;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  background: rgb(0 0 0 / 42%);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+
+  &.visible {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
+.canteen-picker-card {
+  max-height: 86vh;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: env(safe-area-inset-bottom);
+  background: #fff;
+  border-radius: 24rpx 24rpx 0 0;
+}
+
+.canteen-picker-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24rpx;
+  padding: 28rpx 32rpx 20rpx;
+  border-bottom: 1rpx solid #f0f0f0;
+}
+
+.canteen-picker-title {
+  display: block;
+  color: #1f2937;
+  font-size: 32rpx;
+  font-weight: 700;
+}
+
+.canteen-picker-subtitle {
+  display: block;
+  margin-top: 6rpx;
+  color: #6b7280;
+  font-size: 24rpx;
+}
+
+.canteen-picker-close {
+  color: #6b7280;
+  font-size: 28rpx;
+}
+
+.canteen-picker-campus-scroll {
+  padding: 18rpx 0 8rpx;
+}
+
+.canteen-picker-campus-list {
+  display: flex;
+  flex-direction: row;
+  gap: 16rpx;
+  padding: 0 32rpx;
+  white-space: nowrap;
+}
+
+.canteen-picker-campus-tag {
+  flex-shrink: 0;
+  padding: 12rpx 22rpx;
+  color: #4b5563;
+  background: #f3f4f6;
+  border-radius: 28rpx;
+  font-size: 25rpx;
+
+  &.active {
+    color: #fff;
+    background: #5cb896;
+    font-weight: 600;
+  }
+}
+
+.canteen-picker-search {
+  display: flex;
+  align-items: center;
+  margin: 16rpx 32rpx;
+  padding: 16rpx 24rpx;
+  background: #f3f4f6;
+  border-radius: 30rpx;
+}
+
+.canteen-picker-search-icon {
+  margin-right: 14rpx;
+  color: #9ca3af;
+  font-size: 26rpx;
+}
+
+.canteen-picker-input {
+  flex: 1;
+  color: #1f2937;
+  font-size: 28rpx;
+}
+
+.canteen-picker-list {
+  flex: 1;
+  min-height: 260rpx;
+  max-height: 38vh;
+}
+
+.canteen-picker-item {
+  padding: 24rpx 32rpx;
+  border-bottom: 1rpx solid #f5f5f5;
+
+  &.selected {
+    background: #f4faf8;
+
+    .canteen-picker-item-name {
+      color: #047857;
+      font-weight: 700;
+    }
+  }
+}
+
+.canteen-picker-item-name {
+  display: block;
+  color: #1f2937;
+  font-size: 29rpx;
+  line-height: 1.4;
+}
+
+.canteen-picker-item-meta {
+  display: block;
+  margin-top: 8rpx;
+  color: #9ca3af;
+  font-size: 24rpx;
+  line-height: 1.4;
+}
+
+.canteen-picker-loading,
+.canteen-picker-empty {
+  display: flex;
+  justify-content: center;
+  padding: 56rpx 0;
+}
+
+.canteen-picker-empty-text {
+  color: #9ca3af;
+  font-size: 27rpx;
+}
+
+.canteen-picker-spinner {
+  width: 40rpx;
+  height: 40rpx;
+  border: 4rpx solid #e5e7eb;
+  border-top-color: #5cb896;
+  border-radius: 50%;
+  animation: canteen-picker-spin 0.8s linear infinite;
+}
+
+.canteen-picker-spinner--small {
+  width: 28rpx;
+  height: 28rpx;
+  border-width: 3rpx;
+}
+
+@keyframes canteen-picker-spin {
+  to { transform: rotate(360deg); }
+}
+
+.canteen-picker-apply {
+  margin: 16rpx 32rpx 28rpx;
+  padding: 24rpx;
+  background: #f8fafc;
+  border: 1rpx solid #edf2f7;
+  border-radius: 18rpx;
+}
+
+.canteen-picker-apply-title {
+  display: block;
+  margin-bottom: 16rpx;
+  color: #1f2937;
+  font-size: 28rpx;
+  font-weight: 700;
+}
+
+.canteen-picker-apply-input,
+.canteen-picker-apply-textarea {
+  box-sizing: border-box;
+  width: 100%;
+  margin-bottom: 14rpx;
+  padding: 0 20rpx;
+  color: #1f2937;
+  background: #fff;
+  border-radius: 12rpx;
+  font-size: 27rpx;
+}
+
+.canteen-picker-apply-input {
+  height: 72rpx;
+}
+
+.canteen-picker-apply-textarea {
+  height: 112rpx;
+  padding-top: 16rpx;
+}
+
+.canteen-picker-apply-btn {
+  height: 72rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  background: #047857;
+  border-radius: 12rpx;
+  font-size: 27rpx;
+  font-weight: 700;
+
+  &.disabled {
+    opacity: 0.65;
+  }
+}
+
+.canteen-picker-overlay--dark {
+  background: rgb(0 0 0 / 62%);
+
+  .canteen-picker-card {
+    background: #101a17;
+  }
+
+  .canteen-picker-header,
+  .canteen-picker-item {
+    border-bottom-color: rgb(255 255 255 / 7%);
+  }
+
+  .canteen-picker-title,
+  .canteen-picker-item-name,
+  .canteen-picker-apply-title,
+  .canteen-picker-input,
+  .canteen-picker-apply-input,
+  .canteen-picker-apply-textarea {
+    color: #f3f7f5;
+  }
+
+  .canteen-picker-subtitle,
+  .canteen-picker-close,
+  .canteen-picker-item-meta,
+  .canteen-picker-empty-text {
+    color: #aab7b2;
+  }
+
+  .canteen-picker-search,
+  .canteen-picker-campus-tag,
+  .canteen-picker-apply {
+    background: #17231f;
+    border-color: rgb(255 255 255 / 7%);
+  }
+
+  .canteen-picker-apply-input,
+  .canteen-picker-apply-textarea {
+    background: #0b1411;
+  }
+}

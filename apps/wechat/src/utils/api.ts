@@ -6510,6 +6510,14 @@ export interface PublicFoodLibraryItem {
   author?: { id: string; nickname: string; avatar: string }
   /** 是否为校园食堂菜品 */
   is_campus_food?: boolean
+  /** 学校 ID */
+  school_id?: string | null
+  /** 校区 ID */
+  campus_id?: string | null
+  /** 食堂 ID */
+  canteen_id?: string | null
+  /** 窗口 ID */
+  window_id?: string | null
   /** 学校名称 */
   school_name?: string | null
   /** 校区 */
@@ -6625,6 +6633,10 @@ export interface CreatePublicFoodLibraryRequest {
   type?: PublicFoodLibraryType
   /** 是否为校园食堂菜品 */
   is_campus_food?: boolean
+  school_id?: string
+  campus_id?: string
+  canteen_id?: string
+  window_id?: string
   school_name?: string
   campus_name?: string
   canteen_name?: string
@@ -6651,6 +6663,10 @@ export interface PublicFoodLibraryListParams {
   offset?: number
   type?: PublicFoodLibraryType
   is_campus_food?: boolean
+  school_id?: string
+  campus_id?: string
+  canteen_id?: string
+  window_id?: string
   school_name?: string
   canteen_name?: string
   is_campus_highlight?: boolean
@@ -6686,6 +6702,10 @@ export async function getPublicFoodLibraryList(
   if (params?.offset !== undefined) q.set('offset', String(params.offset))
   if (params?.type) q.set('type', params.type)
   if (params?.is_campus_food !== undefined) q.set('is_campus_food', String(params.is_campus_food))
+  if (params?.school_id) q.set('school_id', params.school_id)
+  if (params?.campus_id) q.set('campus_id', params.campus_id)
+  if (params?.canteen_id) q.set('canteen_id', params.canteen_id)
+  if (params?.window_id) q.set('window_id', params.window_id)
   if (params?.school_name) q.set('school_name', params.school_name)
   if (params?.canteen_name) q.set('canteen_name', params.canteen_name)
   if (params?.is_campus_highlight !== undefined) q.set('is_campus_highlight', String(params.is_campus_highlight))
@@ -7204,6 +7224,56 @@ export interface SchoolItem {
   logo_url?: string
 }
 
+export interface SchoolCampusItem {
+  id: string
+  school_id: string
+  name: string
+  aliases?: string[]
+  address?: string
+  campus_type?: string
+  status?: string
+  sort_order?: number
+}
+
+export interface SchoolCanteenItem {
+  id: string
+  school_id: string
+  campus_id?: string | null
+  campus_name?: string
+  name: string
+  aliases?: string[]
+  location_text?: string
+  building_or_floor?: string
+  service_type?: string
+  audience?: string
+  meal_periods?: string[]
+  opening_hours_raw?: string
+  status?: string
+  sort_order?: number
+}
+
+export interface CanteenWindowItem {
+  id: string
+  school_id: string
+  campus_id?: string | null
+  canteen_id: string
+  name: string
+  aliases?: string[]
+  floor?: string
+  status?: string
+  sort_order?: number
+}
+
+export interface CampusCanteenApplicationRequest {
+  school_id: string
+  campus_id?: string
+  requested_campus_name?: string
+  requested_canteen_name: string
+  location_text?: string
+  evidence_url?: string
+  applicant_note?: string
+}
+
 export async function searchSchools(keyword: string, province?: string, limit = 20): Promise<SchoolItem[]> {
   const q = new URLSearchParams()
   if (keyword) q.set('keyword', keyword)
@@ -7217,6 +7287,70 @@ export async function searchSchools(keyword: string, province?: string, limit = 
     throw new Error((response.data as any)?.message || '搜索学校失败')
   }
   return unwrapResponse<SchoolItem[]>(response) || []
+}
+
+export async function getSchoolCampuses(schoolId: string): Promise<SchoolCampusItem[]> {
+  const response = await authenticatedRequest(`/api/schools/${encodeURIComponent(schoolId)}/campuses`, {
+    method: 'GET',
+    timeout: 10000,
+  })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.message || '获取校区失败')
+  }
+  return unwrapResponse<SchoolCampusItem[]>(response) || []
+}
+
+export async function getSchoolCanteens(
+  schoolId: string,
+  params?: { campus_id?: string }
+): Promise<SchoolCanteenItem[]> {
+  const q = new URLSearchParams()
+  if (params?.campus_id) q.set('campus_id', params.campus_id)
+  const qs = q.toString()
+  const response = await authenticatedRequest(`/api/schools/${encodeURIComponent(schoolId)}/canteens${qs ? `?${qs}` : ''}`, {
+    method: 'GET',
+    timeout: 10000,
+  })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.message || '获取食堂失败')
+  }
+  return unwrapResponse<SchoolCanteenItem[]>(response) || []
+}
+
+export async function getCampusCanteens(campusId: string): Promise<SchoolCanteenItem[]> {
+  const response = await authenticatedRequest(`/api/school-campuses/${encodeURIComponent(campusId)}/canteens`, {
+    method: 'GET',
+    timeout: 10000,
+  })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.message || '获取食堂失败')
+  }
+  return unwrapResponse<SchoolCanteenItem[]>(response) || []
+}
+
+export async function getCanteenWindows(canteenId: string): Promise<CanteenWindowItem[]> {
+  const response = await authenticatedRequest(`/api/school-canteens/${encodeURIComponent(canteenId)}/windows`, {
+    method: 'GET',
+    timeout: 10000,
+  })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.message || '获取窗口失败')
+  }
+  return unwrapResponse<CanteenWindowItem[]>(response) || []
+}
+
+export async function createSchoolCanteenApplication(
+  data: CampusCanteenApplicationRequest
+): Promise<{ id: string; message: string }> {
+  const response = await authenticatedRequest('/api/school-canteen-applications', {
+    method: 'POST',
+    data,
+    timeout: 10000,
+  })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.detail || (response.data as any)?.message || '提交食堂申请失败')
+  }
+  return response.data as { id: string; message: string }
 }
 
 /** 获取有学校的省份列表 */

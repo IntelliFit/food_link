@@ -18,6 +18,7 @@ import { withAuth } from '../../../utils/withAuth'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
 import { PetAvatar } from '../../../components/PetAvatar'
+import { PetMarkdown } from './pet-markdown'
 import './index.scss'
 
 type ChatRole = 'pet' | 'user'
@@ -33,10 +34,10 @@ type ChatMessage = {
 }
 
 const QUICK_QUESTIONS = [
-  { text: '最近训练状态下滑了，帮我找原因', range: 'week' as RangeMode },
-  { text: '帮我找最该优化的一点', range: 'week' as RangeMode },
-  { text: '我最近总饿，是不是吃法有问题', range: 'week' as RangeMode },
-  { text: '看最近 30 天规律', range: 'month' as RangeMode },
+  { text: '最近训练状态下滑了，帮我找原因', subtitle: '训练表现', range: 'week' as RangeMode },
+  { text: '我最近总饿，是不是吃法有问题', subtitle: '饥饿感', range: 'week' as RangeMode },
+  { text: '帮我找最该优化的一点', subtitle: '优先级', range: 'week' as RangeMode },
+  { text: '看最近 30 天规律', subtitle: '长期趋势', range: 'month' as RangeMode },
 ]
 
 const FOLLOW_UPS = [
@@ -144,6 +145,7 @@ function PetChatPage() {
   const [sessions, setSessions] = useState<PetChatSessionSummary[]>([])
   const petName = petSummary?.pet?.name || '你的宠物'
   const [messages, setMessages] = useState<ChatMessage[]>([buildIntroMessage('你的宠物')])
+  const isEmptyConversation = !lastAnalysis && !sessionID && messages.length === 1 && messages[0]?.kind === 'intro'
 
   useDidShow(() => {
     applyThemeNavigationBar(scheme)
@@ -325,7 +327,11 @@ function PetChatPage() {
             <View key={message.id} className={`pet-chat-message ${message.role}`}>
               {message.role === 'pet' ? <PetAvatar pet={petSummary?.pet} size={30} mood={petSummary?.status?.mood} state={petSummary?.status?.state} /> : null}
               <View className='pet-chat-bubble'>
-                <Text className='pet-chat-message-text'>{message.text}</Text>
+                {message.role === 'pet' ? (
+                  <PetMarkdown text={message.text} />
+                ) : (
+                  <Text className='pet-chat-message-text'>{message.text}</Text>
+                )}
                 {message.clues?.length ? (
                   <View className='pet-chat-clues'>
                     {message.clues.map((clue, index) => (
@@ -346,6 +352,19 @@ function PetChatPage() {
               </View>
             </View>
           ))}
+          {isEmptyConversation ? (
+            <View className='pet-chat-starter'>
+              <Text className='pet-chat-starter-title'>可以从这些话题开始</Text>
+              <View className='pet-chat-starter-grid'>
+                {QUICK_QUESTIONS.map((item) => (
+                  <View key={item.text} className='pet-chat-starter-card' onClick={() => handleQuickQuestion(item.text, item.range)}>
+                    <Text className='pet-chat-starter-card-title'>{item.text}</Text>
+                    <Text className='pet-chat-starter-card-subtitle'>{item.subtitle} · {rangeLabel(item.range)}</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          ) : null}
           {busy ? (
             <View className='pet-chat-message pet'>
               <PetAvatar pet={petSummary?.pet} size={30} mood={petSummary?.status?.mood} state={petSummary?.status?.state} />
@@ -359,21 +378,23 @@ function PetChatPage() {
         </View>
       </ScrollView>
 
-      <ScrollView className='pet-chat-quick-row' scrollX enhanced showScrollbar={false}>
-        <View className='pet-chat-quick-row-inner'>
-          {(!lastAnalysis ? QUICK_QUESTIONS : FOLLOW_UPS).map((item) => {
-            const text = typeof item === 'string' ? item : item.text
-            const range = typeof item === 'string' ? activeRange : item.range
-            return (
-              <View key={text} className={`pet-chat-quick-chip ${lastAnalysis ? 'follow' : ''}`} onClick={() => {
-                handleQuickQuestion(text, range)
-              }}>
+      {lastAnalysis ? (
+        <ScrollView className='pet-chat-quick-row' scrollX enhanced showScrollbar={false}>
+          <View className='pet-chat-quick-row-inner'>
+            {FOLLOW_UPS.map((text) => (
+              <View
+                key={text}
+                className='pet-chat-quick-chip follow'
+                onClick={() => {
+                  handleQuickQuestion(text, activeRange)
+                }}
+              >
                 <Text>{text}</Text>
               </View>
-            )
-          })}
-        </View>
-      </ScrollView>
+            ))}
+          </View>
+        </ScrollView>
+      ) : null}
 
       <View className='pet-chat-input-bar'>
         <Input

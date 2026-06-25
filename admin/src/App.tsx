@@ -20,6 +20,7 @@ import { OverviewPage } from '@/pages/overview-page'
 import { PackagedFoodsPage } from '@/pages/packaged-foods-page'
 import { FoodNutritionPage } from '@/pages/food-nutrition-page'
 import { PublicFoodLibraryPage } from '@/pages/public-food-library-page'
+import { CampusDirectoryPage } from '@/pages/campus-directory-page'
 import { PaymentTestPage } from '@/pages/payment-test-page'
 import type { AdminMenuId } from '@/components/admin-sidebar'
 
@@ -30,6 +31,7 @@ const MENU_PATHS: Record<AdminMenuId, string> = {
   'packaged-foods': '/packaged-foods',
   'food-nutrition': '/food-nutrition',
   'public-food-library': '/public-food-library',
+  'campus-directory': '/campus-directory',
   'exercise-energy': '/exercise-energy',
   'feed-reports': '/feed-reports',
   'payment-test': '/payment-test',
@@ -128,6 +130,7 @@ export function App() {
         <Route path='/packaged-foods' element={<PackagedFoodsPage {...pageProps} />} />
         <Route path='/food-nutrition' element={<FoodNutritionPage {...pageProps} />} />
         <Route path='/public-food-library' element={<PublicFoodLibraryPage {...pageProps} />} />
+        <Route path='/campus-directory' element={<CampusDirectoryPage {...pageProps} />} />
         <Route path='/payment-test' element={<PaymentTestPage {...pageProps} />} />
         <Route path='*' element={<Navigate to='/overview' replace />} />
       </Routes>

@@ -19,6 +19,10 @@ type PublicFoodItem = {
   type: string
   status: string
   is_campus_food: boolean
+  school_id: string
+  campus_id: string
+  canteen_id: string
+  window_id: string
   school_name: string
   campus_name: string
   canteen_name: string
@@ -66,6 +70,10 @@ const fields: FieldDef[] = [
   { key: 'merchant_name', label: '商家名称', type: 'text', group: 'basic' },
   { key: 'merchant_address', label: '商家地址', type: 'text', group: 'basic', wide: true },
   { key: 'detail_address', label: '详细地址', type: 'text', group: 'basic', wide: true },
+  { key: 'school_id', label: '学校 ID', type: 'text', group: 'campus' },
+  { key: 'campus_id', label: '校区 ID', type: 'text', group: 'campus' },
+  { key: 'canteen_id', label: '食堂 ID', type: 'text', group: 'campus' },
+  { key: 'window_id', label: '窗口 ID', type: 'text', group: 'campus' },
   { key: 'school_name', label: '学校', type: 'text', group: 'campus' },
   { key: 'campus_name', label: '校区', type: 'text', group: 'campus' },
   { key: 'canteen_name', label: '食堂', type: 'text', group: 'campus' },
@@ -95,6 +103,10 @@ const blankItem: PublicFoodItem = {
   type: 'common',
   status: 'published',
   is_campus_food: false,
+  school_id: '',
+  campus_id: '',
+  canteen_id: '',
+  window_id: '',
   school_name: '',
   campus_name: '',
   canteen_name: '',

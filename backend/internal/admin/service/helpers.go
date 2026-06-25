@@ -23,6 +23,14 @@ func setStringPtr[M ~map[string]any](patch M, key string, value *string) {
 	patch[key] = strings.TrimSpace(*value)
 }
 
+func stringPtrFromValue(value string) *string {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return nil
+	}
+	return &trimmed
+}
+
 func setStringSlicePtr[M ~map[string]any](patch M, key string, value *[]string) {
 	if value == nil {
 		return

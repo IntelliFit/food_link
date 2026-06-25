@@ -38,10 +38,26 @@ type ListFilter struct {
 	Offset             int
 	Type               string
 	IsCampusFood       *bool
+	SchoolID           string
+	CampusID           string
+	CanteenID          string
+	WindowID           string
 	SchoolName         string
 	CanteenName        string
 	IsCampusHighlight  *bool
 	ViewerUserID       string
+}
+
+type CampusDirectoryRef struct {
+	SchoolID    string
+	SchoolName  string
+	CampusID    string
+	CampusName  string
+	CanteenID   string
+	CanteenName string
+	WindowID    string
+	WindowName  string
+	Floor       string
 }
 
 func (r *PublicFoodRepo) CreateItem(ctx context.Context, item *domain.PublicFoodItem) error {
@@ -114,6 +130,18 @@ func (r *PublicFoodRepo) ListPublished(ctx context.Context, f ListFilter) ([]dom
 	}
 	if f.MaxCalories != nil {
 		q = q.Where("p.total_calories <= ?", *f.MaxCalories)
+	}
+	if f.SchoolID != "" {
+		q = q.Where("p.school_id = ?", f.SchoolID)
+	}
+	if f.CampusID != "" {
+		q = q.Where("p.campus_id = ?", f.CampusID)
+	}
+	if f.CanteenID != "" {
+		q = q.Where("p.canteen_id = ?", f.CanteenID)
+	}
+	if f.WindowID != "" {
+		q = q.Where("p.window_id = ?", f.WindowID)
 	}
 	itemType := normalizePublicFoodTypeFilter(f.Type)
 	if itemType != "" {
@@ -239,10 +267,14 @@ func (r *PublicFoodRepo) ListSimilarCampusFoods(ctx context.Context, item domain
 		Where("id <> ? AND status = ?", item.ID, "published")
 	q = visiblePublicFoodToViewer(q, "p.user_id", viewerUserID)
 	q = applyLegacyPublicFoodTypeWhere(q, "p", "campus")
-	if strings.TrimSpace(item.SchoolName) != "" {
+	if item.SchoolID != nil && strings.TrimSpace(*item.SchoolID) != "" {
+		q = q.Where("p.school_id = ?", strings.TrimSpace(*item.SchoolID))
+	} else if strings.TrimSpace(item.SchoolName) != "" {
 		q = q.Where("p.school_name = ?", item.SchoolName)
 	}
-	if strings.TrimSpace(item.CanteenName) != "" {
+	if item.CanteenID != nil && strings.TrimSpace(*item.CanteenID) != "" {
+		q = q.Where("p.canteen_id = ?", strings.TrimSpace(*item.CanteenID))
+	} else if strings.TrimSpace(item.CanteenName) != "" {
 		q = q.Where("p.canteen_name = ?", item.CanteenName)
 	}
 	err := q.
@@ -268,10 +300,14 @@ func (r *PublicFoodRepo) ListRelatedCampusFeeds(ctx context.Context, item domain
 		Where("p.id <> ? AND p.status = ? AND p.is_campus_highlight = ?", item.ID, "published", true)
 	q = visiblePublicFoodToViewer(q, "p.user_id", viewerUserID)
 	q = applyLegacyPublicFoodTypeWhere(q, "p", "campus")
-	if strings.TrimSpace(item.SchoolName) != "" {
+	if item.SchoolID != nil && strings.TrimSpace(*item.SchoolID) != "" {
+		q = q.Where("p.school_id = ?", strings.TrimSpace(*item.SchoolID))
+	} else if strings.TrimSpace(item.SchoolName) != "" {
 		q = q.Where("p.school_name = ?", item.SchoolName)
 	}
-	if strings.TrimSpace(item.CanteenName) != "" {
+	if item.CanteenID != nil && strings.TrimSpace(*item.CanteenID) != "" {
+		q = q.Where("p.canteen_id = ?", strings.TrimSpace(*item.CanteenID))
+	} else if strings.TrimSpace(item.CanteenName) != "" {
 		q = q.Where("p.canteen_name = ?", item.CanteenName)
 	}
 	err := q.
@@ -328,6 +364,124 @@ func (r *PublicFoodRepo) GetItem(ctx context.Context, itemID string) (*domain.Pu
 		return nil, nil
 	}
 	return &row, err
+}
+
+func (r *PublicFoodRepo) GetCampusDirectoryRef(ctx context.Context, schoolID, campusID, canteenID, windowID string) (*CampusDirectoryRef, error) {
+	schoolID = strings.TrimSpace(schoolID)
+	campusID = strings.TrimSpace(campusID)
+	canteenID = strings.TrimSpace(canteenID)
+	windowID = strings.TrimSpace(windowID)
+	if schoolID == "" && campusID == "" && canteenID == "" && windowID == "" {
+		return nil, nil
+	}
+	ref := &CampusDirectoryRef{}
+	if schoolID != "" {
+		var row struct {
+			ID   string
+			Name string
+		}
+		err := r.db.WithContext(ctx).Table("schools").Select("id, name").Where("id = ? AND status = ?", schoolID, "active").First(&row).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+		ref.SchoolID = row.ID
+		ref.SchoolName = row.Name
+	}
+	if campusID != "" {
+		var row struct {
+			ID       string
+			SchoolID string
+			Name     string
+		}
+		err := r.db.WithContext(ctx).Table("school_campuses").Select("id, school_id, name").Where("id = ? AND status = ?", campusID, "active").First(&row).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+		if ref.SchoolID != "" && row.SchoolID != ref.SchoolID {
+			return nil, nil
+		}
+		ref.CampusID = row.ID
+		ref.CampusName = row.Name
+		if ref.SchoolID == "" {
+			ref.SchoolID = row.SchoolID
+		}
+	}
+	if canteenID != "" {
+		var row struct {
+			ID       string
+			SchoolID string
+			CampusID *string
+			Name     string
+		}
+		err := r.db.WithContext(ctx).Table("school_canteens").Select("id, school_id, campus_id, name").Where("id = ? AND status = ?", canteenID, "active").First(&row).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+		if ref.SchoolID != "" && row.SchoolID != ref.SchoolID {
+			return nil, nil
+		}
+		if ref.CampusID != "" && (row.CampusID == nil || *row.CampusID != ref.CampusID) {
+			return nil, nil
+		}
+		ref.CanteenID = row.ID
+		ref.CanteenName = row.Name
+		if ref.SchoolID == "" {
+			ref.SchoolID = row.SchoolID
+		}
+		if ref.CampusID == "" && row.CampusID != nil {
+			ref.CampusID = *row.CampusID
+		}
+	}
+	if windowID != "" {
+		var row struct {
+			ID        string
+			SchoolID  string
+			CampusID  *string
+			CanteenID string
+			Name      string
+			Floor     *string
+		}
+		err := r.db.WithContext(ctx).Table("canteen_windows").Select("id, school_id, campus_id, canteen_id, name, floor").Where("id = ? AND status = ?", windowID, "active").First(&row).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+		if ref.SchoolID != "" && row.SchoolID != ref.SchoolID {
+			return nil, nil
+		}
+		if ref.CampusID != "" && (row.CampusID == nil || *row.CampusID != ref.CampusID) {
+			return nil, nil
+		}
+		if ref.CanteenID != "" && row.CanteenID != ref.CanteenID {
+			return nil, nil
+		}
+		ref.WindowID = row.ID
+		ref.WindowName = row.Name
+		if row.Floor != nil {
+			ref.Floor = *row.Floor
+		}
+		if ref.SchoolID == "" {
+			ref.SchoolID = row.SchoolID
+		}
+		if ref.CampusID == "" && row.CampusID != nil {
+			ref.CampusID = *row.CampusID
+		}
+		if ref.CanteenID == "" {
+			ref.CanteenID = row.CanteenID
+		}
+	}
+	return ref, nil
 }
 
 func (r *PublicFoodRepo) GetFoodRecord(ctx context.Context, recordID string) (map[string]any, error) {
