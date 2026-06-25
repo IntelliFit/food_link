@@ -109,6 +109,14 @@ func (c *OfoxAIClient) AnalyzeWithImagesAndTemperatureModel(ctx context.Context,
 	return c.analyzeWithImagesAndTemperature(ctx, prompt, imageURLs, temperature, modelName, nil)
 }
 
+func (c *OfoxAIClient) AnalyzeWithImagesAndTemperatureMeta(ctx context.Context, prompt string, imageURLs []string, temperature float64) (map[string]any, map[string]any, error) {
+	parsed, raw, err := c.analyzeWithImagesAndTemperatureMeta(ctx, prompt, imageURLs, temperature, "", nil)
+	if err != nil {
+		return nil, nil, err
+	}
+	return parsed, extractChatCompletionUsageMeta(raw), nil
+}
+
 func (c *OfoxAIClient) AnalyzeWithImagesDashScopeWebSearch(ctx context.Context, prompt string, imageURLs []string, options DashScopeWebSearchOptions) (map[string]any, map[string]any, error) {
 	searchStrategy := strings.TrimSpace(options.SearchStrategy)
 	if searchStrategy == "" {
@@ -134,6 +142,11 @@ func (c *OfoxAIClient) AnalyzeWithImagesDashScopeWebSearch(ctx context.Context, 
 }
 
 func (c *OfoxAIClient) analyzeWithImagesAndTemperature(ctx context.Context, prompt string, imageURLs []string, temperature float64, modelOverride string, extras map[string]any) (map[string]any, error) {
+	parsed, _, err := c.analyzeWithImagesAndTemperatureMeta(ctx, prompt, imageURLs, temperature, modelOverride, extras)
+	return parsed, err
+}
+
+func (c *OfoxAIClient) analyzeWithImagesAndTemperatureMeta(ctx context.Context, prompt string, imageURLs []string, temperature float64, modelOverride string, extras map[string]any) (map[string]any, map[string]any, error) {
 	model := strings.TrimSpace(modelOverride)
 	if model == "" {
 		model = c.Model
@@ -174,47 +187,55 @@ func isDashScopeQwenModel(model, baseURL string) bool {
 	return strings.Contains(normalizedBase, "dashscope.aliyuncs.com") || strings.HasPrefix(normalizedModel, "qwen")
 }
 
-func (c *OfoxAIClient) doRequest(ctx context.Context, url string, body map[string]any) (map[string]any, error) {
+func (c *OfoxAIClient) doRequest(ctx context.Context, url string, body map[string]any) (map[string]any, map[string]any, error) {
 	b, _ := json.Marshal(body)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(b))
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	req.Header.Set("Authorization", "Bearer "+c.APIKey)
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.client.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer resp.Body.Close()
 	data, readErr := io.ReadAll(resp.Body)
 	if readErr != nil {
-		return nil, readErr
+		return nil, nil, readErr
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("ofoxai api error %d: %s", resp.StatusCode, summarizeUpstreamBody(data, resp.Header.Get("Content-Type")))
+		return nil, nil, fmt.Errorf("ofoxai api error %d: %s", resp.StatusCode, summarizeUpstreamBody(data, resp.Header.Get("Content-Type")))
 	}
 	contentType := strings.ToLower(resp.Header.Get("Content-Type"))
 	if looksLikeHTMLResponse(data, contentType) {
-		return nil, fmt.Errorf("ofoxai api returned html instead of json; check OFOXAI_BASE_URL, current base URL: %s", c.BaseURL)
+		return nil, nil, fmt.Errorf("ofoxai api returned html instead of json; check OFOXAI_BASE_URL, current base URL: %s", c.BaseURL)
 	}
 
-	var result struct {
-		Choices []struct {
-			Message struct {
-				Content string `json:"content"`
-			} `json:"message"`
-		} `json:"choices"`
+	var raw map[string]any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil, nil, fmt.Errorf("decode ofoxai response failed: %w", err)
 	}
-	if err := json.Unmarshal(data, &result); err != nil {
-		return nil, fmt.Errorf("decode ofoxai response failed: %w", err)
+	choices, ok := raw["choices"].([]any)
+	if !ok || len(choices) == 0 {
+		return nil, nil, fmt.Errorf("empty response from ofoxai")
 	}
-	if len(result.Choices) == 0 {
-		return nil, fmt.Errorf("empty response from ofoxai")
+	firstChoice, ok := choices[0].(map[string]any)
+	if !ok {
+		return nil, nil, fmt.Errorf("empty response from ofoxai")
 	}
-	return parseLLMJSON(result.Choices[0].Message.Content)
+	message := mapFromAny(firstChoice["message"])
+	content := stringFromAny(message["content"])
+	if strings.TrimSpace(content) == "" {
+		return nil, nil, fmt.Errorf("empty response from ofoxai")
+	}
+	parsed, err := parseLLMJSON(content)
+	if err != nil {
+		return nil, nil, err
+	}
+	return parsed, raw, nil
 }
 
 func summarizeUpstreamBody(data []byte, contentType string) string {
@@ -280,6 +301,15 @@ func (c *DoubaoClient) AnalyzeWithImagesAndTemperature(ctx context.Context, prom
 }
 
 func (c *DoubaoClient) AnalyzeWithImagesAndTemperatureModel(ctx context.Context, prompt string, imageURLs []string, temperature float64, modelName string) (map[string]any, error) {
+	parsed, _, err := c.analyzeWithImagesAndTemperatureModelMeta(ctx, prompt, imageURLs, temperature, modelName)
+	return parsed, err
+}
+
+func (c *DoubaoClient) AnalyzeWithImagesAndTemperatureMeta(ctx context.Context, prompt string, imageURLs []string, temperature float64) (map[string]any, map[string]any, error) {
+	return c.analyzeWithImagesAndTemperatureModelMeta(ctx, prompt, imageURLs, temperature, "")
+}
+
+func (c *DoubaoClient) analyzeWithImagesAndTemperatureModelMeta(ctx context.Context, prompt string, imageURLs []string, temperature float64, modelName string) (map[string]any, map[string]any, error) {
 	model := strings.TrimSpace(modelName)
 	if model == "" {
 		model = c.Model
@@ -305,7 +335,11 @@ func (c *DoubaoClient) AnalyzeWithImagesAndTemperatureModel(ctx context.Context,
 		"temperature":      temperature,
 		"reasoning_effort": "low",
 	}
-	return c.doRequest(ctx, c.BaseURL+"/chat/completions", body)
+	parsed, raw, err := c.doRequest(ctx, c.BaseURL+"/chat/completions", body)
+	if err != nil {
+		return nil, nil, err
+	}
+	return parsed, extractChatCompletionUsageMeta(raw), nil
 }
 
 func (c *DoubaoClient) AnalyzeWithImagesWebSearch(ctx context.Context, prompt string, imageURLs []string, options DoubaoWebSearchOptions) (map[string]any, map[string]any, error) {
@@ -391,47 +425,55 @@ func (c *DoubaoClient) doResponsesRequest(ctx context.Context, url string, body 
 	return parsed, extractResponsesUsageMeta(raw), nil
 }
 
-func (c *DoubaoClient) doRequest(ctx context.Context, url string, body map[string]any) (map[string]any, error) {
+func (c *DoubaoClient) doRequest(ctx context.Context, url string, body map[string]any) (map[string]any, map[string]any, error) {
 	b, _ := json.Marshal(body)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(b))
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	req.Header.Set("Authorization", "Bearer "+c.APIKey)
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.client.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer resp.Body.Close()
 	data, readErr := io.ReadAll(resp.Body)
 	if readErr != nil {
-		return nil, readErr
+		return nil, nil, readErr
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("doubao api error %d: %s", resp.StatusCode, summarizeUpstreamBody(data, resp.Header.Get("Content-Type")))
+		return nil, nil, fmt.Errorf("doubao api error %d: %s", resp.StatusCode, summarizeUpstreamBody(data, resp.Header.Get("Content-Type")))
 	}
 	contentType := strings.ToLower(resp.Header.Get("Content-Type"))
 	if looksLikeHTMLResponse(data, contentType) {
-		return nil, fmt.Errorf("doubao api returned html instead of json; check DOUBAO_BASE_URL, current base URL: %s", c.BaseURL)
+		return nil, nil, fmt.Errorf("doubao api returned html instead of json; check DOUBAO_BASE_URL, current base URL: %s", c.BaseURL)
 	}
 
-	var result struct {
-		Choices []struct {
-			Message struct {
-				Content string `json:"content"`
-			} `json:"message"`
-		} `json:"choices"`
+	var raw map[string]any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil, nil, fmt.Errorf("decode doubao response failed: %w", err)
 	}
-	if err := json.Unmarshal(data, &result); err != nil {
-		return nil, fmt.Errorf("decode doubao response failed: %w", err)
+	choices, ok := raw["choices"].([]any)
+	if !ok || len(choices) == 0 {
+		return nil, nil, fmt.Errorf("empty response from doubao")
 	}
-	if len(result.Choices) == 0 {
-		return nil, fmt.Errorf("empty response from doubao")
+	firstChoice, ok := choices[0].(map[string]any)
+	if !ok {
+		return nil, nil, fmt.Errorf("empty response from doubao")
 	}
-	return parseLLMJSON(result.Choices[0].Message.Content)
+	message := mapFromAny(firstChoice["message"])
+	content := stringFromAny(message["content"])
+	if strings.TrimSpace(content) == "" {
+		return nil, nil, fmt.Errorf("empty response from doubao")
+	}
+	parsed, err := parseLLMJSON(content)
+	if err != nil {
+		return nil, nil, err
+	}
+	return parsed, raw, nil
 }
 
 func looksLikeHTMLResponse(data []byte, contentType string) bool {
@@ -516,6 +558,24 @@ func extractResponsesUsageMeta(raw map[string]any) map[string]any {
 		}
 		if len(calls) > 0 {
 			meta["web_search_calls"] = calls
+		}
+	}
+	return meta
+}
+
+func extractChatCompletionUsageMeta(raw map[string]any) map[string]any {
+	meta := map[string]any{}
+	if id := strings.TrimSpace(fmt.Sprintf("%v", raw["id"])); id != "" && id != "<nil>" {
+		meta["response_id"] = id
+	}
+	if model := strings.TrimSpace(fmt.Sprintf("%v", raw["model"])); model != "" && model != "<nil>" {
+		meta["model"] = model
+	}
+	if usage, ok := raw["usage"].(map[string]any); ok {
+		for _, key := range []string{"prompt_tokens", "completion_tokens", "total_tokens", "input_tokens", "output_tokens"} {
+			if value, exists := usage[key]; exists {
+				meta[key] = value
+			}
 		}
 	}
 	return meta

@@ -6,10 +6,12 @@ import (
 	"strconv"
 	"strings"
 
+	admindomain "food_link/backend/internal/admin/domain"
 	"food_link/backend/internal/admin/repo"
 	"food_link/backend/internal/admin/service"
 	"food_link/backend/internal/common/response"
 	"food_link/backend/internal/foodrecord/domain"
+	foodrecordservice "food_link/backend/internal/foodrecord/service"
 	"food_link/backend/pkg/logger"
 
 	"github.com/gin-gonic/gin"
@@ -18,6 +20,10 @@ import (
 type PackagedFoodService interface {
 	List(ctx context.Context, input service.ListPackagedFoodsInput) (*repo.ListPackagedFoodsResult, error)
 	Get(ctx context.Context, id string) (*domain.PackagedFood, error)
+	TestExtract(ctx context.Context, id string) (*foodrecordservice.PackagedProductExtractResult, error)
+	RunTestExtract(ctx context.Context, id string) (*admindomain.PackagedFoodTestRun, error)
+	ListTestRuns(ctx context.Context, input repo.ListTestRunsInput) (*repo.ListTestRunsResult, error)
+	GetTestRun(ctx context.Context, id string) (*admindomain.PackagedFoodTestRun, error)
 	Create(ctx context.Context, input service.CreatePackagedFoodInput) (*domain.PackagedFood, error)
 	Update(ctx context.Context, id string, input service.UpdatePackagedFoodInput) (*domain.PackagedFood, error)
 	Delete(ctx context.Context, id string) error
@@ -61,6 +67,53 @@ func (h *PackagedFoodHandler) Get(c *gin.Context) {
 		return
 	}
 	response.Success(c, gin.H{"item": item})
+}
+
+func (h *PackagedFoodHandler) TestExtract(c *gin.Context) {
+	run, err := h.svc.RunTestExtract(c.Request.Context(), c.Param("food_id"))
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	logger.LogAPI(c.Request.Context(), "管理员测试包装食品识别", "admin", "test_extract_packaged_food",
+		slog.String("packaged_food_id", c.Param("food_id")),
+		slog.String("run_id", run.ID),
+		slog.String("run_status", run.Status),
+		slog.Int64("duration_ms", run.Metadata.DurationMs),
+		slog.Int64("input_tokens", run.Metadata.InputTokens),
+		slog.Int64("output_tokens", run.Metadata.OutputTokens),
+		slog.Int64("total_tokens", run.Metadata.TotalTokens),
+	)
+	response.Success(c, gin.H{"run": run})
+}
+
+func (h *PackagedFoodHandler) ListTestRuns(c *gin.Context) {
+	page := positiveInt(c.Query("page"), 1)
+	limit := positiveInt(c.Query("limit"), 20)
+	result, err := h.svc.ListTestRuns(c.Request.Context(), repo.ListTestRunsInput{
+		PackagedFoodID: c.Param("food_id"),
+		Limit:          limit,
+		Offset:         (page - 1) * limit,
+	})
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, gin.H{
+		"items": result.Items,
+		"page":  page,
+		"limit": limit,
+		"total": result.Total,
+	})
+}
+
+func (h *PackagedFoodHandler) GetTestRun(c *gin.Context) {
+	run, err := h.svc.GetTestRun(c.Request.Context(), c.Param("run_id"))
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, gin.H{"run": run})
 }
 
 func (h *PackagedFoodHandler) Create(c *gin.Context) {

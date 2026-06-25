@@ -1,6 +1,10 @@
 package do
 
-import "time"
+import (
+	"time"
+
+	"gorm.io/datatypes"
+)
 
 type UserDO struct {
 	ID              string     `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
@@ -1445,6 +1449,22 @@ type BenchmarkRunSampleDO struct {
 
 func (BenchmarkRunSampleDO) TableName() string { return "benchmark_run_samples" }
 
+type PackagedFoodTestRunDO struct {
+	ID             string         `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	PackagedFoodID string         `gorm:"column:packaged_food_id;type:uuid;not null;index:idx_packaged_food_test_runs_food_id"`
+	Status         string         `gorm:"column:status;type:text;not null;default:'success'"`
+	ResultJSON     datatypes.JSON `gorm:"column:result_json;type:jsonb;not null;default:'{}'::jsonb"`
+	MetadataJSON   datatypes.JSON `gorm:"column:metadata_json;type:jsonb;not null;default:'{}'::jsonb"`
+	ErrorMessage   *string        `gorm:"column:error_message;type:text"`
+	StartedAt      *time.Time     `gorm:"column:started_at;type:timestamptz"`
+	CompletedAt    *time.Time     `gorm:"column:completed_at;type:timestamptz"`
+	CreatedBy      *string        `gorm:"column:created_by;type:uuid"`
+	CreatedAt      *time.Time     `gorm:"column:created_at;type:timestamptz;default:now()"`
+	UpdatedAt      *time.Time     `gorm:"column:updated_at;type:timestamptz;default:now()"`
+}
+
+func (PackagedFoodTestRunDO) TableName() string { return "packaged_food_test_runs" }
+
 func AllModels() []any {
 	return []any{
 		&UserDO{},
@@ -1526,5 +1546,6 @@ func AllModels() []any {
 		&FoodWeightLabeledSampleDO{},
 		&BenchmarkRunDO{},
 		&BenchmarkRunSampleDO{},
+		&PackagedFoodTestRunDO{},
 	}
 }

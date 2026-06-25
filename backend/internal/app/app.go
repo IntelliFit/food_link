@@ -608,7 +608,8 @@ func New(cfg *config.Config) (*App, error) {
 
 	// Admin routes
 	adminPackagedFoodRepo := adminrepo.NewPackagedFoodRepo(db)
-	adminPackagedFoodSvc := adminservice.NewPackagedFoodService(adminPackagedFoodRepo, storageClient)
+	adminPackagedFoodTestRunRepo := adminrepo.NewPackagedFoodTestRunRepo(db)
+	adminPackagedFoodSvc := adminservice.NewPackagedFoodService(adminPackagedFoodRepo, adminPackagedFoodTestRunRepo, storageClient, frNutritionSvc)
 	adminPackagedFoodHandler := adminhandler.NewPackagedFoodHandler(adminPackagedFoodSvc)
 	adminFoodNutritionRepo := adminrepo.NewFoodNutritionRepo(db)
 	adminFoodNutritionSvc := adminservice.NewFoodNutritionService(adminFoodNutritionRepo, storageClient)
@@ -641,6 +642,9 @@ func New(cfg *config.Config) (*App, error) {
 	adminAPI.GET("/session", adminAuthHandler.Session)
 	adminAPI.GET("/packaged-foods", adminAuth, adminPackagedFoodHandler.List)
 	adminAPI.GET("/packaged-foods/:food_id", adminAuth, adminPackagedFoodHandler.Get)
+	adminAPI.POST("/packaged-foods/:food_id/test-extract", adminAuth, adminPackagedFoodHandler.TestExtract)
+	adminAPI.GET("/packaged-foods/:food_id/test-runs", adminAuth, adminPackagedFoodHandler.ListTestRuns)
+	adminAPI.GET("/packaged-food-test-runs/:run_id", adminAuth, adminPackagedFoodHandler.GetTestRun)
 	adminAPI.POST("/packaged-foods", adminAuth, adminPackagedFoodHandler.Create)
 	adminAPI.PATCH("/packaged-foods/:food_id", adminAuth, adminPackagedFoodHandler.Update)
 	adminAPI.DELETE("/packaged-foods/:food_id", adminAuth, adminPackagedFoodHandler.Delete)
