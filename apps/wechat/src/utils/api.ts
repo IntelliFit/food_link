@@ -1284,6 +1284,19 @@ export interface PetChatHistoryMessage {
   created_at?: string
 }
 
+export interface PetChatStreamMeta {
+  session_id: string
+  user_message_id?: string
+  assistant_message_id?: string
+  range: 'week' | 'month'
+  range_label: string
+  recorded_days: number
+  credits_charged: number
+  billing_status: string
+  ai_usage_pricing?: AIUsagePricingResult
+  estimated_pricing: AIUsagePricingResult
+}
+
 export interface PetChatHistoryResponse {
   session?: {
     ID?: string
@@ -3855,6 +3868,109 @@ export async function generatePetChat(question: string, range: 'week' | 'month',
     throwHttpErrorWithStatus(res.statusCode, res.data, '小食探分析失败', res.header as Record<string, any> | undefined)
   }
   return unwrapResponse<PetChatResponse>(res)
+}
+
+export interface StreamGeneratePetChatCallbacks {
+  onStart?: () => void
+  onChunk: (text: string) => void
+  onDone: (meta: PetChatStreamMeta) => void
+  onError: (error: Error) => void
+}
+
+export function streamGeneratePetChat(
+  question: string,
+  range: 'week' | 'month',
+  sessionId = '',
+  newSession = false,
+  callbacks: StreamGeneratePetChatCallbacks
+): () => void {
+  const token = getAccessToken()
+  if (!token) {
+    redirectToLogin('未登录，请先登录')
+    callbacks.onError(new Error('未登录，请先登录'))
+    return () => {}
+  }
+
+  let buffer = ''
+  const decoder = new TextDecoder('utf-8')
+  let doneReceived = false
+
+  const processSSEText = (text: string) => {
+    buffer += text
+    const events = buffer.split('\n\n')
+    buffer = events.pop() || ''
+    for (const event of events) {
+      const lines = event.split('\n')
+      let dataLine = ''
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          dataLine = line.slice(6)
+        }
+      }
+      if (!dataLine) continue
+      try {
+        const parsed = JSON.parse(dataLine) as { type: string; text?: string; error?: string; meta?: PetChatStreamMeta }
+        if (parsed.type === 'chunk' && typeof parsed.text === 'string') {
+          callbacks.onChunk(parsed.text)
+        } else if (parsed.type === 'done' && parsed.meta) {
+          doneReceived = true
+          callbacks.onDone(parsed.meta)
+        } else if (parsed.type === 'error') {
+          callbacks.onError(new Error(parsed.error || '小食探分析失败'))
+        }
+      } catch (_) {
+        // ignore malformed sse data
+      }
+    }
+  }
+
+  const requestTask = Taro.request({
+    url: `${API_BASE_URL}/api/pet/chat/stream`,
+    method: 'POST',
+    header: withNgrokBypassHeaders({
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      'Accept': 'text/event-stream',
+    }),
+    data: { question, range, session_id: sessionId, new_session: newSession },
+    enableChunked: true,
+    timeout: 180000,
+    success: (res) => {
+      if (res.statusCode === 401 || res.statusCode === 403) {
+        redirectToLogin('登录已失效，请重新登录')
+        callbacks.onError(new Error('登录已失效，请重新登录'))
+        return
+      }
+      if (res.statusCode < 200 || res.statusCode >= 300) {
+        callbacks.onError(new Error('小食探分析失败'))
+        return
+      }
+      callbacks.onStart?.()
+      // 部分环境 chunk 会聚合在 res.data 中，兜底解析
+      if (typeof res.data === 'string') {
+        processSSEText(res.data)
+      }
+    },
+    fail: (err) => {
+      callbacks.onError(new Error(String(err?.errMsg || err || '请求失败')))
+    },
+    complete: () => {
+      if (!doneReceived && buffer.trim()) {
+        processSSEText('\n\n')
+      }
+    },
+  })
+
+  requestTask.onChunkReceived?.((res: any) => {
+    const chunk = res.data instanceof ArrayBuffer ? decoder.decode(res.data) : String(res.data || '')
+    processSSEText(chunk)
+  })
+
+  return () => {
+    try {
+      requestTask.abort?.()
+    } catch (_) {}
+  }
 }
 
 export async function getLatestPetChatSession(): Promise<PetChatHistoryResponse> {

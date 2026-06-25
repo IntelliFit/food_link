@@ -521,6 +521,7 @@ func New(cfg *config.Config) (*App, error) {
 	engine.GET("/api/pet/chat/sessions/:session_id", authmw.RequireJWT(jwtSvc), petHandler.ChatSession)
 	engine.POST("/api/pet/chat/estimate", authmw.RequireJWT(jwtSvc), petHandler.EstimateChat)
 	engine.POST("/api/pet/chat", authmw.RequireJWT(jwtSvc), petHandler.Chat)
+	engine.POST("/api/pet/chat/stream", authmw.RequireJWT(jwtSvc), petHandler.ChatStream)
 	engine.POST("/api/pet/chat/messages", authmw.RequireJWT(jwtSvc), petHandler.AppendChatMessages)
 	engine.POST("/api/pet/events/:event_id/claim", authmw.RequireJWT(jwtSvc), petHandler.ClaimEvent)
 	engine.POST("/api/pet/select-appearance", authmw.RequireJWT(jwtSvc), petHandler.SelectAppearance)

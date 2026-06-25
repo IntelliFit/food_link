@@ -1,6 +1,7 @@
 package service
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -274,6 +275,24 @@ type PetChatAppendInput struct {
 	Messages  []PetChatAppendMessage `json:"messages"`
 }
 
+type PetChatStreamChunk struct {
+	Type  string `json:"type"`
+	Text  string `json:"text,omitempty"`
+	Error string `json:"error,omitempty"`
+	Meta  *struct {
+		SessionID          string                 `json:"session_id"`
+		UserMessageID      string                 `json:"user_message_id,omitempty"`
+		AssistantMessageID string                 `json:"assistant_message_id,omitempty"`
+		Range              string                 `json:"range"`
+		RangeLabel         string                 `json:"range_label"`
+		RecordedDays       int                    `json:"recorded_days"`
+		CreditsCharged     int                    `json:"credits_charged"`
+		BillingStatus      string                 `json:"billing_status"`
+		AIUsagePricing     *billing.PricingResult `json:"ai_usage_pricing,omitempty"`
+		EstimatedPricing   billing.PricingResult  `json:"estimated_pricing"`
+	} `json:"meta,omitempty"`
+}
+
 func (s *StatsService) GetSummary(ctx context.Context, userID string, statsRange string, fallbackTDEE int, fallbackStreakDays int) (*StatsSummary, error) {
 	comp, err := s.buildStatsComputation(ctx, userID, statsRange, fallbackTDEE, fallbackStreakDays)
 	if err != nil {
@@ -539,6 +558,154 @@ func (s *StatsService) GeneratePetChat(ctx context.Context, userID string, input
 		AIUsagePricing:     actualPricing,
 		EstimatedPricing:   estimate.Pricing,
 	}, nil
+}
+
+func (s *StatsService) GeneratePetChatStream(ctx context.Context, userID string, input PetChatInput) (<-chan PetChatStreamChunk, error) {
+	estimate, err := s.EstimatePetChat(ctx, userID, input)
+	if err != nil {
+		return nil, err
+	}
+	var creditsInfo map[string]any
+	if s.creditGuard != nil && strings.TrimSpace(userID) != "" {
+		creditsInfo, err = s.creditGuard.ValidateUsageCredits(ctx, userID, estimate.Pricing.CreditsCharged, "小食探对话")
+		if err != nil {
+			return nil, err
+		}
+	}
+	comp, err := s.buildStatsComputation(ctx, userID, estimate.Range, 2000, 0)
+	if err != nil {
+		return nil, err
+	}
+	session, err := s.resolvePetChatSession(ctx, userID, input, comp, estimate.Question)
+	if err != nil {
+		return nil, err
+	}
+	historyMessages, err := s.repo.GetPetChatSessionMessages(ctx, userID, session.ID, 12)
+	if err != nil {
+		logger.Warn(ctx, "读取宠物连续对话上下文失败",
+			logger.UserID(userID),
+			slog.String("session_id", session.ID),
+			logger.Err(err),
+		)
+		historyMessages = nil
+	}
+
+	chunkChan := make(chan PetChatStreamChunk, 32)
+	go func() {
+		defer close(chunkChan)
+		fullAnswer := &strings.Builder{}
+		var streamErr error
+		apiKey := ""
+		baseURL := s.deepSeekBaseURL
+		if strings.TrimSpace(baseURL) == "" {
+			baseURL = "https://api.deepseek.com"
+		}
+		model := s.petChatModel()
+		if s.cfg != nil {
+			apiKey = strings.TrimSpace(s.cfg.External.DeepSeekAPIKey)
+		}
+		if apiKey == "" {
+			fallback := fallbackPetChatAnswer(comp, estimate.Question)
+			fullAnswer.WriteString(fallback)
+			chunkChan <- PetChatStreamChunk{Type: "chunk", Text: fallback}
+		} else {
+			prompt := buildPetChatPrompt(comp, estimate.Question, historyMessages)
+			textChan, err := s.streamNutritionInsight(ctx, baseURL, apiKey, model, prompt)
+			if err != nil {
+				streamErr = err
+			} else {
+				for text := range textChan {
+					fullAnswer.WriteString(text)
+					chunkChan <- PetChatStreamChunk{Type: "chunk", Text: text}
+				}
+			}
+		}
+
+		content := sanitizeStatsInsightText(fullAnswer.String())
+		if streamErr != nil {
+			logger.Warn(ctx, "宠物对话大模型流式生成失败",
+				logger.UserID(userID),
+				slog.String("range", estimate.Range),
+				slog.Int("recorded_days", estimate.RecordedDays),
+				logger.Err(streamErr),
+			)
+			chunkChan <- PetChatStreamChunk{Type: "error", Error: "小食探分析失败，请稍后重试"}
+			return
+		}
+
+		actualPricing := (*billing.PricingResult)(nil)
+		billingStatus := "free_fallback"
+		creditsCharged := 0
+		if apiKey != "" {
+			billingStatus = "actual_usage_unmetered"
+			if s.creditGuard != nil && strings.TrimSpace(userID) != "" {
+				billingStatus = "actual_usage_charged"
+			}
+		}
+		if apiKey != "" && s.creditGuard != nil && strings.TrimSpace(userID) != "" {
+			sourceKey := fmt.Sprintf("pet_chat:%s:%s:%d", estimate.Range, session.ID, time.Now().UnixNano())
+			pricing := billing.PriceTokenUsage(billing.PricingInput{Model: s.petChatModel(), Usage: billing.TokenUsage{OutputTokens: estimateChineseTokens(content)}}, s.aiUsagePricingConfig())
+			actualPricing = &pricing
+			creditsCharged = pricing.CreditsCharged
+			creditsInfo, err = s.creditGuard.ValidateUsageCredits(ctx, userID, pricing.CreditsCharged, "小食探对话")
+			if err != nil {
+				logger.Warn(ctx, "宠物对话流式生成后积分校验失败",
+					logger.UserID(userID),
+					slog.String("session_id", session.ID),
+					logger.Err(err),
+				)
+				chunkChan <- PetChatStreamChunk{Type: "error", Error: "积分校验失败，请稍后重试"}
+				return
+			}
+			if err := s.creditGuard.ConsumeEarnedCreditsAfterSuccess(ctx, userID, creditsInfo, pricing.CreditsCharged, "pet_chat_reward_spend", sourceKey, map[string]any{
+				"range":             estimate.Range,
+				"session_id":        session.ID,
+				"question":          estimate.Question,
+				"ai_usage_pricing":  pricing,
+				"estimated_pricing": estimate.Pricing,
+				"recorded_days":     estimate.RecordedDays,
+				"billing_strategy":  "actual_usage",
+				"credits_per_cny":   pricing.CreditsPerCNY,
+				"cost_multiplier":   pricing.CostMultiplier,
+			}); err != nil {
+				logger.Warn(ctx, "宠物对话流式生成后积分扣减失败",
+					logger.UserID(userID),
+					slog.String("session_id", session.ID),
+					logger.Err(err),
+				)
+			}
+		}
+
+		userMessageID, assistantMessageID := s.persistPetChatExchange(ctx, userID, session.ID, estimate.Range, estimate.Question, content, creditsCharged, actualPricing, &estimate.Pricing, billingStatus)
+		chunkChan <- PetChatStreamChunk{
+			Type: "done",
+			Meta: &struct {
+				SessionID          string                 `json:"session_id"`
+				UserMessageID      string                 `json:"user_message_id,omitempty"`
+				AssistantMessageID string                 `json:"assistant_message_id,omitempty"`
+				Range              string                 `json:"range"`
+				RangeLabel         string                 `json:"range_label"`
+				RecordedDays       int                    `json:"recorded_days"`
+				CreditsCharged     int                    `json:"credits_charged"`
+				BillingStatus      string                 `json:"billing_status"`
+				AIUsagePricing     *billing.PricingResult `json:"ai_usage_pricing,omitempty"`
+				EstimatedPricing   billing.PricingResult  `json:"estimated_pricing"`
+			}{
+				SessionID:          session.ID,
+				UserMessageID:      userMessageID,
+				AssistantMessageID: assistantMessageID,
+				Range:              estimate.Range,
+				RangeLabel:         estimate.RangeLabel,
+				RecordedDays:       estimate.RecordedDays,
+				CreditsCharged:     creditsCharged,
+				BillingStatus:      billingStatus,
+				AIUsagePricing:     actualPricing,
+				EstimatedPricing:   estimate.Pricing,
+			},
+		}
+	}()
+
+	return chunkChan, nil
 }
 
 func (s *StatsService) GetLatestPetChatSession(ctx context.Context, userID string) (*PetChatHistoryResult, error) {
@@ -1121,6 +1288,91 @@ func (s *StatsService) requestNutritionInsight(ctx context.Context, baseURL, api
 			CacheMissInputTokens: parsed.Usage.PromptCacheMissTokens,
 		},
 	}, nil
+}
+
+func (s *StatsService) streamNutritionInsight(ctx context.Context, baseURL, apiKey, model, prompt string) (<-chan string, error) {
+	body := map[string]any{
+		"model":       model,
+		"messages":    []map[string]string{{"role": "user", "content": prompt}},
+		"temperature": 0.6,
+		"max_tokens":  statsInsightMaxTokens,
+		"stream":      true,
+	}
+	bodyBytes, _ := json.Marshal(body)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/chat/completions", bytes.NewReader(bodyBytes))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "text/event-stream")
+
+	client := s.client
+	if client.Timeout > 0 {
+		client = &http.Client{Timeout: 180 * time.Second}
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		defer resp.Body.Close()
+		respBody, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("DeepSeek API 错误: %d %s", resp.StatusCode, extractDeepSeekError(respBody))
+	}
+
+	textChan := make(chan string, 32)
+	go func() {
+		defer close(textChan)
+		defer resp.Body.Close()
+		reader := bufio.NewReader(resp.Body)
+		for {
+			line, err := reader.ReadString('\n')
+			if err != nil {
+				if err != io.EOF {
+					logger.Warn(ctx, "读取 DeepSeek SSE 流失败", logger.Err(err))
+				}
+				return
+			}
+			line = strings.TrimSpace(line)
+			if line == "" || !strings.HasPrefix(line, "data: ") {
+				continue
+			}
+			data := strings.TrimPrefix(line, "data: ")
+			if strings.TrimSpace(data) == "[DONE]" {
+				return
+			}
+			var parsed struct {
+				Choices []struct {
+					Delta struct {
+						Content string `json:"content"`
+					} `json:"delta"`
+					FinishReason string `json:"finish_reason"`
+				} `json:"choices"`
+			}
+			if err := json.Unmarshal([]byte(data), &parsed); err != nil {
+				continue
+			}
+			if len(parsed.Choices) == 0 {
+				continue
+			}
+			if text := parsed.Choices[0].Delta.Content; text != "" {
+				textChan <- text
+			}
+			if strings.EqualFold(strings.TrimSpace(parsed.Choices[0].FinishReason), "length") {
+				return
+			}
+		}
+	}()
+	return textChan, nil
+}
+
+func estimateChineseTokens(content string) int {
+	if content == "" {
+		return 0
+	}
+	runes := []rune(content)
+	return int(math.Ceil(float64(len(runes)) / 1.5))
 }
 
 func sanitizeStatsInsightText(content string) string {

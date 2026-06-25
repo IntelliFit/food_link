@@ -329,6 +329,15 @@
   font-weight: 800;
 }
 
+.pet-chat-thinking-bubble {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10rpx;
+  min-width: 80rpx;
+  min-height: 40rpx;
+}
+
 .pet-chat-thinking-dot {
   width: 12rpx;
   height: 12rpx;

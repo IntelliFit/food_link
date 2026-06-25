@@ -9,8 +9,10 @@ import {
   getStatsSummary,
   listPetChatSessions,
   showUnifiedApiError,
+  streamGeneratePetChat,
   type PetChatHistoryMessage,
   type PetChatSessionSummary,
+  type PetChatStreamMeta,
   type PetSummary,
   type StatsSummary
 } from '../../../utils/api'
@@ -145,6 +147,7 @@ function PetChatPage() {
   const [sessions, setSessions] = useState<PetChatSessionSummary[]>([])
   const petName = petSummary?.pet?.name || '你的宠物'
   const [messages, setMessages] = useState<ChatMessage[]>([buildIntroMessage('你的宠物')])
+  const streamingTextRef = useRef('')
   const isEmptyConversation = !lastAnalysis && !sessionID && messages.length === 1 && messages[0]?.kind === 'intro'
 
   useDidShow(() => {
@@ -180,6 +183,10 @@ function PetChatPage() {
 
   const appendMessage = useCallback((message: ChatMessage) => {
     setMessages((prev) => [...prev, message])
+  }, [])
+
+  const updateMessage = useCallback((id: string, updater: (message: ChatMessage) => ChatMessage) => {
+    setMessages((prev) => prev.map((m) => (m.id === id ? updater(m) : m)))
   }, [])
 
   const startNewConversation = useCallback(() => {
@@ -240,41 +247,63 @@ function PetChatPage() {
     if (busyRef.current) return
     busyRef.current = true
     setBusy(true)
+    streamingTextRef.current = ''
 
     setActiveRange(range)
     appendMessage({ id: nextID('user'), role: 'user', text: question })
-    try {
-      const [nextSummary, chat] = await Promise.all([
-        getStatsSummary(range).catch(() => null),
-        generatePetChat(question, range, sessionID, !sessionID),
-      ])
-      if (chat.session_id) setSessionID(chat.session_id)
-      if (nextSummary) setSummary(nextSummary)
-      const text = chat.answer || '我看完了，但这次没有生成足够明确的结论。可以先多记录几餐再试。'
-      const message: ChatMessage = {
-        id: nextID('pet'),
-        role: 'pet',
-        kind: 'analysis',
-        text,
-        clues: buildClues(nextSummary, text),
-        actions: buildActions(question),
-      }
-      setLastAnalysis(message)
-      appendMessage(message)
-    } catch (error) {
-      await showUnifiedApiError(error, `${petName}分析失败`)
-      appendMessage({
-        id: nextID('pet'),
-        role: 'pet',
-        kind: 'local',
-        text: `${petName}这次没能顺利读完记录。你可以稍后再试，或者先换成最近 7 天的小范围分析。`,
-        actions: ['换最近 7 天', '稍后再试'],
+    const streamingMessageID = nextID('pet-stream')
+    appendMessage({ id: streamingMessageID, role: 'pet', kind: 'analysis', text: '' })
+
+    let nextSummary: StatsSummary | null = null
+    getStatsSummary(range)
+      .then((s) => {
+        nextSummary = s
+        setSummary(s)
       })
-    } finally {
+      .catch(() => null)
+
+    const finish = () => {
       busyRef.current = false
       setBusy(false)
+      streamingTextRef.current = ''
     }
-  }, [appendMessage, petName, sessionID])
+
+    streamGeneratePetChat(question, range, sessionID, !sessionID, {
+      onStart: () => {
+        // first chunk will arrive soon
+      },
+      onChunk: (text) => {
+        streamingTextRef.current += text
+        updateMessage(streamingMessageID, (m) => ({ ...m, text: m.text + text }))
+      },
+      onDone: (meta) => {
+        if (meta.session_id) setSessionID(meta.session_id)
+        const finalText = streamingTextRef.current || '我看完了，但这次没有生成足够明确的结论。可以先多记录几餐再试。'
+        const message: ChatMessage = {
+          id: streamingMessageID,
+          role: 'pet',
+          kind: 'analysis',
+          text: finalText,
+          clues: buildClues(nextSummary, finalText),
+          actions: buildActions(question),
+        }
+        setLastAnalysis(message)
+        updateMessage(streamingMessageID, () => message)
+        finish()
+      },
+      onError: async (error) => {
+        await showUnifiedApiError(error, `${petName}分析失败`)
+        updateMessage(streamingMessageID, () => ({
+          id: nextID('pet'),
+          role: 'pet',
+          kind: 'local',
+          text: `${petName}这次没能顺利读完记录。你可以稍后再试，或者先换成最近 7 天的小范围分析。`,
+          actions: ['换最近 7 天', '稍后再试'],
+        }))
+        finish()
+      },
+    })
+  }, [appendMessage, petName, sessionID, updateMessage])
 
   const handleQuickQuestion = useCallback((text: string, range: RangeMode) => {
     if (busy || busyRef.current) return
@@ -312,7 +341,15 @@ function PetChatPage() {
               {message.role === 'pet' ? <PetAvatar pet={petSummary?.pet} size={56} mood={petSummary?.status?.mood} state={petSummary?.status?.state} /> : null}
               <View className='pet-chat-bubble'>
                 {message.role === 'pet' ? (
-                  <PetMarkdown text={message.text} />
+                  message.text ? (
+                    <PetMarkdown text={message.text} />
+                  ) : (
+                    <View className='pet-chat-thinking-bubble'>
+                      <View className='pet-chat-thinking-dot' />
+                      <View className='pet-chat-thinking-dot' />
+                      <View className='pet-chat-thinking-dot' />
+                    </View>
+                  )
                 ) : (
                   <Text className='pet-chat-message-text'>{message.text}</Text>
                 )}
@@ -346,16 +383,6 @@ function PetChatPage() {
                     <Text className='pet-chat-starter-card-subtitle'>{item.subtitle} · {rangeLabel(item.range)}</Text>
                   </View>
                 ))}
-              </View>
-            </View>
-          ) : null}
-          {busy ? (
-            <View className='pet-chat-message pet'>
-              <PetAvatar pet={petSummary?.pet} size={56} mood={petSummary?.status?.mood} state={petSummary?.status?.state} />
-              <View className='pet-chat-bubble thinking'>
-                <View className='pet-chat-thinking-dot' />
-                <View className='pet-chat-thinking-dot' />
-                <View className='pet-chat-thinking-dot' />
               </View>
             </View>
           ) : null}
