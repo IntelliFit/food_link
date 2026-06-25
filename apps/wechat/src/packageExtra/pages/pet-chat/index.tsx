@@ -299,25 +299,9 @@ function PetChatPage() {
           <View className='pet-chat-history-button' onClick={openHistoryPanel}>
             <Text>最近</Text>
           </View>
-          <View className='pet-chat-new-button' onClick={startNewConversation}>
+          <View className={`pet-chat-new-button ${isEmptyConversation ? 'disabled' : ''}`} onClick={isEmptyConversation ? undefined : startNewConversation}>
             <Text>新对话</Text>
           </View>
-        </View>
-      </View>
-
-      <View className='pet-chat-stage'>
-        <View className='pet-chat-stage-pet'>
-          <PetAvatar pet={petSummary?.pet} size={56} mood={petSummary?.status?.mood} state={petSummary?.status?.state} />
-        </View>
-        <View className='pet-chat-stage-bubble'>
-          <Text className='pet-chat-stage-title'>{petName}在读你的饮食记录</Text>
-          <Text className='pet-chat-stage-copy'>
-            {lastAnalysis
-              ? '继续追问不会重新读记录；想重新分析就点上方新对话。'
-              : summary
-                ? `默认先看最近 7 天。你提到 30 天、最近一个月、长期，我会自动把范围放大。现在已有 ${summary.recorded_days || 0} 天饮食记录。`
-                : '默认先看最近 7 天。你提到 30 天、最近一个月、长期，我会自动把范围放大。'}
-          </Text>
         </View>
       </View>
 
@@ -325,7 +309,7 @@ function PetChatPage() {
         <View className='pet-chat-messages'>
           {messages.map((message) => (
             <View key={message.id} className={`pet-chat-message ${message.role}`}>
-              {message.role === 'pet' ? <PetAvatar pet={petSummary?.pet} size={30} mood={petSummary?.status?.mood} state={petSummary?.status?.state} /> : null}
+              {message.role === 'pet' ? <PetAvatar pet={petSummary?.pet} size={56} mood={petSummary?.status?.mood} state={petSummary?.status?.state} /> : null}
               <View className='pet-chat-bubble'>
                 {message.role === 'pet' ? (
                   <PetMarkdown text={message.text} />
@@ -367,7 +351,7 @@ function PetChatPage() {
           ) : null}
           {busy ? (
             <View className='pet-chat-message pet'>
-              <PetAvatar pet={petSummary?.pet} size={30} mood={petSummary?.status?.mood} state={petSummary?.status?.state} />
+              <PetAvatar pet={petSummary?.pet} size={56} mood={petSummary?.status?.mood} state={petSummary?.status?.state} />
               <View className='pet-chat-bubble thinking'>
                 <View className='pet-chat-thinking-dot' />
                 <View className='pet-chat-thinking-dot' />
