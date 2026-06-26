@@ -1,0 +1,1857 @@
+{
+  "generated_at": "2026-06-25T16:27:44.775582+00:00",
+  "totals": {
+    "schools": 2631,
+    "campuses": 364,
+    "canteens": 1048,
+    "windows": 0,
+    "sources": 1233,
+    "batches": 4
+  },
+  "coverage_issues": {
+    "schools_without_campus": {
+      "count": 2522,
+      "sample": [
+        {
+          "id": "2faf51c4-c02e-4fdb-9ecf-3bfdbce84d7b",
+          "name": "上海东海职业技术学院",
+          "province": "上海市"
+        },
+        {
+          "id": "6059446f-c8da-4b59-8459-3749e4d4a3a0",
+          "name": "上海中侨职业技术学院",
+          "province": "上海市"
+        },
+        {
+          "id": "c8cc136e-8835-438d-94a2-aa8ab69809ac",
+          "name": "上海中医药大学",
+          "province": "上海市"
+        },
+        {
+          "id": "25301343-cb15-4cfb-ad0e-aa8bbdcc5fa2",
+          "name": "上海中华职业技术学院",
+          "province": "上海市"
+        },
+        {
+          "id": "98f1ae31-4aaf-475d-a8d1-8ad29a19fb6e",
+          "name": "上海交通职业技术学院",
+          "province": "上海市"
+        },
+        {
+          "id": "9a869890-9382-4397-b4ab-4204b4d82038",
+          "name": "上海体育学院",
+          "province": "上海市"
+        },
+        {
+          "id": "ff805dd5-2f8e-48da-a6a6-5cdfb7404ff7",
+          "name": "上海体育职业学院",
+          "province": "上海市"
+        },
+        {
+          "id": "641a23f6-6635-4696-b21e-cbfa6993396b",
+          "name": "上海健康医学院",
+          "province": "上海市"
+        },
+        {
+          "id": "b72b7c24-7de9-4847-9cfb-80b4328f2e4e",
+          "name": "上海公安学院",
+          "province": "上海市"
+        },
+        {
+          "id": "41084919-9423-4abc-bab8-9908da9794c8",
+          "name": "上海兴伟学院",
+          "province": "上海市"
+        },
+        {
+          "id": "38e3b006-befa-4a3f-af29-bd44efbcbdcb",
+          "name": "上海农林职业技术学院",
+          "province": "上海市"
+        },
+        {
+          "id": "3161e2b0-fd31-4b9f-9730-c1ca854602be",
+          "name": "上海出版印刷高等专科学校",
+          "province": "上海市"
+        },
+        {
+          "id": "14c2f0b2-e761-4a2e-a13e-89588d71183d",
+          "name": "上海商学院",
+          "province": "上海市"
+        },
+        {
+          "id": "124fdffa-c50c-4a6e-b5e2-ddea7f093f49",
+          "name": "上海城建职业学院",
+          "province": "上海市"
+        },
+        {
+          "id": "7cc2386f-eb31-4f85-b1cf-3b01d0798895",
+          "name": "上海外国语大学贤达经济人文\n学院",
+          "province": "上海市"
+        },
+        {
+          "id": "2b394e55-fe4f-4cc4-8ed3-850d52bdea2a",
+          "name": "上海对外经贸大学",
+          "province": "上海市"
+        },
+        {
+          "id": "e940bc7a-bcf3-4b01-90e2-5bdd1e8f8a27",
+          "name": "上海工会管理职业学院",
+          "province": "上海市"
+        },
+        {
+          "id": "e43c5578-4fb9-4034-a921-68af593c35a6",
+          "name": "上海工商外国语职业学院",
+          "province": "上海市"
+        },
+        {
+          "id": "815e275a-4869-4027-b5a8-0b81bcd044dc",
+          "name": "上海工商职业技术学院",
+          "province": "上海市"
+        },
+        {
+          "id": "e4892121-e20b-488e-925f-b198de4ba1b8",
+          "name": "上海工程技术大学",
+          "province": "上海市"
+        },
+        {
+          "id": "c60a29fe-4a7e-4ca1-8a65-7cf819e789ad",
+          "name": "上海工艺美术职业学院",
+          "province": "上海市"
+        },
+        {
+          "id": "466dc242-5034-4737-be78-8589ddb3c842",
+          "name": "上海师范大学",
+          "province": "上海市"
+        },
+        {
+          "id": "7db62788-b06f-42a3-a8bc-6b621fcea500",
+          "name": "上海师范大学天华学院",
+          "province": "上海市"
+        },
+        {
+          "id": "d86f281d-bb17-4054-af1c-50408b9d7497",
+          "name": "上海应用技术大学",
+          "province": "上海市"
+        },
+        {
+          "id": "b779d1c2-597a-491f-baf6-42be60d73478",
+          "name": "上海建桥学院",
+          "province": "上海市"
+        },
+        {
+          "id": "0b4ac86f-9f10-4509-b0a8-de9fd74591f8",
+          "name": "上海思博职业技术学院",
+          "province": "上海市"
+        },
+        {
+          "id": "8ecc5b4e-0a03-49ba-a154-f7ff64b37c2d",
+          "name": "上海戏剧学院",
+          "province": "上海市"
+        },
+        {
+          "id": "cff0fc9a-59be-42b6-ae76-2348f46c6c21",
+          "name": "上海政法学院",
+          "province": "上海市"
+        },
+        {
+          "id": "c80e37d8-a4dc-418a-abeb-bf12ce743766",
+          "name": "上海旅游高等专科学校",
+          "province": "上海市"
+        },
+        {
+          "id": "5542fd1c-d034-4ef3-b9b9-a018c8c16639",
+          "name": "上海杉达学院",
+          "province": "上海市"
+        },
+        {
+          "id": "45664f51-65ff-4288-b8c1-f3b25414190f",
+          "name": "上海欧华职业技术学院",
+          "province": "上海市"
+        },
+        {
+          "id": "ef37c34e-021f-44da-9186-abfd976e4a61",
+          "name": "上海民航职业技术学院",
+          "province": "上海市"
+        },
+        {
+          "id": "9cad8f4f-7347-4d57-abef-f07f54985ddf",
+          "name": "上海民远职业技术学院",
+          "province": "上海市"
+        },
+        {
+          "id": "f4c4331b-0878-4de9-b2c1-1f0ff153567e",
+          "name": "上海济光职业技术学院",
+          "province": "上海市"
+        },
+        {
+          "id": "b7af782e-e314-4981-89a4-2185149c60bb",
+          "name": "上海海事大学",
+          "province": "上海市"
+        },
+        {
+          "id": "7248d669-9c9b-4d43-bef4-81e2fca2fa7f",
+          "name": "上海海事职业技术学院",
+          "province": "上海市"
+        },
+        {
+          "id": "7bb00672-0c54-4c55-a595-530eb52519bc",
+          "name": "上海海关学院",
+          "province": "上海市"
+        },
+        {
+          "id": "f6bcb2d8-b736-440c-a91a-78dd410728e7",
+          "name": "上海海洋大学",
+          "province": "上海市"
+        },
+        {
+          "id": "54827e23-e398-48b6-ab7d-9061ab0fc0b6",
+          "name": "上海理工大学",
+          "province": "上海市"
+        },
+        {
+          "id": "b03d5bb9-6b90-4617-b6d8-b8e6842a68ff",
+          "name": "上海电力学院",
+          "province": "上海市"
+        },
+        {
+          "id": "7068f924-6147-4591-aa84-6a84077ef1f3",
+          "name": "上海电子信息职业技术学院",
+          "province": "上海市"
+        },
+        {
+          "id": "e183da08-c650-4a30-bccd-d58368f8f925",
+          "name": "上海电影艺术职业学院",
+          "province": "上海市"
+        },
+        {
+          "id": "bd62d952-f715-45dd-9314-58870164d2b2",
+          "name": "上海电机学院",
+          "province": "上海市"
+        },
+        {
+          "id": "9e0dd220-9b13-485f-b995-eaac77371254",
+          "name": "上海科学技术职业学院",
+          "province": "上海市"
+        },
+        {
+          "id": "7a45fa49-37d4-47c9-849c-b2bb6959dc65",
+          "name": "上海科技大学",
+          "province": "上海市"
+        },
+        {
+          "id": "c1458752-e342-4f34-b9db-a351188f885d",
+          "name": "上海立信会计金融学院",
+          "province": "上海市"
+        },
+        {
+          "id": "6234d3fb-89f1-4806-9107-986f2ccf2629",
+          "name": "上海立达职业技术学院",
+          "province": "上海市"
+        },
+        {
+          "id": "9db58457-aa33-43bd-a313-bda4785db3c4",
+          "name": "上海第二工业大学",
+          "province": "上海市"
+        },
+        {
+          "id": "ab0a5399-f3ba-4666-a870-8bf40390254a",
+          "name": "上海纽约大学",
+          "province": "上海市"
+        },
+        {
+          "id": "1c6a8b2f-3e82-47ae-96e7-11f173ec3b28",
+          "name": "上海行健职业学院",
+          "province": "上海市"
+        },
+        {
+          "id": "bef57dd3-e1f0-48d2-9baf-cb0339d89256",
+          "name": "上海视觉艺术学院",
+          "province": "上海市"
+        },
+        {
+          "id": "0c1b3fa1-2c0c-42bb-bd1c-67e90da0f87a",
+          "name": "上海邦德职业技术学院",
+          "province": "上海市"
+        },
+        {
+          "id": "f674b59f-b3e9-4103-b640-e50b7ac1d1dc",
+          "name": "上海震旦职业学院",
+          "province": "上海市"
+        },
+        {
+          "id": "9e5e54eb-ddd6-4ecd-baff-78c0f0969838",
+          "name": "上海音乐学院",
+          "province": "上海市"
+        },
+        {
+          "id": "f0354ec1-50d5-48f6-8f07-7c8326b7e7ec",
+          "name": "华东政法大学",
+          "province": "上海市"
+        },
+        {
+          "id": "82bfe418-b55a-40a7-a42f-4dc1620717aa",
+          "name": "滇西科技师范学院",
+          "province": "云南省"
+        },
+        {
+          "id": "0049552c-17c4-49cb-a7ec-1273cb317870",
+          "name": "丽江师范高等专科学校",
+          "province": "云南省"
+        },
+        {
+          "id": "8691810f-29a6-4d89-9b06-1993146cfd31",
+          "name": "云南大学旅游文化学院",
+          "province": "云南省"
+        },
+        {
+          "id": "e4ee46b7-1295-4b1d-8756-78175c9b1fce",
+          "name": "保山中医药高等专科学校",
+          "province": "云南省"
+        },
+        {
+          "id": "a4267674-d381-4ccf-ba82-0de6235b4d16",
+          "name": "保山学院",
+          "province": "云南省"
+        },
+        {
+          "id": "5f1a269f-8f11-4506-85be-0084808cf5ef",
+          "name": "大理护理职业学院",
+          "province": "云南省"
+        },
+        {
+          "id": "ed42c182-c402-401a-b1fe-e5e2c8f2fd81",
+          "name": "大理农林职业技术学院",
+          "province": "云南省"
+        },
+        {
+          "id": "abc8ea44-60ba-4a60-9a11-cfa345ac42ed",
+          "name": "大理大学",
+          "province": "云南省"
+        },
+        {
+          "id": "fdb525b7-5505-425c-8c29-56617f67c429",
+          "name": "滇西应用技术大学",
+          "province": "云南省"
+        },
+        {
+          "id": "67d444a3-7b8c-4f98-b886-767502990e97",
+          "name": "德宏师范高等专科学校",
+          "province": "云南省"
+        },
+        {
+          "id": "7eccd868-d985-46dc-a590-95d10d8f8005",
+          "name": "德宏职业学院",
+          "province": "云南省"
+        },
+        {
+          "id": "f6ba392b-c9b6-4862-a230-747521e6f3ae",
+          "name": "云南三鑫职业技术学院",
+          "province": "云南省"
+        },
+        {
+          "id": "1577901c-3f26-47a6-bb48-7f2f7e01d111",
+          "name": "文山学院",
+          "province": "云南省"
+        },
+        {
+          "id": "6961f522-bb89-4afc-8f25-9dd50026aba6",
+          "name": "云南中医学院",
+          "province": "云南省"
+        },
+        {
+          "id": "28bfbc68-5720-4ffd-a7bb-8c7a734bb5ac",
+          "name": "云南交通职业技术学院",
+          "province": "云南省"
+        },
+        {
+          "id": "2143b6a3-93ad-46b4-ac85-d4fce19001bf",
+          "name": "云南交通运输职业学院",
+          "province": "云南省"
+        },
+        {
+          "id": "511fd60c-e2e5-4dd7-ac72-e8cc1e1e2a18",
+          "name": "云南体育运动职业技术学院",
+          "province": "云南省"
+        },
+        {
+          "id": "5900c3b6-37f2-49a1-8b29-e76c39c3f7f9",
+          "name": "云南农业大学",
+          "province": "云南省"
+        },
+        {
+          "id": "360ebc60-af4e-49de-a455-66cb327cbe08",
+          "name": "云南农业职业技术学院",
+          "province": "云南省"
+        },
+        {
+          "id": "ce95586c-1aaa-4884-8300-cd19ae050a3f",
+          "name": "云南司法警官职业学院",
+          "province": "云南省"
+        },
+        {
+          "id": "77e5e2e0-ff1f-41e2-a45b-a91e73aac319",
+          "name": "云南商务职业学院",
+          "province": "云南省"
+        },
+        {
+          "id": "0bf9d871-c9f4-42ae-8c15-036ff71556fb",
+          "name": "云南国土资源职业学院",
+          "province": "云南省"
+        },
+        {
+          "id": "a7285038-9a34-4407-befe-dc02f08d8416",
+          "name": "云南国防工业职业技术学院",
+          "province": "云南省"
+        },
+        {
+          "id": "335d04c7-5faa-42f3-8436-703369ba3436",
+          "name": "云南城市建设职业学院",
+          "province": "云南省"
+        },
+        {
+          "id": "8429d8da-2e51-463b-977d-be631f36e222",
+          "name": "云南外事外语职业学院",
+          "province": "云南省"
+        },
+        {
+          "id": "2ba081da-b2cc-40af-b20a-c5a85eaa7b92",
+          "name": "云南大学滇池学院",
+          "province": "云南省"
+        },
+        {
+          "id": "ae08af98-9c4b-4f0d-a6f6-c84e7ba16e91",
+          "name": "云南工商学院",
+          "province": "云南省"
+        },
+        {
+          "id": "6c4c64e5-9885-4857-9b7e-dcbe84ecd5e9",
+          "name": "云南工程职业学院",
+          "province": "云南省"
+        },
+        {
+          "id": "40e522e5-2ee6-4c09-93be-823f8a749e4f",
+          "name": "云南工贸职业技术学院",
+          "province": "云南省"
+        },
+        {
+          "id": "6f021f2f-b761-483d-8d91-f6f848ac6b4d",
+          "name": "云南师范大学",
+          "province": "云南省"
+        },
+        {
+          "id": "f923b460-c921-492a-888c-9ed5c4ff8249",
+          "name": "云南师范大学商学院",
+          "province": "云南省"
+        },
+        {
+          "id": "03c21454-e4eb-46d7-8f73-d493fd98b636",
+          "name": "云南师范大学文理学院",
+          "province": "云南省"
+        },
+        {
+          "id": "f709f15a-5f88-4d29-9059-528b2af383aa",
+          "name": "云南文化艺术职业学院",
+          "province": "云南省"
+        },
+        {
+          "id": "fabf9573-42b0-475c-8276-8850697e1a14",
+          "name": "云南新兴职业学院",
+          "province": "云南省"
+        },
+        {
+          "id": "1f162703-0fe3-47fd-9183-7889e0745e2a",
+          "name": "云南旅游职业学院",
+          "province": "云南省"
+        },
+        {
+          "id": "533b59e0-56be-4f6b-bdd3-4101d199e823",
+          "name": "云南机电职业技术学院",
+          "province": "云南省"
+        },
+        {
+          "id": "47c68212-8157-4a2b-8999-499da9352636",
+          "name": "云南林业职业技术学院",
+          "province": "云南省"
+        },
+        {
+          "id": "65191149-2fc7-48ac-97c3-f7c828b9540e",
+          "name": "云南民族大学",
+          "province": "云南省"
+        },
+        {
+          "id": "e37c09ec-eb64-4846-950c-98770d9f6fa4",
+          "name": "云南水利水电职业学院",
+          "province": "云南省"
+        },
+        {
+          "id": "b5b8333f-5fa6-4814-855f-3573a21152d2",
+          "name": "云南特殊教育职业学院",
+          "province": "云南省"
+        },
+        {
+          "id": "2c1f686b-237e-4212-99cc-b936e7d6aa9e",
+          "name": "云南科技信息职业学院",
+          "province": "云南省"
+        },
+        {
+          "id": "bb1056af-6cd2-4dca-b01a-c7771f3c720a",
+          "name": "云南经济管理学院",
+          "province": "云南省"
+        },
+        {
+          "id": "a097bb9d-0677-431c-8f68-39a2eeac059c",
+          "name": "云南经贸外事职业学院",
+          "province": "云南省"
+        },
+        {
+          "id": "380ad6ec-a4af-40bb-95cf-692112a98739",
+          "name": "云南艺术学院",
+          "province": "云南省"
+        },
+        {
+          "id": "5a21e170-4789-4c7d-8fbf-a165b3981820",
+          "name": "云南艺术学院文华学院",
+          "province": "云南省"
+        }
+      ]
+    },
+    "schools_with_campus_but_no_canteen": {
+      "count": 0,
+      "sample": []
+    },
+    "campuses_without_canteen": {
+      "count": 72,
+      "sample": [
+        {
+          "id": "41bdcafc-869f-4a09-9565-0186a6e6e191",
+          "name": "黄浦校区",
+          "school_name": "上海交通大学"
+        },
+        {
+          "id": "5f300e73-a331-4146-9098-a37e982a9235",
+          "name": "浦东校区",
+          "school_name": "上海交通大学"
+        },
+        {
+          "id": "ac743226-8c8e-42d6-98ea-a6d445ed089b",
+          "name": "崇明校区",
+          "school_name": "上海交通大学"
+        },
+        {
+          "id": "50cb34a3-7465-4879-819a-3b561b701a06",
+          "name": "昆山路校区",
+          "school_name": "上海财经大学"
+        },
+        {
+          "id": "fbebf595-f167-4210-a0bf-76c6c4be86cf",
+          "name": "新华路校区",
+          "school_name": "东华大学"
+        },
+        {
+          "id": "4433d582-52ce-491a-b653-3b4faeabff7e",
+          "name": "无锡校区",
+          "school_name": "东南大学"
+        },
+        {
+          "id": "32709b4a-a7f2-4018-9deb-ccc7035aa7c9",
+          "name": "苏州校区",
+          "school_name": "东南大学"
+        },
+        {
+          "id": "a67acb00-08fa-4726-aeb8-e5551b04232d",
+          "name": "苏州校区",
+          "school_name": "中国人民大学"
+        },
+        {
+          "id": "33c5c5a9-757a-4bc4-987e-20ca63d52cd4",
+          "name": "张自忠路校区",
+          "school_name": "中国人民大学"
+        },
+        {
+          "id": "bc79332e-7952-40f2-84b0-53a1cf87f820",
+          "name": "海南国际学院",
+          "school_name": "中国传媒大学"
+        },
+        {
+          "id": "745f58f9-b2f4-4a82-a87f-3671a99dd840",
+          "name": "浮山校区",
+          "school_name": "中国海洋大学"
+        },
+        {
+          "id": "625a4dbb-61fd-4235-a5bf-f662a6dddfc6",
+          "name": "北校区",
+          "school_name": "中国科学技术大学"
+        },
+        {
+          "id": "4a3db81d-b9c5-427b-938f-76d15ba96656",
+          "name": "海南校区",
+          "school_name": "中央民族大学"
+        },
+        {
+          "id": "53a1f0c0-4f34-481f-99ad-436f64647436",
+          "name": "望京校区",
+          "school_name": "北京中医药大学"
+        },
+        {
+          "id": "9817b3a8-2bb4-4c58-bf9a-478c1da7d562",
+          "name": "雄安校区",
+          "school_name": "北京交通大学"
+        },
+        {
+          "id": "3472e566-d6ee-4e7d-aa5e-cbf47355fb45",
+          "name": "昌平校区",
+          "school_name": "北京化工大学"
+        },
+        {
+          "id": "fd700ed9-430c-4487-ad57-3523a672eabd",
+          "name": "海淀校区",
+          "school_name": "北京化工大学"
+        },
+        {
+          "id": "f815dc00-4ff1-4124-b79b-6e487b2c5629",
+          "name": "医学部",
+          "school_name": "北京大学"
+        },
+        {
+          "id": "3b004d96-3af5-407f-9b80-dffd01b2d288",
+          "name": "大兴校区",
+          "school_name": "北京大学"
+        },
+        {
+          "id": "0f7a54ac-b35b-4121-961c-407561382c05",
+          "name": "深圳研究生院",
+          "school_name": "北京大学"
+        },
+        {
+          "id": "8a5b74a3-9255-48f4-b458-dae2fb315cc3",
+          "name": "管庄校区",
+          "school_name": "北京工业大学"
+        },
+        {
+          "id": "d3f547b3-672f-4c5d-b55c-a5668eedb728",
+          "name": "琉璃井校区",
+          "school_name": "北京工业大学"
+        },
+        {
+          "id": "58066f6a-e422-425f-957e-1d2a22958746",
+          "name": "惠新东街校区",
+          "school_name": "北京工业大学"
+        },
+        {
+          "id": "60d823ba-d033-49b0-936d-3d26c29d1db8",
+          "name": "怀来校区",
+          "school_name": "北京理工大学"
+        },
+        {
+          "id": "077a3c06-c066-4a9b-8337-93e6290c608b",
+          "name": "沙河创新园区",
+          "school_name": "北京科技大学"
+        },
+        {
+          "id": "d3234ef3-65dc-4742-af82-e530bce716de",
+          "name": "雄安校区",
+          "school_name": "北京科技大学"
+        },
+        {
+          "id": "a08af1b4-9bba-4c81-bc99-3ec43ba8e7ea",
+          "name": "顺德创新学院",
+          "school_name": "北京科技大学"
+        },
+        {
+          "id": "c1836adc-3a3b-4c9a-bfd5-0ae7a5598350",
+          "name": "杭州国际校园",
+          "school_name": "北京航空航天大学"
+        },
+        {
+          "id": "8f58a513-5a19-4926-9865-45398db520e0",
+          "name": "海南校区",
+          "school_name": "北京邮电大学"
+        },
+        {
+          "id": "4e8be475-f3fb-4c60-8793-11624867cfb9",
+          "name": "金山科技园区",
+          "school_name": "华东理工大学"
+        },
+        {
+          "id": "0950789f-4d97-4edc-9609-af99c00d9ee6",
+          "name": "同济校区",
+          "school_name": "华中科技大学"
+        },
+        {
+          "id": "93bd0217-ae4f-48e1-98f4-0c0c3bb78b1c",
+          "name": "军山校区",
+          "school_name": "华中科技大学"
+        },
+        {
+          "id": "d090aba5-42a6-4f08-893e-86cbfe2e8a9c",
+          "name": "广州国际校区",
+          "school_name": "华南理工大学"
+        },
+        {
+          "id": "16756065-17ba-4018-bc29-a5309fbb2908",
+          "name": "鄱阳湖校区",
+          "school_name": "南昌大学"
+        },
+        {
+          "id": "c1819ade-502e-490d-86a3-3d428ee071ef",
+          "name": "六安路校区",
+          "school_name": "合肥工业大学"
+        },
+        {
+          "id": "309794f7-988a-47ad-a358-fd9ba77d583e",
+          "name": "新民校区",
+          "school_name": "吉林大学"
+        },
+        {
+          "id": "6d31c8ff-efb7-4e53-941b-7195a5e3a7cd",
+          "name": "朝阳校区",
+          "school_name": "吉林大学"
+        },
+        {
+          "id": "04424192-3d79-4bb3-84f6-0b5a0d633408",
+          "name": "科学园",
+          "school_name": "哈尔滨工业大学"
+        },
+        {
+          "id": "db488ac9-dd04-4e3f-a43b-bced06140c8f",
+          "name": "青岛创新发展基地",
+          "school_name": "哈尔滨工程大学"
+        },
+        {
+          "id": "0a519232-1a0a-421a-bed7-17d18f8739c6",
+          "name": "烟台研究院",
+          "school_name": "哈尔滨工程大学"
+        },
+        {
+          "id": "38777e04-fa98-465d-9312-bf1f272269f1",
+          "name": "南海研究院",
+          "school_name": "哈尔滨工程大学"
+        },
+        {
+          "id": "6f9a4412-cc29-452e-a1b7-61265896016c",
+          "name": "一二九校区",
+          "school_name": "大连理工大学"
+        },
+        {
+          "id": "bef50b39-5593-4740-9500-500b3876e6ca",
+          "name": "广东路校区",
+          "school_name": "天津医科大学"
+        },
+        {
+          "id": "3960deba-b70d-4bbd-a495-b27855e576cd",
+          "name": "史河路校区",
+          "school_name": "安徽大学"
+        },
+        {
+          "id": "4ecd9e9b-eaaa-4921-a5d7-593624e97917",
+          "name": "泗州路校区",
+          "school_name": "安徽大学"
+        },
+        {
+          "id": "f975cdaa-b64c-4862-8934-fa613a473d37",
+          "name": "千佛山校区",
+          "school_name": "山东大学"
+        },
+        {
+          "id": "9fca692c-3447-4840-8347-e2184a8e9811",
+          "name": "软件园校区",
+          "school_name": "山东大学"
+        },
+        {
+          "id": "2b65ce2f-8508-4199-8b6f-5a387680df1d",
+          "name": "威海校区",
+          "school_name": "山东大学"
+        },
+        {
+          "id": "b29842b2-302e-4cc5-834e-3445af774d63",
+          "name": "珲春校区",
+          "school_name": "延边大学"
+        },
+        {
+          "id": "c7bcc94d-26b4-4f46-8f19-e0e793373c17",
+          "name": "珠海校区",
+          "school_name": "暨南大学"
+        },
+        {
+          "id": "632b7508-f8fa-4fb4-b957-14e9e5b5a30f",
+          "name": "广园东校区",
+          "school_name": "暨南大学"
+        },
+        {
+          "id": "9b074656-ff08-425f-a6eb-1a689ab66342",
+          "name": "深圳校区",
+          "school_name": "暨南大学"
+        },
+        {
+          "id": "3b8015c5-1251-45d8-821c-ade3979ee00b",
+          "name": "廊坊校区",
+          "school_name": "河北工业大学"
+        },
+        {
+          "id": "28c6dd4b-0ed1-48f5-b9fb-1d511fd85b55",
+          "name": "舟山校区",
+          "school_name": "浙江大学"
+        },
+        {
+          "id": "cdc5d953-2aef-44b6-8198-659fbfe24424",
+          "name": "海宁校区",
+          "school_name": "浙江大学"
+        },
+        {
+          "id": "47d805cf-10de-4914-b1cb-cbd6634543de",
+          "name": "城西基础教学部",
+          "school_name": "海南大学"
+        },
+        {
+          "id": "ccfab1c6-5b5b-4b4e-a0bc-35ecafae41fe",
+          "name": "崖州校区",
+          "school_name": "海南大学"
+        },
+        {
+          "id": "4d04f0b2-cf45-4b69-89de-a58b919b5e9c",
+          "name": "深圳国际研究生院",
+          "school_name": "清华大学"
+        },
+        {
+          "id": "53143c62-ac99-40f9-aae8-8bd74401d3c7",
+          "name": "南院校区",
+          "school_name": "湖南师范大学"
+        },
+        {
+          "id": "20acb1b8-55ec-4eb4-becb-567bb6bc16f1",
+          "name": "桃花坪校区",
+          "school_name": "湖南师范大学"
+        },
+        {
+          "id": "dc5f3e93-43af-44aa-a6a7-d93169df2121",
+          "name": "咸嘉湖校区",
+          "school_name": "湖南师范大学"
+        },
+        {
+          "id": "11bcddb8-b0e5-4f93-803f-bd3d7a0f213b",
+          "name": "张公岭校区",
+          "school_name": "湖南师范大学"
+        },
+        {
+          "id": "c9669835-478f-40da-9d80-e4250c95c7d0",
+          "name": "怡山校区",
+          "school_name": "福州大学"
+        },
+        {
+          "id": "1fa56203-1fa2-49ed-88af-3f3ef21518ae",
+          "name": "铜盘校区",
+          "school_name": "福州大学"
+        },
+        {
+          "id": "74ffcb2b-0f9d-4fad-a6f9-8579acbca1d7",
+          "name": "厦门集美校区",
+          "school_name": "福州大学"
+        },
+        {
+          "id": "d1fcda19-7746-4965-bb73-856951832d5d",
+          "name": "厦门鼓浪屿校区",
+          "school_name": "福州大学"
+        },
+        {
+          "id": "294e16d5-3d17-407e-a424-9a8ef8955b0b",
+          "name": "泉港校区",
+          "school_name": "福州大学"
+        },
+        {
+          "id": "d10740b7-9099-4312-b843-412060ab968f",
+          "name": "晋江校区",
+          "school_name": "福州大学"
+        },
+        {
+          "id": "7fcea2ff-db4a-49bb-bb32-94552b711295",
+          "name": "未来校区",
+          "school_name": "苏州大学"
+        },
+        {
+          "id": "d7853a20-3563-4079-b85c-314de38579ac",
+          "name": "东部（国际）校区",
+          "school_name": "西南交通大学"
+        },
+        {
+          "id": "8aad5087-6472-43be-af3f-5a609cbdf72c",
+          "name": "峨眉校区",
+          "school_name": "西南交通大学"
+        },
+        {
+          "id": "71ae0a5f-4e69-4078-b356-7e13c1207e5b",
+          "name": "国家卓越工程师学院",
+          "school_name": "重庆大学"
+        }
+      ]
+    },
+    "canteens_without_campus": {
+      "count": 1,
+      "sample": [
+        {
+          "id": "59253533-7a09-481c-90a3-377a332e1fa9",
+          "name": "清真食堂",
+          "school_name": "内蒙古大学"
+        }
+      ]
+    }
+  },
+  "duplicates": {
+    "duplicate_campus_names_count": 0,
+    "duplicate_campus_names_sample": [],
+    "duplicate_canteen_names_in_campus_count": 0,
+    "duplicate_canteen_names_in_campus_sample": [],
+    "duplicate_orphan_canteen_names_count": 0,
+    "duplicate_orphan_canteen_names_sample": []
+  },
+  "distributions": {
+    "campus_status": {
+      "pending_review": 340,
+      "active": 24
+    },
+    "canteen_status": {
+      "pending_review": 1007,
+      "active": 41
+    },
+    "canteen_confidence_level": {
+      "A": 822,
+      "B": 199,
+      "C": 27
+    },
+    "top_provinces": [
+      [
+        "江苏省",
+        167
+      ],
+      [
+        "广东省",
+        151
+      ],
+      [
+        "山东省",
+        145
+      ],
+      [
+        "河南省",
+        134
+      ],
+      [
+        "湖北省",
+        129
+      ],
+      [
+        "湖南省",
+        124
+      ],
+      [
+        "河北省",
+        121
+      ],
+      [
+        "安徽省",
+        119
+      ],
+      [
+        "辽宁省",
+        115
+      ],
+      [
+        "四川省",
+        109
+      ],
+      [
+        "浙江省",
+        107
+      ],
+      [
+        "江西省",
+        100
+      ],
+      [
+        "陕西省",
+        93
+      ],
+      [
+        "北京市",
+        92
+      ],
+      [
+        "福建省",
+        89
+      ],
+      [
+        "黑龙江省",
+        81
+      ],
+      [
+        "山西省",
+        80
+      ],
+      [
+        "云南省",
+        77
+      ],
+      [
+        "广西壮族自治区",
+        74
+      ],
+      [
+        "贵州省",
+        70
+      ]
+    ],
+    "campus_counts_per_school": {
+      "6": 9,
+      "2": 31,
+      "3": 28,
+      "4": 24,
+      "1": 6,
+      "5": 8,
+      "8": 1,
+      "7": 2
+    },
+    "canteen_counts_per_campus": {
+      "3": 31,
+      "1": 85,
+      "11": 3,
+      "7": 15,
+      "4": 31,
+      "2": 52,
+      "8": 8,
+      "9": 5,
+      "6": 30,
+      "5": 24,
+      "14": 1,
+      "12": 1,
+      "13": 1,
+      "10": 4,
+      "15": 1
+    }
+  },
+  "data_quality": {
+    "overly_generic_canteen_names_count": 2,
+    "overly_generic_canteen_names_sample": [
+      {
+        "id": "fdd64ae1-dfa3-41da-b2be-ec41da53c309",
+        "school_name": "北京师范大学",
+        "campus_name": "昌平校园G区",
+        "name": "食堂"
+      },
+      {
+        "id": "5d243c89-e830-4e63-a58e-6c33c6aa883b",
+        "school_name": "北京师范大学",
+        "campus_name": "育荣校园",
+        "name": "食堂"
+      }
+    ],
+    "canteens_missing_location_count": 141,
+    "canteens_missing_location_sample": [
+      {
+        "id": "9e639a3b-87b4-41e1-a42e-74c198a9a303",
+        "name": "北苑餐厅",
+        "school_name": "中国传媒大学",
+        "campus_name": "北京校区"
+      },
+      {
+        "id": "9e71db5e-ecdf-4199-bc55-d221aad37f58",
+        "name": "南苑餐厅",
+        "school_name": "中国传媒大学",
+        "campus_name": "北京校区"
+      },
+      {
+        "id": "0862004e-2a06-49e8-8e34-aa5a77098ddc",
+        "name": "梆子井餐厅",
+        "school_name": "中国传媒大学",
+        "campus_name": "北京校区"
+      },
+      {
+        "id": "1b968c96-a1e1-4f3a-b1fe-72efb0a7ef78",
+        "name": "中蓝餐厅",
+        "school_name": "中国传媒大学",
+        "campus_name": "北京校区"
+      },
+      {
+        "id": "d832a08c-5077-415c-bf55-3ae49d8884c3",
+        "name": "溢香苑餐厅",
+        "school_name": "中国传媒大学",
+        "campus_name": "北京校区"
+      },
+      {
+        "id": "e2b8f67c-cd00-4a51-a24b-4810ac290cb0",
+        "name": "公寓一食堂",
+        "school_name": "中国农业大学",
+        "campus_name": "东校区"
+      },
+      {
+        "id": "de39076f-5feb-4414-9c8a-3677b6befa81",
+        "name": "公寓二食堂",
+        "school_name": "中国农业大学",
+        "campus_name": "东校区"
+      },
+      {
+        "id": "2407d2c2-dc61-4b42-9ff0-f019e66ed2ef",
+        "name": "公寓三食堂",
+        "school_name": "中国农业大学",
+        "campus_name": "东校区"
+      },
+      {
+        "id": "49ce25cc-ebbd-45d2-8eff-93873088d405",
+        "name": "公寓四食堂",
+        "school_name": "中国农业大学",
+        "campus_name": "东校区"
+      },
+      {
+        "id": "ee91d34c-99ce-4a2a-a4df-73bc2028c121",
+        "name": "风味餐厅",
+        "school_name": "中国农业大学",
+        "campus_name": "东校区"
+      },
+      {
+        "id": "ef63aed9-b3c7-43a7-ae1c-fd245f701b86",
+        "name": "民族风味食堂",
+        "school_name": "中国农业大学",
+        "campus_name": "东校区"
+      },
+      {
+        "id": "afdb19dc-7b93-4fad-bc55-a1d2289fd8e7",
+        "name": "颐园一食堂",
+        "school_name": "中国农业大学",
+        "campus_name": "西校区"
+      },
+      {
+        "id": "ce218a18-503d-4cf4-98c9-bee48d5dbb62",
+        "name": "颐园二食堂",
+        "school_name": "中国农业大学",
+        "campus_name": "西校区"
+      },
+      {
+        "id": "9b2f8fdd-2d03-4edf-aad9-0cf8ade2ef53",
+        "name": "颐园三食堂",
+        "school_name": "中国农业大学",
+        "campus_name": "西校区"
+      },
+      {
+        "id": "8e51ad17-204f-4693-ac4e-7b06639c85f2",
+        "name": "民族风味食堂",
+        "school_name": "中国农业大学",
+        "campus_name": "西校区"
+      },
+      {
+        "id": "cdb99b55-6b05-45a1-83f0-231302cb4914",
+        "name": "和园一食堂",
+        "school_name": "中国农业大学",
+        "campus_name": "西校区"
+      },
+      {
+        "id": "07e6bc0e-fe62-4cba-a60d-0a737b72a191",
+        "name": "和园二食堂",
+        "school_name": "中国农业大学",
+        "campus_name": "西校区"
+      },
+      {
+        "id": "b26bc2dd-9e43-4f3d-9251-1f8b9cf5fdbd",
+        "name": "清真食堂",
+        "school_name": "中国政法大学",
+        "campus_name": "昌平校区"
+      },
+      {
+        "id": "90a78763-7a03-405c-8f4b-0c6a6eaea5fc",
+        "name": "清真园",
+        "school_name": "中国矿业大学（北京）",
+        "campus_name": "学院路校区"
+      },
+      {
+        "id": "32d9dced-195a-49a2-863a-9c79288015b8",
+        "name": "丰园",
+        "school_name": "中国矿业大学（北京）",
+        "campus_name": "学院路校区"
+      },
+      {
+        "id": "7fd65ea4-a481-4bfc-b17e-2a7ed9cb56e9",
+        "name": "清真餐厅",
+        "school_name": "中国矿业大学（北京）",
+        "campus_name": "沙河校区"
+      },
+      {
+        "id": "88b6e19e-a964-4471-af23-3182de590334",
+        "name": "丰园",
+        "school_name": "中国矿业大学（北京）",
+        "campus_name": "沙河校区"
+      },
+      {
+        "id": "385a0305-2113-439b-a7e7-c36e37048975",
+        "name": "馨园",
+        "school_name": "中国矿业大学（北京）",
+        "campus_name": "沙河校区"
+      },
+      {
+        "id": "2cabd81c-29b7-4148-988b-0334d71a64c6",
+        "name": "菁园",
+        "school_name": "中国矿业大学（北京）",
+        "campus_name": "沙河校区"
+      },
+      {
+        "id": "5d07a816-d719-4a7f-b1cb-325394efe861",
+        "name": "东区学生食堂",
+        "school_name": "中国科学技术大学",
+        "campus_name": "东校区"
+      },
+      {
+        "id": "f5ee44fd-71ee-499d-b0a4-f1c0406f93e6",
+        "name": "中区学生食堂",
+        "school_name": "中国科学技术大学",
+        "campus_name": "中校区"
+      },
+      {
+        "id": "615f12c8-a9e8-4ca1-9382-f832c6f54651",
+        "name": "南区学生食堂",
+        "school_name": "中国科学技术大学",
+        "campus_name": "南校区"
+      },
+      {
+        "id": "2e26cac1-9e42-4363-9e18-7b8cf952ff4e",
+        "name": "西区学生食堂",
+        "school_name": "中国科学技术大学",
+        "campus_name": "西校区"
+      },
+      {
+        "id": "1aea26ca-8401-4ae7-b5a7-4069c10ef86f",
+        "name": "高新校区食堂",
+        "school_name": "中国科学技术大学",
+        "campus_name": "高新校区"
+      },
+      {
+        "id": "4e330a88-6c6a-4ff2-b211-d3f5aef06429",
+        "name": "聚雅餐厅",
+        "school_name": "中央民族大学",
+        "campus_name": "丰台校区"
+      },
+      {
+        "id": "798b7d18-dd8e-4e75-93ac-b5757c085fec",
+        "name": "荟贤餐厅",
+        "school_name": "中央民族大学",
+        "campus_name": "丰台校区"
+      },
+      {
+        "id": "e55cebd7-85d2-41ce-a5d1-f68bd200e133",
+        "name": "第一学生餐厅",
+        "school_name": "中央民族大学",
+        "campus_name": "海淀校区"
+      },
+      {
+        "id": "7534d983-c3e0-4478-8ecd-f109b23cefe2",
+        "name": "第二教工食堂",
+        "school_name": "中央民族大学",
+        "campus_name": "海淀校区"
+      },
+      {
+        "id": "bb4c5a4e-9623-48e1-bab8-051bd8dc8966",
+        "name": "一食堂",
+        "school_name": "云南大学",
+        "campus_name": "东陆校区"
+      },
+      {
+        "id": "f1977bd4-c366-41d6-9116-49846f68402b",
+        "name": "清真食堂",
+        "school_name": "云南大学",
+        "campus_name": "东陆校区"
+      },
+      {
+        "id": "faf6026b-79ff-42e4-a3e0-628b6e3c622f",
+        "name": "知味堂一楼餐厅",
+        "school_name": "云南大学",
+        "campus_name": "呈贡校区"
+      },
+      {
+        "id": "48926c36-bc0d-47f2-81b7-0c02c3149adc",
+        "name": "知味堂二楼食堂",
+        "school_name": "云南大学",
+        "campus_name": "呈贡校区"
+      },
+      {
+        "id": "e89e2e41-4aee-4842-a36a-52c6649a5ccb",
+        "name": "知味堂三楼餐厅",
+        "school_name": "云南大学",
+        "campus_name": "呈贡校区"
+      },
+      {
+        "id": "43d27ce6-7c61-46e1-8886-7ee3fdbe95f1",
+        "name": "知味堂清真食堂",
+        "school_name": "云南大学",
+        "campus_name": "呈贡校区"
+      },
+      {
+        "id": "148fdd26-a0e5-488d-aa1e-ffcc7648e066",
+        "name": "馀味堂一楼食堂",
+        "school_name": "云南大学",
+        "campus_name": "呈贡校区"
+      },
+      {
+        "id": "d81df1b4-286f-4e2a-a48c-8665bc8bb170",
+        "name": "馀味堂二楼食堂",
+        "school_name": "云南大学",
+        "campus_name": "呈贡校区"
+      },
+      {
+        "id": "31b8c2b6-5b3a-4f1c-ade3-9c713cb89fdd",
+        "name": "馀味堂三楼食堂",
+        "school_name": "云南大学",
+        "campus_name": "呈贡校区"
+      },
+      {
+        "id": "18181e42-9190-4479-8c78-4c57f2836c63",
+        "name": "馀味堂清真食堂",
+        "school_name": "云南大学",
+        "campus_name": "呈贡校区"
+      },
+      {
+        "id": "4147784c-c416-4162-bfaa-3d2c4addac5a",
+        "name": "学子餐厅",
+        "school_name": "北京交通大学",
+        "campus_name": "威海校区"
+      },
+      {
+        "id": "83a6b9fd-2e71-4c52-968c-67e2ec5cc28d",
+        "name": "民族风味餐厅",
+        "school_name": "北京交通大学",
+        "campus_name": "威海校区"
+      },
+      {
+        "id": "7546e473-c7e1-4169-b241-5d32707cd357",
+        "name": "学一食堂",
+        "school_name": "北京交通大学",
+        "campus_name": "海淀校区"
+      },
+      {
+        "id": "fef769eb-54d2-408a-bf8e-a57f4efb521c",
+        "name": "学二食堂",
+        "school_name": "北京交通大学",
+        "campus_name": "海淀校区"
+      },
+      {
+        "id": "f13609d9-1b37-4f6b-bf7f-c12e936fdc95",
+        "name": "学三食堂",
+        "school_name": "北京交通大学",
+        "campus_name": "海淀校区"
+      },
+      {
+        "id": "04c1e2f2-d971-436c-bd7f-32547df5095f",
+        "name": "学四食堂",
+        "school_name": "北京交通大学",
+        "campus_name": "海淀校区"
+      },
+      {
+        "id": "e8ae7045-5bd6-4a7c-9c75-ddb8892a0d5b",
+        "name": "留园餐厅",
+        "school_name": "北京交通大学",
+        "campus_name": "海淀校区"
+      }
+    ],
+    "campuses_missing_address_count": 63,
+    "campuses_missing_address_sample": [
+      {
+        "id": "5f300e73-a331-4146-9098-a37e982a9235",
+        "name": "浦东校区",
+        "school_name": "上海交通大学"
+      },
+      {
+        "id": "a564189d-7eba-4d6c-bef0-f1fc2f44608f",
+        "name": "东校区",
+        "school_name": "中国科学技术大学"
+      },
+      {
+        "id": "2e02a891-86e4-40a7-b21a-efa0aebf2bbf",
+        "name": "西校区",
+        "school_name": "中国科学技术大学"
+      },
+      {
+        "id": "bab2824e-faac-4759-a155-c5863e31e4c7",
+        "name": "中校区",
+        "school_name": "中国科学技术大学"
+      },
+      {
+        "id": "625a4dbb-61fd-4235-a5bf-f662a6dddfc6",
+        "name": "北校区",
+        "school_name": "中国科学技术大学"
+      },
+      {
+        "id": "a472778c-30e5-4ea4-b060-005e48e79fbe",
+        "name": "南校区",
+        "school_name": "中国科学技术大学"
+      },
+      {
+        "id": "a8d36345-a81c-4a7a-9fad-7fb015f3eca5",
+        "name": "高新校区",
+        "school_name": "中国科学技术大学"
+      },
+      {
+        "id": "49e70c44-bfdc-4a3f-8ab3-a08d4359ef63",
+        "name": "燕园校区",
+        "school_name": "北京大学"
+      },
+      {
+        "id": "f815dc00-4ff1-4124-b79b-6e487b2c5629",
+        "name": "医学部",
+        "school_name": "北京大学"
+      },
+      {
+        "id": "7a71f6ae-8124-4ff9-a91a-53be34ff4c1c",
+        "name": "昌平新校区",
+        "school_name": "北京大学"
+      },
+      {
+        "id": "3b004d96-3af5-407f-9b80-dffd01b2d288",
+        "name": "大兴校区",
+        "school_name": "北京大学"
+      },
+      {
+        "id": "0f7a54ac-b35b-4121-961c-407561382c05",
+        "name": "深圳研究生院",
+        "school_name": "北京大学"
+      },
+      {
+        "id": "9fd106ac-e630-4e6f-b6ab-ca3709bccedf",
+        "name": "昌平校园G区",
+        "school_name": "北京师范大学"
+      },
+      {
+        "id": "e2fa5a22-c1a6-4f8e-9013-33716f04b00f",
+        "name": "育荣校园",
+        "school_name": "北京师范大学"
+      },
+      {
+        "id": "56c29aff-5a1f-4aad-b15a-38faa6f81a37",
+        "name": "西城校园",
+        "school_name": "北京师范大学"
+      },
+      {
+        "id": "60d823ba-d033-49b0-936d-3d26c29d1db8",
+        "name": "怀来校区",
+        "school_name": "北京理工大学"
+      },
+      {
+        "id": "d3234ef3-65dc-4742-af82-e530bce716de",
+        "name": "雄安校区",
+        "school_name": "北京科技大学"
+      },
+      {
+        "id": "a3333bb8-b4d2-46ae-b983-ccfb931bb023",
+        "name": "盱眙校区",
+        "school_name": "南京理工大学"
+      },
+      {
+        "id": "1341569d-27d8-4df3-9869-b54a7471ea42",
+        "name": "土木楼校区",
+        "school_name": "哈尔滨工业大学"
+      },
+      {
+        "id": "dc770826-6579-4f0f-b54c-2098a5ea0786",
+        "name": "邯郸校区",
+        "school_name": "复旦大学"
+      },
+      {
+        "id": "36be19a2-6adf-44b7-823d-2de393e8d32d",
+        "name": "枫林校区",
+        "school_name": "复旦大学"
+      },
+      {
+        "id": "5630b121-ce88-49df-be12-078d140d1e66",
+        "name": "江湾校区",
+        "school_name": "复旦大学"
+      },
+      {
+        "id": "b3e42a70-bb64-4f1e-9a55-dbb602d03d35",
+        "name": "张江校区",
+        "school_name": "复旦大学"
+      },
+      {
+        "id": "53f334a8-cdbd-4913-8403-1df17d1c1701",
+        "name": "杨树沟校区",
+        "school_name": "大连海事大学"
+      },
+      {
+        "id": "3a82241c-61b2-41fe-95df-423ef7f19a32",
+        "name": "虎峪校区",
+        "school_name": "太原理工大学"
+      },
+      {
+        "id": "a96d4bde-4a71-46d0-98de-5c71d5757f74",
+        "name": "柏林校区",
+        "school_name": "太原理工大学"
+      },
+      {
+        "id": "18cda19e-08eb-41d7-9084-175614046e58",
+        "name": "贺兰山校区",
+        "school_name": "宁夏大学"
+      },
+      {
+        "id": "b98f82ad-2cc8-4968-af10-71514a4e9b43",
+        "name": "怀远校区",
+        "school_name": "宁夏大学"
+      },
+      {
+        "id": "3c7e989c-787c-435a-a0f4-f913f0d19376",
+        "name": "文萃校区",
+        "school_name": "宁夏大学"
+      },
+      {
+        "id": "caaf4744-008e-441a-88b5-6849cde8b0ed",
+        "name": "金凤校区",
+        "school_name": "宁夏大学"
+      },
+      {
+        "id": "3b8015c5-1251-45d8-821c-ade3979ee00b",
+        "name": "廊坊校区",
+        "school_name": "河北工业大学"
+      },
+      {
+        "id": "3003791b-3481-420c-93c7-3bd2eea64116",
+        "name": "紫金港校区",
+        "school_name": "浙江大学"
+      },
+      {
+        "id": "f9684c13-bf15-4aa1-8472-e7927a5b202f",
+        "name": "玉泉校区",
+        "school_name": "浙江大学"
+      },
+      {
+        "id": "d5bab0e0-1f8a-4b85-a789-4ae62b2d497c",
+        "name": "西溪校区",
+        "school_name": "浙江大学"
+      },
+      {
+        "id": "b0e176e7-dba7-4610-874b-41b68cb5f05c",
+        "name": "华家池校区",
+        "school_name": "浙江大学"
+      },
+      {
+        "id": "77464a68-f3a5-4e8f-a649-0a9d4870a651",
+        "name": "之江校区",
+        "school_name": "浙江大学"
+      },
+      {
+        "id": "28c6dd4b-0ed1-48f5-b9fb-1d511fd85b55",
+        "name": "舟山校区",
+        "school_name": "浙江大学"
+      },
+      {
+        "id": "cdc5d953-2aef-44b6-8198-659fbfe24424",
+        "name": "海宁校区",
+        "school_name": "浙江大学"
+      },
+      {
+        "id": "3c1ee486-4f55-48ef-b6c1-1a3a56a0542a",
+        "name": "清华园校区",
+        "school_name": "清华大学"
+      },
+      {
+        "id": "4d04f0b2-cf45-4b69-89de-a58b919b5e9c",
+        "name": "深圳国际研究生院",
+        "school_name": "清华大学"
+      },
+      {
+        "id": "ab3209b4-e01f-49e2-bb56-7989c49dcf32",
+        "name": "天马校区",
+        "school_name": "湖南师范大学"
+      },
+      {
+        "id": "53143c62-ac99-40f9-aae8-8bd74401d3c7",
+        "name": "南院校区",
+        "school_name": "湖南师范大学"
+      },
+      {
+        "id": "20acb1b8-55ec-4eb4-becb-567bb6bc16f1",
+        "name": "桃花坪校区",
+        "school_name": "湖南师范大学"
+      },
+      {
+        "id": "dc5f3e93-43af-44aa-a6a7-d93169df2121",
+        "name": "咸嘉湖校区",
+        "school_name": "湖南师范大学"
+      },
+      {
+        "id": "11bcddb8-b0e5-4f93-803f-bd3d7a0f213b",
+        "name": "张公岭校区",
+        "school_name": "湖南师范大学"
+      },
+      {
+        "id": "774ff24e-af29-4739-a8c5-5ccf287424a4",
+        "name": "北区",
+        "school_name": "石河子大学"
+      },
+      {
+        "id": "5886d4da-3247-4df0-b247-ea8acbac1f32",
+        "name": "中区",
+        "school_name": "石河子大学"
+      },
+      {
+        "id": "9ffa6007-b8d9-4f2a-8e5c-1a8f07893d16",
+        "name": "南区",
+        "school_name": "石河子大学"
+      },
+      {
+        "id": "f618714d-cbd6-463f-8a55-22346b24613c",
+        "name": "北苑新区",
+        "school_name": "石河子大学"
+      },
+      {
+        "id": "0b1c3a30-cf0b-4284-b9a9-21389a9d9abe",
+        "name": "东区",
+        "school_name": "石河子大学"
+      }
+    ],
+    "schools_without_sources_count": 2527,
+    "schools_without_sources_sample": [
+      {
+        "id": "2faf51c4-c02e-4fdb-9ecf-3bfdbce84d7b",
+        "name": "上海东海职业技术学院",
+        "province": "上海市"
+      },
+      {
+        "id": "6059446f-c8da-4b59-8459-3749e4d4a3a0",
+        "name": "上海中侨职业技术学院",
+        "province": "上海市"
+      },
+      {
+        "id": "c8cc136e-8835-438d-94a2-aa8ab69809ac",
+        "name": "上海中医药大学",
+        "province": "上海市"
+      },
+      {
+        "id": "25301343-cb15-4cfb-ad0e-aa8bbdcc5fa2",
+        "name": "上海中华职业技术学院",
+        "province": "上海市"
+      },
+      {
+        "id": "98f1ae31-4aaf-475d-a8d1-8ad29a19fb6e",
+        "name": "上海交通职业技术学院",
+        "province": "上海市"
+      },
+      {
+        "id": "9a869890-9382-4397-b4ab-4204b4d82038",
+        "name": "上海体育学院",
+        "province": "上海市"
+      },
+      {
+        "id": "ff805dd5-2f8e-48da-a6a6-5cdfb7404ff7",
+        "name": "上海体育职业学院",
+        "province": "上海市"
+      },
+      {
+        "id": "641a23f6-6635-4696-b21e-cbfa6993396b",
+        "name": "上海健康医学院",
+        "province": "上海市"
+      },
+      {
+        "id": "b72b7c24-7de9-4847-9cfb-80b4328f2e4e",
+        "name": "上海公安学院",
+        "province": "上海市"
+      },
+      {
+        "id": "41084919-9423-4abc-bab8-9908da9794c8",
+        "name": "上海兴伟学院",
+        "province": "上海市"
+      },
+      {
+        "id": "38e3b006-befa-4a3f-af29-bd44efbcbdcb",
+        "name": "上海农林职业技术学院",
+        "province": "上海市"
+      },
+      {
+        "id": "3161e2b0-fd31-4b9f-9730-c1ca854602be",
+        "name": "上海出版印刷高等专科学校",
+        "province": "上海市"
+      },
+      {
+        "id": "14c2f0b2-e761-4a2e-a13e-89588d71183d",
+        "name": "上海商学院",
+        "province": "上海市"
+      },
+      {
+        "id": "124fdffa-c50c-4a6e-b5e2-ddea7f093f49",
+        "name": "上海城建职业学院",
+        "province": "上海市"
+      },
+      {
+        "id": "7cc2386f-eb31-4f85-b1cf-3b01d0798895",
+        "name": "上海外国语大学贤达经济人文\n学院",
+        "province": "上海市"
+      },
+      {
+        "id": "2b394e55-fe4f-4cc4-8ed3-850d52bdea2a",
+        "name": "上海对外经贸大学",
+        "province": "上海市"
+      },
+      {
+        "id": "e940bc7a-bcf3-4b01-90e2-5bdd1e8f8a27",
+        "name": "上海工会管理职业学院",
+        "province": "上海市"
+      },
+      {
+        "id": "e43c5578-4fb9-4034-a921-68af593c35a6",
+        "name": "上海工商外国语职业学院",
+        "province": "上海市"
+      },
+      {
+        "id": "815e275a-4869-4027-b5a8-0b81bcd044dc",
+        "name": "上海工商职业技术学院",
+        "province": "上海市"
+      },
+      {
+        "id": "e4892121-e20b-488e-925f-b198de4ba1b8",
+        "name": "上海工程技术大学",
+        "province": "上海市"
+      },
+      {
+        "id": "c60a29fe-4a7e-4ca1-8a65-7cf819e789ad",
+        "name": "上海工艺美术职业学院",
+        "province": "上海市"
+      },
+      {
+        "id": "466dc242-5034-4737-be78-8589ddb3c842",
+        "name": "上海师范大学",
+        "province": "上海市"
+      },
+      {
+        "id": "7db62788-b06f-42a3-a8bc-6b621fcea500",
+        "name": "上海师范大学天华学院",
+        "province": "上海市"
+      },
+      {
+        "id": "d86f281d-bb17-4054-af1c-50408b9d7497",
+        "name": "上海应用技术大学",
+        "province": "上海市"
+      },
+      {
+        "id": "b779d1c2-597a-491f-baf6-42be60d73478",
+        "name": "上海建桥学院",
+        "province": "上海市"
+      },
+      {
+        "id": "0b4ac86f-9f10-4509-b0a8-de9fd74591f8",
+        "name": "上海思博职业技术学院",
+        "province": "上海市"
+      },
+      {
+        "id": "8ecc5b4e-0a03-49ba-a154-f7ff64b37c2d",
+        "name": "上海戏剧学院",
+        "province": "上海市"
+      },
+      {
+        "id": "cff0fc9a-59be-42b6-ae76-2348f46c6c21",
+        "name": "上海政法学院",
+        "province": "上海市"
+      },
+      {
+        "id": "c80e37d8-a4dc-418a-abeb-bf12ce743766",
+        "name": "上海旅游高等专科学校",
+        "province": "上海市"
+      },
+      {
+        "id": "5542fd1c-d034-4ef3-b9b9-a018c8c16639",
+        "name": "上海杉达学院",
+        "province": "上海市"
+      },
+      {
+        "id": "45664f51-65ff-4288-b8c1-f3b25414190f",
+        "name": "上海欧华职业技术学院",
+        "province": "上海市"
+      },
+      {
+        "id": "ef37c34e-021f-44da-9186-abfd976e4a61",
+        "name": "上海民航职业技术学院",
+        "province": "上海市"
+      },
+      {
+        "id": "9cad8f4f-7347-4d57-abef-f07f54985ddf",
+        "name": "上海民远职业技术学院",
+        "province": "上海市"
+      },
+      {
+        "id": "f4c4331b-0878-4de9-b2c1-1f0ff153567e",
+        "name": "上海济光职业技术学院",
+        "province": "上海市"
+      },
+      {
+        "id": "b7af782e-e314-4981-89a4-2185149c60bb",
+        "name": "上海海事大学",
+        "province": "上海市"
+      },
+      {
+        "id": "7248d669-9c9b-4d43-bef4-81e2fca2fa7f",
+        "name": "上海海事职业技术学院",
+        "province": "上海市"
+      },
+      {
+        "id": "7bb00672-0c54-4c55-a595-530eb52519bc",
+        "name": "上海海关学院",
+        "province": "上海市"
+      },
+      {
+        "id": "f6bcb2d8-b736-440c-a91a-78dd410728e7",
+        "name": "上海海洋大学",
+        "province": "上海市"
+      },
+      {
+        "id": "54827e23-e398-48b6-ab7d-9061ab0fc0b6",
+        "name": "上海理工大学",
+        "province": "上海市"
+      },
+      {
+        "id": "b03d5bb9-6b90-4617-b6d8-b8e6842a68ff",
+        "name": "上海电力学院",
+        "province": "上海市"
+      },
+      {
+        "id": "7068f924-6147-4591-aa84-6a84077ef1f3",
+        "name": "上海电子信息职业技术学院",
+        "province": "上海市"
+      },
+      {
+        "id": "e183da08-c650-4a30-bccd-d58368f8f925",
+        "name": "上海电影艺术职业学院",
+        "province": "上海市"
+      },
+      {
+        "id": "bd62d952-f715-45dd-9314-58870164d2b2",
+        "name": "上海电机学院",
+        "province": "上海市"
+      },
+      {
+        "id": "9e0dd220-9b13-485f-b995-eaac77371254",
+        "name": "上海科学技术职业学院",
+        "province": "上海市"
+      },
+      {
+        "id": "7a45fa49-37d4-47c9-849c-b2bb6959dc65",
+        "name": "上海科技大学",
+        "province": "上海市"
+      },
+      {
+        "id": "c1458752-e342-4f34-b9db-a351188f885d",
+        "name": "上海立信会计金融学院",
+        "province": "上海市"
+      },
+      {
+        "id": "6234d3fb-89f1-4806-9107-986f2ccf2629",
+        "name": "上海立达职业技术学院",
+        "province": "上海市"
+      },
+      {
+        "id": "9db58457-aa33-43bd-a313-bda4785db3c4",
+        "name": "上海第二工业大学",
+        "province": "上海市"
+      },
+      {
+        "id": "ab0a5399-f3ba-4666-a870-8bf40390254a",
+        "name": "上海纽约大学",
+        "province": "上海市"
+      },
+      {
+        "id": "1c6a8b2f-3e82-47ae-96e7-11f173ec3b28",
+        "name": "上海行健职业学院",
+        "province": "上海市"
+      }
+    ],
+    "sources_attached_to_canteens": 1008,
+    "sources_attached_to_campuses_only": 225
+  }
+}
