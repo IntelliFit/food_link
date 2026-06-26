@@ -43,6 +43,7 @@ import {
   isPrivacyAuthorizeError,
   showPrivacyAuthorizeFailure,
 } from "../../../utils/weapp-privacy";
+import { formatMacroNutrient } from "../../../utils/number-format";
 import SchoolPicker from "../../../components/SchoolPicker";
 import CampusPicker from "../../../components/CampusPicker";
 import CanteenPicker from "../../../components/CanteenPicker";
@@ -1097,19 +1098,19 @@ function FoodLibrarySharePage() {
         <Text className='section-title'>营养信息</Text>
         <View className='nutrition-summary'>
           <View className='nutrition-item'>
-            <Text className='nutrition-value'>{totalCalories.toFixed(0)}</Text>
+            <Text className='nutrition-value'>{formatMacroNutrient(totalCalories)}</Text>
             <Text className='nutrition-label'>热量 kcal</Text>
           </View>
           <View className='nutrition-item'>
-            <Text className='nutrition-value'>{totalProtein.toFixed(1)}</Text>
+            <Text className='nutrition-value'>{formatMacroNutrient(totalProtein)}</Text>
             <Text className='nutrition-label'>蛋白质 g</Text>
           </View>
           <View className='nutrition-item'>
-            <Text className='nutrition-value'>{totalCarbs.toFixed(1)}</Text>
+            <Text className='nutrition-value'>{formatMacroNutrient(totalCarbs)}</Text>
             <Text className='nutrition-label'>碳水 g</Text>
           </View>
           <View className='nutrition-item'>
-            <Text className='nutrition-value'>{totalFat.toFixed(1)}</Text>
+            <Text className='nutrition-value'>{formatMacroNutrient(totalFat)}</Text>
             <Text className='nutrition-label'>脂肪 g</Text>
           </View>
         </View>
@@ -1589,7 +1590,7 @@ function FoodLibrarySharePage() {
                         {r.description || "饮食记录"}
                       </Text>
                       <Text className='record-meta'>
-                        {r.total_calories.toFixed(0)} kcal ·{" "}
+                        {formatMacroNutrient(r.total_calories)} kcal ·{" "}
                         {r.record_time?.slice(0, 10)}
                       </Text>
                     </View>

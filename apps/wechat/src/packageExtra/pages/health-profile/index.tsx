@@ -20,6 +20,7 @@ import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
 import { chooseImageWithPrivacy, isPrivacyAuthorizeError, showPrivacyAuthorizeFailure } from '../../../utils/weapp-privacy'
 import { defaultAvatarImage } from '../../../utils/default-user-profile'
+import { formatBodyMetric } from '../../../utils/number-format'
 
 import './index.scss'
 import HeightRuler from '../../../components/HeightRuler'
@@ -163,8 +164,8 @@ function HealthProfilePage() {
         setBirthday(`${year}-01-01`)
         setAge(25)
       }
-      if (profile.height != null) setHeight(String(profile.height))
-      if (profile.weight != null) setWeight(String(profile.weight))
+      if (profile.height != null) setHeight(formatBodyMetric(profile.height))
+      if (profile.weight != null) setWeight(formatBodyMetric(profile.weight))
       const hc = profile.health_condition
       if (profile.diet_goal) setDietGoal(profile.diet_goal)
       if (typeof hc?.daily_life_activity_level === 'string' && hc.daily_life_activity_level.trim()) {
@@ -701,7 +702,7 @@ function HealthProfilePage() {
             <View style={{ width: '100%', marginBottom: '24px' }}>
               <HeightRuler
                 value={effectiveHeight}
-                onChange={(val) => setHeight(String(val))}
+                onChange={(val) => setHeight(formatBodyMetric(val))}
                 min={100}
                 max={250}
               />
@@ -721,7 +722,7 @@ function HealthProfilePage() {
             {/* Title is handled inside WeightRuler for better layout */}
             <WeightRuler
               value={effectiveWeight}
-              onChange={(val) => setWeight(String(val))}
+              onChange={(val) => setWeight(formatBodyMetric(val))}
               min={30}
               max={200}
               height={effectiveHeight}

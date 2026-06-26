@@ -36,6 +36,7 @@ import { getStoredRecordTargetDate, persistRecordTargetDate } from '../../../uti
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
 import { chooseImageWithPrivacy, isPrivacyAuthorizeError, showPrivacyAuthorizeFailure } from '../../../utils/weapp-privacy'
+import { roundTo } from '../../../utils/number-format'
 import './index.scss'
 
 const MEALS: Array<{ id: CanonicalMealType; name: string; icon: string }> = [
@@ -1150,10 +1151,10 @@ function RecordManualPage() {
         description: '手动记录：' + selectedItems.map(i => i.title).join('、'),
         insight: hasCustomItems ? '手动记录，包含用户自定义营养数据' : '手动记录，数据来自食物词典',
         items,
-        total_calories: Math.round(totalNutrients.calories * 10) / 10,
-        total_protein: Math.round(totalNutrients.protein * 10) / 10,
-        total_carbs: Math.round(totalNutrients.carbs * 10) / 10,
-        total_fat: Math.round(totalNutrients.fat * 10) / 10,
+        total_calories: roundTo(totalNutrients.calories, 1),
+        total_protein: roundTo(totalNutrients.protein, 1),
+        total_carbs: roundTo(totalNutrients.carbs, 1),
+        total_fat: roundTo(totalNutrients.fat, 1),
         total_weight_grams: totalWeight,
         entry_type: entryTypeRef.current,
       })

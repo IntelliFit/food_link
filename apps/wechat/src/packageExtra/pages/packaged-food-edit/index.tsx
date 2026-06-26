@@ -19,6 +19,7 @@ import {
   type PackagedUploadRewardResult,
 } from '../../../utils/api'
 import { chooseImageWithPrivacy, isPrivacyAuthorizeError, showPrivacyAuthorizeFailure } from '../../../utils/weapp-privacy'
+import { formatMacroNutrient, formatMicroNutrient } from '../../../utils/number-format'
 import './index.scss'
 
 const PACKAGED_FOOD_EDIT_DRAFT_KEY = 'packagedFoodEditDraft'
@@ -202,10 +203,31 @@ const nutritionValuePer100g = (value: string, basis: number) => (
   basis > 0 ? numberFromDraft(value) * 100 / basis : numberFromDraft(value)
 )
 
+const macroFields = new Set<keyof Draft>([
+  'calories', 'protein', 'carbs', 'fat', 'fiber', 'sugar', 'saturatedFat',
+  'netWeightG', 'servingWeightG',
+])
+
+const microFields = new Set<keyof Draft>([
+  'sodiumMg', 'cholesterolMg', 'potassiumMg', 'calciumMg', 'ironMg',
+  'magnesiumMg', 'zincMg', 'vitaminARaeMcg', 'vitaminCMg', 'vitaminDMcg',
+  'vitaminEMg', 'vitaminKMcg', 'thiaminMg', 'riboflavinMg', 'niacinMg',
+  'vitaminB6Mg', 'folateMcg', 'vitaminB12Mcg',
+])
+
 const formatRecognizedNumber = (value: unknown) => {
   const n = Number(value)
   if (!Number.isFinite(n) || n <= 0) return ''
   return Number.isInteger(n) ? String(n) : String(Math.round(n * 100) / 100)
+}
+
+const formatRecognizedField = (field: keyof Draft, value: unknown) => {
+  const n = Number(value)
+  if (!Number.isFinite(n) || n < 0) return ''
+  if (n === 0) return ''
+  if (macroFields.has(field)) return formatMacroNutrient(n)
+  if (microFields.has(field)) return formatMicroNutrient(n)
+  return formatRecognizedNumber(value)
 }
 
 const normalizeString = (value: unknown) => String(value || '').trim()
@@ -485,7 +507,7 @@ function PackagedFoodEditPage() {
   }
 
   const fillIfRecognized = (current: Draft, field: keyof Draft, value: unknown) => {
-    const next = formatRecognizedNumber(value)
+    const next = formatRecognizedField(field, value)
     return next ? { ...current, [field]: next } : current
   }
 

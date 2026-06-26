@@ -13,6 +13,7 @@ import {
   type SelectableMealType
 } from '../../../components/MealTypeSelector'
 import { buildFoodRecordItemPayloadFromResultItem } from '../../../utils/food-record-item-payload'
+import { formatMacroNutrient, formatMicroNutrient, roundTo } from '../../../utils/number-format'
 
 import './MealRecordEditModal.scss'
 
@@ -92,24 +93,16 @@ const NUTRIENT_DETAIL_META: Array<{ key: NutrientDetailKey; label: string; unit:
   { key: 'vitaminB12Mcg', label: '维生素B12', unit: 'mcg' }
 ]
 
-const roundToSingleDecimal = (value: number) => Math.round(value * 10) / 10
+const roundToSingleDecimal = (value: number) => roundTo(value, 1)
 
-const normalizeDisplayNumber = (value: number) => {
-  if (!Number.isFinite(value)) return '0'
-  const rounded = roundToSingleDecimal(value)
-  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1)
-}
+const normalizeDisplayNumber = (value: number) => formatMacroNutrient(value)
 
 const normalizeNutrientValue = (value: unknown) => {
   const num = Number(value)
   return Number.isFinite(num) && num > 0 ? num : 0
 }
 
-const formatNutrientDetailValue = (value: number) => {
-  if (value >= 10) return String(Math.round(value))
-  if (value >= 1) return String(Math.round(value * 10) / 10)
-  return String(Math.round(value * 100) / 100)
-}
+const formatNutrientDetailValue = (value: number) => formatMicroNutrient(value)
 
 const getItemRatioFactor = (item: Pick<EditableFoodItem, 'ratio'>) => Math.max(0, item.ratio ?? 0) / 100
 
@@ -157,7 +150,7 @@ const resolveRecordItemIntake = (item: Pick<FoodRecord['items'][0], 'ratio' | 'i
   if (Number.isFinite(intake) && intake > 0) return intake
   const weight = Number(item.weight)
   if (!Number.isFinite(weight) || weight <= 0) return 0
-  return Math.round((weight * resolveRecordItemRatio(item) / 100) * 10) / 10
+  return roundTo(weight * resolveRecordItemRatio(item) / 100, 1)
 }
 
 function ensureAllNutrientKeys(nutrients: Partial<Nutrients>): Nutrients {
@@ -276,7 +269,7 @@ export function MealRecordEditModal({ visible, record, onClose, onSuccess }: Mea
     setEditItems(prev => {
       const next = [...prev]
       const item = { ...next[index] }
-      item.intake = Math.max(0, Math.min(item.weight, Math.round(newIntake * 10) / 10))
+      item.intake = Math.max(0, Math.min(item.weight, roundTo(newIntake, 1)))
       if (item.weight > 0) {
         item.ratio = Math.round((item.intake / item.weight) * 100)
       }
@@ -290,7 +283,7 @@ export function MealRecordEditModal({ visible, record, onClose, onSuccess }: Mea
       const next = [...prev]
       const item = { ...next[index] }
       item.ratio = Math.max(0, Math.min(100, newRatio))
-      item.intake = Math.round(item.weight * item.ratio / 100 * 10) / 10
+      item.intake = roundTo(item.weight * item.ratio / 100, 1)
       next[index] = item
       return next
     })
@@ -443,10 +436,10 @@ export function MealRecordEditModal({ visible, record, onClose, onSuccess }: Mea
       if (!item) return prev
       const next = [...prev]
       const updated = { ...next[index] }
-      const nextWeight = Math.max(10, Math.round(((item.weight || 0) + delta) * 10) / 10)
+      const nextWeight = Math.max(10, roundTo((item.weight || 0) + delta, 1))
       const scale = item.weight > 0 ? nextWeight / item.weight : 1
       updated.weight = nextWeight
-      updated.intake = Math.round(nextWeight * (updated.ratio / 100) * 10) / 10
+      updated.intake = roundTo(nextWeight * (updated.ratio / 100), 1)
       if (updated.intake > nextWeight) {
         updated.intake = nextWeight
         updated.ratio = 100
@@ -570,10 +563,10 @@ export function MealRecordEditModal({ visible, record, onClose, onSuccess }: Mea
       await updateFoodRecord(record.id, {
         meal_type: editMealType,
         items: editItems.map(item => buildFoodRecordItemPayloadFromResultItem(item, item.nutrients)),
-        total_calories: Math.round(totalCalories * 10) / 10,
-        total_protein: Math.round(totalProtein * 10) / 10,
-        total_carbs: Math.round(totalCarbs * 10) / 10,
-        total_fat: Math.round(totalFat * 10) / 10,
+        total_calories: roundTo(totalCalories, 1),
+        total_protein: roundTo(totalProtein, 1),
+        total_carbs: roundTo(totalCarbs, 1),
+        total_fat: roundTo(totalFat, 1),
         total_weight_grams: Math.round(totalWeight)
       })
       Taro.hideLoading()
