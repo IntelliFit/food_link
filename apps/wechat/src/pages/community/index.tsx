@@ -2474,6 +2474,30 @@ function CommunityPage() {
                                     }
                                   }}
                                 >{item.is_mine ? '我' : item.author.nickname}</Text>
+                                <View className='feed-card-actions-group' onClick={(e) => e.stopPropagation()}>
+                                  {item.is_mine && (
+                                    <View
+                                      className='action-item action-edit'
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        handleEditFeedItem(item)
+                                      }}
+                                    >
+                                      <Text className='action-icon iconfont icon-edit' />
+                                    </View>
+                                  )}
+                                  <View
+                                    className='action-item action-manage'
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      setFeedActionSheet({ item, mode: item.is_mine ? 'manage' : 'report' })
+                                    }}
+                                  >
+                                    <View className='action-manage-box'>
+                                      <Text className='action-manage-icon'>⋮</Text>
+                                    </View>
+                                  </View>
+                                </View>
                               </View>
                               <View className='feed-sub-meta-row'>
                                 <Text className='post-time'>
@@ -2701,30 +2725,7 @@ function CommunityPage() {
                                   <Text className='action-count'>评论 {item.comment_count || 0}</Text>
                                 </View>
                               </View>
-                              <View className='feed-actions-right'>
-                                {item.is_mine && (
-                                  <View
-                                    className='action-item action-edit'
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      handleEditFeedItem(item)
-                                    }}
-                                  >
-                                    <Text className='action-icon iconfont icon-edit' />
-                                  </View>
-                                )}
-                                <View
-                                  className='action-item action-manage'
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    setFeedActionSheet({ item, mode: item.is_mine ? 'manage' : 'report' })
-                                  }}
-                                >
-                                  <View className='action-manage-box'>
-                                    <Text className='action-manage-icon'>⋮</Text>
-                                  </View>
-                                </View>
-                              </View>
+
                             </View>
                             {(item.comments?.length ?? 0) > 0 && (() => {
                               const list = item.comments || []
