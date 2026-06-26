@@ -72,10 +72,10 @@ func (m *mockCommunityService) HideFeed(ctx context.Context, userID, recordID st
 func (m *mockCommunityService) HideFeedTarget(ctx context.Context, userID, targetType, targetID string) error {
 	return m.hideErr
 }
-func (m *mockCommunityService) ListComments(ctx context.Context, recordID string, limit int) ([]service.CommentItem, error) {
+func (m *mockCommunityService) ListComments(ctx context.Context, viewerUserID, recordID string, limit int) ([]service.CommentItem, error) {
 	return m.comments, m.commentsErr
 }
-func (m *mockCommunityService) ListTargetComments(ctx context.Context, targetType, targetID string, limit int) ([]service.CommentItem, error) {
+func (m *mockCommunityService) ListTargetComments(ctx context.Context, viewerUserID, targetType, targetID string, limit int) ([]service.CommentItem, error) {
 	return m.comments, m.commentsErr
 }
 func (m *mockCommunityService) FeedContext(ctx context.Context, userID, recordID string) (*service.FeedContextResult, error) {
@@ -96,7 +96,7 @@ func (m *mockCommunityService) DeleteTargetComment(ctx context.Context, userID, 
 func (m *mockCommunityService) ListCommentTasks(ctx context.Context, userID string, limit int) ([]domain.CommentTask, error) {
 	return m.commentTasks, m.commentTasksErr
 }
-func (m *mockCommunityService) ListNotifications(ctx context.Context, userID string, limit int) (*service.NotificationListResult, error) {
+func (m *mockCommunityService) ListNotifications(ctx context.Context, userID, notificationType string, limit, offset int) (*service.NotificationListResult, error) {
 	return m.notifications, m.notificationsErr
 }
 func (m *mockCommunityService) MarkNotificationsRead(ctx context.Context, userID string, notificationIDs []string) (*service.MarkReadResult, error) {
