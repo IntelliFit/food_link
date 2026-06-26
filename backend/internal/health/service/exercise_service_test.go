@@ -227,6 +227,9 @@ func TestExerciseService_ProcessExerciseTaskUsesDetectedTypeForWeakTitle(t *test
 	assert.Equal(t, "椭圆机训练", repo.logs[0].ExerciseDesc)
 	exerciseLog := result["exercise_log"].(map[string]any)
 	assert.Equal(t, "椭圆机训练", exerciseLog["exercise_desc"])
+	require.Len(t, repo.logs[0].ExerciseItems, 1)
+	assert.Equal(t, "椭圆机训练", repo.logs[0].ExerciseItems[0]["name"])
+	assert.Equal(t, 220, repo.logs[0].ExerciseItems[0]["calories_kcal"])
 }
 
 func TestExerciseService_ProcessExerciseTaskKeepsUsefulUserTitle(t *testing.T) {
@@ -250,6 +253,10 @@ func TestExerciseService_ProcessExerciseTaskKeepsUsefulUserTitle(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, repo.logs, 1)
 	assert.Equal(t, "跑步30分钟", repo.logs[0].ExerciseDesc)
+	require.Len(t, repo.logs[0].ExerciseItems, 1)
+	assert.Equal(t, "跑步机慢跑", repo.logs[0].ExerciseItems[0]["name"])
+	assert.Equal(t, 30, repo.logs[0].ExerciseItems[0]["duration_min"])
+	assert.Equal(t, 180, repo.logs[0].ExerciseItems[0]["calories_kcal"])
 }
 
 func TestExerciseService_ListLogs(t *testing.T) {
@@ -315,6 +322,11 @@ func TestExerciseService_EstimateCalories(t *testing.T) {
 	assert.Equal(t, "跑步30分钟", result["exercise_desc"])
 	assert.NotEmpty(t, result["reasoning"])
 	assert.NotNil(t, result["profile_snapshot"])
+	items := result["exercise_items"].([]map[string]any)
+	require.Len(t, items, 1)
+	assert.Equal(t, "跑步", items[0]["name"])
+	assert.Equal(t, 30, items[0]["duration_min"])
+	assert.Equal(t, 240, items[0]["calories_kcal"])
 }
 
 func TestExerciseService_EstimateCaloriesDoesNotFallbackWhenLLMUnavailable(t *testing.T) {
@@ -353,6 +365,10 @@ func TestExerciseService_ProcessExerciseTask_CreatesLogWithReasoning(t *testing.
 	assert.Equal(t, recordedOn, repo.logs[0].RecordedOn.UTC().Format("2006-01-02"))
 	assert.NotNil(t, repo.logs[0].AIReasoning)
 	assert.Greater(t, *repo.logs[0].CaloriesBurned, 0.0)
+	require.Len(t, repo.logs[0].ExerciseItems, 1)
+	assert.Equal(t, "跑步", repo.logs[0].ExerciseItems[0]["name"])
+	assert.Equal(t, 30, repo.logs[0].ExerciseItems[0]["duration_min"])
+	assert.Equal(t, 240, repo.logs[0].ExerciseItems[0]["calories_kcal"])
 }
 
 func TestExerciseService_EstimateCalories_SplitsMultiItemDescription(t *testing.T) {
@@ -374,6 +390,14 @@ func TestExerciseService_EstimateCalories_SplitsMultiItemDescription(t *testing.
 	require.NoError(t, err)
 	assert.Contains(t, result["reasoning"], "分项估算")
 	assert.Equal(t, 300, result["estimated_calories"].(int))
+	items := result["exercise_items"].([]map[string]any)
+	require.Len(t, items, 3)
+	assert.Equal(t, "慢跑", items[0]["name"])
+	assert.Equal(t, 30, items[0]["duration_min"])
+	assert.Equal(t, "跳绳", items[1]["name"])
+	assert.Equal(t, 10, items[1]["duration_min"])
+	assert.Equal(t, "拉伸", items[2]["name"])
+	assert.Equal(t, 15, items[2]["duration_min"])
 }
 
 func TestExerciseService_EstimateCalories_LongTextUsesLibraryMET(t *testing.T) {
@@ -396,6 +420,11 @@ func TestExerciseService_EstimateCalories_LongTextUsesLibraryMET(t *testing.T) {
 	assert.Equal(t, 280, result["estimated_calories"].(int))
 	assert.Contains(t, result["reasoning"], "分项识别")
 	assert.Empty(t, repo.pending)
+	items := result["exercise_items"].([]map[string]any)
+	require.Len(t, items, 1)
+	assert.Equal(t, "慢跑", items[0]["name"])
+	assert.Equal(t, 30, int(items[0]["duration_min"].(float64)))
+	assert.Equal(t, 7.0, items[0]["met"])
 }
 
 func TestExerciseService_EstimateCalories_LongTextCreatesPendingMET(t *testing.T) {
@@ -423,6 +452,10 @@ func TestExerciseService_EstimateCalories_LongTextCreatesPendingMET(t *testing.T
 	assert.Equal(t, "壶铃训练", repo.pending[0].CanonicalName)
 	assert.Equal(t, "pending", repo.pending[0].ReviewStatus)
 	assert.Equal(t, 8.0, repo.pending[0].METValue)
+	items := result["exercise_items"].([]map[string]any)
+	require.Len(t, items, 1)
+	assert.Equal(t, "壶铃摆动", items[0]["name"])
+	assert.Equal(t, 20, int(items[0]["duration_min"].(float64)))
 }
 
 func TestExerciseService_EstimateCalories_ShortTextRun40MinutesUsesOriginalLLM(t *testing.T) {
@@ -448,6 +481,11 @@ func TestExerciseService_EstimateCalories_ShortTextRun40MinutesUsesOriginalLLM(t
 	assert.Contains(t, result["reasoning"], "跑步40分钟")
 	assert.Empty(t, repo.pending)
 	assert.NotContains(t, result["ai_response"].(string), "long_text_library_met")
+	items := result["exercise_items"].([]map[string]any)
+	require.Len(t, items, 1)
+	assert.Equal(t, "跑步", items[0]["name"])
+	assert.Equal(t, 40, items[0]["duration_min"])
+	assert.Equal(t, 320, items[0]["calories_kcal"])
 }
 
 func TestExerciseService_EstimateCalories_LongTextUsesGemini35Config(t *testing.T) {
@@ -659,6 +697,8 @@ func TestExerciseService_ProcessExerciseTask_LongStrengthCardioTextIgnoresInvali
 	require.Len(t, repo.logs, 1)
 	assert.Nil(t, repo.logs[0].ImageURL)
 	assert.Empty(t, repo.pending)
+	require.NotEmpty(t, repo.logs[0].ExerciseItems)
+	assert.Equal(t, "深蹲", repo.logs[0].ExerciseItems[0]["name"])
 }
 
 func TestExerciseService_EstimateSingleLongTextItemsResponseFallsBackToLongTextFlow(t *testing.T) {

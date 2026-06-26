@@ -345,6 +345,7 @@ func (s *ExerciseService) EstimateCalories(ctx context.Context, userID string, e
 		"ai_response":        estimate.Raw,
 		"reasoning":          estimate.Reasoning,
 		"profile_snapshot":   profileSnapshot,
+		"exercise_items":     exerciseItemsFromEstimate(desc, estimate),
 	}, nil
 }
 
@@ -484,7 +485,7 @@ func (s *ExerciseService) ProcessExerciseTask(ctx context.Context, userID, exerc
 	calories := float64(estimate.CaloriesKcal)
 	reasoning := estimate.Reasoning
 	logDesc := resolveExerciseLogDesc(desc, estimate)
-	exerciseItems := exerciseItemsFromEstimate(estimate)
+	exerciseItems := exerciseItemsFromEstimate(desc, estimate)
 	var storedImageURL *string
 	if imageURL != "" {
 		storedImageURL = &imageURL
@@ -559,36 +560,159 @@ type ExerciseEstimate struct {
 	ExerciseType string
 }
 
-func exerciseItemsFromEstimate(estimate ExerciseEstimate) []map[string]any {
+func exerciseItemsFromEstimate(inputDesc string, estimate ExerciseEstimate) []map[string]any {
 	if strings.TrimSpace(estimate.Raw) == "" {
 		return nil
 	}
-	var payload struct {
-		Mode  string           `json:"mode"`
-		Items []map[string]any `json:"items"`
-	}
-	if err := json.Unmarshal([]byte(estimate.Raw), &payload); err != nil {
+	var rawObj map[string]any
+	if err := json.Unmarshal([]byte(estimate.Raw), &rawObj); err != nil {
 		return nil
 	}
-	if payload.Mode != "long_text_library_met" || len(payload.Items) == 0 {
-		return nil
-	}
-	items := make([]map[string]any, 0, len(payload.Items))
-	for _, row := range payload.Items {
-		name, _ := row["name"].(string)
-		if strings.TrimSpace(name) == "" {
-			continue
+
+	// 长文本 library MET 链路：已经生成结构化 items
+	if mode, _ := rawObj["mode"].(string); mode == "long_text_library_met" {
+		itemsRaw, _ := rawObj["items"].([]any)
+		items := make([]map[string]any, 0, len(itemsRaw))
+		for _, rowRaw := range itemsRaw {
+			row, ok := rowRaw.(map[string]any)
+			if !ok {
+				continue
+			}
+			name, _ := row["name"].(string)
+			if strings.TrimSpace(name) == "" {
+				continue
+			}
+			items = append(items, cloneMap(row))
 		}
-		cloned := make(map[string]any, len(row))
-		for key, value := range row {
-			cloned[key] = value
+		if len(items) > 0 {
+			return items
 		}
-		items = append(items, cloned)
 	}
-	if len(items) == 0 {
+
+	// 分段估算链路：把每个 segment 转换成独立 item
+	if segmentsRaw, ok := rawObj["segments"].([]any); ok && len(segmentsRaw) > 0 {
+		items := make([]map[string]any, 0, len(segmentsRaw))
+		for _, segRaw := range segmentsRaw {
+			seg, ok := segRaw.(map[string]any)
+			if !ok {
+				continue
+			}
+			segment, _ := seg["segment"].(string)
+			name := strings.TrimSpace(segment)
+			if name == "" {
+				continue
+			}
+			durationMin, sets, reps := extractExerciseMetrics(name)
+			item := map[string]any{
+				"name":          cleanExerciseSegmentName(name),
+				"duration_min":  durationMin,
+				"sets":          sets,
+				"reps":          reps,
+				"calories_kcal": toExerciseInt(seg["calories_kcal"]),
+				"reasoning":     seg["reasoning"],
+				"source":        seg["source"],
+			}
+			items = append(items, item)
+		}
+		if len(items) > 0 {
+			return items
+		}
+	}
+
+	// 单条 LLM 估算（短文本或图片）：用 exercise_type 作为唯一 item
+	exerciseType := strings.TrimSpace(estimate.ExerciseType)
+	if exerciseType == "" {
 		return nil
 	}
-	return items
+	durationMin, sets, reps := extractExerciseMetrics(inputDesc)
+	return []map[string]any{{
+		"name":          exerciseType,
+		"duration_min":  durationMin,
+		"sets":          sets,
+		"reps":          reps,
+		"calories_kcal": estimate.CaloriesKcal,
+		"reasoning":     estimate.Reasoning,
+		"source":        estimate.Source,
+	}}
+}
+
+func cloneMap(m map[string]any) map[string]any {
+	cloned := make(map[string]any, len(m))
+	for key, value := range m {
+		cloned[key] = value
+	}
+	return cloned
+}
+
+func extractExerciseMetrics(text string) (durationMin, sets, reps int) {
+	text = strings.TrimSpace(text)
+	durationMin = extractDurationMinutes(text)
+	sets, reps = extractSetsAndReps(text)
+	if sets > 0 && reps == 0 {
+		if seconds := extractSetSeconds(text); seconds > 0 {
+			durationMin = sets * seconds / 60
+		}
+	}
+	return
+}
+
+func extractDurationMinutes(text string) int {
+	matches := exerciseMinuteRe.FindStringSubmatch(text)
+	if len(matches) >= 2 {
+		if v, err := strconv.ParseFloat(matches[1], 64); err == nil {
+			return int(v + 0.5)
+		}
+	}
+	return 0
+}
+
+func extractSetsAndReps(text string) (sets, reps int) {
+	matches := exerciseSetRepRe.FindStringSubmatch(text)
+	if len(matches) >= 3 {
+		sets, _ = strconv.Atoi(matches[1])
+		reps, _ = strconv.Atoi(matches[2])
+	}
+	return
+}
+
+func extractSetSeconds(text string) int {
+	matches := exerciseSetSecondRe.FindStringSubmatch(text)
+	if len(matches) >= 3 {
+		if seconds, err := strconv.Atoi(matches[2]); err == nil {
+			return seconds
+		}
+	}
+	return 0
+}
+
+func cleanExerciseSegmentName(segment string) string {
+	name := segment
+	name = exerciseMinuteRe.ReplaceAllString(name, "")
+	name = exerciseSetRepRe.ReplaceAllString(name, "")
+	name = exerciseSetSecondRe.ReplaceAllString(name, "")
+	name = exerciseEachSecondRe.ReplaceAllString(name, "")
+	name = strings.TrimSpace(name)
+	name = strings.Trim(name, "；;。，,\n\r")
+	if name == "" {
+		return strings.TrimSpace(segment)
+	}
+	return name
+}
+
+func toExerciseInt(v any) int {
+	switch n := v.(type) {
+	case int:
+		return n
+	case int64:
+		return int(n)
+	case float64:
+		return int(n)
+	case string:
+		if i, err := strconv.Atoi(n); err == nil {
+			return i
+		}
+	}
+	return 0
 }
 
 type extractedExerciseItem struct {

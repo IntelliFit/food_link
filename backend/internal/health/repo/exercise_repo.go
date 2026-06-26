@@ -27,6 +27,9 @@ func (r *ExerciseRepo) CreateExerciseLog(ctx context.Context, log *domain.Exerci
 	if log.ID == "" {
 		log.ID = uuid.New().String()
 	}
+	if log.ExerciseItems == nil {
+		log.ExerciseItems = []map[string]any{}
+	}
 	q := r.db.WithContext(ctx)
 	if !q.Migrator().HasColumn(&domain.ExerciseLog{}, "exercise_items") {
 		q = q.Omit("ExerciseItems")
