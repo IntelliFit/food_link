@@ -228,9 +228,6 @@ function RecipesPage() {
   })
   const [microTotalsDraft, setMicroTotalsDraft] = useState<MicroNutrientTotals>({})
   const [nutritionSaving, setNutritionSaving] = useState(false)
-  const [macroExpanded, setMacroExpanded] = useState(true)
-  const [microExpanded, setMicroExpanded] = useState(false)
-
   /** 加载食谱列表 */
   const loadRecipes = async () => {
     setLoading(true)
@@ -315,8 +312,6 @@ function RecipesPage() {
       fat: toDraftNumber(recipe.total_fat)
     })
     setMicroTotalsDraft(getRecipeMicroTotals(recipe))
-    setMacroExpanded(true)
-    setMicroExpanded(false)
   }
 
   const handleCloseNutritionEditor = () => {
@@ -615,57 +610,41 @@ function RecipesPage() {
             </View>
 
             <View className='nutrition-editor-body'>
-              <View className='nutrition-editor-fold-section'>
-                <View className='nutrition-editor-fold-header' onClick={() => setMacroExpanded((prev) => !prev)}>
-                  <View>
-                    <Text className='nutrition-editor-fold-title'>宏量营养素</Text>
-                    <Text className='nutrition-editor-fold-subtitle'>修改后会联动总热量</Text>
-                  </View>
-                  <Text className={`iconfont icon-right nutrition-editor-fold-icon ${macroExpanded ? 'expanded' : ''}`} />
+              <View className='nutrition-editor-section'>
+                <Text className='nutrition-editor-section-title'>宏量营养素</Text>
+                <View className='nutrition-editor-grid'>
+                  {NUTRITION_FIELDS.map((field) => (
+                    <View key={field.key} className='nutrition-editor-grid-item'>
+                      <Text className='nutrition-editor-grid-label'>{field.label}</Text>
+                      <View className='nutrition-editor-grid-input-wrap'>
+                        <Input
+                          className='nutrition-editor-grid-input'
+                          type='digit'
+                          value={nutritionDraft[field.key]}
+                          placeholder={field.placeholder}
+                          onInput={(e) => updateNutritionDraft(field.key, e.detail.value)}
+                        />
+                        <Text className='nutrition-editor-grid-unit'>{field.unit}</Text>
+                      </View>
+                    </View>
+                  ))}
                 </View>
-                {macroExpanded && (
+              </View>
+
+              {getVisibleMicroRows(microTotalsDraft).length > 0 && (
+                <View className='nutrition-editor-section'>
+                  <Text className='nutrition-editor-section-title'>微量营养素</Text>
                   <View className='nutrition-editor-grid'>
-                    {NUTRITION_FIELDS.map((field) => (
-                      <View key={field.key} className='nutrition-editor-grid-item'>
-                        <Text className='nutrition-editor-grid-label'>{field.label}</Text>
+                    {getVisibleMicroRows(microTotalsDraft).map((row) => (
+                      <View key={row.key} className='nutrition-editor-grid-item'>
+                        <Text className='nutrition-editor-grid-label'>{row.label}</Text>
                         <View className='nutrition-editor-grid-input-wrap'>
-                          <Input
-                            className='nutrition-editor-grid-input'
-                            type='digit'
-                            value={nutritionDraft[field.key]}
-                            placeholder={field.placeholder}
-                            onInput={(e) => updateNutritionDraft(field.key, e.detail.value)}
-                          />
-                          <Text className='nutrition-editor-grid-unit'>{field.unit}</Text>
+                          <Text className='nutrition-editor-grid-value'>{formatMicroValue(row.value)}</Text>
+                          <Text className='nutrition-editor-grid-unit'>{row.unit}</Text>
                         </View>
                       </View>
                     ))}
                   </View>
-                )}
-              </View>
-
-              {getVisibleMicroRows(microTotalsDraft).length > 0 && (
-                <View className='nutrition-editor-micro-section'>
-                  <View className='nutrition-editor-micro-header' onClick={() => setMicroExpanded((prev) => !prev)}>
-                    <View>
-                      <Text className='nutrition-editor-micro-title'>微量营养素</Text>
-                      <Text className='nutrition-editor-micro-hint'>随总热量按比例同步变化</Text>
-                    </View>
-                    <Text className={`iconfont icon-right nutrition-editor-fold-icon ${microExpanded ? 'expanded' : ''}`} />
-                  </View>
-                  {microExpanded && (
-                    <View className='nutrition-editor-grid'>
-                      {getVisibleMicroRows(microTotalsDraft).map((row) => (
-                        <View key={row.key} className='nutrition-editor-grid-item'>
-                          <Text className='nutrition-editor-grid-label'>{row.label}</Text>
-                          <View className='nutrition-editor-grid-input-wrap'>
-                            <Text className='nutrition-editor-grid-value'>{formatMicroValue(row.value)}</Text>
-                            <Text className='nutrition-editor-grid-unit'>{row.unit}</Text>
-                          </View>
-                        </View>
-                      ))}
-                    </View>
-                  )}
                 </View>
               )}
             </View>
