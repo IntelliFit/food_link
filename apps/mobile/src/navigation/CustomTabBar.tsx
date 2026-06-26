@@ -23,7 +23,7 @@ export function CustomTabBar({ state, navigation }: BottomTabBarProps) {
   const rightRoutes = state.routes.slice(2)
 
   const openHomeRecordMenu = () => {
-    navigation.getParent()?.navigate('HomeTab')
+    navigation.navigate('HomeTab')
     void requestHomeRecordMenu()
   }
 

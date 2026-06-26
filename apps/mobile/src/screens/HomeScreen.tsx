@@ -181,6 +181,7 @@ export function HomeScreen() {
 
   const openRecordMenuFromRequest = useCallback(() => {
     void consumeHomeRecordMenuDate().then((pendingDate) => {
+      if (pendingDate === null) return
       if (pendingDate) {
         setSelectedDate(pendingDate)
       }
@@ -213,11 +214,19 @@ export function HomeScreen() {
     navigation.navigate('AnalyzeHistory')
   }, [isAuthenticated, mealType, navigation, openAnalyze, recordDate])
 
+  useEffect(() => onHomeRecordMenuRequest(openRecordMenuFromRequest), [openRecordMenuFromRequest])
+
   useEffect(() => {
     if (!showTargetEditor) {
       setTargetForm(targetFormFromDashboard(dashboard))
     }
   }, [dashboard, showTargetEditor])
+
+  useFocusEffect(
+    useCallback(() => {
+      openRecordMenuFromRequest()
+    }, [openRecordMenuFromRequest]),
+  )
 
   useFocusEffect(
     useCallback(() => {
@@ -436,6 +445,11 @@ export function HomeScreen() {
           </View>
         </View>
       </Modal>
+      <RecordActionSheet
+        visible={showRecordMenu}
+        onClose={() => setShowRecordMenu(false)}
+        onSelect={handleSelectRecordAction}
+      />
       {petSummary && !homePetHidden ? (
         <FloatingPetCompanion
           summary={petSummary}
