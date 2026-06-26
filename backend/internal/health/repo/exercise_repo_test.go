@@ -9,12 +9,17 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/sqlite"
+	gormsqlite "gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+
+	_ "modernc.org/sqlite"
 )
 
 func setupExerciseTestDB(t *testing.T) *gorm.DB {
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	db, err := gorm.Open(gormsqlite.New(gormsqlite.Config{
+		DriverName: "sqlite",
+		DSN:        ":memory:",
+	}), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, db.Exec(`CREATE TABLE user_exercise_logs (
 		id TEXT PRIMARY KEY,
@@ -93,6 +98,34 @@ func TestExerciseRepo_ListAndDailyCaloriesUseDateColumnSemantics(t *testing.T) {
 	total, err := r.GetDailyCaloriesBurned(ctx, "user-1", "2024-06-15")
 	require.NoError(t, err)
 	assert.Equal(t, int64(585), total)
+}
+
+func TestExerciseRepo_CreateExerciseLog_NormalizesNilItems(t *testing.T) {
+	db := setupExerciseTestDB(t)
+	r := NewExerciseRepo(db)
+	ctx := context.Background()
+
+	now := time.Now().UTC()
+	recordedOn := time.Date(2024, 6, 15, 0, 0, 0, 0, time.UTC)
+	calories := 300.0
+	log := &domain.ExerciseLog{
+		UserID:         "user-1",
+		ExerciseDesc:   "跑步30分钟",
+		CaloriesBurned: &calories,
+		RecordedOn:     &recordedOn,
+		CreatedAt:      &now,
+		// ExerciseItems 故意为 nil，应被归一化为空数组
+	}
+
+	err := r.CreateExerciseLog(ctx, log)
+	require.NoError(t, err)
+	assert.NotNil(t, log.ExerciseItems)
+	assert.Empty(t, log.ExerciseItems)
+
+	found, err := r.GetExerciseLogByID(ctx, "user-1", log.ID)
+	require.NoError(t, err)
+	require.NotNil(t, found)
+	assert.Equal(t, "跑步30分钟", found.ExerciseDesc)
 }
 
 func TestExerciseRepo_CreateAnalysisTask(t *testing.T) {
