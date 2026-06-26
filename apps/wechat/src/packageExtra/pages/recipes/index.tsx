@@ -614,16 +614,13 @@ function RecipesPage() {
             </View>
 
             <View className='nutrition-editor-body'>
-              <View className='nutrition-calorie-card'>
+              <View className='nutrition-calorie-row'>
                 <View className='nutrition-calorie-stepper' onClick={() => adjustNutritionCalories(-10)}>
                   <Text className='nutrition-calorie-stepper-text'>−</Text>
                 </View>
-                <View className='nutrition-calorie-main'>
-                  <View className='nutrition-calorie-label-row'>
-                    <Text className='iconfont icon-huore nutrition-calorie-icon' />
-                    <Text className='nutrition-calorie-label'>总热量</Text>
-                  </View>
-                  <View className='nutrition-calorie-input-card'>
+                <View className='nutrition-calorie-cell'>
+                  <Text className='nutrition-calorie-label'>总热量</Text>
+                  <View className='nutrition-calorie-input-wrap'>
                     <Input
                       className='nutrition-calorie-input'
                       type='digit'

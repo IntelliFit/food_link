@@ -481,17 +481,51 @@
   touch-action: pan-y;
 }
 
-.nutrition-calorie-card {
+.nutrition-calorie-row {
   margin-top: 8rpx;
-  box-sizing: border-box;
-  padding: 28rpx 22rpx;
-  border-radius: 28rpx;
-  border: 1rpx solid rgb(0 188 125 / 20%);
-  background: linear-gradient(135deg, #ecfdf5 0%, #ffffff 64%);
-  box-shadow: 0 8rpx 24rpx rgb(0 188 125 / 8%);
   display: flex;
   align-items: center;
   gap: 18rpx;
+}
+
+.nutrition-calorie-cell {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10rpx;
+}
+
+.nutrition-calorie-label {
+  font-size: 26rpx;
+  color: #4b5563;
+}
+
+.nutrition-calorie-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  padding: 18rpx 20rpx;
+  background: #f9fafb;
+  border-radius: 16rpx;
+}
+
+.nutrition-calorie-input {
+  flex: 1;
+  min-width: 0;
+  height: 64rpx;
+  font-size: 30rpx;
+  color: #1f2937;
+  line-height: 64rpx;
+  text-align: right;
+}
+
+.nutrition-calorie-unit {
+  flex-shrink: 0;
+  font-size: 24rpx;
+  color: #9ca3af;
+  min-width: 56rpx;
+  text-align: right;
 }
 
 .nutrition-calorie-stepper {
@@ -512,11 +546,11 @@
 }
 
 .nutrition-calorie-stepper--plus {
-  color: #059669;
-  background: #dcfce7;
+  color: #475569;
+  background: #f1f5f9;
 
   &:active {
-    background: #bbf7d0;
+    background: #e2e8f0;
   }
 }
 
@@ -524,57 +558,6 @@
   font-size: 40rpx;
   font-weight: 700;
   line-height: 1;
-}
-
-.nutrition-calorie-main {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12rpx;
-}
-
-.nutrition-calorie-label-row {
-  display: flex;
-  align-items: center;
-  gap: 8rpx;
-}
-
-.nutrition-calorie-icon {
-  font-size: 26rpx;
-  color: #00bc7d;
-}
-
-.nutrition-calorie-label {
-  font-size: 24rpx;
-  color: #00bc7d;
-  font-weight: 700;
-}
-
-.nutrition-calorie-input-card {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 10rpx;
-  padding: 0 16rpx;
-}
-
-.nutrition-calorie-input {
-  width: auto;
-  min-width: 120rpx;
-  height: 64rpx;
-  font-size: 56rpx;
-  font-weight: 800;
-  color: #00bc7d;
-  line-height: 64rpx;
-  text-align: center;
-}
-
-.nutrition-calorie-unit {
-  flex-shrink: 0;
-  font-size: 24rpx;
-  font-weight: 800;
-  color: #00bc7d;
 }
 
 .nutrition-editor-fold-section {
