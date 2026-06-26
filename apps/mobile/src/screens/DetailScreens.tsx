@@ -519,13 +519,31 @@ function FoodRecordPosterModal({
 }) {
   const posterCardRef = useRef<View>(null)
   const [capturing, setCapturing] = useState(false)
+  const [posterProfile, setPosterProfile] = useState<{ nickname?: string; avatar?: string } | null>(null)
   const record = share?.record
   const imageUrl = recordImageUrls(record || null)[0]
-  const foods = (record?.items || [])
-    .map((item) => String(item.name || '').trim())
-    .filter(Boolean)
-    .slice(0, 4)
+  const posterDate = getPosterDateInfo(record?.record_time)
+  const posterItems = (record?.items || []).slice(0, 4)
+  const overflowItemCount = Math.max(0, (record?.items || []).length - posterItems.length)
+  const protein = Math.round(Number(record?.total_protein || 0))
+  const carbs = Math.round(Number(record?.total_carbs || 0))
+  const fat = Math.round(Number(record?.total_fat || 0))
+  const macroTotal = protein + carbs + fat
   const busy = Boolean(share?.busyTarget) || capturing
+
+  useEffect(() => {
+    if (!share) return
+    let active = true
+    apiClient.getUserProfile()
+      .then((profile) => {
+        if (!active) return
+        setPosterProfile({ nickname: profile.nickname || '', avatar: profile.avatar || '' })
+      })
+      .catch(() => {
+        if (active) setPosterProfile(null)
+      })
+    return () => { active = false }
+  }, [share])
 
   const handleSharePoster = useCallback(async () => {
     if (!share || busy) return
@@ -561,48 +579,78 @@ function FoodRecordPosterModal({
           </View>
           <ScrollView style={styles.foodPosterScroll} contentContainerStyle={styles.foodPosterScrollContent} showsVerticalScrollIndicator={false}>
             <View ref={posterCardRef} collapsable={false} style={styles.foodPosterCard}>
-              <View style={styles.foodPosterBrandRow}>
-                <Image source={appIcon} style={styles.foodPosterLogo} resizeMode="contain" />
-                <View style={styles.foodPosterBrandText}>
-                  <Text style={styles.foodPosterBrandName}>智健食探</Text>
-                  <Text style={styles.foodPosterBrandSub}>AI 饮食记录</Text>
-                </View>
-              </View>
-
               <View style={styles.foodPosterImageWrap}>
                 {imageUrl ? (
-                  <Image source={{ uri: imageUrl }} style={styles.foodPosterImage} resizeMode="cover" />
+                  <Image source={{ uri: imageUrl }} style={styles.foodPosterImage} resizeMode='cover' />
                 ) : (
                   <View style={styles.foodPosterImageFallback}>
                     <Text style={styles.foodPosterImageFallbackText}>{mealLabelForPoster(record?.meal_type)}</Text>
                   </View>
                 )}
+                <View style={styles.foodPosterImageScrim} />
+                <View style={styles.foodPosterMealBadge}>
+                  <Text style={styles.foodPosterMealBadgeText}>{mealLabelForPoster(record?.meal_type)}</Text>
+                </View>
+                <View style={styles.foodPosterDateRow}>
+                  <Text style={styles.foodPosterDateDay}>{posterDate.day}</Text>
+                  <Text style={styles.foodPosterDateMonth}> {posterDate.month}.</Text>
+                </View>
               </View>
 
-              <Text style={styles.foodPosterMeal}>{mealLabelForPoster(record?.meal_type)}</Text>
-              <Text style={styles.foodPosterTitle} numberOfLines={2}>
-                {record ? buildRecordShareTitle(record) : '饮食记录'}
-              </Text>
-              <Text style={styles.foodPosterDescription} numberOfLines={2}>
-                {record ? buildRecordShareDescription(record) : ''}
-              </Text>
+              <View style={styles.foodPosterBody}>
+                <View style={styles.foodPosterCalorieRow}>
+                  <View style={styles.foodPosterCalorieTextRow}>
+                    <Text style={styles.foodPosterCalories}>{Math.round(Number(record?.total_calories || 0)).toLocaleString('en-US')}</Text>
+                    <Text style={styles.foodPosterCaloriesUnit}> kcal</Text>
+                  </View>
+                  <View style={styles.foodPosterDotsChip}>
+                    {[0, 1, 2].map((index) => (
+                      <View key={`poster-dot-${index}`} style={styles.foodPosterDotOuter}>
+                        {index < getPosterDotLevel(record) ? <View style={styles.foodPosterDotInner} /> : null}
+                      </View>
+                    ))}
+                  </View>
+                </View>
 
-              <View style={styles.foodPosterMacroRow}>
-                <FoodPosterMacro label="热量" value={Math.round(Number(record?.total_calories || 0)).toString()} unit="kcal" />
-                <FoodPosterMacro label="蛋白" value={formatDisplayNumber(record?.total_protein || 0)} unit="g" />
-                <FoodPosterMacro label="碳水" value={formatDisplayNumber(record?.total_carbs || 0)} unit="g" />
-                <FoodPosterMacro label="脂肪" value={formatDisplayNumber(record?.total_fat || 0)} unit="g" />
-              </View>
+                <View style={styles.foodPosterMacroLabels}>
+                  <View style={styles.foodPosterMacroSide}>
+                    <Text style={[styles.foodPosterMacroName, styles.foodPosterMacroProtein]}>蛋白质</Text>
+                    <Text style={styles.foodPosterMacroValue}>{protein}g</Text>
+                  </View>
+                  <View style={styles.foodPosterMacroCenter}>
+                    <Text style={[styles.foodPosterMacroName, styles.foodPosterMacroCarbs]}>碳水</Text>
+                    <Text style={styles.foodPosterMacroValue}>{carbs}g</Text>
+                  </View>
+                  <View style={[styles.foodPosterMacroSide, styles.foodPosterMacroSideRight]}>
+                    <Text style={[styles.foodPosterMacroName, styles.foodPosterMacroFat]}>脂肪</Text>
+                    <Text style={styles.foodPosterMacroValue}>{fat}g</Text>
+                  </View>
+                </View>
+                <View style={styles.foodPosterMacroBar}>
+                  <View style={[styles.foodPosterMacroBarSegment, styles.foodPosterMacroBarProtein, { flex: macroTotal > 0 ? protein : 1 }]} />
+                  <View style={[styles.foodPosterMacroBarSegment, styles.foodPosterMacroBarCarbs, { flex: macroTotal > 0 ? carbs : 1 }]} />
+                  <View style={[styles.foodPosterMacroBarSegment, styles.foodPosterMacroBarFat, { flex: macroTotal > 0 ? fat : 1 }]} />
+                </View>
 
-              {foods.length ? (
-                <Text style={styles.foodPosterFoods} numberOfLines={1}>{foods.join(' · ')}</Text>
-              ) : null}
+                <View style={styles.foodPosterDivider} />
+                <View style={styles.foodPosterItems}>
+                  {posterItems.map((item, index) => (
+                    <FoodPosterItemRow item={item} key={`${String(item.name || 'food')}-${index}`} />
+                  ))}
+                  {overflowItemCount > 0 ? (
+                    <Text style={styles.foodPosterOverflowText}>还有 {overflowItemCount} 项</Text>
+                  ) : null}
+                </View>
 
-              <View style={styles.foodPosterQrPanel}>
-                <RecordShareQrCode value={share?.shareUrl || ''} />
-                <View style={styles.foodPosterQrText}>
-                  <Text style={styles.foodPosterQrTitle}>扫码查看这餐</Text>
-                  <Text style={styles.foodPosterQrHint}>打开网页后可继续跳转 App</Text>
+                <View style={styles.foodPosterFooter}>
+                  <PosterFooterAvatar profile={posterProfile} />
+                  <View style={styles.foodPosterFooterText}>
+                    <Text style={styles.foodPosterFooterTitle} numberOfLines={1}>
+                      {posterProfile?.nickname ? `${posterProfile.nickname} 的饮食分享` : '智健食探'}
+                    </Text>
+                    <Text style={styles.foodPosterFooterHint} numberOfLines={1}>扫码注册食探，达标后各得15积分</Text>
+                  </View>
+                  <RecordShareQrCode value={share?.shareUrl || ''} />
                 </View>
               </View>
             </View>
@@ -630,13 +678,35 @@ function FoodRecordPosterModal({
   )
 }
 
-function FoodPosterMacro({ label, value, unit }: { label: string; value: string; unit: string }) {
+function FoodPosterItemRow({ item }: { item: FoodRecord['items'][number] }) {
+  const ratio = recordItemRatio(item)
+  const intake = Math.round(recordItemIntake(item))
+  const calories = Math.round(recordItemKcal(item))
   return (
-    <View style={styles.foodPosterMacro}>
-      <Text style={styles.foodPosterMacroValue}>{value}</Text>
-      <Text style={styles.foodPosterMacroLabel}>{label} {unit}</Text>
+    <View style={styles.foodPosterItemRow}>
+      <Text style={styles.foodPosterItemNameWrap} numberOfLines={1}>
+        <Text style={styles.foodPosterItemName}>{String(item.name || '食物')}</Text>
+        <Text style={styles.foodPosterItemRatio}>（{formatPosterRatio(ratio)}）</Text>
+      </Text>
+      <Text style={styles.foodPosterItemMeta} numberOfLines={1}>{intake}g · {calories} kcal</Text>
     </View>
   )
+}
+
+function PosterFooterAvatar({ profile }: { profile: { nickname?: string; avatar?: string } | null }) {
+  const nickname = String(profile?.nickname || '').trim()
+  const avatar = String(profile?.avatar || '').trim()
+  if (avatar) {
+    return <Image source={{ uri: avatar }} style={styles.foodPosterFooterAvatar} resizeMode='cover' />
+  }
+  if (nickname) {
+    return (
+      <View style={styles.foodPosterFooterAvatarFallback}>
+        <Text style={styles.foodPosterFooterAvatarInitial}>{nickname.slice(0, 1)}</Text>
+      </View>
+    )
+  }
+  return <Image source={appIcon} style={styles.foodPosterFooterAvatar} resizeMode='contain' />
 }
 
 function RecordShareQrCode({ value }: { value: string }) {
@@ -668,6 +738,30 @@ function RecordShareQrCode({ value }: { value: string }) {
       </View>
     </View>
   )
+}
+
+const POSTER_MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+function getPosterDateInfo(recordTime?: string | null): { day: string; month: string } {
+  const date = new Date(recordTime || '')
+  if (Number.isNaN(date.getTime())) return { day: '--', month: '--' }
+  return {
+    day: String(date.getDate()),
+    month: POSTER_MONTH_NAMES[date.getMonth()] || 'Jan',
+  }
+}
+
+function getPosterDotLevel(record?: FoodRecord | null): number {
+  const calories = Number(record?.total_calories || 0)
+  if (!Number.isFinite(calories) || calories <= 0) return 0
+  if (calories >= 600) return 3
+  if (calories >= 300) return 2
+  return 1
+}
+
+function formatPosterRatio(value: number): string {
+  const rounded = Math.round(value * 10) / 10
+  return Number.isInteger(rounded) ? `${rounded.toFixed(0)}%` : `${rounded.toFixed(1)}%`
 }
 
 function mealLabelForPoster(mealType?: string): string {
@@ -7494,51 +7588,20 @@ const styles = StyleSheet.create({
     paddingBottom: 14,
   },
   foodPosterCard: {
-    width: '100%',
-    maxWidth: 380,
-    borderRadius: 18,
-    padding: 18,
-    backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
+    width: 375,
+    maxWidth: '100%',
+    overflow: 'hidden',
+    backgroundColor: '#f9f7f2',
     shadowColor: '#0f172a',
-    shadowOpacity: 0.14,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 8,
-  },
-  foodPosterBrandRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  foodPosterLogo: {
-    width: 38,
-    height: 38,
-    borderRadius: 10,
-  },
-  foodPosterBrandText: {
-    flex: 1,
-    minWidth: 0,
-  },
-  foodPosterBrandName: {
-    color: '#0f172a',
-    fontSize: 15,
-    lineHeight: 20,
-    fontWeight: '900',
-  },
-  foodPosterBrandSub: {
-    color: '#64748b',
-    fontSize: 11,
-    lineHeight: 16,
-    fontWeight: '700',
+    shadowOpacity: 0.18,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 10,
   },
   foodPosterImageWrap: {
-    marginTop: 15,
-    height: 178,
+    height: 280,
     overflow: 'hidden',
-    borderRadius: 14,
-    backgroundColor: '#ecfdf5',
+    backgroundColor: '#e5e7eb',
   },
   foodPosterImage: {
     width: '100%',
@@ -7548,91 +7611,236 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#e7f7ef',
+    backgroundColor: '#e8ece7',
   },
   foodPosterImageFallbackText: {
-    color: colors.brand,
-    fontSize: 34,
+    color: '#94a3b8',
+    fontSize: 32,
     lineHeight: 42,
     fontWeight: '900',
   },
-  foodPosterMeal: {
-    marginTop: 16,
-    alignSelf: 'flex-start',
-    borderRadius: 999,
-    overflow: 'hidden',
-    backgroundColor: 'rgba(0, 188, 125, 0.1)',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    color: colors.brand,
+  foodPosterImageScrim: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 86,
+    backgroundColor: 'rgba(0,0,0,0.22)',
+  },
+  foodPosterMealBadge: {
+    position: 'absolute',
+    left: 12,
+    top: 12,
+    minWidth: 44,
+    height: 26,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 11,
+    backgroundColor: 'rgba(255,255,255,0.94)',
+  },
+  foodPosterMealBadgeText: {
+    color: '#0f172a',
     fontSize: 12,
     lineHeight: 16,
     fontWeight: '900',
   },
-  foodPosterTitle: {
-    marginTop: 8,
-    color: '#0f172a',
-    fontSize: 24,
-    lineHeight: 30,
+  foodPosterDateRow: {
+    position: 'absolute',
+    left: 16,
+    bottom: 16,
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+  },
+  foodPosterDateDay: {
+    color: '#ffffff',
+    fontSize: 40,
+    lineHeight: 45,
     fontWeight: '900',
   },
-  foodPosterDescription: {
-    marginTop: 8,
-    color: '#475569',
-    fontSize: 13,
+  foodPosterDateMonth: {
+    marginBottom: 6,
+    color: '#ffffff',
+    fontSize: 16,
     lineHeight: 20,
+    fontWeight: '700',
   },
-  foodPosterMacroRow: {
-    marginTop: 16,
+  foodPosterBody: {
+    paddingHorizontal: 20,
+    paddingTop: 28,
+    paddingBottom: 30,
+  },
+  foodPosterCalorieRow: {
+    minHeight: 54,
     flexDirection: 'row',
-    gap: 7,
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
   },
-  foodPosterMacro: {
-    flex: 1,
-    minHeight: 58,
-    borderRadius: 12,
+  foodPosterCalorieTextRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    minWidth: 0,
+    flexShrink: 1,
+  },
+  foodPosterCalories: {
+    color: '#0f172a',
+    fontSize: 44,
+    lineHeight: 50,
+    fontWeight: '900',
+  },
+  foodPosterCaloriesUnit: {
+    marginBottom: 7,
+    color: '#64748b',
+    fontSize: 14,
+    lineHeight: 18,
+    fontWeight: '800',
+  },
+  foodPosterDotsChip: {
+    marginTop: 8,
+    minWidth: 68,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(17,24,39,0.12)',
+    backgroundColor: '#e5c68d',
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#f1f5f9',
-    paddingHorizontal: 4,
+    gap: 7,
+    paddingHorizontal: 10,
+  },
+  foodPosterDotOuter: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    borderWidth: 1.35,
+    borderColor: '#111827',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  foodPosterDotInner: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#111827',
+  },
+  foodPosterMacroLabels: {
+    marginTop: 18,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+  },
+  foodPosterMacroSide: {
+    width: 92,
+    alignItems: 'flex-start',
+  },
+  foodPosterMacroCenter: {
+    width: 92,
+    alignItems: 'center',
+  },
+  foodPosterMacroSideRight: {
+    alignItems: 'flex-end',
+  },
+  foodPosterMacroName: {
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '800',
+  },
+  foodPosterMacroProtein: {
+    color: '#3b82f6',
+  },
+  foodPosterMacroCarbs: {
+    color: '#eab308',
+  },
+  foodPosterMacroFat: {
+    color: '#f97316',
   },
   foodPosterMacroValue: {
+    marginTop: 2,
     color: '#0f172a',
-    fontSize: 17,
+    fontSize: 21,
+    lineHeight: 26,
+    fontWeight: '900',
+  },
+  foodPosterMacroBar: {
+    marginTop: 8,
+    height: 8,
+    borderRadius: 4,
+    overflow: 'hidden',
+    backgroundColor: '#e5e7eb',
+    flexDirection: 'row',
+  },
+  foodPosterMacroBarSegment: {
+    height: '100%',
+  },
+  foodPosterMacroBarProtein: {
+    backgroundColor: '#3b82f6',
+  },
+  foodPosterMacroBarCarbs: {
+    backgroundColor: '#eab308',
+  },
+  foodPosterMacroBarFat: {
+    backgroundColor: '#f97316',
+  },
+  foodPosterDivider: {
+    marginTop: 32,
+    height: 1,
+    backgroundColor: '#e5e7eb',
+  },
+  foodPosterItems: {
+    marginTop: 20,
+  },
+  foodPosterItemRow: {
+    minHeight: 42,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  foodPosterItemNameWrap: {
+    flex: 1,
+    minWidth: 0,
+  },
+  foodPosterItemName: {
+    color: '#0f172a',
+    fontSize: 16,
     lineHeight: 22,
     fontWeight: '900',
   },
-  foodPosterMacroLabel: {
-    marginTop: 2,
-    color: '#64748b',
-    fontSize: 10,
-    lineHeight: 14,
-    fontWeight: '700',
-  },
-  foodPosterFoods: {
-    marginTop: 12,
-    color: '#334155',
+  foodPosterItemRatio: {
+    color: '#94a3b8',
     fontSize: 12,
     lineHeight: 18,
     fontWeight: '700',
   },
-  foodPosterQrPanel: {
-    marginTop: 16,
-    minHeight: 116,
-    borderRadius: 14,
-    backgroundColor: '#f8fafc',
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    padding: 12,
+  foodPosterItemMeta: {
+    color: '#64748b',
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '600',
+  },
+  foodPosterOverflowText: {
+    marginTop: 6,
+    color: '#94a3b8',
+    fontSize: 12,
+    lineHeight: 18,
+    fontStyle: 'italic',
+    textAlign: 'center',
+  },
+  foodPosterFooter: {
+    marginTop: 43,
+    minHeight: 76,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 13,
   },
   foodPosterQrOuter: {
-    width: 92,
-    height: 92,
-    borderRadius: 10,
-    padding: 7,
+    width: 76,
+    height: 76,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#d4d4d4',
+    padding: 4,
     backgroundColor: '#ffffff',
   },
   foodPosterQrMatrix: {
@@ -7651,21 +7859,44 @@ const styles = StyleSheet.create({
   foodPosterQrCellLight: {
     backgroundColor: '#ffffff',
   },
-  foodPosterQrText: {
-    flex: 1,
-    minWidth: 0,
+  foodPosterFooterAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#dbece5',
   },
-  foodPosterQrTitle: {
-    color: '#0f172a',
+  foodPosterFooterAvatarFallback: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#dbece5',
+  },
+  foodPosterFooterAvatarInitial: {
+    color: '#2f6b55',
     fontSize: 15,
-    lineHeight: 21,
+    lineHeight: 20,
     fontWeight: '900',
   },
-  foodPosterQrHint: {
-    marginTop: 4,
-    color: '#64748b',
+  foodPosterFooterText: {
+    flex: 1,
+    minWidth: 0,
+    paddingLeft: 12,
+    paddingRight: 12,
+  },
+  foodPosterFooterTitle: {
+    color: '#0f172a',
+    fontSize: 15,
+    lineHeight: 20,
+    fontWeight: '900',
+  },
+  foodPosterFooterHint: {
+    marginTop: 2,
+    color: '#94a3b8',
     fontSize: 12,
-    lineHeight: 18,
+    lineHeight: 16,
+    fontWeight: '600',
   },
   foodPosterActions: {
     flexDirection: 'row',

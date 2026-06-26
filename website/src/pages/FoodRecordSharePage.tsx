@@ -113,6 +113,12 @@ function recordImageUrls(record: SharedFoodRecord): string[] {
     .filter(Boolean)
 }
 
+function recordItemCalories(item: SharedFoodRecordItem): number {
+  const ratio = item.ratio == null ? 100 : Number(item.ratio)
+  const safeRatio = Number.isFinite(ratio) ? ratio : 100
+  return Number(item.nutrients?.calories || 0) * safeRatio / 100
+}
+
 function mealLabel(record: SharedFoodRecord): string {
   return mealLabels[String(record.meal_type || '').trim()] || '饮食'
 }
@@ -235,6 +241,33 @@ function syncShareMeta(record: SharedFoodRecord, pageUrl: string) {
   upsertLink('canonical', canonicalUrl)
 }
 
+function isMobileBrowser(): boolean {
+  if (typeof navigator === 'undefined') return false
+  return /Android|iPhone|iPad|iPod|Mobile|HarmonyOS/i.test(navigator.userAgent)
+}
+
+function buildAppSchemeUrl(recordId: string): string {
+  return `foodlink://food-record?record_id=${encodeURIComponent(recordId)}`
+}
+
+function buildAppOpenUrl(recordId: string): string {
+  const schemeUrl = buildAppSchemeUrl(recordId)
+  if (typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent)) {
+    return `intent://food-record?record_id=${encodeURIComponent(recordId)}#Intent;scheme=foodlink;package=cn.healthymax.foodlink;end`
+  }
+  return schemeUrl
+}
+
+function tryOpenAppSilently(schemeUrl: string) {
+  if (typeof document === 'undefined') return
+  const iframe = document.createElement('iframe')
+  iframe.src = schemeUrl
+  iframe.style.display = 'none'
+  iframe.setAttribute('aria-hidden', 'true')
+  document.body.appendChild(iframe)
+  window.setTimeout(() => iframe.remove(), 1600)
+}
+
 function ShareSkeleton() {
   return (
     <div className="mx-auto flex min-h-svh max-w-5xl flex-col gap-5 px-4 py-5 md:px-8 md:py-8">
@@ -310,11 +343,21 @@ export function FoodRecordSharePage() {
     if (typeof window === 'undefined') return absoluteUrl(`/share/food-record/${encodeURIComponent(trimmedRecordId)}`)
     return window.location.href
   }, [trimmedRecordId])
-  const appUrl = useMemo(() => `foodlink://food-record?record_id=${encodeURIComponent(trimmedRecordId)}`, [trimmedRecordId])
+  const appSchemeUrl = useMemo(() => buildAppSchemeUrl(trimmedRecordId), [trimmedRecordId])
+  const appOpenUrl = useMemo(() => buildAppOpenUrl(trimmedRecordId), [trimmedRecordId])
 
   useEffect(() => {
     if (state.status === 'ready') syncShareMeta(state.record, pageUrl)
   }, [pageUrl, state])
+
+  useEffect(() => {
+    if (state.status !== 'ready' || !trimmedRecordId || !isMobileBrowser()) return
+    const key = `foodlink:auto-open:${trimmedRecordId}`
+    if (window.sessionStorage.getItem(key) === '1') return
+    window.sessionStorage.setItem(key, '1')
+    const timer = window.setTimeout(() => tryOpenAppSilently(appSchemeUrl), 500)
+    return () => window.clearTimeout(timer)
+  }, [appSchemeUrl, state.status, trimmedRecordId])
 
   const isPendingRequest = Boolean(trimmedRecordId) && state.requestKey !== requestKey
 
@@ -328,6 +371,7 @@ export function FoodRecordSharePage() {
   const images = recordImageUrls(record)
   const foods = (record.items || []).filter((item) => String(item.name || '').trim()).slice(0, 8)
   const recordTime = formatRecordTime(record.record_time)
+  const meal = mealLabel(record)
 
   const copyPageUrl = async () => {
     try {
@@ -341,70 +385,54 @@ export function FoodRecordSharePage() {
 
   return (
     <div className="min-h-svh overflow-x-clip bg-gradient-page">
-      <main className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-5 md:px-8 md:py-8">
-        <div className="flex items-center justify-between gap-3">
+      <main className="mx-auto flex max-w-3xl flex-col gap-4 px-4 pb-[calc(7.5rem+env(safe-area-inset-bottom,0px))] pt-4 md:px-8 md:pb-12 md:pt-8">
+        <div className="flex items-center justify-between gap-3 px-1">
           <Link to="/" className="inline-flex min-h-10 items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground">
             <img src={brand.assets.loginLogo} alt="" className="size-7 rounded-md object-contain" />
             {brand.shortName}
           </Link>
-          <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">{mealLabel(record)}</span>
+          <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">{meal}</span>
         </div>
 
-        <section className="grid overflow-hidden rounded-md border border-border bg-card shadow-sm md:grid-cols-[minmax(0,1.08fr)_minmax(340px,0.92fr)]">
-          <div className="relative min-h-[280px] bg-muted md:min-h-[620px]">
+        <section className="overflow-hidden rounded-lg border border-border/80 bg-card shadow-sm">
+          <div className="relative aspect-[4/3] bg-muted md:aspect-[16/9]">
             {images[0] ? (
               <img src={images[0]} alt={title} className="absolute inset-0 size-full object-cover" />
             ) : (
-              <div className="grid size-full min-h-[280px] place-items-center bg-[linear-gradient(135deg,#e9f8ee,#f9fbf5)]">
+              <div className="grid size-full place-items-center bg-[linear-gradient(135deg,#e9f8ee,#f9fbf5)]">
                 <img src={brand.assets.logoShitan} alt={brand.fullName} className="h-28 w-28 rounded-2xl object-contain" />
               </div>
             )}
+            <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black/35 to-transparent" />
+            <span className="absolute left-3 top-3 rounded-full bg-white/92 px-3 py-1.5 text-xs font-bold text-foreground shadow-sm">{meal}</span>
+            {recordTime ? <span className="absolute bottom-3 left-3 text-sm font-semibold text-white drop-shadow">{recordTime}</span> : null}
           </div>
 
-          <div className="flex flex-col gap-6 p-5 md:p-7">
-            <div>
-              {recordTime ? <p className="text-sm font-medium text-muted-foreground">{recordTime}</p> : null}
-              <h1 className="mt-2 text-3xl font-bold leading-tight text-foreground md:text-4xl">{title}</h1>
-              <p className="mt-4 text-base leading-7 text-muted-foreground">{description}</p>
+          <div className="flex flex-col gap-5 p-4 md:p-6">
+            <div className="space-y-3">
+              <h1 className="text-[2rem] font-black leading-tight text-foreground md:text-4xl">{title}</h1>
+              <p className="text-[0.98rem] leading-7 text-muted-foreground">{description}</p>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <Metric icon={<Flame size={18} />} label="热量" value={Math.round(Number(record.total_calories || 0)).toString()} unit="kcal" />
-              <Metric icon={<Beef size={18} />} label="蛋白质" value={round1(record.total_protein)} unit="g" />
-              <Metric icon={<Wheat size={18} />} label="碳水" value={round1(record.total_carbs)} unit="g" />
-              <Metric icon={<Droplets size={18} />} label="脂肪" value={round1(record.total_fat)} unit="g" />
-            </div>
-
-            <div className="grid gap-3">
-              <a
-                href={appUrl}
-                className="inline-flex min-h-12 items-center justify-center gap-2 rounded-md bg-primary px-5 text-sm font-bold text-primary-foreground shadow-sm"
-              >
-                <Smartphone size={18} />
-                打开 App 查看
-              </a>
-              <button
-                type="button"
-                onClick={() => void copyPageUrl()}
-                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-border bg-background px-5 text-sm font-semibold text-foreground"
-              >
-                <Copy size={17} />
-                {copied ? '已复制链接' : '复制分享链接'}
-              </button>
+            <div className="grid grid-cols-4 gap-2 rounded-md bg-muted/45 p-2">
+              <Metric icon={<Flame size={15} />} label="热量" value={Math.round(Number(record.total_calories || 0)).toString()} unit="kcal" />
+              <Metric icon={<Beef size={15} />} label="蛋白" value={round1(record.total_protein)} unit="g" />
+              <Metric icon={<Wheat size={15} />} label="碳水" value={round1(record.total_carbs)} unit="g" />
+              <Metric icon={<Droplets size={15} />} label="脂肪" value={round1(record.total_fat)} unit="g" />
             </div>
 
             {foods.length ? (
-              <div>
-                <h2 className="text-sm font-bold text-foreground">食物明细</h2>
-                <div className="mt-3 divide-y divide-border">
+              <div className="rounded-md border border-border/80 bg-background p-4">
+                <h2 className="text-base font-black text-foreground">食物明细</h2>
+                <div className="mt-2 divide-y divide-border">
                   {foods.map((item, index) => (
                     <div key={`${item.name}-${index}`} className="flex items-center justify-between gap-4 py-3">
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold text-foreground">{item.name}</p>
-                        <p className="mt-1 text-xs text-muted-foreground">摄入 {Math.round(recordItemIntake(item))}g</p>
+                        <p className="truncate text-base font-bold text-foreground">{item.name}</p>
+                        <p className="mt-1 text-sm text-muted-foreground">摄入 {Math.round(recordItemIntake(item))}g</p>
                       </div>
-                      <span className="shrink-0 text-sm font-semibold text-muted-foreground">
-                        {Math.round(Number(item.nutrients?.calories || 0))} kcal
+                      <span className="shrink-0 text-base font-bold text-muted-foreground">
+                        {Math.round(recordItemCalories(item))} kcal
                       </span>
                     </div>
                   ))}
@@ -414,22 +442,48 @@ export function FoodRecordSharePage() {
           </div>
         </section>
 
-        <p className="text-center text-xs leading-6 text-muted-foreground">
+        <p className="px-2 text-center text-xs leading-6 text-muted-foreground">
           饮食分析结果仅供参考，不构成医学诊断。继续记录饮食，请在 {brand.fullName} App 或小程序中查看。
         </p>
       </main>
-      <SiteFooter />
+      <div className="fixed inset-x-0 bottom-0 z-40 px-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] pt-3">
+        {copied ? (
+          <div className="mx-auto mb-2 w-fit rounded-full bg-foreground px-3 py-1 text-xs font-semibold text-background shadow-sm">
+            链接已复制
+          </div>
+        ) : null}
+        <div className="mx-auto flex max-w-md items-center gap-2 rounded-full border border-border/70 bg-card/92 p-2 shadow-[0_12px_40px_rgba(15,23,42,0.18)] backdrop-blur">
+          <button
+            type="button"
+            onClick={() => void copyPageUrl()}
+            className="inline-flex size-12 shrink-0 items-center justify-center rounded-full bg-muted text-foreground transition-colors hover:bg-muted/80"
+            aria-label={copied ? '已复制链接' : '复制分享链接'}
+          >
+            <Copy size={20} />
+          </button>
+          <a
+            href={appOpenUrl}
+            className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-full bg-primary px-5 text-base font-black text-primary-foreground shadow-sm transition-transform active:scale-[0.98]"
+          >
+            <Smartphone size={19} />
+            App 内打开
+          </a>
+        </div>
+      </div>
+      <div className="hidden md:block">
+        <SiteFooter />
+      </div>
     </div>
   )
 }
 
 function Metric({ icon, label, value, unit }: { icon: ReactNode; label: string; value: string; unit: string }) {
   return (
-    <div className="rounded-md border border-border bg-muted/40 p-3">
-      <div className="flex items-center gap-2 text-primary">{icon}<span className="text-xs font-semibold">{label}</span></div>
-      <div className="mt-2 flex items-end gap-1">
-        <span className="text-2xl font-bold leading-none text-foreground">{value}</span>
-        <span className="text-xs font-semibold text-muted-foreground">{unit}</span>
+    <div className="min-w-0 rounded-sm bg-card px-2 py-2 text-center shadow-[inset_0_0_0_1px_rgb(226_232_240/0.7)]">
+      <div className="flex items-center justify-center gap-1 text-primary">{icon}<span className="truncate text-[0.68rem] font-bold">{label}</span></div>
+      <div className="mt-1 flex items-baseline justify-center gap-0.5">
+        <span className="truncate text-xl font-black leading-none text-foreground">{value}</span>
+        <span className="text-[0.65rem] font-bold text-muted-foreground">{unit}</span>
       </div>
     </div>
   )
