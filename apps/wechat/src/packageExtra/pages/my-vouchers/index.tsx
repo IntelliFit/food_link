@@ -85,7 +85,7 @@ function MyVouchersPage() {
       ) : (
         <View className='voucher-list'>
           {items.map(voucher => (
-            <View key={voucher.id} className={`voucher-card voucher-card--${voucher.status}`}>
+            <View key={voucher.id} className={`voucher-card voucher-card--${voucher.status} voucher-card--${voucher.voucher_type}`}>
               <View className='voucher-card__main'>
                 <Text className='voucher-card__title'>{voucher.title}</Text>
                 {voucher.description ? (

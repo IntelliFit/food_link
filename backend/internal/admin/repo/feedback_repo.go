@@ -28,6 +28,7 @@ func NewFeedbackRepo(db *gorm.DB) *FeedbackRepo {
 type ListFeedbackInput struct {
 	Query    string
 	Category string
+	Source   string
 	Status   string
 	Limit    int
 	Offset   int
@@ -220,6 +221,11 @@ func applyFeedbackFilters(q *gorm.DB, input ListFeedbackInput) *gorm.DB {
 	case "", "all":
 	default:
 		q = q.Where("f.category = ?", strings.TrimSpace(input.Category))
+	}
+	switch strings.TrimSpace(input.Source) {
+	case "", "all":
+	default:
+		q = q.Where("f.source = ?", strings.TrimSpace(input.Source))
 	}
 	switch strings.TrimSpace(input.Status) {
 	case "", "all":

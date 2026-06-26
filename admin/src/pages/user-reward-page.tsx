@@ -112,9 +112,9 @@ export function UserRewardPage({ onLogout, onMenuChange }: UserRewardPageProps) 
   }
 
   return (
-    <div className='grid min-h-svh grid-cols-[256px_minmax(0,1fr)] gap-6 p-6'>
+    <div className='relative z-10 mx-auto grid min-h-[calc(100vh-2rem)] w-full max-w-[1540px] grid-cols-[256px_minmax(0,1fr)] gap-8 px-4 py-4'>
       <AdminSidebar activeMenu='user-rewards' onLogout={onLogout} onMenuChange={onMenuChange} />
-      <main className='space-y-6'>
+      <main className='min-w-0 space-y-6 pb-8'>
         <div className='flex items-center justify-between'>
           <div>
             <h1 className='text-2xl font-bold tracking-tight'>用户奖励</h1>
@@ -143,15 +143,22 @@ export function UserRewardPage({ onLogout, onMenuChange }: UserRewardPageProps) 
               </form>
 
               {searchResults.length > 0 && (
-                <div className='space-y-2'>
+                <div className='space-y-3'>
                   {searchResults.map((user) => (
                     <button
                       key={user.user_id}
                       type='button'
                       onClick={() => handleSelectUser(user)}
-                      className='flex w-full items-center justify-between rounded-lg border p-3 text-left transition-colors hover:bg-accent'
+                      className='flex w-full items-center gap-3 rounded-lg border p-3 text-left transition-colors hover:bg-accent'
                     >
-                      <div className='min-w-0'>
+                      {user.avatar ? (
+                        <img src={user.avatar} alt='' className='size-10 shrink-0 rounded-full object-cover' />
+                      ) : (
+                        <div className='flex size-10 shrink-0 items-center justify-center rounded-full bg-muted'>
+                          <User className='size-5 text-muted-foreground' />
+                        </div>
+                      )}
+                      <div className='min-w-0 flex-1'>
                         <div className='flex items-center gap-2'>
                           <span className='truncate font-medium'>{user.nickname || '未命名用户'}</span>
                           {user.telephone && <Badge variant='outline'>{user.telephone}</Badge>}

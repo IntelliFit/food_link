@@ -54,6 +54,7 @@ const SERVICE_ICON_TONES: Record<number, ProfileListIconTone> = {
   5: { color: '#4c92b3', backgroundColor: '#ecf7fc', darkColor: '#81d6fb', darkBackgroundColor: 'rgba(129, 214, 251, 0.16)' },
   8: { color: '#6e5ab5', backgroundColor: '#f4f0fc', darkColor: '#b39ef4', darkBackgroundColor: 'rgba(179, 158, 244, 0.16)' },
   10: { color: '#0f8f74', backgroundColor: '#eafaf5', darkColor: '#6ee7c8', darkBackgroundColor: 'rgba(110, 231, 200, 0.16)' },
+  11: { color: '#d97706', backgroundColor: '#fff7ed', darkColor: '#fbbf24', darkBackgroundColor: 'rgba(251, 191, 36, 0.16)' },
 }
 
 const SETTING_ICON_TONES: Record<number, ProfileListIconTone> = {
@@ -296,6 +297,13 @@ function ProfilePage() {
       title: '赚积分',
       desc: '查看今天还能做哪些任务、每项上限和当前进度',
       path: extraPkgUrl('/pages/reward-center/index')
+    },
+    {
+      id: 11,
+      iconClass: 'icon-youhuiquan',
+      title: '我的礼券',
+      desc: '查看注册奖励、邀请奖励和积分礼券',
+      path: extraPkgUrl('/pages/my-vouchers/index')
     },
     {
       id: 5,

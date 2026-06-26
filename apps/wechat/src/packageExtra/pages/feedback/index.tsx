@@ -74,7 +74,7 @@ function FeedbackPage() {
       }
     } catch (error) {
       if (isPrivacyAuthorizeError(error)) {
-        showPrivacyAuthorizeFailure()
+        showPrivacyAuthorizeFailure(error)
         return
       }
       console.error('选择图片失败', error)

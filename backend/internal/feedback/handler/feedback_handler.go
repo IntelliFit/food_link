@@ -37,6 +37,7 @@ func NewFeedbackHandler(svc FeedbackService, uploads FeedbackUploadService) *Fee
 func (h *FeedbackHandler) Submit(c *gin.Context) {
 	var body struct {
 		Category       string                      `json:"category"`
+		Source         string                      `json:"source"`
 		Content        string                      `json:"content"`
 		Contact        string                      `json:"contact"`
 		PagePath       string                      `json:"page_path"`
@@ -44,6 +45,7 @@ func (h *FeedbackHandler) Submit(c *gin.Context) {
 		ClientInfo     map[string]any              `json:"client_info"`
 		RecentRequests []domain.RecentRequestTrace `json:"recent_requests"`
 		ImageURLs      []string                    `json:"image_urls"`
+		Extra          map[string]any              `json:"extra"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		response.Error(c, err)
@@ -54,6 +56,7 @@ func (h *FeedbackHandler) Submit(c *gin.Context) {
 	traceID, requestID, hostName := commonmw.RequestIDs(c)
 	id, err := h.svc.Submit(c.Request.Context(), userID, service.SubmitInput{
 		Category:        body.Category,
+		Source:          body.Source,
 		Content:         body.Content,
 		Contact:         body.Contact,
 		PagePath:        body.PagePath,
@@ -61,6 +64,7 @@ func (h *FeedbackHandler) Submit(c *gin.Context) {
 		ClientInfo:      body.ClientInfo,
 		RecentRequests:  body.RecentRequests,
 		ImageURLs:       body.ImageURLs,
+		Extra:           body.Extra,
 		SubmitTraceID:   traceID,
 		SubmitRequestID: requestID,
 		SubmitHostName:  hostName,
@@ -73,6 +77,7 @@ func (h *FeedbackHandler) Submit(c *gin.Context) {
 		slog.String("user_id", userID),
 		slog.String("feedback_id", id),
 		slog.String("category", body.Category),
+		slog.String("source", body.Source),
 		slog.Int("recent_request_count", len(body.RecentRequests)),
 		slog.Int("image_count", len(body.ImageURLs)),
 		slog.String("trace_id", traceID),

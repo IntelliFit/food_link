@@ -72,6 +72,7 @@ type UserFeedbackDO struct {
 	ID                string           `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
 	UserID            string           `gorm:"column:user_id;type:uuid;not null;index:idx_user_feedback_user_created,priority:1"`
 	Category          string           `gorm:"column:category;type:text;not null;default:'other'"`
+	Source            string           `gorm:"column:source;type:text;not null;default:'app';index:idx_user_feedback_source_created,priority:1"`
 	Content           string           `gorm:"column:content;type:text;not null"`
 	Contact           string           `gorm:"column:contact;type:text;not null;default:''"`
 	PagePath          string           `gorm:"column:page_path;type:text;not null;default:''"`
@@ -79,6 +80,7 @@ type UserFeedbackDO struct {
 	ClientInfo        map[string]any   `gorm:"column:client_info;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
 	RecentRequests    []map[string]any `gorm:"column:recent_requests;type:jsonb;serializer:json;not null;default:'[]'::jsonb"`
 	ImageURLs         []string         `gorm:"column:image_urls;type:jsonb;serializer:json;not null;default:'[]'::jsonb"`
+	Extra             map[string]any   `gorm:"column:extra;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
 	SubmitTraceID     string           `gorm:"column:submit_trace_id;type:text;not null;default:'';index:idx_user_feedback_submit_trace_id"`
 	SubmitRequestID   string           `gorm:"column:submit_request_id;type:text;not null;default:''"`
 	SubmitHostName    string           `gorm:"column:submit_host_name;type:text;not null;default:''"`
@@ -86,7 +88,7 @@ type UserFeedbackDO struct {
 	ResolutionMessage string           `gorm:"column:resolution_message;type:text;not null;default:''"`
 	RewardCredits     int              `gorm:"column:reward_credits;type:integer;not null;default:0"`
 	RewardLedgerID    *string          `gorm:"column:reward_ledger_id;type:uuid"`
-	CreatedAt         *time.Time       `gorm:"column:created_at;type:timestamptz;default:now();index:idx_user_feedback_user_created,priority:2"`
+	CreatedAt         *time.Time       `gorm:"column:created_at;type:timestamptz;default:now();index:idx_user_feedback_user_created,priority:2;index:idx_user_feedback_source_created,priority:2,sort:desc"`
 	UpdatedAt         *time.Time       `gorm:"column:updated_at;type:timestamptz;default:now()"`
 }
 

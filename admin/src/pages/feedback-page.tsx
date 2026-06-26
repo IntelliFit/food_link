@@ -24,7 +24,7 @@ import { adminRequest, copyText, displayApiBase } from '@/lib/api'
 import { displayUser, firstTraceId, formatTime, formatTraceStatusCode, parseConsoleLogs, shortId, truncate } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import type { ConsoleLogEntry, FeedbackItem, FeedbackListResponse, FeedbackStatus, RecentRequestTrace } from '@/types/feedback'
-import { categoryLabels, statusLabels } from '@/types/feedback'
+import { categoryLabels, sourceLabels, statusLabels } from '@/types/feedback'
 
 type FeedbackPageProps = {
   onLogout: () => void
@@ -40,6 +40,7 @@ const statusBadgeClass: Record<FeedbackStatus, string> = {
 type LoadListOptions = {
   query?: string
   category?: string
+  source?: string
   status?: string
   selectId?: string
   notifyDirectMiss?: boolean
@@ -61,6 +62,7 @@ export function FeedbackPage({ onLogout, onMenuChange }: FeedbackPageProps) {
   const directFeedbackId = readDirectFeedbackId(searchParams)
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState('all')
+  const [source, setSource] = useState('all')
   const [status, setStatus] = useState('open')
   const [page, setPage] = useState(1)
   const [limit, setLimit] = useState(30)
@@ -78,17 +80,19 @@ export function FeedbackPage({ onLogout, onMenuChange }: FeedbackPageProps) {
   useEffect(() => {
     void loadList()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, limit, category, status])
+  }, [page, limit, category, source, status])
 
   useEffect(() => {
     if (!directFeedbackId) return
     setQuery(directFeedbackId)
     setCategory('all')
+    setSource('all')
     setStatus('all')
     setPage(1)
     void loadList(1, {
       query: directFeedbackId,
       category: 'all',
+      source: 'all',
       status: 'all',
       selectId: directFeedbackId,
       notifyDirectMiss: true,
@@ -101,12 +105,14 @@ export function FeedbackPage({ onLogout, onMenuChange }: FeedbackPageProps) {
     try {
       const requestedQuery = options.query ?? query.trim()
       const requestedCategory = options.category ?? category
+      const requestedSource = options.source ?? source
       const requestedStatus = options.status ?? status
       const params = new URLSearchParams({
         page: String(nextPage),
         limit: String(limit),
         q: requestedQuery,
         category: requestedCategory,
+        source: requestedSource,
         status: requestedStatus,
       })
       const data = await adminRequest<FeedbackListResponse>(`/api/admin/feedback?${params.toString()}`)
@@ -202,7 +208,7 @@ export function FeedbackPage({ onLogout, onMenuChange }: FeedbackPageProps) {
         </div>
 
         <Card>
-          <CardContent className="grid gap-4 pt-6 md:grid-cols-[minmax(280px,2fr)_160px_150px_110px_auto] md:items-end">
+          <CardContent className="grid gap-4 pt-6 md:grid-cols-[minmax(280px,2fr)_160px_150px_150px_110px_auto] md:items-end">
             <div className="space-y-2 md:col-span-1">
               <Label htmlFor="search">搜索</Label>
               <div className="relative">
@@ -225,6 +231,13 @@ export function FeedbackPage({ onLogout, onMenuChange }: FeedbackPageProps) {
               { value: 'suggestion', label: '功能建议' },
               { value: 'experience', label: '使用体验' },
               { value: 'other', label: '其他' },
+            ]} />
+            <FilterSelect label="来源" value={source} onValueChange={(value) => { setSource(value); setPage(1) }} options={[
+              { value: 'all', label: '全部来源' },
+              { value: 'app', label: 'App' },
+              { value: 'campus_location', label: '校园目录' },
+              { value: 'campus_food', label: '校园食物' },
+              { value: 'food_library', label: '公共食物库' },
             ]} />
             <FilterSelect label="状态" value={status} onValueChange={(value) => { setStatus(value); setPage(1) }} options={[
               { value: 'all', label: '全部状态' },
@@ -376,6 +389,11 @@ function FeedbackCard({
         <div className="min-w-0 flex-1 space-y-3">
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant="secondary">{categoryLabels[item.category] || item.category}</Badge>
+            {item.source && item.source !== 'app' ? (
+              <Badge variant="outline" className="border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-400">
+                {sourceLabels[item.source] || item.source}
+              </Badge>
+            ) : null}
             <Badge variant="outline" className={statusBadgeClass[item.status]}>
               {statusLabels[item.status] || item.status}
             </Badge>
@@ -419,6 +437,39 @@ function MetaChip({ children }: { children: ReactNode }) {
   )
 }
 
+function getFeedbackQuickActions(item: FeedbackItem): Array<{ label: string; to: string }> {
+  const extra = item.extra || {}
+  const actions: Array<{ label: string; to: string }> = []
+  if (item.source === 'campus_location') {
+    const tab = extra.canteen_id ? 'canteens' : extra.campus_id ? 'campuses' : 'schools'
+    const params = new URLSearchParams()
+    params.set('tab', String(tab))
+    if (extra.canteen_id) {
+      params.set('id', String(extra.canteen_id))
+      if (extra.canteen_name) params.set('q', String(extra.canteen_name))
+    } else if (extra.campus_id) {
+      params.set('id', String(extra.campus_id))
+      if (extra.campus_name) params.set('q', String(extra.campus_name))
+    } else if (extra.school_id) {
+      params.set('id', String(extra.school_id))
+      if (extra.school_name) params.set('q', String(extra.school_name))
+    }
+    actions.push({ label: '打开校园食堂', to: `/campus-directory?${params.toString()}` })
+  } else if (item.source === 'campus_food' || item.source === 'food_library') {
+    const params = new URLSearchParams()
+    if (extra.food_id) {
+      params.set('id', String(extra.food_id))
+    } else if (extra.food_name) {
+      params.set('q', String(extra.food_name))
+    }
+    actions.push({
+      label: item.source === 'campus_food' ? '打开校园食物' : '打开公共食物库',
+      to: `/public-food-library?${params.toString()}`,
+    })
+  }
+  return actions
+}
+
 function FeedbackDetail({
   item,
   onStatusChange,
@@ -459,6 +510,11 @@ function FeedbackDetail({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant="secondary">{categoryLabels[item.category] || item.category}</Badge>
+          {item.source && item.source !== 'app' ? (
+            <Badge variant="outline" className="border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-400">
+              {sourceLabels[item.source] || item.source}
+            </Badge>
+          ) : null}
           <Badge variant="outline" className={statusBadgeClass[item.status]}>
             {statusLabels[item.status] || item.status}
           </Badge>
@@ -538,6 +594,32 @@ function FeedbackDetail({
         <p className="whitespace-pre-wrap rounded-lg border bg-muted/30 p-3 text-sm leading-relaxed">{item.content}</p>
       </section>
 
+      {item.extra && Object.keys(item.extra).length > 0 ? (
+        <section className="space-y-2">
+          <h3 className="text-sm font-semibold">结构化信息</h3>
+          <pre className="max-h-60 overflow-auto rounded-lg border bg-muted/20 p-3 text-xs leading-relaxed">
+            {JSON.stringify(item.extra, null, 2)}
+          </pre>
+        </section>
+      ) : null}
+
+      {(() => {
+        const actions = getFeedbackQuickActions(item)
+        if (!actions.length) return null
+        return (
+          <section className="space-y-2">
+            <h3 className="text-sm font-semibold">快捷操作</h3>
+            <div className="flex flex-wrap gap-2">
+              {actions.map((action) => (
+                <Button key={action.to} variant="outline" size="sm" asChild>
+                  <a href={action.to}>{action.label}</a>
+                </Button>
+              ))}
+            </div>
+          </section>
+        )
+      })()}
+
       {item.image_urls?.length ? (
         <section className="space-y-3">
           <h3 className="text-sm font-semibold">截图 ({item.image_urls.length})</h3>
@@ -565,6 +647,7 @@ function FeedbackDetail({
           <DetailKV label="反馈 ID" value={item.id} />
           <DetailKV label="用户" value={displayUser(item)} />
           <DetailKV label="用户 ID" value={item.user_id} />
+          <DetailKV label="来源" value={item.source ? sourceLabels[item.source] || item.source : 'App'} />
           <DetailKV label="联系方式" value={item.contact || '未填写'} />
           <DetailKV label="手机号" value={item.user_telephone || '未绑定'} />
           <DetailKV label="页面" value={item.page_path || '未知'} />

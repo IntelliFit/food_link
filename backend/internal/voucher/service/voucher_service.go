@@ -369,7 +369,7 @@ func (s *VoucherService) notifyUserAboutVoucher(ctx context.Context, voucher *vo
 		content = fmt.Sprintf("恭喜你获得「%s」，%s，点击前往「我的礼券」查看并使用。", voucher.Title, *voucher.Description)
 	}
 	extra := map[string]any{
-		"path":   "/packageExtra/pages/my-vouchers/index",
+		"path":   "/pages/my-vouchers/index",
 		"target": "my-vouchers",
 	}
 	if err := s.messageSender.SendSystemMessageWithAction(ctx, voucher.UserID, content, "去使用", extra); err != nil {

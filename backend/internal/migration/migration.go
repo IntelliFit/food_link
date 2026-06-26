@@ -112,6 +112,7 @@ func ensureConstraints(ctx context.Context, db *gorm.DB) error {
 		`DELETE FROM user_feedback WHERE status = 'processing'`,
 		`DELETE FROM feed_reports WHERE status = 'processing'`,
 		dropAndAddCheck("user_feedback", "user_feedback_category_check", `category = ANY (ARRAY['bug'::text,'suggestion'::text,'experience'::text,'other'::text])`),
+		dropAndAddCheck("user_feedback", "user_feedback_source_check", `source = ANY (ARRAY['app'::text,'campus_location'::text,'campus_food'::text,'food_library'::text])`),
 		dropAndAddCheck("user_feedback", "user_feedback_status_check", `status = ANY (ARRAY['open'::text,'resolved'::text,'closed'::text])`),
 		dropAndAddCheck("user_feedback", "user_feedback_reward_credits_check", `reward_credits >= 0`),
 		dropAndAddCheck("admin_accounts", "admin_accounts_status_check", `status = ANY (ARRAY['active'::text,'disabled'::text])`),
@@ -322,6 +323,9 @@ func ensureConstraints(ctx context.Context, db *gorm.DB) error {
 
 func ensureIndexes(ctx context.Context, db *gorm.DB) error {
 	for _, sql := range []string{
+		`ALTER TABLE user_feedback ADD COLUMN IF NOT EXISTS source text NOT NULL DEFAULT 'app'`,
+		`ALTER TABLE user_feedback ADD COLUMN IF NOT EXISTS extra jsonb NOT NULL DEFAULT '{}'::jsonb`,
+		`CREATE INDEX IF NOT EXISTS idx_user_feedback_source_created ON user_feedback (source, created_at DESC)`,
 		`ALTER TABLE weapp_user ADD COLUMN IF NOT EXISTS app_openid text`,
 		`ALTER TABLE weapp_user ADD COLUMN IF NOT EXISTS app_unionid text`,
 		`ALTER TABLE weapp_user ADD COLUMN IF NOT EXISTS username text`,

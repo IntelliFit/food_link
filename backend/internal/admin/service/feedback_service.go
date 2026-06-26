@@ -28,6 +28,7 @@ type FeedbackService struct {
 type ListFeedbackInput struct {
 	Query    string
 	Category string
+	Source   string
 	Status   string
 	Page     int
 	Limit    int
@@ -60,6 +61,7 @@ func (s *FeedbackService) List(ctx context.Context, input ListFeedbackInput) (*r
 	return s.repo.List(ctx, repo.ListFeedbackInput{
 		Query:    input.Query,
 		Category: input.Category,
+		Source:   input.Source,
 		Status:   input.Status,
 		Limit:    limit,
 		Offset:   (page - 1) * limit,

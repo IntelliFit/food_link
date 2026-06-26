@@ -42,6 +42,7 @@ func (h *FeedbackHandler) List(c *gin.Context) {
 	result, err := h.svc.List(c.Request.Context(), service.ListFeedbackInput{
 		Query:    c.Query("q"),
 		Category: c.DefaultQuery("category", "all"),
+		Source:   c.DefaultQuery("source", "all"),
 		Status:   c.DefaultQuery("status", "all"),
 		Page:     page,
 		Limit:    limit,

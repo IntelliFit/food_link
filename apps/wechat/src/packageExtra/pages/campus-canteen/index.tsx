@@ -14,6 +14,8 @@ import {
   getMyMembership,
   getPublicFoodLibraryList,
   showUnifiedApiError,
+  submitStructuredFeedback,
+  type FeedbackSource,
   type MembershipStatus,
   type PublicFoodLibraryItem,
   type SchoolCampusItem,
@@ -255,6 +257,49 @@ function CampusCanteenPage() {
       .finally(() => {
         setLoading(false);
       });
+  };
+
+  const handleLocationFeedback = async () => {
+    if (!isCampusMember) return;
+    const modalResult = await Taro.showModal({
+      title: "校区/食堂信息纠错",
+      content: "",
+      editable: true,
+      placeholderText: "请说明学校、校区或食堂信息哪里不对，我们会尽快核实…",
+      confirmText: "提交",
+      cancelText: "取消",
+      confirmColor: "#00bc7d",
+    } as any);
+    const { confirm } = modalResult;
+    const content = String((modalResult as any).content || "").trim();
+    if (!confirm) return;
+    const trimmed = content;
+    if (!trimmed) {
+      Taro.showToast({ title: "请填写反馈内容", icon: "none" });
+      return;
+    }
+    Taro.showLoading({ title: "提交中...", mask: true });
+    try {
+      await submitStructuredFeedback({
+        source: "campus_location" as FeedbackSource,
+        content: trimmed,
+        extra: {
+          school_id: selectedSchool?.id || null,
+          school_name: selectedSchool?.name || null,
+          campus_id: selectedCampus?.id || null,
+          campus_name: selectedCampus?.name || null,
+          canteen_id: selectedCanteen?.id || null,
+          canteen_name: selectedCanteen?.name || null,
+          floor: floorName || null,
+          window_name: windowName || null,
+        },
+      });
+      Taro.showToast({ title: "反馈已提交", icon: "success" });
+    } catch (e: any) {
+      await showUnifiedApiError(e, "提交失败");
+    } finally {
+      Taro.hideLoading();
+    }
   };
 
   const goDetail = (itemId: string) => {
@@ -641,6 +686,10 @@ function CampusCanteenPage() {
             <Button className='search-btn' onClick={handleSearch}>
               搜索
             </Button>
+          </View>
+          <View className='campus-feedback-row' onClick={() => void handleLocationFeedback()}>
+            <Text className='iconfont icon-edit campus-feedback-icon' />
+            <Text className='campus-feedback-text'>学校、校区或食堂信息有误？点击反馈</Text>
           </View>
         </View>
 

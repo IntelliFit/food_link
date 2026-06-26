@@ -182,6 +182,15 @@ export function PublicFoodLibraryPage({ onLogout, onMenuChange }: PublicFoodLibr
     if (found) setSelected(found)
   }, [items, selectedId])
 
+  useEffect(() => {
+    const id = searchParams.get('id')
+    if (id) {
+      setSelectedId(id)
+      void loadDetail(id)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams.get('id')])
+
   async function loadList(nextPage = page) {
     setLoading(true)
     try {

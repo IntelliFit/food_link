@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Building2, Check, Loader2, Plus, Save, X } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { AdminSidebar, type AdminMenuId } from "@/components/admin-sidebar";
 import { Button } from "@/components/ui/button";
@@ -304,14 +305,33 @@ function itemMeta(item: DirectoryItem, tab: TabId): string {
     .join(" · ");
 }
 
+const VALID_TABS: TabId[] = [
+  "schools",
+  "campuses",
+  "canteens",
+  "drafts",
+  "windows",
+  "applications",
+  "import-batches",
+  "imports",
+];
+
+function parseTab(value: string | null): TabId {
+  return value && VALID_TABS.includes(value as TabId) ? (value as TabId) : "schools";
+}
+
 export function CampusDirectoryPage({
   onLogout,
   onMenuChange,
 }: CampusDirectoryPageProps) {
-  const [tab, setTab] = useState<TabId>("schools");
-  const [query, setQuery] = useState("");
-  const [status, setStatus] = useState("all");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialTab = parseTab(searchParams.get("tab"));
+  const [tab, setTab] = useState<TabId>(initialTab);
+  const [query, setQuery] = useState(searchParams.get("q") ?? "");
+  const [status, setStatus] = useState(searchParams.get("status") ?? "all");
   const [page, setPage] = useState(1);
+  const initialSelectedId = searchParams.get("id") ?? "";
+  const pendingSelectId = useMemo(() => initialSelectedId, []);
   const limit = 40;
   const [items, setItems] = useState<DirectoryItem[]>([]);
   const [total, setTotal] = useState(0);
@@ -330,8 +350,13 @@ export function CampusDirectoryPage({
 
   const apiBase = displayApiBase();
   const totalPages = Math.max(1, Math.ceil(total / limit));
+  const skipInitialTabEffect = useRef(true);
 
   useEffect(() => {
+    if (skipInitialTabEffect.current) {
+      skipInitialTabEffect.current = false;
+      return;
+    }
     setSelected(null);
     setDraft(blankForTab(tab));
     setCreateDraft(blankForTab(tab));
@@ -356,6 +381,18 @@ export function CampusDirectoryPage({
     if (selected) setDraft(normalizeItem(selected));
   }, [selected]);
 
+  useEffect(() => {
+    const params = new URLSearchParams();
+    params.set("tab", tab);
+    const q = query.trim();
+    if (q) params.set("q", q);
+    if (status !== "all") params.set("status", status);
+    if (page !== 1) params.set("page", String(page));
+    if (selected?.id) params.set("id", selected.id);
+    setSearchParams(params, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, query, status, page, selected?.id]);
+
   const endpoint = useMemo(() => `/api/admin/campus-directory/${tab}`, [tab]);
 
   async function loadList(nextPage = page) {
@@ -372,14 +409,20 @@ export function CampusDirectoryPage({
       const data = await adminRequest<ListResponse<DirectoryItem>>(
         `${endpoint}?${params.toString()}`,
       );
-      setItems(data.items || []);
+      const nextItems = data.items || [];
+      setItems(nextItems);
       setTotal(data.total || 0);
       setPage(data.page || nextPage);
-      setSelected((current) =>
-        current && (data.items || []).some((item) => item.id === current.id)
-          ? current
-          : data.items?.[0] || null,
-      );
+      if (pendingSelectId) {
+        const target = nextItems.find((item) => item.id === pendingSelectId);
+        setSelected(target || nextItems[0] || null);
+      } else {
+        setSelected((current) =>
+          current && nextItems.some((item) => item.id === current.id)
+            ? current
+            : nextItems[0] || null,
+        );
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "读取失败");
       setItems([]);

@@ -7559,15 +7559,27 @@ export async function getUserLocation(): Promise<LocationInfo> {
 
 
 export type FeedbackCategory = 'bug' | 'suggestion' | 'experience' | 'other'
+export type FeedbackSource = 'app' | 'campus_location' | 'campus_food' | 'food_library'
 
 export const FEEDBACK_MAX_IMAGES = 4
 
 export interface SubmitFeedbackRequest {
   category: FeedbackCategory
+  source?: FeedbackSource
   content: string
   contact?: string
   attachRecentRequests?: boolean
   imageUrls?: string[]
+  extra?: Record<string, unknown>
+}
+
+export interface SubmitStructuredFeedbackRequest {
+  source: FeedbackSource
+  content: string
+  contact?: string
+  attachRecentRequests?: boolean
+  imageUrls?: string[]
+  extra?: Record<string, unknown>
 }
 
 export interface SubmitFeedbackResponse {
@@ -7647,6 +7659,7 @@ export async function submitFeedback(input: SubmitFeedbackRequest): Promise<Subm
     method: 'POST',
     data: {
       category: input.category,
+      source: input.source || 'app',
       content,
       contact: input.contact?.trim() || undefined,
       page_path: getCurrentPagePath(),
@@ -7654,6 +7667,7 @@ export async function submitFeedback(input: SubmitFeedbackRequest): Promise<Subm
       client_info: getClientInfo(input.attachRecentRequests !== false),
       recent_requests: input.attachRecentRequests === false ? [] : getRecentRequestTraces(),
       image_urls: imageUrls,
+      extra: input.extra || {},
     },
     timeout: 10000,
   })
@@ -7661,4 +7675,11 @@ export async function submitFeedback(input: SubmitFeedbackRequest): Promise<Subm
     throw new Error((response.data as any)?.message || '提交反馈失败')
   }
   return response.data as SubmitFeedbackResponse
+}
+
+export async function submitStructuredFeedback(input: SubmitStructuredFeedbackRequest): Promise<SubmitFeedbackResponse> {
+  return submitFeedback({
+    category: 'other',
+    ...input,
+  })
 }

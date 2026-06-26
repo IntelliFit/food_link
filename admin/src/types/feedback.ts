@@ -1,5 +1,6 @@
 export type FeedbackStatus = 'open' | 'resolved' | 'closed'
 export type FeedbackCategory = 'bug' | 'suggestion' | 'experience' | 'other'
+export type FeedbackSource = 'app' | 'campus_location' | 'campus_food' | 'food_library'
 
 export type RecentRequestTrace = {
   method?: string
@@ -40,6 +41,8 @@ export type FeedbackItem = {
   submit_trace_id: string
   submit_request_id: string
   submit_host_name: string
+  source?: FeedbackSource
+  extra?: Record<string, unknown>
   status: FeedbackStatus
   resolution_message: string
   reward_credits: number
@@ -49,6 +52,13 @@ export type FeedbackItem = {
   user_nickname?: string
   user_avatar?: string
   user_telephone?: string
+}
+
+export const sourceLabels: Record<FeedbackSource | string, string> = {
+  app: 'App',
+  campus_location: '校园目录',
+  campus_food: '校园食物',
+  food_library: '公共食物库',
 }
 
 export type FeedbackListResponse = {

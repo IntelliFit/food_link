@@ -46,10 +46,11 @@ const menuGroups: Array<{
     ],
   },
   {
-    label: '用户声音',
+    label: '用户管理',
     items: [
       { id: 'feedback', label: '意见反馈', icon: MessageSquareText },
       { id: 'feed-reports', label: '举报管理', icon: Flag },
+      { id: 'user-rewards', label: '用户奖励', icon: Gift },
     ],
   },
   {
@@ -68,7 +69,6 @@ const menuGroups: Array<{
       { id: 'benchmark', label: '数据集评测', icon: FlaskConical },
       { id: 'packaged-food-test', label: '包装食品测试', icon: Package },
       { id: 'payment-test', label: '支付测试', icon: CreditCard },
-      { id: 'user-rewards', label: '用户奖励', icon: Gift },
     ],
   },
   {
