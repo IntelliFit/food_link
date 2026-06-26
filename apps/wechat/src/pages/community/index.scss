@@ -1987,6 +1987,13 @@ $feed-body-font-size: 30rpx;
   gap: 48rpx;
 }
 
+.feed-actions-right {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  margin-left: auto;
+}
+
 .action-item {
   display: flex;
   align-items: center;
@@ -2741,8 +2748,6 @@ $comment-body-font-size: 28rpx;
 }
 
 .action-item.action-edit {
-  margin-right: 8rpx;
-
   &:active {
     opacity: 0.7;
     transform: scale(0.95);
