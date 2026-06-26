@@ -481,85 +481,6 @@
   touch-action: pan-y;
 }
 
-.nutrition-calorie-row {
-  margin-top: 8rpx;
-  display: flex;
-  align-items: center;
-  gap: 18rpx;
-}
-
-.nutrition-calorie-cell {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 10rpx;
-}
-
-.nutrition-calorie-label {
-  font-size: 26rpx;
-  color: #4b5563;
-}
-
-.nutrition-calorie-input-wrap {
-  display: flex;
-  align-items: center;
-  gap: 12rpx;
-  padding: 18rpx 20rpx;
-  background: #f9fafb;
-  border-radius: 16rpx;
-}
-
-.nutrition-calorie-input {
-  flex: 1;
-  min-width: 0;
-  height: 64rpx;
-  font-size: 30rpx;
-  color: #1f2937;
-  line-height: 64rpx;
-  text-align: right;
-}
-
-.nutrition-calorie-unit {
-  flex-shrink: 0;
-  font-size: 24rpx;
-  color: #9ca3af;
-  min-width: 56rpx;
-  text-align: right;
-}
-
-.nutrition-calorie-stepper {
-  width: 72rpx;
-  height: 72rpx;
-  border-radius: 20rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #f1f5f9;
-  color: #475569;
-  flex-shrink: 0;
-
-  &:active {
-    background: #e2e8f0;
-    transform: scale(0.95);
-  }
-}
-
-.nutrition-calorie-stepper--plus {
-  color: #475569;
-  background: #f1f5f9;
-
-  &:active {
-    background: #e2e8f0;
-  }
-}
-
-.nutrition-calorie-stepper-text {
-  font-size: 40rpx;
-  font-weight: 700;
-  line-height: 1;
-}
-
 .nutrition-editor-fold-section {
   margin-top: 22rpx;
   padding: 22rpx;
@@ -602,54 +523,56 @@
   }
 }
 
-.nutrition-macro-row {
+.nutrition-editor-grid {
   margin-top: 18rpx;
-  display: flex;
-  align-items: center;
-  gap: 12rpx;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20rpx;
 }
 
-.nutrition-macro-cell {
-  flex: 1;
-  min-width: 0;
-  box-sizing: border-box;
-  padding: 18rpx 12rpx;
-  border-radius: 20rpx;
-  background: #f8fafc;
-  border: 1rpx solid #e2e8f0;
+.nutrition-editor-grid-item {
   display: flex;
   flex-direction: column;
-  align-items: center;
   gap: 10rpx;
 }
 
-.nutrition-macro-label {
-  font-size: 22rpx;
-  color: #94a3b8;
-  font-weight: 600;
+.nutrition-editor-grid-label {
+  font-size: 26rpx;
+  color: #4b5563;
 }
 
-.nutrition-macro-input-wrap {
+.nutrition-editor-grid-input-wrap {
   display: flex;
-  align-items: baseline;
-  gap: 6rpx;
+  align-items: center;
+  gap: 12rpx;
+  padding: 18rpx 20rpx;
+  background: #f9fafb;
+  border-radius: 16rpx;
 }
 
-.nutrition-macro-input {
-  width: 72rpx;
+.nutrition-editor-grid-input {
+  flex: 1;
   min-width: 0;
-  height: 48rpx;
-  font-size: 34rpx;
-  font-weight: 800;
-  color: #0f172a;
-  line-height: 48rpx;
-  text-align: center;
+  font-size: 30rpx;
+  color: #1f2937;
+  text-align: right;
 }
 
-.nutrition-macro-unit {
-  font-size: 22rpx;
-  color: #64748b;
-  font-weight: 600;
+.nutrition-editor-grid-value {
+  flex: 1;
+  min-width: 0;
+  font-size: 30rpx;
+  color: #1f2937;
+  text-align: right;
+  line-height: 1.4;
+}
+
+.nutrition-editor-grid-unit {
+  flex-shrink: 0;
+  font-size: 24rpx;
+  color: #9ca3af;
+  min-width: 48rpx;
+  text-align: right;
 }
 
 .nutrition-editor-actions {
@@ -691,57 +614,6 @@
   color: #94a3b8;
 }
 
-.nutrition-editor-micro-grid {
-  margin-top: 18rpx;
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10rpx;
-}
-
-.nutrition-editor-micro-cell {
-  min-width: 0;
-  min-height: 92rpx;
-  padding: 12rpx 6rpx;
-  border-radius: 18rpx;
-  background: #f8fafc;
-  border: 1rpx solid #e2e8f0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 6rpx;
-  box-sizing: border-box;
-}
-
-.nutrition-editor-micro-label {
-  max-width: 100%;
-  font-size: 19rpx;
-  font-weight: 600;
-  color: #64748b;
-  line-height: 1.2;
-  text-align: center;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.nutrition-editor-micro-value {
-  max-width: 100%;
-  font-size: 25rpx;
-  font-weight: 800;
-  color: #0f172a;
-  line-height: 1.1;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.nutrition-editor-micro-unit {
-  margin-left: 3rpx;
-  font-size: 18rpx;
-  color: #94a3b8;
-  font-weight: 600;
-}
 
 .nutrition-editor-btn {
   flex: 1;

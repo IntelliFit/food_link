@@ -56,6 +56,7 @@ const NUTRITION_FIELDS: Array<{
   unit: string
   placeholder: string
 }> = [
+  { key: 'calories', label: '热量', unit: 'kcal', placeholder: '0' },
   { key: 'protein', label: '蛋白质', unit: 'g', placeholder: '如 18' },
   { key: 'carbs', label: '碳水', unit: 'g', placeholder: '如 42' },
   { key: 'fat', label: '脂肪', unit: 'g', placeholder: '如 9' }
@@ -614,28 +615,6 @@ function RecipesPage() {
             </View>
 
             <View className='nutrition-editor-body'>
-              <View className='nutrition-calorie-row'>
-                <View className='nutrition-calorie-stepper' onClick={() => adjustNutritionCalories(-10)}>
-                  <Text className='nutrition-calorie-stepper-text'>−</Text>
-                </View>
-                <View className='nutrition-calorie-cell'>
-                  <Text className='nutrition-calorie-label'>总热量</Text>
-                  <View className='nutrition-calorie-input-wrap'>
-                    <Input
-                      className='nutrition-calorie-input'
-                      type='digit'
-                      value={nutritionDraft.calories}
-                      placeholder='0'
-                      onInput={(e) => updateNutritionDraft('calories', e.detail.value)}
-                    />
-                    <Text className='nutrition-calorie-unit'>kcal</Text>
-                  </View>
-                </View>
-                <View className='nutrition-calorie-stepper nutrition-calorie-stepper--plus' onClick={() => adjustNutritionCalories(10)}>
-                  <Text className='nutrition-calorie-stepper-text'>+</Text>
-                </View>
-              </View>
-
               <View className='nutrition-editor-fold-section'>
                 <View className='nutrition-editor-fold-header' onClick={() => setMacroExpanded((prev) => !prev)}>
                   <View>
@@ -645,19 +624,19 @@ function RecipesPage() {
                   <Text className={`iconfont icon-right nutrition-editor-fold-icon ${macroExpanded ? 'expanded' : ''}`} />
                 </View>
                 {macroExpanded && (
-                  <View className='nutrition-macro-row'>
+                  <View className='nutrition-editor-grid'>
                     {NUTRITION_FIELDS.map((field) => (
-                      <View key={field.key} className={`nutrition-macro-cell nutrition-macro-cell--${field.key}`}>
-                        <Text className='nutrition-macro-label'>{field.label}</Text>
-                        <View className='nutrition-macro-input-wrap'>
+                      <View key={field.key} className='nutrition-editor-grid-item'>
+                        <Text className='nutrition-editor-grid-label'>{field.label}</Text>
+                        <View className='nutrition-editor-grid-input-wrap'>
                           <Input
-                            className='nutrition-macro-input'
+                            className='nutrition-editor-grid-input'
                             type='digit'
                             value={nutritionDraft[field.key]}
                             placeholder={field.placeholder}
                             onInput={(e) => updateNutritionDraft(field.key, e.detail.value)}
                           />
-                          <Text className='nutrition-macro-unit'>{field.unit}</Text>
+                          <Text className='nutrition-editor-grid-unit'>{field.unit}</Text>
                         </View>
                       </View>
                     ))}
@@ -675,14 +654,14 @@ function RecipesPage() {
                     <Text className={`iconfont icon-right nutrition-editor-fold-icon ${microExpanded ? 'expanded' : ''}`} />
                   </View>
                   {microExpanded && (
-                    <View className='nutrition-editor-micro-grid'>
+                    <View className='nutrition-editor-grid'>
                       {getVisibleMicroRows(microTotalsDraft).map((row) => (
-                        <View key={row.key} className='nutrition-editor-micro-cell'>
-                          <Text className='nutrition-editor-micro-label'>{row.label}</Text>
-                          <Text className='nutrition-editor-micro-value'>
-                            {formatMicroValue(row.value)}
-                            <Text className='nutrition-editor-micro-unit'>{row.unit}</Text>
-                          </Text>
+                        <View key={row.key} className='nutrition-editor-grid-item'>
+                          <Text className='nutrition-editor-grid-label'>{row.label}</Text>
+                          <View className='nutrition-editor-grid-input-wrap'>
+                            <Text className='nutrition-editor-grid-value'>{formatMicroValue(row.value)}</Text>
+                            <Text className='nutrition-editor-grid-unit'>{row.unit}</Text>
+                          </View>
                         </View>
                       ))}
                     </View>
