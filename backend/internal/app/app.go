@@ -13,6 +13,9 @@ import (
 	adminhandler "food_link/backend/internal/admin/handler"
 	adminrepo "food_link/backend/internal/admin/repo"
 	adminservice "food_link/backend/internal/admin/service"
+	adminvoucherrewardhandler "food_link/backend/internal/admin/voucher_reward/handler"
+	adminvoucherrewardrepo "food_link/backend/internal/admin/voucher_reward/repo"
+	adminvoucherrewardservice "food_link/backend/internal/admin/voucher_reward/service"
 	analyzehandler "food_link/backend/internal/analyze/handler"
 	analyzerepo "food_link/backend/internal/analyze/repo"
 	analyzeservice "food_link/backend/internal/analyze/service"
@@ -76,6 +79,9 @@ import (
 	userrepo "food_link/backend/internal/user/repo"
 	userservice "food_link/backend/internal/user/service"
 	utilityhandler "food_link/backend/internal/utility/handler"
+	voucherhandler "food_link/backend/internal/voucher/handler"
+	voucherrepo "food_link/backend/internal/voucher/repo"
+	voucherservice "food_link/backend/internal/voucher/service"
 	utilityrepo "food_link/backend/internal/utility/repo"
 	utilityservice "food_link/backend/internal/utility/service"
 	workerpkg "food_link/backend/internal/worker"
@@ -259,6 +265,14 @@ func New(cfg *config.Config) (*App, error) {
 	frSvc.ConfigureInviteRewardActivator(membershipSvc)
 	frNutritionSvc.ConfigureRewardAwarder(membershipSvc)
 	membershipHandler := membershiphandler.NewMembershipHandler(membershipSvc)
+
+	// Voucher module DI
+	voucherRepo := voucherrepo.NewVoucherRepo(db)
+	voucherSvc := voucherservice.NewVoucherService(voucherRepo, membershipRepo, userRepo)
+	voucherSvc.ConfigureMessageSender(messageSvc)
+	voucherHandler := voucherhandler.NewVoucherHandler(voucherSvc)
+	loginSvc.ConfigureVoucherService(voucherSvc)
+	membershipSvc.ConfigureVoucherService(voucherSvc)
 
 	// Pet companion module DI
 	petRepo := petrepo.NewPetRepo(db)
@@ -514,6 +528,11 @@ func New(cfg *config.Config) (*App, error) {
 	engine.POST("/api/payment/wechat/papay/contract/terminate-notify", membershipHandler.PapayContractTerminateNotify)
 	engine.POST("/api/membership/rewards/share-poster/claim", authmw.RequireJWT(jwtSvc), membershipHandler.ClaimSharePosterReward)
 
+	// Voucher routes
+	engine.GET("/api/vouchers/my", authmw.RequireJWT(jwtSvc), voucherHandler.ListMyVouchers)
+	engine.GET("/api/vouchers/:voucher_id", authmw.RequireJWT(jwtSvc), voucherHandler.GetVoucherDetail)
+	engine.POST("/api/vouchers/:voucher_id/use", authmw.RequireJWT(jwtSvc), voucherHandler.UseVoucher)
+
 	// Pet companion routes
 	engine.GET("/api/pet/summary", authmw.RequireJWT(jwtSvc), petHandler.Summary)
 	engine.GET("/api/pet/chat/latest", authmw.RequireJWT(jwtSvc), petHandler.LatestChat)
@@ -633,6 +652,9 @@ func New(cfg *config.Config) (*App, error) {
 	adminPaymentTestRepo := adminrepo.NewPaymentTestRepo(db)
 	adminPaymentTestSvc := adminservice.NewPaymentTestService(adminPaymentTestRepo)
 	adminPaymentTestHandler := adminhandler.NewPaymentTestHandler(adminPaymentTestSvc)
+	adminVoucherRewardRepo := adminvoucherrewardrepo.NewVoucherRewardRepo(db)
+	adminVoucherRewardSvc := adminvoucherrewardservice.NewVoucherRewardService(adminVoucherRewardRepo, voucherSvc)
+	adminVoucherRewardHandler := adminvoucherrewardhandler.NewVoucherRewardHandler(adminVoucherRewardSvc)
 	adminAuthSvc := adminservice.NewAuthService(adminAccountRepo)
 	adminAuthHandler := adminhandler.NewAuthHandler(adminAuthSvc)
 	adminCampusDirectoryHandler := adminhandler.NewCampusDirectoryHandler(db)
@@ -716,6 +738,11 @@ func New(cfg *config.Config) (*App, error) {
 	adminAPI.POST("/payment-test/users/:user_id/cancel-membership", adminAuth, adminPaymentTestHandler.CancelUserMembership)
 	adminAPI.POST("/payment-test/users/:user_id/restore-membership", adminAuth, adminPaymentTestHandler.RestoreUserMembership)
 	adminAPI.DELETE("/payment-test/users/:user_id", adminAuth, adminPaymentTestHandler.RemoveUser)
+
+	// Admin voucher reward routes
+	adminAPI.GET("/users/search", adminAuth, adminVoucherRewardHandler.SearchUsers)
+	adminAPI.GET("/users/:user_id/summary", adminAuth, adminVoucherRewardHandler.GetUserSummary)
+	adminAPI.POST("/users/:user_id/voucher-rewards/points", adminAuth, adminVoucherRewardHandler.IssuePointsVoucher)
 
 	routeMapPath := filepath.Join(".", "docs", "backend-api-prd", "ROUTE_MAP.md")
 	if _, err := os.Stat(routeMapPath); err == nil {

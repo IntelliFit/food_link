@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"food_link/backend/internal/auth/repo"
+	voucherdomain "food_link/backend/internal/voucher/domain"
 	"food_link/backend/pkg/config"
 	"food_link/backend/pkg/logger"
 )
@@ -80,13 +81,23 @@ type LoginOutput struct {
 }
 
 type LoginService struct {
-	cfg   *config.Config
-	users *repo.UserRepo
-	jwt   *JWTService
+	cfg        *config.Config
+	users      *repo.UserRepo
+	jwt        *JWTService
+	voucherSvc VoucherService
+}
+
+// VoucherService is the interface for issuing registration trial vouchers.
+type VoucherService interface {
+	IssueRegistrationTrialVoucher(ctx context.Context, userID, openID, unionID string, createdAt *time.Time, trialDays int, policy string, earlyRank *int) (*voucherdomain.UserVoucher, error)
 }
 
 func NewLoginService(cfg *config.Config, users *repo.UserRepo, jwt *JWTService) *LoginService {
 	return &LoginService{cfg: cfg, users: users, jwt: jwt}
+}
+
+func (s *LoginService) ConfigureVoucherService(voucherSvc VoucherService) {
+	s.voucherSvc = voucherSvc
 }
 
 func (s *LoginService) Login(ctx context.Context, input LoginInput) (*LoginOutput, error) {
@@ -112,7 +123,7 @@ func (s *LoginService) Login(ctx context.Context, input LoginInput) (*LoginOutpu
 		return nil, err
 	}
 	if user != nil {
-		if err := s.ensureTrialEntitlement(ctx, user, openID, unionID); err != nil {
+		if err := s.ensureTrialVoucher(ctx, user, openID, unionID); err != nil {
 			return nil, err
 		}
 	}
@@ -244,7 +255,7 @@ func (s *LoginService) RegisterWithPassword(ctx context.Context, input PasswordR
 	if err := s.users.Create(ctx, user); err != nil {
 		return nil, err
 	}
-	if err := s.ensureTrialEntitlement(ctx, user, user.OpenID, ""); err != nil {
+	if err := s.ensureTrialVoucher(ctx, user, user.OpenID, ""); err != nil {
 		return nil, err
 	}
 	_ = s.ensureRegistrationInviteCode(ctx, user.ID)
@@ -318,31 +329,40 @@ func (s *LoginService) SetPassword(ctx context.Context, userID string, input Set
 	return s.issueLoginOutput(user, user.OpenID, firstNonEmpty(derefString(user.UnionID), derefString(user.AppUnionID)))
 }
 
-func (s *LoginService) ensureTrialEntitlement(ctx context.Context, user *repo.User, openID, unionID string) error {
+func (s *LoginService) ensureTrialVoucher(ctx context.Context, user *repo.User, openID, unionID string) error {
 	if user == nil {
 		return nil
 	}
 	openID = strings.TrimSpace(openID)
 	unionID = strings.TrimSpace(unionID)
+
+	// Determine trial policy and days.
+	trialDays := loginRegularUserTrialDays
+	policy := "regular_new_user"
+	var earlyRank *int
+	if rank, err := s.users.GetFirstMembershipTrialBatchRank(ctx, user.ID, loginEarlyUserTrialLimit); err == nil && rank > 0 {
+		earlyRank = &rank
+		switch {
+		case rank <= loginEarlyUserTop500Limit:
+			trialDays = loginEarlyUserTop500TrialDays
+			policy = "founding_top_500_bonus_month"
+		case rank <= loginEarlyUserTrialLimit:
+			trialDays = loginEarlyUserTrialDays
+			policy = "early_first_1000"
+		}
+	}
+
+	if s.voucherSvc != nil {
+		_, err := s.voucherSvc.IssueRegistrationTrialVoucher(ctx, user.ID, openID, unionID, user.CreatedAt, trialDays, policy, earlyRank)
+		return err
+	}
+
+	// Fallback: direct trial entitlement when voucher service is not configured (legacy/tests).
 	ent, err := s.users.FindTrialEntitlementByIdentity(ctx, openID, unionID)
 	if err != nil {
 		return err
 	}
 	if ent == nil {
-		trialDays := loginRegularUserTrialDays
-		policy := "regular_new_user"
-		var earlyRank *int
-		if rank, err := s.users.GetFirstMembershipTrialBatchRank(ctx, user.ID, loginEarlyUserTrialLimit); err == nil && rank > 0 {
-			earlyRank = &rank
-			switch {
-			case rank <= loginEarlyUserTop500Limit:
-				trialDays = loginEarlyUserTop500TrialDays
-				policy = "founding_top_500_bonus_month"
-			case rank <= loginEarlyUserTrialLimit:
-				trialDays = loginEarlyUserTrialDays
-				policy = "early_first_1000"
-			}
-		}
 		ent = &repo.UserTrialEntitlement{
 			FirstUserID:       &user.ID,
 			OpenID:            openID,
@@ -393,7 +413,7 @@ func (s *LoginService) findOrCreateWechatUser(ctx context.Context, openID, union
 		if err := s.users.Create(ctx, user); err != nil {
 			return nil, err
 		}
-		if err := s.ensureTrialEntitlement(ctx, user, openID, unionID); err != nil {
+		if err := s.ensureTrialVoucher(ctx, user, openID, unionID); err != nil {
 			return nil, err
 		}
 		_ = s.ensureRegistrationInviteCode(ctx, user.ID)
@@ -449,7 +469,7 @@ func (s *LoginService) findOrCreateAppWechatUser(ctx context.Context, appOpenID,
 		if err := s.users.Create(ctx, user); err != nil {
 			return nil, err
 		}
-		if err := s.ensureTrialEntitlement(ctx, user, user.OpenID, unionID); err != nil {
+		if err := s.ensureTrialVoucher(ctx, user, user.OpenID, unionID); err != nil {
 			return nil, err
 		}
 		_ = s.ensureRegistrationInviteCode(ctx, user.ID)

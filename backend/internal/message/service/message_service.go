@@ -85,6 +85,11 @@ func (s *MessageService) IsBlockedBetween(ctx context.Context, userA, userB stri
 
 // SendSystemMessage 向指定用户发送一条系统消息。
 func (s *MessageService) SendSystemMessage(ctx context.Context, receiverID, content string) error {
+	return s.SendSystemMessageWithAction(ctx, receiverID, content, "", nil)
+}
+
+// SendSystemMessageWithAction 向指定用户发送一条带跳转动作的系统消息。
+func (s *MessageService) SendSystemMessageWithAction(ctx context.Context, receiverID, content, actionText string, extraData map[string]any) error {
 	receiverID = strings.TrimSpace(receiverID)
 	if receiverID == "" {
 		return &commonerrors.AppError{Code: 10002, Message: "接收者 ID 不能为空", HTTPStatus: 400}
@@ -97,6 +102,8 @@ func (s *MessageService) SendSystemMessage(ctx context.Context, receiverID, cont
 		ReceiverID:  receiverID,
 		Content:     strings.TrimSpace(content),
 		ContentType: "system",
+		ActionText:  strings.TrimSpace(actionText),
+		ExtraData:   extraData,
 		CreatedAt:   time.Now(),
 	}
 	return s.msgRepo.CreateMessage(ctx, msg)

@@ -20,6 +20,7 @@ import {
 import { FlPageThemeRoot } from '../../../components/FlPageThemeRoot'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
+import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { chooseImageWithPrivacy, isPrivacyAuthorizeError, showPrivacyAuthorizeFailure } from '../../../utils/weapp-privacy'
 import { DEFAULT_AVATAR_URL } from '../../../utils/static-asset-cdn-url'
 import './index.scss'
@@ -409,6 +410,23 @@ export default function PrivateChatPage() {
           <View className='chat-system-message-row'>
             <View className='chat-system-bubble'>
               <Text className='chat-system-bubble-text'>{msg.content}</Text>
+              {msg.extra_data?.path ? (
+                <View
+                  className='chat-system-action'
+                  onClick={() => {
+                    const path = String(msg.extra_data?.path || '')
+                    if (!path) return
+                    Taro.navigateTo({
+                      url: extraPkgUrl(path),
+                      fail: () => {
+                        Taro.showToast({ title: '页面跳转失败', icon: 'none' })
+                      },
+                    })
+                  }}
+                >
+                  <Text className='chat-system-action-text'>{msg.action_text || '查看'}</Text>
+                </View>
+              ) : null}
             </View>
           </View>
         ) : (

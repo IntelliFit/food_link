@@ -186,7 +186,7 @@ func (s *SMSService) LoginWithCode(ctx context.Context, input SMSLoginInput) (*L
 		if err != nil {
 			return nil, err
 		}
-		if err := s.login.ensureTrialEntitlement(ctx, user, user.OpenID, ""); err != nil {
+		if err := s.login.ensureTrialVoucher(ctx, user, user.OpenID, ""); err != nil {
 			return nil, err
 		}
 		_ = s.login.ensureRegistrationInviteCode(ctx, user.ID)

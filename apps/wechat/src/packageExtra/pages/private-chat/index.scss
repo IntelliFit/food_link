@@ -211,6 +211,22 @@
   word-break: break-all;
 }
 
+.chat-system-action {
+  margin-top: 16rpx;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10rpx 24rpx;
+  border-radius: 8rpx;
+  background: #0f9f6e;
+}
+
+.chat-system-action-text {
+  font-size: 24rpx;
+  color: #fff;
+  font-weight: 500;
+}
+
 /* 底部输入区 */
 .chat-input-bar {
   display: flex;

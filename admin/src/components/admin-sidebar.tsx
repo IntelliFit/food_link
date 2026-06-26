@@ -6,6 +6,7 @@ import {
   CreditCard,
   Flag,
   FlaskConical,
+  Gift,
   LayoutDashboard,
   LogOut,
   MessageSquareText,
@@ -19,7 +20,7 @@ import { cn } from '@/lib/utils'
 import { BrandMark } from '@/components/brand-mark'
 import { ThemeToggle } from '@/components/theme-toggle'
 
-export type AdminMenuId = 'overview' | 'feedback' | 'benchmark' | 'packaged-foods' | 'packaged-food-test' | 'food-nutrition' | 'public-food-library' | 'campus-directory' | 'exercise-energy' | 'feed-reports' | 'payment-test' | 'settings'
+export type AdminMenuId = 'overview' | 'feedback' | 'benchmark' | 'packaged-foods' | 'packaged-food-test' | 'food-nutrition' | 'public-food-library' | 'campus-directory' | 'exercise-energy' | 'feed-reports' | 'payment-test' | 'user-rewards' | 'settings'
 
 type AdminSidebarProps = {
   activeMenu: AdminMenuId
@@ -67,6 +68,7 @@ const menuGroups: Array<{
       { id: 'benchmark', label: '数据集评测', icon: FlaskConical },
       { id: 'packaged-food-test', label: '包装食品测试', icon: Package },
       { id: 'payment-test', label: '支付测试', icon: CreditCard },
+      { id: 'user-rewards', label: '用户奖励', icon: Gift },
     ],
   },
   {

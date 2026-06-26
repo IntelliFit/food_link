@@ -27,6 +27,7 @@ import (
 	commonerrors "food_link/backend/internal/common/errors"
 	"food_link/backend/internal/membership/domain"
 	membershiprepo "food_link/backend/internal/membership/repo"
+	voucherdomain "food_link/backend/internal/voucher/domain"
 	"food_link/backend/pkg/config"
 	"food_link/backend/pkg/logger"
 )
@@ -138,6 +139,12 @@ type MembershipService struct {
 	paymentTestRepo PaymentTestPolicyRepo
 	cfg             *config.Config
 	client          *http.Client
+	voucherSvc      VoucherService
+}
+
+// VoucherService is used to issue invite reward vouchers.
+type VoucherService interface {
+	IssueInviteRewardVouchers(ctx context.Context, referral *domain.UserInviteReferral) (*voucherdomain.UserVoucher, *voucherdomain.UserVoucher, error)
 }
 
 type earlyUserMembershipMeta struct {
@@ -189,6 +196,10 @@ func NewMembershipService(repo MembershipRepo, cfg ...*config.Config) *Membershi
 		svc.paymentTestRepo = paymentTestRepo
 	}
 	return svc
+}
+
+func (s *MembershipService) ConfigureVoucherService(voucherSvc VoucherService) {
+	s.voucherSvc = voucherSvc
 }
 
 func (s *MembershipService) ListPlans(ctx context.Context, userID string) ([]map[string]any, error) {
@@ -511,16 +522,25 @@ func (s *MembershipService) ActivatePendingInviteReferralOnFirstValidUse(ctx con
 		"reward_type":     inviteRewardMembershipType,
 		"reward_label":    inviteRewardMembershipLabel,
 	}
-	inviterMeta := copyMeta(baseMeta)
-	inviterMeta["role"] = "inviter"
-	if _, err := s.grantInviteRewardMembership(ctx, referral, "inviter", inviterMeta); err != nil {
-		return nil, err
+
+	if s.voucherSvc != nil {
+		if _, _, err := s.voucherSvc.IssueInviteRewardVouchers(ctx, referral); err != nil {
+			return nil, err
+		}
+	} else {
+		// Fallback: direct membership grant when voucher service is not configured (legacy/tests).
+		inviterMeta := copyMeta(baseMeta)
+		inviterMeta["role"] = "inviter"
+		if _, err := s.grantInviteRewardMembership(ctx, referral, "inviter", inviterMeta); err != nil {
+			return nil, err
+		}
+		inviteeMeta := copyMeta(baseMeta)
+		inviteeMeta["role"] = "invitee"
+		if _, err := s.grantInviteRewardMembership(ctx, referral, "invitee", inviteeMeta); err != nil {
+			return nil, err
+		}
 	}
-	inviteeMeta := copyMeta(baseMeta)
-	inviteeMeta["role"] = "invitee"
-	if _, err := s.grantInviteRewardMembership(ctx, referral, "invitee", inviteeMeta); err != nil {
-		return nil, err
-	}
+
 	rewardDate := todayCN
 	rewardEndDate := todayCN.AddDate(0, 0, inviteRewardMembershipGrantDays-1)
 	return s.repo.UpdateInviteReferral(ctx, referral.ID, map[string]any{

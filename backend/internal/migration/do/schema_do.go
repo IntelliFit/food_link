@@ -218,6 +218,25 @@ type UserTrialEntitlementDO struct {
 
 func (UserTrialEntitlementDO) TableName() string { return "user_trial_entitlements" }
 
+type UserVoucherDO struct {
+	ID            string         `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	UserID        string         `gorm:"column:user_id;type:uuid;not null;index:idx_user_vouchers_user_status,priority:1;uniqueIndex:idx_user_vouchers_user_source,priority:1"`
+	VoucherType   string         `gorm:"column:voucher_type;type:text;not null;index:idx_user_vouchers_user_status,priority:2"`
+	Status        string         `gorm:"column:status;type:text;not null;default:'pending';index:idx_user_vouchers_user_status,priority:3"`
+	Title         string         `gorm:"column:title;type:text;not null"`
+	Description   *string        `gorm:"column:description;type:text"`
+	RewardPayload map[string]any `gorm:"column:reward_payload;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
+	SourceType    string         `gorm:"column:source_type;type:text;not null;uniqueIndex:idx_user_vouchers_user_source,priority:2"`
+	SourceKey     string         `gorm:"column:source_key;type:text;not null;uniqueIndex:idx_user_vouchers_user_source,priority:3"`
+	ValidStartAt  *time.Time     `gorm:"column:valid_start_at;type:timestamptz"`
+	ValidEndAt    *time.Time     `gorm:"column:valid_end_at;type:timestamptz;index:idx_user_vouchers_valid_end"`
+	UsedAt        *time.Time     `gorm:"column:used_at;type:timestamptz"`
+	CreatedAt     *time.Time     `gorm:"column:created_at;type:timestamptz;default:now()"`
+	UpdatedAt     *time.Time     `gorm:"column:updated_at;type:timestamptz;default:now()"`
+}
+
+func (UserVoucherDO) TableName() string { return "user_vouchers" }
+
 type AnalysisTaskDO struct {
 	ID              string         `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
 	UserID          string         `gorm:"column:user_id;type:uuid;not null;index:idx_analysis_tasks_user_id"`
@@ -804,16 +823,18 @@ type UserFollowDO struct {
 func (UserFollowDO) TableName() string { return "user_follows" }
 
 type PrivateMessageDO struct {
-	ID              string     `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
-	SenderID        string     `gorm:"column:sender_id;type:uuid;not null;index:idx_private_messages_sender"`
-	ReceiverID      string     `gorm:"column:receiver_id;type:uuid;not null;index:idx_private_messages_receiver"`
-	Content         string     `gorm:"column:content;type:text;not null;default:''"`
-	ImageURL        *string    `gorm:"column:image_url;type:text"`
-	ContentType     string     `gorm:"column:content_type;type:text;not null;default:'text'"`
-	IsRead          bool       `gorm:"column:is_read;type:boolean;not null;default:false"`
-	CreatedAt       *time.Time `gorm:"column:created_at;type:timestamptz;default:now()"`
-	DeletedAt       *time.Time `gorm:"column:deleted_at;type:timestamptz;index:idx_private_messages_deleted_at"`
-	DeletedByUserID *string    `gorm:"column:deleted_by_user_id;type:uuid"`
+	ID              string         `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	SenderID        string         `gorm:"column:sender_id;type:uuid;not null;index:idx_private_messages_sender"`
+	ReceiverID      string         `gorm:"column:receiver_id;type:uuid;not null;index:idx_private_messages_receiver"`
+	Content         string         `gorm:"column:content;type:text;not null;default:''"`
+	ImageURL        *string        `gorm:"column:image_url;type:text"`
+	ContentType     string         `gorm:"column:content_type;type:text;not null;default:'text'"`
+	ActionText      *string        `gorm:"column:action_text;type:text"`
+	ExtraData       map[string]any `gorm:"column:extra_data;type:jsonb;serializer:json;default:'{}'::jsonb"`
+	IsRead          bool           `gorm:"column:is_read;type:boolean;not null;default:false"`
+	CreatedAt       *time.Time     `gorm:"column:created_at;type:timestamptz;default:now()"`
+	DeletedAt       *time.Time     `gorm:"column:deleted_at;type:timestamptz;index:idx_private_messages_deleted_at"`
+	DeletedByUserID *string        `gorm:"column:deleted_by_user_id;type:uuid"`
 }
 
 func (PrivateMessageDO) TableName() string { return "private_messages" }
@@ -1477,6 +1498,7 @@ func AllModels() []any {
 		&PetChatSessionDO{},
 		&PetChatMessageDO{},
 		&UserTrialEntitlementDO{},
+		&UserVoucherDO{},
 		&MembershipPlanDO{},
 		&PaymentTestSettingDO{},
 		&PaymentTestUserDO{},

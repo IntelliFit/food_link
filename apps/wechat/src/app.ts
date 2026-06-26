@@ -41,6 +41,19 @@ function resetPreviousCommunityFeedSession() {
   }
 }
 
+function handleDeepLink(options?: any) {
+  const target = String(options?.query?.target || '').trim()
+  const path = String(options?.query?.path || '').trim()
+  if (target === 'my-vouchers' || path.includes('my-vouchers')) {
+    Taro.navigateTo({
+      url: extraPkgUrl('/pages/my-vouchers/index'),
+      fail: (error) => {
+        console.error('[app] deep link navigate failed:', error)
+      },
+    })
+  }
+}
+
 function handleInviteScene(options?: any) {
   // 小程序码参数在 options.query.scene，不是 options.scene（后者是场景值数字）
   const rawScene = String(options?.query?.scene || '')
@@ -108,12 +121,14 @@ function App({ children }: PropsWithChildren<any>) {
     resetPreviousCommunityFeedSession()
     cleanupGeneratedUserFiles().catch(() => { /* ignore startup cleanup errors */ })
     handleInviteScene(options)
+    handleDeepLink(options)
   })
 
   useEffect(() => {
     const onShow = (options: any) => {
       console.log('[app] onAppShow, options:', options)
       handleInviteScene(options)
+      handleDeepLink(options)
     }
     Taro.onAppShow(onShow)
     return () => {

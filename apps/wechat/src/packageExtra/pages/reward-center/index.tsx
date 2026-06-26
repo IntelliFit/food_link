@@ -3,10 +3,12 @@ import Taro, { useDidShow } from '@tarojs/taro'
 import { useMemo, useState } from 'react'
 import {
   getRewardCenter,
+  getMyVouchers,
   type InviteRewardCenterSummary,
   type InviteRewardRecord,
   type RewardCenterResponse,
   type RewardCenterTask,
+  type VoucherItem,
 } from '../../../utils/api'
 import {
   extraPkgUrl,
@@ -28,6 +30,7 @@ function RewardCenterPage() {
   const { scheme } = useAppColorScheme()
   const [loading, setLoading] = useState(true)
   const [data, setData] = useState<RewardCenterResponse | null>(null)
+  const [vouchers, setVouchers] = useState<VoucherItem[]>([])
 
   useDidShow(() => {
     loadData()
@@ -36,8 +39,12 @@ function RewardCenterPage() {
   const loadData = async () => {
     setLoading(true)
     try {
-      const next = await getRewardCenter()
+      const [next, voucherRes] = await Promise.all([
+        getRewardCenter(),
+        getMyVouchers('pending'),
+      ])
       setData(next)
+      setVouchers(voucherRes.items || [])
     } catch (error: any) {
       console.error('[reward-center] load failed:', error)
       Taro.showToast({ title: error?.message || '加载失败', icon: 'none' })
@@ -245,6 +252,55 @@ function RewardCenterPage() {
           )}
         </View>
       )}
+
+      <View className='reward-section'>
+        <View className='reward-section__head'>
+          <Text className='reward-section__title'>我的礼券</Text>
+          <Text
+            className='reward-section__more'
+            onClick={() => {
+              Taro.navigateTo({ url: extraPkgUrl('/pages/my-vouchers/index') })
+            }}
+          >
+            查看全部
+          </Text>
+        </View>
+        {loading ? (
+          <View className='reward-voucher-loading'>
+            <View className='reward-voucher-loading__spinner' />
+          </View>
+        ) : vouchers.length === 0 ? (
+          <View
+            className='reward-voucher-empty'
+            onClick={() => {
+              Taro.navigateTo({ url: extraPkgUrl('/pages/my-vouchers/index') })
+            }}
+          >
+            <Text className='reward-voucher-empty__text'>暂无可用礼券</Text>
+            <Text className='reward-voucher-empty__hint'>点击查看全部礼券</Text>
+          </View>
+        ) : (
+          <View className='reward-voucher-list'>
+            {vouchers.slice(0, 3).map(voucher => (
+              <View
+                key={voucher.id}
+                className='reward-voucher-card'
+                onClick={() => {
+                  Taro.navigateTo({ url: extraPkgUrl('/pages/my-vouchers/index') })
+                }}
+              >
+                <View className='reward-voucher-card__main'>
+                  <Text className='reward-voucher-card__title'>{voucher.title}</Text>
+                  {voucher.description ? (
+                    <Text className='reward-voucher-card__desc'>{voucher.description}</Text>
+                  ) : null}
+                </View>
+                <Text className='reward-voucher-card__button'>去使用</Text>
+              </View>
+            ))}
+          </View>
+        )}
+      </View>
     </View>
   )
 }

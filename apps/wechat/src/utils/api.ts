@@ -1639,6 +1639,27 @@ export interface RewardCenterResponse {
   invite_reward?: InviteRewardCenterSummary | null
 }
 
+export interface VoucherItem {
+  id: string
+  user_id: string
+  voucher_type: 'registration_trial' | 'invite_light_week' | 'admin_points'
+  status: 'pending' | 'used' | 'expired' | 'cancelled'
+  title: string
+  description?: string | null
+  reward_payload?: Record<string, any>
+  source_type: string
+  source_key: string
+  valid_start_at?: string | null
+  valid_end_at?: string | null
+  used_at?: string | null
+  created_at?: string
+}
+
+export interface VoucherListResponse {
+  items: VoucherItem[]
+  total: number
+}
+
 export interface InviteRewardStatusItem {
   referral_id: string
   status: string
@@ -4688,6 +4709,39 @@ export async function getInviteRewardStatus(): Promise<InviteRewardStatusRespons
   }
 }
 
+export async function getMyVouchers(status?: string): Promise<VoucherListResponse> {
+  try {
+    const query = status ? `?status=${encodeURIComponent(status)}` : ''
+    const response = await authenticatedRequest(`/api/vouchers/my${query}`, {
+      method: 'GET',
+    })
+    if (response.statusCode !== 200) {
+      const errorMsg = (response.data as any)?.detail || '获取礼券列表失败'
+      throw new Error(errorMsg)
+    }
+    return (response.data as VoucherListResponse) || { items: [], total: 0 }
+  } catch (error: any) {
+    console.error('获取礼券列表失败:', error)
+    throw new Error(error.message || '获取礼券列表失败')
+  }
+}
+
+export async function useVoucher(voucherId: string): Promise<{ success: boolean }> {
+  try {
+    const response = await authenticatedRequest(`/api/vouchers/${encodeURIComponent(voucherId)}/use`, {
+      method: 'POST',
+    })
+    if (response.statusCode !== 200) {
+      const errorMsg = (response.data as any)?.detail || '使用礼券失败'
+      throw new Error(errorMsg)
+    }
+    return (response.data as { success: boolean }) || { success: true }
+  } catch (error: any) {
+    console.error('使用礼券失败:', error)
+    throw new Error(error.message || '使用礼券失败')
+  }
+}
+
 export async function getFoodExpiryDashboard(): Promise<FoodExpiryDashboard> {
   const response = await authenticatedRequest('/api/expiry/dashboard', {
     method: 'GET',
@@ -6154,6 +6208,8 @@ function normalizePrivateMessage(raw: any): PrivateMessage {
     content: raw?.content || raw?.Content || '',
     image_url: raw?.image_url || raw?.ImageURL || '',
     content_type: raw?.content_type || raw?.ContentType || 'text',
+    action_text: raw?.action_text || raw?.ActionText || '',
+    extra_data: raw?.extra_data || raw?.ExtraData || undefined,
     is_read: raw?.is_read ?? raw?.IsRead ?? false,
     created_at: raw?.created_at || raw?.CreatedAt || '',
   }
@@ -6178,6 +6234,8 @@ export interface PrivateMessage {
   content: string
   image_url?: string
   content_type: 'text' | 'image' | 'system'
+  action_text?: string
+  extra_data?: Record<string, any>
   is_read: boolean
   created_at: string
 }

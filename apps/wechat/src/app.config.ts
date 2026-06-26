@@ -37,6 +37,7 @@ const extraSubpackagePages = [
   'pages/campus-food-share/index',
   'pages/feedback/index',
   'pages/reward-center/index',
+  'pages/my-vouchers/index',
   'pages/interaction-notifications/index',
   'pages/interaction-feed-detail/index',
   'pages/circle-post-edit/index',
