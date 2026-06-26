@@ -11,16 +11,14 @@ import (
 	"food_link/backend/internal/friend/repo"
 	membershipdomain "food_link/backend/internal/membership/domain"
 
+	"food_link/backend/pkg/testdb"
+
 	"github.com/stretchr/testify/assert"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
 func setupTestDB(t *testing.T) *gorm.DB {
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("open sqlite: %v", err)
-	}
+	db := testdb.New(t)
 	if err := db.AutoMigrate(&domain.FriendRequest{}, &domain.UserFriend{}, &domain.UserBlock{}, &authrepo.User{}, &membershipdomain.UserInviteReferral{}); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}

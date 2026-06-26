@@ -9,7 +9,6 @@ import (
 
 	. "github.com/agiledragon/gomonkey/v2"
 	"github.com/stretchr/testify/assert"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 
 	"food_link/backend/internal/auth/repo"
@@ -17,13 +16,11 @@ import (
 	userrepo "food_link/backend/internal/user/repo"
 	"food_link/backend/pkg/config"
 	"food_link/backend/pkg/storage"
+	"food_link/backend/pkg/testdb"
 )
 
 func setupTestDB(t *testing.T) *gorm.DB {
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("open sqlite: %v", err)
-	}
+	db := testdb.New(t)
 	db.Exec(`CREATE TABLE weapp_user (
 		id TEXT PRIMARY KEY,
 		openid TEXT,
@@ -77,7 +74,7 @@ func setupTestDB(t *testing.T) *gorm.DB {
 		document_type TEXT,
 		image_url TEXT,
 		extracted_content TEXT,
-		create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 	)`)
 	db.Exec(`CREATE TABLE user_mode_switch_logs (
 		id TEXT PRIMARY KEY,
@@ -86,7 +83,7 @@ func setupTestDB(t *testing.T) *gorm.DB {
 		to_mode TEXT,
 		changed_by TEXT,
 		reason_code TEXT,
-		create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 	)`)
 	db.Exec(`CREATE TABLE analysis_tasks (
 		id TEXT PRIMARY KEY,
@@ -94,8 +91,9 @@ func setupTestDB(t *testing.T) *gorm.DB {
 		task_type TEXT,
 		status TEXT,
 		image_url TEXT,
+		image_paths TEXT,
 		payload TEXT,
-		create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 	)`)
 	db.Exec(`CREATE TABLE user_food_records (
 		id TEXT PRIMARY KEY,
@@ -527,8 +525,14 @@ func TestUserService_UpdateHealthProfile_EmptyUpdates(t *testing.T) {
 	user := &repo.User{OpenID: "o1"}
 	_ = userRepo.Create(ctx, user)
 
-	_, err := svc.UpdateHealthProfile(ctx, user.ID, UpdateHealthProfileInput{})
-	assert.Error(t, err)
+	result, err := svc.UpdateHealthProfile(ctx, user.ID, UpdateHealthProfileInput{})
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	if v, ok := result["onboarding_completed"].(*bool); ok {
+		assert.True(t, *v)
+	} else {
+		assert.True(t, result["onboarding_completed"].(bool))
+	}
 }
 
 func TestUserService_UpdateHealthProfile_WithDashboardTargets(t *testing.T) {

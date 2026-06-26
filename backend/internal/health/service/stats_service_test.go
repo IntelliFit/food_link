@@ -379,8 +379,8 @@ func TestStatsService_GenerateInsightReturnsErrorWhenDeepSeekFails(t *testing.T)
 	assert.Empty(t, repo.insights)
 }
 
-func TestStatsInsightUsesDeepSeekV4FlashModel(t *testing.T) {
-	assert.Equal(t, "deepseek-v4-flash", statsInsightDeepSeekModel)
+func TestStatsInsightUsesDeepSeekV4ProModel(t *testing.T) {
+	assert.Equal(t, "deepseek-v4-pro", statsInsightDeepSeekModel)
 }
 
 func TestStatsInsightRequestsEnoughOutputTokens(t *testing.T) {

@@ -6,15 +6,15 @@ import (
 	"testing"
 	"time"
 
+	"food_link/backend/pkg/testdb"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
 func setupHomeTestDB(t *testing.T) *gorm.DB {
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
+	db := testdb.New(t)
 	db.Exec(`CREATE TABLE user_food_records (
 		id TEXT PRIMARY KEY,
 		user_id TEXT,

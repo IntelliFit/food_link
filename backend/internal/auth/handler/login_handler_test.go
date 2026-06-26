@@ -11,16 +11,16 @@ import (
 	"food_link/backend/internal/auth/service"
 	"food_link/backend/pkg/config"
 
+	"food_link/backend/pkg/testdb"
+
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
 func setupLoginTestDB(t *testing.T) (*gorm.DB, *repo.UserRepo) {
-	db, err := gorm.Open(sqlite.Open("file::memory:"), &gorm.Config{})
-	require.NoError(t, err)
+	db := testdb.New(t)
 	require.NoError(t, db.AutoMigrate(&repo.User{}, &repo.UserTrialEntitlement{}))
 	return db, repo.NewUserRepo(db)
 }
@@ -128,21 +128,21 @@ func TestLoginHandler_AppWechatLoginDevelopmentMock(t *testing.T) {
 func TestLoginHandler_PasswordRegisterAndLogin(t *testing.T) {
 	_, userRepo := setupLoginTestDB(t)
 	cfg := &config.Config{
-		App: config.AppConfig{Env: "development"},
+		App: config.AppConfig{Env: "development", AllowDebugRegister: true},
 		JWT: config.JWTConfig{AccessTokenTTLSeconds: 3600, RefreshTokenTTLSeconds: 86400},
 	}
 	jwtSvc := service.NewJWTService("test-secret-key-for-testing-only-min-32-chars", 3600, 86400)
 	h := NewLoginHandler(service.NewLoginService(cfg, userRepo, jwtSvc))
 	r := setupLoginRouter(h)
 
-	registerBody, _ := json.Marshal(map[string]string{"phone": "13800138003", "password": "password123"})
+	registerBody, _ := json.Marshal(map[string]string{"phone": "13511679220", "password": "password123"})
 	registerW := httptest.NewRecorder()
 	registerReq, _ := http.NewRequest(http.MethodPost, "/api/app/register/password", bytes.NewReader(registerBody))
 	registerReq.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(registerW, registerReq)
 	assert.Equal(t, http.StatusOK, registerW.Code)
 
-	loginBody, _ := json.Marshal(map[string]string{"phone": "13800138003", "password": "password123"})
+	loginBody, _ := json.Marshal(map[string]string{"phone": "13511679220", "password": "password123"})
 	loginW := httptest.NewRecorder()
 	loginReq, _ := http.NewRequest(http.MethodPost, "/api/app/login/password", bytes.NewReader(loginBody))
 	loginReq.Header.Set("Content-Type", "application/json")
@@ -153,21 +153,21 @@ func TestLoginHandler_PasswordRegisterAndLogin(t *testing.T) {
 func TestLoginHandler_PhonePasswordRegisterAndLogin(t *testing.T) {
 	_, userRepo := setupLoginTestDB(t)
 	cfg := &config.Config{
-		App: config.AppConfig{Env: "development"},
+		App: config.AppConfig{Env: "development", AllowDebugRegister: true},
 		JWT: config.JWTConfig{AccessTokenTTLSeconds: 3600, RefreshTokenTTLSeconds: 86400},
 	}
 	jwtSvc := service.NewJWTService("test-secret-key-for-testing-only-min-32-chars", 3600, 86400)
 	h := NewLoginHandler(service.NewLoginService(cfg, userRepo, jwtSvc))
 	r := setupLoginRouter(h)
 
-	registerBody, _ := json.Marshal(map[string]string{"phone": "+86 138-0013-8000", "password": "password123"})
+	registerBody, _ := json.Marshal(map[string]string{"phone": "+86 135-1167-9220", "password": "password123"})
 	registerW := httptest.NewRecorder()
 	registerReq, _ := http.NewRequest(http.MethodPost, "/api/app/register/password", bytes.NewReader(registerBody))
 	registerReq.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(registerW, registerReq)
 	assert.Equal(t, http.StatusOK, registerW.Code)
 
-	loginBody, _ := json.Marshal(map[string]string{"phone": "13800138000", "password": "password123"})
+	loginBody, _ := json.Marshal(map[string]string{"phone": "13511679220", "password": "password123"})
 	loginW := httptest.NewRecorder()
 	loginReq, _ := http.NewRequest(http.MethodPost, "/api/app/login/password", bytes.NewReader(loginBody))
 	loginReq.Header.Set("Content-Type", "application/json")

@@ -8,16 +8,16 @@ import (
 
 	"food_link/backend/internal/foodrecord/domain"
 
+	"food_link/backend/pkg/testdb"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/datatypes"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
 func setupTestDB(t *testing.T) *gorm.DB {
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
+	db := testdb.New(t)
 	require.NoError(t, db.AutoMigrate(&domain.FoodRecord{}, &domain.CriticalSample{}))
 	return db
 }

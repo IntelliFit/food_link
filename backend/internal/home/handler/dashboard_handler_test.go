@@ -11,17 +11,17 @@ import (
 	"food_link/backend/internal/home/repo"
 	"food_link/backend/internal/home/service"
 
+	"food_link/backend/pkg/testdb"
+
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
 func setupDashboardTestDB(t *testing.T) (*gorm.DB, *userrepo.UserRepo, *repo.HomeRepo) {
-	db, err := gorm.Open(sqlite.Open("file::memory:"), &gorm.Config{})
-	require.NoError(t, err)
+	db := testdb.New(t)
 	require.NoError(t, db.AutoMigrate(&userrepo.User{}, &repo.FoodRecord{}, &repo.ExpiryItem{}, &repo.DailyNutritionTarget{}))
 	// user_exercise_logs table is queried with user_id and recorded_on but ExerciseLog model doesn't define them
 	require.NoError(t, db.Exec("CREATE TABLE IF NOT EXISTS user_exercise_logs (calories_burned INTEGER, user_id TEXT, recorded_on TEXT)").Error)

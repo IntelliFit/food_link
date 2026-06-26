@@ -10,28 +10,36 @@ import (
 	"food_link/backend/pkg/config"
 	"food_link/backend/pkg/storage"
 
+	"food_link/backend/pkg/testdb"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
 func setupTestDB(t *testing.T) *gorm.DB {
-	db, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
-	require.NoError(t, err)
+	db := testdb.New(t)
 	require.NoError(t, db.AutoMigrate(
 		&fooddomain.FoodNutrition{},
 		&fooddomain.FoodNutritionAlias{},
+		&fooddomain.PackagedFood{},
 		&publicdomain.PublicFoodItem{},
 		&publicdomain.PublicFoodCollection{},
+		&domain.UserCustomFood{},
 	))
 	require.NoError(t, db.Exec(`
 		CREATE TABLE user_food_records (
 			id TEXT PRIMARY KEY,
 			user_id TEXT,
-			items JSON,
-			record_time DATETIME
+			items JSONB,
+			record_time TIMESTAMPTZ
 		)
+	`).Error)
+	require.NoError(t, db.Exec(`
+		ALTER TABLE public_food_library ALTER COLUMN items TYPE jsonb USING items::jsonb
+	`).Error)
+	require.NoError(t, db.Exec(`
+		ALTER TABLE packaged_food_library ADD COLUMN IF NOT EXISTS updated_at timestamptz DEFAULT now()
 	`).Error)
 	return db
 }
@@ -131,8 +139,8 @@ func TestManualFoodRepo_Search(t *testing.T) {
 	items, err := r.Search(ctx, "u1", "西兰花", 10)
 	require.NoError(t, err)
 	require.Len(t, items, 2)
-	assert.Equal(t, "西兰花鸡胸饭", items[0].Title)
-	assert.Equal(t, "西兰花", items[1].Title)
+	assert.Equal(t, "西兰花", items[0].Title)
+	assert.Equal(t, "西兰花鸡胸饭", items[1].Title)
 
 	aliasItems, err := r.Search(ctx, "u1", "花椰菜", 10)
 	require.NoError(t, err)
@@ -360,7 +368,6 @@ func TestManualFoodCategoryFilterSQL(t *testing.T) {
 	assert.Contains(t, manualFoodCategoryFilterSQL("canonical_name", "other"), "NOT (")
 }
 
-
 func TestMergeManualFoodNutrients_KeepsExistingMacrosAndBackfillsMicros(t *testing.T) {
 	existing := &domain.ManualFoodNutrients{
 		Calories: 127.5,
@@ -369,13 +376,13 @@ func TestMergeManualFoodNutrients_KeepsExistingMacrosAndBackfillsMicros(t *testi
 		Fat:      0.3,
 	}
 	library := &domain.ManualFoodNutrients{
-		Calories:       116,
-		Protein:        2.6,
-		Carbs:          25.9,
-		Fat:            0.3,
-		Fiber:          0.4,
-		SodiumMg:       2,
-		PotassiumMg:    35,
+		Calories:    116,
+		Protein:     2.6,
+		Carbs:       25.9,
+		Fat:         0.3,
+		Fiber:       0.4,
+		SodiumMg:    2,
+		PotassiumMg: 35,
 	}
 	merged := mergeManualFoodNutrients(existing, library)
 	require.NotNil(t, merged)

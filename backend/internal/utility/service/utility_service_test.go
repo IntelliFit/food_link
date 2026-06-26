@@ -8,30 +8,39 @@ import (
 
 	fooddomain "food_link/backend/internal/foodrecord/domain"
 	publicdomain "food_link/backend/internal/publicfood/domain"
+	utilitydomain "food_link/backend/internal/utility/domain"
 	utilityrepo "food_link/backend/internal/utility/repo"
+
+	"food_link/backend/pkg/testdb"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
 func setupUtilityTestDB(t *testing.T) (*gorm.DB, *utilityrepo.ManualFoodRepo) {
-	db, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
-	require.NoError(t, err)
+	db := testdb.New(t)
 	require.NoError(t, db.AutoMigrate(
 		&fooddomain.FoodNutrition{},
 		&fooddomain.FoodNutritionAlias{},
+		&fooddomain.PackagedFood{},
 		&publicdomain.PublicFoodItem{},
 		&publicdomain.PublicFoodCollection{},
+		&utilitydomain.UserCustomFood{},
 	))
 	require.NoError(t, db.Exec(`
 		CREATE TABLE user_food_records (
 			id TEXT PRIMARY KEY,
 			user_id TEXT,
-			items JSON,
-			record_time DATETIME
+			items JSONB,
+			record_time TIMESTAMPTZ
 		)
+	`).Error)
+	require.NoError(t, db.Exec(`
+		ALTER TABLE public_food_library ALTER COLUMN items TYPE jsonb USING items::jsonb
+	`).Error)
+	require.NoError(t, db.Exec(`
+		ALTER TABLE packaged_food_library ADD COLUMN IF NOT EXISTS updated_at timestamptz DEFAULT now()
 	`).Error)
 	return db, utilityrepo.NewManualFoodRepo(db)
 }

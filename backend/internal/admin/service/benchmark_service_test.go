@@ -10,21 +10,21 @@ import (
 	admindomain "food_link/backend/internal/admin/domain"
 	"food_link/backend/internal/admin/repo"
 	analyzedomain "food_link/backend/internal/analyze/domain"
-	analyzeservice "food_link/backend/internal/analyze/service"
 	analyzerepo "food_link/backend/internal/analyze/repo"
+	analyzeservice "food_link/backend/internal/analyze/service"
 	authrepo "food_link/backend/internal/auth/repo"
 	"food_link/backend/internal/migration/do"
+
+	"food_link/backend/pkg/testdb"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
 func setupBenchmarkTestDB(t *testing.T) *gorm.DB {
-	db, err := gorm.Open(sqlite.Open("file::memory:"), &gorm.Config{})
-	require.NoError(t, err)
+	db := testdb.New(t)
 	require.NoError(t, db.AutoMigrate(
 		&do.FoodWeightLabeledSampleDO{},
 		&do.BenchmarkRunDO{},
@@ -306,7 +306,10 @@ func TestBenchmarkService_CreateRun_InvalidExecutionMode(t *testing.T) {
 func TestBenchmarkService_CancelRun(t *testing.T) {
 	db := setupBenchmarkTestDB(t)
 	benchmarkRepo := repo.NewBenchmarkRepo(db)
-	svc := NewBenchmarkService(benchmarkRepo, nil, nil, nil, nil)
+	taskRepo := analyzerepo.NewTaskRepo(db)
+	userRepo := authrepo.NewUserRepo(db)
+	fakeTaskSvc := &fakeBenchmarkTaskService{taskRepo: taskRepo, delay: 200 * time.Millisecond}
+	svc := NewBenchmarkService(benchmarkRepo, fakeTaskSvc, nil, userRepo, nil)
 	ctx := context.Background()
 
 	total := 50.0
@@ -342,7 +345,9 @@ func TestBenchmarkService_CancelRun(t *testing.T) {
 func TestBenchmarkService_DeleteRun(t *testing.T) {
 	db := setupBenchmarkTestDB(t)
 	benchmarkRepo := repo.NewBenchmarkRepo(db)
-	svc := NewBenchmarkService(benchmarkRepo, nil, nil, nil, nil)
+	userRepo := authrepo.NewUserRepo(db)
+	fakeTaskSvc := &fakeBenchmarkTaskService{err: assert.AnError}
+	svc := NewBenchmarkService(benchmarkRepo, fakeTaskSvc, nil, userRepo, nil)
 	ctx := context.Background()
 
 	total := 50.0
@@ -365,6 +370,10 @@ func TestBenchmarkService_DeleteRun(t *testing.T) {
 		DatasetFilter: domain.DatasetFilter{BatchNames: []string{"batch-delete"}},
 	})
 	require.NoError(t, err)
+
+	// Give the async execution goroutine a moment to fail the single sample and
+	 // finish, so that DeleteRun does not race with it.
+	time.Sleep(200 * time.Millisecond)
 
 	err = svc.DeleteRun(ctx, run.ID)
 	require.NoError(t, err)
@@ -465,16 +474,16 @@ func TestBenchmarkService_ExecuteSample_TaskSubmitFailure(t *testing.T) {
 
 func TestBenchmarkService_ComparePredictionWithGroundTruth(t *testing.T) {
 	cases := []struct {
-		name       string
-		groundTruth map[string]any
-		prediction map[string]any
+		name            string
+		groundTruth     map[string]any
+		prediction      map[string]any
 		wantNameMatched bool
 		wantTotalErrPct float64
 	}{
 		{
 			name: "total match",
 			groundTruth: map[string]any{
-				"label_type":        "total",
+				"label_type":         "total",
 				"total_weight_grams": 100.0,
 			},
 			prediction: map[string]any{

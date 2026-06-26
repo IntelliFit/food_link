@@ -2336,17 +2336,14 @@ func (r *FoodNutritionRepo) UpsertDeepSeekNutrition(ctx context.Context, rawName
 	if err != gorm.ErrRecordNotFound {
 		return "", err
 	}
-	if err := r.db.WithContext(ctx).Table((&domain.FoodNutrition{}).TableName()).Create(nutritionCreateValues(raw, normalized, unit, source)).Error; err != nil {
+	id := uuid.NewString()
+	values := nutritionCreateValues(raw, normalized, unit, source)
+	values["id"] = id
+	if err := r.db.WithContext(ctx).Table((&domain.FoodNutrition{}).TableName()).Create(values).Error; err != nil {
 		return "", err
 	}
-	var created domain.FoodNutrition
-	if err := r.db.WithContext(ctx).Where("normalized_name = ?", normalized).First(&created).Error; err != nil {
-		return "", err
-	}
-	if created.ID != "" {
-		_ = r.createNutritionAlias(ctx, created.ID, raw, normalized)
-	}
-	return created.ID, nil
+	_ = r.createNutritionAlias(ctx, id, raw, normalized)
+	return id, nil
 }
 
 func nutritionCreateValues(raw, normalized string, unit map[string]any, source string) map[string]any {
@@ -2391,6 +2388,7 @@ func (r *FoodNutritionRepo) createNutritionAlias(ctx context.Context, foodID, ra
 		Table((&domain.FoodNutritionAlias{}).TableName()).
 		Clauses(clause.OnConflict{DoNothing: true}).
 		Create(map[string]any{
+			"id":               uuid.NewString(),
 			"food_id":          foodID,
 			"alias_name":       raw,
 			"normalized_alias": normalized,

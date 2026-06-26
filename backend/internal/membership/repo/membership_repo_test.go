@@ -7,17 +7,17 @@ import (
 
 	"food_link/backend/internal/membership/domain"
 
+	"food_link/backend/pkg/testdb"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/datatypes"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
 func setupTestDB(t *testing.T) *gorm.DB {
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
+	db := testdb.New(t)
 	require.NoError(t, db.AutoMigrate(
 		&domain.MembershipPlan{},
 		&domain.PaymentTestSetting{},
@@ -36,14 +36,14 @@ CREATE TABLE membership_payment_test_users (
 	user_id text,
 	note text,
 	created_by text,
-	membership_snapshot text,
-	membership_snapshot_taken_at datetime,
-	membership_cancelled_at datetime,
+	membership_snapshot jsonb default '{}'::jsonb,
+	membership_snapshot_taken_at timestamptz,
+	membership_cancelled_at timestamptz,
 	membership_cancelled_by text,
-	membership_restored_at datetime,
+	membership_restored_at timestamptz,
 	membership_restored_by text,
-	created_at datetime,
-	updated_at datetime
+	created_at timestamptz,
+	updated_at timestamptz
 )`).Error)
 	return db
 }
@@ -89,7 +89,7 @@ func TestMembershipRepo_GrantMembershipCreatesLightWeekIdempotently(t *testing.T
 	require.NotNil(t, secondGrant)
 	require.NotNil(t, secondMembership)
 	assert.Equal(t, grant.ID, secondGrant.ID)
-	assert.True(t, secondMembership.ExpiresAt.Equal(*membership.ExpiresAt))
+	assert.WithinDuration(t, *membership.ExpiresAt, *secondMembership.ExpiresAt, time.Second)
 }
 
 func TestMembershipRepo_GrantMembershipExtendsActiveHigherPlan(t *testing.T) {
@@ -128,9 +128,9 @@ func TestMembershipRepo_GrantMembershipExtendsActiveHigherPlan(t *testing.T) {
 	require.NotNil(t, membership.CurrentPlanCode)
 	assert.Equal(t, "standard_monthly", *membership.CurrentPlanCode)
 	assert.Equal(t, 20, membership.DailyCredits)
-	assert.True(t, membership.ExpiresAt.Equal(expires.AddDate(0, 0, 7)))
+	assert.WithinDuration(t, expires.AddDate(0, 0, 7), *membership.ExpiresAt, time.Second)
 	require.NotNil(t, grant.StartsAt)
-	assert.True(t, grant.StartsAt.Equal(expires))
+	assert.WithinDuration(t, expires, *grant.StartsAt, time.Second)
 	assert.Equal(t, "standard_monthly", grant.PlanCode)
 }
 
@@ -296,6 +296,7 @@ func TestMembershipRepo_CountDailySystemCreditUsage(t *testing.T) {
 		Reason:      "pet_chat_reward_spend_system",
 		RelatedDate: &today,
 		Meta: map[string]any{
+			"ledger_role":  "system_credit_usage",
 			"credit_usage": map[string]any{"system_by_date": map[string]any{today: 2}},
 		},
 	}).Error)

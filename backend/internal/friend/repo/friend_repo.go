@@ -14,10 +14,11 @@ import (
 
 // User — minimal weapp_user struct for friend queries
 type User struct {
-	ID        string  `gorm:"column:id"`
-	Nickname  string  `gorm:"column:nickname"`
-	Avatar    string  `gorm:"column:avatar"`
-	Telephone *string `gorm:"column:telephone"`
+	ID         string  `gorm:"column:id"`
+	Nickname   string  `gorm:"column:nickname"`
+	Avatar     string  `gorm:"column:avatar"`
+	Telephone  *string `gorm:"column:telephone"`
+	Searchable *bool   `gorm:"column:searchable"`
 }
 
 func (User) TableName() string { return "weapp_user" }

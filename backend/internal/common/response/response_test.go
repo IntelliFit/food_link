@@ -44,6 +44,7 @@ func TestError_AppError(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodGet, "/", nil)
 
 	Error(c, commonerrors.ErrNotFound)
 
@@ -58,6 +59,7 @@ func TestError_GenericError(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodGet, "/", nil)
 
 	Error(c, assert.AnError)
 

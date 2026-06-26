@@ -30,7 +30,7 @@ func TestHealthReportOCR_WithRealReport_Base64(t *testing.T) {
 			"conclusions": "各项指标正常",
 		},
 	}
-	h := NewUserHandler(&mockUserService{}, nil, nil, mockSvc, nil)
+	h := NewUserHandler(&mockUserService{}, nil, nil, mockSvc, nil, nil)
 	r := setupRouter(h)
 
 	body, _ := json.Marshal(map[string]string{"base64Image": base64Image})
@@ -55,7 +55,7 @@ func TestHealthReportOCRExtract_WithRealReport_Base64(t *testing.T) {
 	mockSvc := &mockOCRService{
 		result: map[string]any{"indicators": []any{}, "conclusions": "未见异常"},
 	}
-	h := NewUserHandler(&mockUserService{}, nil, nil, mockSvc, nil)
+	h := NewUserHandler(&mockUserService{}, nil, nil, mockSvc, nil, nil)
 	r := setupRouter(h)
 
 	body, _ := json.Marshal(map[string]string{"base64Image": base64Image})
@@ -74,7 +74,7 @@ func TestHealthReportOCRExtract_WithRealReport_ImageURL(t *testing.T) {
 	mockSvc := &mockOCRService{
 		result: map[string]any{"indicators": []any{}, "conclusions": "正常"},
 	}
-	h := NewUserHandler(&mockUserService{}, nil, nil, mockSvc, nil)
+	h := NewUserHandler(&mockUserService{}, nil, nil, mockSvc, nil, nil)
 	r := setupRouter(h)
 
 	body, _ := json.Marshal(map[string]string{"imageUrl": "https://cdn.example.com/report_3.png"})
@@ -94,7 +94,7 @@ func TestHealthReportOCR_WithRealReport_ServiceError(t *testing.T) {
 	assert.NoError(t, err)
 
 	mockSvc := &mockOCRService{err: errors.New("ocr service timeout")}
-	h := NewUserHandler(&mockUserService{}, nil, nil, mockSvc, nil)
+	h := NewUserHandler(&mockUserService{}, nil, nil, mockSvc, nil, nil)
 	r := setupRouter(h)
 
 	body, _ := json.Marshal(map[string]string{"base64Image": base64Image})
@@ -119,7 +119,7 @@ func TestHealthReportOCR_MultipleRealReports(t *testing.T) {
 			mockSvc := &mockOCRService{
 				result: map[string]any{"indicators": []any{}},
 			}
-			h := NewUserHandler(&mockUserService{}, nil, nil, mockSvc, nil)
+			h := NewUserHandler(&mockUserService{}, nil, nil, mockSvc, nil, nil)
 			r := setupRouter(h)
 
 			body, _ := json.Marshal(map[string]string{"base64Image": base64Image})

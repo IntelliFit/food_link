@@ -6,14 +6,14 @@ import (
 	"time"
 
 	"food_link/backend/internal/community/domain"
+	"food_link/backend/pkg/testdb"
+
 	"github.com/stretchr/testify/assert"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
 func setupFeedTestDB(t *testing.T) *gorm.DB {
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	assert.NoError(t, err)
+	db := testdb.New(t)
 
 	// Create tables
 	assert.NoError(t, db.AutoMigrate(&FeedRecord{}, &domain.FeedLike{}, &domain.FeedComment{}, &UserFriend{}, &UserProfile{}))
@@ -25,12 +25,12 @@ func setupFeedTestDB(t *testing.T) *gorm.DB {
 		image_url text,
 		calories_burned real,
 		duration_min integer,
-		recorded_on datetime,
-		recorded_at datetime,
+		recorded_on timestamptz,
+		recorded_at timestamptz,
 		ai_reasoning text,
-		exercise_items text,
+		exercise_items jsonb default '[]'::jsonb,
 		hidden_from_feed boolean default false,
-		created_at datetime
+		created_at timestamptz
 	)`).Error)
 	return db
 }

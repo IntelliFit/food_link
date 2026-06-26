@@ -6,21 +6,21 @@ import (
 	"io"
 	"net/http"
 	"reflect"
+	"runtime"
 	"testing"
 
 	. "github.com/agiledragon/gomonkey/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 
 	"food_link/backend/internal/auth/repo"
 	"food_link/backend/pkg/config"
+	"food_link/backend/pkg/testdb"
 )
 
 func setupBindPhoneTestDB(t *testing.T) (*gorm.DB, *repo.UserRepo) {
-	db, err := gorm.Open(sqlite.Open("file::memory:"), &gorm.Config{})
-	require.NoError(t, err)
+	db := testdb.New(t)
 	require.NoError(t, db.AutoMigrate(&repo.User{}))
 	return db, repo.NewUserRepo(db)
 }
@@ -44,6 +44,9 @@ func mockAccessTokenResponse() *http.Response {
 }
 
 func TestBindPhoneService_BindPhone_Success(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("gomonkey method patch on http.Client.Do does not work reliably on Windows; skipped")
+	}
 	patches := ApplyMethod(reflect.TypeOf(&http.Client{}), "Do", func(_ *http.Client, req *http.Request) (*http.Response, error) {
 		if bytes.Contains([]byte(req.URL.String()), []byte("stable_token")) {
 			return mockAccessTokenResponse(), nil

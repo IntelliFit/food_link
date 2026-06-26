@@ -33,6 +33,9 @@ type mockUserService struct {
 func (m *mockUserService) GetProfile(ctx context.Context, userID string) (map[string]any, error) {
 	return m.profile, m.profileErr
 }
+func (m *mockUserService) GetPublicProfile(ctx context.Context, viewerUserID, targetUserID string) (map[string]any, error) {
+	return m.profile, m.profileErr
+}
 func (m *mockUserService) UpdateProfile(ctx context.Context, userID string, input service.UpdateProfileInput) (map[string]any, error) {
 	return m.updateProfile, m.updateProfileErr
 }
@@ -100,6 +103,9 @@ func (m *mockUploadService) UploadAvatar(userID string, base64Image string) (str
 func (m *mockUploadService) UploadReportImage(userID string, base64Image string) (string, error) {
 	return m.url, m.err
 }
+func (m *mockUploadService) UploadCoverImage(userID string, base64Image string) (string, error) {
+	return m.url, m.err
+}
 
 type mockOCRService struct {
 	result map[string]any
@@ -150,7 +156,7 @@ func setupRouter(h *UserHandler) *gin.Engine {
 
 func TestGetProfile(t *testing.T) {
 	mockSvc := &mockUserService{profile: map[string]any{"id": "u1", "nickname": "Test"}}
-	h := NewUserHandler(mockSvc, nil, nil, nil, nil)
+	h := NewUserHandler(mockSvc, nil, nil, nil, nil, nil)
 	r := setupRouter(h)
 
 	w := httptest.NewRecorder()
@@ -167,7 +173,7 @@ func TestGetProfile(t *testing.T) {
 
 func TestGetProfileError(t *testing.T) {
 	mockSvc := &mockUserService{profileErr: errors.New("not found")}
-	h := NewUserHandler(mockSvc, nil, nil, nil, nil)
+	h := NewUserHandler(mockSvc, nil, nil, nil, nil, nil)
 	r := setupRouter(h)
 
 	w := httptest.NewRecorder()
@@ -179,7 +185,7 @@ func TestGetProfileError(t *testing.T) {
 
 func TestUpdateProfile(t *testing.T) {
 	mockSvc := &mockUserService{updateProfile: map[string]any{"id": "u1", "nickname": "Updated"}}
-	h := NewUserHandler(mockSvc, nil, nil, nil, nil)
+	h := NewUserHandler(mockSvc, nil, nil, nil, nil, nil)
 	r := setupRouter(h)
 
 	body, _ := json.Marshal(map[string]string{"nickname": "Updated"})
@@ -197,7 +203,7 @@ func TestUpdateProfile(t *testing.T) {
 
 func TestBindPhone(t *testing.T) {
 	mockSvc := &mockBindPhoneService{output: &service.BindPhoneOutput{Telephone: "13800138000"}}
-	h := NewUserHandler(&mockUserService{}, mockSvc, nil, nil, nil)
+	h := NewUserHandler(&mockUserService{}, mockSvc, nil, nil, nil, nil)
 	r := setupRouter(h)
 
 	body, _ := json.Marshal(map[string]string{"phoneCode": "test-code"})
@@ -215,7 +221,7 @@ func TestBindPhone(t *testing.T) {
 
 func TestUploadAvatar(t *testing.T) {
 	mockSvc := &mockUploadService{url: "https://cdn.example.com/avatar.jpg"}
-	h := NewUserHandler(&mockUserService{}, nil, mockSvc, nil, nil)
+	h := NewUserHandler(&mockUserService{}, nil, mockSvc, nil, nil, nil)
 	r := setupRouter(h)
 
 	body, _ := json.Marshal(map[string]string{"base64Image": "data:image/jpeg;base64,test"})
@@ -233,7 +239,7 @@ func TestUploadAvatar(t *testing.T) {
 
 func TestGetDashboardTargets(t *testing.T) {
 	mockSvc := &mockUserService{dashboardTargets: map[string]float64{"calorie_target": 2000}}
-	h := NewUserHandler(mockSvc, nil, nil, nil, nil)
+	h := NewUserHandler(mockSvc, nil, nil, nil, nil, nil)
 	r := setupRouter(h)
 
 	w := httptest.NewRecorder()
@@ -249,7 +255,7 @@ func TestGetDashboardTargets(t *testing.T) {
 
 func TestGetHealthProfile(t *testing.T) {
 	mockSvc := &mockUserService{healthProfile: map[string]any{"height": 175.0}}
-	h := NewUserHandler(mockSvc, nil, nil, nil, nil)
+	h := NewUserHandler(mockSvc, nil, nil, nil, nil, nil)
 	r := setupRouter(h)
 
 	w := httptest.NewRecorder()
@@ -265,7 +271,7 @@ func TestGetHealthProfile(t *testing.T) {
 
 func TestHealthReportOCRExtract(t *testing.T) {
 	mockSvc := &mockOCRService{result: map[string]any{"indicators": []any{}}}
-	h := NewUserHandler(&mockUserService{}, nil, nil, mockSvc, nil)
+	h := NewUserHandler(&mockUserService{}, nil, nil, mockSvc, nil, nil)
 	r := setupRouter(h)
 
 	body, _ := json.Marshal(map[string]string{"imageUrl": "https://example.com/report.jpg"})
@@ -284,7 +290,7 @@ func TestHealthReportOCRExtract(t *testing.T) {
 
 func TestSubmitReportExtractionTask(t *testing.T) {
 	mockSvc := &mockAnalysisTaskService{taskID: "task-123"}
-	h := NewUserHandler(&mockUserService{}, nil, nil, nil, mockSvc)
+	h := NewUserHandler(&mockUserService{}, nil, nil, nil, mockSvc, nil)
 	r := setupRouter(h)
 
 	body, _ := json.Marshal(map[string]string{"imageUrl": "https://example.com/report.jpg"})
@@ -302,7 +308,7 @@ func TestSubmitReportExtractionTask(t *testing.T) {
 
 func TestGetRecordDays(t *testing.T) {
 	mockSvc := &mockUserService{recordDays: 42}
-	h := NewUserHandler(mockSvc, nil, nil, nil, nil)
+	h := NewUserHandler(mockSvc, nil, nil, nil, nil, nil)
 	r := setupRouter(h)
 
 	w := httptest.NewRecorder()
@@ -318,7 +324,7 @@ func TestGetRecordDays(t *testing.T) {
 
 func TestUpdateLastSeenAnalyzeHistory(t *testing.T) {
 	mockSvc := &mockUserService{}
-	h := NewUserHandler(mockSvc, nil, nil, nil, nil)
+	h := NewUserHandler(mockSvc, nil, nil, nil, nil, nil)
 	r := setupRouter(h)
 
 	w := httptest.NewRecorder()
@@ -334,7 +340,7 @@ func TestUpdateLastSeenAnalyzeHistory(t *testing.T) {
 
 func TestDeleteAccount(t *testing.T) {
 	mockSvc := &mockUserService{}
-	h := NewUserHandler(mockSvc, nil, nil, nil, nil)
+	h := NewUserHandler(mockSvc, nil, nil, nil, nil, nil)
 	r := setupRouter(h)
 
 	w := httptest.NewRecorder()
@@ -350,7 +356,7 @@ func TestDeleteAccount(t *testing.T) {
 
 func TestDeleteAccountError(t *testing.T) {
 	mockSvc := &mockUserService{deleteAccountErr: errors.New("db error")}
-	h := NewUserHandler(mockSvc, nil, nil, nil, nil)
+	h := NewUserHandler(mockSvc, nil, nil, nil, nil, nil)
 	r := setupRouter(h)
 
 	w := httptest.NewRecorder()
@@ -362,7 +368,7 @@ func TestDeleteAccountError(t *testing.T) {
 
 func TestUpdateDashboardTargets(t *testing.T) {
 	mockSvc := &mockUserService{dashboardTargets: map[string]float64{"calorie_target": 2200}}
-	h := NewUserHandler(mockSvc, nil, nil, nil, nil)
+	h := NewUserHandler(mockSvc, nil, nil, nil, nil, nil)
 	r := setupRouter(h)
 
 	body, _ := json.Marshal(map[string]float64{"calorie_target": 2200})
@@ -380,7 +386,7 @@ func TestUpdateDashboardTargets(t *testing.T) {
 
 func TestUpdateDashboardTargetsError(t *testing.T) {
 	mockSvc := &mockUserService{dashboardTargetsErr: errors.New("db error")}
-	h := NewUserHandler(mockSvc, nil, nil, nil, nil)
+	h := NewUserHandler(mockSvc, nil, nil, nil, nil, nil)
 	r := setupRouter(h)
 
 	body, _ := json.Marshal(map[string]float64{"calorie_target": 2200})
@@ -394,7 +400,7 @@ func TestUpdateDashboardTargetsError(t *testing.T) {
 
 func TestUpdateHealthProfile(t *testing.T) {
 	mockSvc := &mockUserService{healthProfile: map[string]any{"height": 180.0}}
-	h := NewUserHandler(mockSvc, nil, nil, nil, nil)
+	h := NewUserHandler(mockSvc, nil, nil, nil, nil, nil)
 	r := setupRouter(h)
 
 	body, _ := json.Marshal(map[string]float64{"height": 180})
@@ -412,7 +418,7 @@ func TestUpdateHealthProfile(t *testing.T) {
 
 func TestUpdateHealthProfileError(t *testing.T) {
 	mockSvc := &mockUserService{healthProfileErr: errors.New("db error")}
-	h := NewUserHandler(mockSvc, nil, nil, nil, nil)
+	h := NewUserHandler(mockSvc, nil, nil, nil, nil, nil)
 	r := setupRouter(h)
 
 	body, _ := json.Marshal(map[string]float64{"height": 180})
@@ -426,7 +432,7 @@ func TestUpdateHealthProfileError(t *testing.T) {
 
 func TestHealthReportOCR(t *testing.T) {
 	mockSvc := &mockOCRService{result: map[string]any{"indicators": []any{}}}
-	h := NewUserHandler(&mockUserService{}, nil, nil, mockSvc, nil)
+	h := NewUserHandler(&mockUserService{}, nil, nil, mockSvc, nil, nil)
 	r := setupRouter(h)
 
 	body, _ := json.Marshal(map[string]string{"base64Image": "data:image/jpeg;base64,test"})
@@ -443,7 +449,7 @@ func TestHealthReportOCR(t *testing.T) {
 }
 
 func TestHealthReportOCREmptyImage(t *testing.T) {
-	h := NewUserHandler(&mockUserService{}, nil, nil, nil, nil)
+	h := NewUserHandler(&mockUserService{}, nil, nil, nil, nil, nil)
 	r := setupRouter(h)
 
 	body, _ := json.Marshal(map[string]string{"base64Image": ""})
@@ -457,7 +463,7 @@ func TestHealthReportOCREmptyImage(t *testing.T) {
 
 func TestHealthReportOCRExtractWithBase64(t *testing.T) {
 	mockSvc := &mockOCRService{result: map[string]any{"indicators": []any{}}}
-	h := NewUserHandler(&mockUserService{}, nil, nil, mockSvc, nil)
+	h := NewUserHandler(&mockUserService{}, nil, nil, mockSvc, nil, nil)
 	r := setupRouter(h)
 
 	body, _ := json.Marshal(map[string]string{"base64Image": "data:image/jpeg;base64,test"})
@@ -470,7 +476,7 @@ func TestHealthReportOCRExtractWithBase64(t *testing.T) {
 }
 
 func TestHealthReportOCRExtractEmpty(t *testing.T) {
-	h := NewUserHandler(&mockUserService{}, nil, nil, nil, nil)
+	h := NewUserHandler(&mockUserService{}, nil, nil, nil, nil, nil)
 	r := setupRouter(h)
 
 	body, _ := json.Marshal(map[string]string{"imageUrl": "", "base64Image": ""})
@@ -484,7 +490,7 @@ func TestHealthReportOCRExtractEmpty(t *testing.T) {
 
 func TestHealthReportOCRExtractError(t *testing.T) {
 	mockSvc := &mockOCRService{err: errors.New("ocr error")}
-	h := NewUserHandler(&mockUserService{}, nil, nil, mockSvc, nil)
+	h := NewUserHandler(&mockUserService{}, nil, nil, mockSvc, nil, nil)
 	r := setupRouter(h)
 
 	body, _ := json.Marshal(map[string]string{"imageUrl": "https://example.com/report.jpg"})
@@ -498,7 +504,7 @@ func TestHealthReportOCRExtractError(t *testing.T) {
 
 func TestUploadReportImage(t *testing.T) {
 	mockSvc := &mockUploadService{url: "https://cdn.example.com/report.jpg"}
-	h := NewUserHandler(&mockUserService{}, nil, mockSvc, nil, nil)
+	h := NewUserHandler(&mockUserService{}, nil, mockSvc, nil, nil, nil)
 	r := setupRouter(h)
 
 	body, _ := json.Marshal(map[string]string{"base64Image": "data:image/jpeg;base64,test"})
@@ -515,7 +521,7 @@ func TestUploadReportImage(t *testing.T) {
 }
 
 func TestUploadReportImageEmpty(t *testing.T) {
-	h := NewUserHandler(&mockUserService{}, nil, nil, nil, nil)
+	h := NewUserHandler(&mockUserService{}, nil, nil, nil, nil, nil)
 	r := setupRouter(h)
 
 	body, _ := json.Marshal(map[string]string{"base64Image": ""})
@@ -529,7 +535,7 @@ func TestUploadReportImageEmpty(t *testing.T) {
 
 func TestUploadReportImageError(t *testing.T) {
 	mockSvc := &mockUploadService{err: errors.New("upload error")}
-	h := NewUserHandler(&mockUserService{}, nil, mockSvc, nil, nil)
+	h := NewUserHandler(&mockUserService{}, nil, mockSvc, nil, nil, nil)
 	r := setupRouter(h)
 
 	body, _ := json.Marshal(map[string]string{"base64Image": "data:image/jpeg;base64,test"})
@@ -542,7 +548,7 @@ func TestUploadReportImageError(t *testing.T) {
 }
 
 func TestSubmitReportExtractionTaskEmptyImageURL(t *testing.T) {
-	h := NewUserHandler(&mockUserService{}, nil, nil, nil, nil)
+	h := NewUserHandler(&mockUserService{}, nil, nil, nil, nil, nil)
 	r := setupRouter(h)
 
 	body, _ := json.Marshal(map[string]string{"imageUrl": ""})
@@ -556,7 +562,7 @@ func TestSubmitReportExtractionTaskEmptyImageURL(t *testing.T) {
 
 func TestSubmitReportExtractionTaskError(t *testing.T) {
 	mockSvc := &mockAnalysisTaskService{err: errors.New("task error")}
-	h := NewUserHandler(&mockUserService{}, nil, nil, nil, mockSvc)
+	h := NewUserHandler(&mockUserService{}, nil, nil, nil, mockSvc, nil)
 	r := setupRouter(h)
 
 	body, _ := json.Marshal(map[string]string{"imageUrl": "https://example.com/report.jpg"})
@@ -570,7 +576,7 @@ func TestSubmitReportExtractionTaskError(t *testing.T) {
 
 func TestSubmitReportExtractionTaskWithImageURLs(t *testing.T) {
 	mockSvc := &mockAnalysisTaskService{taskID: "task-1"}
-	h := NewUserHandler(&mockUserService{}, nil, nil, nil, mockSvc)
+	h := NewUserHandler(&mockUserService{}, nil, nil, nil, mockSvc, nil)
 	r := setupRouter(h)
 
 	body, _ := json.Marshal(map[string]any{
@@ -589,7 +595,7 @@ func TestSubmitReportExtractionTaskWithImageURLs(t *testing.T) {
 
 func TestGetRecordDaysError(t *testing.T) {
 	mockSvc := &mockUserService{recordDaysErr: errors.New("db error")}
-	h := NewUserHandler(mockSvc, nil, nil, nil, nil)
+	h := NewUserHandler(mockSvc, nil, nil, nil, nil, nil)
 	r := setupRouter(h)
 
 	w := httptest.NewRecorder()
@@ -600,7 +606,7 @@ func TestGetRecordDaysError(t *testing.T) {
 }
 
 func TestUploadAvatarEmptyImage(t *testing.T) {
-	h := NewUserHandler(&mockUserService{}, nil, nil, nil, nil)
+	h := NewUserHandler(&mockUserService{}, nil, nil, nil, nil, nil)
 	r := setupRouter(h)
 
 	body, _ := json.Marshal(map[string]string{"base64Image": ""})
@@ -614,7 +620,7 @@ func TestUploadAvatarEmptyImage(t *testing.T) {
 
 func TestUploadAvatarError(t *testing.T) {
 	mockSvc := &mockUploadService{err: errors.New("upload error")}
-	h := NewUserHandler(&mockUserService{}, nil, mockSvc, nil, nil)
+	h := NewUserHandler(&mockUserService{}, nil, mockSvc, nil, nil, nil)
 	r := setupRouter(h)
 
 	body, _ := json.Marshal(map[string]string{"base64Image": "data:image/jpeg;base64,test"})

@@ -7,18 +7,14 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	gormsqlite "gorm.io/driver/sqlite"
-	"gorm.io/gorm"
 
-	_ "modernc.org/sqlite"
+	"food_link/backend/pkg/testdb"
+
+	"gorm.io/gorm"
 )
 
 func setupFoodRecordTestDB(t *testing.T) *gorm.DB {
-	db, err := gorm.Open(gormsqlite.New(gormsqlite.Config{
-		DriverName: "sqlite",
-		DSN:        ":memory:",
-	}), &gorm.Config{})
-	require.NoError(t, err)
+	db := testdb.New(t)
 	db.Exec(`CREATE TABLE user_food_records (
 		id TEXT PRIMARY KEY,
 		user_id TEXT,

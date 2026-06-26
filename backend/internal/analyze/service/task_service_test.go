@@ -16,10 +16,10 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	gormsqlite "gorm.io/driver/sqlite"
-	"gorm.io/gorm"
 
-	_ "modernc.org/sqlite"
+	"food_link/backend/pkg/testdb"
+
+	"gorm.io/gorm"
 )
 
 type recordingTaskPublisher struct {
@@ -101,11 +101,7 @@ func (m *mockTaskCreditGuard) RefundEarnedCreditsAfterTaskFailure(ctx context.Co
 }
 
 func setupTaskServiceTestDB(t *testing.T) (*gorm.DB, *repo.TaskRepo, *repo.PrecisionRepo, *authrepo.UserRepo) {
-	db, err := gorm.Open(gormsqlite.New(gormsqlite.Config{
-		DriverName: "sqlite",
-		DSN:        "file::memory:",
-	}), &gorm.Config{})
-	require.NoError(t, err)
+	db := testdb.New(t)
 	sqlDB, err := db.DB()
 	require.NoError(t, err)
 	sqlDB.SetMaxOpenConns(1)
