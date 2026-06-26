@@ -599,14 +599,14 @@ function RecipesPage() {
       </ScrollView>
 
       {editingRecipe && (
-        <View className='nutrition-editor-overlay' catchMove>
+        <View className='nutrition-editor-overlay'>
           <View className='nutrition-editor-mask' onClick={handleCloseNutritionEditor} />
           <View className='nutrition-editor-panel'>
             <View className='nutrition-editor-handle' />
             <View className='nutrition-editor-header'>
-              <View>
-                <Text className='nutrition-editor-title'>修改营养信息</Text>
-                <Text className='nutrition-editor-subtitle'>{editingRecipe.recipe_name}</Text>
+              <View className='nutrition-editor-header-main'>
+                <Text className='nutrition-editor-title'>{editingRecipe.recipe_name}</Text>
+                <Text className='nutrition-editor-subtitle'>修改营养信息</Text>
               </View>
               <View className='nutrition-editor-close' onClick={handleCloseNutritionEditor}>
                 <Text className='iconfont icon-close' />
@@ -614,11 +614,14 @@ function RecipesPage() {
             </View>
 
             <View className='nutrition-editor-body'>
-              <View className='nutrition-calorie-editor'>
-                <Text className='nutrition-editor-field-label'>总热量</Text>
-                <View className='nutrition-calorie-control'>
-                  <View className='nutrition-calorie-stepper' onClick={() => adjustNutritionCalories(-10)}>
-                    <Text className='nutrition-calorie-stepper-text'>−</Text>
+              <View className='nutrition-calorie-card'>
+                <View className='nutrition-calorie-stepper' onClick={() => adjustNutritionCalories(-10)}>
+                  <Text className='nutrition-calorie-stepper-text'>−</Text>
+                </View>
+                <View className='nutrition-calorie-main'>
+                  <View className='nutrition-calorie-label-row'>
+                    <Text className='iconfont icon-huore nutrition-calorie-icon' />
+                    <Text className='nutrition-calorie-label'>总热量</Text>
                   </View>
                   <View className='nutrition-calorie-input-card'>
                     <Input
@@ -630,9 +633,9 @@ function RecipesPage() {
                     />
                     <Text className='nutrition-calorie-unit'>kcal</Text>
                   </View>
-                  <View className='nutrition-calorie-stepper nutrition-calorie-stepper--plus' onClick={() => adjustNutritionCalories(10)}>
-                    <Text className='nutrition-calorie-stepper-text'>+</Text>
-                  </View>
+                </View>
+                <View className='nutrition-calorie-stepper nutrition-calorie-stepper--plus' onClick={() => adjustNutritionCalories(10)}>
+                  <Text className='nutrition-calorie-stepper-text'>+</Text>
                 </View>
               </View>
 
@@ -645,19 +648,19 @@ function RecipesPage() {
                   <Text className={`iconfont icon-right nutrition-editor-fold-icon ${macroExpanded ? 'expanded' : ''}`} />
                 </View>
                 {macroExpanded && (
-                  <View className='nutrition-editor-fields'>
+                  <View className='nutrition-macro-row'>
                     {NUTRITION_FIELDS.map((field) => (
-                      <View key={field.key} className={`nutrition-editor-field nutrition-editor-field--${field.key}`}>
-                        <Text className='nutrition-editor-field-label'>{field.label}</Text>
-                        <View className='nutrition-editor-input-wrap'>
+                      <View key={field.key} className={`nutrition-macro-cell nutrition-macro-cell--${field.key}`}>
+                        <Text className='nutrition-macro-label'>{field.label}</Text>
+                        <View className='nutrition-macro-input-wrap'>
                           <Input
-                            className='nutrition-editor-input'
+                            className='nutrition-macro-input'
                             type='digit'
                             value={nutritionDraft[field.key]}
                             placeholder={field.placeholder}
                             onInput={(e) => updateNutritionDraft(field.key, e.detail.value)}
                           />
-                          <Text className='nutrition-editor-unit'>{field.unit}</Text>
+                          <Text className='nutrition-macro-unit'>{field.unit}</Text>
                         </View>
                       </View>
                     ))}
