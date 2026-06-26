@@ -1,6 +1,9 @@
+import { useState } from 'react'
 import { Text, View } from '@tarojs/components'
 import type { ExerciseActivityItem } from '../../../utils/api'
 import './ExerciseActivityCards.scss'
+
+const DEFAULT_VISIBLE_COUNT = 3
 
 export type ExerciseActivityDisplayItem = ExerciseActivityItem & {
   displayName: string
@@ -79,12 +82,17 @@ export interface ExerciseActivityCardsProps {
 }
 
 export function ExerciseActivityCards({ items, onItemClick }: ExerciseActivityCardsProps) {
+  const [expanded, setExpanded] = useState(false)
   const displayItems = extractExerciseActivityDisplayItems(items)
   if (displayItems.length === 0) return null
 
+  const hasMore = displayItems.length > DEFAULT_VISIBLE_COUNT
+  const visibleItems = expanded ? displayItems : displayItems.slice(0, DEFAULT_VISIBLE_COUNT)
+  const hiddenCount = displayItems.length - DEFAULT_VISIBLE_COUNT
+
   return (
     <View className='feed-exercise-activities'>
-      {displayItems.map((row, index) => (
+      {visibleItems.map((row, index) => (
         <View
           key={`exercise-${index}-${row.displayName}`}
           className='feed-exercise-activity-card'
@@ -112,6 +120,19 @@ export function ExerciseActivityCards({ items, onItemClick }: ExerciseActivityCa
           </View>
         </View>
       ))}
+      {hasMore && (
+        <View
+          className='feed-exercise-activity-expand-row'
+          onClick={(e) => {
+            e.stopPropagation()
+            setExpanded(!expanded)
+          }}
+        >
+          <Text className='feed-exercise-activity-expand-text'>
+            {expanded ? '收起' : `更多 ${hiddenCount} 项运动`}
+          </Text>
+        </View>
+      )}
     </View>
   )
 }
