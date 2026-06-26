@@ -183,7 +183,9 @@ func buildAppearanceCandidates(userID, fingerprint, archetype string, reasons []
 	styles := []string{"pretty", "quirky", "stable"}
 	candidates := make([]AppearanceCandidate, 0, len(styles))
 	for _, style := range styles {
-		seed := fmt.Sprintf("pet:%s:v%d:%s:%s:%s", userID, petProfileMatchVersion, fingerprint, archetype, style)
+		// seed 不包含版本号，保证同画像同原型下的外观只由画像决定，
+		// 后端算法版本升级不会导致已生成的颜色/形状等自动变化。
+		seed := fmt.Sprintf("pet:%s:%s:%s:%s", userID, fingerprint, archetype, style)
 		candidate := candidateFromSeed(seed, archetype, style, reasons)
 		candidates = append(candidates, candidate)
 	}
