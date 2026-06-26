@@ -336,13 +336,6 @@ function PetChatPage() {
                     ))}
                   </View>
                 ) : null}
-                {message.actions?.length ? (
-                  <View className='pet-chat-actions'>
-                    {message.actions.map((action) => (
-                      <Text key={`${message.id}-${action}`} className='pet-chat-action-chip'>{action}</Text>
-                    ))}
-                  </View>
-                ) : null}
               </View>
             </View>
           ))}
