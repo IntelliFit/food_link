@@ -374,16 +374,16 @@ export function FoodRecordSharePage() {
 
   return (
     <div className="min-h-svh overflow-x-clip bg-gradient-page">
-      <main className="mx-auto flex max-w-[440px] flex-col gap-3 px-4 pb-[calc(6.25rem+env(safe-area-inset-bottom,0px))] pt-3 md:max-w-3xl md:gap-4 md:px-8 md:pb-12 md:pt-8">
-        <div className="flex items-center justify-between gap-3 px-0.5">
-          <Link to="/" className="inline-flex min-h-10 items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground">
-            <img src={brand.assets.loginLogo} alt="" className="size-7 rounded-md object-contain" />
+      <main className="mx-auto flex w-full flex-col gap-0 px-0 pb-[calc(6.25rem+env(safe-area-inset-bottom,0px))] pt-0 md:max-w-3xl md:gap-4 md:px-8 md:pb-12 md:pt-8">
+        <div className="flex items-center gap-2 px-3 py-2 md:px-0 md:py-0">
+          <Link to="/" className="inline-flex min-h-8 items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground">
+            <img src={brand.assets.loginLogo} alt="" className="size-6 rounded-md object-contain" />
             {brand.shortName}
           </Link>
-          <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">{meal}</span>
+          <span className="ml-auto rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary md:px-3">{meal}</span>
         </div>
 
-        <section className="overflow-hidden rounded-lg border border-border/80 bg-card shadow-sm">
+        <section className="overflow-hidden border-y border-border/80 bg-card shadow-sm md:rounded-lg md:border">
           <div className="relative aspect-[4/3] bg-muted md:aspect-[16/9]">
             {images[0] ? (
               <img src={images[0]} alt={title} className="absolute inset-0 size-full object-cover" />
