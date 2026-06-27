@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
-import { AlertCircle, Beef, Droplets, Flame, Smartphone, Wheat } from 'lucide-react'
+import { AlertCircle, Beef, Droplets, Flame, Smartphone, Wheat, X } from 'lucide-react'
 import { SiteFooter } from '@/components/layout/SiteFooter'
 import { brand } from '@/content/brand'
 import { absoluteUrl } from '@/content/seo'
@@ -246,6 +246,11 @@ function isMobileBrowser(): boolean {
   return /Android|iPhone|iPad|iPod|Mobile|HarmonyOS/i.test(navigator.userAgent)
 }
 
+function isEmbeddedBrowser(): boolean {
+  if (typeof navigator === 'undefined') return false
+  return /MicroMessenger|QQ\/|QQBrowser|WeiBo|DingTalk|Lark|Feishu|Toutiao|BytedanceWebview/i.test(navigator.userAgent)
+}
+
 function buildAppSchemeUrl(recordId: string): string {
   return `foodlink://food-record?record_id=${encodeURIComponent(recordId)}`
 }
@@ -315,6 +320,7 @@ export function FoodRecordSharePage() {
   const [searchParams] = useSearchParams()
   const apiBaseUrl = useMemo(() => resolveShareApiBaseUrl(searchParams), [searchParams])
   const [state, setState] = useState<LoadState>({ status: 'loading', requestKey: '' })
+  const [showBrowserGuide, setShowBrowserGuide] = useState(false)
   const trimmedRecordId = recordId.trim()
   const requestKey = useMemo(() => `${apiBaseUrl}::${trimmedRecordId}`, [apiBaseUrl, trimmedRecordId])
   const missingRecordState: Extract<LoadState, { status: 'error' }> | null = trimmedRecordId
@@ -350,7 +356,7 @@ export function FoodRecordSharePage() {
   }, [pageUrl, state])
 
   useEffect(() => {
-    if (state.status !== 'ready' || !trimmedRecordId || !isMobileBrowser()) return
+    if (state.status !== 'ready' || !trimmedRecordId || !isMobileBrowser() || isEmbeddedBrowser()) return
     const key = `foodlink:auto-open:${trimmedRecordId}`
     if (window.sessionStorage.getItem(key) === '1') return
     window.sessionStorage.setItem(key, '1')
@@ -371,6 +377,14 @@ export function FoodRecordSharePage() {
   const foods = (record.items || []).filter((item) => String(item.name || '').trim()).slice(0, 8)
   const recordTime = formatRecordTime(record.record_time)
   const meal = mealLabel(record)
+
+  const openApp = () => {
+    if (isEmbeddedBrowser()) {
+      setShowBrowserGuide(true)
+      return
+    }
+    window.location.href = appOpenUrl
+  }
 
   return (
     <div className="min-h-svh overflow-x-clip bg-gradient-page">
@@ -436,16 +450,45 @@ export function FoodRecordSharePage() {
         </p>
       </main>
       <div className="fixed inset-x-0 bottom-0 z-40 flex justify-center px-4 pb-[calc(2.3rem+env(safe-area-inset-bottom,0px))] pt-3">
-        <a
-          href={appOpenUrl}
+        <button
+          type="button"
+          onClick={openApp}
           className="flex min-h-14 w-full max-w-72 items-center justify-center gap-2 rounded-full bg-primary px-6 text-base font-black text-primary-foreground shadow-[0_12px_32px_rgba(16,185,129,0.28)] transition-transform active:scale-[0.98]"
         >
           <Smartphone size={19} />
           App 内打开
-        </a>
+        </button>
       </div>
+      {showBrowserGuide ? <OpenInBrowserGuide onClose={() => setShowBrowserGuide(false)} /> : null}
       <div className="hidden md:block">
         <SiteFooter />
+      </div>
+    </div>
+  )
+}
+
+function OpenInBrowserGuide({ onClose }: { onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-950/78 px-5 pt-[calc(1rem+env(safe-area-inset-top,0px))] text-white">
+      <button
+        type="button"
+        onClick={onClose}
+        className="absolute left-4 top-[calc(1rem+env(safe-area-inset-top,0px))] grid size-10 place-items-center rounded-full bg-white/12 text-white"
+        aria-label="关闭引导"
+      >
+        <X size={22} />
+      </button>
+      <div className="ml-auto flex max-w-[260px] flex-col items-end gap-4 text-right">
+        <div className="relative pr-2 pt-1">
+          <div className="text-5xl font-black leading-none">···</div>
+          <div className="absolute right-3 top-12 h-16 w-16 rotate-45 rounded-tr-[28px] border-r-4 border-t-4 border-white" />
+        </div>
+        <div className="mt-12 rounded-md bg-white px-4 py-4 text-left text-foreground shadow-lg">
+          <p className="text-lg font-black">请在浏览器中打开</p>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">
+            点击右上角菜单，选择“在浏览器打开”，再点「App 内打开」即可跳转到 App。
+          </p>
+        </div>
       </div>
     </div>
   )
