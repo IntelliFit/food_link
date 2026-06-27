@@ -469,25 +469,30 @@ export function FoodRecordSharePage() {
 
 function OpenInBrowserGuide({ onClose }: { onClose: () => void }) {
   return (
-    <div className="fixed inset-0 z-50 bg-slate-950/78 px-5 pt-[calc(1rem+env(safe-area-inset-top,0px))] text-white">
+    <div className="fixed inset-0 z-50 bg-[radial-gradient(circle_at_80%_7%,rgba(16,185,129,0.22),transparent_28%),linear-gradient(180deg,rgba(15,23,42,0.86),rgba(15,23,42,0.76))] px-5 pt-[calc(1rem+env(safe-area-inset-top,0px))] text-white backdrop-blur-[2px]">
       <button
         type="button"
         onClick={onClose}
-        className="absolute left-4 top-[calc(1rem+env(safe-area-inset-top,0px))] grid size-10 place-items-center rounded-full bg-white/12 text-white"
+        className="absolute left-4 top-[calc(1rem+env(safe-area-inset-top,0px))] grid size-8 place-items-center text-white/90"
         aria-label="关闭引导"
       >
-        <X size={22} />
+        <X size={28} strokeWidth={2.2} />
       </button>
-      <div className="ml-auto flex max-w-[260px] flex-col items-end gap-4 text-right">
-        <div className="relative pr-2 pt-1">
-          <div className="text-5xl font-black leading-none">···</div>
-          <div className="absolute right-3 top-12 h-16 w-16 rotate-45 rounded-tr-[28px] border-r-4 border-t-4 border-white" />
-        </div>
-        <div className="mt-12 rounded-md bg-white px-4 py-4 text-left text-foreground shadow-lg">
-          <p className="text-lg font-black">请在浏览器中打开</p>
-          <p className="mt-2 text-sm leading-6 text-muted-foreground">
+      <div className="pointer-events-none absolute right-5 top-[calc(0.75rem+env(safe-area-inset-top,0px))] text-5xl font-black leading-none text-white">
+        ···
+      </div>
+      <div className="pointer-events-none absolute right-16 top-[calc(4.25rem+env(safe-area-inset-top,0px))] h-[2px] w-32 origin-right -rotate-45 rounded-full bg-white shadow-[0_0_16px_rgba(255,255,255,0.55)]">
+        <span className="absolute right-0 top-1/2 size-4 -translate-y-1/2 rotate-45 border-r-[3px] border-t-[3px] border-white" />
+      </div>
+      <div className="flex min-h-svh items-start justify-center pt-[calc(8rem+env(safe-area-inset-top,0px))]">
+        <div className="w-full max-w-[20rem] rounded-lg border border-white/18 bg-white/14 px-5 py-5 text-left shadow-[0_24px_70px_rgba(0,0,0,0.32)] backdrop-blur-md">
+          <p className="text-xl font-black text-white">请在浏览器中打开</p>
+          <p className="mt-3 text-sm leading-6 text-white/82">
             点击右上角菜单，选择“在浏览器打开”，再点「App 内打开」即可跳转到 App。
           </p>
+          <div className="mt-4 inline-flex items-center rounded-full bg-primary/95 px-3 py-1 text-xs font-bold text-primary-foreground">
+            打开后会继续停留在这条分享记录
+          </div>
         </div>
       </div>
     </div>
