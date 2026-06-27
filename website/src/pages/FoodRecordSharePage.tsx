@@ -435,10 +435,10 @@ export function FoodRecordSharePage() {
           饮食分析结果仅供参考，不构成医学诊断。继续记录饮食，请在 {brand.fullName} App 或小程序中查看。
         </p>
       </main>
-      <div className="fixed inset-x-0 bottom-0 z-40 px-4 pb-[calc(1.05rem+env(safe-area-inset-bottom,0px))] pt-3">
+      <div className="fixed inset-x-0 bottom-0 z-40 flex justify-center px-4 pb-[calc(2.3rem+env(safe-area-inset-bottom,0px))] pt-3">
         <a
           href={appOpenUrl}
-          className="mx-auto inline-flex min-h-14 w-full max-w-72 items-center justify-center gap-2 rounded-full bg-primary px-6 text-base font-black text-primary-foreground shadow-[0_12px_32px_rgba(16,185,129,0.28)] transition-transform active:scale-[0.98]"
+          className="flex min-h-14 w-full max-w-72 items-center justify-center gap-2 rounded-full bg-primary px-6 text-base font-black text-primary-foreground shadow-[0_12px_32px_rgba(16,185,129,0.28)] transition-transform active:scale-[0.98]"
         >
           <Smartphone size={19} />
           App 内打开
