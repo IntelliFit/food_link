@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
-import { AlertCircle, Beef, Copy, Droplets, Flame, Smartphone, Wheat } from 'lucide-react'
+import { AlertCircle, Beef, Droplets, Flame, Smartphone, Wheat } from 'lucide-react'
 import { SiteFooter } from '@/components/layout/SiteFooter'
 import { brand } from '@/content/brand'
 import { absoluteUrl } from '@/content/seo'
@@ -315,7 +315,6 @@ export function FoodRecordSharePage() {
   const [searchParams] = useSearchParams()
   const apiBaseUrl = useMemo(() => resolveShareApiBaseUrl(searchParams), [searchParams])
   const [state, setState] = useState<LoadState>({ status: 'loading', requestKey: '' })
-  const [copied, setCopied] = useState(false)
   const trimmedRecordId = recordId.trim()
   const requestKey = useMemo(() => `${apiBaseUrl}::${trimmedRecordId}`, [apiBaseUrl, trimmedRecordId])
   const missingRecordState: Extract<LoadState, { status: 'error' }> | null = trimmedRecordId
@@ -373,20 +372,10 @@ export function FoodRecordSharePage() {
   const recordTime = formatRecordTime(record.record_time)
   const meal = mealLabel(record)
 
-  const copyPageUrl = async () => {
-    try {
-      await navigator.clipboard?.writeText(pageUrl)
-      setCopied(true)
-      window.setTimeout(() => setCopied(false), 1800)
-    } catch {
-      setCopied(false)
-    }
-  }
-
   return (
     <div className="min-h-svh overflow-x-clip bg-gradient-page">
-      <main className="mx-auto flex max-w-3xl flex-col gap-4 px-4 pb-[calc(7.5rem+env(safe-area-inset-bottom,0px))] pt-4 md:px-8 md:pb-12 md:pt-8">
-        <div className="flex items-center justify-between gap-3 px-1">
+      <main className="mx-auto flex max-w-[440px] flex-col gap-3 px-4 pb-[calc(6.25rem+env(safe-area-inset-bottom,0px))] pt-3 md:max-w-3xl md:gap-4 md:px-8 md:pb-12 md:pt-8">
+        <div className="flex items-center justify-between gap-3 px-0.5">
           <Link to="/" className="inline-flex min-h-10 items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground">
             <img src={brand.assets.loginLogo} alt="" className="size-7 rounded-md object-contain" />
             {brand.shortName}
@@ -408,10 +397,10 @@ export function FoodRecordSharePage() {
             {recordTime ? <span className="absolute bottom-3 left-3 text-sm font-semibold text-white drop-shadow">{recordTime}</span> : null}
           </div>
 
-          <div className="flex flex-col gap-5 p-4 md:p-6">
-            <div className="space-y-3">
-              <h1 className="text-[2rem] font-black leading-tight text-foreground md:text-4xl">{title}</h1>
-              <p className="text-[0.98rem] leading-7 text-muted-foreground">{description}</p>
+          <div className="flex flex-col gap-4 p-4 md:gap-5 md:p-6">
+            <div className="space-y-2.5">
+              <h1 className="text-[1.75rem] font-black leading-[1.12] text-foreground md:text-4xl">{title}</h1>
+              <p className="text-[0.95rem] leading-6 text-muted-foreground md:leading-7">{description}</p>
             </div>
 
             <div className="grid grid-cols-4 gap-2 rounded-md bg-muted/45 p-2">
@@ -422,14 +411,14 @@ export function FoodRecordSharePage() {
             </div>
 
             {foods.length ? (
-              <div className="rounded-md border border-border/80 bg-background p-4">
+              <div className="rounded-md border border-border/80 bg-background px-4 py-3.5 md:p-4">
                 <h2 className="text-base font-black text-foreground">食物明细</h2>
                 <div className="mt-2 divide-y divide-border">
                   {foods.map((item, index) => (
-                    <div key={`${item.name}-${index}`} className="flex items-center justify-between gap-4 py-3">
+                    <div key={`${item.name}-${index}`} className="flex items-center justify-between gap-4 py-2.5 md:py-3">
                       <div className="min-w-0">
                         <p className="truncate text-base font-bold text-foreground">{item.name}</p>
-                        <p className="mt-1 text-sm text-muted-foreground">摄入 {Math.round(recordItemIntake(item))}g</p>
+                        <p className="mt-0.5 text-sm text-muted-foreground">摄入 {Math.round(recordItemIntake(item))}g</p>
                       </div>
                       <span className="shrink-0 text-base font-bold text-muted-foreground">
                         {Math.round(recordItemCalories(item))} kcal
@@ -446,29 +435,14 @@ export function FoodRecordSharePage() {
           饮食分析结果仅供参考，不构成医学诊断。继续记录饮食，请在 {brand.fullName} App 或小程序中查看。
         </p>
       </main>
-      <div className="fixed inset-x-0 bottom-0 z-40 px-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] pt-3">
-        {copied ? (
-          <div className="mx-auto mb-2 w-fit rounded-full bg-foreground px-3 py-1 text-xs font-semibold text-background shadow-sm">
-            链接已复制
-          </div>
-        ) : null}
-        <div className="mx-auto flex max-w-md items-center gap-2 rounded-full border border-border/70 bg-card/92 p-2 shadow-[0_12px_40px_rgba(15,23,42,0.18)] backdrop-blur">
-          <button
-            type="button"
-            onClick={() => void copyPageUrl()}
-            className="inline-flex size-12 shrink-0 items-center justify-center rounded-full bg-muted text-foreground transition-colors hover:bg-muted/80"
-            aria-label={copied ? '已复制链接' : '复制分享链接'}
-          >
-            <Copy size={20} />
-          </button>
-          <a
-            href={appOpenUrl}
-            className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-full bg-primary px-5 text-base font-black text-primary-foreground shadow-sm transition-transform active:scale-[0.98]"
-          >
-            <Smartphone size={19} />
-            App 内打开
-          </a>
-        </div>
+      <div className="fixed inset-x-0 bottom-0 z-40 px-4 pb-[calc(1.05rem+env(safe-area-inset-bottom,0px))] pt-3">
+        <a
+          href={appOpenUrl}
+          className="mx-auto inline-flex min-h-14 w-full max-w-72 items-center justify-center gap-2 rounded-full bg-primary px-6 text-base font-black text-primary-foreground shadow-[0_12px_32px_rgba(16,185,129,0.28)] transition-transform active:scale-[0.98]"
+        >
+          <Smartphone size={19} />
+          App 内打开
+        </a>
       </div>
       <div className="hidden md:block">
         <SiteFooter />
