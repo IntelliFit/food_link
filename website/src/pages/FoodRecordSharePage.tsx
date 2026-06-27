@@ -403,7 +403,7 @@ export function FoodRecordSharePage() {
               <p className="text-[0.95rem] leading-6 text-muted-foreground md:leading-7">{description}</p>
             </div>
 
-            <div className="grid grid-cols-4 gap-2 rounded-md bg-muted/45 p-2">
+            <div className="grid grid-cols-2 gap-2 rounded-md bg-muted/35 p-2 md:grid-cols-4">
               <Metric icon={<Flame size={15} />} label="热量" value={Math.round(Number(record.total_calories || 0)).toString()} unit="kcal" />
               <Metric icon={<Beef size={15} />} label="蛋白" value={round1(record.total_protein)} unit="g" />
               <Metric icon={<Wheat size={15} />} label="碳水" value={round1(record.total_carbs)} unit="g" />
@@ -453,11 +453,14 @@ export function FoodRecordSharePage() {
 
 function Metric({ icon, label, value, unit }: { icon: ReactNode; label: string; value: string; unit: string }) {
   return (
-    <div className="min-w-0 rounded-sm bg-card px-2 py-2 text-center shadow-[inset_0_0_0_1px_rgb(226_232_240/0.7)]">
-      <div className="flex items-center justify-center gap-1 text-primary">{icon}<span className="truncate text-[0.68rem] font-bold">{label}</span></div>
-      <div className="mt-1 flex items-baseline justify-center gap-0.5">
-        <span className="truncate text-xl font-black leading-none text-foreground">{value}</span>
-        <span className="text-[0.65rem] font-bold text-muted-foreground">{unit}</span>
+    <div className="flex min-h-14 min-w-0 items-center justify-between gap-2 rounded-sm bg-card px-3 py-2 shadow-[inset_0_0_0_1px_rgb(226_232_240/0.72)]">
+      <div className="flex min-w-0 items-center gap-1.5 text-primary">
+        {icon}
+        <span className="truncate text-xs font-bold text-muted-foreground">{label}</span>
+      </div>
+      <div className="flex shrink-0 items-baseline gap-1 whitespace-nowrap">
+        <span className="text-lg font-black leading-none text-foreground">{value}</span>
+        <span className="text-[0.7rem] font-bold text-muted-foreground">{unit}</span>
       </div>
     </div>
   )
