@@ -397,13 +397,13 @@ export function FoodRecordSharePage() {
             {recordTime ? <span className="absolute bottom-3 left-3 text-sm font-semibold text-white drop-shadow">{recordTime}</span> : null}
           </div>
 
-          <div className="flex flex-col gap-4 p-4 md:gap-5 md:p-6">
+          <div className="flex flex-col gap-4 px-3 py-4 md:gap-5 md:p-6">
             <div className="space-y-2.5">
               <h1 className="text-[1.75rem] font-black leading-[1.12] text-foreground md:text-4xl">{title}</h1>
               <p className="text-[0.95rem] leading-6 text-muted-foreground md:leading-7">{description}</p>
             </div>
 
-            <div className="grid grid-cols-2 gap-2 rounded-md bg-muted/35 p-2 md:grid-cols-4">
+            <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
               <Metric icon={<Flame size={15} />} label="热量" value={Math.round(Number(record.total_calories || 0)).toString()} unit="kcal" />
               <Metric icon={<Beef size={15} />} label="蛋白" value={round1(record.total_protein)} unit="g" />
               <Metric icon={<Wheat size={15} />} label="碳水" value={round1(record.total_carbs)} unit="g" />
@@ -411,7 +411,7 @@ export function FoodRecordSharePage() {
             </div>
 
             {foods.length ? (
-              <div className="rounded-md border border-border/80 bg-background px-4 py-3.5 md:p-4">
+              <div className="rounded-md border border-border/80 bg-background px-3 py-3.5 md:p-4">
                 <h2 className="text-base font-black text-foreground">食物明细</h2>
                 <div className="mt-2 divide-y divide-border">
                   {foods.map((item, index) => (
@@ -453,14 +453,14 @@ export function FoodRecordSharePage() {
 
 function Metric({ icon, label, value, unit }: { icon: ReactNode; label: string; value: string; unit: string }) {
   return (
-    <div className="flex min-h-14 min-w-0 items-center justify-between gap-2 rounded-sm bg-card px-3 py-2 shadow-[inset_0_0_0_1px_rgb(226_232_240/0.72)]">
-      <div className="flex min-w-0 items-center gap-1.5 text-primary">
+    <div className="flex min-h-11 min-w-0 items-center justify-between gap-1.5 rounded-sm bg-card px-2 py-1.5 shadow-[inset_0_0_0_1px_rgb(226_232_240/0.72)]">
+      <div className="flex min-w-0 items-center gap-1 text-primary">
         {icon}
-        <span className="truncate text-xs font-bold text-muted-foreground">{label}</span>
+        <span className="truncate text-[0.68rem] font-bold text-muted-foreground">{label}</span>
       </div>
-      <div className="flex shrink-0 items-baseline gap-1 whitespace-nowrap">
-        <span className="text-lg font-black leading-none text-foreground">{value}</span>
-        <span className="text-[0.7rem] font-bold text-muted-foreground">{unit}</span>
+      <div className="flex shrink-0 items-baseline gap-0.5 whitespace-nowrap">
+        <span className="text-[1.3rem] font-black leading-none text-foreground">{value}</span>
+        <span className="text-[0.68rem] font-bold text-muted-foreground">{unit}</span>
       </div>
     </div>
   )
