@@ -37,6 +37,8 @@ const statusBadgeClass: Record<FeedbackStatus, string> = {
   closed: 'border-border bg-muted text-muted-foreground dark:bg-muted/50',
 }
 
+const DEFAULT_FEEDBACK_REWARD_CREDITS = 5
+
 type LoadListOptions = {
   query?: string
   category?: string
@@ -54,6 +56,13 @@ function buildFeedbackDirectLink(feedbackId: string): string {
   const url = new URL('/feedback', window.location.origin)
   url.searchParams.set('feedback_id', feedbackId)
   return url.toString()
+}
+
+function getFeedbackRewardCreditsInputValue(item: FeedbackItem): string {
+  if (item.status === 'open' && (item.reward_credits ?? 0) <= 0) {
+    return String(DEFAULT_FEEDBACK_REWARD_CREDITS)
+  }
+  return String(item.reward_credits ?? 0)
 }
 
 /** 意见反馈管理页 */
@@ -479,12 +488,12 @@ function FeedbackDetail({
   onStatusChange: (id: string, status: FeedbackStatus, rewardCredits?: number, resolutionMessage?: string) => Promise<void>
   onCopy: (text: string, label?: string) => Promise<void>
 }) {
-  const [rewardCredits, setRewardCredits] = useState(String(item.reward_credits ?? 0))
+  const [rewardCredits, setRewardCredits] = useState(getFeedbackRewardCreditsInputValue(item))
   const [resolutionMessage, setResolutionMessage] = useState(item.resolution_message || '')
   const [updating, setUpdating] = useState(false)
 
   useEffect(() => {
-    setRewardCredits(String(item.reward_credits ?? 0))
+    setRewardCredits(getFeedbackRewardCreditsInputValue(item))
     setResolutionMessage(item.resolution_message || '')
   }, [item.id, item.resolution_message, item.reward_credits, item.status])
 
