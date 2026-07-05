@@ -676,7 +676,7 @@ func (s *MembershipService) buildInviteRewardRecord(ctx context.Context, userID 
 	blockedReasonLabel := inviteRewardBlockedReasonLabel(referral.BlockedReason)
 	grant := s.inviteMembershipGrantForRecord(ctx, referral.ID, role)
 	hasMembershipGrant := grant != nil
-	requirementText, nextActionText := inviteRewardActionTexts(role, referral, recordsNeeded, expired, blockedReasonLabel, hasMembershipGrant)
+	requirementText, nextActionText := inviteRewardActionTextsV2(role, referral, recordsNeeded, expired, blockedReasonLabel, hasMembershipGrant)
 	rewardType := inviteRewardMembershipType
 	rewardLabel := inviteRewardMembershipLabel
 	rewardDays := inviteRewardMembershipGrantDays
@@ -1706,7 +1706,7 @@ func (s *MembershipService) buildRewardCenterInviteReward(ctx context.Context, u
 			"reward_label":     inviteeRecord["reward_label"],
 			"reward_days":      inviteeRecord["reward_days"],
 			"reward_plan_code": inviteeRecord["reward_plan_code"],
-			"deadline_text":    inviteRewardDeadlineText(inviteeRecord),
+			"deadline_text":    inviteRewardDeadlineTextV2(inviteeRecord),
 			"next_action_text": inviteeRecord["next_action_text"],
 			"record":           inviteeRecord,
 		}
@@ -1753,6 +1753,64 @@ func inviteRewardDeadlineText(record map[string]any) string {
 	createdAt := parseTime(fmt.Sprintf("%v", record["created_at"]))
 	if createdAt == nil {
 		return fmt.Sprintf("%d 天内完成 %d 个自然日记录", inviteRewardWindowDays, inviteRewardRequiredDays)
+	}
+	deadline := dateOnly(createdAt.In(chinaLocation())).AddDate(0, 0, inviteRewardWindowDays-1)
+	return "有效期至 " + deadline.Format("2006-01-02")
+}
+
+func inviteRewardActionTextsV2(role string, referral domain.UserInviteReferral, recordsNeeded int, expired bool, blockedReasonLabel string, hasMembershipGrant bool) (string, string) {
+	rewardText := "完成后双方各得 " + inviteRewardMembershipLabel
+	if role == "inviter" {
+		rewardText = "好友完成后你们各得 " + inviteRewardMembershipLabel
+	}
+	switch strings.TrimSpace(referral.Status) {
+	case "pending_qualified":
+		if expired {
+			return fmt.Sprintf("注册后 %d 天内完成 %d 个不同自然日有效使用", inviteRewardWindowDays, inviteRewardRequiredDays), "已超过有效期，无法获得奖励"
+		}
+		if recordsNeeded <= 1 {
+			return fmt.Sprintf("还需在另一个自然日再完成 1 次有效使用，%s", rewardText), "完成 1 个不同自然日的有效使用"
+		}
+		return fmt.Sprintf("还需完成 %d 个不同自然日的有效使用，%s", recordsNeeded, rewardText), "完成任意功能使用，先点亮第 1 个有效自然日"
+	case "reward_completed":
+		if hasMembershipGrant {
+			return "已完成，双方已获得 " + inviteRewardMembershipLabel, "会员奖励已发放"
+		}
+		return fmt.Sprintf("已完成，双方各 +%d 积分", inviteRewardCreditsOnQualify), "奖励已进入奖励积分余额"
+	case "reward_blocked":
+		if blockedReasonLabel != "" {
+			return blockedReasonLabel, "该邀请奖励无法继续发放"
+		}
+		return "奖励条件未达成", "该邀请奖励无法继续发放"
+	case "reward_active":
+		return "旧版邀请奖励进行中", "系统会按旧版规则处理每日奖励"
+	case "cancelled":
+		return "邀请关系已取消", "无需继续处理"
+	default:
+		return "邀请奖励状态待确认", "请根据状态字段继续排查"
+	}
+}
+
+func inviteRewardDeadlineTextV2(record map[string]any) string {
+	statusLabel, _ := record["status_label"].(string)
+	if statusLabel == "已过期" {
+		return "已超过有效期"
+	}
+	status, _ := record["status"].(string)
+	switch status {
+	case "reward_completed":
+		return "已达标"
+	case "reward_blocked":
+		if label, _ := record["blocked_reason_label"].(string); label != "" {
+			return label
+		}
+		return "奖励条件未达成"
+	case "cancelled":
+		return "邀请关系已取消"
+	}
+	createdAt := parseTime(fmt.Sprintf("%v", record["created_at"]))
+	if createdAt == nil {
+		return fmt.Sprintf("%d 天内完成 %d 个自然日有效使用", inviteRewardWindowDays, inviteRewardRequiredDays)
 	}
 	deadline := dateOnly(createdAt.In(chinaLocation())).AddDate(0, 0, inviteRewardWindowDays-1)
 	return "有效期至 " + deadline.Format("2006-01-02")
