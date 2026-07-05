@@ -45,7 +45,7 @@ function InviteFriendsPage() {
 
   const shareTitle = inviterNickname
     ? `${inviterNickname}邀请你加入食探，达标后各得一周轻度版会员`
-    : '加入食探并完成2天打卡，双方各得一周轻度版会员'
+    : '加入食探并连续2天使用，双方各得一周轻度版会员'
 
   useShareAppMessage(() => ({
     title: shareTitle,
@@ -207,7 +207,7 @@ function InviteFriendsPage() {
     ? '登录注册并领取邀请'
     : isInviteOwner
       ? '请转发给新朋友'
-      : '直接加好友并开始打卡'
+      : '直接加好友并开始使用'
 
   return (
     <View className='invite-page'>
@@ -220,7 +220,7 @@ function InviteFriendsPage() {
               ? '把食探分享给新朋友'
               : '加入食探并开始健康打卡'}
         </Text>
-        <Text className='invite-subtitle'>新用户 7 天内完成 2 个自然日有效记录，双方各得一周轻度版会员，每月最多 10 人</Text>
+        <Text className='invite-subtitle'>新用户 7 天内完成 2 个自然日有效使用，双方各得一周轻度版会员，每月最多 5 人</Text>
       </View>
 
       <View className='invite-card inviter-card'>
@@ -239,7 +239,7 @@ function InviteFriendsPage() {
             <Text className='inviter-desc'>
               {isInviteOwner
                 ? '通过小程序卡片或二维码邀请新朋友，不必先分享打卡海报'
-                : '完成注册后继续记录饮食或运动，满足规则即可到账'}
+                : '完成注册后继续使用任意功能，满足规则即可到账'}
             </Text>
           </View>
         </View>
@@ -256,11 +256,11 @@ function InviteFriendsPage() {
         </View>
         <View className='rule-item'>
           <Text className='rule-item__index'>02</Text>
-          <Text className='rule-item__text'>注册后 7 天内完成 2 个自然日饮食或运动记录</Text>
+          <Text className='rule-item__text'>注册后 7 天内完成 2 个自然日任意功能使用</Text>
         </View>
         <View className='rule-item'>
           <Text className='rule-item__index'>03</Text>
-          <Text className='rule-item__text'>达标后双方各得一周轻度版会员，邀请人每月上限 10 人</Text>
+          <Text className='rule-item__text'>达标后双方各得一周轻度版会员，邀请人每月上限 5 人</Text>
         </View>
       </View>
 

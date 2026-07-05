@@ -258,6 +258,13 @@ func New(cfg *config.Config) (*App, error) {
 	exerciseSvc.ConfigureInviteRewardActivator(membershipSvc)
 	frSvc.ConfigureInviteRewardActivator(membershipSvc)
 	frNutritionSvc.ConfigureRewardAwarder(membershipSvc)
+	authmw.ConfigureAuthenticatedUseObserver(func(ctx context.Context, userID, path, method string) {
+		userID = strings.TrimSpace(userID)
+		if userID == "" {
+			return
+		}
+		_, _ = membershipSvc.ActivatePendingInviteReferralOnFirstValidUse(ctx, userID, "authenticated_api_use")
+	})
 	membershipHandler := membershiphandler.NewMembershipHandler(membershipSvc)
 
 	// Pet companion module DI

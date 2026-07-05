@@ -351,7 +351,7 @@ function RecordDetailPage() {
   const sharePath = `${extraPkgUrl('/pages/record-detail/index')}?id=${encodeURIComponent(shareRecordId)}${shareOwnerId ? `&from_user_id=${encodeURIComponent(shareOwnerId)}` : ''}${inviteCode ? `&invite_code=${encodeURIComponent(inviteCode)}` : ''}`
 
   useShareAppMessage(() => {
-    const title = ownerNickname ? `${ownerNickname}邀你来食探，达标后各得一周轻度版会员` : '加入食探并完成2天打卡，双方各得一周轻度版会员'
+    const title = ownerNickname ? `${ownerNickname}邀你来食探，达标后各得一周轻度版会员` : '加入食探并连续2天使用，双方各得一周轻度版会员'
     return {
       title,
       path: sharePath,
@@ -360,7 +360,7 @@ function RecordDetailPage() {
   })
 
   useShareTimeline(() => {
-    const title = ownerNickname ? `${ownerNickname}邀你来食探，达标后各得一周轻度版会员` : '加入食探并完成2天打卡，双方各得一周轻度版会员'
+    const title = ownerNickname ? `${ownerNickname}邀你来食探，达标后各得一周轻度版会员` : '加入食探并连续2天使用，双方各得一周轻度版会员'
     return {
       title,
       query: `id=${encodeURIComponent(shareRecordId)}${shareOwnerId ? `&from_user_id=${encodeURIComponent(shareOwnerId)}` : ''}${inviteCode ? `&invite_code=${encodeURIComponent(inviteCode)}` : ''}`,
@@ -786,10 +786,10 @@ function RecordDetailPage() {
             <View className='friend-invite-header'>
               {ownerAvatar ? <Image className='friend-invite-avatar' src={ownerAvatar} mode='aspectFill' /> : null}
               <Text className='friend-invite-title'>
-                {ownerNickname ? `${ownerNickname} 邀你来食探，达标后各得一周轻度版会员` : '注册食探并完成2天打卡，双方各得一周轻度版会员'}
+                {ownerNickname ? `${ownerNickname} 邀你来食探，达标后各得一周轻度版会员` : '注册食探并连续2天使用，双方各得一周轻度版会员'}
               </Text>
             </View>
-            <Text className='friend-invite-desc'>新用户注册后，7天内完成2个自然日饮食或运动记录即可获得会员奖励；老用户也能直接加好友</Text>
+            <Text className='friend-invite-desc'>新用户注册后，7天内完成2个自然日有效使用即可获得会员奖励；老用户也能直接加好友</Text>
             <Button className='friend-invite-btn' onClick={handleAcceptInvite} disabled={inviteLoading}>
               {inviteLoading ? <View className='btn-spinner' /> : (getAccessToken() ? '直接加好友' : '登录注册并领取邀请')}
             </Button>

@@ -54,7 +54,7 @@ const (
 	inviteRewardMembershipPlanCode  = "light_monthly"
 	inviteRewardMembershipType      = "membership_light_week"
 	inviteRewardMembershipLabel     = "一周轻度版会员"
-	inviteRewardMonthlyLimit        = 10
+	inviteRewardMonthlyLimit        = 5
 	inviteRewardLegacyCreditsPerDay = 5
 	sharePosterRewardCredits        = 1
 	sharePosterDailyMaxEvents       = 3

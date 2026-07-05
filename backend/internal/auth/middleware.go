@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"net/http"
 	"strings"
 
@@ -16,6 +17,12 @@ const (
 	ContextOpenIDKey  = "openid"
 	ContextUnionIDKey = "unionid"
 )
+
+var authenticatedUseObserver func(ctx context.Context, userID, path, method string)
+
+func ConfigureAuthenticatedUseObserver(observer func(ctx context.Context, userID, path, method string)) {
+	authenticatedUseObserver = observer
+}
 
 func RequireJWT(jwt *authservice.JWTService) gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -35,6 +42,9 @@ func RequireJWT(jwt *authservice.JWTService) gin.HandlerFunc {
 		c.Set(ContextOpenIDKey, claims.OpenID)
 		c.Set(ContextUnionIDKey, claims.UnionID)
 		setUserTraceAttributes(c, claims.UserID)
+		if authenticatedUseObserver != nil {
+			authenticatedUseObserver(c.Request.Context(), claims.UserID, c.FullPath(), c.Request.Method)
+		}
 		c.Next()
 	}
 }
