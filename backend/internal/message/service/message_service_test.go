@@ -25,4 +25,5 @@ func TestMessageServiceResolveAvatarURLUsesUserAvatarsBucket(t *testing.T) {
 	}))
 
 	assert.Equal(t, "https://cdn-user-avatars.example.com/users/avatar.jpg", svc.resolveAvatarURL("users/avatar.jpg"))
+	assert.Equal(t, "https://cdn-food-images.example.com/wechat/default_avatar.jpg", svc.resolveAvatarURL("_system/default_avatar.jpg"))
 }

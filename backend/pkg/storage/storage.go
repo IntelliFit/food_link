@@ -20,6 +20,11 @@ type Client struct {
 	cfg config.StorageConfig
 }
 
+const (
+	defaultUserAvatarKey      = "_system/default_avatar.jpg"
+	defaultUserAvatarImageKey = "wechat/default_avatar.jpg"
+)
+
 func New(cfg config.StorageConfig) *Client {
 	return &Client{cfg: cfg}
 }
@@ -137,6 +142,17 @@ func (c *Client) ResolveReferenceURL(bucketAlias, value string) string {
 		return ""
 	}
 	return raw
+}
+
+func (c *Client) ResolveUserAvatarURL(value string) string {
+	raw := strings.TrimSpace(value)
+	if raw == "" {
+		return ""
+	}
+	if raw == defaultUserAvatarKey {
+		return c.ResolveReferenceURL("food-images", defaultUserAvatarImageKey)
+	}
+	return c.ResolveReferenceURL("user-avatars", raw)
 }
 
 func (c *Client) ResolveReferenceURLs(bucketAlias string, values []string) []string {

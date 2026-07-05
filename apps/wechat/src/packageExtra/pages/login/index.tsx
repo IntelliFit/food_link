@@ -33,6 +33,9 @@ interface UserInfo {
     meta: string
 }
 
+const NEW_USER_TRIAL_MODAL_STORAGE_PREFIX = 'new_user_trial_modal_shown_v1:'
+const NEW_USER_TRIAL_MODAL_WINDOW_MS = 30 * 60 * 1000
+
 /** 安全返回：若上一页是受保护页面则跳转首页，避免循环跳转 */
 function safeNavigateBack() {
     const pages = Taro.getCurrentPages()
@@ -88,6 +91,43 @@ function stripTraceText(text: string): string {
     return String(text || '')
         .replace(/\s*[\(（]?\s*traceId\s*[:：]\s*[a-fA-F0-9]+\s*[\)）]?\s*$/i, '')
         .trim()
+}
+
+function buildNewUserTrialModalStorageKey(userId: string, createdAt: string): string {
+    return `${NEW_USER_TRIAL_MODAL_STORAGE_PREFIX}${userId}:${createdAt}`
+}
+
+function shouldShowNewUserTrialModal(userId: string, createdAt?: string | null): boolean {
+    const normalizedUserId = String(userId || '').trim()
+    const normalizedCreatedAt = String(createdAt || '').trim()
+    if (!normalizedUserId || !normalizedCreatedAt) {
+        return false
+    }
+    const createdMs = Date.parse(normalizedCreatedAt)
+    if (!Number.isFinite(createdMs)) {
+        return false
+    }
+    const ageMs = Date.now() - createdMs
+    if (ageMs < 0 || ageMs > NEW_USER_TRIAL_MODAL_WINDOW_MS) {
+        return false
+    }
+    const storageKey = buildNewUserTrialModalStorageKey(normalizedUserId, normalizedCreatedAt)
+    return !Taro.getStorageSync(storageKey)
+}
+
+async function showNewUserTrialModalIfNeeded(userId: string, createdAt?: string | null): Promise<void> {
+    if (!shouldShowNewUserTrialModal(userId, createdAt)) {
+        return
+    }
+    const normalizedCreatedAt = String(createdAt || '').trim()
+    const storageKey = buildNewUserTrialModalStorageKey(userId, normalizedCreatedAt)
+    Taro.setStorageSync(storageKey, '1')
+    await Taro.showModal({
+        title: '新用户礼包已到账',
+        content: '系统已自动赠送你 3 天基础会员时长，快去体验吧。',
+        confirmText: '我知道了',
+        showCancel: false,
+    })
 }
 
 async function showLoginErrorToast(error: unknown, fallback: string): Promise<void> {
@@ -444,6 +484,7 @@ export default function LoginPage() {
             }
             Taro.setStorageSync('userInfo', userInfo)
             Taro.setStorageSync('isLoggedIn', true)
+            await showNewUserTrialModalIfNeeded(loginData.user_id, apiUserInfo.create_time)
 
             Taro.showToast({
                 title: '登录成功',
