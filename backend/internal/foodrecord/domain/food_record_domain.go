@@ -36,44 +36,44 @@ type FoodRecord struct {
 func (FoodRecord) TableName() string { return "user_food_records" }
 
 type FoodItem struct {
-	Name                   string                 `json:"name"`
-	Weight                 float64                `json:"weight"`
-	Ratio                  float64                `json:"ratio"`
-	Intake                 float64                `json:"intake"`
-	ImagePath              *string                `json:"image_path,omitempty"`
-	ImagePaths             []string               `json:"image_paths,omitempty"`
-	GrossWeightGrams       float64                `json:"gross_weight_grams,omitempty"`
-	EdiblePortionRatio     float64                `json:"edible_portion_ratio,omitempty"`
-	EdiblePortionReason    *string                `json:"edible_portion_reason,omitempty"`
-	EdiblePortionSource    *string                `json:"edible_portion_source,omitempty"`
-	SuggestedRatio         *float64               `json:"suggested_ratio,omitempty"`
-	SuggestedRatioReason   *string                `json:"suggested_ratio_reason,omitempty"`
-	SuggestedRatioSource   *string                `json:"suggested_ratio_source,omitempty"`
-	WaterMl                  float64                `json:"water_ml,omitempty"`
-	NutritionSource          *string                `json:"nutrition_source,omitempty"`
-	NutritionSourceCategory  *string                `json:"nutrition_source_category,omitempty"`
-	MatchedFoodID            *string                `json:"matched_food_id,omitempty"`
-	PackagedFoodID           *string                `json:"packaged_food_id,omitempty"`
-	PackageMatchStatus     *string                `json:"package_match_status,omitempty"`
-	PackageMatchConfidence *float64               `json:"package_match_confidence,omitempty"`
-	PackageWeightSource    *string                `json:"package_weight_source,omitempty"`
-	PackageWeightApplied   *bool                  `json:"package_weight_applied,omitempty"`
-	PackageWeightReason    *string                `json:"package_weight_reason,omitempty"`
-	PackagedCandidates     []map[string]any       `json:"packaged_candidates,omitempty"`
-	Nutrients              FoodItemNutrients      `json:"nutrients"`
-	Ingredients            *FoodItemIngredients   `json:"ingredients,omitempty"`
-	ManualSource           *string                `json:"manual_source,omitempty"`
-	ManualSourceID         *string                `json:"manual_source_id,omitempty"`
-	ManualSourceTitle      *string                `json:"manual_source_title,omitempty"`
-	ManualPortionLabel     *string                `json:"manual_portion_label,omitempty"`
+	Name                    string               `json:"name"`
+	Weight                  float64              `json:"weight"`
+	Ratio                   float64              `json:"ratio"`
+	Intake                  float64              `json:"intake"`
+	ImagePath               *string              `json:"image_path,omitempty"`
+	ImagePaths              []string             `json:"image_paths,omitempty"`
+	GrossWeightGrams        float64              `json:"gross_weight_grams,omitempty"`
+	EdiblePortionRatio      float64              `json:"edible_portion_ratio,omitempty"`
+	EdiblePortionReason     *string              `json:"edible_portion_reason,omitempty"`
+	EdiblePortionSource     *string              `json:"edible_portion_source,omitempty"`
+	SuggestedRatio          *float64             `json:"suggested_ratio,omitempty"`
+	SuggestedRatioReason    *string              `json:"suggested_ratio_reason,omitempty"`
+	SuggestedRatioSource    *string              `json:"suggested_ratio_source,omitempty"`
+	WaterMl                 float64              `json:"water_ml,omitempty"`
+	NutritionSource         *string              `json:"nutrition_source,omitempty"`
+	NutritionSourceCategory *string              `json:"nutrition_source_category,omitempty"`
+	MatchedFoodID           *string              `json:"matched_food_id,omitempty"`
+	PackagedFoodID          *string              `json:"packaged_food_id,omitempty"`
+	PackageMatchStatus      *string              `json:"package_match_status,omitempty"`
+	PackageMatchConfidence  *float64             `json:"package_match_confidence,omitempty"`
+	PackageWeightSource     *string              `json:"package_weight_source,omitempty"`
+	PackageWeightApplied    *bool                `json:"package_weight_applied,omitempty"`
+	PackageWeightReason     *string              `json:"package_weight_reason,omitempty"`
+	PackagedCandidates      []map[string]any     `json:"packaged_candidates,omitempty"`
+	Nutrients               FoodItemNutrients    `json:"nutrients"`
+	Ingredients             *FoodItemIngredients `json:"ingredients,omitempty"`
+	ManualSource            *string              `json:"manual_source,omitempty"`
+	ManualSourceID          *string              `json:"manual_source_id,omitempty"`
+	ManualSourceTitle       *string              `json:"manual_source_title,omitempty"`
+	ManualPortionLabel      *string              `json:"manual_portion_label,omitempty"`
 }
 
 // FoodItemIngredients holds the ingredient label / nutrition facts extracted
 // from packaged food images during the first-stage vision recognition.
 type FoodItemIngredients struct {
-	IngredientsText    string         `json:"ingredientsText,omitempty"`
-	ServingSize        string         `json:"servingSize,omitempty"`
-	NutritionPer100g   map[string]any `json:"nutritionPer100g,omitempty"`
+	IngredientsText  string         `json:"ingredientsText,omitempty"`
+	ServingSize      string         `json:"servingSize,omitempty"`
+	NutritionPer100g map[string]any `json:"nutritionPer100g,omitempty"`
 }
 
 func (f *FoodItem) UnmarshalJSON(data []byte) error {
@@ -408,6 +408,46 @@ type PackagedFood struct {
 }
 
 func (PackagedFood) TableName() string { return "packaged_food_library" }
+
+type PackagedFoodCorrectionSubmission struct {
+	ID                string         `gorm:"column:id" json:"id"`
+	UserID            string         `gorm:"column:user_id" json:"user_id"`
+	PackagedFoodID    string         `gorm:"column:packaged_food_id" json:"packaged_food_id"`
+	Status            string         `gorm:"column:status" json:"status"`
+	ReasonType        string         `gorm:"column:reason_type" json:"reason_type"`
+	Comment           string         `gorm:"column:comment" json:"comment"`
+	BeforeSnapshot    map[string]any `gorm:"column:before_snapshot;serializer:json" json:"before_snapshot,omitempty"`
+	ProposedPatch     map[string]any `gorm:"column:proposed_patch;serializer:json" json:"proposed_patch,omitempty"`
+	EvidenceImageURLs []string       `gorm:"column:evidence_image_urls;serializer:json" json:"evidence_image_urls,omitempty"`
+	EvidenceBarcode   *string        `gorm:"column:evidence_barcode" json:"evidence_barcode,omitempty"`
+	OCRRawText        *string        `gorm:"column:ocr_raw_text" json:"ocr_raw_text,omitempty"`
+	ConfidenceScore   float64        `gorm:"column:confidence_score" json:"confidence_score"`
+	RiskFlags         []string       `gorm:"column:risk_flags;serializer:json" json:"risk_flags,omitempty"`
+	ReviewNote        *string        `gorm:"column:review_note" json:"review_note,omitempty"`
+	ReviewedBy        *string        `gorm:"column:reviewed_by" json:"reviewed_by,omitempty"`
+	ReviewedAt        *time.Time     `gorm:"column:reviewed_at" json:"reviewed_at,omitempty"`
+	AppliedAt         *time.Time     `gorm:"column:applied_at" json:"applied_at,omitempty"`
+	CreatedAt         *time.Time     `gorm:"column:created_at" json:"created_at,omitempty"`
+	UpdatedAt         *time.Time     `gorm:"column:updated_at" json:"updated_at,omitempty"`
+}
+
+func (PackagedFoodCorrectionSubmission) TableName() string {
+	return "packaged_food_correction_submissions"
+}
+
+type PackagedFoodChangeLog struct {
+	ID             string         `gorm:"column:id" json:"id"`
+	PackagedFoodID string         `gorm:"column:packaged_food_id" json:"packaged_food_id"`
+	SubmissionID   *string        `gorm:"column:submission_id" json:"submission_id,omitempty"`
+	OperatorID     *string        `gorm:"column:operator_id" json:"operator_id,omitempty"`
+	OperatorType   string         `gorm:"column:operator_type" json:"operator_type"`
+	BeforeSnapshot map[string]any `gorm:"column:before_snapshot;serializer:json" json:"before_snapshot,omitempty"`
+	AfterSnapshot  map[string]any `gorm:"column:after_snapshot;serializer:json" json:"after_snapshot,omitempty"`
+	ChangedFields  []string       `gorm:"column:changed_fields;serializer:json" json:"changed_fields,omitempty"`
+	CreatedAt      *time.Time     `gorm:"column:created_at" json:"created_at,omitempty"`
+}
+
+func (PackagedFoodChangeLog) TableName() string { return "packaged_food_change_logs" }
 
 // PackagedFoodAlias — table: packaged_food_aliases
 type PackagedFoodAlias struct {

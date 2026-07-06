@@ -351,6 +351,17 @@ function PackagedFoodTaskDetailPage() {
     Taro.navigateTo({ url: '/packageExtra/pages/packaged-food-edit/index?task_mode=reward_center' })
   }
 
+  const submitCorrection = () => {
+    const packagedFoodId = normalizeString(packaged?.packaged_food_id || auto?.packaged_food_id || reward?.packaged_food_id)
+    if (!packagedFoodId) {
+      Taro.showToast({ title: '当前还没有可纠错的入库商品', icon: 'none' })
+      return
+    }
+    Taro.navigateTo({
+      url: `/packageExtra/pages/packaged-food-correction/index?packaged_food_id=${encodeURIComponent(packagedFoodId)}`,
+    })
+  }
+
   const supplementResult = () => {
     if (!packaged) return
     const netWeight = Number(packaged.net_weight_g) || Number((packaged as any).net_content_value) || 0
@@ -402,6 +413,11 @@ function PackagedFoodTaskDetailPage() {
             {packaged && !isTaskStillRunning(task?.status) && auto?.status !== 'ingested' && (
               <View className='detail-action-btn secondary' onClick={supplementResult}>
                 <Text className='detail-action-text secondary'>补充信息</Text>
+              </View>
+            )}
+            {packaged && !isTaskStillRunning(task?.status) && (packaged?.packaged_food_id || auto?.packaged_food_id || reward?.packaged_food_id) && (
+              <View className='detail-action-btn secondary' onClick={submitCorrection}>
+                <Text className='detail-action-text secondary'>发起纠错</Text>
               </View>
             )}
           </View>

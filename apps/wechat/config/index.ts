@@ -3,8 +3,8 @@ import { join } from 'path'
 import { defineConfig, type UserConfigExport } from '@tarojs/cli'
 import { createStyleImportPlugin } from 'vite-plugin-style-import'
 
-import devConfig from './dev'
-import prodConfig from './prod'
+import devConfig from './dev.ts'
+import prodConfig from './prod.ts'
 
 const appRoot = process.cwd()
 const workspaceRoot = join(appRoot, '..', '..')

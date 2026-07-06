@@ -2327,6 +2327,7 @@ func applyManualFoodServingProfile(item *domain.ManualFoodResult) {
 		if strings.TrimSpace(item.PortionLabel) == "" {
 			item.PortionLabel = fmt.Sprintf("%.0f%s", item.DefaultWeightGrams, item.DisplayUnitLabel)
 		}
+		applyPackagedFoodPortionNutrition(item)
 		return
 	}
 	title := strings.TrimSpace(item.Title)
@@ -2380,6 +2381,45 @@ func applyPer100Default(item *domain.ManualFoodResult, defaultWeight float64) {
 	item.DefaultWeightGrams = defaultWeight
 }
 
+func applyPackagedFoodPortionNutrition(item *domain.ManualFoodResult) {
+	if item == nil || item.NutrientsPer100g == nil || item.DefaultWeightGrams <= 0 {
+		return
+	}
+	if item.DisplayUnit == "ml" && item.DefaultWeightGrams > 750 {
+		item.DefaultWeightGrams = 500
+		item.PortionLabel = "500ml"
+	}
+	scale := item.DefaultWeightGrams / 100
+	item.TotalCalories = item.NutrientsPer100g.Calories * scale
+	item.TotalProtein = item.NutrientsPer100g.Protein * scale
+	item.TotalCarbs = item.NutrientsPer100g.Carbs * scale
+	item.TotalFat = item.NutrientsPer100g.Fat * scale
+	if item.ExtraNutrients == nil {
+		item.ExtraNutrients = &domain.ManualFoodNutrients{}
+	}
+	item.ExtraNutrients.Fiber = item.NutrientsPer100g.Fiber * scale
+	item.ExtraNutrients.Sugar = item.NutrientsPer100g.Sugar * scale
+	item.ExtraNutrients.SaturatedFat = item.NutrientsPer100g.SaturatedFat * scale
+	item.ExtraNutrients.CholesterolMg = item.NutrientsPer100g.CholesterolMg * scale
+	item.ExtraNutrients.SodiumMg = item.NutrientsPer100g.SodiumMg * scale
+	item.ExtraNutrients.PotassiumMg = item.NutrientsPer100g.PotassiumMg * scale
+	item.ExtraNutrients.CalciumMg = item.NutrientsPer100g.CalciumMg * scale
+	item.ExtraNutrients.IronMg = item.NutrientsPer100g.IronMg * scale
+	item.ExtraNutrients.MagnesiumMg = item.NutrientsPer100g.MagnesiumMg * scale
+	item.ExtraNutrients.ZincMg = item.NutrientsPer100g.ZincMg * scale
+	item.ExtraNutrients.VitaminARaeMcg = item.NutrientsPer100g.VitaminARaeMcg * scale
+	item.ExtraNutrients.VitaminCMg = item.NutrientsPer100g.VitaminCMg * scale
+	item.ExtraNutrients.VitaminDMcg = item.NutrientsPer100g.VitaminDMcg * scale
+	item.ExtraNutrients.VitaminEMg = item.NutrientsPer100g.VitaminEMg * scale
+	item.ExtraNutrients.VitaminKMcg = item.NutrientsPer100g.VitaminKMcg * scale
+	item.ExtraNutrients.ThiaminMg = item.NutrientsPer100g.ThiaminMg * scale
+	item.ExtraNutrients.RiboflavinMg = item.NutrientsPer100g.RiboflavinMg * scale
+	item.ExtraNutrients.NiacinMg = item.NutrientsPer100g.NiacinMg * scale
+	item.ExtraNutrients.VitaminB6Mg = item.NutrientsPer100g.VitaminB6Mg * scale
+	item.ExtraNutrients.FolateMcg = item.NutrientsPer100g.FolateMcg * scale
+	item.ExtraNutrients.VitaminB12Mcg = item.NutrientsPer100g.VitaminB12Mcg * scale
+}
+
 func servingPresets(base float64, unit string, quantities []float64) []domain.ManualFoodServingPreset {
 	if base <= 0 {
 		return nil
@@ -2418,6 +2458,9 @@ func isEggLikeFood(title string) bool {
 
 func isBeverageLikeFood(title string) bool {
 	lower := strings.ToLower(strings.TrimSpace(title))
+	if strings.Contains(title, "粉") || strings.Contains(title, "固体饮料") || strings.Contains(title, "冲剂") || strings.Contains(lower, "powder") {
+		return false
+	}
 	keywords := []string{"咖啡", "美式", "拿铁", "奶茶", "茶饮", "绿茶", "红茶", "乌龙茶", "普洱", "茉莉茶", "饮料", "可乐", "果汁", "豆浆", "清汤", "汤", "coffee", "latte", "tea", "drink", "soup", "broth"}
 	for _, keyword := range keywords {
 		if strings.Contains(lower, strings.ToLower(keyword)) {
@@ -2496,6 +2539,9 @@ func packagedDefaultWeight(item fooddomain.PackagedFood) float64 {
 	if netContent := packagedNetContentWeight(item); netContent > 0 && netContent <= 500 {
 		return netContent
 	}
+	if strings.EqualFold(strings.TrimSpace(stringPtrValue(item.NetContentUnit)), "ml") && item.NetContentValue > 750 {
+		return 500
+	}
 	if item.NetWeightG > 0 && item.NetWeightG <= 500 {
 		return item.NetWeightG
 	}
@@ -2509,6 +2555,9 @@ func packagedPortionLabel(item fooddomain.PackagedFood) string {
 	}
 	if item.ServingWeightG > 0 {
 		return fmt.Sprintf("%.0f%s", item.ServingWeightG, unit)
+	}
+	if unit == "ml" && item.NetContentValue > 750 {
+		return "500ml"
 	}
 	if label := packagedNetContentLabel(item); label != "" {
 		return label

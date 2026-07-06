@@ -219,6 +219,12 @@ export interface FoodItem {
   category?: string
   estimatedWeightGrams: number
   originalWeightGrams: number
+  final_weight_g?: number
+  display_weight?: string
+  weight_method?: string
+  weight_confidence?: number
+  weight_interval_g?: number[]
+  needs_user_confirmation?: boolean
   grossWeightGrams?: number
   gross_weight_grams?: number
   ediblePortionRatio?: number
@@ -5306,6 +5312,7 @@ export interface PackagedFoodItem {
   id: string
   brand?: string
   product_name: string
+  display_name?: string
   normalized_name: string
   product_key?: string
   spec_text?: string
@@ -5318,6 +5325,11 @@ export interface PackagedFoodItem {
   extract_confidence?: number
   field_confidence?: Record<string, any>
   ingest_method?: string
+  review_status?: string
+  nutrition_basis_unit?: string
+  energy_unit_raw?: string
+  raw_label_payload?: Record<string, any>
+  conversion_status?: string
   net_weight_g: number
   serving_weight_g: number
   kcal_per_100g: number
@@ -5326,9 +5338,42 @@ export interface PackagedFoodItem {
   fat_per_100g: number
   fiber_per_100g?: number
   sugar_per_100g?: number
+  saturated_fat_per_100g?: number
+  cholesterol_mg_per_100g?: number
   sodium_mg_per_100g?: number
+  potassium_mg_per_100g?: number
+  calcium_mg_per_100g?: number
+  iron_mg_per_100g?: number
+  magnesium_mg_per_100g?: number
+  zinc_mg_per_100g?: number
+  vitamin_a_rae_mcg_per_100g?: number
+  vitamin_c_mg_per_100g?: number
+  vitamin_d_mcg_per_100g?: number
+  vitamin_e_mg_per_100g?: number
+  vitamin_k_mcg_per_100g?: number
+  thiamin_mg_per_100g?: number
+  riboflavin_mg_per_100g?: number
+  niacin_mg_per_100g?: number
+  vitamin_b6_mg_per_100g?: number
+  folate_mcg_per_100g?: number
+  vitamin_b12_mcg_per_100g?: number
   source?: string
   is_active: boolean
+}
+
+export type PackagedFoodCorrectionReasonType =
+  | 'nutrition_wrong'
+  | 'barcode_wrong'
+  | 'name_wrong'
+  | 'spec_wrong'
+  | 'duplicate'
+  | 'other'
+
+export interface SubmitPackagedFoodCorrectionRequest extends CreatePackagedFoodRequest {
+  packaged_food_id: string
+  reason_type: PackagedFoodCorrectionReasonType
+  comment?: string
+  display_name?: string
 }
 
 export interface PackagedNutritionLabelRecognition {
@@ -5426,6 +5471,33 @@ export async function createPackagedFood(payload: CreatePackagedFoodRequest): Pr
     throwHttpErrorWithStatus(res.statusCode, res.data, '保存零食数据失败')
   }
   return unwrapResponse<{ item: PackagedFoodItem }>(res).item
+}
+
+export async function getPackagedFoodItem(foodId: string): Promise<PackagedFoodItem> {
+  const id = String(foodId || '').trim()
+  if (!id) {
+    throw new Error('缺少零食库商品 ID')
+  }
+  const res = await authenticatedRequest(`/api/packaged-food/${encodeURIComponent(id)}`, {
+    method: 'GET',
+    timeout: 10000,
+  })
+  if (res.statusCode !== 200) {
+    throwHttpErrorWithStatus(res.statusCode, res.data, '获取零食库商品失败')
+  }
+  return unwrapResponse<{ item: PackagedFoodItem }>(res).item
+}
+
+export async function submitPackagedFoodCorrection(payload: SubmitPackagedFoodCorrectionRequest): Promise<{ id: string; message: string; item: Record<string, any> }> {
+  const res = await authenticatedRequest('/api/packaged-food/corrections', {
+    method: 'POST',
+    data: payload,
+    timeout: 15000,
+  })
+  if (res.statusCode !== 200) {
+    throwHttpErrorWithStatus(res.statusCode, res.data, '提交零食纠错失败')
+  }
+  return unwrapResponse<{ id: string; message: string; item: Record<string, any> }>(res)
 }
 
 export async function recognizePackagedNutritionLabel(imageUrl: string): Promise<PackagedNutritionLabelRecognition> {

@@ -56,6 +56,12 @@ export interface FoodItem {
   category?: string
   estimatedWeightGrams: number
   originalWeightGrams: number
+  final_weight_g?: number
+  display_weight?: string
+  weight_method?: string
+  weight_confidence?: number
+  weight_interval_g?: number[]
+  needs_user_confirmation?: boolean
   grossWeightGrams?: number
   gross_weight_grams?: number
   ediblePortionRatio?: number

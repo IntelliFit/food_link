@@ -315,7 +315,7 @@ const formatIngredientMetricDisplay = (field: IngredientMetricField, value: numb
   field === 'waterMl' || field === 'calories' ? formatWaterDisplay(value) : formatMacroDisplay(value)
 )
 
-const formatWeightDisplay = (value: number) => `${Math.max(0, Math.round(value))}g`
+const formatWeightDisplay = (item: NutritionItem) => item.displayWeight || `${Math.max(0, Math.round(item.weight))}g`
 
 type NutrientDetailKey = keyof Pick<Nutrients,
   'fiber' | 'sugar' | 'saturatedFat' | 'cholesterolMg' | 'sodiumMg' | 'potassiumMg' |
@@ -2937,7 +2937,7 @@ function ResultPage() {
                           className='adjust-btn minus'
                           onClick={() => handleWeightAdjust(item.id, -10)}
                         >–</View>
-                        <Text className='weight-display'>{formatWeightDisplay(item.weight)}</Text>
+                        <Text className='weight-display'>{formatWeightDisplay(item)}</Text>
                         <View
                           className='adjust-btn plus'
                           onClick={() => handleWeightAdjust(item.id, 10)}

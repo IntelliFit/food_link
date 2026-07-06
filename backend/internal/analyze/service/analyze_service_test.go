@@ -1937,6 +1937,98 @@ func TestNutritionWeightFromItemFallsBackToWaterMl(t *testing.T) {
 	}))
 }
 
+func TestAnalyzeService_FinalWeightPresentationAddsGenericEvidenceFields(t *testing.T) {
+	resolver := newFakeAnalyzeNutritionResolver()
+	resolver.ordinaryFoods["茶叶蛋"] = foodrecorddomain.FoodNutrition{
+		ID:             "tea-egg-1",
+		CanonicalName:  "茶叶蛋",
+		NormalizedName: "茶叶蛋",
+		KcalPer100g:    150,
+		ProteinPer100g: 13,
+		CarbsPer100g:   1,
+		FatPer100g:     10,
+		IsActive:       true,
+	}
+	svc := NewAnalyzeService(&mockLLMClient{}, &mockLLMClient{}, nil)
+	svc.nutrition = resolver
+
+	resp, err := svc.finalizeAnalyzeResponse(context.Background(), "", map[string]any{
+		"description": "tea egg",
+		"items": []any{map[string]any{
+			"name":                 "茶叶蛋",
+			"type":                 "normal",
+			"estimatedWeightGrams": 80.0,
+			"grossWeightGrams":     80.0,
+		}},
+	}, AnalyzeInput{}, defaultExecutionMode, "fake", "fake-model", 12)
+	require.NoError(t, err)
+
+	items := toItems(resp["items"])
+	require.Len(t, items, 1)
+	assert.Equal(t, 80.0, items[0]["estimatedWeightGrams"])
+	assert.Equal(t, 80.0, items[0]["final_weight_g"])
+	assert.Equal(t, "visual_estimate", items[0]["weight_method"])
+	assert.Equal(t, 0.68, items[0]["weight_confidence"])
+	assert.Equal(t, []float64{57.6, 102.4}, items[0]["weight_interval_g"])
+	assert.Equal(t, "约 80g", items[0]["display_weight"])
+	assert.Equal(t, false, items[0]["needs_user_confirmation"])
+}
+
+func TestAnalyzeService_FinalWeightPresentationRespectsItemSpecificEvidence(t *testing.T) {
+	resolver := newFakeAnalyzeNutritionResolver()
+	resolver.ordinaryFoods["鸡蛋"] = foodrecorddomain.FoodNutrition{
+		ID:             "egg-1",
+		CanonicalName:  "鸡蛋",
+		NormalizedName: "鸡蛋",
+		KcalPer100g:    141,
+		ProteinPer100g: 12.6,
+		CarbsPer100g:   1.1,
+		FatPer100g:     9.5,
+		IsActive:       true,
+	}
+	svc := NewAnalyzeService(&mockLLMClient{}, &mockLLMClient{}, nil)
+	svc.nutrition = resolver
+
+	resp, err := svc.finalizeAnalyzeResponse(context.Background(), "", map[string]any{
+		"description": "eggs",
+		"items": []any{map[string]any{
+			"name":                 "鸡蛋",
+			"type":                 "normal",
+			"estimatedWeightGrams": 150.0,
+			"weight_method":        "vision_verified",
+			"weight_confidence":    0.82,
+			"weight_interval_g":    []any{130.0, 170.0},
+		}},
+	}, AnalyzeInput{}, defaultExecutionMode, "fake", "fake-model", 12)
+	require.NoError(t, err)
+
+	items := toItems(resp["items"])
+	require.Len(t, items, 1)
+	assert.Equal(t, 150.0, items[0]["final_weight_g"])
+	assert.Equal(t, "vision_verified", items[0]["weight_method"])
+	assert.Equal(t, 0.82, items[0]["weight_confidence"])
+	assert.Equal(t, []float64{130, 170}, items[0]["weight_interval_g"])
+	assert.Equal(t, "约 150g", items[0]["display_weight"])
+}
+
+func TestAnalyzeService_FinalWeightPresentationMarksStrongEvidence(t *testing.T) {
+	svc := NewAnalyzeService(&mockLLMClient{}, &mockLLMClient{}, nil)
+	svc.nutrition = newFakeAnalyzeNutritionResolver()
+
+	items := svc.ApplyDBFirstToItems(context.Background(), []map[string]any{{
+		"name":                 "桃李豆沙小饼面包",
+		"estimatedWeightGrams": 80.0,
+		"grossWeightGrams":     80.0,
+	}}, "")
+
+	require.Len(t, items, 1)
+	assert.Equal(t, 55.0, items[0]["final_weight_g"])
+	assert.Equal(t, "package_weight", items[0]["weight_method"])
+	assert.Equal(t, 0.96, items[0]["weight_confidence"])
+	assert.Equal(t, []float64{53.35, 56.65}, items[0]["weight_interval_g"])
+	assert.Equal(t, false, items[0]["needs_user_confirmation"])
+}
+
 func mixedMealWithPackagedFoodParsed() map[string]any {
 	return map[string]any{
 		"description": "米饭配面包",

@@ -12,13 +12,25 @@ import {
   Settings,
   Utensils,
 } from 'lucide-react'
+
+import { BrandMark } from '@/components/brand-mark'
+import { ThemeToggle } from '@/components/theme-toggle'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
-import { BrandMark } from '@/components/brand-mark'
-import { ThemeToggle } from '@/components/theme-toggle'
 
-export type AdminMenuId = 'overview' | 'feedback' | 'benchmark' | 'packaged-foods' | 'food-nutrition' | 'public-food-library' | 'exercise-energy' | 'feed-reports' | 'payment-test' | 'settings'
+export type AdminMenuId =
+  | 'overview'
+  | 'feedback'
+  | 'benchmark'
+  | 'packaged-foods'
+  | 'packaged-food-corrections'
+  | 'food-nutrition'
+  | 'public-food-library'
+  | 'exercise-energy'
+  | 'feed-reports'
+  | 'payment-test'
+  | 'settings'
 
 type AdminSidebarProps = {
   activeMenu: AdminMenuId
@@ -33,15 +45,10 @@ type AdminMenuItem = {
   disabled?: boolean
 }
 
-const menuGroups: Array<{
-  label: string
-  items: AdminMenuItem[]
-}> = [
+const menuGroups: Array<{ label: string; items: AdminMenuItem[] }> = [
   {
     label: '工作台',
-    items: [
-      { id: 'overview', label: '总览', icon: LayoutDashboard },
-    ],
+    items: [{ id: 'overview', label: '总览', icon: LayoutDashboard }],
   },
   {
     label: '用户声音',
@@ -54,6 +61,7 @@ const menuGroups: Array<{
     label: '内容数据',
     items: [
       { id: 'packaged-foods', label: '包装食品', icon: Package },
+      { id: 'packaged-food-corrections', label: '零食纠错', icon: Flag },
       { id: 'food-nutrition', label: '营养食物', icon: Apple },
       { id: 'public-food-library', label: '公共食物', icon: Utensils },
       { id: 'exercise-energy', label: '运动库', icon: Activity },
@@ -68,13 +76,10 @@ const menuGroups: Array<{
   },
   {
     label: '系统',
-    items: [
-      { id: 'settings', label: '系统设置', icon: Settings, disabled: true },
-    ],
+    items: [{ id: 'settings', label: '系统设置', icon: Settings, disabled: true }],
   },
 ]
 
-/** 后台左侧导航 */
 export function AdminSidebar({ activeMenu, onLogout, onMenuChange }: AdminSidebarProps) {
   return (
     <aside className='sticky top-4 flex h-[calc(100vh-2rem)] w-[256px] shrink-0 flex-col rounded-2xl border bg-card/90 p-5 shadow-lg backdrop-blur-md'>
@@ -89,9 +94,7 @@ export function AdminSidebar({ activeMenu, onLogout, onMenuChange }: AdminSideba
       <nav className='flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto pr-1'>
         {menuGroups.map((group) => (
           <section key={group.label} className='space-y-2'>
-            <div className='px-2 text-[11px] font-semibold tracking-wide text-muted-foreground'>
-              {group.label}
-            </div>
+            <div className='px-2 text-[11px] font-semibold tracking-wide text-muted-foreground'>{group.label}</div>
             <div className='space-y-1'>
               {group.items.map((menu) => {
                 const Icon = menu.icon
