@@ -419,6 +419,48 @@ type PackagedFoodAlias struct {
 
 func (PackagedFoodAlias) TableName() string { return "packaged_food_aliases" }
 
+// PackagedFoodCorrectionSubmission — table: packaged_food_correction_submissions
+type PackagedFoodCorrectionSubmission struct {
+	ID                string         `gorm:"column:id" json:"id"`
+	UserID            string         `gorm:"column:user_id" json:"user_id"`
+	PackagedFoodID    string         `gorm:"column:packaged_food_id" json:"packaged_food_id"`
+	Status            string         `gorm:"column:status" json:"status"`
+	ReasonType        string         `gorm:"column:reason_type" json:"reason_type"`
+	Comment           string         `gorm:"column:comment" json:"comment"`
+	BeforeSnapshot    map[string]any `gorm:"column:before_snapshot;serializer:json" json:"before_snapshot,omitempty"`
+	ProposedPatch     map[string]any `gorm:"column:proposed_patch;serializer:json" json:"proposed_patch,omitempty"`
+	EvidenceImageURLs []string       `gorm:"column:evidence_image_urls;serializer:json" json:"evidence_image_urls,omitempty"`
+	EvidenceBarcode   *string        `gorm:"column:evidence_barcode" json:"evidence_barcode,omitempty"`
+	OCRRawText        *string        `gorm:"column:ocr_raw_text" json:"ocr_raw_text,omitempty"`
+	ConfidenceScore   float64        `gorm:"column:confidence_score" json:"confidence_score"`
+	RiskFlags         []string       `gorm:"column:risk_flags;serializer:json" json:"risk_flags,omitempty"`
+	ReviewNote        *string        `gorm:"column:review_note" json:"review_note,omitempty"`
+	ReviewedBy        *string        `gorm:"column:reviewed_by" json:"reviewed_by,omitempty"`
+	ReviewedAt        *time.Time     `gorm:"column:reviewed_at" json:"reviewed_at,omitempty"`
+	AppliedAt         *time.Time     `gorm:"column:applied_at" json:"applied_at,omitempty"`
+	CreatedAt         *time.Time     `gorm:"column:created_at" json:"created_at,omitempty"`
+	UpdatedAt         *time.Time     `gorm:"column:updated_at" json:"updated_at,omitempty"`
+}
+
+func (PackagedFoodCorrectionSubmission) TableName() string {
+	return "packaged_food_correction_submissions"
+}
+
+// PackagedFoodChangeLog — table: packaged_food_change_logs
+type PackagedFoodChangeLog struct {
+	ID             string         `gorm:"column:id" json:"id"`
+	PackagedFoodID string         `gorm:"column:packaged_food_id" json:"packaged_food_id"`
+	SubmissionID   *string        `gorm:"column:submission_id" json:"submission_id,omitempty"`
+	OperatorID     *string        `gorm:"column:operator_id" json:"operator_id,omitempty"`
+	OperatorType   string         `gorm:"column:operator_type" json:"operator_type"`
+	BeforeSnapshot map[string]any `gorm:"column:before_snapshot;serializer:json" json:"before_snapshot,omitempty"`
+	AfterSnapshot  map[string]any `gorm:"column:after_snapshot;serializer:json" json:"after_snapshot,omitempty"`
+	ChangedFields  []string       `gorm:"column:changed_fields;serializer:json" json:"changed_fields,omitempty"`
+	CreatedAt      *time.Time     `gorm:"column:created_at" json:"created_at,omitempty"`
+}
+
+func (PackagedFoodChangeLog) TableName() string { return "packaged_food_change_logs" }
+
 // FoodNutritionAlias — table: food_nutrition_aliases
 type FoodNutritionAlias struct {
 	ID              string `gorm:"column:id" json:"id"`

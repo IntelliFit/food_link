@@ -325,6 +325,10 @@ function PackagedFoodTaskDetailPage() {
   const imageUrls = useMemo(() => imageUrlsForTask(task, packaged), [task, packaged])
   const derivedNutrition = useMemo(() => derivePackagedNutrition(packaged), [packaged])
   const nutrition = derivedNutrition.unit
+  const correctionPackagedFoodId =
+    normalizeString(packaged?.packaged_food_id) ||
+    normalizeString(auto?.packaged_food_id) ||
+    normalizeString(reward?.packaged_food_id)
 
   const loadTask = async (showToast = false) => {
     if (!taskId || loading) return
@@ -351,35 +355,11 @@ function PackagedFoodTaskDetailPage() {
     Taro.navigateTo({ url: '/packageExtra/pages/packaged-food-edit/index?task_mode=reward_center' })
   }
 
-  const supplementResult = () => {
-    if (!packaged) return
-    const netWeight = Number(packaged.net_weight_g) || Number((packaged as any).net_content_value) || 0
-    Taro.setStorageSync(PACKAGED_FOOD_EDIT_DRAFT_KEY, {
-      sourceTaskId: taskId,
-      recognizedNameHint: packaged.product_name,
-      frontImageUrl: imageUrls[0] || '',
-      nutritionImageUrl: imageUrls[1] || '',
-      ingredientsImageUrl: imageUrls[2] || '',
-      brand: packaged.brand || '',
-      productName: packaged.product_name || '',
-      flavorText: packaged.flavor_text || '',
-      packageCategory: packaged.package_category || '',
-      specText: packaged.spec_text || '',
-      barcode: packaged.barcode || '',
-      ingredientsText: packaged.ingredients_text || '',
-      netWeightG: netWeight > 0 ? String(netWeight) : '',
-      servingWeightG: packaged.serving_weight_g ? String(packaged.serving_weight_g) : derivedNutrition.servingWeightG ? String(derivedNutrition.servingWeightG) : '',
-      nutritionBasis: '100',
-      energyUnit: 'kcal',
-      calories: nutrition.calories != null ? String(nutrition.calories) : '',
-      protein: nutrition.protein != null ? String(nutrition.protein) : '',
-      carbs: nutrition.carbs != null ? String(nutrition.carbs) : '',
-      fat: nutrition.fat != null ? String(nutrition.fat) : '',
-      fiber: nutrition.fiber != null ? String(nutrition.fiber) : '',
-      sugar: nutrition.sugar != null ? String(nutrition.sugar) : '',
-      sodiumMg: nutrition.sodiumMg != null ? String(nutrition.sodiumMg) : '',
+  const submitCorrection = () => {
+    if (!correctionPackagedFoodId) return
+    Taro.navigateTo({
+      url: `/packageExtra/pages/packaged-food-correction/index?packaged_food_id=${encodeURIComponent(correctionPackagedFoodId)}`,
     })
-    Taro.navigateTo({ url: '/packageExtra/pages/packaged-food-edit/index?mode=manual&task_mode=reward_center' })
   }
 
   return (
@@ -399,9 +379,9 @@ function PackagedFoodTaskDetailPage() {
                 <Text className='detail-action-text secondary'>重新上传</Text>
               </View>
             )}
-            {packaged && !isTaskStillRunning(task?.status) && auto?.status !== 'ingested' && (
-              <View className='detail-action-btn secondary' onClick={supplementResult}>
-                <Text className='detail-action-text secondary'>补充信息</Text>
+            {!isTaskStillRunning(task?.status) && correctionPackagedFoodId && (
+              <View className='detail-action-btn secondary' onClick={submitCorrection}>
+                <Text className='detail-action-text secondary'>发起纠错</Text>
               </View>
             )}
           </View>
