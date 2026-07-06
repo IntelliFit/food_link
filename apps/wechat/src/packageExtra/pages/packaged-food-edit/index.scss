@@ -658,6 +658,30 @@
   border: 1rpx solid rgba(249, 115, 22, 0.2);
 }
 
+.confirmation-card {
+  margin-top: 18rpx;
+  padding: 20rpx;
+  border-radius: 16rpx;
+  background: #fffbeb;
+  border: 1rpx solid rgba(245, 158, 11, 0.28);
+}
+
+.confirmation-card-title {
+  display: block;
+  font-size: 26rpx;
+  font-weight: 700;
+  color: #92400e;
+  margin-bottom: 8rpx;
+}
+
+.confirmation-card-desc {
+  display: block;
+  font-size: 23rpx;
+  line-height: 1.6;
+  color: #b45309;
+  white-space: pre-line;
+}
+
 .ingest-status-title {
   display: block;
   font-size: 26rpx;
@@ -951,6 +975,14 @@
   }
 }
 
+.field-input.field--highlight,
+.field-input-with-unit.field--highlight,
+.nutrition-grid.field--highlight {
+  background: #fffbeb;
+  border-color: rgba(245, 158, 11, 0.7);
+  box-shadow: 0 0 0 2rpx rgba(245, 158, 11, 0.14);
+}
+
 .field-unit {
   flex-shrink: 0;
   min-width: 70rpx;
@@ -1160,6 +1192,19 @@
     border-color: rgba(249, 115, 22, 0.28);
   }
 
+  .confirmation-card {
+    background: rgba(146, 64, 14, 0.2);
+    border-color: rgba(245, 158, 11, 0.32);
+  }
+
+  .confirmation-card-title {
+    color: #fbbf24;
+  }
+
+  .confirmation-card-desc {
+    color: #fde68a;
+  }
+
   .ingest-status-desc {
     color: #fdba74;
   }
@@ -1254,5 +1299,13 @@
   .field-input-with-unit {
     background: #101716;
     border-color: rgba(71, 85, 105, 0.8);
+  }
+
+  .field-input.field--highlight,
+  .field-input-with-unit.field--highlight,
+  .nutrition-grid.field--highlight {
+    background: rgba(146, 64, 14, 0.18);
+    border-color: rgba(245, 158, 11, 0.44);
+    box-shadow: 0 0 0 2rpx rgba(245, 158, 11, 0.1);
   }
 }

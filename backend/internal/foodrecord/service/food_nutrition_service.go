@@ -226,6 +226,9 @@ type PackagedProductExtractResult struct {
 	ExtractConfidence    float64                     `json:"extract_confidence,omitempty"`
 	NeedsMoreImages      []string                    `json:"needs_more_images,omitempty"`
 	MissingFields        []string                    `json:"missing_fields,omitempty"`
+	NeedsUserConfirmation bool                       `json:"needs_user_confirmation,omitempty"`
+	ConfirmationReasons   []string                   `json:"confirmation_reasons,omitempty"`
+	ConfirmationFields    []string                   `json:"confirmation_fields,omitempty"`
 	AutoIngestResult     PackagedAutoIngestResult    `json:"auto_ingest_result,omitempty"`
 	PackagedFoodID       string                      `json:"packaged_food_id,omitempty"`
 	OCRRawText           string                      `json:"ocr_raw_text,omitempty"`
@@ -803,7 +806,10 @@ func enrichPackagedProductExtractResult(result *PackagedProductExtractResult) {
 	result.UnitContentValue = normalized.UnitContentValue
 	result.UnitContentUnit = normalized.UnitContentUnit
 	result.ReviewStatus = normalized.ReviewStatus
+	result.NeedsMoreImages = normalizeStringSlice(result.NeedsMoreImages)
 	result.MissingFields = missingFields
+	result.ConfirmationReasons, result.ConfirmationFields = determinePackagedConfirmation(result)
+	result.NeedsUserConfirmation = len(result.ConfirmationReasons) > 0
 }
 
 func stringFromAny(values ...any) string {
@@ -1481,6 +1487,109 @@ func detectPackagedExtractConflicts(result *PackagedProductExtractResult) []stri
 		}
 	}
 	return conflicts
+}
+
+func determinePackagedConfirmation(result *PackagedProductExtractResult) ([]string, []string) {
+	if result == nil {
+		return nil, nil
+	}
+	reasons := make([]string, 0, 8)
+	fields := make([]string, 0, 8)
+	seenReasons := map[string]bool{}
+	seenFields := map[string]bool{}
+	addReason := func(value string) {
+		value = strings.TrimSpace(value)
+		if value == "" || seenReasons[value] {
+			return
+		}
+		seenReasons[value] = true
+		reasons = append(reasons, value)
+	}
+	addField := func(value string) {
+		value = strings.TrimSpace(value)
+		if value == "" || seenFields[value] {
+			return
+		}
+		seenFields[value] = true
+		fields = append(fields, value)
+	}
+
+	if strings.TrimSpace(result.ProductName) == "" {
+		addReason("missing_product_name")
+		addField("product_name")
+	}
+	if result.NetWeightG <= 0 && result.NetContentValue <= 0 {
+		addReason("missing_net_content")
+		addField("net_weight_g")
+	}
+	if strings.TrimSpace(result.ConversionStatus) != "converted" {
+		addReason("conversion_not_closed")
+		addField("nutrition_basis_unit")
+		addField("unit_nutrition_per_100g")
+	}
+	if hasImplausiblePackagedNutrition(result.UnitNutritionPer100g) {
+		addReason("nutrition_out_of_range")
+		addField("unit_nutrition_per_100g")
+	}
+	if !hasValidPackagedNutrition(result.UnitNutritionPer100g) && !PackagedExtractHasVerifiedZeroNutritionEvidence(result) {
+		addReason("missing_nutrition")
+		addField("unit_nutrition_per_100g")
+	}
+
+	for _, field := range result.MissingFields {
+		switch strings.TrimSpace(field) {
+		case "product_name":
+			addField("product_name")
+		case "net_weight_g":
+			addField("net_weight_g")
+		case "spec_text":
+			addField("spec_text")
+		}
+	}
+
+	for _, imageNeed := range result.NeedsMoreImages {
+		switch strings.TrimSpace(imageNeed) {
+		case "front_package":
+			addReason("need_clearer_front_package")
+			addField("product_name")
+		case "nutrition_label":
+			addReason("need_clearer_nutrition_label")
+			addField("unit_nutrition_per_100g")
+			addField("nutrition_basis_unit")
+		case "net_weight":
+			addReason("need_clearer_net_weight")
+			addField("net_weight_g")
+			addField("spec_text")
+		}
+	}
+
+	for _, conflict := range detectPackagedExtractConflicts(result) {
+		addReason(conflict)
+	}
+
+	if numberFromAny(result.FieldConfidence["product_name"]) > 0 && numberFromAny(result.FieldConfidence["product_name"]) < 0.6 {
+		addField("product_name")
+	}
+	if numberFromAny(result.FieldConfidence["spec_text"]) > 0 && numberFromAny(result.FieldConfidence["spec_text"]) < 0.6 {
+		addField("spec_text")
+	}
+	if numberFromAny(result.FieldConfidence["nutrition"]) > 0 && numberFromAny(result.FieldConfidence["nutrition"]) < 0.7 {
+		addField("unit_nutrition_per_100g")
+		addField("nutrition_basis_unit")
+	}
+	if result.ExtractConfidence > 0 && result.ExtractConfidence < 0.65 {
+		if strings.TrimSpace(result.ProductName) == "" {
+			addField("product_name")
+		}
+		if result.NetWeightG <= 0 && result.NetContentValue <= 0 {
+			addField("net_weight_g")
+		}
+		if !hasValidPackagedNutrition(result.UnitNutritionPer100g) {
+			addField("unit_nutrition_per_100g")
+		}
+	}
+
+	return reasons, fields
 }
 
 func hasValidPackagedNutrition(unit map[string]any) bool {

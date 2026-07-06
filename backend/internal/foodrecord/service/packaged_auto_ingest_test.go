@@ -183,6 +183,72 @@ func TestEvaluatePackagedProductExtract_NilIsBlocked(t *testing.T) {
 	}
 }
 
+func TestEnrichPackagedProductExtractResult_DoesNotRequestConfirmationWhenStable(t *testing.T) {
+	result := packagedReadyExtractForConfirmation()
+
+	enrichPackagedProductExtractResult(result)
+
+	if result.NeedsUserConfirmation {
+		t.Fatalf("needs_user_confirmation=%v want false, reasons=%v", result.NeedsUserConfirmation, result.ConfirmationReasons)
+	}
+	if len(result.ConfirmationReasons) != 0 {
+		t.Fatalf("confirmation_reasons=%v want empty", result.ConfirmationReasons)
+	}
+}
+
+func TestEnrichPackagedProductExtractResult_RequestsConfirmationForImplausibleNutrition(t *testing.T) {
+	result := packagedReadyExtractForConfirmation()
+	result.UnitNutritionPer100g["calories"] = 1668
+
+	enrichPackagedProductExtractResult(result)
+
+	if !result.NeedsUserConfirmation {
+		t.Fatal("expected needs_user_confirmation")
+	}
+	if !containsString(result.ConfirmationReasons, "nutrition_out_of_range") {
+		t.Fatalf("confirmation_reasons=%v want nutrition_out_of_range", result.ConfirmationReasons)
+	}
+	if !containsString(result.ConfirmationFields, "unit_nutrition_per_100g") {
+		t.Fatalf("confirmation_fields=%v want unit_nutrition_per_100g", result.ConfirmationFields)
+	}
+}
+
+func TestEnrichPackagedProductExtractResult_RequestsConfirmationForMissingCoreFields(t *testing.T) {
+	result := packagedReadyExtractForConfirmation()
+	result.ProductName = ""
+	result.NetWeightG = 0
+	result.NetContentValue = 0
+	result.SpecText = ""
+	result.ConversionStatus = ""
+	result.UnitNutritionPer100g = map[string]any{}
+	result.MissingFields = []string{"product_name", "net_weight_g", "spec_text"}
+	result.NeedsMoreImages = []string{"front_package", "nutrition_label", "net_weight"}
+
+	enrichPackagedProductExtractResult(result)
+
+	if !result.NeedsUserConfirmation {
+		t.Fatal("expected needs_user_confirmation")
+	}
+	for _, want := range []string{
+		"missing_product_name",
+		"missing_net_content",
+		"conversion_not_closed",
+		"missing_nutrition",
+		"need_clearer_front_package",
+		"need_clearer_nutrition_label",
+		"need_clearer_net_weight",
+	} {
+		if !containsString(result.ConfirmationReasons, want) {
+			t.Fatalf("confirmation_reasons=%v want %s", result.ConfirmationReasons, want)
+		}
+	}
+	for _, wantField := range []string{"product_name", "net_weight_g", "spec_text", "unit_nutrition_per_100g", "nutrition_basis_unit"} {
+		if !containsString(result.ConfirmationFields, wantField) {
+			t.Fatalf("confirmation_fields=%v want %s", result.ConfirmationFields, wantField)
+		}
+	}
+}
+
 func TestConvertPackagedNutrition_NormalizesChinesePer100ML(t *testing.T) {
 	result := packagedReadyExtract()
 	result.NutritionBasisUnit = "每100毫升（冲调后）"
@@ -379,6 +445,49 @@ func packagedReadyExtract() *PackagedProductExtractResult {
 		},
 		ExtractConfidence: 0.95,
 	}
+}
+
+func packagedReadyExtractForConfirmation() *PackagedProductExtractResult {
+	return &PackagedProductExtractResult{
+		Brand:              "洽洽",
+		ProductName:        "焦糖瓜子（熟制葵花籽）",
+		DisplayName:        "洽洽 焦糖瓜子（熟制葵花籽） 焦糖味 108g",
+		FlavorText:         "焦糖味",
+		PackageCategory:    "袋装",
+		NetWeightG:         108,
+		NetContentValue:    108,
+		NetContentUnit:     "g",
+		ServingWeightG:     108,
+		SpecText:           "净含量108g 熟制葵花籽",
+		NutritionBasisUnit: "100g",
+		ConversionStatus:   "converted",
+		UnitNutritionPer100g: map[string]any{
+			"calories": 595.36,
+			"protein":  28.8,
+			"carbs":    34.0,
+			"fat":      48.7,
+			"fiber":    8.1,
+			"sugar":    7.9,
+			"sodiumMg": 902,
+		},
+		FieldConfidence: map[string]any{
+			"product_name":     1,
+			"spec_text":        1,
+			"nutrition":        1,
+			"brand":            1,
+			"ingredients_text": 1,
+		},
+		ExtractConfidence: 0.98,
+	}
+}
+
+func containsString(values []string, want string) bool {
+	for _, value := range values {
+		if strings.TrimSpace(value) == want {
+			return true
+		}
+	}
+	return false
 }
 
 func verifiedZeroDrinkExtract() *PackagedProductExtractResult {

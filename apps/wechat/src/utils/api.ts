@@ -5497,8 +5497,52 @@ export interface PackagedFoodItem {
   fiber_per_100g?: number
   sugar_per_100g?: number
   sodium_mg_per_100g?: number
+  nutrition_basis_unit?: string
+  energy_unit_raw?: string
+  display_name?: string
+  review_status?: string
+  conversion_status?: string
+  raw_label_payload?: Record<string, any>
   source?: string
   is_active: boolean
+}
+
+export type PackagedFoodCorrectionReasonType =
+  | 'nutrition_wrong'
+  | 'name_wrong'
+  | 'spec_wrong'
+  | 'barcode_wrong'
+  | 'duplicate'
+  | 'other'
+
+export interface SubmitPackagedFoodCorrectionRequest {
+  packaged_food_id: string
+  reason_type: PackagedFoodCorrectionReasonType
+  comment?: string
+  brand?: string
+  product_name: string
+  display_name?: string
+  spec_text?: string
+  barcode?: string
+  flavor_text?: string
+  package_category?: string
+  ingredients_text?: string
+  source_image_urls: string[]
+  nutrition_basis_unit?: string
+  energy_unit_raw?: string
+  conversion_status?: string
+  review_status?: string
+  net_weight_g: number
+  serving_weight_g: number
+  kcal_per_100g: number
+  protein_per_100g: number
+  carbs_per_100g: number
+  fat_per_100g: number
+  fiber_per_100g?: number
+  sugar_per_100g?: number
+  sodium_mg_per_100g?: number
+  ingest_method?: string
+  raw_label_payload?: Record<string, any>
 }
 
 export interface PackagedNutritionLabelRecognition {
@@ -5568,6 +5612,9 @@ export interface PackagedProductExtractResult {
   extract_confidence?: number
   needs_more_images?: string[]
   missing_fields?: string[]
+  needs_user_confirmation?: boolean
+  confirmation_reasons?: string[]
+  confirmation_fields?: string[]
   auto_ingest_result?: PackagedAutoIngestResult
   packaged_food_id?: string
   ocr_raw_text?: string
@@ -5596,6 +5643,31 @@ export async function createPackagedFood(payload: CreatePackagedFoodRequest): Pr
     throwHttpErrorWithStatus(res.statusCode, res.data, '保存零食数据失败')
   }
   return unwrapResponse<{ item: PackagedFoodItem }>(res).item
+}
+
+export async function getPackagedFoodItem(foodId: string): Promise<PackagedFoodItem> {
+  const res = await authenticatedRequest(`/api/packaged-food/${encodeURIComponent(foodId)}`, {
+    method: 'GET',
+    timeout: 10000,
+  })
+  if (res.statusCode !== 200) {
+    throwHttpErrorWithStatus(res.statusCode, res.data, '获取零食库商品失败')
+  }
+  return unwrapResponse<{ item: PackagedFoodItem }>(res).item
+}
+
+export async function submitPackagedFoodCorrection(
+  payload: SubmitPackagedFoodCorrectionRequest
+): Promise<{ submission_id: string; status: string; message?: string }> {
+  const res = await authenticatedRequest('/api/packaged-food/corrections', {
+    method: 'POST',
+    data: payload,
+    timeout: 10000,
+  })
+  if (res.statusCode !== 200) {
+    throwHttpErrorWithStatus(res.statusCode, res.data, '提交零食库纠错失败')
+  }
+  return unwrapResponse<{ submission_id: string; status: string; message?: string }>(res)
 }
 
 export async function recognizePackagedNutritionLabel(imageUrl: string): Promise<PackagedNutritionLabelRecognition> {
