@@ -746,6 +746,42 @@ func TestFoodRecordService_hydrateRecord(t *testing.T) {
 	assert.Equal(t, []string{"https://cdn.example.com/food/fallback.jpg"}, result3.ImagePaths)
 }
 
+func TestFoodRecordService_hydrateRecord_RemovesManualSourceFallbackWhenRealPhotoExists(t *testing.T) {
+	db := setupServiceTestDB(t)
+	r := foodrepo.NewFoodRecordRepo(db)
+	tr := foodrepo.NewAnalysisTaskRepo(db)
+	ur := repo.NewUserRepo(db)
+	storageClient := storage.New(config.StorageConfig{CDNFoodImagesBaseURL: "https://cdn.example.com/food"})
+	svc := NewFoodRecordService(r, tr, ur, storageClient)
+
+	manualSource := "nutrition_library"
+	manualSourceID := "nut-coke-1"
+	require.NoError(t, db.Create(&domain.FoodNutrition{
+		ID:            manualSourceID,
+		CanonicalName: "可乐",
+		ImagePath:     strPtr("nutrition/coke.jpg"),
+		KcalPer100g:   43,
+		IsActive:      true,
+	}).Error)
+
+	realPhoto := "records/meal.jpg"
+	fallbackPhoto := "nutrition/coke.jpg"
+	record := &domain.FoodRecord{
+		ImagePaths: []string{realPhoto, fallbackPhoto},
+		Items: []domain.FoodItem{{
+			Name:           "可乐",
+			ManualSource:   &manualSource,
+			ManualSourceID: &manualSourceID,
+		}},
+	}
+
+	result := svc.hydrateRecord(record)
+	require.Len(t, result.ImagePaths, 1)
+	assert.Equal(t, "https://cdn.example.com/food/records/meal.jpg", result.ImagePaths[0])
+	require.NotNil(t, result.ImagePath)
+	assert.Equal(t, "https://cdn.example.com/food/records/meal.jpg", *result.ImagePath)
+}
+
 func TestFoodRecordService_List_HydratesManualSourceImages(t *testing.T) {
 	db := setupServiceTestDB(t)
 	r := foodrepo.NewFoodRecordRepo(db)

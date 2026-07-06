@@ -5398,6 +5398,9 @@ export interface PackagedProductExtractResult {
   extract_confidence?: number
   needs_more_images?: string[]
   missing_fields?: string[]
+  needs_user_confirmation?: boolean
+  confirmation_reasons?: string[]
+  confirmation_fields?: string[]
   auto_ingest_result?: PackagedAutoIngestResult
   packaged_food_id?: string
   ocr_raw_text?: string

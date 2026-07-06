@@ -183,6 +183,72 @@ func TestEvaluatePackagedProductExtract_NilIsBlocked(t *testing.T) {
 	}
 }
 
+func TestEnrichPackagedProductExtractResult_DoesNotRequestConfirmationWhenStable(t *testing.T) {
+	result := packagedReadyExtractForConfirmation()
+
+	enrichPackagedProductExtractResult(result)
+
+	if result.NeedsUserConfirmation {
+		t.Fatalf("needs_user_confirmation=%v want false, reasons=%v", result.NeedsUserConfirmation, result.ConfirmationReasons)
+	}
+	if len(result.ConfirmationReasons) != 0 {
+		t.Fatalf("confirmation_reasons=%v want empty", result.ConfirmationReasons)
+	}
+}
+
+func TestEnrichPackagedProductExtractResult_RequestsConfirmationForImplausibleNutrition(t *testing.T) {
+	result := packagedReadyExtractForConfirmation()
+	result.RawNutritionPerBasis.Energy = PackagedLabelNutritionValue{Value: 6980, Unit: "kj"}
+
+	enrichPackagedProductExtractResult(result)
+
+	if !result.NeedsUserConfirmation {
+		t.Fatal("expected needs_user_confirmation")
+	}
+	if !containsString(result.ConfirmationReasons, "nutrition_out_of_range") {
+		t.Fatalf("confirmation_reasons=%v want nutrition_out_of_range", result.ConfirmationReasons)
+	}
+	if !containsString(result.ConfirmationFields, "unit_nutrition_per_100g") {
+		t.Fatalf("confirmation_fields=%v want unit_nutrition_per_100g", result.ConfirmationFields)
+	}
+}
+
+func TestEnrichPackagedProductExtractResult_RequestsConfirmationForMissingCoreFields(t *testing.T) {
+	result := packagedReadyExtractForConfirmation()
+	result.ProductName = ""
+	result.NetWeightG = 0
+	result.SpecText = ""
+	result.UnitNutritionPer100g = map[string]any{}
+	result.RawNutritionBasis = PackagedLabelNutritionBasis{}
+	result.RawNutritionPerBasis = PackagedLabelRawNutrition{}
+	result.MissingFields = []string{"product_name", "net_weight_g"}
+	result.NeedsMoreImages = []string{"front_package", "nutrition_label", "net_weight"}
+
+	enrichPackagedProductExtractResult(result)
+
+	if !result.NeedsUserConfirmation {
+		t.Fatal("expected needs_user_confirmation")
+	}
+	for _, want := range []string{
+		"missing_product_name",
+		"missing_net_content",
+		"conversion_not_closed",
+		"missing_nutrition",
+		"need_clearer_front_package",
+		"need_clearer_nutrition_label",
+		"need_clearer_net_weight",
+	} {
+		if !containsString(result.ConfirmationReasons, want) {
+			t.Fatalf("confirmation_reasons=%v want %s", result.ConfirmationReasons, want)
+		}
+	}
+	for _, wantField := range []string{"product_name", "net_weight_g", "spec_text", "unit_nutrition_per_100g"} {
+		if !containsString(result.ConfirmationFields, wantField) {
+			t.Fatalf("confirmation_fields=%v want %s", result.ConfirmationFields, wantField)
+		}
+	}
+}
+
 func TestConvertPackagedNutrition_NormalizesChinesePer100ML(t *testing.T) {
 	result := packagedReadyExtract()
 	result.NutritionBasisUnit = "每100毫升（冲调后）"
@@ -381,6 +447,38 @@ func packagedReadyExtract() *PackagedProductExtractResult {
 	}
 }
 
+func packagedReadyExtractForConfirmation() *PackagedProductExtractResult {
+	return &PackagedProductExtractResult{
+		Brand:              "测试品牌",
+		ProductName:        "测试蛋白棒",
+		PackageCategory:    "零食",
+		NetWeightG:         60,
+		NetContentValue:    60,
+		NetContentUnit:     "g",
+		SpecText:           "60g",
+		NutritionBasisUnit: "100g",
+		RawNutritionBasis:  PackagedLabelNutritionBasis{Type: "100g", Value: 100, Unit: "g"},
+		RawNutritionPerBasis: PackagedLabelRawNutrition{
+			Energy:  PackagedLabelNutritionValue{Value: 1757, Unit: "kj"},
+			Protein: PackagedLabelNutritionValue{Value: 20, Unit: "g"},
+			Carbs:   PackagedLabelNutritionValue{Value: 40, Unit: "g"},
+			Fat:     PackagedLabelNutritionValue{Value: 15, Unit: "g"},
+		},
+		UnitNutritionPer100g: map[string]any{
+			"calories": 420,
+			"protein":  20,
+			"carbs":    40,
+			"fat":      15,
+		},
+		FieldConfidence: map[string]any{
+			"product_name": 0.92,
+			"spec_text":    0.9,
+			"nutrition":    0.93,
+		},
+		ExtractConfidence: 0.95,
+	}
+}
+
 func verifiedZeroDrinkExtract() *PackagedProductExtractResult {
 	return &PackagedProductExtractResult{
 		Brand:              "三得利",
@@ -413,4 +511,13 @@ func verifiedZeroDrinkExtract() *PackagedProductExtractResult {
 		},
 		ExtractConfidence: 0.95,
 	}
+}
+
+func containsString(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }

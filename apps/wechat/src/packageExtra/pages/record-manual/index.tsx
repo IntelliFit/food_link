@@ -20,7 +20,6 @@ import {
   type Nutrients,
 } from '../../../utils/api'
 import {
-  collectFoodDisplayImageUrls,
   hasFoodDisplayImage,
   pickFoodDisplayImageUrl,
 } from '../../../utils/food-display-image'
@@ -1134,17 +1133,9 @@ function RecordManualPage() {
       }))
       const totalWeight = selectedItems.reduce((s, i) => s + i.weight, 0)
       const hasCustomItems = selectedItems.some(item => item.source === 'custom')
-      const mealImagePaths = Array.from(
-        new Set(
-          selectedItems.flatMap((item) => collectFoodDisplayImageUrls({ image_path: item.imagePath }))
-        )
-      )
-
       const saveResult = await saveFoodRecord({
         date: getStoredRecordTargetDate(),
         meal_type: selectedMeal as any,
-        image_path: mealImagePaths[0],
-        image_paths: mealImagePaths.length > 0 ? mealImagePaths : undefined,
         diet_goal: dietGoal as any,
         activity_timing: activityTiming as any,
         description: '手动记录：' + selectedItems.map(i => i.title).join('、'),
