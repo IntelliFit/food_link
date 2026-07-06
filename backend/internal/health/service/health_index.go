@@ -81,6 +81,13 @@ var statsMicronutrientWeights = map[string]float64{
 	"vitaminDMcg":      0.10,
 }
 
+var statsSupplementSensitiveMicronutrients = map[string]bool{
+	"calciumMg":      true,
+	"ironMg":         true,
+	"vitaminARaeMcg": true,
+	"vitaminDMcg":    true,
+}
+
 func computeMicronutrientScore(comp *statsComputation) (int, string, string, string, string) {
 	if comp == nil || len(comp.MicronutrientDaily) == 0 {
 		return 0, "暂无微量营养数据。", "本期保存的记录里没有可用的微量营养字段，无法判断钙、铁、钾、维生素、膳食纤维等是否充足。", "", "继续保持记录，系统会在数据足够后给出微量营养趋势。"
@@ -89,6 +96,7 @@ func computeMicronutrientScore(comp *statsComputation) (int, string, string, str
 	score := 0.0
 	var deficitLabels []string
 	var excessLabels []string
+	var supplementContextLabels []string
 	var basisParts []string
 
 	for _, ref := range statsInsightMicronutrientReferences {
@@ -117,8 +125,14 @@ func computeMicronutrientScore(comp *statsComputation) (int, string, string, str
 			} else if target > 0 {
 				ratio = actual / target
 			}
-			if actual < target*0.5 {
+			if statsSupplementSensitiveMicronutrients[ref.Key] && target > 0 && actual < target {
+				ratio = math.Max(ratio, 0.75)
+			}
+			if actual < target*0.5 && !statsSupplementSensitiveMicronutrients[ref.Key] {
 				deficitLabels = append(deficitLabels, ref.Label)
+			}
+			if actual < target*0.5 && statsSupplementSensitiveMicronutrients[ref.Key] {
+				supplementContextLabels = append(supplementContextLabels, ref.Label)
 			}
 		}
 		score += ratio * weight * 100
@@ -154,6 +168,10 @@ func computeMicronutrientScore(comp *statsComputation) (int, string, string, str
 	}
 
 	basis := fmt.Sprintf("近 %d 天日均：%s。", comp.RecordedDays, strings.Join(basisParts, "，"))
+	if len(supplementContextLabels) > 0 {
+		summary += fmt.Sprintf(" %s在饮食记录里偏低，但这里没有计入补剂摄入。", strings.Join(supplementContextLabels, "、"))
+	}
+	basis += " 仅基于饮食记录，不含补剂摄入。"
 	return s, brief, summary, basis, action
 }
 
@@ -265,12 +283,14 @@ func computeHealthIndex(comp *statsComputation, statsRange string) *HealthIndex 
 		weightBonus = 3
 	}
 
+	weightTrendAdjustment, weightTrendSupportsGoal, weightTrendAgainstGoal := healthIndexWeightTrendAdjustment(comp, dietGoal)
 	weightScore := clampScore(
 		100-
 			weightEnergyOverRatio*40-
 			weightOverTargetRate*25-
 			snackOver15*0.5-
 			dinnerOver38*4.0+
+			weightTrendAdjustment+
 			weightBonus,
 	)
 
@@ -320,9 +340,9 @@ func computeHealthIndex(comp *statsComputation, statsRange string) *HealthIndex 
 			carbOver50*1.0+
 			bonusIf(recordedDays >= thresholdDays(statsRange), 5),
 	)
-	weightOverTarget := weightEnergyOverRatio > 0.08
+	weightOverTarget := weightTrendAgainstGoal || (weightEnergyOverRatio > 0.08 && !weightTrendSupportsGoal)
 	weightBrief, weightSummary, weightAction := healthIndexWeightCopy(dietGoal, weightOverTarget)
-	weightBasis := healthIndexWeightBasis(avgCaloriesPerDay, weightReferenceCalories, tdee, streakDays, weightReferenceLabel)
+	weightBasis := healthIndexWeightBasis(avgCaloriesPerDay, weightReferenceCalories, tdee, streakDays, weightReferenceLabel, comp.BodyMetrics)
 
 	riskCards := []RiskCard{
 		{
@@ -495,11 +515,14 @@ func healthIndexWeightReferenceCalories(tdee float64, dietGoal string) (float64,
 	}
 }
 
-func healthIndexWeightBasis(avgCaloriesPerDay, referenceCalories, tdee float64, streakDays int, referenceLabel string) string {
+func healthIndexWeightBasis(avgCaloriesPerDay, referenceCalories, tdee float64, streakDays int, referenceLabel string, bodyMetrics *BodyMetricsSummary) string {
+	basis := ""
 	if referenceLabel == "TDEE" {
-		return fmt.Sprintf("日均摄入 %.0f kcal，对比 TDEE %.0f kcal；饮食打卡 %d 天。", avgCaloriesPerDay, tdee, streakDays)
+		basis = fmt.Sprintf("日均摄入 %.0f kcal，对比 TDEE %.0f kcal；饮食打卡 %d 天。", avgCaloriesPerDay, tdee, streakDays)
+	} else {
+		basis = fmt.Sprintf("日均摄入 %.0f kcal，对比%s %.0f kcal（TDEE %.0f kcal）；饮食打卡 %d 天。", avgCaloriesPerDay, referenceLabel, referenceCalories, tdee, streakDays)
 	}
-	return fmt.Sprintf("日均摄入 %.0f kcal，对比%s %.0f kcal（TDEE %.0f kcal）；饮食打卡 %d 天。", avgCaloriesPerDay, referenceLabel, referenceCalories, tdee, streakDays)
+	return appendWeightTrendToBasis(basis, bodyMetrics)
 }
 
 func healthIndexWeightCopy(dietGoal string, overTarget bool) (string, string, string) {
@@ -531,6 +554,58 @@ func healthIndexWeightCopy(dietGoal string, overTarget bool) (string, string, st
 		return "总量接近目标。",
 			"热量总体接近目标，但餐次集中和加餐结构仍有优化空间。",
 			"保持总量不大改，优先优化睡前餐和加餐的时段分布。"
+	}
+}
+
+func healthIndexWeightTrendAdjustment(comp *statsComputation, dietGoal string) (float64, bool, bool) {
+	if comp == nil || comp.BodyMetrics == nil || comp.BodyMetrics.WeightChange == nil {
+		return 0, false, false
+	}
+	change := *comp.BodyMetrics.WeightChange
+	switch dietGoal {
+	case "fat_loss":
+		switch {
+		case change <= -0.3:
+			return 12, true, false
+		case change <= -0.1:
+			return 6, true, false
+		case change >= 0.3:
+			return -10, false, true
+		}
+	case "muscle_gain":
+		switch {
+		case change >= 0.2:
+			return 8, true, false
+		case change <= -0.3:
+			return -10, false, true
+		}
+	default:
+		switch {
+		case change <= -0.3:
+			return 5, true, false
+		case change >= 0.5:
+			return -8, false, true
+		}
+	}
+	return 0, false, false
+}
+
+func appendWeightTrendToBasis(basis string, bodyMetrics *BodyMetricsSummary) string {
+	if bodyMetrics == nil || bodyMetrics.LatestWeight == nil {
+		return basis
+	}
+	out := basis + fmt.Sprintf(" 最新体重 %.1f kg", bodyMetrics.LatestWeight.Value)
+	if bodyMetrics.WeightChange == nil {
+		return out + "。"
+	}
+	change := *bodyMetrics.WeightChange
+	switch {
+	case change > 0:
+		return out + fmt.Sprintf("，较前一次上升 %.1f kg。", math.Abs(change))
+	case change < 0:
+		return out + fmt.Sprintf("，较前一次下降 %.1f kg。", math.Abs(change))
+	default:
+		return out + "，较前一次基本持平。"
 	}
 }
 
