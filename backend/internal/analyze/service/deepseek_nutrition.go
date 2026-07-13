@@ -14,7 +14,7 @@ import (
 
 var deepSeekFenceRe = regexp.MustCompile("(?s)```json?\\s*\\n?|```")
 
-const deepSeekNutritionFallbackModel = "deepseek-v4-flash"
+const deepSeekNutritionFallbackModel = "deepseek-v4-pro"
 
 const aiNutritionMicronutrientRequirement = "必须尽量补齐维生素和矿物质等项目 21 项微量营养：fiber、sugar、saturatedFat、cholesterolMg、sodiumMg、potassiumMg、calciumMg、ironMg、magnesiumMg、zincMg、vitaminARaeMcg、vitaminCMg、vitaminDMcg、vitaminEMg、vitaminKMcg、thiaminMg、riboflavinMg、niacinMg、vitaminB6Mg、folateMcg、vitaminB12Mcg。不要把微量元素随意填 0；微量元素不确定时也要按同类食物保守估算，只有天然接近 0 或该食物确实几乎不含该营养时才填 0。"
 

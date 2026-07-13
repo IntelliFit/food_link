@@ -80,11 +80,11 @@ import (
 	userrepo "food_link/backend/internal/user/repo"
 	userservice "food_link/backend/internal/user/service"
 	utilityhandler "food_link/backend/internal/utility/handler"
+	utilityrepo "food_link/backend/internal/utility/repo"
+	utilityservice "food_link/backend/internal/utility/service"
 	voucherhandler "food_link/backend/internal/voucher/handler"
 	voucherrepo "food_link/backend/internal/voucher/repo"
 	voucherservice "food_link/backend/internal/voucher/service"
-	utilityrepo "food_link/backend/internal/utility/repo"
-	utilityservice "food_link/backend/internal/utility/service"
 	workerpkg "food_link/backend/internal/worker"
 	"food_link/backend/pkg/config"
 	"food_link/backend/pkg/database"
@@ -190,7 +190,13 @@ func New(cfg *config.Config) (*App, error) {
 	ofoxAIClient := analyzeservice.NewOfoxAIClient(cfg.External.OfoxAIAPIKey, "gemini-3-flash-preview", cfg.External.OfoxAIBaseURL)
 	analyzeSvc := analyzeservice.NewAnalyzeService(doubaoClient, ofoxAIClient, userRepo, analyzeNutritionRepo)
 	analyzeSvc.ConfigureDoubaoClient(cfg.External.DoubaoAPIKey, cfg.External.DoubaoBaseURL, "")
-	analyzeSvc.ConfigureDashScopeClient(cfg.External.DashScopeAPIKey, cfg.External.DashScopeBaseURL)
+	var dashscopeClient *analyzeservice.OfoxAIClient
+	if strings.TrimSpace(cfg.External.DashScopeAPIKey) != "" {
+		dashscopeClient = analyzeservice.NewDashScopeClient(cfg.External.DashScopeAPIKey, cfg.External.DashScopeBaseURL)
+		analyzeSvc.ConfigureDashScopeLLMClient(dashscopeClient)
+	} else {
+		analyzeSvc.ConfigureDashScopeClient(cfg.External.DashScopeAPIKey, cfg.External.DashScopeBaseURL)
+	}
 	analyzeSvc.ConfigureGemini31LiteClient(cfg.External.OfoxAIAPIKey, cfg.External.OfoxAIBaseURL, "gemini-3.1-flash-lite")
 	analyzeSvc.ConfigureGemini35Client(cfg.External.Gemini35APIKey, cfg.External.Gemini35BaseURL, cfg.External.Gemini35Model)
 	if cfg.External.DoubaoWebSearchAPIKey != "" {
@@ -216,7 +222,11 @@ func New(cfg *config.Config) (*App, error) {
 	frSvc.ConfigureWaterLogRecorder(bodyMetricsRepo)
 	frUploadSvc := foodrecordservice.NewUploadService(storageClient)
 	frNutritionSvc := foodrecordservice.NewFoodNutritionService(frNutritionRepo)
-	frNutritionSvc.ConfigureNutritionLabelVisionClient(doubaoClient)
+	if dashscopeClient != nil {
+		frNutritionSvc.ConfigureNutritionLabelVisionClient(dashscopeClient)
+	} else {
+		frNutritionSvc.ConfigureNutritionLabelVisionClient(ofoxAIClient)
+	}
 	frNutritionSvc.ConfigureAsyncTasks(analyzeTaskRepo, taskQueue)
 	frHandler := foodrecordhandler.NewFoodRecordHandler(frSvc, frUploadSvc, frNutritionSvc)
 

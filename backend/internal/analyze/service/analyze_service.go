@@ -308,7 +308,11 @@ func (s *AnalyzeService) runPrecisionJSONWithImagesTemperature(ctx context.Conte
 	case "doubao":
 		client = s.doubaoClient
 	case "gemini":
-		client = s.ofoxAIClient
+		if model == gemini35FlashModel && s.gemini35Client != nil {
+			client = s.gemini35Client
+		} else {
+			client = s.ofoxAIClient
+		}
 	case "openai":
 		client = s.ofoxAIClient
 	default:
@@ -339,31 +343,31 @@ func (s *AnalyzeService) runPrecisionJSONWithImagesTemperature(ctx context.Conte
 		defer attemptCancel()
 		return analyzeWithImagesTemperatureModel(attemptCtx, client, prompt, imageURLs, temperature, model)
 	})
-	if allowFallback && err != nil && provider == "gemini" && len(imageURLs) > 0 && isTransientLLMError(err) && s.doubaoClient != nil {
-		fallbackParsed, fallbackErr := analyzeWithJSONParseRetry(callCtx, "precision_fallback", "doubao", "doubao-seed-2-0-lite-260428", func(retryCtx context.Context) (map[string]any, error) {
-			return analyzeWithImagesTemperature(retryCtx, s.doubaoClient, prompt, imageURLs, temperature)
+	if allowFallback && err != nil && provider == "gemini" && len(imageURLs) > 0 && isTransientLLMError(err) && s.dashscopeClient != nil {
+		fallbackParsed, fallbackErr := analyzeWithJSONParseRetry(callCtx, "precision_fallback", "qwen", qwen36FlashModel, func(retryCtx context.Context) (map[string]any, error) {
+			return analyzeWithImagesTemperatureModel(retryCtx, s.dashscopeClient, prompt, imageURLs, temperature, qwen36FlashModel)
 		})
 		if fallbackErr == nil {
-			logger.Warn(ctx, "精准模式 Gemini 视觉模型临时失败，回退豆包",
+			logger.Warn(ctx, "精准模式 Gemini 视觉模型临时失败，回退 Qwen 3.6 Flash",
 				logger.Err(err),
 				slog.Int("image_count", len(imageURLs)),
 			)
 			apm.AddEvent(ctx, "精准模式大模型回退完成",
 				attribute.String("analysis.primary_provider", provider),
-				attribute.String("analysis.fallback_provider", "doubao"),
+				attribute.String("analysis.fallback_provider", "qwen"),
 				attribute.Int("analysis.image_count", len(imageURLs)),
 				apm.DurationMS("analysis.duration_ms", time.Since(start)),
 			)
 			return fallbackParsed, nil
 		}
-		logger.Warn(ctx, "精准模式豆包回退失败",
+		logger.Warn(ctx, "精准模式 Qwen 3.6 Flash 回退失败",
 			logger.NamedErr("fallback_error", fallbackErr),
 			logger.Err(err),
 			slog.Int("image_count", len(imageURLs)),
 		)
 		apm.RecordError(ctx, fallbackErr,
 			attribute.String("analysis.stage", "fallback"),
-			attribute.String("analysis.fallback_provider", "doubao"),
+			attribute.String("analysis.fallback_provider", "qwen"),
 		)
 	}
 	if err != nil {

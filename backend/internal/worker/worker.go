@@ -36,8 +36,8 @@ import (
 )
 
 const (
-	precisionPlanModelName   = "doubao"
-	precisionWeightModelName = "ofox-gemini"
+	precisionPlanModelName   = "gemini-3.5-flash"
+	precisionWeightModelName = "gemini-3.5-flash"
 	strictSeparateModeName   = "strict_separate"
 	precisionRefineEnabled   = true
 	precisionRefineTimeout   = 25 * time.Second
@@ -4641,6 +4641,9 @@ func sanitizeTaskErrorMessage(taskErr error) string {
 		strings.Contains(lower, "doubao api error 504") ||
 		strings.Contains(lower, "internalserviceerror") {
 		return "AI 识别服务暂时不可用，请稍后重试"
+	}
+	if sanitized := analyzeservice.SanitizeAIUpstreamErrorMessage(msg); sanitized != msg {
+		return sanitized
 	}
 	runes := []rune(msg)
 	if len(runes) > 300 {

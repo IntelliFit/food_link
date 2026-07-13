@@ -862,6 +862,10 @@ func (s *TaskService) GetTask(ctx context.Context, taskID, userID string) (*doma
 	if task.UserID != userID {
 		return nil, errors.ErrForbidden
 	}
+	if task.ErrorMessage != nil {
+		safeMessage := SanitizeAIUpstreamErrorMessage(*task.ErrorMessage)
+		task.ErrorMessage = &safeMessage
+	}
 	s.normalizeTaskImages(task)
 	if task.Status == "done" {
 		recordedMap, err := s.tasks.RecordedTaskMap(ctx, userID, []string{task.ID})

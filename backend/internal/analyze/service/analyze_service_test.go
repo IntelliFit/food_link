@@ -457,7 +457,7 @@ func TestResolveModelConfig(t *testing.T) {
 
 	p, m = resolveModelConfig("deepseek")
 	assert.Equal(t, "deepseek", p)
-	assert.Equal(t, "deepseek-v4-flash", m)
+	assert.Equal(t, "deepseek-v4-pro", m)
 
 	p, m = resolveModelConfig("gemini")
 	assert.Equal(t, "gemini", p)
@@ -1811,16 +1811,36 @@ func TestAnalyzeWithJSONParseRetry_RetriesTransientDoubaoError(t *testing.T) {
 	assert.Equal(t, 2, calls)
 }
 
-func TestAnalyzeService_RunPrecisionJSONFallsBackToDoubaoOnGeminiTransientError(t *testing.T) {
-	doubaoClient := &mockLLMClient{result: map[string]any{"description": "doubao precision fallback", "items": []any{}}}
+func TestAnalyzeService_RunPrecisionJSONFallsBackToQwenOnGeminiTransientError(t *testing.T) {
+	doubaoClient := &mockLLMClient{result: map[string]any{"description": "unexpected doubao fallback", "items": []any{}}}
 	ofoxClient := &mockLLMClient{err: errors.New(`Post "https://api.ofox.ai/v1/chat/completions": context deadline exceeded (Client.Timeout exceeded while awaiting headers)`)}
+	qwenClient := &mockLLMClient{result: map[string]any{"description": "qwen precision fallback", "items": []any{}}}
 	svc := NewAnalyzeService(doubaoClient, ofoxClient, nil)
 	svc.doubaoClient = doubaoClient
+	svc.ConfigureDashScopeLLMClient(qwenClient)
 
 	result, err := svc.RunPrecisionJSONWithImages(context.Background(), "image", "prompt", []string{"https://example.com/img.jpg"}, "ofox-gemini")
 
 	require.NoError(t, err)
-	assert.Equal(t, "doubao precision fallback", result["description"])
+	assert.Equal(t, "qwen precision fallback", result["description"])
+	assert.Equal(t, 0, doubaoClient.calls)
+	assert.Equal(t, 1, qwenClient.calls)
+}
+
+func TestAnalyzeService_RunPrecisionJSONUsesDedicatedGemini35Client(t *testing.T) {
+	doubaoClient := &mockLLMClient{result: map[string]any{"description": "unexpected doubao", "items": []any{}}}
+	ofoxClient := &mockLLMClient{result: map[string]any{"description": "unexpected gemini 3", "items": []any{}}}
+	gemini35Client := &mockLLMClient{result: map[string]any{"description": "gemini 3.5 precision", "items": []any{}}}
+	svc := NewAnalyzeService(doubaoClient, ofoxClient, nil)
+	svc.ConfigureGemini35LLMClient(gemini35Client)
+
+	result, err := svc.RunPrecisionJSONWithImagesNoFallback(context.Background(), "image", "prompt", []string{"https://example.com/img.jpg"}, gemini35FlashModel)
+
+	require.NoError(t, err)
+	assert.Equal(t, "gemini 3.5 precision", result["description"])
+	assert.Equal(t, 1, gemini35Client.calls)
+	assert.Equal(t, 0, ofoxClient.calls)
+	assert.Equal(t, 0, doubaoClient.calls)
 }
 
 func TestAnalyzeService_RunPrecisionJSONNoFallbackKeepsGeminiError(t *testing.T) {
