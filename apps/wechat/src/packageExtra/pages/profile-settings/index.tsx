@@ -12,8 +12,10 @@ import {
   getUserProfile,
   getUserRecordDays,
   getPublicFoodLibraryCollections,
+  getUserRecipes,
   getPublicUserProfile,
   getUserCollections,
+  getUserFavoriteRecipes,
   communityGetFeed,
   communityGetPublicFeed,
   friendBlockUser,
@@ -24,6 +26,7 @@ import {
   getFollowStats,
   resolveFriendInvite,
   type PublicFoodLibraryItem,
+  type UserRecipe,
   type CommunityFeedItem,
   type FollowStats,
   type FriendBlockStatus,
@@ -143,6 +146,7 @@ export default function ProfileSettingsPage() {
 
   // 收藏
   const [foodCollections, setFoodCollections] = useState<PublicFoodLibraryItem[]>([])
+  const [recipeCollections, setRecipeCollections] = useState<UserRecipe[]>([])
 
   useEffect(() => {
     applyThemeNavigationBar(scheme, { lightBackground: '#f8fafc', darkBackground: '#101716' })
@@ -195,10 +199,11 @@ export default function ProfileSettingsPage() {
       if (isOwner) {
         setIsDeletedUser(false)
         setBlockStatus(null)
-        const [profile, recordDaysRes, foodColls, followStats] = await Promise.all([
+        const [profile, recordDaysRes, foodColls, recipeColls, followStats] = await Promise.all([
           getUserProfile().catch(() => null),
           getUserRecordDays().catch(() => ({ record_days: 0 })),
           getPublicFoodLibraryCollections().catch(() => ({ list: [] })),
+          getUserRecipes({ is_favorite: true }).catch(() => ({ recipes: [] })),
           followStatsPromise,
         ])
         const avatar = profile?.avatar || ''
@@ -217,7 +222,8 @@ export default function ProfileSettingsPage() {
         setCoverImage(cover)
         setMotto(userMotto)
         setFoodCollections(foodColls.list || [])
-        setFavoriteCount(foodColls.list?.length || 0)
+        setRecipeCollections(recipeColls.recipes || [])
+        setFavoriteCount(recipeColls.recipes?.length || 0)
         applyFollowStats(followStats)
         // 加载动态（等用户基础数据落库后再请求，避免状态竞争）
         await loadFeed(true)
@@ -239,6 +245,7 @@ export default function ProfileSettingsPage() {
           setCoverImage('')
           setMotto('')
           setFoodCollections([])
+          setRecipeCollections([])
           setFavoriteCount(0)
           applyFollowStats({ followers_count: 0, following_count: 0, is_following: false })
           setFeedList([])
@@ -258,6 +265,7 @@ export default function ProfileSettingsPage() {
           setCoverImage('')
           setMotto('')
           setFoodCollections([])
+          setRecipeCollections([])
           setFavoriteCount(0)
           applyFollowStats({ followers_count: 0, following_count: 0, is_following: false })
           setFeedList([])
@@ -266,8 +274,9 @@ export default function ProfileSettingsPage() {
           return
         }
         setIsDeletedUser(false)
-        const [foodColls, followStats] = await Promise.all([
+        const [foodColls, recipeColls, followStats] = await Promise.all([
           getUserCollections(resolvedUserId).catch(() => ({ list: [] })),
+          getUserFavoriteRecipes(resolvedUserId).catch(() => ({ recipes: [] })),
           followStatsPromise,
         ])
         const avatar = publicProfile?.avatar || ''
@@ -284,7 +293,8 @@ export default function ProfileSettingsPage() {
         setCoverImage(cover)
         setMotto(userMotto)
         setFoodCollections(foodColls.list || [])
-        setFavoriteCount(foodColls.list?.length || 0)
+        setRecipeCollections(recipeColls.recipes || [])
+        setFavoriteCount(recipeColls.recipes?.length || 0)
         applyFollowStats(followStats)
         // 加载动态（等用户基础数据落库后再请求，避免状态竞争）
         await loadFeed(true)
@@ -686,6 +696,10 @@ export default function ProfileSettingsPage() {
 
   const handleGoDetail = (item: PublicFoodLibraryItem) => {
     Taro.navigateTo({ url: `/pages/food-library-detail/index?id=${encodeURIComponent(item.id)}` })
+  }
+
+  const handleGoRecipeDetail = (recipe: UserRecipe) => {
+    Taro.navigateTo({ url: `${extraPkgUrl('/pages/recipe-detail/index')}?id=${encodeURIComponent(recipe.id)}` })
   }
 
   const handleGoFeedDetail = (item: CommunityFeedItem) => {
@@ -1097,15 +1111,15 @@ export default function ProfileSettingsPage() {
                 <View className='profile-content-empty'>
                   <Text className='profile-content-empty-text'>该用户已注销，食物收藏不可见</Text>
                 </View>
-              ) : foodCollections.length === 0 ? (
+              ) : recipeCollections.length === 0 ? (
                 <View className='profile-content-empty'>
                   <Text className='profile-content-empty-text'>暂无食物收藏</Text>
                 </View>
               ) : (
-                foodCollections.map((item) => (
-                  <View key={item.id} className='collection-food-card' onClick={() => handleGoDetail(item)}>
+                recipeCollections.map((item) => (
+                  <View key={item.id} className='collection-food-card' onClick={() => handleGoRecipeDetail(item)}>
                     <View className='collection-food-main'>
-                      <Text className='collection-food-name'>{item.food_name || item.description || '未命名食物'}</Text>
+                      <Text className='collection-food-name'>{item.recipe_name || '未命名食谱'}</Text>
                       <View className='collection-food-nutrition-row'>
                         {item.total_calories > 0 && (
                           <View className='collection-food-nutri-item'>
