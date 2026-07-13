@@ -208,11 +208,11 @@ func (s *NutritionAliasReviewService) Review(ctx context.Context, id, reviewerID
 
 func buildAliasReviewPrompt(item *repo.NutritionAliasCandidate) string {
 	payload := map[string]any{
-		"task": "审核一个食物别名是否可以安全、唯一地指向目标营养条目",
+		"task":  "审核一个食物别名是否可以安全、唯一地指向目标营养条目",
 		"alias": item.AliasName,
 		"target": map[string]any{
 			"canonicalName": item.ProposedCanonicalName,
-			"kcalPer100g": item.KcalPer100g, "proteinPer100g": item.ProteinPer100g,
+			"kcalPer100g":   item.KcalPer100g, "proteinPer100g": item.ProteinPer100g,
 			"carbsPer100g": item.CarbsPer100g, "fatPer100g": item.FatPer100g,
 		},
 		"rules": []string{
@@ -324,4 +324,3 @@ func normalizeSuggestedAliases(value any, item *repo.NutritionAliasCandidate) []
 func badAliasRequest(message string) error {
 	return &commonerrors.AppError{Code: 10002, Message: message, HTTPStatus: 400}
 }
-

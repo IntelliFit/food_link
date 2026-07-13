@@ -94,6 +94,10 @@ type nutritionFallbackEstimator interface {
 	Estimate(context.Context, []UnresolvedNutritionCandidate, string) (map[int]map[string]any, error)
 }
 
+type nutritionAliasCandidateProposer interface {
+	ProposeNutritionAliasCandidate(context.Context, string, string, string, float64, string) error
+}
+
 func NewAnalyzeService(doubaoClient, ofoxAIClient LLMClient, users *authrepo.UserRepo, nutrition ...*foodrecordrepo.FoodNutritionRepo) *AnalyzeService {
 	var nutritionRepo *foodrecordrepo.FoodNutritionRepo
 	if len(nutrition) > 0 {
@@ -4853,6 +4857,23 @@ func (s *AnalyzeService) applyDBFirstNutritionWithOptions(ctx context.Context, r
 					}
 					if decision.Reason != "" {
 						lookups[lookupIndex].item["resolve_reason"] = decision.Reason
+					}
+					if decision.Confidence >= 0.95 {
+						if proposer, ok := s.nutrition.(nutritionAliasCandidateProposer); ok {
+							model := "deepseek-v4-pro"
+							if s.deepseek != nil && strings.TrimSpace(s.deepseek.Model) != "" {
+								model = strings.TrimSpace(s.deepseek.Model)
+							}
+							if err := proposer.ProposeNutritionAliasCandidate(ctx, food.ID, lookups[lookupIndex].name, model, decision.Confidence, decision.Reason); err != nil {
+								logger.Warn(ctx, "营养别名候选写入待审队列失败",
+									slog.String("food_id", food.ID), slog.String("alias_name", lookups[lookupIndex].name),
+									slog.String("reason", err.Error()))
+							} else {
+								logger.Info(ctx, "营养语义命中已进入别名待审队列",
+									slog.String("food_id", food.ID), slog.String("alias_name", lookups[lookupIndex].name),
+									slog.Float64("confidence", decision.Confidence))
+							}
+						}
 					}
 					if decision.ShouldAddAlias {
 						logger.Info(ctx, "已跳过模型建议的永久营养别名写入",

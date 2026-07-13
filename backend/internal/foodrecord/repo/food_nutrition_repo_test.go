@@ -344,6 +344,16 @@ func TestIsImplausibleNutritionFoodMatch(t *testing.T) {
 	assert.False(t, isImplausibleNutritionFoodMatch("瘦牛肉", domain.FoodNutrition{CarbsPer100g: 0}))
 }
 
+func TestValidateNutritionAliasTargetRejectsMixedDishToZeroCarbIngredient(t *testing.T) {
+	err := ValidateNutritionAliasTarget("牛肉面", domain.FoodNutrition{
+		ID: "beef", CanonicalName: "瘦牛肉(熟)", IsActive: true,
+		KcalPer100g: 176, ProteinPer100g: 26, CarbsPer100g: 0, FatPer100g: 7,
+	})
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "不兼容")
+}
+
 func TestFoodNutritionRepo_EnsureNutritionAliasRejectsMixedDishToIngredient(t *testing.T) {
 	db := setupFoodNutritionFullTestDB(t)
 	repo := NewFoodNutritionRepo(db)

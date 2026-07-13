@@ -21,8 +21,10 @@ import { PackagedFoodsPage } from '@/pages/packaged-foods-page'
 import { PackagedFoodTestPage } from '@/pages/packaged-food-test-page'
 import { PackagedFoodTestRunsPage } from '@/pages/packaged-food-test-runs-page'
 import { FoodNutritionPage } from '@/pages/food-nutrition-page'
+import { NutritionAliasReviewPage } from '@/pages/nutrition-alias-review-page'
 import { PublicFoodLibraryPage } from '@/pages/public-food-library-page'
 import { CampusDirectoryPage } from '@/pages/campus-directory-page'
+import { CampusFoodCollectionPage } from '@/pages/campus-food-collection-page'
 import { PaymentTestPage } from '@/pages/payment-test-page'
 import { UserRewardPage } from '@/pages/user-reward-page'
 import type { AdminMenuId } from '@/components/admin-sidebar'
@@ -34,8 +36,10 @@ const MENU_PATHS: Record<AdminMenuId, string> = {
   'packaged-foods': '/packaged-foods',
   'packaged-food-test': '/packaged-food-test',
   'food-nutrition': '/food-nutrition',
+  'nutrition-alias-review': '/nutrition-alias-review',
   'public-food-library': '/public-food-library',
   'campus-directory': '/campus-directory',
+  'campus-food-collection': '/campus-food-collection',
   'exercise-energy': '/exercise-energy',
   'feed-reports': '/feed-reports',
   'payment-test': '/payment-test',
@@ -136,8 +140,10 @@ export function App() {
         <Route path='/packaged-food-test' element={<PackagedFoodTestPage {...pageProps} />} />
         <Route path='/packaged-food-test/runs/:foodId' element={<PackagedFoodTestRunsPage {...pageProps} />} />
         <Route path='/food-nutrition' element={<FoodNutritionPage {...pageProps} />} />
+        <Route path='/nutrition-alias-review' element={<NutritionAliasReviewPage {...pageProps} />} />
         <Route path='/public-food-library' element={<PublicFoodLibraryPage {...pageProps} />} />
         <Route path='/campus-directory' element={<CampusDirectoryPage {...pageProps} />} />
+        <Route path='/campus-food-collection' element={<CampusFoodCollectionPage {...pageProps} />} />
         <Route path='/payment-test' element={<PaymentTestPage {...pageProps} />} />
         <Route path='/user-rewards' element={<UserRewardPage {...pageProps} />} />
         <Route path='*' element={<Navigate to='/overview' replace />} />

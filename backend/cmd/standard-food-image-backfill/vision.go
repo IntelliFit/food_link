@@ -8,7 +8,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"regexp"
 	"sort"
@@ -22,11 +24,11 @@ const (
 )
 
 type imageDecision struct {
-	FoodMatch    bool    `json:"food_match"`
-	NoWatermark  bool    `json:"no_watermark"`
-	Match        bool    `json:"match"`
-	Confidence   float64 `json:"confidence"`
-	Reason       string  `json:"reason"`
+	FoodMatch   bool    `json:"food_match"`
+	NoWatermark bool    `json:"no_watermark"`
+	Match       bool    `json:"match"`
+	Confidence  float64 `json:"confidence"`
+	Reason      string  `json:"reason"`
 }
 
 type visionClient struct {
@@ -46,6 +48,9 @@ func dashScopeBaseURL(configDir string) string {
 
 func loadDashScopeAPIKey(configDir, apiKeyPath string) string {
 	loadBackendEnv(configDir)
+	if temporary := strings.TrimSpace(os.Getenv("FOOD_IMAGE_VISION_API_KEY")); !isPlaceholderAPIKey(temporary) {
+		return strings.TrimPrefix(temporary, "Bearer ")
+	}
 	if manual := strings.TrimSpace(os.Getenv("DASHSCOPE_API_KEY")); !isPlaceholderAPIKey(manual) {
 		return strings.TrimPrefix(manual, "Bearer ")
 	}
@@ -88,11 +93,13 @@ func newVisionClient(configDir, apiKeyPath, baseURL, model string) (*visionClien
 	} else {
 		baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
 	}
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.TLSHandshakeTimeout = 30 * time.Second
 	return &visionClient{
 		apiKey:  key,
 		baseURL: baseURL,
 		model:   strings.TrimSpace(model),
-		http:    &http.Client{Timeout: 120 * time.Second},
+		http:    &http.Client{Timeout: 120 * time.Second, Transport: transport},
 	}, nil
 }
 
@@ -205,6 +212,33 @@ func (c *visionClient) classifyImage(ctx context.Context, foodName string, data 
 		"请判断图片是否适合作为“%s”的标准展示图。该图来自 Bing 图片搜索「%s」。只返回 JSON，不要 Markdown。格式必须为 {\"food_match\":true/false,\"no_watermark\":true/false,\"confidence\":0到1,\"reason\":\"中文简短原因\"}。food_match：主体应是搜索词所指的食物或常见同类菜品实拍；若搜索凉拌海带丝，深绿/褐绿条状海带凉菜、碗装凉拌海带丝应判 true；仅当明显是无关食物（如皮蛋黄瓜、地图、包装无关商品）才 false。no_watermark：无平台/店铺/版权/大面积水印；少量配料文字可 true。",
 		foodName, foodName,
 	)
+	return c.classifyImageWithPrompt(ctx, prompt, data, contentType)
+}
+
+func (c *visionClient) classifyExistingImage(ctx context.Context, foodName string, data []byte, contentType string) (*imageDecision, error) {
+	prompt := fmt.Sprintf(
+		"你正在审核食物数据库已有图片。请严格判断图片主体是否确实是“%s”，不要因为都是食物就判定匹配。名称中的做法、食材、熟制状态或商品品牌/口味明显不一致时，应判 food_match=false；仅有摆盘、切法或少量常见配料差异可以判 true。图片模糊、主体不可辨认、只有文字/包装且无法确认内容时降低 confidence。只返回 JSON，不要 Markdown。格式必须为 {\"food_match\":true/false,\"no_watermark\":true/false,\"confidence\":0到1,\"reason\":\"中文简短原因\"}。no_watermark 表示没有平台、店铺、版权或大面积水印。",
+		foodName,
+	)
+	return c.classifyImageWithPrompt(ctx, prompt, data, contentType)
+}
+
+func (c *visionClient) classifyImageWithPrompt(ctx context.Context, prompt string, data []byte, contentType string) (*imageDecision, error) {
+	if contentType == "" {
+		contentType = http.DetectContentType(data)
+	}
+	if c.isGeminiNative() {
+		return c.classifyGeminiNative(ctx, prompt, data, contentType)
+	}
+	model := c.model
+	if model == "" {
+		resolved, err := c.resolveModel(ctx, "")
+		if err != nil {
+			return nil, err
+		}
+		model = resolved
+		c.model = resolved
+	}
 	payload := map[string]any{
 		"model":           model,
 		"temperature":     0,
@@ -248,6 +282,120 @@ func (c *visionClient) classifyImage(ctx context.Context, foodName string, data 
 		return nil, errors.New("dashscope returned no choices")
 	}
 	return parseImageDecision(parsed.Choices[0].Message.Content)
+}
+
+func (c *visionClient) isGeminiNative() bool {
+	return strings.Contains(strings.ToLower(c.baseURL), "maas-openapi.wanjiedata.com") &&
+		strings.HasPrefix(strings.ToLower(strings.TrimSpace(c.model)), "gemini-")
+}
+
+func (c *visionClient) classifyGeminiNative(ctx context.Context, prompt string, data []byte, contentType string) (*imageDecision, error) {
+	payload := map[string]any{
+		"contents": []map[string]any{{
+			"role": "user",
+			"parts": []map[string]any{
+				{"text": prompt},
+				{"inlineData": map[string]string{
+					"mimeType": contentType,
+					"data":     base64.StdEncoding.EncodeToString(data),
+				}},
+			},
+		}},
+		"generationConfig": map[string]any{
+			"temperature":      0,
+			"maxOutputTokens":  512,
+			"responseMimeType": "application/json",
+		},
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return nil, err
+	}
+	var resp *http.Response
+	for attempt := 0; attempt < 2; attempt++ {
+		req, reqErr := http.NewRequestWithContext(ctx, http.MethodPost, geminiVisionEndpoint(c.baseURL, c.model), bytes.NewReader(body))
+		if reqErr != nil {
+			return nil, reqErr
+		}
+		req.Header.Set("Authorization", "Bearer "+c.apiKey)
+		req.Header.Set("Content-Type", "application/json")
+		resp, err = c.http.Do(req)
+		if err == nil && !shouldRetryVisionStatus(resp.StatusCode) {
+			break
+		}
+		if resp != nil {
+			io.Copy(io.Discard, io.LimitReader(resp.Body, 64*1024))
+			resp.Body.Close()
+			resp = nil
+		}
+		if attempt == 0 && (err != nil || shouldRetryVisionStatusCodeFromError(err)) {
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(300 * time.Millisecond):
+			}
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	if resp == nil {
+		if err != nil {
+			return nil, err
+		}
+		return nil, errors.New("gemini vision request failed")
+	}
+	defer resp.Body.Close()
+	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 2*1024*1024))
+	if resp.StatusCode >= 400 {
+		return nil, fmt.Errorf("gemini vision status %d: %s", resp.StatusCode, string(respBody))
+	}
+	var parsed struct {
+		Candidates []struct {
+			Content struct {
+				Parts []struct {
+					Text string `json:"text"`
+				} `json:"parts"`
+			} `json:"content"`
+		} `json:"candidates"`
+	}
+	if err := json.Unmarshal(respBody, &parsed); err != nil {
+		return nil, err
+	}
+	for _, candidate := range parsed.Candidates {
+		for _, part := range candidate.Content.Parts {
+			if strings.TrimSpace(part.Text) != "" {
+				return parseImageDecision(part.Text)
+			}
+		}
+	}
+	return nil, errors.New("gemini vision returned no text")
+}
+
+func shouldRetryVisionStatus(status int) bool {
+	return status == http.StatusRequestTimeout || status == http.StatusTooManyRequests || status >= 500
+}
+
+func shouldRetryVisionStatusCodeFromError(err error) bool {
+	if err == nil {
+		return false
+	}
+	var netErr net.Error
+	return errors.As(err, &netErr) && (netErr.Timeout() || netErr.Temporary())
+}
+
+func geminiVisionEndpoint(baseURL, model string) string {
+	parsed, err := url.Parse(strings.TrimRight(strings.TrimSpace(baseURL), "/"))
+	if err != nil {
+		return strings.TrimRight(baseURL, "/") + "/v1beta/models/" + url.PathEscape(model) + ":generateContent"
+	}
+	path := strings.TrimRight(parsed.Path, "/")
+	path = strings.TrimSuffix(path, "/v1beta")
+	path = strings.TrimSuffix(path, "/v1")
+	parsed.Path = path + "/v1beta/models/" + url.PathEscape(model) + ":generateContent"
+	parsed.RawQuery = ""
+	return parsed.String()
 }
 
 func classifyFoodImage(ctx context.Context, configDir, apiKeyPath, baseURL, model, foodName string, data []byte, contentType string) (*imageDecision, error) {

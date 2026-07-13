@@ -24,6 +24,9 @@ import (
 	authhandler "food_link/backend/internal/auth/handler"
 	authrepo "food_link/backend/internal/auth/repo"
 	authservice "food_link/backend/internal/auth/service"
+	campuscataloghandler "food_link/backend/internal/campuscatalog/handler"
+	campuscatalogrepo "food_link/backend/internal/campuscatalog/repo"
+	campuscatalogservice "food_link/backend/internal/campuscatalog/service"
 	commonmw "food_link/backend/internal/common/middleware"
 	"food_link/backend/internal/common/routes"
 	communityhandler "food_link/backend/internal/community/handler"
@@ -692,6 +695,9 @@ func New(cfg *config.Config) (*App, error) {
 	adminAuthSvc := adminservice.NewAuthService(adminAccountRepo)
 	adminAuthHandler := adminhandler.NewAuthHandler(adminAuthSvc)
 	adminCampusDirectoryHandler := adminhandler.NewCampusDirectoryHandler(db)
+	adminCampusCatalogRepo := campuscatalogrepo.NewCatalogRepo(db)
+	adminCampusCatalogSvc := campuscatalogservice.NewCatalogService(adminCampusCatalogRepo, storageClient)
+	adminCampusCatalogHandler := campuscataloghandler.NewCatalogHandler(adminCampusCatalogSvc)
 	adminAuth := adminAuthHandler.AdminAuth()
 	adminAPI := engine.Group("/api/admin", adminCORS(os.Getenv("ADMIN_CORS_ALLOWED_ORIGINS")))
 	adminAPI.POST("/login", adminAuthHandler.Login)
@@ -747,6 +753,10 @@ func New(cfg *config.Config) (*App, error) {
 	adminAPI.GET("/campus-directory/imports", adminAuth, adminCampusDirectoryHandler.ListImports)
 	adminAPI.POST("/campus-directory/imports", adminAuth, adminCampusDirectoryHandler.CreateImport)
 	adminAPI.PATCH("/campus-directory/imports/:import_id", adminAuth, adminCampusDirectoryHandler.UpdateImport)
+	adminAPI.POST("/campus-food-collection/images", adminAuth, adminCampusCatalogHandler.UploadImage)
+	adminAPI.POST("/campus-food-collection/batches", adminAuth, adminCampusCatalogHandler.CreateBatch)
+	adminAPI.GET("/campus-food-collection/batches", adminAuth, adminCampusCatalogHandler.ListBatches)
+	adminAPI.GET("/campus-food-collection/items", adminAuth, adminCampusCatalogHandler.ListItems)
 	adminAPI.GET("/exercise-energy-library", adminAuth, adminExerciseEnergyHandler.List)
 	adminAPI.GET("/exercise-energy-library/:activity_id", adminAuth, adminExerciseEnergyHandler.Get)
 	adminAPI.PATCH("/exercise-energy-library/:activity_id", adminAuth, adminExerciseEnergyHandler.Update)

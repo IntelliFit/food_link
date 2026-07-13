@@ -216,11 +216,11 @@ func (r *NutritionAliasReviewRepo) Create(ctx context.Context, input CreateNutri
 
 func foodSnapshot(food domain.FoodNutrition) map[string]any {
 	return map[string]any{
-		"canonical_name":  food.CanonicalName,
-		"kcal_per_100g":   food.KcalPer100g,
+		"canonical_name":   food.CanonicalName,
+		"kcal_per_100g":    food.KcalPer100g,
 		"protein_per_100g": food.ProteinPer100g,
-		"carbs_per_100g":  food.CarbsPer100g,
-		"fat_per_100g":    food.FatPer100g,
+		"carbs_per_100g":   food.CarbsPer100g,
+		"fat_per_100g":     food.FatPer100g,
 		"source":           food.Source,
 	}
 }
@@ -316,4 +316,3 @@ func (r *NutritionAliasReviewRepo) Review(ctx context.Context, id, decision, rev
 	}
 	return r.Get(ctx, id)
 }
-

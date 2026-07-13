@@ -584,6 +584,7 @@ func TestBuildPetChatPromptRequiresGentleTone(t *testing.T) {
 	assert.Contains(t, prompt, "不要调侃、挖苦、训话、责备")
 	assert.Contains(t, prompt, "避免“你这”“坎儿”“别一口气这么猛”")
 	assert.Contains(t, prompt, "合作式表达")
+	assert.Contains(t, prompt, "不要使用 *、**、_、__ 作为强调标记")
 }
 
 func TestStatsService_GenerateInsightRetriesForbiddenIdentityClaim(t *testing.T) {

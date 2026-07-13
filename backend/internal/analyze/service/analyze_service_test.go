@@ -171,6 +171,7 @@ type fakeAnalyzeNutritionResolver struct {
 	packagedResolveCalls int
 	searchCandidates     map[string][]foodrecordrepo.SearchCandidate
 	ensuredAliases       []string
+	proposedAliases      []string
 }
 
 func newFakeAnalyzeNutritionResolver() *fakeAnalyzeNutritionResolver {
@@ -289,6 +290,11 @@ func (r *fakeAnalyzeNutritionResolver) SearchCandidates(ctx context.Context, que
 
 func (r *fakeAnalyzeNutritionResolver) EnsureNutritionAlias(ctx context.Context, foodID, rawName string) error {
 	r.ensuredAliases = append(r.ensuredAliases, foodID+":"+rawName)
+	return nil
+}
+
+func (r *fakeAnalyzeNutritionResolver) ProposeNutritionAliasCandidate(_ context.Context, foodID, rawName, model string, confidence float64, reason string) error {
+	r.proposedAliases = append(r.proposedAliases, fmt.Sprintf("%s:%s:%s:%.2f:%s", foodID, rawName, model, confidence, reason))
 	return nil
 }
 
@@ -2924,6 +2930,8 @@ func TestAnalyzeService_SemanticReuseDoesNotPersistModelSuggestedAlias(t *testin
 	require.Len(t, items, 1)
 	assert.Equal(t, "semantic_rerank", items[0]["resolve_status"])
 	assert.Empty(t, resolver.ensuredAliases)
+	require.Len(t, resolver.proposedAliases, 1)
+	assert.Contains(t, resolver.proposedAliases[0], "icecream-1:原味冰淇淋:deepseek-v4-pro:0.99")
 }
 
 func TestModelDeclaredPackagedFoodDoesNotInferFromName(t *testing.T) {

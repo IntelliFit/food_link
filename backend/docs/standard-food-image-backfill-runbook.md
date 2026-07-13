@@ -70,3 +70,65 @@ FROM food_nutrition_library;
 | Bing 限流 | 增大 `sleep_ms` |
 | `no_match` | `--failed-only` 二轮 |
 | 错图 | Phase1 人工抽检 30 张 |
+
+## 8. Gemini 全库图片质检
+
+工具同时支持万界方舟 Gemini 原生 `generateContent` 协议。临时密钥只通过进程环境变量传入，禁止写入仓库、报告或命令行参数文件。
+
+### 已有图片全量审计（只读）
+
+```powershell
+cd backend
+$env:FOOD_IMAGE_VISION_API_KEY = '<temporary-key>'
+go run ./cmd/standard-food-image-backfill `
+  --vision-model gemini-3-flash-preview `
+  --vision-base-url https://maas-openapi.wanjiedata.com/api `
+  --audit-existing `
+  --workers 24 `
+  --checkpoint-every 25 `
+  --audit-search-replacements `
+  --audit-output tmp/food-image-audit/full-existing-report.json
+```
+
+- `--audit-existing` 强制只读，即使同时误传 `--apply` 也不会覆盖已有图。
+- `match` 与 `mismatch` 会被断点续跑跳过；`uncertain`、`vision_failed`、`download_failed` 会在下次运行自动重试。
+- 高置信错配可通过 `--audit-search-replacements` 继续联网找图，但候选仍保持 dry-run。
+
+### 缺图全量找图（默认 dry-run）
+
+```powershell
+go run ./cmd/standard-food-image-backfill `
+  --vision-model gemini-3-flash-preview `
+  --vision-base-url https://maas-openapi.wanjiedata.com/api `
+  --workers 12 `
+  --max-candidates 6 `
+  --search-query-limit 3 `
+  --output-dir tmp/food-image-audit/full-missing `
+  --success-json tmp/food-image-audit/full-missing-success.json
+```
+
+只有人工复核报告后，才允许单独使用 `--apply` 上传 COS 并填充仍为空的数据库字段。已有非空图片不会被该写入路径覆盖。
+
+### 高置信报告二次复核与安全写入
+
+先不带 `--apply` 运行一次现场复核：
+
+```powershell
+go run ./cmd/standard-food-image-backfill `
+  --reviewed-apply `
+  --reviewed-missing-report tmp/food-image-audit/full-missing-success.json `
+  --reviewed-existing-report tmp/food-image-audit/full-existing-report.json `
+  --reviewed-output tmp/food-image-audit/reviewed-verification-report.json `
+  --reviewed-min-confidence 0.95 `
+  --vision-model gemini-3-flash-preview `
+  --vision-base-url https://maas-openapi.wanjiedata.com/api `
+  --workers 24
+```
+
+确认复核报告后，增加 `--apply`、用 `--reviewed-allowlist-report` 指向上述复核报告，并换用新的输出文件执行写入。这样只有上一轮 `status=verified` 的固定白名单会进入正式写入。该模式有以下门禁：
+
+- 审计与现场复核置信度都必须达到阈值，候选必须无水印；
+- 同一候选 URL 被多个食物复用时整组排除；
+- 替换已有图片时，旧图必须在现场第二次判定中仍为高置信错配；
+- 上传新对象后按审计前的 `image_path`、`image_paths` 做条件更新，扫描后被他人修改的行自动跳过；
+- 不删除旧 COS 对象；输出清单保留旧值、新 key、来源 URL 与两轮模型结果，可用于回滚和追责。

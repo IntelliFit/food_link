@@ -919,6 +919,14 @@ $rm-shadow-card: 0 8rpx 24rpx rgb(15 23 42 / 5%);
   line-height: 34rpx;
 }
 
+.item-amount {
+  display: block;
+  margin-top: 4rpx;
+  color: $rm-text-secondary;
+  font-size: 22rpx;
+  line-height: 32rpx;
+}
+
 .food-sub {
   color: $rm-text-tertiary;
 }

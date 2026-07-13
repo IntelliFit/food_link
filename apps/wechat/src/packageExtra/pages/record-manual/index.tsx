@@ -36,6 +36,13 @@ import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
 import { chooseImageWithPrivacy, isPrivacyAuthorizeError, showPrivacyAuthorizeFailure } from '../../../utils/weapp-privacy'
 import { roundTo } from '../../../utils/number-format'
+import {
+  manualFoodDisplayInput,
+  manualFoodResultPortionText,
+  manualFoodWeightFromInput,
+  practicalManualFoodDefaultWeight,
+  selectedManualFoodAmountText,
+} from '../../../utils/manual-food-serving'
 import './index.scss'
 
 const MEALS: Array<{ id: CanonicalMealType; name: string; icon: string }> = [
@@ -366,7 +373,7 @@ function inferServingProfile(item: ManualFoodSearchResult): {
     }))
   const remoteUnit = item.display_unit
   if (remoteUnit) {
-    const defaultWeight = positiveWeightGrams(item.default_weight_grams, remotePresets[0]?.grams || 100)
+    const defaultWeight = practicalManualFoodDefaultWeight(item, remotePresets[0]?.grams || 100)
     return {
       defaultWeight,
       displayUnit: remoteUnit,
@@ -434,39 +441,22 @@ function inferServingProfile(item: ManualFoodSearchResult): {
 }
 
 function formatSelectedAmount(item: Pick<SelectedItem, 'weight' | 'defaultWeight' | 'displayUnit' | 'displayUnitLabel'>) {
-  if (item.displayUnit === 'serving') {
-    return `${roundToSingle(item.weight / item.defaultWeight)}份`
-  }
-  if (item.displayUnit === 'piece') {
-    return `${roundToSingle(item.weight / 55)}个`
+  if (item.displayUnit === 'piece' || item.displayUnit === 'serving') {
+    return `${roundToSingle(item.weight / item.defaultWeight)}${item.displayUnitLabel}`
   }
   return `${formatWeightGrams(item.weight)}${item.displayUnitLabel}`
 }
 
 function formatWeightInput(item: Pick<SelectedItem, 'weight' | 'defaultWeight' | 'displayUnit'>, nextWeight = item.weight) {
-  if (item.displayUnit === 'serving') {
-    return String(roundToSingle(nextWeight / item.defaultWeight))
-  }
-  if (item.displayUnit === 'piece') {
-    return String(roundToSingle(nextWeight / 55))
-  }
-  return formatWeightGrams(nextWeight)
+  return manualFoodDisplayInput({ ...item, displayUnitLabel: item.displayUnit }, nextWeight)
 }
 
 function weightFromDisplayInput(item: Pick<SelectedItem, 'defaultWeight' | 'displayUnit'>, value: number) {
-  if (item.displayUnit === 'serving') {
-    return item.defaultWeight * value
-  }
-  if (item.displayUnit === 'piece') {
-    return 55 * value
-  }
-  return value
+  return manualFoodWeightFromInput(item, value)
 }
 
 function resultPortionText(item: ManualFoodSearchResult) {
-  if (item.display_unit === 'piece') return '1个'
-  if (item.display_unit === 'ml') return `${formatWeightGrams(item.default_weight_grams || 350)}ml`
-  if (item.display_unit === 'serving') return '1份'
+  if (item.display_unit) return manualFoodResultPortionText(item)
   if (isEggLikeFood(item.title)) return '1个'
   if (isBeverageLikeFood(item.title) || isSoupLikeFood(item.title)) {
     const fallbackVolume = isSoupLikeFood(item.title) ? 250 : 350
@@ -1218,6 +1208,7 @@ function RecordManualPage() {
                   </Text>
                 </View>
                 <Text className='item-cal'>{Math.round(item.nutrients.calories)} kcal</Text>
+                <Text className='item-amount'>当前：{selectedManualFoodAmountText(item)}</Text>
                 {!!item.recommendReason && (
                   <Text className='item-hint'>{item.recommendReason}</Text>
                 )}

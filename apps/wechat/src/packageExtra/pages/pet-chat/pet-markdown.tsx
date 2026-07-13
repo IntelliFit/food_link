@@ -52,7 +52,10 @@ function isTableDelimiter(line: string): boolean {
 
 function parseInline(text: string): PetMarkdownInlinePart[] {
   const parts: PetMarkdownInlinePart[] = []
-  const pattern = /<u>(.*?)<\/u>|__(.*?)__|\*\*(.*?)\*\*/g
+  // 宠物对话的模型偶尔会用单星号表示强调。小程序没有浏览器的
+  // Markdown 渲染器，若不在这里处理就会把 `*重点*` 原样显示出来。
+  // 三星号先匹配，避免被双星号规则吃掉后留下一个孤立的星号。
+  const pattern = /`([^`]+)`|<u>(.*?)<\/u>|__(.*?)__|\*\*\*(.*?)\*\*\*|\*\*(.*?)\*\*|\*([^*\n]+?)\*/g
   let cursor = 0
   let match: RegExpExecArray | null
 
@@ -61,11 +64,17 @@ function parseInline(text: string): PetMarkdownInlinePart[] {
       parts.push({ text: text.slice(cursor, match.index) })
     }
     if (match[1] != null) {
-      parts.push({ text: match[1], underline: true })
+      parts.push({ text: match[1] })
     } else if (match[2] != null) {
       parts.push({ text: match[2], underline: true })
     } else if (match[3] != null) {
-      parts.push({ text: match[3], strong: true })
+      parts.push({ text: match[3], underline: true })
+    } else if (match[4] != null) {
+      parts.push({ text: match[4], strong: true, underline: true })
+    } else if (match[5] != null) {
+      parts.push({ text: match[5], strong: true })
+    } else if (match[6] != null) {
+      parts.push({ text: match[6], strong: true })
     }
     cursor = pattern.lastIndex
   }

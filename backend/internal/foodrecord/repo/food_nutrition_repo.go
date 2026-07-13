@@ -2480,6 +2480,62 @@ func (r *FoodNutritionRepo) EnsureNutritionAlias(ctx context.Context, foodID, ra
 	return r.createNutritionAlias(ctx, foodID, raw, normalizeFoodName(raw))
 }
 
+// ProposeNutritionAliasCandidate records a semantic match in the isolated
+// review queue. It never writes food_nutrition_aliases and therefore cannot
+// affect runtime matching before an administrator approves the proposal.
+func (r *FoodNutritionRepo) ProposeNutritionAliasCandidate(ctx context.Context, foodID, rawName, model string, confidence float64, reason string) error {
+	raw := strings.TrimSpace(rawName)
+	foodID = strings.TrimSpace(foodID)
+	if foodID == "" || raw == "" {
+		return nil
+	}
+	var food domain.FoodNutrition
+	if err := r.db.WithContext(ctx).Where("id = ? AND is_active = ?", foodID, true).First(&food).Error; err != nil {
+		return fmt.Errorf("校验营养别名候选目标失败: %w", err)
+	}
+	if normalizeFoodName(raw) == normalizeFoodName(food.CanonicalName) {
+		return nil
+	}
+	if err := ValidateNutritionAliasTarget(raw, food); err != nil {
+		return fmt.Errorf("拒绝创建营养别名候选: %w", err)
+	}
+	normalized := normalizeFoodName(raw)
+	var count int64
+	if err := r.db.WithContext(ctx).Table((&domain.FoodNutritionAlias{}).TableName()).
+		Where("normalized_alias = ?", normalized).Count(&count).Error; err != nil {
+		return err
+	}
+	if count > 0 {
+		return nil
+	}
+	if err := r.db.WithContext(ctx).Table("food_nutrition_alias_candidates").
+		Where("normalized_alias = ? AND proposed_food_id = ? AND status = 'pending'", normalized, foodID).
+		Count(&count).Error; err != nil {
+		return err
+	}
+	if count > 0 {
+		return nil
+	}
+	snapshot, err := json.Marshal(map[string]any{
+		"canonical_name": food.CanonicalName,
+		"kcal_per_100g":  food.KcalPer100g, "protein_per_100g": food.ProteinPer100g,
+		"carbs_per_100g": food.CarbsPer100g, "fat_per_100g": food.FatPer100g,
+		"source": food.Source,
+	})
+	if err != nil {
+		return err
+	}
+	emptyList := datatypes.JSON([]byte("[]"))
+	return r.db.WithContext(ctx).Table("food_nutrition_alias_candidates").
+		Clauses(clause.OnConflict{DoNothing: true}).Create(map[string]any{
+		"id": uuid.NewString(), "alias_name": raw, "normalized_alias": normalized,
+		"proposed_food_id": foodID, "source": "ai_semantic", "model": strings.TrimSpace(model),
+		"model_decision": "approve", "model_confidence": confidence, "model_reason": strings.TrimSpace(reason),
+		"suggested_aliases": emptyList, "rule_flags": emptyList, "candidate_snapshot": datatypes.JSON(snapshot),
+		"status": "pending",
+	}).Error
+}
+
 func (r *FoodNutritionRepo) createPackagedFoodAlias(ctx context.Context, foodID, raw, normalized string) error {
 	if strings.TrimSpace(foodID) == "" || strings.TrimSpace(raw) == "" || strings.TrimSpace(normalized) == "" {
 		return nil

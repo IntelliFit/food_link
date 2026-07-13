@@ -120,4 +120,3 @@ func valueOrEmpty(value *string) string {
 	}
 	return *value
 }
-
