@@ -8,20 +8,14 @@ import (
 	"food_link/backend/internal/analyze/domain"
 
 	"github.com/stretchr/testify/assert"
-	gormsqlite "gorm.io/driver/sqlite"
-	"gorm.io/gorm"
 
-	_ "modernc.org/sqlite"
+	"food_link/backend/pkg/testdb"
+
+	"gorm.io/gorm"
 )
 
 func setupTestDB(t *testing.T) *gorm.DB {
-	db, err := gorm.Open(gormsqlite.New(gormsqlite.Config{
-		DriverName: "sqlite",
-		DSN:        ":memory:",
-	}), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("open sqlite: %v", err)
-	}
+	db := testdb.New(t)
 	if err := db.AutoMigrate(&domain.AnalysisTask{}, &domain.AnalysisFeedbackSample{}); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}

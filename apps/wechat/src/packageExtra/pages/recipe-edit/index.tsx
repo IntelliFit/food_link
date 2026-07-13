@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import Taro from '@tarojs/taro'
 import { withAuth } from '../../../utils/withAuth'
 import { showUnifiedApiError } from '../../../utils/api'
+import { formatMacroNutrient } from '../../../utils/number-format'
 
 import './index.scss'
 
@@ -180,19 +181,19 @@ function RecipeEditPage() {
         <Text className='section-title'>营养摘要</Text>
         <View className='summary'>
           <View className='summary-item'>
-            <Text className='summary-value'>{totalCalories}</Text>
+            <Text className='summary-value'>{formatMacroNutrient(totalCalories)}</Text>
             <Text className='summary-label'>热量 (kcal)</Text>
           </View>
           <View className='summary-item'>
-            <Text className='summary-value'>{totalProtein}</Text>
+            <Text className='summary-value'>{formatMacroNutrient(totalProtein)}</Text>
             <Text className='summary-label'>蛋白质 (g)</Text>
           </View>
           <View className='summary-item'>
-            <Text className='summary-value'>{totalCarbs}</Text>
+            <Text className='summary-value'>{formatMacroNutrient(totalCarbs)}</Text>
             <Text className='summary-label'>碳水 (g)</Text>
           </View>
           <View className='summary-item'>
-            <Text className='summary-value'>{totalFat}</Text>
+            <Text className='summary-value'>{formatMacroNutrient(totalFat)}</Text>
             <Text className='summary-label'>脂肪 (g)</Text>
           </View>
         </View>

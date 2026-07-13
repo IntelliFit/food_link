@@ -1,0 +1,107 @@
+[
+  {
+    "school": "北京大学",
+    "source_url": "https://cyzx.pku.edu.cn/fwzn/74317312d14a4988bc38eff6f5c8b851.htm",
+    "campuses": [
+      { "name": "燕园校区", "source_url": "https://www.xsg.pku.edu.cn/campus.html" },
+      { "name": "医学部", "source_url": "https://www.xsg.pku.edu.cn/campus.html" },
+      { "name": "昌平新校区", "source_url": "https://www.xsg.pku.edu.cn/campus.html" },
+      { "name": "大兴校区", "source_url": "https://www.xsg.pku.edu.cn/campus.html" },
+      { "name": "深圳研究生院", "source_url": "https://www.xsg.pku.edu.cn/campus.html" }
+    ],
+    "canteens": [
+      { "campus": "燕园校区", "name": "学一食堂" },
+      { "campus": "燕园校区", "name": "家园食堂" },
+      { "campus": "燕园校区", "name": "学五食堂" },
+      { "campus": "燕园校区", "name": "燕南美食" },
+      { "campus": "燕园校区", "name": "勺园食堂" },
+      { "campus": "燕园校区", "name": "农园食堂" },
+      { "campus": "燕园校区", "name": "佟园食堂" },
+      { "campus": "燕园校区", "name": "中关园食堂" },
+      { "campus": "燕园校区", "name": "畅春园食堂" },
+      { "campus": "燕园校区", "name": "成府园食堂" },
+      { "campus": "燕园校区", "name": "馨园食堂" },
+      { "campus": "昌平新校区", "name": "昌平200号食堂" }
+    ]
+  },
+  {
+    "school": "清华大学",
+    "source_url": "https://www.tsinghua.edu.cn/ysfwzx/",
+    "campuses": [
+      { "name": "清华园校区", "source_url": "https://www.tsinghua.edu.cn/" },
+      { "name": "深圳国际研究生院", "source_url": "https://www.sigs.tsinghua.edu.cn/lxwm_7686/list.htm" }
+    ],
+    "canteens": [
+      { "campus": "清华园校区", "name": "紫荆园" },
+      { "campus": "清华园校区", "name": "桃李园" },
+      { "campus": "清华园校区", "name": "清芬园" },
+      { "campus": "清华园校区", "name": "听涛园" },
+      { "campus": "清华园校区", "name": "融园" },
+      { "campus": "清华园校区", "name": "丁香园" },
+      { "campus": "清华园校区", "name": "闻馨园" },
+      { "campus": "清华园校区", "name": "双清园" },
+      { "campus": "清华园校区", "name": "观畴园" },
+      { "campus": "清华园校区", "name": "芝兰园" }
+    ]
+  },
+  {
+    "school": "复旦大学",
+    "source_url": "https://zongwuchu.fudan.edu.cn/39407/list.htm",
+    "campuses": [
+      { "name": "邯郸校区", "source_url": "https://jijian.fudan.edu.cn/43607/list.htm" },
+      { "name": "枫林校区", "source_url": "https://jijian.fudan.edu.cn/43607/list.htm" },
+      { "name": "江湾校区", "source_url": "https://jijian.fudan.edu.cn/43607/list.htm" },
+      { "name": "张江校区", "source_url": "https://jijian.fudan.edu.cn/43607/list.htm" }
+    ],
+    "canteens": [
+      { "campus": "邯郸校区", "name": "旦苑餐厅" },
+      { "campus": "邯郸校区", "name": "北区食堂" },
+      { "campus": "邯郸校区", "name": "南区食堂" },
+      { "campus": "邯郸校区", "name": "教工食堂" },
+      { "campus": "邯郸校区", "name": "南苑餐厅" },
+      { "campus": "江湾校区", "name": "江湾食堂" },
+      { "campus": "江湾校区", "name": "江湾光华餐厅" },
+      { "campus": "枫林校区", "name": "枫林食堂" },
+      { "campus": "张江校区", "name": "张江食堂" }
+    ]
+  },
+  {
+    "school": "浙江大学",
+    "source_url": "https://zulg.zju.edu.cn/about/departments/d11.htm",
+    "campuses": [
+      { "name": "紫金港校区", "source_url": "https://iczu.zju.edu.cn/zdjj/list.htm" },
+      { "name": "玉泉校区", "source_url": "https://iczu.zju.edu.cn/zdjj/list.htm" },
+      { "name": "西溪校区", "source_url": "https://iczu.zju.edu.cn/zdjj/list.htm" },
+      { "name": "华家池校区", "source_url": "https://iczu.zju.edu.cn/zdjj/list.htm" },
+      { "name": "之江校区", "source_url": "https://iczu.zju.edu.cn/zdjj/list.htm" },
+      { "name": "舟山校区", "source_url": "https://iczu.zju.edu.cn/zdjj/list.htm" },
+      { "name": "海宁校区", "source_url": "https://iczu.zju.edu.cn/zdjj/list.htm" }
+    ],
+    "canteens": [
+      { "campus": "紫金港校区", "name": "紫金港校区食堂" },
+      { "campus": "玉泉校区", "name": "玉泉校区食堂" },
+      { "campus": "西溪校区", "name": "西溪校区食堂" },
+      { "campus": "华家池校区", "name": "华家池校区食堂" },
+      { "campus": "之江校区", "name": "之江校区食堂" }
+    ]
+  },
+  {
+    "school": "中国科学技术大学",
+    "source_url": "https://gradschool.ustc.edu.cn/article/3387",
+    "campuses": [
+      { "name": "东校区", "source_url": "https://map.ustc.edu.cn/" },
+      { "name": "西校区", "source_url": "https://map.ustc.edu.cn/" },
+      { "name": "中校区", "source_url": "https://map.ustc.edu.cn/" },
+      { "name": "北校区", "source_url": "https://map.ustc.edu.cn/" },
+      { "name": "南校区", "source_url": "https://map.ustc.edu.cn/" },
+      { "name": "高新校区", "source_url": "https://map.ustc.edu.cn/" }
+    ],
+    "canteens": [
+      { "campus": "东校区", "name": "东区学生食堂" },
+      { "campus": "西校区", "name": "西区学生食堂" },
+      { "campus": "中校区", "name": "中区学生食堂" },
+      { "campus": "南校区", "name": "南区学生食堂" },
+      { "campus": "高新校区", "name": "高新校区食堂" }
+    ]
+  }
+]

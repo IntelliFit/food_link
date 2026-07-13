@@ -4,15 +4,15 @@ import (
 	"context"
 	"testing"
 
+	"food_link/backend/pkg/testdb"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
 func setupExpiryTaskTestDB(t *testing.T) *gorm.DB {
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
+	db := testdb.New(t)
 	db.Exec(`CREATE TABLE analysis_tasks (
 		id TEXT PRIMARY KEY,
 		user_id TEXT,
@@ -26,8 +26,13 @@ func setupExpiryTaskTestDB(t *testing.T) *gorm.DB {
 		error_message TEXT,
 		is_violated BOOLEAN,
 		violation_reason TEXT,
-		created_at TIMESTAMP,
-		updated_at TIMESTAMP
+		worker_id TEXT,
+		attempt_id TEXT,
+		attempt_count INTEGER,
+		processing_started_at TIMESTAMPTZ,
+		lease_until TIMESTAMPTZ,
+		created_at TIMESTAMPTZ,
+		updated_at TIMESTAMPTZ
 	)`)
 	return db
 }

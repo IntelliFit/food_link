@@ -97,6 +97,7 @@ func buildFeedbackSummaryMarkdown(feedback *domain.UserFeedback) string {
 		markdownField("反馈ID", feedback.ID),
 		markdownField("用户ID", feedback.UserID),
 		markdownField("分类", feedbackCategoryLabel(feedback.Category)),
+		markdownField("来源", feedbackSourceLabel(feedback.Source)),
 		markdownField("页面", displayOrDash(feedback.PagePath)),
 		markdownField("版本", displayOrDash(feedback.AppVersion)),
 		markdownField("联系方式", displayOrDash(feedback.Contact)),
@@ -117,6 +118,9 @@ func buildFeedbackSummaryMarkdown(feedback *domain.UserFeedback) string {
 	}
 	if summary := summarizeClientInfo(feedback.ClientInfo); summary != "" {
 		lines = append(lines, markdownField("客户端", summary))
+	}
+	if extraSummary := summarizeExtra(feedback.Extra); extraSummary != "" {
+		lines = append(lines, markdownField("关联信息", extraSummary))
 	}
 	return strings.Join(lines, "\n")
 }
@@ -167,6 +171,42 @@ func feedbackCategoryLabel(category string) string {
 	default:
 		return "其他"
 	}
+}
+
+func feedbackSourceLabel(source string) string {
+	switch strings.TrimSpace(strings.ToLower(source)) {
+	case domain.SourceCampusLocation:
+		return "校园目录纠错"
+	case domain.SourceCampusFood:
+		return "校园菜品纠错"
+	case domain.SourceFoodLibrary:
+		return "公共食物库纠错"
+	default:
+		return "App 意见反馈"
+	}
+}
+
+func summarizeExtra(extra map[string]any) string {
+	if len(extra) == 0 {
+		return ""
+	}
+	keys := []string{
+		"school_name", "campus_name", "canteen_name", "floor", "window_name",
+		"food_name", "item_id", "public_food_item_id", "library_item_id",
+	}
+	parts := make([]string, 0, len(keys))
+	for _, key := range keys {
+		value, ok := extra[key]
+		if !ok {
+			continue
+		}
+		text := strings.TrimSpace(fmt.Sprint(value))
+		if text == "" || text == "<nil>" {
+			continue
+		}
+		parts = append(parts, fmt.Sprintf("%s=%s", key, text))
+	}
+	return strings.Join(parts, "，")
 }
 
 func displayOrDash(value string) string {

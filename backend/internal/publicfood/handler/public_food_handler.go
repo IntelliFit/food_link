@@ -69,6 +69,10 @@ func (h *PublicFoodHandler) Create(c *gin.Context) {
 		DetailAddress      *string          `json:"detail_address"`
 		Type               string           `json:"type"`
 		IsCampusFood       bool             `json:"is_campus_food"`
+		SchoolID           *string          `json:"school_id"`
+		CampusID           *string          `json:"campus_id"`
+		CanteenID          *string          `json:"canteen_id"`
+		WindowID           *string          `json:"window_id"`
 		SchoolName         *string          `json:"school_name"`
 		CampusName         *string          `json:"campus_name"`
 		CanteenName        *string          `json:"canteen_name"`
@@ -112,6 +116,10 @@ func (h *PublicFoodHandler) Create(c *gin.Context) {
 		DetailAddress:      body.DetailAddress,
 		Type:               body.Type,
 		IsCampusFood:       body.IsCampusFood,
+		SchoolID:           body.SchoolID,
+		CampusID:           body.CampusID,
+		CanteenID:          body.CanteenID,
+		WindowID:           body.WindowID,
 		SchoolName:         body.SchoolName,
 		CampusName:         body.CampusName,
 		CanteenName:        body.CanteenName,
@@ -140,6 +148,10 @@ func (h *PublicFoodHandler) List(c *gin.Context) {
 		Limit:        intQuery(c, "limit", 20),
 		Offset:       intQuery(c, "offset", 0),
 		Type:         c.Query("type"),
+		SchoolID:     c.Query("school_id"),
+		CampusID:     c.Query("campus_id"),
+		CanteenID:    c.Query("canteen_id"),
+		WindowID:     c.Query("window_id"),
 		SchoolName:   c.Query("school_name"),
 		CanteenName:  c.Query("canteen_name"),
 	}
@@ -276,6 +288,10 @@ func (h *PublicFoodHandler) Update(c *gin.Context) {
 		DetailAddress      *string    `json:"detail_address"`
 		Type               string     `json:"type"`
 		IsCampusFood       bool       `json:"is_campus_food"`
+		SchoolID           *string    `json:"school_id"`
+		CampusID           *string    `json:"campus_id"`
+		CanteenID          *string    `json:"canteen_id"`
+		WindowID           *string    `json:"window_id"`
 		SchoolName         *string    `json:"school_name"`
 		CampusName         *string    `json:"campus_name"`
 		CanteenName        *string    `json:"canteen_name"`
@@ -313,6 +329,10 @@ func (h *PublicFoodHandler) Update(c *gin.Context) {
 		DetailAddress:      body.DetailAddress,
 		Type:               body.Type,
 		IsCampusFood:       body.IsCampusFood,
+		SchoolID:           body.SchoolID,
+		CampusID:           body.CampusID,
+		CanteenID:          body.CanteenID,
+		WindowID:           body.WindowID,
 		SchoolName:         body.SchoolName,
 		CampusName:         body.CampusName,
 		CanteenName:        body.CanteenName,

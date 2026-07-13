@@ -1,10 +1,16 @@
 package handler
 
 import (
+	"context"
 	"net/http"
 	"strconv"
 	"strings"
 
+	authmw "food_link/backend/internal/auth"
+	"food_link/backend/internal/common/response"
+	schooldomain "food_link/backend/internal/school/domain"
+	schoolrepo "food_link/backend/internal/school/repo"
+	schoolservice "food_link/backend/internal/school/service"
 	"food_link/backend/pkg/storage"
 
 	"github.com/gin-gonic/gin"
@@ -12,12 +18,25 @@ import (
 )
 
 type SchoolHandler struct {
-	db          *gorm.DB
+	db            *gorm.DB
 	storageClient *storage.Client
+	directory     CampusDirectoryService
 }
 
 func NewSchoolHandler(db *gorm.DB, storageClient *storage.Client) *SchoolHandler {
-	return &SchoolHandler{db: db, storageClient: storageClient}
+	directoryRepo := schoolrepo.NewCampusDirectoryRepo(db)
+	return &SchoolHandler{
+		db:            db,
+		storageClient: storageClient,
+		directory:     schoolservice.NewCampusDirectoryService(directoryRepo),
+	}
+}
+
+type CampusDirectoryService interface {
+	ListCampuses(ctx context.Context, input schoolservice.ListCampusesInput) ([]schooldomain.SchoolCampus, error)
+	ListCanteens(ctx context.Context, input schoolservice.ListCanteensInput) ([]schooldomain.SchoolCanteen, error)
+	ListWindows(ctx context.Context, input schoolservice.ListWindowsInput) ([]schooldomain.CanteenWindow, error)
+	CreateApplication(ctx context.Context, input schoolservice.CreateCanteenApplicationInput) (*schooldomain.CampusCanteenApplication, error)
 }
 
 type SchoolSearchResponse struct {
@@ -104,9 +123,88 @@ func (h *SchoolHandler) Provinces(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"code": 0, "data": provinces})
 }
 
+func (h *SchoolHandler) Campuses(c *gin.Context) {
+	rows, err := h.directory.ListCampuses(c.Request.Context(), schoolservice.ListCampusesInput{
+		SchoolID: c.Param("school_id"),
+	})
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, rows)
+}
+
+func (h *SchoolHandler) Canteens(c *gin.Context) {
+	rows, err := h.directory.ListCanteens(c.Request.Context(), schoolservice.ListCanteensInput{
+		SchoolID: c.Param("school_id"),
+		CampusID: c.Query("campus_id"),
+		Query:    c.Query("q"),
+		Limit:    intQuery(c, "limit", 100),
+	})
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, rows)
+}
+
+func (h *SchoolHandler) CampusCanteens(c *gin.Context) {
+	rows, err := h.directory.ListCanteens(c.Request.Context(), schoolservice.ListCanteensInput{
+		SchoolID: c.Query("school_id"),
+		CampusID: c.Param("campus_id"),
+		Query:    c.Query("q"),
+		Limit:    intQuery(c, "limit", 100),
+	})
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, rows)
+}
+
+func (h *SchoolHandler) CanteenWindows(c *gin.Context) {
+	rows, err := h.directory.ListWindows(c.Request.Context(), schoolservice.ListWindowsInput{
+		CanteenID: c.Param("canteen_id"),
+		Query:     c.Query("q"),
+		Limit:     intQuery(c, "limit", 100),
+	})
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, rows)
+}
+
+func (h *SchoolHandler) CreateCanteenApplication(c *gin.Context) {
+	var body schoolservice.CreateCanteenApplicationInput
+	if err := c.ShouldBindJSON(&body); err != nil {
+		response.Error(c, err)
+		return
+	}
+	body.UserID = c.GetString(authmw.ContextUserIDKey)
+	row, err := h.directory.CreateApplication(c.Request.Context(), body)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, gin.H{"message": "申请已提交，审核通过后会出现在食堂列表中", "application": row})
+}
+
 func ptrString(s *string) string {
 	if s == nil {
 		return ""
 	}
 	return *s
+}
+
+func intQuery(c *gin.Context, key string, fallback int) int {
+	raw := strings.TrimSpace(c.Query(key))
+	if raw == "" {
+		return fallback
+	}
+	parsed, err := strconv.Atoi(raw)
+	if err != nil || parsed <= 0 {
+		return fallback
+	}
+	return parsed
 }

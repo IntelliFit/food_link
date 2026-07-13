@@ -7,16 +7,18 @@ const SystemSenderID = "00000000-0000-0000-0000-000000000000"
 
 // PrivateMessage — table: private_messages
 type PrivateMessage struct {
-	ID              string     `json:"id"`
-	SenderID        string     `json:"sender_id"`
-	ReceiverID      string     `json:"receiver_id"`
-	Content         string     `json:"content"`
-	ImageURL        string     `json:"image_url"`
-	ContentType     string     `json:"content_type"` // text | image | system
-	IsRead          bool       `json:"is_read"`
-	CreatedAt       time.Time  `json:"created_at"`
-	DeletedAt       *time.Time `json:"deleted_at,omitempty"`
-	DeletedByUserID string     `json:"deleted_by_user_id,omitempty"`
+	ID              string         `json:"id"`
+	SenderID        string         `json:"sender_id"`
+	ReceiverID      string         `json:"receiver_id"`
+	Content         string         `json:"content"`
+	ImageURL        string         `json:"image_url"`
+	ContentType     string         `json:"content_type"` // text | image | system
+	ActionText      string         `json:"action_text,omitempty"`
+	ExtraData       map[string]any `json:"extra_data,omitempty"`
+	IsRead          bool           `json:"is_read"`
+	CreatedAt       time.Time      `json:"created_at"`
+	DeletedAt       *time.Time     `json:"deleted_at,omitempty"`
+	DeletedByUserID string         `json:"deleted_by_user_id,omitempty"`
 }
 
 type PrivateMessageReport struct {

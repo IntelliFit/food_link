@@ -3,6 +3,7 @@ package routes
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -22,7 +23,11 @@ func TestLoadFromRouteMap(t *testing.T) {
 func TestLoadFromRouteMap_FileNotFound(t *testing.T) {
 	_, err := LoadFromRouteMap("/nonexistent/path/route_map.md")
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "no such file")
+	msg := err.Error()
+	assert.True(t,
+		strings.Contains(msg, "no such file") || strings.Contains(msg, "cannot find the path") || strings.Contains(msg, "cannot find the file"),
+		"expected a file-not-found error, got: %s", msg,
+	)
 }
 
 func TestLoadFromRouteMap_EmptyFile(t *testing.T) {

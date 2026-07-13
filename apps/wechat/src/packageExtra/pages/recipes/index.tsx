@@ -56,6 +56,7 @@ const NUTRITION_FIELDS: Array<{
   unit: string
   placeholder: string
 }> = [
+  { key: 'calories', label: '热量', unit: 'kcal', placeholder: '0' },
   { key: 'protein', label: '蛋白质', unit: 'g', placeholder: '如 18' },
   { key: 'carbs', label: '碳水', unit: 'g', placeholder: '如 42' },
   { key: 'fat', label: '脂肪', unit: 'g', placeholder: '如 9' }
@@ -227,9 +228,6 @@ function RecipesPage() {
   })
   const [microTotalsDraft, setMicroTotalsDraft] = useState<MicroNutrientTotals>({})
   const [nutritionSaving, setNutritionSaving] = useState(false)
-  const [macroExpanded, setMacroExpanded] = useState(true)
-  const [microExpanded, setMicroExpanded] = useState(false)
-
   /** 加载食谱列表 */
   const loadRecipes = async () => {
     setLoading(true)
@@ -314,8 +312,6 @@ function RecipesPage() {
       fat: toDraftNumber(recipe.total_fat)
     })
     setMicroTotalsDraft(getRecipeMicroTotals(recipe))
-    setMacroExpanded(true)
-    setMicroExpanded(false)
   }
 
   const handleCloseNutritionEditor = () => {
@@ -599,14 +595,14 @@ function RecipesPage() {
       </ScrollView>
 
       {editingRecipe && (
-        <View className='nutrition-editor-overlay' catchMove>
+        <View className='nutrition-editor-overlay'>
           <View className='nutrition-editor-mask' onClick={handleCloseNutritionEditor} />
           <View className='nutrition-editor-panel'>
             <View className='nutrition-editor-handle' />
             <View className='nutrition-editor-header'>
-              <View>
-                <Text className='nutrition-editor-title'>修改营养信息</Text>
-                <Text className='nutrition-editor-subtitle'>{editingRecipe.recipe_name}</Text>
+              <View className='nutrition-editor-header-main'>
+                <Text className='nutrition-editor-title'>{editingRecipe.recipe_name}</Text>
+                <Text className='nutrition-editor-subtitle'>修改营养信息</Text>
               </View>
               <View className='nutrition-editor-close' onClick={handleCloseNutritionEditor}>
                 <Text className='iconfont icon-close' />
@@ -614,79 +610,41 @@ function RecipesPage() {
             </View>
 
             <View className='nutrition-editor-body'>
-              <View className='nutrition-calorie-editor'>
-                <Text className='nutrition-editor-field-label'>总热量</Text>
-                <View className='nutrition-calorie-control'>
-                  <View className='nutrition-calorie-stepper' onClick={() => adjustNutritionCalories(-10)}>
-                    <Text className='nutrition-calorie-stepper-text'>−</Text>
-                  </View>
-                  <View className='nutrition-calorie-input-card'>
-                    <Input
-                      className='nutrition-calorie-input'
-                      type='digit'
-                      value={nutritionDraft.calories}
-                      placeholder='0'
-                      onInput={(e) => updateNutritionDraft('calories', e.detail.value)}
-                    />
-                    <Text className='nutrition-calorie-unit'>kcal</Text>
-                  </View>
-                  <View className='nutrition-calorie-stepper nutrition-calorie-stepper--plus' onClick={() => adjustNutritionCalories(10)}>
-                    <Text className='nutrition-calorie-stepper-text'>+</Text>
-                  </View>
+              <View className='nutrition-editor-section'>
+                <Text className='nutrition-editor-section-title'>宏量营养素</Text>
+                <View className='nutrition-editor-grid'>
+                  {NUTRITION_FIELDS.map((field) => (
+                    <View key={field.key} className='nutrition-editor-grid-item'>
+                      <Text className='nutrition-editor-grid-label'>{field.label}</Text>
+                      <View className='nutrition-editor-grid-input-wrap'>
+                        <Input
+                          className='nutrition-editor-grid-input'
+                          type='digit'
+                          value={nutritionDraft[field.key]}
+                          placeholder={field.placeholder}
+                          onInput={(e) => updateNutritionDraft(field.key, e.detail.value)}
+                        />
+                        <Text className='nutrition-editor-grid-unit'>{field.unit}</Text>
+                      </View>
+                    </View>
+                  ))}
                 </View>
               </View>
 
-              <View className='nutrition-editor-fold-section'>
-                <View className='nutrition-editor-fold-header' onClick={() => setMacroExpanded((prev) => !prev)}>
-                  <View>
-                    <Text className='nutrition-editor-fold-title'>宏量营养素</Text>
-                    <Text className='nutrition-editor-fold-subtitle'>修改后会联动总热量</Text>
-                  </View>
-                  <Text className={`iconfont icon-right nutrition-editor-fold-icon ${macroExpanded ? 'expanded' : ''}`} />
-                </View>
-                {macroExpanded && (
-                  <View className='nutrition-editor-fields'>
-                    {NUTRITION_FIELDS.map((field) => (
-                      <View key={field.key} className={`nutrition-editor-field nutrition-editor-field--${field.key}`}>
-                        <Text className='nutrition-editor-field-label'>{field.label}</Text>
-                        <View className='nutrition-editor-input-wrap'>
-                          <Input
-                            className='nutrition-editor-input'
-                            type='digit'
-                            value={nutritionDraft[field.key]}
-                            placeholder={field.placeholder}
-                            onInput={(e) => updateNutritionDraft(field.key, e.detail.value)}
-                          />
-                          <Text className='nutrition-editor-unit'>{field.unit}</Text>
+              {getVisibleMicroRows(microTotalsDraft).length > 0 && (
+                <View className='nutrition-editor-section'>
+                  <Text className='nutrition-editor-section-title'>微量营养素</Text>
+                  <View className='nutrition-editor-grid'>
+                    {getVisibleMicroRows(microTotalsDraft).map((row) => (
+                      <View key={row.key} className='nutrition-editor-grid-item'>
+                        <Text className='nutrition-editor-grid-label'>{row.label}</Text>
+                        <View className='nutrition-editor-grid-input-wrap'>
+                          <Text className='nutrition-editor-grid-value'>{formatMicroValue(row.value)}</Text>
+                          <Text className='nutrition-editor-grid-unit'>{row.unit}</Text>
                         </View>
                       </View>
                     ))}
                   </View>
-                )}
-              </View>
-
-              {getVisibleMicroRows(microTotalsDraft).length > 0 && (
-                <View className='nutrition-editor-micro-section'>
-                  <View className='nutrition-editor-micro-header' onClick={() => setMicroExpanded((prev) => !prev)}>
-                    <View>
-                      <Text className='nutrition-editor-micro-title'>微量营养素</Text>
-                      <Text className='nutrition-editor-micro-hint'>随总热量按比例同步变化</Text>
-                    </View>
-                    <Text className={`iconfont icon-right nutrition-editor-fold-icon ${microExpanded ? 'expanded' : ''}`} />
-                  </View>
-                  {microExpanded && (
-                    <View className='nutrition-editor-micro-grid'>
-                      {getVisibleMicroRows(microTotalsDraft).map((row) => (
-                        <View key={row.key} className='nutrition-editor-micro-cell'>
-                          <Text className='nutrition-editor-micro-label'>{row.label}</Text>
-                          <Text className='nutrition-editor-micro-value'>
-                            {formatMicroValue(row.value)}
-                            <Text className='nutrition-editor-micro-unit'>{row.unit}</Text>
-                          </Text>
-                        </View>
-                      ))}
-                    </View>
-                  )}
                 </View>
               )}
             </View>

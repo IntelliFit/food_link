@@ -10,21 +10,21 @@ import (
 	"food_link/backend/pkg/config"
 	"food_link/backend/pkg/storage"
 
+	"food_link/backend/pkg/testdb"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
 func setupDashboardTestDB(t *testing.T) (*gorm.DB, *authrepo.UserRepo, *homerepo.HomeRepo) {
-	db, err := gorm.Open(sqlite.Open("file::memory:"), &gorm.Config{})
-	require.NoError(t, err)
+	db := testdb.New(t)
 	require.NoError(t, db.AutoMigrate(&authrepo.User{}, &homerepo.FoodRecord{}, &homerepo.ExpiryItem{}, &homerepo.DailyNutritionTarget{}))
 	// ExerciseLog model doesn't have user_id/recorded_on, create table manually
 	db.Exec(`CREATE TABLE user_exercise_logs (
-		id INTEGER PRIMARY KEY,
+		id SERIAL PRIMARY KEY,
 		user_id TEXT,
-		recorded_on TEXT,
+		recorded_on DATE,
 		calories_burned INTEGER
 	)`)
 	return db, authrepo.NewUserRepo(db), homerepo.NewHomeRepo(db)
@@ -139,7 +139,7 @@ func TestDashboardService_HomeDashboard_StableTargetsIgnoreExercise(t *testing.T
 	result, err := svc.HomeDashboard(ctx, user.ID, "2024-06-15")
 	require.NoError(t, err)
 	intakeData := result["intakeData"].(map[string]any)
-	assert.Equal(t, 1560.0, intakeData["target"])
+	assert.Equal(t, 1640.0, intakeData["target"])
 	macros := intakeData["macros"].(map[string]any)
 	assert.Equal(t, 126.0, macros["protein"].(map[string]any)["target"])
 	assert.Greater(t, macros["carbs"].(map[string]any)["target"], 150.0)
@@ -148,7 +148,7 @@ func TestDashboardService_HomeDashboard_StableTargetsIgnoreExercise(t *testing.T
 	require.True(t, ok)
 	assert.Equal(t, "dynamic", target["source"])
 	assert.Equal(t, "fat_loss", target["diet_goal"])
-	assert.Equal(t, 1560.0, target["base_calorie_target"])
+	assert.Equal(t, 1638.0, target["base_calorie_target"])
 	assert.Equal(t, 0.0, target["exercise_added_kcal"])
 	assert.Equal(t, 1.3, target["activity_multiplier"])
 	assert.Contains(t, target["explanation"], "不随当天运动自动变化")
@@ -293,8 +293,8 @@ func TestDashboardService_CalibrationSuggestionAfter14Days(t *testing.T) {
 		id TEXT PRIMARY KEY,
 		user_id TEXT,
 		weight_kg REAL,
-		recorded_on TIMESTAMP,
-		created_at TIMESTAMP
+		recorded_on TIMESTAMPTZ,
+		created_at TIMESTAMPTZ
 	)`).Error)
 	svc := NewDashboardService(userRepo, homeRepo)
 	ctx := context.Background()
@@ -398,8 +398,7 @@ func TestBuildMealItem(t *testing.T) {
 }
 
 func TestBuildMealItemManualSourceImageFallback(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open("file::memory:"), &gorm.Config{})
-	require.NoError(t, err)
+	db := testdb.New(t)
 	require.NoError(t, db.Exec(`
 		CREATE TABLE public_food_library (
 			id TEXT PRIMARY KEY,

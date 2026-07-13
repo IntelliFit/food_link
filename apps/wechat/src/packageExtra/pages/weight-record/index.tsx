@@ -20,6 +20,7 @@ import {
   getWeightSortKey,
   normalizeRouteDate,
 } from '../body-metrics-shared'
+import { formatBodyMetric } from '../../../utils/number-format'
 
 import './index.scss'
 
@@ -44,7 +45,7 @@ function WeightRecordPage() {
         .filter((item) => item.date === recordDate)
         .sort((a, b) => getWeightSortKey(b).localeCompare(getWeightSortKey(a)))
       const defaultWeight = sameDay[0]?.value ?? res.latest_weight?.value
-      setWeightInput(defaultWeight ? String(defaultWeight) : '')
+      setWeightInput(defaultWeight ? formatBodyMetric(defaultWeight) : '')
     } catch (err) {
       await showUnifiedApiError(err, '获取体重记录失败')
     } finally {

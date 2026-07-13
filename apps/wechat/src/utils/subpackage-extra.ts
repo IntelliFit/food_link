@@ -38,6 +38,13 @@ export function extraPkgUrl(pathWithOptionalQuery: string): string {
   const withSlash = raw.startsWith('/') ? raw : `/${raw}`
   const q = withSlash.indexOf('?')
   const pathPart = q === -1 ? withSlash : withSlash.slice(0, q)
+  // 如果传入的已经是完整分包路径，直接返回，避免重复拼接分包根
+  const alreadyRooted = KNOWN_EXTRA_PACKAGE_ROOTS.some(
+    (root) => pathPart === root || pathPart.startsWith(`${root}/`),
+  )
+  if (alreadyRooted) {
+    return withSlash
+  }
   const root = EXTRA_PACKAGE_ROOT_BY_PAGE[pathPart] || SUBPACKAGE_EXTRA_ROOT
   if (q === -1) {
     return `${root}${withSlash}`

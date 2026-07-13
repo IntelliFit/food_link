@@ -10,7 +10,7 @@ import {
   getPublicFoodLibraryComments,
   postPublicFoodLibraryComment,
   deletePublicFoodLibraryComment,
-  submitPublicFoodLibraryFeedback,
+  submitStructuredFeedback,
   showUnifiedApiError,
   type CampusFoodMetric,
   type CampusRelatedFeedItem,
@@ -341,7 +341,19 @@ function FoodLibraryDetailPage() {
 
     Taro.showLoading({ title: '提交中...', mask: true })
     try {
-      await submitPublicFoodLibraryFeedback(content.trim(), item.id)
+      const source = isCampusFoodItem(item) ? 'campus_food' : 'food_library'
+      await submitStructuredFeedback({
+        source,
+        content: content.trim(),
+        extra: {
+          food_id: item.id,
+          food_name: item.food_name || null,
+          location: getCampusLocationText(item),
+          calories: item.total_calories ?? null,
+          price: item.price ?? null,
+          merchant_name: item.merchant_name || null,
+        },
+      })
       Taro.showToast({ title: '修正已提交', icon: 'success' })
     } catch (e: any) {
       await showUnifiedApiError(e, '提交失败')

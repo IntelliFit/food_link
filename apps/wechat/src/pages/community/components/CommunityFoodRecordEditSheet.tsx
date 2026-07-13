@@ -8,6 +8,7 @@ import {
   type CommunityFeedRecord,
 } from '../../../utils/api'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
+import { formatMacroNutrient, parseInputNumber } from '../../../utils/number-format'
 
 import './CommunityFoodRecordEditSheet.scss'
 
@@ -29,8 +30,7 @@ function normalizeImagePaths(record: CommunityFeedRecord | null | undefined): st
 }
 
 function parseNumber(value: string): number {
-  const num = parseFloat(value)
-  return Number.isFinite(num) && num >= 0 ? Math.round(num * 10) / 10 : 0
+  return parseInputNumber(value, 1)
 }
 
 export function CommunityFoodRecordEditSheet({
@@ -55,10 +55,10 @@ export function CommunityFoodRecordEditSheet({
     if (visible && record) {
       setDescription(record.description || '')
       setImagePaths(normalizeImagePaths(record))
-      setCalories(String(record.total_calories ?? 0))
-      setProtein(String(record.total_protein ?? 0))
-      setCarbs(String(record.total_carbs ?? 0))
-      setFat(String(record.total_fat ?? 0))
+      setCalories(formatMacroNutrient(record.total_calories ?? 0))
+      setProtein(formatMacroNutrient(record.total_protein ?? 0))
+      setCarbs(formatMacroNutrient(record.total_carbs ?? 0))
+      setFat(formatMacroNutrient(record.total_fat ?? 0))
     }
   }, [visible, record])
 

@@ -1538,6 +1538,7 @@ func TestMembershipService_WechatNotify_EarlyPaidRankDoublesDailyCredits(t *test
 func TestMembershipService_SyncWechatPayment_ActivatesPaidOrderFromQuery(t *testing.T) {
 	oldBaseURL := wechatPayAPIBaseURL
 	defer func() { wechatPayAPIBaseURL = oldBaseURL }()
+	successTime := time.Now().Add(-time.Hour).Format(time.RFC3339)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, http.MethodGet, r.Method)
 		assert.Contains(t, r.URL.Path, "/v3/pay/transactions/out-trade-no/PM1")
@@ -1546,7 +1547,7 @@ func TestMembershipService_SyncWechatPayment_ActivatesPaidOrderFromQuery(t *test
 			"out_trade_no":   "PM1",
 			"trade_state":    "SUCCESS",
 			"transaction_id": "4200000000000001",
-			"success_time":   "2026-06-02T00:38:44+08:00",
+			"success_time":   successTime,
 			"amount":         map[string]any{"payer_total": 990, "total": 990},
 		})
 	}))

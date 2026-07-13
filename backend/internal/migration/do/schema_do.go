@@ -1,6 +1,10 @@
 package do
 
-import "time"
+import (
+	"time"
+
+	"gorm.io/datatypes"
+)
 
 type UserDO struct {
 	ID              string     `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
@@ -68,6 +72,7 @@ type UserFeedbackDO struct {
 	ID                string           `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
 	UserID            string           `gorm:"column:user_id;type:uuid;not null;index:idx_user_feedback_user_created,priority:1"`
 	Category          string           `gorm:"column:category;type:text;not null;default:'other'"`
+	Source            string           `gorm:"column:source;type:text;not null;default:'app';index:idx_user_feedback_source_created,priority:1"`
 	Content           string           `gorm:"column:content;type:text;not null"`
 	Contact           string           `gorm:"column:contact;type:text;not null;default:''"`
 	PagePath          string           `gorm:"column:page_path;type:text;not null;default:''"`
@@ -75,6 +80,7 @@ type UserFeedbackDO struct {
 	ClientInfo        map[string]any   `gorm:"column:client_info;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
 	RecentRequests    []map[string]any `gorm:"column:recent_requests;type:jsonb;serializer:json;not null;default:'[]'::jsonb"`
 	ImageURLs         []string         `gorm:"column:image_urls;type:jsonb;serializer:json;not null;default:'[]'::jsonb"`
+	Extra             map[string]any   `gorm:"column:extra;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
 	SubmitTraceID     string           `gorm:"column:submit_trace_id;type:text;not null;default:'';index:idx_user_feedback_submit_trace_id"`
 	SubmitRequestID   string           `gorm:"column:submit_request_id;type:text;not null;default:''"`
 	SubmitHostName    string           `gorm:"column:submit_host_name;type:text;not null;default:''"`
@@ -82,7 +88,7 @@ type UserFeedbackDO struct {
 	ResolutionMessage string           `gorm:"column:resolution_message;type:text;not null;default:''"`
 	RewardCredits     int              `gorm:"column:reward_credits;type:integer;not null;default:0"`
 	RewardLedgerID    *string          `gorm:"column:reward_ledger_id;type:uuid"`
-	CreatedAt         *time.Time       `gorm:"column:created_at;type:timestamptz;default:now();index:idx_user_feedback_user_created,priority:2"`
+	CreatedAt         *time.Time       `gorm:"column:created_at;type:timestamptz;default:now();index:idx_user_feedback_user_created,priority:2;index:idx_user_feedback_source_created,priority:2,sort:desc"`
 	UpdatedAt         *time.Time       `gorm:"column:updated_at;type:timestamptz;default:now()"`
 }
 
@@ -213,6 +219,25 @@ type UserTrialEntitlementDO struct {
 }
 
 func (UserTrialEntitlementDO) TableName() string { return "user_trial_entitlements" }
+
+type UserVoucherDO struct {
+	ID            string         `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	UserID        string         `gorm:"column:user_id;type:uuid;not null;index:idx_user_vouchers_user_status,priority:1;uniqueIndex:idx_user_vouchers_user_source,priority:1"`
+	VoucherType   string         `gorm:"column:voucher_type;type:text;not null;index:idx_user_vouchers_user_status,priority:2"`
+	Status        string         `gorm:"column:status;type:text;not null;default:'pending';index:idx_user_vouchers_user_status,priority:3"`
+	Title         string         `gorm:"column:title;type:text;not null"`
+	Description   *string        `gorm:"column:description;type:text"`
+	RewardPayload map[string]any `gorm:"column:reward_payload;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
+	SourceType    string         `gorm:"column:source_type;type:text;not null;uniqueIndex:idx_user_vouchers_user_source,priority:2"`
+	SourceKey     string         `gorm:"column:source_key;type:text;not null;uniqueIndex:idx_user_vouchers_user_source,priority:3"`
+	ValidStartAt  *time.Time     `gorm:"column:valid_start_at;type:timestamptz"`
+	ValidEndAt    *time.Time     `gorm:"column:valid_end_at;type:timestamptz;index:idx_user_vouchers_valid_end"`
+	UsedAt        *time.Time     `gorm:"column:used_at;type:timestamptz"`
+	CreatedAt     *time.Time     `gorm:"column:created_at;type:timestamptz;default:now()"`
+	UpdatedAt     *time.Time     `gorm:"column:updated_at;type:timestamptz;default:now()"`
+}
+
+func (UserVoucherDO) TableName() string { return "user_vouchers" }
 
 type AnalysisTaskDO struct {
 	ID              string         `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
@@ -538,6 +563,10 @@ type PublicFoodItemDO struct {
 	UpdatedAt          *time.Time       `gorm:"column:updated_at;type:timestamptz;default:now()"`
 	// Campus canteen fields
 	IsCampusFood       bool       `gorm:"column:is_campus_food;type:boolean;not null;default:false"`
+	SchoolID           *string    `gorm:"column:school_id;type:uuid;index:idx_public_food_library_school_id"`
+	CampusID           *string    `gorm:"column:campus_id;type:uuid;index:idx_public_food_library_campus_id"`
+	CanteenID          *string    `gorm:"column:canteen_id;type:uuid;index:idx_public_food_library_canteen_id"`
+	WindowID           *string    `gorm:"column:window_id;type:uuid;index:idx_public_food_library_window_id"`
 	SchoolName         *string    `gorm:"column:school_name;type:text"`
 	CampusName         *string    `gorm:"column:campus_name;type:text"`
 	CanteenName        *string    `gorm:"column:canteen_name;type:text"`
@@ -796,16 +825,18 @@ type UserFollowDO struct {
 func (UserFollowDO) TableName() string { return "user_follows" }
 
 type PrivateMessageDO struct {
-	ID              string     `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
-	SenderID        string     `gorm:"column:sender_id;type:uuid;not null;index:idx_private_messages_sender"`
-	ReceiverID      string     `gorm:"column:receiver_id;type:uuid;not null;index:idx_private_messages_receiver"`
-	Content         string     `gorm:"column:content;type:text;not null;default:''"`
-	ImageURL        *string    `gorm:"column:image_url;type:text"`
-	ContentType     string     `gorm:"column:content_type;type:text;not null;default:'text'"`
-	IsRead          bool       `gorm:"column:is_read;type:boolean;not null;default:false"`
-	CreatedAt       *time.Time `gorm:"column:created_at;type:timestamptz;default:now()"`
-	DeletedAt       *time.Time `gorm:"column:deleted_at;type:timestamptz;index:idx_private_messages_deleted_at"`
-	DeletedByUserID *string    `gorm:"column:deleted_by_user_id;type:uuid"`
+	ID              string         `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	SenderID        string         `gorm:"column:sender_id;type:uuid;not null;index:idx_private_messages_sender"`
+	ReceiverID      string         `gorm:"column:receiver_id;type:uuid;not null;index:idx_private_messages_receiver"`
+	Content         string         `gorm:"column:content;type:text;not null;default:''"`
+	ImageURL        *string        `gorm:"column:image_url;type:text"`
+	ContentType     string         `gorm:"column:content_type;type:text;not null;default:'text'"`
+	ActionText      *string        `gorm:"column:action_text;type:text"`
+	ExtraData       map[string]any `gorm:"column:extra_data;type:jsonb;serializer:json;default:'{}'::jsonb"`
+	IsRead          bool           `gorm:"column:is_read;type:boolean;not null;default:false"`
+	CreatedAt       *time.Time     `gorm:"column:created_at;type:timestamptz;default:now()"`
+	DeletedAt       *time.Time     `gorm:"column:deleted_at;type:timestamptz;index:idx_private_messages_deleted_at"`
+	DeletedByUserID *string        `gorm:"column:deleted_by_user_id;type:uuid"`
 }
 
 func (PrivateMessageDO) TableName() string { return "private_messages" }
@@ -1279,6 +1310,133 @@ type SchoolDO struct {
 
 func (SchoolDO) TableName() string { return "schools" }
 
+type SchoolCampusDO struct {
+	ID         string     `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	SchoolID   string     `gorm:"column:school_id;type:uuid;not null;index:idx_school_campuses_school_id"`
+	Name       string     `gorm:"column:name;type:text;not null;index:idx_school_campuses_name"`
+	Aliases    []string   `gorm:"column:aliases;type:jsonb;serializer:json;not null;default:'[]'::jsonb"`
+	Address    *string    `gorm:"column:address;type:text"`
+	CampusType *string    `gorm:"column:campus_type;type:text"`
+	SourceURL  *string    `gorm:"column:source_url;type:text"`
+	Status     string     `gorm:"column:status;type:text;not null;default:'pending_review';index:idx_school_campuses_status"`
+	SortOrder  int        `gorm:"column:sort_order;type:integer;not null;default:0"`
+	CreatedAt  *time.Time `gorm:"column:created_at;type:timestamptz;default:now()"`
+	UpdatedAt  *time.Time `gorm:"column:updated_at;type:timestamptz;default:now()"`
+}
+
+func (SchoolCampusDO) TableName() string { return "school_campuses" }
+
+type SchoolCanteenDO struct {
+	ID               string     `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	SchoolID         string     `gorm:"column:school_id;type:uuid;not null;index:idx_school_canteens_school_id"`
+	CampusID         *string    `gorm:"column:campus_id;type:uuid;index:idx_school_canteens_campus_id"`
+	Name             string     `gorm:"column:name;type:text;not null;index:idx_school_canteens_name"`
+	Aliases          []string   `gorm:"column:aliases;type:jsonb;serializer:json;not null;default:'[]'::jsonb"`
+	LocationText     *string    `gorm:"column:location_text;type:text"`
+	BuildingOrFloor  *string    `gorm:"column:building_or_floor;type:text"`
+	ServiceType      *string    `gorm:"column:service_type;type:text"`
+	Audience         *string    `gorm:"column:audience;type:text"`
+	MealPeriods      []string   `gorm:"column:meal_periods;type:jsonb;serializer:json;not null;default:'[]'::jsonb"`
+	OpeningHoursRaw  *string    `gorm:"column:opening_hours_raw;type:text"`
+	PaymentMethods   []string   `gorm:"column:payment_methods;type:jsonb;serializer:json;not null;default:'[]'::jsonb"`
+	HalalOrEthnic    *bool      `gorm:"column:halal_or_ethnic;type:boolean"`
+	VisitorAvailable *bool      `gorm:"column:visitor_available;type:boolean"`
+	SourceURL        *string    `gorm:"column:source_url;type:text"`
+	SourceOrg        *string    `gorm:"column:source_org;type:text"`
+	SourceType       *string    `gorm:"column:source_type;type:text"`
+	ConfidenceLevel  *string    `gorm:"column:confidence_level;type:text"`
+	Status           string     `gorm:"column:status;type:text;not null;default:'pending_review';index:idx_school_canteens_status"`
+	ReviewNote       *string    `gorm:"column:review_note;type:text"`
+	ReviewedBy       *string    `gorm:"column:reviewed_by;type:uuid"`
+	ReviewedAt       *time.Time `gorm:"column:reviewed_at;type:timestamptz"`
+	SortOrder        int        `gorm:"column:sort_order;type:integer;not null;default:0"`
+	CreatedAt        *time.Time `gorm:"column:created_at;type:timestamptz;default:now()"`
+	UpdatedAt        *time.Time `gorm:"column:updated_at;type:timestamptz;default:now()"`
+}
+
+func (SchoolCanteenDO) TableName() string { return "school_canteens" }
+
+type CampusDirectoryImportBatchDO struct {
+	ID            string     `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	Name          string     `gorm:"column:name;type:text;not null;index:idx_campus_directory_import_batches_name"`
+	Region        *string    `gorm:"column:region;type:text;index:idx_campus_directory_import_batches_region"`
+	SourceScope   *string    `gorm:"column:source_scope;type:text"`
+	Status        string     `gorm:"column:status;type:text;not null;default:'pending_review';index:idx_campus_directory_import_batches_status"`
+	TotalSchools  int        `gorm:"column:total_schools;type:integer;not null;default:0"`
+	TotalCampuses int        `gorm:"column:total_campuses;type:integer;not null;default:0"`
+	TotalCanteens int        `gorm:"column:total_canteens;type:integer;not null;default:0"`
+	TotalWindows  int        `gorm:"column:total_windows;type:integer;not null;default:0"`
+	TotalSources  int        `gorm:"column:total_sources;type:integer;not null;default:0"`
+	Notes         *string    `gorm:"column:notes;type:text"`
+	CreatedBy     *string    `gorm:"column:created_by;type:uuid"`
+	ReviewedBy    *string    `gorm:"column:reviewed_by;type:uuid"`
+	ReviewedAt    *time.Time `gorm:"column:reviewed_at;type:timestamptz"`
+	CreatedAt     *time.Time `gorm:"column:created_at;type:timestamptz;default:now()"`
+	UpdatedAt     *time.Time `gorm:"column:updated_at;type:timestamptz;default:now()"`
+}
+
+func (CampusDirectoryImportBatchDO) TableName() string { return "campus_directory_import_batches" }
+
+type CanteenWindowDO struct {
+	ID        string     `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	SchoolID  string     `gorm:"column:school_id;type:uuid;not null;index:idx_canteen_windows_school_id"`
+	CampusID  *string    `gorm:"column:campus_id;type:uuid;index:idx_canteen_windows_campus_id"`
+	CanteenID string     `gorm:"column:canteen_id;type:uuid;not null;index:idx_canteen_windows_canteen_id"`
+	Name      string     `gorm:"column:name;type:text;not null;index:idx_canteen_windows_name"`
+	Aliases   []string   `gorm:"column:aliases;type:jsonb;serializer:json;not null;default:'[]'::jsonb"`
+	Floor     *string    `gorm:"column:floor;type:text"`
+	SourceURL *string    `gorm:"column:source_url;type:text"`
+	Status    string     `gorm:"column:status;type:text;not null;default:'active';index:idx_canteen_windows_status"`
+	SortOrder int        `gorm:"column:sort_order;type:integer;not null;default:0"`
+	CreatedAt *time.Time `gorm:"column:created_at;type:timestamptz;default:now()"`
+	UpdatedAt *time.Time `gorm:"column:updated_at;type:timestamptz;default:now()"`
+}
+
+func (CanteenWindowDO) TableName() string { return "canteen_windows" }
+
+type CampusCanteenApplicationDO struct {
+	ID                   string     `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	UserID               string     `gorm:"column:user_id;type:uuid;not null;index:idx_campus_canteen_applications_user_id"`
+	SchoolID             string     `gorm:"column:school_id;type:uuid;not null;index:idx_campus_canteen_applications_school_id"`
+	CampusID             *string    `gorm:"column:campus_id;type:uuid;index:idx_campus_canteen_applications_campus_id"`
+	CanteenID            *string    `gorm:"column:canteen_id;type:uuid;index:idx_campus_canteen_applications_canteen_id"`
+	RequestedSchoolName  string     `gorm:"column:requested_school_name;type:text;not null"`
+	RequestedCampusName  *string    `gorm:"column:requested_campus_name;type:text"`
+	RequestedCanteenName string     `gorm:"column:requested_canteen_name;type:text;not null;index:idx_campus_canteen_applications_canteen_name"`
+	LocationText         *string    `gorm:"column:location_text;type:text"`
+	EvidenceURL          *string    `gorm:"column:evidence_url;type:text"`
+	ApplicantNote        *string    `gorm:"column:applicant_note;type:text"`
+	Status               string     `gorm:"column:status;type:text;not null;default:'pending';index:idx_campus_canteen_applications_status"`
+	ReviewNote           *string    `gorm:"column:review_note;type:text"`
+	ReviewedBy           *string    `gorm:"column:reviewed_by;type:uuid"`
+	ReviewedAt           *time.Time `gorm:"column:reviewed_at;type:timestamptz"`
+	CreatedAt            *time.Time `gorm:"column:created_at;type:timestamptz;default:now()"`
+	UpdatedAt            *time.Time `gorm:"column:updated_at;type:timestamptz;default:now()"`
+}
+
+func (CampusCanteenApplicationDO) TableName() string { return "campus_canteen_applications" }
+
+type CampusDirectorySourceDO struct {
+	ID                string     `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	BatchID           *string    `gorm:"column:batch_id;type:uuid;index:idx_campus_directory_sources_batch_id"`
+	SchoolID          string     `gorm:"column:school_id;type:uuid;not null;index:idx_campus_directory_sources_school_id"`
+	CampusID          *string    `gorm:"column:campus_id;type:uuid;index:idx_campus_directory_sources_campus_id"`
+	CanteenID         *string    `gorm:"column:canteen_id;type:uuid;index:idx_campus_directory_sources_canteen_id"`
+	SourceURL         string     `gorm:"column:source_url;type:text;not null"`
+	SourceTitle       *string    `gorm:"column:source_title;type:text"`
+	SourceOrg         *string    `gorm:"column:source_org;type:text"`
+	SourceType        *string    `gorm:"column:source_type;type:text"`
+	EvidenceLevel     *string    `gorm:"column:evidence_level;type:text"`
+	EvidenceExcerpt   *string    `gorm:"column:evidence_excerpt;type:text"`
+	ReviewStatus      string     `gorm:"column:review_status;type:text;not null;default:'pending_review';index:idx_campus_directory_sources_review_status"`
+	SourcePublishedAt *time.Time `gorm:"column:source_published_at;type:timestamptz"`
+	CollectedAt       *time.Time `gorm:"column:collected_at;type:timestamptz;default:now()"`
+	CreatedAt         *time.Time `gorm:"column:created_at;type:timestamptz;default:now()"`
+	UpdatedAt         *time.Time `gorm:"column:updated_at;type:timestamptz;default:now()"`
+}
+
+func (CampusDirectorySourceDO) TableName() string { return "campus_directory_sources" }
+
 type FoodWeightLabeledSampleDO struct {
 	ID               string         `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
 	BatchName        string         `gorm:"column:batch_name;type:text;not null"`
@@ -1339,6 +1497,22 @@ type BenchmarkRunSampleDO struct {
 
 func (BenchmarkRunSampleDO) TableName() string { return "benchmark_run_samples" }
 
+type PackagedFoodTestRunDO struct {
+	ID             string         `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	PackagedFoodID string         `gorm:"column:packaged_food_id;type:uuid;not null;index:idx_packaged_food_test_runs_food_id"`
+	Status         string         `gorm:"column:status;type:text;not null;default:'success'"`
+	ResultJSON     datatypes.JSON `gorm:"column:result_json;type:jsonb;not null;default:'{}'::jsonb"`
+	MetadataJSON   datatypes.JSON `gorm:"column:metadata_json;type:jsonb;not null;default:'{}'::jsonb"`
+	ErrorMessage   *string        `gorm:"column:error_message;type:text"`
+	StartedAt      *time.Time     `gorm:"column:started_at;type:timestamptz"`
+	CompletedAt    *time.Time     `gorm:"column:completed_at;type:timestamptz"`
+	CreatedBy      *string        `gorm:"column:created_by;type:uuid"`
+	CreatedAt      *time.Time     `gorm:"column:created_at;type:timestamptz;default:now()"`
+	UpdatedAt      *time.Time     `gorm:"column:updated_at;type:timestamptz;default:now()"`
+}
+
+func (PackagedFoodTestRunDO) TableName() string { return "packaged_food_test_runs" }
+
 func AllModels() []any {
 	return []any{
 		&UserDO{},
@@ -1351,6 +1525,7 @@ func AllModels() []any {
 		&PetChatSessionDO{},
 		&PetChatMessageDO{},
 		&UserTrialEntitlementDO{},
+		&UserVoucherDO{},
 		&MembershipPlanDO{},
 		&PapayContractDO{},
 		&PaymentTestSettingDO{},
@@ -1412,8 +1587,15 @@ func AllModels() []any {
 		&TestDatasetDO{},
 		&TestBatchDO{},
 		&SchoolDO{},
+		&SchoolCampusDO{},
+		&SchoolCanteenDO{},
+		&CampusDirectoryImportBatchDO{},
+		&CanteenWindowDO{},
+		&CampusCanteenApplicationDO{},
+		&CampusDirectorySourceDO{},
 		&FoodWeightLabeledSampleDO{},
 		&BenchmarkRunDO{},
 		&BenchmarkRunSampleDO{},
+		&PackagedFoodTestRunDO{},
 	}
 }

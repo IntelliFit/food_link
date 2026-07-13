@@ -8,15 +8,15 @@ import (
 	"food_link/backend/internal/auth/repo"
 	"food_link/backend/pkg/config"
 
+	"food_link/backend/pkg/testdb"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
 func setupLoginTestDB(t *testing.T) (*gorm.DB, *repo.UserRepo) {
-	db, err := gorm.Open(sqlite.Open("file::memory:"), &gorm.Config{})
-	require.NoError(t, err)
+	db := testdb.New(t)
 	require.NoError(t, db.AutoMigrate(&repo.User{}, &repo.UserTrialEntitlement{}))
 	return db, repo.NewUserRepo(db)
 }
@@ -97,7 +97,9 @@ func TestLoginService_Login_CreatesTrialEntitlement(t *testing.T) {
 	require.NotNil(t, ent)
 	require.NotNil(t, ent.FirstUserID)
 	assert.Equal(t, result.UserID, *ent.FirstUserID)
-	assert.Equal(t, loginRegularUserTrialDays, ent.TrialDaysTotal)
+	// In a fresh test DB this is the first user (rank 1), so it falls into the
+	// founding top-500 early-user policy rather than the regular new-user policy.
+	assert.Equal(t, loginEarlyUserTop500TrialDays, ent.TrialDaysTotal)
 }
 
 func TestLoginService_AppWechatLogin_WithDevelopmentMockCode(t *testing.T) {

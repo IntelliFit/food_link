@@ -46,7 +46,7 @@ func (m *mockMembershipService) GetRewardCenter(ctx context.Context, userID stri
 	return m.rewardCenterResult, m.rewardCenterErr
 }
 func (m *mockMembershipService) GetInviteRewardStatus(ctx context.Context, userID string) (map[string]any, error) {
-	return map[string]any{}, nil
+	return map[string]any{"eligible": false}, nil
 }
 func (m *mockMembershipService) CreatePaymentWithInput(ctx context.Context, userID string, input service.CreateMembershipPaymentInput) (map[string]any, error) {
 	m.createPaymentInput = input

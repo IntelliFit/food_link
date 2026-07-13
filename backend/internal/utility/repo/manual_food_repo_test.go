@@ -10,28 +10,36 @@ import (
 	"food_link/backend/pkg/config"
 	"food_link/backend/pkg/storage"
 
+	"food_link/backend/pkg/testdb"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
 func setupTestDB(t *testing.T) *gorm.DB {
-	db, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
-	require.NoError(t, err)
+	db := testdb.New(t)
 	require.NoError(t, db.AutoMigrate(
 		&fooddomain.FoodNutrition{},
 		&fooddomain.FoodNutritionAlias{},
+		&fooddomain.PackagedFood{},
 		&publicdomain.PublicFoodItem{},
 		&publicdomain.PublicFoodCollection{},
+		&domain.UserCustomFood{},
 	))
 	require.NoError(t, db.Exec(`
 		CREATE TABLE user_food_records (
 			id TEXT PRIMARY KEY,
 			user_id TEXT,
-			items JSON,
-			record_time DATETIME
+			items JSONB,
+			record_time TIMESTAMPTZ
 		)
+	`).Error)
+	require.NoError(t, db.Exec(`
+		ALTER TABLE public_food_library ALTER COLUMN items TYPE jsonb USING items::jsonb
+	`).Error)
+	require.NoError(t, db.Exec(`
+		ALTER TABLE packaged_food_library ADD COLUMN IF NOT EXISTS updated_at timestamptz DEFAULT now()
 	`).Error)
 	return db
 }
@@ -131,8 +139,8 @@ func TestManualFoodRepo_Search(t *testing.T) {
 	items, err := r.Search(ctx, "u1", "西兰花", 10)
 	require.NoError(t, err)
 	require.Len(t, items, 2)
-	assert.Equal(t, "西兰花鸡胸饭", items[0].Title)
-	assert.Equal(t, "西兰花", items[1].Title)
+	assert.Equal(t, "西兰花", items[0].Title)
+	assert.Equal(t, "西兰花鸡胸饭", items[1].Title)
 
 	aliasItems, err := r.Search(ctx, "u1", "花椰菜", 10)
 	require.NoError(t, err)
@@ -294,6 +302,39 @@ func TestManualFoodResultFromPackagedScalesPer100gToServingWeight(t *testing.T) 
 	assert.Equal(t, 504.0, item.NutrientsPer100g.Calories)
 	assert.Equal(t, 64.5, item.NutrientsPer100g.Carbs)
 	assert.Equal(t, 55.0, item.ExtraNutrients.SodiumMg)
+}
+
+func TestManualFoodResultFromPackagedScalesNutrientsToDefaultWeight(t *testing.T) {
+	unit := "g"
+	item := manualFoodResultFromPackaged(fooddomain.PackagedFood{
+		ID:              "pkg-scaled",
+		Brand:           "测试品牌",
+		ProductName:     "测试饼干",
+		NetContentValue: 200,
+		NetContentUnit:  &unit,
+		KcalPer100g:     300,
+		ProteinPer100g:  10,
+		CarbsPer100g:    50,
+		FatPer100g:      12,
+		FiberPer100g:    5,
+		SodiumMgPer100g: 200,
+	}, 0.9)
+
+	assert.Equal(t, 200.0, item.DefaultWeightGrams)
+	// Total* 应该按 defaultWeight/100 缩放到 200g 份量
+	assert.InDelta(t, 600.0, item.TotalCalories, 0.001)
+	assert.InDelta(t, 20.0, item.TotalProtein, 0.001)
+	assert.InDelta(t, 100.0, item.TotalCarbs, 0.001)
+	assert.InDelta(t, 24.0, item.TotalFat, 0.001)
+	// NutrientsPer100g 保持每100克口径不变
+	require.NotNil(t, item.NutrientsPer100g)
+	assert.InDelta(t, 300.0, item.NutrientsPer100g.Calories, 0.001)
+	assert.InDelta(t, 10.0, item.NutrientsPer100g.Protein, 0.001)
+	// ExtraNutrients 也应缩放到 200g 份量，供前端按份缩放时使用
+	require.NotNil(t, item.ExtraNutrients)
+	assert.InDelta(t, 600.0, item.ExtraNutrients.Calories, 0.001)
+	assert.InDelta(t, 10.0, item.ExtraNutrients.Fiber, 0.001)
+	assert.InDelta(t, 400.0, item.ExtraNutrients.SodiumMg, 0.001)
 }
 
 func TestEnrichManualFoodResultsWithNutritionLibrary(t *testing.T) {

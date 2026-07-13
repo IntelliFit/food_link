@@ -4,7 +4,7 @@ deploy_versions/
 .temp/
 .rn_temp/
 .swc
-backend/*.exe
+backend/**/*.exe
 backend/main
 backend/api-test-server
 

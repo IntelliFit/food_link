@@ -10,21 +10,23 @@ import (
 	"food_link/backend/internal/publicfood/domain"
 
 	"github.com/stretchr/testify/require"
-	gormsqlite "gorm.io/driver/sqlite"
-	"gorm.io/gorm"
 
-	_ "modernc.org/sqlite"
+	"food_link/backend/pkg/testdb"
+
+	"gorm.io/gorm"
 )
 
 func setupPublicFoodRepoTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 
-	db, err := gorm.Open(gormsqlite.New(gormsqlite.Config{
-		DriverName: "sqlite",
-		DSN:        ":memory:",
-	}), &gorm.Config{})
-	require.NoError(t, err)
+	db := testdb.New(t)
 	require.NoError(t, db.AutoMigrate(&domain.PublicFoodItem{}, &domain.PublicFoodComment{}, &analyzedomain.AnalysisTask{}, &frienddomain.UserBlock{}))
+	require.NoError(t, db.Exec(`
+		ALTER TABLE analysis_tasks ALTER COLUMN result TYPE jsonb USING result::jsonb
+	`).Error)
+	require.NoError(t, db.Exec(`
+		ALTER TABLE public_food_library ALTER COLUMN items TYPE jsonb USING items::jsonb
+	`).Error)
 	require.NoError(t, db.Exec(`CREATE TABLE weapp_user (
 		id TEXT PRIMARY KEY,
 		nickname TEXT,

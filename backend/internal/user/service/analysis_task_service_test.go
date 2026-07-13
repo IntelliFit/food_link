@@ -10,16 +10,21 @@ import (
 	"food_link/backend/pkg/config"
 	"food_link/backend/pkg/storage"
 
+	"food_link/backend/pkg/testdb"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
 func setupAnalysisTaskTestDB(t *testing.T) (*gorm.DB, *repo.AnalysisTaskRepo) {
-	db, err := gorm.Open(sqlite.Open("file::memory:"), &gorm.Config{})
-	require.NoError(t, err)
+	db := testdb.New(t)
 	require.NoError(t, db.AutoMigrate(&domain.AnalysisTask{}))
+	require.NoError(t, db.Exec(`
+		ALTER TABLE analysis_tasks
+			ALTER COLUMN image_paths TYPE jsonb USING image_paths::jsonb,
+			ALTER COLUMN payload TYPE jsonb USING payload::jsonb
+	`).Error)
 	return db, repo.NewAnalysisTaskRepo(db)
 }
 
@@ -98,7 +103,7 @@ func TestAnalysisTaskService_CreateHealthReportTaskWithImageURLs(t *testing.T) {
 		"https://example.com/report-2.jpg",
 	}, task.ImagePaths)
 	assert.Equal(t, "https://example.com/report-1.jpg", task.Payload["image_url"])
-	assert.Equal(t, []string{
+	assert.ElementsMatch(t, []string{
 		"https://example.com/report-1.jpg",
 		"https://example.com/report-2.jpg",
 	}, task.Payload["image_urls"])

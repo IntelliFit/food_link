@@ -4,15 +4,14 @@ import (
 	"context"
 	"testing"
 
+	"food_link/backend/pkg/testdb"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
 )
 
 func TestLookupManualSourceImagePaths(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open("file::memory:"), &gorm.Config{})
-	require.NoError(t, err)
+	db := testdb.New(t)
 	require.NoError(t, db.Exec(`
 		CREATE TABLE public_food_library (
 			id TEXT PRIMARY KEY,
@@ -23,8 +22,15 @@ func TestLookupManualSourceImagePaths(t *testing.T) {
 	require.NoError(t, db.Exec(`
 		CREATE TABLE food_nutrition_library (
 			id TEXT PRIMARY KEY,
+			canonical_name TEXT,
 			image_path TEXT,
 			image_paths TEXT
+		)
+	`).Error)
+	require.NoError(t, db.Exec(`
+		CREATE TABLE food_nutrition_aliases (
+			alias_name TEXT,
+			food_id TEXT
 		)
 	`).Error)
 	require.NoError(t, db.Exec(
@@ -32,13 +38,13 @@ func TestLookupManualSourceImagePaths(t *testing.T) {
 		"pub-1", "public/thumb.jpg", `[]`,
 	).Error)
 	require.NoError(t, db.Exec(
-		`INSERT INTO food_nutrition_library (id, image_path, image_paths) VALUES (?, ?, ?)`,
-		"nut-1", "nutrition/rice.jpg", `[]`,
+		`INSERT INTO food_nutrition_library (id, canonical_name, image_path, image_paths) VALUES (?, ?, ?, ?)`,
+		"nut-1", "米饭", "nutrition/rice.jpg", `[]`,
 	).Error)
 
 	require.NoError(t, db.Exec(
-		`INSERT INTO food_nutrition_library (id, image_path, image_paths) VALUES (?, ?, ?)`,
-		"nut-rice", "nutrition/white-rice.jpg", `[]`,
+		`INSERT INTO food_nutrition_library (id, canonical_name, image_path, image_paths) VALUES (?, ?, ?, ?)`,
+		"nut-rice", "白米饭", "nutrition/white-rice.jpg", `[]`,
 	).Error)
 
 	paths := LookupManualSourceImagePaths(context.Background(), db, []map[string]any{

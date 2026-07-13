@@ -9,15 +9,14 @@ import (
 	"food_link/backend/internal/expiry/domain"
 	"food_link/backend/internal/expiry/repo"
 
+	"food_link/backend/pkg/testdb"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
 )
 
 func setupTestDB(t *testing.T) (*repo.ExpiryRepo, *repo.TaskRepo) {
-	db, err := gorm.Open(sqlite.Open("file::memory:"), &gorm.Config{})
-	require.NoError(t, err)
+	db := testdb.New(t)
 	require.NoError(t, db.AutoMigrate(&domain.ExpiryItem{}, &domain.ExpiryNotificationJob{}, &analyzedomain.AnalysisTask{}))
 	return repo.NewExpiryRepo(db), repo.NewTaskRepo(db)
 }

@@ -28,6 +28,7 @@ type FoodNutritionService struct {
 
 type NutritionLabelVisionClient interface {
 	AnalyzeWithImagesAndTemperature(ctx context.Context, prompt string, imageURLs []string, temperature float64) (map[string]any, error)
+	AnalyzeWithImagesAndTemperatureMeta(ctx context.Context, prompt string, imageURLs []string, temperature float64) (map[string]any, map[string]any, error)
 }
 
 type PackagedRewardAwarder interface {
@@ -409,20 +410,53 @@ func (s *FoodNutritionService) RecognizePackagedNutritionLabel(ctx context.Conte
 }
 
 func (s *FoodNutritionService) ExtractPackagedProduct(ctx context.Context, imageURLs []string, recognizedNameHint string) (*PackagedProductExtractResult, error) {
+	result, _, err := s.ExtractPackagedProductWithMeta(ctx, imageURLs, recognizedNameHint)
+	return result, err
+}
+
+// ExtractMetadata 记录一次包装食品识别的原始元数据（耗时、模型、token 等）。
+type ExtractMetadata struct {
+	DurationMs   int64          `json:"duration_ms"`
+	Model        string         `json:"model,omitempty"`
+	ResponseID   string         `json:"response_id,omitempty"`
+	InputTokens  int64          `json:"input_tokens,omitempty"`
+	OutputTokens int64          `json:"output_tokens,omitempty"`
+	TotalTokens  int64          `json:"total_tokens,omitempty"`
+	RawMeta      map[string]any `json:"raw_meta,omitempty"`
+}
+
+func (s *FoodNutritionService) ExtractPackagedProductWithMeta(ctx context.Context, imageURLs []string, recognizedNameHint string) (*PackagedProductExtractResult, *ExtractMetadata, error) {
 	imageURLs = normalizeStringSlice(imageURLs)
 	if len(imageURLs) == 0 {
-		return nil, &commonerrors.AppError{Code: 10002, Message: "包装图片不能为空", HTTPStatus: 400}
+		return nil, nil, &commonerrors.AppError{Code: 10002, Message: "包装图片不能为空", HTTPStatus: 400}
 	}
 	if s.nutritionLabelVisionClient == nil {
-		return nil, &commonerrors.AppError{Code: 10000, Message: "预包装商品识别服务未配置", HTTPStatus: 500}
+		return nil, nil, &commonerrors.AppError{Code: 10000, Message: "预包装商品识别服务未配置", HTTPStatus: 500}
 	}
-	result, err := s.nutritionLabelVisionClient.AnalyzeWithImagesAndTemperature(ctx, buildPackagedProductExtractPrompt(recognizedNameHint, len(imageURLs)), imageURLs, 0.1)
+	start := time.Now()
+	raw, meta, err := s.nutritionLabelVisionClient.AnalyzeWithImagesAndTemperatureMeta(ctx, buildPackagedProductExtractPrompt(recognizedNameHint, len(imageURLs)), imageURLs, 0.1)
+	durationMs := time.Since(start).Milliseconds()
 	if err != nil {
-		return nil, fmt.Errorf("识别预包装商品失败: %w", err)
+		return nil, nil, fmt.Errorf("识别预包装商品失败: %w", err)
 	}
-	parsed := parsePackagedProductExtractResult(result, imageURLs)
+	parsed := parsePackagedProductExtractResult(raw, imageURLs)
 	enrichPackagedProductExtractResult(parsed)
-	return parsed, nil
+
+	extractMeta := &ExtractMetadata{
+		DurationMs: durationMs,
+		RawMeta:    meta,
+	}
+	if meta != nil {
+		extractMeta.Model = stringFromAny(meta["model"])
+		extractMeta.ResponseID = stringFromAny(meta["response_id"])
+		extractMeta.InputTokens = int64FromAny(meta["input_tokens"], meta["prompt_tokens"])
+		extractMeta.OutputTokens = int64FromAny(meta["output_tokens"], meta["completion_tokens"])
+		extractMeta.TotalTokens = int64FromAny(meta["total_tokens"])
+		if extractMeta.TotalTokens == 0 {
+			extractMeta.TotalTokens = extractMeta.InputTokens + extractMeta.OutputTokens
+		}
+	}
+	return parsed, extractMeta, nil
 }
 
 func (s *FoodNutritionService) SubmitPackagedNutritionLabelTask(ctx context.Context, userID, imageURL string) (string, error) {
@@ -780,6 +814,42 @@ func stringFromAny(values ...any) string {
 		}
 	}
 	return ""
+}
+
+func int64FromAny(values ...any) int64 {
+	for _, value := range values {
+		switch v := value.(type) {
+		case int:
+			return int64(v)
+		case int8:
+			return int64(v)
+		case int16:
+			return int64(v)
+		case int32:
+			return int64(v)
+		case int64:
+			return v
+		case uint:
+			return int64(v)
+		case uint8:
+			return int64(v)
+		case uint16:
+			return int64(v)
+		case uint32:
+			return int64(v)
+		case uint64:
+			return int64(v)
+		case float32:
+			return int64(v)
+		case float64:
+			return int64(v)
+		case string:
+			if n, err := strconv.ParseInt(strings.TrimSpace(v), 10, 64); err == nil {
+				return n
+			}
+		}
+	}
+	return 0
 }
 
 func stringSliceFromAny(value any) []string {

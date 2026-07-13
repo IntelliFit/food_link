@@ -17,11 +17,12 @@ import (
 	"food_link/backend/pkg/config"
 	"food_link/backend/pkg/storage"
 
+	"food_link/backend/pkg/testdb"
+
 	. "github.com/agiledragon/gomonkey/v2"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
@@ -84,8 +85,7 @@ func (m *mockWaterLogRecorder) SumWaterByDateSource(ctx context.Context, userID 
 }
 
 func setupServiceTestDB(t *testing.T) *gorm.DB {
-	db, err := gorm.Open(sqlite.Open("file::memory:?_fk=1"), &gorm.Config{})
-	require.NoError(t, err)
+	db := testdb.New(t)
 	require.NoError(t, db.AutoMigrate(
 		&domain.FoodRecord{},
 		&domain.CriticalSample{},
@@ -392,7 +392,7 @@ func TestFoodRecordService_Save_WithSourceTaskID(t *testing.T) {
 
 	recordedOn := time.Now().In(chinaTZ).Format("2006-01-02")
 	payload := map[string]any{"recorded_on": recordedOn}
-	task := &analyzedomain.AnalysisTask{UserID: "u1", TaskType: "analyze", Payload: payload}
+	task := &analyzedomain.AnalysisTask{ID: uuid.New().String(), UserID: "u1", TaskType: "analyze", Payload: payload}
 	require.NoError(t, db.Create(task).Error)
 
 	record, err := svc.Save(ctx, "u1", SaveFoodRecordInput{
@@ -412,7 +412,7 @@ func TestFoodRecordService_Save_SourceTaskIDIsIdempotent(t *testing.T) {
 	svc := NewFoodRecordService(r, tr, ur)
 	ctx := context.Background()
 
-	task := &analyzedomain.AnalysisTask{UserID: "u1", TaskType: "food"}
+	task := &analyzedomain.AnalysisTask{ID: uuid.New().String(), UserID: "u1", TaskType: "food"}
 	require.NoError(t, db.Create(task).Error)
 
 	first, err := svc.Save(ctx, "u1", SaveFoodRecordInput{
@@ -449,7 +449,7 @@ func TestFoodRecordService_Save_SourceTaskIDBackfillsMissingWater(t *testing.T) 
 	svc.ConfigureWaterLogRecorder(waterRecorder)
 	ctx := context.Background()
 
-	task := &analyzedomain.AnalysisTask{UserID: "u1", TaskType: "food"}
+	task := &analyzedomain.AnalysisTask{ID: uuid.New().String(), UserID: "u1", TaskType: "food"}
 	require.NoError(t, db.Create(task).Error)
 
 	first, err := svc.Save(ctx, "u1", SaveFoodRecordInput{

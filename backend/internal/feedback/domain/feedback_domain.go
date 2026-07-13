@@ -12,6 +12,11 @@ const (
 	CategoryExperience = "experience"
 	CategoryOther      = "other"
 
+	SourceApp            = "app"
+	SourceCampusLocation = "campus_location"
+	SourceCampusFood     = "campus_food"
+	SourceFoodLibrary    = "food_library"
+
 	StatusOpen = "open"
 )
 
@@ -31,6 +36,7 @@ type UserFeedback struct {
 	ID                string                                  `gorm:"column:id" json:"id"`
 	UserID            string                                  `gorm:"column:user_id" json:"user_id"`
 	Category          string                                  `gorm:"column:category" json:"category"`
+	Source            string                                  `gorm:"column:source" json:"source"`
 	Content           string                                  `gorm:"column:content" json:"content"`
 	Contact           string                                  `gorm:"column:contact" json:"contact"`
 	PagePath          string                                  `gorm:"column:page_path" json:"page_path"`
@@ -38,6 +44,7 @@ type UserFeedback struct {
 	ClientInfo        datatypes.JSONMap                       `gorm:"column:client_info;serializer:json" json:"client_info"`
 	RecentRequests    datatypes.JSONSlice[RecentRequestTrace] `gorm:"column:recent_requests;serializer:json" json:"recent_requests"`
 	ImageURLs         datatypes.JSONSlice[string]             `gorm:"column:image_urls;serializer:json" json:"image_urls"`
+	Extra             datatypes.JSONMap                       `gorm:"column:extra;serializer:json" json:"extra"`
 	SubmitTraceID     string                                  `gorm:"column:submit_trace_id" json:"submit_trace_id"`
 	SubmitRequestID   string                                  `gorm:"column:submit_request_id" json:"submit_request_id"`
 	SubmitHostName    string                                  `gorm:"column:submit_host_name" json:"submit_host_name"`

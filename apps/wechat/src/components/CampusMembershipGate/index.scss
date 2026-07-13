@@ -1,0 +1,82 @@
+.campus-membership-gate {
+  min-height: 100vh;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 80rpx 40rpx;
+  background: #f3f8f5;
+}
+
+.campus-membership-gate--loading {
+  min-height: 420rpx;
+}
+
+.campus-membership-gate__spinner {
+  width: 48rpx;
+  height: 48rpx;
+  border: 4rpx solid #d9eee6;
+  border-top-color: #047857;
+  border-radius: 50%;
+  animation: campus-membership-spin 0.8s linear infinite;
+}
+
+@keyframes campus-membership-spin {
+  to { transform: rotate(360deg); }
+}
+
+.campus-membership-gate__card {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 52rpx 40rpx;
+  background: #fff;
+  border: 1rpx solid rgb(4 120 87 / 10%);
+  border-radius: 28rpx;
+  box-shadow: 0 18rpx 48rpx rgb(15 23 42 / 7%);
+  text-align: center;
+}
+
+.campus-membership-gate__icon {
+  width: 88rpx;
+  height: 88rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 24rpx;
+  color: #047857;
+  background: #ecfdf5;
+  border-radius: 50%;
+  font-size: 44rpx;
+}
+
+.campus-membership-gate__title {
+  display: block;
+  color: #10231e;
+  font-size: 34rpx;
+  font-weight: 800;
+  line-height: 1.4;
+}
+
+.campus-membership-gate__subtitle {
+  display: block;
+  margin-top: 16rpx;
+  color: #64748b;
+  font-size: 26rpx;
+  line-height: 1.7;
+}
+
+.campus-membership-gate__button {
+  height: 84rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 32rpx;
+  background: #047857;
+  border-radius: 999rpx;
+}
+
+.campus-membership-gate__button-text {
+  color: #fff;
+  font-size: 28rpx;
+  font-weight: 700;
+}

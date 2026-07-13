@@ -6,11 +6,10 @@ import (
 	"time"
 
 	"food_link/backend/pkg/config"
+	"food_link/backend/pkg/testdb"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
 )
 
 func TestPingWithEnvConfig(t *testing.T) {
@@ -49,12 +48,11 @@ func TestOpen(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func TestPing_WithSQLite(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
+func TestPing_WithEmbeddedPostgres(t *testing.T) {
+	db := testdb.New(t)
 
 	ctx := context.Background()
-	err = Ping(ctx, db)
+	err := Ping(ctx, db)
 	require.NoError(t, err)
 }
 

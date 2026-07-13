@@ -1987,6 +1987,16 @@ $feed-body-font-size: 30rpx;
   gap: 48rpx;
 }
 
+.feed-actions-right {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  margin-left: auto;
+  padding: 4rpx 8rpx;
+  border-radius: 999rpx;
+  background: rgba(243, 244, 246, 0.72);
+}
+
 .action-item {
   display: flex;
   align-items: center;
@@ -2741,11 +2751,18 @@ $comment-body-font-size: 28rpx;
 }
 
 .action-item.action-edit {
-  margin-right: 8rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56rpx;
+  height: 44rpx;
+  border-radius: 12rpx;
+  background: #f3f4f6;
 
   &:active {
-    opacity: 0.7;
+    opacity: 1;
     transform: scale(0.95);
+    background: #e5e7eb;
   }
 }
 

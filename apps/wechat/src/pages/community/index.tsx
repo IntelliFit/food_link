@@ -2714,26 +2714,28 @@ function CommunityPage() {
                                   <Text className='action-count'>评论 {item.comment_count || 0}</Text>
                                 </View>
                               </View>
-                              {item.is_mine && (
+                              <View className='feed-actions-right'>
+                                {item.is_mine && (
+                                  <View
+                                    className='action-item action-edit'
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      handleEditFeedItem(item)
+                                    }}
+                                  >
+                                    <Text className='action-icon iconfont icon-edit' />
+                                  </View>
+                                )}
                                 <View
-                                  className='action-item action-edit'
+                                  className='action-item action-manage'
                                   onClick={(e) => {
                                     e.stopPropagation()
-                                    handleEditFeedItem(item)
+                                    setFeedActionSheet({ item, mode: item.is_mine ? 'manage' : 'report' })
                                   }}
                                 >
-                                  <Text className='action-icon iconfont icon-edit' />
-                                </View>
-                              )}
-                              <View
-                                className='action-item action-manage'
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  setFeedActionSheet({ item, mode: item.is_mine ? 'manage' : 'report' })
-                                }}
-                              >
-                                <View className='action-manage-box'>
-                                  <Text className='action-manage-icon'>⋮</Text>
+                                  <View className='action-manage-box'>
+                                    <Text className='action-manage-icon'>⋮</Text>
+                                  </View>
                                 </View>
                               </View>
                             </View>

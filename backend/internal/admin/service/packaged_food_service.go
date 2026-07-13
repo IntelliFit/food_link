@@ -2,12 +2,18 @@ package service
 
 import (
 	"context"
+	"encoding/json"
+	"log/slog"
 	"strings"
+	"time"
 
+	admindomain "food_link/backend/internal/admin/domain"
 	"food_link/backend/internal/admin/repo"
 	commonerrors "food_link/backend/internal/common/errors"
 	"food_link/backend/internal/foodrecord/domain"
 	foodrecordrepo "food_link/backend/internal/foodrecord/repo"
+	foodrecordservice "food_link/backend/internal/foodrecord/service"
+	"food_link/backend/pkg/logger"
 	"food_link/backend/pkg/storage"
 )
 
@@ -17,6 +23,10 @@ type PackagedFoodRepo interface {
 	Create(ctx context.Context, item *domain.PackagedFood) (*domain.PackagedFood, error)
 	Update(ctx context.Context, id string, patch repo.PackagedFoodPatch) (*domain.PackagedFood, error)
 	Delete(ctx context.Context, id string) error
+}
+
+type PackagedFoodExtractor interface {
+	ExtractPackagedProductWithMeta(ctx context.Context, imageURLs []string, recognizedNameHint string) (*foodrecordservice.PackagedProductExtractResult, *foodrecordservice.ExtractMetadata, error)
 }
 
 type CreatePackagedFoodInput struct {
@@ -78,8 +88,17 @@ type CreatePackagedFoodInput struct {
 }
 
 type PackagedFoodService struct {
-	repo    PackagedFoodRepo
-	storage *storage.Client
+	repo        PackagedFoodRepo
+	testRunRepo TestRunRepo
+	storage     *storage.Client
+	extractor   PackagedFoodExtractor
+}
+
+type TestRunRepo interface {
+	List(ctx context.Context, input repo.ListTestRunsInput) (*repo.ListTestRunsResult, error)
+	Get(ctx context.Context, id string) (*admindomain.PackagedFoodTestRun, error)
+	Create(ctx context.Context, item *admindomain.PackagedFoodTestRun) (*admindomain.PackagedFoodTestRun, error)
+	UpdateResult(ctx context.Context, id string, status string, resultJSON map[string]any, metadata admindomain.PackagedFoodTestRunMetadata, errorMessage *string, completedAt time.Time) error
 }
 
 type ListPackagedFoodsInput struct {
@@ -149,8 +168,8 @@ type UpdatePackagedFoodInput struct {
 	IsActive              *bool           `json:"is_active"`
 }
 
-func NewPackagedFoodService(repo PackagedFoodRepo, storage *storage.Client) *PackagedFoodService {
-	return &PackagedFoodService{repo: repo, storage: storage}
+func NewPackagedFoodService(repo PackagedFoodRepo, testRunRepo TestRunRepo, storage *storage.Client, extractor PackagedFoodExtractor) *PackagedFoodService {
+	return &PackagedFoodService{repo: repo, testRunRepo: testRunRepo, storage: storage, extractor: extractor}
 }
 
 func (s *PackagedFoodService) List(ctx context.Context, input ListPackagedFoodsInput) (*repo.ListPackagedFoodsResult, error) {
@@ -193,6 +212,109 @@ func (s *PackagedFoodService) Get(ctx context.Context, id string) (*domain.Packa
 	}
 	s.normalizeImages(item)
 	return item, nil
+}
+
+func (s *PackagedFoodService) TestExtract(ctx context.Context, id string) (*foodrecordservice.PackagedProductExtractResult, error) {
+	run, err := s.RunTestExtract(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	return run.Result, nil
+}
+
+func (s *PackagedFoodService) RunTestExtract(ctx context.Context, id string) (*admindomain.PackagedFoodTestRun, error) {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return nil, &commonerrors.AppError{Code: 10002, Message: "商品 ID 不能为空", HTTPStatus: 400}
+	}
+	if s.extractor == nil {
+		return nil, &commonerrors.AppError{Code: 10002, Message: "包装食品识别器未配置", HTTPStatus: 500}
+	}
+	item, err := s.repo.Get(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	imageURLs := item.SourceImageURLs
+	if len(imageURLs) == 0 {
+		return nil, &commonerrors.AppError{Code: 10002, Message: "该包装食品没有图片", HTTPStatus: 400}
+	}
+
+	now := time.Now()
+	run, err := s.testRunRepo.Create(ctx, &admindomain.PackagedFoodTestRun{
+		PackagedFoodID: id,
+		Status:         "running",
+		StartedAt:      &now,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	result, meta, err := s.extractor.ExtractPackagedProductWithMeta(ctx, imageURLs, "")
+	completedAt := time.Now()
+	if err != nil {
+		msg := err.Error()
+		logger.Warn(ctx, "包装食品测试识别失败",
+			slog.String("run_id", run.ID),
+			slog.String("packaged_food_id", id),
+			slog.String("error", msg),
+		)
+		_ = s.testRunRepo.UpdateResult(ctx, run.ID, "error", nil, admindomain.PackagedFoodTestRunMetadata{}, &msg, completedAt)
+		return nil, err
+	}
+
+	if result != nil {
+		result.AutoIngestResult = *foodrecordservice.EvaluatePackagedProductExtract(result)
+		result.UnitNutritionPer100g = foodrecordservice.RoundPackagedNutritionMap(result.UnitNutritionPer100g)
+	}
+
+	metadata := admindomain.PackagedFoodTestRunMetadata{}
+	if meta != nil {
+		metadata.DurationMs = meta.DurationMs
+		metadata.Model = meta.Model
+		metadata.ResponseID = meta.ResponseID
+		metadata.InputTokens = meta.InputTokens
+		metadata.OutputTokens = meta.OutputTokens
+		metadata.TotalTokens = meta.TotalTokens
+		metadata.RawMeta = meta.RawMeta
+	}
+
+	resultJSON := map[string]any{}
+	if result != nil {
+		resultJSON = toMap(result)
+	}
+	logger.Info(ctx, "包装食品测试识别成功",
+		slog.String("run_id", run.ID),
+		slog.String("packaged_food_id", id),
+		slog.Int64("duration_ms", metadata.DurationMs),
+		slog.Int64("input_tokens", metadata.InputTokens),
+		slog.Int64("output_tokens", metadata.OutputTokens),
+		slog.Int64("total_tokens", metadata.TotalTokens),
+		slog.String("model", metadata.Model),
+	)
+	if err := s.testRunRepo.UpdateResult(ctx, run.ID, "success", resultJSON, metadata, nil, completedAt); err != nil {
+		logger.Error(ctx, "保存包装食品测试识别结果失败", err,
+			slog.String("run_id", run.ID),
+			slog.String("packaged_food_id", id),
+		)
+		return nil, err
+	}
+
+	return s.testRunRepo.Get(ctx, run.ID)
+}
+
+func (s *PackagedFoodService) ListTestRuns(ctx context.Context, input repo.ListTestRunsInput) (*repo.ListTestRunsResult, error) {
+	return s.testRunRepo.List(ctx, input)
+}
+
+func (s *PackagedFoodService) GetTestRun(ctx context.Context, id string) (*admindomain.PackagedFoodTestRun, error) {
+	return s.testRunRepo.Get(ctx, id)
+}
+
+func toMap(v any) map[string]any {
+	b, _ := json.Marshal(v)
+	var m map[string]any
+	_ = json.Unmarshal(b, &m)
+	return m
 }
 
 func (s *PackagedFoodService) Create(ctx context.Context, input CreatePackagedFoodInput) (*domain.PackagedFood, error) {

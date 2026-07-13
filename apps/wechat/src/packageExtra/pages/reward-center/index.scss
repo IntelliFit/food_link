@@ -573,3 +573,122 @@
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
 }
+
+.reward-section__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.reward-section__more {
+  font-size: 24px;
+  color: #0f9f6e;
+}
+
+.reward-voucher-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.reward-voucher-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #fff;
+  border-radius: 20px;
+  padding: 28px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+}
+
+.reward-center-page--dark .reward-voucher-card {
+  background: #1f2937;
+}
+
+.reward-voucher-card__main {
+  flex: 1;
+  min-width: 0;
+  margin-right: 20px;
+}
+
+.reward-voucher-card__title {
+  display: block;
+  font-size: 30px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.reward-center-page--dark .reward-voucher-card__title {
+  color: #f1f5f9;
+}
+
+.reward-voucher-card__desc {
+  display: block;
+  margin-top: 10px;
+  font-size: 24px;
+  color: #64748b;
+}
+
+.reward-center-page--dark .reward-voucher-card__desc {
+  color: #94a3b8;
+}
+
+.reward-voucher-card__button {
+  flex-shrink: 0;
+  padding: 12px 24px;
+  border-radius: 999px;
+  background: #0f9f6e;
+  color: #fff;
+  font-size: 24px;
+  font-weight: 500;
+}
+
+.reward-voucher-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 0;
+}
+
+.reward-voucher-loading__spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid #e5e5e5;
+  border-top-color: #0f9f6e;
+  border-radius: 50%;
+  animation: reward-spin 1s linear infinite;
+}
+
+.reward-voucher-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 0;
+  background: #fff;
+  border-radius: 20px;
+}
+
+.reward-center-page--dark .reward-voucher-empty {
+  background: #1f2937;
+}
+
+.reward-voucher-empty__text {
+  font-size: 28px;
+  color: #1f2937;
+}
+
+.reward-center-page--dark .reward-voucher-empty__text {
+  color: #f1f5f9;
+}
+
+.reward-voucher-empty__hint {
+  margin-top: 10px;
+  font-size: 24px;
+  color: #64748b;
+}
+
+.reward-center-page--dark .reward-voucher-empty__hint {
+  color: #94a3b8;
+}

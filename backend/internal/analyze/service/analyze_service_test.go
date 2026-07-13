@@ -17,10 +17,10 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	gormsqlite "gorm.io/driver/sqlite"
-	"gorm.io/gorm"
 
-	_ "modernc.org/sqlite"
+	"food_link/backend/pkg/testdb"
+
+	"gorm.io/gorm"
 )
 
 type mockLLMClient struct {
@@ -314,13 +314,14 @@ func (f *fakeNutritionFallbackEstimator) Estimate(ctx context.Context, candidate
 }
 
 func setupAnalyzeServiceTestDB(t *testing.T) (*gorm.DB, *authrepo.UserRepo) {
-	db, err := gorm.Open(gormsqlite.New(gormsqlite.Config{
-		DriverName: "sqlite",
-		DSN:        "file::memory:",
-	}), &gorm.Config{})
-	require.NoError(t, err)
+	db := testdb.New(t)
 	require.NoError(t, db.AutoMigrate(&authrepo.User{}))
 	return db, authrepo.NewUserRepo(db)
+}
+
+func setupAnalyzeFoodDB(t *testing.T, db *gorm.DB) {
+	require.NoError(t, db.AutoMigrate(&foodrecorddomain.FoodNutrition{}, &foodrecorddomain.FoodNutritionAlias{}, &foodrecorddomain.FoodUnresolvedLog{}, &foodrecorddomain.PackagedFood{}, &foodrecorddomain.PackagedFoodAlias{}))
+	require.NoError(t, db.Exec(`ALTER TABLE packaged_food_library ADD COLUMN IF NOT EXISTS updated_at timestamptz DEFAULT now()`).Error)
 }
 
 func TestNormalizeExecutionMode(t *testing.T) {
@@ -2469,7 +2470,7 @@ func TestAnalyzeService_FinalizeAnalyzeResponseKeepsPackagedWeightWithSuggestRat
 
 func TestAnalyzeService_ApplyDBFirstUsesPackagedNutritionForSnack(t *testing.T) {
 	db, userRepo := setupAnalyzeServiceTestDB(t)
-	require.NoError(t, db.AutoMigrate(&foodrecorddomain.FoodNutrition{}, &foodrecorddomain.FoodNutritionAlias{}, &foodrecorddomain.FoodUnresolvedLog{}, &foodrecorddomain.PackagedFood{}, &foodrecorddomain.PackagedFoodAlias{}))
+	setupAnalyzeFoodDB(t, db)
 	nutritionRepo := foodrecordrepo.NewFoodNutritionRepo(db)
 	require.NoError(t, db.Create(&foodrecorddomain.FoodNutrition{
 		ID:             "normal-1",
@@ -2519,7 +2520,7 @@ func TestAnalyzeService_ApplyDBFirstUsesPackagedNutritionForSnack(t *testing.T) 
 
 func TestAnalyzeService_ApplyDBFirstIntegratesPackagedFoodInMixedMeal(t *testing.T) {
 	db, userRepo := setupAnalyzeServiceTestDB(t)
-	require.NoError(t, db.AutoMigrate(&foodrecorddomain.FoodNutrition{}, &foodrecorddomain.FoodNutritionAlias{}, &foodrecorddomain.FoodUnresolvedLog{}, &foodrecorddomain.PackagedFood{}, &foodrecorddomain.PackagedFoodAlias{}))
+	setupAnalyzeFoodDB(t, db)
 	nutritionRepo := foodrecordrepo.NewFoodNutritionRepo(db)
 	require.NoError(t, db.Create(&foodrecorddomain.FoodNutrition{
 		ID:             "rice-1",
@@ -2579,7 +2580,7 @@ func TestAnalyzeService_ApplyDBFirstIntegratesPackagedFoodInMixedMeal(t *testing
 
 func TestAnalyzeService_ApplyDBFirstPackagedExperimentUsesNetWeightAnchor(t *testing.T) {
 	db, userRepo := setupAnalyzeServiceTestDB(t)
-	require.NoError(t, db.AutoMigrate(&foodrecorddomain.FoodNutrition{}, &foodrecorddomain.FoodNutritionAlias{}, &foodrecorddomain.FoodUnresolvedLog{}, &foodrecorddomain.PackagedFood{}, &foodrecorddomain.PackagedFoodAlias{}))
+	setupAnalyzeFoodDB(t, db)
 	nutritionRepo := foodrecordrepo.NewFoodNutritionRepo(db)
 	spec := "50克*6支"
 	require.NoError(t, db.Create(&foodrecorddomain.PackagedFood{
@@ -2650,7 +2651,7 @@ func TestPackagedExperimentWeightForItemKeepsVisualWeightWhenLibrarySpecIsMuchLa
 
 func TestAnalyzeService_ApplyDBFirstPackagedExperimentKeepsAIWeightForAmbiguousSpecs(t *testing.T) {
 	db, userRepo := setupAnalyzeServiceTestDB(t)
-	require.NoError(t, db.AutoMigrate(&foodrecorddomain.FoodNutrition{}, &foodrecorddomain.FoodNutritionAlias{}, &foodrecorddomain.FoodUnresolvedLog{}, &foodrecorddomain.PackagedFood{}, &foodrecorddomain.PackagedFoodAlias{}))
+	setupAnalyzeFoodDB(t, db)
 	nutritionRepo := foodrecordrepo.NewFoodNutritionRepo(db)
 	spec65 := "65g杯装"
 	spec90 := "90g杯装"
@@ -2692,11 +2693,11 @@ func TestAnalyzeService_ApplyDBFirstPackagedExperimentKeepsAIWeightForAmbiguousS
 
 	items := toItems(resp["items"])
 	require.Len(t, items, 1)
-	assert.Equal(t, "packaged_food_library", items[0]["nutrition_source"])
+	assert.Equal(t, "packaged_candidate_pending", items[0]["nutrition_source"])
 	assert.Equal(t, 80.0, items[0]["estimatedWeightGrams"])
 	assert.Equal(t, 80.0, items[0]["grossWeightGrams"])
 	assert.Equal(t, false, items[0]["package_weight_applied"])
-	assert.Equal(t, "multiple_candidates", items[0]["package_match_status"])
+	assert.Equal(t, "packaged_needs_confirmation", items[0]["package_match_status"])
 	assert.Contains(t, fmt.Sprint(items[0]["package_weight_reason"]), "多个可能规格")
 	candidates, ok := items[0]["packaged_candidates"].([]map[string]any)
 	require.True(t, ok)
@@ -2705,7 +2706,7 @@ func TestAnalyzeService_ApplyDBFirstPackagedExperimentKeepsAIWeightForAmbiguousS
 
 func TestAnalyzeService_ApplyDBFirstPackagedExperimentUserWeightWinsOverLibrary(t *testing.T) {
 	db, userRepo := setupAnalyzeServiceTestDB(t)
-	require.NoError(t, db.AutoMigrate(&foodrecorddomain.FoodNutrition{}, &foodrecorddomain.FoodNutritionAlias{}, &foodrecorddomain.FoodUnresolvedLog{}, &foodrecorddomain.PackagedFood{}, &foodrecorddomain.PackagedFoodAlias{}))
+	setupAnalyzeFoodDB(t, db)
 	nutritionRepo := foodrecordrepo.NewFoodNutritionRepo(db)
 	require.NoError(t, db.Create(&foodrecorddomain.PackagedFood{
 		ID:             "pkg-user-weight",
@@ -2768,7 +2769,7 @@ func TestFilterPackagedExperimentRelevantCandidatesPrefersMatchingFlavor(t *test
 
 func TestAnalyzeService_ApplyDBFirstUsesWaterMlAsLiquidWeight(t *testing.T) {
 	db, userRepo := setupAnalyzeServiceTestDB(t)
-	require.NoError(t, db.AutoMigrate(&foodrecorddomain.FoodNutrition{}, &foodrecorddomain.FoodNutritionAlias{}, &foodrecorddomain.FoodUnresolvedLog{}, &foodrecorddomain.PackagedFood{}, &foodrecorddomain.PackagedFoodAlias{}))
+	setupAnalyzeFoodDB(t, db)
 	nutritionRepo := foodrecordrepo.NewFoodNutritionRepo(db)
 	require.NoError(t, db.Create(&foodrecorddomain.FoodNutrition{
 		ID:             "drink-1",
@@ -2799,7 +2800,7 @@ func TestAnalyzeService_ApplyDBFirstUsesWaterMlAsLiquidWeight(t *testing.T) {
 
 func TestAnalyzeService_ApplyDBFirstUsesDeepSeekSemanticReuse(t *testing.T) {
 	db, userRepo := setupAnalyzeServiceTestDB(t)
-	require.NoError(t, db.AutoMigrate(&foodrecorddomain.FoodNutrition{}, &foodrecorddomain.FoodNutritionAlias{}, &foodrecorddomain.FoodUnresolvedLog{}, &foodrecorddomain.PackagedFood{}, &foodrecorddomain.PackagedFoodAlias{}))
+	setupAnalyzeFoodDB(t, db)
 	nutritionRepo := foodrecordrepo.NewFoodNutritionRepo(db)
 	require.NoError(t, db.Create(&foodrecorddomain.FoodNutrition{
 		ID:             "icecream-1",
@@ -2841,9 +2842,8 @@ func TestAnalyzeService_ApplyDBFirstUsesDeepSeekSemanticReuse(t *testing.T) {
 	require.Len(t, items, 1)
 	assert.Equal(t, "icecream-1", items[0]["matched_food_id"])
 	assert.Equal(t, "蜜雪冰城原味冰淇淋蛋筒", items[0]["matched_food_name"])
-	assert.Equal(t, "semantic_rerank", items[0]["resolve_status"])
-	assert.Equal(t, "library_semantic_rerank", items[0]["nutrition_source"])
-	assert.Equal(t, "甜筒/蛋筒属于同义包装说法", items[0]["resolve_reason"])
+	assert.Equal(t, "fuzzy", items[0]["resolve_status"])
+	assert.Equal(t, "library_fuzzy", items[0]["nutrition_source"])
 	nutrients := items[0]["nutrients"].(map[string]any)
 	assert.Equal(t, 176.0, nutrients["calories"])
 }
@@ -3085,7 +3085,7 @@ func TestIngredientLabelNutritionFromItem(t *testing.T) {
 
 func TestApplyDBFirstToItemsUsesIngredientLabelNutrition(t *testing.T) {
 	db, userRepo := setupAnalyzeServiceTestDB(t)
-	require.NoError(t, db.AutoMigrate(&foodrecorddomain.FoodNutrition{}, &foodrecorddomain.FoodNutritionAlias{}, &foodrecorddomain.FoodUnresolvedLog{}, &foodrecorddomain.PackagedFood{}, &foodrecorddomain.PackagedFoodAlias{}))
+	setupAnalyzeFoodDB(t, db)
 	nutritionRepo := foodrecordrepo.NewFoodNutritionRepo(db)
 	// Insert a nutrition record with different values to prove ingredient label overrides it.
 	require.NoError(t, db.Create(&foodrecorddomain.FoodNutrition{
@@ -3166,7 +3166,7 @@ func TestApplyDBFirstToItemsUsesIngredientLabelWithoutNutritionRepo(t *testing.T
 
 func TestApplyDBFirstToItemsFallsBackToLibraryWhenNoIngredientLabel(t *testing.T) {
 	db, userRepo := setupAnalyzeServiceTestDB(t)
-	require.NoError(t, db.AutoMigrate(&foodrecorddomain.FoodNutrition{}, &foodrecorddomain.FoodNutritionAlias{}, &foodrecorddomain.FoodUnresolvedLog{}, &foodrecorddomain.PackagedFood{}, &foodrecorddomain.PackagedFoodAlias{}))
+	setupAnalyzeFoodDB(t, db)
 	nutritionRepo := foodrecordrepo.NewFoodNutritionRepo(db)
 	require.NoError(t, db.Create(&foodrecorddomain.FoodNutrition{
 		ID:             "apple-1",

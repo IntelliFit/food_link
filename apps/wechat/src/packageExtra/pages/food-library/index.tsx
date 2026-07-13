@@ -11,7 +11,7 @@ import {
   unlikePublicFoodLibraryItem,
   collectPublicFoodLibraryItem,
   uncollectPublicFoodLibraryItem,
-  submitPublicFoodLibraryFeedback,
+  submitStructuredFeedback,
   deletePublicFoodLibraryItem,
   showUnifiedApiError,
   type PublicFoodLibraryItem
@@ -516,7 +516,7 @@ function FoodLibraryPage() {
 
   // 提交反馈
   const handleFeedback = async () => {
-    const { confirm, content } = await Taro.showModal({
+    const modalResult = await Taro.showModal({
       title: '提交反馈',
       content: '',
       editable: true,
@@ -524,12 +524,25 @@ function FoodLibraryPage() {
       confirmText: '提交',
       cancelText: '取消',
       confirmColor: '#00bc7d',
-    })
+    } as any)
+    const { confirm } = modalResult
+    const content = String((modalResult as any).content || '')
     if (!confirm || !content || !content.trim()) return
 
     Taro.showLoading({ title: '提交中...', mask: true })
     try {
-      await submitPublicFoodLibraryFeedback(content.trim())
+      await submitStructuredFeedback({
+        source: 'food_library',
+        content: content.trim(),
+        extra: {
+          page: 'food_library',
+          tab_mode: tabMode,
+          sort_by: sortBy,
+          filter_fat_loss: filterFatLoss ?? null,
+          search_keyword: searchKeyword || null,
+          search_merchant: searchMerchant || null,
+        },
+      })
       Taro.showToast({ title: '反馈已提交', icon: 'success' })
     } catch (e: any) {
       await showUnifiedApiError(e, '提交失败')

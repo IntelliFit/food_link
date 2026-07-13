@@ -396,6 +396,51 @@ func TestNormalizeFeedRecordUsesChinaTime(t *testing.T) {
 	assert.Equal(t, "2026-05-11T20:30:00+08:00", record.RecordTime.Format(time.RFC3339))
 }
 
+func TestNormalizeFeedRecordKeepsOnlyOriginalImages(t *testing.T) {
+	svc := newTestService(&mockFeedRepo{}, &mockNotificationRepo{}, &mockUserRepo{})
+	userImage := "https://cdn-food-images.coachlink.fit/user.jpg"
+	libraryImage := "standard-food/backfill/lib.jpg"
+
+	record := svc.normalizeFeedRecord(context.Background(), repo.FeedRecord{
+		ID:         "r1",
+		FeedType:   repo.FeedTargetFoodRecord,
+		ImagePath:  &userImage,
+		ImagePaths: []string{userImage},
+		Items: []map[string]any{
+			{
+				"name":          "水煮蛋",
+				"manual_source": "nutrition_library",
+				"image_paths":   []string{libraryImage},
+			},
+		},
+	})
+
+	assert.Equal(t, []string{userImage}, record.ImagePaths)
+	assert.NotNil(t, record.ImagePath)
+	assert.Equal(t, userImage, *record.ImagePath)
+}
+
+func TestNormalizeFeedRecordFallsBackToLibraryImages(t *testing.T) {
+	svc := newTestService(&mockFeedRepo{}, &mockNotificationRepo{}, &mockUserRepo{})
+	libraryImage := "standard-food/backfill/lib.jpg"
+
+	record := svc.normalizeFeedRecord(context.Background(), repo.FeedRecord{
+		ID:       "r1",
+		FeedType: repo.FeedTargetFoodRecord,
+		Items: []map[string]any{
+			{
+				"name":          "水煮蛋",
+				"manual_source": "nutrition_library",
+				"image_paths":   []string{libraryImage},
+			},
+		},
+	})
+
+	assert.Equal(t, []string{libraryImage}, record.ImagePaths)
+	assert.NotNil(t, record.ImagePath)
+	assert.Equal(t, libraryImage, *record.ImagePath)
+}
+
 func TestChinaWeekWindowUsesBeijingNaturalWeek(t *testing.T) {
 	mondayMorning := time.Date(2026, 5, 11, 9, 30, 0, 0, chinaTZ)
 
@@ -515,11 +560,12 @@ func TestHideFeedForbidden(t *testing.T) {
 
 func TestListComments(t *testing.T) {
 	mockFeed := &mockFeedRepo{
-		listComments: []domain.FeedComment{{ID: "c1", UserID: "u1", RecordID: boolStringPtr("r1"), Content: "nice"}},
-		profiles:     map[string]*repo.UserProfile{"u1": {ID: "u1", Nickname: "Alice"}},
+		getFeedRecord: &repo.FeedRecord{ID: "r1", UserID: "u2"},
+		listComments:  []domain.FeedComment{{ID: "c1", UserID: "u1", RecordID: boolStringPtr("r1"), Content: "nice"}},
+		profiles:      map[string]*repo.UserProfile{"u1": {ID: "u1", Nickname: "Alice"}},
 	}
 	svc := newTestService(mockFeed, &mockNotificationRepo{}, &mockUserRepo{})
-	items, err := svc.ListComments(context.Background(), "r1", 50)
+	items, err := svc.ListComments(context.Background(), "u2", "r1", 50)
 	assert.NoError(t, err)
 	assert.Len(t, items, 1)
 	assert.Equal(t, "nice", items[0].Content)

@@ -83,6 +83,18 @@ func (m *mockFriendService) ResolveInviteWithRelation(ctx context.Context, userI
 func (m *mockFriendService) AcceptInvite(ctx context.Context, userID, code string) (map[string]any, error) {
 	return m.acceptInviteResult, m.acceptInviteErr
 }
+func (m *mockFriendService) BlockUser(ctx context.Context, blockerUserID, blockedUserID string) (map[string]any, error) {
+	return map[string]any{"blocked": true}, nil
+}
+func (m *mockFriendService) UnblockUser(ctx context.Context, blockerUserID, blockedUserID string) error {
+	return nil
+}
+func (m *mockFriendService) GetBlockedUsers(ctx context.Context, blockerUserID string) ([]map[string]any, error) {
+	return []map[string]any{}, nil
+}
+func (m *mockFriendService) GetBlockStatus(ctx context.Context, userID, counterpartUserID string) (map[string]any, error) {
+	return map[string]any{"is_blocked": false}, nil
+}
 
 func setupRouter(h *FriendHandler) *gin.Engine {
 	gin.SetMode(gin.TestMode)

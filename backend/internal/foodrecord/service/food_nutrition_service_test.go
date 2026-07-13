@@ -7,15 +7,15 @@ import (
 	"food_link/backend/internal/foodrecord/domain"
 	"food_link/backend/internal/foodrecord/repo"
 
+	"food_link/backend/pkg/testdb"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
 func setupFoodNutritionTestDB(t *testing.T) (*gorm.DB, *repo.FoodNutritionRepo) {
-	db, err := gorm.Open(sqlite.Open("file::memory:"), &gorm.Config{})
-	require.NoError(t, err)
+	db := testdb.New(t)
 	require.NoError(t, db.AutoMigrate(&domain.FoodNutrition{}, &domain.FoodNutritionAlias{}, &domain.FoodUnresolvedLog{}))
 	return db, repo.NewFoodNutritionRepo(db)
 }
@@ -50,8 +50,8 @@ func TestFoodNutritionService_Search_Alias(t *testing.T) {
 	svc := NewFoodNutritionService(nutritionRepo)
 	ctx := context.Background()
 
-	require.NoError(t, db.Create(&domain.FoodNutrition{ID: "f1", CanonicalName: "Apple", KcalPer100g: 52, IsActive: true}).Error)
-	require.NoError(t, db.Create(&domain.FoodNutritionAlias{ID: "a1", FoodID: "f1", AliasName: "红富士"}).Error)
+	require.NoError(t, db.Create(&domain.FoodNutrition{ID: "f1", CanonicalName: "苹果", KcalPer100g: 52, IsActive: true}).Error)
+	require.NoError(t, db.Create(&domain.FoodNutritionAlias{ID: "a1", FoodID: "f1", AliasName: "红富士", NormalizedAlias: "红富士"}).Error)
 
 	items, err := svc.Search(ctx, "红富士", 10)
 	require.NoError(t, err)

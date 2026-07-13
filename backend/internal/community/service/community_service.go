@@ -695,6 +695,25 @@ func (s *CommunityService) normalizeFeedRecord(ctx context.Context, record repo.
 		}
 		return record
 	}
+	// 记录自身已上传的图片需要保留；条目 enrichment 会回查营养库并可能把系统回填图
+	// 也append到记录级 ImagePaths，导致用户实拍图和默认图混在一起展示。
+	originalPaths := s.resolveFoodImageURLs(record.ImagePaths)
+	if record.ImagePath != nil {
+		resolved := s.resolveFoodImageURL(*record.ImagePath)
+		if resolved != "" {
+			found := false
+			for _, p := range originalPaths {
+				if p == resolved {
+					found = true
+					break
+				}
+			}
+			if !found {
+				originalPaths = append([]string{resolved}, originalPaths...)
+			}
+		}
+	}
+
 	record.Items = foodmedia.EnrichFoodRecordDisplayFields(
 		ctx,
 		s.db,
@@ -703,6 +722,17 @@ func (s *CommunityService) normalizeFeedRecord(ctx context.Context, record repo.
 		&record.ImagePaths,
 		record.Items,
 	)
+
+	// 若记录本身已有图片，feed 轮播只展示用户自己的图片，不混入营养库回填图。
+	if len(originalPaths) > 0 {
+		record.ImagePaths = s.resolveFoodImageURLs(originalPaths)
+		if len(record.ImagePaths) > 0 {
+			first := record.ImagePaths[0]
+			record.ImagePath = &first
+		}
+		return record
+	}
+
 	record.ImagePaths = s.resolveFoodImageURLs(record.ImagePaths)
 	if len(record.ImagePaths) > 0 {
 		first := record.ImagePaths[0]

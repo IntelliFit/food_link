@@ -18,10 +18,10 @@ import (
 	"food_link/backend/pkg/storage"
 
 	"github.com/stretchr/testify/require"
-	gormsqlite "gorm.io/driver/sqlite"
-	"gorm.io/gorm"
 
-	_ "modernc.org/sqlite"
+	"food_link/backend/pkg/testdb"
+
+	"gorm.io/gorm"
 )
 
 type mockPublicFoodRewardAwarder struct {
@@ -47,11 +47,7 @@ func (m *mockPublicFoodRewardAwarder) AwardPublicFoodUpload(ctx context.Context,
 func setupPublicFoodServiceTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 
-	db, err := gorm.Open(gormsqlite.New(gormsqlite.Config{
-		DriverName: "sqlite",
-		DSN:        ":memory:",
-	}), &gorm.Config{})
-	require.NoError(t, err)
+	db := testdb.New(t)
 	require.NoError(t, db.AutoMigrate(
 		&domain.PublicFoodItem{},
 		&analyzedomain.AnalysisTask{},
@@ -63,6 +59,12 @@ func setupPublicFoodServiceTestDB(t *testing.T) *gorm.DB {
 		&domain.PublicFoodCollection{},
 		&domain.PublicFoodComment{},
 	))
+	require.NoError(t, db.Exec(`
+		ALTER TABLE analysis_tasks ALTER COLUMN result TYPE jsonb USING result::jsonb
+	`).Error)
+	require.NoError(t, db.Exec(`
+		ALTER TABLE public_food_library ALTER COLUMN items TYPE jsonb USING items::jsonb
+	`).Error)
 	require.NoError(t, db.Exec(`CREATE TABLE schools (
 		id TEXT PRIMARY KEY,
 		name TEXT NOT NULL,

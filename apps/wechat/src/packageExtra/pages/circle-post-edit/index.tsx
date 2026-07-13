@@ -17,6 +17,7 @@ import {
 import { COMMUNITY_FEED_CHANGED_EVENT } from '../../../utils/home-events'
 import { chooseImageWithPrivacy, isPrivacyAuthorizeError, showPrivacyAuthorizeFailure } from '../../../utils/weapp-privacy'
 import { withAuth } from '../../../utils/withAuth'
+import { formatMacroNutrient, formatMicroNutrient } from '../../../utils/number-format'
 
 import './index.scss'
 
@@ -93,9 +94,11 @@ function buildNutritionInput(state: NutritionFormState): CirclePostNutritionInpu
   return hasValue ? input : undefined
 }
 
-function formatNumberDisplay(value: number | null | undefined): string {
+function formatNumberDisplay(key: keyof CirclePostNutritionInput, value: number | null | undefined): string {
   if (value == null || !Number.isFinite(value)) return ''
-  return String(value)
+  const microKeys = new Set<keyof CirclePostNutritionInput>(['sodium_mg'])
+  if (microKeys.has(key)) return formatMicroNutrient(value)
+  return formatMacroNutrient(value)
 }
 
 function CirclePostEditPage() {
@@ -137,7 +140,7 @@ function CirclePostEditPage() {
       let hasNutrition = false
       NUTRITION_FIELDS.forEach(({ key }) => {
         const value = item.record[key as keyof typeof item.record]
-        const formatted = formatNumberDisplay(value as number | null | undefined)
+        const formatted = formatNumberDisplay(key, value as number | null | undefined)
         next[key] = formatted
         if (formatted) hasNutrition = true
       })

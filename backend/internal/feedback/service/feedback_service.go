@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"strings"
 	"time"
@@ -21,6 +22,7 @@ const (
 	maxContactLength        = 200
 	maxRecentRequestCount   = 50
 	maxRecentRequestPathLen = 240
+	maxExtraDepth           = 3
 )
 
 type FeedbackRepo interface {
@@ -49,6 +51,7 @@ type FeedbackService struct {
 
 type SubmitInput struct {
 	Category        string
+	Source          string
 	Content         string
 	Contact         string
 	PagePath        string
@@ -56,6 +59,7 @@ type SubmitInput struct {
 	ClientInfo      map[string]any
 	RecentRequests  []domain.RecentRequestTrace
 	ImageURLs       []string
+	Extra           map[string]any
 	SubmitTraceID   string
 	SubmitRequestID string
 	SubmitHostName  string
@@ -97,6 +101,7 @@ func (s *FeedbackService) Submit(ctx context.Context, userID string, input Submi
 	feedback := &domain.UserFeedback{
 		UserID:          userID,
 		Category:        normalizeCategory(input.Category),
+		Source:          normalizeSource(input.Source),
 		Content:         content,
 		Contact:         contact,
 		PagePath:        truncateRunes(strings.TrimSpace(input.PagePath), maxRecentRequestPathLen),
@@ -104,6 +109,7 @@ func (s *FeedbackService) Submit(ctx context.Context, userID string, input Submi
 		ClientInfo:      datatypes.JSONMap(input.ClientInfo),
 		RecentRequests:  datatypes.JSONSlice[domain.RecentRequestTrace](normalizeRecentRequests(input.RecentRequests)),
 		ImageURLs:       datatypes.JSONSlice[string](imageURLs),
+		Extra:           datatypes.JSONMap(normalizeExtra(input.Extra, maxExtraDepth)),
 		SubmitTraceID:   truncateRunes(strings.TrimSpace(input.SubmitTraceID), 80),
 		SubmitRequestID: truncateRunes(strings.TrimSpace(input.SubmitRequestID), 80),
 		SubmitHostName:  truncateRunes(strings.TrimSpace(input.SubmitHostName), 120),
@@ -117,6 +123,9 @@ func (s *FeedbackService) Submit(ctx context.Context, userID string, input Submi
 	}
 	if feedback.ImageURLs == nil {
 		feedback.ImageURLs = datatypes.JSONSlice[string]{}
+	}
+	if feedback.Extra == nil {
+		feedback.Extra = datatypes.JSONMap{}
 	}
 	if err := s.repo.Create(ctx, feedback); err != nil {
 		return "", err
@@ -216,6 +225,7 @@ func feedbackAsyncSpan(parentCtx context.Context, name string, feedback *domain.
 			attribute.String("feedback.id", feedback.ID),
 			attribute.String("feedback.user_id", feedback.UserID),
 			attribute.String("feedback.category", feedback.Category),
+			attribute.String("feedback.source", feedback.Source),
 		)
 	}
 	ctx, span := apm.StartSpan(baseCtx, name, attrs...)
@@ -231,6 +241,68 @@ func normalizeCategory(value string) string {
 	default:
 		return domain.CategoryOther
 	}
+}
+
+func normalizeSource(value string) string {
+	switch strings.TrimSpace(strings.ToLower(value)) {
+	case domain.SourceCampusLocation, domain.SourceCampusFood, domain.SourceFoodLibrary:
+		return strings.TrimSpace(strings.ToLower(value))
+	default:
+		return domain.SourceApp
+	}
+}
+
+func normalizeExtra(value map[string]any, maxDepth int) map[string]any {
+	if value == nil {
+		return map[string]any{}
+	}
+	if maxDepth <= 0 {
+		maxDepth = maxExtraDepth
+	}
+	return pruneExtra(value, maxDepth)
+}
+
+func pruneExtra(value map[string]any, depth int) map[string]any {
+	if depth <= 0 {
+		return map[string]any{}
+	}
+	out := make(map[string]any, len(value))
+	for k, v := range value {
+		if k == "" {
+			continue
+		}
+		switch typed := v.(type) {
+		case map[string]any:
+			out[k] = pruneExtra(typed, depth-1)
+		case []any:
+			out[k] = pruneExtraSlice(typed, depth-1)
+		case string, int, int64, float64, float32, bool, nil:
+			out[k] = v
+		default:
+			out[k] = fmt.Sprintf("%v", v)
+		}
+	}
+	return out
+}
+
+func pruneExtraSlice(value []any, depth int) []any {
+	if depth <= 0 {
+		return []any{}
+	}
+	out := make([]any, 0, len(value))
+	for _, v := range value {
+		switch typed := v.(type) {
+		case map[string]any:
+			out = append(out, pruneExtra(typed, depth-1))
+		case []any:
+			out = append(out, pruneExtraSlice(typed, depth-1))
+		case string, int, int64, float64, float32, bool, nil:
+			out = append(out, v)
+		default:
+			out = append(out, fmt.Sprintf("%v", v))
+		}
+	}
+	return out
 }
 
 func normalizeRecentRequests(items []domain.RecentRequestTrace) []domain.RecentRequestTrace {

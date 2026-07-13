@@ -2,7 +2,10 @@ package handler
 
 import (
 	"context"
+	"encoding/json"
+	"io"
 	"log/slog"
+	"net/http"
 	"strings"
 
 	authmw "food_link/backend/internal/auth"
@@ -25,6 +28,7 @@ type PetService interface {
 type PetChatService interface {
 	EstimatePetChat(ctx context.Context, userID string, input healthservice.PetChatInput) (*healthservice.PetChatEstimateResult, error)
 	GeneratePetChat(ctx context.Context, userID string, input healthservice.PetChatInput) (*healthservice.PetChatResult, error)
+	GeneratePetChatStream(ctx context.Context, userID string, input healthservice.PetChatInput) (<-chan healthservice.PetChatStreamChunk, error)
 	GetLatestPetChatSession(ctx context.Context, userID string) (*healthservice.PetChatHistoryResult, error)
 	ListPetChatSessions(ctx context.Context, userID string) (*healthservice.PetChatSessionsResult, error)
 	GetPetChatSessionHistory(ctx context.Context, userID, sessionID string) (*healthservice.PetChatHistoryResult, error)
@@ -151,6 +155,63 @@ func (h *PetHandler) Chat(c *gin.Context) {
 		slog.String("billing_status", data.BillingStatus),
 	)
 	response.Success(c, data)
+}
+
+func (h *PetHandler) ChatStream(c *gin.Context) {
+	userID := c.GetString(authmw.ContextUserIDKey)
+	if userID == "" {
+		response.Error(c, commonerrors.ErrUnauthorized)
+		return
+	}
+	if h.chat == nil {
+		response.Error(c, &commonerrors.AppError{Code: 10000, Message: "小食探对话服务暂不可用", HTTPStatus: 503})
+		return
+	}
+	var req petChatRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, err)
+		return
+	}
+	logger.Info(c.Request.Context(), "宠物对话流式生成请求进入",
+		slog.String("user_id", userID),
+		slog.String("range", strings.TrimSpace(req.Range)),
+		slog.Int("question_length", len([]rune(strings.TrimSpace(req.Question)))),
+	)
+	chunkChan, err := h.chat.GeneratePetChatStream(c.Request.Context(), userID, healthservice.PetChatInput{
+		Question:   strings.TrimSpace(req.Question),
+		Range:      strings.TrimSpace(req.Range),
+		SessionID:  strings.TrimSpace(req.SessionID),
+		NewSession: req.NewSession,
+	})
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	flusher, ok := c.Writer.(http.Flusher)
+	if !ok {
+		response.Error(c, &commonerrors.AppError{Code: 10000, Message: "流式响应不支持", HTTPStatus: 500})
+		return
+	}
+
+	c.Header("Content-Type", "text/event-stream; charset=utf-8")
+	c.Header("Cache-Control", "no-cache")
+	c.Header("Connection", "keep-alive")
+	c.Header("X-Accel-Buffering", "no")
+	c.Status(http.StatusOK)
+
+	for chunk := range chunkChan {
+		data, _ := json.Marshal(chunk)
+		_, writeErr := io.WriteString(c.Writer, "data: "+string(data)+"\n\n")
+		if writeErr != nil {
+			logger.Warn(c.Request.Context(), "宠物对话 SSE 写入失败",
+				slog.String("user_id", userID),
+				logger.Err(writeErr),
+			)
+			return
+		}
+		flusher.Flush()
+	}
 }
 
 func (h *PetHandler) LatestChat(c *gin.Context) {

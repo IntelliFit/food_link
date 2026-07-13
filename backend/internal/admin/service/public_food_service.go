@@ -46,6 +46,10 @@ type CreatePublicFoodInput struct {
 	Type               string           `json:"type"`
 	Status             string           `json:"status"`
 	IsCampusFood       bool             `json:"is_campus_food"`
+	SchoolID           string           `json:"school_id"`
+	CampusID           string           `json:"campus_id"`
+	CanteenID          string           `json:"canteen_id"`
+	WindowID           string           `json:"window_id"`
 	SchoolName         string           `json:"school_name"`
 	CampusName         string           `json:"campus_name"`
 	CanteenName        string           `json:"canteen_name"`
@@ -74,6 +78,10 @@ type UpdatePublicFoodInput struct {
 	Type               *string           `json:"type,omitempty"`
 	Status             *string           `json:"status,omitempty"`
 	IsCampusFood       *bool             `json:"is_campus_food,omitempty"`
+	SchoolID           *string           `json:"school_id,omitempty"`
+	CampusID           *string           `json:"campus_id,omitempty"`
+	CanteenID          *string           `json:"canteen_id,omitempty"`
+	WindowID           *string           `json:"window_id,omitempty"`
 	SchoolName         *string           `json:"school_name,omitempty"`
 	CampusName         *string           `json:"campus_name,omitempty"`
 	CanteenName        *string           `json:"canteen_name,omitempty"`
@@ -154,6 +162,10 @@ func (s *PublicFoodService) Create(ctx context.Context, input CreatePublicFoodIn
 		Type:               itemType,
 		Status:             status,
 		IsCampusFood:       input.IsCampusFood,
+		SchoolID:           stringPtrFromValue(input.SchoolID),
+		CampusID:           stringPtrFromValue(input.CampusID),
+		CanteenID:          stringPtrFromValue(input.CanteenID),
+		WindowID:           stringPtrFromValue(input.WindowID),
 		SchoolName:         strings.TrimSpace(input.SchoolName),
 		CampusName:         strings.TrimSpace(input.CampusName),
 		CanteenName:        strings.TrimSpace(input.CanteenName),
@@ -200,6 +212,10 @@ func (s *PublicFoodService) Update(ctx context.Context, id string, input UpdateP
 	setStringPtr(patch, "type", input.Type)
 	setStringPtr(patch, "status", input.Status)
 	setBoolPtr(patch, "is_campus_food", input.IsCampusFood)
+	setStringPtr(patch, "school_id", input.SchoolID)
+	setStringPtr(patch, "campus_id", input.CampusID)
+	setStringPtr(patch, "canteen_id", input.CanteenID)
+	setStringPtr(patch, "window_id", input.WindowID)
 	setStringPtr(patch, "school_name", input.SchoolName)
 	setStringPtr(patch, "campus_name", input.CampusName)
 	setStringPtr(patch, "canteen_name", input.CanteenName)
@@ -248,5 +264,3 @@ func (s *PublicFoodService) normalizeImages(item *domain.PublicFoodItem) {
 		}
 	}
 }
-
-

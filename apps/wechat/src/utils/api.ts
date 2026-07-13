@@ -1284,6 +1284,19 @@ export interface PetChatHistoryMessage {
   created_at?: string
 }
 
+export interface PetChatStreamMeta {
+  session_id: string
+  user_message_id?: string
+  assistant_message_id?: string
+  range: 'week' | 'month'
+  range_label: string
+  recorded_days: number
+  credits_charged: number
+  billing_status: string
+  ai_usage_pricing?: AIUsagePricingResult
+  estimated_pricing: AIUsagePricingResult
+}
+
 export interface PetChatHistoryResponse {
   session?: {
     ID?: string
@@ -1643,6 +1656,27 @@ export interface RewardCenterResponse {
   }
   tasks: RewardCenterTask[]
   invite_reward?: InviteRewardCenterSummary | null
+}
+
+export interface VoucherItem {
+  id: string
+  user_id: string
+  voucher_type: 'registration_trial' | 'invite_light_week' | 'admin_points'
+  status: 'pending' | 'used' | 'expired' | 'cancelled'
+  title: string
+  description?: string | null
+  reward_payload?: Record<string, any>
+  source_type: string
+  source_key: string
+  valid_start_at?: string | null
+  valid_end_at?: string | null
+  used_at?: string | null
+  created_at?: string
+}
+
+export interface VoucherListResponse {
+  items: VoucherItem[]
+  total: number
 }
 
 export interface InviteRewardStatusItem {
@@ -3876,6 +3910,109 @@ export async function generatePetChat(question: string, range: 'week' | 'month',
   return unwrapResponse<PetChatResponse>(res)
 }
 
+export interface StreamGeneratePetChatCallbacks {
+  onStart?: () => void
+  onChunk: (text: string) => void
+  onDone: (meta: PetChatStreamMeta) => void
+  onError: (error: Error) => void
+}
+
+export function streamGeneratePetChat(
+  question: string,
+  range: 'week' | 'month',
+  sessionId = '',
+  newSession = false,
+  callbacks: StreamGeneratePetChatCallbacks
+): () => void {
+  const token = getAccessToken()
+  if (!token) {
+    redirectToLogin('未登录，请先登录')
+    callbacks.onError(new Error('未登录，请先登录'))
+    return () => {}
+  }
+
+  let buffer = ''
+  const decoder = new TextDecoder('utf-8')
+  let doneReceived = false
+
+  const processSSEText = (text: string) => {
+    buffer += text
+    const events = buffer.split('\n\n')
+    buffer = events.pop() || ''
+    for (const event of events) {
+      const lines = event.split('\n')
+      let dataLine = ''
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          dataLine = line.slice(6)
+        }
+      }
+      if (!dataLine) continue
+      try {
+        const parsed = JSON.parse(dataLine) as { type: string; text?: string; error?: string; meta?: PetChatStreamMeta }
+        if (parsed.type === 'chunk' && typeof parsed.text === 'string') {
+          callbacks.onChunk(parsed.text)
+        } else if (parsed.type === 'done' && parsed.meta) {
+          doneReceived = true
+          callbacks.onDone(parsed.meta)
+        } else if (parsed.type === 'error') {
+          callbacks.onError(new Error(parsed.error || '小食探分析失败'))
+        }
+      } catch (_) {
+        // ignore malformed sse data
+      }
+    }
+  }
+
+  const requestTask = Taro.request({
+    url: `${API_BASE_URL}/api/pet/chat/stream`,
+    method: 'POST',
+    header: withNgrokBypassHeaders({
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      'Accept': 'text/event-stream',
+    }),
+    data: { question, range, session_id: sessionId, new_session: newSession },
+    enableChunked: true,
+    timeout: 180000,
+    success: (res) => {
+      if (res.statusCode === 401 || res.statusCode === 403) {
+        redirectToLogin('登录已失效，请重新登录')
+        callbacks.onError(new Error('登录已失效，请重新登录'))
+        return
+      }
+      if (res.statusCode < 200 || res.statusCode >= 300) {
+        callbacks.onError(new Error('小食探分析失败'))
+        return
+      }
+      callbacks.onStart?.()
+      // 部分环境 chunk 会聚合在 res.data 中，兜底解析
+      if (typeof res.data === 'string') {
+        processSSEText(res.data)
+      }
+    },
+    fail: (err) => {
+      callbacks.onError(new Error(String(err?.errMsg || err || '请求失败')))
+    },
+    complete: () => {
+      if (!doneReceived && buffer.trim()) {
+        processSSEText('\n\n')
+      }
+    },
+  })
+
+  requestTask.onChunkReceived?.((res: any) => {
+    const chunk = res.data instanceof ArrayBuffer ? decoder.decode(res.data) : String(res.data || '')
+    processSSEText(chunk)
+  })
+
+  return () => {
+    try {
+      requestTask.abort?.()
+    } catch (_) {}
+  }
+}
+
 export async function getLatestPetChatSession(): Promise<PetChatHistoryResponse> {
   const res = await authenticatedRequest('/api/pet/chat/latest', {
     method: 'GET',
@@ -4588,6 +4725,39 @@ export async function getInviteRewardStatus(): Promise<InviteRewardStatusRespons
   } catch (error: any) {
     console.error('获取邀请奖励进度失败:', error)
     throw new Error(error.message || '获取邀请奖励进度失败')
+  }
+}
+
+export async function getMyVouchers(status?: string): Promise<VoucherListResponse> {
+  try {
+    const query = status ? `?status=${encodeURIComponent(status)}` : ''
+    const response = await authenticatedRequest(`/api/vouchers/my${query}`, {
+      method: 'GET',
+    })
+    if (response.statusCode !== 200) {
+      const errorMsg = (response.data as any)?.detail || '获取礼券列表失败'
+      throw new Error(errorMsg)
+    }
+    return (response.data as VoucherListResponse) || { items: [], total: 0 }
+  } catch (error: any) {
+    console.error('获取礼券列表失败:', error)
+    throw new Error(error.message || '获取礼券列表失败')
+  }
+}
+
+export async function useVoucher(voucherId: string): Promise<{ success: boolean }> {
+  try {
+    const response = await authenticatedRequest(`/api/vouchers/${encodeURIComponent(voucherId)}/use`, {
+      method: 'POST',
+    })
+    if (response.statusCode !== 200) {
+      const errorMsg = (response.data as any)?.detail || '使用礼券失败'
+      throw new Error(errorMsg)
+    }
+    return (response.data as { success: boolean }) || { success: true }
+  } catch (error: any) {
+    console.error('使用礼券失败:', error)
+    throw new Error(error.message || '使用礼券失败')
   }
 }
 
@@ -6080,6 +6250,8 @@ function normalizePrivateMessage(raw: any): PrivateMessage {
     content: raw?.content || raw?.Content || '',
     image_url: raw?.image_url || raw?.ImageURL || '',
     content_type: raw?.content_type || raw?.ContentType || 'text',
+    action_text: raw?.action_text || raw?.ActionText || '',
+    extra_data: raw?.extra_data || raw?.ExtraData || undefined,
     is_read: raw?.is_read ?? raw?.IsRead ?? false,
     created_at: raw?.created_at || raw?.CreatedAt || '',
   }
@@ -6104,6 +6276,8 @@ export interface PrivateMessage {
   content: string
   image_url?: string
   content_type: 'text' | 'image' | 'system'
+  action_text?: string
+  extra_data?: Record<string, any>
   is_read: boolean
   created_at: string
 }
@@ -6552,6 +6726,14 @@ export interface PublicFoodLibraryItem {
   author?: { id: string; nickname: string; avatar: string }
   /** 是否为校园食堂菜品 */
   is_campus_food?: boolean
+  /** 学校 ID */
+  school_id?: string | null
+  /** 校区 ID */
+  campus_id?: string | null
+  /** 食堂 ID */
+  canteen_id?: string | null
+  /** 窗口 ID */
+  window_id?: string | null
   /** 学校名称 */
   school_name?: string | null
   /** 校区 */
@@ -6667,6 +6849,10 @@ export interface CreatePublicFoodLibraryRequest {
   type?: PublicFoodLibraryType
   /** 是否为校园食堂菜品 */
   is_campus_food?: boolean
+  school_id?: string
+  campus_id?: string
+  canteen_id?: string
+  window_id?: string
   school_name?: string
   campus_name?: string
   canteen_name?: string
@@ -6693,6 +6879,10 @@ export interface PublicFoodLibraryListParams {
   offset?: number
   type?: PublicFoodLibraryType
   is_campus_food?: boolean
+  school_id?: string
+  campus_id?: string
+  canteen_id?: string
+  window_id?: string
   school_name?: string
   canteen_name?: string
   is_campus_highlight?: boolean
@@ -6728,6 +6918,10 @@ export async function getPublicFoodLibraryList(
   if (params?.offset !== undefined) q.set('offset', String(params.offset))
   if (params?.type) q.set('type', params.type)
   if (params?.is_campus_food !== undefined) q.set('is_campus_food', String(params.is_campus_food))
+  if (params?.school_id) q.set('school_id', params.school_id)
+  if (params?.campus_id) q.set('campus_id', params.campus_id)
+  if (params?.canteen_id) q.set('canteen_id', params.canteen_id)
+  if (params?.window_id) q.set('window_id', params.window_id)
   if (params?.school_name) q.set('school_name', params.school_name)
   if (params?.canteen_name) q.set('canteen_name', params.canteen_name)
   if (params?.is_campus_highlight !== undefined) q.set('is_campus_highlight', String(params.is_campus_highlight))
@@ -7246,6 +7440,56 @@ export interface SchoolItem {
   logo_url?: string
 }
 
+export interface SchoolCampusItem {
+  id: string
+  school_id: string
+  name: string
+  aliases?: string[]
+  address?: string
+  campus_type?: string
+  status?: string
+  sort_order?: number
+}
+
+export interface SchoolCanteenItem {
+  id: string
+  school_id: string
+  campus_id?: string | null
+  campus_name?: string
+  name: string
+  aliases?: string[]
+  location_text?: string
+  building_or_floor?: string
+  service_type?: string
+  audience?: string
+  meal_periods?: string[]
+  opening_hours_raw?: string
+  status?: string
+  sort_order?: number
+}
+
+export interface CanteenWindowItem {
+  id: string
+  school_id: string
+  campus_id?: string | null
+  canteen_id: string
+  name: string
+  aliases?: string[]
+  floor?: string
+  status?: string
+  sort_order?: number
+}
+
+export interface CampusCanteenApplicationRequest {
+  school_id: string
+  campus_id?: string
+  requested_campus_name?: string
+  requested_canteen_name: string
+  location_text?: string
+  evidence_url?: string
+  applicant_note?: string
+}
+
 export async function searchSchools(keyword: string, province?: string, limit = 20): Promise<SchoolItem[]> {
   const q = new URLSearchParams()
   if (keyword) q.set('keyword', keyword)
@@ -7259,6 +7503,70 @@ export async function searchSchools(keyword: string, province?: string, limit = 
     throw new Error((response.data as any)?.message || '搜索学校失败')
   }
   return unwrapResponse<SchoolItem[]>(response) || []
+}
+
+export async function getSchoolCampuses(schoolId: string): Promise<SchoolCampusItem[]> {
+  const response = await authenticatedRequest(`/api/schools/${encodeURIComponent(schoolId)}/campuses`, {
+    method: 'GET',
+    timeout: 10000,
+  })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.message || '获取校区失败')
+  }
+  return unwrapResponse<SchoolCampusItem[]>(response) || []
+}
+
+export async function getSchoolCanteens(
+  schoolId: string,
+  params?: { campus_id?: string }
+): Promise<SchoolCanteenItem[]> {
+  const q = new URLSearchParams()
+  if (params?.campus_id) q.set('campus_id', params.campus_id)
+  const qs = q.toString()
+  const response = await authenticatedRequest(`/api/schools/${encodeURIComponent(schoolId)}/canteens${qs ? `?${qs}` : ''}`, {
+    method: 'GET',
+    timeout: 10000,
+  })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.message || '获取食堂失败')
+  }
+  return unwrapResponse<SchoolCanteenItem[]>(response) || []
+}
+
+export async function getCampusCanteens(campusId: string): Promise<SchoolCanteenItem[]> {
+  const response = await authenticatedRequest(`/api/school-campuses/${encodeURIComponent(campusId)}/canteens`, {
+    method: 'GET',
+    timeout: 10000,
+  })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.message || '获取食堂失败')
+  }
+  return unwrapResponse<SchoolCanteenItem[]>(response) || []
+}
+
+export async function getCanteenWindows(canteenId: string): Promise<CanteenWindowItem[]> {
+  const response = await authenticatedRequest(`/api/school-canteens/${encodeURIComponent(canteenId)}/windows`, {
+    method: 'GET',
+    timeout: 10000,
+  })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.message || '获取窗口失败')
+  }
+  return unwrapResponse<CanteenWindowItem[]>(response) || []
+}
+
+export async function createSchoolCanteenApplication(
+  data: CampusCanteenApplicationRequest
+): Promise<{ id: string; message: string }> {
+  const response = await authenticatedRequest('/api/school-canteen-applications', {
+    method: 'POST',
+    data,
+    timeout: 10000,
+  })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.detail || (response.data as any)?.message || '提交食堂申请失败')
+  }
+  return response.data as { id: string; message: string }
 }
 
 /** 获取有学校的省份列表 */
@@ -7293,15 +7601,27 @@ export async function getUserLocation(): Promise<LocationInfo> {
 
 
 export type FeedbackCategory = 'bug' | 'suggestion' | 'experience' | 'other'
+export type FeedbackSource = 'app' | 'campus_location' | 'campus_food' | 'food_library'
 
 export const FEEDBACK_MAX_IMAGES = 4
 
 export interface SubmitFeedbackRequest {
   category: FeedbackCategory
+  source?: FeedbackSource
   content: string
   contact?: string
   attachRecentRequests?: boolean
   imageUrls?: string[]
+  extra?: Record<string, unknown>
+}
+
+export interface SubmitStructuredFeedbackRequest {
+  source: FeedbackSource
+  content: string
+  contact?: string
+  attachRecentRequests?: boolean
+  imageUrls?: string[]
+  extra?: Record<string, unknown>
 }
 
 export interface SubmitFeedbackResponse {
@@ -7381,6 +7701,7 @@ export async function submitFeedback(input: SubmitFeedbackRequest): Promise<Subm
     method: 'POST',
     data: {
       category: input.category,
+      source: input.source || 'app',
       content,
       contact: input.contact?.trim() || undefined,
       page_path: getCurrentPagePath(),
@@ -7388,6 +7709,7 @@ export async function submitFeedback(input: SubmitFeedbackRequest): Promise<Subm
       client_info: getClientInfo(input.attachRecentRequests !== false),
       recent_requests: input.attachRecentRequests === false ? [] : getRecentRequestTraces(),
       image_urls: imageUrls,
+      extra: input.extra || {},
     },
     timeout: 10000,
   })
@@ -7395,4 +7717,11 @@ export async function submitFeedback(input: SubmitFeedbackRequest): Promise<Subm
     throw new Error((response.data as any)?.message || '提交反馈失败')
   }
   return response.data as SubmitFeedbackResponse
+}
+
+export async function submitStructuredFeedback(input: SubmitStructuredFeedbackRequest): Promise<SubmitFeedbackResponse> {
+  return submitFeedback({
+    category: 'other',
+    ...input,
+  })
 }

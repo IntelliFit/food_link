@@ -35,6 +35,7 @@ type feedbackBotUserFeedbackPayload struct {
 	ExternalID     string                      `json:"external_id"`
 	Title          string                      `json:"title,omitempty"`
 	Category       string                      `json:"category,omitempty"`
+	Source         string                      `json:"source,omitempty"`
 	Content        string                      `json:"content"`
 	Status         string                      `json:"status,omitempty"`
 	UserID         string                      `json:"user_id,omitempty"`
@@ -44,8 +45,8 @@ type feedbackBotUserFeedbackPayload struct {
 	ClientInfo     map[string]any              `json:"client_info,omitempty"`
 	RecentRequests []domain.RecentRequestTrace `json:"recent_requests,omitempty"`
 	ImageURLs      []string                    `json:"image_urls,omitempty"`
+	Extra          map[string]any              `json:"extra,omitempty"`
 	AdminURL       string                      `json:"admin_url,omitempty"`
-	Source         string                      `json:"source,omitempty"`
 	CreatedAt      string                      `json:"created_at,omitempty"`
 	Raw            map[string]any              `json:"raw,omitempty"`
 }
@@ -118,6 +119,7 @@ func (c *FeedbackBotClient) buildPayload(feedback *domain.UserFeedback) feedback
 		ExternalID:     strings.TrimSpace(feedback.ID),
 		Title:          feedbackBotTitle(feedback),
 		Category:       strings.TrimSpace(feedback.Category),
+		Source:         strings.TrimSpace(feedback.Source),
 		Content:        strings.TrimSpace(feedback.Content),
 		Status:         strings.TrimSpace(feedback.Status),
 		UserID:         strings.TrimSpace(feedback.UserID),
@@ -127,8 +129,8 @@ func (c *FeedbackBotClient) buildPayload(feedback *domain.UserFeedback) feedback
 		ClientInfo:     map[string]any(feedback.ClientInfo),
 		RecentRequests: []domain.RecentRequestTrace(feedback.RecentRequests),
 		ImageURLs:      []string(feedback.ImageURLs),
+		Extra:          map[string]any(feedback.Extra),
 		AdminURL:       feedbackBotAdminURL(c.adminBaseURL, feedback.ID),
-		Source:         "food_link",
 		Raw: map[string]any{
 			"submit_trace_id":   strings.TrimSpace(feedback.SubmitTraceID),
 			"submit_request_id": strings.TrimSpace(feedback.SubmitRequestID),
@@ -148,9 +150,9 @@ func feedbackBotTitle(feedback *domain.UserFeedback) string {
 	}
 	content := strings.Join(strings.Fields(feedback.Content), " ")
 	if content != "" {
-		return truncateFeedbackBotTitle(content, 40)
+		return truncateFeedbackBotTitle("["+feedbackSourceLabel(feedback.Source)+"] "+content, 60)
 	}
-	return feedbackCategoryLabel(feedback.Category) + "反馈"
+	return feedbackSourceLabel(feedback.Source) + "反馈"
 }
 
 func truncateFeedbackBotTitle(value string, max int) string {

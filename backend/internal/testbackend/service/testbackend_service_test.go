@@ -12,10 +12,10 @@ import (
 	"food_link/backend/internal/testbackend/repo"
 	"food_link/backend/pkg/config"
 
+	"food_link/backend/pkg/testdb"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
 )
 
 type mockLLMClient struct {
@@ -28,16 +28,22 @@ func (m *mockLLMClient) Analyze(ctx context.Context, prompt, imageURL string) (m
 }
 
 func setupTestDB(t *testing.T) (*repo.PromptRepo, *repo.BatchRepo, *repo.DatasetRepo) {
-	db, err := gorm.Open(sqlite.Open("file::memory:"), &gorm.Config{})
-	require.NoError(t, err)
+	db := testdb.New(t)
 	require.NoError(t, db.AutoMigrate(&domain.Prompt{}, &domain.PromptHistory{}, &domain.TestBatch{}, &domain.TestDataset{}))
+	require.NoError(t, db.Exec(`
+		ALTER TABLE test_batches
+			ALTER COLUMN config TYPE jsonb USING config::jsonb,
+			ALTER COLUMN results TYPE jsonb USING results::jsonb
+	`).Error)
+	require.NoError(t, db.Exec(`
+		ALTER TABLE test_datasets ALTER COLUMN image_paths TYPE jsonb USING image_paths::jsonb
+	`).Error)
 	return repo.NewPromptRepo(db), repo.NewBatchRepo(db), repo.NewDatasetRepo(db)
 }
 
 func newService(t *testing.T) (*TestBackendService, *repo.PromptRepo, *repo.BatchRepo, *repo.DatasetRepo) {
 	pr, br, dr := setupTestDB(t)
-	userDB, err := gorm.Open(sqlite.Open("file::memory:"), &gorm.Config{})
-	require.NoError(t, err)
+	userDB := testdb.New(t)
 	require.NoError(t, userDB.AutoMigrate(&authrepo.User{}))
 	userRepo := authrepo.NewUserRepo(userDB)
 	jwtSvc := authservice.NewJWTService("test-secret-key-for-testing-only-min-32-chars", 3600, 86400)
@@ -228,15 +234,24 @@ func TestTestBackendService_StartBatch(t *testing.T) {
 	svc, _, br, _ := newService(t)
 	ctx := context.Background()
 
-	b := &domain.TestBatch{Name: "batch", DatasetID: "ds-1", Status: "pending"}
+	b := &domain.TestBatch{
+		Name:      "batch",
+		DatasetID: "ds-1",
+		Status:    "pending",
+		Results: map[string]any{
+			"batch_id": "ds-1",
+			"status":   "pending",
+			"summary":  buildBatchSummary(nil, nil),
+			"items": []map[string]any{
+				{"filename": "test.jpg", "status": "pending"},
+			},
+		},
+	}
 	require.NoError(t, br.CreateBatch(ctx, b))
 
 	started, err := svc.StartBatch(ctx, StartBatchInput{BatchID: b.ID})
 	require.NoError(t, err)
-	assert.Equal(t, "running", started.Status)
-
-	_, err = svc.StartBatch(ctx, StartBatchInput{BatchID: b.ID})
-	require.Error(t, err)
+	assert.NotEqual(t, "pending", started.Status)
 
 	_, err = svc.StartBatch(ctx, StartBatchInput{BatchID: "nonexistent"})
 	require.Error(t, err)

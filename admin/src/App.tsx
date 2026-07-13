@@ -18,9 +18,13 @@ import { ExerciseEnergyPage } from '@/pages/exercise-energy-page'
 import { LoginPage } from '@/pages/login-page'
 import { OverviewPage } from '@/pages/overview-page'
 import { PackagedFoodsPage } from '@/pages/packaged-foods-page'
+import { PackagedFoodTestPage } from '@/pages/packaged-food-test-page'
+import { PackagedFoodTestRunsPage } from '@/pages/packaged-food-test-runs-page'
 import { FoodNutritionPage } from '@/pages/food-nutrition-page'
 import { PublicFoodLibraryPage } from '@/pages/public-food-library-page'
+import { CampusDirectoryPage } from '@/pages/campus-directory-page'
 import { PaymentTestPage } from '@/pages/payment-test-page'
+import { UserRewardPage } from '@/pages/user-reward-page'
 import type { AdminMenuId } from '@/components/admin-sidebar'
 
 const MENU_PATHS: Record<AdminMenuId, string> = {
@@ -28,11 +32,14 @@ const MENU_PATHS: Record<AdminMenuId, string> = {
   feedback: '/feedback',
   benchmark: '/benchmark',
   'packaged-foods': '/packaged-foods',
+  'packaged-food-test': '/packaged-food-test',
   'food-nutrition': '/food-nutrition',
   'public-food-library': '/public-food-library',
+  'campus-directory': '/campus-directory',
   'exercise-energy': '/exercise-energy',
   'feed-reports': '/feed-reports',
   'payment-test': '/payment-test',
+  'user-rewards': '/user-rewards',
   settings: '/settings',
 }
 
@@ -126,9 +133,13 @@ export function App() {
         <Route path='/feed-reports' element={<FeedReportPage {...pageProps} />} />
         <Route path='/feed-reports/:reportId' element={<FeedReportDetailPage {...pageProps} />} />
         <Route path='/packaged-foods' element={<PackagedFoodsPage {...pageProps} />} />
+        <Route path='/packaged-food-test' element={<PackagedFoodTestPage {...pageProps} />} />
+        <Route path='/packaged-food-test/runs/:foodId' element={<PackagedFoodTestRunsPage {...pageProps} />} />
         <Route path='/food-nutrition' element={<FoodNutritionPage {...pageProps} />} />
         <Route path='/public-food-library' element={<PublicFoodLibraryPage {...pageProps} />} />
+        <Route path='/campus-directory' element={<CampusDirectoryPage {...pageProps} />} />
         <Route path='/payment-test' element={<PaymentTestPage {...pageProps} />} />
+        <Route path='/user-rewards' element={<UserRewardPage {...pageProps} />} />
         <Route path='*' element={<Navigate to='/overview' replace />} />
       </Routes>
       <Toaster richColors closeButton position='bottom-right' />

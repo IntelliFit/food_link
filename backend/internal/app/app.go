@@ -14,6 +14,9 @@ import (
 	adminhandler "food_link/backend/internal/admin/handler"
 	adminrepo "food_link/backend/internal/admin/repo"
 	adminservice "food_link/backend/internal/admin/service"
+	adminvoucherrewardhandler "food_link/backend/internal/admin/voucher_reward/handler"
+	adminvoucherrewardrepo "food_link/backend/internal/admin/voucher_reward/repo"
+	adminvoucherrewardservice "food_link/backend/internal/admin/voucher_reward/service"
 	analyzehandler "food_link/backend/internal/analyze/handler"
 	analyzerepo "food_link/backend/internal/analyze/repo"
 	analyzeservice "food_link/backend/internal/analyze/service"
@@ -77,6 +80,9 @@ import (
 	userrepo "food_link/backend/internal/user/repo"
 	userservice "food_link/backend/internal/user/service"
 	utilityhandler "food_link/backend/internal/utility/handler"
+	voucherhandler "food_link/backend/internal/voucher/handler"
+	voucherrepo "food_link/backend/internal/voucher/repo"
+	voucherservice "food_link/backend/internal/voucher/service"
 	utilityrepo "food_link/backend/internal/utility/repo"
 	utilityservice "food_link/backend/internal/utility/service"
 	workerpkg "food_link/backend/internal/worker"
@@ -261,6 +267,14 @@ func New(cfg *config.Config) (*App, error) {
 	frSvc.ConfigureInviteRewardActivator(membershipSvc)
 	frNutritionSvc.ConfigureRewardAwarder(membershipSvc)
 	membershipHandler := membershiphandler.NewMembershipHandler(membershipSvc)
+
+	// Voucher module DI
+	voucherRepo := voucherrepo.NewVoucherRepo(db)
+	voucherSvc := voucherservice.NewVoucherService(voucherRepo, membershipRepo, userRepo)
+	voucherSvc.ConfigureMessageSender(messageSvc)
+	voucherHandler := voucherhandler.NewVoucherHandler(voucherSvc)
+	loginSvc.ConfigureVoucherService(voucherSvc)
+	membershipSvc.ConfigureVoucherService(voucherSvc)
 
 	// Pet companion module DI
 	petRepo := petrepo.NewPetRepo(db)
@@ -521,6 +535,11 @@ func New(cfg *config.Config) (*App, error) {
 	engine.POST("/api/payment/wechat/papay/contract/terminate-notify", membershipHandler.PapayContractTerminateNotify)
 	engine.POST("/api/membership/rewards/share-poster/claim", authmw.RequireJWT(jwtSvc), membershipHandler.ClaimSharePosterReward)
 
+	// Voucher routes
+	engine.GET("/api/vouchers/my", authmw.RequireJWT(jwtSvc), voucherHandler.ListMyVouchers)
+	engine.GET("/api/vouchers/:voucher_id", authmw.RequireJWT(jwtSvc), voucherHandler.GetVoucherDetail)
+	engine.POST("/api/vouchers/:voucher_id/use", authmw.RequireJWT(jwtSvc), voucherHandler.UseVoucher)
+
 	// Pet companion routes
 	engine.GET("/api/pet/summary", authmw.RequireJWT(jwtSvc), petHandler.Summary)
 	engine.GET("/api/pet/chat/latest", authmw.RequireJWT(jwtSvc), petHandler.LatestChat)
@@ -528,6 +547,7 @@ func New(cfg *config.Config) (*App, error) {
 	engine.GET("/api/pet/chat/sessions/:session_id", authmw.RequireJWT(jwtSvc), petHandler.ChatSession)
 	engine.POST("/api/pet/chat/estimate", authmw.RequireJWT(jwtSvc), petHandler.EstimateChat)
 	engine.POST("/api/pet/chat", authmw.RequireJWT(jwtSvc), petHandler.Chat)
+	engine.POST("/api/pet/chat/stream", authmw.RequireJWT(jwtSvc), petHandler.ChatStream)
 	engine.POST("/api/pet/chat/messages", authmw.RequireJWT(jwtSvc), petHandler.AppendChatMessages)
 	engine.POST("/api/pet/events/:event_id/claim", authmw.RequireJWT(jwtSvc), petHandler.ClaimEvent)
 	engine.POST("/api/pet/select-appearance", authmw.RequireJWT(jwtSvc), petHandler.SelectAppearance)
@@ -584,6 +604,11 @@ func New(cfg *config.Config) (*App, error) {
 	engine.POST("/api/manual-food/custom", authmw.RequireJWT(jwtSvc), utilityHandler.ManualFoodCustomSave)
 	engine.GET("/api/schools", authmw.RequireJWT(jwtSvc), schoolHandler.Search)
 	engine.GET("/api/schools/provinces", authmw.RequireJWT(jwtSvc), schoolHandler.Provinces)
+	engine.GET("/api/schools/:school_id/campuses", authmw.RequireJWT(jwtSvc), schoolHandler.Campuses)
+	engine.GET("/api/schools/:school_id/canteens", authmw.RequireJWT(jwtSvc), schoolHandler.Canteens)
+	engine.GET("/api/school-campuses/:campus_id/canteens", authmw.RequireJWT(jwtSvc), schoolHandler.CampusCanteens)
+	engine.GET("/api/school-canteens/:canteen_id/windows", authmw.RequireJWT(jwtSvc), schoolHandler.CanteenWindows)
+	engine.POST("/api/school-canteen-applications", authmw.RequireJWT(jwtSvc), schoolHandler.CreateCanteenApplication)
 	engine.GET("/api/location", authmw.RequireJWT(jwtSvc), locationhandler.GetLocation)
 
 	// TestBackend routes
@@ -610,7 +635,8 @@ func New(cfg *config.Config) (*App, error) {
 
 	// Admin routes
 	adminPackagedFoodRepo := adminrepo.NewPackagedFoodRepo(db)
-	adminPackagedFoodSvc := adminservice.NewPackagedFoodService(adminPackagedFoodRepo, storageClient)
+	adminPackagedFoodTestRunRepo := adminrepo.NewPackagedFoodTestRunRepo(db)
+	adminPackagedFoodSvc := adminservice.NewPackagedFoodService(adminPackagedFoodRepo, adminPackagedFoodTestRunRepo, storageClient, frNutritionSvc)
 	adminPackagedFoodHandler := adminhandler.NewPackagedFoodHandler(adminPackagedFoodSvc)
 	adminFoodNutritionRepo := adminrepo.NewFoodNutritionRepo(db)
 	adminFoodNutritionSvc := adminservice.NewFoodNutritionService(adminFoodNutritionRepo, storageClient)
@@ -633,8 +659,12 @@ func New(cfg *config.Config) (*App, error) {
 	adminPaymentTestRepo := adminrepo.NewPaymentTestRepo(db)
 	adminPaymentTestSvc := adminservice.NewPaymentTestService(adminPaymentTestRepo)
 	adminPaymentTestHandler := adminhandler.NewPaymentTestHandler(adminPaymentTestSvc)
+	adminVoucherRewardRepo := adminvoucherrewardrepo.NewVoucherRewardRepo(db)
+	adminVoucherRewardSvc := adminvoucherrewardservice.NewVoucherRewardService(adminVoucherRewardRepo, voucherSvc)
+	adminVoucherRewardHandler := adminvoucherrewardhandler.NewVoucherRewardHandler(adminVoucherRewardSvc)
 	adminAuthSvc := adminservice.NewAuthService(adminAccountRepo)
 	adminAuthHandler := adminhandler.NewAuthHandler(adminAuthSvc)
+	adminCampusDirectoryHandler := adminhandler.NewCampusDirectoryHandler(db)
 	adminAuth := adminAuthHandler.AdminAuth()
 	adminAPI := engine.Group("/api/admin", adminCORS(os.Getenv("ADMIN_CORS_ALLOWED_ORIGINS")))
 	adminAPI.POST("/login", adminAuthHandler.Login)
@@ -642,6 +672,9 @@ func New(cfg *config.Config) (*App, error) {
 	adminAPI.GET("/session", adminAuthHandler.Session)
 	adminAPI.GET("/packaged-foods", adminAuth, adminPackagedFoodHandler.List)
 	adminAPI.GET("/packaged-foods/:food_id", adminAuth, adminPackagedFoodHandler.Get)
+	adminAPI.POST("/packaged-foods/:food_id/test-extract", adminAuth, adminPackagedFoodHandler.TestExtract)
+	adminAPI.GET("/packaged-foods/:food_id/test-runs", adminAuth, adminPackagedFoodHandler.ListTestRuns)
+	adminAPI.GET("/packaged-food-test-runs/:run_id", adminAuth, adminPackagedFoodHandler.GetTestRun)
 	adminAPI.POST("/packaged-foods", adminAuth, adminPackagedFoodHandler.Create)
 	adminAPI.PATCH("/packaged-foods/:food_id", adminAuth, adminPackagedFoodHandler.Update)
 	adminAPI.DELETE("/packaged-foods/:food_id", adminAuth, adminPackagedFoodHandler.Delete)
@@ -655,6 +688,32 @@ func New(cfg *config.Config) (*App, error) {
 	adminAPI.POST("/public-food-library", adminAuth, adminPublicFoodHandler.Create)
 	adminAPI.PATCH("/public-food-library/:item_id", adminAuth, adminPublicFoodHandler.Update)
 	adminAPI.DELETE("/public-food-library/:item_id", adminAuth, adminPublicFoodHandler.Delete)
+	adminAPI.GET("/campus-directory/schools", adminAuth, adminCampusDirectoryHandler.ListSchools)
+	adminAPI.POST("/campus-directory/schools", adminAuth, adminCampusDirectoryHandler.CreateSchool)
+	adminAPI.PATCH("/campus-directory/schools/:school_id", adminAuth, adminCampusDirectoryHandler.UpdateSchool)
+	adminAPI.GET("/campus-directory/campuses", adminAuth, adminCampusDirectoryHandler.ListCampuses)
+	adminAPI.POST("/campus-directory/campuses", adminAuth, adminCampusDirectoryHandler.CreateCampus)
+	adminAPI.PATCH("/campus-directory/campuses/:campus_id", adminAuth, adminCampusDirectoryHandler.UpdateCampus)
+	adminAPI.DELETE("/campus-directory/campuses/:campus_id", adminAuth, adminCampusDirectoryHandler.DeleteCampus)
+	adminAPI.GET("/campus-directory/canteens", adminAuth, adminCampusDirectoryHandler.ListCanteens)
+	adminAPI.POST("/campus-directory/canteens", adminAuth, adminCampusDirectoryHandler.CreateCanteen)
+	adminAPI.PATCH("/campus-directory/canteens/:canteen_id", adminAuth, adminCampusDirectoryHandler.UpdateCanteen)
+	adminAPI.POST("/campus-directory/canteens/:canteen_id/review", adminAuth, adminCampusDirectoryHandler.ReviewCanteenDraft)
+	adminAPI.POST("/campus-directory/canteens/:canteen_id/merge", adminAuth, adminCampusDirectoryHandler.MergeCanteen)
+	adminAPI.DELETE("/campus-directory/canteens/:canteen_id", adminAuth, adminCampusDirectoryHandler.DeleteCanteen)
+	adminAPI.GET("/campus-directory/drafts", adminAuth, adminCampusDirectoryHandler.ListCanteenDrafts)
+	adminAPI.GET("/campus-directory/windows", adminAuth, adminCampusDirectoryHandler.ListWindows)
+	adminAPI.POST("/campus-directory/windows", adminAuth, adminCampusDirectoryHandler.CreateWindow)
+	adminAPI.PATCH("/campus-directory/windows/:window_id", adminAuth, adminCampusDirectoryHandler.UpdateWindow)
+	adminAPI.DELETE("/campus-directory/windows/:window_id", adminAuth, adminCampusDirectoryHandler.DeleteWindow)
+	adminAPI.GET("/campus-directory/applications", adminAuth, adminCampusDirectoryHandler.ListApplications)
+	adminAPI.PATCH("/campus-directory/applications/:application_id", adminAuth, adminCampusDirectoryHandler.UpdateApplication)
+	adminAPI.GET("/campus-directory/import-batches", adminAuth, adminCampusDirectoryHandler.ListImportBatches)
+	adminAPI.POST("/campus-directory/import-batches", adminAuth, adminCampusDirectoryHandler.CreateImportBatch)
+	adminAPI.PATCH("/campus-directory/import-batches/:batch_id", adminAuth, adminCampusDirectoryHandler.UpdateImportBatch)
+	adminAPI.GET("/campus-directory/imports", adminAuth, adminCampusDirectoryHandler.ListImports)
+	adminAPI.POST("/campus-directory/imports", adminAuth, adminCampusDirectoryHandler.CreateImport)
+	adminAPI.PATCH("/campus-directory/imports/:import_id", adminAuth, adminCampusDirectoryHandler.UpdateImport)
 	adminAPI.GET("/exercise-energy-library", adminAuth, adminExerciseEnergyHandler.List)
 	adminAPI.GET("/exercise-energy-library/:activity_id", adminAuth, adminExerciseEnergyHandler.Get)
 	adminAPI.PATCH("/exercise-energy-library/:activity_id", adminAuth, adminExerciseEnergyHandler.Update)
@@ -686,6 +745,11 @@ func New(cfg *config.Config) (*App, error) {
 	adminAPI.POST("/payment-test/users/:user_id/cancel-membership", adminAuth, adminPaymentTestHandler.CancelUserMembership)
 	adminAPI.POST("/payment-test/users/:user_id/restore-membership", adminAuth, adminPaymentTestHandler.RestoreUserMembership)
 	adminAPI.DELETE("/payment-test/users/:user_id", adminAuth, adminPaymentTestHandler.RemoveUser)
+
+	// Admin voucher reward routes
+	adminAPI.GET("/users/search", adminAuth, adminVoucherRewardHandler.SearchUsers)
+	adminAPI.GET("/users/:user_id/summary", adminAuth, adminVoucherRewardHandler.GetUserSummary)
+	adminAPI.POST("/users/:user_id/voucher-rewards/points", adminAuth, adminVoucherRewardHandler.IssuePointsVoucher)
 
 	routeMapPath := filepath.Join(".", "docs", "backend-api-prd", "ROUTE_MAP.md")
 	if _, err := os.Stat(routeMapPath); err == nil {

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -418,6 +419,31 @@ func TestStatsService_RequestNutritionInsightRetriesTransientUpstreamFailure(t *
 	require.NoError(t, err)
 	assert.Equal(t, 2, requestCount)
 	assert.Equal(t, "我们先从明天的一份蛋白质加餐开始。", result.Content)
+}
+
+func TestStatsService_StreamNutritionInsightRetriesTransientUpstreamFailure(t *testing.T) {
+	requestCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCount++
+		if requestCount == 1 {
+			http.Error(w, `{"error":{"message":"gateway temporarily unavailable"}}`, http.StatusServiceUnavailable)
+			return
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("data: {\"choices\":[{\"delta\":{\"content\":\"先补足蛋白质\"},\"finish_reason\":\"\"}]}\n\ndata: [DONE]\n\n"))
+	}))
+	defer server.Close()
+
+	svc := NewStatsService(&mockStatsRepo{}, &mockBodyMetricsProvider{})
+	textChan, err := svc.streamNutritionInsight(context.Background(), server.URL, "test-key", "deepseek-v4-pro", "test prompt")
+	require.NoError(t, err)
+
+	var content strings.Builder
+	for chunk := range textChan {
+		content.WriteString(chunk)
+	}
+	assert.Equal(t, 2, requestCount)
+	assert.Equal(t, "先补足蛋白质", content.String())
 }
 
 func TestStatsService_GenerateDietRecommendationUsesConfiguredDeepSeekBaseURL(t *testing.T) {

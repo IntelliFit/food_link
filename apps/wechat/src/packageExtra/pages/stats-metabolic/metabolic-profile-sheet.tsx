@@ -11,6 +11,7 @@ import {
   updateHealthProfile,
   type UserInfo,
 } from '../../../utils/api'
+import { formatBodyMetric } from '../../../utils/number-format'
 import './metabolic-profile-sheet.scss'
 
 const LOCAL_STORAGE_KEY = 'food_link_metabolic_min_profile_v1'
@@ -146,8 +147,8 @@ export function MetabolicProfileSheet({
     const w = u?.weight && u.weight > 0 ? u.weight : local?.weight
     const g = u?.gender && String(u.gender).trim() ? u.gender : local?.gender
     const b = u?.birthday && String(u.birthday).trim() ? u.birthday : local?.birthday
-    setHeightStr(h != null ? String(h) : '')
-    setWeightStr(w != null ? String(w) : '')
+    setHeightStr(h != null ? formatBodyMetric(h) : '')
+    setWeightStr(w != null ? formatBodyMetric(w) : '')
     setBirthdayStr(b || '1995-01-01')
     setGender(g === 'female' || g === '女' ? 'female' : g === 'male' || g === '男' ? 'male' : '')
   }, [open, initialUser])

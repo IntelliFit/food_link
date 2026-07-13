@@ -13,10 +13,10 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	gormsqlite "gorm.io/driver/sqlite"
-	"gorm.io/gorm"
 
-	_ "modernc.org/sqlite"
+	"food_link/backend/pkg/testdb"
+
+	"gorm.io/gorm"
 )
 
 type testSchoolDO struct {
@@ -29,17 +29,13 @@ type testSchoolDO struct {
 	Is211     *bool      `gorm:"column:is_211;type:boolean;default:false"`
 	LogoURL   *string    `gorm:"column:logo_url;type:text"`
 	Status    string     `gorm:"column:status;type:text;not null;default:'active'"`
-	CreatedAt *time.Time `gorm:"column:created_at;type:datetime;default:current_timestamp"`
+	CreatedAt *time.Time `gorm:"column:created_at;type:timestamptz;default:current_timestamp"`
 }
 
 func (testSchoolDO) TableName() string { return "schools" }
 
 func setupSchoolTestDB(t *testing.T) *gorm.DB {
-	db, err := gorm.Open(gormsqlite.New(gormsqlite.Config{
-		DriverName: "sqlite",
-		DSN:        ":memory:",
-	}), &gorm.Config{})
-	require.NoError(t, err)
+	db := testdb.New(t)
 	require.NoError(t, db.AutoMigrate(&testSchoolDO{}))
 
 	now := time.Now()

@@ -41,6 +41,10 @@ type PublicFoodItem struct {
 	UpdatedAt          *time.Time       `gorm:"column:updated_at" json:"updated_at"`
 	// Campus canteen fields
 	IsCampusFood       bool       `gorm:"column:is_campus_food" json:"is_campus_food"`
+	SchoolID           *string    `gorm:"column:school_id" json:"school_id,omitempty"`
+	CampusID           *string    `gorm:"column:campus_id" json:"campus_id,omitempty"`
+	CanteenID          *string    `gorm:"column:canteen_id" json:"canteen_id,omitempty"`
+	WindowID           *string    `gorm:"column:window_id" json:"window_id,omitempty"`
 	SchoolName         string     `gorm:"column:school_name" json:"school_name,omitempty"`
 	CampusName         string     `gorm:"column:campus_name" json:"campus_name,omitempty"`
 	CanteenName        string     `gorm:"column:canteen_name" json:"canteen_name,omitempty"`

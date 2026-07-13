@@ -6,18 +6,16 @@ import (
 
 	"food_link/backend/internal/friend/domain"
 
+	"food_link/backend/pkg/testdb"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
 func setupTestDB(t *testing.T) *gorm.DB {
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("open sqlite: %v", err)
-	}
-	if err := db.AutoMigrate(&domain.FriendRequest{}, &domain.UserFriend{}, &User{}); err != nil {
+	db := testdb.New(t)
+	if err := db.AutoMigrate(&domain.FriendRequest{}, &domain.UserFriend{}, &domain.UserBlock{}, &User{}); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
 	return db

@@ -5,15 +5,16 @@ import (
 	"testing"
 
 	"food_link/backend/internal/community/domain"
+	frienddomain "food_link/backend/internal/friend/domain"
+	"food_link/backend/pkg/testdb"
+
 	"github.com/stretchr/testify/assert"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
 func setupNotificationTestDB(t *testing.T) *gorm.DB {
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	assert.NoError(t, err)
-	assert.NoError(t, db.AutoMigrate(&domain.FeedInteractionNotification{}, &domain.CommentTask{}))
+	db := testdb.New(t)
+	assert.NoError(t, db.AutoMigrate(&domain.FeedInteractionNotification{}, &domain.CommentTask{}, &frienddomain.UserBlock{}))
 	return db
 }
 
@@ -32,7 +33,7 @@ func TestNotificationRepoCreateAndList(t *testing.T) {
 	assert.NoError(t, r.CreateNotification(ctx, n))
 	assert.NotEmpty(t, n.ID)
 
-	notifications, err := r.ListNotifications(ctx, "u1", 10)
+	notifications, err := r.ListNotifications(ctx, "u1", "", 10, 0)
 	assert.NoError(t, err)
 	assert.Len(t, notifications, 1)
 	assert.Equal(t, "like_received", notifications[0].NotificationType)

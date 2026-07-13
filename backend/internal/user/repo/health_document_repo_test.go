@@ -7,22 +7,22 @@ import (
 
 	"food_link/backend/internal/user/domain"
 
+	"food_link/backend/pkg/testdb"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
 func setupHealthDocumentTestDB(t *testing.T) *gorm.DB {
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
+	db := testdb.New(t)
 	db.Exec(`CREATE TABLE user_health_documents (
 		id TEXT PRIMARY KEY,
 		user_id TEXT,
 		document_type TEXT,
 		image_url TEXT,
 		extracted_content TEXT,
-		create_time TIMESTAMP
+		created_at TIMESTAMP
 	)`)
 	return db
 }

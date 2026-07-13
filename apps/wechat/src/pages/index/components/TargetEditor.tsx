@@ -1,6 +1,7 @@
 import { View, Text, Input } from '@tarojs/components'
 import { Button } from '@taroify/core'
 import { type TargetEditorProps } from '../types'
+import { formatMacroNutrient, formatMicroNutrient } from '../../../utils/number-format'
 
 type MicroTargetKey =
   | 'fiberTarget'
@@ -67,9 +68,10 @@ export function TargetEditor({
 }: TargetEditorProps) {
   if (!visible) return null
 
-  const formatAdjustedValue = (value: number) => {
-    const rounded = Math.max(0, Math.round((value + Number.EPSILON) * 10) / 10)
-    return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1)
+  const formatTargetValue = (key: keyof typeof targetForm, value: number) => {
+    const macroKeys = new Set(['calorieTarget', 'proteinTarget', 'carbsTarget', 'fatTarget'])
+    if (macroKeys.has(key)) return formatMacroNutrient(Math.max(0, value))
+    return formatMicroNutrient(Math.max(0, value))
   }
 
   const handleFormChange = (key: keyof typeof targetForm, value: string) => {
@@ -90,7 +92,7 @@ export function TargetEditor({
     const currentValue = parseFloat(targetForm[key]) || 0
     const step = getStep(key)
     const newValue = Math.max(0, currentValue + delta * step)
-    handleFormChange(key, formatAdjustedValue(newValue))
+    handleFormChange(key, formatTargetValue(key, newValue))
   }
 
   const renderMacroItem = (

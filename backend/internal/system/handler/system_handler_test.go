@@ -4,10 +4,13 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func setupSystemRouter(h *Handler) *gin.Engine {
@@ -78,20 +81,32 @@ func TestSystemHandler_MapPicker(t *testing.T) {
 	assert.Equal(t, "text/html; charset=utf-8", w.Header().Get("Content-Type"))
 }
 
+func chdirToBackendRoot(t *testing.T) {
+	t.Helper()
+	wd, err := os.Getwd()
+	require.NoError(t, err)
+	root := filepath.Join(wd, "..", "..", "..")
+	require.NoError(t, os.Chdir(root))
+	t.Cleanup(func() { _ = os.Chdir(wd) })
+}
+
 func TestSystemHandler_TestBackendPage(t *testing.T) {
+	chdirToBackendRoot(t)
 	h := New(nil)
 	r := setupSystemRouter(h)
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest(http.MethodGet, "/test-backend", nil)
+	req.AddCookie(&http.Cookie{Name: "test_backend_token", Value: "token"})
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
-	assert.Contains(t, w.Body.String(), "test-backend")
+	assert.Contains(t, w.Body.String(), "测试后台")
 	assert.Equal(t, "text/html; charset=utf-8", w.Header().Get("Content-Type"))
 }
 
 func TestSystemHandler_TestBackendLoginPage(t *testing.T) {
+	chdirToBackendRoot(t)
 	h := New(nil)
 	r := setupSystemRouter(h)
 
@@ -100,6 +115,6 @@ func TestSystemHandler_TestBackendLoginPage(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
-	assert.Contains(t, w.Body.String(), "test-backend login")
+	assert.Contains(t, w.Body.String(), "测试后台登录")
 	assert.Equal(t, "text/html; charset=utf-8", w.Header().Get("Content-Type"))
 }

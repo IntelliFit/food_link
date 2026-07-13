@@ -2,9 +2,11 @@ import type { ComponentType } from 'react'
 import {
   Activity,
   Apple,
+  Building2,
   CreditCard,
   Flag,
   FlaskConical,
+  Gift,
   LayoutDashboard,
   LogOut,
   MessageSquareText,
@@ -18,7 +20,7 @@ import { cn } from '@/lib/utils'
 import { BrandMark } from '@/components/brand-mark'
 import { ThemeToggle } from '@/components/theme-toggle'
 
-export type AdminMenuId = 'overview' | 'feedback' | 'benchmark' | 'packaged-foods' | 'food-nutrition' | 'public-food-library' | 'exercise-energy' | 'feed-reports' | 'payment-test' | 'settings'
+export type AdminMenuId = 'overview' | 'feedback' | 'benchmark' | 'packaged-foods' | 'packaged-food-test' | 'food-nutrition' | 'public-food-library' | 'campus-directory' | 'exercise-energy' | 'feed-reports' | 'payment-test' | 'user-rewards' | 'settings'
 
 type AdminSidebarProps = {
   activeMenu: AdminMenuId
@@ -44,10 +46,11 @@ const menuGroups: Array<{
     ],
   },
   {
-    label: '用户声音',
+    label: '用户管理',
     items: [
       { id: 'feedback', label: '意见反馈', icon: MessageSquareText },
       { id: 'feed-reports', label: '举报管理', icon: Flag },
+      { id: 'user-rewards', label: '用户奖励', icon: Gift },
     ],
   },
   {
@@ -56,6 +59,7 @@ const menuGroups: Array<{
       { id: 'packaged-foods', label: '包装食品', icon: Package },
       { id: 'food-nutrition', label: '营养食物', icon: Apple },
       { id: 'public-food-library', label: '公共食物', icon: Utensils },
+      { id: 'campus-directory', label: '校园食堂', icon: Building2 },
       { id: 'exercise-energy', label: '运动库', icon: Activity },
     ],
   },
@@ -63,6 +67,7 @@ const menuGroups: Array<{
     label: '实验工具',
     items: [
       { id: 'benchmark', label: '数据集评测', icon: FlaskConical },
+      { id: 'packaged-food-test', label: '包装食品测试', icon: Package },
       { id: 'payment-test', label: '支付测试', icon: CreditCard },
     ],
   },

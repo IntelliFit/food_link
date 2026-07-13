@@ -2,12 +2,14 @@ package repo
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	commonerrors "food_link/backend/internal/common/errors"
 	"food_link/backend/internal/message/domain"
 
 	"github.com/google/uuid"
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
@@ -48,6 +50,8 @@ func (r *MessageRepo) CreateMessage(ctx context.Context, msg *domain.PrivateMess
 		Content:     msg.Content,
 		ImageURL:    msg.ImageURL,
 		ContentType: msg.ContentType,
+		ActionText:  strPtrIfNonEmpty(msg.ActionText),
+		ExtraData:   datatypes.JSONMap(msg.ExtraData),
 		IsRead:      false,
 		CreatedAt:   &now,
 	}
@@ -254,16 +258,18 @@ func (r *MessageRepo) CreateReport(ctx context.Context, report *domain.PrivateMe
 // --- internal DO ---
 
 type privateMessageDO struct {
-	ID              string     `gorm:"column:id"`
-	SenderID        string     `gorm:"column:sender_id"`
-	ReceiverID      string     `gorm:"column:receiver_id"`
-	Content         string     `gorm:"column:content"`
-	ImageURL        string     `gorm:"column:image_url"`
-	ContentType     string     `gorm:"column:content_type"`
-	IsRead          bool       `gorm:"column:is_read"`
-	CreatedAt       *time.Time `gorm:"column:created_at"`
-	DeletedAt       *time.Time `gorm:"column:deleted_at"`
-	DeletedByUserID *string    `gorm:"column:deleted_by_user_id"`
+	ID              string            `gorm:"column:id"`
+	SenderID        string            `gorm:"column:sender_id"`
+	ReceiverID      string            `gorm:"column:receiver_id"`
+	Content         string            `gorm:"column:content"`
+	ImageURL        string            `gorm:"column:image_url"`
+	ContentType     string            `gorm:"column:content_type"`
+	ActionText      *string           `gorm:"column:action_text"`
+	ExtraData       datatypes.JSONMap `gorm:"column:extra_data"`
+	IsRead          bool              `gorm:"column:is_read"`
+	CreatedAt       *time.Time        `gorm:"column:created_at"`
+	DeletedAt       *time.Time        `gorm:"column:deleted_at"`
+	DeletedByUserID *string           `gorm:"column:deleted_by_user_id"`
 }
 
 func (privateMessageDO) TableName() string { return "private_messages" }
@@ -303,6 +309,12 @@ func toDomain(r privateMessageDO) domain.PrivateMessage {
 		IsRead:      r.IsRead,
 		DeletedAt:   r.DeletedAt,
 	}
+	if r.ActionText != nil {
+		m.ActionText = *r.ActionText
+	}
+	if r.ExtraData != nil {
+		m.ExtraData = map[string]any(r.ExtraData)
+	}
 	if r.DeletedByUserID != nil {
 		m.DeletedByUserID = *r.DeletedByUserID
 	}
@@ -310,6 +322,13 @@ func toDomain(r privateMessageDO) domain.PrivateMessage {
 		m.CreatedAt = *r.CreatedAt
 	}
 	return m
+}
+
+func strPtrIfNonEmpty(s string) *string {
+	if strings.TrimSpace(s) == "" {
+		return nil
+	}
+	return &s
 }
 
 func toReportDomain(r privateMessageReportDO) domain.PrivateMessageReport {

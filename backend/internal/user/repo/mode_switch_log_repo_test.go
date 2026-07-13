@@ -7,15 +7,15 @@ import (
 
 	"food_link/backend/internal/user/domain"
 
+	"food_link/backend/pkg/testdb"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
 func setupModeSwitchLogTestDB(t *testing.T) *gorm.DB {
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
+	db := testdb.New(t)
 	db.Exec(`CREATE TABLE user_mode_switch_logs (
 		id TEXT PRIMARY KEY,
 		user_id TEXT,
@@ -23,7 +23,7 @@ func setupModeSwitchLogTestDB(t *testing.T) *gorm.DB {
 		to_mode TEXT,
 		changed_by TEXT,
 		reason_code TEXT,
-		create_time TIMESTAMP
+		created_at TIMESTAMP
 	)`)
 	return db
 }
