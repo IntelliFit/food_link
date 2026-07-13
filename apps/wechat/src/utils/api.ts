@@ -4221,9 +4221,10 @@ export function clearAllStorage() {
 /** 登录页路径，token 失效时统一跳转 */
 const LOGIN_PAGE_URL = extraPkgUrl('/pages/login/index')
 
-export async function deleteAccount(): Promise<{ success: boolean }> {
+export async function deleteAccount(confirmation: string): Promise<{ success: boolean }> {
   const response = await authenticatedRequest('/api/user/account', {
     method: 'DELETE',
+    data: { confirmation },
     timeout: 15000,
   })
   if (response.statusCode !== 200) {

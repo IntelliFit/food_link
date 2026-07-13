@@ -1390,3 +1390,80 @@
     background: #2a3330;
   }
 }
+
+.profile-delete-dialog-mask {
+  position: fixed;
+  z-index: 200;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48rpx;
+  background: rgba(15, 23, 42, 0.52);
+  box-sizing: border-box;
+}
+
+.profile-delete-dialog {
+  width: 100%;
+  padding: 40rpx 32rpx 32rpx;
+  border-radius: 24rpx;
+  background: #ffffff;
+  box-shadow: 0 20rpx 60rpx rgba(15, 23, 42, 0.22);
+}
+
+.profile-delete-dialog-title {
+  display: block;
+  color: #172b24;
+  font-size: 36rpx;
+  font-weight: 700;
+  text-align: center;
+}
+
+.profile-delete-dialog-description {
+  display: block;
+  margin-top: 20rpx;
+  color: #64748b;
+  font-size: 26rpx;
+  line-height: 1.6;
+}
+
+.profile-delete-dialog-label {
+  display: block;
+  margin-top: 28rpx;
+  color: #334155;
+  font-size: 26rpx;
+  font-weight: 600;
+}
+
+.profile-delete-dialog-input {
+  height: 82rpx;
+  margin-top: 14rpx;
+  padding: 0 22rpx;
+  border: 1rpx solid #d7dee8;
+  border-radius: 14rpx;
+  background: #f8fafc;
+  color: #172b24;
+  font-size: 29rpx;
+  line-height: 82rpx;
+}
+
+.profile-delete-dialog-actions {
+  display: flex;
+  gap: 20rpx;
+  margin-top: 32rpx;
+}
+
+.profile-delete-dialog-actions button {
+  flex: 1;
+  height: 82rpx;
+  margin: 0;
+  border-radius: 14rpx;
+  font-size: 28rpx;
+  font-weight: 700;
+  line-height: 82rpx;
+}
+
+.profile-delete-dialog-actions button::after { border: 0; }
+.profile-delete-dialog-cancel { background: #f1f5f9; color: #526276; }
+.profile-delete-dialog-confirm { background: #c85b4c; color: #ffffff; }
+.profile-delete-dialog-confirm--disabled { opacity: 0.42; }

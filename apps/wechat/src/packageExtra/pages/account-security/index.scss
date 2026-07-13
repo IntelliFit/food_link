@@ -194,3 +194,136 @@
     transform: rotate(360deg);
   }
 }
+
+.account-security-danger-card {
+  margin-top: 24rpx;
+  padding: 28rpx;
+  border: 1rpx solid #f7d7d1;
+  border-radius: 20rpx;
+  background: #fffafa;
+}
+
+.account-security-danger-heading,
+.account-security-dialog-actions {
+  display: flex;
+}
+
+.account-security-danger-heading { gap: 20rpx; }
+
+.account-security-danger-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 64rpx;
+  height: 64rpx;
+  flex: 0 0 64rpx;
+  border-radius: 32rpx;
+  background: #fff0ed;
+}
+
+.account-security-danger-icon-text { color: #d85a4b; font-size: 32rpx; }
+
+.account-security-danger-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.account-security-danger-title { color: #a43f34; font-size: 30rpx; font-weight: 700; }
+.account-security-danger-description { color: #7b625e; font-size: 24rpx; line-height: 1.55; }
+
+.account-security-delete-btn {
+  height: 80rpx;
+  margin-top: 24rpx;
+  border: 1rpx solid #e8a59b;
+  border-radius: 40rpx;
+  background: #ffffff;
+  color: #b94b3e;
+  font-size: 27rpx;
+  font-weight: 700;
+  line-height: 78rpx;
+}
+
+.account-security-delete-btn::after,
+.account-security-dialog-actions button::after { border: 0; }
+
+.account-security-dialog-mask {
+  position: fixed;
+  z-index: 1000;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48rpx;
+  background: rgba(15, 23, 42, 0.52);
+  box-sizing: border-box;
+}
+
+.account-security-dialog {
+  width: 100%;
+  padding: 40rpx 32rpx 32rpx;
+  border-radius: 24rpx;
+  background: #ffffff;
+  box-shadow: 0 20rpx 60rpx rgba(15, 23, 42, 0.22);
+}
+
+.account-security-dialog-title {
+  display: block;
+  color: #172b24;
+  font-size: 36rpx;
+  font-weight: 700;
+  text-align: center;
+}
+
+.account-security-dialog-description {
+  display: block;
+  margin-top: 20rpx;
+  color: #64748b;
+  font-size: 26rpx;
+  line-height: 1.6;
+}
+
+.account-security-dialog-label {
+  display: block;
+  margin-top: 28rpx;
+  color: #334155;
+  font-size: 26rpx;
+  font-weight: 600;
+}
+
+.account-security-dialog-input {
+  height: 82rpx;
+  margin-top: 14rpx;
+  padding: 0 22rpx;
+  border: 1rpx solid #d7dee8;
+  border-radius: 14rpx;
+  background: #f8fafc;
+  color: #172b24;
+  font-size: 29rpx;
+  line-height: 82rpx;
+}
+
+.account-security-dialog-actions { gap: 20rpx; margin-top: 32rpx; }
+
+.account-security-dialog-actions button {
+  flex: 1;
+  height: 82rpx;
+  margin: 0;
+  border-radius: 14rpx;
+  font-size: 28rpx;
+  font-weight: 700;
+  line-height: 82rpx;
+}
+
+.account-security-dialog-cancel { background: #f1f5f9; color: #526276; }
+
+.account-security-dialog-confirm {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #c85b4c;
+  color: #ffffff;
+}
+
+.account-security-dialog-confirm--disabled { opacity: 0.42; }
+.account-security-btn-spinner--danger { width: 30rpx; height: 30rpx; }

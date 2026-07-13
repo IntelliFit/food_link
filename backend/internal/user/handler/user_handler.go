@@ -4,8 +4,10 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"strings"
 
 	authmw "food_link/backend/internal/auth"
+	commonerrors "food_link/backend/internal/common/errors"
 	"food_link/backend/internal/common/response"
 	"food_link/backend/internal/user/service"
 
@@ -377,12 +379,23 @@ func (h *UserHandler) AcknowledgeHealthDisclaimer(c *gin.Context) {
 }
 
 func (h *UserHandler) DeleteAccount(c *gin.Context) {
+	var input struct {
+		Confirmation string `json:"confirmation"`
+	}
+	if err := c.ShouldBindJSON(&input); err != nil {
+		response.Error(c, err)
+		return
+	}
+	if strings.TrimSpace(input.Confirmation) != "注销账号" {
+		response.Error(c, &commonerrors.AppError{Code: 10002, Message: "请准确输入“注销账号”以确认操作", HTTPStatus: http.StatusBadRequest})
+		return
+	}
 	userID := c.GetString(authmw.ContextUserIDKey)
 	if err := h.userSvc.DeleteAccount(c.Request.Context(), userID); err != nil {
 		response.Error(c, err)
 		return
 	}
-	logUserAPI(c, "delete_account_ok")
+	logUserAPI(c, "账号注销完成")
 	response.Success(c, map[string]bool{"success": true})
 }
 

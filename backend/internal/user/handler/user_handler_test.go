@@ -344,7 +344,7 @@ func TestDeleteAccount(t *testing.T) {
 	r := setupRouter(h)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(http.MethodDelete, "/api/user/account", nil)
+	req, _ := http.NewRequest(http.MethodDelete, "/api/user/account", bytes.NewBufferString(`{"confirmation":"注销账号"}`))
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -360,7 +360,7 @@ func TestDeleteAccountError(t *testing.T) {
 	r := setupRouter(h)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(http.MethodDelete, "/api/user/account", nil)
+	req, _ := http.NewRequest(http.MethodDelete, "/api/user/account", bytes.NewBufferString(`{"confirmation":"注销账号"}`))
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
