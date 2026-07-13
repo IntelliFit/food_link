@@ -1269,7 +1269,9 @@ export default function ProfileSettingsPage() {
               <Input className='profile-delete-dialog-input' value={deleteConfirmation} placeholder='注销账号' maxlength={8} onInput={(event) => setDeleteConfirmation(event.detail.value)} />
               <View className='profile-delete-dialog-actions'>
                 <Button className='profile-delete-dialog-cancel' disabled={deleting} onClick={closeDeleteConfirm}>取消</Button>
-                <Button className={`profile-delete-dialog-confirm ${deleteConfirmation.trim() === '注销账号' ? '' : 'profile-delete-dialog-confirm--disabled'}`} disabled={deleting || deleteConfirmation.trim() !== '注销账号'} onClick={confirmDeleteAccount}>确认注销</Button>
+                <Button className={`profile-delete-dialog-confirm ${deleteConfirmation.trim() === '注销账号' ? '' : 'profile-delete-dialog-confirm--disabled'}`} disabled={deleting || deleteConfirmation.trim() !== '注销账号'} onClick={confirmDeleteAccount}>
+                  {deleting ? <View className='profile-delete-dialog-spinner' /> : '确认注销'}
+                </Button>
               </View>
             </View>
           </View>
