@@ -11,6 +11,7 @@ import (
 	"food_link/backend/internal/auth/repo"
 	commonerrors "food_link/backend/internal/common/errors"
 	"food_link/backend/internal/user/domain"
+	"food_link/backend/internal/user/nickname"
 	userrepo "food_link/backend/internal/user/repo"
 	"food_link/backend/pkg/logger"
 	"food_link/backend/pkg/storage"
@@ -82,7 +83,18 @@ type UpdateProfileInput struct {
 func (s *UserService) UpdateProfile(ctx context.Context, userID string, input UpdateProfileInput) (map[string]any, error) {
 	updates := map[string]any{}
 	if input.Nickname != nil {
-		updates["nickname"] = *input.Nickname
+		validatedNickname, err := nickname.Validate(*input.Nickname)
+		if err != nil {
+			return nil, err
+		}
+		taken, err := s.users.IsNicknameTaken(ctx, validatedNickname, userID)
+		if err != nil {
+			return nil, err
+		}
+		if taken {
+			return nil, nickname.DuplicateError()
+		}
+		updates["nickname"] = validatedNickname
 	}
 	if input.Avatar != nil {
 		updates["avatar"] = s.resolveAvatarURL(*input.Avatar)
@@ -107,6 +119,9 @@ func (s *UserService) UpdateProfile(ctx context.Context, userID string, input Up
 	}
 	user, err := s.users.UpdateFields(ctx, userID, updates)
 	if err != nil {
+		if repo.IsNicknameUniqueConstraintError(err) {
+			return nil, nickname.DuplicateError()
+		}
 		return nil, err
 	}
 	return s.buildProfileResponse(user), nil

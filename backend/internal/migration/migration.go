@@ -321,7 +321,27 @@ func ensureConstraints(ctx context.Context, db *gorm.DB) error {
 	return nil
 }
 
+func ensureNicknameUniqueIndex(ctx context.Context, db *gorm.DB) error {
+	var duplicate struct {
+		Nickname string
+		Count    int64
+	}
+	err := db.WithContext(ctx).Raw("SELECT MIN(COALESCE(nickname, '')) AS nickname, COUNT(*) AS count FROM weapp_user GROUP BY lower(trim(COALESCE(nickname, ''))) HAVING COUNT(*) > 1 ORDER BY count DESC LIMIT 1").Scan(&duplicate).Error
+	if err != nil {
+		return fmt.Errorf("检查重复昵称: %w", err)
+	}
+	if duplicate.Count > 1 {
+		return fmt.Errorf("无法创建昵称唯一索引：发现重复昵称 %q（%d 个账号），请先确认历史昵称处理方案", duplicate.Nickname, duplicate.Count)
+	}
+	if err := db.WithContext(ctx).Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_weapp_user_nickname_normalized_unique ON weapp_user (lower(trim(COALESCE(nickname, ''))))").Error; err != nil {
+		return fmt.Errorf("创建昵称唯一索引: %w", err)
+	}
+	return nil
+}
 func ensureIndexes(ctx context.Context, db *gorm.DB) error {
+	if err := ensureNicknameUniqueIndex(ctx, db); err != nil {
+		return err
+	}
 	for _, sql := range []string{
 		`ALTER TABLE user_feedback ADD COLUMN IF NOT EXISTS source text NOT NULL DEFAULT 'app'`,
 		`ALTER TABLE user_feedback ADD COLUMN IF NOT EXISTS extra jsonb NOT NULL DEFAULT '{}'::jsonb`,
