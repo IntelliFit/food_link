@@ -222,13 +222,15 @@ function RecipeDetailPage() {
             <Text className='recipe-detail-danger-btn-text'>{deleting ? '删除中...' : '删除'}</Text>
           </View>
         )}
-        <Button
-          className='recipe-detail-primary-btn'
-          loading={using}
-          onClick={handleUse}
-        >
-          <Text className='recipe-detail-primary-btn-text'>{using ? '记录中...' : '一键记录'}</Text>
-        </Button>
+        {isOwner && (
+          <Button
+            className='recipe-detail-primary-btn'
+            loading={using}
+            onClick={handleUse}
+          >
+            <Text className='recipe-detail-primary-btn-text'>{using ? '记录中...' : '一键记录'}</Text>
+          </Button>
+        )}
       </View>
     </View>
   )

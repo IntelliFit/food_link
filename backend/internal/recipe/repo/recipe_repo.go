@@ -57,6 +57,18 @@ func (r *RecipeRepo) Get(ctx context.Context, recipeID, userID string) (*domain.
 	return &row, err
 }
 
+// GetByID retrieves a recipe without granting write permission. Callers must
+// perform their own visibility checks before returning a recipe owned by
+// another user.
+func (r *RecipeRepo) GetByID(ctx context.Context, recipeID string) (*domain.Recipe, error) {
+	var row domain.Recipe
+	err := r.db.WithContext(ctx).Where("id = ?", recipeID).First(&row).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	return &row, err
+}
+
 func (r *RecipeRepo) Update(ctx context.Context, recipeID, userID string, updates map[string]any) (*domain.Recipe, error) {
 	result := r.db.WithContext(ctx).Model(&domain.Recipe{}).Where("id = ? AND user_id = ?", recipeID, userID).Updates(updates)
 	if result.Error != nil {
