@@ -1749,8 +1749,7 @@ func shouldUseImageProviderPreference(modelName string) bool {
 	normalized := strings.ToLower(raw)
 	switch normalized {
 	case "gemini", "gemini-flash", "gemini-vision",
-		"doubao", "doubao-seed-2-0-lite", "doubao-seed-2-0-lite-260428",
-		"qwen", "qwen-flash", qwen36FlashModel:
+		"doubao", "qwen", "qwen-flash":
 		return true
 	default:
 		return false

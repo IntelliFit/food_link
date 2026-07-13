@@ -402,6 +402,26 @@ func isImplausibleNutritionFoodMatch(query string, food domain.FoodNutrition) bo
 	return starchyDish && food.CarbsPer100g <= 2
 }
 
+// ValidateNutritionAliasTarget applies the same hard safety gates used by
+// runtime matching. Admin approval and automated proposal generation must call
+// this before an alias can enter food_nutrition_aliases.
+func ValidateNutritionAliasTarget(aliasName string, food domain.FoodNutrition) error {
+	raw := strings.TrimSpace(aliasName)
+	if raw == "" {
+		return fmt.Errorf("营养别名不能为空")
+	}
+	if strings.TrimSpace(food.ID) == "" || !food.IsActive {
+		return fmt.Errorf("营养别名目标不存在或已停用")
+	}
+	if isUnsafeNutritionAliasMatch(raw, raw, food.CanonicalName) {
+		return fmt.Errorf("形态或食物层级不兼容: %s -> %s", raw, food.CanonicalName)
+	}
+	if isImplausibleNutritionFoodMatch(raw, food) {
+		return fmt.Errorf("主食碳水合理性校验失败: %s -> %s", raw, food.CanonicalName)
+	}
+	return nil
+}
+
 func containsAnyToken(text string, tokens []string) bool {
 	for _, token := range tokens {
 		if token != "" && strings.Contains(text, token) {
@@ -2438,8 +2458,8 @@ func (r *FoodNutritionRepo) createNutritionAlias(ctx context.Context, foodID, ra
 	if err := r.db.WithContext(ctx).Where("is_active = ? AND id = ?", true, foodID).First(&food).Error; err != nil {
 		return fmt.Errorf("校验营养别名目标失败: %w", err)
 	}
-	if isUnsafeNutritionAliasMatch(raw, raw, food.CanonicalName) {
-		return fmt.Errorf("拒绝创建形态不兼容的营养别名: %s -> %s", raw, food.CanonicalName)
+	if err := ValidateNutritionAliasTarget(raw, food); err != nil {
+		return fmt.Errorf("拒绝创建营养别名: %w", err)
 	}
 	return r.db.WithContext(ctx).
 		Table((&domain.FoodNutritionAlias{}).TableName()).

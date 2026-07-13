@@ -181,6 +181,34 @@ func TestExerciseService_EstimateImageUsesDoubao(t *testing.T) {
 	assert.Equal(t, "跑步机慢跑", estimate.ExerciseType)
 }
 
+func TestExerciseService_EstimateImageUsesQwenOnWanjie(t *testing.T) {
+	svc := NewExerciseService(&mockExerciseRepo{}, &config.Config{
+		External: config.ExternalConfig{
+			DoubaoAPIKey:  "fake-key",
+			DoubaoBaseURL: "https://maas-openapi.wanjiedata.com/api/v1",
+		},
+	})
+	svc.client = &http.Client{Transport: exerciseRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+		assert.Equal(t, "https://maas-openapi.wanjiedata.com/api/v1/chat/completions", req.URL.String())
+		var body map[string]any
+		require.NoError(t, json.NewDecoder(req.Body).Decode(&body))
+		assert.Equal(t, "qwen3.6-flash", body["model"])
+		assert.Equal(t, "medium", body["reasoning_effort"])
+		responseBody := `{"choices":[{"message":{"content":"{\"exercise_type\":\"跑步机慢跑\",\"reasoning\":\"图片显示跑步机慢跑\",\"calories_kcal\":180}"}}]}`
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(bytes.NewBufferString(responseBody)),
+			Header:     make(http.Header),
+		}, nil
+	})}
+
+	estimate, err := svc.estimateExerciseCaloriesWithLLM(context.Background(), "", "https://example.com/run.jpg", nil)
+
+	require.NoError(t, err)
+	assert.Equal(t, 180, estimate.CaloriesKcal)
+	assert.Equal(t, "llm", estimate.Source)
+}
+
 func TestExerciseService_ProcessExerciseTaskDoesNotFallbackForImageLLMFailure(t *testing.T) {
 	repo := &mockExerciseRepo{}
 	svc := NewExerciseService(repo, &config.Config{

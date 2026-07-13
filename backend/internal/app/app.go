@@ -641,6 +641,14 @@ func New(cfg *config.Config) (*App, error) {
 	adminFoodNutritionRepo := adminrepo.NewFoodNutritionRepo(db)
 	adminFoodNutritionSvc := adminservice.NewFoodNutritionService(adminFoodNutritionRepo, storageClient)
 	adminFoodNutritionHandler := adminhandler.NewFoodNutritionHandler(adminFoodNutritionSvc)
+	adminAliasReviewRepo := adminrepo.NewNutritionAliasReviewRepo(db)
+	adminAliasReviewer := analyzeservice.NewDeepSeekNutritionEstimator(
+		cfg.External.DeepSeekAPIKey,
+		cfg.External.DeepSeekBaseURL,
+		"deepseek-v4-pro",
+	)
+	adminAliasReviewSvc := adminservice.NewNutritionAliasReviewService(adminAliasReviewRepo, adminAliasReviewer, "deepseek-v4-pro")
+	adminAliasReviewHandler := adminhandler.NewNutritionAliasReviewHandler(adminAliasReviewSvc)
 	adminPublicFoodRepo := adminrepo.NewPublicFoodRepo(db)
 	adminPublicFoodSvc := adminservice.NewPublicFoodService(adminPublicFoodRepo, storageClient)
 	adminPublicFoodHandler := adminhandler.NewPublicFoodHandler(adminPublicFoodSvc)
@@ -683,6 +691,12 @@ func New(cfg *config.Config) (*App, error) {
 	adminAPI.POST("/food-nutrition", adminAuth, adminFoodNutritionHandler.Create)
 	adminAPI.PATCH("/food-nutrition/:food_id", adminAuth, adminFoodNutritionHandler.Update)
 	adminAPI.DELETE("/food-nutrition/:food_id", adminAuth, adminFoodNutritionHandler.Delete)
+	adminAPI.GET("/nutrition-alias-candidates", adminAuth, adminAliasReviewHandler.List)
+	adminAPI.GET("/nutrition-alias-candidates/:candidate_id", adminAuth, adminAliasReviewHandler.Get)
+	adminAPI.POST("/nutrition-alias-candidates", adminAuth, adminAliasReviewHandler.Create)
+	adminAPI.POST("/nutrition-alias-candidates/ai-review-batch", adminAuth, adminAliasReviewHandler.BatchAIReview)
+	adminAPI.POST("/nutrition-alias-candidates/:candidate_id/ai-review", adminAuth, adminAliasReviewHandler.AIReview)
+	adminAPI.POST("/nutrition-alias-candidates/:candidate_id/review", adminAuth, adminAliasReviewHandler.Review)
 	adminAPI.GET("/public-food-library", adminAuth, adminPublicFoodHandler.List)
 	adminAPI.GET("/public-food-library/:item_id", adminAuth, adminPublicFoodHandler.Get)
 	adminAPI.POST("/public-food-library", adminAuth, adminPublicFoodHandler.Create)

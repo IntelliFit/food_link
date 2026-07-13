@@ -496,6 +496,36 @@ type FoodNutritionAliasDO struct {
 
 func (FoodNutritionAliasDO) TableName() string { return "food_nutrition_aliases" }
 
+// FoodNutritionAliasCandidateDO stores proposals separately from the active alias
+// table. Runtime matching must never read this table before an administrator
+// approves a proposal.
+type FoodNutritionAliasCandidateDO struct {
+	ID                    string         `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	AliasName             string         `gorm:"column:alias_name;type:text;not null"`
+	NormalizedAlias       string         `gorm:"column:normalized_alias;type:text;not null;index:idx_food_nutrition_alias_candidates_normalized"`
+	ProposedFoodID        string         `gorm:"column:proposed_food_id;type:uuid;not null;index:idx_food_nutrition_alias_candidates_food"`
+	Source                string         `gorm:"column:source;type:text;not null;default:'admin_manual';index:idx_food_nutrition_alias_candidates_source"`
+	SourceTaskID          *string        `gorm:"column:source_task_id;type:uuid"`
+	Model                 *string        `gorm:"column:model;type:text"`
+	ModelDecision         *string        `gorm:"column:model_decision;type:text"`
+	ModelConfidence       *float64       `gorm:"column:model_confidence;type:numeric"`
+	ModelReason           *string        `gorm:"column:model_reason;type:text"`
+	SuggestedAliases      []string       `gorm:"column:suggested_aliases;type:jsonb;serializer:json;not null;default:'[]'::jsonb"`
+	RuleFlags             []string       `gorm:"column:rule_flags;type:jsonb;serializer:json;not null;default:'[]'::jsonb"`
+	CandidateSnapshot     map[string]any `gorm:"column:candidate_snapshot;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
+	Status                string         `gorm:"column:status;type:text;not null;default:'pending';index:idx_food_nutrition_alias_candidates_status"`
+	ReviewerID            *string        `gorm:"column:reviewer_id;type:uuid"`
+	ReviewedAt            *time.Time     `gorm:"column:reviewed_at;type:timestamptz"`
+	ReviewNote            *string        `gorm:"column:review_note;type:text"`
+	GeneratedFromID       *string        `gorm:"column:generated_from_id;type:uuid"`
+	CreatedAt             time.Time      `gorm:"column:created_at;type:timestamptz;not null;default:now()"`
+	UpdatedAt             time.Time      `gorm:"column:updated_at;type:timestamptz;not null;default:now()"`
+}
+
+func (FoodNutritionAliasCandidateDO) TableName() string {
+	return "food_nutrition_alias_candidates"
+}
+
 type FoodUnresolvedLogDO struct {
 	ID             string         `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
 	TaskID         *string        `gorm:"column:task_id;type:uuid"`
@@ -1537,6 +1567,7 @@ func AllModels() []any {
 		&PackagedFoodDO{},
 		&PackagedFoodAliasDO{},
 		&FoodNutritionAliasDO{},
+		&FoodNutritionAliasCandidateDO{},
 		&FoodUnresolvedLogDO{},
 		&CriticalSampleDO{},
 		&PrecisionSessionDO{},

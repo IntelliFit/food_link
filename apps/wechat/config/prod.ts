@@ -6,14 +6,26 @@ export default {
   terser: {
     enable: true,
     config: {
-      // fix: 禁用变量名混淆，避免 Terser 压缩后的短变量名与小程序 JSCore 全局 const 冲突，
-      // 导致真机偶发 "Assignment to constant variable" 异常。
-      mangle: false,
+      // 开启局部变量压缩，为主包和分包长期保留体积余量。
+      // 不压缩顶层名称，避免跨 chunk 的 require/export 标识被改写；safari10 用于规避
+      // 旧版 JavaScriptCore 的循环作用域/短变量名兼容问题。2026-04 的真机崩溃链路中，
+      // 对应的闭包 for 循环已经从业务代码移除，这里继续保留引擎兼容保护。
+      mangle: {
+        toplevel: false,
+        safari10: true,
+      },
       compress: {
-        // 保留基础压缩，但关闭已知容易导致小程序问题的优化项
+        // Taro 默认已关闭 collapse_vars / reduce_vars / loops 等激进优化；这里只补充
+        // 明确安全的清理项；旧版 JavaScriptCore 兼容由 mangle/output 负责。
         dead_code: true,
         drop_debugger: true,
-      }
+      },
+      output: {
+        // 小程序脚本本身使用 UTF-8；保留中文字符比转成 6 字节的 \uXXXX 更小。
+        ascii_only: false,
+        comments: false,
+        safari10: true,
+      },
     }
   },
   csso: {

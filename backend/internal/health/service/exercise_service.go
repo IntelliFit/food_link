@@ -65,6 +65,25 @@ type exerciseJSONLLMConfig struct {
 	Model    string
 }
 
+const (
+	defaultDoubaoExerciseModel = "doubao-seed-2-0-lite-260428"
+	wanjieExerciseModel        = "qwen3.6-flash"
+)
+
+func exerciseModelForBaseURL(baseURL string) string {
+	if strings.Contains(strings.ToLower(baseURL), "maas-openapi.wanjiedata.com") {
+		return wanjieExerciseModel
+	}
+	return defaultDoubaoExerciseModel
+}
+
+func exerciseModelProvider(model string) string {
+	if strings.HasPrefix(strings.ToLower(strings.TrimSpace(model)), "qwen") {
+		return "qwen"
+	}
+	return "doubao"
+}
+
 func NewExerciseService(repo ExerciseRepo, cfg ...*config.Config) *ExerciseService {
 	var c *config.Config
 	if len(cfg) > 0 {
@@ -939,13 +958,14 @@ func (s *ExerciseService) estimateExerciseCaloriesWithLLM(ctx context.Context, d
 	}()
 	apiKey := ""
 	baseURL := "https://ark.cn-beijing.volces.com/api/v3"
-	model := "doubao-seed-2-0-lite-260428"
 	if s.cfg != nil {
 		apiKey = strings.TrimSpace(s.cfg.External.DoubaoAPIKey)
 		if configuredBaseURL := strings.TrimSpace(s.cfg.External.DoubaoBaseURL); configuredBaseURL != "" {
 			baseURL = strings.TrimRight(configuredBaseURL, "/")
 		}
 	}
+	model := exerciseModelForBaseURL(baseURL)
+	provider := exerciseModelProvider(model)
 	if apiKey == "" {
 		status = "config_error"
 		return ExerciseEstimate{}, &commonerrors.AppError{Code: 10000, Message: "运动分析服务未配置，请联系管理员处理", HTTPStatus: 500}
@@ -960,7 +980,7 @@ func (s *ExerciseService) estimateExerciseCaloriesWithLLM(ctx context.Context, d
 	}
 	logger.Info(ctx, "运动热量大模型估算开始",
 		logger.Stage("llm_call"),
-		logger.ProviderModel("doubao", model),
+		logger.ProviderModel(provider, model),
 		slog.String("source", source),
 		logger.Truncated("exercise_desc", desc, 120),
 		slog.Bool("has_image", imageURL != ""),
@@ -1005,10 +1025,10 @@ func (s *ExerciseService) estimateExerciseCaloriesWithLLM(ctx context.Context, d
 	resp, err := s.client.Do(req)
 	if err != nil {
 		status = "request_error"
-		metrics.ObserveLLMCall("exercise", "doubao", model, status, time.Since(start))
+		metrics.ObserveLLMCall("exercise", provider, model, status, time.Since(start))
 		logger.Warn(ctx, "运动热量大模型请求失败",
 			logger.Stage("llm_call"),
-			logger.ProviderModel("doubao", model),
+			logger.ProviderModel(provider, model),
 			slog.String("source", source),
 			logger.Err(err),
 		)
@@ -1018,7 +1038,7 @@ func (s *ExerciseService) estimateExerciseCaloriesWithLLM(ctx context.Context, d
 	respBytes, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		status = fmt.Sprintf("http_%d", resp.StatusCode)
-		metrics.ObserveLLMCall("exercise", "doubao", model, status, time.Since(start))
+		metrics.ObserveLLMCall("exercise", provider, model, status, time.Since(start))
 		return ExerciseEstimate{}, fmt.Errorf("运动分析服务返回异常 %d", resp.StatusCode)
 	}
 	var parsed struct {
@@ -1039,7 +1059,7 @@ func (s *ExerciseService) estimateExerciseCaloriesWithLLM(ctx context.Context, d
 		if strings.Contains(err.Error(), "missing calories_kcal") && len([]rune(strings.TrimSpace(desc))) > exerciseLongTextThresholdRunes {
 			logger.Warn(ctx, "运动热量大模型返回长文本结构，切换长文本识别链路",
 				logger.Stage("llm_parse"),
-				logger.ProviderModel("doubao", model),
+				logger.ProviderModel(provider, model),
 				logger.LLMResponseSummary(raw),
 				slog.Int("exercise_desc_len", len([]rune(strings.TrimSpace(desc)))),
 			)
@@ -1049,7 +1069,7 @@ func (s *ExerciseService) estimateExerciseCaloriesWithLLM(ctx context.Context, d
 		metrics.ObserveLLMCall("exercise", "doubao", model, status, time.Since(start))
 		logger.Warn(ctx, "运动热量大模型结果解析失败",
 			logger.Stage("llm_parse"),
-			logger.ProviderModel("doubao", model),
+			logger.ProviderModel(provider, model),
 			logger.LLMResponseSummary(raw),
 			logger.Err(err),
 		)
@@ -1057,10 +1077,10 @@ func (s *ExerciseService) estimateExerciseCaloriesWithLLM(ctx context.Context, d
 	}
 	estimate.Raw = raw
 	estimate.Source = "llm"
-	metrics.ObserveLLMCall("exercise", "doubao", model, "success", time.Since(start))
+	metrics.ObserveLLMCall("exercise", provider, model, "success", time.Since(start))
 	logger.Info(ctx, "运动热量大模型估算完成",
 		logger.Stage("llm_call"),
-		logger.ProviderModel("doubao", model),
+		logger.ProviderModel(provider, model),
 		slog.String("source", source),
 		slog.String("exercise_type", estimate.ExerciseType),
 		slog.Int("calories_kcal", estimate.CaloriesKcal),
@@ -1227,10 +1247,10 @@ func (s *ExerciseService) resolveExerciseJSONLLMConfigs() []exerciseJSONLLMConfi
 			baseURL = strings.TrimRight(configuredBaseURL, "/")
 		}
 		configs = append(configs, exerciseJSONLLMConfig{
-			Provider: "doubao",
+			Provider: exerciseModelProvider(exerciseModelForBaseURL(baseURL)),
 			APIKey:   strings.TrimSpace(s.cfg.External.DoubaoAPIKey),
 			BaseURL:  baseURL,
-			Model:    "doubao-seed-2-0-lite-260428",
+			Model:    exerciseModelForBaseURL(baseURL),
 		})
 	}
 	return configs

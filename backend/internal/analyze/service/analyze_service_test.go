@@ -1105,6 +1105,28 @@ func TestAnalyzeService_AnalyzeImageStandardIgnoresExplicitDoubaoAndUsesGemini3F
 	assert.Equal(t, 1, gemini3Client.calls)
 }
 
+func TestAnalyzeService_AnalyzeImageFastKeepsExplicitQwen36Model(t *testing.T) {
+	doubaoClient := &mockLLMClient{result: map[string]any{"description": "doubao image", "items": []any{}}}
+	gemini3Client := &mockLLMClient{err: assert.AnError}
+	qwenClient := &mockLLMClient{result: map[string]any{"description": "qwen fast image", "items": []any{}}}
+	svc := NewAnalyzeService(doubaoClient, gemini3Client, nil)
+	svc.ConfigureImageProvider("doubao")
+	svc.ConfigureDashScopeLLMClient(qwenClient)
+	svc.ConfigureWebSearcher(nil)
+	svc.ConfigureNutritionResolver(newFakeAnalyzeNutritionResolver())
+	mode := fastExecutionMode
+
+	result, err := svc.Analyze(context.Background(), "", AnalyzeInput{
+		ImageURL:      "https://example.com/img.jpg",
+		ExecutionMode: &mode,
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, "qwen fast image", result["description"])
+	assert.Equal(t, 0, doubaoClient.calls)
+	assert.Equal(t, 1, qwenClient.calls)
+}
+
 func TestAnalyzeService_AnalyzeImageStandardDoesNotFallbackToDoubaoWhenGeminiFails(t *testing.T) {
 	doubaoClient := &mockLLMClient{result: map[string]any{"description": "doubao fallback", "items": []any{}}}
 	gemini3Client := &mockLLMClient{err: errors.New("ofoxai api error 429: Resource exhausted. Please try again later")}

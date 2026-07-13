@@ -3,11 +3,13 @@ package service
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
 	"time"
@@ -59,10 +61,11 @@ func IsLLMJSONParseError(err error) bool {
 
 // OfoxAIClient calls OfoxAI/Gemini compatible API.
 type OfoxAIClient struct {
-	APIKey  string
-	Model   string
-	BaseURL string
-	client  *http.Client
+	APIKey      string
+	Model       string
+	BaseURL     string
+	client      *http.Client
+	imageClient *http.Client
 }
 
 func NewDashScopeClient(apiKey string, baseURLs ...string) *OfoxAIClient {
@@ -86,6 +89,9 @@ func NewOfoxAIClient(apiKey, model string, baseURLs ...string) *OfoxAIClient {
 		Model:   model,
 		BaseURL: baseURL,
 		client:  &http.Client{Timeout: 90 * time.Second},
+		imageClient: &http.Client{
+			Timeout: 30 * time.Second,
+		},
 	}
 }
 
@@ -151,6 +157,9 @@ func (c *OfoxAIClient) analyzeWithImagesAndTemperatureMeta(ctx context.Context, 
 	if model == "" {
 		model = c.Model
 	}
+	if isWanjieGeminiNativeModel(model, c.BaseURL) {
+		return c.doGeminiNativeRequest(ctx, model, prompt, imageURLs, temperature)
+	}
 	content := []map[string]any{
 		{"type": "text", "text": prompt},
 	}
@@ -185,6 +194,130 @@ func isDashScopeQwenModel(model, baseURL string) bool {
 	normalizedModel := strings.ToLower(strings.TrimSpace(model))
 	normalizedBase := strings.ToLower(strings.TrimSpace(baseURL))
 	return strings.Contains(normalizedBase, "dashscope.aliyuncs.com") || strings.HasPrefix(normalizedModel, "qwen")
+}
+
+func isWanjieGeminiNativeModel(model, baseURL string) bool {
+	return strings.Contains(strings.ToLower(baseURL), "maas-openapi.wanjiedata.com") &&
+		strings.HasPrefix(strings.ToLower(strings.TrimSpace(model)), "gemini-")
+}
+
+func (c *OfoxAIClient) doGeminiNativeRequest(ctx context.Context, model, prompt string, imageURLs []string, temperature float64) (map[string]any, map[string]any, error) {
+	parts := []map[string]any{{"text": prompt}}
+	for _, imageURL := range imageURLs {
+		imageURL = strings.TrimSpace(imageURL)
+		if imageURL == "" {
+			continue
+		}
+		inlineData, err := c.downloadGeminiInlineImage(ctx, imageURL)
+		if err != nil {
+			return nil, nil, err
+		}
+		parts = append(parts, map[string]any{"inlineData": inlineData})
+	}
+	body := map[string]any{
+		"contents": []map[string]any{{"role": "user", "parts": parts}},
+		"generationConfig": map[string]any{
+			"temperature":      temperature,
+			"maxOutputTokens":  8192,
+			"responseMimeType": "application/json",
+		},
+	}
+	b, err := json.Marshal(body)
+	if err != nil {
+		return nil, nil, fmt.Errorf("encode Gemini request failed: %w", err)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, geminiNativeEndpoint(c.BaseURL, model), bytes.NewReader(b))
+	if err != nil {
+		return nil, nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+c.APIKey)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer resp.Body.Close()
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, nil, fmt.Errorf("gemini api error %d: %s", resp.StatusCode, summarizeUpstreamBody(data, resp.Header.Get("Content-Type")))
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil, nil, fmt.Errorf("decode Gemini response failed: %w", err)
+	}
+	candidates, ok := raw["candidates"].([]any)
+	if !ok || len(candidates) == 0 {
+		return nil, nil, fmt.Errorf("empty response from Gemini")
+	}
+	firstCandidate := mapFromAny(candidates[0])
+	content := mapFromAny(firstCandidate["content"])
+	for _, part := range anyListFromAny(content["parts"]) {
+		text := stringFromAny(mapFromAny(part)["text"])
+		if strings.TrimSpace(text) == "" {
+			continue
+		}
+		parsed, err := parseLLMJSON(text)
+		if err != nil {
+			return nil, nil, err
+		}
+		return parsed, raw, nil
+	}
+	return nil, nil, fmt.Errorf("empty response from Gemini")
+}
+
+func geminiNativeEndpoint(baseURL, model string) string {
+	endpoint, err := url.Parse(strings.TrimRight(baseURL, "/"))
+	if err != nil {
+		return strings.TrimRight(baseURL, "/") + "/../v1beta/models/" + url.PathEscape(model) + ":generateContent"
+	}
+	endpoint.Path = "/api/v1beta/models/" + url.PathEscape(model) + ":generateContent"
+	endpoint.RawQuery = ""
+	return endpoint.String()
+}
+
+func (c *OfoxAIClient) downloadGeminiInlineImage(ctx context.Context, imageURL string) (map[string]string, error) {
+	parsedURL, err := url.Parse(imageURL)
+	if err != nil || !strings.EqualFold(parsedURL.Scheme, "https") || parsedURL.Host == "" {
+		return nil, fmt.Errorf("Gemini 图片必须使用有效的 HTTPS 地址")
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, imageURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	imageClient := c.imageClient
+	if imageClient == nil {
+		imageClient = &http.Client{Timeout: 30 * time.Second}
+	}
+	resp, err := imageClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("下载 Gemini 图片失败: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return nil, fmt.Errorf("下载 Gemini 图片失败: HTTP %d", resp.StatusCode)
+	}
+	const maxGeminiImageBytes = 10 << 20
+	data, err := io.ReadAll(io.LimitReader(resp.Body, maxGeminiImageBytes+1))
+	if err != nil {
+		return nil, fmt.Errorf("读取 Gemini 图片失败: %w", err)
+	}
+	if len(data) == 0 || len(data) > maxGeminiImageBytes {
+		return nil, fmt.Errorf("Gemini 图片大小必须在 1B 到 10MB 之间")
+	}
+	mimeType := strings.TrimSpace(strings.Split(resp.Header.Get("Content-Type"), ";")[0])
+	if !strings.HasPrefix(strings.ToLower(mimeType), "image/") {
+		mimeType = http.DetectContentType(data)
+	}
+	if !strings.HasPrefix(strings.ToLower(mimeType), "image/") {
+		return nil, fmt.Errorf("Gemini 图片格式无效")
+	}
+	return map[string]string{
+		"mimeType": mimeType,
+		"data":     base64.StdEncoding.EncodeToString(data),
+	}, nil
 }
 
 func (c *OfoxAIClient) doRequest(ctx context.Context, url string, body map[string]any) (map[string]any, map[string]any, error) {
