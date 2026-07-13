@@ -47,8 +47,11 @@ export function FeedReportSheet({ visible, targetType, targetId, onClose, onSucc
     onClose()
   }
 
+  // iOS WeChat can leak native textarea placeholders through hidden parents.
+  if (!visible) return null
+
   return (
-    <View className={`feed-report-sheet-overlay ${visible ? 'feed-report-sheet-overlay--visible' : ''}`} catchMove>
+    <View className='feed-report-sheet-overlay feed-report-sheet-overlay--visible' catchMove>
       <View className='feed-report-sheet-mask' onClick={(e) => { e.stopPropagation(); handleClose() }} />
       <View className='feed-report-sheet-content'>
         <View className='feed-report-sheet-card'>
