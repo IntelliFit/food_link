@@ -272,7 +272,6 @@ func deleteAccountOwnedData(tx *gorm.DB, userID string) error {
 		{"food_expiry_items", "user_id = ?", []any{userID}},
 		{"user_recipes", "user_id = ?", []any{userID}},
 		{"user_custom_foods", "user_id = ?", []any{userID}},
-		{"manual_food_library", "user_id = ?", []any{userID}},
 		{"user_circle_posts", "user_id = ?", []any{userID}},
 		{"user_food_records", "user_id = ?", []any{userID}},
 		{"user_trial_entitlements", "first_user_id = ?", []any{userID}},
@@ -305,16 +304,16 @@ func deleteAccountFeedArtifacts(tx *gorm.DB, userID string) error {
 func accountFeedTargetClauses(tx *gorm.DB, userID string) []string {
 	clauses := make([]string, 0, 4)
 	if tableExists(tx, "user_food_records") {
-		clauses = append(clauses, fmt.Sprintf("target_type = 'food_record' AND target_id IN (SELECT CAST(id AS TEXT) FROM user_food_records WHERE user_id = %s)", quoteSQLString(userID)))
+		clauses = append(clauses, fmt.Sprintf("target_type = 'food_record' AND CAST(target_id AS TEXT) IN (SELECT CAST(id AS TEXT) FROM user_food_records WHERE user_id = %s)", quoteSQLString(userID)))
 	}
 	if tableExists(tx, "user_exercise_logs") {
-		clauses = append(clauses, fmt.Sprintf("target_type = 'exercise_log' AND target_id IN (SELECT CAST(id AS TEXT) FROM user_exercise_logs WHERE user_id = %s)", quoteSQLString(userID)))
+		clauses = append(clauses, fmt.Sprintf("target_type = 'exercise_log' AND CAST(target_id AS TEXT) IN (SELECT CAST(id AS TEXT) FROM user_exercise_logs WHERE user_id = %s)", quoteSQLString(userID)))
 	}
 	if tableExists(tx, "user_circle_posts") {
-		clauses = append(clauses, fmt.Sprintf("target_type = 'circle_post' AND target_id IN (SELECT CAST(id AS TEXT) FROM user_circle_posts WHERE user_id = %s)", quoteSQLString(userID)))
+		clauses = append(clauses, fmt.Sprintf("target_type = 'circle_post' AND CAST(target_id AS TEXT) IN (SELECT CAST(id AS TEXT) FROM user_circle_posts WHERE user_id = %s)", quoteSQLString(userID)))
 	}
 	if tableExists(tx, "public_food_library") {
-		clauses = append(clauses, fmt.Sprintf("target_type = 'campus_food' AND target_id IN (SELECT CAST(id AS TEXT) FROM public_food_library WHERE user_id = %s)", quoteSQLString(userID)))
+		clauses = append(clauses, fmt.Sprintf("target_type = 'campus_food' AND CAST(target_id AS TEXT) IN (SELECT CAST(id AS TEXT) FROM public_food_library WHERE user_id = %s)", quoteSQLString(userID)))
 	}
 	return clauses
 }

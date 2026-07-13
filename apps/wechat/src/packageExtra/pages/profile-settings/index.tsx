@@ -122,6 +122,9 @@ export default function ProfileSettingsPage() {
   const [editCoverImage, setEditCoverImage] = useState('')
   const [editMotto, setEditMotto] = useState('')
   const [saving, setSaving] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [deleteConfirmation, setDeleteConfirmation] = useState('')
+  const [deleting, setDeleting] = useState(false)
 
   // 座右铭
   const [motto, setMotto] = useState('')
@@ -561,25 +564,29 @@ export default function ProfileSettingsPage() {
   }
 
   // 注销账号
-  const handleDeleteAccount = async () => {
-    const modalRes = await Taro.showModal({
-      title: '注销账号',
-      content: '注销后，您的账号及健康记录、饮食分析历史、好友关系等数据会被删除，本地登录状态也会清空。确定要注销账号吗？',
-      confirmText: '确认注销',
-      confirmColor: '#ef4444',
-      cancelText: '再想想'
-    })
-    if (!modalRes.confirm) return
+  const handleDeleteAccount = () => {
+    setDeleteConfirmation('')
+    setShowDeleteConfirm(true)
+  }
+
+  const closeDeleteConfirm = () => {
+    if (deleting) return
+    setShowDeleteConfirm(false)
+    setDeleteConfirmation('')
+  }
+
+  const confirmDeleteAccount = async () => {
+    if (deleting || deleteConfirmation.trim() !== '注销账号') return
     try {
-      Taro.showLoading({ title: '注销中...' })
-      await deleteAccount()
+      setDeleting(true)
+      await deleteAccount(deleteConfirmation.trim())
       clearAllStorage()
-      Taro.hideLoading()
       Taro.showToast({ title: '已注销账号', icon: 'success' })
-      setTimeout(() => { Taro.switchTab({ url: '/pages/index/index' }) }, 1200)
+      setTimeout(() => { Taro.switchTab({ url: '/pages/index/index' }) }, 900)
     } catch (error) {
-      Taro.hideLoading()
       await showUnifiedApiError(error, '注销失败')
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -1253,6 +1260,20 @@ export default function ProfileSettingsPage() {
           </View>
         )}
 
+        {showDeleteConfirm && (
+          <View className='profile-delete-dialog-mask' onClick={closeDeleteConfirm}>
+            <View className='profile-delete-dialog' onClick={(event) => event.stopPropagation()}>
+              <Text className='profile-delete-dialog-title'>确认注销账号</Text>
+              <Text className='profile-delete-dialog-description'>这是不可恢复的操作。请输入“注销账号”后继续。</Text>
+              <Text className='profile-delete-dialog-label'>确认文案</Text>
+              <Input className='profile-delete-dialog-input' value={deleteConfirmation} placeholder='注销账号' maxlength={8} onInput={(event) => setDeleteConfirmation(event.detail.value)} />
+              <View className='profile-delete-dialog-actions'>
+                <Button className='profile-delete-dialog-cancel' disabled={deleting} onClick={closeDeleteConfirm}>取消</Button>
+                <Button className={`profile-delete-dialog-confirm ${deleteConfirmation.trim() === '注销账号' ? '' : 'profile-delete-dialog-confirm--disabled'}`} disabled={deleting || deleteConfirmation.trim() !== '注销账号'} onClick={confirmDeleteAccount}>确认注销</Button>
+              </View>
+            </View>
+          </View>
+        )}
         {/* 离屏 Canvas（用于生成海报） */}
         <Canvas
           type='2d'
