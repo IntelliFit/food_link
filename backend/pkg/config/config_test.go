@@ -308,6 +308,7 @@ func TestLoadTrimsExternalSecrets(t *testing.T) {
 	t.Setenv("GEMINI35_BASE_URL", "\thttps://yunwu.ai/v1\n")
 	t.Setenv("GEMINI35_MODEL", "\tgemini-3.5-flash\n")
 	t.Setenv("DEEPSEEK_API_KEY", " deepseek-key ")
+	t.Setenv("DEEPSEEK_BASE_URL", "\thttps://deepseek.example.com/v1/\n")
 
 	dir := writeTestConfig(t, `
 worker:
@@ -345,6 +346,9 @@ worker:
 	if cfg.External.DeepSeekAPIKey != "deepseek-key" {
 		t.Fatalf("expected trimmed deepseek key, got %q", cfg.External.DeepSeekAPIKey)
 	}
+	if cfg.External.DeepSeekBaseURL != "https://deepseek.example.com/v1/" {
+		t.Fatalf("expected trimmed deepseek base URL, got %q", cfg.External.DeepSeekBaseURL)
+	}
 }
 
 func TestLoadPrefersFileExternalKeysOverEnv(t *testing.T) {
@@ -357,6 +361,7 @@ func TestLoadPrefersFileExternalKeysOverEnv(t *testing.T) {
 	t.Setenv("GEMINI35_BASE_URL", "https://bad.example.com")
 	t.Setenv("GEMINI35_MODEL", "bad-model")
 	t.Setenv("DEEPSEEK_API_KEY", "bad-deepseek")
+	t.Setenv("DEEPSEEK_BASE_URL", "https://bad-deepseek.example.com/v1")
 
 	dir := writeTestConfig(t, `
 app:
@@ -371,6 +376,7 @@ external:
   gemini35_base_url: "https://good.example.com/v1"
   gemini35_model: "gemini-3.5-flash"
   deepseek_api_key: "good-deepseek"
+  deepseek_base_url: "https://good-deepseek.example.com/v1"
 worker:
   count: 1
 `)
@@ -405,6 +411,9 @@ worker:
 	}
 	if cfg.External.DeepSeekAPIKey != "good-deepseek" {
 		t.Fatalf("expected file deepseek key, got %q", cfg.External.DeepSeekAPIKey)
+	}
+	if cfg.External.DeepSeekBaseURL != "https://good-deepseek.example.com/v1" {
+		t.Fatalf("expected file deepseek base URL, got %q", cfg.External.DeepSeekBaseURL)
 	}
 }
 
@@ -563,6 +572,7 @@ func TestLoadMergesApolloConfig(t *testing.T) {
 				"POSTGRESQL_DATABASE":"food-cloud",
 				"JWT_SECRET_KEY":"cloud-jwt",
 				"DOUBAO_API_KEY":"cloud-doubao",
+				"DEEPSEEK_BASE_URL":"https://llm.example.com/api/v1",
 				"WORKER_COUNT":"3",
 				"TASK_QUEUE_BROKERS":"kafka-1:9092,kafka-2:9092"
 			}`))
@@ -603,7 +613,7 @@ worker:
 	if cfg.Database.Host != "db.example.internal" || cfg.Database.Name != "food-cloud" {
 		t.Fatalf("expected database config from Apollo, got %+v", cfg.Database)
 	}
-	if cfg.JWT.Secret != "cloud-jwt" || cfg.External.DoubaoAPIKey != "cloud-doubao" {
+	if cfg.JWT.Secret != "cloud-jwt" || cfg.External.DoubaoAPIKey != "cloud-doubao" || cfg.External.DeepSeekBaseURL != "https://llm.example.com/api/v1" {
 		t.Fatalf("expected secrets from Apollo, got jwt=%q external=%+v", cfg.JWT.Secret, cfg.External)
 	}
 	if cfg.Worker.Count != 3 {

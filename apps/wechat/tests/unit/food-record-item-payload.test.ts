@@ -175,4 +175,21 @@ describe('food record item payload helpers', () => {
       sodium_mg: 0,
     })
   })
+
+  it('caps saved water at the item weight', () => {
+    const payload = buildFoodRecordItemPayloadFromResultItem(
+      {
+        name: '西瓜',
+        weight: 1200,
+        ratio: 100,
+        intake: 1200,
+        waterMl: 1840,
+      },
+      baseNutrients({ calories: 360, carbs: 91.2, waterMl: 1840, water_ml: 1840 }),
+    )
+
+    expect(payload.water_ml).toBe(1200)
+    expect(payload.nutrients.waterMl).toBe(1200)
+    expect(payload.nutrients.water_ml).toBe(1200)
+  })
 })

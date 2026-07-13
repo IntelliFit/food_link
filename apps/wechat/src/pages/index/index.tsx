@@ -224,7 +224,7 @@ function buildWeekHeatmapCellsFromStorage(): WeekHeatmapCell[] {
     const snap = getStoredHomeDashboardSnapshotByDate(dateKey)
     const calories = snap ? snap.intakeData.current : 0
     const target = snap ? snap.intakeData.target : 2000
-    const hasRecord = calories > 0
+    const hasRecord = calories > 0 || Boolean(snap?.meals?.length)
     cells.push({
       date: dateKey,
       dayName: SHORT_DAY_NAMES[date.getDay()],
@@ -233,7 +233,8 @@ function buildWeekHeatmapCellsFromStorage(): WeekHeatmapCell[] {
       target,
       intakeRatio: hasRecord ? calories / target : 0,
       state: !hasRecord ? 'none' : calories > target ? 'surplus' : 'deficit',
-      isToday: offset === 0
+      isToday: offset === 0,
+      hasRecord
     })
   }
   return cells
@@ -584,12 +585,15 @@ function applyCloudBodyMetrics(storage: BodyMetricsStorage, cloud: {
   if (cloud.water_daily?.length) {
     for (const day of cloud.water_daily) {
       const d = bmDateKey(day.date)
-      const total = Math.max(0, Number(day.total) || 0)
-      const logs = (day.logs || []).map((value) => Math.max(0, Number(value) || 0))
+      const cloudTotal = Math.max(0, Number(day.total) || 0)
+      const cloudLogs = (day.logs || []).map((value) => Math.max(0, Number(value) || 0))
+      const local = next.waterByDate[d]
+      const localTotal = Math.max(0, Number(local?.total) || 0)
+      const useLocal = localTotal > cloudTotal
       next.waterByDate[d] = {
         date: d,
-        total,
-        logs
+        total: useLocal ? localTotal : cloudTotal,
+        logs: useLocal ? (local?.logs || []) : cloudLogs
       }
     }
   }
@@ -610,12 +614,13 @@ function normalizeMetricNumber(value: unknown): number {
 function foodRecordItemWaterMl(item: FoodRecord['items'][number]): number {
   const waterMl = normalizeMetricNumber(item.water_ml ?? item.waterMl ?? item.nutrients?.water_ml ?? item.nutrients?.waterMl)
   if (waterMl <= 0) return 0
-  const ratio = normalizeMetricNumber(item.ratio)
-  if (ratio > 0) return waterMl * ratio / 100
-  const intake = normalizeMetricNumber(item.intake)
   const weight = normalizeMetricNumber(item.weight)
-  if (intake > 0 && weight > 0) return waterMl * intake / weight
-  if (intake === 0 && weight === 0) return waterMl
+  const cappedWaterMl = weight > 0 ? Math.min(waterMl, weight) : waterMl
+  const ratio = normalizeMetricNumber(item.ratio)
+  if (ratio > 0) return cappedWaterMl * ratio / 100
+  const intake = normalizeMetricNumber(item.intake)
+  if (intake > 0 && weight > 0) return cappedWaterMl * intake / weight
+  if (intake === 0 && weight === 0) return cappedWaterMl
   return 0
 }
 
@@ -1061,7 +1066,7 @@ function IndexPage() {
         const dayData = stats.daily_calories.find(d => normalizeTo2025(d.date) === normalizeTo2025(dateKey))
         const calories = snap ? snap.intakeData.current : (dayData?.calories || 0)
         const target = snap ? snap.intakeData.target : (stats.tdee || 2000)
-        const hasRecord = calories > 0
+        const hasRecord = calories > 0 || Boolean(snap?.meals?.length)
         nextWeekHeatmapCells.push({
           date: dateKey,
           dayName: SHORT_DAY_NAMES[date.getDay()],
@@ -1070,7 +1075,8 @@ function IndexPage() {
           target,
           intakeRatio: hasRecord ? calories / target : 0,
           state: !hasRecord ? 'none' : calories > target ? 'surplus' : 'deficit',
-          isToday: offset === 0
+          isToday: offset === 0,
+          hasRecord
         })
       }
       console.log('[DEBUG] weekHeatmapCells built:', nextWeekHeatmapCells.map(c => ({ date: c.date, state: c.state, calories: c.calories })))
@@ -2084,13 +2090,14 @@ function IndexPage() {
         if (cell.date !== date) return cell
         const calories = intake.current
         const target = intake.target
-        const hasRecord = calories > 0
+        const hasRecord = calories > 0 || (meals.length > 0)
         return {
           ...cell,
           calories,
           target,
           intakeRatio: hasRecord ? calories / target : 0,
-          state: !hasRecord ? 'none' : calories > target ? 'surplus' : 'deficit'
+          state: !hasRecord ? 'none' : calories > target ? 'surplus' : 'deficit',
+          hasRecord
         }
       }))
       homeLastLoadRef.current = { date, ts: Date.now() }

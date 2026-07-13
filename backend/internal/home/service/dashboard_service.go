@@ -784,6 +784,9 @@ func totalFoodRecordWaterMl(items []map[string]any) float64 {
 		if waterMl <= 0 {
 			continue
 		}
+		if weight, ok := toFloat64(item["weight"]); ok && weight > 0 && waterMl > weight {
+			waterMl = weight
+		}
 		if ratio, ok := toFloat64(item["ratio"]); ok && ratio >= 0 {
 			if ratio > 100 {
 				ratio = 100

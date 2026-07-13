@@ -135,8 +135,12 @@ func (s *AnalyzeService) ConfigureImageProvider(provider string) {
 	s.imageProvider = normalizeImageProviderPreference(provider)
 }
 
-func (s *AnalyzeService) ConfigureDeepSeekFallback(apiKey string) {
-	estimator := NewDeepSeekNutritionEstimator(apiKey, "", "")
+func (s *AnalyzeService) ConfigureDeepSeekFallback(apiKey string, baseURLs ...string) {
+	baseURL := ""
+	if len(baseURLs) > 0 {
+		baseURL = baseURLs[0]
+	}
+	estimator := NewDeepSeekNutritionEstimator(apiKey, baseURL, "")
 	s.deepseek = estimator
 	s.refreshNutritionFallbackEstimator()
 }
@@ -4354,6 +4358,9 @@ func parseItems(parsed map[string]any) []map[string]any {
 			if waterMl < 0 {
 				waterMl = 0
 			}
+			if weight > 0 && waterMl > weight {
+				waterMl = weight
+			}
 			nutrients := map[string]any{
 				"calories": 0.0,
 				"protein":  0.0,
@@ -4575,6 +4582,7 @@ func (s *AnalyzeService) applyEdiblePortionRatios(ctx context.Context, resp map[
 		next["ediblePortionRatio"] = round2(ratio)
 		next["estimatedWeightGrams"] = round2(edibleWeight)
 		next["originalWeightGrams"] = round2(edibleWeight)
+		capItemWaterMlToWeight(next)
 		if reason != "" && reason != "<nil>" {
 			next["ediblePortionReason"] = truncateEdiblePortionReason(reason)
 		} else if ratio < 100 {
@@ -4842,17 +4850,10 @@ func (s *AnalyzeService) applyDBFirstNutritionWithOptions(ctx context.Context, r
 						lookups[lookupIndex].item["resolve_reason"] = decision.Reason
 					}
 					if decision.ShouldAddAlias {
-						aliasName := strings.TrimSpace(decision.AliasName)
-						if aliasName == "" {
-							aliasName = strings.TrimSpace(semanticQueries[index])
-						}
-						if aliasErr := s.nutrition.EnsureNutritionAlias(ctx, food.ID, aliasName); aliasErr != nil {
-							logger.Warn(ctx, "语义复用后补别名失败",
-								logger.Err(aliasErr),
-								slog.String("food_id", food.ID),
-								slog.String("alias_name", aliasName),
-							)
-						}
+						logger.Info(ctx, "已跳过模型建议的永久营养别名写入",
+							slog.String("food_id", food.ID),
+							slog.String("alias_name", strings.TrimSpace(decision.AliasName)),
+						)
 					}
 					resolvedCount++
 					if unresolvedCount > 0 {
@@ -5029,6 +5030,7 @@ func (s *AnalyzeService) applyDBFirstNutritionWithOptions(ctx context.Context, r
 		out = append(out, next)
 	}
 	for _, item := range out {
+		capItemWaterMlToWeight(item)
 		item["nutrition_source_category"] = nutritionSourceCategory(stringFromAny(item["nutrition_source"]))
 	}
 	resp["items"] = out
@@ -5594,6 +5596,33 @@ func waterMlFromItem(item map[string]any) float64 {
 		}
 	}
 	return 0
+}
+
+func capItemWaterMlToWeight(item map[string]any) {
+	if item == nil {
+		return
+	}
+	weight := numberFromAny(firstNonNil(item["estimatedWeightGrams"], item["weight"], item["estimated_weight_g"], item["originalWeightGrams"]))
+	if weight <= 0 {
+		return
+	}
+	waterMl := waterMlFromItem(item)
+	if waterMl <= weight {
+		return
+	}
+	waterMl = round2(weight)
+	item["waterMl"] = waterMl
+	if _, ok := item["water_ml"]; ok {
+		item["water_ml"] = waterMl
+	}
+	if nutrients := mapFromAny(item["nutrients"]); len(nutrients) > 0 {
+		if _, ok := nutrients["waterMl"]; ok {
+			nutrients["waterMl"] = waterMl
+		}
+		if _, ok := nutrients["water_ml"]; ok {
+			nutrients["water_ml"] = waterMl
+		}
+	}
 }
 
 func nutritionUnit(food *foodrecorddomain.FoodNutrition) map[string]any {
@@ -6445,6 +6474,7 @@ func (s *AnalyzeService) rerankNutritionCandidatesWithDeepSeek(ctx context.Conte
 			"只有非常有把握时 reuseExisting 才能为 true。",
 			"confidence 取 0 到 1。",
 			"selectedCandidateIndex 必须使用输入里的 candidateIndex；如果不复用填 -1。",
+			"系统不会自动写入永久别名，shouldAddAlias 必须为 false，aliasName 必须为空。",
 		},
 		"items": requestItems,
 		"responseSchema": map[string]any{

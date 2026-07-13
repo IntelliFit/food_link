@@ -122,7 +122,7 @@ func (s *StatsService) generateDietRecommendationCore(ctx context.Context, userI
 		"stream":      false,
 	}
 	bodyBytes, _ := json.Marshal(body)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://api.deepseek.com/chat/completions", bytes.NewReader(bodyBytes))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.deepSeekChatBaseURL()+"/chat/completions", bytes.NewReader(bodyBytes))
 	if err != nil {
 		return nil, err
 	}

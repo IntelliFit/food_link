@@ -79,11 +79,36 @@ func TestLocationService_SearchAddress_Success(t *testing.T) {
 		var payload map[string]any
 		require.NoError(t, json.Unmarshal([]byte(postStr), &payload))
 		assert.Equal(t, `北京"店`, payload["keyWord"])
+		assert.Equal(t, float64(10), payload["count"])
+		assert.Equal(t, tiandituDefaultMapBound, payload["mapBound"])
 		return mockTiandituResponse(), nil
 	})
 	ctx := context.Background()
 
-	result, err := svc.SearchAddress(ctx, `北京"店`)
+	result, err := svc.SearchAddress(ctx, `北京"店`, 0, nil, nil, nil)
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+}
+
+func TestLocationService_SearchAddress_UsesCenterRadiusAndCount(t *testing.T) {
+	cfg := &config.Config{External: config.ExternalConfig{TiandituTK: "mock-tk"}}
+	svc := NewLocationService(cfg)
+	lon := 116.4
+	lat := 39.9
+	radiusKM := 2.0
+	svc.client.Transport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		postStr, err := url.QueryUnescape(req.URL.Query().Get("postStr"))
+		require.NoError(t, err)
+		var payload map[string]any
+		require.NoError(t, json.Unmarshal([]byte(postStr), &payload))
+
+		assert.Equal(t, float64(20), payload["count"])
+		assert.Equal(t, "116.376514,39.881982,116.423486,39.918018", payload["mapBound"])
+		return mockTiandituResponse(), nil
+	})
+	ctx := context.Background()
+
+	result, err := svc.SearchAddress(ctx, "北京大学", 50, &lon, &lat, &radiusKM)
 	assert.NoError(t, err)
 	assert.NotNil(t, result)
 }
@@ -93,7 +118,7 @@ func TestLocationService_SearchAddress_EmptyKeyword(t *testing.T) {
 	svc := NewLocationService(cfg)
 	ctx := context.Background()
 
-	result, err := svc.SearchAddress(ctx, " ")
+	result, err := svc.SearchAddress(ctx, " ", 0, nil, nil, nil)
 	assert.NoError(t, err)
 	assert.Equal(t, "", result["keyword"])
 	assert.Empty(t, result["pois"])
@@ -104,7 +129,7 @@ func TestLocationService_SearchAddress_MissingTK(t *testing.T) {
 	svc := NewLocationService(cfg)
 	ctx := context.Background()
 
-	_, err := svc.SearchAddress(ctx, "北京")
+	_, err := svc.SearchAddress(ctx, "北京", 0, nil, nil, nil)
 	assert.Error(t, err)
 }
 
@@ -116,7 +141,7 @@ func TestLocationService_SearchAddress_HTTPError(t *testing.T) {
 	})
 	ctx := context.Background()
 
-	_, err := svc.SearchAddress(ctx, "北京")
+	_, err := svc.SearchAddress(ctx, "北京", 0, nil, nil, nil)
 	assert.Error(t, err)
 }
 
@@ -135,7 +160,7 @@ func TestLocationService_SearchAddress_NonJSONProductionReturnsFriendlyAppError(
 	})
 	ctx := context.Background()
 
-	_, err := svc.SearchAddress(ctx, "北京")
+	_, err := svc.SearchAddress(ctx, "北京", 0, nil, nil, nil)
 	require.Error(t, err)
 	var appErr *commonerrors.AppError
 	require.True(t, errors.As(err, &appErr))
@@ -157,7 +182,7 @@ func TestLocationService_SearchAddress_HTTPForbiddenDevelopmentFallback(t *testi
 	})
 	ctx := context.Background()
 
-	result, err := svc.SearchAddress(ctx, "咖啡")
+	result, err := svc.SearchAddress(ctx, "咖啡", 0, nil, nil, nil)
 	require.NoError(t, err)
 	assert.Equal(t, true, result["fallback"])
 	assert.NotEmpty(t, result["pois"])

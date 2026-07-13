@@ -136,6 +136,7 @@ type CreateMembershipPaymentInput struct {
 type MembershipService struct {
 	repo            MembershipRepo
 	paymentTestRepo PaymentTestPolicyRepo
+	papayRepo       PapayContractRepository
 	cfg             *config.Config
 	client          *http.Client
 }
@@ -189,6 +190,10 @@ func NewMembershipService(repo MembershipRepo, cfg ...*config.Config) *Membershi
 		svc.paymentTestRepo = paymentTestRepo
 	}
 	return svc
+}
+
+func (s *MembershipService) ConfigurePapayRepository(repo PapayContractRepository) {
+	s.papayRepo = repo
 }
 
 func (s *MembershipService) ListPlans(ctx context.Context, userID string) ([]map[string]any, error) {
@@ -257,6 +262,13 @@ func (s *MembershipService) GetMyMembership(ctx context.Context, userID string, 
 		return nil, err
 	}
 	resp := formatMembershipResponse(membership)
+	if s.papayRepo != nil {
+		contract, contractErr := s.papayRepo.GetEffectivePapayContract(ctx, userID)
+		if contractErr != nil {
+			return nil, contractErr
+		}
+		resp["auto_renew_contract"] = formatPapayContract(contract)
+	}
 
 	usedToday, err := s.repo.CountAnalysisTasksToday(ctx, userID)
 	if err != nil {
@@ -348,7 +360,7 @@ func (s *MembershipService) reconcileMembershipFromLatestPaidOrder(ctx context.C
 		"current_period_start": expectedPeriodStart,
 		"expires_at":           expectedExpiresAt,
 		"last_paid_at":         *paidAt,
-		"auto_renew":           false,
+		"auto_renew":           latest.PayChannel == "wechat_papay",
 		"daily_credits":        effectiveDailyCredits,
 	})
 }
@@ -2394,7 +2406,7 @@ func (s *MembershipService) activateMembershipFromPayment(ctx context.Context, p
 		"current_period_start": start,
 		"expires_at":           expires,
 		"last_paid_at":         paidAt,
-		"auto_renew":           false,
+		"auto_renew":           payment.PayChannel == "wechat_papay",
 		"daily_credits":        dailyCredits,
 	})
 }
@@ -2777,6 +2789,7 @@ func formatMembershipResponse(membership *domain.UserMembership) map[string]any 
 			"current_period_start": nil,
 			"expires_at":           nil,
 			"last_paid_at":         nil,
+			"auto_renew":           false,
 		}
 	}
 	status := membership.Status
@@ -2795,6 +2808,7 @@ func formatMembershipResponse(membership *domain.UserMembership) map[string]any 
 		"current_period_start": timePtrISO(membership.CurrentPeriodStart),
 		"expires_at":           timePtrISO(membership.ExpiresAt),
 		"last_paid_at":         timePtrISO(membership.LastPaidAt),
+		"auto_renew":           membership.AutoRenew,
 	}
 }
 

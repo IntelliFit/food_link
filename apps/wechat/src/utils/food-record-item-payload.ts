@@ -79,6 +79,13 @@ export const buildFoodRecordNutrients = (
   sodium_mg: normalizeFoodRecordNumber(nutrients?.sodium_mg ?? nutrients?.sodiumMg),
 })
 
+const clampFoodRecordWaterMl = (value: unknown, maxWeight: number): number => {
+  const waterMl = normalizeFoodRecordNumber(value)
+  if (waterMl <= 0) return 0
+  if (maxWeight <= 0) return waterMl
+  return Math.min(waterMl, maxWeight)
+}
+
 export const buildFoodRecordItemPayloadFromResultItem = <T extends ResultRecordItemSource>(
   item: T,
   nutrients: Nutrients,
@@ -98,6 +105,10 @@ export const buildFoodRecordItemPayloadFromResultItem = <T extends ResultRecordI
   const existingManualSource = firstDefined(item.manual_source, item.manualSource) as FoodRecordItemPayload['manual_source']
   const existingManualSourceId = firstDefined(item.manual_source_id, item.manualSourceId)
   const existingManualSourceTitle = firstDefined(item.manual_source_title, item.manualSourceTitle)
+  const waterMl = clampFoodRecordWaterMl(
+    firstDefined(item.water_ml, item.waterMl, nutrients.water_ml, nutrients.waterMl),
+    weight,
+  )
 
   let manualSource: FoodRecordItemPayload['manual_source'] = existingManualSource
   let manualSourceId: string | undefined = existingManualSourceId
@@ -128,7 +139,7 @@ export const buildFoodRecordItemPayloadFromResultItem = <T extends ResultRecordI
     suggested_ratio: firstDefined(item.suggested_ratio, item.suggestedRatio),
     suggested_ratio_reason: firstDefined(item.suggested_ratio_reason, item.suggestedRatioReason),
     suggested_ratio_source: firstDefined(item.suggested_ratio_source, item.suggestedRatioSource),
-    water_ml: firstDefined(item.water_ml, item.waterMl),
+    water_ml: waterMl,
     nutrition_source: firstDefined(item.nutrition_source, item.nutritionSource),
     nutrition_source_category: firstDefined(item.nutrition_source_category, item.nutritionSourceCategory),
     matched_food_id: firstDefined(item.matched_food_id, item.matchedFoodId),
@@ -142,7 +153,11 @@ export const buildFoodRecordItemPayloadFromResultItem = <T extends ResultRecordI
     manual_source: manualSource,
     manual_source_id: manualSourceId,
     manual_source_title: manualSourceTitle,
-    nutrients,
+    nutrients: {
+      ...nutrients,
+      waterMl,
+      water_ml: waterMl,
+    },
   }
 }
 

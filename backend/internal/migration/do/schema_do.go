@@ -1046,6 +1046,31 @@ type MembershipPaymentDO struct {
 
 func (MembershipPaymentDO) TableName() string { return "pro_membership_payment_records" }
 
+type PapayContractDO struct {
+	ID                     string         `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	UserID                 string         `gorm:"column:user_id;type:uuid;not null;index:idx_wechat_papay_contracts_user_status,priority:1"`
+	PlanCode               string         `gorm:"column:plan_code;type:varchar(50);not null"`
+	TemplateID             string         `gorm:"column:template_id;type:varchar(28);not null"`
+	MerchantContractCode   string         `gorm:"column:merchant_contract_code;type:varchar(128);not null;uniqueIndex:idx_wechat_papay_contracts_merchant_code"`
+	WechatContractID       *string        `gorm:"column:wechat_contract_id;type:varchar(32);uniqueIndex:idx_wechat_papay_contracts_wechat_contract_id"`
+	OpenID                 *string        `gorm:"column:openid;type:text"`
+	Status                 string         `gorm:"column:status;type:varchar(32);not null;default:'pending';index:idx_wechat_papay_contracts_user_status,priority:2"`
+	RenewalState           string         `gorm:"column:renewal_state;type:varchar(32);not null;default:'awaiting_sign'"`
+	RequestSerial          string         `gorm:"column:request_serial;type:varchar(32);not null;uniqueIndex:idx_wechat_papay_contracts_request_serial"`
+	NextActionAt           *time.Time     `gorm:"column:next_action_at;type:timestamptz;index:idx_wechat_papay_contracts_next_action"`
+	RenewalDueAt           *time.Time     `gorm:"column:renewal_due_at;type:timestamptz"`
+	LastOrderNo            *string        `gorm:"column:last_order_no;type:varchar(100)"`
+	LastError              *string        `gorm:"column:last_error;type:text"`
+	TerminatedAt           *time.Time     `gorm:"column:terminated_at;type:timestamptz"`
+	TerminationSource      *string        `gorm:"column:termination_source;type:varchar(32)"`
+	SignNotifyPayload      map[string]any `gorm:"column:sign_notify_payload;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
+	TerminateNotifyPayload map[string]any `gorm:"column:terminate_notify_payload;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
+	CreatedAt              time.Time      `gorm:"column:created_at;type:timestamptz;not null;default:now()"`
+	UpdatedAt              time.Time      `gorm:"column:updated_at;type:timestamptz;not null;default:now()"`
+}
+
+func (PapayContractDO) TableName() string { return "wechat_papay_contracts" }
+
 type UserInviteReferralDO struct {
 	ID                       string     `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
 	InviterUserID            string     `gorm:"column:inviter_user_id;type:uuid;not null;index:idx_user_invite_referrals_inviter,priority:1"`
@@ -1327,6 +1352,7 @@ func AllModels() []any {
 		&PetChatMessageDO{},
 		&UserTrialEntitlementDO{},
 		&MembershipPlanDO{},
+		&PapayContractDO{},
 		&PaymentTestSettingDO{},
 		&PaymentTestUserDO{},
 		&AnalysisTaskDO{},

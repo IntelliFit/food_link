@@ -223,6 +223,9 @@ func TestManualFoodResultFromPackagedUsesOnlyPrimaryImage(t *testing.T) {
 	assert.Equal(t, "snack", item.Category)
 	assert.Equal(t, "g", item.DisplayUnit)
 	assert.Equal(t, 90.0, item.DefaultWeightGrams)
+	assert.Equal(t, 468.0, item.TotalCalories)
+	assert.Equal(t, 54.0, item.TotalCarbs)
+	assert.Equal(t, 25.2, item.TotalFat)
 	assert.Equal(t, 520.0, item.NutrientsPer100g.Calories)
 	assert.Contains(t, item.Title, "番茄味")
 }
@@ -263,8 +266,34 @@ func TestManualFoodResultFromPackagedUsesNetContentValue(t *testing.T) {
 
 	assert.Equal(t, "士力架 花生夹心巧克力 70g", item.Title)
 	assert.Equal(t, 70.0, item.DefaultWeightGrams)
+	assert.InDelta(t, 340.9, item.TotalCalories, 0.01)
+	assert.InDelta(t, 43.4, item.TotalCarbs, 0.01)
 	assert.Equal(t, "70g", item.PortionLabel)
 	assert.Contains(t, item.NutritionHighlights, "净含量 70g")
+}
+
+func TestManualFoodResultFromPackagedScalesPer100gToServingWeight(t *testing.T) {
+	item := manualFoodResultFromPackaged(fooddomain.PackagedFood{
+		ID:              "pkg-pocky",
+		Brand:           "格力高",
+		ProductName:     "百奇巧克力味",
+		ServingWeightG:  25,
+		KcalPer100g:     504,
+		ProteinPer100g:  9.7,
+		CarbsPer100g:    64.5,
+		FatPer100g:      22.8,
+		SodiumMgPer100g: 220,
+	}, 0.9)
+
+	assert.Equal(t, 25.0, item.DefaultWeightGrams)
+	assert.Equal(t, "25g", item.PortionLabel)
+	assert.Equal(t, 126.0, item.TotalCalories)
+	assert.InDelta(t, 2.425, item.TotalProtein, 0.001)
+	assert.InDelta(t, 16.125, item.TotalCarbs, 0.001)
+	assert.InDelta(t, 5.7, item.TotalFat, 0.001)
+	assert.Equal(t, 504.0, item.NutrientsPer100g.Calories)
+	assert.Equal(t, 64.5, item.NutrientsPer100g.Carbs)
+	assert.Equal(t, 55.0, item.ExtraNutrients.SodiumMg)
 }
 
 func TestEnrichManualFoodResultsWithNutritionLibrary(t *testing.T) {
@@ -327,7 +356,6 @@ func TestManualFoodCategoryFilterSQL(t *testing.T) {
 	assert.Contains(t, manualFoodCategoryFilterSQL("canonical_name", "other"), "NOT (")
 }
 
-
 func TestMergeManualFoodNutrients_KeepsExistingMacrosAndBackfillsMicros(t *testing.T) {
 	existing := &domain.ManualFoodNutrients{
 		Calories: 127.5,
@@ -336,13 +364,13 @@ func TestMergeManualFoodNutrients_KeepsExistingMacrosAndBackfillsMicros(t *testi
 		Fat:      0.3,
 	}
 	library := &domain.ManualFoodNutrients{
-		Calories:       116,
-		Protein:        2.6,
-		Carbs:          25.9,
-		Fat:            0.3,
-		Fiber:          0.4,
-		SodiumMg:       2,
-		PotassiumMg:    35,
+		Calories:    116,
+		Protein:     2.6,
+		Carbs:       25.9,
+		Fat:         0.3,
+		Fiber:       0.4,
+		SodiumMg:    2,
+		PotassiumMg: 35,
 	}
 	merged := mergeManualFoodNutrients(existing, library)
 	require.NotNil(t, merged)

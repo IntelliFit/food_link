@@ -16,24 +16,8 @@ import (
 var identifierPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
 func AutoMigrate(ctx context.Context, db *gorm.DB, schema string) error {
-	if schema == "" {
-		schema = "public"
-	}
-	if !identifierPattern.MatchString(schema) {
-		return fmt.Errorf("invalid database schema: %q", schema)
-	}
-	qSchema := quoteIdent(schema)
-	if err := db.WithContext(ctx).Exec("CREATE SCHEMA IF NOT EXISTS " + qSchema).Error; err != nil {
-		return fmt.Errorf("create schema: %w", err)
-	}
-	if err := db.WithContext(ctx).Exec("CREATE EXTENSION IF NOT EXISTS pgcrypto").Error; err != nil {
-		return fmt.Errorf("create pgcrypto extension: %w", err)
-	}
-	if err := db.WithContext(ctx).Exec("CREATE EXTENSION IF NOT EXISTS pg_trgm").Error; err != nil {
-		return fmt.Errorf("create pg_trgm extension: %w", err)
-	}
-	if err := db.WithContext(ctx).Exec("SET search_path TO " + qSchema).Error; err != nil {
-		return fmt.Errorf("set search path: %w", err)
+	if err := prepareSchema(ctx, db, schema); err != nil {
+		return err
 	}
 	if err := db.WithContext(ctx).AutoMigrate(migrationdo.AllModels()...); err != nil {
 		return fmt.Errorf("auto migrate models: %w", err)
@@ -80,7 +64,47 @@ func AutoMigrate(ctx context.Context, db *gorm.DB, schema string) error {
 	if err := ensureMembershipGrantConfig(ctx, db); err != nil {
 		return err
 	}
+	return ensurePapayContractIndexes(ctx, db)
+}
+
+// MigratePapayContracts applies only the automatic-renewal schema changes.
+func MigratePapayContracts(ctx context.Context, db *gorm.DB, schema string) error {
+	if err := prepareSchema(ctx, db, schema); err != nil {
+		return err
+	}
+	if err := db.WithContext(ctx).AutoMigrate(&migrationdo.PapayContractDO{}); err != nil {
+		return fmt.Errorf("auto migrate papay contract: %w", err)
+	}
+	return ensurePapayContractIndexes(ctx, db)
+}
+
+func prepareSchema(ctx context.Context, db *gorm.DB, schema string) error {
+	if schema == "" {
+		schema = "public"
+	}
+	if !identifierPattern.MatchString(schema) {
+		return fmt.Errorf("invalid database schema: %q", schema)
+	}
+	qSchema := quoteIdent(schema)
+	if err := db.WithContext(ctx).Exec("CREATE SCHEMA IF NOT EXISTS " + qSchema).Error; err != nil {
+		return fmt.Errorf("create schema: %w", err)
+	}
+	if err := db.WithContext(ctx).Exec("CREATE EXTENSION IF NOT EXISTS pgcrypto").Error; err != nil {
+		return fmt.Errorf("create pgcrypto extension: %w", err)
+	}
+	if err := db.WithContext(ctx).Exec("CREATE EXTENSION IF NOT EXISTS pg_trgm").Error; err != nil {
+		return fmt.Errorf("create pg_trgm extension: %w", err)
+	}
+	if err := db.WithContext(ctx).Exec("SET search_path TO " + qSchema).Error; err != nil {
+		return fmt.Errorf("set search path: %w", err)
+	}
 	return nil
+}
+
+func ensurePapayContractIndexes(ctx context.Context, db *gorm.DB) error {
+	return db.WithContext(ctx).Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_wechat_papay_contracts_one_effective_per_user
+ON wechat_papay_contracts (user_id)
+WHERE status IN ('pending', 'active', 'termination_requested')`).Error
 }
 
 func quoteIdent(value string) string {

@@ -169,6 +169,8 @@ type fakeAnalyzeNutritionResolver struct {
 	nescafeFood          foodrecorddomain.PackagedFood
 	sugarfreeDrinkFood   foodrecorddomain.PackagedFood
 	packagedResolveCalls int
+	searchCandidates     map[string][]foodrecordrepo.SearchCandidate
+	ensuredAliases       []string
 }
 
 func newFakeAnalyzeNutritionResolver() *fakeAnalyzeNutritionResolver {
@@ -279,10 +281,14 @@ func (r *fakeAnalyzeNutritionResolver) ResolveFood(ctx context.Context, name str
 }
 
 func (r *fakeAnalyzeNutritionResolver) SearchCandidates(ctx context.Context, query string, limit int) ([]foodrecordrepo.SearchCandidate, error) {
+	if r.searchCandidates != nil {
+		return r.searchCandidates[strings.TrimSpace(query)], nil
+	}
 	return nil, nil
 }
 
 func (r *fakeAnalyzeNutritionResolver) EnsureNutritionAlias(ctx context.Context, foodID, rawName string) error {
+	r.ensuredAliases = append(r.ensuredAliases, foodID+":"+rawName)
 	return nil
 }
 
@@ -802,6 +808,16 @@ func TestParseItems(t *testing.T) {
 	assert.Equal(t, 126.0, items[0]["waterMl"])
 	assert.Equal(t, 150.0, items[0]["grossWeightGrams"])
 	assert.Equal(t, 100.0, items[0]["ediblePortionRatio"])
+}
+
+func TestParseItemsCapsWaterMlAtEstimatedWeight(t *testing.T) {
+	items := parseItems(map[string]any{"items": []any{map[string]any{
+		"name":                 "牛肉面",
+		"estimatedWeightGrams": 550.0,
+		"waterMl":              700.0,
+	}}})
+	require.Len(t, items, 1)
+	assert.Equal(t, 550.0, items[0]["waterMl"])
 }
 
 func TestParseItemsPreservesGrossAndEdibleRatio(t *testing.T) {
@@ -2830,6 +2846,42 @@ func TestAnalyzeService_ApplyDBFirstUsesDeepSeekSemanticReuse(t *testing.T) {
 	assert.Equal(t, "甜筒/蛋筒属于同义包装说法", items[0]["resolve_reason"])
 	nutrients := items[0]["nutrients"].(map[string]any)
 	assert.Equal(t, 176.0, nutrients["calories"])
+}
+
+func TestAnalyzeService_SemanticReuseDoesNotPersistModelSuggestedAlias(t *testing.T) {
+	resolver := newFakeAnalyzeNutritionResolver()
+	resolver.searchCandidates = map[string][]foodrecordrepo.SearchCandidate{
+		"原味冰淇淋": {{
+			Food: foodrecorddomain.FoodNutrition{
+				ID:             "icecream-1",
+				CanonicalName:  "原味冰淇淋蛋筒",
+				KcalPer100g:    220,
+				ProteinPer100g: 4,
+				CarbsPer100g:   28,
+				FatPer100g:     10,
+				IsActive:       true,
+			},
+			MatchSource: "fuzzy",
+			Score:       0.8,
+		}},
+	}
+	svc := NewAnalyzeService(&mockLLMClient{}, &mockLLMClient{}, nil)
+	svc.ConfigureNutritionResolver(resolver)
+	svc.ConfigureDeepSeekFallback("fake-key")
+	svc.deepseek.client = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		body := `{"choices":[{"message":{"content":"{\"items\":[{\"index\":0,\"reuseExisting\":true,\"selectedCandidateIndex\":0,\"confidence\":0.99,\"reason\":\"同义名称\",\"shouldAddAlias\":true,\"aliasName\":\"原味冰淇淋\"}]}"}}]}`
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
+	})}
+
+	items := svc.ApplyDBFirstToItems(context.Background(), []map[string]any{{
+		"name":                 "原味冰淇淋",
+		"type":                 "dish",
+		"estimatedWeightGrams": 80.0,
+	}}, "")
+
+	require.Len(t, items, 1)
+	assert.Equal(t, "semantic_rerank", items[0]["resolve_status"])
+	assert.Empty(t, resolver.ensuredAliases)
 }
 
 func TestModelDeclaredPackagedFoodDoesNotInferFromName(t *testing.T) {

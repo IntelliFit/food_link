@@ -376,6 +376,10 @@ func TestTotalFoodWaterIntakeMl(t *testing.T) {
 	assert.Equal(t, 80, totalFoodWaterIntakeMl([]domain.FoodItem{{WaterMl: 200, Weight: 500, Intake: 200}}))
 	assert.Equal(t, 0, totalFoodWaterIntakeMl([]domain.FoodItem{{WaterMl: 200, Ratio: 0, Weight: 500, Intake: 0}}))
 	assert.Equal(t, 126, totalFoodWaterIntakeMl([]domain.FoodItem{{WaterMl: 125.5}}))
+	assert.Equal(t, 90, totalFoodWaterIntakeMl([]domain.FoodItem{{WaterMl: 180, Weight: 100, Ratio: 90}}))
+	items := normalizeFoodItems([]domain.FoodItem{{WaterMl: 180, Weight: 100}})
+	require.Len(t, items, 1)
+	assert.Equal(t, 100.0, items[0].WaterMl)
 }
 
 func TestFoodRecordService_Save_WithSourceTaskID(t *testing.T) {
@@ -1394,4 +1398,3 @@ func TestShiftMealTypeByExistingRecord(t *testing.T) {
 	// 无记录 -> 保持
 	assert.Equal(t, "breakfast", shiftMealTypeByExistingRecords("breakfast", ref, nil))
 }
-

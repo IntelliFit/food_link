@@ -367,6 +367,12 @@ func normalizeFoodItems(items []domain.FoodItem) []domain.FoodItem {
 		if items[i].Intake < 0 {
 			items[i].Intake = 0
 		}
+		if items[i].WaterMl < 0 {
+			items[i].WaterMl = 0
+		}
+		if items[i].Weight > 0 && items[i].WaterMl > items[i].Weight {
+			items[i].WaterMl = items[i].Weight
+		}
 	}
 	return items
 }
@@ -450,6 +456,9 @@ func totalFoodWaterIntakeMl(items []domain.FoodItem) int {
 		waterMl := item.WaterMl
 		if waterMl <= 0 {
 			continue
+		}
+		if item.Weight > 0 && waterMl > item.Weight {
+			waterMl = item.Weight
 		}
 		ratio := item.Ratio
 		if ratio > 100 {
@@ -973,6 +982,9 @@ func (s *FoodRecordService) hydrateRecordNutrientsFromTask(ctx context.Context, 
 		fillMissingNutrients(&record.Items[index].Nutrients, source.nutrients)
 		if record.Items[index].WaterMl <= 0 && source.waterMl > 0 {
 			record.Items[index].WaterMl = source.waterMl
+		}
+		if record.Items[index].Weight > 0 && record.Items[index].WaterMl > record.Items[index].Weight {
+			record.Items[index].WaterMl = record.Items[index].Weight
 		}
 	}
 }

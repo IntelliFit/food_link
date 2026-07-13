@@ -209,20 +209,17 @@ func (s *StatsService) GenerateCustomFocusCard(ctx context.Context, userID, stat
 
 	riskCard := domainCustomFocusToRiskCard(card, false)
 	meta := map[string]any{
-		"card":                           riskCard,
-		"custom_focus_daily_limit":       customFocusDailyLimit,
-		"custom_focus_used_today":        int(countToday) + 1,
-		"custom_focus_remaining_today":   maxInt(0, customFocusDailyLimit-int(countToday)-1),
+		"card":                         riskCard,
+		"custom_focus_daily_limit":     customFocusDailyLimit,
+		"custom_focus_used_today":      int(countToday) + 1,
+		"custom_focus_remaining_today": maxInt(0, customFocusDailyLimit-int(countToday)-1),
 	}
 	return &riskCard, meta, nil
 }
 
 func (s *StatsService) generateCustomFocusCardPayload(ctx context.Context, comp *statsComputation, focusLabel string) (*customFocusCardPayload, error) {
 	apiKey := ""
-	baseURL := s.deepSeekBaseURL
-	if strings.TrimSpace(baseURL) == "" {
-		baseURL = "https://api.deepseek.com"
-	}
+	baseURL := s.deepSeekChatBaseURL()
 	if s.cfg != nil {
 		apiKey = strings.TrimSpace(s.cfg.External.DeepSeekAPIKey)
 	}

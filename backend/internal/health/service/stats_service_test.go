@@ -379,8 +379,71 @@ func TestStatsService_GenerateInsightReturnsErrorWhenDeepSeekFails(t *testing.T)
 	assert.Empty(t, repo.insights)
 }
 
-func TestStatsInsightUsesDeepSeekV4FlashModel(t *testing.T) {
-	assert.Equal(t, "deepseek-v4-flash", statsInsightDeepSeekModel)
+func TestStatsInsightUsesDeepSeekV4ProModel(t *testing.T) {
+	assert.Equal(t, "deepseek-v4-pro", statsInsightDeepSeekModel)
+}
+
+func TestNewStatsServiceUsesConfiguredDeepSeekBaseURL(t *testing.T) {
+	svc := NewStatsService(&mockStatsRepo{}, &mockBodyMetricsProvider{}, &config.Config{
+		External: config.ExternalConfig{DeepSeekBaseURL: " https://llm.example.com/api/v1/ "},
+	})
+
+	assert.Equal(t, "https://llm.example.com/api/v1", svc.deepSeekChatBaseURL())
+}
+
+func TestNewStatsInsightHTTPClientAllowsSlowTLSHandshake(t *testing.T) {
+	client := newStatsInsightHTTPClient()
+	transport, ok := client.Transport.(*http.Transport)
+	require.True(t, ok)
+	assert.Equal(t, 30*time.Second, transport.TLSHandshakeTimeout)
+	assert.Equal(t, 90*time.Second, client.Timeout)
+}
+
+func TestStatsService_RequestNutritionInsightRetriesTransientUpstreamFailure(t *testing.T) {
+	requestCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCount++
+		if requestCount == 1 {
+			http.Error(w, `{"error":{"message":"gateway temporarily unavailable"}}`, http.StatusServiceUnavailable)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"我们先从明天的一份蛋白质加餐开始。"},"finish_reason":"stop"}]}`))
+	}))
+	defer server.Close()
+
+	svc := NewStatsService(&mockStatsRepo{}, &mockBodyMetricsProvider{})
+	result, err := svc.requestNutritionInsight(context.Background(), server.URL, "test-key", "deepseek-v4-pro", "test prompt", "")
+
+	require.NoError(t, err)
+	assert.Equal(t, 2, requestCount)
+	assert.Equal(t, "我们先从明天的一份蛋白质加餐开始。", result.Content)
+}
+
+func TestStatsService_GenerateDietRecommendationUsesConfiguredDeepSeekBaseURL(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/chat/completions", r.URL.Path)
+		assert.Equal(t, "Bearer test-key", r.Header.Get("Authorization"))
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"{\"scene\":\"cook_home\",\"title\":\"轻松补蛋白\",\"summary\":\"优先补足蛋白质\",\"recommendations\":[{\"title\":\"鸡胸肉配米饭\",\"reason\":\"补蛋白且热量可控\",\"calories\":420,\"protein\":38,\"carbs\":48,\"fat\":8,\"items\":[{\"name\":\"鸡胸肉\",\"amount\":\"150g\"}],\"tips\":[],\"alternatives\":[]}] }"}}]}`))
+	}))
+	defer server.Close()
+
+	svc := NewStatsService(&mockStatsRepo{}, &mockBodyMetricsProvider{}, &config.Config{
+		External: config.ExternalConfig{
+			DeepSeekAPIKey:  "test-key",
+			DeepSeekBaseURL: server.URL + "/",
+		},
+	})
+
+	result, err := svc.GenerateDietRecommendation(context.Background(), "u1", DietRecommendationInput{
+		Scene:            "cook_home",
+		CalorieRemaining: 450,
+		MacroGaps:        DietRecommendationMacro{Protein: 30, Carbs: 50, Fat: 8},
+	})
+	require.NoError(t, err)
+	assert.NotEqual(t, "rule_fallback", result.GeneratedBy)
+	assert.NotEmpty(t, result.Recommendations)
 }
 
 func TestStatsInsightRequestsEnoughOutputTokens(t *testing.T) {
@@ -580,6 +643,35 @@ func TestStatsService_GeneratePetChatRetriesHarshTone(t *testing.T) {
 	assert.Equal(t, 2, requestCount)
 	assert.Contains(t, result.Answer, "我们先把明天目标放小一点")
 	assert.NotContains(t, result.Answer, "你这坎儿")
+}
+
+func TestStatsService_GeneratePetChatRetriesTransientUpstreamFailure(t *testing.T) {
+	requestCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCount++
+		if requestCount == 1 {
+			http.Error(w, `{"error":{"message":"gateway temporarily unavailable"}}`, http.StatusBadGateway)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"我们可以先从明天午餐多加一份蛋白质开始，慢慢调整就好。"},"finish_reason":"stop"}]}`))
+	}))
+	defer server.Close()
+
+	recordTime := time.Date(2024, 6, 15, 12, 0, 0, 0, time.UTC)
+	repo := &mockStatsRepo{records: []domain.FoodRecord{{
+		UserID: "u1", MealType: "lunch", TotalCalories: 500, TotalProtein: 20, TotalCarbs: 60, TotalFat: 15, RecordTime: &recordTime,
+	}}}
+	svc := NewStatsService(repo, &mockBodyMetricsProvider{}, &config.Config{
+		External: config.ExternalConfig{DeepSeekAPIKey: "test-key"},
+	})
+	svc.deepSeekBaseURL = server.URL
+
+	result, err := svc.GeneratePetChat(context.Background(), "u1", PetChatInput{Range: "week", Question: "你好"})
+
+	require.NoError(t, err)
+	assert.Equal(t, 2, requestCount)
+	assert.Contains(t, result.Answer, "明天午餐")
 }
 
 func TestStatsService_GenerateInsightReturnsErrorWhenDeepSeekTruncates(t *testing.T) {

@@ -73,6 +73,13 @@ export const buildFoodRecordNutrients = (
   sodium_mg: normalizeFoodRecordNumber(nutrients?.sodium_mg ?? nutrients?.sodiumMg),
 })
 
+const clampFoodRecordWaterMl = (value: unknown, maxWeight: number): number => {
+  const waterMl = normalizeFoodRecordNumber(value)
+  if (waterMl <= 0) return 0
+  if (maxWeight <= 0) return waterMl
+  return Math.min(waterMl, maxWeight)
+}
+
 export const buildFoodRecordItemPayloadFromResultItem = <T extends ResultRecordItemSource>(
   item: T,
   nutrients: Nutrients,
@@ -84,6 +91,10 @@ export const buildFoodRecordItemPayloadFromResultItem = <T extends ResultRecordI
   if (ratio < 0) ratio = 0
   if (intake > weight) intake = weight
   if (intake < 0) intake = 0
+  const waterMl = clampFoodRecordWaterMl(
+    firstDefined(item.water_ml, item.waterMl, nutrients.water_ml, nutrients.waterMl),
+    weight,
+  )
   return {
     name: item.name || '未命名食物',
     weight,
@@ -96,7 +107,7 @@ export const buildFoodRecordItemPayloadFromResultItem = <T extends ResultRecordI
     suggested_ratio: firstDefined(item.suggested_ratio, item.suggestedRatio),
     suggested_ratio_reason: firstDefined(item.suggested_ratio_reason, item.suggestedRatioReason),
     suggested_ratio_source: firstDefined(item.suggested_ratio_source, item.suggestedRatioSource),
-    water_ml: firstDefined(item.water_ml, item.waterMl),
+    water_ml: waterMl,
     nutrition_source: firstDefined(item.nutrition_source, item.nutritionSource),
     nutrition_source_category: firstDefined(item.nutrition_source_category, item.nutritionSourceCategory),
     matched_food_id: firstDefined(item.matched_food_id, item.matchedFoodId),
@@ -107,7 +118,11 @@ export const buildFoodRecordItemPayloadFromResultItem = <T extends ResultRecordI
     package_weight_applied: firstDefined(item.package_weight_applied, item.packageWeightApplied),
     package_weight_reason: firstDefined(item.package_weight_reason, item.packageWeightReason),
     packaged_candidates: firstDefined(item.packaged_candidates, item.packagedCandidates),
-    nutrients,
+    nutrients: {
+      ...nutrients,
+      waterMl,
+      water_ml: waterMl,
+    },
   }
 }
 

@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	adminhandler "food_link/backend/internal/admin/handler"
@@ -190,7 +191,7 @@ func New(cfg *config.Config) (*App, error) {
 		analyzeSvc.ConfigureDoubaoWebSearchClient(cfg.External.DoubaoWebSearchAPIKey, cfg.External.DoubaoBaseURL, "")
 	}
 	analyzeSvc.ConfigureImageProvider(cfg.External.LLMProvider)
-	analyzeSvc.ConfigureDeepSeekFallback(cfg.External.DeepSeekAPIKey)
+	analyzeSvc.ConfigureDeepSeekFallback(cfg.External.DeepSeekAPIKey, cfg.External.DeepSeekBaseURL)
 	analyzeSvc.ConfigureStorage(storageClient)
 	frRepo := foodrecordrepo.NewFoodRecordRepo(db)
 
@@ -252,6 +253,7 @@ func New(cfg *config.Config) (*App, error) {
 	// Membership module DI
 	membershipRepo := membershiprepo.NewMembershipRepo(db)
 	membershipSvc := membershipservice.NewMembershipService(membershipRepo, cfg)
+	membershipSvc.ConfigurePapayRepository(membershipRepo)
 	statsSvc.ConfigureCreditGuard(membershipSvc)
 	analyzeTaskSvc.ConfigureCreditGuard(membershipSvc)
 	exerciseSvc.ConfigureCreditGuard(membershipSvc)
@@ -512,6 +514,10 @@ func New(cfg *config.Config) (*App, error) {
 	engine.POST("/api/membership/pay/create", authmw.RequireJWT(jwtSvc), membershipHandler.CreatePayment)
 	engine.POST("/api/membership/pay/sync", authmw.RequireJWT(jwtSvc), membershipHandler.SyncPayment)
 	engine.POST("/api/payment/wechat/notify/membership", membershipHandler.WechatNotify)
+	engine.POST("/api/membership/auto-renew/signing", authmw.RequireJWT(jwtSvc), membershipHandler.CreatePapaySigning)
+	engine.POST("/api/membership/auto-renew/cancel", authmw.RequireJWT(jwtSvc), membershipHandler.CancelPapayContract)
+	engine.POST("/api/payment/wechat/papay/contract/notify", membershipHandler.PapayContractNotify)
+	engine.POST("/api/payment/wechat/papay/pay/notify", membershipHandler.PapayPaymentNotify)
 	engine.POST("/api/payment/wechat/papay/contract/terminate-notify", membershipHandler.PapayContractTerminateNotify)
 	engine.POST("/api/membership/rewards/share-poster/claim", authmw.RequireJWT(jwtSvc), membershipHandler.ClaimSharePosterReward)
 
@@ -768,6 +774,13 @@ func (a *App) startEmbeddedWorker(
 	)
 	go func() {
 		defer close(done)
+		var background sync.WaitGroup
+		background.Add(1)
+		go func() {
+			defer background.Done()
+			runPapayRenewalLoop(workerCtx, membershipSvc)
+		}()
+		defer background.Wait()
 		for workerCtx.Err() == nil {
 			err := runner.Run(workerCtx, workerpkg.Options{
 				WorkerID:     workerID,
@@ -787,8 +800,36 @@ func (a *App) startEmbeddedWorker(
 			case <-timer.C:
 			}
 		}
+		cancel()
 		logger.Info(context.Background(), "内嵌 worker 已停止")
 	}()
+}
+
+func runPapayRenewalLoop(ctx context.Context, membershipSvc *membershipservice.MembershipService) {
+	if membershipSvc == nil {
+		return
+	}
+	process := func() {
+		count, err := membershipSvc.ProcessPapayRenewals(ctx)
+		if err != nil && ctx.Err() == nil {
+			logger.Error(ctx, "微信自动续费任务巡检失败", err)
+			return
+		}
+		if count > 0 {
+			logger.Info(ctx, "微信自动续费任务已处理", slog.Int("count", count))
+		}
+	}
+	process()
+	ticker := time.NewTicker(time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			process()
+		}
+	}
 }
 
 func embeddedWorkerID(cfg *config.Config) string {
