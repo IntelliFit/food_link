@@ -120,7 +120,11 @@ func (c *OfoxAIClient) AnalyzeWithImagesAndTemperatureMeta(ctx context.Context, 
 	if err != nil {
 		return nil, nil, err
 	}
-	return parsed, extractChatCompletionUsageMeta(raw), nil
+	meta := extractChatCompletionUsageMeta(raw)
+	if strings.TrimSpace(stringFromAny(meta["model"])) == "" {
+		meta["model"] = c.Model
+	}
+	return parsed, meta, nil
 }
 
 func (c *OfoxAIClient) AnalyzeWithImagesDashScopeWebSearch(ctx context.Context, prompt string, imageURLs []string, options DashScopeWebSearchOptions) (map[string]any, map[string]any, error) {
@@ -703,12 +707,25 @@ func extractChatCompletionUsageMeta(raw map[string]any) map[string]any {
 	}
 	if model := strings.TrimSpace(fmt.Sprintf("%v", raw["model"])); model != "" && model != "<nil>" {
 		meta["model"] = model
+	} else if model := strings.TrimSpace(fmt.Sprintf("%v", raw["modelVersion"])); model != "" && model != "<nil>" {
+		meta["model"] = model
 	}
 	if usage, ok := raw["usage"].(map[string]any); ok {
 		for _, key := range []string{"prompt_tokens", "completion_tokens", "total_tokens", "input_tokens", "output_tokens"} {
 			if value, exists := usage[key]; exists {
 				meta[key] = value
 			}
+		}
+	}
+	if usage, ok := raw["usageMetadata"].(map[string]any); ok {
+		if value, exists := usage["promptTokenCount"]; exists {
+			meta["input_tokens"] = value
+		}
+		if value, exists := usage["candidatesTokenCount"]; exists {
+			meta["output_tokens"] = value
+		}
+		if value, exists := usage["totalTokenCount"]; exists {
+			meta["total_tokens"] = value
 		}
 	}
 	return meta

@@ -19,11 +19,12 @@ import (
 )
 
 type FoodNutritionService struct {
-	nutritionRepo              *repo.FoodNutritionRepo
-	nutritionLabelVisionClient NutritionLabelVisionClient
-	taskRepo                   *analyzerepo.TaskRepo
-	taskQueue                  taskqueue.Publisher
-	rewards                    PackagedRewardAwarder
+	nutritionRepo               *repo.FoodNutritionRepo
+	nutritionLabelVisionClient  NutritionLabelVisionClient
+	packagedProductVisionClient NutritionLabelVisionClient
+	taskRepo                    *analyzerepo.TaskRepo
+	taskQueue                   taskqueue.Publisher
+	rewards                     PackagedRewardAwarder
 }
 
 type NutritionLabelVisionClient interface {
@@ -246,6 +247,10 @@ func (s *FoodNutritionService) ConfigureNutritionLabelVisionClient(client Nutrit
 	s.nutritionLabelVisionClient = client
 }
 
+func (s *FoodNutritionService) ConfigurePackagedProductVisionClient(client NutritionLabelVisionClient) {
+	s.packagedProductVisionClient = client
+}
+
 func (s *FoodNutritionService) ConfigureAsyncTasks(taskRepo *analyzerepo.TaskRepo, queue taskqueue.Publisher) {
 	s.taskRepo = taskRepo
 	s.taskQueue = queue
@@ -430,11 +435,11 @@ func (s *FoodNutritionService) ExtractPackagedProductWithMeta(ctx context.Contex
 	if len(imageURLs) == 0 {
 		return nil, nil, &commonerrors.AppError{Code: 10002, Message: "包装图片不能为空", HTTPStatus: 400}
 	}
-	if s.nutritionLabelVisionClient == nil {
+	if s.packagedProductVisionClient == nil {
 		return nil, nil, &commonerrors.AppError{Code: 10000, Message: "预包装商品识别服务未配置", HTTPStatus: 500}
 	}
 	start := time.Now()
-	raw, meta, err := s.nutritionLabelVisionClient.AnalyzeWithImagesAndTemperatureMeta(ctx, buildPackagedProductExtractPrompt(recognizedNameHint, len(imageURLs)), imageURLs, 0.1)
+	raw, meta, err := s.packagedProductVisionClient.AnalyzeWithImagesAndTemperatureMeta(ctx, buildPackagedProductExtractPrompt(recognizedNameHint, len(imageURLs)), imageURLs, 0.1)
 	durationMs := time.Since(start).Milliseconds()
 	if err != nil {
 		return nil, nil, fmt.Errorf("识别预包装商品失败: %w", err)

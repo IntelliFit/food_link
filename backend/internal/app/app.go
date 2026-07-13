@@ -198,7 +198,14 @@ func New(cfg *config.Config) (*App, error) {
 		analyzeSvc.ConfigureDashScopeClient(cfg.External.DashScopeAPIKey, cfg.External.DashScopeBaseURL)
 	}
 	analyzeSvc.ConfigureGemini31LiteClient(cfg.External.OfoxAIAPIKey, cfg.External.OfoxAIBaseURL, "gemini-3.1-flash-lite")
-	analyzeSvc.ConfigureGemini35Client(cfg.External.Gemini35APIKey, cfg.External.Gemini35BaseURL, cfg.External.Gemini35Model)
+	gemini35Model := "gemini-3.5-flash"
+	var gemini35Client *analyzeservice.OfoxAIClient
+	if strings.TrimSpace(cfg.External.Gemini35APIKey) != "" && strings.TrimSpace(cfg.External.Gemini35BaseURL) != "" {
+		gemini35Client = analyzeservice.NewOfoxAIClient(cfg.External.Gemini35APIKey, gemini35Model, cfg.External.Gemini35BaseURL)
+		analyzeSvc.ConfigureGemini35LLMClient(gemini35Client)
+	} else {
+		analyzeSvc.ConfigureGemini35Client(cfg.External.Gemini35APIKey, cfg.External.Gemini35BaseURL, gemini35Model)
+	}
 	if cfg.External.DoubaoWebSearchAPIKey != "" {
 		analyzeSvc.ConfigureDoubaoWebSearchClient(cfg.External.DoubaoWebSearchAPIKey, cfg.External.DoubaoBaseURL, "")
 	}
@@ -222,10 +229,9 @@ func New(cfg *config.Config) (*App, error) {
 	frSvc.ConfigureWaterLogRecorder(bodyMetricsRepo)
 	frUploadSvc := foodrecordservice.NewUploadService(storageClient)
 	frNutritionSvc := foodrecordservice.NewFoodNutritionService(frNutritionRepo)
-	if dashscopeClient != nil {
-		frNutritionSvc.ConfigureNutritionLabelVisionClient(dashscopeClient)
-	} else {
-		frNutritionSvc.ConfigureNutritionLabelVisionClient(ofoxAIClient)
+	if gemini35Client != nil {
+		frNutritionSvc.ConfigureNutritionLabelVisionClient(gemini35Client)
+		frNutritionSvc.ConfigurePackagedProductVisionClient(gemini35Client)
 	}
 	frNutritionSvc.ConfigureAsyncTasks(analyzeTaskRepo, taskQueue)
 	frHandler := foodrecordhandler.NewFoodRecordHandler(frSvc, frUploadSvc, frNutritionSvc)
@@ -313,6 +319,9 @@ func New(cfg *config.Config) (*App, error) {
 	expiryRepo := expiryrepo.NewExpiryRepo(db)
 	expiryTaskRepo := expiryrepo.NewTaskRepo(db)
 	expiryRecognizer := expiryservice.NewRecognizer(cfg)
+	if gemini35Client != nil {
+		expiryRecognizer.ConfigureVisionClient(gemini35Client)
+	}
 	expiryNotifier := expiryservice.NewNotificationWorker(expiryRepo, cfg)
 	expirySvc := expiryservice.NewExpiryService(expiryRepo, expiryTaskRepo, expiryRecognizer)
 	expirySvc.ConfigureNotificationTemplate(cfg.ResolvedWechatPay().ExpirySubscribeTemplateID)
