@@ -196,6 +196,15 @@ func (s *AnalyzeService) refreshNutritionFallbackEstimator() {
 			timeout:   nutritionFallbackAttemptTimeout,
 		})
 	}
+	// Gemini is the quality fallback when Qwen is unavailable or returns no
+	// usable nutrition rows. The deterministic 4/4/9 gate still runs for both.
+	if s.gemini35Client != nil {
+		estimators = append(estimators, namedNutritionFallbackEstimator{
+			source:    "gemini_generated",
+			estimator: NewGeminiNutritionEstimator(s.gemini35Client),
+			timeout:   nutritionFallbackAttemptTimeout,
+		})
+	}
 	if s.deepseek != nil && strings.TrimSpace(s.deepseek.APIKey) != "" {
 		estimators = append(estimators, namedNutritionFallbackEstimator{
 			source:    "deepseek_generated",
@@ -264,11 +273,13 @@ func (s *AnalyzeService) ConfigureGemini35Client(apiKey, baseURL, model string) 
 		model = gemini35FlashModel
 	}
 	s.gemini35Client = NewOfoxAIClient(apiKey, model, baseURL)
+	s.refreshNutritionFallbackEstimator()
 	logger.Info(context.Background(), "Gemini 3.5 Flash 客户端初始化完成", slog.String("base_url", baseURL), slog.String("model", model))
 }
 
 func (s *AnalyzeService) ConfigureGemini35LLMClient(client LLMClient) {
 	s.gemini35Client = client
+	s.refreshNutritionFallbackEstimator()
 }
 
 func (s *AnalyzeService) RunPrecisionJSON(ctx context.Context, sourceType, prompt, imageURL, modelName string) (map[string]any, error) {
@@ -5000,6 +5011,7 @@ func (s *AnalyzeService) applyDBFirstNutritionWithOptions(ctx context.Context, r
 	out := make([]map[string]any, 0, len(items))
 	deepseekGeneratedCount := 0
 	qwenGeneratedCount := 0
+	geminiGeneratedCount := 0
 	deepseekPersistedCount := 0
 	deepseekPersistFailedCount := 0
 	for _, lookup := range lookups {
@@ -5071,6 +5083,8 @@ func (s *AnalyzeService) applyDBFirstNutritionWithOptions(ctx context.Context, r
 				fallbackSource := popFallbackSource(fallbackUnit, "deepseek_generated")
 				if fallbackSource == "qwen_generated" {
 					qwenGeneratedCount++
+				} else if fallbackSource == "gemini_generated" {
+					geminiGeneratedCount++
 				} else {
 					deepseekGeneratedCount++
 				}
@@ -5106,7 +5120,7 @@ func (s *AnalyzeService) applyDBFirstNutritionWithOptions(ctx context.Context, r
 				_ = s.nutrition.LogUnresolved(ctx, lookup.name)
 			}
 			next["unit_nutrition_per_100g"] = unit
-			next["nutrients"] = scaleNutrition(unit, lookup.weight)
+			next["nutrients"] = scaleGeneratedNutrition(unit, lookup.weight)
 			next["estimatedWeightGrams"] = lookup.weight
 			next["originalWeightGrams"] = lookup.weight
 			ensureGrossWeightField(next, lookup.weight)
@@ -5119,9 +5133,17 @@ func (s *AnalyzeService) applyDBFirstNutritionWithOptions(ctx context.Context, r
 		next["resolve_status"] = resolve.Status
 		next["resolve_score"] = resolve.Score
 		next["is_unresolved"] = false
-		next["nutrition_source"] = nutritionSource(resolve.Status)
+		resolvedNutritionSource := nutritionSource(resolve.Status)
+		if foodrecorddomain.IsAIGeneratedNutritionSource(resolve.Food.Source) {
+			resolvedNutritionSource = resolve.Food.Source
+		}
+		next["nutrition_source"] = resolvedNutritionSource
 		next["unit_nutrition_per_100g"] = unit
-		next["nutrients"] = scaleNutrition(unit, lookup.weight)
+		if foodrecorddomain.IsAIGeneratedNutritionSource(resolve.Food.Source) {
+			next["nutrients"] = scaleGeneratedNutrition(unit, lookup.weight)
+		} else {
+			next["nutrients"] = scaleNutrition(unit, lookup.weight)
+		}
 		next["estimatedWeightGrams"] = lookup.weight
 		next["originalWeightGrams"] = lookup.weight
 		ensureGrossWeightField(next, lookup.weight)
@@ -5159,6 +5181,7 @@ func (s *AnalyzeService) applyDBFirstNutritionWithOptions(ctx context.Context, r
 	metrics.AddNutritionResolveItems("db_first", "unresolved", unresolvedCount)
 	metrics.AddNutritionResolveItems("db_first", "deepseek_generated", deepseekGeneratedCount)
 	metrics.AddNutritionResolveItems("db_first", "qwen_generated", qwenGeneratedCount)
+	metrics.AddNutritionResolveItems("db_first", "gemini_generated", geminiGeneratedCount)
 	metrics.AddNutritionResolveItems("db_first", "deepseek_persisted", deepseekPersistedCount)
 	metrics.AddNutritionResolveItems("db_first", "deepseek_persist_failed", deepseekPersistFailedCount)
 	logger.Info(ctx, "营养库优先回算完成",
@@ -5167,6 +5190,7 @@ func (s *AnalyzeService) applyDBFirstNutritionWithOptions(ctx context.Context, r
 		slog.Int("unresolved_count", unresolvedCount),
 		slog.Int("deepseek_generated_count", deepseekGeneratedCount),
 		slog.Int("qwen_generated_count", qwenGeneratedCount),
+		slog.Int("gemini_generated_count", geminiGeneratedCount),
 		slog.Int("deepseek_persisted_count", deepseekPersistedCount),
 		slog.Int("deepseek_persist_failed_count", deepseekPersistFailedCount),
 		slog.Any("items", analyzeItemLogSummary(out, 12)),
@@ -5177,6 +5201,7 @@ func (s *AnalyzeService) applyDBFirstNutritionWithOptions(ctx context.Context, r
 		attribute.Int("analysis.unresolved_count", unresolvedCount),
 		attribute.Int("analysis.deepseek_generated_count", deepseekGeneratedCount),
 		attribute.Int("analysis.qwen_generated_count", qwenGeneratedCount),
+		attribute.Int("analysis.gemini_generated_count", geminiGeneratedCount),
 		attribute.Int("analysis.deepseek_persisted_count", deepseekPersistedCount),
 		attribute.Int("analysis.deepseek_persist_failed_count", deepseekPersistFailedCount),
 		attribute.String("analysis.items", summarizeAnalyzeItemsForTrace(out, 12)),
@@ -5730,7 +5755,7 @@ func capItemWaterMlToWeight(item map[string]any) {
 }
 
 func nutritionUnit(food *foodrecorddomain.FoodNutrition) map[string]any {
-	return map[string]any{
+	unit := map[string]any{
 		"calories":       food.KcalPer100g,
 		"protein":        food.ProteinPer100g,
 		"carbs":          food.CarbsPer100g,
@@ -5757,6 +5782,10 @@ func nutritionUnit(food *foodrecorddomain.FoodNutrition) map[string]any {
 		"folateMcg":      food.FolateMcgPer100g,
 		"vitaminB12Mcg":  food.VitaminB12McgPer100g,
 	}
+	if foodrecorddomain.IsAIGeneratedNutritionSource(food.Source) {
+		unit["calories"] = foodrecorddomain.MacroCalories(food.ProteinPer100g, food.CarbsPer100g, food.FatPer100g)
+	}
+	return unit
 }
 
 func packagedNutritionUnit(food *foodrecorddomain.PackagedFood) map[string]any {
@@ -6365,6 +6394,16 @@ func scaleNutrition(unit map[string]any, weight float64) map[string]any {
 	return out
 }
 
+func scaleGeneratedNutrition(unit map[string]any, weight float64) map[string]any {
+	out := scaleNutrition(unit, weight)
+	out["calories"] = round2(foodrecorddomain.MacroCalories(
+		numberFromAny(out["protein"]),
+		numberFromAny(out["carbs"]),
+		numberFromAny(out["fat"]),
+	))
+	return out
+}
+
 func ItemLogSummary(items []map[string]any, limit int) []map[string]any {
 	return analyzeItemLogSummary(items, limit)
 }
@@ -6497,7 +6536,7 @@ func nutritionSourceCategory(source string) string {
 		return "user_image_label"
 	case "user_text":
 		return "user_text"
-	case "deepseek_generated", "qwen_generated":
+	case "deepseek_generated", "qwen_generated", "gemini_generated":
 		return "llm_generated"
 	case "web_search":
 		return "web_search"

@@ -979,22 +979,19 @@ function IndexPage() {
     try {
       const exerciseLogParams = { date: resolvedDate }
       console.log('[DEBUG] loadDashboard start, date=', resolvedDate, 'seq=', seq)
-      let res, stats, bodyMetricsRes, exerciseLogsRes
-      try {
-        [res, stats, bodyMetricsRes, exerciseLogsRes] = await Promise.all([
-          getHomeDashboard(resolvedDate),
-          getStatsSummary('week'),
-          fetchBodyMetricsSummaryRetry(),
-          getExerciseLogs(exerciseLogParams).catch((err) => {
-            console.error('[DEBUG] getExerciseLogs FAILED:', err)
-            return null
-          })
-        ])
-        console.log('[DEBUG] loadDashboard Promise.all success')
-      } catch (err: any) {
-        console.error('[DEBUG] loadDashboard Promise.all FAILED:', err)
-        throw err
-      }
+      // 首页主数据是首屏唯一硬依赖。其余接口提前并发启动，但都作为后台增强，
+      // 不能因为弱网超时而阻塞已经成功返回的 dashboard 渲染。
+      const statsPromise = getStatsSummary('week').catch((err) => {
+        console.error('[home-dashboard] getStatsSummary failed:', err)
+        return null
+      })
+      const bodyMetricsPromise = fetchBodyMetricsSummaryRetry()
+      const exerciseLogsPromise = getExerciseLogs(exerciseLogParams).catch((err) => {
+        console.error('[home-dashboard] getExerciseLogs failed:', err)
+        return null
+      })
+
+      const res = await getHomeDashboard(resolvedDate)
       if (seq !== loadDashboardSeqRef.current) {
         return
       }
@@ -1015,7 +1012,8 @@ function IndexPage() {
       setNutritionTarget(res.nutritionTarget || null)
       setMeals(res.meals || [])
       setExpirySummary(res.expirySummary || DEFAULT_EXPIRY_SUMMARY)
-      const nextExerciseKcal = mergeExerciseKcalFromDashboardAndLogs(res.exerciseBurnedKcal, exerciseLogsRes?.total_calories)
+      const initialExerciseKcal = mergeExerciseKcalFromDashboardAndLogs(res.exerciseBurnedKcal, undefined)
+      let nextExerciseKcal = initialExerciseKcal
       setExerciseBurnedKcal(nextExerciseKcal)
       const nextAchievement = res.achievement ?? { streak_days: 0, green_days: 0 }
       setHomeAchievement(nextAchievement)
@@ -1055,35 +1053,69 @@ function IndexPage() {
         saveHomeDashboardSnapshot({ ...currentSnapshot, updatedAt: Date.now() })
       }
 
-      // 2. 再从 storage 优先、stats 回退构建7天热力图并更新 UI
-      const today = new Date()
-      const nextWeekHeatmapCells: WeekHeatmapCell[] = []
-      for (let offset = -3; offset <= 3; offset++) {
-        const date = new Date(today)
-        date.setDate(today.getDate() + offset)
-        const dateKey = formatDateKey(date)
-        const snap = getStoredHomeDashboardSnapshotByDate(dateKey)
-        const dayData = stats.daily_calories.find(d => normalizeTo2025(d.date) === normalizeTo2025(dateKey))
-        const calories = snap ? snap.intakeData.current : (dayData?.calories || 0)
-        const target = snap ? snap.intakeData.target : (stats.tdee || 2000)
-        const hasRecord = calories > 0 || Boolean(snap?.meals?.length)
-        nextWeekHeatmapCells.push({
-          date: dateKey,
-          dayName: SHORT_DAY_NAMES[date.getDay()],
-          dayNum: String(date.getDate()),
-          calories,
-          target,
-          intakeRatio: hasRecord ? calories / target : 0,
-          state: !hasRecord ? 'none' : calories > target ? 'surplus' : 'deficit',
-          isToday: offset === 0,
-          hasRecord
-        })
-      }
-      console.log('[DEBUG] weekHeatmapCells built:', nextWeekHeatmapCells.map(c => ({ date: c.date, state: c.state, calories: c.calories })))
-      setWeekHeatmapCells(nextWeekHeatmapCells)
+      // 主接口完成后立即展示首屏；周统计、身体指标和运动在下方继续后台合并。
+      setWeekHeatmapCells(buildWeekHeatmapCellsFromStorage())
 
       homeLastLoadRef.current = { date: resolvedDate, ts: Date.now() }
       homeDataStaleRef.current = false
+      setLoading(false)
+      setIsSwitchingDate(false)
+
+      const [stats, bodyMetricsRes, exerciseLogsRes] = await Promise.all([
+        statsPromise,
+        bodyMetricsPromise,
+        exerciseLogsPromise
+      ])
+      if (seq !== loadDashboardSeqRef.current) {
+        return
+      }
+
+      if (exerciseLogsRes) {
+        nextExerciseKcal = mergeExerciseKcalFromDashboardAndLogs(
+          res.exerciseBurnedKcal,
+          exerciseLogsRes.total_calories
+        )
+        setExerciseBurnedKcal(nextExerciseKcal)
+        if (nextExerciseKcal !== initialExerciseKcal) {
+          const latestSnapshot = getStoredHomeDashboardSnapshotByDate(normalizedDate)
+          if (latestSnapshot) {
+            saveHomeDashboardSnapshot({
+              ...latestSnapshot,
+              updatedAt: Date.now(),
+              exerciseBurnedKcal: nextExerciseKcal
+            })
+          }
+        }
+      }
+
+      // 从 storage 优先、stats 回退构建 7 天热力图；stats 失败时保留首屏缓存结果。
+      if (stats) {
+        const today = new Date()
+        const nextWeekHeatmapCells: WeekHeatmapCell[] = []
+        for (let offset = -3; offset <= 3; offset++) {
+          const date = new Date(today)
+          date.setDate(today.getDate() + offset)
+          const dateKey = formatDateKey(date)
+          const snap = getStoredHomeDashboardSnapshotByDate(dateKey)
+          const dayData = stats.daily_calories.find(d => normalizeTo2025(d.date) === normalizeTo2025(dateKey))
+          const calories = snap ? snap.intakeData.current : (dayData?.calories || 0)
+          const target = snap ? snap.intakeData.target : (stats.tdee || 2000)
+          const hasRecord = calories > 0 || Boolean(snap?.meals?.length)
+          nextWeekHeatmapCells.push({
+            date: dateKey,
+            dayName: SHORT_DAY_NAMES[date.getDay()],
+            dayNum: String(date.getDate()),
+            calories,
+            target,
+            intakeRatio: hasRecord ? calories / target : 0,
+            state: !hasRecord ? 'none' : calories > target ? 'surplus' : 'deficit',
+            isToday: offset === 0,
+            hasRecord
+          })
+        }
+        console.log('[DEBUG] weekHeatmapCells built:', nextWeekHeatmapCells.map(c => ({ date: c.date, state: c.state, calories: c.calories })))
+        setWeekHeatmapCells(nextWeekHeatmapCells)
+      }
 
       // 应用云端身体指标数据（失败时仍规范化本机日期键，避免 2025/2026 混用导致按日切换永远不变）
       console.log('[DEBUG] bodyMetricsRes:', JSON.stringify({

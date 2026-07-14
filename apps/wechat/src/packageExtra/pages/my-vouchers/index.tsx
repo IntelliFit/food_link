@@ -2,6 +2,8 @@ import { View } from '@tarojs/components'
 import Taro, { useDidShow } from '@tarojs/taro'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 
+import './index.scss'
+
 function MyVouchersPage() {
   useDidShow(() => {
     Taro.redirectTo({

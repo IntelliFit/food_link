@@ -93,8 +93,23 @@ type QwenNutritionEstimator struct {
 	client LLMClient
 }
 
+type GeminiNutritionEstimator struct {
+	client LLMClient
+}
+
 func NewQwenNutritionEstimator(client LLMClient) *QwenNutritionEstimator {
 	return &QwenNutritionEstimator{client: client}
+}
+
+func NewGeminiNutritionEstimator(client LLMClient) *GeminiNutritionEstimator {
+	return &GeminiNutritionEstimator{client: client}
+}
+
+func (e *GeminiNutritionEstimator) Estimate(ctx context.Context, candidates []UnresolvedNutritionCandidate, additionalContext string) (map[int]map[string]any, error) {
+	if e == nil {
+		return map[int]map[string]any{}, nil
+	}
+	return (&QwenNutritionEstimator{client: e.client}).Estimate(ctx, candidates, additionalContext)
 }
 
 func (e *QwenNutritionEstimator) Estimate(ctx context.Context, candidates []UnresolvedNutritionCandidate, additionalContext string) (map[int]map[string]any, error) {
@@ -128,7 +143,7 @@ func (e *QwenNutritionEstimator) Estimate(ctx context.Context, candidates []Unre
 			aiNutritionMicronutrientRequirement,
 			"如果名称包含清炒、清蒸、炖、红烧、油麦菜、青菜、蔬菜等信息，请按常见熟制菜估算，不要误判成肉类或补剂。",
 			"热量单位 kcal；protein/carbs/fat/fiber/sugar/saturatedFat 单位 g；cholesterolMg、sodiumMg、potassiumMg、calciumMg、ironMg、magnesiumMg、zincMg 和维生素中以 Mg 结尾的字段单位为 mg；vitaminARaeMcg、vitaminDMcg、vitaminKMcg、folateMcg、vitaminB12Mcg 单位为 mcg。",
-			"热量必须与宏量营养基本自洽：calories 不应低于 protein*4 + carbs*4 + fat*9 太多。",
+			"热量必须严格按 calories = protein*4 + carbs*4 + fat*9 计算，不要独立猜测另一个热量值。",
 			"每100g 的 protein/carbs/fat/fiber/sugar/saturatedFat 不得为负，也不得超过 100g；sugar 不得超过 carbs，saturatedFat 不得超过 fat。",
 		},
 		"additionalContext": strings.TrimSpace(additionalContext),

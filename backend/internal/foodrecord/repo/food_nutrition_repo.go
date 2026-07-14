@@ -2363,6 +2363,7 @@ func (r *FoodNutritionRepo) UpsertDeepSeekNutrition(ctx context.Context, rawName
 	if len(sources) > 0 && strings.TrimSpace(sources[0]) != "" {
 		source = strings.TrimSpace(sources[0])
 	}
+	unit = normalizeAIGeneratedNutritionUnit(unit, source)
 	var existing domain.FoodNutrition
 	err := r.db.WithContext(ctx).Where("normalized_name = ?", normalized).First(&existing).Error
 	if err == nil {
@@ -2414,6 +2415,22 @@ func (r *FoodNutritionRepo) UpsertDeepSeekNutrition(ctx context.Context, rawName
 	}
 	_ = r.createNutritionAlias(ctx, id, raw, normalized)
 	return id, nil
+}
+
+func normalizeAIGeneratedNutritionUnit(unit map[string]any, source string) map[string]any {
+	if !domain.IsAIGeneratedNutritionSource(source) {
+		return unit
+	}
+	out := make(map[string]any, len(unit)+1)
+	for key, value := range unit {
+		out[key] = value
+	}
+	out["calories"] = domain.MacroCalories(
+		number(out["protein"]),
+		number(out["carbs"]),
+		number(out["fat"]),
+	)
+	return out
 }
 
 func nutritionCreateValues(raw, normalized string, unit map[string]any, source string) map[string]any {

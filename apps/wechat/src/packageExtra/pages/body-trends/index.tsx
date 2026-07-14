@@ -4,6 +4,8 @@ import Taro, { useRouter } from '@tarojs/taro'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { normalizeRouteDate } from '../body-metrics-shared'
 
+import './index.scss'
+
 type BodyTrendTab = 'weight' | 'water' | 'exercise'
 
 function normalizeTab(value: unknown): BodyTrendTab {

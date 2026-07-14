@@ -2281,7 +2281,7 @@ func TestAnalyzeService_FinalizeAnalyzeResponseGeneratesNutritionWhenPackagedAnd
 	assert.Equal(t, "generated-food", items[0]["matched_food_id"])
 	assert.Equal(t, true, items[0]["nutrition_persisted"])
 	nutrients := items[0]["nutrients"].(map[string]any)
-	assert.Equal(t, 75.0, nutrients["calories"])
+	assert.Equal(t, 72.0, nutrients["calories"])
 	assert.Equal(t, 3.6, nutrients["protein"])
 	assert.Equal(t, 1, resp["resolved_count"])
 	assert.Equal(t, 0, resp["unresolved_count"])
@@ -2334,7 +2334,7 @@ func TestAnalyzeService_FinalizeAnalyzeResponseFallsBackToQwenWhenDeepSeekFails(
 	assert.Equal(t, "qwen_generated", items[0]["resolve_status"])
 	assert.Equal(t, false, items[0]["is_unresolved"])
 	nutrients := items[0]["nutrients"].(map[string]any)
-	assert.Equal(t, 60.0, nutrients["calories"])
+	assert.Equal(t, 54.0, nutrients["calories"])
 	assert.Equal(t, 4.0, nutrients["protein"])
 	assert.Equal(t, 1, resp["resolved_count"])
 	assert.Equal(t, 0, resp["unresolved_count"])
@@ -2428,11 +2428,46 @@ func TestQwenNutritionEstimatorEstimateParsesNutrition(t *testing.T) {
 	assert.Contains(t, client.prompt, "calciumMg")
 	assert.Contains(t, client.prompt, "vitaminCMg")
 	assert.Contains(t, client.prompt, "vitaminB12Mcg")
-	assert.Equal(t, 80.0, rows[3]["calories"])
+	assert.Equal(t, 78.0, rows[3]["calories"])
 	assert.Equal(t, 3.0, rows[3]["protein"])
 	assert.Equal(t, 22.0, rows[3]["calciumMg"])
 	assert.Equal(t, 6.0, rows[3]["vitaminCMg"])
 	assert.Equal(t, 0.2, rows[3]["vitaminB12Mcg"])
+}
+
+func TestNutritionUnitReconcilesExistingAIGeneratedFood(t *testing.T) {
+	unit := nutritionUnit(&foodrecorddomain.FoodNutrition{
+		KcalPer100g:    230,
+		ProteinPer100g: 13,
+		CarbsPer100g:   10,
+		FatPer100g:     12,
+		Source:         "qwen_generated",
+	})
+	assert.Equal(t, 200.0, unit["calories"])
+
+	scaled := scaleGeneratedNutrition(unit, 430)
+	assert.Equal(t, 860.0, scaled["calories"])
+	assert.Equal(t, 55.9, scaled["protein"])
+	assert.Equal(t, 43.0, scaled["carbs"])
+	assert.Equal(t, 51.6, scaled["fat"])
+}
+
+func TestChainedNutritionFallbackUsesGeminiAfterQwenFailure(t *testing.T) {
+	qwen := &fakeNutritionFallbackEstimator{err: errors.New("qwen unavailable")}
+	gemini := &fakeNutritionFallbackEstimator{rows: map[int]map[string]any{
+		0: {"calories": 230.0, "protein": 13.0, "carbs": 10.0, "fat": 12.0},
+	}}
+	estimator := newChainedNutritionFallbackEstimator(
+		namedNutritionFallbackEstimator{source: "qwen_generated", estimator: qwen},
+		namedNutritionFallbackEstimator{source: "gemini_generated", estimator: gemini},
+	)
+
+	rows, err := estimator.Estimate(context.Background(), []UnresolvedNutritionCandidate{{Index: 0, Name: "三层皇堡", EstimatedWeightGrams: 430}}, "")
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	assert.Equal(t, "gemini_generated", rows[0][fallbackNutritionSourceKey])
+	require.Len(t, qwen.candidates, 1)
+	require.Len(t, gemini.candidates, 1)
 }
 
 func TestAnalyzeService_ApplyDBFirstToItemsIntegratesPackagedFoodForWorkerPrecision(t *testing.T) {

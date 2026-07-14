@@ -10,6 +10,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	foodrecorddomain "food_link/backend/internal/foodrecord/domain"
 )
 
 var deepSeekFenceRe = regexp.MustCompile("(?s)```json?\\s*\\n?|```")
@@ -99,7 +101,7 @@ func (e *DeepSeekNutritionEstimator) Estimate(ctx context.Context, candidates []
 			aiNutritionMicronutrientRequirement,
 			"如果名称带有烹饪信息，例如 清炒/清蒸/炖/红烧，请结合该烹饪方式估算。",
 			"热量单位 kcal；protein/carbs/fat/fiber/sugar/saturatedFat 单位 g；cholesterolMg、sodiumMg、potassiumMg、calciumMg、ironMg、magnesiumMg、zincMg 和维生素中以 Mg 结尾的字段单位为 mg；vitaminARaeMcg、vitaminDMcg、vitaminKMcg、folateMcg、vitaminB12Mcg 单位为 mcg。",
-			"热量必须与宏量营养一致：calories 应大致不低于 protein*4 + carbs*4 + fat*9；如果无法确定热量，用该公式的结果作为下限。",
+			"热量必须严格按 calories = protein*4 + carbs*4 + fat*9 计算，不要独立猜测另一个热量值。",
 			"每100g 的 protein/carbs/fat/fiber/sugar/saturatedFat 不得为负，也不得超过 100g；sugar 不得超过 carbs，saturatedFat 不得超过 fat。",
 			"无糖黑咖啡/美式咖啡/纯茶/白水每100g可接近 0 kcal；但如果名称包含拿铁、奶、糖、糖浆、奶油、椰乳等，应估算对应碳水/脂肪和热量。",
 			"品牌饮品如果无法确认配方，应按同类常见产品估算，并保证热量和宏量营养自洽。",
@@ -294,12 +296,13 @@ func normalizeFallbackUnitNutrition(foodName string, unit map[string]any) map[st
 	out["sugar"] = clampRange(numberFromAny(out["sugar"]), 0, numberFromAny(out["carbs"]))
 	out["saturatedFat"] = clampRange(numberFromAny(out["saturatedFat"]), 0, numberFromAny(out["fat"]))
 
-	macroCalories := round4(numberFromAny(out["protein"])*4 + numberFromAny(out["carbs"])*4 + numberFromAny(out["fat"])*9)
-	calories := clampRange(numberFromAny(out["calories"]), 0, 900)
-	if macroCalories > 0 && calories < macroCalories*0.85 {
-		calories = macroCalories
-	}
-	out["calories"] = clampRange(round4(calories), 0, 900)
+	// AI estimates do not have an authoritative label energy value. Always
+	// derive calories from macros so the four generated fields cannot drift.
+	out["calories"] = foodrecorddomain.MacroCalories(
+		numberFromAny(out["protein"]),
+		numberFromAny(out["carbs"]),
+		numberFromAny(out["fat"]),
+	)
 	return out
 }
 

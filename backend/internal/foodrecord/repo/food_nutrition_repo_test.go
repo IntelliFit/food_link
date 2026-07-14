@@ -627,13 +627,31 @@ func TestFoodNutritionRepo_UpsertDeepSeekNutritionInsertsFullProfile(t *testing.
 
 	var food domain.FoodNutrition
 	require.NoError(t, db.Where("normalized_name = ?", normalizeFoodName("新食物")).First(&food).Error)
-	assert.Equal(t, 120.0, food.KcalPer100g)
+	assert.Equal(t, 114.0, food.KcalPer100g)
 	assert.Equal(t, 6.0, food.ProteinPer100g)
 	assert.Equal(t, 40.0, food.CalciumMgPer100g)
 	assert.Equal(t, 20.0, food.VitaminARaeMcgPer100g)
 	assert.Equal(t, 10.0, food.VitaminCMgPer100g)
 	assert.Equal(t, 0.4, food.VitaminB12McgPer100g)
 	assert.Equal(t, "deepseek_v4_pro_auto", food.Source)
+}
+
+func TestFoodNutritionRepo_UpsertGeneratedNutritionForcesMacroCalories(t *testing.T) {
+	db := setupFoodNutritionFullTestDB(t)
+	repo := NewFoodNutritionRepo(db)
+
+	_, err := repo.UpsertDeepSeekNutrition(context.Background(), "汉堡王三层皇堡", map[string]any{
+		"calories": 230,
+		"protein":  13,
+		"carbs":    10,
+		"fat":      12,
+	}, "qwen_generated")
+	require.NoError(t, err)
+
+	var food domain.FoodNutrition
+	require.NoError(t, db.Where("normalized_name = ?", normalizeFoodName("汉堡王三层皇堡")).First(&food).Error)
+	assert.Equal(t, 200.0, food.KcalPer100g)
+	assert.Equal(t, "qwen_generated", food.Source)
 }
 
 func TestFoodNutritionRepo_ResolvePackagedFood(t *testing.T) {

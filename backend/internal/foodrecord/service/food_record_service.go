@@ -152,6 +152,23 @@ func (s *FoodRecordService) Save(ctx context.Context, userID string, input SaveF
 		input.ImagePath = &first
 	}
 	input.Items = normalizeFoodItems(input.Items)
+	var aiGeneratedNutrition bool
+	input.Items, aiGeneratedNutrition = reconcileAIGeneratedFoodItems(input.Items)
+	if aiGeneratedNutrition {
+		oldCalories := input.TotalCalories
+		protein, carbs, fat := recordMacroTotals(input.Items, input.TotalProtein, input.TotalCarbs, input.TotalFat)
+		input.TotalCalories = domain.MacroCalories(protein, carbs, fat)
+		if math.Abs(oldCalories-input.TotalCalories) > 0.0001 {
+			logger.Info(ctx, "AI生成营养热量已按三大营养素校准",
+				slog.String("user_id", userID),
+				slog.Float64("calories.before", oldCalories),
+				slog.Float64("calories.after", input.TotalCalories),
+				slog.Float64("protein_g", protein),
+				slog.Float64("carbs_g", carbs),
+				slog.Float64("fat_g", fat),
+			)
+		}
+	}
 	if input.SourceTaskID != nil {
 		if err := validateNoSuspiciousZeroNutritionItems(input.Items); err != nil {
 			return nil, err
@@ -375,6 +392,43 @@ func normalizeFoodItems(items []domain.FoodItem) []domain.FoodItem {
 		}
 	}
 	return items
+}
+
+func reconcileAIGeneratedFoodItems(items []domain.FoodItem) ([]domain.FoodItem, bool) {
+	hasAIGenerated := false
+	for i := range items {
+		source := foodRecordStringPtrValue(items[i].NutritionSource)
+		category := foodRecordStringPtrValue(items[i].NutritionSourceCategory)
+		if !domain.IsAIGeneratedNutritionSource(source) && !domain.IsAIGeneratedNutritionSource(category) {
+			continue
+		}
+		hasAIGenerated = true
+		items[i].Nutrients.Calories = domain.MacroCalories(
+			items[i].Nutrients.Protein,
+			items[i].Nutrients.Carbs,
+			items[i].Nutrients.Fat,
+		)
+	}
+	return items, hasAIGenerated
+}
+
+func foodRecordStringPtrValue(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return strings.TrimSpace(*value)
+}
+
+func recordMacroTotals(items []domain.FoodItem, protein, carbs, fat float64) (float64, float64, float64) {
+	if protein > 0 || carbs > 0 || fat > 0 {
+		return protein, carbs, fat
+	}
+	for _, item := range items {
+		protein += item.Nutrients.Protein
+		carbs += item.Nutrients.Carbs
+		fat += item.Nutrients.Fat
+	}
+	return protein, carbs, fat
 }
 
 func validateNoSuspiciousZeroNutritionItems(items []domain.FoodItem) error {
@@ -611,8 +665,11 @@ func (s *FoodRecordService) Get(ctx context.Context, userID, recordID string) (*
 func (s *FoodRecordService) Update(ctx context.Context, userID, recordID string, input UpdateFoodRecordInput) (*domain.FoodRecord, error) {
 	var previousWaterMl int
 	var previousRecordTime *time.Time
-	if input.Items != nil {
-		existing, err := s.recordRepo.GetByID(ctx, recordID)
+	var existing *domain.FoodRecord
+	nutritionUpdate := input.Items != nil || input.TotalCalories != nil || input.TotalProtein != nil || input.TotalCarbs != nil || input.TotalFat != nil
+	if nutritionUpdate {
+		var err error
+		existing, err = s.recordRepo.GetByID(ctx, recordID)
 		if err != nil {
 			return nil, err
 		}
@@ -622,21 +679,50 @@ func (s *FoodRecordService) Update(ctx context.Context, userID, recordID string,
 		if existing.UserID != userID {
 			return nil, commonerrors.ErrNotFound
 		}
-		previousWaterMl = totalFoodWaterIntakeMl(existing.Items)
-		previousRecordTime = existing.RecordTime
+		if input.Items != nil {
+			previousWaterMl = totalFoodWaterIntakeMl(existing.Items)
+			previousRecordTime = existing.RecordTime
+		}
 	}
 
 	updates := map[string]any{}
+	enforceAIGeneratedEnergy := false
 	if input.MealType != nil {
 		if !validMealType(*input.MealType) {
 			return nil, &commonerrors.AppError{Code: 10002, Message: "meal_type 不合法", HTTPStatus: 400}
 		}
 		updates["meal_type"] = normalizeMealType(*input.MealType, nil)
 	}
+	effectiveItems := existingItems(existing)
 	if input.Items != nil {
-		updates["items"] = normalizeFoodItems(input.Items)
+		effectiveItems = normalizeFoodItems(input.Items)
+		effectiveItems, enforceAIGeneratedEnergy = reconcileAIGeneratedFoodItems(effectiveItems)
+		updates["items"] = effectiveItems
+	} else if nutritionUpdate {
+		effectiveItems, enforceAIGeneratedEnergy = reconcileAIGeneratedFoodItems(effectiveItems)
+		if enforceAIGeneratedEnergy {
+			updates["items"] = effectiveItems
+		}
 	}
-	if input.TotalCalories != nil {
+	if enforceAIGeneratedEnergy {
+		protein := existing.TotalProtein
+		carbs := existing.TotalCarbs
+		fat := existing.TotalFat
+		if input.Items != nil {
+			protein, carbs, fat = recordMacroTotals(effectiveItems, 0, 0, 0)
+		}
+		if input.TotalProtein != nil {
+			protein = *input.TotalProtein
+		}
+		if input.TotalCarbs != nil {
+			carbs = *input.TotalCarbs
+		}
+		if input.TotalFat != nil {
+			fat = *input.TotalFat
+		}
+		updates["total_calories"] = domain.MacroCalories(protein, carbs, fat)
+	}
+	if input.TotalCalories != nil && !enforceAIGeneratedEnergy {
 		updates["total_calories"] = *input.TotalCalories
 	}
 	if input.TotalProtein != nil {
@@ -679,6 +765,13 @@ func (s *FoodRecordService) Update(ctx context.Context, userID, recordID string,
 	record = s.hydrateRecordWithContext(ctx, record)
 	record.MealType = normalizeMealType(record.MealType, record.RecordTime)
 	return record, nil
+}
+
+func existingItems(record *domain.FoodRecord) []domain.FoodItem {
+	if record == nil {
+		return nil
+	}
+	return record.Items
 }
 
 func (s *FoodRecordService) Delete(ctx context.Context, userID, recordID string) error {

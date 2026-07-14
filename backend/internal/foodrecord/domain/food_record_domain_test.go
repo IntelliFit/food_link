@@ -4,7 +4,20 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
+
+func TestMacroCaloriesAndAIGeneratedSource(t *testing.T) {
+	assert.Equal(t, 200.0, MacroCalories(13, 10, 12))
+	assert.Equal(t, 0.0, MacroCalories(-1, -2, -3))
+	assert.True(t, IsAIGeneratedNutritionSource("qwen_generated"))
+	assert.True(t, IsAIGeneratedNutritionSource("gemini_generated"))
+	assert.True(t, IsAIGeneratedNutritionSource("deepseek_v4_pro_auto"))
+	assert.True(t, IsAIGeneratedNutritionSource("llm_generated"))
+	assert.False(t, IsAIGeneratedNutritionSource("ingredient_label"))
+	assert.False(t, IsAIGeneratedNutritionSource("library_exact_canonical"))
+}
 
 func TestFoodItemUnmarshalJSON_Ingredients(t *testing.T) {
 	input := `{
