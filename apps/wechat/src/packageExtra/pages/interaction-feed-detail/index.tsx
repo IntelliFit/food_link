@@ -217,7 +217,6 @@ function aggregateMicroNutrients(record: CommunityFeedRecord | undefined | null)
 }
 
 function InteractionFeedDetailPage() {
-  const [recordId, setRecordId] = useState('')
   const [targetType, setTargetType] = useState<CommunityFeedTargetType>('food_record')
   const [targetCommentId, setTargetCommentId] = useState('')
   const [feedItem, setFeedItem] = useState<CommunityFeedItem | null>(null)
@@ -235,6 +234,7 @@ function InteractionFeedDetailPage() {
   const [manualFoodsExpanded, setManualFoodsExpanded] = useState(false)
   const likePendingRef = useRef(false)
   const INITIAL_VISIBLE_MANUAL_FOODS = 3
+  const routeInitializationRef = useRef('')
 
   const loadDetail = useCallback(async (nextRecordId: string, nextTargetType: CommunityFeedTargetType = 'food_record') => {
     if (!nextRecordId) {
@@ -280,7 +280,9 @@ function InteractionFeedDetailPage() {
   const hydrateFromOptions = useCallback((options: RouteOptions) => {
     const nextRecordId = pickRecordId(options)
     const nextTargetType = pickTargetType(options)
-    setRecordId(nextRecordId)
+    const routeKey = `${nextTargetType}:${nextRecordId}`
+    if (nextRecordId && routeInitializationRef.current === routeKey) return
+    if (nextRecordId) routeInitializationRef.current = routeKey
     setTargetType(nextTargetType)
     const nextTarget = String(options?.commentId || options?.parentCommentId || '')
     setTargetCommentId(nextTarget)
@@ -298,7 +300,7 @@ function InteractionFeedDetailPage() {
   })
 
   Taro.useDidShow(() => {
-    if (recordId) return
+    if (routeInitializationRef.current) return
     const pages = Taro.getCurrentPages()
     const current = pages[pages.length - 1]
     const options = (current?.options || {}) as RouteOptions

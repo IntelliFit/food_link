@@ -1,5 +1,5 @@
 import { View, Text, Image, Button, Input, Canvas } from '@tarojs/components'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import Taro, { useRouter, useReachBottom } from '@tarojs/taro'
 import {
   updateUserInfo,
@@ -141,6 +141,7 @@ export default function ProfileSettingsPage() {
   const [feedHasMore, setFeedHasMore] = useState(true)
   const [feedLoading, setFeedLoading] = useState(false)
   const [reportTarget, setReportTarget] = useState<{ targetType: CommunityFeedTargetType; targetId: string } | null>(null)
+  const feedDetailNavigatingRef = useRef(false)
   const [feedActionSheetTarget, setFeedActionSheetTarget] = useState<{ targetType: CommunityFeedTargetType; targetId: string } | null>(null)
   const [reportMaskTarget, setReportMaskTarget] = useState<{ targetType: CommunityFeedTargetType; targetId: string } | null>(null)
 
@@ -704,6 +705,7 @@ export default function ProfileSettingsPage() {
 
   const handleGoFeedDetail = (item: CommunityFeedItem) => {
     const record = item.record
+    if (feedDetailNavigatingRef.current) return
     if (!record?.id) return
     const targetType = item.target_type || record.feed_type || 'food_record'
     const targetId = item.target_id || record.id
@@ -712,9 +714,14 @@ export default function ProfileSettingsPage() {
       `targetId=${encodeURIComponent(targetId)}`,
       `recordId=${encodeURIComponent(record.id)}`
     ].join('&')
+    feedDetailNavigatingRef.current = true
     Taro.navigateTo({ url: `${extraPkgUrl('/pages/interaction-feed-detail/index')}?${query}` })
   }
 
+
+  Taro.useDidShow(() => {
+    feedDetailNavigatingRef.current = false
+  })
   const handleManualFoodCardClick = (item: CommunityFeedItem) => {
     handleGoFeedDetail(item)
   }
