@@ -136,6 +136,28 @@ func (s *RecipeService) Get(ctx context.Context, userID, recipeID string) (*doma
 	return s.normalizeRecipe(recipe), nil
 }
 
+// GetForViewer returns the owner's recipe, or a recipe another user has
+// explicitly collected. The same visibility rule used by the collection list
+// is applied before exposing another user's recipe.
+func (s *RecipeService) GetForViewer(ctx context.Context, viewerUserID, recipeID string) (*domain.Recipe, error) {
+	recipe, err := s.repo.GetByID(ctx, recipeID)
+	if err != nil {
+		return nil, err
+	}
+	if recipe == nil {
+		return nil, commonerrors.ErrNotFound
+	}
+	if recipe.UserID != viewerUserID {
+		if !recipe.IsFavorite {
+			return nil, commonerrors.ErrNotFound
+		}
+		if err := s.ensureUserVisible(ctx, viewerUserID, recipe.UserID); err != nil {
+			return nil, err
+		}
+	}
+	return s.normalizeRecipe(recipe), nil
+}
+
 func (s *RecipeService) Update(ctx context.Context, userID, recipeID string, input UpdateInput) (*domain.Recipe, error) {
 	updates := map[string]any{}
 	if input.RecipeName != nil {

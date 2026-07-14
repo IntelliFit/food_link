@@ -44,6 +44,10 @@ func (m *mockRecipeService) Get(ctx context.Context, userID, recipeID string) (*
 	return nil, nil
 }
 
+func (m *mockRecipeService) GetForViewer(ctx context.Context, viewerUserID, recipeID string) (*domain.Recipe, error) {
+	return m.Get(ctx, viewerUserID, recipeID)
+}
+
 func (m *mockRecipeService) Update(ctx context.Context, userID, recipeID string, input service.UpdateInput) (*domain.Recipe, error) {
 	m.updateInput = &input
 	if m.updateRecipe != nil {
