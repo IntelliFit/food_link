@@ -2,12 +2,14 @@ package handler
 
 import (
 	"context"
+	"log/slog"
 	"strconv"
 
 	authmw "food_link/backend/internal/auth"
 	"food_link/backend/internal/common/response"
 	"food_link/backend/internal/recipe/domain"
 	"food_link/backend/internal/recipe/service"
+	"food_link/backend/pkg/logger"
 
 	"github.com/gin-gonic/gin"
 )
@@ -18,6 +20,7 @@ type RecipeService interface {
 	ListForViewer(ctx context.Context, viewerUserID, ownerUserID, mealType string, isFavorite *bool) ([]domain.Recipe, error)
 	Count(ctx context.Context, userID string, isFavorite *bool) (int64, error)
 	Get(ctx context.Context, userID, recipeID string) (*domain.Recipe, error)
+	GetForViewer(ctx context.Context, viewerUserID, recipeID string) (*domain.Recipe, error)
 	Update(ctx context.Context, userID, recipeID string, input service.UpdateInput) (*domain.Recipe, error)
 	Delete(ctx context.Context, userID, recipeID string) error
 	Use(ctx context.Context, userID, recipeID string, mealType *string, entryType *string) (string, error)
@@ -102,11 +105,16 @@ func (h *RecipeHandler) Count(c *gin.Context) {
 }
 
 func (h *RecipeHandler) Get(c *gin.Context) {
-	recipe, err := h.svc.Get(c.Request.Context(), c.GetString(authmw.ContextUserIDKey), c.Param("recipe_id"))
+	recipe, err := h.svc.GetForViewer(c.Request.Context(), c.GetString(authmw.ContextUserIDKey), c.Param("recipe_id"))
 	if err != nil {
 		response.Error(c, err)
 		return
 	}
+	logger.Info(c.Request.Context(), "获取食谱详情成功",
+		slog.String("viewer_user_id", c.GetString(authmw.ContextUserIDKey)),
+		slog.String("recipe_id", recipe.ID),
+		slog.String("owner_user_id", recipe.UserID),
+	)
 	response.Success(c, recipe)
 }
 

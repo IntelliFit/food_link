@@ -184,6 +184,23 @@ func (r *UserRepo) FindByID(ctx context.Context, userID string) (*User, error) {
 	return &user, err
 }
 
+// IsNicknameTaken checks the same normalized value protected by the database index.
+func (r *UserRepo) IsNicknameTaken(ctx context.Context, nickname, excludeUserID string) (bool, error) {
+	query := r.db.WithContext(ctx).Model(&User{}).
+		Where("lower(trim(coalesce(nickname, ''))) = lower(trim(?))", nickname)
+	if excludeUserID != "" {
+		query = query.Where("id <> ?", excludeUserID)
+	}
+	var count int64
+	if err := query.Count(&count).Error; err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
+func IsNicknameUniqueConstraintError(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "idx_weapp_user_nickname_normalized_unique")
+}
 func (r *UserRepo) FindTrialEntitlementByIdentity(ctx context.Context, openID, unionID string) (*UserTrialEntitlement, error) {
 	unionID = strings.TrimSpace(unionID)
 	openID = strings.TrimSpace(openID)

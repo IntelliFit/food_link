@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"food_link/backend/internal/auth/repo"
+	nicknamepolicy "food_link/backend/internal/user/nickname"
 	voucherdomain "food_link/backend/internal/voucher/domain"
 	"food_link/backend/pkg/config"
 	"food_link/backend/pkg/logger"
@@ -239,6 +240,12 @@ func (s *LoginService) RegisterWithPassword(ctx context.Context, input PasswordR
 	if nickname == "" {
 		nickname = "Food Link 用户"
 	}
+	generatedNickname := strings.TrimSpace(input.Nickname) == ""
+	if generatedNickname {
+		nickname = buildDefaultWechatNickname()
+	} else if nickname, err = nicknamepolicy.Validate(nickname); err != nil {
+		return nil, err
+	}
 	user := &repo.User{
 		OpenID:          passwordLoginOpenID(phone, ""),
 		PasswordHash:    strPtrIfColumn(s.users, "password_hash", passwordHash),
@@ -252,7 +259,7 @@ func (s *LoginService) RegisterWithPassword(ctx context.Context, input PasswordR
 	}
 	user.Telephone = strPtrIfColumn(s.users, "telephone", phone)
 	ensureLegacyAppAuth(user, phone, passwordHash)
-	if err := s.users.Create(ctx, user); err != nil {
+	if err := s.createUserWithUniqueNickname(ctx, user, generatedNickname); err != nil {
 		return nil, err
 	}
 	if err := s.ensureTrialVoucher(ctx, user, user.OpenID, ""); err != nil {
@@ -410,7 +417,7 @@ func (s *LoginService) findOrCreateWechatUser(ctx context.Context, openID, union
 		user.LastLoginMethod = strPtr(loginMethod)
 		now := time.Now()
 		user.LastLoginAt = &now
-		if err := s.users.Create(ctx, user); err != nil {
+		if err := s.createUserWithUniqueNickname(ctx, user, true); err != nil {
 			return nil, err
 		}
 		if err := s.ensureTrialVoucher(ctx, user, openID, unionID); err != nil {
@@ -466,7 +473,7 @@ func (s *LoginService) findOrCreateAppWechatUser(ctx context.Context, appOpenID,
 		}
 		user.LastLoginMethod = strPtr("wechat_app")
 		user.LastLoginAt = &now
-		if err := s.users.Create(ctx, user); err != nil {
+		if err := s.createUserWithUniqueNickname(ctx, user, true); err != nil {
 			return nil, err
 		}
 		if err := s.ensureTrialVoucher(ctx, user, user.OpenID, unionID); err != nil {
@@ -600,6 +607,41 @@ func newDefaultUser(openID string, phone *string) *repo.User {
 	}
 }
 
+func (s *LoginService) createUserWithUniqueNickname(ctx context.Context, user *repo.User, generated bool) error {
+	if !generated {
+		taken, err := s.users.IsNicknameTaken(ctx, user.Nickname, "")
+		if err != nil {
+			return err
+		}
+		if taken {
+			return nicknamepolicy.DuplicateError()
+		}
+		if err := s.users.Create(ctx, user); err != nil {
+			if repo.IsNicknameUniqueConstraintError(err) {
+				return nicknamepolicy.DuplicateError()
+			}
+			return err
+		}
+		return nil
+	}
+
+	for attempt := 0; attempt < 12; attempt++ {
+		user.Nickname = buildDefaultWechatNickname()
+		taken, err := s.users.IsNicknameTaken(ctx, user.Nickname, "")
+		if err != nil {
+			return err
+		}
+		if taken {
+			continue
+		}
+		if err := s.users.Create(ctx, user); err == nil {
+			return nil
+		} else if !repo.IsNicknameUniqueConstraintError(err) {
+			return err
+		}
+	}
+	return fmt.Errorf("生成唯一默认昵称失败，请稍后重试")
+}
 func (s *LoginService) resolvePhoneNumber(ctx context.Context, phoneCode string) *string {
 	phoneCode = strings.TrimSpace(phoneCode)
 	if phoneCode == "" {
