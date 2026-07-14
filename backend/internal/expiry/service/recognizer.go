@@ -3,9 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -19,20 +17,15 @@ import (
 
 const expiryCreditCost = 2
 
-const (
-	expiryRecognitionModel       = "gemini-3.5-flash"
-	expiryRecognitionMaxAttempts = 2
-	expiryRecognitionRetryDelay  = 300 * time.Millisecond
-)
+const expiryRecognitionModel = "gemini-3.5-flash"
 
 type ExpiryVisionClient interface {
-	AnalyzeWithImagesAndTemperatureModel(ctx context.Context, prompt string, imageURLs []string, temperature float64, modelName string) (map[string]any, error)
+	RunPrecisionJSONWithImagesTemperature(ctx context.Context, sourceType, prompt string, imageURLs []string, modelName string, temperature float64) (map[string]any, error)
 }
 
 type Recognizer struct {
-	client     ExpiryVisionClient
-	model      string
-	retryDelay time.Duration
+	client ExpiryVisionClient
+	model  string
 }
 
 type RecognizeInput struct {
@@ -46,10 +39,7 @@ type RecognitionOutput struct {
 }
 
 func NewRecognizer(_ *config.Config) *Recognizer {
-	return &Recognizer{
-		model:      expiryRecognitionModel,
-		retryDelay: expiryRecognitionRetryDelay,
-	}
+	return &Recognizer{model: expiryRecognitionModel}
 }
 
 func (r *Recognizer) ConfigureVisionClient(client ExpiryVisionClient) {
@@ -70,9 +60,9 @@ func (r *Recognizer) Recognize(ctx context.Context, input RecognizeInput) (*Reco
 	if r.client == nil {
 		return nil, expiryRecognitionConfigError("后端未配置保质期识别模型")
 	}
-	parsed, attempts, err := r.analyzeWithRetry(ctx, prompt, imageURLs)
+	parsed, err := r.client.RunPrecisionJSONWithImagesTemperature(ctx, "image", prompt, imageURLs, r.model, 0.2)
 	if err != nil {
-		return nil, expiryRecognitionUpstreamError(ctx, fmt.Sprintf("保质期识别模型调用失败 model=%s attempts=%d error_class=%s: %v", r.model, attempts, expiryRecognitionErrorClass(err), err))
+		return nil, expiryRecognitionUpstreamError(ctx, fmt.Sprintf("保质期识别模型调用失败 primary_model=%s fallback_model=qwen3.6-flash: %v", r.model, err))
 	}
 	rawItems := extractMapItems(parsed["items"])
 	items := make([]map[string]any, 0, len(rawItems))
@@ -90,120 +80,6 @@ func (r *Recognizer) Recognize(ctx context.Context, input RecognizeInput) (*Reco
 		slog.Int("image_count", len(imageURLs)),
 	)
 	return &RecognitionOutput{Items: items, RecognizedCount: len(items)}, nil
-}
-
-func (r *Recognizer) analyzeWithRetry(ctx context.Context, prompt string, imageURLs []string) (map[string]any, int, error) {
-	for attempt := 1; attempt <= expiryRecognitionMaxAttempts; attempt++ {
-		startedAt := time.Now()
-		parsed, err := r.client.AnalyzeWithImagesAndTemperatureModel(ctx, prompt, imageURLs, 0.2, r.model)
-		if err == nil {
-			if attempt > 1 {
-				logger.Info(ctx, "保质期识别上游重试成功",
-					logger.Stage("llm_retry"),
-					slog.String("model", r.model),
-					slog.Int("attempt", attempt),
-					slog.Int("max_attempts", expiryRecognitionMaxAttempts),
-					slog.Duration("attempt_duration", time.Since(startedAt)),
-				)
-			}
-			return parsed, attempt, nil
-		}
-
-		errorClass := expiryRecognitionErrorClass(err)
-		if attempt >= expiryRecognitionMaxAttempts || ctx.Err() != nil || !isRetryableExpiryRecognitionError(err) {
-			return nil, attempt, err
-		}
-
-		logger.Warn(ctx, "保质期识别上游调用失败，准备重试",
-			logger.Stage("llm_retry"),
-			slog.String("model", r.model),
-			slog.Int("attempt", attempt),
-			slog.Int("max_attempts", expiryRecognitionMaxAttempts),
-			slog.String("error_class", errorClass),
-			slog.Duration("attempt_duration", time.Since(startedAt)),
-			slog.Duration("retry_delay", r.retryDelay),
-			logger.Truncated("upstream_error", err.Error(), 300),
-		)
-		if err := waitForExpiryRecognitionRetry(ctx, r.retryDelay); err != nil {
-			return nil, attempt, err
-		}
-	}
-	return nil, expiryRecognitionMaxAttempts, errors.New("保质期识别重试流程异常结束")
-}
-
-func waitForExpiryRecognitionRetry(ctx context.Context, delay time.Duration) error {
-	if delay <= 0 {
-		return nil
-	}
-	timer := time.NewTimer(delay)
-	defer timer.Stop()
-	select {
-	case <-timer.C:
-		return nil
-	case <-ctx.Done():
-		return ctx.Err()
-	}
-}
-
-func isRetryableExpiryRecognitionError(err error) bool {
-	if err == nil || errors.Is(err, context.Canceled) {
-		return false
-	}
-	lower := strings.ToLower(err.Error())
-	if strings.Contains(lower, "tls handshake timeout") ||
-		strings.Contains(lower, "unexpected eof") ||
-		lower == "eof" ||
-		strings.HasSuffix(lower, ": eof") ||
-		strings.Contains(lower, "connection reset") ||
-		strings.Contains(lower, "connection refused") ||
-		strings.Contains(lower, "server closed idle connection") ||
-		strings.Contains(lower, "use of closed network connection") ||
-		strings.Contains(lower, "socket hang up") ||
-		strings.Contains(lower, "gemini api error 500") ||
-		strings.Contains(lower, "gemini api error 502") ||
-		strings.Contains(lower, "gemini api error 503") ||
-		strings.Contains(lower, "gemini api error 504") {
-		return true
-	}
-	var networkError net.Error
-	return errors.As(err, &networkError) && networkError.Timeout()
-}
-
-func expiryRecognitionErrorClass(err error) string {
-	if err == nil {
-		return "none"
-	}
-	if errors.Is(err, context.Canceled) {
-		return "context_canceled"
-	}
-	if errors.Is(err, context.DeadlineExceeded) {
-		return "deadline_exceeded"
-	}
-	lower := strings.ToLower(err.Error())
-	switch {
-	case strings.Contains(lower, "tls handshake timeout"):
-		return "tls_handshake_timeout"
-	case strings.Contains(lower, "unexpected eof"), lower == "eof", strings.HasSuffix(lower, ": eof"):
-		return "unexpected_eof"
-	case strings.Contains(lower, "connection reset"):
-		return "connection_reset"
-	case strings.Contains(lower, "connection refused"):
-		return "connection_refused"
-	case strings.Contains(lower, "server closed idle connection"):
-		return "closed_idle_connection"
-	case strings.Contains(lower, "use of closed network connection"), strings.Contains(lower, "socket hang up"):
-		return "connection_closed"
-	case strings.Contains(lower, "gemini api error 500"),
-		strings.Contains(lower, "gemini api error 502"),
-		strings.Contains(lower, "gemini api error 503"),
-		strings.Contains(lower, "gemini api error 504"):
-		return "upstream_5xx"
-	}
-	var networkError net.Error
-	if errors.As(err, &networkError) && networkError.Timeout() {
-		return "network_timeout"
-	}
-	return "non_retryable"
 }
 
 func expiryRecognitionBadRequest(message string) error {

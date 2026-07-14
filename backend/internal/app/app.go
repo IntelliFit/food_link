@@ -323,9 +323,7 @@ func New(cfg *config.Config) (*App, error) {
 	expiryRepo := expiryrepo.NewExpiryRepo(db)
 	expiryTaskRepo := expiryrepo.NewTaskRepo(db)
 	expiryRecognizer := expiryservice.NewRecognizer(cfg)
-	if gemini35Client != nil {
-		expiryRecognizer.ConfigureVisionClient(gemini35Client)
-	}
+	expiryRecognizer.ConfigureVisionClient(analyzeSvc)
 	expiryNotifier := expiryservice.NewNotificationWorker(expiryRepo, cfg)
 	expirySvc := expiryservice.NewExpiryService(expiryRepo, expiryTaskRepo, expiryRecognizer)
 	expirySvc.ConfigureNotificationTemplate(cfg.ResolvedWechatPay().ExpirySubscribeTemplateID)

@@ -7,6 +7,7 @@ import (
 	analyzedomain "food_link/backend/internal/analyze/domain"
 
 	"github.com/google/uuid"
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
@@ -68,7 +69,7 @@ func (r *TaskRepo) UpdateTaskStatus(ctx context.Context, taskID string, status s
 func (r *TaskRepo) CompleteTask(ctx context.Context, taskID string, result map[string]any) (bool, error) {
 	updates := map[string]any{
 		"status":        "done",
-		"result":        result,
+		"result":        datatypes.JSONMap(result),
 		"error_message": nil,
 		"lease_until":   nil,
 		"updated_at":    time.Now(),
