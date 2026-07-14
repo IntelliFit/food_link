@@ -251,6 +251,7 @@ func TestUserRepo_DeleteByIDCleansOwnedPublicContent(t *testing.T) {
 	exec(`CREATE TABLE public_food_library (id TEXT PRIMARY KEY, user_id TEXT)`)
 	exec(`CREATE TABLE public_food_library_collections (id TEXT PRIMARY KEY, user_id TEXT, library_item_id TEXT)`)
 	exec(`CREATE TABLE user_recipes (id TEXT PRIMARY KEY, user_id TEXT)`)
+	exec(`CREATE TABLE manual_food_library (id TEXT PRIMARY KEY, canonical_name TEXT)`)
 
 	exec(`INSERT INTO user_food_records (id, user_id, record_time, total_calories) VALUES (?, ?, ?, ?)`, "food-1", userID, now, 100)
 	exec(`INSERT INTO user_exercise_logs (id, user_id) VALUES (?, ?)`, "exercise-1", userID)
@@ -258,6 +259,7 @@ func TestUserRepo_DeleteByIDCleansOwnedPublicContent(t *testing.T) {
 	exec(`INSERT INTO public_food_library (id, user_id) VALUES (?, ?)`, "public-food-1", userID)
 	exec(`INSERT INTO public_food_library_collections (id, user_id, library_item_id) VALUES (?, ?, ?)`, "coll-1", otherUserID, "public-food-1")
 	exec(`INSERT INTO user_recipes (id, user_id) VALUES (?, ?)`, "recipe-1", userID)
+	exec(`INSERT INTO manual_food_library (id, canonical_name) VALUES (?, ?)`, "global-food-1", "全局食物")
 	exec(`INSERT INTO feed_likes (id, user_id, target_type, target_id) VALUES (?, ?, ?, ?)`, "like-1", otherUserID, "food_record", "food-1")
 	exec(`INSERT INTO feed_comments (id, user_id, reply_to_user_id, target_type, target_id) VALUES (?, ?, ?, ?, ?)`, "comment-1", otherUserID, userID, "circle_post", "post-1")
 	exec(`INSERT INTO feed_interaction_notifications (id, recipient_user_id, actor_user_id, target_type, target_id) VALUES (?, ?, ?, ?, ?)`, "notice-1", otherUserID, userID, "exercise_log", "exercise-1")
@@ -272,6 +274,7 @@ func TestUserRepo_DeleteByIDCleansOwnedPublicContent(t *testing.T) {
 	assert.Equal(t, int64(0), countTableRows(t, db, "public_food_library", "user_id = ?", userID))
 	assert.Equal(t, int64(0), countTableRows(t, db, "public_food_library_collections", "library_item_id = ?", "public-food-1"))
 	assert.Equal(t, int64(0), countTableRows(t, db, "user_recipes", "user_id = ?", userID))
+	assert.Equal(t, int64(1), countTableRows(t, db, "manual_food_library", "id = ?", "global-food-1"))
 	assert.Equal(t, int64(0), countTableRows(t, db, "feed_likes", "target_id = ?", "food-1"))
 	assert.Equal(t, int64(0), countTableRows(t, db, "feed_comments", "reply_to_user_id = ? OR target_id = ?", userID, "post-1"))
 	assert.Equal(t, int64(0), countTableRows(t, db, "feed_interaction_notifications", "actor_user_id = ? OR target_id = ?", userID, "exercise-1"))

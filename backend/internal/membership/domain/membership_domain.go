@@ -148,6 +148,33 @@ type MembershipPayment struct {
 
 func (MembershipPayment) TableName() string { return "pro_membership_payment_records" }
 
+// PapayContract stores the merchant-side state for one WeChat delegated-payment agreement.
+// A user may have only one pending or active contract at a time (enforced by migration index).
+type PapayContract struct {
+	ID                     string         `gorm:"column:id;primaryKey" json:"id"`
+	UserID                 string         `gorm:"column:user_id" json:"user_id"`
+	PlanCode               string         `gorm:"column:plan_code" json:"plan_code"`
+	TemplateID             string         `gorm:"column:template_id" json:"template_id"`
+	MerchantContractCode   string         `gorm:"column:merchant_contract_code" json:"merchant_contract_code"`
+	WechatContractID       *string        `gorm:"column:wechat_contract_id" json:"wechat_contract_id,omitempty"`
+	OpenID                 *string        `gorm:"column:openid" json:"openid,omitempty"`
+	Status                 string         `gorm:"column:status" json:"status"`
+	RenewalState           string         `gorm:"column:renewal_state" json:"renewal_state"`
+	RequestSerial          string         `gorm:"column:request_serial" json:"request_serial"`
+	NextActionAt           *time.Time     `gorm:"column:next_action_at" json:"next_action_at,omitempty"`
+	RenewalDueAt           *time.Time     `gorm:"column:renewal_due_at" json:"renewal_due_at,omitempty"`
+	LastOrderNo            *string        `gorm:"column:last_order_no" json:"last_order_no,omitempty"`
+	LastError              *string        `gorm:"column:last_error" json:"last_error,omitempty"`
+	TerminatedAt           *time.Time     `gorm:"column:terminated_at" json:"terminated_at,omitempty"`
+	TerminationSource      *string        `gorm:"column:termination_source" json:"termination_source,omitempty"`
+	SignNotifyPayload      map[string]any `gorm:"column:sign_notify_payload;serializer:json" json:"sign_notify_payload,omitempty"`
+	TerminateNotifyPayload map[string]any `gorm:"column:terminate_notify_payload;serializer:json" json:"terminate_notify_payload,omitempty"`
+	CreatedAt              *time.Time     `gorm:"column:created_at" json:"created_at,omitempty"`
+	UpdatedAt              *time.Time     `gorm:"column:updated_at" json:"updated_at,omitempty"`
+}
+
+func (PapayContract) TableName() string { return "wechat_papay_contracts" }
+
 // UserCreditBonusEvent — table: user_credit_bonus_events
 type UserCreditBonusEvent struct {
 	ID             string         `gorm:"column:id;primaryKey" json:"id"`

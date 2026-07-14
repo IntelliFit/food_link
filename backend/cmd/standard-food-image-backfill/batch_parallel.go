@@ -21,20 +21,20 @@ import (
 )
 
 type successRecord struct {
-	FoodID       string        `json:"food_id"`
-	FoodName     string        `json:"food_name"`
-	Status       string        `json:"status"`
-	CandidateURL string        `json:"candidate_url"`
-	Query        string        `json:"query"`
-	Confidence   float64       `json:"confidence"`
-	FoodMatch    bool          `json:"food_match"`
-	NoWatermark  bool          `json:"no_watermark"`
-	Reason       string        `json:"reason"`
-	ObjectKey    string        `json:"object_key,omitempty"`
-	AccessURL    string        `json:"access_url,omitempty"`
-	Uploaded     bool          `json:"uploaded"`
-	DBUpdated    bool          `json:"db_updated"`
-	ProcessedAt  time.Time     `json:"processed_at"`
+	FoodID       string         `json:"food_id"`
+	FoodName     string         `json:"food_name"`
+	Status       string         `json:"status"`
+	CandidateURL string         `json:"candidate_url"`
+	Query        string         `json:"query"`
+	Confidence   float64        `json:"confidence"`
+	FoodMatch    bool           `json:"food_match"`
+	NoWatermark  bool           `json:"no_watermark"`
+	Reason       string         `json:"reason"`
+	ObjectKey    string         `json:"object_key,omitempty"`
+	AccessURL    string         `json:"access_url,omitempty"`
+	Uploaded     bool           `json:"uploaded"`
+	DBUpdated    bool           `json:"db_updated"`
+	ProcessedAt  time.Time      `json:"processed_at"`
 	Decision     *imageDecision `json:"decision,omitempty"`
 }
 
@@ -99,8 +99,8 @@ func runBackfill(ctx context.Context, opts options) error {
 		len(foods), pendingCount, opts.forceReprocess, opts.failedOnly, opts.workers)
 
 	var (
-		mu       sync.Mutex
-		results  []resultRow
+		mu        sync.Mutex
+		results   []resultRow
 		successes []successRecord
 	)
 	var processed int64
@@ -111,6 +111,7 @@ func runBackfill(ctx context.Context, opts options) error {
 			return
 		}
 		result := processFood(ctx, db, storageClient, opts, state, food)
+		current := atomic.AddInt64(&processed, 1)
 		mu.Lock()
 		updateState(state, result)
 		results = append(results, result)
@@ -121,12 +122,10 @@ func runBackfill(ctx context.Context, opts options) error {
 		if isFailureStatus(result.Status) {
 			_ = appendJSONL(opts.failedPath, result)
 		}
-		attempts := state.Entries[result.FoodID].Attempts
-		if opts.checkpointEvery > 0 && attempts%opts.checkpointEvery == 0 {
+		if shouldCheckpoint(current, opts.checkpointEvery) {
 			_ = saveState(opts.statePath, state)
 		}
 		mu.Unlock()
-		current := atomic.AddInt64(&processed, 1)
 		if isSuccessStatus(result.Status) {
 			atomic.AddInt64(&successCnt, 1)
 		}
@@ -186,6 +185,10 @@ func runBackfill(ctx context.Context, opts options) error {
 	}
 	printTiming(opts, "run_total duration=%s", time.Since(runStart).Round(time.Millisecond))
 	return nil
+}
+
+func shouldCheckpoint(processed int64, every int) bool {
+	return every > 0 && processed > 0 && processed%int64(every) == 0
 }
 
 func loadFoodsForRun(ctx context.Context, db *gorm.DB, opts options) ([]foodRow, error) {

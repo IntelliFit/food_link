@@ -15,7 +15,7 @@ import (
 
 type LocationService interface {
 	ReverseGeocode(ctx context.Context, lat, lng float64) (map[string]any, error)
-	SearchAddress(ctx context.Context, keyword string) (map[string]any, error)
+	SearchAddress(ctx context.Context, keyword string, count int, lon, lat, radiusKM *float64) (map[string]any, error)
 }
 
 type QRCodeService interface {
@@ -71,8 +71,12 @@ func (h *UtilityHandler) LocationReverse(c *gin.Context) {
 // POST /api/location/search
 func (h *UtilityHandler) LocationSearch(c *gin.Context) {
 	var body struct {
-		Keyword string `json:"keyword"`
-		KeyWord string `json:"keyWord"`
+		Keyword  string   `json:"keyword"`
+		KeyWord  string   `json:"keyWord"`
+		Count    int      `json:"count"`
+		Lon      *float64 `json:"lon"`
+		Lat      *float64 `json:"lat"`
+		RadiusKM *float64 `json:"radius_km"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		response.Error(c, err)
@@ -82,7 +86,7 @@ func (h *UtilityHandler) LocationSearch(c *gin.Context) {
 	if keyword == "" {
 		keyword = strings.TrimSpace(body.KeyWord)
 	}
-	data, err := h.locationSvc.SearchAddress(c.Request.Context(), keyword)
+	data, err := h.locationSvc.SearchAddress(c.Request.Context(), keyword, body.Count, body.Lon, body.Lat, body.RadiusKM)
 	if err != nil {
 		response.Error(c, err)
 		return

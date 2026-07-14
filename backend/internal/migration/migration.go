@@ -18,24 +18,8 @@ import (
 var identifierPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
 func AutoMigrate(ctx context.Context, db *gorm.DB, schema string) error {
-	if schema == "" {
-		schema = "public"
-	}
-	if !identifierPattern.MatchString(schema) {
-		return fmt.Errorf("invalid database schema: %q", schema)
-	}
-	qSchema := quoteIdent(schema)
-	if err := db.WithContext(ctx).Exec("CREATE SCHEMA IF NOT EXISTS " + qSchema).Error; err != nil {
-		return fmt.Errorf("create schema: %w", err)
-	}
-	if err := db.WithContext(ctx).Exec("CREATE EXTENSION IF NOT EXISTS pgcrypto").Error; err != nil {
-		return fmt.Errorf("create pgcrypto extension: %w", err)
-	}
-	if err := db.WithContext(ctx).Exec("CREATE EXTENSION IF NOT EXISTS pg_trgm").Error; err != nil {
-		return fmt.Errorf("create pg_trgm extension: %w", err)
-	}
-	if err := db.WithContext(ctx).Exec("SET search_path TO " + qSchema).Error; err != nil {
-		return fmt.Errorf("set search path: %w", err)
+	if err := prepareSchema(ctx, db, schema); err != nil {
+		return err
 	}
 	if err := db.WithContext(ctx).AutoMigrate(migrationdo.AllModels()...); err != nil {
 		return fmt.Errorf("auto migrate models: %w", err)
@@ -94,7 +78,47 @@ func AutoMigrate(ctx context.Context, db *gorm.DB, schema string) error {
 	if err := ensureMembershipGrantConfig(ctx, db); err != nil {
 		return err
 	}
+	return ensurePapayContractIndexes(ctx, db)
+}
+
+// MigratePapayContracts applies only the automatic-renewal schema changes.
+func MigratePapayContracts(ctx context.Context, db *gorm.DB, schema string) error {
+	if err := prepareSchema(ctx, db, schema); err != nil {
+		return err
+	}
+	if err := db.WithContext(ctx).AutoMigrate(&migrationdo.PapayContractDO{}); err != nil {
+		return fmt.Errorf("auto migrate papay contract: %w", err)
+	}
+	return ensurePapayContractIndexes(ctx, db)
+}
+
+func prepareSchema(ctx context.Context, db *gorm.DB, schema string) error {
+	if schema == "" {
+		schema = "public"
+	}
+	if !identifierPattern.MatchString(schema) {
+		return fmt.Errorf("invalid database schema: %q", schema)
+	}
+	qSchema := quoteIdent(schema)
+	if err := db.WithContext(ctx).Exec("CREATE SCHEMA IF NOT EXISTS " + qSchema).Error; err != nil {
+		return fmt.Errorf("create schema: %w", err)
+	}
+	if err := db.WithContext(ctx).Exec("CREATE EXTENSION IF NOT EXISTS pgcrypto").Error; err != nil {
+		return fmt.Errorf("create pgcrypto extension: %w", err)
+	}
+	if err := db.WithContext(ctx).Exec("CREATE EXTENSION IF NOT EXISTS pg_trgm").Error; err != nil {
+		return fmt.Errorf("create pg_trgm extension: %w", err)
+	}
+	if err := db.WithContext(ctx).Exec("SET search_path TO " + qSchema).Error; err != nil {
+		return fmt.Errorf("set search path: %w", err)
+	}
 	return nil
+}
+
+func ensurePapayContractIndexes(ctx context.Context, db *gorm.DB) error {
+	return db.WithContext(ctx).Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_wechat_papay_contracts_one_effective_per_user
+ON wechat_papay_contracts (user_id)
+WHERE status IN ('pending', 'active', 'termination_requested')`).Error
 }
 
 func quoteIdent(value string) string {
@@ -494,6 +518,14 @@ WHERE COALESCE(display_name, '') = ''
 		`CREATE INDEX IF NOT EXISTS idx_packaged_food_library_family_key ON packaged_food_library (product_family_key)`,
 		`CREATE INDEX IF NOT EXISTS idx_packaged_food_library_review_status ON packaged_food_library (review_status)`,
 		`CREATE INDEX IF NOT EXISTS idx_packaged_food_aliases_normalized_alias ON packaged_food_aliases (normalized_alias)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_food_nutrition_alias_candidates_pending_unique ON food_nutrition_alias_candidates (normalized_alias, proposed_food_id) WHERE status = 'pending'`,
+		`CREATE INDEX IF NOT EXISTS idx_food_nutrition_alias_candidates_review_queue ON food_nutrition_alias_candidates (status, created_at DESC)`,
+		`ALTER TABLE food_nutrition_alias_candidates DROP CONSTRAINT IF EXISTS food_nutrition_alias_candidates_status_check`,
+		`ALTER TABLE food_nutrition_alias_candidates ADD CONSTRAINT food_nutrition_alias_candidates_status_check CHECK (status IN ('pending', 'approved', 'rejected'))`,
+		addFK("fk_food_nutrition_alias_candidates_food", "food_nutrition_alias_candidates", "proposed_food_id", "food_nutrition_library", "id", "RESTRICT"),
+		addFK("fk_food_nutrition_alias_candidates_reviewer", "food_nutrition_alias_candidates", "reviewer_id", "admin_accounts", "id", "SET NULL"),
+		addFK("fk_food_nutrition_alias_candidates_source_task", "food_nutrition_alias_candidates", "source_task_id", "analysis_tasks", "id", "SET NULL"),
+		addFK("fk_food_nutrition_alias_candidates_generated_from", "food_nutrition_alias_candidates", "generated_from_id", "food_nutrition_alias_candidates", "id", "SET NULL"),
 		`CREATE INDEX IF NOT EXISTS idx_packaged_food_library_barcode ON packaged_food_library (barcode) WHERE barcode IS NOT NULL AND barcode <> ''`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_reward_task_uploads_source_key ON reward_task_uploads (source_key) WHERE source_key IS NOT NULL`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS precision_item_estimates_session_round_item_key_key ON precision_item_estimates (session_id, round_index, item_key)`,

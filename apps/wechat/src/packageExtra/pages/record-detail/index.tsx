@@ -142,7 +142,9 @@ const formatNutrientDetailValue = (value: number) => {
 
 const getRecordItemWaterMl = (item: FoodRecord['items'][0]) => {
   const value = Number(item.water_ml ?? item.nutrients?.water_ml ?? item.nutrients?.waterMl ?? 0)
-  return Number.isFinite(value) && value > 0 ? value : 0
+  const waterMl = Number.isFinite(value) && value > 0 ? value : 0
+  const weight = Number(item.weight ?? 0)
+  return Number.isFinite(weight) && weight > 0 ? Math.min(waterMl, weight) : waterMl
 }
 
 const getRecordItemNutrientDetailRows = (item: FoodRecord['items'][0]) => {

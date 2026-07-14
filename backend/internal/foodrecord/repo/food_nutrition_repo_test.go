@@ -326,9 +326,55 @@ func TestIsUnsafeNutritionAliasMatch(t *testing.T) {
 	assert.True(t, isUnsafeNutritionAliasMatch("煮玉米", "煮玉米", "玉米肠"))
 	assert.True(t, isUnsafeNutritionAliasMatch("蒸玉米", "蒸玉米", "鸡肉玉米肠"))
 	assert.True(t, isUnsafeNutritionAliasMatch("全脂牛奶", "全脂牛奶", "Milk, whole, 3.25% milkfat, with added vitamin D"))
+	assert.True(t, isUnsafeNutritionAliasMatch("牛肉面", "牛肉面", "瘦牛肉(熟)"))
+	assert.True(t, isUnsafeNutritionAliasMatch("照烧鸡肉拌饭", "照烧鸡肉拌饭", "照烧鸡肉"))
+	assert.True(t, isUnsafeNutritionAliasMatch("鸡蛋面", "鸡蛋面", "鸡蛋(全蛋)"))
+	assert.True(t, isUnsafeNutritionAliasMatch("豆浆粉", "豆浆粉", "豆浆"))
 	assert.False(t, isUnsafeNutritionAliasMatch("玉米肠", "玉米肠", "玉米肠"))
 	assert.False(t, isUnsafeNutritionAliasMatch("即食玉米肠", "即食玉米肠", "玉米肠"))
 	assert.False(t, isUnsafeNutritionAliasMatch("水煮玉米", "水煮玉米", "玉米(熟)"))
+	assert.False(t, isUnsafeNutritionAliasMatch("牛肉面婴儿泥", "牛肉面婴儿泥", "婴儿牛肉面泥"))
+	assert.False(t, isUnsafeNutritionAliasMatch("蛋白粉", "蛋白粉", "鸡蛋白干粉"))
+}
+
+func TestIsImplausibleNutritionFoodMatch(t *testing.T) {
+	assert.True(t, isImplausibleNutritionFoodMatch("牛肉面", domain.FoodNutrition{CarbsPer100g: 0}))
+	assert.True(t, isImplausibleNutritionFoodMatch("红烧牛肉粉", domain.FoodNutrition{CarbsPer100g: 1.5}))
+	assert.False(t, isImplausibleNutritionFoodMatch("牛肉面", domain.FoodNutrition{CarbsPer100g: 18}))
+	assert.False(t, isImplausibleNutritionFoodMatch("瘦牛肉", domain.FoodNutrition{CarbsPer100g: 0}))
+}
+
+func TestValidateNutritionAliasTargetRejectsMixedDishToZeroCarbIngredient(t *testing.T) {
+	err := ValidateNutritionAliasTarget("牛肉面", domain.FoodNutrition{
+		ID: "beef", CanonicalName: "瘦牛肉(熟)", IsActive: true,
+		KcalPer100g: 176, ProteinPer100g: 26, CarbsPer100g: 0, FatPer100g: 7,
+	})
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "不兼容")
+}
+
+func TestFoodNutritionRepo_EnsureNutritionAliasRejectsMixedDishToIngredient(t *testing.T) {
+	db := setupFoodNutritionFullTestDB(t)
+	repo := NewFoodNutritionRepo(db)
+	ctx := context.Background()
+
+	require.NoError(t, db.Create(&domain.FoodNutrition{
+		ID:             "lean-beef",
+		CanonicalName:  "瘦牛肉(熟)",
+		NormalizedName: normalizeFoodName("瘦牛肉(熟)"),
+		KcalPer100g:    176,
+		ProteinPer100g: 26,
+		CarbsPer100g:   0,
+		FatPer100g:     7,
+		IsActive:       true,
+	}).Error)
+
+	err := repo.EnsureNutritionAlias(ctx, "lean-beef", "牛肉面")
+	require.ErrorContains(t, err, "拒绝创建形态不兼容的营养别名")
+	var count int64
+	require.NoError(t, db.Model(&domain.FoodNutritionAlias{}).Count(&count).Error)
+	assert.Zero(t, count)
 }
 
 func TestNutritionQueryVariants(t *testing.T) {

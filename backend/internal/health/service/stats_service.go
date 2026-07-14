@@ -68,12 +68,19 @@ type StatsService struct {
 }
 
 const (
+	defaultDeepSeekBaseURL    = "https://api.deepseek.com"
 	statsInsightDeepSeekModel = "deepseek-v4-pro"
 	statsInsightDailyLimit    = 3
 	statsInsightCreditCost    = 1
 	statsInsightMaxTokens     = 4096
 	statsInsightMinRecordDays = 1
 	statsInsightMaxAttempts   = 2
+	// The default Go transport gives TLS negotiation only 10 seconds. The
+	// OpenAI-compatible gateway can occasionally take longer during cold starts.
+	statsInsightTLSHandshakeTimeout = 30 * time.Second
+	statsInsightHTTPTimeout         = 90 * time.Second
+	statsInsightNetworkMaxAttempts  = 2
+	statsInsightNetworkRetryDelay   = 300 * time.Millisecond
 )
 
 var statsInsightForbiddenIdentityTerms = []string{
@@ -113,9 +120,33 @@ func NewStatsService(repo StatsRepo, bodyMetrics BodyMetricsSummaryProvider, cfg
 		repo:            repo,
 		bodyMetrics:     bodyMetrics,
 		cfg:             c,
-		client:          &http.Client{Timeout: 60 * time.Second},
-		deepSeekBaseURL: "https://api.deepseek.com",
+		client:          newStatsInsightHTTPClient(),
+		deepSeekBaseURL: configuredDeepSeekBaseURL(c),
 	}
+}
+
+func newStatsInsightHTTPClient() *http.Client {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.TLSHandshakeTimeout = statsInsightTLSHandshakeTimeout
+	return &http.Client{Transport: transport, Timeout: statsInsightHTTPTimeout}
+}
+
+func configuredDeepSeekBaseURL(cfg *config.Config) string {
+	if cfg != nil {
+		if baseURL := strings.TrimRight(strings.TrimSpace(cfg.External.DeepSeekBaseURL), "/"); baseURL != "" {
+			return baseURL
+		}
+	}
+	return defaultDeepSeekBaseURL
+}
+
+func (s *StatsService) deepSeekChatBaseURL() string {
+	if s != nil {
+		if baseURL := strings.TrimRight(strings.TrimSpace(s.deepSeekBaseURL), "/"); baseURL != "" {
+			return baseURL
+		}
+	}
+	return defaultDeepSeekBaseURL
 }
 
 func (s *StatsService) ConfigureCreditGuard(guard CreditGuard) {
@@ -953,10 +984,7 @@ func (s *StatsService) SaveInsight(ctx context.Context, userID string, content s
 
 func (s *StatsService) generatePetChatAnswer(ctx context.Context, comp *statsComputation, question string, historyMessages []domain.PetChatMessage) (statsInsightGeneration, error) {
 	apiKey := ""
-	baseURL := s.deepSeekBaseURL
-	if strings.TrimSpace(baseURL) == "" {
-		baseURL = "https://api.deepseek.com"
-	}
+	baseURL := s.deepSeekChatBaseURL()
 	model := s.petChatModel()
 	if s.cfg != nil {
 		apiKey = strings.TrimSpace(s.cfg.External.DeepSeekAPIKey)
@@ -1176,10 +1204,7 @@ func (s *StatsService) getStreakDays(ctx context.Context, userID string) int {
 
 func (s *StatsService) generateNutritionInsight(ctx context.Context, comp *statsComputation) (statsInsightGeneration, error) {
 	apiKey := ""
-	baseURL := s.deepSeekBaseURL
-	if strings.TrimSpace(baseURL) == "" {
-		baseURL = "https://api.deepseek.com"
-	}
+	baseURL := s.deepSeekChatBaseURL()
 	model := statsInsightDeepSeekModel
 	if s.cfg != nil {
 		apiKey = strings.TrimSpace(s.cfg.External.DeepSeekAPIKey)
@@ -1220,6 +1245,36 @@ func (s *StatsService) generateNutritionInsight(ctx context.Context, comp *stats
 }
 
 func (s *StatsService) requestNutritionInsight(ctx context.Context, baseURL, apiKey, model, prompt, retryFeedback string) (statsInsightGeneration, error) {
+	var lastErr error
+	for attempt := 1; attempt <= statsInsightNetworkMaxAttempts; attempt++ {
+		generation, err := s.requestNutritionInsightOnce(ctx, baseURL, apiKey, model, prompt, retryFeedback)
+		if err == nil {
+			return generation, nil
+		}
+		lastErr = err
+		if attempt == statsInsightNetworkMaxAttempts || !isTransientStatsInsightError(err) {
+			break
+		}
+
+		logger.Warn(ctx, "统计文本大模型调用失败，准备重试",
+			slog.Int("retry_number", attempt),
+			slog.Int("max_retries", statsInsightNetworkMaxAttempts-1),
+			logger.Err(err),
+		)
+		timer := time.NewTimer(statsInsightNetworkRetryDelay)
+		select {
+		case <-ctx.Done():
+			if !timer.Stop() {
+				<-timer.C
+			}
+			return statsInsightGeneration{}, ctx.Err()
+		case <-timer.C:
+		}
+	}
+	return statsInsightGeneration{}, lastErr
+}
+
+func (s *StatsService) requestNutritionInsightOnce(ctx context.Context, baseURL, apiKey, model, prompt, retryFeedback string) (statsInsightGeneration, error) {
 	messages := []map[string]string{
 		{"role": "user", "content": prompt},
 	}
@@ -1290,6 +1345,36 @@ func (s *StatsService) requestNutritionInsight(ctx context.Context, baseURL, api
 	}, nil
 }
 
+func isTransientStatsInsightError(err error) bool {
+	if err == nil {
+		return false
+	}
+	message := strings.ToLower(err.Error())
+	for _, hint := range []string{
+		"context deadline exceeded",
+		"client.timeout",
+		"timeout exceeded while awaiting headers",
+		"net/http: timeout",
+		"i/o timeout",
+		"tls handshake timeout",
+		"connection reset",
+		"connection refused",
+		"temporary failure",
+		"eof",
+		"deepseek api 错误: 408",
+		"deepseek api 错误: 429",
+		"deepseek api 错误: 500",
+		"deepseek api 错误: 502",
+		"deepseek api 错误: 503",
+		"deepseek api 错误: 504",
+	} {
+		if strings.Contains(message, hint) {
+			return true
+		}
+	}
+	return false
+}
+
 func (s *StatsService) streamNutritionInsight(ctx context.Context, baseURL, apiKey, model, prompt string) (<-chan string, error) {
 	body := map[string]any{
 		"model":       model,
@@ -1299,26 +1384,49 @@ func (s *StatsService) streamNutritionInsight(ctx context.Context, baseURL, apiK
 		"stream":      true,
 	}
 	bodyBytes, _ := json.Marshal(body)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/chat/completions", bytes.NewReader(bodyBytes))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Authorization", "Bearer "+apiKey)
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "text/event-stream")
+	var resp *http.Response
+	var lastErr error
+	for attempt := 1; attempt <= statsInsightNetworkMaxAttempts; attempt++ {
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/chat/completions", bytes.NewReader(bodyBytes))
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "text/event-stream")
 
-	client := s.client
-	if client.Timeout > 0 {
-		client = &http.Client{Timeout: 180 * time.Second}
+		resp, err = s.client.Do(req)
+		if err == nil && (resp.StatusCode < 200 || resp.StatusCode >= 300) {
+			respBody, _ := io.ReadAll(resp.Body)
+			_ = resp.Body.Close()
+			err = fmt.Errorf("DeepSeek API 错误: %d %s", resp.StatusCode, extractDeepSeekError(respBody))
+			resp = nil
+		}
+		if err == nil {
+			break
+		}
+		lastErr = err
+		if attempt == statsInsightNetworkMaxAttempts || !isTransientStatsInsightError(err) {
+			return nil, err
+		}
+
+		logger.Warn(ctx, "宠物对话流式大模型调用失败，准备重试",
+			slog.Int("retry_number", attempt),
+			slog.Int("max_retries", statsInsightNetworkMaxAttempts-1),
+			logger.Err(err),
+		)
+		timer := time.NewTimer(statsInsightNetworkRetryDelay)
+		select {
+		case <-ctx.Done():
+			if !timer.Stop() {
+				<-timer.C
+			}
+			return nil, ctx.Err()
+		case <-timer.C:
+		}
 	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		defer resp.Body.Close()
-		respBody, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("DeepSeek API 错误: %d %s", resp.StatusCode, extractDeepSeekError(respBody))
+	if resp == nil {
+		return nil, lastErr
 	}
 
 	textChan := make(chan string, 32)
@@ -1715,7 +1823,7 @@ func buildPetChatPrompt(comp *statsComputation, question string, historyMessages
 8. 如果当前追问很短，例如“为什么”“有什么关系”“只看微量元素”，要从最近对话里还原它指代的问题再回答。
 9. 必须说明证据边界：如果没有训练日志、睡眠或体感数据，要明确说“这部分只能推测”；如果有训练日志，也不要编造日志里没有的强度、配速或心率。
 10. 最后给 2-3 个明天能执行的小动作。
-11. 输出 Markdown 正文，不要 JSON，不要代码块，控制在 450-750 字。
+11. 输出 Markdown 正文，不要 JSON，不要代码块，控制在 450-750 字。仅使用标题、短段落、列表和表格；不要使用 *、**、_、__ 作为强调标记，重点直接写在文字里。
 12. 严禁出现“专业营养师”“注册营养师”“持证营养师”等身份措辞。
 `,
 		question,

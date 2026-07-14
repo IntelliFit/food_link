@@ -481,14 +481,20 @@ const scaleNutrients = (nutrients: Nutrients, factor: number): Nutrients => {
   return scaled
 }
 
+const clampWaterMlForItem = (waterMl: number, weight: number) => {
+  const safeWater = Number.isFinite(waterMl) ? Math.max(0, waterMl) : 0
+  const safeWeight = Number.isFinite(weight) ? Math.max(0, weight) : 0
+  return safeWeight > 0 ? Math.min(safeWater, safeWeight) : safeWater
+}
+
 const buildFoodItemNutrients = (item: NutritionItem): Nutrients => ({
   ...item.nutrients,
   calories: item.calorie,
   protein: item.protein,
   carbs: item.carbs,
   fat: item.fat,
-  waterMl: item.waterMl,
-  water_ml: item.waterMl,
+  waterMl: clampWaterMlForItem(item.waterMl, item.weight),
+  water_ml: clampWaterMlForItem(item.waterMl, item.weight),
   sodium_mg: item.nutrients.sodiumMg || item.nutrients.sodium_mg || 0,
   fiber: item.nutrients.fiber || 0,
   sugar: item.nutrients.sugar || 0
@@ -1320,7 +1326,7 @@ function ResultPage() {
         const currentValue = field === 'calories' ? item.calorie : item[field]
         const resolvedValue = typeof nextValue === 'function' ? nextValue(currentValue) : nextValue
         const normalizedValue = field === 'waterMl'
-          ? Math.max(0, Math.round(resolvedValue))
+          ? clampWaterMlForItem(Math.round(resolvedValue), item.weight)
           : Math.max(0, roundToSingleDecimal(resolvedValue))
         if (field === 'calories') {
           return {
@@ -1655,7 +1661,10 @@ function ResultPage() {
         const nextProtein = nutritionChanged ? roundToSingleDecimal(protein) : roundToSingleDecimal(item.protein * weightScale)
         const nextCarbs = nutritionChanged ? roundToSingleDecimal(carbs) : roundToSingleDecimal(item.carbs * weightScale)
         const nextFat = nutritionChanged ? roundToSingleDecimal(fat) : roundToSingleDecimal(item.fat * weightScale)
-        const nextWaterMl = nutritionChanged ? Math.round(waterMl) : Math.round(item.waterMl * weightScale)
+        const nextWaterMl = clampWaterMlForItem(
+          nutritionChanged ? Math.round(waterMl) : Math.round(item.waterMl * weightScale),
+          weight,
+        )
         const nextCalories = nutritionChanged ? Math.round(calories) : Math.round(item.calorie * weightScale)
         const ratio = item.ratio > 0 ? item.ratio : 100
         return {
@@ -2949,6 +2958,7 @@ function ResultPage() {
                       <View className='ratio-control-main'>
                         <View className='ratio-label-wrap'>
                           <Text className='control-label'>实际摄入</Text>
+                          <Text className='control-sub-label'>约 {formatWeightDisplay(item.intake)}</Text>
                         </View>
                         <View className='ratio-control-right'>
                           <View className='ratio-slider-shell'>

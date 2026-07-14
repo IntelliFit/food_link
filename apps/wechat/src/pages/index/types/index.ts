@@ -29,6 +29,7 @@ export interface WeekHeatmapCell {
   intakeRatio: number
   state: WeekHeatmapState
   isToday: boolean
+  hasRecord?: boolean
 }
 
 export interface TargetFormState {

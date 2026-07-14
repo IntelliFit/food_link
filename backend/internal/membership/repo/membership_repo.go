@@ -47,6 +47,87 @@ func (r *MembershipRepo) GetPlanByCode(ctx context.Context, planCode string) (*d
 	return &plan, err
 }
 
+func (r *MembershipRepo) CreatePapayContract(ctx context.Context, contract *domain.PapayContract) error {
+	if contract == nil {
+		return fmt.Errorf("papay contract is nil")
+	}
+	if contract.ID == "" {
+		contract.ID = uuid.New().String()
+	}
+	if contract.SignNotifyPayload == nil {
+		contract.SignNotifyPayload = map[string]any{}
+	}
+	if contract.TerminateNotifyPayload == nil {
+		contract.TerminateNotifyPayload = map[string]any{}
+	}
+	now := time.Now()
+	if contract.CreatedAt == nil {
+		contract.CreatedAt = &now
+	}
+	contract.UpdatedAt = &now
+	return r.db.WithContext(ctx).Create(contract).Error
+}
+
+func (r *MembershipRepo) GetEffectivePapayContract(ctx context.Context, userID string) (*domain.PapayContract, error) {
+	var contract domain.PapayContract
+	err := r.db.WithContext(ctx).
+		Where("user_id = ? AND status IN ?", strings.TrimSpace(userID), []string{"pending", "active", "termination_requested"}).
+		Order("created_at DESC").
+		First(&contract).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	return &contract, err
+}
+
+func (r *MembershipRepo) GetPapayContractByMerchantCode(ctx context.Context, code string) (*domain.PapayContract, error) {
+	var contract domain.PapayContract
+	err := r.db.WithContext(ctx).Where("merchant_contract_code = ?", strings.TrimSpace(code)).First(&contract).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	return &contract, err
+}
+
+func (r *MembershipRepo) GetPapayContractByWechatID(ctx context.Context, contractID string) (*domain.PapayContract, error) {
+	var contract domain.PapayContract
+	err := r.db.WithContext(ctx).Where("wechat_contract_id = ?", strings.TrimSpace(contractID)).First(&contract).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	return &contract, err
+}
+
+func (r *MembershipRepo) UpdatePapayContract(ctx context.Context, id string, updates map[string]any) error {
+	updates["updated_at"] = time.Now()
+	for _, key := range []string{"sign_notify_payload", "terminate_notify_payload"} {
+		if value, ok := updates[key].(map[string]any); ok {
+			updates[key] = datatypes.JSONMap(value)
+		}
+	}
+	return r.db.WithContext(ctx).Model(&domain.PapayContract{}).Where("id = ?", id).Updates(updates).Error
+}
+
+func (r *MembershipRepo) ListPapayContractsReadyForAction(ctx context.Context, now time.Time, limit int) ([]domain.PapayContract, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	var contracts []domain.PapayContract
+	err := r.db.WithContext(ctx).
+		Where("status = ? AND renewal_state IN ? AND next_action_at IS NOT NULL AND next_action_at <= ?", "active", []string{"initial_pending", "renewal_pending", "pre_notified"}, now).
+		Order("next_action_at ASC").
+		Limit(limit).
+		Find(&contracts).Error
+	return contracts, err
+}
+
+func (r *MembershipRepo) ClaimPapayContractAction(ctx context.Context, id, state string) (bool, error) {
+	result := r.db.WithContext(ctx).Model(&domain.PapayContract{}).
+		Where("id = ? AND status = ? AND renewal_state = ?", id, "active", state).
+		Updates(map[string]any{"renewal_state": state + "_processing", "updated_at": time.Now()})
+	return result.RowsAffected == 1, result.Error
+}
+
 func (r *MembershipRepo) GetPaymentTestAccess(ctx context.Context, userID string) (*domain.PaymentTestAccess, error) {
 	var setting domain.PaymentTestSetting
 	err := r.db.WithContext(ctx).Where("id = ?", "default").First(&setting).Error

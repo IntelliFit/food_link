@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	adminhandler "food_link/backend/internal/admin/handler"
@@ -23,6 +24,9 @@ import (
 	authhandler "food_link/backend/internal/auth/handler"
 	authrepo "food_link/backend/internal/auth/repo"
 	authservice "food_link/backend/internal/auth/service"
+	campuscataloghandler "food_link/backend/internal/campuscatalog/handler"
+	campuscatalogrepo "food_link/backend/internal/campuscatalog/repo"
+	campuscatalogservice "food_link/backend/internal/campuscatalog/service"
 	commonmw "food_link/backend/internal/common/middleware"
 	"food_link/backend/internal/common/routes"
 	communityhandler "food_link/backend/internal/community/handler"
@@ -79,11 +83,11 @@ import (
 	userrepo "food_link/backend/internal/user/repo"
 	userservice "food_link/backend/internal/user/service"
 	utilityhandler "food_link/backend/internal/utility/handler"
+	utilityrepo "food_link/backend/internal/utility/repo"
+	utilityservice "food_link/backend/internal/utility/service"
 	voucherhandler "food_link/backend/internal/voucher/handler"
 	voucherrepo "food_link/backend/internal/voucher/repo"
 	voucherservice "food_link/backend/internal/voucher/service"
-	utilityrepo "food_link/backend/internal/utility/repo"
-	utilityservice "food_link/backend/internal/utility/service"
 	workerpkg "food_link/backend/internal/worker"
 	"food_link/backend/pkg/config"
 	"food_link/backend/pkg/database"
@@ -189,14 +193,27 @@ func New(cfg *config.Config) (*App, error) {
 	ofoxAIClient := analyzeservice.NewOfoxAIClient(cfg.External.OfoxAIAPIKey, "gemini-3-flash-preview", cfg.External.OfoxAIBaseURL)
 	analyzeSvc := analyzeservice.NewAnalyzeService(doubaoClient, ofoxAIClient, userRepo, analyzeNutritionRepo)
 	analyzeSvc.ConfigureDoubaoClient(cfg.External.DoubaoAPIKey, cfg.External.DoubaoBaseURL, "")
-	analyzeSvc.ConfigureDashScopeClient(cfg.External.DashScopeAPIKey, cfg.External.DashScopeBaseURL)
+	var dashscopeClient *analyzeservice.OfoxAIClient
+	if strings.TrimSpace(cfg.External.DashScopeAPIKey) != "" {
+		dashscopeClient = analyzeservice.NewDashScopeClient(cfg.External.DashScopeAPIKey, cfg.External.DashScopeBaseURL)
+		analyzeSvc.ConfigureDashScopeLLMClient(dashscopeClient)
+	} else {
+		analyzeSvc.ConfigureDashScopeClient(cfg.External.DashScopeAPIKey, cfg.External.DashScopeBaseURL)
+	}
 	analyzeSvc.ConfigureGemini31LiteClient(cfg.External.OfoxAIAPIKey, cfg.External.OfoxAIBaseURL, "gemini-3.1-flash-lite")
-	analyzeSvc.ConfigureGemini35Client(cfg.External.Gemini35APIKey, cfg.External.Gemini35BaseURL, cfg.External.Gemini35Model)
+	gemini35Model := "gemini-3.5-flash"
+	var gemini35Client *analyzeservice.OfoxAIClient
+	if strings.TrimSpace(cfg.External.Gemini35APIKey) != "" && strings.TrimSpace(cfg.External.Gemini35BaseURL) != "" {
+		gemini35Client = analyzeservice.NewOfoxAIClient(cfg.External.Gemini35APIKey, gemini35Model, cfg.External.Gemini35BaseURL)
+		analyzeSvc.ConfigureGemini35LLMClient(gemini35Client)
+	} else {
+		analyzeSvc.ConfigureGemini35Client(cfg.External.Gemini35APIKey, cfg.External.Gemini35BaseURL, gemini35Model)
+	}
 	if cfg.External.DoubaoWebSearchAPIKey != "" {
 		analyzeSvc.ConfigureDoubaoWebSearchClient(cfg.External.DoubaoWebSearchAPIKey, cfg.External.DoubaoBaseURL, "")
 	}
 	analyzeSvc.ConfigureImageProvider(cfg.External.LLMProvider)
-	analyzeSvc.ConfigureDeepSeekFallback(cfg.External.DeepSeekAPIKey)
+	analyzeSvc.ConfigureDeepSeekFallback(cfg.External.DeepSeekAPIKey, cfg.External.DeepSeekBaseURL)
 	analyzeSvc.ConfigureStorage(storageClient)
 	frRepo := foodrecordrepo.NewFoodRecordRepo(db)
 
@@ -215,7 +232,10 @@ func New(cfg *config.Config) (*App, error) {
 	frSvc.ConfigureWaterLogRecorder(bodyMetricsRepo)
 	frUploadSvc := foodrecordservice.NewUploadService(storageClient)
 	frNutritionSvc := foodrecordservice.NewFoodNutritionService(frNutritionRepo)
-	frNutritionSvc.ConfigureNutritionLabelVisionClient(doubaoClient)
+	if gemini35Client != nil {
+		frNutritionSvc.ConfigureNutritionLabelVisionClient(gemini35Client)
+		frNutritionSvc.ConfigurePackagedProductVisionClient(gemini35Client)
+	}
 	frNutritionSvc.ConfigureAsyncTasks(analyzeTaskRepo, taskQueue)
 	frHandler := foodrecordhandler.NewFoodRecordHandler(frSvc, frUploadSvc, frNutritionSvc)
 
@@ -258,6 +278,7 @@ func New(cfg *config.Config) (*App, error) {
 	// Membership module DI
 	membershipRepo := membershiprepo.NewMembershipRepo(db)
 	membershipSvc := membershipservice.NewMembershipService(membershipRepo, cfg)
+	membershipSvc.ConfigurePapayRepository(membershipRepo)
 	statsSvc.ConfigureCreditGuard(membershipSvc)
 	analyzeTaskSvc.ConfigureCreditGuard(membershipSvc)
 	exerciseSvc.ConfigureCreditGuard(membershipSvc)
@@ -301,6 +322,9 @@ func New(cfg *config.Config) (*App, error) {
 	expiryRepo := expiryrepo.NewExpiryRepo(db)
 	expiryTaskRepo := expiryrepo.NewTaskRepo(db)
 	expiryRecognizer := expiryservice.NewRecognizer(cfg)
+	if gemini35Client != nil {
+		expiryRecognizer.ConfigureVisionClient(gemini35Client)
+	}
 	expiryNotifier := expiryservice.NewNotificationWorker(expiryRepo, cfg)
 	expirySvc := expiryservice.NewExpiryService(expiryRepo, expiryTaskRepo, expiryRecognizer)
 	expirySvc.ConfigureNotificationTemplate(cfg.ResolvedWechatPay().ExpirySubscribeTemplateID)
@@ -417,6 +441,7 @@ func New(cfg *config.Config) (*App, error) {
 	engine.GET("/api/food-record/list", authmw.RequireJWT(jwtSvc), frHandler.ListFoodRecords)
 	engine.GET("/api/food-record/entry-distribution", authmw.RequireJWT(jwtSvc), frHandler.EntryDistribution)
 	engine.GET("/api/food-record/recommend-meal-type", authmw.OptionalJWT(jwtSvc), frHandler.RecommendMealType)
+	engine.OPTIONS("/api/food-record/share/:record_id", frHandler.ShareFoodRecordOptions)
 	engine.GET("/api/food-record/share/:record_id", frHandler.ShareFoodRecord)
 	engine.GET("/share/food-record/:record_id", frHandler.ShareFoodRecordPage)
 	engine.GET("/api/food-record/:record_id", authmw.RequireJWT(jwtSvc), frHandler.GetFoodRecord)
@@ -525,6 +550,10 @@ func New(cfg *config.Config) (*App, error) {
 	engine.POST("/api/membership/pay/create", authmw.RequireJWT(jwtSvc), membershipHandler.CreatePayment)
 	engine.POST("/api/membership/pay/sync", authmw.RequireJWT(jwtSvc), membershipHandler.SyncPayment)
 	engine.POST("/api/payment/wechat/notify/membership", membershipHandler.WechatNotify)
+	engine.POST("/api/membership/auto-renew/signing", authmw.RequireJWT(jwtSvc), membershipHandler.CreatePapaySigning)
+	engine.POST("/api/membership/auto-renew/cancel", authmw.RequireJWT(jwtSvc), membershipHandler.CancelPapayContract)
+	engine.POST("/api/payment/wechat/papay/contract/notify", membershipHandler.PapayContractNotify)
+	engine.POST("/api/payment/wechat/papay/pay/notify", membershipHandler.PapayPaymentNotify)
 	engine.POST("/api/payment/wechat/papay/contract/terminate-notify", membershipHandler.PapayContractTerminateNotify)
 	engine.POST("/api/membership/rewards/share-poster/claim", authmw.RequireJWT(jwtSvc), membershipHandler.ClaimSharePosterReward)
 
@@ -634,6 +663,14 @@ func New(cfg *config.Config) (*App, error) {
 	adminFoodNutritionRepo := adminrepo.NewFoodNutritionRepo(db)
 	adminFoodNutritionSvc := adminservice.NewFoodNutritionService(adminFoodNutritionRepo, storageClient)
 	adminFoodNutritionHandler := adminhandler.NewFoodNutritionHandler(adminFoodNutritionSvc)
+	adminAliasReviewRepo := adminrepo.NewNutritionAliasReviewRepo(db)
+	adminAliasReviewer := analyzeservice.NewDeepSeekNutritionEstimator(
+		cfg.External.DeepSeekAPIKey,
+		cfg.External.DeepSeekBaseURL,
+		"deepseek-v4-pro",
+	)
+	adminAliasReviewSvc := adminservice.NewNutritionAliasReviewService(adminAliasReviewRepo, adminAliasReviewer, "deepseek-v4-pro")
+	adminAliasReviewHandler := adminhandler.NewNutritionAliasReviewHandler(adminAliasReviewSvc)
 	adminPublicFoodRepo := adminrepo.NewPublicFoodRepo(db)
 	adminPublicFoodSvc := adminservice.NewPublicFoodService(adminPublicFoodRepo, storageClient)
 	adminPublicFoodHandler := adminhandler.NewPublicFoodHandler(adminPublicFoodSvc)
@@ -658,6 +695,9 @@ func New(cfg *config.Config) (*App, error) {
 	adminAuthSvc := adminservice.NewAuthService(adminAccountRepo)
 	adminAuthHandler := adminhandler.NewAuthHandler(adminAuthSvc)
 	adminCampusDirectoryHandler := adminhandler.NewCampusDirectoryHandler(db)
+	adminCampusCatalogRepo := campuscatalogrepo.NewCatalogRepo(db)
+	adminCampusCatalogSvc := campuscatalogservice.NewCatalogService(adminCampusCatalogRepo, storageClient)
+	adminCampusCatalogHandler := campuscataloghandler.NewCatalogHandler(adminCampusCatalogSvc)
 	adminAuth := adminAuthHandler.AdminAuth()
 	adminAPI := engine.Group("/api/admin", adminCORS(os.Getenv("ADMIN_CORS_ALLOWED_ORIGINS")))
 	adminAPI.POST("/login", adminAuthHandler.Login)
@@ -676,6 +716,12 @@ func New(cfg *config.Config) (*App, error) {
 	adminAPI.POST("/food-nutrition", adminAuth, adminFoodNutritionHandler.Create)
 	adminAPI.PATCH("/food-nutrition/:food_id", adminAuth, adminFoodNutritionHandler.Update)
 	adminAPI.DELETE("/food-nutrition/:food_id", adminAuth, adminFoodNutritionHandler.Delete)
+	adminAPI.GET("/nutrition-alias-candidates", adminAuth, adminAliasReviewHandler.List)
+	adminAPI.GET("/nutrition-alias-candidates/:candidate_id", adminAuth, adminAliasReviewHandler.Get)
+	adminAPI.POST("/nutrition-alias-candidates", adminAuth, adminAliasReviewHandler.Create)
+	adminAPI.POST("/nutrition-alias-candidates/ai-review-batch", adminAuth, adminAliasReviewHandler.BatchAIReview)
+	adminAPI.POST("/nutrition-alias-candidates/:candidate_id/ai-review", adminAuth, adminAliasReviewHandler.AIReview)
+	adminAPI.POST("/nutrition-alias-candidates/:candidate_id/review", adminAuth, adminAliasReviewHandler.Review)
 	adminAPI.GET("/public-food-library", adminAuth, adminPublicFoodHandler.List)
 	adminAPI.GET("/public-food-library/:item_id", adminAuth, adminPublicFoodHandler.Get)
 	adminAPI.POST("/public-food-library", adminAuth, adminPublicFoodHandler.Create)
@@ -707,6 +753,10 @@ func New(cfg *config.Config) (*App, error) {
 	adminAPI.GET("/campus-directory/imports", adminAuth, adminCampusDirectoryHandler.ListImports)
 	adminAPI.POST("/campus-directory/imports", adminAuth, adminCampusDirectoryHandler.CreateImport)
 	adminAPI.PATCH("/campus-directory/imports/:import_id", adminAuth, adminCampusDirectoryHandler.UpdateImport)
+	adminAPI.POST("/campus-food-collection/images", adminAuth, adminCampusCatalogHandler.UploadImage)
+	adminAPI.POST("/campus-food-collection/batches", adminAuth, adminCampusCatalogHandler.CreateBatch)
+	adminAPI.GET("/campus-food-collection/batches", adminAuth, adminCampusCatalogHandler.ListBatches)
+	adminAPI.GET("/campus-food-collection/items", adminAuth, adminCampusCatalogHandler.ListItems)
 	adminAPI.GET("/exercise-energy-library", adminAuth, adminExerciseEnergyHandler.List)
 	adminAPI.GET("/exercise-energy-library/:activity_id", adminAuth, adminExerciseEnergyHandler.Get)
 	adminAPI.PATCH("/exercise-energy-library/:activity_id", adminAuth, adminExerciseEnergyHandler.Update)
@@ -831,6 +881,13 @@ func (a *App) startEmbeddedWorker(
 	)
 	go func() {
 		defer close(done)
+		var background sync.WaitGroup
+		background.Add(1)
+		go func() {
+			defer background.Done()
+			runPapayRenewalLoop(workerCtx, membershipSvc)
+		}()
+		defer background.Wait()
 		for workerCtx.Err() == nil {
 			err := runner.Run(workerCtx, workerpkg.Options{
 				WorkerID:     workerID,
@@ -850,8 +907,36 @@ func (a *App) startEmbeddedWorker(
 			case <-timer.C:
 			}
 		}
+		cancel()
 		logger.Info(context.Background(), "内嵌 worker 已停止")
 	}()
+}
+
+func runPapayRenewalLoop(ctx context.Context, membershipSvc *membershipservice.MembershipService) {
+	if membershipSvc == nil {
+		return
+	}
+	process := func() {
+		count, err := membershipSvc.ProcessPapayRenewals(ctx)
+		if err != nil && ctx.Err() == nil {
+			logger.Error(ctx, "微信自动续费任务巡检失败", err)
+			return
+		}
+		if count > 0 {
+			logger.Info(ctx, "微信自动续费任务已处理", slog.Int("count", count))
+		}
+	}
+	process()
+	ticker := time.NewTicker(time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			process()
+		}
+	}
 }
 
 func embeddedWorkerID(cfg *config.Config) string {

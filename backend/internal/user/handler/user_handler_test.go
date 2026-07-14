@@ -28,6 +28,8 @@ type mockUserService struct {
 	recordDaysErr       error
 	lastSeenErr         error
 	deleteAccountErr    error
+	deleteAccountCalls  int
+	deletedUserID       string
 }
 
 func (m *mockUserService) GetProfile(ctx context.Context, userID string) (map[string]any, error) {
@@ -61,6 +63,8 @@ func (m *mockUserService) AcknowledgeHealthDisclaimer(ctx context.Context, userI
 	return nil
 }
 func (m *mockUserService) DeleteAccount(ctx context.Context, userID string) error {
+	m.deleteAccountCalls++
+	m.deletedUserID = userID
 	return m.deleteAccountErr
 }
 
@@ -345,13 +349,44 @@ func TestDeleteAccount(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest(http.MethodDelete, "/api/user/account", bytes.NewBufferString(`{"confirmation":"注销账号"}`))
+	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, 1, mockSvc.deleteAccountCalls)
+	assert.Equal(t, "test-user-id", mockSvc.deletedUserID)
 	var resp map[string]any
 	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	data := resp["data"].(map[string]any)
 	assert.Equal(t, true, data["success"])
+}
+
+func TestDeleteAccountRejectsInvalidConfirmation(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+	}{
+		{name: "empty body", body: ""},
+		{name: "malformed json", body: `{"confirmation":`},
+		{name: "missing confirmation", body: `{}`},
+		{name: "wrong confirmation", body: `{"confirmation":"删除账号"}`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockSvc := &mockUserService{}
+			h := NewUserHandler(mockSvc, nil, nil, nil, nil, nil)
+			r := setupRouter(h)
+
+			w := httptest.NewRecorder()
+			req, _ := http.NewRequest(http.MethodDelete, "/api/user/account", bytes.NewBufferString(tt.body))
+			req.Header.Set("Content-Type", "application/json")
+			r.ServeHTTP(w, req)
+
+			assert.Equal(t, http.StatusBadRequest, w.Code)
+			assert.Zero(t, mockSvc.deleteAccountCalls)
+		})
+	}
 }
 
 func TestDeleteAccountError(t *testing.T) {
@@ -361,9 +396,11 @@ func TestDeleteAccountError(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest(http.MethodDelete, "/api/user/account", bytes.NewBufferString(`{"confirmation":"注销账号"}`))
+	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.Equal(t, 1, mockSvc.deleteAccountCalls)
 }
 
 func TestUpdateDashboardTargets(t *testing.T) {

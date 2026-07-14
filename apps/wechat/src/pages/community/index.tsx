@@ -528,6 +528,7 @@ function CommunityPage() {
   const [feedContentType, setFeedContentType] = useState<CommunityFeedContentType>('all')
   /** 动态筛选：漏斗展开后再显示排序/餐次/目标，避免占满一屏 */
   const [feedFilterExpanded, setFeedFilterExpanded] = useState(false)
+  const feedFilterExpandedRef = useRef(false)
   const [feedMealType, setFeedMealType] = useState<MealType | 'all'>('all')
   const [feedDietGoal, setFeedDietGoal] = useState<DietGoal | 'all'>('all')
   const [feedAuthorScope, setFeedAuthorScope] = useState<CommunityAuthorScope>('public')
@@ -1174,6 +1175,17 @@ function CommunityPage() {
     }
     useDidShowTsRef.current = didShowNow
 
+    try {
+      if (!expandedCommentRecordIdRef.current) {
+        Taro.removeStorageSync('community_comment_bar_visible')
+      }
+    } catch (_) {}
+    try {
+      if (!feedFilterExpandedRef.current) {
+        Taro.removeStorageSync(COMMUNITY_FILTER_DRAWER_VISIBLE_KEY)
+      }
+    } catch (_) {}
+
     const token = getAccessToken()
     setLoggedIn(!!token)
     setPriorityAuthorIds((prev) => {
@@ -1650,6 +1662,7 @@ function CommunityPage() {
   }, [expandedCommentRecordId])
 
   useEffect(() => {
+    feedFilterExpandedRef.current = feedFilterExpanded
     if (feedFilterExpanded) {
       try {
         Taro.setStorageSync(COMMUNITY_FILTER_DRAWER_VISIBLE_KEY, '1')
@@ -2430,17 +2443,17 @@ function CommunityPage() {
                       : []
                     const showReportMask = isCirclePost && reportMaskTarget?.targetType === targetType && reportMaskTarget?.targetId === targetId
                     return (
-	                    <View key={targetKey}>
-	                      <View
-	                        id={`feed-card-${targetType}-${targetId}`}
-	                        className={`feed-card${(item.record.description?.trim() || exerciseDesc || circlePostText.trim()) && !item.record.image_path && !useManualFoodCards && !useExerciseActivityCards ? ' feed-card-text-only' : ''} ${exercise ? 'feed-card-exercise' : ''} ${isCirclePost ? 'feed-card-circle-post' : ''}`}
-                        style={isCirclePost ? { position: 'relative' } : undefined}
-                        onLongPress={() => {
-                          if (isCirclePost && !item.is_mine) {
-                            setReportMaskTarget({ targetType, targetId })
-                          }
-                        }}
-                      >
+                      <View key={targetKey}>
+                        <View
+                          id={`feed-card-${targetType}-${targetId}`}
+                          className={`feed-card${(item.record.description?.trim() || exerciseDesc || circlePostText.trim()) && !item.record.image_path && !useManualFoodCards && !useExerciseActivityCards ? ' feed-card-text-only' : ''} ${exercise ? 'feed-card-exercise' : ''} ${isCirclePost ? 'feed-card-circle-post' : ''}`}
+                          style={isCirclePost ? { position: 'relative' } : undefined}
+                          onLongPress={() => {
+                            if (isCirclePost && !item.is_mine) {
+                              setReportMaskTarget({ targetType, targetId })
+                            }
+                          }}
+                        >
                         <View
                           className='feed-card-moments'
                           onClick={() => handleViewDetail(item)}
@@ -2507,18 +2520,18 @@ function CommunityPage() {
                                   )}
                                 </View>
                               ))}
-	                            {useManualFoodCards && (
-	                              <ManualFoodCards
-	                                items={item.record.items}
-	                                onItemClick={() => handleViewDetail(item)}
-	                              />
-	                            )}
-	                            {useExerciseActivityCards && (
-	                              <ExerciseActivityCards
-	                                items={item.record.exercise_items}
-	                                onItemClick={() => handleViewDetail(item)}
-	                              />
-	                            )}
+                            {useManualFoodCards && (
+                              <ManualFoodCards
+                                items={item.record.items}
+                                onItemClick={() => handleViewDetail(item)}
+                              />
+                            )}
+                            {useExerciseActivityCards && (
+                              <ExerciseActivityCards
+                                items={item.record.exercise_items}
+                                onItemClick={() => handleViewDetail(item)}
+                              />
+                            )}
                             {feedImagePaths.length > 0 && !useManualFoodCards && !isCirclePost && (
                               <View
                                 className={`feed-image ${feedImagePaths.length <= 1 ? 'feed-tap-to-detail' : ''}`}

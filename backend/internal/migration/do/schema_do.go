@@ -496,6 +496,36 @@ type FoodNutritionAliasDO struct {
 
 func (FoodNutritionAliasDO) TableName() string { return "food_nutrition_aliases" }
 
+// FoodNutritionAliasCandidateDO stores proposals separately from the active alias
+// table. Runtime matching must never read this table before an administrator
+// approves a proposal.
+type FoodNutritionAliasCandidateDO struct {
+	ID                    string         `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	AliasName             string         `gorm:"column:alias_name;type:text;not null"`
+	NormalizedAlias       string         `gorm:"column:normalized_alias;type:text;not null;index:idx_food_nutrition_alias_candidates_normalized"`
+	ProposedFoodID        string         `gorm:"column:proposed_food_id;type:uuid;not null;index:idx_food_nutrition_alias_candidates_food"`
+	Source                string         `gorm:"column:source;type:text;not null;default:'admin_manual';index:idx_food_nutrition_alias_candidates_source"`
+	SourceTaskID          *string        `gorm:"column:source_task_id;type:uuid"`
+	Model                 *string        `gorm:"column:model;type:text"`
+	ModelDecision         *string        `gorm:"column:model_decision;type:text"`
+	ModelConfidence       *float64       `gorm:"column:model_confidence;type:numeric"`
+	ModelReason           *string        `gorm:"column:model_reason;type:text"`
+	SuggestedAliases      []string       `gorm:"column:suggested_aliases;type:jsonb;serializer:json;not null;default:'[]'::jsonb"`
+	RuleFlags             []string       `gorm:"column:rule_flags;type:jsonb;serializer:json;not null;default:'[]'::jsonb"`
+	CandidateSnapshot     map[string]any `gorm:"column:candidate_snapshot;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
+	Status                string         `gorm:"column:status;type:text;not null;default:'pending';index:idx_food_nutrition_alias_candidates_status"`
+	ReviewerID            *string        `gorm:"column:reviewer_id;type:uuid"`
+	ReviewedAt            *time.Time     `gorm:"column:reviewed_at;type:timestamptz"`
+	ReviewNote            *string        `gorm:"column:review_note;type:text"`
+	GeneratedFromID       *string        `gorm:"column:generated_from_id;type:uuid"`
+	CreatedAt             time.Time      `gorm:"column:created_at;type:timestamptz;not null;default:now()"`
+	UpdatedAt             time.Time      `gorm:"column:updated_at;type:timestamptz;not null;default:now()"`
+}
+
+func (FoodNutritionAliasCandidateDO) TableName() string {
+	return "food_nutrition_alias_candidates"
+}
+
 type FoodUnresolvedLogDO struct {
 	ID             string         `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
 	TaskID         *string        `gorm:"column:task_id;type:uuid"`
@@ -1077,6 +1107,31 @@ type MembershipPaymentDO struct {
 
 func (MembershipPaymentDO) TableName() string { return "pro_membership_payment_records" }
 
+type PapayContractDO struct {
+	ID                     string         `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	UserID                 string         `gorm:"column:user_id;type:uuid;not null;index:idx_wechat_papay_contracts_user_status,priority:1"`
+	PlanCode               string         `gorm:"column:plan_code;type:varchar(50);not null"`
+	TemplateID             string         `gorm:"column:template_id;type:varchar(28);not null"`
+	MerchantContractCode   string         `gorm:"column:merchant_contract_code;type:varchar(128);not null;uniqueIndex:idx_wechat_papay_contracts_merchant_code"`
+	WechatContractID       *string        `gorm:"column:wechat_contract_id;type:varchar(32);uniqueIndex:idx_wechat_papay_contracts_wechat_contract_id"`
+	OpenID                 *string        `gorm:"column:openid;type:text"`
+	Status                 string         `gorm:"column:status;type:varchar(32);not null;default:'pending';index:idx_wechat_papay_contracts_user_status,priority:2"`
+	RenewalState           string         `gorm:"column:renewal_state;type:varchar(32);not null;default:'awaiting_sign'"`
+	RequestSerial          string         `gorm:"column:request_serial;type:varchar(32);not null;uniqueIndex:idx_wechat_papay_contracts_request_serial"`
+	NextActionAt           *time.Time     `gorm:"column:next_action_at;type:timestamptz;index:idx_wechat_papay_contracts_next_action"`
+	RenewalDueAt           *time.Time     `gorm:"column:renewal_due_at;type:timestamptz"`
+	LastOrderNo            *string        `gorm:"column:last_order_no;type:varchar(100)"`
+	LastError              *string        `gorm:"column:last_error;type:text"`
+	TerminatedAt           *time.Time     `gorm:"column:terminated_at;type:timestamptz"`
+	TerminationSource      *string        `gorm:"column:termination_source;type:varchar(32)"`
+	SignNotifyPayload      map[string]any `gorm:"column:sign_notify_payload;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
+	TerminateNotifyPayload map[string]any `gorm:"column:terminate_notify_payload;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
+	CreatedAt              time.Time      `gorm:"column:created_at;type:timestamptz;not null;default:now()"`
+	UpdatedAt              time.Time      `gorm:"column:updated_at;type:timestamptz;not null;default:now()"`
+}
+
+func (PapayContractDO) TableName() string { return "wechat_papay_contracts" }
+
 type UserInviteReferralDO struct {
 	ID                       string     `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
 	InviterUserID            string     `gorm:"column:inviter_user_id;type:uuid;not null;index:idx_user_invite_referrals_inviter,priority:1"`
@@ -1369,6 +1424,81 @@ type CanteenWindowDO struct {
 
 func (CanteenWindowDO) TableName() string { return "canteen_windows" }
 
+type CampusFoodCollectionBatchDO struct {
+	ID                  string     `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	ClientBatchKey      string     `gorm:"column:client_batch_key;type:text;not null;uniqueIndex:uk_campus_food_collection_batches_client_key"`
+	BatchName           string     `gorm:"column:batch_name;type:text;not null"`
+	VenueType           string     `gorm:"column:venue_type;type:text;not null;default:'university';index:idx_campus_food_collection_batches_venue_type"`
+	SchoolID            *string    `gorm:"column:school_id;type:uuid;index:idx_campus_food_collection_batches_school_id"`
+	CampusID            *string    `gorm:"column:campus_id;type:uuid;index:idx_campus_food_collection_batches_campus_id"`
+	CanteenID           *string    `gorm:"column:canteen_id;type:uuid;index:idx_campus_food_collection_batches_canteen_id"`
+	DefaultWindowID     *string    `gorm:"column:default_window_id;type:uuid"`
+	OrganizationName    string     `gorm:"column:organization_name;type:text;not null;index:idx_campus_food_collection_batches_organization"`
+	AreaName            *string    `gorm:"column:area_name;type:text"`
+	CanteenName         string     `gorm:"column:canteen_name;type:text;not null;index:idx_campus_food_collection_batches_canteen_name"`
+	DefaultFloor        *string    `gorm:"column:default_floor;type:text"`
+	DefaultWindowName   *string    `gorm:"column:default_window_name;type:text"`
+	DefaultWindowLayout string     `gorm:"column:default_window_layout;type:text;not null;default:'unknown'"`
+	DefaultServiceMode  string     `gorm:"column:default_service_mode;type:text;not null;default:'unknown'"`
+	DefaultMealPeriods  []string   `gorm:"column:default_meal_periods;type:jsonb;serializer:json;not null;default:'[]'::jsonb"`
+	CapturedAt          *time.Time `gorm:"column:captured_at;type:timestamptz;index:idx_campus_food_collection_batches_captured_at"`
+	CollectorName       *string    `gorm:"column:collector_name;type:text"`
+	SourceNote          *string    `gorm:"column:source_note;type:text"`
+	Status              string     `gorm:"column:status;type:text;not null;default:'submitted';index:idx_campus_food_collection_batches_status"`
+	CreatedByAdminID    *string    `gorm:"column:created_by_admin_id;type:uuid;index:idx_campus_food_collection_batches_admin"`
+	CreatedAt           *time.Time `gorm:"column:created_at;type:timestamptz;default:now();index:idx_campus_food_collection_batches_created_at,sort:desc"`
+	UpdatedAt           *time.Time `gorm:"column:updated_at;type:timestamptz;default:now()"`
+}
+
+func (CampusFoodCollectionBatchDO) TableName() string {
+	return "campus_food_collection_batches"
+}
+
+type CampusFoodCatalogItemDO struct {
+	ID                 string         `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	BatchID            string         `gorm:"column:batch_id;type:uuid;not null;index:idx_campus_food_catalog_items_batch_id"`
+	EntryType          string         `gorm:"column:entry_type;type:text;not null;default:'dish';index:idx_campus_food_catalog_items_entry_type"`
+	Name               *string        `gorm:"column:name;type:text;index:idx_campus_food_catalog_items_name"`
+	Description        *string        `gorm:"column:description;type:text"`
+	SchoolID           *string        `gorm:"column:school_id;type:uuid;index:idx_campus_food_catalog_items_school_id"`
+	CampusID           *string        `gorm:"column:campus_id;type:uuid;index:idx_campus_food_catalog_items_campus_id"`
+	CanteenID          *string        `gorm:"column:canteen_id;type:uuid;index:idx_campus_food_catalog_items_canteen_id"`
+	WindowID           *string        `gorm:"column:window_id;type:uuid;index:idx_campus_food_catalog_items_window_id"`
+	OrganizationName   string         `gorm:"column:organization_name;type:text;not null;index:idx_campus_food_catalog_items_organization"`
+	AreaName           *string        `gorm:"column:area_name;type:text"`
+	CanteenName        string         `gorm:"column:canteen_name;type:text;not null;index:idx_campus_food_catalog_items_canteen_name"`
+	Floor              *string        `gorm:"column:floor;type:text"`
+	WindowName         *string        `gorm:"column:window_name;type:text"`
+	WindowLayout       string         `gorm:"column:window_layout;type:text;not null;default:'unknown'"`
+	MealPeriods        []string       `gorm:"column:meal_periods;type:jsonb;serializer:json;not null;default:'[]'::jsonb"`
+	AvailableWeekdays  []string       `gorm:"column:available_weekdays;type:jsonb;serializer:json;not null;default:'[]'::jsonb"`
+	AvailabilityNote   *string        `gorm:"column:availability_note;type:text"`
+	ServiceMode        string         `gorm:"column:service_mode;type:text;not null;default:'unknown';index:idx_campus_food_catalog_items_service_mode"`
+	PriceType          string         `gorm:"column:price_type;type:text;not null;default:'unknown'"`
+	Price              *float64       `gorm:"column:price;type:numeric"`
+	PriceMin           *float64       `gorm:"column:price_min;type:numeric"`
+	PriceMax           *float64       `gorm:"column:price_max;type:numeric"`
+	PriceUnit          *string        `gorm:"column:price_unit;type:text"`
+	PriceText          *string        `gorm:"column:price_text;type:text"`
+	PriceOptions       map[string]any `gorm:"column:price_options;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
+	PortionDescription *string        `gorm:"column:portion_description;type:text"`
+	ImagePaths         []string       `gorm:"column:image_paths;type:jsonb;serializer:json;not null;default:'[]'::jsonb"`
+	ImageKind          string         `gorm:"column:image_kind;type:text;not null;default:'dish'"`
+	SourceFilename     *string        `gorm:"column:source_filename;type:text"`
+	RawText            *string        `gorm:"column:raw_text;type:text"`
+	Notes              *string        `gorm:"column:notes;type:text"`
+	MissingFields      []string       `gorm:"column:missing_fields;type:jsonb;serializer:json;not null;default:'[]'::jsonb"`
+	CompletenessStatus string         `gorm:"column:completeness_status;type:text;not null;default:'incomplete';index:idx_campus_food_catalog_items_completeness"`
+	Status             string         `gorm:"column:status;type:text;not null;default:'draft';index:idx_campus_food_catalog_items_status"`
+	CapturedAt         *time.Time     `gorm:"column:captured_at;type:timestamptz;index:idx_campus_food_catalog_items_captured_at"`
+	ContributorUserID  *string        `gorm:"column:contributor_user_id;type:uuid;index:idx_campus_food_catalog_items_contributor"`
+	CreatedByAdminID   *string        `gorm:"column:created_by_admin_id;type:uuid;index:idx_campus_food_catalog_items_admin"`
+	CreatedAt          *time.Time     `gorm:"column:created_at;type:timestamptz;default:now();index:idx_campus_food_catalog_items_created_at,sort:desc"`
+	UpdatedAt          *time.Time     `gorm:"column:updated_at;type:timestamptz;default:now()"`
+}
+
+func (CampusFoodCatalogItemDO) TableName() string { return "campus_food_catalog_items" }
+
 type CampusCanteenApplicationDO struct {
 	ID                   string     `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
 	UserID               string     `gorm:"column:user_id;type:uuid;not null;index:idx_campus_canteen_applications_user_id"`
@@ -1502,6 +1632,7 @@ func AllModels() []any {
 		&UserTrialEntitlementDO{},
 		&UserVoucherDO{},
 		&MembershipPlanDO{},
+		&PapayContractDO{},
 		&PaymentTestSettingDO{},
 		&PaymentTestUserDO{},
 		&AnalysisTaskDO{},
@@ -1511,6 +1642,7 @@ func AllModels() []any {
 		&PackagedFoodDO{},
 		&PackagedFoodAliasDO{},
 		&FoodNutritionAliasDO{},
+		&FoodNutritionAliasCandidateDO{},
 		&FoodUnresolvedLogDO{},
 		&CriticalSampleDO{},
 		&PrecisionSessionDO{},
@@ -1565,6 +1697,8 @@ func AllModels() []any {
 		&SchoolCanteenDO{},
 		&CampusDirectoryImportBatchDO{},
 		&CanteenWindowDO{},
+		&CampusFoodCollectionBatchDO{},
+		&CampusFoodCatalogItemDO{},
 		&CampusCanteenApplicationDO{},
 		&CampusDirectorySourceDO{},
 		&FoodWeightLabeledSampleDO{},

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"strings"
@@ -18,6 +19,7 @@ import (
 const (
 	tiandituGeocoderEndpoint = "https://api.tianditu.gov.cn/geocoder"
 	tiandituSearchEndpoint   = "https://api.tianditu.gov.cn/v2/search"
+	tiandituDefaultMapBound  = "73.446960,3.408477,135.085831,53.557926"
 
 	locationServiceUnavailableCode    = 10030
 	locationServiceUnavailableMessage = "位置服务暂时不可用，请稍后重试"
@@ -83,11 +85,13 @@ func (s *LocationService) ReverseGeocode(ctx context.Context, lat, lng float64) 
 	return data, nil
 }
 
-func (s *LocationService) SearchAddress(ctx context.Context, keyword string) (map[string]any, error) {
+func (s *LocationService) SearchAddress(ctx context.Context, keyword string, count int, lon, lat, radiusKM *float64) (map[string]any, error) {
 	keyword = strings.TrimSpace(keyword)
 	if keyword == "" {
 		return map[string]any{"keyword": "", "pois": []any{}}, nil
 	}
+	count = normalizeSearchCount(count)
+	mapBound := searchMapBound(lon, lat, radiusKM)
 	tk := s.cfg.External.TiandituTK
 	if tk == "" {
 		if s.developmentFallbackEnabled() {
@@ -98,10 +102,10 @@ func (s *LocationService) SearchAddress(ctx context.Context, keyword string) (ma
 	postStr, err := json.Marshal(map[string]any{
 		"keyWord":   keyword,
 		"level":     12,
-		"mapBound":  "-180,-90,180,90",
+		"mapBound":  mapBound,
 		"queryType": 1,
 		"start":     0,
-		"count":     10,
+		"count":     count,
 	})
 	if err != nil {
 		return nil, err
@@ -130,6 +134,61 @@ func (s *LocationService) SearchAddress(ctx context.Context, keyword string) (ma
 		return nil, err
 	}
 	return data, nil
+}
+
+func normalizeSearchCount(count int) int {
+	if count <= 0 {
+		return 10
+	}
+	if count > 20 {
+		return 20
+	}
+	return count
+}
+
+func searchMapBound(lon, lat, radiusKM *float64) string {
+	if lon == nil || lat == nil || !validCoordinate(*lon, *lat) {
+		return tiandituDefaultMapBound
+	}
+
+	radius := 3.0
+	if radiusKM != nil && !math.IsNaN(*radiusKM) && *radiusKM > 0 {
+		radius = *radiusKM
+	}
+	if radius < 0.2 {
+		radius = 0.2
+	}
+	if radius > 20 {
+		radius = 20
+	}
+
+	latDelta := radius / 111.0
+	cosLat := math.Cos(*lat * math.Pi / 180)
+	if math.Abs(cosLat) < 0.01 {
+		cosLat = 0.01
+	}
+	lonDelta := radius / (111.0 * math.Abs(cosLat))
+
+	minLon := clampFloat(*lon-lonDelta, -180, 180)
+	minLat := clampFloat(*lat-latDelta, -90, 90)
+	maxLon := clampFloat(*lon+lonDelta, -180, 180)
+	maxLat := clampFloat(*lat+latDelta, -90, 90)
+
+	return fmt.Sprintf("%.6f,%.6f,%.6f,%.6f", minLon, minLat, maxLon, maxLat)
+}
+
+func validCoordinate(lon, lat float64) bool {
+	return !math.IsNaN(lon) && !math.IsNaN(lat) && lon >= -180 && lon <= 180 && lat >= -90 && lat <= 90
+}
+
+func clampFloat(value, min, max float64) float64 {
+	if value < min {
+		return min
+	}
+	if value > max {
+		return max
+	}
+	return value
 }
 
 func tiandituURL(endpoint string, values url.Values) string {

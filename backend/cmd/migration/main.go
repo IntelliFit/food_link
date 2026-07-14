@@ -17,6 +17,7 @@ import (
 func main() {
 	configDir := flag.String("config-dir", ".", "directory containing config.yaml")
 	timeout := flag.Duration("timeout", 5*time.Minute, "migration timeout")
+	onlyPapay := flag.Bool("only-papay", false, "only migrate WeChat automatic-renewal contracts")
 	flag.Parse()
 
 	cfg, resolvedDir, err := loadConfig(*configDir)
@@ -40,12 +41,22 @@ func main() {
 	if err := database.Ping(ctx, db); err != nil {
 		log.Fatalf("数据库 ping 失败: %v", err)
 	}
-	if err := migration.AutoMigrate(ctx, db, cfg.Database.Schema); err != nil {
-		log.Fatalf("自动迁移失败: %v", err)
+	var migrateErr error
+	if *onlyPapay {
+		migrateErr = migration.MigratePapayContracts(ctx, db, cfg.Database.Schema)
+	} else {
+		migrateErr = migration.AutoMigrate(ctx, db, cfg.Database.Schema)
+	}
+	if migrateErr != nil {
+		log.Fatalf("自动迁移失败: %v", migrateErr)
 	}
 	schema := cfg.Database.Schema
 	if schema == "" {
 		schema = "public"
+	}
+	if *onlyPapay {
+		log.Printf("微信自动续费迁移完成: config_dir=%s schema=%s", resolvedDir, schema)
+		return
 	}
 	log.Printf("数据库迁移完成: config_dir=%s schema=%s", resolvedDir, schema)
 }

@@ -168,12 +168,13 @@ function foodRecordItemWaterMl(item: any): number {
   const rawWaterMl = item?.water_ml ?? item?.waterMl ?? nutrients?.water_ml ?? nutrients?.waterMl
   const waterMl = getNum(rawWaterMl)
   if (waterMl <= 0) return 0
-  const ratio = getNum(item?.ratio)
-  if (ratio > 0) return waterMl * ratio / 100
-  const intake = getNum(item?.intake)
   const weight = getNum(item?.weight)
-  if (intake > 0 && weight > 0) return waterMl * intake / weight
-  if (intake === 0 && weight === 0) return waterMl
+  const cappedWaterMl = weight > 0 ? Math.min(waterMl, weight) : waterMl
+  const ratio = getNum(item?.ratio)
+  if (ratio > 0) return cappedWaterMl * ratio / 100
+  const intake = getNum(item?.intake)
+  if (intake > 0 && weight > 0) return cappedWaterMl * intake / weight
+  if (intake === 0 && weight === 0) return cappedWaterMl
   return 0
 }
 

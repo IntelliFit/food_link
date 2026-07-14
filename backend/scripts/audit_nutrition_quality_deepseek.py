@@ -3,10 +3,11 @@ Whole-library nutrition quality audit with optional DeepSeek review.
 
 Default mode is read-only. It scans all active food_nutrition_library rows,
 exports rule-based suspicious rows, then optionally asks DeepSeek to review
-the highest-risk candidates.
+either the highest-risk candidates or every active row.
 
 Usage:
     python backend/scripts/audit_nutrition_quality_deepseek.py --llm --limit 200
+    python backend/scripts/audit_nutrition_quality_deepseek.py --llm-all --workers 12
 
 DeepSeek environment variables:
     DEEPSEEK_API_KEY   required when --llm is used
@@ -17,6 +18,7 @@ DeepSeek environment variables:
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
 import csv
 import json
 import math
@@ -440,6 +442,31 @@ def audit_row(row: FoodRow) -> Optional[AuditFinding]:
     )
 
 
+def llm_subject_from_row(row: FoodRow, finding: Optional[AuditFinding] = None) -> AuditFinding:
+    """Build a DeepSeek review subject even when deterministic rules found nothing."""
+    if finding is not None:
+        return finding
+    macro_energy = _macro_energy(row)
+    ratio = row.kcal_per_100g / macro_energy if macro_energy > 0 and row.kcal_per_100g > 0 else None
+    return AuditFinding(
+        id=row.id,
+        canonical_name=row.canonical_name,
+        normalized_name=row.normalized_name,
+        kcal_per_100g=round(row.kcal_per_100g, 4),
+        protein_per_100g=round(row.protein_per_100g, 4),
+        carbs_per_100g=round(row.carbs_per_100g, 4),
+        fat_per_100g=round(row.fat_per_100g, 4),
+        fiber_per_100g=round(row.fiber_per_100g, 4),
+        sugar_per_100g=round(row.sugar_per_100g, 4),
+        source=row.source,
+        severity=0,
+        macro_energy_kcal=round(macro_energy, 4),
+        kcal_energy_ratio=round(ratio, 4) if ratio is not None and math.isfinite(ratio) else None,
+        macro_sum_g=round(_macro_sum(row), 4),
+        flags=[],
+    )
+
+
 def _csv_value(value: Any) -> Any:
     if isinstance(value, list):
         return "|".join(value)
@@ -479,18 +506,30 @@ def _llm_prompt(batch: Sequence[AuditFinding]) -> str:
                 "rule_flags": finding.flags,
             }
         )
+    # The Wanjie OpenAI-compatible gateway currently garbles long Chinese
+    # prompts for deepseek-v4-pro. Keep the audit prompt compact and English so
+    # the model receives the intended nutrition semantics reliably.
     return (
-        "你是食品营养数据库质检员。请审核下面每个食物的每100g营养是否明显错误。"
-        "要求：保守判断，不要把可能合理的烹调差异当成错误；熟肉、脱水、腌制、酱卤肉蛋白质可能偏高，"
-        "只有在明显违背每100g物理约束、宏量与热量严重不一致、或名称与营养显著不符时才建议修正。"
-        "每个 reason 不超过 30 个汉字，risk_tags 每项不超过 20 个英文字符。"
-        "返回严格 JSON，不要 markdown。格式："
+        "You are auditing food nutrition database rows. Review every item below. "
+        "All values are per 100g. Be conservative: cooking, dehydration, curing, "
+        "and sauces can legitimately change nutrient density. Recommend a fix only "
+        "for a clear physical impossibility, a severe calorie/macro mismatch, or an "
+        "obvious name/nutrition mismatch. A zero fiber or sugar value often means "
+        "the source did not provide it; never flag or fill a row only for that. "
+        "USDA and other authoritative rows can differ from 4/4/9 because of Atwater "
+        "factors, fiber, sugar alcohols, or organic acids; do not change them solely "
+        "to force a 4/4/9 match. Source trust alone must never change keep to review: "
+        "if a branded, AI-estimated, or historical-average row is numerically plausible, "
+        "keep it. If such a row is suspicious but no reliable correction is directly "
+        "derivable, use review instead of inventing values. Supplements may remain searchable foods, so their product "
+        "type alone is not a reason to deactivate. Keep each reason under 12 words and each "
+        "risk tag under 20 ASCII characters. Return strict JSON without markdown: "
         '{"items":[{"id":"...","decision":"keep|fix|deactivate|review","confidence":0.0,'
         '"suggested":{"kcal":0,"protein":0,"carbs":0,"fat":0,"fiber":0,"sugar":0},'
-        '"reason":"简短中文原因","risk_tags":["..."]}]}。'
-        "decision 含义：keep=现值可接受；review=需要人工复核但不建议自动改；"
-        "fix=高置信建议替换为 suggested；deactivate=明显非食物或脏词条。"
-        f"\n待审核数据：{json.dumps(items, ensure_ascii=False)}"
+        '"reason":"short reason","risk_tags":["..."]}]}. '
+        "Decisions: keep=acceptable; review=needs a human; fix=replace with suggested; "
+        "deactivate=not food or a corrupt row. "
+        f"Rows: {json.dumps(items, ensure_ascii=False)}"
     )
 
 
@@ -514,6 +553,7 @@ def review_with_deepseek(
     batch_size: int,
     sleep_seconds: float,
     out_dir: Path,
+    workers: int = 1,
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     if not settings["api_key"]:
         raise RuntimeError(
@@ -529,6 +569,29 @@ def review_with_deepseek(
     errors: List[Dict[str, Any]] = []
     raw_dir = out_dir / "deepseek_raw"
     raw_dir.mkdir(parents=True, exist_ok=True)
+    batch_dir = out_dir / "deepseek_batches"
+    batch_dir.mkdir(parents=True, exist_ok=True)
+    valid_decisions = {"keep", "review", "fix", "deactivate"}
+
+    def valid_review_items(items: Any, expected_ids: set[str]) -> bool:
+        if not isinstance(items, list) or len(items) != len(expected_ids):
+            return False
+        returned_ids: List[str] = []
+        for item in items:
+            if not isinstance(item, dict):
+                return False
+            returned_ids.append(str(item.get("id", "")))
+            if item.get("decision") not in valid_decisions:
+                return False
+            try:
+                confidence = float(item.get("confidence"))
+            except (TypeError, ValueError):
+                return False
+            if not 0 <= confidence <= 1:
+                return False
+            if not str(item.get("reason") or "").strip():
+                return False
+        return len(returned_ids) == len(set(returned_ids)) and set(returned_ids) == expected_ids
 
     def fallback_review(batch: Sequence[AuditFinding], reason: str, raw_path: str = "") -> List[Dict[str, Any]]:
         out = []
@@ -586,24 +649,36 @@ def review_with_deepseek(
             "messages": [
                 {
                     "role": "system",
-                    "content": "你只输出可以被 json.loads 解析的 JSON 对象，不能省略、截断或添加注释。",
+                    "content": "Return only one complete JSON object parseable by json.loads.",
                 },
                 {"role": "user", "content": _llm_prompt(batch)},
             ],
-            "temperature": 0,
-            "max_tokens": 8192,
-            "response_format": {"type": "json_object"},
+            "stream": False,
+            "max_tokens": 4096,
         }
         content = ""
         try:
-            response = client.post(url, headers=headers, json=payload)
-            response.raise_for_status()
+            response = None
+            last_error: Optional[Exception] = None
+            for attempt in range(3):
+                try:
+                    response = client.post(url, headers=headers, json=payload)
+                    response.raise_for_status()
+                    last_error = None
+                    break
+                except httpx.HTTPError as exc:
+                    last_error = exc
+                    if attempt < 2:
+                        time.sleep(1.0 * (attempt + 1))
+            if last_error is not None or response is None:
+                raise last_error or RuntimeError("DeepSeek request failed")
             data = response.json()
             content = data["choices"][0]["message"]["content"]
             parsed = _extract_json_object(content)
             items = parsed.get("items") or []
-            if not isinstance(items, list):
-                raise RuntimeError("DeepSeek response missing items list")
+            expected_ids = {finding.id for finding in batch}
+            if not valid_review_items(items, expected_ids):
+                raise RuntimeError("DeepSeek response has missing, duplicate, or invalid review fields")
             return items
         except (json.JSONDecodeError, RuntimeError) as exc:
             raw_path = save_raw(label, batch, content, str(exc))
@@ -626,13 +701,41 @@ def review_with_deepseek(
             print(f"  HTTP error for single row, marked review: {exc}")
             return fallback_review(batch, "DeepSeek请求失败，需人工复核", raw_path)
 
-    with httpx.Client(timeout=90.0) as client:
+    workers = max(1, min(int(workers or 1), 48))
+    with httpx.Client(timeout=120.0) as client:
         batches = [findings[i : i + batch_size] for i in range(0, len(findings), batch_size)]
-        for idx, batch in enumerate(batches, 1):
+        def review_numbered_batch(item: Tuple[int, Sequence[AuditFinding]]) -> List[Dict[str, Any]]:
+            idx, batch = item
+            checkpoint = batch_dir / f"batch_{idx:05d}.json"
+            expected_ids = {finding.id for finding in batch}
+            if checkpoint.exists():
+                try:
+                    cached = json.loads(checkpoint.read_text(encoding="utf-8"))
+                    has_failure = any(
+                        "llm_failed" in (row.get("risk_tags") or [])
+                        for row in cached
+                        if isinstance(row, dict)
+                    )
+                    if valid_review_items(cached, expected_ids) and not has_failure:
+                        print(f"DeepSeek review batch {idx}/{len(batches)} resumed ({len(batch)} rows).")
+                        return cached
+                except (OSError, json.JSONDecodeError, TypeError):
+                    pass
             print(f"DeepSeek review batch {idx}/{len(batches)} ({len(batch)} rows)...")
-            results.extend(call_batch(client, batch, f"batch_{idx:03d}"))
-            if sleep_seconds > 0 and idx < len(batches):
+            reviewed = call_batch(client, batch, f"batch_{idx:05d}")
+            write_json(checkpoint, reviewed)
+            if sleep_seconds > 0:
                 time.sleep(sleep_seconds)
+            return reviewed
+
+        numbered = list(enumerate(batches, 1))
+        if workers == 1:
+            for item in numbered:
+                results.extend(review_numbered_batch(item))
+        else:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
+                for reviewed in executor.map(review_numbered_batch, numbered):
+                    results.extend(reviewed)
     return results, errors
 
 
@@ -691,9 +794,15 @@ def main() -> int:
     parser.add_argument("--config", default=str(_backend_dir() / "config.yaml"))
     parser.add_argument("--out-dir", default="")
     parser.add_argument("--llm", action="store_true", help="Ask DeepSeek to review high-risk findings.")
+    parser.add_argument(
+        "--llm-all",
+        action="store_true",
+        help="Ask DeepSeek to review every active nutrition row, not only rule findings.",
+    )
     parser.add_argument("--limit", type=int, default=200, help="Max findings sent to DeepSeek.")
     parser.add_argument("--batch-size", type=int, default=20)
     parser.add_argument("--sleep", type=float, default=0.3)
+    parser.add_argument("--workers", type=int, default=1, help="Concurrent DeepSeek batches (max 48).")
     args = parser.parse_args()
 
     _load_local_env()
@@ -733,11 +842,27 @@ def main() -> int:
     print(json.dumps(summary, ensure_ascii=False, indent=2))
     print(f"Rule report: {out_dir / 'rule_findings.csv'}")
 
-    if args.llm:
-        high_risk = findings[: max(0, args.limit)]
+    if args.llm or args.llm_all:
+        if args.llm_all:
+            finding_by_id = {finding.id: finding for finding in findings}
+            llm_subjects = [
+                llm_subject_from_row(row, finding_by_id.get(row.id))
+                for row in rows
+            ]
+            llm_scope = "all_active_rows"
+        else:
+            llm_subjects = findings[: max(0, args.limit)]
+            llm_scope = "rule_findings"
         settings = _deepseek_settings(config)
-        llm_rows, llm_errors = review_with_deepseek(high_risk, settings, args.batch_size, args.sleep, out_dir)
-        finding_by_id = {f.id: f for f in findings}
+        llm_rows, llm_errors = review_with_deepseek(
+            llm_subjects,
+            settings,
+            args.batch_size,
+            args.sleep,
+            out_dir,
+            args.workers,
+        )
+        finding_by_id = {f.id: f for f in llm_subjects}
         write_json(out_dir / "deepseek_review.json", llm_rows)
         write_llm_csv(out_dir / "deepseek_review.csv", llm_rows, finding_by_id)
         write_json(out_dir / "deepseek_errors.json", llm_errors)
@@ -747,6 +872,8 @@ def main() -> int:
             llm_summary[decision] = llm_summary.get(decision, 0) + 1
         if llm_errors:
             llm_summary["llm_error_rows"] = len(llm_errors)
+        llm_summary["reviewed_rows"] = len(llm_rows)
+        llm_summary["scope"] = llm_scope
         write_json(out_dir / "deepseek_summary.json", llm_summary)
         print("DeepSeek summary:")
         print(json.dumps(llm_summary, ensure_ascii=False, indent=2))

@@ -439,6 +439,7 @@ func TestTotalFoodRecordWaterMl(t *testing.T) {
 	assert.Equal(t, 150.0, totalFoodRecordWaterMl([]map[string]any{{"water_ml": 300.0, "ratio": 50.0, "weight": 300.0, "intake": 150.0}}))
 	assert.Equal(t, 80.0, totalFoodRecordWaterMl([]map[string]any{{"waterMl": 200.0, "weight": 500.0, "intake": 200.0}}))
 	assert.Equal(t, 125.5, totalFoodRecordWaterMl([]map[string]any{{"nutrients": map[string]any{"water_ml": 125.5}}}))
+	assert.Equal(t, 90.0, totalFoodRecordWaterMl([]map[string]any{{"water_ml": 180.0, "weight": 100.0, "ratio": 90.0}}))
 }
 
 func TestBuildExpirySummary(t *testing.T) {

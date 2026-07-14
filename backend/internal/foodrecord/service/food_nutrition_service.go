@@ -19,11 +19,12 @@ import (
 )
 
 type FoodNutritionService struct {
-	nutritionRepo              *repo.FoodNutritionRepo
-	nutritionLabelVisionClient NutritionLabelVisionClient
-	taskRepo                   *analyzerepo.TaskRepo
-	taskQueue                  taskqueue.Publisher
-	rewards                    PackagedRewardAwarder
+	nutritionRepo               *repo.FoodNutritionRepo
+	nutritionLabelVisionClient  NutritionLabelVisionClient
+	packagedProductVisionClient NutritionLabelVisionClient
+	taskRepo                    *analyzerepo.TaskRepo
+	taskQueue                   taskqueue.Publisher
+	rewards                     PackagedRewardAwarder
 }
 
 type NutritionLabelVisionClient interface {
@@ -246,6 +247,10 @@ func (s *FoodNutritionService) ConfigureNutritionLabelVisionClient(client Nutrit
 	s.nutritionLabelVisionClient = client
 }
 
+func (s *FoodNutritionService) ConfigurePackagedProductVisionClient(client NutritionLabelVisionClient) {
+	s.packagedProductVisionClient = client
+}
+
 func (s *FoodNutritionService) ConfigureAsyncTasks(taskRepo *analyzerepo.TaskRepo, queue taskqueue.Publisher) {
 	s.taskRepo = taskRepo
 	s.taskQueue = queue
@@ -320,11 +325,7 @@ func (s *FoodNutritionService) CreatePackagedFoodWithAction(ctx context.Context,
 	if len(input.SourceImageURLs) == 0 {
 		return nil, "", &commonerrors.AppError{Code: 10002, Message: "请至少上传一张包装图片", HTTPStatus: 400}
 	}
-	if input.ServingWeightG <= 0 && input.NetWeightG > 0 {
-		input.ServingWeightG = input.NetWeightG
-	} else if input.ServingWeightG <= 0 && input.NetContentValue > 0 && strings.EqualFold(strings.TrimSpace(input.NetContentUnit), "g") {
-		input.ServingWeightG = input.NetContentValue
-	}
+	normalizePackagedServingWeight(&input)
 	if input.KcalPer100g <= 0 && input.ProteinPer100g <= 0 && input.CarbsPer100g <= 0 && input.FatPer100g <= 0 {
 		return nil, "", &commonerrors.AppError{Code: 10002, Message: "请至少填写热量或三大营养素", HTTPStatus: 400}
 	}
@@ -390,6 +391,25 @@ func (s *FoodNutritionService) CreatePackagedFoodWithAction(ctx context.Context,
 	})
 }
 
+func normalizePackagedServingWeight(input *PackagedFoodInput) {
+	if input == nil {
+		return
+	}
+	evidence := packagedFoodServingEvidenceFromInput(*input)
+	containerWeight := domain.PackagedContainerWeight(evidence)
+	if containerWeight <= 0 {
+		return
+	}
+	// serving_weight_g 不能只因为“小于整包”就被信任。AI 很容易生成
+	// 25g/30g 等常见建议份量；只有包装规格、OCR、每份营养口径或单位字段
+	// 能提供证据时才保留，否则默认按整包记录。
+	if servingWeight, _ := domain.SupportedPackagedServingWeight(evidence); servingWeight > 0 {
+		input.ServingWeightG = servingWeight
+		return
+	}
+	input.ServingWeightG = containerWeight
+}
+
 func (s *FoodNutritionService) RecognizePackagedNutritionLabel(ctx context.Context, imageURL string) (*PackagedNutritionLabelResult, error) {
 	imageURL = strings.TrimSpace(imageURL)
 	if imageURL == "" {
@@ -430,11 +450,11 @@ func (s *FoodNutritionService) ExtractPackagedProductWithMeta(ctx context.Contex
 	if len(imageURLs) == 0 {
 		return nil, nil, &commonerrors.AppError{Code: 10002, Message: "包装图片不能为空", HTTPStatus: 400}
 	}
-	if s.nutritionLabelVisionClient == nil {
+	if s.packagedProductVisionClient == nil {
 		return nil, nil, &commonerrors.AppError{Code: 10000, Message: "预包装商品识别服务未配置", HTTPStatus: 500}
 	}
 	start := time.Now()
-	raw, meta, err := s.nutritionLabelVisionClient.AnalyzeWithImagesAndTemperatureMeta(ctx, buildPackagedProductExtractPrompt(recognizedNameHint, len(imageURLs)), imageURLs, 0.1)
+	raw, meta, err := s.packagedProductVisionClient.AnalyzeWithImagesAndTemperatureMeta(ctx, buildPackagedProductExtractPrompt(recognizedNameHint, len(imageURLs)), imageURLs, 0.1)
 	durationMs := time.Since(start).Milliseconds()
 	if err != nil {
 		return nil, nil, fmt.Errorf("识别预包装商品失败: %w", err)
@@ -1664,13 +1684,61 @@ func confidenceBelow(confidence map[string]any, key string, threshold float64) b
 }
 
 func effectiveServingWeight(result *PackagedProductExtractResult) float64 {
-	if result != nil && result.ServingWeightG > 0 {
-		return result.ServingWeightG
+	if result == nil {
+		return 0
 	}
-	if result != nil {
-		return result.NetWeightG
+	payload := make(map[string]any, len(result.RawLabelPayload)+1)
+	for key, value := range result.RawLabelPayload {
+		payload[key] = value
 	}
-	return 0
+	if strings.TrimSpace(result.RawNutritionBasis.Type) != "" {
+		payload["raw_nutrition_basis"] = map[string]any{
+			"type":  result.RawNutritionBasis.Type,
+			"value": result.RawNutritionBasis.Value,
+			"unit":  result.RawNutritionBasis.Unit,
+		}
+	}
+	evidence := domain.PackagedFood{
+		SpecText:           packagedStringPointer(result.SpecText),
+		OCRRawText:         packagedStringPointer(result.OCRRawText),
+		NutritionBasisUnit: packagedStringPointer(result.NutritionBasisUnit),
+		RawLabelPayload:    payload,
+		NetContentValue:    result.NetContentValue,
+		NetContentUnit:     packagedStringPointer(result.NetContentUnit),
+		UnitCount:          result.UnitCount,
+		UnitContentValue:   result.UnitContentValue,
+		UnitContentUnit:    packagedStringPointer(result.UnitContentUnit),
+		NetWeightG:         result.NetWeightG,
+		ServingWeightG:     result.ServingWeightG,
+	}
+	if servingWeight, _ := domain.SupportedPackagedServingWeight(evidence); servingWeight > 0 {
+		return servingWeight
+	}
+	return domain.PackagedContainerWeight(evidence)
+}
+
+func packagedFoodServingEvidenceFromInput(input PackagedFoodInput) domain.PackagedFood {
+	return domain.PackagedFood{
+		SpecText:           packagedStringPointer(input.SpecText),
+		OCRRawText:         packagedStringPointer(input.OCRRawText),
+		NutritionBasisUnit: packagedStringPointer(input.NutritionBasisUnit),
+		RawLabelPayload:    input.RawLabelPayload,
+		NetContentValue:    input.NetContentValue,
+		NetContentUnit:     packagedStringPointer(input.NetContentUnit),
+		UnitCount:          input.UnitCount,
+		UnitContentValue:   input.UnitContentValue,
+		UnitContentUnit:    packagedStringPointer(input.UnitContentUnit),
+		NetWeightG:         input.NetWeightG,
+		ServingWeightG:     input.ServingWeightG,
+	}
+}
+
+func packagedStringPointer(value string) *string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+	return &value
 }
 
 func parseSpecTotalWeight(specText string) float64 {

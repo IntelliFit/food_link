@@ -30,6 +30,25 @@ describe('food record helpers', () => {
     expect(item.nutrients.calories).toBe(156)
   })
 
+  it('caps impossible water values at the item weight', () => {
+    const item = buildFoodRecordItemPayloadFromAnalyzeItem({
+      ...sampleFood,
+      name: '西瓜',
+      estimatedWeightGrams: 1200,
+      originalWeightGrams: 1200,
+      waterMl: 1840,
+      nutrients: {
+        ...sampleFood.nutrients,
+        waterMl: 1840,
+        water_ml: 1840,
+      },
+    })
+
+    expect(item.water_ml).toBe(1200)
+    expect(item.nutrients.waterMl).toBe(1200)
+    expect(item.nutrients.water_ml).toBe(1200)
+  })
+
   it('builds a save request from analysis task', () => {
     const task: AnalysisTask = {
       id: 'task-1',

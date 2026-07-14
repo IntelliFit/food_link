@@ -11,7 +11,9 @@ import {
   LogOut,
   MessageSquareText,
   Package,
+  ScanLine,
   Settings,
+  Tags,
   Utensils,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -20,7 +22,7 @@ import { cn } from '@/lib/utils'
 import { BrandMark } from '@/components/brand-mark'
 import { ThemeToggle } from '@/components/theme-toggle'
 
-export type AdminMenuId = 'overview' | 'feedback' | 'benchmark' | 'packaged-foods' | 'packaged-food-test' | 'food-nutrition' | 'public-food-library' | 'campus-directory' | 'exercise-energy' | 'feed-reports' | 'payment-test' | 'user-rewards' | 'settings'
+export type AdminMenuId = 'overview' | 'feedback' | 'benchmark' | 'packaged-foods' | 'packaged-food-test' | 'food-nutrition' | 'nutrition-alias-review' | 'public-food-library' | 'campus-directory' | 'campus-food-collection' | 'exercise-energy' | 'feed-reports' | 'payment-test' | 'user-rewards' | 'settings'
 
 type AdminSidebarProps = {
   activeMenu: AdminMenuId
@@ -58,8 +60,10 @@ const menuGroups: Array<{
     items: [
       { id: 'packaged-foods', label: '包装食品', icon: Package },
       { id: 'food-nutrition', label: '营养食物', icon: Apple },
+      { id: 'nutrition-alias-review', label: '别名审核', icon: Tags },
       { id: 'public-food-library', label: '公共食物', icon: Utensils },
       { id: 'campus-directory', label: '校园食堂', icon: Building2 },
+      { id: 'campus-food-collection', label: '食堂采集', icon: ScanLine },
       { id: 'exercise-energy', label: '运动库', icon: Activity },
     ],
   },

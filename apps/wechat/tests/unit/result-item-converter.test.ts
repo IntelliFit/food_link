@@ -250,4 +250,19 @@ describe('result item converter', () => {
       sodium_mg: 0,
     })
   })
+
+  it('caps impossible water values at estimated food weight', () => {
+    const [converted] = convertApiFoodItemsToNutritionItems([{
+      itemId: 21,
+      name: '西瓜',
+      estimatedWeightGrams: 1200,
+      originalWeightGrams: 1200,
+      waterMl: 1840,
+      nutrients: baseNutrients({ calories: 360, carbs: 91.2, waterMl: 1840, water_ml: 1840 }),
+    }])
+
+    expect(converted.waterMl).toBe(1200)
+    expect(converted.nutrients.waterMl).toBe(1200)
+    expect(converted.nutrients.water_ml).toBe(1200)
+  })
 })

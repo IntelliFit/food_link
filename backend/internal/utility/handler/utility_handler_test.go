@@ -22,13 +22,21 @@ type mockLocationService struct {
 	searchData  map[string]any
 	searchErr   error
 	lastKeyword string
+	lastCount   int
+	lastLon     *float64
+	lastLat     *float64
+	lastRadius  *float64
 }
 
 func (m *mockLocationService) ReverseGeocode(ctx context.Context, lat, lng float64) (map[string]any, error) {
 	return m.reverseData, m.reverseErr
 }
-func (m *mockLocationService) SearchAddress(ctx context.Context, keyword string) (map[string]any, error) {
+func (m *mockLocationService) SearchAddress(ctx context.Context, keyword string, count int, lon, lat, radiusKM *float64) (map[string]any, error) {
 	m.lastKeyword = keyword
+	m.lastCount = count
+	m.lastLon = lon
+	m.lastLat = lat
+	m.lastRadius = radiusKM
 	return m.searchData, m.searchErr
 }
 
@@ -136,6 +144,37 @@ func TestLocationSearch(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, w.Code)
 	assert.Equal(t, "restaurant", mockLoc.lastKeyword)
+}
+
+func TestLocationSearchPassesMiniProgramGeoOptions(t *testing.T) {
+	mockLoc := &mockLocationService{searchData: map[string]any{"pois": []any{}}}
+	h := NewUtilityHandler(mockLoc, nil, nil)
+	r := setupRouter(h)
+
+	body, _ := json.Marshal(map[string]any{
+		"keyword":   "北京大学",
+		"count":     20,
+		"lon":       116.310316,
+		"lat":       39.992864,
+		"radius_km": 3,
+	})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/location/search", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "北京大学", mockLoc.lastKeyword)
+	assert.Equal(t, 20, mockLoc.lastCount)
+	if assert.NotNil(t, mockLoc.lastLon) {
+		assert.Equal(t, 116.310316, *mockLoc.lastLon)
+	}
+	if assert.NotNil(t, mockLoc.lastLat) {
+		assert.Equal(t, 39.992864, *mockLoc.lastLat)
+	}
+	if assert.NotNil(t, mockLoc.lastRadius) {
+		assert.Equal(t, 3.0, *mockLoc.lastRadius)
+	}
 }
 
 func TestLocationSearchAcceptsMiniProgramKeyWord(t *testing.T) {

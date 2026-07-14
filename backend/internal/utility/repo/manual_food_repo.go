@@ -487,6 +487,9 @@ func (r *ManualFoodRepo) listGlobalFrequentRecordItems(ctx context.Context, cate
 	}
 	results := make([]domain.ManualFoodResult, 0, len(rows))
 	for _, row := range rows {
+		if isPhysicallyImplausibleFrequentFood(row.AvgWeight, row.AvgCal, row.AvgProtein, row.AvgCarbs, row.AvgFat) {
+			continue
+		}
 		item := manualFoodResultFromFrequentRecord(row.Name, row.Uses, row.AvgWeight, row.AvgCal, row.AvgProtein, row.AvgCarbs, row.AvgFat, row.ItemJSON)
 		if item.Title != "" {
 			results = append(results, item)
@@ -549,6 +552,9 @@ func (r *ManualFoodRepo) searchCatalogItems(ctx context.Context, query string, l
 	}
 	results := make([]domain.ManualFoodResult, 0, len(rows))
 	for _, row := range rows {
+		if isPhysicallyImplausibleFrequentFood(row.AvgWeight, row.AvgCal, row.AvgProtein, row.AvgCarbs, row.AvgFat) {
+			continue
+		}
 		item := manualFoodResultFromFrequentRecord(row.Name, row.Uses, row.AvgWeight, row.AvgCal, row.AvgProtein, row.AvgCarbs, row.AvgFat, row.ItemJSON)
 		item.MatchScore = computeMatchScore(query, row.Name) + 0.45
 		results = append(results, item)
@@ -1138,25 +1144,25 @@ func manualFoodResultFromPackaged(item fooddomain.PackagedFood, score float64) d
 	// 这样前端列表显示和后续按份缩放时，宏量、微量营养素口径一致。
 	scaled := scaleManualFoodNutrients(per100g, defaultWeight/100.0)
 	result := domain.ManualFoodResult{
-		ID:                 item.ID,
-		Source:             "packaged_food",
-		Title:              title,
-		Subtitle:           subtitle,
-		Category:           inferManualFoodCategory(title+" "+subtitle+" "+stringPtrValue(item.PackageCategory), "packaged_food"),
-		DefaultWeightGrams: defaultWeight,
-		TotalCalories:      scaled.Calories,
-		TotalProtein:       scaled.Protein,
-		TotalCarbs:         scaled.Carbs,
-		TotalFat:           scaled.Fat,
-		NutrientsPer100g:   &per100g,
-		ExtraNutrients:     &scaled,
-		ImagePath:          imagePath,
-		ImagePaths:         imagePaths,
-		PortionLabel:       packagedPortionLabel(item),
-		SourceLabel:        "包装食品",
-		RecommendReason:    "来自用户上传包装图，按营养成分表换算",
+		ID:                  item.ID,
+		Source:              "packaged_food",
+		Title:               title,
+		Subtitle:            subtitle,
+		Category:            inferManualFoodCategory(title+" "+subtitle+" "+stringPtrValue(item.PackageCategory), "packaged_food"),
+		DefaultWeightGrams:  defaultWeight,
+		TotalCalories:       scaled.Calories,
+		TotalProtein:        scaled.Protein,
+		TotalCarbs:          scaled.Carbs,
+		TotalFat:            scaled.Fat,
+		NutrientsPer100g:    &per100g,
+		ExtraNutrients:      &scaled,
+		ImagePath:           imagePath,
+		ImagePaths:          imagePaths,
+		PortionLabel:        packagedPortionLabel(item),
+		SourceLabel:         "包装食品",
+		RecommendReason:     "来自用户上传包装图，按营养成分表换算",
 		NutritionHighlights: highlights,
-		MatchScore:         score,
+		MatchScore:          score,
 	}
 	applyManualFoodServingProfile(&result)
 	return result
@@ -1425,11 +1431,14 @@ func manualFoodResultFromFrequentRecord(name string, usageCount int, avgWeight f
 	if title == "" {
 		return domain.ManualFoodResult{}
 	}
-	defaultWeight := avgWeight
-	if defaultWeight <= 0 {
-		defaultWeight = 100
+	sourceWeight := avgWeight
+	if sourceWeight <= 0 {
+		sourceWeight = 100
 	}
-	per100Scale := 100 / defaultWeight
+	// 历史记录的 AVG 往往会产生 65.8333g 这类不可操作的小数。
+	// 营养密度仍按原始平均重量计算，但默认份量统一为整克，避免把统计值直接暴露给用户。
+	defaultWeight := practicalManualFoodWeight(sourceWeight)
+	per100Scale := 100 / sourceWeight
 	if avgCalories <= 0 {
 		item := manualFoodResultFromRecordItem("nutrition_library", "catalog:"+title, title, "100g", usageCount, raw)
 		item.ID = "catalog:" + title
@@ -1450,10 +1459,10 @@ func manualFoodResultFromFrequentRecord(name string, usageCount int, avgWeight f
 		Subtitle:           "常用食物",
 		Category:           inferManualFoodCategory(title, "nutrition_library"),
 		DefaultWeightGrams: defaultWeight,
-		TotalCalories:      avgCalories,
-		TotalProtein:       avgProtein,
-		TotalCarbs:         avgCarbs,
-		TotalFat:           avgFat,
+		TotalCalories:      avgCalories * per100Scale * defaultWeight / 100,
+		TotalProtein:       avgProtein * per100Scale * defaultWeight / 100,
+		TotalCarbs:         avgCarbs * per100Scale * defaultWeight / 100,
+		TotalFat:           avgFat * per100Scale * defaultWeight / 100,
 		NutrientsPer100g: &domain.ManualFoodNutrients{
 			Calories: avgCalories * per100Scale,
 			Protein:  avgProtein * per100Scale,
@@ -1470,15 +1479,18 @@ func manualFoodResultFromFrequentRecord(name string, usageCount int, avgWeight f
 	}
 
 	// 从代表性记录的原始 item 中解析微量元素，避免高频食物丢失微量营养。
+	// 高频项的宏量营养必须以聚合 AVG 结果为准；单条代表记录只用于补齐微量元素，
+	// 否则一个异常历史样本会覆盖几十条记录的平均值。
 	representative := manualFoodResultFromRecordItem("nutrition_library", "catalog:"+title, title, fmt.Sprintf("%.0fg", defaultWeight), usageCount, raw)
 	if representative.NutrientsPer100g != nil {
-		result.NutrientsPer100g = representative.NutrientsPer100g
-		extraNutrients := scaleManualFoodNutrients(*representative.NutrientsPer100g, defaultWeight/100)
+		result.NutrientsPer100g = mergeManualFoodNutrients(result.NutrientsPer100g, representative.NutrientsPer100g)
+		extraNutrients := scaleManualFoodNutrients(*result.NutrientsPer100g, defaultWeight/100)
 		result.ExtraNutrients = &extraNutrients
 	} else if representative.ExtraNutrients != nil {
-		nutrientsPer100g := scaleManualFoodNutrients(*representative.ExtraNutrients, per100Scale)
-		result.NutrientsPer100g = &nutrientsPer100g
-		result.ExtraNutrients = representative.ExtraNutrients
+		representativePer100g := scaleManualFoodNutrients(*representative.ExtraNutrients, per100Scale)
+		result.NutrientsPer100g = mergeManualFoodNutrients(result.NutrientsPer100g, &representativePer100g)
+		extraNutrients := scaleManualFoodNutrients(*result.NutrientsPer100g, defaultWeight/100)
+		result.ExtraNutrients = &extraNutrients
 	}
 
 	applyManualFoodServingProfile(&result)
@@ -1903,6 +1915,7 @@ func (r *ManualFoodRepo) loadNutritionFoodRowsByIDs(ctx context.Context, ids []s
 
 func (r *ManualFoodRepo) loadNutritionFoodRowsByTitles(ctx context.Context, titles []string) map[string]fooddomain.FoodNutrition {
 	out := make(map[string]fooddomain.FoodNutrition, len(titles))
+	exactMatches := make(map[string]bool, len(titles))
 	if len(titles) == 0 {
 		return out
 	}
@@ -1936,6 +1949,7 @@ func (r *ManualFoodRepo) loadNutritionFoodRowsByTitles(ctx context.Context, titl
 			for _, title := range unique {
 				if strings.EqualFold(title, key) {
 					out[title] = preferNutritionRowWithImage(out[title], row)
+					exactMatches[title] = true
 				}
 			}
 		}
@@ -1961,13 +1975,21 @@ func (r *ManualFoodRepo) loadNutritionFoodRowsByTitles(ctx context.Context, titl
 			}
 			for _, title := range unique {
 				if strings.EqualFold(title, alias) {
-					out[title] = preferNutritionRowWithImage(out[title], food)
+					// 精确 canonical_name 必须优先于别名。否则两行都有图片时，
+					// 例如“茶叶蛋”的精确营养行会被“茶叶蛋 -> 鸡蛋(全蛋)”
+					// 别名目标覆盖，最终返回错误的 food_id 和营养来源。
+					if !exactMatches[title] {
+						out[title] = food
+					}
 				}
 			}
 		}
 	}
 	nutriRepo := foodrecordrepo.NewFoodNutritionRepo(r.db)
 	for _, title := range unique {
+		if exactMatches[title] {
+			continue
+		}
 		if existing, ok := out[title]; ok && nutritionRowHasImage(existing) {
 			continue
 		}
@@ -2314,15 +2336,16 @@ func applyManualFoodServingProfile(item *domain.ManualFoodResult) {
 	}
 	title := strings.TrimSpace(item.Title)
 	switch {
-	case isEggLikeFood(title):
-		applyPer100Default(item, 55)
+	case manualFoodEggPieceWeight(title) > 0:
+		pieceWeight := manualFoodEggPieceWeight(title)
+		applyPer100Default(item, pieceWeight)
 		item.DisplayUnit = "piece"
 		item.DisplayUnitLabel = "个"
 		item.PortionLabel = "1个"
 		item.ServingPresets = []domain.ManualFoodServingPreset{
-			{Label: "0.5个", Grams: 27.5, Quantity: 0.5},
-			{Label: "1个", Grams: 55, Quantity: 1},
-			{Label: "2个", Grams: 110, Quantity: 2},
+			{Label: "0.5个", Grams: pieceWeight * 0.5, Quantity: 0.5},
+			{Label: "1个", Grams: pieceWeight, Quantity: 1},
+			{Label: "2个", Grams: pieceWeight * 2, Quantity: 2},
 		}
 	case isBeverageLikeFood(title):
 		defaultWeight := 350.0
@@ -2396,7 +2419,70 @@ func beverageServingPresets(title string) []domain.ManualFoodServingPreset {
 
 func isEggLikeFood(title string) bool {
 	normalized := strings.ToLower(strings.TrimSpace(title))
-	return strings.Contains(normalized, "egg") || strings.Contains(title, "鸡蛋") || strings.Contains(title, "水煮蛋") || strings.Contains(title, "卤蛋") || strings.Contains(title, "煎蛋")
+	if normalized == "" {
+		return false
+	}
+	// 蛋白、蛋黄和含蛋复合食品不能套用“一个整蛋约 55g”的份量。
+	// 这也避免“鸡蛋面”“鸡蛋饼”等仅因名称含鸡蛋就被显示为按个记录。
+	if containsAnyManualFoodToken(normalized, []string{
+		"蛋白", "蛋清", "蛋黄", "蛋糕", "蛋挞", "蛋卷", "蛋饼", "鸡蛋面",
+		"炒蛋", "炒鸡蛋", "蒸蛋", "蛋羹", "蛋花", "鹌鹑蛋", "鸽子蛋", "鹅蛋", "鸭蛋",
+		"eggplant", "egg white", "egg yolk", "egg tart", "egg cake", "quail egg", "duck egg", "goose egg",
+		"scrambled egg", "omelet", "omelette",
+	}) {
+		return false
+	}
+	return containsAnyManualFoodToken(normalized, []string{
+		"egg", "鸡蛋", "水煮蛋", "白煮蛋", "煮鸡蛋", "茶叶蛋", "卤蛋", "煎蛋", "荷包蛋",
+	})
+}
+
+func manualFoodEggPieceWeight(title string) float64 {
+	normalized := strings.ToLower(strings.TrimSpace(title))
+	if normalized == "" || containsAnyManualFoodToken(normalized, []string{
+		"蛋白粉", "蛋白棒", "蛋白饮", "蛋白奶昔", "egg protein", "protein powder",
+		"蛋糕", "蛋挞", "蛋卷", "蛋饼", "鸡蛋面", "炒蛋", "炒鸡蛋", "蒸蛋", "蛋羹", "蛋花",
+		"eggplant", "egg tart", "egg cake", "scrambled egg", "omelet", "omelette",
+	}) {
+		return 0
+	}
+	switch {
+	case containsAnyManualFoodToken(normalized, []string{"蛋清", "蛋蛋白", "鸡蛋白", "egg white"}):
+		return 33
+	case containsAnyManualFoodToken(normalized, []string{"蛋黄", "egg yolk"}):
+		return 17
+	case containsAnyManualFoodToken(normalized, []string{"鹌鹑蛋", "quail egg"}):
+		return 10
+	case containsAnyManualFoodToken(normalized, []string{"鸽子蛋", "pigeon egg"}):
+		return 15
+	case containsAnyManualFoodToken(normalized, []string{"鸭蛋", "duck egg"}):
+		return 65
+	case containsAnyManualFoodToken(normalized, []string{"鹅蛋", "goose egg"}):
+		return 180
+	case isEggLikeFood(normalized):
+		return 55
+	default:
+		return 0
+	}
+}
+
+func practicalManualFoodWeight(weight float64) float64 {
+	if weight <= 0 {
+		return 100
+	}
+	if weight < 1 {
+		return math.Round(weight*10) / 10
+	}
+	return math.Round(weight)
+}
+
+func containsAnyManualFoodToken(value string, tokens []string) bool {
+	for _, token := range tokens {
+		if strings.Contains(value, strings.ToLower(token)) {
+			return true
+		}
+	}
+	return false
 }
 
 func isBeverageLikeFood(title string) bool {
@@ -2473,8 +2559,8 @@ func packagedMatchesManualCategory(result domain.ManualFoodResult, item fooddoma
 }
 
 func packagedDefaultWeight(item fooddomain.PackagedFood) float64 {
-	if item.ServingWeightG > 0 {
-		return item.ServingWeightG
+	if servingWeight := validPackagedServingWeight(item); servingWeight > 0 {
+		return servingWeight
 	}
 	if netContent := packagedNetContentWeight(item); netContent > 0 && netContent <= 500 {
 		return netContent
@@ -2490,8 +2576,8 @@ func packagedPortionLabel(item fooddomain.PackagedFood) string {
 	if strings.Contains(strings.ToLower(stringPtrValue(item.NutritionBasisUnit)), "100ml") {
 		unit = "ml"
 	}
-	if item.ServingWeightG > 0 {
-		return fmt.Sprintf("%.0f%s", item.ServingWeightG, unit)
+	if servingWeight := validPackagedServingWeight(item); servingWeight > 0 {
+		return fmt.Sprintf("%.0f%s", servingWeight, unit)
 	}
 	if label := packagedNetContentLabel(item); label != "" {
 		return label
@@ -2500,6 +2586,22 @@ func packagedPortionLabel(item fooddomain.PackagedFood) string {
 		return fmt.Sprintf("%.0f%s", item.NetWeightG, unit)
 	}
 	return "100" + unit
+}
+
+func validPackagedServingWeight(item fooddomain.PackagedFood) float64 {
+	servingWeight, _ := fooddomain.SupportedPackagedServingWeight(item)
+	return servingWeight
+}
+
+func isPhysicallyImplausibleFrequentFood(weight, calories, protein, carbs, fat float64) bool {
+	if weight <= 0 || weight > 2000 || calories < 0 || protein < 0 || carbs < 0 || fat < 0 {
+		return true
+	}
+	scale := 100 / weight
+	if calories*scale > 950 {
+		return true
+	}
+	return (protein+carbs+fat)*scale > 105
 }
 
 func packagedDisplayName(item fooddomain.PackagedFood) string {

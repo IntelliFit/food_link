@@ -94,6 +94,10 @@ type nutritionFallbackEstimator interface {
 	Estimate(context.Context, []UnresolvedNutritionCandidate, string) (map[int]map[string]any, error)
 }
 
+type nutritionAliasCandidateProposer interface {
+	ProposeNutritionAliasCandidate(context.Context, string, string, string, float64, string) error
+}
+
 func NewAnalyzeService(doubaoClient, ofoxAIClient LLMClient, users *authrepo.UserRepo, nutrition ...*foodrecordrepo.FoodNutritionRepo) *AnalyzeService {
 	var nutritionRepo *foodrecordrepo.FoodNutritionRepo
 	if len(nutrition) > 0 {
@@ -135,8 +139,12 @@ func (s *AnalyzeService) ConfigureImageProvider(provider string) {
 	s.imageProvider = normalizeImageProviderPreference(provider)
 }
 
-func (s *AnalyzeService) ConfigureDeepSeekFallback(apiKey string) {
-	estimator := NewDeepSeekNutritionEstimator(apiKey, "", "")
+func (s *AnalyzeService) ConfigureDeepSeekFallback(apiKey string, baseURLs ...string) {
+	baseURL := ""
+	if len(baseURLs) > 0 {
+		baseURL = baseURLs[0]
+	}
+	estimator := NewDeepSeekNutritionEstimator(apiKey, baseURL, "")
 	s.deepseek = estimator
 	s.refreshNutritionFallbackEstimator()
 }
@@ -304,7 +312,11 @@ func (s *AnalyzeService) runPrecisionJSONWithImagesTemperature(ctx context.Conte
 	case "doubao":
 		client = s.doubaoClient
 	case "gemini":
-		client = s.ofoxAIClient
+		if model == gemini35FlashModel && s.gemini35Client != nil {
+			client = s.gemini35Client
+		} else {
+			client = s.ofoxAIClient
+		}
 	case "openai":
 		client = s.ofoxAIClient
 	default:
@@ -335,31 +347,31 @@ func (s *AnalyzeService) runPrecisionJSONWithImagesTemperature(ctx context.Conte
 		defer attemptCancel()
 		return analyzeWithImagesTemperatureModel(attemptCtx, client, prompt, imageURLs, temperature, model)
 	})
-	if allowFallback && err != nil && provider == "gemini" && len(imageURLs) > 0 && isTransientLLMError(err) && s.doubaoClient != nil {
-		fallbackParsed, fallbackErr := analyzeWithJSONParseRetry(callCtx, "precision_fallback", "doubao", "doubao-seed-2-0-lite-260428", func(retryCtx context.Context) (map[string]any, error) {
-			return analyzeWithImagesTemperature(retryCtx, s.doubaoClient, prompt, imageURLs, temperature)
+	if allowFallback && err != nil && provider == "gemini" && len(imageURLs) > 0 && isTransientLLMError(err) && s.dashscopeClient != nil {
+		fallbackParsed, fallbackErr := analyzeWithJSONParseRetry(callCtx, "precision_fallback", "qwen", qwen36FlashModel, func(retryCtx context.Context) (map[string]any, error) {
+			return analyzeWithImagesTemperatureModel(retryCtx, s.dashscopeClient, prompt, imageURLs, temperature, qwen36FlashModel)
 		})
 		if fallbackErr == nil {
-			logger.Warn(ctx, "精准模式 Gemini 视觉模型临时失败，回退豆包",
+			logger.Warn(ctx, "精准模式 Gemini 视觉模型临时失败，回退 Qwen 3.6 Flash",
 				logger.Err(err),
 				slog.Int("image_count", len(imageURLs)),
 			)
 			apm.AddEvent(ctx, "精准模式大模型回退完成",
 				attribute.String("analysis.primary_provider", provider),
-				attribute.String("analysis.fallback_provider", "doubao"),
+				attribute.String("analysis.fallback_provider", "qwen"),
 				attribute.Int("analysis.image_count", len(imageURLs)),
 				apm.DurationMS("analysis.duration_ms", time.Since(start)),
 			)
 			return fallbackParsed, nil
 		}
-		logger.Warn(ctx, "精准模式豆包回退失败",
+		logger.Warn(ctx, "精准模式 Qwen 3.6 Flash 回退失败",
 			logger.NamedErr("fallback_error", fallbackErr),
 			logger.Err(err),
 			slog.Int("image_count", len(imageURLs)),
 		)
 		apm.RecordError(ctx, fallbackErr,
 			attribute.String("analysis.stage", "fallback"),
-			attribute.String("analysis.fallback_provider", "doubao"),
+			attribute.String("analysis.fallback_provider", "qwen"),
 		)
 	}
 	if err != nil {
@@ -1745,8 +1757,7 @@ func shouldUseImageProviderPreference(modelName string) bool {
 	normalized := strings.ToLower(raw)
 	switch normalized {
 	case "gemini", "gemini-flash", "gemini-vision",
-		"doubao", "doubao-seed-2-0-lite", "doubao-seed-2-0-lite-260428",
-		"qwen", "qwen-flash", qwen36FlashModel:
+		"doubao", "qwen", "qwen-flash":
 		return true
 	default:
 		return false
@@ -4356,6 +4367,9 @@ func parseItems(parsed map[string]any) []map[string]any {
 			if waterMl < 0 {
 				waterMl = 0
 			}
+			if weight > 0 && waterMl > weight {
+				waterMl = weight
+			}
 			nutrients := map[string]any{
 				"calories": 0.0,
 				"protein":  0.0,
@@ -4577,6 +4591,7 @@ func (s *AnalyzeService) applyEdiblePortionRatios(ctx context.Context, resp map[
 		next["ediblePortionRatio"] = round2(ratio)
 		next["estimatedWeightGrams"] = round2(edibleWeight)
 		next["originalWeightGrams"] = round2(edibleWeight)
+		capItemWaterMlToWeight(next)
 		if reason != "" && reason != "<nil>" {
 			next["ediblePortionReason"] = truncateEdiblePortionReason(reason)
 		} else if ratio < 100 {
@@ -4843,18 +4858,28 @@ func (s *AnalyzeService) applyDBFirstNutritionWithOptions(ctx context.Context, r
 					if decision.Reason != "" {
 						lookups[lookupIndex].item["resolve_reason"] = decision.Reason
 					}
+					if decision.Confidence >= 0.95 {
+						if proposer, ok := s.nutrition.(nutritionAliasCandidateProposer); ok {
+							model := "deepseek-v4-pro"
+							if s.deepseek != nil && strings.TrimSpace(s.deepseek.Model) != "" {
+								model = strings.TrimSpace(s.deepseek.Model)
+							}
+							if err := proposer.ProposeNutritionAliasCandidate(ctx, food.ID, lookups[lookupIndex].name, model, decision.Confidence, decision.Reason); err != nil {
+								logger.Warn(ctx, "营养别名候选写入待审队列失败",
+									slog.String("food_id", food.ID), slog.String("alias_name", lookups[lookupIndex].name),
+									slog.String("reason", err.Error()))
+							} else {
+								logger.Info(ctx, "营养语义命中已进入别名待审队列",
+									slog.String("food_id", food.ID), slog.String("alias_name", lookups[lookupIndex].name),
+									slog.Float64("confidence", decision.Confidence))
+							}
+						}
+					}
 					if decision.ShouldAddAlias {
-						aliasName := strings.TrimSpace(decision.AliasName)
-						if aliasName == "" {
-							aliasName = strings.TrimSpace(semanticQueries[index])
-						}
-						if aliasErr := s.nutrition.EnsureNutritionAlias(ctx, food.ID, aliasName); aliasErr != nil {
-							logger.Warn(ctx, "语义复用后补别名失败",
-								logger.Err(aliasErr),
-								slog.String("food_id", food.ID),
-								slog.String("alias_name", aliasName),
-							)
-						}
+						logger.Info(ctx, "已跳过模型建议的永久营养别名写入",
+							slog.String("food_id", food.ID),
+							slog.String("alias_name", strings.TrimSpace(decision.AliasName)),
+						)
 					}
 					resolvedCount++
 					if unresolvedCount > 0 {
@@ -5031,6 +5056,7 @@ func (s *AnalyzeService) applyDBFirstNutritionWithOptions(ctx context.Context, r
 		out = append(out, next)
 	}
 	for _, item := range out {
+		capItemWaterMlToWeight(item)
 		item["nutrition_source_category"] = nutritionSourceCategory(stringFromAny(item["nutrition_source"]))
 	}
 	resp["items"] = out
@@ -5596,6 +5622,33 @@ func waterMlFromItem(item map[string]any) float64 {
 		}
 	}
 	return 0
+}
+
+func capItemWaterMlToWeight(item map[string]any) {
+	if item == nil {
+		return
+	}
+	weight := numberFromAny(firstNonNil(item["estimatedWeightGrams"], item["weight"], item["estimated_weight_g"], item["originalWeightGrams"]))
+	if weight <= 0 {
+		return
+	}
+	waterMl := waterMlFromItem(item)
+	if waterMl <= weight {
+		return
+	}
+	waterMl = round2(weight)
+	item["waterMl"] = waterMl
+	if _, ok := item["water_ml"]; ok {
+		item["water_ml"] = waterMl
+	}
+	if nutrients := mapFromAny(item["nutrients"]); len(nutrients) > 0 {
+		if _, ok := nutrients["waterMl"]; ok {
+			nutrients["waterMl"] = waterMl
+		}
+		if _, ok := nutrients["water_ml"]; ok {
+			nutrients["water_ml"] = waterMl
+		}
+	}
 }
 
 func nutritionUnit(food *foodrecorddomain.FoodNutrition) map[string]any {
@@ -6447,6 +6500,7 @@ func (s *AnalyzeService) rerankNutritionCandidatesWithDeepSeek(ctx context.Conte
 			"只有非常有把握时 reuseExisting 才能为 true。",
 			"confidence 取 0 到 1。",
 			"selectedCandidateIndex 必须使用输入里的 candidateIndex；如果不复用填 -1。",
+			"系统不会自动写入永久别名，shouldAddAlias 必须为 false，aliasName 必须为空。",
 		},
 		"items": requestItems,
 		"responseSchema": map[string]any{

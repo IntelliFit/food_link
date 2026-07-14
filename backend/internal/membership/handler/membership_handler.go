@@ -28,6 +28,11 @@ type MembershipService interface {
 	SyncWechatPayment(ctx context.Context, userID, orderNo string) (map[string]any, error)
 	WechatNotify(ctx context.Context, paymentID string) error
 	HandleWechatNotify(ctx context.Context, headers http.Header, body []byte) (map[string]any, error)
+	CreatePapaySigning(ctx context.Context, userID, planCode string) (map[string]any, error)
+	CancelPapayContract(ctx context.Context, userID string) (map[string]any, error)
+	HandlePapayContractNotify(ctx context.Context, body []byte) error
+	HandlePapayTerminateNotify(ctx context.Context, body []byte) error
+	HandlePapayPaymentNotify(ctx context.Context, body []byte) error
 	ClaimSharePosterReward(ctx context.Context, userID string, input service.SharePosterRewardClaimInput) (map[string]any, error)
 }
 
@@ -217,27 +222,82 @@ func (h *MembershipHandler) PapayContractTerminateNotify(c *gin.Context) {
 		return
 	}
 
-	notice, parseErr := parsePapayContractNotice(body)
-	attrs := []slog.Attr{
-		slog.Int("http.request.body.size", len(body)),
-		slog.String("wechat.app_id", notice.AppID),
-		slog.String("wechat.mch_id", notice.MchID),
-		slog.String("wechat.contract_id", notice.ContractID),
-		slog.String("wechat.contract_code", notice.ContractCode),
-		slog.String("wechat.plan_id", notice.PlanID),
-		slog.String("wechat.change_type", notice.ChangeType),
-		slog.String("wechat.return_code", notice.ReturnCode),
-		slog.String("wechat.result_code", notice.ResultCode),
+	if err := h.svc.HandlePapayTerminateNotify(c.Request.Context(), body); err != nil {
+		logger.Warn(c.Request.Context(), "微信委托代扣解约通知处理失败", logger.Err(err), slog.Int("http.request.body.size", len(body)))
+		writeWechatPapayXML(c, "FAIL", "处理失败")
+		return
 	}
-	if parseErr != nil {
-		logger.Warn(c.Request.Context(), "微信委托代扣解约通知 XML 解析失败，占位接口仍返回成功",
-			append(attrs, logger.Err(parseErr))...,
-		)
-	} else {
-		logger.Info(c.Request.Context(), "收到微信委托代扣解约通知，占位接口已应答成功", attrs...)
-	}
-
+	logger.Info(c.Request.Context(), "微信委托代扣解约通知处理完成", slog.Int("http.request.body.size", len(body)))
 	writeWechatPapayXML(c, "SUCCESS", "OK")
+}
+
+// POST /api/payment/wechat/papay/contract/notify
+func (h *MembershipHandler) PapayContractNotify(c *gin.Context) {
+	body, err := readLimitedNotifyBody(c.Request.Body, wechatPapayNotifyMaxBodyBytes)
+	if err != nil {
+		writeWechatPapayXML(c, "FAIL", "读取通知失败")
+		return
+	}
+	if err := h.svc.HandlePapayContractNotify(c.Request.Context(), body); err != nil {
+		logger.Warn(c.Request.Context(), "微信委托代扣签约通知处理失败", logger.Err(err), slog.Int("http.request.body.size", len(body)))
+		writeWechatPapayXML(c, "FAIL", "处理失败")
+		return
+	}
+	writeWechatPapayXML(c, "SUCCESS", "OK")
+}
+
+// POST /api/payment/wechat/papay/pay/notify
+func (h *MembershipHandler) PapayPaymentNotify(c *gin.Context) {
+	body, err := readLimitedNotifyBody(c.Request.Body, wechatPapayNotifyMaxBodyBytes)
+	if err != nil {
+		writeWechatPapayXML(c, "FAIL", "读取通知失败")
+		return
+	}
+	if err := h.svc.HandlePapayPaymentNotify(c.Request.Context(), body); err != nil {
+		logger.Warn(c.Request.Context(), "微信委托代扣扣款通知处理失败", logger.Err(err), slog.Int("http.request.body.size", len(body)))
+		writeWechatPapayXML(c, "FAIL", "处理失败")
+		return
+	}
+	writeWechatPapayXML(c, "SUCCESS", "OK")
+}
+
+// POST /api/membership/auto-renew/signing
+func (h *MembershipHandler) CreatePapaySigning(c *gin.Context) {
+	var body struct {
+		PlanCode string `json:"plan_code"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		response.Error(c, err)
+		return
+	}
+	userID := c.GetString(authmw.ContextUserIDKey)
+	if userID == "" {
+		response.Error(c, commonerrors.ErrUnauthorized)
+		return
+	}
+	data, err := h.svc.CreatePapaySigning(c.Request.Context(), userID, body.PlanCode)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	logMembershipAPI(c, "papay_signing_create_ok", slog.String("plan_code", strings.TrimSpace(body.PlanCode)))
+	response.Success(c, data)
+}
+
+// POST /api/membership/auto-renew/cancel
+func (h *MembershipHandler) CancelPapayContract(c *gin.Context) {
+	userID := c.GetString(authmw.ContextUserIDKey)
+	if userID == "" {
+		response.Error(c, commonerrors.ErrUnauthorized)
+		return
+	}
+	data, err := h.svc.CancelPapayContract(c.Request.Context(), userID)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	logMembershipAPI(c, "papay_contract_cancel_ok")
+	response.Success(c, data)
 }
 
 // POST /api/membership/rewards/share-poster/claim

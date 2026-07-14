@@ -148,6 +148,7 @@ export function createWeekHeatmapCells(): WeekHeatmapCell[] {
       intakeRatio: 0,
       state: 'none',
       isToday: offset === 0,
+      hasRecord: false,
     })
   }
 

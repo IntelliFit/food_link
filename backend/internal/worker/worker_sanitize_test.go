@@ -666,6 +666,16 @@ func TestSanitizeTaskErrorMessage_APIKey(t *testing.T) {
 	}
 }
 
+func TestSanitizeTaskErrorMessage_ModelNotFound(t *testing.T) {
+	msg := sanitizeTaskErrorMessage(errors.New(`doubao api error 400: model not found`))
+	if strings.Contains(strings.ToLower(msg), "doubao") || strings.Contains(strings.ToLower(msg), "model not found") {
+		t.Fatalf("raw model error leaked into sanitized error: %s", msg)
+	}
+	if !strings.Contains(msg, "AI 识别服务配置异常") {
+		t.Fatalf("unexpected sanitized model error: %s", msg)
+	}
+}
+
 func TestSanitizeTaskErrorMessage_DoubaoResponsesAuthenticationError(t *testing.T) {
 	msg := sanitizeTaskErrorMessage(errors.New(`doubao responses api error 401: {"error":{"code":"AuthenticationError","message":"The API key format is incorrect. Request id: 021779210783873f3cee0c2e226f4d0a5"}}`))
 	if strings.Contains(msg, "AuthenticationError") || strings.Contains(msg, "Request id") {

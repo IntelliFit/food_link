@@ -169,6 +169,9 @@ type fakeAnalyzeNutritionResolver struct {
 	nescafeFood          foodrecorddomain.PackagedFood
 	sugarfreeDrinkFood   foodrecorddomain.PackagedFood
 	packagedResolveCalls int
+	searchCandidates     map[string][]foodrecordrepo.SearchCandidate
+	ensuredAliases       []string
+	proposedAliases      []string
 }
 
 func newFakeAnalyzeNutritionResolver() *fakeAnalyzeNutritionResolver {
@@ -279,10 +282,19 @@ func (r *fakeAnalyzeNutritionResolver) ResolveFood(ctx context.Context, name str
 }
 
 func (r *fakeAnalyzeNutritionResolver) SearchCandidates(ctx context.Context, query string, limit int) ([]foodrecordrepo.SearchCandidate, error) {
+	if r.searchCandidates != nil {
+		return r.searchCandidates[strings.TrimSpace(query)], nil
+	}
 	return nil, nil
 }
 
 func (r *fakeAnalyzeNutritionResolver) EnsureNutritionAlias(ctx context.Context, foodID, rawName string) error {
+	r.ensuredAliases = append(r.ensuredAliases, foodID+":"+rawName)
+	return nil
+}
+
+func (r *fakeAnalyzeNutritionResolver) ProposeNutritionAliasCandidate(_ context.Context, foodID, rawName, model string, confidence float64, reason string) error {
+	r.proposedAliases = append(r.proposedAliases, fmt.Sprintf("%s:%s:%s:%.2f:%s", foodID, rawName, model, confidence, reason))
 	return nil
 }
 
@@ -451,7 +463,7 @@ func TestResolveModelConfig(t *testing.T) {
 
 	p, m = resolveModelConfig("deepseek")
 	assert.Equal(t, "deepseek", p)
-	assert.Equal(t, "deepseek-v4-flash", m)
+	assert.Equal(t, "deepseek-v4-pro", m)
 
 	p, m = resolveModelConfig("gemini")
 	assert.Equal(t, "gemini", p)
@@ -805,6 +817,16 @@ func TestParseItems(t *testing.T) {
 	assert.Equal(t, 100.0, items[0]["ediblePortionRatio"])
 }
 
+func TestParseItemsCapsWaterMlAtEstimatedWeight(t *testing.T) {
+	items := parseItems(map[string]any{"items": []any{map[string]any{
+		"name":                 "牛肉面",
+		"estimatedWeightGrams": 550.0,
+		"waterMl":              700.0,
+	}}})
+	require.Len(t, items, 1)
+	assert.Equal(t, 550.0, items[0]["waterMl"])
+}
+
 func TestParseItemsPreservesGrossAndEdibleRatio(t *testing.T) {
 	items := parseItems(map[string]any{
 		"items": []any{
@@ -1087,6 +1109,28 @@ func TestAnalyzeService_AnalyzeImageStandardIgnoresExplicitDoubaoAndUsesGemini3F
 	assert.Equal(t, "gemini3 image", result["description"])
 	assert.Equal(t, 0, doubaoClient.calls)
 	assert.Equal(t, 1, gemini3Client.calls)
+}
+
+func TestAnalyzeService_AnalyzeImageFastKeepsExplicitQwen36Model(t *testing.T) {
+	doubaoClient := &mockLLMClient{result: map[string]any{"description": "doubao image", "items": []any{}}}
+	gemini3Client := &mockLLMClient{err: assert.AnError}
+	qwenClient := &mockLLMClient{result: map[string]any{"description": "qwen fast image", "items": []any{}}}
+	svc := NewAnalyzeService(doubaoClient, gemini3Client, nil)
+	svc.ConfigureImageProvider("doubao")
+	svc.ConfigureDashScopeLLMClient(qwenClient)
+	svc.ConfigureWebSearcher(nil)
+	svc.ConfigureNutritionResolver(newFakeAnalyzeNutritionResolver())
+	mode := fastExecutionMode
+
+	result, err := svc.Analyze(context.Background(), "", AnalyzeInput{
+		ImageURL:      "https://example.com/img.jpg",
+		ExecutionMode: &mode,
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, "qwen fast image", result["description"])
+	assert.Equal(t, 0, doubaoClient.calls)
+	assert.Equal(t, 1, qwenClient.calls)
 }
 
 func TestAnalyzeService_AnalyzeImageStandardDoesNotFallbackToDoubaoWhenGeminiFails(t *testing.T) {
@@ -1773,16 +1817,36 @@ func TestAnalyzeWithJSONParseRetry_RetriesTransientDoubaoError(t *testing.T) {
 	assert.Equal(t, 2, calls)
 }
 
-func TestAnalyzeService_RunPrecisionJSONFallsBackToDoubaoOnGeminiTransientError(t *testing.T) {
-	doubaoClient := &mockLLMClient{result: map[string]any{"description": "doubao precision fallback", "items": []any{}}}
+func TestAnalyzeService_RunPrecisionJSONFallsBackToQwenOnGeminiTransientError(t *testing.T) {
+	doubaoClient := &mockLLMClient{result: map[string]any{"description": "unexpected doubao fallback", "items": []any{}}}
 	ofoxClient := &mockLLMClient{err: errors.New(`Post "https://api.ofox.ai/v1/chat/completions": context deadline exceeded (Client.Timeout exceeded while awaiting headers)`)}
+	qwenClient := &mockLLMClient{result: map[string]any{"description": "qwen precision fallback", "items": []any{}}}
 	svc := NewAnalyzeService(doubaoClient, ofoxClient, nil)
 	svc.doubaoClient = doubaoClient
+	svc.ConfigureDashScopeLLMClient(qwenClient)
 
 	result, err := svc.RunPrecisionJSONWithImages(context.Background(), "image", "prompt", []string{"https://example.com/img.jpg"}, "ofox-gemini")
 
 	require.NoError(t, err)
-	assert.Equal(t, "doubao precision fallback", result["description"])
+	assert.Equal(t, "qwen precision fallback", result["description"])
+	assert.Equal(t, 0, doubaoClient.calls)
+	assert.Equal(t, 1, qwenClient.calls)
+}
+
+func TestAnalyzeService_RunPrecisionJSONUsesDedicatedGemini35Client(t *testing.T) {
+	doubaoClient := &mockLLMClient{result: map[string]any{"description": "unexpected doubao", "items": []any{}}}
+	ofoxClient := &mockLLMClient{result: map[string]any{"description": "unexpected gemini 3", "items": []any{}}}
+	gemini35Client := &mockLLMClient{result: map[string]any{"description": "gemini 3.5 precision", "items": []any{}}}
+	svc := NewAnalyzeService(doubaoClient, ofoxClient, nil)
+	svc.ConfigureGemini35LLMClient(gemini35Client)
+
+	result, err := svc.RunPrecisionJSONWithImagesNoFallback(context.Background(), "image", "prompt", []string{"https://example.com/img.jpg"}, gemini35FlashModel)
+
+	require.NoError(t, err)
+	assert.Equal(t, "gemini 3.5 precision", result["description"])
+	assert.Equal(t, 1, gemini35Client.calls)
+	assert.Equal(t, 0, ofoxClient.calls)
+	assert.Equal(t, 0, doubaoClient.calls)
 }
 
 func TestAnalyzeService_RunPrecisionJSONNoFallbackKeepsGeminiError(t *testing.T) {
@@ -2830,6 +2894,44 @@ func TestAnalyzeService_ApplyDBFirstUsesDeepSeekSemanticReuse(t *testing.T) {
 	assert.Equal(t, "library_fuzzy", items[0]["nutrition_source"])
 	nutrients := items[0]["nutrients"].(map[string]any)
 	assert.Equal(t, 176.0, nutrients["calories"])
+}
+
+func TestAnalyzeService_SemanticReuseDoesNotPersistModelSuggestedAlias(t *testing.T) {
+	resolver := newFakeAnalyzeNutritionResolver()
+	resolver.searchCandidates = map[string][]foodrecordrepo.SearchCandidate{
+		"原味冰淇淋": {{
+			Food: foodrecorddomain.FoodNutrition{
+				ID:             "icecream-1",
+				CanonicalName:  "原味冰淇淋蛋筒",
+				KcalPer100g:    220,
+				ProteinPer100g: 4,
+				CarbsPer100g:   28,
+				FatPer100g:     10,
+				IsActive:       true,
+			},
+			MatchSource: "fuzzy",
+			Score:       0.8,
+		}},
+	}
+	svc := NewAnalyzeService(&mockLLMClient{}, &mockLLMClient{}, nil)
+	svc.ConfigureNutritionResolver(resolver)
+	svc.ConfigureDeepSeekFallback("fake-key")
+	svc.deepseek.client = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		body := `{"choices":[{"message":{"content":"{\"items\":[{\"index\":0,\"reuseExisting\":true,\"selectedCandidateIndex\":0,\"confidence\":0.99,\"reason\":\"同义名称\",\"shouldAddAlias\":true,\"aliasName\":\"原味冰淇淋\"}]}"}}]}`
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
+	})}
+
+	items := svc.ApplyDBFirstToItems(context.Background(), []map[string]any{{
+		"name":                 "原味冰淇淋",
+		"type":                 "dish",
+		"estimatedWeightGrams": 80.0,
+	}}, "")
+
+	require.Len(t, items, 1)
+	assert.Equal(t, "semantic_rerank", items[0]["resolve_status"])
+	assert.Empty(t, resolver.ensuredAliases)
+	require.Len(t, resolver.proposedAliases, 1)
+	assert.Contains(t, resolver.proposedAliases[0], "icecream-1:原味冰淇淋:deepseek-v4-pro:0.99")
 }
 
 func TestModelDeclaredPackagedFoodDoesNotInferFromName(t *testing.T) {

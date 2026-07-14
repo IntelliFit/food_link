@@ -262,6 +262,7 @@ func (h *FoodRecordHandler) DeleteFoodRecord(c *gin.Context) {
 
 // GET /api/food-record/share/:record_id
 func (h *FoodRecordHandler) ShareFoodRecord(c *gin.Context) {
+	applyFoodRecordShareCORS(c)
 	recordID := c.Param("record_id")
 	record, err := h.recordSvc.Share(c.Request.Context(), recordID)
 	if err != nil {
@@ -273,6 +274,12 @@ func (h *FoodRecordHandler) ShareFoodRecord(c *gin.Context) {
 		slog.String("meal_type", record.MealType),
 	)
 	response.Success(c, gin.H{"record": record})
+}
+
+// OPTIONS /api/food-record/share/:record_id
+func (h *FoodRecordHandler) ShareFoodRecordOptions(c *gin.Context) {
+	applyFoodRecordShareCORS(c)
+	c.Status(http.StatusNoContent)
 }
 
 // GET /share/food-record/:record_id
@@ -670,4 +677,28 @@ func forwardedHost(c *gin.Context) string {
 		host = strings.TrimSpace(host[:i])
 	}
 	return strings.ToLower(host)
+}
+
+func applyFoodRecordShareCORS(c *gin.Context) {
+	origin := strings.TrimSpace(c.GetHeader("Origin"))
+	if !isFoodRecordShareCORSOriginAllowed(origin) {
+		return
+	}
+	c.Header("Access-Control-Allow-Origin", origin)
+	c.Header("Vary", "Origin")
+	c.Header("Access-Control-Allow-Methods", "GET, OPTIONS")
+	c.Header("Access-Control-Allow-Headers", "Accept, Content-Type, Origin")
+	c.Header("Access-Control-Max-Age", "86400")
+}
+
+func isFoodRecordShareCORSOriginAllowed(origin string) bool {
+	switch strings.ToLower(strings.TrimRight(strings.TrimSpace(origin), "/")) {
+	case "https://healthymax.cn",
+		"https://www.healthymax.cn",
+		"http://localhost:5173",
+		"http://127.0.0.1:5173":
+		return true
+	default:
+		return false
+	}
 }

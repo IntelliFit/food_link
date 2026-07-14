@@ -2,6 +2,7 @@ package repo
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 
 	"food_link/backend/internal/admin/domain"
@@ -91,6 +92,7 @@ func (r *BenchmarkRepo) UpdateSample(ctx context.Context, id string, input domai
 	if len(updates) == 0 {
 		return r.GetSample(ctx, id)
 	}
+	updates = normalizeBenchmarkJSONUpdates(updates, "items", "metadata")
 	if err := r.db.WithContext(ctx).Model(&do.FoodWeightLabeledSampleDO{}).Where("id = ?", id).Updates(updates).Error; err != nil {
 		return nil, err
 	}
@@ -178,6 +180,7 @@ func (r *BenchmarkRepo) ListRuns(ctx context.Context, page, limit int) (*domain.
 }
 
 func (r *BenchmarkRepo) UpdateRun(ctx context.Context, id string, updates map[string]any) error {
+	updates = normalizeBenchmarkJSONUpdates(updates, "dataset_filter", "model_config", "metrics", "stage_outputs_summary")
 	return r.db.WithContext(ctx).Model(&do.BenchmarkRunDO{}).Where("id = ?", id).Updates(updates).Error
 }
 
@@ -197,7 +200,31 @@ func (r *BenchmarkRepo) CreateRunSample(ctx context.Context, sample *do.Benchmar
 }
 
 func (r *BenchmarkRepo) UpdateRunSample(ctx context.Context, id string, updates map[string]any) error {
+	updates = normalizeBenchmarkJSONUpdates(updates, "prediction", "ground_truth", "stage_outputs", "metrics")
 	return r.db.WithContext(ctx).Model(&do.BenchmarkRunSampleDO{}).Where("id = ?", id).Updates(updates).Error
+}
+
+func normalizeBenchmarkJSONUpdates(updates map[string]any, jsonKeys ...string) map[string]any {
+	normalized := make(map[string]any, len(updates))
+	for key, value := range updates {
+		normalized[key] = value
+	}
+	for _, key := range jsonKeys {
+		value, ok := normalized[key]
+		if !ok || value == nil {
+			continue
+		}
+		if raw, ok := value.(datatypes.JSON); ok {
+			normalized[key] = raw
+			continue
+		}
+		encoded, err := json.Marshal(value)
+		if err != nil {
+			continue
+		}
+		normalized[key] = datatypes.JSON(encoded)
+	}
+	return normalized
 }
 
 func (r *BenchmarkRepo) ListRunSamples(ctx context.Context, runID string, page, limit int) (*domain.ListRunSamplesResult, error) {

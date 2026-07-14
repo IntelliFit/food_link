@@ -289,7 +289,10 @@ func (r *FoodNutritionRepo) ResolveFood(ctx context.Context, name string) (*Reso
 			Where("is_active = ? AND (LOWER(canonical_name) = ? OR normalized_name = ?)", true, strings.ToLower(variant.Text), variant.Normalized).
 			First(&food).Error
 		if err == nil {
-			return &ResolveResult{Food: &food, Status: "exact_canonical", MatchSource: variant.matchSource("canonical"), Score: 1}, nil
+			if !isImplausibleNutritionFoodMatch(raw, food) {
+				return &ResolveResult{Food: &food, Status: "exact_canonical", MatchSource: variant.matchSource("canonical"), Score: 1}, nil
+			}
+			continue
 		}
 		if err != gorm.ErrRecordNotFound {
 			return nil, err
@@ -303,7 +306,7 @@ func (r *FoodNutritionRepo) ResolveFood(ctx context.Context, name string) (*Reso
 			First(&alias).Error
 		if err == nil && alias.FoodID != "" {
 			if foodErr := r.db.WithContext(ctx).Where("is_active = ? AND id = ?", true, alias.FoodID).First(&food).Error; foodErr == nil {
-				if !isUnsafeNutritionAliasMatch(raw, alias.AliasName, food.CanonicalName) {
+				if !isUnsafeNutritionAliasMatch(raw, alias.AliasName, food.CanonicalName) && !isImplausibleNutritionFoodMatch(raw, food) {
 					return &ResolveResult{Food: &food, Status: "exact_alias", MatchSource: variant.matchSource("alias"), Score: 1}, nil
 				}
 			} else if foodErr != gorm.ErrRecordNotFound {
@@ -352,7 +355,71 @@ func isUnsafeNutritionAliasMatch(query, aliasName, canonicalName string) bool {
 	if containsCJK(queryNorm) && isMostlyASCII(canonicalName) {
 		return true
 	}
+	if isNutritionMixedDishName(queryText) && !isNutritionMixedDishName(canonicalNorm) && containsAnyToken(canonicalNorm, nutritionIngredientTokens) {
+		return true
+	}
+	if isNutritionDryForm(queryText) && !isNutritionDryForm(canonicalNorm) && containsAnyToken(canonicalNorm, nutritionLiquidTokens) {
+		return true
+	}
 	return false
+}
+
+var nutritionMixedDishTokens = []string{
+	"面", "饭", "粥", "饺", "馄饨", "云吞", "包子", "披萨", "汉堡", "麻辣烫",
+	"盖浇", "便当", "套餐", "咖喱", "沙拉", "米线", "河粉",
+	"noodle", "rice", "sandwich", "platter", "menu", "burger", "pizza", "cereal",
+	"macaroni", "lasagna", "dumpling", "bagel", "entree", "croissant",
+}
+
+var nutritionIngredientTokens = []string{
+	"肉", "牛", "猪", "鸡", "鸭", "羊", "鱼", "虾", "蛋", "豆腐", "菜", "玉米",
+	"beef", "pork", "chicken", "lamb", "duck", "fish", "shrimp", "egg", "tofu",
+}
+
+var nutritionLiquidTokens = []string{"豆浆", "牛奶", "奶", "茶", "咖啡", "果汁", "饮料", "汤", "milk", "juice", "drink", "beverage"}
+
+var nutritionStarchDishTokens = []string{
+	"面", "饭", "粥", "饺", "馄饨", "云吞", "包子", "馒头", "面包", "披萨", "汉堡", "米线", "河粉",
+	"noodle", "rice", "porridge", "dumpling", "bun", "bread", "pizza", "burger", "macaroni", "lasagna", "bagel",
+}
+
+func isNutritionMixedDishName(text string) bool {
+	if containsAnyToken(text, nutritionMixedDishTokens) {
+		return true
+	}
+	return strings.Contains(text, "粉") && containsAnyToken(text, []string{"红烧", "炒", "汤", "酸辣", "螺蛳"})
+}
+
+func isNutritionDryForm(text string) bool {
+	trimmed := strings.TrimSpace(strings.ToLower(text))
+	return strings.HasSuffix(trimmed, "粉") || containsAnyToken(trimmed, []string{"干粉", "powder", "flour", "dried", "dehydrated"})
+}
+
+func isImplausibleNutritionFoodMatch(query string, food domain.FoodNutrition) bool {
+	normalized := normalizeFoodName(query)
+	starchyDish := containsAnyToken(normalized, nutritionStarchDishTokens) ||
+		(strings.Contains(normalized, "粉") && containsAnyToken(normalized, []string{"红烧", "炒", "汤", "酸辣", "螺蛳"}))
+	return starchyDish && food.CarbsPer100g <= 2
+}
+
+// ValidateNutritionAliasTarget applies the same hard safety gates used by
+// runtime matching. Admin approval and automated proposal generation must call
+// this before an alias can enter food_nutrition_aliases.
+func ValidateNutritionAliasTarget(aliasName string, food domain.FoodNutrition) error {
+	raw := strings.TrimSpace(aliasName)
+	if raw == "" {
+		return fmt.Errorf("营养别名不能为空")
+	}
+	if strings.TrimSpace(food.ID) == "" || !food.IsActive {
+		return fmt.Errorf("营养别名目标不存在或已停用")
+	}
+	if isUnsafeNutritionAliasMatch(raw, raw, food.CanonicalName) {
+		return fmt.Errorf("形态或食物层级不兼容: %s -> %s", raw, food.CanonicalName)
+	}
+	if isImplausibleNutritionFoodMatch(raw, food) {
+		return fmt.Errorf("主食碳水合理性校验失败: %s -> %s", raw, food.CanonicalName)
+	}
+	return nil
 }
 
 func containsAnyToken(text string, tokens []string) bool {
@@ -1465,6 +1532,9 @@ func (r *FoodNutritionRepo) SearchCandidates(ctx context.Context, query string, 
 
 	seen := map[string]SearchCandidate{}
 	for _, food := range canonicalFoods {
+		if isImplausibleNutritionFoodMatch(raw, food) {
+			continue
+		}
 		variant := canonicalVariantByFoodID[food.ID]
 		score := nutritionSearchScore(raw, variant, food, "canonical")
 		matchSource := "canonical"
@@ -1503,7 +1573,7 @@ func (r *FoodNutritionRepo) SearchCandidates(ctx context.Context, query string, 
 				return nil, err
 			}
 			for _, food := range aliasFoods {
-				if allNutritionAliasesUnsafe(raw, aliasNamesByFoodID[food.ID], food.CanonicalName) {
+				if allNutritionAliasesUnsafe(raw, aliasNamesByFoodID[food.ID], food.CanonicalName) || isImplausibleNutritionFoodMatch(raw, food) {
 					continue
 				}
 				variant := bestNutritionVariant(aliasVariantsByFoodID[food.ID])
@@ -2384,6 +2454,13 @@ func (r *FoodNutritionRepo) createNutritionAlias(ctx context.Context, foodID, ra
 	if strings.TrimSpace(foodID) == "" || strings.TrimSpace(raw) == "" || strings.TrimSpace(normalized) == "" {
 		return nil
 	}
+	var food domain.FoodNutrition
+	if err := r.db.WithContext(ctx).Where("is_active = ? AND id = ?", true, foodID).First(&food).Error; err != nil {
+		return fmt.Errorf("校验营养别名目标失败: %w", err)
+	}
+	if err := ValidateNutritionAliasTarget(raw, food); err != nil {
+		return fmt.Errorf("拒绝创建营养别名: %w", err)
+	}
 	return r.db.WithContext(ctx).
 		Table((&domain.FoodNutritionAlias{}).TableName()).
 		Clauses(clause.OnConflict{DoNothing: true}).
@@ -2401,6 +2478,62 @@ func (r *FoodNutritionRepo) EnsureNutritionAlias(ctx context.Context, foodID, ra
 		return nil
 	}
 	return r.createNutritionAlias(ctx, foodID, raw, normalizeFoodName(raw))
+}
+
+// ProposeNutritionAliasCandidate records a semantic match in the isolated
+// review queue. It never writes food_nutrition_aliases and therefore cannot
+// affect runtime matching before an administrator approves the proposal.
+func (r *FoodNutritionRepo) ProposeNutritionAliasCandidate(ctx context.Context, foodID, rawName, model string, confidence float64, reason string) error {
+	raw := strings.TrimSpace(rawName)
+	foodID = strings.TrimSpace(foodID)
+	if foodID == "" || raw == "" {
+		return nil
+	}
+	var food domain.FoodNutrition
+	if err := r.db.WithContext(ctx).Where("id = ? AND is_active = ?", foodID, true).First(&food).Error; err != nil {
+		return fmt.Errorf("校验营养别名候选目标失败: %w", err)
+	}
+	if normalizeFoodName(raw) == normalizeFoodName(food.CanonicalName) {
+		return nil
+	}
+	if err := ValidateNutritionAliasTarget(raw, food); err != nil {
+		return fmt.Errorf("拒绝创建营养别名候选: %w", err)
+	}
+	normalized := normalizeFoodName(raw)
+	var count int64
+	if err := r.db.WithContext(ctx).Table((&domain.FoodNutritionAlias{}).TableName()).
+		Where("normalized_alias = ?", normalized).Count(&count).Error; err != nil {
+		return err
+	}
+	if count > 0 {
+		return nil
+	}
+	if err := r.db.WithContext(ctx).Table("food_nutrition_alias_candidates").
+		Where("normalized_alias = ? AND proposed_food_id = ? AND status = 'pending'", normalized, foodID).
+		Count(&count).Error; err != nil {
+		return err
+	}
+	if count > 0 {
+		return nil
+	}
+	snapshot, err := json.Marshal(map[string]any{
+		"canonical_name": food.CanonicalName,
+		"kcal_per_100g":  food.KcalPer100g, "protein_per_100g": food.ProteinPer100g,
+		"carbs_per_100g": food.CarbsPer100g, "fat_per_100g": food.FatPer100g,
+		"source": food.Source,
+	})
+	if err != nil {
+		return err
+	}
+	emptyList := datatypes.JSON([]byte("[]"))
+	return r.db.WithContext(ctx).Table("food_nutrition_alias_candidates").
+		Clauses(clause.OnConflict{DoNothing: true}).Create(map[string]any{
+		"id": uuid.NewString(), "alias_name": raw, "normalized_alias": normalized,
+		"proposed_food_id": foodID, "source": "ai_semantic", "model": strings.TrimSpace(model),
+		"model_decision": "approve", "model_confidence": confidence, "model_reason": strings.TrimSpace(reason),
+		"suggested_aliases": emptyList, "rule_flags": emptyList, "candidate_snapshot": datatypes.JSON(snapshot),
+		"status": "pending",
+	}).Error
 }
 
 func (r *FoodNutritionRepo) createPackagedFoodAlias(ctx context.Context, foodID, raw, normalized string) error {

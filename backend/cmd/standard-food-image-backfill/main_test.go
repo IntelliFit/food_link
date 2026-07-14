@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -10,6 +11,7 @@ import (
 )
 
 func TestLoadDashScopeAPIKeyFromEnvFile(t *testing.T) {
+	t.Setenv("FOOD_IMAGE_VISION_API_KEY", "")
 	t.Setenv("DASHSCOPE_API_KEY", "")
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, ".env"), []byte("DASHSCOPE_API_KEY=sk-from-env\n"), 0o600))
@@ -17,11 +19,18 @@ func TestLoadDashScopeAPIKeyFromEnvFile(t *testing.T) {
 }
 
 func TestLoadDashScopeAPIKeyFromFileOverride(t *testing.T) {
+	t.Setenv("FOOD_IMAGE_VISION_API_KEY", "")
 	t.Setenv("DASHSCOPE_API_KEY", "")
 	dir := t.TempDir()
 	path := filepath.Join(dir, "dashscope-api-key.local")
 	require.NoError(t, os.WriteFile(path, []byte("DASHSCOPE_API_KEY=sk-test-key\n"), 0o600))
 	assert.Equal(t, "sk-test-key", loadDashScopeAPIKey(dir, path))
+}
+
+func TestLoadTemporaryFoodImageVisionAPIKeyTakesPriority(t *testing.T) {
+	t.Setenv("FOOD_IMAGE_VISION_API_KEY", "sk-temporary")
+	t.Setenv("DASHSCOPE_API_KEY", "sk-configured")
+	assert.Equal(t, "sk-temporary", loadDashScopeAPIKey(t.TempDir(), ""))
 }
 
 func TestPickQwenFlashModel(t *testing.T) {
@@ -128,4 +137,75 @@ func TestNormalizeImageDecisionBothRequired(t *testing.T) {
 func TestExtensionForContentType(t *testing.T) {
 	assert.Equal(t, ".png", extensionForContentType("image/png"))
 	assert.Equal(t, ".jpg", extensionForContentType("image/jpeg"))
+}
+
+func TestGeminiVisionEndpoint(t *testing.T) {
+	assert.Equal(t,
+		"https://maas-openapi.wanjiedata.com/api/v1beta/models/gemini-3-flash-preview:generateContent",
+		geminiVisionEndpoint("https://maas-openapi.wanjiedata.com/api/v1", "gemini-3-flash-preview"),
+	)
+}
+
+func TestExistingImageAuditStatus(t *testing.T) {
+	assert.Equal(t, "mismatch", existingImageAuditStatus(&imageDecision{FoodMatch: false, Confidence: 0.9}))
+	assert.Equal(t, "uncertain", existingImageAuditStatus(&imageDecision{FoodMatch: false, Confidence: 0.7}))
+	assert.Equal(t, "match", existingImageAuditStatus(&imageDecision{FoodMatch: true, Confidence: 0.9}))
+}
+
+func TestShouldSkipExistingImageAudit(t *testing.T) {
+	assert.True(t, shouldSkipExistingImageAudit(existingImageAuditEntry{Status: "match"}))
+	assert.True(t, shouldSkipExistingImageAudit(existingImageAuditEntry{Status: "mismatch"}))
+	assert.False(t, shouldSkipExistingImageAudit(existingImageAuditEntry{Status: "uncertain"}))
+	assert.False(t, shouldSkipExistingImageAudit(existingImageAuditEntry{Status: "vision_failed"}))
+}
+
+func TestCheckpointUsesGlobalProcessedCount(t *testing.T) {
+	checkpointEvery := 5
+	var checkpoints []int64
+	for current := int64(1); current <= 12; current++ {
+		if shouldCheckpoint(current, checkpointEvery) {
+			checkpoints = append(checkpoints, current)
+		}
+	}
+	assert.Equal(t, []int64{5, 10}, checkpoints)
+}
+
+func TestLoadReviewedCandidatesRequiresHighConfidenceAndUniqueURL(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "missing.json")
+	decision := &imageDecision{FoodMatch: true, NoWatermark: true, Match: true, Confidence: 0.96}
+	summary := successSummary{Successes: []successRecord{
+		{FoodID: "unique", FoodName: "苹果", CandidateURL: "https://example.com/unique.jpg", Decision: decision},
+		{FoodID: "duplicate-a", FoodName: "土豆片", CandidateURL: "https://example.com/shared.jpg", Decision: decision},
+		{FoodID: "duplicate-b", FoodName: "油菜", CandidateURL: "https://example.com/shared.jpg", Decision: decision},
+		{FoodID: "low", FoodName: "低置信", CandidateURL: "https://example.com/low.jpg", Decision: &imageDecision{FoodMatch: true, NoWatermark: true, Match: true, Confidence: 0.9}},
+	}}
+	data, err := json.Marshal(summary)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(path, data, 0o600))
+
+	candidates, err := loadReviewedCandidates(options{reviewedMissingReport: path, reviewedMinConfidence: 0.95})
+	require.NoError(t, err)
+	require.Len(t, candidates, 1)
+	assert.Equal(t, "unique", candidates[0].FoodID)
+
+	allowlistPath := filepath.Join(dir, "allowlist.json")
+	allowlist := reviewedImageReport{Entries: map[string]reviewedImageEntry{
+		reviewedEntryKey(reviewedKindMissing, "unique"): {Kind: reviewedKindMissing, FoodID: "unique", Status: "verified"},
+	}}
+	data, err = json.Marshal(allowlist)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(allowlistPath, data, 0o600))
+	candidates, err = loadReviewedCandidates(options{
+		reviewedMissingReport: path, reviewedAllowlistReport: allowlistPath, reviewedMinConfidence: 0.95,
+	})
+	require.NoError(t, err)
+	require.Len(t, candidates, 1)
+}
+
+func TestSnapshotContainsImage(t *testing.T) {
+	assert.True(t, snapshotHasImage(imageDBSnapshot{ImagePaths: `["a.jpg"]`}))
+	assert.True(t, snapshotContainsImage(imageDBSnapshot{ImagePath: "a.jpg", ImagePaths: `[]`}, "a.jpg"))
+	assert.True(t, snapshotContainsImage(imageDBSnapshot{ImagePaths: `["a.jpg"]`}, "a.jpg"))
+	assert.False(t, snapshotContainsImage(imageDBSnapshot{ImagePaths: `["b.jpg"]`}, "a.jpg"))
 }

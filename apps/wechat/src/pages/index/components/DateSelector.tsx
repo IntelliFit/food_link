@@ -25,7 +25,8 @@ export function DateSelector({ cells, selectedDate, onSelect }: DateSelectorProp
           // 计算圆圈颜色状态
           // 无记录: 白色, 有记录未超目标: 绿色, 超过目标: 红色
           let circleClass = 'is-empty'  // 默认无记录白色
-          if (cell.calories > 0) {
+          const hasRecord = cell.hasRecord ?? cell.calories > 0
+          if (hasRecord) {
             if (cell.calories > cell.target) {
               circleClass = 'is-over'  // 超过目标红色
             } else {

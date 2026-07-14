@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
-import { AlertCircle, Beef, Copy, Droplets, Flame, Smartphone, Wheat } from 'lucide-react'
+import { AlertCircle, Beef, Droplets, Flame, Smartphone, Wheat, X } from 'lucide-react'
 import { SiteFooter } from '@/components/layout/SiteFooter'
 import { brand } from '@/content/brand'
 import { absoluteUrl } from '@/content/seo'
@@ -111,6 +111,12 @@ function recordImageUrls(record: SharedFoodRecord): string[] {
   return [...(Array.isArray(record.image_paths) ? record.image_paths : []), record.image_path]
     .map((url) => String(url || '').trim())
     .filter(Boolean)
+}
+
+function recordItemCalories(item: SharedFoodRecordItem): number {
+  const ratio = item.ratio == null ? 100 : Number(item.ratio)
+  const safeRatio = Number.isFinite(ratio) ? ratio : 100
+  return Number(item.nutrients?.calories || 0) * safeRatio / 100
 }
 
 function mealLabel(record: SharedFoodRecord): string {
@@ -235,6 +241,38 @@ function syncShareMeta(record: SharedFoodRecord, pageUrl: string) {
   upsertLink('canonical', canonicalUrl)
 }
 
+function isMobileBrowser(): boolean {
+  if (typeof navigator === 'undefined') return false
+  return /Android|iPhone|iPad|iPod|Mobile|HarmonyOS/i.test(navigator.userAgent)
+}
+
+function isEmbeddedBrowser(): boolean {
+  if (typeof navigator === 'undefined') return false
+  return /MicroMessenger|QQ\/|QQBrowser|WeiBo|DingTalk|Lark|Feishu|Toutiao|BytedanceWebview/i.test(navigator.userAgent)
+}
+
+function buildAppSchemeUrl(recordId: string): string {
+  return `foodlink://food-record?record_id=${encodeURIComponent(recordId)}`
+}
+
+function buildAppOpenUrl(recordId: string): string {
+  const schemeUrl = buildAppSchemeUrl(recordId)
+  if (typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent)) {
+    return `intent://food-record?record_id=${encodeURIComponent(recordId)}#Intent;scheme=foodlink;package=cn.healthymax.foodlink;end`
+  }
+  return schemeUrl
+}
+
+function tryOpenAppSilently(schemeUrl: string) {
+  if (typeof document === 'undefined') return
+  const iframe = document.createElement('iframe')
+  iframe.src = schemeUrl
+  iframe.style.display = 'none'
+  iframe.setAttribute('aria-hidden', 'true')
+  document.body.appendChild(iframe)
+  window.setTimeout(() => iframe.remove(), 1600)
+}
+
 function ShareSkeleton() {
   return (
     <div className="mx-auto flex min-h-svh max-w-5xl flex-col gap-5 px-4 py-5 md:px-8 md:py-8">
@@ -282,7 +320,7 @@ export function FoodRecordSharePage() {
   const [searchParams] = useSearchParams()
   const apiBaseUrl = useMemo(() => resolveShareApiBaseUrl(searchParams), [searchParams])
   const [state, setState] = useState<LoadState>({ status: 'loading', requestKey: '' })
-  const [copied, setCopied] = useState(false)
+  const [showBrowserGuide, setShowBrowserGuide] = useState(false)
   const trimmedRecordId = recordId.trim()
   const requestKey = useMemo(() => `${apiBaseUrl}::${trimmedRecordId}`, [apiBaseUrl, trimmedRecordId])
   const missingRecordState: Extract<LoadState, { status: 'error' }> | null = trimmedRecordId
@@ -310,11 +348,21 @@ export function FoodRecordSharePage() {
     if (typeof window === 'undefined') return absoluteUrl(`/share/food-record/${encodeURIComponent(trimmedRecordId)}`)
     return window.location.href
   }, [trimmedRecordId])
-  const appUrl = useMemo(() => `foodlink://food-record?record_id=${encodeURIComponent(trimmedRecordId)}`, [trimmedRecordId])
+  const appSchemeUrl = useMemo(() => buildAppSchemeUrl(trimmedRecordId), [trimmedRecordId])
+  const appOpenUrl = useMemo(() => buildAppOpenUrl(trimmedRecordId), [trimmedRecordId])
 
   useEffect(() => {
     if (state.status === 'ready') syncShareMeta(state.record, pageUrl)
   }, [pageUrl, state])
+
+  useEffect(() => {
+    if (state.status !== 'ready' || !trimmedRecordId || !isMobileBrowser() || isEmbeddedBrowser()) return
+    const key = `foodlink:auto-open:${trimmedRecordId}`
+    if (window.sessionStorage.getItem(key) === '1') return
+    window.sessionStorage.setItem(key, '1')
+    const timer = window.setTimeout(() => tryOpenAppSilently(appSchemeUrl), 500)
+    return () => window.clearTimeout(timer)
+  }, [appSchemeUrl, state.status, trimmedRecordId])
 
   const isPendingRequest = Boolean(trimmedRecordId) && state.requestKey !== requestKey
 
@@ -328,83 +376,66 @@ export function FoodRecordSharePage() {
   const images = recordImageUrls(record)
   const foods = (record.items || []).filter((item) => String(item.name || '').trim()).slice(0, 8)
   const recordTime = formatRecordTime(record.record_time)
+  const meal = mealLabel(record)
 
-  const copyPageUrl = async () => {
-    try {
-      await navigator.clipboard?.writeText(pageUrl)
-      setCopied(true)
-      window.setTimeout(() => setCopied(false), 1800)
-    } catch {
-      setCopied(false)
+  const openApp = () => {
+    if (isEmbeddedBrowser()) {
+      setShowBrowserGuide(true)
+      return
     }
+    window.location.href = appOpenUrl
   }
 
   return (
     <div className="min-h-svh overflow-x-clip bg-gradient-page">
-      <main className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-5 md:px-8 md:py-8">
-        <div className="flex items-center justify-between gap-3">
-          <Link to="/" className="inline-flex min-h-10 items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground">
-            <img src={brand.assets.loginLogo} alt="" className="size-7 rounded-md object-contain" />
+      <main className="mx-auto flex w-full flex-col gap-0 px-0 pb-[calc(6.25rem+env(safe-area-inset-bottom,0px))] pt-0 md:max-w-3xl md:gap-4 md:px-8 md:pb-12 md:pt-8">
+        <div className="flex items-center gap-2 px-3 py-2 md:px-0 md:py-0">
+          <Link to="/" className="inline-flex min-h-8 items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground">
+            <img src={brand.assets.loginLogo} alt="" className="size-6 rounded-md object-contain" />
             {brand.shortName}
           </Link>
-          <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">{mealLabel(record)}</span>
+          <span className="ml-auto rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary md:px-3">{meal}</span>
         </div>
 
-        <section className="grid overflow-hidden rounded-md border border-border bg-card shadow-sm md:grid-cols-[minmax(0,1.08fr)_minmax(340px,0.92fr)]">
-          <div className="relative min-h-[280px] bg-muted md:min-h-[620px]">
+        <section className="overflow-hidden border-y border-border/80 bg-card shadow-sm md:rounded-lg md:border">
+          <div className="relative aspect-[4/3] bg-muted md:aspect-[16/9]">
             {images[0] ? (
               <img src={images[0]} alt={title} className="absolute inset-0 size-full object-cover" />
             ) : (
-              <div className="grid size-full min-h-[280px] place-items-center bg-[linear-gradient(135deg,#e9f8ee,#f9fbf5)]">
+              <div className="grid size-full place-items-center bg-[linear-gradient(135deg,#e9f8ee,#f9fbf5)]">
                 <img src={brand.assets.logoShitan} alt={brand.fullName} className="h-28 w-28 rounded-2xl object-contain" />
               </div>
             )}
+            <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black/35 to-transparent" />
+            <span className="absolute left-3 top-3 rounded-full bg-white/92 px-3 py-1.5 text-xs font-bold text-foreground shadow-sm">{meal}</span>
+            {recordTime ? <span className="absolute bottom-3 left-3 text-sm font-semibold text-white drop-shadow">{recordTime}</span> : null}
           </div>
 
-          <div className="flex flex-col gap-6 p-5 md:p-7">
-            <div>
-              {recordTime ? <p className="text-sm font-medium text-muted-foreground">{recordTime}</p> : null}
-              <h1 className="mt-2 text-3xl font-bold leading-tight text-foreground md:text-4xl">{title}</h1>
-              <p className="mt-4 text-base leading-7 text-muted-foreground">{description}</p>
+          <div className="flex flex-col gap-4 px-3 py-4 md:gap-5 md:p-6">
+            <div className="space-y-2.5">
+              <h1 className="text-[1.75rem] font-black leading-[1.12] text-foreground md:text-4xl">{title}</h1>
+              <p className="text-[0.95rem] leading-6 text-muted-foreground md:leading-7">{description}</p>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <Metric icon={<Flame size={18} />} label="热量" value={Math.round(Number(record.total_calories || 0)).toString()} unit="kcal" />
-              <Metric icon={<Beef size={18} />} label="蛋白质" value={round1(record.total_protein)} unit="g" />
-              <Metric icon={<Wheat size={18} />} label="碳水" value={round1(record.total_carbs)} unit="g" />
-              <Metric icon={<Droplets size={18} />} label="脂肪" value={round1(record.total_fat)} unit="g" />
-            </div>
-
-            <div className="grid gap-3">
-              <a
-                href={appUrl}
-                className="inline-flex min-h-12 items-center justify-center gap-2 rounded-md bg-primary px-5 text-sm font-bold text-primary-foreground shadow-sm"
-              >
-                <Smartphone size={18} />
-                打开 App 查看
-              </a>
-              <button
-                type="button"
-                onClick={() => void copyPageUrl()}
-                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-border bg-background px-5 text-sm font-semibold text-foreground"
-              >
-                <Copy size={17} />
-                {copied ? '已复制链接' : '复制分享链接'}
-              </button>
+            <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+              <Metric icon={<Flame size={15} />} label="热量" value={Math.round(Number(record.total_calories || 0)).toString()} unit="kcal" />
+              <Metric icon={<Beef size={15} />} label="蛋白" value={round1(record.total_protein)} unit="g" />
+              <Metric icon={<Wheat size={15} />} label="碳水" value={round1(record.total_carbs)} unit="g" />
+              <Metric icon={<Droplets size={15} />} label="脂肪" value={round1(record.total_fat)} unit="g" />
             </div>
 
             {foods.length ? (
-              <div>
-                <h2 className="text-sm font-bold text-foreground">食物明细</h2>
-                <div className="mt-3 divide-y divide-border">
+              <div className="rounded-md border border-border/80 bg-background px-3 py-3.5 md:p-4">
+                <h2 className="text-base font-black text-foreground">食物明细</h2>
+                <div className="mt-2 divide-y divide-border">
                   {foods.map((item, index) => (
-                    <div key={`${item.name}-${index}`} className="flex items-center justify-between gap-4 py-3">
+                    <div key={`${item.name}-${index}`} className="flex items-center justify-between gap-4 py-2.5 md:py-3">
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold text-foreground">{item.name}</p>
-                        <p className="mt-1 text-xs text-muted-foreground">摄入 {Math.round(recordItemIntake(item))}g</p>
+                        <p className="truncate text-base font-bold text-foreground">{item.name}</p>
+                        <p className="mt-0.5 text-sm text-muted-foreground">摄入 {Math.round(recordItemIntake(item))}g</p>
                       </div>
-                      <span className="shrink-0 text-sm font-semibold text-muted-foreground">
-                        {Math.round(Number(item.nutrients?.calories || 0))} kcal
+                      <span className="shrink-0 text-base font-bold text-muted-foreground">
+                        {Math.round(recordItemCalories(item))} kcal
                       </span>
                     </div>
                   ))}
@@ -414,22 +445,70 @@ export function FoodRecordSharePage() {
           </div>
         </section>
 
-        <p className="text-center text-xs leading-6 text-muted-foreground">
+        <p className="px-2 text-center text-xs leading-6 text-muted-foreground">
           饮食分析结果仅供参考，不构成医学诊断。继续记录饮食，请在 {brand.fullName} App 或小程序中查看。
         </p>
       </main>
-      <SiteFooter />
+      <div className="fixed inset-x-0 bottom-0 z-40 flex justify-center px-4 pb-[calc(2.3rem+env(safe-area-inset-bottom,0px))] pt-3">
+        <button
+          type="button"
+          onClick={openApp}
+          className="flex min-h-14 w-full max-w-72 items-center justify-center gap-2 rounded-full bg-primary px-6 text-base font-black text-primary-foreground shadow-[0_12px_32px_rgba(16,185,129,0.28)] transition-transform active:scale-[0.98]"
+        >
+          <Smartphone size={19} />
+          App 内打开
+        </button>
+      </div>
+      {showBrowserGuide ? <OpenInBrowserGuide onClose={() => setShowBrowserGuide(false)} /> : null}
+      <div className="hidden md:block">
+        <SiteFooter />
+      </div>
+    </div>
+  )
+}
+
+function OpenInBrowserGuide({ onClose }: { onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 bg-[radial-gradient(circle_at_80%_7%,rgba(16,185,129,0.22),transparent_28%),linear-gradient(180deg,rgba(15,23,42,0.86),rgba(15,23,42,0.76))] px-5 pt-[calc(1rem+env(safe-area-inset-top,0px))] text-white backdrop-blur-[2px]">
+      <button
+        type="button"
+        onClick={onClose}
+        className="absolute left-4 top-[calc(1rem+env(safe-area-inset-top,0px))] grid size-8 place-items-center text-white/90"
+        aria-label="关闭引导"
+      >
+        <X size={28} strokeWidth={2.2} />
+      </button>
+      <div className="pointer-events-none absolute right-5 top-[calc(0.75rem+env(safe-area-inset-top,0px))] text-5xl font-black leading-none text-white">
+        ···
+      </div>
+      <div className="pointer-events-none absolute right-16 top-[calc(4.25rem+env(safe-area-inset-top,0px))] h-[2px] w-32 origin-right -rotate-45 rounded-full bg-white shadow-[0_0_16px_rgba(255,255,255,0.55)]">
+        <span className="absolute right-0 top-1/2 size-4 -translate-y-1/2 rotate-45 border-r-[3px] border-t-[3px] border-white" />
+      </div>
+      <div className="flex min-h-svh items-start justify-center pt-[calc(8rem+env(safe-area-inset-top,0px))]">
+        <div className="w-full max-w-[20rem] rounded-lg border border-white/18 bg-white/14 px-5 py-5 text-left shadow-[0_24px_70px_rgba(0,0,0,0.32)] backdrop-blur-md">
+          <p className="text-xl font-black text-white">请在浏览器中打开</p>
+          <p className="mt-3 text-sm leading-6 text-white/82">
+            点击右上角菜单，选择“在浏览器打开”，再点「App 内打开」即可跳转到 App。
+          </p>
+          <div className="mt-4 inline-flex items-center rounded-full bg-primary/95 px-3 py-1 text-xs font-bold text-primary-foreground">
+            打开后会继续停留在这条分享记录
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
 
 function Metric({ icon, label, value, unit }: { icon: ReactNode; label: string; value: string; unit: string }) {
   return (
-    <div className="rounded-md border border-border bg-muted/40 p-3">
-      <div className="flex items-center gap-2 text-primary">{icon}<span className="text-xs font-semibold">{label}</span></div>
-      <div className="mt-2 flex items-end gap-1">
-        <span className="text-2xl font-bold leading-none text-foreground">{value}</span>
-        <span className="text-xs font-semibold text-muted-foreground">{unit}</span>
+    <div className="flex min-h-11 min-w-0 items-center justify-between gap-1.5 rounded-sm bg-card px-2 py-1.5 shadow-[inset_0_0_0_1px_rgb(226_232_240/0.72)]">
+      <div className="flex min-w-0 items-center gap-1 text-primary">
+        {icon}
+        <span className="truncate text-[0.68rem] font-bold text-muted-foreground">{label}</span>
+      </div>
+      <div className="flex shrink-0 items-baseline gap-0.5 whitespace-nowrap">
+        <span className="text-[1.3rem] font-black leading-none text-foreground">{value}</span>
+        <span className="text-[0.68rem] font-bold text-muted-foreground">{unit}</span>
       </div>
     </div>
   )

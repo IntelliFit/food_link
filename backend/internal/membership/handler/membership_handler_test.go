@@ -29,6 +29,11 @@ type mockMembershipService struct {
 	rewardCenterErr              error
 	claimSharePosterRewardResult map[string]any
 	claimSharePosterRewardErr    error
+	papaySigningResult           map[string]any
+	papaySigningErr              error
+	papayCancelResult            map[string]any
+	papayCancelErr               error
+	papayNotifyErr               error
 }
 
 func (m *mockMembershipService) ListPlans(ctx context.Context, userID string) ([]map[string]any, error) {
@@ -59,6 +64,21 @@ func (m *mockMembershipService) HandleWechatNotify(ctx context.Context, headers 
 	}
 	return map[string]any{"code": "SUCCESS", "message": "成功"}, m.wechatNotifyErr
 }
+func (m *mockMembershipService) CreatePapaySigning(ctx context.Context, userID, planCode string) (map[string]any, error) {
+	return m.papaySigningResult, m.papaySigningErr
+}
+func (m *mockMembershipService) CancelPapayContract(ctx context.Context, userID string) (map[string]any, error) {
+	return m.papayCancelResult, m.papayCancelErr
+}
+func (m *mockMembershipService) HandlePapayContractNotify(ctx context.Context, body []byte) error {
+	return m.papayNotifyErr
+}
+func (m *mockMembershipService) HandlePapayTerminateNotify(ctx context.Context, body []byte) error {
+	return m.papayNotifyErr
+}
+func (m *mockMembershipService) HandlePapayPaymentNotify(ctx context.Context, body []byte) error {
+	return m.papayNotifyErr
+}
 func (m *mockMembershipService) ClaimSharePosterReward(ctx context.Context, userID string, input service.SharePosterRewardClaimInput) (map[string]any, error) {
 	return m.claimSharePosterRewardResult, m.claimSharePosterRewardErr
 }
@@ -75,6 +95,10 @@ func setupRouter(h *MembershipHandler) *gin.Engine {
 	r.POST("/api/membership/pay/create", h.CreatePayment)
 	r.POST("/api/membership/pay/sync", h.SyncPayment)
 	r.POST("/api/payment/wechat/notify/membership", h.WechatNotify)
+	r.POST("/api/membership/auto-renew/signing", h.CreatePapaySigning)
+	r.POST("/api/membership/auto-renew/cancel", h.CancelPapayContract)
+	r.POST("/api/payment/wechat/papay/contract/notify", h.PapayContractNotify)
+	r.POST("/api/payment/wechat/papay/pay/notify", h.PapayPaymentNotify)
 	r.POST("/api/payment/wechat/papay/contract/terminate-notify", h.PapayContractTerminateNotify)
 	r.POST("/api/membership/rewards/share-poster/claim", h.ClaimSharePosterReward)
 	return r

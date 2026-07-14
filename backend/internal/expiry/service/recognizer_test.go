@@ -1,12 +1,10 @@
 package service
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
+	"strings"
 	"testing"
 
 	commonerrors "food_link/backend/internal/common/errors"
@@ -16,57 +14,60 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type expiryRoundTripFunc func(*http.Request) (*http.Response, error)
-
-func (f expiryRoundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
-	return f(req)
+type expiryVisionClientStub struct {
+	result      map[string]any
+	err         error
+	calls       int
+	prompt      string
+	imageURLs   []string
+	temperature float64
+	model       string
 }
 
-func newTestExpiryRecognizer(handler expiryRoundTripFunc) *Recognizer {
-	recognizer := NewRecognizer(&config.Config{
-		External: config.ExternalConfig{
-			DoubaoAPIKey: "fake-key",
-			OfoxAIAPIKey: "fake-ofox-key",
-		},
-	})
-	recognizer.client = &http.Client{Transport: handler}
+func (s *expiryVisionClientStub) AnalyzeWithImagesAndTemperatureModel(_ context.Context, prompt string, imageURLs []string, temperature float64, modelName string) (map[string]any, error) {
+	s.calls++
+	s.prompt = prompt
+	s.imageURLs = append([]string(nil), imageURLs...)
+	s.temperature = temperature
+	s.model = modelName
+	return s.result, s.err
+}
+
+func newTestExpiryRecognizer(client *expiryVisionClientStub) *Recognizer {
+	recognizer := NewRecognizer(&config.Config{})
+	recognizer.ConfigureVisionClient(client)
 	return recognizer
 }
 
-func TestRecognizerRecognizeSuccess(t *testing.T) {
-	recognizer := newTestExpiryRecognizer(func(req *http.Request) (*http.Response, error) {
-		assert.Equal(t, "https://api.ofox.ai/v1/chat/completions", req.URL.String())
-		var body map[string]any
-		require.NoError(t, json.NewDecoder(req.Body).Decode(&body))
-		assert.Equal(t, "gemini-3-flash-preview", body["model"])
-		assert.Equal(t, "medium", body["reasoning_effort"])
-
-		responseBody := `{"choices":[{"message":{"content":"{\"items\":[{\"food_name\":\"牛奶\",\"category\":\"乳制品\",\"storage_type\":\"refrigerated\",\"quantity_note\":\"1盒\",\"expire_date\":\"2026-05-12\",\"confidence\":0.8}]}"}}]}`
-		return &http.Response{
-			StatusCode: http.StatusOK,
-			Body:       io.NopCloser(bytes.NewBufferString(responseBody)),
-			Header:     make(http.Header),
-		}, nil
-	})
+func TestRecognizerRecognizeSuccessUsesGemini35Client(t *testing.T) {
+	client := &expiryVisionClientStub{result: map[string]any{
+		"items": []any{map[string]any{
+			"food_name":     "牛奶",
+			"category":      "乳制品",
+			"storage_type":  "refrigerated",
+			"quantity_note": "1盒",
+			"expire_date":   "2026-08-12",
+			"confidence":    0.8,
+		}},
+	}}
+	recognizer := newTestExpiryRecognizer(client)
 
 	result, err := recognizer.Recognize(context.Background(), RecognizeInput{
-		ImageURLs: []string{"https://example.com/milk.jpg"},
+		ImageURLs:         []string{"https://example.com/milk.jpg"},
+		AdditionalContext: "今晚刚买的",
 	})
 
 	require.NoError(t, err)
 	require.Len(t, result.Items, 1)
 	assert.Equal(t, "牛奶", result.Items[0]["food_name"])
+	assert.Equal(t, expiryRecognitionModel, client.model)
+	assert.Equal(t, []string{"https://example.com/milk.jpg"}, client.imageURLs)
+	assert.Equal(t, 0.2, client.temperature)
+	assert.Contains(t, client.prompt, "今晚刚买的")
 }
 
 func TestRecognizerRecognizeNoItemsReturnsBadRequest(t *testing.T) {
-	recognizer := newTestExpiryRecognizer(func(req *http.Request) (*http.Response, error) {
-		responseBody := `{"choices":[{"message":{"content":"{\"items\":[]}"}}]}`
-		return &http.Response{
-			StatusCode: http.StatusOK,
-			Body:       io.NopCloser(bytes.NewBufferString(responseBody)),
-			Header:     make(http.Header),
-		}, nil
-	})
+	recognizer := newTestExpiryRecognizer(&expiryVisionClientStub{result: map[string]any{"items": []any{}}})
 
 	_, err := recognizer.Recognize(context.Background(), RecognizeInput{
 		ImageURLs: []string{"https://example.com/not-food.jpg"},
@@ -78,14 +79,8 @@ func TestRecognizerRecognizeNoItemsReturnsBadRequest(t *testing.T) {
 	assert.Contains(t, appErr.Message, "未识别到可用于保质期录入的食物")
 }
 
-func TestRecognizerRecognizeUpstreamErrorReturnsBadGateway(t *testing.T) {
-	recognizer := newTestExpiryRecognizer(func(req *http.Request) (*http.Response, error) {
-		return &http.Response{
-			StatusCode: http.StatusInternalServerError,
-			Body:       io.NopCloser(bytes.NewBufferString(`{"error":"bad upstream"}`)),
-			Header:     http.Header{"Content-Type": []string{"application/json"}},
-		}, nil
-	})
+func TestRecognizerRecognizeUpstreamErrorReturnsFriendlyBadGateway(t *testing.T) {
+	recognizer := newTestExpiryRecognizer(&expiryVisionClientStub{err: errors.New("gemini api error 500: contents is required")})
 
 	_, err := recognizer.Recognize(context.Background(), RecognizeInput{
 		ImageURLs: []string{"https://example.com/milk.jpg"},
@@ -95,9 +90,10 @@ func TestRecognizerRecognizeUpstreamErrorReturnsBadGateway(t *testing.T) {
 	require.True(t, errors.As(err, &appErr))
 	assert.Equal(t, http.StatusBadGateway, appErr.HTTPStatus)
 	assert.Equal(t, "保质期识别服务暂时不可用，请稍后再试", appErr.Message)
+	assert.NotContains(t, strings.ToLower(appErr.Message), "gemini")
 }
 
-func TestRecognizerRecognizeMissingConfigReturnsServerError(t *testing.T) {
+func TestRecognizerRecognizeMissingClientReturnsServerError(t *testing.T) {
 	recognizer := NewRecognizer(&config.Config{})
 
 	_, err := recognizer.Recognize(context.Background(), RecognizeInput{
@@ -110,56 +106,15 @@ func TestRecognizerRecognizeMissingConfigReturnsServerError(t *testing.T) {
 	assert.Equal(t, "后端未配置保质期识别模型", appErr.Message)
 }
 
-func TestRecognizerFallsBackToDoubaoWhenGeminiFails(t *testing.T) {
-	callCount := 0
-	recognizer := newTestExpiryRecognizer(func(req *http.Request) (*http.Response, error) {
-		callCount++
-		if callCount == 1 {
-			assert.Equal(t, "https://api.ofox.ai/v1/chat/completions", req.URL.String())
-			return &http.Response{
-				StatusCode: http.StatusTooManyRequests,
-				Body:       io.NopCloser(bytes.NewBufferString(`{"error":{"message":"Resource exhausted"}}`)),
-				Header:     http.Header{"Content-Type": []string{"application/json"}},
-			}, nil
-		}
-		assert.Equal(t, "https://ark.cn-beijing.volces.com/api/v3/chat/completions", req.URL.String())
-		responseBody := `{"choices":[{"message":{"content":"{\"items\":[{\"food_name\":\"酸奶\",\"category\":\"乳制品\",\"storage_type\":\"refrigerated\",\"expire_date\":\"2026-05-12\",\"confidence\":0.8}]}"}}]}`
-		return &http.Response{
-			StatusCode: http.StatusOK,
-			Body:       io.NopCloser(bytes.NewBufferString(responseBody)),
-			Header:     make(http.Header),
-		}, nil
-	})
+func TestRecognizerPinsGemini35Model(t *testing.T) {
+	client := &expiryVisionClientStub{result: map[string]any{
+		"items": []any{map[string]any{"food_name": "酸奶", "expire_date": "2026-08-12"}},
+	}}
+	recognizer := NewRecognizer(&config.Config{External: config.ExternalConfig{Gemini35Model: "wrong-model"}})
+	recognizer.ConfigureVisionClient(client)
 
-	result, err := recognizer.Recognize(context.Background(), RecognizeInput{
-		ImageURLs: []string{"https://example.com/yogurt.jpg"},
-	})
+	_, err := recognizer.Recognize(context.Background(), RecognizeInput{ImageURLs: []string{"https://example.com/yogurt.jpg"}})
 
 	require.NoError(t, err)
-	require.Len(t, result.Items, 1)
-	assert.Equal(t, 2, callCount)
-	assert.Equal(t, "酸奶", result.Items[0]["food_name"])
-}
-
-func TestRecognizerUsesGeminiWhenOnlyOfoxConfigured(t *testing.T) {
-	recognizer := NewRecognizer(&config.Config{
-		External: config.ExternalConfig{OfoxAIAPIKey: "fake-ofox-key"},
-	})
-	recognizer.client = &http.Client{Transport: expiryRoundTripFunc(func(req *http.Request) (*http.Response, error) {
-		assert.Equal(t, "https://api.ofox.ai/v1/chat/completions", req.URL.String())
-		responseBody := `{"choices":[{"message":{"content":"{\"items\":[{\"food_name\":\"牛奶\",\"category\":\"乳制品\",\"storage_type\":\"refrigerated\",\"expire_date\":\"2026-05-12\",\"confidence\":0.8}]}"}}]}`
-		return &http.Response{
-			StatusCode: http.StatusOK,
-			Body:       io.NopCloser(bytes.NewBufferString(responseBody)),
-			Header:     make(http.Header),
-		}, nil
-	})}
-
-	result, err := recognizer.Recognize(context.Background(), RecognizeInput{
-		ImageURLs: []string{"https://example.com/milk.jpg"},
-	})
-
-	require.NoError(t, err)
-	require.Len(t, result.Items, 1)
-	assert.Equal(t, "牛奶", result.Items[0]["food_name"])
+	assert.Equal(t, expiryRecognitionModel, client.model)
 }

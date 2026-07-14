@@ -1541,6 +1541,8 @@ export interface MembershipStatus {
   current_period_start?: string | null
   expires_at?: string | null
   last_paid_at?: string | null
+  auto_renew?: boolean
+  auto_renew_contract?: MembershipAutoRenewContract | null
   /** 旧拍照日限，当前关闭，可能为 null */
   daily_limit: number | null
   daily_used: number | null
@@ -1592,6 +1594,23 @@ export interface MembershipStatus {
   /** 当前付费状态是否已按创始翻倍生效 */
   early_user_paid_bonus_active?: boolean
   points_balance?: number | null
+}
+
+export interface MembershipAutoRenewContract {
+  status: 'pending' | 'active' | 'termination_requested'
+  plan_code: string
+  template_id: string
+  renewal_state: string
+  next_action_at?: string | null
+  renewal_due_at?: string | null
+}
+
+export interface CreateMembershipAutoRenewSigningResponse {
+  target_app_id: string
+  path: string
+  extra_data: Record<string, any>
+  plan_code: string
+  plan_name: string
 }
 
 export interface ClaimSharePosterRewardResponse {
@@ -4861,6 +4880,29 @@ export async function createMembershipPayment(planCode: string): Promise<CreateM
     console.error('创建会员支付单失败:', error)
     throw new Error(error.message || '创建会员支付单失败')
   }
+}
+
+/** 创建微信委托代扣纯签约参数。模板 ID 只在服务端按套餐编码映射。 */
+export async function createMembershipAutoRenewSigning(planCode: string): Promise<CreateMembershipAutoRenewSigningResponse> {
+  const response = await authenticatedRequest('/api/membership/auto-renew/signing', {
+    method: 'POST',
+    data: { plan_code: planCode },
+  })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.detail || '创建自动续费签约失败')
+  }
+  return response.data as CreateMembershipAutoRenewSigningResponse
+}
+
+/** 关闭当前用户唯一的微信自动续费合同，不影响已付费会员周期。 */
+export async function cancelMembershipAutoRenew(): Promise<{ cancelled: boolean }> {
+  const response = await authenticatedRequest('/api/membership/auto-renew/cancel', {
+    method: 'POST',
+  })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.detail || '关闭自动续费失败')
+  }
+  return response.data as { cancelled: boolean }
 }
 
 export async function syncMembershipPayment(orderNo: string): Promise<SyncMembershipPaymentResponse> {

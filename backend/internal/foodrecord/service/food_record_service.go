@@ -367,6 +367,12 @@ func normalizeFoodItems(items []domain.FoodItem) []domain.FoodItem {
 		if items[i].Intake < 0 {
 			items[i].Intake = 0
 		}
+		if items[i].WaterMl < 0 {
+			items[i].WaterMl = 0
+		}
+		if items[i].Weight > 0 && items[i].WaterMl > items[i].Weight {
+			items[i].WaterMl = items[i].Weight
+		}
 	}
 	return items
 }
@@ -450,6 +456,9 @@ func totalFoodWaterIntakeMl(items []domain.FoodItem) int {
 		waterMl := item.WaterMl
 		if waterMl <= 0 {
 			continue
+		}
+		if item.Weight > 0 && waterMl > item.Weight {
+			waterMl = item.Weight
 		}
 		ratio := item.Ratio
 		if ratio > 100 {
@@ -974,6 +983,9 @@ func (s *FoodRecordService) hydrateRecordNutrientsFromTask(ctx context.Context, 
 		if record.Items[index].WaterMl <= 0 && source.waterMl > 0 {
 			record.Items[index].WaterMl = source.waterMl
 		}
+		if record.Items[index].Weight > 0 && record.Items[index].WaterMl > record.Items[index].Weight {
+			record.Items[index].WaterMl = record.Items[index].Weight
+		}
 	}
 }
 
@@ -1154,7 +1166,7 @@ func (s *FoodRecordService) collectFoodRecordImagePaths(ctx context.Context, rec
 	if record == nil {
 		return nil
 	}
-	paths := make([]string, 0)
+	explicitPaths := make([]string, 0)
 	seen := map[string]bool{}
 	appendRaw := func(raw string) {
 		raw = strings.TrimSpace(raw)
@@ -1162,7 +1174,7 @@ func (s *FoodRecordService) collectFoodRecordImagePaths(ctx context.Context, rec
 			return
 		}
 		seen[raw] = true
-		paths = append(paths, raw)
+		explicitPaths = append(explicitPaths, raw)
 	}
 	for _, imagePath := range record.ImagePaths {
 		appendRaw(imagePath)
@@ -1170,15 +1182,46 @@ func (s *FoodRecordService) collectFoodRecordImagePaths(ctx context.Context, rec
 	if record.ImagePath != nil {
 		appendRaw(*record.ImagePath)
 	}
-	if len(paths) > 0 {
-		return paths
+	if s.recordRepo == nil {
+		return explicitPaths
 	}
-	if s.recordRepo != nil {
-		for _, raw := range s.recordRepo.LookupManualSourceImagePaths(ctx, record.Items) {
-			appendRaw(raw)
+	fallbackPaths := s.recordRepo.LookupManualSourceImagePaths(ctx, record.Items)
+	if len(explicitPaths) == 0 {
+		return fallbackPaths
+	}
+	return filterManualSourceFallbackImagePaths(explicitPaths, fallbackPaths, s.resolveFoodImageURL)
+}
+
+func filterManualSourceFallbackImagePaths(explicitPaths, fallbackPaths []string, resolve func(string) string) []string {
+	if len(explicitPaths) == 0 || len(fallbackPaths) == 0 {
+		return explicitPaths
+	}
+	fallbackResolved := make(map[string]struct{}, len(fallbackPaths))
+	for _, raw := range fallbackPaths {
+		resolved := resolve(raw)
+		if resolved == "" {
+			continue
 		}
+		fallbackResolved[resolved] = struct{}{}
 	}
-	return paths
+	if len(fallbackResolved) == 0 {
+		return explicitPaths
+	}
+	filtered := make([]string, 0, len(explicitPaths))
+	for _, raw := range explicitPaths {
+		resolved := resolve(raw)
+		if resolved == "" {
+			continue
+		}
+		if _, ok := fallbackResolved[resolved]; ok {
+			continue
+		}
+		filtered = append(filtered, raw)
+	}
+	if len(filtered) > 0 {
+		return filtered
+	}
+	return explicitPaths
 }
 
 func (s *FoodRecordService) normalizeImagePaths(paths []string) []string {

@@ -2,6 +2,7 @@ package repo
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	fooddomain "food_link/backend/internal/foodrecord/domain"
@@ -202,6 +203,107 @@ func TestManualFoodServingProfile(t *testing.T) {
 	assert.Equal(t, "450ml", coffee.ServingPresets[1].Label)
 }
 
+func TestManualFoodServingProfileUsesWholeEggPortionForTeaEgg(t *testing.T) {
+	teaEgg := manualFoodResultFromFrequentRecord(
+		"茶叶蛋",
+		56,
+		87.16964285714286,
+		142.68892857142856,
+		12.040921717171717,
+		1.5992406204906204,
+		9.752362914862914,
+		json.RawMessage(`{
+			"name":"茶叶蛋",
+			"weight":87.16964285714286,
+			"nutrients":{
+				"calories":142.68892857142856,
+				"protein":12.040921717171717,
+				"carbs":1.5992406204906204,
+				"fat":9.752362914862914
+			}
+		}`),
+	)
+
+	assert.Equal(t, "piece", teaEgg.DisplayUnit)
+	assert.Equal(t, "个", teaEgg.DisplayUnitLabel)
+	assert.Equal(t, 55.0, teaEgg.DefaultWeightGrams)
+	assert.Equal(t, "1个", teaEgg.PortionLabel)
+	assert.InDelta(t, 90.03, teaEgg.TotalCalories, 0.01)
+	require.Len(t, teaEgg.ServingPresets, 3)
+}
+
+func TestFrequentFoodKeepsAggregatedMacrosWhenRepresentativeRecordDiffers(t *testing.T) {
+	item := manualFoodResultFromFrequentRecord(
+		"茶叶蛋",
+		56,
+		87.16964285714286,
+		142.68892857142856,
+		12.040921717171717,
+		1.5992406204906204,
+		9.752362914862914,
+		json.RawMessage(`{
+			"name":"茶叶蛋",
+			"weight":50,
+			"nutrients":{
+				"calories":100,
+				"protein":10,
+				"carbs":2,
+				"fat":6,
+				"sodiumMg":100
+			}
+		}`),
+	)
+
+	assert.InDelta(t, 163.69, item.NutrientsPer100g.Calories, 0.01)
+	assert.InDelta(t, 13.81, item.NutrientsPer100g.Protein, 0.01)
+	assert.InDelta(t, 90.03, item.TotalCalories, 0.01)
+	assert.InDelta(t, 110, item.ExtraNutrients.SodiumMg, 0.01)
+}
+
+func TestIsEggLikeFoodRejectsEggComponentsAndCompoundFoods(t *testing.T) {
+	assert.False(t, isEggLikeFood("茶叶蛋蛋白"))
+	assert.False(t, isEggLikeFood("鸡蛋面"))
+	assert.False(t, isEggLikeFood("番茄炒鸡蛋"))
+	assert.False(t, isEggLikeFood("鹌鹑蛋"))
+	assert.False(t, isEggLikeFood("eggplant"))
+	assert.False(t, isEggLikeFood("egg white"))
+	assert.True(t, isEggLikeFood("茶叶蛋/煮鸡蛋"))
+}
+
+func TestManualFoodServingProfileUsesSpecificEggComponentWeights(t *testing.T) {
+	tests := []struct {
+		name   string
+		weight float64
+	}{
+		{name: "茶叶蛋蛋白", weight: 33},
+		{name: "鸡蛋蛋黄", weight: 17},
+		{name: "卤鹌鹑蛋", weight: 10},
+		{name: "咸鸭蛋", weight: 65},
+		{name: "鹅蛋", weight: 180},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			item := manualFoodResultFromFrequentRecord(tt.name, 6, 65.8333333333, 33.6333333333, 7.345, 0.568, 0.12, nil)
+			assert.Equal(t, "piece", item.DisplayUnit)
+			assert.Equal(t, tt.weight, item.DefaultWeightGrams)
+			require.Len(t, item.ServingPresets, 3)
+			assert.Equal(t, tt.weight, item.ServingPresets[1].Grams)
+		})
+	}
+
+	proteinPowder := manualFoodResultFromFrequentRecord("乳清蛋白粉", 6, 31.25, 120, 24, 3, 2, nil)
+	assert.Equal(t, "g", proteinPowder.DisplayUnit)
+	assert.Equal(t, 31.0, proteinPowder.DefaultWeightGrams)
+}
+
+func TestFrequentFoodRoundsHistoricalAverageWeightWithoutChangingDensity(t *testing.T) {
+	item := manualFoodResultFromFrequentRecord("鸡胸肉", 10, 65.8333333333, 100, 20, 0, 2, nil)
+	assert.Equal(t, 66.0, item.DefaultWeightGrams)
+	assert.Equal(t, "66g", item.PortionLabel)
+	assert.InDelta(t, 151.8987, item.NutrientsPer100g.Calories, 0.001)
+	assert.InDelta(t, 100.2532, item.TotalCalories, 0.001)
+}
+
 func TestManualFoodResultFromPackagedUsesOnlyPrimaryImage(t *testing.T) {
 	spec := "15g*6袋"
 	basis := "100g"
@@ -231,6 +333,9 @@ func TestManualFoodResultFromPackagedUsesOnlyPrimaryImage(t *testing.T) {
 	assert.Equal(t, "snack", item.Category)
 	assert.Equal(t, "g", item.DisplayUnit)
 	assert.Equal(t, 90.0, item.DefaultWeightGrams)
+	assert.Equal(t, 468.0, item.TotalCalories)
+	assert.Equal(t, 54.0, item.TotalCarbs)
+	assert.Equal(t, 25.2, item.TotalFat)
 	assert.Equal(t, 520.0, item.NutrientsPer100g.Calories)
 	assert.Contains(t, item.Title, "番茄味")
 }
@@ -271,8 +376,76 @@ func TestManualFoodResultFromPackagedUsesNetContentValue(t *testing.T) {
 
 	assert.Equal(t, "士力架 花生夹心巧克力 70g", item.Title)
 	assert.Equal(t, 70.0, item.DefaultWeightGrams)
+	assert.InDelta(t, 340.9, item.TotalCalories, 0.01)
+	assert.InDelta(t, 43.4, item.TotalCarbs, 0.01)
 	assert.Equal(t, "70g", item.PortionLabel)
 	assert.Contains(t, item.NutritionHighlights, "净含量 70g")
+}
+
+func TestManualFoodResultFromPackagedScalesPer100gToServingWeight(t *testing.T) {
+	spec := "营养成分表每份25克"
+	item := manualFoodResultFromPackaged(fooddomain.PackagedFood{
+		ID:              "pkg-pocky",
+		Brand:           "格力高",
+		ProductName:     "百奇巧克力味",
+		SpecText:        &spec,
+		NetWeightG:      50,
+		ServingWeightG:  25,
+		KcalPer100g:     504,
+		ProteinPer100g:  9.7,
+		CarbsPer100g:    64.5,
+		FatPer100g:      22.8,
+		SodiumMgPer100g: 220,
+	}, 0.9)
+
+	assert.Equal(t, 25.0, item.DefaultWeightGrams)
+	assert.Equal(t, "25g", item.PortionLabel)
+	assert.Equal(t, 126.0, item.TotalCalories)
+	assert.InDelta(t, 2.425, item.TotalProtein, 0.001)
+	assert.InDelta(t, 16.125, item.TotalCarbs, 0.001)
+	assert.InDelta(t, 5.7, item.TotalFat, 0.001)
+	assert.Equal(t, 504.0, item.NutrientsPer100g.Calories)
+	assert.Equal(t, 64.5, item.NutrientsPer100g.Carbs)
+	assert.Equal(t, 55.0, item.ExtraNutrients.SodiumMg)
+}
+
+func TestManualFoodResultFromPackagedRejectsPockyServingWithoutEvidence(t *testing.T) {
+	item := manualFoodResultFromPackaged(fooddomain.PackagedFood{
+		ID:             "pkg-pocky-legacy",
+		Brand:          "格力高",
+		ProductName:    "百奇巧克力味 50g",
+		NetWeightG:     50,
+		ServingWeightG: 25,
+		KcalPer100g:    504,
+	}, 0.9)
+
+	assert.Equal(t, 50.0, item.DefaultWeightGrams)
+	assert.Equal(t, "50g", item.PortionLabel)
+	assert.Equal(t, 252.0, item.TotalCalories)
+}
+
+func TestManualFoodResultFromPackagedRejectsServingWeightAboveNetWeight(t *testing.T) {
+	item := manualFoodResultFromPackaged(fooddomain.PackagedFood{
+		ID:             "pkg-sausage",
+		ProductName:    "火腿肠",
+		NetWeightG:     45,
+		ServingWeightG: 100,
+		KcalPer100g:    185,
+		ProteinPer100g: 12.5,
+		CarbsPer100g:   7,
+		FatPer100g:     12,
+	}, 0.9)
+
+	assert.Equal(t, 45.0, item.DefaultWeightGrams)
+	assert.Equal(t, "45g", item.PortionLabel)
+	assert.InDelta(t, 83.25, item.TotalCalories, 0.01)
+}
+
+func TestIsPhysicallyImplausibleFrequentFood(t *testing.T) {
+	assert.True(t, isPhysicallyImplausibleFrequentFood(22.93, 239.6, 8, 12, 17.8))
+	assert.True(t, isPhysicallyImplausibleFrequentFood(10, 164.2, 8, 10, 10.27))
+	assert.False(t, isPhysicallyImplausibleFrequentFood(55, 85, 6.8, 0.8, 6))
+	assert.False(t, isPhysicallyImplausibleFrequentFood(25, 126, 2.4, 16.1, 5.7))
 }
 
 func TestManualFoodResultFromPackagedScalesNutrientsToDefaultWeight(t *testing.T) {
@@ -340,6 +513,87 @@ func TestEnrichManualFoodResultsWithNutritionLibrary(t *testing.T) {
 	require.NotNil(t, items[0].ImagePath)
 	assert.Equal(t, "https://cdn-food-images.example.com/standard-food/backfill/rice.png", *items[0].ImagePath)
 	require.NotEmpty(t, items[0].ImagePaths)
+}
+
+func TestEnrichManualFoodPrefersExactCanonicalNameOverAliasTarget(t *testing.T) {
+	db := setupTestDB(t)
+	exactImage := "standard-food/tea-egg.jpg"
+	aliasImage := "standard-food/egg.jpg"
+	r := NewManualFoodRepo(db)
+	require.NoError(t, db.Create(&fooddomain.FoodNutrition{
+		ID:             "tea-egg",
+		CanonicalName:  "茶叶蛋",
+		NormalizedName: "茶叶蛋",
+		ImagePath:      &exactImage,
+		ImagePaths:     []string{exactImage},
+		KcalPer100g:    155,
+		IsActive:       true,
+	}).Error)
+	require.NoError(t, db.Create(&fooddomain.FoodNutrition{
+		ID:             "whole-egg",
+		CanonicalName:  "鸡蛋(全蛋)",
+		NormalizedName: "鸡蛋全蛋",
+		ImagePath:      &aliasImage,
+		ImagePaths:     []string{aliasImage},
+		KcalPer100g:    144,
+		IsActive:       true,
+	}).Error)
+	require.NoError(t, db.Create(&fooddomain.FoodNutritionAlias{
+		ID:              "tea-egg-alias",
+		FoodID:          "whole-egg",
+		AliasName:       "茶叶蛋",
+		NormalizedAlias: "茶叶蛋",
+	}).Error)
+
+	items := r.enrichManualFoodResultsWithNutritionLibrary(context.Background(), []domain.ManualFoodResult{{
+		ID:                 "catalog:茶叶蛋",
+		Source:             "nutrition_library",
+		Title:              "茶叶蛋",
+		DefaultWeightGrams: 55,
+	}})
+
+	require.Len(t, items, 1)
+	assert.Equal(t, "tea-egg", items[0].ID)
+	assert.Equal(t, 155.0, items[0].NutrientsPer100g.Calories)
+}
+
+func TestEnrichManualFoodKeepsExactCanonicalNameWithoutImage(t *testing.T) {
+	db := setupTestDB(t)
+	aliasImage := "standard-food/egg.jpg"
+	r := NewManualFoodRepo(db)
+	require.NoError(t, db.Create(&fooddomain.FoodNutrition{
+		ID:             "tea-egg-no-image",
+		CanonicalName:  "茶叶蛋",
+		NormalizedName: "茶叶蛋",
+		KcalPer100g:    155,
+		IsActive:       true,
+	}).Error)
+	require.NoError(t, db.Create(&fooddomain.FoodNutrition{
+		ID:             "whole-egg-with-image",
+		CanonicalName:  "鸡蛋(全蛋)",
+		NormalizedName: "鸡蛋全蛋",
+		ImagePath:      &aliasImage,
+		ImagePaths:     []string{aliasImage},
+		KcalPer100g:    144,
+		IsActive:       true,
+	}).Error)
+	require.NoError(t, db.Create(&fooddomain.FoodNutritionAlias{
+		ID:              "tea-egg-alias-with-image",
+		FoodID:          "whole-egg-with-image",
+		AliasName:       "茶叶蛋",
+		NormalizedAlias: "茶叶蛋",
+	}).Error)
+
+	items := r.enrichManualFoodResultsWithNutritionLibrary(context.Background(), []domain.ManualFoodResult{{
+		ID:                 "catalog:茶叶蛋",
+		Source:             "nutrition_library",
+		Title:              "茶叶蛋",
+		DefaultWeightGrams: 55,
+	}})
+
+	require.Len(t, items, 1)
+	assert.Equal(t, "tea-egg-no-image", items[0].ID)
+	assert.Equal(t, 155.0, items[0].NutrientsPer100g.Calories)
 }
 
 func TestManualFoodCatalogUserScopedCategoriesAllowAnonymous(t *testing.T) {

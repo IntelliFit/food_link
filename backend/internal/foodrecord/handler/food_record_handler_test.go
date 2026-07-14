@@ -144,6 +144,7 @@ func setupRouter(h *FoodRecordHandler) *gin.Engine {
 	r.GET("/api/food-record/:record_id", h.GetFoodRecord)
 	r.PUT("/api/food-record/:record_id", h.UpdateFoodRecord)
 	r.DELETE("/api/food-record/:record_id", h.DeleteFoodRecord)
+	r.OPTIONS("/api/food-record/share/:record_id", h.ShareFoodRecordOptions)
 	r.GET("/api/food-record/share/:record_id", h.ShareFoodRecord)
 	r.GET("/share/food-record/:record_id", h.ShareFoodRecordPage)
 	r.POST("/api/upload-analyze-image", h.UploadAnalyzeImage)
@@ -396,6 +397,50 @@ func TestShareFoodRecord(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+func TestShareFoodRecordAllowsHealthymaxCORS(t *testing.T) {
+	mockSvc := &mockFoodRecordService{shareRecord: &domain.FoodRecord{ID: "r1", MealType: "lunch"}}
+	h := NewFoodRecordHandler(mockSvc, nil, nil)
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/api/food-record/share/r1", nil)
+	req.Header.Set("Origin", "https://healthymax.cn")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "https://healthymax.cn", w.Header().Get("Access-Control-Allow-Origin"))
+	assert.Equal(t, "Origin", w.Header().Get("Vary"))
+}
+
+func TestShareFoodRecordRejectsUnknownCORSOrigin(t *testing.T) {
+	mockSvc := &mockFoodRecordService{shareRecord: &domain.FoodRecord{ID: "r1", MealType: "lunch"}}
+	h := NewFoodRecordHandler(mockSvc, nil, nil)
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/api/food-record/share/r1", nil)
+	req.Header.Set("Origin", "https://evil.example")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Empty(t, w.Header().Get("Access-Control-Allow-Origin"))
+}
+
+func TestShareFoodRecordOptionsAllowsHealthymaxCORS(t *testing.T) {
+	h := NewFoodRecordHandler(nil, nil, nil)
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodOptions, "/api/food-record/share/r1", nil)
+	req.Header.Set("Origin", "https://healthymax.cn")
+	req.Header.Set("Access-Control-Request-Method", http.MethodGet)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNoContent, w.Code)
+	assert.Equal(t, "https://healthymax.cn", w.Header().Get("Access-Control-Allow-Origin"))
+	assert.Contains(t, w.Header().Get("Access-Control-Allow-Methods"), http.MethodGet)
 }
 
 func TestShareFoodRecordPageRedirectsToFrontend(t *testing.T) {

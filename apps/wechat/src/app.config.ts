@@ -78,6 +78,8 @@ export default defineAppConfig({
   // 否则会出现“应用仍是浅色态，但原生页面背景先变黑”的半黑半白混合态。
   darkmode: false,
   pages: mainPages,
+  // 微信支付委托代扣签约小程序，开通自动续费时由会员页跳转至该固定 AppID。
+  navigateToMiniProgramAppIdList: ['wxbd687630cd02ce1d'],
   subpackages: [
     {
       root: 'packageExtra',

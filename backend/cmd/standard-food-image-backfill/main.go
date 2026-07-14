@@ -55,20 +55,26 @@ type downloadedImage struct {
 	SHA256      string
 }
 
+var imageDownloadHTTPClient = func() *http.Client {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.TLSHandshakeTimeout = 30 * time.Second
+	return &http.Client{Transport: transport, Timeout: 60 * time.Second}
+}()
+
 type resultRow struct {
-	FoodID      string        `json:"food_id"`
-	FoodName    string        `json:"food_name"`
-	Status      string        `json:"status"`
-	Reason      string        `json:"reason,omitempty"`
-	Candidate   string        `json:"candidate,omitempty"`
-	TriedURLs   []string      `json:"tried_urls,omitempty"`
-	Query       string        `json:"query,omitempty"`
+	FoodID      string         `json:"food_id"`
+	FoodName    string         `json:"food_name"`
+	Status      string         `json:"status"`
+	Reason      string         `json:"reason,omitempty"`
+	Candidate   string         `json:"candidate,omitempty"`
+	TriedURLs   []string       `json:"tried_urls,omitempty"`
+	Query       string         `json:"query,omitempty"`
 	Decision    *imageDecision `json:"decision,omitempty"`
-	ObjectKey   string        `json:"object_key,omitempty"`
-	AccessURL   string        `json:"access_url,omitempty"`
-	Uploaded    bool          `json:"uploaded"`
-	DBUpdated   bool          `json:"db_updated"`
-	ProcessedAt time.Time     `json:"processed_at"`
+	ObjectKey   string         `json:"object_key,omitempty"`
+	AccessURL   string         `json:"access_url,omitempty"`
+	Uploaded    bool           `json:"uploaded"`
+	DBUpdated   bool           `json:"db_updated"`
+	ProcessedAt time.Time      `json:"processed_at"`
 }
 
 type stateFile struct {
@@ -87,43 +93,53 @@ type stateEntry struct {
 }
 
 type options struct {
-	configDir      string
-	outputDir      string
-	statePath      string
-	resultsPath    string
-	failedPath     string
-	visionAPIKeyPath string
-	dashscopeBaseURL string
-	limit          int
-	offset         int
-	maxCandidates  int
-	foodID         string
-	keyPrefix      string
-	model          string
-	threshold      float64
-	apply          bool
-	dryRun         bool
-	failedOnly     bool
-	demo           bool
-	testAPI        bool
-	demoImage      string
-	demoFood       string
-	localImage     string
-	trustLocal      bool
-	workers         int
-	imageSearch     string
-	foodIDs         string
-	successJSON     string
-	forceReprocess  bool
-	timeout         time.Duration
-	sleep             time.Duration
-	searchQueryLimit  int
-	searchPerQuery    int
-	bingPageOffset    int
-	timing            bool
-	statsOnly         bool
-	statsOutput       string
-	checkpointEvery   int
+	configDir               string
+	outputDir               string
+	statePath               string
+	resultsPath             string
+	failedPath              string
+	visionAPIKeyPath        string
+	dashscopeBaseURL        string
+	limit                   int
+	offset                  int
+	maxCandidates           int
+	foodID                  string
+	keyPrefix               string
+	model                   string
+	threshold               float64
+	apply                   bool
+	dryRun                  bool
+	failedOnly              bool
+	demo                    bool
+	testAPI                 bool
+	demoImage               string
+	demoFood                string
+	localImage              string
+	trustLocal              bool
+	workers                 int
+	imageSearch             string
+	foodIDs                 string
+	successJSON             string
+	forceReprocess          bool
+	timeout                 time.Duration
+	sleep                   time.Duration
+	searchQueryLimit        int
+	searchPerQuery          int
+	bingPageOffset          int
+	timing                  bool
+	statsOnly               bool
+	statsOutput             string
+	checkpointEvery         int
+	auditExisting           bool
+	auditOutput             string
+	auditMinUses            int
+	auditSearchReplacements bool
+	reviewedApply           bool
+	reviewedMissingReport   string
+	reviewedExistingReport  string
+	reviewedAllowlistReport string
+	reviewedOutput          string
+	reviewedMinConfidence   float64
 }
 
 func main() {
@@ -156,8 +172,20 @@ func main() {
 		}
 		return
 	}
+	if opts.reviewedApply {
+		if err := runReviewedImageApply(ctx, opts); err != nil {
+			log.Fatalf("复核图片写入失败: %v", err)
+		}
+		return
+	}
 	if err := ensureVisionModel(ctx, &opts); err != nil {
 		log.Fatalf("解析视觉模型失败: %v", err)
+	}
+	if opts.auditExisting {
+		if err := runExistingImageAudit(ctx, opts); err != nil {
+			log.Fatalf("已有图片审计失败: %v", err)
+		}
+		return
 	}
 	if err := runBackfill(ctx, opts); err != nil {
 		log.Fatalf("标准食物图片回填失败: %v", err)
@@ -173,6 +201,7 @@ func parseFlags() options {
 	flag.StringVar(&opts.failedPath, "failed-file", "", "failed jsonl path")
 	flag.StringVar(&opts.visionAPIKeyPath, "dashscope-api-key-file", "", "optional DashScope API key file override (default: backend/.env DASHSCOPE_API_KEY)")
 	flag.StringVar(&opts.dashscopeBaseURL, "dashscope-base-url", "", "DashScope OpenAI-compatible base URL (default: env DASHSCOPE_BASE_URL or Beijing endpoint)")
+	flag.StringVar(&opts.dashscopeBaseURL, "vision-base-url", "", "generic vision API base URL; alias of --dashscope-base-url")
 	flag.IntVar(&opts.limit, "limit", 0, "process at most N foods, 0 means all")
 	flag.IntVar(&opts.offset, "offset", 0, "skip first N foods")
 	flag.IntVar(&opts.maxCandidates, "max-candidates", 8, "max downloaded image candidates per food")
@@ -203,6 +232,16 @@ func parseFlags() options {
 	flag.BoolVar(&opts.statsOnly, "stats-only", false, "print backfill baseline stats and exit")
 	flag.StringVar(&opts.statsOutput, "stats-output", "", "write --stats-only JSON to this file")
 	flag.IntVar(&opts.checkpointEvery, "checkpoint-every", 1, "save state.json every N processed foods (0=only at end)")
+	flag.BoolVar(&opts.auditExisting, "audit-existing", false, "audit existing food images without changing COS or database")
+	flag.StringVar(&opts.auditOutput, "audit-output", "tmp/food-image-audit/report.json", "resumable JSON report for --audit-existing")
+	flag.IntVar(&opts.auditMinUses, "audit-min-uses", 0, "only audit foods referenced at least N times by manual records")
+	flag.BoolVar(&opts.auditSearchReplacements, "audit-search-replacements", false, "search and classify a replacement candidate for confident mismatches (always dry-run)")
+	flag.BoolVar(&opts.reviewedApply, "reviewed-apply", false, "revalidate high-confidence audit candidates and optionally apply with --apply")
+	flag.StringVar(&opts.reviewedMissingReport, "reviewed-missing-report", "", "missing-image success JSON used by --reviewed-apply")
+	flag.StringVar(&opts.reviewedExistingReport, "reviewed-existing-report", "", "existing-image audit JSON used by --reviewed-apply")
+	flag.StringVar(&opts.reviewedAllowlistReport, "reviewed-allowlist-report", "", "optional prior reviewed report; only entries with status=verified are eligible")
+	flag.StringVar(&opts.reviewedOutput, "reviewed-output", "tmp/food-image-audit/reviewed-apply-report.json", "atomic verification/apply manifest")
+	flag.Float64Var(&opts.reviewedMinConfidence, "reviewed-min-confidence", 0.95, "minimum confidence required in both audit and fresh verification")
 	flag.Parse()
 	if opts.imageSearch != "google" && opts.imageSearch != "bing" {
 		log.Fatalf("不支持的 image-search: %s（仅 google 或 bing）", opts.imageSearch)
@@ -668,28 +707,42 @@ func downloadCandidateImage(ctx context.Context, candidate imageCandidate, image
 }
 
 func downloadCandidateHTTP(ctx context.Context, candidate imageCandidate, imageSearch string) (*downloadedImage, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, candidate.ImageURL, nil)
-	if err != nil {
-		return nil, err
-	}
-	ua := browserUserAgent()
-	if imageSearch == "bing" {
-		ua = bingSearchUserAgent()
-	}
-	req.Header.Set("User-Agent", ua)
-	referer := strings.TrimSpace(candidate.PageURL)
-	if referer == "" {
-		switch imageSearch {
-		case "google":
-			referer = "https://www.google.com/"
-		case "bing":
-			referer = "https://cn.bing.com/images/search"
-		default:
-			referer = "https://www.bing.com/"
+	var resp *http.Response
+	var err error
+	for attempt := 0; attempt < 2; attempt++ {
+		req, reqErr := http.NewRequestWithContext(ctx, http.MethodGet, candidate.ImageURL, nil)
+		if reqErr != nil {
+			return nil, reqErr
+		}
+		ua := browserUserAgent()
+		if imageSearch == "bing" {
+			ua = bingSearchUserAgent()
+		}
+		req.Header.Set("User-Agent", ua)
+		referer := strings.TrimSpace(candidate.PageURL)
+		if referer == "" {
+			switch imageSearch {
+			case "google":
+				referer = "https://www.google.com/"
+			case "bing":
+				referer = "https://cn.bing.com/images/search"
+			default:
+				referer = "https://www.bing.com/"
+			}
+		}
+		req.Header.Set("Referer", referer)
+		resp, err = imageDownloadHTTPClient.Do(req)
+		if err == nil {
+			break
+		}
+		if attempt == 0 {
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(200 * time.Millisecond):
+			}
 		}
 	}
-	req.Header.Set("Referer", referer)
-	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, err
 	}

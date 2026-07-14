@@ -164,6 +164,45 @@ func TestOfoxAIClient_Analyze_CustomBaseURL(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestOfoxAIClient_Analyze_WanjieGeminiNative(t *testing.T) {
+	client := NewOfoxAIClient("fake-key", "gemini-3.5-flash", "https://maas-openapi.wanjiedata.com/api/v1")
+	client.imageClient = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		assert.Equal(t, http.MethodGet, req.Method)
+		assert.Equal(t, "https://cdn.example.com/food.png", req.URL.String())
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(bytes.NewBuffer([]byte{0x89, 0x50, 0x4e, 0x47})),
+			Header:     http.Header{"Content-Type": []string{"image/png"}},
+		}, nil
+	})}
+	client.client = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		assert.Equal(t, http.MethodPost, req.Method)
+		assert.Equal(t, "https://maas-openapi.wanjiedata.com/api/v1beta/models/gemini-3.5-flash:generateContent", req.URL.String())
+		var payload map[string]any
+		assert.NoError(t, json.NewDecoder(req.Body).Decode(&payload))
+		assert.NotContains(t, payload, "messages")
+		contents := payload["contents"].([]any)
+		parts := contents[0].(map[string]any)["parts"].([]any)
+		assert.Equal(t, "test prompt", parts[0].(map[string]any)["text"])
+		assert.Equal(t, "image/png", parts[1].(map[string]any)["inlineData"].(map[string]any)["mimeType"])
+		body := `{"candidates":[{"content":{"parts":[{"text":"{\"description\":\"Gemini 原生识别\",\"items\":[{\"name\":\"rice\",\"estimatedWeightGrams\":100}]}"}]}}],"usageMetadata":{"promptTokenCount":120,"candidatesTokenCount":30,"totalTokenCount":150}}`
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(bytes.NewBufferString(body)),
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+		}, nil
+	})}
+
+	result, meta, err := client.AnalyzeWithImagesAndTemperatureMeta(context.Background(), "test prompt", []string{"https://cdn.example.com/food.png"}, 0.1)
+
+	assert.NoError(t, err)
+	assert.Equal(t, "Gemini 原生识别", result["description"])
+	assert.Equal(t, "gemini-3.5-flash", meta["model"])
+	assert.Equal(t, float64(120), meta["input_tokens"])
+	assert.Equal(t, float64(30), meta["output_tokens"])
+	assert.Equal(t, float64(150), meta["total_tokens"])
+}
+
 func TestOfoxAIClient_AnalyzeWithImagesAndTemperatureModel_OverridesRequestModel(t *testing.T) {
 	client := NewOfoxAIClient("fake-key", "gemini-3-flash-preview", "https://proxy.example.com/v1/")
 	client.client = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {

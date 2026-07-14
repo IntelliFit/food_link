@@ -114,6 +114,7 @@ type ExternalConfig struct {
 	Gemini35Model         string `mapstructure:"gemini35_model"`
 	LLMProvider           string `mapstructure:"llm_provider"`
 	DeepSeekAPIKey        string `mapstructure:"deepseek_api_key"`
+	DeepSeekBaseURL       string `mapstructure:"deepseek_base_url"`
 	DoubaoAPIKey          string `mapstructure:"doubao_api_key"`
 	DoubaoWebSearchAPIKey string `mapstructure:"doubao_web_search_api_key"`
 	DoubaoBaseURL         string `mapstructure:"doubao_base_url"`
@@ -191,8 +192,14 @@ type WechatPayConfig struct {
 	NotifyURL                   string `mapstructure:"notify_url"`
 	SerialNo                    string `mapstructure:"serial_no"`
 	APIV3Key                    string `mapstructure:"api_v3_key"`
+	APIV2Key                    string `mapstructure:"api_v2_key"`
+	LegacyAPIV2Key              string `mapstructure:"wechat_pay_api_v2_key"`
 	PrivateKey                  string `mapstructure:"private_key"`
 	PublicKey                   string `mapstructure:"public_key"`
+	PapaySignNotifyURL          string `mapstructure:"papay_sign_notify_url"`
+	PapayPayNotifyURL           string `mapstructure:"papay_pay_notify_url"`
+	LegacyPapaySignNotifyURL    string `mapstructure:"wechat_pay_papay_sign_notify_url"`
+	LegacyPapayPayNotifyURL     string `mapstructure:"wechat_pay_papay_pay_notify_url"`
 	ExpirySubscribeTemplateID   string `mapstructure:"expiry_subscribe_template_id"`
 	AnalysisSubscribeTemplateID string `mapstructure:"analysis_subscribe_template_id"`
 }
@@ -510,6 +517,9 @@ func applyLocalConfigOverrides(v *viper.Viper) error {
 	}
 	if fileCfg.External.DeepSeekAPIKey != "" {
 		v.Set("external.deepseek_api_key", fileCfg.External.DeepSeekAPIKey)
+	}
+	if fileCfg.External.DeepSeekBaseURL != "" {
+		v.Set("external.deepseek_base_url", fileCfg.External.DeepSeekBaseURL)
 	}
 	if fileV.IsSet("worker.id") {
 		v.Set("worker.id", fileCfg.Worker.ID)
@@ -999,6 +1009,7 @@ var cloudConfigKeyAliases = map[string]string{
 	"GEMINI35_MODEL":                          "external.gemini35_model",
 	"LLM_PROVIDER":                            "external.llm_provider",
 	"DEEPSEEK_API_KEY":                        "external.deepseek_api_key",
+	"DEEPSEEK_BASE_URL":                       "external.deepseek_base_url",
 	"DOUBAO_API_KEY":                          "external.doubao_api_key",
 	"DOUBAO_WEB_SEARCH_API_KEY":               "external.doubao_web_search_api_key",
 	"DOUBAO_BASE_URL":                         "external.doubao_base_url",
@@ -1010,8 +1021,11 @@ var cloudConfigKeyAliases = map[string]string{
 	"WECHAT_PAY_NOTIFY_URL":                   "wechat.pay.notify_url",
 	"WECHAT_PAY_SERIAL_NO":                    "wechat.pay.serial_no",
 	"WECHAT_PAY_API_V3_KEY":                   "wechat.pay.api_v3_key",
+	"WECHAT_PAY_API_V2_KEY":                   "wechat.pay.api_v2_key",
 	"WECHAT_PAY_PRIVATE_KEY":                  "wechat.pay.private_key",
 	"WECHAT_PAY_PUBLIC_KEY":                   "wechat.pay.public_key",
+	"WECHAT_PAY_PAPAY_SIGN_NOTIFY_URL":        "wechat.pay.papay_sign_notify_url",
+	"WECHAT_PAY_PAPAY_PAY_NOTIFY_URL":         "wechat.pay.papay_pay_notify_url",
 	"EXPIRY_SUBSCRIBE_TEMPLATE_ID":            "wechat.pay.expiry_subscribe_template_id",
 	"ANALYSIS_SUBSCRIBE_TEMPLATE_ID":          "wechat.pay.analysis_subscribe_template_id",
 	"COS_REGION":                              "storage.cos_region",
@@ -1123,6 +1137,7 @@ func trimExternalConfig(cfg *ExternalConfig) {
 	cfg.Gemini35Model = strings.TrimSpace(cfg.Gemini35Model)
 	cfg.LLMProvider = strings.TrimSpace(cfg.LLMProvider)
 	cfg.DeepSeekAPIKey = strings.TrimSpace(cfg.DeepSeekAPIKey)
+	cfg.DeepSeekBaseURL = strings.TrimSpace(cfg.DeepSeekBaseURL)
 	cfg.DoubaoAPIKey = strings.TrimSpace(cfg.DoubaoAPIKey)
 	cfg.DoubaoWebSearchAPIKey = strings.TrimSpace(cfg.DoubaoWebSearchAPIKey)
 	cfg.DoubaoBaseURL = strings.TrimSpace(cfg.DoubaoBaseURL)
@@ -1294,11 +1309,20 @@ func (c *Config) ResolvedWechatPay() WechatPayConfig {
 	if pay.APIV3Key == "" {
 		pay.APIV3Key = c.WechatPay.APIV3Key
 	}
+	if pay.APIV2Key == "" {
+		pay.APIV2Key = firstNonEmpty(c.WechatPay.APIV2Key, c.WechatPay.LegacyAPIV2Key)
+	}
 	if pay.PrivateKey == "" {
 		pay.PrivateKey = c.WechatPay.PrivateKey
 	}
 	if pay.PublicKey == "" {
 		pay.PublicKey = c.WechatPay.PublicKey
+	}
+	if pay.PapaySignNotifyURL == "" {
+		pay.PapaySignNotifyURL = firstNonEmpty(c.WechatPay.PapaySignNotifyURL, c.WechatPay.LegacyPapaySignNotifyURL)
+	}
+	if pay.PapayPayNotifyURL == "" {
+		pay.PapayPayNotifyURL = firstNonEmpty(c.WechatPay.PapayPayNotifyURL, c.WechatPay.LegacyPapayPayNotifyURL)
 	}
 	if pay.ExpirySubscribeTemplateID == "" {
 		pay.ExpirySubscribeTemplateID = c.WechatPay.ExpirySubscribeTemplateID
@@ -1398,6 +1422,7 @@ func bindLegacyEnv(v *viper.Viper) {
 	_ = v.BindEnv("external.gemini35_model", "GEMINI35_MODEL")
 	_ = v.BindEnv("external.llm_provider", "LLM_PROVIDER")
 	_ = v.BindEnv("external.deepseek_api_key", "DEEPSEEK_API_KEY")
+	_ = v.BindEnv("external.deepseek_base_url", "DEEPSEEK_BASE_URL")
 	_ = v.BindEnv("external.doubao_api_key", "DOUBAO_API_KEY")
 	_ = v.BindEnv("external.doubao_web_search_api_key", "DOUBAO_WEB_SEARCH_API_KEY")
 	_ = v.BindEnv("external.doubao_base_url", "DOUBAO_BASE_URL")
@@ -1409,8 +1434,11 @@ func bindLegacyEnv(v *viper.Viper) {
 	_ = v.BindEnv("wechat.pay.notify_url", "WECHAT_PAY_NOTIFY_URL")
 	_ = v.BindEnv("wechat.pay.serial_no", "WECHAT_PAY_SERIAL_NO")
 	_ = v.BindEnv("wechat.pay.api_v3_key", "WECHAT_PAY_API_V3_KEY")
+	_ = v.BindEnv("wechat.pay.api_v2_key", "WECHAT_PAY_API_V2_KEY")
 	_ = v.BindEnv("wechat.pay.private_key", "WECHAT_PAY_PRIVATE_KEY")
 	_ = v.BindEnv("wechat.pay.public_key", "WECHAT_PAY_PUBLIC_KEY")
+	_ = v.BindEnv("wechat.pay.papay_sign_notify_url", "WECHAT_PAY_PAPAY_SIGN_NOTIFY_URL")
+	_ = v.BindEnv("wechat.pay.papay_pay_notify_url", "WECHAT_PAY_PAPAY_PAY_NOTIFY_URL")
 	_ = v.BindEnv("wechat.pay.expiry_subscribe_template_id", "EXPIRY_SUBSCRIBE_TEMPLATE_ID")
 	_ = v.BindEnv("wechat.pay.analysis_subscribe_template_id", "ANALYSIS_SUBSCRIBE_TEMPLATE_ID")
 	_ = v.BindEnv("wechat_pay.app_pay_app_id", "WECHAT_PAY_APP_PAY_APP_ID")
@@ -1419,8 +1447,11 @@ func bindLegacyEnv(v *viper.Viper) {
 	_ = v.BindEnv("wechat_pay.notify_url", "WECHAT_PAY_NOTIFY_URL")
 	_ = v.BindEnv("wechat_pay.serial_no", "WECHAT_PAY_SERIAL_NO")
 	_ = v.BindEnv("wechat_pay.api_v3_key", "WECHAT_PAY_API_V3_KEY")
+	_ = v.BindEnv("wechat_pay.api_v2_key", "WECHAT_PAY_API_V2_KEY")
 	_ = v.BindEnv("wechat_pay.private_key", "WECHAT_PAY_PRIVATE_KEY")
 	_ = v.BindEnv("wechat_pay.public_key", "WECHAT_PAY_PUBLIC_KEY")
+	_ = v.BindEnv("wechat_pay.papay_sign_notify_url", "WECHAT_PAY_PAPAY_SIGN_NOTIFY_URL")
+	_ = v.BindEnv("wechat_pay.papay_pay_notify_url", "WECHAT_PAY_PAPAY_PAY_NOTIFY_URL")
 	_ = v.BindEnv("wechat_pay.expiry_subscribe_template_id", "EXPIRY_SUBSCRIBE_TEMPLATE_ID")
 	_ = v.BindEnv("wechat_pay.analysis_subscribe_template_id", "ANALYSIS_SUBSCRIBE_TEMPLATE_ID")
 	_ = v.BindEnv("storage.cos_region", "COS_REGION")

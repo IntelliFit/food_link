@@ -86,6 +86,14 @@ const normalizeWaterMl = (...values: unknown[]) => {
   return 0
 }
 
+const clampWaterMlToWeight = (waterMl: number, weight: unknown) => {
+  const maxWeight = Number(weight)
+  if (!Number.isFinite(maxWeight) || maxWeight <= 0) {
+    return waterMl
+  }
+  return Math.min(waterMl, Math.round(maxWeight))
+}
+
 const isPackagedCandidatePending = (
   status: unknown,
   weightApplied: unknown,
@@ -110,7 +118,10 @@ export const convertApiFoodItemsToNutritionItems = (items: FoodItem[]): Nutritio
     )))
     const aiWeight = item.originalWeightGrams ?? item.estimatedWeightGrams
     const itemId = item.itemId ?? (index + 1)
-    const waterMl = normalizeWaterMl(item.waterMl, item.water_ml, item.nutrients?.waterMl, item.nutrients?.water_ml)
+    const waterMl = clampWaterMlToWeight(
+      normalizeWaterMl(item.waterMl, item.water_ml, item.nutrients?.waterMl, item.nutrients?.water_ml),
+      item.estimatedWeightGrams,
+    )
     const nutrients = normalizeItemNutrients(item.nutrients, waterMl)
     const suggestedRatio = Math.max(0, Math.min(100, Math.round(item.suggestedRatio ?? item.suggested_ratio ?? 100)))
     const actualRatio = 100

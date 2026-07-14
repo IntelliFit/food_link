@@ -82,6 +82,63 @@ func TestCreatePackagedFoodRejectsMissingSourceImage(t *testing.T) {
 	}
 }
 
+func TestNormalizePackagedServingWeightRejectsNutritionBasisAsServing(t *testing.T) {
+	input := PackagedFoodInput{
+		NetWeightG:     45,
+		ServingWeightG: 100,
+	}
+
+	normalizePackagedServingWeight(&input)
+
+	if input.ServingWeightG != 45 {
+		t.Fatalf("serving_weight_g=%v want net weight 45g", input.ServingWeightG)
+	}
+}
+
+func TestNormalizePackagedServingWeightRejectsUnsupportedSmallerServing(t *testing.T) {
+	input := PackagedFoodInput{
+		NetWeightG:     50,
+		ServingWeightG: 25,
+	}
+
+	normalizePackagedServingWeight(&input)
+
+	if input.ServingWeightG != 50 {
+		t.Fatalf("serving_weight_g=%v want evidence-backed package weight 50g", input.ServingWeightG)
+	}
+}
+
+func TestNormalizePackagedServingWeightKeepsExplicitPerServingEvidence(t *testing.T) {
+	input := PackagedFoodInput{
+		NetWeightG:     90,
+		ServingWeightG: 30,
+		OCRRawText:     "营养成分表 每份食用量:30克",
+	}
+
+	normalizePackagedServingWeight(&input)
+
+	if input.ServingWeightG != 30 {
+		t.Fatalf("serving_weight_g=%v want explicit serving 30g", input.ServingWeightG)
+	}
+}
+
+func TestNormalizePackagedServingWeightKeepsExplicitUnitBreakdown(t *testing.T) {
+	input := PackagedFoodInput{
+		NetWeightG:       91,
+		ServingWeightG:   13,
+		SpecText:         "91克(7条×13克)",
+		UnitCount:        7,
+		UnitContentValue: 13,
+		UnitContentUnit:  "g",
+	}
+
+	normalizePackagedServingWeight(&input)
+
+	if input.ServingWeightG != 13 {
+		t.Fatalf("serving_weight_g=%v want explicit unit 13g", input.ServingWeightG)
+	}
+}
+
 func TestEvaluatePackagedProductExtract_AllowsMissingIngredientsWhenNutritionReady(t *testing.T) {
 	result := packagedReadyExtract()
 	result.IngredientsText = ""
@@ -254,6 +311,7 @@ func TestConvertPackagedNutrition_TreatsSolidBeverageServingAsPer100G(t *testing
 	result := packagedReadyExtract()
 	result.PackageCategory = "固体饮料"
 	result.ServingWeightG = 2
+	result.SpecText = "每份2克"
 	result.RawNutritionBasis = PackagedLabelNutritionBasis{Type: "每份", Value: 2, Unit: "份"}
 	result.RawNutritionPerBasis = PackagedLabelRawNutrition{
 		Energy:  PackagedLabelNutritionValue{Value: 31, Unit: "千焦"},

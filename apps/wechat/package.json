@@ -42,5 +42,8 @@
     "dev:jd": "npm run build:jd -- --watch",
     "dev:harmony-hybrid": "npm run build:harmony-hybrid -- --watch",
     "iconfont": "iconfont-taro"
+  },
+  "dependencies": {
+    "@food-link/core": "0.0.0"
   }
 }

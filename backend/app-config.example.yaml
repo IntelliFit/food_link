@@ -52,6 +52,8 @@ external:
   gemini35_base_url: ""
   gemini35_model: "gemini-3.5-flash"
   deepseek_api_key: ""
+  # OpenAI-compatible endpoint prefix. This service appends /chat/completions.
+  deepseek_base_url: "https://api.deepseek.com"
   doubao_api_key: ""
   doubao_web_search_api_key: ""
   doubao_base_url: "https://ark.cn-beijing.volces.com/api/v3"
@@ -70,8 +72,13 @@ wechat:
     notify_url: ""
     serial_no: ""
     api_v3_key: ""
+    # 委托代扣 V2 API 密钥。不要使用 API v3 密钥替代。
+    api_v2_key: ""
     private_key: ""
     public_key: ""
+    # 供微信委托代扣纯签约、扣款结果通知使用，必须是公网 HTTPS URL，且不能带 query 参数。
+    papay_sign_notify_url: "https://api.healthymax.cn/api/payment/wechat/papay/contract/notify"
+    papay_pay_notify_url: "https://api.healthymax.cn/api/payment/wechat/papay/pay/notify"
     expiry_subscribe_template_id: ""
     analysis_subscribe_template_id: ""
 

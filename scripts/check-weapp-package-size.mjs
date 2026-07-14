@@ -4,7 +4,8 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 const DEFAULT_MAX_KB = 2048
-const DEFAULT_WARN_KB = 1900
+const DEFAULT_BUDGET_KB = 1900
+const DEFAULT_WARN_KB = 1800
 const DEFAULT_TOP_COUNT = 12
 const DEFAULT_TOTAL_MAX_KB = 20 * 1024
 
@@ -12,6 +13,7 @@ function parseArgs(argv) {
   const options = {
     dist: 'dist',
     maxKb: DEFAULT_MAX_KB,
+    budgetKb: DEFAULT_BUDGET_KB,
     warnKb: DEFAULT_WARN_KB,
     totalMaxKb: DEFAULT_TOTAL_MAX_KB,
     top: DEFAULT_TOP_COUNT,
@@ -26,6 +28,9 @@ function parseArgs(argv) {
       i += 1
     } else if (arg === '--max-kb' && next) {
       options.maxKb = Number(next)
+      i += 1
+    } else if (arg === '--budget-kb' && next) {
+      options.budgetKb = Number(next)
       i += 1
     } else if (arg === '--warn-kb' && next) {
       options.warnKb = Number(next)
@@ -53,6 +58,7 @@ function printHelp() {
 Options:
   --dist <path>          Mini program output directory, default: dist
   --max-kb <number>      Per package hard limit, default: ${DEFAULT_MAX_KB}
+  --budget-kb <number>   Per package enforced budget, default: ${DEFAULT_BUDGET_KB}
   --warn-kb <number>     Per package warning threshold, default: ${DEFAULT_WARN_KB}
   --total-max-kb <num>   Total package hard limit, default: ${DEFAULT_TOTAL_MAX_KB}
   --top <number>         Number of largest files to print per package, default: ${DEFAULT_TOP_COUNT}
@@ -168,9 +174,10 @@ function buildPackageReports(distDir, topCount) {
   }
 }
 
-function statusFor(bytes, maxKb, warnKb) {
+function statusFor(bytes, maxKb, budgetKb, warnKb) {
   const kb = bytesToKb(bytes)
   if (kb > maxKb) return 'FAIL'
+  if (kb > budgetKb) return 'BUDGET'
   if (kb > warnKb) return 'WARN'
   return 'OK'
 }
@@ -181,16 +188,23 @@ function main() {
   const { reports, totalBytes } = buildPackageReports(distDir, options.top)
   const failures = []
 
+  if (options.warnKb > options.budgetKb || options.budgetKb > options.maxKb) {
+    throw new Error('体积阈值必须满足 warn-kb <= budget-kb <= max-kb')
+  }
+
   console.log('[weapp:size] package size report')
   console.log(`[weapp:size] dist=${path.relative(process.cwd(), distDir) || '.'}`)
-  console.log(`[weapp:size] per-package limit=${options.maxKb}KB, warning=${options.warnKb}KB, total limit=${options.totalMaxKb}KB`)
+  console.log(`[weapp:size] per-package hard limit=${options.maxKb}KB, enforced budget=${options.budgetKb}KB, warning=${options.warnKb}KB, total limit=${options.totalMaxKb}KB`)
 
   for (const report of reports) {
-    const status = statusFor(report.bytes, options.maxKb, options.warnKb)
+    const status = statusFor(report.bytes, options.maxKb, options.budgetKb, options.warnKb)
     const line = `${status.padEnd(4)} ${report.name.padEnd(24)} ${formatKb(report.bytes).padStart(10)}  ${report.files.length} files`
     console.log(line)
     if (status === 'FAIL') {
       failures.push(`${report.name} ${formatKb(report.bytes)} > ${options.maxKb}KB`)
+    }
+    if (status === 'BUDGET') {
+      failures.push(`${report.name} ${formatKb(report.bytes)} > enforced budget ${options.budgetKb}KB`)
     }
     if (status !== 'OK' && report.largest.length > 0) {
       console.log(`     largest files:`)
