@@ -103,17 +103,15 @@ func (s *StatsService) GenerateDietRecommendation(ctx context.Context, userID st
 
 func (s *StatsService) generateDietRecommendationCore(ctx context.Context, userID string, input DietRecommendationInput) (*DietRecommendationResult, error) {
 	input = normalizeDietRecommendationInput(input)
-	apiKey := ""
-	if s.cfg != nil {
-		apiKey = strings.TrimSpace(s.cfg.External.DeepSeekAPIKey)
-	}
+	llm := s.preferredTextLLM()
+	apiKey := llm.APIKey
 	candidates := s.fetchDietRecommendationCandidates(ctx, userID, input)
 	if apiKey == "" {
 		return fallbackDietRecommendation(input, "rule_fallback", candidates), nil
 	}
 
 	body := map[string]any{
-		"model": statsInsightDeepSeekModel,
+		"model": llm.Model,
 		"messages": []map[string]string{
 			{"role": "user", "content": buildDietRecommendationPrompt(input, candidates)},
 		},
@@ -122,7 +120,7 @@ func (s *StatsService) generateDietRecommendationCore(ctx context.Context, userI
 		"stream":      false,
 	}
 	bodyBytes, _ := json.Marshal(body)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.deepSeekChatBaseURL()+"/chat/completions", bytes.NewReader(bodyBytes))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, llm.BaseURL+"/chat/completions", bytes.NewReader(bodyBytes))
 	if err != nil {
 		return nil, err
 	}
@@ -152,7 +150,7 @@ func (s *StatsService) generateDietRecommendationCore(ctx context.Context, userI
 	if err := json.Unmarshal([]byte(content), &result); err != nil {
 		return fallbackDietRecommendation(input, "rule_fallback", candidates), nil
 	}
-	result = normalizeDietRecommendationResult(input, result, "deepseek-v4-flash", candidates)
+	result = normalizeDietRecommendationResult(input, result, llm.Model, candidates)
 	if len(result.Recommendations) == 0 {
 		return fallbackDietRecommendation(input, "rule_fallback", candidates), nil
 	}

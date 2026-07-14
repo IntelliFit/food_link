@@ -107,7 +107,7 @@ func (r *VoucherRepo) MarkVoucherUsed(ctx context.Context, voucherID, userID str
 		return result.Error
 	}
 	if result.RowsAffected == 0 {
-		return fmt.Errorf("礼券不可用或已使用")
+		return fmt.Errorf("奖励不可用或已启用")
 	}
 	return nil
 }
@@ -127,7 +127,7 @@ func (r *VoucherRepo) UpdateVoucherStatus(ctx context.Context, voucherID, status
 func (r *VoucherRepo) ExpirePendingVouchers(ctx context.Context, before time.Time) (int64, error) {
 	result := r.db.WithContext(ctx).
 		Model(&domain.UserVoucher{}).
-		Where("status = ? AND valid_end_at IS NOT NULL AND valid_end_at < ?", domain.VoucherStatusPending, before).
+		Where("status = ? AND voucher_type <> ? AND valid_end_at IS NOT NULL AND valid_end_at < ?", domain.VoucherStatusPending, domain.VoucherTypeInviteLightWeek, before).
 		Updates(map[string]any{
 			"status":     domain.VoucherStatusExpired,
 			"updated_at": time.Now(),

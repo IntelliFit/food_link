@@ -2,12 +2,14 @@ package handler
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
 
 	"food_link/backend/internal/common/response"
 	voucherdomain "food_link/backend/internal/voucher/domain"
+	"food_link/backend/pkg/logger"
 
 	"github.com/gin-gonic/gin"
 )
@@ -35,6 +37,10 @@ func (h *VoucherHandler) ListMyVouchers(c *gin.Context) {
 		return
 	}
 	status := strings.TrimSpace(c.Query("status"))
+	logger.Info(c.Request.Context(), "查询用户可用奖励",
+		slog.String("user_id", userID),
+		slog.String("reward.status", status),
+	)
 	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
 	if limit <= 0 || limit > 100 {
@@ -43,10 +49,19 @@ func (h *VoucherHandler) ListMyVouchers(c *gin.Context) {
 
 	items, err := h.svc.ListMyVouchers(c.Request.Context(), userID, status, offset, limit)
 	if err != nil {
+		logger.Error(c.Request.Context(), "查询用户可用奖励失败", err,
+			slog.String("user_id", userID),
+			slog.String("reward.status", status),
+		)
 		response.Error(c, err)
 		return
 	}
 	count, _ := h.svc.CountMyVouchers(c.Request.Context(), userID, status)
+	logger.Info(c.Request.Context(), "查询用户可用奖励完成",
+		slog.String("user_id", userID),
+		slog.Int("reward.returned_count", len(items)),
+		slog.Int64("reward.total_count", count),
+	)
 
 	response.Success(c, gin.H{
 		"items": items,
@@ -62,7 +77,7 @@ func (h *VoucherHandler) GetVoucherDetail(c *gin.Context) {
 	}
 	voucherID := strings.TrimSpace(c.Param("voucher_id"))
 	if voucherID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "礼券 ID 不能为空"})
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "奖励 ID 不能为空"})
 		return
 	}
 	item, err := h.svc.GetVoucherDetail(c.Request.Context(), userID, voucherID)
@@ -71,7 +86,7 @@ func (h *VoucherHandler) GetVoucherDetail(c *gin.Context) {
 		return
 	}
 	if item == nil {
-		c.JSON(http.StatusNotFound, gin.H{"code": 404, "message": "礼券不存在"})
+		c.JSON(http.StatusNotFound, gin.H{"code": 404, "message": "奖励不存在"})
 		return
 	}
 	response.Success(c, item)
@@ -85,12 +100,25 @@ func (h *VoucherHandler) UseVoucher(c *gin.Context) {
 	}
 	voucherID := strings.TrimSpace(c.Param("voucher_id"))
 	if voucherID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "礼券 ID 不能为空"})
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "奖励 ID 不能为空"})
 		return
 	}
+	logger.Info(c.Request.Context(), "启用用户奖励",
+		slog.String("user_id", userID),
+		slog.String("reward_id", voucherID),
+	)
 	if err := h.svc.UseVoucher(c.Request.Context(), userID, voucherID); err != nil {
+		logger.Warn(c.Request.Context(), "启用用户奖励失败",
+			slog.String("user_id", userID),
+			slog.String("reward_id", voucherID),
+			logger.Err(err),
+		)
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": err.Error()})
 		return
 	}
+	logger.Info(c.Request.Context(), "启用用户奖励完成",
+		slog.String("user_id", userID),
+		slog.String("reward_id", voucherID),
+	)
 	response.Success(c, gin.H{"success": true})
 }

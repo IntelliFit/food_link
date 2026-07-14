@@ -44,9 +44,9 @@ function resetPreviousCommunityFeedSession() {
 function handleDeepLink(options?: any) {
   const target = String(options?.query?.target || '').trim()
   const path = String(options?.query?.path || '').trim()
-  if (target === 'my-vouchers' || path.includes('my-vouchers')) {
+  if (target === 'my-vouchers' || target === 'reward-center' || path.includes('my-vouchers') || path.includes('reward-center')) {
     Taro.navigateTo({
-      url: extraPkgUrl('/pages/my-vouchers/index'),
+      url: extraPkgUrl('/pages/reward-center/index?section=rewards'),
       fail: (error) => {
         console.error('[app] deep link navigate failed:', error)
       },

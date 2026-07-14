@@ -1,7 +1,6 @@
 package service
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -9,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	authrepo "food_link/backend/internal/auth/repo"
@@ -738,7 +738,7 @@ func TestBuildDBFirstPromptIncludesCorrectionContext(t *testing.T) {
 
 func TestBuildDBFirstPromptsUseEdibleNetWeight(t *testing.T) {
 	imagePrompt := buildImageDBFirstPrompt(AnalyzeInput{ImageURL: "https://example.com/shrimp.jpg"}, nil)
-	for _, expected := range []string{"grossWeightGrams", "原始可见总重量", "后端会用 DeepSeek Flash 单独计算 ediblePortionRatio"} {
+	for _, expected := range []string{"grossWeightGrams", "原始可见总重量", "后端会用文本模型单独计算 ediblePortionRatio"} {
 		assert.Contains(t, imagePrompt, expected)
 	}
 
@@ -758,7 +758,7 @@ func TestImageDBFirstPromptsSeparateWeightFromSuggestedRatio(t *testing.T) {
 	strictPrompt := buildPrompt(input, nil, "strict")
 	for _, prompt := range []string{standardPrompt, strictPrompt} {
 		assert.Contains(t, prompt, "原始")
-		assert.Contains(t, prompt, "DeepSeek Flash")
+		assert.Contains(t, prompt, "文本模型")
 		assert.Contains(t, prompt, "不能改变重量本身")
 		assert.Contains(t, prompt, "不能反向影响 estimatedWeightGrams")
 		assert.Contains(t, prompt, "grossWeightGrams")
@@ -1030,30 +1030,26 @@ func TestAnalyzeService_AnalyzeUsesSingleLLMRequestForMultipleImages(t *testing.
 
 func TestAnalyzeService_AnalyzeText(t *testing.T) {
 	doubaoClient := &mockLLMClient{result: map[string]any{"description": "text test", "items": []any{}}}
+	qwenClient := &mockLLMClient{result: map[string]any{"description": "text test", "items": []any{}}}
 	svc := NewAnalyzeService(doubaoClient, doubaoClient, nil)
-	svc.ConfigureDeepSeekFallback("fake-key")
-	svc.deepseek.client = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-		body := `{"choices":[{"message":{"content":"{\"description\":\"text test\",\"items\":[]}"}}]}`
-		return &http.Response{
-			StatusCode: http.StatusOK,
-			Body:       io.NopCloser(bytes.NewBufferString(body)),
-			Header:     make(http.Header),
-		}, nil
-	})}
+	svc.ConfigureDashScopeLLMClient(qwenClient)
 	ctx := context.Background()
 
 	result, err := svc.AnalyzeText(ctx, "", AnalyzeInput{Text: "一碗米饭"})
 	require.NoError(t, err)
 	assert.Equal(t, "text test", result["description"])
+	assert.Equal(t, 1, qwenClient.calls)
+	assert.Equal(t, 0, doubaoClient.calls)
 }
 
-func TestAnalyzeService_AnalyzeTextRequiresDeepSeekByDefault(t *testing.T) {
+func TestAnalyzeService_AnalyzeTextRequiresConfiguredTextModel(t *testing.T) {
 	doubaoClient := &mockLLMClient{result: map[string]any{"description": "should not be used", "items": []any{}}}
 	svc := NewAnalyzeService(doubaoClient, doubaoClient, nil)
 
 	_, err := svc.AnalyzeText(context.Background(), "", AnalyzeInput{Text: "一碗米饭"})
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "DEEPSEEK_API_KEY")
+	assert.Contains(t, err.Error(), "大模型未配置")
+	assert.Equal(t, 0, doubaoClient.calls)
 }
 
 func TestAnalyzeService_AnalyzeImageGeminiAliasUsesGemini3FlashInStandardMode(t *testing.T) {
@@ -2342,6 +2338,62 @@ func TestAnalyzeService_FinalizeAnalyzeResponseFallsBackToQwenWhenDeepSeekFails(
 	assert.Equal(t, 4.0, nutrients["protein"])
 	assert.Equal(t, 1, resp["resolved_count"])
 	assert.Equal(t, 0, resp["unresolved_count"])
+}
+
+func TestAnalyzeService_FinalizeFastModeUsesOnlyQwenPostprocessing(t *testing.T) {
+	resolver := newFakeAnalyzeNutritionResolver()
+	qwen := &sequenceLLMClient{results: []map[string]any{
+		{
+			"items": []any{map[string]any{
+				"index": 0,
+				"unitNutritionPer100g": map[string]any{
+					"calories": 100.0,
+					"protein":  5.0,
+					"carbs":    10.0,
+					"fat":      4.0,
+				},
+			}},
+		},
+		{
+			"items": []any{map[string]any{
+				"index":          0,
+				"suggestedRatio": 80.0,
+				"reason":         "测试建议比例",
+			}},
+		},
+	}}
+	var deepseekCalls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		deepseekCalls.Add(1)
+		http.Error(w, "unexpected deepseek call", http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	svc := NewAnalyzeService(&mockLLMClient{}, &mockLLMClient{}, nil)
+	svc.nutrition = resolver
+	svc.ConfigureDeepSeekFallback("test-key", server.URL)
+	svc.ConfigureDashScopeLLMClient(qwen)
+
+	resp, err := svc.finalizeAnalyzeResponse(context.Background(), "", map[string]any{
+		"description": "快速模式包装补充剂",
+		"items": []any{map[string]any{
+			"name":                 "未收录D3补充剂",
+			"type":                 "snack",
+			"estimatedWeightGrams": 30.0,
+			"grossWeightGrams":     30.0,
+		}},
+	}, AnalyzeInput{SuggestRatioEnabled: true}, fastExecutionMode, "qwen", qwen36FlashModel, 6000)
+	require.NoError(t, err)
+
+	assert.Equal(t, int32(0), deepseekCalls.Load())
+	assert.Equal(t, 2, qwen.calls)
+	assert.Equal(t, "fast_default", resp["edible_portion_status"])
+	assert.Equal(t, "applied", resp["suggest_ratio_status"])
+	items := toItems(resp["items"])
+	require.Len(t, items, 1)
+	assert.Equal(t, "qwen_generated", items[0]["nutrition_source"])
+	assert.Equal(t, "fast_default", items[0]["ediblePortionSource"])
+	assert.Equal(t, "ai", items[0]["suggestedRatioSource"])
 }
 
 func TestQwenNutritionEstimatorEstimateParsesNutrition(t *testing.T) {

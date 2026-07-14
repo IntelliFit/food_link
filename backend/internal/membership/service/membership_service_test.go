@@ -12,6 +12,7 @@ import (
 	commonerrors "food_link/backend/internal/common/errors"
 	"food_link/backend/internal/membership/domain"
 	membershiprepo "food_link/backend/internal/membership/repo"
+	voucherdomain "food_link/backend/internal/voucher/domain"
 	"food_link/backend/pkg/config"
 
 	"github.com/stretchr/testify/assert"
@@ -61,6 +62,19 @@ type mockMembershipRepo struct {
 	ledgerByReasonSource          map[string]*domain.UserEarnedCreditLedger
 	sumPositiveEarnedCredits      int
 	rewardTaskUploads             map[string]*domain.RewardTaskUpload
+}
+
+type mockInviteRewardVoucherService struct {
+	calls      int
+	referralID string
+}
+
+func (m *mockInviteRewardVoucherService) IssueInviteRewardVouchers(_ context.Context, referral *domain.UserInviteReferral) (*voucherdomain.UserVoucher, *voucherdomain.UserVoucher, error) {
+	m.calls++
+	if referral != nil {
+		m.referralID = referral.ID
+	}
+	return &voucherdomain.UserVoucher{ID: "inviter-reward"}, &voucherdomain.UserVoucher{ID: "invitee-reward"}, nil
 }
 
 const testRSAPrivateKeyPEM = `-----BEGIN RSA PRIVATE KEY-----
@@ -994,8 +1008,35 @@ func TestMembershipService_ActivateInviteReferralSecondDayAwardsBothSides(t *tes
 	assert.Equal(t, "light_monthly", inviterGrant.PlanCode)
 	assert.Equal(t, "light_monthly", inviteeGrant.PlanCode)
 	assert.Equal(t, 7, inviterGrant.GrantDays)
-	assert.Equal(t, 7, inviteeGrant.GrantDays)
+	assert.Equal(t, 3, inviteeGrant.GrantDays)
 	assert.Empty(t, repo.ledgerByReasonSource)
+}
+
+func TestMembershipService_ActivateInviteReferralDefersMembershipUntilRewardActivation(t *testing.T) {
+	first := time.Now().AddDate(0, 0, -1)
+	created := time.Now().AddDate(0, 0, -2)
+	repo := &mockMembershipRepo{
+		user: &membershiprepo.User{ID: "invitee"},
+		inviteReferral: &domain.UserInviteReferral{
+			ID:                     "ref-deferred",
+			InviterUserID:          "inviter",
+			InviteeUserID:          "invitee",
+			Status:                 "pending_qualified",
+			FirstEffectiveActionAt: &first,
+			CreatedAt:              &created,
+		},
+	}
+	voucherSvc := &mockInviteRewardVoucherService{}
+	svc := NewMembershipService(repo)
+	svc.ConfigureVoucherService(voucherSvc)
+
+	ref, err := svc.ActivatePendingInviteReferralOnFirstValidUse(context.Background(), "invitee", "exercise_log")
+	require.NoError(t, err)
+	require.NotNil(t, ref)
+	assert.Equal(t, "reward_completed", ref.Status)
+	assert.Equal(t, 1, voucherSvc.calls)
+	assert.Equal(t, "ref-deferred", voucherSvc.referralID)
+	assert.Empty(t, repo.membershipGrantsBySourceKey)
 }
 
 func TestMembershipService_ActivateInviteReferralDoesNotDuplicateMembershipGrant(t *testing.T) {
@@ -1110,10 +1151,14 @@ func TestMembershipService_GetInviteRewardStatusRecordsInviteePendingNoAction(t 
 	require.NoError(t, err)
 	asInvitee := data["as_invitee"].(map[string]any)
 	assert.Equal(t, 2, asInvitee["records_needed"])
+	assert.Equal(t, 3, asInvitee["reward_days"])
+	assert.Equal(t, "3 天轻度版会员", asInvitee["reward_label"])
 	records := data["records"].([]any)
 	require.Len(t, records, 1)
 	row := records[0].(map[string]any)
 	assert.Equal(t, "invitee", row["role"])
+	assert.Equal(t, 3, row["reward_days"])
+	assert.Equal(t, "3 天轻度版会员", row["reward_label"])
 	assert.Equal(t, "进行中", row["status_label"])
 	assert.Equal(t, 2, row["records_needed"])
 	assert.Equal(t, "邀请人", row["other_nickname"])
@@ -1193,9 +1238,13 @@ func TestMembershipService_GetInviteRewardStatusRecordsInviterAllStatuses(t *tes
 	require.Len(t, asInviter, 1)
 	records := data["records"].([]any)
 	require.Len(t, records, 3)
-	assert.Equal(t, "已完成", records[0].(map[string]any)["status_label"])
+	assert.Equal(t, "待启用", records[0].(map[string]any)["status_label"])
 	assert.Equal(t, "好友一", records[0].(map[string]any)["other_nickname"])
-	assert.Contains(t, records[0].(map[string]any)["requirement_text"], "双方各 +15 积分")
+	assert.Equal(t, 7, records[0].(map[string]any)["reward_days"])
+	assert.Equal(t, "7 天轻度版会员", records[0].(map[string]any)["reward_label"])
+	assert.Contains(t, records[0].(map[string]any)["requirement_text"], "邀请人获得 7 天轻度版会员")
+	assert.Contains(t, records[0].(map[string]any)["requirement_text"], "好友获得 3 天轻度版会员")
+	assert.Contains(t, records[0].(map[string]any)["next_action_text"], "按需启用")
 	assert.Equal(t, "未达成", records[1].(map[string]any)["status_label"])
 	assert.Equal(t, "邀请人当月奖励名额已满", records[1].(map[string]any)["blocked_reason_label"])
 	assert.Equal(t, "进行中", records[2].(map[string]any)["status_label"])
@@ -1273,8 +1322,10 @@ func TestMembershipService_GetRewardCenterInviteRewardInviterSummary(t *testing.
 	assert.Equal(t, 3, summary["invited_count"])
 	assert.Equal(t, 1, summary["completed_count"])
 	assert.Equal(t, 2, summary["pending_count"])
-	assert.Equal(t, 30, summary["estimated_credits"])
-	assert.Equal(t, 15, summary["earned_credits"])
+	assert.Equal(t, 0, summary["estimated_credits"])
+	assert.Equal(t, 0, summary["earned_credits"])
+	assert.Equal(t, 7, summary["reward_days"])
+	assert.Equal(t, "7 天轻度版会员", summary["reward_label"])
 	require.Len(t, summary["records"].([]any), 3)
 }
 
@@ -1295,7 +1346,9 @@ func TestMembershipService_GetRewardCenterInviteRewardInviteeNoAction(t *testing
 	summary := data["invite_reward"].(map[string]any)["as_invitee_summary"].(map[string]any)
 	assert.Equal(t, 0, summary["completed_days"])
 	assert.Equal(t, 2, summary["remaining_days"])
-	assert.Equal(t, 15, summary["reward_credits"])
+	assert.Equal(t, 0, summary["reward_credits"])
+	assert.Equal(t, 3, summary["reward_days"])
+	assert.Equal(t, "3 天轻度版会员", summary["reward_label"])
 }
 
 func TestMembershipService_GetRewardCenterInviteRewardInviteeOneAction(t *testing.T) {

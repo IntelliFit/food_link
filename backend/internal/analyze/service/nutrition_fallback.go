@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 )
 
 const fallbackNutritionSourceKey = "_nutrition_source"
@@ -12,6 +13,7 @@ const fallbackNutritionSourceKey = "_nutrition_source"
 type namedNutritionFallbackEstimator struct {
 	source    string
 	estimator nutritionFallbackEstimator
+	timeout   time.Duration
 }
 
 type chainedNutritionFallbackEstimator struct {
@@ -35,13 +37,22 @@ func (e *chainedNutritionFallbackEstimator) Estimate(ctx context.Context, candid
 	}
 	var lastErr error
 	for _, candidate := range e.estimators {
-		rows, err := candidate.estimator.Estimate(ctx, candidates, additionalContext)
+		callCtx := ctx
+		cancel := func() {}
+		if candidate.timeout > 0 {
+			callCtx, cancel = context.WithTimeout(ctx, candidate.timeout)
+		}
+		rows, err := candidate.estimator.Estimate(callCtx, candidates, additionalContext)
+		cancel()
 		if err == nil && len(rows) > 0 {
 			tagFallbackSource(rows, candidate.source)
 			return rows, nil
 		}
 		if err != nil {
 			lastErr = err
+		}
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
 		}
 	}
 	if lastErr != nil {

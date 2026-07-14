@@ -16,9 +16,9 @@ const (
 )
 
 const (
-	VoucherSourceTypeRegistration  = "registration"
+	VoucherSourceTypeRegistration   = "registration"
 	VoucherSourceTypeInviteReferral = "invite_referral"
-	VoucherSourceTypeAdminManual   = "admin_manual"
+	VoucherSourceTypeAdminManual    = "admin_manual"
 )
 
 // UserVoucher — table: user_vouchers
@@ -49,6 +49,10 @@ func (v *UserVoucher) IsUsable() bool {
 	now := time.Now()
 	if v.ValidStartAt != nil && now.Before(*v.ValidStartAt) {
 		return false
+	}
+	// 邀请达标奖励已经属于用户，会员天数从主动启用时开始计算；历史记录中的领取截止日不再生效。
+	if v.VoucherType == VoucherTypeInviteLightWeek {
+		return true
 	}
 	if v.ValidEndAt != nil && now.After(*v.ValidEndAt) {
 		return false

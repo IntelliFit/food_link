@@ -467,8 +467,12 @@ func TestRunFoodAnalysisWithAnalyzeServiceIntegratesPackagedFood(t *testing.T) {
 			if err != nil {
 				t.Fatalf("runFoodAnalysis returned error: %v", err)
 			}
-			if llm.calls != 2 {
-				t.Fatalf("expected one vision call plus one suggested ratio call, got %d", llm.calls)
+			expectedCalls := 3
+			if mode == "fast" || mode == "fast_web_search" {
+				expectedCalls = 2
+			}
+			if llm.calls != expectedCalls {
+				t.Fatalf("expected %d model calls for %s mode, got %d", expectedCalls, mode, llm.calls)
 			}
 			items := extractItems(result["items"])
 			if len(items) != 2 {
@@ -549,8 +553,12 @@ func TestRunFoodAnalysisWithAnalyzeServiceFallsBackToAIWhenPackagedFoodMisses(t 
 			if err != nil {
 				t.Fatalf("runFoodAnalysis returned error: %v", err)
 			}
-			if llm.calls != 2 {
-				t.Fatalf("expected one vision call plus one suggested ratio call, got %d", llm.calls)
+			expectedCalls := 3
+			if mode == "fast" || mode == "fast_web_search" {
+				expectedCalls = 2
+			}
+			if llm.calls != expectedCalls {
+				t.Fatalf("expected %d model calls for %s mode, got %d", expectedCalls, mode, llm.calls)
 			}
 			if len(fallback.candidates) != 1 {
 				t.Fatalf("expected one nutrition fallback candidate, got %#v", fallback.candidates)

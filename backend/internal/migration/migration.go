@@ -39,6 +39,9 @@ func AutoMigrate(ctx context.Context, db *gorm.DB, schema string) error {
 	if err := ensureTrialEntitlementBackfill(ctx, db); err != nil {
 		return err
 	}
+	if err := ensureDeferredInviteRewards(ctx, db); err != nil {
+		return err
+	}
 	if err := ensureTriggers(ctx, db); err != nil {
 		return err
 	}
@@ -119,6 +122,23 @@ func ensurePapayContractIndexes(ctx context.Context, db *gorm.DB) error {
 	return db.WithContext(ctx).Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_wechat_papay_contracts_one_effective_per_user
 ON wechat_papay_contracts (user_id)
 WHERE status IN ('pending', 'active', 'termination_requested')`).Error
+}
+
+func ensureDeferredInviteRewards(ctx context.Context, db *gorm.DB) error {
+	result := db.WithContext(ctx).Exec(`
+UPDATE user_vouchers
+SET status = 'pending',
+    valid_end_at = NULL,
+    updated_at = now()
+WHERE voucher_type = 'invite_light_week'
+  AND status IN ('pending', 'expired')
+  AND used_at IS NULL
+  AND (status <> 'pending' OR valid_end_at IS NOT NULL)
+`)
+	if result.Error != nil {
+		return fmt.Errorf("normalize deferred invite rewards: %w", result.Error)
+	}
+	return nil
 }
 
 func quoteIdent(value string) string {

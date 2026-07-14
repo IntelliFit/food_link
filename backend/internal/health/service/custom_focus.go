@@ -18,10 +18,9 @@ import (
 )
 
 const (
-	customFocusCreditCost    = 1
-	customFocusDailyLimit    = 3
-	customFocusMaxTokens     = 2048
-	customFocusDeepSeekModel = statsInsightDeepSeekModel
+	customFocusCreditCost = 1
+	customFocusDailyLimit = 3
+	customFocusMaxTokens  = 2048
 )
 
 type customFocusCardPayload struct {
@@ -218,17 +217,15 @@ func (s *StatsService) GenerateCustomFocusCard(ctx context.Context, userID, stat
 }
 
 func (s *StatsService) generateCustomFocusCardPayload(ctx context.Context, comp *statsComputation, focusLabel string) (*customFocusCardPayload, error) {
-	apiKey := ""
-	baseURL := s.deepSeekChatBaseURL()
-	if s.cfg != nil {
-		apiKey = strings.TrimSpace(s.cfg.External.DeepSeekAPIKey)
-	}
+	llm := s.preferredTextLLM()
+	apiKey := llm.APIKey
+	baseURL := llm.BaseURL
 	if apiKey == "" {
 		return fallbackCustomFocusCardPayload(comp, focusLabel), nil
 	}
 
 	body := map[string]any{
-		"model": customFocusDeepSeekModel,
+		"model": llm.Model,
 		"messages": []map[string]string{
 			{"role": "user", "content": buildCustomFocusCardPrompt(comp, focusLabel)},
 		},
@@ -250,7 +247,7 @@ func (s *StatsService) generateCustomFocusCardPayload(ctx context.Context, comp 
 	defer resp.Body.Close()
 	respBody, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("DeepSeek API 错误: %d %s", resp.StatusCode, extractDeepSeekError(respBody))
+		return nil, fmt.Errorf("文本模型 API 错误: %d %s", resp.StatusCode, extractDeepSeekError(respBody))
 	}
 	var parsed struct {
 		Choices []struct {
@@ -263,7 +260,7 @@ func (s *StatsService) generateCustomFocusCardPayload(ctx context.Context, comp 
 		return nil, err
 	}
 	if len(parsed.Choices) == 0 {
-		return nil, fmt.Errorf("DeepSeek 返回了空响应")
+		return nil, fmt.Errorf("文本模型返回了空响应")
 	}
 	content := strings.TrimSpace(parsed.Choices[0].Message.Content)
 	return parseCustomFocusCardPayload(content, comp, focusLabel)

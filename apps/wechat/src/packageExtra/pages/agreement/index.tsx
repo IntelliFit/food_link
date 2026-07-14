@@ -86,7 +86,7 @@ export default function AgreementPage() {
                 <View className='section'>
                     <Text className='section-title'>八、奖励积分规则</Text>
                     <Text className='paragraph'>
-                        1. 邀请好友：您通过专属邀请码邀请的好友，在注册后 7 天内完成 2 个自然日的有效使用，您与好友双方将各获得一周轻度版会员权益。
+                        1. 邀请好友：新用户通过您的专属邀请码、邀请链接或二维码注册，并在注册后 7 天内完成 2 个不同自然日的有效使用后，邀请人获得 7 天轻度版会员权益，新用户获得 3 天轻度版会员权益。奖励由用户手动启用后开始计时。
                     </Text>
                     <Text className='paragraph'>
                         2. 每日分享：将饮食分析结果生成分享海报并分享，每日首次分享可获得 1 奖励积分，计入累计余额。

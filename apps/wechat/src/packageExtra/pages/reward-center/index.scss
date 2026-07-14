@@ -581,6 +581,28 @@
   margin-bottom: 20px;
 }
 
+.reward-invite-section__action {
+  flex-shrink: 0;
+  padding: 12px 20px;
+  border-radius: 999px;
+  background: #0f9f6e;
+  color: #fff;
+  font-size: 23px;
+  font-weight: 700;
+}
+
+.reward-section__hint {
+  display: block;
+  margin-top: 8px;
+  font-size: 24px;
+  line-height: 1.5;
+  color: #64748b;
+}
+
+.reward-center-page--dark .reward-section__hint {
+  color: #94a3b8;
+}
+
 .reward-section__more {
   font-size: 24px;
   color: #0f9f6e;
@@ -630,6 +652,14 @@
   color: #64748b;
 }
 
+.reward-voucher-card__note {
+  display: block;
+  margin-top: 8px;
+  font-size: 22px;
+  line-height: 1.45;
+  color: #0f9f6e;
+}
+
 .reward-center-page--dark .reward-voucher-card__desc {
   color: #94a3b8;
 }
@@ -642,6 +672,22 @@
   color: #fff;
   font-size: 24px;
   font-weight: 500;
+}
+
+.reward-voucher-card__button--loading {
+  min-width: 104px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.reward-voucher-card__spinner {
+  width: 24px;
+  height: 24px;
+  border: 3px solid rgba(255, 255, 255, 0.45);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: reward-spin 0.8s linear infinite;
 }
 
 .reward-voucher-loading {

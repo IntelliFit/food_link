@@ -1,11 +1,10 @@
 import { View, Text } from '@tarojs/components'
-import Taro, { useDidShow } from '@tarojs/taro'
-import { useMemo, useState } from 'react'
+import Taro, { useDidShow, useRouter } from '@tarojs/taro'
+import { useEffect, useMemo, useState } from 'react'
 import {
   getRewardCenter,
   getMyVouchers,
-  type InviteRewardCenterSummary,
-  type InviteRewardRecord,
+  useVoucher as activateReward,
   type RewardCenterResponse,
   type RewardCenterTask,
   type VoucherItem,
@@ -28,28 +27,67 @@ import './index.scss'
 
 function RewardCenterPage() {
   const { scheme } = useAppColorScheme()
+  const router = useRouter()
   const [loading, setLoading] = useState(true)
   const [data, setData] = useState<RewardCenterResponse | null>(null)
   const [vouchers, setVouchers] = useState<VoucherItem[]>([])
+  const [activatingRewardID, setActivatingRewardID] = useState('')
 
   useDidShow(() => {
     loadData()
   })
 
+  useEffect(() => {
+    if (loading || vouchers.length === 0 || router.params?.section !== 'rewards') return
+    Taro.nextTick(() => {
+      Taro.pageScrollTo({ selector: '.reward-available-section', duration: 250 })
+    })
+  }, [loading, router.params?.section, vouchers.length])
+
   const loadData = async () => {
     setLoading(true)
+    const rewardCenterRequest = getRewardCenter()
+    const availableRewardsRequest = getMyVouchers('pending')
     try {
-      const [next, voucherRes] = await Promise.all([
-        getRewardCenter(),
-        getMyVouchers('pending'),
-      ])
+      const next = await rewardCenterRequest
       setData(next)
-      setVouchers(voucherRes.items || [])
     } catch (error: any) {
-      console.error('[reward-center] load failed:', error)
-      Taro.showToast({ title: error?.message || '加载失败', icon: 'none' })
+      console.error('[reward-center] task load failed:', error)
+      Taro.showToast({ title: error?.message || '获取任务失败', icon: 'none' })
+    }
+    try {
+      const rewardRes = await availableRewardsRequest
+      // 邀请会员奖励有独立入口，不再混进“赚积分”。
+      setVouchers((rewardRes.items || []).filter(item => item.voucher_type !== 'invite_light_week'))
+    } catch (error) {
+      // 可用奖励是附加能力，接口异常不能再把原有赚积分任务一起清空。
+      console.error('[reward-center] available rewards load failed:', error)
+      setVouchers([])
+    }
+    setLoading(false)
+  }
+
+  const handleActivateReward = async (reward: VoucherItem) => {
+    if (reward.status !== 'pending' || activatingRewardID) return
+    const confirmed = await Taro.showModal({
+      title: '现在启用奖励？',
+      content: '启用后奖励会立即到账。你也可以取消，留到以后再启用。',
+      confirmText: '现在启用',
+      cancelText: '以后再用',
+      confirmColor: '#00bc7d',
+    })
+    if (!confirmed.confirm) return
+
+    setActivatingRewardID(reward.id)
+    try {
+      await activateReward(reward.id)
+      Taro.showToast({ title: '奖励已启用', icon: 'success' })
+      await loadData()
+    } catch (error: any) {
+      console.error('[reward-center] activate reward failed:', error)
+      Taro.showToast({ title: error?.message || '启用失败', icon: 'none' })
     } finally {
-      setLoading(false)
+      setActivatingRewardID('')
     }
   }
 
@@ -68,8 +106,6 @@ function RewardCenterPage() {
   }
 
   const quickTasks = (data?.tasks || []).filter(isTaskAvailable).slice(0, 2)
-  const inviteReward = data?.invite_reward || null
-  const showInviteReward = hasInviteReward(inviteReward)
 
   const balance = data?.earned_credits_balance ?? 0
   const levelMeta = useMemo(() => getRewardLevelMeta(balance), [balance])
@@ -162,145 +198,38 @@ function RewardCenterPage() {
         )}
       </View>
 
-      {!loading && showInviteReward && (
-        <View className='reward-invite-section'>
-          <View className='reward-invite-section__head'>
+      {!loading && vouchers.length > 0 && (
+        <View className='reward-section reward-available-section'>
+          <View className='reward-section__head'>
             <View>
-              <Text className='reward-invite-section__title'>邀请奖励</Text>
-              <Text className='reward-invite-section__hint'>邀请好友或完成受邀记录，双方各得一周轻度版会员</Text>
+              <Text className='reward-section__title'>可用奖励</Text>
+              <Text className='reward-section__hint'>已获得的奖励可以留到需要时再启用</Text>
             </View>
           </View>
-
-          {inviteReward?.as_invitee_summary && (
-            <View className='reward-invite-card reward-invite-card--invitee'>
-              <View className='reward-invite-card__head'>
-                <View>
-                  <Text className='reward-invite-card__eyebrow'>我是被邀请人</Text>
-                  <Text className='reward-invite-card__title'>
-                    已记录 {inviteReward.as_invitee_summary.completed_days}/{inviteReward.as_invitee_summary.required_days} 个自然日
-                  </Text>
+          <View className='reward-voucher-list'>
+            {vouchers.map(voucher => {
+              const activating = activatingRewardID === voucher.id
+              return (
+                <View key={voucher.id} className='reward-voucher-card'>
+                  <View className='reward-voucher-card__main'>
+                    <Text className='reward-voucher-card__title'>{voucher.title}</Text>
+                    {voucher.description ? (
+                      <Text className='reward-voucher-card__desc'>{voucher.description}</Text>
+                    ) : null}
+                    <Text className='reward-voucher-card__note'>{rewardActivationNote(voucher)}</Text>
+                  </View>
+                  <View
+                    className={`reward-voucher-card__button ${activating ? 'reward-voucher-card__button--loading' : ''}`}
+                    onClick={() => handleActivateReward(voucher)}
+                  >
+                    {activating ? <View className='reward-voucher-card__spinner' /> : <Text>现在启用</Text>}
+                  </View>
                 </View>
-                <Text className='reward-invite-card__bonus'>{formatInviteRewardLabel(inviteReward.as_invitee_summary.reward_label)}</Text>
-              </View>
-              <View className='reward-invite-progress'>
-                <View
-                  className='reward-invite-progress__bar'
-                  style={{ width: `${inviteeProgressPercent(inviteReward.as_invitee_summary.completed_days, inviteReward.as_invitee_summary.required_days)}%` }}
-                />
-              </View>
-              <View className='reward-invite-days'>
-                <Text className={`reward-invite-days__item ${(inviteReward.as_invitee_summary.completed_days ?? 0) >= 1 ? 'reward-invite-days__item--active' : ''}`}>
-                  第 1 天{(inviteReward.as_invitee_summary.completed_days ?? 0) >= 1 ? ' ✓' : ''}
-                </Text>
-                <Text className={`reward-invite-days__item ${(inviteReward.as_invitee_summary.completed_days ?? 0) >= 2 ? 'reward-invite-days__item--active' : ''}`}>
-                  第 2 天{(inviteReward.as_invitee_summary.completed_days ?? 0) >= 2 ? ' ✓' : ''}
-                </Text>
-              </View>
-              <Text className='reward-invite-card__desc'>
-                {inviteReward.as_invitee_summary.remaining_days > 0
-                  ? `还差 ${inviteReward.as_invitee_summary.remaining_days} 个不同自然日，记满后你和邀请人各得${formatInviteRewardLabel(inviteReward.as_invitee_summary.reward_label)}`
-                  : `已满足 2 个不同自然日记录条件，奖励状态：${inviteReward.as_invitee_summary.record?.status_label || '已完成'}`}
-              </Text>
-              <Text className='reward-invite-card__note'>
-                {inviteReward.as_invitee_summary.deadline_text || inviteReward.as_invitee_summary.next_action_text || '继续保持记录即可'}
-              </Text>
-            </View>
-          )}
-
-          {inviteReward?.as_inviter_summary && (
-            <View className='reward-invite-card reward-invite-card--inviter'>
-              <View className='reward-invite-card__head'>
-                <View>
-                  <Text className='reward-invite-card__eyebrow'>我是邀请人</Text>
-                  <Text className='reward-invite-card__title'>成功完成 {inviteReward.as_inviter_summary.completed_count} 次邀请</Text>
-                </View>
-                <Text className='reward-invite-card__bonus'>{formatInviteRewardLabel(inviteReward.as_inviter_summary.reward_label)}</Text>
-              </View>
-              <View className='reward-invite-stats'>
-                <View className='reward-invite-stat'>
-                  <Text className='reward-invite-stat__value'>{inviteReward.as_inviter_summary.invited_count}</Text>
-                  <Text className='reward-invite-stat__label'>已邀请</Text>
-                </View>
-                <View className='reward-invite-stat'>
-                  <Text className='reward-invite-stat__value'>{inviteReward.as_inviter_summary.completed_count}</Text>
-                  <Text className='reward-invite-stat__label'>已达标</Text>
-                </View>
-                <View className='reward-invite-stat'>
-                  <Text className='reward-invite-stat__value'>{inviteReward.as_inviter_summary.pending_count}</Text>
-                  <Text className='reward-invite-stat__label'>待达标</Text>
-                </View>
-              </View>
-              <Text className='reward-invite-card__desc'>
-                已送出 {inviteReward.as_inviter_summary.completed_count} 份{formatInviteRewardLabel(inviteReward.as_inviter_summary.reward_label)}，仍有 {inviteReward.as_inviter_summary.pending_count} 位好友达标后可继续获得。
-              </Text>
-              {Array.isArray(inviteReward.as_inviter_summary.records) && inviteReward.as_inviter_summary.records.length > 0 && (
-                <View className='reward-invite-friend-list'>
-                  {inviteReward.as_inviter_summary.records.map(record => (
-                    <View className='reward-invite-friend' key={record.referral_id}>
-                      <View className='reward-invite-friend__main'>
-                        <Text className='reward-invite-friend__name'>{record.other_nickname || shortInviteID(record.other_user_id) || '好友'}</Text>
-                        <Text className='reward-invite-friend__desc'>{record.requirement_text || record.next_action_text || '邀请奖励状态待确认'}</Text>
-                      </View>
-                      <Text className={`reward-invite-friend__status ${inviteStatusClass(record)}`}>
-                        {record.status_label || record.status || '未知'}
-                      </Text>
-                    </View>
-                  ))}
-                </View>
-              )}
-            </View>
-          )}
+              )
+            })}
+          </View>
         </View>
       )}
-
-      <View className='reward-section'>
-        <View className='reward-section__head'>
-          <Text className='reward-section__title'>我的礼券</Text>
-          <Text
-            className='reward-section__more'
-            onClick={() => {
-              Taro.navigateTo({ url: extraPkgUrl('/pages/my-vouchers/index') })
-            }}
-          >
-            查看全部
-          </Text>
-        </View>
-        {loading ? (
-          <View className='reward-voucher-loading'>
-            <View className='reward-voucher-loading__spinner' />
-          </View>
-        ) : vouchers.length === 0 ? (
-          <View
-            className='reward-voucher-empty'
-            onClick={() => {
-              Taro.navigateTo({ url: extraPkgUrl('/pages/my-vouchers/index') })
-            }}
-          >
-            <Text className='reward-voucher-empty__text'>暂无可用礼券</Text>
-            <Text className='reward-voucher-empty__hint'>点击查看全部礼券</Text>
-          </View>
-        ) : (
-          <View className='reward-voucher-list'>
-            {vouchers.slice(0, 3).map(voucher => (
-              <View
-                key={voucher.id}
-                className='reward-voucher-card'
-                onClick={() => {
-                  Taro.navigateTo({ url: extraPkgUrl('/pages/my-vouchers/index') })
-                }}
-              >
-                <View className='reward-voucher-card__main'>
-                  <Text className='reward-voucher-card__title'>{voucher.title}</Text>
-                  {voucher.description ? (
-                    <Text className='reward-voucher-card__desc'>{voucher.description}</Text>
-                  ) : null}
-                </View>
-                <Text className='reward-voucher-card__button'>去使用</Text>
-              </View>
-            ))}
-          </View>
-        )}
-      </View>
     </View>
   )
 }
@@ -343,38 +272,11 @@ function formatTaskName(task: RewardCenterTask): string {
   return task.name
 }
 
-function hasInviteReward(summary: InviteRewardCenterSummary | null): boolean {
-  return Boolean(summary?.as_invitee_summary || summary?.as_inviter_summary)
-}
-
-function formatInviteRewardLabel(value?: string | null): string {
-  const label = String(value || '').trim()
-  return label || '一周轻度版会员'
-}
-
-function inviteeProgressPercent(completedDays: number, requiredDays: number): number {
-  if (!requiredDays || requiredDays <= 0) return 0
-  return Math.max(0, Math.min(100, Math.round((completedDays / requiredDays) * 100)))
-}
-
-function shortInviteID(value?: string | null): string {
-  if (!value) return ''
-  return value.length <= 8 ? value : `${value.slice(0, 4)}...${value.slice(-4)}`
-}
-
-function inviteStatusClass(record: InviteRewardRecord): string {
-  if (record.status_label === '已过期') return 'reward-invite-friend__status--blocked'
-  switch (record.status) {
-    case 'reward_completed':
-      return 'reward-invite-friend__status--completed'
-    case 'reward_blocked':
-    case 'cancelled':
-      return 'reward-invite-friend__status--blocked'
-    case 'reward_active':
-      return 'reward-invite-friend__status--active'
-    default:
-      return 'reward-invite-friend__status--pending'
+function rewardActivationNote(reward: VoucherItem): string {
+  if (reward.voucher_type === 'registration_trial') {
+    return '未启用前不会开始计算会员天数'
   }
+  return '未启用前奖励不会计入当前余额'
 }
 
 export default RewardCenterPage

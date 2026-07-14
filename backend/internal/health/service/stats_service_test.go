@@ -384,6 +384,51 @@ func TestStatsInsightUsesDeepSeekV4ProModel(t *testing.T) {
 	assert.Equal(t, "deepseek-v4-pro", statsInsightDeepSeekModel)
 }
 
+func TestStatsServicePreferredTextLLMUsesQwenBeforeDeepSeek(t *testing.T) {
+	svc := NewStatsService(&mockStatsRepo{}, &mockBodyMetricsProvider{}, &config.Config{
+		External: config.ExternalConfig{
+			DashScopeAPIKey:  "qwen-key",
+			DashScopeBaseURL: " https://qwen.example.com/api/v1/ ",
+			DeepSeekAPIKey:   "deepseek-key",
+			DeepSeekBaseURL:  "https://deepseek.example.com/api/v1",
+		},
+		AIUsagePricing: config.AIUsagePricingConfig{DefaultTextModel: "deepseek-v4-pro"},
+	})
+
+	llm := svc.preferredTextLLM()
+	assert.Equal(t, "qwen", llm.Provider)
+	assert.Equal(t, "qwen3.6-flash", llm.Model)
+	assert.Equal(t, "qwen-key", llm.APIKey)
+	assert.Equal(t, "https://qwen.example.com/api/v1", llm.BaseURL)
+	assert.Equal(t, "qwen3.6-flash", svc.petChatModel())
+}
+
+func TestStatsServiceGenerateInsightUsesPreferredQwenModel(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+		assert.Equal(t, "qwen3.6-flash", body["model"])
+		assert.Equal(t, "Bearer qwen-key", r.Header.Get("Authorization"))
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"总体结论\n本期饮食结构稳定，下一步优先补足蛋白质。"},"finish_reason":"stop"}]}`))
+	}))
+	defer server.Close()
+
+	recordTime := time.Date(2024, 6, 15, 12, 0, 0, 0, time.UTC)
+	svc := NewStatsService(&mockStatsRepo{records: []domain.FoodRecord{{
+		UserID: "u1", MealType: "lunch", TotalCalories: 500, TotalProtein: 20, TotalCarbs: 60, TotalFat: 15, RecordTime: &recordTime,
+	}}}, &mockBodyMetricsProvider{}, &config.Config{External: config.ExternalConfig{
+		DashScopeAPIKey:  "qwen-key",
+		DashScopeBaseURL: server.URL,
+		DeepSeekAPIKey:   "deepseek-key",
+		DeepSeekBaseURL:  "http://127.0.0.1:1",
+	}})
+
+	result, err := svc.GenerateInsight(context.Background(), "u1", "week", 2000, 5)
+	require.NoError(t, err)
+	assert.Contains(t, result["analysis_summary"], "优先补足蛋白质")
+}
+
 func TestNewStatsServiceUsesConfiguredDeepSeekBaseURL(t *testing.T) {
 	svc := NewStatsService(&mockStatsRepo{}, &mockBodyMetricsProvider{}, &config.Config{
 		External: config.ExternalConfig{DeepSeekBaseURL: " https://llm.example.com/api/v1/ "},

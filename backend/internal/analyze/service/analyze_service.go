@@ -30,34 +30,38 @@ import (
 )
 
 const (
-	defaultExecutionMode           = "standard"
-	standardWebSearchMode          = "standard_web_search"
-	standardPackagedExperimentMode = "standard_packaged_experiment"
-	fastExecutionMode              = "fast"
-	fastWebSearchMode              = "fast_web_search"
-	liteExecutionMode              = "lite"
-	precisionExecutionMode         = "strict"
-	precisionSeparateExecutionMode = "strict_separate"
-	precisionWebSearchMode         = "strict_web_search"
-	validExecutionMode             = "experimental"
-	gemini35FlashExecutionMode     = "gemini35_flash"
-	gemini35GroupedExecutionMode   = "gemini35_flash_grouped"
-	gemini3FlashModel              = "gemini-3-flash-preview"
-	gemini31FlashLiteModel         = "gemini-3.1-flash-lite"
-	gemini35FlashModel             = "gemini-3.5-flash"
-	qwen36FlashModel               = "qwen3.6-flash"
-	visionPrimaryTimeout           = 45 * time.Second
-	maxLLMJSONParseRetries         = 3
-	maxLLMTransientRetries         = 2
-	ratioSuggestionTimeout         = 20 * time.Second
-	ediblePortionTimeout           = 15 * time.Second
-	standardHybridTimeout          = 60 * time.Second
-	webSearchTimeout               = 6 * time.Second
-	webSearchMaxQueries            = 3
-	webSearchMaxResults            = 3
-	webSearchMinRelevantResults    = 1
-	resolveFoodCandidateLimit      = 8
-	resolveFoodSemanticThreshold   = 0.9
+	defaultExecutionMode            = "standard"
+	standardWebSearchMode           = "standard_web_search"
+	standardPackagedExperimentMode  = "standard_packaged_experiment"
+	fastExecutionMode               = "fast"
+	fastWebSearchMode               = "fast_web_search"
+	liteExecutionMode               = "lite"
+	precisionExecutionMode          = "strict"
+	precisionSeparateExecutionMode  = "strict_separate"
+	precisionWebSearchMode          = "strict_web_search"
+	validExecutionMode              = "experimental"
+	gemini35FlashExecutionMode      = "gemini35_flash"
+	gemini35GroupedExecutionMode    = "gemini35_flash_grouped"
+	gemini3FlashModel               = "gemini-3-flash-preview"
+	gemini31FlashLiteModel          = "gemini-3.1-flash-lite"
+	gemini35FlashModel              = "gemini-3.5-flash"
+	qwen36FlashModel                = "qwen3.6-flash"
+	visionPrimaryTimeout            = 45 * time.Second
+	maxLLMJSONParseRetries          = 3
+	maxLLMTransientRetries          = 2
+	ratioSuggestionTimeout          = 20 * time.Second
+	ediblePortionTimeout            = 15 * time.Second
+	nutritionFallbackAttemptTimeout = 15 * time.Second
+	fastNutritionFallbackTimeout    = 12 * time.Second
+	fastVisionAnalysisTimeout       = 25 * time.Second
+	fastPostprocessTimeout          = 20 * time.Second
+	standardHybridTimeout           = 60 * time.Second
+	webSearchTimeout                = 6 * time.Second
+	webSearchMaxQueries             = 3
+	webSearchMaxResults             = 3
+	webSearchMinRelevantResults     = 1
+	resolveFoodCandidateLimit       = 8
+	resolveFoodSemanticThreshold    = 0.9
 )
 
 const packagedFoodResolveEnabled = true
@@ -183,16 +187,20 @@ func (s *AnalyzeService) ConfigureDashScopeLLMClient(client LLMClient) {
 
 func (s *AnalyzeService) refreshNutritionFallbackEstimator() {
 	estimators := []namedNutritionFallbackEstimator{}
-	if s.deepseek != nil && strings.TrimSpace(s.deepseek.APIKey) != "" {
-		estimators = append(estimators, namedNutritionFallbackEstimator{
-			source:    "deepseek_generated",
-			estimator: s.deepseek,
-		})
-	}
+	// Prefer Qwen for user-facing post-processing so DeepSeek retries cannot
+	// dominate latency after the vision result is already available.
 	if s.dashscopeClient != nil {
 		estimators = append(estimators, namedNutritionFallbackEstimator{
 			source:    "qwen_generated",
 			estimator: NewQwenNutritionEstimator(s.dashscopeClient),
+			timeout:   nutritionFallbackAttemptTimeout,
+		})
+	}
+	if s.deepseek != nil && strings.TrimSpace(s.deepseek.APIKey) != "" {
+		estimators = append(estimators, namedNutritionFallbackEstimator{
+			source:    "deepseek_generated",
+			estimator: s.deepseek,
+			timeout:   nutritionFallbackAttemptTimeout,
 		})
 	}
 	if len(estimators) == 0 {
@@ -200,6 +208,20 @@ func (s *AnalyzeService) refreshNutritionFallbackEstimator() {
 		return
 	}
 	s.nutritionAI = newChainedNutritionFallbackEstimator(estimators...)
+}
+
+func (s *AnalyzeService) runtimePostprocessClient() (LLMClient, string, string) {
+	if s != nil && s.dashscopeClient != nil {
+		return s.dashscopeClient, "qwen", qwen36FlashModel
+	}
+	if s != nil && s.deepseek != nil && strings.TrimSpace(s.deepseek.APIKey) != "" {
+		model := strings.TrimSpace(s.deepseek.Model)
+		if model == "" {
+			model = deepSeekNutritionFallbackModel
+		}
+		return s.deepseek, "deepseek", model
+	}
+	return nil, "", ""
 }
 
 func (s *AnalyzeService) ConfigureGemini31LiteClient(apiKey, baseURL, model string) {
@@ -1015,14 +1037,14 @@ func buildImageDBFirstPrompt(input AnalyzeInput, user *authrepo.User) string {
 - 如果包装只露出很小一角、只有色块/封边/局部花纹，读不到可靠文字，也无法确认完整包装归属，不要猜成具体零食或品牌；这类对象不计入
 - 不输出餐具、空包装、桌面、骨头、壳、果核、签子等不可食或非食物部分
 - 对仅在边缘露出少量、无法确认种类或份量的食物，不计入
-- name 仍写食物本身；带壳、带骨、带核食物的不可食部分由后端 DeepSeek Flash 统一折算，视觉模型不要在 estimatedWeightGrams 里自行扣减
+- name 仍写食物本身；带壳、带骨、带核食物的不可食部分由后端文本模型统一折算，视觉模型不要在 estimatedWeightGrams 里自行扣减
 - 相同食物合并为一项，明显不同食物分开
 - 食物名称使用简体中文，尽量具体、标准、常见，方便命中营养库
 - 混合菜无法可靠拆分时，作为一道常见菜名输出，不要猜测不可见成分
 
 重量规则：
 - grossWeightGrams 必须是数字，单位克，表示图片中可见食物的原始可见总重量；带壳、带骨、带核时先估整份原始重量，不要扣壳/骨/核
-- estimatedWeightGrams 为兼容字段，本轮请先填与 grossWeightGrams 相同的值；后端会用 DeepSeek Flash 单独计算 ediblePortionRatio 并得到真正可食重量
+- estimatedWeightGrams 为兼容字段，本轮请先填与 grossWeightGrams 相同的值；后端会用文本模型单独计算 ediblePortionRatio 并得到真正可食重量
 - 不要因为减脂、控糖、剩余热量不足或健康建议而下调 grossWeightGrams 或 estimatedWeightGrams；饮食控制只能体现在 suggestedRatio，不能改变重量本身
 - 综合可见面积、厚度、高度、容器、餐具、手掌、包装等参照物估算
 - 生成 estimatedWeightGrams 前，必须先用空间标定或 OCR 规格做一次合理性校验；大杯、大盒、大盘、砂锅不能被压成默认小份量
@@ -1101,7 +1123,7 @@ func buildLiteImageDBFirstPrompt(input AnalyzeInput, user *authrepo.User) string
 - 如果包装只露出很小一角、只有色块/封边/局部花纹，读不到可靠文字，也无法确认完整包装归属，不要猜成具体零食或品牌；这类对象不计入
 - 不确定 OCR 不能直接当食物名；若 OCR 与视觉冲突，把冲突写进 recognitionEvidence 和 alternativeNames
 - 小众水果/进口零食/不确定包装食品可使用 web_search，搜索关键词要围绕可见包装文字、品牌、品名或用户补充信息，避免用泛泛描述搜索
-- grossWeightGrams 是图中可见原始总重量；estimatedWeightGrams 先填同值，后端会用 DeepSeek Flash 单独折算可食比例
+- grossWeightGrams 是图中可见原始总重量；estimatedWeightGrams 先填同值，后端会用文本模型单独折算可食比例
 - waterMl 表示该食物/饮品本身可计入饮水参考的水量；无法判断填 0
 
 Type rule:
@@ -1184,7 +1206,7 @@ func buildGemini35ImageDBFirstPrompt(input AnalyzeInput, user *authrepo.User, ex
 
 重量规则：
 - grossWeightGrams 是图中可见食物原始总重量，单位克，必须是数字；带壳、带骨、带核时先估整份原始重量，不要扣壳/骨/核
-- estimatedWeightGrams 为兼容字段，本轮请先填与 grossWeightGrams 相同的值；后端会用 DeepSeek Flash 单独计算 ediblePortionRatio 并得到真正可食重量
+- estimatedWeightGrams 为兼容字段，本轮请先填与 grossWeightGrams 相同的值；后端会用文本模型单独计算 ediblePortionRatio 并得到真正可食重量
 - 不要因为减脂、控糖、剩余热量不足或健康建议而下调 grossWeightGrams 或 estimatedWeightGrams；饮食控制只能体现在 suggestedRatio，不能改变重量本身
 - 不把餐具、空包装计入重量；不可食部分由后端可食比例链路扣除
 - 包装食品如果只能看到独立小包，按该小包通常净含量/可见体积估算；如果看得到净含量文字，优先参考净含量
@@ -1886,7 +1908,13 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 	)
 	lightweightMeta := map[string]any{}
 	qwenNativeSearchMeta := map[string]any{}
-	parsed, err := analyzeWithJSONParseRetry(ctx, "food_image", provider, model, func(callCtx context.Context) (map[string]any, error) {
+	analysisCallCtx := ctx
+	analysisCallCancel := func() {}
+	if isFastExecutionMode(executionMode) {
+		analysisCallCtx, analysisCallCancel = context.WithTimeout(ctx, fastVisionAnalysisTimeout)
+	}
+	defer analysisCallCancel()
+	parsed, err := analyzeWithJSONParseRetry(analysisCallCtx, "food_image", provider, model, func(callCtx context.Context) (map[string]any, error) {
 		attemptCtx := callCtx
 		attemptCancel := func() {}
 		if provider == "gemini" && len(imageURLs) > 0 {
@@ -4053,18 +4081,29 @@ func (s *AnalyzeService) AnalyzeText(ctx context.Context, userID string, input A
 	provider, model := resolveModelConfig(input.ModelName)
 	var client LLMClient
 	if strings.TrimSpace(input.ModelName) == "" {
-		if s.deepseek == nil || strings.TrimSpace(s.deepseek.APIKey) == "" {
-			return nil, fmt.Errorf("文字输入模式默认使用 DeepSeek，请配置 DEEPSEEK_API_KEY")
+		if s.dashscopeClient != nil {
+			provider = "qwen"
+			model = qwen36FlashModel
+			client = s.dashscopeClient
+		} else if s.deepseek != nil && strings.TrimSpace(s.deepseek.APIKey) != "" {
+			provider = "deepseek"
+			model = s.deepseek.Model
+			client = s.deepseek
+		} else {
+			return nil, fmt.Errorf("文字输入模式大模型未配置")
 		}
-		provider = "deepseek"
-		model = s.deepseek.Model
-		client = s.deepseek
 	} else if provider == "deepseek" {
 		if s.deepseek == nil || strings.TrimSpace(s.deepseek.APIKey) == "" {
 			return nil, fmt.Errorf("文字输入模式使用 DeepSeek，请配置 DEEPSEEK_API_KEY")
 		}
 		client = s.deepseek
 		model = s.deepseek.Model
+	} else if provider == "qwen" {
+		if s.dashscopeClient == nil {
+			return nil, fmt.Errorf("文字输入模式使用千问时，请配置 DASHSCOPE_API_KEY")
+		}
+		client = s.dashscopeClient
+		model = qwen36FlashModel
 	} else if provider == "doubao" {
 		client = s.doubaoClient
 	} else if provider == "gemini" || provider == "openai" {
@@ -4522,14 +4561,36 @@ func (s *AnalyzeService) finalizeAnalyzeResponse(ctx context.Context, userID str
 		resp["analysis_engine"] = "legacy_direct"
 		return s.applySuggestedRatios(ctx, resp, input), nil
 	}
-	resp = s.applyEdiblePortionRatios(ctx, resp, input)
-	resp = s.applyDBFirstNutritionWithOptions(ctx, resp, dbFirstNutritionOptions{
+	fastMode := isFastExecutionMode(executionMode)
+	postprocessCtx := ctx
+	postprocessCancel := func() {}
+	if fastMode {
+		postprocessCtx, postprocessCancel = context.WithTimeout(ctx, fastPostprocessTimeout)
+	}
+	defer postprocessCancel()
+	if fastMode {
+		resp["items"] = withDefaultEdiblePortions(toItems(resp["items"]), "fast_default")
+		resp["edible_portion_status"] = "fast_default"
+		resp["edible_portion_applied_count"] = 0
+	} else {
+		resp = s.applyEdiblePortionRatios(postprocessCtx, resp, input)
+	}
+	resp = s.applyDBFirstNutritionWithOptions(postprocessCtx, resp, dbFirstNutritionOptions{
 		additionalContext:            input.AdditionalContext,
 		packagedIntegrationEnabled:   true,
 		packagedExperimentCompatMode: isPackagedExperimentExecutionMode(executionMode),
+		skipSemanticRerank:           fastMode,
+		nutritionFallbackTimeout:     fastModeDuration(fastMode, fastNutritionFallbackTimeout),
 	})
-	resp = s.applySuggestedRatios(ctx, resp, input)
+	resp = s.applySuggestedRatios(postprocessCtx, resp, input)
 	return resp, nil
+}
+
+func fastModeDuration(enabled bool, value time.Duration) time.Duration {
+	if enabled {
+		return value
+	}
+	return 0
 }
 
 func (s *AnalyzeService) applyEdiblePortionRatios(ctx context.Context, resp map[string]any, input AnalyzeInput) map[string]any {
@@ -4539,7 +4600,8 @@ func (s *AnalyzeService) applyEdiblePortionRatios(ctx context.Context, resp map[
 		return resp
 	}
 	base := withDefaultEdiblePortions(items, "default")
-	if s == nil || s.deepseek == nil || strings.TrimSpace(s.deepseek.APIKey) == "" {
+	client, provider, model := s.runtimePostprocessClient()
+	if client == nil {
 		resp["items"] = withFallbackEdiblePortions(items, "unavailable")
 		resp["edible_portion_status"] = "unavailable"
 		return resp
@@ -4547,10 +4609,12 @@ func (s *AnalyzeService) applyEdiblePortionRatios(ctx context.Context, resp map[
 	prompt := buildEdiblePortionPrompt(base, input)
 	callCtx, cancel := context.WithTimeout(ctx, ediblePortionTimeout)
 	defer cancel()
-	parsed, err := s.deepseek.Analyze(callCtx, prompt, "")
+	parsed, err := client.Analyze(callCtx, prompt, "")
 	if err != nil {
-		logger.Warn(ctx, "DeepSeek 可食比例判定失败",
+		logger.Warn(ctx, "可食比例模型判定失败",
 			logger.Err(err),
+			slog.String("provider", provider),
+			slog.String("model", model),
 			slog.Int("item_count", len(items)),
 		)
 		resp["items"] = withFallbackEdiblePortions(items, "failed")
@@ -4573,7 +4637,7 @@ func (s *AnalyzeService) applyEdiblePortionRatios(ctx context.Context, resp map[
 		if row, ok := rows[index]; ok {
 			ratio = row.ratio
 			reason = row.reason
-			source = "deepseek"
+			source = provider
 			applied++
 		}
 		if ratio <= 0 || ratio > 100 {
@@ -4615,6 +4679,8 @@ type dbFirstNutritionOptions struct {
 	additionalContext            string
 	packagedIntegrationEnabled   bool
 	packagedExperimentCompatMode bool
+	skipSemanticRerank           bool
+	nutritionFallbackTimeout     time.Duration
 }
 
 type lookupItem struct {
@@ -4828,9 +4894,9 @@ func (s *AnalyzeService) applyDBFirstNutritionWithOptions(ctx context.Context, r
 			lookups[i] = lookupItem{index: index, item: item, name: name, weight: weight, resolve: resolve}
 		}
 	}
-	if len(semanticCandidates) > 0 {
-		if decisions, err := s.rerankNutritionCandidatesWithDeepSeek(ctx, semanticQueries, semanticCandidates); err != nil {
-			logger.Warn(ctx, "DeepSeek 候选复用判定失败",
+	if len(semanticCandidates) > 0 && !options.skipSemanticRerank {
+		if decisions, err := s.rerankNutritionCandidatesWithAI(ctx, semanticQueries, semanticCandidates); err != nil {
+			logger.Warn(ctx, "营养候选复用模型判定失败",
 				logger.Err(err),
 				slog.Int("candidate_group_count", len(semanticCandidates)),
 			)
@@ -4860,9 +4926,9 @@ func (s *AnalyzeService) applyDBFirstNutritionWithOptions(ctx context.Context, r
 					}
 					if decision.Confidence >= 0.95 {
 						if proposer, ok := s.nutrition.(nutritionAliasCandidateProposer); ok {
-							model := "deepseek-v4-pro"
-							if s.deepseek != nil && strings.TrimSpace(s.deepseek.Model) != "" {
-								model = strings.TrimSpace(s.deepseek.Model)
+							_, _, model := s.runtimePostprocessClient()
+							if strings.TrimSpace(model) == "" {
+								model = deepSeekNutritionFallbackModel
 							}
 							if err := proposer.ProposeNutritionAliasCandidate(ctx, food.ID, lookups[lookupIndex].name, model, decision.Confidence, decision.Reason); err != nil {
 								logger.Warn(ctx, "营养别名候选写入待审队列失败",
@@ -4896,29 +4962,36 @@ func (s *AnalyzeService) applyDBFirstNutritionWithOptions(ctx context.Context, r
 	if len(fallbackCandidates) > 0 {
 		contextText := ""
 		contextText = options.additionalContext
-		logger.Info(ctx, "营养库未命中，开始 DeepSeek 营养补全",
+		logger.Info(ctx, "营养库未命中，开始模型营养补全",
 			slog.Int("candidate_count", len(fallbackCandidates)),
 			slog.Any("candidates", unresolvedNutritionCandidateLogSummary(fallbackCandidates, 12)),
 		)
-		apm.AddEvent(ctx, "营养库未命中，开始 DeepSeek 营养补全",
+		apm.AddEvent(ctx, "营养库未命中，开始模型营养补全",
 			attribute.Int("analysis.candidate_count", len(fallbackCandidates)),
 			attribute.String("analysis.candidates", summarizeUnresolvedNutritionCandidates(fallbackCandidates, 12)),
 		)
-		if rows, err := s.estimateNutritionWithDeepSeek(ctx, fallbackCandidates, contextText); err == nil {
+		fallbackCtx := ctx
+		fallbackCancel := func() {}
+		if options.nutritionFallbackTimeout > 0 {
+			fallbackCtx, fallbackCancel = context.WithTimeout(ctx, options.nutritionFallbackTimeout)
+		}
+		rows, fallbackErr := s.estimateNutritionWithFallback(fallbackCtx, fallbackCandidates, contextText)
+		fallbackCancel()
+		if fallbackErr == nil {
 			fallbacks = rows
-			logger.Info(ctx, "DeepSeek 营养补全完成",
+			logger.Info(ctx, "模型营养补全完成",
 				slog.Int("candidate_count", len(fallbackCandidates)),
 				slog.Int("generated_count", len(fallbacks)),
 				slog.Any("generated_indexes", sortedIntKeys(fallbacks)),
 			)
-			apm.AddEvent(ctx, "DeepSeek 营养补全完成",
+			apm.AddEvent(ctx, "模型营养补全完成",
 				attribute.Int("analysis.candidate_count", len(fallbackCandidates)),
 				attribute.Int("analysis.generated_count", len(fallbacks)),
 			)
 		} else {
 			metrics.AddNutritionResolveItems("db_first", "deepseek_fallback_failed", len(fallbackCandidates))
-			logger.Warn(ctx, "DeepSeek 营养补全失败",
-				logger.Err(err),
+			logger.Warn(ctx, "营养补全模型调用失败",
+				logger.Err(fallbackErr),
 				slog.Int("candidate_count", len(fallbackCandidates)),
 			)
 		}
@@ -5125,7 +5198,16 @@ func (s *AnalyzeService) applySuggestedRatios(ctx context.Context, resp map[stri
 		resp["suggest_ratio_status"] = "disabled"
 		return resp
 	}
-	if s.ofoxAIClient == nil {
+	client, provider, modelName := s.runtimePostprocessClient()
+	if client == nil && s != nil && s.ofoxAIClient != nil {
+		client = s.ofoxAIClient
+		provider = "gemini"
+		modelName = "gemini"
+		if ofoxClient, ok := s.ofoxAIClient.(*OfoxAIClient); ok && strings.TrimSpace(ofoxClient.Model) != "" {
+			modelName = ofoxClient.Model
+		}
+	}
+	if client == nil {
 		resp["items"] = withDefaultSuggestedRatios(items, "unavailable")
 		resp["suggest_ratio_enabled"] = true
 		resp["suggest_ratio_status"] = "unavailable"
@@ -5133,14 +5215,10 @@ func (s *AnalyzeService) applySuggestedRatios(ctx context.Context, resp map[stri
 	}
 
 	prompt := buildSuggestedRatioPrompt(items, input)
-	modelName := "gemini"
-	if client, ok := s.ofoxAIClient.(*OfoxAIClient); ok && strings.TrimSpace(client.Model) != "" {
-		modelName = client.Model
-	}
 	callCtx, cancel := context.WithTimeout(ctx, ratioSuggestionTimeout)
 	defer cancel()
-	parsed, err := analyzeWithJSONParseRetry(callCtx, "suggest_ratio", "gemini", modelName, func(innerCtx context.Context) (map[string]any, error) {
-		return s.ofoxAIClient.Analyze(innerCtx, prompt, "")
+	parsed, err := analyzeWithJSONParseRetry(callCtx, "suggest_ratio", provider, modelName, func(innerCtx context.Context) (map[string]any, error) {
+		return client.Analyze(innerCtx, prompt, "")
 	})
 	if err != nil {
 		logger.Warn(ctx, "建议摄入比例生成失败",
@@ -5495,7 +5573,7 @@ func buildSuggestedRatioPrompt(items []map[string]any, input AnalyzeInput) strin
 	return "你是健康饮食决策助手。请根据用户上下文和本餐最终营养数据，给出每个食物的建议摄入比例。\n" + string(bytes)
 }
 
-func (s *AnalyzeService) estimateNutritionWithDeepSeek(ctx context.Context, candidates []UnresolvedNutritionCandidate, additionalContext string) (map[int]map[string]any, error) {
+func (s *AnalyzeService) estimateNutritionWithFallback(ctx context.Context, candidates []UnresolvedNutritionCandidate, additionalContext string) (map[int]map[string]any, error) {
 	if s.nutritionAI != nil {
 		return s.nutritionAI.Estimate(ctx, candidates, additionalContext)
 	}
@@ -6446,8 +6524,9 @@ type foodCandidateReuseDecision struct {
 	AliasName              string  `json:"aliasName"`
 }
 
-func (s *AnalyzeService) rerankNutritionCandidatesWithDeepSeek(ctx context.Context, queries map[int]string, candidates map[int][]foodrecordrepo.SearchCandidate) (map[int]*foodCandidateReuseDecision, error) {
-	if s == nil || s.deepseek == nil || strings.TrimSpace(s.deepseek.APIKey) == "" || len(candidates) == 0 {
+func (s *AnalyzeService) rerankNutritionCandidatesWithAI(ctx context.Context, queries map[int]string, candidates map[int][]foodrecordrepo.SearchCandidate) (map[int]*foodCandidateReuseDecision, error) {
+	client, _, _ := s.runtimePostprocessClient()
+	if client == nil || len(candidates) == 0 {
 		return map[int]*foodCandidateReuseDecision{}, nil
 	}
 	type requestItem struct {
@@ -6518,7 +6597,7 @@ func (s *AnalyzeService) rerankNutritionCandidatesWithDeepSeek(ctx context.Conte
 	userBytes, _ := json.Marshal(userPrompt)
 	callCtx, cancel := context.WithTimeout(ctx, 18*time.Second)
 	defer cancel()
-	parsed, err := s.deepseek.Analyze(callCtx, systemPrompt+"\n"+string(userBytes), "")
+	parsed, err := client.Analyze(callCtx, systemPrompt+"\n"+string(userBytes), "")
 	if err != nil {
 		return nil, err
 	}

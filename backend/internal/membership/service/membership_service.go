@@ -50,11 +50,12 @@ const (
 	earlyUserPaidCreditsMultiplier  = 2
 	inviteRewardRequiredDays        = 2
 	inviteRewardWindowDays          = 7
-	inviteRewardCreditsOnQualify    = 15
+	inviteRewardCreditsOnQualify    = 0
 	inviteRewardMembershipGrantDays = 7
+	inviteRewardInviteeGrantDays    = 3
 	inviteRewardMembershipPlanCode  = "light_monthly"
-	inviteRewardMembershipType      = "membership_light_week"
-	inviteRewardMembershipLabel     = "一周轻度版会员"
+	inviteRewardMembershipType      = "membership_light_reward"
+	inviteRewardMembershipLabel     = "7 天轻度版会员"
 	inviteRewardMonthlyLimit        = 10
 	inviteRewardLegacyCreditsPerDay = 5
 	sharePosterRewardCredits        = 1
@@ -530,7 +531,7 @@ func (s *MembershipService) ActivatePendingInviteReferralOnFirstValidUse(ctx con
 		"inviter_user_id": referral.InviterUserID,
 		"invitee_user_id": referral.InviteeUserID,
 		"qualified_date":  qualifiedDate,
-		"rule":            fmt.Sprintf("%dd/%ddays/%ddays-light-membership", inviteRewardWindowDays, inviteRewardRequiredDays, inviteRewardMembershipGrantDays),
+		"rule":            fmt.Sprintf("%dd/%ddays/inviter-%dd-invitee-%dd-light-membership", inviteRewardWindowDays, inviteRewardRequiredDays, inviteRewardMembershipGrantDays, inviteRewardInviteeGrantDays),
 		"reward_type":     inviteRewardMembershipType,
 		"reward_label":    inviteRewardMembershipLabel,
 	}
@@ -573,6 +574,7 @@ func (s *MembershipService) grantInviteRewardMembership(ctx context.Context, ref
 		userID = referral.InviterUserID
 	}
 	userID = strings.TrimSpace(userID)
+	grantDays := inviteRewardGrantDaysForRole(role)
 	if userID == "" {
 		return nil, nil
 	}
@@ -591,7 +593,7 @@ func (s *MembershipService) grantInviteRewardMembership(ctx context.Context, ref
 		SourceKey:    sourceKey,
 		PlanCode:     inviteRewardMembershipPlanCode,
 		DailyCredits: dailyCredits,
-		GrantDays:    inviteRewardMembershipGrantDays,
+		GrantDays:    grantDays,
 		ReferralID:   referral.ID,
 		Role:         role,
 		Meta:         meta,
@@ -610,7 +612,7 @@ func (s *MembershipService) grantInviteRewardMembership(ctx context.Context, ref
 			slog.String("role", role),
 			slog.String("source_key", sourceKey),
 			slog.String("plan_code", grant.PlanCode),
-			slog.Int("grant_days", inviteRewardMembershipGrantDays),
+			slog.Int("grant_days", grantDays),
 			slog.String("membership_expires_at", membershipExpiresAt),
 		)
 	}
@@ -646,8 +648,8 @@ func (s *MembershipService) GetInviteRewardStatus(ctx context.Context, userID st
 			"records_needed":   days,
 			"reward_credits":   inviteRewardCreditsOnQualify,
 			"reward_type":      inviteRewardMembershipType,
-			"reward_label":     inviteRewardMembershipLabel,
-			"reward_days":      inviteRewardMembershipGrantDays,
+			"reward_label":     inviteRewardLabelForRole("invitee"),
+			"reward_days":      inviteRewardGrantDaysForRole("invitee"),
 			"reward_plan_code": inviteRewardMembershipPlanCode,
 			"inviter_nickname": inviterNickname,
 		}
@@ -671,8 +673,8 @@ func (s *MembershipService) GetInviteRewardStatus(ctx context.Context, userID st
 				"records_needed":   days,
 				"reward_credits":   inviteRewardCreditsOnQualify,
 				"reward_type":      inviteRewardMembershipType,
-				"reward_label":     inviteRewardMembershipLabel,
-				"reward_days":      inviteRewardMembershipGrantDays,
+				"reward_label":     inviteRewardLabelForRole("inviter"),
+				"reward_days":      inviteRewardGrantDaysForRole("inviter"),
 				"reward_plan_code": inviteRewardMembershipPlanCode,
 			})
 		}
@@ -710,8 +712,8 @@ func (s *MembershipService) buildInviteRewardRecord(ctx context.Context, userID 
 	hasMembershipGrant := grant != nil
 	requirementText, nextActionText := inviteRewardActionTexts(role, referral, recordsNeeded, expired, blockedReasonLabel, hasMembershipGrant)
 	rewardType := inviteRewardMembershipType
-	rewardLabel := inviteRewardMembershipLabel
-	rewardDays := inviteRewardMembershipGrantDays
+	rewardLabel := inviteRewardLabelForRole(role)
+	rewardDays := inviteRewardGrantDaysForRole(role)
 	rewardPlanCode := inviteRewardMembershipPlanCode
 	var membershipGrantStartAt any
 	var membershipGrantExpiresAt any
@@ -722,10 +724,8 @@ func (s *MembershipService) buildInviteRewardRecord(ctx context.Context, userID 
 			rewardPlanCode = grant.PlanCode
 		}
 	} else if referral.Status == "reward_completed" {
-		rewardType = "earned_credits"
-		rewardLabel = fmt.Sprintf("%d 奖励积分", inviteRewardCreditsOnQualify)
-		rewardDays = 0
-		rewardPlanCode = ""
+		// 达标只代表奖励已经获得；会员天数从用户主动启用时才开始计算。
+		statusLabel = "待启用"
 	}
 	return map[string]any{
 		"referral_id":                 referral.ID,
@@ -830,10 +830,25 @@ func inviteRewardBlockedReasonLabel(reason *string) string {
 	}
 }
 
+func inviteRewardGrantDaysForRole(role string) int {
+	if strings.TrimSpace(role) == "invitee" {
+		return inviteRewardInviteeGrantDays
+	}
+	return inviteRewardMembershipGrantDays
+}
+
+func inviteRewardLabelForRole(role string) string {
+	return fmt.Sprintf("%d 天轻度版会员", inviteRewardGrantDaysForRole(role))
+}
+
+func inviteRewardPairLabel() string {
+	return "邀请人获得 7 天轻度版会员，好友获得 3 天轻度版会员"
+}
+
 func inviteRewardActionTexts(role string, referral domain.UserInviteReferral, recordsNeeded int, expired bool, blockedReasonLabel string, hasMembershipGrant bool) (string, string) {
-	rewardText := "完成后双方各得" + inviteRewardMembershipLabel
+	rewardText := "完成后你获得 3 天轻度版会员，邀请人获得 7 天轻度版会员"
 	if role == "inviter" {
-		rewardText = "好友完成后你们各得" + inviteRewardMembershipLabel
+		rewardText = "好友完成后你获得 7 天轻度版会员，好友获得 3 天轻度版会员"
 	}
 	switch strings.TrimSpace(referral.Status) {
 	case "pending_qualified":
@@ -846,9 +861,9 @@ func inviteRewardActionTexts(role string, referral domain.UserInviteReferral, re
 		return fmt.Sprintf("还需完成 %d 个不同自然日的饮食或运动记录，%s", recordsNeeded, rewardText), "完成饮食或运动记录，先点亮第 1 个有效自然日"
 	case "reward_completed":
 		if hasMembershipGrant {
-			return "已完成，双方已获得" + inviteRewardMembershipLabel, "会员奖励已发放"
+			return "已完成，" + inviteRewardPairLabel(), "会员奖励已启用"
 		}
-		return fmt.Sprintf("已完成，双方各 +%d 积分", inviteRewardCreditsOnQualify), "奖励已进入奖励积分余额"
+		return "已达标，" + inviteRewardPairLabel(), "可在「邀请好友得会员」中按需启用，会员天数从启用时开始计算"
 	case "reward_blocked":
 		if blockedReasonLabel != "" {
 			return blockedReasonLabel, "该邀请奖励无法继续发放"

@@ -4736,13 +4736,13 @@ export async function getMyVouchers(status?: string): Promise<VoucherListRespons
       method: 'GET',
     })
     if (response.statusCode !== 200) {
-      const errorMsg = (response.data as any)?.detail || '获取礼券列表失败'
+      const errorMsg = (response.data as any)?.detail || '获取可用奖励失败'
       throw new Error(errorMsg)
     }
     return (response.data as VoucherListResponse) || { items: [], total: 0 }
   } catch (error: any) {
-    console.error('获取礼券列表失败:', error)
-    throw new Error(error.message || '获取礼券列表失败')
+    console.error('获取可用奖励失败:', error)
+    throw new Error(error.message || '获取可用奖励失败')
   }
 }
 
@@ -4752,13 +4752,13 @@ export async function useVoucher(voucherId: string): Promise<{ success: boolean 
       method: 'POST',
     })
     if (response.statusCode !== 200) {
-      const errorMsg = (response.data as any)?.detail || '使用礼券失败'
+      const errorMsg = (response.data as any)?.detail || '启用奖励失败'
       throw new Error(errorMsg)
     }
     return (response.data as { success: boolean }) || { success: true }
   } catch (error: any) {
-    console.error('使用礼券失败:', error)
-    throw new Error(error.message || '使用礼券失败')
+    console.error('启用奖励失败:', error)
+    throw new Error(error.message || '启用奖励失败')
   }
 }
 

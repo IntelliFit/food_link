@@ -1,15 +1,21 @@
 import { View, Text, Image, Button } from '@tarojs/components'
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import Taro, { useRouter, useShareAppMessage, useShareTimeline } from '@tarojs/taro'
 import {
   acceptFriendInvite,
   getAccessToken,
   getFriendInviteProfile,
   getFriendInviteProfileByCode,
+  getMyVouchers,
+  getRewardCenter,
   getShareQrEnvVersion,
   getUnlimitedQRCode,
   showUnifiedApiError,
+  useVoucher as activateReward,
   type FriendInviteProfile,
+  type InviteRewardCenterSummary,
+  type InviteRewardRecord,
+  type VoucherItem,
 } from '../../../utils/api'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { withAuth } from '../../../utils/withAuth'
@@ -29,6 +35,10 @@ function InviteFriendsPage() {
   const [qrLoading, setQrLoading] = useState(false)
   const [qrCodeImage, setQrCodeImage] = useState('')
   const [accepting, setAccepting] = useState(false)
+  const [rewardLoading, setRewardLoading] = useState(false)
+  const [rewardSummary, setRewardSummary] = useState<InviteRewardCenterSummary | null>(null)
+  const [membershipRewards, setMembershipRewards] = useState<VoucherItem[]>([])
+  const [activatingRewardID, setActivatingRewardID] = useState('')
 
   const inviterUserId = profile?.user_id || routeFromUserId
   const inviterNickname = profile?.nickname || ''
@@ -44,8 +54,8 @@ function InviteFriendsPage() {
   }, [inviterUserId, inviteCode])
 
   const shareTitle = inviterNickname
-    ? `${inviterNickname}邀请你加入食探，达标后各得一周轻度版会员`
-    : '加入食探并完成2天打卡，双方各得一周轻度版会员'
+    ? `${inviterNickname}邀请你加入食探：完成2天记录，你得3天会员`
+    : '加入食探完成2天记录，你得3天会员，邀请人得7天'
 
   useShareAppMessage(() => ({
     title: shareTitle,
@@ -152,6 +162,44 @@ function InviteFriendsPage() {
     }
   }, [inviteCode, isInviteOwner])
 
+  const loadInviteRewards = useCallback(async () => {
+    if (!isInviteOwner || !getAccessToken()) {
+      setRewardSummary(null)
+      setMembershipRewards([])
+      return
+    }
+
+    setRewardLoading(true)
+    const progressRequest = getRewardCenter()
+    const rewardsRequest = getMyVouchers('pending')
+    try {
+      const rewardCenter = await progressRequest
+      setRewardSummary(rewardCenter.invite_reward || null)
+    } catch (error) {
+      console.error('[invite-friends] reward progress load failed', error)
+      setRewardSummary(null)
+    }
+    try {
+      const rewards = await rewardsRequest
+      setMembershipRewards((rewards.items || []).filter(item => item.voucher_type === 'invite_light_week'))
+    } catch (error) {
+      console.error('[invite-friends] membership rewards load failed', error)
+      setMembershipRewards([])
+    }
+    setRewardLoading(false)
+  }, [isInviteOwner])
+
+  useEffect(() => {
+    void loadInviteRewards()
+  }, [loadInviteRewards])
+
+  useEffect(() => {
+    if (rewardLoading || router.params?.section !== 'rewards') return
+    Taro.nextTick(() => {
+      Taro.pageScrollTo({ selector: '.invite-rewards-section', duration: 250 })
+    })
+  }, [rewardLoading, router.params?.section])
+
   const handleCopyInviteCode = async () => {
     if (!inviteCode) {
       Taro.showToast({ title: '邀请码暂不可用', icon: 'none' })
@@ -164,6 +212,30 @@ function InviteFriendsPage() {
   const handlePreviewQr = () => {
     if (!qrCodeImage) return
     Taro.previewImage({ urls: [qrCodeImage], current: qrCodeImage })
+  }
+
+  const handleActivateMembershipReward = async (reward: VoucherItem) => {
+    if (reward.status !== 'pending' || activatingRewardID) return
+    const grantDays = membershipRewardDays(reward)
+    const confirmed = await Taro.showModal({
+      title: `现在启用 ${grantDays} 天会员？`,
+      content: `确认后会立即开始 ${grantDays} 天轻度版会员。也可以先留着，等需要时再启用。`,
+      confirmText: '现在启用',
+      cancelText: '以后再用',
+      confirmColor: '#10b981',
+    })
+    if (!confirmed.confirm) return
+
+    setActivatingRewardID(reward.id)
+    try {
+      await activateReward(reward.id)
+      Taro.showToast({ title: '会员奖励已启用', icon: 'success' })
+      await loadInviteRewards()
+    } catch (error) {
+      await showUnifiedApiError(error, '启用会员奖励失败')
+    } finally {
+      setActivatingRewardID('')
+    }
   }
 
   const handleInviteAction = async () => {
@@ -212,15 +284,29 @@ function InviteFriendsPage() {
   return (
     <View className='invite-page'>
       <View className='invite-hero'>
-        <Text className='invite-eyebrow'>邀请有礼</Text>
+        <Text className='invite-eyebrow'>邀请好友得会员</Text>
         <Text className='invite-title'>
           {inviterNickname
             ? `${inviterNickname} 邀你加入食探`
             : isInviteOwner
-              ? '把食探分享给新朋友'
+              ? '邀请好友，一起得会员'
               : '加入食探并开始健康打卡'}
         </Text>
-        <Text className='invite-subtitle'>新用户 7 天内完成 2 个自然日有效记录，双方各得一周轻度版会员，每月最多 10 人</Text>
+        <Text className='invite-subtitle'>新朋友注册后 7 天内完成 2 个不同自然日有效记录：邀请人得 7 天会员，新朋友得 3 天会员。</Text>
+      </View>
+
+      <View className='invite-benefits'>
+        <View className='invite-benefit invite-benefit--owner'>
+          <Text className='invite-benefit__eyebrow'>邀请人</Text>
+          <Text className='invite-benefit__days'>7 天</Text>
+          <Text className='invite-benefit__label'>轻度版会员</Text>
+        </View>
+        <View className='invite-benefit__arrow'>→</View>
+        <View className='invite-benefit invite-benefit--friend'>
+          <Text className='invite-benefit__eyebrow'>新朋友</Text>
+          <Text className='invite-benefit__days'>3 天</Text>
+          <Text className='invite-benefit__label'>轻度版会员</Text>
+        </View>
       </View>
 
       <View className='invite-card inviter-card'>
@@ -238,8 +324,8 @@ function InviteFriendsPage() {
             </Text>
             <Text className='inviter-desc'>
               {isInviteOwner
-                ? '通过小程序卡片或二维码邀请新朋友，不必先分享打卡海报'
-                : '完成注册后继续记录饮食或运动，满足规则即可到账'}
+                ? '邀请码、分享链接和二维码都能绑定邀请关系'
+                : '完成注册后继续记录饮食或运动，满足规则即可获得会员奖励'}
             </Text>
           </View>
         </View>
@@ -260,9 +346,127 @@ function InviteFriendsPage() {
         </View>
         <View className='rule-item'>
           <Text className='rule-item__index'>03</Text>
-          <Text className='rule-item__text'>达标后双方各得一周轻度版会员，邀请人每月上限 10 人</Text>
+          <Text className='rule-item__text'>达标后邀请人得 7 天、新朋友得 3 天；奖励可留到以后手动启用，邀请人每月最多奖励 10 位好友</Text>
         </View>
       </View>
+
+      {isInviteOwner && (
+        <View className='invite-card invite-progress-card'>
+          <View className='invite-section-head'>
+            <View>
+              <Text className='invite-section-title'>邀请进度</Text>
+              <Text className='invite-section-desc'>好友必须在注册后 7 天内完成 2 个不同自然日有效记录</Text>
+            </View>
+          </View>
+
+          {rewardLoading ? (
+            <View className='invite-section-loading'><View className='invite-spinner' /></View>
+          ) : (
+            <>
+              {rewardSummary?.as_inviter_summary && (
+                <View className='invite-progress-block'>
+                  <Text className='invite-progress-block__title'>我邀请的好友</Text>
+                  <View className='invite-progress-stats'>
+                    <View className='invite-progress-stat'>
+                      <Text className='invite-progress-stat__value'>{rewardSummary.as_inviter_summary.invited_count}</Text>
+                      <Text className='invite-progress-stat__label'>已邀请</Text>
+                    </View>
+                    <View className='invite-progress-stat'>
+                      <Text className='invite-progress-stat__value'>{rewardSummary.as_inviter_summary.completed_count}</Text>
+                      <Text className='invite-progress-stat__label'>已达标</Text>
+                    </View>
+                    <View className='invite-progress-stat'>
+                      <Text className='invite-progress-stat__value'>{rewardSummary.as_inviter_summary.pending_count}</Text>
+                      <Text className='invite-progress-stat__label'>待达标</Text>
+                    </View>
+                  </View>
+                  {Array.isArray(rewardSummary.as_inviter_summary.records) && rewardSummary.as_inviter_summary.records.length > 0 && (
+                    <View className='invite-friend-list'>
+                      {rewardSummary.as_inviter_summary.records.map(record => (
+                        <View className='invite-friend-row' key={record.referral_id}>
+                          <View className='invite-friend-row__main'>
+                            <Text className='invite-friend-row__name'>{record.other_nickname || shortInviteID(record.other_user_id) || '好友'}</Text>
+                            <Text className='invite-friend-row__desc'>{record.requirement_text || record.next_action_text || '邀请进度待更新'}</Text>
+                          </View>
+                          <Text className={`invite-friend-row__status ${inviteStatusClass(record)}`}>
+                            {record.status_label || record.status || '未知'}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+                </View>
+              )}
+
+              {rewardSummary?.as_invitee_summary && (
+                <View className='invite-progress-block invite-progress-block--invitee'>
+                  <View className='invite-progress-block__head'>
+                    <View>
+                      <Text className='invite-progress-block__title'>我的受邀任务</Text>
+                      <Text className='invite-progress-block__desc'>完成后获得 3 天轻度版会员</Text>
+                    </View>
+                    <Text className='invite-progress-block__count'>
+                      {rewardSummary.as_invitee_summary.completed_days}/{rewardSummary.as_invitee_summary.required_days} 天
+                    </Text>
+                  </View>
+                  <View className='invite-day-progress'>
+                    <View
+                      className='invite-day-progress__bar'
+                      style={{ width: `${inviteProgressPercent(rewardSummary.as_invitee_summary.completed_days, rewardSummary.as_invitee_summary.required_days)}%` }}
+                    />
+                  </View>
+                  <Text className='invite-progress-block__note'>
+                    {rewardSummary.as_invitee_summary.deadline_text || rewardSummary.as_invitee_summary.next_action_text || '继续记录即可'}
+                  </Text>
+                </View>
+              )}
+
+              {!rewardSummary?.as_inviter_summary && !rewardSummary?.as_invitee_summary && (
+                <View className='invite-progress-empty'>
+                  <Text className='invite-progress-empty__title'>还没有邀请记录</Text>
+                  <Text className='invite-progress-empty__desc'>把邀请码或邀请链接发给新朋友，注册后会自动出现在这里。</Text>
+                </View>
+              )}
+            </>
+          )}
+        </View>
+      )}
+
+      {isInviteOwner && (
+        <View className='invite-card invite-rewards-section'>
+          <View className='invite-section-head'>
+            <View>
+              <Text className='invite-section-title'>可启用的会员奖励</Text>
+              <Text className='invite-section-desc'>奖励不会自动计时，等需要时再启用</Text>
+            </View>
+          </View>
+          {rewardLoading ? (
+            <View className='invite-section-loading'><View className='invite-spinner' /></View>
+          ) : membershipRewards.length === 0 ? (
+            <View className='invite-reward-empty'>达标后的 3 天或 7 天会员奖励会保存在这里</View>
+          ) : (
+            <View className='invite-reward-list'>
+              {membershipRewards.map(reward => {
+                const activating = activatingRewardID === reward.id
+                return (
+                  <View className='invite-reward-row' key={reward.id}>
+                    <View className='invite-reward-row__main'>
+                      <Text className='invite-reward-row__title'>{reward.title}</Text>
+                      <Text className='invite-reward-row__desc'>{reward.description || '邀请达标会员奖励'}</Text>
+                    </View>
+                    <View
+                      className={`invite-reward-row__button ${activating ? 'invite-reward-row__button--loading' : ''}`}
+                      onClick={() => handleActivateMembershipReward(reward)}
+                    >
+                      {activating ? <View className='invite-reward-row__spinner' /> : <Text>现在启用</Text>}
+                    </View>
+                  </View>
+                )
+              })}
+            </View>
+          )}
+        </View>
+      )}
 
       {isInviteOwner && (
         <View className='invite-card qr-card'>
@@ -294,7 +498,7 @@ function InviteFriendsPage() {
           </>
         ) : (
           <Button className='invite-btn invite-btn--primary' onClick={handleInviteAction} disabled={accepting}>
-            {accepting ? '处理中...' : ctaText}
+            {accepting ? <View className='invite-btn__spinner' /> : ctaText}
           </Button>
         )}
       </View>
@@ -306,6 +510,36 @@ function InviteFriendsPage() {
       )}
     </View>
   )
+}
+
+function membershipRewardDays(reward: VoucherItem): number {
+  const value = Number(reward.reward_payload?.grant_days)
+  return Number.isFinite(value) && value > 0 ? value : 7
+}
+
+function inviteProgressPercent(completedDays: number, requiredDays: number): number {
+  if (!requiredDays || requiredDays <= 0) return 0
+  return Math.max(0, Math.min(100, Math.round((completedDays / requiredDays) * 100)))
+}
+
+function shortInviteID(value?: string | null): string {
+  if (!value) return ''
+  return value.length <= 8 ? value : `${value.slice(0, 4)}...${value.slice(-4)}`
+}
+
+function inviteStatusClass(record: InviteRewardRecord): string {
+  if (record.status_label === '已过期') return 'invite-friend-row__status--blocked'
+  switch (record.status) {
+    case 'reward_completed':
+      return 'invite-friend-row__status--completed'
+    case 'reward_blocked':
+    case 'cancelled':
+      return 'invite-friend-row__status--blocked'
+    case 'reward_active':
+      return 'invite-friend-row__status--active'
+    default:
+      return 'invite-friend-row__status--pending'
+  }
 }
 
 export default withAuth(InviteFriendsPage, { public: true })

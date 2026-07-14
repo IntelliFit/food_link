@@ -68,13 +68,15 @@ type StatsService struct {
 }
 
 const (
-	defaultDeepSeekBaseURL    = "https://api.deepseek.com"
-	statsInsightDeepSeekModel = "deepseek-v4-pro"
-	statsInsightDailyLimit    = 3
-	statsInsightCreditCost    = 1
-	statsInsightMaxTokens     = 4096
-	statsInsightMinRecordDays = 1
-	statsInsightMaxAttempts   = 2
+	defaultDeepSeekBaseURL     = "https://api.deepseek.com"
+	defaultDashScopeBaseURL    = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+	statsInsightDeepSeekModel  = "deepseek-v4-pro"
+	statsInsightPreferredModel = "qwen3.6-flash"
+	statsInsightDailyLimit     = 3
+	statsInsightCreditCost     = 1
+	statsInsightMaxTokens      = 4096
+	statsInsightMinRecordDays  = 1
+	statsInsightMaxAttempts    = 2
 	// The default Go transport gives TLS negotiation only 10 seconds. The
 	// OpenAI-compatible gateway can occasionally take longer during cold starts.
 	statsInsightTLSHandshakeTimeout = 30 * time.Second
@@ -147,6 +149,29 @@ func (s *StatsService) deepSeekChatBaseURL() string {
 		}
 	}
 	return defaultDeepSeekBaseURL
+}
+
+type textLLMRuntimeConfig struct {
+	BaseURL  string
+	APIKey   string
+	Model    string
+	Provider string
+}
+
+func (s *StatsService) preferredTextLLM() textLLMRuntimeConfig {
+	if s != nil && s.cfg != nil {
+		if apiKey := strings.TrimSpace(s.cfg.External.DashScopeAPIKey); apiKey != "" {
+			baseURL := strings.TrimRight(strings.TrimSpace(s.cfg.External.DashScopeBaseURL), "/")
+			if baseURL == "" {
+				baseURL = defaultDashScopeBaseURL
+			}
+			return textLLMRuntimeConfig{BaseURL: baseURL, APIKey: apiKey, Model: statsInsightPreferredModel, Provider: "qwen"}
+		}
+		if apiKey := strings.TrimSpace(s.cfg.External.DeepSeekAPIKey); apiKey != "" {
+			return textLLMRuntimeConfig{BaseURL: s.deepSeekChatBaseURL(), APIKey: apiKey, Model: statsInsightDeepSeekModel, Provider: "deepseek"}
+		}
+	}
+	return textLLMRuntimeConfig{BaseURL: defaultDashScopeBaseURL, Model: statsInsightPreferredModel, Provider: "qwen"}
 }
 
 func (s *StatsService) ConfigureCreditGuard(guard CreditGuard) {
@@ -626,15 +651,10 @@ func (s *StatsService) GeneratePetChatStream(ctx context.Context, userID string,
 		defer close(chunkChan)
 		fullAnswer := &strings.Builder{}
 		var streamErr error
-		apiKey := ""
-		baseURL := s.deepSeekBaseURL
-		if strings.TrimSpace(baseURL) == "" {
-			baseURL = "https://api.deepseek.com"
-		}
-		model := s.petChatModel()
-		if s.cfg != nil {
-			apiKey = strings.TrimSpace(s.cfg.External.DeepSeekAPIKey)
-		}
+		llm := s.preferredTextLLM()
+		apiKey := llm.APIKey
+		baseURL := llm.BaseURL
+		model := llm.Model
 		if apiKey == "" {
 			fallback := fallbackPetChatAnswer(comp, estimate.Question)
 			fullAnswer.WriteString(fallback)
@@ -983,12 +1003,10 @@ func (s *StatsService) SaveInsight(ctx context.Context, userID string, content s
 }
 
 func (s *StatsService) generatePetChatAnswer(ctx context.Context, comp *statsComputation, question string, historyMessages []domain.PetChatMessage) (statsInsightGeneration, error) {
-	apiKey := ""
-	baseURL := s.deepSeekChatBaseURL()
-	model := s.petChatModel()
-	if s.cfg != nil {
-		apiKey = strings.TrimSpace(s.cfg.External.DeepSeekAPIKey)
-	}
+	llm := s.preferredTextLLM()
+	apiKey := llm.APIKey
+	baseURL := llm.BaseURL
+	model := llm.Model
 	if apiKey == "" {
 		return statsInsightGeneration{Content: fallbackPetChatAnswer(comp, question), Model: model}, nil
 	}
@@ -1002,12 +1020,12 @@ func (s *StatsService) generatePetChatAnswer(ctx context.Context, comp *statsCom
 			break
 		}
 		if term := findStatsInsightForbiddenIdentityTerm(generation.Content); term != "" {
-			lastErr = fmt.Errorf("DeepSeek 输出包含禁用身份措辞: %s", term)
+			lastErr = fmt.Errorf("文本模型输出包含禁用身份措辞: %s", term)
 			retryFeedback = fmt.Sprintf("上一次输出包含禁用身份措辞“%s”。请重新生成全文：不要自称任何身份，不要出现“专业营养师”“注册营养师”“持证营养师”等说法，也不要使用相近表达。", term)
 			continue
 		}
 		if term := findPetChatHarshToneTerm(generation.Content); term != "" {
-			lastErr = fmt.Errorf("DeepSeek 输出包含刺耳语气措辞: %s", term)
+			lastErr = fmt.Errorf("文本模型输出包含刺耳语气措辞: %s", term)
 			retryFeedback = fmt.Sprintf("上一次输出包含容易让用户感觉被责备的措辞“%s”。请重新生成全文：语气要温和陪伴，不要调侃、挖苦、训话、责备或评价用户本人；用“我们可以”“明天先试试”这类合作式表达。", term)
 			continue
 		}
@@ -1021,7 +1039,7 @@ func (s *StatsService) generatePetChatAnswer(ctx context.Context, comp *statsCom
 	if lastErr != nil {
 		return statsInsightGeneration{}, lastErr
 	}
-	return statsInsightGeneration{}, fmt.Errorf("DeepSeek 返回了空响应")
+	return statsInsightGeneration{}, fmt.Errorf("文本模型返回了空响应")
 }
 
 func (s *StatsService) aiUsagePricingConfig() config.AIUsagePricingConfig {
@@ -1032,10 +1050,7 @@ func (s *StatsService) aiUsagePricingConfig() config.AIUsagePricingConfig {
 }
 
 func (s *StatsService) petChatModel() string {
-	if s.cfg != nil && strings.TrimSpace(s.cfg.AIUsagePricing.DefaultTextModel) != "" {
-		return strings.TrimSpace(s.cfg.AIUsagePricing.DefaultTextModel)
-	}
-	return statsInsightDeepSeekModel
+	return s.preferredTextLLM().Model
 }
 
 func (s *StatsService) buildStatsComputation(ctx context.Context, userID string, statsRange string, fallbackTDEE int, fallbackStreakDays int) (*statsComputation, error) {
@@ -1203,12 +1218,10 @@ func (s *StatsService) getStreakDays(ctx context.Context, userID string) int {
 }
 
 func (s *StatsService) generateNutritionInsight(ctx context.Context, comp *statsComputation) (statsInsightGeneration, error) {
-	apiKey := ""
-	baseURL := s.deepSeekChatBaseURL()
-	model := statsInsightDeepSeekModel
-	if s.cfg != nil {
-		apiKey = strings.TrimSpace(s.cfg.External.DeepSeekAPIKey)
-	}
+	llm := s.preferredTextLLM()
+	apiKey := llm.APIKey
+	baseURL := llm.BaseURL
+	model := llm.Model
 	if apiKey == "" {
 		return statsInsightGeneration{Content: fallbackStatsInsight(comp), Model: model}, nil
 	}
@@ -1223,7 +1236,7 @@ func (s *StatsService) generateNutritionInsight(ctx context.Context, comp *stats
 			break
 		}
 		if term := findStatsInsightForbiddenIdentityTerm(generation.Content); term != "" {
-			lastErr = fmt.Errorf("DeepSeek 输出包含禁用身份措辞: %s", term)
+			lastErr = fmt.Errorf("文本模型输出包含禁用身份措辞: %s", term)
 			retryFeedback = fmt.Sprintf("上一次输出包含禁用身份措辞“%s”。请重新生成全文：不要自称任何身份，不要出现“专业营养师”“专业的营养师”“注册营养师”“持证营养师”“饮食行为研究员”等说法，也不要用相近表达暗示自己具备执业资质。", term)
 			continue
 		}
@@ -1241,7 +1254,7 @@ func (s *StatsService) generateNutritionInsight(ctx context.Context, comp *stats
 	if lastErr != nil {
 		return statsInsightGeneration{}, lastErr
 	}
-	return statsInsightGeneration{}, fmt.Errorf("DeepSeek 返回了空响应")
+	return statsInsightGeneration{}, fmt.Errorf("文本模型返回了空响应")
 }
 
 func (s *StatsService) requestNutritionInsight(ctx context.Context, baseURL, apiKey, model, prompt, retryFeedback string) (statsInsightGeneration, error) {
@@ -1302,7 +1315,7 @@ func (s *StatsService) requestNutritionInsightOnce(ctx context.Context, baseURL,
 	defer resp.Body.Close()
 	respBody, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return statsInsightGeneration{}, fmt.Errorf("DeepSeek API 错误: %d %s", resp.StatusCode, extractDeepSeekError(respBody))
+		return statsInsightGeneration{}, fmt.Errorf("文本模型 API 错误: %d %s", resp.StatusCode, extractDeepSeekError(respBody))
 	}
 	var parsed struct {
 		Choices []struct {
@@ -1323,14 +1336,14 @@ func (s *StatsService) requestNutritionInsightOnce(ctx context.Context, baseURL,
 		return statsInsightGeneration{}, err
 	}
 	if len(parsed.Choices) == 0 {
-		return statsInsightGeneration{}, fmt.Errorf("DeepSeek 返回了空响应")
+		return statsInsightGeneration{}, fmt.Errorf("文本模型返回了空响应")
 	}
 	if strings.EqualFold(strings.TrimSpace(parsed.Choices[0].FinishReason), "length") {
-		return statsInsightGeneration{}, fmt.Errorf("DeepSeek 输出因 max_tokens 截断")
+		return statsInsightGeneration{}, fmt.Errorf("文本模型输出因 max_tokens 截断")
 	}
 	content := strings.TrimSpace(parsed.Choices[0].Message.Content)
 	if content == "" {
-		return statsInsightGeneration{}, fmt.Errorf("DeepSeek 返回了空响应")
+		return statsInsightGeneration{}, fmt.Errorf("文本模型返回了空响应")
 	}
 	return statsInsightGeneration{
 		Content: content,
@@ -1367,6 +1380,12 @@ func isTransientStatsInsightError(err error) bool {
 		"deepseek api 错误: 502",
 		"deepseek api 错误: 503",
 		"deepseek api 错误: 504",
+		"文本模型 api 错误: 408",
+		"文本模型 api 错误: 429",
+		"文本模型 api 错误: 500",
+		"文本模型 api 错误: 502",
+		"文本模型 api 错误: 503",
+		"文本模型 api 错误: 504",
 	} {
 		if strings.Contains(message, hint) {
 			return true
@@ -1399,7 +1418,7 @@ func (s *StatsService) streamNutritionInsight(ctx context.Context, baseURL, apiK
 		if err == nil && (resp.StatusCode < 200 || resp.StatusCode >= 300) {
 			respBody, _ := io.ReadAll(resp.Body)
 			_ = resp.Body.Close()
-			err = fmt.Errorf("DeepSeek API 错误: %d %s", resp.StatusCode, extractDeepSeekError(respBody))
+			err = fmt.Errorf("文本模型 API 错误: %d %s", resp.StatusCode, extractDeepSeekError(respBody))
 			resp = nil
 		}
 		if err == nil {
@@ -1438,7 +1457,7 @@ func (s *StatsService) streamNutritionInsight(ctx context.Context, baseURL, apiK
 			line, err := reader.ReadString('\n')
 			if err != nil {
 				if err != io.EOF {
-					logger.Warn(ctx, "读取 DeepSeek SSE 流失败", logger.Err(err))
+					logger.Warn(ctx, "读取文本模型 SSE 流失败", logger.Err(err))
 				}
 				return
 			}

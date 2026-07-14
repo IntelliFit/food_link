@@ -27,10 +27,10 @@ type MessageSender interface {
 }
 
 type VoucherService struct {
-	voucherRepo     *voucherrepo.VoucherRepo
-	membershipRepo  *membershiprepo.MembershipRepo
-	userRepo        *authrepo.UserRepo
-	messageSender   MessageSender
+	voucherRepo    *voucherrepo.VoucherRepo
+	membershipRepo *membershiprepo.MembershipRepo
+	userRepo       *authrepo.UserRepo
+	messageSender  MessageSender
 }
 
 func NewVoucherService(
@@ -74,8 +74,8 @@ func (s *VoucherService) IssueRegistrationTrialVoucher(ctx context.Context, user
 		Title:       "新用户试用卡",
 		Description: strPtr(fmt.Sprintf("赠送 %d 天会员试用权益", trialDays)),
 		RewardPayload: map[string]any{
-			"trial_days":    trialDays,
-			"trial_policy":  policy,
+			"trial_days":      trialDays,
+			"trial_policy":    policy,
 			"early_user_rank": intPtrValue(earlyRank),
 		},
 		SourceType:   sourceType,
@@ -97,9 +97,6 @@ func (s *VoucherService) IssueInviteRewardVouchers(ctx context.Context, referral
 	if referral == nil {
 		return nil, nil, fmt.Errorf("referral is nil")
 	}
-	now := time.Now()
-	validEndAt := now.AddDate(0, 0, defaultVoucherValidityDays)
-
 	makeVoucher := func(userID, role string) (*voucherdomain.UserVoucher, error) {
 		sourceType := voucherdomain.VoucherSourceTypeInviteReferral
 		sourceKey := fmt.Sprintf("%s:%s:%s", sourceType, referral.ID, role)
@@ -110,22 +107,24 @@ func (s *VoucherService) IssueInviteRewardVouchers(ctx context.Context, referral
 		if existing != nil {
 			return existing, nil
 		}
+		grantDays, title, description := inviteRewardVoucherCopy(role)
 		voucher := &voucherdomain.UserVoucher{
 			UserID:      userID,
 			VoucherType: voucherdomain.VoucherTypeInviteLightWeek,
 			Status:      voucherdomain.VoucherStatusPending,
-			Title:       "一周轻度版会员",
-			Description: strPtr("邀请好友达标奖励，点击即可领取 7 天轻度版会员"),
+			Title:       title,
+			Description: strPtr(description),
 			RewardPayload: map[string]any{
-				"plan_code":  "light_monthly",
-				"grant_days": 7,
+				"plan_code":   "light_monthly",
+				"grant_days":  grantDays,
 				"referral_id": referral.ID,
 				"role":        role,
 			},
 			SourceType:   sourceType,
 			SourceKey:    sourceKey,
 			ValidStartAt: nil,
-			ValidEndAt:   &validEndAt,
+			// 邀请奖励属于已经获得、等待用户主动启用的权益，不设置领取过期时间。
+			ValidEndAt: nil,
 		}
 		created, err := s.voucherRepo.CreateVoucher(ctx, voucher)
 		if err != nil {
@@ -172,9 +171,9 @@ func (s *VoucherService) IssueAdminPointsVoucher(ctx context.Context, adminUserI
 		Title:       fmt.Sprintf("%d 积分奖励", points),
 		Description: &description,
 		RewardPayload: map[string]any{
-			"points":    points,
-			"admin_id":  adminUserID,
-			"note":      note,
+			"points":   points,
+			"admin_id": adminUserID,
+			"note":     note,
 		},
 		SourceType:   sourceType,
 		SourceKey:    sourceKey,
@@ -211,7 +210,7 @@ func (s *VoucherService) UseVoucher(ctx context.Context, userID, voucherID strin
 	userID = strings.TrimSpace(userID)
 	voucherID = strings.TrimSpace(voucherID)
 	if userID == "" || voucherID == "" {
-		return fmt.Errorf("用户 ID 和礼券 ID 不能为空")
+		return fmt.Errorf("用户 ID 和奖励 ID 不能为空")
 	}
 
 	voucher, err := s.voucherRepo.GetVoucherByID(ctx, voucherID, userID)
@@ -219,10 +218,10 @@ func (s *VoucherService) UseVoucher(ctx context.Context, userID, voucherID strin
 		return err
 	}
 	if voucher == nil {
-		return fmt.Errorf("礼券不存在")
+		return fmt.Errorf("奖励不存在")
 	}
 	if !voucher.IsUsable() {
-		return fmt.Errorf("礼券不可用或已过期")
+		return fmt.Errorf("奖励不可用或已启用")
 	}
 
 	return s.voucherRepo.WithTransaction(ctx, func(tx *gorm.DB) error {
@@ -240,7 +239,7 @@ func (s *VoucherService) UseVoucher(ctx context.Context, userID, voucherID strin
 		case voucherdomain.VoucherTypeAdminPoints:
 			return s.applyAdminPoints(ctx, txMembershipRepo, userID, voucher)
 		default:
-			return fmt.Errorf("未知的礼券类型: %s", voucher.VoucherType)
+			return fmt.Errorf("未知的奖励类型: %s", voucher.VoucherType)
 		}
 	})
 }
@@ -364,21 +363,40 @@ func (s *VoucherService) notifyUserAboutVoucher(ctx context.Context, voucher *vo
 	if s.messageSender == nil || voucher == nil {
 		return
 	}
-	content := fmt.Sprintf("恭喜你获得「%s」，点击前往「我的礼券」查看并使用。", voucher.Title)
+	actionPath := "/pages/reward-center/index?section=rewards"
+	target := "reward-center"
+	containerName := "赚积分"
+	if voucher.VoucherType == voucherdomain.VoucherTypeInviteLightWeek {
+		actionPath = "/pages/invite-friends/index?section=rewards"
+		target = "invite-rewards"
+		containerName = "邀请好友得会员"
+	}
+	content := fmt.Sprintf("恭喜你获得「%s」，已放入「%s」的可用奖励中。你可以现在启用，也可以以后再启用。", voucher.Title, containerName)
 	if voucher.Description != nil && strings.TrimSpace(*voucher.Description) != "" {
-		content = fmt.Sprintf("恭喜你获得「%s」，%s，点击前往「我的礼券」查看并使用。", voucher.Title, *voucher.Description)
+		content = fmt.Sprintf("恭喜你获得「%s」，%s。奖励已放入「%s」，可以以后需要时再启用。", voucher.Title, strings.TrimSuffix(strings.TrimSpace(*voucher.Description), "。"), containerName)
 	}
 	extra := map[string]any{
-		"path":   "/pages/my-vouchers/index",
-		"target": "my-vouchers",
+		"path":   actionPath,
+		"target": target,
 	}
-	if err := s.messageSender.SendSystemMessageWithAction(ctx, voucher.UserID, content, "去使用", extra); err != nil {
-		logger.Warn(ctx, "礼券系统消息通知失败",
+	if err := s.messageSender.SendSystemMessageWithAction(ctx, voucher.UserID, content, "查看奖励", extra); err != nil {
+		logger.Warn(ctx, "奖励系统消息通知失败",
 			slog.String("user_id", voucher.UserID),
 			slog.String("voucher_id", voucher.ID),
 			logger.Err(err),
 		)
 	}
+}
+
+func inviteRewardVoucherCopy(role string) (int, string, string) {
+	grantDays := 7
+	description := "邀请好友达标奖励，可在需要时启用 7 天轻度版会员"
+	if strings.TrimSpace(role) == "invitee" {
+		grantDays = 3
+		description = "完成受邀任务奖励，可在需要时启用 3 天轻度版会员"
+	}
+	title := fmt.Sprintf("%d 天轻度版会员", grantDays)
+	return grantDays, title, description
 }
 
 func strPtr(s string) *string { return &s }
