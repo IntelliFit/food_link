@@ -7134,6 +7134,7 @@ export interface CreateRecipeRequest {
   tags?: string[]
   meal_type?: string
   is_favorite?: boolean
+	source_task_id?: string
 }
 
 /** 更新食谱请求 */

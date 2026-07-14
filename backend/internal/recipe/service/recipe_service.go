@@ -71,6 +71,7 @@ type CreateInput struct {
 	Tags             []string
 	MealType         *string
 	IsFavorite       bool
+	SourceTaskID     *string
 }
 
 type UpdateInput struct {
@@ -93,6 +94,22 @@ func (s *RecipeService) Create(ctx context.Context, userID string, input CreateI
 	if strings.TrimSpace(input.RecipeName) == "" {
 		return "", &commonerrors.AppError{Code: 10002, Message: "recipe_name 不能为空", HTTPStatus: 400}
 	}
+	if input.SourceTaskID != nil {
+		*input.SourceTaskID = strings.TrimSpace(*input.SourceTaskID)
+		if *input.SourceTaskID == "" {
+			input.SourceTaskID = nil
+		}
+	}
+	if input.SourceTaskID != nil {
+		existing, err := s.repo.GetByUserAndSourceTask(ctx, userID, *input.SourceTaskID)
+		if err != nil {
+			return "", err
+		}
+		if existing != nil {
+			logger.Info(ctx, "分析结果收藏已存在，复用已有收藏", slog.String("user_id", userID), slog.String("source_task_id", *input.SourceTaskID), slog.String("recipe_id", existing.ID))
+			return existing.ID, nil
+		}
+	}
 	input.ImagePath = s.normalizeImagePathPtr(input.ImagePath)
 	recipe := &domain.Recipe{
 		UserID:           userID,
@@ -108,8 +125,18 @@ func (s *RecipeService) Create(ctx context.Context, userID string, input CreateI
 		Tags:             domain.StringArray(input.Tags),
 		MealType:         normalizeMealPtr(input.MealType),
 		IsFavorite:       input.IsFavorite,
+		SourceTaskID:     input.SourceTaskID,
 	}
 	if err := s.repo.Create(ctx, recipe); err != nil {
+		if input.SourceTaskID != nil && repo.IsUserSourceTaskUniqueViolation(err) {
+			existing, lookupErr := s.repo.GetByUserAndSourceTask(ctx, userID, *input.SourceTaskID)
+			if lookupErr != nil {
+				return "", lookupErr
+			}
+			if existing != nil {
+				return existing.ID, nil
+			}
+		}
 		return "", err
 	}
 	return recipe.ID, nil

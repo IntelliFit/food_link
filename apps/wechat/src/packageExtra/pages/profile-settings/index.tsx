@@ -898,7 +898,7 @@ export default function ProfileSettingsPage() {
             <Text className='profile-feed-likes-text'>❤ {item.like_count || 0}</Text>
           </View>
           {!isOwner && (
-            {(isOwner || publicFavoriteRecipes) && <View
+            <View
               className='profile-feed-more'
               onClick={(e) => {
                 e.stopPropagation()
@@ -907,8 +907,8 @@ export default function ProfileSettingsPage() {
             >
               <View className='profile-feed-more-box'>
                 <Text className='profile-feed-more-icon'>⋮</Text>
-              </View>
-			</View>}
+            </View>
+            </View>
           )}
         </View>
         {showReportMask ? (
@@ -1074,13 +1074,13 @@ export default function ProfileSettingsPage() {
               <Text className='profile-content-tab-text'>最新动态</Text>
               {activeTab === 'feed' && <View className='profile-content-tab-indicator' />}
             </View>
-            <View
+            {(isOwner || publicFavoriteRecipes) && <View
               className={`profile-content-tab ${activeTab === 'collections' ? 'profile-content-tab--active' : ''}`}
               onClick={() => setActiveTab('collections')}
             >
               <Text className='profile-content-tab-text'>食物收藏</Text>
               {activeTab === 'collections' && <View className='profile-content-tab-indicator' />}
-            </View>
+			</View>}
           </View>
 
           {/* 最新动态 */}

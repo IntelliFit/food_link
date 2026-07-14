@@ -1206,6 +1206,7 @@ type RecipeDO struct {
 	Tags             []string         `gorm:"column:tags;type:text[]"`
 	MealType         *string          `gorm:"column:meal_type;type:varchar(20);index:idx_user_recipes_meal_type"`
 	IsFavorite       *bool            `gorm:"column:is_favorite;type:boolean;default:false;index:idx_user_recipes_is_favorite"`
+	SourceTaskID     *string          `gorm:"column:source_task_id;type:uuid;index:idx_user_recipes_source_task_id"`
 	UseCount         *int             `gorm:"column:use_count;type:integer;default:0"`
 	LastUsedAt       *time.Time       `gorm:"column:last_used_at;type:timestamptz"`
 	CreatedAt        *time.Time       `gorm:"column:created_at;type:timestamptz;default:CURRENT_TIMESTAMP;index:idx_user_recipes_created_at,sort:desc"`

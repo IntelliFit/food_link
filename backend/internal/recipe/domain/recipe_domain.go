@@ -68,6 +68,7 @@ type Recipe struct {
 	Tags             StringArray      `gorm:"column:tags;type:text[]" json:"tags"`
 	MealType         *string          `gorm:"column:meal_type" json:"meal_type,omitempty"`
 	IsFavorite       bool             `gorm:"column:is_favorite" json:"is_favorite"`
+	SourceTaskID     *string          `gorm:"column:source_task_id" json:"source_task_id,omitempty"`
 	UseCount         int              `gorm:"column:use_count" json:"use_count"`
 	LastUsedAt       *time.Time       `gorm:"column:last_used_at" json:"last_used_at,omitempty"`
 	CreatedAt        *time.Time       `gorm:"column:created_at" json:"created_at"`

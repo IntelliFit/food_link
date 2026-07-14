@@ -1446,6 +1446,23 @@ transitiontransition
     transform: scale(0.98);
   }
 
+  &.is-favorited {
+    background: #e6f8f1;
+
+    .btn-text {
+      color: #009b6a;
+    }
+  }
+
+  &.loading {
+    pointer-events: none;
+
+    .btn-spinner {
+      border-color: rgb(0 188 125 / 25%);
+      border-top-color: #00bc7d;
+    }
+  }
+
   &.disabled {
     opacity: 0.5;
     pointer-events: none;

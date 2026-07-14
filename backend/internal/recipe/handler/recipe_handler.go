@@ -48,6 +48,7 @@ func (h *RecipeHandler) Create(c *gin.Context) {
 		Tags             []string         `json:"tags"`
 		MealType         *string          `json:"meal_type"`
 		IsFavorite       bool             `json:"is_favorite"`
+		SourceTaskID     *string          `json:"source_task_id"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		response.Error(c, err)
@@ -66,6 +67,7 @@ func (h *RecipeHandler) Create(c *gin.Context) {
 		Tags:             body.Tags,
 		MealType:         body.MealType,
 		IsFavorite:       body.IsFavorite,
+		SourceTaskID:     body.SourceTaskID,
 	})
 	if err != nil {
 		response.Error(c, err)

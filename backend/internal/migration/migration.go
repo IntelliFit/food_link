@@ -557,6 +557,7 @@ WHERE COALESCE(display_name, '') = ''
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_reward_task_uploads_source_key ON reward_task_uploads (source_key) WHERE source_key IS NOT NULL`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS precision_item_estimates_session_round_item_key_key ON precision_item_estimates (session_id, round_index, item_key)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS user_food_records_user_task_unique ON user_food_records (user_id, source_task_id)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_user_recipes_user_source_task_unique ON user_recipes (user_id, source_task_id) WHERE source_task_id IS NOT NULL`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS public_food_library_likes_unique ON public_food_library_likes (user_id, library_item_id)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS public_food_library_collections_unique ON public_food_library_collections (user_id, library_item_id)`,
 		`ALTER TABLE public_food_library_comments ADD COLUMN IF NOT EXISTS parent_comment_id uuid`,

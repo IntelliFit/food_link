@@ -3,6 +3,7 @@ package repo
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"food_link/backend/internal/recipe/domain"
@@ -24,6 +25,19 @@ func (r *RecipeRepo) Create(ctx context.Context, recipe *domain.Recipe) error {
 		recipe.ID = uuid.New().String()
 	}
 	return r.db.WithContext(ctx).Create(recipe).Error
+}
+
+func (r *RecipeRepo) GetByUserAndSourceTask(ctx context.Context, userID, sourceTaskID string) (*domain.Recipe, error) {
+	var row domain.Recipe
+	err := r.db.WithContext(ctx).Where("user_id = ? AND source_task_id = ?", userID, sourceTaskID).First(&row).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	return &row, err
+}
+
+func IsUserSourceTaskUniqueViolation(err error) bool {
+	return err != nil && strings.Contains(strings.ToLower(err.Error()), "idx_user_recipes_user_source_task_unique")
 }
 
 func (r *RecipeRepo) List(ctx context.Context, userID, mealType string, isFavorite *bool) ([]domain.Recipe, error) {

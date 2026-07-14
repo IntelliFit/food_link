@@ -84,6 +84,7 @@ func packagedRecipeRequestBody() map[string]any {
 		"total_carbs":        42.0,
 		"total_fat":          16.0,
 		"total_weight_grams": 70,
+		"source_task_id":     "0dbf0fc0-bb93-4bc3-94fd-c4c8acf6ea8a",
 		"items": []map[string]any{{
 			"name":                   "士力架花生夹心巧克力",
 			"weight":                 70,
@@ -147,6 +148,8 @@ func TestCreateRecipePreservesPackagedAnalysisMetadata(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 	require.NotNil(t, mockSvc.createInput)
 	assert.Equal(t, "零食混合餐收藏", mockSvc.createInput.RecipeName)
+	require.NotNil(t, mockSvc.createInput.SourceTaskID)
+	assert.Equal(t, "0dbf0fc0-bb93-4bc3-94fd-c4c8acf6ea8a", *mockSvc.createInput.SourceTaskID)
 	assertRecipeInputPreservesPackagedMetadata(t, mockSvc.createInput.Items)
 }
 

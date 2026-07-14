@@ -573,6 +573,9 @@ function ResultPage() {
   const [absorptionNotes, setAbsorptionNotes] = useState<string | null>(null)
   const [contextAdvice, setContextAdvice] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+	const [savingRecipe, setSavingRecipe] = useState(false)
+	const [savedRecipeId, setSavedRecipeId] = useState<string | null>(null)
+	const recipeSaveInFlightRef = useRef(false)
   /** 当前识别会话是否已保存为饮食记录（可跳转详情，不再重复写入/发动态） */
   const [committedRecordId, setCommittedRecordId] = useState<string | null>(null)
   const [executionMode, setExecutionMode] = useState<ExecutionMode>('standard')
@@ -826,6 +829,7 @@ function ResultPage() {
       Taro.removeStorageSync('analyzeTaskIsRecorded')
       Taro.removeStorageSync('analyzeCommittedRecordId')
       setCommittedRecordId(null)
+		setSavedRecipeId(null)
     }
   }
 
@@ -2030,6 +2034,11 @@ function ResultPage() {
 
   // 收藏食物（保存为可复用模板）
   const handleSaveAsRecipe = () => {
+	if (savedRecipeId) {
+		Taro.showToast({ title: '该餐食已收藏', icon: 'none' })
+		return
+	}
+	if (recipeSaveInFlightRef.current) return
     // 检查登录
     const token = getAccessToken()
     if (!token) {
@@ -2056,10 +2065,13 @@ function ResultPage() {
       success: async (res) => {
         if (res.confirm && (res as any).content) {
           const recipeName = (res as any).content.trim()
-          if (!recipeName) {
+        if (!recipeName) {
             Taro.showToast({ title: '请输入食谱名称', icon: 'none' })
-            return
-          }
+          return
+        }
+		if (recipeSaveInFlightRef.current) return
+		recipeSaveInFlightRef.current = true
+		setSavingRecipe(true)
 
           Taro.showLoading({ title: '保存中...', mask: true })
 
@@ -2070,7 +2082,7 @@ function ResultPage() {
               buildFoodItemNutrients(nutritionItem),
             ))
 
-            await createUserRecipe({
+			const createdRecipe = await createUserRecipe({
               recipe_name: recipeName,
               description: description || '',
               image_path: imagePath || undefined,
@@ -2082,8 +2094,10 @@ function ResultPage() {
               total_weight_grams: totalWeight,
               meal_type: mealType,
               tags: ['自定义'],
-              is_favorite: true
+			  is_favorite: true,
+			  source_task_id: String(Taro.getStorageSync('analyzeSourceTaskId') || '').trim() || undefined,
             })
+			setSavedRecipeId(createdRecipe.id)
 
             Taro.hideLoading()
             Taro.showModal({
@@ -2097,6 +2111,9 @@ function ResultPage() {
               title: error.message || '保存失败',
               icon: 'none'
             })
+		  } finally {
+			recipeSaveInFlightRef.current = false
+			setSavingRecipe(false)
           }
         }
       }
@@ -3006,10 +3023,10 @@ function ResultPage() {
         <View className='pba-safe-area'>
           <View className='action-grid'>
             <View
-              className='secondary-btn'
+              className={`secondary-btn ${savingRecipe ? 'loading' : ''} ${savedRecipeId ? 'is-favorited' : ''}`}
               onClick={handleSaveAsRecipe}
             >
-              <Text className='btn-text'>收藏餐食</Text>
+			  {savingRecipe ? <View className='btn-spinner' /> : <Text className='btn-text'>{savedRecipeId ? '已收藏' : '收藏餐食'}</Text>}
             </View>
             <View
               className={`primary-btn ${saving ? 'loading' : ''} ${pendingPackagedChoiceCount > 0 ? 'needs-spec' : ''} ${isAnalyzeSessionCommitted() || committedRecordId ? 'is-committed' : ''}`}
