@@ -47,10 +47,13 @@ const (
 	gemini35FlashModel              = "gemini-3.5-flash"
 	qwen36FlashModel                = "qwen3.6-flash"
 	visionPrimaryTimeout            = 45 * time.Second
+	visionFallbackTimeout           = 12 * time.Second
 	maxLLMJSONParseRetries          = 3
 	maxLLMTransientRetries          = 2
-	ratioSuggestionTimeout          = 20 * time.Second
-	ediblePortionTimeout            = 15 * time.Second
+	realtimeVisionJSONRetries       = 1
+	realtimeVisionTransientRetries  = 1
+	ratioSuggestionTimeout          = 8 * time.Second
+	ediblePortionTimeout            = 8 * time.Second
 	nutritionFallbackAttemptTimeout = 15 * time.Second
 	fastNutritionFallbackTimeout    = 12 * time.Second
 	fastVisionAnalysisTimeout       = 25 * time.Second
@@ -233,6 +236,15 @@ func (s *AnalyzeService) runtimePostprocessClient() (LLMClient, string, string) 
 	return nil, "", ""
 }
 
+func analyzePostprocess(ctx context.Context, client LLMClient, prompt string) (map[string]any, error) {
+	if fastClient, ok := client.(interface {
+		AnalyzeWithoutThinking(context.Context, string, string) (map[string]any, error)
+	}); ok {
+		return fastClient.AnalyzeWithoutThinking(ctx, prompt, "")
+	}
+	return client.Analyze(ctx, prompt, "")
+}
+
 func (s *AnalyzeService) ConfigureGemini31LiteClient(apiKey, baseURL, model string) {
 	if strings.TrimSpace(model) == "" {
 		model = gemini31FlashLiteModel
@@ -371,19 +383,25 @@ func (s *AnalyzeService) runPrecisionJSONWithImagesTemperature(ctx context.Conte
 		attribute.Int("analysis.image_count", len(imageURLs)),
 		attribute.Float64("analysis.temperature", temperature),
 	)
-	parsed, err := analyzeWithJSONParseRetry(callCtx, "precision", provider, model, func(retryCtx context.Context) (map[string]any, error) {
+	primaryCall := newAnalyzeWithImagesTemperatureModelCall(client, prompt, imageURLs, temperature, model)
+	policy := defaultLLMRetryPolicy
+	if provider == "gemini" && len(imageURLs) > 0 {
+		policy = realtimeVisionRetryPolicy
+	}
+	parsed, err := analyzeWithJSONParseRetryPolicy(callCtx, "precision", provider, model, policy, func(retryCtx context.Context) (map[string]any, error) {
 		attemptCtx := retryCtx
 		attemptCancel := func() {}
 		if provider == "gemini" && len(imageURLs) > 0 {
 			attemptCtx, attemptCancel = context.WithTimeout(retryCtx, visionPrimaryTimeout)
 		}
 		defer attemptCancel()
-		return analyzeWithImagesTemperatureModel(attemptCtx, client, prompt, imageURLs, temperature, model)
+		return primaryCall(attemptCtx)
 	})
-	if allowFallback && err != nil && provider == "gemini" && len(imageURLs) > 0 && isTransientLLMError(err) && s.dashscopeClient != nil {
-		fallbackParsed, fallbackErr := analyzeWithJSONParseRetry(callCtx, "precision_fallback", "qwen", qwen36FlashModel, func(retryCtx context.Context) (map[string]any, error) {
-			return analyzeWithImagesTemperatureModel(retryCtx, s.dashscopeClient, prompt, imageURLs, temperature, qwen36FlashModel)
-		})
+	if allowFallback && err != nil && provider == "gemini" && len(imageURLs) > 0 && (isTransientLLMError(err) || IsLLMJSONParseError(err)) && s.dashscopeClient != nil {
+		fallbackCtx, fallbackCancel := context.WithTimeout(callCtx, visionFallbackTimeout)
+		fallbackCall := newAnalyzeWithImagesTemperatureModelCall(s.dashscopeClient, prompt, imageURLs, temperature, qwen36FlashModel)
+		fallbackParsed, fallbackErr := analyzeWithJSONParseRetryPolicy(fallbackCtx, "precision_fallback", "qwen", qwen36FlashModel, postprocessRetryPolicy, fallbackCall)
+		fallbackCancel()
 		if fallbackErr == nil {
 			logger.Warn(ctx, "精准模式 Gemini 视觉模型临时失败，回退 Qwen 3.6 Flash",
 				logger.Err(err),
@@ -469,6 +487,17 @@ func analyzeWithImagesTemperatureModel(ctx context.Context, client LLMClient, pr
 	return client.Analyze(ctx, prompt, "")
 }
 
+func newAnalyzeWithImagesTemperatureModelCall(client LLMClient, prompt string, imageURLs []string, temperature float64, modelName string) func(context.Context) (map[string]any, error) {
+	if preparedClient, ok := client.(interface {
+		NewAnalyzeWithImagesAndTemperatureModelCall(string, []string, float64, string) func(context.Context) (map[string]any, error)
+	}); ok {
+		return preparedClient.NewAnalyzeWithImagesAndTemperatureModelCall(prompt, imageURLs, temperature, modelName)
+	}
+	return func(ctx context.Context) (map[string]any, error) {
+		return analyzeWithImagesTemperatureModel(ctx, client, prompt, imageURLs, temperature, modelName)
+	}
+}
+
 func isTransientLLMError(err error) bool {
 	if err == nil {
 		return false
@@ -493,6 +522,12 @@ func isTransientLLMError(err error) bool {
 		"ofoxai api error 502",
 		"ofoxai api error 503",
 		"ofoxai api error 504",
+		"gemini api error 408",
+		"gemini api error 429",
+		"gemini api error 500",
+		"gemini api error 502",
+		"gemini api error 503",
+		"gemini api error 504",
 		"doubao api error 408",
 		"doubao api error 429",
 		"doubao api error 500",
@@ -508,7 +543,31 @@ func isTransientLLMError(err error) bool {
 	return false
 }
 
+type llmRetryPolicy struct {
+	maxJSONRetries      int
+	maxTransientRetries int
+}
+
+var defaultLLMRetryPolicy = llmRetryPolicy{
+	maxJSONRetries:      maxLLMJSONParseRetries,
+	maxTransientRetries: maxLLMTransientRetries,
+}
+
+var realtimeVisionRetryPolicy = llmRetryPolicy{
+	maxJSONRetries:      realtimeVisionJSONRetries,
+	maxTransientRetries: realtimeVisionTransientRetries,
+}
+
+var postprocessRetryPolicy = llmRetryPolicy{
+	maxJSONRetries:      1,
+	maxTransientRetries: 0,
+}
+
 func analyzeWithJSONParseRetry(ctx context.Context, stage, provider, model string, call func(context.Context) (map[string]any, error)) (map[string]any, error) {
+	return analyzeWithJSONParseRetryPolicy(ctx, stage, provider, model, defaultLLMRetryPolicy, call)
+}
+
+func analyzeWithJSONParseRetryPolicy(ctx context.Context, stage, provider, model string, policy llmRetryPolicy, call func(context.Context) (map[string]any, error)) (map[string]any, error) {
 	var parsed map[string]any
 	var err error
 	jsonRetries := 0
@@ -535,18 +594,18 @@ func analyzeWithJSONParseRetry(ctx context.Context, stage, provider, model strin
 		retryNumber := 0
 		maxRetries := 0
 		switch {
-		case IsLLMJSONParseError(err) && jsonRetries < maxLLMJSONParseRetries:
+		case IsLLMJSONParseError(err) && jsonRetries < policy.maxJSONRetries:
 			jsonRetries++
 			retryReason = "json_parse"
 			metrics.ObserveLLMRetry(stage, provider, model, retryReason)
 			retryNumber = jsonRetries
-			maxRetries = maxLLMJSONParseRetries
-		case isTransientLLMError(err) && transientRetries < maxLLMTransientRetries:
+			maxRetries = policy.maxJSONRetries
+		case isTransientLLMError(err) && transientRetries < policy.maxTransientRetries:
 			transientRetries++
 			retryReason = "transient"
 			metrics.ObserveLLMRetry(stage, provider, model, retryReason)
 			retryNumber = transientRetries
-			maxRetries = maxLLMTransientRetries
+			maxRetries = policy.maxTransientRetries
 		default:
 			logger.Warn(ctx, "大模型调用最终失败",
 				logger.Stage(stage),
@@ -1925,7 +1984,12 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 		analysisCallCtx, analysisCallCancel = context.WithTimeout(ctx, fastVisionAnalysisTimeout)
 	}
 	defer analysisCallCancel()
-	parsed, err := analyzeWithJSONParseRetry(analysisCallCtx, "food_image", provider, model, func(callCtx context.Context) (map[string]any, error) {
+	primaryImageCall := newAnalyzeWithImagesTemperatureModelCall(client, prompt, imageURLs, 0, model)
+	visionPolicy := defaultLLMRetryPolicy
+	if provider == "gemini" && len(imageURLs) > 0 {
+		visionPolicy = realtimeVisionRetryPolicy
+	}
+	parsed, err := analyzeWithJSONParseRetryPolicy(analysisCallCtx, "food_image", provider, model, visionPolicy, func(callCtx context.Context) (map[string]any, error) {
 		attemptCtx := callCtx
 		attemptCancel := func() {}
 		if provider == "gemini" && len(imageURLs) > 0 {
@@ -1958,9 +2022,34 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 			qwenNativeSearchMeta = meta
 			return fastParsed, fastErr
 		}
-		return analyzeWithImagesTemperature(attemptCtx, client, prompt, imageURLs, 0)
+		return primaryImageCall(attemptCtx)
 	})
 	fallbackUsed := false
+	if err != nil && provider == "gemini" && len(imageURLs) > 0 && (isTransientLLMError(err) || IsLLMJSONParseError(err)) && s.dashscopeClient != nil {
+		primaryErr := err
+		fallbackCtx, fallbackCancel := context.WithTimeout(ctx, visionFallbackTimeout)
+		fallbackCall := newAnalyzeWithImagesTemperatureModelCall(s.dashscopeClient, prompt, imageURLs, 0, qwen36FlashModel)
+		fallbackParsed, fallbackErr := analyzeWithJSONParseRetryPolicy(fallbackCtx, "food_image_fallback", "qwen", qwen36FlashModel, postprocessRetryPolicy, fallbackCall)
+		fallbackCancel()
+		if fallbackErr == nil {
+			parsed = fallbackParsed
+			err = nil
+			fallbackUsed = true
+			client = s.dashscopeClient
+			provider = "qwen"
+			model = qwen36FlashModel
+			logger.Warn(ctx, "食物图片 Gemini 临时失败，已快速回退千问",
+				logger.NamedErr("primary_error", primaryErr),
+				slog.Int("image_count", len(imageURLs)),
+			)
+		} else {
+			logger.Warn(ctx, "食物图片千问快速回退失败",
+				logger.NamedErr("primary_error", primaryErr),
+				logger.NamedErr("fallback_error", fallbackErr),
+				slog.Int("image_count", len(imageURLs)),
+			)
+		}
+	}
 	if err != nil {
 		metrics.ObserveFoodAnalysis("image", provider, model, "llm_error", time.Since(start), -1)
 		apm.RecordError(ctx, err,
@@ -4611,6 +4700,12 @@ func (s *AnalyzeService) applyEdiblePortionRatios(ctx context.Context, resp map[
 		return resp
 	}
 	base := withDefaultEdiblePortions(items, "default")
+	if !needsEdiblePortionModel(base) {
+		resp["items"] = withDefaultEdiblePortions(base, "deterministic")
+		resp["edible_portion_status"] = "deterministic"
+		resp["edible_portion_applied_count"] = 0
+		return resp
+	}
 	client, provider, model := s.runtimePostprocessClient()
 	if client == nil {
 		resp["items"] = withFallbackEdiblePortions(items, "unavailable")
@@ -4620,7 +4715,7 @@ func (s *AnalyzeService) applyEdiblePortionRatios(ctx context.Context, resp map[
 	prompt := buildEdiblePortionPrompt(base, input)
 	callCtx, cancel := context.WithTimeout(ctx, ediblePortionTimeout)
 	defer cancel()
-	parsed, err := client.Analyze(callCtx, prompt, "")
+	parsed, err := analyzePostprocess(callCtx, client, prompt)
 	if err != nil {
 		logger.Warn(ctx, "可食比例模型判定失败",
 			logger.Err(err),
@@ -4684,6 +4779,32 @@ func (s *AnalyzeService) applyEdiblePortionRatios(ctx context.Context, resp map[
 	resp["edible_portion_status"] = "applied"
 	resp["edible_portion_applied_count"] = applied
 	return resp
+}
+
+var ediblePortionModelKeywords = []string{
+	"小龙虾", "龙虾", "螃蟹", "蟹", "虾", "贝", "蛤", "牡蛎", "生蚝", "扇贝", "鱼",
+	"鸡翅", "鸡腿", "鸡爪", "凤爪", "鸭腿", "鸭脖", "排骨", "羊排", "猪蹄", "带骨", "骨头", "整鸡", "烤鸡",
+	"香蕉", "橙", "橘", "柚", "芒果", "牛油果", "榴莲", "西瓜", "哈密瓜", "菠萝", "凤梨", "椰",
+	"桃", "李子", "杏", "樱桃", "荔枝", "龙眼", "桂圆", "山竹", "石榴", "火龙果", "苹果", "梨", "猕猴桃", "百香果",
+	"玉米", "花生", "瓜子", "核桃", "板栗", "开心果", "带壳", "果核", "果皮", "鸡蛋", "鸭蛋", "鹅蛋",
+}
+
+func needsEdiblePortionModel(items []map[string]any) bool {
+	for _, item := range items {
+		ratio := numberFromAny(firstNonNil(item["ediblePortionRatio"], item["edible_portion_ratio"]))
+		if ratio > 0 && ratio < 99.5 {
+			continue
+		}
+		name := strings.TrimSpace(fmt.Sprintf("%v", item["name"]))
+		name = strings.ReplaceAll(name, "鱼香", "")
+		name = strings.ReplaceAll(name, "鸡腿菇", "")
+		for _, keyword := range ediblePortionModelKeywords {
+			if strings.Contains(name, keyword) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 type dbFirstNutritionOptions struct {
@@ -5223,6 +5344,13 @@ func (s *AnalyzeService) applySuggestedRatios(ctx context.Context, resp map[stri
 		resp["suggest_ratio_status"] = "disabled"
 		return resp
 	}
+	if !needsSuggestedRatioModel(items, input) {
+		resp["items"] = withDefaultSuggestedRatios(items, "not_needed")
+		resp["suggest_ratio_enabled"] = true
+		resp["suggest_ratio_status"] = "not_needed"
+		resp["suggest_ratio_applied_count"] = 0
+		return resp
+	}
 	client, provider, modelName := s.runtimePostprocessClient()
 	if client == nil && s != nil && s.ofoxAIClient != nil {
 		client = s.ofoxAIClient
@@ -5242,8 +5370,8 @@ func (s *AnalyzeService) applySuggestedRatios(ctx context.Context, resp map[stri
 	prompt := buildSuggestedRatioPrompt(items, input)
 	callCtx, cancel := context.WithTimeout(ctx, ratioSuggestionTimeout)
 	defer cancel()
-	parsed, err := analyzeWithJSONParseRetry(callCtx, "suggest_ratio", provider, modelName, func(innerCtx context.Context) (map[string]any, error) {
-		return client.Analyze(innerCtx, prompt, "")
+	parsed, err := analyzeWithJSONParseRetryPolicy(callCtx, "suggest_ratio", provider, modelName, postprocessRetryPolicy, func(innerCtx context.Context) (map[string]any, error) {
+		return analyzePostprocess(innerCtx, client, prompt)
 	})
 	if err != nil {
 		logger.Warn(ctx, "建议摄入比例生成失败",
@@ -5288,6 +5416,21 @@ func (s *AnalyzeService) applySuggestedRatios(ctx context.Context, resp map[stri
 	resp["suggest_ratio_enabled"] = true
 	resp["suggest_ratio_applied_count"] = applied
 	return resp
+}
+
+func needsSuggestedRatioModel(items []map[string]any, input AnalyzeInput) bool {
+	if input.RemainingCalories == nil {
+		return false
+	}
+	totalCalories := 0.0
+	for _, item := range items {
+		totalCalories += numberFromAny(mapFromAny(item["nutrients"])["calories"])
+	}
+	if totalCalories <= 0 {
+		return false
+	}
+	remainingCalories := math.Max(0, *input.RemainingCalories)
+	return totalCalories > remainingCalories+5
 }
 
 type suggestedRatioRow struct {

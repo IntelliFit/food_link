@@ -203,6 +203,42 @@ func TestOfoxAIClient_Analyze_WanjieGeminiNative(t *testing.T) {
 	assert.Equal(t, float64(150), meta["total_tokens"])
 }
 
+func TestOfoxAIClient_PreparedGeminiCallReusesDownloadedImage(t *testing.T) {
+	client := NewOfoxAIClient("fake-key", "gemini-3.5-flash", "https://maas-openapi.wanjiedata.com/api/v1")
+	imageDownloads := 0
+	modelRequests := 0
+	client.imageClient = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		imageDownloads++
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(bytes.NewBuffer([]byte{0x89, 0x50, 0x4e, 0x47})),
+			Header:     http.Header{"Content-Type": []string{"image/png"}},
+		}, nil
+	})}
+	client.client = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		modelRequests++
+		if modelRequests == 1 {
+			return nil, errors.New("net/http: TLS handshake timeout")
+		}
+		body := `{"candidates":[{"content":{"parts":[{"text":"{\"description\":\"重试成功\",\"items\":[]}"}]}}]}`
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(bytes.NewBufferString(body)),
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+		}, nil
+	})}
+
+	call := client.NewAnalyzeWithImagesAndTemperatureModelCall("prompt", []string{"https://cdn.example.com/food.png"}, 0.1, "gemini-3.5-flash")
+	_, err := call(context.Background())
+	assert.Error(t, err)
+	result, err := call(context.Background())
+
+	assert.NoError(t, err)
+	assert.Equal(t, "重试成功", result["description"])
+	assert.Equal(t, 1, imageDownloads)
+	assert.Equal(t, 2, modelRequests)
+}
+
 func TestOfoxAIClient_AnalyzeWithImagesAndTemperatureModel_OverridesRequestModel(t *testing.T) {
 	client := NewOfoxAIClient("fake-key", "gemini-3-flash-preview", "https://proxy.example.com/v1/")
 	client.client = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
@@ -243,6 +279,24 @@ func TestDashScopeClient_Analyze_UsesQwen36FlashThinking(t *testing.T) {
 	result, err := client.Analyze(context.Background(), "test prompt", "https://example.com/img.jpg")
 	assert.NoError(t, err)
 	assert.Equal(t, "快速识别", result["description"])
+}
+
+func TestDashScopeClient_AnalyzeWithoutThinking_DisablesThinking(t *testing.T) {
+	client := NewDashScopeClient("fake-key")
+	client.client = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		var payload map[string]any
+		assert.NoError(t, json.NewDecoder(req.Body).Decode(&payload))
+		assert.Equal(t, false, payload["enable_thinking"])
+		body := `{"choices":[{"message":{"content":"{\"items\":[]}"}}]}`
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(bytes.NewBufferString(body)),
+			Header:     make(http.Header),
+		}, nil
+	})}
+
+	_, err := client.AnalyzeWithoutThinking(context.Background(), "postprocess", "")
+	assert.NoError(t, err)
 }
 
 func TestDashScopeClient_AnalyzeWithImagesDashScopeWebSearch(t *testing.T) {

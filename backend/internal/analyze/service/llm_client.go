@@ -8,10 +8,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -68,6 +70,20 @@ type OfoxAIClient struct {
 	imageClient *http.Client
 }
 
+const llmTLSHandshakeTimeout = 4 * time.Second
+
+var sharedLLMTransport = &http.Transport{
+	Proxy:                 http.ProxyFromEnvironment,
+	DialContext:           (&net.Dialer{Timeout: 4 * time.Second, KeepAlive: 30 * time.Second}).DialContext,
+	ForceAttemptHTTP2:     true,
+	MaxIdleConns:          128,
+	MaxIdleConnsPerHost:   32,
+	MaxConnsPerHost:       64,
+	IdleConnTimeout:       90 * time.Second,
+	TLSHandshakeTimeout:   llmTLSHandshakeTimeout,
+	ExpectContinueTimeout: time.Second,
+}
+
 func NewDashScopeClient(apiKey string, baseURLs ...string) *OfoxAIClient {
 	baseURL := "https://dashscope.aliyuncs.com/compatible-mode/v1"
 	if len(baseURLs) > 0 && strings.TrimSpace(baseURLs[0]) != "" {
@@ -88,9 +104,10 @@ func NewOfoxAIClient(apiKey, model string, baseURLs ...string) *OfoxAIClient {
 		APIKey:  apiKey,
 		Model:   model,
 		BaseURL: baseURL,
-		client:  &http.Client{Timeout: 90 * time.Second},
+		client:  &http.Client{Timeout: 90 * time.Second, Transport: sharedLLMTransport},
 		imageClient: &http.Client{
-			Timeout: 30 * time.Second,
+			Timeout:   30 * time.Second,
+			Transport: sharedLLMTransport,
 		},
 	}
 }
@@ -113,6 +130,47 @@ func (c *OfoxAIClient) AnalyzeWithImagesAndTemperature(ctx context.Context, prom
 
 func (c *OfoxAIClient) AnalyzeWithImagesAndTemperatureModel(ctx context.Context, prompt string, imageURLs []string, temperature float64, modelName string) (map[string]any, error) {
 	return c.analyzeWithImagesAndTemperature(ctx, prompt, imageURLs, temperature, modelName, nil)
+}
+
+func (c *OfoxAIClient) AnalyzeWithoutThinking(ctx context.Context, prompt, imageURL string) (map[string]any, error) {
+	imageURLs := []string{}
+	if strings.TrimSpace(imageURL) != "" {
+		imageURLs = append(imageURLs, imageURL)
+	}
+	return c.analyzeWithImagesAndTemperature(ctx, prompt, imageURLs, 0, "", map[string]any{"enable_thinking": false})
+}
+
+// NewAnalyzeWithImagesAndTemperatureModelCall creates one logical model call.
+// For native Gemini requests, successfully downloaded inline images are retained
+// only inside the returned closure so retries do not download the same CDN object again.
+func (c *OfoxAIClient) NewAnalyzeWithImagesAndTemperatureModelCall(prompt string, imageURLs []string, temperature float64, modelName string) func(context.Context) (map[string]any, error) {
+	model := strings.TrimSpace(modelName)
+	if model == "" {
+		model = c.Model
+	}
+	if !isWanjieGeminiNativeModel(model, c.BaseURL) {
+		return func(ctx context.Context) (map[string]any, error) {
+			return c.AnalyzeWithImagesAndTemperatureModel(ctx, prompt, imageURLs, temperature, modelName)
+		}
+	}
+
+	var mu sync.Mutex
+	var preparedBody []byte
+	return func(ctx context.Context) (map[string]any, error) {
+		mu.Lock()
+		if len(preparedBody) == 0 {
+			body, err := c.prepareGeminiNativeRequest(ctx, prompt, imageURLs, temperature)
+			if err != nil {
+				mu.Unlock()
+				return nil, err
+			}
+			preparedBody = body
+		}
+		body := preparedBody
+		mu.Unlock()
+		parsed, _, err := c.doGeminiNativePreparedRequest(ctx, model, body)
+		return parsed, err
+	}
 }
 
 func (c *OfoxAIClient) AnalyzeWithImagesAndTemperatureMeta(ctx context.Context, prompt string, imageURLs []string, temperature float64) (map[string]any, map[string]any, error) {
@@ -206,6 +264,14 @@ func isWanjieGeminiNativeModel(model, baseURL string) bool {
 }
 
 func (c *OfoxAIClient) doGeminiNativeRequest(ctx context.Context, model, prompt string, imageURLs []string, temperature float64) (map[string]any, map[string]any, error) {
+	body, err := c.prepareGeminiNativeRequest(ctx, prompt, imageURLs, temperature)
+	if err != nil {
+		return nil, nil, err
+	}
+	return c.doGeminiNativePreparedRequest(ctx, model, body)
+}
+
+func (c *OfoxAIClient) prepareGeminiNativeRequest(ctx context.Context, prompt string, imageURLs []string, temperature float64) ([]byte, error) {
 	parts := []map[string]any{{"text": prompt}}
 	for _, imageURL := range imageURLs {
 		imageURL = strings.TrimSpace(imageURL)
@@ -214,7 +280,7 @@ func (c *OfoxAIClient) doGeminiNativeRequest(ctx context.Context, model, prompt 
 		}
 		inlineData, err := c.downloadGeminiInlineImage(ctx, imageURL)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		parts = append(parts, map[string]any{"inlineData": inlineData})
 	}
@@ -228,9 +294,13 @@ func (c *OfoxAIClient) doGeminiNativeRequest(ctx context.Context, model, prompt 
 	}
 	b, err := json.Marshal(body)
 	if err != nil {
-		return nil, nil, fmt.Errorf("encode Gemini request failed: %w", err)
+		return nil, fmt.Errorf("encode Gemini request failed: %w", err)
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, geminiNativeEndpoint(c.BaseURL, model), bytes.NewReader(b))
+	return b, nil
+}
+
+func (c *OfoxAIClient) doGeminiNativePreparedRequest(ctx context.Context, model string, body []byte) (map[string]any, map[string]any, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, geminiNativeEndpoint(c.BaseURL, model), bytes.NewReader(body))
 	if err != nil {
 		return nil, nil, err
 	}

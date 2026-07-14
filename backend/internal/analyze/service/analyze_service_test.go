@@ -880,8 +880,8 @@ func TestAnalyzeService_ApplyEdiblePortionRatiosFailureDefaultsTo100(t *testing.
 			{
 				"name":                 "小龙虾",
 				"grossWeightGrams":     600.0,
-				"estimatedWeightGrams": 210.0,
-				"ediblePortionRatio":   35.0,
+				"estimatedWeightGrams": 600.0,
+				"ediblePortionRatio":   100.0,
 				"ediblePortionReason":  "旧比例",
 			},
 		},
@@ -896,6 +896,27 @@ func TestAnalyzeService_ApplyEdiblePortionRatiosFailureDefaultsTo100(t *testing.
 	assert.Equal(t, "failed", items[0]["ediblePortionSource"])
 	assert.Equal(t, 600.0, items[0]["estimatedWeightGrams"])
 	assert.NotContains(t, items[0], "ediblePortionReason")
+}
+
+func TestAnalyzeService_ApplyEdiblePortionRatiosSkipsModelForFullyEdibleFood(t *testing.T) {
+	client := &mockLLMClient{result: map[string]any{"items": []any{}}}
+	svc := NewAnalyzeService(nil, client, nil)
+	svc.ConfigureDashScopeLLMClient(client)
+	resp := map[string]any{
+		"items": []map[string]any{{
+			"name":                 "绿圣女果",
+			"grossWeightGrams":     210.0,
+			"estimatedWeightGrams": 210.0,
+		}},
+	}
+
+	result := svc.applyEdiblePortionRatios(context.Background(), resp, AnalyzeInput{})
+	items := result["items"].([]map[string]any)
+
+	assert.Equal(t, "deterministic", result["edible_portion_status"])
+	assert.Equal(t, 0, client.calls)
+	assert.Equal(t, 100.0, items[0]["ediblePortionRatio"])
+	assert.Equal(t, 210.0, items[0]["estimatedWeightGrams"])
 }
 
 func TestAnalyzeService_ApplySuggestedRatiosDisabledDefaultsTo100(t *testing.T) {
@@ -919,11 +940,11 @@ func TestAnalyzeService_ApplySuggestedRatiosFailureDefaultsTo100(t *testing.T) {
 	svc := NewAnalyzeService(nil, &mockLLMClient{err: errors.New("gemini timeout")}, nil)
 	resp := map[string]any{
 		"items": []map[string]any{
-			{"name": "rice", "estimatedWeightGrams": 180.0, "suggestedRatio": 35.0, "suggestedRatioReason": "旧建议"},
+			{"name": "rice", "estimatedWeightGrams": 180.0, "suggestedRatio": 35.0, "suggestedRatioReason": "旧建议", "nutrients": map[string]any{"calories": 260.0}},
 		},
 	}
 
-	result := svc.applySuggestedRatios(context.Background(), resp, AnalyzeInput{SuggestRatioEnabled: true})
+	result := svc.applySuggestedRatios(context.Background(), resp, AnalyzeInput{SuggestRatioEnabled: true, RemainingCalories: floatPtr(100)})
 	items := result["items"].([]map[string]any)
 
 	assert.Equal(t, true, result["suggest_ratio_enabled"])
@@ -932,6 +953,29 @@ func TestAnalyzeService_ApplySuggestedRatiosFailureDefaultsTo100(t *testing.T) {
 	assert.Equal(t, 100.0, items[0]["suggestedRatio"])
 	assert.Equal(t, "failed", items[0]["suggestedRatioSource"])
 	assert.NotContains(t, items[0], "suggestedRatioReason")
+}
+
+func TestAnalyzeService_ApplySuggestedRatiosSkipsModelWithinBudget(t *testing.T) {
+	client := &mockLLMClient{result: map[string]any{"items": []any{}}}
+	svc := NewAnalyzeService(nil, client, nil)
+	svc.ConfigureDashScopeLLMClient(client)
+	resp := map[string]any{
+		"items": []map[string]any{{
+			"name":      "绿圣女果",
+			"nutrients": map[string]any{"calories": 45.0},
+		}},
+	}
+
+	result := svc.applySuggestedRatios(context.Background(), resp, AnalyzeInput{
+		SuggestRatioEnabled: true,
+		RemainingCalories:   floatPtr(300),
+	})
+	items := result["items"].([]map[string]any)
+
+	assert.Equal(t, "not_needed", result["suggest_ratio_status"])
+	assert.Equal(t, 0, client.calls)
+	assert.Equal(t, 100.0, items[0]["suggestedRatio"])
+	assert.Equal(t, "not_needed", items[0]["suggestedRatioSource"])
 }
 
 func TestAnalyzeService_ApplySuggestedRatiosUsesGeminiSuggestion(t *testing.T) {
@@ -1143,7 +1187,7 @@ func TestAnalyzeService_AnalyzeImageStandardDoesNotFallbackToDoubaoWhenGeminiFai
 
 	require.Error(t, err)
 	assert.Equal(t, 0, doubaoClient.calls)
-	assert.Equal(t, 3, gemini3Client.calls)
+	assert.Equal(t, 2, gemini3Client.calls)
 }
 
 func TestAnalyzeService_AnalyzeImageStandardWebSearchRefinesWithSearchEvidence(t *testing.T) {
@@ -1829,6 +1873,36 @@ func TestAnalyzeService_RunPrecisionJSONFallsBackToQwenOnGeminiTransientError(t 
 	assert.Equal(t, 1, qwenClient.calls)
 }
 
+func TestAnalyzeService_AnalyzeImageFallsBackToQwenAfterOneGeminiRetry(t *testing.T) {
+	executionMode := precisionExecutionMode
+	geminiClient := &mockLLMClient{err: errors.New("net/http: TLS handshake timeout")}
+	qwenClient := &mockLLMClient{result: map[string]any{
+		"description": "千问快速回退",
+		"items": []any{map[string]any{
+			"name":                 "白米饭",
+			"grossWeightGrams":     200.0,
+			"estimatedWeightGrams": 200.0,
+		}},
+	}}
+	svc := NewAnalyzeService(nil, geminiClient, nil)
+	svc.ConfigureGemini35LLMClient(geminiClient)
+	svc.ConfigureDashScopeLLMClient(qwenClient)
+	svc.ConfigureNutritionResolver(newFakeAnalyzeNutritionResolver())
+
+	result, err := svc.Analyze(context.Background(), "", AnalyzeInput{
+		ImageURL:            "https://example.com/img.jpg",
+		ModelName:           gemini35FlashModel,
+		ExecutionMode:       &executionMode,
+		AnalysisEngine:      "db_first",
+		SuggestRatioEnabled: false,
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, "千问快速回退", result["description"])
+	assert.Equal(t, 2, geminiClient.calls)
+	assert.Equal(t, 1, qwenClient.calls)
+}
+
 func TestAnalyzeService_RunPrecisionJSONUsesDedicatedGemini35Client(t *testing.T) {
 	doubaoClient := &mockLLMClient{result: map[string]any{"description": "unexpected doubao", "items": []any{}}}
 	ofoxClient := &mockLLMClient{result: map[string]any{"description": "unexpected gemini 3", "items": []any{}}}
@@ -2090,7 +2164,7 @@ func TestAnalyzeService_FinalizeAnalyzeResponseIntegratesSugarfreePackagedDrinkA
 			svc := NewAnalyzeService(&mockLLMClient{}, ratioClient, nil)
 			svc.nutrition = newFakeAnalyzeNutritionResolver()
 
-			resp, err := svc.finalizeAnalyzeResponse(context.Background(), "", mixedMealWithSugarfreePackagedDrinkParsed(), AnalyzeInput{SuggestRatioEnabled: true}, mode, "fake", "fake-model", 12)
+			resp, err := svc.finalizeAnalyzeResponse(context.Background(), "", mixedMealWithSugarfreePackagedDrinkParsed(), AnalyzeInput{SuggestRatioEnabled: true, RemainingCalories: floatPtr(100)}, mode, "fake", "fake-model", 12)
 			require.NoError(t, err)
 
 			assert.Equal(t, 2, resp["resolved_count"])
@@ -2382,7 +2456,7 @@ func TestAnalyzeService_FinalizeFastModeUsesOnlyQwenPostprocessing(t *testing.T)
 			"estimatedWeightGrams": 30.0,
 			"grossWeightGrams":     30.0,
 		}},
-	}, AnalyzeInput{SuggestRatioEnabled: true}, fastExecutionMode, "qwen", qwen36FlashModel, 6000)
+	}, AnalyzeInput{SuggestRatioEnabled: true, RemainingCalories: floatPtr(10)}, fastExecutionMode, "qwen", qwen36FlashModel, 6000)
 	require.NoError(t, err)
 
 	assert.Equal(t, int32(0), deepseekCalls.Load())
@@ -2586,7 +2660,7 @@ func TestAnalyzeService_FinalizeAnalyzeResponseKeepsPackagedWeightWithSuggestRat
 			svc := NewAnalyzeService(&mockLLMClient{}, ratioClient, nil)
 			svc.nutrition = newFakeAnalyzeNutritionResolver()
 
-			resp, err := svc.finalizeAnalyzeResponse(context.Background(), "", mixedMealWithPackagedFoodParsed(), AnalyzeInput{SuggestRatioEnabled: true}, mode, "fake", "fake-model", 12)
+			resp, err := svc.finalizeAnalyzeResponse(context.Background(), "", mixedMealWithPackagedFoodParsed(), AnalyzeInput{SuggestRatioEnabled: true, RemainingCalories: floatPtr(100)}, mode, "fake", "fake-model", 12)
 			require.NoError(t, err)
 
 			assert.Equal(t, true, resp["suggest_ratio_enabled"])
