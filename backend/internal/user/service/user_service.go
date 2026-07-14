@@ -71,13 +71,14 @@ func (s *UserService) GetProfile(ctx context.Context, userID string) (map[string
 }
 
 type UpdateProfileInput struct {
-	Nickname      *string `json:"nickname"`
-	Avatar        *string `json:"avatar"`
-	CoverImage    *string `json:"cover_image"`
-	Telephone     *string `json:"telephone"`
-	Searchable    *bool   `json:"searchable"`
-	PublicRecords *bool   `json:"public_records"`
-	Motto         *string `json:"motto"`
+	Nickname              *string `json:"nickname"`
+	Avatar                *string `json:"avatar"`
+	CoverImage            *string `json:"cover_image"`
+	Telephone             *string `json:"telephone"`
+	Searchable            *bool   `json:"searchable"`
+	PublicRecords         *bool   `json:"public_records"`
+	PublicFavoriteRecipes *bool   `json:"public_favorite_recipes"`
+	Motto                 *string `json:"motto"`
 }
 
 func (s *UserService) UpdateProfile(ctx context.Context, userID string, input UpdateProfileInput) (map[string]any, error) {
@@ -110,6 +111,9 @@ func (s *UserService) UpdateProfile(ctx context.Context, userID string, input Up
 	}
 	if input.PublicRecords != nil {
 		updates["public_records"] = *input.PublicRecords
+	}
+	if input.PublicFavoriteRecipes != nil {
+		updates["public_favorite_recipes"] = *input.PublicFavoriteRecipes
 	}
 	if input.Motto != nil {
 		updates["motto"] = *input.Motto
@@ -500,13 +504,14 @@ func (s *UserService) GetPublicProfile(ctx context.Context, viewerUserID, target
 	}
 	recordDays, _ := s.users.CountFoodRecordDays(ctx, targetUserID)
 	return map[string]any{
-		"id":          user.ID,
-		"nickname":    user.Nickname,
-		"avatar":      s.resolveAvatarURL(user.Avatar),
-		"cover_image": s.resolveCoverImageURL(user.CoverImage),
-		"record_days": recordDays,
-		"create_time": user.CreatedAt,
-		"motto":       user.Motto,
+		"id":                      user.ID,
+		"nickname":                user.Nickname,
+		"avatar":                  s.resolveAvatarURL(user.Avatar),
+		"cover_image":             s.resolveCoverImageURL(user.CoverImage),
+		"record_days":             recordDays,
+		"create_time":             user.CreatedAt,
+		"motto":                   user.Motto,
+		"public_favorite_recipes": user.PublicFavoriteRecipes == nil || *user.PublicFavoriteRecipes,
 	}, nil
 }
 
@@ -596,36 +601,50 @@ func buildProfileResponse(user *repo.User) map[string]any {
 
 func buildProfileResponseWithStorage(user *repo.User, storageClient *storage.Client) map[string]any {
 	return map[string]any{
-		"id":                    user.ID,
-		"openid":                user.OpenID,
-		"unionid":               user.UnionID,
-		"username":              user.Username,
-		"has_password":          user.PasswordHash != nil && strings.TrimSpace(*user.PasswordHash) != "",
-		"password_set_at":       user.PasswordSetAt,
-		"nickname":              user.Nickname,
-		"avatar":                user.Avatar,
-		"telephone":             user.Telephone,
-		"create_time":           user.CreatedAt,
-		"height":                user.Height,
-		"weight":                user.Weight,
-		"birthday":              user.Birthday,
-		"gender":                user.Gender,
-		"activity_level":        user.ActivityLevel,
-		"health_condition":      normalizeHealthConditionResponse(user.HealthCondition, storageClient),
-		"bmr":                   user.BMR,
-		"tdee":                  user.TDEE,
-		"onboarding_completed":  user.OnboardingCompleted,
-		"diet_goal":             user.DietGoal,
-		"execution_mode":        normalizeExecutionMode(user.ExecutionMode),
-		"mode_set_by":           user.ModeSetBy,
-		"mode_set_at":           user.ModeSetAt,
-		"mode_reason":           user.ModeReason,
-		"mode_commitment_days":  user.ModeCommitmentDays,
-		"mode_switch_count_30d": user.ModeSwitchCount30d,
-		"searchable":            user.Searchable,
-		"public_records":        user.PublicRecords,
-		"motto":                 user.Motto,
+		"id":                      user.ID,
+		"openid":                  user.OpenID,
+		"unionid":                 user.UnionID,
+		"username":                user.Username,
+		"has_password":            user.PasswordHash != nil && strings.TrimSpace(*user.PasswordHash) != "",
+		"password_set_at":         user.PasswordSetAt,
+		"nickname":                user.Nickname,
+		"avatar":                  user.Avatar,
+		"telephone":               user.Telephone,
+		"create_time":             user.CreatedAt,
+		"height":                  user.Height,
+		"weight":                  user.Weight,
+		"birthday":                user.Birthday,
+		"gender":                  user.Gender,
+		"activity_level":          user.ActivityLevel,
+		"health_condition":        normalizeHealthConditionResponse(user.HealthCondition, storageClient),
+		"bmr":                     user.BMR,
+		"tdee":                    user.TDEE,
+		"onboarding_completed":    user.OnboardingCompleted,
+		"diet_goal":               user.DietGoal,
+		"execution_mode":          normalizeExecutionMode(user.ExecutionMode),
+		"mode_set_by":             user.ModeSetBy,
+		"mode_set_at":             user.ModeSetAt,
+		"mode_reason":             user.ModeReason,
+		"mode_commitment_days":    user.ModeCommitmentDays,
+		"mode_switch_count_30d":   user.ModeSwitchCount30d,
+		"searchable":              user.Searchable,
+		"public_records":          user.PublicRecords,
+		"public_favorite_recipes": user.PublicFavoriteRecipes,
+		"motto":                   user.Motto,
 	}
+}
+
+// FavoriteRecipesVisible reports whether a user's analyzed-food favorites may
+// be displayed to other users. A nil value keeps pre-migration users public.
+func (s *UserService) FavoriteRecipesVisible(ctx context.Context, userID string) (bool, error) {
+	user, err := s.users.FindByID(ctx, userID)
+	if err != nil {
+		return false, err
+	}
+	if user == nil {
+		return false, commonerrors.ErrNotFound
+	}
+	return user.PublicFavoriteRecipes == nil || *user.PublicFavoriteRecipes, nil
 }
 
 func buildHealthProfileResponse(user *repo.User) map[string]any {

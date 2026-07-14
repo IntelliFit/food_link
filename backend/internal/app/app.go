@@ -314,6 +314,7 @@ func New(cfg *config.Config) (*App, error) {
 	recipeSvc := recipeservice.NewRecipeService(recipeRepo, storageClient)
 	recipeSvc.ConfigureWaterLogRecorder(bodyMetricsRepo)
 	recipeSvc.ConfigureBlockChecker(friendSvc)
+	recipeSvc.ConfigureFavoriteRecipeVisibilityChecker(userSvc)
 	recipeHandler := recipehandler.NewRecipeHandler(recipeSvc)
 
 	schoolHandler := schoolhandler.NewSchoolHandler(db, storageClient)

@@ -17,6 +17,25 @@ type mockWaterLogRecorder struct {
 	err  error
 }
 
+type mockFavoriteRecipeVisibilityChecker struct {
+	visible bool
+	err     error
+}
+
+func (m mockFavoriteRecipeVisibilityChecker) FavoriteRecipesVisible(_ context.Context, _ string) (bool, error) {
+	return m.visible, m.err
+}
+
+func TestRecipeService_ListForViewer_HidesPrivateFavorites(t *testing.T) {
+	svc := NewRecipeService(nil)
+	svc.ConfigureFavoriteRecipeVisibilityChecker(mockFavoriteRecipeVisibilityChecker{visible: false})
+	favorite := true
+
+	_, err := svc.ListForViewer(context.Background(), "viewer", "owner", "", &favorite)
+
+	require.Error(t, err)
+}
+
 func (m *mockWaterLogRecorder) CreateWaterLog(ctx context.Context, log *healthdomain.BodyWaterLog) error {
 	if m.err != nil {
 		return m.err

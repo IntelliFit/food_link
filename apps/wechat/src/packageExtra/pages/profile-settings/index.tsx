@@ -110,6 +110,7 @@ export default function ProfileSettingsPage() {
   const [followLoading, setFollowLoading] = useState(false)
   const [blockStatus, setBlockStatus] = useState<FriendBlockStatus | null>(null)
   const [isDeletedUser, setIsDeletedUser] = useState(false)
+	const [publicFavoriteRecipes, setPublicFavoriteRecipes] = useState(true)
   const [pageLoading, setPageLoading] = useState(true)
 
   // 分享海报
@@ -199,6 +200,7 @@ export default function ProfileSettingsPage() {
       const followStatsPromise = getFollowStats(resolvedUserId).catch(() => ({ followers_count: 0, following_count: 0, is_following: false }))
       if (isOwner) {
         setIsDeletedUser(false)
+		setPublicFavoriteRecipes(true)
         setBlockStatus(null)
         const [profile, recordDaysRes, foodColls, recipeColls, followStats] = await Promise.all([
           getUserProfile().catch(() => null),
@@ -275,9 +277,12 @@ export default function ProfileSettingsPage() {
           return
         }
         setIsDeletedUser(false)
+		setPublicFavoriteRecipes(publicProfile.public_favorite_recipes)
         const [foodColls, recipeColls, followStats] = await Promise.all([
           getUserCollections(resolvedUserId).catch(() => ({ list: [] })),
-          getUserFavoriteRecipes(resolvedUserId).catch(() => ({ recipes: [] })),
+		  publicProfile.public_favorite_recipes
+			? getUserFavoriteRecipes(resolvedUserId).catch(() => ({ recipes: [] }))
+			: Promise.resolve({ recipes: [] }),
           followStatsPromise,
         ])
         const avatar = publicProfile?.avatar || ''
@@ -893,7 +898,7 @@ export default function ProfileSettingsPage() {
             <Text className='profile-feed-likes-text'>❤ {item.like_count || 0}</Text>
           </View>
           {!isOwner && (
-            <View
+            {(isOwner || publicFavoriteRecipes) && <View
               className='profile-feed-more'
               onClick={(e) => {
                 e.stopPropagation()
@@ -903,7 +908,7 @@ export default function ProfileSettingsPage() {
               <View className='profile-feed-more-box'>
                 <Text className='profile-feed-more-icon'>⋮</Text>
               </View>
-            </View>
+			</View>}
           )}
         </View>
         {showReportMask ? (
@@ -1112,7 +1117,7 @@ export default function ProfileSettingsPage() {
           )}
 
           {/* 食物收藏（原食谱收藏） */}
-          {activeTab === 'collections' && (
+          {(isOwner || publicFavoriteRecipes) && activeTab === 'collections' && (
             <View className='profile-content-body'>
               {isDeletedUser ? (
                 <View className='profile-content-empty'>

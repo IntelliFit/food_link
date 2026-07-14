@@ -19,10 +19,11 @@ import (
 )
 
 type RecipeService struct {
-	repo         *repo.RecipeRepo
-	storage      *storage.Client
-	waterLogs    WaterLogRecorder
-	blockChecker BlockChecker
+	repo                            *repo.RecipeRepo
+	storage                         *storage.Client
+	waterLogs                       WaterLogRecorder
+	blockChecker                    BlockChecker
+	favoriteRecipeVisibilityChecker FavoriteRecipeVisibilityChecker
 }
 
 func NewRecipeService(repo *repo.RecipeRepo, storageClient ...*storage.Client) *RecipeService {
@@ -41,12 +42,20 @@ type BlockChecker interface {
 	IsBlockedEither(ctx context.Context, userA, userB string) (bool, error)
 }
 
+type FavoriteRecipeVisibilityChecker interface {
+	FavoriteRecipesVisible(ctx context.Context, userID string) (bool, error)
+}
+
 func (s *RecipeService) ConfigureWaterLogRecorder(recorder WaterLogRecorder) {
 	s.waterLogs = recorder
 }
 
 func (s *RecipeService) ConfigureBlockChecker(checker BlockChecker) {
 	s.blockChecker = checker
+}
+
+func (s *RecipeService) ConfigureFavoriteRecipeVisibilityChecker(checker FavoriteRecipeVisibilityChecker) {
+	s.favoriteRecipeVisibilityChecker = checker
 }
 
 type CreateInput struct {
@@ -118,6 +127,11 @@ func (s *RecipeService) ListForViewer(ctx context.Context, viewerUserID, ownerUs
 	if err := s.ensureUserVisible(ctx, viewerUserID, ownerUserID); err != nil {
 		return nil, err
 	}
+	if viewerUserID != ownerUserID && isFavorite != nil && *isFavorite && s.favoriteRecipeVisibilityChecker != nil {
+		if err := s.ensureFavoriteRecipesVisible(ctx, viewerUserID, ownerUserID); err != nil {
+			return nil, err
+		}
+	}
 	return s.List(ctx, ownerUserID, mealType, isFavorite)
 }
 
@@ -152,6 +166,9 @@ func (s *RecipeService) GetForViewer(ctx context.Context, viewerUserID, recipeID
 			return nil, commonerrors.ErrNotFound
 		}
 		if err := s.ensureUserVisible(ctx, viewerUserID, recipe.UserID); err != nil {
+			return nil, err
+		}
+		if err := s.ensureFavoriteRecipesVisible(ctx, viewerUserID, recipe.UserID); err != nil {
 			return nil, err
 		}
 	}
@@ -324,6 +341,20 @@ func (s *RecipeService) ensureUserVisible(ctx context.Context, viewerUserID, own
 		return err
 	}
 	if blocked {
+		return commonerrors.ErrNotFound
+	}
+	return nil
+}
+
+func (s *RecipeService) ensureFavoriteRecipesVisible(ctx context.Context, viewerUserID, ownerUserID string) error {
+	if viewerUserID == ownerUserID || s.favoriteRecipeVisibilityChecker == nil {
+		return nil
+	}
+	visible, err := s.favoriteRecipeVisibilityChecker.FavoriteRecipesVisible(ctx, ownerUserID)
+	if err != nil {
+		return err
+	}
+	if !visible {
 		return commonerrors.ErrNotFound
 	}
 	return nil

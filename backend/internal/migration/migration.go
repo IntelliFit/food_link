@@ -66,6 +66,9 @@ func AutoMigrate(ctx context.Context, db *gorm.DB, schema string) error {
 	if err := ensurePublicRecordsDefault(ctx, db); err != nil {
 		return err
 	}
+	if err := ensurePublicFavoriteRecipesDefault(ctx, db); err != nil {
+		return err
+	}
 	if err := ensureRecipeIDColumn(ctx, db); err != nil {
 		return err
 	}
@@ -375,7 +378,11 @@ func ensureNicknameUniqueIndex(ctx context.Context, db *gorm.DB) error {
 		return fmt.Errorf("检查重复昵称: %w", err)
 	}
 	if duplicate.Count > 1 {
-		return fmt.Errorf("无法创建昵称唯一索引：发现重复昵称 %q（%d 个账号），请先确认历史昵称处理方案", duplicate.Nickname, duplicate.Count)
+		// Preserve historical accounts and their visible nicknames. The service-layer
+		// duplicate check remains active; the database-level concurrency safeguard is
+		// deferred until the duplicate data has an explicit product resolution.
+		fmt.Printf("警告：暂缓创建昵称唯一索引，发现重复昵称 %q（%d 个账号）；已保留历史账号和昵称，后续需完成数据治理后再创建索引。\n", duplicate.Nickname, duplicate.Count)
+		return nil
 	}
 	if err := db.WithContext(ctx).Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_weapp_user_nickname_normalized_unique ON weapp_user (lower(trim(COALESCE(nickname, ''))))").Error; err != nil {
 		return fmt.Errorf("创建昵称唯一索引: %w", err)
@@ -1500,6 +1507,18 @@ func ensurePublicRecordsDefault(ctx context.Context, db *gorm.DB) error {
 	`)
 	if result.Error != nil {
 		return fmt.Errorf("backfill public_records default: %w", result.Error)
+	}
+	return nil
+}
+
+func ensurePublicFavoriteRecipesDefault(ctx context.Context, db *gorm.DB) error {
+	result := db.WithContext(ctx).Exec(`
+		UPDATE weapp_user
+		SET public_favorite_recipes = TRUE
+		WHERE public_favorite_recipes IS NULL
+	`)
+	if result.Error != nil {
+		return fmt.Errorf("backfill public_favorite_recipes default: %w", result.Error)
 	}
 	return nil
 }

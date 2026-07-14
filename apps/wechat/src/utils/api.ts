@@ -1507,6 +1507,7 @@ export interface UserInfo {
   mode_switch_count_30d?: number | null
   searchable?: boolean
   public_records?: boolean
+	public_favorite_recipes?: boolean
 }
 
 export type MembershipTier = 'light' | 'standard' | 'advanced'
@@ -1992,6 +1993,7 @@ export interface UpdateUserInfoRequest {
   telephone?: string
   searchable?: boolean
   public_records?: boolean
+	public_favorite_recipes?: boolean
 }
 
 /**
@@ -7204,6 +7206,7 @@ export async function getPublicUserProfile(userId: string): Promise<{
   motto?: string
   record_days: number
   create_time?: string
+	public_favorite_recipes: boolean
 }> {
   const response = await authenticatedRequest(`/api/user/${userId}/public-profile`, { method: 'GET', timeout: 10000 })
   if (response.statusCode !== 200) {
@@ -7218,6 +7221,7 @@ export async function getPublicUserProfile(userId: string): Promise<{
     motto: p.motto || p.Motto,
     record_days: p.record_days ?? p.RecordDays ?? 0,
     create_time: p.create_time || p.CreateTime,
+	public_favorite_recipes: p.public_favorite_recipes ?? p.PublicFavoriteRecipes ?? true,
   }
 }
 

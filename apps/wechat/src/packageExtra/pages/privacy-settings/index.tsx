@@ -9,6 +9,7 @@ import { withAuth } from '../../../utils/withAuth'
 function PrivacySettings() {
     const [searchable, setSearchable] = useState(true)
     const [publicRecords, setPublicRecords] = useState(true)
+	const [publicFavoriteRecipes, setPublicFavoriteRecipes] = useState(true)
     const [loading, setLoading] = useState(true)
 
     useDidShow(() => {
@@ -22,6 +23,7 @@ function PrivacySettings() {
             // API 应该返回这两个字段
             setSearchable(profile.searchable ?? true)
             setPublicRecords(profile.public_records ?? true)
+			setPublicFavoriteRecipes(profile.public_favorite_recipes ?? true)
         } catch (e) {
             console.error('Failed to fetch privacy settings:', e)
             await showUnifiedApiError(e, '加载失败')
@@ -30,10 +32,11 @@ function PrivacySettings() {
         }
     }
 
-    const updateSetting = async (key: 'searchable' | 'public_records', value: boolean) => {
+    const updateSetting = async (key: 'searchable' | 'public_records' | 'public_favorite_recipes', value: boolean) => {
         try {
             if (key === 'searchable') setSearchable(value)
             if (key === 'public_records') setPublicRecords(value)
+			if (key === 'public_favorite_recipes') setPublicFavoriteRecipes(value)
 
             // Call API directly for updating user profile
             const res = await authenticatedRequest('/api/user/profile', {
@@ -51,6 +54,7 @@ function PrivacySettings() {
             // Revert optimism setup
             if (key === 'searchable') setSearchable(!value)
             if (key === 'public_records') setPublicRecords(!value)
+			if (key === 'public_favorite_recipes') setPublicFavoriteRecipes(!value)
         }
     }
 
@@ -87,6 +91,17 @@ function PrivacySettings() {
                         />
                     }
                 />
+				<Cell
+				  title='公开我的食物收藏'
+				  brief='关闭后，其他用户进入您的个人主页时将无法查看拍照分析后收藏的食物。'
+				  rightIcon={
+						<Switch
+						  checked={publicFavoriteRecipes}
+						  onChange={(val) => updateSetting('public_favorite_recipes', val)}
+						  style={{ '--switch-checked-background-color': '#00bc7d' } as React.CSSProperties}
+						/>
+					  }
+				/>
             </Cell.Group>
         </View>
     )
