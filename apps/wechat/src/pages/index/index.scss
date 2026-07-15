@@ -1171,20 +1171,275 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 }
 
 .diet-rec-loading {
-  height: 100%;
-  min-height: 0;
+  position: relative;
+  min-height: 720rpx;
+  padding: 52rpx 8rpx 24rpx;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  overflow: hidden;
+}
+
+.diet-rec-loading-orbit {
+  position: relative;
+  width: 132rpx;
+  height: 132rpx;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-.diet-rec-spinner {
-  width: 44rpx;
-  height: 44rpx;
+.diet-rec-loading-ring {
+  position: absolute;
+  inset: 0;
   border-radius: 50%;
-  border: 5rpx solid rgb(92 184 150 / 20%);
-  border-top-color: $primary-color;
-  animation: spin 0.9s linear infinite;
+  border: 2rpx solid rgb(92 184 150 / 18%);
+}
+
+.diet-rec-loading-ring.ring-one {
+  border-top-color: rgb(47 127 98 / 72%);
+  border-right-color: rgb(92 184 150 / 42%);
+  animation: diet-rec-orbit 2.1s linear infinite;
+}
+
+.diet-rec-loading-ring.ring-two {
+  inset: 18rpx;
+  border-bottom-color: rgb(47 127 98 / 58%);
+  animation: diet-rec-orbit-reverse 1.55s linear infinite;
+}
+
+.diet-rec-loading-core {
+  position: relative;
+  width: 64rpx;
+  height: 64rpx;
+  border-radius: 22rpx;
+  background: linear-gradient(145deg, #74d9b4, #3eae84);
+  box-shadow: 0 12rpx 30rpx rgb(62 174 132 / 24%);
+  animation: diet-rec-core-breathe 1.8s ease-in-out infinite;
+}
+
+.diet-rec-loading-leaf {
+  position: absolute;
+  top: 18rpx;
+  width: 20rpx;
+  height: 30rpx;
+  border-radius: 20rpx 4rpx 20rpx 4rpx;
+  background: rgb(255 255 255 / 92%);
+}
+
+.diet-rec-loading-leaf.leaf-left {
+  left: 14rpx;
+  transform: rotate(-34deg);
+}
+
+.diet-rec-loading-leaf.leaf-right {
+  right: 14rpx;
+  transform: scaleX(-1) rotate(-34deg);
+}
+
+.diet-rec-loading-particle {
+  position: absolute;
+  width: 10rpx;
+  height: 10rpx;
+  border-radius: 50%;
+  background: $primary-color;
+  box-shadow: 0 0 12rpx rgb(92 184 150 / 45%);
+}
+
+.diet-rec-loading-particle.particle-one {
+  top: 5rpx;
+  left: 26rpx;
+  animation: diet-rec-particle 1.7s ease-in-out infinite;
+}
+
+.diet-rec-loading-particle.particle-two {
+  right: 0;
+  bottom: 34rpx;
+  animation: diet-rec-particle 1.7s 0.45s ease-in-out infinite;
+}
+
+.diet-rec-loading-particle.particle-three {
+  left: 6rpx;
+  bottom: 18rpx;
+  animation: diet-rec-particle 1.7s 0.9s ease-in-out infinite;
+}
+
+.diet-rec-loading-track {
+  width: 250rpx;
+  height: 8rpx;
+  margin-top: 30rpx;
+  border-radius: 999rpx;
+  background: rgb(92 184 150 / 12%);
+  overflow: hidden;
+}
+
+.diet-rec-loading-track-fill {
+  width: 46%;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, rgb(92 184 150 / 15%), #5cb896, rgb(92 184 150 / 15%));
+  animation: diet-rec-track 1.8s ease-in-out infinite;
+}
+
+.diet-rec-loading-steps {
+  width: 250rpx;
+  margin-top: 18rpx;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.diet-rec-loading-step {
+  position: relative;
+  flex: 1;
+  display: flex;
+  justify-content: center;
+}
+
+.diet-rec-loading-step:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  top: 6rpx;
+  left: calc(50% + 10rpx);
+  width: calc(100% - 20rpx);
+  height: 2rpx;
+  background: rgb(92 184 150 / 18%);
+}
+
+.diet-rec-loading-step-dot {
+  position: relative;
+  z-index: 1;
+  width: 14rpx;
+  height: 14rpx;
+  border-radius: 50%;
+  background: rgb(92 184 150 / 24%);
+  box-shadow: 0 0 0 0 rgb(92 184 150 / 0%);
+  animation: diet-rec-step 2.4s ease-in-out infinite;
+}
+
+.diet-rec-loading-step.step-2 .diet-rec-loading-step-dot {
+  animation-delay: 0.8s;
+}
+
+.diet-rec-loading-step.step-3 .diet-rec-loading-step-dot {
+  animation-delay: 1.6s;
+}
+
+.diet-rec-loading-skeletons {
+  width: 100%;
+  margin-top: 42rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+}
+
+.diet-rec-loading-skeleton {
+  position: relative;
+  height: 150rpx;
+  padding: 22rpx;
+  border-radius: 20rpx;
+  border: 1rpx solid rgb(92 184 150 / 10%);
+  background: linear-gradient(145deg, #fbfdfc, #f6faf8);
+  box-sizing: border-box;
+  overflow: hidden;
+  animation: diet-rec-card-breathe 2.2s ease-in-out infinite;
+}
+
+.diet-rec-loading-skeleton:nth-child(2) {
+  animation-delay: 0.25s;
+}
+
+.diet-rec-loading-skeleton:nth-child(3) {
+  animation-delay: 0.5s;
+}
+
+.diet-rec-loading-shimmer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -45%;
+  width: 42%;
+  transform: skewX(-18deg);
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 82%), transparent);
+  animation: diet-rec-shimmer 1.75s ease-in-out infinite;
+}
+
+.diet-rec-loading-skeleton-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.diet-rec-loading-line,
+.diet-rec-loading-pill {
+  border-radius: 999rpx;
+  background: rgb(92 184 150 / 13%);
+}
+
+.diet-rec-loading-line.line-title {
+  width: 42%;
+  height: 20rpx;
+}
+
+.diet-rec-loading-line.line-calorie {
+  width: 20%;
+  height: 18rpx;
+}
+
+.diet-rec-loading-line.line-reason {
+  width: 72%;
+  height: 14rpx;
+  margin-top: 20rpx;
+}
+
+.diet-rec-loading-pills {
+  margin-top: 20rpx;
+  display: flex;
+  gap: 10rpx;
+}
+
+.diet-rec-loading-pill {
+  width: 92rpx;
+  height: 24rpx;
+}
+
+@keyframes diet-rec-orbit {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes diet-rec-orbit-reverse {
+  to { transform: rotate(-360deg); }
+}
+
+@keyframes diet-rec-core-breathe {
+  0%, 100% { transform: scale(0.92); opacity: 0.78; }
+  50% { transform: scale(1.05); opacity: 1; }
+}
+
+@keyframes diet-rec-particle {
+  0%, 100% { transform: translateY(4rpx) scale(0.72); opacity: 0.25; }
+  50% { transform: translateY(-8rpx) scale(1); opacity: 0.9; }
+}
+
+@keyframes diet-rec-track {
+  0% { transform: translateX(-100%); }
+  55%, 100% { transform: translateX(220%); }
+}
+
+@keyframes diet-rec-step {
+  0%, 24%, 100% { background: rgb(92 184 150 / 24%); box-shadow: 0 0 0 0 rgb(92 184 150 / 0%); }
+  8%, 16% { background: $primary-color; box-shadow: 0 0 0 8rpx rgb(92 184 150 / 12%); }
+}
+
+@keyframes diet-rec-card-breathe {
+  0%, 100% { transform: translateY(0); opacity: 0.7; }
+  50% { transform: translateY(-3rpx); opacity: 1; }
+}
+
+@keyframes diet-rec-shimmer {
+  0% { left: -45%; }
+  65%, 100% { left: 125%; }
 }
 
 .diet-rec-summary {
@@ -1193,6 +1448,14 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   line-height: 38rpx;
   color: $text-secondary;
   margin-bottom: 16rpx;
+}
+
+.diet-rec-source-note {
+  display: block;
+  margin-top: 12rpx;
+  font-size: 22rpx;
+  line-height: 34rpx;
+  color: $text-tertiary;
 }
 
 .diet-rec-gap-row {

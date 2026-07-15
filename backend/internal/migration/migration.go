@@ -369,23 +369,10 @@ func ensureConstraints(ctx context.Context, db *gorm.DB) error {
 }
 
 func ensureNicknameUniqueIndex(ctx context.Context, db *gorm.DB) error {
-	var duplicate struct {
-		Nickname string
-		Count    int64
-	}
-	err := db.WithContext(ctx).Raw("SELECT MIN(COALESCE(nickname, '')) AS nickname, COUNT(*) AS count FROM weapp_user GROUP BY lower(trim(COALESCE(nickname, ''))) HAVING COUNT(*) > 1 ORDER BY count DESC LIMIT 1").Scan(&duplicate).Error
-	if err != nil {
-		return fmt.Errorf("检查重复昵称: %w", err)
-	}
-	if duplicate.Count > 1 {
-		// Preserve historical accounts and their visible nicknames. The service-layer
-		// duplicate check remains active; the database-level concurrency safeguard is
-		// deferred until the duplicate data has an explicit product resolution.
-		fmt.Printf("警告：暂缓创建昵称唯一索引，发现重复昵称 %q（%d 个账号）；已保留历史账号和昵称，后续需完成数据治理后再创建索引。\n", duplicate.Nickname, duplicate.Count)
-		return nil
-	}
-	if err := db.WithContext(ctx).Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_weapp_user_nickname_normalized_unique ON weapp_user (lower(trim(COALESCE(nickname, ''))))").Error; err != nil {
-		return fmt.Errorf("创建昵称唯一索引: %w", err)
+	// Nicknames are currently display names, not account identifiers. Remove the
+	// historical uniqueness constraint so registrations and profile edits may reuse one.
+	if err := db.WithContext(ctx).Exec("DROP INDEX IF EXISTS idx_weapp_user_nickname_normalized_unique").Error; err != nil {
+		return fmt.Errorf("删除昵称唯一索引: %w", err)
 	}
 	return nil
 }

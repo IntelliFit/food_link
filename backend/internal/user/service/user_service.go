@@ -88,13 +88,6 @@ func (s *UserService) UpdateProfile(ctx context.Context, userID string, input Up
 		if err != nil {
 			return nil, err
 		}
-		taken, err := s.users.IsNicknameTaken(ctx, validatedNickname, userID)
-		if err != nil {
-			return nil, err
-		}
-		if taken {
-			return nil, nickname.DuplicateError()
-		}
 		updates["nickname"] = validatedNickname
 	}
 	if input.Avatar != nil {
@@ -123,9 +116,6 @@ func (s *UserService) UpdateProfile(ctx context.Context, userID string, input Up
 	}
 	user, err := s.users.UpdateFields(ctx, userID, updates)
 	if err != nil {
-		if repo.IsNicknameUniqueConstraintError(err) {
-			return nil, nickname.DuplicateError()
-		}
 		return nil, err
 	}
 	return s.buildProfileResponse(user), nil

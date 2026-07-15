@@ -8,8 +8,10 @@ import (
 	authmw "food_link/backend/internal/auth"
 	"food_link/backend/internal/common/response"
 	"food_link/backend/internal/health/service"
+	"food_link/backend/pkg/logger"
 
 	"github.com/gin-gonic/gin"
+	"log/slog"
 )
 
 type BodyMetricsService interface {
@@ -332,10 +334,10 @@ func (h *HealthHandler) GenerateCustomFocusCard(c *gin.Context) {
 		return
 	}
 	response.Success(c, gin.H{
-		"card":                           card,
-		"custom_focus_daily_limit":       meta["custom_focus_daily_limit"],
-		"custom_focus_used_today":        meta["custom_focus_used_today"],
-		"custom_focus_remaining_today":   meta["custom_focus_remaining_today"],
+		"card":                         card,
+		"custom_focus_daily_limit":     meta["custom_focus_daily_limit"],
+		"custom_focus_used_today":      meta["custom_focus_used_today"],
+		"custom_focus_remaining_today": meta["custom_focus_remaining_today"],
 	})
 }
 
@@ -347,11 +349,27 @@ func (h *HealthHandler) GenerateDietRecommendation(c *gin.Context) {
 		return
 	}
 	userID := c.GetString(authmw.ContextUserIDKey)
+	logger.Info(c.Request.Context(), "饮食推荐请求进入",
+		slog.String("user_id", userID),
+		slog.String("scene", body.Scene),
+		slog.String("date", body.Date),
+	)
 	result, err := h.stats.GenerateDietRecommendation(c.Request.Context(), userID, body)
 	if err != nil {
+		logger.Warn(c.Request.Context(), "饮食推荐生成失败",
+			logger.Err(err),
+			slog.String("user_id", userID),
+			slog.String("scene", body.Scene),
+		)
 		response.Error(c, err)
 		return
 	}
+	logger.Info(c.Request.Context(), "饮食推荐请求完成",
+		slog.String("user_id", userID),
+		slog.String("scene", result.Scene),
+		slog.String("generated_by", result.GeneratedBy),
+		slog.Int("recommendation_count", len(result.Recommendations)),
+	)
 	response.Success(c, result)
 }
 

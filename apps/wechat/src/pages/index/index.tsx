@@ -873,6 +873,7 @@ function IndexPage() {
   const [dietRecScene, setDietRecScene] = React.useState<DietRecommendationScene>('eat_out')
   const [dietRecLoading, setDietRecLoading] = React.useState(false)
   const [dietRecResult, setDietRecResult] = React.useState<DietRecommendationResult | null>(null)
+  const dietRecRequestSeqRef = React.useRef(0)
 
   const loadRewardHintData = React.useCallback(async () => {
     if (!getAccessToken()) {
@@ -2039,13 +2040,20 @@ function IndexPage() {
     setDietRecScene(scene)
     setDietRecVisible(true)
     setDietRecLoading(true)
+    const requestSeq = ++dietRecRequestSeqRef.current
     try {
       const result = await generateDietRecommendation(buildDietRecommendationPayload(scene))
-      setDietRecResult(result)
+      if (requestSeq === dietRecRequestSeqRef.current) {
+        setDietRecResult(result)
+      }
     } catch (error) {
-      await showUnifiedApiError(error, '生成推荐失败')
+      if (requestSeq === dietRecRequestSeqRef.current) {
+        await showUnifiedApiError(error, '生成推荐失败')
+      }
     } finally {
-      setDietRecLoading(false)
+      if (requestSeq === dietRecRequestSeqRef.current) {
+        setDietRecLoading(false)
+      }
     }
   }, [buildDietRecommendationPayload])
 

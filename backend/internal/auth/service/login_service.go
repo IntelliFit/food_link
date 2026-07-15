@@ -608,39 +608,9 @@ func newDefaultUser(openID string, phone *string) *repo.User {
 }
 
 func (s *LoginService) createUserWithUniqueNickname(ctx context.Context, user *repo.User, generated bool) error {
-	if !generated {
-		taken, err := s.users.IsNicknameTaken(ctx, user.Nickname, "")
-		if err != nil {
-			return err
-		}
-		if taken {
-			return nicknamepolicy.DuplicateError()
-		}
-		if err := s.users.Create(ctx, user); err != nil {
-			if repo.IsNicknameUniqueConstraintError(err) {
-				return nicknamepolicy.DuplicateError()
-			}
-			return err
-		}
-		return nil
-	}
-
-	for attempt := 0; attempt < 12; attempt++ {
-		user.Nickname = buildDefaultWechatNickname()
-		taken, err := s.users.IsNicknameTaken(ctx, user.Nickname, "")
-		if err != nil {
-			return err
-		}
-		if taken {
-			continue
-		}
-		if err := s.users.Create(ctx, user); err == nil {
-			return nil
-		} else if !repo.IsNicknameUniqueConstraintError(err) {
-			return err
-		}
-	}
-	return fmt.Errorf("生成唯一默认昵称失败，请稍后重试")
+	// Nicknames are display names and are temporarily allowed to repeat.
+	// Keep the helper name to avoid widening this urgent registration fix.
+	return s.users.Create(ctx, user)
 }
 func (s *LoginService) resolvePhoneNumber(ctx context.Context, phoneCode string) *string {
 	phoneCode = strings.TrimSpace(phoneCode)

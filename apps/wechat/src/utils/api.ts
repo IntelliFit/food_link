@@ -3754,16 +3754,31 @@ export async function getStatsSummary(range: 'week' | 'month'): Promise<StatsSum
 export async function generateDietRecommendation(
   payload: DietRecommendationRequest
 ): Promise<DietRecommendationResult> {
-  const res = await authenticatedRequest('/api/diet/recommendations', {
-    method: 'POST',
-    data: payload,
-    timeout: 45000
-  })
-  if (res.statusCode !== 200) {
-    const msg = (res.data as any)?.detail || '生成推荐失败'
-    throw new Error(msg)
+  let lastError: unknown
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const res = await authenticatedRequest('/api/diet/recommendations', {
+        method: 'POST',
+        data: payload,
+        timeout: 18000
+      })
+      return res.data as DietRecommendationResult
+    } catch (error) {
+      lastError = error
+      const statusCode = Number((error as { statusCode?: number })?.statusCode || 0)
+      const message = String((error as { errMsg?: string; message?: string })?.errMsg || (error as Error)?.message || '').toLowerCase()
+      const retryableNetworkError =
+        message.includes('request:fail') &&
+        (message.includes('timeout') || message.includes('network') || message.includes('connection'))
+      const retryableServerError = statusCode >= 500
+      if (attempt === 0 && (retryableNetworkError || retryableServerError)) {
+        await new Promise((resolve) => setTimeout(resolve, 260))
+        continue
+      }
+      throw error
+    }
   }
-  return res.data as DietRecommendationResult
+  throw lastError
 }
 
 export async function getBodyMetricsSummary(range: 'week' | 'month' = 'month'): Promise<BodyMetricsSummary> {

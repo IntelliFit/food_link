@@ -11,8 +11,12 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 
 	"food_link/backend/internal/health/domain"
+	"food_link/backend/pkg/logger"
+
+	"log/slog"
 )
 
 type DietRecommendationInput struct {
@@ -76,6 +80,10 @@ var dietRecommendationFenceRe = regexp.MustCompile("(?s)```json?\\s*\\n?|```")
 
 const creditCostDietRecommendation = 1
 
+// 饮食推荐必须在小程序请求超时前返回。AI 只是改善文案和组合的可选项，
+// 不能让它的瞬时网络波动阻塞本地候选和规则兜底结果。
+var dietRecommendationTimeout = 12 * time.Second
+
 func (s *StatsService) GenerateDietRecommendation(ctx context.Context, userID string, input DietRecommendationInput) (*DietRecommendationResult, error) {
 	var creditsInfo map[string]any
 	var err error
@@ -102,11 +110,19 @@ func (s *StatsService) GenerateDietRecommendation(ctx context.Context, userID st
 }
 
 func (s *StatsService) generateDietRecommendationCore(ctx context.Context, userID string, input DietRecommendationInput) (*DietRecommendationResult, error) {
+	ctx, cancel := context.WithTimeout(ctx, dietRecommendationTimeout)
+	defer cancel()
+
 	input = normalizeDietRecommendationInput(input)
 	llm := s.preferredTextLLM()
 	apiKey := llm.APIKey
 	candidates := s.fetchDietRecommendationCandidates(ctx, userID, input)
 	if apiKey == "" {
+		logger.Info(ctx, "饮食推荐未配置文本模型，使用兜底推荐",
+			slog.String("user_id", userID),
+			slog.String("scene", input.Scene),
+			slog.Int("candidate_count", len(candidates)),
+		)
 		return fallbackDietRecommendation(input, "rule_fallback", candidates), nil
 	}
 
@@ -128,11 +144,24 @@ func (s *StatsService) generateDietRecommendationCore(ctx context.Context, userI
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := s.client.Do(req)
 	if err != nil {
+		logger.Warn(ctx, "饮食推荐大模型请求失败，使用兜底推荐",
+			logger.Err(err),
+			slog.String("user_id", userID),
+			slog.String("scene", input.Scene),
+			slog.String("model", llm.Model),
+			slog.Int("candidate_count", len(candidates)),
+		)
 		return fallbackDietRecommendation(input, "rule_fallback", candidates), nil
 	}
 	defer resp.Body.Close()
 	respBody, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		logger.Warn(ctx, "饮食推荐大模型响应异常，使用兜底推荐",
+			slog.String("user_id", userID),
+			slog.String("scene", input.Scene),
+			slog.String("model", llm.Model),
+			slog.Int("http.status_code", resp.StatusCode),
+		)
 		return fallbackDietRecommendation(input, "rule_fallback", candidates), nil
 	}
 	var parsed struct {
@@ -143,17 +172,41 @@ func (s *StatsService) generateDietRecommendationCore(ctx context.Context, userI
 		} `json:"choices"`
 	}
 	if err := json.Unmarshal(respBody, &parsed); err != nil || len(parsed.Choices) == 0 {
+		logger.Warn(ctx, "饮食推荐大模型返回内容无效，使用兜底推荐",
+			logger.Err(err),
+			slog.String("user_id", userID),
+			slog.String("scene", input.Scene),
+			slog.String("model", llm.Model),
+		)
 		return fallbackDietRecommendation(input, "rule_fallback", candidates), nil
 	}
 	content := strings.TrimSpace(dietRecommendationFenceRe.ReplaceAllString(parsed.Choices[0].Message.Content, ""))
 	var result DietRecommendationResult
 	if err := json.Unmarshal([]byte(content), &result); err != nil {
+		logger.Warn(ctx, "饮食推荐大模型 JSON 解析失败，使用兜底推荐",
+			logger.Err(err),
+			slog.String("user_id", userID),
+			slog.String("scene", input.Scene),
+			slog.String("model", llm.Model),
+		)
 		return fallbackDietRecommendation(input, "rule_fallback", candidates), nil
 	}
 	result = normalizeDietRecommendationResult(input, result, llm.Model, candidates)
 	if len(result.Recommendations) == 0 {
+		logger.Warn(ctx, "饮食推荐大模型未返回方案，使用兜底推荐",
+			slog.String("user_id", userID),
+			slog.String("scene", input.Scene),
+			slog.String("model", llm.Model),
+		)
 		return fallbackDietRecommendation(input, "rule_fallback", candidates), nil
 	}
+	logger.Info(ctx, "饮食推荐生成完成",
+		slog.String("user_id", userID),
+		slog.String("scene", input.Scene),
+		slog.String("model", llm.Model),
+		slog.Int("candidate_count", len(candidates)),
+		slog.Int("recommendation_count", len(result.Recommendations)),
+	)
 
 	return &result, nil
 }

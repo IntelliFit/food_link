@@ -445,6 +445,41 @@ func TestNewStatsInsightHTTPClientAllowsSlowTLSHandshake(t *testing.T) {
 	assert.Equal(t, 90*time.Second, client.Timeout)
 }
 
+func TestDietRecommendationFallsBackWhenTextModelExceedsBudget(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-r.Context().Done():
+			return
+		case <-time.After(time.Second):
+			_, _ = w.Write([]byte(`{"choices":[]}`))
+		}
+	}))
+	defer server.Close()
+
+	previousTimeout := dietRecommendationTimeout
+	dietRecommendationTimeout = 20 * time.Millisecond
+	t.Cleanup(func() { dietRecommendationTimeout = previousTimeout })
+
+	svc := NewStatsService(&mockStatsRepo{candidates: []domain.DietRecommendationCandidate{{
+		Source: "food_nutrition_library", SourceID: "food-1", Title: "鸡胸肉",
+		Calories: 120, Protein: 23, Carbs: 1, Fat: 2,
+	}}}, &mockBodyMetricsProvider{}, &config.Config{External: config.ExternalConfig{
+		DashScopeAPIKey: "qwen-key", DashScopeBaseURL: server.URL,
+	}})
+
+	startedAt := time.Now()
+	result, err := svc.GenerateDietRecommendation(context.Background(), "u1", DietRecommendationInput{
+		Scene: "cook_home", CalorieRemaining: 500,
+		MacroGaps: DietRecommendationMacro{Protein: 30, Carbs: 50, Fat: 12},
+	})
+
+	require.NoError(t, err)
+	assert.Less(t, time.Since(startedAt), 300*time.Millisecond)
+	assert.Equal(t, "rule_fallback", result.GeneratedBy)
+	require.NotEmpty(t, result.Recommendations)
+	assert.Equal(t, "food_nutrition_library", result.Recommendations[0].Source)
+}
+
 func TestStatsService_RequestNutritionInsightRetriesTransientUpstreamFailure(t *testing.T) {
 	requestCount := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

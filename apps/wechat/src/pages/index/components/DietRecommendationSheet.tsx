@@ -20,7 +20,7 @@ const SCENE_LABELS: Record<DietRecommendationScene, string> = {
 const SOURCE_LABELS: Record<string, string> = {
   public_food_library: '公共食物库',
   user_food_records: '历史记录',
-  food_nutrition_library: '营养库',
+  food_nutrition_library: '标准营养库',
   mixed: '组合候选',
   rule_fallback: '规则兜底',
   ai_generated: 'AI 补充'
@@ -77,11 +77,54 @@ export function DietRecommendationSheet({
         >
           {loading ? (
             <View className='diet-rec-loading'>
-              <View className='diet-rec-spinner' />
+              <View className='diet-rec-loading-orbit'>
+                <View className='diet-rec-loading-ring ring-one' />
+                <View className='diet-rec-loading-ring ring-two' />
+                <View className='diet-rec-loading-core'>
+                  <View className='diet-rec-loading-leaf leaf-left' />
+                  <View className='diet-rec-loading-leaf leaf-right' />
+                </View>
+                <View className='diet-rec-loading-particle particle-one' />
+                <View className='diet-rec-loading-particle particle-two' />
+                <View className='diet-rec-loading-particle particle-three' />
+              </View>
+
+              <View className='diet-rec-loading-track'>
+                <View className='diet-rec-loading-track-fill' />
+              </View>
+
+              <View className='diet-rec-loading-steps'>
+                {[0, 1, 2].map((step) => (
+                  <View key={step} className={`diet-rec-loading-step step-${step + 1}`}>
+                    <View className='diet-rec-loading-step-dot' />
+                  </View>
+                ))}
+              </View>
+
+              <View className='diet-rec-loading-skeletons'>
+                {[0, 1, 2].map((card) => (
+                  <View key={card} className='diet-rec-loading-skeleton'>
+                    <View className='diet-rec-loading-shimmer' />
+                    <View className='diet-rec-loading-skeleton-head'>
+                      <View className='diet-rec-loading-line line-title' />
+                      <View className='diet-rec-loading-line line-calorie' />
+                    </View>
+                    <View className='diet-rec-loading-line line-reason' />
+                    <View className='diet-rec-loading-pills'>
+                      <View className='diet-rec-loading-pill' />
+                      <View className='diet-rec-loading-pill' />
+                      <View className='diet-rec-loading-pill' />
+                    </View>
+                  </View>
+                ))}
+              </View>
             </View>
           ) : result ? (
             <>
               <Text className='diet-rec-summary'>{result.summary}</Text>
+              <Text className='diet-rec-source-note'>
+                推荐优先从公共食物库、你的历史记录和标准营养库中选取；AI 仅负责按今日剩余目标组合。每个方案下方会标出实际来源。
+              </Text>
               <View className='diet-rec-gap-row'>
                 <View className='diet-rec-gap-pill'>
                   <Text className='diet-rec-gap-value'>{formatDisplayNumber(Math.max(0, Math.round(result.calorie_remaining || 0)))}</Text>

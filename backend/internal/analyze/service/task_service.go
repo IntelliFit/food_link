@@ -781,6 +781,7 @@ func (s *TaskService) ListTasks(ctx context.Context, userID, taskType, status, s
 	}
 	for i := range tasks {
 		s.normalizeTaskImages(&tasks[i])
+		normalizeIngredientLabelEnergyInResult(tasks[i].Result)
 		if tasks[i].Status == "done" {
 			if recordID, ok := recordedMap[tasks[i].ID]; ok {
 				tasks[i].IsRecorded = true
@@ -867,6 +868,7 @@ func (s *TaskService) GetTask(ctx context.Context, taskID, userID string) (*doma
 		task.ErrorMessage = &safeMessage
 	}
 	s.normalizeTaskImages(task)
+	normalizeIngredientLabelEnergyInResult(task.Result)
 	if task.Status == "done" {
 		recordedMap, err := s.tasks.RecordedTaskMap(ctx, userID, []string{task.ID})
 		if err != nil {
