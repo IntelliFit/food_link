@@ -2053,15 +2053,25 @@ function ResultPage() {
     // 获取餐次信息
     const savedMealType = Taro.getStorageSync('analyzeMealType')
     const mealType = normalizeSelectableMealType(savedMealType, defaultMealType)
+    // 与“记录”后展示在圈子中的标题保持一致：优先使用识别描述。
+    // 当识别描述缺失时，再用本次识别到的食物名称兜底，确保弹窗始终预填一个可编辑名称。
+    const defaultRecipeName = description.trim()
+      || nutritionItems
+        .map((item) => item.name.trim())
+        .filter(Boolean)
+        .join('、')
+      || `${getMealTypeLabel(mealType)}餐食`
 
     // 弹窗输入收藏名称
     Taro.showModal({
       title: '收藏食物',
-      content: '请输入收藏名称',
+      // 在微信小程序的 editable modal 中，content 就是输入框的初始值；
+      // 原先把提示语放在这里，导致它被当作可编辑的黑色正文保存。
+      content: defaultRecipeName,
       // @ts-ignore
       editable: true,
       // @ts-ignore
-      placeholderText: '例如：我的标配减脂早餐',
+      placeholderText: '请输入收藏名称',
       success: async (res) => {
         if (res.confirm && (res as any).content) {
           const recipeName = (res as any).content.trim()
