@@ -39,6 +39,9 @@ func AutoMigrate(ctx context.Context, db *gorm.DB, schema string) error {
 	if err := ensureTrialEntitlementBackfill(ctx, db); err != nil {
 		return err
 	}
+	if err := ensureRegistrationTrialVouchersAutoApplied(ctx, db); err != nil {
+		return err
+	}
 	if err := ensureDeferredInviteRewards(ctx, db); err != nil {
 		return err
 	}
@@ -717,6 +720,19 @@ WITH ranked_users AS (
     openid,
     unionid,
     create_time,
+    CASE
+      -- Registration trials were briefly issued as pending vouchers. They did
+      -- not become active until manually redeemed, so compensate affected users
+      -- with their full trial period from this migration.
+      WHEN EXISTS (
+        SELECT 1
+        FROM user_vouchers v
+        WHERE v.user_id = weapp_user.id
+          AND v.voucher_type = 'registration_trial'
+          AND v.status IN ('pending', 'expired')
+      ) THEN now()
+      ELSE COALESCE(create_time, now())
+    END AS trial_started_at,
     ROW_NUMBER() OVER (
       ORDER BY create_time IS NULL ASC, create_time ASC, id ASC
     ) AS registration_rank
@@ -729,7 +745,7 @@ prepared AS (
     id AS first_user_id,
     openid,
     unionid,
-    COALESCE(create_time, now()) AS first_registered_at,
+    trial_started_at AS first_registered_at,
     CASE
       WHEN registration_rank <= 1000 THEN registration_rank
       ELSE NULL
@@ -780,6 +796,29 @@ WHERE NOT EXISTS (
 );`
 	if err := db.WithContext(ctx).Exec(sql).Error; err != nil {
 		return fmt.Errorf("backfill user trial entitlements: %w", err)
+	}
+	return nil
+}
+
+// ensureRegistrationTrialVouchersAutoApplied closes the historical deferred
+// registration vouchers after their trial entitlement has been activated. Invite
+// and admin vouchers remain explicitly user-redeemable.
+func ensureRegistrationTrialVouchersAutoApplied(ctx context.Context, db *gorm.DB) error {
+	result := db.WithContext(ctx).Exec(`
+UPDATE user_vouchers v
+SET status = 'used',
+    used_at = COALESCE(v.used_at, now()),
+    updated_at = now()
+WHERE v.voucher_type = 'registration_trial'
+  AND v.status IN ('pending', 'expired')
+  AND EXISTS (
+    SELECT 1
+    FROM user_trial_entitlements e
+    WHERE e.first_user_id = v.user_id
+  )
+`)
+	if result.Error != nil {
+		return fmt.Errorf("activate historical registration trial vouchers: %w", result.Error)
 	}
 	return nil
 }

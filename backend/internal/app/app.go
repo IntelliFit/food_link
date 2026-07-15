@@ -292,7 +292,6 @@ func New(cfg *config.Config) (*App, error) {
 	voucherSvc := voucherservice.NewVoucherService(voucherRepo, membershipRepo, userRepo)
 	voucherSvc.ConfigureMessageSender(messageSvc)
 	voucherHandler := voucherhandler.NewVoucherHandler(voucherSvc)
-	loginSvc.ConfigureVoucherService(voucherSvc)
 	membershipSvc.ConfigureVoucherService(voucherSvc)
 
 	// Pet companion module DI
