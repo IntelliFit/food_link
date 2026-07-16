@@ -635,7 +635,7 @@ function HealthProfilePage() {
                 />
               </View>
             </View>
-            <View className='card-footer card-footer-single'>
+            <View className='card-footer card-footer-single profile-step-footer'>
               <Button block color='primary' shape='round' className={`card-next-btn ${canProceed() ? 'ready' : ''}`} onClick={goNext} disabled={!canProceed()}>
                 下一步 <Text className='iconfont icon-right' />
               </Button>
@@ -667,7 +667,8 @@ function HealthProfilePage() {
                 <Text className='option-label'>女</Text>
               </View>
             </View>
-            <View className='card-footer card-footer-single'>
+            <View className='card-footer'>
+              <View className='card-prev-btn' onClick={goPrev}><Text className='card-prev-arrow iconfont icon-left' />上一步</View>
               <Button block color='primary' shape='round' className={`card-next-btn ${gender ? 'ready' : ''}`} onClick={goNext} disabled={!gender}>
                 下一步 <Text className='iconfont icon-right' />
               </Button>
