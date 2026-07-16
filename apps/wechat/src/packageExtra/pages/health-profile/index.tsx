@@ -13,6 +13,7 @@ import {
   imageToBase64,
   showUnifiedApiError,
   type HealthProfileUpdateRequest,
+  type OnboardingStatus,
 } from '../../../utils/api'
 import { processChooseAvatarSelection, ensureAvatarUploadedForSave } from '../../../utils/new-user-profile-form'
 import { withAuth } from '../../../utils/withAuth'
@@ -124,6 +125,7 @@ function HealthProfilePage() {
   const [reportImageUrls, setReportImageUrls] = useState<string[]>([])
   const [avatarUrl, setAvatarUrl] = useState<string>('')
   const [nickname, setNickname] = useState<string>('')
+  const [onboardingStatus, setOnboardingStatus] = useState<OnboardingStatus>('pending')
 
   const [customMedical, setCustomMedical] = useState<string>('') // 自定义病史输入
   const [customMedicalList, setCustomMedicalList] = useState<string[]>([]) // 用户添加的自定义病史列表
@@ -148,6 +150,7 @@ function HealthProfilePage() {
       if (userInfo) {
         setAvatarUrl(userInfo.avatar || defaultAvatarImage)
         setNickname(userInfo.nickname || '')
+        setOnboardingStatus(userInfo.onboarding_status || (userInfo.onboarding_completed === true ? 'completed' : 'pending'))
       } else {
         setAvatarUrl(defaultAvatarImage)
       }
@@ -403,6 +406,29 @@ function HealthProfilePage() {
     setNickname(value)
   }
 
+  const handleSkipOnboarding = async () => {
+    if (saving || onboardingStatus !== 'pending') return
+    const { confirm } = await Taro.showModal({
+      title: '稍后填写健康档案？',
+      content: '你仍可使用基础功能；补充档案后可获得更准确的营养目标和健康建议。',
+      confirmText: '稍后填写',
+      cancelText: '继续填写',
+    })
+    if (!confirm) return
+
+    setSaving(true)
+    try {
+      await updateHealthProfile({ onboarding_status: 'skipped' })
+      setOnboardingStatus('skipped')
+      Taro.showToast({ title: '可稍后在我的中填写', icon: 'none' })
+      setTimeout(() => Taro.switchTab({ url: '/pages/index/index' }), 500)
+    } catch (error: any) {
+      await showUnifiedApiError(error, '暂不填写失败')
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const handleSelectActivity = (value: string) => {
     setActivityLevel(value)
   }
@@ -613,6 +639,11 @@ function HealthProfilePage() {
               <Button block color='primary' shape='round' className={`card-next-btn ${canProceed() ? 'ready' : ''}`} onClick={goNext} disabled={!canProceed()}>
                 下一步 <Text className='iconfont icon-right' />
               </Button>
+              {onboardingStatus === 'pending' && (
+                <View className='profile-skip-onboarding' onClick={handleSkipOnboarding}>
+                  稍后填写
+                </View>
+              )}
             </View>
           </View>
 

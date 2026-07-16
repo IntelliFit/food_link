@@ -20,36 +20,39 @@ type UserDO struct {
 	Avatar          *string    `gorm:"column:avatar;type:text;default:''"`
 	Nickname        *string    `gorm:"column:nickname;type:text;default:''"`
 	// A normalized unique phone index is installed in migration.go so +86 legacy values conflict with 11-digit phones.
-	Telephone                      *string        `gorm:"column:telephone;type:text;index:idx_weapp_user_telephone"`
-	CreatedAt                      *time.Time     `gorm:"column:create_time;type:timestamptz;default:now()"`
-	UpdatedAt                      *time.Time     `gorm:"column:update_time;type:timestamptz;default:now()"`
-	Height                         *float64       `gorm:"column:height;type:numeric"`
-	Weight                         *float64       `gorm:"column:weight;type:numeric"`
-	Birthday                       *time.Time     `gorm:"column:birthday;type:date"`
-	Gender                         *string        `gorm:"column:gender;type:text"`
-	ActivityLevel                  *string        `gorm:"column:activity_level;type:text"`
-	HealthCondition                map[string]any `gorm:"column:health_condition;type:jsonb;serializer:json;default:'{}'::jsonb"`
-	BMR                            *float64       `gorm:"column:bmr;type:numeric"`
-	TDEE                           *float64       `gorm:"column:tdee;type:numeric"`
-	OnboardingCompleted            *bool          `gorm:"column:onboarding_completed;type:boolean;default:false"`
-	DietGoal                       *string        `gorm:"column:diet_goal;type:varchar(50)"`
-	Searchable                     *bool          `gorm:"column:searchable;type:boolean;default:true"`
-	PublicRecords                  *bool          `gorm:"column:public_records;type:boolean;default:true"`
-	PublicFavoriteRecipes          *bool          `gorm:"column:public_favorite_recipes;type:boolean;default:true"`
-	LastSeenAnalyzeHistory         *time.Time     `gorm:"column:last_seen_analyze_history_at;type:timestamptz"`
-	ExecutionMode                  *string        `gorm:"column:execution_mode;type:text;default:'standard'"`
-	ModeSetBy                      *string        `gorm:"column:mode_set_by;type:text;default:'system'"`
-	ModeSetAt                      *time.Time     `gorm:"column:mode_set_at;type:timestamptz"`
-	ModeReason                     *string        `gorm:"column:mode_reason;type:text"`
-	ModeCommitmentDays             *int           `gorm:"column:mode_commitment_days;type:integer;default:14"`
-	ModeSwitchCount30d             *int           `gorm:"column:mode_switch_count_30d;type:integer;default:0"`
-	PointsBalance                  *float64       `gorm:"column:points_balance;type:numeric;default:100"`
-	RegistrationInviteCode         *string        `gorm:"column:registration_invite_code;type:text;index:idx_weapp_user_registration_invite_code"`
-	ReferredByUserID               *string        `gorm:"column:referred_by_user_id;type:uuid;index:idx_weapp_user_referred_by_user_id"`
-	EarnedCreditsBalance           int            `gorm:"column:earned_credits_balance;type:integer;not null;default:0"`
-	HealthDisclaimerAcknowledgedAt *time.Time     `gorm:"column:health_disclaimer_acknowledged_at;type:timestamptz"`
-	Motto                          *string        `gorm:"column:motto;type:text"`
-	CoverImage                     *string        `gorm:"column:cover_image;type:text"`
+	Telephone           *string        `gorm:"column:telephone;type:text;index:idx_weapp_user_telephone"`
+	CreatedAt           *time.Time     `gorm:"column:create_time;type:timestamptz;default:now()"`
+	UpdatedAt           *time.Time     `gorm:"column:update_time;type:timestamptz;default:now()"`
+	Height              *float64       `gorm:"column:height;type:numeric"`
+	Weight              *float64       `gorm:"column:weight;type:numeric"`
+	Birthday            *time.Time     `gorm:"column:birthday;type:date"`
+	Gender              *string        `gorm:"column:gender;type:text"`
+	ActivityLevel       *string        `gorm:"column:activity_level;type:text"`
+	HealthCondition     map[string]any `gorm:"column:health_condition;type:jsonb;serializer:json;default:'{}'::jsonb"`
+	BMR                 *float64       `gorm:"column:bmr;type:numeric"`
+	TDEE                *float64       `gorm:"column:tdee;type:numeric"`
+	OnboardingCompleted *bool          `gorm:"column:onboarding_completed;type:boolean;default:false"`
+	// Keep this nullable so adding the column never rewrites existing user rows.
+	// A nil value is interpreted from the legacy OnboardingCompleted boolean.
+	OnboardingStatus               *string    `gorm:"column:onboarding_status;type:text"`
+	DietGoal                       *string    `gorm:"column:diet_goal;type:varchar(50)"`
+	Searchable                     *bool      `gorm:"column:searchable;type:boolean;default:true"`
+	PublicRecords                  *bool      `gorm:"column:public_records;type:boolean;default:true"`
+	PublicFavoriteRecipes          *bool      `gorm:"column:public_favorite_recipes;type:boolean;default:true"`
+	LastSeenAnalyzeHistory         *time.Time `gorm:"column:last_seen_analyze_history_at;type:timestamptz"`
+	ExecutionMode                  *string    `gorm:"column:execution_mode;type:text;default:'standard'"`
+	ModeSetBy                      *string    `gorm:"column:mode_set_by;type:text;default:'system'"`
+	ModeSetAt                      *time.Time `gorm:"column:mode_set_at;type:timestamptz"`
+	ModeReason                     *string    `gorm:"column:mode_reason;type:text"`
+	ModeCommitmentDays             *int       `gorm:"column:mode_commitment_days;type:integer;default:14"`
+	ModeSwitchCount30d             *int       `gorm:"column:mode_switch_count_30d;type:integer;default:0"`
+	PointsBalance                  *float64   `gorm:"column:points_balance;type:numeric;default:100"`
+	RegistrationInviteCode         *string    `gorm:"column:registration_invite_code;type:text;index:idx_weapp_user_registration_invite_code"`
+	ReferredByUserID               *string    `gorm:"column:referred_by_user_id;type:uuid;index:idx_weapp_user_referred_by_user_id"`
+	EarnedCreditsBalance           int        `gorm:"column:earned_credits_balance;type:integer;not null;default:0"`
+	HealthDisclaimerAcknowledgedAt *time.Time `gorm:"column:health_disclaimer_acknowledged_at;type:timestamptz"`
+	Motto                          *string    `gorm:"column:motto;type:text"`
+	CoverImage                     *string    `gorm:"column:cover_image;type:text"`
 }
 
 func (UserDO) TableName() string { return "weapp_user" }

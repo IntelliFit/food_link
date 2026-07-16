@@ -24,6 +24,9 @@ func AutoMigrate(ctx context.Context, db *gorm.DB, schema string) error {
 	if err := db.WithContext(ctx).AutoMigrate(migrationdo.AllModels()...); err != nil {
 		return fmt.Errorf("auto migrate models: %w", err)
 	}
+	if err := ensureOnboardingStatus(ctx, db); err != nil {
+		return err
+	}
 	if err := ensureConstraints(ctx, db); err != nil {
 		return err
 	}
@@ -90,6 +93,16 @@ func AutoMigrate(ctx context.Context, db *gorm.DB, schema string) error {
 	return ensurePapayContractIndexes(ctx, db)
 }
 
+// ensureOnboardingStatus verifies the additive lifecycle column exists. It must
+// not backfill existing rows: nil is intentionally interpreted from the legacy
+// boolean so this migration never changes user data.
+func ensureOnboardingStatus(ctx context.Context, db *gorm.DB) error {
+	if !db.Migrator().HasColumn(&migrationdo.UserDO{}, "onboarding_status") {
+		return fmt.Errorf("missing onboarding_status column after auto migrate")
+	}
+	return nil
+}
+
 // MigratePapayContracts applies only the automatic-renewal schema changes.
 func MigratePapayContracts(ctx context.Context, db *gorm.DB, schema string) error {
 	if err := prepareSchema(ctx, db, schema); err != nil {
@@ -99,6 +112,27 @@ func MigratePapayContracts(ctx context.Context, db *gorm.DB, schema string) erro
 		return fmt.Errorf("auto migrate papay contract: %w", err)
 	}
 	return ensurePapayContractIndexes(ctx, db)
+}
+
+// MigrateOnboardingStatus applies only the additive onboarding-status schema.
+// It deliberately avoids the broad AutoMigrate routine because that routine
+// also contains historical data normalization and seed operations.
+func MigrateOnboardingStatus(ctx context.Context, db *gorm.DB, schema string) error {
+	if err := prepareSchema(ctx, db, schema); err != nil {
+		return err
+	}
+	if !db.Migrator().HasColumn(&migrationdo.UserDO{}, "onboarding_status") {
+		if err := db.WithContext(ctx).Migrator().AddColumn(&migrationdo.UserDO{}, "OnboardingStatus"); err != nil {
+			return fmt.Errorf("add onboarding status column: %w", err)
+		}
+	}
+	if err := ensureOnboardingStatus(ctx, db); err != nil {
+		return err
+	}
+	if err := db.WithContext(ctx).Exec(dropAndAddCheck("weapp_user", "weapp_user_onboarding_status_check", `onboarding_status IS NULL OR onboarding_status = ANY (ARRAY['pending'::text,'skipped'::text,'completed'::text])`)).Error; err != nil {
+		return fmt.Errorf("add onboarding status check: %w", err)
+	}
+	return nil
 }
 
 func prepareSchema(ctx context.Context, db *gorm.DB, schema string) error {
@@ -156,6 +190,7 @@ func ensureConstraints(ctx context.Context, db *gorm.DB) error {
 		`ALTER TABLE user_credit_bonus_events DROP CONSTRAINT IF EXISTS user_credit_bonus_events_user_id_bonus_type_bonus_date_key`,
 		dropAndAddCheck("weapp_user", "weapp_user_gender_check", `gender IS NULL OR gender = ANY (ARRAY['male'::text,'female'::text,'other'::text,''::text])`),
 		dropAndAddCheck("weapp_user", "weapp_user_activity_level_check", `activity_level IS NULL OR activity_level = ANY (ARRAY['sedentary'::text,'light'::text,'moderate'::text,'active'::text,'very_active'::text,''::text])`),
+		dropAndAddCheck("weapp_user", "weapp_user_onboarding_status_check", `onboarding_status IS NULL OR onboarding_status = ANY (ARRAY['pending'::text,'skipped'::text,'completed'::text])`),
 		dropAndAddCheck("weapp_user", "weapp_user_execution_mode_check", `execution_mode IS NULL OR execution_mode = ANY (ARRAY['standard'::text,'standard_web_search'::text,'fast'::text,'fast_web_search'::text,'strict'::text,'strict_web_search'::text,'experimental'::text,'gemini35_flash'::text,'gemini35_flash_grouped'::text])`),
 		dropAndAddCheck("weapp_user", "weapp_user_last_login_method_check", `last_login_method IS NULL OR last_login_method = ANY (ARRAY['wechat_miniprogram'::text,'wechat_app'::text,'password'::text,'sms_code'::text,'development_test_openid'::text,'debug_impersonate'::text])`),
 		dropAndAddCheck("weapp_user", "weapp_user_telephone_format_check", `telephone IS NULL OR trim(telephone) = '' OR regexp_replace(trim(telephone), '[\s\-\(\)]', '', 'g') ~ '^(\+?86)?1[3-9][0-9]{9}$'`),

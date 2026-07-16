@@ -18,7 +18,11 @@ func main() {
 	configDir := flag.String("config-dir", ".", "directory containing config.yaml")
 	timeout := flag.Duration("timeout", 5*time.Minute, "migration timeout")
 	onlyPapay := flag.Bool("only-papay", false, "only migrate WeChat automatic-renewal contracts")
+	onlyOnboardingStatus := flag.Bool("only-onboarding-status", false, "only add nullable onboarding status schema without data backfills")
 	flag.Parse()
+	if *onlyPapay && *onlyOnboardingStatus {
+		log.Fatal("--only-papay 与 --only-onboarding-status 不能同时使用")
+	}
 
 	cfg, resolvedDir, err := loadConfig(*configDir)
 	if err != nil {
@@ -44,6 +48,8 @@ func main() {
 	var migrateErr error
 	if *onlyPapay {
 		migrateErr = migration.MigratePapayContracts(ctx, db, cfg.Database.Schema)
+	} else if *onlyOnboardingStatus {
+		migrateErr = migration.MigrateOnboardingStatus(ctx, db, cfg.Database.Schema)
 	} else {
 		migrateErr = migration.AutoMigrate(ctx, db, cfg.Database.Schema)
 	}

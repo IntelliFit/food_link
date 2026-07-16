@@ -105,8 +105,7 @@ function ProfilePage() {
     meta: '已记录 0 天'
   })
 
-  // 是否已完成健康档案引导（首次问卷）
-  const [onboardingCompleted, setOnboardingCompleted] = React.useState<boolean>(true)
+  const [onboardingStatus, setOnboardingStatus] = React.useState<'pending' | 'skipped' | 'completed'>('completed')
 
   // 记录天数
   const [recordDays, setRecordDays] = React.useState(0)
@@ -209,12 +208,7 @@ function ProfilePage() {
             nickname: apiUserInfo.nickname || '用户昵称',
           })
           const completed = apiUserInfo.onboarding_completed === true
-          setOnboardingCompleted(completed)
-          // 首次登录未填写健康档案时，先跳转到答题页面
-          if (!completed) {
-            Taro.redirectTo({ url: extraPkgUrl('/pages/health-profile/index') })
-            return
-          }
+          setOnboardingStatus(apiUserInfo.onboarding_status || (completed ? 'completed' : 'pending'))
 
           // 加载快捷入口统计数字
           loadQuickStats()
@@ -349,9 +343,9 @@ function ProfilePage() {
       return
     }
 
-    // 健康档案：未完成则去填写，已完成则去查看
-    if (service.id === 0) {
-      if (!onboardingCompleted) {
+      // 健康档案：待填或稍后填写均可主动进入填写；已完成进入查看页。
+      if (service.id === 0) {
+        if (onboardingStatus !== 'completed') {
         Taro.navigateTo({ url: extraPkgUrl('/pages/health-profile/index') })
       } else {
         Taro.navigateTo({ url: extraPkgUrl('/pages/health-profile-view/index') })
@@ -685,7 +679,7 @@ function ProfilePage() {
       </View>
 
       {/* 引导横幅 */}
-      {isLoggedIn && !onboardingCompleted && (
+      {isLoggedIn && onboardingStatus === 'pending' && (
         <View
           className='profile-card onboarding-card'
           onClick={() => Taro.navigateTo({ url: extraPkgUrl('/pages/health-profile/index') })}
