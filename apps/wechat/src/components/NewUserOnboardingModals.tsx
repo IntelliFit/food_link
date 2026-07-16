@@ -1,4 +1,4 @@
-import { View, Text, Image, Button } from '@tarojs/components'
+import { View, Text, Image, Button, Input } from '@tarojs/components'
 import { Button as TaroifyButton } from '@taroify/core'
 import '@taroify/core/button/style'
 import './NewUserOnboardingModals.scss'
@@ -9,9 +9,7 @@ export interface NewUserOnboardingModalsProps {
   tempAvatar: string
   tempNickname: string
   onChooseAvatar: (e: { detail?: { avatarUrl?: string } }) => void | Promise<void>
-  onUseWechatProfile?: () => void | Promise<void>
   onNicknameInput: (value: string) => void
-  onNicknameBlur?: (e: { detail?: { value?: string } }) => void
   onSaveProfile: () => void
   onBindPhone: (e: { detail?: { code?: string } }) => void | Promise<void>
   onSkipPhone: () => void
@@ -25,15 +23,14 @@ export function NewUserOnboardingModals({
   showPhoneBindModal,
   tempAvatar,
   tempNickname,
-  onUseWechatProfile,
+  onChooseAvatar,
+  onNicknameInput,
   onSaveProfile,
   onBindPhone,
   onSkipPhone,
   profileSaveLabel = '进入首页',
   previewBadge,
 }: NewUserOnboardingModalsProps) {
-  const handleUseWechatProfile = onUseWechatProfile || (() => {})
-
   return (
     <>
       {showPhoneBindModal && (
@@ -74,13 +71,10 @@ export function NewUserOnboardingModals({
           <View className='profile-form-content'>
             <View className='profile-form-header'>
               <Text className='profile-form-title'>完善个人信息</Text>
-              <Text className='profile-form-desc'>点击头像或昵称，授权后一键使用微信资料</Text>
+              <Text className='profile-form-desc'>点击头像选择图片；点击昵称输入框可使用微信昵称</Text>
             </View>
             <View className='profile-form-body'>
-              <View
-                className='avatar-choose-wrapper'
-                onClick={handleUseWechatProfile}
-              >
+              <View className='avatar-choose-wrapper'>
                 {tempAvatar ? (
                   <Image src={tempAvatar} className='avatar-image' mode='aspectFill' />
                 ) : (
@@ -91,14 +85,32 @@ export function NewUserOnboardingModals({
                     📷
                   </Text>
                 )}
-                <View className='choose-tip'>点击使用微信头像</View>
+                <Button
+                  className='avatar-choose-button'
+                  openType='chooseAvatar'
+                  onChooseAvatar={onChooseAvatar}
+                />
+                <View className='choose-tip'>点击修改头像</View>
               </View>
 
-              <View className='nickname-picker' onClick={handleUseWechatProfile}>
-                <Text className={`nickname-picker-value ${tempNickname ? '' : 'placeholder'}`}>
-                  {tempNickname || '点击使用微信昵称'}
-                </Text>
-                <Text className='nickname-picker-action'>点击授权</Text>
+              <View className='nickname-picker'>
+                <Input
+                  className='nickname-picker-value'
+                  type='nickname'
+                  placeholder='请输入昵称'
+                  value={tempNickname}
+                  onInput={(event) => {
+                    const value = event.detail.value
+                    onNicknameInput(value)
+                    return value
+                  }}
+                  onBlur={(event) => {
+                    onNicknameInput(event.detail.value)
+                  }}
+                  onConfirm={(event) => {
+                    onNicknameInput(event.detail.value)
+                  }}
+                />
               </View>
             </View>
 

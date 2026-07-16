@@ -345,13 +345,13 @@ export default function LoginPage() {
             console.log('[invite-debug][login] 未完成健康档案，先跳转 health-profile，好友申请已在资料就绪后处理', {
                 inviteCode,
             })
-            Taro.redirectTo({ url: extraPkgUrl('/pages/health-profile/index') })
+            Taro.navigateTo({ url: extraPkgUrl('/pages/health-profile/index') })
             return
         }
         await finishLoginFlow()
     }
 
-    /** 微信一键登录：只完成登录，头像/昵称在完善信息弹窗中由用户点击授权复制 */
+    /** 微信一键登录：只完成登录，头像/昵称由用户在资料页自行选择或填写。 */
     const handleWxLogin = async () => {
         if (!agreed) {
             Taro.showToast({
@@ -464,7 +464,7 @@ export default function LoginPage() {
             // API 返回的 avatar 可能为空字符串，nickname 可能为空
             if (shouldShowProfileFormFromApiUser(apiUserInfo)) {
                 console.log('[invite-debug][login] 需要完善头像昵称，邀请码处理继续延后', { inviteCode })
-                // 优先使用一键授权获取的微信头像/昵称；微信默认名 fallback 为随机昵称
+                // 使用已保存资料；新用户仍以系统头像和随机昵称作为可编辑默认值。
                 const initialAvatar = getInitialRegistrationAvatar(wxAvatarUrl || apiUserInfo.avatar)
                 const initialNickname = resolveRegistrationNickname(wxNickname || apiUserInfo.nickname, loginData.openid)
                 setTempAvatar(initialAvatar)
@@ -525,26 +525,6 @@ export default function LoginPage() {
             await processChooseAvatarSelection(avatarUrl, setTempAvatar)
         } catch (err: unknown) {
             await showLoginErrorToast(err, '上传失败')
-        }
-    }
-
-    const handleNicknameBlur = (e: any) => {
-        setTempNickname(e.detail.value)
-    }
-
-    const handleUseWechatProfile = async () => {
-        try {
-            const profileRes = await Taro.getUserProfile({ desc: '用于完善个人资料' })
-            const wxNickname = profileRes.userInfo?.nickName || ''
-            const wxAvatarUrl = profileRes.userInfo?.avatarUrl || ''
-            if (wxNickname) {
-                setTempNickname(wxNickname)
-            }
-            if (wxAvatarUrl) {
-                await processChooseAvatarSelection(wxAvatarUrl, setTempAvatar)
-            }
-        } catch (err: unknown) {
-            console.warn('获取微信资料失败或用户拒绝:', err)
         }
     }
 
@@ -704,9 +684,7 @@ export default function LoginPage() {
               tempAvatar={tempAvatar}
               tempNickname={tempNickname}
               onChooseAvatar={handleChooseAvatar}
-              onUseWechatProfile={handleUseWechatProfile}
               onNicknameInput={setTempNickname}
-              onNicknameBlur={handleNicknameBlur}
               onSaveProfile={handleSaveProfile}
               onBindPhone={handleBindPhone}
               onSkipPhone={() => {

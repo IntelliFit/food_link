@@ -403,27 +403,6 @@ function HealthProfilePage() {
     setNickname(value)
   }
 
-  const handleUseWechatProfile = async () => {
-    try {
-      const res = await Taro.getUserProfile({ desc: '用于完善个人资料' })
-      const info = res.userInfo
-      if (info) {
-        if (info.avatarUrl) {
-          processChooseAvatarSelection(info.avatarUrl, setAvatarUrl)
-        }
-        if (info.nickName) {
-          setNickname(info.nickName)
-        }
-      }
-    } catch (err: any) {
-      if (err?.errMsg?.includes('cancel') || err?.errMsg?.includes('deny') || err?.errMsg?.includes('fail auth')) {
-        return
-      }
-      console.error('获取微信资料失败:', err)
-      Taro.showToast({ title: '获取微信资料失败', icon: 'none' })
-    }
-  }
-
   const handleSelectActivity = (value: string) => {
     setActivityLevel(value)
   }
@@ -620,20 +599,15 @@ function HealthProfilePage() {
                   type='nickname'
                   placeholder='请输入昵称'
                   value={nickname}
-                  onInput={(e) => handleNicknameInput(e.detail.value)}
+                  onInput={(event) => {
+                    const value = event.detail.value
+                    handleNicknameInput(value)
+                    return value
+                  }}
+                  onBlur={(event) => handleNicknameInput(event.detail.value)}
+                  onConfirm={(event) => handleNicknameInput(event.detail.value)}
                 />
               </View>
-
-              <Button
-                className='profile-wechat-fill-btn'
-                variant='outlined'
-                color='primary'
-                shape='round'
-                block
-                onClick={handleUseWechatProfile}
-              >
-                一键使用微信头像和昵称
-              </Button>
             </View>
             <View className='card-footer card-footer-single'>
               <Button block color='primary' shape='round' className={`card-next-btn ${canProceed() ? 'ready' : ''}`} onClick={goNext} disabled={!canProceed()}>
