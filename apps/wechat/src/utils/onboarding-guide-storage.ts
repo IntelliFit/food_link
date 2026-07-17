@@ -14,9 +14,23 @@ const ALL_ONBOARDING_KEYS = [
 
 export type OnboardingGuideStorageKey = (typeof ALL_ONBOARDING_KEYS)[number]
 
+/**
+ * 引导是否完成是账号状态，而不是设备状态：同一台设备上的新注册账号仍应获得首次引导，
+ * 同一账号之后从健康档案等入口返回首页则不应重复展示。
+ */
+function getUserScopedGuideKey(key: OnboardingGuideStorageKey): string | null {
+  try {
+    const userID = String(Taro.getStorageSync('user_id') || '').trim()
+    return userID ? `${key}:user:${encodeURIComponent(userID)}` : null
+  } catch {
+    return null
+  }
+}
+
 export function isGuideCompleted(key: OnboardingGuideStorageKey): boolean {
   try {
-    return Taro.getStorageSync(key) === true
+    const scopedKey = getUserScopedGuideKey(key)
+    return scopedKey ? Taro.getStorageSync(scopedKey) === true : false
   } catch {
     return false
   }
@@ -32,7 +46,10 @@ export function shouldOfferOnboardingGuide(key: OnboardingGuideStorageKey): bool
 
 export function markGuideCompleted(key: OnboardingGuideStorageKey): void {
   try {
-    Taro.setStorageSync(key, true)
+    const scopedKey = getUserScopedGuideKey(key)
+    if (scopedKey) {
+      Taro.setStorageSync(scopedKey, true)
+    }
   } catch {
     /* ignore */
   }
@@ -69,6 +86,11 @@ export function consumeHomeRecordGuideAfterOnboarding(): boolean {
 export function clearAllOnboardingGuides(): void {
   ALL_ONBOARDING_KEYS.forEach((key) => {
     try {
+      const scopedKey = getUserScopedGuideKey(key)
+      if (scopedKey) {
+        Taro.removeStorageSync(scopedKey)
+      }
+      // 兼容清除旧版本遗留的设备级标记；新逻辑不会读取它。
       Taro.removeStorageSync(key)
     } catch {
       /* ignore */

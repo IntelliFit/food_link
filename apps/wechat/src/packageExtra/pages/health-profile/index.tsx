@@ -15,9 +15,13 @@ import {
   type HealthProfileUpdateRequest,
   type OnboardingStatus,
 } from '../../../utils/api'
-import { processChooseAvatarSelection, ensureAvatarUploadedForSave } from '../../../utils/new-user-profile-form'
+import { processChooseAvatarSelection, ensureAvatarUploadedForSave, getInitialRegistrationAvatar } from '../../../utils/new-user-profile-form'
 import { withAuth } from '../../../utils/withAuth'
-import { requestHomeRecordGuideAfterOnboarding } from '../../../utils/onboarding-guide-storage'
+import {
+  ONBOARDING_HOME_RECORD_GUIDE_KEY,
+  requestHomeRecordGuideAfterOnboarding,
+  shouldOfferOnboardingGuide,
+} from '../../../utils/onboarding-guide-storage'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
 import { chooseImageWithPrivacy, isPrivacyAuthorizeError, showPrivacyAuthorizeFailure } from '../../../utils/weapp-privacy'
@@ -145,6 +149,12 @@ function HealthProfilePage() {
 
   const [healthNotes, setHealthNotes] = useState<string>('') // 用户自己文字补充自己身体的特殊情况和问题
 
+  const requestInitialHomeGuideIfNeeded = () => {
+    if (shouldOfferOnboardingGuide(ONBOARDING_HOME_RECORD_GUIDE_KEY)) {
+      requestHomeRecordGuideAfterOnboarding()
+    }
+  }
+
   const loadProfile = async () => {
     let profile: Awaited<ReturnType<typeof getHealthProfile>> | null = null
     try {
@@ -154,7 +164,7 @@ function HealthProfilePage() {
       ])
       profile = loadedProfile
       if (userInfo) {
-        const initialAvatar = userInfo.avatar || defaultAvatarImage
+        const initialAvatar = getInitialRegistrationAvatar(userInfo.avatar)
         const initialNickname = userInfo.nickname || ''
         initialIdentityRef.current = { avatar: initialAvatar, nickname: initialNickname }
         setAvatarUrl(initialAvatar)
@@ -473,7 +483,7 @@ function HealthProfilePage() {
       await saveDraft(currentStep)
       Taro.showToast({ title: '已保存，可稍后继续', icon: 'none' })
       setTimeout(() => {
-        requestHomeRecordGuideAfterOnboarding()
+        requestInitialHomeGuideIfNeeded()
         Taro.switchTab({ url: '/pages/index/index' })
       }, 300)
     } catch (error) {
@@ -547,7 +557,7 @@ function HealthProfilePage() {
       setOnboardingStatus('skipped')
       Taro.showToast({ title: identityChanged ? '个人资料已保存，可稍后补充健康档案' : '可稍后在我的中填写', icon: 'none' })
       setTimeout(() => {
-        requestHomeRecordGuideAfterOnboarding()
+        requestInitialHomeGuideIfNeeded()
         Taro.switchTab({ url: '/pages/index/index' })
       }, 500)
     } catch (error: any) {
@@ -654,7 +664,7 @@ function HealthProfilePage() {
       }
       Taro.showToast({ title: '保存成功', icon: 'success' })
       setTimeout(() => {
-        requestHomeRecordGuideAfterOnboarding()
+        requestInitialHomeGuideIfNeeded()
         Taro.switchTab({ url: '/pages/profile/index' })
       }, 1500)
     } catch (e: any) {
