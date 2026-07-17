@@ -212,7 +212,7 @@ function HealthProfilePage() {
     } finally {
       const draftStep = Number(profile?.onboarding_draft_step)
       setCurrentStep(
-        profile?.onboarding_status === 'pending' && Number.isInteger(draftStep) && draftStep >= 0 && draftStep < TOTAL_STEPS
+        Number.isInteger(draftStep) && draftStep >= 0 && draftStep < TOTAL_STEPS
           ? draftStep
           : 0
       )
@@ -472,7 +472,10 @@ function HealthProfilePage() {
     try {
       await saveDraft(currentStep)
       Taro.showToast({ title: '已保存，可稍后继续', icon: 'none' })
-      setTimeout(() => Taro.switchTab({ url: '/pages/index/index' }), 300)
+      setTimeout(() => {
+        requestHomeRecordGuideAfterOnboarding()
+        Taro.switchTab({ url: '/pages/index/index' })
+      }, 300)
     } catch (error) {
       await showUnifiedApiError(error, '保存健康档案草稿失败')
     } finally {
