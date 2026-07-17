@@ -13,6 +13,7 @@ import {
   getShareQrEnvVersion,
   getUnlimitedQRCode,
   getFriendInviteProfile,
+  getHealthProfile,
   getSharedFoodRecord,
   getFoodRecordById,
   getPetSummary,
@@ -98,6 +99,8 @@ import { formatDisplayNumber, formatNumberWithComma, formatDateKey, createTarget
 import { useAnimatedNumber, useAnimatedProgress } from './hooks'
 import { TargetEditor, GreetingSection, DateSelector, StatsEntry, RecordMenu, MealActionSheet, MealRecordsDialog, MealRecordEditModal, MealRecordPosterModal, DietRecommendationSheet, MicrosSection, type MealPosterSharePayload } from './components'
 import OnboardingGuide from '../../components/OnboardingGuide'
+
+const HOME_HEALTH_PROFILE_PROMPT_DISMISSED_KEY = 'homeHealthProfilePromptDismissed'
 import { PetAvatar } from '../../components/PetAvatar'
 import {
   ONBOARDING_HOME_RECORD_GUIDE_KEY,
@@ -865,6 +868,16 @@ function IndexPage() {
   }, [])
 
   /** 首页仪表盘返回的成就（连续记录 / 全绿天数） */
+  const dismissHealthProfilePrompt = React.useCallback(() => {
+    Taro.setStorageSync(HOME_HEALTH_PROFILE_PROMPT_DISMISSED_KEY, true)
+    setShowHealthProfilePrompt(false)
+  }, [])
+
+  const openHealthProfileFromPrompt = React.useCallback(() => {
+    dismissHealthProfilePrompt()
+    Taro.navigateTo({ url: extraPkgUrl('/pages/health-profile/index') })
+  }, [dismissHealthProfilePrompt])
+
   const [homeAchievement, setHomeAchievement] = React.useState<HomeAchievement>(initialLocalSnapshot?.achievement || { streak_days: 0, green_days: 0 })
   const [dailyPosterGenerating, setDailyPosterGenerating] = React.useState(false)
   const [dailyPosterImageUrl, setDailyPosterImageUrl] = React.useState<string | null>(null)
@@ -873,6 +886,7 @@ function IndexPage() {
   const [dietRecScene, setDietRecScene] = React.useState<DietRecommendationScene>('eat_out')
   const [dietRecLoading, setDietRecLoading] = React.useState(false)
   const [dietRecResult, setDietRecResult] = React.useState<DietRecommendationResult | null>(null)
+  const [showHealthProfilePrompt, setShowHealthProfilePrompt] = React.useState(false)
   const dietRecRequestSeqRef = React.useRef(0)
 
   const loadRewardHintData = React.useCallback(async () => {
@@ -1249,6 +1263,18 @@ function IndexPage() {
 
   useDidShow(() => {
     setPetHidden(getStoredPetHidden())
+    if (getAccessToken() && !Taro.getStorageSync(HOME_HEALTH_PROFILE_PROMPT_DISMISSED_KEY)) {
+      void getHealthProfile()
+        .then((profile) => {
+          const status = profile.onboarding_status || (profile.onboarding_completed === true ? 'completed' : 'pending')
+          setShowHealthProfilePrompt(status !== 'completed')
+        })
+        .catch(() => {
+          // 档案提示为增强信息，读取失败不影响首页主链路。
+        })
+    } else {
+      setShowHealthProfilePrompt(false)
+    }
     const today = formatDateKey(new Date())
     const currentSelected = selectedDateRef.current
 
@@ -3026,6 +3052,24 @@ function IndexPage() {
         )}
 
         {/* 日期选择器 */}
+        {showHealthProfilePrompt && (
+          <View className='home-health-profile-prompt'>
+            <View className='home-health-profile-prompt__icon'>健</View>
+            <View className='home-health-profile-prompt__content' onClick={openHealthProfileFromPrompt}>
+              <Text className='home-health-profile-prompt__title'>完善健康档案，获得更贴合你的建议</Text>
+              <Text className='home-health-profile-prompt__desc'>每日目标、饮食分析会结合你的身体数据、过敏与饮食偏好。</Text>
+            </View>
+            <View className='home-health-profile-prompt__actions'>
+              <View className='home-health-profile-prompt__go' onClick={openHealthProfileFromPrompt}>
+                <Text>去完善</Text>
+              </View>
+              <View className='home-health-profile-prompt__dismiss' onClick={dismissHealthProfilePrompt}>
+                <Text>稍后</Text>
+              </View>
+            </View>
+          </View>
+        )}
+
         <DateSelector
           cells={weekHeatmapCells}
           selectedDate={selectedDate}

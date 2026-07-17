@@ -77,6 +77,7 @@ const PACKAGED_FOOD_EDIT_DRAFT_KEY = 'packagedFoodEditDraft'
 const PACKAGED_FOOD_EDIT_SAVED_KEY = 'packagedFoodEditSaved'
 const ANALYSIS_ENGINE_STORAGE_KEY = 'analyzeAnalysisEngine'
 const SUGGEST_RATIO_STORAGE_KEY = 'analyzeSuggestRatioEnabled'
+const ANALYSIS_HEALTH_PROFILE_PROMPT_SHOWN_KEY = 'analysisHealthProfilePromptShown'
 const CORRECTION_SUBMIT_DEBOUNCE_MS = 300
 const MAX_ANALYZE_IMAGES = 3
 /** 用户在分析结果页停留超过此时间且未调整摄入比例，则视为疑似不信任识别结果 */
@@ -950,6 +951,30 @@ function ResultPage() {
         const result: AnalyzeResponse = JSON.parse(storedResult)
         applyAnalyzeResultToPage(result, undefined, storedPrecisionSessionId)
         void hydrateCommittedRecord()
+        if (getAccessToken() && !Taro.getStorageSync(ANALYSIS_HEALTH_PROFILE_PROMPT_SHOWN_KEY)) {
+          void getHealthProfile()
+            .then((profile) => {
+              const status = profile.onboarding_status || (profile.onboarding_completed === true ? 'completed' : 'pending')
+              if (status === 'completed') return
+
+              Taro.setStorageSync(ANALYSIS_HEALTH_PROFILE_PROMPT_SHOWN_KEY, true)
+              Taro.showModal({
+                title: '让分析建议更贴合你',
+                content: '完善健康档案后，食物分析会结合你的过敏/忌口、饮食偏好和每日消耗，给出更安全、更适合你的建议。',
+                confirmText: '去完善',
+                cancelText: '暂不填写',
+                confirmColor: '#238c6d',
+                success: ({ confirm }) => {
+                  if (confirm) {
+                    Taro.navigateTo({ url: extraPkgUrl('/pages/health-profile/index') })
+                  }
+                },
+              })
+            })
+            .catch(() => {
+              // 档案提示读取失败不影响分析结果展示。
+            })
+        }
       } else {
         Taro.showModal({
           title: '提示',

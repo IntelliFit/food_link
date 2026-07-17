@@ -1,7 +1,7 @@
 import { View, Text, Input, Textarea, Image, Button as NativeButton } from '@tarojs/components'
 import { Button } from '@taroify/core'
 import '@taroify/core/button/style'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Taro from '@tarojs/taro'
 import {
   getHealthProfile,
@@ -126,6 +126,7 @@ function HealthProfilePage() {
   const [avatarUrl, setAvatarUrl] = useState<string>('')
   const [nickname, setNickname] = useState<string>('')
   const [onboardingStatus, setOnboardingStatus] = useState<OnboardingStatus>('pending')
+  const initialIdentityRef = useRef({ avatar: '', nickname: '' })
 
   const [customMedical, setCustomMedical] = useState<string>('') // 自定义病史输入
   const [customMedicalList, setCustomMedicalList] = useState<string[]>([]) // 用户添加的自定义病史列表
@@ -148,10 +149,14 @@ function HealthProfilePage() {
         getUserProfile().catch(() => null),
       ])
       if (userInfo) {
-        setAvatarUrl(userInfo.avatar || defaultAvatarImage)
-        setNickname(userInfo.nickname || '')
+        const initialAvatar = userInfo.avatar || defaultAvatarImage
+        const initialNickname = userInfo.nickname || ''
+        initialIdentityRef.current = { avatar: initialAvatar, nickname: initialNickname }
+        setAvatarUrl(initialAvatar)
+        setNickname(initialNickname)
         setOnboardingStatus(userInfo.onboarding_status || (userInfo.onboarding_completed === true ? 'completed' : 'pending'))
       } else {
+        initialIdentityRef.current = { avatar: defaultAvatarImage, nickname: '' }
         setAvatarUrl(defaultAvatarImage)
       }
       if (profile.gender) setGender(profile.gender)
@@ -418,9 +423,27 @@ function HealthProfilePage() {
 
     setSaving(true)
     try {
+      const normalizedNickname = nickname.trim()
+      const identityChanged =
+        normalizedNickname !== initialIdentityRef.current.nickname ||
+        avatarUrl !== initialIdentityRef.current.avatar
+      if (identityChanged) {
+        const finalAvatar = await ensureAvatarUploadedForSave(avatarUrl)
+        await updateUserInfo({
+          nickname: normalizedNickname,
+          avatar: finalAvatar || undefined,
+        })
+        const cachedUser = Taro.getStorageSync('userInfo') || {}
+        Taro.setStorageSync('userInfo', {
+          ...cachedUser,
+          avatar: finalAvatar,
+          name: normalizedNickname,
+          nickname: normalizedNickname,
+        })
+      }
       await updateHealthProfile({ onboarding_status: 'skipped' })
       setOnboardingStatus('skipped')
-      Taro.showToast({ title: '可稍后在我的中填写', icon: 'none' })
+      Taro.showToast({ title: identityChanged ? '个人资料已保存，可稍后补充健康档案' : '可稍后在我的中填写', icon: 'none' })
       setTimeout(() => Taro.switchTab({ url: '/pages/index/index' }), 500)
     } catch (error: any) {
       await showUnifiedApiError(error, '暂不填写失败')

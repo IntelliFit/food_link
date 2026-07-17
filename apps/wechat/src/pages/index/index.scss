@@ -110,6 +110,76 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   color: #fff;
 }
 
+.home-health-profile-prompt {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  margin: 18rpx 0 22rpx;
+  padding: 20rpx;
+  border: 1rpx solid rgb(92 184 150 / 28%);
+  border-radius: 24rpx;
+  background: linear-gradient(135deg, rgb(238 250 245 / 94%), rgb(255 255 255 / 92%));
+  box-shadow: 0 10rpx 28rpx rgb(47 143 111 / 9%);
+}
+
+.home-health-profile-prompt__icon {
+  display: flex;
+  flex: 0 0 52rpx;
+  align-items: center;
+  justify-content: center;
+  width: 52rpx;
+  height: 52rpx;
+  border-radius: 18rpx;
+  color: #198b69;
+  font-size: 28rpx;
+  font-weight: 800;
+  background: rgb(92 184 150 / 16%);
+}
+
+.home-health-profile-prompt__content {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.home-health-profile-prompt__title {
+  color: #245246;
+  font-size: 25rpx;
+  font-weight: 700;
+  line-height: 34rpx;
+}
+
+.home-health-profile-prompt__desc {
+  margin-top: 4rpx;
+  color: #6c827b;
+  font-size: 20rpx;
+  line-height: 29rpx;
+}
+
+.home-health-profile-prompt__actions {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8rpx;
+}
+
+.home-health-profile-prompt__go,
+.home-health-profile-prompt__dismiss {
+  padding: 4rpx 2rpx;
+  color: #238c6d;
+  font-size: 22rpx;
+  font-weight: 700;
+  line-height: 30rpx;
+}
+
+.home-health-profile-prompt__dismiss {
+  color: #98a8a2;
+  font-size: 19rpx;
+  font-weight: 500;
+}
+
 // 问候区
 .greeting-section {
   display: flex;
