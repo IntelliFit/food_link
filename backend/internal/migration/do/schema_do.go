@@ -34,7 +34,10 @@ type UserDO struct {
 	OnboardingCompleted *bool          `gorm:"column:onboarding_completed;type:boolean;default:false"`
 	// Keep this nullable so adding the column never rewrites existing user rows.
 	// A nil value is interpreted from the legacy OnboardingCompleted boolean.
-	OnboardingStatus               *string    `gorm:"column:onboarding_status;type:text"`
+	OnboardingStatus *string `gorm:"column:onboarding_status;type:text"`
+	// Draft step is nullable for backwards compatibility. Nil means the user has
+	// not started a resumable health-profile draft.
+	OnboardingDraftStep            *int       `gorm:"column:onboarding_draft_step;type:integer"`
 	DietGoal                       *string    `gorm:"column:diet_goal;type:varchar(50)"`
 	Searchable                     *bool      `gorm:"column:searchable;type:boolean;default:true"`
 	PublicRecords                  *bool      `gorm:"column:public_records;type:boolean;default:true"`

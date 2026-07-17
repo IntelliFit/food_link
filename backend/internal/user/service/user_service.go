@@ -184,9 +184,10 @@ func (s *UserService) GetHealthProfile(ctx context.Context, userID string) (map[
 }
 
 type UpdateHealthProfileInput struct {
-	// OnboardingStatus is only used by the explicit “稍后填写” action. A full
-	// health-profile save is always recorded as completed for legacy compatibility.
+	// OnboardingStatus is optional. Old clients omit it and retain the legacy
+	// behavior: a normal full health-profile save becomes completed.
 	OnboardingStatus           *string                      `json:"onboarding_status"`
+	OnboardingDraftStep        *int                         `json:"onboarding_draft_step"`
 	Gender                     *string                      `json:"gender"`
 	Birthday                   *string                      `json:"birthday"`
 	Height                     *float64                     `json:"height"`
@@ -444,6 +445,14 @@ func (s *UserService) UpdateHealthProfile(ctx context.Context, userID string, in
 		return nil, err
 	}
 	updates["onboarding_status"] = status
+	if status == onboardingStatusPending {
+		if input.OnboardingDraftStep == nil || *input.OnboardingDraftStep < 0 || *input.OnboardingDraftStep > 12 {
+			return nil, &commonerrors.AppError{Code: 10002, Message: "健康档案草稿进度无效", HTTPStatus: 400}
+		}
+		updates["onboarding_draft_step"] = *input.OnboardingDraftStep
+	} else {
+		updates["onboarding_draft_step"] = nil
+	}
 	// Keep the legacy boolean unchanged in the API contract: old Mini Program
 	// releases only understand “pending” versus a terminal onboarding state.
 	updates["onboarding_completed"] = status != onboardingStatusPending
@@ -621,8 +630,11 @@ func resolveOnboardingStatusUpdate(user *repo.User, requested *string) (string, 
 		return onboardingStatusCompleted, nil
 	}
 	status := strings.TrimSpace(*requested)
-	if status != onboardingStatusSkipped {
+	if status != onboardingStatusPending && status != onboardingStatusSkipped {
 		return "", &commonerrors.AppError{Code: 10002, Message: "无效的健康档案引导状态", HTTPStatus: 400}
+	}
+	if status == onboardingStatusPending && resolveOnboardingStatus(user) == onboardingStatusCompleted {
+		return "", &commonerrors.AppError{Code: 10002, Message: "健康档案已完成，无需保存草稿", HTTPStatus: 400}
 	}
 	if resolveOnboardingStatus(user) == onboardingStatusCompleted {
 		return "", &commonerrors.AppError{Code: 10002, Message: "健康档案已完成，无需跳过", HTTPStatus: 400}
@@ -657,6 +669,7 @@ func buildProfileResponseWithStorage(user *repo.User, storageClient *storage.Cli
 		"tdee":                    user.TDEE,
 		"onboarding_completed":    onboardingStatus != onboardingStatusPending,
 		"onboarding_status":       onboardingStatus,
+		"onboarding_draft_step":   user.OnboardingDraftStep,
 		"diet_goal":               user.DietGoal,
 		"execution_mode":          normalizeExecutionMode(user.ExecutionMode),
 		"mode_set_by":             user.ModeSetBy,
@@ -705,6 +718,7 @@ func buildHealthProfileResponseWithStorage(user *repo.User, storageClient *stora
 		"tdee":                  user.TDEE,
 		"onboarding_completed":  onboardingStatus != onboardingStatusPending,
 		"onboarding_status":     onboardingStatus,
+		"onboarding_draft_step": user.OnboardingDraftStep,
 		"diet_goal":             user.DietGoal,
 		"execution_mode":        normalizeExecutionMode(user.ExecutionMode),
 		"mode_set_by":           user.ModeSetBy,

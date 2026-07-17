@@ -100,6 +100,9 @@ func ensureOnboardingStatus(ctx context.Context, db *gorm.DB) error {
 	if !db.Migrator().HasColumn(&migrationdo.UserDO{}, "onboarding_status") {
 		return fmt.Errorf("missing onboarding_status column after auto migrate")
 	}
+	if !db.Migrator().HasColumn(&migrationdo.UserDO{}, "onboarding_draft_step") {
+		return fmt.Errorf("missing onboarding_draft_step column after auto migrate")
+	}
 	return nil
 }
 
@@ -126,11 +129,19 @@ func MigrateOnboardingStatus(ctx context.Context, db *gorm.DB, schema string) er
 			return fmt.Errorf("add onboarding status column: %w", err)
 		}
 	}
+	if !db.Migrator().HasColumn(&migrationdo.UserDO{}, "onboarding_draft_step") {
+		if err := db.WithContext(ctx).Migrator().AddColumn(&migrationdo.UserDO{}, "OnboardingDraftStep"); err != nil {
+			return fmt.Errorf("add onboarding draft step column: %w", err)
+		}
+	}
 	if err := ensureOnboardingStatus(ctx, db); err != nil {
 		return err
 	}
 	if err := db.WithContext(ctx).Exec(dropAndAddCheck("weapp_user", "weapp_user_onboarding_status_check", `onboarding_status IS NULL OR onboarding_status = ANY (ARRAY['pending'::text,'skipped'::text,'completed'::text])`)).Error; err != nil {
 		return fmt.Errorf("add onboarding status check: %w", err)
+	}
+	if err := db.WithContext(ctx).Exec(dropAndAddCheck("weapp_user", "weapp_user_onboarding_draft_step_check", `onboarding_draft_step IS NULL OR onboarding_draft_step BETWEEN 0 AND 12`)).Error; err != nil {
+		return fmt.Errorf("add onboarding draft step check: %w", err)
 	}
 	return nil
 }
@@ -191,6 +202,7 @@ func ensureConstraints(ctx context.Context, db *gorm.DB) error {
 		dropAndAddCheck("weapp_user", "weapp_user_gender_check", `gender IS NULL OR gender = ANY (ARRAY['male'::text,'female'::text,'other'::text,''::text])`),
 		dropAndAddCheck("weapp_user", "weapp_user_activity_level_check", `activity_level IS NULL OR activity_level = ANY (ARRAY['sedentary'::text,'light'::text,'moderate'::text,'active'::text,'very_active'::text,''::text])`),
 		dropAndAddCheck("weapp_user", "weapp_user_onboarding_status_check", `onboarding_status IS NULL OR onboarding_status = ANY (ARRAY['pending'::text,'skipped'::text,'completed'::text])`),
+		dropAndAddCheck("weapp_user", "weapp_user_onboarding_draft_step_check", `onboarding_draft_step IS NULL OR onboarding_draft_step BETWEEN 0 AND 12`),
 		dropAndAddCheck("weapp_user", "weapp_user_execution_mode_check", `execution_mode IS NULL OR execution_mode = ANY (ARRAY['standard'::text,'standard_web_search'::text,'fast'::text,'fast_web_search'::text,'strict'::text,'strict_web_search'::text,'experimental'::text,'gemini35_flash'::text,'gemini35_flash_grouped'::text])`),
 		dropAndAddCheck("weapp_user", "weapp_user_last_login_method_check", `last_login_method IS NULL OR last_login_method = ANY (ARRAY['wechat_miniprogram'::text,'wechat_app'::text,'password'::text,'sms_code'::text,'development_test_openid'::text,'debug_impersonate'::text])`),
 		dropAndAddCheck("weapp_user", "weapp_user_telephone_format_check", `telephone IS NULL OR trim(telephone) = '' OR regexp_replace(trim(telephone), '[\s\-\(\)]', '', 'g') ~ '^(\+?86)?1[3-9][0-9]{9}$'`),

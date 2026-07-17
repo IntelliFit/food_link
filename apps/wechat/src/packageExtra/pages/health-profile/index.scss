@@ -212,6 +212,19 @@
 
 }
 
+.health-profile-save-exit {
+  position: fixed;
+  right: 32rpx;
+  bottom: 36rpx;
+  z-index: 20;
+  padding: 16rpx 24rpx;
+  border-radius: 999rpx;
+  background: rgb(255 255 255 / 92%);
+  box-shadow: 0 6rpx 20rpx rgb(15 23 42 / 12%);
+  color: #64748b;
+  font-size: 26rpx;
+}
+
 /* 单选项 - 纵向列表 */
 .choice-row {
   display: flex;

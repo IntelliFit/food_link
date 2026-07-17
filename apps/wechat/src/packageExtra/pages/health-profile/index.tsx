@@ -23,6 +23,7 @@ import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
 import { chooseImageWithPrivacy, isPrivacyAuthorizeError, showPrivacyAuthorizeFailure } from '../../../utils/weapp-privacy'
 import { defaultAvatarImage } from '../../../utils/default-user-profile'
 import { formatBodyMetric } from '../../../utils/number-format'
+import CustomNavBar from '../../../components/CustomNavBar'
 
 import './index.scss'
 import HeightRuler from '../../../components/HeightRuler'
@@ -145,11 +146,13 @@ function HealthProfilePage() {
   const [healthNotes, setHealthNotes] = useState<string>('') // 用户自己文字补充自己身体的特殊情况和问题
 
   const loadProfile = async () => {
+    let profile: Awaited<ReturnType<typeof getHealthProfile>> | null = null
     try {
-      const [profile, userInfo] = await Promise.all([
+      const [loadedProfile, userInfo] = await Promise.all([
         getHealthProfile(),
         getUserProfile().catch(() => null),
       ])
+      profile = loadedProfile
       if (userInfo) {
         const initialAvatar = userInfo.avatar || defaultAvatarImage
         const initialNickname = userInfo.nickname || ''
@@ -207,7 +210,12 @@ function HealthProfilePage() {
     } catch (err: any) {
       await showUnifiedApiError(err, '获取档案失败')
     } finally {
-      setCurrentStep(0)
+      const draftStep = Number(profile?.onboarding_draft_step)
+      setCurrentStep(
+        profile?.onboarding_status === 'pending' && Number.isInteger(draftStep) && draftStep >= 0 && draftStep < TOTAL_STEPS
+          ? draftStep
+          : 0
+      )
       setLoading(false)
     }
   }
@@ -220,7 +228,31 @@ function HealthProfilePage() {
     loadProfile()
   }, [])
 
-  const proceedToNext = (profileNickname = nickname) => {
+  const buildDraftRequest = (nextStep: number): HealthProfileUpdateRequest => ({
+    onboarding_status: 'pending',
+    onboarding_draft_step: nextStep,
+    gender: gender || undefined,
+    birthday: birthday || undefined,
+    height: isHeightValid ? effectiveHeight : undefined,
+    weight: isWeightValid ? effectiveWeight : undefined,
+    diet_goal: dietGoal || undefined,
+    activity_level: activityLevel || undefined,
+    daily_life_activity_level: activityLevel || undefined,
+    medical_history: [...medicalHistory.filter((value) => value !== 'none'), ...selectedCustomMedical],
+    diet_preference: dietPreference.filter((value) => value !== 'none'),
+    allergies: [...allergyList.filter((value) => value !== 'none'), ...selectedCustomAllergy],
+    health_notes: healthNotes || undefined,
+    routine_type: formatRoutineHours(routineHours) || undefined,
+    routine_sleep_hour: routineHours.sleepHour,
+    routine_wake_hour: routineHours.wakeHour,
+  })
+
+  const saveDraft = async (nextStep: number) => {
+    await updateHealthProfile(buildDraftRequest(nextStep))
+    setOnboardingStatus('pending')
+  }
+
+  const proceedToNext = async (profileNickname = nickname) => {
     if (currentStep >= TOTAL_STEPS - 1) return
     if (!canProceed(profileNickname)) {
       if (currentStep === 3 && height) {
@@ -234,7 +266,26 @@ function HealthProfilePage() {
       }
       return
     }
-    setCurrentStep((s) => s + 1)
+    const nextStep = currentStep + 1
+    setSaving(true)
+    try {
+      if (currentStep === 0) {
+        const normalizedNickname = profileNickname.trim()
+        if (normalizedNickname !== initialIdentityRef.current.nickname || avatarUrl !== initialIdentityRef.current.avatar) {
+          const finalAvatar = await ensureAvatarUploadedForSave(avatarUrl)
+          await updateUserInfo({ nickname: normalizedNickname, avatar: finalAvatar || undefined })
+          initialIdentityRef.current = { avatar: finalAvatar || avatarUrl, nickname: normalizedNickname }
+          setAvatarUrl(finalAvatar || avatarUrl)
+          setNickname(normalizedNickname)
+        }
+      }
+      await saveDraft(nextStep)
+      setCurrentStep(nextStep)
+    } catch (error) {
+      await showUnifiedApiError(error, '保存健康档案草稿失败')
+    } finally {
+      setSaving(false)
+    }
   }
 
   const goNext = () => proceedToNext()
@@ -413,6 +464,28 @@ function HealthProfilePage() {
 
   const handleNicknameInput = (value: string) => {
     setNickname(value)
+  }
+
+  const handleSaveAndExit = async () => {
+    if (saving) return
+    setSaving(true)
+    try {
+      await saveDraft(currentStep)
+      Taro.showToast({ title: '已保存，可稍后继续', icon: 'none' })
+      setTimeout(() => Taro.switchTab({ url: '/pages/index/index' }), 300)
+    } catch (error) {
+      await showUnifiedApiError(error, '保存健康档案草稿失败')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handlePageBack = async () => {
+    if (onboardingStatus === 'completed') {
+      await Taro.navigateBack()
+      return
+    }
+    await handleSaveAndExit()
   }
 
   const getSubmittedNickname = (value?: unknown) => {
@@ -627,6 +700,13 @@ function HealthProfilePage() {
 
   return (
     <View className='health-profile-page'>
+      <CustomNavBar
+        title='健康档案'
+        color='#1a1a1a'
+        background='#ffffff'
+        showBack
+        onBack={handlePageBack}
+      />
       {/* 进度条 */}
       <View className='progress-wrap'>
         <View className='progress-dots'>
@@ -1164,6 +1244,11 @@ function HealthProfilePage() {
           </View>
         </View>
       </View>
+      {currentStep > 0 && currentStep < TOTAL_STEPS - 1 && (
+        <View className='health-profile-save-exit' onClick={handleSaveAndExit}>
+          保存并稍后继续
+        </View>
+      )}
     </View>
   )
 }

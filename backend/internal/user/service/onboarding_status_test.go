@@ -14,6 +14,7 @@ import (
 func TestUserService_HealthProfileOnboardingStatusCompatibility(t *testing.T) {
 	db := setupTestDB(t)
 	require.NoError(t, db.Exec(`ALTER TABLE weapp_user ADD COLUMN onboarding_status TEXT`).Error)
+	require.NoError(t, db.Exec(`ALTER TABLE weapp_user ADD COLUMN onboarding_draft_step INTEGER`).Error)
 
 	users := repo.NewUserRepo(db)
 	svc := NewUserService(users, userrepo.NewHealthDocumentRepo(db), userrepo.NewModeSwitchLogRepo(db), nil)

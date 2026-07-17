@@ -31,6 +31,7 @@ type User struct {
 	CreatedAt                      *time.Time     `gorm:"column:create_time"`
 	OnboardingCompleted            *bool          `gorm:"column:onboarding_completed"`
 	OnboardingStatus               *string        `gorm:"column:onboarding_status"`
+	OnboardingDraftStep            *int           `gorm:"column:onboarding_draft_step"`
 	Height                         *float64       `gorm:"column:height"`
 	Weight                         *float64       `gorm:"column:weight"`
 	Birthday                       *string        `gorm:"column:birthday"`
