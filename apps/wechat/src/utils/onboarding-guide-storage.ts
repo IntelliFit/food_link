@@ -2,6 +2,7 @@ import Taro from '@tarojs/taro'
 import { getAccessToken } from './api'
 
 export const ONBOARDING_HOME_RECORD_GUIDE_KEY = 'onboarding_home_record_guide_v1'
+const ONBOARDING_HOME_RECORD_GUIDE_PENDING_USER_KEY = 'onboarding_home_record_guide_pending_user_id'
 export const ONBOARDING_ANALYZE_PREP_GUIDE_KEY = 'onboarding_analyze_prep_guide_v1'
 export const ONBOARDING_RECORD_DETAIL_GUIDE_KEY = 'onboarding_record_detail_guide_v1'
 
@@ -34,6 +35,34 @@ export function markGuideCompleted(key: OnboardingGuideStorageKey): void {
     Taro.setStorageSync(key, true)
   } catch {
     /* ignore */
+  }
+}
+
+/**
+ * 注册完成后标记：用户下一次真正落到首页时，稳定地展示一次首页记录引导。
+ * 标记绑定当前用户，避免在同一设备切换账号时串到其他账号。
+ */
+export function requestHomeRecordGuideAfterOnboarding(): void {
+  try {
+    const userID = String(Taro.getStorageSync('user_id') || '').trim()
+    if (userID) {
+      Taro.setStorageSync(ONBOARDING_HOME_RECORD_GUIDE_PENDING_USER_KEY, userID)
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+/** 仅当前用户消费注册后的首页引导请求。 */
+export function consumeHomeRecordGuideAfterOnboarding(): boolean {
+  try {
+    const userID = String(Taro.getStorageSync('user_id') || '').trim()
+    const pendingUserID = String(Taro.getStorageSync(ONBOARDING_HOME_RECORD_GUIDE_PENDING_USER_KEY) || '').trim()
+    if (!userID || pendingUserID !== userID) return false
+    Taro.removeStorageSync(ONBOARDING_HOME_RECORD_GUIDE_PENDING_USER_KEY)
+    return true
+  } catch {
+    return false
   }
 }
 

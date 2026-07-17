@@ -17,6 +17,7 @@ import {
 } from '../../../utils/api'
 import { processChooseAvatarSelection, ensureAvatarUploadedForSave } from '../../../utils/new-user-profile-form'
 import { withAuth } from '../../../utils/withAuth'
+import { requestHomeRecordGuideAfterOnboarding } from '../../../utils/onboarding-guide-storage'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
 import { chooseImageWithPrivacy, isPrivacyAuthorizeError, showPrivacyAuthorizeFailure } from '../../../utils/weapp-privacy'
@@ -444,7 +445,10 @@ function HealthProfilePage() {
       await updateHealthProfile({ onboarding_status: 'skipped' })
       setOnboardingStatus('skipped')
       Taro.showToast({ title: identityChanged ? '个人资料已保存，可稍后补充健康档案' : '可稍后在我的中填写', icon: 'none' })
-      setTimeout(() => Taro.switchTab({ url: '/pages/index/index' }), 500)
+      setTimeout(() => {
+        requestHomeRecordGuideAfterOnboarding()
+        Taro.switchTab({ url: '/pages/index/index' })
+      }, 500)
     } catch (error: any) {
       await showUnifiedApiError(error, '暂不填写失败')
     } finally {
@@ -549,6 +553,7 @@ function HealthProfilePage() {
       }
       Taro.showToast({ title: '保存成功', icon: 'success' })
       setTimeout(() => {
+        requestHomeRecordGuideAfterOnboarding()
         Taro.switchTab({ url: '/pages/profile/index' })
       }, 1500)
     } catch (e: any) {

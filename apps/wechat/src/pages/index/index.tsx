@@ -104,6 +104,7 @@ const HOME_HEALTH_PROFILE_PROMPT_DISMISSED_KEY = 'homeHealthProfilePromptDismiss
 import { PetAvatar } from '../../components/PetAvatar'
 import {
   ONBOARDING_HOME_RECORD_GUIDE_KEY,
+  consumeHomeRecordGuideAfterOnboarding,
   shouldOfferOnboardingGuide,
 } from '../../utils/onboarding-guide-storage'
 import { HOME_RECORD_ONBOARDING_STEPS } from './home-onboarding-steps'
@@ -843,6 +844,7 @@ function IndexPage() {
   // 记录菜单弹窗状态
   const [showRecordMenu, setShowRecordMenu] = React.useState(false)
   const [showHomeOnboardingGuide, setShowHomeOnboardingGuide] = React.useState(false)
+  const homeGuideTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
   const [dismissedBackfillDates, setDismissedBackfillDates] = React.useState<string[]>(() => getDismissedBackfillDates())
   const selectedDateRef = React.useRef(selectedDate)
   const commitSelectedDate = React.useCallback((date: string) => {
@@ -930,6 +932,12 @@ function IndexPage() {
   React.useEffect(() => {
     showDailyPosterModalRef.current = showDailyPosterModal
   }, [showDailyPosterModal])
+
+  React.useEffect(() => () => {
+    if (homeGuideTimerRef.current) {
+      clearTimeout(homeGuideTimerRef.current)
+    }
+  }, [])
 
   React.useEffect(() => {
     const handleHiddenChanged = (hidden?: boolean) => {
@@ -1283,10 +1291,19 @@ function IndexPage() {
     if (shouldShowRecordMenu) {
       Taro.removeStorageSync(HOME_RECORD_MENU_FLAG_KEY)
       openRecordMenuFromRequest()
-    } else if (shouldOfferOnboardingGuide(ONBOARDING_HOME_RECORD_GUIDE_KEY)) {
-      setShowHomeOnboardingGuide(true)
     } else {
-      setShowHomeOnboardingGuide(false)
+      const requestedAfterOnboarding = consumeHomeRecordGuideAfterOnboarding()
+      if (requestedAfterOnboarding || shouldOfferOnboardingGuide(ONBOARDING_HOME_RECORD_GUIDE_KEY)) {
+        if (homeGuideTimerRef.current) clearTimeout(homeGuideTimerRef.current)
+        setShowHomeOnboardingGuide(false)
+        // switchTab 后等待首页布局完成，确保高亮区域可计算且首次落页不会漏掉引导。
+        homeGuideTimerRef.current = setTimeout(() => {
+          setShowHomeOnboardingGuide(true)
+          homeGuideTimerRef.current = null
+        }, requestedAfterOnboarding ? 350 : 0)
+      } else {
+        setShowHomeOnboardingGuide(false)
+      }
     }
 
     if (skipNextRefreshRef.current) {
