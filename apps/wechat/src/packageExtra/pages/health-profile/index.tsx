@@ -1,4 +1,4 @@
-import { View, Text, Input, Textarea, Image, Button as NativeButton } from '@tarojs/components'
+import { View, Text, Input, Textarea, Image, Form, Button as NativeButton, type FormProps } from '@tarojs/components'
 import { Button } from '@taroify/core'
 import '@taroify/core/button/style'
 import { useState, useEffect, useRef } from 'react'
@@ -128,6 +128,7 @@ function HealthProfilePage() {
   const [nickname, setNickname] = useState<string>('')
   const [onboardingStatus, setOnboardingStatus] = useState<OnboardingStatus>('pending')
   const initialIdentityRef = useRef({ avatar: '', nickname: '' })
+  const profileFormActionRef = useRef<'next' | 'skip'>('next')
 
   const [customMedical, setCustomMedical] = useState<string>('') // 自定义病史输入
   const [customMedicalList, setCustomMedicalList] = useState<string[]>([]) // 用户添加的自定义病史列表
@@ -219,9 +220,9 @@ function HealthProfilePage() {
     loadProfile()
   }, [])
 
-  const goNext = () => {
+  const proceedToNext = (profileNickname = nickname) => {
     if (currentStep >= TOTAL_STEPS - 1) return
-    if (!canProceed()) {
+    if (!canProceed(profileNickname)) {
       if (currentStep === 3 && height) {
         Taro.showToast({ title: '请输入 100～250 之间的身高 (cm)', icon: 'none' })
       } else if (currentStep === 4 && weight) {
@@ -235,6 +236,8 @@ function HealthProfilePage() {
     }
     setCurrentStep((s) => s + 1)
   }
+
+  const goNext = () => proceedToNext()
 
   const goPrev = () => {
     if (currentStep <= 0) return
@@ -412,7 +415,29 @@ function HealthProfilePage() {
     setNickname(value)
   }
 
-  const handleSkipOnboarding = async () => {
+  const getSubmittedNickname = (value?: unknown) => {
+    const submittedNickname = String(value || '').trim()
+    return submittedNickname || nickname.trim()
+  }
+
+  const handleProfileFormSubmit: FormProps['onSubmit'] = async (event) => {
+    const submittedNickname = getSubmittedNickname(event.detail.value?.nickname)
+    const action = profileFormActionRef.current
+    profileFormActionRef.current = 'next'
+
+    if (submittedNickname !== nickname) {
+      setNickname(submittedNickname)
+    }
+
+    if (action === 'skip') {
+      await handleSkipOnboarding(submittedNickname)
+      return
+    }
+
+    proceedToNext(submittedNickname)
+  }
+
+  const handleSkipOnboarding = async (submittedNickname?: string) => {
     if (saving || onboardingStatus !== 'pending') return
     const { confirm } = await Taro.showModal({
       title: '稍后填写健康档案？',
@@ -424,7 +449,7 @@ function HealthProfilePage() {
 
     setSaving(true)
     try {
-      const normalizedNickname = nickname.trim()
+      const normalizedNickname = getSubmittedNickname(submittedNickname)
       const identityChanged =
         normalizedNickname !== initialIdentityRef.current.nickname ||
         avatarUrl !== initialIdentityRef.current.avatar
@@ -469,10 +494,10 @@ function HealthProfilePage() {
   const isHeightValid = Number.isFinite(effectiveHeight) && effectiveHeight >= 100 && effectiveHeight <= 250
   const isWeightValid = Number.isFinite(effectiveWeight) && effectiveWeight >= 30 && effectiveWeight <= 200
 
-  const canProceed = () => {
+  const canProceed = (profileNickname = nickname) => {
     switch (currentStep) {
       case 0:
-        return !!avatarUrl && !!nickname.trim()
+        return !!avatarUrl && !!profileNickname.trim()
       case 1:
         return !!gender
       case 2:
@@ -631,7 +656,8 @@ function HealthProfilePage() {
           <View className='card step-card profile-step-card'>
             <Text className='step-card-title'>完善资料</Text>
             <Text className='step-card-subtitle'>设置头像和昵称，让朋友更容易认出你。</Text>
-            <View className='profile-form-body'>
+            <Form className='profile-native-form' onSubmit={handleProfileFormSubmit}>
+              <View className='profile-form-body'>
               <View className='profile-avatar-choose-wrapper'>
                 {avatarUrl ? (
                   <Image src={avatarUrl} className='profile-avatar-image' mode='aspectFill' />
@@ -650,6 +676,7 @@ function HealthProfilePage() {
                 <Text className='profile-nickname-label'>昵称</Text>
                 <Input
                   className='profile-nickname-input'
+                  name='nickname'
                   type='nickname'
                   placeholder='请输入昵称'
                   value={nickname}
@@ -662,17 +689,30 @@ function HealthProfilePage() {
                   onConfirm={(event) => handleNicknameInput(event.detail.value)}
                 />
               </View>
-            </View>
-            <View className='card-footer card-footer-single profile-step-footer'>
-              <Button block color='primary' shape='round' className={`card-next-btn ${canProceed() ? 'ready' : ''}`} onClick={goNext} disabled={!canProceed()}>
+              </View>
+              <View className='card-footer card-footer-single profile-step-footer'>
+              <Button
+                block
+                color='primary'
+                shape='round'
+                formType='submit'
+                className={`card-next-btn ${avatarUrl ? 'ready' : ''}`}
+                onClick={() => { profileFormActionRef.current = 'next' }}
+                disabled={!avatarUrl}
+              >
                 下一步 <Text className='iconfont icon-right' />
               </Button>
               {onboardingStatus === 'pending' && (
-                <View className='profile-skip-onboarding' onClick={handleSkipOnboarding}>
+                <NativeButton
+                  className='profile-skip-onboarding'
+                  formType='submit'
+                  onClick={() => { profileFormActionRef.current = 'skip' }}
+                >
                   稍后填写
-                </View>
+                </NativeButton>
               )}
-            </View>
+              </View>
+            </Form>
           </View>
 
           {/* Step 1: 性别 */}

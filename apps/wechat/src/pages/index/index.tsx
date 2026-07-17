@@ -99,9 +99,8 @@ import { formatDisplayNumber, formatNumberWithComma, formatDateKey, createTarget
 import { useAnimatedNumber, useAnimatedProgress } from './hooks'
 import { TargetEditor, GreetingSection, DateSelector, StatsEntry, RecordMenu, MealActionSheet, MealRecordsDialog, MealRecordEditModal, MealRecordPosterModal, DietRecommendationSheet, MicrosSection, type MealPosterSharePayload } from './components'
 import OnboardingGuide from '../../components/OnboardingGuide'
-
-const HOME_HEALTH_PROFILE_PROMPT_DISMISSED_KEY = 'homeHealthProfilePromptDismissed'
 import { PetAvatar } from '../../components/PetAvatar'
+import { isHealthProfileReminderSnoozed, snoozeHealthProfileReminder } from '../../utils/health-profile-reminder'
 import {
   ONBOARDING_HOME_RECORD_GUIDE_KEY,
   consumeHomeRecordGuideAfterOnboarding,
@@ -844,6 +843,7 @@ function IndexPage() {
   // 记录菜单弹窗状态
   const [showRecordMenu, setShowRecordMenu] = React.useState(false)
   const [showHomeOnboardingGuide, setShowHomeOnboardingGuide] = React.useState(false)
+  const [homeGuideTransitionPending, setHomeGuideTransitionPending] = React.useState(false)
   const homeGuideTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
   const [dismissedBackfillDates, setDismissedBackfillDates] = React.useState<string[]>(() => getDismissedBackfillDates())
   const selectedDateRef = React.useRef(selectedDate)
@@ -871,14 +871,19 @@ function IndexPage() {
 
   /** 首页仪表盘返回的成就（连续记录 / 全绿天数） */
   const dismissHealthProfilePrompt = React.useCallback(() => {
-    Taro.setStorageSync(HOME_HEALTH_PROFILE_PROMPT_DISMISSED_KEY, true)
+    snoozeHealthProfileReminder()
     setShowHealthProfilePrompt(false)
   }, [])
 
+  const closeHomeOnboardingGuide = React.useCallback(() => {
+    setShowHomeOnboardingGuide(false)
+    setHomeGuideTransitionPending(false)
+  }, [])
+
   const openHealthProfileFromPrompt = React.useCallback(() => {
-    dismissHealthProfilePrompt()
+    setShowHealthProfilePrompt(false)
     Taro.navigateTo({ url: extraPkgUrl('/pages/health-profile/index') })
-  }, [dismissHealthProfilePrompt])
+  }, [])
 
   const [homeAchievement, setHomeAchievement] = React.useState<HomeAchievement>(initialLocalSnapshot?.achievement || { streak_days: 0, green_days: 0 })
   const [dailyPosterGenerating, setDailyPosterGenerating] = React.useState(false)
@@ -1271,11 +1276,11 @@ function IndexPage() {
 
   useDidShow(() => {
     setPetHidden(getStoredPetHidden())
-    if (getAccessToken() && !Taro.getStorageSync(HOME_HEALTH_PROFILE_PROMPT_DISMISSED_KEY)) {
+    if (getAccessToken()) {
       void getHealthProfile()
         .then((profile) => {
           const status = profile.onboarding_status || (profile.onboarding_completed === true ? 'completed' : 'pending')
-          setShowHealthProfilePrompt(status !== 'completed')
+          setShowHealthProfilePrompt(status !== 'completed' && !isHealthProfileReminderSnoozed())
         })
         .catch(() => {
           // 档案提示为增强信息，读取失败不影响首页主链路。
@@ -1295,6 +1300,7 @@ function IndexPage() {
       const requestedAfterOnboarding = consumeHomeRecordGuideAfterOnboarding()
       if (requestedAfterOnboarding || shouldOfferOnboardingGuide(ONBOARDING_HOME_RECORD_GUIDE_KEY)) {
         if (homeGuideTimerRef.current) clearTimeout(homeGuideTimerRef.current)
+        setHomeGuideTransitionPending(requestedAfterOnboarding)
         setShowHomeOnboardingGuide(false)
         // switchTab 后等待首页布局完成，确保高亮区域可计算且首次落页不会漏掉引导。
         homeGuideTimerRef.current = setTimeout(() => {
@@ -3069,7 +3075,7 @@ function IndexPage() {
         )}
 
         {/* 日期选择器 */}
-        {showHealthProfilePrompt && (
+        {showHealthProfilePrompt && !homeGuideTransitionPending && (
           <View className='home-health-profile-prompt'>
             <View className='home-health-profile-prompt__icon'>健</View>
             <View className='home-health-profile-prompt__content' onClick={openHealthProfileFromPrompt}>
@@ -3081,7 +3087,7 @@ function IndexPage() {
                 <Text>去完善</Text>
               </View>
               <View className='home-health-profile-prompt__dismiss' onClick={dismissHealthProfilePrompt}>
-                <Text>稍后</Text>
+                <Text>7天后提醒</Text>
               </View>
             </View>
           </View>
@@ -3848,7 +3854,7 @@ function IndexPage() {
         visible={showHomeOnboardingGuide}
         steps={HOME_RECORD_ONBOARDING_STEPS}
         storageKey={ONBOARDING_HOME_RECORD_GUIDE_KEY}
-        onClose={() => setShowHomeOnboardingGuide(false)}
+        onClose={closeHomeOnboardingGuide}
         onBeforeNext={handleHomeGuideBeforeNext}
       />
 

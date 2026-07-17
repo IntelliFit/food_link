@@ -679,12 +679,12 @@ function ProfilePage() {
       </View>
 
       {/* 引导横幅 */}
-      {isLoggedIn && onboardingStatus === 'pending' && (
+      {isLoggedIn && onboardingStatus !== 'completed' && (
         <View
           className='profile-card onboarding-card'
           onClick={() => Taro.navigateTo({ url: extraPkgUrl('/pages/health-profile/index') })}
         >
-          <Text className='onboarding-text'>📋 完善健康档案，获取个性化饮食建议</Text>
+          <Text className='onboarding-text'>📋 完善健康档案，获取更贴合你的饮食建议</Text>
           <Text className='onboarding-arrow'>{'>'}</Text>
         </View>
       )}
