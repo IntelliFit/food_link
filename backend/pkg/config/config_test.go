@@ -546,12 +546,16 @@ task_queue:
 
 func TestConfigKeyForSecretSupportsPathAndLegacyNames(t *testing.T) {
 	cases := map[string]string{
-		"external.doubao_api_key": "external.doubao_api_key",
-		"database.host":           "database.host",
-		"database__host":          "database.host",
-		"POSTGRESQL_HOST":         "database.host",
-		"TASK_QUEUE_BROKERS":      "task_queue.brokers",
-		"worker-count":            "worker_count",
+		"external.doubao_api_key":   "external.doubao_api_key",
+		"database.host":             "database.host",
+		"database__host":            "database.host",
+		"POSTGRESQL_HOST":           "database.host",
+		"TASK_QUEUE_BROKERS":        "task_queue.brokers",
+		"WECHAT_XPAY_OFFER_ID":      "wechat.xpay.offer_id",
+		"WECHAT_XPAY_APP_KEY":       "wechat.xpay.app_key",
+		"WECHAT_XPAY_SANDBOX":       "wechat.xpay.sandbox",
+		"WECHAT_XPAY_MESSAGE_TOKEN": "wechat.xpay.message_token",
+		"worker-count":              "worker_count",
 	}
 	for input, want := range cases {
 		if got := configKeyForSecret(input); got != want {
@@ -574,7 +578,11 @@ func TestLoadMergesApolloConfig(t *testing.T) {
 				"DOUBAO_API_KEY":"cloud-doubao",
 				"DEEPSEEK_BASE_URL":"https://llm.example.com/api/v1",
 				"WORKER_COUNT":"3",
-				"TASK_QUEUE_BROKERS":"kafka-1:9092,kafka-2:9092"
+				"TASK_QUEUE_BROKERS":"kafka-1:9092,kafka-2:9092",
+				"WECHAT_XPAY_OFFER_ID":"offer-from-apollo",
+				"WECHAT_XPAY_APP_KEY":"app-key-from-apollo",
+				"WECHAT_XPAY_SANDBOX":"true",
+				"WECHAT_XPAY_MESSAGE_TOKEN":"token-from-apollo"
 			}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/services/config":
 			w.Header().Set("Content-Type", "application/json")
@@ -621,6 +629,9 @@ worker:
 	}
 	if len(cfg.TaskQueue.Brokers) != 2 || cfg.TaskQueue.Brokers[1] != "kafka-2:9092" {
 		t.Fatalf("expected normalized kafka brokers from Apollo, got %+v", cfg.TaskQueue.Brokers)
+	}
+	if cfg.Wechat.XPay.OfferID != "offer-from-apollo" || cfg.Wechat.XPay.AppKey != "app-key-from-apollo" || !cfg.Wechat.XPay.Sandbox || cfg.Wechat.XPay.MessageToken != "token-from-apollo" {
+		t.Fatalf("expected XPay config from Apollo, got %+v", cfg.Wechat.XPay)
 	}
 	if cfg.ConfigSource != "apollo" {
 		t.Fatalf("expected Apollo config source, got %q", cfg.ConfigSource)

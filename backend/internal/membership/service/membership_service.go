@@ -1028,8 +1028,12 @@ func (s *MembershipService) CreatePaymentWithInput(ctx context.Context, userID s
 	if paymentKind.TradeType == "JSAPI" && isAppOnlyOpenID(openID) {
 		return nil, &commonerrors.AppError{Code: 10004, Message: "App 支付暂未开放，当前只支持在微信小程序中完成会员支付", HTTPStatus: http.StatusNotImplemented}
 	}
-	if paymentKind.TradeType == "JSAPI" && openID == "" {
-		return nil, &commonerrors.AppError{Code: 10002, Message: "当前用户缺少 openid，无法发起微信支付", HTTPStatus: 400}
+	if paymentKind.TradeType == "JSAPI" {
+		return nil, &commonerrors.AppError{
+			Code:       10004,
+			Message:    "小程序会员购买已升级为微信虚拟支付，请更新小程序后重试",
+			HTTPStatus: http.StatusGone,
+		}
 	}
 	payCfg, err := s.wechatPayConfig()
 	if err != nil {
@@ -2394,6 +2398,14 @@ func (s *MembershipService) RefundEarnedCreditsAfterTaskFailure(ctx context.Cont
 }
 
 func (s *MembershipService) activateMembershipFromPayment(ctx context.Context, payment *domain.MembershipPayment, paidAt time.Time) (*domain.UserMembership, error) {
+	updates, err := s.membershipUpdatesFromPayment(ctx, payment, paidAt)
+	if err != nil {
+		return nil, err
+	}
+	return s.repo.SaveMembership(ctx, payment.UserID, updates)
+}
+
+func (s *MembershipService) membershipUpdatesFromPayment(ctx context.Context, payment *domain.MembershipPayment, paidAt time.Time) (map[string]any, error) {
 	plan, err := s.repo.GetPlanByCode(ctx, payment.PlanCode)
 	if err != nil {
 		return nil, err
@@ -2434,7 +2446,7 @@ func (s *MembershipService) activateMembershipFromPayment(ctx context.Context, p
 	if err != nil {
 		return nil, err
 	}
-	return s.repo.SaveMembership(ctx, payment.UserID, map[string]any{
+	return map[string]any{
 		"current_plan_code":    effectivePlanCode,
 		"status":               "active",
 		"first_activated_at":   first,
@@ -2443,7 +2455,7 @@ func (s *MembershipService) activateMembershipFromPayment(ctx context.Context, p
 		"last_paid_at":         paidAt,
 		"auto_renew":           payment.PayChannel == "wechat_papay",
 		"daily_credits":        dailyCredits,
-	})
+	}, nil
 }
 
 func (s *MembershipService) resolveEarlyUserMembershipMeta(ctx context.Context, userID string, trialEntitlement *domain.UserTrialEntitlement) (*earlyUserMembershipMeta, error) {

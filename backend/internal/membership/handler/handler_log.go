@@ -24,6 +24,8 @@ func membershipAPILogMessage(action string) string {
 		return "会员支付状态同步完成"
 	case "wechat_notify_ok":
 		return "微信支付回调处理完成"
+	case "xpay_payment_create_ok":
+		return "虚拟支付订单创建成功"
 	case "share_poster_reward_claim_ok":
 		return "分享海报奖励领取完成"
 	default:

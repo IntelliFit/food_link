@@ -13,6 +13,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type mockMembershipService struct {
@@ -23,6 +24,12 @@ type mockMembershipService struct {
 	createPaymentResult          map[string]any
 	createPaymentErr             error
 	createPaymentInput           service.CreateMembershipPaymentInput
+	createVirtualPaymentInput    service.CreateVirtualMembershipPaymentInput
+	createVirtualPaymentResult   map[string]any
+	createVirtualPaymentErr      error
+	xpayCallbackOK               bool
+	xpayCallbackErr              error
+	xpayNotifyErr                error
 	wechatNotifyResult           map[string]any
 	wechatNotifyErr              error
 	rewardCenterResult           map[string]any
@@ -51,6 +58,16 @@ func (m *mockMembershipService) GetInviteRewardStatus(ctx context.Context, userI
 func (m *mockMembershipService) CreatePaymentWithInput(ctx context.Context, userID string, input service.CreateMembershipPaymentInput) (map[string]any, error) {
 	m.createPaymentInput = input
 	return m.createPaymentResult, m.createPaymentErr
+}
+func (m *mockMembershipService) CreateVirtualPayment(ctx context.Context, userID string, input service.CreateVirtualMembershipPaymentInput) (map[string]any, error) {
+	m.createVirtualPaymentInput = input
+	return m.createVirtualPaymentResult, m.createVirtualPaymentErr
+}
+func (m *mockMembershipService) VerifyXPayCallback(timestamp, nonce, signature string) (bool, error) {
+	return m.xpayCallbackOK, m.xpayCallbackErr
+}
+func (m *mockMembershipService) HandleXPayNotify(ctx context.Context, body []byte) error {
+	return m.xpayNotifyErr
 }
 func (m *mockMembershipService) SyncWechatPayment(ctx context.Context, userID, orderNo string) (map[string]any, error) {
 	return map[string]any{"synced": true, "order_no": orderNo}, nil
@@ -93,6 +110,9 @@ func setupRouter(h *MembershipHandler) *gin.Engine {
 	r.GET("/api/membership/plans", h.ListPlans)
 	r.GET("/api/membership/me", h.GetMyMembership)
 	r.POST("/api/membership/pay/create", h.CreatePayment)
+	r.POST("/api/membership/xpay/create", h.CreateVirtualPayment)
+	r.GET("/api/payment/wechat/xpay/notify", h.XPayNotify)
+	r.POST("/api/payment/wechat/xpay/notify", h.XPayNotify)
 	r.POST("/api/membership/pay/sync", h.SyncPayment)
 	r.POST("/api/payment/wechat/notify/membership", h.WechatNotify)
 	r.POST("/api/membership/auto-renew/signing", h.CreatePapaySigning)
@@ -102,6 +122,38 @@ func setupRouter(h *MembershipHandler) *gin.Engine {
 	r.POST("/api/payment/wechat/papay/contract/terminate-notify", h.PapayContractTerminateNotify)
 	r.POST("/api/membership/rewards/share-poster/claim", h.ClaimSharePosterReward)
 	return r
+}
+
+func TestMembershipHandler_CreateVirtualPayment(t *testing.T) {
+	mockSvc := &mockMembershipService{createVirtualPaymentResult: map[string]any{"order_no": "PMX1"}}
+	r := setupRouter(NewMembershipHandler(mockSvc))
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/membership/xpay/create", bytes.NewBufferString(`{"plan_code":"light_monthly","login_code":"fresh-code"}`))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "light_monthly", mockSvc.createVirtualPaymentInput.PlanCode)
+	assert.Equal(t, "fresh-code", mockSvc.createVirtualPaymentInput.LoginCode)
+}
+
+func TestMembershipHandler_XPayNotifyVerification(t *testing.T) {
+	r := setupRouter(NewMembershipHandler(&mockMembershipService{xpayCallbackOK: true}))
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/api/payment/wechat/xpay/notify?timestamp=1&nonce=2&signature=s&echostr=ok", nil)
+	r.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "ok", w.Body.String())
+}
+
+func TestMembershipHandler_XPayNotifyPostReturnsPlatformSuccess(t *testing.T) {
+	r := setupRouter(NewMembershipHandler(&mockMembershipService{xpayCallbackOK: true}))
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/payment/wechat/xpay/notify?timestamp=1&nonce=2&signature=s", bytes.NewBufferString(`{"Event":"xpay_refund_notify"}`))
+	r.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusOK, w.Code)
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Equal(t, float64(0), resp["ErrCode"])
 }
 
 func TestMembershipHandler_ListPlans(t *testing.T) {

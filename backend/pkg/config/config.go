@@ -133,6 +133,7 @@ type WechatConfig struct {
 	MiniProgram WechatMiniProgramConfig `mapstructure:"mini_program"`
 	MobileApp   WechatMobileAppConfig   `mapstructure:"mobile_app"`
 	Pay         WechatPayConfig         `mapstructure:"pay"`
+	XPay        WechatXPayConfig        `mapstructure:"xpay"`
 }
 
 type WechatMiniProgramConfig struct {
@@ -202,6 +203,16 @@ type WechatPayConfig struct {
 	LegacyPapayPayNotifyURL     string `mapstructure:"wechat_pay_papay_pay_notify_url"`
 	ExpirySubscribeTemplateID   string `mapstructure:"expiry_subscribe_template_id"`
 	AnalysisSubscribeTemplateID string `mapstructure:"analysis_subscribe_template_id"`
+}
+
+// WechatXPayConfig holds the server-only credentials for Mini Program virtual
+// payments. AppKey and MessageToken must be supplied via Apollo or environment
+// variables and must never be sent to the client.
+type WechatXPayConfig struct {
+	OfferID      string `mapstructure:"offer_id"`
+	AppKey       string `mapstructure:"app_key"`
+	Sandbox      bool   `mapstructure:"sandbox"`
+	MessageToken string `mapstructure:"message_token"`
 }
 
 type WorkerConfig struct {
@@ -602,6 +613,9 @@ func loadApolloConfig(_ context.Context, bootstrap *viper.Viper) (*viper.Viper, 
 	cloudV := viper.New()
 	cloudV.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	setDefaults(cloudV)
+	// Apollo 是远程配置主来源，但部署侧仍可用环境变量注入单个密钥。
+	// 这也保证新增配置无需等待 Apollo 属性键映射同步后才能生效。
+	bindLegacyEnv(cloudV)
 	cloudV.Set("config_source", "apollo")
 	cloudV.Set("apollo", cfg)
 
@@ -1028,6 +1042,10 @@ var cloudConfigKeyAliases = map[string]string{
 	"WECHAT_PAY_PAPAY_PAY_NOTIFY_URL":         "wechat.pay.papay_pay_notify_url",
 	"EXPIRY_SUBSCRIBE_TEMPLATE_ID":            "wechat.pay.expiry_subscribe_template_id",
 	"ANALYSIS_SUBSCRIBE_TEMPLATE_ID":          "wechat.pay.analysis_subscribe_template_id",
+	"WECHAT_XPAY_OFFER_ID":                    "wechat.xpay.offer_id",
+	"WECHAT_XPAY_APP_KEY":                     "wechat.xpay.app_key",
+	"WECHAT_XPAY_SANDBOX":                     "wechat.xpay.sandbox",
+	"WECHAT_XPAY_MESSAGE_TOKEN":               "wechat.xpay.message_token",
 	"COS_REGION":                              "storage.cos_region",
 	"COS_SECRET_ID":                           "storage.cos_secret_id",
 	"COS_SECRET_KEY":                          "storage.cos_secret_key",
@@ -1167,6 +1185,9 @@ func trimWechatConfig(cfg *WechatConfig) {
 	cfg.Pay.PublicKey = strings.TrimSpace(cfg.Pay.PublicKey)
 	cfg.Pay.ExpirySubscribeTemplateID = strings.TrimSpace(cfg.Pay.ExpirySubscribeTemplateID)
 	cfg.Pay.AnalysisSubscribeTemplateID = strings.TrimSpace(cfg.Pay.AnalysisSubscribeTemplateID)
+	cfg.XPay.OfferID = strings.TrimSpace(cfg.XPay.OfferID)
+	cfg.XPay.AppKey = strings.TrimSpace(cfg.XPay.AppKey)
+	cfg.XPay.MessageToken = strings.TrimSpace(cfg.XPay.MessageToken)
 }
 
 func trimRedisConfig(cfg *RedisConfig) {
@@ -1441,6 +1462,10 @@ func bindLegacyEnv(v *viper.Viper) {
 	_ = v.BindEnv("wechat.pay.papay_pay_notify_url", "WECHAT_PAY_PAPAY_PAY_NOTIFY_URL")
 	_ = v.BindEnv("wechat.pay.expiry_subscribe_template_id", "EXPIRY_SUBSCRIBE_TEMPLATE_ID")
 	_ = v.BindEnv("wechat.pay.analysis_subscribe_template_id", "ANALYSIS_SUBSCRIBE_TEMPLATE_ID")
+	_ = v.BindEnv("wechat.xpay.offer_id", "WECHAT_XPAY_OFFER_ID")
+	_ = v.BindEnv("wechat.xpay.app_key", "WECHAT_XPAY_APP_KEY")
+	_ = v.BindEnv("wechat.xpay.sandbox", "WECHAT_XPAY_SANDBOX")
+	_ = v.BindEnv("wechat.xpay.message_token", "WECHAT_XPAY_MESSAGE_TOKEN")
 	_ = v.BindEnv("wechat_pay.app_pay_app_id", "WECHAT_PAY_APP_PAY_APP_ID")
 	_ = v.BindEnv("wechat_pay.app_id", "WECHAT_PAY_APP_ID")
 	_ = v.BindEnv("wechat_pay.mchid", "WECHAT_PAY_MCHID")

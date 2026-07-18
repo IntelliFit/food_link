@@ -28,12 +28,73 @@ type MembershipService interface {
 	SyncWechatPayment(ctx context.Context, userID, orderNo string) (map[string]any, error)
 	WechatNotify(ctx context.Context, paymentID string) error
 	HandleWechatNotify(ctx context.Context, headers http.Header, body []byte) (map[string]any, error)
+	CreateVirtualPayment(ctx context.Context, userID string, input service.CreateVirtualMembershipPaymentInput) (map[string]any, error)
+	VerifyXPayCallback(timestamp, nonce, signature string) (bool, error)
+	HandleXPayNotify(ctx context.Context, body []byte) error
 	CreatePapaySigning(ctx context.Context, userID, planCode string) (map[string]any, error)
 	CancelPapayContract(ctx context.Context, userID string) (map[string]any, error)
 	HandlePapayContractNotify(ctx context.Context, body []byte) error
 	HandlePapayTerminateNotify(ctx context.Context, body []byte) error
 	HandlePapayPaymentNotify(ctx context.Context, body []byte) error
 	ClaimSharePosterReward(ctx context.Context, userID string, input service.SharePosterRewardClaimInput) (map[string]any, error)
+}
+
+// POST /api/membership/xpay/create
+func (h *MembershipHandler) CreateVirtualPayment(c *gin.Context) {
+	var body struct {
+		PlanCode  string `json:"plan_code"`
+		LoginCode string `json:"login_code"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		response.Error(c, err)
+		return
+	}
+	userID := c.GetString(authmw.ContextUserIDKey)
+	if userID == "" {
+		response.Error(c, commonerrors.ErrUnauthorized)
+		return
+	}
+	data, err := h.svc.CreateVirtualPayment(c.Request.Context(), userID, service.CreateVirtualMembershipPaymentInput{PlanCode: body.PlanCode, LoginCode: body.LoginCode})
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	logMembershipAPI(c, "xpay_payment_create_ok", slog.String("plan_code", strings.TrimSpace(body.PlanCode)), slog.String("order_no", membershipMapString(data, "order_no")))
+	response.Success(c, data)
+}
+
+// GET/POST /api/payment/wechat/xpay/notify
+// This is the URL to configure in MP → 开发管理 → 消息推送 after deployment.
+func (h *MembershipHandler) XPayNotify(c *gin.Context) {
+	signature := c.Query("signature")
+	if signature == "" {
+		signature = c.Query("msg_signature")
+	}
+	ok, err := h.svc.VerifyXPayCallback(c.Query("timestamp"), c.Query("nonce"), signature)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	if !ok {
+		response.Error(c, &commonerrors.AppError{Code: 10003, Message: "虚拟支付推送验签失败", HTTPStatus: http.StatusUnauthorized})
+		return
+	}
+	if c.Request.Method == http.MethodGet {
+		c.String(http.StatusOK, c.Query("echostr"))
+		return
+	}
+	body, err := readLimitedNotifyBody(c.Request.Body, wechatPapayNotifyMaxBodyBytes)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	if err := h.svc.HandleXPayNotify(c.Request.Context(), body); err != nil {
+		logger.Warn(c.Request.Context(), "虚拟支付通知处理失败", logger.Err(err), slog.Int("http.request.body.size", len(body)))
+		response.Error(c, err)
+		return
+	}
+	logger.Info(c.Request.Context(), "虚拟支付通知处理完成", slog.Int("http.request.body.size", len(body)))
+	response.Raw(c, http.StatusOK, service.XPaySuccessResponse())
 }
 
 type MembershipHandler struct {

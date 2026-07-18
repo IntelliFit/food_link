@@ -1606,14 +1606,6 @@ export interface MembershipAutoRenewContract {
   renewal_due_at?: string | null
 }
 
-export interface CreateMembershipAutoRenewSigningResponse {
-  target_app_id: string
-  path: string
-  extra_data: Record<string, any>
-  plan_code: string
-  plan_name: string
-}
-
 export interface ClaimSharePosterRewardResponse {
   claimed: boolean
   already_claimed: boolean
@@ -1864,29 +1856,6 @@ export interface FoodExpirySubscribeResponse {
   status?: string
   scheduled_at?: string | null
   message: string
-}
-
-export interface CreateMembershipPaymentResponse {
-  order_no: string
-  plan_code: string
-  amount: number
-  original_amount?: number
-  order_mode?: 'new_purchase' | 'renewal' | 'prorated_current_period_upgrade' | string
-  upgrade_terms?: Record<string, any>
-  pay_params: {
-    timeStamp: string
-    nonceStr: string
-    package: string
-    signType: 'RSA'
-    paySign: string
-  }
-}
-
-export interface SyncMembershipPaymentResponse {
-  synced: boolean
-  status: string
-  trade_state?: string
-  membership?: MembershipStatus
 }
 
 /** 积分充值下单（微信支付 JSAPI），回调到账后增加积分 */
@@ -3781,6 +3750,18 @@ export async function generateDietRecommendation(
   throw lastError
 }
 
+export interface CreateVirtualMembershipPaymentResponse {
+  order_no: string
+  plan_code: string
+  amount: number
+  virtual_payment: {
+    signData: string
+    paySig: string
+    signature: string
+    mode: 'short_series_goods'
+  }
+}
+
 export async function getBodyMetricsSummary(range: 'week' | 'month' = 'month'): Promise<BodyMetricsSummary> {
   const res = await authenticatedRequest(
     `/api/body-metrics/summary?range=${encodeURIComponent(range)}`,
@@ -4875,40 +4856,17 @@ export async function subscribeManagedFoodExpiryItem(id: string, data: FoodExpir
   return response.data as FoodExpirySubscribeResponse
 }
 
-/**
- * 创建会员支付单
- */
-export async function createMembershipPayment(planCode: string): Promise<CreateMembershipPaymentResponse> {
-  try {
-    const response = await authenticatedRequest('/api/membership/pay/create', {
-      method: 'POST',
-      data: {
-        plan_code: planCode
-      }
-    })
-
-    if (response.statusCode !== 200) {
-      const errorMsg = (response.data as any)?.detail || '创建会员支付单失败'
-      throw new Error(errorMsg)
-    }
-
-    return response.data as CreateMembershipPaymentResponse
-  } catch (error: any) {
-    console.error('创建会员支付单失败:', error)
-    throw new Error(error.message || '创建会员支付单失败')
-  }
-}
-
-/** 创建微信委托代扣纯签约参数。模板 ID 只在服务端按套餐编码映射。 */
-export async function createMembershipAutoRenewSigning(planCode: string): Promise<CreateMembershipAutoRenewSigningResponse> {
-  const response = await authenticatedRequest('/api/membership/auto-renew/signing', {
+/** 创建小程序虚拟支付订单。登录 code 只用于服务端换取当次签名所需的 session_key。 */
+export async function createVirtualMembershipPayment(planCode: string, loginCode: string): Promise<CreateVirtualMembershipPaymentResponse> {
+  const response = await authenticatedRequest('/api/membership/xpay/create', {
     method: 'POST',
-    data: { plan_code: planCode },
+    data: { plan_code: planCode, login_code: loginCode },
+    timeout: 15000,
   })
   if (response.statusCode !== 200) {
-    throw new Error((response.data as any)?.detail || '创建自动续费签约失败')
+    throw new Error((response.data as any)?.detail || (response.data as any)?.message || '创建虚拟支付订单失败')
   }
-  return response.data as CreateMembershipAutoRenewSigningResponse
+  return response.data as CreateVirtualMembershipPaymentResponse
 }
 
 /** 关闭当前用户唯一的微信自动续费合同，不影响已付费会员周期。 */
@@ -4920,28 +4878,6 @@ export async function cancelMembershipAutoRenew(): Promise<{ cancelled: boolean 
     throw new Error((response.data as any)?.detail || '关闭自动续费失败')
   }
   return response.data as { cancelled: boolean }
-}
-
-export async function syncMembershipPayment(orderNo: string): Promise<SyncMembershipPaymentResponse> {
-  try {
-    const response = await authenticatedRequest('/api/membership/pay/sync', {
-      method: 'POST',
-      data: {
-        order_no: orderNo,
-      },
-      timeout: 15000,
-    })
-
-    if (response.statusCode !== 200) {
-      const errorMsg = (response.data as any)?.detail || '同步会员支付状态失败'
-      throw new Error(errorMsg)
-    }
-
-    return response.data as SyncMembershipPaymentResponse
-  } catch (error: any) {
-    console.error('同步会员支付状态失败:', error)
-    throw new Error(error.message || '同步会员支付状态失败')
-  }
 }
 
 /**

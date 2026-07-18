@@ -287,6 +287,12 @@ func (m *mockMembershipRepo) UpdatePaymentByOrderNo(ctx context.Context, orderNo
 		if payload, ok := updates["notify_payload"].(map[string]any); ok {
 			m.payment.NotifyPayload = payload
 		}
+		if extra, ok := updates["extra"].(map[string]any); ok {
+			m.payment.Extra = extra
+		}
+		if refundedAt, ok := updates["refunded_at"].(time.Time); ok {
+			m.payment.RefundedAt = &refundedAt
+		}
 	}
 	return nil
 }
@@ -1689,6 +1695,36 @@ func TestMembershipService_CreatePaymentWithInput_ReturnsMobilePaymentUnavailabl
 	assert.Equal(t, http.StatusNotImplemented, appErr.HTTPStatus)
 	assert.Contains(t, appErr.Message, "App 支付暂未开放")
 	assert.Nil(t, mockRepo.payment)
+}
+
+func TestMembershipService_CreatePaymentWithInput_BlocksMiniProgramJSAPINewOrders(t *testing.T) {
+	plan := &domain.MembershipPlan{Code: "light_monthly", Name: "轻度版月卡", Amount: 9.9, DurationMonths: 1, DailyCredits: 8, IsActive: true}
+	mockRepo := &mockMembershipRepo{
+		planByCode: map[string]*domain.MembershipPlan{"light_monthly": plan},
+		user:       &membershiprepo.User{ID: "u1", OpenID: "openid-u1"},
+	}
+	svc := NewMembershipService(mockRepo)
+
+	data, err := svc.CreatePaymentWithInput(context.Background(), "u1", CreateMembershipPaymentInput{PlanCode: "light_monthly"})
+	require.Error(t, err)
+	assert.Nil(t, data)
+	var appErr *commonerrors.AppError
+	require.True(t, errors.As(err, &appErr))
+	assert.Equal(t, http.StatusGone, appErr.HTTPStatus)
+	assert.Contains(t, appErr.Message, "虚拟支付")
+	assert.Nil(t, mockRepo.payment)
+}
+
+func TestMembershipService_CreatePapaySigning_BlockedUntilVirtualSubscriptionApproved(t *testing.T) {
+	svc := NewMembershipService(&mockMembershipRepo{})
+
+	data, err := svc.CreatePapaySigning(context.Background(), "u1", "light_monthly")
+	require.Error(t, err)
+	assert.Nil(t, data)
+	var appErr *commonerrors.AppError
+	require.True(t, errors.As(err, &appErr))
+	assert.Equal(t, http.StatusForbidden, appErr.HTTPStatus)
+	assert.Contains(t, appErr.Message, "尚未取得")
 }
 
 func TestMembershipService_CreatePaymentWithInput_BlocksDisabledPaymentTestPlan(t *testing.T) {

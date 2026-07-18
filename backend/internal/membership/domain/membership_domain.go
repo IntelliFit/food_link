@@ -140,6 +140,8 @@ type MembershipPayment struct {
 	WxTransactionID *string        `gorm:"column:wx_transaction_id" json:"wx_transaction_id,omitempty"`
 	WxBankType      *string        `gorm:"column:wx_bank_type" json:"wx_bank_type,omitempty"`
 	PaidAt          *time.Time     `gorm:"column:paid_at" json:"paid_at,omitempty"`
+	ClosedAt        *time.Time     `gorm:"column:closed_at" json:"closed_at,omitempty"`
+	RefundedAt      *time.Time     `gorm:"column:refunded_at" json:"refunded_at,omitempty"`
 	NotifyPayload   map[string]any `gorm:"column:notify_payload;serializer:json" json:"notify_payload,omitempty"`
 	Extra           map[string]any `gorm:"column:extra;serializer:json" json:"extra,omitempty"`
 	CreatedAt       *time.Time     `gorm:"column:created_at" json:"created_at,omitempty"`

@@ -62,6 +62,14 @@ wechat:
   mini_program:
     app_id: ""
     app_secret: ""
+
+  # 小程序虚拟支付：仅在 Apollo / 部署环境中填写真实密钥，禁止提交真实值。
+  xpay:
+    offer_id: ""
+    app_key: ""
+    sandbox: true
+    # 与公众平台“开发管理 → 消息推送”中配置的 Token 保持一致。
+    message_token: ""
   mobile_app:
     app_id: ""
     app_secret: ""

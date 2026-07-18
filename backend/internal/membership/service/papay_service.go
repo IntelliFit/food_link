@@ -24,6 +24,7 @@ import (
 )
 
 const (
+	papaySigningEnabled       = false
 	papaySignMiniProgramAppID = "wxbd687630cd02ce1d"
 	papayV2ApplyURL           = "https://api.mch.weixin.qq.com/pay/pappayapply"
 	papayV2TerminateURL       = "https://api.mch.weixin.qq.com/papay/deletecontract"
@@ -100,6 +101,13 @@ func (s *MembershipService) papayConfig() (*papayConfig, error) {
 }
 
 func (s *MembershipService) CreatePapaySigning(ctx context.Context, userID, planCode string) (map[string]any, error) {
+	if !papaySigningEnabled {
+		return nil, &commonerrors.AppError{
+			Code:       10004,
+			Message:    "自动续费尚未取得小程序虚拟支付会员订阅准入，当前仅支持一次性开通",
+			HTTPStatus: http.StatusForbidden,
+		}
+	}
 	if s.papayRepo == nil {
 		return nil, &commonerrors.AppError{Code: 10000, Message: "自动续费服务尚未初始化", HTTPStatus: http.StatusServiceUnavailable}
 	}
