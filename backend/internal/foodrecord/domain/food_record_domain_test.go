@@ -14,6 +14,8 @@ func TestMacroCaloriesAndAIGeneratedSource(t *testing.T) {
 	assert.True(t, IsAIGeneratedNutritionSource("qwen_generated"))
 	assert.True(t, IsAIGeneratedNutritionSource("gemini_generated"))
 	assert.True(t, IsAIGeneratedNutritionSource("deepseek_v4_pro_auto"))
+	assert.True(t, IsAIGeneratedNutritionSource("deepseek_auto"))
+	assert.True(t, IsAIGeneratedNutritionSource("AI估算（DeepSeek）"))
 	assert.True(t, IsAIGeneratedNutritionSource("llm_generated"))
 	assert.False(t, IsAIGeneratedNutritionSource("ingredient_label"))
 	assert.False(t, IsAIGeneratedNutritionSource("library_exact_canonical"))

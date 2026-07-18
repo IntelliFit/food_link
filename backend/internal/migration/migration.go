@@ -27,7 +27,16 @@ func AutoMigrate(ctx context.Context, db *gorm.DB, schema string) error {
 	if err := ensureConstraints(ctx, db); err != nil {
 		return err
 	}
+	if err := ensureNutritionQualityConstraints(ctx, db); err != nil {
+		return err
+	}
 	if err := ensureIndexes(ctx, db); err != nil {
+		return err
+	}
+	if err := ensureNutritionQualityBackfill(ctx, db); err != nil {
+		return err
+	}
+	if err := ensureTrialEntitlementIndexes(ctx, db); err != nil {
 		return err
 	}
 	if err := ensureExerciseEnergySeed(ctx, db); err != nil {
@@ -37,6 +46,9 @@ func AutoMigrate(ctx context.Context, db *gorm.DB, schema string) error {
 		return err
 	}
 	if err := ensureTrialEntitlementBackfill(ctx, db); err != nil {
+		return err
+	}
+	if err := ensureDeferredRegistrationTrialCompensation(ctx, db); err != nil {
 		return err
 	}
 	if err := ensureRegistrationTrialVouchersAutoApplied(ctx, db); err != nil {
@@ -101,6 +113,37 @@ func MigratePapayContracts(ctx context.Context, db *gorm.DB, schema string) erro
 	return ensurePapayContractIndexes(ctx, db)
 }
 
+// MigrateNutritionQuality applies only the nutrition trust-boundary schema and
+// deterministic source backfill. It is safe to run repeatedly and deliberately
+// excludes unrelated migrations in a dirty development worktree.
+func MigrateNutritionQuality(ctx context.Context, db *gorm.DB, schema string) error {
+	if err := prepareSchema(ctx, db, schema); err != nil {
+		return err
+	}
+	if err := db.WithContext(ctx).AutoMigrate(
+		&migrationdo.FoodNutritionDO{},
+		&migrationdo.FoodNutritionAliasDO{},
+	); err != nil {
+		return fmt.Errorf("auto migrate nutrition quality: %w", err)
+	}
+	if err := ensureNutritionQualityConstraints(ctx, db); err != nil {
+		return err
+	}
+	return ensureNutritionQualityBackfill(ctx, db)
+}
+
+func ensureNutritionQualityConstraints(ctx context.Context, db *gorm.DB) error {
+	for _, statement := range []string{
+		dropAndAddCheck("food_nutrition_library", "food_nutrition_library_quality_tier_check", `quality_tier = ANY (ARRAY['authoritative'::text,'reviewed_estimate'::text,'legacy_curated'::text,'plausible'::text,'unreviewed'::text,'rejected'::text])`),
+		dropAndAddCheck("food_nutrition_aliases", "food_nutrition_aliases_match_status_check", `match_status = ANY (ARRAY['approved_exact'::text,'candidate_only'::text,'blocked'::text])`),
+	} {
+		if err := db.WithContext(ctx).Exec(statement).Error; err != nil {
+			return fmt.Errorf("ensure nutrition quality constraint: %w", err)
+		}
+	}
+	return nil
+}
+
 func prepareSchema(ctx context.Context, db *gorm.DB, schema string) error {
 	if schema == "" {
 		schema = "public"
@@ -128,6 +171,25 @@ func ensurePapayContractIndexes(ctx context.Context, db *gorm.DB) error {
 	return db.WithContext(ctx).Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_wechat_papay_contracts_one_effective_per_user
 ON wechat_papay_contracts (user_id)
 WHERE status IN ('pending', 'active', 'termination_requested')`).Error
+}
+
+// ensureTrialEntitlementIndexes scopes a registration trial to an account,
+// rather than to a permanent WeChat identity. This allows a user who deleted an
+// account and later registered again to receive the new-account trial.
+func ensureTrialEntitlementIndexes(ctx context.Context, db *gorm.DB) error {
+	for _, sql := range []string{
+		`DROP INDEX IF EXISTS idx_user_trial_entitlements_openid`,
+		`DROP INDEX IF EXISTS idx_user_trial_entitlements_unionid`,
+		`DROP INDEX IF EXISTS idx_user_trial_entitlements_first_user_id`,
+		`CREATE INDEX IF NOT EXISTS idx_user_trial_entitlements_openid ON user_trial_entitlements (openid)`,
+		`CREATE INDEX IF NOT EXISTS idx_user_trial_entitlements_unionid ON user_trial_entitlements (unionid) WHERE unionid IS NOT NULL`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_user_trial_entitlements_first_user_id ON user_trial_entitlements (first_user_id) WHERE first_user_id IS NOT NULL`,
+	} {
+		if err := db.WithContext(ctx).Exec(sql).Error; err != nil {
+			return fmt.Errorf("update user trial entitlement indexes: %w", err)
+		}
+	}
+	return nil
 }
 
 func ensureDeferredInviteRewards(ctx context.Context, db *gorm.DB) error {
@@ -729,7 +791,6 @@ WITH ranked_users AS (
         FROM user_vouchers v
         WHERE v.user_id = weapp_user.id
           AND v.voucher_type = 'registration_trial'
-          AND v.status IN ('pending', 'expired')
       ) THEN now()
       ELSE COALESCE(create_time, now())
     END AS trial_started_at,
@@ -791,11 +852,39 @@ FROM prepared p
 WHERE NOT EXISTS (
   SELECT 1
   FROM user_trial_entitlements e
-  WHERE e.openid = p.openid
-     OR (p.unionid IS NOT NULL AND e.unionid = p.unionid)
+  WHERE e.first_user_id = p.first_user_id
 );`
 	if err := db.WithContext(ctx).Exec(sql).Error; err != nil {
 		return fmt.Errorf("backfill user trial entitlements: %w", err)
+	}
+	return nil
+}
+
+// ensureDeferredRegistrationTrialCompensation repairs registrations that were
+// initially backfilled with their original registration time after a deferred
+// trial voucher had already been auto-activated. They receive the full three
+// days from the repair time, exactly once.
+func ensureDeferredRegistrationTrialCompensation(ctx context.Context, db *gorm.DB) error {
+	result := db.WithContext(ctx).Exec(`
+UPDATE user_trial_entitlements e
+SET first_registered_at = now(),
+    trial_days_total = 3,
+    trial_policy = 'regular_new_user',
+    early_user_rank = NULL,
+    updated_at = now()
+FROM weapp_user u
+JOIN user_vouchers v
+  ON v.user_id = u.id
+WHERE e.first_user_id = u.id
+  AND v.voucher_type = 'registration_trial'
+  AND v.status = 'used'
+  AND v.used_at IS NOT NULL
+  AND e.created_at IS NOT NULL
+  AND e.first_registered_at < e.created_at - INTERVAL '1 hour'
+  AND v.used_at > u.create_time + INTERVAL '1 hour'
+`)
+	if result.Error != nil {
+		return fmt.Errorf("compensate deferred registration trials: %w", result.Error)
 	}
 	return nil
 }
@@ -1726,6 +1815,43 @@ func ensureMembershipGrantConfig(ctx context.Context, db *gorm.DB) error {
 ) ON CONFLICT (code) DO NOTHING`
 	if err := db.WithContext(ctx).Exec(sql).Error; err != nil {
 		return fmt.Errorf("ensure membership grant config: %w", err)
+	}
+	return nil
+}
+
+func ensureNutritionQualityBackfill(ctx context.Context, db *gorm.DB) error {
+	statements := []string{
+		`UPDATE food_nutrition_library
+SET quality_tier = 'authoritative',
+    quality_evidence = COALESCE(quality_evidence, '{}'::jsonb) || jsonb_build_object('backfill', 'source_authority_v1')
+WHERE quality_tier = 'unreviewed'
+  AND (
+    source LIKE '美国农业部食物数据中心%'
+    OR source LIKE '中国疾控营养成分平台%'
+  )`,
+		`UPDATE food_nutrition_library
+SET quality_tier = 'plausible',
+    quality_evidence = COALESCE(quality_evidence, '{}'::jsonb) || jsonb_build_object('backfill', 'legacy_ai_requires_consensus_v1')
+WHERE quality_tier = 'unreviewed'
+  AND (
+    LOWER(TRIM(COALESCE(source, ''))) IN (
+      'qwen_generated','gemini_generated','deepseek_generated',
+      'deepseek_v4_pro_auto','deepseek_auto','llm_generated'
+    )
+    OR LOWER(TRIM(COALESCE(source, ''))) LIKE '%\_generated' ESCAPE '\'
+    OR LOWER(TRIM(COALESCE(source, ''))) LIKE 'ai估算%'
+  )`,
+		`UPDATE food_nutrition_library
+SET quality_tier = 'legacy_curated',
+    quality_evidence = COALESCE(quality_evidence, '{}'::jsonb) || jsonb_build_object('backfill', 'pre_quality_tier_active_row_v1')
+WHERE quality_tier = 'unreviewed'
+  AND is_active = true
+  AND created_at < TIMESTAMPTZ '2026-07-19 00:00:00+08:00'`,
+	}
+	for _, statement := range statements {
+		if err := db.WithContext(ctx).Exec(statement).Error; err != nil {
+			return fmt.Errorf("backfill nutrition quality tier: %w", err)
+		}
 	}
 	return nil
 }

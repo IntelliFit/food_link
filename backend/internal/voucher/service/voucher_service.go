@@ -269,7 +269,7 @@ func (s *VoucherService) applyRegistrationTrial(ctx context.Context, userRepo *a
 		unionID = user.UnionID
 	}
 
-	ent, err := userRepo.FindTrialEntitlementByIdentity(ctx, openID, derefString(unionID))
+	ent, err := userRepo.FindTrialEntitlementByUserID(ctx, userID)
 	if err != nil {
 		return err
 	}

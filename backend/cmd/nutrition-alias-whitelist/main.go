@@ -19,6 +19,7 @@ import (
 	"food_link/backend/pkg/config"
 	"food_link/backend/pkg/database"
 
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -300,7 +301,7 @@ func (s gormAliasStore) FindFoodsByCanonical(ctx context.Context, canonical stri
 	err := s.db.WithContext(ctx).
 		Table((&domain.FoodNutrition{}).TableName()).
 		Select("id, canonical_name, kcal_per_100g, is_active").
-		Where("LOWER(canonical_name) = LOWER(?)", strings.TrimSpace(canonical)).
+		Where("LOWER(canonical_name) = LOWER(?) AND is_active = TRUE AND quality_tier IN ?", strings.TrimSpace(canonical), []string{domain.NutritionQualityAuthoritative, domain.NutritionQualityReviewedEstimate, domain.NutritionQualityLegacyCurated}).
 		Find(&rows).Error
 	return rows, err
 }
@@ -321,9 +322,12 @@ func (s gormAliasStore) InsertAlias(ctx context.Context, foodID, aliasName, norm
 		Table((&domain.FoodNutritionAlias{}).TableName()).
 		Clauses(clause.OnConflict{DoNothing: true}).
 		Create(map[string]any{
-			"food_id":          foodID,
-			"alias_name":       strings.TrimSpace(aliasName),
-			"normalized_alias": normalizedAlias,
+			"food_id":           foodID,
+			"alias_name":        strings.TrimSpace(aliasName),
+			"normalized_alias":  normalizedAlias,
+			"match_status":      domain.NutritionAliasApprovedExact,
+			"approval_evidence": datatypes.JSONMap{"approval_source": "nutrition_alias_whitelist"},
+			"reviewed_at":       time.Now(),
 		}).Error
 }
 

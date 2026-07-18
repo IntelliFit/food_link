@@ -4,11 +4,13 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 	"unicode"
 
 	"food_link/backend/internal/foodrecord/domain"
 
 	"github.com/google/uuid"
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
@@ -32,10 +34,10 @@ func NewFoodNutritionRepo(db *gorm.DB) *FoodNutritionRepo {
 }
 
 type ListFoodNutritionInput struct {
-	Query    string
-	Active   string
-	Limit    int
-	Offset   int
+	Query  string
+	Active string
+	Limit  int
+	Offset int
 }
 
 type FoodNutritionPatch map[string]any
@@ -151,6 +153,20 @@ func (r *FoodNutritionRepo) Create(ctx context.Context, item *domain.FoodNutriti
 	}
 	item.CanonicalName = strings.TrimSpace(item.CanonicalName)
 	item.NormalizedName = normalizeFoodNutritionName(item.CanonicalName)
+	if domain.IsAIGeneratedNutritionSource(item.Source) && strings.TrimSpace(item.QualityTier) != domain.NutritionQualityReviewedEstimate {
+		item.QualityTier = domain.NutritionQualityPlausible
+		item.IsActive = false
+	}
+	if strings.TrimSpace(item.QualityTier) == "" {
+		item.QualityTier = domain.NutritionQualityLegacyCurated
+	}
+	if item.QualityEvidence == nil {
+		item.QualityEvidence = datatypes.JSONMap{"approval_source": "admin_create"}
+	}
+	if item.QualityReviewedAt == nil {
+		now := time.Now()
+		item.QualityReviewedAt = &now
+	}
 	if err := r.db.WithContext(ctx).Create(item).Error; err != nil {
 		return nil, err
 	}
@@ -161,6 +177,40 @@ func (r *FoodNutritionRepo) Create(ctx context.Context, item *domain.FoodNutriti
 }
 
 func (r *FoodNutritionRepo) Update(ctx context.Context, id string, patch FoodNutritionPatch) (*domain.FoodNutrition, error) {
+	current, err := r.Get(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	active := current.IsActive
+	source := current.Source
+	tier := domain.EffectiveNutritionQualityTier(*current)
+	evidence := current.QualityEvidence
+	if value, ok := patch["is_active"].(bool); ok {
+		active = value
+	}
+	if value, ok := patch["source"].(string); ok {
+		source = strings.TrimSpace(value)
+	}
+	if value, ok := patch["quality_tier"].(string); ok {
+		tier = strings.TrimSpace(value)
+	}
+	if value, ok := patch["quality_evidence"].(datatypes.JSONMap); ok {
+		evidence = value
+	}
+	if active {
+		switch tier {
+		case domain.NutritionQualityAuthoritative, domain.NutritionQualityLegacyCurated:
+			if domain.IsAIGeneratedNutritionSource(source) {
+				return nil, fmt.Errorf("AI 来源不能直接激活为 %s", tier)
+			}
+		case domain.NutritionQualityReviewedEstimate:
+			if len(evidence) == 0 {
+				return nil, fmt.Errorf("reviewed_estimate 缺少审核证据")
+			}
+		default:
+			return nil, fmt.Errorf("可信等级 %s 不能设为 active", tier)
+		}
+	}
 	if err := r.db.WithContext(ctx).
 		Model(&domain.FoodNutrition{}).
 		Where("id = ?", id).
@@ -183,22 +233,30 @@ func (r *FoodNutritionRepo) ensureAlias(ctx context.Context, foodID, rawName str
 		return nil
 	}
 	normalized := normalizeFoodNutritionName(raw)
-	var count int64
+	var existing domain.FoodNutritionAlias
 	if err := r.db.WithContext(ctx).
-		Table("food_nutrition_aliases").
+		Model(&domain.FoodNutritionAlias{}).
 		Where("food_id = ? AND normalized_alias = ?", foodID, normalized).
-		Count(&count).Error; err != nil {
+		First(&existing).Error; err == nil {
+		return r.db.WithContext(ctx).Model(&domain.FoodNutritionAlias{}).
+			Where("id = ?", existing.ID).
+			Updates(map[string]any{
+				"match_status":      domain.NutritionAliasApprovedExact,
+				"approval_evidence": datatypes.JSONMap{"approval_source": "admin_canonical_name"},
+				"reviewed_at":       time.Now(),
+			}).Error
+	} else if err != gorm.ErrRecordNotFound {
 		return err
-	}
-	if count > 0 {
-		return nil
 	}
 	return r.db.WithContext(ctx).
 		Table("food_nutrition_aliases").
 		Create(map[string]any{
-			"id":               uuid.New().String(),
-			"food_id":          foodID,
-			"alias_name":       raw,
-			"normalized_alias": normalized,
+			"id":                uuid.New().String(),
+			"food_id":           foodID,
+			"alias_name":        raw,
+			"normalized_alias":  normalized,
+			"match_status":      domain.NutritionAliasApprovedExact,
+			"approval_evidence": datatypes.JSONMap{"approval_source": "admin_canonical_name"},
+			"reviewed_at":       time.Now(),
 		}).Error
 }

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
@@ -16,19 +17,18 @@ import (
 
 func main() {
 	configDir := flag.String("config-dir", ".", "directory containing config.yaml")
-	timeout := flag.Duration("timeout", 5*time.Minute, "migration timeout")
-	onlyPapay := flag.Bool("only-papay", false, "only migrate WeChat automatic-renewal contracts")
-	onlyNutritionQuality := flag.Bool("only-nutrition-quality", false, "only migrate nutrition quality tiers and alias approval status")
+	artifact := flag.String("artifact", "", "review artifact JSON path")
+	apply := flag.Bool("apply", false, "commit the reviewed batch; default is validation-only dry-run")
+	timeout := flag.Duration("timeout", 15*time.Minute, "review validation/apply timeout")
 	flag.Parse()
-	if *onlyPapay && *onlyNutritionQuality {
-		log.Fatal("--only-papay 与 --only-nutrition-quality 不能同时使用")
+	if *artifact == "" {
+		log.Fatal("必须提供 --artifact")
 	}
 
 	cfg, resolvedDir, err := loadConfig(*configDir)
 	if err != nil {
 		log.Fatalf("加载配置失败: %v", err)
 	}
-
 	db, err := database.Open(cfg.Database)
 	if err != nil {
 		log.Fatalf("打开数据库失败: %v", err)
@@ -41,34 +41,15 @@ func main() {
 
 	ctx, cancel := context.WithTimeout(context.Background(), *timeout)
 	defer cancel()
-
 	if err := database.Ping(ctx, db); err != nil {
 		log.Fatalf("数据库 ping 失败: %v", err)
 	}
-	var migrateErr error
-	if *onlyPapay {
-		migrateErr = migration.MigratePapayContracts(ctx, db, cfg.Database.Schema)
-	} else if *onlyNutritionQuality {
-		migrateErr = migration.MigrateNutritionQuality(ctx, db, cfg.Database.Schema)
-	} else {
-		migrateErr = migration.AutoMigrate(ctx, db, cfg.Database.Schema)
+	result, err := migration.ApplyNutritionQualityReview(ctx, db, cfg.Database.Schema, *artifact, *apply)
+	if err != nil {
+		log.Fatalf("营养审核批次执行失败: %v", err)
 	}
-	if migrateErr != nil {
-		log.Fatalf("自动迁移失败: %v", migrateErr)
-	}
-	schema := cfg.Database.Schema
-	if schema == "" {
-		schema = "public"
-	}
-	if *onlyPapay {
-		log.Printf("微信自动续费迁移完成: config_dir=%s schema=%s", resolvedDir, schema)
-		return
-	}
-	if *onlyNutritionQuality {
-		log.Printf("营养可信等级迁移完成: config_dir=%s schema=%s", resolvedDir, schema)
-		return
-	}
-	log.Printf("数据库迁移完成: config_dir=%s schema=%s", resolvedDir, schema)
+	body, _ := json.Marshal(result)
+	log.Printf("营养审核批次完成: config_dir=%s result=%s", resolvedDir, body)
 }
 
 func loadConfig(configDir string) (*config.Config, string, error) {

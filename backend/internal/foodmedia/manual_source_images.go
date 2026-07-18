@@ -98,7 +98,7 @@ func LookupManualSourceImagePaths(ctx context.Context, db *gorm.DB, items []map[
 		if err := db.WithContext(ctx).
 			Table("food_nutrition_library").
 			Select("image_path, image_paths").
-			Where("id IN ?", nutritionIDs).
+			Where("id IN ? AND is_active = TRUE AND quality_tier IN ?", nutritionIDs, []string{"authoritative", "reviewed_estimate", "legacy_curated"}).
 			Scan(&rows).Error; err == nil {
 			appendNutritionImageRows(rows)
 		}
@@ -115,7 +115,7 @@ func LookupManualSourceImagePaths(ctx context.Context, db *gorm.DB, items []map[
 		if err := db.WithContext(ctx).
 			Table("food_nutrition_library").
 			Select("image_path, image_paths").
-			Where("canonical_name IN ? OR LOWER(canonical_name) IN ?", nutritionTitles, lowerTitles).
+			Where("is_active = TRUE AND quality_tier IN ? AND (canonical_name IN ? OR LOWER(canonical_name) IN ?)", []string{"authoritative", "reviewed_estimate", "legacy_curated"}, nutritionTitles, lowerTitles).
 			Scan(&rows).Error; err == nil {
 			appendNutritionImageRows(rows)
 		}
@@ -123,7 +123,10 @@ func LookupManualSourceImagePaths(ctx context.Context, db *gorm.DB, items []map[
 			SELECT f.image_path, f.image_paths
 			FROM food_nutrition_aliases a
 			INNER JOIN food_nutrition_library f ON f.id = a.food_id
-			WHERE a.alias_name IN ? OR LOWER(a.alias_name) IN ?
+			WHERE f.is_active = TRUE
+			  AND f.quality_tier IN ('authoritative','reviewed_estimate','legacy_curated')
+			  AND a.match_status = 'approved_exact'
+			  AND (a.alias_name IN ? OR LOWER(a.alias_name) IN ?)
 		`, nutritionTitles, lowerTitles).Scan(&rows).Error; err == nil {
 			appendNutritionImageRows(rows)
 		}

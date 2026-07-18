@@ -351,7 +351,7 @@ func (s *LoginService) ensureTrialEntitlement(ctx context.Context, user *repo.Us
 		}
 	}
 
-	ent, err := s.users.FindTrialEntitlementByIdentity(ctx, openID, unionID)
+	ent, err := s.users.FindTrialEntitlementByUserID(ctx, user.ID)
 	if err != nil {
 		return err
 	}

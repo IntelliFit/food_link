@@ -241,7 +241,7 @@ func (r *StatsRepo) getNutritionRecommendationCandidates(ctx context.Context, li
 	err := r.db.WithContext(ctx).
 		Table("food_nutrition_library").
 		Select("id, canonical_name AS name, kcal_per_100g AS calories, protein_per_100g AS protein, carbs_per_100g AS carbs, fat_per_100g AS fat").
-		Where("is_active = ? AND kcal_per_100g > 0", true).
+		Where("is_active = ? AND kcal_per_100g > 0 AND quality_tier IN ?", true, []string{"authoritative", "reviewed_estimate", "legacy_curated"}).
 		Order("RANDOM()").
 		Limit(limit).
 		Scan(&rows).Error

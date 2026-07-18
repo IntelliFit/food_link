@@ -226,6 +226,21 @@ func (r *UserRepo) FindTrialEntitlementByIdentity(ctx context.Context, openID, u
 	return &ent, err
 }
 
+// FindTrialEntitlementByUserID returns the single registration trial assigned
+// to an account. A user who deletes and recreates an account may reuse the same
+// WeChat identity, but is still eligible for a new-account trial.
+func (r *UserRepo) FindTrialEntitlementByUserID(ctx context.Context, userID string) (*UserTrialEntitlement, error) {
+	if strings.TrimSpace(userID) == "" {
+		return nil, nil
+	}
+	var ent UserTrialEntitlement
+	err := r.db.WithContext(ctx).Where("first_user_id = ?", userID).First(&ent).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	return &ent, err
+}
+
 func (r *UserRepo) DeleteByID(ctx context.Context, userID string) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := deleteAccountOwnedData(tx, userID); err != nil {

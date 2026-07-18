@@ -47,6 +47,7 @@ func setupUserTestDB(t *testing.T) *gorm.DB {
 		mode_switch_count_30d INTEGER,
 		searchable BOOLEAN,
 		public_records BOOLEAN,
+		public_favorite_recipes BOOLEAN,
 		last_seen_analyze_history_at TIMESTAMP,
 		registration_invite_code TEXT,
 		referred_by_user_id TEXT,
@@ -318,6 +319,11 @@ func TestUserRepo_TrialEntitlementCRUD(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, foundByUnion)
 	assert.Equal(t, ent.ID, foundByUnion.ID)
+
+	foundByUser, err := repo.FindTrialEntitlementByUserID(ctx, firstUserID)
+	require.NoError(t, err)
+	require.NotNil(t, foundByUser)
+	assert.Equal(t, ent.ID, foundByUser.ID)
 
 	updated, err := repo.UpdateTrialEntitlement(ctx, ent.ID, map[string]any{"first_user_id": "user-trial-2"})
 	require.NoError(t, err)

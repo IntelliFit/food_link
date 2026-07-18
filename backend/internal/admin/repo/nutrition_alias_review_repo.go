@@ -289,12 +289,44 @@ func (r *NutritionAliasReviewRepo) Review(ctx context.Context, id, decision, rev
 				return err
 			}
 			if err == gorm.ErrRecordNotFound {
+				evidence := datatypes.JSONMap{
+					"approval_source":  "admin_alias_review",
+					"candidate_id":     candidate.ID,
+					"reviewer_id":      strings.TrimSpace(reviewerID),
+					"review_note":      strings.TrimSpace(note),
+					"model":            candidate.Model,
+					"model_decision":   candidate.ModelDecision,
+					"model_confidence": candidate.ModelConfidence,
+				}
+				now := time.Now()
 				if err := tx.Create(&domain.FoodNutritionAlias{
-					ID:              uuid.NewString(),
-					FoodID:          candidate.ProposedFoodID,
-					AliasName:       candidate.AliasName,
-					NormalizedAlias: candidate.NormalizedAlias,
+					ID:               uuid.NewString(),
+					FoodID:           candidate.ProposedFoodID,
+					AliasName:        candidate.AliasName,
+					NormalizedAlias:  candidate.NormalizedAlias,
+					MatchStatus:      domain.NutritionAliasApprovedExact,
+					ApprovalEvidence: evidence,
+					ReviewedAt:       &now,
 				}).Error; err != nil {
+					return err
+				}
+			} else {
+				evidence := datatypes.JSONMap{
+					"approval_source":  "admin_alias_review",
+					"candidate_id":     candidate.ID,
+					"reviewer_id":      strings.TrimSpace(reviewerID),
+					"review_note":      strings.TrimSpace(note),
+					"model":            candidate.Model,
+					"model_decision":   candidate.ModelDecision,
+					"model_confidence": candidate.ModelConfidence,
+				}
+				if err := tx.Model(&domain.FoodNutritionAlias{}).
+					Where("id = ?", existing.ID).
+					Updates(map[string]any{
+						"match_status":      domain.NutritionAliasApprovedExact,
+						"approval_evidence": evidence,
+						"reviewed_at":       time.Now(),
+					}).Error; err != nil {
 					return err
 				}
 			}

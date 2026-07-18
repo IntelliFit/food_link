@@ -506,30 +506,18 @@ def _llm_prompt(batch: Sequence[AuditFinding]) -> str:
                 "rule_flags": finding.flags,
             }
         )
-    # The Wanjie OpenAI-compatible gateway currently garbles long Chinese
-    # prompts for deepseek-v4-pro. Keep the audit prompt compact and English so
-    # the model receives the intended nutrition semantics reliably.
+    # Keep this compact: the Wanjie gateway can close long-running DeepSeek
+    # requests before it returns a first byte. One-row batches plus a concise
+    # contract have proven substantially more reliable than a verbose rubric.
     return (
-        "You are auditing food nutrition database rows. Review every item below. "
-        "All values are per 100g. Be conservative: cooking, dehydration, curing, "
-        "and sauces can legitimately change nutrient density. Recommend a fix only "
-        "for a clear physical impossibility, a severe calorie/macro mismatch, or an "
-        "obvious name/nutrition mismatch. A zero fiber or sugar value often means "
-        "the source did not provide it; never flag or fill a row only for that. "
-        "USDA and other authoritative rows can differ from 4/4/9 because of Atwater "
-        "factors, fiber, sugar alcohols, or organic acids; do not change them solely "
-        "to force a 4/4/9 match. Source trust alone must never change keep to review: "
-        "if a branded, AI-estimated, or historical-average row is numerically plausible, "
-        "keep it. If such a row is suspicious but no reliable correction is directly "
-        "derivable, use review instead of inventing values. Supplements may remain searchable foods, so their product "
-        "type alone is not a reason to deactivate. Keep each reason under 12 words and each "
-        "risk tag under 20 ASCII characters. Return strict JSON without markdown: "
+        "Audit each food row; values are per 100g. Keep plausible cooked, dry, branded, "
+        "or authoritative-source variation. Flag only physical impossibility, severe "
+        "kcal-macro mismatch, or obvious name mismatch. Missing fiber or sugar is not "
+        "an error. Prefer review over invented corrections. Return JSON only: "
         '{"items":[{"id":"...","decision":"keep|fix|deactivate|review","confidence":0.0,'
         '"suggested":{"kcal":0,"protein":0,"carbs":0,"fat":0,"fiber":0,"sugar":0},'
-        '"reason":"short reason","risk_tags":["..."]}]}. '
-        "Decisions: keep=acceptable; review=needs a human; fix=replace with suggested; "
-        "deactivate=not food or a corrupt row. "
-        f"Rows: {json.dumps(items, ensure_ascii=False)}"
+        '"reason":"under 8 words","risk_tags":[]}]}. Exactly one item per id. '
+        f"Rows: {json.dumps(items, ensure_ascii=False, separators=(',', ':'))}"
     )
 
 
@@ -560,7 +548,8 @@ def review_with_deepseek(
             "DEEPSEEK_API_KEY is missing. Set it in your current shell before using --llm."
         )
 
-    url = f"{settings['base_url']}/v1/chat/completions"
+    base_url = settings["base_url"].rstrip("/")
+    url = f"{base_url}/chat/completions" if base_url.endswith("/v1") else f"{base_url}/v1/chat/completions"
     headers = {
         "Authorization": f"Bearer {settings['api_key']}",
         "Content-Type": "application/json",
@@ -647,14 +636,9 @@ def review_with_deepseek(
         payload = {
             "model": settings["model"],
             "messages": [
-                {
-                    "role": "system",
-                    "content": "Return only one complete JSON object parseable by json.loads.",
-                },
                 {"role": "user", "content": _llm_prompt(batch)},
             ],
             "stream": False,
-            "max_tokens": 4096,
         }
         content = ""
         try:
@@ -803,6 +787,11 @@ def main() -> int:
     parser.add_argument("--batch-size", type=int, default=20)
     parser.add_argument("--sleep", type=float, default=0.3)
     parser.add_argument("--workers", type=int, default=1, help="Concurrent DeepSeek batches (max 48).")
+    parser.add_argument(
+        "--exclude-reviewed",
+        default="",
+        help="For --llm-all, skip ids already present in a prior deepseek_review.json.",
+    )
     args = parser.parse_args()
 
     _load_local_env()
@@ -843,6 +832,7 @@ def main() -> int:
     print(f"Rule report: {out_dir / 'rule_findings.csv'}")
 
     if args.llm or args.llm_all:
+        excluded_reviewed_rows = 0
         if args.llm_all:
             finding_by_id = {finding.id: finding for finding in findings}
             llm_subjects = [
@@ -850,6 +840,17 @@ def main() -> int:
                 for row in rows
             ]
             llm_scope = "all_active_rows"
+            if args.exclude_reviewed:
+                prior_review = json.loads(Path(args.exclude_reviewed).read_text(encoding="utf-8"))
+                prior_ids = {
+                    str(item.get("id") or "")
+                    for item in prior_review
+                    if isinstance(item, dict) and item.get("id")
+                }
+                before = len(llm_subjects)
+                llm_subjects = [item for item in llm_subjects if item.id not in prior_ids]
+                excluded_reviewed_rows = before - len(llm_subjects)
+                llm_scope = "all_active_rows_incremental"
         else:
             llm_subjects = findings[: max(0, args.limit)]
             llm_scope = "rule_findings"
@@ -866,7 +867,7 @@ def main() -> int:
         write_json(out_dir / "deepseek_review.json", llm_rows)
         write_llm_csv(out_dir / "deepseek_review.csv", llm_rows, finding_by_id)
         write_json(out_dir / "deepseek_errors.json", llm_errors)
-        llm_summary: Dict[str, int] = {}
+        llm_summary: Dict[str, Any] = {}
         for row in llm_rows:
             decision = str(row.get("decision") or "unknown")
             llm_summary[decision] = llm_summary.get(decision, 0) + 1
@@ -874,6 +875,8 @@ def main() -> int:
             llm_summary["llm_error_rows"] = len(llm_errors)
         llm_summary["reviewed_rows"] = len(llm_rows)
         llm_summary["scope"] = llm_scope
+        if excluded_reviewed_rows:
+            llm_summary["excluded_reviewed_rows"] = excluded_reviewed_rows
         write_json(out_dir / "deepseek_summary.json", llm_summary)
         print("DeepSeek summary:")
         print(json.dumps(llm_summary, ensure_ascii=False, indent=2))

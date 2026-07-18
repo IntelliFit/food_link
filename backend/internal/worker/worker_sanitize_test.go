@@ -73,6 +73,9 @@ func (c *workerMixedMealLLMClient) Analyze(ctx context.Context, prompt, imageURL
 			},
 			map[string]any{
 				"name":                 "桃李豆沙小饼面包",
+				"type":                 "packaged",
+				"foodState":            "packaged",
+				"weightBasis":          "package_net",
 				"estimatedWeightGrams": 80.0,
 				"grossWeightGrams":     80.0,
 			},
@@ -467,12 +470,12 @@ func TestRunFoodAnalysisWithAnalyzeServiceIntegratesPackagedFood(t *testing.T) {
 			if err != nil {
 				t.Fatalf("runFoodAnalysis returned error: %v", err)
 			}
-			expectedCalls := 3
-			if mode == "fast" || mode == "fast_web_search" {
-				expectedCalls = 2
-			}
-			if llm.calls != expectedCalls {
-				t.Fatalf("expected %d model calls for %s mode, got %d", expectedCalls, mode, llm.calls)
+			// This fixture has no food that needs edible-portion inference and no
+			// remaining-calorie budget that would require a suggested-ratio call.
+			// The only LLM call should therefore be the initial vision analysis;
+			// nutrition is resolved deterministically from the configured libraries.
+			if llm.calls != 1 {
+				t.Fatalf("expected one vision model call for %s mode, got %d", mode, llm.calls)
 			}
 			items := extractItems(result["items"])
 			if len(items) != 2 {
@@ -490,11 +493,11 @@ func TestRunFoodAnalysisWithAnalyzeServiceIntegratesPackagedFood(t *testing.T) {
 			if !boolFromAny(items[1]["package_weight_applied"]) {
 				t.Fatalf("expected packaged weight to be applied: %#v", items[1])
 			}
-			if got, _ := floatFromAny(items[1]["suggestedRatio"]); got != 60 {
-				t.Fatalf("expected AI suggested ratio 60 for packaged item, got %v", got)
+			if got, _ := floatFromAny(items[1]["suggestedRatio"]); got != 100 {
+				t.Fatalf("expected default suggested ratio without a remaining-calorie budget, got %v", got)
 			}
-			if source := stringFromMap(items[1], "suggestedRatioSource"); source != "ai" {
-				t.Fatalf("expected AI suggested ratio source, got %s", source)
+			if source := stringFromMap(items[1], "suggestedRatioSource"); source != "not_needed" {
+				t.Fatalf("expected suggested ratio to be marked not_needed, got %s", source)
 			}
 			meta := mapFromAny(result["packaged_food_resolution"])
 			if intFromAny(meta["matched_count"]) != 1 {
@@ -553,12 +556,12 @@ func TestRunFoodAnalysisWithAnalyzeServiceFallsBackToAIWhenPackagedFoodMisses(t 
 			if err != nil {
 				t.Fatalf("runFoodAnalysis returned error: %v", err)
 			}
-			expectedCalls := 3
-			if mode == "fast" || mode == "fast_web_search" {
-				expectedCalls = 2
-			}
-			if llm.calls != expectedCalls {
-				t.Fatalf("expected %d model calls for %s mode, got %d", expectedCalls, mode, llm.calls)
+			// This fixture has no food that needs edible-portion inference and no
+			// remaining-calorie budget that would require a suggested-ratio call.
+			// The only LLM call should therefore be the initial vision analysis;
+			// nutrition fallback is provided by the dedicated estimator below.
+			if llm.calls != 1 {
+				t.Fatalf("expected one vision model call for %s mode, got %d", mode, llm.calls)
 			}
 			if len(fallback.candidates) != 1 {
 				t.Fatalf("expected one nutrition fallback candidate, got %#v", fallback.candidates)
@@ -589,14 +592,17 @@ func TestRunFoodAnalysisWithAnalyzeServiceFallsBackToAIWhenPackagedFoodMisses(t 
 				t.Fatalf("expected generated nutrition to be persisted, got matched id %s", matched)
 			}
 			nutrients := mapFromAny(items[1]["nutrients"])
-			if got, _ := floatFromAny(nutrients["calories"]); got != 75 {
-				t.Fatalf("expected 30g scaled generated calories 75, got %v", got)
+			if got, _ := floatFromAny(nutrients["calories"]); got != 72 {
+				t.Fatalf("expected macro-derived 30g calories 72, got %v", got)
 			}
 			if got, _ := floatFromAny(nutrients["protein"]); got != 3.6 {
 				t.Fatalf("expected 30g scaled generated protein 3.6, got %v", got)
 			}
-			if got, _ := floatFromAny(items[1]["suggestedRatio"]); got != 70 {
-				t.Fatalf("expected AI suggested ratio for packaged miss item, got %v", got)
+			if got, _ := floatFromAny(items[1]["suggestedRatio"]); got != 100 {
+				t.Fatalf("expected default suggested ratio without a remaining-calorie budget, got %v", got)
+			}
+			if source := stringFromMap(items[1], "suggestedRatioSource"); source != "not_needed" {
+				t.Fatalf("expected suggested ratio to be marked not_needed, got %s", source)
 			}
 			meta := mapFromAny(result["packaged_food_resolution"])
 			if intFromAny(meta["triggered_count"]) != 1 || intFromAny(meta["matched_count"]) != 0 || intFromAny(meta["fallback_count"]) != 1 {

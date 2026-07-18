@@ -32,7 +32,8 @@ func setupFoodNutritionTestDB(t *testing.T) *gorm.DB {
 		id TEXT PRIMARY KEY,
 		food_id TEXT,
 		alias_name TEXT,
-		normalized_alias TEXT
+		normalized_alias TEXT,
+		match_status TEXT NOT NULL DEFAULT 'candidate_only'
 	)`)
 	db.Exec(`CREATE TABLE food_unresolved_logs (
 		id TEXT PRIMARY KEY,
@@ -190,10 +191,8 @@ func TestFoodNutritionRepo_ResolveFoodSkipsUnsafeProcessedAlias(t *testing.T) {
 
 	result, err := repo.ResolveFood(ctx, "煮玉米")
 	require.NoError(t, err)
-	require.NotNil(t, result.Food)
-	assert.Equal(t, "cooked-corn", result.Food.ID)
-	assert.NotEqual(t, "corn-sausage", result.Food.ID)
-	assert.Less(t, result.Food.FatPer100g, 2.0)
+	assert.Nil(t, result.Food)
+	assert.Equal(t, "unresolved", result.Status)
 
 	candidates, err := repo.SearchCandidates(ctx, "煮玉米", 5)
 	require.NoError(t, err)
@@ -218,6 +217,9 @@ func TestFoodNutritionRepo_ResolveFoodUsesNormalizedQueryVariants(t *testing.T) 
 		CanonicalName:  "白米饭",
 		NormalizedName: normalizeFoodName("白米饭"),
 		KcalPer100g:    116,
+		ProteinPer100g: 2.6,
+		CarbsPer100g:   25.9,
+		FatPer100g:     0.3,
 		IsActive:       true,
 	}).Error)
 	require.NoError(t, db.Create(&domain.FoodNutritionAlias{
@@ -225,6 +227,7 @@ func TestFoodNutritionRepo_ResolveFoodUsesNormalizedQueryVariants(t *testing.T) 
 		FoodID:          "rice",
 		AliasName:       "米饭",
 		NormalizedAlias: normalizeFoodName("米饭"),
+		MatchStatus:     domain.NutritionAliasApprovedExact,
 	}).Error)
 	require.NoError(t, db.Create(&domain.FoodNutrition{
 		ID:             "youmaicai",
@@ -253,13 +256,15 @@ func TestFoodNutritionRepo_ResolveFoodUsesNormalizedQueryVariants(t *testing.T) 
 
 	youmaicai, err := repo.ResolveFood(ctx, "香菇油麦菜")
 	require.NoError(t, err)
-	require.NotNil(t, youmaicai.Food)
-	assert.Equal(t, "youmaicai", youmaicai.Food.ID)
-	assert.Equal(t, "exact_canonical", youmaicai.Status)
-	assert.Equal(t, "canonical", youmaicai.MatchSource)
+	assert.Nil(t, youmaicai.Food)
+	assert.Equal(t, "unresolved", youmaicai.Status)
+	candidates, err := repo.SearchCandidates(ctx, "香菇油麦菜", 5)
+	require.NoError(t, err)
+	require.NotEmpty(t, candidates)
+	assert.Equal(t, "youmaicai", candidates[0].Food.ID)
 }
 
-func TestFoodNutritionRepo_ResolveFoodFallsBackBrandYogurtToGenericYogurt(t *testing.T) {
+func TestFoodNutritionRepo_ResolveFoodKeepsBrandYogurtAsCandidateOnly(t *testing.T) {
 	db := setupFoodNutritionFullTestDB(t)
 	repo := NewFoodNutritionRepo(db)
 	ctx := context.Background()
@@ -283,10 +288,12 @@ func TestFoodNutritionRepo_ResolveFoodFallsBackBrandYogurtToGenericYogurt(t *tes
 
 	result, err := repo.ResolveFood(ctx, "如实酸奶")
 	require.NoError(t, err)
-	require.NotNil(t, result.Food)
-	assert.Equal(t, "yogurt", result.Food.ID)
-	assert.Equal(t, "exact_alias", result.Status)
-	assert.Equal(t, "alias", result.MatchSource)
+	assert.Nil(t, result.Food)
+	assert.Equal(t, "unresolved", result.Status)
+	candidates, err := repo.SearchCandidates(ctx, "如实酸奶", 5)
+	require.NoError(t, err)
+	require.NotEmpty(t, candidates)
+	assert.Equal(t, "yogurt", candidates[0].Food.ID)
 }
 
 func TestFoodNutritionRepo_ResolveFoodSkipsEnglishAliasForChineseQuery(t *testing.T) {
@@ -371,7 +378,7 @@ func TestFoodNutritionRepo_EnsureNutritionAliasRejectsMixedDishToIngredient(t *t
 	}).Error)
 
 	err := repo.EnsureNutritionAlias(ctx, "lean-beef", "牛肉面")
-	require.ErrorContains(t, err, "拒绝创建形态不兼容的营养别名")
+	require.ErrorContains(t, err, "形态或食物层级不兼容")
 	var count int64
 	require.NoError(t, db.Model(&domain.FoodNutritionAlias{}).Count(&count).Error)
 	assert.Zero(t, count)
@@ -634,6 +641,10 @@ func TestFoodNutritionRepo_UpsertDeepSeekNutritionInsertsFullProfile(t *testing.
 	assert.Equal(t, 10.0, food.VitaminCMgPer100g)
 	assert.Equal(t, 0.4, food.VitaminB12McgPer100g)
 	assert.Equal(t, "deepseek_v4_pro_auto", food.Source)
+	assert.False(t, food.IsActive)
+	var aliasCount int64
+	require.NoError(t, db.Model(&domain.FoodNutritionAlias{}).Where("food_id = ?", food.ID).Count(&aliasCount).Error)
+	assert.Zero(t, aliasCount)
 }
 
 func TestFoodNutritionRepo_UpsertGeneratedNutritionForcesMacroCalories(t *testing.T) {
@@ -652,6 +663,65 @@ func TestFoodNutritionRepo_UpsertGeneratedNutritionForcesMacroCalories(t *testin
 	require.NoError(t, db.Where("normalized_name = ?", normalizeFoodName("汉堡王三层皇堡")).First(&food).Error)
 	assert.Equal(t, 200.0, food.KcalPer100g)
 	assert.Equal(t, "qwen_generated", food.Source)
+	assert.False(t, food.IsActive)
+}
+
+func TestFoodNutritionRepo_ResolveFoodNeverPromotesFuzzyCandidate(t *testing.T) {
+	db := setupFoodNutritionFullTestDB(t)
+	repo := NewFoodNutritionRepo(db)
+	ctx := context.Background()
+
+	require.NoError(t, db.Create(&domain.FoodNutrition{
+		ID:             "whole-wheat-toast",
+		CanonicalName:  "全麦吐司面包",
+		NormalizedName: normalizeFoodName("全麦吐司面包"),
+		KcalPer100g:    250,
+		ProteinPer100g: 9,
+		CarbsPer100g:   45,
+		FatPer100g:     4,
+		IsActive:       true,
+	}).Error)
+
+	result, err := repo.ResolveFood(ctx, "全麦吐司")
+	require.NoError(t, err)
+	assert.Nil(t, result.Food)
+	assert.Equal(t, "unresolved", result.Status)
+
+	candidates, err := repo.SearchCandidates(ctx, "全麦吐司", 5)
+	require.NoError(t, err)
+	require.NotEmpty(t, candidates)
+	assert.Equal(t, "whole-wheat-toast", candidates[0].Food.ID)
+}
+
+func TestFoodNutritionRepo_ResolveFoodExcludesActiveAIGeneratedRows(t *testing.T) {
+	db := setupFoodNutritionFullTestDB(t)
+	repo := NewFoodNutritionRepo(db)
+	ctx := context.Background()
+
+	require.NoError(t, db.Create(&domain.FoodNutrition{
+		ID:             "ai-oatmeal",
+		CanonicalName:  "泡发燕麦",
+		NormalizedName: normalizeFoodName("泡发燕麦"),
+		KcalPer100g:    389,
+		CarbsPer100g:   66,
+		Source:         "qwen_generated",
+		IsActive:       true,
+	}).Error)
+	require.NoError(t, db.Create(&domain.FoodNutritionAlias{
+		ID:              "ai-oatmeal-alias",
+		FoodID:          "ai-oatmeal",
+		AliasName:       "泡发燕麦",
+		NormalizedAlias: normalizeFoodName("泡发燕麦"),
+	}).Error)
+
+	result, err := repo.ResolveFood(ctx, "泡发燕麦")
+	require.NoError(t, err)
+	assert.Nil(t, result.Food)
+	assert.Equal(t, "unresolved", result.Status)
+
+	candidates, err := repo.SearchCandidates(ctx, "泡发燕麦", 5)
+	require.NoError(t, err)
+	assert.Empty(t, candidates)
 }
 
 func TestFoodNutritionRepo_ResolvePackagedFood(t *testing.T) {

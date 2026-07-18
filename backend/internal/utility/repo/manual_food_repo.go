@@ -28,6 +28,8 @@ type ManualFoodRepo struct {
 	storage *storage.Client
 }
 
+const nutritionExactQualitySQL = "quality_tier IN ('authoritative','reviewed_estimate','legacy_curated')"
+
 type CustomFoodInput struct {
 	ID                 string
 	Title              string
@@ -578,11 +580,12 @@ func (r *ManualFoodRepo) listNutritionCatalogItems(ctx context.Context, category
 		FROM food_nutrition_library
 		WHERE is_active = ?
 			AND kcal_per_100g > 0
+			AND %s
 			AND canonical_name ~ '[一-龥]'
 			%s
 		ORDER BY %s
 		LIMIT ? OFFSET ?
-	`, whereCategory, nutritionBrowseOrderSQL()), args...).Scan(&rows).Error
+	`, nutritionExactQualitySQL, whereCategory, nutritionBrowseOrderSQL()), args...).Scan(&rows).Error
 	if err != nil {
 		return nil, err
 	}
@@ -622,10 +625,10 @@ func (r *ManualFoodRepo) listPackagedCatalogItems(ctx context.Context, category 
 
 func (r *ManualFoodRepo) loadStats(ctx context.Context) (*domain.ManualFoodBrowseStats, error) {
 	stats := &domain.ManualFoodBrowseStats{}
-	if err := r.db.WithContext(ctx).Model(&fooddomain.FoodNutrition{}).Where("is_active = ?", true).Count(&stats.NutritionFoodCount).Error; err != nil {
+	if err := r.db.WithContext(ctx).Model(&fooddomain.FoodNutrition{}).Where("is_active = ? AND "+nutritionExactQualitySQL, true).Count(&stats.NutritionFoodCount).Error; err != nil {
 		return nil, err
 	}
-	if err := r.db.WithContext(ctx).Model(&fooddomain.FoodNutritionAlias{}).Count(&stats.NutritionAliasCount).Error; err != nil {
+	if err := r.db.WithContext(ctx).Model(&fooddomain.FoodNutritionAlias{}).Where("match_status = ?", fooddomain.NutritionAliasApprovedExact).Count(&stats.NutritionAliasCount).Error; err != nil {
 		return nil, err
 	}
 	if err := r.db.WithContext(ctx).Model(&publicdomain.PublicFoodItem{}).Where("status = ?", "published").Count(&stats.PublicFoodCount).Error; err != nil {
@@ -683,7 +686,7 @@ func (r *ManualFoodRepo) listRecentItems(ctx context.Context, userID string, lim
 		result.MatchScore = 0.45
 		results = append(results, result)
 	}
-	return results, nil
+	return r.refreshRecentPackagedFoods(ctx, results)
 }
 
 func (r *ManualFoodRepo) listCollectedPublicLibrary(ctx context.Context, userID string, limit int) ([]domain.ManualFoodResult, error) {
@@ -746,7 +749,7 @@ func (r *ManualFoodRepo) listCampusCatalogItems(ctx context.Context, limit int, 
 func (r *ManualFoodRepo) listNutritionLibrary(ctx context.Context, limit int) ([]domain.ManualFoodResult, error) {
 	var rows []fooddomain.FoodNutrition
 	err := r.db.WithContext(ctx).
-		Where("is_active = ? AND kcal_per_100g > 0", true).
+		Where("is_active = ? AND kcal_per_100g > 0 AND "+nutritionExactQualitySQL, true).
 		Order(nutritionBrowseOrderSQL()).
 		Limit(limit).
 		Find(&rows).Error
@@ -818,7 +821,55 @@ func (r *ManualFoodRepo) searchRecentItems(ctx context.Context, userID string, q
 		result.MatchScore = computeMatchScore(query, result.Title, result.Subtitle) + 0.35
 		results = append(results, result)
 	}
-	return results, nil
+	return r.refreshRecentPackagedFoods(ctx, results)
+}
+
+// refreshRecentPackagedFoods prevents historical record snapshots from
+// overriding a corrected packaged-food row. A legacy record may contain a
+// suggested 25g portion or per-100g values in total fields; recent/search
+// results must always use the current active package evidence instead.
+func (r *ManualFoodRepo) refreshRecentPackagedFoods(ctx context.Context, results []domain.ManualFoodResult) ([]domain.ManualFoodResult, error) {
+	ids := make([]string, 0)
+	seen := map[string]bool{}
+	for _, result := range results {
+		id := strings.TrimSpace(result.ID)
+		if result.Source != "packaged_food" || id == "" || seen[id] {
+			continue
+		}
+		seen[id] = true
+		ids = append(ids, id)
+	}
+	if len(ids) == 0 {
+		return results, nil
+	}
+	var rows []fooddomain.PackagedFood
+	if err := r.db.WithContext(ctx).
+		Where("id IN ? AND is_active = TRUE AND kcal_per_100g > 0 AND COALESCE(NULLIF(review_status, ''), 'active') = ?", ids, "active").
+		Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	byID := make(map[string]fooddomain.PackagedFood, len(rows))
+	for _, row := range rows {
+		byID[strings.TrimSpace(row.ID)] = row
+	}
+	refreshed := make([]domain.ManualFoodResult, 0, len(results))
+	for _, result := range results {
+		if result.Source != "packaged_food" {
+			refreshed = append(refreshed, result)
+			continue
+		}
+		row, ok := byID[strings.TrimSpace(result.ID)]
+		if !ok {
+			// Inactive or needs-review package rows must not re-enter search
+			// through a user's historical record snapshot.
+			continue
+		}
+		current := r.manualFoodResultFromPackaged(row, result.MatchScore)
+		current.UsageCount = result.UsageCount
+		current.Collected = result.Collected
+		refreshed = append(refreshed, current)
+	}
+	return refreshed, nil
 }
 
 func (r *ManualFoodRepo) searchPublicLibrary(ctx context.Context, userID string, query string, limit int) ([]domain.ManualFoodResult, error) {
@@ -955,9 +1006,10 @@ func (r *ManualFoodRepo) searchNutritionLibrary(ctx context.Context, query strin
 				ELSE 'alias'
 			END AS match_source
 		FROM food_nutrition_library f
-		LEFT JOIN food_nutrition_aliases a ON a.food_id = f.id
+		LEFT JOIN food_nutrition_aliases a ON a.food_id = f.id AND a.match_status = 'approved_exact'
 		WHERE f.is_active = TRUE
 			AND f.kcal_per_100g > 0
+			AND f.quality_tier IN ('authoritative','reviewed_estimate','legacy_curated')
 			AND (%s)
 		ORDER BY f.id, match_source ASC, %s
 		LIMIT ?
@@ -1902,7 +1954,7 @@ func (r *ManualFoodRepo) loadNutritionFoodRowsByIDs(ctx context.Context, ids []s
 	}
 	var rows []fooddomain.FoodNutrition
 	if err := r.db.WithContext(ctx).
-		Where("id::text IN ? AND is_active = TRUE AND kcal_per_100g > 0", ids).
+		Where("id::text IN ? AND is_active = TRUE AND kcal_per_100g > 0 AND "+nutritionExactQualitySQL, ids).
 		Find(&rows).Error; err != nil {
 		return out
 	}
@@ -1938,7 +1990,7 @@ func (r *ManualFoodRepo) loadNutritionFoodRowsByTitles(ctx context.Context, titl
 	}
 	var rows []fooddomain.FoodNutrition
 	if err := r.db.WithContext(ctx).
-		Where("is_active = TRUE AND kcal_per_100g > 0 AND (canonical_name IN ? OR LOWER(canonical_name) IN ?)", unique, lowerTitles).
+		Where("is_active = TRUE AND kcal_per_100g > 0 AND "+nutritionExactQualitySQL+" AND (canonical_name IN ? OR LOWER(canonical_name) IN ?)", unique, lowerTitles).
 		Find(&rows).Error; err == nil {
 		for _, row := range rows {
 			row = r.normalizeNutritionFoodItem(row)
@@ -1965,6 +2017,8 @@ func (r *ManualFoodRepo) loadNutritionFoodRowsByTitles(ctx context.Context, titl
 		INNER JOIN food_nutrition_library f ON f.id = a.food_id
 		WHERE f.is_active = TRUE
 			AND f.kcal_per_100g > 0
+			AND f.quality_tier IN ('authoritative','reviewed_estimate','legacy_curated')
+			AND a.match_status = 'approved_exact'
 			AND (a.alias_name IN ? OR LOWER(a.alias_name) IN ?)
 	`, unique, lowerTitles).Scan(&aliasRows).Error; err == nil {
 		for _, row := range aliasRows {

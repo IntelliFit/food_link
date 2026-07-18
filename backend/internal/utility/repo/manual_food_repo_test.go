@@ -60,9 +60,10 @@ func TestManualFoodRepo_Browse(t *testing.T) {
 		ProteinPer100g: 13,
 		CarbsPer100g:   1.1,
 		FatPer100g:     9.4,
+		QualityTier:    fooddomain.NutritionQualityLegacyCurated,
 		IsActive:       true,
 	}).Error)
-	require.NoError(t, db.Create(&fooddomain.FoodNutritionAlias{ID: "a1", FoodID: "n1", AliasName: "蛋"}).Error)
+	require.NoError(t, db.Create(&fooddomain.FoodNutritionAlias{ID: "a1", FoodID: "n1", AliasName: "蛋", MatchStatus: fooddomain.NutritionAliasApprovedExact}).Error)
 	require.NoError(t, db.Create(&publicdomain.PublicFoodItem{
 		ID:              "p1",
 		UserID:          "u2",
@@ -116,6 +117,7 @@ func TestManualFoodRepo_Search(t *testing.T) {
 		ProteinPer100g: 2.8,
 		CarbsPer100g:   7,
 		FatPer100g:     0.4,
+		QualityTier:    fooddomain.NutritionQualityLegacyCurated,
 		IsActive:       true,
 	}).Error)
 	require.NoError(t, db.Create(&fooddomain.FoodNutritionAlias{
@@ -123,6 +125,7 @@ func TestManualFoodRepo_Search(t *testing.T) {
 		FoodID:          "n1",
 		AliasName:       "花椰菜",
 		NormalizedAlias: "花椰菜",
+		MatchStatus:     fooddomain.NutritionAliasApprovedExact,
 	}).Error)
 	require.NoError(t, db.Create(&publicdomain.PublicFoodItem{
 		ID:            "p1",
@@ -497,6 +500,7 @@ func TestEnrichManualFoodResultsWithNutritionLibrary(t *testing.T) {
 		ProteinPer100g: 2.6,
 		CarbsPer100g:   25.9,
 		FatPer100g:     0.3,
+		QualityTier:    fooddomain.NutritionQualityLegacyCurated,
 		IsActive:       true,
 	}).Error)
 
@@ -527,6 +531,7 @@ func TestEnrichManualFoodPrefersExactCanonicalNameOverAliasTarget(t *testing.T) 
 		ImagePath:      &exactImage,
 		ImagePaths:     []string{exactImage},
 		KcalPer100g:    155,
+		QualityTier:    fooddomain.NutritionQualityLegacyCurated,
 		IsActive:       true,
 	}).Error)
 	require.NoError(t, db.Create(&fooddomain.FoodNutrition{
@@ -536,6 +541,7 @@ func TestEnrichManualFoodPrefersExactCanonicalNameOverAliasTarget(t *testing.T) 
 		ImagePath:      &aliasImage,
 		ImagePaths:     []string{aliasImage},
 		KcalPer100g:    144,
+		QualityTier:    fooddomain.NutritionQualityLegacyCurated,
 		IsActive:       true,
 	}).Error)
 	require.NoError(t, db.Create(&fooddomain.FoodNutritionAlias{
@@ -543,6 +549,7 @@ func TestEnrichManualFoodPrefersExactCanonicalNameOverAliasTarget(t *testing.T) 
 		FoodID:          "whole-egg",
 		AliasName:       "茶叶蛋",
 		NormalizedAlias: "茶叶蛋",
+		MatchStatus:     fooddomain.NutritionAliasApprovedExact,
 	}).Error)
 
 	items := r.enrichManualFoodResultsWithNutritionLibrary(context.Background(), []domain.ManualFoodResult{{
@@ -566,6 +573,7 @@ func TestEnrichManualFoodKeepsExactCanonicalNameWithoutImage(t *testing.T) {
 		CanonicalName:  "茶叶蛋",
 		NormalizedName: "茶叶蛋",
 		KcalPer100g:    155,
+		QualityTier:    fooddomain.NutritionQualityLegacyCurated,
 		IsActive:       true,
 	}).Error)
 	require.NoError(t, db.Create(&fooddomain.FoodNutrition{
@@ -575,6 +583,7 @@ func TestEnrichManualFoodKeepsExactCanonicalNameWithoutImage(t *testing.T) {
 		ImagePath:      &aliasImage,
 		ImagePaths:     []string{aliasImage},
 		KcalPer100g:    144,
+		QualityTier:    fooddomain.NutritionQualityLegacyCurated,
 		IsActive:       true,
 	}).Error)
 	require.NoError(t, db.Create(&fooddomain.FoodNutritionAlias{
@@ -582,6 +591,7 @@ func TestEnrichManualFoodKeepsExactCanonicalNameWithoutImage(t *testing.T) {
 		FoodID:          "whole-egg-with-image",
 		AliasName:       "茶叶蛋",
 		NormalizedAlias: "茶叶蛋",
+		MatchStatus:     fooddomain.NutritionAliasApprovedExact,
 	}).Error)
 
 	items := r.enrichManualFoodResultsWithNutritionLibrary(context.Background(), []domain.ManualFoodResult{{

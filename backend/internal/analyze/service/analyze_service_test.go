@@ -919,6 +919,28 @@ func TestAnalyzeService_ApplyEdiblePortionRatiosSkipsModelForFullyEdibleFood(t *
 	assert.Equal(t, 210.0, items[0]["estimatedWeightGrams"])
 }
 
+func TestAnalyzeService_ApplyEdiblePortionRatiosSkipsPackagedBrandKeyword(t *testing.T) {
+	client := &mockLLMClient{result: map[string]any{"items": []any{}}}
+	svc := NewAnalyzeService(nil, client, nil)
+	svc.ConfigureDashScopeLLMClient(client)
+	resp := map[string]any{
+		"items": []map[string]any{{
+			"name":                 "桃李豆沙小饼面包",
+			"foodState":            "packaged",
+			"weightBasis":          "package_net",
+			"grossWeightGrams":     55.0,
+			"estimatedWeightGrams": 55.0,
+		}},
+	}
+
+	result := svc.applyEdiblePortionRatios(context.Background(), resp, AnalyzeInput{})
+	items := result["items"].([]map[string]any)
+
+	assert.Equal(t, "deterministic", result["edible_portion_status"])
+	assert.Equal(t, 0, client.calls)
+	assert.Equal(t, 100.0, items[0]["ediblePortionRatio"])
+}
+
 func TestAnalyzeService_ApplySuggestedRatiosDisabledDefaultsTo100(t *testing.T) {
 	svc := NewAnalyzeService(nil, nil, nil)
 	resp := map[string]any{
@@ -3035,7 +3057,7 @@ func TestAnalyzeService_ApplyDBFirstUsesDeepSeekSemanticReuse(t *testing.T) {
 	svc := NewAnalyzeService(&mockLLMClient{}, &mockLLMClient{}, userRepo, nutritionRepo)
 	svc.ConfigureDeepSeekFallback("fake-key")
 	svc.deepseek.client = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-		body := `{"choices":[{"message":{"content":"{\"items\":[{\"index\":0,\"reuseExisting\":true,\"selectedCandidateIndex\":0,\"confidence\":0.96,\"reason\":\"甜筒/蛋筒属于同义包装说法\",\"shouldAddAlias\":true,\"aliasName\":\"蜜雪冰城原味冰淇淋\"}]}"}}]}`
+		body := `{"choices":[{"message":{"content":"{\"items\":[{\"index\":0,\"reuseExisting\":true,\"selectedCandidateIndex\":0,\"identityEquivalent\":true,\"preparationEquivalent\":true,\"compositionEquivalent\":true,\"nutritionBasisEquivalent\":true,\"confidence\":0.99,\"reason\":\"甜筒/蛋筒属于同一产品的完整名称差异\",\"shouldAddAlias\":false,\"aliasName\":\"\"}]}"}}]}`
 		return &http.Response{
 			StatusCode: 200,
 			Body:       io.NopCloser(strings.NewReader(body)),
@@ -3051,8 +3073,9 @@ func TestAnalyzeService_ApplyDBFirstUsesDeepSeekSemanticReuse(t *testing.T) {
 	require.Len(t, items, 1)
 	assert.Equal(t, "icecream-1", items[0]["matched_food_id"])
 	assert.Equal(t, "蜜雪冰城原味冰淇淋蛋筒", items[0]["matched_food_name"])
-	assert.Equal(t, "fuzzy", items[0]["resolve_status"])
-	assert.Equal(t, "library_fuzzy", items[0]["nutrition_source"])
+	assert.Equal(t, "semantic_rerank", items[0]["resolve_status"])
+	assert.Equal(t, "library_semantic_rerank", items[0]["nutrition_source"])
+	assert.Equal(t, "蜜雪冰城原味冰淇淋蛋筒", items[0]["standardized_food_name"])
 	nutrients := items[0]["nutrients"].(map[string]any)
 	assert.Equal(t, 176.0, nutrients["calories"])
 }
@@ -3078,7 +3101,7 @@ func TestAnalyzeService_SemanticReuseDoesNotPersistModelSuggestedAlias(t *testin
 	svc.ConfigureNutritionResolver(resolver)
 	svc.ConfigureDeepSeekFallback("fake-key")
 	svc.deepseek.client = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-		body := `{"choices":[{"message":{"content":"{\"items\":[{\"index\":0,\"reuseExisting\":true,\"selectedCandidateIndex\":0,\"confidence\":0.99,\"reason\":\"同义名称\",\"shouldAddAlias\":true,\"aliasName\":\"原味冰淇淋\"}]}"}}]}`
+		body := `{"choices":[{"message":{"content":"{\"items\":[{\"index\":0,\"reuseExisting\":true,\"selectedCandidateIndex\":0,\"identityEquivalent\":true,\"preparationEquivalent\":true,\"compositionEquivalent\":true,\"nutritionBasisEquivalent\":true,\"confidence\":0.99,\"reason\":\"同一食物的规范名称差异\",\"shouldAddAlias\":false,\"aliasName\":\"\"}]}"}}]}`
 		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
 	})}
 
@@ -3093,6 +3116,27 @@ func TestAnalyzeService_SemanticReuseDoesNotPersistModelSuggestedAlias(t *testin
 	assert.Empty(t, resolver.ensuredAliases)
 	require.Len(t, resolver.proposedAliases, 1)
 	assert.Contains(t, resolver.proposedAliases[0], "icecream-1:原味冰淇淋:deepseek-v4-pro:0.99")
+}
+
+func TestStrictNutritionReuseDecisionRequiresAllIdentityDimensions(t *testing.T) {
+	valid := &foodCandidateReuseDecision{
+		ReuseExisting:            true,
+		SelectedCandidateIndex:   0,
+		IdentityEquivalent:       true,
+		PreparationEquivalent:    true,
+		CompositionEquivalent:    true,
+		NutritionBasisEquivalent: true,
+		Confidence:               0.99,
+	}
+	assert.True(t, isStrictNutritionReuseDecision(valid))
+
+	compositionMismatch := *valid
+	compositionMismatch.CompositionEquivalent = false
+	assert.False(t, isStrictNutritionReuseDecision(&compositionMismatch))
+
+	lowConfidence := *valid
+	lowConfidence.Confidence = 0.96
+	assert.False(t, isStrictNutritionReuseDecision(&lowConfidence))
 }
 
 func TestModelDeclaredPackagedFoodDoesNotInferFromName(t *testing.T) {

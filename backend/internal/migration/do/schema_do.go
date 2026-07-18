@@ -208,9 +208,9 @@ func (PetChatMessageDO) TableName() string { return "pet_chat_messages" }
 
 type UserTrialEntitlementDO struct {
 	ID                string     `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
-	FirstUserID       *string    `gorm:"column:first_user_id;type:uuid;index:idx_user_trial_entitlements_first_user_id"`
-	OpenID            string     `gorm:"column:openid;type:text;not null;uniqueIndex:idx_user_trial_entitlements_openid"`
-	UnionID           *string    `gorm:"column:unionid;type:text;uniqueIndex:idx_user_trial_entitlements_unionid,where:unionid IS NOT NULL"`
+	FirstUserID       *string    `gorm:"column:first_user_id;type:uuid;uniqueIndex:idx_user_trial_entitlements_first_user_id,where:first_user_id IS NOT NULL"`
+	OpenID            string     `gorm:"column:openid;type:text;not null;index:idx_user_trial_entitlements_openid"`
+	UnionID           *string    `gorm:"column:unionid;type:text;index:idx_user_trial_entitlements_unionid,where:unionid IS NOT NULL"`
 	FirstRegisteredAt *time.Time `gorm:"column:first_registered_at;type:timestamptz;not null;default:now()"`
 	EarlyUserRank     *int       `gorm:"column:early_user_rank;type:integer"`
 	TrialDaysTotal    int        `gorm:"column:trial_days_total;type:integer;not null;default:3"`
@@ -369,43 +369,46 @@ type FoodRecordDO struct {
 func (FoodRecordDO) TableName() string { return "user_food_records" }
 
 type FoodNutritionDO struct {
-	ID                    string    `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
-	CanonicalName         string    `gorm:"column:canonical_name;type:text;not null;index:idx_food_nutrition_library_canonical_name"`
-	NormalizedName        string    `gorm:"column:normalized_name;type:text;not null;unique"`
-	KcalPer100g           float64   `gorm:"column:kcal_per_100g;type:numeric;not null;default:0"`
-	ProteinPer100g        float64   `gorm:"column:protein_per_100g;type:numeric;not null;default:0"`
-	CarbsPer100g          float64   `gorm:"column:carbs_per_100g;type:numeric;not null;default:0"`
-	FatPer100g            float64   `gorm:"column:fat_per_100g;type:numeric;not null;default:0"`
-	FiberPer100g          float64   `gorm:"column:fiber_per_100g;type:numeric;not null;default:0"`
-	SugarPer100g          float64   `gorm:"column:sugar_per_100g;type:numeric;not null;default:0"`
-	SaturatedFatPer100g   float64   `gorm:"column:saturated_fat_per_100g;type:numeric;not null;default:0"`
-	CholesterolMgPer100g  float64   `gorm:"column:cholesterol_mg_per_100g;type:numeric;not null;default:0"`
-	SodiumMgPer100g       float64   `gorm:"column:sodium_mg_per_100g;type:numeric;not null;default:0"`
-	PotassiumMgPer100g    float64   `gorm:"column:potassium_mg_per_100g;type:numeric;not null;default:0"`
-	CalciumMgPer100g      float64   `gorm:"column:calcium_mg_per_100g;type:numeric;not null;default:0"`
-	IronMgPer100g         float64   `gorm:"column:iron_mg_per_100g;type:numeric;not null;default:0"`
-	MagnesiumMgPer100g    float64   `gorm:"column:magnesium_mg_per_100g;type:numeric;not null;default:0"`
-	ZincMgPer100g         float64   `gorm:"column:zinc_mg_per_100g;type:numeric;not null;default:0"`
-	VitaminARaeMcgPer100g float64   `gorm:"column:vitamin_a_rae_mcg_per_100g;type:numeric;not null;default:0"`
-	VitaminCMgPer100g     float64   `gorm:"column:vitamin_c_mg_per_100g;type:numeric;not null;default:0"`
-	VitaminDMcgPer100g    float64   `gorm:"column:vitamin_d_mcg_per_100g;type:numeric;not null;default:0"`
-	VitaminEMgPer100g     float64   `gorm:"column:vitamin_e_mg_per_100g;type:numeric;not null;default:0"`
-	VitaminKMcgPer100g    float64   `gorm:"column:vitamin_k_mcg_per_100g;type:numeric;not null;default:0"`
-	ThiaminMgPer100g      float64   `gorm:"column:thiamin_mg_per_100g;type:numeric;not null;default:0"`
-	RiboflavinMgPer100g   float64   `gorm:"column:riboflavin_mg_per_100g;type:numeric;not null;default:0"`
-	NiacinMgPer100g       float64   `gorm:"column:niacin_mg_per_100g;type:numeric;not null;default:0"`
-	VitaminB6MgPer100g    float64   `gorm:"column:vitamin_b6_mg_per_100g;type:numeric;not null;default:0"`
-	FolateMcgPer100g      float64   `gorm:"column:folate_mcg_per_100g;type:numeric;not null;default:0"`
-	VitaminB12McgPer100g  float64   `gorm:"column:vitamin_b12_mcg_per_100g;type:numeric;not null;default:0"`
-	ImagePath             *string   `gorm:"column:image_path;type:text"`
-	ImagePaths            []string  `gorm:"column:image_paths;type:jsonb;serializer:json;not null;default:'[]'::jsonb"`
-	ImageSourceURL        *string   `gorm:"column:image_source_url;type:text"`
-	ImageSourceLabel      *string   `gorm:"column:image_source_label;type:text"`
-	ImageLicense          *string   `gorm:"column:image_license;type:text"`
-	IsActive              bool      `gorm:"column:is_active;type:boolean;not null;default:true;index:idx_food_nutrition_library_is_active"`
-	Source                *string   `gorm:"column:source;type:text"`
-	CreatedAt             time.Time `gorm:"column:created_at;type:timestamptz;not null;default:now()"`
-	UpdatedAt             time.Time `gorm:"column:updated_at;type:timestamptz;not null;default:now()"`
+	ID                    string            `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	CanonicalName         string            `gorm:"column:canonical_name;type:text;not null;index:idx_food_nutrition_library_canonical_name"`
+	NormalizedName        string            `gorm:"column:normalized_name;type:text;not null;unique"`
+	KcalPer100g           float64           `gorm:"column:kcal_per_100g;type:numeric;not null;default:0"`
+	ProteinPer100g        float64           `gorm:"column:protein_per_100g;type:numeric;not null;default:0"`
+	CarbsPer100g          float64           `gorm:"column:carbs_per_100g;type:numeric;not null;default:0"`
+	FatPer100g            float64           `gorm:"column:fat_per_100g;type:numeric;not null;default:0"`
+	FiberPer100g          float64           `gorm:"column:fiber_per_100g;type:numeric;not null;default:0"`
+	SugarPer100g          float64           `gorm:"column:sugar_per_100g;type:numeric;not null;default:0"`
+	SaturatedFatPer100g   float64           `gorm:"column:saturated_fat_per_100g;type:numeric;not null;default:0"`
+	CholesterolMgPer100g  float64           `gorm:"column:cholesterol_mg_per_100g;type:numeric;not null;default:0"`
+	SodiumMgPer100g       float64           `gorm:"column:sodium_mg_per_100g;type:numeric;not null;default:0"`
+	PotassiumMgPer100g    float64           `gorm:"column:potassium_mg_per_100g;type:numeric;not null;default:0"`
+	CalciumMgPer100g      float64           `gorm:"column:calcium_mg_per_100g;type:numeric;not null;default:0"`
+	IronMgPer100g         float64           `gorm:"column:iron_mg_per_100g;type:numeric;not null;default:0"`
+	MagnesiumMgPer100g    float64           `gorm:"column:magnesium_mg_per_100g;type:numeric;not null;default:0"`
+	ZincMgPer100g         float64           `gorm:"column:zinc_mg_per_100g;type:numeric;not null;default:0"`
+	VitaminARaeMcgPer100g float64           `gorm:"column:vitamin_a_rae_mcg_per_100g;type:numeric;not null;default:0"`
+	VitaminCMgPer100g     float64           `gorm:"column:vitamin_c_mg_per_100g;type:numeric;not null;default:0"`
+	VitaminDMcgPer100g    float64           `gorm:"column:vitamin_d_mcg_per_100g;type:numeric;not null;default:0"`
+	VitaminEMgPer100g     float64           `gorm:"column:vitamin_e_mg_per_100g;type:numeric;not null;default:0"`
+	VitaminKMcgPer100g    float64           `gorm:"column:vitamin_k_mcg_per_100g;type:numeric;not null;default:0"`
+	ThiaminMgPer100g      float64           `gorm:"column:thiamin_mg_per_100g;type:numeric;not null;default:0"`
+	RiboflavinMgPer100g   float64           `gorm:"column:riboflavin_mg_per_100g;type:numeric;not null;default:0"`
+	NiacinMgPer100g       float64           `gorm:"column:niacin_mg_per_100g;type:numeric;not null;default:0"`
+	VitaminB6MgPer100g    float64           `gorm:"column:vitamin_b6_mg_per_100g;type:numeric;not null;default:0"`
+	FolateMcgPer100g      float64           `gorm:"column:folate_mcg_per_100g;type:numeric;not null;default:0"`
+	VitaminB12McgPer100g  float64           `gorm:"column:vitamin_b12_mcg_per_100g;type:numeric;not null;default:0"`
+	ImagePath             *string           `gorm:"column:image_path;type:text"`
+	ImagePaths            []string          `gorm:"column:image_paths;type:jsonb;serializer:json;not null;default:'[]'::jsonb"`
+	ImageSourceURL        *string           `gorm:"column:image_source_url;type:text"`
+	ImageSourceLabel      *string           `gorm:"column:image_source_label;type:text"`
+	ImageLicense          *string           `gorm:"column:image_license;type:text"`
+	IsActive              bool              `gorm:"column:is_active;type:boolean;not null;default:true;index:idx_food_nutrition_library_is_active"`
+	Source                *string           `gorm:"column:source;type:text"`
+	QualityTier           string            `gorm:"column:quality_tier;type:text;not null;default:'unreviewed';index:idx_food_nutrition_library_quality_tier"`
+	QualityEvidence       datatypes.JSONMap `gorm:"column:quality_evidence;type:jsonb;not null;default:'{}'::jsonb"`
+	QualityReviewedAt     *time.Time        `gorm:"column:quality_reviewed_at;type:timestamptz"`
+	CreatedAt             time.Time         `gorm:"column:created_at;type:timestamptz;not null;default:now()"`
+	UpdatedAt             time.Time         `gorm:"column:updated_at;type:timestamptz;not null;default:now()"`
 }
 
 func (FoodNutritionDO) TableName() string { return "food_nutrition_library" }
@@ -487,12 +490,15 @@ type PackagedFoodAliasDO struct {
 func (PackagedFoodAliasDO) TableName() string { return "packaged_food_aliases" }
 
 type FoodNutritionAliasDO struct {
-	ID              string    `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
-	FoodID          string    `gorm:"column:food_id;type:uuid;not null;index:idx_food_nutrition_aliases_food_id"`
-	AliasName       string    `gorm:"column:alias_name;type:text;not null"`
-	NormalizedAlias string    `gorm:"column:normalized_alias;type:text;not null;unique"`
-	CreatedAt       time.Time `gorm:"column:created_at;type:timestamptz;not null;default:now()"`
-	UpdatedAt       time.Time `gorm:"column:updated_at;type:timestamptz;not null;default:now()"`
+	ID               string            `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	FoodID           string            `gorm:"column:food_id;type:uuid;not null;index:idx_food_nutrition_aliases_food_id"`
+	AliasName        string            `gorm:"column:alias_name;type:text;not null"`
+	NormalizedAlias  string            `gorm:"column:normalized_alias;type:text;not null;unique"`
+	MatchStatus      string            `gorm:"column:match_status;type:text;not null;default:'candidate_only';index:idx_food_nutrition_aliases_match_status"`
+	ApprovalEvidence datatypes.JSONMap `gorm:"column:approval_evidence;type:jsonb;not null;default:'{}'::jsonb"`
+	ReviewedAt       *time.Time        `gorm:"column:reviewed_at;type:timestamptz"`
+	CreatedAt        time.Time         `gorm:"column:created_at;type:timestamptz;not null;default:now()"`
+	UpdatedAt        time.Time         `gorm:"column:updated_at;type:timestamptz;not null;default:now()"`
 }
 
 func (FoodNutritionAliasDO) TableName() string { return "food_nutrition_aliases" }
