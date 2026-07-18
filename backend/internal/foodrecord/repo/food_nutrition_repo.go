@@ -40,6 +40,20 @@ type SearchCandidate struct {
 	Score       float64
 }
 
+type NutritionEmbeddingSource struct {
+	IdentityKey   string
+	FoodID        string
+	SourceType    string
+	SourceID      string
+	EmbeddingText string
+}
+
+type NutritionEmbeddingIndexRow struct {
+	IdentityKey    string
+	FoodID         string
+	EmbeddingBytes []byte
+}
+
 type PackagedResolveResult struct {
 	Food        *domain.PackagedFood
 	Status      string
@@ -1669,6 +1683,140 @@ func (r *FoodNutritionRepo) SearchCandidates(ctx context.Context, query string, 
 		candidates = candidates[:limit]
 	}
 	return candidates, nil
+}
+
+// ListNutritionEmbeddingSources returns only trusted rows and non-blocked
+// aliases. Aliases remain recall hints; their status never upgrades them to an
+// exact nutrition match.
+func (r *FoodNutritionRepo) ListNutritionEmbeddingSources(ctx context.Context) ([]NutritionEmbeddingSource, error) {
+	var foods []domain.FoodNutrition
+	if err := r.db.WithContext(ctx).
+		Where("is_active = ? AND quality_tier IN ?", true, []string{domain.NutritionQualityAuthoritative, domain.NutritionQualityLegacyCurated}).
+		Order("id ASC").
+		Find(&foods).Error; err != nil {
+		return nil, err
+	}
+	sources := make([]NutritionEmbeddingSource, 0, len(foods)*2)
+	for _, food := range foods {
+		name := strings.TrimSpace(food.CanonicalName)
+		if name == "" {
+			continue
+		}
+		sources = append(sources, NutritionEmbeddingSource{
+			IdentityKey:   "canonical:" + food.ID,
+			FoodID:        food.ID,
+			SourceType:    "canonical",
+			SourceID:      food.ID,
+			EmbeddingText: name,
+		})
+	}
+	type aliasSourceRow struct {
+		ID            string `gorm:"column:id"`
+		FoodID        string `gorm:"column:food_id"`
+		AliasName     string `gorm:"column:alias_name"`
+		CanonicalName string `gorm:"column:canonical_name"`
+	}
+	var aliases []aliasSourceRow
+	if err := r.db.WithContext(ctx).
+		Table("food_nutrition_aliases AS aliases").
+		Select("aliases.id, aliases.food_id, aliases.alias_name, foods.canonical_name").
+		Joins("JOIN food_nutrition_library AS foods ON foods.id = aliases.food_id").
+		Where("foods.is_active = ? AND foods.quality_tier IN ?", true, []string{domain.NutritionQualityAuthoritative, domain.NutritionQualityLegacyCurated}).
+		Where("aliases.match_status <> ?", domain.NutritionAliasBlocked).
+		Order("aliases.id ASC").
+		Find(&aliases).Error; err != nil {
+		return nil, err
+	}
+	for _, alias := range aliases {
+		name := strings.TrimSpace(alias.AliasName)
+		if name == "" || strings.TrimSpace(alias.ID) == "" || strings.TrimSpace(alias.FoodID) == "" {
+			continue
+		}
+		sources = append(sources, NutritionEmbeddingSource{
+			IdentityKey:   "alias:" + alias.ID,
+			FoodID:        alias.FoodID,
+			SourceType:    "alias",
+			SourceID:      alias.ID,
+			EmbeddingText: name,
+		})
+	}
+	return sources, nil
+}
+
+func (r *FoodNutritionRepo) ListNutritionEmbeddingHashes(ctx context.Context, model string, dimensions int) (map[string]string, error) {
+	type row struct {
+		IdentityKey string `gorm:"column:identity_key"`
+		ContentHash string `gorm:"column:content_hash"`
+	}
+	var rows []row
+	if err := r.db.WithContext(ctx).
+		Table((&domain.FoodNutritionEmbedding{}).TableName()).
+		Select("identity_key, content_hash").
+		Where("embedding_model = ? AND embedding_dimensions = ?", strings.TrimSpace(model), dimensions).
+		Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	out := make(map[string]string, len(rows))
+	for _, item := range rows {
+		out[item.IdentityKey] = item.ContentHash
+	}
+	return out, nil
+}
+
+func (r *FoodNutritionRepo) UpsertNutritionEmbeddings(ctx context.Context, rows []domain.FoodNutritionEmbedding) error {
+	if len(rows) == 0 {
+		return nil
+	}
+	return r.db.WithContext(ctx).Clauses(clause.OnConflict{
+		Columns: []clause.Column{{Name: "identity_key"}, {Name: "embedding_model"}, {Name: "embedding_dimensions"}},
+		DoUpdates: clause.AssignmentColumns([]string{
+			"food_id", "source_type", "source_id", "embedding_text", "content_hash", "embedding_bytes", "is_active", "updated_at",
+		}),
+	}).CreateInBatches(rows, 100).Error
+}
+
+func (r *FoodNutritionRepo) LoadNutritionEmbeddingIndex(ctx context.Context, model string, dimensions int) ([]NutritionEmbeddingIndexRow, error) {
+	type row struct {
+		IdentityKey    string `gorm:"column:identity_key"`
+		FoodID         string `gorm:"column:food_id"`
+		EmbeddingBytes []byte `gorm:"column:embedding_bytes"`
+	}
+	var rows []row
+	if err := r.db.WithContext(ctx).
+		Table("food_nutrition_embeddings AS embeddings").
+		Select("embeddings.identity_key, embeddings.food_id, embeddings.embedding_bytes").
+		Joins("JOIN food_nutrition_library AS foods ON foods.id = embeddings.food_id").
+		Joins("LEFT JOIN food_nutrition_aliases AS aliases ON embeddings.source_type = 'alias' AND aliases.id = embeddings.source_id").
+		Where("embeddings.is_active = ? AND embeddings.embedding_model = ? AND embeddings.embedding_dimensions = ?", true, strings.TrimSpace(model), dimensions).
+		Where("foods.is_active = ? AND foods.quality_tier IN ?", true, []string{domain.NutritionQualityAuthoritative, domain.NutritionQualityLegacyCurated}).
+		Where("embeddings.source_type = 'canonical' OR (aliases.id IS NOT NULL AND aliases.match_status <> ?)", domain.NutritionAliasBlocked).
+		Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	out := make([]NutritionEmbeddingIndexRow, 0, len(rows))
+	for _, item := range rows {
+		out = append(out, NutritionEmbeddingIndexRow(item))
+	}
+	return out, nil
+}
+
+func (r *FoodNutritionRepo) FindNutritionFoodsByIDs(ctx context.Context, foodIDs []string) (map[string]domain.FoodNutrition, error) {
+	if len(foodIDs) == 0 {
+		return map[string]domain.FoodNutrition{}, nil
+	}
+	var foods []domain.FoodNutrition
+	if err := r.db.WithContext(ctx).
+		Where("is_active = ? AND id IN ?", true, foodIDs).
+		Find(&foods).Error; err != nil {
+		return nil, err
+	}
+	out := make(map[string]domain.FoodNutrition, len(foods))
+	for _, food := range foods {
+		if isCandidateMatchEligibleNutritionFood(food) {
+			out[food.ID] = food
+		}
+	}
+	return out, nil
 }
 
 func (r *FoodNutritionRepo) GetUnresolvedTop(ctx context.Context, limit int) ([]domain.FoodUnresolvedLog, error) {

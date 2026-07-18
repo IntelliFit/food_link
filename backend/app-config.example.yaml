@@ -57,6 +57,12 @@ external:
   doubao_api_key: ""
   doubao_web_search_api_key: ""
   doubao_base_url: "https://ark.cn-beijing.volces.com/api/v3"
+  # 营养库语义召回。密钥只放 Apollo / 环境变量，向量只用于候选召回，不能直接复用营养。
+  nutrition_embedding_enabled: false
+  nutrition_embedding_api_key: ""
+  nutrition_embedding_base_url: "https://yunwu.ai/v1"
+  nutrition_embedding_model: "text-embedding-3-large"
+  nutrition_embedding_dimensions: 1024
 
 wechat:
   mini_program:

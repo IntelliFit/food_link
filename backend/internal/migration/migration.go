@@ -30,6 +30,9 @@ func AutoMigrate(ctx context.Context, db *gorm.DB, schema string) error {
 	if err := ensureNutritionQualityConstraints(ctx, db); err != nil {
 		return err
 	}
+	if err := ensureNutritionEmbeddingConstraints(ctx, db); err != nil {
+		return err
+	}
 	if err := ensureIndexes(ctx, db); err != nil {
 		return err
 	}
@@ -130,6 +133,30 @@ func MigrateNutritionQuality(ctx context.Context, db *gorm.DB, schema string) er
 		return err
 	}
 	return ensureNutritionQualityBackfill(ctx, db)
+}
+
+// MigrateNutritionEmbeddings applies only the semantic-retrieval storage. It
+// intentionally avoids every unrelated migration in a dirty worktree.
+func MigrateNutritionEmbeddings(ctx context.Context, db *gorm.DB, schema string) error {
+	if err := prepareSchema(ctx, db, schema); err != nil {
+		return err
+	}
+	if err := db.WithContext(ctx).AutoMigrate(&migrationdo.FoodNutritionEmbeddingDO{}); err != nil {
+		return fmt.Errorf("auto migrate nutrition embeddings: %w", err)
+	}
+	return ensureNutritionEmbeddingConstraints(ctx, db)
+}
+
+func ensureNutritionEmbeddingConstraints(ctx context.Context, db *gorm.DB) error {
+	for _, statement := range []string{
+		dropAndAddCheck("food_nutrition_embeddings", "food_nutrition_embeddings_source_type_check", `source_type = ANY (ARRAY['canonical'::text,'alias'::text])`),
+		dropAndAddCheck("food_nutrition_embeddings", "food_nutrition_embeddings_dimensions_check", `embedding_dimensions > 0 AND embedding_dimensions <= 4096`),
+	} {
+		if err := db.WithContext(ctx).Exec(statement).Error; err != nil {
+			return fmt.Errorf("ensure nutrition embedding constraint: %w", err)
+		}
+	}
+	return nil
 }
 
 func ensureNutritionQualityConstraints(ctx context.Context, db *gorm.DB) error {

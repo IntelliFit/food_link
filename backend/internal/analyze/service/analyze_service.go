@@ -66,6 +66,7 @@ const (
 	resolveFoodCandidateLimit       = 5
 	resolveFoodSemanticThreshold    = 0.97
 	resolveFoodSemanticTimeout      = 6 * time.Second
+	resolveFoodEmbeddingTimeout     = 4 * time.Second
 	kilojoulesPerKilocalorie        = 4.184
 )
 
@@ -80,13 +81,14 @@ type AnalyzeService struct {
 	doubaoWebSearchClient interface {
 		AnalyzeWithImagesWebSearch(context.Context, string, []string, DoubaoWebSearchOptions) (map[string]any, map[string]any, error)
 	}
-	imageProvider string
-	users         *authrepo.UserRepo
-	nutrition     NutritionResolver
-	deepseek      *DeepSeekNutritionEstimator
-	nutritionAI   nutritionFallbackEstimator
-	storage       *storage.Client
-	webSearcher   WebSearcher
+	imageProvider     string
+	users             *authrepo.UserRepo
+	nutrition         NutritionResolver
+	nutritionSemantic NutritionSemanticRetriever
+	deepseek          *DeepSeekNutritionEstimator
+	nutritionAI       nutritionFallbackEstimator
+	storage           *storage.Client
+	webSearcher       WebSearcher
 }
 
 type NutritionResolver interface {
@@ -97,6 +99,10 @@ type NutritionResolver interface {
 	EnsureNutritionAlias(context.Context, string, string) error
 	LogUnresolved(context.Context, string) error
 	UpsertDeepSeekNutrition(context.Context, string, map[string]any, ...string) (string, error)
+}
+
+type NutritionSemanticRetriever interface {
+	SearchCandidates(context.Context, []string, int) ([][]foodrecordrepo.SearchCandidate, error)
 }
 
 type nutritionFallbackEstimator interface {
@@ -136,6 +142,10 @@ func (s *AnalyzeService) ConfigureWebSearcher(searcher WebSearcher) {
 
 func (s *AnalyzeService) ConfigureNutritionResolver(resolver NutritionResolver) {
 	s.nutrition = resolver
+}
+
+func (s *AnalyzeService) ConfigureNutritionSemanticRetriever(retriever NutritionSemanticRetriever) {
+	s.nutritionSemantic = retriever
 }
 
 func (s *AnalyzeService) ConfigureNutritionFallbackEstimator(estimator interface {
@@ -5233,15 +5243,15 @@ func (s *AnalyzeService) applyDBFirstNutritionWithOptions(ctx context.Context, r
 		resolve, err := s.nutrition.ResolveFood(ctx, lookups[i].nutritionName)
 		if err != nil || resolve == nil || resolve.Food == nil {
 			if err == nil && strings.TrimSpace(lookups[i].nutritionName) != "" {
+				semanticQueries[index] = nutritionCandidateQuery{
+					QueryName:           lookups[i].nutritionName,
+					OriginalName:        name,
+					FoodState:           strings.TrimSpace(fmt.Sprintf("%v", firstNonNil(item["foodState"], item["food_state"]))),
+					WeightBasis:         strings.TrimSpace(fmt.Sprintf("%v", firstNonNil(item["weightBasis"], item["weight_basis"]))),
+					RecognitionEvidence: strings.TrimSpace(fmt.Sprintf("%v", firstNonNil(item["recognitionEvidence"], item["recognition_evidence"]))),
+				}
 				if candidates, candidateErr := s.nutrition.SearchCandidates(ctx, lookups[i].nutritionName, resolveFoodCandidateLimit); candidateErr == nil && len(candidates) > 0 {
 					semanticCandidates[index] = candidates
-					semanticQueries[index] = nutritionCandidateQuery{
-						QueryName:           lookups[i].nutritionName,
-						OriginalName:        name,
-						FoodState:           strings.TrimSpace(fmt.Sprintf("%v", firstNonNil(item["foodState"], item["food_state"]))),
-						WeightBasis:         strings.TrimSpace(fmt.Sprintf("%v", firstNonNil(item["weightBasis"], item["weight_basis"]))),
-						RecognitionEvidence: strings.TrimSpace(fmt.Sprintf("%v", firstNonNil(item["recognitionEvidence"], item["recognition_evidence"]))),
-					}
 				}
 			}
 			unresolvedCount++
@@ -5283,6 +5293,41 @@ func (s *AnalyzeService) applyDBFirstNutritionWithOptions(ctx context.Context, r
 			rows, err := s.estimateNutritionWithFallback(fallbackCtx, candidates, contextText)
 			resultCh <- nutritionFallbackResult{rows: rows, err: err}
 		}()
+	}
+
+	// Embedding recall is deliberately restricted to lexical misses. Exact
+	// matches and existing lexical Top5 candidates keep their current latency;
+	// only names with zero candidates pay this network call, in parallel with
+	// the fresh nutrition estimate already running above.
+	if s.nutritionSemantic != nil && !options.skipSemanticRerank && len(semanticQueries) > 0 {
+		missingIndices := make([]int, 0, len(semanticQueries))
+		for index := range semanticQueries {
+			if len(semanticCandidates[index]) == 0 {
+				missingIndices = append(missingIndices, index)
+			}
+		}
+		sort.Ints(missingIndices)
+		if len(missingIndices) > 0 {
+			queries := make([]string, 0, len(missingIndices))
+			for _, index := range missingIndices {
+				queries = append(queries, semanticQueries[index].QueryName)
+			}
+			embeddingCtx, embeddingCancel := context.WithTimeout(ctx, resolveFoodEmbeddingTimeout)
+			embeddingCandidates, embeddingErr := s.nutritionSemantic.SearchCandidates(embeddingCtx, queries, resolveFoodCandidateLimit)
+			embeddingCancel()
+			if embeddingErr != nil {
+				logger.Warn(ctx, "营养向量候选召回失败，保留原有回退链路",
+					logger.Err(embeddingErr),
+					slog.Int("query_count", len(queries)),
+				)
+			} else {
+				for position, index := range missingIndices {
+					if position < len(embeddingCandidates) && len(embeddingCandidates[position]) > 0 {
+						semanticCandidates[index] = embeddingCandidates[position]
+					}
+				}
+			}
+		}
 	}
 
 	if len(semanticCandidates) > 0 && !options.skipSemanticRerank {

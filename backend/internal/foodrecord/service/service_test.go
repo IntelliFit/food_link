@@ -821,6 +821,7 @@ func TestFoodRecordService_hydrateRecord_RemovesManualSourceFallbackWhenRealPhot
 		CanonicalName: "可乐",
 		ImagePath:     strPtr("nutrition/coke.jpg"),
 		KcalPer100g:   43,
+		QualityTier:   domain.NutritionQualityLegacyCurated,
 		IsActive:      true,
 	}).Error)
 
@@ -883,6 +884,7 @@ func TestFoodRecordService_List_HydratesManualSourceImages(t *testing.T) {
 		CanonicalName: "白米饭",
 		ImagePath:     strPtr("nutrition/rice.jpg"),
 		KcalPer100g:   151,
+		QualityTier:   domain.NutritionQualityLegacyCurated,
 		IsActive:      true,
 	}).Error)
 

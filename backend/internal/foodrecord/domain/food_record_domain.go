@@ -437,6 +437,27 @@ type FoodNutritionAlias struct {
 
 func (FoodNutritionAlias) TableName() string { return "food_nutrition_aliases" }
 
+// FoodNutritionEmbedding stores precomputed retrieval vectors separately from
+// nutrition facts. Vectors are candidate recall evidence only and never grant
+// permission to reuse a nutrition row without the analyze-layer identity gate.
+type FoodNutritionEmbedding struct {
+	ID                  string    `json:"id" gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+	IdentityKey         string    `json:"identityKey" gorm:"column:identity_key;type:text;not null;uniqueIndex:idx_food_nutrition_embeddings_identity_model,priority:1"`
+	FoodID              string    `json:"foodId" gorm:"column:food_id;type:uuid;not null;index:idx_food_nutrition_embeddings_food_id"`
+	SourceType          string    `json:"sourceType" gorm:"column:source_type;type:text;not null"`
+	SourceID            string    `json:"sourceId" gorm:"column:source_id;type:uuid;not null"`
+	EmbeddingText       string    `json:"embeddingText" gorm:"column:embedding_text;type:text;not null"`
+	ContentHash         string    `json:"contentHash" gorm:"column:content_hash;type:text;not null"`
+	EmbeddingModel      string    `json:"embeddingModel" gorm:"column:embedding_model;type:text;not null;uniqueIndex:idx_food_nutrition_embeddings_identity_model,priority:2"`
+	EmbeddingDimensions int       `json:"embeddingDimensions" gorm:"column:embedding_dimensions;type:integer;not null;uniqueIndex:idx_food_nutrition_embeddings_identity_model,priority:3"`
+	EmbeddingBytes      []byte    `json:"-" gorm:"column:embedding_bytes;type:bytea;not null"`
+	IsActive            bool      `json:"isActive" gorm:"column:is_active;type:boolean;not null;default:true;index:idx_food_nutrition_embeddings_active_model"`
+	CreatedAt           time.Time `json:"createdAt" gorm:"column:created_at;type:timestamptz;not null;default:now()"`
+	UpdatedAt           time.Time `json:"updatedAt" gorm:"column:updated_at;type:timestamptz;not null;default:now();index:idx_food_nutrition_embeddings_active_model"`
+}
+
+func (FoodNutritionEmbedding) TableName() string { return "food_nutrition_embeddings" }
+
 // FoodUnresolvedLog — table: food_unresolved_logs
 type FoodUnresolvedLog struct {
 	ID             string `gorm:"column:id" json:"id"`

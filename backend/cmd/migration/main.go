@@ -19,9 +19,16 @@ func main() {
 	timeout := flag.Duration("timeout", 5*time.Minute, "migration timeout")
 	onlyPapay := flag.Bool("only-papay", false, "only migrate WeChat automatic-renewal contracts")
 	onlyNutritionQuality := flag.Bool("only-nutrition-quality", false, "only migrate nutrition quality tiers and alias approval status")
+	onlyNutritionEmbeddings := flag.Bool("only-nutrition-embeddings", false, "only migrate nutrition semantic embedding storage")
 	flag.Parse()
-	if *onlyPapay && *onlyNutritionQuality {
-		log.Fatal("--only-papay 与 --only-nutrition-quality 不能同时使用")
+	selectedOnlyModes := 0
+	for _, selected := range []bool{*onlyPapay, *onlyNutritionQuality, *onlyNutritionEmbeddings} {
+		if selected {
+			selectedOnlyModes++
+		}
+	}
+	if selectedOnlyModes > 1 {
+		log.Fatal("--only-papay、--only-nutrition-quality 与 --only-nutrition-embeddings 不能同时使用")
 	}
 
 	cfg, resolvedDir, err := loadConfig(*configDir)
@@ -50,6 +57,8 @@ func main() {
 		migrateErr = migration.MigratePapayContracts(ctx, db, cfg.Database.Schema)
 	} else if *onlyNutritionQuality {
 		migrateErr = migration.MigrateNutritionQuality(ctx, db, cfg.Database.Schema)
+	} else if *onlyNutritionEmbeddings {
+		migrateErr = migration.MigrateNutritionEmbeddings(ctx, db, cfg.Database.Schema)
 	} else {
 		migrateErr = migration.AutoMigrate(ctx, db, cfg.Database.Schema)
 	}
@@ -66,6 +75,10 @@ func main() {
 	}
 	if *onlyNutritionQuality {
 		log.Printf("营养可信等级迁移完成: config_dir=%s schema=%s", resolvedDir, schema)
+		return
+	}
+	if *onlyNutritionEmbeddings {
+		log.Printf("营养向量存储迁移完成: config_dir=%s schema=%s", resolvedDir, schema)
 		return
 	}
 	log.Printf("数据库迁移完成: config_dir=%s schema=%s", resolvedDir, schema)

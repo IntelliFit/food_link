@@ -214,6 +214,22 @@ func New(cfg *config.Config) (*App, error) {
 	}
 	analyzeSvc.ConfigureImageProvider(cfg.External.LLMProvider)
 	analyzeSvc.ConfigureDeepSeekFallback(cfg.External.DeepSeekAPIKey, cfg.External.DeepSeekBaseURL)
+	if cfg.External.NutritionEmbeddingEnabled &&
+		strings.TrimSpace(cfg.External.NutritionEmbeddingAPIKey) != "" &&
+		strings.TrimSpace(cfg.External.NutritionEmbeddingBaseURL) != "" &&
+		strings.TrimSpace(cfg.External.NutritionEmbeddingModel) != "" &&
+		cfg.External.NutritionEmbeddingDimensions > 0 {
+		embeddingClient := foodrecordservice.NewOpenAIEmbeddingClient(
+			cfg.External.NutritionEmbeddingAPIKey,
+			cfg.External.NutritionEmbeddingBaseURL,
+			cfg.External.NutritionEmbeddingModel,
+			cfg.External.NutritionEmbeddingDimensions,
+			4*time.Second,
+		)
+		analyzeSvc.ConfigureNutritionSemanticRetriever(
+			foodrecordservice.NewNutritionSemanticRetriever(analyzeNutritionRepo, embeddingClient),
+		)
+	}
 	analyzeSvc.ConfigureStorage(storageClient)
 	frRepo := foodrecordrepo.NewFoodRecordRepo(db)
 

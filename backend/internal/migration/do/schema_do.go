@@ -503,6 +503,24 @@ type FoodNutritionAliasDO struct {
 
 func (FoodNutritionAliasDO) TableName() string { return "food_nutrition_aliases" }
 
+type FoodNutritionEmbeddingDO struct {
+	ID                  string    `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	IdentityKey         string    `gorm:"column:identity_key;type:text;not null;uniqueIndex:idx_food_nutrition_embeddings_identity_model,priority:1"`
+	FoodID              string    `gorm:"column:food_id;type:uuid;not null;index:idx_food_nutrition_embeddings_food_id"`
+	SourceType          string    `gorm:"column:source_type;type:text;not null"`
+	SourceID            string    `gorm:"column:source_id;type:uuid;not null"`
+	EmbeddingText       string    `gorm:"column:embedding_text;type:text;not null"`
+	ContentHash         string    `gorm:"column:content_hash;type:text;not null"`
+	EmbeddingModel      string    `gorm:"column:embedding_model;type:text;not null;uniqueIndex:idx_food_nutrition_embeddings_identity_model,priority:2"`
+	EmbeddingDimensions int       `gorm:"column:embedding_dimensions;type:integer;not null;uniqueIndex:idx_food_nutrition_embeddings_identity_model,priority:3"`
+	EmbeddingBytes      []byte    `gorm:"column:embedding_bytes;type:bytea;not null"`
+	IsActive            bool      `gorm:"column:is_active;type:boolean;not null;default:true;index:idx_food_nutrition_embeddings_active_model"`
+	CreatedAt           time.Time `gorm:"column:created_at;type:timestamptz;not null;default:now()"`
+	UpdatedAt           time.Time `gorm:"column:updated_at;type:timestamptz;not null;default:now();index:idx_food_nutrition_embeddings_active_model"`
+}
+
+func (FoodNutritionEmbeddingDO) TableName() string { return "food_nutrition_embeddings" }
+
 // FoodNutritionAliasCandidateDO stores proposals separately from the active alias
 // table. Runtime matching must never read this table before an administrator
 // approves a proposal.
@@ -1650,6 +1668,7 @@ func AllModels() []any {
 		&PackagedFoodDO{},
 		&PackagedFoodAliasDO{},
 		&FoodNutritionAliasDO{},
+		&FoodNutritionEmbeddingDO{},
 		&FoodNutritionAliasCandidateDO{},
 		&FoodUnresolvedLogDO{},
 		&CriticalSampleDO{},

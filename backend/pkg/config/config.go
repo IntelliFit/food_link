@@ -102,24 +102,29 @@ type StorageConfig struct {
 }
 
 type ExternalConfig struct {
-	AppID                 string `mapstructure:"appid"`
-	Secret                string `mapstructure:"secret"`
-	SupabaseURL           string `mapstructure:"supabase_url"`
-	SupabaseKey           string `mapstructure:"supabase_service_role_key"`
-	TiandituTK            string `mapstructure:"tianditu_tk"`
-	OfoxAIAPIKey          string `mapstructure:"ofoxai_api_key"`
-	OfoxAIBaseURL         string `mapstructure:"ofoxai_base_url"`
-	Gemini35APIKey        string `mapstructure:"gemini35_api_key"`
-	Gemini35BaseURL       string `mapstructure:"gemini35_base_url"`
-	Gemini35Model         string `mapstructure:"gemini35_model"`
-	LLMProvider           string `mapstructure:"llm_provider"`
-	DeepSeekAPIKey        string `mapstructure:"deepseek_api_key"`
-	DeepSeekBaseURL       string `mapstructure:"deepseek_base_url"`
-	DoubaoAPIKey          string `mapstructure:"doubao_api_key"`
-	DoubaoWebSearchAPIKey string `mapstructure:"doubao_web_search_api_key"`
-	DoubaoBaseURL         string `mapstructure:"doubao_base_url"`
-	DashScopeAPIKey       string `mapstructure:"dashscope_api_key"`
-	DashScopeBaseURL      string `mapstructure:"dashscope_base_url"`
+	AppID                        string `mapstructure:"appid"`
+	Secret                       string `mapstructure:"secret"`
+	SupabaseURL                  string `mapstructure:"supabase_url"`
+	SupabaseKey                  string `mapstructure:"supabase_service_role_key"`
+	TiandituTK                   string `mapstructure:"tianditu_tk"`
+	OfoxAIAPIKey                 string `mapstructure:"ofoxai_api_key"`
+	OfoxAIBaseURL                string `mapstructure:"ofoxai_base_url"`
+	Gemini35APIKey               string `mapstructure:"gemini35_api_key"`
+	Gemini35BaseURL              string `mapstructure:"gemini35_base_url"`
+	Gemini35Model                string `mapstructure:"gemini35_model"`
+	LLMProvider                  string `mapstructure:"llm_provider"`
+	DeepSeekAPIKey               string `mapstructure:"deepseek_api_key"`
+	DeepSeekBaseURL              string `mapstructure:"deepseek_base_url"`
+	DoubaoAPIKey                 string `mapstructure:"doubao_api_key"`
+	DoubaoWebSearchAPIKey        string `mapstructure:"doubao_web_search_api_key"`
+	DoubaoBaseURL                string `mapstructure:"doubao_base_url"`
+	DashScopeAPIKey              string `mapstructure:"dashscope_api_key"`
+	DashScopeBaseURL             string `mapstructure:"dashscope_base_url"`
+	NutritionEmbeddingEnabled    bool   `mapstructure:"nutrition_embedding_enabled"`
+	NutritionEmbeddingAPIKey     string `mapstructure:"nutrition_embedding_api_key"`
+	NutritionEmbeddingBaseURL    string `mapstructure:"nutrition_embedding_base_url"`
+	NutritionEmbeddingModel      string `mapstructure:"nutrition_embedding_model"`
+	NutritionEmbeddingDimensions int    `mapstructure:"nutrition_embedding_dimensions"`
 }
 
 type AppAuthConfig struct {
@@ -531,6 +536,21 @@ func applyLocalConfigOverrides(v *viper.Viper) error {
 	}
 	if fileCfg.External.DeepSeekBaseURL != "" {
 		v.Set("external.deepseek_base_url", fileCfg.External.DeepSeekBaseURL)
+	}
+	if fileV.IsSet("external.nutrition_embedding_enabled") {
+		v.Set("external.nutrition_embedding_enabled", fileCfg.External.NutritionEmbeddingEnabled)
+	}
+	if fileCfg.External.NutritionEmbeddingAPIKey != "" {
+		v.Set("external.nutrition_embedding_api_key", fileCfg.External.NutritionEmbeddingAPIKey)
+	}
+	if fileCfg.External.NutritionEmbeddingBaseURL != "" {
+		v.Set("external.nutrition_embedding_base_url", fileCfg.External.NutritionEmbeddingBaseURL)
+	}
+	if fileCfg.External.NutritionEmbeddingModel != "" {
+		v.Set("external.nutrition_embedding_model", fileCfg.External.NutritionEmbeddingModel)
+	}
+	if fileV.IsSet("external.nutrition_embedding_dimensions") {
+		v.Set("external.nutrition_embedding_dimensions", fileCfg.External.NutritionEmbeddingDimensions)
 	}
 	if fileV.IsSet("worker.id") {
 		v.Set("worker.id", fileCfg.Worker.ID)
@@ -1029,6 +1049,11 @@ var cloudConfigKeyAliases = map[string]string{
 	"DOUBAO_BASE_URL":                         "external.doubao_base_url",
 	"DASHSCOPE_API_KEY":                       "external.dashscope_api_key",
 	"DASHSCOPE_BASE_URL":                      "external.dashscope_base_url",
+	"NUTRITION_EMBEDDING_ENABLED":             "external.nutrition_embedding_enabled",
+	"NUTRITION_EMBEDDING_API_KEY":             "external.nutrition_embedding_api_key",
+	"NUTRITION_EMBEDDING_BASE_URL":            "external.nutrition_embedding_base_url",
+	"NUTRITION_EMBEDDING_MODEL":               "external.nutrition_embedding_model",
+	"NUTRITION_EMBEDDING_DIMENSIONS":          "external.nutrition_embedding_dimensions",
 	"WECHAT_PAY_APP_PAY_APP_ID":               "wechat.pay.app_pay_app_id",
 	"WECHAT_PAY_APP_ID":                       "wechat.pay.app_id",
 	"WECHAT_PAY_MCHID":                        "wechat.pay.mchid",
@@ -1161,6 +1186,9 @@ func trimExternalConfig(cfg *ExternalConfig) {
 	cfg.DoubaoBaseURL = strings.TrimSpace(cfg.DoubaoBaseURL)
 	cfg.DashScopeAPIKey = strings.TrimSpace(cfg.DashScopeAPIKey)
 	cfg.DashScopeBaseURL = strings.TrimSpace(cfg.DashScopeBaseURL)
+	cfg.NutritionEmbeddingAPIKey = strings.TrimSpace(cfg.NutritionEmbeddingAPIKey)
+	cfg.NutritionEmbeddingBaseURL = strings.TrimRight(strings.TrimSpace(cfg.NutritionEmbeddingBaseURL), "/")
+	cfg.NutritionEmbeddingModel = strings.TrimSpace(cfg.NutritionEmbeddingModel)
 }
 
 func trimAppAuthConfig(cfg *AppAuthConfig) {
@@ -1397,6 +1425,10 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("feedback_bot.enabled", false)
 	v.SetDefault("feedback_bot.project_key", "foodlink")
 	v.SetDefault("feedback_bot.timeout_seconds", 5)
+	v.SetDefault("external.nutrition_embedding_enabled", false)
+	v.SetDefault("external.nutrition_embedding_base_url", "https://yunwu.ai/v1")
+	v.SetDefault("external.nutrition_embedding_model", "text-embedding-3-large")
+	v.SetDefault("external.nutrition_embedding_dimensions", 1024)
 	v.SetDefault("ai_usage_pricing.default_text_model", "deepseek-v4-pro")
 	v.SetDefault("ai_usage_pricing.credits_per_cny", 25.0)
 	v.SetDefault("ai_usage_pricing.usd_to_cny", 7.25)
@@ -1449,6 +1481,11 @@ func bindLegacyEnv(v *viper.Viper) {
 	_ = v.BindEnv("external.doubao_base_url", "DOUBAO_BASE_URL")
 	_ = v.BindEnv("external.dashscope_api_key", "DASHSCOPE_API_KEY")
 	_ = v.BindEnv("external.dashscope_base_url", "DASHSCOPE_BASE_URL")
+	_ = v.BindEnv("external.nutrition_embedding_enabled", "NUTRITION_EMBEDDING_ENABLED")
+	_ = v.BindEnv("external.nutrition_embedding_api_key", "NUTRITION_EMBEDDING_API_KEY")
+	_ = v.BindEnv("external.nutrition_embedding_base_url", "NUTRITION_EMBEDDING_BASE_URL")
+	_ = v.BindEnv("external.nutrition_embedding_model", "NUTRITION_EMBEDDING_MODEL")
+	_ = v.BindEnv("external.nutrition_embedding_dimensions", "NUTRITION_EMBEDDING_DIMENSIONS")
 	_ = v.BindEnv("wechat.pay.app_pay_app_id", "WECHAT_PAY_APP_PAY_APP_ID")
 	_ = v.BindEnv("wechat.pay.app_id", "WECHAT_PAY_APP_ID")
 	_ = v.BindEnv("wechat.pay.mchid", "WECHAT_PAY_MCHID")
