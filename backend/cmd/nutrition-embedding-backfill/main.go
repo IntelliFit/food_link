@@ -100,6 +100,10 @@ func main() {
 		client := foodrecordservice.NewOpenAIEmbeddingClient(apiKey, baseURL, model, dimensions, *timeout)
 		retriever := foodrecordservice.NewNutritionSemanticRetriever(repo, client)
 		probeCtx, probeCancel := context.WithTimeout(ctx, *timeout)
+		if warmErr := retriever.Warm(probeCtx); warmErr != nil {
+			probeCancel()
+			log.Fatalf("营养向量索引探针预热失败: %v", warmErr)
+		}
 		results, probeErr := retriever.SearchCandidates(probeCtx, queries, 5)
 		probeCancel()
 		if probeErr != nil {

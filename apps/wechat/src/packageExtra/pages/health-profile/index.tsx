@@ -1,7 +1,7 @@
-import { View, Text, Input, Textarea, Image, Button as NativeButton } from '@tarojs/components'
+import { View, Text, Input, Textarea, Image, Form, Button as NativeButton, type FormProps } from '@tarojs/components'
 import { Button } from '@taroify/core'
 import '@taroify/core/button/style'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Taro from '@tarojs/taro'
 import {
   getHealthProfile,
@@ -13,14 +13,21 @@ import {
   imageToBase64,
   showUnifiedApiError,
   type HealthProfileUpdateRequest,
+  type OnboardingStatus,
 } from '../../../utils/api'
-import { processChooseAvatarSelection, ensureAvatarUploadedForSave } from '../../../utils/new-user-profile-form'
+import { processChooseAvatarSelection, ensureAvatarUploadedForSave, getInitialRegistrationAvatar } from '../../../utils/new-user-profile-form'
 import { withAuth } from '../../../utils/withAuth'
+import {
+  ONBOARDING_HOME_RECORD_GUIDE_KEY,
+  requestHomeRecordGuideAfterOnboarding,
+  shouldOfferOnboardingGuide,
+} from '../../../utils/onboarding-guide-storage'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
 import { chooseImageWithPrivacy, isPrivacyAuthorizeError, showPrivacyAuthorizeFailure } from '../../../utils/weapp-privacy'
 import { defaultAvatarImage } from '../../../utils/default-user-profile'
 import { formatBodyMetric } from '../../../utils/number-format'
+import CustomNavBar from '../../../components/CustomNavBar'
 
 import './index.scss'
 import HeightRuler from '../../../components/HeightRuler'
@@ -124,6 +131,9 @@ function HealthProfilePage() {
   const [reportImageUrls, setReportImageUrls] = useState<string[]>([])
   const [avatarUrl, setAvatarUrl] = useState<string>('')
   const [nickname, setNickname] = useState<string>('')
+  const [onboardingStatus, setOnboardingStatus] = useState<OnboardingStatus>('pending')
+  const initialIdentityRef = useRef({ avatar: '', nickname: '' })
+  const profileFormActionRef = useRef<'next' | 'skip'>('next')
 
   const [customMedical, setCustomMedical] = useState<string>('') // 自定义病史输入
   const [customMedicalList, setCustomMedicalList] = useState<string[]>([]) // 用户添加的自定义病史列表
@@ -139,16 +149,29 @@ function HealthProfilePage() {
 
   const [healthNotes, setHealthNotes] = useState<string>('') // 用户自己文字补充自己身体的特殊情况和问题
 
+  const requestInitialHomeGuideIfNeeded = () => {
+    if (shouldOfferOnboardingGuide(ONBOARDING_HOME_RECORD_GUIDE_KEY)) {
+      requestHomeRecordGuideAfterOnboarding()
+    }
+  }
+
   const loadProfile = async () => {
+    let profile: Awaited<ReturnType<typeof getHealthProfile>> | null = null
     try {
-      const [profile, userInfo] = await Promise.all([
+      const [loadedProfile, userInfo] = await Promise.all([
         getHealthProfile(),
         getUserProfile().catch(() => null),
       ])
+      profile = loadedProfile
       if (userInfo) {
-        setAvatarUrl(userInfo.avatar || defaultAvatarImage)
-        setNickname(userInfo.nickname || '')
+        const initialAvatar = getInitialRegistrationAvatar(userInfo.avatar)
+        const initialNickname = userInfo.nickname || ''
+        initialIdentityRef.current = { avatar: initialAvatar, nickname: initialNickname }
+        setAvatarUrl(initialAvatar)
+        setNickname(initialNickname)
+        setOnboardingStatus(userInfo.onboarding_status || (userInfo.onboarding_completed === true ? 'completed' : 'pending'))
       } else {
+        initialIdentityRef.current = { avatar: defaultAvatarImage, nickname: '' }
         setAvatarUrl(defaultAvatarImage)
       }
       if (profile.gender) setGender(profile.gender)
@@ -197,7 +220,12 @@ function HealthProfilePage() {
     } catch (err: any) {
       await showUnifiedApiError(err, '获取档案失败')
     } finally {
-      setCurrentStep(0)
+      const draftStep = Number(profile?.onboarding_draft_step)
+      setCurrentStep(
+        Number.isInteger(draftStep) && draftStep >= 0 && draftStep < TOTAL_STEPS
+          ? draftStep
+          : 0
+      )
       setLoading(false)
     }
   }
@@ -210,9 +238,33 @@ function HealthProfilePage() {
     loadProfile()
   }, [])
 
-  const goNext = () => {
+  const buildDraftRequest = (nextStep: number): HealthProfileUpdateRequest => ({
+    onboarding_status: 'pending',
+    onboarding_draft_step: nextStep,
+    gender: gender || undefined,
+    birthday: birthday || undefined,
+    height: isHeightValid ? effectiveHeight : undefined,
+    weight: isWeightValid ? effectiveWeight : undefined,
+    diet_goal: dietGoal || undefined,
+    activity_level: activityLevel || undefined,
+    daily_life_activity_level: activityLevel || undefined,
+    medical_history: [...medicalHistory.filter((value) => value !== 'none'), ...selectedCustomMedical],
+    diet_preference: dietPreference.filter((value) => value !== 'none'),
+    allergies: [...allergyList.filter((value) => value !== 'none'), ...selectedCustomAllergy],
+    health_notes: healthNotes || undefined,
+    routine_type: formatRoutineHours(routineHours) || undefined,
+    routine_sleep_hour: routineHours.sleepHour,
+    routine_wake_hour: routineHours.wakeHour,
+  })
+
+  const saveDraft = async (nextStep: number) => {
+    await updateHealthProfile(buildDraftRequest(nextStep))
+    setOnboardingStatus('pending')
+  }
+
+  const proceedToNext = async (profileNickname = nickname) => {
     if (currentStep >= TOTAL_STEPS - 1) return
-    if (!canProceed()) {
+    if (!canProceed(profileNickname)) {
       if (currentStep === 3 && height) {
         Taro.showToast({ title: '请输入 100～250 之间的身高 (cm)', icon: 'none' })
       } else if (currentStep === 4 && weight) {
@@ -224,8 +276,29 @@ function HealthProfilePage() {
       }
       return
     }
-    setCurrentStep((s) => s + 1)
+    const nextStep = currentStep + 1
+    setSaving(true)
+    try {
+      if (currentStep === 0) {
+        const normalizedNickname = profileNickname.trim()
+        if (normalizedNickname !== initialIdentityRef.current.nickname || avatarUrl !== initialIdentityRef.current.avatar) {
+          const finalAvatar = await ensureAvatarUploadedForSave(avatarUrl)
+          await updateUserInfo({ nickname: normalizedNickname, avatar: finalAvatar || undefined })
+          initialIdentityRef.current = { avatar: finalAvatar || avatarUrl, nickname: normalizedNickname }
+          setAvatarUrl(finalAvatar || avatarUrl)
+          setNickname(normalizedNickname)
+        }
+      }
+      await saveDraft(nextStep)
+      setCurrentStep(nextStep)
+    } catch (error) {
+      await showUnifiedApiError(error, '保存健康档案草稿失败')
+    } finally {
+      setSaving(false)
+    }
   }
+
+  const goNext = () => proceedToNext()
 
   const goPrev = () => {
     if (currentStep <= 0) return
@@ -403,24 +476,94 @@ function HealthProfilePage() {
     setNickname(value)
   }
 
-  const handleUseWechatProfile = async () => {
+  const handleSaveAndExit = async () => {
+    if (saving) return
+    setSaving(true)
     try {
-      const res = await Taro.getUserProfile({ desc: '用于完善个人资料' })
-      const info = res.userInfo
-      if (info) {
-        if (info.avatarUrl) {
-          processChooseAvatarSelection(info.avatarUrl, setAvatarUrl)
-        }
-        if (info.nickName) {
-          setNickname(info.nickName)
-        }
+      await saveDraft(currentStep)
+      Taro.showToast({ title: '已保存，可稍后继续', icon: 'none' })
+      setTimeout(() => {
+        requestInitialHomeGuideIfNeeded()
+        Taro.switchTab({ url: '/pages/index/index' })
+      }, 300)
+    } catch (error) {
+      await showUnifiedApiError(error, '保存健康档案草稿失败')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handlePageBack = async () => {
+    if (onboardingStatus === 'completed') {
+      await Taro.navigateBack()
+      return
+    }
+    await handleSaveAndExit()
+  }
+
+  const getSubmittedNickname = (value?: unknown) => {
+    const submittedNickname = String(value || '').trim()
+    return submittedNickname || nickname.trim()
+  }
+
+  const handleProfileFormSubmit: FormProps['onSubmit'] = async (event) => {
+    const submittedNickname = getSubmittedNickname(event.detail.value?.nickname)
+    const action = profileFormActionRef.current
+    profileFormActionRef.current = 'next'
+
+    if (submittedNickname !== nickname) {
+      setNickname(submittedNickname)
+    }
+
+    if (action === 'skip') {
+      await handleSkipOnboarding(submittedNickname)
+      return
+    }
+
+    proceedToNext(submittedNickname)
+  }
+
+  const handleSkipOnboarding = async (submittedNickname?: string) => {
+    if (saving || onboardingStatus !== 'pending') return
+    const { confirm } = await Taro.showModal({
+      title: '稍后填写健康档案？',
+      content: '你仍可使用基础功能；补充档案后可获得更准确的营养目标和健康建议。',
+      confirmText: '稍后填写',
+      cancelText: '继续填写',
+    })
+    if (!confirm) return
+
+    setSaving(true)
+    try {
+      const normalizedNickname = getSubmittedNickname(submittedNickname)
+      const identityChanged =
+        normalizedNickname !== initialIdentityRef.current.nickname ||
+        avatarUrl !== initialIdentityRef.current.avatar
+      if (identityChanged) {
+        const finalAvatar = await ensureAvatarUploadedForSave(avatarUrl)
+        await updateUserInfo({
+          nickname: normalizedNickname,
+          avatar: finalAvatar || undefined,
+        })
+        const cachedUser = Taro.getStorageSync('userInfo') || {}
+        Taro.setStorageSync('userInfo', {
+          ...cachedUser,
+          avatar: finalAvatar,
+          name: normalizedNickname,
+          nickname: normalizedNickname,
+        })
       }
-    } catch (err: any) {
-      if (err?.errMsg?.includes('cancel') || err?.errMsg?.includes('deny') || err?.errMsg?.includes('fail auth')) {
-        return
-      }
-      console.error('获取微信资料失败:', err)
-      Taro.showToast({ title: '获取微信资料失败', icon: 'none' })
+      await updateHealthProfile({ onboarding_status: 'skipped' })
+      setOnboardingStatus('skipped')
+      Taro.showToast({ title: identityChanged ? '个人资料已保存，可稍后补充健康档案' : '可稍后在我的中填写', icon: 'none' })
+      setTimeout(() => {
+        requestInitialHomeGuideIfNeeded()
+        Taro.switchTab({ url: '/pages/index/index' })
+      }, 500)
+    } catch (error: any) {
+      await showUnifiedApiError(error, '暂不填写失败')
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -437,10 +580,10 @@ function HealthProfilePage() {
   const isHeightValid = Number.isFinite(effectiveHeight) && effectiveHeight >= 100 && effectiveHeight <= 250
   const isWeightValid = Number.isFinite(effectiveWeight) && effectiveWeight >= 30 && effectiveWeight <= 200
 
-  const canProceed = () => {
+  const canProceed = (profileNickname = nickname) => {
     switch (currentStep) {
       case 0:
-        return !!avatarUrl && !!nickname.trim()
+        return !!avatarUrl && !!profileNickname.trim()
       case 1:
         return !!gender
       case 2:
@@ -521,6 +664,7 @@ function HealthProfilePage() {
       }
       Taro.showToast({ title: '保存成功', icon: 'success' })
       setTimeout(() => {
+        requestInitialHomeGuideIfNeeded()
         Taro.switchTab({ url: '/pages/profile/index' })
       }, 1500)
     } catch (e: any) {
@@ -569,6 +713,13 @@ function HealthProfilePage() {
 
   return (
     <View className='health-profile-page'>
+      <CustomNavBar
+        title='健康档案'
+        color='#1a1a1a'
+        background='#ffffff'
+        showBack
+        onBack={handlePageBack}
+      />
       {/* 进度条 */}
       <View className='progress-wrap'>
         <View className='progress-dots'>
@@ -598,7 +749,8 @@ function HealthProfilePage() {
           <View className='card step-card profile-step-card'>
             <Text className='step-card-title'>完善资料</Text>
             <Text className='step-card-subtitle'>设置头像和昵称，让朋友更容易认出你。</Text>
-            <View className='profile-form-body'>
+            <Form className='profile-native-form' onSubmit={handleProfileFormSubmit}>
+              <View className='profile-form-body'>
               <View className='profile-avatar-choose-wrapper'>
                 {avatarUrl ? (
                   <Image src={avatarUrl} className='profile-avatar-image' mode='aspectFill' />
@@ -617,29 +769,43 @@ function HealthProfilePage() {
                 <Text className='profile-nickname-label'>昵称</Text>
                 <Input
                   className='profile-nickname-input'
+                  name='nickname'
                   type='nickname'
                   placeholder='请输入昵称'
                   value={nickname}
-                  onInput={(e) => handleNicknameInput(e.detail.value)}
+                  onInput={(event) => {
+                    const value = event.detail.value
+                    handleNicknameInput(value)
+                    return value
+                  }}
+                  onBlur={(event) => handleNicknameInput(event.detail.value)}
+                  onConfirm={(event) => handleNicknameInput(event.detail.value)}
                 />
               </View>
-
+              </View>
+              <View className='card-footer card-footer-single profile-step-footer'>
               <Button
-                className='profile-wechat-fill-btn'
-                variant='outlined'
+                block
                 color='primary'
                 shape='round'
-                block
-                onClick={handleUseWechatProfile}
+                formType='submit'
+                className={`card-next-btn ${avatarUrl ? 'ready' : ''}`}
+                onClick={() => { profileFormActionRef.current = 'next' }}
+                disabled={!avatarUrl}
               >
-                一键使用微信头像和昵称
-              </Button>
-            </View>
-            <View className='card-footer card-footer-single'>
-              <Button block color='primary' shape='round' className={`card-next-btn ${canProceed() ? 'ready' : ''}`} onClick={goNext} disabled={!canProceed()}>
                 下一步 <Text className='iconfont icon-right' />
               </Button>
-            </View>
+              {onboardingStatus === 'pending' && (
+                <NativeButton
+                  className='profile-skip-onboarding'
+                  formType='submit'
+                  onClick={() => { profileFormActionRef.current = 'skip' }}
+                >
+                  稍后填写
+                </NativeButton>
+              )}
+              </View>
+            </Form>
           </View>
 
           {/* Step 1: 性别 */}
@@ -662,7 +828,8 @@ function HealthProfilePage() {
                 <Text className='option-label'>女</Text>
               </View>
             </View>
-            <View className='card-footer card-footer-single'>
+            <View className='card-footer'>
+              <View className='card-prev-btn' onClick={goPrev}><Text className='card-prev-arrow iconfont icon-left' />上一步</View>
               <Button block color='primary' shape='round' className={`card-next-btn ${gender ? 'ready' : ''}`} onClick={goNext} disabled={!gender}>
                 下一步 <Text className='iconfont icon-right' />
               </Button>
@@ -1090,6 +1257,11 @@ function HealthProfilePage() {
           </View>
         </View>
       </View>
+      {currentStep > 0 && currentStep < TOTAL_STEPS - 1 && (
+        <View className='health-profile-save-exit' onClick={handleSaveAndExit}>
+          保存并稍后继续
+        </View>
+      )}
     </View>
   )
 }

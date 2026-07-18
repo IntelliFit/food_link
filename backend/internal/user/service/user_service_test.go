@@ -32,6 +32,8 @@ func setupTestDB(t *testing.T) *gorm.DB {
 		health_condition TEXT,
 		create_time TIMESTAMP,
 		onboarding_completed BOOLEAN,
+		onboarding_status TEXT,
+		onboarding_draft_step INTEGER,
 		height REAL,
 		weight REAL,
 		birthday TEXT,

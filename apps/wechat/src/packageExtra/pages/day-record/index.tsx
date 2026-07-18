@@ -375,8 +375,13 @@ function DayRecordPage() {
           }
 
           const nextItems = currentItems.filter((_, index) => index !== foodIndex)
+          const payloadItems = nextItems.map((item) => ({
+            ...item,
+            image_path: item.image_path ?? undefined,
+            image_paths: item.image_paths ?? undefined,
+          }))
           await updateFoodRecord(meal.id, {
-            items: nextItems,
+            items: payloadItems,
             ...summarizeRecordItems(nextItems),
           })
           notifyFoodRecordsChanged()

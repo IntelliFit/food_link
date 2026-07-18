@@ -1685,6 +1685,25 @@ func (r *FoodNutritionRepo) SearchCandidates(ctx context.Context, query string, 
 	return candidates, nil
 }
 
+// FilterNutritionCandidatesForQuery reapplies deterministic identity/physical
+// safety rules to candidates produced outside the lexical repository search.
+func FilterNutritionCandidatesForQuery(query string, candidates []SearchCandidate, limit int) []SearchCandidate {
+	if limit <= 0 {
+		limit = 5
+	}
+	out := make([]SearchCandidate, 0, len(candidates))
+	for _, candidate := range candidates {
+		if !isCandidateMatchEligibleNutritionFood(candidate.Food) || isImplausibleNutritionFoodMatch(query, candidate.Food) {
+			continue
+		}
+		out = append(out, candidate)
+		if len(out) == limit {
+			break
+		}
+	}
+	return out
+}
+
 // ListNutritionEmbeddingSources returns only trusted rows and non-blocked
 // aliases. Aliases remain recall hints; their status never upgrades them to an
 // exact nutrition match.
@@ -1912,6 +1931,10 @@ func nutritionQueryVariants(raw string) []nutritionQueryVariant {
 			weight float64
 		}{cleaned, 0.92})
 		for _, stripped := range stripNutritionPreparationWords(cleaned) {
+			strippedNormalized := normalizeFoodName(stripped)
+			if containsCJK(strippedNormalized) && runeCount(strippedNormalized) < 2 {
+				continue
+			}
 			if stripped != "" && stripped != cleaned {
 				candidates = append(candidates, struct {
 					text   string

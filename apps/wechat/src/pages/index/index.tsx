@@ -13,6 +13,7 @@ import {
   getShareQrEnvVersion,
   getUnlimitedQRCode,
   getFriendInviteProfile,
+  getHealthProfile,
   getSharedFoodRecord,
   getFoodRecordById,
   getPetSummary,
@@ -99,8 +100,10 @@ import { useAnimatedNumber, useAnimatedProgress } from './hooks'
 import { TargetEditor, GreetingSection, DateSelector, StatsEntry, RecordMenu, MealActionSheet, MealRecordsDialog, MealRecordEditModal, MealRecordPosterModal, DietRecommendationSheet, MicrosSection, type MealPosterSharePayload } from './components'
 import OnboardingGuide from '../../components/OnboardingGuide'
 import { PetAvatar } from '../../components/PetAvatar'
+import { isHealthProfileReminderSnoozed, snoozeHealthProfileReminder } from '../../utils/health-profile-reminder'
 import {
   ONBOARDING_HOME_RECORD_GUIDE_KEY,
+  consumeHomeRecordGuideAfterOnboarding,
   shouldOfferOnboardingGuide,
 } from '../../utils/onboarding-guide-storage'
 import { HOME_RECORD_ONBOARDING_STEPS } from './home-onboarding-steps'
@@ -840,6 +843,8 @@ function IndexPage() {
   // 记录菜单弹窗状态
   const [showRecordMenu, setShowRecordMenu] = React.useState(false)
   const [showHomeOnboardingGuide, setShowHomeOnboardingGuide] = React.useState(false)
+  const [homeGuideTransitionPending, setHomeGuideTransitionPending] = React.useState(false)
+  const homeGuideTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
   const [dismissedBackfillDates, setDismissedBackfillDates] = React.useState<string[]>(() => getDismissedBackfillDates())
   const selectedDateRef = React.useRef(selectedDate)
   const commitSelectedDate = React.useCallback((date: string) => {
@@ -865,6 +870,21 @@ function IndexPage() {
   }, [])
 
   /** 首页仪表盘返回的成就（连续记录 / 全绿天数） */
+  const dismissHealthProfilePrompt = React.useCallback(() => {
+    snoozeHealthProfileReminder()
+    setShowHealthProfilePrompt(false)
+  }, [])
+
+  const closeHomeOnboardingGuide = React.useCallback(() => {
+    setShowHomeOnboardingGuide(false)
+    setHomeGuideTransitionPending(false)
+  }, [])
+
+  const openHealthProfileFromPrompt = React.useCallback(() => {
+    setShowHealthProfilePrompt(false)
+    Taro.navigateTo({ url: extraPkgUrl('/pages/health-profile/index') })
+  }, [])
+
   const [homeAchievement, setHomeAchievement] = React.useState<HomeAchievement>(initialLocalSnapshot?.achievement || { streak_days: 0, green_days: 0 })
   const [dailyPosterGenerating, setDailyPosterGenerating] = React.useState(false)
   const [dailyPosterImageUrl, setDailyPosterImageUrl] = React.useState<string | null>(null)
@@ -873,6 +893,7 @@ function IndexPage() {
   const [dietRecScene, setDietRecScene] = React.useState<DietRecommendationScene>('eat_out')
   const [dietRecLoading, setDietRecLoading] = React.useState(false)
   const [dietRecResult, setDietRecResult] = React.useState<DietRecommendationResult | null>(null)
+  const [showHealthProfilePrompt, setShowHealthProfilePrompt] = React.useState(false)
   const dietRecRequestSeqRef = React.useRef(0)
 
   const loadRewardHintData = React.useCallback(async () => {
@@ -916,6 +937,12 @@ function IndexPage() {
   React.useEffect(() => {
     showDailyPosterModalRef.current = showDailyPosterModal
   }, [showDailyPosterModal])
+
+  React.useEffect(() => () => {
+    if (homeGuideTimerRef.current) {
+      clearTimeout(homeGuideTimerRef.current)
+    }
+  }, [])
 
   React.useEffect(() => {
     const handleHiddenChanged = (hidden?: boolean) => {
@@ -1249,6 +1276,18 @@ function IndexPage() {
 
   useDidShow(() => {
     setPetHidden(getStoredPetHidden())
+    if (getAccessToken()) {
+      void getHealthProfile()
+        .then((profile) => {
+          const status = profile.onboarding_status || (profile.onboarding_completed === true ? 'completed' : 'pending')
+          setShowHealthProfilePrompt(status !== 'completed' && !isHealthProfileReminderSnoozed())
+        })
+        .catch(() => {
+          // 档案提示为增强信息，读取失败不影响首页主链路。
+        })
+    } else {
+      setShowHealthProfilePrompt(false)
+    }
     const today = formatDateKey(new Date())
     const currentSelected = selectedDateRef.current
 
@@ -1257,10 +1296,20 @@ function IndexPage() {
     if (shouldShowRecordMenu) {
       Taro.removeStorageSync(HOME_RECORD_MENU_FLAG_KEY)
       openRecordMenuFromRequest()
-    } else if (shouldOfferOnboardingGuide(ONBOARDING_HOME_RECORD_GUIDE_KEY)) {
-      setShowHomeOnboardingGuide(true)
     } else {
-      setShowHomeOnboardingGuide(false)
+      const requestedAfterOnboarding = consumeHomeRecordGuideAfterOnboarding()
+      if (requestedAfterOnboarding || shouldOfferOnboardingGuide(ONBOARDING_HOME_RECORD_GUIDE_KEY)) {
+        if (homeGuideTimerRef.current) clearTimeout(homeGuideTimerRef.current)
+        setHomeGuideTransitionPending(requestedAfterOnboarding)
+        setShowHomeOnboardingGuide(false)
+        // switchTab 后等待首页布局完成，确保高亮区域可计算且首次落页不会漏掉引导。
+        homeGuideTimerRef.current = setTimeout(() => {
+          setShowHomeOnboardingGuide(true)
+          homeGuideTimerRef.current = null
+        }, requestedAfterOnboarding ? 350 : 0)
+      } else {
+        setShowHomeOnboardingGuide(false)
+      }
     }
 
     if (skipNextRefreshRef.current) {
@@ -3026,6 +3075,24 @@ function IndexPage() {
         )}
 
         {/* 日期选择器 */}
+        {showHealthProfilePrompt && !homeGuideTransitionPending && (
+          <View className='home-health-profile-prompt'>
+            <View className='home-health-profile-prompt__icon'>健</View>
+            <View className='home-health-profile-prompt__content' onClick={openHealthProfileFromPrompt}>
+              <Text className='home-health-profile-prompt__title'>完善健康档案，获得更贴合你的建议</Text>
+              <Text className='home-health-profile-prompt__desc'>每日目标、饮食分析会结合你的身体数据、过敏与饮食偏好。</Text>
+            </View>
+            <View className='home-health-profile-prompt__actions'>
+              <View className='home-health-profile-prompt__go' onClick={openHealthProfileFromPrompt}>
+                <Text>去完善</Text>
+              </View>
+              <View className='home-health-profile-prompt__dismiss' onClick={dismissHealthProfilePrompt}>
+                <Text>7天后提醒</Text>
+              </View>
+            </View>
+          </View>
+        )}
+
         <DateSelector
           cells={weekHeatmapCells}
           selectedDate={selectedDate}
@@ -3787,7 +3854,7 @@ function IndexPage() {
         visible={showHomeOnboardingGuide}
         steps={HOME_RECORD_ONBOARDING_STEPS}
         storageKey={ONBOARDING_HOME_RECORD_GUIDE_KEY}
-        onClose={() => setShowHomeOnboardingGuide(false)}
+        onClose={closeHomeOnboardingGuide}
         onBeforeNext={handleHomeGuideBeforeNext}
       />
 

@@ -226,9 +226,15 @@ func New(cfg *config.Config) (*App, error) {
 			cfg.External.NutritionEmbeddingDimensions,
 			4*time.Second,
 		)
-		analyzeSvc.ConfigureNutritionSemanticRetriever(
-			foodrecordservice.NewNutritionSemanticRetriever(analyzeNutritionRepo, embeddingClient),
-		)
+		nutritionSemanticRetriever := foodrecordservice.NewNutritionSemanticRetriever(analyzeNutritionRepo, embeddingClient)
+		analyzeSvc.ConfigureNutritionSemanticRetriever(nutritionSemanticRetriever)
+		go func() {
+			warmCtx, warmCancel := context.WithTimeout(context.Background(), 5*time.Minute)
+			defer warmCancel()
+			if err := nutritionSemanticRetriever.Warm(warmCtx); err != nil {
+				logger.Warn(context.Background(), "营养向量索引后台预热失败，运行时将使用原有回退链路", logger.Err(err))
+			}
+		}()
 	}
 	analyzeSvc.ConfigureStorage(storageClient)
 	frRepo := foodrecordrepo.NewFoodRecordRepo(db)

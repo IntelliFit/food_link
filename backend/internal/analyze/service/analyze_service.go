@@ -5071,6 +5071,7 @@ func (s *AnalyzeService) applyDBFirstNutritionWithOptions(ctx context.Context, r
 	fallbackCandidates := []UnresolvedNutritionCandidate{}
 	semanticCandidates := map[int][]foodrecordrepo.SearchCandidate{}
 	semanticQueries := map[int]nutritionCandidateQuery{}
+	semanticEmbeddingEligible := map[int]bool{}
 	resolvedCount := 0
 	unresolvedCount := 0
 	packagedResolutionTriggered := 0
@@ -5250,6 +5251,7 @@ func (s *AnalyzeService) applyDBFirstNutritionWithOptions(ctx context.Context, r
 					WeightBasis:         strings.TrimSpace(fmt.Sprintf("%v", firstNonNil(item["weightBasis"], item["weight_basis"]))),
 					RecognitionEvidence: strings.TrimSpace(fmt.Sprintf("%v", firstNonNil(item["recognitionEvidence"], item["recognition_evidence"]))),
 				}
+				semanticEmbeddingEligible[index] = !shouldResolvePackagedFoodForDBFirst(item, options.packagedResolverEnabled())
 				if candidates, candidateErr := s.nutrition.SearchCandidates(ctx, lookups[i].nutritionName, resolveFoodCandidateLimit); candidateErr == nil && len(candidates) > 0 {
 					semanticCandidates[index] = candidates
 				}
@@ -5302,7 +5304,7 @@ func (s *AnalyzeService) applyDBFirstNutritionWithOptions(ctx context.Context, r
 	if s.nutritionSemantic != nil && !options.skipSemanticRerank && len(semanticQueries) > 0 {
 		missingIndices := make([]int, 0, len(semanticQueries))
 		for index := range semanticQueries {
-			if len(semanticCandidates[index]) == 0 {
+			if len(semanticCandidates[index]) == 0 && semanticEmbeddingEligible[index] {
 				missingIndices = append(missingIndices, index)
 			}
 		}

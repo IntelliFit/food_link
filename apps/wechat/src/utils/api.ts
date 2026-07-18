@@ -1499,6 +1499,9 @@ export interface UserInfo {
   bmr?: number | null
   tdee?: number | null
   onboarding_completed?: boolean
+  /** 健康档案引导状态；旧后端未返回时由 onboarding_completed 兼容推断。 */
+  onboarding_status?: OnboardingStatus
+	  onboarding_draft_step?: number | null
   execution_mode?: ExecutionMode | null
   mode_set_by?: string | null
   mode_set_at?: string | null
@@ -1905,6 +1908,8 @@ export interface HealthCondition {
 }
 
 /** 健康档案（GET 返回） */
+export type OnboardingStatus = 'pending' | 'skipped' | 'completed'
+
 export interface HealthProfile {
   height?: number | null
   weight?: number | null
@@ -1915,6 +1920,8 @@ export interface HealthProfile {
   bmr?: number | null
   tdee?: number | null
   onboarding_completed?: boolean
+  onboarding_status?: OnboardingStatus
+  onboarding_draft_step?: number | null
   diet_goal?: string | null
   execution_mode?: ExecutionMode | null
   mode_set_by?: string | null
@@ -1926,6 +1933,10 @@ export interface HealthProfile {
 
 /** 提交健康档案问卷请求 */
 export interface HealthProfileUpdateRequest {
+  /** 草稿保存使用 pending，首次暂不填写使用 skipped；旧客户端省略时仍按完成保存。 */
+  onboarding_status?: 'pending' | 'skipped'
+  /** 草稿下次应继续的题目序号（从 0 开始）。 */
+  onboarding_draft_step?: number
   gender?: string
   birthday?: string
   height?: number

@@ -126,17 +126,27 @@ type nutritionEmbeddingIndexEntry struct {
 // NutritionSemanticRetriever performs exact cosine search over the prebuilt
 // trusted-name index. Its output is candidate recall only.
 type NutritionSemanticRetriever struct {
-	repo       nutritionEmbeddingRepository
-	client     *OpenAIEmbeddingClient
-	indexTTL   time.Duration
-	mu         sync.RWMutex
-	entries    []nutritionEmbeddingIndexEntry
-	loadedAt   time.Time
-	lastLoaded int
+	repo     nutritionEmbeddingRepository
+	client   *OpenAIEmbeddingClient
+	indexTTL time.Duration
+	mu       sync.RWMutex
+	loadMu   sync.Mutex
+	entries  []nutritionEmbeddingIndexEntry
+	loadedAt time.Time
 }
 
 func NewNutritionSemanticRetriever(repo nutritionEmbeddingRepository, client *OpenAIEmbeddingClient) *NutritionSemanticRetriever {
 	return &NutritionSemanticRetriever{repo: repo, client: client, indexTTL: defaultNutritionIndexTTL}
+}
+
+// Warm loads the immutable index snapshot outside the user request path.
+// SearchCandidates remains fail-safe when warm-up has not completed.
+func (s *NutritionSemanticRetriever) Warm(ctx context.Context) error {
+	if s == nil {
+		return fmt.Errorf("营养向量检索未配置")
+	}
+	_, err := s.snapshot(ctx)
+	return err
 }
 
 func (s *NutritionSemanticRetriever) SearchCandidates(ctx context.Context, queries []string, limit int) ([][]foodrecordrepo.SearchCandidate, error) {
@@ -151,11 +161,11 @@ func (s *NutritionSemanticRetriever) SearchCandidates(ctx context.Context, queri
 		cleaned[index] = strings.TrimSpace(query)
 	}
 	started := time.Now()
-	vectors, err := s.client.Embed(ctx, cleaned)
-	if err != nil {
-		return nil, err
+	entries, ready := s.readySnapshot()
+	if !ready {
+		return nil, fmt.Errorf("营养向量索引尚未预热完成")
 	}
-	entries, err := s.snapshot(ctx)
+	vectors, err := s.client.Embed(ctx, cleaned)
 	if err != nil {
 		return nil, err
 	}
@@ -187,8 +197,12 @@ func (s *NutritionSemanticRetriever) SearchCandidates(ctx context.Context, queri
 			}
 			return scored[i].score > scored[j].score
 		})
-		if len(scored) > limit {
-			scored = scored[:limit]
+		candidatePoolLimit := limit * 4
+		if candidatePoolLimit < limit {
+			candidatePoolLimit = limit
+		}
+		if len(scored) > candidatePoolLimit {
+			scored = scored[:candidatePoolLimit]
 		}
 		scoredByQuery[queryIndex] = scored
 		for _, row := range scored {
@@ -216,7 +230,7 @@ func (s *NutritionSemanticRetriever) SearchCandidates(ctx context.Context, queri
 				Score:       row.score,
 			})
 		}
-		result[queryIndex] = candidates
+		result[queryIndex] = foodrecordrepo.FilterNutritionCandidatesForQuery(cleaned[queryIndex], candidates, limit)
 	}
 	logger.Info(ctx, "营养向量候选检索完成",
 		slog.Int("query_count", len(queries)),
@@ -224,6 +238,15 @@ func (s *NutritionSemanticRetriever) SearchCandidates(ctx context.Context, queri
 		slog.Int64("duration_ms", time.Since(started).Milliseconds()),
 	)
 	return result, nil
+}
+
+func (s *NutritionSemanticRetriever) readySnapshot() ([]nutritionEmbeddingIndexEntry, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if len(s.entries) == 0 {
+		return nil, false
+	}
+	return s.entries, true
 }
 
 func (s *NutritionSemanticRetriever) snapshot(ctx context.Context) ([]nutritionEmbeddingIndexEntry, error) {
@@ -235,11 +258,15 @@ func (s *NutritionSemanticRetriever) snapshot(ctx context.Context) ([]nutritionE
 	}
 	s.mu.RUnlock()
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.loadMu.Lock()
+	defer s.loadMu.Unlock()
+	s.mu.RLock()
 	if len(s.entries) > 0 && time.Since(s.loadedAt) < s.indexTTL {
-		return s.entries, nil
+		entries := s.entries
+		s.mu.RUnlock()
+		return entries, nil
 	}
+	s.mu.RUnlock()
 	rows, err := s.repo.LoadNutritionEmbeddingIndex(ctx, s.client.Model(), s.client.Dimensions())
 	if err != nil {
 		return nil, err
@@ -259,11 +286,12 @@ func (s *NutritionSemanticRetriever) snapshot(ctx context.Context) ([]nutritionE
 	if len(entries) == 0 {
 		return nil, fmt.Errorf("营养向量索引为空")
 	}
+	s.mu.Lock()
 	s.entries = entries
 	s.loadedAt = time.Now()
-	s.lastLoaded = len(entries)
+	s.mu.Unlock()
 	logger.Info(ctx, "营养向量索引加载完成", slog.Int("entry_count", len(entries)))
-	return s.entries, nil
+	return entries, nil
 }
 
 func EmbeddingContentHash(text string) string {
