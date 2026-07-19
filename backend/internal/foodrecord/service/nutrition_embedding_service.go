@@ -30,7 +30,14 @@ const (
 
 type nutritionEmbeddingRepository interface {
 	LoadNutritionEmbeddingIndex(context.Context, string, int) ([]foodrecordrepo.NutritionEmbeddingIndexRow, error)
+	GetNutritionEmbeddingIndexRevision(context.Context, string, int) (foodrecordrepo.NutritionEmbeddingIndexRevision, error)
 	FindNutritionFoodsByIDs(context.Context, []string) (map[string]domain.FoodNutrition, error)
+}
+
+type nutritionEmbeddingClient interface {
+	Model() string
+	Dimensions() int
+	Embed(context.Context, []string) ([][]float32, error)
 }
 
 type OpenAIEmbeddingClient struct {
@@ -127,15 +134,16 @@ type nutritionEmbeddingIndexEntry struct {
 // trusted-name index. Its output is candidate recall only.
 type NutritionSemanticRetriever struct {
 	repo     nutritionEmbeddingRepository
-	client   *OpenAIEmbeddingClient
+	client   nutritionEmbeddingClient
 	indexTTL time.Duration
 	mu       sync.RWMutex
 	loadMu   sync.Mutex
 	entries  []nutritionEmbeddingIndexEntry
 	loadedAt time.Time
+	revision foodrecordrepo.NutritionEmbeddingIndexRevision
 }
 
-func NewNutritionSemanticRetriever(repo nutritionEmbeddingRepository, client *OpenAIEmbeddingClient) *NutritionSemanticRetriever {
+func NewNutritionSemanticRetriever(repo nutritionEmbeddingRepository, client nutritionEmbeddingClient) *NutritionSemanticRetriever {
 	return &NutritionSemanticRetriever{repo: repo, client: client, indexTTL: defaultNutritionIndexTTL}
 }
 
@@ -145,8 +153,36 @@ func (s *NutritionSemanticRetriever) Warm(ctx context.Context) error {
 	if s == nil {
 		return fmt.Errorf("营养向量检索未配置")
 	}
-	_, err := s.snapshot(ctx)
+	revision, err := s.repo.GetNutritionEmbeddingIndexRevision(ctx, s.client.Model(), s.client.Dimensions())
+	if err != nil {
+		return err
+	}
+	_, err = s.reload(ctx, false, revision)
 	return err
+}
+
+// RefreshIfChanged cheaply checks the persisted index revision and swaps in a
+// new immutable snapshot only when another pod or the maintenance loop wrote
+// embeddings. User requests continue using the previous snapshot while reload
+// is in progress.
+func (s *NutritionSemanticRetriever) RefreshIfChanged(ctx context.Context) (bool, error) {
+	if s == nil || s.repo == nil || s.client == nil {
+		return false, fmt.Errorf("营养向量检索未配置")
+	}
+	revision, err := s.repo.GetNutritionEmbeddingIndexRevision(ctx, s.client.Model(), s.client.Dimensions())
+	if err != nil {
+		return false, err
+	}
+	s.mu.RLock()
+	unchanged := len(s.entries) > 0 && revision == s.revision
+	s.mu.RUnlock()
+	if unchanged {
+		return false, nil
+	}
+	if _, err := s.reload(ctx, true, revision); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func (s *NutritionSemanticRetriever) SearchCandidates(ctx context.Context, queries []string, limit int) ([][]foodrecordrepo.SearchCandidate, error) {
@@ -249,9 +285,9 @@ func (s *NutritionSemanticRetriever) readySnapshot() ([]nutritionEmbeddingIndexE
 	return s.entries, true
 }
 
-func (s *NutritionSemanticRetriever) snapshot(ctx context.Context) ([]nutritionEmbeddingIndexEntry, error) {
+func (s *NutritionSemanticRetriever) reload(ctx context.Context, force bool, revision foodrecordrepo.NutritionEmbeddingIndexRevision) ([]nutritionEmbeddingIndexEntry, error) {
 	s.mu.RLock()
-	if len(s.entries) > 0 && time.Since(s.loadedAt) < s.indexTTL {
+	if !force && len(s.entries) > 0 && time.Since(s.loadedAt) < s.indexTTL {
 		entries := s.entries
 		s.mu.RUnlock()
 		return entries, nil
@@ -261,7 +297,12 @@ func (s *NutritionSemanticRetriever) snapshot(ctx context.Context) ([]nutritionE
 	s.loadMu.Lock()
 	defer s.loadMu.Unlock()
 	s.mu.RLock()
-	if len(s.entries) > 0 && time.Since(s.loadedAt) < s.indexTTL {
+	if !force && len(s.entries) > 0 && time.Since(s.loadedAt) < s.indexTTL {
+		entries := s.entries
+		s.mu.RUnlock()
+		return entries, nil
+	}
+	if force && len(s.entries) > 0 && revision == s.revision {
 		entries := s.entries
 		s.mu.RUnlock()
 		return entries, nil
@@ -289,6 +330,7 @@ func (s *NutritionSemanticRetriever) snapshot(ctx context.Context) ([]nutritionE
 	s.mu.Lock()
 	s.entries = entries
 	s.loadedAt = time.Now()
+	s.revision = revision
 	s.mu.Unlock()
 	logger.Info(ctx, "营养向量索引加载完成", slog.Int("entry_count", len(entries)))
 	return entries, nil

@@ -104,13 +104,15 @@ import (
 )
 
 type App struct {
-	engine        *gin.Engine
-	db            *gorm.DB
-	shutdownTrace func(context.Context) error
-	shutdownLog   logger.ShutdownFunc
-	workerCancel  context.CancelFunc
-	workerDone    chan struct{}
-	taskQueue     taskqueue.Queue
+	engine          *gin.Engine
+	db              *gorm.DB
+	shutdownTrace   func(context.Context) error
+	shutdownLog     logger.ShutdownFunc
+	workerCancel    context.CancelFunc
+	workerDone      chan struct{}
+	embeddingCancel context.CancelFunc
+	embeddingDone   chan struct{}
+	taskQueue       taskqueue.Queue
 }
 
 func New(cfg *config.Config) (*App, error) {
@@ -214,27 +216,33 @@ func New(cfg *config.Config) (*App, error) {
 	}
 	analyzeSvc.ConfigureImageProvider(cfg.External.LLMProvider)
 	analyzeSvc.ConfigureDeepSeekFallback(cfg.External.DeepSeekAPIKey, cfg.External.DeepSeekBaseURL)
+	var nutritionEmbeddingMaintainer *foodrecordservice.NutritionEmbeddingMaintainer
 	if cfg.External.NutritionEmbeddingEnabled &&
 		strings.TrimSpace(cfg.External.NutritionEmbeddingAPIKey) != "" &&
 		strings.TrimSpace(cfg.External.NutritionEmbeddingBaseURL) != "" &&
 		strings.TrimSpace(cfg.External.NutritionEmbeddingModel) != "" &&
 		cfg.External.NutritionEmbeddingDimensions > 0 {
-		embeddingClient := foodrecordservice.NewOpenAIEmbeddingClient(
+		queryEmbeddingClient := foodrecordservice.NewOpenAIEmbeddingClient(
 			cfg.External.NutritionEmbeddingAPIKey,
 			cfg.External.NutritionEmbeddingBaseURL,
 			cfg.External.NutritionEmbeddingModel,
 			cfg.External.NutritionEmbeddingDimensions,
 			4*time.Second,
 		)
-		nutritionSemanticRetriever := foodrecordservice.NewNutritionSemanticRetriever(analyzeNutritionRepo, embeddingClient)
+		maintenanceEmbeddingClient := foodrecordservice.NewOpenAIEmbeddingClient(
+			cfg.External.NutritionEmbeddingAPIKey,
+			cfg.External.NutritionEmbeddingBaseURL,
+			cfg.External.NutritionEmbeddingModel,
+			cfg.External.NutritionEmbeddingDimensions,
+			30*time.Second,
+		)
+		nutritionSemanticRetriever := foodrecordservice.NewNutritionSemanticRetriever(analyzeNutritionRepo, queryEmbeddingClient)
 		analyzeSvc.ConfigureNutritionSemanticRetriever(nutritionSemanticRetriever)
-		go func() {
-			warmCtx, warmCancel := context.WithTimeout(context.Background(), 5*time.Minute)
-			defer warmCancel()
-			if err := nutritionSemanticRetriever.Warm(warmCtx); err != nil {
-				logger.Warn(context.Background(), "营养向量索引后台预热失败，运行时将使用原有回退链路", logger.Err(err))
-			}
-		}()
+		nutritionEmbeddingMaintainer = foodrecordservice.NewNutritionEmbeddingMaintainer(
+			analyzeNutritionRepo,
+			maintenanceEmbeddingClient,
+			nutritionSemanticRetriever,
+		)
 	}
 	analyzeSvc.ConfigureStorage(storageClient)
 	frRepo := foodrecordrepo.NewFoodRecordRepo(db)
@@ -387,6 +395,7 @@ func New(cfg *config.Config) (*App, error) {
 		taskQueue:     taskQueue,
 	}
 	app.startEmbeddedWorker(cfg, analyzeTaskRepo, analyzePrecisionRepo, publicFoodRepo, analyzeSvc, ocrSvc, healthDocRepo, userRepo, expiryRecognizer, expiryNotifier, exerciseSvc, frNutritionSvc, membershipSvc, taskQueue, storageClient)
+	app.startNutritionEmbeddingMaintenance(nutritionEmbeddingMaintainer)
 
 	engine.POST("/api/login", loginHandler.Login)
 	engine.POST("/api/app/login/wechat", loginHandler.AppWechatLogin)
@@ -935,6 +944,22 @@ func (a *App) startEmbeddedWorker(
 	}()
 }
 
+func (a *App) startNutritionEmbeddingMaintenance(maintainer *foodrecordservice.NutritionEmbeddingMaintainer) {
+	if maintainer == nil {
+		return
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	a.embeddingCancel = cancel
+	a.embeddingDone = done
+	go func() {
+		defer close(done)
+		maintainer.Run(ctx)
+		logger.Info(context.Background(), "营养向量自动维护已停止")
+	}()
+	logger.Info(context.Background(), "营养向量自动维护已启动")
+}
+
 func runPapayRenewalLoop(ctx context.Context, membershipSvc *membershipservice.MembershipService) {
 	if membershipSvc == nil {
 		return
@@ -973,6 +998,16 @@ func embeddedWorkerID(cfg *config.Config) string {
 }
 
 func (a *App) Close(ctx context.Context) error {
+	if a.embeddingCancel != nil {
+		a.embeddingCancel()
+	}
+	if a.embeddingDone != nil {
+		select {
+		case <-a.embeddingDone:
+		case <-ctx.Done():
+			logger.Warn(context.Background(), "营养向量自动维护关闭超时", logger.Err(ctx.Err()))
+		}
+	}
 	if a.workerCancel != nil {
 		a.workerCancel()
 	}

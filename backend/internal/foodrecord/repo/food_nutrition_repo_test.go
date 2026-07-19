@@ -54,6 +54,75 @@ func setupFoodNutritionFullTestDB(t *testing.T) *gorm.DB {
 	return db
 }
 
+func TestFoodNutritionRepo_EmbeddingMaintenanceRevisionLockAndDeactivate(t *testing.T) {
+	db := setupFoodNutritionFullTestDB(t)
+	require.NoError(t, db.Exec(`ALTER TABLE food_nutrition_library ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now()`).Error)
+	require.NoError(t, db.Exec(`ALTER TABLE food_nutrition_aliases ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now()`).Error)
+	require.NoError(t, db.AutoMigrate(&domain.FoodNutritionEmbedding{}))
+
+	foodID := "11111111-1111-1111-1111-111111111111"
+	aliasID := "22222222-2222-2222-2222-222222222222"
+	require.NoError(t, db.Create(&domain.FoodNutrition{
+		ID:             foodID,
+		CanonicalName:  "燕麦粥",
+		NormalizedName: normalizeFoodName("燕麦粥"),
+		KcalPer100g:    68,
+		IsActive:       true,
+		QualityTier:    domain.NutritionQualityAuthoritative,
+	}).Error)
+	require.NoError(t, db.Create(&domain.FoodNutritionAlias{
+		ID:              aliasID,
+		FoodID:          foodID,
+		AliasName:       "泡发燕麦",
+		NormalizedAlias: normalizeFoodName("泡发燕麦"),
+		MatchStatus:     domain.NutritionAliasCandidateOnly,
+	}).Error)
+
+	repo := NewFoodNutritionRepo(db)
+	ctx := context.Background()
+	sourceRevision, err := repo.GetNutritionEmbeddingSourceRevision(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), sourceRevision.CanonicalCount)
+	assert.Equal(t, int64(1), sourceRevision.AliasCount)
+	assert.NotEmpty(t, sourceRevision.FoodUpdatedAt)
+	assert.NotEmpty(t, sourceRevision.AliasUpdatedAt)
+
+	require.NoError(t, repo.UpsertNutritionEmbeddings(ctx, []domain.FoodNutritionEmbedding{{
+		IdentityKey:         "canonical:" + foodID,
+		FoodID:              foodID,
+		SourceType:          "canonical",
+		SourceID:            foodID,
+		EmbeddingText:       "燕麦粥",
+		ContentHash:         "hash",
+		EmbeddingModel:      "embedding-test",
+		EmbeddingDimensions: 3,
+		EmbeddingBytes:      []byte{1, 2, 3},
+		IsActive:            true,
+	}}))
+	indexRevision, err := repo.GetNutritionEmbeddingIndexRevision(ctx, "embedding-test", 3)
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), indexRevision.ActiveCount)
+
+	outerAcquired, err := repo.TryNutritionEmbeddingSyncLock(ctx, func(lockCtx context.Context) error {
+		innerAcquired, innerErr := repo.TryNutritionEmbeddingSyncLock(lockCtx, func(context.Context) error {
+			return nil
+		})
+		require.NoError(t, innerErr)
+		assert.False(t, innerAcquired)
+		return nil
+	})
+	require.NoError(t, err)
+	assert.True(t, outerAcquired)
+	afterReleaseAcquired, err := repo.TryNutritionEmbeddingSyncLock(ctx, func(context.Context) error { return nil })
+	require.NoError(t, err)
+	assert.True(t, afterReleaseAcquired)
+
+	require.NoError(t, repo.DeactivateNutritionEmbeddings(ctx, []string{"canonical:" + foodID}, "embedding-test", 3))
+	indexRevision, err = repo.GetNutritionEmbeddingIndexRevision(ctx, "embedding-test", 3)
+	require.NoError(t, err)
+	assert.Equal(t, int64(0), indexRevision.ActiveCount)
+}
+
 func TestFoodNutritionRepo_Search(t *testing.T) {
 	db := setupFoodNutritionTestDB(t)
 	repo := NewFoodNutritionRepo(db)

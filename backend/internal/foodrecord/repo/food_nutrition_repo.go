@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 
 	"food_link/backend/internal/foodrecord/domain"
@@ -52,6 +53,18 @@ type NutritionEmbeddingIndexRow struct {
 	IdentityKey    string
 	FoodID         string
 	EmbeddingBytes []byte
+}
+
+type NutritionEmbeddingSourceRevision struct {
+	CanonicalCount int64
+	AliasCount     int64
+	FoodUpdatedAt  string
+	AliasUpdatedAt string
+}
+
+type NutritionEmbeddingIndexRevision struct {
+	ActiveCount int64
+	UpdatedAt   string
 }
 
 type PackagedResolveResult struct {
@@ -1771,7 +1784,7 @@ func (r *FoodNutritionRepo) ListNutritionEmbeddingHashes(ctx context.Context, mo
 	if err := r.db.WithContext(ctx).
 		Table((&domain.FoodNutritionEmbedding{}).TableName()).
 		Select("identity_key, content_hash").
-		Where("embedding_model = ? AND embedding_dimensions = ?", strings.TrimSpace(model), dimensions).
+		Where("embedding_model = ? AND embedding_dimensions = ? AND is_active = ?", strings.TrimSpace(model), dimensions, true).
 		Find(&rows).Error; err != nil {
 		return nil, err
 	}
@@ -1780,6 +1793,82 @@ func (r *FoodNutritionRepo) ListNutritionEmbeddingHashes(ctx context.Context, mo
 		out[item.IdentityKey] = item.ContentHash
 	}
 	return out, nil
+}
+
+// GetNutritionEmbeddingSourceRevision is a cheap change detector for the
+// authoritative canonical/alias source set. The periodic full reconciliation
+// remains the safety net for legacy SQL that failed to maintain updated_at.
+func (r *FoodNutritionRepo) GetNutritionEmbeddingSourceRevision(ctx context.Context) (NutritionEmbeddingSourceRevision, error) {
+	var revision NutritionEmbeddingSourceRevision
+	err := r.db.WithContext(ctx).Raw(`
+		SELECT
+			(SELECT COUNT(*) FROM food_nutrition_library
+			 WHERE is_active = TRUE AND quality_tier IN (?, ?)) AS canonical_count,
+			(SELECT COUNT(*)
+			 FROM food_nutrition_aliases AS aliases
+			 JOIN food_nutrition_library AS foods ON foods.id = aliases.food_id
+			 WHERE foods.is_active = TRUE
+			   AND foods.quality_tier IN (?, ?)
+			   AND aliases.match_status <> ?) AS alias_count,
+			COALESCE((SELECT MAX(updated_at)::text FROM food_nutrition_library), '') AS food_updated_at,
+			COALESCE((SELECT MAX(updated_at)::text FROM food_nutrition_aliases), '') AS alias_updated_at
+	`,
+		domain.NutritionQualityAuthoritative,
+		domain.NutritionQualityLegacyCurated,
+		domain.NutritionQualityAuthoritative,
+		domain.NutritionQualityLegacyCurated,
+		domain.NutritionAliasBlocked,
+	).Scan(&revision).Error
+	return revision, err
+}
+
+func (r *FoodNutritionRepo) GetNutritionEmbeddingIndexRevision(ctx context.Context, model string, dimensions int) (NutritionEmbeddingIndexRevision, error) {
+	var revision NutritionEmbeddingIndexRevision
+	err := r.db.WithContext(ctx).Raw(`
+		SELECT
+			COUNT(*) FILTER (WHERE is_active = TRUE) AS active_count,
+			COALESCE(MAX(updated_at)::text, '') AS updated_at
+		FROM food_nutrition_embeddings
+		WHERE embedding_model = ? AND embedding_dimensions = ?
+	`, strings.TrimSpace(model), dimensions).Scan(&revision).Error
+	return revision, err
+}
+
+// TryNutritionEmbeddingSyncLock serializes reconciliation across application
+// pods without holding a database transaction open during an external API call.
+func (r *FoodNutritionRepo) TryNutritionEmbeddingSyncLock(ctx context.Context, fn func(context.Context) error) (bool, error) {
+	const lockID int64 = 704631921175
+	acquired := false
+	err := r.db.WithContext(ctx).Connection(func(connection *gorm.DB) error {
+		if err := connection.Raw("SELECT pg_try_advisory_lock(?)", lockID).Scan(&acquired).Error; err != nil {
+			return err
+		}
+		if !acquired {
+			return nil
+		}
+		defer func() {
+			unlockDB := connection.Session(&gorm.Session{NewDB: true}).WithContext(context.Background())
+			_ = unlockDB.Exec("SELECT pg_advisory_unlock(?)", lockID).Error
+		}()
+		return fn(ctx)
+	})
+	return acquired, err
+}
+
+func (r *FoodNutritionRepo) DeactivateNutritionEmbeddings(ctx context.Context, identityKeys []string, model string, dimensions int) error {
+	for start := 0; start < len(identityKeys); start += 500 {
+		end := start + 500
+		if end > len(identityKeys) {
+			end = len(identityKeys)
+		}
+		if err := r.db.WithContext(ctx).
+			Model(&domain.FoodNutritionEmbedding{}).
+			Where("identity_key IN ? AND embedding_model = ? AND embedding_dimensions = ? AND is_active = ?", identityKeys[start:end], strings.TrimSpace(model), dimensions, true).
+			Updates(map[string]any{"is_active": false, "updated_at": time.Now()}).Error; err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (r *FoodNutritionRepo) UpsertNutritionEmbeddings(ctx context.Context, rows []domain.FoodNutritionEmbedding) error {
