@@ -148,6 +148,9 @@ function PetChatPage() {
   const petName = petSummary?.pet?.name || '你的宠物'
   const [messages, setMessages] = useState<ChatMessage[]>([buildIntroMessage('你的宠物')])
   const streamingTextRef = useRef('')
+  const activeStreamAbortRef = useRef<(() => void) | null>(null)
+  const activeStreamMessageIDRef = useRef('')
+  const analysisRunIDRef = useRef(0)
   const isEmptyConversation = !lastAnalysis && !sessionID && messages.length === 1 && messages[0]?.kind === 'intro'
 
   useDidShow(() => {
@@ -189,15 +192,37 @@ function PetChatPage() {
     setMessages((prev) => prev.map((m) => (m.id === id ? updater(m) : m)))
   }, [])
 
+  const cancelActiveAnalysis = useCallback(() => {
+    if (!busyRef.current) return false
+
+    analysisRunIDRef.current += 1
+    const streamingMessageID = activeStreamMessageIDRef.current
+    activeStreamAbortRef.current?.()
+    activeStreamAbortRef.current = null
+    activeStreamMessageIDRef.current = ''
+    streamingTextRef.current = ''
+    busyRef.current = false
+    setBusy(false)
+
+    if (streamingMessageID) {
+      updateMessage(streamingMessageID, (message) => (
+        message.text.trim()
+          ? message
+          : { ...message, kind: 'local', text: '本次分析已停止，你可以继续提问。' }
+      ))
+    }
+    return true
+  }, [updateMessage])
+
   const startNewConversation = useCallback(() => {
-    if (busyRef.current) return
+    cancelActiveAnalysis()
     setHistoryOpen(false)
     setInput('')
     setLastAnalysis(null)
     setSessionID('')
     setMessages([buildIntroMessage(petName)])
     Taro.showToast({ title: '已新建对话', icon: 'none' })
-  }, [petName])
+  }, [cancelActiveAnalysis, petName])
 
   const applyHistory = useCallback((history: Awaited<ReturnType<typeof getLatestPetChatSession>>) => {
     const restored = history?.messages?.map(mapHistoryMessage).filter((item) => item.text.trim()) || []
@@ -213,7 +238,6 @@ function PetChatPage() {
   }, [])
 
   const openHistoryPanel = useCallback(async () => {
-    if (busyRef.current) return
     setHistoryOpen(true)
     setHistoryLoading(true)
     try {
@@ -227,7 +251,8 @@ function PetChatPage() {
   }, [])
 
   const openSession = useCallback(async (targetSessionID: string) => {
-    if (!targetSessionID || busyRef.current) return
+    if (!targetSessionID) return
+    cancelActiveAnalysis()
     setHistoryLoading(true)
     try {
       const history = await getPetChatSession(targetSessionID)
@@ -241,10 +266,12 @@ function PetChatPage() {
     } finally {
       setHistoryLoading(false)
     }
-  }, [applyHistory])
+  }, [applyHistory, cancelActiveAnalysis])
 
   const runAnalysis = useCallback(async (question: string, range: RangeMode) => {
     if (busyRef.current) return
+    const runID = analysisRunIDRef.current + 1
+    analysisRunIDRef.current = runID
     busyRef.current = true
     setBusy(true)
     streamingTextRef.current = ''
@@ -252,31 +279,38 @@ function PetChatPage() {
     setActiveRange(range)
     appendMessage({ id: nextID('user'), role: 'user', text: question })
     const streamingMessageID = nextID('pet-stream')
+    activeStreamMessageIDRef.current = streamingMessageID
     appendMessage({ id: streamingMessageID, role: 'pet', kind: 'analysis', text: '' })
 
     let nextSummary: StatsSummary | null = null
     getStatsSummary(range)
       .then((s) => {
+        if (analysisRunIDRef.current !== runID) return
         nextSummary = s
         setSummary(s)
       })
       .catch(() => null)
 
     const finish = () => {
+      if (analysisRunIDRef.current !== runID) return
+      activeStreamAbortRef.current = null
+      activeStreamMessageIDRef.current = ''
       busyRef.current = false
       setBusy(false)
       streamingTextRef.current = ''
     }
 
-    streamGeneratePetChat(question, range, sessionID, !sessionID, {
+    const abort = streamGeneratePetChat(question, range, sessionID, !sessionID, {
       onStart: () => {
         // first chunk will arrive soon
       },
       onChunk: (text) => {
+        if (analysisRunIDRef.current !== runID) return
         streamingTextRef.current += text
         updateMessage(streamingMessageID, (m) => ({ ...m, text: m.text + text }))
       },
       onDone: (meta) => {
+        if (analysisRunIDRef.current !== runID) return
         if (meta.session_id) setSessionID(meta.session_id)
         const finalText = streamingTextRef.current || '我看完了，但这次没有生成足够明确的结论。可以先多记录几餐再试。'
         const message: ChatMessage = {
@@ -292,6 +326,7 @@ function PetChatPage() {
         finish()
       },
       onError: async (error) => {
+        if (analysisRunIDRef.current !== runID) return
         await showUnifiedApiError(error, `${petName}分析失败`)
         updateMessage(streamingMessageID, () => ({
           id: nextID('pet'),
@@ -303,20 +338,26 @@ function PetChatPage() {
         finish()
       },
     })
+    if (analysisRunIDRef.current === runID) {
+      activeStreamAbortRef.current = abort
+    } else {
+      abort()
+    }
   }, [appendMessage, petName, sessionID, updateMessage])
 
   const handleQuickQuestion = useCallback((text: string, range: RangeMode) => {
-    if (busy || busyRef.current) return
+    cancelActiveAnalysis()
     void runAnalysis(text, range)
-  }, [busy, runAnalysis])
+  }, [cancelActiveAnalysis, runAnalysis])
 
   const handleSend = useCallback(() => {
     const text = input.trim()
-    if (!text || busy || busyRef.current) return
+    if (!text) return
+    cancelActiveAnalysis()
     setInput('')
     const range: RangeMode = /30|月|长期/.test(text) ? 'month' : activeRange
     void runAnalysis(text, range)
-  }, [activeRange, busy, input, runAnalysis])
+  }, [activeRange, cancelActiveAnalysis, input, runAnalysis])
 
   return (
     <View className={`pet-chat-page ${scheme === 'dark' ? 'pet-chat-page--dark' : ''}`}>
@@ -409,9 +450,8 @@ function PetChatPage() {
           confirmType='send'
           onInput={(event) => setInput(String(event.detail.value || ''))}
           onConfirm={handleSend}
-          disabled={busy}
         />
-        <View className={`pet-chat-send ${busy || !input.trim() ? 'disabled' : ''}`} onClick={handleSend}>
+        <View className={`pet-chat-send ${!input.trim() ? 'disabled' : ''}`} onClick={handleSend}>
           <Text>发送</Text>
         </View>
       </View>
