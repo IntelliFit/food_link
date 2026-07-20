@@ -63,21 +63,30 @@ export const normalizeFoodRecordNumber = (value: unknown): number => {
   return Number.isFinite(n) ? n : 0
 }
 
+const macroCalories = (protein: number, carbs: number, fat: number): number => (
+  Math.max(0, protein) * 4 + Math.max(0, carbs) * 4 + Math.max(0, fat) * 9
+)
+
 export const buildFoodRecordNutrients = (
   nutrients: Partial<Nutrients> | undefined,
   waterMl: number,
-): Nutrients => ({
+): Nutrients => {
+  const protein = normalizeFoodRecordNumber(nutrients?.protein)
+  const carbs = normalizeFoodRecordNumber(nutrients?.carbs)
+  const fat = normalizeFoodRecordNumber(nutrients?.fat)
+  return {
   ...(nutrients || {}),
-  calories: normalizeFoodRecordNumber(nutrients?.calories),
-  protein: normalizeFoodRecordNumber(nutrients?.protein),
-  carbs: normalizeFoodRecordNumber(nutrients?.carbs),
-  fat: normalizeFoodRecordNumber(nutrients?.fat),
+  calories: macroCalories(protein, carbs, fat),
+  protein,
+  carbs,
+  fat,
   fiber: normalizeFoodRecordNumber(nutrients?.fiber),
   sugar: normalizeFoodRecordNumber(nutrients?.sugar),
   waterMl,
   water_ml: waterMl,
   sodium_mg: normalizeFoodRecordNumber(nutrients?.sodium_mg ?? nutrients?.sodiumMg),
-})
+  }
+}
 
 const clampFoodRecordWaterMl = (value: unknown, maxWeight: number): number => {
   const waterMl = normalizeFoodRecordNumber(value)
@@ -154,7 +163,7 @@ export const buildFoodRecordItemPayloadFromResultItem = <T extends ResultRecordI
     manual_source_id: manualSourceId,
     manual_source_title: manualSourceTitle,
     nutrients: {
-      ...nutrients,
+      ...buildFoodRecordNutrients(nutrients, waterMl),
       waterMl,
       water_ml: waterMl,
     },

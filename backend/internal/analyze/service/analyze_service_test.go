@@ -2048,6 +2048,14 @@ func TestBuildAnalyzeResponse(t *testing.T) {
 
 	resp2 := buildAnalyzeResponse(map[string]any{"description": "d", "items": []any{}, "pfc_ratio_comment": "good"}, "experimental", "doubao", "doubao-seed-2-0-lite-260428", 100)
 	assert.Equal(t, "good", *resp2["pfc_ratio_comment"].(*string))
+
+	resp3 := buildAnalyzeResponse(map[string]any{"items": []any{map[string]any{
+		"name": "测试食物",
+		"nutrients": map[string]any{"calories": 999.0, "protein": 10.0, "carbs": 20.0, "fat": 5.0},
+	}}}, "standard", "fake", "fake", 0)
+	items := toItems(resp3["items"])
+	require.Len(t, items, 1)
+	assert.Equal(t, 165.0, numberFromAny(mapFromAny(items[0]["nutrients"])["calories"]))
 }
 
 func TestNutritionUnitIncludesMicronutrients(t *testing.T) {
@@ -2065,6 +2073,8 @@ func TestNutritionUnitIncludesMicronutrients(t *testing.T) {
 	}
 	unit := nutritionUnit(food)
 	scaled := scaleNutrition(unit, 50)
+	assert.Equal(t, 97.0, unit["calories"])
+	assert.Equal(t, 48.5, scaled["calories"])
 
 	assert.Equal(t, 20.0, scaled["calciumMg"])
 	assert.Equal(t, 0.6, scaled["ironMg"])

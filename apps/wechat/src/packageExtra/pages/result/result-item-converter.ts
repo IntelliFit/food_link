@@ -45,11 +45,19 @@ const normalizeNutrientValue = (value: unknown) => {
   return Number.isFinite(num) && num > 0 ? num : 0
 }
 
-export const normalizeItemNutrients = (nutrients: FoodItem['nutrients'] | undefined, waterMl: number): Nutrients => ({
-  calories: normalizeNutrientValue(nutrients?.calories),
-  protein: normalizeNutrientValue(nutrients?.protein),
-  carbs: normalizeNutrientValue(nutrients?.carbs),
-  fat: normalizeNutrientValue(nutrients?.fat),
+const macroCalories = (protein: number, carbs: number, fat: number) => (
+  Math.max(0, protein) * 4 + Math.max(0, carbs) * 4 + Math.max(0, fat) * 9
+)
+
+export const normalizeItemNutrients = (nutrients: FoodItem['nutrients'] | undefined, waterMl: number): Nutrients => {
+  const protein = normalizeNutrientValue(nutrients?.protein)
+  const carbs = normalizeNutrientValue(nutrients?.carbs)
+  const fat = normalizeNutrientValue(nutrients?.fat)
+  return {
+  calories: macroCalories(protein, carbs, fat),
+  protein,
+  carbs,
+  fat,
   fiber: normalizeNutrientValue(nutrients?.fiber),
   sugar: normalizeNutrientValue(nutrients?.sugar),
   waterMl,
@@ -74,7 +82,8 @@ export const normalizeItemNutrients = (nutrients: FoodItem['nutrients'] | undefi
   vitaminB6Mg: normalizeNutrientValue(nutrients?.vitaminB6Mg),
   folateMcg: normalizeNutrientValue(nutrients?.folateMcg),
   vitaminB12Mcg: normalizeNutrientValue(nutrients?.vitaminB12Mcg)
-})
+  }
+}
 
 const normalizeWaterMl = (...values: unknown[]) => {
   for (const value of values) {
