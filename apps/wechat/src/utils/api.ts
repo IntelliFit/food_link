@@ -3921,6 +3921,7 @@ export async function generatePetChat(question: string, range: 'week' | 'month',
 
 export interface StreamGeneratePetChatCallbacks {
   onStart?: () => void
+  onSessionReady?: (meta: PetChatStreamMeta) => void
   onChunk: (text: string) => void
   onDone: (meta: PetChatStreamMeta) => void
   onError: (error: Error) => void
@@ -3959,7 +3960,9 @@ export function streamGeneratePetChat(
       if (!dataLine) continue
       try {
         const parsed = JSON.parse(dataLine) as { type: string; text?: string; error?: string; meta?: PetChatStreamMeta }
-        if (parsed.type === 'chunk' && typeof parsed.text === 'string') {
+        if (parsed.type === 'started' && parsed.meta) {
+          callbacks.onSessionReady?.(parsed.meta)
+        } else if (parsed.type === 'chunk' && typeof parsed.text === 'string') {
           callbacks.onChunk(parsed.text)
         } else if (parsed.type === 'done' && parsed.meta) {
           doneReceived = true

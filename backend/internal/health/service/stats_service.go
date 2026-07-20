@@ -645,10 +645,54 @@ func (s *StatsService) GeneratePetChatStream(ctx context.Context, userID string,
 		)
 		historyMessages = nil
 	}
+	userMessageID := ""
+	userMessage, err := s.repo.AddPetChatMessage(ctx, domain.PetChatMessage{
+		SessionID:   session.ID,
+		UserID:      userID,
+		Role:        "user",
+		Content:     estimate.Question,
+		MessageType: "question",
+		RangeType:   estimate.Range,
+		Meta: map[string]any{
+			"billing_status": "pending",
+		},
+	})
+	if err != nil {
+		logger.Warn(ctx, "流式宠物对话保存用户消息失败",
+			logger.UserID(userID),
+			slog.String("session_id", session.ID),
+			logger.Err(err),
+		)
+	} else {
+		userMessageID = userMessage.ID
+	}
 
 	chunkChan := make(chan PetChatStreamChunk, 32)
 	go func() {
 		defer close(chunkChan)
+		chunkChan <- PetChatStreamChunk{
+			Type: "started",
+			Meta: &struct {
+				SessionID          string                 `json:"session_id"`
+				UserMessageID      string                 `json:"user_message_id,omitempty"`
+				AssistantMessageID string                 `json:"assistant_message_id,omitempty"`
+				Range              string                 `json:"range"`
+				RangeLabel         string                 `json:"range_label"`
+				RecordedDays       int                    `json:"recorded_days"`
+				CreditsCharged     int                    `json:"credits_charged"`
+				BillingStatus      string                 `json:"billing_status"`
+				AIUsagePricing     *billing.PricingResult `json:"ai_usage_pricing,omitempty"`
+				EstimatedPricing   billing.PricingResult  `json:"estimated_pricing"`
+			}{
+				SessionID:        session.ID,
+				UserMessageID:    userMessageID,
+				Range:            estimate.Range,
+				RangeLabel:       estimate.RangeLabel,
+				RecordedDays:     estimate.RecordedDays,
+				BillingStatus:    "pending",
+				EstimatedPricing: estimate.Pricing,
+			},
+		}
 		fullAnswer := &strings.Builder{}
 		var streamErr error
 		llm := s.preferredTextLLM()
@@ -727,7 +771,7 @@ func (s *StatsService) GeneratePetChatStream(ctx context.Context, userID string,
 			}
 		}
 
-		userMessageID, assistantMessageID := s.persistPetChatExchange(ctx, userID, session.ID, estimate.Range, estimate.Question, content, creditsCharged, actualPricing, &estimate.Pricing, billingStatus)
+		assistantMessageID := s.persistPetChatAssistantMessage(ctx, userID, session.ID, estimate.Range, estimate.Question, content, creditsCharged, actualPricing, &estimate.Pricing, billingStatus)
 		chunkChan <- PetChatStreamChunk{
 			Type: "done",
 			Meta: &struct {
@@ -898,6 +942,11 @@ func (s *StatsService) persistPetChatExchange(ctx context.Context, userID, sessi
 		)
 		return "", ""
 	}
+	assistantMessageID := s.persistPetChatAssistantMessage(ctx, userID, sessionID, statsRange, question, answer, creditsCharged, actualPricing, estimatedPricing, billingStatus)
+	return userMsg.ID, assistantMessageID
+}
+
+func (s *StatsService) persistPetChatAssistantMessage(ctx context.Context, userID, sessionID, statsRange, question, answer string, creditsCharged int, actualPricing *billing.PricingResult, estimatedPricing *billing.PricingResult, billingStatus string) string {
 	assistantMsg, err := s.repo.AddPetChatMessage(ctx, domain.PetChatMessage{
 		SessionID:        sessionID,
 		UserID:           userID,
@@ -918,7 +967,7 @@ func (s *StatsService) persistPetChatExchange(ctx context.Context, userID, sessi
 			slog.String("session_id", sessionID),
 			logger.Err(err),
 		)
-		return userMsg.ID, ""
+		return ""
 	}
 	if err := s.repo.TouchPetChatSession(ctx, sessionID, userID, question, answer, creditsCharged); err != nil {
 		logger.Warn(ctx, "更新宠物对话会话状态失败",
@@ -927,7 +976,7 @@ func (s *StatsService) persistPetChatExchange(ctx context.Context, userID, sessi
 			logger.Err(err),
 		)
 	}
-	return userMsg.ID, assistantMsg.ID
+	return assistantMsg.ID
 }
 
 func toPetChatHistoryMessages(messages []domain.PetChatMessage) []PetChatHistoryMessage {

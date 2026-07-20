@@ -250,8 +250,20 @@ function PetChatPage() {
     }
   }, [])
 
-  const openSession = useCallback(async (targetSessionID: string) => {
+  const openSession = useCallback(async (session: PetChatSessionSummary) => {
+    const targetSessionID = getHistorySessionID(session)
     if (!targetSessionID) return
+
+    const activeQuestion = [...messages].reverse().find((message) => message.role === 'user')?.text.trim()
+    const isCurrentStreamingSession = busyRef.current && (
+      targetSessionID === sessionID ||
+      (!sessionID && Boolean(activeQuestion) && (session.last_question === activeQuestion || session.title === activeQuestion))
+    )
+    if (targetSessionID === sessionID || isCurrentStreamingSession) {
+      setHistoryOpen(false)
+      return
+    }
+
     cancelActiveAnalysis()
     setHistoryLoading(true)
     try {
@@ -266,7 +278,7 @@ function PetChatPage() {
     } finally {
       setHistoryLoading(false)
     }
-  }, [applyHistory, cancelActiveAnalysis])
+  }, [applyHistory, cancelActiveAnalysis, messages, sessionID])
 
   const runAnalysis = useCallback(async (question: string, range: RangeMode) => {
     if (busyRef.current) return
@@ -303,6 +315,10 @@ function PetChatPage() {
     const abort = streamGeneratePetChat(question, range, sessionID, !sessionID, {
       onStart: () => {
         // first chunk will arrive soon
+      },
+      onSessionReady: (meta) => {
+        if (analysisRunIDRef.current !== runID) return
+        if (meta.session_id) setSessionID(meta.session_id)
       },
       onChunk: (text) => {
         if (analysisRunIDRef.current !== runID) return
@@ -479,7 +495,7 @@ function PetChatPage() {
                 const itemID = getHistorySessionID(session)
                 const active = itemID && itemID === sessionID
                 return (
-                  <View key={itemID} className={`pet-chat-history-item ${active ? 'active' : ''}`} onClick={() => openSession(itemID)}>
+                  <View key={itemID} className={`pet-chat-history-item ${active ? 'active' : ''}`} onClick={() => openSession(session)}>
                     <Text className='pet-chat-history-item-title' numberOfLines={1}>{session.title || session.last_question || '未命名对话'}</Text>
                     <Text className='pet-chat-history-item-desc' numberOfLines={1}>{session.last_question || session.last_answer || '饮食分析对话'}</Text>
                     <Text className='pet-chat-history-item-meta'>{formatSessionTime(session.last_message_at || session.updated_at)}</Text>
