@@ -52,6 +52,7 @@ type StatsRepo interface {
 	GetLatestPetChatSessionWithMessages(ctx context.Context, userID string, limit int) (*domain.PetChatSession, []domain.PetChatMessage, error)
 	AddPetChatMessage(ctx context.Context, message domain.PetChatMessage) (*domain.PetChatMessage, error)
 	TouchPetChatSession(ctx context.Context, sessionID, userID, question, answer string, creditsCharged int) error
+	SetPetChatSessionStatus(ctx context.Context, sessionID, userID, status string) error
 }
 
 type BodyMetricsSummaryProvider interface {
@@ -550,6 +551,9 @@ func (s *StatsService) GeneratePetChat(ctx context.Context, userID string, input
 	if err != nil {
 		return nil, err
 	}
+	if err := s.repo.SetPetChatSessionStatus(ctx, session.ID, userID, "generating"); err != nil {
+		logger.Warn(ctx, "更新宠物对话生成状态失败", logger.UserID(userID), slog.String("session_id", session.ID), logger.Err(err))
+	}
 	historyMessages, err := s.repo.GetPetChatSessionMessages(ctx, userID, session.ID, 12)
 	if err != nil {
 		logger.Warn(ctx, "读取宠物连续对话上下文失败",
@@ -636,6 +640,9 @@ func (s *StatsService) GeneratePetChatStream(ctx context.Context, userID string,
 	if err != nil {
 		return nil, err
 	}
+	if err := s.repo.SetPetChatSessionStatus(ctx, session.ID, userID, "generating"); err != nil {
+		logger.Warn(ctx, "更新宠物对话生成状态失败", logger.UserID(userID), slog.String("session_id", session.ID), logger.Err(err))
+	}
 	historyMessages, err := s.repo.GetPetChatSessionMessages(ctx, userID, session.ID, 12)
 	if err != nil {
 		logger.Warn(ctx, "读取宠物连续对话上下文失败",
@@ -670,7 +677,13 @@ func (s *StatsService) GeneratePetChatStream(ctx context.Context, userID string,
 	chunkChan := make(chan PetChatStreamChunk, 32)
 	go func() {
 		defer close(chunkChan)
-		chunkChan <- PetChatStreamChunk{
+		emit := func(chunk PetChatStreamChunk) {
+			select {
+			case chunkChan <- chunk:
+			default:
+			}
+		}
+		emit(PetChatStreamChunk{
 			Type: "started",
 			Meta: &struct {
 				SessionID          string                 `json:"session_id"`
@@ -692,7 +705,7 @@ func (s *StatsService) GeneratePetChatStream(ctx context.Context, userID string,
 				BillingStatus:    "pending",
 				EstimatedPricing: estimate.Pricing,
 			},
-		}
+		})
 		fullAnswer := &strings.Builder{}
 		var streamErr error
 		llm := s.preferredTextLLM()
@@ -702,7 +715,7 @@ func (s *StatsService) GeneratePetChatStream(ctx context.Context, userID string,
 		if apiKey == "" {
 			fallback := fallbackPetChatAnswer(comp, estimate.Question)
 			fullAnswer.WriteString(fallback)
-			chunkChan <- PetChatStreamChunk{Type: "chunk", Text: fallback}
+			emit(PetChatStreamChunk{Type: "chunk", Text: fallback})
 		} else {
 			prompt := buildPetChatPrompt(comp, estimate.Question, historyMessages)
 			textChan, err := s.streamNutritionInsight(ctx, baseURL, apiKey, model, prompt)
@@ -711,20 +724,21 @@ func (s *StatsService) GeneratePetChatStream(ctx context.Context, userID string,
 			} else {
 				for text := range textChan {
 					fullAnswer.WriteString(text)
-					chunkChan <- PetChatStreamChunk{Type: "chunk", Text: text}
+					emit(PetChatStreamChunk{Type: "chunk", Text: text})
 				}
 			}
 		}
 
 		content := sanitizeStatsInsightText(fullAnswer.String())
 		if streamErr != nil {
+			_ = s.repo.SetPetChatSessionStatus(ctx, session.ID, userID, "interrupted")
 			logger.Warn(ctx, "宠物对话大模型流式生成失败",
 				logger.UserID(userID),
 				slog.String("range", estimate.Range),
 				slog.Int("recorded_days", estimate.RecordedDays),
 				logger.Err(streamErr),
 			)
-			chunkChan <- PetChatStreamChunk{Type: "error", Error: "小食探分析失败，请稍后重试"}
+			emit(PetChatStreamChunk{Type: "error", Error: "小食探分析失败，请稍后重试"})
 			return
 		}
 
@@ -744,12 +758,13 @@ func (s *StatsService) GeneratePetChatStream(ctx context.Context, userID string,
 			creditsCharged = pricing.CreditsCharged
 			creditsInfo, err = s.creditGuard.ValidateUsageCredits(ctx, userID, pricing.CreditsCharged, "小食探对话")
 			if err != nil {
+				_ = s.repo.SetPetChatSessionStatus(ctx, session.ID, userID, "interrupted")
 				logger.Warn(ctx, "宠物对话流式生成后积分校验失败",
 					logger.UserID(userID),
 					slog.String("session_id", session.ID),
 					logger.Err(err),
 				)
-				chunkChan <- PetChatStreamChunk{Type: "error", Error: "积分校验失败，请稍后重试"}
+				emit(PetChatStreamChunk{Type: "error", Error: "积分校验失败，请稍后重试"})
 				return
 			}
 			if err := s.creditGuard.ConsumeEarnedCreditsAfterSuccess(ctx, userID, creditsInfo, pricing.CreditsCharged, "pet_chat_reward_spend", sourceKey, map[string]any{
@@ -772,7 +787,7 @@ func (s *StatsService) GeneratePetChatStream(ctx context.Context, userID string,
 		}
 
 		assistantMessageID := s.persistPetChatAssistantMessage(ctx, userID, session.ID, estimate.Range, estimate.Question, content, creditsCharged, actualPricing, &estimate.Pricing, billingStatus)
-		chunkChan <- PetChatStreamChunk{
+		emit(PetChatStreamChunk{
 			Type: "done",
 			Meta: &struct {
 				SessionID          string                 `json:"session_id"`
@@ -797,7 +812,7 @@ func (s *StatsService) GeneratePetChatStream(ctx context.Context, userID string,
 				AIUsagePricing:     actualPricing,
 				EstimatedPricing:   estimate.Pricing,
 			},
-		}
+		})
 	}()
 
 	return chunkChan, nil

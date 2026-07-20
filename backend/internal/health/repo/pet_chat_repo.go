@@ -109,7 +109,7 @@ func (r *StatsRepo) ListPetChatSessions(ctx context.Context, userID string, limi
 	}
 	var rows []petChatSessionDO
 	if err := r.db.WithContext(ctx).
-		Where("user_id = ? AND status = ?", userID, "active").
+		Where("user_id = ? AND status <> ?", userID, "deleted").
 		Order("updated_at DESC").
 		Limit(limit).
 		Find(&rows).Error; err != nil {
@@ -177,6 +177,7 @@ func (r *StatsRepo) AddPetChatMessage(ctx context.Context, message domain.PetCha
 func (r *StatsRepo) TouchPetChatSession(ctx context.Context, sessionID, userID, question, answer string, creditsCharged int) error {
 	now := time.Now()
 	updates := map[string]any{
+		"status":                "active",
 		"last_question":         question,
 		"last_answer":           answer,
 		"last_message_at":       now,
@@ -187,6 +188,12 @@ func (r *StatsRepo) TouchPetChatSession(ctx context.Context, sessionID, userID, 
 		Model(&petChatSessionDO{}).
 		Where("id = ? AND user_id = ?", sessionID, userID).
 		Updates(updates).Error
+}
+
+func (r *StatsRepo) SetPetChatSessionStatus(ctx context.Context, sessionID, userID, status string) error {
+	return r.db.WithContext(ctx).Model(&petChatSessionDO{}).
+		Where("id = ? AND user_id = ?", sessionID, userID).
+		Updates(map[string]any{"status": status, "updated_at": time.Now()}).Error
 }
 
 func petChatSessionFromDomain(in domain.PetChatSession) petChatSessionDO {

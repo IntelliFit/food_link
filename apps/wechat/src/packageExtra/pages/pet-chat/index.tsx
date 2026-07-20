@@ -214,19 +214,40 @@ function PetChatPage() {
     return true
   }, [updateMessage])
 
+  const detachActiveAnalysis = useCallback(() => {
+    if (!busyRef.current) return false
+    analysisRunIDRef.current += 1
+    activeStreamAbortRef.current = null
+    activeStreamMessageIDRef.current = ''
+    streamingTextRef.current = ''
+    busyRef.current = false
+    setBusy(false)
+    return true
+  }, [])
+
   const startNewConversation = useCallback(() => {
-    cancelActiveAnalysis()
+    detachActiveAnalysis()
     setHistoryOpen(false)
     setInput('')
     setLastAnalysis(null)
     setSessionID('')
     setMessages([buildIntroMessage(petName)])
     Taro.showToast({ title: '已新建对话', icon: 'none' })
-  }, [cancelActiveAnalysis, petName])
+  }, [detachActiveAnalysis, petName])
 
   const applyHistory = useCallback((history: Awaited<ReturnType<typeof getLatestPetChatSession>>) => {
     const restored = history?.messages?.map(mapHistoryMessage).filter((item) => item.text.trim()) || []
     if (!restored.length) return false
+    const sessionStatus = history?.session?.status || history?.session?.Status
+    const hasPetReply = restored.some((item) => item.role === 'pet')
+    if (!hasPetReply && sessionStatus === 'interrupted') {
+      restored.push({
+        id: nextID('pet-interrupted'),
+        role: 'pet',
+        kind: 'local',
+        text: '本次分析已中断，暂未生成回复。你可以重新提问。',
+      })
+    }
     const restoredSessionID = history?.session?.id || history?.session?.ID || ''
     setSessionID(restoredSessionID)
     setMessages(restored)
@@ -264,7 +285,7 @@ function PetChatPage() {
       return
     }
 
-    cancelActiveAnalysis()
+    detachActiveAnalysis()
     setHistoryLoading(true)
     try {
       const history = await getPetChatSession(targetSessionID)
@@ -278,7 +299,7 @@ function PetChatPage() {
     } finally {
       setHistoryLoading(false)
     }
-  }, [applyHistory, cancelActiveAnalysis, messages, sessionID])
+  }, [applyHistory, detachActiveAnalysis, messages, sessionID])
 
   const runAnalysis = useCallback(async (question: string, range: RangeMode) => {
     if (busyRef.current) return

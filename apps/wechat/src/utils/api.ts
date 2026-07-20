@@ -1305,6 +1305,8 @@ export interface PetChatHistoryResponse {
     title?: string
     RangeType?: 'week' | 'month'
     range_type?: 'week' | 'month'
+    Status?: 'active' | 'generating' | 'interrupted'
+    status?: 'active' | 'generating' | 'interrupted'
   }
   messages: PetChatHistoryMessage[]
 }

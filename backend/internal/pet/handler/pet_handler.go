@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	authmw "food_link/backend/internal/auth"
 	commonerrors "food_link/backend/internal/common/errors"
@@ -177,7 +178,10 @@ func (h *PetHandler) ChatStream(c *gin.Context) {
 		slog.String("range", strings.TrimSpace(req.Range)),
 		slog.Int("question_length", len([]rune(strings.TrimSpace(req.Question)))),
 	)
-	chunkChan, err := h.chat.GeneratePetChatStream(c.Request.Context(), userID, healthservice.PetChatInput{
+	// The generation belongs to the saved chat session, not to this SSE viewer.
+	// Let the timeout end it even if the Mini Program leaves the page.
+	backgroundCtx, _ := context.WithTimeout(context.WithoutCancel(c.Request.Context()), 3*time.Minute)
+	chunkChan, err := h.chat.GeneratePetChatStream(backgroundCtx, userID, healthservice.PetChatInput{
 		Question:   strings.TrimSpace(req.Question),
 		Range:      strings.TrimSpace(req.Range),
 		SessionID:  strings.TrimSpace(req.SessionID),
