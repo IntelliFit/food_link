@@ -4428,7 +4428,7 @@ func (s *AnalyzeService) AnalyzeBatch(ctx context.Context, userID string, input 
 
 func buildAnalyzeResponse(parsed map[string]any, executionMode, provider, model string, durationMs float64) map[string]any {
 	parsed = normalizePayload(parsed)
-	items := reconcileAnalyzeItemCaloriesByMacros(parseItems(parsed))
+	items := parseItems(parsed)
 	optStr := func(v any) *string {
 		if v == nil {
 			return nil
@@ -4482,23 +4482,6 @@ func buildAnalyzeResponse(parsed map[string]any, executionMode, provider, model 
 
 	_ = provider
 	return resp
-}
-
-func reconcileAnalyzeItemCaloriesByMacros(items []map[string]any) []map[string]any {
-	for _, item := range items {
-		nutrients := mapFromAny(item["nutrients"])
-		if len(nutrients) == 0 {
-			continue
-		}
-		nutrients = copyAnyMap(nutrients)
-		nutrients["calories"] = round2(foodrecorddomain.MacroCalories(
-			numberFromAny(nutrients["protein"]),
-			numberFromAny(nutrients["carbs"]),
-			numberFromAny(nutrients["fat"]),
-		))
-		item["nutrients"] = nutrients
-	}
-	return items
 }
 
 func parseItems(parsed map[string]any) []map[string]any {
@@ -6279,7 +6262,7 @@ func capItemWaterMlToWeight(item map[string]any) {
 
 func nutritionUnit(food *foodrecorddomain.FoodNutrition) map[string]any {
 	unit := map[string]any{
-		"calories":       foodrecorddomain.MacroCalories(food.ProteinPer100g, food.CarbsPer100g, food.FatPer100g),
+		"calories":       food.KcalPer100g,
 		"protein":        food.ProteinPer100g,
 		"carbs":          food.CarbsPer100g,
 		"fat":            food.FatPer100g,
@@ -6305,6 +6288,9 @@ func nutritionUnit(food *foodrecorddomain.FoodNutrition) map[string]any {
 		"folateMcg":      food.FolateMcgPer100g,
 		"vitaminB12Mcg":  food.VitaminB12McgPer100g,
 	}
+	if foodrecorddomain.IsAIGeneratedNutritionSource(food.Source) {
+		unit["calories"] = foodrecorddomain.MacroCalories(food.ProteinPer100g, food.CarbsPer100g, food.FatPer100g)
+	}
 	return unit
 }
 
@@ -6313,7 +6299,7 @@ func packagedNutritionUnit(food *foodrecorddomain.PackagedFood) map[string]any {
 		return zeroUnitNutritionPer100g()
 	}
 	return map[string]any{
-		"calories":       foodrecorddomain.MacroCalories(food.ProteinPer100g, food.CarbsPer100g, food.FatPer100g),
+		"calories":       food.KcalPer100g,
 		"protein":        food.ProteinPer100g,
 		"carbs":          food.CarbsPer100g,
 		"fat":            food.FatPer100g,
@@ -6953,17 +6939,17 @@ func scaleNutrition(unit map[string]any, weight float64) map[string]any {
 	for key, value := range unit {
 		out[key] = math.Round(numberFromAny(value)*factor*100) / 100
 	}
-	// Every analyzed food uses its scaled macros as the single calorie source.
+	return out
+}
+
+func scaleGeneratedNutrition(unit map[string]any, weight float64) map[string]any {
+	out := scaleNutrition(unit, weight)
 	out["calories"] = round2(foodrecorddomain.MacroCalories(
 		numberFromAny(out["protein"]),
 		numberFromAny(out["carbs"]),
 		numberFromAny(out["fat"]),
 	))
 	return out
-}
-
-func scaleGeneratedNutrition(unit map[string]any, weight float64) map[string]any {
-	return scaleNutrition(unit, weight)
 }
 
 func ItemLogSummary(items []map[string]any, limit int) []map[string]any {

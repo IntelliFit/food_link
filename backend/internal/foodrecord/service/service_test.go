@@ -168,41 +168,9 @@ func TestFoodRecordService_SaveReconcilesAIGeneratedCalories(t *testing.T) {
 	assert.Equal(t, 860.0, updated.TotalCalories)
 }
 
-func TestFoodRecordService_SaveReconcilesCuratedCalories(t *testing.T) {
-	db := setupServiceTestDB(t)
-	svc := NewFoodRecordService(
-		foodrepo.NewFoodRecordRepo(db),
-		foodrepo.NewAnalysisTaskRepo(db),
-		repo.NewUserRepo(db),
-	)
-	source := "nutrition_library"
-	category := "database"
-
-	record, err := svc.Save(context.Background(), "u1", SaveFoodRecordInput{
-		MealType:      "lunch",
-		TotalCalories: 123,
-		TotalProtein:  1,
-		TotalCarbs:    2,
-		TotalFat:      3,
-		Items: []domain.FoodItem{{
-			Name:                    "测试食物",
-			Weight:                  100,
-			Intake:                  100,
-			Ratio:                   100,
-			NutritionSource:         &source,
-			NutritionSourceCategory: &category,
-			Nutrients:               domain.FoodItemNutrients{Calories: 123, Protein: 1, Carbs: 2, Fat: 3},
-		}},
-	})
-	require.NoError(t, err)
-	assert.Equal(t, 39.0, record.TotalCalories)
-	require.Len(t, record.Items, 1)
-	assert.Equal(t, 39.0, record.Items[0].Nutrients.Calories)
-}
-
-func TestReconcileFoodItemCaloriesByMacrosAlsoNormalizesCuratedNutrition(t *testing.T) {
+func TestReconcileAIGeneratedFoodItemsLeavesCuratedNutritionUntouched(t *testing.T) {
 	source := "ingredient_label"
-	items := reconcileFoodItemCaloriesByMacros([]domain.FoodItem{{
+	items, reconciled := reconcileAIGeneratedFoodItems([]domain.FoodItem{{
 		NutritionSource: &source,
 		Nutrients: domain.FoodItemNutrients{
 			Calories: 123,
@@ -212,8 +180,9 @@ func TestReconcileFoodItemCaloriesByMacrosAlsoNormalizesCuratedNutrition(t *test
 		},
 	}})
 
+	assert.False(t, reconciled)
 	require.Len(t, items, 1)
-	assert.Equal(t, 39.0, items[0].Nutrients.Calories)
+	assert.Equal(t, 123.0, items[0].Nutrients.Calories)
 }
 
 func TestZeroNutritionGateRejectsSuspiciousItem(t *testing.T) {

@@ -308,11 +308,6 @@ const INGREDIENT_METRIC_META: Record<IngredientMetricField, { label: string; cla
 
 const roundToSingleDecimal = (value: number) => Math.round(value * 10) / 10
 
-const formatCalorieDisplay = (value: number) => {
-  const rounded = roundToSingleDecimal(value)
-  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1)
-}
-
 const formatMacroDisplay = (value: number) => roundToSingleDecimal(value).toFixed(1)
 
 const formatWaterDisplay = (value: number) => String(Math.max(0, Math.round(value)))
@@ -495,7 +490,7 @@ const clampWaterMlForItem = (waterMl: number, weight: number) => {
 
 const buildFoodItemNutrients = (item: NutritionItem): Nutrients => ({
   ...item.nutrients,
-  calories: calculateCaloriesFromMacros(item.protein, item.carbs, item.fat),
+  calories: item.calorie,
   protein: item.protein,
   carbs: item.carbs,
   fat: item.fat,
@@ -522,7 +517,7 @@ const formatNutrientDetailValue = (value: number) => {
 }
 
 const calculateCaloriesFromMacros = (protein: number, carbs: number, fat: number) => (
-  Math.max(0, protein) * 4 + Math.max(0, carbs) * 4 + Math.max(0, fat) * 9
+  roundToSingleDecimal(protein) * 4 + roundToSingleDecimal(carbs) * 4 + roundToSingleDecimal(fat) * 9
 )
 
 /** 结果页头图：上滑时在区间内高度收缩；左右不留 margin（全宽铺满） */
@@ -776,7 +771,7 @@ function ResultPage() {
         // 使用 ratio 来计算实际摄入的营养
         const ratio = item.ratio / 100
         return {
-          calories: acc.calories + calculateCaloriesFromMacros(item.protein, item.carbs, item.fat) * ratio,
+          calories: acc.calories + item.calorie * ratio,
           protein: acc.protein + item.protein * ratio,
           carbs: acc.carbs + item.carbs * ratio,
           fat: acc.fat + item.fat * ratio
@@ -784,7 +779,7 @@ function ResultPage() {
       },
       { calories: 0, protein: 0, carbs: 0, fat: 0 }
     )
-    setNutritionStats({ ...stats, calories: roundToSingleDecimal(stats.calories) })
+    setNutritionStats(stats)
 
     // 计算总摄入重量
     const total = confirmedItems.reduce((sum, item) => sum + item.intake, 0)
@@ -1362,7 +1357,17 @@ function ResultPage() {
         const normalizedValue = field === 'waterMl'
           ? clampWaterMlForItem(Math.round(resolvedValue), item.weight)
           : Math.max(0, roundToSingleDecimal(resolvedValue))
-        if (field === 'calories') return item
+        if (field === 'calories') {
+          return {
+            ...item,
+            nutritionEdited: true,
+            calorie: Math.round(normalizedValue),
+            nutrients: {
+              ...item.nutrients,
+              calories: Math.round(normalizedValue)
+            }
+          }
+        }
         const nextItem = {
           ...item,
           nutritionEdited: true,
@@ -1651,6 +1656,7 @@ function ResultPage() {
     nutritionAdjustedRef.current = true
     const name = foodEditDraft.name.trim()
     const weight = parseFoodEditNumber(foodEditDraft.weight)
+    const calories = parseFoodEditNumber(foodEditDraft.calories)
     const protein = parseFoodEditNumber(foodEditDraft.protein)
     const carbs = parseFoodEditNumber(foodEditDraft.carbs)
     const fat = parseFoodEditNumber(foodEditDraft.fat)
@@ -1664,7 +1670,7 @@ function ResultPage() {
       Taro.showToast({ title: '请输入大于0的重量', icon: 'none' })
       return
     }
-    if (protein == null || carbs == null || fat == null || waterMl == null) {
+    if (calories == null || protein == null || carbs == null || fat == null || waterMl == null) {
       Taro.showToast({ title: '营养值需为不小于0的数字', icon: 'none' })
       return
     }
@@ -1675,6 +1681,7 @@ function ResultPage() {
         const weightChanged = Math.abs(weight - item.weight) > 0.001
         const isPendingPackagedChoice = isPackagedChoicePending(item)
         const nutritionChanged =
+          Math.abs(calories - item.calorie) > 0.001 ||
           Math.abs(protein - item.protein) > 0.001 ||
           Math.abs(carbs - item.carbs) > 0.001 ||
           Math.abs(fat - item.fat) > 0.001 ||
@@ -1687,7 +1694,7 @@ function ResultPage() {
           nutritionChanged ? Math.round(waterMl) : Math.round(item.waterMl * weightScale),
           weight,
         )
-        const nextCalories = calculateCaloriesFromMacros(nextProtein, nextCarbs, nextFat)
+        const nextCalories = nutritionChanged ? Math.round(calories) : Math.round(item.calorie * weightScale)
         const ratio = item.ratio > 0 ? item.ratio : 100
         return {
           ...item,
@@ -2694,7 +2701,7 @@ function ResultPage() {
           <View className='nutrition-overview-card'>
             <View className='nutrition-header'>
               <View className='calories-main'>
-                <Text className='calories-value'>{formatCalorieDisplay(nutritionStats.calories)}</Text>
+                <Text className='calories-value'>{Math.round(nutritionStats.calories)}</Text>
                 <View className='calories-unit-row'>
                   <Text className='calories-unit'>kcal</Text>
                   <Text className='calories-label'>总热量</Text>
@@ -2930,7 +2937,7 @@ function ResultPage() {
                       <Text className='ingredient-summary-label'>热量</Text>
                       <View className='ingredient-cal-kcal-line'>
                         <Text className='ingredient-cal-kcal-num'>
-                            {formatIngredientMetricDisplay('calories', calculateCaloriesFromMacros(item.protein, item.carbs, item.fat) * (item.ratio / 100))}
+                          {Math.round(item.calorie * (item.ratio / 100))}
                         </Text>
                         <Text className='ingredient-cal-kcal-unit'>kcal</Text>
                       </View>
@@ -3136,16 +3143,7 @@ function ResultPage() {
                 <View className='food-edit-grid'>
                   <View className='food-edit-field food-edit-field--with-unit'>
                     <Text className='food-edit-label'>热量</Text>
-                    <Input
-                      className='food-edit-input'
-                      type='digit'
-                      value={String(roundToSingleDecimal(calculateCaloriesFromMacros(
-                        Number(foodEditDraft.protein) || 0,
-                        Number(foodEditDraft.carbs) || 0,
-                        Number(foodEditDraft.fat) || 0,
-                      )))}
-                      disabled
-                    />
+                    <Input className='food-edit-input' type='digit' value={foodEditDraft.calories} placeholder='热量' onInput={(e: any) => updateFoodEditDraftField('calories', e.detail.value)} />
                     <Text className='food-edit-unit'>kcal</Text>
                   </View>
                   <View className='food-edit-field food-edit-field--with-unit'>

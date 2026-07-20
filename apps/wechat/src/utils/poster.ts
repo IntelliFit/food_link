@@ -238,7 +238,7 @@ export function drawRecordPoster(
           calorieCompare,
           sharerNickname, sharerAvatarImage } = options
 
-  const cal = record.total_calories ?? 0
+  const cal = Math.round(record.total_calories ?? 0)
   const p = Math.round(record.total_protein ?? 0)
   const c = Math.round(record.total_carbs ?? 0)
   const f = Math.round(record.total_fat ?? 0)
@@ -356,8 +356,7 @@ export function drawRecordPoster(
   ctx.textBaseline = 'alphabetic'
   ctx.fillStyle = TEXT_INK
   ctx.font = 'bold 44px sans-serif'
-  const roundedCal = Math.round(cal * 10) / 10
-  const calStr = Number.isInteger(roundedCal) ? roundedCal.toLocaleString('en-US') : roundedCal.toFixed(1)
+  const calStr = cal.toLocaleString('en-US')
   ctx.fillText(calStr, cx, calBaselineY)
   const calStrW = ctx.measureText(calStr).width
   ctx.fillStyle = TEXT_MUTED
