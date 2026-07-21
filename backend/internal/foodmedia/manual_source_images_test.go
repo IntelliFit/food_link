@@ -24,13 +24,16 @@ func TestLookupManualSourceImagePaths(t *testing.T) {
 			id TEXT PRIMARY KEY,
 			canonical_name TEXT,
 			image_path TEXT,
-			image_paths TEXT
+			image_paths TEXT,
+			is_active BOOLEAN NOT NULL DEFAULT TRUE,
+			quality_tier TEXT NOT NULL DEFAULT 'legacy_curated'
 		)
 	`).Error)
 	require.NoError(t, db.Exec(`
 		CREATE TABLE food_nutrition_aliases (
 			alias_name TEXT,
-			food_id TEXT
+			food_id TEXT,
+			match_status TEXT NOT NULL DEFAULT 'approved_exact'
 		)
 	`).Error)
 	require.NoError(t, db.Exec(
