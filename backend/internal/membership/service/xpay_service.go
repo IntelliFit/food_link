@@ -145,6 +145,17 @@ func (s *MembershipService) CreateVirtualPayment(ctx context.Context, userID str
 	if err := s.ensurePlanPurchaseAllowed(ctx, userID, plan); err != nil {
 		return nil, err
 	}
+	activeMembership, err := s.repo.GetActiveMembership(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if activeMembership != nil {
+		logger.Warn(ctx, "有效会员尝试重复购买虚拟支付套餐",
+			slog.String("user_id", userID),
+			slog.String("plan_code", plan.Code),
+		)
+		return nil, &commonerrors.AppError{Code: 20003, Message: "会员已开通，有效期内无需重复购买", HTTPStatus: http.StatusConflict}
+	}
 	user, err := s.repo.GetUser(ctx, userID)
 	if err != nil {
 		return nil, err

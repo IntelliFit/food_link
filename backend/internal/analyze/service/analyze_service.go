@@ -54,10 +54,10 @@ const (
 	realtimeVisionTransientRetries  = 1
 	ratioSuggestionTimeout          = 8 * time.Second
 	ediblePortionTimeout            = 8 * time.Second
-	nutritionFallbackAttemptTimeout = 15 * time.Second
-	fastNutritionFallbackTimeout    = 12 * time.Second
+	nutritionFallbackAttemptTimeout = 35 * time.Second
+	fastNutritionFallbackTimeout    = 25 * time.Second
 	fastVisionAnalysisTimeout       = 25 * time.Second
-	fastPostprocessTimeout          = 20 * time.Second
+	fastPostprocessTimeout          = 30 * time.Second
 	standardHybridTimeout           = 60 * time.Second
 	webSearchTimeout                = 6 * time.Second
 	webSearchMaxQueries             = 3
@@ -461,6 +461,31 @@ func (s *AnalyzeService) ApplyDBFirstToItems(ctx context.Context, items []map[st
 	resp := map[string]any{"items": items}
 	resp = s.applyDBFirstNutrition(ctx, resp, additionalContext)
 	return toItems(resp["items"])
+}
+
+// ValidateResolvedNutritionItems prevents unresolved zero placeholders from
+// crossing a task boundary as a successful analysis result.
+func ValidateResolvedNutritionItems(items []map[string]any) error {
+	names := make([]string, 0)
+	for _, item := range items {
+		if !boolFromAny(item["is_unresolved"]) &&
+			!strings.EqualFold(strings.TrimSpace(fmt.Sprintf("%v", item["resolve_status"])), "unresolved") &&
+			!strings.EqualFold(strings.TrimSpace(fmt.Sprintf("%v", item["nutrition_source"])), "unresolved") {
+			continue
+		}
+		name := strings.TrimSpace(fmt.Sprintf("%v", item["name"]))
+		if name == "" {
+			name = "未识别食物"
+		}
+		names = append(names, name)
+	}
+	if len(names) == 0 {
+		return nil
+	}
+	if len(names) > 3 {
+		names = names[:3]
+	}
+	return fmt.Errorf("食物「%s」的营养信息暂时无法可靠补全，请稍后重试", strings.Join(names, "、"))
 }
 
 func analyzeWithImagesTemperature(ctx context.Context, client LLMClient, prompt string, imageURLs []string, temperature float64) (map[string]any, error) {

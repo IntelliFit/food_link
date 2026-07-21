@@ -2283,6 +2283,12 @@ func (r *Runner) processPrecisionItemEstimate(ctx context.Context, task *domain.
 		}
 	}
 	dbItems := r.analyze.ApplyDBFirstToItems(ctx, parsedItems, additionalContext)
+	if err := analyzeservice.ValidateResolvedNutritionItems(dbItems); err != nil {
+		if estimate != nil {
+			_ = r.precision.UpdateItemEstimate(ctx, estimate.ID, map[string]any{"status": "failed", "error_message": sanitizeTaskErrorMessage(err)})
+		}
+		return err
+	}
 	dbItems = attachPrecisionItemMetadata(dbItems, plannedItems)
 	uncertaintyNotes := stringSliceFromAny(parsed["uncertaintyNotes"])
 	uncertaintyNotes = append(uncertaintyNotes, refinedNotes...)
@@ -4352,6 +4358,11 @@ func (r *Runner) completeTask(ctx context.Context, task *domain.AnalysisTask, re
 	if task == nil {
 		return nil
 	}
+	if taskResultRequiresResolvedNutrition(task.TaskType) {
+		if err := analyzeservice.ValidateResolvedNutritionItems(extractItems(result["items"])); err != nil {
+			return err
+		}
+	}
 	attemptID := stringPtrValue(task.AttemptID)
 	var (
 		ok  bool
@@ -4377,6 +4388,15 @@ func (r *Runner) completeTask(ctx context.Context, task *domain.AnalysisTask, re
 		)
 	}
 	return nil
+}
+
+func taskResultRequiresResolvedNutrition(taskType string) bool {
+	switch strings.TrimSpace(taskType) {
+	case "food", "food_text", "precision_aggregate":
+		return true
+	default:
+		return false
+	}
 }
 
 func (r *Runner) failTask(ctx context.Context, task *domain.AnalysisTask, taskErr error) error {

@@ -3773,6 +3773,13 @@ export interface CreateVirtualMembershipPaymentResponse {
   }
 }
 
+export interface MembershipPaymentSyncResponse {
+  synced: boolean
+  status: string
+  entitlement_status?: string
+  membership?: MembershipStatus
+}
+
 export async function getBodyMetricsSummary(range: 'week' | 'month' = 'month'): Promise<BodyMetricsSummary> {
   const res = await authenticatedRequest(
     `/api/body-metrics/summary?range=${encodeURIComponent(range)}`,
@@ -4878,6 +4885,19 @@ export async function createVirtualMembershipPayment(planCode: string, loginCode
     throw new Error((response.data as any)?.detail || (response.data as any)?.message || '创建虚拟支付订单失败')
   }
   return response.data as CreateVirtualMembershipPaymentResponse
+}
+
+/** 查询本次会员订单是否已支付并完成权益发放。 */
+export async function syncMembershipPayment(orderNo: string): Promise<MembershipPaymentSyncResponse> {
+  const response = await authenticatedRequest('/api/membership/pay/sync', {
+    method: 'POST',
+    data: { order_no: orderNo },
+    timeout: 15000,
+  })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.detail || (response.data as any)?.message || '确认支付结果失败')
+  }
+  return response.data as MembershipPaymentSyncResponse
 }
 
 /** 关闭当前用户唯一的微信自动续费合同，不影响已付费会员周期。 */

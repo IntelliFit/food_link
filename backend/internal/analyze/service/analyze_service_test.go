@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	authrepo "food_link/backend/internal/auth/repo"
 	foodrecorddomain "food_link/backend/internal/foodrecord/domain"
@@ -311,6 +312,37 @@ type fakeNutritionFallbackEstimator struct {
 	additionalContext string
 	rows              map[int]map[string]any
 	err               error
+}
+
+type delayedNutritionFallbackEstimator struct {
+	delay time.Duration
+	rows  map[int]map[string]any
+	err   error
+}
+
+func (f *delayedNutritionFallbackEstimator) Estimate(ctx context.Context, _ []UnresolvedNutritionCandidate, _ string) (map[int]map[string]any, error) {
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-time.After(f.delay):
+		return f.rows, f.err
+	}
+}
+
+type noThinkingNutritionClient struct {
+	result          map[string]any
+	analyzeCalls    int
+	noThinkingCalls int
+}
+
+func (c *noThinkingNutritionClient) Analyze(context.Context, string, string) (map[string]any, error) {
+	c.analyzeCalls++
+	return c.result, nil
+}
+
+func (c *noThinkingNutritionClient) AnalyzeWithoutThinking(context.Context, string, string) (map[string]any, error) {
+	c.noThinkingCalls++
+	return c.result, nil
 }
 
 func (f *fakeNutritionFallbackEstimator) Estimate(ctx context.Context, candidates []UnresolvedNutritionCandidate, additionalContext string) (map[int]map[string]any, error) {
@@ -2436,6 +2468,108 @@ func TestAnalyzeService_FinalizeAnalyzeResponseFallsBackToQwenWhenDeepSeekFails(
 	assert.Equal(t, 0, resp["unresolved_count"])
 }
 
+func TestChainedNutritionFallbackEstimatorRunsProvidersInParallel(t *testing.T) {
+	slow := &delayedNutritionFallbackEstimator{
+		delay: 300 * time.Millisecond,
+		rows: map[int]map[string]any{0: {
+			"calories": 200.0,
+			"protein":  10.0,
+			"carbs":    20.0,
+			"fat":      8.0,
+		}},
+	}
+	fast := &delayedNutritionFallbackEstimator{
+		delay: 20 * time.Millisecond,
+		rows: map[int]map[string]any{0: {
+			"calories": 180.0,
+			"protein":  9.0,
+			"carbs":    18.0,
+			"fat":      8.0,
+		}},
+	}
+	estimator := newChainedNutritionFallbackEstimator(
+		namedNutritionFallbackEstimator{source: "slow_generated", estimator: slow, timeout: time.Second},
+		namedNutritionFallbackEstimator{source: "fast_generated", estimator: fast, timeout: time.Second},
+	)
+
+	start := time.Now()
+	rows, err := estimator.Estimate(context.Background(), []UnresolvedNutritionCandidate{{Index: 0, Name: "板烧双蛋汉堡", EstimatedWeightGrams: 300}}, "")
+	require.NoError(t, err)
+	assert.Less(t, time.Since(start), 200*time.Millisecond)
+	assert.Equal(t, "fast_generated", rows[0][fallbackNutritionSourceKey])
+}
+
+func TestChainedNutritionFallbackEstimatorMergesCompleteRowsAcrossProviders(t *testing.T) {
+	burger := &delayedNutritionFallbackEstimator{
+		delay: 10 * time.Millisecond,
+		rows: map[int]map[string]any{0: {
+			"calories": 250.0,
+			"protein":  14.0,
+			"carbs":    24.0,
+			"fat":      11.0,
+		}},
+	}
+	coffee := &delayedNutritionFallbackEstimator{
+		delay: 20 * time.Millisecond,
+		rows: map[int]map[string]any{2: {
+			"calories": 0.0,
+			"protein":  0.0,
+			"carbs":    0.0,
+			"fat":      0.0,
+		}},
+	}
+	estimator := newChainedNutritionFallbackEstimator(
+		namedNutritionFallbackEstimator{source: "burger_generated", estimator: burger, timeout: time.Second},
+		namedNutritionFallbackEstimator{source: "coffee_generated", estimator: coffee, timeout: time.Second},
+	)
+
+	rows, err := estimator.Estimate(context.Background(), []UnresolvedNutritionCandidate{
+		{Index: 0, Name: "麦当劳板烧双蛋汉堡", EstimatedWeightGrams: 300},
+		{Index: 2, Name: "黑咖啡", EstimatedWeightGrams: 200},
+	}, "")
+	require.NoError(t, err)
+	require.Len(t, rows, 2)
+	assert.Equal(t, "burger_generated", rows[0][fallbackNutritionSourceKey])
+	assert.Equal(t, "coffee_generated", rows[2][fallbackNutritionSourceKey])
+}
+
+func TestChainedNutritionFallbackEstimatorRejectsSuspiciousZeroFood(t *testing.T) {
+	zero := &delayedNutritionFallbackEstimator{
+		rows: map[int]map[string]any{0: {
+			"calories": 0.0,
+			"protein":  0.0,
+			"carbs":    0.0,
+			"fat":      0.0,
+		}},
+	}
+	estimator := newChainedNutritionFallbackEstimator(
+		namedNutritionFallbackEstimator{source: "zero_generated", estimator: zero, timeout: time.Second},
+	)
+
+	rows, err := estimator.Estimate(context.Background(), []UnresolvedNutritionCandidate{{Index: 0, Name: "麦当劳板烧双蛋汉堡", EstimatedWeightGrams: 300}}, "")
+	require.Error(t, err)
+	assert.Nil(t, rows)
+	assert.Contains(t, err.Error(), "0/1")
+}
+
+func TestValidateResolvedNutritionItemsRejectsUnresolvedPlaceholder(t *testing.T) {
+	err := ValidateResolvedNutritionItems([]map[string]any{{
+		"name":             "麦当劳板烧双蛋汉堡",
+		"is_unresolved":    true,
+		"resolve_status":   "unresolved",
+		"nutrition_source": "unresolved",
+		"nutrients": map[string]any{
+			"calories": 0.0,
+			"protein":  0.0,
+			"carbs":    0.0,
+			"fat":      0.0,
+		},
+	}})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "麦当劳板烧双蛋汉堡")
+	assert.Contains(t, err.Error(), "无法可靠补全")
+}
+
 func TestAnalyzeService_FinalizeFastModeUsesOnlyQwenPostprocessing(t *testing.T) {
 	resolver := newFakeAnalyzeNutritionResolver()
 	qwen := &sequenceLLMClient{results: []map[string]any{
@@ -2531,6 +2665,26 @@ func TestQwenNutritionEstimatorEstimateParsesNutrition(t *testing.T) {
 	assert.Equal(t, 0.2, rows[3]["vitaminB12Mcg"])
 }
 
+func TestQwenNutritionEstimatorUsesNoThinkingClient(t *testing.T) {
+	client := &noThinkingNutritionClient{result: map[string]any{
+		"items": []any{map[string]any{
+			"index": 0,
+			"unitNutritionPer100g": map[string]any{
+				"protein": 10.0,
+				"carbs":   20.0,
+				"fat":     8.0,
+			},
+		}},
+	}}
+	estimator := NewQwenNutritionEstimator(client)
+
+	rows, err := estimator.Estimate(context.Background(), []UnresolvedNutritionCandidate{{Index: 0, Name: "板烧双蛋汉堡", EstimatedWeightGrams: 300}}, "")
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	assert.Equal(t, 0, client.analyzeCalls)
+	assert.Equal(t, 1, client.noThinkingCalls)
+}
+
 func TestNutritionUnitReconcilesExistingAIGeneratedFood(t *testing.T) {
 	unit := nutritionUnit(&foodrecorddomain.FoodNutrition{
 		KcalPer100g:    230,
@@ -2550,9 +2704,12 @@ func TestNutritionUnitReconcilesExistingAIGeneratedFood(t *testing.T) {
 
 func TestChainedNutritionFallbackUsesGeminiAfterQwenFailure(t *testing.T) {
 	qwen := &fakeNutritionFallbackEstimator{err: errors.New("qwen unavailable")}
-	gemini := &fakeNutritionFallbackEstimator{rows: map[int]map[string]any{
-		0: {"calories": 230.0, "protein": 13.0, "carbs": 10.0, "fat": 12.0},
-	}}
+	gemini := &delayedNutritionFallbackEstimator{
+		delay: 10 * time.Millisecond,
+		rows: map[int]map[string]any{
+			0: {"calories": 230.0, "protein": 13.0, "carbs": 10.0, "fat": 12.0},
+		},
+	}
 	estimator := newChainedNutritionFallbackEstimator(
 		namedNutritionFallbackEstimator{source: "qwen_generated", estimator: qwen},
 		namedNutritionFallbackEstimator{source: "gemini_generated", estimator: gemini},
@@ -2563,7 +2720,6 @@ func TestChainedNutritionFallbackUsesGeminiAfterQwenFailure(t *testing.T) {
 	require.Len(t, rows, 1)
 	assert.Equal(t, "gemini_generated", rows[0][fallbackNutritionSourceKey])
 	require.Len(t, qwen.candidates, 1)
-	require.Len(t, gemini.candidates, 1)
 }
 
 func TestAnalyzeService_ApplyDBFirstToItemsIntegratesPackagedFoodForWorkerPrecision(t *testing.T) {

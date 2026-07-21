@@ -20,6 +20,11 @@ type chainedNutritionFallbackEstimator struct {
 	estimators []namedNutritionFallbackEstimator
 }
 
+type nutritionFallbackAttemptResult struct {
+	rows map[int]map[string]any
+	err  error
+}
+
 func newChainedNutritionFallbackEstimator(estimators ...namedNutritionFallbackEstimator) *chainedNutritionFallbackEstimator {
 	active := make([]namedNutritionFallbackEstimator, 0, len(estimators))
 	for _, estimator := range estimators {
@@ -35,30 +40,93 @@ func (e *chainedNutritionFallbackEstimator) Estimate(ctx context.Context, candid
 	if e == nil || len(e.estimators) == 0 {
 		return map[int]map[string]any{}, nil
 	}
-	var lastErr error
-	for _, candidate := range e.estimators {
-		callCtx := ctx
-		cancel := func() {}
-		if candidate.timeout > 0 {
-			callCtx, cancel = context.WithTimeout(ctx, candidate.timeout)
-		}
-		rows, err := candidate.estimator.Estimate(callCtx, candidates, additionalContext)
-		cancel()
-		if err == nil && len(rows) > 0 {
-			tagFallbackSource(rows, candidate.source)
-			return rows, nil
-		}
-		if err != nil {
-			lastErr = err
-		}
-		if ctx.Err() != nil {
+
+	expected := make(map[int]UnresolvedNutritionCandidate, len(candidates))
+	for _, candidate := range candidates {
+		expected[candidate.Index] = candidate
+	}
+	if len(expected) == 0 {
+		return map[int]map[string]any{}, nil
+	}
+
+	runCtx, cancelAll := context.WithCancel(ctx)
+	defer cancelAll()
+	results := make(chan nutritionFallbackAttemptResult, len(e.estimators))
+	for _, configured := range e.estimators {
+		configured := configured
+		go func() {
+			callCtx := runCtx
+			cancel := func() {}
+			if configured.timeout > 0 {
+				callCtx, cancel = context.WithTimeout(runCtx, configured.timeout)
+			}
+			rows, err := configured.estimator.Estimate(callCtx, candidates, additionalContext)
+			cancel()
+			if err == nil {
+				tagFallbackSource(rows, configured.source)
+			}
+			results <- nutritionFallbackAttemptResult{rows: rows, err: err}
+		}()
+	}
+
+	merged := make(map[int]map[string]any, len(expected))
+	for remaining := len(e.estimators); remaining > 0; remaining-- {
+		select {
+		case <-ctx.Done():
 			return nil, ctx.Err()
+		case result := <-results:
+			if result.err != nil {
+				continue
+			}
+			for index, candidate := range expected {
+				if _, exists := merged[index]; exists {
+					continue
+				}
+				row, exists := result.rows[index]
+				if !exists || !usableNutritionFallbackRow(candidate.Name, row) {
+					continue
+				}
+				merged[index] = row
+			}
+			if len(merged) == len(expected) {
+				cancelAll()
+				return merged, nil
+			}
 		}
 	}
-	if lastErr != nil {
-		return nil, lastErr
+	return nil, fmt.Errorf("营养补全未获得完整可靠结果（完成 %d/%d 项）", len(merged), len(expected))
+}
+
+func usableNutritionFallbackRow(foodName string, row map[string]any) bool {
+	if len(row) == 0 {
+		return false
 	}
-	return map[int]map[string]any{}, nil
+	calories := numberFromAny(row["calories"])
+	macroSum := numberFromAny(row["protein"]) + numberFromAny(row["carbs"]) + numberFromAny(row["fat"])
+	if calories > 0 && macroSum > 0 {
+		return true
+	}
+	return naturalNearZeroNutritionName(foodName)
+}
+
+func naturalNearZeroNutritionName(name string) bool {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return false
+	}
+	exact := []string{"水", "白开水", "温水", "热水", "冰水", "纯净水", "矿泉水", "饮用水", "苏打水", "气泡水", "无糖茶", "茶水", "绿茶", "乌龙茶", "黑咖啡", "美式咖啡", "食用冰", "冰块"}
+	for _, candidate := range exact {
+		if name == candidate {
+			return true
+		}
+	}
+	contains := []string{"无糖茶", "黑咖啡", "美式咖啡", "无糖可乐", "无糖芬达", "食用冰", "冰块"}
+	for _, candidate := range contains {
+		if strings.Contains(name, candidate) {
+			return true
+		}
+	}
+	return false
 }
 
 func tagFallbackSource(rows map[int]map[string]any, source string) {
@@ -157,7 +225,15 @@ func (e *QwenNutritionEstimator) Estimate(ctx context.Context, candidates []Unre
 	}
 	bytes, _ := json.Marshal(userPrompt)
 	prompt := "你是营养数据库补全助手。请用常见营养数据库口径保守估算，补齐维生素和矿物质，避免 0 营养和宏量不闭合。\n" + string(bytes)
-	parsed, err := e.client.Analyze(ctx, prompt, "")
+	var parsed map[string]any
+	var err error
+	if client, ok := e.client.(interface {
+		AnalyzeWithoutThinking(context.Context, string, string) (map[string]any, error)
+	}); ok {
+		parsed, err = client.AnalyzeWithoutThinking(ctx, prompt, "")
+	} else {
+		parsed, err = e.client.Analyze(ctx, prompt, "")
+	}
 	if err != nil {
 		return nil, err
 	}

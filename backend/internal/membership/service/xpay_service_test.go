@@ -14,6 +14,63 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestCreateVirtualPaymentRejectsActiveMembership(t *testing.T) {
+	now := time.Now()
+	expiresAt := now.AddDate(0, 1, 0)
+	planCode := "light_monthly"
+	repo := &mockMembershipRepo{
+		planByCode: map[string]*domain.MembershipPlan{planCode: {
+			Code: planCode, Amount: 9.9, DurationMonths: 1, IsActive: true, IsVisible: true,
+		}},
+		membership: &domain.UserMembership{UserID: "u1", Status: "active", ExpiresAt: &expiresAt},
+	}
+	svc := NewMembershipService(repo, xpayTestConfig())
+
+	_, err := svc.CreateVirtualPayment(context.Background(), "u1", CreateVirtualMembershipPaymentInput{
+		PlanCode: planCode, LoginCode: "login-code",
+	})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "会员已开通")
+	assert.Nil(t, repo.payment)
+}
+
+func TestSyncWechatPaymentXPayRequiresAppliedEntitlement(t *testing.T) {
+	for _, tc := range []struct {
+		name              string
+		paymentStatus     string
+		entitlementStatus string
+		wantSynced        bool
+	}{
+		{name: "pending", paymentStatus: "pending", wantSynced: false},
+		{name: "paid but entitlement pending", paymentStatus: "paid", entitlementStatus: xpayActivationPrepared, wantSynced: false},
+		{name: "paid and entitlement applied", paymentStatus: "paid", entitlementStatus: xpayActivationApplied, wantSynced: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			extra := map[string]any{}
+			if tc.entitlementStatus != "" {
+				extra[xpayActivationExtraKey] = map[string]any{"status": tc.entitlementStatus}
+			}
+			expiresAt := time.Now().AddDate(0, 1, 0)
+			repo := &mockMembershipRepo{
+				payment: &domain.MembershipPayment{
+					UserID: "u1", OrderNo: "PMX1", Status: tc.paymentStatus,
+					PayChannel: "wechat_virtual_payment", TradeType: "XPAY", Extra: extra,
+				},
+				membership: &domain.UserMembership{UserID: "u1", Status: "active", ExpiresAt: &expiresAt},
+			}
+			svc := NewMembershipService(repo)
+
+			data, err := svc.SyncWechatPayment(context.Background(), "u1", "PMX1")
+
+			require.NoError(t, err)
+			assert.Equal(t, tc.wantSynced, data["synced"])
+			assert.Equal(t, tc.paymentStatus, data["status"])
+			assert.Equal(t, tc.entitlementStatus, data["entitlement_status"])
+		})
+	}
+}
+
 func TestXPaySignatures(t *testing.T) {
 	signData := `{"offerId":"1450593228","buyQuantity":1,"env":1,"currencyType":"CNY","productId":"light_monthly","goodsPrice":990,"outTradeNo":"PM20260719123000A1B2C3D4","attach":"membership:light_monthly"}`
 	if got, want := xpayHMACSHA256("app-key", "requestVirtualPayment&"+signData), "e00d94ab6e3fd1f7e6a8a0b33bc9b06f6d51b871b8f3dd9ccbb8064afa82b29c"; got != want {

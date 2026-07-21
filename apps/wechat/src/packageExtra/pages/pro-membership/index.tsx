@@ -8,6 +8,7 @@ import {
   getMembershipPlans,
   getMyMembership,
   getHealthProfile,
+  syncMembershipPayment,
   showUnifiedApiError,
   MembershipPeriod,
   MembershipPlan,
@@ -16,12 +17,10 @@ import {
   HealthProfile,
 } from '../../../utils/api'
 import {
-  compareMembershipTier,
   getFounderPaidBonusRankLabel,
   getFounderPaidBonusSourceLabel,
   getCurrentMembershipPeriod,
   getCurrentMembershipTier,
-  getMembershipTierLabel,
   isPrecisionSupportedTier,
 } from '../../../utils/membership'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
@@ -267,15 +266,18 @@ function ProMembershipPage() {
     applyThemeNavigationBar(scheme, { lightBackground: '#f0fdf4', darkBackground: '#101716' })
   }, [scheme])
 
-  const pollMembershipStatus = async () => {
+  const pollPaymentStatus = async (orderNo: string) => {
     for (let i = 0; i < 8; i++) {
       await wait(1000)
       try {
-        const latest = await getMyMembership(undefined, { forceRefresh: true })
-        setMembership(latest)
-        if (latest.is_pro || latest.status === 'active') return true
+        const payment = await syncMembershipPayment(orderNo)
+        if (payment.synced && payment.status === 'paid') {
+          const latest = payment.membership || await getMyMembership(undefined, { forceRefresh: true })
+          setMembership(latest)
+          return true
+        }
       } catch (err) {
-        console.error('轮询会员状态失败:', err)
+        console.error('轮询支付状态失败:', err)
       }
     }
     return false
@@ -288,6 +290,11 @@ function ProMembershipPage() {
       return
     }
     if (!selectedPlan || loading) return
+
+    if (membership?.is_pro || membership?.status === 'active') {
+      Taro.showToast({ title: '会员已开通，无需重复购买', icon: 'none' })
+      return
+    }
 
     const selectedPlanIsPaymentTest = isPaymentTestPlan(selectedPlan)
 
@@ -347,18 +354,17 @@ function ProMembershipPage() {
         mode: payOrder.virtual_payment.mode,
       })
       Taro.showToast({ title: '支付已提交，正在确认', icon: 'none', duration: 1800 })
-      if (selectedPlanIsPaymentTest) {
-        Taro.showToast({ title: '测试会员已开通', icon: 'success' })
+      const confirmed = await pollPaymentStatus(payOrder.order_no)
+      if (!confirmed) {
+        await Taro.showModal({
+          title: '支付结果确认中',
+          content: '暂未收到微信支付确认，请稍后重新进入会员页面查看。请勿重复支付。',
+          showCancel: false,
+          confirmText: '我知道了',
+        })
         return
       }
-      const confirmed = await pollMembershipStatus()
-      if (!confirmed) {
-        const latest = await getMyMembership(undefined, { forceRefresh: true })
-        setMembership(latest)
-      }
-      if (membership?.is_pro || confirmed) {
-        Taro.showToast({ title: '开通成功！', icon: 'success' })
-      }
+      Taro.showToast({ title: '开通成功！', icon: 'success' })
     } catch (error: any) {
       const message = error?.errMsg || error?.message || ''
       if (String(message).includes('cancel')) {
@@ -395,7 +401,6 @@ function ProMembershipPage() {
   const bonusCredits = membership?.daily_bonus_credits ?? 0
   const inviteBonusCredits = membership?.invite_bonus_credits ?? 0
   const shareBonusCredits = membership?.share_bonus_credits ?? 0
-  const currentPlanCode = membership?.current_plan_code ?? null
   const currentPlanTier = getCurrentMembershipTier(membership)
   const currentPlanPeriod = getCurrentMembershipPeriod(membership)
   const selectedTierMeta = TIERS.find(t => t.key === selectedTier) || null
@@ -420,16 +425,6 @@ function ProMembershipPage() {
     { label: '适合频率', values: { light: '轻量记录', standard: '日常使用', advanced: '高频使用' } },
   ]), [tierCreditsDisplay])
   const selectedTierCredits = selectedTierMeta ? tierCreditsDisplay[selectedTierMeta.key] : 0
-  const isCurrentSelectedPlan = Boolean(isPro && selectedPlan && currentPlanCode === selectedPlan.code)
-  const showPrecisionUpgradeNotice = Boolean(isPro && currentPlanTier === 'light')
-  const routeSource = String(Taro.getCurrentInstance().router?.params?.source || '').trim()
-  const showRouteUpgradeNotice = routeSource === 'precision_upgrade' && showPrecisionUpgradeNotice
-  const upgradeNoticeText = showPrecisionUpgradeNotice
-    ? showRouteUpgradeNotice
-      ? '你当前是轻度版，精准模式需要升级到标准版或进阶版。已帮你定位到可升级套餐。'
-      : '你当前是轻度版，当前不含精准模式。若想使用精准模式，可升级到标准版或进阶版。'
-    : ''
-
   // 立省金额：取所选 plan 的 savings（后端已计算）；若无 savings 则按月卡 × duration 对比
   const savingsAmount = useMemo<number | null>(() => {
     if (!selectedPlan) return null
@@ -455,15 +450,12 @@ function ProMembershipPage() {
   }, [selectedPlan])
 
   const actionButtonText = useMemo(() => {
+    if (isPro) return '会员已开通'
     if (!selectedPlan) return '请选择套餐'
     if (isPaymentTestPlan(selectedPlan)) return `支付测试套餐 · ¥${selectedPlan.amount.toFixed(2)}`
     const price = `¥${selectedPlan.amount.toFixed(2)}`
-    if (!isPro) return `立即开通 · ${price}`
-    if (isCurrentSelectedPlan) return `续费当前套餐 · ${price}`
-    const tierCompare = compareMembershipTier(selectedTier, currentPlanTier)
-    if (tierCompare > 0) return `升级到${getMembershipTierLabel(selectedTier)} · ${price}`
-    return `购买${selectedPlan.name} · ${price}`
-  }, [selectedPlan, isPro, isCurrentSelectedPlan, selectedTier, currentPlanTier])
+    return `立即开通 · ${price}`
+  }, [selectedPlan, isPro])
 
   return (
     <View className={`membership-page ${scheme === 'dark' ? 'membership-page--dark' : ''}`}>
@@ -537,20 +529,6 @@ function ProMembershipPage() {
         </View>
       </View>
 
-      {showPrecisionUpgradeNotice && (
-        <View className='upgrade-notice'>
-          <View className='upgrade-notice-main'>
-            <Text className='upgrade-notice-text'>{upgradeNoticeText}</Text>
-            <Text
-              className='upgrade-notice-action'
-              onClick={() => setSelectedTier('standard')}
-            >
-              去看标准版
-            </Text>
-          </View>
-        </View>
-      )}
-
       {paymentTestPlan && (
         <View
           className={`payment-test-card ${selectedPlan?.code === paymentTestPlan.code ? 'payment-test-card--active' : ''}`}
@@ -611,7 +589,7 @@ function ProMembershipPage() {
       <View className='period-section'>
         <View className='section-title'>
           <Text className='section-title-text'>选择周期</Text>
-          <Text className='section-title-hint'>{isPro ? '随时可升级档位' : '长期订阅更划算'}</Text>
+          <Text className='section-title-hint'>{isPro ? '当前会员有效期内无需重复购买' : '长期订阅更划算'}</Text>
         </View>
         <View className='period-tabs'>
           {PERIODS.map(p => {
@@ -772,7 +750,7 @@ function ProMembershipPage() {
               <View className='status-row'>
                 <Text className='status-label'>精准模式</Text>
                 <Text className='status-value'>
-                  {isPrecisionSupportedTier(currentPlanTier) ? '已解锁' : '当前套餐不含，升级标准版/进阶版可解锁'}
+                  {isPrecisionSupportedTier(currentPlanTier) ? '已解锁' : '当前套餐不含精准模式'}
                 </Text>
               </View>
             </>
@@ -859,14 +837,14 @@ function ProMembershipPage() {
         {isPro ? (
           <View className='renew-tip'>
             <Text className='renew-tip-text'>
-              {paidBonusActive ? `创始用户权益已生效，当前会员积分 x${paidBonusMultiplier}` : '会员生效中，可升档或续费'}
+              {paidBonusActive ? `创始用户权益已生效，当前会员积分 x${paidBonusMultiplier}` : '会员已开通，有效期内无需重复购买'}
             </Text>
           </View>
         ) : null}
         <Button
           className={`subscribe-btn ${isPro ? 'subscribe-btn--renew' : ''}`}
           loading={loading}
-          disabled={loading || !selectedPlan || pageLoading}
+          disabled={loading || !selectedPlan || pageLoading || isPro}
           onClick={handleSubscribe}
         >
           {pageLoading

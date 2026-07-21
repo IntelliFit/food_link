@@ -1366,6 +1366,24 @@ func (s *MembershipService) SyncWechatPayment(ctx context.Context, userID, order
 	if strings.TrimSpace(payment.UserID) != strings.TrimSpace(userID) {
 		return nil, commonerrors.ErrForbidden
 	}
+	if payment.PayChannel == "wechat_virtual_payment" && payment.TradeType == "XPAY" {
+		activation, _ := xpayActivationFromExtra(payment.Extra)
+		entitlementStatus := strings.TrimSpace(stringFromAny(activation["status"]))
+		confirmed := payment.Status == "paid" && entitlementStatus == xpayActivationApplied
+		data := map[string]any{
+			"synced":             confirmed,
+			"status":             payment.Status,
+			"entitlement_status": entitlementStatus,
+		}
+		if confirmed {
+			membership, err := s.getEffectiveMembership(ctx, userID)
+			if err != nil {
+				return nil, err
+			}
+			data["membership"] = formatMembershipResponse(membership)
+		}
+		return data, nil
+	}
 	if payment.Status == "paid" {
 		membership, err := s.getEffectiveMembership(ctx, userID)
 		if err != nil {
