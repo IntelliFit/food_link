@@ -1207,6 +1207,11 @@ func (s *MembershipService) buildMembershipPaymentTerms(ctx context.Context, tar
 		terms.Mode = "renewal"
 		return terms, nil
 	}
+	currentTier := membershipTierOrder(currentPlanCode)
+	targetTier := membershipTierOrder(targetPlanCode)
+	if currentTier > 0 && targetTier > 0 && targetTier < currentTier {
+		return nil, &commonerrors.AppError{Code: 10002, Message: "当前会员有效期内不支持降档，请选择当前或更高档位", HTTPStatus: http.StatusBadRequest}
+	}
 	currentPlan, err := s.repo.GetPlanByCode(ctx, currentPlanCode)
 	if err != nil {
 		return nil, err

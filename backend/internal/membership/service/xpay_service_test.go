@@ -3,6 +3,9 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"io"
+	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -14,25 +17,88 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestCreateVirtualPaymentRejectsActiveMembership(t *testing.T) {
+func TestBuildMembershipPaymentTermsRejectsDowngrade(t *testing.T) {
 	now := time.Now()
 	expiresAt := now.AddDate(0, 1, 0)
-	planCode := "light_monthly"
+	startedAt := now.AddDate(0, 0, -5)
+	currentPlanCode := "advanced_monthly"
+	targetPlanCode := "standard_yearly"
 	repo := &mockMembershipRepo{
-		planByCode: map[string]*domain.MembershipPlan{planCode: {
-			Code: planCode, Amount: 9.9, DurationMonths: 1, IsActive: true, IsVisible: true,
+		planByCode: map[string]*domain.MembershipPlan{currentPlanCode: {
+			Code: currentPlanCode, Amount: 29.9, DurationMonths: 1, IsActive: true, IsVisible: true,
 		}},
-		membership: &domain.UserMembership{UserID: "u1", Status: "active", ExpiresAt: &expiresAt},
 	}
-	svc := NewMembershipService(repo, xpayTestConfig())
+	svc := NewMembershipService(repo)
+	targetPlan := &domain.MembershipPlan{Code: targetPlanCode, Amount: 199, DurationMonths: 12}
+	membership := &domain.UserMembership{
+		UserID: "u1", Status: "active", CurrentPlanCode: &currentPlanCode,
+		CurrentPeriodStart: &startedAt, ExpiresAt: &expiresAt,
+	}
 
-	_, err := svc.CreateVirtualPayment(context.Background(), "u1", CreateVirtualMembershipPaymentInput{
-		PlanCode: planCode, LoginCode: "login-code",
-	})
+	_, err := svc.buildMembershipPaymentTerms(context.Background(), targetPlan, membership, now)
 
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "会员已开通")
-	assert.Nil(t, repo.payment)
+	assert.Contains(t, err.Error(), "不支持降档")
+}
+
+func TestXPaySignDataIncludesProratedActualPrice(t *testing.T) {
+	actualPrice := 1234
+	payload, err := json.Marshal(xpaySignData{
+		OfferID: "offer", BuyQuantity: 1, Env: 0, CurrencyType: "CNY",
+		ProductID: "advanced_monthly", GoodsPrice: 2990,
+		ActivitySellingPrice: &actualPrice, OutTradeNo: "PMX1", Attach: "membership:advanced_monthly",
+	})
+	require.NoError(t, err)
+	assert.JSONEq(t, `{
+		"offerId":"offer","buyQuantity":1,"env":0,"currencyType":"CNY",
+		"productId":"advanced_monthly","goodsPrice":2990,"activitySellingPrice":1234,
+		"outTradeNo":"PMX1","attach":"membership:advanced_monthly"
+	}`, string(payload))
+}
+
+func TestCreateVirtualPaymentUpgradeUsesProratedAmount(t *testing.T) {
+	now := time.Now()
+	startedAt := now.AddDate(0, 0, -10)
+	expiresAt := startedAt.AddDate(0, 1, 0)
+	currentPlanCode := "light_monthly"
+	targetPlanCode := "advanced_monthly"
+	openID := "openid-u1"
+	repo := &mockMembershipRepo{
+		planByCode: map[string]*domain.MembershipPlan{
+			currentPlanCode: {Code: currentPlanCode, Amount: 9.9, DurationMonths: 1, IsActive: true, IsVisible: true},
+			targetPlanCode:  {Code: targetPlanCode, Amount: 29.9, DurationMonths: 1, IsActive: true, IsVisible: true},
+		},
+		membership: &domain.UserMembership{
+			UserID: "u1", Status: "active", CurrentPlanCode: &currentPlanCode,
+			CurrentPeriodStart: &startedAt, ExpiresAt: &expiresAt,
+		},
+		user: &membershiprepo.User{ID: "u1", OpenID: openID},
+	}
+	svc := NewMembershipService(repo, xpayTestConfig())
+	svc.client = &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(strings.NewReader(`{"openid":"openid-u1","session_key":"session-key"}`)),
+			Header:     make(http.Header),
+		}, nil
+	})}
+
+	data, err := svc.CreateVirtualPayment(context.Background(), "u1", CreateVirtualMembershipPaymentInput{
+		PlanCode: targetPlanCode, LoginCode: "login-code",
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, repo.payment)
+	assert.Equal(t, "prorated_current_period_upgrade", data["order_mode"])
+	assert.Less(t, repo.payment.Amount, 29.9)
+	assert.Greater(t, repo.payment.Amount, 0.0)
+	assert.Equal(t, repo.payment.Amount, data["amount"])
+	var signPayload xpaySignData
+	require.NoError(t, json.Unmarshal([]byte(data["virtual_payment"].(map[string]string)["signData"]), &signPayload))
+	require.NotNil(t, signPayload.ActivitySellingPrice)
+	assert.Equal(t, amountToFen(repo.payment.Amount), *signPayload.ActivitySellingPrice)
+	assert.Equal(t, 2990, signPayload.GoodsPrice)
+	assert.Equal(t, "prorated_current_period_upgrade", repo.payment.Extra["order_mode"])
 }
 
 func TestSyncWechatPaymentXPayRequiresAppliedEntitlement(t *testing.T) {
@@ -175,4 +241,10 @@ func xpayTestConfig() *config.Config {
 		MiniProgram: config.WechatMiniProgramConfig{AppID: "wx-test", AppSecret: "secret"},
 		XPay:        config.WechatXPayConfig{OfferID: "offer", AppKey: "app-key", Sandbox: true, MessageToken: "token"},
 	}}
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (fn roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return fn(req)
 }

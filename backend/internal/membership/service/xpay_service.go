@@ -46,14 +46,15 @@ type xpayConfig struct {
 }
 
 type xpaySignData struct {
-	OfferID      string `json:"offerId"`
-	BuyQuantity  int    `json:"buyQuantity"`
-	Env          int    `json:"env"`
-	CurrencyType string `json:"currencyType"`
-	ProductID    string `json:"productId"`
-	GoodsPrice   int    `json:"goodsPrice"`
-	OutTradeNo   string `json:"outTradeNo"`
-	Attach       string `json:"attach"`
+	OfferID              string `json:"offerId"`
+	BuyQuantity          int    `json:"buyQuantity"`
+	Env                  int    `json:"env"`
+	CurrencyType         string `json:"currencyType"`
+	ProductID            string `json:"productId"`
+	GoodsPrice           int    `json:"goodsPrice"`
+	ActivitySellingPrice *int   `json:"activitySellingPrice,omitempty"`
+	OutTradeNo           string `json:"outTradeNo"`
+	Attach               string `json:"attach"`
 }
 
 type xpayGoodsInfo struct {
@@ -149,12 +150,9 @@ func (s *MembershipService) CreateVirtualPayment(ctx context.Context, userID str
 	if err != nil {
 		return nil, err
 	}
-	if activeMembership != nil {
-		logger.Warn(ctx, "有效会员尝试重复购买虚拟支付套餐",
-			slog.String("user_id", userID),
-			slog.String("plan_code", plan.Code),
-		)
-		return nil, &commonerrors.AppError{Code: 20003, Message: "会员已开通，有效期内无需重复购买", HTTPStatus: http.StatusConflict}
+	terms, err := s.buildMembershipPaymentTerms(ctx, plan, activeMembership, time.Now())
+	if err != nil {
+		return nil, err
 	}
 	user, err := s.repo.GetUser(ctx, userID)
 	if err != nil {
@@ -163,7 +161,7 @@ func (s *MembershipService) CreateVirtualPayment(ctx context.Context, userID str
 	if user == nil || strings.TrimSpace(user.OpenID) == "" || isAppOnlyOpenID(user.OpenID) {
 		return nil, &commonerrors.AppError{Code: 10002, Message: "当前账号不是有效的小程序登录用户，无法发起虚拟支付", HTTPStatus: http.StatusBadRequest}
 	}
-	if err := enforceMinorPaymentLimit(user, plan.Amount); err != nil {
+	if err := enforceMinorPaymentLimit(user, terms.ChargeAmount); err != nil {
 		return nil, err
 	}
 	membership, err := s.getEffectiveMembership(ctx, userID)
@@ -183,7 +181,8 @@ func (s *MembershipService) CreateVirtualPayment(ctx context.Context, userID str
 	}
 	orderNo := generateMembershipOrderNo()
 	priceFen := amountToFen(plan.Amount)
-	if priceFen <= 0 {
+	chargeFen := amountToFen(terms.ChargeAmount)
+	if priceFen <= 0 || chargeFen <= 0 || chargeFen > priceFen {
 		return nil, &commonerrors.AppError{Code: 10002, Message: "会员套餐价格配置异常", HTTPStatus: http.StatusBadRequest}
 	}
 	env := 0
@@ -191,6 +190,9 @@ func (s *MembershipService) CreateVirtualPayment(ctx context.Context, userID str
 		env = 1
 	}
 	signPayload := xpaySignData{OfferID: cfg.OfferID, BuyQuantity: 1, Env: env, CurrencyType: "CNY", ProductID: plan.Code, GoodsPrice: priceFen, OutTradeNo: orderNo, Attach: "membership:" + plan.Code}
+	if chargeFen < priceFen {
+		signPayload.ActivitySellingPrice = &chargeFen
+	}
 	signDataBytes, err := json.Marshal(signPayload)
 	if err != nil {
 		return nil, err
@@ -199,20 +201,28 @@ func (s *MembershipService) CreateVirtualPayment(ctx context.Context, userID str
 	paySig := xpayHMACSHA256(cfg.AppKey, "requestVirtualPayment&"+signData)
 	signature := xpayHMACSHA256(sessionKey, signData)
 	_, _ = s.repo.ExpirePendingMembershipOrders(ctx, userID, "", "superseded_by_new_virtual_order")
-	extra := map[string]any{
-		"payment_provider":           "wechat_xpay",
-		"xpay_env":                   env,
-		"xpay_product_id":            plan.Code,
-		"xpay_goods_price":           priceFen,
-		"xpay_sign_data":             signData,
-		xpayMembershipBeforeExtraKey: membershipSnapshotForXPay(membership),
-	}
-	payment := &domain.MembershipPayment{UserID: userID, PlanCode: plan.Code, OrderNo: orderNo, Amount: plan.Amount, Currency: "CNY", DurationMonths: plan.DurationMonths, PayChannel: "wechat_virtual_payment", TradeType: "XPAY", Status: "pending", WxOpenID: &openID, Extra: extra}
+	extra := buildPaymentExtra(plan, terms)
+	extra["payment_provider"] = "wechat_xpay"
+	extra["xpay_env"] = env
+	extra["xpay_product_id"] = plan.Code
+	extra["xpay_goods_price"] = priceFen
+	extra["xpay_actual_price"] = chargeFen
+	extra["xpay_sign_data"] = signData
+	extra[xpayMembershipBeforeExtraKey] = membershipSnapshotForXPay(membership)
+	payment := &domain.MembershipPayment{UserID: userID, PlanCode: plan.Code, OrderNo: orderNo, Amount: terms.ChargeAmount, Currency: "CNY", DurationMonths: plan.DurationMonths, PayChannel: "wechat_virtual_payment", TradeType: "XPAY", Status: "pending", WxOpenID: &openID, Extra: extra}
 	if err := s.repo.CreatePayment(ctx, payment); err != nil {
 		return nil, err
 	}
-	logger.Info(ctx, "虚拟支付会员订单创建成功", slog.String("user_id", userID), slog.String("order_no", orderNo), slog.String("plan_code", plan.Code), slog.Int("amount_fen", priceFen), slog.Int("xpay.env", env))
-	return map[string]any{"order_no": orderNo, "plan_code": plan.Code, "amount": plan.Amount, "virtual_payment": map[string]string{"signData": signData, "paySig": paySig, "signature": signature, "mode": "short_series_goods"}}, nil
+	logger.Info(ctx, "虚拟支付会员订单创建成功", slog.String("user_id", userID), slog.String("order_no", orderNo), slog.String("plan_code", plan.Code), slog.String("order_mode", terms.Mode), slog.Int("amount_fen", chargeFen), slog.Int("original_amount_fen", priceFen), slog.Int("xpay.env", env))
+	return map[string]any{
+		"order_no":        orderNo,
+		"plan_code":       plan.Code,
+		"amount":          terms.ChargeAmount,
+		"original_amount": plan.Amount,
+		"order_mode":      terms.Mode,
+		"upgrade_terms":   extra["upgrade_terms"],
+		"virtual_payment": map[string]string{"signData": signData, "paySig": paySig, "signature": signature, "mode": "short_series_goods"},
+	}, nil
 }
 
 func (s *MembershipService) exchangeXPaySession(ctx context.Context, cfg *xpayConfig, code string) (string, string, error) {
@@ -312,7 +322,8 @@ func (s *MembershipService) HandleXPayGoodsDeliverNotify(ctx context.Context, bo
 	if cfg.Sandbox {
 		expectedEnv = 1
 	}
-	if notice.Env != expectedEnv || notice.GoodsInfo.ProductID != payment.PlanCode || notice.GoodsInfo.Quantity != 1 || notice.GoodsInfo.ActualPrice != amountToFen(payment.Amount) || (payment.WxOpenID != nil && strings.TrimSpace(*payment.WxOpenID) != strings.TrimSpace(notice.OpenID)) {
+	expectedOrigPrice := intFromAny(payment.Extra["xpay_goods_price"])
+	if notice.Env != expectedEnv || notice.GoodsInfo.ProductID != payment.PlanCode || notice.GoodsInfo.Quantity != 1 || notice.GoodsInfo.ActualPrice != amountToFen(payment.Amount) || (expectedOrigPrice > 0 && notice.GoodsInfo.OrigPrice != expectedOrigPrice) || (payment.WxOpenID != nil && strings.TrimSpace(*payment.WxOpenID) != strings.TrimSpace(notice.OpenID)) {
 		return &commonerrors.AppError{Code: 10003, Message: "虚拟支付发货通知与订单不一致", HTTPStatus: http.StatusForbidden}
 	}
 	paidAt := time.Now()

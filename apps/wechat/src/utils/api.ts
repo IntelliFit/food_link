@@ -3765,6 +3765,14 @@ export interface CreateVirtualMembershipPaymentResponse {
   order_no: string
   plan_code: string
   amount: number
+  original_amount: number
+  order_mode: 'new_purchase' | 'renewal' | 'prorated_current_period_upgrade'
+  upgrade_terms?: {
+    current_plan_code: string
+    target_expires_at: string
+    unused_current_credit_applied: number
+    payable_amount: number
+  }
   virtual_payment: {
     signData: string
     paySig: string
@@ -4589,7 +4597,8 @@ export async function registerWithPassword(
 export async function getUserProfile(): Promise<UserInfo> {
   try {
     const response = await authenticatedRequest('/api/user/profile', {
-      method: 'GET'
+      method: 'GET',
+      timeout: 10000,
     })
 
     if (response.statusCode !== 200) {
@@ -4920,7 +4929,8 @@ export async function updateUserInfo(userInfo: UpdateUserInfoRequest): Promise<U
   try {
     const response = await authenticatedRequest('/api/user/profile', {
       method: 'PUT',
-      data: userInfo
+      data: userInfo,
+      timeout: 15000,
     })
 
     if (response.statusCode !== 200) {
@@ -5003,7 +5013,8 @@ export async function getUserRecordDays(): Promise<{ record_days: number }> {
 export async function getHealthProfile(): Promise<HealthProfile> {
   try {
     const response = await authenticatedRequest('/api/user/health-profile', {
-      method: 'GET'
+      method: 'GET',
+      timeout: 10000,
     })
     if (response.statusCode !== 200) {
       const errorMsg = (response.data as any)?.detail || '获取健康档案失败'
@@ -5049,7 +5060,8 @@ export async function updateHealthProfile(
   try {
     const response = await authenticatedRequest('/api/user/health-profile', {
       method: 'PUT',
-      data
+      data,
+      timeout: 15000,
     })
     if (response.statusCode !== 200) {
       const errorMsg = (response.data as any)?.detail || '更新健康档案失败'

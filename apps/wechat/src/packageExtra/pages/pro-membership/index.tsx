@@ -17,10 +17,12 @@ import {
   HealthProfile,
 } from '../../../utils/api'
 import {
+  compareMembershipTier,
   getFounderPaidBonusRankLabel,
   getFounderPaidBonusSourceLabel,
   getCurrentMembershipPeriod,
   getCurrentMembershipTier,
+  getMembershipTierLabel,
   isPrecisionSupportedTier,
 } from '../../../utils/membership'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
@@ -45,6 +47,41 @@ function formatCurrencyCompact(amount: number): string {
   return Number.isInteger(rounded)
     ? rounded.toFixed(0)
     : rounded.toFixed(2).replace(/0+$/, '').replace(/\.$/, '')
+}
+
+function addMonthsDate(date: Date, months: number): Date {
+  const next = new Date(date.getTime())
+  const day = next.getDate()
+  next.setDate(1)
+  next.setMonth(next.getMonth() + Math.max(months, 1))
+  const lastDay = new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate()
+  next.setDate(Math.min(day, lastDay))
+  return next
+}
+
+function parseDateValue(value?: string | null): Date | null {
+  if (!value) return null
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? null : date
+}
+
+function formatDateShort(value: Date): string {
+  return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`
+}
+
+function virtualPaymentErrorMessage(error: any): string {
+  const errorCode = Number(error?.errCode ?? error?.errno ?? 0)
+  const messages: Record<number, string> = {
+    [-15005]: '支付签名校验失败，请稍后重试',
+    [-15006]: '支付参数签名校验失败，请稍后重试',
+    [-15007]: '微信登录状态已过期，请重新进入页面后重试',
+    [-15010]: '该套餐道具尚未在微信后台发布，请联系客服',
+    [-15011]: '支付环境配置不一致，请联系客服',
+    [-15013]: '套餐价格与微信后台配置不一致，请联系客服',
+    [-15014]: '套餐道具发布尚未生效，请稍后再试',
+  }
+  const detail = messages[errorCode] || String(error?.errMsg || error?.message || '微信支付调用失败')
+  return errorCode ? `${detail}（错误码 ${errorCode}）` : detail
 }
 
 const TIERS: Array<{
@@ -202,10 +239,79 @@ function ProMembershipPage() {
     return plans.find(p => !p.is_test_plan && p.code !== PAYMENT_TEST_PLAN_CODE && p.tier === selectedTier && p.period === 'monthly') || null
   }, [plans, selectedTier])
 
+  const paymentEstimate = useMemo(() => {
+    if (!selectedPlan) {
+      return { mode: 'loading', amount: 0, disabled: false, hint: '' }
+    }
+    if (isPaymentTestPlan(selectedPlan)) {
+      return {
+        mode: 'payment_test',
+        amount: selectedPlan.amount,
+        disabled: false,
+        hint: '测试支付会走完整会员开通链路，仅对测试名单用户可见',
+      }
+    }
+    const currentCode = membership?.current_plan_code || null
+    const currentPlan = plans.find(p => p.code === currentCode) || null
+    const now = new Date()
+    const currentStart = parseDateValue(membership?.current_period_start) || parseDateValue(membership?.first_activated_at)
+    const currentExpires = parseDateValue(membership?.expires_at)
+    if (!membership?.is_pro || !currentPlan || !currentStart || !currentExpires || currentExpires <= now || currentCode === selectedPlan.code) {
+      return { mode: currentCode === selectedPlan.code ? 'renewal' : 'new_purchase', amount: selectedPlan.amount, disabled: false, hint: '' }
+    }
+    if (compareMembershipTier(selectedPlan.tier, currentPlan.tier) < 0) {
+      return {
+        mode: 'blocked',
+        amount: selectedPlan.amount,
+        disabled: true,
+        hint: `当前是${getMembershipTierLabel(currentPlan.tier)}，有效期内不能降档`,
+      }
+    }
+    const currentDurationEnd = addMonthsDate(currentStart, currentPlan.duration_months || 1)
+    const targetExpires = addMonthsDate(currentStart, selectedPlan.duration_months || 1)
+    if (targetExpires <= now) {
+      return {
+        mode: 'blocked',
+        amount: selectedPlan.amount,
+        disabled: true,
+        hint: '所选套餐周期已短于当前已使用时长，请选择更长周期',
+      }
+    }
+    if (targetExpires < currentExpires) {
+      return {
+        mode: 'blocked',
+        amount: selectedPlan.amount,
+        disabled: true,
+        hint: '所选套餐会缩短当前有效期，请到期后再购买或选择更长周期',
+      }
+    }
+    const currentDuration = Math.max(currentDurationEnd.getTime() - currentStart.getTime(), 1)
+    const targetDuration = Math.max(targetExpires.getTime() - currentStart.getTime(), 1)
+    const currentRemaining = Math.max(currentExpires.getTime() - now.getTime(), 0)
+    const targetRemaining = Math.max(targetExpires.getTime() - now.getTime(), 0)
+    const currentRemainingValue = currentPlan.amount * currentRemaining / currentDuration
+    const targetRemainingValue = selectedPlan.amount * targetRemaining / targetDuration
+    const charge = Math.round((targetRemainingValue - currentRemainingValue) * 100) / 100
+    if (charge <= 0) {
+      return {
+        mode: 'blocked',
+        amount: selectedPlan.amount,
+        disabled: true,
+        hint: '当前套餐剩余价值已覆盖所选套餐，请选择更高档位或更长周期',
+      }
+    }
+    return {
+      mode: 'prorated_current_period_upgrade',
+      amount: charge,
+      disabled: false,
+      hint: `已折抵当前套餐剩余价值约 ¥${formatCurrencyCompact(currentRemainingValue)}，升级后有效期至 ${formatDateShort(targetExpires)}`,
+    }
+  }, [selectedPlan, membership, plans])
+
   const ageCompliance = useMemo<AgeCompliance>(() => {
     const age = calculateAge(healthProfile?.birthday)
-    return checkAgeCompliance(age, selectedPlan?.amount || 0)
-  }, [healthProfile, selectedPlan])
+    return checkAgeCompliance(age, paymentEstimate.amount || selectedPlan?.amount || 0)
+  }, [healthProfile, selectedPlan, paymentEstimate])
 
   const loadData = useCallback(async () => {
     const token = getAccessToken()
@@ -291,12 +397,17 @@ function ProMembershipPage() {
     }
     if (!selectedPlan || loading) return
 
-    if (membership?.is_pro || membership?.status === 'active') {
-      Taro.showToast({ title: '会员已开通，无需重复购买', icon: 'none' })
+    const selectedPlanIsPaymentTest = isPaymentTestPlan(selectedPlan)
+    if (!selectedPlanIsPaymentTest && paymentEstimate.disabled) {
+      await Taro.showModal({
+        title: '暂不可切换',
+        content: paymentEstimate.hint || '当前套餐暂不支持这样切换，请选择更高档位或更长周期。',
+        showCancel: false,
+        confirmText: '知道了',
+        confirmColor: '#00bc7d',
+      })
       return
     }
-
-    const selectedPlanIsPaymentTest = isPaymentTestPlan(selectedPlan)
 
     // 年龄合规校验
     if (!selectedPlanIsPaymentTest && !ageCompliance.ok) {
@@ -325,9 +436,11 @@ function ProMembershipPage() {
       if (!modalRes.confirm) return
     }
 
-    const payAmount = selectedPlan.amount
+    const payAmount = paymentEstimate.amount || selectedPlan.amount
     const confirmContent = selectedPlanIsPaymentTest
       ? `支付测试套餐，¥${payAmount.toFixed(2)}。\n该订单用于验证真实微信支付与会员开通链路，支付成功后会开通测试会员。`
+      : paymentEstimate.mode === 'prorated_current_period_upgrade'
+      ? `升级 ${selectedPlan.name}，本次补差 ¥${payAmount.toFixed(2)}。${paymentEstimate.hint || '已按当前会员剩余价值折抵'}。到期后需手动续费。`
       : `开通 ${selectedPlan.name}，¥${payAmount.toFixed(2)}${PERIODS.find(p => p.key === selectedPeriod)?.unit || ''}，到期后需手动续费。`
 
     const modalRes = await Taro.showModal({
@@ -370,7 +483,16 @@ function ProMembershipPage() {
       if (String(message).includes('cancel')) {
         Taro.showToast({ title: '已取消支付', icon: 'none' })
       } else {
-        await showUnifiedApiError(error, '支付失败，请重试')
+        console.error('微信虚拟支付调用失败', {
+          errCode: error?.errCode ?? error?.errno,
+          errMsg: error?.errMsg ?? error?.message,
+        })
+        await Taro.showModal({
+          title: '支付未完成',
+          content: virtualPaymentErrorMessage(error),
+          showCancel: false,
+          confirmText: '知道了',
+        })
       }
     } finally {
       setLoading(false)
@@ -450,12 +572,17 @@ function ProMembershipPage() {
   }, [selectedPlan])
 
   const actionButtonText = useMemo(() => {
-    if (isPro) return '会员已开通'
     if (!selectedPlan) return '请选择套餐'
     if (isPaymentTestPlan(selectedPlan)) return `支付测试套餐 · ¥${selectedPlan.amount.toFixed(2)}`
-    const price = `¥${selectedPlan.amount.toFixed(2)}`
-    return `立即开通 · ${price}`
-  }, [selectedPlan, isPro])
+    if (paymentEstimate.disabled) return '当前套餐不可即时切换'
+    const price = `¥${(paymentEstimate.amount || selectedPlan.amount).toFixed(2)}`
+    if (!isPro) return `立即开通 · ${price}`
+    if (membership?.current_plan_code === selectedPlan.code) return `续费当前套餐 · ${price}`
+    if (paymentEstimate.mode === 'prorated_current_period_upgrade') return `补差升级 · ${price}`
+    const tierCompare = compareMembershipTier(selectedTier, currentPlanTier)
+    if (tierCompare > 0) return `升级到${getMembershipTierLabel(selectedTier)} · ${price}`
+    return `切换周期 · ${price}`
+  }, [selectedPlan, paymentEstimate, isPro, membership, selectedTier, currentPlanTier])
 
   return (
     <View className={`membership-page ${scheme === 'dark' ? 'membership-page--dark' : ''}`}>
@@ -837,14 +964,14 @@ function ProMembershipPage() {
         {isPro ? (
           <View className='renew-tip'>
             <Text className='renew-tip-text'>
-              {paidBonusActive ? `创始用户权益已生效，当前会员积分 x${paidBonusMultiplier}` : '会员已开通，有效期内无需重复购买'}
+                {paidBonusActive ? `创始用户权益已生效，当前会员积分 x${paidBonusMultiplier}` : '会员生效中，可升档或续费；有效期内不可降档'}
             </Text>
           </View>
         ) : null}
         <Button
           className={`subscribe-btn ${isPro ? 'subscribe-btn--renew' : ''}`}
           loading={loading}
-          disabled={loading || !selectedPlan || pageLoading || isPro}
+          disabled={loading || !selectedPlan || pageLoading}
           onClick={handleSubscribe}
         >
           {pageLoading
@@ -852,7 +979,7 @@ function ProMembershipPage() {
             : actionButtonText
           }
         </Button>
-        <Text className='subscribe-hint'>到期后不自动续费 · 通过微信虚拟支付开通</Text>
+        <Text className='subscribe-hint'>{paymentEstimate.hint || '到期后不自动续费 · 通过微信虚拟支付开通'}</Text>
       </View>
 
     </View>
