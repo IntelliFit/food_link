@@ -248,6 +248,20 @@ func (s *AnalyzeService) runtimePostprocessClient() (LLMClient, string, string) 
 	return nil, "", ""
 }
 
+func (s *AnalyzeService) ediblePortionPostprocessClient() (LLMClient, string, string) {
+	if s != nil && s.deepseek != nil && strings.TrimSpace(s.deepseek.APIKey) != "" {
+		model := strings.TrimSpace(s.deepseek.Model)
+		if model == "" {
+			model = deepSeekNutritionFallbackModel
+		}
+		return s.deepseek, "deepseek", model
+	}
+	if s != nil && s.dashscopeClient != nil {
+		return s.dashscopeClient, "qwen", qwen36FlashModel
+	}
+	return nil, "", ""
+}
+
 func analyzePostprocess(ctx context.Context, client LLMClient, prompt string) (map[string]any, error) {
 	if fastClient, ok := client.(interface {
 		AnalyzeWithoutThinking(context.Context, string, string) (map[string]any, error)
@@ -1115,6 +1129,17 @@ func buildContextTags(input AnalyzeInput, user *authrepo.User) []string {
 	return tags
 }
 
+func imageEdiblePortionPromptRules() string {
+	return `通用可食部分估算规则（适用于所有食物，不按食物名称套固定比例）：
+- 先判断图片中的呈现状态：完整/购买态、带皮带壳带骨带核，还是已经去皮、去壳、去骨、切块、装盘的可食状态；只扣除原图中实际存在的不可食部分
+- hasInedibleParts 表示原图这份食物是否仍包含不可食结构；已经去皮、去壳、去骨、去核且可直接食用的部分通常填 false，ediblePortionRatio 填 100
+- 对仍有不可食结构的完整食物，必须根据原图估计外皮/壳/骨/核/硬芯的厚度、体积占比和与可食组织的密度差异，再得到 ediblePortionRatio；不能因为不确定就习惯性填 50，也不能只按食物名称查一个固定常数
+- 估算证据优先级：包装净含量或称重/OCR > 可见数量与单体尺寸 > 原图几何体积、厚度、密度和容器比例尺 > 同状态食物的常见出成率；常见出成率只能辅助校验，不能覆盖原图呈现状态
+- grossWeightGrams 是原图中这份食物连同实际存在的不可食结构的毛重；estimatedWeightGrams 是可食净重，必须严格等于 grossWeightGrams × ediblePortionRatio / 100
+- ediblePortionReason 用一句短语说明原图中扣除了什么结构、依据是什么；比例为 100 时说明已是可直接食用状态或没有可见不可食结构
+- 这些视觉初估字段会进入现有第二步文本模型复核；第二步只做校验和有依据的修正，因此本轮必须先给出完整、可自洽的初估，不能只填毛重`
+}
+
 func buildImageDBFirstPrompt(input AnalyzeInput, user *authrepo.User) string {
 	tagBlock := ""
 	if tags := buildContextTags(input, user); len(tags) > 0 {
@@ -1144,24 +1169,26 @@ func buildImageDBFirstPrompt(input AnalyzeInput, user *authrepo.User) string {
 - 如果包装只露出很小一角、只有色块/封边/局部花纹，读不到可靠文字，也无法确认完整包装归属，不要猜成具体零食或品牌；这类对象不计入
 - 不输出餐具、空包装、桌面、骨头、壳、果核、签子等不可食或非食物部分
 - 对仅在边缘露出少量、无法确认种类或份量的食物，不计入
-- name 仍写食物本身；带壳、带骨、带核食物的不可食部分由后端文本模型统一折算，视觉模型不要在 estimatedWeightGrams 里自行扣减
+- name 仍写食物本身；不可食部分必须由本次视觉识别按原图呈现状态直接折算
 - 相同食物合并为一项，明显不同食物分开
 - 食物名称使用简体中文，尽量具体、标准、常见，方便命中营养库
 - 混合菜无法可靠拆分时，作为一道常见菜名输出，不要猜测不可见成分
 
 重量规则：
 - grossWeightGrams 必须是数字，单位克，表示图片中可见食物的原始可见总重量；带壳、带骨、带核时先估整份原始重量，不要扣壳/骨/核
-- estimatedWeightGrams 为兼容字段，本轮请先填与 grossWeightGrams 相同的值；后端会用文本模型单独计算 ediblePortionRatio 并得到真正可食重量
+- estimatedWeightGrams 必须是本次视觉识别直接估算的可食净重，不再交给文本模型按食物名称二次猜测
 - 多个可独立计数的同类食物（水果、鸡蛋、包子等）必须先数清 itemCount，再估 estimatedUnitWeightGrams，并按 itemCount × estimatedUnitWeightGrams 得到 grossWeightGrams；三个字段必须严格自洽
 - 掌心大小鲜桃单枚按常见重量保守估算，无电子秤或明确超大尺寸证据时不得超过180g；苹果、梨、柑橘等其它鲜果单枚超过250g也必须有强证据，不能只因近景透视而放大
 - 必须区分食物状态 foodState 与重量口径 weightBasis：泡发/泡开的燕麦、木耳、银耳等，如果用户明确说“60g干燕麦”则按60g干重并填 weightBasis=dry；否则按泡发后的实际湿重并填 weightBasis=as_served，名称也要保留“泡发/粥”等状态，严禁用湿重配干态食物名
 - 不要因为减脂、控糖、剩余热量不足或健康建议而下调 grossWeightGrams 或 estimatedWeightGrams；饮食控制只能体现在 suggestedRatio，不能改变重量本身
 - 综合可见面积、厚度、高度、容器、餐具、手掌、包装等参照物估算
 - 生成 estimatedWeightGrams 前，必须先用空间标定或 OCR 规格做一次合理性校验；大杯、大盒、大盘、砂锅不能被压成默认小份量
-- 不把餐具、空包装计入重量；虾/螃蟹/贝类/带骨带核水果先估可见原始食物重量，后端再折算可食比例
+- 不把餐具、空包装计入重量；任何带皮、带壳、带骨、带核食物都按下面的通用物理规则折算
 - waterMl 表示该食物/饮品本身含有的水量，单位毫升，必须是数字；固体食物按常见含水率保守估算，无法判断时填 0
 - 饮品、汤、粥、奶、茶、咖啡等液体或半流体应估算 waterMl；干货、油炸物、酱料难判断时可填 0
 - suggestedRatio 只是结果页“实际摄入比例”滑块的建议值，不能反向影响 estimatedWeightGrams、waterMl 或营养计算基础；默认100
+
+%s
 
 输出要求：
 - 简体中文
@@ -1190,6 +1217,9 @@ JSON:
 	"itemCount":1,
 	"estimatedUnitWeightGrams":0,
     "grossWeightGrams":0,
+	"hasInedibleParts":false,
+	"ediblePortionRatio":100,
+	"ediblePortionReason":"已是可直接食用状态",
     "estimatedWeightGrams":0,
     "waterMl":0,
     "suggestedRatio":100,
@@ -1214,7 +1244,7 @@ JSON:
   "context_advice":""
 	}
 
-注意：ingredients 为可选字段，仅当该 item 识别到配料表/营养成分表时才输出；未识别到时请省略或置 null。`, tagBlock, imageInputHint, additionalLine, correctionBlock)
+注意：ingredients 为可选字段，仅当该 item 识别到配料表/营养成分表时才输出；未识别到时请省略或置 null。`, tagBlock, imageInputHint, additionalLine, correctionBlock, imageEdiblePortionPromptRules())
 }
 
 func buildLiteImageDBFirstPrompt(input AnalyzeInput, user *authrepo.User) string {
@@ -1238,10 +1268,12 @@ func buildLiteImageDBFirstPrompt(input AnalyzeInput, user *authrepo.User) string
 - 如果包装只露出很小一角、只有色块/封边/局部花纹，读不到可靠文字，也无法确认完整包装归属，不要猜成具体零食或品牌；这类对象不计入
 - 不确定 OCR 不能直接当食物名；若 OCR 与视觉冲突，把冲突写进 recognitionEvidence 和 alternativeNames
 - 小众水果/进口零食/不确定包装食品可使用 web_search，搜索关键词要围绕可见包装文字、品牌、品名或用户补充信息，避免用泛泛描述搜索
-- grossWeightGrams 是图中可见原始总重量；estimatedWeightGrams 先填同值，后端会用文本模型单独折算可食比例
+- grossWeightGrams 是图中可见原始总重量；estimatedWeightGrams 是视觉模型按原图呈现状态直接估算的可食净重
 - 多枚同类水果、鸡蛋、包子等必须输出 itemCount 和 estimatedUnitWeightGrams，并令 grossWeightGrams = itemCount × estimatedUnitWeightGrams；掌心大小鲜桃无秤时单枚不超过180g，其它桃/苹果/梨/柑橘单枚超过250g必须有强比例尺证据
 - 输出 foodState（fresh/dry/hydrated/cooked/liquid/packaged）和 weightBasis（dry/as_served/package_net）。泡发燕麦若用户明确提供干重则沿用干重；否则必须按湿重并把名称写成“泡发燕麦/燕麦粥”，不得用湿重套干态名称
 - waterMl 表示该食物/饮品本身可计入饮水参考的水量；无法判断填 0
+
+%s
 
 Type rule:
 - Every item must include "type".
@@ -1259,6 +1291,9 @@ JSON:
 	"itemCount":1,
 	"estimatedUnitWeightGrams":0,
     "grossWeightGrams":0,
+	"hasInedibleParts":false,
+	"ediblePortionRatio":100,
+	"ediblePortionReason":"已是可直接食用状态",
     "estimatedWeightGrams":0,
     "waterMl":0,
     "suggestedRatio":100,
@@ -1285,7 +1320,7 @@ JSON:
   "webSearchSummary":""
 }
 
-注意：ingredients 为可选字段，仅当该 item 识别到配料表/营养成分表时才输出；未识别到时请省略或置 null。`, tagBlock, imageInputHint, additionalLine)
+注意：ingredients 为可选字段，仅当该 item 识别到配料表/营养成分表时才输出；未识别到时请省略或置 null。`, tagBlock, imageInputHint, additionalLine, imageEdiblePortionPromptRules())
 }
 
 func buildGemini35ImageDBFirstPrompt(input AnalyzeInput, user *authrepo.User, executionMode string) string {
@@ -1328,16 +1363,18 @@ func buildGemini35ImageDBFirstPrompt(input AnalyzeInput, user *authrepo.User, ex
 
 重量规则：
 - grossWeightGrams 是图中可见食物原始总重量，单位克，必须是数字；带壳、带骨、带核时先估整份原始重量，不要扣壳/骨/核
-- estimatedWeightGrams 为兼容字段，本轮请先填与 grossWeightGrams 相同的值；后端会用文本模型单独计算 ediblePortionRatio 并得到真正可食重量
+- estimatedWeightGrams 是本次视觉识别按原图呈现状态直接估算的可食净重
 - 多个可独立计数的同类食物必须先输出 itemCount 与 estimatedUnitWeightGrams，再令 grossWeightGrams = itemCount × estimatedUnitWeightGrams；三个字段不得互相矛盾
 - 掌心大小鲜桃无电子秤或明显超大尺寸证据时单枚不得超过180g；其它桃/苹果/梨/柑橘等鲜果单枚超过250g时，必须在 weightEvidence 中给出电子秤、包装规格或明显超大尺寸等强证据；近景透视本身不能作为放大重量的理由
 - 输出 foodState（fresh/dry/hydrated/cooked/liquid/packaged）和 weightBasis（dry/as_served/package_net）。泡发燕麦若用户明确给出干重则采用干重；否则采用湿重且名称必须保留泡发/粥状态，禁止把湿重与干燕麦营养口径混用
 - 不要因为减脂、控糖、剩余热量不足或健康建议而下调 grossWeightGrams 或 estimatedWeightGrams；饮食控制只能体现在 suggestedRatio，不能改变重量本身
-- 不把餐具、空包装计入重量；不可食部分由后端可食比例链路扣除
+- 不把餐具、空包装计入重量；不可食部分由本次视觉识别按下面的通用物理规则扣除
 - 包装食品如果只能看到独立小包，按该小包通常净含量/可见体积估算；如果看得到净含量文字，优先参考净含量
 - grossWeightGrams 必须与 weightEvidence 完全吻合；如果 weightEvidence 写明包装净含量 260g 且未开封，则重量不能输出 130g 或其它均值猜测
 - waterMl 表示该食物/饮品本身含有的水量，单位毫升，必须是数字；无法判断填 0
 - suggestedRatio 只是结果页“实际摄入比例”滑块的建议值，不能反向影响 estimatedWeightGrams、waterMl 或营养计算基础；默认100
+
+%s
 
 输出要求：
 - 只返回 JSON，不要输出 Markdown
@@ -1362,6 +1399,9 @@ JSON:
 	  "itemCount":1,
 	  "estimatedUnitWeightGrams":0,
       "grossWeightGrams":0,
+	  "hasInedibleParts":false,
+	  "ediblePortionRatio":100,
+	  "ediblePortionReason":"已是可直接食用状态",
       "estimatedWeightGrams":0,
       "waterMl":0,
       "suggestedRatio":100,
@@ -1394,7 +1434,7 @@ JSON:
   "ocrText":[]
 }
 
-注意：ingredients 为可选字段，仅当该 item 识别到配料表/营养成分表时才输出；未识别到时请省略或置 null。`, tagBlock, imageInputHint, additionalLine, groupLine)
+注意：ingredients 为可选字段，仅当该 item 识别到配料表/营养成分表时才输出；未识别到时请省略或置 null。`, tagBlock, imageInputHint, additionalLine, groupLine, imageEdiblePortionPromptRules())
 }
 
 func buildGemini35GroupedPlanPrompt(input AnalyzeInput, user *authrepo.User) string {
@@ -2648,17 +2688,18 @@ func buildGemini35GroupedWeightPrompt(input AnalyzeInput, plan map[string]any) s
 - 第一阶段的食物清单默认已经锁定；第二阶段主要估重量，不要随意新增、删除或改名
 - 只有当图片中有非常强的反证时，才允许在 alternativeNames 或 recognitionEvidence 中说明名称疑点；最终 name 仍尽量沿用第一阶段
 - groupId 只能使用第一阶段给出的 1 或 2；不要重新发明更多组
-- 先估每组总可食净重，再把组内重量分配到各 item
+- 先估每组总毛重，再把组内毛重分配到各 item，并分别判断每项原图中是否存在不可食结构
 - 优先利用包装净含量、可见数量、剩余比例、常见单个重量、盘子/手/包装尺寸、面积厚度、遮挡关系进行推理
-- estimatedWeightGrams 必须是可食部净重，单位克
-- 带壳、带骨、带核食物按去壳/去骨/去核后的可食净重估算
+- grossWeightGrams 是原图呈现状态的毛重，estimatedWeightGrams 是可食部净重，单位克
 - 不输出营养，营养由后端数据库查表
 - 每个 item 必须给 weightEvidence；如果是粗估，要说明依据和不确定性
 - 返回 items 数量应尽量等于第一阶段 item 数量，并按第一阶段顺序输出
 
+%s
+
 只返回 JSON:
 {
-  "items":[{"name":"","type":"normal","estimatedWeightGrams":0,"waterMl":0,"suggestedRatio":100,"groupId":1,"confidence":0.8,"recognitionEvidence":"","weightEvidence":"","alternativeNames":[]}],
+  "items":[{"name":"","type":"normal","grossWeightGrams":0,"hasInedibleParts":false,"ediblePortionRatio":100,"ediblePortionReason":"已是可直接食用状态","estimatedWeightGrams":0,"waterMl":0,"suggestedRatio":100,"groupId":1,"confidence":0.8,"recognitionEvidence":"","weightEvidence":"","alternativeNames":[]}],
   "groups":[{"groupId":1,"description":"","estimatedWeightGrams":0,"weightEvidence":""}],
   "description":"",
   "insight":"",
@@ -2667,7 +2708,7 @@ func buildGemini35GroupedWeightPrompt(input AnalyzeInput, plan map[string]any) s
   "absorption_notes":"",
   "context_advice":"",
   "ocrText":[]
-}`, string(planBytes), additionalLine)
+}`, string(planBytes), additionalLine, imageEdiblePortionPromptRules())
 }
 
 func gemini35GroupedPlanItemsForPrompt(items []map[string]any, limit int) []map[string]any {
@@ -2714,6 +2755,18 @@ func mergeGemini35GroupedPlanAndWeights(plan, weightResult map[string]any) map[s
 		next["groupId"] = normalizeGemini35GroupID(planItem["groupId"])
 		if weightItem, weightIndex := bestGemini35WeightItemForPlan(index, planItem, weightItems, usedWeights); weightItem != nil {
 			usedWeights[weightIndex] = struct{}{}
+			if grossWeight := numberFromAny(weightItem["grossWeightGrams"]); grossWeight > 0 {
+				next["grossWeightGrams"] = grossWeight
+			}
+			if hasInedibleParts, ok := weightItem["hasInedibleParts"].(bool); ok {
+				next["hasInedibleParts"] = hasInedibleParts
+			}
+			if edibleRatio := numberFromAny(weightItem["ediblePortionRatio"]); edibleRatio > 0 && edibleRatio <= 100 {
+				next["ediblePortionRatio"] = edibleRatio
+			}
+			if reason := cleanAnalyzeText(weightItem["ediblePortionReason"]); reason != "" {
+				next["ediblePortionReason"] = reason
+			}
 			if weight := numberFromAny(weightItem["estimatedWeightGrams"]); weight > 0 {
 				next["estimatedWeightGrams"] = weight
 				next["originalWeightGrams"] = weight
@@ -4554,14 +4607,15 @@ func parseItems(parsed map[string]any) []map[string]any {
 				}
 			}
 			edibleRatio := numberFromAny(firstNonNil(item["ediblePortionRatio"], item["edible_portion_ratio"]))
-			if edibleRatio <= 0 || edibleRatio > 100 {
+			hasExplicitEdibleRatio := edibleRatio > 0 && edibleRatio <= 100
+			if !hasExplicitEdibleRatio {
 				if grossWeight > 0 && weight > 0 && weight <= grossWeight*1.05 {
 					edibleRatio = clampRange(weight/grossWeight*100, 1, 100)
 				} else {
 					edibleRatio = 100
 				}
 			}
-			if unitWeightCalibrated {
+			if (hasExplicitEdibleRatio || unitWeightCalibrated) && grossWeight > 0 {
 				weight = grossWeight * edibleRatio / 100
 			}
 			if weight <= 0 && grossWeight > 0 {
@@ -4572,7 +4626,7 @@ func parseItems(parsed map[string]any) []map[string]any {
 				edibleRatio = 100
 			}
 			originalWeight := numberFromAny(firstNonNil(item["originalWeightGrams"], item["original_weight_g"], item["originalWeight"]))
-			if originalWeight <= 0 || unitWeightCalibrated {
+			if originalWeight <= 0 || hasExplicitEdibleRatio || unitWeightCalibrated {
 				originalWeight = weight
 			}
 			waterMl := numberFromAny(item["waterMl"])
@@ -4917,15 +4971,19 @@ func (s *AnalyzeService) applyEdiblePortionRatios(ctx context.Context, resp map[
 		return resp
 	}
 	base := withDefaultEdiblePortions(items, "default")
-	if !needsEdiblePortionModel(base) {
+	if !needsEdiblePortionModel(base, input) {
 		resp["items"] = withDefaultEdiblePortions(base, "deterministic")
 		resp["edible_portion_status"] = "deterministic"
 		resp["edible_portion_applied_count"] = 0
 		return resp
 	}
-	client, provider, model := s.runtimePostprocessClient()
+	client, provider, model := s.ediblePortionPostprocessClient()
 	if client == nil {
-		resp["items"] = withFallbackEdiblePortions(items, "unavailable")
+		if strings.TrimSpace(input.Text) == "" && hasVisualEdiblePortionEstimate(items) {
+			resp["items"] = withDefaultEdiblePortions(items, "vision_fallback")
+		} else {
+			resp["items"] = withFallbackEdiblePortions(items, "unavailable")
+		}
 		resp["edible_portion_status"] = "unavailable"
 		return resp
 	}
@@ -4940,7 +4998,11 @@ func (s *AnalyzeService) applyEdiblePortionRatios(ctx context.Context, resp map[
 			slog.String("model", model),
 			slog.Int("item_count", len(items)),
 		)
-		resp["items"] = withFallbackEdiblePortions(items, "failed")
+		if strings.TrimSpace(input.Text) == "" && hasVisualEdiblePortionEstimate(items) {
+			resp["items"] = withDefaultEdiblePortions(items, "vision_fallback")
+		} else {
+			resp["items"] = withFallbackEdiblePortions(items, "failed")
+		}
 		resp["edible_portion_status"] = "fallback"
 		resp["edible_portion_fallback_reason"] = "generation_failed"
 		return resp
@@ -5006,7 +5068,26 @@ var ediblePortionModelKeywords = []string{
 	"玉米", "花生", "瓜子", "核桃", "板栗", "开心果", "带壳", "果核", "果皮", "鸡蛋", "鸭蛋", "鹅蛋",
 }
 
-func needsEdiblePortionModel(items []map[string]any) bool {
+func needsEdiblePortionModel(items []map[string]any, input AnalyzeInput) bool {
+	if strings.TrimSpace(input.Text) == "" {
+		allItemsHaveVisualStructure := len(items) > 0
+		for _, item := range items {
+			if ratio := numberFromAny(item["ediblePortionRatio"]); ratio > 0 && ratio < 99.5 {
+				return true
+			}
+			hasInedibleParts, ok := item["hasInedibleParts"].(bool)
+			if !ok {
+				allItemsHaveVisualStructure = false
+				continue
+			}
+			if hasInedibleParts {
+				return true
+			}
+		}
+		if allItemsHaveVisualStructure {
+			return false
+		}
+	}
 	for _, item := range items {
 		ratio := numberFromAny(firstNonNil(item["ediblePortionRatio"], item["edible_portion_ratio"]))
 		if ratio > 0 && ratio < 99.5 {
@@ -5025,6 +5106,18 @@ func needsEdiblePortionModel(items []map[string]any) bool {
 			if strings.Contains(name, keyword) {
 				return true
 			}
+		}
+	}
+	return false
+}
+
+func hasVisualEdiblePortionEstimate(items []map[string]any) bool {
+	for _, item := range items {
+		if _, ok := item["hasInedibleParts"].(bool); !ok {
+			continue
+		}
+		if ratio := numberFromAny(item["ediblePortionRatio"]); ratio > 0 && ratio <= 100 {
+			return true
 		}
 	}
 	return false
@@ -5961,11 +6054,17 @@ func buildEdiblePortionPrompt(items []map[string]any, input AnalyzeInput) string
 	payloadItems := make([]map[string]any, 0, len(items))
 	for index, item := range items {
 		payloadItems = append(payloadItems, map[string]any{
-			"index":            index,
-			"name":             strings.TrimSpace(fmt.Sprintf("%v", item["name"])),
-			"type":             firstNonNil(item["type"], item["food_type"]),
-			"grossWeightGrams": round2(numberFromAny(item["grossWeightGrams"])),
-			"waterMl":          round2(numberFromAny(item["waterMl"])),
+			"index":                      index,
+			"name":                       strings.TrimSpace(fmt.Sprintf("%v", item["name"])),
+			"type":                       firstNonNil(item["type"], item["food_type"]),
+			"foodState":                  firstNonNil(item["foodState"], item["food_state"]),
+			"weightBasis":                firstNonNil(item["weightBasis"], item["weight_basis"]),
+			"grossWeightGrams":           round2(numberFromAny(item["grossWeightGrams"])),
+			"visualHasInedibleParts":     firstNonNil(item["hasInedibleParts"], item["has_inedible_parts"]),
+			"visualEdiblePortionRatio":   round2(numberFromAny(item["ediblePortionRatio"])),
+			"visualEdiblePortionReason":  cleanAnalyzeText(item["ediblePortionReason"]),
+			"visualEstimatedWeightGrams": round2(numberFromAny(item["estimatedWeightGrams"])),
+			"waterMl":                    round2(numberFromAny(item["waterMl"])),
 			"recognitionEvidence": strings.TrimSpace(fmt.Sprintf("%v",
 				firstNonNil(item["recognitionEvidence"], item["recognition_evidence"]))),
 			"weightEvidence": strings.TrimSpace(fmt.Sprintf("%v",
@@ -5973,14 +6072,16 @@ func buildEdiblePortionPrompt(items []map[string]any, input AnalyzeInput) string
 		})
 	}
 	contextPayload := map[string]any{
-		"task": "根据食物名称和可见原始重量，判定每项食物最终可食部分比例。只返回 JSON。",
+		"task": "复核视觉模型基于原图给出的不可食结构、可食率和可食净重；必要时修正，输出最终可食部分比例。只返回 JSON。",
 		"rules": []string{
-			"grossWeightGrams 是视觉模型估计的图中可见原始重量；它可能包含壳、骨、果核、果皮或包装内完整内容。",
-			"ediblePortionRatio 表示可实际吃进营养计算的比例，0-100 的整数。",
-			"普通米饭、炒菜、酸奶、饮料、蛋糕、冰淇淋、饼干、完整可食包装食品通常为 100。",
-			"小龙虾、螃蟹、贝类、带骨鸡爪/排骨/鱼、带核水果、带皮不可食水果，需要按常识扣除不可食部分。",
+			"第一步视觉模型已经看过原图；visualHasInedibleParts、visualEdiblePortionRatio、visualEdiblePortionReason 和 visualEstimatedWeightGrams 是它基于原图呈现状态给出的初判，不得忽略后仅按食物名称重新猜测。",
+			"先检查视觉初判是否满足：只扣原图中实际存在的不可食结构、毛重与可食净重口径一致、grossWeightGrams × ediblePortionRatio / 100 等于可食净重。",
+			"若视觉理由包含外皮/壳/骨/核/硬芯的厚度、体积、数量、包装或称重证据，应把它作为主要依据；常见食物出成率只用于校验明显偏差。",
+			"不要按食物名称套固定比例；同一种食物在完整、已去皮、切块、去骨或包装净含量状态下可以有不同可食率。",
+			"视觉初判自洽且没有明显违反常见物理结构时，保持 visualEdiblePortionRatio；只有存在明确结构或口径矛盾时才修正，并在 reason 写清修正依据。",
+			"ediblePortionRatio 表示最终计入营养计算的比例，范围 1-100。",
 			"不要根据减脂、控糖、多人分享或剩余热量调整比例；那些属于 suggestedRatio，不属于 ediblePortionRatio。",
-			"不确定时保守填 100，并在 reason 说明未扣减。",
+			"不能因为不确定就机械改成 50 或 100；证据不足时优先保留视觉初判。",
 		},
 		"context": map[string]any{
 			"mealType":          input.MealType,
@@ -5996,7 +6097,7 @@ func buildEdiblePortionPrompt(items []map[string]any, input AnalyzeInput) string
 		},
 	}
 	bytes, _ := json.Marshal(contextPayload)
-	return "你是食物可食部比例判定助手。请只做不可食部分扣除，不做营养估算，也不做摄入建议。\n" + string(bytes)
+	return "你是食物可食部比例复核助手。第一步视觉模型已经依据原图完成初估；请校验其结构和口径，只在有明确依据时修正，不做营养估算或摄入建议。\n" + string(bytes)
 }
 
 func withDefaultSuggestedRatios(items []map[string]any, source string) []map[string]any {
