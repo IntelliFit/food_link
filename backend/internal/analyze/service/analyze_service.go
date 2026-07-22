@@ -64,6 +64,7 @@ const (
 	webSearchMaxResults             = 3
 	webSearchMinRelevantResults     = 1
 	resolveFoodCandidateLimit       = 5
+	resolveFoodCandidateRRFK        = 60.0
 	resolveFoodSemanticThreshold    = 0.97
 	resolveFoodSemanticTimeout      = 6 * time.Second
 	resolveFoodEmbeddingTimeout     = 4 * time.Second
@@ -5415,21 +5416,21 @@ func (s *AnalyzeService) applyDBFirstNutritionWithOptions(ctx context.Context, r
 		}()
 	}
 
-	// Embedding recall is deliberately restricted to lexical misses. Exact
-	// matches and existing lexical Top5 candidates keep their current latency;
-	// only names with zero candidates pay this network call, in parallel with
-	// the fresh nutrition estimate already running above.
+	// Exact trusted matches have already returned above. For every remaining
+	// eligible query, combine lexical and embedding recall before the strict AI
+	// equivalence gate. The two retrievers expose incomparable score scales, so
+	// fuse their ranks instead of adding raw scores.
 	if s.nutritionSemantic != nil && !options.skipSemanticRerank && len(semanticQueries) > 0 {
-		missingIndices := make([]int, 0, len(semanticQueries))
+		eligibleIndices := make([]int, 0, len(semanticQueries))
 		for index := range semanticQueries {
-			if len(semanticCandidates[index]) == 0 && semanticEmbeddingEligible[index] {
-				missingIndices = append(missingIndices, index)
+			if semanticEmbeddingEligible[index] {
+				eligibleIndices = append(eligibleIndices, index)
 			}
 		}
-		sort.Ints(missingIndices)
-		if len(missingIndices) > 0 {
-			queries := make([]string, 0, len(missingIndices))
-			for _, index := range missingIndices {
+		sort.Ints(eligibleIndices)
+		if len(eligibleIndices) > 0 {
+			queries := make([]string, 0, len(eligibleIndices))
+			for _, index := range eligibleIndices {
 				queries = append(queries, semanticQueries[index].QueryName)
 			}
 			embeddingCtx, embeddingCancel := context.WithTimeout(ctx, resolveFoodEmbeddingTimeout)
@@ -5441,9 +5442,14 @@ func (s *AnalyzeService) applyDBFirstNutritionWithOptions(ctx context.Context, r
 					slog.Int("query_count", len(queries)),
 				)
 			} else {
-				for position, index := range missingIndices {
-					if position < len(embeddingCandidates) && len(embeddingCandidates[position]) > 0 {
-						semanticCandidates[index] = embeddingCandidates[position]
+				for position, index := range eligibleIndices {
+					var embeddingRows []foodrecordrepo.SearchCandidate
+					if position < len(embeddingCandidates) {
+						embeddingRows = embeddingCandidates[position]
+					}
+					merged := mergeNutritionCandidateRecall(semanticCandidates[index], embeddingRows, resolveFoodCandidateLimit)
+					if len(merged) > 0 {
+						semanticCandidates[index] = merged
 					}
 				}
 			}
@@ -7252,6 +7258,92 @@ func isStrictNutritionReuseDecision(decision *foodCandidateReuseDecision) bool {
 		decision.CompositionEquivalent &&
 		decision.NutritionBasisEquivalent &&
 		decision.Confidence >= resolveFoodSemanticThreshold
+}
+
+// mergeNutritionCandidateRecall combines lexical and embedding candidate
+// rankings with reciprocal-rank fusion. Raw lexical and cosine scores are not
+// directly comparable, while rank fusion rewards candidates supported by both
+// channels and still keeps each channel's strongest independent candidates.
+func mergeNutritionCandidateRecall(lexical, embedding []foodrecordrepo.SearchCandidate, limit int) []foodrecordrepo.SearchCandidate {
+	if limit <= 0 {
+		limit = resolveFoodCandidateLimit
+	}
+	if len(lexical) == 0 {
+		return append([]foodrecordrepo.SearchCandidate(nil), embedding[:min(limit, len(embedding))]...)
+	}
+	if len(embedding) == 0 {
+		return append([]foodrecordrepo.SearchCandidate(nil), lexical[:min(limit, len(lexical))]...)
+	}
+
+	type fusedCandidate struct {
+		candidate foodrecordrepo.SearchCandidate
+		rrfScore  float64
+		lexical   bool
+		embedding bool
+	}
+	keyFor := func(candidate foodrecordrepo.SearchCandidate) string {
+		if id := strings.TrimSpace(candidate.Food.ID); id != "" {
+			return "id:" + id
+		}
+		return "name:" + strings.TrimSpace(candidate.Food.CanonicalName)
+	}
+	fused := make(map[string]*fusedCandidate, len(lexical)+len(embedding))
+	addRanked := func(rows []foodrecordrepo.SearchCandidate, lexicalChannel bool) {
+		seen := make(map[string]struct{}, len(rows))
+		for rank, candidate := range rows {
+			key := keyFor(candidate)
+			if key == "name:" {
+				continue
+			}
+			if _, exists := seen[key]; exists {
+				continue
+			}
+			seen[key] = struct{}{}
+			entry, exists := fused[key]
+			if !exists {
+				entry = &fusedCandidate{candidate: candidate}
+				fused[key] = entry
+			}
+			entry.rrfScore += 1 / (resolveFoodCandidateRRFK + float64(rank+1))
+			if lexicalChannel {
+				entry.lexical = true
+			} else {
+				entry.embedding = true
+				if !entry.lexical {
+					entry.candidate = candidate
+				}
+			}
+		}
+	}
+	addRanked(lexical, true)
+	addRanked(embedding, false)
+
+	maxRRFScore := 2 / (resolveFoodCandidateRRFK + 1)
+	merged := make([]fusedCandidate, 0, len(fused))
+	for _, entry := range fused {
+		entry.candidate.Score = entry.rrfScore / maxRRFScore
+		switch {
+		case entry.lexical && entry.embedding:
+			entry.candidate.MatchSource = "hybrid_candidate"
+		case entry.embedding:
+			entry.candidate.MatchSource = "embedding_candidate"
+		}
+		merged = append(merged, *entry)
+	}
+	sort.SliceStable(merged, func(i, j int) bool {
+		if merged[i].rrfScore == merged[j].rrfScore {
+			return merged[i].candidate.Food.CanonicalName < merged[j].candidate.Food.CanonicalName
+		}
+		return merged[i].rrfScore > merged[j].rrfScore
+	})
+	if len(merged) > limit {
+		merged = merged[:limit]
+	}
+	out := make([]foodrecordrepo.SearchCandidate, 0, len(merged))
+	for _, entry := range merged {
+		out = append(out, entry.candidate)
+	}
+	return out
 }
 
 func unresolvedNutritionFallbackCandidates(lookups []lookupItem, candidates []UnresolvedNutritionCandidate) []UnresolvedNutritionCandidate {
