@@ -16,6 +16,7 @@ import {
   type OnboardingStatus,
 } from '../../../utils/api'
 import { processChooseAvatarSelection, ensureAvatarUploadedForSave, getInitialRegistrationAvatar } from '../../../utils/new-user-profile-form'
+import { shouldShowProfileFormFromApiUser } from '../../../utils/new-user-onboarding-scenarios'
 import { withAuth } from '../../../utils/withAuth'
 import {
   ONBOARDING_HOME_RECORD_GUIDE_KEY,
@@ -25,7 +26,6 @@ import {
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
 import { chooseImageWithPrivacy, isPrivacyAuthorizeError, showPrivacyAuthorizeFailure } from '../../../utils/weapp-privacy'
-import { defaultAvatarImage } from '../../../utils/default-user-profile'
 import { formatBodyMetric } from '../../../utils/number-format'
 import CustomNavBar from '../../../components/CustomNavBar'
 
@@ -131,6 +131,7 @@ function HealthProfilePage() {
   const [loadError, setLoadError] = useState('')
   const [saving, setSaving] = useState(false)
   const [currentStep, setCurrentStep] = useState(0)
+  const [profileStepRequired, setProfileStepRequired] = useState(true)
 
   const [gender, setGender] = useState<string>('')
   const [birthday, setBirthday] = useState<string>('')
@@ -163,6 +164,9 @@ function HealthProfilePage() {
   const [editingAllergy, setEditingAllergy] = useState<string>('') // 正在编辑的自定义过敏源
 
   const [healthNotes, setHealthNotes] = useState<string>('') // 用户自己文字补充自己身体的特殊情况和问题
+  const firstVisibleStep = profileStepRequired ? 0 : 1
+  const visibleStepCount = TOTAL_STEPS - firstVisibleStep
+  const visibleCurrentStep = Math.max(0, currentStep - firstVisibleStep)
 
   const requestInitialHomeGuideIfNeeded = () => {
     if (shouldOfferOnboardingGuide(ONBOARDING_HOME_RECORD_GUIDE_KEY)) {
@@ -174,6 +178,7 @@ function HealthProfilePage() {
     setLoading(true)
     setLoadError('')
     let profile: Awaited<ReturnType<typeof getHealthProfile>> | null = null
+    let requiresProfileStep = true
     try {
       const [loadedProfile, userInfo] = await Promise.all([
         getHealthProfile(),
@@ -181,6 +186,7 @@ function HealthProfilePage() {
       ])
       profile = loadedProfile
       if (userInfo) {
+        requiresProfileStep = shouldShowProfileFormFromApiUser(userInfo)
         const initialAvatar = getInitialRegistrationAvatar(userInfo.avatar)
         const initialNickname = userInfo.nickname || ''
         initialIdentityRef.current = { avatar: initialAvatar, nickname: initialNickname }
@@ -188,9 +194,19 @@ function HealthProfilePage() {
         setNickname(initialNickname)
         setOnboardingStatus(userInfo.onboarding_status || (userInfo.onboarding_completed === true ? 'completed' : 'pending'))
       } else {
-        initialIdentityRef.current = { avatar: defaultAvatarImage, nickname: '' }
-        setAvatarUrl(defaultAvatarImage)
+        const cachedUser = Taro.getStorageSync('userInfo') || {}
+        const cachedAvatar = String(cachedUser.avatar || '').trim()
+        const cachedNickname = String(cachedUser.nickname || cachedUser.name || '').trim()
+        requiresProfileStep = shouldShowProfileFormFromApiUser({
+          avatar: cachedAvatar,
+          nickname: cachedNickname,
+        })
+        const initialAvatar = getInitialRegistrationAvatar(cachedAvatar)
+        initialIdentityRef.current = { avatar: initialAvatar, nickname: cachedNickname }
+        setAvatarUrl(initialAvatar)
+        setNickname(cachedNickname)
       }
+      setProfileStepRequired(requiresProfileStep)
       if (profile.gender) setGender(profile.gender)
       if (profile.birthday) {
         setBirthday(profile.birthday)
@@ -239,11 +255,10 @@ function HealthProfilePage() {
       await showUnifiedApiError(err, '获取档案失败')
     } finally {
       const draftStep = Number(profile?.onboarding_draft_step)
-      setCurrentStep(
-        Number.isInteger(draftStep) && draftStep >= 0 && draftStep < TOTAL_STEPS
-          ? draftStep
-          : 0
-      )
+      const savedStep = Number.isInteger(draftStep) && draftStep >= 0 && draftStep < TOTAL_STEPS
+        ? draftStep
+        : 0
+      setCurrentStep(!requiresProfileStep && savedStep === 0 ? 1 : savedStep)
       setLoading(false)
     }
   }
@@ -306,6 +321,7 @@ function HealthProfilePage() {
           setAvatarUrl(finalAvatar || avatarUrl)
           setNickname(normalizedNickname)
         }
+        setProfileStepRequired(false)
       }
       await saveDraft(nextStep)
       setCurrentStep(nextStep)
@@ -319,7 +335,7 @@ function HealthProfilePage() {
   const goNext = () => proceedToNext()
 
   const goPrev = () => {
-    if (currentStep <= 0) return
+    if (currentStep <= firstVisibleStep) return
     setCurrentStep((s) => s - 1)
   }
 
@@ -768,15 +784,18 @@ function HealthProfilePage() {
       {/* 进度条 */}
       <View className='progress-wrap'>
         <View className='progress-dots'>
-          {Array.from({ length: TOTAL_STEPS }).map((_, i) => (
-            <View
-              key={i}
-              className={`progress-dot ${i <= currentStep ? 'active' : ''} ${i === currentStep ? 'current' : ''}`}
-            />
-          ))}
+          {Array.from({ length: visibleStepCount }).map((_, i) => {
+            const step = i + firstVisibleStep
+            return (
+              <View
+                key={step}
+                className={`progress-dot ${step <= currentStep ? 'active' : ''} ${step === currentStep ? 'current' : ''}`}
+              />
+            )
+          })}
         </View>
         <Text className='progress-text'>
-          {currentStep + 1} / {TOTAL_STEPS}
+          {visibleCurrentStep + 1} / {visibleStepCount}
         </Text>
       </View>
 
@@ -873,7 +892,12 @@ function HealthProfilePage() {
               </View>
             </View>
             <View className='card-footer'>
-              <View className='card-prev-btn' onClick={goPrev}><Text className='card-prev-arrow iconfont icon-left' />上一步</View>
+              <View
+                className={`card-prev-btn ${profileStepRequired ? '' : 'card-prev-btn--hidden'}`}
+                onClick={profileStepRequired ? goPrev : undefined}
+              >
+                <Text className='card-prev-arrow iconfont icon-left' />上一步
+              </View>
               <Button block color='primary' shape='round' className={`card-next-btn ${gender ? 'ready' : ''}`} onClick={goNext} disabled={!gender}>
                 下一步 <Text className='iconfont icon-right' />
               </Button>

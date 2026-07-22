@@ -42,6 +42,11 @@
   margin-top: 44rpx !important;
 }
 
+.card-prev-btn--hidden {
+  visibility: hidden;
+  pointer-events: none;
+}
+
 /* 进度条 - 圆点样式 */
 .progress-wrap {
   padding: 40rpx 40rpx 24rpx;
