@@ -1,7 +1,7 @@
 import { View, Text, Input, Textarea, Image, Form, Button as NativeButton, type FormProps } from '@tarojs/components'
 import { Button } from '@taroify/core'
 import '@taroify/core/button/style'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, type ReactNode } from 'react'
 import Taro from '@tarojs/taro'
 import {
   getHealthProfile,
@@ -111,9 +111,24 @@ const MAX_REPORT_IMAGE_COUNT = 9
 const MEDICAL_OPTION_VALUES = new Set(MEDICAL_OPTIONS.map((item) => item.value))
 const ALLERGY_OPTION_VALUES = new Set(ALLERGY_OPTIONS.map((item) => item.value))
 
+interface LazyProfileStepProps {
+  active: boolean
+  className?: string
+  children: ReactNode
+}
+
+function LazyProfileStep({ active, className = '', children }: LazyProfileStepProps) {
+  return (
+    <View className={`card step-card${className ? ` ${className}` : ''}`}>
+      {active ? children : null}
+    </View>
+  )
+}
+
 function HealthProfilePage() {
   const { scheme } = useAppColorScheme()
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
   const [saving, setSaving] = useState(false)
   const [currentStep, setCurrentStep] = useState(0)
 
@@ -156,6 +171,8 @@ function HealthProfilePage() {
   }
 
   const loadProfile = async () => {
+    setLoading(true)
+    setLoadError('')
     let profile: Awaited<ReturnType<typeof getHealthProfile>> | null = null
     try {
       const [loadedProfile, userInfo] = await Promise.all([
@@ -218,6 +235,7 @@ function HealthProfilePage() {
         setRoutineHours(parseRoutineHours(hc.routine_type))
       }
     } catch (err: any) {
+      setLoadError('网络或服务异常，请重新加载健康档案。')
       await showUnifiedApiError(err, '获取档案失败')
     } finally {
       const draftStep = Number(profile?.onboarding_draft_step)
@@ -711,6 +729,33 @@ function HealthProfilePage() {
     )
   }
 
+  if (loadError) {
+    return (
+      <View className='health-profile-page'>
+        <CustomNavBar
+          title='健康档案'
+          color='#1a1a1a'
+          background='#ffffff'
+          showBack
+          onBack={handlePageBack}
+        />
+        <View className='health-profile-load-error'>
+          <Text className='health-profile-load-error__title'>档案加载失败</Text>
+          <Text className='health-profile-load-error__desc'>{loadError}</Text>
+          <Button
+            block
+            color='primary'
+            shape='round'
+            className='health-profile-load-error__retry'
+            onClick={() => void loadProfile()}
+          >
+            重新加载
+          </Button>
+        </View>
+      </View>
+    )
+  }
+
   return (
     <View className='health-profile-page'>
       <CustomNavBar
@@ -741,12 +786,11 @@ function HealthProfilePage() {
           className='cards-track'
           style={{
             width: `${TOTAL_STEPS * PROFILE_STEP_WIDTH_RPX}rpx`,
-            transform: `translateX(-${currentStep * PROFILE_STEP_WIDTH_RPX}rpx)`,
-            transition: 'transform 0.3s ease-out'
+            transform: `translateX(-${currentStep * PROFILE_STEP_WIDTH_RPX}rpx)`
           }}
         >
           {/* Step 0: 头像昵称 */}
-          <View className='card step-card profile-step-card'>
+          <LazyProfileStep active={currentStep === 0} className='profile-step-card'>
             <Text className='step-card-title'>完善资料</Text>
             <Text className='step-card-subtitle'>设置头像和昵称，让朋友更容易认出你。</Text>
             <Form className='profile-native-form' onSubmit={handleProfileFormSubmit}>
@@ -806,10 +850,10 @@ function HealthProfilePage() {
               )}
               </View>
             </Form>
-          </View>
+          </LazyProfileStep>
 
           {/* Step 1: 性别 */}
-          <View className='card step-card'>
+          <LazyProfileStep active={currentStep === 1}>
             <Text className='step-card-title'>基础信息</Text>
             <Text className='step-card-subtitle'>选择你的性别，让我们更了解你。</Text>
             <View className='choice-row choice-row-vertical'>
@@ -834,10 +878,10 @@ function HealthProfilePage() {
                 下一步 <Text className='iconfont icon-right' />
               </Button>
             </View>
-          </View>
+          </LazyProfileStep>
 
           {/* Step 1: 出生日期 (Changed to Age Selection) */}
-          <View className='card step-card'>
+          <LazyProfileStep active={currentStep === 2}>
             <Text className='step-card-title'>基础信息</Text>
             <Text className='step-card-subtitle'>选择你的年龄，让我们更了解你。</Text>
             <View style={{ width: '100%', marginBottom: '24px' }}>
@@ -859,10 +903,10 @@ function HealthProfilePage() {
                 下一步 <Text className='iconfont icon-right' />
               </Button>
             </View>
-          </View>
+          </LazyProfileStep>
 
           {/* Step 2: 身高 */}
-          <View className='card step-card'>
+          <LazyProfileStep active={currentStep === 3}>
             <Text className='step-card-title'>身体数据</Text>
             <Text className='step-card-subtitle'>你的身高是多少？</Text>
             {/* 使用 HeightRuler 替换原有的输入 */}
@@ -880,10 +924,10 @@ function HealthProfilePage() {
                 下一步 <Text className='iconfont icon-right' />
               </Button>
             </View>
-          </View>
+          </LazyProfileStep>
 
           {/* Step 3: 体重 */}
-          <View className='card step-card'>
+          <LazyProfileStep active={currentStep === 4}>
             <Text className='step-card-title'>身体数据</Text>
             <Text className='step-card-subtitle'>你的体重是多少？</Text>
             {/* Title is handled inside WeightRuler for better layout */}
@@ -900,10 +944,10 @@ function HealthProfilePage() {
                 下一步 <Text className='iconfont icon-right' />
               </Button>
             </View>
-          </View>
+          </LazyProfileStep>
 
           {/* Step 4: 目标选择 */}
-          <View className='card step-card'>
+          <LazyProfileStep active={currentStep === 5}>
             <Text className='step-card-title'>健康目标</Text>
             <Text className='step-card-subtitle'>你希望达到什么样的身体状态？</Text>
             <View className='option-list'>
@@ -927,10 +971,10 @@ function HealthProfilePage() {
                 下一步 <Text className='iconfont icon-right' />
               </Button>
             </View>
-          </View>
+          </LazyProfileStep>
 
           {/* Step 5: 日常活动 */}
-          <View className='card step-card'>
+          <LazyProfileStep active={currentStep === 6}>
             <Text className='step-card-title'>日常活动</Text>
             <Text className='step-card-subtitle'>不算专门健身，你平时的一天更接近哪种状态？</Text>
             <View className='option-list'>
@@ -952,10 +996,10 @@ function HealthProfilePage() {
                 下一步 <Text className='iconfont icon-right' />
               </Button>
             </View>
-          </View>
+          </LazyProfileStep>
 
           {/* Step 6: 作息习惯 */}
-          <View className='card step-card'>
+          <LazyProfileStep active={currentStep === 7}>
             <Text className='step-card-title'>作息习惯</Text>
             <Text className='step-card-subtitle'>了解你的作息，让算法更加懂你</Text>
             <RoutineHourPicker
@@ -969,10 +1013,10 @@ function HealthProfilePage() {
                 下一步 <Text className='iconfont icon-right' />
               </Button>
             </View>
-          </View>
+          </LazyProfileStep>
 
           {/* Step 7: 既往病史（多选） */}
-          <View className='card step-card'>
+          <LazyProfileStep active={currentStep === 8}>
             <Text className='step-card-title'>既往病史</Text>
             <Text className='step-card-subtitle'>是否有以下病史？（可多选）</Text>
             <View className='option-grid'>
@@ -1046,10 +1090,10 @@ function HealthProfilePage() {
                 下一步 <Text className='iconfont icon-right' />
               </Button>
             </View>
-          </View>
+          </LazyProfileStep>
 
           {/* Step 8: 特殊饮食（多选） */}
-          <View className='card step-card'>
+          <LazyProfileStep active={currentStep === 9}>
             <Text className='step-card-title'>饮食习惯</Text>
             <Text className='step-card-subtitle'>你有特殊的饮食习惯吗？（可多选）</Text>
             <View className='option-grid'>
@@ -1070,10 +1114,10 @@ function HealthProfilePage() {
                 下一步 <Text className='iconfont icon-right' />
               </Button>
             </View>
-          </View>
+          </LazyProfileStep>
 
           {/* Step 9: 过敏源 */}
-          <View className='card step-card'>
+          <LazyProfileStep active={currentStep === 10}>
             <Text className='step-card-title'>过敏源</Text>
             <Text className='step-card-subtitle'>有过敏源吗？（可多选）</Text>
             <View className='option-grid'>
@@ -1148,10 +1192,10 @@ function HealthProfilePage() {
                 下一步 <Text className='iconfont icon-right' />
               </Button>
             </View>
-          </View>
+          </LazyProfileStep>
 
           {/* Step 10: 特殊情况和问题补充 */}
-          <View className='card step-card'>
+          <LazyProfileStep active={currentStep === 11}>
             <Text className='step-card-title'>补充信息</Text>
             <Text className='step-card-subtitle'>有其他特殊情况需要补充吗？（选填）</Text>
             <View className='input-card'>
@@ -1171,10 +1215,10 @@ function HealthProfilePage() {
                 下一步 <Text className='iconfont icon-right' />
               </Button>
             </View>
-          </View>
+          </LazyProfileStep>
 
           {/* Step 11: 体检报告上传 */}
-          <View className='card step-card upload-step'>
+          <LazyProfileStep active={currentStep === 12} className='upload-step'>
             <View className='upload-hero'>
               <View className='hero-icon-wrapper'>
                 <Text className='hero-icon iconfont icon-yiliaohangyedeICON-'></Text>
@@ -1254,7 +1298,7 @@ function HealthProfilePage() {
                 {reportImageUrls.length > 0 ? '确认并开启分析' : '以后再说，直接完成'}
               </Button>
             </View>
-          </View>
+          </LazyProfileStep>
         </View>
       </View>
       {currentStep > 0 && currentStep < TOTAL_STEPS - 1 && (

@@ -9,6 +9,39 @@
   overflow: hidden;
 }
 
+.health-profile-load-error {
+  flex: 1;
+  min-height: 0;
+  padding: 80rpx 56rpx;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.health-profile-load-error__title {
+  display: block;
+  color: #16332a;
+  font-size: 36rpx;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.health-profile-load-error__desc {
+  display: block;
+  margin-top: 18rpx;
+  color: #61756d;
+  font-size: 26rpx;
+  line-height: 1.6;
+}
+
+.health-profile-load-error__retry {
+  width: 360rpx !important;
+  margin-top: 44rpx !important;
+}
+
 /* 进度条 - 圆点样式 */
 .progress-wrap {
   padding: 40rpx 40rpx 24rpx;
