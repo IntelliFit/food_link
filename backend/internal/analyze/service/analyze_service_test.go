@@ -770,7 +770,7 @@ func TestBuildDBFirstPromptIncludesCorrectionContext(t *testing.T) {
 
 func TestBuildDBFirstPromptsUseEdibleNetWeight(t *testing.T) {
 	imagePrompt := buildImageDBFirstPrompt(AnalyzeInput{ImageURL: "https://example.com/shrimp.jpg"}, nil)
-	for _, expected := range []string{"grossWeightGrams", "原始可见总重量", "后端会用文本模型单独计算 ediblePortionRatio"} {
+	for _, expected := range []string{"grossWeightGrams", "原始可见总重量", "hasInedibleParts", "视觉初估字段会进入现有第二步文本模型复核"} {
 		assert.Contains(t, imagePrompt, expected)
 	}
 
@@ -859,7 +859,7 @@ func TestParseItemsCapsWaterMlAtEstimatedWeight(t *testing.T) {
 	assert.Equal(t, 550.0, items[0]["waterMl"])
 }
 
-func TestParseItemsPreservesGrossAndEdibleRatio(t *testing.T) {
+func TestParseItemsNormalizesWeightFromGrossAndEdibleRatio(t *testing.T) {
 	items := parseItems(map[string]any{
 		"items": []any{
 			map[string]any{
@@ -872,7 +872,7 @@ func TestParseItemsPreservesGrossAndEdibleRatio(t *testing.T) {
 	})
 	assert.Len(t, items, 1)
 	assert.Equal(t, 600.0, items[0]["grossWeightGrams"])
-	assert.Equal(t, 600.0, items[0]["estimatedWeightGrams"])
+	assert.Equal(t, 210.0, items[0]["estimatedWeightGrams"])
 	assert.Equal(t, 35.0, items[0]["ediblePortionRatio"])
 }
 
