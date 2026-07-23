@@ -28,6 +28,10 @@ import {
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
 import { extraPkgUrl, MAIN_TAB_ROUTES, normalizeRedirectUrlForSubpackage } from '../../../utils/subpackage-extra'
+import {
+  isVirtualPaymentCancellation,
+  requestVirtualPaymentAndWait,
+} from '../../../utils/virtual-payment'
 
 import './index.scss'
 import { withAuth } from '../../../utils/withAuth'
@@ -468,10 +472,7 @@ function ProMembershipPage() {
       if (!login.code) throw new Error('获取微信登录状态失败，请重试')
       const payOrder = await createVirtualMembershipPayment(selectedPlan.code, login.code)
       const requestVirtualPayment = (Taro as any).requestVirtualPayment
-      if (typeof requestVirtualPayment !== 'function') {
-        throw new Error('当前微信版本暂不支持虚拟支付，请升级微信后重试')
-      }
-      await requestVirtualPayment({
+      await requestVirtualPaymentAndWait(requestVirtualPayment, {
         signData: payOrder.virtual_payment.signData,
         paySig: payOrder.virtual_payment.paySig,
         signature: payOrder.virtual_payment.signature,
@@ -481,8 +482,8 @@ function ProMembershipPage() {
       const confirmed = await pollPaymentStatus(payOrder.order_no)
       if (!confirmed) {
         await Taro.showModal({
-          title: '支付结果确认中',
-          content: '暂未收到微信支付确认，请稍后重新进入会员页面查看。请勿重复支付。',
+          title: '正在确认支付',
+          content: '支付结果正在同步，请稍后返回本页查看。请勿重复购买。',
           showCancel: false,
           confirmText: '我知道了',
         })
@@ -490,8 +491,7 @@ function ProMembershipPage() {
       }
       Taro.showToast({ title: '开通成功！', icon: 'success' })
     } catch (error: any) {
-      const message = error?.errMsg || error?.message || ''
-      if (String(message).includes('cancel')) {
+      if (isVirtualPaymentCancellation(error)) {
         Taro.showToast({ title: '已取消支付', icon: 'none' })
       } else {
         console.error('微信虚拟支付调用失败', {
