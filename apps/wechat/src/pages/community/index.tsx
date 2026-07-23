@@ -1193,23 +1193,29 @@ function CommunityPage() {
       return prev.join('|') === next.join('|') ? prev : next
     })
 
+    const now = Date.now()
+    const needRefreshFriends = Boolean(
+      token &&
+        (friends.length === 0 || now - lastFriendsRefreshTime.current > CACHE_DURATION)
+    )
+
     if (token) {
-      loadCheckinPreview(true)
-      loadInteractionNotificationsBadge()
-      loadUnreadMessageCount()
-      void syncPendingFriendRequests()
+      // Feed 是首屏关键请求。排行榜、消息角标和好友申请稍后再拉，
+      // 避免与 Feed/好友列表同时抢占后端仅 10 个数据库连接。
+      setTimeout(() => {
+        void loadCheckinPreview(true)
+        void loadInteractionNotificationsBadge()
+        void loadUnreadMessageCount()
+        if (!needRefreshFriends) {
+          void syncPendingFriendRequests()
+        }
+      }, 300)
     } else {
       setLbPreviewTop([])
       setUnreadNotificationCount(0)
       setUnreadMessageCount(0)
       setRequests([])
     }
-
-    const now = Date.now()
-    const needRefreshFriends = Boolean(
-      token &&
-        (friends.length === 0 || now - lastFriendsRefreshTime.current > CACHE_DURATION)
-    )
 
     // 已有 Feed 时不再走下方冷启动，但仍需按需拉取好友（否则仅从缓存恢复 Feed 时会 early return，永远不请求 /api/friend/list）
     if (feedList.length > 0) {

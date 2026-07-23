@@ -6377,7 +6377,7 @@ export async function communityGetFeed(
   }
   if (params?.author_id) q += `&author_id=${encodeURIComponent(params.author_id)}`
   const response = await withTransientRequestRetry(() =>
-    authenticatedRequest(`/api/community/feed${q}`, { method: 'GET', timeout: 8000 })
+    authenticatedRequest(`/api/community/feed${q}`, { method: 'GET', timeout: 15000 })
   )
   if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '获取动态失败')
   return response.data as { list: CommunityFeedItem[]; has_more?: boolean }
@@ -6418,7 +6418,7 @@ export async function communityGetPublicFeed(
       url: `${API_BASE_URL}/api/community/public-feed${q}`,
       method: 'GET',
       header: withNgrokBypassHeaders(token ? { Authorization: `Bearer ${token}` } : undefined),
-      timeout: 8000
+      timeout: 15000
     })
     if (result.statusCode >= 500) {
       const error = Object.assign(
