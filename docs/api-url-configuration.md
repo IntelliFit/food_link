@@ -16,20 +16,28 @@
 
 ### 机制
 
-上传**同一份** `dist` 即可：小程序在**运行时**读取 `Taro.getAccountInfoSync().miniProgram.envVersion`，自动选择 API：
+上传**同一份 production `dist`** 即可：小程序在**运行时**读取
+`Taro.getAccountInfoSync().miniProgram.envVersion`，并结合构建模式自动选择 API：
 
-| `envVersion` | 场景 | 环境变量 |
-|--------------|------|----------|
-| `develop` | 开发者工具 / 开发版 | `TARO_APP_API_BASE_URL_DEVELOP` |
-| `trial` | 体验版 | `TARO_APP_API_BASE_URL_TRIAL` |
-| `release` | 正式版 | `TARO_APP_API_BASE_URL_RELEASE` |
+| 构建模式 | `envVersion` | 场景 | 最终 API |
+|----------|--------------|------|----------|
+| development | `develop` | 本地开发者工具 | `TARO_APP_API_BASE_URL_DEVELOP` |
+| production | `develop` | 微信审核（官方默认以开发版身份审核） | `TARO_APP_API_BASE_URL_RELEASE` |
+| production | `trial` | 体验版 | `TARO_APP_API_BASE_URL_TRIAL` |
+| production | `release` | 正式版 | `TARO_APP_API_BASE_URL_RELEASE` |
 
-无需为体验版 / 正式版分别 build；体验版提审发布为正式版后，同一包会自动切到正式 API。
+无需为体验版 / 正式版分别 build；体验版提审发布为正式版后，同一包会自动切换。
+production 包即使收到 `develop` 也不会访问 localhost；非 HTTPS 或 loopback override
+也会被忽略，避免审核设备请求自身端口。
+
+> Apollo 管理 Go 后端启动后的运行时业务配置，不负责小程序首次请求前的 API
+> 入口选择。小程序 API 地址在 Taro 构建时注入并固化进上传 JS。
 
 ### 本地配置
 
-1. 复制根目录 `.env.example` 为 `.env.development` 与 `.env.production`（二者均被 gitignore）。
-2. 按环境填写三个 URL（通常两份文件内容相同）。
+构建变量可由系统环境、CI 或本地 env 文件提供；已有 `process.env` 优先，本地文件仅作
+开发机缺省来源。需要本地文件时，复制根目录 `.env.example` 为 `.env.development`
+与 `.env.production`（二者均被 gitignore），再填写三个 URL。
 
 ```bash
 TARO_APP_API_BASE_URL_RELEASE=https://api.healthymax.cn

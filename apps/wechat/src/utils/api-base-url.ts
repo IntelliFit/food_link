@@ -15,6 +15,14 @@ function normalizeBaseUrl(url: string): string {
   return url.replace(/\/+$/, '')
 }
 
+function isSafeProductionOverride(url: string): boolean {
+  const normalized = normalizeBaseUrl(url.trim())
+  if (!/^https:\/\//i.test(normalized)) {
+    return false
+  }
+  return !/^https:\/\/(?:localhost|127(?:\.\d{1,3}){3}|\[?::1\]?)(?::|\/|$)/i.test(normalized)
+}
+
 function readMiniProgramEnvVersion(): MiniProgramEnvVersion | undefined {
   try {
     const envVersion = Taro.getAccountInfoSync?.()?.miniProgram?.envVersion
@@ -29,11 +37,12 @@ function readMiniProgramEnvVersion(): MiniProgramEnvVersion | undefined {
 
 /**
  * 按微信 miniProgram.envVersion 选择 API 根地址。
- * 各环境 URL 由构建时从 .env 注入，不在代码中写死域名。
+ * 各环境 URL 由构建配置注入，不在业务代码中写死域名。
  */
 export function resolveApiBaseUrl(): string {
+  const isProductionBuild = process.env.NODE_ENV === 'production'
   const override = readInjectedString(() => __API_BASE_URL_OVERRIDE__, '')
-  if (override) {
+  if (override && (!isProductionBuild || isSafeProductionOverride(override))) {
     return normalizeBaseUrl(override)
   }
 
@@ -48,12 +57,26 @@ export function resolveApiBaseUrl(): string {
   if (envVersion === 'trial' && trialUrl) {
     return normalizeBaseUrl(trialUrl)
   }
-  if (envVersion === 'develop' && developUrl) {
-    return normalizeBaseUrl(developUrl)
+  if (envVersion === 'develop') {
+    // 微信官方默认以 develop 身份运行审核中版本。production 上传包必须走
+    // 审核可达的正式 API；仅 development 构建允许 develop 使用本机地址。
+    if (isProductionBuild) {
+      if (releaseUrl) {
+        return normalizeBaseUrl(releaseUrl)
+      }
+      if (trialUrl) {
+        return normalizeBaseUrl(trialUrl)
+      }
+    } else if (developUrl) {
+      return normalizeBaseUrl(developUrl)
+    }
   }
 
-  // envVersion 不可用时（单测等）：开发构建优先本地，否则按 trial → release → develop
-  if (process.env.NODE_ENV === 'development' && developUrl) {
+  // envVersion 不可用时：production 优先正式 API，development 优先本地 API。
+  if (isProductionBuild && releaseUrl) {
+    return normalizeBaseUrl(releaseUrl)
+  }
+  if (!isProductionBuild && developUrl) {
     return normalizeBaseUrl(developUrl)
   }
   if (trialUrl) {

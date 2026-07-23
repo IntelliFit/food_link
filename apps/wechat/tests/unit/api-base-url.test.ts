@@ -35,13 +35,20 @@ function loadResolver(): typeof import('../../src/utils/api-base-url') {
 }
 
 describe('resolveApiBaseUrl', () => {
+  const originalNodeEnv = process.env.NODE_ENV
+
   beforeEach(() => {
     mockGetAccountInfoSync.mockReset()
+    process.env.NODE_ENV = 'development'
     setInjectedUrls({
       release: 'https://api.healthymax.cn',
       trial: 'https://dev.api.healthymax.cn',
       develop: 'http://127.0.0.1:3010',
     })
+  })
+
+  afterAll(() => {
+    process.env.NODE_ENV = originalNodeEnv
   })
 
   it('uses release url for release envVersion', () => {
@@ -54,14 +61,50 @@ describe('resolveApiBaseUrl', () => {
     expect(loadResolver().resolveApiBaseUrl()).toBe('https://dev.api.healthymax.cn')
   })
 
-  it('uses develop url for develop envVersion', () => {
+  it('uses local develop url for a development build', () => {
     mockGetAccountInfoSync.mockReturnValue({ miniProgram: { envVersion: 'develop' } })
     expect(loadResolver().resolveApiBaseUrl()).toBe('http://127.0.0.1:3010')
+  })
+
+  it('uses release url when a production review runs with develop envVersion', () => {
+    process.env.NODE_ENV = 'production'
+    mockGetAccountInfoSync.mockReturnValue({ miniProgram: { envVersion: 'develop' } })
+    expect(loadResolver().resolveApiBaseUrl()).toBe('https://api.healthymax.cn')
+  })
+
+  it('falls back to trial url for a production review when release url is missing', () => {
+    process.env.NODE_ENV = 'production'
+    setInjectedUrls({
+      trial: 'https://dev.api.healthymax.cn',
+      develop: 'http://127.0.0.1:3010',
+    })
+    mockGetAccountInfoSync.mockReturnValue({ miniProgram: { envVersion: 'develop' } })
+    expect(loadResolver().resolveApiBaseUrl()).toBe('https://dev.api.healthymax.cn')
   })
 
   it('honors override before envVersion', () => {
     setInjectedUrls({ override: 'http://10.0.0.2:3010', release: 'https://api.healthymax.cn' })
     mockGetAccountInfoSync.mockReturnValue({ miniProgram: { envVersion: 'release' } })
     expect(loadResolver().resolveApiBaseUrl()).toBe('http://10.0.0.2:3010')
+  })
+
+  it('ignores a localhost override in a production upload', () => {
+    process.env.NODE_ENV = 'production'
+    setInjectedUrls({
+      override: 'http://127.0.0.1:3010',
+      release: 'https://api.healthymax.cn',
+    })
+    mockGetAccountInfoSync.mockReturnValue({ miniProgram: { envVersion: 'develop' } })
+    expect(loadResolver().resolveApiBaseUrl()).toBe('https://api.healthymax.cn')
+  })
+
+  it('allows a secure public override in a production upload', () => {
+    process.env.NODE_ENV = 'production'
+    setInjectedUrls({
+      override: 'https://audit.api.healthymax.cn',
+      release: 'https://api.healthymax.cn',
+    })
+    mockGetAccountInfoSync.mockReturnValue({ miniProgram: { envVersion: 'develop' } })
+    expect(loadResolver().resolveApiBaseUrl()).toBe('https://audit.api.healthymax.cn')
   })
 })

@@ -587,7 +587,11 @@ export default function LoginPage() {
                 <Text className='app-name'>
                     {envVersion === 'release'
                         ? '智健食探'
-                        : `智健食探（${envVersion === 'develop' ? '开发版' : '体验版'}）`}
+                        : envVersion === 'trial'
+                            ? '智健食探（体验版）'
+                            : isDev
+                                ? '智健食探（开发版）'
+                                : '智健食探'}
                 </Text>
                 <Text className='app-slogan'>记录饮食，连接健康</Text>
             </View>
