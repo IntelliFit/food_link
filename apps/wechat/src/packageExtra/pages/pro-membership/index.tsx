@@ -84,6 +84,16 @@ function virtualPaymentErrorMessage(error: any): string {
   return errorCode ? `${detail}（错误码 ${errorCode}）` : detail
 }
 
+function getVirtualPaymentEntryCopy(): string {
+  try {
+    const platform = String(Taro.getSystemInfoSync()?.platform || '').toLowerCase()
+    if (platform === 'ios') return '确认后将进入 Apple 支付。'
+  } catch {
+    // 系统信息读取失败时，使用小程序虚拟支付的通用提示。
+  }
+  return '确认后将进入微信小程序虚拟支付。'
+}
+
 const TIERS: Array<{
   key: MembershipTier
   name: string
@@ -437,14 +447,15 @@ function ProMembershipPage() {
     }
 
     const payAmount = paymentEstimate.amount || selectedPlan.amount
-    const confirmContent = selectedPlanIsPaymentTest
+    const confirmSummary = selectedPlanIsPaymentTest
       ? `支付测试套餐，¥${payAmount.toFixed(2)}。\n该订单用于验证真实微信支付与会员开通链路，支付成功后会开通测试会员。`
       : paymentEstimate.mode === 'prorated_current_period_upgrade'
       ? `升级 ${selectedPlan.name}，本次补差 ¥${payAmount.toFixed(2)}。${paymentEstimate.hint || '已按当前会员剩余价值折抵'}。到期后需手动续费。`
       : `开通 ${selectedPlan.name}，¥${payAmount.toFixed(2)}${PERIODS.find(p => p.key === selectedPeriod)?.unit || ''}，到期后需手动续费。`
+    const confirmContent = `${confirmSummary}\n${getVirtualPaymentEntryCopy()}`
 
     const modalRes = await Taro.showModal({
-      title: selectedPlanIsPaymentTest ? '测试支付确认' : '订阅确认',
+      title: selectedPlanIsPaymentTest ? '测试支付确认' : '虚拟支付确认',
       content: confirmContent,
       confirmText: '确认支付',
       confirmColor: '#00bc7d'
@@ -573,15 +584,15 @@ function ProMembershipPage() {
 
   const actionButtonText = useMemo(() => {
     if (!selectedPlan) return '请选择套餐'
-    if (isPaymentTestPlan(selectedPlan)) return `支付测试套餐 · ¥${selectedPlan.amount.toFixed(2)}`
+    if (isPaymentTestPlan(selectedPlan)) return `虚拟支付测试 · ¥${selectedPlan.amount.toFixed(2)}`
     if (paymentEstimate.disabled) return '当前套餐不可即时切换'
     const price = `¥${(paymentEstimate.amount || selectedPlan.amount).toFixed(2)}`
-    if (!isPro) return `立即开通 · ${price}`
-    if (membership?.current_plan_code === selectedPlan.code) return `续费当前套餐 · ${price}`
-    if (paymentEstimate.mode === 'prorated_current_period_upgrade') return `补差升级 · ${price}`
+    if (!isPro) return `通过虚拟支付开通 · ${price}`
+    if (membership?.current_plan_code === selectedPlan.code) return `通过虚拟支付续费 · ${price}`
+    if (paymentEstimate.mode === 'prorated_current_period_upgrade') return `虚拟支付补差升级 · ${price}`
     const tierCompare = compareMembershipTier(selectedTier, currentPlanTier)
-    if (tierCompare > 0) return `升级到${getMembershipTierLabel(selectedTier)} · ${price}`
-    return `切换周期 · ${price}`
+    if (tierCompare > 0) return `虚拟支付升级到${getMembershipTierLabel(selectedTier)} · ${price}`
+    return `通过虚拟支付切换周期 · ${price}`
   }, [selectedPlan, paymentEstimate, isPro, membership, selectedTier, currentPlanTier])
 
   return (
@@ -793,6 +804,19 @@ function ProMembershipPage() {
             <Text className='plan-original-price'>原价 ¥{originalAmountDisplay}{PERIODS.find(p => p.key === selectedPeriod)?.unit || ''}</Text>
           )}
         </View>
+      </View>
+
+      <View className='virtual-payment-notice'>
+        <View className='virtual-payment-notice-head'>
+          <Text className='virtual-payment-notice-badge'>支付方式</Text>
+          <Text className='virtual-payment-notice-title'>微信小程序虚拟支付</Text>
+        </View>
+        <Text className='virtual-payment-notice-channel'>
+          iOS 端通过 Apple 支付，其他平台通过微信支付
+        </Text>
+        <Text className='virtual-payment-notice-detail'>
+          一次性购买，到期不自动续费
+        </Text>
       </View>
 
       {/* 三档对比表 */}
