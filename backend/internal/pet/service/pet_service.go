@@ -154,7 +154,8 @@ func (s *Service) Summary(ctx context.Context, userID, date string) (*Summary, e
 	if strings.TrimSpace(date) == "" {
 		date = ChinaToday()
 	}
-	if _, err := parseChinaDate(date); err != nil {
+	day, err := parseChinaDate(date)
+	if err != nil {
 		return nil, err
 	}
 	profile, err := s.repo.GetUserProfile(ctx, userID)
@@ -191,7 +192,8 @@ func (s *Service) Summary(ctx context.Context, userID, date string) (*Summary, e
 	pet.TodayStatus = moodForScore(todayScore.HabitScore)
 	now := time.Now()
 	pet.LastSummaryAt = &now
-	event, err := s.repo.GetLatestUnclaimedEvent(ctx, userID)
+	eventDate := day.AddDate(0, 0, -1).Format("2006-01-02")
+	event, err := s.repo.GetEventByUserDateType(ctx, userID, eventDate, petdomain.EventTypeOfflineReview)
 	if err != nil {
 		return nil, err
 	}

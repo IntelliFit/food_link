@@ -48,6 +48,8 @@ import { AppButton } from '../components/AppButton'
 import type { RootStackParamList } from '../navigation/types'
 import { colors } from '../theme'
 import { formatDateTime, todayKey } from '../utils/date'
+import { emitHomeIntakeDataChangedEvent } from '../utils/home-events'
+import { refreshHomeDashboardLocalSnapshotFromCloud } from '../utils/home-dashboard-local-cache'
 import { userFacingErrorMessage } from '../utils/errors'
 
 const mealOptions: MealType[] = ['breakfast', 'morning_snack', 'lunch', 'afternoon_snack', 'dinner', 'evening_snack']
@@ -610,6 +612,9 @@ export function RecipesScreen() {
     setLoading(true)
     try {
       const result = await apiClient.useRecipe(recipe.id, selectedMealType)
+      const date = todayKey()
+      await refreshHomeDashboardLocalSnapshotFromCloud(date)
+      emitHomeIntakeDataChangedEvent({ date, force: true })
       setMealSheetRecipe(null)
       if (!result.record_id) {
         Alert.alert('已记录', '食谱已写入今日饮食记录', [
@@ -706,8 +711,10 @@ export function RecipesScreen() {
                   </View>
 
                   <View style={styles.recipeCardContent}>
-                    <Text style={styles.recipeCardName} numberOfLines={2}>{recipe.recipe_name || '未命名食谱'}</Text>
-                    {recipe.description ? <Text style={styles.recipeCardDesc} numberOfLines={2}>{recipe.description}</Text> : null}
+                    <Pressable onPress={() => navigation.navigate('RecipeDetail', { recipeId: recipe.id })}>
+                      <Text style={styles.recipeCardName} numberOfLines={2}>{formatRecipeDisplayText(recipe.recipe_name) || '未命名食谱'}</Text>
+                    </Pressable>
+                    {recipe.description ? <Text style={styles.recipeCardDesc} numberOfLines={2}>{formatRecipeDisplayText(recipe.description)}</Text> : null}
 
                     <View style={styles.recipeNutritionSummary}>
                       <View style={[styles.recipeNutritionItem, styles.recipeNutritionHighlight]}>
@@ -734,10 +741,15 @@ export function RecipesScreen() {
                     {recipe.tags?.length ? (
                       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.recipeTagsScroll}>
                         <View style={styles.recipeTags}>
-                          {recipe.tags.map((tag) => <Text key={tag} style={styles.recipeTag}>#{tag}</Text>)}
+                          {recipe.tags.map((tag) => {
+                            const label = formatRecipeTag(tag)
+                            return label ? <Text key={tag} style={styles.recipeTag}>{label}</Text> : null
+                          })}
                         </View>
                       </ScrollView>
                     ) : null}
+
+                    <RecipeMicroSummary recipe={recipe} />
 
                     <View style={styles.recipeCardFooter}>
                       <View style={styles.recipeStatsRow}>
@@ -3622,6 +3634,125 @@ function formatRecipeNumber(value?: number | null): string {
   return String(Math.round(numeric * 10) / 10)
 }
 
+type RecipeMicroNutrientKey =
+  | 'fiber'
+  | 'sugar'
+  | 'sodium_mg'
+  | 'potassiumMg'
+  | 'calciumMg'
+  | 'ironMg'
+  | 'magnesiumMg'
+  | 'zincMg'
+  | 'vitaminARaeMcg'
+  | 'vitaminCMg'
+  | 'vitaminDMcg'
+  | 'vitaminEMg'
+  | 'vitaminKMcg'
+  | 'thiaminMg'
+  | 'riboflavinMg'
+  | 'niacinMg'
+  | 'vitaminB6Mg'
+  | 'folateMcg'
+  | 'vitaminB12Mcg'
+
+const recipeMicroNutrientMeta: Array<{
+  key: RecipeMicroNutrientKey
+  label: string
+  unit: string
+  aliases?: string[]
+}> = [
+  { key: 'fiber', label: '膳食纤维', unit: 'g' },
+  { key: 'sugar', label: '糖', unit: 'g' },
+  { key: 'sodium_mg', label: '钠', unit: 'mg', aliases: ['sodiumMg'] },
+  { key: 'potassiumMg', label: '钾', unit: 'mg', aliases: ['potassium_mg'] },
+  { key: 'calciumMg', label: '钙', unit: 'mg', aliases: ['calcium_mg'] },
+  { key: 'ironMg', label: '铁', unit: 'mg', aliases: ['iron_mg'] },
+  { key: 'magnesiumMg', label: '镁', unit: 'mg', aliases: ['magnesium_mg'] },
+  { key: 'zincMg', label: '锌', unit: 'mg', aliases: ['zinc_mg'] },
+  { key: 'vitaminARaeMcg', label: '维生素A', unit: 'mcg' },
+  { key: 'vitaminCMg', label: '维生素C', unit: 'mg' },
+  { key: 'vitaminDMcg', label: '维生素D', unit: 'mcg' },
+  { key: 'vitaminEMg', label: '维生素E', unit: 'mg' },
+  { key: 'vitaminKMcg', label: '维生素K', unit: 'mcg' },
+  { key: 'thiaminMg', label: '维生素B1', unit: 'mg' },
+  { key: 'riboflavinMg', label: '维生素B2', unit: 'mg' },
+  { key: 'niacinMg', label: '烟酸', unit: 'mg' },
+  { key: 'vitaminB6Mg', label: '维生素B6', unit: 'mg' },
+  { key: 'folateMcg', label: '叶酸', unit: 'mcg' },
+  { key: 'vitaminB12Mcg', label: '维生素B12', unit: 'mcg' },
+]
+
+function formatRecipeDisplayText(value?: string | null): string {
+  return String(value || '')
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    .replace(/<\/?[^>]+>/g, ' ')
+    .replace(/^\s{0,3}#{1,6}\s*/gm, '')
+    .replace(/^\s*(?:[-*+]|\d+[.)])\s+/gm, '')
+    .replace(/^\s*>\s?/gm, '')
+    .replace(/(\*\*|__)(.*?)\1/g, '$2')
+    .replace(/([*_~`])([^]*?)\1/g, '$2')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function formatRecipeTag(value: string): string {
+  return formatRecipeDisplayText(value).replace(/^#+\s*/, '').trim()
+}
+
+function recipeMicroValue(nutrients: Record<string, unknown>, key: RecipeMicroNutrientKey, aliases: string[] = []): number {
+  for (const candidate of [key, ...aliases]) {
+    const value = Number(nutrients[candidate])
+    if (Number.isFinite(value) && value > 0) return value
+  }
+  return 0
+}
+
+function getRecipeMicroRows(recipe: RecipeItem) {
+  const totals = (recipe.items || []).reduce<Partial<Record<RecipeMicroNutrientKey, number>>>((result, rawItem) => {
+    const item = rawItem as Record<string, unknown>
+    const rawRatio = Number(item.ratio)
+    const ratio = Number.isFinite(rawRatio) ? Math.max(0, rawRatio) / 100 : 1
+    const nutrients = item.nutrients && typeof item.nutrients === 'object'
+      ? item.nutrients as Record<string, unknown>
+      : {}
+
+    recipeMicroNutrientMeta.forEach((meta) => {
+      const value = recipeMicroValue(nutrients, meta.key, meta.aliases) * ratio
+      if (value > 0) result[meta.key] = Math.round(((result[meta.key] || 0) + value) * 10) / 10
+    })
+    return result
+  }, {})
+
+  return recipeMicroNutrientMeta
+    .map((meta) => ({ ...meta, value: totals[meta.key] || 0 }))
+    .filter((row) => row.value > 0)
+    .slice(0, 4)
+}
+
+function formatRecipeMicroValue(value: number): string {
+  if (value >= 10) return String(Math.round(value))
+  if (value >= 1) return String(Math.round(value * 10) / 10)
+  return String(Math.round(value * 100) / 100)
+}
+
+function RecipeMicroSummary({ recipe }: { recipe: RecipeItem }) {
+  const rows = getRecipeMicroRows(recipe)
+  if (!rows.length) return null
+
+  return (
+    <View style={styles.recipeMicroSummary}>
+      {rows.map((row) => (
+        <View key={row.key} style={styles.recipeMicroSummaryItem}>
+          <Text style={styles.recipeMicroSummaryLabel}>{row.label}</Text>
+          <Text style={styles.recipeMicroSummaryValue}>{formatRecipeMicroValue(row.value)}{row.unit}</Text>
+        </View>
+      ))}
+    </View>
+  )
+}
+
 function formatRecipeLastUsed(value?: string | null): string {
   if (!value) return '未使用'
   const date = new Date(value)
@@ -5070,6 +5201,34 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 15,
     backgroundColor: '#f1f5f9',
+  },
+  recipeMicroSummary: {
+    minHeight: 52,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#dce8e2',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 7,
+    backgroundColor: '#f7fcf9',
+  },
+  recipeMicroSummaryItem: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: 'center',
+    gap: 2,
+  },
+  recipeMicroSummaryLabel: {
+    color: '#94a3b8',
+    fontSize: 10,
+    lineHeight: 14,
+  },
+  recipeMicroSummaryValue: {
+    color: '#334155',
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '800',
   },
   recipeMealSheetOverlay: {
     flex: 1,

@@ -255,6 +255,29 @@ export interface CreateExpiryItemInput {
   quantityNote?: string
   storageType?: string
   note?: string
+  sourceType?: 'manual' | 'ai' | string
+}
+
+export interface FoodExpiryRecognitionItem {
+  food_name: string
+  category?: string | null
+  storage_type?: string
+  quantity_note?: string | null
+  expire_date: string
+  note?: string | null
+  source_type?: 'manual' | 'ai' | string
+  suggested_days?: number | null
+  expire_date_is_estimated?: boolean
+  confidence?: number | null
+  recognition_basis?: string | null
+  missing_fields?: string[]
+}
+
+export interface FoodExpiryRecognitionResponse {
+  task_id: string
+  credits_cost: number
+  items: FoodExpiryRecognitionItem[]
+  message: string
 }
 
 export interface UpdateExpiryItemInput {
@@ -1547,10 +1570,26 @@ export class FoodLinkApiClient {
         quantity_note: input.quantityNote?.trim(),
         storage_type: input.storageType?.trim() || 'refrigerated',
         note: input.note?.trim(),
-        source_type: 'manual',
+        source_type: input.sourceType?.trim() || 'manual',
         status: 'active',
       },
       timeoutMs: 10000,
+    })
+  }
+
+  async recognizeFoodExpiryItems(
+    imageUrls: string[],
+    additionalContext?: string,
+  ): Promise<FoodExpiryRecognitionResponse> {
+    const urls = imageUrls.map((url) => url.trim()).filter(Boolean)
+    if (!urls.length) throw new Error('请先选择食物图片')
+    return this.authenticatedRequest<FoodExpiryRecognitionResponse>('/api/expiry/recognize', {
+      method: 'POST',
+      body: {
+        image_urls: urls,
+        additional_context: additionalContext?.trim() || undefined,
+      },
+      timeoutMs: 90000,
     })
   }
 

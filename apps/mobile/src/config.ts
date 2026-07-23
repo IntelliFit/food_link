@@ -16,7 +16,7 @@ export const SHARE_BASE_URL =
 export const SHOW_DEBUG_LOGIN =
   __DEV__ && process.env.EXPO_PUBLIC_ENABLE_DEBUG_LOGIN === 'true'
 
-export const APP_VERSION = Constants.expoConfig?.version || rootPackage.version || '0.0.0'
+export const APP_VERSION = rootPackage.version || Constants.expoConfig?.version || '0.0.0'
 
 export const WECHAT_APP_ID =
   process.env.EXPO_PUBLIC_WECHAT_APP_ID ||

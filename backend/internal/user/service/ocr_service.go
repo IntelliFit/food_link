@@ -23,6 +23,18 @@ type OCRService struct {
 	client  *http.Client
 }
 
+const (
+	defaultHealthReportOCRModel = "doubao-seed-2-0-lite-260428"
+	wanjieHealthReportOCRModel  = "qwen3.6-flash"
+)
+
+func healthReportOCRModelForBaseURL(baseURL string) string {
+	if strings.Contains(strings.ToLower(baseURL), "maas-openapi.wanjiedata.com") {
+		return wanjieHealthReportOCRModel
+	}
+	return defaultHealthReportOCRModel
+}
+
 func NewOCRService(cfg *config.Config, storageClient ...*storage.Client) *OCRService {
 	var client *storage.Client
 	if len(storageClient) > 0 {
@@ -71,7 +83,7 @@ func (s *OCRService) callDoubao(ctx context.Context, imageURL string) (map[strin
 		baseURL = "https://ark.cn-beijing.volces.com/api/v3"
 	}
 	payload := map[string]any{
-		"model": "doubao-seed-2-0-lite-260428",
+		"model": healthReportOCRModelForBaseURL(baseURL),
 		"messages": []map[string]any{
 			{
 				"role": "user",

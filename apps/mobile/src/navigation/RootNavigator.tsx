@@ -7,7 +7,7 @@ import { HomeScreen } from '../screens/HomeScreen'
 import { StatsScreen } from '../screens/StatsScreen'
 import { CommunityScreen } from '../screens/CommunityScreen'
 import { CommunitySearchScreen } from '../screens/CommunitySearchScreen'
-import { ProfileMoreFeaturesScreen, ProfileScreen } from '../screens/ProfileScreen'
+import { ProfileScreen } from '../screens/ProfileScreen'
 import { ProfileSettingsScreen } from '../screens/ProfileSettingsScreen'
 import { AccountSecurityScreen } from '../screens/AccountSecurityScreen'
 import { HealthProfileViewScreen } from '../screens/HealthProfileViewScreen'
@@ -18,6 +18,7 @@ import { GooseDuckChickenScreen } from '../screens/GooseDuckChickenScreen'
 import { AnalyzeLoadingScreen } from '../screens/AnalyzeLoadingScreen'
 import { ResultScreen } from '../screens/ResultScreen'
 import { TextResultScreen } from '../screens/TextResultScreen'
+import { RecipeDetailScreen } from '../screens/RecipeDetailScreen'
 import {
   AboutScreen,
   AboutFeedbackScreen,
@@ -53,7 +54,6 @@ import {
   FollowListScreen,
   InviteFriendsScreen,
   PetHomeScreen,
-  PetLabScreen,
   PrivacyPolicyScreen,
   PublicFoodShareScreen,
   RecipeEditScreen,
@@ -263,14 +263,13 @@ export function RootNavigator() {
             <Stack.Screen name="FoodLibraryDetail" component={FoodLibraryDetailScreen} options={{ title: '食物详情' }} />
             <Stack.Screen name="DayRecord" component={DayRecordScreen} options={{ title: '单日记录' }} />
             <Stack.Screen name="RecordDetail" component={RecordDetailScreen} options={{ title: '记录详情' }} />
-            <Stack.Screen name="AnalyzeHistory" component={AnalyzeHistoryScreen} options={{ title: '识别历史' }} />
+            <Stack.Screen name="AnalyzeHistory" component={AnalyzeHistoryScreen} options={{ title: '识别记录' }} />
             <Stack.Screen name="AiAssistant" component={AiAssistantScreen} options={{ title: 'AI 助手' }} />
             <Stack.Screen name="StatsMetabolic" component={StatsMetabolicScreen} options={{ headerShown: false }} />
             <Stack.Screen name="TrendDetail" component={TrendDetailScreen} options={({ route }) => ({ title: route.params.kind === 'weight' ? '体重趋势' : route.params.kind === 'water' ? '饮水趋势' : '运动趋势' })} />
             <Stack.Screen name="HealthProfile" component={HealthProfileScreen} options={{ title: '健康档案' }} />
             <Stack.Screen name="HealthProfileView" component={HealthProfileViewScreen} options={{ title: '健康档案详情' }} />
             <Stack.Screen name="ProfileSettings" component={ProfileSettingsScreen} options={{ title: '个人主页' }} />
-            <Stack.Screen name="ProfileMoreFeatures" component={ProfileMoreFeaturesScreen} options={{ title: '更多功能' }} />
             <Stack.Screen name="AccountSecurity" component={AccountSecurityScreen} options={{ title: '账号安全' }} />
             <Stack.Screen
               name="BodyMetricRecord"
@@ -280,7 +279,11 @@ export function RootNavigator() {
               })}
             />
             <Stack.Screen name="Expiry" component={ExpiryScreen} options={{ title: '食物保质期' }} />
-            <Stack.Screen name="ExpiryEdit" component={ExpiryEditScreen} options={{ title: '编辑保质期' }} />
+            <Stack.Screen
+              name="ExpiryEdit"
+              component={ExpiryEditScreen}
+              options={({ route }) => ({ title: route.params?.itemId ? '编辑保质期' : '新增保质期' })}
+            />
             <Stack.Screen name="RewardCenter" component={RewardCenterScreen} options={{ title: '赚积分' }} />
             <Stack.Screen
               name="MembershipCenter"
@@ -293,6 +296,7 @@ export function RootNavigator() {
               }}
             />
             <Stack.Screen name="Recipes" component={RecipesScreen} options={{ title: '收藏食谱' }} />
+            <Stack.Screen name="RecipeDetail" component={RecipeDetailScreen} options={{ title: '食谱详情' }} />
             <Stack.Screen
               name="RecipeEdit"
               component={RecipeEditScreen}
@@ -323,7 +327,6 @@ export function RootNavigator() {
             <Stack.Screen name="CheckinLeaderboard" component={CheckinLeaderboardScreen} options={{ title: '打卡排行榜' }} />
             <Stack.Screen name="InviteFriends" component={InviteFriendsScreen} options={{ title: '邀请好友' }} />
             <Stack.Screen name="PetHome" component={PetHomeScreen} options={{ title: '成长伙伴' }} />
-            <Stack.Screen name="PetLab" component={PetLabScreen} options={{ title: '宠物试验箱' }} />
             <Stack.Screen name="Agreements" component={AgreementsScreen} options={{ title: '用户协议' }} />
             <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} options={{ title: '隐私政策' }} />
             <Stack.Screen
@@ -337,7 +340,11 @@ export function RootNavigator() {
               }}
             />
             <Stack.Screen name="CirclePostEdit" component={CirclePostEditScreen} options={{ title: '发布动态' }} />
-            <Stack.Screen name="Friends" component={FriendsScreen} options={{ title: '好友' }} />
+            <Stack.Screen
+              name="Friends"
+              component={FriendsScreen}
+              options={{ title: '好友管理', headerTitleAlign: 'center' }}
+            />
             <Stack.Screen name="Notifications" component={NotificationsScreen} options={{ title: '互动消息' }} />
             <Stack.Screen name="About" component={AboutScreen} options={{ title: '关于' }} />
             <Stack.Screen name="AboutFeedback" component={AboutFeedbackScreen} options={{ title: '意见反馈' }} />

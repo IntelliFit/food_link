@@ -1424,6 +1424,26 @@ export function PetHomeScreen() {
     setClaiming(true)
     try {
       const result = await apiClient.claimPetEvent(summary.event.id)
+      // 与小程序保持一致：领取接口成功后立即把当前事件标记为已领取，
+      // 不等待二次 GET 才隐藏按钮/奖励图标。
+      setSummary((current) => current ? {
+        ...current,
+        pet: result.pet,
+        event: {
+          ...result.event,
+          can_claim: false,
+          is_claimed: true,
+        },
+      } : current)
+      const earnedCreditsBalance = result.earned_credits_balance
+      if (typeof earnedCreditsBalance === 'number') {
+        setMembership((current) => current ? {
+          ...current,
+          earned_credits_balance: earnedCreditsBalance,
+          total_credits_available: (current.system_credits_remaining ?? 0) + earnedCreditsBalance,
+          daily_credits_remaining: (current.system_credits_remaining ?? 0) + earnedCreditsBalance,
+        } : current)
+      }
       Alert.alert('已领取', `经验 +${result.exp_awarded || 0}，积分 +${result.credits_awarded || 0}`)
       await load()
     } catch (error) {
@@ -1644,13 +1664,13 @@ export function PetHomeScreen() {
                 {rerolling ? <ActivityIndicator color={colors.brand} size="small" /> : <Text style={styles.petHomeActionCost}>5 积分</Text>}
               </View>
             </Pressable>
-            <Pressable style={styles.petHomeActionItem} onPress={() => navigation.navigate('PetLab')}>
+            <View style={styles.petHomeActionItem}>
               <View style={styles.flex}>
                 <Text style={styles.petHomeActionTitle}>外观试验箱</Text>
                 <Text style={styles.petHomeActionDesc}>批量查看颜色、体型、动物特征、花纹与配饰组合。</Text>
               </View>
-              <Text style={styles.petHomeActionCost}>打开试验箱</Text>
-            </Pressable>
+              <Text style={[styles.petHomeActionCost, styles.petHomeActionStatusMuted]}>即将开放</Text>
+            </View>
           </View>
         </View>
       </ScrollView>

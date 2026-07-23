@@ -80,7 +80,6 @@ export type RootStackParamList = {
   HealthProfile: undefined
   HealthProfileView: undefined
   ProfileSettings: { userId?: string } | undefined
-  ProfileMoreFeatures: undefined
   AccountSecurity: undefined
   BodyMetricRecord: { type: 'weight' | 'water' | 'exercise'; date?: string }
   Expiry: undefined
@@ -88,6 +87,7 @@ export type RootStackParamList = {
   RewardCenter: undefined
   MembershipCenter: undefined
   Recipes: undefined
+  RecipeDetail: { recipeId: string }
   RecipeEdit: { recipeId?: string } | undefined
   PublicFood: { mode?: 'all' | 'campus' | 'mine' | 'collections' } | undefined
   PublicFoodDetail: { itemId: string; isCampus?: boolean }
@@ -113,7 +113,6 @@ export type RootStackParamList = {
   CheckinLeaderboard: undefined
   InviteFriends: { inviteCode?: string; invite_code?: string; fi?: string } | undefined
   PetHome: undefined
-  PetLab: undefined
   PetChat: undefined
   Agreements: undefined
   PrivacyPolicy: undefined
