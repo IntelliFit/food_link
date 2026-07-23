@@ -112,6 +112,7 @@ export default function ProfileSettingsPage() {
   const [isDeletedUser, setIsDeletedUser] = useState(false)
 	const [publicFavoriteRecipes, setPublicFavoriteRecipes] = useState(true)
   const [pageLoading, setPageLoading] = useState(true)
+  const [profileLoadError, setProfileLoadError] = useState('')
 
   // 分享海报
   const [posterGenerating, setPosterGenerating] = useState(false)
@@ -196,6 +197,7 @@ export default function ProfileSettingsPage() {
       return
     }
     setPageLoading(true)
+    setProfileLoadError('')
     try {
       const followStatsPromise = getFollowStats(resolvedUserId).catch(() => ({ followers_count: 0, following_count: 0, is_following: false }))
       if (isOwner) {
@@ -203,7 +205,7 @@ export default function ProfileSettingsPage() {
 		setPublicFavoriteRecipes(true)
         setBlockStatus(null)
         const [profile, recordDaysRes, foodColls, recipeColls, followStats] = await Promise.all([
-          getUserProfile().catch(() => null),
+          getUserProfile(),
           getUserRecordDays().catch(() => ({ record_days: 0 })),
           getPublicFoodLibraryCollections().catch(() => ({ list: [] })),
           getUserRecipes({ is_favorite: true }).catch(() => ({ recipes: [] })),
@@ -307,6 +309,7 @@ export default function ProfileSettingsPage() {
       }
     } catch (error) {
       console.error('[profile-settings] 加载用户数据失败:', error)
+      setProfileLoadError('个人主页加载失败，请检查网络后重试')
     } finally {
       setPageLoading(false)
     }
@@ -922,6 +925,37 @@ export default function ProfileSettingsPage() {
           />
         ) : null}
       </View>
+    )
+  }
+
+  if (pageLoading) {
+    return (
+      <FlPageThemeRoot>
+        <View className={`profile-settings-page ${scheme === 'dark' ? 'profile-settings-page--dark' : ''}`}>
+          <View className='profile-loading'>
+            <View className='profile-skeleton-avatar' />
+            <View className='profile-skeleton-name' />
+            <View className='profile-skeleton-id' />
+            <View className='profile-skeleton-stats' />
+          </View>
+        </View>
+      </FlPageThemeRoot>
+    )
+  }
+
+  if (profileLoadError) {
+    return (
+      <FlPageThemeRoot>
+        <View className={`profile-settings-page ${scheme === 'dark' ? 'profile-settings-page--dark' : ''}`}>
+          <View className='profile-load-error'>
+            <Text className='profile-load-error-title'>个人主页加载失败</Text>
+            <Text className='profile-load-error-desc'>{profileLoadError}</Text>
+            <Button className='profile-load-error-retry' onClick={() => { void loadUserData() }}>
+              重新加载
+            </Button>
+          </View>
+        </View>
+      </FlPageThemeRoot>
     )
   }
 

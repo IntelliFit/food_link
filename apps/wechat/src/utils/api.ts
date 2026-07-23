@@ -7,6 +7,7 @@ import {
   type FoodImageSource,
 } from './food-display-image'
 import { extraPkgUrl } from './subpackage-extra'
+import { withTransientRequestRetry } from './transient-request-retry'
 
 declare const __RECENT_REQUEST_TRACE_LIMIT__: string
 
@@ -4596,10 +4597,12 @@ export async function registerWithPassword(
  */
 export async function getUserProfile(): Promise<UserInfo> {
   try {
-    const response = await authenticatedRequest('/api/user/profile', {
-      method: 'GET',
-      timeout: 10000,
-    })
+    const response = await withTransientRequestRetry(() =>
+      authenticatedRequest('/api/user/profile', {
+        method: 'GET',
+        timeout: 12000,
+      })
+    )
 
     if (response.statusCode !== 200) {
       const errorMsg = (response.data as any)?.detail || '获取用户信息失败'
@@ -6373,7 +6376,9 @@ export async function communityGetFeed(
     q += `&priority_author_ids=${encodeURIComponent(params.priority_author_ids.join(','))}`
   }
   if (params?.author_id) q += `&author_id=${encodeURIComponent(params.author_id)}`
-  const response = await authenticatedRequest(`/api/community/feed${q}`, { method: 'GET' })
+  const response = await withTransientRequestRetry(() =>
+    authenticatedRequest(`/api/community/feed${q}`, { method: 'GET', timeout: 8000 })
+  )
   if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '获取动态失败')
   return response.data as { list: CommunityFeedItem[]; has_more?: boolean }
 }
@@ -6408,11 +6413,21 @@ export async function communityGetPublicFeed(
   if (params?.content_type) q += `&content_type=${encodeURIComponent(params.content_type)}`
   if (params?.author_id) q += `&author_id=${encodeURIComponent(params.author_id)}`
   const token = getAccessToken()
-  const response = await Taro.request({
-    url: `${API_BASE_URL}/api/community/public-feed${q}`,
-    method: 'GET',
-    header: withNgrokBypassHeaders(token ? { Authorization: `Bearer ${token}` } : undefined),
-    timeout: 10000
+  const response = await withTransientRequestRetry(async () => {
+    const result = await Taro.request({
+      url: `${API_BASE_URL}/api/community/public-feed${q}`,
+      method: 'GET',
+      header: withNgrokBypassHeaders(token ? { Authorization: `Bearer ${token}` } : undefined),
+      timeout: 8000
+    })
+    if (result.statusCode >= 500) {
+      const error = Object.assign(
+        new Error((result.data as any)?.detail || '获取动态失败'),
+        { statusCode: result.statusCode }
+      )
+      throw error
+    }
+    return result
   })
   if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '获取动态失败')
   return unwrapResponse<{ list: CommunityFeedItem[]; has_more?: boolean }>(response)
@@ -6942,7 +6957,9 @@ export async function getMyPublicFoodLibrary(): Promise<{ list: PublicFoodLibrar
 
 /** 获取当前用户收藏的公共食物库条目（收藏夹） */
 export async function getPublicFoodLibraryCollections(): Promise<{ list: PublicFoodLibraryItem[] }> {
-  const response = await authenticatedRequest('/api/public-food-library/collections', { method: 'GET', timeout: 10000 })
+  const response = await withTransientRequestRetry(() =>
+    authenticatedRequest('/api/public-food-library/collections', { method: 'GET', timeout: 12000 })
+  )
   if (response.statusCode !== 200) {
     throw new Error((response.data as any)?.detail || '获取收藏列表失败')
   }
@@ -7176,7 +7193,9 @@ export async function getUserRecipes(params?: { meal_type?: string; is_favorite?
   if (params?.is_favorite !== undefined) q.set('is_favorite', String(params.is_favorite))
   const qs = q.toString()
   const url = qs ? `/api/recipes?${qs}` : '/api/recipes'
-  const response = await authenticatedRequest(url, { method: 'GET', timeout: 10000 })
+  const response = await withTransientRequestRetry(() =>
+    authenticatedRequest(url, { method: 'GET', timeout: 12000 })
+  )
   if (response.statusCode !== 200) {
     throw new Error((response.data as any)?.detail || '获取食谱列表失败')
   }

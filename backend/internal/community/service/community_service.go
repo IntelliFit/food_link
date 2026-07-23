@@ -296,13 +296,13 @@ func (s *CommunityService) publicFeed(ctx context.Context, params FeedParams, vi
 
 	targets := feedTargetsFromRecords(records)
 
-	likesMap, err := s.feedRepo.GetLikesForTargets(ctx, targets, viewerUserID)
-	if err != nil {
-		return nil, err
-	}
-
+	likesMap := map[string]*repo.LikeInfo{}
 	var commentCountMap map[string]int
 	if customRank {
+		likesMap, err = s.feedRepo.GetLikesForTargets(ctx, targets, viewerUserID)
+		if err != nil {
+			return nil, err
+		}
 		commentCountMap = s.getCommentCountsForTargets(ctx, viewerUserID, targets)
 	}
 
@@ -317,11 +317,20 @@ func (s *CommunityService) publicFeed(ctx context.Context, params FeedParams, vi
 	}
 
 	targets = feedTargetsFromRecords(records)
-	likesMap, _ = s.feedRepo.GetLikesForTargets(ctx, targets, viewerUserID)
+	if !customRank {
+		likesMap, err = s.feedRepo.GetLikesForTargets(ctx, targets, viewerUserID)
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	var commentsMap map[string][]CommentItem
 	if params.IncludeComments {
-		commentsMap = s.getCommentsMapForTargets(ctx, viewerUserID, targets, params.CommentsLimit)
+		var loadedCommentCounts map[string]int
+		commentsMap, loadedCommentCounts = s.getCommentsAndCountsForTargets(ctx, viewerUserID, targets, params.CommentsLimit)
+		if commentCountMap == nil {
+			commentCountMap = loadedCommentCounts
+		}
 	}
 	if commentCountMap == nil {
 		commentCountMap = s.getCommentCountsForTargets(ctx, viewerUserID, targets)
@@ -442,13 +451,13 @@ func (s *CommunityService) FriendFeed(ctx context.Context, userID string, params
 
 	targets := feedTargetsFromRecords(records)
 
-	likesMap, err := s.feedRepo.GetLikesForTargets(ctx, targets, userID)
-	if err != nil {
-		return nil, err
-	}
-
+	likesMap := map[string]*repo.LikeInfo{}
 	var commentCountMap map[string]int
 	if customRank {
+		likesMap, err = s.feedRepo.GetLikesForTargets(ctx, targets, userID)
+		if err != nil {
+			return nil, err
+		}
 		commentCountMap = s.getCommentCountsForTargets(ctx, userID, targets)
 	}
 
@@ -463,11 +472,20 @@ func (s *CommunityService) FriendFeed(ctx context.Context, userID string, params
 	}
 
 	targets = feedTargetsFromRecords(records)
-	likesMap, _ = s.feedRepo.GetLikesForTargets(ctx, targets, userID)
+	if !customRank {
+		likesMap, err = s.feedRepo.GetLikesForTargets(ctx, targets, userID)
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	var commentsMap map[string][]CommentItem
 	if params.IncludeComments {
-		commentsMap = s.getCommentsMapForTargets(ctx, userID, targets, params.CommentsLimit)
+		var loadedCommentCounts map[string]int
+		commentsMap, loadedCommentCounts = s.getCommentsAndCountsForTargets(ctx, userID, targets, params.CommentsLimit)
+		if commentCountMap == nil {
+			commentCountMap = loadedCommentCounts
+		}
 	}
 	if commentCountMap == nil {
 		commentCountMap = s.getCommentCountsForTargets(ctx, userID, targets)
@@ -594,17 +612,24 @@ func (s *CommunityService) getCommentsMap(ctx context.Context, viewerUserID stri
 }
 
 func (s *CommunityService) getCommentsMapForTargets(ctx context.Context, viewerUserID string, targets []repo.FeedTarget, commentsLimit int) map[string][]CommentItem {
+	commentsMap, _ := s.getCommentsAndCountsForTargets(ctx, viewerUserID, targets, commentsLimit)
+	return commentsMap
+}
+
+func (s *CommunityService) getCommentsAndCountsForTargets(ctx context.Context, viewerUserID string, targets []repo.FeedTarget, commentsLimit int) (map[string][]CommentItem, map[string]int) {
 	if len(targets) == 0 {
-		return map[string][]CommentItem{}
+		return map[string][]CommentItem{}, map[string]int{}
 	}
 	comments, err := s.feedRepo.ListCommentsByTargets(ctx, targets)
 	if err != nil {
-		return map[string][]CommentItem{}
+		return map[string][]CommentItem{}, map[string]int{}
 	}
 	comments = s.filterBlockedComments(ctx, viewerUserID, comments)
 
+	commentCounts := make(map[string]int)
 	userIDs := make(map[string]bool)
 	for _, c := range comments {
+		commentCounts[commentTargetKey(c)]++
 		userIDs[c.UserID] = true
 		if c.ReplyToUserID != nil {
 			userIDs[*c.ReplyToUserID] = true
@@ -650,7 +675,7 @@ func (s *CommunityService) getCommentsMapForTargets(ctx context.Context, viewerU
 		}
 		result[targetKey] = items
 	}
-	return result
+	return result, commentCounts
 }
 
 func strOr(profile *repo.UserProfile, fallback string) string {

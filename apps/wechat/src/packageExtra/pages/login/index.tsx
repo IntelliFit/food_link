@@ -424,8 +424,9 @@ export default function LoginPage() {
         })
         // 保存基础信息
         Taro.setStorageSync('openid', loginData.openid)
-        if (loginData.purePhoneNumber) {
-            Taro.setStorageSync('phoneNumber', loginData.purePhoneNumber)
+        const loginPhoneNumber = String(loginData.purePhoneNumber || loginData.phoneNumber || '').trim()
+        if (loginPhoneNumber) {
+            Taro.setStorageSync('phoneNumber', loginPhoneNumber)
         }
 
         // 获取用户信息 check 是否完善
@@ -485,16 +486,33 @@ export default function LoginPage() {
 
         } catch (error) {
             console.error('获取用户信息失败', error)
-            // 即使获取失败，也算登录成功
+            // 登录成功不代表资料读取成功。请求失败时绝不能把老用户当成资料缺失，
+            // 否则默认昵称会通过“完善资料”保存回服务端，覆盖用户原昵称。
             Taro.setStorageSync('isLoggedIn', true)
+            Taro.removeStorageSync('userInfo')
+            Taro.removeStorageSync('userRegisterTime')
             setLoading(false)
-            console.warn('[invite-debug][login] 用户资料拉取失败，进入资料完善兜底，邀请码处理延后', {
+            setPendingOnboardingCompleted(true)
+            setShowProfileForm(false)
+            console.warn('[invite-debug][login] 用户资料拉取失败，跳过破坏性资料兜底并保护服务端资料', {
                 inviteCode,
                 message: String((error as any)?.message || error || ''),
             })
-            setTempAvatar(getInitialRegistrationAvatar(wxAvatarUrl || ''))
-            setTempNickname(resolveRegistrationNickname(wxNickname, loginData.openid))
-            setShowProfileForm(true) // 兜底：预填默认头像昵称，用户可直接进入
+            try {
+                await Taro.showToast({
+                    title: '资料暂未同步，原昵称未修改',
+                    icon: 'none',
+                    duration: 2500,
+                })
+            } catch (toastError) {
+                console.warn('[login] show profile protection toast failed', toastError)
+            }
+
+            if (loginPhoneNumber) {
+                setTimeout(() => { void continueAfterAuthGates(true) }, 800)
+            } else {
+                setShowPhoneBindModal(true)
+            }
         }
     }
 

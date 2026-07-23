@@ -952,6 +952,48 @@
   animation: shimmer 1.5s infinite;
 }
 
+.profile-load-error {
+  display: flex;
+  min-height: 70vh;
+  padding: 96rpx 48rpx;
+  box-sizing: border-box;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.profile-load-error-title {
+  color: #172b24;
+  font-size: 34rpx;
+  font-weight: 700;
+  line-height: 48rpx;
+}
+
+.profile-load-error-desc {
+  margin-top: 16rpx;
+  color: #64748b;
+  font-size: 26rpx;
+  line-height: 40rpx;
+  text-align: center;
+}
+
+.profile-load-error-retry {
+  min-width: 220rpx;
+  height: 76rpx;
+  margin-top: 36rpx;
+  border: 0;
+  border-radius: 38rpx;
+  background: #00bc7d;
+  color: #ffffff;
+  font-size: 28rpx;
+  font-weight: 700;
+  line-height: 76rpx;
+}
+
+.profile-load-error-retry::after {
+  border: 0;
+}
+
 @keyframes shimmer {
   0% { background-position: 200% 0; }
   100% { background-position: -200% 0; }
@@ -1136,6 +1178,14 @@
     #0d1312 65%,
     #0d1312 100%
   );
+
+  .profile-load-error-title {
+    color: #f2f7f4;
+  }
+
+  .profile-load-error-desc {
+    color: #94a3b8;
+  }
 
   .profile-nickname {
     color: #fff;
