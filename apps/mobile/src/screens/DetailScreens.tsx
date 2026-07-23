@@ -9,6 +9,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { Apple, Check, Coffee, Cookie, Dumbbell, ImagePlus, Inbox, Link2, MessageCircle, Moon, MoreHorizontal, MoreVertical, Plus, QrCode, RefreshCw, Search, Send, Share2, Soup, Trash2, Undo2, UserPlus, Users, Utensils, X, type LucideIcon } from 'lucide-react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
+  buildSaveFoodRecordRequestFromTask,
   getMealTypeLabel,
   inferDefaultMealTypeFromLocalTime,
   type AnalysisTask,
@@ -48,6 +49,7 @@ import {
   emitHomeDashboardRefreshEvent,
   emitHomeIntakeDataChangedEvent,
 } from '../utils/home-events'
+import { refreshHomeDashboardLocalSnapshotFromCloud } from '../utils/home-dashboard-local-cache'
 
 const appIcon = require('../../assets/icon.png')
 
@@ -1441,7 +1443,6 @@ export function RecordDetailScreen() {
 export function AnalyzeHistoryScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const dialog = useAppDialog()
-  const { shareFoodRecord, shareSheet } = useFoodRecordShareSheet(dialog)
   const [tasks, setTasks] = useState<AnalysisTask[]>([])
   const [searchKeyword, setSearchKeyword] = useState('')
   const [loading, setLoading] = useState(false)
@@ -1449,7 +1450,12 @@ export function AnalyzeHistoryScreen() {
   const [bulkDeleting, setBulkDeleting] = useState(false)
   const [menuTask, setMenuTask] = useState<AnalysisTask | null>(null)
   const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null)
-  const [sharingTaskId, setSharingTaskId] = useState<string | null>(null)
+  const [quickRecordTask, setQuickRecordTask] = useState<AnalysisTask | null>(null)
+  const [quickRecordMealType, setQuickRecordMealType] = useState<MealType>(inferDefaultMealTypeFromLocalTime())
+  const [recordingTaskId, setRecordingTaskId] = useState<string | null>(null)
+  const [recipeTask, setRecipeTask] = useState<AnalysisTask | null>(null)
+  const [recipeName, setRecipeName] = useState('')
+  const [savingRecipeTaskId, setSavingRecipeTaskId] = useState<string | null>(null)
 
   const load = useCallback(async (keyword = '') => {
     setLoading(true)
@@ -1469,7 +1475,13 @@ export function AnalyzeHistoryScreen() {
   const refresh = useCallback(() => load(searchKeyword), [load, searchKeyword])
   const hasKeyword = searchKeyword.trim().length > 0
   const discardableTasks = useMemo(
-    () => tasks.filter((task) => task.status === 'done' && task.is_recorded === false),
+    () => tasks.filter((task) => (
+      task.status === 'pending'
+      || task.status === 'processing'
+      || task.status === 'failed'
+      || task.status === 'timed_out'
+      || (task.status === 'done' && task.is_recorded === false)
+    )),
     [tasks],
   )
 
@@ -1508,19 +1520,32 @@ export function AnalyzeHistoryScreen() {
   const deleteUnrecordedTasks = useCallback(async () => {
     if (discardableTasks.length === 0 || bulkDeleting) return
     const confirmed = await dialog.confirm({
-      title: '删除未记录',
-      message: `将删除 ${discardableTasks.length} 条已识别但还没有写入饮食记录的历史，不会影响已经保存的一餐。`,
-      confirmText: '删除未记录',
+      title: '确认丢弃',
+      message: `确定丢弃 ${discardableTasks.length} 条未记录的任务吗？丢弃后不可恢复。`,
+      confirmText: '丢弃',
       cancelText: '取消',
       kind: 'danger',
     })
     if (!confirmed) return
     setBulkDeleting(true)
     try {
-      await Promise.all(discardableTasks.map((task) => apiClient.deleteAnalysisTask(task.id)))
-      setTasks((current) => current.filter((task) => !discardableTasks.some((item) => item.id === task.id)))
-    } catch (error) {
-      await showError(dialog, '删除识别记录失败', error)
+      const results = await Promise.allSettled(
+        discardableTasks.map((task) => apiClient.deleteAnalysisTask(task.id)),
+      )
+      const deletedIds = new Set(
+        results.flatMap((result, index) => (
+          result.status === 'fulfilled' ? [discardableTasks[index].id] : []
+        )),
+      )
+      setTasks((current) => current.filter((task) => !deletedIds.has(task.id)))
+      const failedCount = results.length - deletedIds.size
+      if (failedCount > 0) {
+        await dialog.alert(
+          '部分丢弃失败',
+          `已丢弃 ${deletedIds.size} 条，另有 ${failedCount} 条未能丢弃，请稍后重试。`,
+          'warning',
+        )
+      }
     } finally {
       setBulkDeleting(false)
     }
@@ -1576,50 +1601,128 @@ export function AnalyzeHistoryScreen() {
     })
   }, [confirmRetryTask, navigation])
 
-  const shareAnalyzeTask = useCallback(async (task: AnalysisTask) => {
-    if (sharingTaskId) return
-    if (task.status !== 'done' || isPackagedAnalyzeHistoryTask(task)) {
-      await dialog.alert('暂时无法分享', '识别完成并保存为饮食记录后，才能生成微信分享卡片。', 'warning')
-      return
-    }
-    setSharingTaskId(task.id)
-    try {
-      const record = await findFoodRecordForAnalyzeTask(task)
-      if (!record) {
-        setSharingTaskId(null)
-        const confirmed = await dialog.confirm({
-          title: '先保存后分享',
-          message: '微信卡片需要一条已保存的饮食记录。请先打开识别结果并保存为饮食记录，再回来分享。',
-          confirmText: '去保存',
-          cancelText: '取消',
-        })
-        if (confirmed) openTask(task)
-        return
-      }
-      const shared = await shareFoodRecord(record)
-      if (!shared) return
-      const reward = await apiClient.claimSharePosterReward({ recordId: record.id })
-      await showShareRewardAlert(dialog, reward)
-    } catch (error) {
-      await showError(dialog, '分享失败', error)
-    } finally {
-      setSharingTaskId((current) => (current === task.id ? null : current))
-    }
-  }, [dialog, openTask, shareFoodRecord, sharingTaskId])
-
   const closeTaskMenu = useCallback(() => {
     setMenuTask(null)
   }, [])
 
+  const startQuickRecord = useCallback((task: AnalysisTask) => {
+    closeTaskMenu()
+    if (task.status !== 'done' || !task.result || task.is_recorded) return
+    setQuickRecordMealType(analyzeHistoryMealType(task))
+    setQuickRecordTask(task)
+  }, [closeTaskMenu])
+
+  const confirmQuickRecord = useCallback(async () => {
+    const task = quickRecordTask
+    if (!task?.result || task.status !== 'done' || task.is_recorded || recordingTaskId) return
+    setQuickRecordTask(null)
+    setRecordingTaskId(task.id)
+    try {
+      const date = analyzeHistoryDate(task)
+      const payload = buildSaveFoodRecordRequestFromTask(task, {
+        mealType: quickRecordMealType,
+        date,
+        entryType: 'analyze_history',
+      })
+      const source = (task.payload || {}) as Record<string, unknown>
+      payload.diet_goal = String(source.diet_goal || source.dietGoal || 'none') as typeof payload.diet_goal
+      payload.activity_timing = String(source.activity_timing || source.activityTiming || 'none') as typeof payload.activity_timing
+      const pfcRatioComment = typeof task.result.pfc_ratio_comment === 'string' ? task.result.pfc_ratio_comment : undefined
+      const absorptionNotes = typeof task.result.absorption_notes === 'string' ? task.result.absorption_notes : undefined
+      const contextAdvice = typeof task.result.context_advice === 'string' ? task.result.context_advice : undefined
+      if (pfcRatioComment) payload.pfc_ratio_comment = pfcRatioComment
+      if (absorptionNotes) payload.absorption_notes = absorptionNotes
+      if (contextAdvice) payload.context_advice = contextAdvice
+      const saved = await apiClient.saveFoodRecord(payload)
+      setTasks((current) => current.map((item) => (
+        item.id === task.id ? { ...item, is_recorded: true, record_id: saved.id } : item
+      )))
+      emitHomeIntakeDataChangedEvent({ date, force: true })
+      await refreshHomeDashboardLocalSnapshotFromCloud(date)
+      await dialog.alert(
+        saved.already_saved ? '该餐已记录' : '记录成功',
+        saved.already_saved ? '这条记录之前已经保存。' : `已快速记录到${getMealTypeLabel(quickRecordMealType)}。`,
+        saved.already_saved ? 'warning' : 'success',
+      )
+    } catch (error) {
+      await showError(dialog, '记录失败', error)
+    } finally {
+      setRecordingTaskId(null)
+    }
+  }, [dialog, quickRecordMealType, quickRecordTask, recordingTaskId])
+
+  const startSaveRecipe = useCallback((task: AnalysisTask) => {
+    closeTaskMenu()
+    if (task.status !== 'done' || !task.result) return
+    setRecipeName(analyzeHistoryTitle(task))
+    setRecipeTask(task)
+  }, [closeTaskMenu])
+
+  const confirmSaveRecipe = useCallback(async () => {
+    const task = recipeTask
+    if (!task?.result || task.status !== 'done' || savingRecipeTaskId) return
+    const recordPayload = buildSaveFoodRecordRequestFromTask(task, {
+      mealType: analyzeHistoryMealType(task),
+      date: analyzeHistoryDate(task),
+      entryType: 'analyze_history',
+    })
+    if (!recordPayload.items.length) {
+      await dialog.alert('无法收藏', '这条记录没有可收藏的食物。', 'warning')
+      return
+    }
+    setRecipeTask(null)
+    setSavingRecipeTaskId(task.id)
+    try {
+      await apiClient.createRecipe({
+        recipeName: recipeName.trim() || analyzeHistoryTitle(task),
+        description: task.result.description || '',
+        imagePath: analyzeHistoryImageUrl(task) || undefined,
+        items: recordPayload.items as unknown as Array<Record<string, unknown>>,
+        totalCalories: recordPayload.total_calories,
+        totalProtein: recordPayload.total_protein,
+        totalCarbs: recordPayload.total_carbs,
+        totalFat: recordPayload.total_fat,
+        totalWeightGrams: recordPayload.total_weight_grams,
+        mealType: analyzeHistoryMealType(task),
+        tags: ['识别记录'],
+        isFavorite: true,
+      })
+      await dialog.alert('收藏成功', '已收藏到“我的收藏”，之后可以直接复用到餐食记录。', 'success')
+    } catch (error) {
+      await showError(dialog, '收藏失败', error)
+    } finally {
+      setSavingRecipeTaskId(null)
+    }
+  }, [dialog, recipeName, recipeTask, savingRecipeTaskId])
+
+  const shareToPublicFoodLibrary = useCallback((task: AnalysisTask) => {
+    closeTaskMenu()
+    if (task.status !== 'done' || !task.result) return
+    const payload = buildSaveFoodRecordRequestFromTask(task, {
+      mealType: analyzeHistoryMealType(task),
+      date: analyzeHistoryDate(task),
+      entryType: 'analyze_history',
+    })
+    navigation.navigate('PublicFoodShare', {
+      mode: 'public',
+      draft: {
+        foodName: analyzeHistoryTitle(task),
+        description: task.result.description || task.result.insight || '',
+        imageUrls: [task.image_url, ...(task.image_paths || [])].filter(Boolean).join('\n'),
+        calories: String(Math.round(payload.total_calories || 0)),
+        protein: String(Math.round((payload.total_protein || 0) * 10) / 10),
+        carbs: String(Math.round((payload.total_carbs || 0) * 10) / 10),
+        fat: String(Math.round((payload.total_fat || 0) * 10) / 10),
+        sourceKind: 'homemade',
+        suitableForFatLoss: true,
+        tags: '识别记录',
+      },
+    })
+  }, [closeTaskMenu, navigation])
+
   const openTaskMenu = useCallback((task: AnalysisTask) => {
     setMenuTask(task)
   }, [])
-
-  const selectMenuOpenTask = useCallback(() => {
-    const task = menuTask
-    closeTaskMenu()
-    if (task) openTask(task)
-  }, [closeTaskMenu, menuTask, openTask])
 
   const selectMenuRetryTask = useCallback(() => {
     const task = menuTask
@@ -1627,21 +1730,11 @@ export function AnalyzeHistoryScreen() {
     if (task && isAnalyzeRetryable(task)) void confirmRetryTask(task)
   }, [closeTaskMenu, confirmRetryTask, menuTask])
 
-  const selectMenuShareTask = useCallback(() => {
-    const task = menuTask
-    closeTaskMenu()
-    if (task) void shareAnalyzeTask(task)
-  }, [closeTaskMenu, menuTask, shareAnalyzeTask])
-
   const selectMenuDeleteTask = useCallback(() => {
     const task = menuTask
     closeTaskMenu()
     if (task) void confirmDeleteTask(task)
   }, [closeTaskMenu, confirmDeleteTask, menuTask])
-
-  const submitSearch = () => {
-    void load(searchKeyword)
-  }
 
   const clearSearch = () => {
     setSearchKeyword('')
@@ -1649,13 +1742,17 @@ export function AnalyzeHistoryScreen() {
   }
 
   useEffect(() => {
-    void load('')
-  }, [load])
+    const timer = setTimeout(() => {
+      void load(searchKeyword)
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [load, searchKeyword])
 
   const initialLoading = loading && tasks.length === 0
   const menuTaskRetryable = menuTask ? isAnalyzeRetryable(menuTask) : false
-  const menuTaskShareable = menuTask ? menuTask.status === 'done' && !isPackagedAnalyzeHistoryTask(menuTask) : false
-  const menuTaskBusy = menuTask ? retryingTaskId === menuTask.id || deletingTaskId === menuTask.id || sharingTaskId === menuTask.id : false
+  const menuTaskDone = Boolean(menuTask?.status === 'done' && menuTask.result && !isPackagedAnalyzeHistoryTask(menuTask))
+  const menuTaskQuickRecordable = Boolean(menuTaskDone && menuTask?.is_recorded !== true)
+  const menuTaskBusy = menuTask ? retryingTaskId === menuTask.id || deletingTaskId === menuTask.id || recordingTaskId === menuTask.id || savingRecipeTaskId === menuTask.id : false
 
   return (
     <View style={styles.analyzeHistoryPage}>
@@ -1668,7 +1765,7 @@ export function AnalyzeHistoryScreen() {
             placeholder="搜索食物名称"
             placeholderTextColor="#9ca3af"
             returnKeyType="search"
-            onSubmitEditing={submitSearch}
+            onSubmitEditing={() => void load(searchKeyword)}
             style={styles.analyzeHistorySearchInput}
           />
           {hasKeyword ? (
@@ -1677,9 +1774,6 @@ export function AnalyzeHistoryScreen() {
             </Pressable>
           ) : null}
         </View>
-        <Pressable disabled={loading} style={[styles.analyzeHistorySearchButton, loading && styles.analyzeHistorySearchButtonDisabled]} onPress={submitSearch}>
-          {loading ? <ActivityIndicator color="#ffffff" size="small" /> : <Text style={styles.analyzeHistorySearchButtonText}>搜索</Text>}
-        </Pressable>
       </View>
 
       <ScrollView
@@ -1723,8 +1817,9 @@ export function AnalyzeHistoryScreen() {
           const modeLabel = analyzeHistoryModeLabel(task)
           const retrying = retryingTaskId === task.id
           const deleting = deletingTaskId === task.id
-          const sharing = sharingTaskId === task.id
-          const busy = retrying || deleting || sharing
+          const recording = recordingTaskId === task.id
+          const savingRecipe = savingRecipeTaskId === task.id
+          const busy = retrying || deleting || recording || savingRecipe
           return (
             <Pressable key={task.id} style={({ pressed }) => [styles.analyzeHistoryTaskWrapper, pressed && styles.analyzeHistoryPressed]} onPress={() => openTask(task)}>
               <View style={[styles.analyzeHistoryTaskCard, task.status === 'violated' && styles.analyzeHistoryTaskCardViolated]}>
@@ -1746,22 +1841,21 @@ export function AnalyzeHistoryScreen() {
                       {task.status === 'violated' ? (
                         <Text style={styles.analyzeHistoryViolationReason} numberOfLines={2}>{analyzeHistoryMeta(task)}</Text>
                       ) : null}
-                      <View style={styles.analyzeHistoryTagRow}>
-                        <Text style={styles.analyzeHistoryTime} numberOfLines={1}>{formatDateTime(task.created_at)}</Text>
-                        <View style={styles.analyzeHistoryMiniTag}>
-                          <Text style={styles.analyzeHistoryMiniTagText}>{getMealTypeLabel(analyzeHistoryMealType(task))}</Text>
+                      <View style={styles.analyzeHistoryTimeRow}>
+                        <Text style={styles.analyzeHistoryTime} numberOfLines={1}>{formatAnalyzeHistoryTime(task.created_at)}</Text>
+                        <View style={[styles.analyzeHistoryStatusBadge, statusTone.style]}>
+                          {busy ? <ActivityIndicator size="small" color={statusTone.color} /> : <Text style={[styles.analyzeHistoryStatusText, { color: statusTone.color }]}>{analyzeHistoryStatusLabel(task)}</Text>}
                         </View>
-                        {modeLabel ? (
+                      </View>
+                      {modeLabel ? (
+                        <View style={styles.analyzeHistoryTagRow}>
                           <View style={styles.analyzeHistoryModeTag}>
                             <Text style={styles.analyzeHistoryModeTagText}>{modeLabel}</Text>
                           </View>
-                        ) : null}
-                      </View>
+                        </View>
+                      ) : null}
                     </View>
                     <View style={styles.analyzeHistoryRightContent}>
-                      <View style={[styles.analyzeHistoryStatusBadge, statusTone.style]}>
-                        {busy ? <ActivityIndicator size="small" color={statusTone.color} /> : <Text style={[styles.analyzeHistoryStatusText, { color: statusTone.color }]}>{analyzeHistoryStatusLabel(task)}</Text>}
-                      </View>
                       <Pressable
                         hitSlop={8}
                         disabled={busy}
@@ -1793,40 +1887,22 @@ export function AnalyzeHistoryScreen() {
 
             <View style={styles.analyzeHistoryMenuActions}>
               <Pressable
-                disabled={!menuTask || menuTaskBusy}
+                disabled={!menuTaskQuickRecordable || menuTaskBusy}
                 style={({ pressed }) => [
                   styles.analyzeHistoryMenuAction,
                   pressed && styles.analyzeHistoryMenuActionPressed,
-                  (!menuTask || menuTaskBusy) && styles.analyzeHistoryMenuActionDisabled,
+                  (!menuTaskQuickRecordable || menuTaskBusy) && styles.analyzeHistoryMenuActionDisabled,
                 ]}
-                onPress={selectMenuOpenTask}
+                onPress={() => menuTask && startQuickRecord(menuTask)}
               >
-                <View style={styles.analyzeHistoryMenuActionIcon}>
-                  <Search size={17} color={colors.brand} strokeWidth={2.5} />
+                <View style={[styles.analyzeHistoryMenuActionIcon, styles.analyzeHistoryMenuActionIconRecord]}>
+                  <IconfontText className="iconfont icon-canciguanli" size={17} color="#10b981" style={styles.analyzeHistoryMenuIconGlyph} />
                 </View>
                 <View style={styles.analyzeHistoryMenuActionCopy}>
-                  <Text style={styles.analyzeHistoryMenuActionText}>查看识别结果</Text>
-                  <Text style={styles.analyzeHistoryMenuActionHint}>打开这条记录的详情页</Text>
-                </View>
-              </Pressable>
-
-              <Pressable
-                disabled={!menuTaskShareable || menuTaskBusy}
-                style={({ pressed }) => [
-                  styles.analyzeHistoryMenuAction,
-                  pressed && styles.analyzeHistoryMenuActionPressed,
-                  (!menuTaskShareable || menuTaskBusy) && styles.analyzeHistoryMenuActionDisabled,
-                ]}
-                onPress={selectMenuShareTask}
-              >
-                <View style={styles.analyzeHistoryMenuActionIcon}>
-                  <Share2 size={17} color={colors.brand} strokeWidth={2.5} />
-                </View>
-                <View style={styles.analyzeHistoryMenuActionCopy}>
-                  <Text style={styles.analyzeHistoryMenuActionText}>分享</Text>
-                  <Text style={styles.analyzeHistoryMenuActionHint}>
-                    {menuTask?.is_recorded === true ? '微信、复制链接或更多方式' : '需先保存成饮食记录'}
+                  <Text style={styles.analyzeHistoryMenuActionText}>
+                    快速记录到{menuTask ? getMealTypeLabel(analyzeHistoryMealType(menuTask)) : '餐食'}
                   </Text>
+                  <Text style={styles.analyzeHistoryMenuActionHint}>选择餐次后直接写入饮食记录</Text>
                 </View>
               </Pressable>
 
@@ -1839,12 +1915,58 @@ export function AnalyzeHistoryScreen() {
                 ]}
                 onPress={selectMenuRetryTask}
               >
-                <View style={styles.analyzeHistoryMenuActionIcon}>
-                  <RefreshCw size={17} color={colors.brand} strokeWidth={2.5} />
+                <View style={[
+                  styles.analyzeHistoryMenuActionIcon,
+                  menuTaskRetryable ? styles.analyzeHistoryMenuActionIconRetry : styles.analyzeHistoryMenuActionIconDisabled,
+                ]}>
+                  <IconfontText
+                    className="iconfont icon-paizhao-xianxing"
+                    size={17}
+                    color={menuTaskRetryable ? '#f97316' : '#9ca3af'}
+                    style={styles.analyzeHistoryMenuIconGlyph}
+                  />
                 </View>
                 <View style={styles.analyzeHistoryMenuActionCopy}>
-                  <Text style={styles.analyzeHistoryMenuActionText}>重新识别</Text>
+                  <Text style={styles.analyzeHistoryMenuActionText}>
+                    {menuTask && isTextAnalysisTask(menuTask) ? '用原文字重新识别' : '用原图重新识别'}
+                  </Text>
                   <Text style={styles.analyzeHistoryMenuActionHint}>失败或超时的记录可重新提交</Text>
+                </View>
+              </Pressable>
+
+              <Pressable
+                disabled={!menuTaskDone || menuTaskBusy}
+                style={({ pressed }) => [
+                  styles.analyzeHistoryMenuAction,
+                  pressed && styles.analyzeHistoryMenuActionPressed,
+                  (!menuTaskDone || menuTaskBusy) && styles.analyzeHistoryMenuActionDisabled,
+                ]}
+                onPress={() => menuTask && startSaveRecipe(menuTask)}
+              >
+                <View style={[styles.analyzeHistoryMenuActionIcon, styles.analyzeHistoryMenuActionIconFavorite]}>
+                  <IconfontText className="iconfont icon-collection_fill" size={17} color="#5cb896" style={styles.analyzeHistoryMenuIconGlyph} />
+                </View>
+                <View style={styles.analyzeHistoryMenuActionCopy}>
+                  <Text style={styles.analyzeHistoryMenuActionText}>收藏到我的餐食</Text>
+                  <Text style={styles.analyzeHistoryMenuActionHint}>保存后可直接复用到餐食记录</Text>
+                </View>
+              </Pressable>
+
+              <Pressable
+                disabled={!menuTaskDone || menuTaskBusy}
+                style={({ pressed }) => [
+                  styles.analyzeHistoryMenuAction,
+                  pressed && styles.analyzeHistoryMenuActionPressed,
+                  (!menuTaskDone || menuTaskBusy) && styles.analyzeHistoryMenuActionDisabled,
+                ]}
+                onPress={() => menuTask && shareToPublicFoodLibrary(menuTask)}
+              >
+                <View style={[styles.analyzeHistoryMenuActionIcon, styles.analyzeHistoryMenuActionIconLibrary]}>
+                  <IconfontText className="iconfont icon-shiwu" size={17} color="#f97316" style={styles.analyzeHistoryMenuIconGlyph} />
+                </View>
+                <View style={styles.analyzeHistoryMenuActionCopy}>
+                  <Text style={styles.analyzeHistoryMenuActionText}>分享到公共食物库</Text>
+                  <Text style={styles.analyzeHistoryMenuActionHint}>带入图片和营养信息后继续完善</Text>
                 </View>
               </Pressable>
 
@@ -1858,7 +1980,7 @@ export function AnalyzeHistoryScreen() {
                 onPress={selectMenuDeleteTask}
               >
                 <View style={[styles.analyzeHistoryMenuActionIcon, styles.analyzeHistoryMenuActionIconDanger]}>
-                  <Trash2 size={17} color="#ef4444" strokeWidth={2.5} />
+                  <IconfontText className="iconfont icon-shanchu" size={17} color="#ef4444" style={styles.analyzeHistoryMenuIconGlyph} />
                 </View>
                 <View style={styles.analyzeHistoryMenuActionCopy}>
                   <Text style={[styles.analyzeHistoryMenuActionText, styles.analyzeHistoryMenuActionTextDanger]}>删除识别记录</Text>
@@ -1873,7 +1995,61 @@ export function AnalyzeHistoryScreen() {
           </Pressable>
         </Pressable>
       </Modal>
-      {shareSheet}
+
+      <Modal visible={Boolean(quickRecordTask)} transparent animationType="fade" onRequestClose={() => setQuickRecordTask(null)}>
+        <Pressable style={styles.analyzeHistoryDialogBackdrop} onPress={() => setQuickRecordTask(null)}>
+          <Pressable style={styles.analyzeHistoryDialogCard} onPress={(event) => event.stopPropagation?.()}>
+            <Text style={styles.analyzeHistoryDialogTitle}>选择记录餐次</Text>
+            <Text style={styles.analyzeHistoryDialogDesc}>确认后会直接写入当天饮食记录</Text>
+            <View style={styles.analyzeHistoryMealGrid}>
+              {mealOptions.map((mealType) => (
+                <Pressable
+                  key={mealType}
+                  style={[styles.analyzeHistoryMealOption, quickRecordMealType === mealType && styles.analyzeHistoryMealOptionActive]}
+                  onPress={() => setQuickRecordMealType(mealType)}
+                >
+                  <Text style={[styles.analyzeHistoryMealOptionText, quickRecordMealType === mealType && styles.analyzeHistoryMealOptionTextActive]}>
+                    {getMealTypeLabel(mealType)}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+            <View style={styles.analyzeHistoryDialogButtons}>
+              <Pressable style={styles.analyzeHistoryDialogCancel} onPress={() => setQuickRecordTask(null)}>
+                <Text style={styles.analyzeHistoryDialogCancelText}>取消</Text>
+              </Pressable>
+              <Pressable style={styles.analyzeHistoryDialogConfirm} onPress={() => void confirmQuickRecord()}>
+                <Text style={styles.analyzeHistoryDialogConfirmText}>确认记录</Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal visible={Boolean(recipeTask)} transparent animationType="fade" onRequestClose={() => setRecipeTask(null)}>
+        <Pressable style={styles.analyzeHistoryDialogBackdrop} onPress={() => setRecipeTask(null)}>
+          <Pressable style={styles.analyzeHistoryDialogCard} onPress={(event) => event.stopPropagation?.()}>
+            <Text style={styles.analyzeHistoryDialogTitle}>收藏餐食</Text>
+            <Text style={styles.analyzeHistoryDialogDesc}>填写一个方便下次查找的名称</Text>
+            <TextInput
+              value={recipeName}
+              onChangeText={setRecipeName}
+              maxLength={50}
+              placeholder="例如：工作日晚餐"
+              placeholderTextColor="#94a3b8"
+              style={styles.analyzeHistoryRecipeInput}
+            />
+            <View style={styles.analyzeHistoryDialogButtons}>
+              <Pressable style={styles.analyzeHistoryDialogCancel} onPress={() => setRecipeTask(null)}>
+                <Text style={styles.analyzeHistoryDialogCancelText}>取消</Text>
+              </Pressable>
+              <Pressable style={styles.analyzeHistoryDialogConfirm} onPress={() => void confirmSaveRecipe()}>
+                <Text style={styles.analyzeHistoryDialogConfirmText}>确认收藏</Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   )
 }
@@ -4857,7 +5033,7 @@ export function FriendsScreen() {
         <View style={styles.friendsTabsWrapper}>
           <View style={styles.friendsTabs}>
             <FriendsTabButton label="好友列表" badge={friends.length} active={activeTab === 'friends'} onPress={() => setActiveTab('friends')} />
-            <FriendsTabButton label="收到请求" badge={receivedPendingCount} active={activeTab === 'received'} onPress={() => setActiveTab('received')} />
+            <FriendsTabButton label="收到的请求" badge={receivedPendingCount} active={activeTab === 'received'} onPress={() => setActiveTab('received')} />
             <FriendsTabButton label="我发起的" badge={sentPendingCount} active={activeTab === 'sent'} onPress={() => setActiveTab('sent')} />
             <FriendsTabButton label="黑名单" badge={blocks.length} active={activeTab === 'blocks'} onPress={() => setActiveTab('blocks')} />
           </View>
@@ -7251,7 +7427,7 @@ function analyzeHistoryAvatarText(task: AnalysisTask): string {
 
 function analyzeHistoryStatusLabel(task: AnalysisTask): string {
   const status = String(task.status || '')
-  if (status === 'pending' || status === 'queued' || status === 'processing' || status === 'running') return '识别'
+  if (status === 'pending' || status === 'queued' || status === 'processing' || status === 'running') return '正在识别'
   if (status === 'done') {
     if (task.is_recorded === true) return '已经记录'
     if (task.is_recorded === false) return '等待记录'
@@ -7289,25 +7465,35 @@ function analyzeHistoryCompactMeta(task: AnalysisTask): string {
   const kind = isPackagedAnalyzeHistoryTask(task) ? '包装食品' : isTextAnalysisTask(task) ? '文字记录' : '图片记录'
   const count = task.result?.items?.length || 0
   const parts = [kind]
-  if (count > 0) parts.push(`${count} 项食物`)
-  if (task.is_recorded === true) parts.push('已写入饮食记录')
-  if (task.is_recorded === false && status === 'done') parts.push('等待记录')
+  if (count > 0) parts.push(`识别出 ${count} 项食物`)
   return parts.join(' · ')
 }
 
 function analyzeHistoryModeLabel(task: AnalysisTask): string {
   const taskAny = task as AnalysisTask & { execution_mode?: unknown }
   const raw = String(taskAny.execution_mode || analyzeHistoryPayloadValue(task, 'execution_mode', 'executionMode') || '').trim()
-  if (!raw) return ''
-  if (raw.includes('packaged')) return '零食识别'
-  if (raw.includes('strict') || raw.includes('gemini35')) {
-    if (raw.includes('web_search')) return '精准联网'
-    if (raw.includes('separate') || raw.includes('grouped')) return '精准分项'
-    return '精准模式'
-  }
-  if (raw.includes('fast')) return raw.includes('web_search') ? '快速联网' : '快速模式'
-  if (raw.includes('web_search')) return '联网校准'
-  return ''
+  return raw === 'strict' || raw === 'gemini35_flash' || raw === 'gemini35_flash_grouped'
+    ? '精准'
+    : ''
+}
+
+function formatAnalyzeHistoryTime(value?: string | null): string {
+  if (!value) return ''
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return ''
+  const now = new Date()
+  const time = parsed.toLocaleTimeString('zh-CN', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  })
+  const period = parsed.getHours() < 12 ? '上午' : '下午'
+  if (parsed.toDateString() === now.toDateString()) return `今天 ${period}${time}`
+  const yesterday = new Date(now)
+  yesterday.setDate(yesterday.getDate() - 1)
+  if (parsed.toDateString() === yesterday.toDateString()) return `昨天 ${period}${time}`
+  const date = parsed.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' })
+  return `${date} ${period}${time}`
 }
 
 function analyzeHistoryStatusTone(task: AnalysisTask) {
@@ -9186,13 +9372,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#eef3f1',
   },
   analyzeHistorySearchBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
     paddingHorizontal: 12,
-    paddingTop: 10,
+    paddingTop: 8,
     paddingBottom: 8,
-    backgroundColor: '#f6faf8',
+    backgroundColor: 'transparent',
   },
   analyzeHistorySearchInputWrap: {
     flex: 1,
@@ -9226,23 +9409,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: 13,
     backgroundColor: '#f3f4f6',
-  },
-  analyzeHistorySearchButton: {
-    minWidth: 58,
-    height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 12,
-    backgroundColor: colors.brand,
-    paddingHorizontal: 14,
-  },
-  analyzeHistorySearchButtonDisabled: {
-    opacity: 0.78,
-  },
-  analyzeHistorySearchButtonText: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '800',
   },
   analyzeHistoryScroll: {
     flex: 1,
@@ -9326,7 +9492,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 11,
-    minHeight: 102,
+    minHeight: 116,
     borderRadius: 14,
     borderWidth: 1,
     borderColor: 'rgba(92, 184, 150, 0.14)',
@@ -9389,8 +9555,7 @@ const styles = StyleSheet.create({
   },
   analyzeHistoryRightContent: {
     alignItems: 'flex-end',
-    justifyContent: 'space-between',
-    gap: 8,
+    justifyContent: 'center',
   },
   analyzeHistoryHeadline: {
     color: '#10211a',
@@ -9423,21 +9588,18 @@ const styles = StyleSheet.create({
     gap: 6,
     marginTop: 2,
   },
+  analyzeHistoryTimeRow: {
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 6,
+    marginTop: 2,
+  },
   analyzeHistoryTime: {
     color: '#6b7280',
     fontSize: 11,
     lineHeight: 16,
-  },
-  analyzeHistoryMiniTag: {
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: 999,
-    backgroundColor: '#f3f4f6',
-  },
-  analyzeHistoryMiniTagText: {
-    color: '#4b5563',
-    fontSize: 10,
-    fontWeight: '800',
   },
   analyzeHistoryModeTag: {
     paddingHorizontal: 7,
@@ -9577,6 +9739,29 @@ const styles = StyleSheet.create({
     borderRadius: 17,
     backgroundColor: 'rgba(92, 184, 150, 0.12)',
   },
+  analyzeHistoryMenuIconGlyph: {
+    width: 20,
+    height: 20,
+    lineHeight: 20,
+    textAlign: 'center',
+    textAlignVertical: 'center',
+    includeFontPadding: false,
+  },
+  analyzeHistoryMenuActionIconRecord: {
+    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+  },
+  analyzeHistoryMenuActionIconRetry: {
+    backgroundColor: 'rgba(249, 115, 22, 0.1)',
+  },
+  analyzeHistoryMenuActionIconFavorite: {
+    backgroundColor: 'rgba(92, 184, 150, 0.1)',
+  },
+  analyzeHistoryMenuActionIconLibrary: {
+    backgroundColor: 'rgba(249, 115, 22, 0.1)',
+  },
+  analyzeHistoryMenuActionIconDisabled: {
+    backgroundColor: 'rgba(156, 163, 175, 0.1)',
+  },
   analyzeHistoryMenuActionIconDanger: {
     backgroundColor: 'rgba(239, 68, 68, 0.1)',
   },
@@ -9612,6 +9797,110 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 20,
     fontWeight: '800',
+  },
+  analyzeHistoryDialogBackdrop: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+    backgroundColor: 'rgba(15, 23, 42, 0.42)',
+  },
+  analyzeHistoryDialogCard: {
+    width: '100%',
+    maxWidth: 380,
+    borderRadius: 20,
+    padding: 20,
+    backgroundColor: '#ffffff',
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.2,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 20,
+  },
+  analyzeHistoryDialogTitle: {
+    color: '#0f172a',
+    fontSize: 18,
+    lineHeight: 24,
+    fontWeight: '900',
+    textAlign: 'center',
+  },
+  analyzeHistoryDialogDesc: {
+    marginTop: 5,
+    color: '#64748b',
+    fontSize: 12,
+    lineHeight: 18,
+    textAlign: 'center',
+  },
+  analyzeHistoryMealGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 18,
+  },
+  analyzeHistoryMealOption: {
+    width: '31%',
+    minHeight: 42,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    backgroundColor: '#f8fafc',
+  },
+  analyzeHistoryMealOptionActive: {
+    borderColor: colors.brand,
+    backgroundColor: 'rgba(92, 184, 150, 0.12)',
+  },
+  analyzeHistoryMealOptionText: {
+    color: '#475569',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  analyzeHistoryMealOptionTextActive: {
+    color: '#2f7f62',
+    fontWeight: '900',
+  },
+  analyzeHistoryRecipeInput: {
+    minHeight: 46,
+    marginTop: 18,
+    borderWidth: 1,
+    borderColor: '#dbe5e1',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    color: '#10211a',
+    fontSize: 15,
+    backgroundColor: '#f8fbfa',
+  },
+  analyzeHistoryDialogButtons: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 18,
+  },
+  analyzeHistoryDialogCancel: {
+    flex: 1,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 12,
+    backgroundColor: '#f1f5f9',
+  },
+  analyzeHistoryDialogCancelText: {
+    color: '#64748b',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  analyzeHistoryDialogConfirm: {
+    flex: 1,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 12,
+    backgroundColor: colors.brand,
+  },
+  analyzeHistoryDialogConfirmText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '900',
   },
   manualRecordPage: {
     flex: 1,

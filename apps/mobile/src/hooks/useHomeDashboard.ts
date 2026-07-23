@@ -116,6 +116,9 @@ export function useHomeDashboard(selectedDate?: string) {
 
     const seq = ++loadDashboardSeqRef.current
     loadDashboardPendingRef.current = { date: resolvedDate, seq }
+    // 宠物事件不属于首页本地快照。即使营养首页命中缓存，也必须从
+    // 服务端刷新宠物状态，否则领取奖励后返回首页仍会显示旧“奖”图标。
+    const petDataPromise = apiClient.getPetSummary(resolvedDate).catch(() => null)
 
     let localSnapshot: HomeDashboardLocalSnapshot | null = null
     try {
@@ -134,6 +137,11 @@ export function useHomeDashboard(selectedDate?: string) {
       if (loadDashboardPendingRef.current?.seq === seq) {
         loadDashboardPendingRef.current = null
       }
+      void petDataPromise.then((petData) => {
+        if (seq === loadDashboardSeqRef.current) {
+          setPetSummary(petData)
+        }
+      })
       return
     }
 
@@ -153,7 +161,7 @@ export function useHomeDashboard(selectedDate?: string) {
     try {
       const [dashboardData, petData, statsData, bodyMetricsData, exerciseLogsData] = await Promise.all([
         apiClient.getHomeDashboard(resolvedDate),
-        apiClient.getPetSummary(resolvedDate).catch(() => null),
+        petDataPromise,
         apiClient.getStatsSummary('week').catch(() => null),
         apiClient.getBodyMetricsSummary('month').catch(() => null),
         apiClient.getExerciseLogs({ date: resolvedDate }).catch(() => null),

@@ -186,6 +186,25 @@ function formatMicroValue(value: number) {
   return String(Math.round(value * 100) / 100)
 }
 
+function formatRecipeDisplayText(value?: string | null) {
+  return String(value || '')
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    .replace(/<\/?[^>]+>/g, ' ')
+    .replace(/^\s{0,3}#{1,6}\s*/gm, '')
+    .replace(/^\s*(?:[-*+]|\d+[.)])\s+/gm, '')
+    .replace(/^\s*>\s?/gm, '')
+    .replace(/(\*\*|__)(.*?)\1/g, '$2')
+    .replace(/([*_~`])([^]*?)\1/g, '$2')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function formatRecipeTag(value: string) {
+  return formatRecipeDisplayText(value).replace(/^#+\s*/, '').trim()
+}
+
 function scaleRecipeItemsNutrients(
   items: UserRecipe['items'],
   scales: { calories: number; protein: number; carbs: number; fat: number; micro: number }
@@ -478,12 +497,12 @@ function RecipesPage() {
                 <View className='recipe-content'>
                   {/* 标题 */}
                   <View className='recipe-header'>
-                    <Text className='recipe-name'>{recipe.recipe_name}</Text>
+                    <Text className='recipe-name'>{formatRecipeDisplayText(recipe.recipe_name) || '未命名食谱'}</Text>
                   </View>
 
                   {/* 描述 */}
                   {recipe.description && (
-                    <Text className='recipe-desc' numberOfLines={2}>{recipe.description}</Text>
+                    <Text className='recipe-desc' numberOfLines={2}>{formatRecipeDisplayText(recipe.description)}</Text>
                   )}
 
                   {/* 营养摘要 */}
@@ -514,11 +533,14 @@ function RecipesPage() {
                   {recipe.tags && recipe.tags.length > 0 && (
                     <ScrollView scrollX className='tags-scroll' showScrollbar={false}>
                       <View className='tags'>
-                        {recipe.tags.map((tag, index) => (
-                          <Text key={index} className='tag'>
-                            #{tag}
-                          </Text>
-                        ))}
+                        {recipe.tags.map((tag, index) => {
+                          const label = formatRecipeTag(tag)
+                          return label ? (
+                            <Text key={index} className='tag'>
+                              {label}
+                            </Text>
+                          ) : null
+                        })}
                       </View>
                     </ScrollView>
                   )}

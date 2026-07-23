@@ -5,29 +5,14 @@ import { Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } 
 import { useFocusEffect, useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import type { FoodExpiryDashboard, MembershipStatus, RewardCenterResponse, UserInfo } from '@food-link/core'
+import type { FoodExpiryDashboard, MembershipStatus, UserInfo } from '@food-link/core'
 import {
-  Activity,
-  Bell,
-  BookOpen,
   ChevronRight,
-  CreditCard,
-  FileText,
   Info,
-  LineChart,
-  Lock,
-  MapPin,
   MessageCircle,
-  Package,
   PawPrint,
-  Search,
-  Shield,
-  Sparkles,
-  Star,
   Store,
-  Trophy,
   User,
-  UserPlus,
   Users,
   type LucideIcon,
 } from 'lucide-react-native'
@@ -79,36 +64,14 @@ const rewardLevels: RewardLevelMeta[] = [
   { level: 6, title: '传说食探长', min: 3000, max: null },
 ]
 
-function buildMoreItems(navigation: NativeStackNavigationProp<RootStackParamList>): MenuEntry[] {
-  return [
-    { title: 'AI 助手', subtitle: '风险解读、饮食建议和关注卡片', icon: Sparkles, tone: 'green', onPress: () => navigation.navigate('AiAssistant') },
-    { title: '账号安全', subtitle: '手机号密码与备用登录方式', icon: Lock, tone: 'slate', onPress: () => navigation.navigate('AccountSecurity') },
-    { title: '互动消息', subtitle: '点赞、评论、回复和审核结果', icon: Bell, tone: 'purple', onPress: () => navigation.navigate('Notifications') },
-    { title: '邀请好友', subtitle: '分享邀请码和好友奖励', icon: UserPlus, tone: 'gold', onPress: () => navigation.navigate('InviteFriends') },
-    { title: '打卡排行榜', subtitle: '查看本周打卡排名', icon: Trophy, tone: 'gold', onPress: () => navigation.navigate('CheckinLeaderboard') },
-    { title: '代谢分析', subtitle: 'BMR、TDEE 和摄入差额', icon: Activity, tone: 'green', onPress: () => navigation.navigate('StatsMetabolic') },
-    { title: '身体趋势', subtitle: '查看体重、饮水和月度摄入趋势', icon: LineChart, tone: 'blue', onPress: () => navigation.navigate('BodyTrends') },
-    { title: '包装食品', subtitle: '上传营养成分表和商品包装', icon: Package, tone: 'blue', onPress: () => navigation.navigate('PackagedFoodEdit') },
-    { title: '收藏食谱', subtitle: '常吃组合一键写入饮食记录', icon: Star, tone: 'gold', onPress: () => navigation.navigate('Recipes') },
-    { title: '食物库', subtitle: '营养库、自定义食物和手动记录', icon: Search, tone: 'blue', onPress: () => navigation.navigate('FoodLibrary') },
-    { title: '分享到公共库', subtitle: '上传外食、校园餐或自制餐食', icon: BookOpen, tone: 'purple', onPress: () => navigation.navigate('PublicFoodShare', { mode: 'public' }) },
-    { title: '定位搜索', subtitle: '搜索商家、食堂或地点', icon: MapPin, tone: 'slate', onPress: () => navigation.navigate('LocationSearch') },
-    { title: '自动续费审核', subtitle: '续费状态与支付渠道说明', icon: CreditCard, tone: 'slate', onPress: () => navigation.navigate('AutoRenewAudit') },
-    { title: '用户协议', subtitle: '服务条款摘要', icon: FileText, tone: 'slate', onPress: () => navigation.navigate('Agreements') },
-    { title: '会员协议', subtitle: '会员权益、续费和订单说明', icon: FileText, tone: 'slate', onPress: () => navigation.navigate('MembershipAgreement') },
-    { title: '隐私政策', subtitle: '数据、图片和缓存说明', icon: Shield, tone: 'slate', onPress: () => navigation.navigate('PrivacyPolicy') },
-  ]
-}
-
 export function ProfileScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const insets = useSafeAreaInsets()
   const dialog = useAppDialog()
   const { logout } = useAuth()
-  const { isDark, toggleScheme } = useColorScheme()
+  const { isDark } = useColorScheme()
   const [profile, setProfile] = useState<UserInfo | null>(null)
   const [membership, setMembership] = useState<MembershipStatus | null>(null)
-  const [reward, setReward] = useState<RewardCenterResponse | null>(null)
   const [expiry, setExpiry] = useState<FoodExpiryDashboard | null>(null)
   const [recordDays, setRecordDays] = useState(0)
   const [counts, setCounts] = useState({ analyze: 0, friends: 0, favorites: 0 })
@@ -121,7 +84,6 @@ export function ProfileScreen() {
       const [
         profileData,
         membershipData,
-        rewardData,
         expiryData,
         recordDayData,
         analyzeCount,
@@ -131,7 +93,6 @@ export function ProfileScreen() {
       ] = await Promise.all([
         apiClient.getUserProfile(),
         apiClient.getMyMembership().catch(() => null),
-        apiClient.getRewardCenter().catch(() => null),
         apiClient.getFoodExpiryDashboard().catch(() => null),
         apiClient.getUserRecordDays().catch(() => ({ record_days: 0 })),
         apiClient.getAnalyzeTaskCount().catch(() => ({ count: 0 })),
@@ -141,7 +102,6 @@ export function ProfileScreen() {
       ])
       setProfile(profileData)
       setMembership(membershipData)
-      setReward(rewardData)
       setExpiry(expiryData)
       setRecordDays(recordDayData.record_days || 0)
       setFriendRequestCount(friendRequestsData?.received?.filter((item) => item.status === 'pending').length || 0)
@@ -215,8 +175,6 @@ export function ProfileScreen() {
     navigation.navigate(profile?.onboarding_completed ? 'HealthProfileView' : 'HealthProfile')
   }
 
-  const credits = membership?.total_credits_available ?? membership?.daily_credits_remaining ?? 0
-  const todayEarned = reward?.today_earned_credits || 0
   const expiryText = expiry ? `${expiry.active_count || 0} 样保鲜中，${expiry.soon_count || 0} 样临期` : '管理临期食物'
   const expiryBadge = expiry ? (expiry.expired_count || 0) + (expiry.today_count || 0) + (expiry.soon_count || 0) : 0
   const systemMax = membership?.daily_credits_max ?? membership?.daily_limit ?? 0
@@ -238,17 +196,18 @@ export function ProfileScreen() {
       : ''
 
   const serviceItems: MenuEntry[] = [
-    { title: '健康档案', subtitle: '身体数据、病史偏好和饮食目标', iconClass: 'icon-shentinianling', tone: 'green', onPress: openHealthProfile },
+    { title: '健康档案', subtitle: '生理指标、日常消耗、病史与饮食偏好', iconClass: 'icon-shentinianling', tone: 'green', onPress: openHealthProfile },
     { title: '食物保质期', subtitle: expiryText, iconClass: 'icon-guoqi1', tone: 'gold', badgeCount: expiryBadge, onPress: () => navigation.navigate('Expiry') },
-    { title: '我的宠物', subtitle: '查看成长伙伴、任务和奖励', iconClass: 'icon-good', tone: 'purple', onPress: () => navigation.navigate('PetHome') },
-    { title: '赚积分', subtitle: `今日已赚 ${todayEarned} 积分`, iconClass: 'icon-zengji', tone: 'slate', onPress: () => navigation.navigate('RewardCenter') },
-    { title: '公共食物库', subtitle: '外食、校园餐和我的分享', iconClass: 'icon-foodshop', tone: 'blue', onPress: () => navigation.navigate('PublicFood', { mode: 'all' }) },
-    { title: '校园食堂', subtitle: '校园餐、食堂窗口和价格', iconClass: 'icon-dizhi', tone: 'slate', onPress: () => navigation.navigate('CampusCanteen') },
-    { title: '加入用户群', subtitle: '进群反馈体验与获取更新', iconClass: 'icon-pengyouquan', tone: 'purple', onPress: () => navigation.navigate('UserGroup') },
-    { title: '意见反馈', subtitle: '反馈问题、建议或体验感受', iconClass: 'icon-pinglun', tone: 'green', onPress: () => navigation.navigate('AboutFeedback') },
+    { title: '我的宠物', subtitle: `奖励积分 ${earnedBalance}，去看看你的健康伙伴`, iconClass: 'icon-good', tone: 'purple', onPress: () => navigation.navigate('PetHome') },
+    { title: '赚积分', subtitle: '查看今天还能做哪些任务、每项上限和当前进度', iconClass: 'icon-zengji', tone: 'slate', onPress: () => navigation.navigate('RewardCenter') },
+    { title: '公共食物库', subtitle: '浏览公共食物营养数据', iconClass: 'icon-foodshop', tone: 'blue', onPress: () => navigation.navigate('PublicFood', { mode: 'all' }) },
+    { title: '校园食堂', subtitle: '查食堂菜品热量、价格和蛋白质', iconClass: 'icon-dizhi', tone: 'slate', onPress: () => navigation.navigate('CampusCanteen') },
+    { title: '加入用户群', subtitle: '反馈问题、提建议，一起共创食探', iconClass: 'icon-pengyouquan', tone: 'purple', onPress: () => navigation.navigate('UserGroup') },
+    { title: '意见反馈', subtitle: '提交问题或建议，并自动附带最近请求诊断', iconClass: 'icon-pinglun', tone: 'green', onPress: () => navigation.navigate('AboutFeedback') },
   ]
 
   const settingsItems: MenuEntry[] = [
+    { title: '账号安全', subtitle: '手机号密码与备用登录方式', iconClass: 'icon-user', tone: 'blue', onPress: () => navigation.navigate('AccountSecurity') },
     { title: '隐私设置', subtitle: '搜索可见性和公开记录', iconClass: 'icon-jiesuo', tone: 'green', onPress: () => navigation.navigate('PrivacySettings') },
     { title: '关于我们', subtitle: '应用说明、协议和联系方式', iconClass: 'icon-all', tone: 'gold', onPress: () => navigation.navigate('About') },
   ]
@@ -309,9 +268,6 @@ export function ProfileScreen() {
                 <ChevronRight size={15} color="#9ca3af" strokeWidth={2.3} />
               </Pressable>
             </View>
-            <Pressable style={({ pressed }) => [styles.themeChip, pressed && styles.pressed]} onPress={toggleScheme}>
-              <IconfontText className={`iconfont ${profileDark ? 'icon-wanshang' : 'icon-zaoshang'}`} size={20} color={profileTextPrimary} />
-            </Pressable>
           </Pressable>
 
           <View style={[styles.quickActions, { borderTopColor: profileBorder }]}>
@@ -348,12 +304,18 @@ export function ProfileScreen() {
               </Text>
             </View>
             <View style={styles.memberProgressBar}>
-              <View style={[styles.memberProgressInner, { width: `${Math.max(0, Math.min(systemProgressPct, 100))}%` }]} />
+              <View
+                style={[
+                  styles.memberProgressInner,
+                  membership?.is_pro && styles.memberProgressInnerPro,
+                  { width: `${Math.max(0, Math.min(systemProgressPct, 100))}%` },
+                ]}
+              />
             </View>
           </View>
           <View style={styles.memberMeter}>
             <View style={styles.memberMeterHead}>
-              <Text style={styles.memberMeterLabel}>奖励可用（一直持有）</Text>
+              <Text style={styles.memberMeterLabel}>奖励积分（一直持有）</Text>
               <Text style={styles.memberMeterValue}>
                 {`${formatRewardLevelRange(earnedBalance, rewardLevel)} · Lv${rewardLevel.level} ${rewardLevel.title}`}
               </Text>
@@ -364,14 +326,14 @@ export function ProfileScreen() {
                   key={index}
                   style={[
                     styles.segmentedProgressBar,
-                    index < Math.min(Math.max(Math.ceil(rewardProgressPct / 10), 0), 10) && styles.segmentedProgressFilled,
+                    index < Math.min(Math.max(Math.ceil(rewardProgressPct / 10), 0), 10)
+                      && (membership?.is_pro ? styles.segmentedProgressFilled : styles.segmentedProgressFilledFree),
                   ]}
                 />
               ))}
             </View>
           </View>
           {founderBenefitText ? <Text style={styles.memberBenefit} numberOfLines={1}>{founderBenefitText}</Text> : null}
-          <Text style={styles.memberCardTip}>当前可用 {credits} 积分 · 今日已赚 {todayEarned}</Text>
         </Pressable>
 
         <View style={[styles.listCard, { backgroundColor: profileCardBg }]}>
@@ -379,16 +341,6 @@ export function ProfileScreen() {
             <ProfileListItem key={item.title} item={item} first={index === 0} isDark={profileDark} />
           ))}
           {settingsItems.map((item) => <ProfileListItem key={item.title} item={item} isDark={profileDark} />)}
-          <ProfileListItem
-            item={{
-              title: '更多功能',
-              subtitle: '账号安全、身体趋势和更多个人工具',
-              icon: Sparkles,
-              tone: 'slate',
-              onPress: () => navigation.navigate('ProfileMoreFeatures'),
-            }}
-            isDark={profileDark}
-          />
         </View>
 
         <Pressable style={({ pressed }) => [styles.toolCard, { backgroundColor: profileCardBg }, pressed && styles.pressed]} onPress={confirmClearCache}>
@@ -400,37 +352,6 @@ export function ProfileScreen() {
         </Pressable>
 
         <Text style={[styles.profileVersion, profileDark && { color: 'rgba(214,226,220,0.4)' }]}>版本号 v{APP_VERSION}</Text>
-      </ScrollView>
-    </View>
-  )
-}
-
-export function ProfileMoreFeaturesScreen() {
-  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
-  const insets = useSafeAreaInsets()
-  const { isDark } = useColorScheme()
-  const moreItems = buildMoreItems(navigation)
-  const profilePageBg = isDark ? '#0d1312' : '#f0f3f6'
-  const profileWashBg = isDark ? 'rgba(16,23,22,1)' : 'rgba(92, 184, 150, 0.08)'
-  const profileCardBg = isDark ? '#181f1d' : '#fff'
-
-  return (
-    <View style={[styles.profilePage, { backgroundColor: profilePageBg }]}>
-      <View style={[styles.profileWash, { backgroundColor: profileWashBg }]} pointerEvents="none" />
-      <ScrollView
-        style={styles.profileScroll}
-        contentContainerStyle={[
-          styles.profileContent,
-          styles.moreFeaturesContent,
-          { paddingBottom: insets.bottom + 24 },
-        ]}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={[styles.listCard, { backgroundColor: profileCardBg }]}>
-          {moreItems.map((item, index) => (
-            <ProfileListItem key={item.title} item={item} first={index === 0} isDark={isDark} />
-          ))}
-        </View>
       </ScrollView>
     </View>
   )
@@ -469,12 +390,10 @@ function QuickAction({
 function ProfileListItem({
   item,
   first,
-  chevronStyle,
   isDark,
 }: {
   item: MenuEntry
   first?: boolean
-  chevronStyle?: object
   isDark?: boolean
 }) {
   const Icon = item.icon
@@ -490,14 +409,12 @@ function ProfileListItem({
       </View>
       <View style={styles.listText}>
         <Text style={[styles.listTitle, { color: isDark ? '#f2f7f4' : '#1f2937' }]} numberOfLines={1}>{item.title}</Text>
-        {item.subtitle ? <Text style={[styles.listSubtitle, { color: isDark ? 'rgba(214,226,220,0.58)' : '#94a3b8' }]} numberOfLines={1}>{item.subtitle}</Text> : null}
       </View>
       {item.badgeCount ? (
         <View style={styles.listBadge}>
           <Text style={styles.listBadgeText}>{item.badgeCount > 99 ? '99+' : item.badgeCount}</Text>
         </View>
       ) : null}
-      <ChevronRight size={18} color="#c8c9cc" strokeWidth={2.35} style={chevronStyle} />
     </Pressable>
   )
 }
@@ -536,7 +453,7 @@ function membershipTierLabel(planCode?: string | null): string {
   if (text.includes('advanced')) return '进阶版'
   if (text.includes('standard')) return '标准版'
   if (text.includes('light')) return '轻享版'
-  return 'Pro'
+  return '会员'
 }
 
 const styles = StyleSheet.create({
@@ -557,9 +474,6 @@ const styles = StyleSheet.create({
   },
   profileContent: {
     paddingBottom: 120,
-  },
-  moreFeaturesContent: {
-    paddingTop: 12,
   },
   profileHeaderSection: {
     marginHorizontal: 12,
@@ -588,25 +502,6 @@ const styles = StyleSheet.create({
   },
   userInfoMain: {
     flex: 1,
-  },
-  themeChip: {
-    position: 'absolute',
-    right: 0,
-    top: '50%',
-    transform: [{ translateY: -16 }],
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.88)',
-    borderWidth: 1,
-    borderColor: 'rgba(92, 184, 150, 0.22)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#5cb896',
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 1,
   },
   userNameRow: {
     flexDirection: 'row',
@@ -817,6 +712,9 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     backgroundColor: '#fff',
   },
+  memberProgressInnerPro: {
+    backgroundColor: '#f59e0b',
+  },
   segmentedProgress: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -832,19 +730,15 @@ const styles = StyleSheet.create({
   segmentedProgressFilled: {
     backgroundColor: '#fbbf24',
   },
+  segmentedProgressFilledFree: {
+    backgroundColor: '#fff',
+  },
   memberBenefit: {
     marginTop: -2,
     color: 'rgba(255,255,255,0.98)',
     fontSize: 12,
     lineHeight: 17,
     fontWeight: '800',
-  },
-  memberCardTip: {
-    marginTop: 2,
-    color: 'rgba(255,255,255,0.74)',
-    fontSize: 11,
-    lineHeight: 16,
-    fontWeight: '700',
   },
   listCard: {
     marginHorizontal: 12,
@@ -882,14 +776,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 22,
     fontWeight: '600',
-  },
-  listSubtitle: {
-    fontSize: 12,
-    lineHeight: 17,
-    marginTop: 2,
-  },
-  chevronOpen: {
-    transform: [{ rotate: '90deg' }],
   },
   listBadge: {
     minWidth: 18,

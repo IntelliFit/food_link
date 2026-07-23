@@ -1,0 +1,64 @@
+diff --git a/node_modules/expo-modules-autolinking/android/expo-gradle-plugin/expo-autolinking-plugin-shared/build.gradle.kts b/node_modules/expo-modules-autolinking/android/expo-gradle-plugin/expo-autolinking-plugin-shared/build.gradle.kts
+index 3aca925..5663d50 100644
+--- a/node_modules/expo-modules-autolinking/android/expo-gradle-plugin/expo-autolinking-plugin-shared/build.gradle.kts
++++ b/node_modules/expo-modules-autolinking/android/expo-gradle-plugin/expo-autolinking-plugin-shared/build.gradle.kts
+@@ -7,6 +7,7 @@ plugins {
+ }
+ 
+ repositories {
++  maven { url = uri("https://maven.aliyun.com/repository/public") }
+   mavenCentral()
+ }
+ 
+diff --git a/node_modules/expo-modules-autolinking/android/expo-gradle-plugin/expo-autolinking-plugin/build.gradle.kts b/node_modules/expo-modules-autolinking/android/expo-gradle-plugin/expo-autolinking-plugin/build.gradle.kts
+index ba61caf..4192819 100644
+--- a/node_modules/expo-modules-autolinking/android/expo-gradle-plugin/expo-autolinking-plugin/build.gradle.kts
++++ b/node_modules/expo-modules-autolinking/android/expo-gradle-plugin/expo-autolinking-plugin/build.gradle.kts
+@@ -7,6 +7,8 @@ plugins {
+ }
+ 
+ repositories {
++  maven { url = uri("https://maven.aliyun.com/repository/google") }
++  maven { url = uri("https://maven.aliyun.com/repository/public") }
+   google()
+   mavenCentral()
+ }
+diff --git a/node_modules/expo-modules-autolinking/android/expo-gradle-plugin/expo-autolinking-settings-plugin/build.gradle.kts b/node_modules/expo-modules-autolinking/android/expo-gradle-plugin/expo-autolinking-settings-plugin/build.gradle.kts
+index da66c64..f1d8919 100644
+--- a/node_modules/expo-modules-autolinking/android/expo-gradle-plugin/expo-autolinking-settings-plugin/build.gradle.kts
++++ b/node_modules/expo-modules-autolinking/android/expo-gradle-plugin/expo-autolinking-settings-plugin/build.gradle.kts
+@@ -8,6 +8,8 @@ plugins {
+ }
+ 
+ repositories {
++  maven { url = uri("https://maven.aliyun.com/repository/google") }
++  maven { url = uri("https://maven.aliyun.com/repository/public") }
+   google()
+   mavenCentral()
+ }
+diff --git a/node_modules/expo-modules-autolinking/android/expo-gradle-plugin/expo-max-sdk-override-plugin/build.gradle.kts b/node_modules/expo-modules-autolinking/android/expo-gradle-plugin/expo-max-sdk-override-plugin/build.gradle.kts
+index 1e09909..9de013a 100644
+--- a/node_modules/expo-modules-autolinking/android/expo-gradle-plugin/expo-max-sdk-override-plugin/build.gradle.kts
++++ b/node_modules/expo-modules-autolinking/android/expo-gradle-plugin/expo-max-sdk-override-plugin/build.gradle.kts
+@@ -7,6 +7,8 @@ plugins {
+ }
+ 
+ repositories {
++  maven { url = uri("https://maven.aliyun.com/repository/google") }
++  maven { url = uri("https://maven.aliyun.com/repository/public") }
+   google()
+   mavenCentral()
+ }
+diff --git a/node_modules/expo-modules-autolinking/android/expo-gradle-plugin/settings.gradle.kts b/node_modules/expo-modules-autolinking/android/expo-gradle-plugin/settings.gradle.kts
+index f988286..0f8e26b 100644
+--- a/node_modules/expo-modules-autolinking/android/expo-gradle-plugin/settings.gradle.kts
++++ b/node_modules/expo-modules-autolinking/android/expo-gradle-plugin/settings.gradle.kts
+@@ -1,5 +1,8 @@
+ pluginManagement {
+   repositories {
++    maven { url = uri("https://maven.aliyun.com/repository/gradle-plugin") }
++    maven { url = uri("https://maven.aliyun.com/repository/google") }
++    maven { url = uri("https://maven.aliyun.com/repository/public") }
+     mavenCentral()
+     google()
+     gradlePluginPortal()

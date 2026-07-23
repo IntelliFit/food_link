@@ -1,0 +1,32 @@
+diff --git a/node_modules/expo-modules-core/expo-module-gradle-plugin/build.gradle.kts b/node_modules/expo-modules-core/expo-module-gradle-plugin/build.gradle.kts
+index 837bb4f..38c2609 100644
+--- a/node_modules/expo-modules-core/expo-module-gradle-plugin/build.gradle.kts
++++ b/node_modules/expo-modules-core/expo-module-gradle-plugin/build.gradle.kts
+@@ -8,6 +8,9 @@ plugins {
+ }
+ 
+ repositories {
++  maven { url = uri("https://maven.aliyun.com/repository/gradle-plugin") }
++  maven { url = uri("https://maven.aliyun.com/repository/google") }
++  maven { url = uri("https://maven.aliyun.com/repository/public") }
+   google()
+   mavenCentral()
+ }
+diff --git a/node_modules/expo-modules-core/expo-module-gradle-plugin/settings.gradle.kts b/node_modules/expo-modules-core/expo-module-gradle-plugin/settings.gradle.kts
+new file mode 100644
+index 0000000..0c5f0d6
+--- /dev/null
++++ b/node_modules/expo-modules-core/expo-module-gradle-plugin/settings.gradle.kts
+@@ -0,0 +1,12 @@
++pluginManagement {
++  repositories {
++    maven { url = uri("https://maven.aliyun.com/repository/gradle-plugin") }
++    maven { url = uri("https://maven.aliyun.com/repository/google") }
++    maven { url = uri("https://maven.aliyun.com/repository/public") }
++    gradlePluginPortal()
++    google()
++    mavenCentral()
++  }
++}
++
++rootProject.name = "expo-module-gradle-plugin"

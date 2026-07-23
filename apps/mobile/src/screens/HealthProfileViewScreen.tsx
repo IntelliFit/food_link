@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react'
-import { ActivityIndicator, Image, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
+import { ActivityIndicator, Alert, Image, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
 import * as ImagePicker from 'expo-image-picker'
 import { useFocusEffect, useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
@@ -181,24 +181,12 @@ export function HealthProfileViewScreen() {
     if (confirmed) navigation.navigate('HealthProfile')
   }
 
-  const uploadReportImages = async () => {
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync()
-    if (!permission.granted) {
-      await dialog.alert('需要相册权限', '请选择体检报告或病例图片。', 'warning')
-      return
-    }
-    const picked = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsMultipleSelection: true,
-      selectionLimit: 9,
-      quality: 0.86,
-    })
-    if (picked.canceled || picked.assets.length === 0) return
-
+  const submitReportImages = async (assets: ImagePicker.ImagePickerAsset[]) => {
+    if (assets.length === 0) return
     setSaving(true)
     try {
       const urls: string[] = []
-      for (const asset of picked.assets.slice(0, 9)) {
+      for (const asset of assets.slice(0, 9)) {
         const base64Image = await readImageAsBase64DataUrl(asset.uri, asset.mimeType || 'image/jpeg')
         const uploaded = await apiClient.uploadHealthReportImage({ base64Image })
         urls.push(uploaded.imageUrl)
@@ -213,6 +201,41 @@ export function HealthProfileViewScreen() {
     } finally {
       setSaving(false)
     }
+  }
+
+  const pickReportFromAlbum = async () => {
+    // Android 13+ 的系统 Photo Picker 无需申请整个相册权限。提前申请会
+    // 把选择器限制为“仅允许访问已选照片”，导致新保存的报告不可见。
+    const picked = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsMultipleSelection: true,
+      selectionLimit: 9,
+      quality: 0.86,
+    })
+    if (picked.canceled || picked.assets.length === 0) return
+    await submitReportImages(picked.assets)
+  }
+
+  const takeReportPhoto = async () => {
+    const permission = await ImagePicker.requestCameraPermissionsAsync()
+    if (!permission.granted) {
+      await dialog.alert('需要相机权限', '请允许使用相机拍摄体检报告或病例。', 'warning')
+      return
+    }
+    const picked = await ImagePicker.launchCameraAsync({
+      mediaTypes: ['images'],
+      quality: 0.86,
+    })
+    if (picked.canceled || picked.assets.length === 0) return
+    await submitReportImages(picked.assets)
+  }
+
+  const chooseReportSource = () => {
+    Alert.alert('上传体检/病例报告', '请选择图片来源', [
+      { text: '拍摄', onPress: () => void takeReportPhoto() },
+      { text: '从手机相册选择', onPress: () => void pickReportFromAlbum() },
+      { text: '取消', style: 'cancel' },
+    ])
   }
 
   const retryReportExtraction = async () => {
@@ -302,7 +325,7 @@ export function HealthProfileViewScreen() {
         <View style={styles.editorReportBody}>
           <ReportSummary report={report} />
           {reportImageUrls.length ? <ReportImageGrid urls={reportImageUrls} /> : null}
-          <ActionButton label={reportImageUrls.length ? '上传新报告' : '上传报告'} loading={saving} onPress={uploadReportImages} />
+          <ActionButton label={reportImageUrls.length ? '上传新报告' : '上传报告'} loading={saving} onPress={chooseReportSource} />
           {reportImageUrls.length ? <ActionButton label="重新识别当前报告" variant="secondary" loading={saving} onPress={retryReportExtraction} /> : null}
         </View>
       )
@@ -390,7 +413,7 @@ export function HealthProfileViewScreen() {
             {reportSummaryValue ? (
               <EditableRow label="报告结果" value={reportSummaryValue} highlight={reportSummaryValue === '查看结果'} onPress={() => openEditor('report_extract', report)} />
             ) : (
-              <Pressable style={styles.reportUploadTrigger} onPress={uploadReportImages}>
+              <Pressable style={styles.reportUploadTrigger} onPress={chooseReportSource}>
                 <View style={styles.reportUploadIcon}>
                   <Text style={styles.reportUploadIconText}>+</Text>
                 </View>

@@ -2,11 +2,29 @@
  * 跨平台启动 Go backend server。
  */
 const { spawn } = require('child_process')
+const fs = require('fs')
 const path = require('path')
 const net = require('net')
+const dotenv = require('dotenv')
 
 const backendDir = path.join(__dirname, '..', 'backend')
 const port = Number(process.env.PORT || 3010)
+
+function loadEnvFile(filePath) {
+  if (!fs.existsSync(filePath)) {
+    return
+  }
+
+  const parsed = dotenv.parse(fs.readFileSync(filePath))
+  for (const [key, value] of Object.entries(parsed)) {
+    process.env[key] = value
+  }
+}
+
+function loadBackendEnv() {
+  loadEnvFile(path.join(backendDir, '.env'))
+  loadEnvFile(path.join(backendDir, '.env.local'))
+}
 
 function ensurePortAvailable(targetPort) {
   return new Promise((resolve, reject) => {
@@ -37,6 +55,7 @@ function ensurePortAvailable(targetPort) {
 
 async function main() {
   try {
+    loadBackendEnv()
     await ensurePortAvailable(port)
   } catch (error) {
     console.error(error?.message || error)

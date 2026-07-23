@@ -8,7 +8,7 @@ import { CommonActions, useFocusEffect, useNavigation, useRoute, type RouteProp 
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import Svg, { Defs, Line as SvgLine, LinearGradient as SvgLinearGradient, Path as SvgPath, Rect as SvgRect, Stop } from 'react-native-svg'
-import { ChevronLeft, Flame, Info, UserRound } from 'lucide-react-native'
+import { ChevronLeft, Flame, ImagePlus, Info, UserRound, X } from 'lucide-react-native'
 import {
   normalizeInsightText,
   type AnalysisTask,
@@ -58,13 +58,48 @@ const expiryStorageOptions = [
 const DEFAULT_LOCATION_COORDS = { latitude: 39.89945, longitude: 116.40769 }
 
 const expiryEditPresets = [
-  { name: '牛奶', category: '乳制品', days: 7, storageType: 'refrigerated', quantityNote: '1 盒' },
-  { name: '酸奶', category: '乳制品', days: 14, storageType: 'refrigerated', quantityNote: '1 杯' },
-  { name: '水果', category: '水果', days: 5, storageType: 'refrigerated', quantityNote: '1 份' },
-  { name: '面包', category: '主食', days: 3, storageType: 'room_temp', quantityNote: '1 袋' },
-  { name: '剩菜', category: '熟食', days: 2, storageType: 'refrigerated', quantityNote: '1 盒' },
-  { name: '熟食', category: '熟食', days: 3, storageType: 'refrigerated', quantityNote: '1 份' },
+  { name: '牛奶', category: '乳制品', days: 3, storageType: 'refrigerated' },
+  { name: '酸奶', category: '乳制品', days: 5, storageType: 'refrigerated' },
+  { name: '水果', category: '水果', days: 3, storageType: 'refrigerated' },
+  { name: '面包', category: '面包', days: 3, storageType: 'room_temp' },
+  { name: '剩菜', category: '剩菜', days: 1, storageType: 'refrigerated' },
+  { name: '熟食', category: '熟食', days: 2, storageType: 'refrigerated' },
 ] as const
+
+const expiryCategoryOptions = ['乳制品', '水果', '蔬菜', '肉类', '海鲜', '蛋类', '豆制品', '熟食', '剩菜', '主食', '面包', '零食', '饮料', '冷冻食品', '调味品', '其他'] as const
+
+type ExpiryDraft = {
+  clientId: string
+  foodName: string
+  category: string
+  customCategory: string
+  expireDate: string
+  quantityNote: string
+  storageType: string
+  note: string
+  sourceType: 'manual' | 'ai' | string
+  confidence?: number | null
+  estimated?: boolean
+  suggestedDays?: number | null
+  recognitionBasis?: string | null
+  missingFields?: string[]
+}
+
+type ExpiryImageAsset = { uri: string; fileName?: string | null; mimeType?: string | null }
+
+function newExpiryDraft(): ExpiryDraft {
+  return {
+    clientId: `expiry-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    foodName: '',
+    category: '乳制品',
+    customCategory: '',
+    expireDate: dateKeyAfterDays(3),
+    quantityNote: '',
+    storageType: 'refrigerated',
+    note: '',
+    sourceType: 'manual',
+  }
+}
 
 type CampusCanteenSort = 'hot' | 'high_protein' | 'low_calorie' | 'value'
 
@@ -3368,14 +3403,24 @@ export function ExpiryEditScreen() {
   const route = useRoute<RouteProp<RootStackParamList, 'ExpiryEdit'>>()
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const insets = useSafeAreaInsets()
-  const [item, setItem] = useState<FoodExpiryItem | undefined>(route.params?.item)
-  const [foodName, setFoodName] = useState(route.params?.item?.food_name || '')
-  const [category, setCategory] = useState(route.params?.item?.category || '')
-  const [expireDate, setExpireDate] = useState((route.params?.item?.expire_date || todayKey()).slice(0, 10))
-  const [quantityNote, setQuantityNote] = useState(route.params?.item?.quantity_note || '')
-  const [storageType, setStorageType] = useState(route.params?.item?.storage_type || 'refrigerated')
-  const [note, setNote] = useState(route.params?.item?.note || '')
-  const [status, setStatus] = useState(route.params?.item?.status || 'active')
+  const initialItem = route.params?.item
+  const draftFromItem = (nextItem: FoodExpiryItem): ExpiryDraft => ({
+    ...newExpiryDraft(),
+    clientId: nextItem.id,
+    foodName: nextItem.food_name || '',
+    category: nextItem.category || '其他',
+    customCategory: expiryCategoryOptions.includes((nextItem.category || '') as typeof expiryCategoryOptions[number]) ? '' : nextItem.category || '',
+    expireDate: (nextItem.expire_date || todayKey()).slice(0, 10),
+    quantityNote: nextItem.quantity_note || '',
+    storageType: nextItem.storage_type || 'refrigerated',
+    note: nextItem.note || '',
+    sourceType: nextItem.source_type || 'manual',
+  })
+  const [drafts, setDrafts] = useState<ExpiryDraft[]>(initialItem ? [draftFromItem(initialItem)] : [newExpiryDraft()])
+  const [images, setImages] = useState<ExpiryImageAsset[]>([])
+  const [recognitionContext, setRecognitionContext] = useState('')
+  const [recognizing, setRecognizing] = useState(false)
+  const [lastRecognizedCount, setLastRecognizedCount] = useState(0)
   const [loading, setLoading] = useState(false)
 
   const load = useCallback(async () => {
@@ -3384,15 +3429,7 @@ export function ExpiryEditScreen() {
     setLoading(true)
     try {
       const data = await apiClient.getFoodExpiryItem(id)
-      const nextItem = data.item
-      setItem(nextItem)
-      setFoodName(nextItem.food_name || '')
-      setCategory(nextItem.category || '')
-      setExpireDate((nextItem.expire_date || todayKey()).slice(0, 10))
-      setQuantityNote(nextItem.quantity_note || '')
-      setStorageType(nextItem.storage_type || 'refrigerated')
-      setNote(nextItem.note || '')
-      setStatus(nextItem.status || 'active')
+      setDrafts([draftFromItem(data.item)])
     } catch (error) {
       showError('获取保质期条目失败', error)
     } finally {
@@ -3405,43 +3442,126 @@ export function ExpiryEditScreen() {
   }, [load, route.params?.item, route.params?.itemId])
 
   const isEditing = Boolean(route.params?.itemId)
-  const formIncomplete = !foodName.trim() || !expireDate.trim()
-  const saveDisabled = loading || formIncomplete
+  const filledDrafts = drafts.filter((draft) => draft.foodName.trim())
+  const saveDisabled = loading || filledDrafts.length === 0
 
-  const applyPreset = (preset: (typeof expiryEditPresets)[number]) => {
-    setFoodName(preset.name)
-    setCategory(preset.category)
-    setExpireDate(dateKeyAfterDays(preset.days))
-    setQuantityNote(preset.quantityNote)
-    setStorageType(preset.storageType)
+  const updateDraft = (clientId: string, update: Partial<ExpiryDraft>) => {
+    setDrafts((current) => current.map((draft) => draft.clientId === clientId ? { ...draft, ...update } : draft))
+  }
+
+  const applyPreset = (clientId: string, preset: (typeof expiryEditPresets)[number]) => {
+    updateDraft(clientId, {
+      foodName: preset.name,
+      category: preset.category,
+      customCategory: '',
+      expireDate: dateKeyAfterDays(preset.days),
+      storageType: preset.storageType,
+    })
+  }
+
+  const pickImages = async (camera = false) => {
+    const remaining = 5 - images.length
+    if (remaining <= 0) {
+      Alert.alert('最多支持 5 张图片')
+      return
+    }
+    const result = camera
+      ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.82 })
+      : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.82, allowsMultipleSelection: true, selectionLimit: remaining })
+    if (result.canceled) return
+    setImages((current) => [...current, ...result.assets.slice(0, remaining)])
+  }
+
+  const chooseImageSource = () => {
+    Alert.alert('拍照或上传食物', '最多支持 5 张图片一起识别', [
+      { text: '拍照', onPress: () => void pickImages(true) },
+      { text: '从相册选择', onPress: () => void pickImages(false) },
+      { text: '取消', style: 'cancel' },
+    ])
+  }
+
+  const recognize = async () => {
+    if (!images.length) {
+      chooseImageSource()
+      return
+    }
+    setRecognizing(true)
+    try {
+      const urls: string[] = []
+      for (let index = 0; index < images.length; index += 1) {
+        const asset = images[index]
+        const uploaded = await apiClient.uploadAnalyzeImageFile({
+          fileUri: asset.uri,
+          fileName: asset.fileName || `expiry-${index + 1}.jpg`,
+          mimeType: asset.mimeType || 'image/jpeg',
+        })
+        urls.push(uploaded.imageUrl)
+      }
+      const result = await apiClient.recognizeFoodExpiryItems(urls, recognitionContext)
+      const recognized = result.items.map((recognizedItem) => {
+        const category = recognizedItem.category?.trim() || '其他'
+        return {
+          ...newExpiryDraft(),
+          foodName: recognizedItem.food_name || '',
+          category,
+          customCategory: expiryCategoryOptions.includes(category as typeof expiryCategoryOptions[number]) ? '' : category,
+          expireDate: recognizedItem.expire_date?.slice(0, 10) || dateKeyAfterDays(recognizedItem.suggested_days ?? 3),
+          quantityNote: recognizedItem.quantity_note || '',
+          storageType: recognizedItem.storage_type || 'refrigerated',
+          note: recognizedItem.note || '',
+          sourceType: recognizedItem.source_type || 'ai',
+          confidence: recognizedItem.confidence,
+          estimated: recognizedItem.expire_date_is_estimated,
+          suggestedDays: recognizedItem.suggested_days,
+          recognitionBasis: recognizedItem.recognition_basis,
+          missingFields: recognizedItem.missing_fields || [],
+        } satisfies ExpiryDraft
+      })
+      if (!recognized.length) throw new Error('没有识别到可录入的食物，请换个角度再试')
+      setDrafts((current) => {
+        const first = current[0]
+        const blank = current.length === 1 && !first.foodName.trim() && !first.quantityNote.trim() && !first.note.trim()
+        return blank ? recognized : [...current, ...recognized]
+      })
+      setLastRecognizedCount(recognized.length)
+    } catch (error) {
+      showError('保质期识别失败', error)
+    } finally {
+      setRecognizing(false)
+    }
   }
 
   const save = async () => {
+    if (!filledDrafts.length) {
+      Alert.alert('请至少填写 1 项食物')
+      return
+    }
     setLoading(true)
     try {
       if (route.params?.itemId) {
-        const data = await apiClient.updateFoodExpiryItem(route.params.itemId, {
-          foodName,
-          category,
-          expireDate,
-          quantityNote,
-          storageType,
-          note,
-          status,
+        const draft = filledDrafts[0]
+        await apiClient.updateFoodExpiryItem(route.params.itemId, {
+          foodName: draft.foodName,
+          category: draft.customCategory.trim() || draft.category,
+          expireDate: draft.expireDate,
+          quantityNote: draft.quantityNote,
+          storageType: draft.storageType,
+          note: draft.note,
         })
-        setItem(data.item)
         Alert.alert('已保存', '保质期记录已更新')
       } else {
-        const data = await apiClient.createFoodExpiryItem({
-          foodName,
-          category,
-          expireDate,
-          quantityNote,
-          storageType,
-          note,
-        })
-        setItem(data.item)
-        Alert.alert('已保存', '保质期记录已加入')
+        for (const draft of filledDrafts) {
+          await apiClient.createFoodExpiryItem({
+            foodName: draft.foodName,
+            category: draft.customCategory.trim() || draft.category,
+            expireDate: draft.expireDate,
+            quantityNote: draft.quantityNote,
+            storageType: draft.storageType,
+            note: draft.note,
+            sourceType: draft.sourceType,
+          })
+        }
+        Alert.alert('已保存', `已创建 ${filledDrafts.length} 项提醒`)
       }
       emitFoodExpiryChangedEvent({ force: true })
       navigation.goBack()
@@ -3459,71 +3579,149 @@ export function ExpiryEditScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[styles.expiryEditContent, { paddingBottom: 104 + insets.bottom }]}
       >
-        <View style={styles.expiryEditHero}>
-          <Text style={styles.expiryEditKicker}>{isEditing ? '编辑保质期提醒' : '新增保质期提醒'}</Text>
-          <Text style={styles.expiryEditTitle} numberOfLines={1}>{item?.food_name || foodName || '记录一项食物'}</Text>
-          <Text style={styles.expiryEditDesc}>补齐名称、到期日和储存方式，列表会按临期程度自动归组。</Text>
-        </View>
-
-        {loading && isEditing && !item ? (
+        {loading && isEditing && drafts[0]?.foodName === '' ? (
           <View style={styles.expiryEditLoading}>
             <ActivityIndicator color="#00bc7d" />
           </View>
         ) : null}
 
-        <View style={styles.expiryEditBlock}>
-          <View style={styles.expiryEditBlockHead}>
-            <Text style={styles.expiryEditBlockTitle}>常用预设</Text>
-            <Text style={styles.expiryEditBlockMeta}>点选后可继续修改</Text>
-          </View>
-          <View style={styles.expiryEditPresetList}>
-            {expiryEditPresets.map((preset) => (
-              <Pressable key={preset.name} style={styles.expiryEditPresetChip} onPress={() => applyPreset(preset)}>
-                <Text style={styles.expiryEditPresetText}>{preset.name}</Text>
+        {!isEditing ? (
+          <View style={styles.expiryAiPanel}>
+            <View style={styles.expiryAiHead}>
+              <View style={styles.flex}>
+                <Text style={styles.expiryEditBlockTitle}>拍照识别预填</Text>
+                <Text style={styles.expiryAiDesc}>支持一张图里识别多个食物，也支持多张图一起识别。AI 会先帮你填能看出来的信息，剩下的你再补。</Text>
+              </View>
+              <View style={styles.expiryAiCost}><Text style={styles.expiryAiCostText}>2 积分/次</Text></View>
+            </View>
+            {images.length ? (
+              <View style={styles.expiryImageGrid}>
+                {images.map((asset, index) => (
+                  <View key={`${asset.uri}-${index}`} style={styles.expiryImageItem}>
+                    <Image source={{ uri: asset.uri }} style={styles.expiryImageThumb} />
+                    <Pressable style={styles.expiryImageRemove} onPress={() => setImages((current) => current.filter((_, itemIndex) => itemIndex !== index))}>
+                      <X size={14} color="#fff" />
+                    </Pressable>
+                  </View>
+                ))}
+                {images.length < 5 ? <Pressable style={styles.expiryImageAdd} onPress={chooseImageSource}><ImagePlus size={22} color={colors.brand} /><Text style={styles.expiryImageAddText}>继续加图</Text></Pressable> : null}
+              </View>
+            ) : (
+              <Pressable style={styles.expiryUploadArea} onPress={chooseImageSource}>
+                <Text style={styles.expiryUploadPlus}>＋</Text>
+                <Text style={styles.expiryUploadTitle}>拍照或上传食物</Text>
+                <Text style={styles.expiryUploadDesc}>例如冰箱里的牛奶、水果、熟食、剩菜，最多 5 张。</Text>
               </Pressable>
-            ))}
-          </View>
-        </View>
-
-        <View style={styles.expiryEditBlock}>
-          <Text style={styles.expiryEditBlockTitle}>基础信息</Text>
-          <ExpiryEditField label="食物名称" value={foodName} onChangeText={setFoodName} placeholder="例如 牛奶、草莓、剩菜" />
-          <ExpiryEditField label="分类" value={category} onChangeText={setCategory} placeholder="乳制品、水果、熟食" />
-          <ExpiryEditField label="到期日期" value={expireDate} onChangeText={setExpireDate} placeholder="YYYY-MM-DD" />
-          <ExpiryEditField label="数量说明" value={quantityNote} onChangeText={setQuantityNote} placeholder="例如 2 盒、半袋" />
-          <StorageTypeSegment value={storageType} onChange={setStorageType} />
-          <ExpiryEditField label="备注" value={note} onChangeText={setNote} placeholder="例如 开封后优先吃" multiline />
-        </View>
-
-        <View style={styles.expiryEditBlock}>
-          <Text style={styles.expiryEditBlockTitle}>状态</Text>
-          <View style={styles.expiryEditChoiceList}>
-            {[
-              { value: 'active', label: '保鲜中' },
-              { value: 'consumed', label: '已吃完' },
-              { value: 'discarded', label: '已丢弃' },
-            ].map((option) => (
-              <Pressable
-                key={option.value}
-                style={[styles.expiryEditChoiceChip, status === option.value && styles.expiryEditChoiceChipActive]}
-                onPress={() => setStatus(option.value)}
-              >
-                <Text style={[styles.expiryEditChoiceText, status === option.value && styles.expiryEditChoiceTextActive]}>{option.label}</Text>
+            )}
+            <ExpiryEditField
+              label="识别补充说明"
+              value={recognitionContext}
+              onChangeText={setRecognitionContext}
+              placeholder="例如：这些都是今晚刚买的 / 里面有已经开封的酸奶 / 左边那盒是冷冻水饺"
+              multiline
+            />
+            <View style={styles.expiryAiActions}>
+              <Pressable style={styles.expiryAiGhost} onPress={chooseImageSource}><Text style={styles.expiryAiGhostText}>重新选图</Text></Pressable>
+              <Pressable style={styles.expiryAiPrimary} onPress={() => void recognize()}>
+                {recognizing ? <ActivityIndicator color="#fff" /> : <Text style={styles.expiryAiPrimaryText}>识别并预填</Text>}
               </Pressable>
-            ))}
+            </View>
+            {lastRecognizedCount > 0 ? <Text style={styles.expiryAiResult}>刚刚已预填 {lastRecognizedCount} 项，下面缺的信息继续补就行。</Text> : null}
           </View>
-        </View>
+        ) : null}
+
+        {!isEditing && drafts.length === 1 && drafts[0].sourceType === 'manual' ? (
+          <View style={styles.expiryEditBlock}>
+            <Text style={styles.expiryEditBlockTitle}>常用模板</Text>
+            <View style={styles.expiryEditPresetList}>
+              {expiryEditPresets.map((preset) => (
+                <Pressable key={preset.name} style={styles.expiryEditPresetChip} onPress={() => applyPreset(drafts[0].clientId, preset)}>
+                  <Text style={styles.expiryEditPresetText}>{preset.name}</Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+        ) : null}
+
+        {drafts.map((draft, index) => (
+          <ExpiryDraftCard
+            key={draft.clientId}
+            draft={draft}
+            index={index}
+            canRemove={!isEditing && drafts.length > 1}
+            onChange={(update) => updateDraft(draft.clientId, update)}
+            onRemove={() => setDrafts((current) => current.filter((item) => item.clientId !== draft.clientId))}
+          />
+        ))}
+        {!isEditing ? (
+          <Pressable style={styles.expiryAddItemBar} onPress={() => setDrafts((current) => [...current, newExpiryDraft()])}>
+            <Text style={styles.expiryAddItemText}>＋ 手动再加一项</Text>
+          </Pressable>
+        ) : null}
       </ScrollView>
 
       <View style={[styles.expiryEditFooter, { paddingBottom: Math.max(insets.bottom, 12) }]}>
         <Pressable
           disabled={saveDisabled}
-          style={[styles.expiryEditSubmit, formIncomplete && styles.expiryEditSubmitDisabled]}
+          style={[styles.expiryEditSubmit, saveDisabled && styles.expiryEditSubmitDisabled]}
           onPress={save}
         >
-          {loading ? <ActivityIndicator color="#fff" /> : <Text style={[styles.expiryEditSubmitText, formIncomplete && styles.expiryEditSubmitTextDisabled]}>{isEditing ? '保存修改' : '保存保质期记录'}</Text>}
+          {loading ? <ActivityIndicator color="#fff" /> : <Text style={[styles.expiryEditSubmitText, saveDisabled && styles.expiryEditSubmitTextDisabled]}>{isEditing ? '保存修改' : `保存 ${filledDrafts.length || 1} 项提醒`}</Text>}
         </Pressable>
       </View>
+    </View>
+  )
+}
+
+function ExpiryDraftCard({
+  draft,
+  index,
+  canRemove,
+  onChange,
+  onRemove,
+}: {
+  draft: ExpiryDraft
+  index: number
+  canRemove: boolean
+  onChange: (update: Partial<ExpiryDraft>) => void
+  onRemove: () => void
+}) {
+  const customCategory = !expiryCategoryOptions.includes(draft.category as typeof expiryCategoryOptions[number])
+  return (
+    <View style={styles.expiryDraftCard}>
+      <View style={styles.expiryDraftHead}>
+        <View>
+          <Text style={styles.expiryDraftTitle}>食物 {index + 1}</Text>
+          <Text style={styles.expiryDraftSubtitle}>{draft.sourceType === 'ai' ? 'AI 已预填，缺的信息继续补就可以' : '手动填写一项保质期提醒'}</Text>
+        </View>
+        <View style={styles.expiryDraftActions}>
+          {draft.sourceType === 'ai' ? <Text style={styles.expiryAiBadge}>{draft.confidence != null ? `AI ${Math.round(draft.confidence * 100)}%` : 'AI 识别'}</Text> : null}
+          {canRemove ? <Pressable onPress={onRemove}><Text style={styles.expiryDraftRemove}>删除</Text></Pressable> : null}
+        </View>
+      </View>
+      {draft.estimated ? <Text style={styles.expiryDraftTip}>到期日为 AI 建议值{draft.suggestedDays != null ? `（约 ${draft.suggestedDays} 天）` : ''}，建议确认包装日期后再保存。</Text> : null}
+      {draft.recognitionBasis ? <Text style={styles.expiryDraftTip}>{draft.recognitionBasis}</Text> : null}
+      <View style={styles.expiryDraftInner}>
+        <ExpiryEditField label="食物名称" value={draft.foodName} onChangeText={(foodName) => onChange({ foodName })} placeholder="例如 纯牛奶 / 苹果 / 昨晚剩菜" />
+      </View>
+      <View style={styles.expiryDraftInner}>
+        <Text style={styles.expiryEditLabel}>分类</Text>
+        <View style={styles.expiryEditChoiceList}>
+          {expiryCategoryOptions.map((option) => (
+            <Pressable key={option} style={[styles.expiryEditChoiceChip, !customCategory && draft.category === option && styles.expiryEditChoiceChipActive]} onPress={() => onChange({ category: option, customCategory: '' })}>
+              <Text style={[styles.expiryEditChoiceText, !customCategory && draft.category === option && styles.expiryEditChoiceTextActive]}>{option}</Text>
+            </Pressable>
+          ))}
+          <Pressable style={[styles.expiryEditChoiceChip, customCategory && styles.expiryEditChoiceChipActive]} onPress={() => onChange({ category: draft.customCategory || '自定义' })}>
+            <Text style={[styles.expiryEditChoiceText, customCategory && styles.expiryEditChoiceTextActive]}>自定义</Text>
+          </Pressable>
+        </View>
+        {customCategory ? <ExpiryEditField label="" value={draft.customCategory} onChangeText={(customCategoryValue) => onChange({ customCategory: customCategoryValue, category: customCategoryValue || '自定义' })} placeholder="输入自定义分类" /> : null}
+      </View>
+      <View style={styles.expiryDraftInner}><StorageTypeSegment value={draft.storageType} onChange={(storageType) => onChange({ storageType })} /></View>
+      <View style={styles.expiryDraftInner}><ExpiryEditField label="数量说明" value={draft.quantityNote} onChangeText={(quantityNote) => onChange({ quantityNote })} placeholder="例如 2 盒 / 半袋 / 3 个" /></View>
+      <View style={styles.expiryDraftInner}><ExpiryEditField label="到期日期" value={draft.expireDate} onChangeText={(expireDate) => onChange({ expireDate })} placeholder="YYYY-MM-DD" /></View>
+      <View style={styles.expiryDraftInner}><ExpiryEditField label="备注" value={draft.note} onChangeText={(note) => onChange({ note })} placeholder="例如 已经开封、准备周末吃掉、放在冰箱第二层" multiline /></View>
     </View>
   )
 }
@@ -7048,6 +7246,237 @@ const styles = StyleSheet.create({
     shadowRadius: 15,
     shadowOffset: { width: 0, height: 5 },
     elevation: 1,
+  },
+  expiryAiPanel: {
+    borderRadius: 14,
+    padding: 14,
+    backgroundColor: '#fff',
+    shadowColor: '#1f2937',
+    shadowOpacity: 0.06,
+    shadowRadius: 15,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 1,
+  },
+  expiryAiHead: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+  },
+  expiryAiDesc: {
+    marginTop: 5,
+    color: '#61756d',
+    fontSize: 12,
+    lineHeight: 19,
+  },
+  expiryAiCost: {
+    flexShrink: 0,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    backgroundColor: '#e7faf3',
+  },
+  expiryAiCostText: {
+    color: '#2d9f78',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  expiryUploadArea: {
+    minHeight: 120,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 14,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: '#9ee6cd',
+    borderRadius: 12,
+    backgroundColor: '#f4fcf9',
+  },
+  expiryUploadPlus: {
+    color: '#00bc7d',
+    fontSize: 26,
+    lineHeight: 30,
+  },
+  expiryUploadTitle: {
+    color: '#16332a',
+    fontSize: 15,
+    lineHeight: 22,
+    fontWeight: '800',
+  },
+  expiryUploadDesc: {
+    marginTop: 4,
+    color: '#7b8d86',
+    fontSize: 11,
+    lineHeight: 17,
+    textAlign: 'center',
+  },
+  expiryImageGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 9,
+    marginTop: 14,
+  },
+  expiryImageItem: {
+    position: 'relative',
+    width: 70,
+    height: 70,
+  },
+  expiryImageThumb: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 10,
+    backgroundColor: '#eef3f1',
+  },
+  expiryImageRemove: {
+    position: 'absolute',
+    top: -5,
+    right: -5,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(15, 23, 42, 0.74)',
+  },
+  expiryImageAdd: {
+    width: 70,
+    height: 70,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: '#9ee6cd',
+    borderRadius: 10,
+    backgroundColor: '#f4fcf9',
+  },
+  expiryImageAddText: {
+    marginTop: 3,
+    color: '#4b7668',
+    fontSize: 10,
+  },
+  expiryAiActions: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 14,
+  },
+  expiryAiGhost: {
+    flex: 1,
+    minHeight: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 999,
+    backgroundColor: '#f3f7f5',
+  },
+  expiryAiGhostText: {
+    color: '#567168',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  expiryAiPrimary: {
+    flex: 1,
+    minHeight: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 999,
+    backgroundColor: '#00bc7d',
+  },
+  expiryAiPrimaryText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  expiryAiResult: {
+    marginTop: 12,
+    padding: 10,
+    borderRadius: 9,
+    color: '#27765d',
+    fontSize: 12,
+    lineHeight: 18,
+    backgroundColor: '#e7faf3',
+  },
+  expiryDraftCard: {
+    marginTop: 14,
+    padding: 14,
+    borderRadius: 14,
+    backgroundColor: '#fff',
+    shadowColor: '#1f2937',
+    shadowOpacity: 0.06,
+    shadowRadius: 15,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 1,
+  },
+  expiryDraftHead: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 10,
+    marginBottom: 12,
+  },
+  expiryDraftTitle: {
+    color: '#16332a',
+    fontSize: 17,
+    lineHeight: 24,
+    fontWeight: '900',
+  },
+  expiryDraftSubtitle: {
+    marginTop: 3,
+    color: '#71847d',
+    fontSize: 11,
+    lineHeight: 17,
+  },
+  expiryDraftActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  expiryAiBadge: {
+    overflow: 'hidden',
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    color: '#27765d',
+    fontSize: 10,
+    fontWeight: '800',
+    backgroundColor: '#e7faf3',
+  },
+  expiryDraftRemove: {
+    color: '#ef4444',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  expiryDraftTip: {
+    marginBottom: 10,
+    padding: 9,
+    borderRadius: 8,
+    color: '#8a641b',
+    fontSize: 11,
+    lineHeight: 17,
+    backgroundColor: '#fff8e7',
+  },
+  expiryDraftInner: {
+    marginTop: 10,
+    padding: 14,
+    borderRadius: 12,
+    backgroundColor: '#fff',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#edf1ef',
+    shadowColor: '#1f2937',
+    shadowOpacity: 0.035,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 3 },
+  },
+  expiryAddItemBar: {
+    minHeight: 52,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 14,
+    borderRadius: 999,
+    backgroundColor: '#f3f7f5',
+  },
+  expiryAddItemText: {
+    color: '#365a4e',
+    fontSize: 14,
+    fontWeight: '800',
   },
   expiryEditBlockHead: {
     flexDirection: 'row',
