@@ -1389,6 +1389,76 @@ transitiontransition
 }
 
 // 底部固定操作栏
+.eating-mood-bar {
+  padding: 20rpx 32rpx 14rpx;
+  border-bottom: 1rpx solid #e7f2ec;
+  background: linear-gradient(135deg, #f5fcf8 0%, #ffffff 100%);
+}
+
+.eating-mood-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 12rpx;
+}
+
+.eating-mood-title {
+  font-size: 30rpx;
+  font-weight: 700;
+  color: #1f2937;
+}
+
+.eating-mood-hint {
+  font-size: 23rpx;
+  color: #94a3b8;
+}
+
+.eating-mood-options {
+  width: 100%;
+  white-space: nowrap;
+}
+
+.eating-mood-options-inner {
+  display: inline-flex;
+  gap: 12rpx;
+  padding-right: 32rpx;
+}
+
+.eating-mood-option {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  flex: none;
+  padding: 12rpx 16rpx;
+  border: 1rpx solid #e2e8f0;
+  border-radius: 100rpx;
+  background: #fff;
+
+  &:active {
+    transform: scale(0.97);
+  }
+
+  &.active {
+    border-color: #38c98d;
+    background: #eafaf2;
+  }
+}
+
+.eating-mood-emoji {
+  font-size: 28rpx;
+  line-height: 1;
+}
+
+.eating-mood-label {
+  font-size: 24rpx;
+  font-weight: 600;
+  color: #475569;
+}
+
+.eating-mood-option.active .eating-mood-label {
+  color: #058b5e;
+}
+
 .footer-actions {
   position: fixed;
   bottom: 0;
@@ -2919,6 +2989,29 @@ transitiontransition
 
   .context-textarea::placeholder {
     color: rgba(214, 226, 220, 0.4);
+  }
+
+  .eating-mood-bar {
+    border-color: rgba(111, 196, 149, 0.22);
+    background: linear-gradient(135deg, rgba(20, 47, 38, 0.98) 0%, rgba(22, 30, 28, 0.98) 100%);
+  }
+
+  .eating-mood-title {
+    color: #e8f3ef;
+  }
+
+  .eating-mood-option {
+    border-color: rgba(120, 139, 130, 0.24);
+    background: rgba(32, 41, 39, 0.96);
+  }
+
+  .eating-mood-label {
+    color: #cbd9d2;
+  }
+
+  .eating-mood-option.active {
+    border-color: rgba(74, 222, 128, 0.5);
+    background: rgba(14, 50, 38, 0.94);
   }
 }
 

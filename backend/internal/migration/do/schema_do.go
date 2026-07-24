@@ -359,6 +359,7 @@ type FoodRecordDO struct {
 	ContextAdvice    *string          `gorm:"column:context_advice;type:text"`
 	DietGoal         *string          `gorm:"column:diet_goal;type:text"`
 	ActivityTiming   *string          `gorm:"column:activity_timing;type:text"`
+	EatingMood       *string          `gorm:"column:eating_mood;type:text"`
 	SourceTaskID     *string          `gorm:"column:source_task_id;type:uuid;index:idx_user_food_records_source_task_id"`
 	EntryType        *string          `gorm:"column:entry_type;type:text"`
 	RecipeID         *string          `gorm:"column:recipe_id;type:uuid;index:idx_user_food_records_recipe_id"`

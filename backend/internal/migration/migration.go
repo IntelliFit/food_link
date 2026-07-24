@@ -97,6 +97,28 @@ func AutoMigrate(ctx context.Context, db *gorm.DB, schema string) error {
 	return nil
 }
 
+// MigrateFoodRecordMood applies only the optional eating_mood column for food
+// records. It is intentionally narrow so a small product-field rollout does
+// not publish unrelated pending schema or data migrations.
+func MigrateFoodRecordMood(ctx context.Context, db *gorm.DB, schema string) error {
+	if schema == "" {
+		schema = "public"
+	}
+	if !identifierPattern.MatchString(schema) {
+		return fmt.Errorf("invalid database schema: %q", schema)
+	}
+	if err := db.WithContext(ctx).Exec("SET search_path TO " + quoteIdent(schema)).Error; err != nil {
+		return fmt.Errorf("set search path: %w", err)
+	}
+	if err := db.WithContext(ctx).AutoMigrate(&migrationdo.FoodRecordDO{}); err != nil {
+		return fmt.Errorf("auto migrate user_food_records: %w", err)
+	}
+	if err := db.WithContext(ctx).Exec(`ALTER TABLE user_food_records ADD COLUMN IF NOT EXISTS eating_mood text`).Error; err != nil {
+		return fmt.Errorf("add user_food_records.eating_mood: %w", err)
+	}
+	return nil
+}
+
 func quoteIdent(value string) string {
 	return `"` + strings.ReplaceAll(value, `"`, `""`) + `"`
 }
@@ -394,6 +416,7 @@ END
 		`ALTER TABLE user_exercise_logs ALTER COLUMN exercise_items SET NOT NULL`,
 		`ALTER TABLE user_exercise_logs ADD COLUMN IF NOT EXISTS hidden_from_feed boolean NOT NULL DEFAULT false`,
 		`ALTER TABLE user_food_records ADD COLUMN IF NOT EXISTS entry_type text`,
+		`ALTER TABLE user_food_records ADD COLUMN IF NOT EXISTS eating_mood text`,
 		`ALTER TABLE feed_likes ADD COLUMN IF NOT EXISTS target_type text NOT NULL DEFAULT 'food_record'`,
 		`ALTER TABLE feed_likes ADD COLUMN IF NOT EXISTS target_id uuid`,
 		`UPDATE feed_likes SET target_type = 'food_record', target_id = record_id WHERE target_id IS NULL AND record_id IS NOT NULL`,

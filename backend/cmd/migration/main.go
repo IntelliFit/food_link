@@ -17,6 +17,7 @@ import (
 func main() {
 	configDir := flag.String("config-dir", ".", "directory containing config.yaml")
 	timeout := flag.Duration("timeout", 5*time.Minute, "migration timeout")
+	scope := flag.String("scope", "all", "migration scope: all or food-record-mood")
 	flag.Parse()
 
 	cfg, resolvedDir, err := loadConfig(*configDir)
@@ -40,8 +41,17 @@ func main() {
 	if err := database.Ping(ctx, db); err != nil {
 		log.Fatalf("数据库 ping 失败: %v", err)
 	}
-	if err := migration.AutoMigrate(ctx, db, cfg.Database.Schema); err != nil {
-		log.Fatalf("自动迁移失败: %v", err)
+	var migrateErr error
+	switch *scope {
+	case "all":
+		migrateErr = migration.AutoMigrate(ctx, db, cfg.Database.Schema)
+	case "food-record-mood":
+		migrateErr = migration.MigrateFoodRecordMood(ctx, db, cfg.Database.Schema)
+	default:
+		log.Fatalf("unsupported migration scope: %s", *scope)
+	}
+	if migrateErr != nil {
+		log.Fatalf("database migration failed: %v", migrateErr)
 	}
 	schema := cfg.Database.Schema
 	if schema == "" {

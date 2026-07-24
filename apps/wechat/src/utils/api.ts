@@ -532,6 +532,8 @@ export interface SaveFoodRecordRequest {
   total_weight_grams: number
   diet_goal?: 'fat_loss' | 'muscle_gain' | 'maintain' | 'none'
   activity_timing?: 'post_workout' | 'daily' | 'before_sleep' | 'none'
+  /** 用户在确认本次拍照饮食记录时自主选择的心情；未选择时不传。 */
+  eating_mood?: 'happy' | 'calm' | 'stressed' | 'tired' | 'bored' | 'treat'
   pfc_ratio_comment?: string
   absorption_notes?: string
   context_advice?: string
@@ -645,6 +647,7 @@ export interface FoodRecord {
   // 新增字段
   diet_goal?: string | null
   activity_timing?: string | null
+  eating_mood?: string | null
   source_task_id?: string | null
   entry_type?: FoodRecordEntryType | null
   recipe_id?: string | null

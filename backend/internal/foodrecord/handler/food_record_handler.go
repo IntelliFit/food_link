@@ -88,6 +88,7 @@ func (h *FoodRecordHandler) SaveFoodRecord(c *gin.Context) {
 		TotalWeightGrams float64           `json:"total_weight_grams"`
 		DietGoal         *string           `json:"diet_goal"`
 		ActivityTiming   *string           `json:"activity_timing"`
+		EatingMood       *string           `json:"eating_mood"`
 		PFCRatioComment  *string           `json:"pfc_ratio_comment"`
 		AbsorptionNotes  *string           `json:"absorption_notes"`
 		ContextAdvice    *string           `json:"context_advice"`
@@ -123,6 +124,7 @@ func (h *FoodRecordHandler) SaveFoodRecord(c *gin.Context) {
 		TotalWeightGrams: int(math.Round(body.TotalWeightGrams)),
 		DietGoal:         body.DietGoal,
 		ActivityTiming:   body.ActivityTiming,
+		EatingMood:       body.EatingMood,
 		PFCRatioComment:  body.PFCRatioComment,
 		AbsorptionNotes:  body.AbsorptionNotes,
 		ContextAdvice:    body.ContextAdvice,

@@ -94,6 +94,7 @@ type SaveFoodRecordInput struct {
 	TotalWeightGrams int
 	DietGoal         *string
 	ActivityTiming   *string
+	EatingMood       *string
 	PFCRatioComment  *string
 	AbsorptionNotes  *string
 	ContextAdvice    *string
@@ -121,6 +122,16 @@ func (s *FoodRecordService) Save(ctx context.Context, userID string, input SaveF
 		return nil, &commonerrors.AppError{Code: 10002, Message: "meal_type 不合法", HTTPStatus: 400}
 	}
 	normalizedInputMealType := strings.ToLower(strings.TrimSpace(input.MealType))
+	if input.EatingMood != nil {
+		mood := strings.TrimSpace(*input.EatingMood)
+		if mood == "" {
+			input.EatingMood = nil
+		} else if !validEatingMood(mood) {
+			return nil, &commonerrors.AppError{Code: 10002, Message: "eating_mood 不合法", HTTPStatus: 400}
+		} else {
+			input.EatingMood = &mood
+		}
+	}
 	if input.SourceTaskID != nil {
 		trimmed := strings.TrimSpace(*input.SourceTaskID)
 		if trimmed == "" {
@@ -194,6 +205,7 @@ func (s *FoodRecordService) Save(ctx context.Context, userID string, input SaveF
 		TotalWeightGrams: input.TotalWeightGrams,
 		DietGoal:         input.DietGoal,
 		ActivityTiming:   input.ActivityTiming,
+		EatingMood:       input.EatingMood,
 		PFCRatioComment:  input.PFCRatioComment,
 		AbsorptionNotes:  input.AbsorptionNotes,
 		ContextAdvice:    input.ContextAdvice,
@@ -1222,6 +1234,15 @@ func validMealType(mealType string) bool {
 		}
 	}
 	return false
+}
+
+func validEatingMood(mood string) bool {
+	switch strings.TrimSpace(mood) {
+	case "happy", "calm", "stressed", "tired", "bored", "treat":
+		return true
+	default:
+		return false
+	}
 }
 
 func normalizeMealType(mealType string, recordTime *time.Time) string {

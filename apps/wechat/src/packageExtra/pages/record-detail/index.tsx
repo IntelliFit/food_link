@@ -71,6 +71,15 @@ const ACTIVITY_TIMING_NAMES: Record<string, string> = {
   none: '无'
 }
 
+const EATING_MOOD_NAMES: Record<string, { emoji: string; label: string }> = {
+  happy: { emoji: '😊', label: '开心' },
+  calm: { emoji: '😌', label: '平静' },
+  stressed: { emoji: '😣', label: '压力大' },
+  tired: { emoji: '😮‍💨', label: '疲惫' },
+  bored: { emoji: '😶', label: '无聊' },
+  treat: { emoji: '✨', label: '犒劳自己' },
+}
+
 const roundToSingleDecimal = (value: number) => Math.round(value * 10) / 10
 
 const normalizeDisplayNumber = (value: number) => {
@@ -706,7 +715,7 @@ function RecordDetailPage() {
         </View>
 
         {/* 用户选择的目标与状态 */}
-        {(record.diet_goal || record.activity_timing) && (
+        {(record.diet_goal || record.activity_timing || record.eating_mood) && (
           <View className='context-tags'>
             {record.diet_goal && record.diet_goal !== 'none' && (
               <View className='context-tag goal-tag'>
@@ -718,6 +727,12 @@ function RecordDetailPage() {
               <View className='context-tag timing-tag'>
                 <Text className='tag-icon iconfont icon-shizhong'></Text>
                 <Text className='tag-text'>{ACTIVITY_TIMING_NAMES[record.activity_timing] || record.activity_timing}</Text>
+              </View>
+            )}
+            {record.eating_mood && EATING_MOOD_NAMES[record.eating_mood] && (
+              <View className='context-tag mood-tag'>
+                <Text className='tag-icon'>{EATING_MOOD_NAMES[record.eating_mood].emoji}</Text>
+                <Text className='tag-text'>{EATING_MOOD_NAMES[record.eating_mood].label}</Text>
               </View>
             )}
           </View>
