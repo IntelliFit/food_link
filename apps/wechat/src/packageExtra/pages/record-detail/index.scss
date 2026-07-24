@@ -207,6 +207,11 @@
     color: #1e40af;
   }
 
+  &.mood-tag {
+    background: linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%);
+    color: #c2410c;
+  }
+
   .tag-icon {
     font-size: 28rpx;
     line-height: 1;

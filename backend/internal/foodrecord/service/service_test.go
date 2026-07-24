@@ -185,6 +185,21 @@ func TestReconcileAIGeneratedFoodItemsLeavesCuratedNutritionUntouched(t *testing
 	assert.Equal(t, 123.0, items[0].Nutrients.Calories)
 }
 
+func TestFoodRecordService_SavePersistsValidEatingMood(t *testing.T) {
+	db := setupServiceTestDB(t)
+	svc := NewFoodRecordService(foodrepo.NewFoodRecordRepo(db), foodrepo.NewAnalysisTaskRepo(db), repo.NewUserRepo(db))
+	mood := "calm"
+
+	record, err := svc.Save(context.Background(), "u1", SaveFoodRecordInput{MealType: "lunch", EatingMood: &mood})
+	require.NoError(t, err)
+	require.NotNil(t, record.EatingMood)
+	assert.Equal(t, "calm", *record.EatingMood)
+
+	invalidMood := "sad"
+	_, err = svc.Save(context.Background(), "u1", SaveFoodRecordInput{MealType: "lunch", EatingMood: &invalidMood})
+	require.Error(t, err)
+}
+
 func TestZeroNutritionGateRejectsSuspiciousItem(t *testing.T) {
 	err := validateNoSuspiciousZeroNutritionItems([]domain.FoodItem{{
 		Name:   "如实酸奶",

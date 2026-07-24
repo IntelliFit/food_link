@@ -21,6 +21,7 @@ func main() {
 	onlyNutritionQuality := flag.Bool("only-nutrition-quality", false, "only migrate nutrition quality tiers and alias approval status")
 	onlyNutritionEmbeddings := flag.Bool("only-nutrition-embeddings", false, "only migrate nutrition semantic embedding storage")
 	onlyOnboardingStatus := flag.Bool("only-onboarding-status", false, "only add nullable onboarding status schema without data backfills")
+	scope := flag.String("scope", "all", "migration scope: all or food-record-mood")
 	flag.Parse()
 	selectedOnlyModes := 0
 	for _, selected := range []bool{*onlyPapay, *onlyNutritionQuality, *onlyNutritionEmbeddings, *onlyOnboardingStatus} {
@@ -54,7 +55,11 @@ func main() {
 		log.Fatalf("数据库 ping 失败: %v", err)
 	}
 	var migrateErr error
-	if *onlyPapay {
+	if *scope == "food-record-mood" {
+		migrateErr = migration.MigrateFoodRecordMood(ctx, db, cfg.Database.Schema)
+	} else if *scope != "all" {
+		log.Fatalf("unsupported migration scope: %s", *scope)
+	} else if *onlyPapay {
 		migrateErr = migration.MigratePapayContracts(ctx, db, cfg.Database.Schema)
 	} else if *onlyNutritionQuality {
 		migrateErr = migration.MigrateNutritionQuality(ctx, db, cfg.Database.Schema)
