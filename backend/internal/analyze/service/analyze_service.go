@@ -5529,16 +5529,16 @@ func (s *AnalyzeService) applyDBFirstNutritionWithOptions(ctx context.Context, r
 		} else {
 			result := <-fallbackResultCh
 			fallbackCancel()
+			remaining := make(map[int]struct{}, len(fallbackCandidates))
+			for _, candidate := range fallbackCandidates {
+				remaining[candidate.Index] = struct{}{}
+			}
+			for index, row := range result.rows {
+				if _, ok := remaining[index]; ok {
+					fallbacks[index] = row
+				}
+			}
 			if result.err == nil {
-				remaining := make(map[int]struct{}, len(fallbackCandidates))
-				for _, candidate := range fallbackCandidates {
-					remaining[candidate.Index] = struct{}{}
-				}
-				for index, row := range result.rows {
-					if _, ok := remaining[index]; ok {
-						fallbacks[index] = row
-					}
-				}
 				logger.Info(ctx, "模型营养补全完成",
 					slog.Int("candidate_count", len(fallbackCandidates)),
 					slog.Int("generated_count", len(fallbacks)),
@@ -5549,10 +5549,14 @@ func (s *AnalyzeService) applyDBFirstNutritionWithOptions(ctx context.Context, r
 					attribute.Int("analysis.generated_count", len(fallbacks)),
 				)
 			} else {
-				metrics.AddNutritionResolveItems("db_first", "deepseek_fallback_failed", len(fallbackCandidates))
-				logger.Warn(ctx, "营养补全模型调用失败",
+				failedCount := len(fallbackCandidates) - len(fallbacks)
+				metrics.AddNutritionResolveItems("db_first", "deepseek_fallback_failed", failedCount)
+				logger.Warn(ctx, "营养补全模型部分或全部失败",
 					logger.Err(result.err),
 					slog.Int("candidate_count", len(fallbackCandidates)),
+					slog.Int("generated_count", len(fallbacks)),
+					slog.Int("failed_count", failedCount),
+					slog.Any("generated_indexes", sortedIntKeys(fallbacks)),
 				)
 			}
 		}

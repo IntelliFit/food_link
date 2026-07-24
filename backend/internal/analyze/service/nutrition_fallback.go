@@ -73,6 +73,9 @@ func (e *chainedNutritionFallbackEstimator) Estimate(ctx context.Context, candid
 	for remaining := len(e.estimators); remaining > 0; remaining-- {
 		select {
 		case <-ctx.Done():
+			if len(merged) > 0 {
+				return merged, ctx.Err()
+			}
 			return nil, ctx.Err()
 		case result := <-results:
 			if result.err != nil {
@@ -94,39 +97,15 @@ func (e *chainedNutritionFallbackEstimator) Estimate(ctx context.Context, candid
 			}
 		}
 	}
-	return nil, fmt.Errorf("营养补全未获得完整可靠结果（完成 %d/%d 项）", len(merged), len(expected))
+	err := fmt.Errorf("营养补全未获得完整可靠结果（完成 %d/%d 项）", len(merged), len(expected))
+	if len(merged) > 0 {
+		return merged, err
+	}
+	return nil, err
 }
 
-func usableNutritionFallbackRow(foodName string, row map[string]any) bool {
-	if len(row) == 0 {
-		return false
-	}
-	calories := numberFromAny(row["calories"])
-	macroSum := numberFromAny(row["protein"]) + numberFromAny(row["carbs"]) + numberFromAny(row["fat"])
-	if calories > 0 && macroSum > 0 {
-		return true
-	}
-	return naturalNearZeroNutritionName(foodName)
-}
-
-func naturalNearZeroNutritionName(name string) bool {
-	name = strings.TrimSpace(name)
-	if name == "" {
-		return false
-	}
-	exact := []string{"水", "白开水", "温水", "热水", "冰水", "纯净水", "矿泉水", "饮用水", "苏打水", "气泡水", "无糖茶", "茶水", "绿茶", "乌龙茶", "黑咖啡", "美式咖啡", "食用冰", "冰块"}
-	for _, candidate := range exact {
-		if name == candidate {
-			return true
-		}
-	}
-	contains := []string{"无糖茶", "黑咖啡", "美式咖啡", "无糖可乐", "无糖芬达", "食用冰", "冰块"}
-	for _, candidate := range contains {
-		if strings.Contains(name, candidate) {
-			return true
-		}
-	}
-	return false
+func usableNutritionFallbackRow(_ string, row map[string]any) bool {
+	return len(row) > 0
 }
 
 func tagFallbackSource(rows map[int]map[string]any, source string) {

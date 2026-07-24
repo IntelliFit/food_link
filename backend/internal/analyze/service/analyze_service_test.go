@@ -2533,7 +2533,7 @@ func TestChainedNutritionFallbackEstimatorMergesCompleteRowsAcrossProviders(t *t
 	assert.Equal(t, "coffee_generated", rows[2][fallbackNutritionSourceKey])
 }
 
-func TestChainedNutritionFallbackEstimatorRejectsSuspiciousZeroFood(t *testing.T) {
+func TestChainedNutritionFallbackEstimatorAcceptsZeroNutritionReturnedByModel(t *testing.T) {
 	zero := &delayedNutritionFallbackEstimator{
 		rows: map[int]map[string]any{0: {
 			"calories": 0.0,
@@ -2547,9 +2547,71 @@ func TestChainedNutritionFallbackEstimatorRejectsSuspiciousZeroFood(t *testing.T
 	)
 
 	rows, err := estimator.Estimate(context.Background(), []UnresolvedNutritionCandidate{{Index: 0, Name: "麦当劳板烧双蛋汉堡", EstimatedWeightGrams: 300}}, "")
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	assert.Equal(t, "zero_generated", rows[0][fallbackNutritionSourceKey])
+}
+
+func TestChainedNutritionFallbackEstimatorAcceptsBrandedPlainDrinkingWater(t *testing.T) {
+	fallback := &delayedNutritionFallbackEstimator{
+		rows: map[int]map[string]any{
+			0: {
+				"calories": 220.0,
+				"protein":  13.0,
+				"carbs":    8.0,
+				"fat":      15.0,
+			},
+			1: {
+				"calories": 190.0,
+				"protein":  18.0,
+				"carbs":    3.0,
+				"fat":      12.0,
+			},
+			2: {
+				"calories": 0.0,
+				"protein":  0.0,
+				"carbs":    0.0,
+				"fat":      0.0,
+			},
+		},
+	}
+	estimator := newChainedNutritionFallbackEstimator(
+		namedNutritionFallbackEstimator{source: "qwen_generated", estimator: fallback, timeout: time.Second},
+	)
+
+	rows, err := estimator.Estimate(context.Background(), []UnresolvedNutritionCandidate{
+		{Index: 0, Name: "农家小炒肉", EstimatedWeightGrams: 140},
+		{Index: 1, Name: "卤翅根", EstimatedWeightGrams: 38.5},
+		{Index: 2, Name: "农夫山泉饮用天然水", EstimatedWeightGrams: 550},
+	}, "")
+	require.NoError(t, err)
+	require.Len(t, rows, 3)
+	assert.Equal(t, "qwen_generated", rows[2][fallbackNutritionSourceKey])
+}
+
+func TestChainedNutritionFallbackEstimatorReturnsPartialUsableRows(t *testing.T) {
+	fallback := &delayedNutritionFallbackEstimator{
+		rows: map[int]map[string]any{
+			0: {
+				"calories": 220.0,
+				"protein":  13.0,
+				"carbs":    8.0,
+				"fat":      15.0,
+			},
+		},
+	}
+	estimator := newChainedNutritionFallbackEstimator(
+		namedNutritionFallbackEstimator{source: "qwen_generated", estimator: fallback, timeout: time.Second},
+	)
+
+	rows, err := estimator.Estimate(context.Background(), []UnresolvedNutritionCandidate{
+		{Index: 0, Name: "农家小炒肉", EstimatedWeightGrams: 140},
+		{Index: 1, Name: "未返回营养的食物", EstimatedWeightGrams: 100},
+	}, "")
 	require.Error(t, err)
-	assert.Nil(t, rows)
-	assert.Contains(t, err.Error(), "0/1")
+	assert.Contains(t, err.Error(), "1/2")
+	require.Len(t, rows, 1)
+	assert.Equal(t, "qwen_generated", rows[0][fallbackNutritionSourceKey])
 }
 
 func TestValidateResolvedNutritionItemsRejectsUnresolvedPlaceholder(t *testing.T) {
