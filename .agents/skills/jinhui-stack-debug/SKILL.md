@@ -1,6 +1,6 @@
 ---
 name: jinhui-stack-debug
-description: 网站和小程序调试的依赖关系排查指南。当调试陷入僵局时，Use this skill to systematically identify which dependency layer is causing the issue: (1) Data dependencies - verify backend before debugging frontend, (2) Environment differences - local vs production issues, (3) Version compatibility - library/framework mismatches, (4) Configuration errors - missing or incorrect configs, (5) State management - component/app state problems, (6) Network layer - CORS, timeouts, connectivity, (7) Permission/authorization - auth and access control, (8) Caching issues - stale code or data, (9) Build process - compilation and bundling problems, (10) Runtime environment - browser/platform differences.
+description: "网站和小程序调试的依赖关系排查指南。当调试陷入僵局时，Use this skill to systematically identify which dependency layer is causing the issue: (1) Data dependencies - verify backend before debugging frontend, (2) Environment differences - local vs production issues, (3) Version compatibility - library/framework mismatches, (4) Configuration errors - missing or incorrect configs, (5) State management - component/app state problems, (6) Network layer - CORS, timeouts, connectivity, (7) Permission/authorization - auth and access control, (8) Caching issues - stale code or data, (9) Build process - compilation and bundling problems, (10) Runtime environment - browser/platform differences."
 ---
 
 # Jinhui Stack Debug

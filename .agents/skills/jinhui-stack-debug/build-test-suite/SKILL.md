@@ -1,6 +1,6 @@
 ---
 name: build-test-suite
-description: 构建软件测试集的指南。Use when creating or improving test coverage for software projects for: (1) Setting up test infrastructure for backend APIs and services, (2) Designing test cases with idempotency guarantees, (3) Selecting appropriate testing frameworks for the current tech stack, (4) Maintaining test quality across long-term iterations, (5) Running full test suites before commits. Must follow the 5 golden rules: user approval before creation, test idempotency, pre-commit validation, no modification of existing tests, backend-first execution order.
+description: "构建软件测试集的指南。Use when creating or improving test coverage for software projects for: (1) Setting up test infrastructure for backend APIs and services, (2) Designing test cases with idempotency guarantees, (3) Selecting appropriate testing frameworks for the current tech stack, (4) Maintaining test quality across long-term iterations, (5) Running full test suites before commits. Must follow the 5 golden rules: user approval before creation, test idempotency, pre-commit validation, no modification of existing tests, backend-first execution order."
 ---
 
 # 构建软件测试集

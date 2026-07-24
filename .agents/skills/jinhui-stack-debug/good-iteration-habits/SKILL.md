@@ -1,6 +1,6 @@
 ---
 name: good-iteration-habits
-description: 良好的软件迭代习惯指南。Use when planning or executing software development iterations for: (1) Initializing projects with proper test coverage checks, (2) Implementing new features by reusing existing APIs instead of creating new ones, (3) Analyzing feature dependencies before implementation, (4) Preventing feature conflicts through dependency analysis, (5) Breaking down requirements into frontend/backend components and evaluating existing implementations.
+description: "良好的软件迭代习惯指南。Use when planning or executing software development iterations for: (1) Initializing projects with proper test coverage checks, (2) Implementing new features by reusing existing APIs instead of creating new ones, (3) Analyzing feature dependencies before implementation, (4) Preventing feature conflicts through dependency analysis, (5) Breaking down requirements into frontend/backend components and evaluating existing implementations."
 ---
 
 # 良好的软件迭代习惯
