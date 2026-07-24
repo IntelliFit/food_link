@@ -54,6 +54,10 @@ external:
   deepseek_api_key: ""
   # OpenAI-compatible endpoint prefix. This service appends /chat/completions.
   deepseek_base_url: "https://api.deepseek.com"
+  # 像素分身图像编辑；密钥优先通过 PIXEL_AVATAR_API_KEY 环境变量注入。
+  pixel_avatar_api_key: ""
+  pixel_avatar_base_url: "https://maas-openapi.wanjiedata.com/api/v1"
+  pixel_avatar_model: "gpt-image-2-pool"
   doubao_api_key: ""
   doubao_web_search_api_key: ""
   doubao_base_url: "https://ark.cn-beijing.volces.com/api/v3"

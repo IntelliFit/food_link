@@ -54,11 +54,30 @@ type PetRepo interface {
 }
 
 type Service struct {
-	repo PetRepo
+	repo                 PetRepo
+	storage              PetAvatarStorage
+	pixelAvatarGenerator PixelAvatarGenerator
 }
 
 func NewService(repo PetRepo) *Service {
 	return &Service{repo: repo}
+}
+
+type PetAvatarStorage interface {
+	UploadBytes(bucketAlias, key string, data []byte, contentType string) (string, error)
+	BuildAccessURL(bucketAlias, key string) string
+}
+
+type PixelAvatarGenerator interface {
+	GeneratePixelAvatar(ctx context.Context, source []byte) ([]byte, error)
+}
+
+func (s *Service) ConfigureStorage(storage PetAvatarStorage) {
+	s.storage = storage
+}
+
+func (s *Service) ConfigurePixelAvatarGenerator(generator PixelAvatarGenerator) {
+	s.pixelAvatarGenerator = generator
 }
 
 type Summary struct {
@@ -90,6 +109,11 @@ type PetProfile struct {
 	SelectionCandidates         []AppearanceCandidate `json:"selection_candidates,omitempty"`
 	FreeProfileRematchAvailable bool                  `json:"free_profile_rematch_available"`
 	GrowthUnlocks               []string              `json:"growth_unlocks,omitempty"`
+	AvatarType                  string                `json:"avatar_type,omitempty"`
+	PixelAvatarURL              string                `json:"pixel_avatar_url,omitempty"`
+	PixelAvatarBlinkURL         string                `json:"pixel_avatar_blink_url,omitempty"`
+	PixelAvatarSquashURL        string                `json:"pixel_avatar_squash_url,omitempty"`
+	PixelAvatarJumpURL          string                `json:"pixel_avatar_jump_url,omitempty"`
 }
 
 type DailyScoreView struct {
@@ -102,6 +126,7 @@ type DailyScoreView struct {
 type PetStatus struct {
 	Mood           string `json:"mood"`
 	State          string `json:"state"`
+	MealState      string `json:"meal_state"`
 	Message        string `json:"message"`
 	TaskText       string `json:"task_text"`
 	InactivityDays int    `json:"inactivity_days"`
@@ -209,7 +234,7 @@ func (s *Service) Summary(ctx context.Context, userID, date string) (*Summary, e
 		status.State = "surprised"
 	}
 	return &Summary{
-		Pet:     profileFromPet(pet),
+		Pet:     s.profileFromPet(pet),
 		Today:   dailyScoreView(todayScore),
 		Status:  status,
 		Event:   eventView(event),
@@ -242,7 +267,7 @@ func (s *Service) ClaimEvent(ctx context.Context, userID, eventID string) (*Clai
 		expAwarded = event.ExpReward
 	}
 	result := &ClaimResult{
-		Pet:            profileFromPet(pet),
+		Pet:            s.profileFromPet(pet),
 		Event:          *eventView(claimedEvent),
 		CreditsAwarded: creditsAwarded,
 		ExpAwarded:     expAwarded,
@@ -297,7 +322,7 @@ func (s *Service) RerollAppearance(ctx context.Context, userID string) (*Appeara
 		return nil, err
 	}
 	result := &AppearanceRerollResult{
-		Pet:         profileFromPet(updatedPet),
+		Pet:         s.profileFromPet(updatedPet),
 		CreditsCost: petAppearanceRerollCost,
 	}
 	if ledger != nil {
@@ -356,7 +381,7 @@ func (s *Service) SelectAppearance(ctx context.Context, userID, candidateID stri
 	if updatedPet == nil {
 		return nil, nil
 	}
-	return &AppearanceSelectResult{Pet: profileFromPet(updatedPet)}, nil
+	return &AppearanceSelectResult{Pet: s.profileFromPet(updatedPet)}, nil
 }
 
 func IsInsufficientEarnedCreditsError(err error) bool {
@@ -754,13 +779,33 @@ func stringSliceFromAny(value any) []string {
 	}
 }
 
-func profileFromPet(pet *petdomain.UserPet) PetProfile {
+func (s *Service) profileFromPet(pet *petdomain.UserPet) PetProfile {
 	if pet == nil {
 		return PetProfile{}
 	}
 	levelExp := pet.Experience % nextLevelExp
 	candidates := candidatesFromMeta(pet.Meta)
 	selectedID := stringFromMeta(pet.Meta, "selected_candidate_id")
+	pixelAvatarKey := stringFromMeta(pet.Meta, "pixel_avatar_key")
+	pixelAvatarBlinkKey := stringFromMeta(pet.Meta, "pixel_avatar_blink_key")
+	pixelAvatarSquashKey := stringFromMeta(pet.Meta, "pixel_avatar_squash_key")
+	pixelAvatarJumpKey := stringFromMeta(pet.Meta, "pixel_avatar_jump_key")
+	pixelAvatarURL := ""
+	pixelAvatarBlinkURL := ""
+	pixelAvatarSquashURL := ""
+	pixelAvatarJumpURL := ""
+	if pixelAvatarKey != "" && s.storage != nil {
+		pixelAvatarURL = s.storage.BuildAccessURL("user-avatars", pixelAvatarKey)
+		if pixelAvatarBlinkKey != "" {
+			pixelAvatarBlinkURL = s.storage.BuildAccessURL("user-avatars", pixelAvatarBlinkKey)
+		}
+		if pixelAvatarSquashKey != "" {
+			pixelAvatarSquashURL = s.storage.BuildAccessURL("user-avatars", pixelAvatarSquashKey)
+		}
+		if pixelAvatarJumpKey != "" {
+			pixelAvatarJumpURL = s.storage.BuildAccessURL("user-avatars", pixelAvatarJumpKey)
+		}
+	}
 	return PetProfile{
 		ID:                          pet.ID,
 		PetSeed:                     pet.PetSeed,
@@ -782,6 +827,11 @@ func profileFromPet(pet *petdomain.UserPet) PetProfile {
 		SelectionCandidates:         candidates,
 		FreeProfileRematchAvailable: !boolFromMeta(pet.Meta, "free_profile_rematch_used") && len(candidates) > 0,
 		GrowthUnlocks:               growthUnlocksForLevel(pet.Level),
+		AvatarType:                  stringFromMeta(pet.Meta, "avatar_type"),
+		PixelAvatarURL:              pixelAvatarURL,
+		PixelAvatarBlinkURL:         pixelAvatarBlinkURL,
+		PixelAvatarSquashURL:        pixelAvatarSquashURL,
+		PixelAvatarJumpURL:          pixelAvatarJumpURL,
 	}
 }
 
@@ -848,6 +898,7 @@ func statusForScore(name string, score int, details map[string]any) PetStatus {
 
 func (s *Service) statusForPet(ctx context.Context, userID, name, date string, score int, details map[string]any) PetStatus {
 	status := statusForScore(name, score, details)
+	status.MealState = mealStateFromDetails(details)
 	inactivityDays := s.inactivityDays(ctx, userID, date, details)
 	status.InactivityDays = inactivityDays
 	if truthy(details["recorded_meal"]) {
@@ -883,6 +934,16 @@ func (s *Service) statusForPet(ctx context.Context, userID, name, date string, s
 		return status
 	}
 	return status
+}
+
+func mealStateFromDetails(details map[string]any) string {
+	if truthy(details["three_meals"]) {
+		return "satisfied"
+	}
+	if truthy(details["recorded_meal"]) {
+		return "fed"
+	}
+	return "hungry"
 }
 
 func (s *Service) inactivityDays(ctx context.Context, userID, date string, details map[string]any) int {

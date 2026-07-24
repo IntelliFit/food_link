@@ -327,6 +327,12 @@ func New(cfg *config.Config) (*App, error) {
 	// Pet companion module DI
 	petRepo := petrepo.NewPetRepo(db)
 	petSvc := petservice.NewService(petRepo)
+	petSvc.ConfigureStorage(storageClient)
+	petSvc.ConfigurePixelAvatarGenerator(petservice.NewOpenAIImageEditClient(
+		cfg.External.PixelAvatarAPIKey,
+		cfg.External.PixelAvatarBaseURL,
+		cfg.External.PixelAvatarModel,
+	))
 	petHandler := pethandler.NewPetHandler(petSvc, statsSvc)
 
 	// Public food library module DI
@@ -596,6 +602,7 @@ func New(cfg *config.Config) (*App, error) {
 
 	// Pet companion routes
 	engine.GET("/api/pet/summary", authmw.RequireJWT(jwtSvc), petHandler.Summary)
+	engine.POST("/api/pet/pixel-avatar", authmw.RequireJWT(jwtSvc), petHandler.CustomizePixelAvatar)
 	engine.GET("/api/pet/chat/latest", authmw.RequireJWT(jwtSvc), petHandler.LatestChat)
 	engine.GET("/api/pet/chat/sessions", authmw.RequireJWT(jwtSvc), petHandler.ChatSessions)
 	engine.GET("/api/pet/chat/sessions/:session_id", authmw.RequireJWT(jwtSvc), petHandler.ChatSession)

@@ -17,6 +17,7 @@ import {
   getSharedFoodRecord,
   getFoodRecordById,
   getPetSummary,
+  customizePetPixelAvatar,
   claimPetEvent,
   getMyMembership,
   getRewardCenter,
@@ -107,13 +108,19 @@ import {
   shouldOfferOnboardingGuide,
 } from '../../utils/onboarding-guide-storage'
 import { HOME_RECORD_ONBOARDING_STEPS } from './home-onboarding-steps'
+import {
+  chooseImageWithPrivacy,
+  isPrivacyAuthorizeError,
+  showPrivacyAuthorizeFailure,
+} from '../../utils/weapp-privacy'
 
 const BACKFILL_HINT_DISMISSED_DATES_KEY = 'home_backfill_hint_dismissed_dates_v1'
 const HOME_SELECTED_DATE_KEY = 'home_selected_date_v1'
-const HOME_PET_COLLAPSED_KEY = 'home_pet_companion_collapsed_v1'
-const HOME_PET_FLOAT_POSITION_KEY = 'home_pet_companion_float_position_v1'
+const HOME_PET_COLLAPSED_KEY = 'home_pet_companion_collapsed_v4'
+const HOME_PET_FLOAT_POSITION_KEY = 'home_pet_companion_float_position_v4'
 const HOME_PET_HIDDEN_KEY = 'home_pet_companion_hidden_v1'
 const HOME_PET_HIDDEN_CHANGED_EVENT = 'home_pet_companion_hidden_changed'
+const HOME_PET_INTRO_SEEN_KEY = 'home_health_avatar_intro_seen_v1'
 const CANVAS_ICON_FONT_SOURCE = __ICON_CDN_BASE_URL__
   ? `url("${__ICON_CDN_BASE_URL__.replace(/\/+$/, '')}/iconfont.ttf")`
   : ''
@@ -338,8 +345,13 @@ function getStoredPetHidden(): boolean {
 function getPetFloatMetrics(collapsed: boolean) {
   const info = Taro.getSystemInfoSync()
   const rpx = info.windowWidth / 750
-  const width = (collapsed ? 116 : 520) * rpx
-  const height = (collapsed ? 116 : 124) * rpx
+  let menuBottom = 0
+  try {
+    const menuRect = (Taro as any).getMenuButtonBoundingClientRect?.()
+    menuBottom = Number(menuRect?.bottom || 0)
+  } catch (_) {}
+  const width = (collapsed ? 160 : 420) * rpx
+  const height = (collapsed ? 160 : 224) * rpx
   const margin = 24 * rpx
   return {
     windowWidth: info.windowWidth,
@@ -347,15 +359,20 @@ function getPetFloatMetrics(collapsed: boolean) {
     width,
     height,
     margin,
-    defaultTop: 214 * rpx,
-    defaultLeft: Math.max(margin, info.windowWidth - width - 28 * rpx)
+    defaultTop: Math.max(104 * rpx, menuBottom + 10 * rpx),
+    defaultLeft: collapsed
+      ? info.windowWidth - width / 2
+      : Math.max(margin, info.windowWidth - width - 20 * rpx)
   }
 }
 
 function clampPetFloatPosition(left: number, top: number, collapsed: boolean) {
   const metrics = getPetFloatMetrics(collapsed)
+  const clampedLeft = collapsed
+    ? metrics.windowWidth - metrics.width / 2
+    : Math.max(metrics.margin, Math.min(left, metrics.windowWidth - metrics.width - metrics.margin))
   return {
-    left: Math.max(metrics.margin, Math.min(left, metrics.windowWidth - metrics.width - metrics.margin)),
+    left: clampedLeft,
     top: Math.max(metrics.margin, Math.min(top, metrics.windowHeight - metrics.height - metrics.margin))
   }
 }
@@ -791,10 +808,21 @@ function IndexPage() {
   const [petDragging, setPetDragging] = React.useState(false)
   const [petSummary, setPetSummary] = React.useState<PetSummary | null>(null)
   const [petClaiming, setPetClaiming] = React.useState(false)
+  const [petAvatarCustomizing, setPetAvatarCustomizing] = React.useState(false)
+  const [petCelebrating, setPetCelebrating] = React.useState(false)
+  const [petIntroVisible, setPetIntroVisible] = React.useState(() => {
+    try {
+      return Taro.getStorageSync(HOME_PET_INTRO_SEEN_KEY) !== '1'
+    } catch (_) {
+      return true
+    }
+  })
   const [membershipStatus, setMembershipStatus] = React.useState<MembershipStatus | null>(null)
   const [rewardCenter, setRewardCenter] = React.useState<RewardCenterResponse | null>(null)
   const [rewardHintIndex, setRewardHintIndex] = React.useState(0)
   const petSummarySeqRef = React.useRef(0)
+  const petAvatarCustomizingRef = React.useRef(false)
+  const petCelebrationTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
   const petDragRef = React.useRef<{
     pointerId: number
     startClientX: number
@@ -2542,34 +2570,48 @@ function IndexPage() {
         ? 'calm'
         : 'sleepy')
   const petState = petSummary?.status?.state || petMood
-  const petLevelProgress = petSummary?.pet?.level_progress ?? Math.min(100, healthyHabitScore * 25)
-  const petLevelText = petSummary?.pet?.level ? `Lv.${petSummary.pet.level} · 成长 ${petLevelProgress}%` : `成长 ${petLevelProgress}%`
-  const petMessage = petEvent?.message || petSummary?.status?.message || (dashboardBusy
-    ? '我正在看你今天的状态'
+  const petMealState = petSummary?.status?.meal_state || (totalCurrent > 0 ? 'fed' : 'hungry')
+  const petMealLabel = petMealState === 'satisfied'
+    ? '今天很满足'
+    : petMealState === 'fed'
+      ? '吃饱一点啦'
+      : '肚子有点空'
+  const petDialogText = petEvent?.message || (dashboardBusy
+    ? '我正在看看你今天的状态，等一下再来聊聊吧。'
     : isGuest
-      ? '登录后我会记住你的成长'
-      : healthyHabitScore >= 3
-        ? '今天习惯很稳，我长大了一点'
-        : healthyHabitScore >= 1
-          ? '再完成一个小习惯，我会更有精神'
-          : '先记录一餐，我就知道怎么陪你啦')
-  const petTaskText = petEvent?.task_text || petSummary?.status?.task_text || (dashboardBusy || isGuest
-    ? '今日成长任务'
-    : healthyHabitScore >= 3
-      ? '已点亮多个好习惯'
-      : proteinTargetRaw > 0 && proteinCur < proteinTargetRaw * 0.75
-        ? '补一点蛋白质'
-        : todayWater.total < bodyMetrics.waterGoalMl * 0.6
-          ? '喝水达到 60%'
-          : totalCurrent <= 0
-            ? '记录一餐'
-            : '保持今日节奏')
+      ? '登录后，我会记住你的饮食，也会一直在这里陪你。'
+      : petMealState === 'satisfied'
+        ? '三餐都记住啦，我今天圆滚滚地陪你。想聊会儿吗？'
+        : petMealState === 'fed'
+          ? '我吃饱一点啦！下一餐怎么搭，要不要一起想想？'
+          : '今天还没见到你的饭饭。第一餐吃什么，要不要问问我？')
+  const triggerPetCelebration = React.useCallback(() => {
+    if (petCelebrationTimerRef.current) {
+      clearTimeout(petCelebrationTimerRef.current)
+    }
+    setPetCelebrating(false)
+    petCelebrationTimerRef.current = setTimeout(() => {
+      setPetCelebrating(true)
+      petCelebrationTimerRef.current = setTimeout(() => {
+        setPetCelebrating(false)
+        petCelebrationTimerRef.current = null
+      }, 820)
+    }, 16)
+  }, [])
+
+  React.useEffect(() => () => {
+    if (petCelebrationTimerRef.current) {
+      clearTimeout(petCelebrationTimerRef.current)
+    }
+  }, [])
+
   const handleClaimPetEvent = React.useCallback(async () => {
     if (!petEvent || petClaiming) return
     setPetClaiming(true)
     try {
       const result = await claimPetEvent(petEvent.id)
       setPetSummary((prev) => prev ? { ...prev, pet: result.pet, event: result.event, status: { ...prev.status, message: '奖励已收下，我又长大了一点。' } } : prev)
+      triggerPetCelebration()
       const parts: string[] = []
       if (result.credits_awarded > 0) parts.push(`+${result.credits_awarded}积分`)
       if (result.exp_awarded > 0) parts.push(`+${result.exp_awarded}经验`)
@@ -2579,7 +2621,7 @@ function IndexPage() {
     } finally {
       setPetClaiming(false)
     }
-  }, [petClaiming, petEvent])
+  }, [petClaiming, petEvent, triggerPetCelebration])
   const togglePetCollapsed = React.useCallback(() => {
     setPetCollapsed((prev) => {
       const next = !prev
@@ -2595,8 +2637,49 @@ function IndexPage() {
     })
   }, [])
   const openPetChat = React.useCallback(() => {
+    try {
+      Taro.setStorageSync(HOME_PET_INTRO_SEEN_KEY, '1')
+    } catch (_) {}
+    setPetIntroVisible(false)
     Taro.navigateTo({ url: extraPkgUrl('/pages/pet-chat/index') })
   }, [])
+  const customizePixelAvatar = React.useCallback(async () => {
+    const accessToken = getAccessToken()
+    if (petAvatarCustomizingRef.current || !accessToken) {
+      if (!accessToken) redirectToLogin()
+      return
+    }
+    petAvatarCustomizingRef.current = true
+    setPetAvatarCustomizing(true)
+    try {
+      const result = await chooseImageWithPrivacy({
+        count: 1,
+        sizeType: ['original'],
+        sourceType: ['album', 'camera'],
+      })
+      const filePath = result.tempFilePaths?.[0]
+      if (!filePath) return
+      const customized = await customizePetPixelAvatar(filePath)
+      setPetSummary((previous) => previous ? { ...previous, pet: customized.pet } : previous)
+      triggerPetCelebration()
+      try {
+        Taro.setStorageSync(HOME_PET_INTRO_SEEN_KEY, '1')
+      } catch (_) {}
+      setPetIntroVisible(false)
+      Taro.showToast({ title: '你的像素分身来啦', icon: 'success' })
+    } catch (error) {
+      const message = String((error as any)?.errMsg || (error as any)?.message || '')
+      if (message.toLowerCase().includes('cancel')) return
+      if (isPrivacyAuthorizeError(error)) {
+        showPrivacyAuthorizeFailure(error, '需要相册或相机权限才能生成分身')
+        return
+      }
+      await showUnifiedApiError(error, '生成像素分身失败，请稍后重试')
+    } finally {
+      petAvatarCustomizingRef.current = false
+      setPetAvatarCustomizing(false)
+    }
+  }, [triggerPetCelebration])
   const handlePetTouchStart = React.useCallback((event) => {
     const touch = event.touches?.[0]
     if (!touch) return
@@ -2986,7 +3069,7 @@ function IndexPage() {
 
   return (
     <View
-      className={`home-page ${scheme === 'dark' ? 'home-page--dark' : ''} ${showRecordEditModal || showHomeOnboardingGuide ? 'home-page--modal-open' : ''}`}
+      className={`home-page ${scheme === 'dark' ? 'home-page--dark' : ''} ${showRecordEditModal || showHomeOnboardingGuide ? 'home-page--modal-open' : ''} ${!petHidden && !petCollapsed ? 'home-page--pet-expanded' : ''}`}
     >
       <PageMeta
         pageStyle={
@@ -3003,7 +3086,7 @@ function IndexPage() {
       ) : null}
       {!petHidden ? (
         <View
-          className={`pet-companion-float ${petCollapsed ? 'is-collapsed' : 'is-expanded'} ${petDragging ? 'is-dragging' : ''}`}
+          className={`pet-companion-float ${petCollapsed ? 'is-collapsed' : 'is-expanded'} ${petDragging ? 'is-dragging' : ''} ${petCelebrating ? 'is-celebrating' : ''}`}
           style={{
             left: `${petFloatPosition.left}px`,
             top: `${petFloatPosition.top}px`
@@ -3025,9 +3108,9 @@ function IndexPage() {
               // 展开态点击卡片空白处不进入对话，只有「点我聊聊」进入
             }}
           >
-            <PetAvatar pet={petSummary?.pet} size='small' mood={petMood} state={petState} className='pet-companion-avatar' />
             <View className='pet-companion-content'>
                 <View className='pet-companion-header'>
+                  <Text className='pet-companion-kicker'>{petIntroVisible ? '初次见面' : '健康分身'}</Text>
                   <Text className='pet-companion-name'>{petName}</Text>
                   {!petCollapsed ? (
                     <View
@@ -3041,17 +3124,60 @@ function IndexPage() {
                     </View>
                   ) : null}
                 </View>
-              <Text className='pet-companion-message'>{petMessage}</Text>
               <View
-                className='pet-companion-chat'
+                className={`pet-companion-chat ${petIntroVisible ? 'is-first-visit' : ''}`}
                 onClick={(event) => {
                   event.stopPropagation()
                   openPetChat()
                 }}
               >
-                  <Text className='pet-companion-chat-text'>点我聊聊</Text>
+                <Text className='pet-companion-chat-text'>{petDialogText}</Text>
+                <Text className='pet-companion-chat-action'>和我聊聊 →</Text>
+              </View>
+              <View className='pet-companion-actions'>
+                <Text className={`pet-companion-meal-state is-${petMealState}`}>{petMealLabel}</Text>
+                <View
+                  className={`pet-companion-customize ${petAvatarCustomizing ? 'is-loading' : ''}`}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    void customizePixelAvatar()
+                  }}
+                >
+                  {petAvatarCustomizing ? <View className='pet-companion-customize-spinner' /> : null}
+                  {!petAvatarCustomizing ? (
+                    <Text className='pet-companion-customize-text'>
+                      {petSummary?.pet?.pixel_avatar_url ? '重新定制专属角色' : '定制你的专属角色'}
+                    </Text>
+                  ) : null}
                 </View>
               </View>
+            </View>
+            <View
+              className='pet-companion-stage'
+              onClick={(event) => {
+                event.stopPropagation()
+                const handled = petClickHandledRef.current
+                petClickHandledRef.current = false
+                if (handled) return
+                if (petCollapsed) {
+                  togglePetCollapsed()
+                  return
+                }
+                openPetChat()
+              }}
+            >
+              <View className={`pet-companion-aura is-${petMealState}`} />
+              <PetAvatar
+                pet={petSummary?.pet}
+                size='large'
+                mood={petMood}
+                state={petState}
+                mealState={petMealState}
+                motion='companion'
+                className='pet-companion-avatar'
+              />
+              <View className='pet-companion-stage-shadow' />
+            </View>
           </View>
         </View>
       ) : null}

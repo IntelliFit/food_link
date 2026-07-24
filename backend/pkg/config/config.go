@@ -115,6 +115,9 @@ type ExternalConfig struct {
 	LLMProvider                  string `mapstructure:"llm_provider"`
 	DeepSeekAPIKey               string `mapstructure:"deepseek_api_key"`
 	DeepSeekBaseURL              string `mapstructure:"deepseek_base_url"`
+	PixelAvatarAPIKey            string `mapstructure:"pixel_avatar_api_key"`
+	PixelAvatarBaseURL           string `mapstructure:"pixel_avatar_base_url"`
+	PixelAvatarModel             string `mapstructure:"pixel_avatar_model"`
 	DoubaoAPIKey                 string `mapstructure:"doubao_api_key"`
 	DoubaoWebSearchAPIKey        string `mapstructure:"doubao_web_search_api_key"`
 	DoubaoBaseURL                string `mapstructure:"doubao_base_url"`
@@ -306,6 +309,7 @@ func Load(baseDir string) (*Config, error) {
 		return nil, fmt.Errorf("unmarshal config: %w", err)
 	}
 	cfg.ConfigSource = source
+	applyPixelAvatarProcessEnvOverrides(&cfg.External)
 	trimExternalConfig(&cfg.External)
 	trimAppAuthConfig(&cfg.AppAuth)
 	trimWechatConfig(&cfg.Wechat)
@@ -551,6 +555,15 @@ func applyLocalConfigOverrides(v *viper.Viper) error {
 	}
 	if fileV.IsSet("external.nutrition_embedding_dimensions") {
 		v.Set("external.nutrition_embedding_dimensions", fileCfg.External.NutritionEmbeddingDimensions)
+	}
+	if fileCfg.External.PixelAvatarAPIKey != "" {
+		v.Set("external.pixel_avatar_api_key", fileCfg.External.PixelAvatarAPIKey)
+	}
+	if fileCfg.External.PixelAvatarBaseURL != "" {
+		v.Set("external.pixel_avatar_base_url", fileCfg.External.PixelAvatarBaseURL)
+	}
+	if fileCfg.External.PixelAvatarModel != "" {
+		v.Set("external.pixel_avatar_model", fileCfg.External.PixelAvatarModel)
 	}
 	if fileV.IsSet("worker.id") {
 		v.Set("worker.id", fileCfg.Worker.ID)
@@ -1044,6 +1057,9 @@ var cloudConfigKeyAliases = map[string]string{
 	"LLM_PROVIDER":                            "external.llm_provider",
 	"DEEPSEEK_API_KEY":                        "external.deepseek_api_key",
 	"DEEPSEEK_BASE_URL":                       "external.deepseek_base_url",
+	"PIXEL_AVATAR_API_KEY":                    "external.pixel_avatar_api_key",
+	"PIXEL_AVATAR_BASE_URL":                   "external.pixel_avatar_base_url",
+	"PIXEL_AVATAR_MODEL":                      "external.pixel_avatar_model",
 	"DOUBAO_API_KEY":                          "external.doubao_api_key",
 	"DOUBAO_WEB_SEARCH_API_KEY":               "external.doubao_web_search_api_key",
 	"DOUBAO_BASE_URL":                         "external.doubao_base_url",
@@ -1181,6 +1197,9 @@ func trimExternalConfig(cfg *ExternalConfig) {
 	cfg.LLMProvider = strings.TrimSpace(cfg.LLMProvider)
 	cfg.DeepSeekAPIKey = strings.TrimSpace(cfg.DeepSeekAPIKey)
 	cfg.DeepSeekBaseURL = strings.TrimSpace(cfg.DeepSeekBaseURL)
+	cfg.PixelAvatarAPIKey = strings.TrimSpace(cfg.PixelAvatarAPIKey)
+	cfg.PixelAvatarBaseURL = strings.TrimRight(strings.TrimSpace(cfg.PixelAvatarBaseURL), "/")
+	cfg.PixelAvatarModel = strings.TrimSpace(cfg.PixelAvatarModel)
 	cfg.DoubaoAPIKey = strings.TrimSpace(cfg.DoubaoAPIKey)
 	cfg.DoubaoWebSearchAPIKey = strings.TrimSpace(cfg.DoubaoWebSearchAPIKey)
 	cfg.DoubaoBaseURL = strings.TrimSpace(cfg.DoubaoBaseURL)
@@ -1189,6 +1208,21 @@ func trimExternalConfig(cfg *ExternalConfig) {
 	cfg.NutritionEmbeddingAPIKey = strings.TrimSpace(cfg.NutritionEmbeddingAPIKey)
 	cfg.NutritionEmbeddingBaseURL = strings.TrimRight(strings.TrimSpace(cfg.NutritionEmbeddingBaseURL), "/")
 	cfg.NutritionEmbeddingModel = strings.TrimSpace(cfg.NutritionEmbeddingModel)
+}
+
+func applyPixelAvatarProcessEnvOverrides(cfg *ExternalConfig) {
+	if cfg == nil {
+		return
+	}
+	if value := strings.TrimSpace(os.Getenv("PIXEL_AVATAR_API_KEY")); value != "" {
+		cfg.PixelAvatarAPIKey = value
+	}
+	if value := strings.TrimSpace(os.Getenv("PIXEL_AVATAR_BASE_URL")); value != "" {
+		cfg.PixelAvatarBaseURL = value
+	}
+	if value := strings.TrimSpace(os.Getenv("PIXEL_AVATAR_MODEL")); value != "" {
+		cfg.PixelAvatarModel = value
+	}
 }
 
 func trimAppAuthConfig(cfg *AppAuthConfig) {
@@ -1429,6 +1463,8 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("external.nutrition_embedding_base_url", "https://yunwu.ai/v1")
 	v.SetDefault("external.nutrition_embedding_model", "text-embedding-3-large")
 	v.SetDefault("external.nutrition_embedding_dimensions", 1024)
+	v.SetDefault("external.pixel_avatar_base_url", "https://maas-openapi.wanjiedata.com/api/v1")
+	v.SetDefault("external.pixel_avatar_model", "gpt-image-2-pool")
 	v.SetDefault("ai_usage_pricing.default_text_model", "deepseek-v4-pro")
 	v.SetDefault("ai_usage_pricing.credits_per_cny", 25.0)
 	v.SetDefault("ai_usage_pricing.usd_to_cny", 7.25)
@@ -1476,6 +1512,9 @@ func bindLegacyEnv(v *viper.Viper) {
 	_ = v.BindEnv("external.llm_provider", "LLM_PROVIDER")
 	_ = v.BindEnv("external.deepseek_api_key", "DEEPSEEK_API_KEY")
 	_ = v.BindEnv("external.deepseek_base_url", "DEEPSEEK_BASE_URL")
+	_ = v.BindEnv("external.pixel_avatar_api_key", "PIXEL_AVATAR_API_KEY")
+	_ = v.BindEnv("external.pixel_avatar_base_url", "PIXEL_AVATAR_BASE_URL")
+	_ = v.BindEnv("external.pixel_avatar_model", "PIXEL_AVATAR_MODEL")
 	_ = v.BindEnv("external.doubao_api_key", "DOUBAO_API_KEY")
 	_ = v.BindEnv("external.doubao_web_search_api_key", "DOUBAO_WEB_SEARCH_API_KEY")
 	_ = v.BindEnv("external.doubao_base_url", "DOUBAO_BASE_URL")

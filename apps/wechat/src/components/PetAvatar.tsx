@@ -1,10 +1,14 @@
 import { View, Image } from '@tarojs/components'
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { derivePetAppearance, type PetAnimal, type PetAppearanceCandidate, type PetProfile } from '@food-link/core'
 
 import './PetAvatar.scss'
 
 type PetVisual = Pick<PetProfile | PetAppearanceCandidate, 'pet_seed' | 'name' | 'color' | 'shape' | 'pattern' | 'accessory' | 'personality'>
+  & Pick<Partial<PetProfile>, 'avatar_type' | 'pixel_avatar_url' | 'pixel_avatar_blink_url' | 'pixel_avatar_squash_url' | 'pixel_avatar_jump_url'>
+
+type PetMotion = 'static' | 'companion'
+type PetMotionFrame = 'idle' | 'squash' | 'jump'
 
 interface PetAvatarProps {
   pet?: Partial<PetVisual> | null
@@ -12,6 +16,8 @@ interface PetAvatarProps {
   size?: 'small' | 'medium' | 'large' | number
   mood?: string
   state?: string
+  mealState?: string
+  motion?: PetMotion
   className?: string
 }
 
@@ -50,18 +56,26 @@ interface SvgParts {
   dimmed: boolean
   mood?: string
   state?: string
+  mealState?: string
 }
 
-function buildSvg({ appearance, palette, dimmed, mood, state }: SvgParts): string {
+function buildSvg({ appearance, palette, dimmed, mood, state, mealState }: SvgParts): string {
+  const bodyTransform = mealState === 'hungry'
+    ? 'translate(5 8) scale(.92 .88)'
+    : mealState === 'satisfied'
+      ? 'translate(-3 -2) scale(1.06 1.06)'
+      : mealState === 'fed'
+        ? 'translate(-2 -1) scale(1.04 1.03)'
+        : ''
   return `<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 120 120">
   <ellipse cx="60" cy="101" rx="34" ry="9" fill="rgba(15, 23, 42, 0.12)" />
-  <g opacity="${dimmed ? 0.78 : 1}">
+  <g opacity="${dimmed ? 0.78 : 1}" transform="${bodyTransform}">
     ${renderTail(appearance.animal, palette.body, palette.line)}
     ${renderEars(appearance.animal, palette.body, palette.accent, palette.line)}
     ${renderBody(appearance.shape, palette.body, palette.line)}
     ${renderPattern(appearance.pattern, palette.accent, palette.line)}
     ${renderAccessory(appearance.accessory, palette.accent, palette.line)}
-    ${renderFace(appearance.animal, mood, palette.cheek, palette.line)}
+    ${renderFace(appearance.animal, mood, mealState, palette.cheek, palette.line)}
   </g>
   ${renderMoodGlow(mood, state)}
 </svg>`
@@ -186,7 +200,7 @@ function renderAccessory(accessory: string | undefined, color: string, line: str
   return `<path d="M38 31 C28 25 26 15 28 9 C40 12 46 21 38 31 Z" fill="${color}" stroke="${line}" stroke-width="2.4" />`
 }
 
-function renderFace(animal: PetAnimal, mood: string | undefined, cheek: string, line: string): string {
+function renderFace(animal: PetAnimal, mood: string | undefined, mealState: string | undefined, cheek: string, line: string): string {
   const sleepy = mood === 'sleepy'
   const surprised = mood === 'surprised'
   const happy = mood === 'happy'
@@ -204,7 +218,9 @@ function renderFace(animal: PetAnimal, mood: string | undefined, cheek: string, 
   <circle cx="51.5" cy="56.5" r="1.2" fill="#fff" />
   <circle cx="71.5" cy="56.5" r="1.2" fill="#fff" />
 </g>`
-  const mouth = surprised
+  const mouth = mealState === 'hungry'
+    ? `<path d="M52 77 C56 71 65 71 69 77" fill="none" stroke="${line}" stroke-width="2.6" stroke-linecap="round" />`
+    : surprised
     ? `<path d="M58 72 C58 68 63 68 63 72 C63 77 58 77 58 72 Z" fill="none" stroke="${line}" stroke-width="2.6" stroke-linecap="round" />`
     : happy
       ? `<path d="M52 72 C56 79 65 79 69 72" fill="none" stroke="${line}" stroke-width="2.6" stroke-linecap="round" />`
@@ -227,7 +243,7 @@ function renderMoodGlow(mood: string | undefined, state: string | undefined): st
   return ''
 }
 
-export function PetAvatar({ pet, animal, size = 'medium', mood, state, className }: PetAvatarProps) {
+export function PetAvatar({ pet, animal, size = 'medium', mood, state, mealState, motion = 'static', className }: PetAvatarProps) {
   const appearance = derivePetAppearance(pet)
   if (animal) appearance.animal = animal
   const palette = PET_PALETTE[appearance.color] || PET_PALETTE.mint
@@ -235,9 +251,88 @@ export function PetAvatar({ pet, animal, size = 'medium', mood, state, className
   const label = `${pet?.name || '成长伙伴'}，${petMoodLabel(mood)}，${petStateLabel(state)}`
   const sizeStyle = typeof size === 'number' ? { width: size, height: size } : undefined
   const sizeClass = typeof size === 'string' ? `pet-avatar--${size}` : ''
+  const customAvatarURL = String(pet?.pixel_avatar_url || '').trim()
+  const customAvatarBlinkURL = String(pet?.pixel_avatar_blink_url || '').trim()
+  const customAvatarSquashURL = String(pet?.pixel_avatar_squash_url || '').trim()
+  const customAvatarJumpURL = String(pet?.pixel_avatar_jump_url || '').trim()
+  const hasMotionFrames = Boolean(customAvatarSquashURL && customAvatarJumpURL)
+  const [blinking, setBlinking] = useState(false)
+  const [motionFrame, setMotionFrame] = useState<PetMotionFrame>('idle')
+
+  useEffect(() => {
+    if (customAvatarURL && !customAvatarBlinkURL) {
+      setBlinking(false)
+      return undefined
+    }
+
+    const pauses = [1600, 3200, 2400, 3900]
+    let pauseIndex = 0
+    let timer: ReturnType<typeof setTimeout> | undefined
+    let disposed = false
+
+    const scheduleBlink = (delay: number) => {
+      timer = setTimeout(() => {
+        if (disposed) return
+        setBlinking(true)
+        timer = setTimeout(() => {
+          if (disposed) return
+          setBlinking(false)
+          const nextDelay = pauses[pauseIndex % pauses.length]
+          pauseIndex += 1
+          scheduleBlink(nextDelay)
+        }, 170)
+      }, delay)
+    }
+
+    scheduleBlink(900)
+    return () => {
+      disposed = true
+      if (timer) clearTimeout(timer)
+    }
+  }, [customAvatarBlinkURL, customAvatarURL])
+
+  useEffect(() => {
+    if (motion !== 'companion') {
+      setMotionFrame('idle')
+      return undefined
+    }
+
+    const pauses = [4200, 5600, 4800, 6400]
+    let pauseIndex = 0
+    let timer: ReturnType<typeof setTimeout> | undefined
+    let disposed = false
+
+    const scheduleHop = (delay: number) => {
+      timer = setTimeout(() => {
+        if (disposed) return
+        setMotionFrame('squash')
+        timer = setTimeout(() => {
+          if (disposed) return
+          setMotionFrame('jump')
+          timer = setTimeout(() => {
+            if (disposed) return
+            setMotionFrame('squash')
+            timer = setTimeout(() => {
+              if (disposed) return
+              setMotionFrame('idle')
+              const nextDelay = pauses[pauseIndex % pauses.length]
+              pauseIndex += 1
+              scheduleHop(nextDelay)
+            }, 100)
+          }, 420)
+        }, 110)
+      }, delay)
+    }
+
+    scheduleHop(1400)
+    return () => {
+      disposed = true
+      if (timer) clearTimeout(timer)
+    }
+  }, [motion])
 
   const src = useMemo(() => {
-    const svg = buildSvg({ appearance, palette, dimmed, mood, state })
+    const svg = buildSvg({ appearance, palette, dimmed, mood, state, mealState })
     return `data:image/svg+xml;base64,${toBase64(svg)}`
   }, [
     appearance.seed,
@@ -253,16 +348,45 @@ export function PetAvatar({ pet, animal, size = 'medium', mood, state, className
     dimmed,
     mood,
     state,
+    mealState,
   ])
+
+  const motionClass = motionFrame === 'jump'
+    ? 'pet-avatar--motion-jump'
+    : motionFrame === 'squash'
+      ? 'pet-avatar--motion-squash'
+      : ''
 
   return (
     <View
-      className={`pet-avatar ${sizeClass} ${dimmed ? 'pet-avatar--dimmed' : ''} ${state === 'warming' ? 'pet-avatar--warming' : ''} ${className || ''}`}
+      className={`pet-avatar ${sizeClass} ${dimmed ? 'pet-avatar--dimmed' : ''} ${state === 'warming' ? 'pet-avatar--warming' : ''} ${customAvatarURL ? 'pet-avatar--custom' : ''} ${hasMotionFrames ? 'pet-avatar--has-motion-frames' : ''} ${blinking ? 'pet-avatar--blinking' : ''} ${motionClass} ${mealState ? `pet-avatar--meal-${mealState}` : ''} ${className || ''}`}
       style={sizeStyle}
       aria-label={label}
       role='img'
     >
-      <Image className='pet-avatar__image' src={src} mode='aspectFit' lazyLoad={false} />
+      <View className='pet-avatar__body'>
+        <Image
+          className='pet-avatar__image pet-avatar__frame pet-avatar__frame--idle'
+          src={customAvatarURL || src}
+          mode='aspectFit'
+          lazyLoad={false}
+        />
+        {customAvatarBlinkURL ? (
+          <Image className='pet-avatar__frame pet-avatar__frame--blink' src={customAvatarBlinkURL} mode='aspectFit' lazyLoad={false} />
+        ) : null}
+        {customAvatarSquashURL ? (
+          <Image className='pet-avatar__frame pet-avatar__frame--squash' src={customAvatarSquashURL} mode='aspectFit' lazyLoad={false} />
+        ) : null}
+        {customAvatarJumpURL ? (
+          <Image className='pet-avatar__frame pet-avatar__frame--jump' src={customAvatarJumpURL} mode='aspectFit' lazyLoad={false} />
+        ) : null}
+        {!customAvatarURL ? (
+          <View className='pet-avatar__blink-overlay'>
+            <View className='pet-avatar__blink-eye is-left' style={{ backgroundColor: palette.body }} />
+            <View className='pet-avatar__blink-eye is-right' style={{ backgroundColor: palette.body }} />
+          </View>
+        ) : null}
+      </View>
     </View>
   )
 }
