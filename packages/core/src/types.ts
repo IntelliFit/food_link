@@ -497,6 +497,7 @@ export interface AnalysisTask {
   traceId?: string | null
   is_recorded?: boolean
   record_id?: string
+  history_group_key?: string
   created_at: string
   updated_at: string
 }

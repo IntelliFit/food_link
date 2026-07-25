@@ -762,6 +762,13 @@
   color: #9ca3af;
 }
 
+.loading-more-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24rpx 0 40rpx;
+}
+
 .analyze-history-page--dark {
   background:
     radial-gradient(circle at top left, rgba(94, 211, 145, 0.1) 0%, rgba(94, 211, 145, 0) 28%),
