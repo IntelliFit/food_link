@@ -288,7 +288,7 @@ func (r *ManualFoodRepo) Search(ctx context.Context, userID string, keyword stri
 	}
 	results = append(results, customRows...)
 
-	catalogRows, err := r.searchCatalogItems(ctx, query, limit)
+	catalogRows, err := r.searchCatalogItems(ctx, userID, query, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -330,10 +330,12 @@ func (r *ManualFoodRepo) Search(ctx context.Context, userID string, keyword stri
 		return left > right
 	})
 	results = dedupeManualFoodResults(results)
+	results = r.enrichManualFoodResultsWithNutritionLibrary(ctx, results)
+	results = dedupeManualFoodResults(results)
 	if len(results) > limit {
 		results = results[:limit]
 	}
-	return r.enrichManualFoodResultsWithNutritionLibrary(ctx, results), nil
+	return results, nil
 }
 
 func (r *ManualFoodRepo) SearchPackaged(ctx context.Context, keyword string, limit int) ([]domain.ManualFoodResult, error) {
@@ -500,7 +502,7 @@ func (r *ManualFoodRepo) listGlobalFrequentRecordItems(ctx context.Context, cate
 	return results, nil
 }
 
-func (r *ManualFoodRepo) searchCatalogItems(ctx context.Context, query string, limit int) ([]domain.ManualFoodResult, error) {
+func (r *ManualFoodRepo) searchCatalogItems(ctx context.Context, userID string, query string, limit int) ([]domain.ManualFoodResult, error) {
 	terms := expandedSearchTerms(query)
 	type row struct {
 		Name       string          `gorm:"column:name"`
@@ -512,13 +514,18 @@ func (r *ManualFoodRepo) searchCatalogItems(ctx context.Context, query string, l
 		AvgFat     float64         `gorm:"column:avg_fat"`
 		ItemJSON   json.RawMessage `gorm:"column:item_json"`
 	}
-	conditions := make([]string, 0, len(terms))
+	recordFilter := ""
 	args := []any{}
+	if strings.TrimSpace(userID) != "" {
+		recordFilter = "AND user_id = ?"
+		args = append(args, strings.TrimSpace(userID))
+	}
+	conditions := make([]string, 0, len(terms))
 	for _, term := range terms {
 		conditions = append(conditions, "LOWER(name) LIKE ?")
 		args = append(args, "%"+strings.ToLower(term)+"%")
 	}
-	args = append(args, limit)
+	args = append(args, query, query+"%", limit)
 	var rows []row
 	err := r.db.WithContext(ctx).Raw(fmt.Sprintf(`
 		WITH record_items AS (
@@ -529,6 +536,7 @@ func (r *ManualFoodRepo) searchCatalogItems(ctx context.Context, query string, l
 			CROSS JOIN LATERAL jsonb_array_elements(items) item
 			WHERE trim(COALESCE(NULLIF(item->>'manual_source_title', ''), NULLIF(item->>'name', ''))) <> ''
 				AND COALESCE(item->'nutrients'->>'calories', item->>'calories') ~ '^[0-9]+([.][0-9]+){0,1}$'
+				%s
 		)
 		SELECT
 			name,
@@ -548,7 +556,7 @@ func (r *ManualFoodRepo) searchCatalogItems(ctx context.Context, query string, l
 			COUNT(*) DESC,
 			name ASC
 		LIMIT ?
-	`, strings.Join(conditions, " OR ")), append(args[:len(args)-1], query, query+"%", limit)...).Scan(&rows).Error
+	`, recordFilter, strings.Join(conditions, " OR ")), args...).Scan(&rows).Error
 	if err != nil {
 		return nil, err
 	}
