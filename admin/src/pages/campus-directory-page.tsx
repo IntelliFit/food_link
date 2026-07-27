@@ -31,6 +31,7 @@ type ListResponse<T> = {
 type School = {
   id: string;
   name: string;
+  location_type?: "university" | "company" | "community";
   province?: string;
   city?: string;
   level?: string;
@@ -161,6 +162,7 @@ function blankForTab(tab: TabId): Record<string, unknown> {
     case "schools":
       return {
         name: "",
+        location_type: "university",
         province: "",
         city: "",
         level: "",
@@ -1036,7 +1038,8 @@ function editorFields(
   switch (tab) {
     case "schools":
       return [
-        { key: "name", label: "学校名称", wide: true },
+        { key: "name", label: "地点名称", wide: true },
+        { key: "location_type", label: "类型（高校/公司/社区；内部值 university/company/community）", wide: true },
         { key: "province", label: "省份" },
         { key: "city", label: "城市" },
         { key: "level", label: "层级" },

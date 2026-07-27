@@ -21,9 +21,10 @@ func main() {
 	onlyNutritionQuality := flag.Bool("only-nutrition-quality", false, "only migrate nutrition quality tiers and alias approval status")
 	onlyNutritionEmbeddings := flag.Bool("only-nutrition-embeddings", false, "only migrate nutrition semantic embedding storage")
 	onlyOnboardingStatus := flag.Bool("only-onboarding-status", false, "only add nullable onboarding status schema without data backfills")
+	onlyCampusDirectoryReviewed := flag.Bool("only-campus-directory-reviewed", false, "only publish the reviewed Beijing campus dining directory")
 	flag.Parse()
 	selectedOnlyModes := 0
-	for _, selected := range []bool{*onlyPapay, *onlyNutritionQuality, *onlyNutritionEmbeddings, *onlyOnboardingStatus} {
+	for _, selected := range []bool{*onlyPapay, *onlyNutritionQuality, *onlyNutritionEmbeddings, *onlyOnboardingStatus, *onlyCampusDirectoryReviewed} {
 		if selected {
 			selectedOnlyModes++
 		}
@@ -62,6 +63,8 @@ func main() {
 		migrateErr = migration.MigrateNutritionEmbeddings(ctx, db, cfg.Database.Schema)
 	} else if *onlyOnboardingStatus {
 		migrateErr = migration.MigrateOnboardingStatus(ctx, db, cfg.Database.Schema)
+	} else if *onlyCampusDirectoryReviewed {
+		migrateErr = migration.PublishBeijingOwnerVerifiedDiningDirectory(ctx, db, cfg.Database.Schema)
 	} else {
 		migrateErr = migration.AutoMigrate(ctx, db, cfg.Database.Schema)
 	}

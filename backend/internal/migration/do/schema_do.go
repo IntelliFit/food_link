@@ -1358,16 +1358,21 @@ type TestDatasetDO struct {
 func (TestDatasetDO) TableName() string { return "test_datasets" }
 
 type SchoolDO struct {
-	ID        string     `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
-	Name      string     `gorm:"column:name;type:text;not null;index:idx_schools_name"`
-	Province  *string    `gorm:"column:province;type:text;index:idx_schools_province"`
-	City      *string    `gorm:"column:city;type:text"`
-	Level     *string    `gorm:"column:level;type:text"`
-	Is985     *bool      `gorm:"column:is_985;type:boolean;default:false"`
-	Is211     *bool      `gorm:"column:is_211;type:boolean;default:false"`
-	Status    string     `gorm:"column:status;type:text;not null;default:'active'"`
-	LogoURL   *string    `gorm:"column:logo_url;type:text"`
-	CreatedAt *time.Time `gorm:"column:created_at;type:timestamptz;default:now()"`
+	ID                    string     `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	Name                  string     `gorm:"column:name;type:text;not null;index:idx_schools_name"`
+	LocationType          string     `gorm:"column:location_type;type:text;not null;default:'university';index:idx_schools_location_type"`
+	OfficialCode          *string    `gorm:"column:official_code;type:text;uniqueIndex:idx_schools_official_code"`
+	Authority             *string    `gorm:"column:authority;type:text"`
+	OfficialSourceVersion *string    `gorm:"column:official_source_version;type:text;index:idx_schools_official_source_version"`
+	InstitutionKind       *string    `gorm:"column:institution_kind;type:text"`
+	Province              *string    `gorm:"column:province;type:text;index:idx_schools_province"`
+	City                  *string    `gorm:"column:city;type:text"`
+	Level                 *string    `gorm:"column:level;type:text"`
+	Is985                 *bool      `gorm:"column:is_985;type:boolean;default:false"`
+	Is211                 *bool      `gorm:"column:is_211;type:boolean;default:false"`
+	Status                string     `gorm:"column:status;type:text;not null;default:'active'"`
+	LogoURL               *string    `gorm:"column:logo_url;type:text"`
+	CreatedAt             *time.Time `gorm:"column:created_at;type:timestamptz;default:now()"`
 }
 
 func (SchoolDO) TableName() string { return "schools" }

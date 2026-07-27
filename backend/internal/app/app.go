@@ -661,6 +661,7 @@ func New(cfg *config.Config) (*App, error) {
 	engine.GET("/api/schools/:school_id/campuses", authmw.RequireJWT(jwtSvc), schoolHandler.Campuses)
 	engine.GET("/api/schools/:school_id/canteens", authmw.RequireJWT(jwtSvc), schoolHandler.Canteens)
 	engine.GET("/api/school-campuses/:campus_id/canteens", authmw.RequireJWT(jwtSvc), schoolHandler.CampusCanteens)
+	engine.GET("/api/school-canteens/:canteen_id/floors", authmw.RequireJWT(jwtSvc), schoolHandler.CanteenFloors)
 	engine.GET("/api/school-canteens/:canteen_id/windows", authmw.RequireJWT(jwtSvc), schoolHandler.CanteenWindows)
 	engine.POST("/api/school-canteen-applications", authmw.RequireJWT(jwtSvc), schoolHandler.CreateCanteenApplication)
 	engine.GET("/api/location", authmw.RequireJWT(jwtSvc), locationhandler.GetLocation)

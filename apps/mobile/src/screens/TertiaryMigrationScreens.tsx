@@ -36,6 +36,7 @@ import {
   type UserInfo,
 } from '@food-link/core'
 import { apiClient } from '../api'
+import type { DiningCanteenItem, DiningFloorItem, DiningLocationItem, DiningLocationSiteItem, DiningLocationType, DiningWindowItem } from '@food-link/api-client'
 import { AppButton } from '../components/AppButton'
 import { InsightMarkdownView } from '../components/InsightMarkdownView'
 import { PetAvatar, petMoodLabel, petStateLabel } from '../components/PetAvatar'
@@ -2619,10 +2620,23 @@ export function LocationSearchScreen() {
 export function CampusCanteenScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const [items, setItems] = useState<PublicFoodItem[]>([])
-  const [schoolName, setSchoolName] = useState('')
-  const [canteenName, setCanteenName] = useState('')
-  const [floorName, setFloorName] = useState('')
-  const [windowName, setWindowName] = useState('')
+  const [locationType, setLocationType] = useState<DiningLocationType>('university')
+  const [selectedLocation, setSelectedLocation] = useState<DiningLocationItem | null>(null)
+  const [selectedSite, setSelectedSite] = useState<DiningLocationSiteItem | null>(null)
+  const [selectedCanteen, setSelectedCanteen] = useState<DiningCanteenItem | null>(null)
+  const [selectedFloor, setSelectedFloor] = useState<DiningFloorItem | null>(null)
+  const [selectedWindow, setSelectedWindow] = useState<DiningWindowItem | null>(null)
+  const [locations, setLocations] = useState<DiningLocationItem[]>([])
+  const [sites, setSites] = useState<DiningLocationSiteItem[]>([])
+  const [canteens, setCanteens] = useState<DiningCanteenItem[]>([])
+  const [floors, setFloors] = useState<DiningFloorItem[]>([])
+  const [windows, setWindows] = useState<DiningWindowItem[]>([])
+  const [picker, setPicker] = useState<'location' | 'site' | 'canteen' | 'floor' | 'window' | null>(null)
+  const [pickerLoading, setPickerLoading] = useState(false)
+  const schoolName = selectedLocation?.name || ''
+  const canteenName = selectedCanteen?.name || ''
+  const floorName = selectedFloor?.name || selectedWindow?.floor || ''
+  const windowName = selectedWindow?.name || ''
   const [searchKeyword, setSearchKeyword] = useState('')
   const [sortBy, setSortBy] = useState<CampusCanteenSort>('hot')
   const [loading, setLoading] = useState(false)
@@ -2640,6 +2654,10 @@ export function CampusCanteenScreen() {
         sortBy: nextSortBy,
         schoolName: nextSchoolName.trim() || undefined,
         canteenName: nextCanteenName.trim() || undefined,
+        schoolId: selectedLocation?.id,
+        campusId: selectedSite?.id,
+        canteenId: selectedCanteen?.id,
+        windowId: selectedWindow?.id,
         merchantName: keyword?.trim() || undefined,
       })
       setItems(data.list || [])
@@ -2648,7 +2666,7 @@ export function CampusCanteenScreen() {
     } finally {
       setLoading(false)
     }
-  }, [canteenName, schoolName, sortBy])
+  }, [canteenName, schoolName, sortBy, selectedCanteen?.id, selectedLocation?.id, selectedSite?.id, selectedWindow?.id])
 
   useEffect(() => {
     void load()
@@ -2684,10 +2702,7 @@ export function CampusCanteenScreen() {
   }
 
   const clearFilters = () => {
-    setSchoolName('')
-    setCanteenName('')
-    setFloorName('')
-    setWindowName('')
+    setSelectedLocation(null); setSelectedSite(null); setSelectedCanteen(null); setSelectedFloor(null); setSelectedWindow(null)
     setSearchKeyword('')
     setSortBy('hot')
     void load('', { schoolName: '', canteenName: '', sortBy: 'hot' })
@@ -2718,6 +2733,33 @@ export function CampusCanteenScreen() {
     if (item.author?.id) {
       navigation.navigate('ProfileSettings', { userId: item.author.id })
     }
+  }
+
+  const openPicker = async (next: 'location' | 'site' | 'canteen' | 'floor' | 'window') => {
+    if (next === 'site' && !selectedLocation) return Alert.alert('请先选择地点')
+    if ((next === 'canteen' || next === 'floor' || next === 'window') && !selectedSite && next === 'canteen') return Alert.alert('请先选择校区/园区')
+    if ((next === 'floor' || next === 'window') && !selectedCanteen) return Alert.alert('请先选择食堂')
+    if (next === 'window' && !floorName) return Alert.alert('请先选择楼层')
+    setPickerLoading(true)
+    try {
+      if (next === 'location') setLocations(await apiClient.searchDiningLocations({ type: locationType, limit: 100 }))
+      if (next === 'site' && selectedLocation) setSites(await apiClient.getDiningLocationSites(selectedLocation.id))
+      if (next === 'canteen' && selectedSite) setCanteens(await apiClient.getDiningLocationCanteens(selectedSite.id))
+      if (next === 'floor' && selectedCanteen) setFloors(await apiClient.getDiningCanteenFloors(selectedCanteen.id))
+      if (next === 'window' && selectedCanteen) setWindows(await apiClient.getDiningCanteenWindows(selectedCanteen.id, floorName))
+      setPicker(next)
+    } catch (error) { showError('获取地点目录失败', error) } finally { setPickerLoading(false) }
+  }
+
+  const pickerTitle = picker === 'location' ? '选择地点' : picker === 'site' ? '选择校区/园区' : picker === 'canteen' ? '选择食堂' : picker === 'floor' ? '选择楼层' : '选择窗口'
+  const pickerItems = picker === 'location' ? locations : picker === 'site' ? sites : picker === 'canteen' ? canteens : picker === 'floor' ? floors : windows
+  const choosePickerItem = (item: any) => {
+    if (picker === 'location') { setSelectedLocation(item); setSelectedSite(null); setSelectedCanteen(null); setSelectedFloor(null); setSelectedWindow(null) }
+    if (picker === 'site') { setSelectedSite(item); setSelectedCanteen(null); setSelectedFloor(null); setSelectedWindow(null) }
+    if (picker === 'canteen') { setSelectedCanteen(item); setSelectedFloor(null); setSelectedWindow(null) }
+    if (picker === 'floor') { setSelectedFloor(item); setSelectedWindow(null) }
+    if (picker === 'window') { setSelectedWindow(item); if (item.floor) setSelectedFloor({ name: item.floor, sort_order: 0 }) }
+    setPicker(null)
   }
 
   const renderCampusCard = (item: PublicFoodItem) => {
@@ -2818,7 +2860,7 @@ export function CampusCanteenScreen() {
             <Text style={styles.campusHeroEyebrow}>食探校园活动</Text>
             <Text style={styles.campusHeroTitle}>食探校园食堂计划</Text>
             <Text style={styles.campusHeroSubtitle} numberOfLines={3}>
-              按你所在省份选择大学，一起补全食堂菜品价格、位置和营养信息
+              按你所在省份选择高校，一起补全食堂菜品价格、位置和营养信息
             </Text>
           </View>
           <Pressable style={styles.campusHeroUpload} onPress={goUpload}>
@@ -2828,11 +2870,13 @@ export function CampusCanteenScreen() {
 
         <View style={styles.campusHeader}>
           <View style={styles.campusFilterRow}>
-            <CampusFilterInput value={schoolName} onChangeText={setSchoolName} placeholder="选择大学" />
-            <CampusFilterInput value={canteenName} onChangeText={setCanteenName} placeholder="食堂名称" />
-            <CampusFilterInput value={floorName} onChangeText={setFloorName} placeholder="楼层" />
-            <CampusFilterInput value={windowName} onChangeText={setWindowName} placeholder="窗口" />
+            <Pressable style={styles.campusFilterChip} onPress={() => void openPicker('location')}><Text style={schoolName ? styles.campusFilterInputText : styles.campusFilterPlaceholder}>{schoolName || (locationType === 'company' ? '选择公司' : locationType === 'community' ? '选择社区' : '选择高校')}</Text></Pressable>
+            <Pressable style={styles.campusFilterChip} onPress={() => void openPicker('site')}><Text style={selectedSite?.name ? styles.campusFilterInputText : styles.campusFilterPlaceholder}>{selectedSite?.name || '选择校区/园区'}</Text></Pressable>
+            <Pressable style={styles.campusFilterChip} onPress={() => void openPicker('canteen')}><Text style={canteenName ? styles.campusFilterInputText : styles.campusFilterPlaceholder}>{canteenName || '选择食堂'}</Text></Pressable>
+            <Pressable style={styles.campusFilterChip} onPress={() => void openPicker('floor')}><Text style={floorName ? styles.campusFilterInputText : styles.campusFilterPlaceholder}>{floorName || '选择楼层'}</Text></Pressable>
+            <Pressable style={styles.campusFilterChip} onPress={() => void openPicker('window')}><Text style={windowName ? styles.campusFilterInputText : styles.campusFilterPlaceholder}>{windowName || '选择窗口'}</Text></Pressable>
           </View>
+          <View style={styles.campusFilterRow}>{(['university', 'company', 'community'] as DiningLocationType[]).map((type) => <Pressable key={type} style={styles.campusClearButton} onPress={() => { setLocationType(type); setSelectedLocation(null); setSelectedSite(null); setSelectedCanteen(null); setSelectedFloor(null); setSelectedWindow(null) }}><Text style={styles.campusClearButtonText}>{locationType === type ? '✓ ' : ''}{type === 'university' ? '高校' : type === 'company' ? '公司' : '社区'}</Text></Pressable>)}</View>
           <View style={styles.campusSearchRow}>
             <View style={styles.campusSearchInputWrap}>
               <Text style={styles.campusSearchIcon}>⌕</Text>
@@ -2879,7 +2923,7 @@ export function CampusCanteenScreen() {
 
         <View style={styles.campusSectionHead}>
           <Text style={styles.campusSectionTitle}>全部校园菜品</Text>
-          <Text style={styles.campusSectionSubtitle} numberOfLines={1}>{schoolName || '全部大学'}{canteenName ? ` · ${canteenName}` : ''}</Text>
+          <Text style={styles.campusSectionSubtitle} numberOfLines={1}>{schoolName || '全部高校'}{canteenName ? ` · ${canteenName}` : ''}</Text>
         </View>
 
         {loading && visibleItems.length === 0 ? (
@@ -2899,6 +2943,14 @@ export function CampusCanteenScreen() {
           visibleItems.map(renderCampusCard)
         )}
       </ScrollView>
+      <Modal visible={picker !== null} transparent animationType='slide' onRequestClose={() => setPicker(null)}>
+        <Pressable style={styles.campusModalOverlay} onPress={() => setPicker(null)}>
+          <Pressable style={styles.campusPickerSheet} onPress={(event) => event.stopPropagation()}>
+            <Text style={styles.campusPickerTitle}>{pickerTitle}</Text>
+            {pickerLoading ? <ActivityIndicator color={colors.brand} /> : <ScrollView style={styles.campusPickerList}>{pickerItems.map((item: any) => <Pressable key={item.id} style={styles.campusPickerRow} onPress={() => choosePickerItem(item)}><Text style={styles.campusPickerRowTitle}>{item.name}</Text>{item.floor ? <Text style={styles.campusPickerRowMeta}>{item.floor}</Text> : null}</Pressable>)}</ScrollView>}
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       <Pressable style={styles.campusFabButton} onPress={goUpload}>
         <Text style={styles.campusFabIcon}>+</Text>
@@ -6749,6 +6801,14 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 14,
   },
+  campusFilterInputText: {
+    color: colors.text,
+    fontSize: 14,
+  },
+  campusFilterPlaceholder: {
+    color: colors.textMuted,
+    fontSize: 14,
+  },
   campusSearchRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -6801,6 +6861,32 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '800',
   },
+  campusModalOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(15, 23, 42, 0.38)',
+  },
+  campusPickerSheet: {
+    maxHeight: '72%',
+    padding: 20,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    backgroundColor: colors.surface,
+  },
+  campusPickerTitle: {
+    marginBottom: 12,
+    color: colors.text,
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  campusPickerList: { maxHeight: 420 },
+  campusPickerRow: {
+    paddingVertical: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+  },
+  campusPickerRowTitle: { color: colors.text, fontSize: 15, fontWeight: '700' },
+  campusPickerRowMeta: { marginTop: 3, color: colors.textMuted, fontSize: 12 },
   campusSortSection: {
     flexDirection: 'row',
     gap: 12,

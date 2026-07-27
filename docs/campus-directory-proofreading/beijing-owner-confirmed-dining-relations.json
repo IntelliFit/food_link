@@ -1,0 +1,144 @@
+{
+  "generated_at": "2026-07-24T15:55:00+08:00",
+  "scope": "用户确认的北京联合大学与首都医科大学食堂层级，仅用于审核，不直接写数据库",
+  "source_image": "codex-clipboard-641be1e1-5426-4cf1-b52f-01d611143fc2.jpg",
+  "schools": [
+    {
+      "school_name": "北京联合大学",
+      "official_code": "4111011417",
+      "confirmation_source": "用户提供截图并明确确认",
+      "relations": [
+        {
+          "campus": "南院",
+          "canteen": "南院食堂",
+          "floor": "一楼",
+          "floor_area": "",
+          "window": "",
+          "status": "confirmed",
+          "note": "截图明确列出南院食堂一楼；菜品描述不作为稳定窗口名。"
+        },
+        {
+          "campus": "南院",
+          "canteen": "南院食堂",
+          "floor": "二楼",
+          "floor_area": "",
+          "window": "",
+          "status": "confirmed",
+          "note": "截图明确列出南院食堂二楼；菜品描述不作为稳定窗口名。"
+        },
+        {
+          "campus": "南院",
+          "canteen": "南院食堂",
+          "floor": "三楼",
+          "floor_area": "",
+          "window": "",
+          "status": "confirmed",
+          "note": "截图明确列出南院食堂三楼；菜品描述不作为稳定窗口名。"
+        },
+        {
+          "campus": "南院",
+          "canteen": "南院食堂",
+          "floor": "四楼",
+          "floor_area": "",
+          "window": "",
+          "status": "confirmed",
+          "note": "截图明确列出南院食堂四楼；菜品描述不作为稳定窗口名。"
+        },
+        {
+          "campus": "南院",
+          "canteen": "地下餐厅",
+          "floor": "地下一层",
+          "floor_area": "",
+          "window": "",
+          "status": "confirmed",
+          "note": "截图称地下餐厅位于新图书馆下。"
+        },
+        {
+          "campus": "本部校区",
+          "canteen": "北苑食堂",
+          "floor": "一楼",
+          "floor_area": "基本伙与家常菜",
+          "window": "",
+          "status": "confirmed",
+          "note": "截图称北苑食堂位于男生宿舍13号楼旁，共两层。"
+        },
+        {
+          "campus": "本部校区",
+          "canteen": "北苑食堂",
+          "floor": "二楼",
+          "floor_area": "清真食堂",
+          "window": "",
+          "status": "confirmed",
+          "note": "截图明确北苑食堂二楼为清真食堂。"
+        },
+        {
+          "campus": "外馆斜街校区",
+          "canteen": "外馆斜街校区食堂",
+          "floor": "一楼",
+          "floor_area": "",
+          "window": "",
+          "status": "confirmed",
+          "note": "截图称食堂位于一号楼一层。"
+        },
+        {
+          "campus": "外馆斜街校区",
+          "canteen": "外馆斜街校区地下食堂（正式名称未披露）",
+          "floor": "地下一层",
+          "floor_area": "",
+          "window": "",
+          "status": "name_pending",
+          "note": "截图确认一号楼地下另有一个食堂，但没有披露其正式名称。"
+        }
+      ]
+    },
+    {
+      "school_name": "首都医科大学",
+      "official_code": "4111010025",
+      "confirmation_source": "用户在当前任务中明确确认；7号窗口另有学校官网证据",
+      "relations": [
+        {
+          "campus": "校本部",
+          "canteen": "校本部食堂",
+          "floor": "一楼",
+          "floor_area": "第一餐厅",
+          "window": "",
+          "status": "confirmed",
+          "note": "用户确认首都医科大学只有一个食堂，第一餐厅位于一楼。"
+        },
+        {
+          "campus": "校本部",
+          "canteen": "校本部食堂",
+          "floor": "一楼",
+          "floor_area": "清真食堂",
+          "window": "",
+          "status": "confirmed",
+          "note": "用户确认清真食堂位于一楼。"
+        },
+        {
+          "campus": "校本部",
+          "canteen": "校本部食堂",
+          "floor": "二楼",
+          "floor_area": "第二餐厅",
+          "window": "7号窗口",
+          "status": "confirmed",
+          "note": "用户确认第二餐厅位于二楼；学校官网直接确认二层餐厅7号窗口。"
+        },
+        {
+          "campus": "校本部",
+          "canteen": "校本部食堂",
+          "floor": "三楼",
+          "floor_area": "第三餐厅",
+          "window": "",
+          "status": "confirmed",
+          "note": "用户确认第三餐厅位于三楼。"
+        }
+      ],
+      "removed_candidates": [
+        "国际学院食堂",
+        "学术交流中心餐厅",
+        "基础科研楼餐厅",
+        "地下一层餐饮空间"
+      ]
+    }
+  ]
+}

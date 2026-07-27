@@ -61,6 +61,14 @@ export default function CampusPicker({
 
   const disabled = !school?.id;
   const isDark = scheme === "dark";
+  const areaLabel =
+    school?.location_type === "company"
+      ? "园区"
+      : school?.location_type === "community"
+        ? "社区区域"
+        : school?.location_type === "university"
+          ? "校区"
+          : "校区/园区/社区区域";
 
   return (
     <View
@@ -70,9 +78,9 @@ export default function CampusPicker({
       <View className='campus-picker-card' onClick={(e) => e.stopPropagation()}>
         <View className='campus-picker-header'>
           <View>
-            <Text className='campus-picker-title'>选择校区</Text>
+            <Text className='campus-picker-title'>选择{areaLabel}</Text>
             <Text className='campus-picker-subtitle'>
-              {school?.name || "请先选择大学"}
+              {school?.name || "请先选择学校、公司或社区"}
             </Text>
           </View>
           <Text className='campus-picker-close' onClick={onCancel}>
@@ -90,7 +98,7 @@ export default function CampusPicker({
               <Text className='campus-picker-search-icon iconfont icon-sousuo' />
               <Input
                 className='campus-picker-input'
-                placeholder='搜索校区名称'
+                placeholder={`搜索${areaLabel}名称`}
                 value={keyword}
                 onInput={(e) => setKeyword(e.detail.value)}
               />
@@ -109,7 +117,7 @@ export default function CampusPicker({
               ) : visibleCampuses.length === 0 ? (
                 <View className='campus-picker-empty'>
                   <Text className='campus-picker-empty-text'>
-                    暂未收录这个校区
+                    暂未收录这个{areaLabel}
                   </Text>
                 </View>
               ) : (
@@ -123,7 +131,7 @@ export default function CampusPicker({
                     <Text className='campus-picker-item-meta'>
                       {[item.campus_type, item.address]
                         .filter(Boolean)
-                        .join(" · ") || "已审核校区"}
+                        .join(" · ") || `已审核${areaLabel}`}
                     </Text>
                   </View>
                 ))

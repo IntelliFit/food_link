@@ -89,14 +89,27 @@
 
 .filter-row {
   display: flex;
-  flex-wrap: wrap;
   gap: 16rpx;
   margin-bottom: 16rpx;
 }
 
+.filter-row--equal {
+  width: 100%;
+
+  > .filter-chip,
+  > .filter-picker {
+    flex: 1 1 0;
+    width: 0;
+    min-width: 0;
+  }
+}
+
 .filter-chip {
-  display: inline-flex;
+  display: flex;
   align-items: center;
+  justify-content: space-between;
+  min-width: 0;
+  box-sizing: border-box;
   padding: 16rpx 20rpx;
   background: #f3f4f6;
   border-radius: 32rpx;
@@ -108,6 +121,10 @@
 }
 
 .filter-chip-text {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
   font-size: 28rpx;
   color: #374151;
   margin-right: 8rpx;

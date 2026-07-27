@@ -1,0 +1,645 @@
+{
+  "generated_at": "2026-07-27T17:35:00+08:00",
+  "scope": "产品负责人在当前任务中提供的北京高校食堂、楼层和区域补充确认；用于更新审核表，不直接写数据库",
+  "schools": [
+    {
+      "school_name": "北京协和医学院",
+      "official_code": "4111010023",
+      "source": "用户此前在当前任务中明确确认；协和数据无需待补证",
+      "relations": [
+        {"canteen": "校本部｜东单教学楼餐厅", "floor": "一层", "area": "", "type": "食堂"},
+        {"canteen": "校本部｜东单教学楼餐厅", "floor": "二层", "area": "", "type": "食堂"},
+        {"canteen": "校本部｜东单护士楼餐厅", "floor": "地下一层", "area": "", "type": "食堂"},
+        {"canteen": "校本部｜东单医大餐厅", "floor": "地下一层", "area": "", "type": "食堂"},
+        {"canteen": "北区｜E栋食堂", "floor": "二层", "area": "", "type": "食堂"},
+        {"canteen": "北区｜B栋食堂", "floor": "地下一层", "area": "", "type": "食堂"}
+      ]
+    },
+    {
+      "school_name": "北京工业大学",
+      "official_code": "4111010005",
+      "source": "C:\\Users\\86157\\AppData\\Local\\Temp\\codex-clipboard-47425f08-95c5-430f-ba66-08ffe00e54a8.png",
+      "relations": [
+        {"canteen": "奥运餐厅", "floor": "一层", "area": "", "type": "食堂"},
+        {"canteen": "奥运餐厅", "floor": "二层", "area": "", "type": "食堂"},
+        {"canteen": "北区餐厅", "floor": "", "area": "", "type": "食堂"},
+        {"canteen": "美食园", "floor": "", "area": "", "type": "食堂"},
+        {"canteen": "风味餐厅", "floor": "", "area": "", "type": "食堂"},
+        {"canteen": "民族餐厅", "floor": "", "area": "", "type": "食堂"},
+        {"canteen": "中蓝餐厅", "floor": "", "area": "基本伙", "type": "食堂区域"},
+        {"canteen": "中蓝餐厅", "floor": "", "area": "风味、民族", "type": "食堂区域"},
+        {"canteen": "天天餐厅", "floor": "", "area": "", "type": "食堂"},
+        {"canteen": "天天咖啡厅", "floor": "", "area": "", "type": "独立餐饮点", "status": "图片名称局部遮挡，按可辨识文字录入"},
+        {"canteen": "教工餐厅（科技大厦）", "floor": "", "area": "", "type": "食堂"}
+      ]
+    },
+    {
+      "school_name": "北京工商大学",
+      "official_code": "4111010011",
+      "source": "用户在2026-07-27当前消息中明确确认",
+      "relations": [
+        {"canteen": "良乡主校区｜中区食堂", "floor": "一层", "area": "基本伙", "type": "食堂区域"},
+        {"canteen": "良乡主校区｜中区食堂", "floor": "二层", "area": "风味餐厅", "type": "食堂区域"},
+        {"canteen": "良乡主校区｜中区食堂", "floor": "三层", "area": "风味餐厅、教工餐厅", "type": "食堂区域"},
+        {"canteen": "良乡主校区｜清真食堂", "floor": "", "area": "基本伙", "type": "食堂区域"},
+        {"canteen": "良乡主校区｜西区食堂", "floor": "一层", "area": "基本伙", "type": "食堂区域"},
+        {"canteen": "良乡主校区｜西区食堂", "floor": "二层", "area": "风味餐厅", "type": "食堂区域"},
+        {"canteen": "良乡主校区｜东区勤苑餐厅", "floor": "一层", "area": "基本伙", "type": "食堂区域"},
+        {"canteen": "良乡主校区｜新西区餐厅", "floor": "", "area": "基本伙", "type": "食堂区域"},
+        {"canteen": "阜成路校区｜东区食堂", "floor": "一层", "area": "基本伙、风味档口", "type": "食堂区域"},
+        {"canteen": "阜成路校区｜东区食堂", "floor": "二层", "area": "基本伙、面食", "type": "食堂区域"},
+        {"canteen": "阜成路校区｜西区食堂", "floor": "一层", "area": "基本伙、风味档口", "type": "食堂区域"},
+        {"canteen": "阜成路校区｜西区食堂", "floor": "二层", "area": "教工餐厅", "type": "食堂区域"}
+      ]
+    },
+    {
+      "school_name": "首都师范大学",
+      "official_code": "4111010028",
+      "source": "C:\\Users\\86157\\AppData\\Local\\Temp\\codex-clipboard-d47c5c0a-03ca-4e25-8761-aabb6bb89917.jpg",
+      "relations": [
+        {"canteen": "本部校区｜学一食堂", "floor": "", "area": "", "type": "食堂"},
+        {"canteen": "本部校区｜学二食堂", "floor": "", "area": "", "type": "食堂"},
+        {"canteen": "本部校区｜学三食堂", "floor": "", "area": "", "type": "食堂"},
+        {"canteen": "本部校区｜民族餐厅", "floor": "", "area": "", "type": "食堂"},
+        {"canteen": "本部校区｜西餐厅", "floor": "", "area": "", "type": "食堂"},
+        {"canteen": "本部校区｜膳园餐厅", "floor": "", "area": "", "type": "食堂"},
+        {"canteen": "本部校区｜杏园餐厅", "floor": "", "area": "", "type": "食堂"},
+        {"canteen": "本部校区｜教工服务部", "floor": "", "area": "", "type": "餐饮服务点"},
+        {"canteen": "北一校区｜学四食堂", "floor": "一层", "area": "", "type": "食堂"},
+        {"canteen": "北一校区｜学五食堂", "floor": "二层", "area": "民族餐厅", "type": "食堂区域"},
+        {"canteen": "北二区｜学六食堂", "floor": "一层", "area": "", "type": "食堂"},
+        {"canteen": "北二区｜学六食堂", "floor": "二层", "area": "", "type": "食堂"},
+        {"canteen": "北二区｜民族餐厅", "floor": "", "area": "", "type": "食堂"},
+        {"canteen": "北三区｜学十一食堂", "floor": "", "area": "", "type": "食堂"},
+        {"canteen": "良乡校区｜学七食堂", "floor": "", "area": "", "type": "食堂"},
+        {"canteen": "良乡校区｜学八食堂", "floor": "", "area": "", "type": "食堂"},
+        {"canteen": "良乡校区｜民族餐厅", "floor": "", "area": "", "type": "食堂"},
+        {"canteen": "东一校区｜学九食堂", "floor": "一层", "area": "民族餐厅", "type": "食堂区域"},
+        {"canteen": "东一校区｜学九食堂", "floor": "二层", "area": "", "type": "食堂"},
+        {"canteen": "东二校区｜学十食堂", "floor": "", "area": "", "type": "食堂"}
+      ]
+    },
+    {
+      "school_name": "首都体育学院",
+      "official_code": "4111010029",
+      "source": "用户在2026-07-27当前消息中明确确认",
+      "relations": [
+        {"canteen": "学校食堂", "floor": "一层", "area": "基本伙食", "type": "食堂区域"},
+        {"canteen": "学校食堂", "floor": "二层", "area": "特色餐饮", "type": "食堂区域"},
+        {"canteen": "学校食堂", "floor": "三层", "area": "清真食堂", "type": "食堂区域"},
+        {"canteen": "学校食堂", "floor": "三层", "area": "教工食堂", "type": "食堂区域"}
+      ]
+    },
+    {
+      "school_name": "国际关系学院",
+      "official_code": "4111010042",
+      "source": "用户在2026-07-27当前消息中明确确认",
+      "relations": [
+        {"canteen": "学一食堂", "floor": "一层", "area": "", "type": "食堂"},
+        {"canteen": "学二食堂", "floor": "一层", "area": "", "type": "食堂"},
+        {"canteen": "民族风味餐厅", "floor": "一层", "area": "", "type": "食堂"},
+        {"canteen": "教工食堂", "floor": "", "area": "", "type": "食堂"},
+        {"canteen": "艺园餐厅", "floor": "", "area": "", "type": "食堂"}
+      ]
+    },
+    {
+      "school_name": "中国矿业大学（北京）",
+      "official_code": "4111011413",
+      "source": "用户在2026-07-27当前消息中明确确认",
+      "relations": [
+        {"canteen": "学院路校区｜丰园食堂", "floor": "地下一层", "area": "清真食堂", "type": "食堂区域"},
+        {"canteen": "学院路校区｜丰园食堂", "floor": "一层", "area": "", "type": "食堂", "status": "用户确认地上共三层；服务窗口未逐层拆分"},
+        {"canteen": "学院路校区｜丰园食堂", "floor": "二层", "area": "", "type": "食堂", "status": "用户确认地上共三层；服务窗口未逐层拆分"},
+        {"canteen": "学院路校区｜丰园食堂", "floor": "三层", "area": "", "type": "食堂", "status": "用户确认地上共三层；服务窗口未逐层拆分"},
+        {"canteen": "学院路校区｜福园食堂", "floor": "一层", "area": "清真餐厅", "type": "食堂区域"},
+        {"canteen": "沙河校区｜丰园食堂", "floor": "地下一层", "area": "清真食堂", "type": "食堂区域"},
+        {"canteen": "沙河校区｜丰园食堂", "floor": "一层", "area": "家常菜、面食", "type": "食堂区域"},
+        {"canteen": "沙河校区｜丰园食堂", "floor": "二层", "area": "特色风味", "type": "食堂区域"},
+        {"canteen": "沙河校区｜丰园食堂", "floor": "三层", "area": "特色风味", "type": "食堂区域"},
+        {"canteen": "沙河校区｜馨园食堂", "floor": "一层", "area": "", "type": "食堂"},
+        {"canteen": "沙河校区｜箐园食堂", "floor": "一层", "area": "夜宵供应", "type": "食堂区域"}
+      ]
+    },
+    {
+      "school_name": "北京财贸职业学院",
+      "official_code": "4111012561",
+      "source": "用户在2026-07-27当前消息中明确确认",
+      "relations": [
+        {"canteen": "中心食堂", "floor": "一层", "area": "基本伙食、民族食堂", "type": "食堂区域"},
+        {"canteen": "中心食堂", "floor": "二层", "area": "特色风味窗口", "type": "食堂区域"}
+      ]
+    },
+    {
+      "school_name": "北京金融科技学院",
+      "official_code": "4111013630",
+      "source": "用户在2026-07-27当前消息中明确确认",
+      "relations": [
+        {"canteen": "一食堂（味燃中餐厅）", "floor": "一层", "area": "", "type": "食堂"},
+        {"canteen": "一食堂（味燃中餐厅）", "floor": "二层", "area": "", "type": "食堂"},
+        {"canteen": "味林（味林Tastelin西餐厅）", "floor": "", "area": "", "type": "食堂", "status": "独立食堂名称已由用户确认；具体楼层未说明"}
+      ]
+    },
+    {
+      "school_name": "北京邮电大学世纪学院",
+      "official_code": "4111013901",
+      "source": "用户在2026-07-27当前消息中明确确认",
+      "relations": [
+        {"canteen": "学生食堂", "floor": "一层", "area": "北方风味、面食、水饺、小笼包、基本伙", "type": "食堂区域"},
+        {"canteen": "学生食堂", "floor": "二层", "area": "南方风味、小炒、砂锅、盖饭", "type": "食堂区域"},
+        {"canteen": "学生食堂", "floor": "三层", "area": "民族风味、南北融合快餐、特色炒饭", "type": "食堂区域"}
+      ]
+    },
+    {
+      "school_name": "北京警察学院",
+      "official_code": "4111014019",
+      "source": "用户在2026-07-27当前消息中明确确认",
+      "relations": [
+        {"canteen": "学校食堂（正式名称未披露）", "floor": "一层", "area": "", "type": "食堂"},
+        {"canteen": "学校食堂（正式名称未披露）", "floor": "二层", "area": "", "type": "食堂"}
+      ]
+    },
+    {
+      "school_name": "中国科学院大学",
+      "official_code": "4111014430",
+      "source": "用户在2026-07-27当前消息中明确确认",
+      "relations": [
+        {"canteen": "雁栖湖校区｜一食堂", "floor": "一层", "area": "", "type": "食堂"},
+        {"canteen": "雁栖湖校区｜一食堂", "floor": "二层", "area": "", "type": "食堂"},
+        {"canteen": "雁栖湖校区｜一食堂", "floor": "三层", "area": "", "type": "食堂"},
+        {"canteen": "雁栖湖校区｜二食堂", "floor": "一层", "area": "", "type": "食堂"},
+        {"canteen": "雁栖湖校区｜二食堂", "floor": "二层", "area": "", "type": "食堂"},
+        {"canteen": "雁栖湖校区｜三食堂", "floor": "一层", "area": "", "type": "食堂"},
+        {"canteen": "雁栖湖校区｜三食堂", "floor": "二层", "area": "", "type": "食堂"},
+        {"canteen": "雁栖湖校区｜三食堂", "floor": "", "area": "清真餐厅（具体楼层未说明）", "type": "食堂区域"},
+        {"canteen": "雁栖湖校区｜四食堂", "floor": "一层", "area": "", "type": "食堂"},
+        {"canteen": "雁栖湖校区｜四食堂", "floor": "二层", "area": "", "type": "食堂"},
+        {"canteen": "雁栖湖校区｜四食堂", "floor": "三层", "area": "", "type": "食堂"},
+        {"canteen": "雁栖湖校区｜五食堂", "floor": "一层", "area": "", "type": "食堂"},
+        {"canteen": "雁栖湖校区｜五食堂", "floor": "二层", "area": "", "type": "食堂"},
+        {"canteen": "雁栖湖校区｜五食堂", "floor": "三层", "area": "", "type": "食堂"},
+        {"canteen": "中关村校区｜食堂", "floor": "一层", "area": "", "type": "食堂"},
+        {"canteen": "中关村校区｜食堂", "floor": "二层", "area": "", "type": "食堂"},
+        {"canteen": "中关村校区｜食堂", "floor": "三层", "area": "", "type": "食堂"},
+        {"canteen": "玉泉路校区｜综合食堂", "floor": "一层", "area": "", "type": "食堂"},
+        {"canteen": "玉泉路校区｜综合食堂", "floor": "二层", "area": "", "type": "食堂"},
+        {"canteen": "玉泉路校区｜西北食堂", "floor": "", "area": "", "type": "食堂"},
+        {"canteen": "奥运村校区｜学生食堂", "floor": "", "area": "", "type": "食堂"},
+        {"canteen": "奥运村校区｜奥北食堂", "floor": "", "area": "", "type": "食堂"}
+      ]
+    },
+    {
+      "school_name": "中国社会科学院大学",
+      "official_code": "4111014596",
+      "source": "用户在2026-07-27当前消息中明确确认",
+      "relations": [
+        {"canteen": "良乡校区｜一食堂", "floor": "一层", "area": "", "type": "食堂"},
+        {"canteen": "良乡校区｜一食堂", "floor": "二层", "area": "", "type": "食堂"},
+        {"canteen": "良乡校区｜一食堂", "floor": "二层", "area": "特色民族餐厅", "type": "食堂区域"},
+        {"canteen": "良乡校区｜二食堂（风味餐厅）", "floor": "一层", "area": "", "type": "食堂"},
+        {"canteen": "望京校区｜食堂（正式名称未披露）", "floor": "", "area": "", "type": "食堂"}
+      ]
+    },
+    {
+      "school_name": "北京网络职业学院",
+      "official_code": "4111014588",
+      "source": "用户在2026-07-27当前消息中明确确认",
+      "relations": [
+        {"canteen": "北网公社", "floor": "一层", "area": "", "type": "食堂"},
+        {"canteen": "北网公社", "floor": "二层", "area": "", "type": "食堂"}
+      ]
+    },
+    {
+      "school_name": "北京卫生职业学院",
+      "official_code": "4111014395",
+      "source": "用户在2026-07-27当前消息中明确确认",
+      "relations": [
+        {"canteen": "一院区（房山校区）｜食堂", "floor": "二层", "area": "", "type": "食堂", "status": "主体位于食堂楼二层；部分区域可能为单层"},
+        {"canteen": "二院区（通州校区）｜食堂", "floor": "二层", "area": "", "type": "食堂"},
+        {"canteen": "三院区（通州校区）｜学生食堂", "floor": "", "area": "", "type": "食堂", "status": "名称已确认；具体楼层未明确，不按通常情况猜测"}
+      ]
+    },
+    {
+      "school_name": "北京交通运输职业学院",
+      "official_code": "4111014279",
+      "source": "用户在2026-07-27当前消息中明确确认",
+      "relations": [
+        {"canteen": "学生食堂", "floor": "一层", "area": "清真窗口", "type": "食堂区域"},
+        {"canteen": "学生食堂", "floor": "二层", "area": "普通窗口", "type": "食堂区域"}
+      ]
+    },
+    {
+      "school_name": "北京体育职业学院",
+      "official_code": "4111014215",
+      "source": "用户在2026-07-27当前消息中明确确认",
+      "relations": [
+        {"canteen": "木樨园训练基地｜食堂（正式名称未披露）", "floor": "", "area": "运动员餐区", "type": "食堂区域"},
+        {"canteen": "木樨园训练基地｜食堂（正式名称未披露）", "floor": "", "area": "普通学生餐区", "type": "食堂区域"},
+        {"canteen": "大兴芦城分校区｜食堂（正式名称未披露）", "floor": "", "area": "", "type": "食堂"},
+        {"canteen": "昌平合作实训校区｜食堂（正式名称未披露）", "floor": "", "area": "", "type": "食堂"}
+      ]
+    },
+    {
+      "school_name": "北京劳动保障职业学院",
+      "official_code": "4111014075",
+      "source": "用户在2026-07-27当前消息中明确确认",
+      "relations": [
+        {"canteen": "南校区食堂", "floor": "一层", "area": "", "type": "食堂"},
+        {"canteen": "北校区学生食堂", "floor": "一层", "area": "", "type": "食堂"},
+        {"canteen": "北校区教工食堂", "floor": "一层", "area": "", "type": "食堂"}
+      ]
+    },
+    {
+      "school_name": "北京经济管理职业学院",
+      "official_code": "4111014073",
+      "source": "用户在2026-07-27当前消息中明确确认",
+      "relations": [
+        {"canteen": "固安校区｜第一食堂", "floor": "", "area": "", "type": "食堂"},
+        {"canteen": "固安校区｜第二食堂", "floor": "", "area": "", "type": "食堂"},
+        {"canteen": "南校区（永定河校区）｜食堂（正式名称未披露）", "floor": "", "area": "共2个食堂", "type": "食堂数量确认", "status": "数量已确认；两个食堂的正式名称和楼层未说明，不虚构名称"}
+      ]
+    },
+    {
+      "school_name": "北京工业大学耿丹学院",
+      "official_code": "4111013904",
+      "source": "用户在2026-07-27当前消息中明确确认",
+      "relations": [
+        {"canteen": "大型学生食堂", "floor": "", "area": "", "type": "食堂"},
+        {"canteen": "清真餐厅", "floor": "", "area": "", "type": "食堂"},
+        {"canteen": "教工食堂", "floor": "", "area": "", "type": "食堂"}
+      ]
+    },
+    {
+      "school_name": "北京培黎职业学院",
+      "official_code": "4111013728",
+      "source": "用户在2026-07-27当前消息中明确确认",
+      "relations": [
+        {"canteen": "第一食堂", "floor": "一层", "area": "", "type": "食堂"},
+        {"canteen": "第二食堂", "floor": "二层", "area": "", "type": "食堂"}
+      ]
+    },
+    {
+      "school_name": "北京科技职业学院",
+      "official_code": "4111013703",
+      "source": "用户在2026-07-27当前消息中明确确认",
+      "relations": [
+        {"canteen": "昌平校区｜习成餐厅", "floor": "", "area": "", "type": "食堂"},
+        {"canteen": "昌平校区｜朝宗餐厅", "floor": "", "area": "", "type": "食堂"},
+        {"canteen": "昌平校区｜芙蓉餐厅", "floor": "", "area": "", "type": "食堂"},
+        {"canteen": "昌平校区｜学府餐厅", "floor": "", "area": "", "type": "食堂"}
+      ]
+    },
+    {
+      "school_name": "北京汇佳职业学院",
+      "official_code": "4111012568",
+      "source": "用户在2026-07-27当前消息中明确确认",
+      "relations": [
+        {"canteen": "学校食堂（正式名称未披露）", "floor": "", "area": "", "type": "食堂", "status": "食堂数量1个已确认；正式名称和楼层未说明"}
+      ]
+    },
+    {
+      "school_name": "北京戏曲艺术职业学院",
+      "official_code": "4111012567",
+      "source": "用户在2026-07-27当前消息中明确确认",
+      "relations": [
+        {"canteen": "学校食堂（正式名称未披露）", "floor": "一层", "area": "", "type": "食堂"},
+        {"canteen": "学校食堂（正式名称未披露）", "floor": "二层", "area": "", "type": "食堂"},
+        {"canteen": "学校食堂（正式名称未披露）", "floor": "三层", "area": "", "type": "食堂"}
+      ]
+    },
+    {
+      "school_name": "北京服装学院",
+      "official_code": "4111010012",
+      "source": "用户在2026-07-27当前消息中明确确认",
+      "relations": [
+        {"canteen": "食堂（12号楼）", "floor": "一层", "area": "基本伙", "type": "食堂区域"},
+        {"canteen": "食堂（12号楼）", "floor": "二层", "area": "风味餐厅", "type": "食堂区域"}
+      ]
+    },
+    {
+      "school_name": "北京印刷学院",
+      "official_code": "4111010015",
+      "source": "用户在2026-07-27当前消息中明确确认",
+      "relations": [
+        {"canteen": "本校食堂", "floor": "一层", "area": "基本餐厅", "type": "食堂区域"},
+        {"canteen": "本校食堂", "floor": "二层", "area": "风味餐厅、清真食堂", "type": "食堂区域"},
+        {"canteen": "本校食堂", "floor": "三层", "area": "树人餐厅", "type": "食堂区域"}
+      ]
+    },
+    {
+      "school_name": "北京建筑大学",
+      "official_code": "4111010016",
+      "source": "用户在2026-07-27当前消息中明确确认",
+      "relations": [
+        {"canteen": "大兴校区｜和园", "floor": "一层", "area": "风味小吃、夜宵", "type": "食堂区域"},
+        {"canteen": "大兴校区｜和园", "floor": "二层", "area": "普通校园餐", "type": "食堂区域"},
+        {"canteen": "大兴校区｜和园", "floor": "三层", "area": "清真、西餐", "type": "食堂区域"},
+        {"canteen": "大兴校区｜臻园", "floor": "一层", "area": "特色美食", "type": "食堂区域"},
+        {"canteen": "大兴校区｜臻园", "floor": "二层", "area": "学校自营", "type": "食堂区域"},
+        {"canteen": "大兴校区｜臻园", "floor": "三层", "area": "教工、自助火锅", "type": "食堂区域"}
+      ]
+    },
+    {
+      "school_name": "北京石油化工学院",
+      "official_code": "4111010017",
+      "source": "用户在2026-07-27当前消息中明确确认",
+      "relations": [
+        {"canteen": "清源校区｜青缘餐厅", "floor": "一层", "area": "民族餐", "type": "食堂区域"},
+        {"canteen": "清源校区｜青缘餐厅", "floor": "二层", "area": "基本伙", "type": "食堂区域"},
+        {"canteen": "清源校区｜青缘餐厅", "floor": "三层", "area": "风味", "type": "食堂区域"},
+        {"canteen": "清源校区｜青缘餐厅", "floor": "四层", "area": "教工餐厅", "type": "食堂区域"},
+        {"canteen": "康庄校区｜康缘餐厅", "floor": "一层", "area": "民族餐", "type": "食堂区域"},
+        {"canteen": "康庄校区｜康缘餐厅", "floor": "二层", "area": "基本伙、教工餐厅", "type": "食堂区域"}
+      ]
+    },
+    {
+      "school_name": "北京电子科技学院",
+      "official_code": "4111010018",
+      "source": "用户在2026-07-27当前消息中明确确认",
+      "relations": [
+        {"canteen": "学一食堂", "floor": "地下一层", "area": "各地风味", "type": "食堂区域"},
+        {"canteen": "学一食堂", "floor": "一层", "area": "各地风味", "type": "食堂区域"},
+        {"canteen": "学一食堂", "floor": "二层", "area": "清真", "type": "食堂区域"},
+        {"canteen": "学二食堂", "floor": "一层", "area": "风味、小卖部", "type": "食堂区域"},
+        {"canteen": "学二食堂", "floor": "二层", "area": "自助、套餐", "type": "食堂区域"}
+      ]
+    },
+    {
+      "school_name": "北京农学院",
+      "official_code": "4111010020",
+      "source": "用户在2026-07-27当前消息中明确确认",
+      "relations": [
+        {"canteen": "第一食堂", "floor": "一层", "area": "", "type": "食堂", "status": "食堂共2层；一层功能未说明"},
+        {"canteen": "第一食堂", "floor": "二层", "area": "清真餐厅", "type": "食堂区域"},
+        {"canteen": "第二食堂", "floor": "一层", "area": "学校自营", "type": "食堂区域"},
+        {"canteen": "第二食堂", "floor": "二层", "area": "外包风味", "type": "食堂区域"},
+        {"canteen": "第三食堂", "floor": "一层", "area": "学校自营", "type": "食堂区域"},
+        {"canteen": "第三食堂", "floor": "二层", "area": "外包风味", "type": "食堂区域"}
+      ]
+    },
+    {
+      "school_name": "北京语言大学",
+      "official_code": "4111010032",
+      "source": "用户在2026-07-27当前消息中明确确认",
+      "relations": [
+        {"canteen": "清晏楼", "floor": "一层", "area": "基本伙", "type": "食堂区域"},
+        {"canteen": "清晏楼", "floor": "二层", "area": "基本伙", "type": "食堂区域"},
+        {"canteen": "清晏楼", "floor": "三层", "area": "快乐食间（特色美食）", "type": "食堂区域"},
+        {"canteen": "清晏楼", "floor": "四层", "area": "风味餐厅", "type": "食堂区域"},
+        {"canteen": "清晏楼", "floor": "五层", "area": "汉德轩（饭店）", "type": "食堂区域"}
+      ]
+    },
+    {
+      "school_name": "中央音乐学院",
+      "official_code": "4111010045",
+      "source": "用户在2026-07-27当前消息中明确确认",
+      "relations": [
+        {"canteen": "东校区食堂", "floor": "地下一层", "area": "基本伙", "type": "食堂区域"},
+        {"canteen": "东校区食堂", "floor": "一层", "area": "风味食堂", "type": "食堂区域"},
+        {"canteen": "东校区食堂", "floor": "二层", "area": "清真食堂", "type": "食堂区域"}
+      ]
+    },
+    {
+      "school_name": "中国音乐学院",
+      "official_code": "4111010046",
+      "source": "用户在2026-07-27当前消息中明确确认",
+      "relations": [
+        {"canteen": "风味餐厅", "floor": "地下一层", "area": "", "type": "食堂"},
+        {"canteen": "学生餐厅", "floor": "一层", "area": "", "type": "食堂"},
+        {"canteen": "清真餐厅", "floor": "二层", "area": "", "type": "食堂"}
+      ]
+    },
+    {
+      "school_name": "中国戏曲学院",
+      "official_code": "4111010049",
+      "source": "用户在2026-07-27当前消息中明确确认",
+      "relations": [
+        {"canteen": "食堂（综合楼内）", "floor": "一层", "area": "基本伙", "type": "食堂区域"},
+        {"canteen": "食堂（综合楼内）", "floor": "二层", "area": "小炒", "type": "食堂区域"},
+        {"canteen": "食堂（综合楼内）", "floor": "二层", "area": "梨园餐厅", "type": "食堂区域"},
+        {"canteen": "食堂（综合楼内）", "floor": "二层", "area": "清真食堂", "type": "食堂区域"}
+      ]
+    },
+    {
+      "school_name": "北京电影学院",
+      "official_code": "4111010050",
+      "source": "用户在2026-07-27当前消息中明确确认",
+      "relations": [
+        {"canteen": "海淀校区食堂", "floor": "一层", "area": "清真", "type": "食堂区域"},
+        {"canteen": "海淀校区食堂", "floor": "二层", "area": "基本伙", "type": "食堂区域"},
+        {"canteen": "海淀校区食堂", "floor": "三层", "area": "风味", "type": "食堂区域"},
+        {"canteen": "怀柔校区食堂", "floor": "一层", "area": "风味", "type": "食堂区域"},
+        {"canteen": "怀柔校区食堂", "floor": "二层", "area": "基础餐厅", "type": "食堂区域"}
+      ]
+    },
+    {
+      "school_name": "北京工业职业技术学院",
+      "official_code": "4111010853",
+      "source": "用户在2026-07-27当前消息中明确确认",
+      "relations": [
+        {"canteen": "新食堂", "floor": "一层", "area": "学生食堂", "type": "食堂区域"},
+        {"canteen": "新食堂", "floor": "二层", "area": "学生食堂", "type": "食堂区域"},
+        {"canteen": "新食堂", "floor": "三层", "area": "学生食堂", "type": "食堂区域"},
+        {"canteen": "新食堂", "floor": "四层", "area": "教工食堂", "type": "食堂区域"}
+      ]
+    },
+    {
+      "school_name": "中华女子学院",
+      "official_code": "4111011149",
+      "source": "用户在2026-07-27当前消息中明确确认",
+      "relations": [
+        {"canteen": "一食堂", "floor": "一层", "area": "", "type": "食堂"},
+        {"canteen": "一食堂", "floor": "二层", "area": "", "type": "食堂"},
+        {"canteen": "二食堂", "floor": "三层", "area": "", "type": "食堂"},
+        {"canteen": "清真餐厅", "floor": "三层", "area": "", "type": "食堂"}
+      ]
+    },
+    {
+      "school_name": "北京信息科技大学",
+      "official_code": "4111011232",
+      "source": "用户在2026-07-27当前消息中明确确认",
+      "relations": [
+        {"canteen": "学一食堂", "floor": "一层", "area": "学生区", "type": "食堂区域"},
+        {"canteen": "学一食堂", "floor": "二层", "area": "学生区", "type": "食堂区域"},
+        {"canteen": "学一食堂", "floor": "三层", "area": "教工区", "type": "食堂区域"},
+        {"canteen": "学二食堂", "floor": "一层", "area": "基本伙", "type": "食堂区域"},
+        {"canteen": "学二食堂", "floor": "二层", "area": "清真", "type": "食堂区域"},
+        {"canteen": "学二食堂", "floor": "三层", "area": "风味", "type": "食堂区域"},
+        {"canteen": "学二食堂", "floor": "四层", "area": "55号餐厅", "type": "食堂区域"}
+      ]
+    },
+    {
+      "school_name": "北京政法职业学院",
+      "official_code": "4111012451",
+      "source": "用户在2026-07-27当前消息中明确确认",
+      "relations": [
+        {"canteen": "大兴校区｜食堂", "floor": "一层", "area": "普通餐厅", "type": "食堂区域"},
+        {"canteen": "大兴校区｜食堂", "floor": "二层", "area": "特色餐厅", "type": "食堂区域"},
+        {"canteen": "大兴校区｜食堂", "floor": "三层", "area": "教工餐厅", "type": "食堂区域"},
+        {"canteen": "大兴校区｜食堂", "floor": "三层", "area": "清真餐厅", "type": "食堂区域"}
+      ]
+    },
+    {
+      "school_name": "中国劳动关系学院",
+      "official_code": "4111012453",
+      "source": "用户在2026-07-27当前消息中明确确认",
+      "relations": [
+        {"canteen": "涿州校区｜综合服务楼食堂", "floor": "一层", "area": "基本伙", "type": "食堂区域"},
+        {"canteen": "涿州校区｜综合服务楼食堂", "floor": "二层", "area": "风味", "type": "食堂区域"},
+        {"canteen": "涿州校区｜综合服务楼食堂", "floor": "三层", "area": "小炒", "type": "食堂区域"},
+        {"canteen": "北京校区｜综合楼学生食堂", "floor": "一层", "area": "南侧基本伙", "type": "食堂区域"},
+        {"canteen": "北京校区｜综合楼学生食堂", "floor": "一层", "area": "北侧风味", "type": "食堂区域"}
+      ]
+    },
+    {
+      "school_name": "北京第二外国语学院",
+      "official_code": "4111010031",
+      "source": "用户在2026-07-27当前消息中明确确认",
+      "relations": [
+        {"canteen": "一食堂", "floor": "一层", "area": "", "type": "食堂"},
+        {"canteen": "一食堂", "floor": "二层", "area": "", "type": "食堂"},
+        {"canteen": "翔宇楼（三食堂）", "floor": "一层", "area": "", "type": "食堂"},
+        {"canteen": "翔宇楼（三食堂）", "floor": "二层", "area": "", "type": "食堂"},
+        {"canteen": "翔宇楼（三食堂）", "floor": "三层", "area": "", "type": "食堂"},
+        {"canteen": "翔宇楼（三食堂）", "floor": "四层", "area": "", "type": "食堂"},
+        {"canteen": "清真食堂", "floor": "", "area": "", "type": "食堂", "status": "名称已确认；具体楼层未说明"}
+      ]
+    },
+    {
+      "school_name": "北京物资学院",
+      "official_code": "4111010037",
+      "source": "用户在2026-07-27当前消息中明确确认",
+      "relations": [
+        {"canteen": "学生食堂", "floor": "", "area": "", "type": "食堂", "status": "名称已确认；具体楼层未说明"},
+        {"canteen": "潞河居", "floor": "一层", "area": "", "type": "食堂"},
+        {"canteen": "潞河居", "floor": "二层", "area": "", "type": "食堂"},
+        {"canteen": "京杭源", "floor": "一层", "area": "", "type": "食堂"},
+        {"canteen": "京杭源", "floor": "二层", "area": "", "type": "食堂"},
+        {"canteen": "京杭源", "floor": "三层", "area": "", "type": "食堂"}
+      ]
+    },
+    {
+      "school_name": "中国消防救援学院",
+      "official_code": "4111010039",
+      "source": "用户在2026-07-27当前消息中明确确认",
+      "relations": [
+        {"canteen": "北区学员食堂", "floor": "", "area": "", "type": "食堂", "status": "名称已确认；具体楼层未说明"},
+        {"canteen": "南区学员食堂", "floor": "", "area": "", "type": "食堂", "status": "名称已确认；具体楼层未说明"}
+      ]
+    },
+    {
+      "school_name": "北京体育大学",
+      "official_code": "4111010043",
+      "source": "用户在2026-07-27当前消息中明确确认",
+      "relations": [
+        {"canteen": "中心食堂", "floor": "一层", "area": "", "type": "食堂"},
+        {"canteen": "中心食堂", "floor": "二层", "area": "", "type": "食堂"},
+        {"canteen": "中心食堂", "floor": "三层", "area": "清真餐厅", "type": "食堂区域"},
+        {"canteen": "中心食堂", "floor": "三层", "area": "美好时光餐厅", "type": "食堂区域"},
+        {"canteen": "西餐厅", "floor": "", "area": "", "type": "食堂", "status": "名称已确认；具体楼层未说明"},
+        {"canteen": "小白楼", "floor": "", "area": "", "type": "食堂", "status": "名称已确认；具体楼层未说明"},
+        {"canteen": "冠军餐厅", "floor": "", "area": "", "type": "食堂", "status": "名称已确认；具体楼层未说明"}
+      ]
+    },
+    {
+      "school_name": "北京舞蹈学院",
+      "official_code": "4111010051",
+      "source": "用户在2026-07-27当前消息中明确确认",
+      "relations": [
+        {"canteen": "学校食堂（正式名称未披露）", "floor": "地下一层", "area": "", "type": "食堂"}
+      ]
+    },
+    {
+      "school_name": "北京信息职业技术学院",
+      "official_code": "4111010857",
+      "source": "用户在2026-07-27当前消息中明确确认",
+      "relations": [
+        {"canteen": "本部校区｜食堂（正式名称未披露）", "floor": "", "area": "", "type": "食堂", "status": "食堂数量1个已确认；具体楼层未说明"},
+        {"canteen": "东坝校区｜食堂（正式名称未披露）", "floor": "一层", "area": "", "type": "食堂"},
+        {"canteen": "东坝校区｜食堂（正式名称未披露）", "floor": "二层", "area": "", "type": "食堂"},
+        {"canteen": "花乡校区｜食堂礼堂", "floor": "一层", "area": "", "type": "食堂"},
+        {"canteen": "花乡校区｜食堂礼堂", "floor": "二层", "area": "", "type": "食堂"}
+      ]
+    },
+    {
+      "school_name": "北京京北职业技术学院",
+      "official_code": "4111011090",
+      "source": "用户在2026-07-27当前消息中明确确认",
+      "relations": [
+        {"canteen": "学校食堂（正式名称未披露）", "floor": "", "area": "", "type": "食堂", "status": "食堂数量1个已确认；正式名称和具体楼层未说明"}
+      ]
+    },
+    {
+      "school_name": "北京交通职业技术学院",
+      "official_code": "4111011092",
+      "source": "用户在2026-07-27当前消息中明确确认",
+      "relations": [
+        {"canteen": "南校区餐厅", "floor": "一层", "area": "", "type": "食堂"},
+        {"canteen": "北校区餐厅", "floor": "一层", "area": "", "type": "食堂"},
+        {"canteen": "北校区餐厅", "floor": "二层", "area": "", "type": "食堂"}
+      ]
+    },
+    {
+      "school_name": "北京城市学院",
+      "official_code": "4111011418",
+      "source": "用户在2026-07-27当前消息中明确确认",
+      "relations": [
+        {"canteen": "顺义校区｜一食堂", "floor": "一层", "area": "红彩坊餐厅", "type": "食堂区域"},
+        {"canteen": "顺义校区｜一食堂", "floor": "一层", "area": "东厨小馆", "type": "食堂区域"},
+        {"canteen": "顺义校区｜一食堂", "floor": "二层", "area": "校园美食汇", "type": "食堂区域"},
+        {"canteen": "顺义校区｜一食堂", "floor": "二层", "area": "西餐厅", "type": "食堂区域"},
+        {"canteen": "顺义校区｜一食堂", "floor": "三层", "area": "清真餐厅", "type": "食堂区域"},
+        {"canteen": "顺义校区｜学生公寓食堂", "floor": "地下一层", "area": "", "type": "食堂"},
+        {"canteen": "航天城校区｜食堂（正式名称未披露）", "floor": "地下一层", "area": "小档口", "type": "食堂区域"},
+        {"canteen": "航天城校区｜食堂（正式名称未披露）", "floor": "一层", "area": "基本伙食堂", "type": "食堂区域"},
+        {"canteen": "航天城校区｜食堂（正式名称未披露）", "floor": "二层", "area": "基本伙食堂", "type": "食堂区域"},
+        {"canteen": "航天城校区｜食堂（正式名称未披露）", "floor": "三层", "area": "点餐小餐厅", "type": "食堂区域"}
+      ]
+    },
+    {
+      "school_name": "北京农业职业学院",
+      "official_code": "4111012448",
+      "source": "用户在2026-07-27当前消息中明确确认",
+      "relations": [
+        {"canteen": "长阳校区｜食堂（正式名称未披露）", "floor": "一层", "area": "", "type": "食堂", "status": "食堂共3层；一层功能未说明"},
+        {"canteen": "长阳校区｜食堂（正式名称未披露）", "floor": "二层", "area": "风味餐厅", "type": "食堂区域"},
+        {"canteen": "长阳校区｜食堂（正式名称未披露）", "floor": "三层", "area": "风味餐厅", "type": "食堂区域"},
+        {"canteen": "香山校区｜食堂（正式名称未披露）", "floor": "一层", "area": "厨房", "type": "食堂区域"},
+        {"canteen": "香山校区｜食堂（正式名称未披露）", "floor": "二层", "area": "用餐区", "type": "食堂区域"},
+        {"canteen": "香山校区｜食堂（正式名称未披露）", "floor": "三层", "area": "用餐区", "type": "食堂区域"},
+        {"canteen": "香山校区｜教工食堂", "floor": "", "area": "", "type": "食堂", "status": "名称已确认；具体楼层未说明"},
+        {"canteen": "清河校区｜食堂（正式名称未披露）", "floor": "", "area": "", "type": "食堂", "status": "食堂数量1个已确认；具体楼层未说明"},
+        {"canteen": "清河校区｜教工食堂", "floor": "", "area": "", "type": "食堂", "status": "名称已确认；具体楼层未说明"},
+        {"canteen": "北苑校区｜食堂（正式名称未披露）", "floor": "", "area": "", "type": "食堂", "status": "食堂数量1个已确认；具体楼层未说明"}
+      ]
+    },
+    {
+      "school_name": "北京经贸职业学院",
+      "official_code": "4111012565",
+      "source": "用户在2026-07-27当前消息中明确确认",
+      "relations": [
+        {"canteen": "学校食堂（正式名称未披露）", "floor": "一层", "area": "学生就餐区", "type": "食堂区域"},
+        {"canteen": "学校食堂（正式名称未披露）", "floor": "二层", "area": "学生就餐区", "type": "食堂区域"},
+        {"canteen": "学校食堂（正式名称未披露）", "floor": "三层", "area": "教职工就餐区", "type": "食堂区域"},
+        {"canteen": "学校食堂（正式名称未披露）", "floor": "四层", "area": "教职工就餐区", "type": "食堂区域"}
+      ]
+    },
+    {
+      "school_name": "北京经济技术职业学院",
+      "official_code": "4111012566",
+      "source": "用户在2026-07-27当前消息中明确确认",
+      "relations": [
+        {"canteen": "一食堂", "floor": "", "area": "", "type": "食堂", "status": "名称已确认；具体楼层未说明"},
+        {"canteen": "二食堂", "floor": "", "area": "", "type": "食堂", "status": "名称已确认；具体楼层未说明"}
+      ]
+    },
+    {
+      "school_name": "北京科技经营管理学院",
+      "official_code": "4111012733",
+      "source": "用户在2026-07-27当前消息中明确确认",
+      "relations": [
+        {"canteen": "一食堂", "floor": "地下一层", "area": "", "type": "食堂"},
+        {"canteen": "二食堂", "floor": "", "area": "", "type": "食堂", "status": "名称已确认；具体楼层未说明"}
+      ]
+    }
+  ]
+}

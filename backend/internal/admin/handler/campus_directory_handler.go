@@ -30,6 +30,7 @@ func (h *CampusDirectoryHandler) ListSchools(c *gin.Context) {
 	}
 	qText := strings.TrimSpace(c.Query("q"))
 	status := strings.TrimSpace(c.DefaultQuery("status", "active"))
+	locationType := strings.TrimSpace(c.Query("location_type"))
 	query := h.db.WithContext(c.Request.Context()).Model(&schooldomain.School{})
 	if qText != "" {
 		like := "%" + qText + "%"
@@ -37,6 +38,9 @@ func (h *CampusDirectoryHandler) ListSchools(c *gin.Context) {
 	}
 	if status != "all" {
 		query = query.Where("status = ?", status)
+	}
+	if locationType != "" && locationType != "all" {
+		query = query.Where("location_type = ?", normalizeAdminLocationType(locationType))
 	}
 	var total int64
 	if err := query.Count(&total).Error; err != nil {
@@ -53,14 +57,15 @@ func (h *CampusDirectoryHandler) ListSchools(c *gin.Context) {
 
 func (h *CampusDirectoryHandler) CreateSchool(c *gin.Context) {
 	var body struct {
-		Name     string  `json:"name"`
-		Province string  `json:"province"`
-		City     string  `json:"city"`
-		Level    string  `json:"level"`
-		Is985    bool    `json:"is_985"`
-		Is211    bool    `json:"is_211"`
-		Status   string  `json:"status"`
-		LogoURL  *string `json:"logo_url"`
+		Name         string  `json:"name"`
+		LocationType string  `json:"location_type"`
+		Province     string  `json:"province"`
+		City         string  `json:"city"`
+		Level        string  `json:"level"`
+		Is985        bool    `json:"is_985"`
+		Is211        bool    `json:"is_211"`
+		Status       string  `json:"status"`
+		LogoURL      *string `json:"logo_url"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		response.Error(c, err)
@@ -76,16 +81,17 @@ func (h *CampusDirectoryHandler) CreateSchool(c *gin.Context) {
 		status = "active"
 	}
 	row := map[string]any{
-		"id":         uuid.New().String(),
-		"name":       name,
-		"province":   strings.TrimSpace(body.Province),
-		"city":       strings.TrimSpace(body.City),
-		"level":      strings.TrimSpace(body.Level),
-		"is_985":     body.Is985,
-		"is_211":     body.Is211,
-		"status":     status,
-		"logo_url":   trimStringPtr(body.LogoURL),
-		"created_at": time.Now(),
+		"id":            uuid.New().String(),
+		"name":          name,
+		"location_type": normalizeAdminLocationType(body.LocationType),
+		"province":      strings.TrimSpace(body.Province),
+		"city":          strings.TrimSpace(body.City),
+		"level":         strings.TrimSpace(body.Level),
+		"is_985":        body.Is985,
+		"is_211":        body.Is211,
+		"status":        status,
+		"logo_url":      trimStringPtr(body.LogoURL),
+		"created_at":    time.Now(),
 	}
 	if err := h.db.WithContext(c.Request.Context()).Table("schools").Create(row).Error; err != nil {
 		response.Error(c, err)
@@ -100,7 +106,10 @@ func (h *CampusDirectoryHandler) UpdateSchool(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
-	patch := pickPatch(body, "name", "province", "city", "level", "is_985", "is_211", "status", "logo_url")
+	patch := pickPatch(body, "name", "location_type", "province", "city", "level", "is_985", "is_211", "status", "logo_url")
+	if raw, ok := patch["location_type"].(string); ok {
+		patch["location_type"] = normalizeAdminLocationType(raw)
+	}
 	if len(patch) == 0 {
 		response.Success(c, gin.H{"message": "无变更"})
 		return
@@ -782,4 +791,13 @@ func derefString(value *string) string {
 
 func badRequest(message string) error {
 	return &commonerrors.AppError{Code: 10002, Message: message, HTTPStatus: http.StatusBadRequest}
+}
+
+func normalizeAdminLocationType(value string) string {
+	switch strings.TrimSpace(value) {
+	case "company", "community":
+		return strings.TrimSpace(value)
+	default:
+		return "university"
+	}
 }

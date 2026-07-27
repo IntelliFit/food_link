@@ -1,10 +1,15 @@
 package migration
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
+	_ "embed"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"regexp"
 	"strings"
@@ -14,6 +19,9 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
+
+//go:embed data/official_higher_education_2026.json.gz.b64
+var officialHigherEducation2026Data string
 
 var identifierPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
@@ -69,6 +77,15 @@ func AutoMigrate(ctx context.Context, db *gorm.DB, schema string) error {
 	if err := ensureSchoolsSeed(ctx, db); err != nil {
 		return err
 	}
+	if err := ensureDiningLocationType(ctx, db); err != nil {
+		return err
+	}
+	if err := ensureOfficialHigherEducationDirectory(ctx, db); err != nil {
+		return err
+	}
+	if err := retireLegacyHigherEducationSeedRows(ctx, db); err != nil {
+		return err
+	}
 	if err := ensureCampusDirectorySeed(ctx, db); err != nil {
 		return err
 	}
@@ -76,6 +93,12 @@ func AutoMigrate(ctx context.Context, db *gorm.DB, schema string) error {
 		return err
 	}
 	if err := ensureCampusDirectoryPendingResearchSeed(ctx, db); err != nil {
+		return err
+	}
+	if err := ensureBeijingOwnerVerifiedDiningSeed(ctx, db); err != nil {
+		return err
+	}
+	if err := ensureVerifiedDiningDirectoryPublication(ctx, db); err != nil {
 		return err
 	}
 	if err := ensurePublicFoodCampusDirectoryBackfill(ctx, db); err != nil {
@@ -327,7 +350,7 @@ func ensureConstraints(ctx context.Context, db *gorm.DB) error {
 		dropAndAddCheck("school_campuses", "school_campuses_status_check", `status = ANY (ARRAY['pending_review'::text,'active'::text,'inactive'::text,'deleted'::text])`),
 		dropAndAddCheck("school_canteens", "school_canteens_status_check", `status = ANY (ARRAY['pending_review'::text,'active'::text,'inactive'::text,'rejected'::text,'deleted'::text])`),
 		dropAndAddCheck("school_canteens", "school_canteens_confidence_level_check", `confidence_level IS NULL OR confidence_level = ANY (ARRAY['A'::text,'B'::text,'C'::text,'D'::text])`),
-		dropAndAddCheck("canteen_windows", "canteen_windows_status_check", `status = ANY (ARRAY['active'::text,'inactive'::text,'deleted'::text])`),
+		dropAndAddCheck("canteen_windows", "canteen_windows_status_check", `status = ANY (ARRAY['pending_review'::text,'active'::text,'inactive'::text,'deleted'::text])`),
 		dropAndAddCheck("campus_canteen_applications", "campus_canteen_applications_status_check", `status = ANY (ARRAY['pending'::text,'approved'::text,'rejected'::text])`),
 		dropAndAddCheck("campus_directory_import_batches", "campus_directory_import_batches_status_check", `status = ANY (ARRAY['pending_review'::text,'collecting'::text,'ready_for_review'::text,'approved'::text,'rejected'::text,'archived'::text])`),
 		dropAndAddCheck("campus_directory_sources", "campus_directory_sources_review_status_check", `review_status = ANY (ARRAY['pending_review'::text,'approved'::text,'rejected'::text])`),
@@ -1029,6 +1052,217 @@ func ensureSchoolsSeed(ctx context.Context, db *gorm.DB) error {
 	return nil
 }
 
+// ensureDiningLocationType keeps the legacy schools table compatible while
+// allowing the shared dining directory to also contain companies and communities.
+func ensureDiningLocationType(ctx context.Context, db *gorm.DB) error {
+	statements := []string{
+		`ALTER TABLE schools ADD COLUMN IF NOT EXISTS location_type text NOT NULL DEFAULT 'university'`,
+		`UPDATE schools SET location_type = 'university' WHERE NULLIF(trim(location_type), '') IS NULL`,
+		`CREATE INDEX IF NOT EXISTS idx_schools_location_type ON schools(location_type)`,
+		`ALTER TABLE schools DROP CONSTRAINT IF EXISTS chk_schools_location_type`,
+		`ALTER TABLE schools ADD CONSTRAINT chk_schools_location_type CHECK (location_type IN ('university', 'company', 'community'))`,
+	}
+	for _, statement := range statements {
+		if err := db.WithContext(ctx).Exec(statement).Error; err != nil {
+			return fmt.Errorf("ensure dining location type: %w", err)
+		}
+	}
+	return nil
+}
+
+type officialHigherEducationSnapshot struct {
+	SourceVersion string                               `json:"source_version"`
+	Sources       []string                             `json:"sources"`
+	Institutions  []officialHigherEducationInstitution `json:"institutions"`
+}
+
+type officialHigherEducationInstitution struct {
+	Name         string `json:"name"`
+	OfficialCode string `json:"official_code"`
+	Authority    string `json:"authority"`
+	Province     string `json:"province"`
+	Level        string `json:"level"`
+	Kind         string `json:"kind"`
+}
+
+func ensureOfficialHigherEducationDirectory(ctx context.Context, db *gorm.DB) error {
+	snapshot, err := loadOfficialHigherEducationSnapshot()
+	if err != nil {
+		return err
+	}
+	if snapshot.SourceVersion != "2026-06-17" || len(snapshot.Institutions) != 3196 {
+		return fmt.Errorf("validate official higher education snapshot: version=%q institutions=%d", snapshot.SourceVersion, len(snapshot.Institutions))
+	}
+	rows := make([]officialHigherEducationSyncRow, 0, len(snapshot.Institutions))
+	for _, institution := range snapshot.Institutions {
+		if err := validateOfficialHigherEducationInstitution(institution); err != nil {
+			return err
+		}
+		rows = append(rows, officialHigherEducationSyncRow{
+			Name:                  institution.Name,
+			NormalizedName:        normalizeOfficialSchoolName(institution.Name),
+			OfficialCode:          institution.OfficialCode,
+			Authority:             nullableText(institution.Authority),
+			OfficialSourceVersion: snapshot.SourceVersion,
+			InstitutionKind:       institution.Kind,
+			Province:              nullableText(institution.Province),
+			Level:                 nullableText(institution.Level),
+		})
+	}
+
+	return db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		const table = "official_higher_education_sync"
+		if err := tx.Exec(`CREATE TEMP TABLE official_higher_education_sync (
+			name text NOT NULL,
+			normalized_name text NOT NULL,
+			official_code text PRIMARY KEY,
+			authority text,
+			official_source_version text NOT NULL,
+			institution_kind text NOT NULL,
+			province text,
+			level text
+		) ON COMMIT DROP`).Error; err != nil {
+			return fmt.Errorf("create official higher education sync table: %w", err)
+		}
+		if err := tx.Table(table).CreateInBatches(&rows, 500).Error; err != nil {
+			return fmt.Errorf("stage official higher education directory: %w", err)
+		}
+		if err := tx.Exec(`UPDATE schools AS school
+			SET name = source.name,
+				authority = source.authority,
+				official_source_version = source.official_source_version,
+				institution_kind = source.institution_kind,
+				province = source.province,
+				level = source.level,
+				status = 'active'
+			FROM official_higher_education_sync AS source
+			WHERE school.location_type = 'university'
+				AND school.official_code = source.official_code`).Error; err != nil {
+			return fmt.Errorf("refresh coded official higher education institutions: %w", err)
+		}
+		if err := tx.Exec(`UPDATE schools AS school
+			SET name = source.name,
+				official_code = source.official_code,
+				authority = source.authority,
+				official_source_version = source.official_source_version,
+				institution_kind = source.institution_kind,
+				province = source.province,
+				level = source.level,
+				status = 'active'
+			FROM official_higher_education_sync AS source
+			WHERE school.location_type = 'university'
+				AND (school.official_code IS NULL OR trim(school.official_code) = '')
+				AND regexp_replace(replace(replace(school.name, '（', '('), '）', ')'), '\s+', '', 'g') = source.normalized_name`).Error; err != nil {
+			return fmt.Errorf("match legacy higher education institutions by name: %w", err)
+		}
+		if err := tx.Exec(`INSERT INTO schools (
+			name, location_type, official_code, authority, official_source_version,
+			institution_kind, province, level, status
+		)
+		SELECT name, 'university', official_code, authority, official_source_version,
+			institution_kind, province, level, 'active'
+		FROM official_higher_education_sync
+		ON CONFLICT (official_code) DO UPDATE SET
+			name = EXCLUDED.name,
+			authority = EXCLUDED.authority,
+			official_source_version = EXCLUDED.official_source_version,
+			institution_kind = EXCLUDED.institution_kind,
+			province = EXCLUDED.province,
+			level = EXCLUDED.level,
+			status = 'active'`).Error; err != nil {
+			return fmt.Errorf("upsert official higher education institutions: %w", err)
+		}
+		return nil
+	})
+}
+
+func retireLegacyHigherEducationSeedRows(ctx context.Context, db *gorm.DB) error {
+	data, err := os.ReadFile("data/schools_seed.json")
+	if err != nil {
+		return fmt.Errorf("read legacy higher education seed: %w", err)
+	}
+	var seeds []struct {
+		Name string `json:"name"`
+	}
+	if err := json.Unmarshal(data, &seeds); err != nil {
+		return fmt.Errorf("parse legacy higher education seed: %w", err)
+	}
+	names := make([]string, 0, len(seeds))
+	for _, seed := range seeds {
+		if name := strings.TrimSpace(seed.Name); name != "" {
+			names = append(names, name)
+		}
+	}
+	for start := 0; start < len(names); start += 500 {
+		end := start + 500
+		if end > len(names) {
+			end = len(names)
+		}
+		if err := db.WithContext(ctx).Model(&migrationdo.SchoolDO{}).
+			Where("location_type = ? AND official_source_version IS NULL AND status = ? AND name IN ?", "university", "active", names[start:end]).
+			Update("status", "inactive").Error; err != nil {
+			return fmt.Errorf("retire outdated higher education seed rows: %w", err)
+		}
+	}
+	return nil
+}
+
+type officialHigherEducationSyncRow struct {
+	Name                  string  `gorm:"column:name"`
+	NormalizedName        string  `gorm:"column:normalized_name"`
+	OfficialCode          string  `gorm:"column:official_code"`
+	Authority             *string `gorm:"column:authority"`
+	OfficialSourceVersion string  `gorm:"column:official_source_version"`
+	InstitutionKind       string  `gorm:"column:institution_kind"`
+	Province              *string `gorm:"column:province"`
+	Level                 *string `gorm:"column:level"`
+}
+
+func loadOfficialHigherEducationSnapshot() (*officialHigherEducationSnapshot, error) {
+	encoded := strings.Join(strings.Fields(officialHigherEducation2026Data), "")
+	compressed, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		return nil, fmt.Errorf("decode official higher education snapshot: %w", err)
+	}
+	reader, err := gzip.NewReader(bytes.NewReader(compressed))
+	if err != nil {
+		return nil, fmt.Errorf("open official higher education snapshot: %w", err)
+	}
+	defer reader.Close()
+	raw, err := io.ReadAll(reader)
+	if err != nil {
+		return nil, fmt.Errorf("read official higher education snapshot: %w", err)
+	}
+	var snapshot officialHigherEducationSnapshot
+	if err := json.Unmarshal(raw, &snapshot); err != nil {
+		return nil, fmt.Errorf("parse official higher education snapshot: %w", err)
+	}
+	return &snapshot, nil
+}
+
+func validateOfficialHigherEducationInstitution(institution officialHigherEducationInstitution) error {
+	if strings.TrimSpace(institution.Name) == "" || strings.TrimSpace(institution.OfficialCode) == "" {
+		return fmt.Errorf("validate official higher education institution: name/code is required")
+	}
+	if institution.Kind != "regular" && institution.Kind != "adult" {
+		return fmt.Errorf("validate official higher education institution %q: unsupported kind %q", institution.Name, institution.Kind)
+	}
+	return nil
+}
+
+func normalizeOfficialSchoolName(value string) string {
+	value = strings.NewReplacer("（", "(", "）", ")").Replace(value)
+	return strings.Join(strings.Fields(strings.TrimSpace(value)), "")
+}
+
+func nullableText(value string) *string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+	return &value
+}
+
 type campusDirectorySeed struct {
 	School    string              `json:"school"`
 	SourceURL string              `json:"source_url"`
@@ -1071,6 +1305,7 @@ type campusDirectoryResearchItem struct {
 	ReviewStatus string                           `json:"review_status"`
 	Campuses     []campusDirectoryResearchCampus  `json:"campuses"`
 	Canteens     []campusDirectoryResearchCanteen `json:"canteens"`
+	Windows      []campusDirectoryResearchWindow  `json:"windows"`
 	Notes        []string                         `json:"notes"`
 }
 
@@ -1090,6 +1325,21 @@ type campusDirectoryResearchCanteen struct {
 	ServiceType     string   `json:"service_type"`
 	Audience        string   `json:"audience"`
 	OpeningHoursRaw string   `json:"opening_hours_raw"`
+	SourceURL       string   `json:"source_url"`
+	SourceTitle     string   `json:"source_title"`
+	SourceOrg       string   `json:"source_org"`
+	SourceType      string   `json:"source_type"`
+	EvidenceLevel   string   `json:"evidence_level"`
+	EvidenceExcerpt string   `json:"evidence_excerpt"`
+	ReviewStatus    string   `json:"review_status"`
+}
+
+type campusDirectoryResearchWindow struct {
+	Campus          string   `json:"campus"`
+	Canteen         string   `json:"canteen"`
+	Name            string   `json:"name"`
+	Aliases         []string `json:"aliases"`
+	Floor           string   `json:"floor"`
 	SourceURL       string   `json:"source_url"`
 	SourceTitle     string   `json:"source_title"`
 	SourceOrg       string   `json:"source_org"`
@@ -1140,16 +1390,24 @@ func ensureCampusDirectoryImportBatchSeed(ctx context.Context, db *gorm.DB) erro
 }
 
 func ensureCampusDirectoryPendingResearchSeed(ctx context.Context, db *gorm.DB) error {
-	data, err := os.ReadFile("data/campus_directory_pending_research_seed.json")
+	return ensureCampusDirectoryResearchSeedFile(ctx, db, "data/campus_directory_pending_research_seed.json")
+}
+
+func ensureBeijingOwnerVerifiedDiningSeed(ctx context.Context, db *gorm.DB) error {
+	return ensureCampusDirectoryResearchSeedFile(ctx, db, "data/beijing_owner_verified_dining_seed.json")
+}
+
+func ensureCampusDirectoryResearchSeedFile(ctx context.Context, db *gorm.DB, path string) error {
+	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil
 		}
-		return fmt.Errorf("read campus directory pending research seed file: %w", err)
+		return fmt.Errorf("read campus directory research seed file %q: %w", path, err)
 	}
 	var seeds []campusDirectoryPendingResearchSeed
 	if err := json.Unmarshal(data, &seeds); err != nil {
-		return fmt.Errorf("parse campus directory pending research seed file: %w", err)
+		return fmt.Errorf("parse campus directory research seed file %q: %w", path, err)
 	}
 	for _, batchSeed := range seeds {
 		batchName := strings.TrimSpace(batchSeed.BatchName)
@@ -1169,16 +1427,402 @@ func ensureCampusDirectoryPendingResearchSeed(ctx context.Context, db *gorm.DB) 
 	return nil
 }
 
+// ensureVerifiedDiningDirectoryPublication promotes only direct official
+// evidence (level A) to the user-facing directory. Window-like rows are kept
+// out of the canteen list; the small number that can be linked to one exact
+// parent canteen are migrated into canteen_windows below.
+func ensureVerifiedDiningDirectoryPublication(ctx context.Context, db *gorm.DB) error {
+	return db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		statements := []string{
+			`UPDATE campus_directory_sources
+			 SET review_status = 'approved', updated_at = now()
+			 WHERE (evidence_level = 'A'
+			     OR (evidence_level = 'D' AND source_type LIKE 'user_verified%'))
+			   AND review_status <> 'approved'`,
+			`UPDATE school_canteens AS c
+			 SET status = 'active',
+			     review_note = CASE
+			       WHEN EXISTS (
+			         SELECT 1 FROM campus_directory_sources AS user_source
+			         WHERE user_source.canteen_id = c.id
+			           AND user_source.evidence_level = 'D'
+			           AND user_source.source_type LIKE 'user_verified%'
+			           AND user_source.review_status = 'approved'
+			       ) THEN '用户已核验的现行餐饮目录记录'
+			       ELSE 'A级官方公开来源自动发布'
+			     END,
+			     reviewed_at = COALESCE(c.reviewed_at, now()),
+			     updated_at = now()
+			 WHERE c.status = 'pending_review'
+			   AND c.name !~ '(窗口|档口)'
+			   AND EXISTS (
+			     SELECT 1 FROM campus_directory_sources AS s
+			     WHERE s.canteen_id = c.id
+			       AND (s.evidence_level = 'A'
+			         OR (s.evidence_level = 'D' AND s.source_type LIKE 'user_verified%'))
+			       AND s.review_status = 'approved'
+			   )`,
+			`UPDATE canteen_windows AS w
+			 SET status = 'active', updated_at = now()
+			 WHERE w.status = 'pending_review'
+			   AND EXISTS (
+			     SELECT 1 FROM campus_directory_sources AS s
+			     WHERE s.canteen_id = w.canteen_id
+			       AND s.source_url = w.source_url
+			       AND s.evidence_level = 'A'
+			       AND s.review_status = 'approved'
+			   )`,
+			`UPDATE school_campuses AS campus
+			 SET status = 'active', updated_at = now()
+			 WHERE campus.status = 'pending_review'
+			   AND EXISTS (
+			     SELECT 1 FROM school_canteens AS c
+			     WHERE c.campus_id = campus.id AND c.status = 'active'
+			   )`,
+			`UPDATE campus_directory_import_batches AS batch
+			 SET status = 'approved', updated_at = now()
+			 WHERE batch.name = '北京92所高校食堂目录-产品负责人确认-20260727'
+			   AND NOT EXISTS (
+			     SELECT 1 FROM campus_directory_sources AS source
+			     WHERE source.batch_id = batch.id
+			       AND source.review_status <> 'approved'
+			   )`,
+			`INSERT INTO canteen_windows (
+			   id, school_id, campus_id, canteen_id, name, aliases, floor,
+			   source_url, status, sort_order, created_at, updated_at
+			 )
+			 SELECT gen_random_uuid(), parent.school_id,
+			        COALESCE(parent.campus_id, child.campus_id), parent.id,
+			        '清真窗口', '[]'::jsonb, '一楼', child.source_url,
+			        'active', 1, now(), now()
+			 FROM schools AS school
+			 JOIN school_canteens AS child
+			   ON child.school_id = school.id AND child.name = '棘园一楼清真窗口'
+			 JOIN school_canteens AS parent
+			   ON parent.school_id = school.id AND parent.name = '棘园餐厅'
+			 WHERE school.name = '东北农业大学'
+			   AND parent.status = 'active'
+			   AND EXISTS (
+			     SELECT 1 FROM campus_directory_sources AS source
+			     WHERE source.canteen_id = child.id
+			       AND source.evidence_level = 'A'
+			       AND source.review_status = 'approved'
+			   )
+			   AND NOT EXISTS (
+			     SELECT 1 FROM canteen_windows AS cw
+			     WHERE cw.canteen_id = parent.id
+			       AND cw.name = '清真窗口'
+			       AND cw.floor = '一楼'
+			       AND cw.status <> 'deleted'
+			   )`,
+			`INSERT INTO canteen_windows (
+			   id, school_id, campus_id, canteen_id, name, aliases, floor,
+			   source_url, status, sort_order, created_at, updated_at
+			 )
+			 SELECT gen_random_uuid(), parent.school_id,
+			        COALESCE(parent.campus_id, child.campus_id), parent.id,
+			        '教工午餐档口', '[]'::jsonb, '负一楼', child.source_url,
+			        'active', 1, now(), now()
+			 FROM schools AS school
+			 JOIN school_canteens AS child
+			   ON child.school_id = school.id AND child.name = '国内大厦负一层食堂教工午餐档口'
+			 JOIN school_canteens AS parent
+			   ON parent.school_id = school.id AND parent.name = '国内大厦学生食堂'
+			 WHERE school.name = '北京外国语大学'
+			   AND parent.status = 'active'
+			   AND EXISTS (
+			     SELECT 1 FROM campus_directory_sources AS source
+			     WHERE source.canteen_id = child.id
+			       AND source.evidence_level = 'A'
+			       AND source.review_status = 'approved'
+			   )
+			   AND NOT EXISTS (
+			     SELECT 1 FROM canteen_windows AS cw
+			     WHERE cw.canteen_id = parent.id
+			       AND cw.name = '教工午餐档口'
+			       AND cw.floor = '负一楼'
+			       AND cw.status <> 'deleted'
+			   )`,
+			`UPDATE school_canteens AS child
+			 SET status = 'inactive',
+			     review_note = '该记录属于窗口/档口，已迁移到对应食堂窗口目录',
+			     reviewed_at = COALESCE(child.reviewed_at, now()),
+			     updated_at = now()
+			 FROM schools AS school
+			 WHERE child.school_id = school.id
+			   AND ((school.name = '东北农业大学' AND child.name = '棘园一楼清真窗口')
+			     OR (school.name = '北京外国语大学' AND child.name = '国内大厦负一层食堂教工午餐档口'))
+			   AND EXISTS (
+			     SELECT 1 FROM canteen_windows AS cw
+			     WHERE cw.school_id = child.school_id
+			       AND cw.source_url = child.source_url
+			       AND cw.status = 'active'
+			   )`,
+			`UPDATE school_canteens AS canteen
+			 SET building_or_floor = NULL,
+			     updated_at = now()
+			 FROM schools AS school
+			 WHERE canteen.school_id = school.id
+			   AND school.name = '中国政法大学'
+			   AND canteen.name = '二食堂'
+			   AND trim(COALESCE(canteen.building_or_floor, '')) = '清真食堂位于二食堂二层'`,
+			`WITH mappings(school_name, duplicate_campus, duplicate_name, canonical_campus, canonical_name) AS (
+			   VALUES
+			     ('中国石油大学（北京）', '北京校区', '学生第一食堂', '北校园', '学生第一食堂'),
+			     ('中国石油大学（北京）', '北京校区', '学生第二食堂', '北校园', '学生第二食堂'),
+			     ('中国矿业大学（北京）', '学院路校区', '丰园餐厅', '学院路校区', '丰园'),
+			     ('中国矿业大学（北京）', '学院路校区', '清真餐厅', '学院路校区', '清真园'),
+			     ('中国矿业大学（北京）', '沙河校区', '豐园餐厅', '沙河校区', '丰园'),
+			     ('中国矿业大学（北京）', '沙河校区', '菁园餐厅', '沙河校区', '菁园'),
+			     ('中国矿业大学（北京）', '沙河校区', '馨园餐厅', '沙河校区', '馨园')
+			 ), pairs AS (
+			   SELECT duplicate.id AS duplicate_id, canonical.id AS canonical_id,
+			          canonical.campus_id AS canonical_campus_id
+			   FROM mappings AS mapping
+			   JOIN schools AS school ON school.name = mapping.school_name
+			   JOIN school_campuses AS duplicate_campus
+			     ON duplicate_campus.school_id = school.id AND duplicate_campus.name = mapping.duplicate_campus
+			   JOIN school_canteens AS duplicate
+			     ON duplicate.school_id = school.id AND duplicate.campus_id = duplicate_campus.id
+			    AND duplicate.name = mapping.duplicate_name AND duplicate.status <> 'deleted'
+			   JOIN school_campuses AS canonical_campus
+			     ON canonical_campus.school_id = school.id AND canonical_campus.name = mapping.canonical_campus
+			   JOIN school_canteens AS canonical
+			     ON canonical.school_id = school.id AND canonical.campus_id = canonical_campus.id
+			    AND canonical.name = mapping.canonical_name AND canonical.status <> 'deleted'
+			 )
+			 UPDATE campus_directory_sources AS source
+			 SET canteen_id = pairs.canonical_id,
+			     campus_id = pairs.canonical_campus_id,
+			     updated_at = now()
+			 FROM pairs
+			 WHERE source.canteen_id = pairs.duplicate_id
+			   AND NOT EXISTS (
+			     SELECT 1 FROM campus_directory_sources AS existing
+			     WHERE existing.school_id = source.school_id
+			       AND existing.canteen_id = pairs.canonical_id
+			       AND existing.source_url = source.source_url
+			   )`,
+			`WITH mappings(school_name, duplicate_campus, duplicate_name, canonical_campus, canonical_name) AS (
+			   VALUES
+			     ('中国石油大学（北京）', '北京校区', '学生第一食堂', '北校园', '学生第一食堂'),
+			     ('中国石油大学（北京）', '北京校区', '学生第二食堂', '北校园', '学生第二食堂'),
+			     ('中国矿业大学（北京）', '学院路校区', '丰园餐厅', '学院路校区', '丰园'),
+			     ('中国矿业大学（北京）', '学院路校区', '清真餐厅', '学院路校区', '清真园'),
+			     ('中国矿业大学（北京）', '沙河校区', '豐园餐厅', '沙河校区', '丰园'),
+			     ('中国矿业大学（北京）', '沙河校区', '菁园餐厅', '沙河校区', '菁园'),
+			     ('中国矿业大学（北京）', '沙河校区', '馨园餐厅', '沙河校区', '馨园')
+			 ), pairs AS (
+			   SELECT duplicate.id AS duplicate_id, canonical.id AS canonical_id
+			   FROM mappings AS mapping
+			   JOIN schools AS school ON school.name = mapping.school_name
+			   JOIN school_campuses AS duplicate_campus
+			     ON duplicate_campus.school_id = school.id AND duplicate_campus.name = mapping.duplicate_campus
+			   JOIN school_canteens AS duplicate
+			     ON duplicate.school_id = school.id AND duplicate.campus_id = duplicate_campus.id
+			    AND duplicate.name = mapping.duplicate_name AND duplicate.status <> 'deleted'
+			   JOIN school_campuses AS canonical_campus
+			     ON canonical_campus.school_id = school.id AND canonical_campus.name = mapping.canonical_campus
+			   JOIN school_canteens AS canonical
+			     ON canonical.school_id = school.id AND canonical.campus_id = canonical_campus.id
+			    AND canonical.name = mapping.canonical_name AND canonical.status <> 'deleted'
+			 )
+			 DELETE FROM campus_directory_sources AS source
+			 USING pairs
+			 WHERE source.canteen_id = pairs.duplicate_id
+			   AND EXISTS (
+			     SELECT 1 FROM campus_directory_sources AS existing
+			     WHERE existing.school_id = source.school_id
+			       AND existing.canteen_id = pairs.canonical_id
+			       AND existing.source_url = source.source_url
+			   )`,
+			`WITH mappings(school_name, duplicate_campus, duplicate_name, canonical_campus, canonical_name) AS (
+			   VALUES
+			     ('中国石油大学（北京）', '北京校区', '学生第一食堂', '北校园', '学生第一食堂'),
+			     ('中国石油大学（北京）', '北京校区', '学生第二食堂', '北校园', '学生第二食堂'),
+			     ('中国矿业大学（北京）', '学院路校区', '丰园餐厅', '学院路校区', '丰园'),
+			     ('中国矿业大学（北京）', '学院路校区', '清真餐厅', '学院路校区', '清真园'),
+			     ('中国矿业大学（北京）', '沙河校区', '豐园餐厅', '沙河校区', '丰园'),
+			     ('中国矿业大学（北京）', '沙河校区', '菁园餐厅', '沙河校区', '菁园'),
+			     ('中国矿业大学（北京）', '沙河校区', '馨园餐厅', '沙河校区', '馨园')
+			 ), duplicate_rows AS (
+			   SELECT duplicate.id
+			   FROM mappings AS mapping
+			   JOIN schools AS school ON school.name = mapping.school_name
+			   JOIN school_campuses AS duplicate_campus
+			     ON duplicate_campus.school_id = school.id AND duplicate_campus.name = mapping.duplicate_campus
+			   JOIN school_canteens AS duplicate
+			     ON duplicate.school_id = school.id AND duplicate.campus_id = duplicate_campus.id
+			    AND duplicate.name = mapping.duplicate_name AND duplicate.status <> 'deleted'
+			   JOIN school_campuses AS canonical_campus
+			     ON canonical_campus.school_id = school.id AND canonical_campus.name = mapping.canonical_campus
+			   JOIN school_canteens AS canonical
+			     ON canonical.school_id = school.id AND canonical.campus_id = canonical_campus.id
+			    AND canonical.name = mapping.canonical_name AND canonical.status <> 'deleted'
+			 )
+			 UPDATE school_canteens AS duplicate
+			 SET status = 'inactive',
+			     review_note = '同义食堂记录已合并到官方校区下的规范名称',
+			     updated_at = now()
+			 FROM duplicate_rows
+			 WHERE duplicate.id = duplicate_rows.id`,
+			`UPDATE school_canteens AS canteen
+			 SET status = 'inactive',
+			     review_note = '已由用户提供的精确食堂名称和楼层记录替代；历史泛称不再作为现行下拉项',
+			     reviewed_at = COALESCE(canteen.reviewed_at, now()),
+			     updated_at = now()
+			 FROM schools AS school
+			 WHERE canteen.school_id = school.id
+			   AND school.name = '北京协和医学院'
+			   AND canteen.name IN ('食堂', '学生食堂', '八大处校区食堂')
+			   AND canteen.status NOT IN ('deleted', 'rejected')`,
+			`WITH stale_rows AS (
+			   SELECT canteen.id
+			   FROM school_canteens AS canteen
+			   JOIN schools AS school ON school.id = canteen.school_id
+			   JOIN school_campuses AS campus ON campus.id = canteen.campus_id
+			   WHERE school.name = '北京大学'
+			     AND canteen.status NOT IN ('deleted', 'rejected')
+			     AND ((campus.name = '燕园校区' AND canteen.name = '燕南美食')
+			       OR (campus.name = '燕园校区' AND canteen.name = '馨园食堂'))
+			 )
+			 UPDATE school_canteens AS canteen
+			 SET status = 'inactive',
+			     review_note = CASE
+			       WHEN canteen.name = '馨园食堂' THEN '馨园食堂已纠正到昌平新校区（新燕园校区）'
+			       ELSE '旧名称已由当前官方名称燕南食堂替代'
+			     END,
+			     reviewed_at = COALESCE(canteen.reviewed_at, now()),
+			     updated_at = now()
+			 FROM stale_rows
+			 WHERE canteen.id = stale_rows.id`,
+		}
+		for _, statement := range statements {
+			if err := tx.Exec(statement).Error; err != nil {
+				return fmt.Errorf("publish verified dining directory: %w", err)
+			}
+		}
+		return nil
+	})
+}
+
+// PublishVerifiedDiningDirectory runs the reviewed campus-directory data
+// publication independently from the full schema migration. It is used when a
+// production table lock prevents AutoMigrate from reaching this idempotent
+// data step.
+func PublishVerifiedDiningDirectory(ctx context.Context, db *gorm.DB, schema string) error {
+	if schema == "" {
+		schema = "public"
+	}
+	if !identifierPattern.MatchString(schema) {
+		return fmt.Errorf("invalid database schema: %q", schema)
+	}
+	if err := db.WithContext(ctx).Exec("SET search_path TO " + quoteIdent(schema)).Error; err != nil {
+		return fmt.Errorf("set search path: %w", err)
+	}
+	if err := ensureCanteenWindowReviewStatusConstraint(ctx, db); err != nil {
+		return fmt.Errorf("upgrade canteen window review status constraint: %w", err)
+	}
+	if err := ensureCampusDirectoryPendingResearchSeed(ctx, db); err != nil {
+		return fmt.Errorf("import reviewed dining directory seed: %w", err)
+	}
+	if err := ensureBeijingOwnerVerifiedDiningSeed(ctx, db); err != nil {
+		return fmt.Errorf("import Beijing owner-verified dining directory seed: %w", err)
+	}
+	return ensureVerifiedDiningDirectoryPublication(ctx, db)
+}
+
+// PublishBeijingOwnerVerifiedDiningDirectory publishes only the owner-approved
+// Beijing batch. It deliberately leaves non-Beijing campus dining records
+// untouched while the rest of the nationwide dining hierarchy is incomplete.
+func PublishBeijingOwnerVerifiedDiningDirectory(ctx context.Context, db *gorm.DB, schema string) error {
+	if schema == "" {
+		schema = "public"
+	}
+	if !identifierPattern.MatchString(schema) {
+		return fmt.Errorf("invalid database schema: %q", schema)
+	}
+	if err := db.WithContext(ctx).Exec("SET search_path TO " + quoteIdent(schema)).Error; err != nil {
+		return fmt.Errorf("set search path: %w", err)
+	}
+	if err := ensureBeijingOwnerVerifiedDiningSeed(ctx, db); err != nil {
+		return fmt.Errorf("import Beijing owner-verified dining directory seed: %w", err)
+	}
+	const batchName = "北京92所高校食堂目录-产品负责人确认-20260727"
+	return db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		statements := []string{
+			`UPDATE campus_directory_sources AS source
+			 SET review_status = 'approved', updated_at = now()
+			 FROM campus_directory_import_batches AS batch
+			 WHERE source.batch_id = batch.id
+			   AND batch.name = ?
+			   AND source.review_status <> 'approved'`,
+			`UPDATE school_canteens AS canteen
+			 SET status = 'active',
+			     review_note = '产品负责人确认的北京高校现行食堂目录',
+			     reviewed_at = COALESCE(canteen.reviewed_at, now()),
+			     updated_at = now()
+			 WHERE canteen.status IN ('pending_review', 'inactive')
+			   AND canteen.name !~ '(窗口|档口)'
+			   AND EXISTS (
+			     SELECT 1
+			     FROM campus_directory_sources AS source
+			     JOIN campus_directory_import_batches AS batch ON batch.id = source.batch_id
+			     WHERE source.canteen_id = canteen.id
+			       AND batch.name = ?
+			       AND source.review_status = 'approved'
+			   )`,
+			`UPDATE school_campuses AS campus
+			 SET status = 'active', updated_at = now()
+			 WHERE campus.status = 'pending_review'
+			   AND EXISTS (
+			     SELECT 1
+			     FROM school_canteens AS canteen
+			     JOIN campus_directory_sources AS source ON source.canteen_id = canteen.id
+			     JOIN campus_directory_import_batches AS batch ON batch.id = source.batch_id
+			     WHERE canteen.campus_id = campus.id
+			       AND canteen.status = 'active'
+			       AND batch.name = ?
+			   )`,
+			`UPDATE campus_directory_import_batches
+			 SET status = 'approved', updated_at = now()
+			 WHERE name = ?`,
+		}
+		for _, statement := range statements {
+			if err := tx.Exec(statement, batchName).Error; err != nil {
+				return fmt.Errorf("publish Beijing owner-verified dining directory: %w", err)
+			}
+		}
+		return nil
+	})
+}
+
+func ensureCanteenWindowReviewStatusConstraint(ctx context.Context, db *gorm.DB) error {
+	return db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Exec(`ALTER TABLE canteen_windows DROP CONSTRAINT IF EXISTS canteen_windows_status_check`).Error; err != nil {
+			return err
+		}
+		return tx.Exec(`ALTER TABLE canteen_windows ADD CONSTRAINT canteen_windows_status_check CHECK (status = ANY (ARRAY['pending_review'::text,'active'::text,'inactive'::text,'deleted'::text]))`).Error
+	})
+}
+
 func ensureCampusDirectoryPendingBatch(ctx context.Context, db *gorm.DB, seed campusDirectoryPendingResearchSeed) (string, error) {
 	totalCampuses := 0
 	totalCanteens := 0
+	totalWindows := 0
 	totalSources := 0
 	noteParts := make([]string, 0, len(seed.Schools))
 	for _, school := range seed.Schools {
 		totalCampuses += len(school.Campuses)
 		totalCanteens += len(school.Canteens)
+		totalWindows += len(school.Windows)
 		for _, canteen := range school.Canteens {
 			if strings.TrimSpace(canteen.SourceURL) != "" {
+				totalSources++
+			}
+		}
+		for _, window := range school.Windows {
+			if strings.TrimSpace(window.SourceURL) != "" {
 				totalSources++
 			}
 		}
@@ -1196,6 +1840,7 @@ func ensureCampusDirectoryPendingBatch(ctx context.Context, db *gorm.DB, seed ca
 		TotalSchools:  len(seed.Schools),
 		TotalCampuses: totalCampuses,
 		TotalCanteens: totalCanteens,
+		TotalWindows:  totalWindows,
 		TotalSources:  totalSources,
 		Notes:         stringPtr(strings.Join(noteParts, "\n")),
 	}
@@ -1205,7 +1850,7 @@ func ensureCampusDirectoryPendingBatch(ctx context.Context, db *gorm.DB, seed ca
 	if err := db.WithContext(ctx).Clauses(clause.OnConflict{
 		Columns: []clause.Column{{Name: "name"}},
 		DoUpdates: clause.AssignmentColumns([]string{
-			"region", "source_scope", "status", "total_schools", "total_campuses", "total_canteens", "total_sources", "notes", "updated_at",
+			"region", "source_scope", "status", "total_schools", "total_campuses", "total_canteens", "total_windows", "total_sources", "notes", "updated_at",
 		}),
 	}).Create(&row).Error; err != nil {
 		return "", fmt.Errorf("upsert campus directory pending batch %q: %w", row.Name, err)
@@ -1234,6 +1879,7 @@ func ensureCampusDirectoryPendingSchoolResearch(ctx context.Context, db *gorm.DB
 		return fmt.Errorf("find school %q for pending research: %w", schoolName, err)
 	}
 	campusIDs := map[string]string{}
+	canteenIDs := map[string]string{}
 	for i, campus := range seed.Campuses {
 		name := strings.TrimSpace(campus.Name)
 		if name == "" {
@@ -1257,6 +1903,26 @@ func ensureCampusDirectoryPendingSchoolResearch(ctx context.Context, db *gorm.DB
 		}
 		if err := db.WithContext(ctx).Table("school_campuses").Select("id").Where("school_id = ? AND lower(name) = lower(?) AND status <> ?", school.ID, name, "deleted").Take(&saved).Error; err != nil {
 			return fmt.Errorf("find pending campus %q/%q: %w", schoolName, name, err)
+		}
+		campusUpdates := map[string]any{}
+		if len(campus.Aliases) > 0 {
+			aliasesJSON, marshalErr := json.Marshal(campus.Aliases)
+			if marshalErr != nil {
+				return fmt.Errorf("encode pending campus aliases %q/%q: %w", schoolName, name, marshalErr)
+			}
+			campusUpdates["aliases"] = gorm.Expr("?::jsonb", string(aliasesJSON))
+		}
+		if value := strings.TrimSpace(campus.Address); value != "" {
+			campusUpdates["address"] = value
+		}
+		if value := strings.TrimSpace(campus.SourceURL); value != "" {
+			campusUpdates["source_url"] = value
+		}
+		if len(campusUpdates) > 0 {
+			campusUpdates["updated_at"] = gorm.Expr("now()")
+			if err := db.WithContext(ctx).Table("school_campuses").Where("id = ?", saved.ID).Updates(campusUpdates).Error; err != nil {
+				return fmt.Errorf("update pending campus metadata %q/%q: %w", schoolName, name, err)
+			}
 		}
 		campusIDs[name] = saved.ID
 		for _, alias := range campus.Aliases {
@@ -1306,11 +1972,94 @@ func ensureCampusDirectoryPendingSchoolResearch(ctx context.Context, db *gorm.DB
 		if err != nil {
 			return fmt.Errorf("find pending canteen %q/%q: %w", schoolName, name, err)
 		}
+		canteenUpdates := map[string]any{}
+		if len(canteen.Aliases) > 0 {
+			aliasesJSON, marshalErr := json.Marshal(canteen.Aliases)
+			if marshalErr != nil {
+				return fmt.Errorf("encode pending canteen aliases %q/%q: %w", schoolName, name, marshalErr)
+			}
+			canteenUpdates["aliases"] = gorm.Expr("?::jsonb", string(aliasesJSON))
+		}
+		for column, value := range map[string]string{
+			"location_text":     canteen.LocationText,
+			"building_or_floor": canteen.BuildingOrFloor,
+			"service_type":      canteen.ServiceType,
+			"audience":          canteen.Audience,
+			"opening_hours_raw": canteen.OpeningHoursRaw,
+			"source_url":        canteen.SourceURL,
+			"source_org":        canteen.SourceOrg,
+			"source_type":       canteen.SourceType,
+			"confidence_level":  confidence,
+		} {
+			if value = strings.TrimSpace(value); value != "" {
+				canteenUpdates[column] = value
+			}
+		}
+		if len(canteenUpdates) > 0 {
+			canteenUpdates["updated_at"] = gorm.Expr("now()")
+			if err := db.WithContext(ctx).Table("school_canteens").Where("id = ?", *canteenID).Updates(canteenUpdates).Error; err != nil {
+				return fmt.Errorf("update pending canteen metadata %q/%q: %w", schoolName, name, err)
+			}
+		}
 		if err := ensureCampusDirectoryPendingSource(ctx, db, batchID, school.ID, campusID, canteenID, canteen); err != nil {
+			return err
+		}
+		canteenIDs[campusCanteenKey(strings.TrimSpace(canteen.Campus), name)] = *canteenID
+	}
+	for i, window := range seed.Windows {
+		name := strings.TrimSpace(window.Name)
+		canteenName := strings.TrimSpace(window.Canteen)
+		campusName := strings.TrimSpace(window.Campus)
+		if name == "" || canteenName == "" {
+			continue
+		}
+		canteenID := canteenIDs[campusCanteenKey(campusName, canteenName)]
+		if canteenID == "" {
+			var campusID *string
+			if id := campusIDs[campusName]; id != "" {
+				campusID = &id
+			}
+			found, findErr := findCampusDirectoryCanteenID(ctx, db, school.ID, campusID, canteenName)
+			if findErr != nil {
+				return fmt.Errorf("find pending window parent %q/%q/%q: %w", schoolName, canteenName, name, findErr)
+			}
+			canteenID = *found
+		}
+		var campusID *string
+		if id := campusIDs[campusName]; id != "" {
+			campusID = &id
+		}
+		row := migrationdo.CanteenWindowDO{
+			SchoolID:  school.ID,
+			CampusID:  campusID,
+			CanteenID: canteenID,
+			Name:      name,
+			Aliases:   window.Aliases,
+			Floor:     stringPtr(strings.TrimSpace(window.Floor)),
+			SourceURL: stringPtr(strings.TrimSpace(window.SourceURL)),
+			Status:    normalizePendingReviewStatus(window.ReviewStatus),
+			SortOrder: i + 1,
+		}
+		if err := db.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&row).Error; err != nil {
+			return fmt.Errorf("insert pending window %q/%q/%q: %w", schoolName, canteenName, name, err)
+		}
+		evidence := campusDirectoryResearchCanteen{
+			SourceURL:       window.SourceURL,
+			SourceTitle:     window.SourceTitle,
+			SourceOrg:       window.SourceOrg,
+			SourceType:      window.SourceType,
+			EvidenceLevel:   window.EvidenceLevel,
+			EvidenceExcerpt: window.EvidenceExcerpt,
+		}
+		if err := ensureCampusDirectoryPendingSource(ctx, db, batchID, school.ID, campusID, &canteenID, evidence); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func campusCanteenKey(campus, canteen string) string {
+	return strings.ToLower(strings.TrimSpace(campus)) + "\x00" + strings.ToLower(strings.TrimSpace(canteen))
 }
 
 func findCampusDirectoryCanteenID(ctx context.Context, db *gorm.DB, schoolID string, campusID *string, name string) (*string, error) {
@@ -1370,7 +2119,13 @@ func ensureCampusDirectoryPendingSource(ctx context.Context, db *gorm.DB, batchI
 			"review_status":    row.ReviewStatus,
 			"updated_at":       gorm.Expr("now()"),
 		}
-		return query.Updates(updates).Error
+		updateQuery := db.WithContext(ctx).Table("campus_directory_sources").Where("school_id = ? AND source_url = ?", schoolID, sourceURL)
+		if canteenID == nil {
+			updateQuery = updateQuery.Where("canteen_id IS NULL")
+		} else {
+			updateQuery = updateQuery.Where("canteen_id = ?", *canteenID)
+		}
+		return updateQuery.Updates(updates).Error
 	}
 	if err := db.WithContext(ctx).Create(&row).Error; err != nil {
 		return fmt.Errorf("insert campus directory source %q: %w", sourceURL, err)

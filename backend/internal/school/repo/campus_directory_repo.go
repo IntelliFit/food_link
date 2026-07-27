@@ -36,6 +36,7 @@ type ListCanteensInput struct {
 
 type ListWindowsInput struct {
 	CanteenID string
+	Floor     string
 	Status    string
 	Query     string
 	Limit     int
@@ -143,6 +144,9 @@ func (r *CampusDirectoryRepo) ListWindows(ctx context.Context, input ListWindows
 	}
 	status := normalizeStatus(input.Status, "active")
 	q := r.db.WithContext(ctx).Where("canteen_id = ?", strings.TrimSpace(input.CanteenID))
+	if floor := strings.TrimSpace(input.Floor); floor != "" {
+		q = q.Where("TRIM(floor) = ?", floor)
+	}
 	if status != "all" {
 		q = q.Where("status = ?", status)
 	} else {

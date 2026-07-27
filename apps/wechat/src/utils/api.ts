@@ -7454,6 +7454,7 @@ export async function estimateExerciseCalories(exerciseDesc: string): Promise<{
 export interface SchoolItem {
   id: string
   name: string
+  location_type?: 'university' | 'company' | 'community'
   province?: string
   city?: string
   logo_url?: string
@@ -7499,6 +7500,13 @@ export interface CanteenWindowItem {
   sort_order?: number
 }
 
+export interface CanteenFloorItem {
+  name: string
+  sort_order: number
+  is_fallback?: boolean
+  is_default?: boolean
+}
+
 export interface CampusCanteenApplicationRequest {
   school_id: string
   campus_id?: string
@@ -7509,11 +7517,12 @@ export interface CampusCanteenApplicationRequest {
   applicant_note?: string
 }
 
-export async function searchSchools(keyword: string, province?: string, limit = 20): Promise<SchoolItem[]> {
+export async function searchSchools(keyword: string, province?: string, limit = 20, locationType: 'university' | 'company' | 'community' = 'university'): Promise<SchoolItem[]> {
   const q = new URLSearchParams()
   if (keyword) q.set('keyword', keyword)
   if (province) q.set('province', province)
   q.set('limit', String(limit))
+  q.set('location_type', locationType)
   const response = await authenticatedRequest(`/api/schools?${q.toString()}`, {
     method: 'GET',
     timeout: 10000,
@@ -7563,8 +7572,20 @@ export async function getCampusCanteens(campusId: string): Promise<SchoolCanteen
   return unwrapResponse<SchoolCanteenItem[]>(response) || []
 }
 
-export async function getCanteenWindows(canteenId: string): Promise<CanteenWindowItem[]> {
-  const response = await authenticatedRequest(`/api/school-canteens/${encodeURIComponent(canteenId)}/windows`, {
+export async function getCanteenFloors(canteenId: string): Promise<CanteenFloorItem[]> {
+  const response = await authenticatedRequest(`/api/school-canteens/${encodeURIComponent(canteenId)}/floors`, {
+    method: 'GET',
+    timeout: 10000,
+  })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.message || '获取楼层失败')
+  }
+  return unwrapResponse<CanteenFloorItem[]>(response) || []
+}
+
+export async function getCanteenWindows(canteenId: string, floor?: string): Promise<CanteenWindowItem[]> {
+  const query = floor?.trim() ? `?floor=${encodeURIComponent(floor.trim())}` : ''
+  const response = await authenticatedRequest(`/api/school-canteens/${encodeURIComponent(canteenId)}/windows${query}`, {
     method: 'GET',
     timeout: 10000,
   })
@@ -7589,8 +7610,8 @@ export async function createSchoolCanteenApplication(
 }
 
 /** 获取有学校的省份列表 */
-export async function getSchoolProvinces(): Promise<string[]> {
-  const response = await authenticatedRequest('/api/schools/provinces', {
+export async function getSchoolProvinces(locationType: 'university' | 'company' | 'community' = 'university'): Promise<string[]> {
+  const response = await authenticatedRequest(`/api/schools/provinces?location_type=${encodeURIComponent(locationType)}`, {
     method: 'GET',
     timeout: 10000,
   })

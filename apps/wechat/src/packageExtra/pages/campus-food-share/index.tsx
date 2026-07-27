@@ -13,9 +13,11 @@ import { useAppColorScheme } from "../../../components/AppColorSchemeContext";
 import SchoolPicker from "../../../components/SchoolPicker";
 import CampusPicker from "../../../components/CampusPicker";
 import CanteenPicker from "../../../components/CanteenPicker";
+import FloorPicker from "../../../components/FloorPicker";
 import { applyThemeNavigationBar } from "../../../utils/theme-navigation-bar";
 import {
   createPublicFoodLibraryItem,
+  getCanteenFloors,
   getMyMembership,
   getPublicFoodLibraryItem,
   imageToBase64,
@@ -108,6 +110,7 @@ function CampusFoodSharePage() {
   const [showSchoolPicker, setShowSchoolPicker] = useState(false);
   const [showCampusPicker, setShowCampusPicker] = useState(false);
   const [showCanteenPicker, setShowCanteenPicker] = useState(false);
+  const [showFloorPicker, setShowFloorPicker] = useState(false);
   const [showPriceTypeSheet, setShowPriceTypeSheet] = useState(false);
   const [showPriceDateSheet, setShowPriceDateSheet] = useState(false);
   const [membershipStatus, setMembershipStatus] =
@@ -115,6 +118,14 @@ function CampusFoodSharePage() {
   const [membershipLoading, setMembershipLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const isCampusMember = !!membershipStatus?.is_pro;
+  const areaLabel =
+    selectedSchool?.location_type === "company"
+      ? "园区"
+      : selectedSchool?.location_type === "community"
+        ? "社区区域"
+        : selectedSchool?.location_type === "university"
+          ? "校区"
+          : "校区/园区/社区区域";
 
   const handleChooseImage = async () => {
     const remain = MAX_IMAGES - imageUrls.length;
@@ -251,10 +262,6 @@ function CampusFoodSharePage() {
     }
     if (!schoolName.trim()) {
       Taro.showToast({ title: "请选择学校", icon: "none" });
-      return;
-    }
-    if (!selectedCampus?.id) {
-      Taro.showToast({ title: "请选择校区", icon: "none" });
       return;
     }
     if (!selectedCanteen?.id) {
@@ -564,96 +571,90 @@ function CampusFoodSharePage() {
               onInput={(e) => setFoodName(e.detail.value)}
             />
           </View>
-          <View className='form-item'>
-            <Text className='form-label'>
-              学校 <Text className='required'>*</Text>
-            </Text>
-            <View
-              className='form-input picker-display'
-              onClick={() => setShowSchoolPicker(true)}
-            >
-              <Text
-                className={schoolName ? "picker-value" : "picker-placeholder"}
-              >
-                {schoolName || "请选择学校"}
+          <View className='directory-form-row directory-form-row--two'>
+            <View className='form-item directory-form-item'>
+              <Text className='form-label'>
+                学校/公司/社区 <Text className='required'>*</Text>
               </Text>
+              <View
+                className='form-input picker-display'
+                onClick={() => setShowSchoolPicker(true)}
+              >
+                <Text
+                  className={schoolName ? "picker-value" : "picker-placeholder"}
+                >
+                  {schoolName || "选择学校/公司/社区"}
+                </Text>
+                <Text className='picker-arrow'>⌄</Text>
+              </View>
+            </View>
+            <View className='form-item directory-form-item'>
+              <Text className='form-label'>{areaLabel}</Text>
+              <View
+                className='form-input picker-display'
+                onClick={() => {
+                  if (!selectedSchool?.id && !schoolId) {
+                    Taro.showToast({ title: "请先选择高校、公司或社区", icon: "none" });
+                    return;
+                  }
+                  setShowCampusPicker(true);
+                }}
+              >
+                <Text
+                  className={
+                    selectedCampus?.name ? "picker-value" : "picker-placeholder"
+                  }
+                >
+                  {selectedCampus?.name || `选择${areaLabel}`}
+                </Text>
+                <Text className='picker-arrow'>⌄</Text>
+              </View>
             </View>
           </View>
-          <View className='form-item'>
-            <Text className='form-label'>
-              校区 <Text className='required'>*</Text>
-            </Text>
-            <View
-              className='form-input picker-display'
-              onClick={() => {
-                if (!selectedSchool?.id && !schoolId) {
-                  Taro.showToast({ title: "请先选择学校", icon: "none" });
-                  return;
-                }
-                setShowCampusPicker(true);
-              }}
-            >
-              <Text
-                className={
-                  selectedCampus?.name ? "picker-value" : "picker-placeholder"
-                }
+          <View className='directory-form-row directory-form-row--three'>
+            <View className='form-item directory-form-item'>
+              <Text className='form-label'>
+                食堂 <Text className='required'>*</Text>
+              </Text>
+              <View
+                className='form-input picker-display'
+                onClick={() => {
+                  if (!selectedSchool?.id && !schoolId) {
+                    Taro.showToast({ title: "请先选择高校、公司或社区", icon: "none" });
+                    return;
+                  }
+                  setShowCanteenPicker(true);
+                }}
               >
-                {selectedCampus?.name || "请选择校区"}
-              </Text>
-              <Text className='picker-arrow'>⌄</Text>
+                <Text
+                  className={canteenName ? "picker-value" : "picker-placeholder"}
+                >
+                  {selectedCanteen?.name || canteenName || "选择食堂"}
+                </Text>
+                <Text className='picker-arrow'>⌄</Text>
+              </View>
             </View>
-          </View>
-          <View className='form-item'>
-            <Text className='form-label'>
-              食堂 <Text className='required'>*</Text>
-            </Text>
-            <View
-              className='form-input picker-display'
-              onClick={() => {
-                if (!selectedSchool?.id && !schoolId) {
-                  Taro.showToast({ title: "请先选择学校", icon: "none" });
-                  return;
-                }
-                if (!selectedCampus?.id) {
-                  Taro.showToast({ title: "请先选择校区", icon: "none" });
-                  return;
-                }
-                setShowCanteenPicker(true);
-              }}
-            >
-              <Text
-                className={canteenName ? "picker-value" : "picker-placeholder"}
-              >
-                {selectedCanteen?.name || canteenName || "请选择已审核食堂"}
-              </Text>
-              <Text className='picker-arrow'>⌄</Text>
+            <View className='form-item directory-form-item'>
+              <Text className='form-label'>楼层</Text>
+              <View className='form-input picker-display' onClick={() => selectedCanteen?.id ? setShowFloorPicker(true) : Taro.showToast({ title: '请先选择食堂', icon: 'none' })}>
+                <Text className={floor ? 'picker-value' : 'picker-placeholder'}>{floor || '选择楼层'}</Text><Text className='picker-arrow'>⌄</Text>
+              </View>
             </View>
-            {canteenName && !selectedCanteen?.id && (
-              <Text className='legacy-canteen-tip'>
-                旧食堂名称仅用于展示，保存前请绑定到已审核食堂。
-              </Text>
-            )}
-          </View>
-          <View className='form-row'>
-            <View className='form-item form-item--half'>
-              <Text className='form-label'>楼层（可选）</Text>
-              <Input
-                className='form-input'
-                placeholder='如：一层'
-                value={floor}
-                onInput={(e) => setFloor(e.detail.value)}
-              />
-            </View>
-            <View className='form-item form-item--half'>
+            <View className='form-item directory-form-item'>
               <Text className='form-label'>窗口（可选）</Text>
               <Input
                 className='form-input'
-                placeholder='如：12号窗口'
+                placeholder='填写窗口'
                 value={windowName}
-                onInput={(e) => setWindowName(e.detail.value)}
+                onInput={(event) => setWindowName(event.detail.value)}
               />
             </View>
           </View>
+          {canteenName && !selectedCanteen?.id && (
+            <Text className='legacy-canteen-tip'>
+              旧食堂名称仅用于展示，保存前请绑定到已审核食堂。
+            </Text>
+          )}
         </View>
 
         <View className='campus-share-section'>
@@ -973,10 +974,21 @@ function CampusFoodSharePage() {
             setSelectedCampus(campus);
             setSelectedCanteen(canteen);
             setCanteenName(canteen.name);
+            setFloor("");
+            setWindowName("");
             setShowCanteenPicker(false);
+            getCanteenFloors(canteen.id)
+              .then((items) => {
+                const defaultFloor = items.find((item) => item.is_default);
+                if (defaultFloor) setFloor(defaultFloor.name);
+              })
+              .catch(() => {
+                // 楼层选择器会在用户打开时展示统一错误；食堂选择本身不应被阻断。
+              });
           }}
           onCancel={() => setShowCanteenPicker(false)}
         />
+        <FloorPicker visible={showFloorPicker} canteen={selectedCanteen} value={floor} onSelect={(value) => { setFloor(value); setWindowName(""); setShowFloorPicker(false); }} onCancel={() => setShowFloorPicker(false)} />
       </View>
     </>
   );
