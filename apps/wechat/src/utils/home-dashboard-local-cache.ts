@@ -286,6 +286,7 @@ function buildOptimisticFoodRecord(
     created_at: createdAt.toISOString(),
     diet_goal: payload.diet_goal || null,
     activity_timing: payload.activity_timing || null,
+    eating_mood: payload.eating_mood || null,
     source_task_id: payload.source_task_id || null,
   }
 }

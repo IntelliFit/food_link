@@ -62,7 +62,14 @@
     "push-docker-ccr": "node backend/scripts/push-docker-ccr.mjs",
     "debug:feedback-samples": "bash scripts/query-analysis-feedback-samples.sh",
     "nutrition:enrich-missing": "python scripts/enrich_missing_nutrients.py",
-    "nutrition:enrich-packaged": "python scripts/enrich_packaged_foods.py"
+    "nutrition:enrich-packaged": "python scripts/enrich_packaged_foods.py",
+    "xhs:crawl": "node scripts/crawl-xiaohongshu-campus-dining.mjs",
+    "test:xhs:crawl": "node --test scripts/crawl-xiaohongshu-campus-dining.test.mjs",
+    "campus:indexed-social:crawl": "node scripts/crawl-indexed-social-campus-dining.mjs",
+    "test:campus:indexed-social:crawl": "node --test scripts/crawl-indexed-social-campus-dining.test.mjs",
+    "campus:indexed-content:crawl": "node scripts/crawl-indexed-content-evidence.mjs",
+    "test:campus:indexed-content:crawl": "node --test scripts/crawl-indexed-content-evidence.test.mjs",
+    "campus:web:crawl": "cd backend && go run ./cmd/campus-directory-crawl"
   },
   "browserslist": {
     "development": [
@@ -135,6 +142,7 @@
     "lint-staged": "^16.1.2",
     "miniprogram-automator": "^0.12.1",
     "patch-package": "^8.0.1",
+    "playwright-core": "^1.61.1",
     "postcss": "^8.5.6",
     "react-refresh": "^0.14.0",
     "sass": "^1.75.0",

@@ -54,7 +54,7 @@
 .chat-message-content {
   padding: 24rpx;
   display: flex;
-  flex-direction: column-reverse;
+  flex-direction: column;
 }
 
 .chat-loading {
@@ -242,6 +242,8 @@
   background: #fff;
   border-top: 1rpx solid #e5e7eb;
   flex-shrink: 0;
+  transition: transform 160ms ease-out;
+  will-change: transform;
 }
 
 .chat-input-actions {

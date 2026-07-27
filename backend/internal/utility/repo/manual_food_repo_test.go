@@ -153,6 +153,50 @@ func TestManualFoodRepo_Search(t *testing.T) {
 	assert.Equal(t, "nutrition_library", aliasItems[0].Source)
 }
 
+func TestManualFoodRepoSearchScopesHistoryAndDedupesAfterNutritionMapping(t *testing.T) {
+	db := setupTestDB(t)
+	r := NewManualFoodRepo(db)
+	ctx := context.Background()
+
+	require.NoError(t, db.Create(&fooddomain.FoodNutrition{
+		ID:             "taiwan-sausage",
+		CanonicalName:  "台式烤香肠",
+		NormalizedName: "台式烤香肠",
+		KcalPer100g:    350,
+		ProteinPer100g: 17,
+		CarbsPer100g:   6,
+		FatPer100g:     28,
+		QualityTier:    fooddomain.NutritionQualityLegacyCurated,
+		IsActive:       true,
+	}).Error)
+	require.NoError(t, db.Create(&fooddomain.FoodNutritionAlias{
+		ID:              "taiwan-sausage-alias",
+		FoodID:          "taiwan-sausage",
+		AliasName:       "烤香肠",
+		NormalizedAlias: "烤香肠",
+		MatchStatus:     fooddomain.NutritionAliasApprovedExact,
+	}).Error)
+	require.NoError(t, db.Exec(`
+		INSERT INTO user_food_records (id, user_id, items, record_time) VALUES
+		('u1-r1', 'u1', '[{"name":"烤香肠","intake":51,"nutrients":{"calories":177,"protein":8.6,"carbs":3,"fat":14}}]', CURRENT_TIMESTAMP),
+		('u1-r2', 'u1', '[{"name":"烤香肠","intake":51,"nutrients":{"calories":177,"protein":8.6,"carbs":3,"fat":14}}]', CURRENT_TIMESTAMP),
+		('u1-r3', 'u1', '[{"name":"台式烤香肠","intake":51,"nutrients":{"calories":177,"protein":8.6,"carbs":3,"fat":14}}]', CURRENT_TIMESTAMP),
+		('u1-r4', 'u1', '[{"name":"台式烤香肠","intake":51,"nutrients":{"calories":177,"protein":8.6,"carbs":3,"fat":14}}]', CURRENT_TIMESTAMP),
+		('u2-r1', 'u2', '[{"name":"烤香肠","intake":80,"nutrients":{"calories":300,"protein":12,"carbs":6,"fat":25}}]', CURRENT_TIMESTAMP),
+		('u2-r2', 'u2', '[{"name":"烤香肠","intake":80,"nutrients":{"calories":300,"protein":12,"carbs":6,"fat":25}}]', CURRENT_TIMESTAMP),
+		('u2-r3', 'u2', '[{"name":"烤香肠","intake":80,"nutrients":{"calories":300,"protein":12,"carbs":6,"fat":25}}]', CURRENT_TIMESTAMP)
+	`).Error)
+
+	items, err := r.Search(ctx, "u1", "烤香肠", 20)
+	require.NoError(t, err)
+	require.Len(t, items, 1)
+	assert.Equal(t, "taiwan-sausage", items[0].ID)
+	assert.Equal(t, "nutrition_library", items[0].Source)
+	assert.Equal(t, 2, items[0].UsageCount)
+	assert.InDelta(t, 51, items[0].DefaultWeightGrams, 0.01)
+	assert.InDelta(t, 177, items[0].TotalCalories, 0.01)
+}
+
 func TestExpandedSearchTerms_Rice(t *testing.T) {
 	terms := expandedSearchTerms("饭")
 	assert.Contains(t, terms, "饭")

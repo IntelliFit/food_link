@@ -139,6 +139,9 @@ scripts/enrich_packaged_foods.state.json
 CURRENT_TASK.md
 DECISIONS.md
 .local-state/
+# Dedicated Xiaohongshu browser profile and resumable crawler runtime data.
+# Kept explicit even though the parent directory is already ignored.
+.local-state/xiaohongshu-chrome-profile/
 
 # 本地开发工具链（JDK/Android SDK 等）
 tools/

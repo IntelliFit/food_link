@@ -351,6 +351,30 @@ worker:
 	}
 }
 
+func TestApplyPixelAvatarProcessEnvOverridesApolloValues(t *testing.T) {
+	t.Setenv("PIXEL_AVATAR_API_KEY", " process-key ")
+	t.Setenv("PIXEL_AVATAR_BASE_URL", " https://maas.example.com/api/v1/ ")
+	t.Setenv("PIXEL_AVATAR_MODEL", " gpt-image-2 ")
+
+	external := ExternalConfig{
+		PixelAvatarAPIKey:  "apollo-key",
+		PixelAvatarBaseURL: "https://apollo.example.com",
+		PixelAvatarModel:   "apollo-model",
+	}
+	applyPixelAvatarProcessEnvOverrides(&external)
+	trimExternalConfig(&external)
+
+	if external.PixelAvatarAPIKey != "process-key" {
+		t.Fatalf("expected process pixel avatar key, got %q", external.PixelAvatarAPIKey)
+	}
+	if external.PixelAvatarBaseURL != "https://maas.example.com/api/v1" {
+		t.Fatalf("expected process pixel avatar base URL, got %q", external.PixelAvatarBaseURL)
+	}
+	if external.PixelAvatarModel != "gpt-image-2" {
+		t.Fatalf("expected process pixel avatar model, got %q", external.PixelAvatarModel)
+	}
+}
+
 func TestLoadPrefersFileExternalKeysOverEnv(t *testing.T) {
 	t.Setenv("DOUBAO_API_KEY", "bad-env-key")
 	t.Setenv("DOUBAO_WEB_SEARCH_API_KEY", "bad-web-search")

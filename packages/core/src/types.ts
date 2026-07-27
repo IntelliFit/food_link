@@ -1495,6 +1495,11 @@ export interface PetProfile {
   selection_candidates?: PetAppearanceCandidate[]
   free_profile_rematch_available?: boolean
   growth_unlocks?: string[]
+  avatar_type?: 'pixel_self' | string
+  pixel_avatar_url?: string
+  pixel_avatar_blink_url?: string
+  pixel_avatar_squash_url?: string
+  pixel_avatar_jump_url?: string
 }
 
 export interface PetDailyScore {
@@ -1507,6 +1512,7 @@ export interface PetDailyScore {
 export interface PetStatus {
   mood: string
   state: string
+  meal_state?: 'hungry' | 'fed' | 'satisfied' | string
   message: string
   task_text: string
   inactivity_days: number

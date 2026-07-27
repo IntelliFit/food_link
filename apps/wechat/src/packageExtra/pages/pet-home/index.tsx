@@ -154,8 +154,8 @@ function PetHomePage() {
   const totalCredits = membership?.total_credits_available ?? membership?.daily_credits_remaining ?? 0
   const nextLevelGap = Math.max((petSummary?.pet?.next_level_exp ?? 0) - (petSummary?.pet?.level_exp ?? 0), 0)
   const selectionCandidates = petSummary?.pet?.selection_candidates || []
-  const shouldShowSelection = selectionCandidates.length > 0
-    && Boolean(petSummary?.pet?.needs_selection || petSummary?.pet?.free_profile_rematch_available)
+  // 健康分身 MVP 直接使用默认形象，照片定制也只产生一个结果，不再让用户三选一。
+  const shouldShowSelection = false
 
   const handleClaim = useCallback(async () => {
     if (!petEvent?.id || claiming) return
@@ -275,7 +275,13 @@ function PetHomePage() {
     <View className={`pet-home-page ${scheme === 'dark' ? 'pet-home-page--dark' : ''}`}>
       <View className='pet-home-shell'>
         <View className='pet-home-hero'>
-          <PetAvatar pet={petSummary?.pet} size='large' mood={petSummary?.status?.mood} state={petSummary?.status?.state} />
+          <PetAvatar
+            pet={petSummary?.pet}
+            size='large'
+            mood={petSummary?.status?.mood}
+            state={petSummary?.status?.state}
+            mealState={petSummary?.status?.meal_state}
+          />
 
           <View className='pet-home-hero-copy'>
             <Text className='pet-home-name'>{petSummary?.pet?.name || '健康伙伴'}</Text>
