@@ -95,12 +95,9 @@ func AutoMigrate(ctx context.Context, db *gorm.DB, schema string) error {
 	if err := ensureCampusDirectoryPendingResearchSeed(ctx, db); err != nil {
 		return err
 	}
-	if err := ensureBeijingOwnerVerifiedDiningSeed(ctx, db); err != nil {
-		return err
-	}
-	if err := ensureVerifiedDiningDirectoryPublication(ctx, db); err != nil {
-		return err
-	}
+	// Importing or approving reviewed campus-directory data is an explicit
+	// release action. Keep it behind the dedicated migration command so a
+	// routine schema migration cannot publish or rewrite directory records.
 	if err := ensurePublicFoodCampusDirectoryBackfill(ctx, db); err != nil {
 		return err
 	}
