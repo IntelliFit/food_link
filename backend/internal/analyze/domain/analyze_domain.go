@@ -23,6 +23,7 @@ type AnalysisTask struct {
 	LeaseUntil      *time.Time     `json:"lease_until,omitempty" gorm:"column:lease_until"`
 	IsRecorded      bool           `json:"is_recorded" gorm:"-"`
 	RecordID        string         `json:"record_id,omitempty" gorm:"-"`
+	HistoryGroupKey string         `json:"history_group_key,omitempty" gorm:"-"`
 	CreatedAt       *time.Time     `json:"created_at,omitempty" gorm:"column:created_at"`
 	UpdatedAt       *time.Time     `json:"updated_at,omitempty" gorm:"column:updated_at"`
 }

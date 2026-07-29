@@ -311,10 +311,21 @@ func (r *TaskRepo) GetTaskByID(ctx context.Context, taskID string) (*domain.Anal
 }
 
 func (r *TaskRepo) ListTasksByUser(ctx context.Context, userID, taskType, status, search string, limit int) ([]domain.AnalysisTask, error) {
+	return r.ListTasksByUserPage(ctx, userID, taskType, status, search, limit, 0)
+}
+
+func (r *TaskRepo) ListTasksByUserPage(ctx context.Context, userID, taskType, status, search string, limit, offset int) ([]domain.AnalysisTask, error) {
 	if limit <= 0 {
 		limit = 50
 	}
-	q := r.db.WithContext(ctx).Where("user_id = ?", userID).Order("created_at DESC").Limit(limit)
+	if offset < 0 {
+		offset = 0
+	}
+	q := r.db.WithContext(ctx).
+		Where("user_id = ?", userID).
+		Order("created_at DESC, id DESC").
+		Limit(limit).
+		Offset(offset)
 	if taskType != "" {
 		q = q.Where("task_type = ?", taskType)
 	} else {

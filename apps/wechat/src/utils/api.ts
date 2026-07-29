@@ -2933,6 +2933,7 @@ export interface AnalysisTask {
   violation_reason?: string | null // 违规原因
   is_recorded?: boolean          // 是否已保存为饮食记录（后端通过 user_food_records 关联查询）
   record_id?: string              // 已保存时对应的饮食记录 ID，供跳转详情页
+  history_group_key?: string      // 分页加载时用于跨页合并同一次识别链
   created_at: string
   updated_at: string
 }
@@ -3177,20 +3178,27 @@ export async function getAnalyzeTask(taskId: string): Promise<AnalysisTask> {
   return task
 }
 
+export interface AnalyzeTaskListResponse {
+  tasks: AnalysisTask[]
+  has_more?: boolean
+  next_offset?: number
+}
+
 /** 查询当前用户的分析任务列表 */
-export async function listAnalyzeTasks(params?: { task_type?: string; status?: string; search?: string; limit?: number }): Promise<{ tasks: AnalysisTask[] }> {
+export async function listAnalyzeTasks(params?: { task_type?: string; status?: string; search?: string; limit?: number; offset?: number }): Promise<AnalyzeTaskListResponse> {
   const q = new URLSearchParams()
   if (params?.task_type) q.set('task_type', params.task_type)
   if (params?.status) q.set('status', params.status)
   if (params?.search?.trim()) q.set('search', params.search.trim())
   if (params?.limit != null && Number.isFinite(params.limit)) q.set('limit', String(Math.min(200, Math.max(1, Math.floor(params.limit)))))
+  if (params?.offset != null && Number.isFinite(params.offset)) q.set('offset', String(Math.max(0, Math.floor(params.offset))))
   const url = `/api/analyze/tasks${q.toString() ? '?' + q.toString() : ''}`
   const res = await authenticatedRequest(url, { method: 'GET', timeout: 20000 })
   if (res.statusCode !== 200) {
     const msg = (res.data as any)?.detail || '获取任务列表失败'
     throw new Error(msg)
   }
-  return res.data as { tasks: AnalysisTask[] }
+  return res.data as AnalyzeTaskListResponse
 }
 
 /**

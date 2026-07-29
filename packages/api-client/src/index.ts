@@ -962,7 +962,7 @@ export class FoodLinkApiClient {
     })
   }
 
-  async listAnalyzeTasks(params?: { task_type?: string; status?: string; search?: string; limit?: number }): Promise<{ tasks: AnalysisTask[] }> {
+  async listAnalyzeTasks(params?: { task_type?: string; status?: string; search?: string; limit?: number; offset?: number }): Promise<{ tasks: AnalysisTask[]; has_more?: boolean; next_offset?: number }> {
     const q = new URLSearchParams()
     if (params?.task_type) q.set('task_type', params.task_type)
     if (params?.status) q.set('status', params.status)
@@ -970,8 +970,11 @@ export class FoodLinkApiClient {
     if (params?.limit != null && Number.isFinite(params.limit)) {
       q.set('limit', String(Math.min(200, Math.max(1, Math.floor(params.limit)))))
     }
+    if (params?.offset != null && Number.isFinite(params.offset)) {
+      q.set('offset', String(Math.max(0, Math.floor(params.offset))))
+    }
     const query = q.toString()
-    return this.authenticatedRequest<{ tasks: AnalysisTask[] }>(`/api/analyze/tasks${query ? `?${query}` : ''}`, {
+    return this.authenticatedRequest<{ tasks: AnalysisTask[]; has_more?: boolean; next_offset?: number }>(`/api/analyze/tasks${query ? `?${query}` : ''}`, {
       method: 'GET',
       timeoutMs: 20000,
     })

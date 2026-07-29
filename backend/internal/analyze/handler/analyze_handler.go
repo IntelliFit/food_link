@@ -43,6 +43,10 @@ type TaskService interface {
 	SubmitFeedback(ctx context.Context, userID string, input service.SubmitFeedbackInput) error
 }
 
+type paginatedTaskService interface {
+	ListTasksPage(ctx context.Context, userID, taskType, status, search string, limit, offset int) (service.TaskListPage, error)
+}
+
 type AnalyzeHandler struct {
 	analyzeSvc AnalyzeService
 	taskSvc    TaskService
@@ -329,12 +333,54 @@ func (h *AnalyzeHandler) ListTasks(c *gin.Context) {
 	if limit <= 0 {
 		limit = 50
 	}
-	tasks, err := h.taskSvc.ListTasks(c.Request.Context(), userID, taskType, status, search, limit)
+	if limit > 200 {
+		limit = 200
+	}
+	offset := 0
+	if rawOffset := strings.TrimSpace(c.Query("offset")); rawOffset != "" {
+		parsedOffset, err := strconv.Atoi(rawOffset)
+		if err != nil || parsedOffset < 0 {
+			response.Error(c, &errors.AppError{
+				Code:       10002,
+				Message:    "offset 必须是非负整数",
+				HTTPStatus: http.StatusBadRequest,
+			})
+			return
+		}
+		offset = parsedOffset
+	}
+
+	logger.Info(c.Request.Context(), "查询识别记录列表",
+		slog.String("user_id", userID),
+		slog.Int("limit", limit),
+		slog.Int("offset", offset),
+		slog.Bool("has_search", strings.TrimSpace(search) != ""),
+	)
+
+	var page service.TaskListPage
+	var err error
+	if paginated, ok := h.taskSvc.(paginatedTaskService); ok {
+		page, err = paginated.ListTasksPage(c.Request.Context(), userID, taskType, status, search, limit, offset)
+	} else {
+		page.Tasks, err = h.taskSvc.ListTasks(c.Request.Context(), userID, taskType, status, search, limit)
+		page.NextOffset = offset + len(page.Tasks)
+	}
 	if err != nil {
+		logger.Error(c.Request.Context(), "查询识别记录列表失败", err,
+			slog.String("user_id", userID),
+			slog.Int("limit", limit),
+			slog.Int("offset", offset),
+		)
 		response.Error(c, err)
 		return
 	}
-	response.Success(c, map[string]any{"tasks": tasks})
+	logger.Info(c.Request.Context(), "查询识别记录列表完成",
+		slog.String("user_id", userID),
+		slog.Int("returned_count", len(page.Tasks)),
+		slog.Int("next_offset", page.NextOffset),
+		slog.Bool("has_more", page.HasMore),
+	)
+	response.Success(c, page)
 }
 
 // GET /api/analyze/tasks/count (jwt_required)
