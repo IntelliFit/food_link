@@ -49,6 +49,12 @@ const FOLLOW_UPS = [
   '给我一个明天能执行的小目标',
 ]
 
+const CHAT_GUIDE = [
+  { label: '先说感受', text: '例如总饿、训练没劲、减脂卡住' },
+  { label: '再说范围', text: '可以指定最近 7 天或最近 30 天' },
+  { label: '继续追问', text: '对同一条回答问“为什么”也能接着聊' },
+]
+
 function nextID(prefix: string): string {
   return `${prefix}_${Date.now()}_${Math.random().toString(16).slice(2)}`
 }
@@ -62,7 +68,7 @@ function buildIntroMessage(petName: string): ChatMessage {
     id: 'intro',
     role: 'pet',
     kind: 'intro',
-    text: `我是${petName}。你直接说最近哪里不对劲就行，比如训练没劲、总是饿、减脂卡住，或者想知道明天怎么吃。我只看你保存过的饮食文字和营养数据，不看图片，也不会替你下诊断。`,
+    text: `我是${petName}。告诉我最近发生了什么、持续了多久、你最想改善哪一点，我会结合你保存过的饮食、运动和身体趋势陪你一起分析。我看不到未保存的内容，也不会替你做医学诊断。`,
     actions: ['先说一个最近的困惑', '也可以直接问训练和饥饿感'],
   }
 }
@@ -254,13 +260,7 @@ function PetChatPage() {
     const streamingMessageID = nextID('pet-stream')
     appendMessage({ id: streamingMessageID, role: 'pet', kind: 'analysis', text: '' })
 
-    let nextSummary: StatsSummary | null = null
-    getStatsSummary(range)
-      .then((s) => {
-        nextSummary = s
-        setSummary(s)
-      })
-      .catch(() => null)
+    let nextSummary: StatsSummary | null = summary?.range === range ? summary : null
 
     const finish = () => {
       busyRef.current = false
@@ -290,6 +290,18 @@ function PetChatPage() {
         setLastAnalysis(message)
         updateMessage(streamingMessageID, () => message)
         finish()
+        if (!nextSummary) {
+          getStatsSummary(range)
+            .then((next) => {
+              nextSummary = next
+              setSummary(next)
+              updateMessage(streamingMessageID, (current) => ({
+                ...current,
+                clues: buildClues(next, finalText),
+              }))
+            })
+            .catch(() => null)
+        }
       },
       onError: async (error) => {
         await showUnifiedApiError(error, `${petName}分析失败`)
@@ -303,7 +315,7 @@ function PetChatPage() {
         finish()
       },
     })
-  }, [appendMessage, petName, sessionID, updateMessage])
+  }, [appendMessage, petName, sessionID, summary, updateMessage])
 
   const handleQuickQuestion = useCallback((text: string, range: RangeMode) => {
     if (busy || busyRef.current) return
@@ -363,11 +375,33 @@ function PetChatPage() {
                     ))}
                   </View>
                 ) : null}
+                {message.actions?.length ? (
+                  <View className='pet-chat-actions'>
+                    {message.actions.map((action, index) => (
+                      <Text key={`${message.id}-action-${index}`} className='pet-chat-action-chip'>{action}</Text>
+                    ))}
+                  </View>
+                ) : null}
               </View>
             </View>
           ))}
           {isEmptyConversation ? (
             <View className='pet-chat-starter'>
+              <View className='pet-chat-guide'>
+                <Text className='pet-chat-guide-title'>这样问，更容易得到有用的回答</Text>
+                <View className='pet-chat-guide-list'>
+                  {CHAT_GUIDE.map((item, index) => (
+                    <View key={item.label} className='pet-chat-guide-item'>
+                      <Text className='pet-chat-guide-index'>{index + 1}</Text>
+                      <View className='pet-chat-guide-copy'>
+                        <Text className='pet-chat-guide-label'>{item.label}</Text>
+                        <Text className='pet-chat-guide-text'>{item.text}</Text>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+                <Text className='pet-chat-guide-note'>回答只基于已保存的数据，记录越连续，判断越可靠。</Text>
+              </View>
               <Text className='pet-chat-starter-title'>可以从这些话题开始</Text>
               <View className='pet-chat-starter-grid'>
                 {QUICK_QUESTIONS.map((item) => (
@@ -428,8 +462,13 @@ function PetChatPage() {
             </View>
             <ScrollView className='pet-chat-history-list' scrollY enhanced showScrollbar={false}>
               {historyLoading ? (
-                <View className='pet-chat-history-empty'>
-                  <Text>正在读取...</Text>
+                <View className='pet-chat-history-skeleton' aria-label='正在读取最近对话'>
+                  {[0, 1, 2].map((item) => (
+                    <View key={item} className='pet-chat-history-skeleton-item'>
+                      <View className='pet-chat-history-skeleton-title' />
+                      <View className='pet-chat-history-skeleton-line' />
+                    </View>
+                  ))}
                 </View>
               ) : sessions.length === 0 ? (
                 <View className='pet-chat-history-empty'>

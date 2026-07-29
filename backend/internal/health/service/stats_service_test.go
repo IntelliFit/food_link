@@ -18,16 +18,18 @@ import (
 )
 
 type mockStatsRepo struct {
-	records          []domain.FoodRecord
-	exerciseLogs     []domain.ExerciseLog
-	user             *domain.StatsUserProfile
-	recordDates      []string
-	insights         []domain.StatsInsight
-	candidates       []domain.DietRecommendationCandidate
-	customFocusCards []domain.CustomFocusCard
+	records               []domain.FoodRecord
+	exerciseLogs          []domain.ExerciseLog
+	user                  *domain.StatsUserProfile
+	recordDates           []string
+	insights              []domain.StatsInsight
+	candidates            []domain.DietRecommendationCandidate
+	customFocusCards      []domain.CustomFocusCard
+	foodRecordsQueryCount int
 }
 
 func (m *mockStatsRepo) GetFoodRecordsForDateRange(ctx context.Context, userID string, startUTC, endUTC time.Time) ([]domain.FoodRecord, error) {
+	m.foodRecordsQueryCount++
 	return m.records, nil
 }
 
@@ -494,7 +496,7 @@ func TestStatsService_RequestNutritionInsightRetriesTransientUpstreamFailure(t *
 	defer server.Close()
 
 	svc := NewStatsService(&mockStatsRepo{}, &mockBodyMetricsProvider{})
-	result, err := svc.requestNutritionInsight(context.Background(), server.URL, "test-key", "deepseek-v4-pro", "test prompt", "")
+	result, err := svc.requestNutritionInsight(context.Background(), server.URL, "test-key", "deepseek-v4-pro", "test prompt", "", statsInsightMaxTokens)
 
 	require.NoError(t, err)
 	assert.Equal(t, 2, requestCount)
@@ -515,7 +517,7 @@ func TestStatsService_StreamNutritionInsightRetriesTransientUpstreamFailure(t *t
 	defer server.Close()
 
 	svc := NewStatsService(&mockStatsRepo{}, &mockBodyMetricsProvider{})
-	textChan, err := svc.streamNutritionInsight(context.Background(), server.URL, "test-key", "deepseek-v4-pro", "test prompt")
+	textChan, err := svc.streamNutritionInsight(context.Background(), server.URL, "test-key", "deepseek-v4-pro", "test prompt", statsInsightMaxTokens)
 	require.NoError(t, err)
 
 	var content strings.Builder
@@ -664,7 +666,22 @@ func TestBuildPetChatPromptRequiresGentleTone(t *testing.T) {
 	assert.Contains(t, prompt, "不要调侃、挖苦、训话、责备")
 	assert.Contains(t, prompt, "避免“你这”“坎儿”“别一口气这么猛”")
 	assert.Contains(t, prompt, "合作式表达")
-	assert.Contains(t, prompt, "不要使用 *、**、_、__ 作为强调标记")
+	assert.Contains(t, prompt, "适合聊天气泡的纯文本")
+	assert.Contains(t, prompt, "不要输出 #、*、**、_、反引号")
+}
+
+func TestSanitizePetChatAnswerTextRemovesMarkdownMarkers(t *testing.T) {
+	input := "## 一句话判断\n**蛋白质**略低\n* 明天加一份鸡蛋\n- 训练后补主食\n`不要展示代码样式`"
+
+	result := sanitizePetChatAnswerText(input)
+
+	assert.NotContains(t, result, "*")
+	assert.NotContains(t, result, "#")
+	assert.NotContains(t, result, "`")
+	assert.Contains(t, result, "一句话判断")
+	assert.Contains(t, result, "蛋白质略低")
+	assert.Contains(t, result, "• 明天加一份鸡蛋")
+	assert.Contains(t, result, "• 训练后补主食")
 }
 
 func TestStatsService_GenerateInsightRetriesForbiddenIdentityClaim(t *testing.T) {
@@ -715,6 +732,7 @@ func TestStatsService_GeneratePetChatRetriesHarshTone(t *testing.T) {
 		requestCount++
 		var body map[string]any
 		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+		assert.Equal(t, float64(petChatMaxTokens), body["max_tokens"])
 		messages, ok := body["messages"].([]any)
 		require.True(t, ok)
 		require.NotEmpty(t, messages)
@@ -748,6 +766,7 @@ func TestStatsService_GeneratePetChatRetriesHarshTone(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, 2, requestCount)
+	assert.Equal(t, 1, repo.foodRecordsQueryCount)
 	assert.Contains(t, result.Answer, "我们先把明天目标放小一点")
 	assert.NotContains(t, result.Answer, "你这坎儿")
 }
