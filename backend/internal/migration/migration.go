@@ -239,6 +239,28 @@ func MigrateOnboardingStatus(ctx context.Context, db *gorm.DB, schema string) er
 	return nil
 }
 
+// MigrateFoodRecordMood applies only the optional eating_mood column for food
+// records. It is intentionally narrow so a small product-field rollout does
+// not publish unrelated pending schema or data migrations.
+func MigrateFoodRecordMood(ctx context.Context, db *gorm.DB, schema string) error {
+	if err := prepareSchema(ctx, db, schema); err != nil {
+		return err
+	}
+	if !db.Migrator().HasColumn(&migrationdo.FoodRecordDO{}, "eating_mood") {
+		if err := db.WithContext(ctx).Migrator().AddColumn(&migrationdo.FoodRecordDO{}, "EatingMood"); err != nil {
+			return fmt.Errorf("add user_food_records.eating_mood: %w", err)
+		}
+	}
+	if err := db.WithContext(ctx).Exec(dropAndAddCheck(
+		"user_food_records",
+		"user_food_records_eating_mood_check",
+		`eating_mood IS NULL OR eating_mood = ANY (ARRAY['happy'::text,'calm'::text,'stressed'::text,'tired'::text,'bored'::text,'treat'::text])`,
+	)).Error; err != nil {
+		return fmt.Errorf("add user_food_records eating mood check: %w", err)
+	}
+	return nil
+}
+
 func prepareSchema(ctx context.Context, db *gorm.DB, schema string) error {
 	if schema == "" {
 		schema = "public"
@@ -333,6 +355,7 @@ func ensureConstraints(ctx context.Context, db *gorm.DB) error {
 		dropAndAddCheck("analysis_feedback_samples", "analysis_feedback_samples_resolution_state_check", `resolution_state = ANY (ARRAY['user_corrected'::text,'still_distrust'::text])`),
 		dropAndAddCheck("user_food_records", "user_food_records_meal_type_check", `meal_type = ANY (ARRAY['breakfast'::text,'morning_snack'::text,'lunch'::text,'afternoon_snack'::text,'dinner'::text,'evening_snack'::text,'snack'::text])`),
 		dropAndAddCheck("user_food_records", "user_food_records_entry_type_check", `entry_type = ANY (ARRAY['food_image'::text,'food_text'::text,'food_library'::text,'favorite_recipe'::text,'analyze_history'::text,'campus_canteen'::text,'public_food_library'::text,'unknown'::text])`),
+		dropAndAddCheck("user_food_records", "user_food_records_eating_mood_check", `eating_mood IS NULL OR eating_mood = ANY (ARRAY['happy'::text,'calm'::text,'stressed'::text,'tired'::text,'bored'::text,'treat'::text])`),
 		dropAndAddCheck("precision_sessions", "precision_sessions_source_type_check", `source_type = ANY (ARRAY['image'::text,'text'::text])`),
 		dropAndAddCheck("precision_sessions", "precision_sessions_execution_mode_check", `execution_mode = ANY (ARRAY['standard'::text,'standard_web_search'::text,'fast'::text,'fast_web_search'::text,'strict'::text,'strict_web_search'::text,'experimental'::text,'gemini35_flash'::text,'gemini35_flash_grouped'::text])`),
 		dropAndAddCheck("precision_sessions", "precision_sessions_status_check", `status = ANY (ARRAY['collecting'::text,'estimating'::text,'needs_user_input'::text,'needs_retake'::text,'done'::text,'cancelled'::text,'failed'::text])`),
@@ -614,6 +637,7 @@ END
 		`ALTER TABLE user_exercise_logs ALTER COLUMN exercise_items SET NOT NULL`,
 		`ALTER TABLE user_exercise_logs ADD COLUMN IF NOT EXISTS hidden_from_feed boolean NOT NULL DEFAULT false`,
 		`ALTER TABLE user_food_records ADD COLUMN IF NOT EXISTS entry_type text`,
+		`ALTER TABLE user_food_records ADD COLUMN IF NOT EXISTS eating_mood text`,
 		`ALTER TABLE feed_likes ADD COLUMN IF NOT EXISTS target_type text NOT NULL DEFAULT 'food_record'`,
 		`ALTER TABLE feed_likes ADD COLUMN IF NOT EXISTS target_id uuid`,
 		`UPDATE feed_likes SET target_type = 'food_record', target_id = record_id WHERE target_id IS NULL AND record_id IS NOT NULL`,

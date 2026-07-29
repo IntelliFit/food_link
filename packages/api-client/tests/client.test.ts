@@ -963,6 +963,7 @@ describe('FoodLinkApiClient', () => {
     await client.updateFoodRecord('record-1', {
       meal_type: 'dinner',
       description: '鸡胸饭少油版',
+      eating_mood: 'calm',
       items: [
         {
           name: '鸡胸饭',
@@ -998,6 +999,7 @@ describe('FoodLinkApiClient', () => {
     expect(rewardReqs[1]?.options?.body).toMatchObject({ share_scope: 'daily_food', share_date: '2026-06-15' })
     expect(updateReq?.options?.body).toMatchObject({
       meal_type: 'dinner',
+      eating_mood: 'calm',
       total_calories: 390,
       total_weight_grams: 225,
       items: [

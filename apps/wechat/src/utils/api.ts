@@ -84,6 +84,7 @@ export type CanonicalMealType =
 export type MealType = CanonicalMealType | 'snack'
 export type DietGoal = 'fat_loss' | 'muscle_gain' | 'maintain' | 'none'
 export type ActivityTiming = 'post_workout' | 'daily' | 'before_sleep' | 'none'
+export type EatingMood = 'happy' | 'calm' | 'stressed' | 'tired' | 'bored' | 'treat'
 export type UserGoal = 'muscle_gain' | 'fat_loss' | 'maintain'
 export type ExecutionMode =
   | 'lite'
@@ -533,6 +534,7 @@ export interface SaveFoodRecordRequest {
   total_weight_grams: number
   diet_goal?: 'fat_loss' | 'muscle_gain' | 'maintain' | 'none'
   activity_timing?: 'post_workout' | 'daily' | 'before_sleep' | 'none'
+  eating_mood?: EatingMood
   pfc_ratio_comment?: string
   absorption_notes?: string
   context_advice?: string
@@ -646,6 +648,7 @@ export interface FoodRecord {
   // 新增字段
   diet_goal?: string | null
   activity_timing?: string | null
+  eating_mood?: EatingMood | null
   source_task_id?: string | null
   entry_type?: FoodRecordEntryType | null
   recipe_id?: string | null
@@ -3434,6 +3437,7 @@ export interface UpdateFoodRecordRequest {
   image_paths?: string[]
   diet_goal?: DietGoal
   activity_timing?: ActivityTiming
+  eating_mood?: EatingMood | ''
 }
 
 /**

@@ -5,11 +5,13 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
   buildSaveFoodRecordRequestFromTask,
+  type EatingMood,
   getMealTypeLabel,
   type FoodItem,
   type Nutrients,
 } from '@food-link/core'
 import { apiClient } from '../api'
+import { EatingMoodPicker } from '../components/EatingMoodPicker'
 import type { RootStackParamList } from '../navigation/types'
 import { useAppDialog } from '../providers/DialogProvider'
 import { colors } from '../theme'
@@ -67,10 +69,12 @@ export function ResultScreen() {
   const foodItems = task.result?.items || []
   const [items, setItems] = useState<EditableResultItem[]>(() => buildEditableItems(foodItems))
   const [customPeople, setCustomPeople] = useState('')
+  const [eatingMood, setEatingMood] = useState<EatingMood | null>(null)
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     setItems(buildEditableItems(foodItems))
+    setEatingMood(null)
   }, [task.id, foodItems.length])
 
   const totals = useMemo(() => calculateTotals(items), [items])
@@ -126,6 +130,7 @@ export function ResultScreen() {
       payload.total_carbs = totals.carbs
       payload.total_fat = totals.fat
       payload.total_weight_grams = totals.weight
+      if (eatingMood) payload.eating_mood = eatingMood
 
       const pfcRatioComment = stringOrUndefined(task.result?.pfc_ratio_comment)
       const absorptionNotes = stringOrUndefined(task.result?.absorption_notes)
@@ -231,6 +236,8 @@ export function ResultScreen() {
             <Text style={styles.eyebrow}>识别描述</Text>
             <Text style={styles.description}>{resultDescription}</Text>
           </View>
+
+          <EatingMoodPicker value={eatingMood} onChange={setEatingMood} />
 
           <View style={styles.nutritionOverviewCard}>
             <View style={styles.nutritionHeader}>

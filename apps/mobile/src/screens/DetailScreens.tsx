@@ -1288,9 +1288,30 @@ export function RecordDetailScreen() {
             {contextTags.length ? (
               <View style={styles.recordDetailContextTags}>
                 {contextTags.map((tag) => (
-                  <View key={tag.label} style={[styles.recordDetailContextTag, tag.tone === 'goal' ? styles.recordDetailGoalTag : styles.recordDetailTimingTag]}>
+                  <View
+                    key={tag.label}
+                    style={[
+                      styles.recordDetailContextTag,
+                      tag.tone === 'goal'
+                        ? styles.recordDetailGoalTag
+                        : tag.tone === 'mood'
+                          ? styles.recordDetailMoodTag
+                          : styles.recordDetailTimingTag,
+                    ]}
+                  >
                     <Text style={styles.recordDetailContextTagIcon}>{tag.icon}</Text>
-                    <Text style={[styles.recordDetailContextTagText, tag.tone === 'goal' ? styles.recordDetailGoalTagText : styles.recordDetailTimingTagText]}>{tag.label}</Text>
+                    <Text
+                      style={[
+                        styles.recordDetailContextTagText,
+                        tag.tone === 'goal'
+                          ? styles.recordDetailGoalTagText
+                          : tag.tone === 'mood'
+                            ? styles.recordDetailMoodTagText
+                            : styles.recordDetailTimingTagText,
+                      ]}
+                    >
+                      {tag.label}
+                    </Text>
                   </View>
                 ))}
               </View>
@@ -6956,6 +6977,15 @@ const activityTimingLabels: Record<string, string> = {
   none: '无',
 }
 
+const eatingMoodLabels: Record<string, { emoji: string; label: string }> = {
+  happy: { emoji: '😊', label: '开心' },
+  calm: { emoji: '😌', label: '平静' },
+  stressed: { emoji: '😣', label: '压力大' },
+  tired: { emoji: '😮‍💨', label: '疲惫' },
+  bored: { emoji: '😶', label: '无聊' },
+  treat: { emoji: '✨', label: '犒劳自己' },
+}
+
 const recordNutrientMeta: Array<{ key: string; label: string; unit: string; altKey?: string }> = [
   { key: 'fiber', label: '膳食纤维', unit: 'g' },
   { key: 'sugar', label: '糖', unit: 'g' },
@@ -7038,13 +7068,17 @@ function recordExtraText(record: FoodRecord, key: string): string {
   return String((record as FoodRecord & Record<string, unknown>)[key] || '').trim()
 }
 
-function recordContextTags(record: FoodRecord): Array<{ label: string; icon: string; tone: 'goal' | 'timing' }> {
-  const tags: Array<{ label: string; icon: string; tone: 'goal' | 'timing' }> = []
+function recordContextTags(record: FoodRecord): Array<{ label: string; icon: string; tone: 'goal' | 'timing' | 'mood' }> {
+  const tags: Array<{ label: string; icon: string; tone: 'goal' | 'timing' | 'mood' }> = []
   if (record.diet_goal && record.diet_goal !== 'none') {
     tags.push({ label: dietGoalLabels[record.diet_goal] || record.diet_goal, icon: '↑', tone: 'goal' })
   }
   if (record.activity_timing && record.activity_timing !== 'none') {
     tags.push({ label: activityTimingLabels[record.activity_timing] || record.activity_timing, icon: '时', tone: 'timing' })
+  }
+  if (record.eating_mood && eatingMoodLabels[record.eating_mood]) {
+    const mood = eatingMoodLabels[record.eating_mood]
+    tags.push({ label: mood.label, icon: mood.emoji, tone: 'mood' })
   }
   return tags
 }
@@ -8742,6 +8776,9 @@ const styles = StyleSheet.create({
   recordDetailTimingTag: {
     backgroundColor: '#dbeafe',
   },
+  recordDetailMoodTag: {
+    backgroundColor: '#fef3c7',
+  },
   recordDetailContextTagIcon: {
     fontSize: 13,
     lineHeight: 17,
@@ -8757,6 +8794,9 @@ const styles = StyleSheet.create({
   },
   recordDetailTimingTagText: {
     color: '#1e40af',
+  },
+  recordDetailMoodTagText: {
+    color: '#92400e',
   },
   recordDetailInfoBlock: {
     paddingVertical: 10,

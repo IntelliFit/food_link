@@ -24,6 +24,7 @@ type FoodRecord struct {
 	TotalWeightGrams int        `gorm:"column:total_weight_grams" json:"total_weight_grams"`
 	DietGoal         *string    `gorm:"column:diet_goal" json:"diet_goal,omitempty"`
 	ActivityTiming   *string    `gorm:"column:activity_timing" json:"activity_timing,omitempty"`
+	EatingMood       *string    `gorm:"column:eating_mood" json:"eating_mood,omitempty"`
 	PFCRatioComment  *string    `gorm:"column:pfc_ratio_comment" json:"pfc_ratio_comment,omitempty"`
 	AbsorptionNotes  *string    `gorm:"column:absorption_notes" json:"absorption_notes,omitempty"`
 	ContextAdvice    *string    `gorm:"column:context_advice" json:"context_advice,omitempty"`
