@@ -153,6 +153,53 @@ func TestManualFoodRepo_Search(t *testing.T) {
 	assert.Equal(t, "nutrition_library", aliasItems[0].Source)
 }
 
+func TestManualFoodRepoSearchDedupesAliasesAfterNutritionMapping(t *testing.T) {
+	db := setupTestDB(t)
+	r := NewManualFoodRepo(db)
+	ctx := context.Background()
+
+	require.NoError(t, db.Create(&fooddomain.FoodNutrition{
+		ID:             "taiwan-sausage",
+		CanonicalName:  "台式烤香肠",
+		NormalizedName: "台式烤香肠",
+		KcalPer100g:    350,
+		ProteinPer100g: 17,
+		CarbsPer100g:   6,
+		FatPer100g:     28,
+		QualityTier:    fooddomain.NutritionQualityLegacyCurated,
+		IsActive:       true,
+	}).Error)
+	for _, alias := range []struct {
+		id   string
+		name string
+	}{
+		{id: "taiwan-sausage-alias-1", name: "烤香肠"},
+		{id: "taiwan-sausage-alias-2", name: "台式烤香肠"},
+	} {
+		require.NoError(t, db.Create(&fooddomain.FoodNutritionAlias{
+			ID:              alias.id,
+			FoodID:          "taiwan-sausage",
+			AliasName:       alias.name,
+			NormalizedAlias: alias.name,
+			MatchStatus:     fooddomain.NutritionAliasApprovedExact,
+		}).Error)
+	}
+	require.NoError(t, db.Exec(`
+		INSERT INTO user_food_records (id, user_id, items, record_time) VALUES
+		('r1', 'u1', '[{"name":"烤香肠","intake":51,"nutrients":{"calories":178.5,"protein":8.67,"carbs":3.06,"fat":14.28}}]', CURRENT_TIMESTAMP),
+		('r2', 'u2', '[{"name":"烤香肠","intake":51,"nutrients":{"calories":178.5,"protein":8.67,"carbs":3.06,"fat":14.28}}]', CURRENT_TIMESTAMP),
+		('r3', 'u1', '[{"name":"台式烤香肠","intake":51,"nutrients":{"calories":178.5,"protein":8.67,"carbs":3.06,"fat":14.28}}]', CURRENT_TIMESTAMP),
+		('r4', 'u2', '[{"name":"台式烤香肠","intake":51,"nutrients":{"calories":178.5,"protein":8.67,"carbs":3.06,"fat":14.28}}]', CURRENT_TIMESTAMP)
+	`).Error)
+
+	items, err := r.Search(ctx, "u1", "烤香肠", 20)
+	require.NoError(t, err)
+	require.Len(t, items, 1)
+	assert.Equal(t, "taiwan-sausage", items[0].ID)
+	assert.Equal(t, "烤香肠", items[0].Title)
+	assert.Equal(t, "nutrition_library", items[0].Source)
+}
+
 func TestExpandedSearchTerms_Rice(t *testing.T) {
 	terms := expandedSearchTerms("饭")
 	assert.Contains(t, terms, "饭")

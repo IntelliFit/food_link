@@ -330,10 +330,12 @@ func (r *ManualFoodRepo) Search(ctx context.Context, userID string, keyword stri
 		return left > right
 	})
 	results = dedupeManualFoodResults(results)
+	results = r.enrichManualFoodResultsWithNutritionLibrary(ctx, results)
+	results = dedupeManualFoodResults(results)
 	if len(results) > limit {
 		results = results[:limit]
 	}
-	return r.enrichManualFoodResultsWithNutritionLibrary(ctx, results), nil
+	return results, nil
 }
 
 func (r *ManualFoodRepo) SearchPackaged(ctx context.Context, keyword string, limit int) ([]domain.ManualFoodResult, error) {
