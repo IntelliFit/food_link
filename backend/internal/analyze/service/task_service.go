@@ -36,6 +36,7 @@ type TaskService struct {
 const (
 	waitingRecordBadgeWindow = 24 * time.Hour
 	maxFoodAnalyzeImages     = 3
+	analyzeHistoryScanBatch  = 200
 )
 
 const experimentalExecutionMode = "experimental"
@@ -785,21 +786,28 @@ func (s *TaskService) ListTasksPage(ctx context.Context, userID, taskType, statu
 		offset = 0
 	}
 
-	tasks, err := s.tasks.ListTasksByUserPage(ctx, userID, taskType, status, search, limit+1, offset)
+	var (
+		tasks      []domain.AnalysisTask
+		hasMore    bool
+		nextOffset int
+		err        error
+	)
+	if strings.TrimSpace(taskType) == "" {
+		tasks, hasMore, nextOffset, err = collectAnalyzeHistoryPage(offset, limit, func(rawOffset, rawLimit int) ([]domain.AnalysisTask, error) {
+			return s.tasks.ListTasksByUserPage(ctx, userID, taskType, status, search, rawLimit, rawOffset)
+		})
+	} else {
+		tasks, err = s.tasks.ListTasksByUserPage(ctx, userID, taskType, status, search, limit+1, offset)
+		if err == nil {
+			hasMore = len(tasks) > limit
+			if hasMore {
+				tasks = tasks[:limit]
+			}
+			nextOffset = offset + len(tasks)
+		}
+	}
 	if err != nil {
 		return TaskListPage{}, err
-	}
-	hasMore := len(tasks) > limit
-	if hasMore {
-		tasks = tasks[:limit]
-	}
-	nextOffset := offset + len(tasks)
-	if strings.TrimSpace(taskType) == "" {
-		tasks = filterAnalyzeHistoryTasks(tasks)
-		tasks = collapseAnalyzeHistoryTasks(tasks)
-		for i := range tasks {
-			tasks[i].HistoryGroupKey = analyzeHistoryGroupKey(tasks[i])
-		}
 	}
 	doneTaskIDs := make([]string, 0, len(tasks))
 	for _, task := range tasks {
@@ -1351,6 +1359,51 @@ func collapseAnalyzeHistoryTasks(tasks []domain.AnalysisTask) []domain.AnalysisT
 		out = append(out, task)
 	}
 	return out
+}
+
+type analyzeHistoryPageFetcher func(offset, limit int) ([]domain.AnalysisTask, error)
+
+// collectAnalyzeHistoryPage paginates the visible history rather than the raw
+// analysis_tasks rows. History-only tasks and duplicate correction/input groups
+// must not consume a visible page slot, otherwise clients can receive a short or
+// empty page while older records still exist.
+func collectAnalyzeHistoryPage(offset, limit int, fetch analyzeHistoryPageFetcher) ([]domain.AnalysisTask, bool, int, error) {
+	cursor := offset
+	seen := make(map[string]bool, limit)
+	tasks := make([]domain.AnalysisTask, 0, limit)
+
+	for {
+		batch, err := fetch(cursor, analyzeHistoryScanBatch)
+		if err != nil {
+			return nil, false, offset, err
+		}
+		if len(batch) == 0 {
+			return tasks, false, cursor, nil
+		}
+
+		for index, task := range batch {
+			if isTaskExcludedFromAnalyzeHistory(task) {
+				continue
+			}
+			groupKey := analyzeHistoryGroupKey(task)
+			if seen[groupKey] {
+				continue
+			}
+			if len(tasks) == limit {
+				// Do not consume the look-ahead task. The next page starts from
+				// this raw row so no visible history item is skipped.
+				return tasks, true, cursor + index, nil
+			}
+			seen[groupKey] = true
+			task.HistoryGroupKey = groupKey
+			tasks = append(tasks, task)
+		}
+
+		cursor += len(batch)
+		if len(batch) < analyzeHistoryScanBatch {
+			return tasks, false, cursor, nil
+		}
+	}
 }
 
 func analyzeHistoryGroupKey(task domain.AnalysisTask) string {
