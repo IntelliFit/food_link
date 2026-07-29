@@ -199,10 +199,13 @@ func extractCanteenFloors(raw string) []string {
 	for _, match := range floorRangePattern.FindAllStringSubmatch(text, -1) {
 		start, startOK := floorNumber(match[1])
 		end, endOK := floorNumber(match[2])
-		if !startOK || !endOK || start <= 0 || end < start || end-start > 20 {
+		if !startOK || !endOK || end < start || end-start > 20 {
 			continue
 		}
 		for current := start; current <= end; current++ {
+			if current == 0 {
+				continue
+			}
 			add(chineseFloorName(current))
 		}
 	}
@@ -269,7 +272,12 @@ func floorNumber(value string) (int, bool) {
 	return n, true
 }
 
-func chineseFloorName(number int) string { return chineseNumber(number) + "楼" }
+func chineseFloorName(number int) string {
+	if number < 0 {
+		return "负" + chineseNumber(-number) + "楼"
+	}
+	return chineseNumber(number) + "楼"
+}
 
 func chineseNumber(number int) string {
 	digits := []string{"零", "一", "二", "三", "四", "五", "六", "七", "八", "九"}

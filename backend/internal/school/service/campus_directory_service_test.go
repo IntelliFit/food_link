@@ -14,6 +14,8 @@ func TestExtractCanteenFloors(t *testing.T) {
 	}{
 		{name: "multiple floors", raw: "一楼、二楼", want: []string{"一楼", "二楼"}},
 		{name: "floor range", raw: "一至三楼", want: []string{"一楼", "二楼", "三楼"}},
+		{name: "basement floor range", raw: "负三至负一楼", want: []string{"负三楼", "负二楼", "负一楼"}},
+		{name: "range across ground skips floor zero", raw: "负一至二楼", want: []string{"负一楼", "一楼", "二楼"}},
 		{name: "basement wording", raw: "国内大厦负一层", want: []string{"负一楼"}},
 		{name: "basement code", raw: "B2 美食广场", want: []string{"负二楼"}},
 		{name: "descriptive text", raw: "一楼；二楼大众特色餐厅", want: []string{"一楼", "二楼"}},
