@@ -50,6 +50,8 @@ const STATUS_MAP: Record<string, string> = {
   cancelled: '已取消'
 }
 
+const ANALYZE_HISTORY_PAGE_SIZE = 20
+
 /** 根据后端返回的 status + is_recorded 决定列表中展示的状态文案和样式类名 */
 const pickDisplayStatus = (task: AnalysisTask): { text: string; className: string } => {
   if (task.status === 'pending' || task.status === 'processing') {
@@ -279,21 +281,32 @@ function isAnalyzeHistoryTaskType(taskType: string | undefined): boolean {
   return false
 }
 
-/** 避免真机上某次 request 长时间不返回导致 Promise.all 永不结束、loading 卡死 */
-function withTimeout<T>(p: Promise<T>, ms: number, onTimeout: () => T): Promise<T> {
-  return new Promise((resolve) => {
-    const t = setTimeout(() => resolve(onTimeout()), ms)
+/** 避免真机上某次 request 长时间不返回导致 loading 卡死 */
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error('请求超时，请稍后重试')), ms)
     p.then(
       (v) => {
         clearTimeout(t)
         resolve(v)
       },
-      () => {
+      (error) => {
         clearTimeout(t)
-        resolve(onTimeout())
+        reject(error)
       }
     )
   })
+}
+
+function mergeAnalyzeHistoryTasks(current: AnalysisTask[], incoming: AnalysisTask[]): AnalysisTask[] {
+  const byGroup = new Map(current.map(task => [task.history_group_key || task.id, task]))
+  incoming.forEach((task) => {
+    const groupKey = task.history_group_key || task.id
+    if (!byGroup.has(groupKey)) byGroup.set(groupKey, task)
+  })
+  return Array.from(byGroup.values()).sort(
+    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  )
 }
 
 function formatTime(iso: string): { text: string; isToday: boolean } {
@@ -415,6 +428,8 @@ function AnalyzeHistoryPage() {
   const { scheme } = useAppColorScheme()
   const [tasks, setTasks] = useState<AnalysisTask[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [hasMore, setHasMore] = useState(false)
   const [showActionSheet, setShowActionSheet] = useState(false)
   const [activeTask, setActiveTask] = useState<AnalysisTask | null>(null)
   const [quickRecordTask, setQuickRecordTask] = useState<AnalysisTask | null>(null)
@@ -426,6 +441,10 @@ function AnalyzeHistoryPage() {
   const [searchKeyword, setSearchKeyword] = useState('')
   const searchDebounceRef = useRef(0)
   const loadSeqRef = useRef(0)
+  const nextOffsetRef = useRef(0)
+  const hasMoreRef = useRef(false)
+  const loadingMoreRef = useRef(false)
+  const searchKeywordRef = useRef('')
   const navBarHeight = getNavBarHeight()
 
   const handleBack = useCallback(() => {
@@ -472,37 +491,62 @@ function AnalyzeHistoryPage() {
     return normalizeSelectableMealType(getTaskMealType(task), inferred)
   }
 
-  const load = useCallback(async (keyword?: string) => {
-    const seq = ++loadSeqRef.current
-    setLoading(true)
+  const load = useCallback(async (keyword?: string, append = false) => {
+    if (append && (!hasMoreRef.current || loadingMoreRef.current)) return
+    const seq = append ? loadSeqRef.current : ++loadSeqRef.current
+    const offset = append ? nextOffsetRef.current : 0
+    if (append) {
+      loadingMoreRef.current = true
+      setLoadingMore(true)
+    } else {
+      loadingMoreRef.current = false
+      setLoadingMore(false)
+      nextOffsetRef.current = 0
+      hasMoreRef.current = false
+      setHasMore(false)
+      setLoading(true)
+    }
     try {
       const search = keyword?.trim()
-      // 单次拉取再前端筛选：避免 Promise.all 四路并行时一路挂起导致整页永远 loading（真机偶发）
       const res = await withTimeout(
-        listAnalyzeTasks({ limit: 120, search }).catch(() => ({ tasks: [] as AnalysisTask[] })),
-        22000,
-        () => ({ tasks: [] as AnalysisTask[] })
+        listAnalyzeTasks({ limit: ANALYZE_HISTORY_PAGE_SIZE, offset, search }),
+        22000
       )
-      const allTasks = (res.tasks || []).filter((t) => {
+      const pageTasks = (res.tasks || []).filter((t) => {
         const payload = (t.payload || {}) as Record<string, unknown>
         if (payload.expiry_recognition) return false
         if (payload.exercise) return false // 排除运动回退任务（payload.exercise=true）
         return isAnalyzeHistoryTaskType(t.task_type)
       })
-      allTasks.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      pageTasks.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
       if (seq !== loadSeqRef.current) return
-      setTasks(allTasks)
+      setTasks(current => append ? mergeAnalyzeHistoryTasks(current, pageTasks) : pageTasks)
+      const nextOffset = typeof res.next_offset === 'number' && Number.isFinite(res.next_offset)
+        ? Math.max(offset, Math.floor(res.next_offset))
+        : offset + (res.tasks || []).length
+      const nextHasMore = res.has_more === true
+      nextOffsetRef.current = nextOffset
+      hasMoreRef.current = nextHasMore
+      setHasMore(nextHasMore)
     } catch (e: any) {
       if (seq !== loadSeqRef.current) return
       console.error('[analyze-history] load failed', e)
       await showUnifiedApiError(e, '加载失败')
     } finally {
-      if (seq === loadSeqRef.current) setLoading(false)
+      if (seq === loadSeqRef.current) {
+        if (append) {
+          loadingMoreRef.current = false
+          setLoadingMore(false)
+        } else {
+          setLoading(false)
+        }
+      }
     }
   }, [])
 
   const handleSearchInput = (value: string) => {
     setSearchKeyword(value)
+    searchKeywordRef.current = value
     window.clearTimeout(searchDebounceRef.current)
     searchDebounceRef.current = window.setTimeout(() => {
       void load(value)
@@ -511,12 +555,17 @@ function AnalyzeHistoryPage() {
 
   const clearSearch = () => {
     setSearchKeyword('')
+    searchKeywordRef.current = ''
     void load('')
+  }
+
+  const handleLoadMore = () => {
+    if (hasMore) void load(searchKeywordRef.current, true)
   }
 
   useDidShow(() => {
     applyThemeNavigationBar(scheme)
-    void load()
+    void load(searchKeywordRef.current)
   })
 
   useDidHide(() => {
@@ -538,6 +587,7 @@ function AnalyzeHistoryPage() {
       }
       // 从列表中移除
       setTasks(prev => prev.filter(t => t.id !== taskId))
+      nextOffsetRef.current = Math.max(0, nextOffsetRef.current - 1)
     } catch (e: any) {
       await showUnifiedApiError(e, '删除失败')
     }
@@ -579,6 +629,7 @@ function AnalyzeHistoryPage() {
               Taro.showToast({ title: `已丢弃 ${successCount} 条记录`, icon: 'success' })
             }
             setTasks(prev => prev.filter(t => !deletedIds.includes(t.id)))
+            nextOffsetRef.current = Math.max(0, nextOffsetRef.current - successCount)
             try {
               const cached = Taro.getStorageSync('profile_stats_analyze_count')
               if (cached !== undefined && cached !== '') {
@@ -658,7 +709,7 @@ function AnalyzeHistoryPage() {
       const result = await retryAnalyzeTask(task.id)
       Taro.hideLoading()
       Taro.showToast({ title: '已重新识别', icon: 'success' })
-      void load()
+      void load(searchKeywordRef.current)
       Taro.navigateTo({
         url: `${extraPkgUrl('/pages/analyze-loading/index')}?task_id=${encodeURIComponent(result.task_id)}&task_type=${encodeURIComponent(task.task_type || 'food')}&execution_mode=${pickExecutionMode(task)}`
       })
@@ -1003,7 +1054,13 @@ function AnalyzeHistoryPage() {
           )}
         </View>
       </View>
-      <ScrollView className='list' scrollY style={{ height: `calc(100vh - ${navBarHeight}px - 96rpx)` }}>
+      <ScrollView
+        className='list'
+        scrollY
+        lowerThreshold={120}
+        onScrollToLower={handleLoadMore}
+        style={{ height: `calc(100vh - ${navBarHeight}px - 96rpx)` }}
+      >
         {loading ? (
           <View className='loading-wrap'><View className='loading-spinner-md' /></View>
         ) : tasks.length === 0 ? (
@@ -1030,6 +1087,11 @@ function AnalyzeHistoryPage() {
                 onMore={handleMore}
               />
             ))}
+            {loadingMore && (
+              <View className='loading-more-wrap'>
+                <View className='loading-spinner-md' />
+              </View>
+            )}
           </>
         )}
       </ScrollView>

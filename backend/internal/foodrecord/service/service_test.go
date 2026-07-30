@@ -185,6 +185,52 @@ func TestReconcileAIGeneratedFoodItemsLeavesCuratedNutritionUntouched(t *testing
 	assert.Equal(t, 123.0, items[0].Nutrients.Calories)
 }
 
+func TestFoodRecordService_SavePersistsValidEatingMood(t *testing.T) {
+	db := setupServiceTestDB(t)
+	svc := NewFoodRecordService(foodrepo.NewFoodRecordRepo(db), foodrepo.NewAnalysisTaskRepo(db), repo.NewUserRepo(db))
+	mood := "calm"
+
+	record, err := svc.Save(context.Background(), "u1", SaveFoodRecordInput{MealType: "lunch", EatingMood: &mood})
+	require.NoError(t, err)
+	require.NotNil(t, record.EatingMood)
+	assert.Equal(t, "calm", *record.EatingMood)
+
+	updatedMood := " treat "
+	record, err = svc.Update(context.Background(), "u1", record.ID, UpdateFoodRecordInput{EatingMood: &updatedMood})
+	require.NoError(t, err)
+	require.NotNil(t, record.EatingMood)
+	assert.Equal(t, "treat", *record.EatingMood)
+
+	emptyMood := " "
+	record, err = svc.Update(context.Background(), "u1", record.ID, UpdateFoodRecordInput{EatingMood: &emptyMood})
+	require.NoError(t, err)
+	assert.Nil(t, record.EatingMood)
+
+	invalidMood := "sad"
+	_, err = svc.Save(context.Background(), "u1", SaveFoodRecordInput{MealType: "lunch", EatingMood: &invalidMood})
+	require.Error(t, err)
+	_, err = svc.Update(context.Background(), "u1", record.ID, UpdateFoodRecordInput{EatingMood: &invalidMood})
+	require.Error(t, err)
+}
+
+func TestNormalizeEatingMood(t *testing.T) {
+	valid := " calm "
+	normalized, err := normalizeEatingMood(&valid)
+	require.NoError(t, err)
+	require.NotNil(t, normalized)
+	assert.Equal(t, "calm", *normalized)
+
+	empty := " "
+	normalized, err = normalizeEatingMood(&empty)
+	require.NoError(t, err)
+	assert.Nil(t, normalized)
+
+	invalid := "sad"
+	normalized, err = normalizeEatingMood(&invalid)
+	require.Error(t, err)
+	assert.Nil(t, normalized)
+}
+
 func TestZeroNutritionGateRejectsSuspiciousItem(t *testing.T) {
 	err := validateNoSuspiciousZeroNutritionItems([]domain.FoodItem{{
 		Name:   "如实酸奶",

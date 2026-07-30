@@ -10,7 +10,7 @@ import {
   friendGetBlockStatus,
   friendUnblockUser,
   getAccessToken,
-  API_BASE_URL,
+  uploadAnalyzeImageFile,
   SYSTEM_MESSAGE_USER_ID,
   deletePrivateMessage,
   reportPrivateMessage,
@@ -24,6 +24,7 @@ import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { isRewardSystemMessage, resolveSystemMessageActionPath } from '../../../utils/system-message-action'
 import { chooseImageWithPrivacy, isPrivacyAuthorizeError, showPrivacyAuthorizeFailure } from '../../../utils/weapp-privacy'
 import { DEFAULT_AVATAR_URL } from '../../../utils/static-asset-cdn-url'
+import { mergeMessagesByID, orderMessagesByTime } from './message-list'
 import './index.scss'
 
 const POLL_INTERVAL_MS = 3000
@@ -86,11 +87,24 @@ export default function PrivateChatPage() {
   const [actionTarget, setActionTarget] = useState<PrivateMessage | null>(null)
   const [actionSheetVisible, setActionSheetVisible] = useState(false)
   const [blockStatus, setBlockStatus] = useState<FriendBlockStatus | null>(null)
+  const [scrollIntoView, setScrollIntoView] = useState('')
+  const [scrollAnchorId, setScrollAnchorId] = useState('chat-bottom-anchor')
+  const [keyboardHeight, setKeyboardHeight] = useState(0)
 
-  const scrollRef = useRef<string>('')
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const isPollingRef = useRef(false)
+  const isSendingRef = useRef(false)
+  const scrollRequestRef = useRef(0)
   const messagesRef = useRef<PrivateMessage[]>([])
+
+  const scrollToBottom = useCallback((delay = 24) => {
+    const target = `chat-bottom-anchor-${Date.now()}-${++scrollRequestRef.current}`
+    setScrollIntoView('')
+    setScrollAnchorId(target)
+    setTimeout(() => {
+      Taro.nextTick(() => setScrollIntoView(target))
+    }, delay)
+  }, [])
 
   useEffect(() => {
     setCurrentUserAvatar(getCurrentUserAvatar())
@@ -99,6 +113,18 @@ export default function PrivateChatPage() {
   useEffect(() => {
     applyThemeNavigationBar(scheme, { lightBackground: '#f8fafc', darkBackground: '#101716' })
   }, [scheme])
+
+  useEffect(() => {
+    const taro = Taro as any
+    if (typeof taro.onKeyboardHeightChange !== 'function') return undefined
+    const handleKeyboardHeightChange = (event: { height?: number }) => {
+      const nextHeight = Math.max(0, Number(event?.height) || 0)
+      setKeyboardHeight(nextHeight)
+      if (nextHeight > 0) scrollToBottom(80)
+    }
+    taro.onKeyboardHeightChange(handleKeyboardHeightChange)
+    return () => taro.offKeyboardHeightChange?.(handleKeyboardHeightChange)
+  }, [scrollToBottom])
 
   useEffect(() => {
     messagesRef.current = messages
@@ -157,11 +183,12 @@ export default function PrivateChatPage() {
         }))
       }
       if (reset) {
-        setMessages(list)
+        setMessages(orderMessagesByTime(list))
         // 标记已读
         markMessagesRead(otherUserId).catch(() => {})
+        scrollToBottom()
       } else {
-        setMessages((prev) => [...list, ...prev])
+        setMessages((prev) => mergeMessagesByID(prev, list))
       }
       setHasMore(res.has_more ?? list.length >= 20)
       setOffset(currentOffset + list.length)
@@ -170,7 +197,7 @@ export default function PrivateChatPage() {
     } finally {
       if (reset) setLoading(false)
     }
-  }, [otherUserId, offset, hasMore])
+  }, [otherUserId, offset, hasMore, scrollToBottom])
 
   // 轮询新消息
   const pollNewMessages = useCallback(async () => {
@@ -182,7 +209,7 @@ export default function PrivateChatPage() {
       const currentIds = new Set(messagesRef.current.map((m) => m.id))
       const newMsgs = list.filter((m) => !currentIds.has(m.id))
       if (newMsgs.length > 0) {
-        setMessages(list)
+        setMessages((prev) => mergeMessagesByID(prev, list))
         // 有新消息且当前在页面底部附近时，标记已读
         markMessagesRead(otherUserId).catch(() => {})
       }
@@ -212,60 +239,48 @@ export default function PrivateChatPage() {
   // 发送文本消息
   const handleSendText = async () => {
     const text = inputText.trim()
-    if (!text || !otherUserId || sending) return
+    if (!text || !otherUserId || sending || isSendingRef.current) return
     if (blockStatus?.blocked_either) {
       Taro.showToast({ title: '已无法继续发送消息', icon: 'none' })
       return
     }
+    isSendingRef.current = true
     setSending(true)
     try {
       const msg = await sendPrivateMessage(otherUserId, text, 'text')
-      setMessages((prev) => [msg, ...prev])
+      setMessages((prev) => mergeMessagesByID(prev, [msg]))
       setInputText('')
       scrollToBottom()
     } catch (err: any) {
       Taro.showToast({ title: err?.message || '发送失败', icon: 'none' })
     } finally {
+      isSendingRef.current = false
       setSending(false)
     }
   }
 
   // 发送图片消息
   const handleSendImage = async () => {
-    if (!otherUserId || sending) return
+    if (!otherUserId || sending || isSendingRef.current) return
     if (blockStatus?.blocked_either) {
       Taro.showToast({ title: '已无法继续发送消息', icon: 'none' })
       return
     }
+    isSendingRef.current = true
     try {
-      const chooseRes = await chooseImageWithPrivacy({ count: 1, sizeType: ['compressed'] })
+      const chooseRes = await chooseImageWithPrivacy({ count: 1, sizeType: ['original'] })
       const tempFilePaths = (chooseRes as any)?.tempFilePaths || []
       if (!tempFilePaths || tempFilePaths.length === 0) return
       const tempFilePath = tempFilePaths[0]
 
       setSending(true)
-      Taro.showLoading({ title: '发送中...', mask: true })
+      Taro.showLoading({ title: '', mask: true })
 
-      // 上传图片到服务器
-      const token = getAccessToken()
-      const uploadRes = await Taro.uploadFile({
-        url: `${API_BASE_URL}/api/upload-analyze-image-file`,
-        filePath: tempFilePath,
-        name: 'file',
-        header: {
-          Authorization: `Bearer ${token}`,
-        },
-      })
-
+      const { imageUrl } = await uploadAnalyzeImageFile(tempFilePath)
       Taro.hideLoading()
-      const data = JSON.parse(uploadRes.data)
-      const imageUrl = data?.imageUrl || data?.data?.imageUrl
-      if (!imageUrl) {
-        throw new Error('图片上传失败')
-      }
 
       const msg = await sendPrivateMessage(otherUserId, '', 'image', imageUrl)
-      setMessages((prev) => [msg, ...prev])
+      setMessages((prev) => mergeMessagesByID(prev, [msg]))
       scrollToBottom()
     } catch (err: any) {
       Taro.hideLoading()
@@ -275,14 +290,9 @@ export default function PrivateChatPage() {
       }
       Taro.showToast({ title: err?.message || '发送失败', icon: 'none' })
     } finally {
+      isSendingRef.current = false
       setSending(false)
     }
-  }
-
-  const scrollToBottom = () => {
-    setTimeout(() => {
-      scrollRef.current = `msg-bottom-${Date.now()}`
-    }, 100)
   }
 
   const openProfile = (userId?: string) => {
@@ -361,7 +371,7 @@ export default function PrivateChatPage() {
     })
     if (!ok.confirm) return
     try {
-      Taro.showLoading({ title: '处理中...', mask: true })
+      Taro.showLoading({ title: '', mask: true })
       await friendBlockUser(otherUserId)
       Taro.hideLoading()
       Taro.showToast({ title: '已拉黑', icon: 'success' })
@@ -383,7 +393,7 @@ export default function PrivateChatPage() {
     })
     if (!ok.confirm) return
     try {
-      Taro.showLoading({ title: '处理中...', mask: true })
+      Taro.showLoading({ title: '', mask: true })
       await friendUnblockUser(otherUserId)
       Taro.hideLoading()
       Taro.showToast({ title: '已解除', icon: 'success' })
@@ -396,7 +406,7 @@ export default function PrivateChatPage() {
 
   const renderMessage = (msg: PrivateMessage, index: number) => {
     const isSelf = msg.sender_id === currentUserId
-    const prevMsg = index < messages.length - 1 ? messages[index + 1] : null
+    const prevMsg = index > 0 ? messages[index - 1] : null
     const showTime = shouldShowTimeDivider(prevMsg, msg)
     const isSystem = msg.content_type === 'system'
     const systemActionPath = isSystem ? resolveSystemMessageActionPath(msg) : ''
@@ -507,7 +517,8 @@ export default function PrivateChatPage() {
           scrollY
           enhanced
           showScrollbar={false}
-          scrollIntoView={scrollRef.current}
+          scrollIntoView={scrollIntoView}
+          style={keyboardHeight > 0 ? { marginBottom: `${keyboardHeight}px` } : undefined}
         >
           <View className='chat-message-content'>
             {loading && messages.length === 0 ? (
@@ -521,7 +532,7 @@ export default function PrivateChatPage() {
             ) : (
               <>
                 {messages.map(renderMessage)}
-                <View id={`msg-bottom-${scrollRef.current}`} className='chat-bottom-anchor' />
+                <View id={scrollAnchorId} className='chat-bottom-anchor' />
               </>
             )}
           </View>
@@ -534,7 +545,10 @@ export default function PrivateChatPage() {
               <Text className='chat-disabled-text'>已无法继续发送消息</Text>
             </View>
           ) : (
-            <View className='chat-input-bar'>
+            <View
+              className='chat-input-bar'
+              style={keyboardHeight > 0 ? { transform: `translateY(-${keyboardHeight}px)` } : undefined}
+            >
               <View className='chat-input-actions'>
                 <View className='chat-image-btn' onClick={handleSendImage}>
                   <Text className='iconfont icon-picture chat-image-btn-icon' />
@@ -547,7 +561,10 @@ export default function PrivateChatPage() {
                 value={inputText}
                 onInput={(e) => setInputText(e.detail.value)}
                 onConfirm={handleSendText}
+                onFocus={() => scrollToBottom(120)}
                 confirmType='send'
+                adjustPosition={false}
+                cursorSpacing={16}
                 disabled={sending}
               />
               <Button

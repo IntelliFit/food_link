@@ -59,6 +59,7 @@ type FriendTab = 'friends' | 'received' | 'sent' | 'blocks'
 type ExpoSharingModule = typeof import('expo-sharing')
 type ViewShotModule = typeof import('react-native-view-shot')
 const notificationPageSize = 20
+const analyzeHistoryPageSize = 20
 const commonTextFoods = ['米饭', '面条', '鸡蛋', '鸡胸肉', '苹果', '香蕉', '牛奶', '面包']
 type TextRecordDietGoal = 'fat_loss' | 'muscle_gain' | 'maintain' | 'none'
 type TextRecordActivityTiming = 'post_workout' | 'daily' | 'before_sleep' | 'none'
@@ -1287,9 +1288,30 @@ export function RecordDetailScreen() {
             {contextTags.length ? (
               <View style={styles.recordDetailContextTags}>
                 {contextTags.map((tag) => (
-                  <View key={tag.label} style={[styles.recordDetailContextTag, tag.tone === 'goal' ? styles.recordDetailGoalTag : styles.recordDetailTimingTag]}>
+                  <View
+                    key={tag.label}
+                    style={[
+                      styles.recordDetailContextTag,
+                      tag.tone === 'goal'
+                        ? styles.recordDetailGoalTag
+                        : tag.tone === 'mood'
+                          ? styles.recordDetailMoodTag
+                          : styles.recordDetailTimingTag,
+                    ]}
+                  >
                     <Text style={styles.recordDetailContextTagIcon}>{tag.icon}</Text>
-                    <Text style={[styles.recordDetailContextTagText, tag.tone === 'goal' ? styles.recordDetailGoalTagText : styles.recordDetailTimingTagText]}>{tag.label}</Text>
+                    <Text
+                      style={[
+                        styles.recordDetailContextTagText,
+                        tag.tone === 'goal'
+                          ? styles.recordDetailGoalTagText
+                          : tag.tone === 'mood'
+                            ? styles.recordDetailMoodTagText
+                            : styles.recordDetailTimingTagText,
+                      ]}
+                    >
+                      {tag.label}
+                    </Text>
                   </View>
                 ))}
               </View>
@@ -1446,6 +1468,8 @@ export function AnalyzeHistoryScreen() {
   const [tasks, setTasks] = useState<AnalysisTask[]>([])
   const [searchKeyword, setSearchKeyword] = useState('')
   const [loading, setLoading] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [hasMore, setHasMore] = useState(false)
   const [retryingTaskId, setRetryingTaskId] = useState<string | null>(null)
   const [bulkDeleting, setBulkDeleting] = useState(false)
   const [menuTask, setMenuTask] = useState<AnalysisTask | null>(null)
@@ -1456,19 +1480,52 @@ export function AnalyzeHistoryScreen() {
   const [recipeTask, setRecipeTask] = useState<AnalysisTask | null>(null)
   const [recipeName, setRecipeName] = useState('')
   const [savingRecipeTaskId, setSavingRecipeTaskId] = useState<string | null>(null)
+  const nextOffsetRef = useRef(0)
+  const hasMoreRef = useRef(false)
+  const loadingMoreRef = useRef(false)
+  const loadSeqRef = useRef(0)
 
-  const load = useCallback(async (keyword = '') => {
-    setLoading(true)
+  const load = useCallback(async (keyword = '', append = false) => {
+    if (append && (!hasMoreRef.current || loadingMoreRef.current)) return
+    const seq = append ? loadSeqRef.current : ++loadSeqRef.current
+    const offset = append ? nextOffsetRef.current : 0
+    if (append) {
+      loadingMoreRef.current = true
+      setLoadingMore(true)
+    } else {
+      loadingMoreRef.current = false
+      setLoadingMore(false)
+      nextOffsetRef.current = 0
+      hasMoreRef.current = false
+      setHasMore(false)
+      setLoading(true)
+    }
     try {
-      const data = await apiClient.listAnalyzeTasks({ limit: 80, search: keyword })
+      const data = await apiClient.listAnalyzeTasks({ limit: analyzeHistoryPageSize, offset, search: keyword })
       const visibleTasks = (data.tasks || [])
         .filter(isVisibleAnalyzeHistoryTask)
         .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-      setTasks(visibleTasks)
+      if (seq !== loadSeqRef.current) return
+      setTasks((current) => append ? mergeVisibleAnalyzeHistoryTasks(current, visibleTasks) : visibleTasks)
+      const nextOffset = typeof data.next_offset === 'number' && Number.isFinite(data.next_offset)
+        ? Math.max(offset, Math.floor(data.next_offset))
+        : offset + (data.tasks || []).length
+      const nextHasMore = data.has_more === true
+      nextOffsetRef.current = nextOffset
+      hasMoreRef.current = nextHasMore
+      setHasMore(nextHasMore)
     } catch (error) {
+      if (seq !== loadSeqRef.current) return
       await showError(dialog, '获取识别历史失败', error)
     } finally {
-      setLoading(false)
+      if (seq === loadSeqRef.current) {
+        if (append) {
+          loadingMoreRef.current = false
+          setLoadingMore(false)
+        } else {
+          setLoading(false)
+        }
+      }
     }
   }, [dialog])
 
@@ -1538,6 +1595,7 @@ export function AnalyzeHistoryScreen() {
         )),
       )
       setTasks((current) => current.filter((task) => !deletedIds.has(task.id)))
+      nextOffsetRef.current = Math.max(0, nextOffsetRef.current - deletedIds.size)
       const failedCount = results.length - deletedIds.size
       if (failedCount > 0) {
         await dialog.alert(
@@ -1565,6 +1623,7 @@ export function AnalyzeHistoryScreen() {
     try {
       await apiClient.deleteAnalysisTask(task.id)
       setTasks((current) => current.filter((item) => item.id !== task.id))
+      nextOffsetRef.current = Math.max(0, nextOffsetRef.current - 1)
       await dialog.alert('已删除', '识别记录已删除', 'success')
     } catch (error) {
       await showError(dialog, '删除识别记录失败', error)
@@ -1780,6 +1839,12 @@ export function AnalyzeHistoryScreen() {
         style={styles.analyzeHistoryScroll}
         contentContainerStyle={styles.analyzeHistoryList}
         keyboardShouldPersistTaps="handled"
+        scrollEventThrottle={200}
+        onScroll={({ nativeEvent }) => {
+          const nearBottom = nativeEvent.layoutMeasurement.height + nativeEvent.contentOffset.y
+            >= nativeEvent.contentSize.height - 160
+          if (hasMore && nearBottom) void load(searchKeyword, true)
+        }}
         refreshControl={<RefreshControl refreshing={loading && tasks.length > 0} onRefresh={refresh} tintColor={colors.brand} colors={[colors.brand]} />}
       >
         {initialLoading ? (
@@ -1874,6 +1939,11 @@ export function AnalyzeHistoryScreen() {
             </Pressable>
           )
         })}
+        {loadingMore ? (
+          <View style={styles.analyzeHistoryLoadingMore}>
+            <ActivityIndicator color={colors.brand} size="small" />
+          </View>
+        ) : null}
       </ScrollView>
 
       <Modal visible={Boolean(menuTask)} transparent animationType="fade" onRequestClose={closeTaskMenu}>
@@ -6907,6 +6977,15 @@ const activityTimingLabels: Record<string, string> = {
   none: '无',
 }
 
+const eatingMoodLabels: Record<string, { emoji: string; label: string }> = {
+  happy: { emoji: '😊', label: '开心' },
+  calm: { emoji: '😌', label: '平静' },
+  stressed: { emoji: '😣', label: '压力大' },
+  tired: { emoji: '😮‍💨', label: '疲惫' },
+  bored: { emoji: '😶', label: '无聊' },
+  treat: { emoji: '✨', label: '犒劳自己' },
+}
+
 const recordNutrientMeta: Array<{ key: string; label: string; unit: string; altKey?: string }> = [
   { key: 'fiber', label: '膳食纤维', unit: 'g' },
   { key: 'sugar', label: '糖', unit: 'g' },
@@ -6989,13 +7068,17 @@ function recordExtraText(record: FoodRecord, key: string): string {
   return String((record as FoodRecord & Record<string, unknown>)[key] || '').trim()
 }
 
-function recordContextTags(record: FoodRecord): Array<{ label: string; icon: string; tone: 'goal' | 'timing' }> {
-  const tags: Array<{ label: string; icon: string; tone: 'goal' | 'timing' }> = []
+function recordContextTags(record: FoodRecord): Array<{ label: string; icon: string; tone: 'goal' | 'timing' | 'mood' }> {
+  const tags: Array<{ label: string; icon: string; tone: 'goal' | 'timing' | 'mood' }> = []
   if (record.diet_goal && record.diet_goal !== 'none') {
     tags.push({ label: dietGoalLabels[record.diet_goal] || record.diet_goal, icon: '↑', tone: 'goal' })
   }
   if (record.activity_timing && record.activity_timing !== 'none') {
     tags.push({ label: activityTimingLabels[record.activity_timing] || record.activity_timing, icon: '时', tone: 'timing' })
+  }
+  if (record.eating_mood && eatingMoodLabels[record.eating_mood]) {
+    const mood = eatingMoodLabels[record.eating_mood]
+    tags.push({ label: mood.label, icon: mood.emoji, tone: 'mood' })
   }
   return tags
 }
@@ -7364,6 +7447,17 @@ function isVisibleAnalyzeHistoryTask(task: AnalysisTask): boolean {
   if (taskType === 'food_text' || taskType.startsWith('food_text')) return true
   if (taskType.startsWith('precision_')) return true
   return false
+}
+
+function mergeVisibleAnalyzeHistoryTasks(current: AnalysisTask[], incoming: AnalysisTask[]): AnalysisTask[] {
+  const byGroup = new Map(current.map((task) => [task.history_group_key || task.id, task]))
+  incoming.forEach((task) => {
+    const groupKey = task.history_group_key || task.id
+    if (!byGroup.has(groupKey)) byGroup.set(groupKey, task)
+  })
+  return Array.from(byGroup.values()).sort(
+    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+  )
 }
 
 async function findFoodRecordForAnalyzeTask(task: AnalysisTask): Promise<FoodRecord | null> {
@@ -8682,6 +8776,9 @@ const styles = StyleSheet.create({
   recordDetailTimingTag: {
     backgroundColor: '#dbeafe',
   },
+  recordDetailMoodTag: {
+    backgroundColor: '#fef3c7',
+  },
   recordDetailContextTagIcon: {
     fontSize: 13,
     lineHeight: 17,
@@ -8697,6 +8794,9 @@ const styles = StyleSheet.create({
   },
   recordDetailTimingTagText: {
     color: '#1e40af',
+  },
+  recordDetailMoodTagText: {
+    color: '#92400e',
   },
   recordDetailInfoBlock: {
     paddingVertical: 10,
@@ -9420,6 +9520,11 @@ const styles = StyleSheet.create({
   },
   analyzeHistoryLoading: {
     minHeight: 220,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  analyzeHistoryLoadingMore: {
+    height: 52,
     alignItems: 'center',
     justifyContent: 'center',
   },

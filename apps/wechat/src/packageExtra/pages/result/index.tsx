@@ -80,6 +80,15 @@ const SUGGEST_RATIO_STORAGE_KEY = 'analyzeSuggestRatioEnabled'
 const ANALYSIS_HEALTH_PROFILE_PROMPT_SHOWN_KEY = 'analysisHealthProfilePromptShown'
 const CORRECTION_SUBMIT_DEBOUNCE_MS = 300
 const MAX_ANALYZE_IMAGES = 3
+const EATING_MOOD_OPTIONS = [
+  { value: 'happy', emoji: '😊', label: '开心' },
+  { value: 'calm', emoji: '😌', label: '平静' },
+  { value: 'stressed', emoji: '😣', label: '压力大' },
+  { value: 'tired', emoji: '😮‍💨', label: '疲惫' },
+  { value: 'bored', emoji: '😶', label: '无聊' },
+  { value: 'treat', emoji: '✨', label: '犒劳自己' },
+] as const
+type EatingMood = typeof EATING_MOOD_OPTIONS[number]['value']
 /** 用户在分析结果页停留超过此时间且未调整摄入比例，则视为疑似不信任识别结果 */
 const SUSPECT_DISTRUST_TIMEOUT_MS = 15000
 /** 判断当前识别会话是否已保存为饮食记录。
@@ -569,6 +578,7 @@ function ResultPage() {
   })
   const [healthAdvice, setHealthAdvice] = useState('')
   const [description, setDescription] = useState('')
+  const [eatingMood, setEatingMood] = useState<EatingMood | null>(null)
   const [pfcRatioComment, setPfcRatioComment] = useState<string | null>(null)
   const [eatingOrderAdvice, setEatingOrderAdvice] = useState<string | null>(null)
   const [absorptionNotes, setAbsorptionNotes] = useState<string | null>(null)
@@ -1909,6 +1919,7 @@ function ResultPage() {
           total_weight_grams: totalWeight,
           diet_goal: dietGoal,
           activity_timing: activityTiming,
+          eating_mood: eatingMood || undefined,
           pfc_ratio_comment: pfcRatioComment ?? undefined,
           absorption_notes: absorptionNotes ?? undefined,
           context_advice: contextAdvice ?? undefined,
@@ -3055,6 +3066,28 @@ function ResultPage() {
 
       {/* 底部固定栏：必须放在 scroll-view 外，避免 iOS 上 fixed 相对滚动容器失效 */}
       <View className='footer-actions'>
+        {(taskType === 'food' || taskType === 'food_text') && !isAnalyzeSessionCommitted() && !committedRecordId && (
+          <View className='eating-mood-bar'>
+            <View className='eating-mood-heading'>
+              <Text className='eating-mood-title'>此刻心情</Text>
+              <Text className='eating-mood-hint'>可选</Text>
+            </View>
+            <ScrollView className='eating-mood-options' scrollX showScrollbar={false}>
+              <View className='eating-mood-options-inner'>
+                {EATING_MOOD_OPTIONS.map((option) => (
+                  <View
+                    key={option.value}
+                    className={`eating-mood-option ${eatingMood === option.value ? 'active' : ''}`}
+                    onClick={() => setEatingMood(current => current === option.value ? null : option.value)}
+                  >
+                    <Text className='eating-mood-emoji'>{option.emoji}</Text>
+                    <Text className='eating-mood-label'>{option.label}</Text>
+                  </View>
+                ))}
+              </View>
+            </ScrollView>
+          </View>
+        )}
         <View className='pba-safe-area'>
           <View className='action-grid'>
             <View

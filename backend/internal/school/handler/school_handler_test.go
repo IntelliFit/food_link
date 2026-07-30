@@ -20,16 +20,17 @@ import (
 )
 
 type testSchoolDO struct {
-	ID        string     `gorm:"column:id;type:text;primaryKey"`
-	Name      string     `gorm:"column:name;type:text;not null"`
-	Province  *string    `gorm:"column:province;type:text"`
-	City      *string    `gorm:"column:city;type:text"`
-	Level     *string    `gorm:"column:level;type:text"`
-	Is985     *bool      `gorm:"column:is_985;type:boolean;default:false"`
-	Is211     *bool      `gorm:"column:is_211;type:boolean;default:false"`
-	LogoURL   *string    `gorm:"column:logo_url;type:text"`
-	Status    string     `gorm:"column:status;type:text;not null;default:'active'"`
-	CreatedAt *time.Time `gorm:"column:created_at;type:timestamptz;default:current_timestamp"`
+	ID           string     `gorm:"column:id;type:text;primaryKey"`
+	Name         string     `gorm:"column:name;type:text;not null"`
+	LocationType string     `gorm:"column:location_type;type:text;not null;default:'university'"`
+	Province     *string    `gorm:"column:province;type:text"`
+	City         *string    `gorm:"column:city;type:text"`
+	Level        *string    `gorm:"column:level;type:text"`
+	Is985        *bool      `gorm:"column:is_985;type:boolean;default:false"`
+	Is211        *bool      `gorm:"column:is_211;type:boolean;default:false"`
+	LogoURL      *string    `gorm:"column:logo_url;type:text"`
+	Status       string     `gorm:"column:status;type:text;not null;default:'active'"`
+	CreatedAt    *time.Time `gorm:"column:created_at;type:timestamptz;default:current_timestamp"`
 }
 
 func (testSchoolDO) TableName() string { return "schools" }

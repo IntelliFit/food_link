@@ -84,6 +84,7 @@ export type CanonicalMealType =
 export type MealType = CanonicalMealType | 'snack'
 export type DietGoal = 'fat_loss' | 'muscle_gain' | 'maintain' | 'none'
 export type ActivityTiming = 'post_workout' | 'daily' | 'before_sleep' | 'none'
+export type EatingMood = 'happy' | 'calm' | 'stressed' | 'tired' | 'bored' | 'treat'
 export type UserGoal = 'muscle_gain' | 'fat_loss' | 'maintain'
 export type ExecutionMode =
   | 'lite'
@@ -533,6 +534,7 @@ export interface SaveFoodRecordRequest {
   total_weight_grams: number
   diet_goal?: 'fat_loss' | 'muscle_gain' | 'maintain' | 'none'
   activity_timing?: 'post_workout' | 'daily' | 'before_sleep' | 'none'
+  eating_mood?: EatingMood
   pfc_ratio_comment?: string
   absorption_notes?: string
   context_advice?: string
@@ -646,6 +648,7 @@ export interface FoodRecord {
   // 新增字段
   diet_goal?: string | null
   activity_timing?: string | null
+  eating_mood?: EatingMood | null
   source_task_id?: string | null
   entry_type?: FoodRecordEntryType | null
   recipe_id?: string | null
@@ -2933,6 +2936,7 @@ export interface AnalysisTask {
   violation_reason?: string | null // 违规原因
   is_recorded?: boolean          // 是否已保存为饮食记录（后端通过 user_food_records 关联查询）
   record_id?: string              // 已保存时对应的饮食记录 ID，供跳转详情页
+  history_group_key?: string      // 分页加载时用于跨页合并同一次识别链
   created_at: string
   updated_at: string
 }
@@ -3177,20 +3181,27 @@ export async function getAnalyzeTask(taskId: string): Promise<AnalysisTask> {
   return task
 }
 
+export interface AnalyzeTaskListResponse {
+  tasks: AnalysisTask[]
+  has_more?: boolean
+  next_offset?: number
+}
+
 /** 查询当前用户的分析任务列表 */
-export async function listAnalyzeTasks(params?: { task_type?: string; status?: string; search?: string; limit?: number }): Promise<{ tasks: AnalysisTask[] }> {
+export async function listAnalyzeTasks(params?: { task_type?: string; status?: string; search?: string; limit?: number; offset?: number }): Promise<AnalyzeTaskListResponse> {
   const q = new URLSearchParams()
   if (params?.task_type) q.set('task_type', params.task_type)
   if (params?.status) q.set('status', params.status)
   if (params?.search?.trim()) q.set('search', params.search.trim())
   if (params?.limit != null && Number.isFinite(params.limit)) q.set('limit', String(Math.min(200, Math.max(1, Math.floor(params.limit)))))
+  if (params?.offset != null && Number.isFinite(params.offset)) q.set('offset', String(Math.max(0, Math.floor(params.offset))))
   const url = `/api/analyze/tasks${q.toString() ? '?' + q.toString() : ''}`
   const res = await authenticatedRequest(url, { method: 'GET', timeout: 20000 })
   if (res.statusCode !== 200) {
     const msg = (res.data as any)?.detail || '获取任务列表失败'
     throw new Error(msg)
   }
-  return res.data as { tasks: AnalysisTask[] }
+  return res.data as AnalyzeTaskListResponse
 }
 
 /**
@@ -3426,6 +3437,7 @@ export interface UpdateFoodRecordRequest {
   image_paths?: string[]
   diet_goal?: DietGoal
   activity_timing?: ActivityTiming
+  eating_mood?: EatingMood | ''
 }
 
 /**
@@ -7454,6 +7466,7 @@ export async function estimateExerciseCalories(exerciseDesc: string): Promise<{
 export interface SchoolItem {
   id: string
   name: string
+  location_type?: 'university' | 'company' | 'community'
   province?: string
   city?: string
   logo_url?: string
@@ -7499,6 +7512,13 @@ export interface CanteenWindowItem {
   sort_order?: number
 }
 
+export interface CanteenFloorItem {
+  name: string
+  sort_order: number
+  is_fallback?: boolean
+  is_default?: boolean
+}
+
 export interface CampusCanteenApplicationRequest {
   school_id: string
   campus_id?: string
@@ -7509,11 +7529,12 @@ export interface CampusCanteenApplicationRequest {
   applicant_note?: string
 }
 
-export async function searchSchools(keyword: string, province?: string, limit = 20): Promise<SchoolItem[]> {
+export async function searchSchools(keyword: string, province?: string, limit = 20, locationType: 'university' | 'company' | 'community' = 'university'): Promise<SchoolItem[]> {
   const q = new URLSearchParams()
   if (keyword) q.set('keyword', keyword)
   if (province) q.set('province', province)
   q.set('limit', String(limit))
+  q.set('location_type', locationType)
   const response = await authenticatedRequest(`/api/schools?${q.toString()}`, {
     method: 'GET',
     timeout: 10000,
@@ -7563,8 +7584,20 @@ export async function getCampusCanteens(campusId: string): Promise<SchoolCanteen
   return unwrapResponse<SchoolCanteenItem[]>(response) || []
 }
 
-export async function getCanteenWindows(canteenId: string): Promise<CanteenWindowItem[]> {
-  const response = await authenticatedRequest(`/api/school-canteens/${encodeURIComponent(canteenId)}/windows`, {
+export async function getCanteenFloors(canteenId: string): Promise<CanteenFloorItem[]> {
+  const response = await authenticatedRequest(`/api/school-canteens/${encodeURIComponent(canteenId)}/floors`, {
+    method: 'GET',
+    timeout: 10000,
+  })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.message || '获取楼层失败')
+  }
+  return unwrapResponse<CanteenFloorItem[]>(response) || []
+}
+
+export async function getCanteenWindows(canteenId: string, floor?: string): Promise<CanteenWindowItem[]> {
+  const query = floor?.trim() ? `?floor=${encodeURIComponent(floor.trim())}` : ''
+  const response = await authenticatedRequest(`/api/school-canteens/${encodeURIComponent(canteenId)}/windows${query}`, {
     method: 'GET',
     timeout: 10000,
   })
@@ -7589,8 +7622,8 @@ export async function createSchoolCanteenApplication(
 }
 
 /** 获取有学校的省份列表 */
-export async function getSchoolProvinces(): Promise<string[]> {
-  const response = await authenticatedRequest('/api/schools/provinces', {
+export async function getSchoolProvinces(locationType: 'university' | 'company' | 'community' = 'university'): Promise<string[]> {
+  const response = await authenticatedRequest(`/api/schools/provinces?location_type=${encodeURIComponent(locationType)}`, {
     method: 'GET',
     timeout: 10000,
   })

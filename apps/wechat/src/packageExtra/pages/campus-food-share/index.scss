@@ -160,6 +160,45 @@
   gap: 16rpx;
 }
 
+.directory-form-row {
+  display: flex;
+  width: 100%;
+  gap: 16rpx;
+}
+
+.directory-form-item {
+  flex: 1 1 0;
+  width: 0;
+  min-width: 0;
+
+  .form-label {
+    min-width: 0;
+    height: 40rpx;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .form-input {
+    min-width: 0;
+    padding-right: 16rpx;
+    padding-left: 16rpx;
+  }
+
+  .picker-value,
+  .picker-placeholder {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .picker-arrow {
+    flex: 0 0 auto;
+    margin-left: 8rpx;
+  }
+}
+
 .form-item--half {
   flex: 1;
 }

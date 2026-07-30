@@ -3,15 +3,20 @@ package domain
 import "time"
 
 type School struct {
-	ID       string  `gorm:"column:id" json:"id"`
-	Name     string  `gorm:"column:name" json:"name"`
-	Province string  `gorm:"column:province" json:"province,omitempty"`
-	City     string  `gorm:"column:city" json:"city,omitempty"`
-	Level    string  `gorm:"column:level" json:"level,omitempty"`
-	Is985    bool    `gorm:"column:is_985" json:"is_985"`
-	Is211    bool    `gorm:"column:is_211" json:"is_211"`
-	Status   string  `gorm:"column:status" json:"status"`
-	LogoURL  *string `gorm:"column:logo_url" json:"logo_url,omitempty"`
+	ID                    string  `gorm:"column:id" json:"id"`
+	Name                  string  `gorm:"column:name" json:"name"`
+	LocationType          string  `gorm:"column:location_type" json:"location_type"`
+	OfficialCode          string  `gorm:"column:official_code" json:"official_code,omitempty"`
+	Authority             string  `gorm:"column:authority" json:"authority,omitempty"`
+	OfficialSourceVersion string  `gorm:"column:official_source_version" json:"official_source_version,omitempty"`
+	InstitutionKind       string  `gorm:"column:institution_kind" json:"institution_kind,omitempty"`
+	Province              string  `gorm:"column:province" json:"province,omitempty"`
+	City                  string  `gorm:"column:city" json:"city,omitempty"`
+	Level                 string  `gorm:"column:level" json:"level,omitempty"`
+	Is985                 bool    `gorm:"column:is_985" json:"is_985"`
+	Is211                 bool    `gorm:"column:is_211" json:"is_211"`
+	Status                string  `gorm:"column:status" json:"status"`
+	LogoURL               *string `gorm:"column:logo_url" json:"logo_url,omitempty"`
 }
 
 func (School) TableName() string { return "schools" }
@@ -101,6 +106,16 @@ type CanteenWindow struct {
 }
 
 func (CanteenWindow) TableName() string { return "canteen_windows" }
+
+// CanteenFloor is a derived directory item. Floors are sourced from the
+// canteen's reviewed location metadata and its reviewed windows, so callers do
+// not have to infer floors from window availability.
+type CanteenFloor struct {
+	Name       string `json:"name"`
+	SortOrder  int    `json:"sort_order"`
+	IsFallback bool   `json:"is_fallback,omitempty"`
+	IsDefault  bool   `json:"is_default,omitempty"`
+}
 
 type CampusCanteenApplication struct {
 	ID                   string     `gorm:"column:id" json:"id"`

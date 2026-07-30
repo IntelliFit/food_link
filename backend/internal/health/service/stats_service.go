@@ -75,6 +75,7 @@ const (
 	statsInsightDailyLimit     = 3
 	statsInsightCreditCost     = 1
 	statsInsightMaxTokens      = 4096
+	petChatMaxTokens           = 1200
 	statsInsightMinRecordDays  = 1
 	statsInsightMaxAttempts    = 2
 	// The default Go transport gives TLS negotiation only 10 seconds. The
@@ -501,23 +502,28 @@ func hasEnoughStatsInsightData(comp *statsComputation) bool {
 }
 
 func (s *StatsService) EstimatePetChat(ctx context.Context, userID string, input PetChatInput) (*PetChatEstimateResult, error) {
+	estimate, _, err := s.preparePetChat(ctx, userID, input)
+	return estimate, err
+}
+
+func (s *StatsService) preparePetChat(ctx context.Context, userID string, input PetChatInput) (*PetChatEstimateResult, *statsComputation, error) {
 	question := normalizePetChatQuestion(input.Question)
 	if question == "" {
-		return nil, &commonerrors.AppError{Code: 10002, Message: "question 不能为空", HTTPStatus: 400}
+		return nil, nil, &commonerrors.AppError{Code: 10002, Message: "question 不能为空", HTTPStatus: 400}
 	}
 	comp, err := s.buildStatsComputation(ctx, userID, input.Range, 2000, 0)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if !hasEnoughStatsInsightData(comp) {
-		return nil, &commonerrors.AppError{Code: 10002, Message: "当前统计周期还没有饮食记录，先记录一餐后再问小食探", HTTPStatus: 400}
+		return nil, nil, &commonerrors.AppError{Code: 10002, Message: "当前统计周期还没有饮食记录，先记录一餐后再问小食探", HTTPStatus: 400}
 	}
 	prompt := buildPetChatPrompt(comp, question, nil)
 	usage := estimatePetChatTokenUsage(prompt, comp.StatsRange)
 	pricing := billing.PriceTokenUsage(billing.PricingInput{Model: s.petChatModel(), Usage: usage}, s.aiUsagePricingConfig())
 	if s.creditGuard != nil && strings.TrimSpace(userID) != "" {
 		if _, err := s.creditGuard.ValidateUsageCredits(ctx, userID, pricing.CreditsCharged, "小食探对话"); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
 	return &PetChatEstimateResult{
@@ -527,25 +533,15 @@ func (s *StatsService) EstimatePetChat(ctx context.Context, userID string, input
 		RecordedDays:   comp.RecordedDays,
 		EstimatedUsage: usage,
 		Pricing:        pricing,
-	}, nil
+	}, comp, nil
 }
 
 func (s *StatsService) GeneratePetChat(ctx context.Context, userID string, input PetChatInput) (*PetChatResult, error) {
-	estimate, err := s.EstimatePetChat(ctx, userID, input)
+	estimate, comp, err := s.preparePetChat(ctx, userID, input)
 	if err != nil {
 		return nil, err
 	}
 	var creditsInfo map[string]any
-	if s.creditGuard != nil && strings.TrimSpace(userID) != "" {
-		creditsInfo, err = s.creditGuard.ValidateUsageCredits(ctx, userID, estimate.Pricing.CreditsCharged, "小食探对话")
-		if err != nil {
-			return nil, err
-		}
-	}
-	comp, err := s.buildStatsComputation(ctx, userID, estimate.Range, 2000, 0)
-	if err != nil {
-		return nil, err
-	}
 	session, err := s.resolvePetChatSession(ctx, userID, input, comp, estimate.Question)
 	if err != nil {
 		return nil, err
@@ -617,18 +613,8 @@ func (s *StatsService) GeneratePetChat(ctx context.Context, userID string, input
 }
 
 func (s *StatsService) GeneratePetChatStream(ctx context.Context, userID string, input PetChatInput) (<-chan PetChatStreamChunk, error) {
-	estimate, err := s.EstimatePetChat(ctx, userID, input)
-	if err != nil {
-		return nil, err
-	}
-	var creditsInfo map[string]any
-	if s.creditGuard != nil && strings.TrimSpace(userID) != "" {
-		creditsInfo, err = s.creditGuard.ValidateUsageCredits(ctx, userID, estimate.Pricing.CreditsCharged, "小食探对话")
-		if err != nil {
-			return nil, err
-		}
-	}
-	comp, err := s.buildStatsComputation(ctx, userID, estimate.Range, 2000, 0)
+	requestStarted := time.Now()
+	estimate, comp, err := s.preparePetChat(ctx, userID, input)
 	if err != nil {
 		return nil, err
 	}
@@ -645,10 +631,18 @@ func (s *StatsService) GeneratePetChatStream(ctx context.Context, userID string,
 		)
 		historyMessages = nil
 	}
+	logger.Info(ctx, "宠物对话流式准备完成",
+		logger.UserID(userID),
+		slog.String("session_id", session.ID),
+		slog.String("range", estimate.Range),
+		slog.Int("recorded_days", estimate.RecordedDays),
+		slog.Int64("prepare_duration_ms", time.Since(requestStarted).Milliseconds()),
+	)
 
 	chunkChan := make(chan PetChatStreamChunk, 32)
 	go func() {
 		defer close(chunkChan)
+		chunkChan <- PetChatStreamChunk{Type: "start"}
 		fullAnswer := &strings.Builder{}
 		var streamErr error
 		llm := s.preferredTextLLM()
@@ -661,18 +655,44 @@ func (s *StatsService) GeneratePetChatStream(ctx context.Context, userID string,
 			chunkChan <- PetChatStreamChunk{Type: "chunk", Text: fallback}
 		} else {
 			prompt := buildPetChatPrompt(comp, estimate.Question, historyMessages)
-			textChan, err := s.streamNutritionInsight(ctx, baseURL, apiKey, model, prompt)
+			modelStarted := time.Now()
+			textChan, err := s.streamNutritionInsight(ctx, baseURL, apiKey, model, prompt, petChatMaxTokens)
 			if err != nil {
 				streamErr = err
 			} else {
+				logger.Info(ctx, "宠物对话模型流已建立",
+					logger.UserID(userID),
+					slog.String("session_id", session.ID),
+					slog.String("model", model),
+					slog.Int64("model_headers_duration_ms", time.Since(modelStarted).Milliseconds()),
+				)
+				firstChunkLogged := false
 				for text := range textChan {
+					if text == "" {
+						continue
+					}
+					if !firstChunkLogged {
+						firstChunkLogged = true
+						logger.Info(ctx, "宠物对话模型首段到达",
+							logger.UserID(userID),
+							slog.String("session_id", session.ID),
+							slog.String("model", model),
+							slog.Int64("model_first_chunk_duration_ms", time.Since(modelStarted).Milliseconds()),
+						)
+					}
 					fullAnswer.WriteString(text)
 					chunkChan <- PetChatStreamChunk{Type: "chunk", Text: text}
 				}
+				logger.Info(ctx, "宠物对话模型流生成完成",
+					logger.UserID(userID),
+					slog.String("session_id", session.ID),
+					slog.String("model", model),
+					slog.Int64("model_total_duration_ms", time.Since(modelStarted).Milliseconds()),
+				)
 			}
 		}
 
-		content := sanitizeStatsInsightText(fullAnswer.String())
+		content := sanitizePetChatAnswerText(fullAnswer.String())
 		if streamErr != nil {
 			logger.Warn(ctx, "宠物对话大模型流式生成失败",
 				logger.UserID(userID),
@@ -698,12 +718,12 @@ func (s *StatsService) GeneratePetChatStream(ctx context.Context, userID string,
 			pricing := billing.PriceTokenUsage(billing.PricingInput{Model: s.petChatModel(), Usage: billing.TokenUsage{OutputTokens: estimateChineseTokens(content)}}, s.aiUsagePricingConfig())
 			actualPricing = &pricing
 			creditsCharged = pricing.CreditsCharged
-			creditsInfo, err = s.creditGuard.ValidateUsageCredits(ctx, userID, pricing.CreditsCharged, "小食探对话")
-			if err != nil {
+			creditsInfo, creditErr := s.creditGuard.ValidateUsageCredits(ctx, userID, pricing.CreditsCharged, "小食探对话")
+			if creditErr != nil {
 				logger.Warn(ctx, "宠物对话流式生成后积分校验失败",
 					logger.UserID(userID),
 					slog.String("session_id", session.ID),
-					logger.Err(err),
+					logger.Err(creditErr),
 				)
 				chunkChan <- PetChatStreamChunk{Type: "error", Error: "积分校验失败，请稍后重试"}
 				return
@@ -728,6 +748,13 @@ func (s *StatsService) GeneratePetChatStream(ctx context.Context, userID string,
 		}
 
 		userMessageID, assistantMessageID := s.persistPetChatExchange(ctx, userID, session.ID, estimate.Range, estimate.Question, content, creditsCharged, actualPricing, &estimate.Pricing, billingStatus)
+		logger.Info(ctx, "宠物对话流式生成完成",
+			logger.UserID(userID),
+			slog.String("session_id", session.ID),
+			slog.String("range", estimate.Range),
+			slog.Int("answer_length", len([]rune(content))),
+			slog.Int64("total_duration_ms", time.Since(requestStarted).Milliseconds()),
+		)
 		chunkChan <- PetChatStreamChunk{
 			Type: "done",
 			Meta: &struct {
@@ -1014,7 +1041,7 @@ func (s *StatsService) generatePetChatAnswer(ctx context.Context, comp *statsCom
 	var lastErr error
 	var retryFeedback string
 	for attempt := 0; attempt < statsInsightMaxAttempts; attempt++ {
-		generation, err := s.requestNutritionInsight(ctx, baseURL, apiKey, model, prompt, retryFeedback)
+		generation, err := s.requestNutritionInsight(ctx, baseURL, apiKey, model, prompt, retryFeedback, petChatMaxTokens)
 		if err != nil {
 			lastErr = err
 			break
@@ -1029,7 +1056,7 @@ func (s *StatsService) generatePetChatAnswer(ctx context.Context, comp *statsCom
 			retryFeedback = fmt.Sprintf("上一次输出包含容易让用户感觉被责备的措辞“%s”。请重新生成全文：语气要温和陪伴，不要调侃、挖苦、训话、责备或评价用户本人；用“我们可以”“明天先试试”这类合作式表达。", term)
 			continue
 		}
-		generation.Content = sanitizeStatsInsightText(generation.Content)
+		generation.Content = sanitizePetChatAnswerText(generation.Content)
 		if billing.HasTokenUsage(generation.Usage) {
 			pricing := billing.PriceTokenUsage(billing.PricingInput{Model: model, Usage: generation.Usage}, s.aiUsagePricingConfig())
 			generation.Pricing = &pricing
@@ -1230,7 +1257,7 @@ func (s *StatsService) generateNutritionInsight(ctx context.Context, comp *stats
 	var lastErr error
 	var retryFeedback string
 	for attempt := 0; attempt < statsInsightMaxAttempts; attempt++ {
-		generation, err := s.requestNutritionInsight(ctx, baseURL, apiKey, model, prompt, retryFeedback)
+		generation, err := s.requestNutritionInsight(ctx, baseURL, apiKey, model, prompt, retryFeedback, statsInsightMaxTokens)
 		if err != nil {
 			lastErr = err
 			break
@@ -1257,10 +1284,10 @@ func (s *StatsService) generateNutritionInsight(ctx context.Context, comp *stats
 	return statsInsightGeneration{}, fmt.Errorf("文本模型返回了空响应")
 }
 
-func (s *StatsService) requestNutritionInsight(ctx context.Context, baseURL, apiKey, model, prompt, retryFeedback string) (statsInsightGeneration, error) {
+func (s *StatsService) requestNutritionInsight(ctx context.Context, baseURL, apiKey, model, prompt, retryFeedback string, maxTokens int) (statsInsightGeneration, error) {
 	var lastErr error
 	for attempt := 1; attempt <= statsInsightNetworkMaxAttempts; attempt++ {
-		generation, err := s.requestNutritionInsightOnce(ctx, baseURL, apiKey, model, prompt, retryFeedback)
+		generation, err := s.requestNutritionInsightOnce(ctx, baseURL, apiKey, model, prompt, retryFeedback, maxTokens)
 		if err == nil {
 			return generation, nil
 		}
@@ -1287,7 +1314,7 @@ func (s *StatsService) requestNutritionInsight(ctx context.Context, baseURL, api
 	return statsInsightGeneration{}, lastErr
 }
 
-func (s *StatsService) requestNutritionInsightOnce(ctx context.Context, baseURL, apiKey, model, prompt, retryFeedback string) (statsInsightGeneration, error) {
+func (s *StatsService) requestNutritionInsightOnce(ctx context.Context, baseURL, apiKey, model, prompt, retryFeedback string, maxTokens int) (statsInsightGeneration, error) {
 	messages := []map[string]string{
 		{"role": "user", "content": prompt},
 	}
@@ -1298,7 +1325,7 @@ func (s *StatsService) requestNutritionInsightOnce(ctx context.Context, baseURL,
 		"model":       model,
 		"messages":    messages,
 		"temperature": 0.6,
-		"max_tokens":  statsInsightMaxTokens,
+		"max_tokens":  maxTokens,
 		"stream":      false,
 	}
 	bodyBytes, _ := json.Marshal(body)
@@ -1394,12 +1421,12 @@ func isTransientStatsInsightError(err error) bool {
 	return false
 }
 
-func (s *StatsService) streamNutritionInsight(ctx context.Context, baseURL, apiKey, model, prompt string) (<-chan string, error) {
+func (s *StatsService) streamNutritionInsight(ctx context.Context, baseURL, apiKey, model, prompt string, maxTokens int) (<-chan string, error) {
 	body := map[string]any{
 		"model":       model,
 		"messages":    []map[string]string{{"role": "user", "content": prompt}},
 		"temperature": 0.6,
-		"max_tokens":  statsInsightMaxTokens,
+		"max_tokens":  maxTokens,
 		"stream":      true,
 	}
 	bodyBytes, _ := json.Marshal(body)
@@ -1512,6 +1539,22 @@ func sanitizeStatsInsightText(content string) string {
 	text = regexp.MustCompile("```+").ReplaceAllString(text, "")
 	text = regexp.MustCompile(`\n{3,}`).ReplaceAllString(text, "\n\n")
 	text = filterStatsInsightForbiddenIdentityText(text)
+	return strings.TrimSpace(text)
+}
+
+func sanitizePetChatAnswerText(content string) string {
+	text := sanitizeStatsInsightText(content)
+	if text == "" {
+		return ""
+	}
+	text = regexp.MustCompile(`(?m)^\s{0,3}#{1,6}\s*`).ReplaceAllString(text, "")
+	text = regexp.MustCompile(`(?m)^\s*[-*+]\s+`).ReplaceAllString(text, "• ")
+	text = strings.NewReplacer(
+		"**", "",
+		"*", "",
+		"__", "",
+		"`", "",
+	).Replace(text)
 	return strings.TrimSpace(text)
 }
 
@@ -1842,7 +1885,7 @@ func buildPetChatPrompt(comp *statsComputation, question string, historyMessages
 8. 如果当前追问很短，例如“为什么”“有什么关系”“只看微量元素”，要从最近对话里还原它指代的问题再回答。
 9. 必须说明证据边界：如果没有训练日志、睡眠或体感数据，要明确说“这部分只能推测”；如果有训练日志，也不要编造日志里没有的强度、配速或心率。
 10. 最后给 2-3 个明天能执行的小动作。
-11. 输出 Markdown 正文，不要 JSON，不要代码块，控制在 450-750 字。仅使用标题、短段落、列表和表格；不要使用 *、**、_、__ 作为强调标记，重点直接写在文字里。
+11. 使用适合聊天气泡的纯文本，控制在 250-450 字。用短段落和“一句话判断”“为什么”“明天可以做”这类中文小标题组织；不要 Markdown、JSON、代码块或表格，不要输出 #、*、**、_、反引号等格式符号。
 12. 严禁出现“专业营养师”“注册营养师”“持证营养师”等身份措辞。
 `,
 		question,

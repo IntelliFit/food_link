@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	authmw "food_link/backend/internal/auth"
+	commonerrors "food_link/backend/internal/common/errors"
 	"food_link/backend/internal/common/response"
 	schooldomain "food_link/backend/internal/school/domain"
 	schoolrepo "food_link/backend/internal/school/repo"
@@ -33,23 +34,27 @@ func NewSchoolHandler(db *gorm.DB, storageClient *storage.Client) *SchoolHandler
 }
 
 type CampusDirectoryService interface {
+	GetCampus(ctx context.Context, campusID string) (*schooldomain.SchoolCampus, error)
 	ListCampuses(ctx context.Context, input schoolservice.ListCampusesInput) ([]schooldomain.SchoolCampus, error)
 	ListCanteens(ctx context.Context, input schoolservice.ListCanteensInput) ([]schooldomain.SchoolCanteen, error)
+	ListFloors(ctx context.Context, input schoolservice.ListFloorsInput) ([]schooldomain.CanteenFloor, error)
 	ListWindows(ctx context.Context, input schoolservice.ListWindowsInput) ([]schooldomain.CanteenWindow, error)
 	CreateApplication(ctx context.Context, input schoolservice.CreateCanteenApplicationInput) (*schooldomain.CampusCanteenApplication, error)
 }
 
 type SchoolSearchResponse struct {
-	ID       string `json:"id"`
-	Name     string `json:"name"`
-	Province string `json:"province,omitempty"`
-	City     string `json:"city,omitempty"`
-	LogoURL  string `json:"logo_url,omitempty"`
+	ID           string `json:"id"`
+	Name         string `json:"name"`
+	LocationType string `json:"location_type"`
+	Province     string `json:"province,omitempty"`
+	City         string `json:"city,omitempty"`
+	LogoURL      string `json:"logo_url,omitempty"`
 }
 
 func (h *SchoolHandler) Search(c *gin.Context) {
 	keyword := strings.TrimSpace(c.Query("keyword"))
 	province := strings.TrimSpace(c.Query("province"))
+	locationType := normalizeLocationType(c.DefaultQuery("location_type", "university"))
 	limit := 20
 	if l := c.Query("limit"); l != "" {
 		if parsed, err := strconv.Atoi(l); err == nil && parsed > 0 && parsed <= 100 {
@@ -58,14 +63,15 @@ func (h *SchoolHandler) Search(c *gin.Context) {
 	}
 
 	var rows []struct {
-		ID       string
-		Name     string
-		Province *string
-		City     *string
-		LogoURL  *string
+		ID           string
+		Name         string
+		Province     *string
+		City         *string
+		LogoURL      *string
+		LocationType string
 	}
 
-	q := h.db.Table("schools").Select("id, name, province, city, logo_url").Where("status = ?", "active")
+	q := h.db.Table("schools").Select("id, name, location_type, province, city, logo_url").Where("status = ? AND location_type = ?", "active", locationType)
 	if keyword != "" {
 		q = q.Where("LOWER(name) LIKE LOWER(?)", "%"+keyword+"%")
 	}
@@ -87,11 +93,12 @@ func (h *SchoolHandler) Search(c *gin.Context) {
 			logoURL = ptrString(r.LogoURL)
 		}
 		results = append(results, SchoolSearchResponse{
-			ID:       r.ID,
-			Name:     r.Name,
-			Province: ptrString(r.Province),
-			City:     ptrString(r.City),
-			LogoURL:  logoURL,
+			ID:           r.ID,
+			Name:         r.Name,
+			LocationType: r.LocationType,
+			Province:     ptrString(r.Province),
+			City:         ptrString(r.City),
+			LogoURL:      logoURL,
 		})
 	}
 
@@ -100,12 +107,13 @@ func (h *SchoolHandler) Search(c *gin.Context) {
 
 // Provinces 返回所有有学校的省份列表（去重、排序）
 func (h *SchoolHandler) Provinces(c *gin.Context) {
+	locationType := normalizeLocationType(c.DefaultQuery("location_type", "university"))
 	var rows []struct {
 		Province *string
 	}
 	err := h.db.Table("schools").
 		Select("DISTINCT province").
-		Where("status = ? AND province IS NOT NULL AND province != ?", "active", "").
+		Where("status = ? AND location_type = ? AND province IS NOT NULL AND province != ?", "active", locationType, "").
 		Order("province ASC").
 		Find(&rows).Error
 	if err != nil {
@@ -149,9 +157,19 @@ func (h *SchoolHandler) Canteens(c *gin.Context) {
 }
 
 func (h *SchoolHandler) CampusCanteens(c *gin.Context) {
+	campusID := strings.TrimSpace(c.Param("campus_id"))
+	campus, err := h.directory.GetCampus(c.Request.Context(), campusID)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	if campus == nil || campus.Status != "active" {
+		response.Error(c, &commonerrors.AppError{Code: 10002, Message: "地点分区不存在", HTTPStatus: http.StatusBadRequest})
+		return
+	}
 	rows, err := h.directory.ListCanteens(c.Request.Context(), schoolservice.ListCanteensInput{
-		SchoolID: c.Query("school_id"),
-		CampusID: c.Param("campus_id"),
+		SchoolID: campus.SchoolID,
+		CampusID: campusID,
 		Query:    c.Query("q"),
 		Limit:    intQuery(c, "limit", 100),
 	})
@@ -162,12 +180,31 @@ func (h *SchoolHandler) CampusCanteens(c *gin.Context) {
 	response.Success(c, rows)
 }
 
+func normalizeLocationType(value string) string {
+	switch strings.TrimSpace(value) {
+	case "company", "community":
+		return strings.TrimSpace(value)
+	default:
+		return "university"
+	}
+}
+
 func (h *SchoolHandler) CanteenWindows(c *gin.Context) {
 	rows, err := h.directory.ListWindows(c.Request.Context(), schoolservice.ListWindowsInput{
 		CanteenID: c.Param("canteen_id"),
+		Floor:     c.Query("floor"),
 		Query:     c.Query("q"),
 		Limit:     intQuery(c, "limit", 100),
 	})
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, rows)
+}
+
+func (h *SchoolHandler) CanteenFloors(c *gin.Context) {
+	rows, err := h.directory.ListFloors(c.Request.Context(), schoolservice.ListFloorsInput{CanteenID: c.Param("canteen_id")})
 	if err != nil {
 		response.Error(c, err)
 		return

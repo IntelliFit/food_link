@@ -1,0 +1,382 @@
+{
+  "generated_at": "2026-07-24T17:45:00+08:00",
+  "scope": "用户提供的北京大学、清华大学食堂图片转录；优先级高于本轮自动网页候选；仅供审核，不直接写数据库",
+  "source_policy": "用户明确要求北京大学、清华大学以 F:\\桌面\\食堂 下图片为准，不采用本轮网页搜索结果替代",
+  "schools": [
+    {
+      "official_code": "4111010001",
+      "name": "北京大学",
+      "source_files": [
+        "F:\\桌面\\食堂\\北京大学\\北京大学1.jpg",
+        "F:\\桌面\\食堂\\北京大学\\北京大学2.jpg"
+      ],
+      "review_status": "user_provided_image_transcribed",
+      "canteens": [
+        {
+          "name": "学一食堂",
+          "floors": [],
+          "areas": [],
+          "evidence_file": "F:\\桌面\\食堂\\北京大学\\北京大学1.jpg"
+        },
+        {
+          "name": "家园食堂",
+          "floors": [
+            "一层",
+            "二层",
+            "三层",
+            "四层",
+            "地下一层"
+          ],
+          "areas": [
+            {
+              "name": "小北面包房",
+              "floors": [
+                "三层",
+                "四层"
+              ]
+            },
+            {
+              "name": "愉火锅",
+              "floors": [
+                "四层"
+              ]
+            },
+            {
+              "name": "咖啡厅",
+              "floors": [
+                "地下一层"
+              ]
+            }
+          ],
+          "evidence_file": "F:\\桌面\\食堂\\北京大学\\北京大学1.jpg"
+        },
+        {
+          "name": "学五食堂",
+          "floors": [
+            "二层"
+          ],
+          "areas": [
+            {
+              "name": "二层快餐",
+              "floors": [
+                "二层"
+              ]
+            }
+          ],
+          "evidence_file": "F:\\桌面\\食堂\\北京大学\\北京大学1.jpg",
+          "note": "图片同一行出现“面食、西餐、米粉、二层快餐”，仅保留明确出现的二层关系"
+        },
+        {
+          "name": "燕南美食",
+          "floors": [
+            "一层",
+            "B1"
+          ],
+          "areas": [
+            {
+              "name": "咖啡厅",
+              "floors": []
+            }
+          ],
+          "evidence_file": "F:\\桌面\\食堂\\北京大学\\北京大学1.jpg"
+        },
+        {
+          "name": "艺园食堂",
+          "floors": [
+            "一层",
+            "二层"
+          ],
+          "areas": [],
+          "evidence_file": "F:\\桌面\\食堂\\北京大学\\北京大学1.jpg"
+        },
+        {
+          "name": "勺园食堂",
+          "floors": [
+            "一层",
+            "二层"
+          ],
+          "areas": [
+            {
+              "name": "教师餐厅",
+              "floors": []
+            },
+            {
+              "name": "松林快餐",
+              "floors": []
+            }
+          ],
+          "evidence_file": "F:\\桌面\\食堂\\北京大学\\北京大学1.jpg；F:\\桌面\\食堂\\北京大学\\北京大学2.jpg",
+          "note": "松林快餐位于第二张图片顶部、处于勺园食堂合并单元格延续段，未推断楼层"
+        },
+        {
+          "name": "农园食堂",
+          "floors": [],
+          "areas": [],
+          "evidence_file": "F:\\桌面\\食堂\\北京大学\\北京大学2.jpg",
+          "note": "图片标注整体修缮改造，开餐时间另行通知"
+        },
+        {
+          "name": "佟园食堂",
+          "floors": [],
+          "areas": [],
+          "evidence_file": "F:\\桌面\\食堂\\北京大学\\北京大学2.jpg"
+        },
+        {
+          "name": "中关园食堂",
+          "floors": [],
+          "areas": [],
+          "evidence_file": "F:\\桌面\\食堂\\北京大学\\北京大学2.jpg"
+        },
+        {
+          "name": "畅春园食堂",
+          "floors": [
+            "一层",
+            "三层"
+          ],
+          "areas": [],
+          "evidence_file": "F:\\桌面\\食堂\\北京大学\\北京大学2.jpg"
+        },
+        {
+          "name": "咸府园食堂",
+          "floors": [],
+          "areas": [],
+          "evidence_file": "F:\\桌面\\食堂\\北京大学\\北京大学2.jpg"
+        },
+        {
+          "name": "万柳食堂",
+          "floors": [],
+          "areas": [],
+          "evidence_file": "F:\\桌面\\食堂\\北京大学\\北京大学2.jpg"
+        },
+        {
+          "name": "馨园食堂",
+          "floors": [],
+          "areas": [],
+          "evidence_file": "F:\\桌面\\食堂\\北京大学\\北京大学2.jpg"
+        },
+        {
+          "name": "昌平200号食堂",
+          "floors": [],
+          "areas": [],
+          "evidence_file": "F:\\桌面\\食堂\\北京大学\\北京大学2.jpg"
+        },
+        {
+          "name": "移动餐车",
+          "floors": [],
+          "areas": [],
+          "evidence_file": "F:\\桌面\\食堂\\北京大学\\北京大学2.jpg",
+          "entity_type": "mobile_dining_service"
+        }
+      ]
+    },
+    {
+      "official_code": "4111010003",
+      "name": "清华大学",
+      "source_files": [
+        "F:\\桌面\\食堂\\清华大学\\清华大学1.jpg",
+        "F:\\桌面\\食堂\\清华大学\\清华大学2.jpg"
+      ],
+      "review_status": "user_provided_image_transcribed",
+      "canteens": [
+        {
+          "name": "紫荆园",
+          "floors": [
+            "一层",
+            "二层",
+            "三层",
+            "四层"
+          ],
+          "evidence_file": "F:\\桌面\\食堂\\清华大学\\清华大学2.jpg"
+        },
+        {
+          "name": "桃李园",
+          "floors": [
+            "一层",
+            "二层"
+          ],
+          "evidence_file": "F:\\桌面\\食堂\\清华大学\\清华大学2.jpg"
+        },
+        {
+          "name": "清芬园",
+          "floors": [
+            "一层",
+            "二层"
+          ],
+          "evidence_file": "F:\\桌面\\食堂\\清华大学\\清华大学2.jpg"
+        },
+        {
+          "name": "观畴园",
+          "floors": [
+            "一层",
+            "二层",
+            "三层"
+          ],
+          "areas": [
+            {
+              "name": "观畴园三层餐厅",
+              "floors": [
+                "三层"
+              ]
+            }
+          ],
+          "evidence_file": "F:\\桌面\\食堂\\清华大学\\清华大学2.jpg"
+        },
+        {
+          "name": "闻馨园",
+          "floors": [],
+          "evidence_file": "F:\\桌面\\食堂\\清华大学\\清华大学2.jpg"
+        },
+        {
+          "name": "听涛园",
+          "floors": [
+            "一层"
+          ],
+          "evidence_file": "F:\\桌面\\食堂\\清华大学\\清华大学2.jpg"
+        },
+        {
+          "name": "丁香园",
+          "floors": [],
+          "evidence_file": "F:\\桌面\\食堂\\清华大学\\清华大学2.jpg"
+        },
+        {
+          "name": "芝兰园",
+          "floors": [
+            "二层"
+          ],
+          "evidence_file": "F:\\桌面\\食堂\\清华大学\\清华大学2.jpg"
+        },
+        {
+          "name": "双清园",
+          "floors": [
+            "一层",
+            "二层"
+          ],
+          "evidence_file": "F:\\桌面\\食堂\\清华大学\\清华大学2.jpg"
+        },
+        {
+          "name": "融园",
+          "floors": [
+            "一层"
+          ],
+          "evidence_file": "F:\\桌面\\食堂\\清华大学\\清华大学2.jpg"
+        },
+        {
+          "name": "荷园",
+          "floors": [
+            "一层",
+            "二层"
+          ],
+          "evidence_file": "F:\\桌面\\食堂\\清华大学\\清华大学2.jpg"
+        },
+        {
+          "name": "澜园",
+          "floors": [
+            "二层",
+            "三层"
+          ],
+          "evidence_file": "F:\\桌面\\食堂\\清华大学\\清华大学2.jpg"
+        },
+        {
+          "name": "寓园",
+          "floors": [],
+          "evidence_file": "F:\\桌面\\食堂\\清华大学\\清华大学2.jpg"
+        },
+        {
+          "name": "家园",
+          "floors": [],
+          "evidence_file": "F:\\桌面\\食堂\\清华大学\\清华大学2.jpg"
+        },
+        {
+          "name": "南园",
+          "floors": [],
+          "evidence_file": "F:\\桌面\\食堂\\清华大学\\清华大学2.jpg"
+        },
+        {
+          "name": "北园",
+          "floors": [],
+          "evidence_file": "F:\\桌面\\食堂\\清华大学\\清华大学2.jpg"
+        },
+        {
+          "name": "熙春园",
+          "floors": [],
+          "evidence_file": "F:\\桌面\\食堂\\清华大学\\清华大学2.jpg"
+        },
+        {
+          "name": "桃李园简约餐厅",
+          "floors": [],
+          "evidence_file": "F:\\桌面\\食堂\\清华大学\\清华大学2.jpg"
+        },
+        {
+          "name": "玉树园",
+          "floors": [
+            "一层",
+            "二层"
+          ],
+          "areas": [
+            {
+              "name": "一层餐厅",
+              "floors": [
+                "一层"
+              ]
+            },
+            {
+              "name": "二层餐厅",
+              "floors": [
+                "二层"
+              ]
+            }
+          ],
+          "evidence_file": "F:\\桌面\\食堂\\清华大学\\清华大学2.jpg"
+        },
+        {
+          "name": "水木麦原面包坊",
+          "floors": [],
+          "entity_type": "independent_dining_outlet",
+          "evidence_file": "F:\\桌面\\食堂\\清华大学\\清华大学2.jpg"
+        },
+        {
+          "name": "清青牛拉",
+          "floors": [],
+          "entity_type": "independent_dining_outlet",
+          "evidence_file": "F:\\桌面\\食堂\\清华大学\\清华大学2.jpg"
+        },
+        {
+          "name": "清青永和",
+          "floors": [],
+          "entity_type": "independent_dining_outlet",
+          "evidence_file": "F:\\桌面\\食堂\\清华大学\\清华大学2.jpg"
+        },
+        {
+          "name": "清青快餐",
+          "floors": [],
+          "entity_type": "independent_dining_outlet",
+          "evidence_file": "F:\\桌面\\食堂\\清华大学\\清华大学2.jpg"
+        },
+        {
+          "name": "清青咖啡",
+          "floors": [],
+          "entity_type": "independent_dining_outlet",
+          "evidence_file": "F:\\桌面\\食堂\\清华大学\\清华大学2.jpg"
+        },
+        {
+          "name": "清青休闲",
+          "floors": [],
+          "entity_type": "independent_dining_outlet",
+          "evidence_file": "F:\\桌面\\食堂\\清华大学\\清华大学2.jpg"
+        },
+        {
+          "name": "清青披萨",
+          "floors": [],
+          "entity_type": "independent_dining_outlet",
+          "evidence_file": "F:\\桌面\\食堂\\清华大学\\清华大学2.jpg"
+        },
+        {
+          "name": "双清书咖",
+          "floors": [],
+          "entity_type": "independent_dining_outlet",
+          "evidence_file": "F:\\桌面\\食堂\\清华大学\\清华大学2.jpg"
+        }
+      ]
+    }
+  ]
+}

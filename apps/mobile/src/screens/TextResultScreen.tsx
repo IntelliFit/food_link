@@ -6,11 +6,13 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
   buildSaveFoodRecordRequestFromTask,
   type AnalysisTask,
+  type EatingMood,
   type FoodItem,
   type MealType,
   type Nutrients,
 } from '@food-link/core'
 import { apiClient } from '../api'
+import { EatingMoodPicker } from '../components/EatingMoodPicker'
 import type { RootStackParamList } from '../navigation/types'
 import { useAppDialog } from '../providers/DialogProvider'
 import { colors } from '../theme'
@@ -97,12 +99,14 @@ export function TextResultScreen() {
   const { task, mealType, date } = route.params
   const foodItems = task.result?.items || []
   const [items, setItems] = useState<EditableTextResultItem[]>(() => buildEditableItems(foodItems))
+  const [eatingMood, setEatingMood] = useState<EatingMood | null>(null)
   const [saving, setSaving] = useState(false)
   const [showMealSelector, setShowMealSelector] = useState(false)
   const [selectedMealType, setSelectedMealType] = useState<SelectableMealType>(() => normalizeSelectableMealType(mealType))
 
   useEffect(() => {
     setItems(buildEditableItems(foodItems))
+    setEatingMood(null)
   }, [task.id, foodItems.length])
 
   useEffect(() => {
@@ -166,6 +170,7 @@ export function TextResultScreen() {
       payload.total_carbs = totals.carbs
       payload.total_fat = totals.fat
       payload.total_weight_grams = totals.weight
+      if (eatingMood) payload.eating_mood = eatingMood
       const pfcRatioComment = stringOrUndefined(task.result?.pfc_ratio_comment)
       const absorptionNotes = stringOrUndefined(task.result?.absorption_notes)
       const contextAdvice = stringOrUndefined(task.result?.context_advice)
@@ -353,6 +358,8 @@ export function TextResultScreen() {
             <InsightItem tone="absorption" icon="吸" label="吸收与利用" value={task.result?.absorption_notes} />
             <InsightItem tone="intro" icon="时" label="情境建议" value={task.result?.context_advice} />
           </View>
+
+          <EatingMoodPicker value={eatingMood} onChange={setEatingMood} />
 
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>包含成分</Text>

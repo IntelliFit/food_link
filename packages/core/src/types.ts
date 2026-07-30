@@ -15,6 +15,7 @@ export type CanonicalMealType =
 export type MealType = CanonicalMealType | 'snack'
 export type DietGoal = 'fat_loss' | 'muscle_gain' | 'maintain' | 'none'
 export type ActivityTiming = 'post_workout' | 'daily' | 'before_sleep' | 'none'
+export type EatingMood = 'happy' | 'calm' | 'stressed' | 'tired' | 'bored' | 'treat'
 export type UserGoal = 'muscle_gain' | 'fat_loss' | 'maintain'
 export type ExecutionMode =
   | 'lite'
@@ -152,6 +153,7 @@ export interface SaveFoodRecordRequest {
   total_weight_grams: number
   diet_goal?: DietGoal
   activity_timing?: ActivityTiming
+  eating_mood?: EatingMood
   pfc_ratio_comment?: string
   absorption_notes?: string
   context_advice?: string
@@ -211,6 +213,7 @@ export interface FoodRecord {
   created_at: string
   diet_goal?: string | null
   activity_timing?: string | null
+  eating_mood?: EatingMood | null
   source_task_id?: string | null
 }
 
@@ -465,6 +468,7 @@ export interface UpdateFoodRecordRequest {
   image_paths?: string[]
   diet_goal?: DietGoal
   activity_timing?: ActivityTiming
+  eating_mood?: EatingMood | ''
 }
 
 export interface AnalysisTask {
@@ -497,6 +501,7 @@ export interface AnalysisTask {
   traceId?: string | null
   is_recorded?: boolean
   record_id?: string
+  history_group_key?: string
   created_at: string
   updated_at: string
 }

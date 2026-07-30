@@ -18,6 +18,7 @@ import {
   type FeedbackSource,
   type MembershipStatus,
   type PublicFoodLibraryItem,
+  type CanteenWindowItem,
   type SchoolCampusItem,
   type SchoolCanteenItem,
   type SchoolItem,
@@ -30,10 +31,18 @@ import { FlPageThemeRoot } from "../../../components/FlPageThemeRoot";
 import SchoolPicker from "../../../components/SchoolPicker";
 import CampusPicker from "../../../components/CampusPicker";
 import CanteenPicker from "../../../components/CanteenPicker";
+import FloorPicker from "../../../components/FloorPicker";
+import WindowPicker from "../../../components/WindowPicker";
 import CampusMembershipGate from "../../../components/CampusMembershipGate";
 import { CAFETERIA_HERO_BG_URL } from "../../../utils/static-asset-cdn-url";
 
 type SortBy = "hot" | "high_protein" | "low_calorie" | "value";
+type LocationType = "university" | "company" | "community";
+const LOCATION_TYPE_OPTIONS: Array<{ value: LocationType; label: string }> = [
+  { value: "university", label: "学校" },
+  { value: "company", label: "公司" },
+  { value: "community", label: "社区" },
+];
 
 function normalizeText(value?: string | null): string {
   return String(value || "")
@@ -125,9 +134,14 @@ function CampusCanteenPage() {
     useState<SchoolCanteenItem | null>(null);
   const [floorName, setFloorName] = useState("");
   const [windowName, setWindowName] = useState("");
+  const [selectedWindow, setSelectedWindow] = useState<CanteenWindowItem | null>(null);
+  const [locationType, setLocationType] = useState<LocationType>("university");
+  const [locationTypeChosen, setLocationTypeChosen] = useState(false);
   const [showSchoolPicker, setShowSchoolPicker] = useState(false);
   const [showCampusPicker, setShowCampusPicker] = useState(false);
   const [showCanteenPicker, setShowCanteenPicker] = useState(false);
+  const [showFloorPicker, setShowFloorPicker] = useState(false);
+  const [showWindowPicker, setShowWindowPicker] = useState(false);
   const [membershipStatus, setMembershipStatus] =
     useState<MembershipStatus | null>(null);
   const [membershipLoading, setMembershipLoading] = useState(false);
@@ -320,11 +334,7 @@ function CampusCanteenPage() {
 
   const openCanteenPicker = () => {
     if (!selectedSchool?.id) {
-      Taro.showToast({ title: "请先选择大学", icon: "none" });
-      return;
-    }
-    if (!selectedCampus?.id) {
-      Taro.showToast({ title: "请先选择校区", icon: "none" });
+      Taro.showToast({ title: "请先选择学校、公司或社区", icon: "none" });
       return;
     }
     setShowCanteenPicker(true);
@@ -332,7 +342,7 @@ function CampusCanteenPage() {
 
   const openCampusPicker = () => {
     if (!selectedSchool?.id) {
-      Taro.showToast({ title: "请先选择大学", icon: "none" });
+      Taro.showToast({ title: "请先选择学校、公司或社区", icon: "none" });
       return;
     }
     setShowCampusPicker(true);
@@ -359,7 +369,17 @@ function CampusCanteenPage() {
     });
   };
 
-  const selectedSchoolName = selectedSchool?.name || "选择大学";
+  const locationTypeLabel =
+    LOCATION_TYPE_OPTIONS.find((item) => item.value === locationType)?.label ||
+    "主体类型";
+  const areaLabel =
+    locationType === "company"
+      ? "园区"
+      : locationType === "community"
+        ? "社区区域"
+        : "校区";
+  const selectedSchoolName =
+    selectedSchool?.name || `选择${locationTypeLabel}名称`;
   const visibleList = useMemo(() => {
     const floorKeyword = normalizeText(floorName);
     const windowKeyword = normalizeText(windowName);
@@ -623,7 +643,7 @@ function CampusCanteenPage() {
             <Text className='campus-hero-eyebrow'>食探校园活动</Text>
             <Text className='campus-hero-title'>食探校园食堂计划</Text>
             <Text className='campus-hero-subtitle'>
-              按你所在省份选择大学，一起补全食堂菜品价格、位置和营养信息
+              按你所在省份选择高校，一起补全食堂菜品价格、位置和营养信息
             </Text>
           </View>
           <View className='campus-hero-upload' onClick={goUpload}>
@@ -633,43 +653,37 @@ function CampusCanteenPage() {
 
         {/* 头部筛选区 */}
         <View className='campus-header'>
-          <View className='filter-row'>
+          <View className='filter-row filter-row--equal'>
             <View
-              className='filter-chip'
+              className='filter-chip filter-chip--entity'
               onClick={() => setShowSchoolPicker(true)}
             >
               <Text className='filter-chip-text'>
-                {selectedSchool?.name || "选择大学"}
+                {selectedSchool?.name || "选择学校/公司/社区"}
               </Text>
               <Text className='iconfont icon-xiajiantou filter-chip-arrow' />
             </View>
-            <View className='filter-chip' onClick={openCampusPicker}>
+            <View className='filter-chip filter-chip--area' onClick={openCampusPicker}>
               <Text className='filter-chip-text'>
-                {selectedCampus?.name || "选择校区"}
+                {selectedCampus?.name || "选择校区/园区/社区区域"}
               </Text>
               <Text className='iconfont icon-xiajiantou filter-chip-arrow' />
             </View>
+          </View>
+          <View className='filter-row filter-row--equal'>
             <View className='filter-chip' onClick={openCanteenPicker}>
               <Text className='filter-chip-text'>
                 {selectedCanteen?.name || "选择食堂"}
               </Text>
               <Text className='iconfont icon-xiajiantou filter-chip-arrow' />
             </View>
-            <View className='filter-chip filter-chip-input'>
-              <Input
-                className='filter-chip-input-inner'
-                placeholder='楼层'
-                value={floorName}
-                onInput={(e) => setFloorName(e.detail.value)}
-              />
+            <View className='filter-chip' onClick={() => selectedCanteen?.id ? setShowFloorPicker(true) : Taro.showToast({ title: '请先选择食堂', icon: 'none' })}>
+              <Text className='filter-chip-text'>{floorName || '选择楼层'}</Text>
+              <Text className='iconfont icon-xiajiantou filter-chip-arrow' />
             </View>
-            <View className='filter-chip filter-chip-input'>
-              <Input
-                className='filter-chip-input-inner'
-                placeholder='窗口'
-                value={windowName}
-                onInput={(e) => setWindowName(e.detail.value)}
-              />
+            <View className='filter-chip' onClick={() => !selectedCanteen?.id ? Taro.showToast({ title: '请先选择食堂', icon: 'none' }) : !floorName ? Taro.showToast({ title: '请先选择楼层', icon: 'none' }) : setShowWindowPicker(true)}>
+              <Text className='filter-chip-text'>{windowName || '选择窗口'}</Text>
+              <Text className='iconfont icon-xiajiantou filter-chip-arrow' />
             </View>
           </View>
           <View className='search-row'>
@@ -689,7 +703,7 @@ function CampusCanteenPage() {
           </View>
           <View className='campus-feedback-row' onClick={() => void handleLocationFeedback()}>
             <Text className='iconfont icon-edit campus-feedback-icon' />
-            <Text className='campus-feedback-text'>学校、校区或食堂信息有误？点击反馈</Text>
+            <Text className='campus-feedback-text'>主体、分区或食堂信息有误？点击反馈</Text>
           </View>
         </View>
 
@@ -806,7 +820,7 @@ function CampusCanteenPage() {
               <Text className='section-title'>全部校园菜品</Text>
               <Text className='section-subtitle'>
                 {[
-                  selectedSchool?.name || "全部大学",
+                  selectedSchool?.name || "全部高校",
                   selectedCampus?.name,
                   selectedCanteen?.name,
                 ]
@@ -840,10 +854,14 @@ function CampusCanteenPage() {
 
         <SchoolPicker
           visible={showSchoolPicker}
+          locationType={locationTypeChosen ? locationType : undefined}
           onSelect={(school) => {
+            setLocationType(school.location_type || locationType);
+            setLocationTypeChosen(true);
             setSelectedSchool(school);
             setSelectedCampus(null);
             setSelectedCanteen(null);
+            setSelectedWindow(null);
             setShowSchoolPicker(false);
             setFloorName("");
             setWindowName("");
@@ -857,6 +875,7 @@ function CampusCanteenPage() {
           onSelect={(campus) => {
             setSelectedCampus(campus);
             setSelectedCanteen(null);
+            setSelectedWindow(null);
             setFloorName("");
             setWindowName("");
             setShowCampusPicker(false);
@@ -871,12 +890,15 @@ function CampusCanteenPage() {
           onSelect={({ campus, canteen }) => {
             setSelectedCampus(campus);
             setSelectedCanteen(canteen);
+            setSelectedWindow(null);
             setFloorName("");
             setWindowName("");
             setShowCanteenPicker(false);
           }}
           onCancel={() => setShowCanteenPicker(false)}
         />
+        <FloorPicker visible={showFloorPicker} canteen={selectedCanteen} value={floorName} onSelect={(floor) => { setFloorName(floor); setWindowName(''); setSelectedWindow(null); setShowFloorPicker(false); }} onCancel={() => setShowFloorPicker(false)} />
+        <WindowPicker visible={showWindowPicker} canteen={selectedCanteen} floor={floorName} value={selectedWindow?.id} onSelect={(window) => { setSelectedWindow(window); setWindowName(window.name); setFloorName(window.floor || floorName); setShowWindowPicker(false); }} onCancel={() => setShowWindowPicker(false)} />
       </View>
     </FlPageThemeRoot>
   );

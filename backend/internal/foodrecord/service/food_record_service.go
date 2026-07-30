@@ -94,6 +94,7 @@ type SaveFoodRecordInput struct {
 	TotalWeightGrams int
 	DietGoal         *string
 	ActivityTiming   *string
+	EatingMood       *string
 	PFCRatioComment  *string
 	AbsorptionNotes  *string
 	ContextAdvice    *string
@@ -114,6 +115,7 @@ type UpdateFoodRecordInput struct {
 	Description      *string
 	ImagePath        *string
 	ImagePaths       []string
+	EatingMood       *string
 }
 
 func (s *FoodRecordService) Save(ctx context.Context, userID string, input SaveFoodRecordInput) (*domain.FoodRecord, error) {
@@ -121,6 +123,11 @@ func (s *FoodRecordService) Save(ctx context.Context, userID string, input SaveF
 		return nil, &commonerrors.AppError{Code: 10002, Message: "meal_type 不合法", HTTPStatus: 400}
 	}
 	normalizedInputMealType := strings.ToLower(strings.TrimSpace(input.MealType))
+	var err error
+	input.EatingMood, err = normalizeEatingMood(input.EatingMood)
+	if err != nil {
+		return nil, err
+	}
 	if input.SourceTaskID != nil {
 		trimmed := strings.TrimSpace(*input.SourceTaskID)
 		if trimmed == "" {
@@ -211,6 +218,7 @@ func (s *FoodRecordService) Save(ctx context.Context, userID string, input SaveF
 		TotalWeightGrams: input.TotalWeightGrams,
 		DietGoal:         input.DietGoal,
 		ActivityTiming:   input.ActivityTiming,
+		EatingMood:       input.EatingMood,
 		PFCRatioComment:  input.PFCRatioComment,
 		AbsorptionNotes:  input.AbsorptionNotes,
 		ContextAdvice:    input.ContextAdvice,
@@ -745,6 +753,17 @@ func (s *FoodRecordService) Update(ctx context.Context, userID, recordID string,
 	}
 	if input.ImagePaths != nil {
 		updates["image_paths"] = input.ImagePaths
+	}
+	if input.EatingMood != nil {
+		mood, err := normalizeEatingMood(input.EatingMood)
+		if err != nil {
+			return nil, err
+		}
+		if mood == nil {
+			updates["eating_mood"] = nil
+		} else {
+			updates["eating_mood"] = *mood
+		}
 	}
 	if len(updates) == 0 {
 		return nil, &commonerrors.AppError{Code: 10002, Message: "没有需要更新的字段", HTTPStatus: 400}
@@ -1358,6 +1377,29 @@ func validMealType(mealType string) bool {
 		}
 	}
 	return false
+}
+
+func validEatingMood(mood string) bool {
+	switch strings.TrimSpace(mood) {
+	case "happy", "calm", "stressed", "tired", "bored", "treat":
+		return true
+	default:
+		return false
+	}
+}
+
+func normalizeEatingMood(mood *string) (*string, error) {
+	if mood == nil {
+		return nil, nil
+	}
+	normalized := strings.TrimSpace(*mood)
+	if normalized == "" {
+		return nil, nil
+	}
+	if !validEatingMood(normalized) {
+		return nil, &commonerrors.AppError{Code: 10002, Message: "eating_mood 不合法", HTTPStatus: 400}
+	}
+	return &normalized, nil
 }
 
 func normalizeMealType(mealType string, recordTime *time.Time) string {

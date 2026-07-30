@@ -197,6 +197,23 @@ func TestSaveFoodRecordRoundsFloatTotalWeight(t *testing.T) {
 	assert.Equal(t, 126, mockSvc.saveInput.TotalWeightGrams)
 }
 
+func TestSaveFoodRecordPassesEatingMood(t *testing.T) {
+	mockSvc := &mockFoodRecordService{saveRecord: &domain.FoodRecord{ID: "r1"}}
+	h := NewFoodRecordHandler(mockSvc, nil, nil)
+	r := setupRouter(h)
+
+	body, _ := json.Marshal(map[string]string{"meal_type": "lunch", "eating_mood": "calm"})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/food-record/save", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	require.NotNil(t, mockSvc.saveInput)
+	require.NotNil(t, mockSvc.saveInput.EatingMood)
+	assert.Equal(t, "calm", *mockSvc.saveInput.EatingMood)
+}
+
 func TestUpdateFoodRecordRoundsFloatTotalWeight(t *testing.T) {
 	mockSvc := &mockFoodRecordService{updateRecord: &domain.FoodRecord{ID: "r1"}}
 	h := NewFoodRecordHandler(mockSvc, nil, nil)
@@ -320,6 +337,23 @@ func TestUpdateFoodRecord(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+func TestUpdateFoodRecordPassesEatingMood(t *testing.T) {
+	mockSvc := &mockFoodRecordService{updateRecord: &domain.FoodRecord{ID: "r1", MealType: "dinner"}}
+	h := NewFoodRecordHandler(mockSvc, nil, nil)
+	r := setupRouter(h)
+
+	body, _ := json.Marshal(map[string]any{"eating_mood": "treat"})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPut, "/api/food-record/r1", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	require.NotNil(t, mockSvc.updateInput)
+	require.NotNil(t, mockSvc.updateInput.EatingMood)
+	assert.Equal(t, "treat", *mockSvc.updateInput.EatingMood)
 }
 
 func TestUpdateFoodRecordPreservesPackagedAnalysisMetadata(t *testing.T) {

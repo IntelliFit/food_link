@@ -3,7 +3,7 @@ import { View, Text, Input, ScrollView, Textarea } from "@tarojs/components";
 import Taro from "@tarojs/taro";
 import {
   createSchoolCanteenApplication,
-  getCampusCanteens,
+  getSchoolCanteens,
   showUnifiedApiError,
   type SchoolCampusItem,
   type SchoolCanteenItem,
@@ -53,12 +53,11 @@ export default function CanteenPicker({
 
   useEffect(() => {
     if (!visible || !school?.id) return;
-    if (!campus?.id) {
-      setCanteens([]);
-      return;
-    }
     setLoading(true);
-    getCampusCanteens(campus.id)
+    getSchoolCanteens(
+      school.id,
+      campus?.id ? { campus_id: campus.id } : undefined,
+    )
       .then((list) => setCanteens(list))
       .catch(async (e) => {
         setCanteens([]);
@@ -122,7 +121,7 @@ export default function CanteenPicker({
   };
 
   const isDark = scheme === "dark";
-  const disabled = !school?.id || !campus?.id;
+  const disabled = !school?.id;
 
   return (
     <View
@@ -139,7 +138,9 @@ export default function CanteenPicker({
             <Text className='canteen-picker-subtitle'>
               {school?.name && campus?.name
                 ? `${school.name} · ${campus.name}`
-                : "请先选择大学和校区"}
+                : school?.name
+                  ? `${school.name} · 全部校区`
+                  : "请先选择高校"}
             </Text>
           </View>
           <Text className='canteen-picker-close' onClick={onCancel}>
@@ -150,7 +151,7 @@ export default function CanteenPicker({
         {disabled ? (
           <View className='canteen-picker-empty'>
             <Text className='canteen-picker-empty-text'>
-              {school?.id ? "请先选择校区" : "请先选择学校"}
+              请先选择学校
             </Text>
           </View>
         ) : (
@@ -186,7 +187,20 @@ export default function CanteenPicker({
                   <View
                     key={item.id}
                     className={`canteen-picker-item ${value === item.id ? "selected" : ""}`}
-                    onClick={() => onSelect({ campus, canteen: item })}
+                    onClick={() =>
+                      onSelect({
+                        campus:
+                          campus ||
+                          (item.campus_id && item.campus_name
+                            ? {
+                                id: item.campus_id,
+                                school_id: item.school_id,
+                                name: item.campus_name,
+                              }
+                            : null),
+                        canteen: item,
+                      })
+                    }
                   >
                     <Text className='canteen-picker-item-name'>
                       {item.name}

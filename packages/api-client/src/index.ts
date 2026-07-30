@@ -430,9 +430,20 @@ export interface PublicFoodListParams {
   isCampusHighlight?: boolean
   schoolName?: string
   canteenName?: string
+  schoolId?: string
+  campusId?: string
+  canteenId?: string
+  windowId?: string
   minCalories?: number
   maxCalories?: number
 }
+
+export type DiningLocationType = 'university' | 'company' | 'community'
+export interface DiningLocationItem { id: string; name: string; location_type: DiningLocationType; province?: string; city?: string }
+export interface DiningLocationSiteItem { id: string; school_id: string; name: string; address?: string; campus_type?: string }
+export interface DiningCanteenItem { id: string; school_id: string; campus_id?: string | null; campus_name?: string; name: string; building_or_floor?: string }
+export interface DiningFloorItem { name: string; sort_order: number }
+export interface DiningWindowItem { id: string; canteen_id: string; name: string; floor?: string }
 
 export interface CommunityNotificationListParams {
   limit?: number
@@ -951,7 +962,7 @@ export class FoodLinkApiClient {
     })
   }
 
-  async listAnalyzeTasks(params?: { task_type?: string; status?: string; search?: string; limit?: number }): Promise<{ tasks: AnalysisTask[] }> {
+  async listAnalyzeTasks(params?: { task_type?: string; status?: string; search?: string; limit?: number; offset?: number }): Promise<{ tasks: AnalysisTask[]; has_more?: boolean; next_offset?: number }> {
     const q = new URLSearchParams()
     if (params?.task_type) q.set('task_type', params.task_type)
     if (params?.status) q.set('status', params.status)
@@ -959,8 +970,11 @@ export class FoodLinkApiClient {
     if (params?.limit != null && Number.isFinite(params.limit)) {
       q.set('limit', String(Math.min(200, Math.max(1, Math.floor(params.limit)))))
     }
+    if (params?.offset != null && Number.isFinite(params.offset)) {
+      q.set('offset', String(Math.max(0, Math.floor(params.offset))))
+    }
     const query = q.toString()
-    return this.authenticatedRequest<{ tasks: AnalysisTask[] }>(`/api/analyze/tasks${query ? `?${query}` : ''}`, {
+    return this.authenticatedRequest<{ tasks: AnalysisTask[]; has_more?: boolean; next_offset?: number }>(`/api/analyze/tasks${query ? `?${query}` : ''}`, {
       method: 'GET',
       timeoutMs: 20000,
     })
@@ -1693,6 +1707,32 @@ export class FoodLinkApiClient {
       method: 'GET',
       timeoutMs: 10000,
     })
+  }
+
+  async searchDiningLocations(params?: { keyword?: string; province?: string; type?: DiningLocationType; limit?: number }): Promise<DiningLocationItem[]> {
+    const q = new URLSearchParams()
+    if (params?.keyword?.trim()) q.set('keyword', params.keyword.trim())
+    if (params?.province?.trim()) q.set('province', params.province.trim())
+    q.set('location_type', params?.type || 'university')
+    q.set('limit', String(safeLimit(params?.limit || 50)))
+    return this.authenticatedRequest<DiningLocationItem[]>(`/api/schools?${q.toString()}`, { method: 'GET', timeoutMs: 10000 })
+  }
+
+  async getDiningLocationSites(locationId: string): Promise<DiningLocationSiteItem[]> {
+    return this.authenticatedRequest<DiningLocationSiteItem[]>(`/api/schools/${encodeURIComponent(locationId)}/campuses`, { method: 'GET', timeoutMs: 10000 })
+  }
+
+  async getDiningLocationCanteens(siteId: string): Promise<DiningCanteenItem[]> {
+    return this.authenticatedRequest<DiningCanteenItem[]>(`/api/school-campuses/${encodeURIComponent(siteId)}/canteens`, { method: 'GET', timeoutMs: 10000 })
+  }
+
+  async getDiningCanteenFloors(canteenId: string): Promise<DiningFloorItem[]> {
+    return this.authenticatedRequest<DiningFloorItem[]>(`/api/school-canteens/${encodeURIComponent(canteenId)}/floors`, { method: 'GET', timeoutMs: 10000 })
+  }
+
+  async getDiningCanteenWindows(canteenId: string, floor?: string): Promise<DiningWindowItem[]> {
+    const query = floor?.trim() ? `?floor=${encodeURIComponent(floor.trim())}` : ''
+    return this.authenticatedRequest<DiningWindowItem[]>(`/api/school-canteens/${encodeURIComponent(canteenId)}/windows${query}`, { method: 'GET', timeoutMs: 10000 })
   }
 
   async listMyPublicFoods(): Promise<{ list: PublicFoodItem[] }> {
@@ -2553,6 +2593,10 @@ function buildPublicFoodQuery(params?: PublicFoodListParams): string {
   if (params.isCampusHighlight != null) q.set('is_campus_highlight', String(params.isCampusHighlight))
   if (params.schoolName?.trim()) q.set('school_name', params.schoolName.trim())
   if (params.canteenName?.trim()) q.set('canteen_name', params.canteenName.trim())
+  if (params.schoolId?.trim()) q.set('school_id', params.schoolId.trim())
+  if (params.campusId?.trim()) q.set('campus_id', params.campusId.trim())
+  if (params.canteenId?.trim()) q.set('canteen_id', params.canteenId.trim())
+  if (params.windowId?.trim()) q.set('window_id', params.windowId.trim())
   if (params.minCalories != null) q.set('min_calories', String(normalizeNumber(params.minCalories)))
   if (params.maxCalories != null) q.set('max_calories', String(normalizeNumber(params.maxCalories)))
   return q.toString()
