@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -23,6 +24,7 @@ type PetService interface {
 	ClaimEvent(ctx context.Context, userID, eventID string) (*service.ClaimResult, error)
 	RerollAppearance(ctx context.Context, userID string) (*service.AppearanceRerollResult, error)
 	SelectAppearance(ctx context.Context, userID, candidateID string) (*service.AppearanceSelectResult, error)
+	CustomizePixelAvatar(ctx context.Context, userID string, source []byte) (*service.PixelAvatarResult, error)
 }
 
 type PetChatService interface {
@@ -64,6 +66,75 @@ func (h *PetHandler) Summary(c *gin.Context) {
 		response.Error(c, &commonerrors.AppError{Code: 10000, Message: "获取宠物状态失败", HTTPStatus: 500})
 		return
 	}
+	response.Success(c, data)
+}
+
+const maxPixelAvatarUploadBytes = 10 << 20
+
+func (h *PetHandler) CustomizePixelAvatar(c *gin.Context) {
+	userID := c.GetString(authmw.ContextUserIDKey)
+	if userID == "" {
+		response.Error(c, commonerrors.ErrUnauthorized)
+		return
+	}
+
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxPixelAvatarUploadBytes+1024)
+	header, err := c.FormFile("file")
+	if err != nil {
+		response.Error(c, &commonerrors.AppError{Code: 10002, Message: "请选择一张清晰的单人人像照片", HTTPStatus: http.StatusBadRequest})
+		return
+	}
+	if header.Size <= 0 || header.Size > maxPixelAvatarUploadBytes {
+		response.Error(c, &commonerrors.AppError{Code: 10002, Message: "照片大小不能超过 10MB", HTTPStatus: http.StatusBadRequest})
+		return
+	}
+
+	file, err := header.Open()
+	if err != nil {
+		response.Error(c, &commonerrors.AppError{Code: 10000, Message: "读取照片失败", HTTPStatus: http.StatusInternalServerError})
+		return
+	}
+	defer file.Close()
+
+	source, err := io.ReadAll(io.LimitReader(file, maxPixelAvatarUploadBytes+1))
+	if err != nil || len(source) == 0 || len(source) > maxPixelAvatarUploadBytes {
+		response.Error(c, &commonerrors.AppError{Code: 10002, Message: "照片无效或超过 10MB", HTTPStatus: http.StatusBadRequest})
+		return
+	}
+	contentType := http.DetectContentType(source)
+	if !strings.HasPrefix(contentType, "image/") {
+		response.Error(c, &commonerrors.AppError{Code: 10002, Message: "仅支持常见图片格式", HTTPStatus: http.StatusBadRequest})
+		return
+	}
+
+	logger.Info(c.Request.Context(), "开始生成用户像素分身",
+		slog.String("user_id", userID),
+		slog.Int("source_bytes", len(source)),
+		slog.String("content_type", contentType),
+	)
+	data, err := h.svc.CustomizePixelAvatar(c.Request.Context(), userID, source)
+	if err != nil {
+		if errors.Is(err, service.ErrPixelAvatarGenerationUnavailable) {
+			logger.Warn(c.Request.Context(), "像素分身生成服务未配置",
+				slog.String("user_id", userID),
+			)
+			response.Error(c, &commonerrors.AppError{Code: 10000, Message: "像素分身生成服务暂不可用", HTTPStatus: http.StatusServiceUnavailable})
+			return
+		}
+		if errors.Is(err, service.ErrInvalidPixelAvatarImage) {
+			response.Error(c, &commonerrors.AppError{Code: 10002, Message: "无法识别这张照片，请换一张重试", HTTPStatus: http.StatusBadRequest})
+			return
+		}
+		logger.Error(c.Request.Context(), "生成用户像素分身失败", err,
+			slog.String("user_id", userID),
+			slog.Int("source_bytes", len(source)),
+		)
+		response.Error(c, &commonerrors.AppError{Code: 10000, Message: "生成像素分身失败，请稍后重试", HTTPStatus: http.StatusInternalServerError})
+		return
+	}
+	logger.Info(c.Request.Context(), "用户像素分身生成完成",
+		slog.String("user_id", userID),
+	)
 	response.Success(c, data)
 }
 

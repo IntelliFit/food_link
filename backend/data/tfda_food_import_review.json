@@ -1,0 +1,77 @@
+{
+  "version": "2026-08-01-p0-v1",
+  "entries": {
+    "H1105101": {
+      "canonical_name": "黄豆（干货，生重）",
+      "approved_aliases": ["干黄豆", "生黄豆", "黄豆（干货）", "大豆（干货）"],
+      "candidate_aliases": ["黄豆", "大豆", "菽"],
+      "replace_aliases": ["生黄豆"]
+    },
+    "H0605101": {
+      "canonical_name": "黑豆（黑大豆，干货，生重）",
+      "approved_aliases": ["青仁黑豆", "生黑大豆", "干黑大豆", "黑大豆（干货）"],
+      "candidate_aliases": ["黑豆", "黑大豆", "乌豆", "枝仔豆"],
+      "replace_aliases": []
+    },
+    "H1150201": {
+      "canonical_name": "豆浆（无糖）",
+      "adopt_existing": true,
+      "expected_existing_canonical": "豆浆(无糖)",
+      "expected_existing_source": "项目内置初始营养数据",
+      "approved_aliases": ["无糖豆浆", "原味无糖豆浆"],
+      "candidate_aliases": ["豆浆"],
+      "replace_aliases": []
+    },
+    "R5000101": {
+      "canonical_name": "豆浆（含糖，包装）",
+      "approved_aliases": ["含糖豆浆", "包装含糖豆浆"],
+      "candidate_aliases": ["甜豆浆", "豆浆"],
+      "replace_aliases": []
+    },
+    "R5000401": {
+      "canonical_name": "黑豆浆（含糖，包装）",
+      "approved_aliases": ["含糖黑豆浆", "包装黑豆浆"],
+      "candidate_aliases": ["黑豆浆"],
+      "replace_aliases": []
+    },
+    "R5010101": {
+      "canonical_name": "豆浆粉（干粉）",
+      "approved_aliases": ["豆浆粉", "黄豆浆粉"],
+      "candidate_aliases": ["豆奶粉"],
+      "replace_aliases": []
+    },
+    "H0610201": {
+      "canonical_name": "黑豆（黑大豆，烘烤）",
+      "approved_aliases": ["烘烤黑大豆", "烤黑豆"],
+      "candidate_aliases": ["烘烤黑豆", "炒黑豆"],
+      "replace_aliases": []
+    },
+    "H0620101": {
+      "canonical_name": "黑豆粉（黑大豆粉）",
+      "approved_aliases": ["黑大豆粉"],
+      "candidate_aliases": ["黑豆粉"],
+      "replace_aliases": []
+    },
+    "H1120101": {
+      "canonical_name": "黄豆粉（干粉）",
+      "approved_aliases": ["黄豆粉", "大豆粉"],
+      "candidate_aliases": [],
+      "replace_aliases": []
+    }
+  },
+  "unsafe_aliases": [
+    {"alias":"生黄豆","wrong_target_prefix":"Beans, yellow","reason":"USDA yellow beans 不是 Glycine max 黄豆"},
+    {"alias":"黄豆干","wrong_target_prefix":"Beans, yellow","reason":"USDA yellow beans 不是 Glycine max 黄豆"},
+    {"alias":"生黄大豆","wrong_target_prefix":"Beans, yellow","reason":"USDA yellow beans 不是 Glycine max 黄豆"},
+    {"alias":"无盐煮黄豆","wrong_target_prefix":"Beans, yellow","reason":"USDA yellow beans 不是 Glycine max 黄豆"},
+    {"alias":"无盐黄豆（煮）","wrong_target_prefix":"Beans, yellow","reason":"USDA yellow beans 不是 Glycine max 黄豆"},
+    {"alias":"生黑豆","wrong_target_prefix":"Beans, black","reason":"USDA black/turtle bean 不是中文黑大豆"},
+    {"alias":"熟黑豆","wrong_target_prefix":"Beans, black","reason":"USDA black/turtle bean 不是中文黑大豆"},
+    {"alias":"黑豆（生）","wrong_target_prefix":"Beans, black","reason":"USDA black/turtle bean 不是中文黑大豆"},
+    {"alias":"黑豆（熟，无盐）","wrong_target_prefix":"Beans, black","reason":"USDA black/turtle bean 不是中文黑大豆"},
+    {"alias":"黑豆干","wrong_target_prefix":"Beans, black","reason":"USDA black/turtle bean 不是中文黑大豆"},
+    {"alias":"黑豆仁","wrong_target_prefix":"Beans, black","reason":"USDA black/turtle bean 不是中文黑大豆"},
+    {"alias":"黑豆种子","wrong_target_prefix":"Beans, black","reason":"USDA black/turtle bean 不是中文黑大豆"},
+    {"alias":"无盐黑豆","wrong_target_prefix":"Beans, black","reason":"USDA black/turtle bean 不是中文黑大豆"}
+  ]
+}

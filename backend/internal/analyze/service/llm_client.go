@@ -185,6 +185,22 @@ func (c *OfoxAIClient) AnalyzeWithImagesAndTemperatureMeta(ctx context.Context, 
 	return parsed, meta, nil
 }
 
+// AnalyzeWithImagesWithoutThinkingMeta runs a low-cost multimodal JSON call and
+// returns token usage metadata. Offline catalogue jobs use it for auditable
+// sampling and translation; disabling thinking prevents a large batch from
+// spending tokens on hidden reasoning that is not part of the review evidence.
+func (c *OfoxAIClient) AnalyzeWithImagesWithoutThinkingMeta(ctx context.Context, prompt string, imageURLs []string) (map[string]any, map[string]any, error) {
+	parsed, raw, err := c.analyzeWithImagesAndTemperatureMeta(ctx, prompt, imageURLs, 0, "", map[string]any{"enable_thinking": false})
+	if err != nil {
+		return nil, nil, err
+	}
+	meta := extractChatCompletionUsageMeta(raw)
+	if strings.TrimSpace(stringFromAny(meta["model"])) == "" {
+		meta["model"] = c.Model
+	}
+	return parsed, meta, nil
+}
+
 func (c *OfoxAIClient) AnalyzeWithImagesDashScopeWebSearch(ctx context.Context, prompt string, imageURLs []string, options DashScopeWebSearchOptions) (map[string]any, map[string]any, error) {
 	searchStrategy := strings.TrimSpace(options.SearchStrategy)
 	if searchStrategy == "" {
@@ -514,6 +530,13 @@ func (c *DoubaoClient) AnalyzeWithImagesAndTemperatureModel(ctx context.Context,
 
 func (c *DoubaoClient) AnalyzeWithImagesAndTemperatureMeta(ctx context.Context, prompt string, imageURLs []string, temperature float64) (map[string]any, map[string]any, error) {
 	return c.analyzeWithImagesAndTemperatureModelMeta(ctx, prompt, imageURLs, temperature, "")
+}
+
+// AnalyzeWithImagesWithoutThinkingMeta provides the same low-reasoning,
+// usage-aware contract used by offline catalogue audit jobs. Doubao requests
+// already set reasoning_effort=low in the shared request builder.
+func (c *DoubaoClient) AnalyzeWithImagesWithoutThinkingMeta(ctx context.Context, prompt string, imageURLs []string) (map[string]any, map[string]any, error) {
+	return c.analyzeWithImagesAndTemperatureModelMeta(ctx, prompt, imageURLs, 0, "")
 }
 
 func (c *DoubaoClient) analyzeWithImagesAndTemperatureModelMeta(ctx context.Context, prompt string, imageURLs []string, temperature float64, modelName string) (map[string]any, map[string]any, error) {

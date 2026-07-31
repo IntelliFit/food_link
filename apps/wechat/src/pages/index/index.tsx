@@ -110,8 +110,8 @@ import { HOME_RECORD_ONBOARDING_STEPS } from './home-onboarding-steps'
 
 const BACKFILL_HINT_DISMISSED_DATES_KEY = 'home_backfill_hint_dismissed_dates_v1'
 const HOME_SELECTED_DATE_KEY = 'home_selected_date_v1'
-const HOME_PET_COLLAPSED_KEY = 'home_pet_companion_collapsed_v1'
-const HOME_PET_FLOAT_POSITION_KEY = 'home_pet_companion_float_position_v1'
+const HOME_PET_COLLAPSED_KEY = 'home_pet_companion_collapsed_v4'
+const HOME_PET_FLOAT_POSITION_KEY = 'home_pet_companion_float_position_v4'
 const HOME_PET_HIDDEN_KEY = 'home_pet_companion_hidden_v1'
 const HOME_PET_HIDDEN_CHANGED_EVENT = 'home_pet_companion_hidden_changed'
 const CANVAS_ICON_FONT_SOURCE = __ICON_CDN_BASE_URL__
@@ -338,8 +338,13 @@ function getStoredPetHidden(): boolean {
 function getPetFloatMetrics(collapsed: boolean) {
   const info = Taro.getSystemInfoSync()
   const rpx = info.windowWidth / 750
-  const width = (collapsed ? 116 : 520) * rpx
-  const height = (collapsed ? 116 : 124) * rpx
+  let menuBottom = 0
+  try {
+    const menuRect = (Taro as any).getMenuButtonBoundingClientRect?.()
+    menuBottom = Number(menuRect?.bottom || 0)
+  } catch (_) {}
+  const width = (collapsed ? 160 : 360) * rpx
+  const height = (collapsed ? 160 : 190) * rpx
   const margin = 24 * rpx
   return {
     windowWidth: info.windowWidth,
@@ -347,15 +352,20 @@ function getPetFloatMetrics(collapsed: boolean) {
     width,
     height,
     margin,
-    defaultTop: 214 * rpx,
-    defaultLeft: Math.max(margin, info.windowWidth - width - 28 * rpx)
+    defaultTop: Math.max(104 * rpx, menuBottom + 10 * rpx),
+    defaultLeft: collapsed
+      ? info.windowWidth - width / 2
+      : Math.max(margin, info.windowWidth - width - 20 * rpx)
   }
 }
 
 function clampPetFloatPosition(left: number, top: number, collapsed: boolean) {
   const metrics = getPetFloatMetrics(collapsed)
+  const clampedLeft = collapsed
+    ? metrics.windowWidth - metrics.width / 2
+    : Math.max(metrics.margin, Math.min(left, metrics.windowWidth - metrics.width - metrics.margin))
   return {
-    left: Math.max(metrics.margin, Math.min(left, metrics.windowWidth - metrics.width - metrics.margin)),
+    left: clampedLeft,
     top: Math.max(metrics.margin, Math.min(top, metrics.windowHeight - metrics.height - metrics.margin))
   }
 }
@@ -791,10 +801,12 @@ function IndexPage() {
   const [petDragging, setPetDragging] = React.useState(false)
   const [petSummary, setPetSummary] = React.useState<PetSummary | null>(null)
   const [petClaiming, setPetClaiming] = React.useState(false)
+  const [petCelebrating, setPetCelebrating] = React.useState(false)
   const [membershipStatus, setMembershipStatus] = React.useState<MembershipStatus | null>(null)
   const [rewardCenter, setRewardCenter] = React.useState<RewardCenterResponse | null>(null)
   const [rewardHintIndex, setRewardHintIndex] = React.useState(0)
   const petSummarySeqRef = React.useRef(0)
+  const petCelebrationTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
   const petDragRef = React.useRef<{
     pointerId: number
     startClientX: number
@@ -2513,7 +2525,6 @@ function IndexPage() {
     void loadPetSummary(selectedDate)
   }, [loadPetSummary, selectedDate])
 
-  const petName = petSummary?.pet?.name || '成长伙伴'
   const healthyHabitScore = React.useMemo(() => {
     if (dashboardBusy || isGuest) return 0
     let score = 0
@@ -2542,34 +2553,43 @@ function IndexPage() {
         ? 'calm'
         : 'sleepy')
   const petState = petSummary?.status?.state || petMood
-  const petLevelProgress = petSummary?.pet?.level_progress ?? Math.min(100, healthyHabitScore * 25)
-  const petLevelText = petSummary?.pet?.level ? `Lv.${petSummary.pet.level} · 成长 ${petLevelProgress}%` : `成长 ${petLevelProgress}%`
-  const petMessage = petEvent?.message || petSummary?.status?.message || (dashboardBusy
-    ? '我正在看你今天的状态'
+  const petMealState = petSummary?.status?.meal_state || (totalCurrent > 0 ? 'fed' : 'hungry')
+  const petDialogText = petEvent?.message || (dashboardBusy
+    ? '我看看今天的状态。'
     : isGuest
-      ? '登录后我会记住你的成长'
-      : healthyHabitScore >= 3
-        ? '今天习惯很稳，我长大了一点'
-        : healthyHabitScore >= 1
-          ? '再完成一个小习惯，我会更有精神'
-          : '先记录一餐，我就知道怎么陪你啦')
-  const petTaskText = petEvent?.task_text || petSummary?.status?.task_text || (dashboardBusy || isGuest
-    ? '今日成长任务'
-    : healthyHabitScore >= 3
-      ? '已点亮多个好习惯'
-      : proteinTargetRaw > 0 && proteinCur < proteinTargetRaw * 0.75
-        ? '补一点蛋白质'
-        : todayWater.total < bodyMetrics.waterGoalMl * 0.6
-          ? '喝水达到 60%'
-          : totalCurrent <= 0
-            ? '记录一餐'
-            : '保持今日节奏')
+      ? '登录后，我会一直陪你。'
+      : petMealState === 'satisfied'
+        ? '三餐记好啦，今天也很棒。'
+        : petMealState === 'fed'
+          ? '这一餐记住啦。'
+          : '今天还没见到你的饭哦。')
+  const triggerPetCelebration = React.useCallback(() => {
+    if (petCelebrationTimerRef.current) {
+      clearTimeout(petCelebrationTimerRef.current)
+    }
+    setPetCelebrating(false)
+    petCelebrationTimerRef.current = setTimeout(() => {
+      setPetCelebrating(true)
+      petCelebrationTimerRef.current = setTimeout(() => {
+        setPetCelebrating(false)
+        petCelebrationTimerRef.current = null
+      }, 820)
+    }, 16)
+  }, [])
+
+  React.useEffect(() => () => {
+    if (petCelebrationTimerRef.current) {
+      clearTimeout(petCelebrationTimerRef.current)
+    }
+  }, [])
+
   const handleClaimPetEvent = React.useCallback(async () => {
     if (!petEvent || petClaiming) return
     setPetClaiming(true)
     try {
       const result = await claimPetEvent(petEvent.id)
       setPetSummary((prev) => prev ? { ...prev, pet: result.pet, event: result.event, status: { ...prev.status, message: '奖励已收下，我又长大了一点。' } } : prev)
+      triggerPetCelebration()
       const parts: string[] = []
       if (result.credits_awarded > 0) parts.push(`+${result.credits_awarded}积分`)
       if (result.exp_awarded > 0) parts.push(`+${result.exp_awarded}经验`)
@@ -2579,7 +2599,7 @@ function IndexPage() {
     } finally {
       setPetClaiming(false)
     }
-  }, [petClaiming, petEvent])
+  }, [petClaiming, petEvent, triggerPetCelebration])
   const togglePetCollapsed = React.useCallback(() => {
     setPetCollapsed((prev) => {
       const next = !prev
@@ -3003,7 +3023,7 @@ function IndexPage() {
       ) : null}
       {!petHidden ? (
         <View
-          className={`pet-companion-float ${petCollapsed ? 'is-collapsed' : 'is-expanded'} ${petDragging ? 'is-dragging' : ''}`}
+          className={`pet-companion-float ${petCollapsed ? 'is-collapsed' : 'is-expanded'} ${petDragging ? 'is-dragging' : ''} ${petCelebrating ? 'is-celebrating' : ''}`}
           style={{
             left: `${petFloatPosition.left}px`,
             top: `${petFloatPosition.top}px`
@@ -3025,23 +3045,7 @@ function IndexPage() {
               // 展开态点击卡片空白处不进入对话，只有「点我聊聊」进入
             }}
           >
-            <PetAvatar pet={petSummary?.pet} size='small' mood={petMood} state={petState} className='pet-companion-avatar' />
             <View className='pet-companion-content'>
-                <View className='pet-companion-header'>
-                  <Text className='pet-companion-name'>{petName}</Text>
-                  {!petCollapsed ? (
-                    <View
-                      className='pet-companion-collapse'
-                      onClick={(event) => {
-                        event.stopPropagation()
-                        togglePetCollapsed()
-                      }}
-                    >
-                      <Text className='pet-companion-collapse-text'>收起</Text>
-                    </View>
-                  ) : null}
-                </View>
-              <Text className='pet-companion-message'>{petMessage}</Text>
               <View
                 className='pet-companion-chat'
                 onClick={(event) => {
@@ -3049,9 +3053,46 @@ function IndexPage() {
                   openPetChat()
                 }}
               >
-                  <Text className='pet-companion-chat-text'>点我聊聊</Text>
-                </View>
+                <Text className='pet-companion-chat-text'>{petDialogText}</Text>
               </View>
+            </View>
+            <View
+              className='pet-companion-stage'
+              onClick={(event) => {
+                event.stopPropagation()
+                const handled = petClickHandledRef.current
+                petClickHandledRef.current = false
+                if (handled) return
+                if (petCollapsed) {
+                  togglePetCollapsed()
+                  return
+                }
+                openPetChat()
+              }}
+            >
+              <View className={`pet-companion-aura is-${petMealState}`} />
+              <PetAvatar
+                pet={petSummary?.pet}
+                size='large'
+                mood={petMood}
+                state={petState}
+                mealState={petMealState}
+                motion='companion'
+                className='pet-companion-avatar'
+              />
+              <View className='pet-companion-stage-shadow' />
+            </View>
+            {!petCollapsed ? (
+              <View
+                className='pet-companion-collapse'
+                onClick={(event) => {
+                  event.stopPropagation()
+                  togglePetCollapsed()
+                }}
+              >
+                <View className='pet-companion-collapse-icon' />
+              </View>
+            ) : null}
           </View>
         </View>
       ) : null}

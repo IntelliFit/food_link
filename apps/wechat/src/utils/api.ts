@@ -950,6 +950,11 @@ export interface PetProfile {
   selection_candidates?: PetAppearanceCandidate[]
   free_profile_rematch_available?: boolean
   growth_unlocks?: string[]
+  avatar_type?: 'pixel_self' | string
+  pixel_avatar_url?: string
+  pixel_avatar_blink_url?: string
+  pixel_avatar_squash_url?: string
+  pixel_avatar_jump_url?: string
 }
 
 export interface PetAppearanceCandidate {
@@ -977,6 +982,7 @@ export interface PetDailyScore {
 export interface PetStatus {
   mood: 'happy' | 'calm' | 'sleepy' | 'surprised' | string
   state?: 'active' | 'steady' | 'warming' | 'sleepy' | 'dozing' | 'low_power' | 'hibernating' | 'deep_sleep' | 'surprised' | string
+  meal_state?: 'hungry' | 'fed' | 'satisfied' | string
   message: string
   task_text: string
   inactivity_days?: number
@@ -3614,6 +3620,43 @@ export async function getPetSummary(date?: string): Promise<PetSummary> {
     throw new Error('获取宠物状态失败')
   }
   return res.data as PetSummary
+}
+
+export async function customizePetPixelAvatar(localPath: string): Promise<{ pet: PetProfile }> {
+  const filePath = (localPath || '').trim()
+  if (!filePath) {
+    throw new Error('图片路径为空')
+  }
+  const token = getAccessToken()
+  const response = await new Promise<any>((resolve, reject) => {
+    Taro.uploadFile({
+      url: `${API_BASE_URL}/api/pet/pixel-avatar`,
+      filePath,
+      name: 'file',
+      header: withNgrokBypassHeaders({
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      }),
+      // 图像模型实测通常需要 70–90 秒；预留到 180 秒，避免客户端先于服务端取消请求。
+      timeout: 180000,
+      success: resolve,
+      fail: reject,
+    })
+  })
+  const parsedData = parseUploadAnalyzeResponseData(response?.data)
+  if (response?.statusCode !== 200) {
+    throwHttpErrorWithStatus(
+      Number(response?.statusCode || 0),
+      parsedData,
+      '生成像素分身失败，请稍后重试',
+      response?.header as Record<string, any> | undefined
+    )
+  }
+  const payload = unwrapUploadAnalyzePayload(parsedData)
+  const pet = payload?.pet as PetProfile | undefined
+  if (!pet?.id) {
+    throw new Error('生成像素分身失败：服务端未返回分身信息')
+  }
+  return { pet }
 }
 
 export async function claimPetEvent(eventId: string): Promise<PetClaimResult> {

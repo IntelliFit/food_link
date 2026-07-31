@@ -1,4 +1,5 @@
 .pet-avatar {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -23,8 +24,202 @@
     opacity: 0.72;
   }
 
-  &__image {
+  &__body {
+    position: relative;
     width: 100%;
     height: 100%;
+    transform-origin: 50% 82%;
+    animation: pet-avatar-idle 5.6s ease-in-out infinite;
+  }
+
+  &__image,
+  &__frame {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+
+  &--custom &__image,
+  &--custom &__frame {
+    image-rendering: pixelated;
+  }
+
+  &__frame {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  &__frame--idle {
+    opacity: 1;
+  }
+
+  &--custom {
+    overflow: visible;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  &__blink-overlay {
+    position: absolute;
+    z-index: 3;
+    inset: 0;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  &__blink-eye {
+    position: absolute;
+    top: 43.5%;
+    width: 13%;
+    height: 11%;
+    border-radius: 999rpx;
+    box-shadow: inset 0 -4rpx 0 rgba(42, 34, 31, 0.86);
+
+    &.is-left {
+      left: 35.2%;
+    }
+
+    &.is-right {
+      right: 35.2%;
+    }
+  }
+
+  &--blinking &__blink-overlay {
+    opacity: 1;
+  }
+
+  &--custom#{&}--blinking &__frame--idle {
+    opacity: 0;
+  }
+
+  &--custom#{&}--blinking &__frame--blink {
+    opacity: 1;
+  }
+
+  &--has-motion-frames#{&}--motion-squash &__frame--idle,
+  &--has-motion-frames#{&}--motion-jump &__frame--idle,
+  &--has-motion-frames#{&}--motion-squash &__frame--blink,
+  &--has-motion-frames#{&}--motion-jump &__frame--blink {
+    opacity: 0;
+  }
+
+  &--has-motion-frames#{&}--motion-squash &__frame--squash {
+    opacity: 1;
+  }
+
+  &--has-motion-frames#{&}--motion-jump &__frame--jump {
+    opacity: 1;
+  }
+
+  &--motion-squash &__body {
+    animation: pet-avatar-hop-squash 110ms ease-out both;
+  }
+
+  &--motion-jump &__body {
+    animation: pet-avatar-hop-airborne 420ms cubic-bezier(0.2, 0.78, 0.24, 1) both;
+  }
+
+  &--meal-hungry &__body {
+    animation-name: pet-avatar-hungry;
+    animation-duration: 6.4s;
+  }
+
+  &--meal-fed &__body {
+    animation-name: pet-avatar-fed;
+    animation-duration: 5.8s;
+  }
+
+  &--meal-satisfied &__body {
+    animation-name: pet-avatar-satisfied;
+    animation-duration: 5.4s;
+  }
+
+  &--meal-hungry#{&}--motion-squash &__body,
+  &--meal-fed#{&}--motion-squash &__body,
+  &--meal-satisfied#{&}--motion-squash &__body {
+    animation: pet-avatar-hop-squash 110ms ease-out both;
+  }
+
+  &--meal-hungry#{&}--motion-jump &__body,
+  &--meal-fed#{&}--motion-jump &__body,
+  &--meal-satisfied#{&}--motion-jump &__body {
+    animation: pet-avatar-hop-airborne 420ms cubic-bezier(0.2, 0.78, 0.24, 1) both;
+  }
+}
+
+@keyframes pet-avatar-idle {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+
+  50% {
+    transform: translateY(-2rpx) scale(1.008, 0.992);
+  }
+}
+
+@keyframes pet-avatar-hungry {
+  0%,
+  100% {
+    transform: translateY(1rpx) scale(0.95, 0.98);
+  }
+
+  50% {
+    transform: translateY(0) scale(0.96, 0.97);
+  }
+}
+
+@keyframes pet-avatar-fed {
+  0%,
+  100% {
+    transform: translateY(0) scale(1.03, 1);
+  }
+
+  50% {
+    transform: translateY(-2rpx) scale(1.035, 0.995);
+  }
+}
+
+@keyframes pet-avatar-satisfied {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0) scale(1.04);
+  }
+
+  50% {
+    transform: translateY(-2rpx) rotate(-0.4deg) scale(1.045);
+  }
+}
+
+@keyframes pet-avatar-hop-squash {
+  0% {
+    transform: translateY(0) scale(1);
+  }
+
+  100% {
+    transform: translateY(2rpx) scale(1.035, 0.965);
+  }
+}
+
+@keyframes pet-avatar-hop-airborne {
+  0% {
+    transform: translateY(2rpx) scale(1.035, 0.965);
+  }
+
+  46% {
+    transform: translateY(-10rpx) scale(0.99, 1.02);
+  }
+
+  100% {
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pet-avatar__body {
+    animation: none;
   }
 }
