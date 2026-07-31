@@ -31,6 +31,9 @@ type UnresolvedNutritionCandidate struct {
 	Index                int
 	Name                 string
 	EstimatedWeightGrams float64
+	FoodState            string
+	WeightBasis          string
+	BasisEvidence        string
 }
 
 func NewDeepSeekNutritionEstimator(apiKey, baseURL, model string) *DeepSeekNutritionEstimator {
@@ -86,16 +89,21 @@ func (e *DeepSeekNutritionEstimator) Estimate(ctx context.Context, candidates []
 			"index":                candidate.Index,
 			"name":                 name,
 			"estimatedWeightGrams": round2(candidate.EstimatedWeightGrams),
+			"foodState":            strings.TrimSpace(candidate.FoodState),
+			"weightBasis":          strings.TrimSpace(candidate.WeightBasis),
+			"basisEvidence":        strings.TrimSpace(candidate.BasisEvidence),
 		})
 	}
 	if len(payloadItems) == 0 {
 		return map[int]map[string]any{}, nil
 	}
-	systemPrompt := "你是营养数据库补全助手。用户已通过视觉模型识别出食物名称和重量，现在只需要你基于食物名称、烹饪方式和重量，补充每100g营养估计。请尽量使用可靠营养知识、品牌/包装常识和常见食物数据库口径交叉校验；不确定时保守估计并保持热量与宏量营养一致。只返回 JSON，不要附加解释。"
+	systemPrompt := "你是营养数据库补全助手。用户已通过视觉模型识别出食物名称、当前食用状态和重量口径，现在只需要你补充与 foodState、weightBasis 完全一致的每100g营养估计。请尽量使用可靠营养知识、品牌/包装常识和常见食物数据库口径交叉校验；不确定时保守估计并保持热量与宏量营养一致。只返回 JSON，不要附加解释。"
 	userPrompt := map[string]any{
 		"task": "为未命中食物补充每100g营养估计",
 		"requirements": []string{
-			"根据食物名称和常见烹饪方式估算每100g营养，不需要重新判断重量。",
+			"根据食物名称、foodState、weightBasis 和 basisEvidence 估算对应重量口径下的每100g营养，不需要重新判断重量。",
+			"weightBasis=as_served 时必须输出当前可食状态每100g营养；熟米粉、熟米线、熟面条、泡发木耳等必须计入吸水后的重量和营养稀释，严禁返回干料每100g营养。",
+			"weightBasis=dry 时才允许使用下锅前或泡发前干料每100g营养；不得把熟态/泡发态数据反向用于明确干重。",
 			"输出字段使用 camelCase。",
 			"所有字段必须为数字；不要因为不确定就把热量或宏量营养随意填 0，只有该营养天然接近 0 时才填 0。",
 			aiNutritionMicronutrientRequirement,

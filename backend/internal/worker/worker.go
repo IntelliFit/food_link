@@ -2431,6 +2431,9 @@ func normalizePrecisionPlanResult(parsed map[string]any) map[string]any {
 			"uncertainty_reason": "当前画面或文字未能稳定拆分出独立主体",
 		})
 	}
+	for index := range itemsToEstimate {
+		itemsToEstimate[index] = normalizePrecisionStateMetadata(itemsToEstimate[index], "item_name")
+	}
 	precisionStatus = "ready_for_estimate"
 	if len(itemsToEstimate) > 1 && (splitStrategy == "single_item" || splitStrategy == "multi_item_parallel") {
 		hasHigh := false
@@ -2604,6 +2607,163 @@ func validPrecisionSplitStrategy(value string) bool {
 	}
 }
 
+var precisionHydrationSensitiveNames = map[string]bool{
+	"米粉":   true,
+	"米线":   true,
+	"面条":   true,
+	"挂面":   true,
+	"粉条":   true,
+	"宽粉":   true,
+	"粉丝":   true,
+	"河粉":   true,
+	"意面":   true,
+	"意大利面": true,
+	"乌冬面":  true,
+	"荞麦面":  true,
+	"燕麦":   true,
+	"燕麦片":  true,
+	"木耳":   true,
+	"银耳":   true,
+	"腐竹":   true,
+}
+
+func normalizePrecisionFoodState(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "fresh", "raw", "生", "新鲜":
+		return "fresh"
+	case "dry", "dried", "dehydrated", "干", "干燥":
+		return "dry"
+	case "hydrated", "soaked", "rehydrated", "泡发", "浸泡":
+		return "hydrated"
+	case "cooked", "prepared", "熟", "熟制":
+		return "cooked"
+	case "liquid", "液体":
+		return "liquid"
+	case "packaged", "package", "包装":
+		return "packaged"
+	default:
+		return ""
+	}
+}
+
+func normalizePrecisionWeightBasis(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "dry", "dry_weight", "dryweight", "干重":
+		return "dry"
+	case "as_served", "served", "wet", "wet_weight", "cooked_weight", "熟重", "湿重", "食用状态":
+		return "as_served"
+	case "package_net", "package", "net", "net_weight", "包装净重":
+		return "package_net"
+	default:
+		return ""
+	}
+}
+
+func precisionBaseFoodName(name string) string {
+	base := strings.TrimSpace(name)
+	for _, suffix := range []string{"（熟）", "(熟)", "（干）", "(干)"} {
+		base = strings.TrimSpace(strings.TrimSuffix(base, suffix))
+	}
+	for _, prefix := range []string{"泡发的", "泡好的", "泡发", "泡开", "浸泡", "煮熟的", "熟的", "煮熟", "熟", "干燥的", "干的", "干"} {
+		if strings.HasPrefix(base, prefix) && len(base) > len(prefix) {
+			base = strings.TrimSpace(strings.TrimPrefix(base, prefix))
+			break
+		}
+	}
+	return base
+}
+
+func isPrecisionHydrationSensitiveName(name string) bool {
+	return precisionHydrationSensitiveNames[precisionBaseFoodName(name)]
+}
+
+func inferPrecisionFoodState(name string) string {
+	switch {
+	case strings.Contains(name, "泡发") || strings.Contains(name, "泡开") || strings.Contains(name, "浸泡"):
+		return "hydrated"
+	case strings.Contains(name, "（干）") || strings.Contains(name, "(干)") ||
+		(strings.HasPrefix(strings.TrimSpace(name), "干") && isPrecisionHydrationSensitiveName(name)):
+		return "dry"
+	case strings.Contains(name, "（熟）") || strings.Contains(name, "(熟)") ||
+		strings.Contains(name, "煮熟") ||
+		(strings.HasPrefix(strings.TrimSpace(name), "熟") && isPrecisionHydrationSensitiveName(name)):
+		return "cooked"
+	case isPrecisionHydrationSensitiveName(name):
+		// 精准模式分析的是当前餐食；模型漏填状态时，吸水主食按当前食用状态兜底，
+		// 避免将碗里的湿重直接套用到干料每 100g 营养。
+		return "cooked"
+	default:
+		return ""
+	}
+}
+
+func precisionStateQualifiedName(name, state, basis string) string {
+	name = strings.TrimSpace(name)
+	if name == "" || !isPrecisionHydrationSensitiveName(name) {
+		return name
+	}
+	base := precisionBaseFoodName(name)
+	switch {
+	case state == "dry" || basis == "dry":
+		return "干" + base
+	case state == "hydrated":
+		return "泡发" + base
+	case state == "cooked" || basis == "as_served":
+		return "熟" + base
+	default:
+		return name
+	}
+}
+
+func normalizePrecisionStateMetadata(item map[string]any, nameKey string) map[string]any {
+	if item == nil {
+		return item
+	}
+	name := firstNonEmptyString(item, nameKey, "name", "item_name")
+	state := normalizePrecisionFoodState(firstNonEmptyString(item, "foodState", "food_state"))
+	basis := normalizePrecisionWeightBasis(firstNonEmptyString(item, "weightBasis", "weight_basis"))
+	foodType := strings.ToLower(firstNonEmptyString(item, "type"))
+
+	if foodType == "packaged" || foodType == "snack" || basis == "package_net" {
+		state = "packaged"
+		basis = "package_net"
+	}
+	if state == "" {
+		state = inferPrecisionFoodState(name)
+	}
+	if basis == "" {
+		switch state {
+		case "dry":
+			basis = "dry"
+		case "hydrated", "cooked", "fresh", "liquid":
+			basis = "as_served"
+		case "packaged":
+			basis = "package_net"
+		}
+	}
+	if state == "" {
+		switch basis {
+		case "dry":
+			state = "dry"
+		case "package_net":
+			state = "packaged"
+		}
+	}
+	if state != "" {
+		item["foodState"] = state
+	}
+	if basis != "" {
+		item["weightBasis"] = basis
+	}
+	if evidence := firstNonEmptyString(item, "basisEvidence", "basis_evidence"); evidence != "" {
+		item["basisEvidence"] = evidence
+	}
+	if name != "" {
+		item[nameKey] = precisionStateQualifiedName(name, state, basis)
+	}
+	return item
+}
+
 func normalizePrecisionPlanItems(value any) []map[string]any {
 	rawItems := extractItems(value)
 	items := make([]map[string]any, 0, len(rawItems))
@@ -2620,7 +2780,7 @@ func normalizePrecisionPlanItems(value any) []map[string]any {
 		if level != "low" && level != "medium" && level != "high" {
 			level = "medium"
 		}
-		items = append(items, map[string]any{
+		normalized := map[string]any{
 			"item_key":           itemKey,
 			"item_name":          name,
 			"item_hint":          firstNonEmptyString(item, "item_hint"),
@@ -2630,7 +2790,12 @@ func normalizePrecisionPlanItems(value any) []map[string]any {
 			"requires_reference": boolFromAny(item["requires_reference"]),
 			"uncertainty_level":  level,
 			"uncertainty_reason": firstNonEmptyString(item, "uncertainty_reason"),
-		})
+			"type":               firstNonEmptyString(item, "type"),
+			"foodState":          firstNonEmptyString(item, "foodState", "food_state"),
+			"weightBasis":        firstNonEmptyString(item, "weightBasis", "weight_basis"),
+			"basisEvidence":      firstNonEmptyString(item, "basisEvidence", "basis_evidence"),
+		}
+		items = append(items, normalizePrecisionStateMetadata(normalized, "item_name"))
 	}
 	return items
 }
@@ -2654,7 +2819,7 @@ func buildPrecisionEstimateItems(plan map[string]any, sourceType string) []map[s
 		if level != "low" && level != "medium" && level != "high" {
 			level = "medium"
 		}
-		out = append(out, map[string]any{
+		normalized := map[string]any{
 			"item_key":           itemKey,
 			"item_name":          name,
 			"item_hint":          firstNonEmptyString(raw, "item_hint"),
@@ -2664,7 +2829,12 @@ func buildPrecisionEstimateItems(plan map[string]any, sourceType string) []map[s
 			"requires_reference": boolFromAny(raw["requires_reference"]),
 			"uncertainty_level":  level,
 			"uncertainty_reason": firstNonEmptyString(raw, "uncertainty_reason"),
-		})
+			"type":               firstNonEmptyString(raw, "type"),
+			"foodState":          firstNonEmptyString(raw, "foodState", "food_state"),
+			"weightBasis":        firstNonEmptyString(raw, "weightBasis", "weight_basis"),
+			"basisEvidence":      firstNonEmptyString(raw, "basisEvidence", "basis_evidence"),
+		}
+		out = append(out, normalizePrecisionStateMetadata(normalized, "item_name"))
 	}
 	if len(out) == 0 {
 		fallbackName := "整餐"
@@ -2974,12 +3144,16 @@ func buildPrecisionPlanPrompt(sourceType, rawInput, additionalContext string, re
 - 如果当前是明显混合食物，且不同成分可能有不同实际摄入比例，也应拆成 itemsToEstimate，而不是只输出整道菜。
 - 食物种类识别优先于重量估计。每个主体先列出 2-3 个最可能的候选食物，再根据视觉证据选择 item_name。
 - 重量口径必须与营养数据库一致：后续 estimatedWeightGrams 只计算可食部净重。遇到带壳、带骨、带核食物时，itemsToEstimate 仍列食物本身，但 visual_evidence/item_hint 需要提示后续按去壳/去骨/去核后的可食重量估算，不把壳、骨头、果核计入重量。
+- 每个主体必须同时输出 foodState（fresh/dry/hydrated/cooked/liquid/packaged）、weightBasis（dry/as_served/package_net）和 basisEvidence。foodState 描述食物当前形态，weightBasis 描述后续克重对应的营养口径。
+- item_name 本身也必须保留会显著影响每100g营养的状态，例如“熟米粉”“干米粉”“泡发木耳”，不能只写容易混淆的“米粉”“木耳”；结构化字段和名称必须表达同一状态。
+- 餐碗中已经煮好、泡好或可直接食用的米粉/米线/面条/粉条等，estimatedWeightGrams 是当前熟制湿重，必须使用 foodState=cooked、weightBasis=as_served；只有用户明确给出下锅前干重或画面明确是干料时，才使用 foodState=dry、weightBasis=dry。
+- 不得把当前食用状态的湿重与干料每100g营养口径混用；不确定时依据画面中的汤汁、柔软度、膨胀状态和所在餐碗判断，并写入 basisEvidence。
 - 候选筛选必须看具体视觉证据：切法、形状、边缘/皮、是否有馅、颜色、纹理、菜梗/叶片比例、包裹方式、烹饪方式和所在区域；不要只按常见菜名猜。
 - 对容易混淆的食物必须显式区分：莴苣/莴笋片 vs 青菜/小白菜，百叶包/千张包/豆皮包 vs 蒸饺/馄饨，鱼块 vs 鸡块，豆干 vs 肉块。
 - 如果最可能名称不确定，item_name 填最可能的那个，candidate_names 保留 2-3 个候选，alternative_name 填次可能名称，visual_evidence 写选择依据。
 - 不要生成追问式输出，也不要要求用户补充后再继续。
 - 如果缺比例尺且会显著影响估重，请把 referenceObjectNeeded 设为 true，但仍然返回可估计主体。
-- itemsToEstimate 中每个主体必须给 item_key、item_name、candidate_names、visual_evidence、uncertainty_level，可选 item_hint / alternative_name。
+- itemsToEstimate 中每个主体必须给 item_key、item_name、candidate_names、visual_evidence、foodState、weightBasis、basisEvidence、uncertainty_level，可选 item_hint / alternative_name。
 - uncertainty_level 规则：
   - low：单一食材、形状固定（如苹果、鸡蛋、鸡胸肉块、白米饭）
   - medium：普通菜肴、食材可见（如清炒西兰花、蒸蛋、切片水果）
@@ -3002,9 +3176,9 @@ func buildPrecisionPlanPrompt(sourceType, rawInput, additionalContext string, re
   "description": "可继续精估",
   "insight": "先补充信息再进入精估。",
   "itemsToEstimate": [
-    {"item_key": "rice", "item_name": "米饭", "candidate_names": ["米饭", "粥"], "alternative_name": "粥", "visual_evidence": "白色颗粒状主食，米粒边界清楚", "item_hint": "主食区域", "requires_reference": false, "uncertainty_level": "low"},
-    {"item_key": "wrapped_tofu_skin", "item_name": "百叶包", "candidate_names": ["百叶包", "蒸饺", "馄饨"], "alternative_name": "蒸饺", "visual_evidence": "外皮呈豆皮褶皱和方形包裹感，不是半透明面皮", "item_hint": "右侧包裹类主体", "requires_reference": false, "uncertainty_level": "medium"},
-    {"item_key": "lettuce_stem", "item_name": "莴苣片", "candidate_names": ["莴苣片", "青菜", "西兰花梗"], "alternative_name": "青菜", "visual_evidence": "浅绿色厚片状茎部为主，叶片很少", "item_hint": "左侧绿色蔬菜", "requires_reference": false, "uncertainty_level": "medium"}
+    {"item_key": "rice", "item_name": "米饭", "candidate_names": ["米饭", "粥"], "alternative_name": "粥", "visual_evidence": "白色颗粒状主食，米粒边界清楚", "foodState": "cooked", "weightBasis": "as_served", "basisEvidence": "餐碗内已熟制，克重为当前食用状态", "item_hint": "主食区域", "requires_reference": false, "uncertainty_level": "low"},
+    {"item_key": "wrapped_tofu_skin", "item_name": "百叶包", "candidate_names": ["百叶包", "蒸饺", "馄饨"], "alternative_name": "蒸饺", "visual_evidence": "外皮呈豆皮褶皱和方形包裹感，不是半透明面皮", "foodState": "cooked", "weightBasis": "as_served", "basisEvidence": "画面为已熟制可直接食用状态", "item_hint": "右侧包裹类主体", "requires_reference": false, "uncertainty_level": "medium"},
+    {"item_key": "lettuce_stem", "item_name": "莴苣片", "candidate_names": ["莴苣片", "青菜", "西兰花梗"], "alternative_name": "青菜", "visual_evidence": "浅绿色厚片状茎部为主，叶片很少", "foodState": "cooked", "weightBasis": "as_served", "basisEvidence": "画面为已烹调蔬菜", "item_hint": "左侧绿色蔬菜", "requires_reference": false, "uncertainty_level": "medium"}
   ]
 }`, sourceType, rawInput, additionalContext, buildReferenceObjectsHint(referenceObjects), previousBlock, strictSeparateBlock)
 }
@@ -3026,6 +3200,22 @@ func buildPrecisionItemEstimatePromptFromPayload(sourceType string, payload map[
 		itemHint = firstNonEmptyString(items[0], "item_hint")
 	}
 	if len(items) == 1 {
+		items[0] = normalizePrecisionStateMetadata(copyAnyMap(items[0]), "item_name")
+		itemName = firstNonEmptyString(items[0], "item_name", "name")
+		state := firstNonEmptyString(items[0], "foodState", "food_state")
+		basis := firstNonEmptyString(items[0], "weightBasis", "weight_basis")
+		evidence := firstNonEmptyString(items[0], "basisEvidence", "basis_evidence")
+		stateHint := strings.TrimSpace(fmt.Sprintf("状态口径：foodState=%s，weightBasis=%s", state, basis))
+		if evidence != "" {
+			stateHint += "；依据：" + evidence
+		}
+		if state != "" || basis != "" {
+			if itemHint != "" {
+				itemHint += "；" + stateHint
+			} else {
+				itemHint = stateHint
+			}
+		}
 		if candidateHint := buildPrecisionCandidateHint(items[0]); candidateHint != "" {
 			if itemHint != "" {
 				itemHint += "；" + candidateHint
@@ -3063,6 +3253,9 @@ func buildPrecisionItemEstimatePromptSingle(sourceType, itemName, itemHint, rawI
 要求：
 - 只输出这个主体食物自己的名称和估计重量，不要把其他食物并进去。
 - 先判断食物种类，再估重量；如果 planner 给的名称和视觉证据不一致，可以把 name 修正为更可能的候选食物。
+- 必须输出 foodState（fresh/dry/hydrated/cooked/liquid/packaged）、weightBasis（dry/as_served/package_net）和 basisEvidence；状态、克重口径和名称必须互相一致。
+- 名称必须包含会显著影响营养密度的状态，例如“熟米粉”“干米粉”“泡发木耳”，不要把熟制湿重写成含糊的“米粉”后再套用干料营养。
+- 餐碗中已煮好可食用的米粉/米线/面条/粉条，使用 foodState=cooked、weightBasis=as_served；只有明确是下锅前干重时才使用 dry/dry。
 - 对相似项必须比较视觉证据：莴苣/莴笋片看厚片茎部和浅绿半透明质感，青菜/小白菜看叶片和菜梗；百叶包/千张包看豆皮褶皱和包裹边缘，蒸饺/馄饨看面皮半透明和褶边。
 - 如果只能在两个名称之间选择，name 填更可能的主名称，并在 uncertaintyNotes 简短记录备选。
 - 如果画面/描述里还有其他食物，忽略它们。
@@ -3080,6 +3273,9 @@ JSON 结构：
 {
   "item": {
     "name": "%s",
+    "foodState": "cooked",
+    "weightBasis": "as_served",
+    "basisEvidence": "餐碗内已熟制，克重为当前食用状态",
     "estimatedWeightGrams": 180
   },
   "uncertaintyNotes": ["如果没有参考物，重量可能有一定波动"]
@@ -3109,6 +3305,11 @@ func buildPrecisionItemEstimatePromptMulti(sourceType string, items []map[string
 		if stringFromMap(item, "uncertainty_level") == "high" {
 			line += " 【注意：此食物较难精确估重，请特别仔细】"
 		}
+		state := firstNonEmptyString(item, "foodState", "food_state")
+		basis := firstNonEmptyString(item, "weightBasis", "weight_basis")
+		if state != "" || basis != "" {
+			line += fmt.Sprintf("【foodState=%s, weightBasis=%s】", state, basis)
+		}
 		lines = append(lines, line)
 	}
 	if additionalContext == "" {
@@ -3129,6 +3330,9 @@ func buildPrecisionItemEstimatePromptMulti(sourceType string, items []map[string
 要求：
 - 分别输出每个食物的名称和估计重量。
 - 先判断食物种类，再估重量；如果 planner 给的名称和视觉证据不一致，可以把 name 修正为更可能的候选食物。
+- 每项都必须输出 foodState（fresh/dry/hydrated/cooked/liquid/packaged）、weightBasis（dry/as_served/package_net）和 basisEvidence；名称也要包含会显著影响营养密度的状态。
+- 餐碗中已煮好可食用的米粉/米线/面条/粉条，名称写成“熟米粉”等明确状态，使用 cooked/as_served；只有明确是下锅前干重时才使用 dry/dry。
+- 状态、名称和重量口径必须一致，严禁用当前食用状态的湿重搭配干料每100g营养口径。
 - 对相似项必须比较视觉证据：莴苣/莴笋片看厚片茎部和浅绿半透明质感，青菜/小白菜看叶片和菜梗；百叶包/千张包看豆皮褶皱和包裹边缘，蒸饺/馄饨看面皮半透明和褶边。
 - 如果只能在两个名称之间选择，name 填更可能的主名称，并在 uncertaintyNotes 简短记录备选。
 - 注意食物之间的比例关系和相对大小，这有助于更准确地估重。
@@ -3144,8 +3348,8 @@ func buildPrecisionItemEstimatePromptMulti(sourceType string, items []map[string
 JSON 结构：
 {
   "items": [
-    {"name": "食物名称1", "estimatedWeightGrams": 180},
-    {"name": "食物名称2", "estimatedWeightGrams": 120}
+    {"name": "熟米粉", "foodState": "cooked", "weightBasis": "as_served", "basisEvidence": "餐碗内已煮熟", "estimatedWeightGrams": 180},
+    {"name": "牛肉", "foodState": "cooked", "weightBasis": "as_served", "basisEvidence": "画面为熟制牛肉", "estimatedWeightGrams": 120}
   ],
   "uncertaintyNotes": ["如果没有参考物，重量可能有一定波动"]
 }`, strings.Join(lines, "\n"), rawInput, additionalContext, buildReferenceObjectsHint(referenceObjects), precisionStapleVolumeRules())
@@ -3221,6 +3425,8 @@ func buildPrecisionWeightRefinePrompt(items []map[string]any, rawInput, addition
 
 复核规则：
 - 只复核重量，不要补充营养。
+- 必须保留并返回每项原有的 foodState、weightBasis 和 basisEvidence；没有明确相反证据时，不得把 cooked/as_served 改成 dry/dry 或干料口径，也不得删掉名称中的“熟/干/泡发”等状态。
+- 如果复核发现名称与状态字段矛盾，应以画面中的当前食用形态为准统一修正；餐碗内已煮好的米粉/米线/面条/粉条必须保持熟制湿重口径。
 - 只有“图中可见”的参考物或容器，才能当强比例尺；不在图中的参考物尺寸只能当弱提示。
 - 必须根据可见面积、容器填充深度、堆积高度/厚度、与餐具/碗盘/手掌的相对大小重新审视重量。
 - estimatedWeightGrams 必须是可食部净重；带壳、带骨、带核食物按去壳/去骨/去核后的重量复核，不把虾壳、蟹壳、贝壳、花生壳、瓜子壳、骨头、果核计入重量。
@@ -3232,8 +3438,8 @@ func buildPrecisionWeightRefinePrompt(items []map[string]any, rawInput, addition
 JSON 结构：
 {
   "items": [
-    {"name": "食物名称1", "estimatedWeightGrams": 220},
-    {"name": "食物名称2", "estimatedWeightGrams": 95}
+    {"name": "熟米粉", "foodState": "cooked", "weightBasis": "as_served", "basisEvidence": "餐碗内已煮熟", "estimatedWeightGrams": 220},
+    {"name": "牛肉", "foodState": "cooked", "weightBasis": "as_served", "basisEvidence": "画面为熟制牛肉", "estimatedWeightGrams": 95}
   ],
   "uncertaintyNotes": ["米饭缺少清晰顶视角，估重仍有波动"]
 }`, strings.Join(itemLines, "\n"), rawInput, additionalContext, buildReferenceObjectsHint(referenceObjects), precisionStapleVolumeRules())
@@ -3301,10 +3507,14 @@ func parsePrecisionEstimateItems(parsed map[string]any, plannedItems []map[strin
 			name := firstNonEmptyString(raw, "name")
 			weight, _ := floatFromAny(firstNonNil(raw["estimatedWeightGrams"], raw["weight"]))
 			if name != "" {
-				items = append(items, map[string]any{
+				item := map[string]any{
 					"name":                 name,
+					"foodState":            firstNonEmptyString(raw, "foodState", "food_state"),
+					"weightBasis":          firstNonEmptyString(raw, "weightBasis", "weight_basis"),
+					"basisEvidence":        firstNonEmptyString(raw, "basisEvidence", "basis_evidence"),
 					"estimatedWeightGrams": weight,
-				})
+				}
+				items = append(items, normalizePrecisionStateMetadata(item, "name"))
 			}
 		}
 		return items, nil
@@ -3319,10 +3529,14 @@ func parsePrecisionEstimateItems(parsed map[string]any, plannedItems []map[strin
 	if name == "" {
 		return nil, fmt.Errorf("精准模式子项估计未返回有效结果")
 	}
-	return []map[string]any{{
+	item := map[string]any{
 		"name":                 name,
+		"foodState":            firstNonEmptyString(itemPayload, "foodState", "food_state"),
+		"weightBasis":          firstNonEmptyString(itemPayload, "weightBasis", "weight_basis"),
+		"basisEvidence":        firstNonEmptyString(itemPayload, "basisEvidence", "basis_evidence"),
 		"estimatedWeightGrams": weight,
-	}}, nil
+	}
+	return []map[string]any{normalizePrecisionStateMetadata(item, "name")}, nil
 }
 
 func (r *Runner) maybeRefinePrecisionWeights(
@@ -3374,17 +3588,21 @@ func parsePrecisionRefinedItems(parsed map[string]any, fallbackItems []map[strin
 			continue
 		}
 		weight, _ := floatFromAny(firstNonNil(raw["estimatedWeightGrams"], raw["weight"]))
-		refined = append(refined, map[string]any{
+		item := map[string]any{
 			"name":                 name,
+			"foodState":            firstNonEmptyString(raw, "foodState", "food_state"),
+			"weightBasis":          firstNonEmptyString(raw, "weightBasis", "weight_basis"),
+			"basisEvidence":        firstNonEmptyString(raw, "basisEvidence", "basis_evidence"),
 			"estimatedWeightGrams": weight,
-		})
+		}
+		refined = append(refined, normalizePrecisionStateMetadata(item, "name"))
 	}
 	if len(refined) == 0 {
 		return fallbackItems, notes
 	}
 	filtered := filterPrecisionResultToPlanned(map[string]any{"items": refined}, map[string]any{"items_to_estimate": fallbackItems})
 	if item, ok := filtered["item"].(map[string]any); ok && item != nil {
-		return []map[string]any{item}, notes
+		return attachPrecisionItemMetadata([]map[string]any{item}, fallbackItems), notes
 	}
 	filteredItems := extractItems(filtered["items"])
 	if len(filteredItems) == 0 {
@@ -3393,7 +3611,7 @@ func parsePrecisionRefinedItems(parsed map[string]any, fallbackItems []map[strin
 	if len(filteredItems) > len(fallbackItems) && len(fallbackItems) > 0 {
 		filteredItems = filteredItems[:len(fallbackItems)]
 	}
-	return filteredItems, notes
+	return attachPrecisionItemMetadata(filteredItems, fallbackItems), notes
 }
 
 func precisionWeightSnapshot(items []map[string]any) []string {
@@ -3412,7 +3630,7 @@ func attachPrecisionItemMetadata(parsedItems, plannedItems []map[string]any) []m
 	}
 	enriched := make([]map[string]any, 0, len(parsedItems))
 	for _, item := range parsedItems {
-		enriched = append(enriched, copyAnyMap(item))
+		enriched = append(enriched, normalizePrecisionStateMetadata(copyAnyMap(item), "name"))
 	}
 	if len(plannedItems) == 0 {
 		return enriched
@@ -3437,7 +3655,7 @@ func attachPrecisionItemMetadata(parsedItems, plannedItems []map[string]any) []m
 			continue
 		}
 		used[matchIndex] = true
-		for _, key := range []string{"item_key", "item_hint", "uncertainty_level", "uncertainty_reason", "type"} {
+		for _, key := range []string{"item_key", "item_hint", "uncertainty_level", "uncertainty_reason", "type", "foodState", "weightBasis", "basisEvidence"} {
 			if value, ok := planned[key]; ok && !isEmptyAny(value) {
 				enriched[matchIndex][key] = value
 			}
@@ -3445,6 +3663,7 @@ func attachPrecisionItemMetadata(parsedItems, plannedItems []map[string]any) []m
 		if value, ok := planned["requires_reference"]; ok {
 			enriched[matchIndex]["requires_reference"] = boolFromAny(value)
 		}
+		enriched[matchIndex] = normalizePrecisionStateMetadata(enriched[matchIndex], "name")
 	}
 	return enriched
 }

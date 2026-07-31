@@ -175,6 +175,9 @@ func (e *QwenNutritionEstimator) Estimate(ctx context.Context, candidates []Unre
 			"index":                candidate.Index,
 			"name":                 name,
 			"estimatedWeightGrams": round2(candidate.EstimatedWeightGrams),
+			"foodState":            strings.TrimSpace(candidate.FoodState),
+			"weightBasis":          strings.TrimSpace(candidate.WeightBasis),
+			"basisEvidence":        strings.TrimSpace(candidate.BasisEvidence),
 		})
 	}
 	if len(payloadItems) == 0 {
@@ -183,7 +186,9 @@ func (e *QwenNutritionEstimator) Estimate(ctx context.Context, candidates []Unre
 	userPrompt := map[string]any{
 		"task": "为未命中食物补充每100g营养估计",
 		"requirements": []string{
-			"根据食物名称、常见做法和重量估算每100g营养，不需要重新判断重量。",
+			"根据食物名称、foodState、weightBasis 和 basisEvidence 估算对应重量口径下的每100g营养，不需要重新判断重量。",
+			"weightBasis=as_served 时必须输出当前可食状态每100g营养；熟米粉、熟米线、熟面条、泡发木耳等必须计入吸水后的重量和营养稀释，严禁返回干料每100g营养。",
+			"weightBasis=dry 时才允许使用下锅前或泡发前干料每100g营养；不得把熟态/泡发态数据反向用于明确干重。",
 			"只返回 JSON，不要解释。",
 			"输出字段使用 camelCase。",
 			"所有字段必须为数字；不要因为不确定就把热量或宏量营养填 0，只有白水、无糖茶、黑咖啡等天然接近 0 时才可接近 0。",
@@ -203,7 +208,7 @@ func (e *QwenNutritionEstimator) Estimate(ctx context.Context, candidates []Unre
 		},
 	}
 	bytes, _ := json.Marshal(userPrompt)
-	prompt := "你是营养数据库补全助手。请用常见营养数据库口径保守估算，补齐维生素和矿物质，避免 0 营养和宏量不闭合。\n" + string(bytes)
+	prompt := "你是营养数据库补全助手。请严格按食物当前状态和重量口径选用每100g营养，补齐维生素和矿物质，避免 0 营养、宏量不闭合以及熟重套干料营养。\n" + string(bytes)
 	var parsed map[string]any
 	var err error
 	if client, ok := e.client.(interface {

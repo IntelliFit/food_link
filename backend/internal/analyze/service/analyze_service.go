@@ -5377,7 +5377,14 @@ func (s *AnalyzeService) applyDBFirstNutritionWithOptions(ctx context.Context, r
 			}
 			unresolvedCount++
 			if weight > 0 {
-				fallbackCandidates = append(fallbackCandidates, UnresolvedNutritionCandidate{Index: index, Name: lookups[i].nutritionName, EstimatedWeightGrams: weight})
+				fallbackCandidates = append(fallbackCandidates, UnresolvedNutritionCandidate{
+					Index:                index,
+					Name:                 lookups[i].nutritionName,
+					EstimatedWeightGrams: weight,
+					FoodState:            strings.TrimSpace(fmt.Sprintf("%v", firstNonNil(item["foodState"], item["food_state"]))),
+					WeightBasis:          strings.TrimSpace(fmt.Sprintf("%v", firstNonNil(item["weightBasis"], item["weight_basis"]))),
+					BasisEvidence:        strings.TrimSpace(fmt.Sprintf("%v", firstNonNil(item["basisEvidence"], item["basis_evidence"]))),
+				})
 			}
 			lookups[i] = lookupItem{index: index, item: item, name: name, nutritionName: lookups[i].nutritionName, weight: weight, resolve: &foodrecordrepo.ResolveResult{Status: "unresolved", Score: 0}}
 		} else {
@@ -5790,7 +5797,21 @@ func nutritionResolveName(item map[string]any, name, additionalContext string) s
 		if strings.Contains(name, "燕麦") {
 			return "燕麦片"
 		}
+		if base, ok := nutritionHydrationSensitiveBaseName(name); ok {
+			return "干" + base
+		}
 		return name
+	}
+	cooked := state == "cooked" || containsAnyAnalyzeText(itemEvidence, []string{"煮熟", "熟制", "熟重"}) ||
+		(contextAppliesToItem && containsAnyAnalyzeText(contextEvidence, []string{"煮熟", "熟制", "熟重"}))
+	if cooked {
+		if base, ok := nutritionHydrationSensitiveBaseName(name); ok {
+			// 米粉库中明确区分干态和熟态，优先使用可直接精确命中的标准名。
+			if base == "米粉" {
+				return "米粉(熟)"
+			}
+			return "熟" + base
+		}
 	}
 	weight := nutritionWeightFromItem(item)
 	water := numberFromAny(firstNonNil(item["waterMl"], item["water_ml"]))
@@ -5809,7 +5830,35 @@ func nutritionResolveName(item map[string]any, name, additionalContext string) s
 	if strings.Contains(name, "粥") || strings.Contains(name, "糊") {
 		return name
 	}
+	if base, ok := nutritionHydrationSensitiveBaseName(name); ok {
+		return "泡发" + base
+	}
 	return "泡发" + name
+}
+
+var nutritionHydrationSensitiveBaseNames = []string{
+	"意大利面", "荞麦面", "乌冬面", "燕麦片",
+	"米粉", "米线", "面条", "挂面", "粉条", "宽粉", "粉丝", "河粉", "意面",
+	"燕麦", "木耳", "银耳", "腐竹",
+}
+
+func nutritionHydrationSensitiveBaseName(name string) (string, bool) {
+	base := strings.TrimSpace(name)
+	for _, suffix := range []string{"（熟）", "(熟)", "（干）", "(干)"} {
+		base = strings.TrimSpace(strings.TrimSuffix(base, suffix))
+	}
+	for _, prefix := range []string{"泡发的", "泡好的", "泡发", "泡开", "浸泡", "煮熟的", "熟的", "煮熟", "熟", "干燥的", "干的", "干"} {
+		if strings.HasPrefix(base, prefix) && len(base) > len(prefix) {
+			base = strings.TrimSpace(strings.TrimPrefix(base, prefix))
+			break
+		}
+	}
+	for _, candidate := range nutritionHydrationSensitiveBaseNames {
+		if base == candidate {
+			return candidate, true
+		}
+	}
+	return "", false
 }
 
 func containsAnyAnalyzeText(text string, tokens []string) bool {

@@ -1044,6 +1044,132 @@ func TestNormalizePrecisionPlanItems_PreservesRecognitionCandidates(t *testing.T
 	}
 }
 
+func TestNormalizePrecisionPlanItems_QualifiesHydrationSensitiveNames(t *testing.T) {
+	items := normalizePrecisionPlanItems([]map[string]any{
+		{
+			"item_key":      "cooked_rice_noodle",
+			"item_name":     "米粉",
+			"foodState":     "cooked",
+			"weightBasis":   "as_served",
+			"basisEvidence": "餐碗内已煮熟",
+		},
+		{
+			"item_key":    "dry_rice_noodle",
+			"item_name":   "米粉",
+			"foodState":   "dry",
+			"weightBasis": "dry",
+		},
+	})
+	if len(items) != 2 {
+		t.Fatalf("expected two items, got %#v", items)
+	}
+	if got := stringFromMap(items[0], "item_name"); got != "熟米粉" {
+		t.Fatalf("expected cooked state in display name, got %s", got)
+	}
+	if got := stringFromMap(items[0], "foodState"); got != "cooked" {
+		t.Fatalf("expected cooked foodState, got %s", got)
+	}
+	if got := stringFromMap(items[0], "weightBasis"); got != "as_served" {
+		t.Fatalf("expected as_served weightBasis, got %s", got)
+	}
+	if got := stringFromMap(items[0], "basisEvidence"); got != "餐碗内已煮熟" {
+		t.Fatalf("expected basis evidence preserved, got %s", got)
+	}
+	if got := stringFromMap(items[1], "item_name"); got != "干米粉" {
+		t.Fatalf("expected dry state in display name, got %s", got)
+	}
+}
+
+func TestParsePrecisionEstimateItems_PreservesCookedWeightBasis(t *testing.T) {
+	items, err := parsePrecisionEstimateItems(map[string]any{
+		"item": map[string]any{
+			"name":                 "米粉",
+			"foodState":            "cooked",
+			"weightBasis":          "as_served",
+			"basisEvidence":        "汤碗内为柔软熟制米粉",
+			"estimatedWeightGrams": 220,
+		},
+	}, []map[string]any{{
+		"item_name":     "熟米粉",
+		"foodState":     "cooked",
+		"weightBasis":   "as_served",
+		"basisEvidence": "汤碗内为柔软熟制米粉",
+	}}, nil)
+	if err != nil {
+		t.Fatalf("unexpected parse error: %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("expected one item, got %#v", items)
+	}
+	if got := stringFromMap(items[0], "name"); got != "熟米粉" {
+		t.Fatalf("expected state-qualified name, got %s", got)
+	}
+	if got := stringFromMap(items[0], "foodState"); got != "cooked" {
+		t.Fatalf("expected cooked foodState, got %s", got)
+	}
+	if got := stringFromMap(items[0], "weightBasis"); got != "as_served" {
+		t.Fatalf("expected as_served basis, got %s", got)
+	}
+}
+
+func TestParsePrecisionRefinedItems_PreservesStateMetadataFromFallback(t *testing.T) {
+	fallback := []map[string]any{{
+		"name":                 "熟米粉",
+		"foodState":            "cooked",
+		"weightBasis":          "as_served",
+		"basisEvidence":        "餐碗内已煮熟",
+		"estimatedWeightGrams": 200,
+	}}
+	items, _ := parsePrecisionRefinedItems(map[string]any{
+		"items": []map[string]any{{
+			"name":                 "米粉",
+			"estimatedWeightGrams": 220,
+		}},
+	}, fallback)
+	if len(items) != 1 {
+		t.Fatalf("expected one refined item, got %#v", items)
+	}
+	for key, expected := range map[string]string{
+		"name":          "熟米粉",
+		"foodState":     "cooked",
+		"weightBasis":   "as_served",
+		"basisEvidence": "餐碗内已煮熟",
+	} {
+		if got := stringFromMap(items[0], key); got != expected {
+			t.Fatalf("expected %s=%s, got %s in %#v", key, expected, got, items[0])
+		}
+	}
+}
+
+func TestPrecisionPrompts_RequireStateQualifiedNutritionBasis(t *testing.T) {
+	plan := buildPrecisionPlanPrompt("image", "图片输入", "", nil, nil, true)
+	single, err := buildPrecisionItemEstimatePromptFromPayload("image", map[string]any{
+		"items_to_estimate": []map[string]any{{
+			"item_name":     "米粉",
+			"foodState":     "cooked",
+			"weightBasis":   "as_served",
+			"basisEvidence": "餐碗内已煮熟",
+		}},
+	}, "图片输入", "", nil)
+	if err != nil {
+		t.Fatalf("unexpected prompt error: %v", err)
+	}
+	refine := buildPrecisionWeightRefinePrompt([]map[string]any{{
+		"name":                 "熟米粉",
+		"foodState":            "cooked",
+		"weightBasis":          "as_served",
+		"estimatedWeightGrams": 220,
+	}}, "图片输入", "", nil)
+
+	for label, prompt := range map[string]string{"plan": plan, "single": single, "refine": refine} {
+		for _, expected := range []string{"foodState", "weightBasis", "basisEvidence", "熟米粉", "干料"} {
+			if !strings.Contains(prompt, expected) {
+				t.Fatalf("%s prompt missing state/basis rule %q:\n%s", label, expected, prompt)
+			}
+		}
+	}
+}
+
 func TestParsePrecisionRefinedItems_UsesFallbackWhenNoItems(t *testing.T) {
 	fallback := []map[string]any{{"name": "白米饭", "estimatedWeightGrams": 180}}
 	items, notes := parsePrecisionRefinedItems(map[string]any{

@@ -27,8 +27,11 @@ func TestDeepSeekNutritionEstimator_EstimatePromptRequiresMicronutrients(t *test
 
 	_, err := estimator.Estimate(context.Background(), []UnresolvedNutritionCandidate{{
 		Index:                0,
-		Name:                 "测试食物",
+		Name:                 "熟米粉",
 		EstimatedWeightGrams: 100,
+		FoodState:            "cooked",
+		WeightBasis:          "as_served",
+		BasisEvidence:        "餐碗内已煮熟",
 	}}, "")
 	require.NoError(t, err)
 
@@ -44,6 +47,11 @@ func TestDeepSeekNutritionEstimator_EstimatePromptRequiresMicronutrients(t *test
 	assert.Contains(t, prompt, "calciumMg")
 	assert.Contains(t, prompt, "vitaminCMg")
 	assert.Contains(t, prompt, "vitaminB12Mcg")
+	assert.Contains(t, prompt, `"name":"熟米粉"`)
+	assert.Contains(t, prompt, `"foodState":"cooked"`)
+	assert.Contains(t, prompt, `"weightBasis":"as_served"`)
+	assert.Contains(t, prompt, `"basisEvidence":"餐碗内已煮熟"`)
+	assert.Contains(t, prompt, "严禁返回干料每100g营养")
 }
 
 func TestDeepSeekNutritionEstimator_EstimateParsesMicronutrients(t *testing.T) {

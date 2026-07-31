@@ -447,7 +447,8 @@ func isImplausibleNutritionFoodMatch(query string, food domain.FoodNutrition) bo
 	if isFreshFruitToProcessedProductMismatch(normalized, canonical) {
 		return true
 	}
-	return isHydratedFoodToDryNutritionMismatch(normalized, canonical, food)
+	return isHydratedFoodToDryNutritionMismatch(normalized, canonical, food) ||
+		isDryFoodToPreparedNutritionMismatch(normalized, canonical, food)
 }
 
 var nutritionFruitTokens = []string{
@@ -477,7 +478,7 @@ func isFreshFruitToProcessedProductMismatch(query, canonical string) bool {
 }
 
 var nutritionHydratedCues = []string{
-	"泡发", "泡开", "泡好", "水泡", "泡水", "浸泡", "泡过", "煮熟", "煮好", "熬煮", "熟重", "湿重", "粥", "糊",
+	"泡发", "泡开", "泡好", "水泡", "泡水", "浸泡", "泡过", "煮熟", "煮好", "熬煮", "熟", "熟重", "湿重", "粥", "糊",
 }
 
 var nutritionPreparedCues = []string{
@@ -485,7 +486,8 @@ var nutritionPreparedCues = []string{
 }
 
 var nutritionHydratableStaples = []string{
-	"燕麦", "麦片", "大米", "小米", "糙米", "藜麦", "薏米", "红豆", "绿豆", "黄豆", "木耳", "银耳", "腐竹", "粉条", "宽粉", "粉丝", "米粉",
+	"燕麦", "麦片", "大米", "小米", "糙米", "藜麦", "薏米", "红豆", "绿豆", "黄豆", "木耳", "银耳", "腐竹",
+	"粉条", "宽粉", "粉丝", "米粉", "米线", "河粉", "面条", "挂面", "意面", "意大利面", "乌冬", "荞麦面",
 }
 
 func isHydratedFoodToDryNutritionMismatch(query, canonical string, food domain.FoodNutrition) bool {
@@ -496,6 +498,29 @@ func isHydratedFoodToDryNutritionMismatch(query, canonical string, food domain.F
 		return false
 	}
 	return food.KcalPer100g >= 250 || food.CarbsPer100g >= 45
+}
+
+func isDryFoodToPreparedNutritionMismatch(query, canonical string, food domain.FoodNutrition) bool {
+	if !hasExplicitDryNutritionCue(query) || !containsAnyToken(query, nutritionHydratableStaples) {
+		return false
+	}
+	if containsAnyToken(canonical, []string{"干重", "干料", "未泡", "干燥", "脱水"}) ||
+		hasExplicitDryNutritionCue(canonical) {
+		return false
+	}
+	return containsAnyToken(canonical, nutritionPreparedCues) || food.KcalPer100g < 250 || food.CarbsPer100g < 45
+}
+
+func hasExplicitDryNutritionCue(text string) bool {
+	if containsAnyToken(text, []string{"干重", "干料", "未泡", "泡发前", "下锅前"}) {
+		return true
+	}
+	for _, staple := range nutritionHydratableStaples {
+		if strings.Contains(text, "干"+staple) {
+			return true
+		}
+	}
+	return false
 }
 
 // ValidateNutritionAliasTarget applies the same hard safety gates used by

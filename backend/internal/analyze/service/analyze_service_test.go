@@ -2708,7 +2708,14 @@ func TestQwenNutritionEstimatorEstimateParsesNutrition(t *testing.T) {
 	estimator := NewQwenNutritionEstimator(client)
 
 	rows, err := estimator.Estimate(context.Background(), []UnresolvedNutritionCandidate{
-		{Index: 3, Name: "未收录蔬菜", EstimatedWeightGrams: 100},
+		{
+			Index:                3,
+			Name:                 "熟米粉",
+			EstimatedWeightGrams: 100,
+			FoodState:            "cooked",
+			WeightBasis:          "as_served",
+			BasisEvidence:        "餐碗内已煮熟",
+		},
 	}, "测试上下文")
 	require.NoError(t, err)
 
@@ -2720,11 +2727,36 @@ func TestQwenNutritionEstimatorEstimateParsesNutrition(t *testing.T) {
 	assert.Contains(t, client.prompt, "calciumMg")
 	assert.Contains(t, client.prompt, "vitaminCMg")
 	assert.Contains(t, client.prompt, "vitaminB12Mcg")
+	assert.Contains(t, client.prompt, `"name":"熟米粉"`)
+	assert.Contains(t, client.prompt, `"foodState":"cooked"`)
+	assert.Contains(t, client.prompt, `"weightBasis":"as_served"`)
+	assert.Contains(t, client.prompt, `"basisEvidence":"餐碗内已煮熟"`)
+	assert.Contains(t, client.prompt, "严禁返回干料每100g营养")
 	assert.Equal(t, 78.0, rows[3]["calories"])
 	assert.Equal(t, 3.0, rows[3]["protein"])
 	assert.Equal(t, 22.0, rows[3]["calciumMg"])
 	assert.Equal(t, 6.0, rows[3]["vitaminCMg"])
 	assert.Equal(t, 0.2, rows[3]["vitaminB12Mcg"])
+}
+
+func TestNutritionResolveName_DistinguishesCookedAndDryRiceNoodles(t *testing.T) {
+	cooked := nutritionResolveName(map[string]any{
+		"foodState":   "cooked",
+		"weightBasis": "as_served",
+	}, "熟米粉", "")
+	assert.Equal(t, "米粉(熟)", cooked)
+
+	bareButStructured := nutritionResolveName(map[string]any{
+		"foodState":   "cooked",
+		"weightBasis": "as_served",
+	}, "米粉", "")
+	assert.Equal(t, "米粉(熟)", bareButStructured)
+
+	dry := nutritionResolveName(map[string]any{
+		"foodState":   "dry",
+		"weightBasis": "dry",
+	}, "米粉", "")
+	assert.Equal(t, "干米粉", dry)
 }
 
 func TestQwenNutritionEstimatorUsesNoThinkingClient(t *testing.T) {

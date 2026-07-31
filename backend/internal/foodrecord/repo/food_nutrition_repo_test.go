@@ -418,6 +418,26 @@ func TestIsImplausibleNutritionFoodMatch(t *testing.T) {
 	assert.True(t, isImplausibleNutritionFoodMatch("红烧牛肉粉", domain.FoodNutrition{CarbsPer100g: 1.5}))
 	assert.False(t, isImplausibleNutritionFoodMatch("牛肉面", domain.FoodNutrition{CarbsPer100g: 18}))
 	assert.False(t, isImplausibleNutritionFoodMatch("瘦牛肉", domain.FoodNutrition{CarbsPer100g: 0}))
+	assert.True(t, isImplausibleNutritionFoodMatch("熟米粉", domain.FoodNutrition{
+		CanonicalName: "米粉（干重折算）",
+		KcalPer100g:   353.5,
+		CarbsPer100g:  78,
+	}))
+	assert.False(t, isImplausibleNutritionFoodMatch("熟米粉", domain.FoodNutrition{
+		CanonicalName: "米粉(熟)",
+		KcalPer100g:   110,
+		CarbsPer100g:  25,
+	}))
+	assert.True(t, isImplausibleNutritionFoodMatch("干米粉", domain.FoodNutrition{
+		CanonicalName: "米粉(熟)",
+		KcalPer100g:   110,
+		CarbsPer100g:  25,
+	}))
+	assert.False(t, isImplausibleNutritionFoodMatch("干米粉", domain.FoodNutrition{
+		CanonicalName: "米粉（干重折算）",
+		KcalPer100g:   353.5,
+		CarbsPer100g:  78,
+	}))
 }
 
 func TestValidateNutritionAliasTargetRejectsMixedDishToZeroCarbIngredient(t *testing.T) {
