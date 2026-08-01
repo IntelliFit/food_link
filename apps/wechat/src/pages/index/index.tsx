@@ -3203,19 +3203,30 @@ function IndexPage() {
         )}
 
         {/* 热量总览卡片 + 三大营养素合并（仅展示与编辑目标，不整卡跳转） */}
-        <View className='main-card combined-card'>
-          <View className='main-card-header'>
-            <View className='main-card-title'>
-              <Text className='card-label'>
-                {dashboardBusy ? '剩余可摄入' : isCalorieOver ? '已超出' : '剩余可摄入'}
-              </Text>
+        <View className={`main-card combined-card${isCalorieOver ? ' is-over' : ''}`}>
+          <View className='calorie-card-topline'>
+            <View className='calorie-card-kicker'>
+              <Text className='calorie-card-kicker-dot' />
+              <Text className='calorie-card-kicker-text'>今日热量</Text>
+            </View>
+            <View className='target-edit-btn' onClick={openTargetEditor}>
+              <Text className='iconfont icon-target target-edit-icon' />
+              <Text className='target-edit-text'>设置目标</Text>
+            </View>
+          </View>
+
+          <View className='calorie-hero'>
+            <Text className={`calorie-status-label${isCalorieOver ? ' is-over' : ''}`}>
+              {dashboardBusy ? '剩余可摄入' : isCalorieOver ? '已超出目标' : '剩余可摄入'}
+            </Text>
+            <View className='calorie-headline'>
               {dashboardBusy ? (
-                <View style={{ display: 'flex', alignItems: 'center', gap: '12rpx', marginTop: '8rpx' }}>
-                  <Text className='card-value' style={{ fontSize: '36rpx', color: '#9ca3af' }}>--</Text>
-                  <View className='loading-spinner' style={{ width: '24rpx', height: '24rpx', borderWidth: '3rpx' }} />
+                <View className='calorie-headline-loading'>
+                  <Text className='card-value is-muted'>--</Text>
+                  <View className='loading-spinner calorie-headline-spinner' />
                 </View>
               ) : isGuest ? (
-                <Text className='card-value' style={{ color: '#9ca3af' }}>--</Text>
+                <Text className='card-value is-muted'>--</Text>
               ) : (
                 <Text className={`card-value${isCalorieOver ? ' is-over' : ''}`}>
                   {isCalorieOver
@@ -3225,34 +3236,21 @@ function IndexPage() {
               )}
               {!dashboardBusy && !isGuest && <Text className='card-unit'>kcal</Text>}
             </View>
-            <View className='target-section'>
-              {dashboardBusy || isGuest ? (
-                <View className='target-energy-nums-only'>
-                  <Text className='target-energy-num-muted'>--</Text>
-                  <Text className='target-energy-slash-only'>/</Text>
-                  <Text className='target-energy-num-muted'>--</Text>
-                </View>
-              ) : (
-                <View className='target-energy-nums-only'>
-                  <Text className={`target-energy-intake-num${isCalorieOver ? ' is-over' : ''}`}>
-                    {formatDisplayNumber(Math.round(intakeData.current))}
-                  </Text>
-                  <Text className='target-energy-slash-only'>/</Text>
-                  <Text className='target-energy-target-num'>
-                    {formatDisplayNumber(Math.round(intakeData.target))}
-                  </Text>
-                </View>
-              )}
-              <View className='target-action-row'>
-                <View className='target-edit-btn' onClick={openTargetEditor}>
-                  <Text className='iconfont icon-target target-edit-icon' />
-                  <Text className='target-edit-text'>目标设置</Text>
-                </View>
-              </View>
-            </View>
           </View>
 
-          <View className='progress-section'>
+          <View className='calorie-budget-row'>
+            <Text className='calorie-budget-label'>已摄入</Text>
+            {dashboardBusy || isGuest ? (
+              <Text className='calorie-budget-value is-muted'>-- / -- kcal</Text>
+            ) : (
+              <Text className={`calorie-budget-value${isCalorieOver ? ' is-over' : ''}`}>
+                {formatDisplayNumber(Math.round(intakeData.current))}
+                <Text className='calorie-budget-target'> / {formatDisplayNumber(Math.round(intakeData.target))} kcal</Text>
+              </Text>
+            )}
+          </View>
+
+          <View className='progress-section calorie-progress-section'>
             <View className={`progress-bar-bg thick${dashboardBusy ? ' loading-pulse' : ''}`}>
               <View
                 className={`progress-bar-fill thick${isCalorieOver ? ' is-over' : ''}`}
@@ -3267,11 +3265,11 @@ function IndexPage() {
               onClick={() => setNutritionExpanded((value) => !value)}
             >
               <View className='nutrition-expand-title-row'>
-                <Text className='nutrition-expand-title'>营养概览</Text>
+                <Text className='nutrition-expand-title'>三大营养</Text>
                 <View className='nutrition-expand-affordance'>
                   <Text className={`iconfont ${nutritionExpanded ? 'icon-collapse' : 'icon-expand'} nutrition-expand-affordance-icon`} />
                   <Text className='nutrition-expand-affordance-text'>
-                    {nutritionExpanded ? '收起' : '展开更多'}
+                    {nutritionExpanded ? '收起' : '更多营养'}
                   </Text>
                 </View>
               </View>

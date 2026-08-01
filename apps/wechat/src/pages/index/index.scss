@@ -773,6 +773,70 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   box-shadow: 0 4rpx 20rpx rgb(0 0 0 / 4%);
 }
 
+.calorie-card-topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20rpx;
+}
+
+.calorie-card-kicker {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+}
+
+.calorie-card-kicker-dot {
+  width: 10rpx;
+  height: 10rpx;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: $primary-color;
+  box-shadow: 0 0 0 8rpx rgb(92 184 150 / 10%);
+}
+
+.calorie-card-kicker-text {
+  color: #456056;
+  font-size: 24rpx;
+  font-weight: 700;
+  line-height: 34rpx;
+}
+
+.calorie-hero {
+  margin-top: 26rpx;
+}
+
+.calorie-status-label {
+  display: block;
+  color: $text-secondary;
+  font-size: 24rpx;
+  font-weight: 500;
+  line-height: 34rpx;
+
+  &.is-over {
+    color: $home-warning-red;
+  }
+}
+
+.calorie-headline {
+  min-height: 86rpx;
+  display: flex;
+  align-items: baseline;
+  gap: 12rpx;
+}
+
+.calorie-headline-loading {
+  display: flex;
+  align-items: center;
+  gap: 14rpx;
+}
+
+.calorie-headline-spinner {
+  width: 24rpx;
+  height: 24rpx;
+  border-width: 3rpx;
+}
+
 .main-card-header {
   display: flex;
   justify-content: space-between;
@@ -793,10 +857,16 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 }
 
 .card-value {
-  font-size: 56rpx;
-  font-weight: 700;
+  font-size: 72rpx;
+  font-weight: 750;
   color: $text-primary;
-  line-height: 72rpx;
+  line-height: 86rpx;
+  letter-spacing: -2rpx;
+  font-variant-numeric: tabular-nums;
+
+  &.is-muted {
+    color: $text-tertiary;
+  }
 
   &.is-over {
     color: $home-warning-red;
@@ -804,9 +874,45 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 }
 
 .card-unit {
-  font-size: 28rpx;
+  font-size: 24rpx;
+  font-weight: 600;
   color: $text-tertiary;
-  line-height: 40rpx;
+  line-height: 34rpx;
+}
+
+.calorie-budget-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 20rpx;
+  margin-top: 8rpx;
+}
+
+.calorie-budget-label {
+  color: $text-tertiary;
+  font-size: 21rpx;
+  line-height: 30rpx;
+}
+
+.calorie-budget-value {
+  color: #3b8f70;
+  font-size: 24rpx;
+  font-weight: 700;
+  line-height: 34rpx;
+  font-variant-numeric: tabular-nums;
+
+  &.is-over {
+    color: $home-warning-red;
+  }
+
+  &.is-muted {
+    color: $text-tertiary;
+  }
+}
+
+.calorie-budget-target {
+  color: $text-tertiary;
+  font-weight: 500;
 }
 
 .target-section {
@@ -871,16 +977,15 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   align-items: center;
   justify-content: center;
   gap: 6rpx;
-  padding: 6rpx 16rpx;
-  background: rgb(255 255 255 / 94%);
+  min-height: 52rpx;
+  padding: 0 16rpx;
+  background: rgb(92 184 150 / 9%);
   border-radius: 999rpx;
-  box-shadow:
-    0 4rpx 16rpx rgb(0 0 0 / 10%),
-    inset 0 1rpx 0 rgb(255 255 255 / 55%);
+  box-shadow: none;
 
   &:active {
-    background: rgb(255 255 255 / 100%);
-    box-shadow: 0 2rpx 8rpx rgb(0 0 0 / 12%);
+    background: rgb(92 184 150 / 16%);
+    box-shadow: none;
   }
 }
 
@@ -905,6 +1010,10 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   margin-top: 8rpx;
 }
 
+.calorie-progress-section {
+  margin-top: 12rpx;
+}
+
 .progress-bar-bg {
   width: 100%;
   height: 12rpx;
@@ -914,7 +1023,7 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   margin-bottom: 20rpx;
 
   &.thick {
-    height: 20rpx;
+    height: 16rpx;
     margin-bottom: 0;
   }
 }
@@ -950,7 +1059,22 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 
 // 合并卡片样式 - 热量+三大营养素
 .combined-card {
+  position: relative;
+  overflow: hidden;
+  padding: 28rpx;
   padding-bottom: 24rpx;
+  border: 1rpx solid rgb(92 184 150 / 16%);
+  background:
+    radial-gradient(circle at 100% 0%, rgb(141 211 191 / 18%) 0, transparent 42%),
+    linear-gradient(180deg, #ffffff 0%, #fbfefc 100%);
+  box-shadow: 0 12rpx 32rpx rgb(49 105 84 / 9%);
+
+  &.is-over {
+    border-color: rgb(229 115 115 / 18%);
+    background:
+      radial-gradient(circle at 100% 0%, rgb(229 115 115 / 10%) 0, transparent 40%),
+      linear-gradient(180deg, #ffffff 0%, #fffdfd 100%);
+  }
 }
 
 .diet-rec-entry {
@@ -1728,9 +1852,13 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   height: 100%;
   justify-content: space-between;
   flex-direction: row;
-  gap: 8rpx;
+  gap: 0;
   box-sizing: border-box;
   padding-top: 0;
+  border-radius: 18rpx;
+  background: rgb(255 255 255 / 72%);
+  border: 1rpx solid rgb(62 89 78 / 7%);
+  overflow: hidden;
 }
 
 .macro-card-horizontal {
@@ -1741,10 +1869,10 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   flex-direction: row;
   align-items: center;
   justify-content: space-between;
-  padding: 10rpx 8rpx;
-  background: #ffffff;
-  border-radius: 12rpx;
-  border: 2rpx solid transparent;
+  padding: 14rpx 12rpx 16rpx;
+  background: transparent;
+  border-radius: 0;
+  border: none;
   box-sizing: border-box;
   transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease, border-color 0.2s ease;
 
@@ -1754,8 +1882,11 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 
   // 与 `.meal-item.is-warning` 一致：摄入超过目标
   &.is-warning {
-    border-color: $home-warning-border;
     background: $home-warning-surface;
+  }
+
+  & + & {
+    border-left: 1rpx solid rgb(62 89 78 / 9%);
   }
 }
 
@@ -1770,8 +1901,8 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 
 // 超标提示占位槽：预留固定高度，避免有/无提示时三列对齐错乱
 .macro-excess-slot {
-  height: 22rpx;
-  margin-bottom: 6rpx;
+  height: 20rpx;
+  margin-bottom: 4rpx;
   display: flex;
   align-items: center;
   justify-content: flex-start;
@@ -1800,8 +1931,8 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 }
 
 .macro-label-horizontal {
-  font-size: 20rpx;
-  font-weight: 400;
+  font-size: 21rpx;
+  font-weight: 600;
   line-height: 26rpx;
   color: #000;
   white-space: nowrap;
@@ -1817,13 +1948,13 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 }
 
 .macro-current-value-inline {
-  font-size: 23rpx;
+  font-size: 25rpx;
   font-weight: 700;
   line-height: 30rpx;
 }
 
 .macro-target-total {
-  font-size: 18rpx;
+  font-size: 17rpx;
   font-weight: 400;
   color: $text-tertiary;
   line-height: 24rpx;
@@ -1880,21 +2011,22 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 
 .nutrition-expand-shell {
   position: relative;
-  margin-top: 6rpx;
+  margin-top: 24rpx;
+  padding-top: 20rpx;
+  border-top: 1rpx solid rgb(62 89 78 / 9%);
   border-radius: 22rpx;
   transition: background 0.2s ease;
 
   &.is-expanded {
-    padding: 0;
+    padding-top: 20rpx;
     background: transparent;
-    border: none;
   }
 }
 
 .nutrition-expand-main {
   display: flex;
   flex-direction: column;
-  gap: 8rpx;
+  gap: 12rpx;
 }
 
 .nutrition-expand-title-row {
@@ -1905,7 +2037,7 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 }
 
 .nutrition-expand-title {
-  font-size: 22rpx;
+  font-size: 23rpx;
   line-height: 30rpx;
   font-weight: 700;
   color: #34495e;
@@ -1915,9 +2047,9 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   display: inline-flex;
   align-items: center;
   gap: 4rpx;
-  padding: 4rpx 10rpx;
+  padding: 4rpx 0;
   border-radius: 999rpx;
-  background: #f3f8f5;
+  background: transparent;
 }
 
 .nutrition-expand-affordance-icon {
