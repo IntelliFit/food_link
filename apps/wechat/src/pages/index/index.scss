@@ -25,6 +25,12 @@ $home-warning-red: #e57373;
 $home-warning-border: #f5d4d4;
 $home-warning-surface: #fef8f8;
 
+// 首页主界面仅使用四档文字字号；图标按光学尺寸独立处理。
+$home-type-display: 72rpx;
+$home-type-hero: 44rpx;
+$home-type-title: 28rpx;
+$home-type-body: 22rpx;
+
 @import '../../styles/tab-page-layout.scss';
 
 // 日期选中胶囊：沿用主题绿半透明；边框与背景同色（避免色差）
@@ -92,7 +98,7 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 
 .home-login-banner-text {
   flex: 1;
-  font-size: 26rpx;
+  font-size: $home-type-title;
   color: $text-secondary;
   line-height: 1.45;
 }
@@ -105,7 +111,7 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 }
 
 .home-login-banner-btn-text {
-  font-size: 26rpx;
+  font-size: $home-type-body;
   font-weight: 600;
   color: #fff;
 }
@@ -145,7 +151,7 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 
 .home-health-profile-prompt__title {
   color: #245246;
-  font-size: 25rpx;
+  font-size: $home-type-title;
   font-weight: 700;
   line-height: 34rpx;
 }
@@ -153,7 +159,7 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 .home-health-profile-prompt__desc {
   margin-top: 4rpx;
   color: #6c827b;
-  font-size: 20rpx;
+  font-size: $home-type-body;
   line-height: 29rpx;
 }
 
@@ -169,14 +175,13 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 .home-health-profile-prompt__dismiss {
   padding: 4rpx 2rpx;
   color: #238c6d;
-  font-size: 22rpx;
+  font-size: $home-type-body;
   font-weight: 700;
   line-height: 30rpx;
 }
 
 .home-health-profile-prompt__dismiss {
   color: #98a8a2;
-  font-size: 19rpx;
   font-weight: 500;
 }
 
@@ -197,7 +202,7 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   display: flex;
   align-items: center;
   gap: 12rpx;
-  font-size: 44rpx;
+  font-size: $home-type-hero;
   font-weight: 700;
   color: $text-primary;
   line-height: 60rpx;
@@ -212,7 +217,7 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 
 .greeting-subtitle {
   display: block;
-  font-size: 28rpx;
+  font-size: $home-type-title;
   color: $text-secondary;
   line-height: 40rpx;
 }
@@ -266,7 +271,7 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 }
 
 .home-backfill-hint__text {
-  font-size: 24rpx;
+  font-size: $home-type-body;
   line-height: 34rpx;
   font-weight: 600;
   color: #2f7f62;
@@ -287,7 +292,7 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 }
 
 .home-backfill-hint__action {
-  font-size: 22rpx;
+  font-size: $home-type-body;
   line-height: 32rpx;
   font-weight: 700;
   color: #ffffff;
@@ -302,7 +307,7 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 }
 
 .home-backfill-hint__cancel {
-  font-size: 22rpx;
+  font-size: $home-type-body;
   line-height: 32rpx;
   font-weight: 700;
   color: #2f7f62;
@@ -433,7 +438,7 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 }
 
 .home-reward-hint__kicker {
-  font-size: 16rpx;
+  font-size: $home-type-body;
   line-height: 22rpx;
   font-weight: 800;
   color: rgb(255 255 255 / 76%);
@@ -441,7 +446,7 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 
 .home-reward-hint__title {
   margin-top: 2rpx;
-  font-size: 23rpx;
+  font-size: $home-type-title;
   line-height: 30rpx;
   font-weight: 900;
   color: #ffffff;
@@ -449,7 +454,7 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 
 .home-reward-hint__desc {
   margin-top: 2rpx;
-  font-size: 18rpx;
+  font-size: $home-type-body;
   line-height: 24rpx;
   color: rgb(255 255 255 / 82%);
   overflow: hidden;
@@ -471,7 +476,7 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   border-radius: 999rpx;
   background: #ffffff;
   color: #0f9f6e;
-  font-size: 20rpx;
+  font-size: $home-type-body;
   line-height: 24rpx;
   font-weight: 900;
 }
@@ -604,7 +609,7 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 }
 
 .date-num-text {
-  font-size: 26rpx;
+  font-size: $home-type-title;
   font-weight: 600;
   line-height: 36rpx;
 }
@@ -797,7 +802,7 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 
 .calorie-card-kicker-text {
   color: #456056;
-  font-size: 24rpx;
+  font-size: $home-type-body;
   font-weight: 700;
   line-height: 34rpx;
 }
@@ -809,7 +814,7 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 .calorie-status-label {
   display: block;
   color: $text-secondary;
-  font-size: 24rpx;
+  font-size: $home-type-body;
   font-weight: 500;
   line-height: 34rpx;
 
@@ -857,7 +862,7 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 }
 
 .card-value {
-  font-size: 72rpx;
+  font-size: $home-type-display;
   font-weight: 750;
   color: $text-primary;
   line-height: 86rpx;
@@ -874,7 +879,7 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 }
 
 .card-unit {
-  font-size: 24rpx;
+  font-size: $home-type-body;
   font-weight: 600;
   color: $text-tertiary;
   line-height: 34rpx;
@@ -890,13 +895,13 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 
 .calorie-budget-label {
   color: $text-tertiary;
-  font-size: 21rpx;
+  font-size: $home-type-body;
   line-height: 30rpx;
 }
 
 .calorie-budget-value {
   color: #3b8f70;
-  font-size: 24rpx;
+  font-size: $home-type-body;
   font-weight: 700;
   line-height: 34rpx;
   font-variant-numeric: tabular-nums;
@@ -999,7 +1004,7 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 22rpx;
+  font-size: $home-type-body;
   color: #2f7f62;
   line-height: 30rpx;
   font-weight: 600;
@@ -1123,14 +1128,14 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 }
 
 .diet-rec-entry-title {
-  font-size: 28rpx;
+  font-size: $home-type-title;
   line-height: 38rpx;
   font-weight: 700;
   color: $text-primary;
 }
 
 .diet-rec-entry-subtitle {
-  font-size: 22rpx;
+  font-size: $home-type-body;
   line-height: 30rpx;
   color: $text-secondary;
 }
@@ -1163,7 +1168,7 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 }
 
 .diet-rec-entry-btn-text {
-  font-size: 24rpx;
+  font-size: $home-type-body;
   line-height: 32rpx;
   font-weight: 700;
   color: #2f7f62;
@@ -1224,14 +1229,14 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 }
 
 .campus-canteen-entry-title {
-  font-size: 28rpx;
+  font-size: $home-type-title;
   line-height: 38rpx;
   font-weight: 700;
   color: $text-primary;
 }
 
 .campus-canteen-entry-subtitle {
-  font-size: 22rpx;
+  font-size: $home-type-body;
   line-height: 30rpx;
   color: $text-secondary;
 }
@@ -1901,7 +1906,7 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 
 // 超标提示占位槽：预留固定高度，避免有/无提示时三列对齐错乱
 .macro-excess-slot {
-  height: 20rpx;
+  height: 28rpx;
   margin-bottom: 4rpx;
   display: flex;
   align-items: center;
@@ -1910,9 +1915,9 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 
 // 超标时：标签上方极简超出克数（与环图左对齐留白区）
 .macro-over-hint {
-  font-size: 16rpx;
+  font-size: $home-type-body;
   font-weight: 600;
-  line-height: 20rpx;
+  line-height: 28rpx;
   color: $home-warning-red;
   font-variant-numeric: tabular-nums;
 }
@@ -1931,9 +1936,9 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 }
 
 .macro-label-horizontal {
-  font-size: 21rpx;
+  font-size: $home-type-body;
   font-weight: 600;
-  line-height: 26rpx;
+  line-height: 28rpx;
   color: #000;
   white-space: nowrap;
 }
@@ -1948,16 +1953,16 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 }
 
 .macro-current-value-inline {
-  font-size: 25rpx;
+  font-size: $home-type-title;
   font-weight: 700;
-  line-height: 30rpx;
+  line-height: 36rpx;
 }
 
 .macro-target-total {
-  font-size: 17rpx;
+  font-size: $home-type-body;
   font-weight: 400;
   color: $text-tertiary;
-  line-height: 24rpx;
+  line-height: 28rpx;
   white-space: nowrap;
   flex-shrink: 0;
 }
@@ -2037,8 +2042,8 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 }
 
 .nutrition-expand-title {
-  font-size: 23rpx;
-  line-height: 30rpx;
+  font-size: $home-type-title;
+  line-height: 36rpx;
   font-weight: 700;
   color: #34495e;
 }
@@ -2059,8 +2064,8 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 }
 
 .nutrition-expand-affordance-text {
-  font-size: 18rpx;
-  line-height: 22rpx;
+  font-size: $home-type-body;
+  line-height: 28rpx;
   font-weight: 700;
   color: #5aa783;
 }
@@ -2093,7 +2098,7 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 
 .micros-preview-kicker {
   display: block;
-  font-size: 24rpx;
+  font-size: $home-type-title;
   line-height: 32rpx;
   font-weight: 800;
   color: #34495e;
@@ -2108,8 +2113,8 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 
 .micros-preview-status-text {
   display: block;
-  font-size: 18rpx;
-  line-height: 24rpx;
+  font-size: $home-type-body;
+  line-height: 28rpx;
   font-weight: 700;
   color: #5aa783;
 }
@@ -2138,9 +2143,9 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 
 .micros-preview-card-label {
   display: block;
-  font-size: 18rpx;
+  font-size: $home-type-body;
   font-weight: 600;
-  line-height: 24rpx;
+  line-height: 28rpx;
   color: #475569;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2148,14 +2153,14 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 }
 
 .micros-preview-card-unit {
-  font-size: 15rpx;
-  line-height: 20rpx;
+  font-size: $home-type-body;
+  line-height: 28rpx;
   color: #94a3b8;
 }
 
 .micros-preview-card-value {
   display: block;
-  font-size: 25rpx;
+  font-size: $home-type-title;
   line-height: 32rpx;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
@@ -2169,7 +2174,7 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 }
 
 .micros-preview-empty-text {
-  font-size: 22rpx;
+  font-size: $home-type-body;
   line-height: 32rpx;
   color: #94a3b8;
 }
@@ -2205,8 +2210,8 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 
 .micros-preview-card-target {
   display: block;
-  font-size: 15rpx;
-  line-height: 20rpx;
+  font-size: $home-type-body;
+  line-height: 28rpx;
   color: #94a3b8;
   margin-left: 3rpx;
 }
@@ -2391,7 +2396,7 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 
 // 快捷记录区域
 .section-title {
-  font-size: 32rpx;
+  font-size: $home-type-title;
   font-weight: 700;
   color: $text-primary;
   line-height: 44rpx;
@@ -2401,7 +2406,7 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 
 // 快到期食物标题 - 无底部间距
 .expiry-title {
-  font-size: 32rpx;
+  font-size: $home-type-title;
   font-weight: 700;
   color: $text-primary;
   line-height: 44rpx;
@@ -2422,7 +2427,7 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 
 // 今日餐食标题 - 无底部间距
 .meals-title {
-  font-size: 32rpx;
+  font-size: $home-type-title;
   font-weight: 700;
   color: $text-primary;
   line-height: 44rpx;
@@ -2580,7 +2585,7 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 }
 
 .expiry-name {
-  font-size: 28rpx;
+  font-size: $home-type-title;
   font-weight: 600;
   color: $text-primary;
   line-height: 40rpx;
@@ -2599,7 +2604,7 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 }
 
 .expiry-time-pill-text {
-  font-size: 20rpx;
+  font-size: $home-type-body;
   font-weight: 500;
   color: $text-secondary;
   line-height: 28rpx;
@@ -2614,7 +2619,7 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 }
 
 .expiry-meta-text {
-  font-size: 24rpx;
+  font-size: $home-type-body;
   font-weight: 500;
   color: $text-secondary;
   line-height: 34rpx;
@@ -2630,7 +2635,7 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 
 .expiry-empty-title {
   display: block;
-  font-size: 28rpx;
+  font-size: $home-type-title;
   font-weight: 600;
   color: $text-primary;
   line-height: 40rpx;
@@ -2639,7 +2644,7 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 
 .expiry-empty-desc {
   display: block;
-  font-size: 24rpx;
+  font-size: $home-type-body;
   color: $text-secondary;
   line-height: 34rpx;
 }
@@ -2670,7 +2675,7 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 }
 
 .view-all-text {
-  font-size: 26rpx;
+  font-size: $home-type-body;
   color: $primary-color;
   font-weight: 500;
   line-height: 36rpx;
@@ -2784,7 +2789,7 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   height: 72rpx;
   background: linear-gradient(to right, $primary-gradient-start 0%, $primary-gradient-end 100%);
   border: none;
-  font-size: 28rpx;
+  font-size: $home-type-title;
 }
 
 .meal-item {
@@ -2864,7 +2869,7 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 }
 
 .meal-media-type-tag-text {
-  font-size: 18rpx;
+  font-size: $home-type-body;
   font-weight: 700;
   line-height: 30rpx;
   color: #ffffff;
@@ -2889,7 +2894,7 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 }
 
 .meal-desc {
-  font-size: 28rpx;
+  font-size: $home-type-title;
   font-weight: 600;
   color: $text-primary;
   line-height: 40rpx;
@@ -2919,7 +2924,7 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 }
 
 .meal-count-badge-text {
-  font-size: 20rpx;
+  font-size: $home-type-body;
   font-weight: 700;
   color: #ffffff;
   line-height: 28rpx;
@@ -2927,7 +2932,7 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 }
 
 .meal-time-pill-text {
-  font-size: 20rpx;
+  font-size: $home-type-body;
   font-weight: 500;
   color: $text-secondary;
   line-height: 28rpx;
@@ -2949,7 +2954,7 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 }
 
 .meal-calorie {
-  font-size: 26rpx;
+  font-size: $home-type-title;
   font-weight: 700;
   color: $text-primary;
   line-height: 36rpx;
@@ -2957,7 +2962,7 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 }
 
 .meal-calorie-unit {
-  font-size: 20rpx;
+  font-size: $home-type-body;
   font-weight: 500;
   color: $text-secondary;
 }
@@ -2976,7 +2981,7 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 }
 
 .meal-intake-ratio-text {
-  font-size: 22rpx;
+  font-size: $home-type-body;
   font-weight: 600;
   color: $text-secondary;
   line-height: 32rpx;
@@ -2999,14 +3004,14 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 }
 
 .meal-macro-text {
-  font-size: 22rpx;
+  font-size: $home-type-body;
   font-weight: 500;
   color: $text-secondary;
   line-height: 32rpx;
 }
 
 .meal-tag {
-  font-size: 18rpx;
+  font-size: $home-type-body;
   line-height: 26rpx;
   color: $primary-color;
   background: $primary-light;
@@ -3068,7 +3073,7 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 
 .stats-entry-title {
   display: block;
-  font-size: 30rpx;
+  font-size: $home-type-title;
   font-weight: 600;
   color: #fff;
   line-height: 42rpx;
@@ -3077,7 +3082,7 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 
 .stats-entry-desc {
   display: block;
-  font-size: 24rpx;
+  font-size: $home-type-body;
   color: rgb(255 255 255 / 80%);
   line-height: 34rpx;
 }
@@ -3487,21 +3492,56 @@ $sheet-float-max-height: calc(100vh - #{$sheet-float-gap-top} - env(safe-area-in
   }
 }
 
-// 体重/喝水卡片 - 新设计
+// 今日记录：收拢为一个统一面板，减少首页等权白卡碎片。
+.home-record-panel {
+  margin-bottom: 24rpx;
+  overflow: hidden;
+  border: 1rpx solid rgb(62 89 78 / 8%);
+  border-radius: 24rpx;
+  background: rgb(255 255 255 / 92%);
+  box-shadow: 0 8rpx 24rpx rgb(49 105 84 / 7%);
+}
+
+.home-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+  padding: 20rpx 22rpx 14rpx;
+}
+
+.home-section-heading-title {
+  color: $text-primary;
+  font-size: $home-type-title;
+  font-weight: 700;
+  line-height: 38rpx;
+}
+
+.home-section-heading-note {
+  color: $text-tertiary;
+  font-size: $home-type-body;
+  line-height: 30rpx;
+}
+
 .body-status-section {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 16rpx;
-  margin-bottom: 24rpx; // 增加间距
+  gap: 0;
+  margin-bottom: 0;
+  border-top: 1rpx solid rgb(62 89 78 / 8%);
 }
 
 .body-status-card {
   flex: 1;
   min-width: 0;
-  background: #ffffff;
-  border-radius: 24rpx;
-  padding: 20rpx;
-  box-shadow: 0 4rpx 20rpx rgb(0 0 0 / 4%);
+  padding: 20rpx 18rpx 22rpx;
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
+
+  & + & {
+    border-left: 1rpx solid rgb(62 89 78 / 8%);
+  }
 
   &:active {
     transform: scale(0.98);
@@ -3521,6 +3561,13 @@ $sheet-float-max-height: calc(100vh - #{$sheet-float-gap-top} - env(safe-area-in
   gap: 8rpx;
 }
 
+.body-status-title {
+  color: $text-primary;
+  font-size: $home-type-title;
+  font-weight: 600;
+  line-height: 38rpx;
+}
+
 .body-status-icon {
   width: 28rpx;
   height: 28rpx;
@@ -3530,7 +3577,7 @@ $sheet-float-max-height: calc(100vh - #{$sheet-float-gap-top} - env(safe-area-in
 }
 
 .body-status-label {
-  font-size: 20rpx;
+  font-size: $home-type-body;
   font-weight: 400;
   line-height: 30rpx;
   color: $text-secondary;
@@ -3544,20 +3591,20 @@ $sheet-float-max-height: calc(100vh - #{$sheet-float-gap-top} - env(safe-area-in
 }
 
 .body-status-value {
-  font-size: 40rpx;
+  font-size: $home-type-hero;
   font-weight: 700;
   color: $text-primary;
   line-height: 52rpx;
 }
 
 .body-status-unit {
-  font-size: 20rpx;
+  font-size: $home-type-body;
   color: $text-tertiary;
   line-height: 30rpx;
 }
 
 .body-status-change {
-  font-size: 20rpx;
+  font-size: $home-type-body;
   font-weight: 600;
   padding: 4rpx 10rpx;
   border-radius: 9999rpx;
@@ -3575,17 +3622,19 @@ $sheet-float-max-height: calc(100vh - #{$sheet-float-gap-top} - env(safe-area-in
 }
 
 .body-status-empty {
-  font-size: 28rpx;
+  font-size: $home-type-title;
   font-weight: 600;
   color: $text-tertiary;
   line-height: 40rpx;
 }
 
 .body-status-hint {
-  font-size: 20rpx;
+  font-size: $home-type-body;
   color: $text-tertiary;
   line-height: 30rpx;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .body-status-progress-wrap {
@@ -3612,7 +3661,7 @@ $sheet-float-max-height: calc(100vh - #{$sheet-float-gap-top} - env(safe-area-in
 }
 
 .body-status-progress-text {
-  font-size: 20rpx;
+  font-size: $home-type-body;
   color: $text-tertiary;
   line-height: 28rpx;
 }

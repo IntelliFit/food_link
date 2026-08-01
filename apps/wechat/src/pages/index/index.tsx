@@ -3373,8 +3373,13 @@ function IndexPage() {
           </View>
         </View>
 
-        {/* 体重/喝水状态卡片 */}
-        <View className='body-status-section'>
+        {/* 今日记录：体重 / 喝水 / 运动 */}
+        <View className='home-record-panel'>
+          <View className='home-section-heading'>
+            <Text className='home-section-heading-title'>今日记录</Text>
+            <Text className='home-section-heading-note'>轻点卡片即可记录</Text>
+          </View>
+          <View className='body-status-section'>
           {/* 体重卡片 */}
           <View className='body-status-card weight-card' onClick={() => openBodyMetricRecord('weight')} onLongPress={openWeightEditor}>
             <View className='body-status-header'>
@@ -3470,6 +3475,7 @@ function IndexPage() {
             <Text className='body-status-hint'>
               点击记录运动
             </Text>
+          </View>
           </View>
         </View>
 
