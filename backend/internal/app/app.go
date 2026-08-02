@@ -328,8 +328,14 @@ func New(cfg *config.Config) (*App, error) {
 	petRepo := petrepo.NewPetRepo(db)
 	petSvc := petservice.NewService(petRepo)
 	petSvc.ConfigureStorage(storageClient)
+	pixelAvatarAPIKey := resolvePixelAvatarAPIKey(cfg.External)
+	if strings.TrimSpace(cfg.External.PixelAvatarAPIKey) == "" && pixelAvatarAPIKey != "" {
+		logger.Info(context.Background(), "像素分身复用万界大模型凭证")
+	} else if pixelAvatarAPIKey == "" {
+		logger.Warn(context.Background(), "像素分身生成服务未配置凭证")
+	}
 	petSvc.ConfigurePixelAvatarGenerator(petservice.NewOpenAIImageEditClient(
-		cfg.External.PixelAvatarAPIKey,
+		pixelAvatarAPIKey,
 		cfg.External.PixelAvatarBaseURL,
 		cfg.External.PixelAvatarModel,
 	))
@@ -846,6 +852,20 @@ func New(cfg *config.Config) (*App, error) {
 	}
 
 	return app, nil
+}
+
+func resolvePixelAvatarAPIKey(external config.ExternalConfig) string {
+	if key := strings.TrimSpace(external.PixelAvatarAPIKey); key != "" {
+		return key
+	}
+
+	pixelBaseURL := strings.ToLower(strings.TrimSpace(external.PixelAvatarBaseURL))
+	ofoxBaseURL := strings.ToLower(strings.TrimSpace(external.OfoxAIBaseURL))
+	if strings.Contains(pixelBaseURL, "maas-openapi.wanjiedata.com") &&
+		strings.Contains(ofoxBaseURL, "maas-openapi.wanjiedata.com") {
+		return strings.TrimSpace(external.OfoxAIAPIKey)
+	}
+	return ""
 }
 
 func (a *App) Engine() *gin.Engine {

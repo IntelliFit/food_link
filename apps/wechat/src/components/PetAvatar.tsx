@@ -1,11 +1,15 @@
 import { View, Image } from '@tarojs/components'
 import { useEffect, useMemo, useState } from 'react'
 import { derivePetAppearance, type PetAnimal, type PetAppearanceCandidate, type PetProfile } from '@food-link/core'
+import jianwenIdleAvatar from '../assets/pets/jianwen-01-idle.png'
+import jianwenBlinkAvatar from '../assets/pets/jianwen-01-blink.png'
+import jianwenSquashAvatar from '../assets/pets/jianwen-01-squash.png'
+import jianwenJumpAvatar from '../assets/pets/jianwen-01-jump.png'
 
 import './PetAvatar.scss'
 
 type PetVisual = Pick<PetProfile | PetAppearanceCandidate, 'pet_seed' | 'name' | 'color' | 'shape' | 'pattern' | 'accessory' | 'personality'>
-  & Pick<Partial<PetProfile>, 'avatar_type' | 'pixel_avatar_url' | 'pixel_avatar_blink_url' | 'pixel_avatar_squash_url' | 'pixel_avatar_jump_url'>
+  & Pick<Partial<PetProfile>, 'avatar_type' | 'pixel_avatar_url' | 'pixel_avatar_blink_url' | 'pixel_avatar_squash_url' | 'pixel_avatar_jump_url' | 'builtin_avatar_id'>
 
 type PetMotion = 'static' | 'companion'
 type PetMotionFrame = 'idle' | 'squash' | 'jump'
@@ -19,6 +23,20 @@ interface PetAvatarProps {
   mealState?: string
   motion?: PetMotion
   className?: string
+}
+
+const BUILTIN_AVATAR_FRAMES: Record<string, {
+  idle: string
+  blink: string
+  squash: string
+  jump: string
+}> = {
+  'jianwen-01': {
+    idle: jianwenIdleAvatar,
+    blink: jianwenBlinkAvatar,
+    squash: jianwenSquashAvatar,
+    jump: jianwenJumpAvatar,
+  },
 }
 
 const PET_PALETTE: Record<string, { body: string; accent: string; line: string; cheek: string }> = {
@@ -251,10 +269,11 @@ export function PetAvatar({ pet, animal, size = 'medium', mood, state, mealState
   const label = `${pet?.name || '成长伙伴'}，${petMoodLabel(mood)}，${petStateLabel(state)}`
   const sizeStyle = typeof size === 'number' ? { width: size, height: size } : undefined
   const sizeClass = typeof size === 'string' ? `pet-avatar--${size}` : ''
-  const customAvatarURL = String(pet?.pixel_avatar_url || '').trim()
-  const customAvatarBlinkURL = String(pet?.pixel_avatar_blink_url || '').trim()
-  const customAvatarSquashURL = String(pet?.pixel_avatar_squash_url || '').trim()
-  const customAvatarJumpURL = String(pet?.pixel_avatar_jump_url || '').trim()
+  const builtinFrames = BUILTIN_AVATAR_FRAMES[String(pet?.builtin_avatar_id || '').trim()]
+  const customAvatarURL = builtinFrames?.idle || String(pet?.pixel_avatar_url || '').trim()
+  const customAvatarBlinkURL = builtinFrames?.blink || String(pet?.pixel_avatar_blink_url || '').trim()
+  const customAvatarSquashURL = builtinFrames?.squash || String(pet?.pixel_avatar_squash_url || '').trim()
+  const customAvatarJumpURL = builtinFrames?.jump || String(pet?.pixel_avatar_jump_url || '').trim()
   const hasMotionFrames = Boolean(customAvatarSquashURL && customAvatarJumpURL)
   const [blinking, setBlinking] = useState(false)
   const [motionFrame, setMotionFrame] = useState<PetMotionFrame>('idle')

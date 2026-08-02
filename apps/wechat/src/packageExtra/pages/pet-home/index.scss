@@ -8,6 +8,187 @@
   );
 }
 
+.pet-home-action-spinner {
+  width: 26rpx;
+  height: 26rpx;
+  border: 3rpx solid rgb(92 184 150 / 20%);
+  border-top-color: #5cb896;
+  border-radius: 50%;
+  animation: pet-home-spin 0.8s linear infinite;
+}
+
+.pet-pixel-preview-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 100002;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 24rpx 24rpx calc(34rpx + env(safe-area-inset-bottom));
+  box-sizing: border-box;
+}
+
+.pet-pixel-preview-mask {
+  position: absolute;
+  inset: 0;
+  background: rgb(15 23 42 / 48%);
+  animation: pet-pixel-preview-fade-in 180ms ease-out both;
+}
+
+.pet-pixel-preview-sheet {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 34rpx 30rpx 28rpx;
+  border: 1rpx solid rgb(255 255 255 / 74%);
+  border-radius: 34rpx;
+  background:
+    radial-gradient(circle at 50% 42%, rgb(167 235 211 / 30%) 0, transparent 42%),
+    linear-gradient(150deg, #f8fffb 0%, #effbf6 100%);
+  box-shadow: 0 28rpx 80rpx rgb(34 83 65 / 24%);
+  animation: pet-pixel-preview-sheet-in 280ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.pet-pixel-preview-title,
+.pet-pixel-preview-desc {
+  display: block;
+  text-align: center;
+}
+
+.pet-pixel-preview-title {
+  color: #183b30;
+  font-size: 34rpx;
+  font-weight: 800;
+  line-height: 48rpx;
+}
+
+.pet-pixel-preview-desc {
+  margin-top: 8rpx;
+  color: rgb(38 76 63 / 62%);
+  font-size: 23rpx;
+  line-height: 34rpx;
+}
+
+.pet-pixel-preview-stage {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 330rpx;
+  margin-top: 8rpx;
+}
+
+.pet-pixel-preview-stage .pet-avatar {
+  position: relative;
+  z-index: 2;
+  width: 270rpx;
+  height: 270rpx;
+}
+
+.pet-pixel-preview-glow {
+  position: absolute;
+  width: 250rpx;
+  height: 250rpx;
+  border: 1rpx solid rgb(255 255 255 / 88%);
+  border-radius: 50%;
+  background: radial-gradient(circle, rgb(255 255 255 / 92%) 0%, rgb(123 215 181 / 16%) 68%, transparent 70%);
+}
+
+.pet-pixel-preview-shadow {
+  position: absolute;
+  bottom: 22rpx;
+  width: 126rpx;
+  height: 22rpx;
+  border-radius: 50%;
+  background: rgb(38 92 71 / 14%);
+  filter: blur(5rpx);
+}
+
+.pet-pixel-preview-actions {
+  display: flex;
+  gap: 16rpx;
+}
+
+.pet-pixel-preview-btn {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  height: 84rpx;
+  border-radius: 999rpx;
+
+  &.secondary {
+    background: rgb(255 255 255 / 76%);
+    border: 1rpx solid rgb(79 151 123 / 18%);
+  }
+
+  &.primary {
+    background: linear-gradient(135deg, #4fa985 0%, #65c39f 100%);
+    box-shadow: 0 12rpx 24rpx rgb(79 169 133 / 22%);
+  }
+}
+
+.pet-pixel-preview-btn-text {
+  font-size: 25rpx;
+  font-weight: 700;
+  line-height: 36rpx;
+
+  &.secondary {
+    color: #4b6d61;
+  }
+
+  &.primary {
+    color: #fff;
+  }
+}
+
+.pet-home-page--dark {
+  .pet-pixel-preview-sheet {
+    border-color: rgb(255 255 255 / 8%);
+    background:
+      radial-gradient(circle at 50% 42%, rgb(92 184 150 / 16%) 0, transparent 42%),
+      linear-gradient(150deg, #1b2522 0%, #141d1a 100%);
+    box-shadow: 0 28rpx 80rpx rgb(0 0 0 / 42%);
+  }
+
+  .pet-pixel-preview-title {
+    color: #f2f7f4;
+  }
+
+  .pet-pixel-preview-desc {
+    color: rgb(214 226 220 / 62%);
+  }
+
+  .pet-pixel-preview-btn.secondary {
+    border-color: rgb(255 255 255 / 9%);
+    background: rgb(255 255 255 / 7%);
+  }
+
+  .pet-pixel-preview-btn-text.secondary {
+    color: rgb(226 238 232 / 76%);
+  }
+}
+
+@keyframes pet-home-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes pet-pixel-preview-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes pet-pixel-preview-sheet-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 48rpx, 0) scale(0.98);
+  }
+}
+
 .pet-home-chat-card {
   background:
     radial-gradient(circle at 12% 16%, rgb(255 255 255 / 64%) 0%, transparent 32%),
@@ -380,6 +561,24 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12rpx;
   margin-top: 18rpx;
+}
+
+.pet-home-candidate-grid--common {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.pet-home-candidate-grid--common .pet-home-candidate-card {
+  min-height: 220rpx;
+}
+
+.pet-home-candidate-spinner {
+  width: 24rpx;
+  height: 24rpx;
+  margin-top: 8rpx;
+  border: 3rpx solid rgb(92 184 150 / 24%);
+  border-top-color: #3a8b6b;
+  border-radius: 50%;
+  animation: pet-home-spin 0.75s linear infinite;
 }
 
 .pet-home-candidate-card {

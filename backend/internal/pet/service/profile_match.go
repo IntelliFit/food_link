@@ -12,7 +12,10 @@ import (
 )
 
 const (
-	petProfileMatchVersion = 2
+	petProfileMatchVersion = 3
+
+	builtinAvatarJianwen01ID = "jianwen-01"
+	builtinAvatarType        = "builtin_person"
 
 	archetypeSteadyCaregiver = "steady_caregiver"
 	archetypeEnergeticBuddy  = "energetic_buddy"
@@ -22,18 +25,20 @@ const (
 )
 
 type AppearanceCandidate struct {
-	ID           string   `json:"id"`
-	PetSeed      string   `json:"pet_seed"`
-	Name         string   `json:"name"`
-	Color        string   `json:"color"`
-	Shape        string   `json:"shape"`
-	Pattern      string   `json:"pattern"`
-	Accessory    string   `json:"accessory"`
-	Personality  string   `json:"personality"`
-	Archetype    string   `json:"archetype"`
-	Style        string   `json:"style"`
-	Score        int      `json:"score"`
-	MatchReasons []string `json:"match_reasons,omitempty"`
+	ID              string   `json:"id"`
+	PetSeed         string   `json:"pet_seed"`
+	Name            string   `json:"name"`
+	Color           string   `json:"color"`
+	Shape           string   `json:"shape"`
+	Pattern         string   `json:"pattern"`
+	Accessory       string   `json:"accessory"`
+	Personality     string   `json:"personality"`
+	Archetype       string   `json:"archetype"`
+	Style           string   `json:"style"`
+	Score           int      `json:"score"`
+	MatchReasons    []string `json:"match_reasons,omitempty"`
+	AvatarType      string   `json:"avatar_type,omitempty"`
+	BuiltinAvatarID string   `json:"builtin_avatar_id,omitempty"`
 }
 
 type profileMatch struct {
@@ -181,7 +186,7 @@ func matchReasonsForArchetype(archetype string, profile *repo.UserProfile) []str
 
 func buildAppearanceCandidates(userID, fingerprint, archetype string, reasons []string) []AppearanceCandidate {
 	styles := []string{"pretty", "quirky", "stable"}
-	candidates := make([]AppearanceCandidate, 0, len(styles))
+	candidates := make([]AppearanceCandidate, 0, len(styles)+1)
 	for _, style := range styles {
 		// seed 不包含版本号，保证同画像同原型下的外观只由画像决定，
 		// 后端算法版本升级不会导致已生成的颜色/形状等自动变化。
@@ -189,6 +194,22 @@ func buildAppearanceCandidates(userID, fingerprint, archetype string, reasons []
 		candidate := candidateFromSeed(seed, archetype, style, reasons)
 		candidates = append(candidates, candidate)
 	}
+	candidates = append(candidates, AppearanceCandidate{
+		ID:              "builtin:" + builtinAvatarJianwen01ID,
+		PetSeed:         "builtin:" + builtinAvatarJianwen01ID,
+		Name:            "健文伙伴",
+		Color:           "mint",
+		Shape:           "round",
+		Pattern:         "pattern-0",
+		Accessory:       "scarf",
+		Personality:     "focused",
+		Archetype:       archetypeSteadyCaregiver,
+		Style:           "classic",
+		Score:           96,
+		MatchReasons:    []string{"项目内置的经典像素伙伴，可直接使用且不依赖在线生成"},
+		AvatarType:      builtinAvatarType,
+		BuiltinAvatarID: builtinAvatarJianwen01ID,
+	})
 	return candidates
 }
 

@@ -11,6 +11,7 @@ import {
   type MembershipStatus,
   type PetAppearanceCandidate,
   type PetOfflineEvent,
+  type PetProfile,
   type PetSummary,
   showUnifiedApiError
 } from '../../../utils/api'
@@ -24,6 +25,7 @@ import {
   isPrivacyAuthorizeError,
   showPrivacyAuthorizeFailure,
 } from '../../../utils/weapp-privacy'
+import { HOME_PET_PROFILE_CHANGED_EVENT } from '../../../utils/pet-events'
 import './index.scss'
 
 const HOME_PET_HIDDEN_KEY = 'home_pet_companion_hidden_v1'
@@ -103,6 +105,8 @@ function archetypeText(archetype?: string): string {
 
 function candidateStyleText(style?: string): string {
   switch (style) {
+    case 'classic':
+      return '经典像素'
     case 'quirky':
       return '特色丑萌'
     case 'stable':
@@ -112,17 +116,32 @@ function candidateStyleText(style?: string): string {
   }
 }
 
+function isCandidateActive(candidate: PetAppearanceCandidate, pet?: PetProfile): boolean {
+  if (!pet || pet.avatar_type === 'pixel_self') return false
+  if (candidate.builtin_avatar_id) {
+    return pet.avatar_type === 'builtin_person'
+      && candidate.builtin_avatar_id === pet.builtin_avatar_id
+  }
+  return !pet.builtin_avatar_id && candidate.pet_seed === pet.pet_seed
+}
+
 function PetHomePage() {
   const { scheme } = useAppColorScheme()
   const [loading, setLoading] = useState(true)
   const [claiming, setClaiming] = useState(false)
   const [rerolling, setRerolling] = useState(false)
   const [pixelAvatarCustomizing, setPixelAvatarCustomizing] = useState(false)
+  const [pixelAvatarPreview, setPixelAvatarPreview] = useState<PetProfile | null>(null)
   const [selectingCandidateId, setSelectingCandidateId] = useState('')
   const [petSummary, setPetSummary] = useState<PetSummary | null>(null)
   const [membership, setMembership] = useState<MembershipStatus | null>(null)
   const [homePetHidden, setHomePetHidden] = useState(getStoredHomePetHidden)
   const pixelAvatarCustomizingRef = useRef(false)
+
+  const syncPetProfile = useCallback((pet: PetProfile) => {
+    setPetSummary((previous) => previous ? { ...previous, pet } : previous)
+    Taro.eventCenter.trigger(HOME_PET_PROFILE_CHANGED_EVENT, pet)
+  }, [])
 
   const loadData = useCallback(async () => {
     try {
@@ -162,7 +181,9 @@ function PetHomePage() {
   const totalCredits = membership?.total_credits_available ?? membership?.daily_credits_remaining ?? 0
   const nextLevelGap = Math.max((petSummary?.pet?.next_level_exp ?? 0) - (petSummary?.pet?.level_exp ?? 0), 0)
   const selectionCandidates = petSummary?.pet?.selection_candidates || []
-  const shouldShowSelection = selectionCandidates.length > 0
+  const commonCandidates = selectionCandidates.filter((candidate) => Boolean(candidate.builtin_avatar_id))
+  const matchedCandidates = selectionCandidates.filter((candidate) => !candidate.builtin_avatar_id)
+  const shouldShowSelection = matchedCandidates.length > 0
     && Boolean(petSummary?.pet?.needs_selection || petSummary?.pet?.free_profile_rematch_available)
 
   const handleClaim = useCallback(async () => {
@@ -217,10 +238,7 @@ function PetHomePage() {
     try {
       setRerolling(true)
       const result = await rerollPetAppearance()
-      setPetSummary((prev) => prev ? {
-        ...prev,
-        pet: result.pet,
-      } : prev)
+      syncPetProfile(result.pet)
       const earnedBalance = result.earned_credits_balance
       if (typeof earnedBalance === 'number') {
         setMembership((prev) => prev ? {
@@ -236,24 +254,21 @@ function PetHomePage() {
     } finally {
       setRerolling(false)
     }
-  }, [earnedCredits, petSummary?.pet, rerolling, totalCredits])
+  }, [earnedCredits, petSummary?.pet, rerolling, syncPetProfile, totalCredits])
 
   const handleSelectCandidate = useCallback(async (candidate: PetAppearanceCandidate) => {
     if (!candidate?.id || selectingCandidateId) return
     try {
       setSelectingCandidateId(candidate.id)
       const result = await selectPetAppearance(candidate.id)
-      setPetSummary((prev) => prev ? {
-        ...prev,
-        pet: result.pet,
-      } : prev)
+      syncPetProfile(result.pet)
       Taro.showToast({ title: '宠物已选择', icon: 'success' })
     } catch (error) {
       await showUnifiedApiError(error, '选择宠物失败')
     } finally {
       setSelectingCandidateId('')
     }
-  }, [selectingCandidateId])
+  }, [selectingCandidateId, syncPetProfile])
 
   const handlePickComingSoon = useCallback(() => {
     Taro.showToast({ title: '挑选外观即将开放', icon: 'none' })
@@ -279,8 +294,8 @@ function PetHomePage() {
       const filePath = result.tempFilePaths?.[0]
       if (!filePath) return
       const customized = await customizePetPixelAvatar(filePath)
-      setPetSummary((previous) => previous ? { ...previous, pet: customized.pet } : previous)
-      Taro.showToast({ title: '你的像素分身来啦', icon: 'success' })
+      syncPetProfile(customized.pet)
+      setPixelAvatarPreview(customized.pet)
     } catch (error) {
       const message = String((error as any)?.errMsg || (error as any)?.message || '')
       if (message.toLowerCase().includes('cancel')) return
@@ -293,6 +308,15 @@ function PetHomePage() {
       pixelAvatarCustomizingRef.current = false
       setPixelAvatarCustomizing(false)
     }
+  }, [syncPetProfile])
+
+  const closePixelAvatarPreview = useCallback(() => {
+    setPixelAvatarPreview(null)
+  }, [])
+
+  const viewPixelAvatarOnHome = useCallback(() => {
+    setPixelAvatarPreview(null)
+    Taro.switchTab({ url: '/pages/index/index' })
   }, [])
 
   const handleToggleHomePetHidden = useCallback(() => {
@@ -387,18 +411,48 @@ function PetHomePage() {
               系统先默认使用第一个候选，首页不会被打断。你可以在这里挑一个真正顺眼的伙伴。
             </Text>
             <View className='pet-home-candidate-grid'>
-              {selectionCandidates.map((candidate) => (
+              {matchedCandidates.map((candidate) => (
                 <View
                   key={candidate.id}
-                  className={`pet-home-candidate-card ${candidate.pet_seed === petSummary?.pet?.pet_seed ? 'active' : ''}`}
+                  className={`pet-home-candidate-card ${isCandidateActive(candidate, petSummary?.pet) ? 'active' : ''}`}
                   onClick={() => handleSelectCandidate(candidate)}
                 >
                   <PetAvatar pet={candidate} size='small' />
                   <Text className='pet-home-candidate-name'>{candidate.name}</Text>
                   <Text className='pet-home-candidate-style'>{candidateStyleText(candidate.style)} · {candidate.score || '--'}</Text>
                   <Text className='pet-home-candidate-action'>
-                    {selectingCandidateId === candidate.id ? '选择中' : candidate.pet_seed === petSummary?.pet?.pet_seed ? '当前' : '选择'}
+                    {selectingCandidateId === candidate.id ? '' : isCandidateActive(candidate, petSummary?.pet) ? '当前' : '选择'}
                   </Text>
+                  {selectingCandidateId === candidate.id ? <View className='pet-home-candidate-spinner' /> : null}
+                </View>
+              ))}
+            </View>
+          </View>
+        ) : null}
+
+        {commonCandidates.length ? (
+          <View className='pet-home-card'>
+            <View className='pet-home-card-head'>
+              <Text className='pet-home-card-title'>常用形象</Text>
+              <Text className='pet-home-card-side'>内置 · 免费</Text>
+            </View>
+            <Text className='pet-home-event-message'>
+              直接选择即可跨端同步，不依赖在线生成模型。
+            </Text>
+            <View className='pet-home-candidate-grid pet-home-candidate-grid--common'>
+              {commonCandidates.map((candidate) => (
+                <View
+                  key={candidate.id}
+                  className={`pet-home-candidate-card ${isCandidateActive(candidate, petSummary?.pet) ? 'active' : ''}`}
+                  onClick={() => handleSelectCandidate(candidate)}
+                >
+                  <PetAvatar pet={candidate} size='small' motion='companion' />
+                  <Text className='pet-home-candidate-name'>{candidate.name}</Text>
+                  <Text className='pet-home-candidate-style'>{candidateStyleText(candidate.style)}</Text>
+                  <Text className='pet-home-candidate-action'>
+                    {selectingCandidateId === candidate.id ? '' : isCandidateActive(candidate, petSummary?.pet) ? '当前' : '选择'}
+                  </Text>
+                  {selectingCandidateId === candidate.id ? <View className='pet-home-candidate-spinner' /> : null}
                 </View>
               ))}
             </View>
@@ -484,8 +538,9 @@ function PetHomePage() {
               </View>
               <View className='pet-home-action-side'>
                 <Text className='pet-home-action-cost'>
-                  {pixelAvatarCustomizing ? '生成中' : petSummary?.pet?.pixel_avatar_url ? '重新生成' : '生成'}
+                  {pixelAvatarCustomizing ? '' : petSummary?.pet?.pixel_avatar_url ? '重新生成' : '生成'}
                 </Text>
+                {pixelAvatarCustomizing ? <View className='pet-home-action-spinner' /> : null}
                 <Text className='iconfont icon-right pet-home-action-arrow' />
               </View>
             </View>
@@ -541,6 +596,29 @@ function PetHomePage() {
           </View>
         ) : null}
       </View>
+
+      {pixelAvatarPreview ? (
+        <View className='pet-pixel-preview-modal'>
+          <View className='pet-pixel-preview-mask' onClick={closePixelAvatarPreview} />
+          <View className='pet-pixel-preview-sheet'>
+            <Text className='pet-pixel-preview-title'>专属像素分身已生成</Text>
+            <Text className='pet-pixel-preview-desc'>已经保存并同步到首页，这是你的新伙伴。</Text>
+            <View className='pet-pixel-preview-stage'>
+              <View className='pet-pixel-preview-glow' />
+              <PetAvatar pet={pixelAvatarPreview} size='large' motion='companion' />
+              <View className='pet-pixel-preview-shadow' />
+            </View>
+            <View className='pet-pixel-preview-actions'>
+              <View className='pet-pixel-preview-btn secondary' onClick={closePixelAvatarPreview}>
+                <Text className='pet-pixel-preview-btn-text secondary'>留在这里</Text>
+              </View>
+              <View className='pet-pixel-preview-btn primary' onClick={viewPixelAvatarOnHome}>
+                <Text className='pet-pixel-preview-btn-text primary'>回首页看看</Text>
+              </View>
+            </View>
+          </View>
+        </View>
+      ) : null}
     </View>
   )
 }

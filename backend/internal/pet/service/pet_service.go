@@ -114,6 +114,7 @@ type PetProfile struct {
 	PixelAvatarBlinkURL         string                `json:"pixel_avatar_blink_url,omitempty"`
 	PixelAvatarSquashURL        string                `json:"pixel_avatar_squash_url,omitempty"`
 	PixelAvatarJumpURL          string                `json:"pixel_avatar_jump_url,omitempty"`
+	BuiltinAvatarID             string                `json:"builtin_avatar_id,omitempty"`
 }
 
 type DailyScoreView struct {
@@ -293,6 +294,8 @@ func (s *Service) RerollAppearance(ctx context.Context, userID string) (*Appeara
 	candidate := candidateFromSeed(fmt.Sprintf("pet:%s:reroll:%d", userID, time.Now().UnixNano()), match.Archetype, style, match.Reasons)
 	meta := mergedProfileMeta(pet.Meta, match)
 	meta["selected_candidate_id"] = candidate.ID
+	delete(meta, "avatar_type")
+	delete(meta, "builtin_avatar_id")
 	meta["last_reroll_at"] = time.Now().Format(time.RFC3339)
 	updatedPet, ledger, err := s.repo.RerollAppearance(ctx, userID, pet.ID, map[string]any{
 		"pet_seed":    candidate.PetSeed,
@@ -363,8 +366,17 @@ func (s *Service) SelectAppearance(ctx context.Context, userID, candidateID stri
 	}
 	meta := cloneMeta(pet.Meta)
 	meta["selected_candidate_id"] = selected.ID
-	meta["free_profile_rematch_used"] = true
+	if selected.BuiltinAvatarID == "" {
+		meta["free_profile_rematch_used"] = true
+	}
 	meta["selected_at"] = time.Now().Format(time.RFC3339)
+	if selected.AvatarType != "" {
+		meta["avatar_type"] = selected.AvatarType
+		meta["builtin_avatar_id"] = selected.BuiltinAvatarID
+	} else {
+		delete(meta, "avatar_type")
+		delete(meta, "builtin_avatar_id")
+	}
 	updatedPet, err := s.repo.SelectAppearance(ctx, userID, pet.ID, map[string]any{
 		"pet_seed":    selected.PetSeed,
 		"name":        selected.Name,
@@ -695,18 +707,20 @@ func appearanceCandidateFromAny(value any) (AppearanceCandidate, bool) {
 		return AppearanceCandidate{}, false
 	}
 	return AppearanceCandidate{
-		ID:           stringFromMap(row, "id"),
-		PetSeed:      stringFromMap(row, "pet_seed"),
-		Name:         stringFromMap(row, "name"),
-		Color:        stringFromMap(row, "color"),
-		Shape:        stringFromMap(row, "shape"),
-		Pattern:      stringFromMap(row, "pattern"),
-		Accessory:    stringFromMap(row, "accessory"),
-		Personality:  stringFromMap(row, "personality"),
-		Archetype:    stringFromMap(row, "archetype"),
-		Style:        stringFromMap(row, "style"),
-		Score:        intFromAny(row["score"]),
-		MatchReasons: stringSliceFromAny(row["match_reasons"]),
+		ID:              stringFromMap(row, "id"),
+		PetSeed:         stringFromMap(row, "pet_seed"),
+		Name:            stringFromMap(row, "name"),
+		Color:           stringFromMap(row, "color"),
+		Shape:           stringFromMap(row, "shape"),
+		Pattern:         stringFromMap(row, "pattern"),
+		Accessory:       stringFromMap(row, "accessory"),
+		Personality:     stringFromMap(row, "personality"),
+		Archetype:       stringFromMap(row, "archetype"),
+		Style:           stringFromMap(row, "style"),
+		Score:           intFromAny(row["score"]),
+		MatchReasons:    stringSliceFromAny(row["match_reasons"]),
+		AvatarType:      stringFromMap(row, "avatar_type"),
+		BuiltinAvatarID: stringFromMap(row, "builtin_avatar_id"),
 	}, true
 }
 
@@ -786,6 +800,8 @@ func (s *Service) profileFromPet(pet *petdomain.UserPet) PetProfile {
 	levelExp := pet.Experience % nextLevelExp
 	candidates := candidatesFromMeta(pet.Meta)
 	selectedID := stringFromMeta(pet.Meta, "selected_candidate_id")
+	avatarType := stringFromMeta(pet.Meta, "avatar_type")
+	builtinAvatarID := stringFromMeta(pet.Meta, "builtin_avatar_id")
 	pixelAvatarKey := stringFromMeta(pet.Meta, "pixel_avatar_key")
 	pixelAvatarBlinkKey := stringFromMeta(pet.Meta, "pixel_avatar_blink_key")
 	pixelAvatarSquashKey := stringFromMeta(pet.Meta, "pixel_avatar_squash_key")
@@ -794,7 +810,7 @@ func (s *Service) profileFromPet(pet *petdomain.UserPet) PetProfile {
 	pixelAvatarBlinkURL := ""
 	pixelAvatarSquashURL := ""
 	pixelAvatarJumpURL := ""
-	if pixelAvatarKey != "" && s.storage != nil {
+	if avatarType == "pixel_self" && pixelAvatarKey != "" && s.storage != nil {
 		pixelAvatarURL = s.storage.BuildAccessURL("user-avatars", pixelAvatarKey)
 		if pixelAvatarBlinkKey != "" {
 			pixelAvatarBlinkURL = s.storage.BuildAccessURL("user-avatars", pixelAvatarBlinkKey)
@@ -827,7 +843,8 @@ func (s *Service) profileFromPet(pet *petdomain.UserPet) PetProfile {
 		SelectionCandidates:         candidates,
 		FreeProfileRematchAvailable: !boolFromMeta(pet.Meta, "free_profile_rematch_used") && len(candidates) > 0,
 		GrowthUnlocks:               growthUnlocksForLevel(pet.Level),
-		AvatarType:                  stringFromMeta(pet.Meta, "avatar_type"),
+		AvatarType:                  avatarType,
+		BuiltinAvatarID:             builtinAvatarID,
 		PixelAvatarURL:              pixelAvatarURL,
 		PixelAvatarBlinkURL:         pixelAvatarBlinkURL,
 		PixelAvatarSquashURL:        pixelAvatarSquashURL,

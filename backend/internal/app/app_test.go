@@ -53,3 +53,31 @@ func TestRegisterPublicConfigRoutes(t *testing.T) {
 		assert.Equal(t, true, resp["allow_debug_register"], path)
 	}
 }
+
+func TestResolvePixelAvatarAPIKeyPrefersDedicatedKey(t *testing.T) {
+	external := config.ExternalConfig{
+		PixelAvatarAPIKey:  " pixel-key ",
+		OfoxAIAPIKey:       "shared-key",
+		PixelAvatarBaseURL: "https://maas-openapi.wanjiedata.com/api/v1",
+		OfoxAIBaseURL:      "https://maas-openapi.wanjiedata.com/api/v1",
+	}
+	assert.Equal(t, "pixel-key", resolvePixelAvatarAPIKey(external))
+}
+
+func TestResolvePixelAvatarAPIKeyFallsBackToSameWanjieAccount(t *testing.T) {
+	external := config.ExternalConfig{
+		OfoxAIAPIKey:       " shared-key ",
+		PixelAvatarBaseURL: "https://maas-openapi.wanjiedata.com/api/v1",
+		OfoxAIBaseURL:      "https://maas-openapi.wanjiedata.com/api/v1",
+	}
+	assert.Equal(t, "shared-key", resolvePixelAvatarAPIKey(external))
+}
+
+func TestResolvePixelAvatarAPIKeyDoesNotCrossProviders(t *testing.T) {
+	external := config.ExternalConfig{
+		OfoxAIAPIKey:       "other-provider-key",
+		PixelAvatarBaseURL: "https://maas-openapi.wanjiedata.com/api/v1",
+		OfoxAIBaseURL:      "https://example.com/api/v1",
+	}
+	assert.Empty(t, resolvePixelAvatarAPIKey(external))
+}

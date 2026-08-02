@@ -955,6 +955,7 @@ export interface PetProfile {
   pixel_avatar_blink_url?: string
   pixel_avatar_squash_url?: string
   pixel_avatar_jump_url?: string
+  builtin_avatar_id?: string
 }
 
 export interface PetAppearanceCandidate {
@@ -970,6 +971,8 @@ export interface PetAppearanceCandidate {
   style?: string
   score?: number
   match_reasons?: string[]
+  avatar_type?: 'builtin_person' | string
+  builtin_avatar_id?: string
 }
 
 export interface PetDailyScore {
@@ -3655,6 +3658,9 @@ export async function customizePetPixelAvatar(localPath: string): Promise<{ pet:
   const pet = payload?.pet as PetProfile | undefined
   if (!pet?.id) {
     throw new Error('生成像素分身失败：服务端未返回分身信息')
+  }
+  if (!String(pet.pixel_avatar_url || '').trim()) {
+    throw new Error('生成像素分身失败：服务端未返回预览图片')
   }
   return { pet }
 }

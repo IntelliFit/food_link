@@ -38,6 +38,7 @@ import {
   type HomeNutritionTarget,
   type HomeTargetCalibrationSuggestion,
   type PetSummary,
+  type PetProfile,
   type BodyMetricWeightEntry,
   type BodyMetricWaterDay,
   type HomeFoodExpiryItem,
@@ -107,6 +108,7 @@ import {
   shouldOfferOnboardingGuide,
 } from '../../utils/onboarding-guide-storage'
 import { HOME_RECORD_ONBOARDING_STEPS } from './home-onboarding-steps'
+import { HOME_PET_PROFILE_CHANGED_EVENT } from '../../utils/pet-events'
 
 const BACKFILL_HINT_DISMISSED_DATES_KEY = 'home_backfill_hint_dismissed_dates_v1'
 const HOME_SELECTED_DATE_KEY = 'home_selected_date_v1'
@@ -806,6 +808,7 @@ function IndexPage() {
   const [rewardCenter, setRewardCenter] = React.useState<RewardCenterResponse | null>(null)
   const [rewardHintIndex, setRewardHintIndex] = React.useState(0)
   const petSummarySeqRef = React.useRef(0)
+  const petDidShowCountRef = React.useRef(0)
   const petCelebrationTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
   const petDragRef = React.useRef<{
     pointerId: number
@@ -2524,6 +2527,25 @@ function IndexPage() {
   React.useEffect(() => {
     void loadPetSummary(selectedDate)
   }, [loadPetSummary, selectedDate])
+
+  useDidShow(() => {
+    if (petDidShowCountRef.current === 0) {
+      petDidShowCountRef.current += 1
+      return
+    }
+    void loadPetSummary(selectedDateRef.current)
+  })
+
+  React.useEffect(() => {
+    const handlePetProfileChanged = (pet: PetProfile) => {
+      if (!pet?.id) return
+      setPetSummary((previous) => previous ? { ...previous, pet } : previous)
+    }
+    Taro.eventCenter.on(HOME_PET_PROFILE_CHANGED_EVENT, handlePetProfileChanged)
+    return () => {
+      Taro.eventCenter.off(HOME_PET_PROFILE_CHANGED_EVENT, handlePetProfileChanged)
+    }
+  }, [])
 
   const healthyHabitScore = React.useMemo(() => {
     if (dashboardBusy || isGuest) return 0

@@ -140,6 +140,7 @@ func (s *Service) CustomizePixelAvatar(ctx context.Context, userID string, sourc
 
 	meta := clonePetMeta(pet.Meta)
 	meta["avatar_type"] = "pixel_self"
+	delete(meta, "builtin_avatar_id")
 	meta["pixel_avatar_key"] = key
 	setOptionalPixelAvatarMeta(meta, "pixel_avatar_blink_key", blinkKey)
 	setOptionalPixelAvatarMeta(meta, "pixel_avatar_squash_key", squashKey)

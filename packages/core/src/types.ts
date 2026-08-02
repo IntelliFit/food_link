@@ -1477,6 +1477,8 @@ export interface PetAppearanceCandidate {
   style?: string
   score?: number
   match_reasons?: string[]
+  avatar_type?: 'builtin_person' | string
+  builtin_avatar_id?: string
 }
 
 export interface PetProfile {
@@ -1505,6 +1507,7 @@ export interface PetProfile {
   pixel_avatar_blink_url?: string
   pixel_avatar_squash_url?: string
   pixel_avatar_jump_url?: string
+  builtin_avatar_id?: string
 }
 
 export interface PetDailyScore {
