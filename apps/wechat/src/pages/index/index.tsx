@@ -787,7 +787,6 @@ const MACRO_CONFIGS: Array<{
 
 type HomeHandbookBanner = {
   key: string
-  kicker: string
   title: string
   desc: string
   actionText: string
@@ -2957,7 +2956,6 @@ function IndexPage() {
   const handbookBanners: HomeHandbookBanner[] = [
     {
       key: 'goose-duck-chicken',
-      kicker: '热点专线',
       title: '鹅腿还是鸭腿？',
       desc: '上传图片，让食探只在鹅 / 鸭 / 鸡里做判断',
       actionText: '去识别',
@@ -2966,7 +2964,6 @@ function IndexPage() {
     },
     ...(showRewardCreditHint ? [{
       key: 'reward',
-      kicker: '今日可赚积分',
       title: `今天还可以赚 ${availableRewardCredits} 积分`,
       desc: rewardHintTaskText,
       actionText: '去赚',
@@ -2975,7 +2972,6 @@ function IndexPage() {
     }] : []),
     {
       key: 'campus',
-      kicker: '食探校园活动',
       title: '食探校园食堂计划',
       desc: '一起补全食堂菜品、价格、窗口和营养信息',
       actionText: '去看看',
@@ -2984,7 +2980,6 @@ function IndexPage() {
     },
     {
       key: 'feedback',
-      kicker: '帮助我们一起成长',
       title: '意见反馈',
       desc: '提交宝贵建议，最高可得 +5 积分',
       actionText: '去反馈',
@@ -3327,7 +3322,6 @@ function IndexPage() {
                     <Image className='home-handbook-card__bg' src={banner.bgImage} mode='aspectFill' />
                     <View className='home-handbook-card__shade' />
                     <View className='home-handbook-card__copy'>
-                      <Text className='home-handbook-card__kicker'>{banner.kicker}</Text>
                       <Text className='home-handbook-card__title'>{banner.title}</Text>
                       <Text className='home-handbook-card__desc'>{banner.desc}</Text>
                       <View className='home-handbook-card__action'>

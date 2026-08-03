@@ -382,20 +382,13 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   align-items: center;
 }
 
-.home-handbook-card__kicker,
 .home-handbook-card__desc,
 .home-handbook-card__action {
   font-size: 22rpx;
   line-height: 30rpx;
 }
 
-.home-handbook-card__kicker {
-  color: #a8ead0;
-  font-weight: 700;
-}
-
 .home-handbook-card__title {
-  margin-top: 3rpx;
   max-width: 100%;
   font-size: 28rpx;
   line-height: 38rpx;
@@ -407,6 +400,7 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 }
 
 .home-handbook-card__desc {
+  margin-top: 2rpx;
   max-width: 100%;
   color: rgb(255 255 255 / 84%);
   overflow: hidden;
@@ -415,7 +409,7 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 }
 
 .home-handbook-card__action {
-  margin-top: auto;
+  margin-top: 10rpx;
   gap: 4rpx;
   color: #ffffff;
   font-weight: 700;
