@@ -33,7 +33,7 @@
 }
 
 .reward-hero__level-text {
-  font-size: 23px;
+  font-size: 22px;
   font-weight: 700;
   opacity: 0.92;
 }
@@ -402,7 +402,7 @@
 }
 
 .reward-quick-section__hint {
-  font-size: 21px;
+  font-size: 22px;
   line-height: 30px;
   color: rgba(255, 255, 255, 0.68);
 }
@@ -444,20 +444,26 @@
   min-width: 0;
 }
 
+.reward-quick-card__title-row {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+
 .reward-quick-card__name {
-  display: block;
-  font-size: 26px;
+  font-size: 28px;
   line-height: 36px;
   font-weight: 800;
   color: #ffffff;
 }
 
-.reward-quick-card__desc {
-  display: block;
-  margin-top: 4px;
-  font-size: 21px;
-  line-height: 30px;
-  color: rgba(255, 255, 255, 0.72);
+.reward-quick-card__reward {
+  flex-shrink: 0;
+  font-size: 22px;
+  line-height: 32px;
+  font-weight: 800;
+  color: #6ee7b7;
 }
 
 .reward-quick-card__button {
@@ -467,7 +473,7 @@
   border-radius: 999px;
   background: #ffffff;
   color: #0f9f6e;
-  font-size: 23px;
+  font-size: 22px;
   line-height: 32px;
   font-weight: 800;
   text-align: center;
@@ -507,132 +513,100 @@
   text-align: center;
 }
 
-.reward-spend-section {
-  margin-top: 28px;
+.reward-use-guide {
+  margin-top: 22px;
+  padding-top: 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.16);
 }
 
-.reward-spend-section__head {
-  margin-bottom: 16px;
+.reward-use-guide__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
 }
 
-.reward-spend-section__title {
-  display: block;
+.reward-use-guide__title {
   font-size: 28px;
   line-height: 38px;
   font-weight: 800;
-  color: #172033;
+  color: #ffffff;
 }
 
-.reward-spend-section__hint {
-  display: block;
-  margin-top: 4px;
+.reward-use-guide__hint {
   font-size: 22px;
   line-height: 32px;
-  color: #64748b;
+  font-weight: 700;
+  color: #a7f3d0;
 }
 
-.reward-center-page--dark .reward-spend-section__title {
-  color: #f8fafc;
+.reward-use-guide__list {
+  margin-top: 12px;
 }
 
-.reward-center-page--dark .reward-spend-section__hint {
-  color: #94a3b8;
-}
-
-.reward-spend-list {
-  overflow: hidden;
-  border-radius: 28px;
-  background: #ffffff;
-  border: 1px solid rgba(15, 159, 110, 0.1);
-  box-shadow: 0 14px 36px rgba(15, 23, 42, 0.06);
-}
-
-.reward-center-page--dark .reward-spend-list {
-  background: rgba(30, 41, 59, 0.92);
-  border-color: rgba(16, 185, 129, 0.16);
-  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.24);
-}
-
-.reward-spend-item {
-  position: relative;
+.reward-use-guide__item {
   display: flex;
   align-items: center;
-  gap: 20px;
-  min-height: 112px;
-  padding: 18px 22px;
+  gap: 16px;
+  min-height: 92px;
+  padding: 12px 4px;
   box-sizing: border-box;
 }
 
-.reward-spend-item + .reward-spend-item::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  right: 22px;
-  left: 112px;
-  height: 1px;
-  background: #e8eef0;
+.reward-use-guide__item + .reward-use-guide__item {
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
 }
 
-.reward-center-page--dark .reward-spend-item + .reward-spend-item::before {
-  background: rgba(148, 163, 184, 0.18);
-}
-
-.reward-spend-item__cost {
+.reward-use-guide__icon-wrap {
   flex-shrink: 0;
-  width: 70px;
-  height: 70px;
-  border-radius: 22px;
+  width: 62px;
+  height: 62px;
+  border-radius: 20px;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: #ecfdf5;
-  color: #0f9f6e;
+  background: rgba(167, 243, 208, 0.12);
+  color: #a7f3d0;
 }
 
-.reward-center-page--dark .reward-spend-item__cost {
-  background: rgba(16, 185, 129, 0.14);
-  color: #6ee7b7;
+.reward-use-guide__icon {
+  font-size: 32px;
 }
 
-.reward-spend-item__number {
-  font-size: 28px;
-  line-height: 30px;
-  font-weight: 850;
-}
-
-.reward-spend-item__unit {
-  font-size: 20px;
-  line-height: 24px;
-  font-weight: 700;
-}
-
-.reward-spend-item__content {
+.reward-use-guide__content {
+  flex: 1;
   min-width: 0;
 }
 
-.reward-spend-item__name {
-  display: block;
-  font-size: 26px;
-  line-height: 36px;
-  font-weight: 800;
-  color: #172033;
+.reward-use-guide__label-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
 }
 
-.reward-spend-item__desc {
-  display: block;
-  margin-top: 2px;
+.reward-use-guide__cost,
+.reward-use-guide__name,
+.reward-use-guide__path {
   font-size: 22px;
   line-height: 32px;
-  color: #64748b;
 }
 
-.reward-center-page--dark .reward-spend-item__name {
-  color: #f8fafc;
+.reward-use-guide__cost {
+  flex-shrink: 0;
+  font-weight: 850;
+  color: #6ee7b7;
 }
 
-.reward-center-page--dark .reward-spend-item__desc {
-  color: #94a3b8;
+.reward-use-guide__name {
+  font-weight: 800;
+  color: #ffffff;
+}
+
+.reward-use-guide__path {
+  display: block;
+  margin-top: 2px;
+  font-weight: 600;
+  color: #d1fae5;
 }
 
 .reward-section__title {
@@ -663,14 +637,14 @@
   border-radius: 999px;
   background: #0f9f6e;
   color: #fff;
-  font-size: 23px;
+  font-size: 22px;
   font-weight: 700;
 }
 
 .reward-section__hint {
   display: block;
   margin-top: 8px;
-  font-size: 24px;
+  font-size: 22px;
   line-height: 1.5;
   color: #64748b;
 }
@@ -680,7 +654,7 @@
 }
 
 .reward-section__more {
-  font-size: 24px;
+  font-size: 22px;
   color: #0f9f6e;
 }
 
@@ -712,7 +686,7 @@
 
 .reward-voucher-card__title {
   display: block;
-  font-size: 30px;
+  font-size: 28px;
   font-weight: 600;
   color: #1f2937;
 }
@@ -724,7 +698,7 @@
 .reward-voucher-card__desc {
   display: block;
   margin-top: 10px;
-  font-size: 24px;
+  font-size: 22px;
   color: #64748b;
 }
 
@@ -746,7 +720,7 @@
   border-radius: 999px;
   background: #0f9f6e;
   color: #fff;
-  font-size: 24px;
+  font-size: 22px;
   font-weight: 500;
 }
 
@@ -807,7 +781,7 @@
 
 .reward-voucher-empty__hint {
   margin-top: 10px;
-  font-size: 24px;
+  font-size: 22px;
   color: #64748b;
 }
 
