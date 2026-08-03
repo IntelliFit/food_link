@@ -90,7 +90,6 @@ $fl-dark-sk-grad: linear-gradient(90deg, $fl-dark-sk-a 25%, $fl-dark-sk-b 50%, $
 }
 
 .fl-d .main-card,
-.fl-d .combined-card,
 .fl-d .macro-card,
 .fl-d .water-card,
 .fl-d .exercise-card,
@@ -99,6 +98,14 @@ $fl-dark-sk-grad: linear-gradient(90deg, $fl-dark-sk-a 25%, $fl-dark-sk-b 50%, $
   background: $fl-dark-panel-bg !important;
   border-color: $fl-dark-border !important;
   box-shadow: 0 8rpx 28rpx rgb(0 0 0 / 35%) !important;
+}
+
+.fl-d .combined-card {
+  background: $fl-dark-panel-bg !important;
+  border-color: rgb(125 211 176 / 42%) !important;
+  box-shadow:
+    0 8rpx 28rpx rgb(0 0 0 / 35%),
+    0 0 0 5rpx rgb(125 211 176 / 7%) !important;
 }
 
 .fl-d .card-label,
@@ -222,20 +229,16 @@ $fl-dark-sk-grad: linear-gradient(90deg, $fl-dark-sk-a 25%, $fl-dark-sk-b 50%, $
   color: #7dd3b0 !important;
 }
 
-.fl-d .diet-rec-entry,
 .fl-d .diet-rec-sheet,
 .fl-d .diet-rec-option {
   background: $fl-dark-panel-bg !important;
   box-shadow: 0 8rpx 28rpx rgb(0 0 0 / 35%) !important;
 }
 
-.fl-d .diet-rec-entry-icon,
-.fl-d .diet-rec-entry-btn,
 .fl-d .diet-rec-macro {
   background: rgb(125 211 176 / 14%) !important;
 }
 
-.fl-d .diet-rec-entry-title,
 .fl-d .diet-rec-title,
 .fl-d .diet-rec-gap-value,
 .fl-d .diet-rec-option-title,
@@ -243,7 +246,6 @@ $fl-dark-sk-grad: linear-gradient(90deg, $fl-dark-sk-a 25%, $fl-dark-sk-b 50%, $
   color: $fl-dark-text !important;
 }
 
-.fl-d .diet-rec-entry-subtitle,
 .fl-d .diet-rec-summary,
 .fl-d .diet-rec-option-reason,
 .fl-d .diet-rec-food-amount,
@@ -254,19 +256,15 @@ $fl-dark-sk-grad: linear-gradient(90deg, $fl-dark-sk-a 25%, $fl-dark-sk-b 50%, $
 }
 
 .fl-d .diet-rec-kicker,
-.fl-d .diet-rec-entry-icon-text,
-.fl-d .diet-rec-entry-btn-text,
 .fl-d .diet-rec-option-cal,
 .fl-d .diet-rec-macro {
   color: $fl-dark-accent !important;
 }
 
-.fl-d .diet-rec-entry-btn.primary,
 .fl-d .diet-rec-refresh {
   background: $fl-dark-accent !important;
 }
 
-.fl-d .diet-rec-entry-btn-text.primary,
 .fl-d .diet-rec-refresh-text {
   color: #10201a !important;
 }

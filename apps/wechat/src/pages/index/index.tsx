@@ -1,4 +1,6 @@
 import { View, Text, Input, Image, Canvas, PageMeta, Swiper, SwiperItem } from '@tarojs/components'
+import rewardPointsBannerBg from '../../assets/home-handbook/reward-points.jpg'
+import feedbackBannerBg from '../../assets/home-handbook/feedback.jpg'
 import { CAFETERIA_HERO_BG_URL, GOOSE_DUCK_CHICKEN_BG_URL } from '../../utils/static-asset-cdn-url'
 import React from 'react'
 import Taro, { useDidShow, useShareAppMessage, useShareTimeline } from '@tarojs/taro'
@@ -783,6 +785,16 @@ const MACRO_CONFIGS: Array<{
   { key: 'fat', label: '脂肪', subLabel: '剩余', color: '#f0985c', unit: 'g', iconClass: 'icon-zhifangyouheruhuazhifangzhipin' }
 ]
 
+type HomeHandbookBanner = {
+  key: string
+  kicker: string
+  title: string
+  desc: string
+  actionText: string
+  bgImage: string
+  url: string
+}
+
 function IndexPage() {
   const { scheme } = useAppColorScheme()
   const initialSelectedDate = formatDateKey(new Date())
@@ -806,7 +818,7 @@ function IndexPage() {
   const [petCelebrating, setPetCelebrating] = React.useState(false)
   const [membershipStatus, setMembershipStatus] = React.useState<MembershipStatus | null>(null)
   const [rewardCenter, setRewardCenter] = React.useState<RewardCenterResponse | null>(null)
-  const [rewardHintIndex, setRewardHintIndex] = React.useState(0)
+  const [handbookBannerIndex, setHandbookBannerIndex] = React.useState(0)
   const petSummarySeqRef = React.useRef(0)
   const petDidShowCountRef = React.useRef(0)
   const petCelebrationTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -2942,10 +2954,9 @@ function IndexPage() {
     availableRewardCredits > 0 &&
     (membershipCredits.remaining < LOW_CREDIT_REWARD_HINT_THRESHOLD || rewardHintTasks.some(isRewardTaskAvailable))
   const rewardHintTaskText = formatRewardHintTaskText(rewardHintTasks)
-  const rewardHintBanners = [
+  const handbookBanners: HomeHandbookBanner[] = [
     {
       key: 'goose-duck-chicken',
-      className: 'home-reward-hint--goose-duck-chicken',
       kicker: '热点专线',
       title: '鹅腿还是鸭腿？',
       desc: '上传图片，让食探只在鹅 / 鸭 / 鸡里做判断',
@@ -2955,17 +2966,15 @@ function IndexPage() {
     },
     ...(showRewardCreditHint ? [{
       key: 'reward',
-      className: 'home-reward-hint--reward',
       kicker: '今日可赚积分',
       title: `今天还可以赚 ${availableRewardCredits} 积分`,
       desc: rewardHintTaskText,
       actionText: '去赚',
       url: extraPkgUrl('/pages/reward-center/index'),
-      bgImage: undefined,
+      bgImage: rewardPointsBannerBg,
     }] : []),
     {
       key: 'campus',
-      className: 'home-reward-hint--campus',
       kicker: '食探校园活动',
       title: '食探校园食堂计划',
       desc: '一起补全食堂菜品、价格、窗口和营养信息',
@@ -2975,33 +2984,23 @@ function IndexPage() {
     },
     {
       key: 'feedback',
-      className: 'home-reward-hint--feedback',
       kicker: '帮助我们一起成长',
       title: '意见反馈',
       desc: '提交宝贵建议，最高可得 +5 积分',
       actionText: '去反馈',
       url: extraPkgUrl('/pages/feedback/index'),
-      bgImage: undefined,
+      bgImage: feedbackBannerBg,
     },
-  ] as const
-  const showRewardHint = !isGuest && rewardHintBanners.length > 0
-  const activeRewardHintIndex = rewardHintBanners.length > 0 ? rewardHintIndex % rewardHintBanners.length : 0
+  ]
+  const activeHandbookBannerIndex = handbookBannerIndex % handbookBanners.length
 
-  // 首页轮播图自动轮播
-  React.useEffect(() => {
-    const timer = setInterval(() => {
-      setRewardHintIndex((current) => (current + 1) % Math.max(rewardHintBanners.length, 1))
-    }, 5000)
-    return () => clearInterval(timer)
-  }, [rewardHintBanners.length])
-
-  const handleRewardHintClick = React.useCallback((url: string) => {
+  const handleHandbookBannerClick = React.useCallback((banner: HomeHandbookBanner) => {
     Taro.navigateTo({
-      url,
+      url: banner.url,
       fail: (error) => {
-        console.warn('首页横幅跳转失败', { url, error })
+        console.warn('首页内容横幅跳转失败', { url: banner.url, error })
         Taro.showToast({
-          title: '入口加载失败，请稍后重试',
+          title: '内容加载失败，请稍后重试',
           icon: 'none',
         })
       },
@@ -3161,69 +3160,6 @@ function IndexPage() {
           selectedDate={selectedDate}
           onSelect={handleDateSelect}
         />
-        {showRewardHint && (
-          <View className='home-reward-hint-swiper'>
-            <Swiper
-              className='home-reward-hint-swiper__track'
-              current={activeRewardHintIndex}
-              circular
-              duration={300}
-              onChange={(e) => setRewardHintIndex(e.detail.current)}
-            >
-              {rewardHintBanners.map((banner) => (
-                <SwiperItem key={banner.key} className='home-reward-hint-swiper__item'>
-                  <View
-                    className={`home-reward-hint ${banner.className}`}
-                    onClick={() => handleRewardHintClick(banner.url)}
-                  >
-                    {banner.bgImage && (
-                      <Image
-                        className='home-reward-hint__bg'
-                        src={banner.bgImage}
-                        mode='aspectFill'
-                      />
-                    )}
-                    <View className='home-reward-hint__main'>
-                      <Text className='home-reward-hint__kicker'>{banner.kicker}</Text>
-                      <Text className='home-reward-hint__title'>{banner.title}</Text>
-                      <Text className='home-reward-hint__desc'>{banner.desc}</Text>
-                    </View>
-                    <View
-                      className='home-reward-hint__actions'
-                      onClick={(event) => {
-                        event.stopPropagation()
-                        handleRewardHintClick(banner.url)
-                      }}
-                    >
-                      <Text className='home-reward-hint__go'>{banner.actionText}</Text>
-                    </View>
-                  </View>
-                </SwiperItem>
-              ))}
-            </Swiper>
-            <View className='home-reward-hint__dots'>
-              {rewardHintBanners.map((banner, index) => (
-                <Text
-                  key={banner.key}
-                  className={`home-reward-hint__dot ${index === activeRewardHintIndex ? 'active' : ''}`}
-                />
-              ))}
-            </View>
-          </View>
-        )}
-        {showBackfillHint && (
-          <View className='home-backfill-hint'>
-            <Text className='home-backfill-hint__dot' />
-            <View className='home-backfill-hint__copy'>
-              <Text className='home-backfill-hint__text'>可补录这一天的食物、体重、喝水和运动记录</Text>
-            </View>
-            <View className='home-backfill-hint__actions'>
-              <Text className='home-backfill-hint__action' onClick={openBackfillRecordMenu}>去补录</Text>
-              <Text className='home-backfill-hint__cancel' onClick={handleDismissBackfillHint}>取消</Text>
-            </View>
-          </View>
-        )}
-
         {/* 热量总览卡片 + 三大营养素合并（仅展示与编辑目标，不整卡跳转） */}
         <View className='main-card combined-card'>
           <View className='main-card-header'>
@@ -3373,29 +3309,59 @@ function IndexPage() {
           </View>
         </View>
 
-        <View className='diet-rec-entry'>
-          <View className='diet-rec-entry-main'>
-            <View className='diet-rec-entry-icon'>
-              <Text className='iconfont icon-canciguanli diet-rec-entry-icon-text' />
-            </View>
-            <View className='diet-rec-entry-copy'>
-              <Text className='diet-rec-entry-title'>今天吃什么</Text>
-              <Text className='diet-rec-entry-subtitle'>
-                {dashboardBusy || isGuest
-                  ? '按剩余目标推荐一餐'
-                  : `还可吃 ${formatDisplayNumber(Math.max(0, Math.round(intakeData.target - intakeData.current)))} kcal`}
-              </Text>
+        {!isGuest && (
+          <View className='home-handbook-swiper'>
+            <Swiper
+              className='home-handbook-swiper__track'
+              current={activeHandbookBannerIndex}
+              circular
+              autoplay
+              interval={5000}
+              duration={360}
+              nextMargin='42rpx'
+              onChange={(event) => setHandbookBannerIndex(event.detail.current)}
+            >
+              {handbookBanners.map((banner) => (
+                <SwiperItem key={banner.key} className='home-handbook-swiper__item'>
+                  <View className='home-handbook-card' onClick={() => handleHandbookBannerClick(banner)}>
+                    <Image className='home-handbook-card__bg' src={banner.bgImage} mode='aspectFill' />
+                    <View className='home-handbook-card__shade' />
+                    <View className='home-handbook-card__copy'>
+                      <Text className='home-handbook-card__kicker'>{banner.kicker}</Text>
+                      <Text className='home-handbook-card__title'>{banner.title}</Text>
+                      <Text className='home-handbook-card__desc'>{banner.desc}</Text>
+                      <View className='home-handbook-card__action'>
+                        <Text>{banner.actionText}</Text>
+                        <Text className='iconfont icon-right-arrow home-handbook-card__action-icon' />
+                      </View>
+                    </View>
+                  </View>
+                </SwiperItem>
+              ))}
+            </Swiper>
+            <View className='home-handbook-swiper__dots'>
+              {handbookBanners.map((banner, index) => (
+                <Text
+                  key={banner.key}
+                  className={`home-handbook-swiper__dot ${index === activeHandbookBannerIndex ? 'active' : ''}`}
+                />
+              ))}
             </View>
           </View>
-          <View className='diet-rec-entry-actions'>
-            <View className='diet-rec-entry-btn' onClick={() => openDietRecommendation('eat_out')}>
-              <Text className='diet-rec-entry-btn-text'>外面吃</Text>
+        )}
+
+        {showBackfillHint && (
+          <View className='home-backfill-hint'>
+            <Text className='home-backfill-hint__dot' />
+            <View className='home-backfill-hint__copy'>
+              <Text className='home-backfill-hint__text'>可补录这一天的食物、体重、喝水和运动记录</Text>
             </View>
-            <View className='diet-rec-entry-btn primary' onClick={() => openDietRecommendation('cook_home')}>
-              <Text className='diet-rec-entry-btn-text primary'>自己做</Text>
+            <View className='home-backfill-hint__actions'>
+              <Text className='home-backfill-hint__action' onClick={openBackfillRecordMenu}>去补录</Text>
+              <Text className='home-backfill-hint__cancel' onClick={handleDismissBackfillHint}>取消</Text>
             </View>
           </View>
-        </View>
+        )}
 
         {/* 体重/喝水状态卡片 */}
         <View className='body-status-section'>
