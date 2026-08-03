@@ -161,10 +161,10 @@ function RewardCenterPage() {
                   onClick={() => handleTaskClick(task)}
                 >
                   <View className='reward-quick-card__main'>
-                    <Text className='reward-quick-card__name'>{formatTaskName(task)}</Text>
-                    <Text className='reward-quick-card__desc'>
-                      {formatTaskProgress(task)} · 完成一次 +{task.reward_amount} 积分
-                    </Text>
+                    <View className='reward-quick-card__title-row'>
+                      <Text className='reward-quick-card__name'>{formatTaskName(task)}</Text>
+                      <Text className='reward-quick-card__reward'>+{task.reward_amount}积分</Text>
+                    </View>
                   </View>
                   <Text className={`reward-quick-card__button ${disabled ? 'reward-quick-card__button--disabled' : ''}`}>
                     {disabled ? '今日已满' : '去完成'}
@@ -176,6 +176,51 @@ function RewardCenterPage() {
         ) : (
           <Text className='reward-quick-empty'>暂时没有可完成的任务</Text>
         )}
+
+        <View className='reward-use-guide'>
+          <View className='reward-use-guide__head'>
+            <Text className='reward-use-guide__title'>积分怎么用</Text>
+            <Text className='reward-use-guide__hint'>从主页进入</Text>
+          </View>
+          <View className='reward-use-guide__list'>
+            <View className='reward-use-guide__item'>
+              <View className='reward-use-guide__icon-wrap'>
+                <Text className='iconfont icon-dumbbell reward-use-guide__icon' />
+              </View>
+              <View className='reward-use-guide__content'>
+                <View className='reward-use-guide__label-row'>
+                  <Text className='reward-use-guide__cost'>1积分</Text>
+                  <Text className='reward-use-guide__name'>记录运动</Text>
+                </View>
+                <Text className='reward-use-guide__path'>主页 → 今日记录 → 运动</Text>
+              </View>
+            </View>
+            <View className='reward-use-guide__item'>
+              <View className='reward-use-guide__icon-wrap'>
+                <Text className='iconfont icon-paizhao-xianxing reward-use-guide__icon' />
+              </View>
+              <View className='reward-use-guide__content'>
+                <View className='reward-use-guide__label-row'>
+                  <Text className='reward-use-guide__cost'>2积分</Text>
+                  <Text className='reward-use-guide__name'>普通食物分析</Text>
+                </View>
+                <Text className='reward-use-guide__path'>主页拍照 → 选择普通模式</Text>
+              </View>
+            </View>
+            <View className='reward-use-guide__item'>
+              <View className='reward-use-guide__icon-wrap'>
+                <Text className='iconfont icon-target reward-use-guide__icon' />
+              </View>
+              <View className='reward-use-guide__content'>
+                <View className='reward-use-guide__label-row'>
+                  <Text className='reward-use-guide__cost'>4积分</Text>
+                  <Text className='reward-use-guide__name'>精准食物分析</Text>
+                </View>
+                <Text className='reward-use-guide__path'>主页拍照 → 选择精准模式</Text>
+              </View>
+            </View>
+          </View>
+        </View>
       </View>
 
       {!loading && vouchers.length > 0 && (
@@ -211,44 +256,6 @@ function RewardCenterPage() {
         </View>
       )}
 
-      <View className='reward-spend-section'>
-        <View className='reward-spend-section__head'>
-          <Text className='reward-spend-section__title'>积分怎么用</Text>
-          <Text className='reward-spend-section__hint'>奖励积分长期累积，不会在次日清零</Text>
-        </View>
-        <View className='reward-spend-list'>
-          <View className='reward-spend-item'>
-            <View className='reward-spend-item__cost'>
-              <Text className='reward-spend-item__number'>1</Text>
-              <Text className='reward-spend-item__unit'>积分</Text>
-            </View>
-            <View className='reward-spend-item__content'>
-              <Text className='reward-spend-item__name'>记录一次运动</Text>
-              <Text className='reward-spend-item__desc'>完成日常运动记录</Text>
-            </View>
-          </View>
-          <View className='reward-spend-item'>
-            <View className='reward-spend-item__cost'>
-              <Text className='reward-spend-item__number'>2</Text>
-              <Text className='reward-spend-item__unit'>积分</Text>
-            </View>
-            <View className='reward-spend-item__content'>
-              <Text className='reward-spend-item__name'>基础饮食记录</Text>
-              <Text className='reward-spend-item__desc'>完成一次基础饮食分析</Text>
-            </View>
-          </View>
-          <View className='reward-spend-item'>
-            <View className='reward-spend-item__cost'>
-              <Text className='reward-spend-item__number'>4</Text>
-              <Text className='reward-spend-item__unit'>积分</Text>
-            </View>
-            <View className='reward-spend-item__content'>
-              <Text className='reward-spend-item__name'>精准模式分析</Text>
-              <Text className='reward-spend-item__desc'>获得更细致的饮食分析结果</Text>
-            </View>
-          </View>
-        </View>
-      </View>
     </View>
   )
 }
@@ -271,13 +278,6 @@ function resolveRewardTaskUrl(actionPath: string): string {
 
 function isTaskDisabled(task: RewardCenterTask): boolean {
   return typeof task.daily_limit === 'number' && task.daily_limit > 0 && task.today_count >= task.daily_limit
-}
-
-function formatTaskProgress(task: RewardCenterTask): string {
-  if (typeof task.daily_limit === 'number' && task.daily_limit > 0) {
-    return `今日 ${task.today_count}/${task.daily_limit}`
-  }
-  return `今日已提交 ${task.today_count}`
 }
 
 function formatTaskName(task: RewardCenterTask): string {
