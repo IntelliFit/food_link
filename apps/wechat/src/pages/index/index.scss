@@ -317,187 +317,133 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   }
 }
 
-.home-reward-hint-swiper {
+.home-handbook-swiper {
   position: relative;
-  margin: -4rpx 0 12rpx;
-  border-radius: 22rpx;
-  overflow: hidden;
-  box-shadow: 0 10rpx 22rpx rgb(15 159 110 / 16%);
+  margin: 2rpx -20rpx 16rpx 0;
 }
 
-.home-reward-hint-swiper__track {
-  height: 122rpx;
-  background: transparent;
+.home-handbook-swiper__track {
+  height: 184rpx;
 }
 
-.home-reward-hint-swiper__item {
-  width: 100%;
+.home-handbook-swiper__item {
   height: 100%;
+  padding-right: 12rpx;
+  box-sizing: border-box;
 }
 
-.home-reward-hint {
+.home-handbook-card {
   position: relative;
-  display: flex;
-  align-items: center;
-  gap: 12rpx;
-  min-height: 122rpx;
-  padding: 12rpx 14rpx 24rpx 18rpx;
-  background:
-    radial-gradient(circle at 8% 8%, rgb(255 214 128 / 45%), transparent 34%),
-    linear-gradient(135deg, #11251d 0%, #0f9f6e 58%, #18c58b 100%);
+  height: 176rpx;
+  overflow: hidden;
+  border-radius: 24rpx;
+  background: #d9eee5;
+  border: 1rpx solid rgb(92 184 150 / 30%);
+  box-shadow: 0 8rpx 22rpx rgb(40 118 90 / 14%);
   box-sizing: border-box;
 
   &:active {
-    opacity: 0.9;
+    opacity: 0.92;
   }
 }
 
-.home-reward-hint--campus {
-  background: linear-gradient(135deg, rgb(6 45 37 / 82%) 0%, rgb(17 94 89 / 58%) 52%, rgb(0 0 0 / 36%) 100%);
-
-  &::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    z-index: 1;
-    background: linear-gradient(135deg, rgb(6 45 37 / 82%) 0%, rgb(17 94 89 / 58%) 52%, rgb(0 0 0 / 36%) 100%);
-    pointer-events: none;
-  }
-
-  .home-reward-hint__main,
-  .home-reward-hint__actions {
-    z-index: 2;
-  }
-
-  .home-reward-hint__go {
-    color: #0f766e;
-  }
-}
-
-.home-reward-hint--feedback {
-  background: linear-gradient(135deg, #d4a574 0%, #e0c495 100%);
-
-  .home-reward-hint__go {
-    color: #7d5f33;
-  }
-}
-
-.home-reward-hint--goose-duck-chicken {
-  background:
-    radial-gradient(circle at 12% 18%, rgb(255 255 255 / 28%), transparent 24%),
-    linear-gradient(135deg, #2b211f 0%, #c44f37 54%, #f2b15f 100%);
-
-  &::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    z-index: 1;
-    background:
-      radial-gradient(circle at 12% 18%, rgb(255 255 255 / 28%), transparent 24%),
-      linear-gradient(135deg, rgba(43, 33, 31, 0.82) 0%, rgba(196, 79, 55, 0.58) 54%, rgba(242, 177, 95, 0.36) 100%);
-    pointer-events: none;
-  }
-
-  .home-reward-hint__main,
-  .home-reward-hint__actions {
-    position: relative;
-    z-index: 2;
-  }
-
-  .home-reward-hint__kicker {
-    color: rgb(255 244 214 / 84%);
-  }
-
-  .home-reward-hint__go {
-    color: #a03d24;
-  }
-}
-
-.home-reward-hint__bg {
+.home-handbook-card__bg,
+.home-handbook-card__shade {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
-  z-index: 0;
-  pointer-events: none;
-  object-fit: cover;
 }
 
-.home-reward-hint__main {
-  position: relative;
+.home-handbook-card__bg {
+  z-index: 0;
+}
+
+.home-handbook-card__shade {
   z-index: 1;
-  flex: 1;
-  min-width: 0;
+  background: linear-gradient(90deg, rgb(13 45 35 / 84%) 0%, rgb(13 45 35 / 66%) 46%, rgb(13 45 35 / 7%) 78%);
+  pointer-events: none;
+}
+
+.home-handbook-card__copy {
+  position: relative;
+  z-index: 2;
+  width: 62%;
+  height: 100%;
+  padding: 18rpx 0 16rpx 22rpx;
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
+  box-sizing: border-box;
 }
 
-.home-reward-hint__kicker {
-  font-size: 16rpx;
-  line-height: 22rpx;
-  font-weight: 800;
-  color: rgb(255 255 255 / 76%);
+.home-handbook-card__action {
+  display: flex;
+  align-items: center;
 }
 
-.home-reward-hint__title {
-  margin-top: 2rpx;
-  font-size: 23rpx;
+.home-handbook-card__kicker,
+.home-handbook-card__desc,
+.home-handbook-card__action {
+  font-size: 22rpx;
   line-height: 30rpx;
-  font-weight: 900;
-  color: #ffffff;
 }
 
-.home-reward-hint__desc {
-  margin-top: 2rpx;
-  font-size: 18rpx;
-  line-height: 24rpx;
-  color: rgb(255 255 255 / 82%);
+.home-handbook-card__kicker {
+  color: #a8ead0;
+  font-weight: 700;
+}
+
+.home-handbook-card__title {
+  margin-top: 3rpx;
+  max-width: 100%;
+  font-size: 28rpx;
+  line-height: 38rpx;
+  font-weight: 800;
+  color: #ffffff;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.home-reward-hint__actions {
-  position: relative;
-  z-index: 1;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  gap: 12rpx;
+.home-handbook-card__desc {
+  max-width: 100%;
+  color: rgb(255 255 255 / 84%);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.home-reward-hint__go {
-  padding: 8rpx 14rpx;
-  border-radius: 999rpx;
-  background: #ffffff;
-  color: #0f9f6e;
-  font-size: 20rpx;
-  line-height: 24rpx;
-  font-weight: 900;
+.home-handbook-card__action {
+  margin-top: auto;
+  gap: 4rpx;
+  color: #ffffff;
+  font-weight: 700;
 }
 
-.home-reward-hint__dots {
+.home-handbook-card__action-icon {
+  font-size: 18rpx;
+}
+
+.home-handbook-swiper__dots {
   position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 8rpx;
-  z-index: 2;
+  right: 62rpx;
+  bottom: 20rpx;
+  z-index: 3;
   display: flex;
   align-items: center;
-  justify-content: center;
   gap: 6rpx;
   pointer-events: none;
 }
 
-.home-reward-hint__dot {
+.home-handbook-swiper__dot {
   width: 7rpx;
   height: 7rpx;
   border-radius: 999rpx;
-  background: rgb(255 255 255 / 42%);
-  transition: all 0.2s ease;
+  background: rgb(255 255 255 / 52%);
 
   &.active {
-    width: 16rpx;
+    width: 18rpx;
     background: #ffffff;
   }
 }
@@ -951,102 +897,10 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 // 合并卡片样式 - 热量+三大营养素
 .combined-card {
   padding-bottom: 24rpx;
-}
-
-.diet-rec-entry {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 18rpx;
-  min-height: 112rpx;
-  padding: 22rpx 24rpx;
-  margin-bottom: 16rpx;
-  background: #ffffff;
-  border-radius: 24rpx;
-  box-shadow: 0 4rpx 18rpx rgb(0 0 0 / 4%);
-  box-sizing: border-box;
-}
-
-.diet-rec-entry-main {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 16rpx;
-}
-
-.diet-rec-entry-icon {
-  width: 64rpx;
-  height: 64rpx;
-  flex-shrink: 0;
-  border-radius: 20rpx;
-  background: rgb(92 184 150 / 12%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.diet-rec-entry-icon-text {
-  font-size: 32rpx;
-  color: $primary-color;
-}
-
-.diet-rec-entry-copy {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4rpx;
-}
-
-.diet-rec-entry-title {
-  font-size: 28rpx;
-  line-height: 38rpx;
-  font-weight: 700;
-  color: $text-primary;
-}
-
-.diet-rec-entry-subtitle {
-  font-size: 22rpx;
-  line-height: 30rpx;
-  color: $text-secondary;
-}
-
-.diet-rec-entry-actions {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  gap: 10rpx;
-}
-
-.diet-rec-entry-btn {
-  min-width: 104rpx;
-  height: 54rpx;
-  padding: 0 18rpx;
-  border-radius: 16rpx;
-  background: rgb(92 184 150 / 10%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-sizing: border-box;
-
-  &.primary {
-    background: $primary-color;
-  }
-
-  &:active {
-    opacity: 0.82;
-  }
-}
-
-.diet-rec-entry-btn-text {
-  font-size: 24rpx;
-  line-height: 32rpx;
-  font-weight: 700;
-  color: #2f7f62;
-
-  &.primary {
-    color: #ffffff;
-  }
+  border: 1rpx solid rgb(92 184 150 / 34%);
+  box-shadow:
+    0 8rpx 28rpx rgb(35 113 84 / 10%),
+    0 0 0 5rpx rgb(92 184 150 / 5%);
 }
 
 .campus-canteen-entry {
@@ -4328,15 +4182,11 @@ $sheet-float-max-height: calc(100vh - #{$sheet-float-gap-top} - env(safe-area-in
     color: #94a3b8;
   }
 
-  .home-reward-hint {
+  .home-handbook-card {
     box-shadow: 0 16rpx 34rpx rgb(0 0 0 / 26%);
   }
 
-  .home-reward-hint__go {
-    background: rgb(255 255 255 / 92%);
-  }
-
-  .home-reward-hint__dot {
+  .home-handbook-swiper__dot {
     background: rgb(255 255 255 / 36%);
 
     &.active {
