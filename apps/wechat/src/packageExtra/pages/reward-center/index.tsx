@@ -115,6 +115,7 @@ function RewardCenterPage() {
   return (
     <View className={`reward-center-page ${scheme === 'dark' ? 'reward-center-page--dark' : ''}`}>
       <View className='reward-hero'>
+        <Text className='iconfont icon-a-144-lvye reward-hero__art' />
         <Text className='reward-hero__title'>奖励积分</Text>
         <View className='reward-hero__level'>
           <Text className='reward-hero__level-text'>{levelRangeText} · Lv{levelMeta.level} {levelMeta.title}</Text>
@@ -139,7 +140,12 @@ function RewardCenterPage() {
 
       <View className='reward-quick-section'>
         <View className='reward-quick-section__head'>
-          <Text className='reward-quick-section__title'>最快拿分</Text>
+          <View className='reward-quick-section__heading'>
+            <View className='reward-quick-section__icon-wrap'>
+              <Text className='iconfont icon-huore reward-quick-section__icon' />
+            </View>
+            <Text className='reward-quick-section__title'>最快拿分</Text>
+          </View>
           {!loading && (
             <Text className='reward-quick-section__hint'>
               今日完成 {data?.today_task_overview.completed_count ?? 0}/{data?.today_task_overview.total_count ?? 0}
@@ -160,6 +166,9 @@ function RewardCenterPage() {
                   className={`reward-quick-card ${disabled ? 'reward-quick-card--disabled' : ''}`}
                   onClick={() => handleTaskClick(task)}
                 >
+                  <View className='reward-quick-card__icon-wrap'>
+                    <Text className={`iconfont ${getTaskIconClass(task)} reward-quick-card__icon`} />
+                  </View>
                   <View className='reward-quick-card__main'>
                     <View className='reward-quick-card__title-row'>
                       <Text className='reward-quick-card__name'>{formatTaskName(task)}</Text>
@@ -179,8 +188,12 @@ function RewardCenterPage() {
 
         <View className='reward-use-guide'>
           <View className='reward-use-guide__head'>
-            <Text className='reward-use-guide__title'>积分怎么用</Text>
-            <Text className='reward-use-guide__hint'>从主页进入</Text>
+            <View className='reward-use-guide__heading'>
+              <View className='reward-use-guide__heading-icon-wrap'>
+                <Text className='iconfont icon-youhuiquan reward-use-guide__heading-icon' />
+              </View>
+              <Text className='reward-use-guide__title'>积分怎么用</Text>
+            </View>
           </View>
           <View className='reward-use-guide__list'>
             <View className='reward-use-guide__item'>
@@ -285,6 +298,13 @@ function formatTaskName(task: RewardCenterTask): string {
     return '上传公共食物/校园食堂菜品'
   }
   return task.name
+}
+
+function getTaskIconClass(task: RewardCenterTask): string {
+  if (task.action_type === 'share_poster') return 'icon-share'
+  if (task.action_type === 'packaged_food_upload') return 'icon-picture'
+  if (task.action_type === 'public_food_upload') return 'icon-foodshop'
+  return 'icon-good'
 }
 
 function rewardActivationNote(reward: VoucherItem): string {
