@@ -122,6 +122,10 @@ export default defineConfig<'vite'>(async (merge) => {
           from: 'custom-tab-bar',
           to: 'custom-tab-bar'
         },
+        {
+          from: 'src/assets/pets',
+          to: 'assets/pets'
+        },
 
       ],
       options: {
