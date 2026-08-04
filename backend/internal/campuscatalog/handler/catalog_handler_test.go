@@ -18,14 +18,16 @@ import (
 )
 
 type fakeCatalogService struct {
-	uploadAdminID string
-	uploadType    string
-	uploadCalls   int
-	createAdminID string
-	createInput   service.CreateBatchInput
-	updateAdminID string
-	updateItemID  string
-	updateInput   service.UpdateCatalogItemInput
+	uploadAdminID  string
+	uploadType     string
+	uploadCalls    int
+	createAdminID  string
+	createInput    service.CreateBatchInput
+	updateAdminID  string
+	updateItemID   string
+	updateInput    service.UpdateCatalogItemInput
+	publishAdminID string
+	publishItemID  string
 }
 
 func (f *fakeCatalogService) UploadImage(_ context.Context, adminID, _, contentType string, _ []byte) (string, error) {
@@ -56,6 +58,12 @@ func (f *fakeCatalogService) UpdateItem(_ context.Context, adminID, itemID strin
 	return &domain.CatalogItem{ID: itemID, Name: input.Name}, nil
 }
 
+func (f *fakeCatalogService) PublishItem(_ context.Context, adminID, itemID string) (*domain.CatalogItem, error) {
+	f.publishAdminID = adminID
+	f.publishItemID = itemID
+	return &domain.CatalogItem{ID: itemID, Status: "published"}, nil
+}
+
 func newCatalogTestRouter(svc CatalogService) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
@@ -67,7 +75,21 @@ func newCatalogTestRouter(svc CatalogService) *gin.Engine {
 	router.POST("/images", handler.UploadImage)
 	router.POST("/batches", handler.CreateBatch)
 	router.PATCH("/items/:item_id", handler.UpdateItem)
+	router.POST("/items/:item_id/publish", handler.PublishItem)
 	return router
+}
+
+func TestPublishItemUsesAdminIdentity(t *testing.T) {
+	svc := &fakeCatalogService{}
+	router := newCatalogTestRouter(svc)
+	request := httptest.NewRequest(http.MethodPost, "/items/item-1/publish", nil)
+	recorder := httptest.NewRecorder()
+
+	router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Equal(t, "admin-1", svc.publishAdminID)
+	require.Equal(t, "item-1", svc.publishItemID)
 }
 
 func TestUploadImageUsesAdminIdentity(t *testing.T) {

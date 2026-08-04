@@ -795,6 +795,9 @@ WHERE COALESCE(display_name, '') = ''
 		`ALTER TABLE public_food_library ADD COLUMN IF NOT EXISTS portion_description text`,
 		`ALTER TABLE public_food_library ADD COLUMN IF NOT EXISTS is_campus_highlight boolean NOT NULL DEFAULT false`,
 		`ALTER TABLE public_food_library ADD COLUMN IF NOT EXISTS campus_location_text text`,
+		// Official campus catalog entries are published by an admin account rather
+		// than a mini-program user, so their author is intentionally nullable.
+		`ALTER TABLE public_food_library ALTER COLUMN user_id DROP NOT NULL`,
 		`CREATE INDEX IF NOT EXISTS idx_public_food_library_is_campus ON public_food_library (is_campus_food)`,
 		`CREATE INDEX IF NOT EXISTS idx_public_food_library_school_id ON public_food_library (school_id) WHERE school_id IS NOT NULL`,
 		`CREATE INDEX IF NOT EXISTS idx_public_food_library_campus_id ON public_food_library (campus_id) WHERE campus_id IS NOT NULL`,

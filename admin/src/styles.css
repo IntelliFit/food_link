@@ -842,6 +842,12 @@ h1 {
   background: color-mix(in srgb, var(--red) 10%, transparent);
 }
 
+.pill.warning {
+  border-color: var(--amber);
+  color: var(--amber);
+  background: color-mix(in srgb, var(--amber) 10%, transparent);
+}
+
 .nutrition-line {
   color: var(--muted);
   font-size: 12px;
@@ -1055,6 +1061,19 @@ h1 {
   border-top: 1px solid var(--line);
   background: color-mix(in srgb, var(--panel) 94%, transparent);
   backdrop-filter: blur(8px);
+}
+
+.collection-item-actions {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  min-width: 104px;
+}
+
+.collection-item-actions button {
+  justify-content: center;
+  white-space: nowrap;
 }
 
 @media (max-width: 1380px) {

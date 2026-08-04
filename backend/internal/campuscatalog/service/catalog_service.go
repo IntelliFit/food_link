@@ -30,6 +30,7 @@ type CatalogRepository interface {
 	ListItemsByBatch(ctx context.Context, batchID string) ([]domain.CatalogItem, error)
 	FindItemByID(ctx context.Context, itemID string) (*domain.CatalogItem, error)
 	UpdateItem(ctx context.Context, item *domain.CatalogItem) error
+	PublishItem(ctx context.Context, item *domain.CatalogItem, adminID string, publishedAt time.Time) error
 }
 
 type CatalogService struct {
@@ -298,7 +299,14 @@ func (s *CatalogService) UpdateItem(ctx context.Context, adminID, itemID string,
 	}
 	updated.ID = current.ID
 	updated.BatchID = current.BatchID
-	updated.Status = current.Status
+	switch current.Status {
+	case "published", "changes_pending":
+		updated.Status = "changes_pending"
+	default:
+		updated.Status = "draft"
+	}
+	updated.PublishedAt = current.PublishedAt
+	updated.PublishedByAdminID = current.PublishedByAdminID
 	updated.ContributorUserID = current.ContributorUserID
 	updated.CreatedByAdminID = current.CreatedByAdminID
 	updated.CreatedAt = current.CreatedAt
@@ -324,6 +332,40 @@ func (s *CatalogService) UpdateItem(ctx context.Context, adminID, itemID string,
 	)
 	result := updated
 	items := []domain.CatalogItem{result}
+	s.resolveItemImages(items)
+	return &items[0], nil
+}
+
+func (s *CatalogService) PublishItem(ctx context.Context, adminID, itemID string) (*domain.CatalogItem, error) {
+	itemID = strings.TrimSpace(itemID)
+	adminID = strings.TrimSpace(adminID)
+	if itemID == "" {
+		return nil, badRequest("采集条目 ID 不能为空")
+	}
+	item, err := s.repo.FindItemByID(ctx, itemID)
+	if err != nil {
+		logger.Error(ctx, "读取待上线食堂采集条目失败", err,
+			slog.String("admin_id", adminID), slog.String("item_id", itemID))
+		return nil, err
+	}
+	if item == nil {
+		return nil, notFound("食堂采集条目不存在")
+	}
+	if item.CompletenessStatus != "complete" || len(item.MissingFields) > 0 {
+		return nil, badRequest("请先补齐名称、图片和价格后再提交上线")
+	}
+	publishedAt := time.Now()
+	if err := s.repo.PublishItem(ctx, item, adminID, publishedAt); err != nil {
+		logger.Error(ctx, "发布食堂采集条目失败", err,
+			slog.String("admin_id", adminID), slog.String("item_id", itemID), slog.String("batch_id", item.BatchID))
+		return nil, err
+	}
+	item.Status = "published"
+	item.PublishedAt = &publishedAt
+	item.PublishedByAdminID = trimStringPtr(&adminID)
+	logger.Info(ctx, "食堂采集条目提交上线完成",
+		slog.String("admin_id", adminID), slog.String("item_id", itemID), slog.String("batch_id", item.BatchID))
+	items := []domain.CatalogItem{*item}
 	s.resolveItemImages(items)
 	return &items[0], nil
 }

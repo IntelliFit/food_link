@@ -19,6 +19,8 @@ type fakeCatalogRepo struct {
 	createdBatch  *domain.CollectionBatch
 	createdItems  []domain.CatalogItem
 	updatedItem   *domain.CatalogItem
+	publishedItem *domain.CatalogItem
+	publishedBy   string
 }
 
 func (f *fakeCatalogRepo) FindBatchByClientKey(context.Context, string) (*domain.CollectionBatch, error) {
@@ -47,6 +49,16 @@ func (f *fakeCatalogRepo) FindItemByID(context.Context, string) (*domain.Catalog
 func (f *fakeCatalogRepo) UpdateItem(_ context.Context, item *domain.CatalogItem) error {
 	copyItem := *item
 	f.updatedItem = &copyItem
+	return nil
+}
+
+func (f *fakeCatalogRepo) PublishItem(_ context.Context, item *domain.CatalogItem, adminID string, publishedAt time.Time) error {
+	copyItem := *item
+	copyItem.Status = "published"
+	copyItem.PublishedAt = &publishedAt
+	copyItem.PublishedByAdminID = &adminID
+	f.publishedItem = &copyItem
+	f.publishedBy = adminID
 	return nil
 }
 
@@ -224,6 +236,54 @@ func TestUpdateItemRejectsUnknownItem(t *testing.T) {
 	_, err := svc.UpdateItem(context.Background(), "admin-1", "missing", UpdateCatalogItemInput{})
 
 	require.Error(t, err)
+}
+
+func TestUpdatePublishedItemMarksChangesPending(t *testing.T) {
+	price := 8.0
+	repo := &fakeCatalogRepo{existingItem: &domain.CatalogItem{
+		ID: "item-1", BatchID: "batch-1", Status: "published", Name: "旧名称",
+		OrganizationName: "清华大学", CanteenName: "紫荆园",
+	}}
+	svc := NewCatalogService(repo, nil)
+
+	item, err := svc.UpdateItem(context.Background(), "admin-1", "item-1", UpdateCatalogItemInput{
+		EntryType: "dish", Name: "新名称", ImageKind: "dish", ImagePaths: []string{"campus-food/new.jpg"},
+		PriceType: "fixed", Price: &price, ServiceMode: "fixed_portion", WindowLayout: "standard",
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, "changes_pending", repo.updatedItem.Status)
+	require.Equal(t, "changes_pending", item.Status)
+}
+
+func TestPublishItemRejectsIncompleteDraft(t *testing.T) {
+	repo := &fakeCatalogRepo{existingItem: &domain.CatalogItem{
+		ID: "item-1", Status: "draft", MissingFields: []string{"image"}, CompletenessStatus: "incomplete",
+	}}
+	svc := NewCatalogService(repo, nil)
+
+	_, err := svc.PublishItem(context.Background(), "admin-1", "item-1")
+
+	require.Error(t, err)
+	require.Nil(t, repo.publishedItem)
+}
+
+func TestPublishItemPublishesCompleteDraft(t *testing.T) {
+	price := 12.0
+	repo := &fakeCatalogRepo{existingItem: &domain.CatalogItem{
+		ID: "item-1", BatchID: "batch-1", Status: "draft", EntryType: "dish", Name: "番茄炒饭",
+		OrganizationName: "清华大学", CanteenName: "紫荆园", ImagePaths: []string{"campus-food/rice.jpg"},
+		PriceType: "fixed", Price: &price, CompletenessStatus: "complete",
+	}}
+	svc := NewCatalogService(repo, nil)
+
+	item, err := svc.PublishItem(context.Background(), "admin-1", "item-1")
+
+	require.NoError(t, err)
+	require.NotNil(t, repo.publishedItem)
+	require.Equal(t, "admin-1", repo.publishedBy)
+	require.Equal(t, "published", item.Status)
+	require.NotNil(t, item.PublishedAt)
 }
 
 func windowLayoutLabel(value string) string {

@@ -74,6 +74,8 @@ type CatalogItem struct {
 	MissingFields      []string       `gorm:"column:missing_fields;serializer:json" json:"missing_fields"`
 	CompletenessStatus string         `gorm:"column:completeness_status" json:"completeness_status"`
 	Status             string         `gorm:"column:status" json:"status"`
+	PublishedAt        *time.Time     `gorm:"column:published_at" json:"published_at,omitempty"`
+	PublishedByAdminID *string        `gorm:"column:published_by_admin_id" json:"published_by_admin_id,omitempty"`
 	CapturedAt         *time.Time     `gorm:"column:captured_at" json:"captured_at,omitempty"`
 	ContributorUserID  *string        `gorm:"column:contributor_user_id" json:"contributor_user_id,omitempty"`
 	CreatedByAdminID   *string        `gorm:"column:created_by_admin_id" json:"created_by_admin_id,omitempty"`

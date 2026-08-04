@@ -25,6 +25,7 @@ type CatalogService interface {
 	ListBatches(ctx context.Context, page, limit int) (*service.BatchListResult, error)
 	ListItemsByBatch(ctx context.Context, batchID string) ([]domain.CatalogItem, error)
 	UpdateItem(ctx context.Context, adminID, itemID string, input service.UpdateCatalogItemInput) (*domain.CatalogItem, error)
+	PublishItem(ctx context.Context, adminID, itemID string) (*domain.CatalogItem, error)
 }
 
 type CatalogHandler struct {
@@ -160,6 +161,21 @@ func (h *CatalogHandler) UpdateItem(c *gin.Context) {
 		slog.String("item_id", item.ID),
 		slog.Int("missing_field_count", len(item.MissingFields)),
 	)
+	response.Success(c, gin.H{"item": item})
+}
+
+func (h *CatalogHandler) PublishItem(c *gin.Context) {
+	adminID := strings.TrimSpace(c.GetString("admin_account_id"))
+	itemID := strings.TrimSpace(c.Param("item_id"))
+	logger.Info(c.Request.Context(), "管理员开始提交食堂采集条目上线",
+		slog.String("admin_id", adminID), slog.String("item_id", itemID))
+	item, err := h.svc.PublishItem(c.Request.Context(), adminID, itemID)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	logger.Info(c.Request.Context(), "管理员提交食堂采集条目上线成功",
+		slog.String("admin_id", adminID), slog.String("item_id", item.ID))
 	response.Success(c, gin.H{"item": item})
 }
 
