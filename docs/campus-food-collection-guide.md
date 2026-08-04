@@ -82,7 +82,7 @@
 本功能新增数据库表 `campus_food_collection_batches` 和 `campus_food_catalog_items`。必须先确认 `backend/config.yaml`/环境变量指向的目标数据库，再从 `backend/` 执行：
 
 ```bash
-go run ./cmd/migration -config-dir .
+go run ./cmd/migration -config-dir . -only-campus-catalog-publishing
 ```
 
 随后部署 Go 后端和 Admin。未执行迁移时，后台页面可以构建，但保存和查询会因数据表不存在而失败。
