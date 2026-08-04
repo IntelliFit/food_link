@@ -15,8 +15,10 @@ import (
 type fakeCatalogRepo struct {
 	existing      *domain.CollectionBatch
 	existingItems []domain.CatalogItem
+	existingItem  *domain.CatalogItem
 	createdBatch  *domain.CollectionBatch
 	createdItems  []domain.CatalogItem
+	updatedItem   *domain.CatalogItem
 }
 
 func (f *fakeCatalogRepo) FindBatchByClientKey(context.Context, string) (*domain.CollectionBatch, error) {
@@ -36,6 +38,16 @@ func (f *fakeCatalogRepo) ListBatches(context.Context, int, int) ([]domain.Colle
 
 func (f *fakeCatalogRepo) ListItemsByBatch(context.Context, string) ([]domain.CatalogItem, error) {
 	return append([]domain.CatalogItem(nil), f.existingItems...), nil
+}
+
+func (f *fakeCatalogRepo) FindItemByID(context.Context, string) (*domain.CatalogItem, error) {
+	return f.existingItem, nil
+}
+
+func (f *fakeCatalogRepo) UpdateItem(_ context.Context, item *domain.CatalogItem) error {
+	copyItem := *item
+	f.updatedItem = &copyItem
+	return nil
 }
 
 func TestCreateBatchSupportsMealWindowsAndIncompleteEvidence(t *testing.T) {
@@ -157,6 +169,61 @@ func TestCreateBatchIsIdempotentByClientKey(t *testing.T) {
 	require.Len(t, result.Items, 1)
 	require.Equal(t, 1, result.Batch.ItemCount)
 	require.Nil(t, repo.createdBatch)
+}
+
+func TestUpdateItemSupportsProgressiveEnrichment(t *testing.T) {
+	price := 6.5
+	repo := &fakeCatalogRepo{existingItem: &domain.CatalogItem{
+		ID:                 "item-1",
+		BatchID:            "batch-1",
+		EntryType:          "menu_item",
+		OrganizationName:   "清华大学",
+		CanteenName:        "紫荆园",
+		PriceType:          "unknown",
+		ImageKind:          "menu_board",
+		MissingFields:      []string{"image", "name", "price"},
+		CompletenessStatus: "incomplete",
+		Status:             "draft",
+	}}
+	storageClient := storage.New(config.StorageConfig{CDNFoodImagesBaseURL: "https://cdn-food-images.example.com"})
+	svc := NewCatalogService(repo, storageClient)
+
+	item, err := svc.UpdateItem(context.Background(), "admin-1", "item-1", UpdateCatalogItemInput{
+		EntryType:          "menu_item",
+		Name:               "番茄炒饭",
+		Floor:              "2F",
+		WindowName:         "中式炒饭",
+		WindowLayout:       "standard",
+		MealPeriods:        []string{"lunch", "dinner"},
+		AvailableWeekdays:  []string{"monday", "friday"},
+		AvailabilityNote:   "晚餐可能提前售罄",
+		ServiceMode:        "fixed_portion",
+		PriceType:          "fixed",
+		Price:              &price,
+		PriceUnit:          "元/份",
+		PortionDescription: "一盘",
+		ImagePaths:         []string{"https://cdn-food-images.example.com/campus-food/tomato-rice.jpg"},
+		ImageKind:          "dish",
+		Notes:              "已人工复核",
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, repo.updatedItem)
+	require.Equal(t, "番茄炒饭", repo.updatedItem.Name)
+	require.Equal(t, []string{"lunch", "dinner"}, repo.updatedItem.MealPeriods)
+	require.Equal(t, []string{"monday", "friday"}, repo.updatedItem.AvailableWeekdays)
+	require.Equal(t, []string{"campus-food/tomato-rice.jpg"}, repo.updatedItem.ImagePaths)
+	require.Empty(t, repo.updatedItem.MissingFields)
+	require.Equal(t, "complete", repo.updatedItem.CompletenessStatus)
+	require.Equal(t, "https://cdn-food-images.example.com/campus-food/tomato-rice.jpg", item.ImagePaths[0])
+}
+
+func TestUpdateItemRejectsUnknownItem(t *testing.T) {
+	svc := NewCatalogService(&fakeCatalogRepo{}, nil)
+
+	_, err := svc.UpdateItem(context.Background(), "admin-1", "missing", UpdateCatalogItemInput{})
+
+	require.Error(t, err)
 }
 
 func windowLayoutLabel(value string) string {

@@ -74,3 +74,31 @@ func (r *CatalogRepo) ListItemsByBatch(ctx context.Context, batchID string) ([]d
 	}
 	return items, nil
 }
+
+func (r *CatalogRepo) FindItemByID(ctx context.Context, itemID string) (*domain.CatalogItem, error) {
+	var item domain.CatalogItem
+	err := r.db.WithContext(ctx).
+		Where("id = ? AND status <> ?", itemID, "deleted").
+		First(&item).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &item, nil
+}
+
+func (r *CatalogRepo) UpdateItem(ctx context.Context, item *domain.CatalogItem) error {
+	return r.db.WithContext(ctx).
+		Model(&domain.CatalogItem{}).
+		Where("id = ? AND status <> ?", item.ID, "deleted").
+		Select(
+			"entry_type", "name", "description", "window_id", "floor", "window_name", "window_layout",
+			"meal_periods", "available_weekdays", "availability_note", "service_mode",
+			"price_type", "price", "price_min", "price_max", "price_unit", "price_text", "price_options",
+			"portion_description", "image_paths", "image_kind", "source_filename", "raw_text", "notes",
+			"missing_fields", "completeness_status", "updated_at",
+		).
+		Updates(item).Error
+}

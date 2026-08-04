@@ -42,21 +42,60 @@ type CatalogItem = {
   id: string
   entry_type: string
   name?: string
+  description?: string
+  window_id?: string
   floor?: string
   window_name?: string
+  window_layout?: string
   service_mode: string
   meal_periods?: string[]
+  available_weekdays?: string[]
+  availability_note?: string
   price_type: string
   price?: number
   price_min?: number
   price_max?: number
   price_unit?: string
   price_text?: string
+  price_options?: Record<string, unknown>
+  portion_description?: string
   image_paths?: string[]
   image_kind: string
   source_filename?: string
+  raw_text?: string
+  notes?: string
   missing_fields?: string[]
   completeness_status: string
+}
+
+type CatalogItemEditDraft = {
+  itemId: string
+  entryType: string
+  name: string
+  description: string
+  windowId: string
+  floor: string
+  windowName: string
+  windowLayout: string
+  serviceMode: string
+  mealPeriods: string[]
+  availableWeekdays: string[]
+  availabilityNote: string
+  priceType: string
+  price: string
+  priceMin: string
+  priceMax: string
+  priceUnit: string
+  priceText: string
+  priceOptions: Record<string, unknown>
+  portionDescription: string
+  imagePaths: string[]
+  imageKind: string
+  sourceFilename: string
+  rawText: string
+  notes: string
+  newFiles: File[]
+  previewUrls: string[]
 }
 
 type DraftEntry = {
@@ -92,6 +131,16 @@ const mealOptions: Array<[string, string]> = [
   ['late_night', '夜宵'],
   ['all_day', '全天'],
   ['unknown', '待确认'],
+]
+
+const weekdayOptions: Array<[string, string]> = [
+  ['monday', '周一'],
+  ['tuesday', '周二'],
+  ['wednesday', '周三'],
+  ['thursday', '周四'],
+  ['friday', '周五'],
+  ['saturday', '周六'],
+  ['sunday', '周日'],
 ]
 
 const serviceOptions: Array<[string, string]> = [
@@ -176,6 +225,8 @@ export function CampusFoodCollectionPage({ onLogout, onMenuChange }: CampusFoodC
   const [selectedBatchId, setSelectedBatchId] = useState('')
   const [selectedBatchItems, setSelectedBatchItems] = useState<CatalogItem[]>([])
   const [historyBusy, setHistoryBusy] = useState(false)
+  const [editingItem, setEditingItem] = useState<CatalogItemEditDraft | null>(null)
+  const [itemSaving, setItemSaving] = useState(false)
 
   const isUniversity = venueType === 'university'
   const apiBase = displayApiBase()
@@ -263,6 +314,125 @@ export function CampusFoodCollectionPage({ onLogout, onMenuChange }: CampusFoodC
       toast.error(error instanceof Error ? error.message : '批次明细读取失败')
     } finally {
       setHistoryBusy(false)
+    }
+  }
+
+  function openItemEditor(item: CatalogItem) {
+    setEditingItem((current) => {
+      current?.previewUrls.forEach((url) => URL.revokeObjectURL(url))
+      return createCatalogItemEditDraft(item)
+    })
+  }
+
+  function closeItemEditor() {
+    if (itemSaving) return
+    setEditingItem((current) => {
+      current?.previewUrls.forEach((url) => URL.revokeObjectURL(url))
+      return null
+    })
+  }
+
+  function updateEditingItem(patch: Partial<CatalogItemEditDraft>) {
+    setEditingItem((current) => (current ? { ...current, ...patch } : current))
+  }
+
+  function addEditingItemImages(event: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files || [])
+    event.target.value = ''
+    if (!files.length) return
+    setEditingItem((current) => {
+      if (!current) return current
+      const room = Math.max(0, 6 - current.imagePaths.length - current.newFiles.length)
+      const accepted = files.slice(0, room)
+      if (accepted.length < files.length) toast.error('每条记录最多保留 6 张图片')
+      return {
+        ...current,
+        newFiles: [...current.newFiles, ...accepted],
+        previewUrls: [...current.previewUrls, ...accepted.map((file) => URL.createObjectURL(file))],
+      }
+    })
+  }
+
+  function removeEditingItemImage(index: number) {
+    setEditingItem((current) => (current ? {
+      ...current,
+      imagePaths: current.imagePaths.filter((_, imageIndex) => imageIndex !== index),
+    } : current))
+  }
+
+  function removeEditingItemNewImage(index: number) {
+    setEditingItem((current) => {
+      if (!current) return current
+      URL.revokeObjectURL(current.previewUrls[index])
+      return {
+        ...current,
+        newFiles: current.newFiles.filter((_, imageIndex) => imageIndex !== index),
+        previewUrls: current.previewUrls.filter((_, imageIndex) => imageIndex !== index),
+      }
+    })
+  }
+
+  function toggleEditingItemValues(field: 'mealPeriods' | 'availableWeekdays', value: string) {
+    setEditingItem((current) => {
+      if (!current) return current
+      const values = current[field]
+      const next = field === 'mealPeriods'
+        ? toggleValue(values, value)
+        : toggleSimpleValue(values, value)
+      return { ...current, [field]: next }
+    })
+  }
+
+  async function saveEditingItem() {
+    if (!editingItem) return
+    setItemSaving(true)
+    try {
+      const uploadedImagePaths: string[] = []
+      await runWithConcurrency(editingItem.newFiles, 3, async (file) => {
+        const formData = new FormData()
+        formData.append('file', file)
+        const data = await adminUpload<{ image_url: string }>('/api/admin/campus-food-collection/images', formData)
+        uploadedImagePaths.push(data.image_url)
+      })
+      const imagePaths = [...editingItem.imagePaths, ...uploadedImagePaths]
+      const sourceFilename = [editingItem.sourceFilename, ...editingItem.newFiles.map((file) => file.name)].filter(Boolean).join(' | ')
+      const item = await adminRequest<{ item: CatalogItem }>(`/api/admin/campus-food-collection/items/${encodeURIComponent(editingItem.itemId)}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          entry_type: editingItem.entryType,
+          name: editingItem.name.trim(),
+          description: editingItem.description.trim(),
+          window_id: editingItem.windowId || undefined,
+          floor: editingItem.floor.trim(),
+          window_name: editingItem.windowName.trim(),
+          window_layout: editingItem.windowLayout,
+          service_mode: editingItem.serviceMode,
+          meal_periods: editingItem.mealPeriods,
+          available_weekdays: editingItem.availableWeekdays,
+          availability_note: editingItem.availabilityNote.trim(),
+          price_type: editingItem.priceType,
+          price: optionalNumber(editingItem.price),
+          price_min: optionalNumber(editingItem.priceMin),
+          price_max: optionalNumber(editingItem.priceMax),
+          price_unit: editingItem.priceUnit.trim(),
+          price_text: editingItem.priceText.trim(),
+          price_options: editingItem.priceOptions,
+          portion_description: editingItem.portionDescription.trim(),
+          image_paths: imagePaths,
+          image_kind: editingItem.imageKind,
+          source_filename: sourceFilename,
+          raw_text: editingItem.rawText.trim(),
+          notes: editingItem.notes.trim(),
+        }),
+      })
+      setSelectedBatchItems((current) => current.map((currentItem) => (currentItem.id === item.item.id ? item.item : currentItem)))
+      editingItem.previewUrls.forEach((url) => URL.revokeObjectURL(url))
+      setEditingItem(null)
+      toast.success(item.item.missing_fields?.length ? '条目已保存，可继续补充剩余字段' : '条目已补充完整')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '条目保存失败')
+    } finally {
+      setItemSaving(false)
     }
   }
 
@@ -679,7 +849,7 @@ export function CampusFoodCollectionPage({ onLogout, onMenuChange }: CampusFoodC
           </div>
           {selectedBatchId ? (
             <div className='overflow-x-auto rounded-xl border'>
-              <table className='w-full min-w-[900px] text-sm'>
+              <table className='w-full min-w-[1020px] text-sm'>
                 <thead>
                   <tr className='border-b text-left'>
                     <th className='p-3'>图片</th>
@@ -687,6 +857,7 @@ export function CampusFoodCollectionPage({ onLogout, onMenuChange }: CampusFoodC
                     <th className='p-3'>窗口/餐时</th>
                     <th className='p-3'>售卖/价格</th>
                     <th className='p-3'>待补</th>
+                    <th className='p-3 text-right'>操作</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -698,7 +869,16 @@ export function CampusFoodCollectionPage({ onLogout, onMenuChange }: CampusFoodC
                       <td className='p-3'><strong>{item.name || '待补名称'}</strong><div className='muted'>{labelOf(entryTypeOptions, item.entry_type)} · {labelOf(imageKindOptions, item.image_kind)}</div></td>
                       <td className='p-3'>{[item.floor, item.window_name].filter(Boolean).join(' · ') || '-'}<div className='muted'>{(item.meal_periods || []).map((value) => labelOf(mealOptions, value)).join(' / ') || '餐时待确认'}</div></td>
                       <td className='p-3'>{labelOf(serviceOptions, item.service_mode)}<div className='muted'>{priceSummary(item)}</div></td>
-                      <td className='p-3'><div className='flex flex-wrap gap-1'>{(item.missing_fields || []).map((field) => <span key={field} className='pill inactive'>{missingFieldLabel(field)}</span>)}</div></td>
+                      <td className='p-3'>
+                        <div className='flex flex-wrap gap-1'>
+                          {(item.missing_fields || []).length
+                            ? (item.missing_fields || []).map((field) => <span key={field} className='pill inactive'>{missingFieldLabel(field)}</span>)
+                            : <span className='pill active'>已完整</span>}
+                        </div>
+                      </td>
+                      <td className='p-3 text-right'>
+                        <button type='button' className='min-h-8 px-3' onClick={() => openItemEditor(item)}>编辑补充</button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -707,6 +887,174 @@ export function CampusFoodCollectionPage({ onLogout, onMenuChange }: CampusFoodC
           ) : null}
         </section>
       </main>
+      {editingItem ? (
+        <CatalogItemEditDialog
+          draft={editingItem}
+          saving={itemSaving}
+          onChange={updateEditingItem}
+          onToggleMeal={(value) => toggleEditingItemValues('mealPeriods', value)}
+          onToggleWeekday={(value) => toggleEditingItemValues('availableWeekdays', value)}
+          onAddImages={addEditingItemImages}
+          onRemoveImage={removeEditingItemImage}
+          onRemoveNewImage={removeEditingItemNewImage}
+          onCancel={closeItemEditor}
+          onSave={() => void saveEditingItem()}
+        />
+      ) : null}
+    </div>
+  )
+}
+
+function CatalogItemEditDialog({
+  draft,
+  saving,
+  onChange,
+  onToggleMeal,
+  onToggleWeekday,
+  onAddImages,
+  onRemoveImage,
+  onRemoveNewImage,
+  onCancel,
+  onSave,
+}: {
+  draft: CatalogItemEditDraft
+  saving: boolean
+  onChange: (patch: Partial<CatalogItemEditDraft>) => void
+  onToggleMeal: (value: string) => void
+  onToggleWeekday: (value: string) => void
+  onAddImages: (event: ChangeEvent<HTMLInputElement>) => void
+  onRemoveImage: (index: number) => void
+  onRemoveNewImage: (index: number) => void
+  onCancel: () => void
+  onSave: () => void
+}) {
+  const imageCount = draft.imagePaths.length + draft.newFiles.length
+  return (
+    <div className='modal-overlay' role='presentation' onMouseDown={(event) => {
+      if (event.target === event.currentTarget) onCancel()
+    }}>
+      <section className='modal-panel catalog-item-editor' role='dialog' aria-modal='true' aria-labelledby='catalog-item-editor-title'>
+        <div className='editor-header'>
+          <div>
+            <h2 id='catalog-item-editor-title'>编辑采集条目</h2>
+            <p>可以分多次补充；保存后系统会自动更新“待补”字段。</p>
+          </div>
+          <button type='button' onClick={onCancel} disabled={saving}>关闭</button>
+        </div>
+
+        <div className='catalog-item-editor-section'>
+          <div className='flex flex-wrap items-center justify-between gap-3'>
+            <div>
+              <strong>图片证据</strong>
+              <p className='muted mt-1 text-xs'>已有图片可移除，也可以继续补图；每条最多 6 张。</p>
+            </div>
+            <label className={`button-link ${imageCount >= 6 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}`}>
+              添加图片
+              <input className='hidden' type='file' accept='image/jpeg,image/png,image/webp,image/heic,image/heif' multiple disabled={saving || imageCount >= 6} onChange={onAddImages} />
+            </label>
+          </div>
+          {imageCount ? (
+            <div className='catalog-item-image-grid'>
+              {draft.imagePaths.map((url, index) => (
+                <div key={url} className='catalog-item-image'>
+                  <img src={url} alt={`已有图片 ${index + 1}`} />
+                  <button type='button' className='destructive' disabled={saving} onClick={() => onRemoveImage(index)}>移除</button>
+                </div>
+              ))}
+              {draft.previewUrls.map((url, index) => (
+                <div key={url} className='catalog-item-image'>
+                  <img src={url} alt={`待上传图片 ${index + 1}`} />
+                  <span className='pill active'>待上传</span>
+                  <button type='button' className='destructive' disabled={saving} onClick={() => onRemoveNewImage(index)}>移除</button>
+                </div>
+              ))}
+            </div>
+          ) : <div className='catalog-item-no-image'>当前缺少图片，可先保存其他字段，之后再补。</div>}
+        </div>
+
+        <div className='form-grid catalog-item-editor-form'>
+          <Field label='条目类型'>
+            <select value={draft.entryType} onChange={(event) => onChange({ entryType: event.target.value })}>
+              {entryTypeOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </select>
+          </Field>
+          <Field label='图片证据类型'>
+            <select value={draft.imageKind} onChange={(event) => onChange({ imageKind: event.target.value })}>
+              {imageKindOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </select>
+          </Field>
+          <Field label='菜名/条目名' wide>
+            <input value={draft.name} onChange={(event) => onChange({ name: event.target.value })} placeholder='如：番茄炒饭' />
+          </Field>
+          <Field label='条目说明' wide>
+            <textarea value={draft.description} onChange={(event) => onChange({ description: event.target.value })} rows={2} placeholder='补充菜品、套餐或窗口的说明' />
+          </Field>
+          <Field label='楼层'>
+            <input value={draft.floor} onChange={(event) => onChange({ floor: event.target.value })} placeholder='如：2F' />
+          </Field>
+          <Field label='窗口/档口'>
+            <input value={draft.windowName} onChange={(event) => onChange({ windowName: event.target.value })} placeholder='如：中式炒饭' />
+          </Field>
+          <Field label='窗口形态'>
+            <select value={draft.windowLayout} onChange={(event) => onChange({ windowLayout: event.target.value })}>
+              {windowLayoutOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </select>
+          </Field>
+          <Field label='售卖形式'>
+            <select value={draft.serviceMode} onChange={(event) => onChange({ serviceMode: event.target.value })}>
+              {serviceOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </select>
+          </Field>
+          <Field label='餐时' wide>
+            <ChoiceButtons options={mealOptions} selected={draft.mealPeriods} onToggle={onToggleMeal} />
+          </Field>
+          <Field label='供应星期' wide>
+            <ChoiceButtons options={weekdayOptions} selected={draft.availableWeekdays} onToggle={onToggleWeekday} />
+          </Field>
+          <Field label='供应说明' wide>
+            <input value={draft.availabilityNote} onChange={(event) => onChange({ availabilityNote: event.target.value })} placeholder='如：仅工作日午餐；售完即止' />
+          </Field>
+          <Field label='计价方式'>
+            <select value={draft.priceType} onChange={(event) => onChange({ priceType: event.target.value })}>
+              {priceTypeOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </select>
+          </Field>
+          {draft.priceType === 'range' ? (
+            <>
+              <Field label='最低价'><input type='number' min='0' step='0.01' value={draft.priceMin} onChange={(event) => onChange({ priceMin: event.target.value })} /></Field>
+              <Field label='最高价'><input type='number' min='0' step='0.01' value={draft.priceMax} onChange={(event) => onChange({ priceMax: event.target.value })} /></Field>
+            </>
+          ) : (
+            <Field label='标价'><input type='number' min='0' step='0.01' value={draft.price} onChange={(event) => onChange({ price: event.target.value })} placeholder='可暂时不填' /></Field>
+          )}
+          <Field label='价格单位'>
+            <input value={draft.priceUnit} onChange={(event) => onChange({ priceUnit: event.target.value })} placeholder='元/份、元/两、元/斤' />
+          </Field>
+          <Field label='价格原文/规则' wide>
+            <input value={draft.priceText} onChange={(event) => onChange({ priceText: event.target.value })} placeholder='如：任选三样 12 元' />
+          </Field>
+          <Field label='份量说明' wide>
+            <input value={draft.portionDescription} onChange={(event) => onChange({ portionDescription: event.target.value })} placeholder='如：一盘、两串、约 300g' />
+          </Field>
+          <Field label='照片可见文字' wide>
+            <textarea value={draft.rawText} onChange={(event) => onChange({ rawText: event.target.value })} rows={3} placeholder='录入菜单牌、价签、窗口招牌上的原始文字' />
+          </Field>
+          <Field label='内部备注' wide>
+            <textarea value={draft.notes} onChange={(event) => onChange({ notes: event.target.value })} rows={3} placeholder='记录待核实信息或补录来源' />
+          </Field>
+        </div>
+
+        <div className='catalog-item-editor-actions'>
+          <span className='muted'>允许保留未完整状态，之后可再次进入编辑。</span>
+          <div className='actions' style={{ marginTop: 0 }}>
+            <button type='button' onClick={onCancel} disabled={saving}>取消</button>
+            <button type='button' className='primary min-w-32' onClick={onSave} disabled={saving}>
+              {saving ? <span className='spinner small' /> : null}
+              <span className={saving ? 'ml-2' : ''}>保存条目</span>
+            </button>
+          </div>
+        </div>
+      </section>
     </div>
   )
 }
@@ -841,6 +1189,38 @@ function Stat({ label, value, foot }: { label: string; value: string; foot: stri
   return <article className='stat-card'><span className='stat-label'>{label}</span><strong>{value}</strong><span className='stat-foot'>{foot}</span></article>
 }
 
+function createCatalogItemEditDraft(item: CatalogItem): CatalogItemEditDraft {
+  return {
+    itemId: item.id,
+    entryType: item.entry_type || 'dish',
+    name: item.name || '',
+    description: item.description || '',
+    windowId: item.window_id || '',
+    floor: item.floor || '',
+    windowName: item.window_name || '',
+    windowLayout: item.window_layout || 'unknown',
+    serviceMode: item.service_mode || 'unknown',
+    mealPeriods: item.meal_periods?.length ? [...item.meal_periods] : ['unknown'],
+    availableWeekdays: [...(item.available_weekdays || [])],
+    availabilityNote: item.availability_note || '',
+    priceType: item.price_type || 'unknown',
+    price: item.price == null ? '' : String(item.price),
+    priceMin: item.price_min == null ? '' : String(item.price_min),
+    priceMax: item.price_max == null ? '' : String(item.price_max),
+    priceUnit: item.price_unit || '',
+    priceText: item.price_text || '',
+    priceOptions: item.price_options || {},
+    portionDescription: item.portion_description || '',
+    imagePaths: [...(item.image_paths || [])],
+    imageKind: item.image_kind || 'dish',
+    sourceFilename: item.source_filename || '',
+    rawText: item.raw_text || '',
+    notes: item.notes || '',
+    newFiles: [],
+    previewUrls: [],
+  }
+}
+
 function createDraftEntry(files: File[]): DraftEntry {
   return {
     localId: newClientBatchKey(),
@@ -878,6 +1258,10 @@ function guessName(filename: string): string {
 function toggleValue(values: string[], value: string): string[] {
   const next = values.includes(value) ? values.filter((item) => item !== value) : [...values.filter((item) => item !== 'unknown'), value]
   return next.length ? next : ['unknown']
+}
+
+function toggleSimpleValue(values: string[], value: string): string[] {
+  return values.includes(value) ? values.filter((item) => item !== value) : [...values, value]
 }
 
 function optionalNumber(value: string): number | undefined {

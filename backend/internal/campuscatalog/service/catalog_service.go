@@ -28,6 +28,8 @@ type CatalogRepository interface {
 	CreateBatchWithItems(ctx context.Context, batch *domain.CollectionBatch, items []domain.CatalogItem) error
 	ListBatches(ctx context.Context, limit, offset int) ([]domain.CollectionBatch, int64, error)
 	ListItemsByBatch(ctx context.Context, batchID string) ([]domain.CatalogItem, error)
+	FindItemByID(ctx context.Context, itemID string) (*domain.CatalogItem, error)
+	UpdateItem(ctx context.Context, item *domain.CatalogItem) error
 }
 
 type CatalogService struct {
@@ -87,6 +89,10 @@ type CreateCatalogItemInput struct {
 	RawText            string         `json:"raw_text"`
 	Notes              string         `json:"notes"`
 }
+
+// UpdateCatalogItemInput deliberately matches the editable fields used during
+// creation. Location ownership and audit fields remain immutable on updates.
+type UpdateCatalogItemInput = CreateCatalogItemInput
 
 type CreateBatchResult struct {
 	Batch      domain.CollectionBatch `json:"batch"`
@@ -254,6 +260,72 @@ func (s *CatalogService) ListItemsByBatch(ctx context.Context, batchID string) (
 	}
 	s.resolveItemImages(items)
 	return items, nil
+}
+
+func (s *CatalogService) UpdateItem(ctx context.Context, adminID, itemID string, input UpdateCatalogItemInput) (*domain.CatalogItem, error) {
+	itemID = strings.TrimSpace(itemID)
+	if itemID == "" {
+		return nil, badRequest("采集条目 ID 不能为空")
+	}
+	current, err := s.repo.FindItemByID(ctx, itemID)
+	if err != nil {
+		logger.Error(ctx, "读取待更新食堂采集条目失败", err,
+			slog.String("admin_id", strings.TrimSpace(adminID)),
+			slog.String("item_id", itemID),
+		)
+		return nil, err
+	}
+	if current == nil {
+		return nil, notFound("食堂采集条目不存在")
+	}
+
+	now := time.Now()
+	batch := domain.CollectionBatch{
+		ID:                  current.BatchID,
+		SchoolID:            current.SchoolID,
+		CampusID:            current.CampusID,
+		CanteenID:           current.CanteenID,
+		OrganizationName:    current.OrganizationName,
+		AreaName:            current.AreaName,
+		CanteenName:         current.CanteenName,
+		DefaultWindowLayout: "unknown",
+		DefaultServiceMode:  "unknown",
+		CapturedAt:          current.CapturedAt,
+	}
+	updated, err := s.buildCatalogItem(batch, CreateCatalogItemInput(input), 0, strings.TrimSpace(adminID), now)
+	if err != nil {
+		return nil, err
+	}
+	updated.ID = current.ID
+	updated.BatchID = current.BatchID
+	updated.Status = current.Status
+	updated.ContributorUserID = current.ContributorUserID
+	updated.CreatedByAdminID = current.CreatedByAdminID
+	updated.CreatedAt = current.CreatedAt
+	updated.UpdatedAt = &now
+	if updated.SourceFilename == "" {
+		updated.SourceFilename = current.SourceFilename
+	}
+
+	if err := s.repo.UpdateItem(ctx, &updated); err != nil {
+		logger.Error(ctx, "更新食堂采集条目失败", err,
+			slog.String("admin_id", strings.TrimSpace(adminID)),
+			slog.String("item_id", itemID),
+			slog.String("batch_id", current.BatchID),
+		)
+		return nil, err
+	}
+	logger.Info(ctx, "食堂采集条目字段更新完成",
+		slog.String("admin_id", strings.TrimSpace(adminID)),
+		slog.String("item_id", itemID),
+		slog.String("batch_id", current.BatchID),
+		slog.Int("image_count", len(updated.ImagePaths)),
+		slog.Int("missing_field_count", len(updated.MissingFields)),
+	)
+	result := updated
+	items := []domain.CatalogItem{result}
+	s.resolveItemImages(items)
+	return &items[0], nil
 }
 
 func (s *CatalogService) buildCatalogItem(batch domain.CollectionBatch, input CreateCatalogItemInput, index int, adminID string, now time.Time) (domain.CatalogItem, error) {
@@ -504,6 +576,10 @@ func badRequest(message string) error {
 
 func appError(message string) error {
 	return &commonerrors.AppError{Code: 10002, Message: message, HTTPStatus: 503}
+}
+
+func notFound(message string) error {
+	return &commonerrors.AppError{Code: 10001, Message: message, HTTPStatus: 404}
 }
 
 var venueTypes = enumSet("university", "office_park", "corporate", "community", "other")
