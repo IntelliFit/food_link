@@ -229,8 +229,11 @@ function buildWeekHeatmapCellsFromStorage(): WeekHeatmapCell[] {
     date.setDate(today.getDate() + offset)
     const dateKey = formatDateKey(date)
     const snap = getStoredHomeDashboardSnapshotByDate(dateKey)
-    const calories = snap ? snap.intakeData.current : 0
-    const target = snap ? snap.intakeData.target : 2000
+    // 兼容升级前写入的不完整首页缓存，避免旧快照缺少 intakeData 时阻断整页渲染。
+    const storedCalories = Number(snap?.intakeData?.current)
+    const storedTarget = Number(snap?.intakeData?.target)
+    const calories = Number.isFinite(storedCalories) ? storedCalories : 0
+    const target = Number.isFinite(storedTarget) && storedTarget > 0 ? storedTarget : 2000
     const hasRecord = calories > 0 || Boolean(snap?.meals?.length)
     cells.push({
       date: dateKey,
