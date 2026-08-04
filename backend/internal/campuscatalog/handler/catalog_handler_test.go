@@ -23,6 +23,9 @@ type fakeCatalogService struct {
 	uploadCalls   int
 	createAdminID string
 	createInput   service.CreateBatchInput
+	updateAdminID string
+	updateItemID  string
+	updateInput   service.UpdateCatalogItemInput
 }
 
 func (f *fakeCatalogService) UploadImage(_ context.Context, adminID, _, contentType string, _ []byte) (string, error) {
@@ -46,6 +49,13 @@ func (f *fakeCatalogService) ListItemsByBatch(context.Context, string) ([]domain
 	return nil, nil
 }
 
+func (f *fakeCatalogService) UpdateItem(_ context.Context, adminID, itemID string, input service.UpdateCatalogItemInput) (*domain.CatalogItem, error) {
+	f.updateAdminID = adminID
+	f.updateItemID = itemID
+	f.updateInput = input
+	return &domain.CatalogItem{ID: itemID, Name: input.Name}, nil
+}
+
 func newCatalogTestRouter(svc CatalogService) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
@@ -56,6 +66,7 @@ func newCatalogTestRouter(svc CatalogService) *gin.Engine {
 	handler := NewCatalogHandler(svc)
 	router.POST("/images", handler.UploadImage)
 	router.POST("/batches", handler.CreateBatch)
+	router.PATCH("/items/:item_id", handler.UpdateItem)
 	return router
 }
 
@@ -134,4 +145,29 @@ func TestCreateBatchMapsPayload(t *testing.T) {
 	require.Equal(t, "admin-1", svc.createAdminID)
 	require.Equal(t, "桃李园", svc.createInput.CanteenName)
 	require.Len(t, svc.createInput.Entries, 1)
+}
+
+func TestUpdateItemMapsPayloadAndAdminIdentity(t *testing.T) {
+	svc := &fakeCatalogService{}
+	router := newCatalogTestRouter(svc)
+	payload := map[string]any{
+		"entry_type":   "menu_item",
+		"name":         "鸡蛋饼",
+		"service_mode": "fixed_portion",
+		"price_type":   "fixed",
+		"price":        1.5,
+		"image_kind":   "menu_board",
+	}
+	data, err := json.Marshal(payload)
+	require.NoError(t, err)
+
+	request := httptest.NewRequest(http.MethodPatch, "/items/item-1", bytes.NewReader(data))
+	request.Header.Set("Content-Type", "application/json")
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Equal(t, "admin-1", svc.updateAdminID)
+	require.Equal(t, "item-1", svc.updateItemID)
+	require.Equal(t, "鸡蛋饼", svc.updateInput.Name)
 }

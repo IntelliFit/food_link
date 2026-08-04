@@ -24,6 +24,7 @@ type CatalogService interface {
 	CreateBatch(ctx context.Context, adminID string, input service.CreateBatchInput) (*service.CreateBatchResult, error)
 	ListBatches(ctx context.Context, page, limit int) (*service.BatchListResult, error)
 	ListItemsByBatch(ctx context.Context, batchID string) ([]domain.CatalogItem, error)
+	UpdateItem(ctx context.Context, adminID, itemID string, input service.UpdateCatalogItemInput) (*domain.CatalogItem, error)
 }
 
 type CatalogHandler struct {
@@ -135,6 +136,31 @@ func (h *CatalogHandler) ListItems(c *gin.Context) {
 		return
 	}
 	response.Success(c, gin.H{"items": items})
+}
+
+func (h *CatalogHandler) UpdateItem(c *gin.Context) {
+	var input service.UpdateCatalogItemInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		response.Error(c, err)
+		return
+	}
+	adminID := strings.TrimSpace(c.GetString("admin_account_id"))
+	itemID := strings.TrimSpace(c.Param("item_id"))
+	logger.Info(c.Request.Context(), "管理员开始更新食堂采集条目",
+		slog.String("admin_id", adminID),
+		slog.String("item_id", itemID),
+	)
+	item, err := h.svc.UpdateItem(c.Request.Context(), adminID, itemID, input)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	logger.Info(c.Request.Context(), "管理员更新食堂采集条目成功",
+		slog.String("admin_id", adminID),
+		slog.String("item_id", item.ID),
+		slog.Int("missing_field_count", len(item.MissingFields)),
+	)
+	response.Success(c, gin.H{"item": item})
 }
 
 func badRequest(message string) error {
