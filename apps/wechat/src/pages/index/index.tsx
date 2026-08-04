@@ -3360,103 +3360,108 @@ function IndexPage() {
           </View>
         )}
 
-        {/* 体重/喝水状态卡片 */}
+        {/* 今日记录：体重、喝水、运动共用一张横向信息卡 */}
         <View className='body-status-section'>
-          {/* 体重卡片 */}
-          <View className='body-status-card weight-card' onClick={() => openBodyMetricRecord('weight')} onLongPress={openWeightEditor}>
-            <View className='body-status-header'>
-              <View className='body-status-title-wrap'>
-                <Text className='iconfont icon-weight-scale' style={{ marginRight: '6rpx', fontSize: '26rpx', color: '#6b7280' }} />
-                <Text className='body-status-title'>体重</Text>
-              </View>
+          <View className='body-status-section-header'>
+            <Text className='body-status-section-title'>今日记录</Text>
+            <View className='body-status-edit' onClick={openBackfillRecordMenu}>
+              <Text className='body-status-edit-text'>编辑</Text>
+              <Text className='iconfont icon-bianji body-status-edit-icon' />
             </View>
-            <View className='body-status-content'>
-              {dashboardBusy ? (
-                <View style={{ display: 'flex', alignItems: 'center', gap: '12rpx', minHeight: '52rpx' }}>
-                  <Text className='body-status-value' style={{ color: '#9ca3af' }}>--</Text>
-                  <View className='loading-spinner' style={{ width: '22rpx', height: '22rpx', borderWidth: '3rpx' }} />
+          </View>
+
+          <View className='body-status-grid'>
+            {/* 体重卡片 */}
+            <View className='body-status-card weight-card' onClick={() => openBodyMetricRecord('weight')} onLongPress={openWeightEditor}>
+              <View className='body-status-header'>
+                <View className='body-status-title-wrap'>
+                  <Text className='iconfont icon-weight-scale' style={{ marginRight: '6rpx', fontSize: '26rpx', color: '#6b7280' }} />
+                  <Text className='body-status-title'>体重</Text>
                 </View>
-              ) : isGuest ? (
-                <Text className='body-status-value' style={{ color: '#9ca3af' }}>--</Text>
-              ) : weightSummary.latestWeight ? (
-                <>
-                  <Text className='body-status-value'>{weightSummary.latestWeight.value.toFixed(1)}</Text>
-                  <Text className='body-status-unit'>kg</Text>
-                  {weightSummary.weightChange !== null && (
-                    <Text className={`body-status-change ${weightSummary.weightChange > 0 ? 'up' : 'down'}`}>
-                      {weightSummary.weightChange > 0 ? '+' : ''}{weightSummary.weightChange.toFixed(1)}
+              </View>
+              <View className='body-status-content'>
+                {dashboardBusy ? (
+                  <View style={{ display: 'flex', alignItems: 'center', gap: '12rpx', minHeight: '52rpx' }}>
+                    <Text className='body-status-value' style={{ color: '#9ca3af' }}>--</Text>
+                    <View className='loading-spinner' style={{ width: '22rpx', height: '22rpx', borderWidth: '3rpx' }} />
+                  </View>
+                ) : isGuest ? (
+                  <Text className='body-status-value' style={{ color: '#9ca3af' }}>--</Text>
+                ) : weightSummary.latestWeight ? (
+                  <>
+                    <Text className='body-status-value'>{weightSummary.latestWeight.value.toFixed(1)}</Text>
+                    <Text className='body-status-unit'>kg</Text>
+                  </>
+                ) : (
+                  <Text className='body-status-empty'>点击记录</Text>
+                )}
+              </View>
+              <Text className='body-status-hint'>
+                {isGuest
+                  ? '记录体重，追踪变化'
+                  : weightSummary.latestWeight
+                    ? `上次记录: ${weightSummary.latestWeight.date.slice(5)}`
+                    : '点击记录体重'}
+              </Text>
+            </View>
+
+            {/* 喝水卡片 */}
+            <View className='body-status-card water-card' onClick={() => openBodyMetricRecord('water')} onLongPress={openWaterEditor}>
+              <View className='body-status-header'>
+                <View className='body-status-title-wrap'>
+                  <Text className='iconfont icon-drink' style={{ marginRight: '6rpx', fontSize: '26rpx', color: '#5c9ed4' }} />
+                  <Text className='body-status-title'>喝水</Text>
+                </View>
+              </View>
+              <View className='body-status-content'>
+                {dashboardBusy ? (
+                  <View style={{ display: 'flex', alignItems: 'center', gap: '12rpx', minHeight: '52rpx' }}>
+                    <Text className='body-status-value' style={{ color: '#9ca3af' }}>--</Text>
+                    <View className='loading-spinner' style={{ width: '22rpx', height: '22rpx', borderWidth: '3rpx' }} />
+                  </View>
+                ) : isGuest ? (
+                  <Text className='body-status-value' style={{ color: '#9ca3af' }}>--</Text>
+                ) : (
+                  <>
+                    <Text className='body-status-value'>{Math.round(animatedWaterTotal)}</Text>
+                    <Text className='body-status-unit'>ml</Text>
+                  </>
+                )}
+              </View>
+              <Text className='body-status-hint'>
+                {dashboardBusy || isGuest ? '点击记录喝水' : `${Math.round(animatedWaterProgress)}% / 目标 ${bodyMetrics.waterGoalMl}ml`}
+              </Text>
+            </View>
+
+            {/* 运动卡片 */}
+            <View className='body-status-card exercise-card' onClick={() => openBodyMetricRecord('exercise')} onLongPress={openExerciseRecord}>
+              <View className='body-status-header'>
+                <View className='body-status-title-wrap'>
+                  <Text className='iconfont icon-dumbbell' style={{ marginRight: '6rpx', fontSize: '26rpx', color: '#f0985c' }} />
+                  <Text className='body-status-title'>运动</Text>
+                </View>
+              </View>
+              <View className='body-status-content'>
+                {dashboardBusy ? (
+                  <View style={{ display: 'flex', alignItems: 'center', gap: '12rpx', minHeight: '52rpx' }}>
+                    <Text className='body-status-value' style={{ color: '#9ca3af' }}>--</Text>
+                    <View className='loading-spinner' style={{ width: '22rpx', height: '22rpx', borderWidth: '3rpx' }} />
+                  </View>
+                ) : isGuest ? (
+                  <Text className='body-status-value' style={{ color: '#9ca3af' }}>--</Text>
+                ) : (
+                  <>
+                    <Text className='body-status-value'>
+                      {Math.round(animatedExerciseBurnedKcal)}
                     </Text>
-                  )}
-                </>
-              ) : (
-                <Text className='body-status-empty'>点击记录</Text>
-              )}
-            </View>
-            <Text className='body-status-hint'>
-              {isGuest
-                ? '记录体重，追踪变化'
-                : weightSummary.latestWeight
-                  ? `上次记录: ${weightSummary.latestWeight.date.slice(5)}`
-                  : '点击记录体重'}
-            </Text>
-          </View>
-
-          {/* 喝水卡片 */}
-          <View className='body-status-card water-card' onClick={() => openBodyMetricRecord('water')} onLongPress={openWaterEditor}>
-            <View className='body-status-header'>
-              <View className='body-status-title-wrap'>
-                <Text className='iconfont icon-drink' style={{ marginRight: '6rpx', fontSize: '26rpx', color: '#5c9ed4' }} />
-                <Text className='body-status-title'>喝水</Text>
+                    <Text className='body-status-unit'>kcal</Text>
+                  </>
+                )}
               </View>
+              <Text className='body-status-hint'>
+                点击记录运动
+              </Text>
             </View>
-            <View className='body-status-content'>
-              {dashboardBusy ? (
-                <View style={{ display: 'flex', alignItems: 'center', gap: '12rpx', minHeight: '52rpx' }}>
-                  <Text className='body-status-value' style={{ color: '#9ca3af' }}>--</Text>
-                  <View className='loading-spinner' style={{ width: '22rpx', height: '22rpx', borderWidth: '3rpx' }} />
-                </View>
-              ) : isGuest ? (
-                <Text className='body-status-value' style={{ color: '#9ca3af' }}>--</Text>
-              ) : (
-                <>
-                  <Text className='body-status-value'>{Math.round(animatedWaterTotal)}</Text>
-                  <Text className='body-status-unit'>ml</Text>
-                </>
-              )}
-            </View>
-            <Text className='body-status-hint'>
-              {dashboardBusy || isGuest ? '点击记录喝水' : `${Math.round(animatedWaterProgress)}% / 目标 ${bodyMetrics.waterGoalMl}ml`}
-            </Text>
-          </View>
-
-          {/* 运动卡片 */}
-          <View className='body-status-card exercise-card' onClick={() => openBodyMetricRecord('exercise')} onLongPress={openExerciseRecord}>
-            <View className='body-status-header'>
-              <View className='body-status-title-wrap'>
-                <Text className='iconfont icon-dumbbell' style={{ marginRight: '6rpx', fontSize: '26rpx', color: '#f0985c' }} />
-                <Text className='body-status-title'>运动</Text>
-              </View>
-            </View>
-            <View className='body-status-content'>
-              {dashboardBusy ? (
-                <View style={{ display: 'flex', alignItems: 'center', gap: '12rpx', minHeight: '52rpx' }}>
-                  <Text className='body-status-value' style={{ color: '#9ca3af' }}>--</Text>
-                  <View className='loading-spinner' style={{ width: '22rpx', height: '22rpx', borderWidth: '3rpx' }} />
-                </View>
-              ) : isGuest ? (
-                <Text className='body-status-value' style={{ color: '#9ca3af' }}>--</Text>
-              ) : (
-                <>
-                  <Text className='body-status-value'>
-                    {Math.round(animatedExerciseBurnedKcal)}
-                  </Text>
-                  <Text className='body-status-unit'>kcal</Text>
-                </>
-              )}
-            </View>
-            <Text className='body-status-hint'>
-              点击记录运动
-            </Text>
           </View>
         </View>
 
