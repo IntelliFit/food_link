@@ -655,20 +655,25 @@ export function CampusFoodCollectionPage({ onLogout, onMenuChange }: CampusFoodC
               {historyBusy ? <span className='spinner small' /> : '刷新'}
             </button>
           </div>
-          <div className='grid gap-3 lg:grid-cols-2'>
+          <div className='collection-batch-grid'>
             {batches.map((batch) => (
               <button
                 key={batch.id}
                 type='button'
-                className={`rounded-xl border p-4 text-left ${selectedBatchId === batch.id ? 'border-emerald-500 bg-emerald-50/50' : ''}`}
+                className={`collection-batch-card ${selectedBatchId === batch.id ? 'selected' : ''}`}
                 onClick={() => void loadBatchItems(batch.id)}
               >
-                <div className='flex items-start justify-between gap-3'>
-                  <strong>{batch.batch_name}</strong>
+                <div className='collection-batch-heading'>
+                  <strong title={batch.batch_name}>{batch.batch_name}</strong>
                   <span className='pill active'>{batch.item_count} 条</span>
                 </div>
-                <p className='muted mt-2'>{[batch.organization_name, batch.area_name, batch.canteen_name, batch.default_floor, batch.default_window_name].filter(Boolean).join(' · ')}</p>
-                <p className='muted mt-1'>{formatDate(batch.captured_at || batch.created_at)} · {batch.collector_name || '采集人未填'}</p>
+                <p className='collection-batch-location'>
+                  {[batch.organization_name, batch.area_name, batch.canteen_name, batch.default_floor, batch.default_window_name].filter(Boolean).join(' · ')}
+                </p>
+                <p className='collection-batch-meta'>
+                  <span>{formatDate(batch.captured_at || batch.created_at)}</span>
+                  <span>{batch.collector_name || '采集人未填'}</span>
+                </p>
               </button>
             ))}
           </div>
