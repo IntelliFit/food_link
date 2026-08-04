@@ -236,6 +236,25 @@ func MigrateOnboardingStatus(ctx context.Context, db *gorm.DB, schema string) er
 	return nil
 }
 
+// MigrateCampusCatalogPublishing applies only the additive schema needed by
+// the admin draft-to-publication workflow. It deliberately excludes every
+// historical seed and data backfill in AutoMigrate.
+func MigrateCampusCatalogPublishing(ctx context.Context, db *gorm.DB, schema string) error {
+	if err := prepareSchema(ctx, db, schema); err != nil {
+		return err
+	}
+	if err := db.WithContext(ctx).AutoMigrate(&migrationdo.CampusFoodCatalogItemDO{}); err != nil {
+		return fmt.Errorf("auto migrate campus catalog publishing: %w", err)
+	}
+	if !db.Migrator().HasTable(&migrationdo.PublicFoodItemDO{}) {
+		return fmt.Errorf("public_food_library table is required")
+	}
+	if err := db.WithContext(ctx).Exec(`ALTER TABLE public_food_library ALTER COLUMN user_id DROP NOT NULL`).Error; err != nil {
+		return fmt.Errorf("allow official public food author: %w", err)
+	}
+	return nil
+}
+
 // MigrateFoodRecordMood applies only the optional eating_mood column for food
 // records. It is intentionally narrow so a small product-field rollout does
 // not publish unrelated pending schema or data migrations.
