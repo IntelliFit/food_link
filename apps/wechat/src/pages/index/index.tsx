@@ -792,7 +792,6 @@ type HomeHandbookBanner = {
   key: string
   title: string
   desc: string
-  actionText: string
   bgImage: string
   url: string
 }
@@ -2961,7 +2960,6 @@ function IndexPage() {
       key: 'goose-duck-chicken',
       title: '鹅腿还是鸭腿？',
       desc: '上传图片，让食探只在鹅 / 鸭 / 鸡里做判断',
-      actionText: '去识别',
       url: extraPkgUrl('/pages/goose-duck-chicken/index'),
       bgImage: GOOSE_DUCK_CHICKEN_BG_URL,
     },
@@ -2969,7 +2967,6 @@ function IndexPage() {
       key: 'reward',
       title: `今天还可以赚 ${availableRewardCredits} 积分`,
       desc: rewardHintTaskText,
-      actionText: '去赚',
       url: extraPkgUrl('/pages/reward-center/index'),
       bgImage: rewardPointsBannerBg,
     }] : []),
@@ -2977,7 +2974,6 @@ function IndexPage() {
       key: 'campus',
       title: '食探校园食堂计划',
       desc: '一起补全食堂菜品、价格、窗口和营养信息',
-      actionText: '去看看',
       url: extraPkgUrl('/pages/campus-canteen/index'),
       bgImage: CAFETERIA_HERO_BG_URL,
     },
@@ -2985,7 +2981,6 @@ function IndexPage() {
       key: 'feedback',
       title: '意见反馈',
       desc: '提交宝贵建议，最高可得 +5 积分',
-      actionText: '去反馈',
       url: extraPkgUrl('/pages/feedback/index'),
       bgImage: feedbackBannerBg,
     },
@@ -3327,10 +3322,6 @@ function IndexPage() {
                     <View className='home-handbook-card__copy'>
                       <Text className='home-handbook-card__title'>{banner.title}</Text>
                       <Text className='home-handbook-card__desc'>{banner.desc}</Text>
-                      <View className='home-handbook-card__action'>
-                        <Text>{banner.actionText}</Text>
-                        <Text className='iconfont icon-right-arrow home-handbook-card__action-icon' />
-                      </View>
                     </View>
                   </View>
                 </SwiperItem>
@@ -3360,19 +3351,10 @@ function IndexPage() {
           </View>
         )}
 
-        {/* 今日记录：体重、喝水、运动共用一张横向信息卡 */}
+        {/* 体重、喝水、运动状态卡片 */}
         <View className='body-status-section'>
-          <View className='body-status-section-header'>
-            <Text className='body-status-section-title'>今日记录</Text>
-            <View className='body-status-edit' onClick={openBackfillRecordMenu}>
-              <Text className='body-status-edit-text'>编辑</Text>
-              <Text className='iconfont icon-bianji body-status-edit-icon' />
-            </View>
-          </View>
-
-          <View className='body-status-grid'>
-            {/* 体重卡片 */}
-            <View className='body-status-card weight-card' onClick={() => openBodyMetricRecord('weight')} onLongPress={openWeightEditor}>
+          {/* 体重卡片 */}
+          <View className='body-status-card weight-card' onClick={() => openBodyMetricRecord('weight')} onLongPress={openWeightEditor}>
               <View className='body-status-header'>
                 <View className='body-status-title-wrap'>
                   <Text className='iconfont icon-weight-scale' style={{ marginRight: '6rpx', fontSize: '26rpx', color: '#6b7280' }} />
@@ -3391,6 +3373,11 @@ function IndexPage() {
                   <>
                     <Text className='body-status-value'>{weightSummary.latestWeight.value.toFixed(1)}</Text>
                     <Text className='body-status-unit'>kg</Text>
+                    {weightSummary.weightChange !== null && (
+                      <Text className={`body-status-change ${weightSummary.weightChange > 0 ? 'up' : 'down'}`}>
+                        {weightSummary.weightChange > 0 ? '+' : ''}{weightSummary.weightChange.toFixed(1)}
+                      </Text>
+                    )}
                   </>
                 ) : (
                   <Text className='body-status-empty'>点击记录</Text>
@@ -3403,10 +3390,10 @@ function IndexPage() {
                     ? `上次记录: ${weightSummary.latestWeight.date.slice(5)}`
                     : '点击记录体重'}
               </Text>
-            </View>
+          </View>
 
-            {/* 喝水卡片 */}
-            <View className='body-status-card water-card' onClick={() => openBodyMetricRecord('water')} onLongPress={openWaterEditor}>
+          {/* 喝水卡片 */}
+          <View className='body-status-card water-card' onClick={() => openBodyMetricRecord('water')} onLongPress={openWaterEditor}>
               <View className='body-status-header'>
                 <View className='body-status-title-wrap'>
                   <Text className='iconfont icon-drink' style={{ marginRight: '6rpx', fontSize: '26rpx', color: '#5c9ed4' }} />
@@ -3431,10 +3418,10 @@ function IndexPage() {
               <Text className='body-status-hint'>
                 {dashboardBusy || isGuest ? '点击记录喝水' : `${Math.round(animatedWaterProgress)}% / 目标 ${bodyMetrics.waterGoalMl}ml`}
               </Text>
-            </View>
+          </View>
 
-            {/* 运动卡片 */}
-            <View className='body-status-card exercise-card' onClick={() => openBodyMetricRecord('exercise')} onLongPress={openExerciseRecord}>
+          {/* 运动卡片 */}
+          <View className='body-status-card exercise-card' onClick={() => openBodyMetricRecord('exercise')} onLongPress={openExerciseRecord}>
               <View className='body-status-header'>
                 <View className='body-status-title-wrap'>
                   <Text className='iconfont icon-dumbbell' style={{ marginRight: '6rpx', fontSize: '26rpx', color: '#f0985c' }} />
@@ -3461,7 +3448,6 @@ function IndexPage() {
               <Text className='body-status-hint'>
                 点击记录运动
               </Text>
-            </View>
           </View>
         </View>
 

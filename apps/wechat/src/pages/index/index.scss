@@ -323,7 +323,7 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 }
 
 .home-handbook-swiper__track {
-  height: 184rpx;
+  height: 148rpx;
 }
 
 .home-handbook-swiper__item {
@@ -334,7 +334,7 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 
 .home-handbook-card {
   position: relative;
-  height: 176rpx;
+  height: 140rpx;
   overflow: hidden;
   border-radius: 24rpx;
   background: #d9eee5;
@@ -370,20 +370,15 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   z-index: 2;
   width: 62%;
   height: 100%;
-  padding: 18rpx 0 16rpx 22rpx;
+  padding: 12rpx 0 12rpx 22rpx;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
+  justify-content: center;
   box-sizing: border-box;
 }
 
-.home-handbook-card__action {
-  display: flex;
-  align-items: center;
-}
-
-.home-handbook-card__desc,
-.home-handbook-card__action {
+.home-handbook-card__desc {
   font-size: 22rpx;
   line-height: 30rpx;
 }
@@ -408,21 +403,10 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   white-space: nowrap;
 }
 
-.home-handbook-card__action {
-  margin-top: 10rpx;
-  gap: 4rpx;
-  color: #ffffff;
-  font-weight: 700;
-}
-
-.home-handbook-card__action-icon {
-  font-size: 18rpx;
-}
-
 .home-handbook-swiper__dots {
   position: absolute;
   right: 62rpx;
-  bottom: 20rpx;
+  bottom: 16rpx;
   z-index: 3;
   display: flex;
   align-items: center;
@@ -3203,111 +3187,38 @@ $sheet-float-max-height: calc(100vh - #{$sheet-float-gap-top} - env(safe-area-in
   }
 }
 
-// 今日记录：标题与三项数据共用一张横向卡片
+// 体重、喝水、运动三张独立记录卡
 .body-status-section {
-  margin-bottom: 8rpx;
-  padding: 18rpx 20rpx 20rpx;
-  overflow: hidden;
-  border: 1rpx solid rgb(92 184 150 / 12%);
-  border-radius: 24rpx;
-  background: rgb(255 255 255 / 94%);
-  box-shadow: 0 6rpx 24rpx rgb(38 88 70 / 6%);
-}
-
-.body-status-section-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  min-height: 64rpx;
-  margin-bottom: 8rpx;
-}
-
-.body-status-section-title {
-  color: $text-primary;
-  font-size: 28rpx;
-  font-weight: 700;
-  line-height: 40rpx;
-}
-
-.body-status-edit {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8rpx;
-  min-width: 108rpx;
-  min-height: 88rpx;
-  margin: -12rpx -4rpx -12rpx 0;
-
-  &:active {
-    opacity: 0.68;
-  }
-}
-
-.body-status-edit-text,
-.body-status-edit-icon {
-  color: #3f7d65;
-}
-
-.body-status-edit-text {
-  font-size: 22rpx;
-  font-weight: 600;
-  line-height: 32rpx;
-}
-
-.body-status-edit-icon {
-  font-size: 28rpx;
-  line-height: 32rpx;
-}
-
-.body-status-grid {
-  display: flex;
-  align-items: stretch;
-  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16rpx;
+  margin-bottom: 24rpx;
 }
 
 .body-status-card {
-  position: relative;
-  flex: 1 1 0;
-  width: 0;
+  flex: 1;
   min-width: 0;
-  min-height: 164rpx;
-  padding: 10rpx 18rpx 4rpx;
-  box-sizing: border-box;
+  padding: 20rpx;
+  border-radius: 24rpx;
+  background: #ffffff;
+  box-shadow: 0 4rpx 20rpx rgb(0 0 0 / 4%);
 
   &:active {
-    background: rgb(92 184 150 / 5%);
+    transform: scale(0.98);
   }
-}
-
-.body-status-card + .body-status-card::before {
-  content: '';
-  position: absolute;
-  top: 8rpx;
-  bottom: 4rpx;
-  left: 0;
-  width: 1rpx;
-  background: rgb(36 70 58 / 14%);
 }
 
 .body-status-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 10rpx;
+  margin-bottom: 20rpx;
 }
 
 .body-status-title-wrap {
   display: flex;
   align-items: center;
-  gap: 4rpx;
-  min-width: 0;
-}
-
-.body-status-title {
-  color: #294d40;
-  font-size: 28rpx;
-  font-weight: 500;
-  line-height: 40rpx;
+  gap: 8rpx;
 }
 
 .body-status-icon {
@@ -3328,23 +3239,21 @@ $sheet-float-max-height: calc(100vh - #{$sheet-float-gap-top} - env(safe-area-in
 .body-status-content {
   display: flex;
   align-items: baseline;
-  gap: 6rpx;
-  min-height: 56rpx;
-  margin-bottom: 4rpx;
+  gap: 8rpx;
+  margin-bottom: 12rpx;
 }
 
 .body-status-value {
-  font-size: 44rpx;
+  font-size: 40rpx;
   font-weight: 700;
   color: $text-primary;
-  line-height: 56rpx;
-  font-variant-numeric: tabular-nums;
+  line-height: 52rpx;
 }
 
 .body-status-unit {
-  font-size: 22rpx;
+  font-size: 20rpx;
   color: $text-tertiary;
-  line-height: 32rpx;
+  line-height: 30rpx;
 }
 
 .body-status-change {
@@ -3373,13 +3282,9 @@ $sheet-float-max-height: calc(100vh - #{$sheet-float-gap-top} - env(safe-area-in
 }
 
 .body-status-hint {
-  display: block;
-  max-width: 100%;
-  overflow: hidden;
-  font-size: 22rpx;
+  font-size: 20rpx;
   color: $text-tertiary;
-  line-height: 32rpx;
-  text-overflow: ellipsis;
+  line-height: 30rpx;
   white-space: nowrap;
 }
 
@@ -3412,10 +3317,20 @@ $sheet-float-max-height: calc(100vh - #{$sheet-float-gap-top} - env(safe-area-in
   line-height: 28rpx;
 }
 
-// 运动项保持同一信息带，不另起卡片底色
+// 运动卡片样式
 .exercise-card {
+  .body-status-icon.exercise-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32rpx;
+    height: 32rpx;
+    border-radius: 8rpx;
+    background: #fdfaf6;
+  }
+
   &:active {
-    background: rgb(240 152 92 / 6%);
+    background: #fdfaf6;
   }
 }
 
