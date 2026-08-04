@@ -66,6 +66,8 @@ type CatalogItem = {
   notes?: string
   missing_fields?: string[]
   completeness_status: string
+  status: 'draft' | 'published' | 'changes_pending' | string
+  published_at?: string
 }
 
 type CatalogItemEditDraft = {
@@ -227,6 +229,7 @@ export function CampusFoodCollectionPage({ onLogout, onMenuChange }: CampusFoodC
   const [historyBusy, setHistoryBusy] = useState(false)
   const [editingItem, setEditingItem] = useState<CatalogItemEditDraft | null>(null)
   const [itemSaving, setItemSaving] = useState(false)
+  const [publishingItemId, setPublishingItemId] = useState('')
 
   const isUniversity = venueType === 'university'
   const apiBase = displayApiBase()
@@ -433,6 +436,27 @@ export function CampusFoodCollectionPage({ onLogout, onMenuChange }: CampusFoodC
       toast.error(error instanceof Error ? error.message : '条目保存失败')
     } finally {
       setItemSaving(false)
+    }
+  }
+
+  async function publishCatalogItem(item: CatalogItem) {
+    if ((item.missing_fields || []).length || item.completeness_status !== 'complete') {
+      toast.error('请先补齐名称、图片和价格后再提交上线')
+      return
+    }
+    const actionLabel = item.status === 'changes_pending' ? '提交更新' : '提交上线'
+    if (!window.confirm(`${actionLabel}后，小程序用户将看到这条校园食物。是否继续？`)) return
+    setPublishingItemId(item.id)
+    try {
+      const data = await adminRequest<{ item: CatalogItem }>(`/api/admin/campus-food-collection/items/${encodeURIComponent(item.id)}/publish`, {
+        method: 'POST',
+      })
+      setSelectedBatchItems((current) => current.map((currentItem) => (currentItem.id === data.item.id ? data.item : currentItem)))
+      toast.success(item.status === 'changes_pending' ? '更新已提交，小程序将展示最新版本' : '条目已提交上线')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '提交上线失败')
+    } finally {
+      setPublishingItemId('')
     }
   }
 
@@ -875,9 +899,28 @@ export function CampusFoodCollectionPage({ onLogout, onMenuChange }: CampusFoodC
                             ? (item.missing_fields || []).map((field) => <span key={field} className='pill inactive'>{missingFieldLabel(field)}</span>)
                             : <span className='pill active'>已完整</span>}
                         </div>
+                        <div className='mt-2'>
+                          <span className={`pill ${item.status === 'published' ? 'active' : item.status === 'changes_pending' ? 'warning' : ''}`}>
+                            {catalogPublishStatusLabel(item.status)}
+                          </span>
+                        </div>
                       </td>
                       <td className='p-3 text-right'>
-                        <button type='button' className='min-h-8 px-3' onClick={() => openItemEditor(item)}>编辑补充</button>
+                        <div className='collection-item-actions'>
+                          <button type='button' className='min-h-8 px-3' onClick={() => openItemEditor(item)} disabled={publishingItemId === item.id}>编辑补充</button>
+                          <button
+                            type='button'
+                            className='primary min-h-8 px-3'
+                            onClick={() => void publishCatalogItem(item)}
+                            disabled={publishingItemId === item.id || item.status === 'published' || Boolean((item.missing_fields || []).length)}
+                            title={(item.missing_fields || []).length ? '请先补齐名称、图片和价格' : undefined}
+                          >
+                            {publishingItemId === item.id ? <span className='spinner small' /> : null}
+                            <span className={publishingItemId === item.id ? 'ml-2' : ''}>
+                              {item.status === 'published' ? '已上线' : item.status === 'changes_pending' ? '提交更新' : '提交上线'}
+                            </span>
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -937,7 +980,7 @@ function CatalogItemEditDialog({
         <div className='editor-header'>
           <div>
             <h2 id='catalog-item-editor-title'>编辑采集条目</h2>
-            <p>可以分多次补充；保存后系统会自动更新“待补”字段。</p>
+            <p>可以分多次补充；保存只更新后台草稿，不会直接显示到小程序。</p>
           </div>
           <button type='button' onClick={onCancel} disabled={saving}>关闭</button>
         </div>
@@ -1045,7 +1088,7 @@ function CatalogItemEditDialog({
         </div>
 
         <div className='catalog-item-editor-actions'>
-          <span className='muted'>允许保留未完整状态，之后可再次进入编辑。</span>
+          <span className='muted'>允许保留未完整状态；补齐后请在列表点击“提交上线”。</span>
           <div className='actions' style={{ marginTop: 0 }}>
             <button type='button' onClick={onCancel} disabled={saving}>取消</button>
             <button type='button' className='primary min-w-32' onClick={onSave} disabled={saving}>
@@ -1314,4 +1357,10 @@ function priceSummary(item: CatalogItem): string {
   if (item.price_type === 'range' && item.price_min != null && item.price_max != null) return `${item.price_min}-${item.price_max}${item.price_unit || '元'}`
   if (item.price != null) return `${item.price}${item.price_unit || '元'}`
   return item.price_text || '价格待补充'
+}
+
+function catalogPublishStatusLabel(status: string): string {
+  if (status === 'published') return '小程序已上线'
+  if (status === 'changes_pending') return '有修改待上线'
+  return '仅后台草稿'
 }

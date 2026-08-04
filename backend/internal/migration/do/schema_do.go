@@ -587,8 +587,9 @@ type CriticalSampleDO struct {
 func (CriticalSampleDO) TableName() string { return "critical_samples_weapp" }
 
 type PublicFoodItemDO struct {
-	ID                 string           `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
-	UserID             string           `gorm:"column:user_id;type:uuid;not null;index:idx_public_food_library_user_id"`
+	ID string `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	// Admin-published official entries do not belong to an individual mini-program user.
+	UserID             *string          `gorm:"column:user_id;type:uuid;index:idx_public_food_library_user_id"`
 	SourceRecordID     *string          `gorm:"column:source_record_id;type:uuid"`
 	AnalysisTaskID     *string          `gorm:"column:analysis_task_id;type:uuid;index:idx_public_food_library_analysis_task_id"`
 	ImagePath          *string          `gorm:"column:image_path;type:text"`
@@ -1528,6 +1529,8 @@ type CampusFoodCatalogItemDO struct {
 	MissingFields      []string       `gorm:"column:missing_fields;type:jsonb;serializer:json;not null;default:'[]'::jsonb"`
 	CompletenessStatus string         `gorm:"column:completeness_status;type:text;not null;default:'incomplete';index:idx_campus_food_catalog_items_completeness"`
 	Status             string         `gorm:"column:status;type:text;not null;default:'draft';index:idx_campus_food_catalog_items_status"`
+	PublishedAt        *time.Time     `gorm:"column:published_at;type:timestamptz;index:idx_campus_food_catalog_items_published_at,sort:desc"`
+	PublishedByAdminID *string        `gorm:"column:published_by_admin_id;type:uuid;index:idx_campus_food_catalog_items_published_by_admin"`
 	CapturedAt         *time.Time     `gorm:"column:captured_at;type:timestamptz;index:idx_campus_food_catalog_items_captured_at"`
 	ContributorUserID  *string        `gorm:"column:contributor_user_id;type:uuid;index:idx_campus_food_catalog_items_contributor"`
 	CreatedByAdminID   *string        `gorm:"column:created_by_admin_id;type:uuid;index:idx_campus_food_catalog_items_admin"`
