@@ -312,14 +312,9 @@ function PetHomePage() {
           </View>
 
           <View className='pet-home-hero-copy'>
-            <Text className='pet-home-name'>{petSummary?.pet?.name || '健康伙伴'}</Text>
-            <View className='pet-home-chat-entry' onClick={openPetChat}>
-              <Text className='iconfont icon-comment pet-home-chat-entry-icon' />
-              <View className='pet-home-chat-entry-copy'>
-                <Text className='pet-home-chat-entry-title'>和它聊聊</Text>
-                <Text className='pet-home-chat-entry-subtitle'>饮食与训练分析</Text>
-              </View>
-              <Text className='iconfont icon-right pet-home-chat-entry-arrow' />
+            <View className='pet-home-name-link' onClick={openPetChat}>
+              <Text className='pet-home-name'>{petSummary?.pet?.name || '健康伙伴'}</Text>
+              <Text className='iconfont icon-right pet-home-name-arrow' />
             </View>
           </View>
         </View>

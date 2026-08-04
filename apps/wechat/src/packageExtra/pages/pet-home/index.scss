@@ -279,9 +279,22 @@
   min-width: 0;
 }
 
+.pet-home-name-link {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  max-width: 100%;
+  min-height: 88rpx;
+  padding: 12rpx 0;
+
+  &:active {
+    opacity: 0.62;
+  }
+}
+
 .pet-home-name {
   display: block;
-  margin-bottom: 18rpx;
+  min-width: 0;
   overflow: hidden;
   color: #15212c;
   font-size: 36rpx;
@@ -291,62 +304,11 @@
   white-space: nowrap;
 }
 
-.pet-home-chat-entry {
-  display: flex;
-  align-items: center;
-  width: 100%;
-  min-height: 88rpx;
-  padding: 12rpx 14rpx;
-  border: 1rpx solid rgb(92 184 150 / 22%);
-  border-radius: 20rpx;
-  background: rgb(92 184 150 / 9%);
-  box-sizing: border-box;
-
-  &:active {
-    background: rgb(92 184 150 / 15%);
-  }
-}
-
-.pet-home-chat-entry-icon {
+.pet-home-name-arrow {
   flex-shrink: 0;
-  margin-right: 10rpx;
-  color: #2f7f62;
-  font-size: 34rpx;
-  line-height: 40rpx;
-}
-
-.pet-home-chat-entry-copy {
-  flex: 1;
-  min-width: 0;
-}
-
-.pet-home-chat-entry-title,
-.pet-home-chat-entry-subtitle {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.pet-home-chat-entry-title {
-  color: #245e49;
-  font-size: 26rpx;
-  font-weight: 800;
-  line-height: 36rpx;
-}
-
-.pet-home-chat-entry-subtitle {
-  color: #7a8a84;
-  font-size: 20rpx;
-  line-height: 28rpx;
-}
-
-.pet-home-chat-entry-arrow {
-  flex-shrink: 0;
-  margin-left: 8rpx;
-  color: #5c9f84;
-  font-size: 22rpx;
-  line-height: 30rpx;
+  color: #5f6b66;
+  font-size: 24rpx;
+  line-height: 32rpx;
 }
 
 .pet-home-card {
@@ -733,7 +695,6 @@
   }
 
   .pet-home-name,
-  .pet-home-chat-entry-title,
   .pet-home-card-title,
   .pet-home-metric-value,
   .pet-home-score-value,
@@ -743,7 +704,6 @@
     color: #f2f7f4;
   }
 
-  .pet-home-chat-entry-subtitle,
   .pet-home-card-side,
   .pet-home-metric-label,
   .pet-home-score-label,
@@ -768,14 +728,8 @@
     color: #6ee7b7;
   }
 
-  .pet-home-chat-entry {
-    border-color: rgb(112 196 149 / 18%);
-    background: rgb(92 184 150 / 10%);
-  }
-
-  .pet-home-chat-entry-icon,
-  .pet-home-chat-entry-arrow {
-    color: #6ee7b7;
+  .pet-home-name-arrow {
+    color: rgb(214 226 220 / 72%);
   }
 
   .pet-home-progress {
