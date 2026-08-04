@@ -31,6 +31,7 @@ import {
   inferDefaultMealTypeFromLocalTime,
 } from '../../../utils/infer-default-meal-type'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
+import { returnHomeAfterFoodRecord } from '../../../utils/food-record-flow'
 import { getStoredRecordTargetDate, persistRecordTargetDate } from '../../../utils/record-date'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
@@ -1166,11 +1167,7 @@ function RecordManualPage() {
       }
 
       Taro.showToast({ title: saveResult.already_saved ? '该餐已记录' : '记录成功', icon: saveResult.already_saved ? 'none' : 'success' })
-      setTimeout(() => {
-        Taro.redirectTo({ url: `${extraPkgUrl('/pages/day-record/index')}?date=${targetDate}` }).catch(() => {
-          Taro.navigateTo({ url: `${extraPkgUrl('/pages/day-record/index')}?date=${targetDate}` })
-        })
-      }, 600)
+      returnHomeAfterFoodRecord()
     } catch (e: any) {
       await showUnifiedApiError(e, '保存失败')
     } finally {

@@ -46,6 +46,7 @@ import {
 } from '../../../utils/home-dashboard-local-cache'
 import { formatDateKey } from '../../../pages/index/utils/helpers'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
+import { returnHomeAfterFoodRecord } from '../../../utils/food-record-flow'
 import { getStoredRecordTargetDate, persistRecordTargetDate } from '../../../utils/record-date'
 import { buildFoodRecordItemPayloadFromResultItem } from '../../../utils/food-record-item-payload'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
@@ -1990,9 +1991,7 @@ function ResultPage() {
             title: saveResult.already_saved ? '该餐已记录，未重复发布' : '记录成功',
             icon: saveResult.already_saved ? 'none' : 'success',
           })
-          setTimeout(() => {
-            Taro.navigateBack({ delta: 2 })
-          }, 1200)
+          returnHomeAfterFoodRecord(800)
           return
         }
 
@@ -2000,11 +1999,7 @@ function ResultPage() {
           title: saveResult.already_saved ? '该餐已记录，未重复发布' : '记录成功',
           icon: saveResult.already_saved ? 'none' : 'success',
         })
-        setTimeout(() => {
-          Taro.navigateTo({
-            url: `${extraPkgUrl('/pages/record-detail/index')}?id=${encodeURIComponent(saveResult.id)}&from_save=1`
-          })
-        }, 500)
+        returnHomeAfterFoodRecord()
       } catch (e: any) {
         await showUnifiedApiError(e, '保存失败')
       } finally {

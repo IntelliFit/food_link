@@ -16,7 +16,7 @@ import { getAiInsightCollapsed, setAiInsightCollapsed } from '../../../utils/ai-
 import { HOME_INTAKE_DATA_CHANGED_EVENT } from '../../../utils/home-events'
 import { addWaterToBodyMetricsStorage, calculateFoodRecordItemsWaterMl, refreshHomeDashboardLocalSnapshotFromCloud } from '../../../utils/home-dashboard-local-cache'
 import { formatDateKey } from '../../../pages/index/utils/helpers'
-import { extraPkgUrl } from '../../../utils/subpackage-extra'
+import { returnHomeAfterFoodRecord } from '../../../utils/food-record-flow'
 import { getStoredRecordTargetDate, persistRecordTargetDate } from '../../../utils/record-date'
 
 import './index.scss'
@@ -468,16 +468,12 @@ function ResultTextPage() {
 
       if (saveOnly) {
         Taro.showToast({ title: '记录成功', icon: 'success' })
-        setTimeout(() => {
-          Taro.navigateBack({ delta: 1 })
-        }, 1200)
+        returnHomeAfterFoodRecord(800)
         return
       }
 
-      Taro.showToast({ title: '已保存，去分享', icon: 'success' })
-      setTimeout(() => {
-        Taro.navigateTo({ url: `${extraPkgUrl('/pages/record-detail/index')}?id=${encodeURIComponent(saveResult.id)}` })
-      }, 500)
+      Taro.showToast({ title: saveResult.already_saved ? '该餐已记录' : '记录成功', icon: saveResult.already_saved ? 'none' : 'success' })
+      returnHomeAfterFoodRecord()
     } catch (e: any) {
       await showUnifiedApiError(e, '保存失败')
     } finally {
