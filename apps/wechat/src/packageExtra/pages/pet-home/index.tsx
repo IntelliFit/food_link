@@ -39,68 +39,13 @@ function getStoredHomePetHidden(): boolean {
   }
 }
 
-function moodText(mood?: string): string {
-  switch (mood) {
-    case 'happy':
-      return '元气满满'
-    case 'sleepy':
-      return '慢慢充电'
-    case 'surprised':
-      return '有点惊喜'
-    default:
-      return '稳稳陪伴'
-  }
-}
-
-function petStateText(state?: string, inactivityDays?: number): string {
-  switch (state) {
-    case 'deep_sleep':
-      return '保温箱深睡'
-    case 'hibernating':
-      return '冬眠中'
-    case 'low_power':
-      return '低电量'
-    case 'dozing':
-      return '犯困中'
-    case 'warming':
-      return '正在唤醒'
-    case 'active':
-      return '满电'
-    case 'steady':
-      return '稳定'
-    default:
-      return inactivityDays && inactivityDays > 0 ? `${inactivityDays}天未记录` : '陪伴中'
-  }
-}
-
-function personalityText(personality?: string): string {
-  switch (personality) {
-    case 'energetic':
-      return '元气型'
-    case 'focused':
-      return '认真型'
-    case 'snacky':
-      return '嘴馋型'
-    case 'sporty':
-      return '运动型'
-    default:
-      return '温柔型'
-  }
-}
-
-function archetypeText(archetype?: string): string {
-  switch (archetype) {
-    case 'energetic_buddy':
-      return '元气伙伴'
-    case 'gentle_healer':
-      return '温柔守护'
-    case 'protein_guardian':
-      return '蛋白守卫'
-    case 'light_lifestyle':
-      return '轻盈陪伴'
-    default:
-      return '稳定陪伴'
-  }
+export function sanitizePetReason(reason: unknown): string {
+  return String(reason ?? '')
+    .replace(/是\s*(?:<\s*nil\s*>|\(nil\)|\bnil\b|\bnull\b|\bundefined\b)/gi, '暂未记录')
+    .replace(/(?:<\s*nil\s*>|\(nil\)|\bnil\b|\bnull\b|\bundefined\b)/gi, '暂未记录')
+    .replace(/\s+([，。；：])/g, '$1')
+    .replace(/\s{2,}/g, ' ')
+    .trim()
 }
 
 function candidateStyleText(style?: string): string {
@@ -127,7 +72,6 @@ function isCandidateActive(candidate: PetAppearanceCandidate, pet?: PetProfile):
 
 function PetHomePage() {
   const { scheme } = useAppColorScheme()
-  const [loading, setLoading] = useState(true)
   const [claiming, setClaiming] = useState(false)
   const [rerolling, setRerolling] = useState(false)
   const [pixelAvatarCustomizing, setPixelAvatarCustomizing] = useState(false)
@@ -145,7 +89,6 @@ function PetHomePage() {
 
   const loadData = useCallback(async () => {
     try {
-      setLoading(true)
       const [pet, member] = await Promise.all([
         getPetSummary(),
         getMyMembership().catch(() => null),
@@ -154,8 +97,6 @@ function PetHomePage() {
       setMembership(member)
     } catch (error) {
       await showUnifiedApiError(error, '加载宠物档案失败')
-    } finally {
-      setLoading(false)
     }
   }, [])
 
@@ -173,9 +114,6 @@ function PetHomePage() {
     void loadData().finally(() => Taro.stopPullDownRefresh())
   })
 
-  const petMood = petSummary?.status?.mood || 'calm'
-  const petState = petSummary?.status?.state || petMood
-  const petInactivityDays = petSummary?.status?.inactivity_days || 0
   const petEvent: PetOfflineEvent | null = petSummary?.event && !petSummary.event.is_claimed ? petSummary.event : null
   const earnedCredits = membership?.earned_credits_balance ?? 0
   const totalCredits = membership?.total_credits_available ?? membership?.daily_credits_remaining ?? 0
@@ -185,6 +123,14 @@ function PetHomePage() {
   const matchedCandidates = selectionCandidates.filter((candidate) => !candidate.builtin_avatar_id)
   const shouldShowSelection = matchedCandidates.length > 0
     && Boolean(petSummary?.pet?.needs_selection || petSummary?.pet?.free_profile_rematch_available)
+  const matchReasons = useMemo(() => {
+    const reasons = (petSummary?.pet?.match_reasons || [])
+      .map(sanitizePetReason)
+      .filter(Boolean)
+    return reasons.length > 0
+      ? reasons
+      : ['它会根据你的健康目标、活动水平和记录习惯生成，不按性别粗暴分配。']
+  }, [petSummary?.pet?.match_reasons])
 
   const handleClaim = useCallback(async () => {
     if (!petEvent?.id || claiming) return
@@ -343,49 +289,47 @@ function PetHomePage() {
     <View className={`pet-home-page ${scheme === 'dark' ? 'pet-home-page--dark' : ''}`}>
       <View className='pet-home-shell'>
         <View className='pet-home-hero'>
-          <PetAvatar
-            pet={petSummary?.pet}
-            size='large'
-            mood={petSummary?.status?.mood}
-            state={petSummary?.status?.state}
-            mealState={petSummary?.status?.meal_state}
-          />
+          <View className='pet-home-hero-stage'>
+            <PetAvatar
+              pet={petSummary?.pet}
+              size='large'
+              mood={petSummary?.status?.mood}
+              state={petSummary?.status?.state}
+              mealState={petSummary?.status?.meal_state}
+            />
+            <View className='pet-home-stage-stat pet-home-stage-stat--level'>
+              <Text className='pet-home-stage-stat-label'>等级</Text>
+              <Text className='pet-home-stage-stat-value'>Lv.{petSummary?.pet?.level || 1}</Text>
+            </View>
+            <View className='pet-home-stage-stat pet-home-stage-stat--credits'>
+              <Text className='pet-home-stage-stat-label'>积分</Text>
+              <Text className='pet-home-stage-stat-value'>{totalCredits}</Text>
+            </View>
+            <View className='pet-home-stage-stat pet-home-stage-stat--exp'>
+              <Text className='pet-home-stage-stat-label'>今日经验</Text>
+              <Text className='pet-home-stage-stat-value'>+{petSummary?.today?.exp_gained ?? 0}</Text>
+            </View>
+          </View>
 
           <View className='pet-home-hero-copy'>
             <Text className='pet-home-name'>{petSummary?.pet?.name || '健康伙伴'}</Text>
-            <View className='pet-home-meta-row'>
-              <Text className='pet-home-chip'>Lv.{petSummary?.pet?.level || 1}</Text>
-              <Text className='pet-home-chip secondary'>{personalityText(petSummary?.pet?.personality)}</Text>
-              <Text className='pet-home-chip secondary'>{archetypeText(petSummary?.pet?.archetype)}</Text>
-              <Text className='pet-home-chip secondary'>{petStateText(petState, petInactivityDays)}</Text>
-              <Text className='pet-home-chip secondary'>{moodText(petMood)}</Text>
+            <View className='pet-home-chat-entry' onClick={openPetChat}>
+              <Text className='iconfont icon-comment pet-home-chat-entry-icon' />
+              <View className='pet-home-chat-entry-copy'>
+                <Text className='pet-home-chat-entry-title'>和它聊聊</Text>
+                <Text className='pet-home-chat-entry-subtitle'>饮食与训练分析</Text>
+              </View>
+              <Text className='iconfont icon-right pet-home-chat-entry-arrow' />
             </View>
-            <Text className='pet-home-message'>
-              {loading ? '正在整理今天的状态' : (petSummary?.status?.message || '它正在安静陪你记录每一天。')}
-            </Text>
-          </View>
-        </View>
-
-        <View className='pet-home-card pet-home-chat-card'>
-          <View className='pet-home-card-head'>
-            <Text className='pet-home-card-title'>问问{petSummary?.pet?.name || '宠物'}</Text>
-            <Text className='pet-home-card-side'>文本分析 demo</Text>
-          </View>
-          <Text className='pet-home-event-message'>
-            让它读取你已保存的饮食文字和营养数据，聊聊训练状态、减脂卡住、碳水和蛋白质分布。不读取图片。
-          </Text>
-          <View className='pet-home-inline-action primary pet-home-chat-action' onClick={openPetChat}>
-            <Text className='pet-home-inline-action-text'>去问问它</Text>
           </View>
         </View>
 
         <View className='pet-home-card'>
           <View className='pet-home-card-head'>
             <Text className='pet-home-card-title'>为什么是它</Text>
-            <Text className='pet-home-card-side'>{archetypeText(petSummary?.pet?.archetype)}</Text>
           </View>
           <View className='pet-home-reason-list'>
-            {(petSummary?.pet?.match_reasons?.length ? petSummary.pet.match_reasons : ['它会根据你的健康目标、活动水平和记录习惯生成，不按性别粗暴分配。']).map((reason) => (
+            {matchReasons.map((reason) => (
               <View key={reason} className='pet-home-reason-item'>
                 <Text className='pet-home-reason-dot'>•</Text>
                 <Text className='pet-home-reason-text'>{reason}</Text>
@@ -436,9 +380,6 @@ function PetHomePage() {
               <Text className='pet-home-card-title'>常用形象</Text>
               <Text className='pet-home-card-side'>内置 · 免费</Text>
             </View>
-            <Text className='pet-home-event-message'>
-              直接选择即可跨端同步，不依赖在线生成模型。
-            </Text>
             <View className='pet-home-candidate-grid pet-home-candidate-grid--common'>
               {commonCandidates.map((candidate) => (
                 <View
@@ -448,7 +389,6 @@ function PetHomePage() {
                 >
                   <PetAvatar pet={candidate} size='small' motion='companion' />
                   <Text className='pet-home-candidate-name'>{candidate.name}</Text>
-                  <Text className='pet-home-candidate-style'>{candidateStyleText(candidate.style)}</Text>
                   <Text className='pet-home-candidate-action'>
                     {selectingCandidateId === candidate.id ? '' : isCandidateActive(candidate, petSummary?.pet) ? '当前' : '选择'}
                   </Text>
@@ -624,4 +564,3 @@ function PetHomePage() {
 }
 
 export default withAuth(PetHomePage)
-
