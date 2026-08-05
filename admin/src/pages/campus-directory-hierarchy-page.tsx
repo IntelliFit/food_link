@@ -542,9 +542,9 @@ export function CampusDirectoryPage({ onLogout, onMenuChange }: CampusDirectoryP
   }, [dishPage, hasPendingAnalysis, loadDishes, selectedCanteen, selectedSchool, selectedWindow, viewLevel]);
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div className="relative z-10 mx-auto grid min-h-[calc(100vh-2rem)] w-full max-w-[1640px] grid-cols-[256px_minmax(0,1fr)] gap-8 px-4 py-4">
       <AdminSidebar activeMenu="campus-directory" onLogout={onLogout} onMenuChange={onMenuChange} />
-      <main className="ml-[260px] min-h-screen p-6">
+      <main className="min-w-0">
         <section className="mb-5 flex flex-wrap items-start justify-between gap-4 rounded-2xl border bg-card/90 p-6">
           <div>
             <p className="text-sm text-muted-foreground">API：{apiBase}</p>
