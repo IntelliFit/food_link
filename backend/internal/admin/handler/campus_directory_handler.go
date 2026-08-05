@@ -332,6 +332,20 @@ func (h *CampusDirectoryHandler) CreateCanteen(c *gin.Context) {
 	if body.PaymentMethods == nil {
 		body.PaymentMethods = []string{}
 	}
+	if body.ConfidenceLevel != nil {
+		confidenceLevel := strings.ToUpper(strings.TrimSpace(*body.ConfidenceLevel))
+		if confidenceLevel == "" {
+			body.ConfidenceLevel = nil
+		} else {
+			switch confidenceLevel {
+			case "A", "B", "C", "D":
+				body.ConfidenceLevel = &confidenceLevel
+			default:
+				response.Error(c, badRequest("置信等级必须是 A、B、C 或 D"))
+				return
+			}
+		}
+	}
 	now := time.Now()
 	body.CreatedAt = &now
 	body.UpdatedAt = &now

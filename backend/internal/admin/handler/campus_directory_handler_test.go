@@ -90,6 +90,45 @@ func TestUpdateCanteenIgnoresLegacyNullJSONLists(t *testing.T) {
 	require.Equal(t, "西南门附近", saved.LocationText)
 }
 
+func TestCreateCanteenLeavesBlankConfidenceLevelNull(t *testing.T) {
+	db := newCampusDirectoryTestDB(t)
+	schoolID, campusID := uuid.NewString(), uuid.NewString()
+	require.NoError(t, db.Create(&schooldomain.School{ID: schoolID, Name: "测试大学", LocationType: "university", Status: "active"}).Error)
+	require.NoError(t, db.Create(&schooldomain.SchoolCampus{ID: campusID, SchoolID: schoolID, Name: "主校区", Status: "active"}).Error)
+
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.POST("/canteens", NewCampusDirectoryHandler(db).CreateCanteen)
+	requestBody := `{"school_id":"` + schoolID + `","campus_id":"` + campusID + `","name":"荔园食堂","confidence_level":"","status":"active"}`
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/canteens", strings.NewReader(requestBody))
+	request.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code, recorder.Body.String())
+	var saved schooldomain.SchoolCanteen
+	require.NoError(t, db.First(&saved, "name = ?", "荔园食堂").Error)
+	require.Nil(t, saved.ConfidenceLevel)
+}
+
+func TestCreateCanteenRejectsInvalidConfidenceLevel(t *testing.T) {
+	db := newCampusDirectoryTestDB(t)
+	schoolID, campusID := uuid.NewString(), uuid.NewString()
+	require.NoError(t, db.Create(&schooldomain.School{ID: schoolID, Name: "测试大学", LocationType: "university", Status: "active"}).Error)
+	require.NoError(t, db.Create(&schooldomain.SchoolCampus{ID: campusID, SchoolID: schoolID, Name: "主校区", Status: "active"}).Error)
+
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.POST("/canteens", NewCampusDirectoryHandler(db).CreateCanteen)
+	requestBody := `{"school_id":"` + schoolID + `","campus_id":"` + campusID + `","name":"荔园食堂","confidence_level":"unknown","status":"active"}`
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/canteens", strings.NewReader(requestBody))
+	request.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusBadRequest, recorder.Code, recorder.Body.String())
+}
+
 func TestNormalizeJSONListPatchDropsLegacyNullAndEncodesArrays(t *testing.T) {
 	patch := map[string]any{
 		"aliases":         nil,
