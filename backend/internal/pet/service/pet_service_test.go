@@ -332,7 +332,7 @@ func TestSummaryCreatesStablePetAndSingleOfflineEvent(t *testing.T) {
 	assert.Equal(t, 1, first.Event.CreditReward)
 	assert.Equal(t, archetypeLightLifestyle, first.Pet.Archetype)
 	assert.True(t, first.Pet.NeedsSelection)
-	require.Len(t, first.Pet.SelectionCandidates, 4)
+	require.Len(t, first.Pet.SelectionCandidates, 6)
 	assert.NotEmpty(t, first.Pet.MatchReasons)
 
 	second, err := svc.Summary(context.Background(), "user-1", "2026-05-20")
@@ -424,7 +424,7 @@ func TestSummaryAutoProfileMatchPreservesExistingProgress(t *testing.T) {
 	assert.Equal(t, 7, result.Pet.TotalEvents)
 	assert.Equal(t, archetypeProteinGuardian, result.Pet.Archetype)
 	assert.True(t, result.Pet.FreeProfileRematchAvailable)
-	require.Len(t, result.Pet.SelectionCandidates, 4)
+	require.Len(t, result.Pet.SelectionCandidates, 6)
 }
 
 func TestClaimEventIsIdempotent(t *testing.T) {
@@ -506,7 +506,7 @@ func TestSelectAppearanceUsesCurrentCandidatesAndIsIdempotent(t *testing.T) {
 
 	summary, err := svc.Summary(context.Background(), "user-1", "2026-05-20")
 	require.NoError(t, err)
-	require.Len(t, summary.Pet.SelectionCandidates, 4)
+	require.Len(t, summary.Pet.SelectionCandidates, 6)
 	candidate := summary.Pet.SelectionCandidates[1]
 
 	first, err := svc.SelectAppearance(context.Background(), "user-1", candidate.ID)
@@ -528,8 +528,14 @@ func TestSelectBuiltinAppearancePersistsAcrossSummary(t *testing.T) {
 
 	summary, err := svc.Summary(context.Background(), "user-1", "2026-05-20")
 	require.NoError(t, err)
-	require.Len(t, summary.Pet.SelectionCandidates, 4)
-	builtin := summary.Pet.SelectionCandidates[3]
+	require.Len(t, summary.Pet.SelectionCandidates, 6)
+	var builtin AppearanceCandidate
+	for _, candidate := range summary.Pet.SelectionCandidates {
+		if candidate.BuiltinAvatarID == builtinAvatarJianwen01ID {
+			builtin = candidate
+			break
+		}
+	}
 	assert.Equal(t, builtinAvatarJianwen01ID, builtin.BuiltinAvatarID)
 
 	selected, err := svc.SelectAppearance(context.Background(), "user-1", builtin.ID)
@@ -544,6 +550,51 @@ func TestSelectBuiltinAppearancePersistsAcrossSummary(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, builtinAvatarType, reloaded.Pet.AvatarType)
 	assert.Equal(t, builtinAvatarJianwen01ID, reloaded.Pet.BuiltinAvatarID)
+}
+
+func TestBuiltinAppearanceCandidatesIncludeWellnessCharacters(t *testing.T) {
+	candidates := builtinAppearanceCandidates()
+	require.Len(t, candidates, 3)
+
+	byID := make(map[string]AppearanceCandidate, len(candidates))
+	for _, candidate := range candidates {
+		byID[candidate.BuiltinAvatarID] = candidate
+		assert.Equal(t, builtinAvatarType, candidate.AvatarType)
+		assert.Equal(t, "builtin:"+candidate.BuiltinAvatarID, candidate.ID)
+	}
+
+	assert.Equal(t, "华佗", byID[builtinAvatarHuatuo01ID].Name)
+	assert.Equal(t, "太极小子", byID[builtinAvatarTaijiXiaoziID].Name)
+}
+
+func TestSelectWellnessBuiltinAppearancesPersists(t *testing.T) {
+	tests := []struct {
+		name     string
+		avatarID string
+		petName  string
+	}{
+		{name: "华佗", avatarID: builtinAvatarHuatuo01ID, petName: "华佗"},
+		{name: "太极小子", avatarID: builtinAvatarTaijiXiaoziID, petName: "太极小子"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fake := newFakePetRepo()
+			svc := NewService(fake)
+
+			selected, err := svc.SelectAppearance(context.Background(), "user-1", "builtin:"+tt.avatarID)
+			require.NoError(t, err)
+			require.NotNil(t, selected)
+			assert.Equal(t, builtinAvatarType, selected.Pet.AvatarType)
+			assert.Equal(t, tt.avatarID, selected.Pet.BuiltinAvatarID)
+			assert.Equal(t, tt.petName, selected.Pet.Name)
+
+			reloaded, err := svc.Summary(context.Background(), "user-1", "2026-05-20")
+			require.NoError(t, err)
+			assert.Equal(t, tt.avatarID, reloaded.Pet.BuiltinAvatarID)
+			assert.Equal(t, tt.petName, reloaded.Pet.Name)
+		})
+	}
 }
 
 func TestSelectAppearanceRejectsUnknownCandidate(t *testing.T) {

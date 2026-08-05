@@ -1,5 +1,5 @@
 import { View, Text } from '@tarojs/components'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import Taro, { useDidShow, usePullDownRefresh } from '@tarojs/taro'
 import {
   getMyMembership,
@@ -37,15 +37,6 @@ function getStoredHomePetHidden(): boolean {
   } catch (_) {
     return false
   }
-}
-
-export function sanitizePetReason(reason: unknown): string {
-  return String(reason ?? '')
-    .replace(/是\s*(?:<\s*nil\s*>|\(nil\)|\bnil\b|\bnull\b|\bundefined\b)/gi, '暂未记录')
-    .replace(/(?:<\s*nil\s*>|\(nil\)|\bnil\b|\bnull\b|\bundefined\b)/gi, '暂未记录')
-    .replace(/\s+([，。；：])/g, '$1')
-    .replace(/\s{2,}/g, ' ')
-    .trim()
 }
 
 function candidateStyleText(style?: string): string {
@@ -117,21 +108,11 @@ function PetHomePage() {
   const petEvent: PetOfflineEvent | null = petSummary?.event && !petSummary.event.is_claimed ? petSummary.event : null
   const earnedCredits = membership?.earned_credits_balance ?? 0
   const totalCredits = membership?.total_credits_available ?? membership?.daily_credits_remaining ?? 0
-  const nextLevelGap = Math.max((petSummary?.pet?.next_level_exp ?? 0) - (petSummary?.pet?.level_exp ?? 0), 0)
   const selectionCandidates = petSummary?.pet?.selection_candidates || []
   const commonCandidates = selectionCandidates.filter((candidate) => Boolean(candidate.builtin_avatar_id))
   const matchedCandidates = selectionCandidates.filter((candidate) => !candidate.builtin_avatar_id)
   const shouldShowSelection = matchedCandidates.length > 0
     && Boolean(petSummary?.pet?.needs_selection || petSummary?.pet?.free_profile_rematch_available)
-  const matchReasons = useMemo(() => {
-    const reasons = (petSummary?.pet?.match_reasons || [])
-      .map(sanitizePetReason)
-      .filter(Boolean)
-    return reasons.length > 0
-      ? reasons
-      : ['它会根据你的健康目标、活动水平和记录习惯生成，不按性别粗暴分配。']
-  }, [petSummary?.pet?.match_reasons])
-
   const handleClaim = useCallback(async () => {
     if (!petEvent?.id || claiming) return
     try {
@@ -216,15 +197,32 @@ function PetHomePage() {
     }
   }, [selectingCandidateId, syncPetProfile])
 
-  const handlePickComingSoon = useCallback(() => {
-    Taro.showToast({ title: '挑选外观即将开放', icon: 'none' })
-  }, [])
-
   const handleCustomizePixelAvatar = useCallback(async () => {
     if (pixelAvatarCustomizingRef.current) return
     pixelAvatarCustomizingRef.current = true
     setPixelAvatarCustomizing(true)
     try {
+      const naming = await Taro.showModal({
+        title: '给像素伙伴取名',
+        content: petSummary?.pet?.name || '',
+        confirmText: '下一步',
+        cancelText: '暂不生成',
+        // @ts-ignore 微信小程序支持可编辑 Modal，输入结果通过 content 返回。
+        editable: true,
+        // @ts-ignore
+        placeholderText: '请输入宠物名字（最多 12 个字）',
+      })
+      if (!naming.confirm) return
+      const petName = String((naming as any).content || '').trim()
+      if (!petName) {
+        Taro.showToast({ title: '请输入宠物名字', icon: 'none' })
+        return
+      }
+      if (Array.from(petName).length > 12) {
+        Taro.showToast({ title: '宠物名字最多 12 个字', icon: 'none' })
+        return
+      }
+
       const consent = await Taro.showModal({
         title: '生成像素分身',
         content: '请选择一张清晰的单人人像照片。照片会发送给 AI 图像服务处理；如果使用朋友的照片，请先获得对方授权。',
@@ -239,7 +237,7 @@ function PetHomePage() {
       })
       const filePath = result.tempFilePaths?.[0]
       if (!filePath) return
-      const customized = await customizePetPixelAvatar(filePath)
+      const customized = await customizePetPixelAvatar(filePath, petName)
       syncPetProfile(customized.pet)
       setPixelAvatarPreview(customized.pet)
     } catch (error) {
@@ -254,7 +252,7 @@ function PetHomePage() {
       pixelAvatarCustomizingRef.current = false
       setPixelAvatarCustomizing(false)
     }
-  }, [syncPetProfile])
+  }, [petSummary?.pet?.name, syncPetProfile])
 
   const closePixelAvatarPreview = useCallback(() => {
     setPixelAvatarPreview(null)
@@ -277,10 +275,6 @@ function PetHomePage() {
     })
   }, [])
 
-  const openPetLab = useCallback(() => {
-    Taro.navigateTo({ url: extraPkgUrl('/pages/pet-lab/index') })
-  }, [])
-
   const openPetChat = useCallback(() => {
     Taro.navigateTo({ url: extraPkgUrl('/pages/pet-chat/index') })
   }, [])
@@ -289,55 +283,60 @@ function PetHomePage() {
     <View className={`pet-home-page ${scheme === 'dark' ? 'pet-home-page--dark' : ''}`}>
       <View className='pet-home-shell'>
         <View className='pet-home-hero'>
-          <View className='pet-home-hero-stage'>
-            <PetAvatar
-              pet={petSummary?.pet}
-              size='large'
-              mood={petSummary?.status?.mood}
-              state={petSummary?.status?.state}
-              mealState={petSummary?.status?.meal_state}
-            />
-            <View className='pet-home-stage-stat pet-home-stage-stat--level'>
-              <Text className='pet-home-stage-stat-label'>等级</Text>
-              <Text className='pet-home-stage-stat-value'>Lv.{petSummary?.pet?.level || 1}</Text>
-            </View>
-            <View className='pet-home-stage-stat pet-home-stage-stat--credits'>
-              <Text className='pet-home-stage-stat-label'>积分</Text>
-              <Text className='pet-home-stage-stat-value'>{totalCredits}</Text>
-            </View>
-            <View className='pet-home-stage-stat pet-home-stage-stat--exp'>
-              <Text className='pet-home-stage-stat-label'>今日经验</Text>
-              <Text className='pet-home-stage-stat-value'>+{petSummary?.today?.exp_gained ?? 0}</Text>
-            </View>
-          </View>
-
-          <View className='pet-home-hero-copy'>
-            <View className='pet-home-name-link' onClick={openPetChat}>
-              <Text className='pet-home-name'>{petSummary?.pet?.name || '健康伙伴'}</Text>
-              <Text className='iconfont icon-right pet-home-name-arrow' />
-            </View>
-          </View>
-        </View>
-
-        <View className='pet-home-card'>
-          <View className='pet-home-card-head'>
-            <Text className='pet-home-card-title'>为什么是它</Text>
-          </View>
-          <View className='pet-home-reason-list'>
-            {matchReasons.map((reason) => (
-              <View key={reason} className='pet-home-reason-item'>
-                <Text className='pet-home-reason-dot'>•</Text>
-                <Text className='pet-home-reason-text'>{reason}</Text>
+          <View className='pet-home-hero-main'>
+            <View className='pet-home-hero-stage'>
+              <PetAvatar
+                pet={petSummary?.pet}
+                size='large'
+                mood={petSummary?.status?.mood}
+                state={petSummary?.status?.state}
+                mealState={petSummary?.status?.meal_state}
+              />
+              <View className='pet-home-stage-stat pet-home-stage-stat--level'>
+                <Text className='pet-home-stage-stat-label'>等级</Text>
+                <Text className='pet-home-stage-stat-value'>Lv.{petSummary?.pet?.level || 1}</Text>
               </View>
-            ))}
-          </View>
-          {petSummary?.pet?.growth_unlocks?.length ? (
-            <View className='pet-home-unlock-row'>
-              {petSummary.pet.growth_unlocks.map((item) => (
-                <Text key={item} className='pet-home-unlock-chip'>{item}</Text>
-              ))}
+              <View className='pet-home-stage-stat pet-home-stage-stat--credits'>
+                <Text className='pet-home-stage-stat-label'>积分</Text>
+                <Text className='pet-home-stage-stat-value'>{totalCredits}</Text>
+              </View>
+              <View className='pet-home-stage-stat pet-home-stage-stat--days'>
+                <Text className='pet-home-stage-stat-label'>陪伴</Text>
+                <Text className='pet-home-stage-stat-value'>{petSummary?.pet?.total_events ?? 0}天</Text>
+              </View>
             </View>
-          ) : null}
+
+            <View className='pet-home-hero-copy'>
+              <View className='pet-home-name-link' onClick={openPetChat}>
+                <Text className='pet-home-name'>{petSummary?.pet?.name || '健康伙伴'}</Text>
+                <Text className='iconfont icon-right pet-home-name-arrow' />
+              </View>
+              {petEvent?.can_claim ? (
+                <View className='pet-home-hero-reward' onClick={handleClaim}>
+                  {claiming ? (
+                    <View className='pet-home-hero-reward-spinner' />
+                  ) : (
+                    <Text className='pet-home-hero-reward-text'>领取 +{petEvent.exp_reward} 经验</Text>
+                  )}
+                </View>
+              ) : null}
+            </View>
+          </View>
+
+          <View className='pet-home-upgrade'>
+            <View className='pet-home-upgrade-head'>
+              <Text className='pet-home-upgrade-label'>升级到 Lv.{(petSummary?.pet?.level || 1) + 1}</Text>
+              <Text className='pet-home-upgrade-value'>
+                {petSummary?.pet?.level_exp ?? 0} / {petSummary?.pet?.next_level_exp ?? 0}
+              </Text>
+            </View>
+            <View className='pet-home-upgrade-progress'>
+              <View
+                className='pet-home-upgrade-progress-fill'
+                style={{ width: `${petSummary?.pet?.level_progress ?? 0}%` }}
+              />
+            </View>
+          </View>
         </View>
 
         {shouldShowSelection ? (
@@ -396,72 +395,6 @@ function PetHomePage() {
 
         <View className='pet-home-card'>
           <View className='pet-home-card-head'>
-            <Text className='pet-home-card-title'>成长进度</Text>
-            <Text className='pet-home-card-side'>
-              {petSummary ? `${petSummary.pet.level_exp}/${petSummary.pet.next_level_exp}` : '--'}
-            </Text>
-          </View>
-          <View className='pet-home-progress'>
-            <View className='pet-home-progress-fill' style={{ width: `${petSummary?.pet?.level_progress ?? 0}%` }} />
-          </View>
-          <View className='pet-home-metrics'>
-            <View className='pet-home-metric'>
-              <Text className='pet-home-metric-label'>总经验</Text>
-              <Text className='pet-home-metric-value'>{petSummary?.pet?.experience ?? 0}</Text>
-            </View>
-            <View className='pet-home-metric'>
-              <Text className='pet-home-metric-label'>距升级</Text>
-              <Text className='pet-home-metric-value'>{nextLevelGap}</Text>
-            </View>
-            <View className='pet-home-metric'>
-              <Text className='pet-home-metric-label'>陪伴天数</Text>
-              <Text className='pet-home-metric-value'>{petSummary?.pet?.total_events ?? 0}</Text>
-            </View>
-          </View>
-        </View>
-
-        <View className='pet-home-card'>
-          <View className='pet-home-card-head'>
-            <Text className='pet-home-card-title'>今日状态</Text>
-            <Text className='pet-home-card-side'>习惯分 {petSummary?.today?.habit_score ?? 0}</Text>
-          </View>
-          <View className='pet-home-score-grid'>
-            <View className='pet-home-score-item'>
-              <Text className='pet-home-score-label'>今日经验</Text>
-              <Text className='pet-home-score-value'>+{petSummary?.today?.exp_gained ?? 0}</Text>
-            </View>
-            <View className='pet-home-score-item'>
-              <Text className='pet-home-score-label'>奖励积分</Text>
-              <Text className='pet-home-score-value'>{earnedCredits}</Text>
-            </View>
-            <View className='pet-home-score-item'>
-              <Text className='pet-home-score-label'>总可用积分</Text>
-              <Text className='pet-home-score-value'>{totalCredits}</Text>
-            </View>
-          </View>
-          <Text className='pet-home-task'>{petSummary?.status?.task_text || '继续保持记录，它会慢慢长大。'}</Text>
-        </View>
-
-        <View className='pet-home-card'>
-          <View className='pet-home-card-head'>
-            <Text className='pet-home-card-title'>离线小惊喜</Text>
-            <Text className='pet-home-card-side'>{petEvent ? '未领取' : '已查看'}</Text>
-          </View>
-          <Text className='pet-home-event-title'>{petEvent?.title || '今天还没有新的离线惊喜'}</Text>
-          <Text className='pet-home-event-message'>
-            {petEvent?.message || '等你下一次回来时，它会带着整理好的复盘和一点小奖励出现。'}
-          </Text>
-          {petEvent?.can_claim ? (
-            <View className='pet-home-inline-action primary' onClick={handleClaim}>
-              <Text className='pet-home-inline-action-text'>
-                {claiming ? '领取中' : petEvent.credit_reward > 0 ? `领取 +${petEvent.credit_reward} 积分` : `领取 +${petEvent.exp_reward} 经验`}
-              </Text>
-            </View>
-          ) : null}
-        </View>
-
-        <View className='pet-home-card'>
-          <View className='pet-home-card-head'>
             <Text className='pet-home-card-title'>外观换装</Text>
             <Text className='pet-home-card-side'>统一角色体系</Text>
           </View>
@@ -503,33 +436,9 @@ function PetHomePage() {
                 <Text className='iconfont icon-right pet-home-action-arrow' />
               </View>
             </View>
-            <View className='pet-home-action-item muted' onClick={handlePickComingSoon}>
-              <View>
-                <Text className='pet-home-action-title'>挑选外观</Text>
-                <Text className='pet-home-action-desc'>按喜好指定耳朵、颜色、配饰组合</Text>
-              </View>
-              <View className='pet-home-action-side'>
-                <Text className='pet-home-action-coming'>即将开放</Text>
-                <Text className='iconfont icon-right pet-home-action-arrow muted' />
-              </View>
-            </View>
           </View>
         </View>
 
-        {process.env.NODE_ENV === 'development' ? (
-          <View className='pet-home-card'>
-            <View className='pet-home-card-head'>
-              <Text className='pet-home-card-title'>外观试验箱</Text>
-              <Text className='pet-home-card-side'>开发调试</Text>
-            </View>
-            <Text className='pet-home-event-message'>
-              批量查看颜色、体型、动物特征、花纹与配饰组合，定位哪些组合好看，哪些组合需要收敛。
-            </Text>
-            <View className='pet-home-inline-action lab' onClick={openPetLab}>
-              <Text className='pet-home-inline-action-text lab'>打开试验箱</Text>
-            </View>
-          </View>
-        ) : null}
       </View>
 
       {pixelAvatarPreview ? (

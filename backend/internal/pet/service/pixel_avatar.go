@@ -14,6 +14,7 @@ import (
 	"log/slog"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"food_link/backend/pkg/logger"
 	"github.com/google/uuid"
@@ -30,6 +31,7 @@ const (
 var (
 	ErrPixelAvatarStorageUnavailable = errors.New("pixel avatar storage unavailable")
 	ErrInvalidPixelAvatarImage       = errors.New("invalid pixel avatar image")
+	ErrInvalidPetName                = errors.New("invalid pet name")
 )
 
 type PixelAvatarResult struct {
@@ -43,7 +45,7 @@ type pixelAvatarAnimationPNGs struct {
 	Jump   []byte
 }
 
-func (s *Service) CustomizePixelAvatar(ctx context.Context, userID string, source []byte) (*PixelAvatarResult, error) {
+func (s *Service) CustomizePixelAvatar(ctx context.Context, userID, name string, source []byte) (*PixelAvatarResult, error) {
 	if s.storage == nil {
 		return nil, ErrPixelAvatarStorageUnavailable
 	}
@@ -51,8 +53,12 @@ func (s *Service) CustomizePixelAvatar(ctx context.Context, userID string, sourc
 		return nil, ErrPixelAvatarGenerationUnavailable
 	}
 	userID = strings.TrimSpace(userID)
+	name = strings.TrimSpace(name)
 	if userID == "" || len(source) == 0 {
 		return nil, ErrInvalidPixelAvatarImage
+	}
+	if utf8.RuneCountInString(name) > 12 {
+		return nil, ErrInvalidPetName
 	}
 
 	profile, err := s.repo.GetUserProfile(ctx, userID)
@@ -146,7 +152,11 @@ func (s *Service) CustomizePixelAvatar(ctx context.Context, userID string, sourc
 	setOptionalPixelAvatarMeta(meta, "pixel_avatar_squash_key", squashKey)
 	setOptionalPixelAvatarMeta(meta, "pixel_avatar_jump_key", jumpKey)
 	meta["pixel_avatar_updated_at"] = time.Now().UTC().Format(time.RFC3339)
-	if err := s.repo.UpdatePet(ctx, pet.ID, map[string]any{"meta": meta}); err != nil {
+	updates := map[string]any{"meta": meta}
+	if name != "" {
+		updates["name"] = name
+	}
+	if err := s.repo.UpdatePet(ctx, pet.ID, updates); err != nil {
 		return nil, err
 	}
 	logger.Info(ctx, "像素分身元数据更新完成",

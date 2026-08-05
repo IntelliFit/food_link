@@ -1,9 +1,11 @@
 import { View, Text, Input, Image, Canvas, PageMeta, Swiper, SwiperItem } from '@tarojs/components'
 import rewardPointsBannerBg from '../../assets/home-handbook/reward-points.jpg'
 import feedbackBannerBg from '../../assets/home-handbook/feedback.jpg'
+import wellnessFoodScanBannerBg from '../../assets/wellness/food-scan-banner.jpg'
+import wellnessSolarTermBg from '../../assets/wellness/solar-term-autumn.jpg'
 import { CAFETERIA_HERO_BG_URL, GOOSE_DUCK_CHICKEN_BG_URL } from '../../utils/static-asset-cdn-url'
 import React from 'react'
-import Taro, { useDidShow, useShareAppMessage, useShareTimeline } from '@tarojs/taro'
+import Taro, { useDidHide, useDidShow, useShareAppMessage, useShareTimeline } from '@tarojs/taro'
 import { Empty, Button } from '@taroify/core'
 import {
   getHomeDashboard,
@@ -118,9 +120,26 @@ const HOME_PET_COLLAPSED_KEY = 'home_pet_companion_collapsed_v4'
 const HOME_PET_FLOAT_POSITION_KEY = 'home_pet_companion_float_position_v4'
 const HOME_PET_HIDDEN_KEY = 'home_pet_companion_hidden_v1'
 const HOME_PET_HIDDEN_CHANGED_EVENT = 'home_pet_companion_hidden_changed'
+const HOME_MODE_STORAGE_KEY = 'home_display_mode_v1'
 const CANVAS_ICON_FONT_SOURCE = __ICON_CDN_BASE_URL__
   ? `url("${__ICON_CDN_BASE_URL__.replace(/\/+$/, '')}/iconfont.ttf")`
   : ''
+
+type HomeDisplayMode = 'balanced' | 'wellness'
+
+function getStoredHomeDisplayMode(): HomeDisplayMode {
+  try {
+    return Taro.getStorageSync(HOME_MODE_STORAGE_KEY) === 'wellness' ? 'wellness' : 'balanced'
+  } catch (_) {
+    return 'balanced'
+  }
+}
+
+function saveHomeDisplayMode(mode: HomeDisplayMode) {
+  try {
+    Taro.setStorageSync(HOME_MODE_STORAGE_KEY, mode)
+  } catch (_) {}
+}
 
 function isValidHomeDate(date?: string): date is string {
   return typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)
@@ -820,6 +839,7 @@ function IndexPage() {
   const [membershipStatus, setMembershipStatus] = React.useState<MembershipStatus | null>(null)
   const [rewardCenter, setRewardCenter] = React.useState<RewardCenterResponse | null>(null)
   const [handbookBannerIndex, setHandbookBannerIndex] = React.useState(0)
+  const [homeMode, setHomeMode] = React.useState<HomeDisplayMode>(getStoredHomeDisplayMode)
   const petSummarySeqRef = React.useRef(0)
   const petDidShowCountRef = React.useRef(0)
   const petCelebrationTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -833,6 +853,28 @@ function IndexPage() {
   } | null>(null)
   /** 标记本次 touch 是否已经在 touchend 里处理过展开/收起，避免 touchend 后又触发 card onClick */
   const petClickHandledRef = React.useRef(false)
+
+  const applyHomeNavigationPalette = React.useCallback((mode: HomeDisplayMode) => {
+    void Taro.setNavigationBarColor({
+      frontColor: '#000000',
+      backgroundColor: mode === 'wellness' ? '#f7f4eb' : '#f4faf8',
+      animation: { duration: 180, timingFunc: 'easeInOut' }
+    }).catch(() => {
+      // 状态栏配色属于视觉增强，不影响首页主流程。
+    })
+  }, [])
+
+  React.useEffect(() => {
+    applyHomeNavigationPalette(homeMode)
+  }, [applyHomeNavigationPalette, homeMode])
+
+  useDidShow(() => {
+    applyHomeNavigationPalette(homeMode)
+  })
+
+  useDidHide(() => {
+    applyHomeNavigationPalette('balanced')
+  })
   const [showTargetEditor, setShowTargetEditor] = React.useState(false)
   const [savingTargets, setSavingTargets] = React.useState(false)
   const [nutritionExpanded, setNutritionExpanded] = React.useState(false)
@@ -3002,6 +3044,110 @@ function IndexPage() {
   const openBackfillRecordMenu = () => {
     setShowRecordMenu(true)
   }
+
+  const switchHomeMode = React.useCallback(() => {
+    setHomeMode((current) => {
+      const next = current === 'balanced' ? 'wellness' : 'balanced'
+      saveHomeDisplayMode(next)
+      return next
+    })
+  }, [])
+
+  const wellnessCaloriePct = Math.min(100, calculateProgressPercent(totalCurrent, normalizeDisplayNumber(intakeData.target)))
+  const petVisualCollapsed = petCollapsed || homeMode === 'wellness'
+  const bodyStatusCards = (
+    <View className='body-status-section'>
+      <View className='body-status-card weight-card' onClick={() => openBodyMetricRecord('weight')} onLongPress={openWeightEditor}>
+        <View className='body-status-header'>
+          <View className='body-status-title-wrap'>
+            <Text className='iconfont icon-weight-scale' style={{ marginRight: '6rpx', fontSize: '26rpx', color: '#6b7280' }} />
+            <Text className='body-status-title'>体重</Text>
+          </View>
+        </View>
+        <View className='body-status-content'>
+          {dashboardBusy ? (
+            <View style={{ display: 'flex', alignItems: 'center', gap: '12rpx', minHeight: '52rpx' }}>
+              <Text className='body-status-value' style={{ color: '#9ca3af' }}>--</Text>
+              <View className='loading-spinner' style={{ width: '22rpx', height: '22rpx', borderWidth: '3rpx' }} />
+            </View>
+          ) : isGuest ? (
+            <Text className='body-status-value' style={{ color: '#9ca3af' }}>--</Text>
+          ) : weightSummary.latestWeight ? (
+            <>
+              <Text className='body-status-value'>{weightSummary.latestWeight.value.toFixed(1)}</Text>
+              <Text className='body-status-unit'>kg</Text>
+              {weightSummary.weightChange !== null && (
+                <Text className={`body-status-change ${weightSummary.weightChange > 0 ? 'up' : 'down'}`}>
+                  {weightSummary.weightChange > 0 ? '+' : ''}{weightSummary.weightChange.toFixed(1)}
+                </Text>
+              )}
+            </>
+          ) : (
+            <Text className='body-status-empty'>点击记录</Text>
+          )}
+        </View>
+        <Text className='body-status-hint'>
+          {isGuest
+            ? '记录体重，追踪变化'
+            : weightSummary.latestWeight
+              ? `上次记录: ${weightSummary.latestWeight.date.slice(5)}`
+              : '点击记录体重'}
+        </Text>
+      </View>
+
+      <View className='body-status-card water-card' onClick={() => openBodyMetricRecord('water')} onLongPress={openWaterEditor}>
+        <View className='body-status-header'>
+          <View className='body-status-title-wrap'>
+            <Text className='iconfont icon-drink' style={{ marginRight: '6rpx', fontSize: '26rpx', color: '#5c9ed4' }} />
+            <Text className='body-status-title'>喝水</Text>
+          </View>
+        </View>
+        <View className='body-status-content'>
+          {dashboardBusy ? (
+            <View style={{ display: 'flex', alignItems: 'center', gap: '12rpx', minHeight: '52rpx' }}>
+              <Text className='body-status-value' style={{ color: '#9ca3af' }}>--</Text>
+              <View className='loading-spinner' style={{ width: '22rpx', height: '22rpx', borderWidth: '3rpx' }} />
+            </View>
+          ) : isGuest ? (
+            <Text className='body-status-value' style={{ color: '#9ca3af' }}>--</Text>
+          ) : (
+            <>
+              <Text className='body-status-value'>{Math.round(animatedWaterTotal)}</Text>
+              <Text className='body-status-unit'>ml</Text>
+            </>
+          )}
+        </View>
+        <Text className='body-status-hint'>
+          {dashboardBusy || isGuest ? '点击记录喝水' : `${Math.round(animatedWaterProgress)}% / 目标 ${bodyMetrics.waterGoalMl}ml`}
+        </Text>
+      </View>
+
+      <View className='body-status-card exercise-card' onClick={() => openBodyMetricRecord('exercise')} onLongPress={openExerciseRecord}>
+        <View className='body-status-header'>
+          <View className='body-status-title-wrap'>
+            <Text className='iconfont icon-dumbbell' style={{ marginRight: '6rpx', fontSize: '26rpx', color: '#f0985c' }} />
+            <Text className='body-status-title'>运动</Text>
+          </View>
+        </View>
+        <View className='body-status-content'>
+          {dashboardBusy ? (
+            <View style={{ display: 'flex', alignItems: 'center', gap: '12rpx', minHeight: '52rpx' }}>
+              <Text className='body-status-value' style={{ color: '#9ca3af' }}>--</Text>
+              <View className='loading-spinner' style={{ width: '22rpx', height: '22rpx', borderWidth: '3rpx' }} />
+            </View>
+          ) : isGuest ? (
+            <Text className='body-status-value' style={{ color: '#9ca3af' }}>--</Text>
+          ) : (
+            <>
+              <Text className='body-status-value'>{Math.round(animatedExerciseBurnedKcal)}</Text>
+              <Text className='body-status-unit'>kcal</Text>
+            </>
+          )}
+        </View>
+        <Text className='body-status-hint'>点击记录运动</Text>
+      </View>
+    </View>
+  )
   const handleDismissBackfillHint = async () => {
     const { confirm } = await Taro.showModal({
       title: '取消补录提醒',
@@ -3020,7 +3166,7 @@ function IndexPage() {
 
   return (
     <View
-      className={`home-page ${scheme === 'dark' ? 'home-page--dark' : ''} ${showRecordEditModal || showHomeOnboardingGuide ? 'home-page--modal-open' : ''}`}
+      className={`home-page home-page--${homeMode} ${scheme === 'dark' ? 'home-page--dark' : ''} ${showRecordEditModal || showHomeOnboardingGuide ? 'home-page--modal-open' : ''}`}
     >
       <PageMeta
         pageStyle={
@@ -3037,7 +3183,7 @@ function IndexPage() {
       ) : null}
       {!petHidden ? (
         <View
-          className={`pet-companion-float ${petCollapsed ? 'is-collapsed' : 'is-expanded'} ${petDragging ? 'is-dragging' : ''} ${petCelebrating ? 'is-celebrating' : ''}`}
+          className={`pet-companion-float ${petVisualCollapsed ? 'is-collapsed' : 'is-expanded'} ${petDragging ? 'is-dragging' : ''} ${petCelebrating ? 'is-celebrating' : ''}`}
           style={{
             left: `${petFloatPosition.left}px`,
             top: `${petFloatPosition.top}px`
@@ -3053,7 +3199,7 @@ function IndexPage() {
               const handled = petClickHandledRef.current
               petClickHandledRef.current = false
               if (handled) return
-              if (petCollapsed) {
+              if (petVisualCollapsed && homeMode === 'balanced') {
                 togglePetCollapsed()
               }
               // 展开态点击卡片空白处不进入对话，只有「点我聊聊」进入
@@ -3077,7 +3223,7 @@ function IndexPage() {
                 const handled = petClickHandledRef.current
                 petClickHandledRef.current = false
                 if (handled) return
-                if (petCollapsed) {
+                if (petVisualCollapsed && homeMode === 'balanced') {
                   togglePetCollapsed()
                   return
                 }
@@ -3096,7 +3242,7 @@ function IndexPage() {
               />
               <View className='pet-companion-stage-shadow' />
             </View>
-            {!petCollapsed ? (
+            {!petVisualCollapsed ? (
               <View
                 className='pet-companion-collapse'
                 onClick={(event) => {
@@ -3114,6 +3260,12 @@ function IndexPage() {
       <View className='page-content'>
         {/* 问候区 */}
         <GreetingSection onSharePress={handleShareDailySummary} />
+        <View className='home-mode-switch-row'>
+            <View className='home-mode-switch' onClick={switchHomeMode}>
+              <Text className='home-mode-switch__arrow'>⇄</Text>
+              <Text className='home-mode-switch__text'>{homeMode === 'balanced' ? '养生模式' : '均衡模式'}</Text>
+            </View>
+        </View>
 
         {!getAccessToken() && (
           <View
@@ -3153,6 +3305,8 @@ function IndexPage() {
           selectedDate={selectedDate}
           onSelect={handleDateSelect}
         />
+        {homeMode === 'balanced' ? (
+          <View className='balanced-home-content'>
         {/* 热量总览卡片 + 三大营养素合并（仅展示与编辑目标，不整卡跳转） */}
         <View className='main-card combined-card'>
           <View className='main-card-header'>
@@ -3352,104 +3506,7 @@ function IndexPage() {
         )}
 
         {/* 体重、喝水、运动状态卡片 */}
-        <View className='body-status-section'>
-          {/* 体重卡片 */}
-          <View className='body-status-card weight-card' onClick={() => openBodyMetricRecord('weight')} onLongPress={openWeightEditor}>
-              <View className='body-status-header'>
-                <View className='body-status-title-wrap'>
-                  <Text className='iconfont icon-weight-scale' style={{ marginRight: '6rpx', fontSize: '26rpx', color: '#6b7280' }} />
-                  <Text className='body-status-title'>体重</Text>
-                </View>
-              </View>
-              <View className='body-status-content'>
-                {dashboardBusy ? (
-                  <View style={{ display: 'flex', alignItems: 'center', gap: '12rpx', minHeight: '52rpx' }}>
-                    <Text className='body-status-value' style={{ color: '#9ca3af' }}>--</Text>
-                    <View className='loading-spinner' style={{ width: '22rpx', height: '22rpx', borderWidth: '3rpx' }} />
-                  </View>
-                ) : isGuest ? (
-                  <Text className='body-status-value' style={{ color: '#9ca3af' }}>--</Text>
-                ) : weightSummary.latestWeight ? (
-                  <>
-                    <Text className='body-status-value'>{weightSummary.latestWeight.value.toFixed(1)}</Text>
-                    <Text className='body-status-unit'>kg</Text>
-                    {weightSummary.weightChange !== null && (
-                      <Text className={`body-status-change ${weightSummary.weightChange > 0 ? 'up' : 'down'}`}>
-                        {weightSummary.weightChange > 0 ? '+' : ''}{weightSummary.weightChange.toFixed(1)}
-                      </Text>
-                    )}
-                  </>
-                ) : (
-                  <Text className='body-status-empty'>点击记录</Text>
-                )}
-              </View>
-              <Text className='body-status-hint'>
-                {isGuest
-                  ? '记录体重，追踪变化'
-                  : weightSummary.latestWeight
-                    ? `上次记录: ${weightSummary.latestWeight.date.slice(5)}`
-                    : '点击记录体重'}
-              </Text>
-          </View>
-
-          {/* 喝水卡片 */}
-          <View className='body-status-card water-card' onClick={() => openBodyMetricRecord('water')} onLongPress={openWaterEditor}>
-              <View className='body-status-header'>
-                <View className='body-status-title-wrap'>
-                  <Text className='iconfont icon-drink' style={{ marginRight: '6rpx', fontSize: '26rpx', color: '#5c9ed4' }} />
-                  <Text className='body-status-title'>喝水</Text>
-                </View>
-              </View>
-              <View className='body-status-content'>
-                {dashboardBusy ? (
-                  <View style={{ display: 'flex', alignItems: 'center', gap: '12rpx', minHeight: '52rpx' }}>
-                    <Text className='body-status-value' style={{ color: '#9ca3af' }}>--</Text>
-                    <View className='loading-spinner' style={{ width: '22rpx', height: '22rpx', borderWidth: '3rpx' }} />
-                  </View>
-                ) : isGuest ? (
-                  <Text className='body-status-value' style={{ color: '#9ca3af' }}>--</Text>
-                ) : (
-                  <>
-                    <Text className='body-status-value'>{Math.round(animatedWaterTotal)}</Text>
-                    <Text className='body-status-unit'>ml</Text>
-                  </>
-                )}
-              </View>
-              <Text className='body-status-hint'>
-                {dashboardBusy || isGuest ? '点击记录喝水' : `${Math.round(animatedWaterProgress)}% / 目标 ${bodyMetrics.waterGoalMl}ml`}
-              </Text>
-          </View>
-
-          {/* 运动卡片 */}
-          <View className='body-status-card exercise-card' onClick={() => openBodyMetricRecord('exercise')} onLongPress={openExerciseRecord}>
-              <View className='body-status-header'>
-                <View className='body-status-title-wrap'>
-                  <Text className='iconfont icon-dumbbell' style={{ marginRight: '6rpx', fontSize: '26rpx', color: '#f0985c' }} />
-                  <Text className='body-status-title'>运动</Text>
-                </View>
-              </View>
-              <View className='body-status-content'>
-                {dashboardBusy ? (
-                  <View style={{ display: 'flex', alignItems: 'center', gap: '12rpx', minHeight: '52rpx' }}>
-                    <Text className='body-status-value' style={{ color: '#9ca3af' }}>--</Text>
-                    <View className='loading-spinner' style={{ width: '22rpx', height: '22rpx', borderWidth: '3rpx' }} />
-                  </View>
-                ) : isGuest ? (
-                  <Text className='body-status-value' style={{ color: '#9ca3af' }}>--</Text>
-                ) : (
-                  <>
-                    <Text className='body-status-value'>
-                      {Math.round(animatedExerciseBurnedKcal)}
-                    </Text>
-                    <Text className='body-status-unit'>kcal</Text>
-                  </>
-                )}
-              </View>
-              <Text className='body-status-hint'>
-                点击记录运动
-              </Text>
-          </View>
-        </View>
+        {bodyStatusCards}
 
         {/* 今日餐食区域 */}
         <View className='meals-section'>
@@ -3708,8 +3765,135 @@ function IndexPage() {
         {/* 查看统计入口 */}
         <StatsEntry onClick={openDayRecordForSelectedDate} />
 
-        {/* 底部留白 */}
-        <View className='bottom-spacer' />
+            {/* 底部留白 */}
+            <View className='bottom-spacer' />
+          </View>
+        ) : (
+          <View className='wellness-home-content'>
+            <View className='wellness-overview-card'>
+              <View className='wellness-overview-main'>
+                <View className='wellness-calorie-gauge' style={{ '--wellness-progress': `${wellnessCaloriePct}%` } as React.CSSProperties}>
+                  <View className='wellness-calorie-gauge__center'>
+                    <Text className='wellness-calorie-gauge__label'>剩余可摄入</Text>
+                    <Text className='wellness-calorie-gauge__value'>
+                      {dashboardBusy || isGuest ? '--' : formatNumberWithComma(Math.round(Math.max(0, totalTarget - totalCurrent)))}
+                    </Text>
+                    <Text className='wellness-calorie-gauge__unit'>kcal</Text>
+                    <Text className='iconfont icon-a-144-lvye wellness-calorie-gauge__leaf' />
+                  </View>
+                </View>
+
+                <View className='wellness-overview-detail'>
+                  <Text className='wellness-intake-summary'>
+                    已摄入 {dashboardBusy || isGuest ? '--' : formatDisplayNumber(Math.round(totalCurrent))} kcal / {dashboardBusy || isGuest ? '--' : formatDisplayNumber(Math.round(totalTarget))} kcal
+                  </Text>
+                  <View className='wellness-total-progress'>
+                    <View className='wellness-total-progress__fill' style={{ width: `${wellnessCaloriePct}%` }} />
+                  </View>
+                  <View className='wellness-macros'>
+                    {MACRO_CONFIGS.map(({ key, label, color, unit, iconClass }) => {
+                      const macro = intakeData.macros[key]
+                      const current = normalizeDisplayNumber(macro?.current)
+                      const target = normalizeDisplayNumber(macro?.target)
+                      const pct = Math.min(100, calculateProgressPercent(current, target))
+                      return (
+                        <View key={key} className='wellness-macro'>
+                          <View className='wellness-macro__title'>
+                            <Text className={`iconfont ${iconClass} wellness-macro__icon`} style={{ color }} />
+                            <Text>{label}</Text>
+                          </View>
+                          <View className='wellness-macro__numbers'>
+                            <Text className='wellness-macro__current'>{dashboardBusy || isGuest ? '--' : formatDisplayNumber(current)}</Text>
+                            <Text className='wellness-macro__target'> / {dashboardBusy || isGuest ? '--' : formatDisplayNumber(target)}{unit}</Text>
+                          </View>
+                          <View className='wellness-macro__track'>
+                            <View className='wellness-macro__fill' style={{ width: `${pct}%` }} />
+                          </View>
+                        </View>
+                      )
+                    })}
+                  </View>
+                </View>
+              </View>
+
+              <View className={`nutrition-expand-shell wellness-nutrition-shell${nutritionExpanded ? ' is-expanded' : ''}`}>
+                <View
+                  className='nutrition-expand-main'
+                  onClick={() => setNutritionExpanded((value) => !value)}
+                >
+                  <View className='nutrition-expand-title-row'>
+                    <Text className='nutrition-expand-title'>营养概览</Text>
+                    <View className='nutrition-expand-affordance'>
+                      <Text className={`iconfont ${nutritionExpanded ? 'icon-collapse' : 'icon-expand'} nutrition-expand-affordance-icon`} />
+                      <Text className='nutrition-expand-affordance-text'>
+                        {nutritionExpanded ? '收起' : '展开更多'}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+
+                {nutritionExpanded && (
+                  <View className='nutrition-expanded-body wellness-nutrition-expanded-body'>
+                    <MicrosSection
+                      intakeData={intakeData}
+                      dashboardBusy={dashboardBusy}
+                      isGuest={isGuest}
+                    />
+                  </View>
+                )}
+              </View>
+            </View>
+
+            <View className='wellness-daily-advice'>
+              <Image className='wellness-daily-advice__bg' src={wellnessSolarTermBg} mode='aspectFill' />
+              <View className='wellness-daily-advice__shade' />
+              <View className='wellness-daily-advice__inner'>
+                <View className='wellness-daily-advice__heading'>
+                  <Text className='iconfont icon-a-144-lvye wellness-daily-advice__icon' />
+                  <Text className='wellness-daily-advice__title'>今日养生建议</Text>
+                </View>
+                <View className='wellness-daily-advice__content'>
+                  <View className='wellness-daily-advice__season-copy'>
+                    <Text className='wellness-daily-advice__term'>立秋</Text>
+                    <Text className='wellness-daily-advice__summary'>润燥养肺，饮食宜清淡</Text>
+                  </View>
+                  <View className='wellness-daily-advice__items'>
+                    <View className='wellness-daily-advice__item'>
+                      <Text className='wellness-daily-advice__tag'>宜</Text>
+                      <Text className='wellness-daily-advice__item-text'>绿色蔬菜</Text>
+                    </View>
+                    <View className='wellness-daily-advice__item'>
+                      <Text className='wellness-daily-advice__tag'>建议</Text>
+                      <Text className='wellness-daily-advice__item-text'>优质蛋白</Text>
+                    </View>
+                    <View className='wellness-daily-advice__item'>
+                      <Text className='wellness-daily-advice__tag is-warm'>少</Text>
+                      <Text className='wellness-daily-advice__item-text'>辛辣油腻</Text>
+                    </View>
+                  </View>
+                </View>
+              </View>
+            </View>
+
+            <View className='wellness-food-banner' onClick={handleQuickRecord}>
+              <Image className='wellness-food-banner__bg' src={wellnessFoodScanBannerBg} mode='aspectFill' />
+              <View className='wellness-food-banner__shade' />
+              <View className='wellness-food-banner__copy'>
+                <Text className='wellness-food-banner__eyebrow'>今日养生食鉴</Text>
+                <Text className='wellness-food-banner__title'>AI 食物识别</Text>
+                <Text className='wellness-food-banner__desc'>拍照看看这份食物是否适合今日养生</Text>
+                <View className='wellness-food-banner__action'>
+                  <Text>识别记录</Text>
+                  <Text className='iconfont icon-right-arrow wellness-food-banner__arrow' />
+                </View>
+              </View>
+            </View>
+
+            {bodyStatusCards}
+
+            <View className='bottom-spacer' />
+          </View>
+        )}
       </View>
 
       {/* 目标编辑弹窗 */}

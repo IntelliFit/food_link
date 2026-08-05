@@ -24,7 +24,7 @@ type PetService interface {
 	ClaimEvent(ctx context.Context, userID, eventID string) (*service.ClaimResult, error)
 	RerollAppearance(ctx context.Context, userID string) (*service.AppearanceRerollResult, error)
 	SelectAppearance(ctx context.Context, userID, candidateID string) (*service.AppearanceSelectResult, error)
-	CustomizePixelAvatar(ctx context.Context, userID string, source []byte) (*service.PixelAvatarResult, error)
+	CustomizePixelAvatar(ctx context.Context, userID, name string, source []byte) (*service.PixelAvatarResult, error)
 }
 
 type PetChatService interface {
@@ -79,6 +79,7 @@ func (h *PetHandler) CustomizePixelAvatar(c *gin.Context) {
 	}
 
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxPixelAvatarUploadBytes+1024)
+	name := strings.TrimSpace(c.PostForm("name"))
 	header, err := c.FormFile("file")
 	if err != nil {
 		response.Error(c, &commonerrors.AppError{Code: 10002, Message: "请选择一张清晰的单人人像照片", HTTPStatus: http.StatusBadRequest})
@@ -112,7 +113,7 @@ func (h *PetHandler) CustomizePixelAvatar(c *gin.Context) {
 		slog.Int("source_bytes", len(source)),
 		slog.String("content_type", contentType),
 	)
-	data, err := h.svc.CustomizePixelAvatar(c.Request.Context(), userID, source)
+	data, err := h.svc.CustomizePixelAvatar(c.Request.Context(), userID, name, source)
 	if err != nil {
 		if errors.Is(err, service.ErrPixelAvatarGenerationUnavailable) {
 			logger.Warn(c.Request.Context(), "像素分身生成服务未配置",
@@ -123,6 +124,10 @@ func (h *PetHandler) CustomizePixelAvatar(c *gin.Context) {
 		}
 		if errors.Is(err, service.ErrInvalidPixelAvatarImage) {
 			response.Error(c, &commonerrors.AppError{Code: 10002, Message: "无法识别这张照片，请换一张重试", HTTPStatus: http.StatusBadRequest})
+			return
+		}
+		if errors.Is(err, service.ErrInvalidPetName) {
+			response.Error(c, &commonerrors.AppError{Code: 10002, Message: "宠物名字最多 12 个字", HTTPStatus: http.StatusBadRequest})
 			return
 		}
 		logger.Error(c.Request.Context(), "生成用户像素分身失败", err,

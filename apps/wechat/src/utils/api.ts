@@ -3625,10 +3625,14 @@ export async function getPetSummary(date?: string): Promise<PetSummary> {
   return res.data as PetSummary
 }
 
-export async function customizePetPixelAvatar(localPath: string): Promise<{ pet: PetProfile }> {
+export async function customizePetPixelAvatar(localPath: string, petName: string): Promise<{ pet: PetProfile }> {
   const filePath = (localPath || '').trim()
+  const name = (petName || '').trim()
   if (!filePath) {
     throw new Error('图片路径为空')
+  }
+  if (!name) {
+    throw new Error('宠物名字为空')
   }
   const token = getAccessToken()
   const response = await new Promise<any>((resolve, reject) => {
@@ -3639,6 +3643,7 @@ export async function customizePetPixelAvatar(localPath: string): Promise<{ pet:
       header: withNgrokBypassHeaders({
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       }),
+      formData: { name },
       // 图像模型实测通常需要 70–90 秒；预留到 180 秒，避免客户端先于服务端取消请求。
       timeout: 180000,
       success: resolve,

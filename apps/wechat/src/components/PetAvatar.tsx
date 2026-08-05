@@ -5,6 +5,8 @@ import jianwenIdleAvatar from '../assets/pets/jianwen-01-idle.png'
 import jianwenBlinkAvatar from '../assets/pets/jianwen-01-blink.png'
 import jianwenSquashAvatar from '../assets/pets/jianwen-01-squash.png'
 import jianwenJumpAvatar from '../assets/pets/jianwen-01-jump.png'
+import huatuoAvatar from '../assets/pets/huatuo-01.png'
+import taijiXiaoziAvatar from '../assets/pets/taiji-xiaozi-01.png'
 
 import './PetAvatar.scss'
 
@@ -27,15 +29,21 @@ interface PetAvatarProps {
 
 const BUILTIN_AVATAR_FRAMES: Record<string, {
   idle: string
-  blink: string
-  squash: string
-  jump: string
+  blink?: string
+  squash?: string
+  jump?: string
 }> = {
   'jianwen-01': {
     idle: jianwenIdleAvatar,
     blink: jianwenBlinkAvatar,
     squash: jianwenSquashAvatar,
     jump: jianwenJumpAvatar,
+  },
+  'huatuo-01': {
+    idle: huatuoAvatar,
+  },
+  'taiji-xiaozi-01': {
+    idle: taijiXiaoziAvatar,
   },
 }
 
@@ -275,6 +283,8 @@ export function PetAvatar({ pet, animal, size = 'medium', mood, state, mealState
   const customAvatarSquashURL = builtinFrames?.squash || String(pet?.pixel_avatar_squash_url || '').trim()
   const customAvatarJumpURL = builtinFrames?.jump || String(pet?.pixel_avatar_jump_url || '').trim()
   const hasMotionFrames = Boolean(customAvatarSquashURL && customAvatarJumpURL)
+  const isPixelatedAvatar = pet?.avatar_type === 'pixel_self'
+    || String(pet?.builtin_avatar_id || '').trim() === 'jianwen-01'
   const [blinking, setBlinking] = useState(false)
   const [motionFrame, setMotionFrame] = useState<PetMotionFrame>('idle')
 
@@ -378,7 +388,7 @@ export function PetAvatar({ pet, animal, size = 'medium', mood, state, mealState
 
   return (
     <View
-      className={`pet-avatar ${sizeClass} ${dimmed ? 'pet-avatar--dimmed' : ''} ${state === 'warming' ? 'pet-avatar--warming' : ''} ${customAvatarURL ? 'pet-avatar--custom' : ''} ${hasMotionFrames ? 'pet-avatar--has-motion-frames' : ''} ${blinking ? 'pet-avatar--blinking' : ''} ${motionClass} ${mealState ? `pet-avatar--meal-${mealState}` : ''} ${className || ''}`}
+      className={`pet-avatar ${sizeClass} ${dimmed ? 'pet-avatar--dimmed' : ''} ${state === 'warming' ? 'pet-avatar--warming' : ''} ${customAvatarURL ? 'pet-avatar--custom' : ''} ${isPixelatedAvatar ? 'pet-avatar--pixelated' : ''} ${hasMotionFrames ? 'pet-avatar--has-motion-frames' : ''} ${blinking ? 'pet-avatar--blinking' : ''} ${motionClass} ${mealState ? `pet-avatar--meal-${mealState}` : ''} ${className || ''}`}
       style={sizeStyle}
       aria-label={label}
       role='img'

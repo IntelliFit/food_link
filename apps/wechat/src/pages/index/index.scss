@@ -238,6 +238,623 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   }
 }
 
+// 首页双模式切换：仅切换内容视图，不改变均衡模式原有数据与交互
+.home-mode-switch-row {
+  display: flex;
+  justify-content: flex-end;
+  min-height: 58rpx;
+  margin: -12rpx 0 8rpx;
+  padding-right: 6rpx;
+}
+
+.home-mode-switch {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8rpx;
+  min-height: 58rpx;
+  padding: 0 20rpx;
+  border: 1rpx solid rgb(92 184 150 / 24%);
+  border-radius: 999rpx;
+  background: rgb(255 255 255 / 76%);
+  box-shadow: 0 8rpx 24rpx rgb(55 116 93 / 9%);
+  box-sizing: border-box;
+
+  &:active {
+    transform: scale(0.97);
+  }
+}
+
+.home-mode-switch__text {
+  color: #2d6f57;
+  font-size: 24rpx;
+  font-weight: 700;
+  line-height: 34rpx;
+}
+
+.home-mode-switch__arrow {
+  color: #4fa47f;
+  font-size: 29rpx;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.wellness-home-content {
+  display: flex;
+  flex-direction: column;
+  gap: 20rpx;
+}
+
+.wellness-overview-card,
+.wellness-daily-advice {
+  border: 1rpx solid rgb(103 138 119 / 10%);
+  border-radius: 30rpx;
+  background: rgb(255 255 255 / 88%);
+  box-shadow: 0 14rpx 34rpx rgb(46 79 65 / 8%);
+  box-sizing: border-box;
+}
+
+.wellness-overview-card {
+  padding: 24rpx 24rpx 20rpx;
+}
+
+.wellness-overview-main {
+  display: flex;
+  align-items: center;
+  gap: 26rpx;
+}
+
+.wellness-calorie-gauge {
+  position: relative;
+  flex: 0 0 244rpx;
+  width: 244rpx;
+  height: 244rpx;
+  border-radius: 50%;
+  background: conic-gradient(from 225deg, #7fc6a5 0 var(--wellness-progress), #e7ece9 var(--wellness-progress) 75%, transparent 75% 100%);
+
+  &::after {
+    position: absolute;
+    inset: 18rpx;
+    content: '';
+    border-radius: 50%;
+    background: #ffffff;
+  }
+}
+
+.wellness-calorie-gauge__center {
+  position: absolute;
+  inset: 28rpx 16rpx 10rpx;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.wellness-calorie-gauge__label,
+.wellness-calorie-gauge__unit {
+  color: #758078;
+  font-size: 24rpx;
+  line-height: 34rpx;
+}
+
+.wellness-calorie-gauge__value {
+  margin-top: 2rpx;
+  color: #17211d;
+  font-size: 54rpx;
+  font-weight: 750;
+  line-height: 64rpx;
+  letter-spacing: -1rpx;
+}
+
+.wellness-calorie-gauge__leaf {
+  margin-top: 8rpx;
+  color: #8abc72;
+  font-size: 28rpx;
+}
+
+.wellness-overview-detail {
+  flex: 1;
+  min-width: 0;
+}
+
+.wellness-intake-summary {
+  color: #69756e;
+  font-size: 24rpx;
+  line-height: 36rpx;
+  white-space: nowrap;
+}
+
+.wellness-total-progress,
+.wellness-macro__track {
+  overflow: hidden;
+  border-radius: 999rpx;
+  background: #e8ecea;
+}
+
+.wellness-total-progress {
+  height: 14rpx;
+  margin: 20rpx 0 34rpx;
+}
+
+.wellness-total-progress__fill,
+.wellness-macro__fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #6bbb93, #99d29a);
+}
+
+.wellness-macros {
+  display: flex;
+  justify-content: space-between;
+  gap: 12rpx;
+}
+
+.wellness-macro {
+  flex: 1;
+  min-width: 0;
+}
+
+.wellness-macro__title {
+  display: flex;
+  align-items: center;
+  gap: 6rpx;
+  color: #303b36;
+  font-size: 22rpx;
+  line-height: 32rpx;
+  white-space: nowrap;
+}
+
+.wellness-macro__icon {
+  font-size: 24rpx;
+}
+
+.wellness-macro__numbers {
+  margin-top: 8rpx;
+  white-space: nowrap;
+}
+
+.wellness-macro__current {
+  color: #5ca479;
+  font-size: 25rpx;
+  font-weight: 700;
+}
+
+.wellness-macro__target {
+  color: #8c9691;
+  font-size: 20rpx;
+}
+
+.wellness-macro__track {
+  width: 100%;
+  height: 10rpx;
+  margin-top: 10rpx;
+}
+
+.wellness-daily-advice {
+  position: relative;
+  min-height: 144rpx;
+  overflow: hidden;
+  background: #f5f8ef;
+}
+
+.wellness-daily-advice__bg,
+.wellness-daily-advice__shade {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.wellness-daily-advice__shade {
+  background: linear-gradient(90deg, rgb(250 250 244 / 90%) 0%, rgb(250 250 244 / 72%) 50%, rgb(250 250 244 / 42%) 100%);
+}
+
+.wellness-daily-advice__inner {
+  position: relative;
+  z-index: 1;
+  padding: 18rpx 22rpx 20rpx;
+}
+
+.wellness-daily-advice__heading {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+}
+
+.wellness-daily-advice__icon {
+  color: #69a875;
+  font-size: 24rpx;
+}
+
+.wellness-daily-advice__title {
+  color: #25342d;
+  font-size: 27rpx;
+  font-weight: 750;
+  line-height: 38rpx;
+}
+
+.wellness-daily-advice__content {
+  display: flex;
+  align-items: stretch;
+  gap: 16rpx;
+  margin-top: 12rpx;
+}
+
+.wellness-daily-advice__season-copy {
+  display: flex;
+  flex: 0 0 242rpx;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.wellness-daily-advice__term {
+  color: #26352e;
+  font-size: 25rpx;
+  font-weight: 750;
+  line-height: 34rpx;
+}
+
+.wellness-daily-advice__summary {
+  color: #65746c;
+  font-size: 19rpx;
+  line-height: 28rpx;
+  white-space: nowrap;
+}
+
+.wellness-daily-advice__items {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: space-around;
+  gap: 8rpx;
+  min-width: 0;
+}
+
+.wellness-daily-advice__item {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+  gap: 5rpx;
+}
+
+.wellness-daily-advice__tag {
+  min-width: 42rpx;
+  padding: 3rpx 10rpx;
+  border-radius: 999rpx;
+  background: #e4f1e3;
+  color: #599765;
+  font-size: 18rpx;
+  font-weight: 700;
+  line-height: 26rpx;
+  text-align: center;
+
+  &.is-warm {
+    background: #f8eee2;
+    color: #c37f53;
+  }
+}
+
+.wellness-daily-advice__item-text {
+  overflow: hidden;
+  max-width: 100%;
+  color: #526158;
+  font-size: 18rpx;
+  line-height: 26rpx;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wellness-food-banner {
+  position: relative;
+  height: 164rpx;
+  overflow: hidden;
+  border: 1rpx solid rgb(103 138 119 / 10%);
+  border-radius: 28rpx;
+  background: #eef4e9;
+  box-shadow: 0 12rpx 30rpx rgb(46 79 65 / 8%);
+  box-sizing: border-box;
+
+  &:active {
+    opacity: 0.94;
+  }
+}
+
+.wellness-food-banner__bg,
+.wellness-food-banner__shade {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.wellness-food-banner__shade {
+  background: linear-gradient(90deg, rgb(249 250 244 / 98%) 0%, rgb(249 250 244 / 92%) 44%, rgb(249 250 244 / 18%) 72%);
+}
+
+.wellness-food-banner__copy {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  width: 54%;
+  height: 100%;
+  flex-direction: column;
+  justify-content: center;
+  padding: 14rpx 0 14rpx 24rpx;
+  box-sizing: border-box;
+}
+
+.wellness-food-banner__eyebrow {
+  color: #6c9f72;
+  font-size: 18rpx;
+  font-weight: 700;
+  line-height: 26rpx;
+}
+
+.wellness-food-banner__title {
+  margin-top: 2rpx;
+  color: #22312a;
+  font-size: 30rpx;
+  font-weight: 800;
+  line-height: 40rpx;
+}
+
+.wellness-food-banner__desc {
+  overflow: hidden;
+  color: #6e7a73;
+  font-size: 19rpx;
+  line-height: 27rpx;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wellness-food-banner__action {
+  display: flex;
+  align-items: center;
+  gap: 3rpx;
+  align-self: flex-start;
+  margin-top: 6rpx;
+  padding: 3rpx 12rpx;
+  border-radius: 999rpx;
+  background: rgb(106 166 119 / 14%);
+  color: #4f8f62;
+  font-size: 18rpx;
+  font-weight: 700;
+  line-height: 26rpx;
+}
+
+.wellness-food-banner__arrow {
+  font-size: 17rpx;
+}
+
+.home-page--wellness {
+  background:
+    radial-gradient(circle at 86% 5%, rgb(132 154 111 / 12%) 0, transparent 32%),
+    linear-gradient(180deg, #fbf8f0 0%, #f5f3ea 46%, #eef2ed 100%);
+
+  .pet-companion-float.is-collapsed {
+    transform: scale(0.62);
+    transform-origin: top right;
+  }
+
+  .greeting-title,
+  .greeting-title-icon {
+    color: #294635;
+  }
+
+  .greeting-subtitle {
+    color: #70786f;
+  }
+
+  .home-mode-switch {
+    border-color: rgb(74 111 82 / 26%);
+    background: rgb(255 252 244 / 88%);
+    box-shadow: 0 8rpx 24rpx rgb(70 89 73 / 10%);
+  }
+
+  .home-mode-switch__arrow,
+  .home-mode-switch__text {
+    color: #3f7253;
+  }
+
+  .date-selector-section {
+    padding: 12rpx 10rpx;
+    border: 1rpx solid rgb(47 84 61 / 8%);
+    border-radius: 30rpx;
+    background: rgb(255 253 247 / 94%);
+    box-shadow: 0 10rpx 26rpx rgb(35 71 50 / 10%);
+    box-sizing: border-box;
+  }
+
+  .date-item {
+    height: 142rpx;
+    padding: 16rpx 0 12rpx;
+
+    .date-day-name {
+      color: #6e675a;
+    }
+
+    .date-day-circle {
+      background: #f9f3e6;
+      box-shadow: none;
+
+      &.is-empty .date-num-text {
+        color: #28382f;
+      }
+
+      &.is-recorded {
+        background: #789a67;
+      }
+    }
+
+    &.is-selected {
+      border-color: #285e40;
+      background: linear-gradient(180deg, #356f4d, #214e37);
+      box-shadow: 0 8rpx 18rpx rgb(21 61 43 / 28%);
+    }
+  }
+
+  .wellness-overview-card,
+  .wellness-daily-advice,
+  .body-status-card {
+    border-color: rgb(190 162 110 / 28%);
+    background: linear-gradient(145deg, #fffaf0 0%, #f4ecdc 100%);
+    box-shadow: 0 12rpx 30rpx rgb(3 26 18 / 24%);
+  }
+
+  .wellness-calorie-gauge {
+    background: conic-gradient(from 225deg, #426f4f 0 var(--wellness-progress), #ddd8ca var(--wellness-progress) 75%, transparent 75% 100%);
+
+    &::after {
+      background: #fbf5e8;
+    }
+  }
+
+  .wellness-calorie-gauge__value,
+  .wellness-macro__title,
+  .body-status-value {
+    color: #23352b;
+  }
+
+  .wellness-calorie-gauge__label,
+  .wellness-calorie-gauge__unit,
+  .wellness-intake-summary,
+  .wellness-macro__target,
+  .body-status-hint,
+  .body-status-unit {
+    color: #80796c;
+  }
+
+  .wellness-calorie-gauge__leaf,
+  .wellness-macro__current {
+    color: #547e58;
+  }
+
+  .wellness-total-progress,
+  .wellness-macro__track,
+  .body-status-progress-bg {
+    background: #ded8ca;
+  }
+
+  .wellness-total-progress__fill,
+  .wellness-macro__fill {
+    background: linear-gradient(90deg, #436f4f, #7e9d6e);
+  }
+
+  .wellness-daily-advice {
+    border-color: rgb(190 162 110 / 52%);
+  }
+
+  .wellness-daily-advice__shade {
+    background: linear-gradient(90deg, rgb(255 250 239 / 92%) 0%, rgb(247 238 219 / 76%) 52%, rgb(247 238 219 / 48%) 100%);
+  }
+
+  .wellness-daily-advice__title,
+  .wellness-daily-advice__term {
+    color: #2b4032;
+  }
+
+  .wellness-daily-advice__summary,
+  .wellness-daily-advice__item-text {
+    color: #6f685b;
+  }
+
+  .wellness-daily-advice__tag {
+    background: #dfe9d5;
+    color: #4f7652;
+
+    &.is-warm {
+      background: #efe0c9;
+      color: #a66d45;
+    }
+  }
+
+  .wellness-food-banner {
+    border-color: rgb(216 189 130 / 52%);
+    background: #173e2d;
+    box-shadow: 0 12rpx 30rpx rgb(3 26 18 / 30%);
+  }
+
+  .wellness-food-banner__shade {
+    background: linear-gradient(90deg, rgb(18 58 41 / 98%) 0%, rgb(18 58 41 / 90%) 48%, rgb(18 58 41 / 28%) 78%);
+  }
+
+  .wellness-food-banner__eyebrow,
+  .wellness-food-banner__action {
+    color: #dec58f;
+  }
+
+  .wellness-food-banner__title {
+    color: #fff3d7;
+  }
+
+  .wellness-food-banner__desc {
+    color: #d6ddcf;
+  }
+
+  .wellness-food-banner__action {
+    background: rgb(238 214 162 / 13%);
+  }
+
+  .body-status-section {
+    margin-bottom: 0;
+  }
+
+  .body-status-card {
+    border: 1rpx solid rgb(190 162 110 / 22%);
+  }
+}
+
+.home-page--dark {
+  .home-mode-switch,
+  .wellness-overview-card,
+  .wellness-daily-advice {
+    border-color: rgb(126 170 150 / 18%);
+    background: rgb(28 39 34 / 92%);
+  }
+
+  .wellness-calorie-gauge::after {
+    background: #1c2722;
+  }
+
+  .wellness-calorie-gauge__value,
+  .wellness-daily-advice__title,
+  .wellness-daily-advice__term {
+    color: #f0f5f2;
+  }
+
+  .wellness-calorie-gauge__label,
+  .wellness-calorie-gauge__unit,
+  .wellness-intake-summary,
+  .wellness-macro__target {
+    color: #9caaa3;
+  }
+
+  .wellness-macro__title,
+  .wellness-daily-advice__summary,
+  .wellness-daily-advice__item-text {
+    color: #d9e4de;
+  }
+
+  .wellness-food-banner__shade {
+    background: linear-gradient(90deg, rgb(23 34 29 / 98%) 0%, rgb(23 34 29 / 90%) 46%, rgb(23 34 29 / 16%) 74%);
+  }
+
+  .wellness-daily-advice__shade {
+    background: linear-gradient(90deg, rgb(23 34 29 / 91%) 0%, rgb(23 34 29 / 78%) 52%, rgb(23 34 29 / 58%) 100%);
+  }
+
+  .wellness-food-banner__title {
+    color: #eef5f1;
+  }
+
+  .wellness-food-banner__desc {
+    color: #aab8b0;
+  }
+}
+
 // 日期选择器 - 新设计：滑动卡片式
 .date-selector-section {
   margin-bottom: 16rpx; // 增加间距
@@ -875,10 +1492,8 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 // 合并卡片样式 - 热量+三大营养素
 .combined-card {
   padding-bottom: 24rpx;
-  border: 1rpx solid rgb(92 184 150 / 34%);
-  box-shadow:
-    0 8rpx 28rpx rgb(35 113 84 / 10%),
-    0 0 0 5rpx rgb(92 184 150 / 5%);
+  border: 0;
+  box-shadow: 0 4rpx 20rpx rgb(0 0 0 / 4%);
 }
 
 .campus-canteen-entry {
@@ -1720,6 +2335,42 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
     padding: 0;
     background: transparent;
     border: none;
+  }
+}
+
+.wellness-overview-card .wellness-nutrition-shell {
+  margin-top: 22rpx;
+  padding-top: 18rpx;
+  border-top: 1rpx solid rgb(103 138 119 / 16%);
+  border-radius: 0;
+
+  &.is-expanded {
+    padding-top: 18rpx;
+    border-top: 1rpx solid rgb(103 138 119 / 16%);
+  }
+}
+
+.wellness-nutrition-expanded-body {
+  margin-top: 16rpx;
+}
+
+.home-page--wellness .wellness-overview-card .wellness-nutrition-shell {
+  border-top-color: rgb(190 162 110 / 24%);
+
+  .nutrition-expand-title,
+  .micros-preview-kicker {
+    color: #2f4737;
+  }
+
+  .nutrition-expand-affordance,
+  .micros-preview-status {
+    background: #e4ecd9;
+  }
+
+  .nutrition-expand-affordance-icon,
+  .nutrition-expand-affordance-text,
+  .micros-preview-status-text {
+    color: #547e58;
   }
 }
 

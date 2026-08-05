@@ -40,8 +40,8 @@
     height: 100%;
   }
 
-  &--custom &__image,
-  &--custom &__frame {
+  &--pixelated &__image,
+  &--pixelated &__frame {
     image-rendering: pixelated;
   }
 
