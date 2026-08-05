@@ -61,7 +61,7 @@ func (f *fakeCatalogService) UpdateItem(_ context.Context, adminID, itemID strin
 func (f *fakeCatalogService) PublishItem(_ context.Context, adminID, itemID string) (*domain.CatalogItem, error) {
 	f.publishAdminID = adminID
 	f.publishItemID = itemID
-	return &domain.CatalogItem{ID: itemID, Status: "published"}, nil
+	return &domain.CatalogItem{ID: itemID, Status: "analysis_pending"}, nil
 }
 
 func newCatalogTestRouter(svc CatalogService) *gin.Engine {
@@ -87,7 +87,7 @@ func TestPublishItemUsesAdminIdentity(t *testing.T) {
 
 	router.ServeHTTP(recorder, request)
 
-	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Equal(t, http.StatusAccepted, recorder.Code)
 	require.Equal(t, "admin-1", svc.publishAdminID)
 	require.Equal(t, "item-1", svc.publishItemID)
 }

@@ -2,9 +2,11 @@ package service
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
+	analyzeservice "food_link/backend/internal/analyze/service"
 	"food_link/backend/internal/campuscatalog/domain"
 	"food_link/backend/pkg/config"
 	"food_link/backend/pkg/storage"
@@ -13,14 +15,19 @@ import (
 )
 
 type fakeCatalogRepo struct {
-	existing      *domain.CollectionBatch
-	existingItems []domain.CatalogItem
-	existingItem  *domain.CatalogItem
-	createdBatch  *domain.CollectionBatch
-	createdItems  []domain.CatalogItem
-	updatedItem   *domain.CatalogItem
-	publishedItem *domain.CatalogItem
-	publishedBy   string
+	existing            *domain.CollectionBatch
+	existingItems       []domain.CatalogItem
+	existingItem        *domain.CatalogItem
+	createdBatch        *domain.CollectionBatch
+	createdItems        []domain.CatalogItem
+	updatedItem         *domain.CatalogItem
+	publishedItem       *domain.CatalogItem
+	publishedBy         string
+	analysisPendingItem *domain.CatalogItem
+	analysisFailedItem  *domain.CatalogItem
+	linkedTaskID        string
+	missingNutrition    []domain.CatalogItem
+	hiddenPublicItemID  string
 }
 
 func (f *fakeCatalogRepo) FindBatchByClientKey(context.Context, string) (*domain.CollectionBatch, error) {
@@ -42,6 +49,15 @@ func (f *fakeCatalogRepo) ListItemsByBatch(context.Context, string) ([]domain.Ca
 	return append([]domain.CatalogItem(nil), f.existingItems...), nil
 }
 
+func (f *fakeCatalogRepo) ListPublishedItemsMissingNutrition(context.Context, int) ([]domain.CatalogItem, error) {
+	return append([]domain.CatalogItem(nil), f.missingNutrition...), nil
+}
+
+func (f *fakeCatalogRepo) HidePublicItemForNutritionBackfill(_ context.Context, itemID string) error {
+	f.hiddenPublicItemID = itemID
+	return nil
+}
+
 func (f *fakeCatalogRepo) FindItemByID(context.Context, string) (*domain.CatalogItem, error) {
 	return f.existingItem, nil
 }
@@ -52,14 +68,51 @@ func (f *fakeCatalogRepo) UpdateItem(_ context.Context, item *domain.CatalogItem
 	return nil
 }
 
-func (f *fakeCatalogRepo) PublishItem(_ context.Context, item *domain.CatalogItem, adminID string, publishedAt time.Time) error {
+func (f *fakeCatalogRepo) MarkAnalysisPending(_ context.Context, item *domain.CatalogItem, adminID string, startedAt time.Time) error {
 	copyItem := *item
-	copyItem.Status = "published"
-	copyItem.PublishedAt = &publishedAt
-	copyItem.PublishedByAdminID = &adminID
-	f.publishedItem = &copyItem
+	copyItem.Status = "analysis_pending"
+	copyItem.AnalysisError = ""
+	copyItem.AnalysisStartedAt = &startedAt
+	f.analysisPendingItem = &copyItem
 	f.publishedBy = adminID
 	return nil
+}
+
+func (f *fakeCatalogRepo) LinkAnalysisTask(_ context.Context, itemID, taskID string) error {
+	f.linkedTaskID = taskID
+	return nil
+}
+
+func (f *fakeCatalogRepo) MarkAnalysisFailed(_ context.Context, itemID, message string, failedAt time.Time) error {
+	if f.existingItem != nil {
+		copyItem := *f.existingItem
+		copyItem.Status = "analysis_failed"
+		copyItem.AnalysisError = message
+		f.analysisFailedItem = &copyItem
+	}
+	return nil
+}
+
+type fakeCatalogAnalyzeSubmitter struct {
+	taskID string
+	err    error
+	userID string
+	input  analyzeservice.SubmitTaskInput
+}
+
+func (f *fakeCatalogAnalyzeSubmitter) SubmitInternalAnalyzeTask(_ context.Context, userID string, input analyzeservice.SubmitTaskInput) (string, error) {
+	f.userID = userID
+	f.input = input
+	return f.taskID, f.err
+}
+
+type fakeCatalogAnalysisUserResolver struct {
+	userID string
+	err    error
+}
+
+func (f fakeCatalogAnalysisUserResolver) ResolveInternalAnalysisUserID(context.Context, string, string) (string, error) {
+	return f.userID, f.err
 }
 
 func TestCreateBatchSupportsMealWindowsAndIncompleteEvidence(t *testing.T) {
@@ -256,6 +309,20 @@ func TestUpdatePublishedItemMarksChangesPending(t *testing.T) {
 	require.Equal(t, "changes_pending", item.Status)
 }
 
+func TestUpdateItemRejectsChangesWhileAnalysisIsPending(t *testing.T) {
+	repo := &fakeCatalogRepo{existingItem: &domain.CatalogItem{
+		ID: "item-1", BatchID: "batch-1", Status: "analysis_pending",
+		OrganizationName: "清华大学", CanteenName: "紫荆园",
+	}}
+	svc := NewCatalogService(repo, nil)
+
+	_, err := svc.UpdateItem(context.Background(), "admin-1", "item-1", UpdateCatalogItemInput{})
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "AI 分析进行中")
+	require.Nil(t, repo.updatedItem)
+}
+
 func TestPublishItemRejectsIncompleteDraft(t *testing.T) {
 	repo := &fakeCatalogRepo{existingItem: &domain.CatalogItem{
 		ID: "item-1", Status: "draft", MissingFields: []string{"image"}, CompletenessStatus: "incomplete",
@@ -268,7 +335,48 @@ func TestPublishItemRejectsIncompleteDraft(t *testing.T) {
 	require.Nil(t, repo.publishedItem)
 }
 
-func TestPublishItemPublishesCompleteDraft(t *testing.T) {
+func TestPublishItemQueuesExistingFoodAnalysisBeforePublishing(t *testing.T) {
+	price := 12.0
+	repo := &fakeCatalogRepo{existingItem: &domain.CatalogItem{
+		ID: "item-1", BatchID: "batch-1", Status: "draft", EntryType: "dish", Name: "番茄炒饭",
+		OrganizationName: "清华大学", CanteenName: "紫荆园", ImagePaths: []string{"campus-food/rice.jpg"},
+		PriceType: "fixed", Price: &price, CompletenessStatus: "complete",
+	}}
+	submitter := &fakeCatalogAnalyzeSubmitter{taskID: "task-1"}
+	svc := NewCatalogService(repo, nil)
+	svc.ConfigureAnalysis(submitter, fakeCatalogAnalysisUserResolver{userID: "system-user-1"})
+
+	item, err := svc.PublishItem(context.Background(), "admin-1", "item-1")
+
+	require.NoError(t, err)
+	require.NotNil(t, repo.analysisPendingItem)
+	require.Equal(t, "admin-1", repo.publishedBy)
+	require.Equal(t, "analysis_pending", item.Status)
+	require.Equal(t, "task-1", repo.linkedTaskID)
+	require.Equal(t, "system-user-1", submitter.userID)
+	require.Equal(t, "strict_separate", *submitter.input.ExecutionMode)
+	require.Equal(t, "campus_public_food", submitter.input.ExtraPayload["public_food_source_type"])
+	require.Equal(t, "item-1", submitter.input.ExtraPayload["campus_catalog_item_id"])
+	require.Equal(t, "image", submitter.input.SourceType)
+}
+
+func TestPublishItemDoesNotDuplicatePendingAnalysis(t *testing.T) {
+	repo := &fakeCatalogRepo{existingItem: &domain.CatalogItem{
+		ID: "item-1", Status: "analysis_pending", CompletenessStatus: "complete", AnalysisTaskID: stringPtr("task-existing"),
+	}}
+	submitter := &fakeCatalogAnalyzeSubmitter{taskID: "task-new"}
+	svc := NewCatalogService(repo, nil)
+	svc.ConfigureAnalysis(submitter, fakeCatalogAnalysisUserResolver{userID: "system-user-1"})
+
+	item, err := svc.PublishItem(context.Background(), "admin-1", "item-1")
+
+	require.NoError(t, err)
+	require.Equal(t, "analysis_pending", item.Status)
+	require.Empty(t, submitter.userID)
+	require.Empty(t, repo.linkedTaskID)
+}
+
+func TestPublishItemMarksAnalysisFailedWhenSubmissionFails(t *testing.T) {
 	price := 12.0
 	repo := &fakeCatalogRepo{existingItem: &domain.CatalogItem{
 		ID: "item-1", BatchID: "batch-1", Status: "draft", EntryType: "dish", Name: "番茄炒饭",
@@ -276,15 +384,37 @@ func TestPublishItemPublishesCompleteDraft(t *testing.T) {
 		PriceType: "fixed", Price: &price, CompletenessStatus: "complete",
 	}}
 	svc := NewCatalogService(repo, nil)
+	svc.ConfigureAnalysis(&fakeCatalogAnalyzeSubmitter{err: errors.New("queue unavailable")}, fakeCatalogAnalysisUserResolver{userID: "system-user-1"})
 
-	item, err := svc.PublishItem(context.Background(), "admin-1", "item-1")
+	_, err := svc.PublishItem(context.Background(), "admin-1", "item-1")
+
+	require.Error(t, err)
+	require.NotNil(t, repo.analysisFailedItem)
+	require.Equal(t, "analysis_failed", repo.analysisFailedItem.Status)
+}
+
+func TestPublishedNutritionBackfillReusesNormalStrictSeparatePublishPath(t *testing.T) {
+	price := 18.0
+	item := domain.CatalogItem{
+		ID: "item-history", BatchID: "batch-1", Status: "published", EntryType: "dish", Name: "柠檬金汤大锅（酸辣）",
+		OrganizationName: "北京大学", CanteenName: "家园食堂", ImagePaths: []string{"campus-food/lemon-soup.jpg"},
+		PriceType: "fixed", Price: &price, CompletenessStatus: "complete",
+	}
+	repo := &fakeCatalogRepo{existingItem: &item, missingNutrition: []domain.CatalogItem{item}}
+	submitter := &fakeCatalogAnalyzeSubmitter{taskID: "task-history"}
+	svc := NewCatalogService(repo, nil)
+	svc.ConfigureAnalysis(submitter, fakeCatalogAnalysisUserResolver{userID: "system-user-1"})
+
+	queued, err := svc.SubmitPublishedNutritionBackfill(context.Background(), 100)
 
 	require.NoError(t, err)
-	require.NotNil(t, repo.publishedItem)
-	require.Equal(t, "admin-1", repo.publishedBy)
-	require.Equal(t, "published", item.Status)
-	require.NotNil(t, item.PublishedAt)
+	require.Equal(t, 1, queued)
+	require.Equal(t, "strict_separate", *submitter.input.ExecutionMode)
+	require.Equal(t, "item-history", submitter.input.ExtraPayload["campus_catalog_item_id"])
+	require.Equal(t, "item-history", repo.hiddenPublicItemID)
 }
+
+func stringPtr(value string) *string { return &value }
 
 func windowLayoutLabel(value string) string {
 	if value == "continuous_counter" {
