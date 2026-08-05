@@ -85,6 +85,23 @@ type CatalogItem struct {
 	CreatedByAdminID    *string        `gorm:"column:created_by_admin_id" json:"created_by_admin_id,omitempty"`
 	CreatedAt           *time.Time     `gorm:"column:created_at" json:"created_at,omitempty"`
 	UpdatedAt           *time.Time     `gorm:"column:updated_at" json:"updated_at,omitempty"`
+	TotalCalories       *float64       `gorm:"column:total_calories;->;-:migration" json:"total_calories,omitempty"`
+	TotalProtein        *float64       `gorm:"column:total_protein;->;-:migration" json:"total_protein,omitempty"`
+	TotalCarbs          *float64       `gorm:"column:total_carbs;->;-:migration" json:"total_carbs,omitempty"`
+	TotalFat            *float64       `gorm:"column:total_fat;->;-:migration" json:"total_fat,omitempty"`
+	ClientStatus        string         `gorm:"column:client_status;->;-:migration" json:"client_status,omitempty"`
 }
 
 func (CatalogItem) TableName() string { return "campus_food_catalog_items" }
+
+type CatalogItemFilter struct {
+	BatchID   string
+	SchoolID  string
+	CampusID  string
+	CanteenID string
+	WindowID  string
+	Status    string
+	Query     string
+	Limit     int
+	Offset    int
+}
