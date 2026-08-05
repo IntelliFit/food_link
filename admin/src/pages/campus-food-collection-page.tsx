@@ -230,10 +230,23 @@ export function CampusFoodCollectionPage({ onLogout, onMenuChange }: CampusFoodC
   const [editingItem, setEditingItem] = useState<CatalogItemEditDraft | null>(null)
   const [itemSaving, setItemSaving] = useState(false)
   const [publishingItemId, setPublishingItemId] = useState('')
+  const [batchPublishMode, setBatchPublishMode] = useState(false)
+  const [selectedPublishItemIds, setSelectedPublishItemIds] = useState<string[]>([])
+  const [batchPublishing, setBatchPublishing] = useState(false)
+  const [batchPublishDone, setBatchPublishDone] = useState(0)
+  const [batchPublishTotal, setBatchPublishTotal] = useState(0)
 
   const isUniversity = venueType === 'university'
   const apiBase = displayApiBase()
   const fileCount = useMemo(() => entries.reduce((sum, entry) => sum + entry.files.length, 0), [entries])
+  const publishableBatchItems = useMemo(
+    () => selectedBatchItems.filter(isCatalogItemPublishable),
+    [selectedBatchItems],
+  )
+  const selectedPublishItems = useMemo(() => {
+    const selectedIds = new Set(selectedPublishItemIds)
+    return publishableBatchItems.filter((item) => selectedIds.has(item.id))
+  }, [publishableBatchItems, selectedPublishItemIds])
 
   useEffect(() => {
     void searchSchools('清华大学', true)
@@ -308,7 +321,10 @@ export function CampusFoodCollectionPage({ onLogout, onMenuChange }: CampusFoodC
   }
 
   async function loadBatchItems(batchId: string) {
+    if (batchPublishing) return
     setSelectedBatchId(batchId)
+    setBatchPublishMode(false)
+    setSelectedPublishItemIds([])
     setHistoryBusy(true)
     try {
       const data = await adminRequest<{ items: CatalogItem[] }>(`/api/admin/campus-food-collection/items?batch_id=${encodeURIComponent(batchId)}`)
@@ -457,6 +473,64 @@ export function CampusFoodCollectionPage({ onLogout, onMenuChange }: CampusFoodC
       toast.error(error instanceof Error ? error.message : '提交上线失败')
     } finally {
       setPublishingItemId('')
+    }
+  }
+
+  function toggleBatchPublishMode() {
+    if (batchPublishing) return
+    setBatchPublishMode((current) => !current)
+    setSelectedPublishItemIds([])
+    setBatchPublishDone(0)
+    setBatchPublishTotal(0)
+  }
+
+  function togglePublishItemSelection(item: CatalogItem) {
+    if (!isCatalogItemPublishable(item) || batchPublishing) return
+    setSelectedPublishItemIds((current) => current.includes(item.id)
+      ? current.filter((itemId) => itemId !== item.id)
+      : [...current, item.id])
+  }
+
+  function toggleAllPublishableItems() {
+    if (batchPublishing) return
+    const allIds = publishableBatchItems.map((item) => item.id)
+    const allSelected = allIds.length > 0 && allIds.every((itemId) => selectedPublishItemIds.includes(itemId))
+    setSelectedPublishItemIds(allSelected ? [] : allIds)
+  }
+
+  async function publishSelectedCatalogItems() {
+    if (!selectedPublishItems.length || batchPublishing) return
+    const selectedCount = selectedPublishItems.length
+    if (!window.confirm(`确定将选中的 ${selectedCount} 条校园食物批量提交上线吗？上线后小程序用户将看到这些内容。`)) return
+
+    setBatchPublishing(true)
+    setBatchPublishDone(0)
+    setBatchPublishTotal(selectedCount)
+    const publishedItems = new Map<string, CatalogItem>()
+    const failedItemIds: string[] = []
+    try {
+      await runWithConcurrency(selectedPublishItems, 3, async (item) => {
+        try {
+          const data = await adminRequest<{ item: CatalogItem }>(`/api/admin/campus-food-collection/items/${encodeURIComponent(item.id)}/publish`, {
+            method: 'POST',
+          })
+          publishedItems.set(data.item.id, data.item)
+        } catch {
+          failedItemIds.push(item.id)
+        } finally {
+          setBatchPublishDone((current) => current + 1)
+        }
+      })
+      setSelectedBatchItems((current) => current.map((item) => publishedItems.get(item.id) || item))
+      setSelectedPublishItemIds(failedItemIds)
+      if (failedItemIds.length) {
+        toast.error(`批量提交完成：成功 ${publishedItems.size} 条，失败 ${failedItemIds.length} 条；失败项已保留勾选`)
+      } else {
+        setBatchPublishMode(false)
+        toast.success(`已批量提交上线 ${publishedItems.size} 条校园食物`)
+      }
+    } finally {
+      setBatchPublishing(false)
     }
   }
 
@@ -856,6 +930,7 @@ export function CampusFoodCollectionPage({ onLogout, onMenuChange }: CampusFoodC
                 type='button'
                 className={`collection-batch-card ${selectedBatchId === batch.id ? 'selected' : ''}`}
                 onClick={() => void loadBatchItems(batch.id)}
+                disabled={batchPublishing}
               >
                 <div className='collection-batch-heading'>
                   <strong title={batch.batch_name}>{batch.batch_name}</strong>
@@ -872,60 +947,112 @@ export function CampusFoodCollectionPage({ onLogout, onMenuChange }: CampusFoodC
             ))}
           </div>
           {selectedBatchId ? (
-            <div className='overflow-x-auto rounded-xl border'>
-              <table className='w-full min-w-[1020px] text-sm'>
-                <thead>
-                  <tr className='border-b text-left'>
-                    <th className='p-3'>图片</th>
-                    <th className='p-3'>条目</th>
-                    <th className='p-3'>窗口/餐时</th>
-                    <th className='p-3'>售卖/价格</th>
-                    <th className='p-3'>待补</th>
-                    <th className='p-3 text-right'>操作</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {selectedBatchItems.map((item) => (
-                    <tr key={item.id} className='border-b last:border-0'>
-                      <td className='p-3'>
-                        {item.image_paths?.[0] ? <img className='h-16 w-20 rounded-lg object-cover' src={item.image_paths[0]} alt={item.name || '食堂采集图片'} /> : <span className='pill'>缺图</span>}
-                      </td>
-                      <td className='p-3'><strong>{item.name || '待补名称'}</strong><div className='muted'>{labelOf(entryTypeOptions, item.entry_type)} · {labelOf(imageKindOptions, item.image_kind)}</div></td>
-                      <td className='p-3'>{[item.floor, item.window_name].filter(Boolean).join(' · ') || '-'}<div className='muted'>{(item.meal_periods || []).map((value) => labelOf(mealOptions, value)).join(' / ') || '餐时待确认'}</div></td>
-                      <td className='p-3'>{labelOf(serviceOptions, item.service_mode)}<div className='muted'>{priceSummary(item)}</div></td>
-                      <td className='p-3'>
-                        <div className='flex flex-wrap gap-1'>
-                          {(item.missing_fields || []).length
-                            ? (item.missing_fields || []).map((field) => <span key={field} className='pill inactive'>{missingFieldLabel(field)}</span>)
-                            : <span className='pill active'>已完整</span>}
-                        </div>
-                        <div className='mt-2'>
-                          <span className={`pill ${item.status === 'published' ? 'active' : item.status === 'changes_pending' ? 'warning' : ''}`}>
-                            {catalogPublishStatusLabel(item.status)}
-                          </span>
-                        </div>
-                      </td>
-                      <td className='p-3 text-right'>
-                        <div className='collection-item-actions'>
-                          <button type='button' className='min-h-8 px-3' onClick={() => openItemEditor(item)} disabled={publishingItemId === item.id}>编辑补充</button>
-                          <button
-                            type='button'
-                            className='primary min-h-8 px-3'
-                            onClick={() => void publishCatalogItem(item)}
-                            disabled={publishingItemId === item.id || item.status === 'published' || Boolean((item.missing_fields || []).length)}
-                            title={(item.missing_fields || []).length ? '请先补齐名称、图片和价格' : undefined}
-                          >
-                            {publishingItemId === item.id ? <span className='spinner small' /> : null}
-                            <span className={publishingItemId === item.id ? 'ml-2' : ''}>
-                              {item.status === 'published' ? '已上线' : item.status === 'changes_pending' ? '提交更新' : '提交上线'}
-                            </span>
-                          </button>
-                        </div>
-                      </td>
+            <div className='space-y-3'>
+              <div className={`collection-batch-publish-toolbar ${batchPublishMode ? 'active' : ''}`}>
+                <div>
+                  <strong>{batchPublishMode ? `已选择 ${selectedPublishItems.length} 条` : `可上线 ${publishableBatchItems.length} 条`}</strong>
+                  <p>
+                    {batchPublishing
+                      ? `正在提交 ${batchPublishDone}/${batchPublishTotal}`
+                      : batchPublishMode
+                        ? '只可选择字段完整且尚未上线的条目；失败项会保留勾选，可直接重试。'
+                        : '进入批量模式后，可一次选择多条完整菜品提交到小程序。'}
+                  </p>
+                </div>
+                <div className='actions collection-batch-publish-actions'>
+                  {batchPublishMode ? (
+                    <>
+                      <button type='button' onClick={toggleAllPublishableItems} disabled={batchPublishing || publishableBatchItems.length === 0}>
+                        {publishableBatchItems.length > 0 && selectedPublishItems.length === publishableBatchItems.length ? '取消全选' : '全选可上线'}
+                      </button>
+                      <button type='button' onClick={toggleBatchPublishMode} disabled={batchPublishing}>退出批量模式</button>
+                      <button type='button' className='primary' onClick={() => void publishSelectedCatalogItems()} disabled={batchPublishing || selectedPublishItems.length === 0}>
+                        {batchPublishing ? <span className='spinner small' /> : null}
+                        <span className={batchPublishing ? 'ml-2' : ''}>
+                          {batchPublishing ? `提交中 ${batchPublishDone}/${batchPublishTotal}` : `批量提交上线（${selectedPublishItems.length}）`}
+                        </span>
+                      </button>
+                    </>
+                  ) : (
+                    <button type='button' className='primary' onClick={toggleBatchPublishMode} disabled={publishableBatchItems.length === 0} title={publishableBatchItems.length === 0 ? '当前批次没有可上线条目' : undefined}>
+                      批量上线模式
+                    </button>
+                  )}
+                </div>
+              </div>
+              <div className='overflow-x-auto rounded-xl border'>
+                <table className={`w-full text-sm ${batchPublishMode ? 'min-w-[1080px]' : 'min-w-[1020px]'}`}>
+                  <thead>
+                    <tr className='border-b text-left'>
+                      {batchPublishMode ? <th className='collection-select-cell p-3'>选择</th> : null}
+                      <th className='p-3'>图片</th>
+                      <th className='p-3'>条目</th>
+                      <th className='p-3'>窗口/餐时</th>
+                      <th className='p-3'>售卖/价格</th>
+                      <th className='p-3'>待补</th>
+                      <th className='p-3 text-right'>操作</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {selectedBatchItems.map((item) => {
+                      const publishable = isCatalogItemPublishable(item)
+                      const selected = selectedPublishItemIds.includes(item.id)
+                      return (
+                        <tr key={item.id} className={`border-b last:border-0 ${selected ? 'collection-item-selected' : ''}`}>
+                          {batchPublishMode ? (
+                            <td className='collection-select-cell p-3'>
+                              <input
+                                className='collection-select-checkbox'
+                                type='checkbox'
+                                checked={selected}
+                                disabled={!publishable || batchPublishing}
+                                aria-label={`选择${item.name || '未命名条目'}`}
+                                title={publishable ? '选择此条目' : item.status === 'published' ? '该条目已经上线' : '请先补齐名称、图片和价格'}
+                                onChange={() => togglePublishItemSelection(item)}
+                              />
+                            </td>
+                          ) : null}
+                          <td className='p-3'>
+                            {item.image_paths?.[0] ? <img className='h-16 w-20 rounded-lg object-cover' src={item.image_paths[0]} alt={item.name || '食堂采集图片'} /> : <span className='pill'>缺图</span>}
+                          </td>
+                          <td className='p-3'><strong>{item.name || '待补名称'}</strong><div className='muted'>{labelOf(entryTypeOptions, item.entry_type)} · {labelOf(imageKindOptions, item.image_kind)}</div></td>
+                          <td className='p-3'>{[item.floor, item.window_name].filter(Boolean).join(' · ') || '-'}<div className='muted'>{(item.meal_periods || []).map((value) => labelOf(mealOptions, value)).join(' / ') || '餐时待确认'}</div></td>
+                          <td className='p-3'>{labelOf(serviceOptions, item.service_mode)}<div className='muted'>{priceSummary(item)}</div></td>
+                          <td className='p-3'>
+                            <div className='flex flex-wrap gap-1'>
+                              {(item.missing_fields || []).length
+                                ? (item.missing_fields || []).map((field) => <span key={field} className='pill inactive'>{missingFieldLabel(field)}</span>)
+                                : <span className='pill active'>已完整</span>}
+                            </div>
+                            <div className='mt-2'>
+                              <span className={`pill ${item.status === 'published' ? 'active' : item.status === 'changes_pending' ? 'warning' : ''}`}>
+                                {catalogPublishStatusLabel(item.status)}
+                              </span>
+                            </div>
+                          </td>
+                          <td className='p-3 text-right'>
+                            <div className='collection-item-actions'>
+                              <button type='button' className='min-h-8 px-3' onClick={() => openItemEditor(item)} disabled={publishingItemId === item.id || batchPublishing}>编辑补充</button>
+                              <button
+                                type='button'
+                                className='primary min-h-8 px-3'
+                                onClick={() => void publishCatalogItem(item)}
+                                disabled={publishingItemId === item.id || batchPublishing || item.status === 'published' || Boolean((item.missing_fields || []).length)}
+                                title={(item.missing_fields || []).length ? '请先补齐名称、图片和价格' : undefined}
+                              >
+                                {publishingItemId === item.id ? <span className='spinner small' /> : null}
+                                <span className={publishingItemId === item.id ? 'ml-2' : ''}>
+                                  {item.status === 'published' ? '已上线' : item.status === 'changes_pending' ? '提交更新' : '提交上线'}
+                                </span>
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
           ) : null}
         </section>
@@ -1301,6 +1428,12 @@ function guessName(filename: string): string {
 function toggleValue(values: string[], value: string): string[] {
   const next = values.includes(value) ? values.filter((item) => item !== value) : [...values.filter((item) => item !== 'unknown'), value]
   return next.length ? next : ['unknown']
+}
+
+function isCatalogItemPublishable(item: CatalogItem): boolean {
+  return item.status !== 'published'
+    && item.completeness_status === 'complete'
+    && (item.missing_fields || []).length === 0
 }
 
 function toggleSimpleValue(values: string[], value: string): string[] {
