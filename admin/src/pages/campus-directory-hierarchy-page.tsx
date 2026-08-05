@@ -375,7 +375,7 @@ export function CampusDirectoryPage({ onLogout, onMenuChange }: CampusDirectoryP
     try {
       await adminRequest(endpoint, {
         method: editor.mode === "create" ? "POST" : "PATCH",
-        body: JSON.stringify(cleanPayload(editor.value)),
+        body: JSON.stringify(entityPayload(editor.kind, editor.value)),
       });
       toast.success(editor.mode === "create" ? "创建成功" : "保存成功");
       setEditor(null);
@@ -836,6 +836,10 @@ function entityEndpoint(kind: EntityKind, id?: string) {
 function entityLabel(kind: EntityKind) { return kind === "school" ? "学校" : kind === "campus" ? "校区" : kind === "canteen" ? "食堂" : "窗口"; }
 function normalizeRecord(item: object) { return Object.fromEntries(Object.entries(item).map(([key, value]) => [key, value ?? ""])); }
 function cleanPayload(value: Record<string, unknown>) { return Object.fromEntries(Object.entries(value).map(([key, raw]) => [key, typeof raw === "string" ? raw.trim() : raw])); }
+function entityPayload(kind: EntityKind, value: Record<string, unknown>) {
+  const allowed = new Set(entityFields(kind).map((field) => field.key));
+  return cleanPayload(Object.fromEntries(Object.entries(value).filter(([key]) => allowed.has(key))));
+}
 
 function dishDraft(item?: CatalogItem): Record<string, unknown> {
   return { name: item?.name || "", entry_type: item?.entry_type || "menu_item", price: item?.price ?? "", price_unit: item?.price_unit || "元/份", price_text: item?.price_text || "", portion_description: item?.portion_description || "", description: item?.description || "", raw_text: item?.raw_text || "", notes: item?.notes || "", image_paths: item?.image_paths || [] };
