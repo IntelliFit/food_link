@@ -166,7 +166,7 @@ func TestHidePublicItemForNutritionBackfillOnlyHidesInvalidVersion(t *testing.T)
 	var invalidSaved, validSaved publishedCatalogItem
 	require.NoError(t, db.First(&invalidSaved, "id = ?", invalid.ID).Error)
 	require.NoError(t, db.First(&validSaved, "id = ?", valid.ID).Error)
-	require.Equal(t, "analysis_pending", invalidSaved.Status)
+	require.Equal(t, "pending", invalidSaved.Status)
 	require.Equal(t, "published", validSaved.Status)
 }
 
