@@ -167,7 +167,7 @@ func (r *CatalogRepo) HidePublicItemForNutritionBackfill(ctx context.Context, it
 	return r.db.WithContext(ctx).Table("public_food_library").
 		Where("id = ?", strings.TrimSpace(itemID)).
 		Where("analysis_task_id IS NULL OR COALESCE(total_calories, 0) <= 0").
-		Update("status", "analysis_pending").Error
+		Update("status", "pending").Error
 }
 
 func (r *CatalogRepo) FindItemByID(ctx context.Context, itemID string) (*domain.CatalogItem, error) {
