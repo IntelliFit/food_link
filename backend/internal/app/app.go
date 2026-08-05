@@ -1016,8 +1016,7 @@ func (a *App) startCampusCatalogNutritionBackfill(backfiller campusCatalogNutrit
 	a.catalogBackfillDone = done
 	go func() {
 		defer close(done)
-		initial := time.NewTimer(5 * time.Second)
-		defer initial.Stop()
+		runCampusCatalogNutritionBackfill(ctx, backfiller)
 		ticker := time.NewTicker(10 * time.Minute)
 		defer ticker.Stop()
 		for {
@@ -1025,8 +1024,6 @@ func (a *App) startCampusCatalogNutritionBackfill(backfiller campusCatalogNutrit
 			case <-ctx.Done():
 				logger.Info(context.Background(), "历史校园菜品营养补分析维护已停止")
 				return
-			case <-initial.C:
-				runCampusCatalogNutritionBackfill(ctx, backfiller)
 			case <-ticker.C:
 				runCampusCatalogNutritionBackfill(ctx, backfiller)
 			}

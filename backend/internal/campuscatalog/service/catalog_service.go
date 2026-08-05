@@ -533,6 +533,7 @@ func (s *CatalogService) SubmitPublishedNutritionBackfill(ctx context.Context, l
 	if err != nil {
 		return 0, err
 	}
+	logger.Info(ctx, "历史校园菜品营养补分析扫描完成", slog.Int("candidate_count", len(items)))
 	queued := 0
 	for index := range items {
 		item := &items[index]

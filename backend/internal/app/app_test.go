@@ -30,7 +30,7 @@ func TestAppPackage(t *testing.T) {
 	assert.True(t, true)
 }
 
-func TestStartCampusCatalogNutritionBackfillRunsAfterWorkerStartup(t *testing.T) {
+func TestStartCampusCatalogNutritionBackfillRunsImmediately(t *testing.T) {
 	app := &App{}
 	backfiller := &recordingCampusNutritionBackfiller{called: make(chan int, 1)}
 	app.startCampusCatalogNutritionBackfill(backfiller)
@@ -42,8 +42,8 @@ func TestStartCampusCatalogNutritionBackfillRunsAfterWorkerStartup(t *testing.T)
 	select {
 	case limit := <-backfiller.called:
 		assert.Equal(t, 100, limit)
-	case <-time.After(6 * time.Second):
-		t.Fatal("历史校园菜品营养补分析未在 worker 启动后执行")
+	case <-time.After(time.Second):
+		t.Fatal("历史校园菜品营养补分析未立即执行")
 	}
 }
 
