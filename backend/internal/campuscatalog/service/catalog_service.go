@@ -29,6 +29,7 @@ type CatalogRepository interface {
 	CreateBatchWithItems(ctx context.Context, batch *domain.CollectionBatch, items []domain.CatalogItem) error
 	ListBatches(ctx context.Context, limit, offset int) ([]domain.CollectionBatch, int64, error)
 	ListItemsByBatch(ctx context.Context, batchID string) ([]domain.CatalogItem, error)
+	ListItems(ctx context.Context, filter domain.CatalogItemFilter) ([]domain.CatalogItem, int64, error)
 	ListPublishedItemsMissingNutrition(ctx context.Context, limit int) ([]domain.CatalogItem, error)
 	HidePublicItemForNutritionBackfill(ctx context.Context, itemID string) error
 	FindItemByID(ctx context.Context, itemID string) (*domain.CatalogItem, error)
@@ -36,6 +37,7 @@ type CatalogRepository interface {
 	MarkAnalysisPending(ctx context.Context, item *domain.CatalogItem, adminID string, startedAt time.Time) error
 	LinkAnalysisTask(ctx context.Context, itemID, taskID string) error
 	MarkAnalysisFailed(ctx context.Context, itemID, message string, failedAt time.Time) error
+	SoftDeleteItem(ctx context.Context, itemID string) error
 }
 
 type CatalogAnalyzeTaskSubmitter interface {
@@ -126,6 +128,25 @@ type BatchListResult struct {
 	Page  int                      `json:"page"`
 	Limit int                      `json:"limit"`
 	Total int64                    `json:"total"`
+}
+
+type CatalogItemListInput struct {
+	BatchID   string
+	SchoolID  string
+	CampusID  string
+	CanteenID string
+	WindowID  string
+	Status    string
+	Query     string
+	Page      int
+	Limit     int
+}
+
+type CatalogItemListResult struct {
+	Items []domain.CatalogItem `json:"items"`
+	Page  int                  `json:"page"`
+	Limit int                  `json:"limit"`
+	Total int64                `json:"total"`
 }
 
 func (s *CatalogService) UploadImage(ctx context.Context, adminID, sourceFilename, contentType string, data []byte) (string, error) {
@@ -281,6 +302,64 @@ func (s *CatalogService) ListItemsByBatch(ctx context.Context, batchID string) (
 	}
 	s.resolveItemImages(items)
 	return items, nil
+}
+
+func (s *CatalogService) ListItems(ctx context.Context, input CatalogItemListInput) (*CatalogItemListResult, error) {
+	input.BatchID = strings.TrimSpace(input.BatchID)
+	input.SchoolID = strings.TrimSpace(input.SchoolID)
+	input.CampusID = strings.TrimSpace(input.CampusID)
+	input.CanteenID = strings.TrimSpace(input.CanteenID)
+	input.WindowID = strings.TrimSpace(input.WindowID)
+	input.Status = strings.TrimSpace(input.Status)
+	input.Query = strings.TrimSpace(input.Query)
+	if input.BatchID == "" && input.SchoolID == "" && input.CampusID == "" && input.CanteenID == "" && input.WindowID == "" {
+		return nil, badRequest("至少选择采集批次、学校、校区、食堂或窗口之一")
+	}
+	if input.Page <= 0 {
+		input.Page = 1
+	}
+	if input.Limit <= 0 {
+		input.Limit = 50
+	}
+	if input.Limit > 200 {
+		input.Limit = 200
+	}
+	items, total, err := s.repo.ListItems(ctx, domain.CatalogItemFilter{
+		BatchID: input.BatchID, SchoolID: input.SchoolID, CampusID: input.CampusID,
+		CanteenID: input.CanteenID, WindowID: input.WindowID, Status: input.Status,
+		Query: input.Query, Limit: input.Limit, Offset: (input.Page - 1) * input.Limit,
+	})
+	if err != nil {
+		return nil, err
+	}
+	s.resolveItemImages(items)
+	return &CatalogItemListResult{Items: items, Page: input.Page, Limit: input.Limit, Total: total}, nil
+}
+
+func (s *CatalogService) DeleteItem(ctx context.Context, adminID, itemID string) error {
+	itemID = strings.TrimSpace(itemID)
+	adminID = strings.TrimSpace(adminID)
+	if itemID == "" {
+		return badRequest("采集条目 ID 不能为空")
+	}
+	item, err := s.repo.FindItemByID(ctx, itemID)
+	if err != nil {
+		return err
+	}
+	if item == nil {
+		return notFound("食堂采集条目不存在")
+	}
+	if item.Status == "analysis_pending" {
+		return badRequest("AI 分析进行中，暂不能删除")
+	}
+	if err := s.repo.SoftDeleteItem(ctx, itemID); err != nil {
+		logger.Error(ctx, "管理员删除校园菜品失败", err,
+			slog.String("admin_id", adminID), slog.String("item_id", itemID))
+		return err
+	}
+	logger.Info(ctx, "管理员删除校园菜品成功",
+		slog.String("admin_id", adminID), slog.String("item_id", itemID))
+	return nil
 }
 
 func (s *CatalogService) UpdateItem(ctx context.Context, adminID, itemID string, input UpdateCatalogItemInput) (*domain.CatalogItem, error) {

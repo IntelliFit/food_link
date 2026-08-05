@@ -80,6 +80,72 @@ func (r *CatalogRepo) ListItemsByBatch(ctx context.Context, batchID string) ([]d
 	return items, nil
 }
 
+func (r *CatalogRepo) ListItems(ctx context.Context, filter domain.CatalogItemFilter) ([]domain.CatalogItem, int64, error) {
+	base := r.db.WithContext(ctx).
+		Table("campus_food_catalog_items AS i").
+		Where("i.status <> ?", "deleted")
+	if filter.BatchID != "" {
+		base = base.Where("i.batch_id = ?", filter.BatchID)
+	}
+	if filter.SchoolID != "" {
+		base = base.Where("i.school_id = ?", filter.SchoolID)
+	}
+	if filter.CampusID != "" {
+		base = base.Where("i.campus_id = ?", filter.CampusID)
+	}
+	if filter.CanteenID != "" {
+		base = base.Where("i.canteen_id = ?", filter.CanteenID)
+	}
+	if filter.WindowID != "" {
+		base = base.Where("i.window_id = ?", filter.WindowID)
+	}
+	if filter.Status != "" && filter.Status != "all" {
+		base = base.Where("i.status = ?", filter.Status)
+	}
+	if filter.Query != "" {
+		like := "%" + filter.Query + "%"
+		base = base.Where("i.name ILIKE ? OR i.raw_text ILIKE ? OR i.window_name ILIKE ?", like, like, like)
+	}
+	var total int64
+	if err := base.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	var items []domain.CatalogItem
+	if err := base.
+		Select(`i.*,
+			p.total_calories AS total_calories,
+			p.total_protein AS total_protein,
+			p.total_carbs AS total_carbs,
+			p.total_fat AS total_fat,
+			COALESCE(p.status, '') AS client_status`).
+		Joins("LEFT JOIN public_food_library AS p ON p.id = i.id").
+		Order("i.created_at DESC, i.id ASC").
+		Limit(filter.Limit).
+		Offset(filter.Offset).
+		Scan(&items).Error; err != nil {
+		return nil, 0, err
+	}
+	return items, total, nil
+}
+
+func (r *CatalogRepo) SoftDeleteItem(ctx context.Context, itemID string) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		now := time.Now()
+		result := tx.Table("campus_food_catalog_items").
+			Where("id = ? AND status <> ?", strings.TrimSpace(itemID), "deleted").
+			Updates(map[string]any{"status": "deleted", "updated_at": now})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected != 1 {
+			return gorm.ErrRecordNotFound
+		}
+		return tx.Table("public_food_library").
+			Where("id = ?", strings.TrimSpace(itemID)).
+			Updates(map[string]any{"status": "deleted", "updated_at": now}).Error
+	})
+}
+
 func (r *CatalogRepo) ListPublishedItemsMissingNutrition(ctx context.Context, limit int) ([]domain.CatalogItem, error) {
 	if limit <= 0 {
 		limit = 100

@@ -49,6 +49,11 @@ func (f *fakeCatalogRepo) ListItemsByBatch(context.Context, string) ([]domain.Ca
 	return append([]domain.CatalogItem(nil), f.existingItems...), nil
 }
 
+func (f *fakeCatalogRepo) ListItems(context.Context, domain.CatalogItemFilter) ([]domain.CatalogItem, int64, error) {
+	items := append([]domain.CatalogItem(nil), f.existingItems...)
+	return items, int64(len(items)), nil
+}
+
 func (f *fakeCatalogRepo) ListPublishedItemsMissingNutrition(context.Context, int) ([]domain.CatalogItem, error) {
 	return append([]domain.CatalogItem(nil), f.missingNutrition...), nil
 }
@@ -92,6 +97,8 @@ func (f *fakeCatalogRepo) MarkAnalysisFailed(_ context.Context, itemID, message 
 	}
 	return nil
 }
+
+func (f *fakeCatalogRepo) SoftDeleteItem(context.Context, string) error { return nil }
 
 type fakeCatalogAnalyzeSubmitter struct {
 	taskID string

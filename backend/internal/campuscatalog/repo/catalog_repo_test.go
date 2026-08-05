@@ -98,6 +98,57 @@ func TestListPublishedItemsMissingNutritionOnlyReturnsInvalidPublicRows(t *testi
 	require.Empty(t, items)
 }
 
+func TestListItemsFiltersHierarchyAndHydratesClientNutrition(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:"+uuid.NewString()+"?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&domain.CatalogItem{}, &publishedCatalogItem{}))
+	schoolID, campusID, canteenID := uuid.NewString(), uuid.NewString(), uuid.NewString()
+	windowID, otherWindowID := uuid.NewString(), uuid.NewString()
+	item := domain.CatalogItem{
+		ID: uuid.NewString(), BatchID: uuid.NewString(), EntryType: "dish", Name: "鸡蛋饼",
+		SchoolID: &schoolID, CampusID: &campusID, CanteenID: &canteenID, WindowID: &windowID,
+		OrganizationName: "测试大学", CanteenName: "一食堂", Status: "published",
+	}
+	other := item
+	other.ID, other.WindowID, other.Name = uuid.NewString(), &otherWindowID, "咖喱炒饭"
+	require.NoError(t, db.Create(&item).Error)
+	require.NoError(t, db.Create(&other).Error)
+	require.NoError(t, db.Create(&publishedCatalogItem{
+		ID: item.ID, FoodName: item.Name, Status: "published", IsCampusFood: true,
+		TotalCalories: 320, TotalProtein: 12, TotalCarbs: 42, TotalFat: 9,
+	}).Error)
+
+	items, total, err := NewCatalogRepo(db).ListItems(context.Background(), domain.CatalogItemFilter{
+		SchoolID: schoolID, CanteenID: canteenID, WindowID: windowID, Limit: 50,
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, int64(1), total)
+	require.Len(t, items, 1)
+	require.Equal(t, item.ID, items[0].ID)
+	require.Equal(t, "published", items[0].ClientStatus)
+	require.NotNil(t, items[0].TotalCalories)
+	require.Equal(t, 320.0, *items[0].TotalCalories)
+}
+
+func TestSoftDeleteItemAlsoHidesClientVersion(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:"+uuid.NewString()+"?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&domain.CatalogItem{}, &publishedCatalogItem{}))
+	item := domain.CatalogItem{ID: uuid.NewString(), BatchID: uuid.NewString(), EntryType: "dish", Name: "待删除菜品", OrganizationName: "测试大学", CanteenName: "一食堂", Status: "published"}
+	require.NoError(t, db.Create(&item).Error)
+	require.NoError(t, db.Create(&publishedCatalogItem{ID: item.ID, FoodName: item.Name, Status: "published", IsCampusFood: true}).Error)
+
+	require.NoError(t, NewCatalogRepo(db).SoftDeleteItem(context.Background(), item.ID))
+
+	var catalog domain.CatalogItem
+	var publicItem publishedCatalogItem
+	require.NoError(t, db.Unscoped().First(&catalog, "id = ?", item.ID).Error)
+	require.NoError(t, db.Unscoped().First(&publicItem, "id = ?", item.ID).Error)
+	require.Equal(t, "deleted", catalog.Status)
+	require.Equal(t, "deleted", publicItem.Status)
+}
+
 func TestHidePublicItemForNutritionBackfillOnlyHidesInvalidVersion(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open("file:"+uuid.NewString()+"?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
