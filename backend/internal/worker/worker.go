@@ -18,6 +18,7 @@ import (
 	analyzerepo "food_link/backend/internal/analyze/repo"
 	analyzeservice "food_link/backend/internal/analyze/service"
 	authrepo "food_link/backend/internal/auth/repo"
+	campuscatalogrepo "food_link/backend/internal/campuscatalog/repo"
 	expiryservice "food_link/backend/internal/expiry/service"
 	foodrecorddomain "food_link/backend/internal/foodrecord/domain"
 	foodrecordservice "food_link/backend/internal/foodrecord/service"
@@ -74,20 +75,21 @@ func SupportedTaskTypes() []string {
 }
 
 type Runner struct {
-	tasks      *analyzerepo.TaskRepo
-	precision  *analyzerepo.PrecisionRepo
-	publicFood *publicfoodrepo.PublicFoodRepo
-	analyze    analyzeRunner
-	ocr        *userservice.OCRService
-	healthDocs *userrepo.HealthDocumentRepo
-	users      *authrepo.UserRepo
-	expiry     *expiryservice.Recognizer
-	notifier   *expiryservice.NotificationWorker
-	exercise   *healthservice.ExerciseService
-	nutrition  *foodrecordservice.FoodNutritionService
-	queue      taskqueue.Queue
-	storage    *storage.Client
-	credit     CreditGuard
+	tasks         *analyzerepo.TaskRepo
+	precision     *analyzerepo.PrecisionRepo
+	publicFood    *publicfoodrepo.PublicFoodRepo
+	campusCatalog *campuscatalogrepo.CatalogRepo
+	analyze       analyzeRunner
+	ocr           *userservice.OCRService
+	healthDocs    *userrepo.HealthDocumentRepo
+	users         *authrepo.UserRepo
+	expiry        *expiryservice.Recognizer
+	notifier      *expiryservice.NotificationWorker
+	exercise      *healthservice.ExerciseService
+	nutrition     *foodrecordservice.FoodNutritionService
+	queue         taskqueue.Queue
+	storage       *storage.Client
+	credit        CreditGuard
 }
 
 type analyzeRunner interface {
@@ -151,6 +153,10 @@ func NewRunner(
 
 func (r *Runner) ConfigureCreditGuard(guard CreditGuard) {
 	r.credit = guard
+}
+
+func (r *Runner) ConfigureCampusCatalog(repo *campuscatalogrepo.CatalogRepo) {
+	r.campusCatalog = repo
 }
 
 func (r *Runner) Run(ctx context.Context, opts Options) error {
@@ -815,15 +821,18 @@ func (r *Runner) processFood(ctx context.Context, task *domain.AnalysisTask) err
 	if err != nil {
 		return err
 	}
-	err = r.completeTask(ctx, task, result)
-	if err != nil {
-		r.errorLog(ctx, "食物任务完成状态更新失败", nil, slog.String("task_id", task.ID), logger.AnalysisTaskID(task.ID))
-		apm.RecordError(ctx, err, attribute.String("analysis.stage", "complete_task"))
+	if err := analyzeservice.ValidateResolvedNutritionItems(extractItems(result["items"])); err != nil {
 		return err
 	}
 	if err := r.writeBackCampusPublicFood(ctx, task, result); err != nil {
 		r.errorLog(ctx, "校园食堂分析结果回写失败", err, slog.String("task_id", task.ID), logger.AnalysisTaskID(task.ID))
 		apm.RecordError(ctx, err, attribute.String("analysis.stage", "campus_public_food_writeback"))
+		return err
+	}
+	err = r.completeTask(ctx, task, result)
+	if err != nil {
+		r.errorLog(ctx, "食物任务完成状态更新失败", nil, slog.String("task_id", task.ID), logger.AnalysisTaskID(task.ID))
+		apm.RecordError(ctx, err, attribute.String("analysis.stage", "complete_task"))
 		return err
 	}
 	apm.SetAttributes(ctx,
@@ -847,10 +856,16 @@ func (r *Runner) processFood(ctx context.Context, task *domain.AnalysisTask) err
 }
 
 func (r *Runner) writeBackCampusPublicFood(ctx context.Context, task *domain.AnalysisTask, result map[string]any) error {
-	if r.publicFood == nil || task == nil {
+	if task == nil {
 		return nil
 	}
 	if campusPublicFoodSourceType(task.Payload) != "campus_public_food" {
+		return nil
+	}
+	if catalogItemID := stringFromMap(task.Payload, "campus_catalog_item_id"); catalogItemID != "" && r.campusCatalog != nil {
+		return r.campusCatalog.CompleteAnalyzedItem(ctx, catalogItemID, task.ID, result, time.Now())
+	}
+	if r.publicFood == nil {
 		return nil
 	}
 	itemID := stringFromMap(task.Payload, "public_food_item_id")
@@ -861,7 +876,15 @@ func (r *Runner) writeBackCampusPublicFood(ctx context.Context, task *domain.Ana
 }
 
 func (r *Runner) linkCampusPublicFoodAnalysisTask(ctx context.Context, payload map[string]any, taskID string) error {
-	if r.publicFood == nil || campusPublicFoodSourceType(payload) != "campus_public_food" {
+	if campusPublicFoodSourceType(payload) != "campus_public_food" {
+		return nil
+	}
+	if catalogItemID := stringFromMap(payload, "campus_catalog_item_id"); catalogItemID != "" && r.campusCatalog != nil {
+		if err := r.campusCatalog.LinkAnalysisTask(ctx, catalogItemID, taskID); err != nil {
+			return err
+		}
+	}
+	if r.publicFood == nil {
 		return nil
 	}
 	itemID := stringFromMap(payload, "public_food_item_id")
@@ -886,6 +909,12 @@ func copyCampusPublicFoodPayload(from, to map[string]any) {
 	to["public_food_source_type"] = "campus_public_food"
 	if itemID := stringFromMap(from, "public_food_item_id"); itemID != "" {
 		to["public_food_item_id"] = itemID
+	}
+	if itemID := stringFromMap(from, "campus_catalog_item_id"); itemID != "" {
+		to["campus_catalog_item_id"] = itemID
+	}
+	if adminID := stringFromMap(from, "published_by_admin_id"); adminID != "" {
+		to["published_by_admin_id"] = adminID
 	}
 }
 
@@ -2384,8 +2413,7 @@ func (r *Runner) processPrecisionAggregate(ctx context.Context, task *domain.Ana
 	}); err != nil {
 		return err
 	}
-	err = r.completeTask(ctx, task, finalResult)
-	if err != nil {
+	if err := analyzeservice.ValidateResolvedNutritionItems(extractItems(finalResult["items"])); err != nil {
 		return err
 	}
 	if err := r.writeBackCampusPublicFood(ctx, task, finalResult); err != nil {
@@ -2393,7 +2421,7 @@ func (r *Runner) processPrecisionAggregate(ctx context.Context, task *domain.Ana
 		apm.RecordError(ctx, err, attribute.String("analysis.stage", "campus_public_food_precision_writeback"))
 		return err
 	}
-	return nil
+	return r.completeTask(ctx, task, finalResult)
 }
 
 func normalizePrecisionPlanResult(parsed map[string]any) map[string]any {
@@ -4655,6 +4683,14 @@ func (r *Runner) failTask(ctx context.Context, task *domain.AnalysisTask, taskEr
 	}
 	task.Status = "failed"
 	task.ErrorMessage = &msg
+	if r.campusCatalog != nil {
+		if itemID := stringFromMap(task.Payload, "campus_catalog_item_id"); itemID != "" {
+			if err := r.campusCatalog.MarkAnalysisFailed(ctx, itemID, msg, time.Now()); err != nil {
+				r.warn(ctx, "回写校园菜品 AI 分析失败状态失败",
+					slog.String("task_id", task.ID), slog.String("item_id", itemID), logger.Err(err))
+			}
+		}
+	}
 	if task.TaskType == "health_report" {
 		if err := r.markHealthReportFailed(ctx, task, msg); err != nil {
 			r.warn(ctx, "回写体检报告失败状态失败",

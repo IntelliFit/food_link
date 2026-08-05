@@ -474,6 +474,7 @@ func ensureConstraints(ctx context.Context, db *gorm.DB) error {
 		addFK("public_food_library_user_id_fkey", "public_food_library", "user_id", "weapp_user", "id", "CASCADE"),
 		addFK("public_food_library_source_record_id_fkey", "public_food_library", "source_record_id", "user_food_records", "id", "SET NULL"),
 		addFK("public_food_library_analysis_task_id_fkey", "public_food_library", "analysis_task_id", "analysis_tasks", "id", "SET NULL"),
+		addFK("campus_food_catalog_items_analysis_task_id_fkey", "campus_food_catalog_items", "analysis_task_id", "analysis_tasks", "id", "SET NULL"),
 		addFK("school_campuses_school_id_fkey", "school_campuses", "school_id", "schools", "id", "CASCADE"),
 		addFK("school_canteens_school_id_fkey", "school_canteens", "school_id", "schools", "id", "CASCADE"),
 		addFK("school_canteens_campus_id_fkey", "school_canteens", "campus_id", "school_campuses", "id", "SET NULL"),

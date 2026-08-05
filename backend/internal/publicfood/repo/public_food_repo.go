@@ -90,20 +90,38 @@ func (r *PublicFoodRepo) LinkAnalysisTask(ctx context.Context, itemID, taskID st
 }
 
 func (r *PublicFoodRepo) UpdateNutritionFromAnalysis(ctx context.Context, itemID string, result map[string]any) error {
-	totalCalories, totalProtein, totalCarbs, totalFat := nutritionTotalsFromResult(result)
+	snapshot := NutritionSnapshotFromResult(result)
 	return r.db.WithContext(ctx).
 		Model(&domain.PublicFoodItem{}).
 		Where("id = ?", itemID).
 		Updates(map[string]any{
-			"total_calories": totalCalories,
-			"total_protein":  totalProtein,
-			"total_carbs":    totalCarbs,
-			"total_fat":      totalFat,
-			"items":          datatypes.JSONSlice[map[string]any](mapSliceFromAny(result["items"])),
-			"description":    stringFromAny(result["description"]),
-			"insight":        stringFromAny(result["insight"]),
+			"total_calories": snapshot.TotalCalories,
+			"total_protein":  snapshot.TotalProtein,
+			"total_carbs":    snapshot.TotalCarbs,
+			"total_fat":      snapshot.TotalFat,
+			"items":          datatypes.JSONSlice[map[string]any](snapshot.Items),
+			"description":    snapshot.Description,
+			"insight":        snapshot.Insight,
 			"updated_at":     time.Now(),
 		}).Error
+}
+
+type NutritionSnapshot struct {
+	TotalCalories float64
+	TotalProtein  float64
+	TotalCarbs    float64
+	TotalFat      float64
+	Items         []map[string]any
+	Description   string
+	Insight       string
+}
+
+func NutritionSnapshotFromResult(result map[string]any) NutritionSnapshot {
+	calories, protein, carbs, fat := nutritionTotalsFromResult(result)
+	return NutritionSnapshot{
+		TotalCalories: calories, TotalProtein: protein, TotalCarbs: carbs, TotalFat: fat,
+		Items: mapSliceFromAny(result["items"]), Description: stringFromAny(result["description"]), Insight: stringFromAny(result["insight"]),
+	}
 }
 
 func (r *PublicFoodRepo) ListPublished(ctx context.Context, f ListFilter) ([]domain.PublicFoodItem, error) {

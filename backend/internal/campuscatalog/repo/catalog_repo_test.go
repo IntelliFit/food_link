@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"food_link/backend/internal/campuscatalog/domain"
-	publicfooddomain "food_link/backend/internal/publicfood/domain"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -14,7 +13,13 @@ import (
 	"gorm.io/gorm"
 )
 
-func TestPublishItemCreatesPublicCampusFoodAndMarksCatalogPublished(t *testing.T) {
+func TestPublicPriceTypeMapsCatalogEnums(t *testing.T) {
+	require.Equal(t, "fixed", publicPriceType("fixed"))
+	require.Equal(t, "weight", publicPriceType("by_weight"))
+	require.Equal(t, "unknown", publicPriceType("freeform"))
+}
+
+func TestCompleteAnalyzedItemPublishesNutritionAndCatalogAtomically(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open("file:"+uuid.NewString()+"?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(&domain.CatalogItem{}, &publishedCatalogItem{}))
@@ -22,39 +27,116 @@ func TestPublishItemCreatesPublicCampusFoodAndMarksCatalogPublished(t *testing.T
 	price := 12.0
 	item := &domain.CatalogItem{
 		ID: uuid.NewString(), BatchID: uuid.NewString(), EntryType: "dish", Name: "番茄炒饭",
-		Description: "现炒", OrganizationName: "清华大学", AreaName: "紫荆园", CanteenName: "紫荆园",
-		Floor: "2F", WindowName: "炒饭档口", PriceType: "fixed", Price: &price, PriceUnit: "元/份",
-		ImagePaths: []string{"campus-food/rice.jpg"}, CompletenessStatus: "complete", Status: "draft",
+		OrganizationName: "清华大学", CanteenName: "紫荆园", PriceType: "fixed", Price: &price,
+		PriceUnit: "元/份", ImagePaths: []string{"campus-food/rice.jpg"}, CompletenessStatus: "complete", Status: "analysis_pending",
 	}
 	require.NoError(t, db.Create(item).Error)
 	repo := NewCatalogRepo(db)
-	publishedAt := time.Date(2026, 8, 4, 12, 0, 0, 0, time.UTC)
+	completedAt := time.Date(2026, 8, 5, 12, 0, 0, 0, time.UTC)
 
-	require.NoError(t, repo.PublishItem(context.Background(), item, "admin-1", publishedAt))
+	require.NoError(t, repo.CompleteAnalyzedItem(context.Background(), item.ID, "task-1", map[string]any{
+		"description": "一份番茄炒饭",
+		"items": []map[string]any{{"name": "番茄炒饭", "nutrients": map[string]any{
+			"calories": 420.0, "protein": 12.0, "carbs": 68.0, "fat": 11.0,
+		}}},
+	}, completedAt))
 
-	var saved publishedCatalogItem
-	require.NoError(t, db.Where("id = ?", item.ID).First(&saved).Error)
-	require.Nil(t, saved.UserID)
-	require.Equal(t, "published", saved.Status)
-	require.Equal(t, "campus", saved.Type)
-	require.True(t, saved.IsCampusFood)
-	require.Equal(t, "番茄炒饭", saved.FoodName)
-	require.Equal(t, []string{"campus-food/rice.jpg"}, saved.ImagePaths)
-	require.Equal(t, "清华大学 · 紫荆园 · 2F · 炒饭档口", saved.CampusLocationText)
+	var publicItem publishedCatalogItem
+	require.NoError(t, db.First(&publicItem, "id = ?", item.ID).Error)
+	require.Equal(t, "published", publicItem.Status)
+	require.Equal(t, 420.0, publicItem.TotalCalories)
+	require.Equal(t, 12.0, publicItem.TotalProtein)
+	require.Equal(t, "task-1", *publicItem.AnalysisTaskID)
 
 	var catalog domain.CatalogItem
 	require.NoError(t, db.First(&catalog, "id = ?", item.ID).Error)
 	require.Equal(t, "published", catalog.Status)
-	require.NotNil(t, catalog.PublishedAt)
-	require.Equal(t, "admin-1", *catalog.PublishedByAdminID)
-
-	var publicView publicfooddomain.PublicFoodItem
-	require.NoError(t, db.Table("public_food_library").First(&publicView, "id = ?", item.ID).Error)
-	require.Empty(t, publicView.UserID)
+	require.Equal(t, "task-1", *catalog.AnalysisTaskID)
+	require.NotNil(t, catalog.AnalysisCompletedAt)
 }
 
-func TestPublicPriceTypeMapsCatalogEnums(t *testing.T) {
-	require.Equal(t, "fixed", publicPriceType("fixed"))
-	require.Equal(t, "weight", publicPriceType("by_weight"))
-	require.Equal(t, "unknown", publicPriceType("freeform"))
+func TestCompleteAnalyzedItemRejectsEmptyNutritionWithoutPublishing(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:"+uuid.NewString()+"?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&domain.CatalogItem{}, &publishedCatalogItem{}))
+	item := &domain.CatalogItem{
+		ID: uuid.NewString(), BatchID: uuid.NewString(), EntryType: "dish", Name: "未知菜品",
+		OrganizationName: "清华大学", CanteenName: "紫荆园", Status: "analysis_pending",
+	}
+	require.NoError(t, db.Create(item).Error)
+	repo := NewCatalogRepo(db)
+
+	err = repo.CompleteAnalyzedItem(context.Background(), item.ID, "task-empty", map[string]any{"items": []map[string]any{}}, time.Now())
+
+	require.Error(t, err)
+	var publicCount int64
+	require.NoError(t, db.Table("public_food_library").Where("id = ?", item.ID).Count(&publicCount).Error)
+	require.Zero(t, publicCount)
+}
+
+func TestListPublishedItemsMissingNutritionOnlyReturnsInvalidPublicRows(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:"+uuid.NewString()+"?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&domain.CatalogItem{}, &publishedCatalogItem{}))
+	item := &domain.CatalogItem{
+		ID: uuid.NewString(), BatchID: uuid.NewString(), EntryType: "dish", Name: "历史菜品",
+		OrganizationName: "北京大学", CanteenName: "家园食堂", Status: "published",
+	}
+	require.NoError(t, db.Create(item).Error)
+	require.NoError(t, db.Create(&publishedCatalogItem{ID: item.ID, FoodName: item.Name, Status: "published", IsCampusFood: true}).Error)
+	repo := NewCatalogRepo(db)
+
+	items, err := repo.ListPublishedItemsMissingNutrition(context.Background(), 100)
+	require.NoError(t, err)
+	require.Len(t, items, 1)
+
+	taskID := uuid.NewString()
+	require.NoError(t, db.Model(&publishedCatalogItem{}).Where("id = ?", item.ID).
+		Updates(map[string]any{"analysis_task_id": taskID, "total_calories": 320.0}).Error)
+	items, err = repo.ListPublishedItemsMissingNutrition(context.Background(), 100)
+	require.NoError(t, err)
+	require.Empty(t, items)
+}
+
+func TestHidePublicItemForNutritionBackfillOnlyHidesInvalidVersion(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:"+uuid.NewString()+"?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&publishedCatalogItem{}))
+	invalid := &publishedCatalogItem{ID: uuid.NewString(), FoodName: "零营养旧数据", Status: "published", TotalCalories: 0}
+	taskID := uuid.NewString()
+	valid := &publishedCatalogItem{ID: uuid.NewString(), FoodName: "有效旧版", Status: "published", AnalysisTaskID: &taskID, TotalCalories: 360}
+	require.NoError(t, db.Create(invalid).Error)
+	require.NoError(t, db.Create(valid).Error)
+	repo := NewCatalogRepo(db)
+
+	require.NoError(t, repo.HidePublicItemForNutritionBackfill(context.Background(), invalid.ID))
+	require.NoError(t, repo.HidePublicItemForNutritionBackfill(context.Background(), valid.ID))
+
+	var invalidSaved, validSaved publishedCatalogItem
+	require.NoError(t, db.First(&invalidSaved, "id = ?", invalid.ID).Error)
+	require.NoError(t, db.First(&validSaved, "id = ?", valid.ID).Error)
+	require.Equal(t, "analysis_pending", invalidSaved.Status)
+	require.Equal(t, "published", validSaved.Status)
+}
+
+func TestMarkAnalysisFailedPreservesExistingClientVersion(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:"+uuid.NewString()+"?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&domain.CatalogItem{}, &publishedCatalogItem{}))
+	item := &domain.CatalogItem{
+		ID: uuid.NewString(), BatchID: uuid.NewString(), EntryType: "dish", Name: "已上线旧版",
+		OrganizationName: "清华大学", CanteenName: "紫荆园", Status: "analysis_pending",
+	}
+	require.NoError(t, db.Create(item).Error)
+	require.NoError(t, db.Create(&publishedCatalogItem{
+		ID: item.ID, FoodName: item.Name, Status: "published", IsCampusFood: true, TotalCalories: 360,
+	}).Error)
+	repo := NewCatalogRepo(db)
+
+	require.NoError(t, repo.MarkAnalysisFailed(context.Background(), item.ID, "模型超时", time.Now()))
+
+	var publicItem publishedCatalogItem
+	require.NoError(t, db.First(&publicItem, "id = ?", item.ID).Error)
+	require.Equal(t, "published", publicItem.Status)
+	require.Equal(t, 360.0, publicItem.TotalCalories)
 }

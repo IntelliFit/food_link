@@ -406,7 +406,7 @@ func New(cfg *config.Config) (*App, error) {
 		shutdownLog:   logShutdown,
 		taskQueue:     taskQueue,
 	}
-	app.startEmbeddedWorker(cfg, analyzeTaskRepo, analyzePrecisionRepo, publicFoodRepo, analyzeSvc, ocrSvc, healthDocRepo, userRepo, expiryRecognizer, expiryNotifier, exerciseSvc, frNutritionSvc, membershipSvc, taskQueue, storageClient)
+	app.startEmbeddedWorker(cfg, analyzeTaskRepo, analyzePrecisionRepo, publicFoodRepo, campuscatalogrepo.NewCatalogRepo(db), analyzeSvc, ocrSvc, healthDocRepo, userRepo, expiryRecognizer, expiryNotifier, exerciseSvc, frNutritionSvc, membershipSvc, taskQueue, storageClient)
 	app.startNutritionEmbeddingMaintenance(nutritionEmbeddingMaintainer)
 
 	engine.POST("/api/login", loginHandler.Login)
@@ -743,6 +743,22 @@ func New(cfg *config.Config) (*App, error) {
 	adminCampusDirectoryHandler := adminhandler.NewCampusDirectoryHandler(db)
 	adminCampusCatalogRepo := campuscatalogrepo.NewCatalogRepo(db)
 	adminCampusCatalogSvc := campuscatalogservice.NewCatalogService(adminCampusCatalogRepo, storageClient)
+	adminCampusCatalogSvc.ConfigureAnalysis(
+		analyzeTaskSvc,
+		campuscatalogservice.NewInternalAnalysisUserResolver(userRepo),
+	)
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		defer cancel()
+		queued, err := adminCampusCatalogSvc.SubmitPublishedNutritionBackfill(ctx, 100)
+		if err != nil {
+			logger.Error(ctx, "历史校园菜品营养补分析启动失败", err)
+			return
+		}
+		if queued > 0 {
+			logger.Info(ctx, "历史校园菜品营养补分析已提交", slog.Int("queued_count", queued))
+		}
+	}()
 	adminCampusCatalogHandler := campuscataloghandler.NewCatalogHandler(adminCampusCatalogSvc)
 	adminAuth := adminAuthHandler.AdminAuth()
 	adminAPI := engine.Group("/api/admin", adminCORS(os.Getenv("ADMIN_CORS_ALLOWED_ORIGINS")))
@@ -886,6 +902,7 @@ func (a *App) startEmbeddedWorker(
 	taskRepo *analyzerepo.TaskRepo,
 	precisionRepo *analyzerepo.PrecisionRepo,
 	publicFoodRepo *publicfoodrepo.PublicFoodRepo,
+	campusCatalogRepo *campuscatalogrepo.CatalogRepo,
 	analyzeSvc *analyzeservice.AnalyzeService,
 	ocrSvc *userservice.OCRService,
 	healthDocRepo *userrepo.HealthDocumentRepo,
@@ -928,6 +945,7 @@ func (a *App) startEmbeddedWorker(
 		storageClient,
 	)
 	runner.ConfigureCreditGuard(membershipSvc)
+	runner.ConfigureCampusCatalog(campusCatalogRepo)
 
 	workerCtx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	analyzeservice "food_link/backend/internal/analyze/service"
 	"food_link/backend/internal/campuscatalog/domain"
 	commonerrors "food_link/backend/internal/common/errors"
 	"food_link/backend/pkg/logger"
@@ -28,14 +29,33 @@ type CatalogRepository interface {
 	CreateBatchWithItems(ctx context.Context, batch *domain.CollectionBatch, items []domain.CatalogItem) error
 	ListBatches(ctx context.Context, limit, offset int) ([]domain.CollectionBatch, int64, error)
 	ListItemsByBatch(ctx context.Context, batchID string) ([]domain.CatalogItem, error)
+	ListPublishedItemsMissingNutrition(ctx context.Context, limit int) ([]domain.CatalogItem, error)
+	HidePublicItemForNutritionBackfill(ctx context.Context, itemID string) error
 	FindItemByID(ctx context.Context, itemID string) (*domain.CatalogItem, error)
 	UpdateItem(ctx context.Context, item *domain.CatalogItem) error
-	PublishItem(ctx context.Context, item *domain.CatalogItem, adminID string, publishedAt time.Time) error
+	MarkAnalysisPending(ctx context.Context, item *domain.CatalogItem, adminID string, startedAt time.Time) error
+	LinkAnalysisTask(ctx context.Context, itemID, taskID string) error
+	MarkAnalysisFailed(ctx context.Context, itemID, message string, failedAt time.Time) error
+}
+
+type CatalogAnalyzeTaskSubmitter interface {
+	SubmitInternalAnalyzeTask(ctx context.Context, userID string, input analyzeservice.SubmitTaskInput) (string, error)
+}
+
+type CatalogAnalysisUserResolver interface {
+	ResolveInternalAnalysisUserID(ctx context.Context, purpose, actorID string) (string, error)
 }
 
 type CatalogService struct {
-	repo    CatalogRepository
-	storage *storage.Client
+	repo          CatalogRepository
+	storage       *storage.Client
+	analyzeTasks  CatalogAnalyzeTaskSubmitter
+	analysisUsers CatalogAnalysisUserResolver
+}
+
+func (s *CatalogService) ConfigureAnalysis(submitter CatalogAnalyzeTaskSubmitter, users CatalogAnalysisUserResolver) {
+	s.analyzeTasks = submitter
+	s.analysisUsers = users
 }
 
 func NewCatalogService(repo CatalogRepository, storageClient *storage.Client) *CatalogService {
@@ -279,6 +299,9 @@ func (s *CatalogService) UpdateItem(ctx context.Context, adminID, itemID string,
 	if current == nil {
 		return nil, notFound("食堂采集条目不存在")
 	}
+	if current.Status == "analysis_pending" {
+		return nil, badRequest("AI 分析进行中，完成或失败后再编辑")
+	}
 
 	now := time.Now()
 	batch := domain.CollectionBatch{
@@ -351,23 +374,124 @@ func (s *CatalogService) PublishItem(ctx context.Context, adminID, itemID string
 	if item == nil {
 		return nil, notFound("食堂采集条目不存在")
 	}
+	if item.Status == "analysis_pending" {
+		items := []domain.CatalogItem{*item}
+		s.resolveItemImages(items)
+		return &items[0], nil
+	}
 	if item.CompletenessStatus != "complete" || len(item.MissingFields) > 0 {
 		return nil, badRequest("请先补齐名称、图片和价格后再提交上线")
 	}
-	publishedAt := time.Now()
-	if err := s.repo.PublishItem(ctx, item, adminID, publishedAt); err != nil {
-		logger.Error(ctx, "发布食堂采集条目失败", err,
+	if s.analyzeTasks == nil || s.analysisUsers == nil {
+		return nil, fmt.Errorf("校园菜品 AI 分析服务未配置")
+	}
+	analysisUserID, err := s.analysisUsers.ResolveInternalAnalysisUserID(ctx, "campus_catalog", adminID)
+	if err != nil {
+		logger.Error(ctx, "解析校园菜品内部分析用户失败", err,
+			slog.String("admin_id", adminID), slog.String("item_id", itemID))
+		return nil, err
+	}
+	startedAt := time.Now()
+	if err := s.repo.MarkAnalysisPending(ctx, item, adminID, startedAt); err != nil {
+		logger.Error(ctx, "标记食堂采集条目等待 AI 分析失败", err,
 			slog.String("admin_id", adminID), slog.String("item_id", itemID), slog.String("batch_id", item.BatchID))
 		return nil, err
 	}
-	item.Status = "published"
-	item.PublishedAt = &publishedAt
-	item.PublishedByAdminID = trimStringPtr(&adminID)
-	logger.Info(ctx, "食堂采集条目提交上线完成",
-		slog.String("admin_id", adminID), slog.String("item_id", itemID), slog.String("batch_id", item.BatchID))
+	imageURLs := append([]string(nil), item.ImagePaths...)
+	if s.storage != nil {
+		imageURLs = s.storage.ResolveReferenceURLs("food-images", imageURLs)
+	}
+	mode := "strict_separate"
+	extraPayload := map[string]any{
+		"public_food_source_type": "campus_public_food",
+		"public_food_item_id":     item.ID,
+		"campus_catalog_item_id":  item.ID,
+		"published_by_admin_id":   adminID,
+		"food_name":               item.Name,
+		"school_name":             item.OrganizationName,
+		"campus_name":             item.AreaName,
+		"canteen_name":            item.CanteenName,
+		"floor":                   item.Floor,
+		"window_name":             item.WindowName,
+	}
+	input := analyzeservice.SubmitTaskInput{
+		ImageURLs: imageURLs, ExecutionMode: &mode, SourceType: "image", SuggestRatioEnabled: true,
+		AdditionalContext: catalogAnalysisContext(item), ExtraPayload: extraPayload,
+	}
+	if len(imageURLs) > 0 {
+		input.ImageURL = imageURLs[0]
+	}
+	taskID, submitErr := s.analyzeTasks.SubmitInternalAnalyzeTask(ctx, analysisUserID, input)
+	if submitErr != nil {
+		_ = s.repo.MarkAnalysisFailed(ctx, item.ID, submitErr.Error(), time.Now())
+		logger.Error(ctx, "提交校园菜品 AI 分析任务失败", submitErr,
+			slog.String("admin_id", adminID), slog.String("item_id", itemID), slog.String("batch_id", item.BatchID))
+		return nil, submitErr
+	}
+	if err := s.repo.LinkAnalysisTask(ctx, item.ID, taskID); err != nil {
+		_ = s.repo.MarkAnalysisFailed(ctx, item.ID, err.Error(), time.Now())
+		return nil, err
+	}
+	item.Status = "analysis_pending"
+	item.AnalysisTaskID = trimStringPtr(&taskID)
+	item.AnalysisError = ""
+	item.AnalysisStartedAt = &startedAt
+	logger.Info(ctx, "食堂采集条目已提交 AI 分析",
+		slog.String("admin_id", adminID), slog.String("item_id", itemID), slog.String("batch_id", item.BatchID), slog.String("analysis_task_id", taskID))
 	items := []domain.CatalogItem{*item}
 	s.resolveItemImages(items)
 	return &items[0], nil
+}
+
+// SubmitPublishedNutritionBackfill reuses the normal catalog publish path so
+// historical public items never bypass strict_separate analysis. Pending rows
+// are excluded by the repository query, making startup retries idempotent.
+func (s *CatalogService) SubmitPublishedNutritionBackfill(ctx context.Context, limit int) (int, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	items, err := s.repo.ListPublishedItemsMissingNutrition(ctx, limit)
+	if err != nil {
+		return 0, err
+	}
+	queued := 0
+	for index := range items {
+		item := &items[index]
+		if hideErr := s.repo.HidePublicItemForNutritionBackfill(ctx, item.ID); hideErr != nil {
+			logger.Warn(ctx, "隐藏无有效营养的历史校园菜品失败",
+				slog.String("item_id", item.ID), slog.String("food_name", item.Name), logger.Err(hideErr))
+			continue
+		}
+		adminID := ""
+		if item.PublishedByAdminID != nil {
+			adminID = strings.TrimSpace(*item.PublishedByAdminID)
+		}
+		if _, submitErr := s.PublishItem(ctx, adminID, item.ID); submitErr != nil {
+			_ = s.repo.MarkAnalysisFailed(ctx, item.ID, submitErr.Error(), time.Now())
+			logger.Warn(ctx, "历史校园菜品营养补分析提交失败",
+				slog.String("item_id", item.ID), slog.String("food_name", item.Name), logger.Err(submitErr))
+			continue
+		}
+		queued++
+	}
+	return queued, nil
+}
+
+func catalogAnalysisContext(item *domain.CatalogItem) string {
+	if item == nil {
+		return ""
+	}
+	parts := []string{
+		"请重点分析这一个校园食堂菜品，不要把同一张菜单或照片中的其他菜品合并进来。",
+		"菜品名称：" + strings.TrimSpace(item.Name),
+		"学校：" + strings.TrimSpace(item.OrganizationName),
+		"食堂：" + strings.TrimSpace(item.CanteenName),
+		"窗口：" + strings.TrimSpace(item.WindowName),
+		"价格原文：" + strings.TrimSpace(item.PriceText),
+		"分量：" + strings.TrimSpace(item.PortionDescription),
+		"采集原文：" + strings.TrimSpace(item.RawText),
+	}
+	return strings.Join(nonEmptyStrings(parts...), "；")
 }
 
 func (s *CatalogService) buildCatalogItem(batch domain.CollectionBatch, input CreateCatalogItemInput, index int, adminID string, now time.Time) (domain.CatalogItem, error) {
@@ -461,7 +585,7 @@ func (s *CatalogService) buildCatalogItem(batch domain.CollectionBatch, input Cr
 		Price:              input.Price,
 		PriceMin:           input.PriceMin,
 		PriceMax:           input.PriceMax,
-		PriceUnit:          strings.TrimSpace(input.PriceUnit),
+		PriceUnit:          normalizeStoredPriceUnit(input.PriceUnit),
 		PriceText:          strings.TrimSpace(input.PriceText),
 		PriceOptions:       priceOptions,
 		PortionDescription: strings.TrimSpace(input.PortionDescription),
@@ -478,6 +602,23 @@ func (s *CatalogService) buildCatalogItem(batch domain.CollectionBatch, input Cr
 		CreatedAt:          &now,
 		UpdatedAt:          &now,
 	}, nil
+}
+
+func normalizeStoredPriceUnit(value string) string {
+	unit := strings.TrimSpace(value)
+	unit = strings.ReplaceAll(unit, "￥", "元")
+	unit = strings.ReplaceAll(unit, "¥", "元")
+	if unit == "" || unit == "元" || strings.HasPrefix(unit, "元/") {
+		return unit
+	}
+	if strings.HasPrefix(unit, "元") {
+		unit = strings.TrimSpace(strings.TrimPrefix(unit, "元"))
+		unit = strings.TrimPrefix(unit, "/")
+	}
+	if unit == "" {
+		return "元"
+	}
+	return "元/" + unit
 }
 
 func (s *CatalogService) normalizeImageKeys(values []string) ([]string, error) {
