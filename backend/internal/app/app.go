@@ -104,15 +104,21 @@ import (
 )
 
 type App struct {
-	engine          *gin.Engine
-	db              *gorm.DB
-	shutdownTrace   func(context.Context) error
-	shutdownLog     logger.ShutdownFunc
-	workerCancel    context.CancelFunc
-	workerDone      chan struct{}
-	embeddingCancel context.CancelFunc
-	embeddingDone   chan struct{}
-	taskQueue       taskqueue.Queue
+	engine                *gin.Engine
+	db                    *gorm.DB
+	shutdownTrace         func(context.Context) error
+	shutdownLog           logger.ShutdownFunc
+	workerCancel          context.CancelFunc
+	workerDone            chan struct{}
+	embeddingCancel       context.CancelFunc
+	embeddingDone         chan struct{}
+	catalogBackfillCancel context.CancelFunc
+	catalogBackfillDone   chan struct{}
+	taskQueue             taskqueue.Queue
+}
+
+type campusCatalogNutritionBackfiller interface {
+	SubmitPublishedNutritionBackfill(ctx context.Context, limit int) (int, error)
 }
 
 func New(cfg *config.Config) (*App, error) {
@@ -406,7 +412,7 @@ func New(cfg *config.Config) (*App, error) {
 		shutdownLog:   logShutdown,
 		taskQueue:     taskQueue,
 	}
-	app.startEmbeddedWorker(cfg, analyzeTaskRepo, analyzePrecisionRepo, publicFoodRepo, analyzeSvc, ocrSvc, healthDocRepo, userRepo, expiryRecognizer, expiryNotifier, exerciseSvc, frNutritionSvc, membershipSvc, taskQueue, storageClient)
+	app.startEmbeddedWorker(cfg, analyzeTaskRepo, analyzePrecisionRepo, publicFoodRepo, campuscatalogrepo.NewCatalogRepo(db), analyzeSvc, ocrSvc, healthDocRepo, userRepo, expiryRecognizer, expiryNotifier, exerciseSvc, frNutritionSvc, membershipSvc, taskQueue, storageClient)
 	app.startNutritionEmbeddingMaintenance(nutritionEmbeddingMaintainer)
 
 	engine.POST("/api/login", loginHandler.Login)
@@ -743,6 +749,11 @@ func New(cfg *config.Config) (*App, error) {
 	adminCampusDirectoryHandler := adminhandler.NewCampusDirectoryHandler(db)
 	adminCampusCatalogRepo := campuscatalogrepo.NewCatalogRepo(db)
 	adminCampusCatalogSvc := campuscatalogservice.NewCatalogService(adminCampusCatalogRepo, storageClient)
+	adminCampusCatalogSvc.ConfigureAnalysis(
+		analyzeTaskSvc,
+		campuscatalogservice.NewInternalAnalysisUserResolver(userRepo),
+	)
+	app.startCampusCatalogNutritionBackfill(adminCampusCatalogSvc)
 	adminCampusCatalogHandler := campuscataloghandler.NewCatalogHandler(adminCampusCatalogSvc)
 	adminAuth := adminAuthHandler.AdminAuth()
 	adminAPI := engine.Group("/api/admin", adminCORS(os.Getenv("ADMIN_CORS_ALLOWED_ORIGINS")))
@@ -774,8 +785,10 @@ func New(cfg *config.Config) (*App, error) {
 	adminAPI.PATCH("/public-food-library/:item_id", adminAuth, adminPublicFoodHandler.Update)
 	adminAPI.DELETE("/public-food-library/:item_id", adminAuth, adminPublicFoodHandler.Delete)
 	adminAPI.GET("/campus-directory/schools", adminAuth, adminCampusDirectoryHandler.ListSchools)
+	adminAPI.GET("/campus-directory/schools/:school_id/summary", adminAuth, adminCampusDirectoryHandler.GetSchoolSummary)
 	adminAPI.POST("/campus-directory/schools", adminAuth, adminCampusDirectoryHandler.CreateSchool)
 	adminAPI.PATCH("/campus-directory/schools/:school_id", adminAuth, adminCampusDirectoryHandler.UpdateSchool)
+	adminAPI.DELETE("/campus-directory/schools/:school_id", adminAuth, adminCampusDirectoryHandler.DeleteSchool)
 	adminAPI.GET("/campus-directory/campuses", adminAuth, adminCampusDirectoryHandler.ListCampuses)
 	adminAPI.POST("/campus-directory/campuses", adminAuth, adminCampusDirectoryHandler.CreateCampus)
 	adminAPI.PATCH("/campus-directory/campuses/:campus_id", adminAuth, adminCampusDirectoryHandler.UpdateCampus)
@@ -803,6 +816,9 @@ func New(cfg *config.Config) (*App, error) {
 	adminAPI.POST("/campus-food-collection/batches", adminAuth, adminCampusCatalogHandler.CreateBatch)
 	adminAPI.GET("/campus-food-collection/batches", adminAuth, adminCampusCatalogHandler.ListBatches)
 	adminAPI.GET("/campus-food-collection/items", adminAuth, adminCampusCatalogHandler.ListItems)
+	adminAPI.PATCH("/campus-food-collection/items/:item_id", adminAuth, adminCampusCatalogHandler.UpdateItem)
+	adminAPI.POST("/campus-food-collection/items/:item_id/publish", adminAuth, adminCampusCatalogHandler.PublishItem)
+	adminAPI.DELETE("/campus-food-collection/items/:item_id", adminAuth, adminCampusCatalogHandler.DeleteItem)
 	adminAPI.GET("/exercise-energy-library", adminAuth, adminExerciseEnergyHandler.List)
 	adminAPI.GET("/exercise-energy-library/:activity_id", adminAuth, adminExerciseEnergyHandler.Get)
 	adminAPI.PATCH("/exercise-energy-library/:activity_id", adminAuth, adminExerciseEnergyHandler.Update)
@@ -884,6 +900,7 @@ func (a *App) startEmbeddedWorker(
 	taskRepo *analyzerepo.TaskRepo,
 	precisionRepo *analyzerepo.PrecisionRepo,
 	publicFoodRepo *publicfoodrepo.PublicFoodRepo,
+	campusCatalogRepo *campuscatalogrepo.CatalogRepo,
 	analyzeSvc *analyzeservice.AnalyzeService,
 	ocrSvc *userservice.OCRService,
 	healthDocRepo *userrepo.HealthDocumentRepo,
@@ -926,6 +943,7 @@ func (a *App) startEmbeddedWorker(
 		storageClient,
 	)
 	runner.ConfigureCreditGuard(membershipSvc)
+	runner.ConfigureCampusCatalog(campusCatalogRepo)
 
 	workerCtx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
@@ -988,6 +1006,45 @@ func (a *App) startNutritionEmbeddingMaintenance(maintainer *foodrecordservice.N
 	logger.Info(context.Background(), "营养向量自动维护已启动")
 }
 
+func (a *App) startCampusCatalogNutritionBackfill(backfiller campusCatalogNutritionBackfiller) {
+	if backfiller == nil {
+		return
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	a.catalogBackfillCancel = cancel
+	a.catalogBackfillDone = done
+	go func() {
+		defer close(done)
+		runCampusCatalogNutritionBackfill(ctx, backfiller)
+		ticker := time.NewTicker(10 * time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				logger.Info(context.Background(), "历史校园菜品营养补分析维护已停止")
+				return
+			case <-ticker.C:
+				runCampusCatalogNutritionBackfill(ctx, backfiller)
+			}
+		}
+	}()
+	logger.Info(context.Background(), "历史校园菜品营养补分析维护已启动")
+}
+
+func runCampusCatalogNutritionBackfill(parent context.Context, backfiller campusCatalogNutritionBackfiller) {
+	ctx, cancel := context.WithTimeout(parent, 2*time.Minute)
+	defer cancel()
+	queued, err := backfiller.SubmitPublishedNutritionBackfill(ctx, 100)
+	if err != nil {
+		logger.Error(ctx, "历史校园菜品营养补分析执行失败", err)
+		return
+	}
+	if queued > 0 {
+		logger.Info(ctx, "历史校园菜品营养补分析已提交", slog.Int("queued_count", queued))
+	}
+}
+
 func runPapayRenewalLoop(ctx context.Context, membershipSvc *membershipservice.MembershipService) {
 	if membershipSvc == nil {
 		return
@@ -1026,6 +1083,16 @@ func embeddedWorkerID(cfg *config.Config) string {
 }
 
 func (a *App) Close(ctx context.Context) error {
+	if a.catalogBackfillCancel != nil {
+		a.catalogBackfillCancel()
+	}
+	if a.catalogBackfillDone != nil {
+		select {
+		case <-a.catalogBackfillDone:
+		case <-ctx.Done():
+			logger.Warn(context.Background(), "历史校园菜品营养补分析维护关闭超时", logger.Err(ctx.Err()))
+		}
+	}
 	if a.embeddingCancel != nil {
 		a.embeddingCancel()
 	}

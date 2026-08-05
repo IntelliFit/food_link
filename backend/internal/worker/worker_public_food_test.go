@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -9,6 +10,8 @@ import (
 	analyzerepo "food_link/backend/internal/analyze/repo"
 	analyzeservice "food_link/backend/internal/analyze/service"
 	authrepo "food_link/backend/internal/auth/repo"
+	campuscatalogdomain "food_link/backend/internal/campuscatalog/domain"
+	campuscatalogrepo "food_link/backend/internal/campuscatalog/repo"
 	publicfooddomain "food_link/backend/internal/publicfood/domain"
 	publicfoodrepo "food_link/backend/internal/publicfood/repo"
 	publicfoodservice "food_link/backend/internal/publicfood/service"
@@ -57,8 +60,88 @@ func setupWorkerPublicFoodTestDB(t *testing.T) *gorm.DB {
 		&analyzedomain.PrecisionSessionRound{},
 		&analyzedomain.PrecisionItemEstimate{},
 		&publicfooddomain.PublicFoodItem{},
+		&campuscatalogdomain.CatalogItem{},
 	))
 	return db
+}
+
+func TestWorkerProcessFoodPublishesCatalogItemOnlyAfterNutritionSucceeds(t *testing.T) {
+	db := setupWorkerPublicFoodTestDB(t)
+	ctx := context.Background()
+	taskRepo := analyzerepo.NewTaskRepo(db)
+	catalog := campuscatalogrepo.NewCatalogRepo(db)
+	imageURL := "https://example.com/campus-catalog-rice.jpg"
+	price := 12.0
+	item := &campuscatalogdomain.CatalogItem{
+		ID: "catalog-food-1", BatchID: "batch-1", EntryType: "dish", Name: "番茄炒饭",
+		OrganizationName: "清华大学", CanteenName: "紫荆园", Floor: "2F", WindowName: "炒饭档口",
+		PriceType: "fixed", Price: &price, PriceUnit: "元/份", PortionDescription: "1份",
+		ImagePaths: []string{imageURL}, CompletenessStatus: "complete", Status: "analysis_pending",
+	}
+	require.NoError(t, db.Create(item).Error)
+	task := &analyzedomain.AnalysisTask{
+		ID: "task-catalog-food-1", UserID: "system-user-1", TaskType: "food", Status: "pending",
+		ImageURL: &imageURL, ImagePaths: []string{imageURL}, Payload: map[string]any{
+			"source_type": "image", "public_food_source_type": "campus_public_food",
+			"public_food_item_id": item.ID, "campus_catalog_item_id": item.ID,
+		},
+	}
+	require.NoError(t, taskRepo.CreateTask(ctx, task))
+	require.NoError(t, catalog.LinkAnalysisTask(ctx, item.ID, task.ID))
+
+	var beforeCount int64
+	require.NoError(t, db.Table("public_food_library").Where("id = ?", item.ID).Count(&beforeCount).Error)
+	require.Zero(t, beforeCount)
+
+	runner := &Runner{tasks: taskRepo, analyze: &fakeWorkerAnalyzeRunner{result: map[string]any{
+		"description": "一份番茄炒饭", "insight": "主食份量适中", "items": []any{map[string]any{
+			"name": "番茄炒饭", "nutrients": map[string]any{"calories": 420.0, "protein": 12.0, "carbs": 68.0, "fat": 11.0},
+		}},
+	}}}
+	runner.ConfigureCampusCatalog(catalog)
+	require.NoError(t, runner.processFood(ctx, task))
+
+	var publicItem publicfooddomain.PublicFoodItem
+	require.NoError(t, db.First(&publicItem, "id = ?", item.ID).Error)
+	require.Equal(t, "published", publicItem.Status)
+	require.Equal(t, 420.0, publicItem.TotalCalories)
+	require.Equal(t, 12.0, publicItem.TotalProtein)
+
+	var savedCatalog campuscatalogdomain.CatalogItem
+	require.NoError(t, db.First(&savedCatalog, "id = ?", item.ID).Error)
+	require.Equal(t, "published", savedCatalog.Status)
+	require.Equal(t, task.ID, *savedCatalog.AnalysisTaskID)
+	require.NotNil(t, savedCatalog.AnalysisCompletedAt)
+}
+
+func TestWorkerFailureKeepsNewCatalogItemOutOfClientLibrary(t *testing.T) {
+	db := setupWorkerPublicFoodTestDB(t)
+	ctx := context.Background()
+	taskRepo := analyzerepo.NewTaskRepo(db)
+	catalog := campuscatalogrepo.NewCatalogRepo(db)
+	item := &campuscatalogdomain.CatalogItem{
+		ID: "catalog-food-failed", BatchID: "batch-1", EntryType: "dish", Name: "鸡蛋饼",
+		OrganizationName: "清华大学", CanteenName: "紫荆园", CompletenessStatus: "complete", Status: "analysis_pending",
+	}
+	require.NoError(t, db.Create(item).Error)
+	task := &analyzedomain.AnalysisTask{
+		ID: "task-catalog-food-failed", UserID: "system-user-1", TaskType: "food", Status: "processing",
+		Payload: map[string]any{"public_food_source_type": "campus_public_food", "campus_catalog_item_id": item.ID, "internal_benchmark": true},
+	}
+	require.NoError(t, taskRepo.CreateTask(ctx, task))
+	require.NoError(t, catalog.LinkAnalysisTask(ctx, item.ID, task.ID))
+	runner := &Runner{tasks: taskRepo}
+	runner.ConfigureCampusCatalog(catalog)
+
+	require.NoError(t, runner.failTask(ctx, task, errors.New("模型返回内容无法解析")))
+
+	var savedCatalog campuscatalogdomain.CatalogItem
+	require.NoError(t, db.First(&savedCatalog, "id = ?", item.ID).Error)
+	require.Equal(t, "analysis_failed", savedCatalog.Status)
+	require.Contains(t, savedCatalog.AnalysisError, "模型返回内容无法解析")
+	var publicCount int64
+	require.NoError(t, db.Table("public_food_library").Where("id = ?", item.ID).Count(&publicCount).Error)
+	require.Zero(t, publicCount)
 }
 
 func TestWorkerProcessFoodWritesBackCampusPublicFood(t *testing.T) {

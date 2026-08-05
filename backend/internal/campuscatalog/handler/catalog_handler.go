@@ -24,6 +24,10 @@ type CatalogService interface {
 	CreateBatch(ctx context.Context, adminID string, input service.CreateBatchInput) (*service.CreateBatchResult, error)
 	ListBatches(ctx context.Context, page, limit int) (*service.BatchListResult, error)
 	ListItemsByBatch(ctx context.Context, batchID string) ([]domain.CatalogItem, error)
+	ListItems(ctx context.Context, input service.CatalogItemListInput) (*service.CatalogItemListResult, error)
+	UpdateItem(ctx context.Context, adminID, itemID string, input service.UpdateCatalogItemInput) (*domain.CatalogItem, error)
+	PublishItem(ctx context.Context, adminID, itemID string) (*domain.CatalogItem, error)
+	DeleteItem(ctx context.Context, adminID, itemID string) error
 }
 
 type CatalogHandler struct {
@@ -129,12 +133,78 @@ func (h *CatalogHandler) ListBatches(c *gin.Context) {
 }
 
 func (h *CatalogHandler) ListItems(c *gin.Context) {
-	items, err := h.svc.ListItemsByBatch(c.Request.Context(), c.Query("batch_id"))
+	input := service.CatalogItemListInput{
+		BatchID: c.Query("batch_id"), SchoolID: c.Query("school_id"), CampusID: c.Query("campus_id"),
+		CanteenID: c.Query("canteen_id"), WindowID: c.Query("window_id"), Status: c.Query("status"),
+		Query: c.Query("q"), Page: positiveInt(c.Query("page"), 1), Limit: positiveInt(c.Query("limit"), 50),
+	}
+	result, err := h.svc.ListItems(c.Request.Context(), input)
 	if err != nil {
 		response.Error(c, err)
 		return
 	}
-	response.Success(c, gin.H{"items": items})
+	logger.Info(c.Request.Context(), "管理员读取校园菜品列表成功",
+		slog.String("admin_id", strings.TrimSpace(c.GetString("admin_account_id"))),
+		slog.String("school_id", strings.TrimSpace(input.SchoolID)),
+		slog.String("canteen_id", strings.TrimSpace(input.CanteenID)),
+		slog.String("window_id", strings.TrimSpace(input.WindowID)),
+		slog.Int64("item_count", result.Total),
+	)
+	response.Success(c, result)
+}
+
+func (h *CatalogHandler) UpdateItem(c *gin.Context) {
+	var input service.UpdateCatalogItemInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		response.Error(c, err)
+		return
+	}
+	adminID := strings.TrimSpace(c.GetString("admin_account_id"))
+	itemID := strings.TrimSpace(c.Param("item_id"))
+	logger.Info(c.Request.Context(), "管理员开始更新食堂采集条目",
+		slog.String("admin_id", adminID),
+		slog.String("item_id", itemID),
+	)
+	item, err := h.svc.UpdateItem(c.Request.Context(), adminID, itemID, input)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	logger.Info(c.Request.Context(), "管理员更新食堂采集条目成功",
+		slog.String("admin_id", adminID),
+		slog.String("item_id", item.ID),
+		slog.Int("missing_field_count", len(item.MissingFields)),
+	)
+	response.Success(c, gin.H{"item": item})
+}
+
+func (h *CatalogHandler) PublishItem(c *gin.Context) {
+	adminID := strings.TrimSpace(c.GetString("admin_account_id"))
+	itemID := strings.TrimSpace(c.Param("item_id"))
+	logger.Info(c.Request.Context(), "管理员开始提交食堂采集条目上线",
+		slog.String("admin_id", adminID), slog.String("item_id", itemID))
+	item, err := h.svc.PublishItem(c.Request.Context(), adminID, itemID)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	logger.Info(c.Request.Context(), "管理员提交食堂采集条目上线成功",
+		slog.String("admin_id", adminID), slog.String("item_id", item.ID))
+	c.JSON(http.StatusAccepted, gin.H{
+		"code": 0, "message": "AI 分析任务已提交", "data": gin.H{"item": item},
+	})
+}
+
+func (h *CatalogHandler) DeleteItem(c *gin.Context) {
+	adminID := strings.TrimSpace(c.GetString("admin_account_id"))
+	itemID := strings.TrimSpace(c.Param("item_id"))
+	logger.Info(c.Request.Context(), "管理员开始删除校园菜品",
+		slog.String("admin_id", adminID), slog.String("item_id", itemID))
+	if err := h.svc.DeleteItem(c.Request.Context(), adminID, itemID); err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, gin.H{"message": "菜品已删除"})
 }
 
 func badRequest(message string) error {

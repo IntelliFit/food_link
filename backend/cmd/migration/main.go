@@ -24,9 +24,10 @@ func main() {
 	onlyCampusDirectoryReviewed := flag.Bool("only-campus-directory-reviewed", false, "only publish the reviewed Beijing campus dining directory")
 	onlyFoodRecordMood := flag.Bool("only-food-record-mood", false, "only add the optional food-record eating mood column and constraint")
 	onlyManualFoodSausage := flag.Bool("only-manual-food-sausage", false, "only normalize Taiwanese grilled sausage nutrition and historical records")
+	onlyCampusCatalogPublishing := flag.Bool("only-campus-catalog-publishing", false, "only add campus catalog publishing schema")
 	flag.Parse()
 	selectedOnlyModes := 0
-	for _, selected := range []bool{*onlyPapay, *onlyNutritionQuality, *onlyNutritionEmbeddings, *onlyOnboardingStatus, *onlyCampusDirectoryReviewed, *onlyFoodRecordMood, *onlyManualFoodSausage} {
+	for _, selected := range []bool{*onlyPapay, *onlyNutritionQuality, *onlyNutritionEmbeddings, *onlyOnboardingStatus, *onlyCampusDirectoryReviewed, *onlyFoodRecordMood, *onlyManualFoodSausage, *onlyCampusCatalogPublishing} {
 		if selected {
 			selectedOnlyModes++
 		}
@@ -71,6 +72,8 @@ func main() {
 		migrateErr = migration.MigrateFoodRecordMood(ctx, db, cfg.Database.Schema)
 	} else if *onlyManualFoodSausage {
 		migrateErr = migration.MigrateManualFoodSausage(ctx, db, cfg.Database.Schema)
+	} else if *onlyCampusCatalogPublishing {
+		migrateErr = migration.MigrateCampusCatalogPublishing(ctx, db, cfg.Database.Schema)
 	} else {
 		migrateErr = migration.AutoMigrate(ctx, db, cfg.Database.Schema)
 	}
@@ -103,6 +106,10 @@ func main() {
 	}
 	if *onlyManualFoodSausage {
 		log.Printf("台式烤香肠数据迁移完成: config_dir=%s schema=%s", resolvedDir, schema)
+		return
+	}
+	if *onlyCampusCatalogPublishing {
+		log.Printf("校园采集条目发布结构迁移完成: config_dir=%s schema=%s", resolvedDir, schema)
 		return
 	}
 	log.Printf("数据库迁移完成: config_dir=%s schema=%s", resolvedDir, schema)

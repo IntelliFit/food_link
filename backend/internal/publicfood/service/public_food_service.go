@@ -875,7 +875,11 @@ func (s *PublicFoodService) hydrate(ctx context.Context, userID string, items []
 		item := s.normalizePublicFoodItem(it)
 		author := authors[it.UserID]
 		if author.Nickname == "" {
-			author = domain.Author{ID: it.UserID, Nickname: "用户"}
+			nickname := "用户"
+			if strings.TrimSpace(it.UserID) == "" {
+				nickname = "食探官方"
+			}
+			author = domain.Author{ID: it.UserID, Nickname: nickname}
 		}
 		author.Avatar = s.resolveAvatarURL(author.Avatar)
 		out = append(out, domain.PublicFoodView{

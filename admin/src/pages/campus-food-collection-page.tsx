@@ -42,21 +42,66 @@ type CatalogItem = {
   id: string
   entry_type: string
   name?: string
+  description?: string
+  window_id?: string
   floor?: string
   window_name?: string
+  window_layout?: string
   service_mode: string
   meal_periods?: string[]
+  available_weekdays?: string[]
+  availability_note?: string
   price_type: string
   price?: number
   price_min?: number
   price_max?: number
   price_unit?: string
   price_text?: string
+  price_options?: Record<string, unknown>
+  portion_description?: string
   image_paths?: string[]
   image_kind: string
   source_filename?: string
+  raw_text?: string
+  notes?: string
   missing_fields?: string[]
   completeness_status: string
+  status: 'draft' | 'published' | 'changes_pending' | 'analysis_pending' | 'analysis_failed' | string
+  analysis_task_id?: string
+  analysis_error?: string
+  analysis_started_at?: string
+  analysis_completed_at?: string
+  published_at?: string
+}
+
+type CatalogItemEditDraft = {
+  itemId: string
+  entryType: string
+  name: string
+  description: string
+  windowId: string
+  floor: string
+  windowName: string
+  windowLayout: string
+  serviceMode: string
+  mealPeriods: string[]
+  availableWeekdays: string[]
+  availabilityNote: string
+  priceType: string
+  price: string
+  priceMin: string
+  priceMax: string
+  priceUnit: string
+  priceText: string
+  priceOptions: Record<string, unknown>
+  portionDescription: string
+  imagePaths: string[]
+  imageKind: string
+  sourceFilename: string
+  rawText: string
+  notes: string
+  newFiles: File[]
+  previewUrls: string[]
 }
 
 type DraftEntry = {
@@ -92,6 +137,16 @@ const mealOptions: Array<[string, string]> = [
   ['late_night', '夜宵'],
   ['all_day', '全天'],
   ['unknown', '待确认'],
+]
+
+const weekdayOptions: Array<[string, string]> = [
+  ['monday', '周一'],
+  ['tuesday', '周二'],
+  ['wednesday', '周三'],
+  ['thursday', '周四'],
+  ['friday', '周五'],
+  ['saturday', '周六'],
+  ['sunday', '周日'],
 ]
 
 const serviceOptions: Array<[string, string]> = [
@@ -176,10 +231,30 @@ export function CampusFoodCollectionPage({ onLogout, onMenuChange }: CampusFoodC
   const [selectedBatchId, setSelectedBatchId] = useState('')
   const [selectedBatchItems, setSelectedBatchItems] = useState<CatalogItem[]>([])
   const [historyBusy, setHistoryBusy] = useState(false)
+  const [editingItem, setEditingItem] = useState<CatalogItemEditDraft | null>(null)
+  const [itemSaving, setItemSaving] = useState(false)
+  const [publishingItemId, setPublishingItemId] = useState('')
+  const [batchPublishMode, setBatchPublishMode] = useState(false)
+  const [selectedPublishItemIds, setSelectedPublishItemIds] = useState<string[]>([])
+  const [batchPublishing, setBatchPublishing] = useState(false)
+  const [batchPublishDone, setBatchPublishDone] = useState(0)
+  const [batchPublishTotal, setBatchPublishTotal] = useState(0)
 
   const isUniversity = venueType === 'university'
   const apiBase = displayApiBase()
   const fileCount = useMemo(() => entries.reduce((sum, entry) => sum + entry.files.length, 0), [entries])
+  const publishableBatchItems = useMemo(
+    () => selectedBatchItems.filter(isCatalogItemPublishable),
+    [selectedBatchItems],
+  )
+  const selectedPublishItems = useMemo(() => {
+    const selectedIds = new Set(selectedPublishItemIds)
+    return publishableBatchItems.filter((item) => selectedIds.has(item.id))
+  }, [publishableBatchItems, selectedPublishItemIds])
+  const hasPendingAnalysis = useMemo(
+    () => selectedBatchItems.some((item) => item.status === 'analysis_pending'),
+    [selectedBatchItems],
+  )
 
   useEffect(() => {
     void searchSchools('清华大学', true)
@@ -212,6 +287,16 @@ export function CampusFoodCollectionPage({ onLogout, onMenuChange }: CampusFoodC
     }
     void loadDirectoryOptions(`/api/admin/campus-directory/windows?canteen_id=${encodeURIComponent(canteenId)}&status=active&limit=100`, setWindowOptions)
   }, [canteenId, isUniversity])
+
+  useEffect(() => {
+    if (!selectedBatchId || !hasPendingAnalysis || batchPublishing) return undefined
+    const timer = window.setInterval(() => {
+      void refreshBatchItems(selectedBatchId, true)
+    }, 4000)
+    return () => window.clearInterval(timer)
+    // refreshBatchItems intentionally reads only its arguments and stable setters.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedBatchId, hasPendingAnalysis, batchPublishing])
 
   async function loadDirectoryOptions(path: string, setter: (items: DirectoryOption[]) => void) {
     try {
@@ -254,15 +339,226 @@ export function CampusFoodCollectionPage({ onLogout, onMenuChange }: CampusFoodC
   }
 
   async function loadBatchItems(batchId: string) {
+    if (batchPublishing) return
     setSelectedBatchId(batchId)
+    setBatchPublishMode(false)
+    setSelectedPublishItemIds([])
     setHistoryBusy(true)
+    try {
+      await refreshBatchItems(batchId)
+    } finally {
+      setHistoryBusy(false)
+    }
+  }
+
+  async function refreshBatchItems(batchId: string, silent = false) {
     try {
       const data = await adminRequest<{ items: CatalogItem[] }>(`/api/admin/campus-food-collection/items?batch_id=${encodeURIComponent(batchId)}`)
       setSelectedBatchItems(data.items || [])
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '批次明细读取失败')
+      if (!silent) toast.error(error instanceof Error ? error.message : '批次明细读取失败')
+    }
+  }
+
+  function openItemEditor(item: CatalogItem) {
+    setEditingItem((current) => {
+      current?.previewUrls.forEach((url) => URL.revokeObjectURL(url))
+      return createCatalogItemEditDraft(item)
+    })
+  }
+
+  function closeItemEditor() {
+    if (itemSaving) return
+    setEditingItem((current) => {
+      current?.previewUrls.forEach((url) => URL.revokeObjectURL(url))
+      return null
+    })
+  }
+
+  function updateEditingItem(patch: Partial<CatalogItemEditDraft>) {
+    setEditingItem((current) => (current ? { ...current, ...patch } : current))
+  }
+
+  function addEditingItemImages(event: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files || [])
+    event.target.value = ''
+    if (!files.length) return
+    setEditingItem((current) => {
+      if (!current) return current
+      const room = Math.max(0, 6 - current.imagePaths.length - current.newFiles.length)
+      const accepted = files.slice(0, room)
+      if (accepted.length < files.length) toast.error('每条记录最多保留 6 张图片')
+      return {
+        ...current,
+        newFiles: [...current.newFiles, ...accepted],
+        previewUrls: [...current.previewUrls, ...accepted.map((file) => URL.createObjectURL(file))],
+      }
+    })
+  }
+
+  function removeEditingItemImage(index: number) {
+    setEditingItem((current) => (current ? {
+      ...current,
+      imagePaths: current.imagePaths.filter((_, imageIndex) => imageIndex !== index),
+    } : current))
+  }
+
+  function removeEditingItemNewImage(index: number) {
+    setEditingItem((current) => {
+      if (!current) return current
+      URL.revokeObjectURL(current.previewUrls[index])
+      return {
+        ...current,
+        newFiles: current.newFiles.filter((_, imageIndex) => imageIndex !== index),
+        previewUrls: current.previewUrls.filter((_, imageIndex) => imageIndex !== index),
+      }
+    })
+  }
+
+  function toggleEditingItemValues(field: 'mealPeriods' | 'availableWeekdays', value: string) {
+    setEditingItem((current) => {
+      if (!current) return current
+      const values = current[field]
+      const next = field === 'mealPeriods'
+        ? toggleValue(values, value)
+        : toggleSimpleValue(values, value)
+      return { ...current, [field]: next }
+    })
+  }
+
+  async function saveEditingItem() {
+    if (!editingItem) return
+    setItemSaving(true)
+    try {
+      const uploadedImagePaths: string[] = []
+      await runWithConcurrency(editingItem.newFiles, 3, async (file) => {
+        const formData = new FormData()
+        formData.append('file', file)
+        const data = await adminUpload<{ image_url: string }>('/api/admin/campus-food-collection/images', formData)
+        uploadedImagePaths.push(data.image_url)
+      })
+      const imagePaths = [...editingItem.imagePaths, ...uploadedImagePaths]
+      const sourceFilename = [editingItem.sourceFilename, ...editingItem.newFiles.map((file) => file.name)].filter(Boolean).join(' | ')
+      const item = await adminRequest<{ item: CatalogItem }>(`/api/admin/campus-food-collection/items/${encodeURIComponent(editingItem.itemId)}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          entry_type: editingItem.entryType,
+          name: editingItem.name.trim(),
+          description: editingItem.description.trim(),
+          window_id: editingItem.windowId || undefined,
+          floor: editingItem.floor.trim(),
+          window_name: editingItem.windowName.trim(),
+          window_layout: editingItem.windowLayout,
+          service_mode: editingItem.serviceMode,
+          meal_periods: editingItem.mealPeriods,
+          available_weekdays: editingItem.availableWeekdays,
+          availability_note: editingItem.availabilityNote.trim(),
+          price_type: editingItem.priceType,
+          price: optionalNumber(editingItem.price),
+          price_min: optionalNumber(editingItem.priceMin),
+          price_max: optionalNumber(editingItem.priceMax),
+          price_unit: editingItem.priceUnit.trim(),
+          price_text: editingItem.priceText.trim(),
+          price_options: editingItem.priceOptions,
+          portion_description: editingItem.portionDescription.trim(),
+          image_paths: imagePaths,
+          image_kind: editingItem.imageKind,
+          source_filename: sourceFilename,
+          raw_text: editingItem.rawText.trim(),
+          notes: editingItem.notes.trim(),
+        }),
+      })
+      setSelectedBatchItems((current) => current.map((currentItem) => (currentItem.id === item.item.id ? item.item : currentItem)))
+      editingItem.previewUrls.forEach((url) => URL.revokeObjectURL(url))
+      setEditingItem(null)
+      toast.success(item.item.missing_fields?.length ? '条目已保存，可继续补充剩余字段' : '条目已补充完整')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '条目保存失败')
     } finally {
-      setHistoryBusy(false)
+      setItemSaving(false)
+    }
+  }
+
+  async function publishCatalogItem(item: CatalogItem) {
+    if ((item.missing_fields || []).length || item.completeness_status !== 'complete') {
+      toast.error('请先补齐名称、图片和价格后再提交上线')
+      return
+    }
+    const actionLabel = item.status === 'analysis_failed'
+      ? '重新提交 AI 分析'
+      : item.status === 'changes_pending'
+        ? '提交 AI 分析更新'
+        : '提交 AI 分析并上线'
+    if (!window.confirm(`${actionLabel}？AI 成功后将自动上线；首次上传在分析完成前不会出现在小程序。`)) return
+    setPublishingItemId(item.id)
+    try {
+      const data = await adminRequest<{ item: CatalogItem }>(`/api/admin/campus-food-collection/items/${encodeURIComponent(item.id)}/publish`, {
+        method: 'POST',
+      })
+      setSelectedBatchItems((current) => current.map((currentItem) => (currentItem.id === data.item.id ? data.item : currentItem)))
+      toast.success('AI 分析已提交，成功后自动上线')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '提交 AI 分析失败')
+    } finally {
+      setPublishingItemId('')
+    }
+  }
+
+  function toggleBatchPublishMode() {
+    if (batchPublishing) return
+    setBatchPublishMode((current) => !current)
+    setSelectedPublishItemIds([])
+    setBatchPublishDone(0)
+    setBatchPublishTotal(0)
+  }
+
+  function togglePublishItemSelection(item: CatalogItem) {
+    if (!isCatalogItemPublishable(item) || batchPublishing) return
+    setSelectedPublishItemIds((current) => current.includes(item.id)
+      ? current.filter((itemId) => itemId !== item.id)
+      : [...current, item.id])
+  }
+
+  function toggleAllPublishableItems() {
+    if (batchPublishing) return
+    const allIds = publishableBatchItems.map((item) => item.id)
+    const allSelected = allIds.length > 0 && allIds.every((itemId) => selectedPublishItemIds.includes(itemId))
+    setSelectedPublishItemIds(allSelected ? [] : allIds)
+  }
+
+  async function publishSelectedCatalogItems() {
+    if (!selectedPublishItems.length || batchPublishing) return
+    const selectedCount = selectedPublishItems.length
+    if (!window.confirm(`确定将选中的 ${selectedCount} 条校园食物批量提交 AI 分析吗？分析成功后会自动上线，首次上传在完成前不会出现在小程序。`)) return
+
+    setBatchPublishing(true)
+    setBatchPublishDone(0)
+    setBatchPublishTotal(selectedCount)
+    const publishedItems = new Map<string, CatalogItem>()
+    const failedItemIds: string[] = []
+    try {
+      await runWithConcurrency(selectedPublishItems, 3, async (item) => {
+        try {
+          const data = await adminRequest<{ item: CatalogItem }>(`/api/admin/campus-food-collection/items/${encodeURIComponent(item.id)}/publish`, {
+            method: 'POST',
+          })
+          publishedItems.set(data.item.id, data.item)
+        } catch {
+          failedItemIds.push(item.id)
+        } finally {
+          setBatchPublishDone((current) => current + 1)
+        }
+      })
+      setSelectedBatchItems((current) => current.map((item) => publishedItems.get(item.id) || item))
+      setSelectedPublishItemIds(failedItemIds)
+      if (failedItemIds.length) {
+        toast.error(`批量提交完成：已进入 AI 分析 ${publishedItems.size} 条，提交失败 ${failedItemIds.length} 条；失败项已保留勾选`)
+      } else {
+        setBatchPublishMode(false)
+        toast.success(`已提交 ${publishedItems.size} 条进行 AI 分析，成功后自动上线`)
+      }
+    } finally {
+      setBatchPublishing(false)
     }
   }
 
@@ -655,53 +951,313 @@ export function CampusFoodCollectionPage({ onLogout, onMenuChange }: CampusFoodC
               {historyBusy ? <span className='spinner small' /> : '刷新'}
             </button>
           </div>
-          <div className='grid gap-3 lg:grid-cols-2'>
+          <div className='collection-batch-grid'>
             {batches.map((batch) => (
               <button
                 key={batch.id}
                 type='button'
-                className={`rounded-xl border p-4 text-left ${selectedBatchId === batch.id ? 'border-emerald-500 bg-emerald-50/50' : ''}`}
+                className={`collection-batch-card ${selectedBatchId === batch.id ? 'selected' : ''}`}
                 onClick={() => void loadBatchItems(batch.id)}
+                disabled={batchPublishing}
               >
-                <div className='flex items-start justify-between gap-3'>
-                  <strong>{batch.batch_name}</strong>
+                <div className='collection-batch-heading'>
+                  <strong title={batch.batch_name}>{batch.batch_name}</strong>
                   <span className='pill active'>{batch.item_count} 条</span>
                 </div>
-                <p className='muted mt-2'>{[batch.organization_name, batch.area_name, batch.canteen_name, batch.default_floor, batch.default_window_name].filter(Boolean).join(' · ')}</p>
-                <p className='muted mt-1'>{formatDate(batch.captured_at || batch.created_at)} · {batch.collector_name || '采集人未填'}</p>
+                <p className='collection-batch-location'>
+                  {[batch.organization_name, batch.area_name, batch.canteen_name, batch.default_floor, batch.default_window_name].filter(Boolean).join(' · ')}
+                </p>
+                <p className='collection-batch-meta'>
+                  <span>{formatDate(batch.captured_at || batch.created_at)}</span>
+                  <span>{batch.collector_name || '采集人未填'}</span>
+                </p>
               </button>
             ))}
           </div>
           {selectedBatchId ? (
-            <div className='overflow-x-auto rounded-xl border'>
-              <table className='w-full min-w-[900px] text-sm'>
-                <thead>
-                  <tr className='border-b text-left'>
-                    <th className='p-3'>图片</th>
-                    <th className='p-3'>条目</th>
-                    <th className='p-3'>窗口/餐时</th>
-                    <th className='p-3'>售卖/价格</th>
-                    <th className='p-3'>待补</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {selectedBatchItems.map((item) => (
-                    <tr key={item.id} className='border-b last:border-0'>
-                      <td className='p-3'>
-                        {item.image_paths?.[0] ? <img className='h-16 w-20 rounded-lg object-cover' src={item.image_paths[0]} alt={item.name || '食堂采集图片'} /> : <span className='pill'>缺图</span>}
-                      </td>
-                      <td className='p-3'><strong>{item.name || '待补名称'}</strong><div className='muted'>{labelOf(entryTypeOptions, item.entry_type)} · {labelOf(imageKindOptions, item.image_kind)}</div></td>
-                      <td className='p-3'>{[item.floor, item.window_name].filter(Boolean).join(' · ') || '-'}<div className='muted'>{(item.meal_periods || []).map((value) => labelOf(mealOptions, value)).join(' / ') || '餐时待确认'}</div></td>
-                      <td className='p-3'>{labelOf(serviceOptions, item.service_mode)}<div className='muted'>{priceSummary(item)}</div></td>
-                      <td className='p-3'><div className='flex flex-wrap gap-1'>{(item.missing_fields || []).map((field) => <span key={field} className='pill inactive'>{missingFieldLabel(field)}</span>)}</div></td>
+            <div className='space-y-3'>
+              <div className={`collection-batch-publish-toolbar ${batchPublishMode ? 'active' : ''}`}>
+                <div>
+                  <strong>{batchPublishMode ? `已选择 ${selectedPublishItems.length} 条` : `可提交分析 ${publishableBatchItems.length} 条`}</strong>
+                  <p>
+                    {batchPublishing
+                      ? `正在提交 ${batchPublishDone}/${batchPublishTotal}`
+                      : batchPublishMode
+                        ? '只可选择字段完整且不在分析中的条目；AI 失败项可直接重试。'
+                        : '批量提交原有 AI 食物分析，成功后自动上线；分析中会自动刷新状态。'}
+                  </p>
+                </div>
+                <div className='actions collection-batch-publish-actions'>
+                  {batchPublishMode ? (
+                    <>
+                      <button type='button' onClick={toggleAllPublishableItems} disabled={batchPublishing || publishableBatchItems.length === 0}>
+                        {publishableBatchItems.length > 0 && selectedPublishItems.length === publishableBatchItems.length ? '取消全选' : '全选可分析'}
+                      </button>
+                      <button type='button' onClick={toggleBatchPublishMode} disabled={batchPublishing}>退出批量模式</button>
+                      <button type='button' className='primary' onClick={() => void publishSelectedCatalogItems()} disabled={batchPublishing || selectedPublishItems.length === 0}>
+                        {batchPublishing ? <span className='spinner small' /> : null}
+                        <span className={batchPublishing ? 'ml-2' : ''}>
+                          {batchPublishing ? `提交中 ${batchPublishDone}/${batchPublishTotal}` : `批量提交 AI 分析并上线（${selectedPublishItems.length}）`}
+                        </span>
+                      </button>
+                    </>
+                  ) : (
+                    <button type='button' className='primary' onClick={toggleBatchPublishMode} disabled={publishableBatchItems.length === 0} title={publishableBatchItems.length === 0 ? '当前批次没有可上线条目' : undefined}>
+                      批量 AI 分析上线
+                    </button>
+                  )}
+                </div>
+              </div>
+              <div className='overflow-x-auto rounded-xl border'>
+                <table className={`w-full text-sm ${batchPublishMode ? 'min-w-[1080px]' : 'min-w-[1020px]'}`}>
+                  <thead>
+                    <tr className='border-b text-left'>
+                      {batchPublishMode ? <th className='collection-select-cell p-3'>选择</th> : null}
+                      <th className='p-3'>图片</th>
+                      <th className='p-3'>条目</th>
+                      <th className='p-3'>窗口/餐时</th>
+                      <th className='p-3'>售卖/价格/分量</th>
+                      <th className='p-3'>待补</th>
+                      <th className='p-3 text-right'>操作</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {selectedBatchItems.map((item) => {
+                      const publishable = isCatalogItemPublishable(item)
+                      const selected = selectedPublishItemIds.includes(item.id)
+                      return (
+                        <tr key={item.id} className={`border-b last:border-0 ${selected ? 'collection-item-selected' : ''}`}>
+                          {batchPublishMode ? (
+                            <td className='collection-select-cell p-3'>
+                              <input
+                                className='collection-select-checkbox'
+                                type='checkbox'
+                                checked={selected}
+                                disabled={!publishable || batchPublishing}
+                                aria-label={`选择${item.name || '未命名条目'}`}
+                                title={catalogPublishDisabledReason(item)}
+                                onChange={() => togglePublishItemSelection(item)}
+                              />
+                            </td>
+                          ) : null}
+                          <td className='p-3'>
+                            {item.image_paths?.[0] ? <img className='h-16 w-20 rounded-lg object-cover' src={item.image_paths[0]} alt={item.name || '食堂采集图片'} /> : <span className='pill'>缺图</span>}
+                          </td>
+                          <td className='p-3'><strong>{item.name || '待补名称'}</strong><div className='muted'>{labelOf(entryTypeOptions, item.entry_type)} · {labelOf(imageKindOptions, item.image_kind)}</div></td>
+                          <td className='p-3'>{[item.floor, item.window_name].filter(Boolean).join(' · ') || '-'}<div className='muted'>{(item.meal_periods || []).map((value) => labelOf(mealOptions, value)).join(' / ') || '餐时待确认'}</div></td>
+                          <td className='p-3'>
+                            {labelOf(serviceOptions, item.service_mode)}
+                            <div className='muted'>价格：{priceSummary(item)}</div>
+                            <div className='muted'>分量：{item.portion_description || '待补充'}</div>
+                          </td>
+                          <td className='p-3'>
+                            <div className='flex flex-wrap gap-1'>
+                              {(item.missing_fields || []).length
+                                ? (item.missing_fields || []).map((field) => <span key={field} className='pill inactive'>{missingFieldLabel(field)}</span>)
+                                : <span className='pill active'>已完整</span>}
+                            </div>
+                            <div className='mt-2'>
+                              <span className={`pill ${item.status === 'published' ? 'active' : item.status === 'changes_pending' || item.status === 'analysis_pending' ? 'warning' : item.status === 'analysis_failed' ? 'inactive' : ''}`}>
+                                {catalogPublishStatusLabel(item.status)}
+                              </span>
+                              {item.status === 'analysis_failed' && item.analysis_error ? <div className='muted mt-1' title={item.analysis_error}>{shortAnalysisError(item.analysis_error)}</div> : null}
+                            </div>
+                          </td>
+                          <td className='p-3 text-right'>
+                            <div className='collection-item-actions'>
+                              <button type='button' className='min-h-8 px-3' onClick={() => openItemEditor(item)} disabled={publishingItemId === item.id || batchPublishing || item.status === 'analysis_pending'}>编辑补充</button>
+                              <button
+                                type='button'
+                                className='primary min-h-8 px-3'
+                                onClick={() => void publishCatalogItem(item)}
+                                disabled={publishingItemId === item.id || batchPublishing || item.status === 'published' || item.status === 'analysis_pending' || Boolean((item.missing_fields || []).length)}
+                                title={catalogPublishDisabledReason(item)}
+                              >
+                                {publishingItemId === item.id ? <span className='spinner small' /> : null}
+                                <span className={publishingItemId === item.id ? 'ml-2' : ''}>
+                                  {catalogPublishActionLabel(item.status)}
+                                </span>
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
           ) : null}
         </section>
       </main>
+      {editingItem ? (
+        <CatalogItemEditDialog
+          draft={editingItem}
+          saving={itemSaving}
+          onChange={updateEditingItem}
+          onToggleMeal={(value) => toggleEditingItemValues('mealPeriods', value)}
+          onToggleWeekday={(value) => toggleEditingItemValues('availableWeekdays', value)}
+          onAddImages={addEditingItemImages}
+          onRemoveImage={removeEditingItemImage}
+          onRemoveNewImage={removeEditingItemNewImage}
+          onCancel={closeItemEditor}
+          onSave={() => void saveEditingItem()}
+        />
+      ) : null}
+    </div>
+  )
+}
+
+function CatalogItemEditDialog({
+  draft,
+  saving,
+  onChange,
+  onToggleMeal,
+  onToggleWeekday,
+  onAddImages,
+  onRemoveImage,
+  onRemoveNewImage,
+  onCancel,
+  onSave,
+}: {
+  draft: CatalogItemEditDraft
+  saving: boolean
+  onChange: (patch: Partial<CatalogItemEditDraft>) => void
+  onToggleMeal: (value: string) => void
+  onToggleWeekday: (value: string) => void
+  onAddImages: (event: ChangeEvent<HTMLInputElement>) => void
+  onRemoveImage: (index: number) => void
+  onRemoveNewImage: (index: number) => void
+  onCancel: () => void
+  onSave: () => void
+}) {
+  const imageCount = draft.imagePaths.length + draft.newFiles.length
+  return (
+    <div className='modal-overlay' role='presentation' onMouseDown={(event) => {
+      if (event.target === event.currentTarget) onCancel()
+    }}>
+      <section className='modal-panel catalog-item-editor' role='dialog' aria-modal='true' aria-labelledby='catalog-item-editor-title'>
+        <div className='editor-header'>
+          <div>
+            <h2 id='catalog-item-editor-title'>编辑采集条目</h2>
+            <p>可以分多次补充；保存只更新后台草稿，不会直接显示到小程序。</p>
+          </div>
+          <button type='button' onClick={onCancel} disabled={saving}>关闭</button>
+        </div>
+
+        <div className='catalog-item-editor-section'>
+          <div className='flex flex-wrap items-center justify-between gap-3'>
+            <div>
+              <strong>图片证据</strong>
+              <p className='muted mt-1 text-xs'>已有图片可移除，也可以继续补图；每条最多 6 张。</p>
+            </div>
+            <label className={`button-link ${imageCount >= 6 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}`}>
+              添加图片
+              <input className='hidden' type='file' accept='image/jpeg,image/png,image/webp,image/heic,image/heif' multiple disabled={saving || imageCount >= 6} onChange={onAddImages} />
+            </label>
+          </div>
+          {imageCount ? (
+            <div className='catalog-item-image-grid'>
+              {draft.imagePaths.map((url, index) => (
+                <div key={url} className='catalog-item-image'>
+                  <img src={url} alt={`已有图片 ${index + 1}`} />
+                  <button type='button' className='destructive' disabled={saving} onClick={() => onRemoveImage(index)}>移除</button>
+                </div>
+              ))}
+              {draft.previewUrls.map((url, index) => (
+                <div key={url} className='catalog-item-image'>
+                  <img src={url} alt={`待上传图片 ${index + 1}`} />
+                  <span className='pill active'>待上传</span>
+                  <button type='button' className='destructive' disabled={saving} onClick={() => onRemoveNewImage(index)}>移除</button>
+                </div>
+              ))}
+            </div>
+          ) : <div className='catalog-item-no-image'>当前缺少图片，可先保存其他字段，之后再补。</div>}
+        </div>
+
+        <div className='form-grid catalog-item-editor-form'>
+          <Field label='条目类型'>
+            <select value={draft.entryType} onChange={(event) => onChange({ entryType: event.target.value })}>
+              {entryTypeOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </select>
+          </Field>
+          <Field label='图片证据类型'>
+            <select value={draft.imageKind} onChange={(event) => onChange({ imageKind: event.target.value })}>
+              {imageKindOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </select>
+          </Field>
+          <Field label='菜名/条目名' wide>
+            <input value={draft.name} onChange={(event) => onChange({ name: event.target.value })} placeholder='如：番茄炒饭' />
+          </Field>
+          <Field label='条目说明' wide>
+            <textarea value={draft.description} onChange={(event) => onChange({ description: event.target.value })} rows={2} placeholder='补充菜品、套餐或窗口的说明' />
+          </Field>
+          <Field label='楼层'>
+            <input value={draft.floor} onChange={(event) => onChange({ floor: event.target.value })} placeholder='如：2F' />
+          </Field>
+          <Field label='窗口/档口'>
+            <input value={draft.windowName} onChange={(event) => onChange({ windowName: event.target.value })} placeholder='如：中式炒饭' />
+          </Field>
+          <Field label='窗口形态'>
+            <select value={draft.windowLayout} onChange={(event) => onChange({ windowLayout: event.target.value })}>
+              {windowLayoutOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </select>
+          </Field>
+          <Field label='售卖形式'>
+            <select value={draft.serviceMode} onChange={(event) => onChange({ serviceMode: event.target.value })}>
+              {serviceOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </select>
+          </Field>
+          <Field label='餐时' wide>
+            <ChoiceButtons options={mealOptions} selected={draft.mealPeriods} onToggle={onToggleMeal} />
+          </Field>
+          <Field label='供应星期' wide>
+            <ChoiceButtons options={weekdayOptions} selected={draft.availableWeekdays} onToggle={onToggleWeekday} />
+          </Field>
+          <Field label='供应说明' wide>
+            <input value={draft.availabilityNote} onChange={(event) => onChange({ availabilityNote: event.target.value })} placeholder='如：仅工作日午餐；售完即止' />
+          </Field>
+          <Field label='计价方式'>
+            <select value={draft.priceType} onChange={(event) => onChange({ priceType: event.target.value })}>
+              {priceTypeOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </select>
+          </Field>
+          {draft.priceType === 'range' ? (
+            <>
+              <Field label='最低价'><input type='number' min='0' step='0.01' value={draft.priceMin} onChange={(event) => onChange({ priceMin: event.target.value })} /></Field>
+              <Field label='最高价'><input type='number' min='0' step='0.01' value={draft.priceMax} onChange={(event) => onChange({ priceMax: event.target.value })} /></Field>
+            </>
+          ) : (
+            <Field label='标价'><input type='number' min='0' step='0.01' value={draft.price} onChange={(event) => onChange({ price: event.target.value })} placeholder='可暂时不填' /></Field>
+          )}
+          <Field label='价格单位'>
+            <input value={draft.priceUnit} onChange={(event) => onChange({ priceUnit: event.target.value })} placeholder='元/份、元/两、元/斤' />
+          </Field>
+          <Field label='价格原文/规则' wide>
+            <input value={draft.priceText} onChange={(event) => onChange({ priceText: event.target.value })} placeholder='如：任选三样 12 元' />
+          </Field>
+          <Field label='份量说明' wide>
+            <input value={draft.portionDescription} onChange={(event) => onChange({ portionDescription: event.target.value })} placeholder='如：一盘、两串、约 300g' />
+          </Field>
+          <Field label='照片可见文字' wide>
+            <textarea value={draft.rawText} onChange={(event) => onChange({ rawText: event.target.value })} rows={3} placeholder='录入菜单牌、价签、窗口招牌上的原始文字' />
+          </Field>
+          <Field label='内部备注' wide>
+            <textarea value={draft.notes} onChange={(event) => onChange({ notes: event.target.value })} rows={3} placeholder='记录待核实信息或补录来源' />
+          </Field>
+        </div>
+
+        <div className='catalog-item-editor-actions'>
+          <span className='muted'>允许保留未完整状态；补齐后提交原有 AI 食物分析，成功才会自动上线。</span>
+          <div className='actions' style={{ marginTop: 0 }}>
+            <button type='button' onClick={onCancel} disabled={saving}>取消</button>
+            <button type='button' className='primary min-w-32' onClick={onSave} disabled={saving}>
+              {saving ? <span className='spinner small' /> : null}
+              <span className={saving ? 'ml-2' : ''}>保存条目</span>
+            </button>
+          </div>
+        </div>
+      </section>
     </div>
   )
 }
@@ -836,6 +1392,38 @@ function Stat({ label, value, foot }: { label: string; value: string; foot: stri
   return <article className='stat-card'><span className='stat-label'>{label}</span><strong>{value}</strong><span className='stat-foot'>{foot}</span></article>
 }
 
+function createCatalogItemEditDraft(item: CatalogItem): CatalogItemEditDraft {
+  return {
+    itemId: item.id,
+    entryType: item.entry_type || 'dish',
+    name: item.name || '',
+    description: item.description || '',
+    windowId: item.window_id || '',
+    floor: item.floor || '',
+    windowName: item.window_name || '',
+    windowLayout: item.window_layout || 'unknown',
+    serviceMode: item.service_mode || 'unknown',
+    mealPeriods: item.meal_periods?.length ? [...item.meal_periods] : ['unknown'],
+    availableWeekdays: [...(item.available_weekdays || [])],
+    availabilityNote: item.availability_note || '',
+    priceType: item.price_type || 'unknown',
+    price: item.price == null ? '' : String(item.price),
+    priceMin: item.price_min == null ? '' : String(item.price_min),
+    priceMax: item.price_max == null ? '' : String(item.price_max),
+    priceUnit: item.price_unit || '',
+    priceText: item.price_text || '',
+    priceOptions: item.price_options || {},
+    portionDescription: item.portion_description || '',
+    imagePaths: [...(item.image_paths || [])],
+    imageKind: item.image_kind || 'dish',
+    sourceFilename: item.source_filename || '',
+    rawText: item.raw_text || '',
+    notes: item.notes || '',
+    newFiles: [],
+    previewUrls: [],
+  }
+}
+
 function createDraftEntry(files: File[]): DraftEntry {
   return {
     localId: newClientBatchKey(),
@@ -873,6 +1461,17 @@ function guessName(filename: string): string {
 function toggleValue(values: string[], value: string): string[] {
   const next = values.includes(value) ? values.filter((item) => item !== value) : [...values.filter((item) => item !== 'unknown'), value]
   return next.length ? next : ['unknown']
+}
+
+function isCatalogItemPublishable(item: CatalogItem): boolean {
+  return item.status !== 'published'
+    && item.status !== 'analysis_pending'
+    && item.completeness_status === 'complete'
+    && (item.missing_fields || []).length === 0
+}
+
+function toggleSimpleValue(values: string[], value: string): string[] {
+  return values.includes(value) ? values.filter((item) => item !== value) : [...values, value]
 }
 
 function optionalNumber(value: string): number | undefined {
@@ -922,7 +1521,43 @@ function formatDate(value?: string): string {
 }
 
 function priceSummary(item: CatalogItem): string {
-  if (item.price_type === 'range' && item.price_min != null && item.price_max != null) return `${item.price_min}-${item.price_max}${item.price_unit || '元'}`
-  if (item.price != null) return `${item.price}${item.price_unit || '元'}`
+  const unit = displayPriceUnit(item.price_unit)
+  if (item.price_type === 'range' && item.price_min != null && item.price_max != null) return `${item.price_min}-${item.price_max}${unit}`
+  if (item.price != null) return `${item.price}${unit}`
   return item.price_text || '价格待补充'
+}
+
+function displayPriceUnit(value?: string): string {
+  const unit = value?.trim()
+  if (!unit) return '元'
+  if (unit === '元' || unit.startsWith('元/')) return unit
+  return `元/${unit}`
+}
+
+function catalogPublishStatusLabel(status: string): string {
+  if (status === 'published') return '小程序已上线'
+  if (status === 'analysis_pending') return 'AI 分析中'
+  if (status === 'analysis_failed') return 'AI 分析失败'
+  if (status === 'changes_pending') return '有修改待上线'
+  return '仅后台草稿'
+}
+
+function catalogPublishActionLabel(status: string): string {
+  if (status === 'published') return '已上线'
+  if (status === 'analysis_pending') return 'AI 分析中'
+  if (status === 'analysis_failed') return '重新分析'
+  if (status === 'changes_pending') return '分析更新并上线'
+  return 'AI 分析并上线'
+}
+
+function catalogPublishDisabledReason(item: CatalogItem): string | undefined {
+  if (item.status === 'published') return '该条目已经上线'
+  if (item.status === 'analysis_pending') return 'AI 分析进行中，请等待结果'
+  if ((item.missing_fields || []).length || item.completeness_status !== 'complete') return '请先补齐名称、图片和价格'
+  return '选择此条目'
+}
+
+function shortAnalysisError(value: string): string {
+  const normalized = value.trim()
+  return normalized.length > 42 ? `${normalized.slice(0, 42)}…` : normalized
 }

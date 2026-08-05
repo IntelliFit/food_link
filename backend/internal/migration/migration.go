@@ -236,6 +236,25 @@ func MigrateOnboardingStatus(ctx context.Context, db *gorm.DB, schema string) er
 	return nil
 }
 
+// MigrateCampusCatalogPublishing applies only the additive schema needed by
+// the admin draft-to-publication workflow. It deliberately excludes every
+// historical seed and data backfill in AutoMigrate.
+func MigrateCampusCatalogPublishing(ctx context.Context, db *gorm.DB, schema string) error {
+	if err := prepareSchema(ctx, db, schema); err != nil {
+		return err
+	}
+	if err := db.WithContext(ctx).AutoMigrate(&migrationdo.CampusFoodCatalogItemDO{}); err != nil {
+		return fmt.Errorf("auto migrate campus catalog publishing: %w", err)
+	}
+	if !db.Migrator().HasTable(&migrationdo.PublicFoodItemDO{}) {
+		return fmt.Errorf("public_food_library table is required")
+	}
+	if err := db.WithContext(ctx).Exec(`ALTER TABLE public_food_library ALTER COLUMN user_id DROP NOT NULL`).Error; err != nil {
+		return fmt.Errorf("allow official public food author: %w", err)
+	}
+	return nil
+}
+
 // MigrateFoodRecordMood applies only the optional eating_mood column for food
 // records. It is intentionally narrow so a small product-field rollout does
 // not publish unrelated pending schema or data migrations.
@@ -455,6 +474,7 @@ func ensureConstraints(ctx context.Context, db *gorm.DB) error {
 		addFK("public_food_library_user_id_fkey", "public_food_library", "user_id", "weapp_user", "id", "CASCADE"),
 		addFK("public_food_library_source_record_id_fkey", "public_food_library", "source_record_id", "user_food_records", "id", "SET NULL"),
 		addFK("public_food_library_analysis_task_id_fkey", "public_food_library", "analysis_task_id", "analysis_tasks", "id", "SET NULL"),
+		addFK("campus_food_catalog_items_analysis_task_id_fkey", "campus_food_catalog_items", "analysis_task_id", "analysis_tasks", "id", "SET NULL"),
 		addFK("school_campuses_school_id_fkey", "school_campuses", "school_id", "schools", "id", "CASCADE"),
 		addFK("school_canteens_school_id_fkey", "school_canteens", "school_id", "schools", "id", "CASCADE"),
 		addFK("school_canteens_campus_id_fkey", "school_canteens", "campus_id", "school_campuses", "id", "SET NULL"),
@@ -795,6 +815,9 @@ WHERE COALESCE(display_name, '') = ''
 		`ALTER TABLE public_food_library ADD COLUMN IF NOT EXISTS portion_description text`,
 		`ALTER TABLE public_food_library ADD COLUMN IF NOT EXISTS is_campus_highlight boolean NOT NULL DEFAULT false`,
 		`ALTER TABLE public_food_library ADD COLUMN IF NOT EXISTS campus_location_text text`,
+		// Official campus catalog entries are published by an admin account rather
+		// than a mini-program user, so their author is intentionally nullable.
+		`ALTER TABLE public_food_library ALTER COLUMN user_id DROP NOT NULL`,
 		`CREATE INDEX IF NOT EXISTS idx_public_food_library_is_campus ON public_food_library (is_campus_food)`,
 		`CREATE INDEX IF NOT EXISTS idx_public_food_library_school_id ON public_food_library (school_id) WHERE school_id IS NOT NULL`,
 		`CREATE INDEX IF NOT EXISTS idx_public_food_library_campus_id ON public_food_library (campus_id) WHERE campus_id IS NOT NULL`,
