@@ -1,10 +1,12 @@
 package app
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	systemhandler "food_link/backend/internal/system/handler"
 	"food_link/backend/pkg/config"
@@ -13,10 +15,36 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+type recordingCampusNutritionBackfiller struct {
+	called chan int
+}
+
+func (f *recordingCampusNutritionBackfiller) SubmitPublishedNutritionBackfill(_ context.Context, limit int) (int, error) {
+	f.called <- limit
+	return 1, nil
+}
+
 func TestAppPackage(t *testing.T) {
 	// This is a compile-time / smoke test for the app package
 	// The New() function requires real database/config which is not feasible in unit tests
 	assert.True(t, true)
+}
+
+func TestStartCampusCatalogNutritionBackfillRunsAfterWorkerStartup(t *testing.T) {
+	app := &App{}
+	backfiller := &recordingCampusNutritionBackfiller{called: make(chan int, 1)}
+	app.startCampusCatalogNutritionBackfill(backfiller)
+	t.Cleanup(func() {
+		app.catalogBackfillCancel()
+		<-app.catalogBackfillDone
+	})
+
+	select {
+	case limit := <-backfiller.called:
+		assert.Equal(t, 100, limit)
+	case <-time.After(6 * time.Second):
+		t.Fatal("历史校园菜品营养补分析未在 worker 启动后执行")
+	}
 }
 
 func TestShouldTraceHTTPRequestSkipsHealthCheck(t *testing.T) {
