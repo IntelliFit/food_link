@@ -54,6 +54,64 @@ final result: passed
 
 ---
 
+# 分析页双模式主卡区分设计 QA
+
+- 均衡模式：`/private/tmp/foodlink-balanced-stats-light-card.png`
+- 养生模式：`/private/tmp/foodlink-wellness-stats-dark-card.png`
+- 验证环境：微信开发者工具模拟器，同一分析数据，仅切换首页模式
+
+## Findings
+
+- 均衡模式主卡使用 `#edf8f2 → #c8e5d7` 浅薄荷/鼠尾草绿渐变，标题与主数值使用 `#1f493a` 深绿；视觉语言与圈子页浅色卡片一致。
+- 养生模式主卡继续使用 `#133a32 → #245c4f` 深森林绿渐变和白色标题，不受均衡模式规则影响。
+- 两种模式的卡片结构、数值、徽标和四项指标完全一致，只通过色面和文字明度区分，不改变分析功能。
+- 微信运行时确认分别命中 `fl-page-theme-root--balanced` 与 `fl-page-theme-root--wellness`；错误日志为 0。
+- TypeScript、目标 ESLint与 `git diff --check` 通过。
+
+final result: passed
+
+---
+
+# 首页模式扩展为全局主题设计 QA
+
+- 养生分析页：`/private/tmp/foodlink-wellness-global-stats-final.png`
+- 养生圈子页：`/private/tmp/foodlink-wellness-global-community.png`
+- 养生我的页：`/private/tmp/foodlink-wellness-global-profile.png`
+- 均衡我的页对照：`/private/tmp/foodlink-balanced-global-profile.png`
+- 验证环境：微信开发者工具模拟器，同一代码与用户状态，仅切换 `home_display_mode_v1`
+
+## Findings
+
+- 养生模式在三个主 Tab 使用一致的暖白背景、暖米白表面、森林绿主卡和暖金导航选中态；没有把页面主体整体染成深绿。
+- 分析页“关注综合分”主卡保持深绿底与白字，运行时背景为 `#133a32 → #245c4f`，标题为纯白；不存在通用暖白卡片覆盖造成的低对比问题。
+- 圈子页的快捷入口、排行榜、筛选区和动态列表处于同一暖色背景体系；排行榜继续承担主视觉，内容照片和业务语义色未被主题滤镜污染。
+- 我的页的会员主卡保持深绿，列表卡使用暖米白表面；头像、功能图标和红色提醒等原语义色保持不变。
+- 三页页面壳均实测为 `fl-page-theme-root--wellness`；切回均衡模式后实测为 `fl-page-theme-root--balanced`，页面恢复原薄荷渐变与白色导航。
+- 原生顶部背景和自定义底栏均随模式统一；运行时错误日志为 0。
+- TypeScript、目标 ESLint、21 个 Jest 套件（78 条）与 `git diff --check` 通过。
+
+final result: passed
+
+---
+
+# 首页双模式宠物尺寸一致性设计 QA
+
+- 养生模式截图：`/private/tmp/foodlink-wellness-pet-size.png`
+- 均衡模式截图：`/private/tmp/foodlink-balanced-pet-size.png`
+- 验证环境：微信开发者工具模拟器，同一登录用户、同一宠物展开状态
+
+## Findings
+
+- 养生模式不再强制把宠物收起，也不再额外应用 `scale(0.62)`；模式切换只改变首页内容主题，不改变宠物视觉状态。
+- 微信运行时测量：养生/均衡模式的宠物外框均为 `187 × 98px`，头像均为 `86 × 86px`，状态类均为 `is-expanded`。
+- 两张完整页面截图中宠物的位置、头像直径、对话气泡和收起按钮尺寸一致；未出现裁切、重叠或缩放跳变。
+- 真实执行养生 → 均衡 → 养生切换，用户选择状态可保持；运行时错误日志为 0。
+- TypeScript、目标 ESLint、21 个 Jest 套件（78 条）与 `git diff --check` 通过。
+
+final result: passed
+
+---
+
 # 常用形象新增华佗与太极小子设计 QA
 
 - 源视觉真值：`/var/folders/dl/j1hxj3fs3czd7lt458p170t80000gn/T/codex-clipboard-02918ffa-9e4b-4b14-89ee-884138499f5c.png`、`/var/folders/dl/j1hxj3fs3czd7lt458p170t80000gn/T/codex-clipboard-79144f06-2bb9-43ef-a22b-808aee82e619.png`

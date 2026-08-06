@@ -25,6 +25,65 @@ $community-border-soft: rgb(92 184 150 / 18%);
   padding-top: $tab-page-content-top;
 }
 
+/* 养生模式：圈子页保留社交信息密度，仅统一页面底色、卡片表面与强调色。 */
+.fl-page-theme-root--wellness:not(.fl-d) {
+  .community-page {
+    background: linear-gradient(180deg, #faf7ef 0%, #f4f1e7 44%, #edf1e9 100%);
+  }
+
+  .my-circles-section,
+  .circle-card,
+  .feed-search-friends-panel,
+  .feed-filter-drawer,
+  .library-mix-card {
+    background: rgb(255 253 247 / 96%);
+    border-color: rgb(77 111 83 / 14%);
+    box-shadow: 0 8rpx 28rpx rgb(55 72 58 / 8%);
+  }
+
+  .circle-card {
+    background: linear-gradient(145deg, #fffdf7 0%, #f3f5ec 100%);
+  }
+
+  .ranking-banner {
+    background: linear-gradient(145deg, #315f43 0%, #477553 52%, #274d37 100%);
+    border: 1rpx solid rgb(215 190 135 / 30%);
+    box-shadow: 0 12rpx 34rpx rgb(33 74 52 / 20%);
+  }
+
+  .section-title,
+  .circle-name,
+  .feed-section-title,
+  .feed-search-friends-title {
+    color: #294635;
+  }
+
+  .view-all-text,
+  .library-mix-calorie {
+    color: #315f43;
+  }
+
+  .feed-filter-panel,
+  .feed-card,
+  .skeleton-feed-card {
+    border-bottom-color: rgb(77 111 83 / 13%);
+  }
+
+  .feed-card:active {
+    background: rgb(49 95 67 / 5%);
+  }
+
+  .feed-filter-funnel-btn.is-open,
+  .feed-filter-funnel-btn.is-active {
+    border-color: #315f43;
+    box-shadow: 0 0 0 2rpx rgb(49 95 67 / 12%);
+  }
+
+  .feed-filter-funnel-btn.is-active .icon-filter-filling {
+    color: #315f43;
+  }
+}
+
 // 图标字体在本页的统一样式
 .community-page .iconfont {
   display: inline-flex;

@@ -35,6 +35,111 @@ $stats-blue-soft: #7aa9ce;
   }
 }
 
+/* 养生模式：分析页沿用暖米白表面和森林绿强调，数据结构保持不变。 */
+.fl-page-theme-root--wellness:not(.fl-d) {
+  .stats-page {
+    background: linear-gradient(180deg, #faf7ef 0%, #f4f1e7 44%, #edf1e9 100%);
+  }
+
+  .stats-range-dropdown,
+  .segmented-control,
+  .stats-guest-card,
+  .health-index-gate-card,
+  .stats-data-gate-card,
+  .stats-card:not(.hero-card):not(.risk-overview-card),
+  .risk-detail-panel,
+  .analysis-card,
+  .analysis-loading-card,
+  .ai-insight-card,
+  .ai-detail-panel {
+    background: rgb(255 253 247 / 94%);
+    border-color: rgb(77 111 83 / 15%);
+    box-shadow: 0 8rpx 28rpx rgb(55 72 58 / 8%);
+  }
+
+  .segmented-control {
+    background: rgb(235 231 218 / 72%);
+  }
+
+  .segment-item.active {
+    background: #fffaf0;
+    color: #315f43;
+    box-shadow: 0 4rpx 14rpx rgb(55 72 58 / 10%);
+  }
+
+  .hero-card.stats-card.deficit-mode {
+    background: linear-gradient(145deg, #315f43 0%, #477553 48%, #274d37 100%);
+    border-color: rgb(215 190 135 / 28%);
+    box-shadow: 0 14rpx 42rpx rgb(33 74 52 / 24%);
+  }
+
+  .hero-card.stats-card.surplus-mode {
+    background: linear-gradient(145deg, #a97839 0%, #bd8b4c 48%, #815a2d 100%);
+    border-color: rgb(255 239 202 / 24%);
+    box-shadow: 0 14rpx 40rpx rgb(91 61 28 / 22%);
+  }
+
+  .stats-range-dropdown__label,
+  .card-title,
+  .stats-section-head__title,
+  .action-section-title,
+  .ai-insight-card-title {
+    color: #294635;
+  }
+
+  .stats-page__data-sync-spinner,
+  .loading-spinner-md {
+    border-color: rgb(49 95 67 / 20%);
+    border-top-color: #315f43;
+  }
+}
+
+/* 均衡模式：主卡使用圈子页同系的浅薄荷绿，与养生模式深森林绿形成明确区分。 */
+.fl-page-theme-root--balanced:not(.fl-d) {
+  .risk-overview-card {
+    background:
+      radial-gradient(circle at top right, rgb(255 255 255 / 64%) 0%, transparent 34%),
+      linear-gradient(145deg, #edf8f2 0%, #d9eee4 48%, #c8e5d7 100%);
+    border-color: rgb(92 184 150 / 24%);
+    box-shadow: 0 14rpx 36rpx rgb(73 133 108 / 16%);
+    color: #1f493a;
+
+    &::before {
+      background: radial-gradient(circle, rgb(255 255 255 / 54%) 0%, transparent 70%);
+    }
+
+    &::after {
+      background: radial-gradient(circle, rgb(92 184 150 / 12%) 0%, transparent 70%);
+    }
+  }
+
+  .risk-overview-title,
+  .risk-overview-score,
+  .risk-overview-chip-value {
+    color: #1f493a;
+    text-shadow: none;
+  }
+
+  .risk-overview-score-unit,
+  .risk-overview-score-hint,
+  .risk-overview-chip-label {
+    color: #668176;
+  }
+
+  .risk-overview-summary {
+    color: #3d6657;
+  }
+
+  .risk-overview-badge {
+    background: rgb(255 255 255 / 62%);
+    border-color: rgb(63 119 91 / 16%);
+  }
+
+  .risk-overview-badge-label {
+    color: #356c55;
+  }
+}
+
 /* 分析页：缓存先展示时，后台联网同步的微型指示器（fixed，不挤占布局） */
 .stats-page__data-sync {
   position: fixed;

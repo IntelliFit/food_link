@@ -3054,7 +3054,7 @@ function IndexPage() {
   }, [])
 
   const wellnessCaloriePct = Math.min(100, calculateProgressPercent(totalCurrent, normalizeDisplayNumber(intakeData.target)))
-  const petVisualCollapsed = petCollapsed || homeMode === 'wellness'
+  const petVisualCollapsed = petCollapsed
   const bodyStatusCards = (
     <View className='body-status-section'>
       <View className='body-status-card weight-card' onClick={() => openBodyMetricRecord('weight')} onLongPress={openWeightEditor}>
@@ -3199,7 +3199,7 @@ function IndexPage() {
               const handled = petClickHandledRef.current
               petClickHandledRef.current = false
               if (handled) return
-              if (petVisualCollapsed && homeMode === 'balanced') {
+              if (petVisualCollapsed) {
                 togglePetCollapsed()
               }
               // 展开态点击卡片空白处不进入对话，只有「点我聊聊」进入
@@ -3223,7 +3223,7 @@ function IndexPage() {
                 const handled = petClickHandledRef.current
                 petClickHandledRef.current = false
                 if (handled) return
-                if (petVisualCollapsed && homeMode === 'balanced') {
+                if (petVisualCollapsed) {
                   togglePetCollapsed()
                   return
                 }

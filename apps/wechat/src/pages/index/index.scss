@@ -634,11 +634,6 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
     radial-gradient(circle at 86% 5%, rgb(132 154 111 / 12%) 0, transparent 32%),
     linear-gradient(180deg, #fbf8f0 0%, #f5f3ea 46%, #eef2ed 100%);
 
-  .pet-companion-float.is-collapsed {
-    transform: scale(0.62);
-    transform-origin: top right;
-  }
-
   .greeting-title,
   .greeting-title-icon {
     color: #294635;

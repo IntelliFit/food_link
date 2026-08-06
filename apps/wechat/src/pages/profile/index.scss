@@ -14,6 +14,48 @@
 
 }
 
+/* 养生模式：我的页使用暖白卡片与森林绿会员主卡，形成跨页连续感。 */
+.fl-page-theme-root--wellness:not(.fl-d) {
+  .profile-page {
+    background: linear-gradient(180deg, #faf7ef 0%, #f4f1e7 44%, #edf1e9 100%);
+  }
+
+  .profile-card:not(.member-card),
+  .profile-theme-chip {
+    background: rgb(255 253 247 / 96%);
+    border: 1rpx solid rgb(77 111 83 / 14%);
+    box-shadow: 0 8rpx 28rpx rgb(55 72 58 / 8%);
+  }
+
+  .member-card.member-card--free {
+    background: linear-gradient(145deg, #315f43 0%, #3f7251 52%, #274d37 100%);
+    border-color: rgb(215 190 135 / 34%);
+    box-shadow: 0 12rpx 36rpx rgb(33 74 52 / 22%);
+  }
+
+  .member-card.member-card--free .card-upgrade-text {
+    color: #315f43;
+  }
+
+  .user-card .user-name,
+  .list-item .list-title {
+    color: #294635;
+  }
+
+  .list-item {
+    border-bottom-color: rgb(77 111 83 / 12%);
+  }
+
+  .onboarding-card {
+    background: linear-gradient(135deg, #edf4e9 0%, #fffaf0 100%);
+    border-color: rgb(77 111 83 / 18%);
+  }
+
+  .tool-text--login {
+    color: #315f43;
+  }
+}
+
 // 主题切换：位于用户信息卡片最右侧
 .profile-theme-chip {
   position: absolute;
