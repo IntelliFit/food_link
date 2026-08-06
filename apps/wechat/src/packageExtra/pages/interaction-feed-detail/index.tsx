@@ -513,16 +513,16 @@ function InteractionFeedDetailPage() {
 	                const useExerciseActivityCards = exercise && hasExerciseActivityCards(feedItem.record.exercise_items)
 	                const visibleManualFoodItems = manualFoodsExpanded ? manualFoodItems : manualFoodItems.slice(0, INITIAL_VISIBLE_MANUAL_FOODS)
                 return (
-	              <View
-	                id={`feed-card-${getFeedTargetType(feedItem)}-${getFeedTargetId(feedItem)}`}
-	                className={`feed-card${(feedItem.record.description?.trim() || exerciseDesc || circlePostText.trim()) && !feedItem.record.image_path && !useExerciseActivityCards ? ' feed-card-text-only' : ''} ${exercise ? 'feed-card-exercise' : ''} ${isCirclePost ? 'feed-card-circle-post' : ''}`}
-                style={isCirclePost ? { position: 'relative' } : undefined}
-                onLongPress={() => {
+                  <View
+                    id={`feed-card-${getFeedTargetType(feedItem)}-${getFeedTargetId(feedItem)}`}
+                    className={`feed-card${(feedItem.record.description?.trim() || exerciseDesc || circlePostText.trim()) && !feedItem.record.image_path && !useExerciseActivityCards ? ' feed-card-text-only' : ''} ${exercise ? 'feed-card-exercise' : ''} ${isCirclePost ? 'feed-card-circle-post' : ''}`}
+                    style={isCirclePost ? { position: 'relative' } : undefined}
+                    onLongPress={() => {
                   if (isCirclePost && !feedItem.is_mine) {
                     setReportMaskVisible(true)
                   }
                 }}
-              >
+                  >
                 <View className='feed-card-moments'>
                   <View className='feed-card-avatar-col'>
                     <View className='user-avatar'>
@@ -561,8 +561,8 @@ function InteractionFeedDetailPage() {
 	                    ) : null}
 	                    {useExerciseActivityCards && (
 	                      <ExerciseActivityCards
-	                        items={feedItem.record.exercise_items}
-	                        onItemClick={() => handleViewDetail(feedItem.record.id)}
+  items={feedItem.record.exercise_items}
+  onItemClick={() => handleViewDetail(feedItem.record.id)}
 	                      />
 	                    )}
                     {feedItem.record.image_path && !isCirclePost ? (

@@ -46,6 +46,7 @@ const (
 	taskLeaseExtendEvery      = 30 * time.Second
 	taskRecoveryInterval      = 30 * time.Second
 	taskKafkaRecoveryInterval = 5 * time.Minute
+	taskKafkaRecoveryCooldown = 30 * time.Minute
 	taskRecoveryLeaderRetry   = 30 * time.Second
 	taskRecoveryBatchSize     = 200
 )
@@ -536,13 +537,13 @@ func (r *Runner) recoverLoop(ctx context.Context, taskTypes []string, interval t
 		interval = taskRecoveryInterval
 	}
 	if queueDriver == "kafka" {
-		r.recoverKafkaLeaderLoop(ctx, taskTypes, interval, lockKey)
+		r.recoverKafkaLeaderLoop(ctx, taskTypes, interval, taskKafkaRecoveryCooldown, lockKey)
 		return
 	}
-	r.runRecoverySchedule(ctx, taskTypes, interval)
+	r.runRecoverySchedule(ctx, taskTypes, interval, interval)
 }
 
-func (r *Runner) recoverKafkaLeaderLoop(ctx context.Context, taskTypes []string, interval time.Duration, lockKey string) {
+func (r *Runner) recoverKafkaLeaderLoop(ctx context.Context, taskTypes []string, interval, cooldown time.Duration, lockKey string) {
 	if r.tasks == nil {
 		return
 	}
@@ -557,7 +558,7 @@ func (r *Runner) recoverKafkaLeaderLoop(ctx context.Context, taskTypes []string,
 				slog.String("recovery_lock_key", lockKey),
 				slog.Duration("recovery_interval", interval),
 			)
-			r.runRecoverySchedule(leaderCtx, taskTypes, interval)
+			r.runRecoverySchedule(leaderCtx, taskTypes, interval, cooldown)
 			return nil
 		})
 		if ctx.Err() != nil {
@@ -580,8 +581,8 @@ func (r *Runner) recoverKafkaLeaderLoop(ctx context.Context, taskTypes []string,
 	}
 }
 
-func (r *Runner) runRecoverySchedule(ctx context.Context, taskTypes []string, interval time.Duration) {
-	r.recoverQueueTasks(ctx, taskTypes)
+func (r *Runner) runRecoverySchedule(ctx context.Context, taskTypes []string, interval, cooldown time.Duration) {
+	r.recoverQueueTasks(ctx, taskTypes, cooldown)
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	for {
@@ -589,12 +590,12 @@ func (r *Runner) runRecoverySchedule(ctx context.Context, taskTypes []string, in
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			r.recoverQueueTasks(ctx, taskTypes)
+			r.recoverQueueTasks(ctx, taskTypes, cooldown)
 		}
 	}
 }
 
-func (r *Runner) recoverQueueTasks(ctx context.Context, taskTypes []string) {
+func (r *Runner) recoverQueueTasks(ctx context.Context, taskTypes []string, cooldown time.Duration) {
 	if r.queue == nil || r.tasks == nil {
 		return
 	}
@@ -604,7 +605,11 @@ func (r *Runner) recoverQueueTasks(ctx context.Context, taskTypes []string) {
 	}
 	recoverCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	tasks, err := r.tasks.ListRecoverableTasks(recoverCtx, taskTypes, taskRecoveryBatchSize, time.Now())
+	now := time.Now()
+	if cooldown <= 0 {
+		cooldown = taskRecoveryInterval
+	}
+	tasks, err := r.tasks.ListRecoverableTasks(recoverCtx, taskTypes, taskRecoveryBatchSize, now, now.Add(-cooldown))
 	if err != nil {
 		r.errorLog(ctx, "恢复队列中的分析任务失败", nil)
 		apm.RecordError(recoverCtx, err, attribute.String("analysis.stage", "queue_recovery"))
@@ -638,6 +643,16 @@ func (r *Runner) recoverQueueTasks(ctx context.Context, taskTypes []string) {
 			continue
 		}
 		metrics.AddWorkerRecoveredTasks(task.TaskType, "published", 1)
+		markCtx, markCancel := context.WithTimeout(ctx, 2*time.Second)
+		err = r.tasks.MarkTaskRecoveryPublished(markCtx, task.ID, time.Now())
+		markCancel()
+		if err != nil {
+			r.errorLog(ctx, "记录分析任务恢复发布时间失败", err,
+				slog.String("task_id", task.ID),
+				slog.String("task_type", task.TaskType),
+				logger.Err(err),
+			)
+		}
 		published++
 	}
 	if published > 0 {

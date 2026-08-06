@@ -530,7 +530,7 @@ func (r *TaskRepo) MarkTimedOutTasks(ctx context.Context, timeoutMinutes int) (i
 	return res.RowsAffected, res.Error
 }
 
-func (r *TaskRepo) ListRecoverableTasks(ctx context.Context, taskTypes []string, limit int, now time.Time) ([]domain.AnalysisTask, error) {
+func (r *TaskRepo) ListRecoverableTasks(ctx context.Context, taskTypes []string, limit int, now, recoverBefore time.Time) ([]domain.AnalysisTask, error) {
 	if len(taskTypes) == 0 {
 		return nil, nil
 	}
@@ -540,15 +540,34 @@ func (r *TaskRepo) ListRecoverableTasks(ctx context.Context, taskTypes []string,
 	if now.IsZero() {
 		now = time.Now()
 	}
+	if recoverBefore.IsZero() {
+		recoverBefore = now
+	}
 	var tasks []domain.AnalysisTask
 	err := r.db.WithContext(ctx).
 		Select("id", "task_type", "status", "lease_until").
 		Where("task_type IN ?", taskTypes).
 		Where("status = ? OR (status = ? AND (lease_until IS NULL OR lease_until <= ?))", "pending", "processing", now).
+		Where("updated_at <= ?", recoverBefore).
 		Order("created_at ASC").
 		Limit(limit).
 		Find(&tasks).Error
 	return tasks, err
+}
+
+// MarkTaskRecoveryPublished records a successful recovery publish so the same
+// pending task is not appended to Kafka again on every recovery scan.
+func (r *TaskRepo) MarkTaskRecoveryPublished(ctx context.Context, taskID string, recoveredAt time.Time) error {
+	if strings.TrimSpace(taskID) == "" {
+		return nil
+	}
+	if recoveredAt.IsZero() {
+		recoveredAt = time.Now()
+	}
+	return r.db.WithContext(ctx).
+		Model(&domain.AnalysisTask{}).
+		Where("id = ? AND (status = ? OR (status = ? AND (lease_until IS NULL OR lease_until <= ?)))", taskID, "pending", "processing", recoveredAt).
+		UpdateColumn("updated_at", recoveredAt).Error
 }
 
 // TryTaskRecoveryLeadership elects one recovery loop per queue by holding a
