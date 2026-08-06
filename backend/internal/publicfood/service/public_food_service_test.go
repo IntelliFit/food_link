@@ -532,6 +532,7 @@ func TestPublicFoodServiceGetCampusDetailAggregatesRelatedData(t *testing.T) {
 			WindowName:    "低脂窗口",
 			TotalCalories: 420,
 			TotalProtein:  38,
+			Items:         preciseCampusItemsForServiceTest(),
 			Price:         16,
 			PublishedAt:   &now,
 			CreatedAt:     &now,
@@ -549,6 +550,7 @@ func TestPublicFoodServiceGetCampusDetailAggregatesRelatedData(t *testing.T) {
 			WindowName:        "低脂窗口",
 			TotalCalories:     480,
 			TotalProtein:      35,
+			Items:             preciseCampusItemsForServiceTest(),
 			Price:             19,
 			PublishedAt:       &now,
 			CreatedAt:         &now,
@@ -568,6 +570,41 @@ func TestPublicFoodServiceGetCampusDetailAggregatesRelatedData(t *testing.T) {
 	require.Equal(t, "campus-2", detail.SimilarItems[0].ID)
 	require.Len(t, detail.RelatedFeeds, 1)
 	require.Equal(t, "campus-2", detail.RelatedFeeds[0].ID)
+}
+
+func preciseCampusItemsForServiceTest() []map[string]any {
+	return []map[string]any{{
+		"name":                   "测试菜品",
+		"micronutrient_analysis": "ai_precise_v1",
+		"micronutrient_source":   "qwen_generated",
+		"nutrients": map[string]any{
+			"fiber": 3.2, "sugar": 2.1, "saturatedFat": 1.2, "cholesterolMg": 15.0,
+			"sodiumMg": 330.0, "potassiumMg": 460.0, "calciumMg": 120.0, "ironMg": 2.4,
+			"magnesiumMg": 38.0, "zincMg": 2.1, "vitaminARaeMcg": 80.0, "vitaminCMg": 12.0,
+			"vitaminDMcg": 1.0, "vitaminEMg": 1.5, "vitaminKMcg": 18.0, "thiaminMg": 0.2,
+			"riboflavinMg": 0.2, "niacinMg": 3.1, "vitaminB6Mg": 0.3, "folateMcg": 45.0,
+			"vitaminB12Mcg": 0.8,
+		},
+	}}
+}
+
+func TestHasPreciseCampusMicronutrients(t *testing.T) {
+	require.False(t, hasPreciseCampusMicronutrients(nil))
+	require.False(t, hasPreciseCampusMicronutrients(&domain.PublicFoodItem{}))
+	require.False(t, hasPreciseCampusMicronutrients(&domain.PublicFoodItem{
+		Items: []map[string]any{{"name": "普通分析菜品"}},
+	}))
+	require.False(t, hasPreciseCampusMicronutrients(&domain.PublicFoodItem{
+		Items: []map[string]any{{
+			"name":                   "字段不完整菜品",
+			"micronutrient_analysis": "ai_precise_v1",
+			"micronutrient_source":   "qwen_generated",
+			"nutrients":              map[string]any{"calciumMg": 120.0},
+		}},
+	}))
+	require.True(t, hasPreciseCampusMicronutrients(&domain.PublicFoodItem{
+		Items: preciseCampusItemsForServiceTest(),
+	}))
 }
 
 func TestPublicFoodServiceUpdateOwnItem(t *testing.T) {
