@@ -69,6 +69,22 @@ function getCurrentUserAvatar(): string {
   }
 }
 
+function orderMessagesByTime(messages: PrivateMessage[]): PrivateMessage[] {
+  return [...messages].sort((left, right) => {
+    const leftTime = new Date(left.created_at).getTime()
+    const rightTime = new Date(right.created_at).getTime()
+    if (leftTime !== rightTime) return leftTime - rightTime
+    return left.id.localeCompare(right.id)
+  })
+}
+
+function mergeMessagesByID(current: PrivateMessage[], incoming: PrivateMessage[]): PrivateMessage[] {
+  const byID = new Map<string, PrivateMessage>()
+  current.forEach((message) => byID.set(message.id, message))
+  incoming.forEach((message) => byID.set(message.id, message))
+  return orderMessagesByTime([...byID.values()])
+}
+
 export default function PrivateChatPage() {
   const { scheme } = useAppColorScheme()
   const router = useRouter()
@@ -273,6 +289,7 @@ export default function PrivateChatPage() {
       if (!tempFilePaths || tempFilePaths.length === 0) return
       const tempFilePath = tempFilePaths[0]
 
+      isSendingRef.current = true
       setSending(true)
       Taro.showLoading({ title: '', mask: true })
 
