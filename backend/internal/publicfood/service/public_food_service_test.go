@@ -311,8 +311,8 @@ func TestPublicFoodServiceCreateCampusFoodPublishesAndStoresCampusFields(t *test
 
 	var saved domain.PublicFoodItem
 	require.NoError(t, db.Where("id = ?", id).First(&saved).Error)
-	require.Equal(t, "published", saved.Status)
-	require.NotNil(t, saved.PublishedAt)
+	require.Equal(t, "pending", saved.Status)
+	require.Nil(t, saved.PublishedAt)
 	require.True(t, saved.IsCampusFood)
 	require.Equal(t, school, saved.SchoolName)
 	require.Equal(t, campus, saved.CampusName)
@@ -335,6 +335,7 @@ func TestPublicFoodServiceCreateCampusFoodPublishesAndStoresCampusFields(t *test
 	require.Equal(t, []string{image}, task.ImagePaths)
 	require.Equal(t, id, task.Payload["public_food_item_id"])
 	require.Equal(t, "campus_public_food", task.Payload["public_food_source_type"])
+	require.Equal(t, true, task.Payload["micronutrient_analysis_required"])
 	require.Equal(t, "image", task.Payload["source_type"])
 	require.Equal(t, "strict_separate", task.Payload["execution_mode"])
 	require.NotEmpty(t, task.Payload["precision_session_id"])
@@ -393,7 +394,8 @@ func TestPublicFoodServiceCreateCampusFoodAcceptsPostedPayloadWithoutItems(t *te
 	require.NotEmpty(t, itemID)
 	var saved domain.PublicFoodItem
 	require.NoError(t, db.Where("id = ?", itemID).First(&saved).Error)
-	require.Equal(t, "published", saved.Status)
+	require.Equal(t, "pending", saved.Status)
+	require.Nil(t, saved.PublishedAt)
 	require.Equal(t, []map[string]any{}, saved.Items)
 	require.Equal(t, []string{}, saved.UserTags)
 	require.Equal(t, 0.0, saved.TotalCalories)
@@ -405,6 +407,7 @@ func TestPublicFoodServiceCreateCampusFoodAcceptsPostedPayloadWithoutItems(t *te
 	require.Equal(t, "precision_plan", task.TaskType)
 	require.Equal(t, "strict_separate", task.Payload["execution_mode"])
 	require.Equal(t, "campus_public_food", task.Payload["public_food_source_type"])
+	require.Equal(t, true, task.Payload["micronutrient_analysis_required"])
 	require.Equal(t, itemID, task.Payload["public_food_item_id"])
 	require.Len(t, publisher.messages, 1)
 	require.Equal(t, task.ID, publisher.messages[0].TaskID)

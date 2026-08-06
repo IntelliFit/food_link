@@ -187,6 +187,92 @@
   color: #6b7280;
 }
 
+.micronutrients-panel {
+  margin: -8rpx 0 32rpx;
+  padding: 24rpx;
+  border-radius: 24rpx;
+  background: #f7faf9;
+  border: 2rpx solid #e3f0eb;
+}
+
+.micronutrients-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20rpx;
+}
+
+.micronutrients-heading {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 14rpx;
+  flex-wrap: wrap;
+}
+
+.micronutrients-title {
+  font-size: 28rpx;
+  line-height: 40rpx;
+  font-weight: 650;
+  color: #1f2937;
+}
+
+.micronutrients-status {
+  padding: 4rpx 12rpx;
+  border-radius: 999rpx;
+  background: #fef3c7;
+  color: #92400e;
+  font-size: 22rpx;
+  line-height: 32rpx;
+
+  &.ready {
+    color: #047857;
+    background: #dcfce7;
+  }
+}
+
+.micronutrients-toggle {
+  flex: 0 0 auto;
+  color: #047857;
+  font-size: 24rpx;
+  line-height: 36rpx;
+}
+
+.micronutrients-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12rpx;
+  padding-top: 24rpx;
+}
+
+.micronutrient-cell {
+  min-width: 0;
+  padding: 16rpx 12rpx;
+  border-radius: 16rpx;
+  background: #fff;
+  border: 2rpx solid #edf2f0;
+  display: flex;
+  flex-direction: column;
+  gap: 6rpx;
+}
+
+.micronutrient-label {
+  color: #6b7280;
+  font-size: 22rpx;
+  line-height: 30rpx;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.micronutrient-value {
+  color: #111827;
+  font-size: 24rpx;
+  line-height: 34rpx;
+  font-weight: 650;
+  font-family: 'DIN Alternate', sans-serif;
+}
+
 // 作者信息
 .author-row {
   display: flex;
@@ -1555,6 +1641,25 @@
   .nutrients-row,
   .nutrients-block {
     border-color: rgb(255 255 255 / 8%);
+  }
+
+  .micronutrients-panel {
+    background: rgb(255 255 255 / 5%);
+    border-color: rgb(255 255 255 / 8%);
+  }
+
+  .micronutrients-title,
+  .micronutrient-value {
+    color: #f2f7f4;
+  }
+
+  .micronutrient-label {
+    color: rgb(214 226 220 / 62%);
+  }
+
+  .micronutrient-cell {
+    background: rgb(255 255 255 / 5%);
+    border-color: rgb(255 255 255 / 7%);
   }
 
   .nutrient-item:not(:last-child)::after {

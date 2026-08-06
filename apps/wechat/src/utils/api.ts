@@ -6762,6 +6762,8 @@ export interface PublicFoodLibraryItem {
     name: string
     weight?: number
     nutrients?: Nutrients
+    micronutrient_analysis?: string
+    micronutrient_source?: string
   }>
   description?: string | null
   insight?: string | null

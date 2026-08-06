@@ -478,6 +478,130 @@ func (s *AnalyzeService) ApplyDBFirstToItems(ctx context.Context, items []map[st
 	return toItems(resp["items"])
 }
 
+const preciseMicronutrientAnalysisMarker = "ai_precise_v1"
+
+var preciseMicronutrientKeys = []string{
+	"fiber", "sugar", "saturatedFat", "cholesterolMg", "sodiumMg", "potassiumMg", "calciumMg", "ironMg", "magnesiumMg", "zincMg",
+	"vitaminARaeMcg", "vitaminCMg", "vitaminDMcg", "vitaminEMg", "vitaminKMcg", "thiaminMg", "riboflavinMg", "niacinMg", "vitaminB6Mg", "folateMcg", "vitaminB12Mcg",
+}
+
+// ApplyDBFirstToItemsWithPreciseMicronutrients keeps the existing database-first
+// macro calculation, then reuses the configured nutrition fallback chain to
+// estimate the complete micronutrient profile for every item. Campus dishes use
+// this method so a nutrition-library hit cannot bypass precise micronutrient
+// analysis.
+func (s *AnalyzeService) ApplyDBFirstToItemsWithPreciseMicronutrients(ctx context.Context, items []map[string]any, additionalContext string) ([]map[string]any, error) {
+	resolved := s.ApplyDBFirstToItems(ctx, items, additionalContext)
+	if err := ValidateResolvedNutritionItems(resolved); err != nil {
+		return nil, err
+	}
+	candidates := make([]UnresolvedNutritionCandidate, 0, len(resolved))
+	rows := make(map[int]map[string]any, len(resolved))
+	for index, item := range resolved {
+		name := strings.TrimSpace(fmt.Sprintf("%v", item["name"]))
+		weight := nutritionWeightFromItem(item)
+		if name == "" || weight <= 0 {
+			return nil, fmt.Errorf("校园菜品微量营养精确分析缺少有效名称或份量")
+		}
+		existingSource := strings.TrimSpace(fmt.Sprintf("%v", item["nutrition_source"]))
+		existingUnit := copyAnyMap(mapFromAny(item["unit_nutrition_per_100g"]))
+		if foodrecorddomain.IsAIGeneratedNutritionSource(existingSource) && validatePreciseMicronutrientUnit(existingUnit) == nil {
+			existingUnit[fallbackNutritionSourceKey] = existingSource
+			rows[index] = existingUnit
+			continue
+		}
+		candidates = append(candidates, UnresolvedNutritionCandidate{
+			Index:                index,
+			Name:                 name,
+			EstimatedWeightGrams: weight,
+			FoodState:            strings.TrimSpace(fmt.Sprintf("%v", firstNonNil(item["foodState"], item["food_state"]))),
+			WeightBasis:          strings.TrimSpace(fmt.Sprintf("%v", firstNonNil(item["weightBasis"], item["weight_basis"]))),
+			BasisEvidence:        strings.TrimSpace(fmt.Sprintf("%v", firstNonNil(item["basisEvidence"], item["basis_evidence"]))),
+		})
+	}
+	if len(candidates) > 0 {
+		generatedRows, err := s.estimateNutritionWithFallback(ctx, candidates, additionalContext)
+		if err != nil {
+			return nil, fmt.Errorf("校园菜品微量营养精确分析失败: %w", err)
+		}
+		for index, unit := range generatedRows {
+			rows[index] = unit
+		}
+	}
+	for index := range resolved {
+		unit, ok := rows[index]
+		if !ok || len(unit) == 0 {
+			return nil, fmt.Errorf("校园菜品微量营养精确分析未返回第 %d 项结果", index+1)
+		}
+		source := popFallbackSource(unit, "")
+		if source == "" {
+			return nil, fmt.Errorf("校园菜品微量营养精确分析缺少第 %d 项来源", index+1)
+		}
+		if err := validatePreciseMicronutrientUnit(unit); err != nil {
+			return nil, fmt.Errorf("校园菜品第 %d 项微量营养结果不完整: %w", index+1, err)
+		}
+		weight := nutritionWeightFromItem(resolved[index])
+		scaled := scaleNutrition(unit, weight)
+		nutrients := copyAnyMap(mapFromAny(resolved[index]["nutrients"]))
+		unitNutrition := copyAnyMap(mapFromAny(resolved[index]["unit_nutrition_per_100g"]))
+		for _, key := range preciseMicronutrientKeys {
+			nutrients[key] = scaled[key]
+			unitNutrition[key] = unit[key]
+		}
+		resolved[index]["nutrients"] = nutrients
+		resolved[index]["unit_nutrition_per_100g"] = unitNutrition
+		resolved[index]["micronutrient_analysis"] = preciseMicronutrientAnalysisMarker
+		resolved[index]["micronutrient_source"] = source
+	}
+	if err := ValidatePreciseMicronutrientItems(resolved); err != nil {
+		return nil, err
+	}
+	return resolved, nil
+}
+
+func validatePreciseMicronutrientUnit(unit map[string]any) error {
+	missing := make([]string, 0)
+	positive := 0
+	for _, key := range preciseMicronutrientKeys {
+		value, ok := unit[key]
+		if !ok {
+			missing = append(missing, key)
+			continue
+		}
+		if numberFromAny(value) > 0 {
+			positive++
+		}
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf("缺少字段 %s", strings.Join(missing, ","))
+	}
+	if positive < 4 {
+		return fmt.Errorf("有效微量营养少于 4 项")
+	}
+	return nil
+}
+
+// ValidatePreciseMicronutrientItems is the publication gate for campus food.
+// It verifies that each result crossed the existing AI micronutrient estimator
+// and contains a useful full-field profile.
+func ValidatePreciseMicronutrientItems(items []map[string]any) error {
+	if len(items) == 0 {
+		return fmt.Errorf("校园菜品微量营养结果为空")
+	}
+	for index, item := range items {
+		if strings.TrimSpace(fmt.Sprintf("%v", item["micronutrient_analysis"])) != preciseMicronutrientAnalysisMarker {
+			return fmt.Errorf("校园菜品第 %d 项尚未完成微量营养精确分析", index+1)
+		}
+		if strings.TrimSpace(fmt.Sprintf("%v", item["micronutrient_source"])) == "" {
+			return fmt.Errorf("校园菜品第 %d 项缺少微量营养分析来源", index+1)
+		}
+		if err := validatePreciseMicronutrientUnit(mapFromAny(item["nutrients"])); err != nil {
+			return fmt.Errorf("校园菜品第 %d 项微量营养不完整: %w", index+1, err)
+		}
+	}
+	return nil
+}
+
 // ValidateResolvedNutritionItems prevents unresolved zero placeholders from
 // crossing a task boundary as a successful analysis result.
 func ValidateResolvedNutritionItems(items []map[string]any) error {

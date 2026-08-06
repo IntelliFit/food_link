@@ -364,6 +364,7 @@ func TestPublishItemQueuesExistingFoodAnalysisBeforePublishing(t *testing.T) {
 	require.Equal(t, "strict_separate", *submitter.input.ExecutionMode)
 	require.Equal(t, "campus_public_food", submitter.input.ExtraPayload["public_food_source_type"])
 	require.Equal(t, "item-1", submitter.input.ExtraPayload["campus_catalog_item_id"])
+	require.Equal(t, true, submitter.input.ExtraPayload["micronutrient_analysis_required"])
 	require.Equal(t, "image", submitter.input.SourceType)
 }
 
@@ -418,6 +419,7 @@ func TestPublishedNutritionBackfillReusesNormalStrictSeparatePublishPath(t *test
 	require.Equal(t, 1, queued)
 	require.Equal(t, "strict_separate", *submitter.input.ExecutionMode)
 	require.Equal(t, "item-history", submitter.input.ExtraPayload["campus_catalog_item_id"])
+	require.Equal(t, true, submitter.input.ExtraPayload["micronutrient_analysis_required"])
 	require.Equal(t, "item-history", repo.hiddenPublicItemID)
 }
 

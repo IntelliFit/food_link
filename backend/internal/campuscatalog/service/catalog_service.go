@@ -482,16 +482,17 @@ func (s *CatalogService) PublishItem(ctx context.Context, adminID, itemID string
 	}
 	mode := "strict_separate"
 	extraPayload := map[string]any{
-		"public_food_source_type": "campus_public_food",
-		"public_food_item_id":     item.ID,
-		"campus_catalog_item_id":  item.ID,
-		"published_by_admin_id":   adminID,
-		"food_name":               item.Name,
-		"school_name":             item.OrganizationName,
-		"campus_name":             item.AreaName,
-		"canteen_name":            item.CanteenName,
-		"floor":                   item.Floor,
-		"window_name":             item.WindowName,
+		"public_food_source_type":         "campus_public_food",
+		"public_food_item_id":             item.ID,
+		"campus_catalog_item_id":          item.ID,
+		"micronutrient_analysis_required": true,
+		"published_by_admin_id":           adminID,
+		"food_name":                       item.Name,
+		"school_name":                     item.OrganizationName,
+		"campus_name":                     item.AreaName,
+		"canteen_name":                    item.CanteenName,
+		"floor":                           item.Floor,
+		"window_name":                     item.WindowName,
 	}
 	input := analyzeservice.SubmitTaskInput{
 		ImageURLs: imageURLs, ExecutionMode: &mode, SourceType: "image", SuggestRatioEnabled: true,

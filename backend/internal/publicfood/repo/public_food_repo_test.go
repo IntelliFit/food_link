@@ -326,7 +326,7 @@ func TestPublicFoodRepo_UpdateNutritionFromAnalysisUsesItemCalorieFallback(t *te
 		ID:           "campus-calorie-fallback",
 		UserID:       "user-1",
 		FoodName:     "鸡腿饭",
-		Status:       "published",
+		Status:       "pending",
 		Type:         "campus",
 		IsCampusFood: true,
 	}
@@ -343,6 +343,8 @@ func TestPublicFoodRepo_UpdateNutritionFromAnalysisUsesItemCalorieFallback(t *te
 	require.NoError(t, err)
 	var saved domain.PublicFoodItem
 	require.NoError(t, db.Where("id = ?", item.ID).First(&saved).Error)
+	require.Equal(t, "published", saved.Status)
+	require.NotNil(t, saved.PublishedAt)
 	require.Equal(t, 500.0, saved.TotalCalories)
 	require.Equal(t, 33.0, saved.TotalProtein)
 	require.Equal(t, 56.0, saved.TotalCarbs)

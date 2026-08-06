@@ -91,6 +91,7 @@ func (r *PublicFoodRepo) LinkAnalysisTask(ctx context.Context, itemID, taskID st
 
 func (r *PublicFoodRepo) UpdateNutritionFromAnalysis(ctx context.Context, itemID string, result map[string]any) error {
 	snapshot := NutritionSnapshotFromResult(result)
+	now := time.Now()
 	return r.db.WithContext(ctx).
 		Model(&domain.PublicFoodItem{}).
 		Where("id = ?", itemID).
@@ -102,7 +103,9 @@ func (r *PublicFoodRepo) UpdateNutritionFromAnalysis(ctx context.Context, itemID
 			"items":          datatypes.JSONSlice[map[string]any](snapshot.Items),
 			"description":    snapshot.Description,
 			"insight":        snapshot.Insight,
-			"updated_at":     time.Now(),
+			"status":         "published",
+			"published_at":   now,
+			"updated_at":     now,
 		}).Error
 }
 

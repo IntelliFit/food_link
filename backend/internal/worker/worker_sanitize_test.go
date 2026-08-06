@@ -48,6 +48,27 @@ func (f *fakeWorkerAnalyzeRunner) ApplyDBFirstToItems(ctx context.Context, items
 	return items
 }
 
+func (f *fakeWorkerAnalyzeRunner) ApplyDBFirstToItemsWithPreciseMicronutrients(ctx context.Context, items []map[string]any, additionalContext string) ([]map[string]any, error) {
+	for _, item := range items {
+		nutrients := mapFromAny(item["nutrients"])
+		if len(nutrients) == 0 {
+			nutrients = map[string]any{}
+		}
+		for _, key := range []string{
+			"fiber", "sugar", "saturatedFat", "cholesterolMg", "sodiumMg", "potassiumMg", "calciumMg", "ironMg", "magnesiumMg", "zincMg",
+			"vitaminARaeMcg", "vitaminCMg", "vitaminDMcg", "vitaminEMg", "vitaminKMcg", "thiaminMg", "riboflavinMg", "niacinMg", "vitaminB6Mg", "folateMcg", "vitaminB12Mcg",
+		} {
+			if _, ok := nutrients[key]; !ok {
+				nutrients[key] = 1.0
+			}
+		}
+		item["nutrients"] = nutrients
+		item["micronutrient_analysis"] = "ai_precise_v1"
+		item["micronutrient_source"] = "test_generated"
+	}
+	return items, nil
+}
+
 type workerMixedMealLLMClient struct {
 	calls int
 }

@@ -99,6 +99,7 @@ type analyzeRunner interface {
 	RunPrecisionJSONWithImagesNoFallback(context.Context, string, string, []string, string) (map[string]any, error)
 	RunPrecisionJSONWithImagesTemperatureNoFallback(context.Context, string, string, []string, string, float64) (map[string]any, error)
 	ApplyDBFirstToItems(context.Context, []map[string]any, string) []map[string]any
+	ApplyDBFirstToItemsWithPreciseMicronutrients(context.Context, []map[string]any, string) ([]map[string]any, error)
 }
 
 type CreditGuard interface {
@@ -824,6 +825,11 @@ func (r *Runner) processFood(ctx context.Context, task *domain.AnalysisTask) err
 	if err := analyzeservice.ValidateResolvedNutritionItems(extractItems(result["items"])); err != nil {
 		return err
 	}
+	if requiresPreciseCampusMicronutrients(task.Payload) {
+		if err := analyzeservice.ValidatePreciseMicronutrientItems(extractItems(result["items"])); err != nil {
+			return err
+		}
+	}
 	if err := r.writeBackCampusPublicFood(ctx, task, result); err != nil {
 		r.errorLog(ctx, "校园食堂分析结果回写失败", err, slog.String("task_id", task.ID), logger.AnalysisTaskID(task.ID))
 		apm.RecordError(ctx, err, attribute.String("analysis.stage", "campus_public_food_writeback"))
@@ -902,6 +908,10 @@ func campusPublicFoodSourceType(payload map[string]any) string {
 	return stringFromMap(payload, "source_type")
 }
 
+func requiresPreciseCampusMicronutrients(payload map[string]any) bool {
+	return campusPublicFoodSourceType(payload) == "campus_public_food" && boolFromAny(payload["micronutrient_analysis_required"])
+}
+
 func copyCampusPublicFoodPayload(from, to map[string]any) {
 	if campusPublicFoodSourceType(from) != "campus_public_food" {
 		return
@@ -915,6 +925,9 @@ func copyCampusPublicFoodPayload(from, to map[string]any) {
 	}
 	if adminID := stringFromMap(from, "published_by_admin_id"); adminID != "" {
 		to["published_by_admin_id"] = adminID
+	}
+	if boolFromAny(from["micronutrient_analysis_required"]) {
+		to["micronutrient_analysis_required"] = true
 	}
 }
 
@@ -2103,6 +2116,7 @@ func (r *Runner) processPrecisionPlan(ctx context.Context, task *domain.Analysis
 		if strictSeparateMode {
 			groupPayload["execution_mode"] = strictSeparateModeName
 		}
+		copyCampusPublicFoodPayload(task.Payload, groupPayload)
 		groupPayload["round_index"] = roundIndex
 		groupPayload["group_index"] = groupIndex
 		groupPayload["items_to_estimate"] = groupItems
@@ -2311,7 +2325,18 @@ func (r *Runner) processPrecisionItemEstimate(ctx context.Context, task *domain.
 			)
 		}
 	}
-	dbItems := r.analyze.ApplyDBFirstToItems(ctx, parsedItems, additionalContext)
+	var dbItems []map[string]any
+	if requiresPreciseCampusMicronutrients(task.Payload) {
+		dbItems, err = r.analyze.ApplyDBFirstToItemsWithPreciseMicronutrients(ctx, parsedItems, additionalContext)
+		if err != nil {
+			if estimate != nil {
+				_ = r.precision.UpdateItemEstimate(ctx, estimate.ID, map[string]any{"status": "failed", "error_message": sanitizeTaskErrorMessage(err)})
+			}
+			return err
+		}
+	} else {
+		dbItems = r.analyze.ApplyDBFirstToItems(ctx, parsedItems, additionalContext)
+	}
 	if err := analyzeservice.ValidateResolvedNutritionItems(dbItems); err != nil {
 		if estimate != nil {
 			_ = r.precision.UpdateItemEstimate(ctx, estimate.ID, map[string]any{"status": "failed", "error_message": sanitizeTaskErrorMessage(err)})
@@ -2415,6 +2440,11 @@ func (r *Runner) processPrecisionAggregate(ctx context.Context, task *domain.Ana
 	}
 	if err := analyzeservice.ValidateResolvedNutritionItems(extractItems(finalResult["items"])); err != nil {
 		return err
+	}
+	if requiresPreciseCampusMicronutrients(task.Payload) {
+		if err := analyzeservice.ValidatePreciseMicronutrientItems(extractItems(finalResult["items"])); err != nil {
+			return err
+		}
 	}
 	if err := r.writeBackCampusPublicFood(ctx, task, finalResult); err != nil {
 		r.errorLog(ctx, "校园食堂精准分析结果回写失败", err, slog.String("task_id", task.ID), logger.AnalysisTaskID(task.ID))

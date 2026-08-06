@@ -150,13 +150,21 @@ func (r *CatalogRepo) ListPublishedItemsMissingNutrition(ctx context.Context, li
 	if limit <= 0 {
 		limit = 100
 	}
+	micronutrientMissingSQL := `p.items IS NULL OR jsonb_typeof(p.items::jsonb) <> 'array' OR jsonb_array_length(p.items::jsonb) = 0 OR
+		EXISTS (SELECT 1 FROM jsonb_array_elements(p.items::jsonb) AS nutrient_item
+			WHERE COALESCE(nutrient_item->>'micronutrient_analysis', '') <> 'ai_precise_v1')`
+	if r.db.Dialector.Name() == "sqlite" {
+		micronutrientMissingSQL = `p.items IS NULL OR json_valid(p.items) = 0 OR json_array_length(p.items) = 0 OR
+			EXISTS (SELECT 1 FROM json_each(p.items) AS nutrient_item
+				WHERE COALESCE(json_extract(nutrient_item.value, '$.micronutrient_analysis'), '') <> 'ai_precise_v1')`
+	}
 	var items []domain.CatalogItem
 	err := r.db.WithContext(ctx).
 		Table("campus_food_catalog_items AS c").
 		Select("c.*").
 		Joins("LEFT JOIN public_food_library AS p ON p.id = c.id").
 		Where("c.status = ?", "published").
-		Where("p.id IS NULL OR p.status <> ? OR p.analysis_task_id IS NULL OR COALESCE(p.total_calories, 0) <= 0", "published").
+		Where("p.id IS NULL OR p.status <> ? OR p.analysis_task_id IS NULL OR COALESCE(p.total_calories, 0) <= 0 OR ("+micronutrientMissingSQL+")", "published").
 		Order("c.published_at ASC NULLS FIRST, c.id ASC").
 		Limit(limit).
 		Scan(&items).Error
