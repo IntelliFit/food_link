@@ -26,6 +26,7 @@ import {
   mapCalendarDateToApi,
   resolveHomeMealPrimaryRecordId,
   deleteFoodRecord,
+  createUserRecipe,
   getFoodExpiryDashboard,
   generateDietRecommendation,
   type DashboardTargets,
@@ -109,6 +110,7 @@ import {
 } from '../../utils/onboarding-guide-storage'
 import { HOME_RECORD_ONBOARDING_STEPS } from './home-onboarding-steps'
 import { HOME_PET_PROFILE_CHANGED_EVENT } from '../../utils/pet-events'
+import { buildFoodRecordFavoriteDraft } from '../../utils/food-record-flow'
 
 const BACKFILL_HINT_DISMISSED_DATES_KEY = 'home_backfill_hint_dismissed_dates_v1'
 const HOME_SELECTED_DATE_KEY = 'home_selected_date_v1'
@@ -933,6 +935,7 @@ function IndexPage() {
   const [mealActionSheetVisible, setMealActionSheetVisible] = React.useState(false)
   const [mealActionRecordId, setMealActionRecordId] = React.useState<string | null>(null)
   const [mealActionRecord, setMealActionRecord] = React.useState<FoodRecord | null>(null)
+  const mealFavoriteInFlightRef = React.useRef(false)
   const [showRecordEditModal, setShowRecordEditModal] = React.useState(false)
   const homePageScrollLocked = showRecordEditModal || showHomeOnboardingGuide || dietRecVisible
   const [showRecordPosterModal, setShowRecordPosterModal] = React.useState(false)
@@ -1899,6 +1902,63 @@ function IndexPage() {
       await showUnifiedApiError(e, '加载失败')
     } finally {
       Taro.hideLoading()
+    }
+  }
+
+  const handleMealFavorite = async () => {
+    if (!mealActionRecordId || mealFavoriteInFlightRef.current) return
+
+    mealFavoriteInFlightRef.current = true
+    try {
+      Taro.showLoading({ title: '', mask: true })
+      let record = getCachedMealFullRecord(mealActionRecordId)
+      if (!record || !String(record.id || '').trim()) {
+        const res = await getFoodRecordById(mealActionRecordId)
+        record = res.record
+      }
+      Taro.hideLoading()
+
+      if (!record) {
+        Taro.showToast({ title: '记录加载失败', icon: 'none' })
+        return
+      }
+      if (record.recipe_id) {
+        Taro.showToast({ title: '该餐食已在我的收藏中', icon: 'none' })
+        return
+      }
+
+      const draft = buildFoodRecordFavoriteDraft(record)
+      if (draft.items.length === 0) {
+        Taro.showToast({ title: '没有可收藏的食物', icon: 'none' })
+        return
+      }
+
+      const modalResult = await Taro.showModal({
+        title: '收藏餐食',
+        content: draft.suggestedName,
+        editable: true,
+        placeholderText: '请输入收藏名称',
+        confirmText: '收藏',
+        confirmColor: '#10b981',
+      } as any)
+      if (!modalResult.confirm) return
+
+      const recipeName = String((modalResult as any).content || '').trim()
+      if (!recipeName) {
+        Taro.showToast({ title: '请输入收藏名称', icon: 'none' })
+        return
+      }
+
+      const { suggestedName: _suggestedName, ...recipeData } = draft
+      Taro.showLoading({ title: '', mask: true })
+      await createUserRecipe({ ...recipeData, recipe_name: recipeName })
+      Taro.hideLoading()
+      Taro.showToast({ title: '收藏成功', icon: 'success' })
+    } catch (e: any) {
+      Taro.hideLoading()
+      await showUnifiedApiError(e, '收藏失败')
+    } finally {
+      mealFavoriteInFlightRef.current = false
     }
   }
 
@@ -3999,6 +4059,7 @@ function IndexPage() {
         visible={mealActionSheetVisible}
         onClose={() => setMealActionSheetVisible(false)}
         onEdit={handleMealEdit}
+        onFavorite={handleMealFavorite}
         onPoster={handleMealPoster}
         onShare={handleMealShare}
         onDelete={handleMealDelete}

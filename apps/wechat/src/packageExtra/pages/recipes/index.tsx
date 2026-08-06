@@ -7,6 +7,7 @@ import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { HOME_INTAKE_DATA_CHANGED_EVENT } from '../../../utils/home-events'
 import { addWaterToBodyMetricsStorage, calculateFoodRecordItemsWaterMl, refreshHomeDashboardLocalSnapshotFromCloud } from '../../../utils/home-dashboard-local-cache'
 import { getStoredRecordTargetDate } from '../../../utils/record-date'
+import { returnHomeAfterFoodRecord } from '../../../utils/food-record-flow'
 import './index.scss'
 
 /** 餐次映射 */
@@ -310,8 +311,7 @@ function RecipesPage() {
         /* ignore */
       }
       Taro.showToast({ title: '已添加到饮食记录', icon: 'success' })
-      // 刷新列表以更新使用次数
-      setTimeout(() => loadRecipes(), 500)
+      returnHomeAfterFoodRecord()
     } catch (e: any) {
       // 点击取消也会抛出错误，需区分
       if (e.errMsg && e.errMsg.includes('cancel')) return

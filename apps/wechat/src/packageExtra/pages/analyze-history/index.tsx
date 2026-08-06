@@ -30,6 +30,7 @@ import {
 } from '../../../utils/home-dashboard-local-cache'
 import { formatDateKey } from '../../../pages/index/utils/helpers'
 import { buildFoodRecordItemPayloadFromAnalyzeItem } from '../../../utils/food-record-item-payload'
+import { returnHomeAfterFoodRecord } from '../../../utils/food-record-flow'
 import {
   MealTypeSelectSheet,
   normalizeSelectableMealType,
@@ -915,6 +916,7 @@ function AnalyzeHistoryPage() {
           title: saveResult.already_saved ? '该餐已记录' : '记录成功',
           icon: saveResult.already_saved ? 'none' : 'success'
         })
+        returnHomeAfterFoodRecord()
       } catch (e: any) {
         Taro.hideLoading()
         await showUnifiedApiError(e, '记录失败')

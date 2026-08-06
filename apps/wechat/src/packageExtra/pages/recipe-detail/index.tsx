@@ -17,6 +17,7 @@ import {
   refreshHomeDashboardLocalSnapshotFromCloud
 } from '../../../utils/home-dashboard-local-cache'
 import { getStoredRecordTargetDate } from '../../../utils/record-date'
+import { returnHomeAfterFoodRecord } from '../../../utils/food-record-flow'
 
 import './index.scss'
 
@@ -75,6 +76,7 @@ function RecipeDetailPage() {
       } catch (_) {}
       Taro.eventCenter.trigger(HOME_INTAKE_DATA_CHANGED_EVENT, { date: targetDate, force: true })
       Taro.showToast({ title: '已记录', icon: 'success' })
+      returnHomeAfterFoodRecord()
     } catch (e) {
       await showUnifiedApiError(e, '记录失败')
     } finally {

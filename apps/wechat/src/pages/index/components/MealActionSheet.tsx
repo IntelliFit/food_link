@@ -4,6 +4,7 @@ interface MealActionSheetProps {
   visible: boolean
   onClose: () => void
   onEdit: () => void
+  onFavorite: () => void
   onPoster: () => void
   onShare: () => void
   onDelete: () => void
@@ -16,6 +17,13 @@ const ACTION_ITEMS = [
     iconClass: 'icon-edit',
     color: '#10b981',
     iconModifier: 'action-sheet-icon--record',
+  },
+  {
+    id: 'favorite',
+    label: '收藏到我的餐食',
+    iconClass: 'icon-collection_fill',
+    color: '#f59e0b',
+    iconModifier: 'action-sheet-icon--favorite',
   },
   {
     id: 'poster',
@@ -33,12 +41,13 @@ const ACTION_ITEMS = [
   },
 ] as const
 
-export function MealActionSheet({ visible, onClose, onEdit, onPoster, onShare, onDelete }: MealActionSheetProps) {
+export function MealActionSheet({ visible, onClose, onEdit, onFavorite, onPoster, onShare, onDelete }: MealActionSheetProps) {
   if (!visible) return null
 
   const handleItemClick = (id: string) => {
     onClose()
     if (id === 'edit') onEdit()
+    else if (id === 'favorite') onFavorite()
     else if (id === 'poster') onPoster()
     else if (id === 'share') onShare()
   }
