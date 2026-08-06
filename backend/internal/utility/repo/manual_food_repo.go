@@ -2687,6 +2687,9 @@ func packagedPortionLabel(item fooddomain.PackagedFood) string {
 	if unit == "ml" && item.NetContentValue > 750 {
 		return "500ml"
 	}
+	if unit == "ml" && item.NetContentValue > 750 {
+		return "500ml"
+	}
 	if label := packagedNetContentLabel(item); label != "" {
 		return label
 	}

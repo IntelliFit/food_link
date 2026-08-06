@@ -342,6 +342,28 @@ WHERE voucher_type = 'invite_light_week'
 	return nil
 }
 
+// MigrateFoodRecordMood applies only the optional eating_mood column for food
+// records. It is intentionally narrow so a small product-field rollout does
+// not publish unrelated pending schema or data migrations.
+func MigrateFoodRecordMood(ctx context.Context, db *gorm.DB, schema string) error {
+	if schema == "" {
+		schema = "public"
+	}
+	if !identifierPattern.MatchString(schema) {
+		return fmt.Errorf("invalid database schema: %q", schema)
+	}
+	if err := db.WithContext(ctx).Exec("SET search_path TO " + quoteIdent(schema)).Error; err != nil {
+		return fmt.Errorf("set search path: %w", err)
+	}
+	if err := db.WithContext(ctx).AutoMigrate(&migrationdo.FoodRecordDO{}); err != nil {
+		return fmt.Errorf("auto migrate user_food_records: %w", err)
+	}
+	if err := db.WithContext(ctx).Exec(`ALTER TABLE user_food_records ADD COLUMN IF NOT EXISTS eating_mood text`).Error; err != nil {
+		return fmt.Errorf("add user_food_records.eating_mood: %w", err)
+	}
+	return nil
+}
+
 func quoteIdent(value string) string {
 	return `"` + strings.ReplaceAll(value, `"`, `""`) + `"`
 }
