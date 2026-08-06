@@ -38,8 +38,10 @@ type publishReport struct {
 	TotalItems     int              `json:"total_items"`
 	StatusCounts   map[string]int   `json:"status_counts"`
 	CandidateCount int              `json:"candidate_count"`
+	Candidates     []itemSummary    `json:"candidates,omitempty"`
 	BlockedCount   int              `json:"blocked_count"`
 	BlockedReasons map[string]int   `json:"blocked_reasons"`
+	BlockedItems   []itemSummary    `json:"blocked_items,omitempty"`
 	SubmittedCount int              `json:"submitted_count"`
 	FailedCount    int              `json:"failed_count"`
 	Failures       []publishFailure `json:"failures,omitempty"`
@@ -49,6 +51,22 @@ type publishFailure struct {
 	ItemID string `json:"item_id"`
 	Name   string `json:"name"`
 	Error  string `json:"error"`
+}
+
+type itemSummary struct {
+	ItemID             string   `json:"item_id"`
+	Name               string   `json:"name"`
+	EntryType          string   `json:"entry_type"`
+	Status             string   `json:"status"`
+	AnalysisError      string   `json:"analysis_error,omitempty"`
+	Reasons            []string `json:"reasons,omitempty"`
+	PriceType          string   `json:"price_type,omitempty"`
+	Price              *float64 `json:"price,omitempty"`
+	PriceMin           *float64 `json:"price_min,omitempty"`
+	PriceMax           *float64 `json:"price_max,omitempty"`
+	PriceUnit          string   `json:"price_unit,omitempty"`
+	PriceText          string   `json:"price_text,omitempty"`
+	PortionDescription string   `json:"portion_description,omitempty"`
 }
 
 func main() {
@@ -126,18 +144,29 @@ func auditCandidates(items []catalogdomain.CatalogItem, target string, apply boo
 		reasons := publishBlockingReasons(item)
 		if len(reasons) == 0 {
 			candidates = append(candidates, item)
+			report.Candidates = append(report.Candidates, summarizeItem(item, nil))
 			continue
 		}
 		if item.Status == "published" || item.Status == "analysis_pending" {
 			continue
 		}
 		report.BlockedCount++
+		report.BlockedItems = append(report.BlockedItems, summarizeItem(item, reasons))
 		for _, reason := range reasons {
 			report.BlockedReasons[reason]++
 		}
 	}
 	report.CandidateCount = len(candidates)
 	return report, candidates
+}
+
+func summarizeItem(item catalogdomain.CatalogItem, reasons []string) itemSummary {
+	return itemSummary{
+		ItemID: item.ID, Name: item.Name, EntryType: item.EntryType, Status: item.Status,
+		AnalysisError: item.AnalysisError, Reasons: append([]string(nil), reasons...),
+		PriceType: item.PriceType, Price: item.Price, PriceMin: item.PriceMin, PriceMax: item.PriceMax,
+		PriceUnit: item.PriceUnit, PriceText: item.PriceText, PortionDescription: item.PortionDescription,
+	}
 }
 
 func publishBlockingReasons(item catalogdomain.CatalogItem) []string {

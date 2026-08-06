@@ -24,6 +24,9 @@ func TestAuditCandidatesMatchesAdminPublishGate(t *testing.T) {
 	require.Equal(t, 1, report.BlockedCount)
 	require.Equal(t, 1, report.BlockedReasons["price"])
 	require.Equal(t, []string{"ready", "failed"}, []string{candidates[0].ID, candidates[1].ID})
+	require.Equal(t, []string{"ready", "failed"}, []string{report.Candidates[0].ItemID, report.Candidates[1].ItemID})
+	require.Equal(t, "no-price", report.BlockedItems[0].ItemID)
+	require.Equal(t, []string{"price"}, report.BlockedItems[0].Reasons)
 }
 
 func TestPublishBlockingReasonsAllowsImageOnlyMissingField(t *testing.T) {
