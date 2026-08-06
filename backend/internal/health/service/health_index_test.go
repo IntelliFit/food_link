@@ -164,6 +164,76 @@ func TestHealthIndex_MuscleGainUsesGoalAdjustedWeightTarget(t *testing.T) {
 	assert.Contains(t, weightCard.Action, "训练日前后")
 }
 
+func TestHealthIndex_FatLossUsesRealWeightTrendToAvoidFalseAlarm(t *testing.T) {
+	goal := "fat_loss"
+	comp := buildScreenshotLikeComputation()
+	comp.TDEE = 1800
+	comp.RecordedDays = 7
+	comp.StreakDays = 21
+	comp.TotalCalories = 13160
+	comp.AvgCaloriesPerDay = 1880
+	comp.DailyCalories = []DailyCalories{
+		{Date: "2026-06-17", Calories: 1860},
+		{Date: "2026-06-18", Calories: 1870},
+		{Date: "2026-06-19", Calories: 1890},
+		{Date: "2026-06-20", Calories: 1910},
+		{Date: "2026-06-21", Calories: 1880},
+		{Date: "2026-06-22", Calories: 1870},
+		{Date: "2026-06-23", Calories: 1880},
+	}
+	comp.User = &domain.StatsUserProfile{DietGoal: &goal}
+	weightChange := -0.6
+	comp.BodyMetrics = &BodyMetricsSummary{
+		LatestWeight:   &WeightEntry{Date: "2026-06-23", Value: 67.4},
+		PreviousWeight: &WeightEntry{Date: "2026-06-17", Value: 68.0},
+		WeightChange:   &weightChange,
+	}
+
+	idx := computeHealthIndex(comp, "week")
+	require.True(t, idx.HasEnoughData)
+
+	var weightCard RiskCard
+	for _, card := range idx.RiskCards {
+		if card.Key == "weight" {
+			weightCard = card
+			break
+		}
+	}
+	require.Equal(t, "weight", weightCard.Key)
+	assert.GreaterOrEqual(t, weightCard.Score, 78)
+	assert.NotContains(t, weightCard.Summary, "重复性超标")
+	assert.Contains(t, weightCard.Basis, "67.4")
+}
+
+func TestHealthIndex_MicronutrientBasisMentionsSupplementsNotIncluded(t *testing.T) {
+	comp := buildIdealComputation()
+	comp.MicronutrientDaily = map[string]float64{
+		"fiber":          28,
+		"sodiumMg":       1700,
+		"potassiumMg":    3400,
+		"calciumMg":      260,
+		"ironMg":         6,
+		"vitaminARaeMcg": 320,
+		"vitaminCMg":     110,
+		"vitaminDMcg":    0,
+	}
+
+	idx := computeHealthIndex(comp, "week")
+	require.True(t, idx.HasEnoughData)
+
+	var micronutrientCard RiskCard
+	for _, card := range idx.RiskCards {
+		if card.Key == "micronutrient" {
+			micronutrientCard = card
+			break
+		}
+	}
+	require.Equal(t, "micronutrient", micronutrientCard.Key)
+	assert.Contains(t, micronutrientCard.Basis, "补剂")
+	assert.Contains(t, micronutrientCard.Summary, "补剂摄入")
+	assert.Greater(t, micronutrientCard.Score, 60)
+}
+
 func containsRiskOption(options []RiskOption, key string) bool {
 	for _, o := range options {
 		if o.Key == key {

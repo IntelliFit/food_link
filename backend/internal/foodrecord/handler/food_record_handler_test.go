@@ -91,9 +91,12 @@ type mockNutritionService struct {
 	items                    []map[string]any
 	logs                     []domain.FoodUnresolvedLog
 	item                     *domain.PackagedFood
+	correctionSubmission     *domain.PackagedFoodCorrectionSubmission
 	err                      error
 	submitPackagedExtractErr error
 	submitPackagedInputs     []service.SubmitPackagedProductExtractInput
+	getPackagedFoodID        string
+	submitCorrectionInput    *service.SubmitPackagedFoodCorrectionInput
 }
 
 func (m *mockNutritionService) Search(ctx context.Context, query string, limit int) ([]map[string]any, error) {
@@ -107,6 +110,27 @@ func (m *mockNutritionService) CreatePackagedFood(ctx context.Context, input ser
 		return m.item, m.err
 	}
 	return &domain.PackagedFood{ID: "p1", ProductName: input.ProductName, NetWeightG: input.NetWeightG, IsActive: true}, nil
+}
+func (m *mockNutritionService) GetPackagedFood(ctx context.Context, id string) (*domain.PackagedFood, error) {
+	m.getPackagedFoodID = id
+	if m.item != nil || m.err != nil {
+		return m.item, m.err
+	}
+	return &domain.PackagedFood{ID: id, ProductName: "sample packaged food", IsActive: true}, nil
+}
+func (m *mockNutritionService) SubmitPackagedFoodCorrection(ctx context.Context, userID string, input service.SubmitPackagedFoodCorrectionInput) (*domain.PackagedFoodCorrectionSubmission, error) {
+	m.submitCorrectionInput = &input
+	if m.correctionSubmission != nil || m.err != nil {
+		return m.correctionSubmission, m.err
+	}
+	return &domain.PackagedFoodCorrectionSubmission{
+		ID:             "submission-1",
+		UserID:         userID,
+		PackagedFoodID: input.PackagedFoodID,
+		Status:         "pending",
+		ReasonType:     input.ReasonType,
+		Comment:        input.Comment,
+	}, nil
 }
 func (m *mockNutritionService) RecognizePackagedNutritionLabel(ctx context.Context, imageURL string) (*service.PackagedNutritionLabelResult, error) {
 	if m.err != nil {
@@ -152,6 +176,8 @@ func setupRouter(h *FoodRecordHandler) *gin.Engine {
 	r.GET("/api/food-nutrition/search", h.SearchFoodNutrition)
 	r.GET("/api/food-nutrition/unresolved/top", h.GetUnresolvedTop)
 	r.POST("/api/packaged-food", h.CreatePackagedFood)
+	r.GET("/api/packaged-food/:food_id", h.GetPackagedFood)
+	r.POST("/api/packaged-food/corrections", h.SubmitPackagedFoodCorrection)
 	r.POST("/api/packaged-food/nutrition-label/recognize", h.RecognizePackagedNutritionLabel)
 	r.POST("/api/packaged-food/nutrition-label/submit", h.SubmitPackagedNutritionLabelTask)
 	r.POST("/api/packaged-food/extract/submit", h.SubmitPackagedProductExtractTask)

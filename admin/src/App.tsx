@@ -17,6 +17,7 @@ import { FeedReportDetailPage } from '@/pages/feed-report-detail-page'
 import { ExerciseEnergyPage } from '@/pages/exercise-energy-page'
 import { LoginPage } from '@/pages/login-page'
 import { OverviewPage } from '@/pages/overview-page'
+import { PackagedFoodCorrectionsPage } from '@/pages/packaged-food-corrections-page'
 import { PackagedFoodsPage } from '@/pages/packaged-foods-page'
 import { PackagedFoodTestPage } from '@/pages/packaged-food-test-page'
 import { PackagedFoodTestRunsPage } from '@/pages/packaged-food-test-runs-page'
@@ -36,6 +37,7 @@ const MENU_PATHS: Record<AdminMenuId, string> = {
   benchmark: '/benchmark',
   'packaged-foods': '/packaged-foods',
   'packaged-food-test': '/packaged-food-test',
+  'packaged-food-corrections': '/packaged-food-corrections',
   'food-nutrition': '/food-nutrition',
   'nutrition-alias-review': '/nutrition-alias-review',
   'public-food-library': '/public-food-library',
@@ -140,6 +142,7 @@ export function App() {
         <Route path='/packaged-foods' element={<PackagedFoodsPage {...pageProps} />} />
         <Route path='/packaged-food-test' element={<PackagedFoodTestPage {...pageProps} />} />
         <Route path='/packaged-food-test/runs/:foodId' element={<PackagedFoodTestRunsPage {...pageProps} />} />
+        <Route path='/packaged-food-corrections' element={<PackagedFoodCorrectionsPage {...pageProps} />} />
         <Route path='/food-nutrition' element={<FoodNutritionPage {...pageProps} />} />
         <Route path='/nutrition-alias-review' element={<NutritionAliasReviewPage {...pageProps} />} />
         <Route path='/public-food-library' element={<PublicFoodLibraryPage {...pageProps} />} />

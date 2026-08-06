@@ -49,6 +49,8 @@ type FoodNutritionService interface {
 	Search(ctx context.Context, query string, limit int) ([]map[string]any, error)
 	GetUnresolvedTop(ctx context.Context, limit int) ([]domain.FoodUnresolvedLog, error)
 	CreatePackagedFood(ctx context.Context, input service.PackagedFoodInput) (*domain.PackagedFood, error)
+	GetPackagedFood(ctx context.Context, id string) (*domain.PackagedFood, error)
+	SubmitPackagedFoodCorrection(ctx context.Context, userID string, input service.SubmitPackagedFoodCorrectionInput) (*domain.PackagedFoodCorrectionSubmission, error)
 	RecognizePackagedNutritionLabel(ctx context.Context, imageURL string) (*service.PackagedNutritionLabelResult, error)
 	SubmitPackagedNutritionLabelTask(ctx context.Context, userID, imageURL string) (string, error)
 	SubmitPackagedProductExtractTask(ctx context.Context, userID string, input service.SubmitPackagedProductExtractInput) (string, error)
@@ -529,6 +531,143 @@ func (h *FoodRecordHandler) CreatePackagedFood(c *gin.Context) {
 		slog.Float64("net_weight_g", item.NetWeightG),
 	)
 	response.Success(c, gin.H{"item": item})
+}
+
+// GET /api/packaged-food/:food_id
+func (h *FoodRecordHandler) GetPackagedFood(c *gin.Context) {
+	item, err := h.nutritionSvc.GetPackagedFood(c.Request.Context(), c.Param("food_id"))
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, gin.H{"item": item})
+}
+
+// POST /api/packaged-food/corrections
+func (h *FoodRecordHandler) SubmitPackagedFoodCorrection(c *gin.Context) {
+	var body struct {
+		PackagedFoodID        string         `json:"packaged_food_id"`
+		ReasonType            string         `json:"reason_type"`
+		Comment               string         `json:"comment"`
+		Brand                 string         `json:"brand"`
+		ProductName           string         `json:"product_name"`
+		DisplayName           string         `json:"display_name"`
+		SearchText            string         `json:"search_text"`
+		ProductFamilyKey      string         `json:"product_family_key"`
+		SpecText              string         `json:"spec_text"`
+		Barcode               string         `json:"barcode"`
+		FlavorText            string         `json:"flavor_text"`
+		PackageCategory       string         `json:"package_category"`
+		IngredientsText       string         `json:"ingredients_text"`
+		SourceImageURLs       []string       `json:"source_image_urls"`
+		OCRRawText            string         `json:"ocr_raw_text"`
+		NutritionBasisUnit    string         `json:"nutrition_basis_unit"`
+		EnergyUnitRaw         string         `json:"energy_unit_raw"`
+		RawLabelPayload       map[string]any `json:"raw_label_payload"`
+		ConversionStatus      string         `json:"conversion_status"`
+		ExtractConfidence     float64        `json:"extract_confidence"`
+		FieldConfidence       map[string]any `json:"field_confidence"`
+		IngestMethod          string         `json:"ingest_method"`
+		NetContentValue       float64        `json:"net_content_value"`
+		NetContentUnit        string         `json:"net_content_unit"`
+		UnitCount             float64        `json:"unit_count"`
+		UnitContentValue      float64        `json:"unit_content_value"`
+		UnitContentUnit       string         `json:"unit_content_unit"`
+		NetWeightG            float64        `json:"net_weight_g"`
+		ServingWeightG        float64        `json:"serving_weight_g"`
+		KcalPer100g           float64        `json:"kcal_per_100g"`
+		ProteinPer100g        float64        `json:"protein_per_100g"`
+		CarbsPer100g          float64        `json:"carbs_per_100g"`
+		FatPer100g            float64        `json:"fat_per_100g"`
+		FiberPer100g          float64        `json:"fiber_per_100g"`
+		SugarPer100g          float64        `json:"sugar_per_100g"`
+		SaturatedFatPer100g   float64        `json:"saturated_fat_per_100g"`
+		CholesterolMgPer100g  float64        `json:"cholesterol_mg_per_100g"`
+		SodiumMgPer100g       float64        `json:"sodium_mg_per_100g"`
+		PotassiumMgPer100g    float64        `json:"potassium_mg_per_100g"`
+		CalciumMgPer100g      float64        `json:"calcium_mg_per_100g"`
+		IronMgPer100g         float64        `json:"iron_mg_per_100g"`
+		MagnesiumMgPer100g    float64        `json:"magnesium_mg_per_100g"`
+		ZincMgPer100g         float64        `json:"zinc_mg_per_100g"`
+		VitaminARaeMcgPer100g float64        `json:"vitamin_a_rae_mcg_per_100g"`
+		VitaminCMgPer100g     float64        `json:"vitamin_c_mg_per_100g"`
+		VitaminDMcgPer100g    float64        `json:"vitamin_d_mcg_per_100g"`
+		VitaminEMgPer100g     float64        `json:"vitamin_e_mg_per_100g"`
+		VitaminKMcgPer100g    float64        `json:"vitamin_k_mcg_per_100g"`
+		ThiaminMgPer100g      float64        `json:"thiamin_mg_per_100g"`
+		RiboflavinMgPer100g   float64        `json:"riboflavin_mg_per_100g"`
+		NiacinMgPer100g       float64        `json:"niacin_mg_per_100g"`
+		VitaminB6MgPer100g    float64        `json:"vitamin_b6_mg_per_100g"`
+		FolateMcgPer100g      float64        `json:"folate_mcg_per_100g"`
+		VitaminB12McgPer100g  float64        `json:"vitamin_b12_mcg_per_100g"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		response.Error(c, err)
+		return
+	}
+	item, err := h.nutritionSvc.SubmitPackagedFoodCorrection(c.Request.Context(), c.GetString(authmw.ContextUserIDKey), service.SubmitPackagedFoodCorrectionInput{
+		PackagedFoodID: body.PackagedFoodID,
+		ReasonType:     body.ReasonType,
+		Comment:        body.Comment,
+		Payload: service.PackagedFoodInput{
+			Brand:                 body.Brand,
+			ProductName:           body.ProductName,
+			DisplayName:           body.DisplayName,
+			SearchText:            body.SearchText,
+			ProductFamilyKey:      body.ProductFamilyKey,
+			SpecText:              body.SpecText,
+			Barcode:               body.Barcode,
+			FlavorText:            body.FlavorText,
+			PackageCategory:       body.PackageCategory,
+			IngredientsText:       body.IngredientsText,
+			SourceImageURLs:       body.SourceImageURLs,
+			OCRRawText:            body.OCRRawText,
+			NutritionBasisUnit:    body.NutritionBasisUnit,
+			EnergyUnitRaw:         body.EnergyUnitRaw,
+			RawLabelPayload:       body.RawLabelPayload,
+			ConversionStatus:      body.ConversionStatus,
+			ExtractConfidence:     body.ExtractConfidence,
+			FieldConfidence:       body.FieldConfidence,
+			IngestMethod:          body.IngestMethod,
+			NetContentValue:       body.NetContentValue,
+			NetContentUnit:        body.NetContentUnit,
+			UnitCount:             body.UnitCount,
+			UnitContentValue:      body.UnitContentValue,
+			UnitContentUnit:       body.UnitContentUnit,
+			NetWeightG:            body.NetWeightG,
+			ServingWeightG:        body.ServingWeightG,
+			KcalPer100g:           body.KcalPer100g,
+			ProteinPer100g:        body.ProteinPer100g,
+			CarbsPer100g:          body.CarbsPer100g,
+			FatPer100g:            body.FatPer100g,
+			FiberPer100g:          body.FiberPer100g,
+			SugarPer100g:          body.SugarPer100g,
+			SaturatedFatPer100g:   body.SaturatedFatPer100g,
+			CholesterolMgPer100g:  body.CholesterolMgPer100g,
+			SodiumMgPer100g:       body.SodiumMgPer100g,
+			PotassiumMgPer100g:    body.PotassiumMgPer100g,
+			CalciumMgPer100g:      body.CalciumMgPer100g,
+			IronMgPer100g:         body.IronMgPer100g,
+			MagnesiumMgPer100g:    body.MagnesiumMgPer100g,
+			ZincMgPer100g:         body.ZincMgPer100g,
+			VitaminARaeMcgPer100g: body.VitaminARaeMcgPer100g,
+			VitaminCMgPer100g:     body.VitaminCMgPer100g,
+			VitaminDMcgPer100g:    body.VitaminDMcgPer100g,
+			VitaminEMgPer100g:     body.VitaminEMgPer100g,
+			VitaminKMcgPer100g:    body.VitaminKMcgPer100g,
+			ThiaminMgPer100g:      body.ThiaminMgPer100g,
+			RiboflavinMgPer100g:   body.RiboflavinMgPer100g,
+			NiacinMgPer100g:       body.NiacinMgPer100g,
+			VitaminB6MgPer100g:    body.VitaminB6MgPer100g,
+			FolateMcgPer100g:      body.FolateMcgPer100g,
+			VitaminB12McgPer100g:  body.VitaminB12McgPer100g,
+		},
+	})
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, gin.H{"id": item.ID, "message": "纠错提案已提交，等待审核", "item": item})
 }
 
 func hasNonEmptyString(values []string) bool {

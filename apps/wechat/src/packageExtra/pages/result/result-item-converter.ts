@@ -5,6 +5,7 @@ export interface NutritionItem {
   sourceItemId?: number
   sourceName?: string
   name: string
+  displayWeight?: string
   weight: number
   originalWeight: number
   grossWeight: number
@@ -20,6 +21,10 @@ export interface NutritionItem {
   packageWeightSource?: string
   packageWeightApplied?: boolean
   packageWeightReason?: string
+  weightMethod?: string
+  weightConfidence?: number
+  weightIntervalG?: number[]
+  needsUserConfirmation?: boolean
   matchedFoodId?: string | null
   packagedFoodId?: string
   packageMatchStatus?: string
@@ -136,6 +141,7 @@ export const convertApiFoodItemsToNutritionItems = (items: FoodItem[]): Nutritio
       sourceItemId: itemId,
       sourceName: item.name,
       name: item.name,
+      displayWeight: item.display_weight,
       weight: item.estimatedWeightGrams,
       originalWeight: aiWeight,
       grossWeight,
@@ -151,6 +157,10 @@ export const convertApiFoodItemsToNutritionItems = (items: FoodItem[]): Nutritio
       packageWeightSource: item.package_weight_source ?? item.packageWeightSource,
       packageWeightApplied,
       packageWeightReason: item.package_weight_reason ?? item.packageWeightReason,
+      weightMethod: item.weight_method,
+      weightConfidence: item.weight_confidence,
+      weightIntervalG: item.weight_interval_g,
+      needsUserConfirmation: item.needs_user_confirmation,
       matchedFoodId: item.matched_food_id ?? item.matchedFoodId,
       packagedFoodId: item.packaged_food_id ?? item.packagedFoodId,
       packageMatchStatus,

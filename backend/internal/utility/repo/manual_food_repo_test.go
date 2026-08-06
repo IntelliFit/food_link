@@ -531,6 +531,85 @@ func TestManualFoodResultFromPackagedScalesNutrientsToDefaultWeight(t *testing.T
 	assert.InDelta(t, 400.0, item.ExtraNutrients.SodiumMg, 0.001)
 }
 
+func TestManualFoodResultFromPackagedScalesNutritionByDefaultPortion(t *testing.T) {
+	basis := "100g"
+	item := manualFoodResultFromPackaged(fooddomain.PackagedFood{
+		ID:                 "pkg-cookie",
+		ProductName:        "cookie",
+		NutritionBasisUnit: &basis,
+		NetWeightG:         50,
+		KcalPer100g:        480,
+		ProteinPer100g:     6,
+		CarbsPer100g:       68,
+		FatPer100g:         20,
+	}, 0.9)
+
+	assert.Equal(t, 50.0, item.DefaultWeightGrams)
+	assert.Equal(t, "50g", item.PortionLabel)
+	assert.InDelta(t, 240, item.TotalCalories, 0.01)
+	assert.InDelta(t, 3, item.TotalProtein, 0.01)
+	assert.InDelta(t, 34, item.TotalCarbs, 0.01)
+	assert.InDelta(t, 10, item.TotalFat, 0.01)
+}
+
+func TestManualFoodResultFromPackagedBeverageCapsAbnormalNetContent(t *testing.T) {
+	basis := "100ml"
+	unit := "ml"
+	item := manualFoodResultFromPackaged(fooddomain.PackagedFood{
+		ID:                 "pkg-lemon-tea",
+		ProductName:        "lemon tea",
+		NutritionBasisUnit: &basis,
+		NetContentValue:    2500,
+		NetContentUnit:     &unit,
+		KcalPer100g:        36,
+		ProteinPer100g:     0,
+		CarbsPer100g:       9,
+		FatPer100g:         0,
+	}, 0.9)
+
+	assert.Equal(t, "beverage", item.Category)
+	assert.Equal(t, "ml", item.DisplayUnit)
+	assert.Equal(t, 500.0, item.DefaultWeightGrams)
+	assert.Equal(t, "500ml", item.PortionLabel)
+	assert.InDelta(t, 180, item.TotalCalories, 0.01)
+	assert.InDelta(t, 45, item.TotalCarbs, 0.01)
+}
+
+func TestManualFoodResultFromPackagedBeverageCapsAbnormalServingWeight(t *testing.T) {
+	basis := "100ml"
+	item := manualFoodResultFromPackaged(fooddomain.PackagedFood{
+		ID:                 "pkg-oat-drink",
+		ProductName:        "oat drink",
+		NutritionBasisUnit: &basis,
+		ServingWeightG:     1000,
+		KcalPer100g:        91.5,
+		ProteinPer100g:     0.8,
+		CarbsPer100g:       10,
+		FatPer100g:         5.4,
+	}, 0.9)
+
+	assert.Equal(t, "beverage", item.Category)
+	assert.Equal(t, "ml", item.DisplayUnit)
+	assert.Equal(t, 500.0, item.DefaultWeightGrams)
+	assert.Equal(t, "500ml", item.PortionLabel)
+	assert.InDelta(t, 457.5, item.TotalCalories, 0.01)
+}
+
+func TestManualFoodServingProfileTreatsPowderAsSolid(t *testing.T) {
+	item := manualFoodResultFromNutrition(fooddomain.FoodNutrition{
+		ID:             "instant-coffee-powder",
+		CanonicalName:  "雀巢奶香速溶咖啡固体饮料",
+		KcalPer100g:    420,
+		ProteinPer100g: 6,
+		CarbsPer100g:   70,
+		FatPer100g:     15,
+	}, 0)
+
+	assert.Equal(t, "g", item.DisplayUnit)
+	assert.Equal(t, 100.0, item.DefaultWeightGrams)
+	assert.Equal(t, 420.0, item.TotalCalories)
+}
+
 func TestEnrichManualFoodResultsWithNutritionLibrary(t *testing.T) {
 	db := setupTestDB(t)
 	imgKey := "standard-food/backfill/rice.png"

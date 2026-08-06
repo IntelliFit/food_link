@@ -5845,6 +5845,7 @@ func (s *AnalyzeService) applyDBFirstNutritionWithOptions(ctx context.Context, r
 		item["nutrition_source_category"] = nutritionSourceCategory(stringFromAny(item["nutrition_source"]))
 	}
 	out, sanityMeta := applyNutritionCommonSenseChecks(out)
+	out = applyFinalWeightPresentation(out)
 	resp["items"] = out
 	resp["resolved_count"] = resolvedCount
 	resp["unresolved_count"] = unresolvedCount
@@ -6327,6 +6328,160 @@ func ensureGrossWeightField(item map[string]any, fallbackWeight float64) {
 	if _, ok := item["ediblePortionSource"]; !ok {
 		item["ediblePortionSource"] = "default"
 	}
+}
+
+func applyFinalWeightPresentation(items []map[string]any) []map[string]any {
+	if len(items) == 0 {
+		return items
+	}
+	out := make([]map[string]any, 0, len(items))
+	for _, item := range items {
+		next := copyAnyMap(item)
+		applyFinalWeightPresentationToItem(next)
+		out = append(out, next)
+	}
+	return out
+}
+
+func applyFinalWeightPresentationToItem(item map[string]any) {
+	if item == nil {
+		return
+	}
+	weight := nutritionWeightFromItem(item)
+	if weight <= 0 {
+		item["weight_method"] = "missing_weight"
+		item["weight_confidence"] = 0.0
+		item["needs_user_confirmation"] = true
+		return
+	}
+	if isBlankAny(item["weight_method"]) {
+		item["weight_method"] = finalWeightMethod(item)
+	}
+	confidence := finalWeightConfidence(item)
+	item["final_weight_g"] = round2(weight)
+	item["display_weight"] = fmt.Sprintf("约 %.0fg", math.Round(weight))
+	item["weight_confidence"] = round2(confidence)
+	if interval := existingWeightInterval(item); len(interval) == 2 {
+		item["weight_interval_g"] = interval
+	} else {
+		item["weight_interval_g"] = finalWeightInterval(weight, confidence)
+	}
+	if _, ok := item["needs_user_confirmation"]; !ok {
+		item["needs_user_confirmation"] = confidence < 0.45 || weight > 2000
+	}
+}
+
+func finalWeightMethod(item map[string]any) string {
+	if boolFromAny(firstNonNil(item["weightEdited"], item["weight_edited"])) {
+		return "user_weight"
+	}
+	if boolFromAny(firstNonNil(item["package_weight_applied"], item["packageWeightApplied"])) {
+		return "package_weight"
+	}
+	source := strings.TrimSpace(fmt.Sprintf("%v", firstNonNil(item["nutrition_source"], item["nutritionSource"])))
+	switch source {
+	case "packaged_food_library":
+		return "package_weight"
+	case "ingredient_label":
+		return "label_weight"
+	}
+	if !isBlankAny(firstNonNil(item["weightEvidence"], item["weight_evidence"])) {
+		return "evidence_estimate"
+	}
+	return "visual_estimate"
+}
+
+func finalWeightConfidence(item map[string]any) float64 {
+	if confidence := explicitWeightConfidence(item); confidence > 0 {
+		return confidence
+	}
+	method := strings.TrimSpace(fmt.Sprintf("%v", item["weight_method"]))
+	switch method {
+	case "user_weight":
+		return 0.99
+	case "package_weight":
+		return 0.96
+	case "label_weight":
+		return 0.9
+	case "evidence_estimate":
+		return 0.78
+	}
+	if !isBlankAny(firstNonNil(item["grossWeightGrams"], item["gross_weight_grams"], item["rawWeightGrams"])) {
+		return 0.68
+	}
+	return 0.55
+}
+
+func explicitWeightConfidence(item map[string]any) float64 {
+	for _, key := range []string{"weightConfidence", "weight_confidence", "weightConfidenceScore", "weight_confidence_score"} {
+		if confidence := numberFromAny(item[key]); confidence > 0 {
+			if confidence > 1 {
+				confidence = confidence / 100
+			}
+			return clampRange(confidence, 0.05, 0.99)
+		}
+	}
+	return 0
+}
+
+func existingWeightInterval(item map[string]any) []float64 {
+	for _, key := range []string{"weight_interval_g", "weightIntervalG", "weightRangeGrams", "weight_range_grams"} {
+		if interval := numericPairFromAny(item[key]); len(interval) == 2 {
+			return interval
+		}
+	}
+	minWeight := numberFromAny(firstNonNil(item["minWeightGrams"], item["min_weight_g"], item["weightMinG"], item["weight_min_g"]))
+	maxWeight := numberFromAny(firstNonNil(item["maxWeightGrams"], item["max_weight_g"], item["weightMaxG"], item["weight_max_g"]))
+	if minWeight > 0 && maxWeight >= minWeight {
+		return []float64{round2(minWeight), round2(maxWeight)}
+	}
+	return nil
+}
+
+func numericPairFromAny(value any) []float64 {
+	switch arr := value.(type) {
+	case []float64:
+		if len(arr) >= 2 && arr[0] >= 0 && arr[1] >= arr[0] {
+			return []float64{round2(arr[0]), round2(arr[1])}
+		}
+	case []any:
+		if len(arr) >= 2 {
+			low := numberFromAny(arr[0])
+			high := numberFromAny(arr[1])
+			if low >= 0 && high >= low {
+				return []float64{round2(low), round2(high)}
+			}
+		}
+	}
+	return nil
+}
+
+func finalWeightInterval(weight, confidence float64) []float64 {
+	margin := 0.35
+	switch {
+	case confidence >= 0.95:
+		margin = 0.03
+	case confidence >= 0.85:
+		margin = 0.08
+	case confidence >= 0.7:
+		margin = 0.18
+	case confidence >= 0.55:
+		margin = 0.28
+	}
+	low := weight * (1 - margin)
+	high := weight * (1 + margin)
+	if low < 0 {
+		low = 0
+	}
+	return []float64{round2(low), round2(high)}
+}
+
+func isBlankAny(value any) bool {
+	if value == nil {
+		return true
+	}
+	text := strings.TrimSpace(fmt.Sprintf("%v", value))
+	return text == "" || text == "<nil>"
 }
 
 func buildEdiblePortionPrompt(items []map[string]any, input AnalyzeInput) string {

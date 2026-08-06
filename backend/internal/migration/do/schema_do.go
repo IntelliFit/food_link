@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"gorm.io/datatypes"
+	"gorm.io/gorm"
 )
 
 type UserDO struct {
@@ -484,6 +485,47 @@ type PackagedFoodDO struct {
 }
 
 func (PackagedFoodDO) TableName() string { return "packaged_food_library" }
+
+type PackagedFoodCorrectionSubmissionDO struct {
+	ID                string         `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	UserID            string         `gorm:"column:user_id;type:uuid;not null;index:idx_packaged_food_correction_submissions_user_id"`
+	PackagedFoodID    string         `gorm:"column:packaged_food_id;type:uuid;not null;index:idx_packaged_food_correction_submissions_food_id"`
+	Status            string         `gorm:"column:status;type:text;not null;default:'pending';index:idx_packaged_food_correction_submissions_status"`
+	ReasonType        string         `gorm:"column:reason_type;type:text;not null;default:'other'"`
+	Comment           string         `gorm:"column:comment;type:text;not null;default:''"`
+	BeforeSnapshot    map[string]any `gorm:"column:before_snapshot;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
+	ProposedPatch     map[string]any `gorm:"column:proposed_patch;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
+	EvidenceImageURLs []string       `gorm:"column:evidence_image_urls;type:jsonb;serializer:json;not null;default:'[]'::jsonb"`
+	EvidenceBarcode   *string        `gorm:"column:evidence_barcode;type:text"`
+	OCRRawText        *string        `gorm:"column:ocr_raw_text;type:text"`
+	ConfidenceScore   float64        `gorm:"column:confidence_score;type:numeric;not null;default:0"`
+	RiskFlags         []string       `gorm:"column:risk_flags;type:jsonb;serializer:json;not null;default:'[]'::jsonb"`
+	ReviewNote        *string        `gorm:"column:review_note;type:text"`
+	ReviewedBy        *string        `gorm:"column:reviewed_by;type:uuid"`
+	ReviewedAt        *time.Time     `gorm:"column:reviewed_at;type:timestamptz"`
+	AppliedAt         *time.Time     `gorm:"column:applied_at;type:timestamptz"`
+	CreatedAt         time.Time      `gorm:"column:created_at;type:timestamptz;not null;default:now()"`
+	UpdatedAt         time.Time      `gorm:"column:updated_at;type:timestamptz;not null;default:now()"`
+	DeletedAt         gorm.DeletedAt `gorm:"column:deleted_at;index"`
+}
+
+func (PackagedFoodCorrectionSubmissionDO) TableName() string {
+	return "packaged_food_correction_submissions"
+}
+
+type PackagedFoodChangeLogDO struct {
+	ID             string         `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	PackagedFoodID string         `gorm:"column:packaged_food_id;type:uuid;not null;index:idx_packaged_food_change_logs_food_id"`
+	SubmissionID   *string        `gorm:"column:submission_id;type:uuid;index:idx_packaged_food_change_logs_submission_id"`
+	OperatorID     *string        `gorm:"column:operator_id;type:uuid"`
+	OperatorType   string         `gorm:"column:operator_type;type:text;not null;default:'admin'"`
+	BeforeSnapshot map[string]any `gorm:"column:before_snapshot;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
+	AfterSnapshot  map[string]any `gorm:"column:after_snapshot;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
+	ChangedFields  []string       `gorm:"column:changed_fields;type:jsonb;serializer:json;not null;default:'[]'::jsonb"`
+	CreatedAt      time.Time      `gorm:"column:created_at;type:timestamptz;not null;default:now()"`
+}
+
+func (PackagedFoodChangeLogDO) TableName() string { return "packaged_food_change_logs" }
 
 type PackagedFoodAliasDO struct {
 	ID              string    `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
@@ -1685,6 +1727,8 @@ func AllModels() []any {
 		&FoodRecordDO{},
 		&FoodNutritionDO{},
 		&PackagedFoodDO{},
+		&PackagedFoodCorrectionSubmissionDO{},
+		&PackagedFoodChangeLogDO{},
 		&PackagedFoodAliasDO{},
 		&FoodNutritionAliasDO{},
 		&FoodNutritionEmbeddingDO{},
