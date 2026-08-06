@@ -26,6 +26,7 @@ type PublicFoodService interface {
 	Unlike(ctx context.Context, userID, itemID string) error
 	Collect(ctx context.Context, userID, itemID string) error
 	Uncollect(ctx context.Context, userID, itemID string) error
+	ContributeCampusImages(ctx context.Context, userID, itemID string, imagePaths []string) (*service.CampusImageContributionResult, error)
 	Update(ctx context.Context, userID, itemID string, input service.CreateInput) error
 	Delete(ctx context.Context, userID, itemID string) error
 	Comments(ctx context.Context, userID, itemID string) ([]domain.PublicFoodComment, error)
@@ -254,6 +255,22 @@ func (h *PublicFoodHandler) Uncollect(c *gin.Context) {
 		return
 	}
 	response.Success(c, gin.H{"message": "已取消"})
+}
+
+func (h *PublicFoodHandler) ContributeCampusImages(c *gin.Context) {
+	var body struct {
+		ImagePaths []string `json:"image_paths"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		response.Error(c, err)
+		return
+	}
+	result, err := h.svc.ContributeCampusImages(c.Request.Context(), c.GetString(authmw.ContextUserIDKey), c.Param("item_id"), body.ImagePaths)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, result)
 }
 
 // GET /api/user/:user_id/collections

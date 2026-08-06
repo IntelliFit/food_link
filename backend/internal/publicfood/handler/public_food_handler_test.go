@@ -24,6 +24,7 @@ type mockPublicFoodService struct {
 	listFilter         repo.ListFilter
 	campusDetailItemID string
 	commentInput       service.CommentInput
+	contributedPaths   []string
 }
 
 func (m *mockPublicFoodService) Create(ctx context.Context, userID string, input service.CreateInput) (string, error) {
@@ -88,6 +89,11 @@ func (m *mockPublicFoodService) Uncollect(ctx context.Context, userID, itemID st
 	return nil
 }
 
+func (m *mockPublicFoodService) ContributeCampusImages(ctx context.Context, userID, itemID string, imagePaths []string) (*service.CampusImageContributionResult, error) {
+	m.contributedPaths = append([]string(nil), imagePaths...)
+	return &service.CampusImageContributionResult{ImagePaths: imagePaths, Accepted: true}, nil
+}
+
 func (m *mockPublicFoodService) Update(ctx context.Context, userID, itemID string, input service.CreateInput) error {
 	m.updateInput = input
 	m.updateItemID = itemID
@@ -126,9 +132,27 @@ func setupPublicFoodHandlerRouter(svc *mockPublicFoodService) *gin.Engine {
 	r.GET("/api/public-food-library", h.List)
 	r.POST("/api/public-food-library", h.Create)
 	r.GET("/api/public-food-library/:item_id/campus-detail", h.GetCampusDetail)
+	r.POST("/api/public-food-library/:item_id/contribute-images", h.ContributeCampusImages)
 	r.PUT("/api/public-food-library/:item_id", h.Update)
 	r.POST("/api/public-food-library/:item_id/comments", h.AddComment)
 	return r
+}
+
+func TestContributeCampusImages(t *testing.T) {
+	svc := &mockPublicFoodService{}
+	router := setupPublicFoodHandlerRouter(svc)
+	body := bytes.NewBufferString(`{"image_paths":["campus-food/contributed.jpg"]}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/public-food-library/campus-1/contribute-images", body)
+	req.Header.Set("Content-Type", "application/json")
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	require.Equal(t, http.StatusOK, resp.Code)
+	require.Equal(t, []string{"campus-food/contributed.jpg"}, svc.contributedPaths)
+	var payload map[string]any
+	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &payload))
+	require.Equal(t, float64(0), payload["code"])
 }
 
 func TestPublicFoodHandlerListMapsCampusFilters(t *testing.T) {
