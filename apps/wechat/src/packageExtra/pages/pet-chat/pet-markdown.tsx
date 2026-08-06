@@ -20,23 +20,12 @@ type PetMarkdownProps = {
 
 function normalizePetMarkdown(raw: string): string {
   if (!raw) return ''
-  const normalized = raw
+  return raw
     .replace(/\r\n/g, '\n')
     .replace(/```[a-zA-Z0-9_-]*\n?/g, '')
     .replace(/```+/g, '')
-    .replace(/__/g, '')
     .replace(/\n{3,}/g, '\n\n')
     .trim()
-
-  const chars = Array.from(normalized)
-  return chars
-    .filter((char, index) => {
-      if (char !== '*') return true
-      const previous = chars[index - 1] || ''
-      const next = chars[index + 1] || ''
-      return /\d/.test(previous) && /\d/.test(next)
-    })
-    .join('')
 }
 
 function stripBlockPrefix(line: string): string {

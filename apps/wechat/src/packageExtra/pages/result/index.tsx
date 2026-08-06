@@ -3016,7 +3016,7 @@ function ResultPage() {
                       <View className='ratio-control-main'>
                         <View className='ratio-label-wrap'>
                           <Text className='control-label'>实际摄入</Text>
-                          <Text className='control-sub-label'>约 {formatWeightDisplay(item.intake)}</Text>
+                          <Text className='control-sub-label'>约 {Math.max(0, Math.round(item.intake))}g</Text>
                         </View>
                         <View className='ratio-control-right'>
                           <View className='ratio-slider-shell'>

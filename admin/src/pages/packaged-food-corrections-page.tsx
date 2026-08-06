@@ -58,7 +58,6 @@ export function PackagedFoodCorrectionsPage({ onLogout, onMenuChange }: Packaged
   const [acting, setActing] = useState(false)
 
   const limit = 40
-  const totalPages = Math.max(1, Math.ceil(total / limit))
   const apiBase = displayApiBase()
 
   useEffect(() => {
