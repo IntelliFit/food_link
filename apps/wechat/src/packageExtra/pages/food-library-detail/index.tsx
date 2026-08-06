@@ -181,7 +181,7 @@ function FoodLibraryDetailPage() {
   const [submitting, setSubmitting] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
-  const [showMicronutrients, setShowMicronutrients] = useState(false)
+  const [showMicronutrients, setShowMicronutrients] = useState(true)
   const [contributingImages, setContributingImages] = useState(false)
   const [campusMetrics, setCampusMetrics] = useState<CampusFoodMetric>({})
   const [similarItems, setSimilarItems] = useState<PublicFoodLibraryItem[]>([])

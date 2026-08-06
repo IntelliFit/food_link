@@ -47,6 +47,21 @@ func setupPublicFoodRepoTestDB(t *testing.T) *gorm.DB {
 	return db
 }
 
+func preciseCampusItemsForTest() []map[string]any {
+	return []map[string]any{{
+		"name":                       "测试菜品",
+		"micronutrient_analysis":     "ai_precise_v1",
+		"micronutrient_source":       "qwen_generated",
+		"micronutrient_confidence":   0.9,
+		"micronutrient_generated_at": time.Now().UTC().Format(time.RFC3339),
+		"nutrients": map[string]any{
+			"calories":  420.0,
+			"fiber":     3.2,
+			"calciumMg": 120.0,
+		},
+	}}
+}
+
 func seedPublicFoodItems(t *testing.T, db *gorm.DB) {
 	t.Helper()
 
@@ -73,6 +88,7 @@ func seedPublicFoodItems(t *testing.T, db *gorm.DB) {
 			WindowName:      "低脂窗口",
 			TotalCalories:   420,
 			TotalProtein:    38,
+			Items:           preciseCampusItemsForTest(),
 			Price:           16,
 			LikeCount:       9,
 			CollectionCount: 2,
@@ -89,6 +105,7 @@ func seedPublicFoodItems(t *testing.T, db *gorm.DB) {
 			CanteenName:     "家园食堂",
 			TotalCalories:   560,
 			TotalProtein:    28,
+			Items:           preciseCampusItemsForTest(),
 			Price:           18,
 			LikeCount:       15,
 			CollectionCount: 6,
@@ -105,6 +122,7 @@ func seedPublicFoodItems(t *testing.T, db *gorm.DB) {
 			CanteenName:     "紫荆食堂",
 			TotalCalories:   260,
 			TotalProtein:    31,
+			Items:           preciseCampusItemsForTest(),
 			Price:           22,
 			LikeCount:       3,
 			CollectionCount: 1,
@@ -143,11 +161,27 @@ func seedPublicFoodItems(t *testing.T, db *gorm.DB) {
 			WindowName:        "低脂窗口",
 			TotalCalories:     480,
 			TotalProtein:      20,
+			Items:             preciseCampusItemsForTest(),
 			Price:             19,
 			LikeCount:         8,
 			CollectionCount:   1,
 			PublishedAt:       &now,
 			CreatedAt:         &now,
+		},
+		{
+			ID:            "campus-legacy-analysis",
+			UserID:        "user-7",
+			FoodName:      "旧版普通分析菜品",
+			Status:        "published",
+			IsCampusFood:  true,
+			SchoolName:    "北京大学",
+			CanteenName:   "学一食堂",
+			TotalCalories: 390,
+			TotalProtein:  22,
+			Items:         []map[string]any{{"name": "旧版菜品", "calories": 390.0}},
+			Price:         12,
+			PublishedAt:   &now,
+			CreatedAt:     &now,
 		},
 		{
 			ID:              "normal-1",
@@ -263,14 +297,19 @@ func TestPublicFoodRepo_ListPublishedCampusExcludesInvalidNutritionAndTaskStatus
 
 	require.NoError(t, err)
 	var pending *domain.PublicFoodItem
+	var legacy *domain.PublicFoodItem
 	for i := range rows {
 		if rows[i].ID == "campus-pending" {
 			pending = &rows[i]
+		}
+		if rows[i].ID == "campus-legacy-analysis" {
+			legacy = &rows[i]
 		}
 		require.Empty(t, rows[i].AnalysisStatus)
 		require.Empty(t, rows[i].AnalysisError)
 	}
 	require.Nil(t, pending)
+	require.Nil(t, legacy)
 }
 
 func TestPublicFoodRepo_ListPublishedCampusUsesRedirectTaskStatus(t *testing.T) {

@@ -451,7 +451,7 @@ func (s *PublicFoodService) Get(ctx context.Context, userID, itemID string) (*do
 	if item == nil || isDeletedStatus(item.Status) {
 		return nil, commonerrors.ErrNotFound
 	}
-	if isCampusPublicFood(item) && (item.Status != "published" || item.TotalCalories <= 0) && strings.TrimSpace(item.UserID) != strings.TrimSpace(userID) {
+	if isCampusPublicFood(item) && (item.Status != "published" || item.TotalCalories <= 0 || !hasPreciseCampusMicronutrients(item)) && strings.TrimSpace(item.UserID) != strings.TrimSpace(userID) {
 		return nil, commonerrors.ErrNotFound
 	}
 	if err := s.ensureItemVisible(ctx, userID, item); err != nil {
@@ -472,7 +472,7 @@ func (s *PublicFoodService) GetCampusDetail(ctx context.Context, userID, itemID 
 	if item == nil || isDeletedStatus(item.Status) || !isCampusPublicFood(item) {
 		return nil, commonerrors.ErrNotFound
 	}
-	if (item.Status != "published" || item.TotalCalories <= 0) && strings.TrimSpace(item.UserID) != strings.TrimSpace(userID) {
+	if (item.Status != "published" || item.TotalCalories <= 0 || !hasPreciseCampusMicronutrients(item)) && strings.TrimSpace(item.UserID) != strings.TrimSpace(userID) {
 		return nil, commonerrors.ErrNotFound
 	}
 	if err := s.ensureItemVisible(ctx, userID, item); err != nil {
@@ -509,6 +509,13 @@ func (s *PublicFoodService) GetCampusDetail(ctx context.Context, userID, itemID 
 		SimilarItems: similarViews,
 		RelatedFeeds: relatedFeeds,
 	}, nil
+}
+
+func hasPreciseCampusMicronutrients(item *domain.PublicFoodItem) bool {
+	if item == nil {
+		return false
+	}
+	return analyzeservice.ValidatePreciseMicronutrientItems(item.Items) == nil
 }
 
 func (s *PublicFoodService) Like(ctx context.Context, userID, itemID string) error {

@@ -274,7 +274,13 @@ func validPublishedCampusNutritionSQL(alias string) string {
 	if prefix != "" {
 		prefix += "."
 	}
-	return "(NOT (COALESCE(" + prefix + "type, '') = 'campus' OR COALESCE(" + prefix + "is_campus_food, false) = true) OR COALESCE(" + prefix + "total_calories, 0) > 0)"
+	items := "COALESCE(" + prefix + "items::jsonb, '[]'::jsonb)"
+	safeItems := "CASE WHEN jsonb_typeof(" + items + ") = 'array' THEN " + items + " ELSE '[]'::jsonb END"
+	preciseItems := "(jsonb_array_length(" + safeItems + ") > 0 AND NOT EXISTS (" +
+		"SELECT 1 FROM jsonb_array_elements(" + safeItems + ") AS campus_item " +
+		"WHERE COALESCE(campus_item ->> 'micronutrient_analysis', '') <> 'ai_precise_v1'))"
+	campusItem := "(COALESCE(" + prefix + "type, '') = 'campus' OR COALESCE(" + prefix + "is_campus_food, false) = true)"
+	return "(NOT " + campusItem + " OR (COALESCE(" + prefix + "total_calories, 0) > 0 AND " + preciseItems + "))"
 }
 
 // ListCampusHighlights 查询精选校园内容，用于圈子默认流混入
