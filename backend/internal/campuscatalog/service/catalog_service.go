@@ -42,6 +42,7 @@ type CatalogRepository interface {
 
 type CatalogAnalyzeTaskSubmitter interface {
 	SubmitInternalAnalyzeTask(ctx context.Context, userID string, input analyzeservice.SubmitTaskInput) (string, error)
+	SubmitInternalTextTask(ctx context.Context, userID string, input analyzeservice.SubmitTaskInput) (string, error)
 }
 
 type CatalogAnalysisUserResolver interface {
@@ -458,8 +459,8 @@ func (s *CatalogService) PublishItem(ctx context.Context, adminID, itemID string
 		s.resolveItemImages(items)
 		return &items[0], nil
 	}
-	if item.CompletenessStatus != "complete" || len(item.MissingFields) > 0 {
-		return nil, badRequest("请先补齐名称、图片和价格后再提交上线")
+	if blockers := catalogPublishBlockingFields(item); len(blockers) > 0 {
+		return nil, badRequest("请先补齐名称和价格后再提交上线")
 	}
 	if s.analyzeTasks == nil || s.analysisUsers == nil {
 		return nil, fmt.Errorf("校园菜品 AI 分析服务未配置")
@@ -494,14 +495,23 @@ func (s *CatalogService) PublishItem(ctx context.Context, adminID, itemID string
 		"floor":                           item.Floor,
 		"window_name":                     item.WindowName,
 	}
+	contextText := catalogAnalysisContext(item)
 	input := analyzeservice.SubmitTaskInput{
-		ImageURLs: imageURLs, ExecutionMode: &mode, SourceType: "image", SuggestRatioEnabled: true,
-		AdditionalContext: catalogAnalysisContext(item), ExtraPayload: extraPayload,
+		ExecutionMode: &mode, SuggestRatioEnabled: true,
+		AdditionalContext: contextText, ExtraPayload: extraPayload,
 	}
+	var taskID string
+	var submitErr error
 	if len(imageURLs) > 0 {
+		input.ImageURLs = imageURLs
+		input.SourceType = "image"
 		input.ImageURL = imageURLs[0]
+		taskID, submitErr = s.analyzeTasks.SubmitInternalAnalyzeTask(ctx, analysisUserID, input)
+	} else {
+		input.TextInput = contextText
+		input.SourceType = "text"
+		taskID, submitErr = s.analyzeTasks.SubmitInternalTextTask(ctx, analysisUserID, input)
 	}
-	taskID, submitErr := s.analyzeTasks.SubmitInternalAnalyzeTask(ctx, analysisUserID, input)
 	if submitErr != nil {
 		_ = s.repo.MarkAnalysisFailed(ctx, item.ID, submitErr.Error(), time.Now())
 		logger.Error(ctx, "提交校园菜品 AI 分析任务失败", submitErr,
@@ -517,7 +527,8 @@ func (s *CatalogService) PublishItem(ctx context.Context, adminID, itemID string
 	item.AnalysisError = ""
 	item.AnalysisStartedAt = &startedAt
 	logger.Info(ctx, "食堂采集条目已提交 AI 分析",
-		slog.String("admin_id", adminID), slog.String("item_id", itemID), slog.String("batch_id", item.BatchID), slog.String("analysis_task_id", taskID))
+		slog.String("admin_id", adminID), slog.String("item_id", itemID), slog.String("batch_id", item.BatchID),
+		slog.String("analysis_task_id", taskID), slog.String("analysis_source_type", input.SourceType))
 	items := []domain.CatalogItem{*item}
 	s.resolveItemImages(items)
 	return &items[0], nil
@@ -573,6 +584,36 @@ func catalogAnalysisContext(item *domain.CatalogItem) string {
 		"采集原文：" + strings.TrimSpace(item.RawText),
 	}
 	return strings.Join(nonEmptyStrings(parts...), "；")
+}
+
+func catalogPublishBlockingFields(item *domain.CatalogItem) []string {
+	if item == nil {
+		return []string{"name", "price"}
+	}
+	seen := map[string]struct{}{}
+	blocking := make([]string, 0, len(item.MissingFields)+2)
+	add := func(field string) {
+		if _, exists := seen[field]; exists {
+			return
+		}
+		seen[field] = struct{}{}
+		blocking = append(blocking, field)
+	}
+	for _, field := range item.MissingFields {
+		if strings.TrimSpace(field) == "" || field == "image" {
+			continue
+		}
+		add(field)
+	}
+	if strings.TrimSpace(item.Name) == "" {
+		add("name")
+	}
+	hasPrice := item.Price != nil || item.PriceMin != nil || item.PriceMax != nil || strings.TrimSpace(item.PriceText) != "" || len(item.PriceOptions) > 0
+	if item.PriceType == "unknown" || !hasPrice {
+		add("price")
+	}
+	sort.Strings(blocking)
+	return blocking
 }
 
 func (s *CatalogService) buildCatalogItem(batch domain.CollectionBatch, input CreateCatalogItemInput, index int, adminID string, now time.Time) (domain.CatalogItem, error) {

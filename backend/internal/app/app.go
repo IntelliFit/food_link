@@ -638,6 +638,7 @@ func New(cfg *config.Config) (*App, error) {
 	engine.DELETE("/api/public-food-library/:item_id/like", authmw.RequireJWT(jwtSvc), publicFoodHandler.Unlike)
 	engine.POST("/api/public-food-library/:item_id/collect", authmw.RequireJWT(jwtSvc), publicFoodHandler.Collect)
 	engine.DELETE("/api/public-food-library/:item_id/collect", authmw.RequireJWT(jwtSvc), publicFoodHandler.Uncollect)
+	engine.POST("/api/public-food-library/:item_id/contribute-images", authmw.RequireJWT(jwtSvc), publicFoodHandler.ContributeCampusImages)
 	engine.PUT("/api/public-food-library/:item_id", authmw.RequireJWT(jwtSvc), publicFoodHandler.Update)
 	engine.DELETE("/api/public-food-library/:item_id", authmw.RequireJWT(jwtSvc), publicFoodHandler.Delete)
 	engine.GET("/api/public-food-library/:item_id/comments", authmw.RequireJWT(jwtSvc), publicFoodHandler.Comments)

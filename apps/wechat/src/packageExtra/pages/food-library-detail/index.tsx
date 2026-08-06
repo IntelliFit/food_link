@@ -19,7 +19,9 @@ import {
   type PublicFoodLibraryComment,
   collectPublicFoodLibraryItem,
   uncollectPublicFoodLibraryItem,
-  deletePublicFoodLibraryItem
+  deletePublicFoodLibraryItem,
+  contributeCampusFoodImages,
+  uploadAnalyzeImageFile
 } from '../../../utils/api'
 import './index.scss'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
@@ -180,6 +182,7 @@ function FoodLibraryDetailPage() {
   const [deleting, setDeleting] = useState(false)
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
   const [showMicronutrients, setShowMicronutrients] = useState(false)
+  const [contributingImages, setContributingImages] = useState(false)
   const [campusMetrics, setCampusMetrics] = useState<CampusFoodMetric>({})
   const [similarItems, setSimilarItems] = useState<PublicFoodLibraryItem[]>([])
   const [relatedFeeds, setRelatedFeeds] = useState<CampusRelatedFeedItem[]>([])
@@ -407,6 +410,43 @@ function FoodLibraryDetailPage() {
       await showUnifiedApiError(e, '提交失败')
     } finally {
       Taro.hideLoading()
+    }
+  }
+
+  const handleContributeImages = async () => {
+    if (!item || contributingImages || !isCampusFoodItem(item)) return
+    try {
+      const selection = await Taro.chooseMedia({
+        count: 3,
+        mediaType: ['image'],
+        sourceType: ['album', 'camera'],
+        sizeType: ['compressed']
+      })
+      const files = selection.tempFiles || []
+      if (!files.length) return
+      setContributingImages(true)
+      const uploaded: string[] = []
+      for (const file of files) {
+        const path = String(file.tempFilePath || '').trim()
+        if (!path) continue
+        const result = await uploadAnalyzeImageFile(path)
+        uploaded.push(result.imageUrl)
+      }
+      if (!uploaded.length) throw new Error('没有可上传的图片')
+      const result = await contributeCampusFoodImages(item.id, uploaded)
+      const nextImages = result.image_paths || []
+      if (nextImages.length) {
+        setItem({ ...item, image_path: nextImages[0], image_paths: nextImages })
+        setCurrentImageIndex(0)
+      }
+      Taro.setStorageSync('food_library_need_refresh', '1')
+      Taro.showToast({ title: result.accepted ? '感谢共建，照片已补充' : '该菜品已有用户补图', icon: 'success' })
+    } catch (e: any) {
+      if (!String(e?.errMsg || e?.message || '').includes('cancel')) {
+        await showUnifiedApiError(e, '补充照片失败')
+      }
+    } finally {
+      setContributingImages(false)
     }
   }
 
@@ -724,7 +764,20 @@ function FoodLibraryDetailPage() {
             )}
           </>
         ) : (
-          <View className='image-placeholder'>暂无图片</View>
+          <View className='image-placeholder image-contribution-placeholder'>
+            <Text className='iconfont icon-camera image-contribution-icon' />
+            <Text className='image-contribution-title'>这道菜还没有照片</Text>
+            <Text className='image-contribution-hint'>拍一张真实菜品照片，和同学们一起完善校园食堂</Text>
+            {isCampusFoodItem(item) && (
+              <View
+                className={`image-contribution-button ${contributingImages ? 'disabled' : ''}`}
+                onClick={() => void handleContributeImages()}
+              >
+                {contributingImages ? <View className='image-contribution-spinner' /> : <Text className='iconfont icon-camera' />}
+                {!contributingImages && <Text>补充照片</Text>}
+              </View>
+            )}
+          </View>
         )}
         {item.suitable_for_fat_loss && (
           <View className='fat-loss-badge'>适合减脂</View>

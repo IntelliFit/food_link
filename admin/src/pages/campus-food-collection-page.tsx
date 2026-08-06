@@ -480,8 +480,8 @@ export function CampusFoodCollectionPage({ onLogout, onMenuChange }: CampusFoodC
   }
 
   async function publishCatalogItem(item: CatalogItem) {
-    if ((item.missing_fields || []).length || item.completeness_status !== 'complete') {
-      toast.error('请先补齐名称、图片和价格后再提交上线')
+    if (!isCatalogItemPublishable(item)) {
+      toast.error(catalogPublishDisabledReason(item) || '当前条目不能提交上线')
       return
     }
     const actionLabel = item.status === 'analysis_failed'
@@ -1041,7 +1041,7 @@ export function CampusFoodCollectionPage({ onLogout, onMenuChange }: CampusFoodC
                             </td>
                           ) : null}
                           <td className='p-3'>
-                            {item.image_paths?.[0] ? <img className='h-16 w-20 rounded-lg object-cover' src={item.image_paths[0]} alt={item.name || '食堂采集图片'} /> : <span className='pill'>缺图</span>}
+                            {item.image_paths?.[0] ? <img className='h-16 w-20 rounded-lg object-cover' src={item.image_paths[0]} alt={item.name || '食堂采集图片'} /> : <span className='pill warning'>待用户共建补图</span>}
                           </td>
                           <td className='p-3'><strong>{item.name || '待补名称'}</strong><div className='muted'>{labelOf(entryTypeOptions, item.entry_type)} · {labelOf(imageKindOptions, item.image_kind)}</div></td>
                           <td className='p-3'>{[item.floor, item.window_name].filter(Boolean).join(' · ') || '-'}<div className='muted'>{(item.meal_periods || []).map((value) => labelOf(mealOptions, value)).join(' / ') || '餐时待确认'}</div></td>
@@ -1070,7 +1070,7 @@ export function CampusFoodCollectionPage({ onLogout, onMenuChange }: CampusFoodC
                                 type='button'
                                 className='primary min-h-8 px-3'
                                 onClick={() => void publishCatalogItem(item)}
-                                disabled={publishingItemId === item.id || batchPublishing || item.status === 'published' || item.status === 'analysis_pending' || Boolean((item.missing_fields || []).length)}
+                                disabled={publishingItemId === item.id || batchPublishing || !publishable}
                                 title={catalogPublishDisabledReason(item)}
                               >
                                 {publishingItemId === item.id ? <span className='spinner small' /> : null}
@@ -1466,8 +1466,7 @@ function toggleValue(values: string[], value: string): string[] {
 function isCatalogItemPublishable(item: CatalogItem): boolean {
   return item.status !== 'published'
     && item.status !== 'analysis_pending'
-    && item.completeness_status === 'complete'
-    && (item.missing_fields || []).length === 0
+    && (item.missing_fields || []).every((field) => field === 'image')
 }
 
 function toggleSimpleValue(values: string[], value: string): string[] {
@@ -1509,7 +1508,7 @@ function labelOf(options: Array<[string, string]>, value: string): string {
 
 function missingFieldLabel(value: string): string {
   if (value === 'name') return '缺名称'
-  if (value === 'image') return '缺图片'
+  if (value === 'image') return '待用户共建补图'
   if (value === 'price') return '缺价格'
   return value
 }
@@ -1553,7 +1552,8 @@ function catalogPublishActionLabel(status: string): string {
 function catalogPublishDisabledReason(item: CatalogItem): string | undefined {
   if (item.status === 'published') return '该条目已经上线'
   if (item.status === 'analysis_pending') return 'AI 分析进行中，请等待结果'
-  if ((item.missing_fields || []).length || item.completeness_status !== 'complete') return '请先补齐名称、图片和价格'
+  if ((item.missing_fields || []).some((field) => field !== 'image')) return '请先补齐名称和价格'
+  if ((item.missing_fields || []).includes('image')) return '无图菜品将使用文字 AI 分析，上线后可由用户共建补图'
   return '选择此条目'
 }
 

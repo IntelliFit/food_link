@@ -772,7 +772,7 @@ function DishList(props: {
           const publishing = props.publishingIds.includes(item.id);
           return <tr key={item.id} className="border-t align-top">
             <td className="p-3"><input type="checkbox" checked={props.selectedIds.includes(item.id)} disabled={!isPublishable(item) || props.publishingIds.length > 0} onChange={() => props.onToggle(item)} /></td>
-            <td className="p-3">{item.image_paths?.[0] ? <img className="size-16 rounded-lg object-cover" src={item.image_paths[0]} alt={item.name || "菜品图片"} /> : <div className="flex size-16 items-center justify-center rounded-lg bg-muted"><ImageOff className="size-5 text-muted-foreground" /></div>}</td>
+            <td className="p-3">{item.image_paths?.[0] ? <img className="size-16 rounded-lg object-cover" src={item.image_paths[0]} alt={item.name || "菜品图片"} /> : <div><div className="flex size-16 items-center justify-center rounded-lg bg-muted"><ImageOff className="size-5 text-muted-foreground" /></div><p className="mt-1 text-xs text-amber-300">待用户补图</p></div>}</td>
             <td className="p-3"><strong>{item.name || "未命名菜品"}</strong><p className="mt-1 max-w-56 text-xs text-muted-foreground">{[item.window_name, item.floor].filter(Boolean).join(" · ") || "窗口待关联"}</p></td>
             <td className="p-3">{formatPrice(item)}</td>
             <td className="p-3">{item.portion_description || "待补充"}</td>
@@ -858,7 +858,7 @@ function catalogItemPayload(item: CatalogItem | undefined, value: Record<string,
   };
 }
 
-function isPublishable(item: CatalogItem) { return item.status !== "published" && item.status !== "analysis_pending" && !(item.missing_fields || []).length; }
+function isPublishable(item: CatalogItem) { return item.status !== "published" && item.status !== "analysis_pending" && (item.missing_fields || []).every((field) => field === "image"); }
 function formatPrice(item: CatalogItem) { if (item.price != null) return `${formatNumber(item.price)}${item.price_unit || "元"}`; if (item.price_min != null || item.price_max != null) return `${formatNumber(item.price_min)}–${formatNumber(item.price_max)}${item.price_unit || "元"}`; if (item.price_text) return item.price_text; return "待补充"; }
 function formatNumber(value?: number) { return value == null ? "0" : Number(value).toFixed(Number(value) % 1 === 0 ? 0 : 1); }
 function shortText(value: string, length: number) { return value.length > length ? `${value.slice(0, length)}…` : value; }

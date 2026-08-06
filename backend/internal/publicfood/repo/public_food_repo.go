@@ -584,6 +584,52 @@ func (r *PublicFoodRepo) UpdateItem(ctx context.Context, itemID, userID string, 
 		Updates(updates).Error
 }
 
+// SetMissingCampusImages accepts the first image contribution for a published
+// campus food. The row lock prevents concurrent contributors from overwriting
+// one another; later requests receive the already accepted image set.
+func (r *PublicFoodRepo) SetMissingCampusImages(ctx context.Context, itemID string, imagePaths []string) (*domain.PublicFoodItem, bool, error) {
+	var item domain.PublicFoodItem
+	accepted := false
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("id = ? AND status = ? AND (type = ? OR is_campus_food = ?)", itemID, "published", "campus", true).
+			First(&item).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil
+			}
+			return err
+		}
+		if len(item.ImagePaths) > 0 || (item.ImagePath != nil && strings.TrimSpace(*item.ImagePath) != "") {
+			return nil
+		}
+		encoded, err := json.Marshal(imagePaths)
+		if err != nil {
+			return err
+		}
+		first := imagePaths[0]
+		now := time.Now()
+		if err := tx.Model(&domain.PublicFoodItem{}).Where("id = ?", item.ID).Updates(map[string]any{
+			"image_path":  first,
+			"image_paths": datatypes.JSON(encoded),
+			"updated_at":  now,
+		}).Error; err != nil {
+			return err
+		}
+		item.ImagePath = &first
+		item.ImagePaths = append([]string(nil), imagePaths...)
+		item.UpdatedAt = &now
+		accepted = true
+		return nil
+	})
+	if err != nil {
+		return nil, false, err
+	}
+	if strings.TrimSpace(item.ID) == "" {
+		return nil, false, nil
+	}
+	return &item, accepted, nil
+}
+
 func (r *PublicFoodRepo) SoftDeleteOwned(ctx context.Context, itemID, userID, status string) error {
 	return r.db.WithContext(ctx).
 		Model(&domain.PublicFoodItem{}).

@@ -180,6 +180,51 @@ func TestHasCampusPrice(t *testing.T) {
 	require.True(t, hasCampusPrice(&domain.PublicFoodItem{PriceMin: 8, PriceMax: 15}))
 }
 
+func TestContributeCampusImagesAcceptsFirstContributionWithoutChangingNutrition(t *testing.T) {
+	db := setupPublicFoodServiceTestDB(t)
+	calories := 428.0
+	item := domain.PublicFoodItem{
+		ID: "campus-missing-image", UserID: "system-user", Status: "published", Type: "campus", IsCampusFood: true,
+		FoodName: "番茄炒饭", SchoolName: "清华大学", CanteenName: "紫荆园", TotalCalories: calories,
+		ImagePaths: []string{}, Items: []map[string]any{}, UserTags: []string{},
+	}
+	repository := repo.NewPublicFoodRepo(db)
+	require.NoError(t, repository.CreateItem(context.Background(), &item))
+	svc := NewPublicFoodService(repository)
+
+	first, err := svc.ContributeCampusImages(context.Background(), "user-1", item.ID, []string{"campus-food/first.jpg"})
+	require.NoError(t, err)
+	require.True(t, first.Accepted)
+	require.Equal(t, []string{"campus-food/first.jpg"}, first.ImagePaths)
+
+	second, err := svc.ContributeCampusImages(context.Background(), "user-2", item.ID, []string{"campus-food/second.jpg"})
+	require.NoError(t, err)
+	require.False(t, second.Accepted)
+	require.Equal(t, []string{"campus-food/first.jpg"}, second.ImagePaths)
+
+	saved, err := repository.GetItem(context.Background(), item.ID)
+	require.NoError(t, err)
+	require.Equal(t, calories, saved.TotalCalories)
+	require.Equal(t, []string{"campus-food/first.jpg"}, saved.ImagePaths)
+}
+
+func TestContributeCampusImagesRejectsExternalImageAndNonCampusItem(t *testing.T) {
+	db := setupPublicFoodServiceTestDB(t)
+	repository := repo.NewPublicFoodRepo(db)
+	svc := NewPublicFoodService(repository)
+
+	_, err := svc.ContributeCampusImages(context.Background(), "user-1", "missing", []string{"https://untrusted.example.com/photo.jpg"})
+	require.Error(t, err)
+
+	item := domain.PublicFoodItem{
+		ID: "common-missing-image", UserID: "user-1", Status: "published", Type: "common",
+		FoodName: "家常菜", ImagePaths: []string{}, Items: []map[string]any{}, UserTags: []string{},
+	}
+	require.NoError(t, repository.CreateItem(context.Background(), &item))
+	_, err = svc.ContributeCampusImages(context.Background(), "user-1", item.ID, []string{"food-images/common.jpg"})
+	require.ErrorIs(t, err, commonerrors.ErrNotFound)
+}
+
 func TestNormalizePublicFoodLocationInputHomemadeOnlyRequiresProvinceCity(t *testing.T) {
 	province := "浙江省"
 	city := "杭州市"

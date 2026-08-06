@@ -101,15 +101,22 @@ func (f *fakeCatalogRepo) MarkAnalysisFailed(_ context.Context, itemID, message 
 func (f *fakeCatalogRepo) SoftDeleteItem(context.Context, string) error { return nil }
 
 type fakeCatalogAnalyzeSubmitter struct {
-	taskID string
-	err    error
-	userID string
-	input  analyzeservice.SubmitTaskInput
+	taskID    string
+	err       error
+	userID    string
+	input     analyzeservice.SubmitTaskInput
+	textInput analyzeservice.SubmitTaskInput
 }
 
 func (f *fakeCatalogAnalyzeSubmitter) SubmitInternalAnalyzeTask(_ context.Context, userID string, input analyzeservice.SubmitTaskInput) (string, error) {
 	f.userID = userID
 	f.input = input
+	return f.taskID, f.err
+}
+
+func (f *fakeCatalogAnalyzeSubmitter) SubmitInternalTextTask(_ context.Context, userID string, input analyzeservice.SubmitTaskInput) (string, error) {
+	f.userID = userID
+	f.textInput = input
 	return f.taskID, f.err
 }
 
@@ -330,16 +337,40 @@ func TestUpdateItemRejectsChangesWhileAnalysisIsPending(t *testing.T) {
 	require.Nil(t, repo.updatedItem)
 }
 
-func TestPublishItemRejectsIncompleteDraft(t *testing.T) {
+func TestPublishItemAllowsMissingImageAndUsesExistingTextAnalysis(t *testing.T) {
+	price := 12.0
 	repo := &fakeCatalogRepo{existingItem: &domain.CatalogItem{
-		ID: "item-1", Status: "draft", MissingFields: []string{"image"}, CompletenessStatus: "incomplete",
+		ID: "item-1", BatchID: "batch-1", Status: "draft", EntryType: "dish", Name: "番茄炒饭",
+		OrganizationName: "清华大学", CanteenName: "紫荆园", PriceType: "fixed", Price: &price,
+		MissingFields: []string{"image"}, CompletenessStatus: "incomplete", RawText: "番茄炒饭 12 元/份",
+	}}
+	submitter := &fakeCatalogAnalyzeSubmitter{taskID: "task-text-1"}
+	svc := NewCatalogService(repo, nil)
+	svc.ConfigureAnalysis(submitter, fakeCatalogAnalysisUserResolver{userID: "system-user-1"})
+
+	item, err := svc.PublishItem(context.Background(), "admin-1", "item-1")
+
+	require.NoError(t, err)
+	require.Equal(t, "analysis_pending", item.Status)
+	require.Equal(t, "task-text-1", repo.linkedTaskID)
+	require.Equal(t, "text", submitter.textInput.SourceType)
+	require.Equal(t, "strict_separate", *submitter.textInput.ExecutionMode)
+	require.Contains(t, submitter.textInput.TextInput, "番茄炒饭")
+	require.Contains(t, submitter.textInput.TextInput, "番茄炒饭 12 元/份")
+	require.Empty(t, submitter.input.SourceType)
+}
+
+func TestPublishItemStillRejectsMissingNameOrPrice(t *testing.T) {
+	repo := &fakeCatalogRepo{existingItem: &domain.CatalogItem{
+		ID: "item-1", Status: "draft", MissingFields: []string{"image", "price"}, CompletenessStatus: "incomplete",
 	}}
 	svc := NewCatalogService(repo, nil)
 
 	_, err := svc.PublishItem(context.Background(), "admin-1", "item-1")
 
 	require.Error(t, err)
-	require.Nil(t, repo.publishedItem)
+	require.Contains(t, err.Error(), "名称和价格")
+	require.Nil(t, repo.analysisPendingItem)
 }
 
 func TestPublishItemQueuesExistingFoodAnalysisBeforePublishing(t *testing.T) {

@@ -7047,6 +7047,22 @@ export async function getCampusFoodDetail(itemId: string): Promise<CampusFoodDet
   return response.data as CampusFoodDetailResponse
 }
 
+/** 为缺图的已上线校园菜品补充共建照片；首个有效贡献生效。 */
+export async function contributeCampusFoodImages(
+  itemId: string,
+  imagePaths: string[]
+): Promise<{ image_paths: string[]; accepted: boolean }> {
+  const response = await authenticatedRequest(`/api/public-food-library/${itemId}/contribute-images`, {
+    method: 'POST',
+    data: { image_paths: imagePaths },
+    timeout: 15000
+  })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.detail || '补充照片失败')
+  }
+  return response.data as { image_paths: string[]; accepted: boolean }
+}
+
 /** 点赞公共食物库条目 */
 export async function likePublicFoodLibraryItem(itemId: string): Promise<void> {
   const response = await authenticatedRequest(`/api/public-food-library/${itemId}/like`, { method: 'POST' })
