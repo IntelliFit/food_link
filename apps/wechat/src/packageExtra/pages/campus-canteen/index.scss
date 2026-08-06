@@ -233,6 +233,96 @@
   padding: 0 24rpx 132rpx;
 }
 
+.campus-directory-section {
+  margin-bottom: 24rpx;
+  padding: 24rpx;
+  border-radius: 28rpx;
+  background: #fff;
+  box-shadow: 0 10rpx 30rpx rgba(15, 23, 42, 0.05);
+}
+
+.campus-directory-head {
+  margin-top: 0;
+}
+
+.campus-directory-scroll {
+  width: 100%;
+  white-space: nowrap;
+}
+
+.campus-directory-list {
+  display: inline-flex;
+  gap: 16rpx;
+  padding-right: 8rpx;
+}
+
+.campus-directory-card {
+  width: 360rpx;
+  min-height: 116rpx;
+  box-sizing: border-box;
+  padding: 20rpx;
+  border: 2rpx solid #e3eee8;
+  border-radius: 22rpx;
+  background: #f7fbf9;
+  white-space: normal;
+}
+
+.campus-directory-card.active {
+  border-color: #5cb896;
+  background: #edf8f2;
+}
+
+.campus-directory-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12rpx;
+}
+
+.campus-directory-name {
+  min-width: 0;
+  flex: 1;
+  font-size: 28rpx;
+  line-height: 38rpx;
+  font-weight: 700;
+  color: #10231e;
+}
+
+.campus-directory-badge {
+  flex-shrink: 0;
+  padding: 4rpx 10rpx;
+  border-radius: 999rpx;
+  background: #fff4d8;
+  color: #8a5a00;
+  font-size: 20rpx;
+  line-height: 30rpx;
+}
+
+.campus-directory-location {
+  display: block;
+  margin-top: 10rpx;
+  color: #6b7280;
+  font-size: 22rpx;
+  line-height: 32rpx;
+}
+
+.campus-directory-loading {
+  min-height: 116rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.campus-directory-empty {
+  padding: 24rpx;
+  border-radius: 20rpx;
+  background: #f7f9f8;
+  color: #6b7280;
+  font-size: 24rpx;
+  line-height: 34rpx;
+  text-align: center;
+}
+
 .section-block {
   margin-bottom: 28rpx;
 }
