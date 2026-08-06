@@ -30,6 +30,7 @@ type CatalogRepository interface {
 	ListBatches(ctx context.Context, limit, offset int) ([]domain.CollectionBatch, int64, error)
 	ListItemsByBatch(ctx context.Context, batchID string) ([]domain.CatalogItem, error)
 	ListItems(ctx context.Context, filter domain.CatalogItemFilter) ([]domain.CatalogItem, int64, error)
+	GetAnalysisProgress(ctx context.Context) (*domain.AnalysisProgress, error)
 	ListPublishedItemsMissingNutrition(ctx context.Context, limit int) ([]domain.CatalogItem, error)
 	HidePublicItemForNutritionBackfill(ctx context.Context, itemID string) error
 	FindItemByID(ctx context.Context, itemID string) (*domain.CatalogItem, error)
@@ -148,6 +149,10 @@ type CatalogItemListResult struct {
 	Page  int                  `json:"page"`
 	Limit int                  `json:"limit"`
 	Total int64                `json:"total"`
+}
+
+func (s *CatalogService) GetAnalysisProgress(ctx context.Context) (*domain.AnalysisProgress, error) {
+	return s.repo.GetAnalysisProgress(ctx)
 }
 
 func (s *CatalogService) UploadImage(ctx context.Context, adminID, sourceFilename, contentType string, data []byte) (string, error) {

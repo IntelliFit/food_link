@@ -131,11 +131,17 @@ func (r *PublicFoodRepo) ListPublished(ctx context.Context, f ListFilter) ([]dom
 	var rows []domain.PublicFoodItem
 	q := r.db.WithContext(ctx).
 		Table("public_food_library AS p").
-		Select("p.*, COALESCE(rt.status, t.status, '') AS analysis_status, COALESCE(rt.error_message, t.error_message, '') AS analysis_error, s.logo_url AS school_logo_url").
+		Select(`p.*,
+			CASE WHEN COALESCE(p.type, '') = 'campus' OR COALESCE(p.is_campus_food, false) = true
+				THEN '' ELSE COALESCE(rt.status, t.status, '') END AS analysis_status,
+			CASE WHEN COALESCE(p.type, '') = 'campus' OR COALESCE(p.is_campus_food, false) = true
+				THEN '' ELSE COALESCE(rt.error_message, t.error_message, '') END AS analysis_error,
+			s.logo_url AS school_logo_url`).
 		Joins("LEFT JOIN analysis_tasks t ON t.id = p.analysis_task_id").
 		Joins("LEFT JOIN analysis_tasks rt ON CAST(rt.id AS TEXT) = (t.result ->> 'redirectTaskId')").
 		Joins("LEFT JOIN schools s ON s.name = p.school_name AND s.status = 'active'").
-		Where("p.status = ?", "published")
+		Where("p.status = ?", "published").
+		Where(validPublishedCampusNutritionSQL("p"))
 	q = visiblePublicFoodToViewer(q, "p.user_id", f.ViewerUserID)
 	if f.City != "" {
 		q = q.Where("p.city = ?", f.City)
@@ -263,6 +269,14 @@ func visiblePublicFoodToViewer(q *gorm.DB, authorExpr string, viewerUserID strin
 	`, viewerUserID, viewerUserID)
 }
 
+func validPublishedCampusNutritionSQL(alias string) string {
+	prefix := strings.TrimSpace(alias)
+	if prefix != "" {
+		prefix += "."
+	}
+	return "(NOT (COALESCE(" + prefix + "type, '') = 'campus' OR COALESCE(" + prefix + "is_campus_food, false) = true) OR COALESCE(" + prefix + "total_calories, 0) > 0)"
+}
+
 // ListCampusHighlights 查询精选校园内容，用于圈子默认流混入
 func (r *PublicFoodRepo) ListCampusHighlights(ctx context.Context, limit int) ([]domain.PublicFoodItem, error) {
 	var rows []domain.PublicFoodItem
@@ -271,6 +285,7 @@ func (r *PublicFoodRepo) ListCampusHighlights(ctx context.Context, limit int) ([
 	}
 	err := r.db.WithContext(ctx).
 		Where("is_campus_highlight = ? AND status = ?", true, "published").
+		Where(validPublishedCampusNutritionSQL("")).
 		Order("published_at desc NULLS LAST, created_at desc").
 		Limit(limit).
 		Find(&rows).Error
@@ -285,7 +300,8 @@ func (r *PublicFoodRepo) ListSimilarCampusFoods(ctx context.Context, item domain
 	q := r.db.WithContext(ctx).
 		Table("public_food_library AS p").
 		Select("p.*").
-		Where("id <> ? AND status = ?", item.ID, "published")
+		Where("id <> ? AND status = ?", item.ID, "published").
+		Where(validPublishedCampusNutritionSQL("p"))
 	q = visiblePublicFoodToViewer(q, "p.user_id", viewerUserID)
 	q = applyLegacyPublicFoodTypeWhere(q, "p", "campus")
 	if item.SchoolID != nil && strings.TrimSpace(*item.SchoolID) != "" {
@@ -318,7 +334,8 @@ func (r *PublicFoodRepo) ListRelatedCampusFeeds(ctx context.Context, item domain
 		Table("public_food_library AS p").
 		Select("p.id, p.user_id, p.food_name, p.image_path, p.image_paths, p.school_name, p.canteen_name, p.campus_location_text AS campus_location, p.total_calories, p.total_protein, p.price, p.price_unit, p.like_count, p.comment_count, p.collection_count, p.published_at, s.logo_url AS school_logo_url").
 		Joins("LEFT JOIN schools s ON s.name = p.school_name AND s.status = 'active'").
-		Where("p.id <> ? AND p.status = ? AND p.is_campus_highlight = ?", item.ID, "published", true)
+		Where("p.id <> ? AND p.status = ? AND p.is_campus_highlight = ?", item.ID, "published", true).
+		Where(validPublishedCampusNutritionSQL("p"))
 	q = visiblePublicFoodToViewer(q, "p.user_id", viewerUserID)
 	q = applyLegacyPublicFoodTypeWhere(q, "p", "campus")
 	if item.SchoolID != nil && strings.TrimSpace(*item.SchoolID) != "" {
@@ -362,6 +379,7 @@ func (r *PublicFoodRepo) ListCollected(ctx context.Context, userID string, limit
 		Select("p.*").
 		Joins("JOIN public_food_library_collections c ON c.library_item_id = p.id").
 		Where("c.user_id = ? AND p.status = ?", userID, "published").
+		Where(validPublishedCampusNutritionSQL("p")).
 		Scopes(func(q *gorm.DB) *gorm.DB {
 			return visiblePublicFoodToViewer(q, "p.user_id", viewerUserID)
 		}).
@@ -375,7 +393,12 @@ func (r *PublicFoodRepo) GetItem(ctx context.Context, itemID string) (*domain.Pu
 	var row domain.PublicFoodItem
 	err := r.db.WithContext(ctx).
 		Table("public_food_library AS p").
-		Select("p.*, COALESCE(rt.status, t.status, '') AS analysis_status, COALESCE(rt.error_message, t.error_message, '') AS analysis_error, s.logo_url AS school_logo_url").
+		Select(`p.*,
+			CASE WHEN p.status = 'published' AND (COALESCE(p.type, '') = 'campus' OR COALESCE(p.is_campus_food, false) = true)
+				THEN '' ELSE COALESCE(rt.status, t.status, '') END AS analysis_status,
+			CASE WHEN p.status = 'published' AND (COALESCE(p.type, '') = 'campus' OR COALESCE(p.is_campus_food, false) = true)
+				THEN '' ELSE COALESCE(rt.error_message, t.error_message, '') END AS analysis_error,
+			s.logo_url AS school_logo_url`).
 		Joins("LEFT JOIN analysis_tasks t ON t.id = p.analysis_task_id").
 		Joins("LEFT JOIN analysis_tasks rt ON CAST(rt.id AS TEXT) = (t.result ->> 'redirectTaskId')").
 		Joins("LEFT JOIN schools s ON s.name = p.school_name AND s.status = 'active'").

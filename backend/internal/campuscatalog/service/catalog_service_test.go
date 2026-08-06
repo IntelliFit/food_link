@@ -54,6 +54,10 @@ func (f *fakeCatalogRepo) ListItems(context.Context, domain.CatalogItemFilter) (
 	return items, int64(len(items)), nil
 }
 
+func (f *fakeCatalogRepo) GetAnalysisProgress(context.Context) (*domain.AnalysisProgress, error) {
+	return &domain.AnalysisProgress{Total: 10, AnalyzableTotal: 8, Completed: 3, CompletedPercent: 37.5}, nil
+}
+
 func (f *fakeCatalogRepo) ListPublishedItemsMissingNutrition(context.Context, int) ([]domain.CatalogItem, error) {
 	return append([]domain.CatalogItem(nil), f.missingNutrition...), nil
 }

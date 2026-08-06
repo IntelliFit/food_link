@@ -246,7 +246,7 @@ func TestPublicFoodRepo_ListCommentsBuildsReplyTree(t *testing.T) {
 	require.Equal(t, "小马", rows[0].Replies[0].ReplyToNickname)
 }
 
-func TestPublicFoodRepo_ListPublishedCampusIncludesAnalysisStatus(t *testing.T) {
+func TestPublicFoodRepo_ListPublishedCampusExcludesInvalidNutritionAndTaskStatus(t *testing.T) {
 	db := setupPublicFoodRepoTestDB(t)
 	seedPublicFoodItems(t, db)
 	r := NewPublicFoodRepo(db)
@@ -267,10 +267,10 @@ func TestPublicFoodRepo_ListPublishedCampusIncludesAnalysisStatus(t *testing.T) 
 		if rows[i].ID == "campus-pending" {
 			pending = &rows[i]
 		}
+		require.Empty(t, rows[i].AnalysisStatus)
+		require.Empty(t, rows[i].AnalysisError)
 	}
-	require.NotNil(t, pending)
-	require.Equal(t, "pending", pending.AnalysisStatus)
-	require.Empty(t, pending.AnalysisError)
+	require.Nil(t, pending)
 }
 
 func TestPublicFoodRepo_ListPublishedCampusUsesRedirectTaskStatus(t *testing.T) {
@@ -310,12 +310,11 @@ func TestPublicFoodRepo_ListPublishedCampusUsesRedirectTaskStatus(t *testing.T) 
 	rows, err := r.ListPublished(ctx, ListFilter{Type: "campus", Limit: 10})
 
 	require.NoError(t, err)
-	require.Len(t, rows, 1)
-	require.Equal(t, "pending", rows[0].AnalysisStatus)
+	require.Empty(t, rows)
 	item, err := r.GetItem(ctx, "campus-redirect")
 	require.NoError(t, err)
 	require.NotNil(t, item)
-	require.Equal(t, "pending", item.AnalysisStatus)
+	require.Empty(t, item.AnalysisStatus)
 }
 
 func TestPublicFoodRepo_UpdateNutritionFromAnalysisUsesItemCalorieFallback(t *testing.T) {

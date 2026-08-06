@@ -451,6 +451,9 @@ func (s *PublicFoodService) Get(ctx context.Context, userID, itemID string) (*do
 	if item == nil || isDeletedStatus(item.Status) {
 		return nil, commonerrors.ErrNotFound
 	}
+	if isCampusPublicFood(item) && (item.Status != "published" || item.TotalCalories <= 0) && strings.TrimSpace(item.UserID) != strings.TrimSpace(userID) {
+		return nil, commonerrors.ErrNotFound
+	}
 	if err := s.ensureItemVisible(ctx, userID, item); err != nil {
 		return nil, err
 	}
@@ -467,6 +470,9 @@ func (s *PublicFoodService) GetCampusDetail(ctx context.Context, userID, itemID 
 		return nil, err
 	}
 	if item == nil || isDeletedStatus(item.Status) || !isCampusPublicFood(item) {
+		return nil, commonerrors.ErrNotFound
+	}
+	if (item.Status != "published" || item.TotalCalories <= 0) && strings.TrimSpace(item.UserID) != strings.TrimSpace(userID) {
 		return nil, commonerrors.ErrNotFound
 	}
 	if err := s.ensureItemVisible(ctx, userID, item); err != nil {

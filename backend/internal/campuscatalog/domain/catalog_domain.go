@@ -105,3 +105,14 @@ type CatalogItemFilter struct {
 	Limit     int
 	Offset    int
 }
+
+// AnalysisProgress is the administrator-facing snapshot of the campus dish
+// publication pipeline. The counts come from catalog states, which remain the
+// source of truth even while analysis workers are processing asynchronously.
+type AnalysisProgress struct {
+	Total            int64            `json:"total"`
+	AnalyzableTotal  int64            `json:"analyzable_total"`
+	Completed        int64            `json:"completed"`
+	CompletedPercent float64          `json:"completed_percent"`
+	StatusCounts     map[string]int64 `json:"status_counts"`
+}

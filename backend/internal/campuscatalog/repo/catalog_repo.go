@@ -128,6 +128,40 @@ func (r *CatalogRepo) ListItems(ctx context.Context, filter domain.CatalogItemFi
 	return items, total, nil
 }
 
+func (r *CatalogRepo) GetAnalysisProgress(ctx context.Context) (*domain.AnalysisProgress, error) {
+	type statusCount struct {
+		Status string
+		Count  int64
+	}
+	var rows []statusCount
+	if err := r.db.WithContext(ctx).
+		Table("campus_food_catalog_items").
+		Select("status, COUNT(*) AS count").
+		Where("status <> ?", "deleted").
+		Group("status").
+		Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	counts := map[string]int64{
+		"draft": 0, "changes_pending": 0, "analysis_pending": 0,
+		"analysis_failed": 0, "published": 0,
+	}
+	var total int64
+	for _, row := range rows {
+		counts[row.Status] = row.Count
+		total += row.Count
+	}
+	analyzable := counts["published"] + counts["changes_pending"] + counts["analysis_pending"] + counts["analysis_failed"]
+	percent := 0.0
+	if analyzable > 0 {
+		percent = float64(counts["published"]) * 100 / float64(analyzable)
+	}
+	return &domain.AnalysisProgress{
+		Total: total, AnalyzableTotal: analyzable, Completed: counts["published"],
+		CompletedPercent: percent, StatusCounts: counts,
+	}, nil
+}
+
 func (r *CatalogRepo) SoftDeleteItem(ctx context.Context, itemID string) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		now := time.Now()

@@ -25,9 +25,25 @@ type CatalogService interface {
 	ListBatches(ctx context.Context, page, limit int) (*service.BatchListResult, error)
 	ListItemsByBatch(ctx context.Context, batchID string) ([]domain.CatalogItem, error)
 	ListItems(ctx context.Context, input service.CatalogItemListInput) (*service.CatalogItemListResult, error)
+	GetAnalysisProgress(ctx context.Context) (*domain.AnalysisProgress, error)
 	UpdateItem(ctx context.Context, adminID, itemID string, input service.UpdateCatalogItemInput) (*domain.CatalogItem, error)
 	PublishItem(ctx context.Context, adminID, itemID string) (*domain.CatalogItem, error)
 	DeleteItem(ctx context.Context, adminID, itemID string) error
+}
+
+func (h *CatalogHandler) GetAnalysisProgress(c *gin.Context) {
+	progress, err := h.svc.GetAnalysisProgress(c.Request.Context())
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	logger.Info(c.Request.Context(), "管理员读取校园菜品 AI 分析进度成功",
+		slog.String("admin_id", strings.TrimSpace(c.GetString("admin_account_id"))),
+		slog.Int64("total", progress.Total),
+		slog.Int64("analysis_pending", progress.StatusCounts["analysis_pending"]),
+		slog.Int64("published", progress.StatusCounts["published"]),
+	)
+	response.Success(c, progress)
 }
 
 type CatalogHandler struct {

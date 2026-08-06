@@ -121,6 +121,12 @@ function needsNutritionUpdate(item: PublicFoodLibraryItem): boolean {
   );
 }
 
+function isClientReadyCampusItem(item: PublicFoodLibraryItem): boolean {
+  const publicationStatus = normalizeText(item.status);
+  if (publicationStatus && publicationStatus !== "published") return false;
+  return !isAnalyzingItem(item) && !isAnalysisFailedItem(item) && hasNutrition(item);
+}
+
 function CampusCanteenPage() {
   const { scheme } = useAppColorScheme();
   const [loggedIn, setLoggedIn] = useState(!!getAccessToken());
@@ -193,7 +199,7 @@ function CampusCanteenPage() {
           sort_by: sortBy,
           limit: 80,
         });
-        const newList = res.list || [];
+        const newList = (res.list || []).filter(isClientReadyCampusItem);
         setList(newList);
         lastRefreshTime.current = Date.now();
       } catch (e: any) {
@@ -309,7 +315,7 @@ function CampusCanteenPage() {
       limit: 80,
     })
       .then((res) => {
-        setList(res.list || []);
+        setList((res.list || []).filter(isClientReadyCampusItem));
       })
       .catch(async (e: any) => {
         await showUnifiedApiError(e, "搜索失败");
@@ -430,6 +436,7 @@ function CampusCanteenPage() {
     const floorKeyword = normalizeText(floorName);
     const windowKeyword = normalizeText(windowName);
     return list.filter((item) => {
+      if (!isClientReadyCampusItem(item)) return false;
       if (
         floorKeyword &&
         !normalizeText(item.floor).includes(floorKeyword) &&

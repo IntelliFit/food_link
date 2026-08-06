@@ -111,4 +111,21 @@ describe('campus canteen directory', () => {
     expect(screen.getByText('该食堂目录已上线，暂无已分析菜品')).toBeInTheDocument()
     expect(screen.queryByText('暂无校园食堂数据')).not.toBeInTheDocument()
   })
+
+  it('never renders pending or failed AI dishes in the client list', async () => {
+    ;(getPublicFoodLibraryList as jest.Mock).mockResolvedValue({
+      list: [
+        { id: 'ready', food_name: '已分析鸡肉饭', status: 'published', analysis_status: '', total_calories: 520, total_protein: 32, total_carbs: 60, total_fat: 14, items: [] },
+        { id: 'failed', food_name: '失败菜品', status: 'published', analysis_status: 'failed', total_calories: 0, total_protein: 0, total_carbs: 0, total_fat: 0, items: [] },
+        { id: 'pending', food_name: '分析中菜品', status: 'pending', analysis_status: 'processing', total_calories: 0, total_protein: 0, total_carbs: 0, total_fat: 0, items: [] },
+      ],
+    })
+
+    render(<CampusCanteenPage />)
+
+    await waitFor(() => expect(screen.getAllByText('已分析鸡肉饭').length).toBeGreaterThan(0))
+    expect(screen.queryByText('失败菜品')).not.toBeInTheDocument()
+    expect(screen.queryByText('分析中菜品')).not.toBeInTheDocument()
+    expect(screen.queryByText('分析失败，稍后重试')).not.toBeInTheDocument()
+  })
 })

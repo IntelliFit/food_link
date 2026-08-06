@@ -59,6 +59,13 @@ func (f *fakeCatalogService) ListItems(_ context.Context, input service.CatalogI
 	return &service.CatalogItemListResult{Items: []domain.CatalogItem{{ID: "item-1"}}, Page: input.Page, Limit: input.Limit, Total: 1}, nil
 }
 
+func (f *fakeCatalogService) GetAnalysisProgress(context.Context) (*domain.AnalysisProgress, error) {
+	return &domain.AnalysisProgress{
+		Total: 2107, AnalyzableTotal: 2017, Completed: 13, CompletedPercent: 0.6445,
+		StatusCounts: map[string]int64{"published": 13, "analysis_pending": 2004, "analysis_failed": 0, "draft": 90},
+	}, nil
+}
+
 func (f *fakeCatalogService) UpdateItem(_ context.Context, adminID, itemID string, input service.UpdateCatalogItemInput) (*domain.CatalogItem, error) {
 	f.updateAdminID = adminID
 	f.updateItemID = itemID
@@ -89,10 +96,26 @@ func newCatalogTestRouter(svc CatalogService) *gin.Engine {
 	router.POST("/images", handler.UploadImage)
 	router.POST("/batches", handler.CreateBatch)
 	router.GET("/items", handler.ListItems)
+	router.GET("/analysis-progress", handler.GetAnalysisProgress)
 	router.PATCH("/items/:item_id", handler.UpdateItem)
 	router.POST("/items/:item_id/publish", handler.PublishItem)
 	router.DELETE("/items/:item_id", handler.DeleteItem)
 	return router
+}
+
+func TestGetAnalysisProgressReturnsPipelineCounts(t *testing.T) {
+	router := newCatalogTestRouter(&fakeCatalogService{})
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/analysis-progress", nil))
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	var envelope struct {
+		Data domain.AnalysisProgress `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &envelope))
+	require.Equal(t, int64(2107), envelope.Data.Total)
+	require.Equal(t, int64(2004), envelope.Data.StatusCounts["analysis_pending"])
+	require.Equal(t, int64(13), envelope.Data.StatusCounts["published"])
 }
 
 func TestListItemsAcceptsHierarchyFilters(t *testing.T) {

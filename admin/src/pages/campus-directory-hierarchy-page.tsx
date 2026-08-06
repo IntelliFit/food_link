@@ -125,6 +125,14 @@ type SchoolSummary = {
   counts: { campuses: number; canteens: number; windows: number; dishes: number };
 };
 
+type AnalysisProgress = {
+  total: number;
+  analyzable_total: number;
+  completed: number;
+  completed_percent: number;
+  status_counts: Record<string, number>;
+};
+
 type EditorState = {
   mode: "create" | "edit";
   kind: EntityKind;
@@ -195,6 +203,8 @@ export function CampusDirectoryPage({ onLogout, onMenuChange }: CampusDirectoryP
   const [selectedDishIds, setSelectedDishIds] = useState<string[]>([]);
   const [publishingIds, setPublishingIds] = useState<string[]>([]);
   const [dishImageUploading, setDishImageUploading] = useState(false);
+  const [analysisProgress, setAnalysisProgress] = useState<AnalysisProgress | null>(null);
+  const [loadingAnalysisProgress, setLoadingAnalysisProgress] = useState(false);
 
   const apiBase = displayApiBase();
   const schoolPages = Math.max(1, Math.ceil(schoolTotal / 40));
@@ -278,9 +288,31 @@ export function CampusDirectoryPage({ onLogout, onMenuChange }: CampusDirectoryP
     setSelectedDishIds([]);
   }, [dishPage, dishQuery, dishStatus]);
 
+  const loadAnalysisProgress = useCallback(async (silent = false) => {
+    if (!silent) setLoadingAnalysisProgress(true);
+    try {
+      const result = await adminRequest<AnalysisProgress>("/api/admin/campus-food-collection/analysis-progress");
+      setAnalysisProgress(result);
+    } catch (error) {
+      if (!silent) toast.error(errorMessage(error));
+    } finally {
+      if (!silent) setLoadingAnalysisProgress(false);
+    }
+  }, []);
+
   useEffect(() => {
     void loadSchools(1);
   }, [schoolStatus]);
+
+  useEffect(() => {
+    void loadAnalysisProgress();
+  }, [loadAnalysisProgress]);
+
+  useEffect(() => {
+    if (!analysisProgress?.status_counts.analysis_pending) return;
+    const timer = window.setInterval(() => void loadAnalysisProgress(true), 5000);
+    return () => window.clearInterval(timer);
+  }, [analysisProgress?.status_counts.analysis_pending, loadAnalysisProgress]);
 
   async function runContent(task: () => Promise<void>) {
     setLoadingContent(true);
@@ -524,7 +556,7 @@ export function CampusDirectoryPage({ onLogout, onMenuChange }: CampusDirectoryP
     toast[failed.length ? "error" : "success"](
       failed.length ? `${publishable.length - failed.length} 条已提交，${failed.length} 条失败` : `${publishable.length} 条已提交 AI 分析`,
     );
-    await refreshCurrent();
+    await Promise.all([refreshCurrent(), loadAnalysisProgress(true)]);
   }
 
   const selectedPublishableDishes = useMemo(() => {
@@ -556,6 +588,8 @@ export function CampusDirectoryPage({ onLogout, onMenuChange }: CampusDirectoryP
             <Button variant="outline" onClick={() => navigate("/campus-food-collection")}>进入食堂采集</Button>
           </div>
         </section>
+
+        <AnalysisProgressPanel progress={analysisProgress} loading={loadingAnalysisProgress} onRefresh={() => void loadAnalysisProgress()} />
 
         <section className="grid gap-5 xl:grid-cols-[360px_minmax(0,1fr)]">
           <aside className="rounded-2xl border bg-card/90 p-4">
@@ -694,6 +728,32 @@ export function CampusDirectoryPage({ onLogout, onMenuChange }: CampusDirectoryP
       {dishEditor ? <DishDialog editor={dishEditor} saving={saving} uploading={dishImageUploading} onUpload={(files) => void uploadDishImages(files)} onChange={(value) => setDishEditor({ ...dishEditor, value })} onClose={() => setDishEditor(null)} onSave={saveDish} /> : null}
     </div>
   );
+}
+
+function AnalysisProgressPanel({ progress, loading, onRefresh }: { progress: AnalysisProgress | null; loading: boolean; onRefresh: () => void }) {
+  const counts = progress?.status_counts || {};
+  const percent = Math.max(0, Math.min(100, progress?.completed_percent || 0));
+  const metrics = [
+    { label: "已上线", value: counts.published || 0, className: "text-emerald-400" },
+    { label: "AI 分析中", value: counts.analysis_pending || 0, className: "text-sky-300" },
+    { label: "分析失败", value: counts.analysis_failed || 0, className: "text-red-300" },
+    { label: "待补字段", value: counts.draft || 0, className: "text-amber-300" },
+  ];
+  return <section className="mb-5 rounded-2xl border bg-card/90 p-5" aria-label="校园菜品 AI 分析进度">
+    <div className="flex flex-wrap items-start justify-between gap-3">
+      <div>
+        <div className="flex items-center gap-2"><Sparkles className="size-5 text-primary" /><h2 className="text-lg font-semibold">校园菜品 AI 分析进度</h2></div>
+        <p className="mt-1 text-sm text-muted-foreground">分析成功后自动上线；失败和分析中的版本不会覆盖客户端已有可用数据。</p>
+      </div>
+      <Button variant="outline" size="sm" onClick={onRefresh} disabled={loading}>{loading ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}刷新</Button>
+    </div>
+    {progress ? <>
+      <div className="mt-5 flex items-end justify-between gap-3"><div><strong className="text-2xl">{percent.toFixed(1)}%</strong><span className="ml-2 text-sm text-muted-foreground">{progress.completed} / {progress.analyzable_total} 条已完成</span></div><span className="text-xs text-muted-foreground">目录共 {progress.total} 条</span></div>
+      <div className="mt-2 h-2 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-emerald-500 transition-[width] duration-500" style={{ width: `${percent}%` }} /></div>
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{metrics.map((metric) => <div key={metric.label} className="rounded-xl border bg-muted/20 p-3"><p className="text-xs text-muted-foreground">{metric.label}</p><p className={`mt-1 text-xl font-semibold ${metric.className}`}>{metric.value}</p></div>)}</div>
+      {(counts.analysis_pending || 0) > 0 ? <p className="mt-3 text-xs text-sky-300">后台正在持续处理，页面每 5 秒自动更新。</p> : null}
+    </> : <div className="mt-5 grid grid-cols-4 gap-3">{Array.from({ length: 4 }).map((_, index) => <div key={index} className="h-16 animate-pulse rounded-xl bg-muted/50" />)}</div>}
+  </section>;
 }
 
 function Breadcrumbs({ school, campus, canteen, windowItem, viewLevel, onGo }: { school: School; campus: Campus | null; canteen: Canteen | null; windowItem: WindowItem | null; viewLevel: ViewLevel; onGo: (level: ViewLevel) => void }) {

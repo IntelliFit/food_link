@@ -3,6 +3,7 @@ package repo
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"testing"
 	"time"
 
@@ -141,6 +142,28 @@ func TestListItemsFiltersHierarchyAndHydratesClientNutrition(t *testing.T) {
 	require.Equal(t, "published", items[0].ClientStatus)
 	require.NotNil(t, items[0].TotalCalories)
 	require.Equal(t, 320.0, *items[0].TotalCalories)
+}
+
+func TestGetAnalysisProgressCountsCatalogStates(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:"+uuid.NewString()+"?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&domain.CatalogItem{}))
+	batchID := uuid.NewString()
+	statuses := []string{"published", "published", "analysis_pending", "analysis_failed", "draft", "deleted"}
+	for index, status := range statuses {
+		require.NoError(t, db.Create(&domain.CatalogItem{
+			ID: uuid.NewString(), BatchID: batchID, EntryType: "dish", Name: fmt.Sprintf("菜品%d", index),
+			OrganizationName: "测试大学", CanteenName: "一食堂", Status: status,
+		}).Error)
+	}
+
+	progress, err := NewCatalogRepo(db).GetAnalysisProgress(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, int64(5), progress.Total)
+	require.Equal(t, int64(4), progress.AnalyzableTotal)
+	require.Equal(t, int64(2), progress.Completed)
+	require.Equal(t, int64(1), progress.StatusCounts["analysis_pending"])
+	require.Equal(t, 50.0, progress.CompletedPercent)
 }
 
 func TestSoftDeleteItemAlsoHidesClientVersion(t *testing.T) {

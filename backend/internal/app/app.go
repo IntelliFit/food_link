@@ -817,6 +817,7 @@ func New(cfg *config.Config) (*App, error) {
 	adminAPI.POST("/campus-food-collection/batches", adminAuth, adminCampusCatalogHandler.CreateBatch)
 	adminAPI.GET("/campus-food-collection/batches", adminAuth, adminCampusCatalogHandler.ListBatches)
 	adminAPI.GET("/campus-food-collection/items", adminAuth, adminCampusCatalogHandler.ListItems)
+	adminAPI.GET("/campus-food-collection/analysis-progress", adminAuth, adminCampusCatalogHandler.GetAnalysisProgress)
 	adminAPI.PATCH("/campus-food-collection/items/:item_id", adminAuth, adminCampusCatalogHandler.UpdateItem)
 	adminAPI.POST("/campus-food-collection/items/:item_id/publish", adminAuth, adminCampusCatalogHandler.PublishItem)
 	adminAPI.DELETE("/campus-food-collection/items/:item_id", adminAuth, adminCampusCatalogHandler.DeleteItem)
