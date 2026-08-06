@@ -1,4 +1,5 @@
 const APP_COLOR_SCHEME_KEY = 'fl_app_color_scheme'
+const HOME_DISPLAY_MODE_KEY = 'home_display_mode_v1'
 
 function readStorageFlag(key) {
   try {
@@ -54,6 +55,8 @@ Component({
     hidden: false,
     /** 与 React 端 `fl_app_color_scheme` 同步，供深色底栏 */
     colorScheme: 'light',
+    /** 养生模式使用全局墨绿导航配色，跨 Tab 保持直到切回均衡模式 */
+    wellnessActive: false,
     profileTabBadgeCount: 0,
     tabList: [
       { 
@@ -90,11 +93,13 @@ Component({
       this.updateSelected()
       this.updateHidden()
       this.updateColorScheme()
+      this.updateHomeMode()
       this.updateWaitingBadge()
       this.data.timer = setInterval(() => {
         this.updateSelected()
         this.updateHidden()
         this.updateColorScheme()
+        this.updateHomeMode()
         this.updateWaitingBadge()
       }, 300)
     },
@@ -131,6 +136,19 @@ Component({
         }
       } catch (e) {
         // ignore
+      }
+    },
+
+    updateHomeMode() {
+      try {
+        const next = wx.getStorageSync(HOME_DISPLAY_MODE_KEY) === 'wellness'
+        if (next !== this.data.wellnessActive) {
+          this.setData({ wellnessActive: next })
+        }
+      } catch (e) {
+        if (this.data.wellnessActive) {
+          this.setData({ wellnessActive: false })
+        }
       }
     },
 

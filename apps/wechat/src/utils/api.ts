@@ -7,6 +7,7 @@ import {
   type FoodImageSource,
 } from './food-display-image'
 import { extraPkgUrl } from './subpackage-extra'
+import { createStreamingUTF8Decoder } from './streaming-utf8-decoder'
 import { withTransientRequestRetry } from './transient-request-retry'
 
 declare const __RECENT_REQUEST_TRACE_LIMIT__: string
@@ -3631,10 +3632,14 @@ export async function getPetSummary(date?: string): Promise<PetSummary> {
   return res.data as PetSummary
 }
 
-export async function customizePetPixelAvatar(localPath: string): Promise<{ pet: PetProfile }> {
+export async function customizePetPixelAvatar(localPath: string, petName: string): Promise<{ pet: PetProfile }> {
   const filePath = (localPath || '').trim()
+  const name = (petName || '').trim()
   if (!filePath) {
     throw new Error('图片路径为空')
+  }
+  if (!name) {
+    throw new Error('宠物名字为空')
   }
   const token = getAccessToken()
   const response = await new Promise<any>((resolve, reject) => {
@@ -3645,6 +3650,7 @@ export async function customizePetPixelAvatar(localPath: string): Promise<{ pet:
       header: withNgrokBypassHeaders({
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       }),
+      formData: { name },
       // 图像模型实测通常需要 70–90 秒；预留到 180 秒，避免客户端先于服务端取消请求。
       timeout: 180000,
       success: resolve,
@@ -4024,10 +4030,27 @@ export function streamGeneratePetChat(
   }
 
   let buffer = ''
-  const decoder = new TextDecoder('utf-8')
-  let doneReceived = false
+  const decoder = createStreamingUTF8Decoder()
+  let settled = false
+  let requestTask: ReturnType<typeof Taro.request> | null = null
+  let timeoutID: ReturnType<typeof setTimeout> | null = null
+
+  const clearRequestTimeout = () => {
+    if (timeoutID !== null) {
+      clearTimeout(timeoutID)
+      timeoutID = null
+    }
+  }
+
+  const reportError = (error: unknown) => {
+    if (settled) return
+    settled = true
+    clearRequestTimeout()
+    callbacks.onError(error instanceof Error ? error : new Error(String(error || '请求失败')))
+  }
 
   const processSSEText = (text: string) => {
+    if (settled) return
     buffer += text
     const events = buffer.split('\n\n')
     buffer = events.pop() || ''
@@ -4045,10 +4068,11 @@ export function streamGeneratePetChat(
         if (parsed.type === 'chunk' && typeof parsed.text === 'string') {
           callbacks.onChunk(parsed.text)
         } else if (parsed.type === 'done' && parsed.meta) {
-          doneReceived = true
+          settled = true
+          clearRequestTimeout()
           callbacks.onDone(parsed.meta)
         } else if (parsed.type === 'error') {
-          callbacks.onError(new Error(parsed.error || '小食探分析失败'))
+          reportError(new Error(parsed.error || '小食探分析失败'))
         }
       } catch (_) {
         // ignore malformed sse data
@@ -4056,51 +4080,76 @@ export function streamGeneratePetChat(
     }
   }
 
-  const requestTask = Taro.request({
-    url: `${API_BASE_URL}/api/pet/chat/stream`,
-    method: 'POST',
-    header: withNgrokBypassHeaders({
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-      'Accept': 'text/event-stream',
-    }),
-    data: { question, range, session_id: sessionId, new_session: newSession },
-    enableChunked: true,
-    timeout: 180000,
-    success: (res) => {
-      if (res.statusCode === 401 || res.statusCode === 403) {
-        redirectToLogin('登录已失效，请重新登录')
-        callbacks.onError(new Error('登录已失效，请重新登录'))
-        return
-      }
-      if (res.statusCode < 200 || res.statusCode >= 300) {
-        callbacks.onError(new Error('小食探分析失败'))
-        return
-      }
-      callbacks.onStart?.()
-      // 部分环境 chunk 会聚合在 res.data 中，兜底解析
-      if (typeof res.data === 'string') {
-        processSSEText(res.data)
-      }
-    },
-    fail: (err) => {
-      callbacks.onError(new Error(String(err?.errMsg || err || '请求失败')))
-    },
-    complete: () => {
-      if (!doneReceived && buffer.trim()) {
-        processSSEText('\n\n')
-      }
-    },
-  })
+  try {
+    requestTask = Taro.request({
+      url: `${API_BASE_URL}/api/pet/chat/stream`,
+      method: 'POST',
+      header: withNgrokBypassHeaders({
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        'Accept': 'text/event-stream',
+      }),
+      data: { question, range, session_id: sessionId, new_session: newSession },
+      enableChunked: true,
+      timeout: 180000,
+      success: (res) => {
+        if (settled) return
+        if (res.statusCode === 401 || res.statusCode === 403) {
+          redirectToLogin('登录已失效，请重新登录')
+          reportError(new Error('登录已失效，请重新登录'))
+          return
+        }
+        if (res.statusCode < 200 || res.statusCode >= 300) {
+          reportError(new Error('小食探分析失败'))
+          return
+        }
+        callbacks.onStart?.()
+        // 部分环境 chunk 会聚合在 res.data 中，兜底解析
+        if (typeof res.data === 'string') {
+          processSSEText(res.data)
+        } else if (res.data instanceof ArrayBuffer) {
+          processSSEText(decoder.decode(res.data))
+        }
+      },
+      fail: (err) => {
+        reportError(new Error(String(err?.errMsg || err || '请求失败')))
+      },
+      complete: () => {
+        if (settled) return
+        const trailingText = decoder.decode()
+        if (trailingText) processSSEText(trailingText)
+        if (!settled && buffer.trim()) processSSEText('\n\n')
+        if (!settled) reportError(new Error('连接已结束，但未收到完整结果，请重试'))
+      },
+    })
 
-  requestTask.onChunkReceived?.((res: any) => {
-    const chunk = res.data instanceof ArrayBuffer ? decoder.decode(res.data) : String(res.data || '')
-    processSSEText(chunk)
-  })
+    requestTask.onChunkReceived?.((res: any) => {
+      if (settled) return
+      const chunk = res.data instanceof ArrayBuffer
+        ? decoder.decode(res.data, { stream: true })
+        : String(res.data || '')
+      processSSEText(chunk)
+    })
+
+    if (!settled) {
+      timeoutID = setTimeout(() => {
+        if (settled) return
+        reportError(new Error('宠物回答超时，请稍后重试'))
+        try {
+          requestTask?.abort?.()
+        } catch (_) {}
+      }, 180000)
+    }
+  } catch (error) {
+    reportError(error)
+  }
 
   return () => {
+    if (settled) return
+    settled = true
+    clearRequestTimeout()
     try {
-      requestTask.abort?.()
+      requestTask?.abort?.()
     } catch (_) {}
   }
 }

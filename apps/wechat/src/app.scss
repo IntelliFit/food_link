@@ -45,6 +45,21 @@ page > view {
   box-sizing: border-box;
 }
 
+/* 首页模式的全局视觉底衬：所有页面共享模式感，具体卡片仍由各页面控制。 */
+.fl-page-theme-root--wellness:not(.fl-d) {
+  --fl-mode-page-start: #faf7ef;
+  --fl-mode-page-end: #eef1e9;
+  --fl-mode-surface: #fffdf7;
+  --fl-mode-surface-soft: #f7f1e3;
+  --fl-mode-primary: #315f43;
+  --fl-mode-primary-deep: #214a34;
+  --fl-mode-accent: #b99a5e;
+  --fl-mode-border: rgb(77 111 83 / 16%);
+  --fl-mode-shadow: rgb(55 72 58 / 9%);
+
+  background: linear-gradient(180deg, var(--fl-mode-page-start) 0%, var(--fl-mode-page-end) 100%);
+}
+
 // 通用工具类
 .flex {
   display: flex;

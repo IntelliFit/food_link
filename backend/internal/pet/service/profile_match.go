@@ -12,10 +12,12 @@ import (
 )
 
 const (
-	petProfileMatchVersion = 3
+	petProfileMatchVersion = 4
 
-	builtinAvatarJianwen01ID = "jianwen-01"
-	builtinAvatarType        = "builtin_person"
+	builtinAvatarJianwen01ID   = "jianwen-01"
+	builtinAvatarHuatuo01ID    = "huatuo-01"
+	builtinAvatarTaijiXiaoziID = "taiji-xiaozi-01"
+	builtinAvatarType          = "builtin_person"
 
 	archetypeSteadyCaregiver = "steady_caregiver"
 	archetypeEnergeticBuddy  = "energetic_buddy"
@@ -194,23 +196,61 @@ func buildAppearanceCandidates(userID, fingerprint, archetype string, reasons []
 		candidate := candidateFromSeed(seed, archetype, style, reasons)
 		candidates = append(candidates, candidate)
 	}
-	candidates = append(candidates, AppearanceCandidate{
-		ID:              "builtin:" + builtinAvatarJianwen01ID,
-		PetSeed:         "builtin:" + builtinAvatarJianwen01ID,
-		Name:            "健文伙伴",
-		Color:           "mint",
-		Shape:           "round",
-		Pattern:         "pattern-0",
-		Accessory:       "scarf",
-		Personality:     "focused",
-		Archetype:       archetypeSteadyCaregiver,
-		Style:           "classic",
-		Score:           96,
-		MatchReasons:    []string{"项目内置的经典像素伙伴，可直接使用且不依赖在线生成"},
-		AvatarType:      builtinAvatarType,
-		BuiltinAvatarID: builtinAvatarJianwen01ID,
-	})
+	candidates = append(candidates, builtinAppearanceCandidates()...)
 	return candidates
+}
+
+func builtinAppearanceCandidates() []AppearanceCandidate {
+	return []AppearanceCandidate{
+		{
+			ID:              "builtin:" + builtinAvatarJianwen01ID,
+			PetSeed:         "builtin:" + builtinAvatarJianwen01ID,
+			Name:            "健文伙伴",
+			Color:           "mint",
+			Shape:           "round",
+			Pattern:         "pattern-0",
+			Accessory:       "scarf",
+			Personality:     "focused",
+			Archetype:       archetypeSteadyCaregiver,
+			Style:           "classic",
+			Score:           96,
+			MatchReasons:    []string{"项目内置的经典像素伙伴，可直接使用且不依赖在线生成"},
+			AvatarType:      builtinAvatarType,
+			BuiltinAvatarID: builtinAvatarJianwen01ID,
+		},
+		{
+			ID:              "builtin:" + builtinAvatarHuatuo01ID,
+			PetSeed:         "builtin:" + builtinAvatarHuatuo01ID,
+			Name:            "华佗",
+			Color:           "matcha",
+			Shape:           "round",
+			Pattern:         "pattern-0",
+			Accessory:       "leaf",
+			Personality:     "gentle",
+			Archetype:       archetypeGentleHealer,
+			Style:           "classic",
+			Score:           96,
+			MatchReasons:    []string{"外科圣手，擅长活血化瘀，是内置的养生伙伴"},
+			AvatarType:      builtinAvatarType,
+			BuiltinAvatarID: builtinAvatarHuatuo01ID,
+		},
+		{
+			ID:              "builtin:" + builtinAvatarTaijiXiaoziID,
+			PetSeed:         "builtin:" + builtinAvatarTaijiXiaoziID,
+			Name:            "太极小子",
+			Color:           "cream",
+			Shape:           "bean",
+			Pattern:         "pattern-2",
+			Accessory:       "halo",
+			Personality:     "focused",
+			Archetype:       archetypeSteadyCaregiver,
+			Style:           "classic",
+			Score:           96,
+			MatchReasons:    []string{"阴阳平衡、动静结合，是内置的太极养生伙伴"},
+			AvatarType:      builtinAvatarType,
+			BuiltinAvatarID: builtinAvatarTaijiXiaoziID,
+		},
+	}
 }
 
 func candidateFromSeed(seed, archetype, style string, reasons []string) AppearanceCandidate {

@@ -38,6 +38,15 @@ type fakePetAvatarStorage struct {
 	contentType string
 }
 
+func TestCustomizePixelAvatarRejectsLongPetName(t *testing.T) {
+	svc := NewService(newFakePetRepo())
+	svc.ConfigureStorage(&fakePetAvatarStorage{})
+	svc.ConfigurePixelAvatarGenerator(&fakePixelAvatarGenerator{})
+
+	_, err := svc.CustomizePixelAvatar(t.Context(), "user-1", strings.Repeat("名", 13), []byte("image"))
+	require.ErrorIs(t, err, ErrInvalidPetName)
+}
+
 func (f *fakePetAvatarStorage) UploadBytes(bucketAlias, key string, data []byte, contentType string) (string, error) {
 	f.bucket = bucketAlias
 	f.key = key
@@ -170,13 +179,14 @@ func TestCustomizePixelAvatarStoresOnlyGeneratedAvatarMetadata(t *testing.T) {
 	var encoded bytes.Buffer
 	require.NoError(t, png.Encode(&encoded, source))
 
-	result, err := svc.CustomizePixelAvatar(t.Context(), "user-1", encoded.Bytes())
+	result, err := svc.CustomizePixelAvatar(t.Context(), "user-1", "水滴汤圆", encoded.Bytes())
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.Equal(t, "user-avatars", storage.bucket)
 	assert.Equal(t, "image/png", storage.contentType)
 	assert.True(t, strings.HasPrefix(storage.key, "pixel-avatars/user-1/"))
 	assert.Equal(t, "pixel_self", result.Pet.AvatarType)
+	assert.Equal(t, "水滴汤圆", result.Pet.Name)
 	assert.Contains(t, result.Pet.PixelAvatarURL, storage.key)
 	assert.Equal(t, "kept", repository.pet.Meta["existing"])
 	assert.Equal(t, storage.key, repository.pet.Meta["pixel_avatar_key"])
@@ -200,7 +210,7 @@ func TestCustomizePixelAvatarStoresAnimationFrameMetadata(t *testing.T) {
 	svc.ConfigureStorage(storage)
 	svc.ConfigurePixelAvatarGenerator(&fakePixelAvatarGenerator{output: makeTestPixelAvatarSpriteSheet(t)})
 
-	result, err := svc.CustomizePixelAvatar(t.Context(), "user-1", makeTestPixelAvatarSpriteSheet(t))
+	result, err := svc.CustomizePixelAvatar(t.Context(), "user-1", "小满", makeTestPixelAvatarSpriteSheet(t))
 	require.NoError(t, err)
 	require.Len(t, storage.keys, 4)
 	assert.Contains(t, storage.keys[0], "/idle.png")
@@ -247,12 +257,12 @@ func TestCustomizePixelAvatarKeepsCurrentAvatarUntilExplicitReplacement(t *testi
 		return encoded.Bytes()
 	}
 
-	first, err := svc.CustomizePixelAvatar(t.Context(), "user-1", makeSource(color.NRGBA{R: 80, G: 160, B: 120, A: 255}))
+	first, err := svc.CustomizePixelAvatar(t.Context(), "user-1", "小满", makeSource(color.NRGBA{R: 80, G: 160, B: 120, A: 255}))
 	require.NoError(t, err)
 	firstKey, _ := repository.pet.Meta["pixel_avatar_key"].(string)
 	assert.Contains(t, first.Pet.PixelAvatarURL, firstKey)
 
-	second, err := svc.CustomizePixelAvatar(t.Context(), "user-1", makeSource(color.NRGBA{R: 190, G: 110, B: 90, A: 255}))
+	second, err := svc.CustomizePixelAvatar(t.Context(), "user-1", "小满", makeSource(color.NRGBA{R: 190, G: 110, B: 90, A: 255}))
 	require.NoError(t, err)
 	secondKey, _ := repository.pet.Meta["pixel_avatar_key"].(string)
 

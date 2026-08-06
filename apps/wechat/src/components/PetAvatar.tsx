@@ -22,15 +22,21 @@ interface PetAvatarProps {
 
 const BUILTIN_AVATAR_FRAMES: Record<string, {
   idle: string
-  blink: string
-  squash: string
-  jump: string
+  blink?: string
+  squash?: string
+  jump?: string
 }> = {
   'jianwen-01': {
     idle: '/assets/pets/jianwen-01-idle.png',
     blink: '/assets/pets/jianwen-01-blink.png',
     squash: '/assets/pets/jianwen-01-squash.png',
     jump: '/assets/pets/jianwen-01-jump.png',
+  },
+  'huatuo-01': {
+    idle: '/assets/pets/huatuo-01.png',
+  },
+  'taiji-xiaozi-01': {
+    idle: '/assets/pets/taiji-xiaozi-01.png',
   },
 }
 
@@ -270,6 +276,8 @@ export function PetAvatar({ pet, animal, size = 'medium', mood, state, mealState
   const customAvatarSquashURL = builtinFrames?.squash || String(pet?.pixel_avatar_squash_url || '').trim()
   const customAvatarJumpURL = builtinFrames?.jump || String(pet?.pixel_avatar_jump_url || '').trim()
   const hasMotionFrames = Boolean(customAvatarSquashURL && customAvatarJumpURL)
+  const isPixelatedAvatar = pet?.avatar_type === 'pixel_self'
+    || String(pet?.builtin_avatar_id || '').trim() === 'jianwen-01'
   const [blinking, setBlinking] = useState(false)
   const [motionFrame, setMotionFrame] = useState<PetMotionFrame>('idle')
 
@@ -373,7 +381,7 @@ export function PetAvatar({ pet, animal, size = 'medium', mood, state, mealState
 
   return (
     <View
-      className={`pet-avatar ${sizeClass} ${dimmed ? 'pet-avatar--dimmed' : ''} ${state === 'warming' ? 'pet-avatar--warming' : ''} ${customAvatarURL ? 'pet-avatar--custom' : ''} ${hasMotionFrames ? 'pet-avatar--has-motion-frames' : ''} ${blinking ? 'pet-avatar--blinking' : ''} ${motionClass} ${mealState ? `pet-avatar--meal-${mealState}` : ''} ${className || ''}`}
+      className={`pet-avatar ${sizeClass} ${dimmed ? 'pet-avatar--dimmed' : ''} ${state === 'warming' ? 'pet-avatar--warming' : ''} ${customAvatarURL ? 'pet-avatar--custom' : ''} ${isPixelatedAvatar ? 'pet-avatar--pixelated' : ''} ${hasMotionFrames ? 'pet-avatar--has-motion-frames' : ''} ${blinking ? 'pet-avatar--blinking' : ''} ${motionClass} ${mealState ? `pet-avatar--meal-${mealState}` : ''} ${className || ''}`}
       style={sizeStyle}
       aria-label={label}
       role='img'
