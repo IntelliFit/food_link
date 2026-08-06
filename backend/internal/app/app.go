@@ -968,11 +968,12 @@ func (a *App) startEmbeddedWorker(
 		defer background.Wait()
 		for workerCtx.Err() == nil {
 			err := runner.Run(workerCtx, workerpkg.Options{
-				WorkerID:     workerID,
-				TaskTypes:    taskTypes,
-				PollInterval: pollInterval,
-				WorkerCount:  workerCount,
-				QueueDriver:  cfg.TaskQueue.Driver,
+				WorkerID:        workerID,
+				TaskTypes:       taskTypes,
+				PollInterval:    pollInterval,
+				WorkerCount:     workerCount,
+				RecoveryLockKey: fmt.Sprintf("food-link:task-recovery:%s:%s", cfg.TaskQueue.Topic, cfg.TaskQueue.ConsumerGroup),
+				QueueDriver:     cfg.TaskQueue.Driver,
 			})
 			if err == nil || err == context.Canceled || workerCtx.Err() != nil {
 				break

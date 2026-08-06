@@ -37,15 +37,17 @@ import (
 )
 
 const (
-	precisionPlanModelName   = "gemini-3.5-flash"
-	precisionWeightModelName = "gemini-3.5-flash"
-	strictSeparateModeName   = "strict_separate"
-	precisionRefineEnabled   = true
-	precisionRefineTimeout   = 25 * time.Second
-	taskLeaseDuration        = 5 * time.Minute
-	taskLeaseExtendEvery     = 30 * time.Second
-	taskRecoveryInterval     = 30 * time.Second
-	taskRecoveryBatchSize    = 200
+	precisionPlanModelName    = "gemini-3.5-flash"
+	precisionWeightModelName  = "gemini-3.5-flash"
+	strictSeparateModeName    = "strict_separate"
+	precisionRefineEnabled    = true
+	precisionRefineTimeout    = 25 * time.Second
+	taskLeaseDuration         = 5 * time.Minute
+	taskLeaseExtendEvery      = 30 * time.Second
+	taskRecoveryInterval      = 30 * time.Second
+	taskKafkaRecoveryInterval = 5 * time.Minute
+	taskRecoveryLeaderRetry   = 30 * time.Second
+	taskRecoveryBatchSize     = 200
 )
 
 var errTaskAttemptLost = errors.New("task attempt no longer owns task")
@@ -112,6 +114,7 @@ type Options struct {
 	WorkerCount      int
 	LeaseDuration    time.Duration
 	RecoveryInterval time.Duration
+	RecoveryLockKey  string
 	QueueDriver      string
 }
 
@@ -183,6 +186,9 @@ func (r *Runner) Run(ctx context.Context, opts Options) error {
 	if queueDriver == "" {
 		queueDriver = "unknown"
 	}
+	if queueDriver == "kafka" && opts.RecoveryInterval < taskKafkaRecoveryInterval {
+		opts.RecoveryInterval = taskKafkaRecoveryInterval
+	}
 	if r.queue == nil {
 		return fmt.Errorf("worker task queue is not initialized")
 	}
@@ -202,7 +208,7 @@ func (r *Runner) Run(ctx context.Context, opts Options) error {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		r.recoverLoop(ctx, taskTypes, opts.RecoveryInterval)
+		r.recoverLoop(ctx, taskTypes, opts.RecoveryInterval, queueDriver, opts.RecoveryLockKey)
 	}()
 	for i := 0; i < opts.WorkerCount; i++ {
 		wg.Add(1)
@@ -524,10 +530,56 @@ func (r *Runner) enqueueTask(ctx context.Context, task *domain.AnalysisTask) err
 	return nil
 }
 
-func (r *Runner) recoverLoop(ctx context.Context, taskTypes []string, interval time.Duration) {
+func (r *Runner) recoverLoop(ctx context.Context, taskTypes []string, interval time.Duration, queueDriver, lockKey string) {
 	if interval <= 0 {
 		interval = taskRecoveryInterval
 	}
+	if queueDriver == "kafka" {
+		r.recoverKafkaLeaderLoop(ctx, taskTypes, interval, lockKey)
+		return
+	}
+	r.runRecoverySchedule(ctx, taskTypes, interval)
+}
+
+func (r *Runner) recoverKafkaLeaderLoop(ctx context.Context, taskTypes []string, interval time.Duration, lockKey string) {
+	if r.tasks == nil {
+		return
+	}
+	lockKey = strings.TrimSpace(lockKey)
+	if lockKey == "" {
+		lockKey = "food-link:analysis-task-recovery"
+	}
+	waitingLogged := false
+	for ctx.Err() == nil {
+		acquired, err := r.tasks.TryTaskRecoveryLeadership(ctx, lockKey, func(leaderCtx context.Context) error {
+			r.info(leaderCtx, "已取得分析任务恢复主节点锁",
+				slog.String("recovery_lock_key", lockKey),
+				slog.Duration("recovery_interval", interval),
+			)
+			r.runRecoverySchedule(leaderCtx, taskTypes, interval)
+			return nil
+		})
+		if ctx.Err() != nil {
+			return
+		}
+		if err != nil {
+			r.errorLog(ctx, "获取分析任务恢复主节点锁失败", err,
+				slog.String("recovery_lock_key", lockKey),
+				logger.Err(err),
+			)
+		} else if acquired {
+			return
+		} else if !waitingLogged {
+			r.info(ctx, "分析任务恢复由其他实例负责",
+				slog.String("recovery_lock_key", lockKey),
+			)
+			waitingLogged = true
+		}
+		sleepContext(ctx, taskRecoveryLeaderRetry)
+	}
+}
+
+func (r *Runner) runRecoverySchedule(ctx context.Context, taskTypes []string, interval time.Duration) {
 	r.recoverQueueTasks(ctx, taskTypes)
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
