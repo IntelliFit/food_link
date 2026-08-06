@@ -294,7 +294,10 @@ func (r *CatalogRepo) CompleteAnalyzedItem(ctx context.Context, itemID, taskID s
 		if item.AnalysisTaskID != nil && strings.TrimSpace(*item.AnalysisTaskID) != "" && strings.TrimSpace(*item.AnalysisTaskID) != strings.TrimSpace(taskID) {
 			return fmt.Errorf("catalog item %s analysis task has been superseded", item.ID)
 		}
-		imagePaths := append([]string(nil), item.ImagePaths...)
+		// Keep text-only campus dishes compatible with the public library's
+		// NOT NULL image_paths column. A nil slice is serialized as SQL NULL,
+		// while an allocated empty slice is stored as the intended JSON [].
+		imagePaths := append([]string{}, item.ImagePaths...)
 		var imagePath *string
 		if len(imagePaths) > 0 {
 			first := imagePaths[0]
