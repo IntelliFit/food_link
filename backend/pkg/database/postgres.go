@@ -2,6 +2,7 @@ package database
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"time"
 
@@ -33,9 +34,12 @@ func Open(cfg config.DatabaseConfig) (*gorm.DB, error) {
 	}
 	registerGORMLogCallbacks(db)
 	metrics.RegisterGORMCallbacks(db)
-	if sqlDB, err := db.DB(); err == nil {
-		metrics.RegisterDatabase(cfg.Name, sqlDB)
+	sqlDB, err := db.DB()
+	if err != nil {
+		return nil, fmt.Errorf("get sql database handle: %w", err)
 	}
+	configureConnectionPool(sqlDB)
+	metrics.RegisterDatabase(cfg.Name, sqlDB)
 	return db, nil
 }
 
@@ -44,9 +48,7 @@ func Ping(ctx context.Context, db *gorm.DB) error {
 	if err != nil {
 		return err
 	}
-	sqlDB.SetConnMaxLifetime(5 * time.Minute)
-	sqlDB.SetMaxOpenConns(10)
-	sqlDB.SetMaxIdleConns(5)
+	configureConnectionPool(sqlDB)
 	start := time.Now()
 	err = sqlDB.PingContext(ctx)
 	status := "success"
@@ -59,6 +61,15 @@ func Ping(ctx context.Context, db *gorm.DB) error {
 	}
 	metrics.ObserveDBPing(driver, status, time.Since(start))
 	return err
+}
+
+func configureConnectionPool(sqlDB *sql.DB) {
+	if sqlDB == nil {
+		return
+	}
+	sqlDB.SetConnMaxLifetime(5 * time.Minute)
+	sqlDB.SetMaxOpenConns(10)
+	sqlDB.SetMaxIdleConns(5)
 }
 
 func CheckSchemaReady(ctx context.Context, db *gorm.DB, tables ...string) error {
