@@ -198,39 +198,42 @@ type PackagedAutoIngestResult struct {
 }
 
 type PackagedProductExtractResult struct {
-	Brand                string                      `json:"brand,omitempty"`
-	ProductName          string                      `json:"product_name,omitempty"`
-	DisplayName          string                      `json:"display_name,omitempty"`
-	SearchText           string                      `json:"search_text,omitempty"`
-	ProductFamilyKey     string                      `json:"product_family_key,omitempty"`
-	FlavorText           string                      `json:"flavor_text,omitempty"`
-	PackageCategory      string                      `json:"package_category,omitempty"`
-	NetContentValue      float64                     `json:"net_content_value,omitempty"`
-	NetContentUnit       string                      `json:"net_content_unit,omitempty"`
-	UnitCount            float64                     `json:"unit_count,omitempty"`
-	UnitContentValue     float64                     `json:"unit_content_value,omitempty"`
-	UnitContentUnit      string                      `json:"unit_content_unit,omitempty"`
-	ReviewStatus         string                      `json:"review_status,omitempty"`
-	NetWeightG           float64                     `json:"net_weight_g,omitempty"`
-	ServingWeightG       float64                     `json:"serving_weight_g,omitempty"`
-	SpecText             string                      `json:"spec_text,omitempty"`
-	Barcode              string                      `json:"barcode,omitempty"`
-	IngredientsText      string                      `json:"ingredients_text,omitempty"`
-	UnitNutritionPer100g map[string]any              `json:"unit_nutrition_per_100g,omitempty"`
-	NutritionBasisUnit   string                      `json:"nutrition_basis_unit,omitempty"`
-	EnergyUnitRaw        string                      `json:"energy_unit_raw,omitempty"`
-	RawNutritionBasis    PackagedLabelNutritionBasis `json:"raw_nutrition_basis,omitempty"`
-	RawNutritionPerBasis PackagedLabelRawNutrition   `json:"raw_nutrition_per_basis,omitempty"`
-	RawLabelPayload      map[string]any              `json:"raw_label_payload,omitempty"`
-	ConversionStatus     string                      `json:"conversion_status,omitempty"`
-	FieldConfidence      map[string]any              `json:"field_confidence,omitempty"`
-	ExtractConfidence    float64                     `json:"extract_confidence,omitempty"`
-	NeedsMoreImages      []string                    `json:"needs_more_images,omitempty"`
-	MissingFields        []string                    `json:"missing_fields,omitempty"`
-	AutoIngestResult     PackagedAutoIngestResult    `json:"auto_ingest_result,omitempty"`
-	PackagedFoodID       string                      `json:"packaged_food_id,omitempty"`
-	OCRRawText           string                      `json:"ocr_raw_text,omitempty"`
-	SourceImageURLs      []string                    `json:"source_image_urls,omitempty"`
+	Brand                 string                      `json:"brand,omitempty"`
+	ProductName           string                      `json:"product_name,omitempty"`
+	DisplayName           string                      `json:"display_name,omitempty"`
+	SearchText            string                      `json:"search_text,omitempty"`
+	ProductFamilyKey      string                      `json:"product_family_key,omitempty"`
+	FlavorText            string                      `json:"flavor_text,omitempty"`
+	PackageCategory       string                      `json:"package_category,omitempty"`
+	NetContentValue       float64                     `json:"net_content_value,omitempty"`
+	NetContentUnit        string                      `json:"net_content_unit,omitempty"`
+	UnitCount             float64                     `json:"unit_count,omitempty"`
+	UnitContentValue      float64                     `json:"unit_content_value,omitempty"`
+	UnitContentUnit       string                      `json:"unit_content_unit,omitempty"`
+	ReviewStatus          string                      `json:"review_status,omitempty"`
+	NetWeightG            float64                     `json:"net_weight_g,omitempty"`
+	ServingWeightG        float64                     `json:"serving_weight_g,omitempty"`
+	SpecText              string                      `json:"spec_text,omitempty"`
+	Barcode               string                      `json:"barcode,omitempty"`
+	IngredientsText       string                      `json:"ingredients_text,omitempty"`
+	UnitNutritionPer100g  map[string]any              `json:"unit_nutrition_per_100g,omitempty"`
+	NutritionBasisUnit    string                      `json:"nutrition_basis_unit,omitempty"`
+	EnergyUnitRaw         string                      `json:"energy_unit_raw,omitempty"`
+	RawNutritionBasis     PackagedLabelNutritionBasis `json:"raw_nutrition_basis,omitempty"`
+	RawNutritionPerBasis  PackagedLabelRawNutrition   `json:"raw_nutrition_per_basis,omitempty"`
+	RawLabelPayload       map[string]any              `json:"raw_label_payload,omitempty"`
+	ConversionStatus      string                      `json:"conversion_status,omitempty"`
+	FieldConfidence       map[string]any              `json:"field_confidence,omitempty"`
+	ExtractConfidence     float64                     `json:"extract_confidence,omitempty"`
+	NeedsMoreImages       []string                    `json:"needs_more_images,omitempty"`
+	MissingFields         []string                    `json:"missing_fields,omitempty"`
+	NeedsUserConfirmation bool                        `json:"needs_user_confirmation,omitempty"`
+	ConfirmationReasons   []string                    `json:"confirmation_reasons,omitempty"`
+	ConfirmationFields    []string                    `json:"confirmation_fields,omitempty"`
+	AutoIngestResult      PackagedAutoIngestResult    `json:"auto_ingest_result,omitempty"`
+	PackagedFoodID        string                      `json:"packaged_food_id,omitempty"`
+	OCRRawText            string                      `json:"ocr_raw_text,omitempty"`
+	SourceImageURLs       []string                    `json:"source_image_urls,omitempty"`
 }
 
 type SubmitPackagedProductExtractInput struct {
@@ -824,6 +827,9 @@ func enrichPackagedProductExtractResult(result *PackagedProductExtractResult) {
 	result.UnitContentUnit = normalized.UnitContentUnit
 	result.ReviewStatus = normalized.ReviewStatus
 	result.MissingFields = missingFields
+	result.NeedsMoreImages = normalizeStringSlice(result.NeedsMoreImages)
+	result.ConfirmationReasons, result.ConfirmationFields = determinePackagedConfirmation(result)
+	result.NeedsUserConfirmation = len(result.ConfirmationReasons) > 0
 }
 
 func stringFromAny(values ...any) string {
@@ -1501,6 +1507,92 @@ func detectPackagedExtractConflicts(result *PackagedProductExtractResult) []stri
 		}
 	}
 	return conflicts
+}
+
+func determinePackagedConfirmation(result *PackagedProductExtractResult) ([]string, []string) {
+	if result == nil {
+		return []string{"empty_result"}, []string{"product_name", "net_weight_g", "unit_nutrition_per_100g"}
+	}
+	reasons := []string{}
+	fields := []string{}
+	seenReasons := map[string]bool{}
+	seenFields := map[string]bool{}
+	add := func(reason string, relatedFields ...string) {
+		reason = strings.TrimSpace(reason)
+		if reason != "" && !seenReasons[reason] {
+			seenReasons[reason] = true
+			reasons = append(reasons, reason)
+		}
+		for _, field := range relatedFields {
+			field = strings.TrimSpace(field)
+			if field == "" || seenFields[field] {
+				continue
+			}
+			seenFields[field] = true
+			fields = append(fields, field)
+		}
+	}
+
+	if strings.TrimSpace(result.ProductName) == "" {
+		add("missing_product_name", "product_name")
+	}
+	if result.NetWeightG <= 0 && result.NetContentValue <= 0 {
+		add("missing_net_content", "net_weight_g", "spec_text")
+	}
+	if strings.TrimSpace(result.ConversionStatus) != "converted" {
+		add("conversion_not_closed", "unit_nutrition_per_100g", "nutrition_basis_unit")
+	}
+	if hasImplausiblePackagedNutrition(result.UnitNutritionPer100g) {
+		add("nutrition_out_of_range", "unit_nutrition_per_100g")
+	}
+	if !hasValidPackagedNutrition(result.UnitNutritionPer100g) && !PackagedExtractHasVerifiedZeroNutritionEvidence(result) {
+		add("missing_nutrition", "unit_nutrition_per_100g")
+	}
+
+	for _, missingField := range result.MissingFields {
+		switch strings.TrimSpace(missingField) {
+		case "product_name":
+			add("missing_product_name", "product_name")
+		case "net_weight_g", "net_content_value", "net_content_unit":
+			add("missing_net_content", "net_weight_g", "spec_text")
+		case "nutrition", "calories", "kcal_per_100g":
+			add("missing_nutrition", "unit_nutrition_per_100g")
+		}
+	}
+	for _, imageNeed := range result.NeedsMoreImages {
+		switch strings.TrimSpace(imageNeed) {
+		case "front_package":
+			add("need_clearer_front_package", "product_name")
+		case "nutrition_label":
+			add("need_clearer_nutrition_label", "unit_nutrition_per_100g")
+		case "net_weight":
+			add("need_clearer_net_weight", "net_weight_g", "spec_text")
+		}
+	}
+	for _, conflict := range detectPackagedExtractConflicts(result) {
+		switch conflict {
+		case "serving_weight_exceeds_net_weight":
+			add("serving_net_weight_conflict", "serving_weight_g", "net_weight_g")
+		case "spec_total_weight_conflict":
+			add("spec_total_weight_conflict", "spec_text", "net_weight_g")
+		default:
+			add(conflict)
+		}
+	}
+	if confidenceBelow(result.FieldConfidence, "product_name", 0.35) {
+		add("low_confidence_product_name", "product_name")
+	}
+	if confidenceBelow(result.FieldConfidence, "spec_text", 0.35) && (result.NetWeightG <= 0 || result.UnitCount <= 0) {
+		add("low_confidence_spec", "spec_text", "net_weight_g")
+	}
+	if confidenceBelow(result.FieldConfidence, "nutrition", 0.4) && !PackagedExtractHasVerifiedZeroNutritionEvidence(result) {
+		add("low_confidence_nutrition", "unit_nutrition_per_100g")
+	}
+	if result.ExtractConfidence > 0 && result.ExtractConfidence < 0.3 && (len(reasons) > 0 || len(result.NeedsMoreImages) > 0) {
+		add("low_overall_confidence", "product_name", "spec_text", "unit_nutrition_per_100g")
+	}
+
+	return reasons, fields
 }
 
 func hasValidPackagedNutrition(unit map[string]any) bool {

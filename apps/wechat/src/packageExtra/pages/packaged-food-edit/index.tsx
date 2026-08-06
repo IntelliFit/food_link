@@ -1,5 +1,5 @@
 import { View, Text, ScrollView, Input, Image } from '@tarojs/components'
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import Taro, { useDidShow, useRouter } from '@tarojs/taro'
 import { withAuth } from '../../../utils/withAuth'
 import {
@@ -281,6 +281,95 @@ function buildPackagedExtractToast(result: PackagedProductExtractResult) {
     default:
       return '已填充识别结果'
   }
+}
+
+function normalizeConfirmationField(field: string) {
+  const value = normalizeString(field)
+  switch (value) {
+    case 'product_name':
+      return 'productName'
+    case 'net_weight_g':
+      return 'netWeightG'
+    case 'serving_weight_g':
+      return 'servingWeightG'
+    case 'spec_text':
+      return 'specText'
+    case 'unit_nutrition_per_100g':
+      return 'nutrition'
+    case 'ingredients_text':
+      return 'ingredientsText'
+    case 'nutrition_basis_unit':
+      return 'nutritionBasis'
+    default:
+      return value
+  }
+}
+
+function confirmationFieldLabel(field: string) {
+  switch (field) {
+    case 'productName':
+      return '名称'
+    case 'netWeightG':
+      return '净含量'
+    case 'servingWeightG':
+      return '每份重量'
+    case 'specText':
+      return '规格文本'
+    case 'nutrition':
+      return '营养成分'
+    case 'ingredientsText':
+      return '配料表'
+    case 'nutritionBasis':
+      return '营养标示口径'
+    default:
+      return field
+  }
+}
+
+function describeConfirmationReason(reason: string) {
+  switch (normalizeString(reason)) {
+    case 'missing_product_name':
+      return '商品名还不够确定'
+    case 'missing_net_content':
+      return '净含量或规格缺失'
+    case 'conversion_not_closed':
+      return '营养口径暂时没法可靠换算'
+    case 'missing_nutrition':
+      return '营养成分识别不完整'
+    case 'nutrition_out_of_range':
+      return '热量或营养值明显不合理'
+    case 'need_clearer_front_package':
+      return '正面包装信息还不够清楚'
+    case 'need_clearer_nutrition_label':
+      return '营养成分表还需要再确认'
+    case 'need_clearer_net_weight':
+      return '净含量位置还需要再确认'
+    case 'serving_net_weight_conflict':
+      return '每份重量和净含量存在冲突'
+    case 'spec_total_weight_conflict':
+      return '规格文本和净含量存在冲突'
+    case 'low_confidence_product_name':
+      return '商品名识别置信度偏低'
+    case 'low_confidence_spec':
+      return '规格识别置信度偏低'
+    case 'low_confidence_nutrition':
+      return '营养识别置信度偏低'
+    case 'low_overall_confidence':
+      return '整体识别结果还不够稳'
+    default:
+      return '有几个关键字段建议你再确认一下'
+  }
+}
+
+function buildConfirmationSummary(result: PackagedProductExtractResult) {
+  const reasons = (result.confirmation_reasons || []).map(describeConfirmationReason)
+  const fields = (result.confirmation_fields || [])
+    .map(normalizeConfirmationField)
+    .map(confirmationFieldLabel)
+    .filter(Boolean)
+  const reasonLine = reasons.length ? `原因：${reasons.slice(0, 3).join('、')}` : ''
+  const fieldLine = fields.length ? `建议重点确认：${Array.from(new Set(fields)).join('、')}` : ''
+  return [reasonLine, fieldLine].filter(Boolean).join('\n')
 }
 
 function readPackagedUploadTasks(): PackagedUploadTaskEntry[] {
