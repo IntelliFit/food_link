@@ -165,6 +165,16 @@ func TestResolveReferenceURLs(t *testing.T) {
 	}, client.ResolveReferenceURLs("user-avatars", input))
 }
 
+func TestResolveUserAvatarURL_DefaultSystemAvatarUsesFoodImagesBucket(t *testing.T) {
+	client := New(config.StorageConfig{
+		CDNFoodImagesBaseURL:  "https://cdn.example.com/food",
+		CDNUserAvatarsBaseURL: "https://cdn.example.com/avatar",
+	})
+
+	assert.Equal(t, "https://cdn.example.com/food/wechat/default_avatar.jpg", client.ResolveUserAvatarURL("_system/default_avatar.jpg"))
+	assert.Equal(t, "https://cdn.example.com/avatar/u1/avatar.jpg", client.ResolveUserAvatarURL("u1/avatar.jpg"))
+}
+
 func TestBucketName(t *testing.T) {
 	cfg := config.StorageConfig{
 		COSFoodImagesBucket:    "food-bucket",

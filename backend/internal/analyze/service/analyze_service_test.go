@@ -2743,6 +2743,77 @@ func TestAnalyzeService_FinalizeFastModeUsesOnlyQwenPostprocessing(t *testing.T)
 	assert.Equal(t, "ai", items[0]["suggestedRatioSource"])
 }
 
+func TestAnalyzeService_FinalizeAnalyzeResponseAdjustsImplausibleFallbackCalories(t *testing.T) {
+	resolver := newFakeAnalyzeNutritionResolver()
+	fallback := &fakeNutritionFallbackEstimator{
+		rows: map[int]map[string]any{
+			0: {
+				"calories": 980.0,
+				"protein":  10.0,
+				"carbs":    20.0,
+				"fat":      10.0,
+			},
+		},
+	}
+	svc := NewAnalyzeService(&mockLLMClient{}, &mockLLMClient{}, nil)
+	svc.nutrition = resolver
+	svc.nutritionAI = fallback
+
+	resp, err := svc.finalizeAnalyzeResponse(context.Background(), "", map[string]any{
+		"description": "离谱热量 fallback 校正",
+		"items": []any{
+			map[string]any{
+				"name":                 "未收录蛋白棒",
+				"type":                 "snack",
+				"estimatedWeightGrams": 50.0,
+				"grossWeightGrams":     50.0,
+			},
+		},
+	}, AnalyzeInput{}, defaultExecutionMode, "fake", "fake-model", 12)
+	require.NoError(t, err)
+
+	items := toItems(resp["items"])
+	require.Len(t, items, 1)
+	assert.Equal(t, "adjusted", items[0]["nutrition_sanity_status"])
+	assert.Equal(t, "calories_per_100g_too_high_aligned_to_macros", items[0]["nutrition_sanity_reason"])
+	unit := mapFromAny(items[0]["unit_nutrition_per_100g"])
+	assert.Equal(t, 210.0, unit["calories"])
+	nutrients := mapFromAny(items[0]["nutrients"])
+	assert.Equal(t, 105.0, nutrients["calories"])
+	meta := mapFromAny(resp["nutrition_sanity"])
+	assert.Equal(t, 1, meta["adjusted_count"])
+}
+
+func TestAnalyzeService_FinalizeAnalyzeResponseAdjustsImplausibleLibraryCalories(t *testing.T) {
+	resolver := newFakeAnalyzeNutritionResolver()
+	resolver.rice.KcalPer100g = 560
+	svc := NewAnalyzeService(&mockLLMClient{}, &mockLLMClient{}, nil)
+	svc.nutrition = resolver
+
+	resp, err := svc.finalizeAnalyzeResponse(context.Background(), "", map[string]any{
+		"description": "数据库命中但热量字段离谱",
+		"items": []any{
+			map[string]any{
+				"name":                 "白米饭",
+				"type":                 "normal",
+				"estimatedWeightGrams": 200.0,
+				"grossWeightGrams":     200.0,
+			},
+		},
+	}, AnalyzeInput{}, defaultExecutionMode, "fake", "fake-model", 12)
+	require.NoError(t, err)
+
+	items := toItems(resp["items"])
+	require.Len(t, items, 1)
+	assert.Equal(t, "library_exact_canonical", items[0]["nutrition_source"])
+	assert.Equal(t, "adjusted", items[0]["nutrition_sanity_status"])
+	assert.Equal(t, "calories_macro_mismatch_aligned", items[0]["nutrition_sanity_reason"])
+	unit := mapFromAny(items[0]["unit_nutrition_per_100g"])
+	assert.InDelta(t, 116.7, unit["calories"], 0.1)
+	nutrients := mapFromAny(items[0]["nutrients"])
+	assert.InDelta(t, 233.4, nutrients["calories"], 0.1)
+}
+
 func TestQwenNutritionEstimatorEstimateParsesNutrition(t *testing.T) {
 	client := &mockLLMClient{result: map[string]any{
 		"items": []any{

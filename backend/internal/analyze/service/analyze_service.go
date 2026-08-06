@@ -5844,9 +5844,13 @@ func (s *AnalyzeService) applyDBFirstNutritionWithOptions(ctx context.Context, r
 		capItemWaterMlToWeight(item)
 		item["nutrition_source_category"] = nutritionSourceCategory(stringFromAny(item["nutrition_source"]))
 	}
+	out, sanityMeta := applyNutritionCommonSenseChecks(out)
 	resp["items"] = out
 	resp["resolved_count"] = resolvedCount
 	resp["unresolved_count"] = unresolvedCount
+	if sanityMeta["adjusted_count"].(int) > 0 {
+		resp["nutrition_sanity"] = sanityMeta
+	}
 	if options.packagedResolverEnabled() {
 		packagedMeta := map[string]any{
 			"enabled":              true,
@@ -5993,6 +5997,98 @@ func containsAnyAnalyzeText(text string, tokens []string) bool {
 		}
 	}
 	return false
+}
+
+func applyNutritionCommonSenseChecks(items []map[string]any) ([]map[string]any, map[string]any) {
+	if len(items) == 0 {
+		return items, map[string]any{"adjusted_count": 0}
+	}
+	out := make([]map[string]any, 0, len(items))
+	adjustedCount := 0
+	adjustedIndexes := make([]int, 0)
+	for index, item := range items {
+		next := copyAnyMap(item)
+		unit := copyAnyMap(mapFromAny(next["unit_nutrition_per_100g"]))
+		nutrients := copyAnyMap(mapFromAny(next["nutrients"]))
+		weight := nutritionWeightFromItem(next)
+		adjustedUnit, adjustedNutrients, reason, changed := normalizeNutritionCommonSense(unit, nutrients, weight)
+		if changed {
+			adjustedCount++
+			adjustedIndexes = append(adjustedIndexes, index)
+			next["unit_nutrition_per_100g"] = adjustedUnit
+			next["nutrients"] = adjustedNutrients
+			next["nutrition_sanity_status"] = "adjusted"
+			next["nutrition_sanity_reason"] = reason
+		}
+		out = append(out, next)
+	}
+	meta := map[string]any{
+		"adjusted_count": adjustedCount,
+	}
+	if adjustedCount > 0 {
+		meta["adjusted_indexes"] = adjustedIndexes
+		meta["rules"] = []string{"cap_calories_per_100g_at_900", "align_implausible_calories_with_macros"}
+	}
+	return out, meta
+}
+
+func normalizeNutritionCommonSense(unit map[string]any, nutrients map[string]any, weight float64) (map[string]any, map[string]any, string, bool) {
+	if len(unit) == 0 {
+		return unit, nutrients, "", false
+	}
+	protein := numberFromAny(unit["protein"])
+	carbs := numberFromAny(unit["carbs"])
+	fat := numberFromAny(unit["fat"])
+	macroCalories := protein*4 + carbs*4 + fat*9
+	declaredCalories := numberFromAny(unit["calories"])
+	targetCalories := declaredCalories
+	reason := ""
+
+	if declaredCalories > 900 {
+		if macroCalories > 0 && macroCalories <= 900 {
+			targetCalories = macroCalories
+			reason = "calories_per_100g_too_high_aligned_to_macros"
+		} else {
+			targetCalories = 900
+			reason = "calories_per_100g_capped"
+		}
+	} else if declaredCalories <= 0 && macroCalories > 0 {
+		targetCalories = macroCalories
+		reason = "calories_missing_aligned_to_macros"
+	} else if macroCalories > 0 && caloriesNeedMacroAlignment(declaredCalories, macroCalories) {
+		targetCalories = macroCalories
+		reason = "calories_macro_mismatch_aligned"
+	}
+
+	targetCalories = round2(targetCalories)
+	if targetCalories <= 0 || math.Abs(targetCalories-declaredCalories) < 0.01 {
+		return unit, nutrients, "", false
+	}
+
+	unit["calories"] = targetCalories
+	if len(nutrients) == 0 {
+		nutrients = map[string]any{}
+	}
+	if weight > 0 {
+		nutrients["calories"] = round2(targetCalories * weight / 100)
+	} else {
+		previousCalories := numberFromAny(nutrients["calories"])
+		if previousCalories > 0 && declaredCalories > 0 {
+			nutrients["calories"] = round2(previousCalories * targetCalories / declaredCalories)
+		} else {
+			nutrients["calories"] = 0.0
+		}
+	}
+	return unit, nutrients, reason, true
+}
+
+func caloriesNeedMacroAlignment(declaredCalories, macroCalories float64) bool {
+	if declaredCalories <= 0 || macroCalories <= 0 {
+		return false
+	}
+	diff := math.Abs(declaredCalories - macroCalories)
+	tolerance := math.Max(80, macroCalories*0.35)
+	return diff > tolerance
 }
 
 func (s *AnalyzeService) applySuggestedRatios(ctx context.Context, resp map[string]any, input AnalyzeInput) map[string]any {

@@ -503,7 +503,7 @@ func TestExerciseService_EstimateCalories_ShortTextRun40MinutesUsesOriginalLLM(t
 	result, err := svc.EstimateCalories(context.Background(), "u1", desc)
 	require.NoError(t, err)
 	assert.LessOrEqual(t, len([]rune(desc)), exerciseLongTextThresholdRunes)
-	assert.Equal(t, 1, callCount)
+	assert.Equal(t, 2, callCount)
 	assert.Equal(t, 320, result["estimated_calories"].(int))
 	assert.Equal(t, desc, result["exercise_desc"])
 	assert.Contains(t, result["reasoning"], "跑步40分钟")
@@ -514,6 +514,48 @@ func TestExerciseService_EstimateCalories_ShortTextRun40MinutesUsesOriginalLLM(t
 	assert.Equal(t, "跑步", items[0]["name"])
 	assert.Equal(t, 40, items[0]["duration_min"])
 	assert.Equal(t, 320, items[0]["calories_kcal"])
+}
+
+func TestExerciseService_ProcessExerciseTask_TextImageStructuredDurationUsesMET(t *testing.T) {
+	repo := &mockExerciseRepo{}
+	svc := NewExerciseService(repo, &config.Config{
+		External: config.ExternalConfig{DoubaoAPIKey: "fake-key"},
+	})
+	callCount := 0
+	svc.client = &http.Client{Transport: exerciseRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+		callCount++
+		var content string
+		switch callCount {
+		case 1:
+			content = `{"items":[{"name":"绿道骑行","duration_min":13,"sets":0,"reps":0,"intensity":"moderate","evidence":"绿道骑行13分钟"}]}`
+		case 2:
+			content = `{"activity_name":"骑行","category":"cardio","intensity":"moderate","met":6.8,"reasoning":"绿道骑行按中等强度户外骑行估算"}`
+		default:
+			t.Fatalf("unexpected llm call %d", callCount)
+		}
+		responseBody := `{"choices":[{"message":{"content":` + strconv.Quote(content) + `}}]}`
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(bytes.NewBufferString(responseBody)),
+			Header:     make(http.Header),
+		}, nil
+	})}
+
+	result, err := svc.ProcessExerciseTask(context.Background(), "u1", "绿道骑行13分钟", "https://example.com/ride.jpg", "2026-07-05", map[string]any{
+		"profile_snapshot": map[string]any{"weight_kg": 70.0},
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, 2, callCount)
+	assert.EqualValues(t, 103, result["estimated_calories"])
+	require.Len(t, repo.logs, 1)
+	assert.Equal(t, 103.0, *repo.logs[0].CaloriesBurned)
+	require.Len(t, repo.logs[0].ExerciseItems, 1)
+	assert.Equal(t, "绿道骑行", repo.logs[0].ExerciseItems[0]["name"])
+	assert.Equal(t, 13, int(repo.logs[0].ExerciseItems[0]["duration_min"].(float64)))
+	assert.Equal(t, 6.8, repo.logs[0].ExerciseItems[0]["met"])
+	assert.EqualValues(t, 103, repo.logs[0].ExerciseItems[0]["calories_kcal"])
+	assert.Contains(t, result["ai_response"].(string), "long_text_library_met")
 }
 
 func TestExerciseService_EstimateCalories_LongTextUsesGemini35Config(t *testing.T) {

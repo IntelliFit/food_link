@@ -469,7 +469,7 @@ func (s *SearchService) resolveAvatarURL(value string) string {
 	if value == "" || s.storage == nil {
 		return value
 	}
-	resolved := s.storage.ResolveReferenceURL("user-avatars", value)
+	resolved := s.storage.ResolveUserAvatarURL(value)
 	if resolved == "" {
 		return value
 	}

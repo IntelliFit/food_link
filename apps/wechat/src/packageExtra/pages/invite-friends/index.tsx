@@ -279,7 +279,7 @@ function InviteFriendsPage() {
     ? '登录注册并领取邀请'
     : isInviteOwner
       ? '请转发给新朋友'
-      : '直接加好友并开始打卡'
+      : '直接加好友并开始使用'
 
   return (
     <View className='invite-page'>
@@ -342,7 +342,7 @@ function InviteFriendsPage() {
         </View>
         <View className='rule-item'>
           <Text className='rule-item__index'>02</Text>
-          <Text className='rule-item__text'>注册后 7 天内完成 2 个自然日饮食或运动记录</Text>
+          <Text className='rule-item__text'>注册后 7 天内完成 2 个自然日任意功能使用</Text>
         </View>
         <View className='rule-item'>
           <Text className='rule-item__index'>03</Text>

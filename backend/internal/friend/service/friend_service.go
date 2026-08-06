@@ -537,7 +537,7 @@ func (s *FriendService) resolveAvatarURL(value string) string {
 	if s.storage == nil {
 		return value
 	}
-	resolved := s.storage.ResolveReferenceURL("user-avatars", value)
+	resolved := s.storage.ResolveUserAvatarURL(value)
 	if resolved == "" {
 		return value
 	}

@@ -734,6 +734,14 @@ func toExerciseInt(v any) int {
 	return 0
 }
 
+func shouldPreferLibraryMETForStructuredText(desc string) bool {
+	desc = strings.TrimSpace(desc)
+	if desc == "" {
+		return false
+	}
+	return extractDurationMinutes(desc) > 0
+}
+
 type extractedExerciseItem struct {
 	Name        string
 	DurationMin float64
@@ -803,6 +811,17 @@ func (s *ExerciseService) estimateExerciseCalories(ctx context.Context, desc, im
 	imageURL = strings.TrimSpace(imageURL)
 	if len([]rune(strings.TrimSpace(desc))) > exerciseLongTextThresholdRunes {
 		return s.estimateLongExerciseCalories(ctx, desc, profileSnapshot)
+	}
+	if shouldPreferLibraryMETForStructuredText(desc) {
+		estimate, err := s.estimateLongExerciseCalories(ctx, desc, profileSnapshot)
+		if err == nil {
+			return estimate, nil
+		}
+		logger.Warn(ctx, "短文本运动改走 MET 结构化估算失败，回退到直接热量估算",
+			logger.Stage("exercise_estimate"),
+			logger.Truncated("exercise_desc", desc, 120),
+			logger.Err(err),
+		)
 	}
 	if imageURL != "" {
 		return s.estimateSingleExerciseCalories(ctx, desc, imageURL, profileSnapshot)

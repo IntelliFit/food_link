@@ -2405,6 +2405,21 @@ func ensureExerciseEnergySeed(ctx context.Context, db *gorm.DB) error {
 		{Name: "慢跑", Norm: "慢跑", Category: "cardio", Intensity: "moderate", MET: 7.0, Aliases: []string{"跑步30分钟", "轻松跑"}, Evidence: "基础有氧训练 MET 种子"},
 		{Name: "跳绳", Norm: "跳绳", Category: "cardio", Intensity: "high", MET: 10.0, Aliases: []string{"跳绳训练"}, Evidence: "基础有氧训练 MET 种子"},
 		{Name: "壶铃训练", Norm: "壶铃训练", Category: "strength", Intensity: "high", MET: 8.0, Aliases: []string{"壶铃摆动", "壶铃"}, Evidence: "基础力量循环训练 MET 种子"},
+		{Name: "骑行", Norm: "骑行", Category: "cardio", Intensity: "moderate", MET: 6.8, Aliases: []string{"绿道骑行", "户外骑行", "自行车骑行", "自行车", "单车"}, Evidence: "基础有氧训练 MET 种子"},
+		{Name: "动感单车", Norm: "动感单车", Category: "cardio", Intensity: "high", MET: 8.5, Aliases: []string{"单车课", "室内单车"}, Evidence: "基础有氧训练 MET 种子"},
+		{Name: "游泳", Norm: "游泳", Category: "cardio", Intensity: "high", MET: 6.0, Aliases: []string{"自由泳", "蛙泳", "泳池游泳", "游泳训练"}, Evidence: "基础有氧训练 MET 种子"},
+		{Name: "瑜伽", Norm: "瑜伽", Category: "flexibility", Intensity: "low", MET: 3.0, Aliases: []string{"瑜伽练习", "流瑜伽", "哈他瑜伽"}, Evidence: "基础柔韧训练 MET 种子"},
+		{Name: "普拉提", Norm: "普拉提", Category: "flexibility", Intensity: "moderate", MET: 3.0, Aliases: []string{"普拉提训练", "核心普拉提"}, Evidence: "基础核心训练 MET 种子"},
+		{Name: "羽毛球", Norm: "羽毛球", Category: "cardio", Intensity: "moderate", MET: 5.5, Aliases: []string{"打羽毛球", "羽毛球训练"}, Evidence: "基础球类训练 MET 种子"},
+		{Name: "篮球", Norm: "篮球", Category: "cardio", Intensity: "high", MET: 6.5, Aliases: []string{"打篮球", "篮球训练"}, Evidence: "基础球类训练 MET 种子"},
+		{Name: "足球", Norm: "足球", Category: "cardio", Intensity: "high", MET: 7.0, Aliases: []string{"踢足球", "足球训练"}, Evidence: "基础球类训练 MET 种子"},
+		{Name: "快走", Norm: "快走", Category: "cardio", Intensity: "moderate", MET: 4.3, Aliases: []string{"健走", "快速步行", "暴走"}, Evidence: "基础步行训练 MET 种子"},
+		{Name: "散步", Norm: "散步", Category: "cardio", Intensity: "low", MET: 3.0, Aliases: []string{"走路", "步行", "遛弯"}, Evidence: "基础步行训练 MET 种子"},
+		{Name: "爬楼梯", Norm: "爬楼梯", Category: "cardio", Intensity: "high", MET: 8.8, Aliases: []string{"上下楼梯", "楼梯训练", "爬楼"}, Evidence: "基础有氧训练 MET 种子"},
+		{Name: "椭圆机", Norm: "椭圆机", Category: "cardio", Intensity: "moderate", MET: 5.0, Aliases: []string{"椭圆仪", "椭圆机训练"}, Evidence: "基础有氧训练 MET 种子"},
+		{Name: "划船机", Norm: "划船机", Category: "cardio", Intensity: "high", MET: 7.0, Aliases: []string{"划船器", "划船机训练"}, Evidence: "基础有氧训练 MET 种子"},
+		{Name: "徒步", Norm: "徒步", Category: "cardio", Intensity: "moderate", MET: 6.0, Aliases: []string{"登山徒步", "户外徒步", "爬山"}, Evidence: "基础户外运动 MET 种子"},
+		{Name: "HIIT", Norm: "hiit", Category: "cardio", Intensity: "high", MET: 8.0, Aliases: []string{"高强度间歇训练", "间歇训练", "燃脂训练"}, Evidence: "基础间歇训练 MET 种子"},
 	}
 	for _, seed := range seeds {
 		if err := db.WithContext(ctx).Exec(`

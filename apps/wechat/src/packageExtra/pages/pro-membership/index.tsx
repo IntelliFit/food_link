@@ -859,7 +859,7 @@ function ProMembershipPage() {
         <Text className='credits-hint-item'>· 基础记录 / 基础分析：2 积分 / 次</Text>
         <Text className='credits-hint-item'>· 精准模式：4 积分 / 次</Text>
         <Text className='credits-hint-item credits-hint-item--muted'>· 系统积分每日发放，次日 00:00 刷新；分享等奖励积分累计不清零</Text>
-        <Text className='credits-hint-item'>· 邀请好友：好友在 7 天内完成 2 个自然日有效使用后，双方各得一周轻度版会员</Text>
+        <Text className='credits-hint-item'>· 邀请好友：好友在 7 天内完成 2 个自然日有效使用后，双方各得一周轻度版会员，邀请人每月最多 5 人</Text>
         <Text className='credits-hint-item'>· 分享海报成功：每日奖励 1 积分，转入累计余额</Text>
       </View>
 
