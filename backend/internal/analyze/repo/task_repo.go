@@ -542,10 +542,48 @@ func (r *TaskRepo) ListRecoverableTasks(ctx context.Context, taskTypes []string,
 	}
 	var tasks []domain.AnalysisTask
 	err := r.db.WithContext(ctx).
+		Select("id", "task_type", "status", "lease_until").
 		Where("task_type IN ?", taskTypes).
 		Where("status = ? OR (status = ? AND (lease_until IS NULL OR lease_until <= ?))", "pending", "processing", now).
 		Order("created_at ASC").
 		Limit(limit).
 		Find(&tasks).Error
 	return tasks, err
+}
+
+// TryTaskRecoveryLeadership elects one recovery loop per queue by holding a
+// PostgreSQL session advisory lock for the lifetime of fn. Recovery queries and
+// queue publishes deliberately run outside a database transaction.
+func (r *TaskRepo) TryTaskRecoveryLeadership(ctx context.Context, lockKey string, fn func(context.Context) error) (bool, error) {
+	lockKey = strings.TrimSpace(lockKey)
+	if lockKey == "" {
+		return false, errors.New("task recovery lock key is required")
+	}
+	if fn == nil {
+		return false, errors.New("task recovery leader function is required")
+	}
+
+	acquired := false
+	err := r.db.WithContext(ctx).Connection(func(connection *gorm.DB) error {
+		if err := connection.Raw(
+			"SELECT pg_try_advisory_lock(hashtextextended(?, 0))",
+			lockKey,
+		).Scan(&acquired).Error; err != nil {
+			return err
+		}
+		if !acquired {
+			return nil
+		}
+
+		defer func() {
+			unlockDB := connection.Session(&gorm.Session{NewDB: true}).WithContext(context.Background())
+			_ = unlockDB.Exec(
+				"SELECT pg_advisory_unlock(hashtextextended(?, 0))",
+				lockKey,
+			).Error
+		}()
+
+		return fn(ctx)
+	})
+	return acquired, err
 }
