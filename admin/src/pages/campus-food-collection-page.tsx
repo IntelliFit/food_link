@@ -66,7 +66,11 @@ type CatalogItem = {
   notes?: string
   missing_fields?: string[]
   completeness_status: string
-  status: 'draft' | 'published' | 'changes_pending' | string
+  status: 'draft' | 'published' | 'changes_pending' | 'analysis_pending' | 'analysis_failed' | string
+  analysis_task_id?: string
+  analysis_error?: string
+  analysis_started_at?: string
+  analysis_completed_at?: string
   published_at?: string
 }
 
@@ -230,10 +234,27 @@ export function CampusFoodCollectionPage({ onLogout, onMenuChange }: CampusFoodC
   const [editingItem, setEditingItem] = useState<CatalogItemEditDraft | null>(null)
   const [itemSaving, setItemSaving] = useState(false)
   const [publishingItemId, setPublishingItemId] = useState('')
+  const [batchPublishMode, setBatchPublishMode] = useState(false)
+  const [selectedPublishItemIds, setSelectedPublishItemIds] = useState<string[]>([])
+  const [batchPublishing, setBatchPublishing] = useState(false)
+  const [batchPublishDone, setBatchPublishDone] = useState(0)
+  const [batchPublishTotal, setBatchPublishTotal] = useState(0)
 
   const isUniversity = venueType === 'university'
   const apiBase = displayApiBase()
   const fileCount = useMemo(() => entries.reduce((sum, entry) => sum + entry.files.length, 0), [entries])
+  const publishableBatchItems = useMemo(
+    () => selectedBatchItems.filter(isCatalogItemPublishable),
+    [selectedBatchItems],
+  )
+  const selectedPublishItems = useMemo(() => {
+    const selectedIds = new Set(selectedPublishItemIds)
+    return publishableBatchItems.filter((item) => selectedIds.has(item.id))
+  }, [publishableBatchItems, selectedPublishItemIds])
+  const hasPendingAnalysis = useMemo(
+    () => selectedBatchItems.some((item) => item.status === 'analysis_pending'),
+    [selectedBatchItems],
+  )
 
   useEffect(() => {
     void searchSchools('清华大学', true)
@@ -266,6 +287,16 @@ export function CampusFoodCollectionPage({ onLogout, onMenuChange }: CampusFoodC
     }
     void loadDirectoryOptions(`/api/admin/campus-directory/windows?canteen_id=${encodeURIComponent(canteenId)}&status=active&limit=100`, setWindowOptions)
   }, [canteenId, isUniversity])
+
+  useEffect(() => {
+    if (!selectedBatchId || !hasPendingAnalysis || batchPublishing) return undefined
+    const timer = window.setInterval(() => {
+      void refreshBatchItems(selectedBatchId, true)
+    }, 4000)
+    return () => window.clearInterval(timer)
+    // refreshBatchItems intentionally reads only its arguments and stable setters.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedBatchId, hasPendingAnalysis, batchPublishing])
 
   async function loadDirectoryOptions(path: string, setter: (items: DirectoryOption[]) => void) {
     try {
@@ -308,15 +339,24 @@ export function CampusFoodCollectionPage({ onLogout, onMenuChange }: CampusFoodC
   }
 
   async function loadBatchItems(batchId: string) {
+    if (batchPublishing) return
     setSelectedBatchId(batchId)
+    setBatchPublishMode(false)
+    setSelectedPublishItemIds([])
     setHistoryBusy(true)
+    try {
+      await refreshBatchItems(batchId)
+    } finally {
+      setHistoryBusy(false)
+    }
+  }
+
+  async function refreshBatchItems(batchId: string, silent = false) {
     try {
       const data = await adminRequest<{ items: CatalogItem[] }>(`/api/admin/campus-food-collection/items?batch_id=${encodeURIComponent(batchId)}`)
       setSelectedBatchItems(data.items || [])
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '批次明细读取失败')
-    } finally {
-      setHistoryBusy(false)
+      if (!silent) toast.error(error instanceof Error ? error.message : '批次明细读取失败')
     }
   }
 
@@ -440,23 +480,85 @@ export function CampusFoodCollectionPage({ onLogout, onMenuChange }: CampusFoodC
   }
 
   async function publishCatalogItem(item: CatalogItem) {
-    if ((item.missing_fields || []).length || item.completeness_status !== 'complete') {
-      toast.error('请先补齐名称、图片和价格后再提交上线')
+    if (!isCatalogItemPublishable(item)) {
+      toast.error(catalogPublishDisabledReason(item) || '当前条目不能提交上线')
       return
     }
-    const actionLabel = item.status === 'changes_pending' ? '提交更新' : '提交上线'
-    if (!window.confirm(`${actionLabel}后，小程序用户将看到这条校园食物。是否继续？`)) return
+    const actionLabel = item.status === 'analysis_failed'
+      ? '重新提交 AI 分析'
+      : item.status === 'changes_pending'
+        ? '提交 AI 分析更新'
+        : '提交 AI 分析并上线'
+    if (!window.confirm(`${actionLabel}？AI 成功后将自动上线；首次上传在分析完成前不会出现在小程序。`)) return
     setPublishingItemId(item.id)
     try {
       const data = await adminRequest<{ item: CatalogItem }>(`/api/admin/campus-food-collection/items/${encodeURIComponent(item.id)}/publish`, {
         method: 'POST',
       })
       setSelectedBatchItems((current) => current.map((currentItem) => (currentItem.id === data.item.id ? data.item : currentItem)))
-      toast.success(item.status === 'changes_pending' ? '更新已提交，小程序将展示最新版本' : '条目已提交上线')
+      toast.success('AI 分析已提交，成功后自动上线')
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '提交上线失败')
+      toast.error(error instanceof Error ? error.message : '提交 AI 分析失败')
     } finally {
       setPublishingItemId('')
+    }
+  }
+
+  function toggleBatchPublishMode() {
+    if (batchPublishing) return
+    setBatchPublishMode((current) => !current)
+    setSelectedPublishItemIds([])
+    setBatchPublishDone(0)
+    setBatchPublishTotal(0)
+  }
+
+  function togglePublishItemSelection(item: CatalogItem) {
+    if (!isCatalogItemPublishable(item) || batchPublishing) return
+    setSelectedPublishItemIds((current) => current.includes(item.id)
+      ? current.filter((itemId) => itemId !== item.id)
+      : [...current, item.id])
+  }
+
+  function toggleAllPublishableItems() {
+    if (batchPublishing) return
+    const allIds = publishableBatchItems.map((item) => item.id)
+    const allSelected = allIds.length > 0 && allIds.every((itemId) => selectedPublishItemIds.includes(itemId))
+    setSelectedPublishItemIds(allSelected ? [] : allIds)
+  }
+
+  async function publishSelectedCatalogItems() {
+    if (!selectedPublishItems.length || batchPublishing) return
+    const selectedCount = selectedPublishItems.length
+    if (!window.confirm(`确定将选中的 ${selectedCount} 条校园食物批量提交 AI 分析吗？分析成功后会自动上线，首次上传在完成前不会出现在小程序。`)) return
+
+    setBatchPublishing(true)
+    setBatchPublishDone(0)
+    setBatchPublishTotal(selectedCount)
+    const publishedItems = new Map<string, CatalogItem>()
+    const failedItemIds: string[] = []
+    try {
+      await runWithConcurrency(selectedPublishItems, 3, async (item) => {
+        try {
+          const data = await adminRequest<{ item: CatalogItem }>(`/api/admin/campus-food-collection/items/${encodeURIComponent(item.id)}/publish`, {
+            method: 'POST',
+          })
+          publishedItems.set(data.item.id, data.item)
+        } catch {
+          failedItemIds.push(item.id)
+        } finally {
+          setBatchPublishDone((current) => current + 1)
+        }
+      })
+      setSelectedBatchItems((current) => current.map((item) => publishedItems.get(item.id) || item))
+      setSelectedPublishItemIds(failedItemIds)
+      if (failedItemIds.length) {
+        toast.error(`批量提交完成：已进入 AI 分析 ${publishedItems.size} 条，提交失败 ${failedItemIds.length} 条；失败项已保留勾选`)
+      } else {
+        setBatchPublishMode(false)
+        toast.success(`已提交 ${publishedItems.size} 条进行 AI 分析，成功后自动上线`)
+      }
+    } finally {
+      setBatchPublishing(false)
     }
   }
 
@@ -856,6 +958,7 @@ export function CampusFoodCollectionPage({ onLogout, onMenuChange }: CampusFoodC
                 type='button'
                 className={`collection-batch-card ${selectedBatchId === batch.id ? 'selected' : ''}`}
                 onClick={() => void loadBatchItems(batch.id)}
+                disabled={batchPublishing}
               >
                 <div className='collection-batch-heading'>
                   <strong title={batch.batch_name}>{batch.batch_name}</strong>
@@ -872,60 +975,117 @@ export function CampusFoodCollectionPage({ onLogout, onMenuChange }: CampusFoodC
             ))}
           </div>
           {selectedBatchId ? (
-            <div className='overflow-x-auto rounded-xl border'>
-              <table className='w-full min-w-[1020px] text-sm'>
-                <thead>
-                  <tr className='border-b text-left'>
-                    <th className='p-3'>图片</th>
-                    <th className='p-3'>条目</th>
-                    <th className='p-3'>窗口/餐时</th>
-                    <th className='p-3'>售卖/价格</th>
-                    <th className='p-3'>待补</th>
-                    <th className='p-3 text-right'>操作</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {selectedBatchItems.map((item) => (
-                    <tr key={item.id} className='border-b last:border-0'>
-                      <td className='p-3'>
-                        {item.image_paths?.[0] ? <img className='h-16 w-20 rounded-lg object-cover' src={item.image_paths[0]} alt={item.name || '食堂采集图片'} /> : <span className='pill'>缺图</span>}
-                      </td>
-                      <td className='p-3'><strong>{item.name || '待补名称'}</strong><div className='muted'>{labelOf(entryTypeOptions, item.entry_type)} · {labelOf(imageKindOptions, item.image_kind)}</div></td>
-                      <td className='p-3'>{[item.floor, item.window_name].filter(Boolean).join(' · ') || '-'}<div className='muted'>{(item.meal_periods || []).map((value) => labelOf(mealOptions, value)).join(' / ') || '餐时待确认'}</div></td>
-                      <td className='p-3'>{labelOf(serviceOptions, item.service_mode)}<div className='muted'>{priceSummary(item)}</div></td>
-                      <td className='p-3'>
-                        <div className='flex flex-wrap gap-1'>
-                          {(item.missing_fields || []).length
-                            ? (item.missing_fields || []).map((field) => <span key={field} className='pill inactive'>{missingFieldLabel(field)}</span>)
-                            : <span className='pill active'>已完整</span>}
-                        </div>
-                        <div className='mt-2'>
-                          <span className={`pill ${item.status === 'published' ? 'active' : item.status === 'changes_pending' ? 'warning' : ''}`}>
-                            {catalogPublishStatusLabel(item.status)}
-                          </span>
-                        </div>
-                      </td>
-                      <td className='p-3 text-right'>
-                        <div className='collection-item-actions'>
-                          <button type='button' className='min-h-8 px-3' onClick={() => openItemEditor(item)} disabled={publishingItemId === item.id}>编辑补充</button>
-                          <button
-                            type='button'
-                            className='primary min-h-8 px-3'
-                            onClick={() => void publishCatalogItem(item)}
-                            disabled={publishingItemId === item.id || item.status === 'published' || Boolean((item.missing_fields || []).length)}
-                            title={(item.missing_fields || []).length ? '请先补齐名称、图片和价格' : undefined}
-                          >
-                            {publishingItemId === item.id ? <span className='spinner small' /> : null}
-                            <span className={publishingItemId === item.id ? 'ml-2' : ''}>
-                              {item.status === 'published' ? '已上线' : item.status === 'changes_pending' ? '提交更新' : '提交上线'}
-                            </span>
-                          </button>
-                        </div>
-                      </td>
+            <div className='space-y-3'>
+              <div className={`collection-batch-publish-toolbar ${batchPublishMode ? 'active' : ''}`}>
+                <div>
+                  <strong>{batchPublishMode ? `已选择 ${selectedPublishItems.length} 条` : `可提交分析 ${publishableBatchItems.length} 条`}</strong>
+                  <p>
+                    {batchPublishing
+                      ? `正在提交 ${batchPublishDone}/${batchPublishTotal}`
+                      : batchPublishMode
+                        ? '只可选择字段完整且不在分析中的条目；AI 失败项可直接重试。'
+                        : '批量提交原有 AI 食物分析，成功后自动上线；分析中会自动刷新状态。'}
+                  </p>
+                </div>
+                <div className='actions collection-batch-publish-actions'>
+                  {batchPublishMode ? (
+                    <>
+                      <button type='button' onClick={toggleAllPublishableItems} disabled={batchPublishing || publishableBatchItems.length === 0}>
+                        {publishableBatchItems.length > 0 && selectedPublishItems.length === publishableBatchItems.length ? '取消全选' : '全选可分析'}
+                      </button>
+                      <button type='button' onClick={toggleBatchPublishMode} disabled={batchPublishing}>退出批量模式</button>
+                      <button type='button' className='primary' onClick={() => void publishSelectedCatalogItems()} disabled={batchPublishing || selectedPublishItems.length === 0}>
+                        {batchPublishing ? <span className='spinner small' /> : null}
+                        <span className={batchPublishing ? 'ml-2' : ''}>
+                          {batchPublishing ? `提交中 ${batchPublishDone}/${batchPublishTotal}` : `批量提交 AI 分析并上线（${selectedPublishItems.length}）`}
+                        </span>
+                      </button>
+                    </>
+                  ) : (
+                    <button type='button' className='primary' onClick={toggleBatchPublishMode} disabled={publishableBatchItems.length === 0} title={publishableBatchItems.length === 0 ? '当前批次没有可上线条目' : undefined}>
+                      批量 AI 分析上线
+                    </button>
+                  )}
+                </div>
+              </div>
+              <div className='overflow-x-auto rounded-xl border'>
+                <table className={`w-full text-sm ${batchPublishMode ? 'min-w-[1080px]' : 'min-w-[1020px]'}`}>
+                  <thead>
+                    <tr className='border-b text-left'>
+                      {batchPublishMode ? <th className='collection-select-cell p-3'>选择</th> : null}
+                      <th className='p-3'>图片</th>
+                      <th className='p-3'>条目</th>
+                      <th className='p-3'>窗口/餐时</th>
+                      <th className='p-3'>售卖/价格/分量</th>
+                      <th className='p-3'>待补</th>
+                      <th className='p-3 text-right'>操作</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {selectedBatchItems.map((item) => {
+                      const publishable = isCatalogItemPublishable(item)
+                      const selected = selectedPublishItemIds.includes(item.id)
+                      return (
+                        <tr key={item.id} className={`border-b last:border-0 ${selected ? 'collection-item-selected' : ''}`}>
+                          {batchPublishMode ? (
+                            <td className='collection-select-cell p-3'>
+                              <input
+                                className='collection-select-checkbox'
+                                type='checkbox'
+                                checked={selected}
+                                disabled={!publishable || batchPublishing}
+                                aria-label={`选择${item.name || '未命名条目'}`}
+                                title={catalogPublishDisabledReason(item)}
+                                onChange={() => togglePublishItemSelection(item)}
+                              />
+                            </td>
+                          ) : null}
+                          <td className='p-3'>
+                            {item.image_paths?.[0] ? <img className='h-16 w-20 rounded-lg object-cover' src={item.image_paths[0]} alt={item.name || '食堂采集图片'} /> : <span className='pill warning'>待用户共建补图</span>}
+                          </td>
+                          <td className='p-3'><strong>{item.name || '待补名称'}</strong><div className='muted'>{labelOf(entryTypeOptions, item.entry_type)} · {labelOf(imageKindOptions, item.image_kind)}</div></td>
+                          <td className='p-3'>{[item.floor, item.window_name].filter(Boolean).join(' · ') || '-'}<div className='muted'>{(item.meal_periods || []).map((value) => labelOf(mealOptions, value)).join(' / ') || '餐时待确认'}</div></td>
+                          <td className='p-3'>
+                            {labelOf(serviceOptions, item.service_mode)}
+                            <div className='muted'>价格：{priceSummary(item)}</div>
+                            <div className='muted'>分量：{item.portion_description || '待补充'}</div>
+                          </td>
+                          <td className='p-3'>
+                            <div className='flex flex-wrap gap-1'>
+                              {(item.missing_fields || []).length
+                                ? (item.missing_fields || []).map((field) => <span key={field} className='pill inactive'>{missingFieldLabel(field)}</span>)
+                                : <span className='pill active'>已完整</span>}
+                            </div>
+                            <div className='mt-2'>
+                              <span className={`pill ${item.status === 'published' ? 'active' : item.status === 'changes_pending' || item.status === 'analysis_pending' ? 'warning' : item.status === 'analysis_failed' ? 'inactive' : ''}`}>
+                                {catalogPublishStatusLabel(item.status)}
+                              </span>
+                              {item.status === 'analysis_failed' && item.analysis_error ? <div className='muted mt-1' title={item.analysis_error}>{shortAnalysisError(item.analysis_error)}</div> : null}
+                            </div>
+                          </td>
+                          <td className='p-3 text-right'>
+                            <div className='collection-item-actions'>
+                              <button type='button' className='min-h-8 px-3' onClick={() => openItemEditor(item)} disabled={publishingItemId === item.id || batchPublishing || item.status === 'analysis_pending'}>编辑补充</button>
+                              <button
+                                type='button'
+                                className='primary min-h-8 px-3'
+                                onClick={() => void publishCatalogItem(item)}
+                                disabled={publishingItemId === item.id || batchPublishing || !publishable}
+                                title={catalogPublishDisabledReason(item)}
+                              >
+                                {publishingItemId === item.id ? <span className='spinner small' /> : null}
+                                <span className={publishingItemId === item.id ? 'ml-2' : ''}>
+                                  {catalogPublishActionLabel(item.status)}
+                                </span>
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
           ) : null}
         </section>
@@ -1088,7 +1248,7 @@ function CatalogItemEditDialog({
         </div>
 
         <div className='catalog-item-editor-actions'>
-          <span className='muted'>允许保留未完整状态；补齐后请在列表点击“提交上线”。</span>
+          <span className='muted'>允许保留未完整状态；补齐后提交原有 AI 食物分析，成功才会自动上线。</span>
           <div className='actions' style={{ marginTop: 0 }}>
             <button type='button' onClick={onCancel} disabled={saving}>取消</button>
             <button type='button' className='primary min-w-32' onClick={onSave} disabled={saving}>
@@ -1303,6 +1463,12 @@ function toggleValue(values: string[], value: string): string[] {
   return next.length ? next : ['unknown']
 }
 
+function isCatalogItemPublishable(item: CatalogItem): boolean {
+  return item.status !== 'published'
+    && item.status !== 'analysis_pending'
+    && (item.missing_fields || []).every((field) => field === 'image')
+}
+
 function toggleSimpleValue(values: string[], value: string): string[] {
   return values.includes(value) ? values.filter((item) => item !== value) : [...values, value]
 }
@@ -1342,7 +1508,7 @@ function labelOf(options: Array<[string, string]>, value: string): string {
 
 function missingFieldLabel(value: string): string {
   if (value === 'name') return '缺名称'
-  if (value === 'image') return '缺图片'
+  if (value === 'image') return '待用户共建补图'
   if (value === 'price') return '缺价格'
   return value
 }
@@ -1354,13 +1520,44 @@ function formatDate(value?: string): string {
 }
 
 function priceSummary(item: CatalogItem): string {
-  if (item.price_type === 'range' && item.price_min != null && item.price_max != null) return `${item.price_min}-${item.price_max}${item.price_unit || '元'}`
-  if (item.price != null) return `${item.price}${item.price_unit || '元'}`
+  const unit = displayPriceUnit(item.price_unit)
+  if (item.price_type === 'range' && item.price_min != null && item.price_max != null) return `${item.price_min}-${item.price_max}${unit}`
+  if (item.price != null) return `${item.price}${unit}`
   return item.price_text || '价格待补充'
+}
+
+function displayPriceUnit(value?: string): string {
+  const unit = value?.trim()
+  if (!unit) return '元'
+  if (unit === '元' || unit.startsWith('元/')) return unit
+  return `元/${unit}`
 }
 
 function catalogPublishStatusLabel(status: string): string {
   if (status === 'published') return '小程序已上线'
+  if (status === 'analysis_pending') return 'AI 分析中'
+  if (status === 'analysis_failed') return 'AI 分析失败'
   if (status === 'changes_pending') return '有修改待上线'
   return '仅后台草稿'
+}
+
+function catalogPublishActionLabel(status: string): string {
+  if (status === 'published') return '已上线'
+  if (status === 'analysis_pending') return 'AI 分析中'
+  if (status === 'analysis_failed') return '重新分析'
+  if (status === 'changes_pending') return '分析更新并上线'
+  return 'AI 分析并上线'
+}
+
+function catalogPublishDisabledReason(item: CatalogItem): string | undefined {
+  if (item.status === 'published') return '该条目已经上线'
+  if (item.status === 'analysis_pending') return 'AI 分析进行中，请等待结果'
+  if ((item.missing_fields || []).some((field) => field !== 'image')) return '请先补齐名称和价格'
+  if ((item.missing_fields || []).includes('image')) return '无图菜品将使用文字 AI 分析，上线后可由用户共建补图'
+  return '选择此条目'
+}
+
+function shortAnalysisError(value: string): string {
+  const normalized = value.trim()
+  return normalized.length > 42 ? `${normalized.slice(0, 42)}…` : normalized
 }

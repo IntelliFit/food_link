@@ -2632,6 +2632,61 @@ func TestValidateResolvedNutritionItemsRejectsUnresolvedPlaceholder(t *testing.T
 	assert.Contains(t, err.Error(), "无法可靠补全")
 }
 
+func TestApplyDBFirstToItemsWithPreciseMicronutrientsEnrichesDatabaseHit(t *testing.T) {
+	resolver := newFakeAnalyzeNutritionResolver()
+	fallback := &fakeNutritionFallbackEstimator{rows: map[int]map[string]any{
+		0: {
+			fallbackNutritionSourceKey: "qwen_generated",
+			"calories":                 116.0, "protein": 2.6, "carbs": 25.9, "fat": 0.3,
+			"fiber": 0.4, "sugar": 0.1, "saturatedFat": 0.1, "cholesterolMg": 0.0,
+			"sodiumMg": 2.0, "potassiumMg": 30.0, "calciumMg": 5.0, "ironMg": 0.2,
+			"magnesiumMg": 12.0, "zincMg": 0.4, "vitaminARaeMcg": 0.0, "vitaminCMg": 0.0,
+			"vitaminDMcg": 0.0, "vitaminEMg": 0.1, "vitaminKMcg": 0.1, "thiaminMg": 0.02,
+			"riboflavinMg": 0.01, "niacinMg": 0.4, "vitaminB6Mg": 0.03, "folateMcg": 3.0,
+			"vitaminB12Mcg": 0.0,
+		},
+	}}
+	svc := NewAnalyzeService(nil, nil, nil)
+	svc.ConfigureNutritionResolver(resolver)
+	svc.ConfigureNutritionFallbackEstimator(fallback)
+
+	items, err := svc.ApplyDBFirstToItemsWithPreciseMicronutrients(context.Background(), []map[string]any{{
+		"name": "白米饭", "estimatedWeightGrams": 200.0, "foodState": "cooked", "weightBasis": "as_served",
+	}}, "校园食堂菜品：白米饭")
+
+	require.NoError(t, err)
+	require.Len(t, fallback.candidates, 1, "营养库已命中时仍须调用现有 AI 营养补全")
+	require.Len(t, items, 1)
+	assert.Equal(t, preciseMicronutrientAnalysisMarker, items[0]["micronutrient_analysis"])
+	assert.Equal(t, "qwen_generated", items[0]["micronutrient_source"])
+	nutrients := mapFromAny(items[0]["nutrients"])
+	assert.Equal(t, 232.0, nutrients["calories"], "宏量营养继续采用营养库结果")
+	assert.Equal(t, 60.0, nutrients["potassiumMg"])
+	assert.Equal(t, 24.0, nutrients["magnesiumMg"])
+	require.NoError(t, ValidatePreciseMicronutrientItems(items))
+}
+
+func TestApplyDBFirstToItemsWithPreciseMicronutrientsRejectsSparseAIResult(t *testing.T) {
+	resolver := newFakeAnalyzeNutritionResolver()
+	fallback := &fakeNutritionFallbackEstimator{rows: map[int]map[string]any{
+		0: {
+			fallbackNutritionSourceKey: "qwen_generated",
+			"calories":                 116.0, "protein": 2.6, "carbs": 25.9, "fat": 0.3,
+			"sodiumMg": 2.0,
+		},
+	}}
+	svc := NewAnalyzeService(nil, nil, nil)
+	svc.ConfigureNutritionResolver(resolver)
+	svc.ConfigureNutritionFallbackEstimator(fallback)
+
+	_, err := svc.ApplyDBFirstToItemsWithPreciseMicronutrients(context.Background(), []map[string]any{{
+		"name": "白米饭", "estimatedWeightGrams": 200.0,
+	}}, "校园食堂菜品：白米饭")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "微量营养")
+}
+
 func TestAnalyzeService_FinalizeFastModeUsesOnlyQwenPostprocessing(t *testing.T) {
 	resolver := newFakeAnalyzeNutritionResolver()
 	qwen := &sequenceLLMClient{results: []map[string]any{

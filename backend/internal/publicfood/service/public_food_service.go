@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"math"
 	"strings"
 	"time"
@@ -13,6 +14,7 @@ import (
 	"food_link/backend/internal/publicfood/domain"
 	"food_link/backend/internal/publicfood/repo"
 	"food_link/backend/internal/taskqueue"
+	"food_link/backend/pkg/logger"
 	"food_link/backend/pkg/storage"
 
 	"gorm.io/datatypes"
@@ -40,10 +42,11 @@ type CampusAnalyzeTaskSubmitter interface {
 }
 
 const (
-	statusUserDeleted    = "user_deleted"
-	statusDeleted        = "deleted"
-	publicFoodTypeCommon = "common"
-	publicFoodTypeCampus = "campus"
+	statusUserDeleted           = "user_deleted"
+	statusDeleted               = "deleted"
+	publicFoodTypeCommon        = "common"
+	publicFoodTypeCampus        = "campus"
+	maxCampusContributionImages = 3
 )
 
 func NewPublicFoodService(repo *repo.PublicFoodRepo, storageClient ...*storage.Client) *PublicFoodService {
@@ -120,6 +123,11 @@ type CommentInput struct {
 	Rating          *int
 	ParentCommentID *string
 	ReplyToUserID   *string
+}
+
+type CampusImageContributionResult struct {
+	ImagePaths []string `json:"image_paths"`
+	Accepted   bool     `json:"accepted"`
 }
 
 func (s *PublicFoodService) Create(ctx context.Context, userID string, input CreateInput) (string, error) {
@@ -238,9 +246,11 @@ func (s *PublicFoodService) Create(ctx context.Context, userID string, input Cre
 		CampusLocationText: buildCampusLocationText(input.SchoolName, input.CampusName, input.CanteenName, input.Floor, input.WindowName),
 	}
 	if isCampusPublicFood(item) {
-		item.Status = "published"
+		// Campus foods must not become client-visible until the existing precise
+		// analysis pipeline has produced a complete micronutrient result. The
+		// worker publishes the row atomically with the nutrition writeback.
+		item.Status = "pending"
 		now := time.Now()
-		item.PublishedAt = &now
 		if item.PriceCollectedAt == nil && hasCampusPrice(item) {
 			item.PriceCollectedAt = &now
 		}
@@ -321,15 +331,16 @@ func (s *PublicFoodService) submitCampusAnalyzeTask(ctx context.Context, userID 
 
 func buildCampusAnalyzeExtraPayload(item *domain.PublicFoodItem) map[string]any {
 	payload := map[string]any{
-		"public_food_source_type": "campus_public_food",
-		"public_food_item_id":     item.ID,
-		"food_name":               item.FoodName,
-		"school_name":             item.SchoolName,
-		"campus_name":             item.CampusName,
-		"canteen_name":            item.CanteenName,
-		"floor":                   item.Floor,
-		"window_name":             item.WindowName,
-		"campus_location_text":    item.CampusLocationText,
+		"public_food_source_type":         "campus_public_food",
+		"public_food_item_id":             item.ID,
+		"micronutrient_analysis_required": true,
+		"food_name":                       item.FoodName,
+		"school_name":                     item.SchoolName,
+		"campus_name":                     item.CampusName,
+		"canteen_name":                    item.CanteenName,
+		"floor":                           item.Floor,
+		"window_name":                     item.WindowName,
+		"campus_location_text":            item.CampusLocationText,
 	}
 	contextParts := []string{}
 	if item.FoodName != "" {
@@ -510,6 +521,40 @@ func (s *PublicFoodService) Collect(ctx context.Context, userID, itemID string) 
 		return err
 	}
 	return s.repo.Collect(ctx, userID, itemID)
+}
+
+func (s *PublicFoodService) ContributeCampusImages(ctx context.Context, userID, itemID string, values []string) (*CampusImageContributionResult, error) {
+	userID = strings.TrimSpace(userID)
+	itemID = strings.TrimSpace(itemID)
+	if userID == "" {
+		return nil, commonerrors.ErrUnauthorized
+	}
+	if itemID == "" {
+		return nil, &commonerrors.AppError{Code: 10002, Message: "菜品 ID 不能为空", HTTPStatus: 400}
+	}
+	imagePaths, err := s.normalizeFoodImageKeys(values)
+	if err != nil {
+		return nil, err
+	}
+	if len(imagePaths) == 0 {
+		return nil, &commonerrors.AppError{Code: 10002, Message: "请选择要补充的菜品照片", HTTPStatus: 400}
+	}
+	if len(imagePaths) > maxCampusContributionImages {
+		return nil, &commonerrors.AppError{Code: 10002, Message: "一次最多补充 3 张菜品照片", HTTPStatus: 400}
+	}
+	item, accepted, err := s.repo.SetMissingCampusImages(ctx, itemID, imagePaths)
+	if err != nil {
+		logger.Error(ctx, "保存校园菜品共建图片失败", err,
+			slog.String("user_id", userID), slog.String("item_id", itemID), slog.Int("image_count", len(imagePaths)))
+		return nil, err
+	}
+	if item == nil {
+		return nil, commonerrors.ErrNotFound
+	}
+	normalized := s.normalizePublicFoodItem(*item)
+	logger.Info(ctx, "校园菜品共建图片提交完成",
+		slog.String("user_id", userID), slog.String("item_id", itemID), slog.Bool("accepted", accepted), slog.Int("image_count", len(normalized.ImagePaths)))
+	return &CampusImageContributionResult{ImagePaths: normalized.ImagePaths, Accepted: accepted}, nil
 }
 
 func (s *PublicFoodService) Uncollect(ctx context.Context, userID, itemID string) error {
@@ -970,6 +1015,36 @@ func (s *PublicFoodService) normalizeFoodImageURLs(values []string) []string {
 		return nil
 	}
 	return out
+}
+
+func (s *PublicFoodService) normalizeFoodImageKeys(values []string) ([]string, error) {
+	seen := make(map[string]struct{}, len(values))
+	keys := make([]string, 0, len(values))
+	for _, value := range values {
+		raw := strings.TrimSpace(value)
+		if raw == "" {
+			continue
+		}
+		key := raw
+		if s.storage != nil {
+			key = s.storage.ResolveObjectKey("food-images", raw)
+			if key == "" {
+				return nil, &commonerrors.AppError{Code: 10002, Message: "图片地址无效，请重新上传", HTTPStatus: 400}
+			}
+		} else if strings.Contains(raw, "://") {
+			return nil, &commonerrors.AppError{Code: 10002, Message: "图片地址无效，请重新上传", HTTPStatus: 400}
+		}
+		key = strings.TrimLeft(strings.TrimSpace(key), "/")
+		if key == "" {
+			continue
+		}
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+		keys = append(keys, key)
+	}
+	return keys, nil
 }
 
 func (s *PublicFoodService) resolveFoodImageURL(value string) string {

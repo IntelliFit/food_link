@@ -23,7 +23,8 @@ import { PackagedFoodTestRunsPage } from '@/pages/packaged-food-test-runs-page'
 import { FoodNutritionPage } from '@/pages/food-nutrition-page'
 import { NutritionAliasReviewPage } from '@/pages/nutrition-alias-review-page'
 import { PublicFoodLibraryPage } from '@/pages/public-food-library-page'
-import { CampusDirectoryPage } from '@/pages/campus-directory-page'
+import { CampusDirectoryPage as CampusDirectoryGovernancePage } from '@/pages/campus-directory-page'
+import { CampusDirectoryPage } from '@/pages/campus-directory-hierarchy-page'
 import { CampusFoodCollectionPage } from '@/pages/campus-food-collection-page'
 import { PaymentTestPage } from '@/pages/payment-test-page'
 import { UserRewardPage } from '@/pages/user-reward-page'
@@ -143,6 +144,7 @@ export function App() {
         <Route path='/nutrition-alias-review' element={<NutritionAliasReviewPage {...pageProps} />} />
         <Route path='/public-food-library' element={<PublicFoodLibraryPage {...pageProps} />} />
         <Route path='/campus-directory' element={<CampusDirectoryPage {...pageProps} />} />
+        <Route path='/campus-directory/governance' element={<CampusDirectoryGovernancePage {...pageProps} />} />
         <Route path='/campus-food-collection' element={<CampusFoodCollectionPage {...pageProps} />} />
         <Route path='/payment-test' element={<PaymentTestPage {...pageProps} />} />
         <Route path='/user-rewards' element={<UserRewardPage {...pageProps} />} />

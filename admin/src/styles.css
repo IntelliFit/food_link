@@ -1076,6 +1076,73 @@ h1 {
   white-space: nowrap;
 }
 
+.collection-batch-publish-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel-soft);
+}
+
+.collection-batch-publish-toolbar.active {
+  border-color: color-mix(in srgb, var(--primary) 58%, var(--line));
+  background: color-mix(in srgb, var(--primary) 8%, var(--panel));
+}
+
+.collection-batch-publish-toolbar strong {
+  display: block;
+  line-height: 1.4;
+}
+
+.collection-batch-publish-toolbar p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.collection-batch-publish-actions {
+  flex: none;
+  margin-top: 0;
+}
+
+.collection-select-cell {
+  width: 58px;
+  text-align: center;
+}
+
+input.collection-select-checkbox {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  padding: 0;
+  border-radius: 5px;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+
+input.collection-select-checkbox:disabled {
+  cursor: not-allowed;
+  opacity: 0.35;
+}
+
+.collection-item-selected {
+  background: color-mix(in srgb, var(--primary) 7%, var(--panel));
+}
+
+@media (max-width: 1380px) {
+  .collection-batch-publish-toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .collection-batch-publish-actions {
+    width: 100%;
+  }
+}
+
 @media (max-width: 1380px) {
   .catalog-item-image-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));

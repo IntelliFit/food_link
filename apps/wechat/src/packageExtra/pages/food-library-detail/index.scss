@@ -39,6 +39,65 @@
   background: #f3f4f6;
 }
 
+.image-contribution-placeholder {
+  flex-direction: column;
+  gap: 18rpx;
+  padding: 48rpx;
+  box-sizing: border-box;
+  text-align: center;
+}
+
+.image-contribution-icon {
+  font-size: 64rpx;
+  color: #5cb896;
+}
+
+.image-contribution-title {
+  font-size: 34rpx;
+  line-height: 46rpx;
+  font-weight: 650;
+  color: #374151;
+}
+
+.image-contribution-hint {
+  max-width: 560rpx;
+  font-size: 26rpx;
+  line-height: 40rpx;
+  color: #6b7280;
+}
+
+.image-contribution-button {
+  min-width: 220rpx;
+  height: 76rpx;
+  padding: 0 34rpx;
+  border-radius: 38rpx;
+  background: #5cb896;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12rpx;
+  font-size: 28rpx;
+  font-weight: 600;
+
+  &.disabled {
+    opacity: 0.7;
+  }
+}
+
+.image-contribution-spinner {
+  width: 30rpx;
+  height: 30rpx;
+  border: 4rpx solid rgb(255 255 255 / 38%);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: image-contribution-spin 0.8s linear infinite;
+}
+
+@keyframes image-contribution-spin {
+  to { transform: rotate(360deg); }
+}
+
 // 多图时显示当前张数/总张数（如 2/5），放在左上角避免被遮挡
 .image-counter {
   position: absolute;
@@ -185,6 +244,92 @@
 .nutrient-label {
   font-size: 24rpx;
   color: #6b7280;
+}
+
+.micronutrients-panel {
+  margin: -8rpx 0 32rpx;
+  padding: 24rpx;
+  border-radius: 24rpx;
+  background: #f7faf9;
+  border: 2rpx solid #e3f0eb;
+}
+
+.micronutrients-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20rpx;
+}
+
+.micronutrients-heading {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 14rpx;
+  flex-wrap: wrap;
+}
+
+.micronutrients-title {
+  font-size: 28rpx;
+  line-height: 40rpx;
+  font-weight: 650;
+  color: #1f2937;
+}
+
+.micronutrients-status {
+  padding: 4rpx 12rpx;
+  border-radius: 999rpx;
+  background: #fef3c7;
+  color: #92400e;
+  font-size: 22rpx;
+  line-height: 32rpx;
+
+  &.ready {
+    color: #047857;
+    background: #dcfce7;
+  }
+}
+
+.micronutrients-toggle {
+  flex: 0 0 auto;
+  color: #047857;
+  font-size: 24rpx;
+  line-height: 36rpx;
+}
+
+.micronutrients-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12rpx;
+  padding-top: 24rpx;
+}
+
+.micronutrient-cell {
+  min-width: 0;
+  padding: 16rpx 12rpx;
+  border-radius: 16rpx;
+  background: #fff;
+  border: 2rpx solid #edf2f0;
+  display: flex;
+  flex-direction: column;
+  gap: 6rpx;
+}
+
+.micronutrient-label {
+  color: #6b7280;
+  font-size: 22rpx;
+  line-height: 30rpx;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.micronutrient-value {
+  color: #111827;
+  font-size: 24rpx;
+  line-height: 34rpx;
+  font-weight: 650;
+  font-family: 'DIN Alternate', sans-serif;
 }
 
 // 作者信息
@@ -1501,6 +1646,7 @@
   }
 
   .info-title,
+  .image-contribution-title,
   .nutrient-value,
   .author-name,
   .card-title,
@@ -1513,6 +1659,7 @@
   }
 
   .info-description,
+  .image-contribution-hint,
   .info-insight,
   .nutrient-label,
   .publish-time,
@@ -1555,6 +1702,25 @@
   .nutrients-row,
   .nutrients-block {
     border-color: rgb(255 255 255 / 8%);
+  }
+
+  .micronutrients-panel {
+    background: rgb(255 255 255 / 5%);
+    border-color: rgb(255 255 255 / 8%);
+  }
+
+  .micronutrients-title,
+  .micronutrient-value {
+    color: #f2f7f4;
+  }
+
+  .micronutrient-label {
+    color: rgb(214 226 220 / 62%);
+  }
+
+  .micronutrient-cell {
+    background: rgb(255 255 255 / 5%);
+    border-color: rgb(255 255 255 / 7%);
   }
 
   .nutrient-item:not(:last-child)::after {

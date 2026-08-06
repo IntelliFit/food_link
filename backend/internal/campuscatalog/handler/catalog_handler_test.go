@@ -28,6 +28,9 @@ type fakeCatalogService struct {
 	updateInput    service.UpdateCatalogItemInput
 	publishAdminID string
 	publishItemID  string
+	listInput      service.CatalogItemListInput
+	deleteAdminID  string
+	deleteItemID   string
 }
 
 func (f *fakeCatalogService) UploadImage(_ context.Context, adminID, _, contentType string, _ []byte) (string, error) {
@@ -51,6 +54,11 @@ func (f *fakeCatalogService) ListItemsByBatch(context.Context, string) ([]domain
 	return nil, nil
 }
 
+func (f *fakeCatalogService) ListItems(_ context.Context, input service.CatalogItemListInput) (*service.CatalogItemListResult, error) {
+	f.listInput = input
+	return &service.CatalogItemListResult{Items: []domain.CatalogItem{{ID: "item-1"}}, Page: input.Page, Limit: input.Limit, Total: 1}, nil
+}
+
 func (f *fakeCatalogService) UpdateItem(_ context.Context, adminID, itemID string, input service.UpdateCatalogItemInput) (*domain.CatalogItem, error) {
 	f.updateAdminID = adminID
 	f.updateItemID = itemID
@@ -61,7 +69,13 @@ func (f *fakeCatalogService) UpdateItem(_ context.Context, adminID, itemID strin
 func (f *fakeCatalogService) PublishItem(_ context.Context, adminID, itemID string) (*domain.CatalogItem, error) {
 	f.publishAdminID = adminID
 	f.publishItemID = itemID
-	return &domain.CatalogItem{ID: itemID, Status: "published"}, nil
+	return &domain.CatalogItem{ID: itemID, Status: "analysis_pending"}, nil
+}
+
+func (f *fakeCatalogService) DeleteItem(_ context.Context, adminID, itemID string) error {
+	f.deleteAdminID = adminID
+	f.deleteItemID = itemID
+	return nil
 }
 
 func newCatalogTestRouter(svc CatalogService) *gin.Engine {
@@ -74,9 +88,40 @@ func newCatalogTestRouter(svc CatalogService) *gin.Engine {
 	handler := NewCatalogHandler(svc)
 	router.POST("/images", handler.UploadImage)
 	router.POST("/batches", handler.CreateBatch)
+	router.GET("/items", handler.ListItems)
 	router.PATCH("/items/:item_id", handler.UpdateItem)
 	router.POST("/items/:item_id/publish", handler.PublishItem)
+	router.DELETE("/items/:item_id", handler.DeleteItem)
 	return router
+}
+
+func TestListItemsAcceptsHierarchyFilters(t *testing.T) {
+	svc := &fakeCatalogService{}
+	router := newCatalogTestRouter(svc)
+	request := httptest.NewRequest(http.MethodGet, "/items?school_id=school-1&canteen_id=canteen-1&window_id=window-1&page=2&limit=25", nil)
+	recorder := httptest.NewRecorder()
+
+	router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Equal(t, "school-1", svc.listInput.SchoolID)
+	require.Equal(t, "canteen-1", svc.listInput.CanteenID)
+	require.Equal(t, "window-1", svc.listInput.WindowID)
+	require.Equal(t, 2, svc.listInput.Page)
+	require.Equal(t, 25, svc.listInput.Limit)
+}
+
+func TestDeleteItemUsesAdminIdentity(t *testing.T) {
+	svc := &fakeCatalogService{}
+	router := newCatalogTestRouter(svc)
+	request := httptest.NewRequest(http.MethodDelete, "/items/item-1", nil)
+	recorder := httptest.NewRecorder()
+
+	router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Equal(t, "admin-1", svc.deleteAdminID)
+	require.Equal(t, "item-1", svc.deleteItemID)
 }
 
 func TestPublishItemUsesAdminIdentity(t *testing.T) {
@@ -87,7 +132,7 @@ func TestPublishItemUsesAdminIdentity(t *testing.T) {
 
 	router.ServeHTTP(recorder, request)
 
-	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Equal(t, http.StatusAccepted, recorder.Code)
 	require.Equal(t, "admin-1", svc.publishAdminID)
 	require.Equal(t, "item-1", svc.publishItemID)
 }

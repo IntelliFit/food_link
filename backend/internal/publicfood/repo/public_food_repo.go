@@ -90,20 +90,41 @@ func (r *PublicFoodRepo) LinkAnalysisTask(ctx context.Context, itemID, taskID st
 }
 
 func (r *PublicFoodRepo) UpdateNutritionFromAnalysis(ctx context.Context, itemID string, result map[string]any) error {
-	totalCalories, totalProtein, totalCarbs, totalFat := nutritionTotalsFromResult(result)
+	snapshot := NutritionSnapshotFromResult(result)
+	now := time.Now()
 	return r.db.WithContext(ctx).
 		Model(&domain.PublicFoodItem{}).
 		Where("id = ?", itemID).
 		Updates(map[string]any{
-			"total_calories": totalCalories,
-			"total_protein":  totalProtein,
-			"total_carbs":    totalCarbs,
-			"total_fat":      totalFat,
-			"items":          datatypes.JSONSlice[map[string]any](mapSliceFromAny(result["items"])),
-			"description":    stringFromAny(result["description"]),
-			"insight":        stringFromAny(result["insight"]),
-			"updated_at":     time.Now(),
+			"total_calories": snapshot.TotalCalories,
+			"total_protein":  snapshot.TotalProtein,
+			"total_carbs":    snapshot.TotalCarbs,
+			"total_fat":      snapshot.TotalFat,
+			"items":          datatypes.JSONSlice[map[string]any](snapshot.Items),
+			"description":    snapshot.Description,
+			"insight":        snapshot.Insight,
+			"status":         "published",
+			"published_at":   now,
+			"updated_at":     now,
 		}).Error
+}
+
+type NutritionSnapshot struct {
+	TotalCalories float64
+	TotalProtein  float64
+	TotalCarbs    float64
+	TotalFat      float64
+	Items         []map[string]any
+	Description   string
+	Insight       string
+}
+
+func NutritionSnapshotFromResult(result map[string]any) NutritionSnapshot {
+	calories, protein, carbs, fat := nutritionTotalsFromResult(result)
+	return NutritionSnapshot{
+		TotalCalories: calories, TotalProtein: protein, TotalCarbs: carbs, TotalFat: fat,
+		Items: mapSliceFromAny(result["items"]), Description: stringFromAny(result["description"]), Insight: stringFromAny(result["insight"]),
+	}
 }
 
 func (r *PublicFoodRepo) ListPublished(ctx context.Context, f ListFilter) ([]domain.PublicFoodItem, error) {
@@ -561,6 +582,52 @@ func (r *PublicFoodRepo) UpdateItem(ctx context.Context, itemID, userID string, 
 		Model(&domain.PublicFoodItem{}).
 		Where("id = ? AND user_id = ?", itemID, userID).
 		Updates(updates).Error
+}
+
+// SetMissingCampusImages accepts the first image contribution for a published
+// campus food. The row lock prevents concurrent contributors from overwriting
+// one another; later requests receive the already accepted image set.
+func (r *PublicFoodRepo) SetMissingCampusImages(ctx context.Context, itemID string, imagePaths []string) (*domain.PublicFoodItem, bool, error) {
+	var item domain.PublicFoodItem
+	accepted := false
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("id = ? AND status = ? AND (type = ? OR is_campus_food = ?)", itemID, "published", "campus", true).
+			First(&item).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil
+			}
+			return err
+		}
+		if len(item.ImagePaths) > 0 || (item.ImagePath != nil && strings.TrimSpace(*item.ImagePath) != "") {
+			return nil
+		}
+		encoded, err := json.Marshal(imagePaths)
+		if err != nil {
+			return err
+		}
+		first := imagePaths[0]
+		now := time.Now()
+		if err := tx.Model(&domain.PublicFoodItem{}).Where("id = ?", item.ID).Updates(map[string]any{
+			"image_path":  first,
+			"image_paths": datatypes.JSON(encoded),
+			"updated_at":  now,
+		}).Error; err != nil {
+			return err
+		}
+		item.ImagePath = &first
+		item.ImagePaths = append([]string(nil), imagePaths...)
+		item.UpdatedAt = &now
+		accepted = true
+		return nil
+	})
+	if err != nil {
+		return nil, false, err
+	}
+	if strings.TrimSpace(item.ID) == "" {
+		return nil, false, nil
+	}
+	return &item, accepted, nil
 }
 
 func (r *PublicFoodRepo) SoftDeleteOwned(ctx context.Context, itemID, userID, status string) error {

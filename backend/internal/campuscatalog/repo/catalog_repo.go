@@ -3,10 +3,12 @@ package repo
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
 	"food_link/backend/internal/campuscatalog/domain"
+	publicfoodrepo "food_link/backend/internal/publicfood/repo"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -78,6 +80,104 @@ func (r *CatalogRepo) ListItemsByBatch(ctx context.Context, batchID string) ([]d
 	return items, nil
 }
 
+func (r *CatalogRepo) ListItems(ctx context.Context, filter domain.CatalogItemFilter) ([]domain.CatalogItem, int64, error) {
+	base := r.db.WithContext(ctx).
+		Table("campus_food_catalog_items AS i").
+		Where("i.status <> ?", "deleted")
+	if filter.BatchID != "" {
+		base = base.Where("i.batch_id = ?", filter.BatchID)
+	}
+	if filter.SchoolID != "" {
+		base = base.Where("i.school_id = ?", filter.SchoolID)
+	}
+	if filter.CampusID != "" {
+		base = base.Where("i.campus_id = ?", filter.CampusID)
+	}
+	if filter.CanteenID != "" {
+		base = base.Where("i.canteen_id = ?", filter.CanteenID)
+	}
+	if filter.WindowID != "" {
+		base = base.Where("i.window_id = ?", filter.WindowID)
+	}
+	if filter.Status != "" && filter.Status != "all" {
+		base = base.Where("i.status = ?", filter.Status)
+	}
+	if filter.Query != "" {
+		like := "%" + filter.Query + "%"
+		base = base.Where("i.name ILIKE ? OR i.raw_text ILIKE ? OR i.window_name ILIKE ?", like, like, like)
+	}
+	var total int64
+	if err := base.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	var items []domain.CatalogItem
+	if err := base.
+		Select(`i.*,
+			p.total_calories AS total_calories,
+			p.total_protein AS total_protein,
+			p.total_carbs AS total_carbs,
+			p.total_fat AS total_fat,
+			COALESCE(p.status, '') AS client_status`).
+		Joins("LEFT JOIN public_food_library AS p ON p.id = i.id").
+		Order("i.created_at DESC, i.id ASC").
+		Limit(filter.Limit).
+		Offset(filter.Offset).
+		Scan(&items).Error; err != nil {
+		return nil, 0, err
+	}
+	return items, total, nil
+}
+
+func (r *CatalogRepo) SoftDeleteItem(ctx context.Context, itemID string) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		now := time.Now()
+		result := tx.Table("campus_food_catalog_items").
+			Where("id = ? AND status <> ?", strings.TrimSpace(itemID), "deleted").
+			Updates(map[string]any{"status": "deleted", "updated_at": now})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected != 1 {
+			return gorm.ErrRecordNotFound
+		}
+		return tx.Table("public_food_library").
+			Where("id = ?", strings.TrimSpace(itemID)).
+			Updates(map[string]any{"status": "deleted", "updated_at": now}).Error
+	})
+}
+
+func (r *CatalogRepo) ListPublishedItemsMissingNutrition(ctx context.Context, limit int) ([]domain.CatalogItem, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	micronutrientMissingSQL := `p.items IS NULL OR jsonb_typeof(p.items::jsonb) <> 'array' OR jsonb_array_length(p.items::jsonb) = 0 OR
+		EXISTS (SELECT 1 FROM jsonb_array_elements(p.items::jsonb) AS nutrient_item
+			WHERE COALESCE(nutrient_item->>'micronutrient_analysis', '') <> 'ai_precise_v1')`
+	if r.db.Dialector.Name() == "sqlite" {
+		micronutrientMissingSQL = `p.items IS NULL OR json_valid(p.items) = 0 OR json_array_length(p.items) = 0 OR
+			EXISTS (SELECT 1 FROM json_each(p.items) AS nutrient_item
+				WHERE COALESCE(json_extract(nutrient_item.value, '$.micronutrient_analysis'), '') <> 'ai_precise_v1')`
+	}
+	var items []domain.CatalogItem
+	err := r.db.WithContext(ctx).
+		Table("campus_food_catalog_items AS c").
+		Select("c.*").
+		Joins("LEFT JOIN public_food_library AS p ON p.id = c.id").
+		Where("c.status = ?", "published").
+		Where("p.id IS NULL OR p.status <> ? OR p.analysis_task_id IS NULL OR COALESCE(p.total_calories, 0) <= 0 OR ("+micronutrientMissingSQL+")", "published").
+		Order("c.published_at ASC NULLS FIRST, c.id ASC").
+		Limit(limit).
+		Scan(&items).Error
+	return items, err
+}
+
+func (r *CatalogRepo) HidePublicItemForNutritionBackfill(ctx context.Context, itemID string) error {
+	return r.db.WithContext(ctx).Table("public_food_library").
+		Where("id = ?", strings.TrimSpace(itemID)).
+		Where("analysis_task_id IS NULL OR COALESCE(total_calories, 0) <= 0").
+		Update("status", "pending").Error
+}
+
 func (r *CatalogRepo) FindItemByID(ctx context.Context, itemID string) (*domain.CatalogItem, error) {
 	var item domain.CatalogItem
 	err := r.db.WithContext(ctx).
@@ -106,86 +206,140 @@ func (r *CatalogRepo) UpdateItem(ctx context.Context, item *domain.CatalogItem) 
 		Updates(item).Error
 }
 
+func (r *CatalogRepo) MarkAnalysisPending(ctx context.Context, item *domain.CatalogItem, adminID string, startedAt time.Time) error {
+	if item == nil {
+		return errors.New("catalog item is nil")
+	}
+	updates := map[string]any{
+		"status": "analysis_pending", "analysis_task_id": nil, "analysis_error": "",
+		"analysis_started_at": startedAt, "analysis_completed_at": nil, "updated_at": startedAt,
+	}
+	if adminID = strings.TrimSpace(adminID); adminID != "" {
+		updates["published_by_admin_id"] = adminID
+	}
+	return r.db.WithContext(ctx).Model(&domain.CatalogItem{}).
+		Where("id = ? AND status <> ?", item.ID, "deleted").
+		Updates(updates).Error
+}
+
+func (r *CatalogRepo) LinkAnalysisTask(ctx context.Context, itemID, taskID string) error {
+	return r.db.WithContext(ctx).Model(&domain.CatalogItem{}).
+		Where("id = ? AND status <> ?", strings.TrimSpace(itemID), "deleted").
+		Updates(map[string]any{"analysis_task_id": strings.TrimSpace(taskID), "updated_at": time.Now()}).Error
+}
+
+func (r *CatalogRepo) MarkAnalysisFailed(ctx context.Context, itemID, message string, failedAt time.Time) error {
+	return r.db.WithContext(ctx).Model(&domain.CatalogItem{}).
+		Where("id = ? AND status <> ?", strings.TrimSpace(itemID), "deleted").
+		Updates(map[string]any{
+			"status": "analysis_failed", "analysis_error": strings.TrimSpace(message),
+			"analysis_completed_at": failedAt, "updated_at": failedAt,
+		}).Error
+}
+
 type publishedCatalogItem struct {
-	ID                 string     `gorm:"column:id;primaryKey"`
-	UserID             *string    `gorm:"column:user_id"`
-	ImagePath          *string    `gorm:"column:image_path"`
-	ImagePaths         []string   `gorm:"column:image_paths;serializer:json"`
-	Description        string     `gorm:"column:description"`
-	FoodName           string     `gorm:"column:food_name"`
-	MerchantName       string     `gorm:"column:merchant_name"`
-	MerchantAddress    string     `gorm:"column:merchant_address"`
-	DetailAddress      string     `gorm:"column:detail_address"`
-	Status             string     `gorm:"column:status"`
-	Type               string     `gorm:"column:type"`
-	PublishedAt        *time.Time `gorm:"column:published_at"`
-	CreatedAt          *time.Time `gorm:"column:created_at"`
-	UpdatedAt          *time.Time `gorm:"column:updated_at"`
-	IsCampusFood       bool       `gorm:"column:is_campus_food"`
-	SchoolID           *string    `gorm:"column:school_id"`
-	CampusID           *string    `gorm:"column:campus_id"`
-	CanteenID          *string    `gorm:"column:canteen_id"`
-	WindowID           *string    `gorm:"column:window_id"`
-	SchoolName         string     `gorm:"column:school_name"`
-	CampusName         string     `gorm:"column:campus_name"`
-	CanteenName        string     `gorm:"column:canteen_name"`
-	Floor              string     `gorm:"column:floor"`
-	WindowName         string     `gorm:"column:window_name"`
-	Price              *float64   `gorm:"column:price"`
-	PriceType          string     `gorm:"column:price_type"`
-	PriceMin           *float64   `gorm:"column:price_min"`
-	PriceMax           *float64   `gorm:"column:price_max"`
-	PriceUnit          string     `gorm:"column:price_unit"`
-	PriceCollectedAt   *time.Time `gorm:"column:price_collected_at"`
-	PortionDescription string     `gorm:"column:portion_description"`
-	CampusLocationText string     `gorm:"column:campus_location_text"`
+	ID                 string           `gorm:"column:id;primaryKey"`
+	UserID             *string          `gorm:"column:user_id"`
+	ImagePath          *string          `gorm:"column:image_path"`
+	ImagePaths         []string         `gorm:"column:image_paths;serializer:json"`
+	AnalysisTaskID     *string          `gorm:"column:analysis_task_id"`
+	TotalCalories      float64          `gorm:"column:total_calories"`
+	TotalProtein       float64          `gorm:"column:total_protein"`
+	TotalCarbs         float64          `gorm:"column:total_carbs"`
+	TotalFat           float64          `gorm:"column:total_fat"`
+	Items              []map[string]any `gorm:"column:items;serializer:json"`
+	Description        string           `gorm:"column:description"`
+	Insight            string           `gorm:"column:insight"`
+	FoodName           string           `gorm:"column:food_name"`
+	MerchantName       string           `gorm:"column:merchant_name"`
+	MerchantAddress    string           `gorm:"column:merchant_address"`
+	DetailAddress      string           `gorm:"column:detail_address"`
+	Status             string           `gorm:"column:status"`
+	Type               string           `gorm:"column:type"`
+	PublishedAt        *time.Time       `gorm:"column:published_at"`
+	CreatedAt          *time.Time       `gorm:"column:created_at"`
+	UpdatedAt          *time.Time       `gorm:"column:updated_at"`
+	IsCampusFood       bool             `gorm:"column:is_campus_food"`
+	SchoolID           *string          `gorm:"column:school_id"`
+	CampusID           *string          `gorm:"column:campus_id"`
+	CanteenID          *string          `gorm:"column:canteen_id"`
+	WindowID           *string          `gorm:"column:window_id"`
+	SchoolName         string           `gorm:"column:school_name"`
+	CampusName         string           `gorm:"column:campus_name"`
+	CanteenName        string           `gorm:"column:canteen_name"`
+	Floor              string           `gorm:"column:floor"`
+	WindowName         string           `gorm:"column:window_name"`
+	Price              *float64         `gorm:"column:price"`
+	PriceType          string           `gorm:"column:price_type"`
+	PriceMin           *float64         `gorm:"column:price_min"`
+	PriceMax           *float64         `gorm:"column:price_max"`
+	PriceUnit          string           `gorm:"column:price_unit"`
+	PriceCollectedAt   *time.Time       `gorm:"column:price_collected_at"`
+	PortionDescription string           `gorm:"column:portion_description"`
+	CampusLocationText string           `gorm:"column:campus_location_text"`
 }
 
 func (publishedCatalogItem) TableName() string { return "public_food_library" }
 
-func (r *CatalogRepo) PublishItem(ctx context.Context, item *domain.CatalogItem, adminID string, publishedAt time.Time) error {
-	if item == nil {
-		return errors.New("catalog item is nil")
-	}
-	imagePaths := append([]string(nil), item.ImagePaths...)
-	var imagePath *string
-	if len(imagePaths) > 0 {
-		first := imagePaths[0]
-		imagePath = &first
-	}
-	location := strings.Join(nonEmptyCatalogValues(item.OrganizationName, item.AreaName, item.CanteenName, item.Floor, item.WindowName), " · ")
-	publication := publishedCatalogItem{
-		ID: item.ID, UserID: item.ContributorUserID, ImagePath: imagePath, ImagePaths: imagePaths,
-		Description: item.Description, FoodName: item.Name, MerchantName: item.CanteenName,
-		MerchantAddress: location, DetailAddress: location, Status: "published", Type: "campus",
-		PublishedAt: &publishedAt, CreatedAt: &publishedAt, UpdatedAt: &publishedAt, IsCampusFood: true,
-		SchoolID: item.SchoolID, CampusID: item.CampusID, CanteenID: item.CanteenID, WindowID: item.WindowID,
-		SchoolName: item.OrganizationName, CampusName: item.AreaName, CanteenName: item.CanteenName,
-		Floor: item.Floor, WindowName: item.WindowName, Price: item.Price, PriceType: publicPriceType(item.PriceType),
-		PriceMin: item.PriceMin, PriceMax: item.PriceMax, PriceUnit: item.PriceUnit,
-		PriceCollectedAt: item.CapturedAt, PortionDescription: item.PortionDescription, CampusLocationText: location,
-	}
-	columns := []string{
-		"user_id", "image_path", "image_paths", "description", "food_name", "merchant_name",
-		"merchant_address", "detail_address", "status", "type", "published_at", "updated_at",
-		"is_campus_food", "school_id", "campus_id", "canteen_id", "window_id", "school_name",
-		"campus_name", "canteen_name", "floor", "window_name", "price", "price_type", "price_min",
-		"price_max", "price_unit", "price_collected_at", "portion_description", "campus_location_text",
-	}
-	adminID = strings.TrimSpace(adminID)
+func (r *CatalogRepo) CompleteAnalyzedItem(ctx context.Context, itemID, taskID string, result map[string]any, completedAt time.Time) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var item domain.CatalogItem
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("id = ? AND status <> ?", strings.TrimSpace(itemID), "deleted").First(&item).Error; err != nil {
+			return err
+		}
+		if item.Status != "analysis_pending" {
+			return fmt.Errorf("catalog item %s is not waiting for analysis", item.ID)
+		}
+		if item.AnalysisTaskID != nil && strings.TrimSpace(*item.AnalysisTaskID) != "" && strings.TrimSpace(*item.AnalysisTaskID) != strings.TrimSpace(taskID) {
+			return fmt.Errorf("catalog item %s analysis task has been superseded", item.ID)
+		}
+		// Keep text-only campus dishes compatible with the public library's
+		// NOT NULL image_paths column. A nil slice is serialized as SQL NULL,
+		// while an allocated empty slice is stored as the intended JSON [].
+		imagePaths := append([]string{}, item.ImagePaths...)
+		var imagePath *string
+		if len(imagePaths) > 0 {
+			first := imagePaths[0]
+			imagePath = &first
+		}
+		location := strings.Join(nonEmptyCatalogValues(item.OrganizationName, item.AreaName, item.CanteenName, item.Floor, item.WindowName), " · ")
+		nutrition := publicfoodrepo.NutritionSnapshotFromResult(result)
+		if len(nutrition.Items) == 0 || (nutrition.TotalCalories <= 0 && nutrition.TotalProtein <= 0 && nutrition.TotalCarbs <= 0 && nutrition.TotalFat <= 0) {
+			return errors.New("校园菜品 AI 分析未返回有效营养结果")
+		}
+		description := nutrition.Description
+		if description == "" {
+			description = item.Description
+		}
+		publication := publishedCatalogItem{
+			ID: item.ID, UserID: item.ContributorUserID, ImagePath: imagePath, ImagePaths: imagePaths,
+			AnalysisTaskID: &taskID, TotalCalories: nutrition.TotalCalories, TotalProtein: nutrition.TotalProtein,
+			TotalCarbs: nutrition.TotalCarbs, TotalFat: nutrition.TotalFat, Items: nutrition.Items,
+			Description: description, Insight: nutrition.Insight, FoodName: item.Name, MerchantName: item.CanteenName,
+			MerchantAddress: location, DetailAddress: location, Status: "published", Type: "campus",
+			PublishedAt: &completedAt, CreatedAt: &completedAt, UpdatedAt: &completedAt, IsCampusFood: true,
+			SchoolID: item.SchoolID, CampusID: item.CampusID, CanteenID: item.CanteenID, WindowID: item.WindowID,
+			SchoolName: item.OrganizationName, CampusName: item.AreaName, CanteenName: item.CanteenName,
+			Floor: item.Floor, WindowName: item.WindowName, Price: item.Price, PriceType: publicPriceType(item.PriceType),
+			PriceMin: item.PriceMin, PriceMax: item.PriceMax, PriceUnit: item.PriceUnit,
+			PriceCollectedAt: item.CapturedAt, PortionDescription: item.PortionDescription, CampusLocationText: location,
+		}
+		columns := []string{
+			"user_id", "image_path", "image_paths", "analysis_task_id", "total_calories", "total_protein", "total_carbs", "total_fat", "items",
+			"description", "insight", "food_name", "merchant_name", "merchant_address", "detail_address", "status", "type", "published_at", "updated_at",
+			"is_campus_food", "school_id", "campus_id", "canteen_id", "window_id", "school_name", "campus_name", "canteen_name", "floor", "window_name",
+			"price", "price_type", "price_min", "price_max", "price_unit", "price_collected_at", "portion_description", "campus_location_text",
+		}
 		if err := tx.Clauses(clause.OnConflict{
-			Columns:   []clause.Column{{Name: "id"}},
-			DoUpdates: clause.AssignmentColumns(columns),
+			Columns: []clause.Column{{Name: "id"}}, DoUpdates: clause.AssignmentColumns(columns),
 		}).Create(&publication).Error; err != nil {
 			return err
 		}
-		return tx.Model(&domain.CatalogItem{}).
-			Where("id = ? AND status <> ?", item.ID, "deleted").
-			Updates(map[string]any{
-				"status": "published", "published_at": publishedAt,
-				"published_by_admin_id": adminID, "updated_at": publishedAt,
-			}).Error
+		return tx.Model(&domain.CatalogItem{}).Where("id = ? AND status <> ?", item.ID, "deleted").Updates(map[string]any{
+			"status": "published", "analysis_task_id": taskID, "analysis_error": "", "analysis_completed_at": completedAt,
+			"published_at": completedAt, "updated_at": completedAt,
+		}).Error
 	})
 }
 

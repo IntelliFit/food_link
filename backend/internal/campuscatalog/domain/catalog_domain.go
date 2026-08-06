@@ -39,48 +39,69 @@ func (CollectionBatch) TableName() string { return "campus_food_collection_batch
 // display. Name, image, and price are intentionally allowed to be incomplete so
 // later contributors can enrich the record without discarding today's evidence.
 type CatalogItem struct {
-	ID                 string         `gorm:"column:id" json:"id"`
-	BatchID            string         `gorm:"column:batch_id" json:"batch_id"`
-	EntryType          string         `gorm:"column:entry_type" json:"entry_type"`
-	Name               string         `gorm:"column:name" json:"name,omitempty"`
-	Description        string         `gorm:"column:description" json:"description,omitempty"`
-	SchoolID           *string        `gorm:"column:school_id" json:"school_id,omitempty"`
-	CampusID           *string        `gorm:"column:campus_id" json:"campus_id,omitempty"`
-	CanteenID          *string        `gorm:"column:canteen_id" json:"canteen_id,omitempty"`
-	WindowID           *string        `gorm:"column:window_id" json:"window_id,omitempty"`
-	OrganizationName   string         `gorm:"column:organization_name" json:"organization_name"`
-	AreaName           string         `gorm:"column:area_name" json:"area_name,omitempty"`
-	CanteenName        string         `gorm:"column:canteen_name" json:"canteen_name"`
-	Floor              string         `gorm:"column:floor" json:"floor,omitempty"`
-	WindowName         string         `gorm:"column:window_name" json:"window_name,omitempty"`
-	WindowLayout       string         `gorm:"column:window_layout" json:"window_layout,omitempty"`
-	MealPeriods        []string       `gorm:"column:meal_periods;serializer:json" json:"meal_periods"`
-	AvailableWeekdays  []string       `gorm:"column:available_weekdays;serializer:json" json:"available_weekdays"`
-	AvailabilityNote   string         `gorm:"column:availability_note" json:"availability_note,omitempty"`
-	ServiceMode        string         `gorm:"column:service_mode" json:"service_mode"`
-	PriceType          string         `gorm:"column:price_type" json:"price_type"`
-	Price              *float64       `gorm:"column:price" json:"price,omitempty"`
-	PriceMin           *float64       `gorm:"column:price_min" json:"price_min,omitempty"`
-	PriceMax           *float64       `gorm:"column:price_max" json:"price_max,omitempty"`
-	PriceUnit          string         `gorm:"column:price_unit" json:"price_unit,omitempty"`
-	PriceText          string         `gorm:"column:price_text" json:"price_text,omitempty"`
-	PriceOptions       map[string]any `gorm:"column:price_options;serializer:json" json:"price_options"`
-	PortionDescription string         `gorm:"column:portion_description" json:"portion_description,omitempty"`
-	ImagePaths         []string       `gorm:"column:image_paths;serializer:json" json:"image_paths"`
-	ImageKind          string         `gorm:"column:image_kind" json:"image_kind"`
-	SourceFilename     string         `gorm:"column:source_filename" json:"source_filename,omitempty"`
-	RawText            string         `gorm:"column:raw_text" json:"raw_text,omitempty"`
-	Notes              string         `gorm:"column:notes" json:"notes,omitempty"`
-	MissingFields      []string       `gorm:"column:missing_fields;serializer:json" json:"missing_fields"`
-	CompletenessStatus string         `gorm:"column:completeness_status" json:"completeness_status"`
-	Status             string         `gorm:"column:status" json:"status"`
-	PublishedAt        *time.Time     `gorm:"column:published_at" json:"published_at,omitempty"`
-	PublishedByAdminID *string        `gorm:"column:published_by_admin_id" json:"published_by_admin_id,omitempty"`
-	CapturedAt         *time.Time     `gorm:"column:captured_at" json:"captured_at,omitempty"`
-	ContributorUserID  *string        `gorm:"column:contributor_user_id" json:"contributor_user_id,omitempty"`
-	CreatedByAdminID   *string        `gorm:"column:created_by_admin_id" json:"created_by_admin_id,omitempty"`
-	CreatedAt          *time.Time     `gorm:"column:created_at" json:"created_at,omitempty"`
-	UpdatedAt          *time.Time     `gorm:"column:updated_at" json:"updated_at,omitempty"`
+	ID                  string         `gorm:"column:id" json:"id"`
+	BatchID             string         `gorm:"column:batch_id" json:"batch_id"`
+	EntryType           string         `gorm:"column:entry_type" json:"entry_type"`
+	Name                string         `gorm:"column:name" json:"name,omitempty"`
+	Description         string         `gorm:"column:description" json:"description,omitempty"`
+	SchoolID            *string        `gorm:"column:school_id" json:"school_id,omitempty"`
+	CampusID            *string        `gorm:"column:campus_id" json:"campus_id,omitempty"`
+	CanteenID           *string        `gorm:"column:canteen_id" json:"canteen_id,omitempty"`
+	WindowID            *string        `gorm:"column:window_id" json:"window_id,omitempty"`
+	OrganizationName    string         `gorm:"column:organization_name" json:"organization_name"`
+	AreaName            string         `gorm:"column:area_name" json:"area_name,omitempty"`
+	CanteenName         string         `gorm:"column:canteen_name" json:"canteen_name"`
+	Floor               string         `gorm:"column:floor" json:"floor,omitempty"`
+	WindowName          string         `gorm:"column:window_name" json:"window_name,omitempty"`
+	WindowLayout        string         `gorm:"column:window_layout" json:"window_layout,omitempty"`
+	MealPeriods         []string       `gorm:"column:meal_periods;serializer:json" json:"meal_periods"`
+	AvailableWeekdays   []string       `gorm:"column:available_weekdays;serializer:json" json:"available_weekdays"`
+	AvailabilityNote    string         `gorm:"column:availability_note" json:"availability_note,omitempty"`
+	ServiceMode         string         `gorm:"column:service_mode" json:"service_mode"`
+	PriceType           string         `gorm:"column:price_type" json:"price_type"`
+	Price               *float64       `gorm:"column:price" json:"price,omitempty"`
+	PriceMin            *float64       `gorm:"column:price_min" json:"price_min,omitempty"`
+	PriceMax            *float64       `gorm:"column:price_max" json:"price_max,omitempty"`
+	PriceUnit           string         `gorm:"column:price_unit" json:"price_unit,omitempty"`
+	PriceText           string         `gorm:"column:price_text" json:"price_text,omitempty"`
+	PriceOptions        map[string]any `gorm:"column:price_options;serializer:json" json:"price_options"`
+	PortionDescription  string         `gorm:"column:portion_description" json:"portion_description,omitempty"`
+	ImagePaths          []string       `gorm:"column:image_paths;serializer:json" json:"image_paths"`
+	ImageKind           string         `gorm:"column:image_kind" json:"image_kind"`
+	SourceFilename      string         `gorm:"column:source_filename" json:"source_filename,omitempty"`
+	RawText             string         `gorm:"column:raw_text" json:"raw_text,omitempty"`
+	Notes               string         `gorm:"column:notes" json:"notes,omitempty"`
+	MissingFields       []string       `gorm:"column:missing_fields;serializer:json" json:"missing_fields"`
+	CompletenessStatus  string         `gorm:"column:completeness_status" json:"completeness_status"`
+	Status              string         `gorm:"column:status" json:"status"`
+	AnalysisTaskID      *string        `gorm:"column:analysis_task_id" json:"analysis_task_id,omitempty"`
+	AnalysisError       string         `gorm:"column:analysis_error" json:"analysis_error,omitempty"`
+	AnalysisStartedAt   *time.Time     `gorm:"column:analysis_started_at" json:"analysis_started_at,omitempty"`
+	AnalysisCompletedAt *time.Time     `gorm:"column:analysis_completed_at" json:"analysis_completed_at,omitempty"`
+	PublishedAt         *time.Time     `gorm:"column:published_at" json:"published_at,omitempty"`
+	PublishedByAdminID  *string        `gorm:"column:published_by_admin_id" json:"published_by_admin_id,omitempty"`
+	CapturedAt          *time.Time     `gorm:"column:captured_at" json:"captured_at,omitempty"`
+	ContributorUserID   *string        `gorm:"column:contributor_user_id" json:"contributor_user_id,omitempty"`
+	CreatedByAdminID    *string        `gorm:"column:created_by_admin_id" json:"created_by_admin_id,omitempty"`
+	CreatedAt           *time.Time     `gorm:"column:created_at" json:"created_at,omitempty"`
+	UpdatedAt           *time.Time     `gorm:"column:updated_at" json:"updated_at,omitempty"`
+	TotalCalories       *float64       `gorm:"column:total_calories;->;-:migration" json:"total_calories,omitempty"`
+	TotalProtein        *float64       `gorm:"column:total_protein;->;-:migration" json:"total_protein,omitempty"`
+	TotalCarbs          *float64       `gorm:"column:total_carbs;->;-:migration" json:"total_carbs,omitempty"`
+	TotalFat            *float64       `gorm:"column:total_fat;->;-:migration" json:"total_fat,omitempty"`
+	ClientStatus        string         `gorm:"column:client_status;->;-:migration" json:"client_status,omitempty"`
 }
 
 func (CatalogItem) TableName() string { return "campus_food_catalog_items" }
+
+type CatalogItemFilter struct {
+	BatchID   string
+	SchoolID  string
+	CampusID  string
+	CanteenID string
+	WindowID  string
+	Status    string
+	Query     string
+	Limit     int
+	Offset    int
+}

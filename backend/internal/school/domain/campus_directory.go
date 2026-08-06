@@ -56,7 +56,7 @@ type SchoolCanteen struct {
 	SourceURL        string     `gorm:"column:source_url" json:"source_url,omitempty"`
 	SourceOrg        string     `gorm:"column:source_org" json:"source_org,omitempty"`
 	SourceType       string     `gorm:"column:source_type" json:"source_type,omitempty"`
-	ConfidenceLevel  string     `gorm:"column:confidence_level" json:"confidence_level,omitempty"`
+	ConfidenceLevel  *string    `gorm:"column:confidence_level" json:"confidence_level,omitempty"`
 	Status           string     `gorm:"column:status" json:"status"`
 	ReviewNote       string     `gorm:"column:review_note" json:"review_note,omitempty"`
 	ReviewedBy       *string    `gorm:"column:reviewed_by" json:"reviewed_by,omitempty"`

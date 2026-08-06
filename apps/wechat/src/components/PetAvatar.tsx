@@ -1,13 +1,6 @@
 import { View, Image } from '@tarojs/components'
 import { useEffect, useMemo, useState } from 'react'
 import { derivePetAppearance, type PetAnimal, type PetAppearanceCandidate, type PetProfile } from '@food-link/core'
-import jianwenIdleAvatar from '../assets/pets/jianwen-01-idle.png'
-import jianwenBlinkAvatar from '../assets/pets/jianwen-01-blink.png'
-import jianwenSquashAvatar from '../assets/pets/jianwen-01-squash.png'
-import jianwenJumpAvatar from '../assets/pets/jianwen-01-jump.png'
-import huatuoAvatar from '../assets/pets/huatuo-01.png'
-import taijiXiaoziAvatar from '../assets/pets/taiji-xiaozi-01.png'
-
 import './PetAvatar.scss'
 
 type PetVisual = Pick<PetProfile | PetAppearanceCandidate, 'pet_seed' | 'name' | 'color' | 'shape' | 'pattern' | 'accessory' | 'personality'>
@@ -34,16 +27,16 @@ const BUILTIN_AVATAR_FRAMES: Record<string, {
   jump?: string
 }> = {
   'jianwen-01': {
-    idle: jianwenIdleAvatar,
-    blink: jianwenBlinkAvatar,
-    squash: jianwenSquashAvatar,
-    jump: jianwenJumpAvatar,
+    idle: '/assets/pets/jianwen-01-idle.png',
+    blink: '/assets/pets/jianwen-01-blink.png',
+    squash: '/assets/pets/jianwen-01-squash.png',
+    jump: '/assets/pets/jianwen-01-jump.png',
   },
   'huatuo-01': {
-    idle: huatuoAvatar,
+    idle: '/assets/pets/huatuo-01.png',
   },
   'taiji-xiaozi-01': {
-    idle: taijiXiaoziAvatar,
+    idle: '/assets/pets/taiji-xiaozi-01.png',
   },
 }
 
