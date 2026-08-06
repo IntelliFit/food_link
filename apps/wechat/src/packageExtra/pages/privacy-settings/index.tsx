@@ -91,17 +91,17 @@ function PrivacySettings() {
                         />
                     }
                 />
-				<Cell
-				  title='公开我的食物收藏'
-				  brief='关闭后，其他用户进入您的个人主页时将无法查看拍照分析后收藏的食物。'
-				  rightIcon={
-						<Switch
-						  checked={publicFavoriteRecipes}
-						  onChange={(val) => updateSetting('public_favorite_recipes', val)}
-						  style={{ '--switch-checked-background-color': '#00bc7d' } as React.CSSProperties}
-						/>
-					  }
-				/>
+                <Cell
+                  title='公开我的食物收藏'
+                  brief='关闭后，其他用户进入您的个人主页时将无法查看拍照分析后收藏的食物。'
+                  rightIcon={
+                    <Switch
+                      checked={publicFavoriteRecipes}
+                      onChange={(val) => updateSetting('public_favorite_recipes', val)}
+                      style={{ '--switch-checked-background-color': '#00bc7d' } as React.CSSProperties}
+                    />
+                  }
+                />
             </Cell.Group>
         </View>
     )

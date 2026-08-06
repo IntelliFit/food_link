@@ -17,6 +17,7 @@
     "stop:backend": "node scripts/stop-backend.cjs",
     "dev:restart": "bash scripts/restart-dev.sh",
     "test": "npm --workspace apps/wechat run test",
+    "test:e2e": "npm run test:e2e-weapp:smoke",
     "test:watch": "npm --workspace apps/wechat run test:watch",
     "test:coverage": "npm --workspace apps/wechat run test:coverage",
     "test:backend": "cd backend && source venv/bin/activate && pytest",
