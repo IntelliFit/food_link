@@ -238,9 +238,11 @@ func (s *PublicFoodService) Create(ctx context.Context, userID string, input Cre
 		CampusLocationText: buildCampusLocationText(input.SchoolName, input.CampusName, input.CanteenName, input.Floor, input.WindowName),
 	}
 	if isCampusPublicFood(item) {
-		item.Status = "published"
+		// Campus foods must not become client-visible until the existing precise
+		// analysis pipeline has produced a complete micronutrient result. The
+		// worker publishes the row atomically with the nutrition writeback.
+		item.Status = "pending"
 		now := time.Now()
-		item.PublishedAt = &now
 		if item.PriceCollectedAt == nil && hasCampusPrice(item) {
 			item.PriceCollectedAt = &now
 		}
@@ -321,15 +323,16 @@ func (s *PublicFoodService) submitCampusAnalyzeTask(ctx context.Context, userID 
 
 func buildCampusAnalyzeExtraPayload(item *domain.PublicFoodItem) map[string]any {
 	payload := map[string]any{
-		"public_food_source_type": "campus_public_food",
-		"public_food_item_id":     item.ID,
-		"food_name":               item.FoodName,
-		"school_name":             item.SchoolName,
-		"campus_name":             item.CampusName,
-		"canteen_name":            item.CanteenName,
-		"floor":                   item.Floor,
-		"window_name":             item.WindowName,
-		"campus_location_text":    item.CampusLocationText,
+		"public_food_source_type":         "campus_public_food",
+		"public_food_item_id":             item.ID,
+		"micronutrient_analysis_required": true,
+		"food_name":                       item.FoodName,
+		"school_name":                     item.SchoolName,
+		"campus_name":                     item.CampusName,
+		"canteen_name":                    item.CanteenName,
+		"floor":                           item.Floor,
+		"window_name":                     item.WindowName,
+		"campus_location_text":            item.CampusLocationText,
 	}
 	contextParts := []string{}
 	if item.FoodName != "" {

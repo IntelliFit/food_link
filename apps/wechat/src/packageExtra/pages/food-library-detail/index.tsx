@@ -14,6 +14,7 @@ import {
   showUnifiedApiError,
   type CampusFoodMetric,
   type CampusRelatedFeedItem,
+  type Nutrients,
   type PublicFoodLibraryItem,
   type PublicFoodLibraryComment,
   collectPublicFoodLibraryItem,
@@ -100,6 +101,52 @@ function isCampusFoodItem(item: PublicFoodLibraryItem): boolean {
   return item.type === 'campus' || !!item.is_campus_food
 }
 
+type MicronutrientKey = Exclude<keyof Nutrients, 'calories' | 'protein' | 'carbs' | 'fat' | 'waterMl' | 'water_ml' | 'sodium_mg'>
+
+const MICRONUTRIENTS: Array<{ key: MicronutrientKey; label: string; unit: 'g' | 'mg' | 'μg' }> = [
+  { key: 'fiber', label: '膳食纤维', unit: 'g' },
+  { key: 'sugar', label: '糖', unit: 'g' },
+  { key: 'saturatedFat', label: '饱和脂肪', unit: 'g' },
+  { key: 'cholesterolMg', label: '胆固醇', unit: 'mg' },
+  { key: 'sodiumMg', label: '钠', unit: 'mg' },
+  { key: 'potassiumMg', label: '钾', unit: 'mg' },
+  { key: 'calciumMg', label: '钙', unit: 'mg' },
+  { key: 'ironMg', label: '铁', unit: 'mg' },
+  { key: 'magnesiumMg', label: '镁', unit: 'mg' },
+  { key: 'zincMg', label: '锌', unit: 'mg' },
+  { key: 'vitaminARaeMcg', label: '维生素 A', unit: 'μg' },
+  { key: 'vitaminCMg', label: '维生素 C', unit: 'mg' },
+  { key: 'vitaminDMcg', label: '维生素 D', unit: 'μg' },
+  { key: 'vitaminEMg', label: '维生素 E', unit: 'mg' },
+  { key: 'vitaminKMcg', label: '维生素 K', unit: 'μg' },
+  { key: 'thiaminMg', label: '维生素 B1', unit: 'mg' },
+  { key: 'riboflavinMg', label: '维生素 B2', unit: 'mg' },
+  { key: 'niacinMg', label: '烟酸', unit: 'mg' },
+  { key: 'vitaminB6Mg', label: '维生素 B6', unit: 'mg' },
+  { key: 'folateMcg', label: '叶酸', unit: 'μg' },
+  { key: 'vitaminB12Mcg', label: '维生素 B12', unit: 'μg' }
+]
+
+function campusMicronutrientRows(item: PublicFoodLibraryItem) {
+  const totals = new Map<MicronutrientKey, number>()
+  item.items?.forEach(food => {
+    const nutrients = food.nutrients
+    if (!nutrients) return
+    MICRONUTRIENTS.forEach(({ key }) => {
+      const value = Number(nutrients[key] || 0)
+      if (Number.isFinite(value)) totals.set(key, (totals.get(key) || 0) + value)
+    })
+  })
+  return MICRONUTRIENTS.map(definition => ({ ...definition, value: totals.get(definition.key) || 0 }))
+}
+
+function formatMicronutrientValue(value: number): string {
+  if (value <= 0) return '0'
+  if (value < 0.01) return '<0.01'
+  if (value < 10) return value.toFixed(2).replace(/0+$/, '').replace(/\.$/, '')
+  return value.toFixed(1).replace(/\.0$/, '')
+}
+
 interface CommentReplyTarget {
   parentCommentId: string
   replyToUserId: string
@@ -132,6 +179,7 @@ function FoodLibraryDetailPage() {
   const [submitting, setSubmitting] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
+  const [showMicronutrients, setShowMicronutrients] = useState(false)
   const [campusMetrics, setCampusMetrics] = useState<CampusFoodMetric>({})
   const [similarItems, setSimilarItems] = useState<PublicFoodLibraryItem[]>([])
   const [relatedFeeds, setRelatedFeeds] = useState<CampusRelatedFeedItem[]>([])
@@ -554,6 +602,8 @@ function FoodLibraryDetailPage() {
   const analyzing = isAnalyzingItem(item)
   const analysisFailed = isAnalysisFailedItem(item)
   const nutritionPending = needsNutritionUpdate(item)
+  const micronutrientRows = isCampusFoodItem(item) ? campusMicronutrientRows(item) : []
+  const hasPreciseMicronutrients = item.items?.length > 0 && item.items.every(food => food.micronutrient_analysis === 'ai_precise_v1')
   const commentsTotal = countCommentTotal(comments)
   const openReplyModal = (parent: PublicFoodLibraryComment, target: PublicFoodLibraryComment = parent) => {
     openCommentModal({
@@ -714,6 +764,31 @@ function FoodLibraryDetailPage() {
             <Text className='nutrient-label'>脂肪</Text>
           </View>
         </View>
+        {isCampusFoodItem(item) && (
+          <View className='micronutrients-panel'>
+            <View className='micronutrients-header' onClick={() => hasPreciseMicronutrients && setShowMicronutrients(value => !value)}>
+              <View className='micronutrients-heading'>
+                <Text className='micronutrients-title'>AI 精确微量营养</Text>
+                <Text className={`micronutrients-status ${hasPreciseMicronutrients ? 'ready' : ''}`}>
+                  {hasPreciseMicronutrients ? '已完成 21 项' : '待精确分析'}
+                </Text>
+              </View>
+              {hasPreciseMicronutrients && (
+                <Text className='micronutrients-toggle'>{showMicronutrients ? '收起' : '查看全部'}</Text>
+              )}
+            </View>
+            {showMicronutrients && hasPreciseMicronutrients && (
+              <View className='micronutrients-grid'>
+                {micronutrientRows.map(row => (
+                  <View key={row.key} className='micronutrient-cell'>
+                    <Text className='micronutrient-label'>{row.label}</Text>
+                    <Text className='micronutrient-value'>{formatMicronutrientValue(row.value)} {row.unit}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
+        )}
         <View className='author-row'>
           {item.author?.avatar ? (
             <View className='author-avatar'>
@@ -782,7 +857,7 @@ function FoodLibraryDetailPage() {
             )}
           </View>
           <Text className='campus-price-date'>价格更新于 {formatDateOnly(item.price_collected_at)}</Text>
-          {analyzing && <Text className='campus-analysis-tip'>营养信息正在分析中，完成后会自动补齐热量和宏量营养素。</Text>}
+          {analyzing && <Text className='campus-analysis-tip'>营养信息正在进行精确分析，完成后会自动补齐热量、宏量和 21 项微量营养。</Text>}
           {nutritionPending && <Text className='campus-analysis-tip'>营养信息待更新，暂不建议一键记录。</Text>}
           {analysisFailed && <Text className='campus-analysis-tip campus-analysis-tip--error'>营养分析失败，暂不建议一键记录，可通过纠错入口反馈。</Text>}
               </>

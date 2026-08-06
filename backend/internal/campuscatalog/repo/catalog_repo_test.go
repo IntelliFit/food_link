@@ -2,10 +2,12 @@ package repo
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
 	"food_link/backend/internal/campuscatalog/domain"
+	"food_link/backend/pkg/testdb"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -75,8 +77,7 @@ func TestCompleteAnalyzedItemRejectsEmptyNutritionWithoutPublishing(t *testing.T
 }
 
 func TestListPublishedItemsMissingNutritionOnlyReturnsInvalidPublicRows(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open("file:"+uuid.NewString()+"?mode=memory&cache=shared"), &gorm.Config{})
-	require.NoError(t, err)
+	db := testdb.New(t)
 	require.NoError(t, db.AutoMigrate(&domain.CatalogItem{}, &publishedCatalogItem{}))
 	item := &domain.CatalogItem{
 		ID: uuid.NewString(), BatchID: uuid.NewString(), EntryType: "dish", Name: "历史菜品",
@@ -93,6 +94,17 @@ func TestListPublishedItemsMissingNutritionOnlyReturnsInvalidPublicRows(t *testi
 	taskID := uuid.NewString()
 	require.NoError(t, db.Model(&publishedCatalogItem{}).Where("id = ?", item.ID).
 		Updates(map[string]any{"analysis_task_id": taskID, "total_calories": 320.0}).Error)
+	items, err = repo.ListPublishedItemsMissingNutrition(context.Background(), 100)
+	require.NoError(t, err)
+	require.Len(t, items, 1, "只有宏量营养的历史校园菜品仍须补做精确微量分析")
+
+	preciseItems := []map[string]any{{
+		"name": "历史菜品", "micronutrient_analysis": "ai_precise_v1", "micronutrient_source": "qwen_generated",
+		"nutrients": map[string]any{"fiber": 1.0, "sodiumMg": 100.0, "potassiumMg": 200.0, "calciumMg": 20.0},
+	}}
+	preciseItemsJSON, err := json.Marshal(preciseItems)
+	require.NoError(t, err)
+	require.NoError(t, db.Model(&publishedCatalogItem{}).Where("id = ?", item.ID).Update("items", string(preciseItemsJSON)).Error)
 	items, err = repo.ListPublishedItemsMissingNutrition(context.Background(), 100)
 	require.NoError(t, err)
 	require.Empty(t, items)
