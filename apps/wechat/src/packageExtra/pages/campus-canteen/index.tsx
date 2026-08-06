@@ -13,6 +13,8 @@ import {
   getAccessToken,
   getMyMembership,
   getPublicFoodLibraryList,
+  getSchoolCampuses,
+  getSchoolCanteens,
   showUnifiedApiError,
   submitStructuredFeedback,
   type FeedbackSource,
@@ -132,6 +134,13 @@ function CampusCanteenPage() {
   );
   const [selectedCanteen, setSelectedCanteen] =
     useState<SchoolCanteenItem | null>(null);
+  const [directoryCampuses, setDirectoryCampuses] = useState<
+    SchoolCampusItem[]
+  >([]);
+  const [directoryCanteens, setDirectoryCanteens] = useState<
+    SchoolCanteenItem[]
+  >([]);
+  const [directoryLoading, setDirectoryLoading] = useState(false);
   const [floorName, setFloorName] = useState("");
   const [windowName, setWindowName] = useState("");
   const [selectedWindow, setSelectedWindow] = useState<CanteenWindowItem | null>(null);
@@ -233,6 +242,43 @@ function CampusCanteenPage() {
     selectedCampus,
     selectedCanteen,
   ]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const schoolId = selectedSchool?.id;
+    if (!loggedIn || !isCampusMember || !schoolId) {
+      setDirectoryCampuses([]);
+      setDirectoryCanteens([]);
+      setDirectoryLoading(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setDirectoryLoading(true);
+    setDirectoryCampuses([]);
+    setDirectoryCanteens([]);
+    Promise.all([getSchoolCampuses(schoolId), getSchoolCanteens(schoolId)])
+      .then(([campuses, canteens]) => {
+        if (cancelled) return;
+        setDirectoryCampuses(campuses);
+        setDirectoryCanteens(canteens);
+      })
+      .catch(async (e: any) => {
+        if (cancelled) return;
+        console.error("加载已收录食堂目录失败:", e);
+        setDirectoryCampuses([]);
+        setDirectoryCanteens([]);
+        await showUnifiedApiError(e, "获取食堂目录失败");
+      })
+      .finally(() => {
+        if (!cancelled) setDirectoryLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isCampusMember, loggedIn, selectedSchool?.id]);
 
   const handleRefresherRefresh = useCallback(() => {
     if (!getAccessToken()) {
@@ -401,6 +447,30 @@ function CampusCanteenPage() {
       return true;
     });
   }, [floorName, list, windowName]);
+  const visibleDirectoryCanteens = useMemo(
+    () =>
+      selectedCampus?.id
+        ? directoryCanteens.filter(
+            (canteen) => canteen.campus_id === selectedCampus.id,
+          )
+        : directoryCanteens,
+    [directoryCanteens, selectedCampus?.id],
+  );
+  const publishedCanteenIds = useMemo(
+    () => new Set(list.map((item) => item.canteen_id).filter(Boolean)),
+    [list],
+  );
+
+  const selectDirectoryCanteen = (canteen: SchoolCanteenItem) => {
+    const campus = canteen.campus_id
+      ? directoryCampuses.find((item) => item.id === canteen.campus_id) || null
+      : null;
+    setSelectedCampus(campus);
+    setSelectedCanteen(canteen);
+    setSelectedWindow(null);
+    setFloorName("");
+    setWindowName("");
+  };
 
   const analyzedList = useMemo(
     () => visibleList.filter(hasNutrition),
@@ -747,6 +817,74 @@ function CampusCanteenPage() {
           refresherDefaultStyle='black'
         >
           <View className='list-content'>
+            {selectedSchool && (
+              <View className='campus-directory-section'>
+                <View className='section-head campus-directory-head'>
+                  <Text className='section-title'>已收录食堂</Text>
+                  <Text className='section-subtitle'>
+                    {selectedSchool.name} · {visibleDirectoryCanteens.length} 个
+                  </Text>
+                </View>
+                {directoryLoading ? (
+                  <View className='campus-directory-loading'>
+                    <View className='loading-spinner-md' />
+                  </View>
+                ) : visibleDirectoryCanteens.length === 0 ? (
+                  <View className='campus-directory-empty'>
+                    该学校暂无已审核食堂
+                  </View>
+                ) : (
+                  <ScrollView
+                    scrollX
+                    enhanced
+                    showScrollbar={false}
+                    className='campus-directory-scroll'
+                  >
+                    <View className='campus-directory-list'>
+                      {visibleDirectoryCanteens.map((canteen) => {
+                        const locationText = [
+                          canteen.campus_name,
+                          canteen.building_or_floor,
+                          canteen.location_text,
+                        ]
+                          .filter(Boolean)
+                          .filter(
+                            (value, index, values) =>
+                              values.indexOf(value) === index,
+                          )
+                          .join(" · ");
+                        const hasPublishedDish = publishedCanteenIds.has(
+                          canteen.id,
+                        );
+                        const isSelected = selectedCanteen?.id === canteen.id;
+                        return (
+                          <View
+                            key={canteen.id}
+                            className={`campus-directory-card ${isSelected ? "active" : ""}`}
+                            onClick={() => selectDirectoryCanteen(canteen)}
+                          >
+                            <View className='campus-directory-card-top'>
+                              <Text className='campus-directory-name'>
+                                {canteen.name}
+                              </Text>
+                              {!hasPublishedDish && (
+                                <Text className='campus-directory-badge'>
+                                  待补菜品
+                                </Text>
+                              )}
+                            </View>
+                            <Text className='campus-directory-location'>
+                              {locationText || "位置待补充"}
+                            </Text>
+                          </View>
+                        );
+                      })}
+                    </View>
+                  </ScrollView>
+                )}
+              </View>
+            )}
+
             {analyzedList.length > 0 && (
               <>
                 <View className='section-block'>
@@ -835,8 +973,16 @@ function CampusCanteenPage() {
             ) : visibleList.length === 0 ? (
               <View className='empty-state'>
                 <Text className='empty-icon iconfont icon-shiwu' />
-                <Text className='empty-text'>暂无校园食堂数据</Text>
-                <Text className='empty-subtext'>快来上传第一份食堂菜品吧</Text>
+                <Text className='empty-text'>
+                  {selectedSchool && directoryCanteens.length > 0
+                    ? "该食堂目录已上线，暂无已分析菜品"
+                    : "暂无校园食堂数据"}
+                </Text>
+                <Text className='empty-subtext'>
+                  {selectedSchool && directoryCanteens.length > 0
+                    ? "可以补充第一份菜品，AI 分析后会在这里显示"
+                    : "快来上传第一份食堂菜品吧"}
+                </Text>
                 <View className='empty-btn' onClick={goUpload}>
                   去上传
                 </View>
