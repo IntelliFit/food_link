@@ -18,6 +18,7 @@ const extraSubpackagePages = [
   'pages/packaged-food-edit/index',
   'pages/packaged-food-correction/index',
   'pages/packaged-food-task-detail/index',
+  'pages/packaged-food-correction/index',
   'pages/result-text/index',
   'pages/expiry/index',
   'pages/expiry-edit/index',

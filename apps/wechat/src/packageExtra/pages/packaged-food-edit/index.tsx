@@ -546,6 +546,7 @@ function PackagedFoodEditPage() {
   const [librarySearchResults, setLibrarySearchResults] = useState<ManualFoodSearchResult[]>([])
   const [librarySearchLoading, setLibrarySearchLoading] = useState(false)
   const [librarySearchTouched, setLibrarySearchTouched] = useState(false)
+  const latestConfirmationPromptRef = useRef('')
   const isRewardTaskMode = router.params?.task_mode === 'reward_center'
   const isUploadMode = uploadMode === 'upload'
   const isManualMode = uploadMode === 'manual'
@@ -563,6 +564,9 @@ function PackagedFoodEditPage() {
   const hasSupplementContext = Boolean(sourceImageURLs.length > 0 || draft.sourceTaskId || draft.recognizedNameHint || extractResult)
   const showManualForm = needsSupplement || (isManualMode && draftLoaded && hasSupplementContext)
   const showSupplementBlocked = isManualMode && draftLoaded && !showManualForm
+  const confirmationFieldSet = useMemo(() => new Set(
+    (extractResult?.confirmation_fields || []).map(normalizeConfirmationField).filter(Boolean),
+  ), [extractResult?.confirmation_fields])
 
   useDidShow(() => {
     try {
@@ -599,6 +603,26 @@ function PackagedFoodEditPage() {
     const next = formatRecognizedField(field, value)
     return next ? { ...current, [field]: next } : current
   }
+
+  const showConfirmationPromptIfNeeded = (result: PackagedProductExtractResult) => {
+    if (!result.needs_user_confirmation) {
+      latestConfirmationPromptRef.current = ''
+      return
+    }
+    const summary = buildConfirmationSummary(result)
+    if (!summary || latestConfirmationPromptRef.current === summary) return
+    latestConfirmationPromptRef.current = summary
+    Taro.showModal({
+      title: '请确认识别结果',
+      content: summary,
+      showCancel: false,
+      confirmText: '我来检查',
+    })
+  }
+
+  const highlightedFieldClass = (field: string) => (
+    confirmationFieldSet.has(normalizeConfirmationField(field)) ? 'field--highlight' : ''
+  )
 
   const applyExtractResult = (result: PackagedProductExtractResult) => {
     setExtractResult(result)
@@ -986,6 +1010,7 @@ function PackagedFoodEditPage() {
       }
       const result = await pollPackagedExtractTask(taskId)
       applyExtractResult(result)
+      showConfirmationPromptIfNeeded(result)
       Taro.hideLoading()
       if (result.auto_ingest_result?.status === 'ingested' && result.packaged_food_id) {
         Taro.setStorageSync(PACKAGED_FOOD_EDIT_SAVED_KEY, {
@@ -1369,6 +1394,12 @@ function PackagedFoodEditPage() {
               <Text className='ingest-status-hint'>已识别到的字段会保留在下方，你可以补齐缺失信息后提交待审核。</Text>
             </View>
           )}
+          {extractResult?.needs_user_confirmation && (
+            <View className='confirmation-card'>
+              <Text className='confirmation-card-title'>请优先核对识别不稳的字段</Text>
+              <Text className='confirmation-card-desc'>{buildConfirmationSummary(extractResult)}</Text>
+            </View>
+          )}
         </View>
         )}
 
@@ -1413,7 +1444,7 @@ function PackagedFoodEditPage() {
             <Text className='section-title'>基础信息</Text>
             <View className='field'>
               <Text className='field-label'>名称</Text>
-              <Input className='field-input' value={draft.productName} placeholder='零食名称' onInput={(e) => updateField('productName', e.detail.value)} />
+              <Input className={`field-input ${highlightedFieldClass('product_name')}`} value={draft.productName} placeholder='零食名称' onInput={(e) => updateField('productName', e.detail.value)} />
             </View>
             <View className='field'>
               <Text className='field-label'>品牌</Text>
@@ -1429,7 +1460,7 @@ function PackagedFoodEditPage() {
             </View>
             <View className='field'>
               <Text className='field-label'>规格文本</Text>
-              <Input className='field-input' value={draft.specText} placeholder='如 70g、35g*2袋' onInput={(e) => updateField('specText', e.detail.value)} />
+              <Input className={`field-input ${highlightedFieldClass('spec_text')}`} value={draft.specText} placeholder='如 70g、35g*2袋' onInput={(e) => updateField('specText', e.detail.value)} />
             </View>
             <View className='field'>
               <Text className='field-label'>条码</Text>
@@ -1437,21 +1468,21 @@ function PackagedFoodEditPage() {
             </View>
             <View className='field'>
               <Text className='field-label'>净含量</Text>
-              <View className='field-input-with-unit'>
+              <View className={`field-input-with-unit ${highlightedFieldClass('net_weight_g')}`}>
                 <Input className='field-input' type='digit' value={draft.netWeightG} placeholder='净含量' onInput={(e) => updateField('netWeightG', e.detail.value)} />
                 <Text className='field-unit'>g</Text>
               </View>
             </View>
             <View className='field'>
               <Text className='field-label'>每份重量</Text>
-              <View className='field-input-with-unit'>
+              <View className={`field-input-with-unit ${highlightedFieldClass('serving_weight_g')}`}>
                 <Input className='field-input' type='digit' value={draft.servingWeightG} placeholder='可选' onInput={(e) => updateField('servingWeightG', e.detail.value)} />
                 <Text className='field-unit'>g</Text>
               </View>
             </View>
             <View className='field'>
               <Text className='field-label'>配料表</Text>
-              <Input className='field-input' value={draft.ingredientsText} placeholder='按需补拍后会自动填入，也可手动补' onInput={(e) => updateField('ingredientsText', e.detail.value)} />
+              <Input className={`field-input ${highlightedFieldClass('ingredients_text')}`} value={draft.ingredientsText} placeholder='按需补拍后会自动填入，也可手动补' onInput={(e) => updateField('ingredientsText', e.detail.value)} />
             </View>
           </View>
         )}
@@ -1475,7 +1506,7 @@ function PackagedFoodEditPage() {
               ))}
             </View>
           </View>
-          <View className='nutrition-grid'>
+          <View className={`nutrition-grid ${highlightedFieldClass('nutrition')}`}>
             <View className='field compact'>
               <View className='energy-label-row'>
                 <Text className='field-label'>热量 {draft.energyUnit === 'kj' ? 'kJ' : 'kcal'} / 标示</Text>

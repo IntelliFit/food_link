@@ -325,6 +325,10 @@ function PackagedFoodTaskDetailPage() {
   const imageUrls = useMemo(() => imageUrlsForTask(task, packaged), [task, packaged])
   const derivedNutrition = useMemo(() => derivePackagedNutrition(packaged), [packaged])
   const nutrition = derivedNutrition.unit
+  const correctionPackagedFoodId =
+    normalizeString(packaged?.packaged_food_id) ||
+    normalizeString(auto?.packaged_food_id) ||
+    normalizeString(reward?.packaged_food_id)
 
   const loadTask = async (showToast = false) => {
     if (!taskId || loading) return
@@ -352,13 +356,12 @@ function PackagedFoodTaskDetailPage() {
   }
 
   const submitCorrection = () => {
-    const packagedFoodId = normalizeString(packaged?.packaged_food_id || auto?.packaged_food_id || reward?.packaged_food_id)
-    if (!packagedFoodId) {
+    if (!correctionPackagedFoodId) {
       Taro.showToast({ title: '当前还没有可纠错的入库商品', icon: 'none' })
       return
     }
     Taro.navigateTo({
-      url: `/packageExtra/pages/packaged-food-correction/index?packaged_food_id=${encodeURIComponent(packagedFoodId)}`,
+      url: `/packageExtra/pages/packaged-food-correction/index?packaged_food_id=${encodeURIComponent(correctionPackagedFoodId)}`,
     })
   }
 
@@ -410,14 +413,14 @@ function PackagedFoodTaskDetailPage() {
                 <Text className='detail-action-text secondary'>重新上传</Text>
               </View>
             )}
+            {!isTaskStillRunning(task?.status) && correctionPackagedFoodId && (
+              <View className='detail-action-btn secondary' onClick={submitCorrection}>
+                <Text className='detail-action-text secondary'>发起纠错</Text>
+              </View>
+            )}
             {packaged && !isTaskStillRunning(task?.status) && auto?.status !== 'ingested' && (
               <View className='detail-action-btn secondary' onClick={supplementResult}>
                 <Text className='detail-action-text secondary'>补充信息</Text>
-              </View>
-            )}
-            {packaged && !isTaskStillRunning(task?.status) && (packaged?.packaged_food_id || auto?.packaged_food_id || reward?.packaged_food_id) && (
-              <View className='detail-action-btn secondary' onClick={submitCorrection}>
-                <Text className='detail-action-text secondary'>发起纠错</Text>
               </View>
             )}
           </View>

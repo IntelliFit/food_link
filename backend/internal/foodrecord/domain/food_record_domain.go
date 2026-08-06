@@ -415,6 +415,17 @@ type PackagedFood struct {
 
 func (PackagedFood) TableName() string { return "packaged_food_library" }
 
+// PackagedFoodAlias — table: packaged_food_aliases
+type PackagedFoodAlias struct {
+	ID              string `gorm:"column:id" json:"id"`
+	FoodID          string `gorm:"column:food_id" json:"food_id"`
+	AliasName       string `gorm:"column:alias_name" json:"alias_name"`
+	NormalizedAlias string `gorm:"column:normalized_alias" json:"normalized_alias"`
+}
+
+func (PackagedFoodAlias) TableName() string { return "packaged_food_aliases" }
+
+// PackagedFoodCorrectionSubmission — table: packaged_food_correction_submissions
 type PackagedFoodCorrectionSubmission struct {
 	ID                string         `gorm:"column:id" json:"id"`
 	UserID            string         `gorm:"column:user_id" json:"user_id"`
@@ -441,6 +452,7 @@ func (PackagedFoodCorrectionSubmission) TableName() string {
 	return "packaged_food_correction_submissions"
 }
 
+// PackagedFoodChangeLog — table: packaged_food_change_logs
 type PackagedFoodChangeLog struct {
 	ID             string         `gorm:"column:id" json:"id"`
 	PackagedFoodID string         `gorm:"column:packaged_food_id" json:"packaged_food_id"`
@@ -454,16 +466,6 @@ type PackagedFoodChangeLog struct {
 }
 
 func (PackagedFoodChangeLog) TableName() string { return "packaged_food_change_logs" }
-
-// PackagedFoodAlias — table: packaged_food_aliases
-type PackagedFoodAlias struct {
-	ID              string `gorm:"column:id" json:"id"`
-	FoodID          string `gorm:"column:food_id" json:"food_id"`
-	AliasName       string `gorm:"column:alias_name" json:"alias_name"`
-	NormalizedAlias string `gorm:"column:normalized_alias" json:"normalized_alias"`
-}
-
-func (PackagedFoodAlias) TableName() string { return "packaged_food_aliases" }
 
 // FoodNutritionAlias — table: food_nutrition_aliases
 type FoodNutritionAlias struct {

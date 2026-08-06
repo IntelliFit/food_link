@@ -536,7 +536,6 @@ func packagedReadyExtractForConfirmation() *PackagedProductExtractResult {
 		ExtractConfidence: 0.95,
 	}
 }
-
 func verifiedZeroDrinkExtract() *PackagedProductExtractResult {
 	return &PackagedProductExtractResult{
 		Brand:              "三得利",

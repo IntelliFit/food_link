@@ -826,8 +826,8 @@ func enrichPackagedProductExtractResult(result *PackagedProductExtractResult) {
 	result.UnitContentValue = normalized.UnitContentValue
 	result.UnitContentUnit = normalized.UnitContentUnit
 	result.ReviewStatus = normalized.ReviewStatus
-	result.MissingFields = missingFields
 	result.NeedsMoreImages = normalizeStringSlice(result.NeedsMoreImages)
+	result.MissingFields = missingFields
 	result.ConfirmationReasons, result.ConfirmationFields = determinePackagedConfirmation(result)
 	result.NeedsUserConfirmation = len(result.ConfirmationReasons) > 0
 }
