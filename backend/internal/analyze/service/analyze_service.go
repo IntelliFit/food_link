@@ -51,7 +51,6 @@ const (
 	maxLLMJSONParseRetries          = 3
 	maxLLMTransientRetries          = 2
 	realtimeVisionJSONRetries       = 1
-	realtimeVisionTransientRetries  = 1
 	ratioSuggestionTimeout          = 8 * time.Second
 	ediblePortionTimeout            = 8 * time.Second
 	nutritionFallbackAttemptTimeout = 35 * time.Second
@@ -70,6 +69,11 @@ const (
 	resolveFoodEmbeddingTimeout     = 4 * time.Second
 	kilojoulesPerKilocalorie        = 4.184
 )
+
+// Image requests already have a configured Qwen fallback. Retrying the same
+// Gemini endpoint after a network timeout doubles the user's wait and only
+// delays that failover, so transient vision errors switch provider directly.
+const realtimeVisionTransientRetries = 0
 
 const packagedFoodResolveEnabled = true
 
