@@ -486,7 +486,10 @@ func (s *CatalogService) PublishItem(ctx context.Context, adminID, itemID string
 	if s.storage != nil {
 		imageURLs = s.storage.ResolveReferenceURLs("food-images", imageURLs)
 	}
-	mode := "strict_separate"
+	// Campus dishes use the normal single-task analysis path. The worker keeps
+	// the precise micronutrient publication gate below, so we avoid the former
+	// plan -> item estimates -> aggregate fan-out without weakening nutrition.
+	mode := "standard"
 	extraPayload := map[string]any{
 		"public_food_source_type":         "campus_public_food",
 		"public_food_item_id":             item.ID,
@@ -540,8 +543,8 @@ func (s *CatalogService) PublishItem(ctx context.Context, adminID, itemID string
 }
 
 // SubmitPublishedNutritionBackfill reuses the normal catalog publish path so
-// historical public items never bypass strict_separate analysis. Pending rows
-// are excluded by the repository query, making startup retries idempotent.
+// historical public items never bypass precise micronutrient analysis. Pending
+// rows are excluded by the repository query, making startup retries idempotent.
 func (s *CatalogService) SubmitPublishedNutritionBackfill(ctx context.Context, limit int) (int, error) {
 	if limit <= 0 {
 		limit = 100

@@ -11,13 +11,17 @@ import (
 	analyzeservice "food_link/backend/internal/analyze/service"
 	foodrecorddomain "food_link/backend/internal/foodrecord/domain"
 	foodrecordrepo "food_link/backend/internal/foodrecord/repo"
+
+	"github.com/stretchr/testify/require"
 )
 
 type fakeWorkerAnalyzeRunner struct {
-	userID string
-	input  analyzeservice.AnalyzeInput
-	result map[string]any
-	err    error
+	userID      string
+	input       analyzeservice.AnalyzeInput
+	result      map[string]any
+	err         error
+	preciseErr  error
+	preciseRuns int
 }
 
 func (f *fakeWorkerAnalyzeRunner) Analyze(ctx context.Context, userID string, input analyzeservice.AnalyzeInput) (map[string]any, error) {
@@ -49,6 +53,14 @@ func (f *fakeWorkerAnalyzeRunner) ApplyDBFirstToItems(ctx context.Context, items
 }
 
 func (f *fakeWorkerAnalyzeRunner) ApplyDBFirstToItemsWithPreciseMicronutrients(ctx context.Context, items []map[string]any, additionalContext string) ([]map[string]any, error) {
+	return f.ApplyPreciseMicronutrientsToResolvedItems(ctx, items, additionalContext)
+}
+
+func (f *fakeWorkerAnalyzeRunner) ApplyPreciseMicronutrientsToResolvedItems(ctx context.Context, items []map[string]any, additionalContext string) ([]map[string]any, error) {
+	f.preciseRuns++
+	if f.preciseErr != nil {
+		return nil, f.preciseErr
+	}
 	for _, item := range items {
 		nutrients := mapFromAny(item["nutrients"])
 		if len(nutrients) == 0 {
@@ -67,6 +79,38 @@ func (f *fakeWorkerAnalyzeRunner) ApplyDBFirstToItemsWithPreciseMicronutrients(c
 		item["micronutrient_source"] = "test_generated"
 	}
 	return items, nil
+}
+
+func TestEnrichCampusPreciseMicronutrientsUsesResolvedSingleTaskResult(t *testing.T) {
+	analyze := &fakeWorkerAnalyzeRunner{}
+	runner := &Runner{analyze: analyze}
+	task := &domain.AnalysisTask{
+		ID: "task-campus-standard-1", UserID: "system-user-1", TaskType: "food",
+		Payload: map[string]any{
+			"public_food_source_type": "campus_public_food", "micronutrient_analysis_required": true,
+			"additionalContext": "菜品名称：白米饭",
+		},
+	}
+	result := map[string]any{"items": []any{map[string]any{
+		"name": "白米饭", "nutrients": map[string]any{"calories": 232.0, "protein": 5.2, "carbs": 51.8, "fat": 0.6},
+	}}}
+
+	require.NoError(t, runner.enrichCampusPreciseMicronutrients(context.Background(), task, result))
+	require.Equal(t, 1, analyze.preciseRuns)
+	items := extractItems(result["items"])
+	require.Len(t, items, 1)
+	require.Equal(t, "ai_precise_v1", items[0]["micronutrient_analysis"])
+	require.NoError(t, analyzeservice.ValidatePreciseMicronutrientItems(items))
+}
+
+func TestEnrichCampusPreciseMicronutrientsSkipsOrdinaryUserAnalysis(t *testing.T) {
+	analyze := &fakeWorkerAnalyzeRunner{}
+	runner := &Runner{analyze: analyze}
+	task := &domain.AnalysisTask{ID: "task-user-standard-1", TaskType: "food", Payload: map[string]any{}}
+	result := map[string]any{"items": []any{map[string]any{"name": "白米饭"}}}
+
+	require.NoError(t, runner.enrichCampusPreciseMicronutrients(context.Background(), task, result))
+	require.Zero(t, analyze.preciseRuns)
 }
 
 type workerMixedMealLLMClient struct {

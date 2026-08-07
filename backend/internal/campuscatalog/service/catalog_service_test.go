@@ -358,7 +358,7 @@ func TestPublishItemAllowsMissingImageAndUsesExistingTextAnalysis(t *testing.T) 
 	require.Equal(t, "analysis_pending", item.Status)
 	require.Equal(t, "task-text-1", repo.linkedTaskID)
 	require.Equal(t, "text", submitter.textInput.SourceType)
-	require.Equal(t, "strict_separate", *submitter.textInput.ExecutionMode)
+	require.Equal(t, "standard", *submitter.textInput.ExecutionMode)
 	require.Contains(t, submitter.textInput.TextInput, "番茄炒饭")
 	require.Contains(t, submitter.textInput.TextInput, "番茄炒饭 12 元/份")
 	require.Empty(t, submitter.input.SourceType)
@@ -396,7 +396,7 @@ func TestPublishItemQueuesExistingFoodAnalysisBeforePublishing(t *testing.T) {
 	require.Equal(t, "analysis_pending", item.Status)
 	require.Equal(t, "task-1", repo.linkedTaskID)
 	require.Equal(t, "system-user-1", submitter.userID)
-	require.Equal(t, "strict_separate", *submitter.input.ExecutionMode)
+	require.Equal(t, "standard", *submitter.input.ExecutionMode)
 	require.Equal(t, "campus_public_food", submitter.input.ExtraPayload["public_food_source_type"])
 	require.Equal(t, "item-1", submitter.input.ExtraPayload["campus_catalog_item_id"])
 	require.Equal(t, true, submitter.input.ExtraPayload["micronutrient_analysis_required"])
@@ -436,7 +436,7 @@ func TestPublishItemMarksAnalysisFailedWhenSubmissionFails(t *testing.T) {
 	require.Equal(t, "analysis_failed", repo.analysisFailedItem.Status)
 }
 
-func TestPublishedNutritionBackfillReusesNormalStrictSeparatePublishPath(t *testing.T) {
+func TestPublishedNutritionBackfillReusesSingleTaskPrecisePublishPath(t *testing.T) {
 	price := 18.0
 	item := domain.CatalogItem{
 		ID: "item-history", BatchID: "batch-1", Status: "published", EntryType: "dish", Name: "柠檬金汤大锅（酸辣）",
@@ -452,7 +452,7 @@ func TestPublishedNutritionBackfillReusesNormalStrictSeparatePublishPath(t *test
 
 	require.NoError(t, err)
 	require.Equal(t, 1, queued)
-	require.Equal(t, "strict_separate", *submitter.input.ExecutionMode)
+	require.Equal(t, "standard", *submitter.input.ExecutionMode)
 	require.Equal(t, "item-history", submitter.input.ExtraPayload["campus_catalog_item_id"])
 	require.Equal(t, true, submitter.input.ExtraPayload["micronutrient_analysis_required"])
 	require.Equal(t, "item-history", repo.hiddenPublicItemID)

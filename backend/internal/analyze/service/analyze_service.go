@@ -492,6 +492,18 @@ var preciseMicronutrientKeys = []string{
 // analysis.
 func (s *AnalyzeService) ApplyDBFirstToItemsWithPreciseMicronutrients(ctx context.Context, items []map[string]any, additionalContext string) ([]map[string]any, error) {
 	resolved := s.ApplyDBFirstToItems(ctx, items, additionalContext)
+	return s.ApplyPreciseMicronutrientsToResolvedItems(ctx, resolved, additionalContext)
+}
+
+// ApplyPreciseMicronutrientsToResolvedItems enriches an ordinary analysis
+// result that has already crossed the DB-first nutrition resolver. Keeping this
+// step separate prevents campus single-task analysis from repeating database,
+// embedding and semantic-rerank work before the precise micronutrient call.
+func (s *AnalyzeService) ApplyPreciseMicronutrientsToResolvedItems(ctx context.Context, items []map[string]any, additionalContext string) ([]map[string]any, error) {
+	resolved := make([]map[string]any, 0, len(items))
+	for _, item := range items {
+		resolved = append(resolved, copyAnyMap(item))
+	}
 	if err := ValidateResolvedNutritionItems(resolved); err != nil {
 		return nil, err
 	}

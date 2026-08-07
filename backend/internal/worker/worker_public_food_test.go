@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"testing"
-	"time"
 
 	analyzedomain "food_link/backend/internal/analyze/domain"
 	analyzerepo "food_link/backend/internal/analyze/repo"
@@ -144,6 +143,82 @@ func TestWorkerFailureKeepsNewCatalogItemOutOfClientLibrary(t *testing.T) {
 	require.Zero(t, publicCount)
 }
 
+func TestWorkerProcessFoodTextPublishesCatalogWithPreciseMicronutrients(t *testing.T) {
+	db := setupWorkerPublicFoodTestDB(t)
+	ctx := context.Background()
+	taskRepo := analyzerepo.NewTaskRepo(db)
+	catalog := campuscatalogrepo.NewCatalogRepo(db)
+	price := 6.0
+	item := &campuscatalogdomain.CatalogItem{
+		ID: "catalog-text-food-1", BatchID: "batch-1", EntryType: "dish", Name: "番茄炒蛋",
+		OrganizationName: "清华大学", CanteenName: "紫荆园", PriceType: "fixed", Price: &price,
+		PriceUnit: "元/份", PortionDescription: "1份", CompletenessStatus: "incomplete", Status: "analysis_pending",
+	}
+	require.NoError(t, db.Create(item).Error)
+	text := "菜品名称：番茄炒蛋；价格：6元/份；份量：1份"
+	task := &analyzedomain.AnalysisTask{
+		ID: "task-catalog-text-food-1", UserID: "system-user-1", TaskType: "food_text", Status: "pending", TextInput: &text,
+		Payload: map[string]any{
+			"source_type": "text", "execution_mode": "standard", "public_food_source_type": "campus_public_food",
+			"public_food_item_id": item.ID, "campus_catalog_item_id": item.ID, "micronutrient_analysis_required": true,
+		},
+	}
+	require.NoError(t, taskRepo.CreateTask(ctx, task))
+	require.NoError(t, catalog.LinkAnalysisTask(ctx, item.ID, task.ID))
+	analyze := &fakeWorkerAnalyzeRunner{result: map[string]any{
+		"items": []any{map[string]any{
+			"name": "番茄炒蛋", "nutrients": map[string]any{"calories": 210.0, "protein": 12.0, "carbs": 8.0, "fat": 14.0},
+		}},
+	}}
+	runner := &Runner{tasks: taskRepo, analyze: analyze}
+	runner.ConfigureCampusCatalog(catalog)
+
+	require.NoError(t, runner.processFoodText(ctx, task))
+	require.Equal(t, 1, analyze.preciseRuns)
+
+	var publicItem publicfooddomain.PublicFoodItem
+	require.NoError(t, db.First(&publicItem, "id = ?", item.ID).Error)
+	require.Equal(t, "published", publicItem.Status)
+	require.Equal(t, 210.0, publicItem.TotalCalories)
+	require.Len(t, publicItem.Items, 1)
+	require.Equal(t, "ai_precise_v1", publicItem.Items[0]["micronutrient_analysis"])
+}
+
+func TestWorkerPreciseCampusEnrichmentFailureDoesNotPublish(t *testing.T) {
+	db := setupWorkerPublicFoodTestDB(t)
+	ctx := context.Background()
+	taskRepo := analyzerepo.NewTaskRepo(db)
+	catalog := campuscatalogrepo.NewCatalogRepo(db)
+	item := &campuscatalogdomain.CatalogItem{
+		ID: "catalog-precise-failed", BatchID: "batch-1", EntryType: "dish", Name: "牛肉饭",
+		OrganizationName: "清华大学", CanteenName: "紫荆园", CompletenessStatus: "complete", Status: "analysis_pending",
+	}
+	require.NoError(t, db.Create(item).Error)
+	imageURL := "https://example.com/beef-rice.jpg"
+	task := &analyzedomain.AnalysisTask{
+		ID: "task-catalog-precise-failed", UserID: "system-user-1", TaskType: "food", Status: "pending",
+		ImageURL: &imageURL, ImagePaths: []string{imageURL}, Payload: map[string]any{
+			"source_type": "image", "execution_mode": "standard", "public_food_source_type": "campus_public_food",
+			"campus_catalog_item_id": item.ID, "micronutrient_analysis_required": true,
+		},
+	}
+	require.NoError(t, taskRepo.CreateTask(ctx, task))
+	require.NoError(t, catalog.LinkAnalysisTask(ctx, item.ID, task.ID))
+	analyze := &fakeWorkerAnalyzeRunner{
+		result:     map[string]any{"items": []any{map[string]any{"name": "牛肉饭", "nutrients": map[string]any{"calories": 500.0}}}},
+		preciseErr: errors.New("精确营养服务暂时不可用"),
+	}
+	runner := &Runner{tasks: taskRepo, analyze: analyze}
+	runner.ConfigureCampusCatalog(catalog)
+
+	err := runner.processFood(ctx, task)
+	require.ErrorContains(t, err, "精确营养服务暂时不可用")
+
+	var publicCount int64
+	require.NoError(t, db.Table("public_food_library").Where("id = ?", item.ID).Count(&publicCount).Error)
+	require.Zero(t, publicCount)
+}
+
 func TestWorkerProcessFoodWritesBackCampusPublicFood(t *testing.T) {
 	db := setupWorkerPublicFoodTestDB(t)
 	publicFood := publicfoodrepo.NewPublicFoodRepo(db)
@@ -247,68 +322,36 @@ func TestCampusPublicFoodSubmitWaitsForWorkerCaloriesRecognition(t *testing.T) {
 	task, err := taskRepo.GetTaskByID(ctx, publisher.messages[0].TaskID)
 	require.NoError(t, err)
 	require.NotNil(t, task)
-	require.Equal(t, "precision_plan", task.TaskType)
+	require.Equal(t, "food", task.TaskType)
 	require.Equal(t, "pending", task.Status)
 	require.Equal(t, itemID, task.Payload["public_food_item_id"])
 	require.Equal(t, "campus_public_food", task.Payload["public_food_source_type"])
 	require.Equal(t, "image", task.Payload["source_type"])
-	require.Equal(t, "strict_separate", task.Payload["execution_mode"])
+	require.Equal(t, "standard", task.Payload["execution_mode"])
+	require.Empty(t, task.Payload["precision_session_id"])
+	require.Equal(t, true, task.Payload["micronutrient_analysis_required"])
 
-	aggregateTask := &analyzedomain.AnalysisTask{
-		UserID:     "user-1",
-		TaskType:   "precision_aggregate",
-		Status:     "pending",
-		ImageURL:   &imageURL,
-		ImagePaths: []string{imageURL},
-		Payload: map[string]any{
-			"precision_session_id":            task.Payload["precision_session_id"],
-			"round_index":                     1,
-			"split_strategy":                  "single_shot",
-			"public_food_source_type":         "campus_public_food",
-			"public_food_item_id":             itemID,
-			"micronutrient_analysis_required": true,
-			"execution_mode":                  "strict_separate",
+	runner := &Runner{tasks: taskRepo, publicFood: publicFood, analyze: &fakeWorkerAnalyzeRunner{result: map[string]any{
+		"items": []any{
+			map[string]any{"name": "鸡胸肉", "nutrients": map[string]any{"calories": 198.0, "protein": 37.0, "carbs": 0.0, "fat": 4.0}},
+			map[string]any{"name": "米饭", "nutrients": map[string]any{"calories": 260.0, "protein": 5.0, "carbs": 56.0, "fat": 0.6}},
 		},
-	}
-	require.NoError(t, taskRepo.CreateTask(ctx, aggregateTask))
-	require.NoError(t, publicFood.LinkAnalysisTask(ctx, itemID, aggregateTask.ID))
-	preciseEstimateItems, err := (&fakeWorkerAnalyzeRunner{}).ApplyDBFirstToItemsWithPreciseMicronutrients(ctx, []map[string]any{
-		{"name": "鸡胸肉", "nutrients": map[string]any{"calories": 198.0, "protein": 37.0, "carbs": 0.0, "fat": 4.0}},
-		{"name": "米饭", "nutrients": map[string]any{"calories": 260.0, "protein": 5.0, "carbs": 56.0, "fat": 0.6}},
-	}, "")
-	require.NoError(t, err)
-	require.NoError(t, precisionRepo.CreateItemEstimate(ctx, &analyzedomain.PrecisionItemEstimate{
-		SessionID:  stringFromMap(task.Payload, "precision_session_id"),
-		RoundIndex: 1,
-		ItemIndex:  0,
-		ItemKey:    "group_0",
-		ItemName:   "鸡胸肉米饭",
-		Status:     "done",
-		Result:     map[string]any{"items": preciseEstimateItems},
-	}))
-	runner := &Runner{tasks: taskRepo, precision: precisionRepo, publicFood: publicFood, analyze: &fakeWorkerAnalyzeRunner{}}
-	go func() {
-		_ = runner.processPrecisionAggregate(context.Background(), aggregateTask)
-	}()
+	}}}
+	require.NoError(t, runner.processFood(ctx, task))
 
-	deadline := time.Now().Add(3 * time.Minute)
-	for {
-		var saved publicfooddomain.PublicFoodItem
-		require.NoError(t, db.Where("id = ?", itemID).First(&saved).Error)
-		savedTask, err := taskRepo.GetTaskByID(ctx, aggregateTask.ID)
-		require.NoError(t, err)
-		if savedTask != nil && savedTask.Status == "done" && saved.TotalCalories > 0 {
-			require.Equal(t, 458.0, saved.TotalCalories)
-			require.Equal(t, 42.0, saved.TotalProtein)
-			require.Equal(t, 56.0, saved.TotalCarbs)
-			require.InEpsilon(t, 4.6, saved.TotalFat, 0.001)
-			return
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("校园食堂菜品热量识别在 3 分钟内未完成，task_status=%s total_calories=%.1f", savedTask.Status, saved.TotalCalories)
-		}
-		time.Sleep(200 * time.Millisecond)
-	}
+	var saved publicfooddomain.PublicFoodItem
+	require.NoError(t, db.Where("id = ?", itemID).First(&saved).Error)
+	require.Equal(t, "published", saved.Status)
+	require.Equal(t, 458.0, saved.TotalCalories)
+	require.Equal(t, 42.0, saved.TotalProtein)
+	require.Equal(t, 56.0, saved.TotalCarbs)
+	require.InEpsilon(t, 4.6, saved.TotalFat, 0.001)
+	require.Len(t, saved.Items, 2)
+	require.Equal(t, "ai_precise_v1", saved.Items[0]["micronutrient_analysis"])
+
+	savedTask, err := taskRepo.GetTaskByID(ctx, task.ID)
+	require.NoError(t, err)
+	require.Equal(t, "done", savedTask.Status)
 }
 
 func TestWorkerProcessPrecisionPlanRelinksCampusPublicFoodToAggregateTask(t *testing.T) {

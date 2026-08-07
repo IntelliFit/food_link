@@ -889,6 +889,9 @@ func (r *Runner) processFood(ctx context.Context, task *domain.AnalysisTask) err
 	if err != nil {
 		return err
 	}
+	if err := r.enrichCampusPreciseMicronutrients(ctx, task, result); err != nil {
+		return err
+	}
 	if err := analyzeservice.ValidateResolvedNutritionItems(extractItems(result["items"])); err != nil {
 		return err
 	}
@@ -977,6 +980,51 @@ func campusPublicFoodSourceType(payload map[string]any) string {
 
 func requiresPreciseCampusMicronutrients(payload map[string]any) bool {
 	return campusPublicFoodSourceType(payload) == "campus_public_food" && boolFromAny(payload["micronutrient_analysis_required"])
+}
+
+// enrichCampusPreciseMicronutrients keeps campus analysis in the ordinary
+// food/food_text task while reusing the existing nutrition fallback chain to
+// fill the complete 21-field profile. This replaces the expensive precision
+// plan/item/aggregate task graph; it does not introduce another API or model.
+func (r *Runner) enrichCampusPreciseMicronutrients(ctx context.Context, task *domain.AnalysisTask, result map[string]any) error {
+	if task == nil || !requiresPreciseCampusMicronutrients(task.Payload) {
+		return nil
+	}
+	if r.analyze == nil {
+		return fmt.Errorf("校园菜品营养分析服务未配置")
+	}
+	if result == nil {
+		return fmt.Errorf("校园菜品营养分析结果为空")
+	}
+	items := extractItems(result["items"])
+	if len(items) == 0 {
+		return fmt.Errorf("校园菜品营养分析结果为空")
+	}
+	startedAt := time.Now()
+	input := analyzeInputFromTask(task)
+	var (
+		enriched []map[string]any
+		err      error
+	)
+	if resolvedRunner, ok := r.analyze.(interface {
+		ApplyPreciseMicronutrientsToResolvedItems(context.Context, []map[string]any, string) ([]map[string]any, error)
+	}); ok {
+		enriched, err = resolvedRunner.ApplyPreciseMicronutrientsToResolvedItems(ctx, items, input.AdditionalContext)
+	} else {
+		// Compatibility for alternate analyze runners used by tests and tools.
+		enriched, err = r.analyze.ApplyDBFirstToItemsWithPreciseMicronutrients(ctx, items, input.AdditionalContext)
+	}
+	if err != nil {
+		return err
+	}
+	result["items"] = enriched
+	r.info(ctx, "校园菜品普通分析已补齐精确营养",
+		append(taskAttrs(task.ID, task.TaskType, task.UserID),
+			slog.Int("item_count", len(enriched)),
+			slog.Duration("duration", time.Since(startedAt)),
+		)...,
+	)
+	return nil
 }
 
 func copyCampusPublicFoodPayload(from, to map[string]any) {
@@ -1143,6 +1191,22 @@ func (r *Runner) processFoodText(ctx context.Context, task *domain.AnalysisTask)
 			attribute.String("analysis.stage", "food_text_analyze"),
 			apm.DurationMS("analysis.duration_ms", time.Since(start)),
 		)
+		return err
+	}
+	if err := r.enrichCampusPreciseMicronutrients(ctx, task, result); err != nil {
+		return err
+	}
+	if err := analyzeservice.ValidateResolvedNutritionItems(extractItems(result["items"])); err != nil {
+		return err
+	}
+	if requiresPreciseCampusMicronutrients(task.Payload) {
+		if err := analyzeservice.ValidatePreciseMicronutrientItems(extractItems(result["items"])); err != nil {
+			return err
+		}
+	}
+	if err := r.writeBackCampusPublicFood(ctx, task, result); err != nil {
+		r.errorLog(ctx, "校园食堂文字分析结果回写失败", err, slog.String("task_id", task.ID), logger.AnalysisTaskID(task.ID))
+		apm.RecordError(ctx, err, attribute.String("analysis.stage", "campus_public_food_writeback"))
 		return err
 	}
 	err = r.completeTask(ctx, task, result)

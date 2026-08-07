@@ -312,6 +312,7 @@ type fakeNutritionFallbackEstimator struct {
 	additionalContext string
 	rows              map[int]map[string]any
 	err               error
+	calls             int
 }
 
 type delayedNutritionFallbackEstimator struct {
@@ -346,6 +347,7 @@ func (c *noThinkingNutritionClient) AnalyzeWithoutThinking(context.Context, stri
 }
 
 func (f *fakeNutritionFallbackEstimator) Estimate(ctx context.Context, candidates []UnresolvedNutritionCandidate, additionalContext string) (map[int]map[string]any, error) {
+	f.calls++
 	f.candidates = append([]UnresolvedNutritionCandidate(nil), candidates...)
 	f.additionalContext = additionalContext
 	return f.rows, f.err
@@ -2777,6 +2779,36 @@ func TestApplyDBFirstToItemsWithPreciseMicronutrientsRejectsSparseAIResult(t *te
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "微量营养")
+}
+
+func TestApplyPreciseMicronutrientsToResolvedItemsSkipsSecondDBResolution(t *testing.T) {
+	fallback := &fakeNutritionFallbackEstimator{rows: map[int]map[string]any{
+		0: {
+			fallbackNutritionSourceKey: "qwen_generated",
+			"calories":                 116.0, "protein": 2.6, "carbs": 25.9, "fat": 0.3,
+			"fiber": 0.4, "sugar": 0.1, "saturatedFat": 0.1, "cholesterolMg": 0.0,
+			"sodiumMg": 2.0, "potassiumMg": 30.0, "calciumMg": 5.0, "ironMg": 0.2,
+			"magnesiumMg": 12.0, "zincMg": 0.4, "vitaminARaeMcg": 0.0, "vitaminCMg": 0.0,
+			"vitaminDMcg": 0.0, "vitaminEMg": 0.1, "vitaminKMcg": 0.1, "thiaminMg": 0.02,
+			"riboflavinMg": 0.01, "niacinMg": 0.4, "vitaminB6Mg": 0.03, "folateMcg": 3.0,
+			"vitaminB12Mcg": 0.0,
+		},
+	}}
+	svc := NewAnalyzeService(nil, nil, nil)
+	svc.ConfigureNutritionFallbackEstimator(fallback)
+
+	items, err := svc.ApplyPreciseMicronutrientsToResolvedItems(context.Background(), []map[string]any{{
+		"name": "白米饭", "estimatedWeightGrams": 200.0, "nutrition_source": "database_exact",
+		"nutrients":               map[string]any{"calories": 232.0, "protein": 5.2, "carbs": 51.8, "fat": 0.6},
+		"unit_nutrition_per_100g": map[string]any{"calories": 116.0, "protein": 2.6, "carbs": 25.9, "fat": 0.3},
+	}}, "校园食堂菜品：白米饭")
+
+	require.NoError(t, err)
+	require.Equal(t, 1, fallback.calls)
+	require.Len(t, fallback.candidates, 1)
+	require.Len(t, items, 1)
+	require.Equal(t, preciseMicronutrientAnalysisMarker, items[0]["micronutrient_analysis"])
+	require.Equal(t, 232.0, mapFromAny(items[0]["nutrients"])["calories"])
 }
 
 func TestAnalyzeService_FinalizeFastModeUsesOnlyQwenPostprocessing(t *testing.T) {

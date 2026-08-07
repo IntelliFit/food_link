@@ -374,7 +374,7 @@ func TestPublicFoodServiceCreateCampusFoodPublishesAndStoresCampusFields(t *test
 
 	var task analyzedomain.AnalysisTask
 	require.NoError(t, db.Where("id = ?", *saved.AnalysisTaskID).First(&task).Error)
-	require.Equal(t, "precision_plan", task.TaskType)
+	require.Equal(t, "food", task.TaskType)
 	require.Equal(t, "pending", task.Status)
 	require.Equal(t, image, *task.ImageURL)
 	require.Equal(t, []string{image}, task.ImagePaths)
@@ -382,11 +382,11 @@ func TestPublicFoodServiceCreateCampusFoodPublishesAndStoresCampusFields(t *test
 	require.Equal(t, "campus_public_food", task.Payload["public_food_source_type"])
 	require.Equal(t, true, task.Payload["micronutrient_analysis_required"])
 	require.Equal(t, "image", task.Payload["source_type"])
-	require.Equal(t, "strict_separate", task.Payload["execution_mode"])
-	require.NotEmpty(t, task.Payload["precision_session_id"])
+	require.Equal(t, "standard", task.Payload["execution_mode"])
+	require.Empty(t, task.Payload["precision_session_id"])
 	require.Len(t, publisher.messages, 1)
 	require.Equal(t, task.ID, publisher.messages[0].TaskID)
-	require.Equal(t, "precision_plan", publisher.messages[0].TaskType)
+	require.Equal(t, "food", publisher.messages[0].TaskType)
 	require.True(t, awarder.called)
 	require.Equal(t, true, awarder.meta["is_campus_food"])
 	require.Equal(t, school, awarder.meta["school_name"])
@@ -449,8 +449,8 @@ func TestPublicFoodServiceCreateCampusFoodAcceptsPostedPayloadWithoutItems(t *te
 
 	var task analyzedomain.AnalysisTask
 	require.NoError(t, db.Where("id = ?", *saved.AnalysisTaskID).First(&task).Error)
-	require.Equal(t, "precision_plan", task.TaskType)
-	require.Equal(t, "strict_separate", task.Payload["execution_mode"])
+	require.Equal(t, "food", task.TaskType)
+	require.Equal(t, "standard", task.Payload["execution_mode"])
 	require.Equal(t, "campus_public_food", task.Payload["public_food_source_type"])
 	require.Equal(t, true, task.Payload["micronutrient_analysis_required"])
 	require.Equal(t, itemID, task.Payload["public_food_item_id"])
