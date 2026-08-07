@@ -52,6 +52,7 @@ import {
   type MembershipStatus,
   type RewardCenterResponse,
   type RewardCenterTask,
+  type StatsSummary,
   getCachedMealFullRecord,
   showUnifiedApiError
 } from '../../utils/api'
@@ -269,6 +270,48 @@ function buildWeekHeatmapCellsFromStorage(): WeekHeatmapCell[] {
     })
   }
   return cells
+}
+
+function createCalendarHeatmapCell(
+  dateKey: string,
+  caloriesRaw: unknown,
+  targetRaw: unknown,
+  hasMealRecord = false
+): WeekHeatmapCell {
+  const dateParts = dateKey.split('-').map(Number)
+  const date = new Date(dateParts[0], dateParts[1] - 1, dateParts[2])
+  const caloriesValue = Number(caloriesRaw)
+  const targetValue = Number(targetRaw)
+  const calories = Number.isFinite(caloriesValue) ? caloriesValue : 0
+  const target = Number.isFinite(targetValue) && targetValue > 0 ? targetValue : 2000
+  const hasRecord = calories > 0 || hasMealRecord
+  return {
+    date: dateKey,
+    dayName: SHORT_DAY_NAMES[date.getDay()],
+    dayNum: String(date.getDate()),
+    calories,
+    target,
+    intakeRatio: hasRecord ? calories / target : 0,
+    state: !hasRecord ? 'none' : calories > target ? 'surplus' : 'deficit',
+    isToday: dateKey === formatDateKey(new Date()),
+    hasRecord,
+  }
+}
+
+function buildCalendarHeatmapCellsFromStorage(stats?: StatsSummary | null): WeekHeatmapCell[] {
+  const byDate = new Map<string, WeekHeatmapCell>()
+  stats?.daily_calories?.forEach((day) => {
+    byDate.set(day.date, createCalendarHeatmapCell(day.date, day.calories, stats.tdee, day.calories > 0))
+  })
+  getStoredHomeDashboardSnapshots().forEach((snapshot) => {
+    byDate.set(snapshot.date, createCalendarHeatmapCell(
+      snapshot.date,
+      snapshot.intakeData?.current,
+      snapshot.intakeData?.target,
+      Boolean(snapshot.meals?.length)
+    ))
+  })
+  return Array.from(byDate.values()).sort((a, b) => a.date.localeCompare(b.date))
 }
 
 function parseCompleteNumber(value: string): number | null {
@@ -827,6 +870,7 @@ function IndexPage() {
   const [meals, setMeals] = React.useState<HomeMealItem[]>(initialLocalSnapshot?.meals || [])
   const [expirySummary, setExpirySummary] = React.useState<HomeFoodExpirySummary>(initialLocalSnapshot?.expirySummary || DEFAULT_EXPIRY_SUMMARY)
   const [weekHeatmapCells, setWeekHeatmapCells] = React.useState<WeekHeatmapCell[]>(() => buildWeekHeatmapCellsFromStorage())
+  const [calendarHistoryCells, setCalendarHistoryCells] = React.useState<WeekHeatmapCell[]>(() => buildCalendarHeatmapCellsFromStorage())
   const [loading, setLoading] = React.useState(!initialLocalSnapshot)
   const [isSwitchingDate, setIsSwitchingDate] = React.useState(false)
   /** 后台静默同步中：左上角微型 spinner，不占文档流 */
@@ -1082,7 +1126,7 @@ function IndexPage() {
       console.log('[DEBUG] loadDashboard start, date=', resolvedDate, 'seq=', seq)
       // 首页主数据是首屏唯一硬依赖。其余接口提前并发启动，但都作为后台增强，
       // 不能因为弱网超时而阻塞已经成功返回的 dashboard 渲染。
-      const statsPromise = getStatsSummary('week').catch((err) => {
+      const statsPromise = getStatsSummary('month').catch((err) => {
         console.error('[home-dashboard] getStatsSummary failed:', err)
         return null
       })
@@ -1191,6 +1235,7 @@ function IndexPage() {
 
       // 从 storage 优先、stats 回退构建 7 天热力图；stats 失败时保留首屏缓存结果。
       if (stats) {
+        setCalendarHistoryCells(buildCalendarHeatmapCellsFromStorage(stats))
         const today = new Date()
         const nextWeekHeatmapCells: WeekHeatmapCell[] = []
         for (let offset = -3; offset <= 3; offset++) {
@@ -1259,6 +1304,7 @@ function IndexPage() {
         setHomeAchievement(localFallback.achievement || { streak_days: 0, green_days: 0 })
         setTargetForm(createTargetForm(localFallback.intakeData || DEFAULT_INTAKE))
         setWeekHeatmapCells(buildWeekHeatmapCellsFromStorage())
+        setCalendarHistoryCells(buildCalendarHeatmapCellsFromStorage())
       } else {
         setIntakeData(DEFAULT_INTAKE)
         setNutritionTarget(null)
@@ -1267,6 +1313,7 @@ function IndexPage() {
         setExerciseBurnedKcal(0)
         setHomeAchievement({ streak_days: 0, green_days: 0 })
         setWeekHeatmapCells(createWeekHeatmapCells())
+        setCalendarHistoryCells([])
         setTargetForm(createTargetForm(DEFAULT_INTAKE))
       }
     } finally {
@@ -2292,6 +2339,16 @@ function IndexPage() {
         expirySummary: res.expirySummary || DEFAULT_EXPIRY_SUMMARY,
         exerciseBurnedKcal: nextExerciseKcal,
         achievement: nextAchievement
+      })
+      setCalendarHistoryCells(prev => {
+        const nextCell = createCalendarHeatmapCell(
+          normalizedDate,
+          intake.current,
+          intake.target,
+          Boolean(res.meals?.length)
+        )
+        return [...prev.filter(cell => cell.date !== normalizedDate), nextCell]
+          .sort((a, b) => a.date.localeCompare(b.date))
       })
       if (bodyMetricsRes) {
         setBodyMetrics(prev => {
@@ -3362,6 +3419,7 @@ function IndexPage() {
 
         <DateSelector
           cells={weekHeatmapCells}
+          historyCells={calendarHistoryCells}
           selectedDate={selectedDate}
           onSelect={handleDateSelect}
         />
