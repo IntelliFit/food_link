@@ -1929,7 +1929,7 @@ func TestAnalyzeService_RunPrecisionJSONFallsBackToQwenOnGeminiTransientError(t 
 	assert.Equal(t, 1, qwenClient.calls)
 }
 
-func TestAnalyzeService_AnalyzeImageFallsBackToQwenAfterOneGeminiRetry(t *testing.T) {
+func TestAnalyzeService_AnalyzeImageFallsBackToQwenWithoutRetryingTimedOutGemini(t *testing.T) {
 	executionMode := precisionExecutionMode
 	geminiClient := &mockLLMClient{err: errors.New("net/http: TLS handshake timeout")}
 	qwenClient := &mockLLMClient{result: map[string]any{
@@ -1955,7 +1955,7 @@ func TestAnalyzeService_AnalyzeImageFallsBackToQwenAfterOneGeminiRetry(t *testin
 
 	require.NoError(t, err)
 	assert.Equal(t, "千问快速回退", result["description"])
-	assert.Equal(t, 2, geminiClient.calls)
+	assert.Equal(t, 1, geminiClient.calls)
 	assert.Equal(t, 1, qwenClient.calls)
 }
 
