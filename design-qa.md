@@ -58,6 +58,7 @@ final result: passed
 
 - 源视觉真值：`/var/folders/dl/j1hxj3fs3czd7lt458p170t80000gn/T/codex-clipboard-885e996c-40f8-4d30-a73c-198b83fd6f79.png`
 - 输入栏缺陷证据：`/var/folders/dl/j1hxj3fs3czd7lt458p170t80000gn/T/codex-clipboard-3e71faf1-6aae-4fd9-92c0-4efde8ad9749.png`
+- 空对话底部布局目标：`/var/folders/dl/j1hxj3fs3czd7lt458p170t80000gn/T/codex-clipboard-7de051eb-3221-4d0d-a9de-af2b408f870b.png`
 - 目标页面：`apps/wechat/src/packageExtra/pages/pet-chat/index.tsx`
 - 目标样式：`apps/wechat/src/packageExtra/pages/pet-chat/index.scss`
 - 页面状态：浅色主题、宠物对话页；需同时验证初始对话态与已有分析态
@@ -66,10 +67,10 @@ final result: passed
 
 - 宠物形象从每条宠物消息左侧移除，只在页面左上身份区展示一次；身份区同时显示动态宠物名称和当前处理状态。
 - 用户消息保持右对齐绿色气泡；宠物消息改为无头像、整宽白色内容卡，Markdown 标题、段落、列表和表格能力保留。
-- 初始态删除三步提问教学、重复动作标签和装饰光斑，只保留一段简短介绍与四个起始问题。
-- 分析后的追问由四个长问题收敛为“饮食怎么调整？ / 推荐食谱 / 训练怎么安排？”三项，输入提示同步缩短。
+- 初始态删除三步提问教学、重复动作标签和装饰光斑，只保留简短介绍；起始提示词与输入框统一进入底部操作区。
+- 空对话和已有分析统一显示“饮食怎么调整？ / 推荐食谱 / 训练怎么安排？”三项；输入提示同步缩短。
 - 复用现有 `PetAvatar`、宠物资源和项目色彩体系，没有新增图片、Emoji、自绘 SVG 或占位资源。
-- 根据真机截图补充固定底栏：页面和小程序 `page` 容器均锁定为 100% 可视高度并隐藏外层滚动，中间 `ScrollView` 使用 `flex: 1 1 0; height: 0` 独立承载消息滚动；快捷追问和输入栏位于滚动区之外，始终停在底部安全区上方。页面配置同时声明 `disableScroll: true`。
+- 根据真机截图补充豆包式固定底栏：页面和小程序 `page` 容器锁定为 `100vh` 并隐藏外层滚动，中间 `ScrollView` 使用 `flex: 1 1 0; height: 0` 独立承载消息滚动；提示词和输入框由同一个 `pet-chat-bottom-dock` 承载，从空对话开始就停在底部安全区上方。页面配置同时声明 `disableScroll: true`。
 
 ## Static checks
 
@@ -77,11 +78,11 @@ final result: passed
 - TypeScript typecheck 通过。
 - 目标 TSX ESLint 通过。
 - `git diff --check` 通过。
-- 现有 `dev:weapp` watch 已于 18:44 将 TSX/SCSS/页面配置编译到对应 `dist/packageExtra/pages/pet-chat` 产物，WXSS 中已确认包含 page/root 固定高度与消息区独立滚动规则。
+- 现有 `dev:weapp` watch 已于 13:27 将 TSX/SCSS 编译到对应 `dist/packageExtra/pages/pet-chat` 产物，JS/WXSS 中已确认包含 `pet-chat-bottom-dock`、`100vh` 和空对话输入提示。
 
 ## Blocking issue
 
-- 微信开发者工具 9420 端口处于监听状态，但 `mrc where` 与 `mrc sysinfo` 均返回自动化 WebSocket 连接失败。
+- 微信开发者工具 9420/3001 均未开放自动化 WebSocket，`mrc where` 无法连接。
 - 因此无法取得实现截图，无法按相同视口把参考图与实现并排比较，也无法执行快捷问题、输入发送、历史面板和深色模式的运行时交互检查。
 - 按 Product Design `image-to-code` 的设计 QA 门禁，在微信开发者工具重新开启“工具 → 自动化”前，本轮不能判定视觉验收通过，也不应发布为正式小程序版本。
 

@@ -33,13 +33,6 @@ type ChatMessage = {
   actions?: string[]
 }
 
-const QUICK_QUESTIONS = [
-  { text: '最近训练状态下滑了，帮我找原因', subtitle: '训练表现', range: 'week' as RangeMode },
-  { text: '我最近总饿，是不是吃法有问题', subtitle: '饥饿感', range: 'week' as RangeMode },
-  { text: '帮我找最该优化的一点', subtitle: '优先级', range: 'week' as RangeMode },
-  { text: '看最近 30 天规律', subtitle: '长期趋势', range: 'month' as RangeMode },
-]
-
 const FOLLOW_UPS = [
   '饮食怎么调整？',
   '推荐食谱',
@@ -361,23 +354,10 @@ function PetChatPage() {
               </View>
             </View>
           ))}
-          {isEmptyConversation ? (
-            <View className='pet-chat-starter'>
-              <Text className='pet-chat-starter-title'>可以从这些话题开始</Text>
-              <View className='pet-chat-starter-grid'>
-                {QUICK_QUESTIONS.map((item) => (
-                  <View key={item.text} className='pet-chat-starter-card' onClick={() => handleQuickQuestion(item.text, item.range)}>
-                    <Text className='pet-chat-starter-card-title'>{item.text}</Text>
-                    <Text className='pet-chat-starter-card-subtitle'>{item.subtitle} · {rangeLabel(item.range)}</Text>
-                  </View>
-                ))}
-              </View>
-            </View>
-          ) : null}
         </View>
       </ScrollView>
 
-      {lastAnalysis ? (
+      <View className='pet-chat-bottom-dock'>
         <ScrollView className='pet-chat-quick-row' scrollX enhanced showScrollbar={false}>
           <View className='pet-chat-quick-row-inner'>
             {FOLLOW_UPS.map((text) => (
@@ -393,21 +373,21 @@ function PetChatPage() {
             ))}
           </View>
         </ScrollView>
-      ) : null}
 
-      <View className='pet-chat-input-bar'>
-        <Input
-          className='pet-chat-input'
-          value={input}
-          placeholder={lastAnalysis ? `继续问${petName}...` : '说说你最近最想改善的事...'}
-          placeholderClass='pet-chat-input-placeholder'
-          confirmType='send'
-          onInput={(event) => setInput(String(event.detail.value || ''))}
-          onConfirm={handleSend}
-          disabled={busy}
-        />
-        <View className={`pet-chat-send ${busy || !input.trim() ? 'disabled' : ''}`} onClick={handleSend}>
-          <Text>发送</Text>
+        <View className='pet-chat-input-bar'>
+          <Input
+            className='pet-chat-input'
+            value={input}
+            placeholder={lastAnalysis ? `继续问${petName}...` : `和${petName}聊聊...`}
+            placeholderClass='pet-chat-input-placeholder'
+            confirmType='send'
+            onInput={(event) => setInput(String(event.detail.value || ''))}
+            onConfirm={handleSend}
+            disabled={busy}
+          />
+          <View className={`pet-chat-send ${busy || !input.trim() ? 'disabled' : ''}`} onClick={handleSend}>
+            <Text>发送</Text>
+          </View>
         </View>
       </View>
 
