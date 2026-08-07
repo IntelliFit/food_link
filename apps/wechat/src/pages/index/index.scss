@@ -691,6 +691,37 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
     }
   }
 
+  .date-calendar-title__text,
+  .date-calendar-title__arrow,
+  .date-calendar-nav,
+  .date-calendar-toggle {
+    color: #315d43;
+  }
+
+  .date-selector-section.is-calendar-expanded {
+    border-color: rgb(47 84 61 / 10%);
+    background: rgb(255 253 247 / 96%);
+  }
+
+  .month-calendar-weekday,
+  .month-calendar-legend,
+  .month-calendar-legend__hint {
+    color: #7a756b;
+  }
+
+  .month-calendar-cell {
+    color: #34473b;
+
+    &.is-today:not(.is-selected) {
+      border-color: rgb(63 114 83 / 42%);
+    }
+
+    &.is-selected {
+      background: linear-gradient(180deg, #356f4d, #214e37);
+      box-shadow: 0 6rpx 14rpx rgb(21 61 43 / 22%);
+    }
+  }
+
   .wellness-overview-card,
   .wellness-daily-advice,
   .body-status-card {
@@ -853,6 +884,199 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 // 日期选择器 - 新设计：滑动卡片式
 .date-selector-section {
   margin-bottom: 16rpx; // 增加间距
+
+  &.is-calendar-expanded {
+    padding: 12rpx 18rpx 18rpx;
+    border: 1rpx solid rgb(47 84 61 / 8%);
+    border-radius: 28rpx;
+    background: rgb(255 255 255 / 88%);
+    box-shadow: 0 10rpx 28rpx rgb(28 91 70 / 8%);
+  }
+}
+
+.date-calendar-toolbar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 54rpx;
+  margin-bottom: 6rpx;
+}
+
+.date-calendar-title {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  padding: 8rpx 18rpx;
+}
+
+.date-calendar-title__text,
+.date-calendar-title__arrow {
+  color: #376d5a;
+  font-size: 24rpx;
+  line-height: 34rpx;
+  font-weight: 700;
+}
+
+.date-calendar-title__arrow {
+  font-size: 22rpx;
+}
+
+.date-calendar-nav,
+.date-calendar-toggle {
+  position: relative;
+  z-index: 1;
+  min-width: 54rpx;
+  height: 54rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999rpx;
+  color: #4f8f79;
+  font-size: 34rpx;
+  line-height: 54rpx;
+  font-weight: 700;
+
+  &:active {
+    background: rgb(92 184 150 / 10%);
+  }
+
+  &.is-disabled,
+  &.is-placeholder {
+    opacity: 0.28;
+  }
+}
+
+.date-calendar-toggle {
+  min-width: 72rpx;
+  padding: 0 12rpx;
+  box-sizing: border-box;
+  font-size: 22rpx;
+}
+
+.month-calendar {
+  padding-top: 4rpx;
+}
+
+.month-calendar-weekdays,
+.month-calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+}
+
+.month-calendar-weekdays {
+  margin-bottom: 4rpx;
+}
+
+.month-calendar-weekday {
+  text-align: center;
+  color: $text-tertiary;
+  font-size: 22rpx;
+  line-height: 36rpx;
+  font-weight: 500;
+}
+
+.month-calendar-cell {
+  position: relative;
+  width: 68rpx;
+  height: 68rpx;
+  margin: 3rpx auto;
+  border: 2rpx solid transparent;
+  border-radius: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: $text-primary;
+  box-sizing: border-box;
+
+  &:active:not(.is-future):not(.is-empty-slot) {
+    transform: scale(0.94);
+  }
+
+  &.is-empty-slot {
+    pointer-events: none;
+  }
+
+  &.is-future {
+    opacity: 0.28;
+  }
+
+  &.is-today:not(.is-selected) {
+    border-color: rgb(92 184 150 / 45%);
+  }
+
+  &.is-selected {
+    color: #ffffff;
+    background: $date-capsule-selected-bg;
+    box-shadow: 0 6rpx 14rpx rgb(0 188 125 / 20%);
+
+    .month-calendar-record {
+      background: #ffffff;
+    }
+  }
+}
+
+.month-calendar-day {
+  font-size: 24rpx;
+  line-height: 28rpx;
+  font-weight: 600;
+}
+
+.month-calendar-record {
+  width: 7rpx;
+  height: 7rpx;
+  margin-top: 3rpx;
+  border-radius: 50%;
+  background: transparent;
+
+  &.is-recorded {
+    background: $primary-color;
+  }
+
+  &.is-over {
+    background: $home-warning-red;
+  }
+}
+
+.month-calendar-legend {
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+  min-height: 42rpx;
+  padding: 8rpx 8rpx 0;
+  color: $text-tertiary;
+  font-size: 22rpx;
+  line-height: 30rpx;
+}
+
+.month-calendar-legend__item {
+  display: flex;
+  align-items: center;
+  gap: 7rpx;
+}
+
+.month-calendar-legend__dot {
+  width: 8rpx;
+  height: 8rpx;
+  border-radius: 50%;
+
+  &.is-recorded {
+    background: $primary-color;
+  }
+
+  &.is-over {
+    background: $home-warning-red;
+  }
+}
+
+.month-calendar-legend__hint {
+  margin-left: auto;
+  color: $text-tertiary;
 }
 
 .home-backfill-hint {
