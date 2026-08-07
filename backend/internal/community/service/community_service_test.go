@@ -251,16 +251,19 @@ func newTestService(feed FeedRepo, notif NotificationRepo, user UserFinder) *Com
 }
 
 func TestPublicFeed(t *testing.T) {
+	petLevel := 12
 	mockFeed := &mockFeedRepo{
 		listPublicFeed: []repo.FeedRecord{{ID: "r1", UserID: "u1", MealType: "lunch"}},
 		likesMap:       map[string]*repo.LikeInfo{"r1": {Count: 2}},
-		profiles:       map[string]*repo.UserProfile{"u1": {ID: "u1", Nickname: "Alice"}},
+		profiles:       map[string]*repo.UserProfile{"u1": {ID: "u1", Nickname: "Alice", PetLevel: &petLevel}},
 	}
 	svc := newTestService(mockFeed, &mockNotificationRepo{}, &mockUserRepo{})
 	items, err := svc.PublicFeed(context.Background(), FeedParams{Limit: 10})
 	assert.NoError(t, err)
 	assert.Len(t, items, 1)
 	assert.Equal(t, 2, items[0].LikeCount)
+	assert.NotNil(t, items[0].Author.PetLevel)
+	assert.Equal(t, 12, *items[0].Author.PetLevel)
 }
 
 func TestPublicFeedWithAuthorID(t *testing.T) {

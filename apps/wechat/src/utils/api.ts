@@ -6017,7 +6017,7 @@ export interface CommunityFeedItem {
   target_type?: CommunityFeedTargetType
   target_id?: string
   record: CommunityFeedRecord
-  author: { id: string; nickname: string; avatar: string }
+  author: { id: string; nickname: string; avatar: string; pet_level?: number }
   like_count: number
   liked: boolean
   /** 是否为当前用户自己的帖子 */

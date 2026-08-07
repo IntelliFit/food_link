@@ -77,6 +77,7 @@ type UserProfile struct {
 	Nickname      string `gorm:"column:nickname"`
 	Avatar        string `gorm:"column:avatar"`
 	PublicRecords *bool  `gorm:"column:public_records"`
+	PetLevel      *int   `gorm:"-"`
 }
 
 func (UserProfile) TableName() string { return "weapp_user" }
@@ -572,14 +573,33 @@ func (r *FeedRepo) GetUserProfiles(ctx context.Context, userIDs []string) (map[s
 	if len(userIDs) == 0 {
 		return map[string]*UserProfile{}, nil
 	}
-	var rows []UserProfile
-	err := r.db.WithContext(ctx).Where("id IN ?", userIDs).Find(&rows).Error
+	type userProfileRow struct {
+		ID            string `gorm:"column:id"`
+		Nickname      string `gorm:"column:nickname"`
+		Avatar        string `gorm:"column:avatar"`
+		PublicRecords *bool  `gorm:"column:public_records"`
+		PetLevel      *int   `gorm:"column:pet_level"`
+	}
+	var rows []userProfileRow
+	err := r.db.WithContext(ctx).
+		Table("weapp_user AS users").
+		Select("users.id, users.nickname, users.avatar, users.public_records, pets.level AS pet_level").
+		Joins("LEFT JOIN user_pets AS pets ON pets.user_id = users.id").
+		Where("users.id IN ?", userIDs).
+		Scan(&rows).Error
 	if err != nil {
 		return nil, err
 	}
 	result := make(map[string]*UserProfile)
 	for i := range rows {
-		result[rows[i].ID] = &rows[i]
+		row := rows[i]
+		result[row.ID] = &UserProfile{
+			ID:            row.ID,
+			Nickname:      row.Nickname,
+			Avatar:        row.Avatar,
+			PublicRecords: row.PublicRecords,
+			PetLevel:      row.PetLevel,
+		}
 	}
 	return result, nil
 }
