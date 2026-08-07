@@ -1854,7 +1854,7 @@ func (r *FoodNutritionRepo) GetNutritionEmbeddingIndexRevision(ctx context.Conte
 			COUNT(*) FILTER (WHERE is_active = TRUE) AS active_count,
 			COALESCE(MAX(updated_at)::text, '') AS updated_at
 		FROM food_nutrition_embeddings
-		WHERE embedding_model = ? AND embedding_dimensions = ?
+		WHERE embedding_model = ? AND embedding_dimensions = ? AND source_type = 'canonical'
 	`, strings.TrimSpace(model), dimensions).Scan(&revision).Error
 	return revision, err
 }
@@ -1863,6 +1863,17 @@ func (r *FoodNutritionRepo) GetNutritionEmbeddingIndexRevision(ctx context.Conte
 // pods without holding a database transaction open during an external API call.
 func (r *FoodNutritionRepo) TryNutritionEmbeddingSyncLock(ctx context.Context, fn func(context.Context) error) (bool, error) {
 	const lockID int64 = 704631921175
+	return r.tryNutritionEmbeddingLock(ctx, lockID, fn)
+}
+
+// TryNutritionEmbeddingIndexLoadLock prevents rolling deployments from loading
+// the large in-memory vector index on every pod at the same time.
+func (r *FoodNutritionRepo) TryNutritionEmbeddingIndexLoadLock(ctx context.Context, fn func(context.Context) error) (bool, error) {
+	const lockID int64 = 704631921176
+	return r.tryNutritionEmbeddingLock(ctx, lockID, fn)
+}
+
+func (r *FoodNutritionRepo) tryNutritionEmbeddingLock(ctx context.Context, lockID int64, fn func(context.Context) error) (bool, error) {
 	acquired := false
 	err := r.db.WithContext(ctx).Connection(func(connection *gorm.DB) error {
 		if err := connection.Raw("SELECT pg_try_advisory_lock(?)", lockID).Scan(&acquired).Error; err != nil {
@@ -1909,26 +1920,41 @@ func (r *FoodNutritionRepo) UpsertNutritionEmbeddings(ctx context.Context, rows 
 }
 
 func (r *FoodNutritionRepo) LoadNutritionEmbeddingIndex(ctx context.Context, model string, dimensions int) ([]NutritionEmbeddingIndexRow, error) {
+	const pageSize = 256
 	type row struct {
 		IdentityKey    string `gorm:"column:identity_key"`
 		FoodID         string `gorm:"column:food_id"`
 		EmbeddingBytes []byte `gorm:"column:embedding_bytes"`
 	}
-	var rows []row
-	if err := r.db.WithContext(ctx).
-		Table("food_nutrition_embeddings AS embeddings").
-		Select("embeddings.identity_key, embeddings.food_id, embeddings.embedding_bytes").
-		Joins("JOIN food_nutrition_library AS foods ON foods.id = embeddings.food_id").
-		Joins("LEFT JOIN food_nutrition_aliases AS aliases ON embeddings.source_type = 'alias' AND aliases.id = embeddings.source_id").
-		Where("embeddings.is_active = ? AND embeddings.embedding_model = ? AND embeddings.embedding_dimensions = ?", true, strings.TrimSpace(model), dimensions).
-		Where("foods.is_active = ? AND foods.quality_tier IN ?", true, []string{domain.NutritionQualityAuthoritative, domain.NutritionQualityLegacyCurated}).
-		Where("embeddings.source_type = 'canonical' OR (aliases.id IS NOT NULL AND aliases.match_status <> ?)", domain.NutritionAliasBlocked).
-		Find(&rows).Error; err != nil {
-		return nil, err
-	}
-	out := make([]NutritionEmbeddingIndexRow, 0, len(rows))
-	for _, item := range rows {
-		out = append(out, NutritionEmbeddingIndexRow(item))
+	// Alias names already participate in the cheaper lexical lookup. Keeping the
+	// in-memory semantic index canonical-only cuts its transfer size sharply
+	// without removing alias matching or the AI nutrition fallback.
+	out := make([]NutritionEmbeddingIndexRow, 0)
+	afterIdentityKey := ""
+	for {
+		rows := make([]row, 0, pageSize)
+		query := r.db.WithContext(ctx).
+			Table("food_nutrition_embeddings AS embeddings").
+			Select("embeddings.identity_key, embeddings.food_id, embeddings.embedding_bytes").
+			Joins("JOIN food_nutrition_library AS foods ON foods.id = embeddings.food_id").
+			Where("embeddings.is_active = ? AND embeddings.embedding_model = ? AND embeddings.embedding_dimensions = ?", true, strings.TrimSpace(model), dimensions).
+			Where("embeddings.source_type = ?", "canonical").
+			Where("foods.is_active = ? AND foods.quality_tier IN ?", true, []string{domain.NutritionQualityAuthoritative, domain.NutritionQualityLegacyCurated}).
+			Order("embeddings.identity_key ASC").
+			Limit(pageSize)
+		if afterIdentityKey != "" {
+			query = query.Where("embeddings.identity_key > ?", afterIdentityKey)
+		}
+		if err := query.Find(&rows).Error; err != nil {
+			return nil, err
+		}
+		for _, item := range rows {
+			out = append(out, NutritionEmbeddingIndexRow(item))
+		}
+		if len(rows) < pageSize {
+			break
+		}
+		afterIdentityKey = rows[len(rows)-1].IdentityKey
 	}
 	return out, nil
 }

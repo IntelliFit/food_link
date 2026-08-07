@@ -10,13 +10,15 @@ import (
 )
 
 type maintenanceRepoFake struct {
-	sources       []foodrecordrepo.NutritionEmbeddingSource
-	hashes        map[string]string
-	revision      foodrecordrepo.NutritionEmbeddingSourceRevision
-	lockAvailable bool
-	lockCalls     int
-	upserted      []domain.FoodNutritionEmbedding
-	deactivated   []string
+	sources            []foodrecordrepo.NutritionEmbeddingSource
+	hashes             map[string]string
+	revision           foodrecordrepo.NutritionEmbeddingSourceRevision
+	lockAvailable      bool
+	lockCalls          int
+	indexLockAvailable bool
+	indexLockCalls     int
+	upserted           []domain.FoodNutritionEmbedding
+	deactivated        []string
 }
 
 func (f *maintenanceRepoFake) ListNutritionEmbeddingSources(context.Context) ([]foodrecordrepo.NutritionEmbeddingSource, error) {
@@ -38,6 +40,14 @@ func (f *maintenanceRepoFake) GetNutritionEmbeddingSourceRevision(context.Contex
 func (f *maintenanceRepoFake) TryNutritionEmbeddingSyncLock(ctx context.Context, fn func(context.Context) error) (bool, error) {
 	f.lockCalls++
 	if !f.lockAvailable {
+		return false, nil
+	}
+	return true, fn(ctx)
+}
+
+func (f *maintenanceRepoFake) TryNutritionEmbeddingIndexLoadLock(ctx context.Context, fn func(context.Context) error) (bool, error) {
+	f.indexLockCalls++
+	if !f.indexLockAvailable {
 		return false, nil
 	}
 	return true, fn(ctx)
@@ -215,5 +225,43 @@ func TestNutritionSemanticRetrieverRefreshesOnlyWhenRevisionChanges(t *testing.T
 	entries, ready := retriever.readySnapshot()
 	if !ready || len(entries) != 1 || entries[0].foodID != "food-b" {
 		t.Fatalf("unexpected refreshed entries: ready=%t entries=%+v", ready, entries)
+	}
+}
+
+func TestNutritionEmbeddingMaintainerSkipsWarmWhenAnotherPodOwnsIndexLock(t *testing.T) {
+	repo := &maintenanceRepoFake{indexLockAvailable: false}
+	retrieverRepo := &retrieverRepoFake{
+		revision: foodrecordrepo.NutritionEmbeddingIndexRevision{ActiveCount: 1, UpdatedAt: "1"},
+		rows: []foodrecordrepo.NutritionEmbeddingIndexRow{
+			{IdentityKey: "canonical:food-a", FoodID: "food-a", EmbeddingBytes: EncodeEmbedding([]float32{1, 0, 0})},
+		},
+	}
+	client := &maintenanceClientFake{}
+	maintainer := NewNutritionEmbeddingMaintainer(repo, client, NewNutritionSemanticRetriever(retrieverRepo, client))
+
+	if err := maintainer.refreshIndex(context.Background(), true); err != nil {
+		t.Fatalf("refreshIndex returned error: %v", err)
+	}
+	if repo.indexLockCalls != 1 || retrieverRepo.loads != 0 {
+		t.Fatalf("non-leader must skip index load: lockCalls=%d loads=%d", repo.indexLockCalls, retrieverRepo.loads)
+	}
+}
+
+func TestNutritionEmbeddingMaintainerWarmsWhenIndexLockAcquired(t *testing.T) {
+	repo := &maintenanceRepoFake{indexLockAvailable: true}
+	retrieverRepo := &retrieverRepoFake{
+		revision: foodrecordrepo.NutritionEmbeddingIndexRevision{ActiveCount: 1, UpdatedAt: "1"},
+		rows: []foodrecordrepo.NutritionEmbeddingIndexRow{
+			{IdentityKey: "canonical:food-a", FoodID: "food-a", EmbeddingBytes: EncodeEmbedding([]float32{1, 0, 0})},
+		},
+	}
+	client := &maintenanceClientFake{}
+	maintainer := NewNutritionEmbeddingMaintainer(repo, client, NewNutritionSemanticRetriever(retrieverRepo, client))
+
+	if err := maintainer.refreshIndex(context.Background(), true); err != nil {
+		t.Fatalf("refreshIndex returned error: %v", err)
+	}
+	if repo.indexLockCalls != 1 || retrieverRepo.loads != 1 {
+		t.Fatalf("leader must load index once: lockCalls=%d loads=%d", repo.indexLockCalls, retrieverRepo.loads)
 	}
 }
