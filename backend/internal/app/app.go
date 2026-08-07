@@ -341,6 +341,7 @@ func New(cfg *config.Config) (*App, error) {
 
 	// Pet companion module DI
 	petRepo := petrepo.NewPetRepo(db)
+	statsSvc.ConfigurePetChatCompanionProvider(petRepo)
 	petSvc := petservice.NewService(petRepo)
 	petSvc.ConfigureStorage(storageClient)
 	pixelAvatarAPIKey := resolvePixelAvatarAPIKey(cfg.External)
