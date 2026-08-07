@@ -583,6 +583,14 @@ h1 {
   padding: 16px;
 }
 
+/* 食堂采集是连续录入流程，各步骤应按文档流自然向下排列。 */
+.campus-food-collection-flow .detail-panel {
+  position: static;
+  min-height: 0;
+  max-height: none;
+  overflow: visible;
+}
+
 .collection-batch-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
