@@ -1,0 +1,7 @@
+interface:
+  display_name: "Foodlink 每日代码审查与 PR"
+  short_description: "下班前审查当天改动，安全拆分并创建指向 dev 的 PR"
+  default_prompt: "Use $foodlink-pr-review to review today’s Foodlink changes and create safe PRs targeting dev."
+
+policy:
+  allow_implicit_invocation: true

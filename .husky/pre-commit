@@ -7,7 +7,93 @@ cd "$(git rev-parse --show-toplevel)" || exit 1
 # *.html - 预览文件
 # *.py - 调试脚本
 # *.js - 根目录下的临时 JS 文件
+TRACKED_TEMP_FILES="$(git ls-files -- '*.png' '*.html' '*.py' '*.js' | grep -v '/' || true)"
 find . -maxdepth 1 \( -name "*.png" -o -name "*.html" -o -name "*.py" -o -name "*.js" \) -type f -delete
 
-# 如果删除了文件，需要重新 stage 已跟踪的修改（避免误加入 untracked 编译产物）
-git add -u
+# 只暂存被清理的已跟踪根目录临时文件，禁止把其他未暂存业务改动带进本次提交。
+if [ -n "$TRACKED_TEMP_FILES" ]; then
+  printf '%s\n' "$TRACKED_TEMP_FILES" | xargs git add -u --
+fi
+
+# 对本次暂存内容执行确定性的提交前审查；语义级代码审查由每日 foodlink-pr-review 任务完成。
+STAGED_FILES="$(git diff --cached --name-only --diff-filter=ACMRD)"
+EXISTING_STAGED_FILES="$(git diff --cached --name-only --diff-filter=ACMR)"
+
+if [ -z "$STAGED_FILES" ]; then
+  exit 0
+fi
+
+echo "[pre-commit] 检查暂存 diff..."
+git diff --cached --check || exit 1
+
+SENSITIVE_FILES="$(printf '%s\n' "$STAGED_FILES" | grep -E '(^|/)\.env($|\.)|(^|/)(credentials|secrets)(/|$)' | grep -v -E '\.env\.example$' || true)"
+if [ -n "$SENSITIVE_FILES" ]; then
+  echo "[pre-commit] 拒绝提交疑似敏感文件："
+  printf '%s\n' "$SENSITIVE_FILES"
+  exit 1
+fi
+
+WECHAT_FILES="$(printf '%s\n' "$STAGED_FILES" | grep -E '^apps/wechat/(src|tests|config)/' || true)"
+if [ -n "$WECHAT_FILES" ]; then
+  echo "[pre-commit] 微信端 TypeScript 检查..."
+  npm run typecheck || exit 1
+
+  WECHAT_LINT_FILES="$(printf '%s\n' "$EXISTING_STAGED_FILES" | grep -E '^apps/wechat/(src|tests|config)/.*\.(ts|tsx)$' || true)"
+  if [ -n "$WECHAT_LINT_FILES" ]; then
+    echo "[pre-commit] 微信端 ESLint 检查..."
+    printf '%s\n' "$WECHAT_LINT_FILES" | xargs npx eslint --max-warnings 0 || exit 1
+  fi
+
+  echo "[pre-commit] 微信端测试..."
+  npm test -- --runInBand || exit 1
+fi
+
+ADMIN_FILES="$(printf '%s\n' "$STAGED_FILES" | grep -E '^admin/' || true)"
+if [ -n "$ADMIN_FILES" ]; then
+  echo "[pre-commit] Admin 类型与构建检查..."
+  npm --prefix admin run build || exit 1
+fi
+
+GO_FILES="$(printf '%s\n' "$STAGED_FILES" | grep -E '^backend/.*\.go$' || true)"
+if [ -n "$GO_FILES" ]; then
+  echo "[pre-commit] Go 格式检查..."
+  GO_FORMAT_FILES="$(printf '%s\n' "$EXISTING_STAGED_FILES" | grep -E '^backend/.*\.go$' || true)"
+  UNFORMATTED=""
+  if [ -n "$GO_FORMAT_FILES" ]; then
+    UNFORMATTED="$(printf '%s\n' "$GO_FORMAT_FILES" | xargs gofmt -l)"
+  fi
+  if [ -n "$UNFORMATTED" ]; then
+    echo "[pre-commit] 以下 Go 文件尚未 gofmt："
+    printf '%s\n' "$UNFORMATTED"
+    exit 1
+  fi
+
+  echo "[pre-commit] Go 相关包测试..."
+  (
+    cd backend || exit 1
+    GO_PACKAGES=""
+    GO_TEST_ALL=0
+    for GO_FILE in $GO_FILES; do
+      GO_RELATIVE="${GO_FILE#backend/}"
+      GO_DIR="${GO_RELATIVE%/*}"
+      if [ "$GO_DIR" = "$GO_RELATIVE" ]; then
+        GO_DIR="."
+      fi
+      if [ "$GO_DIR" = "." ] || [ -d "$GO_DIR" ]; then
+        GO_PACKAGES="$GO_PACKAGES ./$GO_DIR"
+      else
+        # 整个 Go 包被删除时，原目录已不存在；运行全量测试覆盖依赖关系。
+        GO_TEST_ALL=1
+      fi
+    done
+    if [ "$GO_TEST_ALL" -eq 1 ]; then
+      go test ./...
+    else
+      GO_PACKAGES="$(printf '%s\n' $GO_PACKAGES | sort -u | tr '\n' ' ')"
+      # shellcheck disable=SC2086
+      go test $GO_PACKAGES
+    fi
+  ) || exit 1
+fi
+
+echo "[pre-commit] 审查通过。"
