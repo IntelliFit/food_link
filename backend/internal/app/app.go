@@ -120,6 +120,7 @@ type App struct {
 type campusCatalogNutritionBackfiller interface {
 	SubmitPublishedNutritionBackfill(ctx context.Context, limit int) (int, error)
 	RepairLegacyAnalysisTasks(ctx context.Context, limit int) (campuscatalogservice.LegacyAnalysisRepairSummary, error)
+	TryAnalysisMaintenanceLeadership(ctx context.Context, fn func(context.Context) error) (bool, error)
 }
 
 func New(cfg *config.Config) (*App, error) {
@@ -1034,20 +1035,44 @@ func (a *App) startCampusCatalogNutritionBackfill(backfiller campusCatalogNutrit
 	a.catalogBackfillDone = done
 	go func() {
 		defer close(done)
-		runCampusCatalogNutritionBackfill(ctx, backfiller)
-		ticker := time.NewTicker(2 * time.Minute)
-		defer ticker.Stop()
-		for {
+		for ctx.Err() == nil {
+			acquired, err := backfiller.TryAnalysisMaintenanceLeadership(ctx, func(leaderCtx context.Context) error {
+				logger.Info(context.Background(), "校园菜品分析维护已取得全局领导权")
+				runCampusCatalogMaintenanceLoop(leaderCtx, backfiller)
+				return nil
+			})
+			if ctx.Err() != nil {
+				break
+			}
+			if err != nil {
+				logger.Error(context.Background(), "校园菜品分析维护领导权获取失败", err)
+			} else if acquired {
+				logger.Warn(context.Background(), "校园菜品分析维护领导实例意外退出，准备重新选举")
+			}
+			timer := time.NewTimer(30 * time.Second)
 			select {
 			case <-ctx.Done():
-				logger.Info(context.Background(), "历史校园菜品营养补分析维护已停止")
-				return
-			case <-ticker.C:
-				runCampusCatalogNutritionBackfill(ctx, backfiller)
+				timer.Stop()
+			case <-timer.C:
 			}
 		}
+		logger.Info(context.Background(), "历史校园菜品营养补分析维护已停止")
 	}()
 	logger.Info(context.Background(), "历史校园菜品营养补分析维护已启动")
+}
+
+func runCampusCatalogMaintenanceLoop(ctx context.Context, backfiller campusCatalogNutritionBackfiller) {
+	runCampusCatalogNutritionBackfill(ctx, backfiller)
+	ticker := time.NewTicker(2 * time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			runCampusCatalogNutritionBackfill(ctx, backfiller)
+		}
+	}
 }
 
 func runCampusCatalogNutritionBackfill(parent context.Context, backfiller campusCatalogNutritionBackfiller) {

@@ -19,6 +19,7 @@ import (
 type recordingCampusNutritionBackfiller struct {
 	called   chan int
 	repaired chan int
+	leader   chan struct{}
 }
 
 func (f *recordingCampusNutritionBackfiller) SubmitPublishedNutritionBackfill(_ context.Context, limit int) (int, error) {
@@ -31,6 +32,11 @@ func (f *recordingCampusNutritionBackfiller) RepairLegacyAnalysisTasks(_ context
 	return campuscatalogservice.LegacyAnalysisRepairSummary{Scanned: 1, Retried: 1}, nil
 }
 
+func (f *recordingCampusNutritionBackfiller) TryAnalysisMaintenanceLeadership(ctx context.Context, fn func(context.Context) error) (bool, error) {
+	f.leader <- struct{}{}
+	return true, fn(ctx)
+}
+
 func TestAppPackage(t *testing.T) {
 	// This is a compile-time / smoke test for the app package
 	// The New() function requires real database/config which is not feasible in unit tests
@@ -39,13 +45,18 @@ func TestAppPackage(t *testing.T) {
 
 func TestStartCampusCatalogNutritionBackfillRunsImmediately(t *testing.T) {
 	app := &App{}
-	backfiller := &recordingCampusNutritionBackfiller{called: make(chan int, 1), repaired: make(chan int, 1)}
+	backfiller := &recordingCampusNutritionBackfiller{called: make(chan int, 1), repaired: make(chan int, 1), leader: make(chan struct{}, 1)}
 	app.startCampusCatalogNutritionBackfill(backfiller)
 	t.Cleanup(func() {
 		app.catalogBackfillCancel()
 		<-app.catalogBackfillDone
 	})
 
+	select {
+	case <-backfiller.leader:
+	case <-time.After(time.Second):
+		t.Fatal("校园菜品分析维护未尝试获取全局领导权")
+	}
 	select {
 	case limit := <-backfiller.called:
 		assert.Equal(t, 100, limit)

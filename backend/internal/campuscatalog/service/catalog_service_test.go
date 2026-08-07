@@ -132,6 +132,10 @@ func (f *fakeCatalogRepo) CompleteAnalyzedItem(_ context.Context, itemID, taskID
 	return nil
 }
 
+func (f *fakeCatalogRepo) TryAnalysisMaintenanceLeadership(ctx context.Context, fn func(context.Context) error) (bool, error) {
+	return true, fn(ctx)
+}
+
 func (f *fakeCatalogRepo) SoftDeleteItem(context.Context, string) error { return nil }
 
 type fakeCatalogAnalyzeSubmitter struct {
