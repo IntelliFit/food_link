@@ -300,3 +300,58 @@ func TestLegacyTerminalAnalysisCandidatesCanBeClaimedOnlyOnce(t *testing.T) {
 	require.Nil(t, saved.AnalysisTaskID)
 	require.Contains(t, saved.AnalysisError, "普通分析")
 }
+
+func TestFailedAnalysisRetryCandidatesExcludeTasksAlreadyRetried(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:"+uuid.NewString()+"?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&domain.CatalogItem{}, &analyzedomain.AnalysisTask{}))
+
+	firstTaskID := uuid.NewString()
+	alreadyRetriedTaskID := uuid.NewString()
+	items := []domain.CatalogItem{
+		{ID: uuid.NewString(), BatchID: uuid.NewString(), EntryType: "dish", Name: "首次失败", Status: "analysis_failed", AnalysisTaskID: &firstTaskID, AnalysisError: "原始模型超时"},
+		{ID: uuid.NewString(), BatchID: uuid.NewString(), EntryType: "dish", Name: "重试仍失败", Status: "analysis_failed", AnalysisTaskID: &alreadyRetriedTaskID},
+	}
+	require.NoError(t, db.Create(&items).Error)
+	require.NoError(t, db.Create(&[]analyzedomain.AnalysisTask{
+		{ID: firstTaskID, UserID: "system", TaskType: "food_text", Status: "failed", Payload: map[string]any{"campus_catalog_item_id": items[0].ID}},
+		{ID: alreadyRetriedTaskID, UserID: "system", TaskType: "food_text", Status: "failed", Payload: map[string]any{"campus_catalog_item_id": items[1].ID, "retry_source_task_id": "source-task"}},
+	}).Error)
+	retryTaskID := uuid.NewString()
+	require.NoError(t, db.Create(&analyzedomain.AnalysisTask{
+		ID: retryTaskID, UserID: "system", TaskType: "food_text", Status: "cancelled",
+		Payload: map[string]any{"campus_catalog_item_id": items[0].ID, "retry_source_task_id": firstTaskID, "internal_retry_prepared": true},
+	}).Error)
+	repo := NewCatalogRepo(db)
+
+	candidates, err := repo.ListFailedAnalysisRetryCandidates(context.Background(), 20)
+
+	require.NoError(t, err)
+	require.Len(t, candidates, 1)
+	require.Equal(t, items[0].ID, candidates[0].ID)
+
+	claimed, err := repo.ActivatePreparedAnalysisRetry(context.Background(), items[0].ID, firstTaskID, uuid.NewString(), time.Now())
+	require.ErrorIs(t, err, gorm.ErrRecordNotFound)
+	require.False(t, claimed)
+	var unchanged domain.CatalogItem
+	require.NoError(t, db.First(&unchanged, "id = ?", items[0].ID).Error)
+	require.Equal(t, "analysis_failed", unchanged.Status)
+	require.NotNil(t, unchanged.AnalysisTaskID)
+	require.Equal(t, firstTaskID, *unchanged.AnalysisTaskID)
+
+	claimed, err = repo.ActivatePreparedAnalysisRetry(context.Background(), items[0].ID, firstTaskID, retryTaskID, time.Now())
+	require.NoError(t, err)
+	require.True(t, claimed)
+	claimed, err = repo.ActivatePreparedAnalysisRetry(context.Background(), items[0].ID, firstTaskID, uuid.NewString(), time.Now())
+	require.NoError(t, err)
+	require.False(t, claimed)
+	var saved domain.CatalogItem
+	require.NoError(t, db.First(&saved, "id = ?", items[0].ID).Error)
+	require.Equal(t, "analysis_pending", saved.Status)
+	require.NotNil(t, saved.AnalysisTaskID)
+	require.Equal(t, retryTaskID, *saved.AnalysisTaskID)
+	require.Equal(t, "原始模型超时", saved.AnalysisError)
+	var activatedTask analyzedomain.AnalysisTask
+	require.NoError(t, db.First(&activatedTask, "id = ?", retryTaskID).Error)
+	require.Equal(t, "pending", activatedTask.Status)
+}

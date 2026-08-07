@@ -8,6 +8,7 @@ import (
 	analyzedomain "food_link/backend/internal/analyze/domain"
 	"food_link/backend/internal/analyze/repo"
 	authrepo "food_link/backend/internal/auth/repo"
+	commonerrors "food_link/backend/internal/common/errors"
 	foodrecorddomain "food_link/backend/internal/foodrecord/domain"
 	foodrecordrepo "food_link/backend/internal/foodrecord/repo"
 	"food_link/backend/internal/taskqueue"
@@ -647,6 +648,64 @@ func TestTaskService_RetryTask_ResubmitsFailedImageTaskWithExistingImages(t *tes
 	assert.Equal(t, true, retryTask.Payload["is_retry"])
 	assert.NotEqual(t, "old-group", stringFromAny(retryTask.Payload["credit_group_id"]))
 	assert.Equal(t, "standard_web_search", retryTask.Payload["execution_mode"])
+}
+
+func TestTaskService_PrepareAndEnqueueInternalRetryPreservesChainWithoutCredits(t *testing.T) {
+	_, taskRepo, precisionRepo, userRepo := setupTaskServiceTestDB(t)
+	svc := NewTaskService(taskRepo, precisionRepo, userRepo)
+	publisher := &recordingTaskPublisher{}
+	guard := &mockTaskCreditGuard{earnedUnits: 1}
+	svc.ConfigureTaskPublisher(publisher)
+	svc.ConfigureCreditGuard(guard)
+	ctx := context.Background()
+	task := &analyzedomain.AnalysisTask{
+		UserID:    "system-user",
+		TaskType:  "food_text",
+		Status:    "failed",
+		TextInput: func() *string { value := "校园菜品：番茄炒饭"; return &value }(),
+		Payload: map[string]any{
+			"execution_mode":         "standard",
+			"campus_catalog_item_id": "catalog-item",
+			"internal_benchmark":     true,
+		},
+	}
+	require.NoError(t, taskRepo.CreateTask(ctx, task))
+
+	result, err := svc.PrepareInternalRetryTask(ctx, task.ID, "system-user")
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Empty(t, publisher.messages)
+	require.Empty(t, guard.validateCalls)
+	require.Empty(t, guard.consumeCalls)
+	require.Empty(t, guard.refundCalls)
+	retryTask, err := taskRepo.GetTaskByID(ctx, result.TaskID)
+	require.NoError(t, err)
+	require.Equal(t, "cancelled", retryTask.Status)
+	require.Equal(t, task.ID, retryTask.Payload["retry_source_task_id"])
+	require.Equal(t, true, retryTask.Payload["internal_benchmark"])
+	require.Equal(t, true, retryTask.Payload["internal_retry_prepared"])
+	require.Equal(t, "catalog-item", retryTask.Payload["campus_catalog_item_id"])
+	require.NoError(t, taskRepo.UpdateTaskStatus(ctx, result.TaskID, "pending", nil))
+	require.NoError(t, svc.EnqueuePreparedInternalTask(ctx, result.TaskID, "system-user"))
+	require.Len(t, publisher.messages, 1)
+	require.Equal(t, result.TaskID, publisher.messages[0].TaskID)
+}
+
+func TestTaskService_PrepareInternalRetryRejectsUserTask(t *testing.T) {
+	_, taskRepo, precisionRepo, userRepo := setupTaskServiceTestDB(t)
+	svc := NewTaskService(taskRepo, precisionRepo, userRepo)
+	ctx := context.Background()
+	imageURL := "https://example.com/user-meal.jpg"
+	task := &analyzedomain.AnalysisTask{
+		UserID: "user-1", TaskType: "food", Status: "failed",
+		ImageURL: &imageURL, ImagePaths: []string{imageURL}, Payload: map[string]any{"execution_mode": "standard"},
+	}
+	require.NoError(t, taskRepo.CreateTask(ctx, task))
+
+	_, err := svc.PrepareInternalRetryTask(ctx, task.ID, "user-1")
+
+	require.ErrorIs(t, err, commonerrors.ErrForbidden)
 }
 
 func TestTaskService_RetryTask_RejectsDoneTask(t *testing.T) {

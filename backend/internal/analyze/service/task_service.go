@@ -1006,6 +1006,88 @@ func (s *TaskService) RetryTask(ctx context.Context, taskID, userID string) (*Re
 	}, nil
 }
 
+// PrepareInternalRetryTask rebuilds a failed internal task without publishing
+// it. The caller must atomically link the prepared task to its business record
+// and move it to pending before EnqueuePreparedInternalTask is called.
+func (s *TaskService) PrepareInternalRetryTask(ctx context.Context, taskID, userID string) (*RetryTaskResult, error) {
+	task, err := s.tasks.GetTaskByID(ctx, taskID)
+	if err != nil {
+		return nil, err
+	}
+	if task == nil {
+		return nil, errors.ErrNotFound
+	}
+	if task.UserID != userID {
+		return nil, errors.ErrForbidden
+	}
+	if !boolFromAny(task.Payload["internal_benchmark"]) {
+		return nil, errors.ErrForbidden
+	}
+	if !isRetryableTaskStatus(task.Status) {
+		return nil, &errors.AppError{Code: 10002, Message: "只有识别失败或超时的任务可以重新识别", HTTPStatus: 400}
+	}
+	input, err := s.retryInputFromTask(task)
+	if err != nil {
+		return nil, err
+	}
+	recordedOn, mode, err := s.resolveSubmitContext(ctx, userID, input)
+	if err != nil {
+		return nil, err
+	}
+	payload := buildSubmitTaskPayload(input, recordedOn, mode)
+	s.attachCorrectionChain(ctx, userID, input, payload)
+	payload["internal_benchmark"] = true
+	payload["internal_retry_prepared"] = true
+	prepared := &domain.AnalysisTask{UserID: userID, Status: "cancelled", Payload: payload}
+	if retrySourceType(task) == "food_text" {
+		text := input.TextInput
+		prepared.TaskType = "food_text"
+		prepared.TextInput = &text
+	} else {
+		prepared.TaskType = "food"
+		if input.ImageURL != "" {
+			prepared.ImageURL = &input.ImageURL
+		}
+		prepared.ImagePaths = append([]string(nil), input.ImageURLs...)
+	}
+	if err := s.tasks.CreateTask(ctx, prepared); err != nil {
+		return nil, err
+	}
+	logger.Info(ctx, "内部分析重试任务已预备",
+		slog.String("user_id", userID),
+		slog.String("source_task_id", task.ID),
+		slog.String("new_task_id", prepared.ID),
+		slog.String("task_type", task.TaskType),
+	)
+	return &RetryTaskResult{
+		TaskID:       prepared.ID,
+		Message:      "已预备重新识别任务",
+		SourceTaskID: task.ID,
+	}, nil
+}
+
+func (s *TaskService) EnqueuePreparedInternalTask(ctx context.Context, taskID, userID string) error {
+	task, err := s.tasks.GetTaskByID(ctx, taskID)
+	if err != nil {
+		return err
+	}
+	if task == nil {
+		return errors.ErrNotFound
+	}
+	if task.UserID != userID || !boolFromAny(task.Payload["internal_benchmark"]) || !boolFromAny(task.Payload["internal_retry_prepared"]) {
+		return errors.ErrForbidden
+	}
+	if task.Status != "pending" {
+		return &errors.AppError{Code: 10002, Message: "内部重试任务尚未激活", HTTPStatus: 400}
+	}
+	if err := s.enqueueTask(ctx, task); err != nil {
+		return err
+	}
+	logger.Info(ctx, "内部分析重试任务已入队",
+		slog.String("user_id", userID), slog.String("task_id", task.ID), slog.String("task_type", task.TaskType))
+	return nil
+}
+
 func isRetryableTaskStatus(status string) bool {
 	switch strings.TrimSpace(status) {
 	case "failed", "timed_out":
@@ -1057,6 +1139,7 @@ func (s *TaskService) retryInputFromTask(task *domain.AnalysisTask) (SubmitTaskI
 		ReferenceObjects:       mapSliceFromAny(payload["reference_objects"]),
 		SourceType:             stringFromAny(payload["source_type"]),
 		RetrySourceTaskID:      task.ID,
+		ExtraPayload:           payload,
 	}
 	if input.Date == "" && task.CreatedAt != nil {
 		input.Date = task.CreatedAt.In(time.FixedZone("Asia/Shanghai", 8*60*60)).Format("2006-01-02")

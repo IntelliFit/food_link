@@ -31,6 +31,10 @@ type fakeCatalogRepo struct {
 	legacyCandidates    []domain.LegacyAnalysisCandidate
 	claimLegacy         bool
 	completedLegacyID   string
+	analysisProgress    *domain.AnalysisProgress
+	failedCandidates    []domain.CatalogItem
+	claimFailed         bool
+	activatedFailedID   string
 }
 
 func (f *fakeCatalogRepo) FindBatchByClientKey(context.Context, string) (*domain.CollectionBatch, error) {
@@ -58,7 +62,24 @@ func (f *fakeCatalogRepo) ListItems(context.Context, domain.CatalogItemFilter) (
 }
 
 func (f *fakeCatalogRepo) GetAnalysisProgress(context.Context) (*domain.AnalysisProgress, error) {
+	if f.analysisProgress != nil {
+		return f.analysisProgress, nil
+	}
 	return &domain.AnalysisProgress{Total: 10, AnalyzableTotal: 8, Completed: 3, CompletedPercent: 37.5}, nil
+}
+
+func (f *fakeCatalogRepo) ListFailedAnalysisRetryCandidates(context.Context, int) ([]domain.CatalogItem, error) {
+	return append([]domain.CatalogItem(nil), f.failedCandidates...), nil
+}
+
+func (f *fakeCatalogRepo) ActivatePreparedAnalysisRetry(_ context.Context, itemID, sourceTaskID, retryTaskID string, startedAt time.Time) (bool, error) {
+	if !f.claimFailed {
+		return false, nil
+	}
+	f.claimFailed = false
+	f.activatedFailedID = itemID
+	f.linkedTaskID = retryTaskID
+	return true, nil
 }
 
 func (f *fakeCatalogRepo) ListPublishedItemsMissingNutrition(context.Context, int) ([]domain.CatalogItem, error) {
@@ -139,17 +160,34 @@ func (f *fakeCatalogRepo) TryAnalysisMaintenanceLeadership(ctx context.Context, 
 func (f *fakeCatalogRepo) SoftDeleteItem(context.Context, string) error { return nil }
 
 type fakeCatalogAnalyzeSubmitter struct {
-	taskID    string
-	err       error
-	userID    string
-	input     analyzeservice.SubmitTaskInput
-	textInput analyzeservice.SubmitTaskInput
+	taskID         string
+	err            error
+	userID         string
+	input          analyzeservice.SubmitTaskInput
+	textInput      analyzeservice.SubmitTaskInput
+	retriedTaskID  string
+	enqueuedTaskID string
 }
 
 func (f *fakeCatalogAnalyzeSubmitter) SubmitInternalAnalyzeTask(_ context.Context, userID string, input analyzeservice.SubmitTaskInput) (string, error) {
 	f.userID = userID
 	f.input = input
 	return f.taskID, f.err
+}
+
+func (f *fakeCatalogAnalyzeSubmitter) PrepareInternalRetryTask(_ context.Context, taskID, userID string) (*analyzeservice.RetryTaskResult, error) {
+	f.userID = userID
+	f.retriedTaskID = taskID
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &analyzeservice.RetryTaskResult{TaskID: f.taskID, SourceTaskID: taskID}, nil
+}
+
+func (f *fakeCatalogAnalyzeSubmitter) EnqueuePreparedInternalTask(_ context.Context, taskID, userID string) error {
+	f.userID = userID
+	f.enqueuedTaskID = taskID
+	return nil
 }
 
 func (f *fakeCatalogAnalyzeSubmitter) SubmitInternalTextTask(_ context.Context, userID string, input analyzeservice.SubmitTaskInput) (string, error) {
@@ -537,6 +575,72 @@ func TestRepairLegacyAnalysisPublishesCompletedPreciseResultWithoutRetry(t *test
 	require.Equal(t, 1, summary.Published)
 	require.Equal(t, item.ID, repo.completedLegacyID)
 	require.Empty(t, submitter.userID)
+}
+
+func TestRepairLegacyAnalysisDefersFailedRowsWhilePendingQueueExists(t *testing.T) {
+	taskID := "legacy-failed-task"
+	item := domain.CatalogItem{ID: "legacy-failed-item", Status: "analysis_failed", AnalysisTaskID: &taskID}
+	repo := &fakeCatalogRepo{
+		analysisProgress: &domain.AnalysisProgress{StatusCounts: map[string]int64{"analysis_pending": 2, "analysis_failed": 1}},
+		legacyCandidates: []domain.LegacyAnalysisCandidate{{
+			Item: item, TaskID: taskID, TaskType: "precision_plan", TaskStatus: "failed",
+		}},
+		claimLegacy: true,
+	}
+	submitter := &fakeCatalogAnalyzeSubmitter{taskID: "must-not-submit"}
+	svc := NewCatalogService(repo, nil)
+	svc.ConfigureAnalysis(submitter, fakeCatalogAnalysisUserResolver{userID: "system-user"})
+
+	summary, err := svc.RepairLegacyAnalysisTasks(context.Background(), 20)
+
+	require.NoError(t, err)
+	require.Equal(t, 1, summary.Skipped)
+	require.Zero(t, summary.Retried)
+	require.True(t, repo.claimLegacy)
+	require.Empty(t, submitter.userID)
+}
+
+func TestRetryFailedAnalysisWaitsUntilPendingQueueDrains(t *testing.T) {
+	taskID := "failed-task"
+	repo := &fakeCatalogRepo{
+		analysisProgress: &domain.AnalysisProgress{StatusCounts: map[string]int64{"analysis_pending": 3, "analysis_failed": 1}},
+		failedCandidates: []domain.CatalogItem{{ID: "failed-item", Status: "analysis_failed", AnalysisTaskID: &taskID}},
+		claimFailed:      true,
+	}
+	submitter := &fakeCatalogAnalyzeSubmitter{taskID: "retry-task"}
+	svc := NewCatalogService(repo, nil)
+	svc.ConfigureAnalysis(submitter, fakeCatalogAnalysisUserResolver{userID: "system-user"})
+
+	summary, err := svc.RetryFailedAnalysisTasks(context.Background(), 20)
+
+	require.NoError(t, err)
+	require.True(t, summary.Deferred)
+	require.Zero(t, summary.Retried)
+	require.Empty(t, repo.activatedFailedID)
+	require.Empty(t, submitter.retriedTaskID)
+}
+
+func TestRetryFailedAnalysisUsesExistingRetryPathAfterQueueDrains(t *testing.T) {
+	taskID := "failed-task"
+	repo := &fakeCatalogRepo{
+		analysisProgress: &domain.AnalysisProgress{StatusCounts: map[string]int64{"analysis_pending": 0, "analysis_failed": 1}},
+		failedCandidates: []domain.CatalogItem{{ID: "failed-item", Status: "analysis_failed", AnalysisTaskID: &taskID}},
+		claimFailed:      true,
+	}
+	submitter := &fakeCatalogAnalyzeSubmitter{taskID: "retry-task"}
+	svc := NewCatalogService(repo, nil)
+	svc.ConfigureAnalysis(submitter, fakeCatalogAnalysisUserResolver{userID: "system-user"})
+
+	summary, err := svc.RetryFailedAnalysisTasks(context.Background(), 20)
+
+	require.NoError(t, err)
+	require.False(t, summary.Deferred)
+	require.Equal(t, 1, summary.Retried)
+	require.Equal(t, "failed-item", repo.activatedFailedID)
+	require.Equal(t, "failed-task", submitter.retriedTaskID)
+	require.Equal(t, "retry-task", repo.linkedTaskID)
+	require.Equal(t, "retry-task", submitter.enqueuedTaskID)
+	require.Equal(t, "system-user", submitter.userID)
 }
 
 func stringPtr(value string) *string { return &value }

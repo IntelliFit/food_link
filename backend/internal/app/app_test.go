@@ -19,6 +19,7 @@ import (
 type recordingCampusNutritionBackfiller struct {
 	called   chan int
 	repaired chan int
+	retried  chan int
 	leader   chan struct{}
 }
 
@@ -30,6 +31,11 @@ func (f *recordingCampusNutritionBackfiller) SubmitPublishedNutritionBackfill(_ 
 func (f *recordingCampusNutritionBackfiller) RepairLegacyAnalysisTasks(_ context.Context, limit int) (campuscatalogservice.LegacyAnalysisRepairSummary, error) {
 	f.repaired <- limit
 	return campuscatalogservice.LegacyAnalysisRepairSummary{Scanned: 1, Retried: 1}, nil
+}
+
+func (f *recordingCampusNutritionBackfiller) RetryFailedAnalysisTasks(_ context.Context, limit int) (campuscatalogservice.FailedAnalysisRetrySummary, error) {
+	f.retried <- limit
+	return campuscatalogservice.FailedAnalysisRetrySummary{}, nil
 }
 
 func (f *recordingCampusNutritionBackfiller) TryAnalysisMaintenanceLeadership(ctx context.Context, fn func(context.Context) error) (bool, error) {
@@ -45,7 +51,7 @@ func TestAppPackage(t *testing.T) {
 
 func TestStartCampusCatalogNutritionBackfillRunsImmediately(t *testing.T) {
 	app := &App{}
-	backfiller := &recordingCampusNutritionBackfiller{called: make(chan int, 1), repaired: make(chan int, 1), leader: make(chan struct{}, 1)}
+	backfiller := &recordingCampusNutritionBackfiller{called: make(chan int, 1), repaired: make(chan int, 1), retried: make(chan int, 1), leader: make(chan struct{}, 1)}
 	app.startCampusCatalogNutritionBackfill(backfiller)
 	t.Cleanup(func() {
 		app.catalogBackfillCancel()
@@ -68,6 +74,12 @@ func TestStartCampusCatalogNutritionBackfillRunsImmediately(t *testing.T) {
 		assert.Equal(t, 20, limit)
 	case <-time.After(time.Second):
 		t.Fatal("旧版校园菜品分析任务未立即对账")
+	}
+	select {
+	case limit := <-backfiller.retried:
+		assert.Equal(t, 20, limit)
+	case <-time.After(time.Second):
+		t.Fatal("校园菜品失败任务未进入延后重试检查")
 	}
 }
 

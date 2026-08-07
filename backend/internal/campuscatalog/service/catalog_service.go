@@ -38,6 +38,8 @@ type CatalogRepository interface {
 	MarkAnalysisPending(ctx context.Context, item *domain.CatalogItem, adminID string, startedAt time.Time) error
 	LinkAnalysisTask(ctx context.Context, itemID, taskID string) error
 	MarkAnalysisFailed(ctx context.Context, itemID, message string, failedAt time.Time) error
+	ListFailedAnalysisRetryCandidates(ctx context.Context, limit int) ([]domain.CatalogItem, error)
+	ActivatePreparedAnalysisRetry(ctx context.Context, itemID, sourceTaskID, retryTaskID string, startedAt time.Time) (bool, error)
 	ListLegacyTerminalAnalysisCandidates(ctx context.Context, limit int) ([]domain.LegacyAnalysisCandidate, error)
 	ClaimLegacyAnalysisRetry(ctx context.Context, itemID, taskID, message string, claimedAt time.Time) (bool, error)
 	CompleteAnalyzedItem(ctx context.Context, itemID, taskID string, result map[string]any, completedAt time.Time) error
@@ -48,6 +50,8 @@ type CatalogRepository interface {
 type CatalogAnalyzeTaskSubmitter interface {
 	SubmitInternalAnalyzeTask(ctx context.Context, userID string, input analyzeservice.SubmitTaskInput) (string, error)
 	SubmitInternalTextTask(ctx context.Context, userID string, input analyzeservice.SubmitTaskInput) (string, error)
+	PrepareInternalRetryTask(ctx context.Context, taskID, userID string) (*analyzeservice.RetryTaskResult, error)
+	EnqueuePreparedInternalTask(ctx context.Context, taskID, userID string) error
 }
 
 type CatalogAnalysisUserResolver interface {
@@ -589,6 +593,83 @@ type LegacyAnalysisRepairSummary struct {
 	Failed    int
 }
 
+type FailedAnalysisRetrySummary struct {
+	Scanned  int
+	Retried  int
+	Skipped  int
+	Failed   int
+	Deferred bool
+}
+
+// RetryFailedAnalysisTasks waits for the normal analysis queue to drain, then
+// retries each failed current-pipeline task at most once through TaskService's
+// existing internal retry path. The task is prepared as non-runnable, then the
+// catalog link and task pending state are committed together before enqueue.
+// retry_source_task_id keeps automatic retries to one round.
+func (s *CatalogService) RetryFailedAnalysisTasks(ctx context.Context, limit int) (FailedAnalysisRetrySummary, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	progress, err := s.repo.GetAnalysisProgress(ctx)
+	if err != nil {
+		return FailedAnalysisRetrySummary{}, err
+	}
+	if progress != nil && progress.StatusCounts["analysis_pending"] > 0 {
+		return FailedAnalysisRetrySummary{Deferred: true}, nil
+	}
+	if s.analyzeTasks == nil || s.analysisUsers == nil {
+		return FailedAnalysisRetrySummary{}, fmt.Errorf("校园菜品 AI 分析服务未配置")
+	}
+	candidates, err := s.repo.ListFailedAnalysisRetryCandidates(ctx, limit)
+	if err != nil {
+		return FailedAnalysisRetrySummary{}, err
+	}
+	summary := FailedAnalysisRetrySummary{Scanned: len(candidates)}
+	if len(candidates) == 0 {
+		return summary, nil
+	}
+	analysisUserID, err := s.analysisUsers.ResolveInternalAnalysisUserID(ctx, "campus_catalog", "")
+	if err != nil {
+		return summary, err
+	}
+	for index := range candidates {
+		item := &candidates[index]
+		if item.AnalysisTaskID == nil || strings.TrimSpace(*item.AnalysisTaskID) == "" {
+			summary.Skipped++
+			continue
+		}
+		sourceTaskID := strings.TrimSpace(*item.AnalysisTaskID)
+		retryResult, retryErr := s.analyzeTasks.PrepareInternalRetryTask(ctx, sourceTaskID, analysisUserID)
+		if retryErr != nil {
+			summary.Failed++
+			logger.Warn(ctx, "校园菜品失败任务自动重试提交失败",
+				slog.String("item_id", item.ID), slog.String("analysis_task_id", sourceTaskID), logger.Err(retryErr))
+			continue
+		}
+		activated, activateErr := s.repo.ActivatePreparedAnalysisRetry(ctx, item.ID, sourceTaskID, retryResult.TaskID, time.Now())
+		if activateErr != nil {
+			summary.Failed++
+			logger.Warn(ctx, "激活校园菜品自动重试任务失败",
+				slog.String("item_id", item.ID), slog.String("analysis_task_id", retryResult.TaskID), logger.Err(activateErr))
+			continue
+		}
+		if !activated {
+			summary.Skipped++
+			continue
+		}
+		if enqueueErr := s.analyzeTasks.EnqueuePreparedInternalTask(ctx, retryResult.TaskID, analysisUserID); enqueueErr != nil {
+			// The task and catalog link are already durable and consistent. The
+			// existing pending-task recovery loop will republish it.
+			logger.Warn(ctx, "校园菜品自动重试任务等待队列恢复补发",
+				slog.String("item_id", item.ID), slog.String("analysis_task_id", retryResult.TaskID), logger.Err(enqueueErr))
+		}
+		summary.Retried++
+		logger.Info(ctx, "校园菜品失败任务已延后自动重试",
+			slog.String("item_id", item.ID), slog.String("source_task_id", sourceTaskID), slog.String("analysis_task_id", retryResult.TaskID))
+	}
+	return summary, nil
+}
+
 func (s *CatalogService) TryAnalysisMaintenanceLeadership(ctx context.Context, fn func(context.Context) error) (bool, error) {
 	return s.repo.TryAnalysisMaintenanceLeadership(ctx, fn)
 }
@@ -602,6 +683,11 @@ func (s *CatalogService) RepairLegacyAnalysisTasks(ctx context.Context, limit in
 	if limit <= 0 {
 		limit = 20
 	}
+	progress, err := s.repo.GetAnalysisProgress(ctx)
+	if err != nil {
+		return LegacyAnalysisRepairSummary{}, err
+	}
+	deferFailed := progress != nil && progress.StatusCounts["analysis_pending"] > 0
 	candidates, err := s.repo.ListLegacyTerminalAnalysisCandidates(ctx, limit)
 	if err != nil {
 		return LegacyAnalysisRepairSummary{}, err
@@ -609,6 +695,10 @@ func (s *CatalogService) RepairLegacyAnalysisTasks(ctx context.Context, limit in
 	summary := LegacyAnalysisRepairSummary{Scanned: len(candidates)}
 	for index := range candidates {
 		candidate := &candidates[index]
+		if deferFailed && candidate.Item.Status == "analysis_failed" {
+			summary.Skipped++
+			continue
+		}
 		if candidate.TaskStatus == "done" && candidate.TaskType == "precision_aggregate" {
 			if completeErr := s.repo.CompleteAnalyzedItem(ctx, candidate.Item.ID, candidate.TaskID, candidate.TaskResult, time.Now()); completeErr == nil {
 				summary.Published++
