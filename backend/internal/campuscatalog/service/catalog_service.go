@@ -41,6 +41,7 @@ type CatalogRepository interface {
 	ListLegacyTerminalAnalysisCandidates(ctx context.Context, limit int) ([]domain.LegacyAnalysisCandidate, error)
 	ClaimLegacyAnalysisRetry(ctx context.Context, itemID, taskID, message string, claimedAt time.Time) (bool, error)
 	CompleteAnalyzedItem(ctx context.Context, itemID, taskID string, result map[string]any, completedAt time.Time) error
+	TryAnalysisMaintenanceLeadership(ctx context.Context, fn func(context.Context) error) (bool, error)
 	SoftDeleteItem(ctx context.Context, itemID string) error
 }
 
@@ -586,6 +587,10 @@ type LegacyAnalysisRepairSummary struct {
 	Retried   int
 	Skipped   int
 	Failed    int
+}
+
+func (s *CatalogService) TryAnalysisMaintenanceLeadership(ctx context.Context, fn func(context.Context) error) (bool, error) {
+	return s.repo.TryAnalysisMaintenanceLeadership(ctx, fn)
 }
 
 // RepairLegacyAnalysisTasks converges catalog rows left behind by the retired

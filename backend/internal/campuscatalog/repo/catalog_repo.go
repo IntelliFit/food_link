@@ -327,6 +327,34 @@ func (r *CatalogRepo) ClaimLegacyAnalysisRetry(ctx context.Context, itemID, task
 	return result.RowsAffected == 1, result.Error
 }
 
+// TryAnalysisMaintenanceLeadership holds one PostgreSQL session advisory lock
+// for the complete maintenance loop, so a multi-pod deployment has only one
+// catalog reconciler and one global retry rate limit.
+func (r *CatalogRepo) TryAnalysisMaintenanceLeadership(ctx context.Context, fn func(context.Context) error) (bool, error) {
+	if fn == nil {
+		return false, errors.New("campus analysis maintenance function is required")
+	}
+	if r.db.Dialector.Name() != "postgres" {
+		return true, fn(ctx)
+	}
+	const lockKey = "food-link:campus-analysis-maintenance"
+	acquired := false
+	err := r.db.WithContext(ctx).Connection(func(connection *gorm.DB) error {
+		if err := connection.Raw("SELECT pg_try_advisory_lock(hashtextextended(?, 0))", lockKey).Scan(&acquired).Error; err != nil {
+			return err
+		}
+		if !acquired {
+			return nil
+		}
+		defer func() {
+			unlockDB := connection.Session(&gorm.Session{NewDB: true}).WithContext(context.Background())
+			_ = unlockDB.Exec("SELECT pg_advisory_unlock(hashtextextended(?, 0))", lockKey).Error
+		}()
+		return fn(ctx)
+	})
+	return acquired, err
+}
+
 type publishedCatalogItem struct {
 	ID                 string           `gorm:"column:id;primaryKey"`
 	UserID             *string          `gorm:"column:user_id"`
