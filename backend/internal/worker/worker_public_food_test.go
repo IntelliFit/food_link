@@ -94,7 +94,7 @@ func TestWorkerProcessFoodPublishesCatalogItemOnlyAfterNutritionSucceeds(t *test
 
 	runner := &Runner{tasks: taskRepo, analyze: &fakeWorkerAnalyzeRunner{result: map[string]any{
 		"description": "一份番茄炒饭", "insight": "主食份量适中", "items": []any{map[string]any{
-			"name": "番茄炒饭", "nutrients": map[string]any{"calories": 420.0, "protein": 12.0, "carbs": 68.0, "fat": 11.0},
+			"name": "番茄炒饭", "micronutrient_analysis": "ai_precise_v1", "nutrients": map[string]any{"calories": 420.0, "protein": 12.0, "carbs": 68.0, "fat": 11.0},
 		}},
 	}}}
 	runner.ConfigureCampusCatalog(catalog)

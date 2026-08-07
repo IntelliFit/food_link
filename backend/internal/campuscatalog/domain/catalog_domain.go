@@ -116,3 +116,15 @@ type AnalysisProgress struct {
 	CompletedPercent float64          `json:"completed_percent"`
 	StatusCounts     map[string]int64 `json:"status_counts"`
 }
+
+// LegacyAnalysisCandidate is a catalog row still linked to the retired
+// precision fan-out pipeline. Maintenance uses it to publish a valid terminal
+// result or atomically claim the row for the current single-task pipeline.
+type LegacyAnalysisCandidate struct {
+	Item       CatalogItem
+	TaskID     string
+	TaskType   string
+	TaskStatus string
+	TaskResult map[string]any
+	TaskError  string
+}

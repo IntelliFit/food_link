@@ -38,6 +38,9 @@ type CatalogRepository interface {
 	MarkAnalysisPending(ctx context.Context, item *domain.CatalogItem, adminID string, startedAt time.Time) error
 	LinkAnalysisTask(ctx context.Context, itemID, taskID string) error
 	MarkAnalysisFailed(ctx context.Context, itemID, message string, failedAt time.Time) error
+	ListLegacyTerminalAnalysisCandidates(ctx context.Context, limit int) ([]domain.LegacyAnalysisCandidate, error)
+	ClaimLegacyAnalysisRetry(ctx context.Context, itemID, taskID, message string, claimedAt time.Time) (bool, error)
+	CompleteAnalyzedItem(ctx context.Context, itemID, taskID string, result map[string]any, completedAt time.Time) error
 	SoftDeleteItem(ctx context.Context, itemID string) error
 }
 
@@ -575,6 +578,67 @@ func (s *CatalogService) SubmitPublishedNutritionBackfill(ctx context.Context, l
 		queued++
 	}
 	return queued, nil
+}
+
+type LegacyAnalysisRepairSummary struct {
+	Scanned   int
+	Published int
+	Retried   int
+	Skipped   int
+	Failed    int
+}
+
+// RepairLegacyAnalysisTasks converges catalog rows left behind by the retired
+// precision plan/item/aggregate graph. A terminal aggregate result is first
+// offered to the normal atomic publisher; anything incomplete or failed is
+// claimed exactly once and resubmitted through PublishItem's current standard
+// single-task path.
+func (s *CatalogService) RepairLegacyAnalysisTasks(ctx context.Context, limit int) (LegacyAnalysisRepairSummary, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	candidates, err := s.repo.ListLegacyTerminalAnalysisCandidates(ctx, limit)
+	if err != nil {
+		return LegacyAnalysisRepairSummary{}, err
+	}
+	summary := LegacyAnalysisRepairSummary{Scanned: len(candidates)}
+	for index := range candidates {
+		candidate := &candidates[index]
+		if candidate.TaskStatus == "done" && candidate.TaskType == "precision_aggregate" {
+			if completeErr := s.repo.CompleteAnalyzedItem(ctx, candidate.Item.ID, candidate.TaskID, candidate.TaskResult, time.Now()); completeErr == nil {
+				summary.Published++
+				continue
+			}
+		}
+
+		reason := strings.TrimSpace(candidate.TaskError)
+		if reason == "" {
+			reason = "旧版精准分析任务未产出可上线的完整营养结果，切换到普通分析路径重试"
+		}
+		claimed, claimErr := s.repo.ClaimLegacyAnalysisRetry(ctx, candidate.Item.ID, candidate.TaskID, reason, time.Now())
+		if claimErr != nil {
+			summary.Failed++
+			logger.Warn(ctx, "抢占旧版校园菜品分析重试失败",
+				slog.String("item_id", candidate.Item.ID), slog.String("analysis_task_id", candidate.TaskID), logger.Err(claimErr))
+			continue
+		}
+		if !claimed {
+			summary.Skipped++
+			continue
+		}
+		adminID := ""
+		if candidate.Item.PublishedByAdminID != nil {
+			adminID = strings.TrimSpace(*candidate.Item.PublishedByAdminID)
+		}
+		if _, publishErr := s.PublishItem(ctx, adminID, candidate.Item.ID); publishErr != nil {
+			summary.Failed++
+			logger.Warn(ctx, "旧版校园菜品切换普通分析路径失败",
+				slog.String("item_id", candidate.Item.ID), slog.String("legacy_task_id", candidate.TaskID), logger.Err(publishErr))
+			continue
+		}
+		summary.Retried++
+	}
+	return summary, nil
 }
 
 func catalogAnalysisContext(item *domain.CatalogItem) string {

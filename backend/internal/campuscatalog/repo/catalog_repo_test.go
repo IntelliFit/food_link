@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	analyzedomain "food_link/backend/internal/analyze/domain"
 	"food_link/backend/internal/campuscatalog/domain"
 	"food_link/backend/pkg/testdb"
 
@@ -39,7 +40,7 @@ func TestCompleteAnalyzedItemPublishesNutritionAndCatalogAtomically(t *testing.T
 
 	require.NoError(t, repo.CompleteAnalyzedItem(context.Background(), item.ID, "task-1", map[string]any{
 		"description": "一份番茄炒饭",
-		"items": []map[string]any{{"name": "番茄炒饭", "nutrients": map[string]any{
+		"items": []map[string]any{{"name": "番茄炒饭", "micronutrient_analysis": "ai_precise_v1", "nutrients": map[string]any{
 			"calories": 420.0, "protein": 12.0, "carbs": 68.0, "fat": 11.0,
 		}}},
 	}, completedAt))
@@ -72,6 +73,29 @@ func TestCompleteAnalyzedItemRejectsEmptyNutritionWithoutPublishing(t *testing.T
 	err = repo.CompleteAnalyzedItem(context.Background(), item.ID, "task-empty", map[string]any{"items": []map[string]any{}}, time.Now())
 
 	require.Error(t, err)
+	var publicCount int64
+	require.NoError(t, db.Table("public_food_library").Where("id = ?", item.ID).Count(&publicCount).Error)
+	require.Zero(t, publicCount)
+}
+
+func TestCompleteAnalyzedItemRejectsResultWithoutPreciseMicronutrients(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:"+uuid.NewString()+"?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&domain.CatalogItem{}, &publishedCatalogItem{}))
+	item := &domain.CatalogItem{
+		ID: uuid.NewString(), BatchID: uuid.NewString(), EntryType: "dish", Name: "普通分析菜品",
+		OrganizationName: "测试大学", CanteenName: "一食堂", Status: "analysis_pending",
+	}
+	require.NoError(t, db.Create(item).Error)
+	repo := NewCatalogRepo(db)
+
+	err = repo.CompleteAnalyzedItem(context.Background(), item.ID, "task-macro-only", map[string]any{
+		"items": []map[string]any{{"name": "普通分析菜品", "nutrients": map[string]any{
+			"calories": 320.0, "protein": 10.0, "carbs": 48.0, "fat": 8.0,
+		}}},
+	}, time.Now())
+
+	require.ErrorContains(t, err, "微量营养")
 	var publicCount int64
 	require.NoError(t, db.Table("public_food_library").Where("id = ?", item.ID).Count(&publicCount).Error)
 	require.Zero(t, publicCount)
@@ -225,4 +249,54 @@ func TestMarkAnalysisFailedPreservesExistingClientVersion(t *testing.T) {
 	require.NoError(t, db.First(&publicItem, "id = ?", item.ID).Error)
 	require.Equal(t, "published", publicItem.Status)
 	require.Equal(t, 360.0, publicItem.TotalCalories)
+}
+
+func TestLegacyTerminalAnalysisCandidatesCanBeClaimedOnlyOnce(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:"+uuid.NewString()+"?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&domain.CatalogItem{}, &analyzedomain.AnalysisTask{}))
+	batchID := uuid.NewString()
+	legacyPending := domain.CatalogItem{
+		ID: uuid.NewString(), BatchID: batchID, EntryType: "dish", Name: "旧任务菜品",
+		OrganizationName: "测试大学", CanteenName: "一食堂", Status: "analysis_pending",
+	}
+	legacyFailed := legacyPending
+	legacyFailed.ID, legacyFailed.Name, legacyFailed.Status = uuid.NewString(), "旧失败菜品", "analysis_failed"
+	currentFailed := legacyPending
+	currentFailed.ID, currentFailed.Name, currentFailed.Status = uuid.NewString(), "新路径失败菜品", "analysis_failed"
+	for _, fixture := range []struct {
+		item     *domain.CatalogItem
+		taskType string
+		status   string
+	}{
+		{&legacyPending, "precision_plan", "done"},
+		{&legacyFailed, "precision_aggregate", "failed"},
+		{&currentFailed, "food_text", "failed"},
+	} {
+		taskID := uuid.NewString()
+		fixture.item.AnalysisTaskID = &taskID
+		require.NoError(t, db.Create(fixture.item).Error)
+		require.NoError(t, db.Create(&analyzedomain.AnalysisTask{
+			ID: taskID, UserID: "system", TaskType: fixture.taskType, Status: fixture.status,
+			Payload: map[string]any{}, Result: map[string]any{},
+		}).Error)
+	}
+	repo := NewCatalogRepo(db)
+
+	candidates, err := repo.ListLegacyTerminalAnalysisCandidates(context.Background(), 10)
+	require.NoError(t, err)
+	require.Len(t, candidates, 2)
+
+	claimed, err := repo.ClaimLegacyAnalysisRetry(context.Background(), legacyPending.ID, *legacyPending.AnalysisTaskID, "切换到普通分析路径", time.Now())
+	require.NoError(t, err)
+	require.True(t, claimed)
+	claimed, err = repo.ClaimLegacyAnalysisRetry(context.Background(), legacyPending.ID, *legacyPending.AnalysisTaskID, "重复抢占", time.Now())
+	require.NoError(t, err)
+	require.False(t, claimed)
+
+	var saved domain.CatalogItem
+	require.NoError(t, db.First(&saved, "id = ?", legacyPending.ID).Error)
+	require.Equal(t, "analysis_failed", saved.Status)
+	require.Nil(t, saved.AnalysisTaskID)
+	require.Contains(t, saved.AnalysisError, "普通分析")
 }

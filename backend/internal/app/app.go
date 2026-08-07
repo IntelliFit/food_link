@@ -119,6 +119,7 @@ type App struct {
 
 type campusCatalogNutritionBackfiller interface {
 	SubmitPublishedNutritionBackfill(ctx context.Context, limit int) (int, error)
+	RepairLegacyAnalysisTasks(ctx context.Context, limit int) (campuscatalogservice.LegacyAnalysisRepairSummary, error)
 }
 
 func New(cfg *config.Config) (*App, error) {
@@ -1034,7 +1035,7 @@ func (a *App) startCampusCatalogNutritionBackfill(backfiller campusCatalogNutrit
 	go func() {
 		defer close(done)
 		runCampusCatalogNutritionBackfill(ctx, backfiller)
-		ticker := time.NewTicker(10 * time.Minute)
+		ticker := time.NewTicker(2 * time.Minute)
 		defer ticker.Stop()
 		for {
 			select {
@@ -1052,6 +1053,18 @@ func (a *App) startCampusCatalogNutritionBackfill(backfiller campusCatalogNutrit
 func runCampusCatalogNutritionBackfill(parent context.Context, backfiller campusCatalogNutritionBackfiller) {
 	ctx, cancel := context.WithTimeout(parent, 2*time.Minute)
 	defer cancel()
+	repair, repairErr := backfiller.RepairLegacyAnalysisTasks(ctx, 20)
+	if repairErr != nil {
+		logger.Error(ctx, "旧版校园菜品分析任务对账失败", repairErr)
+	} else if repair.Scanned > 0 {
+		logger.Info(ctx, "旧版校园菜品分析任务对账完成",
+			slog.Int("scanned_count", repair.Scanned),
+			slog.Int("published_count", repair.Published),
+			slog.Int("retried_count", repair.Retried),
+			slog.Int("skipped_count", repair.Skipped),
+			slog.Int("failed_count", repair.Failed),
+		)
+	}
 	queued, err := backfiller.SubmitPublishedNutritionBackfill(ctx, 100)
 	if err != nil {
 		logger.Error(ctx, "历史校园菜品营养补分析执行失败", err)

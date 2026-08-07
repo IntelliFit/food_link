@@ -27,7 +27,7 @@ func TestCompleteAnalyzedItemStoresEmptyImagePathsForTextOnlyDish(t *testing.T) 
 	require.NoError(t, db.Create(item).Error)
 
 	err = NewCatalogRepo(db).CompleteAnalyzedItem(context.Background(), item.ID, "task-text-only", map[string]any{
-		"items": []map[string]any{{"name": item.Name, "nutrients": map[string]any{
+		"items": []map[string]any{{"name": item.Name, "micronutrient_analysis": "ai_precise_v1", "nutrients": map[string]any{
 			"calories": 280.0, "protein": 24.0, "carbs": 8.0, "fat": 16.0,
 		}}},
 	}, time.Now())
