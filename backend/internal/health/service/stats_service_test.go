@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"food_link/backend/internal/health/domain"
+	petdomain "food_link/backend/internal/pet/domain"
 	"food_link/backend/pkg/config"
 
 	"github.com/stretchr/testify/assert"
@@ -660,14 +661,53 @@ func TestBuildPetChatPromptRequiresGentleTone(t *testing.T) {
 		StartDate:    "2024-06-10",
 		EndDate:      "2024-06-16",
 		RecordedDays: 2,
+		PetCompanion: petChatCompanion{
+			Name:        "太极小子",
+			Personality: "沉稳专注、表达清楚，重视长期规律",
+			Feature:     "重视阴阳平衡、动静结合",
+		},
 	}, "给我一个明天能执行的小目标", nil)
 
-	assert.Contains(t, prompt, "温和陪伴")
+	assert.Contains(t, prompt, "你的名字：\n太极小子")
+	assert.Contains(t, prompt, "沉稳专注、表达清楚")
+	assert.Contains(t, prompt, "重视阴阳平衡、动静结合")
+	assert.Contains(t, prompt, "长期陪伴用户的伙伴")
+	assert.Contains(t, prompt, "关注长期变化")
+	assert.Contains(t, prompt, "用户完成目标、数据改善或习惯有进步时")
 	assert.Contains(t, prompt, "不要调侃、挖苦、训话、责备")
 	assert.Contains(t, prompt, "避免“你这”“坎儿”“别一口气这么猛”")
-	assert.Contains(t, prompt, "合作式表达")
+	assert.Contains(t, prompt, "我们可以")
+	assert.Contains(t, prompt, "1-2 个明天可以尝试的小建议")
 	assert.Contains(t, prompt, "适合聊天气泡的纯文本")
 	assert.Contains(t, prompt, "不要输出 #、*、**、_、反引号")
+}
+
+func TestPetChatCompanionUsesSelectedBuiltinPetProfile(t *testing.T) {
+	pet := &petdomain.UserPet{
+		Name:        "华佗",
+		Personality: "gentle",
+		Meta: map[string]any{
+			"builtin_avatar_id": "huatuo-01",
+		},
+	}
+
+	companion := petChatCompanionFromPet(pet)
+
+	assert.Equal(t, "华佗", companion.Name)
+	assert.Contains(t, companion.Personality, "温和细腻")
+	assert.Contains(t, companion.Feature, "温和养生")
+}
+
+func TestPetChatPersonalityDescriptionMapsEveryStoredValue(t *testing.T) {
+	storedValues := []string{"gentle", "energetic", "focused", "snacky", "sporty"}
+
+	for _, value := range storedValues {
+		t.Run(value, func(t *testing.T) {
+			description := petChatPersonalityDescription(value)
+			assert.NotEmpty(t, description)
+			assert.NotEqual(t, value, description)
+		})
+	}
 }
 
 func TestSanitizePetChatAnswerTextRemovesMarkdownMarkers(t *testing.T) {

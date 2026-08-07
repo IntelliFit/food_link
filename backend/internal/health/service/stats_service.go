@@ -22,6 +22,7 @@ import (
 	commonerrors "food_link/backend/internal/common/errors"
 	"food_link/backend/internal/health/domain"
 	"food_link/backend/internal/nutritionagg"
+	petdomain "food_link/backend/internal/pet/domain"
 	"food_link/backend/pkg/config"
 	"food_link/backend/pkg/logger"
 
@@ -58,9 +59,14 @@ type BodyMetricsSummaryProvider interface {
 	GetSummary(ctx context.Context, userID string, statsRange string) (*BodyMetricsSummary, error)
 }
 
+type PetChatCompanionProvider interface {
+	GetPetByUserID(ctx context.Context, userID string) (*petdomain.UserPet, error)
+}
+
 type StatsService struct {
 	repo            StatsRepo
 	bodyMetrics     BodyMetricsSummaryProvider
+	petCompanion    PetChatCompanionProvider
 	creditGuard     CreditGuard
 	cfg             *config.Config
 	client          *http.Client
@@ -179,6 +185,10 @@ func (s *StatsService) ConfigureCreditGuard(guard CreditGuard) {
 	s.creditGuard = guard
 }
 
+func (s *StatsService) ConfigurePetChatCompanionProvider(provider PetChatCompanionProvider) {
+	s.petCompanion = provider
+}
+
 type DailyCalories struct {
 	Date     string  `json:"date"`
 	Calories float64 `json:"calories"`
@@ -231,6 +241,13 @@ type statsComputation struct {
 	RecordedDays       int
 	DataFingerprint    string
 	BodyMetrics        *BodyMetricsSummary
+	PetCompanion       petChatCompanion
+}
+
+type petChatCompanion struct {
+	Name        string
+	Personality string
+	Feature     string
 }
 
 type statsExerciseSummary struct {
@@ -518,6 +535,7 @@ func (s *StatsService) preparePetChat(ctx context.Context, userID string, input 
 	if !hasEnoughStatsInsightData(comp) {
 		return nil, nil, &commonerrors.AppError{Code: 10002, Message: "当前统计周期还没有饮食记录，先记录一餐后再问小食探", HTTPStatus: 400}
 	}
+	comp.PetCompanion = s.resolvePetChatCompanion(ctx, userID)
 	prompt := buildPetChatPrompt(comp, question, nil)
 	usage := estimatePetChatTokenUsage(prompt, comp.StatsRange)
 	pricing := billing.PriceTokenUsage(billing.PricingInput{Model: s.petChatModel(), Usage: usage}, s.aiUsagePricingConfig())
@@ -534,6 +552,103 @@ func (s *StatsService) preparePetChat(ctx context.Context, userID string, input 
 		EstimatedUsage: usage,
 		Pricing:        pricing,
 	}, comp, nil
+}
+
+func (s *StatsService) resolvePetChatCompanion(ctx context.Context, userID string) petChatCompanion {
+	companion := defaultPetChatCompanion()
+	if s == nil || s.petCompanion == nil || strings.TrimSpace(userID) == "" {
+		return companion
+	}
+	pet, err := s.petCompanion.GetPetByUserID(ctx, userID)
+	if err != nil {
+		logger.Warn(ctx, "读取宠物对话伙伴资料失败",
+			logger.UserID(userID),
+			logger.Err(err),
+		)
+		return companion
+	}
+	if pet == nil {
+		return companion
+	}
+	return petChatCompanionFromPet(pet)
+}
+
+func petChatCompanionFromPet(pet *petdomain.UserPet) petChatCompanion {
+	companion := defaultPetChatCompanion()
+	if pet == nil {
+		return companion
+	}
+	if name := strings.TrimSpace(pet.Name); name != "" {
+		companion.Name = name
+	}
+	companion.Personality = petChatPersonalityDescription(pet.Personality)
+	companion.Feature = petChatFeatureDescription(pet)
+	return companion
+}
+
+func defaultPetChatCompanion() petChatCompanion {
+	return petChatCompanion{
+		Name:        "小食探",
+		Personality: "温暖、耐心、善于倾听",
+		Feature:     "擅长陪用户长期记录饮食与生活变化，并把调整拆成容易做到的小步骤",
+	}
+}
+
+func petChatPersonalityDescription(personality string) string {
+	switch strings.TrimSpace(personality) {
+	case "gentle":
+		return "温和细腻、耐心倾听，不催促用户"
+	case "focused":
+		return "沉稳专注、表达清楚，重视长期规律"
+	case "energetic":
+		return "积极有活力，善于用轻松的方式鼓励用户"
+	case "snacky":
+		return "喜欢探索食物、亲切有趣，善于陪用户发现更合适的饮食选择"
+	case "sporty":
+		return "行动感强、爽朗友好，善于陪用户逐步建立运动习惯"
+	default:
+		if value := strings.TrimSpace(personality); value != "" {
+			return value
+		}
+		return defaultPetChatCompanion().Personality
+	}
+}
+
+func petChatFeatureDescription(pet *petdomain.UserPet) string {
+	if pet == nil {
+		return defaultPetChatCompanion().Feature
+	}
+	builtinAvatarID := petChatMetaString(pet.Meta, "builtin_avatar_id")
+	switch builtinAvatarID {
+	case "huatuo-01":
+		return "偏爱温和养生与循序调整，擅长从饮食和身体趋势中寻找可持续的改善方向"
+	case "taiji-xiaozi-01":
+		return "重视阴阳平衡、动静结合，擅长协调饮食、恢复与运动节奏"
+	case "jianwen-01":
+		return "重视健康记录和长期陪伴，擅长把复杂数据转成简单行动"
+	}
+	switch petChatMetaString(pet.Meta, "archetype") {
+	case "gentle_healer":
+		return "关注身体感受与恢复节奏，擅长提供温和、可持续的调整方向"
+	case "energetic_buddy":
+		return "擅长发现进步并提供行动动力，陪用户逐步建立稳定习惯"
+	case "protein_guardian":
+		return "关注蛋白质摄入、训练恢复与餐次结构，建议务实清楚"
+	case "light_lifestyle":
+		return "关注轻负担饮食与生活节奏，擅长给出容易坚持的小调整"
+	case "steady_caregiver":
+		return "重视长期规律与稳定变化，擅长把目标拆成容易坚持的小步骤"
+	default:
+		return defaultPetChatCompanion().Feature
+	}
+}
+
+func petChatMetaString(meta map[string]any, key string) string {
+	if len(meta) == 0 {
+		return ""
+	}
+	value, _ := meta[key].(string)
+	return strings.TrimSpace(value)
 }
 
 func (s *StatsService) GeneratePetChat(ctx context.Context, userID string, input PetChatInput) (*PetChatResult, error) {
@@ -1807,6 +1922,10 @@ func buildNutritionInsightPrompt(comp *statsComputation) string {
 }
 
 func buildPetChatPrompt(comp *statsComputation, question string, historyMessages []domain.PetChatMessage) string {
+	companion := comp.PetCompanion
+	if strings.TrimSpace(companion.Name) == "" {
+		companion = defaultPetChatCompanion()
+	}
 	rangeLabel := statsRangeLabel(comp.StatsRange)
 	dietGoal := "无"
 	if comp.User != nil && comp.User.DietGoal != nil {
@@ -1839,7 +1958,18 @@ func buildPetChatPrompt(comp *statsComputation, question string, historyMessages
 	exerciseBlock := buildPetChatExercisePromptBlock(comp)
 	historyBlock := buildPetChatHistoryPromptBlock(historyMessages)
 	customFocusBlock := buildPetChatCustomFocusPromptBlock(comp.User)
-	return fmt.Sprintf(`你是“食探”小程序里的宠物伙伴“小食探”，正在和用户进行自然对话式饮食分析。你只能基于已保存的饮食文本、营养汇总和身体趋势数据回答；不要声称看到了图片，不要做医学诊断，不要自称专业营养师。
+	return fmt.Sprintf(`你是「食探」小程序中的宠物伙伴。
+
+你的名字：
+%s
+
+你的性格：
+%s
+
+你的特点：
+%s
+
+你需要像一个长期陪伴用户的伙伴，而不是一个营养分析工具。你只能基于系统提供的饮食记录、营养数据、运动记录、身体趋势、健康档案和历史聊天回答；不要声称看到了图片。
 
 用户当前追问：
 %s
@@ -1875,19 +2005,21 @@ func buildPetChatPrompt(comp *statsComputation, question string, historyMessages
 %s
 
 回答要求：
-1. 用宠物伙伴语气，亲近但不装可爱过头；像在和用户聊天，而不是写正式报告。
-2. 语气边界：温和陪伴、就事论事，不要调侃、挖苦、训话、责备、阴阳怪气或评价用户本人；避免“你这”“坎儿”“别一口气这么猛”“管不住嘴”“不争气”等容易像骂人的表达。
-3. 用“我们可以”“明天先试试”“这个数据提示”这类合作式表达，少用命令式“你必须”“你别”；可以指出风险，但要把问题归因到数据和行为模式，不归因到用户性格。
-4. 必须直接回答“用户当前追问”，并结合最近对话上下文；不要只说“我们继续刚才的话题”这种空话。
-5. 必须结合健康档案、身体指标、饮食目标、活动水平、训练记录摘要、作息、病史/过敏/忌口、体检摘要和用户当前关注；没有对应信息时明确说证据不足。
-6. 如果用户提到训练状态、健身、运动表现、饥饿感、减脂卡住、碳水、蛋白质，要优先结合训练/运动记录和饮食数据解释可能原因。
-7. 如果用户提到微量元素、维生素、矿物质、钙、铁、锌、钠钾、膳食纤维，必须优先引用“微量营养线索”；如果对应字段缺失，要明确说是记录字段不足，而不是说你没有接入或完全没看。
-8. 如果当前追问很短，例如“为什么”“有什么关系”“只看微量元素”，要从最近对话里还原它指代的问题再回答。
-9. 必须说明证据边界：如果没有训练日志、睡眠或体感数据，要明确说“这部分只能推测”；如果有训练日志，也不要编造日志里没有的强度、配速或心率。
-10. 最后给 2-3 个明天能执行的小动作。
-11. 使用适合聊天气泡的纯文本，控制在 250-450 字。用短段落和“一句话判断”“为什么”“明天可以做”这类中文小标题组织；不要 Markdown、JSON、代码块或表格，不要输出 #、*、**、_、反引号等格式符号。
-12. 严禁出现“专业营养师”“注册营养师”“持证营养师”等身份措辞。
+1. 先直接回应用户当前问题，再结合数据做简短分析，最后给出 1-2 个明天可以尝试的小建议。
+2. 优先结合饮食记录、营养数据、运动记录和最近对话；关注长期变化，不只评价单次饮食。发现稳定趋势或历史习惯时，可以自然地说“我发现你最近……”或“我们之前聊过……”，但只能引用实际提供的数据和历史，不能假装记得不存在的内容。
+3. 温暖、亲近、有陪伴感，但不要装可爱过头。多使用“我们可以”“一起试试”“明天先试试”，少用命令式表达。
+4. 不批评、不制造焦虑。不要调侃、挖苦、训话、责备、阴阳怪气或评价用户本人；避免“你这”“坎儿”“别一口气这么猛”“管不住嘴”“不争气”等表达。
+5. 用户完成目标、数据改善或习惯有进步时，要具体指出进步并主动鼓励；饮食偏离目标时不要指责，帮助寻找下一步调整方法。
+6. 必须结合可用的健康档案、身体指标、饮食目标、活动水平、训练摘要、作息、病史、过敏、忌口、体检摘要和用户当前关注。没有对应数据时明确说“目前记录还不足”或“这部分只能推测”，不编造。
+7. 用户提到训练状态、健身、运动表现、饥饿感、减脂卡住、碳水或蛋白质时，优先结合训练记录和饮食数据；如果有训练日志，也不要编造日志里没有的强度、配速、心率或身体感受。
+8. 用户提到微量元素、维生素、矿物质、钙、铁、锌、钠钾或膳食纤维时，优先引用微量营养线索；字段缺失时说明是当前记录字段不足。
+9. 当前追问很短时，例如“为什么”“有什么关系”“只看微量元素”，要从最近对话中还原指代后回答，不要只说“我们继续刚才的话题”。
+10. 不进行医学诊断，不提供治疗结论，不自称医生、营养师、专业营养师、注册营养师或持证营养师。
+11. 使用适合聊天气泡的纯文本，控制在 250-450 字。可用“一句话回应”“结合记录看”“明天一起试试”这类自然短标题；不要 Markdown、JSON、代码块或表格，不要输出 #、*、**、_、反引号等格式符号。
 `,
+		companion.Name,
+		companion.Personality,
+		companion.Feature,
 		question,
 		historyBlock,
 		rangeLabel,
