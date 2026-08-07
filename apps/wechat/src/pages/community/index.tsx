@@ -2140,6 +2140,74 @@ function CommunityPage() {
               if (expandedCommentRecordId) closeCommentModal()
             }}
           >
+            {/* 本周打卡排行榜：页面首屏优先展示 */}
+            <View
+              className='ranking-banner'
+              onClick={(e) => {
+                e.stopPropagation()
+                if (!getAccessToken()) {
+                  redirectToLogin()
+                  return
+                }
+                Taro.navigateTo({ url: extraPkgUrl('/pages/checkin-leaderboard/index') })
+              }}
+            >
+              <View className='ranking-head'>
+                <View className='ranking-icon-wrap'>
+                  <IconTrendingUp size={36} color='rgb(255 255 255 / 95%)' />
+                </View>
+                <View className='ranking-head-text'>
+                  <Text className='ranking-title'>本周打卡排行榜</Text>
+                  <Text className='ranking-subtitle'>看看谁是本周最活跃</Text>
+                </View>
+              </View>
+              {loggedIn ? (
+                <View className='ranking-preview'>
+                  {(lbPreviewLoading || (lbPreviewFetching && lbPreviewTop.length === 0)) ? (
+                    <View className='ranking-preview-skeleton'>
+                      <View className='ranking-preview-sk-dot' />
+                      <View className='ranking-preview-sk-dot' />
+                      <View className='ranking-preview-sk-dot' />
+                    </View>
+                  ) : lbPreviewTop.length > 0 ? (
+                    <View className='ranking-preview-row'>
+                      {lbPreviewTop.map((row) => (
+                        <View
+                          key={row.user_id}
+                          className={`ranking-preview-cell${row.is_me ? ' is-me' : ''}`}
+                        >
+                          <Text
+                            className={`ranking-preview-rank ${row.rank === 1 ? 'r1' : row.rank === 2 ? 'r2' : 'r3'}`}
+                          >
+                            {row.rank}
+                          </Text>
+                          <View className='ranking-preview-avatar-wrap'>
+                            {row.avatar ? (
+                              <Image
+                                className='ranking-preview-avatar'
+                                src={row.avatar}
+                                mode='aspectFill'
+                              />
+                            ) : (
+                              <View className='ranking-preview-avatar-fallback'>
+                                <Text className='iconfont icon-duoren ranking-preview-avatar-ico' />
+                              </View>
+                            )}
+                          </View>
+                          <Text className='ranking-preview-name' numberOfLines={1}>
+                            {row.nickname}
+                          </Text>
+                          <Text className='ranking-preview-count'>{row.checkin_count}次</Text>
+                        </View>
+                      ))}
+                    </View>
+                  ) : (
+                    <Text className='ranking-preview-placeholder'>暂无预览，下拉刷新试试</Text>
+                  )}
+                </View>
+              ) : null}
+            </View>
+
             {/* 快捷入口：三键等分；有待处理申请时在「好友管理」右上角绝对定位角标（不占流），点击进入「收到的请求」 */}
             {loggedIn && (
               <View className='friends-quick-bar' onClick={(e) => e.stopPropagation()}>
@@ -2215,74 +2283,6 @@ function CommunityPage() {
                 </TaroifyButton>
               </View>
             )}
-
-            {/* 本周打卡排行榜：标题一行 + 前三名直接铺在绿底上，无内嵌浅底容器 */}
-            <View
-              className='ranking-banner'
-              onClick={(e) => {
-                e.stopPropagation()
-                if (!getAccessToken()) {
-                  redirectToLogin()
-                  return
-                }
-                Taro.navigateTo({ url: extraPkgUrl('/pages/checkin-leaderboard/index') })
-              }}
-            >
-              <View className='ranking-head'>
-                <View className='ranking-icon-wrap'>
-                  <IconTrendingUp size={36} color='rgb(255 255 255 / 95%)' />
-                </View>
-                <View className='ranking-head-text'>
-                  <Text className='ranking-title'>本周打卡排行榜</Text>
-                  <Text className='ranking-subtitle'>看看谁是本周最活跃</Text>
-                </View>
-              </View>
-              {loggedIn ? (
-                <View className='ranking-preview'>
-                  {(lbPreviewLoading || (lbPreviewFetching && lbPreviewTop.length === 0)) ? (
-                    <View className='ranking-preview-skeleton'>
-                      <View className='ranking-preview-sk-dot' />
-                      <View className='ranking-preview-sk-dot' />
-                      <View className='ranking-preview-sk-dot' />
-                    </View>
-                  ) : lbPreviewTop.length > 0 ? (
-                    <View className='ranking-preview-row'>
-                      {lbPreviewTop.map((row) => (
-                        <View
-                          key={row.user_id}
-                          className={`ranking-preview-cell${row.is_me ? ' is-me' : ''}`}
-                        >
-                          <Text
-                            className={`ranking-preview-rank ${row.rank === 1 ? 'r1' : row.rank === 2 ? 'r2' : 'r3'}`}
-                          >
-                            {row.rank}
-                          </Text>
-                          <View className='ranking-preview-avatar-wrap'>
-                            {row.avatar ? (
-                              <Image
-                                className='ranking-preview-avatar'
-                                src={row.avatar}
-                                mode='aspectFill'
-                              />
-                            ) : (
-                              <View className='ranking-preview-avatar-fallback'>
-                                <Text className='iconfont icon-duoren ranking-preview-avatar-ico' />
-                              </View>
-                            )}
-                          </View>
-                          <Text className='ranking-preview-name' numberOfLines={1}>
-                            {row.nickname}
-                          </Text>
-                          <Text className='ranking-preview-count'>{row.checkin_count}次</Text>
-                        </View>
-                      ))}
-                    </View>
-                  ) : (
-                    <Text className='ranking-preview-placeholder'>暂无预览，下拉刷新试试</Text>
-                  )}
-                </View>
-              ) : null}
-            </View>
 
             {/* 饮食动态 */}
             <View className='feed-section'>
@@ -2493,6 +2493,9 @@ function CommunityPage() {
                                     }
                                   }}
                                 >{item.is_mine ? '我' : item.author.nickname}</Text>
+                                {typeof item.author.pet_level === 'number' ? (
+                                  <Text className='feed-author-level'>Lv.{item.author.pet_level}</Text>
+                                ) : null}
                               </View>
                               <View className='feed-sub-meta-row'>
                                 <Text className='post-time'>

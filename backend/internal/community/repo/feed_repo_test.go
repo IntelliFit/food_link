@@ -17,6 +17,11 @@ func setupFeedTestDB(t *testing.T) *gorm.DB {
 
 	// Create tables
 	assert.NoError(t, db.AutoMigrate(&FeedRecord{}, &domain.FeedLike{}, &domain.FeedComment{}, &UserFriend{}, &UserProfile{}))
+	assert.NoError(t, db.Exec(`CREATE TABLE IF NOT EXISTS user_pets (
+		id text primary key,
+		user_id text unique,
+		level integer not null default 1
+	)`).Error)
 	assert.NoError(t, db.Exec(`CREATE TABLE IF NOT EXISTS user_exercise_logs (
 		id text primary key,
 		user_id text,
@@ -236,10 +241,13 @@ func TestFeedRepoGetUserProfiles(t *testing.T) {
 	ctx := context.Background()
 
 	assert.NoError(t, db.Create(&UserProfile{ID: "u1", Nickname: "Alice"}).Error)
+	assert.NoError(t, db.Exec("INSERT INTO user_pets (id, user_id, level) VALUES (?, ?, ?)", "pet-1", "u1", 12).Error)
 
 	profiles, err := r.GetUserProfiles(ctx, []string{"u1"})
 	assert.NoError(t, err)
 	assert.Equal(t, "Alice", profiles["u1"].Nickname)
+	assert.NotNil(t, profiles["u1"].PetLevel)
+	assert.Equal(t, 12, *profiles["u1"].PetLevel)
 }
 
 func TestFeedRepoGetCheckinCounts(t *testing.T) {

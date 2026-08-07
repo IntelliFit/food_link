@@ -200,16 +200,23 @@ type FeedParams struct {
 }
 
 type FeedItem struct {
-	TargetType      string            `json:"target_type"`
-	TargetID        string            `json:"target_id"`
-	Record          repo.FeedRecord   `json:"record"`
-	Author          map[string]string `json:"author"`
-	LikeCount       int               `json:"like_count"`
-	Liked           bool              `json:"liked"`
-	IsMine          bool              `json:"is_mine"`
-	RecommendReason string            `json:"recommend_reason"`
-	Comments        []CommentItem     `json:"comments,omitempty"`
-	CommentCount    int               `json:"comment_count"`
+	TargetType      string          `json:"target_type"`
+	TargetID        string          `json:"target_id"`
+	Record          repo.FeedRecord `json:"record"`
+	Author          FeedAuthor      `json:"author"`
+	LikeCount       int             `json:"like_count"`
+	Liked           bool            `json:"liked"`
+	IsMine          bool            `json:"is_mine"`
+	RecommendReason string          `json:"recommend_reason"`
+	Comments        []CommentItem   `json:"comments,omitempty"`
+	CommentCount    int             `json:"comment_count"`
+}
+
+type FeedAuthor struct {
+	ID       string `json:"id"`
+	Nickname string `json:"nickname"`
+	Avatar   string `json:"avatar"`
+	PetLevel *int   `json:"pet_level,omitempty"`
 }
 
 type CommentItem struct {
@@ -346,11 +353,7 @@ func (s *CommunityService) publicFeed(ctx context.Context, params FeedParams, vi
 	for _, rec := range records {
 		rec = s.normalizeFeedRecord(ctx, rec)
 		profile := profiles[rec.UserID]
-		author := map[string]string{"id": rec.UserID, "nickname": "用户", "avatar": ""}
-		if profile != nil {
-			author["nickname"] = profile.Nickname
-			author["avatar"] = s.resolveAvatarURL(profile.Avatar)
-		}
+		author := s.feedAuthor(rec.UserID, profile)
 		targetType, targetID := feedTargetOfRecord(rec)
 		targetKey := repo.FeedTargetKey(targetType, targetID)
 		likeInfo := likesMap[targetKey]
@@ -501,11 +504,7 @@ func (s *CommunityService) FriendFeed(ctx context.Context, userID string, params
 	for _, rec := range records {
 		rec = s.normalizeFeedRecord(ctx, rec)
 		profile := profiles[rec.UserID]
-		author := map[string]string{"id": rec.UserID, "nickname": "用户", "avatar": ""}
-		if profile != nil {
-			author["nickname"] = profile.Nickname
-			author["avatar"] = s.resolveAvatarURL(profile.Avatar)
-		}
+		author := s.feedAuthor(rec.UserID, profile)
 		targetType, targetID := feedTargetOfRecord(rec)
 		targetKey := repo.FeedTargetKey(targetType, targetID)
 		likeInfo := likesMap[targetKey]
@@ -1082,15 +1081,15 @@ func (s *CommunityService) ListTargetComments(ctx context.Context, viewerUserID,
 }
 
 type FeedContextResult struct {
-	Allowed      bool              `json:"allowed"`
-	Reason       string            `json:"reason"`
-	Record       *repo.FeedRecord  `json:"record,omitempty"`
-	Author       map[string]string `json:"author,omitempty"`
-	LikeCount    int               `json:"like_count,omitempty"`
-	Liked        bool              `json:"liked,omitempty"`
-	IsMine       bool              `json:"is_mine"`
-	Comments     []CommentItem     `json:"comments,omitempty"`
-	CommentCount int               `json:"comment_count,omitempty"`
+	Allowed      bool             `json:"allowed"`
+	Reason       string           `json:"reason"`
+	Record       *repo.FeedRecord `json:"record,omitempty"`
+	Author       *FeedAuthor      `json:"author,omitempty"`
+	LikeCount    int              `json:"like_count,omitempty"`
+	Liked        bool             `json:"liked,omitempty"`
+	IsMine       bool             `json:"is_mine"`
+	Comments     []CommentItem    `json:"comments,omitempty"`
+	CommentCount int              `json:"comment_count,omitempty"`
 }
 
 func (s *CommunityService) FeedContext(ctx context.Context, userID, recordID string) (*FeedContextResult, error) {
@@ -1119,11 +1118,7 @@ func (s *CommunityService) FeedTargetContext(ctx context.Context, userID, target
 
 	profiles, _ := s.feedRepo.GetUserProfiles(ctx, []string{record.UserID})
 	profile := profiles[record.UserID]
-	author := map[string]string{"id": record.UserID, "nickname": "用户", "avatar": ""}
-	if profile != nil {
-		author["nickname"] = profile.Nickname
-		author["avatar"] = s.resolveAvatarURL(profile.Avatar)
-	}
+	author := s.feedAuthor(record.UserID, profile)
 
 	targetKey := repo.FeedTargetKey(targetType, targetID)
 	likesMap, _ := s.feedRepo.GetLikesForTargets(ctx, []repo.FeedTarget{{TargetType: targetType, TargetID: targetID}}, userID)
@@ -1139,13 +1134,24 @@ func (s *CommunityService) FeedTargetContext(ctx context.Context, userID, target
 		Allowed:      true,
 		Reason:       ctxCheck.Reason,
 		Record:       record,
-		Author:       author,
+		Author:       &author,
 		LikeCount:    likeInfo.Count,
 		Liked:        likeInfo.Liked,
 		IsMine:       userID != "" && record.UserID == userID,
 		Comments:     comments,
 		CommentCount: countMap[targetKey],
 	}, nil
+}
+
+func (s *CommunityService) feedAuthor(userID string, profile *repo.UserProfile) FeedAuthor {
+	author := FeedAuthor{ID: userID, Nickname: "用户"}
+	if profile == nil {
+		return author
+	}
+	author.Nickname = profile.Nickname
+	author.Avatar = s.resolveAvatarURL(profile.Avatar)
+	author.PetLevel = profile.PetLevel
+	return author
 }
 
 func (s *CommunityService) getFeedRecordInteractionContext(ctx context.Context, userID string, record *repo.FeedRecord) (*FeedContextResult, error) {

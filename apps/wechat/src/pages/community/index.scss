@@ -2772,7 +2772,20 @@ $comment-body-font-size: 28rpx;
 .feed-card-name-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
+  gap: 12rpx;
+}
+
+.feed-author-level {
+  flex-shrink: 0;
+  padding: 2rpx 10rpx;
+  border-radius: 999rpx;
+  background: rgb(92 184 150 / 10%);
+  border: 1rpx solid rgb(92 184 150 / 18%);
+  color: #4a9e7d;
+  font-size: 20rpx;
+  font-weight: 600;
+  line-height: 30rpx;
 }
 
 .feed-circle-post-images {
