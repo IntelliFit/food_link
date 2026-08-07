@@ -1284,21 +1284,6 @@ function StatsPage() {
                 ))}
               </View>
             </View>
-            {Taro.getStorageSync('health_disclaimer_dismissed') !== '1' && (
-              <View className='health-disclaimer-banner'>
-                <Text className='health-disclaimer-banner__dot' />
-                <Text className='health-disclaimer-banner__text'>结果仅供参考，不代替医学判断</Text>
-                <Text
-                  className='health-disclaimer-banner__btn'
-                  onClick={() => {
-                    Taro.setStorageSync('health_disclaimer_dismissed', '1')
-                    Taro.showToast({ title: '已确认', icon: 'success' })
-                  }}
-                >
-                  我知道了
-                </Text>
-              </View>
-            )}
           </>
         )}
         <View className='analysis-tabs-container'>
@@ -1960,7 +1945,9 @@ function StatsPage() {
           )
         ) : null}
 
-        <View className='footer-placeholder' />
+        <View className='stats-page-disclaimer'>
+          <Text className='stats-page-disclaimer__text'>结果仅供参考，不代替医学判断</Text>
+        </View>
       </ScrollView>
     </View>
   )

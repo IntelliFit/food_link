@@ -800,50 +800,6 @@ $stats-blue-soft: #7aa9ce;
   text-overflow: ellipsis;
 }
 
-.health-disclaimer-banner {
-  margin: 20rpx 32rpx 20rpx;
-  display: flex;
-  align-items: center;
-  gap: 12rpx;
-  min-height: 64rpx;
-  padding: 10rpx 18rpx 10rpx 22rpx;
-  border-radius: 18rpx;
-  background: rgb(92 184 150 / 12%);
-  border: 1rpx solid rgb(92 184 150 / 24%);
-}
-
-.health-disclaimer-banner__dot {
-  width: 12rpx;
-  height: 12rpx;
-  border-radius: 50%;
-  background: $stats-primary;
-  box-shadow: 0 0 0 6rpx rgb(92 184 150 / 14%);
-  flex-shrink: 0;
-}
-
-.health-disclaimer-banner__text {
-  flex: 1;
-  font-size: 24rpx;
-  font-weight: 600;
-  color: #2f7f62;
-  line-height: 34rpx;
-}
-
-.health-disclaimer-banner__btn {
-  font-size: 22rpx;
-  font-weight: 700;
-  color: #fff;
-  padding: 8rpx 16rpx;
-  border-radius: 999rpx;
-  background: $stats-primary;
-  box-shadow: 0 4rpx 12rpx rgb(92 184 150 / 22%);
-
-  &:active {
-    opacity: 0.9;
-    transform: scale(0.96);
-  }
-}
-
 .risk-section-header {
   margin: 0 32rpx 20rpx;
   display: flex;
@@ -2684,8 +2640,16 @@ $stats-blue-soft: #7aa9ce;
   box-shadow: 0 8rpx 20rpx rgb(92 184 150 / 24%);
 }
 
-.footer-placeholder {
-  height: 120rpx;
+.stats-page-disclaimer {
+  padding: 28rpx 32rpx 120rpx;
+  text-align: center;
+}
+
+.stats-page-disclaimer__text {
+  font-size: 20rpx;
+  line-height: 30rpx;
+  font-weight: 400;
+  color: #9aa4b2;
 }
 
 .body-metrics-grid {
