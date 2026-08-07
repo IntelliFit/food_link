@@ -41,6 +41,13 @@
   - 测试后自动清理 COS 对象和分析任务记录
   - 需使用 build tag `-tags=food_analysis_load` 运行，支持通过环境变量和 flag 灵活配置目标地址、请求数、模型、执行模式等
   - 详细规范请参考 `.agents/skills/go-api-loadtest/SKILL.md`
+- **foodlink-pr-review**: 每个工作日下班前或用户要求审查/整理/提交 PR 时使用。相对 `origin/dev` 归组当天改动，拆分无关功能，执行两轴代码审查和相关测试；仅在无严重问题时生成规范提交并创建目标为 `dev` 的 Draft PR。发现 Blocker/High 问题时禁止提交、推送和建 PR，只输出问题报告。详见 `.agents/skills/foodlink-pr-review/SKILL.md`。
+
+### 提交前审查
+
+- `.husky/pre-commit` 是所有提交的确定性质量门禁，不得使用 `--no-verify` 绕过。
+- 微信端改动执行 TypeScript、暂存文件 ESLint 和 Jest；Admin 改动执行构建；Go 改动执行 gofmt 检查和相关包测试；所有提交执行暂存 diff 与敏感文件检查。
+- Hook 只做确定性检查；功能归组、重复代码、回归影响和严重问题判断由 `foodlink-pr-review` 每日任务完成。
 
 ## 可用 SKILL（第一优先级）
 - Build production-ready Go backend services following DDD-layered architecture.
