@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	campuscatalogservice "food_link/backend/internal/campuscatalog/service"
 	systemhandler "food_link/backend/internal/system/handler"
 	"food_link/backend/pkg/config"
 
@@ -16,12 +17,18 @@ import (
 )
 
 type recordingCampusNutritionBackfiller struct {
-	called chan int
+	called   chan int
+	repaired chan int
 }
 
 func (f *recordingCampusNutritionBackfiller) SubmitPublishedNutritionBackfill(_ context.Context, limit int) (int, error) {
 	f.called <- limit
 	return 1, nil
+}
+
+func (f *recordingCampusNutritionBackfiller) RepairLegacyAnalysisTasks(_ context.Context, limit int) (campuscatalogservice.LegacyAnalysisRepairSummary, error) {
+	f.repaired <- limit
+	return campuscatalogservice.LegacyAnalysisRepairSummary{Scanned: 1, Retried: 1}, nil
 }
 
 func TestAppPackage(t *testing.T) {
@@ -32,7 +39,7 @@ func TestAppPackage(t *testing.T) {
 
 func TestStartCampusCatalogNutritionBackfillRunsImmediately(t *testing.T) {
 	app := &App{}
-	backfiller := &recordingCampusNutritionBackfiller{called: make(chan int, 1)}
+	backfiller := &recordingCampusNutritionBackfiller{called: make(chan int, 1), repaired: make(chan int, 1)}
 	app.startCampusCatalogNutritionBackfill(backfiller)
 	t.Cleanup(func() {
 		app.catalogBackfillCancel()
@@ -44,6 +51,12 @@ func TestStartCampusCatalogNutritionBackfillRunsImmediately(t *testing.T) {
 		assert.Equal(t, 100, limit)
 	case <-time.After(time.Second):
 		t.Fatal("历史校园菜品营养补分析未立即执行")
+	}
+	select {
+	case limit := <-backfiller.repaired:
+		assert.Equal(t, 20, limit)
+	case <-time.After(time.Second):
+		t.Fatal("旧版校园菜品分析任务未立即对账")
 	}
 }
 

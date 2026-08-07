@@ -10,6 +10,7 @@ import (
 	"food_link/backend/internal/campuscatalog/domain"
 	publicfoodrepo "food_link/backend/internal/publicfood/repo"
 
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -271,6 +272,61 @@ func (r *CatalogRepo) MarkAnalysisFailed(ctx context.Context, itemID, message st
 		}).Error
 }
 
+func (r *CatalogRepo) ListLegacyTerminalAnalysisCandidates(ctx context.Context, limit int) ([]domain.LegacyAnalysisCandidate, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	type candidateRow struct {
+		ItemID     string            `gorm:"column:item_id"`
+		TaskID     string            `gorm:"column:task_id"`
+		TaskType   string            `gorm:"column:task_type"`
+		TaskStatus string            `gorm:"column:task_status"`
+		TaskResult datatypes.JSONMap `gorm:"column:task_result"`
+		TaskError  string            `gorm:"column:task_error"`
+	}
+	var rows []candidateRow
+	err := r.db.WithContext(ctx).
+		Table("campus_food_catalog_items AS c").
+		Select(`c.id AS item_id, t.id AS task_id, t.task_type, t.status AS task_status,
+			t.result AS task_result, COALESCE(t.error_message, '') AS task_error`).
+		Joins("JOIN analysis_tasks AS t ON t.id = c.analysis_task_id").
+		Where("c.status IN ?", []string{"analysis_pending", "analysis_failed"}).
+		Where("t.task_type IN ?", []string{"precision_plan", "precision_aggregate"}).
+		Where("t.status IN ?", []string{"done", "failed", "cancelled", "timed_out"}).
+		Order("CASE WHEN c.status = 'analysis_pending' THEN 0 ELSE 1 END, c.updated_at ASC, c.id ASC").
+		Limit(limit).
+		Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	result := make([]domain.LegacyAnalysisCandidate, 0, len(rows))
+	for _, row := range rows {
+		item, findErr := r.FindItemByID(ctx, row.ItemID)
+		if findErr != nil {
+			return nil, findErr
+		}
+		if item == nil {
+			continue
+		}
+		result = append(result, domain.LegacyAnalysisCandidate{
+			Item: *item, TaskID: row.TaskID, TaskType: row.TaskType, TaskStatus: row.TaskStatus,
+			TaskResult: map[string]any(row.TaskResult), TaskError: row.TaskError,
+		})
+	}
+	return result, nil
+}
+
+func (r *CatalogRepo) ClaimLegacyAnalysisRetry(ctx context.Context, itemID, taskID, message string, claimedAt time.Time) (bool, error) {
+	updates := map[string]any{
+		"status": "analysis_failed", "analysis_task_id": nil,
+		"analysis_error": strings.TrimSpace(message), "analysis_completed_at": claimedAt, "updated_at": claimedAt,
+	}
+	result := r.db.WithContext(ctx).Model(&domain.CatalogItem{}).
+		Where("id = ? AND analysis_task_id = ? AND status IN ?", strings.TrimSpace(itemID), strings.TrimSpace(taskID), []string{"analysis_pending", "analysis_failed"}).
+		Updates(updates)
+	return result.RowsAffected == 1, result.Error
+}
+
 type publishedCatalogItem struct {
 	ID                 string           `gorm:"column:id;primaryKey"`
 	UserID             *string          `gorm:"column:user_id"`
@@ -342,6 +398,9 @@ func (r *CatalogRepo) CompleteAnalyzedItem(ctx context.Context, itemID, taskID s
 		if len(nutrition.Items) == 0 || (nutrition.TotalCalories <= 0 && nutrition.TotalProtein <= 0 && nutrition.TotalCarbs <= 0 && nutrition.TotalFat <= 0) {
 			return errors.New("校园菜品 AI 分析未返回有效营养结果")
 		}
+		if !hasPreciseMicronutrientMarkers(nutrition.Items) {
+			return errors.New("校园菜品 AI 分析尚未完成微量营养精确分析")
+		}
 		description := nutrition.Description
 		if description == "" {
 			description = item.Description
@@ -375,6 +434,18 @@ func (r *CatalogRepo) CompleteAnalyzedItem(ctx context.Context, itemID, taskID s
 			"published_at": completedAt, "updated_at": completedAt,
 		}).Error
 	})
+}
+
+func hasPreciseMicronutrientMarkers(items []map[string]any) bool {
+	if len(items) == 0 {
+		return false
+	}
+	for _, item := range items {
+		if strings.TrimSpace(fmt.Sprint(item["micronutrient_analysis"])) != "ai_precise_v1" {
+			return false
+		}
+	}
+	return true
 }
 
 func publicPriceType(value string) string {

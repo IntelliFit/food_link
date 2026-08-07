@@ -28,6 +28,9 @@ type fakeCatalogRepo struct {
 	linkedTaskID        string
 	missingNutrition    []domain.CatalogItem
 	hiddenPublicItemID  string
+	legacyCandidates    []domain.LegacyAnalysisCandidate
+	claimLegacy         bool
+	completedLegacyID   string
 }
 
 func (f *fakeCatalogRepo) FindBatchByClientKey(context.Context, string) (*domain.CollectionBatch, error) {
@@ -99,6 +102,33 @@ func (f *fakeCatalogRepo) MarkAnalysisFailed(_ context.Context, itemID, message 
 		copyItem.AnalysisError = message
 		f.analysisFailedItem = &copyItem
 	}
+	return nil
+}
+
+func (f *fakeCatalogRepo) ListLegacyTerminalAnalysisCandidates(context.Context, int) ([]domain.LegacyAnalysisCandidate, error) {
+	return append([]domain.LegacyAnalysisCandidate(nil), f.legacyCandidates...), nil
+}
+
+func (f *fakeCatalogRepo) ClaimLegacyAnalysisRetry(_ context.Context, itemID, taskID, message string, claimedAt time.Time) (bool, error) {
+	if !f.claimLegacy {
+		return false, nil
+	}
+	f.claimLegacy = false
+	for index := range f.legacyCandidates {
+		if f.legacyCandidates[index].Item.ID == itemID {
+			copyItem := f.legacyCandidates[index].Item
+			copyItem.Status = "analysis_failed"
+			copyItem.AnalysisTaskID = nil
+			copyItem.AnalysisError = message
+			f.existingItem = &copyItem
+			break
+		}
+	}
+	return true, nil
+}
+
+func (f *fakeCatalogRepo) CompleteAnalyzedItem(_ context.Context, itemID, taskID string, result map[string]any, completedAt time.Time) error {
+	f.completedLegacyID = itemID
 	return nil
 }
 
@@ -456,6 +486,53 @@ func TestPublishedNutritionBackfillReusesSingleTaskPrecisePublishPath(t *testing
 	require.Equal(t, "item-history", submitter.input.ExtraPayload["campus_catalog_item_id"])
 	require.Equal(t, true, submitter.input.ExtraPayload["micronutrient_analysis_required"])
 	require.Equal(t, "item-history", repo.hiddenPublicItemID)
+}
+
+func TestRepairLegacyAnalysisRetriesTerminalTaskThroughCurrentPipeline(t *testing.T) {
+	price := 12.0
+	item := domain.CatalogItem{
+		ID: "legacy-item", BatchID: "batch-1", Status: "analysis_pending", EntryType: "dish", Name: "番茄炒饭",
+		OrganizationName: "测试大学", CanteenName: "一食堂", PriceType: "fixed", Price: &price,
+	}
+	taskID := "legacy-plan-task"
+	item.AnalysisTaskID = &taskID
+	repo := &fakeCatalogRepo{
+		legacyCandidates: []domain.LegacyAnalysisCandidate{{
+			Item: item, TaskID: taskID, TaskType: "precision_plan", TaskStatus: "done", TaskResult: map[string]any{},
+		}},
+		claimLegacy: true,
+	}
+	submitter := &fakeCatalogAnalyzeSubmitter{taskID: "standard-task"}
+	svc := NewCatalogService(repo, nil)
+	svc.ConfigureAnalysis(submitter, fakeCatalogAnalysisUserResolver{userID: "system-user"})
+
+	summary, err := svc.RepairLegacyAnalysisTasks(context.Background(), 20)
+
+	require.NoError(t, err)
+	require.Equal(t, 1, summary.Retried)
+	require.Equal(t, "standard-task", repo.linkedTaskID)
+	require.Equal(t, "standard", *submitter.textInput.ExecutionMode)
+	require.Equal(t, true, submitter.textInput.ExtraPayload["micronutrient_analysis_required"])
+}
+
+func TestRepairLegacyAnalysisPublishesCompletedPreciseResultWithoutRetry(t *testing.T) {
+	item := domain.CatalogItem{ID: "precise-item", Status: "analysis_pending"}
+	taskID := "legacy-aggregate-task"
+	item.AnalysisTaskID = &taskID
+	repo := &fakeCatalogRepo{legacyCandidates: []domain.LegacyAnalysisCandidate{{
+		Item: item, TaskID: taskID, TaskType: "precision_aggregate", TaskStatus: "done",
+		TaskResult: map[string]any{"items": []any{map[string]any{"name": "鸡蛋饼", "micronutrient_analysis": "ai_precise_v1"}}},
+	}}}
+	submitter := &fakeCatalogAnalyzeSubmitter{taskID: "must-not-submit"}
+	svc := NewCatalogService(repo, nil)
+	svc.ConfigureAnalysis(submitter, fakeCatalogAnalysisUserResolver{userID: "system-user"})
+
+	summary, err := svc.RepairLegacyAnalysisTasks(context.Background(), 20)
+
+	require.NoError(t, err)
+	require.Equal(t, 1, summary.Published)
+	require.Equal(t, item.ID, repo.completedLegacyID)
+	require.Empty(t, submitter.userID)
 }
 
 func stringPtr(value string) *string { return &value }
