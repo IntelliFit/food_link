@@ -24,6 +24,7 @@ type nutritionEmbeddingMaintenanceRepository interface {
 	ListNutritionEmbeddingHashes(context.Context, string, int) (map[string]string, error)
 	GetNutritionEmbeddingSourceRevision(context.Context) (foodrecordrepo.NutritionEmbeddingSourceRevision, error)
 	TryNutritionEmbeddingSyncLock(context.Context, func(context.Context) error) (bool, error)
+	TryNutritionEmbeddingIndexLoadLock(context.Context, func(context.Context) error) (bool, error)
 	UpsertNutritionEmbeddings(context.Context, []domain.FoodNutritionEmbedding) error
 	DeactivateNutritionEmbeddings(context.Context, []string, string, int) error
 }
@@ -77,7 +78,7 @@ func (m *NutritionEmbeddingMaintainer) Run(ctx context.Context) {
 		return
 	}
 	warmCtx, warmCancel := context.WithTimeout(ctx, 5*time.Minute)
-	if err := m.retriever.Warm(warmCtx); err != nil && ctx.Err() == nil {
+	if err := m.refreshIndex(warmCtx, true); err != nil && ctx.Err() == nil {
 		logger.Warn(ctx, "营养向量索引后台预热失败，运行时将使用原有回退链路", logger.Err(err))
 	}
 	warmCancel()
@@ -104,12 +105,33 @@ func (m *NutritionEmbeddingMaintainer) runCycle(ctx context.Context, force bool)
 	if _, err := m.SyncOnce(cycleCtx, force); err != nil && ctx.Err() == nil {
 		logger.Error(ctx, "营养向量自动同步失败，稍后自动重试", err)
 	}
-	refreshed, err := m.retriever.RefreshIfChanged(cycleCtx)
+	err := m.refreshIndex(cycleCtx, false)
 	if err != nil && ctx.Err() == nil {
 		logger.Warn(ctx, "营养向量内存索引刷新失败，继续使用上一版本", logger.Err(err))
-	} else if refreshed {
-		logger.Info(ctx, "营养向量内存索引已自动刷新")
 	}
+}
+
+// refreshIndex serializes the memory-heavy index load across application pods.
+// A pod that misses the lock keeps serving through the lexical/AI fallback and
+// retries on the next maintenance cycle instead of competing for DB bandwidth.
+func (m *NutritionEmbeddingMaintainer) refreshIndex(ctx context.Context, initial bool) error {
+	acquired, err := m.repo.TryNutritionEmbeddingIndexLoadLock(ctx, func(lockCtx context.Context) error {
+		if initial {
+			return m.retriever.Warm(lockCtx)
+		}
+		refreshed, refreshErr := m.retriever.RefreshIfChanged(lockCtx)
+		if refreshErr == nil && refreshed {
+			logger.Info(lockCtx, "营养向量内存索引已自动刷新")
+		}
+		return refreshErr
+	})
+	if err != nil {
+		return err
+	}
+	if !acquired {
+		logger.Info(ctx, "营养向量索引由其他实例加载，本实例稍后重试")
+	}
+	return nil
 }
 
 func (m *NutritionEmbeddingMaintainer) SyncOnce(ctx context.Context, force bool) (NutritionEmbeddingSyncResult, error) {

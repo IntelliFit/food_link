@@ -116,6 +116,9 @@ func TestFoodNutritionRepo_EmbeddingMaintenanceRevisionLockAndDeactivate(t *test
 	afterReleaseAcquired, err := repo.TryNutritionEmbeddingSyncLock(ctx, func(context.Context) error { return nil })
 	require.NoError(t, err)
 	assert.True(t, afterReleaseAcquired)
+	indexLoadAcquired, err := repo.TryNutritionEmbeddingIndexLoadLock(ctx, func(context.Context) error { return nil })
+	require.NoError(t, err)
+	assert.True(t, indexLoadAcquired)
 
 	require.NoError(t, repo.DeactivateNutritionEmbeddings(ctx, []string{"canonical:" + foodID}, "embedding-test", 3))
 	indexRevision, err = repo.GetNutritionEmbeddingIndexRevision(ctx, "embedding-test", 3)
