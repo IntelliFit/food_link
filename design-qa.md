@@ -1,3 +1,36 @@
+# 宠物对话用户气泡纵向间距设计 QA
+
+- 源视觉真值：`/var/folders/dl/j1hxj3fs3czd7lt458p170t80000gn/T/codex-clipboard-cf83b06d-3818-4408-b55f-7c9669243a43.png`
+- 实现截图：未取得（微信开发者工具 9420 端口监听，但 miniprogram-automator WebSocket 拒绝连接）
+- 目标页面：`apps/wechat/src/packageExtra/pages/pet-chat/index.scss`
+- 源图尺寸：640 × 516 px；目标为截图中的浅色主题、已有对话、单行用户消息状态
+- 实现视口与密度：因自动化连接失败无法读取，未进行密度归一
+
+## Findings
+
+- [P2] 源图中右侧绿色用户气泡继承通用卡片 `30rpx` 四向内边距，单行文字上下留白明显过大。
+- 修复仅覆盖 `.pet-chat-message.user .pet-chat-bubble`，将 padding 改为 `18rpx 30rpx`；横向阅读空间、最大宽度、圆角、颜色和宠物回复卡均保持不变。
+- 字体与文案：字号 `26rpx`、行高 `40rpx` 和“推荐食谱”文案未改。
+- 间距与布局：单行气泡理论高度从约 `100rpx` 收紧到约 `76rpx`，长文本仍按原宽度自然换行。
+- 颜色与视觉 token：绿色背景、白字、阴影和圆角未改。
+- 图片与图标：未新增、替换或近似重绘任何图片、图标或宠物素材。
+
+## Static and runtime checks
+
+- TypeScript、目标 TSX ESLint 与 `git diff --check` 通过。
+- 主工作区 `dev:weapp` watch 已使用 `TARO_APP_API_BASE_URL_OVERRIDE=https://dev.api.healthymax.cn` 重新启动并于 17:30:47 编译成功；`dist/packageExtra/pages/pet-chat/index.wxss` 已确认包含 `padding: 18rpx 30rpx`。
+- `mrc where`、`mrc screenshot` 和错误日志读取均因自动化 WebSocket 连接失败而阻塞，无法取得同视口实现截图、并排视觉比较或点击/输入验证。
+
+## Comparison history
+
+1. 修改前：用户气泡继承 `30rpx` 四向 padding，截图显示单行文本上下留白过大。
+2. 修复：用户气泡单独改为纵向 `18rpx`、横向 `30rpx`。
+3. 修复后：编译产物静态确认成功；运行时视觉证据因自动化连接失败尚未取得。
+
+final result: blocked
+
+---
+
 # 首页活动 Banner 与三记录卡设计 QA
 
 - 源视觉真值：`/var/folders/dl/j1hxj3fs3czd7lt458p170t80000gn/T/codex-clipboard-3c6dce1c-ce26-438d-bd0e-f2bf395bf33f.png`
