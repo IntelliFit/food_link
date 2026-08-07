@@ -272,6 +272,62 @@ func (r *CatalogRepo) MarkAnalysisFailed(ctx context.Context, itemID, message st
 		}).Error
 }
 
+func (r *CatalogRepo) ListFailedAnalysisRetryCandidates(ctx context.Context, limit int) ([]domain.CatalogItem, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	notRetriedSQL := `NOT (COALESCE(t.payload::jsonb, '{}'::jsonb) ? 'retry_source_task_id')`
+	campusTaskSQL := `COALESCE(t.payload::jsonb->>'campus_catalog_item_id', '') = c.id`
+	if r.db.Dialector.Name() == "sqlite" {
+		notRetriedSQL = `json_extract(t.payload, '$.retry_source_task_id') IS NULL`
+		campusTaskSQL = `COALESCE(json_extract(t.payload, '$.campus_catalog_item_id'), '') = c.id`
+	}
+	var items []domain.CatalogItem
+	err := r.db.WithContext(ctx).
+		Table("campus_food_catalog_items AS c").
+		Select("c.*").
+		Joins("JOIN analysis_tasks AS t ON t.id = c.analysis_task_id").
+		Where("c.status = ?", "analysis_failed").
+		Where("t.task_type IN ?", []string{"food", "food_text"}).
+		Where("t.status IN ?", []string{"failed", "timed_out"}).
+		Where(campusTaskSQL).
+		Where(notRetriedSQL).
+		Order("c.analysis_completed_at ASC NULLS FIRST, c.updated_at ASC, c.id ASC").
+		Limit(limit).
+		Scan(&items).Error
+	return items, err
+}
+
+func (r *CatalogRepo) ActivatePreparedAnalysisRetry(ctx context.Context, itemID, sourceTaskID, retryTaskID string, startedAt time.Time) (bool, error) {
+	activated := false
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		catalogResult := tx.Model(&domain.CatalogItem{}).
+			Where("id = ? AND analysis_task_id = ? AND status = ?", strings.TrimSpace(itemID), strings.TrimSpace(sourceTaskID), "analysis_failed").
+			Updates(map[string]any{
+				"status": "analysis_pending", "analysis_task_id": strings.TrimSpace(retryTaskID),
+				"analysis_started_at": startedAt, "analysis_completed_at": nil, "updated_at": startedAt,
+			})
+		if catalogResult.Error != nil {
+			return catalogResult.Error
+		}
+		if catalogResult.RowsAffected != 1 {
+			return nil
+		}
+		taskResult := tx.Table("analysis_tasks").
+			Where("id = ? AND status = ?", strings.TrimSpace(retryTaskID), "cancelled").
+			Updates(map[string]any{"status": "pending", "updated_at": startedAt})
+		if taskResult.Error != nil {
+			return taskResult.Error
+		}
+		if taskResult.RowsAffected != 1 {
+			return gorm.ErrRecordNotFound
+		}
+		activated = true
+		return nil
+	})
+	return activated, err
+}
+
 func (r *CatalogRepo) ListLegacyTerminalAnalysisCandidates(ctx context.Context, limit int) ([]domain.LegacyAnalysisCandidate, error) {
 	if limit <= 0 {
 		limit = 20

@@ -120,6 +120,7 @@ type App struct {
 type campusCatalogNutritionBackfiller interface {
 	SubmitPublishedNutritionBackfill(ctx context.Context, limit int) (int, error)
 	RepairLegacyAnalysisTasks(ctx context.Context, limit int) (campuscatalogservice.LegacyAnalysisRepairSummary, error)
+	RetryFailedAnalysisTasks(ctx context.Context, limit int) (campuscatalogservice.FailedAnalysisRetrySummary, error)
 	TryAnalysisMaintenanceLeadership(ctx context.Context, fn func(context.Context) error) (bool, error)
 }
 
@@ -1098,6 +1099,21 @@ func runCampusCatalogNutritionBackfill(parent context.Context, backfiller campus
 	}
 	if queued > 0 {
 		logger.Info(ctx, "历史校园菜品营养补分析已提交", slog.Int("queued_count", queued))
+	}
+	retry, retryErr := backfiller.RetryFailedAnalysisTasks(ctx, 20)
+	if retryErr != nil {
+		logger.Error(ctx, "校园菜品失败任务延后重试失败", retryErr)
+		return
+	}
+	if retry.Deferred {
+		logger.Info(ctx, "校园菜品失败任务等待剩余分析完成")
+	} else if retry.Scanned > 0 {
+		logger.Info(ctx, "校园菜品失败任务延后重试完成",
+			slog.Int("scanned_count", retry.Scanned),
+			slog.Int("retried_count", retry.Retried),
+			slog.Int("skipped_count", retry.Skipped),
+			slog.Int("failed_count", retry.Failed),
+		)
 	}
 }
 
