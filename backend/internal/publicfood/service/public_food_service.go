@@ -305,7 +305,9 @@ func (s *PublicFoodService) Create(ctx context.Context, userID string, input Cre
 func (s *PublicFoodService) submitCampusAnalyzeTask(ctx context.Context, userID string, item *domain.PublicFoodItem, imageURL *string, imagePaths []string) (string, error) {
 	payload := buildCampusAnalyzeExtraPayload(item)
 	if s.analyzeTasks != nil {
-		mode := "strict_separate"
+		// Keep campus publication on one ordinary analysis task. The worker
+		// performs the existing precise micronutrient enrichment before publish.
+		mode := "standard"
 		input := analyzeservice.SubmitTaskInput{
 			ImageURLs:           imagePaths,
 			ExecutionMode:       &mode,
