@@ -2,7 +2,6 @@ import { View, Text, Input, ScrollView } from '@tarojs/components'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Taro, { useDidShow } from '@tarojs/taro'
 import {
-  generatePetChat,
   getPetChatSession,
   getLatestPetChatSession,
   getPetSummary,
@@ -12,7 +11,6 @@ import {
   streamGeneratePetChat,
   type PetChatHistoryMessage,
   type PetChatSessionSummary,
-  type PetChatStreamMeta,
   type PetSummary,
   type StatsSummary
 } from '../../../utils/api'
@@ -43,16 +41,9 @@ const QUICK_QUESTIONS = [
 ]
 
 const FOLLOW_UPS = [
-  '能不能只看微量元素',
-  '帮我安排训练日前一天怎么吃',
-  '只看碳水是不是偏低',
-  '给我一个明天能执行的小目标',
-]
-
-const CHAT_GUIDE = [
-  { label: '先说感受', text: '例如总饿、训练没劲、减脂卡住' },
-  { label: '再说范围', text: '可以指定最近 7 天或最近 30 天' },
-  { label: '继续追问', text: '对同一条回答问“为什么”也能接着聊' },
+  '饮食怎么调整？',
+  '推荐食谱',
+  '训练怎么安排？',
 ]
 
 function nextID(prefix: string): string {
@@ -68,8 +59,7 @@ function buildIntroMessage(petName: string): ChatMessage {
     id: 'intro',
     role: 'pet',
     kind: 'intro',
-    text: `我是${petName}。告诉我最近发生了什么、持续了多久、你最想改善哪一点，我会结合你保存过的饮食、运动和身体趋势陪你一起分析。我看不到未保存的内容，也不会替你做医学诊断。`,
-    actions: ['先说一个最近的困惑', '也可以直接问训练和饥饿感'],
+    text: `我是${petName}。告诉我最近最想改善的一件事，我会结合你保存的饮食、运动和身体趋势，帮你找出最值得调整的一点。`,
   }
 }
 
@@ -332,10 +322,14 @@ function PetChatPage() {
 
   return (
     <View className={`pet-chat-page ${scheme === 'dark' ? 'pet-chat-page--dark' : ''}`}>
-      <View className='pet-chat-background-glow pet-chat-background-glow--one' />
-      <View className='pet-chat-background-glow pet-chat-background-glow--two' />
-
       <View className='pet-chat-topbar'>
+        <View className='pet-chat-identity'>
+          <PetAvatar pet={petSummary?.pet} size={72} mood={petSummary?.status?.mood} state={petSummary?.status?.state} />
+          <View className='pet-chat-identity-copy'>
+            <Text className='pet-chat-identity-name'>{petName}</Text>
+            <Text className='pet-chat-identity-status'>{busy ? '正在整理你的记录' : '饮食与训练陪伴助手'}</Text>
+          </View>
+        </View>
         <View className='pet-chat-top-actions'>
           <View className='pet-chat-history-button' onClick={openHistoryPanel}>
             <Text>最近</Text>
@@ -350,7 +344,6 @@ function PetChatPage() {
         <View className='pet-chat-messages'>
           {messages.map((message) => (
             <View key={message.id} className={`pet-chat-message ${message.role}`}>
-              {message.role === 'pet' ? <PetAvatar pet={petSummary?.pet} size={56} mood={petSummary?.status?.mood} state={petSummary?.status?.state} /> : null}
               <View className='pet-chat-bubble'>
                 {message.role === 'pet' ? (
                   message.text ? (
@@ -365,43 +358,11 @@ function PetChatPage() {
                 ) : (
                   <Text className='pet-chat-message-text'>{message.text}</Text>
                 )}
-                {message.clues?.length ? (
-                  <View className='pet-chat-clues'>
-                    {message.clues.map((clue, index) => (
-                      <View key={`${message.id}-clue-${index}`} className='pet-chat-clue'>
-                        <Text className='pet-chat-clue-index'>{index + 1}</Text>
-                        <Text className='pet-chat-clue-text'>{clue}</Text>
-                      </View>
-                    ))}
-                  </View>
-                ) : null}
-                {message.actions?.length ? (
-                  <View className='pet-chat-actions'>
-                    {message.actions.map((action, index) => (
-                      <Text key={`${message.id}-action-${index}`} className='pet-chat-action-chip'>{action}</Text>
-                    ))}
-                  </View>
-                ) : null}
               </View>
             </View>
           ))}
           {isEmptyConversation ? (
             <View className='pet-chat-starter'>
-              <View className='pet-chat-guide'>
-                <Text className='pet-chat-guide-title'>这样问，更容易得到有用的回答</Text>
-                <View className='pet-chat-guide-list'>
-                  {CHAT_GUIDE.map((item, index) => (
-                    <View key={item.label} className='pet-chat-guide-item'>
-                      <Text className='pet-chat-guide-index'>{index + 1}</Text>
-                      <View className='pet-chat-guide-copy'>
-                        <Text className='pet-chat-guide-label'>{item.label}</Text>
-                        <Text className='pet-chat-guide-text'>{item.text}</Text>
-                      </View>
-                    </View>
-                  ))}
-                </View>
-                <Text className='pet-chat-guide-note'>回答只基于已保存的数据，记录越连续，判断越可靠。</Text>
-              </View>
               <Text className='pet-chat-starter-title'>可以从这些话题开始</Text>
               <View className='pet-chat-starter-grid'>
                 {QUICK_QUESTIONS.map((item) => (
@@ -438,7 +399,7 @@ function PetChatPage() {
         <Input
           className='pet-chat-input'
           value={input}
-          placeholder={lastAnalysis ? '继续问它：微量元素、餐次、明天怎么吃...' : '问它：训练状态、饥饿感、碳水、减脂卡住...'}
+          placeholder={lastAnalysis ? `继续问${petName}...` : '说说你最近最想改善的事...'}
           placeholderClass='pet-chat-input-placeholder'
           confirmType='send'
           onInput={(event) => setInput(String(event.detail.value || ''))}
