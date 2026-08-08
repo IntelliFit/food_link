@@ -22,5 +22,5 @@ test('runs the staged exporter and ignores unstaged helper and file content', as
   const stagedExporter = execFileSync('git', ['show', ':scripts/export-staged-snapshot.sh'], { cwd: repo })
   execFileSync('sh', ['-s', '--', snapshot], { cwd: repo, input: stagedExporter })
 
-  assert.equal(await readFile(path.join(snapshot, 'example.txt'), 'utf8'), 'staged\n')
+  assert.match(await readFile(path.join(snapshot, 'example.txt'), 'utf8'), /^staged\r?\n$/)
 })

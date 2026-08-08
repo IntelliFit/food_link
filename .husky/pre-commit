@@ -42,12 +42,6 @@ cleanup_snapshot() {
 }
 trap cleanup_snapshot EXIT HUP INT TERM
 git show :scripts/export-staged-snapshot.sh | sh -s -- "$SNAPSHOT_ROOT" || exit 1
-if [ -d node_modules ]; then
-  ln -s "$(pwd)/node_modules" "$SNAPSHOT_ROOT/node_modules"
-fi
-if [ -d admin/node_modules ]; then
-  ln -s "$(pwd)/admin/node_modules" "$SNAPSHOT_ROOT/admin/node_modules"
-fi
 
 echo "[pre-commit] Hook 语法检查..."
 sh -n "$SNAPSHOT_ROOT/.husky/pre-commit" || exit 1
@@ -58,6 +52,9 @@ if [ -n "$HOOK_TOOL_FILES" ]; then
 fi
 
 WECHAT_FILES="$(printf '%s\n' "$STAGED_FILES" | grep -E '^apps/wechat/(src|tests|config)/|^apps/wechat/(package\.json|jest\.config\.[cm]?js|tsconfig(\.[^.]+)?\.json|\.eslintrc(\..+)?)$|^(package\.json|package-lock\.json|jest\.config\.[cm]?js|tsconfig(\.[^.]+)?\.json|\.eslintrc(\..+)?)$' || true)"
+if [ -n "$WECHAT_FILES" ] && [ -d node_modules ]; then
+  ln -s "$(pwd)/node_modules" "$SNAPSHOT_ROOT/node_modules"
+fi
 if [ -n "$WECHAT_FILES" ]; then
   echo "[pre-commit] 微信端 TypeScript 检查..."
   (cd "$SNAPSHOT_ROOT" && npm run typecheck) || exit 1
@@ -78,6 +75,10 @@ fi
 
 ADMIN_FILES="$(printf '%s\n' "$STAGED_FILES" | grep -E '^admin/|^(package\.json|package-lock\.json)$' || true)"
 if [ -n "$ADMIN_FILES" ]; then
+  if [ -d admin/node_modules ]; then
+    ln -s "$(pwd)/admin/node_modules" "$SNAPSHOT_ROOT/admin/node_modules"
+  fi
+
   echo "[pre-commit] Admin 类型与构建检查..."
   (cd "$SNAPSHOT_ROOT" && npm --prefix admin run build) || exit 1
 fi
