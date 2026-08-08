@@ -326,7 +326,7 @@ const formatIngredientMetricDisplay = (field: IngredientMetricField, value: numb
   field === 'waterMl' || field === 'calories' ? formatWaterDisplay(value) : formatMacroDisplay(value)
 )
 
-const formatWeightDisplay = (item: NutritionItem) => item.displayWeight || `${Math.max(0, Math.round(item.weight))}g`
+const formatWeightDisplay = (value: number) => `${Math.max(0, Math.round(value))}g`
 
 type NutrientDetailKey = keyof Pick<Nutrients,
   'fiber' | 'sugar' | 'saturatedFat' | 'cholesterolMg' | 'sodiumMg' | 'potassiumMg' |
@@ -3004,7 +3004,7 @@ function ResultPage() {
                           className='adjust-btn minus'
                           onClick={() => handleWeightAdjust(item.id, -10)}
                         >–</View>
-                        <Text className='weight-display'>{formatWeightDisplay(item)}</Text>
+                        <Text className='weight-display'>{formatWeightDisplay(item.weight)}</Text>
                         <View
                           className='adjust-btn plus'
                           onClick={() => handleWeightAdjust(item.id, 10)}
@@ -3016,7 +3016,7 @@ function ResultPage() {
                       <View className='ratio-control-main'>
                         <View className='ratio-label-wrap'>
                           <Text className='control-label'>实际摄入</Text>
-                          <Text className='control-sub-label'>约 {Math.max(0, Math.round(item.intake))}g</Text>
+                          <Text className='control-sub-label'>约 {formatWeightDisplay(item.intake)}</Text>
                         </View>
                         <View className='ratio-control-right'>
                           <View className='ratio-slider-shell'>
