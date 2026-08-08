@@ -194,6 +194,20 @@ type DailyCalories struct {
 	Calories float64 `json:"calories"`
 }
 
+type CalendarDay struct {
+	Date      string  `json:"date"`
+	Calories  float64 `json:"calories"`
+	HasRecord bool    `json:"has_record"`
+}
+
+type CalendarMonthSummary struct {
+	Month     string        `json:"month"`
+	StartDate string        `json:"start_date"`
+	EndDate   string        `json:"end_date"`
+	TDEE      int           `json:"tdee"`
+	Days      []CalendarDay `json:"days"`
+}
+
 type StatsSummary struct {
 	Range                        string              `json:"range"`
 	StartDate                    string              `json:"start_date"`
@@ -426,6 +440,59 @@ func (s *StatsService) GetSummary(ctx context.Context, userID string, statsRange
 		AnalysisSummaryUsedToday:     usedToday,
 		BodyMetrics:                  comp.BodyMetrics,
 		HealthIndex:                  healthIndex,
+	}, nil
+}
+
+func (s *StatsService) GetCalendarMonth(ctx context.Context, userID, month string, fallbackTDEE int) (*CalendarMonthSummary, error) {
+	start, err := time.ParseInLocation("2006-01", month, chinaTZ)
+	if err != nil || start.Format("2006-01") != month {
+		return nil, &commonerrors.AppError{Code: 10002, Message: "month 参数格式应为 YYYY-MM", HTTPStatus: http.StatusBadRequest}
+	}
+	endExclusive := start.AddDate(0, 1, 0)
+	records, err := s.repo.GetFoodRecordsForDateRange(ctx, userID, start.UTC(), endExclusive.UTC())
+	if err != nil {
+		logger.Error(ctx, "查询月历饮食记录失败", err,
+			logger.UserID(userID),
+			slog.String("month", month),
+		)
+		return nil, err
+	}
+
+	tdee := fallbackTDEE
+	if user, profileErr := s.repo.GetUserProfile(ctx, userID); profileErr == nil && user != nil && user.TDEE != nil && *user.TDEE > 0 {
+		tdee = int(math.Round(*user.TDEE))
+	}
+	if tdee <= 0 {
+		tdee = 2000
+	}
+
+	caloriesByDate := make(map[string]float64)
+	recordedDates := make(map[string]bool)
+	for _, record := range records {
+		if record.RecordTime == nil {
+			continue
+		}
+		dateKey := record.RecordTime.In(chinaTZ).Format("2006-01-02")
+		if dateKey < start.Format("2006-01-02") || dateKey >= endExclusive.Format("2006-01-02") {
+			continue
+		}
+		caloriesByDate[dateKey] += record.TotalCalories
+		recordedDates[dateKey] = true
+	}
+
+	days := make([]CalendarDay, 0, int(endExclusive.Sub(start).Hours()/24))
+	for day := start; day.Before(endExclusive); day = day.AddDate(0, 0, 1) {
+		dateKey := day.Format("2006-01-02")
+		days = append(days, CalendarDay{Date: dateKey, Calories: round1(caloriesByDate[dateKey]), HasRecord: recordedDates[dateKey]})
+	}
+
+	logger.Info(ctx, "月历饮食记录查询完成",
+		logger.UserID(userID),
+		slog.String("month", month),
+		slog.Int("recorded_days", len(recordedDates)),
+	)
+	return &CalendarMonthSummary{
+		Month: month, StartDate: start.Format("2006-01-02"), EndDate: endExclusive.AddDate(0, 0, -1).Format("2006-01-02"), TDEE: tdee, Days: days,
 	}, nil
 }
 

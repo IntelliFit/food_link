@@ -962,6 +962,27 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   padding-top: 4rpx;
 }
 
+.month-calendar-status {
+  min-height: 420rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #6b7280;
+  font-size: 24rpx;
+
+  &.is-error {
+    color: #b45309;
+    padding: 32rpx;
+    text-align: center;
+  }
+}
+
+.month-calendar-spinner {
+  width: 34rpx;
+  height: 34rpx;
+  border-width: 4rpx;
+}
+
 .month-calendar-weekdays,
 .month-calendar-grid {
   display: grid;

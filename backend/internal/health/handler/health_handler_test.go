@@ -89,6 +89,7 @@ func (m *mockExerciseSvc) UpdateLog(ctx context.Context, userID, logID, exercise
 
 type mockStatsSvc struct {
 	summary       *service.StatsSummary
+	calendar      *service.CalendarMonthSummary
 	insightResult map[string]any
 	dietResult    *service.DietRecommendationResult
 	saveErr       error
@@ -97,6 +98,10 @@ type mockStatsSvc struct {
 
 func (m *mockStatsSvc) GetSummary(ctx context.Context, userID string, statsRange string, tdee int, streakDays int) (*service.StatsSummary, error) {
 	return m.summary, m.err
+}
+
+func (m *mockStatsSvc) GetCalendarMonth(ctx context.Context, userID, month string, tdee int) (*service.CalendarMonthSummary, error) {
+	return m.calendar, m.err
 }
 
 func (m *mockStatsSvc) GenerateInsight(ctx context.Context, userID string, dateRange string, tdee int, streakDays int) (map[string]any, error) {
@@ -130,6 +135,7 @@ func setupHealthRouter(h *HealthHandler) *gin.Engine {
 	r.POST("/api/body-metrics/weight", h.SaveBodyWeightRecord)
 	r.DELETE("/api/body-metrics/weight/:record_id", h.DeleteBodyWeightRecord)
 	r.GET("/api/stats/summary", h.GetStatsSummary)
+	r.GET("/api/stats/calendar", h.GetStatsCalendar)
 	r.POST("/api/stats/insight/generate", h.GenerateStatsInsight)
 	r.POST("/api/stats/insight/save", h.SaveStatsInsight)
 	r.POST("/api/diet/recommendations", h.GenerateDietRecommendation)
@@ -280,6 +286,24 @@ func TestGetStatsSummary(t *testing.T) {
 	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	data := resp["data"].(map[string]any)
 	assert.Equal(t, float64(3), data["recorded_days"])
+}
+
+func TestGetStatsCalendar(t *testing.T) {
+	mockSvc := &mockStatsSvc{calendar: &service.CalendarMonthSummary{
+		Month: "2024-02", StartDate: "2024-02-01", EndDate: "2024-02-29", TDEE: 1800,
+		Days: []service.CalendarDay{{Date: "2024-02-03", Calories: 650, HasRecord: true}},
+	}}
+	h := NewHealthHandler(nil, nil, mockSvc)
+	r := setupHealthRouter(h)
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/api/stats/calendar?month=2024-02", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	var resp map[string]any
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+	data := resp["data"].(map[string]any)
+	assert.Equal(t, "2024-02", data["month"])
 }
 
 func TestGenerateStatsInsight(t *testing.T) {

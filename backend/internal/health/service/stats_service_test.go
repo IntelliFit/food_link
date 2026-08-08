@@ -250,6 +250,27 @@ func TestStatsService_GetSummary(t *testing.T) {
 	assert.False(t, summary.AnalysisSummaryNeedsRefresh)
 }
 
+func TestStatsService_GetCalendarMonthUsesRequestedHistoricalMonth(t *testing.T) {
+	tdee := 1850.0
+	first := time.Date(2024, 2, 3, 4, 0, 0, 0, time.UTC)
+	second := time.Date(2024, 2, 3, 12, 0, 0, 0, time.UTC)
+	repo := &mockStatsRepo{
+		user: &domain.StatsUserProfile{TDEE: &tdee},
+		records: []domain.FoodRecord{
+			{UserID: "u1", TotalCalories: 400, RecordTime: &first},
+			{UserID: "u1", TotalCalories: 250, RecordTime: &second},
+		},
+	}
+
+	summary, err := NewStatsService(repo, nil).GetCalendarMonth(context.Background(), "u1", "2024-02", 2000)
+	require.NoError(t, err)
+	require.Len(t, summary.Days, 29)
+	assert.Equal(t, "2024-02-01", summary.StartDate)
+	assert.Equal(t, "2024-02-29", summary.EndDate)
+	assert.Equal(t, 1850, summary.TDEE)
+	assert.Equal(t, CalendarDay{Date: "2024-02-03", Calories: 650, HasRecord: true}, summary.Days[2])
+}
+
 func TestStatsService_GetSummaryHidesCachedInsightWithoutFoodRecords(t *testing.T) {
 	now := time.Now().In(chinaTZ)
 	repo := &mockStatsRepo{

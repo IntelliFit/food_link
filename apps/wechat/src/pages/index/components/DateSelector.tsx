@@ -18,6 +18,9 @@ interface DateSelectorProps {
   historyCells?: WeekHeatmapCell[]
   selectedDate: string
   onSelect: (date: string) => void
+  onVisibleMonthChange?: (month: string) => void
+  monthLoading?: boolean
+  monthLoadError?: boolean
 }
 
 const WEEKDAY_LABELS = ['日', '一', '二', '三', '四', '五', '六']
@@ -28,7 +31,7 @@ function getCircleClass(cell?: WeekHeatmapCell): string {
   return Number(cell?.calories || 0) > Number(cell?.target || 0) ? 'is-over' : 'is-recorded'
 }
 
-export function DateSelector({ cells, historyCells = [], selectedDate, onSelect }: DateSelectorProps) {
+export function DateSelector({ cells, historyCells = [], selectedDate, onSelect, onVisibleMonthChange, monthLoading = false, monthLoadError = false }: DateSelectorProps) {
   const todayKey = React.useMemo(() => {
     const today = new Date()
     const month = String(today.getMonth() + 1).padStart(2, '0')
@@ -62,27 +65,39 @@ export function DateSelector({ cells, historyCells = [], selectedDate, onSelect 
   }
 
   const toggleExpanded = () => {
-    if (!expanded) setVisibleMonth(getCalendarMonthKey(selectedDate))
+    if (!expanded) {
+      const selectedMonth = getCalendarMonthKey(selectedDate)
+      setVisibleMonth(selectedMonth)
+      onVisibleMonthChange?.(selectedMonth)
+    }
     setExpanded(value => !value)
   }
+
+  const showMonth = (offset: number) => {
+    const nextMonth = shiftCalendarMonth(visibleMonth, offset)
+    setVisibleMonth(nextMonth)
+    onVisibleMonthChange?.(nextMonth)
+  }
+
+  const titleMonth = expanded ? visibleMonth : getCalendarMonthKey(selectedDate)
 
   return (
     <View className={`date-selector-section ${expanded ? 'is-calendar-expanded' : ''}`}>
       <View className='date-calendar-toolbar'>
         {expanded ? (
-          <View className='date-calendar-nav' onClick={() => setVisibleMonth(shiftCalendarMonth(visibleMonth, -1))}>
+          <View className='date-calendar-nav' onClick={() => showMonth(-1)}>
             <Text>‹</Text>
           </View>
         ) : <View className='date-calendar-nav is-placeholder' />}
         <View className='date-calendar-title' onClick={toggleExpanded}>
-          <Text className='date-calendar-title__text'>{formatCalendarMonthLabel(visibleMonth)}</Text>
+          <Text className='date-calendar-title__text'>{formatCalendarMonthLabel(titleMonth)}</Text>
           <Text className='date-calendar-title__arrow'>{expanded ? '⌃' : '⌄'}</Text>
         </View>
         {expanded ? (
           <View
             className={`date-calendar-nav ${isCurrentMonth ? 'is-disabled' : ''}`}
             onClick={() => {
-              if (!isCurrentMonth) setVisibleMonth(shiftCalendarMonth(visibleMonth, 1))
+              if (!isCurrentMonth) showMonth(1)
             }}
           >
             <Text>›</Text>
@@ -92,6 +107,15 @@ export function DateSelector({ cells, historyCells = [], selectedDate, onSelect 
 
       {expanded ? (
         <View className='month-calendar'>
+          {monthLoading ? (
+            <View className='month-calendar-status' aria-label='月历数据加载中'>
+              <View className='loading-spinner month-calendar-spinner' />
+            </View>
+          ) : monthLoadError ? (
+            <View className='month-calendar-status is-error'>
+              <Text>月历数据加载失败，请切换月份重试</Text>
+            </View>
+          ) : (<>
           <View className='month-calendar-weekdays'>
             {WEEKDAY_LABELS.map(label => <Text key={label} className='month-calendar-weekday'>{label}</Text>)}
           </View>
@@ -116,6 +140,7 @@ export function DateSelector({ cells, historyCells = [], selectedDate, onSelect 
             <View className='month-calendar-legend__item'><View className='month-calendar-legend__dot is-over' /><Text>超过目标</Text></View>
             <Text className='month-calendar-legend__hint'>点击日期查看当天详情</Text>
           </View>
+          </>)}
         </View>
       ) : (
         <View className='date-list'>

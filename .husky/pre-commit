@@ -33,34 +33,63 @@ if [ -n "$SENSITIVE_FILES" ]; then
   exit 1
 fi
 
-WECHAT_FILES="$(printf '%s\n' "$STAGED_FILES" | grep -E '^apps/wechat/(src|tests|config)/' || true)"
+# 后续所有构建、格式化与测试都在 Git 暂存区导出的快照中执行，避免未暂存内容掩盖提交问题。
+SNAPSHOT_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/foodlink-precommit.XXXXXX")"
+cleanup_snapshot() {
+  case "$SNAPSHOT_ROOT" in
+    */foodlink-precommit.*) find "$SNAPSHOT_ROOT" -depth -delete 2>/dev/null || true ;;
+  esac
+}
+trap cleanup_snapshot EXIT HUP INT TERM
+git show :scripts/export-staged-snapshot.sh | sh -s -- "$SNAPSHOT_ROOT" || exit 1
+if [ -d node_modules ]; then
+  ln -s "$(pwd)/node_modules" "$SNAPSHOT_ROOT/node_modules"
+fi
+if [ -d admin/node_modules ]; then
+  ln -s "$(pwd)/admin/node_modules" "$SNAPSHOT_ROOT/admin/node_modules"
+fi
+
+echo "[pre-commit] Hook 语法检查..."
+sh -n "$SNAPSHOT_ROOT/.husky/pre-commit" || exit 1
+HOOK_TOOL_FILES="$(printf '%s\n' "$STAGED_FILES" | grep -E '^\.husky/pre-commit$|^scripts/export-staged-snapshot\.(sh|test\.mjs)$' || true)"
+if [ -n "$HOOK_TOOL_FILES" ]; then
+  echo "[pre-commit] 暂存快照导出场景测试..."
+  (cd "$SNAPSHOT_ROOT" && node --test scripts/export-staged-snapshot.test.mjs) || exit 1
+fi
+
+WECHAT_FILES="$(printf '%s\n' "$STAGED_FILES" | grep -E '^apps/wechat/(src|tests|config)/|^apps/wechat/(package\.json|jest\.config\.[cm]?js|tsconfig(\.[^.]+)?\.json|\.eslintrc(\..+)?)$|^(package\.json|package-lock\.json|jest\.config\.[cm]?js|tsconfig(\.[^.]+)?\.json|\.eslintrc(\..+)?)$' || true)"
 if [ -n "$WECHAT_FILES" ]; then
   echo "[pre-commit] 微信端 TypeScript 检查..."
-  npm run typecheck || exit 1
+  (cd "$SNAPSHOT_ROOT" && npm run typecheck) || exit 1
 
   WECHAT_LINT_FILES="$(printf '%s\n' "$EXISTING_STAGED_FILES" | grep -E '^apps/wechat/(src|tests|config)/.*\.(ts|tsx)$' || true)"
-  if [ -n "$WECHAT_LINT_FILES" ]; then
+  WECHAT_LINT_CONFIG_FILES="$(printf '%s\n' "$STAGED_FILES" | grep -E '^apps/wechat/\.eslintrc(\..+)?$|^\.eslintrc(\..+)?$' || true)"
+  if [ -n "$WECHAT_LINT_CONFIG_FILES" ]; then
+    echo "[pre-commit] 微信端全量 ESLint 检查..."
+    (cd "$SNAPSHOT_ROOT" && npm run lint) || exit 1
+  elif [ -n "$WECHAT_LINT_FILES" ]; then
     echo "[pre-commit] 微信端 ESLint 检查..."
-    printf '%s\n' "$WECHAT_LINT_FILES" | xargs npx eslint --max-warnings 0 || exit 1
+    (cd "$SNAPSHOT_ROOT" && printf '%s\n' "$WECHAT_LINT_FILES" | xargs npx eslint --max-warnings 0) || exit 1
   fi
 
   echo "[pre-commit] 微信端测试..."
-  npm test -- --runInBand || exit 1
+  (cd "$SNAPSHOT_ROOT" && npm test -- --runInBand) || exit 1
 fi
 
-ADMIN_FILES="$(printf '%s\n' "$STAGED_FILES" | grep -E '^admin/' || true)"
+ADMIN_FILES="$(printf '%s\n' "$STAGED_FILES" | grep -E '^admin/|^(package\.json|package-lock\.json)$' || true)"
 if [ -n "$ADMIN_FILES" ]; then
   echo "[pre-commit] Admin 类型与构建检查..."
-  npm --prefix admin run build || exit 1
+  (cd "$SNAPSHOT_ROOT" && npm --prefix admin run build) || exit 1
 fi
 
 GO_FILES="$(printf '%s\n' "$STAGED_FILES" | grep -E '^backend/.*\.go$' || true)"
-if [ -n "$GO_FILES" ]; then
+GO_TRIGGER_FILES="$(printf '%s\n' "$STAGED_FILES" | grep -E '^backend/.*\.go$|^backend/go\.(mod|sum)$' || true)"
+if [ -n "$GO_TRIGGER_FILES" ]; then
   echo "[pre-commit] Go 格式检查..."
   GO_FORMAT_FILES="$(printf '%s\n' "$EXISTING_STAGED_FILES" | grep -E '^backend/.*\.go$' || true)"
   UNFORMATTED=""
   if [ -n "$GO_FORMAT_FILES" ]; then
-    UNFORMATTED="$(printf '%s\n' "$GO_FORMAT_FILES" | xargs gofmt -l)"
+    UNFORMATTED="$(cd "$SNAPSHOT_ROOT" && printf '%s\n' "$GO_FORMAT_FILES" | xargs gofmt -l)"
   fi
   if [ -n "$UNFORMATTED" ]; then
     echo "[pre-commit] 以下 Go 文件尚未 gofmt："
@@ -70,9 +99,12 @@ if [ -n "$GO_FILES" ]; then
 
   echo "[pre-commit] Go 相关包测试..."
   (
-    cd backend || exit 1
+    cd "$SNAPSHOT_ROOT/backend" || exit 1
     GO_PACKAGES=""
     GO_TEST_ALL=0
+    if printf '%s\n' "$STAGED_FILES" | grep -Eq '^backend/go\.(mod|sum)$'; then
+      GO_TEST_ALL=1
+    fi
     for GO_FILE in $GO_FILES; do
       GO_RELATIVE="${GO_FILE#backend/}"
       GO_DIR="${GO_RELATIVE%/*}"

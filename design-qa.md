@@ -1,36 +1,3 @@
-# 宠物对话用户气泡纵向间距设计 QA
-
-- 源视觉真值：`/var/folders/dl/j1hxj3fs3czd7lt458p170t80000gn/T/codex-clipboard-cf83b06d-3818-4408-b55f-7c9669243a43.png`
-- 实现截图：未取得（微信开发者工具 9420 端口监听，但 miniprogram-automator WebSocket 拒绝连接）
-- 目标页面：`apps/wechat/src/packageExtra/pages/pet-chat/index.scss`
-- 源图尺寸：640 × 516 px；目标为截图中的浅色主题、已有对话、单行用户消息状态
-- 实现视口与密度：因自动化连接失败无法读取，未进行密度归一
-
-## Findings
-
-- [P2] 源图中右侧绿色用户气泡继承通用卡片 `30rpx` 四向内边距，单行文字上下留白明显过大。
-- 修复仅覆盖 `.pet-chat-message.user .pet-chat-bubble`，将 padding 改为 `18rpx 30rpx`；横向阅读空间、最大宽度、圆角、颜色和宠物回复卡均保持不变。
-- 字体与文案：字号 `26rpx`、行高 `40rpx` 和“推荐食谱”文案未改。
-- 间距与布局：单行气泡理论高度从约 `100rpx` 收紧到约 `76rpx`，长文本仍按原宽度自然换行。
-- 颜色与视觉 token：绿色背景、白字、阴影和圆角未改。
-- 图片与图标：未新增、替换或近似重绘任何图片、图标或宠物素材。
-
-## Static and runtime checks
-
-- TypeScript、目标 TSX ESLint 与 `git diff --check` 通过。
-- 主工作区 `dev:weapp` watch 已使用 `TARO_APP_API_BASE_URL_OVERRIDE=https://dev.api.healthymax.cn` 重新启动并于 17:30:47 编译成功；`dist/packageExtra/pages/pet-chat/index.wxss` 已确认包含 `padding: 18rpx 30rpx`。
-- `mrc where`、`mrc screenshot` 和错误日志读取均因自动化 WebSocket 连接失败而阻塞，无法取得同视口实现截图、并排视觉比较或点击/输入验证。
-
-## Comparison history
-
-1. 修改前：用户气泡继承 `30rpx` 四向 padding，截图显示单行文本上下留白过大。
-2. 修复：用户气泡单独改为纵向 `18rpx`、横向 `30rpx`。
-3. 修复后：编译产物静态确认成功；运行时视觉证据因自动化连接失败尚未取得。
-
-final result: blocked
-
----
-
 # 首页活动 Banner 与三记录卡设计 QA
 
 - 源视觉真值：`/var/folders/dl/j1hxj3fs3czd7lt458p170t80000gn/T/codex-clipboard-3c6dce1c-ce26-438d-bd0e-f2bf395bf33f.png`
@@ -84,42 +51,6 @@ final result: blocked
 - 无阻塞项。P3：极窄设备上较长的喝水目标文案继续沿用原版单行展示策略，当前常用机型未发生溢出。
 
 final result: passed
-
----
-
-# 宠物对话页精简与左上宠物身份设计 QA
-
-- 源视觉真值：`/var/folders/dl/j1hxj3fs3czd7lt458p170t80000gn/T/codex-clipboard-885e996c-40f8-4d30-a73c-198b83fd6f79.png`
-- 输入栏缺陷证据：`/var/folders/dl/j1hxj3fs3czd7lt458p170t80000gn/T/codex-clipboard-3e71faf1-6aae-4fd9-92c0-4efde8ad9749.png`
-- 空对话底部布局目标：`/var/folders/dl/j1hxj3fs3czd7lt458p170t80000gn/T/codex-clipboard-7de051eb-3221-4d0d-a9de-af2b408f870b.png`
-- 目标页面：`apps/wechat/src/packageExtra/pages/pet-chat/index.tsx`
-- 目标样式：`apps/wechat/src/packageExtra/pages/pet-chat/index.scss`
-- 页面状态：浅色主题、宠物对话页；需同时验证初始对话态与已有分析态
-
-## Implemented structure
-
-- 宠物形象从每条宠物消息左侧移除，只在页面左上身份区展示一次；身份区同时显示动态宠物名称和当前处理状态。
-- 用户消息保持右对齐绿色气泡；宠物消息改为无头像、整宽白色内容卡，Markdown 标题、段落、列表和表格能力保留。
-- 初始态删除三步提问教学、重复动作标签和装饰光斑，只保留简短介绍；起始提示词与输入框统一进入底部操作区。
-- 空对话和已有分析统一显示“饮食怎么调整？ / 推荐食谱 / 训练怎么安排？”三项；输入提示同步缩短。
-- 复用现有 `PetAvatar`、宠物资源和项目色彩体系，没有新增图片、Emoji、自绘 SVG 或占位资源。
-- 根据真机截图补充豆包式固定底栏：页面和小程序 `page` 容器锁定为 `100vh` 并隐藏外层滚动，中间 `ScrollView` 使用 `flex: 1 1 0; height: 0` 独立承载消息滚动；提示词和输入框由同一个 `pet-chat-bottom-dock` 承载，从空对话开始就停在底部安全区上方。页面配置同时声明 `disableScroll: true`。
-
-## Static checks
-
-- 微信端 Jest：23 suites / 83 tests 通过。
-- TypeScript typecheck 通过。
-- 目标 TSX ESLint 通过。
-- `git diff --check` 通过。
-- 现有 `dev:weapp` watch 已于 13:27 将 TSX/SCSS 编译到对应 `dist/packageExtra/pages/pet-chat` 产物，JS/WXSS 中已确认包含 `pet-chat-bottom-dock`、`100vh` 和空对话输入提示。
-
-## Blocking issue
-
-- 微信开发者工具 9420/3001 均未开放自动化 WebSocket，`mrc where` 无法连接。
-- 因此无法取得实现截图，无法按相同视口把参考图与实现并排比较，也无法执行快捷问题、输入发送、历史面板和深色模式的运行时交互检查。
-- 按 Product Design `image-to-code` 的设计 QA 门禁，在微信开发者工具重新开启“工具 → 自动化”前，本轮不能判定视觉验收通过，也不应发布为正式小程序版本。
-
-final result: blocked
 
 ---
 

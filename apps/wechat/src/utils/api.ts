@@ -1241,6 +1241,14 @@ export interface StatsSummary {
   health_index?: HealthIndex
 }
 
+export interface StatsCalendarMonth {
+  month: string
+  start_date: string
+  end_date: string
+  tdee: number
+  days: Array<{ date: string; calories: number; has_record: boolean }>
+}
+
 export interface AIUsagePricingResult {
   model: string
   input_tokens: number
@@ -3805,6 +3813,18 @@ export async function getStatsSummary(range: 'week' | 'month'): Promise<StatsSum
   return res.data as StatsSummary
 }
 
+export async function getStatsCalendarMonth(month: string): Promise<StatsCalendarMonth> {
+  const res = await authenticatedRequest(
+    `/api/stats/calendar?month=${encodeURIComponent(month)}`,
+    { method: 'GET', timeout: 30000 }
+  )
+  if (res.statusCode !== 200) {
+    const msg = (res.data as any)?.detail || '获取月历统计失败'
+    throw new Error(msg)
+  }
+  return res.data as StatsCalendarMonth
+}
+
 export async function generateDietRecommendation(
   payload: DietRecommendationRequest
 ): Promise<DietRecommendationResult> {
@@ -4344,6 +4364,7 @@ export function clearAllStorage() {
     Taro.removeStorageSync('pending_friend_invite_code')
     Taro.removeStorageSync('dietGoal')
     Taro.removeStorageSync('stats_page_bundle_v1')
+    Taro.removeStorageSync('home_dashboard_local_cache')
 
     // 清除业务数据（可选，根据需求决定是否清除）
     // Taro.removeStorageSync('analyzeImagePath')

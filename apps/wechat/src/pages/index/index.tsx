@@ -10,6 +10,7 @@ import { Empty, Button } from '@taroify/core'
 import {
   getHomeDashboard,
   getStatsSummary,
+  getStatsCalendarMonth,
   getAccessToken,
   updateDashboardTargets,
   getBodyMetricsSummary,
@@ -103,6 +104,7 @@ import {
   HOME_WARNING_RED
 } from './utils/constants'
 import { formatDisplayNumber, formatNumberWithComma, formatDateKey, createTargetForm, createWeekHeatmapCells } from './utils/helpers'
+import { canApplyCalendarResponse, mergeCalendarMonthRecords, resolveCalendarRecordTarget } from './utils/home-calendar'
 import { useAnimatedNumber, useAnimatedProgress } from './hooks'
 import { TargetEditor, GreetingSection, DateSelector, StatsEntry, RecordMenu, MealActionSheet, MealRecordsDialog, MealRecordEditModal, MealRecordPosterModal, DietRecommendationSheet, MicrosSection, type MealPosterSharePayload } from './components'
 import OnboardingGuide from '../../components/OnboardingGuide'
@@ -871,6 +873,8 @@ function IndexPage() {
   const [expirySummary, setExpirySummary] = React.useState<HomeFoodExpirySummary>(initialLocalSnapshot?.expirySummary || DEFAULT_EXPIRY_SUMMARY)
   const [weekHeatmapCells, setWeekHeatmapCells] = React.useState<WeekHeatmapCell[]>(() => buildWeekHeatmapCellsFromStorage())
   const [calendarHistoryCells, setCalendarHistoryCells] = React.useState<WeekHeatmapCell[]>(() => buildCalendarHeatmapCellsFromStorage())
+  const [calendarMonthLoading, setCalendarMonthLoading] = React.useState(false)
+  const [calendarMonthLoadError, setCalendarMonthLoadError] = React.useState(false)
   const [loading, setLoading] = React.useState(!initialLocalSnapshot)
   const [isSwitchingDate, setIsSwitchingDate] = React.useState(false)
   /** 后台静默同步中：左上角微型 spinner，不占文档流 */
@@ -963,6 +967,7 @@ function IndexPage() {
   const homeGuideTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
   const [dismissedBackfillDates, setDismissedBackfillDates] = React.useState<string[]>(() => getDismissedBackfillDates())
   const selectedDateRef = React.useRef(selectedDate)
+  const calendarMonthLoadSeqRef = React.useRef(0)
   const commitSelectedDate = React.useCallback((date: string) => {
     const nextDate = isValidHomeDate(date) ? date : formatDateKey(new Date())
     selectedDateRef.current = nextDate
@@ -970,6 +975,37 @@ function IndexPage() {
     setSelectedDate(nextDate)
     return nextDate
   }, [])
+  const loadCalendarMonth = React.useCallback(async (month: string) => {
+    const requestToken = getAccessToken()
+    if (!requestToken) {
+      calendarMonthLoadSeqRef.current += 1
+      setCalendarHistoryCells([])
+      setCalendarMonthLoading(false)
+      setCalendarMonthLoadError(false)
+      return
+    }
+    const seq = ++calendarMonthLoadSeqRef.current
+    setCalendarMonthLoading(true)
+    setCalendarMonthLoadError(false)
+    try {
+      const calendar = await getStatsCalendarMonth(month)
+      if (!canApplyCalendarResponse(requestToken, getAccessToken(), seq, calendarMonthLoadSeqRef.current)) return
+      const target = resolveCalendarRecordTarget(intakeData.target, calendar.tdee)
+      const monthCells = calendar.days.map(day => createCalendarHeatmapCell(
+        day.date,
+        day.calories,
+        target,
+        day.has_record
+      ))
+      setCalendarHistoryCells(existing => mergeCalendarMonthRecords(existing, month, monthCells))
+    } catch (error) {
+      if (!canApplyCalendarResponse(requestToken, getAccessToken(), seq, calendarMonthLoadSeqRef.current)) return
+      console.error('[home-calendar] getStatsCalendarMonth failed:', error)
+      setCalendarMonthLoadError(true)
+    } finally {
+      if (canApplyCalendarResponse(requestToken, getAccessToken(), seq, calendarMonthLoadSeqRef.current)) setCalendarMonthLoading(false)
+    }
+  }, [intakeData.target])
   const openRecordMenuFromRequest = React.useCallback(() => {
     const pendingDate = consumeHomeRecordMenuDate()
     if (pendingDate) {
@@ -1103,6 +1139,7 @@ function IndexPage() {
     // resolvedDate 已在上方计算
 
     if (!getAccessToken()) {
+      calendarMonthLoadSeqRef.current += 1
       setIntakeData(DEFAULT_INTAKE)
       setNutritionTarget(null)
       setMeals([])
@@ -1111,6 +1148,9 @@ function IndexPage() {
       setHomeAchievement({ streak_days: 0, green_days: 0 })
       setTargetForm(createTargetForm(DEFAULT_INTAKE))
       setWeekHeatmapCells(createWeekHeatmapCells())
+      setCalendarHistoryCells([])
+      setCalendarMonthLoading(false)
+      setCalendarMonthLoadError(false)
       setLoading(false)
       setIsSwitchingDate(false)
       return
@@ -3422,6 +3462,9 @@ function IndexPage() {
           historyCells={calendarHistoryCells}
           selectedDate={selectedDate}
           onSelect={handleDateSelect}
+          onVisibleMonthChange={loadCalendarMonth}
+          monthLoading={calendarMonthLoading}
+          monthLoadError={calendarMonthLoadError}
         />
         {homeMode === 'balanced' ? (
           <View className='balanced-home-content'>

@@ -54,6 +54,34 @@ export function buildCalendarRecordMap(cells: WeekHeatmapCell[]): Map<string, We
   return result
 }
 
+export function mergeCalendarMonthRecords(
+  existing: WeekHeatmapCell[],
+  monthKey: string,
+  replacement: WeekHeatmapCell[]
+): WeekHeatmapCell[] {
+  const merged = new Map<string, WeekHeatmapCell>()
+  existing.forEach((cell) => {
+    if (getCalendarMonthKey(cell.date) !== monthKey) merged.set(cell.date, cell)
+  })
+  replacement.forEach((cell) => merged.set(cell.date, cell))
+  return Array.from(merged.values()).sort((left, right) => left.date.localeCompare(right.date))
+}
+
+export function resolveCalendarRecordTarget(homeTarget: number, fallbackTarget: number): number {
+  return Number.isFinite(homeTarget) && homeTarget > 0
+    ? homeTarget
+    : Number.isFinite(fallbackTarget) && fallbackTarget > 0 ? fallbackTarget : 2000
+}
+
+export function canApplyCalendarResponse(
+  requestToken: string,
+  currentToken: string | null | undefined,
+  requestSeq: number,
+  currentSeq: number
+): boolean {
+  return Boolean(requestToken && currentToken === requestToken && requestSeq === currentSeq)
+}
+
 export function buildCenteredWeekCells(
   selectedDate: string,
   records: Map<string, WeekHeatmapCell>,

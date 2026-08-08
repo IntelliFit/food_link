@@ -591,6 +591,7 @@ func New(cfg *config.Config) (*App, error) {
 	engine.POST("/api/body-metrics/weight", authmw.RequireJWT(jwtSvc), healthHandler.SaveBodyWeightRecord)
 	engine.DELETE("/api/body-metrics/weight/:record_id", authmw.RequireJWT(jwtSvc), healthHandler.DeleteBodyWeightRecord)
 	engine.GET("/api/stats/summary", authmw.RequireJWT(jwtSvc), healthHandler.GetStatsSummary)
+	engine.GET("/api/stats/calendar", authmw.RequireJWT(jwtSvc), healthHandler.GetStatsCalendar)
 	engine.POST("/api/stats/custom-focus/generate", authmw.RequireJWT(jwtSvc), healthHandler.GenerateCustomFocusCard)
 	engine.POST("/api/stats/insight/generate", authmw.RequireJWT(jwtSvc), healthHandler.GenerateStatsInsight)
 	engine.POST("/api/stats/insight/save", authmw.RequireJWT(jwtSvc), healthHandler.SaveStatsInsight)

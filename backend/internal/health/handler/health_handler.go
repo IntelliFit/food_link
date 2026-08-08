@@ -44,10 +44,25 @@ type ExerciseServiceWithRange interface {
 
 type StatsService interface {
 	GetSummary(ctx context.Context, userID string, statsRange string, tdee int, streakDays int) (*service.StatsSummary, error)
+	GetCalendarMonth(ctx context.Context, userID, month string, tdee int) (*service.CalendarMonthSummary, error)
 	GenerateInsight(ctx context.Context, userID string, dateRange string, tdee int, streakDays int) (map[string]any, error)
 	SaveInsight(ctx context.Context, userID string, content string, dateRange string) error
 	GenerateCustomFocusCard(ctx context.Context, userID, statsRange, focusID string) (*service.RiskCard, map[string]any, error)
 	GenerateDietRecommendation(ctx context.Context, userID string, input service.DietRecommendationInput) (*service.DietRecommendationResult, error)
+}
+
+// GET /api/stats/calendar
+func (h *HealthHandler) GetStatsCalendar(c *gin.Context) {
+	userID := c.GetString(authmw.ContextUserIDKey)
+	month := strings.TrimSpace(c.Query("month"))
+	logger.Info(c.Request.Context(), "月历统计请求进入", logger.UserID(userID), slog.String("month", month))
+	summary, err := h.stats.GetCalendarMonth(c.Request.Context(), userID, month, 2000)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	logger.Info(c.Request.Context(), "月历统计请求完成", logger.UserID(userID), slog.String("month", month), slog.Int("day_count", len(summary.Days)))
+	response.Success(c, summary)
 }
 
 type HealthHandler struct {

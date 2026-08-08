@@ -1,6 +1,9 @@
 import {
   buildCalendarRecordMap,
   buildCenteredWeekCells,
+  canApplyCalendarResponse,
+  mergeCalendarMonthRecords,
+  resolveCalendarRecordTarget,
   buildMonthCalendarCells,
   formatCalendarMonthLabel,
   getCalendarMonthKey,
@@ -60,5 +63,27 @@ describe('home calendar helpers', () => {
       '2026-07-13',
     ])
     expect(cells[3].hasRecord).toBe(true)
+  })
+
+  it('replaces only the requested month while preserving cached months', () => {
+    const result = mergeCalendarMonthRecords(
+      [record('2026-06-02'), record('2026-07-02')],
+      '2026-07',
+      [record('2026-07-03', 900)]
+    )
+
+    expect(result.map(cell => cell.date)).toEqual(['2026-06-02', '2026-07-03'])
+  })
+
+  it('uses the actual home calorie target for red and green thresholds', () => {
+    expect(resolveCalendarRecordTarget(1650, 2100)).toBe(1650)
+    expect(resolveCalendarRecordTarget(0, 2100)).toBe(2100)
+  })
+
+  it('rejects a calendar response after logout or account change', () => {
+    expect(canApplyCalendarResponse('token-a', 'token-a', 3, 3)).toBe(true)
+    expect(canApplyCalendarResponse('token-a', null, 3, 3)).toBe(false)
+    expect(canApplyCalendarResponse('token-a', 'token-b', 3, 3)).toBe(false)
+    expect(canApplyCalendarResponse('token-a', 'token-a', 3, 4)).toBe(false)
   })
 })
