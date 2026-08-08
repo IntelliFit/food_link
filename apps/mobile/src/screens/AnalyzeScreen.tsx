@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { ActivityIndicator, Image, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
 import * as ImagePicker from 'expo-image-picker'
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native'
@@ -104,7 +104,9 @@ export function AnalyzeScreen() {
   const [membership, setMembership] = useState<MembershipStatus | null>(null)
   const [imageAssets, setImageAssets] = useState<AnalyzeImageAsset[]>([])
   const [mealType, setMealType] = useState<MealType>(route.params?.mealType || inferDefaultMealTypeFromLocalTime())
-  const [baseMode, setBaseMode] = useState<AnalyzeBaseMode>('standard')
+  const precisionSessionId = String(route.params?.precisionSessionId || '').trim()
+  const carriedReferenceObjects = route.params?.referenceObjects || []
+  const [baseMode, setBaseMode] = useState<AnalyzeBaseMode>(precisionSessionId ? 'strict' : 'standard')
   const [webSearchEnabled, setWebSearchEnabled] = useState(false)
   const [separateFoodEstimateEnabled, setSeparateFoodEstimateEnabled] = useState(false)
   const [multiViewEnabled, setMultiViewEnabled] = useState(false)
@@ -112,24 +114,30 @@ export function AnalyzeScreen() {
   const [activityTiming, setActivityTiming] = useState<ActivityTiming>('none')
   const [additionalContext, setAdditionalContext] = useState('')
   const [helpSheet, setHelpSheet] = useState<HelpSheetState>(null)
+  const submitInFlightRef = useRef(false)
   const date = route.params?.date || todayKey()
 
   const executionMode = useMemo(
-    () => resolveExecutionModeFromOptions(baseMode, webSearchEnabled, separateFoodEstimateEnabled),
-    [baseMode, webSearchEnabled, separateFoodEstimateEnabled],
+    () => precisionSessionId
+      ? 'strict'
+      : resolveExecutionModeFromOptions(baseMode, webSearchEnabled, separateFoodEstimateEnabled),
+    [baseMode, precisionSessionId, webSearchEnabled, separateFoodEstimateEnabled],
   )
   const quota = useMemo(() => buildAnalyzeQuota(membership), [membership])
-  const isQuotaExhausted = Boolean(quota && quota.remaining <= 0)
+  const canUseStrictMode = canUseStrictModeForMembership(membership)
+  const strictModeAuthorized = Boolean(precisionSessionId) || canUseStrictMode
+  const requiredCredits = isPrecisionExecutionMode(executionMode) ? 4 : 2
+  const isQuotaExhausted = Boolean(quota && quota.remaining < requiredCredits)
   const confirmDisabled = loading || imageAssets.length === 0 || isQuotaExhausted
   const bottomInset = Math.max(insets.bottom, 12)
 
   const pickImages = async (source: 'camera' | 'library') => {
-    const permission = source === 'camera'
-      ? await ImagePicker.requestCameraPermissionsAsync()
-      : await ImagePicker.requestMediaLibraryPermissionsAsync()
-    if (!permission.granted) {
-      await dialog.alert(source === 'camera' ? '需要相机权限' : '需要相册权限', '请选择食物图片用于分析。', 'warning')
-      return
+    if (source === 'camera') {
+      const permission = await ImagePicker.requestCameraPermissionsAsync()
+      if (!permission.granted) {
+        await dialog.alert('需要相机权限', '请允许使用相机拍摄食物图片。', 'warning')
+        return
+      }
     }
 
     const picked = source === 'camera'
@@ -178,11 +186,56 @@ export function AnalyzeScreen() {
     }
   }, [baseMode, separateFoodEstimateEnabled])
 
+  useEffect(() => {
+    if (!membership || strictModeAuthorized || baseMode !== 'strict') return
+    setBaseMode('standard')
+    setSeparateFoodEstimateEnabled(false)
+  }, [baseMode, membership, strictModeAuthorized])
+
+  const promptStrictModeUpgrade = async (status: MembershipStatus | null = membership) => {
+    if (!status && membershipLoading) {
+      await dialog.alert('会员信息尚未就绪', '请稍后再选择精准模式。', 'info')
+      return
+    }
+    const isLightMember = Boolean(status?.is_pro && String(status.current_plan_code || '').startsWith('light_'))
+    const result = await dialog.showDialog({
+      title: '解锁精准模式',
+      message: isLightMember
+        ? '你当前是轻度版，暂不支持精准模式。升级到标准版或进阶版后即可使用。'
+        : '精准模式仅对标准版和进阶版开放。',
+      kind: 'warning',
+      cancelText: '取消',
+      confirmText: isLightMember ? '去升级' : '去开通',
+    })
+    if (result === 'confirm') navigation.navigate('MembershipCenter')
+  }
+
+  const selectBaseMode = async (nextMode: AnalyzeBaseMode) => {
+    if (precisionSessionId && nextMode !== 'strict') {
+      await dialog.alert('正在继续精准会话', '重拍会继续当前精准估计，本轮不能切换为其他模式。', 'info')
+      return
+    }
+    if (nextMode === 'strict' && !strictModeAuthorized) {
+      await promptStrictModeUpgrade()
+      return
+    }
+    setBaseMode(nextMode)
+  }
+
+  const toggleSeparateFoodEstimate = async () => {
+    if (!strictModeAuthorized) {
+      await promptStrictModeUpgrade()
+      return
+    }
+    setSeparateFoodEstimateEnabled((value) => !value)
+  }
+
   const removeImage = (uri: string) => {
     setImageAssets((current) => current.filter((asset) => asset.uri !== uri))
   }
 
   const submitAnalyze = async () => {
+    if (submitInFlightRef.current) return
     if (imageAssets.length === 0) {
       await dialog.alert('请先选择图片', `可以拍照或从相册选择，最多支持 ${MAX_ANALYZE_IMAGES} 张图片一起识别。`, 'warning')
       return
@@ -191,8 +244,25 @@ export function AnalyzeScreen() {
       await dialog.alert('积分不足', '当前可用积分不足，暂时不能发起图片分析。', 'warning')
       return
     }
+    submitInFlightRef.current = true
     setLoading(true)
     try {
+      if (isPrecisionExecutionMode(executionMode) && !precisionSessionId) {
+        let verifiedMembership: MembershipStatus
+        try {
+          verifiedMembership = await apiClient.getMyMembership(date)
+          setMembership(verifiedMembership)
+        } catch {
+          await dialog.alert('暂时无法验证会员权益', '为避免错误扣费，本次未提交精准分析，请检查网络后重试。', 'warning')
+          return
+        }
+        if (!canUseStrictModeForMembership(verifiedMembership)) {
+          setBaseMode('standard')
+          setSeparateFoodEstimateEnabled(false)
+          await promptStrictModeUpgrade(verifiedMembership)
+          return
+        }
+      }
       const uploadedUrls: string[] = []
       for (let index = 0; index < imageAssets.length; index += 1) {
         const asset = imageAssets[index]
@@ -203,7 +273,7 @@ export function AnalyzeScreen() {
         })
         uploadedUrls.push(uploaded.imageUrl)
       }
-      const submitted = await apiClient.submitAnalyzeTask({
+      const commonPayload = {
         image_url: uploadedUrls[0],
         image_urls: uploadedUrls,
         meal_type: mealType,
@@ -214,9 +284,18 @@ export function AnalyzeScreen() {
         additionalContext: additionalContext.trim() || undefined,
         is_multi_view: multiViewEnabled,
         suggest_ratio_enabled: suggestRatioEnabled,
-        execution_mode: executionMode,
-        analysis_engine: 'db_first',
-      })
+        reference_objects: carriedReferenceObjects.length > 0 ? carriedReferenceObjects : undefined,
+      }
+      const submitted = precisionSessionId
+        ? await apiClient.continuePrecisionSession(precisionSessionId, {
+            source_type: 'image',
+            ...commonPayload,
+          })
+        : await apiClient.submitAnalyzeTask({
+            ...commonPayload,
+            execution_mode: executionMode,
+            analysis_engine: 'db_first',
+          })
       navigation.replace('AnalyzeLoading', {
         taskId: submitted.task_id,
         imageUri: imageAssets[0]?.uri,
@@ -224,11 +303,12 @@ export function AnalyzeScreen() {
         mealType,
         date,
         taskType: 'food',
-        executionMode,
+        executionMode: precisionSessionId ? 'strict' : executionMode,
       })
     } catch (error) {
       await dialog.alert('分析失败', userFacingErrorMessage(error), 'danger')
     } finally {
+      submitInFlightRef.current = false
       setLoading(false)
     }
   }
@@ -311,9 +391,10 @@ export function AnalyzeScreen() {
                 {MODE_OPTIONS.map((option) => (
                   <ModeSwitchItem
                     key={option.value}
-                    label={option.label}
+                    label={option.value === 'strict' && !strictModeAuthorized ? '精准锁定' : option.label}
                     active={baseMode === option.value}
-                    onPress={() => setBaseMode(option.value)}
+                    locked={option.value === 'strict' && !strictModeAuthorized}
+                    onPress={() => void selectBaseMode(option.value)}
                   />
                 ))}
               </View>
@@ -323,14 +404,15 @@ export function AnalyzeScreen() {
               <AnalysisOptionCard
                 title="联网校准"
                 enabled={webSearchEnabled}
+                disabled={Boolean(precisionSessionId)}
                 onPress={() => setWebSearchEnabled((value) => !value)}
                 onHelpPress={() => setHelpSheet({ title: '联网校准', content: HELP_TEXT.webSearch })}
               />
               <AnalysisOptionCard
                 title="分项模式"
                 enabled={separateFoodEstimateEnabled}
-                disabled={baseMode !== 'strict'}
-                onPress={() => setSeparateFoodEstimateEnabled((value) => !value)}
+                disabled={baseMode !== 'strict' || Boolean(precisionSessionId)}
+                onPress={() => void toggleSeparateFoodEstimate()}
                 onHelpPress={() => setHelpSheet({ title: '分项模式', content: HELP_TEXT.separate })}
               />
             </View>
@@ -466,10 +548,28 @@ function PickerPill({ icon, label, onPress }: { icon: LucideIcon; label: string;
   )
 }
 
-function ModeSwitchItem({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
+function ModeSwitchItem({
+  label,
+  active,
+  locked,
+  onPress,
+}: {
+  label: string
+  active: boolean
+  locked?: boolean
+  onPress: () => void
+}) {
   return (
-    <Pressable style={({ pressed }) => [styles.modeSwitchItem, active && styles.modeSwitchItemActive, pressed && styles.pressed]} onPress={onPress}>
-      <Text style={[styles.modeSwitchText, active && styles.modeSwitchTextActive]} numberOfLines={1}>{label}</Text>
+    <Pressable
+      style={({ pressed }) => [
+        styles.modeSwitchItem,
+        active && styles.modeSwitchItemActive,
+        locked && styles.modeSwitchItemLocked,
+        pressed && styles.pressed,
+      ]}
+      onPress={onPress}
+    >
+      <Text style={[styles.modeSwitchText, active && styles.modeSwitchTextActive, locked && styles.modeSwitchTextLocked]} numberOfLines={1}>{label}</Text>
     </Pressable>
   )
 }
@@ -652,6 +752,16 @@ function executionModeLabel(mode: ExecutionMode): string {
   if (mode === 'strict_separate') return '精准分项'
   if (mode === 'strict_web_search') return '精准联网'
   return '普通'
+}
+
+function isPrecisionExecutionMode(mode: ExecutionMode): boolean {
+  return mode === 'strict' || mode === 'strict_separate' || mode === 'strict_web_search'
+}
+
+function canUseStrictModeForMembership(status: MembershipStatus | null): boolean {
+  if (!status?.is_pro) return false
+  const planCode = String(status.current_plan_code || '').trim()
+  return planCode.startsWith('standard_') || planCode.startsWith('advanced_')
 }
 
 const styles = StyleSheet.create({
@@ -893,6 +1003,10 @@ const styles = StyleSheet.create({
     borderColor: '#00bc7d',
     backgroundColor: '#00bc7d',
   },
+  modeSwitchItemLocked: {
+    borderColor: '#e5e7eb',
+    backgroundColor: '#f3f4f6',
+  },
   modeSwitchText: {
     color: '#64748b',
     fontSize: 12,
@@ -901,6 +1015,10 @@ const styles = StyleSheet.create({
   },
   modeSwitchTextActive: {
     color: '#fff',
+  },
+  modeSwitchTextLocked: {
+    color: '#9ca3af',
+    fontSize: 10,
   },
   analysisOptionsRow: {
     paddingHorizontal: 10,

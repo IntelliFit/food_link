@@ -6,7 +6,7 @@ export const colors = {
   brandWash: 'rgba(92, 184, 150, 0.08)',
   brandWashLight: 'rgba(92, 184, 150, 0.03)',
   tabSelected: '#00bc7d',
-  background: '#f0f3f6',
+  background: '#f9fafb',
   surface: '#ffffff',
   surfaceMuted: '#f8fafc',
   text: '#1f2937',

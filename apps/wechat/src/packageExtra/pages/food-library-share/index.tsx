@@ -316,7 +316,7 @@ function FoodLibrarySharePage() {
   useEffect(() => {
     if (!editId) return;
     let cancelled = false;
-    Taro.showLoading({ title: "加载中...", mask: true });
+    Taro.showLoading({ title: "", mask: true });
     getPublicFoodLibraryItem(editId)
       .then((data: PublicFoodLibraryItem) => {
         if (cancelled) return;

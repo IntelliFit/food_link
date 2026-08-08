@@ -61,6 +61,33 @@ func TestSMSService_WrongCodeDoesNotConsumeCorrectCode(t *testing.T) {
 	assert.Equal(t, "app-phone:13800138010", out.OpenID)
 }
 
+func TestSMSService_VerifyCodeConsumesCodeOnce(t *testing.T) {
+	store := NewMemoryCodeStore()
+	svc := NewSMSService(config.SMSConfig{}, "food_link", nil, nil, nil, store, nil)
+	ctx := context.Background()
+
+	require.NoError(t, store.Set(ctx, svc.smsCodeKey("13800138013"), "530836", 15*time.Minute))
+	require.NoError(t, svc.VerifyCode(ctx, "13800138013", " 530836 "))
+
+	err := svc.VerifyCode(ctx, "13800138013", "530836")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "验证码错误或已过期")
+	assert.ErrorIs(t, err, ErrSMSCodeInvalid)
+}
+
+func TestSMSService_VerifyCodeWrongAttemptDoesNotConsumeCorrectCode(t *testing.T) {
+	store := NewMemoryCodeStore()
+	svc := NewSMSService(config.SMSConfig{}, "food_link", nil, nil, nil, store, nil)
+	ctx := context.Background()
+
+	require.NoError(t, store.Set(ctx, svc.smsCodeKey("13800138014"), "530836", 15*time.Minute))
+	err := svc.VerifyCode(ctx, "13800138014", "000000")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "验证码错误或已过期")
+	assert.ErrorIs(t, err, ErrSMSCodeInvalid)
+	require.NoError(t, svc.VerifyCode(ctx, "13800138014", "530836"))
+}
+
 func TestSMSService_RedisKeysUseConfiguredPrefix(t *testing.T) {
 	svc := NewSMSService(config.SMSConfig{}, "food_link:", nil, nil, nil, nil, nil)
 

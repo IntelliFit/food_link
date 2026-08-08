@@ -1,14 +1,20 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { useEffect, useState } from 'react'
+import { AppState, Pressable, StyleSheet, Text, View } from 'react-native'
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { IconfontText } from '../components/Iconfont'
 import { useColorScheme } from '../providers/ColorSchemeProvider'
 import { colors, radius, shadow } from '../theme'
 import { requestHomeRecordMenu } from '../utils/home-record-menu'
+import {
+  onProfileTabBadgeChanged,
+  readProfileTabBadgeCount,
+  refreshProfileTabBadge,
+} from '../utils/profileTabBadge'
 
 const TAB_LABELS: Record<string, { label: string; iconClass: string }> = {
   HomeTab: { label: '首页', iconClass: 'iconfont icon-shouye' },
-  StatsTab: { label: '分析', iconClass: 'iconfont icon-tubiao-zhuzhuangtu' },
+  StatsTab: { label: '分析', iconClass: 'iconfont icon-weibiaoti1' },
   CommunityTab: { label: '圈子', iconClass: 'iconfont icon-quanzi' },
   ProfileTab: { label: '我的', iconClass: 'iconfont icon-user' },
 }
@@ -19,8 +25,28 @@ export function CustomTabBar({ state, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets()
   const bottomInset = Math.max(insets.bottom, 8)
   const { isDark } = useColorScheme()
+  const [profileBadgeCount, setProfileBadgeCount] = useState(0)
   const leftRoutes = state.routes.slice(0, 2)
   const rightRoutes = state.routes.slice(2)
+
+  useEffect(() => {
+    let active = true
+    void readProfileTabBadgeCount().then((count) => {
+      if (active) setProfileBadgeCount(count)
+    })
+    const unsubscribe = onProfileTabBadgeChanged((count) => {
+      if (active) setProfileBadgeCount(count)
+    })
+    void refreshProfileTabBadge()
+    const appStateSubscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') void refreshProfileTabBadge()
+    })
+    return () => {
+      active = false
+      unsubscribe()
+      appStateSubscription.remove()
+    }
+  }, [state.index])
 
   const openHomeRecordMenu = () => {
     navigation.navigate('HomeTab')
@@ -40,11 +66,18 @@ export function CustomTabBar({ state, navigation }: BottomTabBarProps) {
         onPress={() => navigation.navigate(route.name)}
         style={({ pressed }) => [styles.tab, pressed && styles.pressed]}
       >
-        <IconfontText
-          className={meta.iconClass}
-          size={21}
-          color={focused ? TAB_SELECTED_COLOR : isDark ? 'rgba(255,255,255,0.55)' : '#9ca3af'}
-        />
+        <View style={styles.tabIconWrap}>
+          <IconfontText
+            className={meta.iconClass}
+            size={21}
+            color={focused ? TAB_SELECTED_COLOR : isDark ? 'rgba(255,255,255,0.55)' : '#9ca3af'}
+          />
+          {route.name === 'ProfileTab' && profileBadgeCount > 0 ? (
+            <View style={styles.badge}>
+              <Text style={styles.badgeText}>{profileBadgeCount > 99 ? '99+' : profileBadgeCount}</Text>
+            </View>
+          ) : null}
+        </View>
         <Text style={[styles.tabText, focused && styles.tabTextActive, isDark && styles.tabTextDark]} numberOfLines={1}>{meta.label}</Text>
       </Pressable>
     )
@@ -116,6 +149,27 @@ const styles = StyleSheet.create({
   },
   tabTextDark: {
     color: 'rgba(255,255,255,0.55)',
+  },
+  tabIconWrap: {
+    position: 'relative',
+  },
+  badge: {
+    position: 'absolute',
+    top: -7,
+    left: 13,
+    minWidth: 17,
+    height: 17,
+    paddingHorizontal: 4,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ef4444',
+  },
+  badgeText: {
+    color: '#fff',
+    fontSize: 9,
+    lineHeight: 11,
+    fontWeight: '800',
   },
   centerButton: {
     width: 56,

@@ -29,6 +29,36 @@ type mockPublicFoodRewardAwarder struct {
 	meta   map[string]any
 }
 
+type mockCampusMembershipChecker struct {
+	allowed bool
+	err     error
+}
+
+func (m *mockCampusMembershipChecker) IsCampusPublishingAllowed(context.Context, string) (bool, error) {
+	return m.allowed, m.err
+}
+
+func allowCampusPublishing(svc *PublicFoodService) {
+	svc.ConfigureCampusMembershipChecker(&mockCampusMembershipChecker{allowed: true})
+}
+
+func TestPublicFoodServiceCreateCampusFoodFailsClosedWithoutMembershipChecker(t *testing.T) {
+	svc := NewPublicFoodService(nil)
+	_, err := svc.Create(context.Background(), "user-1", CreateInput{IsCampusFood: true})
+	require.ErrorIs(t, err, commonerrors.ErrInternal)
+}
+
+func TestPublicFoodServiceCreateCampusFoodRejectsNonMember(t *testing.T) {
+	svc := NewPublicFoodService(nil)
+	svc.ConfigureCampusMembershipChecker(&mockCampusMembershipChecker{allowed: false})
+	_, err := svc.Create(context.Background(), "user-1", CreateInput{IsCampusFood: true})
+	require.Error(t, err)
+	var appErr *commonerrors.AppError
+	require.ErrorAs(t, err, &appErr)
+	require.Equal(t, 403, appErr.HTTPStatus)
+	require.Equal(t, "校园食物发布仅限会员", appErr.Message)
+}
+
 type recordingPublicFoodTaskPublisher struct {
 	messages []taskqueue.TaskMessage
 }
@@ -315,6 +345,7 @@ func TestPublicFoodServiceCreateCampusFoodPublishesAndStoresCampusFields(t *test
 	precisionRepo := analyzerepo.NewPrecisionRepo(db)
 	analyzeTaskSvc := analyzeservice.NewTaskService(taskRepo, precisionRepo, authrepo.NewUserRepo(db))
 	svc := NewPublicFoodService(publicFoodRepo)
+	allowCampusPublishing(svc)
 	awarder := &mockPublicFoodRewardAwarder{}
 	publisher := &recordingPublicFoodTaskPublisher{}
 	analyzeTaskSvc.ConfigureTaskPublisher(publisher)
@@ -402,6 +433,7 @@ func TestPublicFoodServiceCreateCampusFoodAcceptsPostedPayloadWithoutItems(t *te
 	publisher := &recordingPublicFoodTaskPublisher{}
 	analyzeTaskSvc.ConfigureTaskPublisher(publisher)
 	svc := NewPublicFoodService(publicFoodRepo)
+	allowCampusPublishing(svc)
 	svc.ConfigureCampusAnalyzeTaskSubmitter(analyzeTaskSvc)
 	ctx := context.Background()
 
@@ -461,6 +493,7 @@ func TestPublicFoodServiceCreateCampusFoodAcceptsPostedPayloadWithoutItems(t *te
 func TestPublicFoodServiceCreateCampusFoodRequiresCoreFields(t *testing.T) {
 	db := setupPublicFoodServiceTestDB(t)
 	svc := NewPublicFoodService(repo.NewPublicFoodRepo(db))
+	allowCampusPublishing(svc)
 	ctx := context.Background()
 
 	foodName := "鸡胸肉套餐"
@@ -610,6 +643,7 @@ func TestHasPreciseCampusMicronutrients(t *testing.T) {
 func TestPublicFoodServiceUpdateOwnItem(t *testing.T) {
 	db := setupPublicFoodServiceTestDB(t)
 	svc := NewPublicFoodService(repo.NewPublicFoodRepo(db))
+	allowCampusPublishing(svc)
 	ctx := context.Background()
 	now := time.Now().UTC()
 

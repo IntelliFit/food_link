@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ActivityIndicator, Image, ImageBackground, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, useWindowDimensions, View } from 'react-native'
 import { useFocusEffect, useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
-import { getMealTypeLabel, inferDefaultMealTypeFromLocalTime, type BodyMetricWaterDay, type BodyMetricWeightEntry, type HomeDashboard, type StatsSummary } from '@food-link/core'
+import { getMealTypeLabel, inferDefaultMealTypeFromLocalTime, type BodyMetricWaterDay, type BodyMetricWeightEntry, type DietRecommendationResult, type HomeDashboard, type HomeMealItem, type HomeMealRecordEntry, type StatsSummary } from '@food-link/core'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useAuth } from '../providers/AuthProvider'
-import { apiClient } from '../api'
+import { apiClient, getStoredUserId } from '../api'
 import { FloatingPetCompanion } from '../components/FloatingPetCompanion'
 import { HomeMicrosSection } from '../components/HomeMicrosSection'
 import { IconfontText } from '../components/Iconfont'
@@ -19,6 +19,15 @@ import { colors, compactFont } from '../theme'
 import { formatShortDate, todayKey } from '../utils/date'
 import { userFacingErrorMessage } from '../utils/errors'
 import { consumeHomeRecordMenuDate, onHomeRecordMenuRequest } from '../utils/home-record-menu'
+import {
+  dismissHomeBackfillDate,
+  getDismissedHomeBackfillDates,
+  isAllowedHomeRecordDate,
+  isHealthProfileReminderSnoozed,
+  isHomeRecordGuideCompleted,
+  markHomeRecordGuideCompleted,
+  snoozeHealthProfileReminder,
+} from '../utils/homeGuidance'
 import { getHomePetCollapsed, getHomePetHidden, setHomePetCollapsed as persistHomePetCollapsed } from '../utils/petPreferences'
 
 type TargetField = 'calorieTarget' | 'proteinTarget' | 'carbsTarget' | 'fatTarget'
@@ -43,6 +52,8 @@ type HomeBanner = {
   imageUrl?: string
   onPress: () => void
 }
+type DietRecommendationScene = 'eat_out' | 'cook_home'
+type RecordDetailInitialAction = 'edit' | 'share' | 'delete'
 
 const targetFieldMeta: Array<{ key: TargetField; label: string; unit: string; step: number }> = [
   { key: 'calorieTarget', label: '基础摄入目标', unit: 'kcal', step: 100 },
@@ -93,6 +104,17 @@ export function HomeScreen() {
   const [homePetHidden, setHomePetHidden] = useState(false)
   const [homePetCollapsed, setHomePetCollapsed] = useState(false)
   const [nutritionExpanded, setNutritionExpanded] = useState(false)
+  const [currentUserId, setCurrentUserId] = useState('')
+  const [showHealthProfilePrompt, setShowHealthProfilePrompt] = useState(false)
+  const [showHomeRecordGuide, setShowHomeRecordGuide] = useState(false)
+  const [dismissedBackfillDates, setDismissedBackfillDates] = useState<string[]>([])
+  const [mealRecordsSheet, setMealRecordsSheet] = useState<HomeMealItem | null>(null)
+  const [mealActionRecordId, setMealActionRecordId] = useState('')
+  const [dietRecommendationVisible, setDietRecommendationVisible] = useState(false)
+  const [dietRecommendationScene, setDietRecommendationScene] = useState<DietRecommendationScene>('eat_out')
+  const [dietRecommendationLoading, setDietRecommendationLoading] = useState(false)
+  const [dietRecommendationResult, setDietRecommendationResult] = useState<DietRecommendationResult | null>(null)
+  const dietRecommendationRequestSeqRef = useRef(0)
   const [targetForm, setTargetForm] = useState<TargetForm>(() => targetFormFromDashboard(null))
   const mealType = inferDefaultMealTypeFromLocalTime()
   const nutritionTarget = dashboard?.nutritionTarget
@@ -242,6 +264,150 @@ export function HomeScreen() {
     }, []),
   )
 
+  useFocusEffect(
+    useCallback(() => {
+      let active = true
+      if (!isAuthenticated) {
+        setCurrentUserId('')
+        setShowHealthProfilePrompt(false)
+        setShowHomeRecordGuide(false)
+        setDismissedBackfillDates([])
+        return () => {
+          active = false
+        }
+      }
+
+      void (async () => {
+        try {
+          const userId = String(await getStoredUserId() || '').trim()
+          if (!active || !userId) return
+          const [snoozed, dismissedDates, guideCompleted, profile] = await Promise.all([
+            isHealthProfileReminderSnoozed(userId),
+            getDismissedHomeBackfillDates(userId),
+            isHomeRecordGuideCompleted(userId),
+            apiClient.getHealthProfile().catch(() => null),
+          ])
+          if (!active) return
+          setCurrentUserId(userId)
+          setDismissedBackfillDates(dismissedDates)
+          setShowHomeRecordGuide(!guideCompleted)
+          setShowHealthProfilePrompt(Boolean(profile && !isHealthProfileCompleted(profile) && !snoozed))
+        } catch {
+          if (!active) return
+          setShowHealthProfilePrompt(false)
+          setShowHomeRecordGuide(false)
+        }
+      })()
+
+      return () => {
+        active = false
+      }
+    }, [isAuthenticated]),
+  )
+
+  const dismissHealthProfilePrompt = useCallback(async () => {
+    if (!currentUserId) return
+    await snoozeHealthProfileReminder(currentUserId)
+    setShowHealthProfilePrompt(false)
+  }, [currentUserId])
+
+  const finishHomeRecordGuide = useCallback(async (openMenu: boolean) => {
+    if (currentUserId) await markHomeRecordGuideCompleted(currentUserId)
+    setShowHomeRecordGuide(false)
+    if (openMenu) setShowRecordMenu(true)
+  }, [currentUserId])
+
+  const openMealRecordActions = useCallback((recordId: string) => {
+    const normalized = String(recordId || '').trim()
+    if (!normalized) {
+      navigation.navigate('AnalyzeHistory')
+      return
+    }
+    setMealRecordsSheet(null)
+    setMealActionRecordId(normalized)
+  }, [navigation])
+
+  const handleOpenMeal = useCallback((meal: HomeMealItem) => {
+    const entries = getMealRecordEntries(meal)
+    if (entries.length > 1) {
+      setMealRecordsSheet(meal)
+      return
+    }
+    openMealRecordActions(entries[0]?.id || meal.primary_record_id || meal.primaryRecordId || '')
+  }, [openMealRecordActions])
+
+  const openRecordDetailAction = useCallback((initialAction?: RecordDetailInitialAction) => {
+    if (!mealActionRecordId) return
+    const recordId = mealActionRecordId
+    setMealActionRecordId('')
+    navigation.navigate('RecordDetail', { recordId, initialAction })
+  }, [mealActionRecordId, navigation])
+
+  const buildDietRecommendationPayload = useCallback((scene: DietRecommendationScene) => {
+    const macros = intakeData?.macros
+    const proteinCurrent = Number(macros?.protein?.current || 0)
+    const proteinTarget = Number(macros?.protein?.target || 0)
+    const carbsCurrent = Number(macros?.carbs?.current || 0)
+    const carbsTarget = Number(macros?.carbs?.target || 0)
+    const fatCurrent = Number(macros?.fat?.current || 0)
+    const fatTarget = Number(macros?.fat?.target || 0)
+    const remaining = Math.max(0, Number((calorieTarget - calorieCurrent).toFixed(1)))
+    return {
+      scene,
+      date: recordDate,
+      calorie_remaining: remaining,
+      macro_gaps: {
+        calories: remaining,
+        protein: Math.max(0, Number((proteinTarget - proteinCurrent).toFixed(1))),
+        carbs: Math.max(0, Number((carbsTarget - carbsCurrent).toFixed(1))),
+        fat: Math.max(0, Number((fatTarget - fatCurrent).toFixed(1))),
+      },
+      targets: {
+        calories: calorieTarget,
+        protein: proteinTarget,
+        carbs: carbsTarget,
+        fat: fatTarget,
+      },
+      current: {
+        calories: calorieCurrent,
+        protein: proteinCurrent,
+        carbs: carbsCurrent,
+        fat: fatCurrent,
+      },
+      meals: (dashboard?.meals || []).map((meal) => ({
+        type: meal.type,
+        name: meal.name,
+        description: meal.description || '',
+        calories: Number(meal.calorie || 0),
+        protein: Number(meal.protein || 0),
+        carbs: Number(meal.carbs || 0),
+        fat: Number(meal.fat || 0),
+      })),
+    }
+  }, [calorieCurrent, calorieTarget, dashboard?.meals, intakeData?.macros, recordDate])
+
+  const requestDietRecommendation = useCallback(async (scene: DietRecommendationScene) => {
+    if (!isAuthenticated) {
+      void navigation.getParent()?.navigate('Login')
+      return
+    }
+    setDietRecommendationScene(scene)
+    setDietRecommendationVisible(true)
+    setDietRecommendationLoading(true)
+    const requestSeq = ++dietRecommendationRequestSeqRef.current
+    try {
+      const result = await apiClient.generateDietRecommendation(buildDietRecommendationPayload(scene))
+      if (requestSeq === dietRecommendationRequestSeqRef.current) setDietRecommendationResult(result)
+    } catch (err) {
+      if (requestSeq === dietRecommendationRequestSeqRef.current) {
+        setDietRecommendationVisible(false)
+        void dialog.alert('生成推荐失败', userFacingErrorMessage(err), 'danger')
+      }
+    } finally {
+      if (requestSeq === dietRecommendationRequestSeqRef.current) setDietRecommendationLoading(false)
+    }
+  }, [buildDietRecommendationPayload, dialog, isAuthenticated, navigation])
+
   const openTargetEditor = useCallback(() => {
     setTargetForm(targetFormFromDashboard(dashboard))
     setShowTargetEditor(true)
@@ -310,6 +476,24 @@ export function HomeScreen() {
     void persistHomePetCollapsed(collapsed)
   }, [])
 
+  const showBackfillHint = isAuthenticated
+    && isAllowedHomeRecordDate(recordDate)
+    && recordDate !== todayDateKey
+    && !dashboardBusy
+    && !dismissedBackfillDates.includes(recordDate)
+
+  const dismissBackfillHint = useCallback(async () => {
+    if (!currentUserId) return
+    const confirmed = await dialog.confirm({
+      title: '取消补录提醒',
+      message: '取消后，这一天的补录提醒将不再显示。仍可随时通过首页记录入口补录历史餐食。',
+      cancelText: '继续保留',
+      confirmText: '确认取消',
+    })
+    if (!confirmed) return
+    setDismissedBackfillDates(await dismissHomeBackfillDate(currentUserId, recordDate))
+  }, [currentUserId, dialog, recordDate])
+
   const dynamicStyles = useHomeDynamicStyles(isDark)
   const themeColors = useHomeThemeColors(isDark)
 
@@ -338,7 +522,24 @@ export function HomeScreen() {
         showsVerticalScrollIndicator={false}
       >
         <HomeGreeting recordDate={recordDate} mealType={mealType} themeColors={themeColors} />
+        {showHealthProfilePrompt ? (
+          <HomeHealthProfilePrompt
+            themeColors={themeColors}
+            onOpen={() => {
+              setShowHealthProfilePrompt(false)
+              navigation.navigate('HealthProfile')
+            }}
+            onSnooze={() => void dismissHealthProfilePrompt()}
+          />
+        ) : null}
         <HomeDateSelector cells={weekCells} selectedDate={recordDate} onSelect={setSelectedDate} themeColors={themeColors} />
+        {showHomeRecordGuide ? (
+          <HomeFirstRecordGuide
+            themeColors={themeColors}
+            onStart={() => void finishHomeRecordGuide(true)}
+            onSkip={() => void finishHomeRecordGuide(false)}
+          />
+        ) : null}
         {error ? <Text style={[styles.error, { color: themeColors.danger }]}>{error}</Text> : null}
         <HomeBannerCarousel
           banners={homeBanners}
@@ -347,6 +548,13 @@ export function HomeScreen() {
           onIndexChange={setActiveBannerIndex}
           themeColors={themeColors}
         />
+        {showBackfillHint ? (
+          <HomeBackfillHint
+            themeColors={themeColors}
+            onRecord={() => setShowRecordMenu(true)}
+            onDismiss={() => void dismissBackfillHint()}
+          />
+        ) : null}
         <HomeCalorieCard
           current={calorieCurrent}
           target={calorieTarget}
@@ -359,6 +567,13 @@ export function HomeScreen() {
           onToggleNutrition={() => setNutritionExpanded((v) => !v)}
           isDark={isDark}
           themeColors={themeColors}
+        />
+        <HomeDietRecommendationEntry
+          remaining={calorieRemaining}
+          busy={dashboardBusy}
+          themeColors={themeColors}
+          onEatOut={() => void requestDietRecommendation('eat_out')}
+          onCookHome={() => void requestDietRecommendation('cook_home')}
         />
         <HomeBodyStatusStrip
           weightSummary={weightSummary}
@@ -376,7 +591,7 @@ export function HomeScreen() {
           onOpenAll={() => navigation.navigate('DayRecord', { date: recordDate })}
           onQuickRecord={() => openAnalyze('camera')}
           onOpenHistory={() => navigation.navigate('AnalyzeHistory')}
-          onOpenRecord={(recordId) => navigation.navigate('RecordDetail', { recordId })}
+          onOpenMeal={handleOpenMeal}
           isDark={isDark}
           themeColors={themeColors}
         />
@@ -445,6 +660,34 @@ export function HomeScreen() {
           </View>
         </View>
       </Modal>
+      <HomeMealRecordsSheet
+        meal={mealRecordsSheet}
+        themeColors={themeColors}
+        onClose={() => setMealRecordsSheet(null)}
+        onSelect={openMealRecordActions}
+      />
+      <HomeMealActionSheet
+        visible={Boolean(mealActionRecordId)}
+        themeColors={themeColors}
+        onClose={() => setMealActionRecordId('')}
+        onView={() => openRecordDetailAction()}
+        onEdit={() => openRecordDetailAction('edit')}
+        onShare={() => openRecordDetailAction('share')}
+        onDelete={() => openRecordDetailAction('delete')}
+      />
+      <HomeDietRecommendationSheet
+        visible={dietRecommendationVisible}
+        scene={dietRecommendationScene}
+        loading={dietRecommendationLoading}
+        result={dietRecommendationResult}
+        themeColors={themeColors}
+        bottomInset={insets.bottom}
+        onClose={() => setDietRecommendationVisible(false)}
+        onChangeScene={(scene) => {
+          if (scene !== dietRecommendationScene || !dietRecommendationResult) void requestDietRecommendation(scene)
+        }}
+        onRefresh={() => void requestDietRecommendation(dietRecommendationScene)}
+      />
       <RecordActionSheet
         visible={showRecordMenu}
         onClose={() => setShowRecordMenu(false)}
@@ -531,6 +774,302 @@ function useHomeDynamicStyles(isDark: boolean) {
         // Reserved for component-specific computed styles if needed beyond inline colors.
       }),
     [isDark],
+  )
+}
+
+function HomeHealthProfilePrompt({
+  themeColors,
+  onOpen,
+  onSnooze,
+}: {
+  themeColors: ReturnType<typeof useHomeThemeColors>
+  onOpen: () => void
+  onSnooze: () => void
+}) {
+  return (
+    <View style={[styles.homePromptCard, { backgroundColor: themeColors.cardBackground, borderColor: themeColors.cardBorder }]}>
+      <View style={styles.homePromptIcon}><Text style={styles.homePromptIconText}>健</Text></View>
+      <Pressable style={styles.homePromptCopy} onPress={onOpen}>
+        <Text style={[styles.homePromptTitle, { color: themeColors.text }]}>完善健康档案，获得更贴合你的建议</Text>
+        <Text style={[styles.homePromptDesc, { color: themeColors.textSecondary }]}>每日目标、饮食分析会结合你的身体数据、过敏与饮食偏好。</Text>
+      </Pressable>
+      <View style={styles.homePromptActions}>
+        <Pressable style={styles.homePromptPrimary} onPress={onOpen}><Text style={styles.homePromptPrimaryText}>去完善</Text></Pressable>
+        <Pressable style={styles.homePromptSecondary} onPress={onSnooze}><Text style={[styles.homePromptSecondaryText, { color: themeColors.textMuted }]}>7天后提醒</Text></Pressable>
+      </View>
+    </View>
+  )
+}
+
+function HomeFirstRecordGuide({
+  themeColors,
+  onStart,
+  onSkip,
+}: {
+  themeColors: ReturnType<typeof useHomeThemeColors>
+  onStart: () => void
+  onSkip: () => void
+}) {
+  return (
+    <View style={[styles.homeFirstGuide, { backgroundColor: themeColors.cardBackground, borderColor: themeColors.cardBorder }]}>
+      <View style={styles.homeFirstGuideHeader}>
+        <View style={styles.homeFirstGuideBadge}><Text style={styles.homeFirstGuideBadgeText}>首次记录</Text></View>
+        <Pressable hitSlop={8} onPress={onSkip}><Text style={[styles.homeFirstGuideSkip, { color: themeColors.textMuted }]}>跳过</Text></Pressable>
+      </View>
+      <Text style={[styles.homeFirstGuideTitle, { color: themeColors.text }]}>第一次记录，从底部中间按钮开始</Text>
+      <Text style={[styles.homeFirstGuideDesc, { color: themeColors.textSecondary }]}>可以拍照、从相册选择、输入文字或手动挑选食物；记录会自动归入当前选中的日期。</Text>
+      <Pressable style={styles.homeFirstGuideAction} onPress={onStart}>
+        <Text style={styles.homeFirstGuideActionText}>打开记录菜单</Text>
+      </Pressable>
+    </View>
+  )
+}
+
+function HomeBackfillHint({
+  themeColors,
+  onRecord,
+  onDismiss,
+}: {
+  themeColors: ReturnType<typeof useHomeThemeColors>
+  onRecord: () => void
+  onDismiss: () => void
+}) {
+  return (
+    <View style={[styles.homeBackfillHint, { backgroundColor: themeColors.cardBackground, borderColor: themeColors.cardBorder }]}>
+      <View style={styles.homeBackfillDot} />
+      <Text style={[styles.homeBackfillText, { color: themeColors.textSecondary }]}>可补录这一天的食物、体重、喝水和运动记录</Text>
+      <Pressable onPress={onRecord}><Text style={styles.homeBackfillAction}>去补录</Text></Pressable>
+      <Pressable onPress={onDismiss}><Text style={[styles.homeBackfillDismiss, { color: themeColors.textMuted }]}>取消</Text></Pressable>
+    </View>
+  )
+}
+
+function HomeDietRecommendationEntry({
+  remaining,
+  busy,
+  themeColors,
+  onEatOut,
+  onCookHome,
+}: {
+  remaining: number
+  busy: boolean
+  themeColors: ReturnType<typeof useHomeThemeColors>
+  onEatOut: () => void
+  onCookHome: () => void
+}) {
+  return (
+    <View style={[styles.homeDietEntry, { backgroundColor: themeColors.cardBackground, borderColor: themeColors.cardBorder }]}>
+      <View style={styles.homeDietEntryMain}>
+        <View style={styles.homeDietEntryIcon}><IconfontText className="iconfont icon-canciguanli" size={20} color={colors.brandDark} /></View>
+        <View style={styles.homeDietEntryCopy}>
+          <Text style={[styles.homeDietEntryTitle, { color: themeColors.text }]}>今天吃什么</Text>
+          <Text style={[styles.homeDietEntrySubtitle, { color: themeColors.textSecondary }]}>{busy ? '按剩余目标推荐一餐' : `还可吃 ${Math.max(0, Math.round(remaining))} kcal`}</Text>
+        </View>
+      </View>
+      <Text style={[styles.homeDietEntryCredit, { color: themeColors.textMuted }]}>每次生成消耗 1 次系统额度；不足时使用奖励积分</Text>
+      <View style={styles.homeDietEntryActions}>
+        <Pressable style={[styles.homeDietEntryButton, { backgroundColor: themeColors.surfaceMuted }]} onPress={onEatOut}><Text style={[styles.homeDietEntryButtonText, { color: themeColors.textSecondary }]}>外面吃</Text></Pressable>
+        <Pressable style={[styles.homeDietEntryButton, styles.homeDietEntryButtonPrimary]} onPress={onCookHome}><Text style={styles.homeDietEntryButtonPrimaryText}>自己做</Text></Pressable>
+      </View>
+    </View>
+  )
+}
+
+function HomeMealRecordsSheet({
+  meal,
+  themeColors,
+  onClose,
+  onSelect,
+}: {
+  meal: HomeMealItem | null
+  themeColors: ReturnType<typeof useHomeThemeColors>
+  onClose: () => void
+  onSelect: (recordId: string) => void
+}) {
+  const entries = meal ? getMealRecordEntries(meal) : []
+  return (
+    <Modal visible={Boolean(meal)} transparent animationType="slide" onRequestClose={onClose}>
+      <View style={styles.homeSheetRoot}>
+        <Pressable style={styles.homeSheetMask} onPress={onClose} />
+        <View style={[styles.homeSheet, { backgroundColor: themeColors.sheetBackground }]}>
+          <View style={[styles.targetModalHandle, { backgroundColor: themeColors.handle }]} />
+          <View style={styles.homeSheetHeader}>
+            <View>
+              <Text style={[styles.homeSheetTitle, { color: themeColors.text }]}>{meal?.name || getMealTypeLabel(meal?.type || '')}</Text>
+              <Text style={[styles.homeSheetSubtitle, { color: themeColors.textSecondary }]}>{entries.length} 条记录 · 选择后可编辑、删除或分享</Text>
+            </View>
+            <Pressable style={[styles.targetModalClose, { backgroundColor: themeColors.closeButton }]} onPress={onClose}><Text style={[styles.targetModalCloseText, { color: themeColors.textSecondary }]}>×</Text></Pressable>
+          </View>
+          <ScrollView style={styles.homeMealRecordsScroll} showsVerticalScrollIndicator={false}>
+            {entries.map((entry, index) => {
+              const imageUrl = firstMealRecordImage(entry)
+              return (
+                <Pressable key={entry.id} style={[styles.homeMealRecordRow, { borderColor: themeColors.border }]} onPress={() => onSelect(entry.id)}>
+                  <View style={[styles.homeMealRecordThumb, { backgroundColor: themeColors.mealIconBg }]}>
+                    {imageUrl ? <Image source={{ uri: imageUrl }} style={styles.homeMealRecordImage} /> : <Text style={[styles.mealIconText, { color: themeColors.mealIconText }]}>食</Text>}
+                  </View>
+                  <View style={styles.homeMealRecordCopy}>
+                    <Text style={[styles.homeMealRecordTitle, { color: themeColors.text }]} numberOfLines={1}>{entry.title || `第 ${index + 1} 次记录`}</Text>
+                    <Text style={[styles.homeMealRecordMeta, { color: themeColors.textSecondary }]}>{formatMealRecordTime(entry.record_time)} · {Math.round(Number(entry.total_calories || 0))} kcal</Text>
+                    <Text style={[styles.homeMealRecordMacros, { color: themeColors.textMuted }]}>蛋白 {formatHomeNumber(entry.total_protein)}g · 碳水 {formatHomeNumber(entry.total_carbs)}g · 脂肪 {formatHomeNumber(entry.total_fat)}g</Text>
+                  </View>
+                  <Text style={[styles.homeMealRecordArrow, { color: themeColors.textMuted }]}>›</Text>
+                </Pressable>
+              )
+            })}
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
+  )
+}
+
+function HomeMealActionSheet({
+  visible,
+  themeColors,
+  onClose,
+  onView,
+  onEdit,
+  onShare,
+  onDelete,
+}: {
+  visible: boolean
+  themeColors: ReturnType<typeof useHomeThemeColors>
+  onClose: () => void
+  onView: () => void
+  onEdit: () => void
+  onShare: () => void
+  onDelete: () => void
+}) {
+  const actions = [
+    { key: 'view', label: '查看详情', icon: 'icon-shiwu', onPress: onView },
+    { key: 'edit', label: '修改记录', icon: 'icon-edit', onPress: onEdit },
+    { key: 'share', label: '分享这餐', icon: 'icon-share', onPress: onShare },
+  ]
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <View style={styles.homeSheetRoot}>
+        <Pressable style={styles.homeSheetMask} onPress={onClose} />
+        <View style={[styles.homeActionSheet, { backgroundColor: themeColors.sheetBackground }]}>
+          <View style={[styles.targetModalHandle, { backgroundColor: themeColors.handle }]} />
+          {actions.map((action) => (
+            <Pressable key={action.key} style={[styles.homeActionRow, { borderBottomColor: themeColors.border }]} onPress={action.onPress}>
+              <IconfontText className={`iconfont ${action.icon}`} size={20} color={colors.brandDark} />
+              <Text style={[styles.homeActionText, { color: themeColors.text }]}>{action.label}</Text>
+            </Pressable>
+          ))}
+          <Pressable style={[styles.homeActionRow, { borderBottomColor: themeColors.border }]} onPress={onDelete}>
+            <IconfontText className="iconfont icon-shanchu" size={20} color={themeColors.danger} />
+            <Text style={[styles.homeActionText, { color: themeColors.danger }]}>删除记录</Text>
+          </Pressable>
+          <Pressable style={[styles.homeActionCancel, { backgroundColor: themeColors.surfaceMuted }]} onPress={onClose}><Text style={[styles.homeActionCancelText, { color: themeColors.textSecondary }]}>取消</Text></Pressable>
+        </View>
+      </View>
+    </Modal>
+  )
+}
+
+function HomeDietRecommendationSheet({
+  visible,
+  scene,
+  loading,
+  result,
+  themeColors,
+  bottomInset,
+  onClose,
+  onChangeScene,
+  onRefresh,
+}: {
+  visible: boolean
+  scene: DietRecommendationScene
+  loading: boolean
+  result: DietRecommendationResult | null
+  themeColors: ReturnType<typeof useHomeThemeColors>
+  bottomInset: number
+  onClose: () => void
+  onChangeScene: (scene: DietRecommendationScene) => void
+  onRefresh: () => void
+}) {
+  const resultRecord = asUnknownRecord(result)
+  const macroGaps = asUnknownRecord(resultRecord.macro_gaps)
+  const recommendations = Array.isArray(result?.recommendations) ? result.recommendations : []
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <View style={styles.homeSheetRoot}>
+        <Pressable style={styles.homeSheetMask} onPress={onClose} />
+        <View style={[styles.homeDietSheet, { paddingBottom: bottomInset + 16, backgroundColor: themeColors.sheetBackground }]}>
+          <View style={[styles.targetModalHandle, { backgroundColor: themeColors.handle }]} />
+          <View style={styles.homeSheetHeader}>
+            <View>
+              <Text style={[styles.homeDietKicker, { color: colors.brandDark }]}>按剩余目标推荐</Text>
+              <Text style={[styles.homeSheetTitle, { color: themeColors.text }]}>{result?.title || '今天吃什么'}</Text>
+            </View>
+            <Pressable style={[styles.targetModalClose, { backgroundColor: themeColors.closeButton }]} onPress={onClose}><Text style={[styles.targetModalCloseText, { color: themeColors.textSecondary }]}>×</Text></Pressable>
+          </View>
+          <View style={[styles.homeDietTabs, { backgroundColor: themeColors.surfaceMuted }]}>
+            {(['eat_out', 'cook_home'] as DietRecommendationScene[]).map((item) => (
+              <Pressable key={item} style={[styles.homeDietTab, scene === item && styles.homeDietTabActive]} onPress={() => onChangeScene(item)}>
+                <Text style={[styles.homeDietTabText, { color: scene === item ? '#fff' : themeColors.textSecondary }]}>{item === 'eat_out' ? '外面吃' : '自己做'}</Text>
+              </Pressable>
+            ))}
+          </View>
+          {loading ? (
+            <View style={styles.homeDietLoading}><ActivityIndicator size="large" color={colors.brand} /></View>
+          ) : (
+            <ScrollView style={styles.homeDietScroll} contentContainerStyle={styles.homeDietScrollContent} showsVerticalScrollIndicator={false}>
+              {result ? (
+                <>
+                  <Text style={[styles.homeDietSummary, { color: themeColors.textSecondary }]}>{result.summary || '已按今天的剩余热量和营养缺口生成推荐。'}</Text>
+                  <Text style={[styles.homeDietSourceNote, { color: themeColors.textMuted }]}>优先从公共食物库、历史记录和标准营养库中选择，AI 仅负责按目标组合。</Text>
+                  <View style={styles.homeDietGapRow}>
+                    <HomeDietGap value={numberFrom(resultRecord.calorie_remaining, 0)} label="kcal" themeColors={themeColors} />
+                    <HomeDietGap value={numberFrom(macroGaps.protein, 0)} label="蛋白" themeColors={themeColors} />
+                    <HomeDietGap value={numberFrom(macroGaps.carbs, 0)} label="碳水" themeColors={themeColors} />
+                    <HomeDietGap value={numberFrom(macroGaps.fat, 0)} label="脂肪" themeColors={themeColors} />
+                  </View>
+                  {recommendations.map((option, index) => {
+                    const optionRecord = asUnknownRecord(option)
+                    const foods = getDietRecommendationFoods(optionRecord)
+                    const source = String(optionRecord.source || foods[0]?.source || '')
+                    return (
+                      <View key={`${option.title || 'recommendation'}-${index}`} style={[styles.homeDietOption, { borderColor: themeColors.border, backgroundColor: themeColors.cardBackground }]}>
+                        <View style={styles.homeDietOptionHeader}>
+                          <Text style={[styles.homeDietOptionTitle, { color: themeColors.text }]}>{option.title || `推荐方案 ${index + 1}`}</Text>
+                          <Text style={styles.homeDietOptionCalories}>{Math.round(numberFrom(option.calories, 0))} kcal</Text>
+                        </View>
+                        {option.reason ? <Text style={[styles.homeDietOptionReason, { color: themeColors.textSecondary }]}>{option.reason}</Text> : null}
+                        {source ? <Text style={[styles.homeDietOptionSource, { color: themeColors.textMuted }]}>来源：{dietRecommendationSourceLabel(source)}</Text> : null}
+                        <View style={styles.homeDietFoods}>
+                          {foods.map((food, foodIndex) => (
+                            <View key={`${food.name}-${foodIndex}`} style={[styles.homeDietFood, { backgroundColor: themeColors.surfaceMuted }]}>
+                              <Text style={[styles.homeDietFoodName, { color: themeColors.text }]}>{food.name}</Text>
+                              {food.amount ? <Text style={[styles.homeDietFoodAmount, { color: themeColors.textSecondary }]}>{food.amount}</Text> : null}
+                            </View>
+                          ))}
+                        </View>
+                        <Text style={[styles.homeDietOptionMacros, { color: themeColors.textSecondary }]}>蛋白 {formatHomeNumber(option.protein)}g · 碳水 {formatHomeNumber(option.carbs)}g · 脂肪 {formatHomeNumber(option.fat)}g</Text>
+                      </View>
+                    )
+                  })}
+                  <Pressable style={styles.homeDietRefresh} onPress={onRefresh}><Text style={styles.homeDietRefreshText}>换一组（再次消耗 1 次额度）</Text></Pressable>
+                </>
+              ) : (
+                <Pressable style={styles.homeDietRefresh} onPress={onRefresh}><Text style={styles.homeDietRefreshText}>重新生成</Text></Pressable>
+              )}
+            </ScrollView>
+          )}
+        </View>
+      </View>
+    </Modal>
+  )
+}
+
+function HomeDietGap({ value, label, themeColors }: { value: number; label: string; themeColors: ReturnType<typeof useHomeThemeColors> }) {
+  return (
+    <View style={[styles.homeDietGap, { backgroundColor: themeColors.surfaceMuted }]}>
+      <Text style={[styles.homeDietGapValue, { color: themeColors.text }]}>{formatHomeNumber(Math.max(0, value))}</Text>
+      <Text style={[styles.homeDietGapLabel, { color: themeColors.textMuted }]}>{label}</Text>
+    </View>
   )
 }
 
@@ -1005,7 +1544,7 @@ function HomeMealsSection({
   onOpenAll,
   onQuickRecord,
   onOpenHistory,
-  onOpenRecord,
+  onOpenMeal,
   isDark,
   themeColors,
 }: {
@@ -1013,7 +1552,7 @@ function HomeMealsSection({
   onOpenAll: () => void
   onQuickRecord: () => void
   onOpenHistory: () => void
-  onOpenRecord: (recordId: string) => void
+  onOpenMeal: (meal: HomeMealItem) => void
   isDark: boolean
   themeColors: ReturnType<typeof useHomeThemeColors>
 }) {
@@ -1035,13 +1574,12 @@ function HomeMealsSection({
         ) : (
           meals.map((meal, index) => {
             const progress = normalizeProgressPercent(meal.progress, meal.calorie, meal.target)
-            const recordId = meal.primary_record_id || meal.primaryRecordId
             const imageUrl = firstMealImage(meal)
             return (
               <Pressable
                 key={`${meal.type}-${meal.time}-${index}`}
                 style={({ pressed }) => [styles.mealItem, { backgroundColor: themeColors.mealCard, borderColor: themeColors.mealCardBorder }, progress > 100 && { backgroundColor: themeColors.mealCardWarningBg, borderColor: themeColors.mealCardWarningBorder }, pressed && styles.pressed]}
-                onPress={() => recordId ? onOpenRecord(recordId) : onOpenHistory()}
+                onPress={() => getMealRecordEntries(meal).length > 0 || meal.primary_record_id || meal.primaryRecordId ? onOpenMeal(meal) : onOpenHistory()}
               >
                 <View style={[styles.mealMediaWrap, imageUrl ? { backgroundColor: themeColors.mealPhotoBg } : { backgroundColor: themeColors.mealIconBg }]}>
                   {imageUrl ? (
@@ -1276,6 +1814,68 @@ function firstMealImage(meal: HomeDashboard['meals'][number]): string {
     meal.image_path,
   ]
   return candidates.find((item): item is string => typeof item === 'string' && item.trim().length > 0) || ''
+}
+
+function getMealRecordEntries(meal: HomeMealItem): HomeMealRecordEntry[] {
+  const entries = Array.isArray(meal.meal_record_entries)
+    ? meal.meal_record_entries.filter((entry): entry is HomeMealRecordEntry => Boolean(entry && String(entry.id || '').trim()))
+    : []
+  if (entries.length > 0) return entries
+  const fallbackId = String(meal.primary_record_id || meal.primaryRecordId || '').trim()
+  return fallbackId ? [{ id: fallbackId, title: meal.name, total_calories: meal.calorie }] : []
+}
+
+function firstMealRecordImage(entry: HomeMealRecordEntry): string {
+  const candidates = [...(Array.isArray(entry.image_paths) ? entry.image_paths : []), entry.image_path]
+  return candidates.find((item): item is string => typeof item === 'string' && item.trim().length > 0) || ''
+}
+
+function formatMealRecordTime(value?: string): string {
+  if (!value) return '时间未记录'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value.slice(11, 16) || value
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
+}
+
+function isHealthProfileCompleted(profile: unknown): boolean {
+  const record = asUnknownRecord(profile)
+  return record.onboarding_status === 'completed' || record.onboarding_completed === true
+}
+
+function asUnknownRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' ? value as Record<string, unknown> : {}
+}
+
+function getDietRecommendationFoods(option: Record<string, unknown>): Array<{ name: string; amount: string; source: string }> {
+  if (Array.isArray(option.items)) {
+    return option.items
+      .map((item) => asUnknownRecord(item))
+      .map((item) => ({
+        name: String(item.name || '').trim(),
+        amount: String(item.amount || '').trim(),
+        source: String(item.source || '').trim(),
+      }))
+      .filter((item) => item.name)
+  }
+  if (Array.isArray(option.foods)) {
+    return option.foods
+      .map((food) => String(food || '').trim())
+      .filter(Boolean)
+      .map((name) => ({ name, amount: '', source: '' }))
+  }
+  return []
+}
+
+function dietRecommendationSourceLabel(source: string): string {
+  const labels: Record<string, string> = {
+    public_food_library: '公共食物库',
+    user_food_records: '历史记录',
+    food_nutrition_library: '标准营养库',
+    mixed: '组合候选',
+    rule_fallback: '规则兜底',
+    ai_generated: 'AI 补充',
+  }
+  return labels[source] || source
 }
 
 function mealIconLabel(type: string): string {
@@ -2466,6 +3066,454 @@ const styles = StyleSheet.create({
     color: colors.brandDark,
     fontSize: 12,
     fontWeight: '800',
+  },
+  homePromptCard: {
+    marginTop: 8,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderRadius: 18,
+    padding: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  homePromptIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#e8f8f1',
+  },
+  homePromptIconText: {
+    color: colors.brandDark,
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  homePromptCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  homePromptTitle: {
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '800',
+  },
+  homePromptDesc: {
+    marginTop: 3,
+    fontSize: 11,
+    lineHeight: 16,
+  },
+  homePromptActions: {
+    alignItems: 'flex-end',
+    gap: 8,
+  },
+  homePromptPrimary: {
+    borderRadius: 999,
+    paddingHorizontal: 11,
+    paddingVertical: 7,
+    backgroundColor: colors.brand,
+  },
+  homePromptPrimaryText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  homePromptSecondary: {
+    paddingHorizontal: 2,
+    paddingVertical: 2,
+  },
+  homePromptSecondaryText: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  homeFirstGuide: {
+    marginTop: 10,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderRadius: 18,
+    padding: 14,
+  },
+  homeFirstGuideHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  homeFirstGuideBadge: {
+    borderRadius: 999,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    backgroundColor: '#e8f8f1',
+  },
+  homeFirstGuideBadgeText: {
+    color: colors.brandDark,
+    fontSize: 10,
+    fontWeight: '900',
+  },
+  homeFirstGuideSkip: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  homeFirstGuideTitle: {
+    marginTop: 10,
+    fontSize: 15,
+    lineHeight: 21,
+    fontWeight: '900',
+  },
+  homeFirstGuideDesc: {
+    marginTop: 5,
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  homeFirstGuideAction: {
+    marginTop: 12,
+    minHeight: 40,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.brand,
+  },
+  homeFirstGuideActionText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  homeBackfillHint: {
+    marginBottom: 12,
+    borderWidth: 1,
+    borderRadius: 15,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  homeBackfillDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: colors.brand,
+  },
+  homeBackfillText: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 11,
+    lineHeight: 16,
+  },
+  homeBackfillAction: {
+    color: colors.brandDark,
+    fontSize: 11,
+    fontWeight: '900',
+  },
+  homeBackfillDismiss: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  homeDietEntry: {
+    marginBottom: 16,
+    borderWidth: 1,
+    borderRadius: 20,
+    padding: 14,
+  },
+  homeDietEntryMain: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  homeDietEntryIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#e8f8f1',
+  },
+  homeDietEntryCopy: {
+    flex: 1,
+  },
+  homeDietEntryTitle: {
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  homeDietEntrySubtitle: {
+    marginTop: 3,
+    fontSize: 12,
+  },
+  homeDietEntryCredit: {
+    marginTop: 9,
+    fontSize: 10,
+    lineHeight: 15,
+  },
+  homeDietEntryActions: {
+    marginTop: 10,
+    flexDirection: 'row',
+    gap: 8,
+  },
+  homeDietEntryButton: {
+    flex: 1,
+    minHeight: 38,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  homeDietEntryButtonPrimary: {
+    backgroundColor: colors.brand,
+  },
+  homeDietEntryButtonText: {
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  homeDietEntryButtonPrimaryText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  homeSheetRoot: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  homeSheetMask: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: 'rgba(0,0,0,0.46)',
+  },
+  homeSheet: {
+    maxHeight: '78%',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 24,
+  },
+  homeSheetHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  homeSheetTitle: {
+    fontSize: 18,
+    lineHeight: 24,
+    fontWeight: '900',
+  },
+  homeSheetSubtitle: {
+    marginTop: 3,
+    fontSize: 11,
+  },
+  homeMealRecordsScroll: {
+    marginTop: 14,
+  },
+  homeMealRecordRow: {
+    minHeight: 78,
+    paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  homeMealRecordThumb: {
+    width: 52,
+    height: 52,
+    borderRadius: 14,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  homeMealRecordImage: {
+    width: '100%',
+    height: '100%',
+  },
+  homeMealRecordCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  homeMealRecordTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  homeMealRecordMeta: {
+    marginTop: 4,
+    fontSize: 11,
+  },
+  homeMealRecordMacros: {
+    marginTop: 3,
+    fontSize: 10,
+  },
+  homeMealRecordArrow: {
+    fontSize: 24,
+    fontWeight: '300',
+  },
+  homeActionSheet: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 18,
+  },
+  homeActionRow: {
+    minHeight: 52,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  homeActionText: {
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  homeActionCancel: {
+    marginTop: 10,
+    minHeight: 46,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  homeActionCancelText: {
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  homeDietSheet: {
+    height: '88%',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+  },
+  homeDietKicker: {
+    fontSize: 10,
+    fontWeight: '900',
+  },
+  homeDietTabs: {
+    marginTop: 14,
+    borderRadius: 14,
+    padding: 4,
+    flexDirection: 'row',
+  },
+  homeDietTab: {
+    flex: 1,
+    minHeight: 36,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  homeDietTabActive: {
+    backgroundColor: colors.brand,
+  },
+  homeDietTabText: {
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  homeDietLoading: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  homeDietScroll: {
+    flex: 1,
+    marginTop: 10,
+  },
+  homeDietScrollContent: {
+    paddingBottom: 18,
+  },
+  homeDietSummary: {
+    fontSize: 13,
+    lineHeight: 20,
+  },
+  homeDietSourceNote: {
+    marginTop: 7,
+    fontSize: 10,
+    lineHeight: 15,
+  },
+  homeDietGapRow: {
+    marginTop: 12,
+    flexDirection: 'row',
+    gap: 7,
+  },
+  homeDietGap: {
+    flex: 1,
+    minWidth: 0,
+    borderRadius: 12,
+    paddingHorizontal: 5,
+    paddingVertical: 9,
+    alignItems: 'center',
+  },
+  homeDietGapValue: {
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  homeDietGapLabel: {
+    marginTop: 2,
+    fontSize: 9,
+  },
+  homeDietOption: {
+    marginTop: 10,
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 12,
+  },
+  homeDietOptionHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  homeDietOptionTitle: {
+    flex: 1,
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '900',
+  },
+  homeDietOptionCalories: {
+    color: colors.brandDark,
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  homeDietOptionReason: {
+    marginTop: 6,
+    fontSize: 11,
+    lineHeight: 17,
+  },
+  homeDietOptionSource: {
+    marginTop: 5,
+    fontSize: 10,
+  },
+  homeDietFoods: {
+    marginTop: 9,
+    gap: 6,
+  },
+  homeDietFood: {
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  homeDietFoodName: {
+    flex: 1,
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  homeDietFoodAmount: {
+    fontSize: 10,
+  },
+  homeDietOptionMacros: {
+    marginTop: 9,
+    fontSize: 10,
+    lineHeight: 15,
+  },
+  homeDietRefresh: {
+    marginTop: 14,
+    minHeight: 42,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#e8f8f1',
+  },
+  homeDietRefreshText: {
+    color: colors.brandDark,
+    fontSize: 12,
+    fontWeight: '900',
   },
   targetModal: {
     flex: 1,

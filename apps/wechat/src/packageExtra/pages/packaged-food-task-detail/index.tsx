@@ -286,7 +286,7 @@ function detailResultDesc(task?: AnalysisTask | null, packaged?: PackagedProduct
 }
 
 function statusText(task?: AnalysisTask | null, packaged?: PackagedProductExtractResult | null, reward?: PackagedUploadRewardResult | null) {
-  if (!task) return '加载中'
+  if (!task) return ''
   if (task.status === 'failed' || task.status === 'timed_out' || task.status === 'cancelled') return '分析失败'
   if (isTaskStillRunning(task.status)) return '后台分析中'
   if (reward?.awarded) return `已入库，奖励积分 +${Number(reward.reward_credits) || 1}`
@@ -402,7 +402,9 @@ function PackagedFoodTaskDetailPage() {
         <View className={`detail-hero status-${task?.status || 'pending'}`}>
           <Text className='detail-hero-kicker'>零食上传任务</Text>
           <Text className='detail-hero-title'>{packaged?.product_name || `零食照片 ${imageUrls.length || 1} 张`}</Text>
-          <Text className='detail-hero-status'>{statusText(task, packaged, reward)}</Text>
+          {task
+            ? <Text className='detail-hero-status'>{statusText(task, packaged, reward)}</Text>
+            : <View className='detail-hero-loading-spinner' />}
           <Text className='detail-hero-time'>{formatTaskTime(task?.created_at)}</Text>
           <View className='detail-actions'>
             <View className={`detail-action-btn ${loading ? 'loading' : ''}`} onClick={() => loadTask(true)}>

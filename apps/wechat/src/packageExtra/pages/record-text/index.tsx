@@ -197,13 +197,14 @@ function RecordTextPage() {
 
   let quotaBarClass = 'record-text-quota-bar'
   let quotaBarText = ''
+  let quotaBarLoading = false
   if (isBackfill) {
     const targetSummary = targetDateStatus ? getMembershipCreditSummary(targetDateStatus) : null
     const targetHasInfo = targetSummary?.hasInfo ?? false
     const targetRemaining = targetSummary?.remaining ?? 0
     const monthDay = `${Number(recordTargetDate.slice(5, 7))}月${Number(recordTargetDate.slice(8, 10))}日`
     if (!targetHasInfo) {
-      quotaBarText = `${monthDay}积分信息加载中`
+      quotaBarLoading = true
     } else if (targetRemaining < creditCost) {
       quotaBarClass += ' record-text-quota-bar--warn'
       quotaBarText = `${monthDay}积分不足 · 将扣除今日积分 · 今日剩余 ${creditsRemaining}`
@@ -223,7 +224,7 @@ function RecordTextPage() {
       }
       quotaBarText = `今日已用 ${creditsUsed}/${creditsMax} 积分 · 剩余 ${creditsRemaining}${!membershipStatus?.is_pro ? '  →开通会员享更高额度' : ''}`
     } else {
-      quotaBarText = `今日积分信息加载中${!membershipStatus?.is_pro ? '  →开通会员享更高额度' : ''}`
+      quotaBarLoading = true
     }
   }
 
@@ -237,7 +238,9 @@ function RecordTextPage() {
             if (!membershipStatus.is_pro) Taro.navigateTo({ url: extraPkgUrl('/pages/pro-membership/index') })
           }}
         >
-          <Text className='record-text-quota-bar-text'>{quotaBarText}</Text>
+          {quotaBarLoading
+            ? <View className='record-text-quota-spinner' />
+            : <Text className='record-text-quota-bar-text'>{quotaBarText}</Text>}
         </View>
       )}
       <ScrollView className='content-scroll' scrollY>

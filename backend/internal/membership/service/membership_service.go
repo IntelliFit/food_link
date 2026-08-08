@@ -300,6 +300,16 @@ func (s *MembershipService) GetMyMembership(ctx context.Context, userID string, 
 	return resp, nil
 }
 
+// IsCampusPublishingAllowed exposes the authoritative membership decision to
+// the public-food service without duplicating expiry and paid-order reconciliation.
+func (s *MembershipService) IsCampusPublishingAllowed(ctx context.Context, userID string) (bool, error) {
+	membership, err := s.getEffectiveMembership(ctx, userID)
+	if err != nil {
+		return false, err
+	}
+	return boolValue(formatMembershipResponse(membership)["is_pro"]), nil
+}
+
 func (s *MembershipService) getEffectiveMembership(ctx context.Context, userID string) (*domain.UserMembership, error) {
 	membership, err := s.repo.GetUserProMembership(ctx, userID)
 	if err != nil {

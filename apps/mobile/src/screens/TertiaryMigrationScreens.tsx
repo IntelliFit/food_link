@@ -1800,11 +1800,6 @@ export function PackagedFoodEditScreen() {
   }, [loadTaskIntoForm, route.params?.taskId])
 
   const pickImage = async () => {
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync()
-    if (!permission.granted) {
-      Alert.alert('需要相册权限', '请选择包装食品图片用于上传。')
-      return
-    }
     const remaining = Math.max(1, 3 - sourceImages.length)
     const picked = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
@@ -2727,7 +2722,21 @@ export function CampusCanteenScreen() {
     })
   }
 
-  const goUpload = () => navigation.navigate('PublicFoodShare', { mode: 'campus' })
+  const goUpload = async () => {
+    try {
+      const membership = await apiClient.getMyMembership()
+      if (!membership?.is_pro) {
+        Alert.alert('分享校园菜品需开通会员', '校园食堂菜品分享、食堂绑定和申请新增食堂目前仅向食探会员开放。', [
+          { text: '暂不开通', style: 'cancel' },
+          { text: '查看会员方案', onPress: () => navigation.navigate('MembershipCenter') },
+        ])
+        return
+      }
+      navigation.navigate('PublicFoodShare', { mode: 'campus' })
+    } catch (error) {
+      showError('验证会员状态失败', error)
+    }
+  }
   const goDetail = (item: PublicFoodItem) => navigation.navigate('PublicFoodDetail', { itemId: item.id, isCampus: true })
   const goAuthor = (item: PublicFoodItem) => {
     if (item.author?.id) {
@@ -3753,29 +3762,64 @@ function ExpiryDraftCard({
       </View>
       {draft.estimated ? <Text style={styles.expiryDraftTip}>到期日为 AI 建议值{draft.suggestedDays != null ? `（约 ${draft.suggestedDays} 天）` : ''}，建议确认包装日期后再保存。</Text> : null}
       {draft.recognitionBasis ? <Text style={styles.expiryDraftTip}>{draft.recognitionBasis}</Text> : null}
+      {draft.missingFields?.length ? (
+        <View style={styles.expiryMissingRow}>
+          <Text style={styles.expiryMissingLabel}>还需确认</Text>
+          {draft.missingFields.map((field) => (
+            <View key={field} style={styles.expiryMissingChip}>
+              <Text style={styles.expiryMissingChipText}>{expiryMissingFieldLabel(field)}</Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
       <View style={styles.expiryDraftInner}>
-        <ExpiryEditField label="食物名称" value={draft.foodName} onChangeText={(foodName) => onChange({ foodName })} placeholder="例如 纯牛奶 / 苹果 / 昨晚剩菜" />
+        <ExpiryEditField label="食物名称" value={draft.foodName} onChangeText={(foodName) => onChange(confirmExpiryDraftField(draft, { foodName }, ['food_name']))} placeholder="例如 纯牛奶 / 苹果 / 昨晚剩菜" />
       </View>
       <View style={styles.expiryDraftInner}>
         <Text style={styles.expiryEditLabel}>分类</Text>
         <View style={styles.expiryEditChoiceList}>
           {expiryCategoryOptions.map((option) => (
-            <Pressable key={option} style={[styles.expiryEditChoiceChip, !customCategory && draft.category === option && styles.expiryEditChoiceChipActive]} onPress={() => onChange({ category: option, customCategory: '' })}>
+            <Pressable key={option} style={[styles.expiryEditChoiceChip, !customCategory && draft.category === option && styles.expiryEditChoiceChipActive]} onPress={() => onChange(confirmExpiryDraftField(draft, { category: option, customCategory: '' }, ['category']))}>
               <Text style={[styles.expiryEditChoiceText, !customCategory && draft.category === option && styles.expiryEditChoiceTextActive]}>{option}</Text>
             </Pressable>
           ))}
-          <Pressable style={[styles.expiryEditChoiceChip, customCategory && styles.expiryEditChoiceChipActive]} onPress={() => onChange({ category: draft.customCategory || '自定义' })}>
+          <Pressable style={[styles.expiryEditChoiceChip, customCategory && styles.expiryEditChoiceChipActive]} onPress={() => onChange(confirmExpiryDraftField(draft, { category: draft.customCategory || '自定义' }, ['category']))}>
             <Text style={[styles.expiryEditChoiceText, customCategory && styles.expiryEditChoiceTextActive]}>自定义</Text>
           </Pressable>
         </View>
-        {customCategory ? <ExpiryEditField label="" value={draft.customCategory} onChangeText={(customCategoryValue) => onChange({ customCategory: customCategoryValue, category: customCategoryValue || '自定义' })} placeholder="输入自定义分类" /> : null}
+        {customCategory ? <ExpiryEditField label="" value={draft.customCategory} onChangeText={(customCategoryValue) => onChange(confirmExpiryDraftField(draft, { customCategory: customCategoryValue, category: customCategoryValue || '自定义' }, ['category']))} placeholder="输入自定义分类" /> : null}
       </View>
-      <View style={styles.expiryDraftInner}><StorageTypeSegment value={draft.storageType} onChange={(storageType) => onChange({ storageType })} /></View>
-      <View style={styles.expiryDraftInner}><ExpiryEditField label="数量说明" value={draft.quantityNote} onChangeText={(quantityNote) => onChange({ quantityNote })} placeholder="例如 2 盒 / 半袋 / 3 个" /></View>
-      <View style={styles.expiryDraftInner}><ExpiryEditField label="到期日期" value={draft.expireDate} onChangeText={(expireDate) => onChange({ expireDate })} placeholder="YYYY-MM-DD" /></View>
-      <View style={styles.expiryDraftInner}><ExpiryEditField label="备注" value={draft.note} onChangeText={(note) => onChange({ note })} placeholder="例如 已经开封、准备周末吃掉、放在冰箱第二层" multiline /></View>
+      <View style={styles.expiryDraftInner}><StorageTypeSegment value={draft.storageType} onChange={(storageType) => onChange(confirmExpiryDraftField(draft, { storageType }, ['storage_type']))} /></View>
+      <View style={styles.expiryDraftInner}><ExpiryEditField label="数量说明" value={draft.quantityNote} onChangeText={(quantityNote) => onChange(confirmExpiryDraftField(draft, { quantityNote }, ['quantity_note']))} placeholder="例如 2 盒 / 半袋 / 3 个" /></View>
+      <View style={styles.expiryDraftInner}><ExpiryEditField label="到期日期" value={draft.expireDate} onChangeText={(expireDate) => onChange(confirmExpiryDraftField(draft, { expireDate }, ['expire_date']))} placeholder="YYYY-MM-DD" /></View>
+      <View style={styles.expiryDraftInner}><ExpiryEditField label="备注" value={draft.note} onChangeText={(note) => onChange(confirmExpiryDraftField(draft, { note }, ['note']))} placeholder="例如 已经开封、准备周末吃掉、放在冰箱第二层" multiline /></View>
     </View>
   )
+}
+
+function confirmExpiryDraftField(
+  draft: ExpiryDraft,
+  patch: Partial<ExpiryDraft>,
+  aliases: string[],
+): Partial<ExpiryDraft> {
+  const aliasSet = new Set(aliases.map((item) => item.toLowerCase()))
+  return {
+    ...patch,
+    missingFields: (draft.missingFields || []).filter((field) => !aliasSet.has(String(field).trim().toLowerCase())),
+  }
+}
+
+function expiryMissingFieldLabel(field: string): string {
+  const normalized = String(field || '').trim().toLowerCase()
+  const labels: Record<string, string> = {
+    food_name: '食物名称',
+    category: '分类',
+    quantity_note: '数量说明',
+    storage_type: '储存方式',
+    expire_date: '到期日期',
+    note: '备注',
+  }
+  return labels[normalized] || field
 }
 
 function ExpiryEditField({
@@ -7538,6 +7582,31 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 17,
     backgroundColor: '#fff8e7',
+  },
+  expiryMissingRow: {
+    marginTop: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  expiryMissingLabel: {
+    color: '#92400e',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  expiryMissingChip: {
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    backgroundColor: '#fff7ed',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#fed7aa',
+  },
+  expiryMissingChipText: {
+    color: '#9a3412',
+    fontSize: 10,
+    fontWeight: '800',
   },
   expiryDraftInner: {
     marginTop: 10,

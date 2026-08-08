@@ -27,6 +27,7 @@ type PublicFoodService struct {
 	analyzeTasks CampusAnalyzeTaskSubmitter
 	rewards      RewardTaskAwarder
 	blockChecker BlockChecker
+	membership   CampusMembershipChecker
 }
 
 type RewardTaskAwarder interface {
@@ -39,6 +40,10 @@ type BlockChecker interface {
 
 type CampusAnalyzeTaskSubmitter interface {
 	SubmitAnalyzeTask(ctx context.Context, userID string, input analyzeservice.SubmitTaskInput) (string, error)
+}
+
+type CampusMembershipChecker interface {
+	IsCampusPublishingAllowed(ctx context.Context, userID string) (bool, error)
 }
 
 const (
@@ -71,6 +76,10 @@ func (s *PublicFoodService) ConfigureRewardTaskAwarder(awarder RewardTaskAwarder
 
 func (s *PublicFoodService) ConfigureBlockChecker(checker BlockChecker) {
 	s.blockChecker = checker
+}
+
+func (s *PublicFoodService) ConfigureCampusMembershipChecker(checker CampusMembershipChecker) {
+	s.membership = checker
 }
 
 type CreateInput struct {
@@ -132,6 +141,11 @@ type CampusImageContributionResult struct {
 
 func (s *PublicFoodService) Create(ctx context.Context, userID string, input CreateInput) (string, error) {
 	normalizePublicFoodTypeInput(&input)
+	if input.IsCampusFood {
+		if err := s.ensureCampusPublishingAllowed(ctx, userID); err != nil {
+			return "", err
+		}
+	}
 	if err := normalizePublicFoodLocationInput(&input); err != nil {
 		return "", err
 	}
@@ -578,9 +592,6 @@ func (s *PublicFoodService) Uncollect(ctx context.Context, userID, itemID string
 
 func (s *PublicFoodService) Update(ctx context.Context, userID, itemID string, input CreateInput) error {
 	normalizePublicFoodTypeInput(&input)
-	if err := s.applyCampusDirectoryRef(ctx, &input); err != nil {
-		return err
-	}
 	item, err := s.repo.GetItem(ctx, itemID)
 	if err != nil {
 		return err
@@ -590,6 +601,14 @@ func (s *PublicFoodService) Update(ctx context.Context, userID, itemID string, i
 	}
 	if item.UserID != userID {
 		return commonerrors.ErrForbidden
+	}
+	if input.IsCampusFood || isCampusPublicFood(item) {
+		if err := s.ensureCampusPublishingAllowed(ctx, userID); err != nil {
+			return err
+		}
+	}
+	if err := s.applyCampusDirectoryRef(ctx, &input); err != nil {
+		return err
 	}
 
 	updates := map[string]any{
@@ -701,6 +720,24 @@ func (s *PublicFoodService) Update(ctx context.Context, userID, itemID string, i
 	}
 
 	return s.repo.UpdateItem(ctx, itemID, userID, updates)
+}
+
+func (s *PublicFoodService) ensureCampusPublishingAllowed(ctx context.Context, userID string) error {
+	if s.membership == nil {
+		err := fmt.Errorf("campus membership checker is not configured")
+		logger.Error(ctx, "校园食物发布会员校验未配置", err, slog.String("user_id", userID))
+		return commonerrors.ErrInternal
+	}
+	allowed, err := s.membership.IsCampusPublishingAllowed(ctx, userID)
+	if err != nil {
+		logger.Error(ctx, "查询校园食物发布会员权限失败", err, slog.String("user_id", userID))
+		return err
+	}
+	if !allowed {
+		logger.Warn(ctx, "非会员尝试发布校园食物", slog.String("user_id", userID))
+		return &commonerrors.AppError{Code: 20003, Message: "校园食物发布仅限会员", HTTPStatus: 403}
+	}
+	return nil
 }
 
 func (s *PublicFoodService) Delete(ctx context.Context, userID, itemID string) error {

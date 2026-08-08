@@ -7,6 +7,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -60,11 +61,23 @@ type PasswordRegisterInput struct {
 }
 
 type SetPasswordInput struct {
-	Username        string `json:"username"`
-	Phone           string `json:"phone"`
-	Password        string `json:"password"`
-	CurrentPassword string `json:"current_password"`
+	Username         string `json:"username"`
+	Phone            string `json:"phone"`
+	Password         string `json:"password"`
+	CurrentPassword  string `json:"current_password"`
+	VerificationCode string `json:"verification_code"`
 }
+
+type ResetPasswordInput struct {
+	Phone    string `json:"phone"`
+	Code     string `json:"code"`
+	Password string `json:"password"`
+}
+
+var (
+	ErrPasswordResetFailed      = errors.New("手机号或验证码错误，无法重置密码")
+	ErrPasswordResetUnavailable = errors.New("密码重置暂时不可用，请稍后重试")
+)
 
 type LoginOutput struct {
 	AccessToken     string  `json:"access_token"`
@@ -81,13 +94,22 @@ type LoginOutput struct {
 }
 
 type LoginService struct {
-	cfg   *config.Config
-	users *repo.UserRepo
-	jwt   *JWTService
+	cfg               *config.Config
+	users             *repo.UserRepo
+	jwt               *JWTService
+	phoneCodeVerifier PhoneCodeVerifier
+}
+
+type PhoneCodeVerifier interface {
+	VerifyCode(ctx context.Context, phone, code string) error
 }
 
 func NewLoginService(cfg *config.Config, users *repo.UserRepo, jwt *JWTService) *LoginService {
 	return &LoginService{cfg: cfg, users: users, jwt: jwt}
+}
+
+func (s *LoginService) ConfigurePhoneCodeVerifier(verifier PhoneCodeVerifier) {
+	s.phoneCodeVerifier = verifier
 }
 
 func (s *LoginService) Login(ctx context.Context, input LoginInput) (*LoginOutput, error) {
@@ -272,13 +294,16 @@ func (s *LoginService) RegisterWithPassword(ctx context.Context, input PasswordR
 func (s *LoginService) SetPassword(ctx context.Context, userID string, input SetPasswordInput) (*LoginOutput, error) {
 	user, err := s.users.FindByID(ctx, userID)
 	if err != nil {
+		logger.Error(ctx, "查询 App 账号安全信息失败", err, slog.String("user_id", userID))
 		return nil, err
 	}
 	if user == nil {
+		logger.Warn(ctx, "设置 App 账号密码时用户不存在", slog.String("user_id", userID))
 		return nil, fmt.Errorf("用户不存在")
 	}
 	if user.PasswordHash != nil && strings.TrimSpace(*user.PasswordHash) != "" {
 		if !VerifyUserPassword(input.CurrentPassword, *user.PasswordHash) {
+			logger.Warn(ctx, "修改 App 账号密码时当前密码错误", slog.String("user_id", user.ID))
 			return nil, fmt.Errorf("当前密码错误")
 		}
 	}
@@ -292,9 +317,25 @@ func (s *LoginService) SetPassword(ctx context.Context, userID string, input Set
 	if phone == "" {
 		return nil, fmt.Errorf("请输入手机号")
 	}
+	currentPhone := normalizeLoginPhone(derefString(user.Telephone))
+	phoneChanged := currentPhone != phone
+	if phoneChanged {
+		if s.phoneCodeVerifier == nil {
+			verificationErr := fmt.Errorf("验证码服务未配置")
+			logger.Error(ctx, "修改 App 账号手机号时验证码服务未配置", verificationErr, slog.String("user_id", user.ID))
+			return nil, verificationErr
+		}
+		logger.Info(ctx, "修改 App 账号手机号开始验证", slog.String("user_id", user.ID), slog.String("phone", maskPhoneForLog(phone)))
+		if err := s.phoneCodeVerifier.VerifyCode(ctx, phone, input.VerificationCode); err != nil {
+			logger.Warn(ctx, "修改 App 账号手机号验证失败", slog.String("user_id", user.ID), slog.String("phone", maskPhoneForLog(phone)), slog.String("reason", err.Error()))
+			return nil, err
+		}
+	}
 	if existing, err := s.users.FindByTelephone(ctx, phone); err != nil {
+		logger.Error(ctx, "检查 App 账号手机号占用状态失败", err, slog.String("user_id", user.ID), slog.String("phone", maskPhoneForLog(phone)))
 		return nil, err
 	} else if existing != nil && existing.ID != user.ID {
+		logger.Warn(ctx, "修改 App 账号手机号时目标号码已被使用", slog.String("user_id", user.ID), slog.String("phone", maskPhoneForLog(phone)))
 		return nil, fmt.Errorf("手机号已被使用")
 	}
 	passwordHash, err := HashUserPassword(input.Password)
@@ -319,9 +360,67 @@ func (s *LoginService) SetPassword(ctx context.Context, userID string, input Set
 	}
 	user, err = s.users.UpdateFields(ctx, user.ID, updates)
 	if err != nil {
+		logger.Error(ctx, "保存 App 账号手机号密码失败", err, slog.String("user_id", user.ID), slog.Bool("phone_changed", phoneChanged))
 		return nil, err
 	}
-	logger.Info(ctx, "App 账号密码已设置", slog.String("user_id", user.ID), slog.String("identifier_type", loginIdentifierType(phone, "")))
+	logger.Info(ctx, "App 账号密码已设置", slog.String("user_id", user.ID), slog.String("identifier_type", loginIdentifierType(phone, "")), slog.Bool("phone_changed", phoneChanged))
+	return s.issueLoginOutput(user, user.OpenID, firstNonEmpty(derefString(user.UnionID), derefString(user.AppUnionID)))
+}
+
+func (s *LoginService) ResetPasswordWithSMS(ctx context.Context, input ResetPasswordInput) (*LoginOutput, error) {
+	phone, err := parsePhoneLoginIdentifier(input.Phone, "")
+	if err != nil || phone == "" {
+		logger.Warn(ctx, "App 短信重置密码校验失败", slog.String("reason", "invalid_phone"))
+		return nil, ErrPasswordResetFailed
+	}
+	passwordHash, err := HashUserPassword(input.Password)
+	if err != nil {
+		return nil, err
+	}
+	if s.phoneCodeVerifier == nil {
+		logger.Error(ctx, "App 短信重置密码时验证码服务未配置", ErrPasswordResetUnavailable, slog.String("phone", maskPhoneForLog(phone)))
+		return nil, ErrPasswordResetUnavailable
+	}
+	logger.Info(ctx, "App 短信重置密码开始验证", slog.String("phone", maskPhoneForLog(phone)))
+	if err := s.phoneCodeVerifier.VerifyCode(ctx, phone, input.Code); err != nil {
+		if errors.Is(err, ErrSMSVerificationUnavailable) {
+			logger.Error(ctx, "App 短信重置密码验证码服务不可用", err, slog.String("phone", maskPhoneForLog(phone)))
+			return nil, ErrPasswordResetUnavailable
+		}
+		logger.Warn(ctx, "App 短信重置密码验证失败", slog.String("phone", maskPhoneForLog(phone)))
+		return nil, ErrPasswordResetFailed
+	}
+	user, err := s.users.FindByTelephone(ctx, phone)
+	if err != nil {
+		logger.Error(ctx, "App 短信重置密码查询账号失败", err, slog.String("phone", maskPhoneForLog(phone)))
+		return nil, ErrPasswordResetUnavailable
+	}
+	if user == nil {
+		logger.Warn(ctx, "App 短信重置密码未匹配账号", slog.String("phone", maskPhoneForLog(phone)))
+		return nil, ErrPasswordResetFailed
+	}
+
+	now := time.Now()
+	updates := map[string]any{
+		"password_hash":   passwordHash,
+		"password_set_at": now,
+		"telephone":       phone,
+	}
+	if !s.users.HasUserColumn("password_hash") || !s.users.HasUserColumn("telephone") {
+		condition := cloneHealthCondition(user.HealthCondition)
+		condition["app_auth"] = map[string]any{
+			"password_hash":   passwordHash,
+			"password_set_at": now.Format(time.RFC3339),
+			"phone":           phone,
+		}
+		updates["health_condition"] = condition
+	}
+	user, err = s.users.UpdateFields(ctx, user.ID, updates)
+	if err != nil {
+		logger.Error(ctx, "保存 App 短信重置密码失败", err, slog.String("user_id", user.ID))
+		return nil, ErrPasswordResetUnavailable
+	}
+	logger.Info(ctx, "App 短信重置密码完成", slog.String("user_id", user.ID), slog.String("phone", maskPhoneForLog(phone)))
 	return s.issueLoginOutput(user, user.OpenID, firstNonEmpty(derefString(user.UnionID), derefString(user.AppUnionID)))
 }
 

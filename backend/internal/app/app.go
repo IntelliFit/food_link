@@ -171,7 +171,9 @@ func New(cfg *config.Config) (*App, error) {
 	if err != nil {
 		return nil, fmt.Errorf("初始化短信验证码存储失败: %w", err)
 	}
-	loginHandler.ConfigureSMSService(authservice.NewSMSService(cfg.SMS, cfg.Redis.KeyPrefix, loginSvc, userRepo, jwtSvc, smsStore, authservice.NewTencentCloudSMSSender(cfg.SMS)))
+	smsSvc := authservice.NewSMSService(cfg.SMS, cfg.Redis.KeyPrefix, loginSvc, userRepo, jwtSvc, smsStore, authservice.NewTencentCloudSMSSender(cfg.SMS))
+	loginSvc.ConfigurePhoneCodeVerifier(smsSvc)
+	loginHandler.ConfigureSMSService(smsSvc)
 
 	healthDocRepo := userrepo.NewHealthDocumentRepo(db)
 	modeSwitchLogRepo := userrepo.NewModeSwitchLogRepo(db)
@@ -363,6 +365,7 @@ func New(cfg *config.Config) (*App, error) {
 	publicFoodSvc := publicfoodservice.NewPublicFoodService(publicFoodRepo, storageClient)
 	publicFoodSvc.ConfigureTaskPublisher(taskQueue)
 	publicFoodSvc.ConfigureCampusAnalyzeTaskSubmitter(analyzeTaskSvc)
+	publicFoodSvc.ConfigureCampusMembershipChecker(membershipSvc)
 	publicFoodSvc.ConfigureRewardTaskAwarder(membershipSvc)
 	publicFoodSvc.ConfigureBlockChecker(friendSvc)
 	publicFoodHandler := publicfoodhandler.NewPublicFoodHandler(publicFoodSvc)
@@ -432,6 +435,7 @@ func New(cfg *config.Config) (*App, error) {
 	engine.POST("/api/app/login/sms", loginHandler.SMSLogin)
 	engine.POST("/api/app/login/password", loginHandler.PasswordLogin)
 	engine.POST("/api/app/register/password", loginHandler.PasswordRegister)
+	engine.POST("/api/app/account/password/reset", loginHandler.ResetPassword)
 	engine.POST("/api/app/account/password", authmw.RequireJWT(jwtSvc), loginHandler.SetPassword)
 	engine.GET("/api", system.Root)
 	engine.GET("/api/health", system.Health)

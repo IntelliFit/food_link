@@ -1,5 +1,6 @@
 import type {
   AnalysisTask,
+  AnalysisFeedbackRequest,
   AnalyzeTaskStatusCount,
   AnalyzeTaskSubmitParams,
   BodyMetricsSummary,
@@ -13,6 +14,7 @@ import type {
   CommunitySearchTab,
   CommunityFeedTargetType,
   ConversationSummary,
+  ContinuePrecisionSessionParams,
   DietRecommendationResult,
   ExecutionMode,
   ExerciseLogItem,
@@ -131,6 +133,127 @@ function normalizeBaseUrl(value: string): string {
   return value.trim().replace(/\/+$/, '')
 }
 
+type PetChatSSEEvent = {
+  type?: unknown
+  text?: unknown
+  error?: unknown
+  meta?: unknown
+}
+
+function petChatStreamHttpErrorMessage(raw: string): string {
+  const text = raw.trim()
+  if (!text) return '小食探分析失败'
+  try {
+    const parsed = JSON.parse(text) as Record<string, unknown>
+    const nested = parsed.data && typeof parsed.data === 'object' ? parsed.data as Record<string, unknown> : undefined
+    return String(parsed.message || parsed.detail || nested?.message || nested?.detail || '小食探分析失败')
+  } catch {
+    return text.length <= 160 ? text : '小食探分析失败'
+  }
+}
+
+function parsePetChatSSEEvent(rawEvent: string): PetChatSSEEvent | null {
+  const dataLines = rawEvent
+    .split(/\r?\n/)
+    .filter((line) => line.startsWith('data:'))
+    .map((line) => line.slice(5).replace(/^ /, ''))
+  if (!dataLines.length) return null
+  try {
+    return JSON.parse(dataLines.join('\n')) as PetChatSSEEvent
+  } catch {
+    return null
+  }
+}
+
+function normalizePetChatStreamMeta(value: unknown): PetChatStreamMeta | null {
+  if (!value || typeof value !== 'object') return null
+  const meta = value as Record<string, unknown>
+  const sessionId = String(meta.session_id || '').trim()
+  const range = meta.range === 'month' ? 'month' : meta.range === 'week' ? 'week' : null
+  if (!sessionId || !range) return null
+  return {
+    session_id: sessionId,
+    user_message_id: String(meta.user_message_id || '').trim() || undefined,
+    assistant_message_id: String(meta.assistant_message_id || '').trim() || undefined,
+    range,
+    range_label: String(meta.range_label || ''),
+    recorded_days: Number(meta.recorded_days || 0),
+    credits_charged: Number(meta.credits_charged || 0),
+    billing_status: String(meta.billing_status || ''),
+    ai_usage_pricing: meta.ai_usage_pricing && typeof meta.ai_usage_pricing === 'object'
+      ? meta.ai_usage_pricing as Record<string, unknown>
+      : undefined,
+    estimated_pricing: meta.estimated_pricing && typeof meta.estimated_pricing === 'object'
+      ? meta.estimated_pricing as Record<string, unknown>
+      : undefined,
+  }
+}
+
+async function readPetChatSSEStream(
+  stream: ReadableStream<Uint8Array>,
+  callbacks: PetChatStreamCallbacks,
+  signal: AbortSignal,
+): Promise<PetChatStreamMeta> {
+  const reader = stream.getReader()
+  const decoder = new TextDecoder('utf-8')
+  let buffer = ''
+  let started = false
+
+  const markStarted = () => {
+    if (started) return
+    started = true
+    callbacks.onStart?.()
+  }
+
+  const processBufferedEvents = (): PetChatStreamMeta | null => {
+    const events = buffer.split(/\r?\n\r?\n/)
+    buffer = events.pop() || ''
+    for (const rawEvent of events) {
+      const event = parsePetChatSSEEvent(rawEvent)
+      if (!event) continue
+      if (event.type === 'start') {
+        markStarted()
+        continue
+      }
+      if (event.type === 'chunk' && typeof event.text === 'string') {
+        markStarted()
+        if (event.text) callbacks.onChunk(event.text)
+        continue
+      }
+      if (event.type === 'error') {
+        throw new PetChatStreamError('server', String(event.error || '小食探分析失败'))
+      }
+      if (event.type === 'done') {
+        const meta = normalizePetChatStreamMeta(event.meta)
+        if (!meta) throw new PetChatStreamError('protocol', '流式响应缺少完成信息')
+        return meta
+      }
+    }
+    return null
+  }
+
+  try {
+    while (true) {
+      if (signal.aborted) throw new PetChatStreamError('cancelled', '已停止生成')
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      const meta = processBufferedEvents()
+      if (meta) {
+        await reader.cancel().catch(() => undefined)
+        return meta
+      }
+    }
+    buffer += decoder.decode()
+    if (buffer.trim()) buffer += '\n\n'
+    const meta = processBufferedEvents()
+    if (meta) return meta
+    throw new PetChatStreamError('protocol', '流式连接提前结束')
+  } finally {
+    reader.releaseLock()
+  }
+}
+
 function inferShareApiEnv(baseUrl: string): string | undefined {
   try {
     const host = new URL(baseUrl).hostname.toLowerCase()
@@ -190,6 +313,83 @@ export interface SetAccountPasswordInput {
   phone?: string
   password: string
   currentPassword?: string
+  verificationCode?: string
+}
+
+export interface ResetAccountPasswordInput {
+  phone: string
+  code: string
+  password: string
+}
+
+export interface HealthFocusItem {
+  id: string
+  label: string
+  created_at?: string
+}
+
+export interface AddHealthFocusResult {
+  focuses: HealthFocusItem[]
+  focus_id: string
+  already_exists?: boolean
+}
+
+export interface RemoveHealthFocusResult {
+  focuses: HealthFocusItem[]
+}
+
+export interface PetChatStreamMeta {
+  session_id: string
+  user_message_id?: string
+  assistant_message_id?: string
+  range: StatsRange
+  range_label: string
+  recorded_days: number
+  credits_charged: number
+  billing_status: string
+  ai_usage_pricing?: Record<string, unknown>
+  estimated_pricing?: Record<string, unknown>
+}
+
+export type PetChatStreamErrorCode = 'cancelled' | 'timeout' | 'unsupported' | 'http' | 'transport' | 'protocol' | 'server'
+
+export class PetChatStreamError extends Error {
+  readonly code: PetChatStreamErrorCode
+  readonly status?: number
+
+  constructor(code: PetChatStreamErrorCode, message: string, status?: number) {
+    super(message)
+    this.name = 'PetChatStreamError'
+    this.code = code
+    this.status = status
+  }
+}
+
+export interface PetChatStreamResponse {
+  status: number
+  ok: boolean
+  body: ReadableStream<Uint8Array> | null
+  text(): Promise<string>
+}
+
+export interface PetChatStreamFetchInit {
+  method: 'POST'
+  headers: Record<string, string>
+  body: string
+  signal?: AbortSignal
+}
+
+export type PetChatStreamFetch = (url: string, init: PetChatStreamFetchInit) => Promise<PetChatStreamResponse>
+
+export interface PetChatStreamCallbacks {
+  onStart?: () => void
+  onChunk: (text: string) => void
+}
+
+export interface PetChatStreamOptions {
+  fetch?: PetChatStreamFetch
+  signal?: AbortSignal
+  timeoutMs?: number
 }
 
 export interface AppWechatLoginInput {
@@ -693,13 +893,31 @@ export class FoodLinkApiClient {
     const phone = input.phone?.trim()
     const password = input.password.trim()
     const currentPassword = input.currentPassword?.trim()
+    const verificationCode = input.verificationCode?.trim()
     if (!password) throw new Error('请输入新密码')
     const body: Record<string, string> = { password }
     if (phone) body.phone = phone
     if (currentPassword) body.current_password = currentPassword
+    if (verificationCode) body.verification_code = verificationCode
     const data = await this.authenticatedRequest<LoginResponse>('/api/app/account/password', {
       method: 'POST',
       body,
+      timeoutMs: 10000,
+    })
+    await this.storeLoginTokens(data)
+    return data
+  }
+
+  async resetAccountPassword(input: ResetAccountPasswordInput): Promise<LoginResponse> {
+    const phone = input.phone.trim()
+    const code = input.code.trim()
+    const password = input.password.trim()
+    if (!phone) throw new Error('请输入手机号')
+    if (!/^\d{6}$/.test(code)) throw new Error('请输入 6 位短信验证码')
+    if (password.length < 8) throw new Error('密码至少需要 8 位')
+    const data = await this.publicRequest<LoginResponse>('/api/app/account/password/reset', {
+      method: 'POST',
+      body: { phone, code, password },
       timeoutMs: 10000,
     })
     await this.storeLoginTokens(data)
@@ -855,6 +1073,29 @@ export class FoodLinkApiClient {
     if (!taskId) {
       throw new Error('服务器未返回识别进度信息，请稍后重试')
     }
+    return { task_id: taskId, message }
+  }
+
+  async continuePrecisionSession(
+    sessionId: string,
+    body: ContinuePrecisionSessionParams,
+  ): Promise<{ task_id: string; message: string }> {
+    const id = sessionId.trim()
+    if (!id) throw new Error('缺少精准分析会话编号')
+    const data = await this.authenticatedRequest<Record<string, unknown>>(
+      `/api/precision-sessions/${encodeURIComponent(id)}/continue`,
+      {
+        method: 'POST',
+        body: {
+          ...body,
+          date: mapCalendarDateToApi(body.date),
+        },
+        timeoutMs: 10000,
+      },
+    )
+    const taskId = String(data.task_id ?? data.taskId ?? '').trim()
+    const message = String(data.message ?? '任务已提交')
+    if (!taskId) throw new Error('服务器未返回识别进度信息，请稍后重试')
     return { task_id: taskId, message }
   }
 
@@ -1110,6 +1351,61 @@ export class FoodLinkApiClient {
       method: 'GET',
       timeoutMs: 10000,
     })
+  }
+
+  async updateAnalysisTaskResult(
+    taskId: string,
+    result: NonNullable<AnalysisTask['result']>,
+  ): Promise<{ message: string; task: AnalysisTask }> {
+    const id = taskId.trim()
+    if (!id) throw new Error('缺少识别任务编号')
+    return this.authenticatedRequest<{ message: string; task: AnalysisTask }>(
+      `/api/analyze/tasks/${encodeURIComponent(id)}/result`,
+      {
+        method: 'PATCH',
+        body: { result },
+        timeoutMs: 10000,
+      },
+    )
+  }
+
+  async submitAnalysisFeedback(input: AnalysisFeedbackRequest): Promise<{ message: string }> {
+    const sourceTaskId = input.source_task_id?.trim()
+    const sourceRecordId = input.source_record_id?.trim()
+    if (!sourceTaskId && !sourceRecordId) {
+      throw new Error('分析反馈缺少关联任务或记录')
+    }
+    return this.authenticatedRequest<{ message: string }>('/api/analyze/feedback', {
+      method: 'POST',
+      body: {
+        ...input,
+        source_task_id: sourceTaskId || undefined,
+        source_record_id: sourceRecordId || undefined,
+      },
+      timeoutMs: 10000,
+    })
+  }
+
+  async addHealthFocus(label: string): Promise<AddHealthFocusResult> {
+    const normalizedLabel = label.trim()
+    if (!normalizedLabel) throw new Error('请输入关注方向')
+    return this.authenticatedRequest<AddHealthFocusResult>('/api/user/health-focuses', {
+      method: 'POST',
+      body: { label: normalizedLabel },
+      timeoutMs: 10000,
+    })
+  }
+
+  async removeHealthFocus(focusId: string): Promise<RemoveHealthFocusResult> {
+    const normalizedFocusId = focusId.trim()
+    if (!normalizedFocusId) throw new Error('缺少关注项标识')
+    return this.authenticatedRequest<RemoveHealthFocusResult>(
+      `/api/user/health-focuses/${encodeURIComponent(normalizedFocusId)}`,
+      {
+        method: 'DELETE',
+        timeoutMs: 10000,
+      },
+    )
   }
 
   async getStatsSummary(range: StatsRange): Promise<StatsSummary> {
@@ -1461,6 +1757,22 @@ export class FoodLinkApiClient {
           parent_comment_id: input.parentCommentId,
           reply_to_user_id: input.replyToUserId,
         },
+        timeoutMs: 10000,
+      },
+    )
+  }
+
+  async communityDeleteComment(input: {
+    targetId: string
+    commentId: string
+    targetType?: CommunityFeedTargetType
+  }): Promise<{ message?: string }> {
+    const commentId = input.commentId.trim()
+    if (!commentId) throw new Error('评论 ID 不能为空')
+    return this.authenticatedRequest<{ message?: string }>(
+      `${this.communityFeedTargetPath(input.targetId, input.targetType || 'food_record', 'comments')}/${encodeURIComponent(commentId)}`,
+      {
+        method: 'DELETE',
         timeoutMs: 10000,
       },
     )
@@ -2112,8 +2424,75 @@ export class FoodLinkApiClient {
     return this.authenticatedRequest<PetChatResponse>('/api/pet/chat', {
       method: 'POST',
       body: { question: text, range, session_id: sessionId.trim(), new_session: newSession },
-      timeoutMs: 30000,
+      timeoutMs: 90000,
     })
+  }
+
+  async streamGeneratePetChat(
+    question: string,
+    range: StatsRange = 'week',
+    sessionId = '',
+    newSession = false,
+    callbacks: PetChatStreamCallbacks,
+    options: PetChatStreamOptions = {},
+  ): Promise<PetChatStreamMeta> {
+    const text = question.trim()
+    if (!text) throw new Error('请输入想问伙伴的问题')
+    const token = await this.adapters.tokenStorage.getAccessToken()
+    if (!token) throw new Error('请先登录')
+
+    const fetcher: PetChatStreamFetch | undefined = options.fetch || (
+      typeof globalThis.fetch === 'function'
+        ? async (url, init) => globalThis.fetch(url, init)
+        : undefined
+    )
+    if (!fetcher) throw new PetChatStreamError('unsupported', '当前环境不支持流式请求')
+
+    const controller = new AbortController()
+    let timedOut = false
+    const timeoutMs = Math.max(1000, options.timeoutMs ?? 180000)
+    const handleExternalAbort = () => controller.abort()
+    if (options.signal?.aborted) controller.abort()
+    else options.signal?.addEventListener('abort', handleExternalAbort)
+    const timer = setTimeout(() => {
+      timedOut = true
+      controller.abort()
+    }, timeoutMs)
+
+    try {
+      const response = await fetcher(this.absoluteUrl('/api/pet/chat/stream'), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'text/event-stream',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          question: text,
+          range,
+          session_id: sessionId.trim(),
+          new_session: newSession,
+        }),
+        signal: controller.signal,
+      })
+      if (!response.ok) {
+        const responseText = await response.text().catch(() => '')
+        throw new PetChatStreamError('http', petChatStreamHttpErrorMessage(responseText), response.status)
+      }
+      if (!response.body || typeof response.body.getReader !== 'function') {
+        throw new PetChatStreamError('unsupported', '当前环境无法读取流式响应')
+      }
+      return await readPetChatSSEStream(response.body, callbacks, controller.signal)
+    } catch (error) {
+      if (timedOut) throw new PetChatStreamError('timeout', '小食探响应超时，请稍后重试')
+      if (options.signal?.aborted) throw new PetChatStreamError('cancelled', '已停止生成')
+      if (error instanceof PetChatStreamError) throw error
+      if (controller.signal.aborted) throw new PetChatStreamError('cancelled', '已停止生成')
+      throw new PetChatStreamError('transport', error instanceof Error ? error.message : '流式连接中断')
+    } finally {
+      clearTimeout(timer)
+      options.signal?.removeEventListener('abort', handleExternalAbort)
+    }
   }
 
   async getLatestPetChatSession(): Promise<PetChatHistoryResponse> {

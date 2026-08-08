@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"crypto/rand"
+	"errors"
 	"fmt"
 	"log/slog"
 	"math/big"
@@ -26,6 +27,11 @@ const (
 	smsIPThrottlePref     = "throttle:sms:ip:"
 	smsDefaultExpireMins  = 15
 	smsDefaultThrottleSec = 30
+)
+
+var (
+	ErrSMSCodeInvalid             = errors.New("验证码错误或已过期")
+	ErrSMSVerificationUnavailable = errors.New("验证码服务暂时不可用")
 )
 
 type SMSCodeStore interface {
@@ -154,22 +160,8 @@ func (s *SMSService) LoginWithCode(ctx context.Context, input SMSLoginInput) (*L
 	if err != nil {
 		return nil, err
 	}
-	if phone == "" {
-		return nil, fmt.Errorf("请输入手机号")
-	}
-	code := strings.TrimSpace(input.Code)
-	if code == "" {
-		return nil, fmt.Errorf("请输入验证码")
-	}
-	if s.store == nil {
-		return nil, fmt.Errorf("验证码服务未配置")
-	}
-	matched, err := s.store.Consume(ctx, s.smsCodeKey(phone), code)
-	if err != nil {
+	if err := s.VerifyCode(ctx, phone, input.Code); err != nil {
 		return nil, err
-	}
-	if !matched {
-		return nil, fmt.Errorf("验证码错误或已过期")
 	}
 	user, err := s.users.FindByTelephone(ctx, phone)
 	if err != nil {
@@ -201,6 +193,37 @@ func (s *SMSService) LoginWithCode(ctx context.Context, input SMSLoginInput) (*L
 	}
 	logger.Info(ctx, "App 手机验证码登录成功", slog.String("user_id", user.ID), slog.String("phone", maskPhoneForLog(phone)))
 	return s.login.issueLoginOutput(user, user.OpenID, firstNonEmpty(derefString(user.UnionID), derefString(user.AppUnionID)))
+}
+
+// VerifyCode verifies and consumes a one-time SMS code. Account security and
+// SMS login intentionally share this implementation so codes keep the same
+// expiry, throttling, and single-use semantics.
+func (s *SMSService) VerifyCode(ctx context.Context, phone, code string) error {
+	normalizedPhone, err := parsePhoneLoginIdentifier(phone, "")
+	if err != nil {
+		return err
+	}
+	if normalizedPhone == "" {
+		return fmt.Errorf("请输入手机号")
+	}
+	code = strings.TrimSpace(code)
+	if code == "" {
+		return fmt.Errorf("请输入验证码")
+	}
+	if s.store == nil {
+		return fmt.Errorf("验证码服务未配置: %w", ErrSMSVerificationUnavailable)
+	}
+	matched, err := s.store.Consume(ctx, s.smsCodeKey(normalizedPhone), code)
+	if err != nil {
+		logger.Error(ctx, "校验 App 手机验证码失败", err, slog.String("phone", maskPhoneForLog(normalizedPhone)))
+		return ErrSMSVerificationUnavailable
+	}
+	if !matched {
+		logger.Warn(ctx, "App 手机验证码错误或已过期", slog.String("phone", maskPhoneForLog(normalizedPhone)))
+		return ErrSMSCodeInvalid
+	}
+	logger.Info(ctx, "App 手机验证码校验成功", slog.String("phone", maskPhoneForLog(normalizedPhone)))
+	return nil
 }
 
 func (s *SMSService) smsCodeKey(phone string) string {

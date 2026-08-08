@@ -59,7 +59,6 @@ import {
   RecipeEditScreen,
 } from '../screens/SecondaryMigrationScreens'
 import {
-  AiAssistantScreen,
   CampusCanteenScreen,
   ExpiryEditScreen,
   FoodLibraryDetailScreen,
@@ -82,7 +81,7 @@ const Tab = createBottomTabNavigator<MainTabParamList>()
 const Stack = createNativeStackNavigator<RootStackParamList>()
 const navigationRef = createNavigationContainerRef<RootStackParamList>()
 
-type StaticDeepLinkRoute = 'About' | 'Expiry'
+type StaticDeepLinkRoute = 'About' | 'Expiry' | 'RewardCenter'
 
 function MainTabs() {
   return (
@@ -153,12 +152,14 @@ export function RootNavigator() {
 
     const navigateToStaticRoute = (routeName: StaticDeepLinkRoute) => {
       pendingStaticRouteRef.current = routeName
-      if (routeName === 'Expiry' && !isAuthenticated) return
+      if (routeName !== 'About' && !isAuthenticated) return
       if (!navigationRef.isReady()) return
       if (routeName === 'About') {
         navigationRef.navigate('About')
-      } else {
+      } else if (routeName === 'Expiry') {
         navigationRef.navigate('Expiry')
+      } else {
+        navigationRef.navigate('RewardCenter')
       }
       pendingStaticRouteRef.current = null
     }
@@ -234,8 +235,10 @@ export function RootNavigator() {
         if (staticRoute && navigationRef.isReady() && (staticRoute === 'About' || isAuthenticated)) {
           if (staticRoute === 'About') {
             navigationRef.navigate('About')
-          } else {
+          } else if (staticRoute === 'Expiry') {
             navigationRef.navigate('Expiry')
+          } else {
+            navigationRef.navigate('RewardCenter')
           }
           pendingStaticRouteRef.current = null
         }
@@ -264,7 +267,6 @@ export function RootNavigator() {
             <Stack.Screen name="DayRecord" component={DayRecordScreen} options={{ title: '单日记录' }} />
             <Stack.Screen name="RecordDetail" component={RecordDetailScreen} options={{ title: '记录详情' }} />
             <Stack.Screen name="AnalyzeHistory" component={AnalyzeHistoryScreen} options={{ title: '识别记录' }} />
-            <Stack.Screen name="AiAssistant" component={AiAssistantScreen} options={{ title: 'AI 助手' }} />
             <Stack.Screen name="StatsMetabolic" component={StatsMetabolicScreen} options={{ headerShown: false }} />
             <Stack.Screen name="TrendDetail" component={TrendDetailScreen} options={({ route }) => ({ title: route.params.kind === 'weight' ? '体重趋势' : route.params.kind === 'water' ? '饮水趋势' : '运动趋势' })} />
             <Stack.Screen name="HealthProfile" component={HealthProfileScreen} options={{ title: '健康档案' }} />
@@ -354,6 +356,7 @@ export function RootNavigator() {
             <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
             <Stack.Screen name="Agreements" component={AgreementsScreen} options={{ title: '用户协议' }} />
             <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} options={{ title: '隐私政策' }} />
+            <Stack.Screen name="MembershipAgreement" component={MembershipAgreementScreen} options={{ title: '会员协议' }} />
             <Stack.Screen name="About" component={AboutScreen} options={{ title: '关于' }} />
           </>
         )}
@@ -366,6 +369,14 @@ function extractStaticDeepLinkRoute(url?: string | null): StaticDeepLinkRoute | 
   if (!url) return null
   const normalized = url.toLowerCase()
   if (normalized.includes('about')) return 'About'
+  if (
+    normalized.includes('reward-center')
+    || normalized.includes('reward_center')
+    || normalized.includes('my-vouchers')
+    || normalized.includes('target=my-vouchers')
+  ) {
+    return 'RewardCenter'
+  }
   if (
     normalized.includes('food-expiry') ||
     normalized.includes('/expiry') ||

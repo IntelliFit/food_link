@@ -593,12 +593,30 @@ export function PublicFoodShareScreen() {
   const [latitude, setLatitude] = useState('')
   const [longitude, setLongitude] = useState('')
   const [loading, setLoading] = useState(false)
+  const [membershipStatus, setMembershipStatus] = useState<MembershipStatus | null>(null)
+  const [membershipLoading, setMembershipLoading] = useState(true)
   const isCampus = sourceKind === 'campus'
   const isHomemade = sourceKind === 'homemade'
   const incomingDraft = route.params?.draft
   const selectedLocation = route.params?.selectedLocation
   const restoredDraftRef = useRef<string | null>(null)
   const appliedLocationRef = useRef<string | null>(null)
+
+  const loadMembership = useCallback(async () => {
+    setMembershipLoading(true)
+    try {
+      setMembershipStatus(await apiClient.getMyMembership())
+    } catch (error) {
+      setMembershipStatus(null)
+      showError('获取会员状态失败', error)
+    } finally {
+      setMembershipLoading(false)
+    }
+  }, [])
+
+  useFocusEffect(useCallback(() => {
+    void loadMembership()
+  }, [loadMembership]))
 
   const load = useCallback(async () => {
     if (!editId) return
@@ -760,11 +778,6 @@ export function PublicFoodShareScreen() {
       Alert.alert('图片已满', `最多上传 ${PUBLIC_FOOD_MAX_IMAGES} 张图片。`)
       return
     }
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync()
-    if (!permission.granted) {
-      Alert.alert('需要相册权限', '请选择食物图片用于分享。')
-      return
-    }
     const picked = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       allowsMultipleSelection: true,
@@ -806,6 +819,20 @@ export function PublicFoodShareScreen() {
     const finalPriceMax = optionalNumber(priceMax)
     const finalLatitude = optionalNumber(latitude)
     const finalLongitude = optionalNumber(longitude)
+
+    if (isCampus) {
+      try {
+        const latestMembership = await apiClient.getMyMembership()
+        setMembershipStatus(latestMembership)
+        if (!latestMembership?.is_pro) {
+          Alert.alert('校园食堂为会员专属', '开通食探会员后，可以分享或编辑校园食堂菜品。')
+          return
+        }
+      } catch (error) {
+        showError('验证会员状态失败', error)
+        return
+      }
+    }
 
     if (!imagePaths.length) {
       Alert.alert('请先上传图片', isCampus ? '请上传校园菜品图片。' : '请上传这份食物的图片。')
@@ -925,6 +952,38 @@ export function PublicFoodShareScreen() {
     })
   }
 
+  const selectCampusSource = () => {
+    if (membershipStatus?.is_pro) {
+      setSourceKind('campus')
+      return
+    }
+    Alert.alert('校园食堂为会员专属', '开通食探会员后，可以分享校园食堂菜品。', [
+      { text: '暂不开通', style: 'cancel' },
+      { text: '查看会员方案', onPress: () => navigation.navigate('MembershipCenter') },
+    ])
+  }
+
+  if (isCampus && membershipLoading) {
+    return (
+      <View style={styles.publicFoodShareGatePage}>
+        <ActivityIndicator color={colors.brand} />
+      </View>
+    )
+  }
+
+  if (isCampus && !membershipStatus?.is_pro) {
+    return (
+      <View style={styles.publicFoodShareGatePage}>
+        <View style={styles.publicFoodShareGateCard}>
+          <Text style={styles.publicFoodShareGateTitle}>校园食堂为会员专属</Text>
+          <Text style={styles.publicFoodShareGateText}>开通食探会员后，可以分享校园食堂菜品并绑定已审核食堂。普通公共食物库分享仍可继续使用。</Text>
+          <AppButton label="查看会员方案" onPress={() => navigation.navigate('MembershipCenter')} />
+          {!campusDefault ? <AppButton label="返回普通分享" variant="secondary" onPress={() => setSourceKind('restaurant')} /> : null}
+        </View>
+      </View>
+    )
+  }
+
   return (
     <View style={styles.publicFoodShareRoot}>
       <ScrollView
@@ -984,7 +1043,7 @@ export function PublicFoodShareScreen() {
               </>
             ) : null}
             {showCampusSwitch ? (
-              <PublicFoodSwitchRow label="校园食堂菜品" value={isCampus} onPress={() => setSourceKind(isCampus ? 'restaurant' : 'campus')} />
+                <PublicFoodSwitchRow label="校园食堂菜品" value={isCampus} onPress={() => isCampus ? setSourceKind('restaurant') : selectCampusSource()} />
             ) : null}
             {isCampus ? (
               <>
@@ -4661,6 +4720,28 @@ const styles = StyleSheet.create({
   publicFoodShareRoot: {
     flex: 1,
     backgroundColor: '#f9fafb',
+  },
+  publicFoodShareGatePage: {
+    flex: 1,
+    justifyContent: 'center',
+    padding: 24,
+    backgroundColor: '#f6f8fa',
+  },
+  publicFoodShareGateCard: {
+    gap: 14,
+    borderRadius: 18,
+    padding: 20,
+    backgroundColor: '#ffffff',
+  },
+  publicFoodShareGateTitle: {
+    color: '#16332a',
+    fontSize: 21,
+    fontWeight: '900',
+  },
+  publicFoodShareGateText: {
+    color: '#64748b',
+    fontSize: 14,
+    lineHeight: 21,
   },
   publicFoodShareScroll: {
     flex: 1,

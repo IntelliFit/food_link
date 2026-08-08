@@ -1,11 +1,14 @@
 package handler
 
 import (
+	"errors"
+	"log/slog"
 	"net/http"
 	"strings"
 
 	authmw "food_link/backend/internal/auth"
 	"food_link/backend/internal/auth/service"
+	"food_link/backend/pkg/logger"
 
 	"github.com/gin-gonic/gin"
 )
@@ -137,11 +140,37 @@ func (h *LoginHandler) SetPassword(c *gin.Context) {
 		return
 	}
 	userID := c.GetString(authmw.ContextUserIDKey)
+	logger.Info(c.Request.Context(), "App 账号安全设置请求进入", slog.String("user_id", userID))
 	out, err := h.service.SetPassword(c.Request.Context(), userID, input)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"detail": err.Error()})
 		return
 	}
+	logger.Info(c.Request.Context(), "App 账号安全设置请求完成", slog.String("user_id", userID))
+	c.JSON(http.StatusOK, out)
+}
+
+func (h *LoginHandler) ResetPassword(c *gin.Context) {
+	var input service.ResetPasswordInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"detail": "请求参数无效"})
+		return
+	}
+	logger.Info(c.Request.Context(), "App 短信重置密码请求进入")
+	out, err := h.service.ResetPasswordWithSMS(c.Request.Context(), input)
+	if err != nil {
+		if errors.Is(err, service.ErrPasswordResetUnavailable) {
+			c.JSON(http.StatusInternalServerError, gin.H{"detail": service.ErrPasswordResetUnavailable.Error()})
+			return
+		}
+		if errors.Is(err, service.ErrPasswordResetFailed) {
+			c.JSON(http.StatusBadRequest, gin.H{"detail": service.ErrPasswordResetFailed.Error()})
+			return
+		}
+		c.JSON(http.StatusBadRequest, gin.H{"detail": err.Error()})
+		return
+	}
+	logger.Info(c.Request.Context(), "App 短信重置密码请求完成", slog.String("user_id", out.UserID))
 	c.JSON(http.StatusOK, out)
 }
 

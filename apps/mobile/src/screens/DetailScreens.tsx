@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { ActivityIndicator, Image, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Switch, Text, TextInput, View } from 'react-native'
 import * as Clipboard from 'expo-clipboard'
@@ -26,6 +26,7 @@ import {
   type FriendRequestItem,
   type FriendUserItem,
   type HealthProfile,
+  type HomeDashboard,
   type ManualFoodBrowseResult,
   type ManualFoodItem,
   type MealType,
@@ -35,6 +36,7 @@ import {
 } from '@food-link/core'
 import { apiClient, getRecentRequestTraces, RECENT_REQUEST_TRACE_LIMIT } from '../api'
 import { AppButton } from '../components/AppButton'
+import { DailySummaryPoster, type DailySummaryPosterData } from '../components/DailySummaryPoster'
 import { APP_VERSION } from '../config'
 import { CONSOLE_LOG_BUFFER_LIMIT, getRecentConsoleLogs } from '../diagnostics/consoleLogBuffer'
 import { IconfontText } from '../components/Iconfont'
@@ -50,6 +52,7 @@ import {
   emitHomeIntakeDataChangedEvent,
 } from '../utils/home-events'
 import { refreshHomeDashboardLocalSnapshotFromCloud } from '../utils/home-dashboard-local-cache'
+import { markFoodExpiryBadgeSeen, markFriendRequestsBadgeSeen } from '../utils/profileTabBadge'
 
 const appIcon = require('../../assets/icon.png')
 
@@ -820,10 +823,17 @@ export function DayRecordScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const dialog = useAppDialog()
   const insets = useSafeAreaInsets()
-  const { shareFoodRecord, shareSheet } = useFoodRecordShareSheet(dialog)
   const date = route.params?.date || todayKey()
   const [records, setRecords] = useState<FoodRecord[]>([])
   const [targetCalories, setTargetCalories] = useState(2000)
+  const [homeDashboard, setHomeDashboard] = useState<HomeDashboard | null>(null)
+  const [dayBodyMetrics, setDayBodyMetrics] = useState<BodyMetricsSummary | null>(null)
+  const [posterIdentity, setPosterIdentity] = useState<{ nickname: string; avatar: string; inviteCode: string }>({ nickname: '', avatar: '', inviteCode: '' })
+  const [dailyPosterVisible, setDailyPosterVisible] = useState(false)
+  const [dailyPosterImageUri, setDailyPosterImageUri] = useState('')
+  const [dailyPosterCapturing, setDailyPosterCapturing] = useState(false)
+  const [dailyPosterBusyAction, setDailyPosterBusyAction] = useState<'share' | 'save' | null>(null)
+  const dailyPosterRef = useRef<View>(null)
   const [errorMessage, setErrorMessage] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -831,11 +841,15 @@ export function DayRecordScreen() {
     setLoading(true)
     setErrorMessage('')
     try {
-      const [data, dashboard] = await Promise.all([
+      const [data, dashboard, bodyMetrics] = await Promise.all([
         apiClient.getFoodRecordList(date),
         apiClient.getHomeDashboard(date).catch(() => null),
+        apiClient.getBodyMetricsSummary('week').catch(() => null),
       ])
       setRecords(data.records || [])
+      setHomeDashboard(dashboard)
+      setDayBodyMetrics(bodyMetrics)
+      setDailyPosterImageUri('')
       const target = numberFrom(dashboard?.intakeData?.target, 0)
       if (target > 0) setTargetCalories(target)
     } catch (error) {
@@ -852,10 +866,68 @@ export function DayRecordScreen() {
     }, [load]),
   )
 
+  useFocusEffect(
+    useCallback(() => {
+      let active = true
+      void (async () => {
+        try {
+          const profile = await apiClient.getUserProfile()
+          const inviteProfile = profile.id ? await apiClient.getInviteProfile(profile.id).catch(() => null) : null
+          if (!active) return
+          setPosterIdentity({
+            nickname: String(inviteProfile?.nickname || profile.nickname || '').trim(),
+            avatar: String(inviteProfile?.avatar || profile.avatar || '').trim(),
+            inviteCode: String(inviteProfile?.invite_code || '').trim(),
+          })
+        } catch {
+          if (active) setPosterIdentity({ nickname: '', avatar: '', inviteCode: '' })
+        }
+      })()
+      return () => { active = false }
+    }, []),
+  )
+
   const totalKcal = records.reduce((sum, record) => sum + Number(record.total_calories || 0), 0)
   const totalProtein = records.reduce((sum, record) => sum + Number(record.total_protein || 0), 0)
   const totalCarbs = records.reduce((sum, record) => sum + Number(record.total_carbs || 0), 0)
   const totalFat = records.reduce((sum, record) => sum + Number(record.total_fat || 0), 0)
+  const dailyPosterData = useMemo<DailySummaryPosterData>(() => {
+    const intake = homeDashboard?.intakeData
+    const waterDay = dayBodyMetrics?.water_daily?.find((item) => item.date === date)
+      || (dayBodyMetrics?.today_water?.date === date ? dayBodyMetrics.today_water : null)
+    const achievement = homeDashboard?.achievement
+    return {
+      date,
+      intakeCurrent: numberFrom(intake?.current, totalKcal),
+      intakeTarget: numberFrom(intake?.target, 0),
+      macros: {
+        protein: {
+          current: numberFrom(intake?.macros?.protein?.current, totalProtein),
+          target: numberFrom(intake?.macros?.protein?.target, 0),
+        },
+        carbs: {
+          current: numberFrom(intake?.macros?.carbs?.current, totalCarbs),
+          target: numberFrom(intake?.macros?.carbs?.target, 0),
+        },
+        fat: {
+          current: numberFrom(intake?.macros?.fat?.current, totalFat),
+          target: numberFrom(intake?.macros?.fat?.target, 0),
+        },
+      },
+      waterCurrentMl: numberFrom(waterDay?.total, 0),
+      waterGoalMl: numberFrom(dayBodyMetrics?.water_goal_ml, 0),
+      exerciseKcal: numberFrom(homeDashboard?.exerciseBurnedKcal, 0),
+      streakDays: numberFrom(achievement?.streak_days, 0),
+      greenDays: numberFrom(achievement?.green_days, 0),
+      nickname: posterIdentity.nickname,
+      avatar: posterIdentity.avatar,
+      qrValue: buildDailyPosterInviteLink(posterIdentity.inviteCode),
+    }
+  }, [date, dayBodyMetrics, homeDashboard, posterIdentity, totalCarbs, totalFat, totalKcal, totalProtein])
+
+  useEffect(() => {
+    setDailyPosterImageUri('')
+  }, [dailyPosterData])
   const initialLoading = loading && records.length === 0
   const dayCards = useMemo(() => sortFoodRecordsByTime(records).map((record) => {
     const imageUrls = recordImageUrls(record)
@@ -875,20 +947,67 @@ export function DayRecordScreen() {
     }
   }), [records])
 
-  const shareDay = async () => {
+  const openDailyPoster = async () => {
     if (records.length === 0) {
       await dialog.alert('暂无可分享记录', '这一天还没有饮食记录。', 'warning')
       return
     }
+    setDailyPosterVisible(true)
+  }
+
+  const ensureDailyPosterImage = async (): Promise<string> => {
+    if (dailyPosterImageUri) return dailyPosterImageUri
+    const viewShot = getViewShotModule()
+    if (!viewShot?.captureRef) throw new Error('当前安装包暂不支持生成海报图片，请更新到最新版 App')
+    if (!dailyPosterRef.current) throw new Error('今日卡片尚未渲染完成，请稍后重试')
+    setDailyPosterCapturing(true)
     try {
-      const shared = records.length === 1
-        ? await shareFoodRecord(records[0])
-        : await shareTextToSystem(`${date} 饮食记录`, buildDayShareMessage(date, records))
+      const imageUri = await viewShot.captureRef(dailyPosterRef, {
+        format: 'png',
+        quality: 0.96,
+        result: 'tmpfile',
+        fileName: `foodlink-daily-${date.replace(/[^0-9-]/g, '') || Date.now()}`,
+      })
+      setDailyPosterImageUri(imageUri)
+      return imageUri
+    } finally {
+      setDailyPosterCapturing(false)
+    }
+  }
+
+  const shareDailyPoster = async () => {
+    if (dailyPosterBusyAction) return
+    setDailyPosterBusyAction('share')
+    try {
+      const imageUri = await ensureDailyPosterImage()
+      const shared = await sharePosterImageToSystem(`${date} 今日卡片`, imageUri)
       if (!shared) return
-      const reward = await apiClient.claimSharePosterReward({ shareScope: 'daily_food', shareDate: date })
+      const reward = await apiClient.claimSharePosterReward({ shareScope: 'daily_summary', shareDate: date })
       await showShareRewardAlert(dialog, reward)
     } catch (error) {
       await showError(dialog, '分享失败', error)
+    } finally {
+      setDailyPosterBusyAction(null)
+    }
+  }
+
+  const saveDailyPoster = async () => {
+    if (dailyPosterBusyAction) return
+    setDailyPosterBusyAction('save')
+    try {
+      const imageUri = await ensureDailyPosterImage()
+      const mediaLibrary = await import('expo-media-library')
+      const permission = await mediaLibrary.requestPermissionsAsync(true)
+      if (!permission.granted) {
+        await dialog.alert('无法保存图片', '请在系统设置中允许食探添加图片到相册。', 'warning')
+        return
+      }
+      await mediaLibrary.saveToLibraryAsync(imageUri)
+      await dialog.alert('已保存', '今日卡片已保存到系统相册。', 'success')
+    } catch (error) {
+      await showError(dialog, '保存图片失败', error)
+    } finally {
+      setDailyPosterBusyAction(null)
     }
   }
 
@@ -953,7 +1072,7 @@ export function DayRecordScreen() {
         <View style={styles.dayRecordTop}>
           <Text style={styles.dayRecordDateLine}>{formatDayRecordDate(date)}</Text>
           {records.length > 0 ? (
-            <Pressable style={styles.dayRecordShareButton} onPress={() => void shareDay()}>
+            <Pressable style={styles.dayRecordShareButton} onPress={() => void openDailyPoster()}>
               <Text style={styles.dayRecordShareIcon}>↗</Text>
               <Text style={styles.dayRecordShareText}>分享今日饮食</Text>
             </Pressable>
@@ -1093,8 +1212,69 @@ export function DayRecordScreen() {
           </View>
         ) : null}
       </ScrollView>
-      {shareSheet}
+      <DailySummaryPosterModal
+        visible={dailyPosterVisible}
+        data={dailyPosterData}
+        posterRef={dailyPosterRef}
+        bottomInset={insets.bottom}
+        capturing={dailyPosterCapturing}
+        busyAction={dailyPosterBusyAction}
+        onClose={() => {
+          if (!dailyPosterBusyAction && !dailyPosterCapturing) setDailyPosterVisible(false)
+        }}
+        onShare={() => void shareDailyPoster()}
+        onSave={() => void saveDailyPoster()}
+      />
     </View>
+  )
+}
+
+function DailySummaryPosterModal({
+  visible,
+  data,
+  posterRef,
+  bottomInset,
+  capturing,
+  busyAction,
+  onClose,
+  onShare,
+  onSave,
+}: {
+  visible: boolean
+  data: DailySummaryPosterData
+  posterRef: RefObject<View | null>
+  bottomInset: number
+  capturing: boolean
+  busyAction: 'share' | 'save' | null
+  onClose: () => void
+  onShare: () => void
+  onSave: () => void
+}) {
+  const busy = capturing || Boolean(busyAction)
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <View style={styles.dailyPosterBackdrop}>
+        <View style={[styles.dailyPosterSheet, { paddingBottom: Math.max(bottomInset, 14) + 14 }]}>
+          <View style={styles.dailyPosterHeader}>
+            <Text style={styles.dailyPosterHeaderTitle}>分享今日卡片</Text>
+            <Pressable hitSlop={10} style={styles.foodShareCloseButton} disabled={busy} onPress={onClose}>
+              <X size={22} color="#374151" strokeWidth={2.4} />
+            </Pressable>
+          </View>
+          <ScrollView style={styles.dailyPosterScroll} contentContainerStyle={styles.dailyPosterScrollContent} showsVerticalScrollIndicator={false}>
+            <DailySummaryPoster ref={posterRef} data={data} />
+          </ScrollView>
+          <View style={styles.dailyPosterActions}>
+            <Pressable disabled={busy} style={[styles.dailyPosterPrimaryAction, busy && styles.foodShareActionDisabled]} onPress={onShare}>
+              {capturing || busyAction === 'share' ? <ActivityIndicator size="small" color="#ffffff" /> : <><Share2 size={18} color="#ffffff" strokeWidth={2.4} /><Text style={styles.dailyPosterPrimaryActionText}>分享图片</Text></>}
+            </Pressable>
+            <Pressable disabled={busy} style={[styles.dailyPosterSecondaryAction, busy && styles.foodShareActionDisabled]} onPress={onSave}>
+              {capturing || busyAction === 'save' ? <ActivityIndicator size="small" color={colors.brand} /> : <><IconfontText className="iconfont icon-download" size={18} color={colors.brandDark} /><Text style={styles.dailyPosterSecondaryActionText}>保存图片</Text></>}
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    </Modal>
   )
 }
 
@@ -1112,6 +1292,7 @@ export function RecordDetailScreen() {
   const [editDescription, setEditDescription] = useState('')
   const [editItems, setEditItems] = useState<EditableRecordItem[]>([])
   const [expandedNutrients, setExpandedNutrients] = useState<Record<string, boolean>>({})
+  const handledInitialActionRef = useRef('')
 
   const syncEditor = useCallback((next: FoodRecord) => {
     setEditMealType(next.meal_type)
@@ -1232,6 +1413,24 @@ export function RecordDetailScreen() {
       void dialog.alert('删除失败', userFacingErrorMessage(error), 'danger')
     }
   }
+
+  useEffect(() => {
+    const initialAction = route.params.initialAction
+    if (!record || loading || !initialAction) return
+    const actionKey = `${route.params.recordId}:${initialAction}`
+    if (handledInitialActionRef.current === actionKey) return
+    handledInitialActionRef.current = actionKey
+    navigation.setParams({ initialAction: undefined })
+    if (initialAction === 'edit') {
+      openEdit()
+      return
+    }
+    if (initialAction === 'share') {
+      void shareRecord()
+      return
+    }
+    void remove()
+  }, [loading, navigation, record, route.params.initialAction, route.params.recordId])
 
   return (
     <View style={styles.recordDetailRoot}>
@@ -3674,11 +3873,6 @@ export function BodyMetricRecordScreen() {
 
   const pickExerciseImage = async () => {
     try {
-      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync()
-      if (!permission.granted) {
-        await dialog.alert('无法访问相册', '请在系统设置中允许访问相册后再添加运动截图。', 'warning')
-        return
-      }
       const picked = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
         quality: 0.86,
@@ -4157,6 +4351,7 @@ export function ExpiryScreen() {
   }, [dialog])
 
   useFocusEffect(useCallback(() => {
+    void markFoodExpiryBadgeSeen()
     void load()
   }, [load]))
 
@@ -4508,11 +4703,6 @@ export function CirclePostEditScreen() {
       await dialog.alert('图片已满', `最多上传 ${CIRCLE_POST_MAX_IMAGES} 张图片。`, 'warning')
       return
     }
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync()
-    if (!permission.granted) {
-      await dialog.alert('需要相册权限', '请选择动态图片。', 'warning')
-      return
-    }
     const picked = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       allowsMultipleSelection: true,
@@ -4776,6 +4966,9 @@ export function FriendsScreen() {
 
   useFocusEffect(useCallback(() => {
     void load()
+    return () => {
+      void markFriendRequestsBadgeSeen()
+    }
   }, [load]))
 
   const openProfile = (userId?: string) => {
@@ -5374,11 +5567,6 @@ export function AboutFeedbackScreen() {
     const remaining = FEEDBACK_MAX_IMAGES - feedbackImageUrls.length
     if (remaining <= 0 || uploadingFeedbackImages) return
     try {
-      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync()
-      if (!permission.granted) {
-        await dialog.alert('无法访问相册', '请在系统设置中允许访问相册后再添加截图。', 'warning')
-        return
-      }
       const picked = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
         allowsMultipleSelection: true,
@@ -6945,22 +7133,9 @@ function buildRecordShareMessage(record: FoodRecord, shareUrl?: string): string 
   return lines.join('\n')
 }
 
-function buildDayShareMessage(date: string, records: FoodRecord[]): string {
-  const totalKcal = records.reduce((sum, record) => sum + Number(record.total_calories || 0), 0)
-  const totalProtein = records.reduce((sum, record) => sum + Number(record.total_protein || 0), 0)
-  const totalCarbs = records.reduce((sum, record) => sum + Number(record.total_carbs || 0), 0)
-  const totalFat = records.reduce((sum, record) => sum + Number(record.total_fat || 0), 0)
-  const lines = [
-    `${date} 饮食记录 · ${Math.round(totalKcal)} kcal`,
-    `蛋白质 ${round1(totalProtein)}g · 碳水 ${round1(totalCarbs)}g · 脂肪 ${round1(totalFat)}g`,
-    `共 ${records.length} 条记录`,
-  ]
-  records.slice(0, 8).forEach((record) => {
-    const name = String(record.description || record.items?.map((item) => item.name).join('、') || '饮食记录').trim()
-    lines.push(`- ${getMealTypeLabel(record.meal_type)} ${Math.round(record.total_calories || 0)} kcal ${name}`)
-  })
-  lines.push('来自 Food Link')
-  return lines.join('\n')
+function buildDailyPosterInviteLink(inviteCode: string): string {
+  const code = inviteCode.trim()
+  return code ? `foodlink://invite?fi=${encodeURIComponent(code)}` : ''
 }
 
 const dietGoalLabels: Record<string, string> = {
@@ -8620,6 +8795,73 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 18,
     textAlign: 'center',
+  },
+  dailyPosterBackdrop: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(7, 18, 15, 0.68)',
+  },
+  dailyPosterSheet: {
+    height: '94%',
+    borderTopLeftRadius: 26,
+    borderTopRightRadius: 26,
+    paddingTop: 12,
+    paddingHorizontal: 14,
+    backgroundColor: '#eef5f2',
+  },
+  dailyPosterHeader: {
+    minHeight: 44,
+    paddingHorizontal: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  dailyPosterHeaderTitle: {
+    color: '#183b31',
+    fontSize: 17,
+    fontWeight: '900',
+  },
+  dailyPosterScroll: {
+    flex: 1,
+  },
+  dailyPosterScrollContent: {
+    paddingVertical: 8,
+    alignItems: 'stretch',
+  },
+  dailyPosterActions: {
+    marginTop: 10,
+    flexDirection: 'row',
+    gap: 10,
+  },
+  dailyPosterPrimaryAction: {
+    flex: 1,
+    minHeight: 48,
+    borderRadius: 15,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+    backgroundColor: colors.brand,
+  },
+  dailyPosterPrimaryActionText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  dailyPosterSecondaryAction: {
+    flex: 1,
+    minHeight: 48,
+    borderRadius: 15,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+    backgroundColor: '#dff0e9',
+  },
+  dailyPosterSecondaryActionText: {
+    color: colors.brandDark,
+    fontSize: 13,
+    fontWeight: '900',
   },
   recordDetailRoot: {
     flex: 1,

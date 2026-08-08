@@ -1,7 +1,7 @@
 # PROJECT_STATE
 
 - Project: `food_link`
-- Workspace: `D:\files\food_link`
+- Workspace: `D:\projects\food_link`
 - Ownership: dedicated coding agent for `food_link`
 - Surface: WeChat Mini Program
 - UI verification tool: `weapp-devtools`

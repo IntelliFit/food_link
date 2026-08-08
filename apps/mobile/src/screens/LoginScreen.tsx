@@ -21,19 +21,26 @@ export function LoginScreen() {
   const dialog = useAppDialog()
   const {
     loginWithWechat,
+    loginWithPassword,
     loginWithSMSCode,
+    resetPasswordWithSMS,
     loginWithDebugAccount,
     loginWithUserId,
   } = useAuth()
   const [loading, setLoading] = useState(false)
+  const [loginMethod, setLoginMethod] = useState<'sms' | 'password'>('sms')
+  const [passwordResetMode, setPasswordResetMode] = useState(false)
   const [accountPhone, setAccountPhone] = useState('')
   const [smsCode, setSmsCode] = useState('')
+  const [accountPassword, setAccountPassword] = useState('')
+  const [resetPassword, setResetPassword] = useState('')
+  const [resetPasswordConfirm, setResetPasswordConfirm] = useState('')
   const [smsSending, setSmsSending] = useState(false)
   const [smsCooldownSeconds, setSmsCooldownSeconds] = useState(0)
   const [agreementAccepted, setAgreementAccepted] = useState(false)
   const [inviteCode, setInviteCode] = useState('')
   const [userId, setUserId] = useState('')
-  const [password, setPassword] = useState('')
+  const [debugPassword, setDebugPassword] = useState('')
   const [keyboardHeight, setKeyboardHeight] = useState(0)
   const scrollRef = useRef<ScrollView>(null)
 
@@ -78,7 +85,7 @@ export function LoginScreen() {
     setTimeout(scroll, 260)
   }, [])
 
-  const run = async (fn: () => Promise<void>, fallback: string) => {
+  const run = async (fn: () => Promise<void>, fallback: string, title = '登录失败') => {
     setLoading(true)
     try {
       console.log('[mobile] login action started')
@@ -86,7 +93,7 @@ export function LoginScreen() {
       console.log('[mobile] login action succeeded')
     } catch (error) {
       console.log('[mobile] login action failed', error instanceof Error ? error.message : error)
-      dialog.alert('登录失败', userFacingErrorMessage(error, fallback), 'warning')
+      dialog.alert(title, userFacingErrorMessage(error, fallback), 'warning')
     } finally {
       setLoading(false)
     }
@@ -94,7 +101,7 @@ export function LoginScreen() {
 
   const ensureAgreementAccepted = () => {
     if (agreementAccepted) return true
-    dialog.alert('请先同意协议', '请阅读并同意用户协议和隐私政策后继续。', 'warning')
+    dialog.alert('请先同意协议', '请阅读并同意用户协议、隐私政策和会员服务协议后继续。', 'warning')
     return false
   }
 
@@ -131,12 +138,75 @@ export function LoginScreen() {
     run(() => loginWithSMSCode(phone, code, inviteCode), '请检查手机号和验证码')
   }
 
+  const loginWithAccountPassword = () => {
+    const phone = accountPhone.trim()
+    const password = accountPassword.trim()
+    if (!isValidMainlandPhone(phone)) {
+      dialog.alert('手机号有误', '请输入 11 位大陆手机号。', 'warning')
+      return
+    }
+    if (!password) {
+      dialog.alert('请输入密码', '请输入已设置的 App 登录密码。', 'warning')
+      return
+    }
+    if (!ensureAgreementAccepted()) return
+    run(() => loginWithPassword(phone, password), '请检查手机号和密码')
+  }
+
+  const submitPasswordReset = () => {
+    const phone = accountPhone.trim()
+    const code = smsCode.trim()
+    const password = resetPassword.trim()
+    if (!isValidMainlandPhone(phone)) {
+      dialog.alert('手机号有误', '请输入 11 位大陆手机号。', 'warning')
+      return
+    }
+    if (!/^\d{6}$/.test(code)) {
+      dialog.alert('验证码有误', '请输入 6 位短信验证码。', 'warning')
+      return
+    }
+    if (password.length < 8) {
+      dialog.alert('密码太短', '新密码至少需要 8 位。', 'warning')
+      return
+    }
+    if (password !== resetPasswordConfirm.trim()) {
+      dialog.alert('两次密码不一致', '请重新输入确认密码。', 'warning')
+      return
+    }
+    if (!ensureAgreementAccepted()) return
+    run(
+      () => resetPasswordWithSMS(phone, code, password),
+      '请确认手机号、验证码和新密码后重试',
+      '重置失败',
+    )
+  }
+
+  const openPasswordReset = () => {
+    setPasswordResetMode(true)
+    setSmsCode('')
+    setResetPassword('')
+    setResetPasswordConfirm('')
+  }
+
+  const closePasswordReset = () => {
+    setPasswordResetMode(false)
+    setLoginMethod('password')
+    setSmsCode('')
+    setResetPassword('')
+    setResetPasswordConfirm('')
+  }
+
   const loginWithWechatAccount = () => {
     if (!ensureAgreementAccepted()) return
     run(() => loginWithWechat(inviteCode), '请稍后重试，或使用手机验证码登录')
   }
 
   const smsLoginReady = isValidMainlandPhone(accountPhone) && /^\d{6}$/.test(smsCode.trim())
+  const passwordLoginReady = isValidMainlandPhone(accountPhone) && accountPassword.trim().length > 0
+  const passwordResetReady = isValidMainlandPhone(accountPhone)
+    && /^\d{6}$/.test(smsCode.trim())
+    && resetPassword.trim().length >= 8
+    && resetPassword.trim() === resetPasswordConfirm.trim()
   const sendCodeReady = isValidMainlandPhone(accountPhone)
   const sendCodeDisabled = smsSending || smsCooldownSeconds > 0 || !sendCodeReady
   const sendCodeLabel = smsCooldownSeconds > 0 ? `${smsCooldownSeconds}s 后重发` : '发送验证码'
@@ -168,7 +238,31 @@ export function LoginScreen() {
       </View>
 
       <View style={styles.form}>
-        <Text style={styles.formHint}>手机号验证登录 / 注册</Text>
+        {passwordResetMode ? (
+          <View style={styles.resetHeader}>
+            <Text style={styles.formTitle}>短信重置密码</Text>
+            <Text style={styles.formHint}>验证账号绑定手机号后，将直接设置新密码并登录。</Text>
+          </View>
+        ) : (
+          <View style={styles.loginMethodTabs}>
+            <Pressable
+              accessibilityRole="tab"
+              accessibilityState={{ selected: loginMethod === 'sms' }}
+              onPress={() => setLoginMethod('sms')}
+              style={[styles.loginMethodTab, loginMethod === 'sms' && styles.loginMethodTabActive]}
+            >
+              <Text style={[styles.loginMethodText, loginMethod === 'sms' && styles.loginMethodTextActive]}>验证码登录</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="tab"
+              accessibilityState={{ selected: loginMethod === 'password' }}
+              onPress={() => setLoginMethod('password')}
+              style={[styles.loginMethodTab, loginMethod === 'password' && styles.loginMethodTabActive]}
+            >
+              <Text style={[styles.loginMethodText, loginMethod === 'password' && styles.loginMethodTextActive]}>密码登录</Text>
+            </Pressable>
+          </View>
+        )}
         <View style={styles.phoneRow}>
           <Text style={styles.countryCode}>+86</Text>
           <View style={styles.inputDivider} />
@@ -185,7 +279,7 @@ export function LoginScreen() {
           />
         </View>
 
-        <View style={styles.codeRow}>
+        {loginMethod === 'sms' || passwordResetMode ? <View style={styles.codeRow}>
           <TextInput
             value={smsCode}
             onChangeText={(value) => setSmsCode(value.replace(/\D/g, '').slice(0, 6))}
@@ -213,21 +307,79 @@ export function LoginScreen() {
               </Text>
             )}
           </Pressable>
-        </View>
+        </View> : null}
+
+        {loginMethod === 'password' && !passwordResetMode ? (
+          <>
+            <View style={styles.passwordRow}>
+              <TextInput
+                value={accountPassword}
+                onChangeText={setAccountPassword}
+                placeholder="密码"
+                secureTextEntry
+                autoCapitalize="none"
+                autoCorrect={false}
+                style={styles.lineInput}
+                placeholderTextColor={colors.textMuted}
+                onFocus={() => scrollLoginFieldIntoView('code')}
+              />
+            </View>
+            <View style={styles.authSecondaryRow}>
+              <Text style={styles.authSecondaryHint}>使用账号安全中设置的手机号和密码</Text>
+              <Pressable accessibilityRole="button" onPress={openPasswordReset} hitSlop={8}>
+                <Text style={styles.authLinkText}>忘记密码</Text>
+              </Pressable>
+            </View>
+          </>
+        ) : null}
+
+        {passwordResetMode ? (
+          <>
+            <View style={styles.passwordRow}>
+              <TextInput
+                value={resetPassword}
+                onChangeText={setResetPassword}
+                placeholder="新密码（至少 8 位）"
+                secureTextEntry
+                autoCapitalize="none"
+                autoCorrect={false}
+                style={styles.lineInput}
+                placeholderTextColor={colors.textMuted}
+              />
+            </View>
+            <View style={styles.passwordRow}>
+              <TextInput
+                value={resetPasswordConfirm}
+                onChangeText={setResetPasswordConfirm}
+                placeholder="再次输入新密码"
+                secureTextEntry
+                autoCapitalize="none"
+                autoCorrect={false}
+                style={styles.lineInput}
+                placeholderTextColor={colors.textMuted}
+              />
+            </View>
+            <Pressable accessibilityRole="button" onPress={closePasswordReset} style={styles.resetBackButton}>
+              <Text style={styles.authLinkText}>返回密码登录</Text>
+            </Pressable>
+          </>
+        ) : null}
 
         <Pressable
-          disabled={loading || !smsLoginReady}
-          onPress={loginWithCode}
+          disabled={loading || (passwordResetMode ? !passwordResetReady : loginMethod === 'sms' ? !smsLoginReady : !passwordLoginReady)}
+          onPress={passwordResetMode ? submitPasswordReset : loginMethod === 'sms' ? loginWithCode : loginWithAccountPassword}
           style={({ pressed }) => [
             styles.primaryButton,
-            pressed && smsLoginReady && !loading && styles.pressed,
-            (loading || !smsLoginReady) && styles.disabled,
+            pressed && !loading && styles.pressed,
+            (loading || (passwordResetMode ? !passwordResetReady : loginMethod === 'sms' ? !smsLoginReady : !passwordLoginReady)) && styles.disabled,
           ]}
         >
           {loading ? (
             <ActivityIndicator color="#fff" />
           ) : (
-            <Text style={styles.primaryButtonText}>登录 / 注册</Text>
+            <Text style={styles.primaryButtonText}>
+              {passwordResetMode ? '验证并重置密码' : loginMethod === 'sms' ? '登录 / 注册' : '手机号密码登录'}
+            </Text>
           )}
         </Pressable>
 
@@ -248,7 +400,7 @@ export function LoginScreen() {
             onPress={() => setAgreementAccepted((value) => !value)}
             accessibilityRole="checkbox"
             accessibilityState={{ checked: agreementAccepted }}
-            accessibilityLabel="同意用户协议和隐私政策"
+            accessibilityLabel="同意用户协议、隐私政策和会员服务协议"
             style={[styles.checkbox, agreementAccepted && styles.checkboxActive]}
           >
             <Text style={styles.checkboxText}>{agreementAccepted ? '✓' : ''}</Text>
@@ -257,6 +409,7 @@ export function LoginScreen() {
             我已阅读并同意
             <Text style={styles.linkText} onPress={() => navigation.navigate('Agreements')}>《用户协议》</Text>
             <Text style={styles.linkText} onPress={() => navigation.navigate('PrivacyPolicy')}>《隐私政策》</Text>
+            <Text style={styles.linkText} onPress={() => navigation.navigate('MembershipAgreement')}>《会员服务协议》</Text>
           </Text>
         </View>
       </View>
@@ -272,12 +425,12 @@ export function LoginScreen() {
           />
           <Text style={styles.debugTitle}>按用户 ID 代登录（备用）</Text>
           <TextInput value={userId} onChangeText={setUserId} placeholder="用户 ID" autoCapitalize="none" style={styles.debugInput} />
-          <TextInput value={password} onChangeText={setPassword} placeholder="调试密码" secureTextEntry style={styles.debugInput} />
+          <TextInput value={debugPassword} onChangeText={setDebugPassword} placeholder="调试密码" secureTextEntry style={styles.debugInput} />
           <AppButton
             label="用指定用户 ID 登录"
             variant="secondary"
             loading={loading}
-            onPress={() => run(() => loginWithUserId(userId, password), '请检查用户 ID 和调试密码')}
+            onPress={() => run(() => loginWithUserId(userId, debugPassword), '请检查用户 ID 和调试密码')}
           />
           <Text style={styles.apiText}>API: {API_BASE_URL}</Text>
         </View>
@@ -305,7 +458,7 @@ function extractInviteCode(url?: string | null): string {
 }
 
 function isValidMainlandPhone(phone: string): boolean {
-  return /^1\d{10}$/.test(phone.trim())
+  return /^1[3-9]\d{9}$/.test(phone.trim())
 }
 
 function normalizePositiveSeconds(value: unknown): number {
@@ -360,12 +513,49 @@ const styles = StyleSheet.create({
   form: {
     gap: 0,
   },
+  resetHeader: {
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  formTitle: {
+    color: colors.text,
+    fontSize: 18,
+    fontWeight: '900',
+    marginBottom: 6,
+  },
   formHint: {
     marginBottom: 8,
     color: colors.textMuted,
     fontSize: 12,
     fontWeight: '800',
     textAlign: 'center',
+  },
+  loginMethodTabs: {
+    flexDirection: 'row',
+    alignSelf: 'center',
+    padding: 3,
+    borderRadius: 999,
+    backgroundColor: '#f1f5f9',
+    marginBottom: 14,
+  },
+  loginMethodTab: {
+    minWidth: 112,
+    minHeight: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 999,
+    paddingHorizontal: 16,
+  },
+  loginMethodTabActive: {
+    backgroundColor: '#ffffff',
+  },
+  loginMethodText: {
+    color: colors.textMuted,
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  loginMethodTextActive: {
+    color: colors.brandDark,
   },
   phoneRow: {
     minHeight: 48,
@@ -392,6 +582,39 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#e5e7eb',
     marginTop: 12,
+  },
+  passwordRow: {
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+    marginTop: 12,
+  },
+  authSecondaryRow: {
+    minHeight: 38,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginTop: 4,
+  },
+  authSecondaryHint: {
+    flex: 1,
+    color: colors.textMuted,
+    fontSize: 11,
+    lineHeight: 16,
+  },
+  authLinkText: {
+    color: colors.brandDark,
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  resetBackButton: {
+    minHeight: 38,
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    marginTop: 4,
   },
   lineInput: {
     flex: 1,

@@ -670,7 +670,7 @@ export default function LoginPage() {
                   onClick={handleWxLogin}
                   loading={loading && !showProfileForm}
                 >
-                    手机号快捷登录
+                    微信快捷登录
                 </TaroifyButton>
                 <TaroifyButton
                   className='skip-login-btn'

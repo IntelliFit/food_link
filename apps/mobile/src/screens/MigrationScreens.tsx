@@ -203,10 +203,10 @@ export function MembershipCenterScreen() {
   const actionButtonText = useMemo(() => {
     if (!selectedPlan) return '暂无可购买套餐'
     const price = `¥${money(selectedPlan.amount)}`
-    if (!membership?.is_pro) return `立即开通 · ${price}`
-    if (membership.current_plan_code === selectedPlan.code) return `续费当前套餐 · ${price}`
+    if (!membership?.is_pro) return `微信小程序开通 · ${price}`
+    if (membership.current_plan_code === selectedPlan.code) return `微信小程序续费 · ${price}`
     const nextTierLabel = membershipTierMeta[selectedTier]?.name || '会员'
-    return `升级到${nextTierLabel} · ${price}`
+    return `微信小程序升级${nextTierLabel} · ${price}`
   }, [membership?.current_plan_code, membership?.is_pro, selectedPlan, selectedTier])
 
   const savingsAmount = useMemo(() => {
@@ -261,29 +261,23 @@ export function MembershipCenterScreen() {
     void load()
   }, [load])
 
-  const createPayment = async (plan: MembershipPlan) => {
-    Alert.alert(
-      'App 支付暂未开放',
-      `当前 App 会员支付还未完成接入，请先在微信小程序中完成开通或续费。\n\n套餐：${plan.name}`,
-    )
-  }
-
   const previewPayment = () => {
     if (!selectedPlan) {
       Alert.alert('请选择套餐', '当前暂无可购买套餐，请刷新后重试。')
       return
     }
     Alert.alert(
-      membership?.is_pro ? '确认续费或升级' : '确认开通会员',
+      '请在微信小程序完成支付',
       [
         `套餐：${selectedPlan.name}`,
         `权益：${planPeriodText(selectedPlan)} · 每日 ${selectedPlan.daily_credits || 0} 系统积分`,
         `金额：¥${money(selectedPlan.amount)}`,
         paymentModePreview(membership, selectedPlan),
+        '',
+        '当前 App 不会创建订单或发起扣款。请打开 Food Link 微信小程序，在“我的 → 食探会员”完成开通、续费或升级。',
       ].filter(Boolean).join('\n'),
       [
-        { text: '再看看', style: 'cancel' },
-        { text: '创建订单', onPress: () => void createPayment(selectedPlan) },
+        { text: '知道了' },
       ],
     )
   }
@@ -1623,6 +1617,8 @@ export function CommunityFeedDetailScreen() {
   const [reportSheetVisible, setReportSheetVisible] = useState(false)
   const [keyboardHeight, setKeyboardHeight] = useState(0)
   const [commentInputFocused, setCommentInputFocused] = useState(false)
+  const [currentUserId, setCurrentUserId] = useState('')
+  const [deletingCommentId, setDeletingCommentId] = useState('')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -1639,6 +1635,10 @@ export function CommunityFeedDetailScreen() {
   useEffect(() => {
     void load()
   }, [load])
+
+  useEffect(() => {
+    void getStoredUserId().then((userId) => setCurrentUserId(String(userId || '').trim()))
+  }, [])
 
   useEffect(() => {
     if (Platform.OS !== 'android') return
@@ -1765,6 +1765,44 @@ export function CommunityFeedDetailScreen() {
     setTimeout(() => commentInputRef.current?.focus(), 60)
   }
 
+  const deleteComment = (entry: FeedCommentItem) => {
+    const canDelete = Boolean(currentUserId && entry.user_id === currentUserId) || Boolean(context?.is_mine)
+    if (!canDelete || deletingCommentId) return
+    Alert.alert('删除评论', '删除后无法恢复，相关回复也会一并删除。', [
+      { text: '取消', style: 'cancel' },
+      {
+        text: '删除',
+        style: 'destructive',
+        onPress: async () => {
+          setDeletingCommentId(entry.id)
+          try {
+            await apiClient.communityDeleteComment({
+              targetId: route.params.targetId,
+              targetType: route.params.targetType,
+              commentId: entry.id,
+            })
+            const subtreeIds = buildCommunityCommentSubtreeIds(comments, entry.id)
+            setContext((current) => {
+              if (!current) return current
+              const nextComments = (current.comments || []).filter((commentItem) => !subtreeIds.has(commentItem.id))
+              const removedCount = (current.comments || []).length - nextComments.length
+              return {
+                ...current,
+                comments: nextComments,
+                comment_count: Math.max(0, Number(current.comment_count || 0) - removedCount),
+              }
+            })
+            if (replyTarget && subtreeIds.has(replyTarget.id)) setReplyTarget(null)
+          } catch (error) {
+            showError('删除评论失败', error)
+          } finally {
+            setDeletingCommentId('')
+          }
+        },
+      },
+    ])
+  }
+
   const openReportSheet = () => {
     setActionSheetVisible(false)
     setReportSheetVisible(true)
@@ -1873,8 +1911,16 @@ export function CommunityFeedDetailScreen() {
 
                   {comments.length > 0 ? (
                     <View style={styles.communityDetailComments}>
-                      {comments.map((entry) => (
-                        <Pressable key={entry.id} style={[styles.communityDetailCommentItem, entry.reply_to_user_id && styles.communityDetailCommentReply]} onPress={() => focusCommentInput(entry)}>
+                      {comments.map((entry) => {
+                        const canDeleteComment = Boolean(currentUserId && entry.user_id === currentUserId) || Boolean(context?.is_mine)
+                        return (
+                        <Pressable
+                          key={entry.id}
+                          style={[styles.communityDetailCommentItem, entry.reply_to_user_id && styles.communityDetailCommentReply, deletingCommentId === entry.id && styles.communityDetailCommentDeleting]}
+                          onPress={() => focusCommentInput(entry)}
+                          onLongPress={() => deleteComment(entry)}
+                          delayLongPress={420}
+                        >
                           <View style={styles.communityDetailCommentAvatar}>
                             {entry.avatar ? <Image source={{ uri: entry.avatar }} style={styles.communityDetailCommentAvatarImage} /> : null}
                           </View>
@@ -1885,8 +1931,22 @@ export function CommunityFeedDetailScreen() {
                             </View>
                             <Text style={styles.communityDetailCommentText}>{entry.content}</Text>
                           </View>
+                          {canDeleteComment ? (
+                            <Pressable
+                              style={styles.communityDetailCommentDelete}
+                              hitSlop={8}
+                              disabled={Boolean(deletingCommentId)}
+                              onPress={(event) => {
+                                event.stopPropagation()
+                                deleteComment(entry)
+                              }}
+                            >
+                              {deletingCommentId === entry.id ? <ActivityIndicator size="small" color={colors.danger} /> : <Trash2 size={15} color={colors.danger} strokeWidth={2} />}
+                            </Pressable>
+                          ) : null}
                         </Pressable>
-                      ))}
+                        )
+                      })}
                     </View>
                   ) : (
                     <Pressable style={styles.communityDetailCommentEmpty} onPress={() => focusCommentInput(null)}>
@@ -2415,11 +2475,6 @@ export function PrivateChatScreen() {
   const sendImage = async () => {
     if (chatBlocked) {
       Alert.alert('已无法继续发送消息')
-      return
-    }
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync()
-    if (!permission.granted) {
-      Alert.alert('需要相册权限', '请选择图片后发送给对方。')
       return
     }
     setSendingImage(true)
@@ -3814,6 +3869,21 @@ function showError(title: string, error: unknown) {
   Alert.alert(title, userFacingErrorMessage(error))
 }
 
+function buildCommunityCommentSubtreeIds(comments: FeedCommentItem[], rootId: string): Set<string> {
+  const ids = new Set<string>([rootId])
+  let changed = true
+  while (changed) {
+    changed = false
+    for (const comment of comments) {
+      if (!ids.has(comment.id) && comment.parent_comment_id && ids.has(comment.parent_comment_id)) {
+        ids.add(comment.id)
+        changed = true
+      }
+    }
+  }
+  return ids
+}
+
 const styles = StyleSheet.create({
   flex: {
     flex: 1,
@@ -4080,6 +4150,9 @@ const styles = StyleSheet.create({
     borderLeftWidth: 2,
     borderLeftColor: '#dbeafe',
   },
+  communityDetailCommentDeleting: {
+    opacity: 0.55,
+  },
   communityDetailCommentAvatar: {
     width: 24,
     height: 24,
@@ -4120,6 +4193,13 @@ const styles = StyleSheet.create({
     color: '#334155',
     fontSize: 13,
     lineHeight: 19,
+  },
+  communityDetailCommentDelete: {
+    width: 30,
+    height: 30,
+    flexShrink: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   communityDetailCommentEmpty: {
     marginTop: 10,

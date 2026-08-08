@@ -1,11 +1,7 @@
 import { View, Text, Input, Image, Canvas, PageMeta, Swiper, SwiperItem } from '@tarojs/components'
-import rewardPointsBannerBg from '../../assets/home-handbook/reward-points.jpg'
-import feedbackBannerBg from '../../assets/home-handbook/feedback.jpg'
-import wellnessFoodScanBannerBg from '../../assets/wellness/food-scan-banner.jpg'
-import wellnessSolarTermBg from '../../assets/wellness/solar-term-autumn.jpg'
 import { CAFETERIA_HERO_BG_URL, GOOSE_DUCK_CHICKEN_BG_URL } from '../../utils/static-asset-cdn-url'
 import React from 'react'
-import Taro, { useDidHide, useDidShow, useShareAppMessage, useShareTimeline } from '@tarojs/taro'
+import Taro, { useDidShow, useShareAppMessage, useShareTimeline } from '@tarojs/taro'
 import { Empty, Button } from '@taroify/core'
 import {
   getHomeDashboard,
@@ -92,6 +88,12 @@ import { collectFoodDisplayImageUrls, hasFoodDisplayImage } from '../../utils/fo
 import { isAllowedRecordDate, isTodayRecordDate } from '../../utils/record-date'
 import { getMembershipCreditSummary, LOW_CREDIT_REWARD_HINT_THRESHOLD } from '../../utils/membership'
 import { useAppColorScheme } from '../../components/AppColorSchemeContext'
+import {
+  HOME_EXPERIENCE_PAGE_ORDER,
+  getStoredHomeExperienceConfig,
+  saveHomeExperienceConfig,
+  type HomeExperiencePageId,
+} from '../../utils/home-experience'
 
 // 导入拆分出的模块
 import { type WeightRecordEntry, type BodyMetricsStorage, type WaterRecord, type MacroKey, type WeekHeatmapState, type WeekHeatmapCell, type TargetFormState, type MacroTargets } from './types'
@@ -106,7 +108,21 @@ import {
 import { formatDisplayNumber, formatNumberWithComma, formatDateKey, createTargetForm, createWeekHeatmapCells } from './utils/helpers'
 import { canApplyCalendarResponse, mergeCalendarMonthRecords, resolveCalendarRecordTarget } from './utils/home-calendar'
 import { useAnimatedNumber, useAnimatedProgress } from './hooks'
-import { TargetEditor, GreetingSection, DateSelector, StatsEntry, RecordMenu, MealActionSheet, MealRecordsDialog, MealRecordEditModal, MealRecordPosterModal, DietRecommendationSheet, MicrosSection, type MealPosterSharePayload } from './components'
+import {
+  TargetEditor,
+  GreetingSection,
+  DateSelector,
+  StatsEntry,
+  RecordMenu,
+  MealActionSheet,
+  MealRecordsDialog,
+  MealRecordEditModal,
+  MealRecordPosterModal,
+  DietRecommendationSheet,
+  MicrosSection,
+  HomeExperienceBar,
+  type MealPosterSharePayload,
+} from './components'
 import OnboardingGuide from '../../components/OnboardingGuide'
 import { PetAvatar } from '../../components/PetAvatar'
 import { isHealthProfileReminderSnoozed, snoozeHealthProfileReminder } from '../../utils/health-profile-reminder'
@@ -121,30 +137,11 @@ import { buildFoodRecordFavoriteDraft } from '../../utils/food-record-flow'
 
 const BACKFILL_HINT_DISMISSED_DATES_KEY = 'home_backfill_hint_dismissed_dates_v1'
 const HOME_SELECTED_DATE_KEY = 'home_selected_date_v1'
-const HOME_PET_COLLAPSED_KEY = 'home_pet_companion_collapsed_v4'
-const HOME_PET_FLOAT_POSITION_KEY = 'home_pet_companion_float_position_v4'
 const HOME_PET_HIDDEN_KEY = 'home_pet_companion_hidden_v1'
 const HOME_PET_HIDDEN_CHANGED_EVENT = 'home_pet_companion_hidden_changed'
-const HOME_MODE_STORAGE_KEY = 'home_display_mode_v1'
 const CANVAS_ICON_FONT_SOURCE = __ICON_CDN_BASE_URL__
   ? `url("${__ICON_CDN_BASE_URL__.replace(/\/+$/, '')}/iconfont.ttf")`
   : ''
-
-type HomeDisplayMode = 'balanced' | 'wellness'
-
-function getStoredHomeDisplayMode(): HomeDisplayMode {
-  try {
-    return Taro.getStorageSync(HOME_MODE_STORAGE_KEY) === 'wellness' ? 'wellness' : 'balanced'
-  } catch (_) {
-    return 'balanced'
-  }
-}
-
-function saveHomeDisplayMode(mode: HomeDisplayMode) {
-  try {
-    Taro.setStorageSync(HOME_MODE_STORAGE_KEY, mode)
-  } catch (_) {}
-}
 
 function isValidHomeDate(date?: string): date is string {
   return typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)
@@ -392,76 +389,12 @@ function getMacroTargetsFromIntake(intake: HomeIntakeData): MacroTargets {
   }
 }
 
-function getStoredPetCollapsed(): boolean {
-  try {
-    return Taro.getStorageSync(HOME_PET_COLLAPSED_KEY) === '1'
-  } catch (_) {
-    return false
-  }
-}
-
 function getStoredPetHidden(): boolean {
   try {
     return Taro.getStorageSync(HOME_PET_HIDDEN_KEY) === '1'
   } catch (_) {
     return false
   }
-}
-
-function getPetFloatMetrics(collapsed: boolean) {
-  const info = Taro.getSystemInfoSync()
-  const rpx = info.windowWidth / 750
-  let menuBottom = 0
-  try {
-    const menuRect = (Taro as any).getMenuButtonBoundingClientRect?.()
-    menuBottom = Number(menuRect?.bottom || 0)
-  } catch (_) {}
-  const width = (collapsed ? 160 : 360) * rpx
-  const height = (collapsed ? 160 : 190) * rpx
-  const margin = 24 * rpx
-  return {
-    windowWidth: info.windowWidth,
-    windowHeight: info.windowHeight,
-    width,
-    height,
-    margin,
-    defaultTop: Math.max(104 * rpx, menuBottom + 10 * rpx),
-    defaultLeft: collapsed
-      ? info.windowWidth - width / 2
-      : Math.max(margin, info.windowWidth - width - 20 * rpx)
-  }
-}
-
-function clampPetFloatPosition(left: number, top: number, collapsed: boolean) {
-  const metrics = getPetFloatMetrics(collapsed)
-  const clampedLeft = collapsed
-    ? metrics.windowWidth - metrics.width / 2
-    : Math.max(metrics.margin, Math.min(left, metrics.windowWidth - metrics.width - metrics.margin))
-  return {
-    left: clampedLeft,
-    top: Math.max(metrics.margin, Math.min(top, metrics.windowHeight - metrics.height - metrics.margin))
-  }
-}
-
-function getStoredPetFloatPosition(collapsed: boolean): { left: number; top: number } {
-  try {
-    const stored = Taro.getStorageSync(HOME_PET_FLOAT_POSITION_KEY)
-    if (stored && typeof stored === 'object') {
-      const left = Number(stored.left)
-      const top = Number(stored.top)
-      if (Number.isFinite(left) && Number.isFinite(top)) {
-        return clampPetFloatPosition(left, top, collapsed)
-      }
-    }
-  } catch (_) {}
-  const metrics = getPetFloatMetrics(collapsed)
-  return { left: metrics.defaultLeft, top: metrics.defaultTop }
-}
-
-function savePetFloatPosition(position: { left: number; top: number }) {
-  try {
-    Taro.setStorageSync(HOME_PET_FLOAT_POSITION_KEY, position)
-  } catch (_) {}
 }
 
 function alignPayloadWithCalorieTarget(payload: DashboardTargets): { payload: DashboardTargets; adjusted: boolean } {
@@ -854,16 +787,16 @@ const MACRO_CONFIGS: Array<{
   { key: 'fat', label: '脂肪', subLabel: '剩余', color: '#f0985c', unit: 'g', iconClass: 'icon-zhifangyouheruhuazhifangzhipin' }
 ]
 
-type HomeHandbookBanner = {
-  key: string
-  title: string
-  desc: string
-  bgImage: string
-  url: string
-}
-
 function IndexPage() {
   const { scheme } = useAppColorScheme()
+  const [homeExperienceConfig, setHomeExperienceConfig] = React.useState(getStoredHomeExperienceConfig)
+  const [activeHomeExperiencePage, setActiveHomeExperiencePage] = React.useState<HomeExperiencePageId>('status')
+  const homeExperienceSwipeRef = React.useRef<{
+    startX: number
+    startY: number
+    endX: number
+    endY: number
+  } | null>(null)
   const initialSelectedDate = formatDateKey(new Date())
   const initialHomeSelectedDate = initialSelectedDate
   const initialLocalSnapshot = getStoredHomeDashboardSnapshotByDate(initialHomeSelectedDate)
@@ -879,52 +812,13 @@ function IndexPage() {
   const [isSwitchingDate, setIsSwitchingDate] = React.useState(false)
   /** 后台静默同步中：左上角微型 spinner，不占文档流 */
   const [dataSyncing, setDataSyncing] = React.useState(false)
-  const [petCollapsed, setPetCollapsed] = React.useState(getStoredPetCollapsed)
   const [petHidden, setPetHidden] = React.useState(getStoredPetHidden)
-  const [petFloatPosition, setPetFloatPosition] = React.useState(() => getStoredPetFloatPosition(getStoredPetCollapsed()))
-  const [petDragging, setPetDragging] = React.useState(false)
   const [petSummary, setPetSummary] = React.useState<PetSummary | null>(null)
   const [petClaiming, setPetClaiming] = React.useState(false)
-  const [petCelebrating, setPetCelebrating] = React.useState(false)
   const [membershipStatus, setMembershipStatus] = React.useState<MembershipStatus | null>(null)
   const [rewardCenter, setRewardCenter] = React.useState<RewardCenterResponse | null>(null)
-  const [handbookBannerIndex, setHandbookBannerIndex] = React.useState(0)
-  const [homeMode, setHomeMode] = React.useState<HomeDisplayMode>(getStoredHomeDisplayMode)
+  const [rewardHintIndex, setRewardHintIndex] = React.useState(0)
   const petSummarySeqRef = React.useRef(0)
-  const petDidShowCountRef = React.useRef(0)
-  const petCelebrationTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
-  const petDragRef = React.useRef<{
-    pointerId: number
-    startClientX: number
-    startClientY: number
-    startLeft: number
-    startTop: number
-    moved: boolean
-  } | null>(null)
-  /** 标记本次 touch 是否已经在 touchend 里处理过展开/收起，避免 touchend 后又触发 card onClick */
-  const petClickHandledRef = React.useRef(false)
-
-  const applyHomeNavigationPalette = React.useCallback((mode: HomeDisplayMode) => {
-    void Taro.setNavigationBarColor({
-      frontColor: '#000000',
-      backgroundColor: mode === 'wellness' ? '#f7f4eb' : '#f4faf8',
-      animation: { duration: 180, timingFunc: 'easeInOut' }
-    }).catch(() => {
-      // 状态栏配色属于视觉增强，不影响首页主流程。
-    })
-  }, [])
-
-  React.useEffect(() => {
-    applyHomeNavigationPalette(homeMode)
-  }, [applyHomeNavigationPalette, homeMode])
-
-  useDidShow(() => {
-    applyHomeNavigationPalette(homeMode)
-  })
-
-  useDidHide(() => {
-    applyHomeNavigationPalette('balanced')
-  })
   const [showTargetEditor, setShowTargetEditor] = React.useState(false)
   const [savingTargets, setSavingTargets] = React.useState(false)
   const [nutritionExpanded, setNutritionExpanded] = React.useState(false)
@@ -2019,6 +1913,73 @@ function IndexPage() {
     }
   }
 
+  const handleMealPoster = async () => {
+    if (!mealActionRecordId) return
+    const cachedRecord = getCachedMealFullRecord(mealActionRecordId)
+    if (
+      cachedRecord &&
+      String(cachedRecord.id || '').trim() &&
+      String(cachedRecord.user_id || '').trim()
+    ) {
+      setMealActionRecord(cachedRecord)
+      setShowRecordPosterModal(true)
+      return
+    }
+    Taro.showLoading({ title: '', mask: true })
+    try {
+      const res = await getFoodRecordById(mealActionRecordId)
+      const nextRecord = res.record
+      if (!nextRecord || !String(nextRecord.id || '').trim() || !String(nextRecord.user_id || '').trim()) {
+        throw new Error('记录信息不完整，请稍后重试')
+      }
+      setMealActionRecord(nextRecord)
+      setShowRecordPosterModal(true)
+    } catch (e: any) {
+      await showUnifiedApiError(e, '加载失败')
+    } finally {
+      Taro.hideLoading()
+    }
+  }
+
+  const handleMealShare = async () => {
+    if (!mealActionRecordId) return
+    try {
+      Taro.showLoading({ title: '', mask: true })
+      let record = getCachedMealFullRecord(mealActionRecordId)
+      if (!record || !String(record.id || '').trim()) {
+        const res = await getFoodRecordById(mealActionRecordId)
+        record = res.record
+      }
+      if (!record) {
+        Taro.hideLoading()
+        Taro.showToast({ title: '记录加载失败', icon: 'none' })
+        return
+      }
+      const items = (record.items || []).map((item: any) => ({
+        name: item.name || '',
+        weight: item.weight || 0,
+        nutrients: item.nutrients
+      }))
+      const shareData = {
+        imageUrl: record.image_path || '',
+        imageUrls: record.image_paths || [],
+        description: record.description || '',
+        insight: record.insight || '',
+        items,
+        totalCalories: record.total_calories || 0,
+        totalProtein: record.total_protein || 0,
+        totalCarbs: record.total_carbs || 0,
+        totalFat: record.total_fat || 0
+      }
+      Taro.setStorageSync('analyzeShareData', shareData)
+      Taro.hideLoading()
+      Taro.navigateTo({ url: `${extraPkgUrl('/pages/food-library-share/index')}?from_analyze=1` })
+    } catch (e: any) {
+      Taro.hideLoading()
+      await showUnifiedApiError(e, '加载失败')
+    }
+  }
+
   const handleMealFavorite = async () => {
     if (!mealActionRecordId || mealFavoriteInFlightRef.current) return
 
@@ -2073,73 +2034,6 @@ function IndexPage() {
       await showUnifiedApiError(e, '收藏失败')
     } finally {
       mealFavoriteInFlightRef.current = false
-    }
-  }
-
-  const handleMealPoster = async () => {
-    if (!mealActionRecordId) return
-    const cachedRecord = getCachedMealFullRecord(mealActionRecordId)
-    if (
-      cachedRecord &&
-      String(cachedRecord.id || '').trim() &&
-      String(cachedRecord.user_id || '').trim()
-    ) {
-      setMealActionRecord(cachedRecord)
-      setShowRecordPosterModal(true)
-      return
-    }
-    Taro.showLoading({ title: '加载中...', mask: true })
-    try {
-      const res = await getFoodRecordById(mealActionRecordId)
-      const nextRecord = res.record
-      if (!nextRecord || !String(nextRecord.id || '').trim() || !String(nextRecord.user_id || '').trim()) {
-        throw new Error('记录信息不完整，请稍后重试')
-      }
-      setMealActionRecord(nextRecord)
-      setShowRecordPosterModal(true)
-    } catch (e: any) {
-      await showUnifiedApiError(e, '加载失败')
-    } finally {
-      Taro.hideLoading()
-    }
-  }
-
-  const handleMealShare = async () => {
-    if (!mealActionRecordId) return
-    try {
-      Taro.showLoading({ title: '加载中...', mask: true })
-      let record = getCachedMealFullRecord(mealActionRecordId)
-      if (!record || !String(record.id || '').trim()) {
-        const res = await getFoodRecordById(mealActionRecordId)
-        record = res.record
-      }
-      if (!record) {
-        Taro.hideLoading()
-        Taro.showToast({ title: '记录加载失败', icon: 'none' })
-        return
-      }
-      const items = (record.items || []).map((item: any) => ({
-        name: item.name || '',
-        weight: item.weight || 0,
-        nutrients: item.nutrients
-      }))
-      const shareData = {
-        imageUrl: record.image_path || '',
-        imageUrls: record.image_paths || [],
-        description: record.description || '',
-        insight: record.insight || '',
-        items,
-        totalCalories: record.total_calories || 0,
-        totalProtein: record.total_protein || 0,
-        totalCarbs: record.total_carbs || 0,
-        totalFat: record.total_fat || 0
-      }
-      Taro.setStorageSync('analyzeShareData', shareData)
-      Taro.hideLoading()
-      Taro.navigateTo({ url: `${extraPkgUrl('/pages/food-library-share/index')}?from_analyze=1` })
-    } catch (e: any) {
-      Taro.hideLoading()
-      await showUnifiedApiError(e, '加载失败')
     }
   }
 
@@ -2740,6 +2634,8 @@ function IndexPage() {
     void loadPetSummary(selectedDate)
   }, [loadPetSummary, selectedDate])
 
+  const petDidShowCountRef = React.useRef(0)
+
   useDidShow(() => {
     if (petDidShowCountRef.current === 0) {
       petDidShowCountRef.current += 1
@@ -2759,6 +2655,7 @@ function IndexPage() {
     }
   }, [])
 
+  const petName = petSummary?.pet?.name || '成长伙伴'
   const healthyHabitScore = React.useMemo(() => {
     if (dashboardBusy || isGuest) return 0
     let score = 0
@@ -2787,43 +2684,34 @@ function IndexPage() {
         ? 'calm'
         : 'sleepy')
   const petState = petSummary?.status?.state || petMood
-  const petMealState = petSummary?.status?.meal_state || (totalCurrent > 0 ? 'fed' : 'hungry')
-  const petDialogText = petEvent?.message || (dashboardBusy
-    ? '我看看今天的状态。'
+  const petLevelProgress = petSummary?.pet?.level_progress ?? Math.min(100, healthyHabitScore * 25)
+  const petLevelText = petSummary?.pet?.level ? `Lv.${petSummary.pet.level} · 成长 ${petLevelProgress}%` : `成长 ${petLevelProgress}%`
+  const petMessage = petEvent?.message || petSummary?.status?.message || (dashboardBusy
+    ? '我正在看你今天的状态'
     : isGuest
-      ? '登录后，我会一直陪你。'
-      : petMealState === 'satisfied'
-        ? '三餐记好啦，今天也很棒。'
-        : petMealState === 'fed'
-          ? '这一餐记住啦。'
-          : '今天还没见到你的饭哦。')
-  const triggerPetCelebration = React.useCallback(() => {
-    if (petCelebrationTimerRef.current) {
-      clearTimeout(petCelebrationTimerRef.current)
-    }
-    setPetCelebrating(false)
-    petCelebrationTimerRef.current = setTimeout(() => {
-      setPetCelebrating(true)
-      petCelebrationTimerRef.current = setTimeout(() => {
-        setPetCelebrating(false)
-        petCelebrationTimerRef.current = null
-      }, 820)
-    }, 16)
-  }, [])
-
-  React.useEffect(() => () => {
-    if (petCelebrationTimerRef.current) {
-      clearTimeout(petCelebrationTimerRef.current)
-    }
-  }, [])
-
+      ? '登录后我会记住你的成长'
+      : healthyHabitScore >= 3
+        ? '今天习惯很稳，我长大了一点'
+        : healthyHabitScore >= 1
+          ? '再完成一个小习惯，我会更有精神'
+          : '先记录一餐，我就知道怎么陪你啦')
+  const petTaskText = petEvent?.task_text || petSummary?.status?.task_text || (dashboardBusy || isGuest
+    ? '今日成长任务'
+    : healthyHabitScore >= 3
+      ? '已点亮多个好习惯'
+      : proteinTargetRaw > 0 && proteinCur < proteinTargetRaw * 0.75
+        ? '补一点蛋白质'
+        : todayWater.total < bodyMetrics.waterGoalMl * 0.6
+          ? '喝水达到 60%'
+          : totalCurrent <= 0
+            ? '记录一餐'
+            : '保持今日节奏')
   const handleClaimPetEvent = React.useCallback(async () => {
     if (!petEvent || petClaiming) return
     setPetClaiming(true)
     try {
       const result = await claimPetEvent(petEvent.id)
       setPetSummary((prev) => prev ? { ...prev, pet: result.pet, event: result.event, status: { ...prev.status, message: '奖励已收下，我又长大了一点。' } } : prev)
-      triggerPetCelebration()
       const parts: string[] = []
       if (result.credits_awarded > 0) parts.push(`+${result.credits_awarded}积分`)
       if (result.exp_awarded > 0) parts.push(`+${result.exp_awarded}经验`)
@@ -2833,73 +2721,10 @@ function IndexPage() {
     } finally {
       setPetClaiming(false)
     }
-  }, [petClaiming, petEvent, triggerPetCelebration])
-  const togglePetCollapsed = React.useCallback(() => {
-    setPetCollapsed((prev) => {
-      const next = !prev
-      try {
-        Taro.setStorageSync(HOME_PET_COLLAPSED_KEY, next ? '1' : '0')
-      } catch (_) {}
-      setPetFloatPosition((current) => {
-        const adjusted = clampPetFloatPosition(current.left, current.top, next)
-        savePetFloatPosition(adjusted)
-        return adjusted
-      })
-      return next
-    })
-  }, [])
+  }, [petClaiming, petEvent])
   const openPetChat = React.useCallback(() => {
     Taro.navigateTo({ url: extraPkgUrl('/pages/pet-chat/index') })
   }, [])
-  const handlePetTouchStart = React.useCallback((event) => {
-    const touch = event.touches?.[0]
-    if (!touch) return
-    petDragRef.current = {
-      pointerId: touch.identifier ?? 0,
-      startClientX: touch.clientX,
-      startClientY: touch.clientY,
-      startLeft: petFloatPosition.left,
-      startTop: petFloatPosition.top,
-      moved: false
-    }
-    setPetDragging(true)
-  }, [petFloatPosition.left, petFloatPosition.top])
-
-  const handlePetTouchMove = React.useCallback((event) => {
-    const drag = petDragRef.current
-    if (!drag) return
-    const touches = Array.from(event.touches || []) as Array<{ identifier?: number; clientX: number; clientY: number }>
-    const touch = touches.find((item: any) => (item.identifier ?? 0) === drag.pointerId) || touches[0]
-    if (!touch) return
-    const dx = touch.clientX - drag.startClientX
-    const dy = touch.clientY - drag.startClientY
-    if (Math.abs(dx) > 4 || Math.abs(dy) > 4) {
-      drag.moved = true
-    }
-    setPetFloatPosition(clampPetFloatPosition(drag.startLeft + dx, drag.startTop + dy, petCollapsed))
-  }, [petCollapsed])
-
-  const handlePetTouchEnd = React.useCallback(() => {
-    const drag = petDragRef.current
-    petDragRef.current = null
-    setPetDragging(false)
-    setPetFloatPosition((current) => {
-      const adjusted = clampPetFloatPosition(current.left, current.top, petCollapsed)
-      savePetFloatPosition(adjusted)
-      return adjusted
-    })
-    if (!drag) return
-    if (drag.moved) {
-      // 发生过拖动，阻止后续 click 被当成点击卡片
-      petClickHandledRef.current = true
-      return
-    }
-    if (petCollapsed) {
-      // 收起态轻触展开；由 card onClick 兜底处理，这里先标记避免重复触发
-      petClickHandledRef.current = true
-      togglePetCollapsed()
-    }
-  }, [petCollapsed, togglePetCollapsed])
 
   const handleShareDailyPosterImage = React.useCallback(() => {
     if (!dailyPosterImageUrl) return
@@ -2935,7 +2760,7 @@ function IndexPage() {
       return
     }
     if (loading || isSwitchingDate) {
-      Taro.showToast({ title: '数据加载中，请稍候', icon: 'none' })
+      Taro.showToast({ title: '数据尚未就绪，请稍后重试', icon: 'none' })
       return
     }
     if (dailyPosterGenerating) return
@@ -3154,45 +2979,66 @@ function IndexPage() {
     availableRewardCredits > 0 &&
     (membershipCredits.remaining < LOW_CREDIT_REWARD_HINT_THRESHOLD || rewardHintTasks.some(isRewardTaskAvailable))
   const rewardHintTaskText = formatRewardHintTaskText(rewardHintTasks)
-  const handbookBanners: HomeHandbookBanner[] = [
+  const rewardHintBanners = [
     {
       key: 'goose-duck-chicken',
+      className: 'home-reward-hint--goose-duck-chicken',
+      kicker: '热点专线',
       title: '鹅腿还是鸭腿？',
       desc: '上传图片，让食探只在鹅 / 鸭 / 鸡里做判断',
+      actionText: '去识别',
       url: extraPkgUrl('/pages/goose-duck-chicken/index'),
       bgImage: GOOSE_DUCK_CHICKEN_BG_URL,
     },
     ...(showRewardCreditHint ? [{
       key: 'reward',
+      className: 'home-reward-hint--reward',
+      kicker: '今日可赚积分',
       title: `今天还可以赚 ${availableRewardCredits} 积分`,
       desc: rewardHintTaskText,
+      actionText: '去赚',
       url: extraPkgUrl('/pages/reward-center/index'),
-      bgImage: rewardPointsBannerBg,
+      bgImage: undefined,
     }] : []),
     {
       key: 'campus',
+      className: 'home-reward-hint--campus',
+      kicker: '食探校园活动',
       title: '食探校园食堂计划',
       desc: '一起补全食堂菜品、价格、窗口和营养信息',
+      actionText: '去看看',
       url: extraPkgUrl('/pages/campus-canteen/index'),
       bgImage: CAFETERIA_HERO_BG_URL,
     },
     {
       key: 'feedback',
+      className: 'home-reward-hint--feedback',
+      kicker: '帮助我们一起成长',
       title: '意见反馈',
       desc: '提交宝贵建议，最高可得 +5 积分',
+      actionText: '去反馈',
       url: extraPkgUrl('/pages/feedback/index'),
-      bgImage: feedbackBannerBg,
+      bgImage: undefined,
     },
-  ]
-  const activeHandbookBannerIndex = handbookBannerIndex % handbookBanners.length
+  ] as const
+  const showRewardHint = !isGuest && rewardHintBanners.length > 0
+  const activeRewardHintIndex = rewardHintBanners.length > 0 ? rewardHintIndex % rewardHintBanners.length : 0
 
-  const handleHandbookBannerClick = React.useCallback((banner: HomeHandbookBanner) => {
+  // 首页轮播图自动轮播
+  React.useEffect(() => {
+    const timer = setInterval(() => {
+      setRewardHintIndex((current) => (current + 1) % Math.max(rewardHintBanners.length, 1))
+    }, 5000)
+    return () => clearInterval(timer)
+  }, [rewardHintBanners.length])
+
+  const handleRewardHintClick = React.useCallback((url: string) => {
     Taro.navigateTo({
-      url: banner.url,
+      url,
       fail: (error) => {
-        console.warn('首页内容横幅跳转失败', { url: banner.url, error })
+        console.warn('首页横幅跳转失败', { url, error })
         Taro.showToast({
-          title: '内容加载失败，请稍后重试',
+          title: '入口加载失败，请稍后重试',
           icon: 'none',
         })
       },
@@ -3201,110 +3047,6 @@ function IndexPage() {
   const openBackfillRecordMenu = () => {
     setShowRecordMenu(true)
   }
-
-  const switchHomeMode = React.useCallback(() => {
-    setHomeMode((current) => {
-      const next = current === 'balanced' ? 'wellness' : 'balanced'
-      saveHomeDisplayMode(next)
-      return next
-    })
-  }, [])
-
-  const wellnessCaloriePct = Math.min(100, calculateProgressPercent(totalCurrent, normalizeDisplayNumber(intakeData.target)))
-  const petVisualCollapsed = petCollapsed
-  const bodyStatusCards = (
-    <View className='body-status-section'>
-      <View className='body-status-card weight-card' onClick={() => openBodyMetricRecord('weight')} onLongPress={openWeightEditor}>
-        <View className='body-status-header'>
-          <View className='body-status-title-wrap'>
-            <Text className='iconfont icon-weight-scale' style={{ marginRight: '6rpx', fontSize: '26rpx', color: '#6b7280' }} />
-            <Text className='body-status-title'>体重</Text>
-          </View>
-        </View>
-        <View className='body-status-content'>
-          {dashboardBusy ? (
-            <View style={{ display: 'flex', alignItems: 'center', gap: '12rpx', minHeight: '52rpx' }}>
-              <Text className='body-status-value' style={{ color: '#9ca3af' }}>--</Text>
-              <View className='loading-spinner' style={{ width: '22rpx', height: '22rpx', borderWidth: '3rpx' }} />
-            </View>
-          ) : isGuest ? (
-            <Text className='body-status-value' style={{ color: '#9ca3af' }}>--</Text>
-          ) : weightSummary.latestWeight ? (
-            <>
-              <Text className='body-status-value'>{weightSummary.latestWeight.value.toFixed(1)}</Text>
-              <Text className='body-status-unit'>kg</Text>
-              {weightSummary.weightChange !== null && (
-                <Text className={`body-status-change ${weightSummary.weightChange > 0 ? 'up' : 'down'}`}>
-                  {weightSummary.weightChange > 0 ? '+' : ''}{weightSummary.weightChange.toFixed(1)}
-                </Text>
-              )}
-            </>
-          ) : (
-            <Text className='body-status-empty'>点击记录</Text>
-          )}
-        </View>
-        <Text className='body-status-hint'>
-          {isGuest
-            ? '记录体重，追踪变化'
-            : weightSummary.latestWeight
-              ? `上次记录: ${weightSummary.latestWeight.date.slice(5)}`
-              : '点击记录体重'}
-        </Text>
-      </View>
-
-      <View className='body-status-card water-card' onClick={() => openBodyMetricRecord('water')} onLongPress={openWaterEditor}>
-        <View className='body-status-header'>
-          <View className='body-status-title-wrap'>
-            <Text className='iconfont icon-drink' style={{ marginRight: '6rpx', fontSize: '26rpx', color: '#5c9ed4' }} />
-            <Text className='body-status-title'>喝水</Text>
-          </View>
-        </View>
-        <View className='body-status-content'>
-          {dashboardBusy ? (
-            <View style={{ display: 'flex', alignItems: 'center', gap: '12rpx', minHeight: '52rpx' }}>
-              <Text className='body-status-value' style={{ color: '#9ca3af' }}>--</Text>
-              <View className='loading-spinner' style={{ width: '22rpx', height: '22rpx', borderWidth: '3rpx' }} />
-            </View>
-          ) : isGuest ? (
-            <Text className='body-status-value' style={{ color: '#9ca3af' }}>--</Text>
-          ) : (
-            <>
-              <Text className='body-status-value'>{Math.round(animatedWaterTotal)}</Text>
-              <Text className='body-status-unit'>ml</Text>
-            </>
-          )}
-        </View>
-        <Text className='body-status-hint'>
-          {dashboardBusy || isGuest ? '点击记录喝水' : `${Math.round(animatedWaterProgress)}% / 目标 ${bodyMetrics.waterGoalMl}ml`}
-        </Text>
-      </View>
-
-      <View className='body-status-card exercise-card' onClick={() => openBodyMetricRecord('exercise')} onLongPress={openExerciseRecord}>
-        <View className='body-status-header'>
-          <View className='body-status-title-wrap'>
-            <Text className='iconfont icon-dumbbell' style={{ marginRight: '6rpx', fontSize: '26rpx', color: '#f0985c' }} />
-            <Text className='body-status-title'>运动</Text>
-          </View>
-        </View>
-        <View className='body-status-content'>
-          {dashboardBusy ? (
-            <View style={{ display: 'flex', alignItems: 'center', gap: '12rpx', minHeight: '52rpx' }}>
-              <Text className='body-status-value' style={{ color: '#9ca3af' }}>--</Text>
-              <View className='loading-spinner' style={{ width: '22rpx', height: '22rpx', borderWidth: '3rpx' }} />
-            </View>
-          ) : isGuest ? (
-            <Text className='body-status-value' style={{ color: '#9ca3af' }}>--</Text>
-          ) : (
-            <>
-              <Text className='body-status-value'>{Math.round(animatedExerciseBurnedKcal)}</Text>
-              <Text className='body-status-unit'>kcal</Text>
-            </>
-          )}
-        </View>
-        <Text className='body-status-hint'>点击记录运动</Text>
-      </View>
-    </View>
-  )
   const handleDismissBackfillHint = async () => {
     const { confirm } = await Taro.showModal({
       title: '取消补录提醒',
@@ -3321,9 +3063,67 @@ function IndexPage() {
     })
   }
 
+  const handleHomeExperienceModeToggle = React.useCallback(() => {
+    const nextMode = homeExperienceConfig.mode === 'wellness' ? 'balanced' : 'wellness'
+    const saved = saveHomeExperienceConfig({ version: 2, mode: nextMode })
+    setHomeExperienceConfig(saved)
+    if (nextMode === 'wellness') setActiveHomeExperiencePage('status')
+    Taro.showToast({
+      title: nextMode === 'wellness' ? '已切换至养生模式' : '已切换至均衡模式',
+      icon: 'none',
+    })
+  }, [homeExperienceConfig.mode])
+
+  const selectHomeExperiencePage = React.useCallback((pageID: HomeExperiencePageId) => {
+    setActiveHomeExperiencePage(pageID)
+  }, [])
+
+  const handleHomeExperienceTouchStart = React.useCallback((event) => {
+    const touch = event.touches?.[0]
+    if (!touch) return
+    homeExperienceSwipeRef.current = {
+      startX: touch.clientX,
+      startY: touch.clientY,
+      endX: touch.clientX,
+      endY: touch.clientY,
+    }
+  }, [])
+
+  const handleHomeExperienceTouchMove = React.useCallback((event) => {
+    const touch = event.touches?.[0]
+    const gesture = homeExperienceSwipeRef.current
+    if (!touch || !gesture) return
+    gesture.endX = touch.clientX
+    gesture.endY = touch.clientY
+  }, [])
+
+  const handleHomeExperienceTouchEnd = React.useCallback(() => {
+    const gesture = homeExperienceSwipeRef.current
+    homeExperienceSwipeRef.current = null
+    if (!gesture) return
+    const dx = gesture.endX - gesture.startX
+    const dy = gesture.endY - gesture.startY
+    if (Math.abs(dx) < 56 || Math.abs(dx) <= Math.abs(dy) * 1.25) return
+    const currentIndex = HOME_EXPERIENCE_PAGE_ORDER.indexOf(activeHomeExperiencePage)
+    if (currentIndex < 0) return
+    const nextIndex = dx < 0
+      ? Math.min(HOME_EXPERIENCE_PAGE_ORDER.length - 1, currentIndex + 1)
+      : Math.max(0, currentIndex - 1)
+    if (nextIndex !== currentIndex) {
+      setActiveHomeExperiencePage(HOME_EXPERIENCE_PAGE_ORDER[nextIndex])
+    }
+  }, [activeHomeExperiencePage])
+
+  const openPetHome = React.useCallback(() => {
+    Taro.navigateTo({ url: extraPkgUrl('/pages/pet-home/index') })
+  }, [])
+
+  const isWellnessMode = homeExperienceConfig.mode === 'wellness'
+  const isBalancedMode = homeExperienceConfig.mode === 'balanced'
+
   return (
     <View
-      className={`home-page home-page--${homeMode} ${scheme === 'dark' ? 'home-page--dark' : ''} ${showRecordEditModal || showHomeOnboardingGuide ? 'home-page--modal-open' : ''}`}
+      className={`home-page home-page--mode-${homeExperienceConfig.mode} ${scheme === 'dark' ? 'home-page--dark' : ''} ${homePageScrollLocked ? 'home-page--modal-open' : ''}`}
     >
       <PageMeta
         pageStyle={
@@ -3338,91 +3138,24 @@ function IndexPage() {
           <View className='home-page__data-sync-spinner' />
         </View>
       ) : null}
-      {!petHidden ? (
-        <View
-          className={`pet-companion-float ${petVisualCollapsed ? 'is-collapsed' : 'is-expanded'} ${petDragging ? 'is-dragging' : ''} ${petCelebrating ? 'is-celebrating' : ''}`}
-          style={{
-            left: `${petFloatPosition.left}px`,
-            top: `${petFloatPosition.top}px`
-          }}
-          onTouchStart={handlePetTouchStart}
-          onTouchMove={handlePetTouchMove}
-          onTouchEnd={handlePetTouchEnd}
-          onTouchCancel={handlePetTouchEnd}
-        >
-          <View
-            className='pet-companion-card'
-            onClick={() => {
-              const handled = petClickHandledRef.current
-              petClickHandledRef.current = false
-              if (handled) return
-              if (petVisualCollapsed) {
-                togglePetCollapsed()
-              }
-              // 展开态点击卡片空白处不进入对话，只有「点我聊聊」进入
-            }}
-          >
-            <View className='pet-companion-content'>
-              <View
-                className='pet-companion-chat'
-                onClick={(event) => {
-                  event.stopPropagation()
-                  openPetChat()
-                }}
-              >
-                <Text className='pet-companion-chat-text'>{petDialogText}</Text>
-              </View>
-            </View>
-            <View
-              className='pet-companion-stage'
-              onClick={(event) => {
-                event.stopPropagation()
-                const handled = petClickHandledRef.current
-                petClickHandledRef.current = false
-                if (handled) return
-                if (petVisualCollapsed) {
-                  togglePetCollapsed()
-                  return
-                }
-                openPetChat()
-              }}
-            >
-              <View className={`pet-companion-aura is-${petMealState}`} />
-              <PetAvatar
-                pet={petSummary?.pet}
-                size='large'
-                mood={petMood}
-                state={petState}
-                mealState={petMealState}
-                motion='companion'
-                className='pet-companion-avatar'
-              />
-              <View className='pet-companion-stage-shadow' />
-            </View>
-            {!petVisualCollapsed ? (
-              <View
-                className='pet-companion-collapse'
-                onClick={(event) => {
-                  event.stopPropagation()
-                  togglePetCollapsed()
-                }}
-              >
-                <View className='pet-companion-collapse-icon' />
-              </View>
-            ) : null}
-          </View>
-        </View>
-      ) : null}
       {/* 页面内容 */}
       <View className='page-content'>
         {/* 问候区 */}
-        <GreetingSection onSharePress={handleShareDailySummary} />
-        <View className='home-mode-switch-row'>
-            <View className='home-mode-switch' onClick={switchHomeMode}>
-              <Text className='home-mode-switch__arrow'>⇄</Text>
-              <Text className='home-mode-switch__text'>{homeMode === 'balanced' ? '养生模式' : '均衡模式'}</Text>
-            </View>
-        </View>
+        <GreetingSection
+          onSharePress={handleShareDailySummary}
+          mode={homeExperienceConfig.mode}
+          onModeToggle={handleHomeExperienceModeToggle}
+          petAvatar={petHidden ? undefined : (
+            <PetAvatar
+              pet={petSummary?.pet}
+              size={58}
+              mood={petMood}
+              state={petState}
+              className='greeting-pet__avatar'
+            />
+          )}
+          onPetPress={openPetHome}
+        />
 
         {!getAccessToken() && (
           <View
@@ -3466,10 +3199,89 @@ function IndexPage() {
           monthLoading={calendarMonthLoading}
           monthLoadError={calendarMonthLoadError}
         />
-        {homeMode === 'balanced' ? (
-          <View className='balanced-home-content'>
+
+        {isWellnessMode && (
+          <HomeExperienceBar
+            activePage={activeHomeExperiencePage}
+            onSelectPage={selectHomeExperiencePage}
+          />
+        )}
+
+        {showRewardHint && (
+          <View className='home-reward-hint-swiper'>
+            <Swiper
+              className='home-reward-hint-swiper__track'
+              current={activeRewardHintIndex}
+              circular
+              duration={300}
+              onChange={(e) => setRewardHintIndex(e.detail.current)}
+            >
+              {rewardHintBanners.map((banner) => (
+                <SwiperItem key={banner.key} className='home-reward-hint-swiper__item'>
+                  <View
+                    className={`home-reward-hint ${banner.className}`}
+                    onClick={() => handleRewardHintClick(banner.url)}
+                  >
+                    {banner.bgImage && (
+                      <Image
+                        className='home-reward-hint__bg'
+                        src={banner.bgImage}
+                        mode='aspectFill'
+                      />
+                    )}
+                    <View className='home-reward-hint__main'>
+                      <Text className='home-reward-hint__kicker'>{banner.kicker}</Text>
+                      <Text className='home-reward-hint__title'>{banner.title}</Text>
+                      <Text className='home-reward-hint__desc'>{banner.desc}</Text>
+                    </View>
+                    <View
+                      className='home-reward-hint__actions'
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        handleRewardHintClick(banner.url)
+                      }}
+                    >
+                      <Text className='home-reward-hint__go'>{banner.actionText}</Text>
+                    </View>
+                  </View>
+                </SwiperItem>
+              ))}
+            </Swiper>
+            <View className='home-reward-hint__dots'>
+              {rewardHintBanners.map((banner, index) => (
+                <Text
+                  key={banner.key}
+                  className={`home-reward-hint__dot ${index === activeRewardHintIndex ? 'active' : ''}`}
+                />
+              ))}
+            </View>
+          </View>
+        )}
+        {showBackfillHint && (
+          <View className='home-backfill-hint'>
+            <Text className='home-backfill-hint__dot' />
+            <View className='home-backfill-hint__copy'>
+              <Text className='home-backfill-hint__text'>可补录这一天的食物、体重、喝水和运动记录</Text>
+            </View>
+            <View className='home-backfill-hint__actions'>
+              <Text className='home-backfill-hint__action' onClick={openBackfillRecordMenu}>去补录</Text>
+              <Text className='home-backfill-hint__cancel' onClick={handleDismissBackfillHint}>取消</Text>
+            </View>
+          </View>
+        )}
+
+        <View
+          key={`${homeExperienceConfig.mode}-${activeHomeExperiencePage}`}
+          className={`home-experience-stage home-experience-stage--${isBalancedMode ? 'balanced' : activeHomeExperiencePage}`}
+          onTouchStart={isWellnessMode ? handleHomeExperienceTouchStart : undefined}
+          onTouchMove={isWellnessMode ? handleHomeExperienceTouchMove : undefined}
+          onTouchEnd={isWellnessMode ? handleHomeExperienceTouchEnd : undefined}
+          onTouchCancel={isWellnessMode ? handleHomeExperienceTouchEnd : undefined}
+        >
+
         {/* 热量总览卡片 + 三大营养素合并（仅展示与编辑目标，不整卡跳转） */}
-        <View className='main-card combined-card'>
+        {(isBalancedMode || isWellnessMode) && (
+        <View className='main-card combined-card home-experience-card'>
           <View className='main-card-header'>
             <View className='main-card-title'>
               <Text className='card-label'>
@@ -3616,61 +3428,139 @@ function IndexPage() {
             )}
           </View>
         </View>
-
-        {!isGuest && (
-          <View className='home-handbook-swiper'>
-            <Swiper
-              className='home-handbook-swiper__track'
-              current={activeHandbookBannerIndex}
-              circular
-              autoplay
-              interval={5000}
-              duration={360}
-              nextMargin='42rpx'
-              onChange={(event) => setHandbookBannerIndex(event.detail.current)}
-            >
-              {handbookBanners.map((banner) => (
-                <SwiperItem key={banner.key} className='home-handbook-swiper__item'>
-                  <View className='home-handbook-card' onClick={() => handleHandbookBannerClick(banner)}>
-                    <Image className='home-handbook-card__bg' src={banner.bgImage} mode='aspectFill' />
-                    <View className='home-handbook-card__shade' />
-                    <View className='home-handbook-card__copy'>
-                      <Text className='home-handbook-card__title'>{banner.title}</Text>
-                      <Text className='home-handbook-card__desc'>{banner.desc}</Text>
-                    </View>
-                  </View>
-                </SwiperItem>
-              ))}
-            </Swiper>
-            <View className='home-handbook-swiper__dots'>
-              {handbookBanners.map((banner, index) => (
-                <Text
-                  key={banner.key}
-                  className={`home-handbook-swiper__dot ${index === activeHandbookBannerIndex ? 'active' : ''}`}
-                />
-              ))}
-            </View>
-          </View>
         )}
 
-        {showBackfillHint && (
-          <View className='home-backfill-hint'>
-            <Text className='home-backfill-hint__dot' />
-            <View className='home-backfill-hint__copy'>
-              <Text className='home-backfill-hint__text'>可补录这一天的食物、体重、喝水和运动记录</Text>
+        {(isBalancedMode || activeHomeExperiencePage === 'recommendations') && (
+        <View className='diet-rec-entry home-experience-card'>
+          <View className='diet-rec-entry-main'>
+            <View className='diet-rec-entry-icon'>
+              <Text className='iconfont icon-canciguanli diet-rec-entry-icon-text' />
             </View>
-            <View className='home-backfill-hint__actions'>
-              <Text className='home-backfill-hint__action' onClick={openBackfillRecordMenu}>去补录</Text>
-              <Text className='home-backfill-hint__cancel' onClick={handleDismissBackfillHint}>取消</Text>
+            <View className='diet-rec-entry-copy'>
+              <Text className='diet-rec-entry-title'>今天吃什么</Text>
+              <Text className='diet-rec-entry-subtitle'>
+                {dashboardBusy || isGuest
+                  ? '按剩余目标推荐一餐'
+                  : `还可吃 ${formatDisplayNumber(Math.max(0, Math.round(intakeData.target - intakeData.current)))} kcal`}
+              </Text>
             </View>
           </View>
+          <View className='diet-rec-entry-actions'>
+            <View className='diet-rec-entry-btn' onClick={() => openDietRecommendation('eat_out')}>
+              <Text className='diet-rec-entry-btn-text'>外面吃</Text>
+            </View>
+            <View className='diet-rec-entry-btn primary' onClick={() => openDietRecommendation('cook_home')}>
+              <Text className='diet-rec-entry-btn-text primary'>自己做</Text>
+            </View>
+          </View>
+        </View>
         )}
 
-        {/* 体重、喝水、运动状态卡片 */}
-        {bodyStatusCards}
+        {/* 体重/喝水状态卡片 */}
+        {(isBalancedMode || activeHomeExperiencePage === 'records') && (
+        <View className='body-status-section home-experience-card'>
+          {/* 体重卡片 */}
+          <View className='body-status-card weight-card' onClick={() => openBodyMetricRecord('weight')} onLongPress={openWeightEditor}>
+            <View className='body-status-header'>
+              <View className='body-status-title-wrap'>
+                <Text className='iconfont icon-weight-scale' style={{ marginRight: '6rpx', fontSize: '26rpx', color: '#6b7280' }} />
+                <Text className='body-status-title'>体重</Text>
+              </View>
+            </View>
+            <View className='body-status-content'>
+              {dashboardBusy ? (
+                <View style={{ display: 'flex', alignItems: 'center', gap: '12rpx', minHeight: '52rpx' }}>
+                  <Text className='body-status-value' style={{ color: '#9ca3af' }}>--</Text>
+                  <View className='loading-spinner' style={{ width: '22rpx', height: '22rpx', borderWidth: '3rpx' }} />
+                </View>
+              ) : isGuest ? (
+                <Text className='body-status-value' style={{ color: '#9ca3af' }}>--</Text>
+              ) : weightSummary.latestWeight ? (
+                <>
+                  <Text className='body-status-value'>{weightSummary.latestWeight.value.toFixed(1)}</Text>
+                  <Text className='body-status-unit'>kg</Text>
+                  {weightSummary.weightChange !== null && (
+                    <Text className={`body-status-change ${weightSummary.weightChange > 0 ? 'up' : 'down'}`}>
+                      {weightSummary.weightChange > 0 ? '+' : ''}{weightSummary.weightChange.toFixed(1)}
+                    </Text>
+                  )}
+                </>
+              ) : (
+                <Text className='body-status-empty'>点击记录</Text>
+              )}
+            </View>
+            <Text className='body-status-hint'>
+              {isGuest
+                ? '记录体重，追踪变化'
+                : weightSummary.latestWeight
+                  ? `上次记录: ${weightSummary.latestWeight.date.slice(5)}`
+                  : '点击记录体重'}
+            </Text>
+          </View>
+
+          {/* 喝水卡片 */}
+          <View className='body-status-card water-card' onClick={() => openBodyMetricRecord('water')} onLongPress={openWaterEditor}>
+            <View className='body-status-header'>
+              <View className='body-status-title-wrap'>
+                <Text className='iconfont icon-drink' style={{ marginRight: '6rpx', fontSize: '26rpx', color: '#5c9ed4' }} />
+                <Text className='body-status-title'>喝水</Text>
+              </View>
+            </View>
+            <View className='body-status-content'>
+              {dashboardBusy ? (
+                <View style={{ display: 'flex', alignItems: 'center', gap: '12rpx', minHeight: '52rpx' }}>
+                  <Text className='body-status-value' style={{ color: '#9ca3af' }}>--</Text>
+                  <View className='loading-spinner' style={{ width: '22rpx', height: '22rpx', borderWidth: '3rpx' }} />
+                </View>
+              ) : isGuest ? (
+                <Text className='body-status-value' style={{ color: '#9ca3af' }}>--</Text>
+              ) : (
+                <>
+                  <Text className='body-status-value'>{Math.round(animatedWaterTotal)}</Text>
+                  <Text className='body-status-unit'>ml</Text>
+                </>
+              )}
+            </View>
+            <Text className='body-status-hint'>
+              {dashboardBusy || isGuest ? '点击记录喝水' : `${Math.round(animatedWaterProgress)}% / 目标 ${bodyMetrics.waterGoalMl}ml`}
+            </Text>
+          </View>
+
+          {/* 运动卡片 */}
+          <View className='body-status-card exercise-card' onClick={() => openBodyMetricRecord('exercise')} onLongPress={openExerciseRecord}>
+            <View className='body-status-header'>
+              <View className='body-status-title-wrap'>
+                <Text className='iconfont icon-dumbbell' style={{ marginRight: '6rpx', fontSize: '26rpx', color: '#f0985c' }} />
+                <Text className='body-status-title'>运动</Text>
+              </View>
+            </View>
+            <View className='body-status-content'>
+              {dashboardBusy ? (
+                <View style={{ display: 'flex', alignItems: 'center', gap: '12rpx', minHeight: '52rpx' }}>
+                  <Text className='body-status-value' style={{ color: '#9ca3af' }}>--</Text>
+                  <View className='loading-spinner' style={{ width: '22rpx', height: '22rpx', borderWidth: '3rpx' }} />
+                </View>
+              ) : isGuest ? (
+                <Text className='body-status-value' style={{ color: '#9ca3af' }}>--</Text>
+              ) : (
+                <>
+                  <Text className='body-status-value'>
+                    {Math.round(animatedExerciseBurnedKcal)}
+                  </Text>
+                  <Text className='body-status-unit'>kcal</Text>
+                </>
+              )}
+            </View>
+            <Text className='body-status-hint'>
+              点击记录运动
+            </Text>
+          </View>
+        </View>
+        )}
 
         {/* 今日餐食区域 */}
-        <View className='meals-section'>
+        {(isBalancedMode || activeHomeExperiencePage === 'records') && (
+        <View className='meals-section home-experience-card'>
           <View className='section-header'>
             <View className='meals-title-wrap'>
               <Text className='iconfont icon-canciguanli meals-title-icon' />
@@ -3835,10 +3725,11 @@ function IndexPage() {
             )}
           </View>
         </View>
+        )}
 
         {/* 食物保质期：快到期提醒（数据来自首页 dashboard） */}
-        {showFoodExpiryBlock && (
-          <View className='expiry-section'>
+        {(isBalancedMode || activeHomeExperiencePage === 'reminders') && showFoodExpiryBlock && (
+          <View className='expiry-section home-experience-card'>
             <View className='section-header'>
               <View className='meals-title-wrap'>
                 <Text className='iconfont icon-kefulan meals-title-icon' />
@@ -3924,137 +3815,93 @@ function IndexPage() {
         )}
 
         {/* 查看统计入口 */}
-        <StatsEntry onClick={openDayRecordForSelectedDate} />
-
-            {/* 底部留白 */}
-            <View className='bottom-spacer' />
-          </View>
-        ) : (
-          <View className='wellness-home-content'>
-            <View className='wellness-overview-card'>
-              <View className='wellness-overview-main'>
-                <View className='wellness-calorie-gauge' style={{ '--wellness-progress': `${wellnessCaloriePct}%` } as React.CSSProperties}>
-                  <View className='wellness-calorie-gauge__center'>
-                    <Text className='wellness-calorie-gauge__label'>剩余可摄入</Text>
-                    <Text className='wellness-calorie-gauge__value'>
-                      {dashboardBusy || isGuest ? '--' : formatNumberWithComma(Math.round(Math.max(0, totalTarget - totalCurrent)))}
-                    </Text>
-                    <Text className='wellness-calorie-gauge__unit'>kcal</Text>
-                    <Text className='iconfont icon-a-144-lvye wellness-calorie-gauge__leaf' />
-                  </View>
-                </View>
-
-                <View className='wellness-overview-detail'>
-                  <Text className='wellness-intake-summary'>
-                    已摄入 {dashboardBusy || isGuest ? '--' : formatDisplayNumber(Math.round(totalCurrent))} kcal / {dashboardBusy || isGuest ? '--' : formatDisplayNumber(Math.round(totalTarget))} kcal
-                  </Text>
-                  <View className='wellness-total-progress'>
-                    <View className='wellness-total-progress__fill' style={{ width: `${wellnessCaloriePct}%` }} />
-                  </View>
-                  <View className='wellness-macros'>
-                    {MACRO_CONFIGS.map(({ key, label, color, unit, iconClass }) => {
-                      const macro = intakeData.macros[key]
-                      const current = normalizeDisplayNumber(macro?.current)
-                      const target = normalizeDisplayNumber(macro?.target)
-                      const pct = Math.min(100, calculateProgressPercent(current, target))
-                      return (
-                        <View key={key} className='wellness-macro'>
-                          <View className='wellness-macro__title'>
-                            <Text className={`iconfont ${iconClass} wellness-macro__icon`} style={{ color }} />
-                            <Text>{label}</Text>
-                          </View>
-                          <View className='wellness-macro__numbers'>
-                            <Text className='wellness-macro__current'>{dashboardBusy || isGuest ? '--' : formatDisplayNumber(current)}</Text>
-                            <Text className='wellness-macro__target'> / {dashboardBusy || isGuest ? '--' : formatDisplayNumber(target)}{unit}</Text>
-                          </View>
-                          <View className='wellness-macro__track'>
-                            <View className='wellness-macro__fill' style={{ width: `${pct}%` }} />
-                          </View>
-                        </View>
-                      )
-                    })}
-                  </View>
-                </View>
-              </View>
-
-              <View className={`nutrition-expand-shell wellness-nutrition-shell${nutritionExpanded ? ' is-expanded' : ''}`}>
-                <View
-                  className='nutrition-expand-main'
-                  onClick={() => setNutritionExpanded((value) => !value)}
-                >
-                  <View className='nutrition-expand-title-row'>
-                    <Text className='nutrition-expand-title'>营养概览</Text>
-                    <View className='nutrition-expand-affordance'>
-                      <Text className={`iconfont ${nutritionExpanded ? 'icon-collapse' : 'icon-expand'} nutrition-expand-affordance-icon`} />
-                      <Text className='nutrition-expand-affordance-text'>
-                        {nutritionExpanded ? '收起' : '展开更多'}
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-
-                {nutritionExpanded && (
-                  <View className='nutrition-expanded-body wellness-nutrition-expanded-body'>
-                    <MicrosSection
-                      intakeData={intakeData}
-                      dashboardBusy={dashboardBusy}
-                      isGuest={isGuest}
-                    />
-                  </View>
-                )}
-              </View>
-            </View>
-
-            <View className='wellness-daily-advice'>
-              <Image className='wellness-daily-advice__bg' src={wellnessSolarTermBg} mode='aspectFill' />
-              <View className='wellness-daily-advice__shade' />
-              <View className='wellness-daily-advice__inner'>
-                <View className='wellness-daily-advice__heading'>
-                  <Text className='iconfont icon-a-144-lvye wellness-daily-advice__icon' />
-                  <Text className='wellness-daily-advice__title'>今日养生建议</Text>
-                </View>
-                <View className='wellness-daily-advice__content'>
-                  <View className='wellness-daily-advice__season-copy'>
-                    <Text className='wellness-daily-advice__term'>立秋</Text>
-                    <Text className='wellness-daily-advice__summary'>润燥养肺，饮食宜清淡</Text>
-                  </View>
-                  <View className='wellness-daily-advice__items'>
-                    <View className='wellness-daily-advice__item'>
-                      <Text className='wellness-daily-advice__tag'>宜</Text>
-                      <Text className='wellness-daily-advice__item-text'>绿色蔬菜</Text>
-                    </View>
-                    <View className='wellness-daily-advice__item'>
-                      <Text className='wellness-daily-advice__tag'>建议</Text>
-                      <Text className='wellness-daily-advice__item-text'>优质蛋白</Text>
-                    </View>
-                    <View className='wellness-daily-advice__item'>
-                      <Text className='wellness-daily-advice__tag is-warm'>少</Text>
-                      <Text className='wellness-daily-advice__item-text'>辛辣油腻</Text>
-                    </View>
-                  </View>
-                </View>
-              </View>
-            </View>
-
-            <View className='wellness-food-banner' onClick={handleQuickRecord}>
-              <Image className='wellness-food-banner__bg' src={wellnessFoodScanBannerBg} mode='aspectFill' />
-              <View className='wellness-food-banner__shade' />
-              <View className='wellness-food-banner__copy'>
-                <Text className='wellness-food-banner__eyebrow'>今日养生食鉴</Text>
-                <Text className='wellness-food-banner__title'>AI 食物识别</Text>
-                <Text className='wellness-food-banner__desc'>拍照看看这份食物是否适合今日养生</Text>
-                <View className='wellness-food-banner__action'>
-                  <Text>识别记录</Text>
-                  <Text className='iconfont icon-right-arrow wellness-food-banner__arrow' />
-                </View>
-              </View>
-            </View>
-
-            {bodyStatusCards}
-
-            <View className='bottom-spacer' />
+        {(isBalancedMode || activeHomeExperiencePage === 'recommendations') && (
+          <View className='home-experience-card'>
+            <StatsEntry onClick={openDayRecordForSelectedDate} />
           </View>
         )}
+
+        {isWellnessMode
+          && activeHomeExperiencePage === 'reminders'
+          && !showRewardHint
+          && !showFoodExpiryBlock && (
+          <View className='home-experience-empty'>
+            <Text className='home-experience-empty__title'>这里暂时很安静</Text>
+            <Text className='home-experience-empty__desc'>登录后，这里会显示奖励与保质期提醒</Text>
+          </View>
+        )}
+
+        {isWellnessMode && activeHomeExperiencePage === 'companion' && (
+          <View className='home-partner-card home-experience-card'>
+            {petHidden ? (
+              <View className='home-partner-card__hidden'>
+                <View className='home-partner-card__hidden-icon'>
+                  <Text className='iconfont icon-good' />
+                </View>
+                <Text className='home-partner-card__hidden-title'>成长伙伴已隐藏</Text>
+                <Text className='home-partner-card__hidden-desc'>你的宠物数据和成长仍会保留，可在宠物小屋重新显示。</Text>
+                <View className='home-partner-card__primary-action' onClick={openPetHome}>
+                  <Text>打开宠物小屋</Text>
+                </View>
+              </View>
+            ) : (
+              <>
+                <View className='home-partner-card__hero'>
+                  <View className='home-partner-card__avatar-wrap' onClick={openPetHome}>
+                    <PetAvatar
+                      pet={petSummary?.pet}
+                      size='large'
+                      mood={petMood}
+                      state={petState}
+                      className='home-partner-card__avatar'
+                    />
+                  </View>
+                  <View className='home-partner-card__hero-copy'>
+                    <Text className='home-partner-card__eyebrow'>今日成长伙伴</Text>
+                    <Text className='home-partner-card__name'>{petName}</Text>
+                    <Text className='home-partner-card__message'>{petMessage}</Text>
+                  </View>
+                </View>
+                <View className='home-partner-card__progress-block'>
+                  <View className='home-partner-card__progress-top'>
+                    <Text className='home-partner-card__progress-label'>{petLevelText}</Text>
+                    <Text className='home-partner-card__task'>{petTaskText}</Text>
+                  </View>
+                  <View className='home-partner-card__progress-track'>
+                    <View
+                      className='home-partner-card__progress-fill'
+                      style={{ width: `${Math.max(0, Math.min(100, petLevelProgress))}%` }}
+                    />
+                  </View>
+                </View>
+                {petEvent ? (
+                  <View className='home-partner-card__reward'>
+                    <View className='home-partner-card__reward-copy'>
+                      <Text className='home-partner-card__reward-title'>{petEvent.title || '成长奖励待领取'}</Text>
+                      <Text className='home-partner-card__reward-desc'>{petEvent.task_text || '完成今天的小习惯后领取'}</Text>
+                    </View>
+                    <View className='home-partner-card__reward-action' onClick={handleClaimPetEvent}>
+                      {petClaiming ? <View className='btn-spinner' /> : <Text>领取</Text>}
+                    </View>
+                  </View>
+                ) : null}
+                <View className='home-partner-card__actions'>
+                  <View className='home-partner-card__secondary-action' onClick={openPetHome}>
+                    <Text>成长档案</Text>
+                  </View>
+                  <View className='home-partner-card__primary-action' onClick={openPetChat}>
+                    <Text>和{petName}聊聊</Text>
+                  </View>
+                </View>
+              </>
+            )}
+          </View>
+        )}
+
+        </View>
+
+        {/* 底部留白 */}
+        <View className='bottom-spacer' />
       </View>
 
       {/* 目标编辑弹窗 */}

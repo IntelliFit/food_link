@@ -1,5 +1,4 @@
 import { useCallback, useState } from 'react'
-import AsyncStorage from '@react-native-async-storage/async-storage'
 import * as Clipboard from 'expo-clipboard'
 import { Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { useFocusEffect, useNavigation } from '@react-navigation/native'
@@ -26,6 +25,7 @@ import { useAppDialog } from '../providers/DialogProvider'
 import { useColorScheme } from '../providers/ColorSchemeProvider'
 import { colors, radius } from '../theme'
 import { userFacingErrorMessage } from '../utils/errors'
+import { clearMobileUserCache } from '../utils/mobileCache'
 
 type MenuTone = 'green' | 'blue' | 'gold' | 'purple' | 'slate' | 'danger'
 
@@ -135,14 +135,7 @@ export function ProfileScreen() {
 
   const clearCache = useCallback(async () => {
     try {
-      const keys = await AsyncStorage.getAllKeys()
-      const removable = keys.filter((key) => (
-        key.startsWith('food_link_mobile_') &&
-        !key.includes('access_token') &&
-        !key.includes('refresh_token') &&
-        !key.includes('user_id')
-      ))
-      if (removable.length) await AsyncStorage.multiRemove(removable)
+      await clearMobileUserCache()
       clearRecentRequestTraces()
       clearRecentConsoleLogs()
       void dialog.alert('已清除', '本地缓存和诊断记录已清理，登录状态已保留。', 'success')
@@ -213,7 +206,7 @@ export function ProfileScreen() {
   ]
 
   const profileDark = isDark
-  const profilePageBg = profileDark ? '#0d1312' : '#f0f3f6'
+  const profilePageBg = profileDark ? '#0d1312' : '#f9fafb'
   const profileWashBg = profileDark ? 'rgba(16,23,22,1)' : 'rgba(92, 184, 150, 0.08)'
   const profileTextPrimary = profileDark ? '#f2f7f4' : '#111827'
   const profileTextSecondary = profileDark ? 'rgba(214,226,220,0.6)' : '#6b7280'
@@ -459,7 +452,7 @@ function membershipTierLabel(planCode?: string | null): string {
 const styles = StyleSheet.create({
   profilePage: {
     flex: 1,
-    backgroundColor: '#f0f3f6',
+    backgroundColor: '#f9fafb',
   },
   profileWash: {
     position: 'absolute',

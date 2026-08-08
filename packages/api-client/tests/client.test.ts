@@ -3,6 +3,7 @@
   type ApiClientAdapters,
   type ApiClientRequestOptions,
   type ApiClientResponse,
+  type PetChatStreamFetch,
   type UploadFileInput,
 } from '../src'
 
@@ -79,6 +80,30 @@ function createMockAdapters() {
           user_id: 'wechat-user-1',
           openid: 'app-wx:openid-1',
         })
+      }
+      if (url.endsWith('/api/app/account/password/reset')) {
+        return response({
+          access_token: 'reset-password-access-token',
+          refresh_token: 'reset-password-refresh-token',
+          token_type: 'bearer',
+          expires_in: 3600,
+          user_id: 'password-user-1',
+          openid: 'app-phone:13800138000',
+        })
+      }
+      if (url.endsWith('/api/user/health-focuses') && options?.method === 'POST') {
+        const label = String((options.body as { label?: unknown } | undefined)?.label || '')
+        return response({
+          code: 0,
+          data: {
+            focuses: [{ id: 'focus-1', label, created_at: '2026-08-01T00:00:00Z' }],
+            focus_id: 'focus-1',
+            already_exists: false,
+          },
+        })
+      }
+      if (url.includes('/api/user/health-focuses/') && options?.method === 'DELETE') {
+        return response({ code: 0, data: { focuses: [] } })
       }
       if (url.endsWith('/api/feedback')) {
         return response({ code: 0, data: { id: 'feedback-1', message: 'ok' } })
@@ -447,6 +472,15 @@ function createMockAdapters() {
       if (url.endsWith('/api/analyze/submit')) {
         return response({ task_id: 'task-1', message: 'ok' })
       }
+      if (url.endsWith('/api/precision-sessions/session%2F1/continue')) {
+        return response({ code: 0, data: { task_id: 'precision-task-1', message: 'continued' } })
+      }
+      if (url.endsWith('/api/analyze/tasks/task%2F1/result')) {
+        return response({ code: 0, data: { message: 'updated', task: { id: 'task/1', status: 'done' } } })
+      }
+      if (url.endsWith('/api/analyze/feedback')) {
+        return response({ code: 0, data: { message: '反馈已记录' } })
+      }
       if (url.endsWith('/api/food-record/save')) {
         return response({ id: 'record-1', message: 'saved' })
       }
@@ -538,6 +572,92 @@ describe('FoodLinkApiClient', () => {
     expect(submitted.task_id).toBe('task-1')
   })
 
+  it('keeps correction and precision session fields across analyze APIs', async () => {
+    const { adapters, requests } = createMockAdapters()
+    const client = createFoodLinkApiClient({ baseUrl: 'https://api.example.com', adapters })
+    await client.loginWithAppWechat({ code: 'expo-go-dev-wechat-code' })
+
+    const previousResult = {
+      description: '原结果',
+      items: [{
+        name: '米饭',
+        estimatedWeightGrams: 200,
+        originalWeightGrams: 200,
+        nutrients: { calories: 232, protein: 5, carbs: 52, fat: 1, fiber: 1, sugar: 0 },
+      }],
+    }
+    const correctionItems = [{
+      name: '糙米饭',
+      weight: 180,
+      originalWeight: 200,
+      sourceName: '米饭',
+      sourceItemId: 1,
+      nameEdited: true,
+      weightEdited: true,
+    }]
+    const referenceObjects = [{
+      reference_type: 'preset' as const,
+      reference_name: '银行卡',
+      dimensions_mm: { length: 85.6, width: 54 },
+      placement_note: '餐盘右侧',
+    }]
+
+    await client.submitAnalyzeTask({
+      image_url: 'https://cdn.example.com/food.jpg',
+      previousResult,
+      correction_source_task_id: 'task/source',
+      correction_root_task_id: 'task/root',
+      precision_session_id: 'session/1',
+      reference_objects: referenceObjects,
+      correctionItems,
+    })
+    const continued = await client.continuePrecisionSession('session/1', {
+      source_type: 'image',
+      date: '20260615',
+      additionalContext: '请按参考物重新估重',
+      previousResult,
+      correctionItems,
+      reference_objects: referenceObjects,
+    })
+    await client.updateAnalysisTaskResult('task/1', previousResult)
+    await client.submitAnalysisFeedback({
+      feedback_type: 'suspect_distrust',
+      resolution_state: 'still_distrust',
+      source_task_id: ' task/source ',
+      before_result: previousResult,
+      user_correction_items: correctionItems,
+    })
+
+    expect(continued.task_id).toBe('precision-task-1')
+    const submitRequest = requests.find((entry) => entry.url.endsWith('/api/analyze/submit'))
+    expect(submitRequest?.options?.body).toMatchObject({
+      correction_source_task_id: 'task/source',
+      correction_root_task_id: 'task/root',
+      precision_session_id: 'session/1',
+      previousResult,
+      correctionItems,
+      reference_objects: referenceObjects,
+    })
+    const continueRequest = requests.find((entry) => entry.url.endsWith('/api/precision-sessions/session%2F1/continue'))
+    expect(continueRequest?.options?.body).toMatchObject({
+      source_type: 'image',
+      date: '20260615',
+      previousResult,
+      correctionItems,
+      reference_objects: referenceObjects,
+    })
+    expect(requests.some((entry) => (
+      entry.url.endsWith('/api/analyze/tasks/task%2F1/result')
+      && entry.options?.method === 'PATCH'
+      && (entry.options?.body as { result?: unknown })?.result === previousResult
+    ))).toBe(true)
+    expect(requests.some((entry) => (
+      entry.url.endsWith('/api/analyze/feedback')
+      && entry.options?.method === 'POST'
+      && (entry.options?.body as { source_task_id?: string })?.source_task_id === 'task/source'
+    ))).toBe(true)
+  })
+
   it('stores token after app wechat login with invite code', async () => {
     const { adapters, requests } = createMockAdapters()
     const client = createFoodLinkApiClient({ baseUrl: 'https://api.example.com', adapters })
@@ -610,6 +730,249 @@ describe('FoodLinkApiClient', () => {
       current_password: 'oldpassword123',
     })
     expect(requests[2].options?.headers?.Authorization).toBe('Bearer account-password-access-token')
+  })
+
+  it('forwards a trimmed SMS verification code when binding a new account phone', async () => {
+    const { adapters, requests } = createMockAdapters()
+    const client = createFoodLinkApiClient({ baseUrl: 'https://api.example.com', adapters })
+
+    await client.loginWithAppWechat({ code: 'expo-go-dev-wechat-code' })
+    await client.setAccountPassword({
+      phone: '13800138000',
+      password: 'newpassword123',
+      verificationCode: ' 530836 ',
+    })
+
+    expect(requests[1].options?.body).toEqual({
+      phone: '13800138000',
+      password: 'newpassword123',
+      verification_code: '530836',
+    })
+  })
+
+  it('resets an account password with SMS and stores the new login token', async () => {
+    const { adapters, requests } = createMockAdapters()
+    const client = createFoodLinkApiClient({ baseUrl: 'https://api.example.com', adapters })
+
+    await client.resetAccountPassword({
+      phone: ' 13800138000 ',
+      code: ' 530836 ',
+      password: ' newpassword123 ',
+    })
+    await client.getHomeDashboard('2026-06-14')
+
+    expect(requests[0].url).toBe('https://api.example.com/api/app/account/password/reset')
+    expect(requests[0].options?.headers?.Authorization).toBeUndefined()
+    expect(requests[0].options?.body).toEqual({
+      phone: '13800138000',
+      code: '530836',
+      password: 'newpassword123',
+    })
+    expect(requests[1].options?.headers?.Authorization).toBe('Bearer reset-password-access-token')
+  })
+
+  it('adds and removes health focuses through authenticated API contracts', async () => {
+    const { adapters, requests } = createMockAdapters()
+    const client = createFoodLinkApiClient({ baseUrl: 'https://api.example.com', adapters })
+
+    await client.loginWithAppWechat({ code: 'expo-go-dev-wechat-code' })
+    const added = await client.addHealthFocus('  控尿酸  ')
+    const removed = await client.removeHealthFocus(' focus/1 ')
+
+    expect(added).toEqual({
+      focuses: [{ id: 'focus-1', label: '控尿酸', created_at: '2026-08-01T00:00:00Z' }],
+      focus_id: 'focus-1',
+      already_exists: false,
+    })
+    expect(removed).toEqual({ focuses: [] })
+    expect(requests[1]).toMatchObject({
+      url: 'https://api.example.com/api/user/health-focuses',
+      options: {
+        method: 'POST',
+        body: { label: '控尿酸' },
+        headers: { Authorization: 'Bearer wechat-access-token' },
+      },
+    })
+    expect(requests[2]).toMatchObject({
+      url: 'https://api.example.com/api/user/health-focuses/focus%2F1',
+      options: {
+        method: 'DELETE',
+        headers: { Authorization: 'Bearer wechat-access-token' },
+      },
+    })
+  })
+
+  it('rejects empty health focus values before making API requests', async () => {
+    const { adapters, requests } = createMockAdapters()
+    const client = createFoodLinkApiClient({ baseUrl: 'https://api.example.com', adapters })
+
+    await expect(client.addHealthFocus('   ')).rejects.toThrow('请输入关注方向')
+    await expect(client.removeHealthFocus('   ')).rejects.toThrow('缺少关注项标识')
+
+    expect(requests).toHaveLength(0)
+  })
+
+  it('parses chunked pet chat SSE events and forwards authenticated stream requests', async () => {
+    const { adapters } = createMockAdapters()
+    const client = createFoodLinkApiClient({ baseUrl: 'https://api.example.com', adapters })
+    await client.loginWithAppWechat({ code: 'expo-go-dev-wechat-code' })
+
+    const calls: Array<{ url: string; init: Parameters<PetChatStreamFetch>[1] }> = []
+    const encoded = new TextEncoder().encode([
+      'data: {"type":"start"}\r\n\r\n',
+      'data: {"type":"chunk","text":"先补"}\n\n',
+      'data: {"type":"chunk","text":"蛋白质🥚"}\n\n',
+      'data: {"type":"done","meta":{"session_id":"session-1","range":"week","range_label":"最近 7 天","recorded_days":5,"credits_charged":2,"billing_status":"actual_usage_charged"}}\n\n',
+    ].join(''))
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoded.slice(0, 37))
+        controller.enqueue(encoded.slice(37, 69))
+        controller.enqueue(encoded.slice(69))
+        controller.close()
+      },
+    })
+    const fetcher: PetChatStreamFetch = async (url, init) => {
+      calls.push({ url, init })
+      return { status: 200, ok: true, body: stream, async text() { return '' } }
+    }
+    const chunks: string[] = []
+    let starts = 0
+
+    const meta = await client.streamGeneratePetChat(
+      '  最近训练没劲  ',
+      'week',
+      ' session-0 ',
+      false,
+      {
+        onStart: () => { starts += 1 },
+        onChunk: (text) => chunks.push(text),
+      },
+      { fetch: fetcher },
+    )
+
+    expect(chunks).toEqual(['先补', '蛋白质🥚'])
+    expect(starts).toBe(1)
+    expect(meta).toMatchObject({ session_id: 'session-1', range: 'week', recorded_days: 5, credits_charged: 2 })
+    expect(calls).toHaveLength(1)
+    expect(calls[0].url).toBe('https://api.example.com/api/pet/chat/stream')
+    expect(calls[0].init.headers).toMatchObject({
+      Accept: 'text/event-stream',
+      Authorization: 'Bearer wechat-access-token',
+      'Content-Type': 'application/json',
+    })
+    expect(JSON.parse(calls[0].init.body)).toEqual({
+      question: '最近训练没劲',
+      range: 'week',
+      session_id: 'session-0',
+      new_session: false,
+    })
+  })
+
+  it('surfaces pet chat stream protocol errors without inventing a done event', async () => {
+    const { adapters } = createMockAdapters()
+    const client = createFoodLinkApiClient({ baseUrl: 'https://api.example.com', adapters })
+    await client.loginWithAppWechat({ code: 'expo-go-dev-wechat-code' })
+    const encoded = new TextEncoder().encode('data: {"type":"chunk","text":"只有半句"}\n\n')
+    const fetcher: PetChatStreamFetch = async () => ({
+      status: 200,
+      ok: true,
+      body: new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(encoded)
+          controller.close()
+        },
+      }),
+      async text() { return '' },
+    })
+
+    await expect(client.streamGeneratePetChat(
+      '测试断线',
+      'week',
+      '',
+      true,
+      { onChunk: () => undefined },
+      { fetch: fetcher },
+    )).rejects.toMatchObject({ code: 'protocol', message: '流式连接提前结束' })
+  })
+
+  it('keeps backend pet chat stream errors distinct from transport failures', async () => {
+    const { adapters } = createMockAdapters()
+    const client = createFoodLinkApiClient({ baseUrl: 'https://api.example.com', adapters })
+    await client.loginWithAppWechat({ code: 'expo-go-dev-wechat-code' })
+    const encoded = new TextEncoder().encode('data: {"type":"error","error":"积分校验失败，请稍后重试"}\n\n')
+    const fetcher: PetChatStreamFetch = async () => ({
+      status: 200,
+      ok: true,
+      body: new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(encoded)
+          controller.close()
+        },
+      }),
+      async text() { return '' },
+    })
+
+    await expect(client.streamGeneratePetChat(
+      '测试服务端错误',
+      'week',
+      '',
+      true,
+      { onChunk: () => undefined },
+      { fetch: fetcher },
+    )).rejects.toMatchObject({ code: 'server', message: '积分校验失败，请稍后重试' })
+  })
+
+  it('supports cancelling an in-flight pet chat stream', async () => {
+    const { adapters } = createMockAdapters()
+    const client = createFoodLinkApiClient({ baseUrl: 'https://api.example.com', adapters })
+    await client.loginWithAppWechat({ code: 'expo-go-dev-wechat-code' })
+    const abortController = new AbortController()
+    const fetcher: PetChatStreamFetch = async (_url, init) => new Promise((_resolve, reject) => {
+      if (init.signal?.aborted) {
+        reject(new Error('aborted'))
+        return
+      }
+      init.signal?.addEventListener('abort', () => reject(new Error('aborted')), { once: true })
+    })
+    const pending = client.streamGeneratePetChat(
+      '测试取消',
+      'week',
+      '',
+      true,
+      { onChunk: () => undefined },
+      { fetch: fetcher, signal: abortController.signal },
+    )
+    abortController.abort()
+
+    await expect(pending).rejects.toMatchObject({ code: 'cancelled', message: '已停止生成' })
+  })
+
+  it('times out a stalled pet chat stream with a distinct error', async () => {
+    jest.useFakeTimers()
+    try {
+      const { adapters } = createMockAdapters()
+      const client = createFoodLinkApiClient({ baseUrl: 'https://api.example.com', adapters })
+      await client.loginWithAppWechat({ code: 'expo-go-dev-wechat-code' })
+      const fetcher: PetChatStreamFetch = async (_url, init) => new Promise((_resolve, reject) => {
+        init.signal?.addEventListener('abort', () => reject(new Error('aborted')), { once: true })
+      })
+      const pending = client.streamGeneratePetChat(
+        '测试超时',
+        'week',
+        '',
+        true,
+        { onChunk: () => undefined },
+        { fetch: fetcher, timeoutMs: 1000 },
+      )
+      await Promise.resolve()
+      await Promise.resolve()
+      jest.advanceTimersByTime(1000)
+
+      await expect(pending).rejects.toMatchObject({ code: 'timeout', message: '小食探响应超时，请稍后重试' })
+    } finally {
+      jest.useRealTimers()
+    }
   })
 
   it('submits app feedback with authenticated token', async () => {
@@ -1222,6 +1585,7 @@ describe('FoodLinkApiClient', () => {
     await client.createMembershipPayment('standard_monthly', { payChannel: 'wechat', tradeType: 'APP', client: 'mobile_app' })
     await client.communityGetContext('record-1', 'food_record')
     await client.communityAddComment({ targetId: 'record-1', targetType: 'food_record', content: 'nice' })
+    await client.communityDeleteComment({ targetId: 'record-1', targetType: 'food_record', commentId: 'comment/1' })
     await client.communityReport({ targetId: 'record-1', targetType: 'food_record', reason: 'other', extraContent: 'bad' })
     const leaderboard = await client.communityGetCheckinLeaderboard()
     await client.createCirclePost({
@@ -1300,6 +1664,7 @@ describe('FoodLinkApiClient', () => {
         body.client === 'mobile_app'
     })).toBe(true)
     expect(requests.some((req) => req.url.includes('/api/community/feed-targets/food_record/record-1/comments') && (req.options?.body as any).content === 'nice')).toBe(true)
+    expect(requests.some((req) => req.url.endsWith('/api/community/feed-targets/food_record/record-1/comments/comment%2F1') && req.options?.method === 'DELETE')).toBe(true)
     expect(leaderboard.list[0]?.checkin_count).toBe(5)
     expect(requests.some((req) => req.url.endsWith('/api/community/checkin-leaderboard'))).toBe(true)
     expect(requests.some((req) => {

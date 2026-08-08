@@ -23,6 +23,29 @@ func ptrTime(t time.Time) *time.Time {
 	return &t
 }
 
+func TestMembershipServiceIsCampusPublishingAllowed(t *testing.T) {
+	future := time.Now().Add(time.Hour)
+	past := time.Now().Add(-time.Hour)
+	tests := []struct {
+		name       string
+		membership *domain.UserMembership
+		allowed    bool
+	}{
+		{name: "active membership", membership: &domain.UserMembership{Status: "active", ExpiresAt: &future}, allowed: true},
+		{name: "expired membership", membership: &domain.UserMembership{Status: "active", ExpiresAt: &past}, allowed: false},
+		{name: "no membership", membership: nil, allowed: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := NewMembershipService(&mockMembershipRepo{membership: tt.membership})
+			allowed, err := svc.IsCampusPublishingAllowed(context.Background(), "user-1")
+			require.NoError(t, err)
+			require.Equal(t, tt.allowed, allowed)
+		})
+	}
+}
+
 func strPtr(value string) *string {
 	return &value
 }

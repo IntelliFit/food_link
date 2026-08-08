@@ -22,12 +22,12 @@ export function GooseDuckChickenScreen() {
 
   const pickImage = async (source: 'camera' | 'library') => {
     setSourceSheet('hidden')
-    const permission = source === 'camera'
-      ? await ImagePicker.requestCameraPermissionsAsync()
-      : await ImagePicker.requestMediaLibraryPermissionsAsync()
-    if (!permission.granted) {
-      await dialog.alert(source === 'camera' ? '需要相机权限' : '需要相册权限', '请允许 App 选择图片后再进行专线识别。', 'warning')
-      return
+    if (source === 'camera') {
+      const permission = await ImagePicker.requestCameraPermissionsAsync()
+      if (!permission.granted) {
+        await dialog.alert('需要相机权限', '请允许 App 拍摄图片后再进行专线识别。', 'warning')
+        return
+      }
     }
 
     const picked = source === 'camera'

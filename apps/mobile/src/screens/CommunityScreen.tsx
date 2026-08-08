@@ -1,9 +1,21 @@
-import { useCallback, useState, type ReactNode } from 'react'
-import { ActivityIndicator, Image, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import AsyncStorage from '@react-native-async-storage/async-storage'
+import { ActivityIndicator, Alert, Image, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native'
 import { useFocusEffect, useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import type { CheckinLeaderboardItem, CommunityFeedContentType, CommunityFeedItem, CommunityFeedSortBy, CommunityFeedTargetType, FriendUserItem } from '@food-link/core'
+import type {
+  CheckinLeaderboardItem,
+  CommunityAuthorScope,
+  CommunityFeedContentType,
+  CommunityFeedItem,
+  CommunityFeedQueryParams,
+  CommunityFeedSortBy,
+  CommunityFeedTargetType,
+  DietGoal,
+  FriendUserItem,
+  MealType,
+} from '@food-link/core'
 import {
   ChevronRight,
   Filter,
@@ -16,7 +28,7 @@ import {
   Utensils,
   type LucideIcon,
 } from 'lucide-react-native'
-import { apiClient } from '../api'
+import { apiClient, getStoredUserId } from '../api'
 import { IconfontText } from '../components/Iconfont'
 import type { RootStackParamList } from '../navigation/types'
 import { useAppDialog } from '../providers/DialogProvider'
@@ -27,6 +39,11 @@ import { userFacingErrorMessage } from '../utils/errors'
 const hairline = 'rgba(92,184,150,0.14)'
 const softBorder = 'rgba(92,184,150,0.18)'
 const authorBlue = '#576b95'
+const feedPageSize = 10
+const feedCacheTtlMs = 5 * 60 * 1000
+const feedCachePrefix = 'mobile_community_feed_v2:'
+const priorityAuthorsPrefix = 'mobile_community_priority_authors_v1:'
+const feedFiltersPrefix = 'mobile_community_filters_v1:'
 
 const sortOptions: Array<{ value: CommunityFeedSortBy; label: string }> = [
   { value: 'latest', label: '最新' },
@@ -43,6 +60,43 @@ const contentOptions: Array<{ value: CommunityFeedContentType; label: string }> 
   { value: 'circle_post', label: '自定义' },
 ]
 
+const mealOptions: Array<{ value: MealType | 'all'; label: string }> = [
+  { value: 'all', label: '全部餐次' },
+  { value: 'breakfast', label: '早餐' },
+  { value: 'lunch', label: '午餐' },
+  { value: 'dinner', label: '晚餐' },
+  { value: 'afternoon_snack', label: '加餐' },
+]
+
+const dietGoalOptions: Array<{ value: DietGoal | 'all'; label: string }> = [
+  { value: 'all', label: '全部目标' },
+  { value: 'fat_loss', label: '减脂' },
+  { value: 'muscle_gain', label: '增肌' },
+  { value: 'maintain', label: '维持' },
+]
+
+const authorScopeOptions: Array<{ value: CommunityAuthorScope; label: string }> = [
+  { value: 'public', label: '全部公开' },
+  { value: 'all', label: '仅好友' },
+  { value: 'priority', label: '特别关注' },
+]
+
+type FeedCacheEntry = {
+  savedAt: number
+  list: CommunityFeedItem[]
+  hasMore: boolean
+}
+
+type FeedFilterPreferences = {
+  sortBy: CommunityFeedSortBy
+  contentType: CommunityFeedContentType
+  mealType: MealType | 'all'
+  dietGoal: DietGoal | 'all'
+  authorScope: CommunityAuthorScope
+  authorId: string
+  authorName: string
+}
+
 type FriendSearchType = 'nickname' | 'telephone'
 
 export function CommunityScreen() {
@@ -50,54 +104,227 @@ export function CommunityScreen() {
   const insets = useSafeAreaInsets()
   const dialog = useAppDialog()
   const [feed, setFeed] = useState<CommunityFeedItem[]>([])
+  const feedRef = useRef<CommunityFeedItem[]>([])
   const [leaderboard, setLeaderboard] = useState<CheckinLeaderboardItem[]>([])
   const [loading, setLoading] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [hasMore, setHasMore] = useState(true)
   const [filterOpen, setFilterOpen] = useState(false)
   const [addFriendOpen, setAddFriendOpen] = useState(false)
   const [sortBy, setSortBy] = useState<CommunityFeedSortBy>('latest')
   const [contentType, setContentType] = useState<CommunityFeedContentType>('all')
+  const [mealType, setMealType] = useState<MealType | 'all'>('all')
+  const [dietGoal, setDietGoal] = useState<DietGoal | 'all'>('all')
+  const [authorScope, setAuthorScope] = useState<CommunityAuthorScope>('public')
+  const [filterAuthorId, setFilterAuthorId] = useState('')
+  const [filterAuthorName, setFilterAuthorName] = useState('')
+  const [filterAuthorKeyword, setFilterAuthorKeyword] = useState('')
+  const [filterAuthorResults, setFilterAuthorResults] = useState<FriendUserItem[]>([])
+  const [filterAuthorSearching, setFilterAuthorSearching] = useState(false)
+  const [sessionUserId, setSessionUserId] = useState('')
+  const [accountReady, setAccountReady] = useState(false)
+  const [priorityAuthorIds, setPriorityAuthorIds] = useState<string[]>([])
   const [friendSearchType, setFriendSearchType] = useState<FriendSearchType>('nickname')
   const [friendSearchKeyword, setFriendSearchKeyword] = useState('')
   const [friendSearchResults, setFriendSearchResults] = useState<FriendUserItem[]>([])
   const [friendSearchAttempted, setFriendSearchAttempted] = useState(false)
   const [friendSearching, setFriendSearching] = useState(false)
   const [friendSendingId, setFriendSendingId] = useState<string | null>(null)
-  const filterActive = sortBy !== 'latest' || contentType !== 'all'
+  const loadingMoreRef = useRef(false)
+  const requestGenerationRef = useRef(0)
+  const filterActive = sortBy !== 'latest'
+    || contentType !== 'all'
+    || mealType !== 'all'
+    || dietGoal !== 'all'
+    || authorScope !== 'public'
+    || Boolean(filterAuthorId)
+  const filterSummary = useMemo(() => {
+    if (!filterActive) return '更多筛选'
+    const labels = [
+      sortBy === 'latest' ? '' : sortOptions.find((option) => option.value === sortBy)?.label,
+      contentType === 'all' ? '' : contentOptions.find((option) => option.value === contentType)?.label,
+      mealType === 'all' || contentType === 'exercise_log' || contentType === 'campus_food' ? '' : mealOptions.find((option) => option.value === mealType)?.label,
+      dietGoal === 'all' || contentType === 'exercise_log' || contentType === 'campus_food' ? '' : dietGoalOptions.find((option) => option.value === dietGoal)?.label,
+      filterAuthorId ? filterAuthorName || '指定作者' : authorScopeOptions.find((option) => option.value === authorScope)?.label,
+    ].filter(Boolean)
+    return labels.slice(0, 2).join(' · ') || '更多筛选'
+  }, [authorScope, contentType, dietGoal, filterActive, filterAuthorId, filterAuthorName, mealType, sortBy])
 
-  const load = useCallback(async () => {
+  const queryParams = useMemo<CommunityFeedQueryParams>(() => ({
+    sort_by: sortBy,
+    content_type: contentType,
+    meal_type: contentType === 'exercise_log' || contentType === 'campus_food' || mealType === 'all' ? undefined : mealType,
+    diet_goal: contentType === 'exercise_log' || contentType === 'campus_food' || dietGoal === 'all' ? undefined : dietGoal,
+    author_scope: filterAuthorId ? 'all' : authorScope,
+    priority_author_ids: filterAuthorId || authorScope !== 'priority' ? undefined : priorityAuthorIds,
+    author_id: filterAuthorId || undefined,
+  }), [authorScope, contentType, dietGoal, filterAuthorId, mealType, priorityAuthorIds, sortBy])
+  const queryKey = useMemo(() => buildFeedQueryKey(queryParams), [queryParams])
+
+  const applyFeed = useCallback((list: CommunityFeedItem[]) => {
+    feedRef.current = list
+    setFeed(list)
+  }, [])
+
+  const saveFeedCache = useCallback(async (list: CommunityFeedItem[], nextHasMore: boolean) => {
+    if (!sessionUserId) return
+    const entry: FeedCacheEntry = {
+      savedAt: Date.now(),
+      list: list.slice(0, 30),
+      hasMore: nextHasMore,
+    }
+    await AsyncStorage.setItem(feedCacheStorageKey(sessionUserId, queryKey), JSON.stringify(entry)).catch(() => undefined)
+  }, [queryKey, sessionUserId])
+
+  const load = useCallback(async (force = false) => {
+    if (!sessionUserId) return
+    const requestGeneration = ++requestGenerationRef.current
+    let cacheShown = false
     setLoading(true)
+
+    if (!force) {
+      const cacheKey = feedCacheStorageKey(sessionUserId, queryKey)
+      try {
+        const raw = await AsyncStorage.getItem(cacheKey)
+        const cached = raw ? JSON.parse(raw) as FeedCacheEntry : null
+        if (cached && Date.now() - Number(cached.savedAt || 0) <= feedCacheTtlMs && Array.isArray(cached.list)) {
+          const list = dedupeFeedItems(cached.list)
+          applyFeed(list)
+          setHasMore(Boolean(cached.hasMore))
+          cacheShown = true
+          setLoading(false)
+        } else if (raw) {
+          await AsyncStorage.removeItem(cacheKey)
+        }
+      } catch {
+        await AsyncStorage.removeItem(cacheKey).catch(() => undefined)
+      }
+    }
+
     try {
       const [feedData, leaderboardData] = await Promise.all([
-        apiClient.communityGetFeed({ limit: 10, params: { sort_by: sortBy, content_type: contentType } }),
+        apiClient.communityGetFeed({ offset: 0, limit: feedPageSize, includeComments: true, commentsLimit: 5, params: queryParams }),
         apiClient.communityGetCheckinLeaderboard().catch(() => ({ list: [] as CheckinLeaderboardItem[], week_start: '', week_end: '' })),
       ])
-      setFeed(feedData.list || [])
+      if (requestGenerationRef.current !== requestGeneration) return
+      const list = dedupeFeedItems(feedData.list || [])
+      const nextHasMore = feedData.has_more ?? list.length >= feedPageSize
+      applyFeed(list)
+      setHasMore(nextHasMore)
       setLeaderboard(leaderboardData.list || [])
+      await saveFeedCache(list, nextHasMore)
     } catch (error) {
-      void dialog.alert('获取圈子失败', userFacingErrorMessage(error), 'danger')
+      if (requestGenerationRef.current === requestGeneration && !cacheShown) {
+        void dialog.alert('获取圈子失败', userFacingErrorMessage(error), 'danger')
+      }
     } finally {
-      setLoading(false)
+      if (requestGenerationRef.current === requestGeneration) setLoading(false)
     }
-  }, [contentType, dialog, sortBy])
+  }, [applyFeed, dialog, queryKey, queryParams, saveFeedCache, sessionUserId])
+
+  const loadMore = useCallback(async () => {
+    if (!sessionUserId || loadingMoreRef.current || !hasMore || loading) return
+    loadingMoreRef.current = true
+    setLoadingMore(true)
+    const requestGeneration = requestGenerationRef.current
+    const offset = feedRef.current.length
+    try {
+      const data = await apiClient.communityGetFeed({
+        offset,
+        limit: feedPageSize,
+        includeComments: true,
+        commentsLimit: 5,
+        params: queryParams,
+      })
+      if (requestGenerationRef.current !== requestGeneration) return
+      const incoming = dedupeFeedItems(data.list || [])
+      const merged = appendUniqueFeedItems(feedRef.current, incoming)
+      const nextHasMore = (data.has_more ?? incoming.length >= feedPageSize) && merged.added > 0
+      applyFeed(merged.list)
+      setHasMore(nextHasMore)
+      await saveFeedCache(merged.list, nextHasMore)
+    } catch (error) {
+      if (requestGenerationRef.current === requestGeneration) {
+        void dialog.alert('加载更多失败', userFacingErrorMessage(error), 'danger')
+      }
+    } finally {
+      loadingMoreRef.current = false
+      setLoadingMore(false)
+    }
+  }, [applyFeed, dialog, hasMore, loading, queryParams, saveFeedCache, sessionUserId])
 
   useFocusEffect(
     useCallback(() => {
+      let active = true
+      void (async () => {
+        const nextUserId = String(await getStoredUserId() || 'guest').trim() || 'guest'
+        const [storedPriorityIds, storedFilters] = await Promise.all([
+          readPriorityAuthorIds(nextUserId),
+          readFeedFilterPreferences(nextUserId),
+        ])
+        if (!active) return
+        setSessionUserId(nextUserId)
+        setPriorityAuthorIds((current) => sameStringList(current, storedPriorityIds) ? current : storedPriorityIds)
+        if (storedFilters) {
+          setSortBy(storedFilters.sortBy)
+          setContentType(storedFilters.contentType)
+          setMealType(storedFilters.mealType)
+          setDietGoal(storedFilters.dietGoal)
+          setAuthorScope(storedFilters.authorScope)
+          setFilterAuthorId(storedFilters.authorId)
+          setFilterAuthorName(storedFilters.authorName)
+        }
+        setAccountReady(true)
+      })()
+      return () => {
+        active = false
+      }
+    }, []),
+  )
+
+  useEffect(() => {
+    if (!accountReady || !sessionUserId) return
+    const preferences: FeedFilterPreferences = {
+      sortBy,
+      contentType,
+      mealType,
+      dietGoal,
+      authorScope,
+      authorId: filterAuthorId,
+      authorName: filterAuthorName,
+    }
+    void AsyncStorage.setItem(feedFiltersStorageKey(sessionUserId), JSON.stringify(preferences)).catch(() => undefined)
+  }, [accountReady, authorScope, contentType, dietGoal, filterAuthorId, filterAuthorName, mealType, sessionUserId, sortBy])
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!accountReady || !sessionUserId) return undefined
+      applyFeed([])
+      setHasMore(true)
       void load()
-    }, [load]),
+      return () => {
+        requestGenerationRef.current += 1
+        loadingMoreRef.current = false
+      }
+    }, [accountReady, applyFeed, load, sessionUserId]),
   )
 
   const toggleLike = async (item: CommunityFeedItem) => {
     const targetId = item.target_id || item.record.id
     const targetType = item.target_type || item.record.feed_type || 'food_record'
-    const next = feed.map((entry) => (
-      entry === item ? { ...entry, liked: !entry.liked, like_count: Math.max(0, entry.like_count + (entry.liked ? -1 : 1)) } : entry
+    const itemKey = getFeedTargetKey(item)
+    const previous = feedRef.current
+    const next = previous.map((entry) => (
+      getFeedTargetKey(entry) === itemKey ? { ...entry, liked: !entry.liked, like_count: Math.max(0, entry.like_count + (entry.liked ? -1 : 1)) } : entry
     ))
-    setFeed(next)
+    applyFeed(next)
+    void saveFeedCache(next, hasMore)
     try {
       if (item.liked) await apiClient.communityUnlike(targetId, targetType)
       else await apiClient.communityLike(targetId, targetType)
     } catch (error) {
-      setFeed(feed)
+      applyFeed(previous)
+      void saveFeedCache(previous, hasMore)
       void dialog.alert('操作失败', userFacingErrorMessage(error), 'danger')
     }
   }
@@ -166,12 +393,84 @@ export function CommunityScreen() {
     if (!confirmed) return
     try {
       await apiClient.blockUser(authorId)
-      setFeed((prev) => prev.filter((entry) => String(entry.author?.id || '') !== authorId))
+      const next = feedRef.current.filter((entry) => String(entry.author?.id || '') !== authorId)
+      applyFeed(next)
+      void saveFeedCache(next, hasMore)
       void dialog.alert('已加入黑名单', undefined, 'success')
     } catch (error) {
       void dialog.alert('无法操作', userFacingErrorMessage(error), 'danger')
     }
-  }, [dialog])
+  }, [applyFeed, dialog, hasMore, saveFeedCache])
+
+  const togglePriorityAuthor = useCallback((authorId: string) => {
+    if (!authorId || !sessionUserId) return
+    const already = priorityAuthorIds.includes(authorId)
+    const next = already ? priorityAuthorIds.filter((id) => id !== authorId) : [...priorityAuthorIds, authorId]
+    setPriorityAuthorIds(next)
+    void AsyncStorage.setItem(priorityAuthorsStorageKey(sessionUserId), JSON.stringify(next)).then(() => {
+      void dialog.alert(already ? '已取消特别关注' : '已设为特别关注', undefined, 'success')
+    }).catch(() => {
+      setPriorityAuthorIds(priorityAuthorIds)
+      void dialog.alert('保存特别关注失败', '请稍后重试。', 'danger')
+    })
+  }, [dialog, priorityAuthorIds, sessionUserId])
+
+  const handleFeedAuthorActions = useCallback((item: CommunityFeedItem) => {
+    const authorId = String(item.author?.id || '').trim()
+    if (!authorId) return
+    const isPriority = priorityAuthorIds.includes(authorId)
+    Alert.alert(item.author?.nickname || '动态作者', undefined, [
+      { text: '取消', style: 'cancel' },
+      {
+        text: isPriority ? '取消特别关注' : '设为特别关注',
+        onPress: () => togglePriorityAuthor(authorId),
+      },
+      {
+        text: '拉黑用户',
+        style: 'destructive',
+        onPress: () => void handleBlockFeedAuthor(item),
+      },
+    ])
+  }, [handleBlockFeedAuthor, priorityAuthorIds, togglePriorityAuthor])
+
+  const handleFilterAuthorSearch = useCallback(async () => {
+    const keyword = filterAuthorKeyword.trim()
+    if (!keyword) return
+    setFilterAuthorSearching(true)
+    setFilterAuthorResults([])
+    try {
+      const data = await apiClient.listFriends()
+      const normalizedKeyword = keyword.toLocaleLowerCase()
+      setFilterAuthorResults((data.list || []).filter((friend) => (
+        String(friend.nickname || '').toLocaleLowerCase().includes(normalizedKeyword)
+      )))
+    } catch (error) {
+      void dialog.alert('搜索作者失败', userFacingErrorMessage(error), 'danger')
+    } finally {
+      setFilterAuthorSearching(false)
+    }
+  }, [dialog, filterAuthorKeyword])
+
+  const selectFilterAuthor = useCallback((author: FriendUserItem) => {
+    setFilterAuthorId(author.id)
+    setFilterAuthorName(author.nickname || '用户')
+    setFilterAuthorResults([])
+    setFilterAuthorKeyword('')
+  }, [])
+
+  const clearFilterAuthor = useCallback(() => {
+    setFilterAuthorId('')
+    setFilterAuthorName('')
+    setFilterAuthorResults([])
+    setFilterAuthorKeyword('')
+  }, [])
+
+  const handleFeedScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent
+    if (layoutMeasurement.height + contentOffset.y >= contentSize.height - 240) {
+      void loadMore()
+    }
+  }, [loadMore])
 
   return (
     <View style={styles.page}>
@@ -186,7 +485,9 @@ export function CommunityScreen() {
           },
         ]}
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor={colors.brand} colors={[colors.brand]} />}
+        onScroll={handleFeedScroll}
+        scrollEventThrottle={120}
+        refreshControl={<RefreshControl refreshing={loading} onRefresh={() => void load(true)} tintColor={colors.brand} colors={[colors.brand]} />}
       >
         <View style={styles.quickBar}>
           <View style={styles.quickGrid}>
@@ -238,7 +539,7 @@ export function CommunityScreen() {
                 <View style={[styles.feedFilterFunnelBtn, filterActive && styles.feedFilterFunnelBtnActive]}>
                   <Filter size={17} color={filterActive ? colors.brand : '#94a3b8'} strokeWidth={2.3} />
                 </View>
-                <Text style={[styles.feedFilterSummary, filterActive && styles.feedFilterSummaryActive]}>更多筛选</Text>
+                <Text style={[styles.feedFilterSummary, filterActive && styles.feedFilterSummaryActive]} numberOfLines={1}>{filterSummary}</Text>
               </Pressable>
               <Pressable style={({ pressed }) => [styles.feedPublishBtn, pressed && styles.pressed]} onPress={() => navigation.navigate('CirclePostEdit')}>
                 <PenLine size={15} color="#fff" strokeWidth={2.4} />
@@ -271,9 +572,18 @@ export function CommunityScreen() {
                   })}
                   onOpenAuthor={() => navigation.navigate('ProfileSettings', { userId: item.author.id })}
                   onLike={() => void toggleLike(item)}
-                  onBlockAuthor={() => void handleBlockFeedAuthor(item)}
+                  onManageAuthor={() => handleFeedAuthorActions(item)}
                 />
               ))}
+              <View style={styles.loadMoreFooter}>
+                {loadingMore ? (
+                  <ActivityIndicator size="small" color={colors.brand} />
+                ) : hasMore ? (
+                  <Text style={styles.loadMoreText}>继续上滑加载更多</Text>
+                ) : (
+                  <Text style={styles.loadMoreText}>已经到底啦</Text>
+                )}
+              </View>
             </View>
           )}
         </View>
@@ -283,9 +593,27 @@ export function CommunityScreen() {
         visible={filterOpen}
         sortBy={sortBy}
         contentType={contentType}
+        mealType={mealType}
+        dietGoal={dietGoal}
+        authorScope={authorScope}
+        authorId={filterAuthorId}
+        authorName={filterAuthorName}
+        authorKeyword={filterAuthorKeyword}
+        authorResults={filterAuthorResults}
+        authorSearching={filterAuthorSearching}
         onClose={() => setFilterOpen(false)}
         onSortChange={setSortBy}
         onContentChange={setContentType}
+        onMealChange={setMealType}
+        onDietGoalChange={setDietGoal}
+        onAuthorScopeChange={setAuthorScope}
+        onAuthorKeywordChange={(value) => {
+          setFilterAuthorKeyword(value)
+          setFilterAuthorResults([])
+        }}
+        onAuthorSearch={handleFilterAuthorSearch}
+        onAuthorSelect={selectFilterAuthor}
+        onAuthorClear={clearFilterAuthor}
       />
       <AddFriendModal
         visible={addFriendOpen}
@@ -466,13 +794,13 @@ function CommunityFeedCard({
   onOpen,
   onOpenAuthor,
   onLike,
-  onBlockAuthor,
+  onManageAuthor,
 }: {
   item: CommunityFeedItem
   onOpen: () => void
   onOpenAuthor: () => void
   onLike: () => void
-  onBlockAuthor?: () => void
+  onManageAuthor?: () => void
 }) {
   const image = feedImage(item)
   const body = feedBody(item)
@@ -527,12 +855,12 @@ function CommunityFeedCard({
                 <Text style={styles.actionCount}>评论 {commentsCount}</Text>
               </View>
             </View>
-            {!item.is_mine && onBlockAuthor ? (
+            {!item.is_mine && onManageAuthor ? (
               <Pressable
                 style={({ pressed }) => [styles.actionManageBox, pressed && styles.pressed]}
                 onPress={(event) => {
                   event.stopPropagation()
-                  onBlockAuthor()
+                  onManageAuthor()
                 }}
                 hitSlop={8}
               >
@@ -587,17 +915,48 @@ function FilterDrawer({
   visible,
   sortBy,
   contentType,
+  mealType,
+  dietGoal,
+  authorScope,
+  authorId,
+  authorName,
+  authorKeyword,
+  authorResults,
+  authorSearching,
   onClose,
   onSortChange,
   onContentChange,
+  onMealChange,
+  onDietGoalChange,
+  onAuthorScopeChange,
+  onAuthorKeywordChange,
+  onAuthorSearch,
+  onAuthorSelect,
+  onAuthorClear,
 }: {
   visible: boolean
   sortBy: CommunityFeedSortBy
   contentType: CommunityFeedContentType
+  mealType: MealType | 'all'
+  dietGoal: DietGoal | 'all'
+  authorScope: CommunityAuthorScope
+  authorId: string
+  authorName: string
+  authorKeyword: string
+  authorResults: FriendUserItem[]
+  authorSearching: boolean
   onClose: () => void
   onSortChange: (value: CommunityFeedSortBy) => void
   onContentChange: (value: CommunityFeedContentType) => void
+  onMealChange: (value: MealType | 'all') => void
+  onDietGoalChange: (value: DietGoal | 'all') => void
+  onAuthorScopeChange: (value: CommunityAuthorScope) => void
+  onAuthorKeywordChange: (value: string) => void
+  onAuthorSearch: () => void
+  onAuthorSelect: (author: FriendUserItem) => void
+  onAuthorClear: () => void
 }) {
+  const showMealAndGoal = contentType !== 'exercise_log' && contentType !== 'campus_food'
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable style={styles.filterDrawerMask} onPress={onClose}>
@@ -609,16 +968,79 @@ function FilterDrawer({
               <Text style={styles.filterDrawerDone}>完成</Text>
             </Pressable>
           </View>
-          <FilterGroup title="排序">
-            {sortOptions.map((option) => (
-              <FilterChip key={option.value} label={option.label} active={sortBy === option.value} onPress={() => onSortChange(option.value)} />
-            ))}
-          </FilterGroup>
-          <FilterGroup title="内容">
-            {contentOptions.map((option) => (
-              <FilterChip key={option.value} label={option.label} active={contentType === option.value} onPress={() => onContentChange(option.value)} />
-            ))}
-          </FilterGroup>
+          <ScrollView style={styles.filterDrawerScroll} contentContainerStyle={styles.filterDrawerScrollContent} keyboardShouldPersistTaps="handled">
+            <FilterGroup title="排序">
+              {sortOptions.map((option) => (
+                <FilterChip key={option.value} label={option.label} active={sortBy === option.value} onPress={() => onSortChange(option.value)} />
+              ))}
+            </FilterGroup>
+            <FilterGroup title="内容">
+              {contentOptions.map((option) => (
+                <FilterChip key={option.value} label={option.label} active={contentType === option.value} onPress={() => onContentChange(option.value)} />
+              ))}
+            </FilterGroup>
+            <FilterGroup title="来源">
+              {authorScopeOptions.map((option) => (
+                <FilterChip key={option.value} label={option.label} active={!authorId && authorScope === option.value} onPress={() => {
+                  onAuthorClear()
+                  onAuthorScopeChange(option.value)
+                }} />
+              ))}
+            </FilterGroup>
+            {showMealAndGoal ? (
+              <>
+                <FilterGroup title="餐次">
+                  {mealOptions.map((option) => (
+                    <FilterChip key={option.value} label={option.label} active={mealType === option.value} onPress={() => onMealChange(option.value)} />
+                  ))}
+                </FilterGroup>
+                <FilterGroup title="目标">
+                  {dietGoalOptions.map((option) => (
+                    <FilterChip key={option.value} label={option.label} active={dietGoal === option.value} onPress={() => onDietGoalChange(option.value)} />
+                  ))}
+                </FilterGroup>
+              </>
+            ) : null}
+            <View style={styles.filterGroup}>
+              <Text style={styles.filterLabel}>指定好友作者</Text>
+              {authorId ? (
+                <View style={styles.filterSelectedAuthor}>
+                  <Text style={styles.filterSelectedAuthorText} numberOfLines={1}>{authorName || '已选作者'}</Text>
+                  <Pressable hitSlop={8} onPress={onAuthorClear}>
+                    <Text style={styles.filterSelectedAuthorClear}>清除</Text>
+                  </Pressable>
+                </View>
+              ) : (
+                <>
+                  <View style={styles.filterAuthorSearchRow}>
+                    <TextInput
+                      value={authorKeyword}
+                      onChangeText={onAuthorKeywordChange}
+                      onSubmitEditing={onAuthorSearch}
+                      returnKeyType="search"
+                      placeholder="输入好友昵称"
+                      placeholderTextColor="#94a3b8"
+                      style={styles.filterAuthorInput}
+                    />
+                    <Pressable
+                      style={[styles.filterAuthorSearchButton, (!authorKeyword.trim() || authorSearching) && styles.filterAuthorSearchButtonDisabled]}
+                      onPress={onAuthorSearch}
+                      disabled={!authorKeyword.trim() || authorSearching}
+                    >
+                      {authorSearching ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.filterAuthorSearchButtonText}>搜索</Text>}
+                    </Pressable>
+                  </View>
+                  {authorResults.map((author) => (
+                    <Pressable key={author.id} style={styles.filterAuthorResult} onPress={() => onAuthorSelect(author)}>
+                      {author.avatar ? <Image source={{ uri: author.avatar }} style={styles.filterAuthorAvatar} /> : <View style={styles.filterAuthorAvatarFallback}><IconfontText className="iconfont icon-user" size={15} color={colors.brand} /></View>}
+                      <Text style={styles.filterAuthorResultName} numberOfLines={1}>{author.nickname || '用户'}</Text>
+                      <Text style={styles.filterAuthorSelectText}>选择</Text>
+                    </Pressable>
+                  ))}
+                </>
+              )}
+            </View>
+          </ScrollView>
         </Pressable>
       </Pressable>
     </Modal>
@@ -704,6 +1126,99 @@ function dietGoalLabel(value: string): string {
     maintain: '维持',
   }
   return labels[value] || value
+}
+
+function getFeedTargetKey(item: CommunityFeedItem): string {
+  const targetType = item.target_type || item.record.feed_type || 'food_record'
+  const targetId = item.target_id || item.record.id
+  return `${targetType}:${targetId}`
+}
+
+function dedupeFeedItems(list: CommunityFeedItem[]): CommunityFeedItem[] {
+  const seen = new Set<string>()
+  return list.filter((item) => {
+    const key = getFeedTargetKey(item)
+    if (!key || seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
+
+function appendUniqueFeedItems(current: CommunityFeedItem[], incoming: CommunityFeedItem[]): { list: CommunityFeedItem[]; added: number } {
+  const known = new Set(current.map(getFeedTargetKey))
+  const next = [...current]
+  let added = 0
+  for (const item of incoming) {
+    const key = getFeedTargetKey(item)
+    if (!key || known.has(key)) continue
+    known.add(key)
+    next.push(item)
+    added += 1
+  }
+  return { list: next, added }
+}
+
+function buildFeedQueryKey(params: CommunityFeedQueryParams): string {
+  return JSON.stringify({
+    sort_by: params.sort_by || 'latest',
+    content_type: params.content_type || 'all',
+    meal_type: params.meal_type || '',
+    diet_goal: params.diet_goal || '',
+    author_scope: params.author_scope || 'public',
+    author_id: params.author_id || '',
+    priority_author_ids: params.priority_author_ids || [],
+  })
+}
+
+function feedCacheStorageKey(userId: string, queryKey: string): string {
+  return `${feedCachePrefix}${encodeURIComponent(userId)}:${encodeURIComponent(queryKey)}`
+}
+
+function priorityAuthorsStorageKey(userId: string): string {
+  return `${priorityAuthorsPrefix}${encodeURIComponent(userId)}`
+}
+
+function feedFiltersStorageKey(userId: string): string {
+  return `${feedFiltersPrefix}${encodeURIComponent(userId)}`
+}
+
+async function readPriorityAuthorIds(userId: string): Promise<string[]> {
+  try {
+    const raw = await AsyncStorage.getItem(priorityAuthorsStorageKey(userId))
+    const parsed = raw ? JSON.parse(raw) : []
+    if (!Array.isArray(parsed)) return []
+    return Array.from(new Set(parsed.map((id) => String(id || '').trim()).filter(Boolean)))
+  } catch {
+    return []
+  }
+}
+
+async function readFeedFilterPreferences(userId: string): Promise<FeedFilterPreferences | null> {
+  try {
+    const raw = await AsyncStorage.getItem(feedFiltersStorageKey(userId))
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as Partial<FeedFilterPreferences>
+    const sortBy = sortOptions.some((option) => option.value === parsed.sortBy) ? parsed.sortBy! : 'latest'
+    const contentType = contentOptions.some((option) => option.value === parsed.contentType) ? parsed.contentType! : 'all'
+    const mealType = mealOptions.some((option) => option.value === parsed.mealType) ? parsed.mealType! : 'all'
+    const dietGoal = dietGoalOptions.some((option) => option.value === parsed.dietGoal) ? parsed.dietGoal! : 'all'
+    const authorScope = authorScopeOptions.some((option) => option.value === parsed.authorScope) ? parsed.authorScope! : 'public'
+    return {
+      sortBy,
+      contentType,
+      mealType,
+      dietGoal,
+      authorScope,
+      authorId: String(parsed.authorId || '').trim(),
+      authorName: String(parsed.authorName || '').trim(),
+    }
+  } catch {
+    return null
+  }
+}
+
+function sameStringList(left: string[], right: string[]): boolean {
+  return left.length === right.length && left.every((value, index) => value === right[index])
 }
 
 const styles = StyleSheet.create({
@@ -1214,6 +1729,19 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     backgroundColor: 'rgba(248,250,252,0.72)',
   },
+  loadMoreFooter: {
+    minHeight: 52,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: hairline,
+  },
+  loadMoreText: {
+    color: colors.textMuted,
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: '600',
+  },
   feedCommentItem: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -1493,12 +2021,19 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(15,23,42,0.42)',
   },
   filterDrawer: {
+    maxHeight: '82%',
     paddingTop: 8,
     paddingHorizontal: 18,
     paddingBottom: 28,
     borderTopLeftRadius: 18,
     borderTopRightRadius: 18,
     backgroundColor: '#fff',
+  },
+  filterDrawerScroll: {
+    flexGrow: 0,
+  },
+  filterDrawerScrollContent: {
+    paddingBottom: 4,
   },
   filterDrawerHandle: {
     alignSelf: 'center',
@@ -1563,5 +2098,98 @@ const styles = StyleSheet.create({
   },
   filterChipTextActive: {
     color: colors.brandDark,
+  },
+  filterSelectedAuthor: {
+    minHeight: 42,
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    paddingHorizontal: 12,
+    backgroundColor: colors.brandSoft,
+  },
+  filterSelectedAuthorText: {
+    flex: 1,
+    color: colors.brandDark,
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '700',
+  },
+  filterSelectedAuthorClear: {
+    color: colors.danger,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '700',
+  },
+  filterAuthorSearchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  filterAuthorInput: {
+    flex: 1,
+    minWidth: 0,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#dbe4ea',
+    paddingHorizontal: 14,
+    color: colors.text,
+    fontSize: 14,
+    backgroundColor: '#f8fafc',
+  },
+  filterAuthorSearchButton: {
+    width: 68,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.brand,
+  },
+  filterAuthorSearchButtonDisabled: {
+    opacity: 0.5,
+  },
+  filterAuthorSearchButtonText: {
+    color: '#fff',
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '800',
+  },
+  filterAuthorResult: {
+    minHeight: 50,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 6,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#edf2f7',
+  },
+  filterAuthorAvatar: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+  },
+  filterAuthorAvatarFallback: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.brandSoft,
+  },
+  filterAuthorResultName: {
+    flex: 1,
+    minWidth: 0,
+    color: colors.text,
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '700',
+  },
+  filterAuthorSelectText: {
+    color: colors.brandDark,
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: '800',
   },
 })

@@ -32,6 +32,7 @@ func setupLoginRouter(h *LoginHandler) *gin.Engine {
 	r.POST("/api/app/login/wechat", h.AppWechatLogin)
 	r.POST("/api/app/login/password", h.PasswordLogin)
 	r.POST("/api/app/register/password", h.PasswordRegister)
+	r.POST("/api/app/account/password/reset", h.ResetPassword)
 	return r
 }
 
@@ -72,6 +73,41 @@ func TestLoginHandler_LoginBindError(t *testing.T) {
 	var resp map[string]any
 	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	assert.Equal(t, "请求参数无效", resp["detail"])
+}
+
+func TestLoginHandler_ResetPasswordBindError(t *testing.T) {
+	h := NewLoginHandler(nil)
+	r := setupLoginRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/app/account/password/reset", bytes.NewReader([]byte("bad json")))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	var resp map[string]any
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+	assert.Equal(t, "请求参数无效", resp["detail"])
+}
+
+func TestLoginHandler_ResetPasswordUnavailable(t *testing.T) {
+	h := NewLoginHandler(service.NewLoginService(&config.Config{}, nil, nil))
+	r := setupLoginRouter(h)
+	body, _ := json.Marshal(map[string]string{
+		"phone":    "13800138000",
+		"code":     "530836",
+		"password": "newpassword123",
+	})
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/app/account/password/reset", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	var resp map[string]any
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+	assert.Equal(t, service.ErrPasswordResetUnavailable.Error(), resp["detail"])
 }
 
 func TestLoginHandler_LoginServiceError(t *testing.T) {

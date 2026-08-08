@@ -2,7 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
 import { useFocusEffect, useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
+import { fetch as expoFetch } from 'expo/fetch'
 import Svg, { Circle as SvgCircle, Defs, LinearGradient as SvgLinearGradient, Rect as SvgRect, Stop } from 'react-native-svg'
+import { PetChatStreamError, type PetChatStreamFetch } from '@food-link/api-client'
 import type {
   PetChatHistoryMessage,
   PetChatHistoryResponse,
@@ -41,6 +43,8 @@ const FOLLOW_UPS = [
   '碳水是不是偏低',
   '给我一个明天能执行的小目标',
 ]
+
+const mobilePetChatStreamFetch: PetChatStreamFetch = (url, init) => expoFetch(url, init)
 
 function nextId(prefix: string): string {
   return `${prefix}_${Date.now()}_${Math.random().toString(16).slice(2)}`
@@ -131,6 +135,24 @@ function buildActions(question: string): string[] {
   return ['先选一个最小改动执行 3 天', '继续记录训练和体感', '下次让我对比执行前后变化']
 }
 
+function shouldFallbackFromStream(error: unknown): boolean {
+  if (!(error instanceof PetChatStreamError)) return true
+  if (error.code === 'transport' || error.code === 'timeout' || error.code === 'protocol' || error.code === 'unsupported') return true
+  return error.code === 'http' && [404, 405, 501].includes(error.status || 0)
+}
+
+function recoverPersistedPetAnswer(history: PetChatHistoryResponse | null | undefined, question: string): { answer: string; sessionId: string } | null {
+  const items = history?.messages || []
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    const item = items[index]
+    if (item.role !== 'user' || item.content.trim() !== question.trim()) continue
+    const answer = items.slice(index + 1).find((candidate) => candidate.role === 'assistant' || candidate.role === 'pet')
+    if (!answer?.content.trim()) return null
+    return { answer: answer.content, sessionId: historySessionId(history) }
+  }
+  return null
+}
+
 export function PetChatScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList, 'PetChat'>>()
   const dialog = useAppDialog()
@@ -145,8 +167,13 @@ export function PetChatScreen() {
   const [loading, setLoading] = useState(false)
   const [historyLoading, setHistoryLoading] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [streamingMessageId, setStreamingMessageId] = useState('')
   const busyRef = useRef(false)
   const historyLoadedRef = useRef(false)
+  const chatScrollRef = useRef<ScrollView | null>(null)
+  const activeRequestIdRef = useRef('')
+  const streamingMessageIdRef = useRef('')
+  const streamAbortRef = useRef<AbortController | null>(null)
 
   const petName = petSummary?.pet?.name || '成长伙伴'
   const hasAnalysis = useMemo(() => messages.some((item) => item.role === 'pet' && item.id !== 'intro'), [messages])
@@ -204,6 +231,13 @@ export function PetChatScreen() {
     })
   }, [navigation, petName])
 
+  useEffect(() => () => {
+    activeRequestIdRef.current = ''
+    streamAbortRef.current?.abort()
+    streamAbortRef.current = null
+    busyRef.current = false
+  }, [])
+
   const openHistory = useCallback(async () => {
     if (busyRef.current) return
     const nextOpen = !historyOpen
@@ -242,47 +276,163 @@ export function PetChatScreen() {
     setMessages([buildIntroMessage(petName)])
   }, [petName])
 
+  const cancelGeneration = useCallback(() => {
+    if (!busyRef.current) return
+    const messageId = streamingMessageIdRef.current
+    activeRequestIdRef.current = ''
+    streamAbortRef.current?.abort()
+    streamAbortRef.current = null
+    busyRef.current = false
+    setBusy(false)
+    setStreamingMessageId('')
+    streamingMessageIdRef.current = ''
+    if (messageId) {
+      setMessages((previous) => previous.map((message) => {
+        if (message.id !== messageId) return message
+        const partial = message.text.trim()
+        return {
+          ...message,
+          text: partial ? `${partial}\n\n（已停止生成）` : `${petName}已停止生成。你可以调整问题后重新发送。`,
+          actions: partial ? ['内容未生成完整，可重新提问'] : ['重新发送问题'],
+        }
+      }))
+    }
+  }, [petName])
+
   const runAnalysis = useCallback(async (question: string, range: StatsRange) => {
     const text = question.trim()
     if (!text || busyRef.current) return
+    const requestId = nextId('pet-request')
+    const streamingId = nextId('pet-stream')
+    const abortController = new AbortController()
+    let streamedText = ''
+    let nextSummary = statsSummary?.range === range ? statsSummary : null
+    let allowLateSummary = false
+
+    activeRequestIdRef.current = requestId
+    streamingMessageIdRef.current = streamingId
+    streamAbortRef.current = abortController
     busyRef.current = true
     setBusy(true)
+    setStreamingMessageId(streamingId)
     setActiveRange(range)
-    setMessages((prev) => [...prev, { id: nextId('user'), role: 'user', text }])
-    try {
-      const [nextSummary, chat] = await Promise.all([
-        apiClient.getStatsSummary(range).catch(() => null),
-        apiClient.generatePetChat(text, range, activeSessionId, !activeSessionId),
-      ])
-      if (chat.session_id) setActiveSessionId(chat.session_id)
-      if (nextSummary) setStatsSummary(nextSummary)
-      const answer = chat.answer || '我看完了，但这次没有生成足够明确的结论。可以先多记录几餐再试。'
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: nextId('pet'),
-          role: 'pet',
-          text: answer,
-          clues: buildClues(nextSummary, answer),
-          actions: buildActions(text),
-        },
-      ])
-    } catch (error) {
-      showError(`${petName}分析失败`, error)
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: nextId('pet'),
-          role: 'pet',
-          text: `${petName}这次没能顺利读完记录。你可以稍后再试，或先换成最近 7 天的小范围分析。`,
-          actions: ['换最近 7 天', '稍后再试'],
-        },
-      ])
-    } finally {
-      busyRef.current = false
-      setBusy(false)
+    setMessages((previous) => [
+      ...previous,
+      { id: nextId('user'), role: 'user', text },
+      { id: streamingId, role: 'pet', text: '' },
+    ])
+
+    const isActive = () => activeRequestIdRef.current === requestId
+    const updateStreamingMessage = (updater: (message: ChatMessage) => ChatMessage) => {
+      if (!isActive()) return
+      setMessages((previous) => previous.map((message) => message.id === streamingId ? updater(message) : message))
     }
-  }, [activeSessionId, petName, showError])
+    const finishMessage = (answer: string) => {
+      allowLateSummary = true
+      updateStreamingMessage((message) => ({
+        ...message,
+        text: answer,
+        clues: buildClues(nextSummary, answer),
+        actions: buildActions(text),
+      }))
+    }
+    const failMessage = () => {
+      updateStreamingMessage((message) => ({
+        ...message,
+        text: `${petName}这次没能顺利读完记录。你可以稍后再试，或先换成最近 7 天的小范围分析。`,
+        clues: undefined,
+        actions: ['换最近 7 天', '稍后再试'],
+      }))
+    }
+    const summaryPromise = apiClient.getStatsSummary(range)
+      .then((summary) => {
+        nextSummary = summary
+        if (!isActive() && !allowLateSummary) return summary
+        setStatsSummary(summary)
+        if (allowLateSummary) {
+          setMessages((previous) => previous.map((message) => (
+            message.id === streamingId && message.text.trim() && !message.text.includes('（已停止生成）')
+              ? { ...message, clues: buildClues(summary, message.text) }
+              : message
+          )))
+        }
+        return summary
+      })
+      .catch(() => null)
+
+    try {
+      const meta = await apiClient.streamGeneratePetChat(
+        text,
+        range,
+        activeSessionId,
+        !activeSessionId,
+        {
+          onChunk: (chunk) => {
+            if (!isActive() || !chunk) return
+            streamedText += chunk
+            updateStreamingMessage((message) => ({ ...message, text: `${message.text}${chunk}` }))
+          },
+        },
+        {
+          fetch: mobilePetChatStreamFetch,
+          signal: abortController.signal,
+          timeoutMs: 180000,
+        },
+      )
+      if (!isActive()) return
+      if (meta.session_id) setActiveSessionId(meta.session_id)
+      const answer = streamedText || '我看完了，但这次没有生成足够明确的结论。可以先多记录几餐再试。'
+      finishMessage(answer)
+    } catch (error) {
+      if (!isActive()) return
+      if (error instanceof PetChatStreamError && error.code === 'cancelled') {
+        failMessage()
+        return
+      }
+      if (!shouldFallbackFromStream(error)) {
+        showError(`${petName}分析失败`, error)
+        failMessage()
+        return
+      }
+
+      try {
+        let recovered: { answer: string; sessionId: string } | null = null
+        if (streamedText) {
+          const history = activeSessionId
+            ? await apiClient.getPetChatSession(activeSessionId).catch(() => null)
+            : await apiClient.getLatestPetChatSession().catch(() => null)
+          recovered = recoverPersistedPetAnswer(history, text)
+        }
+        if (!isActive()) return
+        if (recovered) {
+          if (recovered.sessionId) setActiveSessionId(recovered.sessionId)
+          streamedText = recovered.answer
+          finishMessage(recovered.answer)
+          return
+        }
+
+        const chat = await apiClient.generatePetChat(text, range, activeSessionId, !activeSessionId)
+        if (!isActive()) return
+        if (chat.session_id) setActiveSessionId(chat.session_id)
+        streamedText = chat.answer || ''
+        finishMessage(chat.answer || '我看完了，但这次没有生成足够明确的结论。可以先多记录几餐再试。')
+      } catch (fallbackError) {
+        if (!isActive()) return
+        showError(`${petName}分析失败`, fallbackError)
+        failMessage()
+      }
+    } finally {
+      void summaryPromise
+      if (streamAbortRef.current === abortController) streamAbortRef.current = null
+      if (isActive()) {
+        activeRequestIdRef.current = ''
+        streamingMessageIdRef.current = ''
+        busyRef.current = false
+        setStreamingMessageId('')
+        setBusy(false)
+      }
+    }
+  }, [activeSessionId, petName, showError, statsSummary])
 
   const send = useCallback(() => {
     const text = input.trim()
@@ -308,8 +458,8 @@ export function PetChatScreen() {
         <SvgCircle cx="438" cy="606" r="154" fill="#f5bc5b" opacity="0.16" />
       </Svg>
       <View style={styles.topbar}>
-        <MiniButton label="最近" active={historyOpen} onPress={openHistory} />
-        <MiniButton label="新对话" onPress={startNewConversation} />
+        <MiniButton label="最近" active={historyOpen} disabled={busy} onPress={openHistory} />
+        <MiniButton label="新对话" disabled={busy} onPress={startNewConversation} />
       </View>
 
       <View style={styles.stage}>
@@ -360,9 +510,11 @@ export function PetChatScreen() {
       ) : null}
 
       <ScrollView
+        ref={chatScrollRef}
         style={styles.chatScroll}
         contentContainerStyle={styles.messages}
         showsVerticalScrollIndicator={false}
+        onContentSizeChange={() => chatScrollRef.current?.scrollToEnd({ animated: false })}
         refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor={colors.brand} colors={[colors.brand]} />}
       >
         <View style={styles.messageList}>
@@ -370,7 +522,11 @@ export function PetChatScreen() {
             <View key={message.id} style={[styles.messageRow, message.role === 'user' && styles.messageRowUser]}>
               {message.role === 'pet' ? <PetAvatar pet={petSummary?.pet} size={30} mood={petSummary?.status.mood} state={petSummary?.status.state} /> : null}
               <View style={[styles.bubble, message.role === 'user' ? styles.userBubble : styles.petBubble]}>
-                <Text style={[styles.messageText, message.role === 'user' && styles.userMessageText]}>{message.text}</Text>
+                {busy && message.id === streamingMessageId && !message.text ? (
+                  <ActivityIndicator color={colors.brand} />
+                ) : (
+                  <Text style={[styles.messageText, message.role === 'user' && styles.userMessageText]}>{message.text}</Text>
+                )}
                 {message.clues?.length ? (
                   <View style={styles.clueList}>
                     {message.clues.map((clue, index) => (
@@ -389,14 +545,6 @@ export function PetChatScreen() {
             </View>
             </View>
           ))}
-          {busy ? (
-            <View style={styles.thinkingRow}>
-              <PetAvatar pet={petSummary?.pet} size={30} mood={petSummary?.status.mood} state={petSummary?.status.state} />
-              <View style={styles.thinkingBubble}>
-                <ActivityIndicator color={colors.brand} />
-              </View>
-            </View>
-          ) : null}
         </View>
       </ScrollView>
 
@@ -414,9 +562,18 @@ export function PetChatScreen() {
           placeholderTextColor={colors.textMuted}
           returnKeyType="send"
           style={styles.input}
+          onSubmitEditing={() => {
+            if (!busy) send()
+          }}
         />
-        <Pressable style={[styles.sendButton, (busy || !input.trim()) && styles.sendButtonDisabled]} disabled={busy || !input.trim()} onPress={send}>
-          {busy ? <ActivityIndicator size="small" color={colors.brandDark} /> : <Text style={styles.sendText}>发送</Text>}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={busy ? '停止生成' : '发送消息'}
+          style={[styles.sendButton, busy && styles.stopButton, (!busy && !input.trim()) && styles.sendButtonDisabled]}
+          disabled={!busy && !input.trim()}
+          onPress={busy ? cancelGeneration : send}
+        >
+          <Text style={[styles.sendText, busy && styles.stopText]}>{busy ? '停止' : '发送'}</Text>
         </Pressable>
       </View>
     </View>
@@ -608,19 +765,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '900',
   },
-  thinkingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  thinkingBubble: {
-    minWidth: 52,
-    minHeight: 36,
-    borderRadius: 14,
-    backgroundColor: 'rgba(255, 255, 255, 0.86)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   quickScroll: {
     zIndex: 1,
     flexShrink: 0,
@@ -674,10 +818,18 @@ const styles = StyleSheet.create({
   sendButtonDisabled: {
     opacity: 0.46,
   },
+  stopButton: {
+    backgroundColor: '#fee2e2',
+    borderWidth: 1,
+    borderColor: '#fecaca',
+  },
   sendText: {
     color: '#1d5a45',
     fontSize: 13,
     fontWeight: '900',
+  },
+  stopText: {
+    color: '#b45353',
   },
   historyPanel: {
     position: 'absolute',

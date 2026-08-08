@@ -271,6 +271,14 @@ function ProfilePage() {
       desc: '生理指标、日常消耗、病史与饮食偏好'
     },
     {
+      id: 2,
+      iconClass: 'icon-guoqi1',
+      title: '食物保质期',
+      desc: formatExpiryPreviewText(expiryDashboard),
+      path: '/pages/expiry/index',
+      badgeCount: (expiryDashboard?.expired_count ?? 0) + (expiryDashboard?.today_count ?? 0) + (expiryDashboard?.soon_count ?? 0)
+    },
+    {
       id: 4,
       iconClass: 'icon-good',
       title: '我的宠物',
@@ -285,13 +293,6 @@ function ProfilePage() {
       path: extraPkgUrl('/pages/reward-center/index')
     },
     {
-      id: 9,
-      iconClass: 'icon-dizhi',
-      title: '校园食堂',
-      desc: '查食堂菜品热量、价格和蛋白质',
-      path: extraPkgUrl('/pages/campus-canteen/index')
-    },
-    {
       id: 5,
       iconClass: 'icon-foodshop',
       title: '公共食物库',
@@ -299,19 +300,11 @@ function ProfilePage() {
       path: extraPkgUrl('/pages/food-library/index')
     },
     {
-      id: 2,
-      iconClass: 'icon-guoqi1',
-      title: '食物保质期',
-      desc: formatExpiryPreviewText(expiryDashboard),
-      path: '/pages/expiry/index',
-      badgeCount: (expiryDashboard?.expired_count ?? 0) + (expiryDashboard?.today_count ?? 0) + (expiryDashboard?.soon_count ?? 0)
-    },
-    {
-      id: 11,
-      iconClass: 'icon-duoren',
-      title: '邀请好友得会员',
-      desc: '好友有效使用 2 天，你得 7 天、好友得 3 天会员',
-      path: extraPkgUrl('/pages/invite-friends/index')
+      id: 9,
+      iconClass: 'icon-dizhi',
+      title: '校园食堂',
+      desc: '查食堂菜品热量、价格和蛋白质',
+      path: extraPkgUrl('/pages/campus-canteen/index')
     },
     {
       id: 8,
@@ -548,7 +541,9 @@ function ProfilePage() {
             if (
               key.startsWith('comment_draft_') ||
               key.startsWith('temp_comments_') ||
-              key.startsWith('record_manual_custom_foods_v1:')
+              key.startsWith('record_manual_custom_foods_v1:') ||
+              key.startsWith('home_experience_config_v1:') ||
+              key.startsWith('home_experience_config_v2:')
             ) {
               try { Taro.removeStorageSync(key) } catch (_) {}
             }

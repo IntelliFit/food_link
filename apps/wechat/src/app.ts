@@ -42,9 +42,24 @@ function resetPreviousCommunityFeedSession() {
 }
 
 function handleDeepLink(options?: any) {
-  const target = String(options?.query?.target || '').trim()
-  const path = String(options?.query?.path || '').trim()
-  if (target === 'my-vouchers' || target === 'reward-center' || path.includes('my-vouchers') || path.includes('reward-center')) {
+  const launchPath = String(options?.path || '').trim()
+  const rawScene = String(options?.query?.scene || '').trim()
+  let decodedScene = rawScene
+  try {
+    decodedScene = decodeURIComponent(rawScene)
+  } catch {
+    // 保留原始 scene，继续兼容未编码参数。
+  }
+  const sceneParams = new URLSearchParams(decodedScene)
+  const target = String(options?.query?.target || sceneParams.get('target') || '').trim()
+  const queryPath = String(options?.query?.path || sceneParams.get('path') || '').trim()
+  const path = queryPath || launchPath
+  const wantsRewardCenter = target === 'my-vouchers'
+    || target === 'reward-center'
+    || path.includes('my-vouchers')
+    || path.includes('reward-center')
+  const alreadyOnRewardCenter = launchPath.includes('reward-center')
+  if (wantsRewardCenter && !alreadyOnRewardCenter) {
     Taro.navigateTo({
       url: extraPkgUrl('/pages/reward-center/index?section=rewards'),
       fail: (error) => {

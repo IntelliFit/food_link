@@ -242,6 +242,19 @@
   line-height: 1.4;
 }
 
+.quota-bar-spinner {
+  width: 24rpx;
+  height: 24rpx;
+  border: 3rpx solid rgba(15, 118, 110, 0.2);
+  border-top-color: #0f766e;
+  border-radius: 50%;
+  animation: quota-bar-spin 0.8s linear infinite;
+}
+
+@keyframes quota-bar-spin {
+  to { transform: rotate(360deg); }
+}
+
 .quota-bar--exhausted .quota-bar-text {
   color: #ef4444;
 }

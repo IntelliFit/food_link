@@ -33,6 +33,22 @@ export type ExecutionMode =
 
 export type AnalysisEngine = 'legacy_direct' | 'db_first'
 
+export type PrecisionSourceType = 'image' | 'text'
+
+export interface PrecisionReferenceDimensions {
+  length?: number
+  width?: number
+  height?: number
+}
+
+export interface PrecisionReferenceObjectInput {
+  reference_type: 'preset' | 'custom'
+  reference_name: string
+  dimensions_mm?: PrecisionReferenceDimensions
+  placement_note?: string
+  applies_to_items?: string[]
+}
+
 export interface Nutrients {
   calories: number
   protein: number
@@ -459,6 +475,77 @@ export interface AnalyzeTaskSubmitParams {
   is_multi_view?: boolean
   execution_mode?: ExecutionMode
   analysis_engine?: AnalysisEngine
+  previousResult?: NonNullable<AnalysisTask['result']>
+  correction_source_task_id?: string
+  correction_root_task_id?: string
+  precision_session_id?: string
+  reference_objects?: PrecisionReferenceObjectInput[]
+  correctionItems?: AnalyzeCorrectionItem[]
+}
+
+export interface AnalyzeCorrectionItem {
+  name: string
+  weight: number
+  originalWeight?: number
+  calorie?: number
+  protein?: number
+  carbs?: number
+  fat?: number
+  waterMl?: number
+  nutrients?: Nutrients
+  sourceName?: string
+  sourceItemId?: number
+  nameEdited?: boolean
+  weightEdited?: boolean
+  nutritionEdited?: boolean
+}
+
+export interface ContinuePrecisionSessionParams {
+  source_type: PrecisionSourceType
+  image_url?: string
+  image_urls?: string[]
+  text?: string
+  date?: string
+  additionalContext?: string
+  meal_type?: MealType
+  timezone_offset_minutes?: number
+  province?: string
+  city?: string
+  district?: string
+  diet_goal?: string
+  activity_timing?: string
+  user_goal?: string
+  remaining_calories?: number
+  suggest_ratio_enabled?: boolean
+  is_multi_view?: boolean
+  previousResult?: NonNullable<AnalysisTask['result']>
+  correctionItems?: AnalyzeCorrectionItem[]
+  reference_objects?: PrecisionReferenceObjectInput[]
+}
+
+export type AnalysisFeedbackType =
+  | 'weight_mismatch'
+  | 'nutrition_mismatch'
+  | 'suspect_distrust'
+  | 'record_corrected'
+  | 'correction'
+  | 'failed'
+  | 'retry'
+  | 'manual_entry'
+
+export type AnalysisResolutionState = 'user_corrected' | 'still_distrust'
+
+export interface AnalysisFeedbackRequest {
+  feedback_type: AnalysisFeedbackType
+  resolution_state?: AnalysisResolutionState
+  source_task_id?: string
+  source_record_id?: string
+  before_result?: Record<string, unknown>
+  after_result?: Record<string, unknown>
+  user_correction_items?: Array<Record<string, unknown>>
+  payload_snapshot?: Record<string, unknown>
+  model_name?: string
+  analysis_engine?: string
 }
 
 export interface UpdateFoodRecordRequest {

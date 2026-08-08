@@ -1,8 +1,10 @@
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ActivityIndicator, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { ActivityIndicator, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
 import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import Svg, { Circle } from 'react-native-svg'
+import type { HealthFocusItem } from '@food-link/api-client'
 import {
   normalizeInsightText,
   type BodyMetricsSummary,
@@ -27,6 +29,40 @@ import { userFacingErrorMessage } from '../utils/errors'
 type AnalysisPanel = 'health' | 'nutrition' | 'structure'
 
 type MealKey = 'breakfast' | 'morning_snack' | 'lunch' | 'afternoon_snack' | 'dinner' | 'evening_snack'
+
+type ExtendedRiskCard = RiskCard & {
+  is_custom?: boolean
+  needs_refresh?: boolean
+  focus_label?: string
+}
+
+type RiskOption = {
+  key: string
+  title: string
+  short: string
+  is_custom?: boolean
+}
+
+type CustomFocusMeta = {
+  max_focuses: number
+  generate_cost: number
+  daily_limit: number
+  used_today: number
+  remaining_today: number
+}
+
+type ExtendedHealthIndex = NonNullable<StatsSummary['health_index']> & {
+  custom_risk_cards?: ExtendedRiskCard[]
+  all_risk_options?: RiskOption[]
+  custom_focus_meta?: CustomFocusMeta
+}
+
+type ExtendedStatsSummary = Omit<StatsSummary, 'health_index'> & {
+  health_index?: ExtendedHealthIndex
+}
+
+const DEFAULT_RISK_KEYS = ['hypertension', 'diabetes', 'cardio', 'weight', 'micronutrient']
+const RISK_PREF_STORAGE_KEY = 'stats_risk_focus_keys'
 
 const analysisTabs: Array<{ key: AnalysisPanel; label: string }> = [
   { key: 'health', label: '健康指数' },
@@ -70,11 +106,20 @@ export function StatsScreen() {
   const [range, setRange] = useState<StatsRange>('week')
   const [rangeSheetOpen, setRangeSheetOpen] = useState(false)
   const [panel, setPanel] = useState<AnalysisPanel>('health')
-  const [summary, setSummary] = useState<StatsSummary | null>(null)
+  const [summary, setSummary] = useState<ExtendedStatsSummary | null>(null)
   const [loading, setLoading] = useState(false)
   const [insightLoading, setInsightLoading] = useState(false)
   const [insightError, setInsightError] = useState('')
-  const [selectedRisk, setSelectedRisk] = useState<RiskCard | null>(null)
+  const [selectedRisk, setSelectedRisk] = useState<ExtendedRiskCard | null>(null)
+  const [riskPickerOpen, setRiskPickerOpen] = useState(false)
+  const [selectedRiskKeys, setSelectedRiskKeys] = useState<string[]>(DEFAULT_RISK_KEYS)
+  const [riskPreferencesLoaded, setRiskPreferencesLoaded] = useState(false)
+  const [customFocusInput, setCustomFocusInput] = useState('')
+  const [customFocusAdding, setCustomFocusAdding] = useState(false)
+  const [customFocusRefreshingKey, setCustomFocusRefreshingKey] = useState<string | null>(null)
+  const [customFocusRemovingKey, setCustomFocusRemovingKey] = useState<string | null>(null)
+  const [customFocusError, setCustomFocusError] = useState('')
+  const [customFocusNotice, setCustomFocusNotice] = useState('')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -92,16 +137,67 @@ export function StatsScreen() {
     void load()
   }, [load])
 
+  useEffect(() => {
+    let active = true
+    AsyncStorage.getItem(RISK_PREF_STORAGE_KEY)
+      .then((raw) => {
+        if (!active || !raw) return
+        const parsed = JSON.parse(raw) as unknown
+        if (!Array.isArray(parsed)) return
+        const cleaned = parsed.filter((item): item is string => typeof item === 'string' && Boolean(item.trim()))
+        if (cleaned.length > 0) setSelectedRiskKeys(Array.from(new Set([...DEFAULT_RISK_KEYS, ...cleaned])))
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (active) setRiskPreferencesLoaded(true)
+      })
+    return () => {
+      active = false
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!riskPreferencesLoaded) return
+    void AsyncStorage.setItem(RISK_PREF_STORAGE_KEY, JSON.stringify(selectedRiskKeys)).catch(() => undefined)
+  }, [riskPreferencesLoaded, selectedRiskKeys])
+
   const health = summary?.health_index
-  const riskCards = health?.risk_cards || []
-  const visibleRiskCards = riskCards.slice(0, 6)
+  const riskCards = useMemo(() => (health?.risk_cards || []) as ExtendedRiskCard[], [health?.risk_cards])
+  const customRiskCards = useMemo(() => health?.custom_risk_cards || [], [health?.custom_risk_cards])
+  const allDisplayRiskCards = useMemo(
+    () => [...riskCards, ...customRiskCards],
+    [customRiskCards, riskCards],
+  )
+  const allRiskOptions = useMemo(() => mergeRiskOptions(health, riskCards, customRiskCards), [customRiskCards, health, riskCards])
+  const orderedRiskOptions = useMemo(() => {
+    const selected = selectedRiskKeys
+      .map((key) => allRiskOptions.find((option) => option.key === key))
+      .filter((option): option is RiskOption => Boolean(option))
+    return [...selected, ...allRiskOptions.filter((option) => !selectedRiskKeys.includes(option.key))]
+  }, [allRiskOptions, selectedRiskKeys])
+  const visibleRiskCards = useMemo(() => selectedRiskKeys
+    .map((key) => {
+      const card = allDisplayRiskCards.find((item) => item.key === key)
+      if (card) return card
+      const option = allRiskOptions.find((item) => item.key === key)
+      return option?.is_custom ? pendingCustomRiskCardFromOption(option) : null
+    })
+    .filter((card): card is ExtendedRiskCard => Boolean(card)), [allDisplayRiskCards, allRiskOptions, selectedRiskKeys])
+  const customFocusMeta = health?.custom_focus_meta
+  const selectedRiskItems = useMemo(() => selectedRiskKeys
+    .map((key) => allRiskOptions.find((option) => option.key === key))
+    .filter((option): option is RiskOption => Boolean(option)), [allRiskOptions, selectedRiskKeys])
+  const selectedRiskSummary = selectedRiskItems.map((item) => item.short).join('、')
   const insightText = useMemo(() => normalizeInsightText(summary?.analysis_summary || ''), [summary?.analysis_summary])
   const recordedDays = Math.max(0, Number(summary?.recorded_days ?? summary?.streak_days ?? 0))
   const hasEnoughHealthData = Boolean(health?.has_enough_data)
   const hasAnyDietData = recordedDays > 0 || Number(summary?.total_calories || 0) > 0 || (summary?.daily_calories || []).some((item) => Number(item.calories) > 0)
   const healthScore = Math.round(health?.overall_score ?? averageRiskScore(riskCards) ?? 0)
   const projectedScore = Math.round(health?.projected_score ?? Math.min(100, healthScore + averageRiskDelta(riskCards)))
-  const focusOverviewCopy = health?.overview_copy || scoreToFocusOverview(healthScore, riskCards.length > 0)
+  const hasVisibleCustomFocus = visibleRiskCards.some((card) => card.is_custom)
+  const focusOverviewCopy = hasVisibleCustomFocus
+    ? scoreToFocusOverview(healthScore, allDisplayRiskCards.length > 0, true)
+    : (health?.overview_copy || scoreToFocusOverview(healthScore, riskCards.length > 0, false))
   const signalChips = [
     { label: '记录天数', value: `${recordedDays} 天` },
     { label: '日均摄入', value: `${Math.round(summary?.avg_calories_per_day || 0)} kcal` },
@@ -143,6 +239,170 @@ export function StatsScreen() {
       setInsightLoading(false)
     }
   }, [dialog, insightLoading, range, recordedDays])
+
+  const mergeCustomFocusCard = useCallback((card: ExtendedRiskCard) => {
+    setSummary((previous) => {
+      if (!previous?.health_index) return previous
+      const existingCards = previous.health_index.custom_risk_cards || []
+      const existingOptions = previous.health_index.all_risk_options || []
+      const nextOption = customRiskCardToOption(card)
+      return {
+        ...previous,
+        health_index: {
+          ...previous.health_index,
+          custom_risk_cards: [card, ...existingCards.filter((item) => item.key !== card.key)],
+          all_risk_options: existingOptions.some((item) => item.key === card.key)
+            ? existingOptions.map((item) => item.key === card.key ? { ...item, ...nextOption } : item)
+            : [...existingOptions, nextOption],
+        },
+      }
+    })
+  }, [])
+
+  const mergeCustomFocusOptions = useCallback((focuses: HealthFocusItem[]) => {
+    setSummary((previous) => {
+      if (!previous?.health_index) return previous
+      const nextOptions = [...(previous.health_index.all_risk_options || [])]
+      focuses.forEach((focus) => {
+        if (!focus.id || !focus.label) return
+        const option = customFocusToOption(focus)
+        const index = nextOptions.findIndex((item) => item.key === option.key)
+        if (index >= 0) nextOptions[index] = { ...nextOptions[index], ...option }
+        else nextOptions.push(option)
+      })
+      return {
+        ...previous,
+        health_index: {
+          ...previous.health_index,
+          all_risk_options: nextOptions,
+        },
+      }
+    })
+  }, [])
+
+  const applyGeneratedFocusMeta = useCallback((result: {
+    custom_focus_daily_limit?: number
+    custom_focus_used_today?: number
+    custom_focus_remaining_today?: number
+  }) => {
+    setSummary((previous) => {
+      if (!previous?.health_index || !previous.health_index.custom_focus_meta) return previous
+      const current = previous.health_index.custom_focus_meta
+      return {
+        ...previous,
+        health_index: {
+          ...previous.health_index,
+          custom_focus_meta: {
+            ...current,
+            daily_limit: result.custom_focus_daily_limit ?? current.daily_limit,
+            used_today: result.custom_focus_used_today ?? current.used_today,
+            remaining_today: result.custom_focus_remaining_today ?? current.remaining_today,
+          },
+        },
+      }
+    })
+  }, [])
+
+  const toggleRiskPreference = useCallback((riskKey: string) => {
+    setSelectedRiskKeys((previous) => {
+      const exists = previous.includes(riskKey)
+      const next = exists ? previous.filter((item) => item !== riskKey) : [...previous, riskKey]
+      return next.length > 0 ? next : previous
+    })
+  }, [])
+
+  const handleAddCustomFocus = useCallback(async () => {
+    const label = customFocusInput.trim()
+    if (!label || customFocusAdding) return
+    if (!health?.has_enough_data) {
+      setCustomFocusError('连续记录两天后才能添加 AI 关注。')
+      return
+    }
+    setCustomFocusAdding(true)
+    setCustomFocusError('')
+    setCustomFocusNotice('')
+    try {
+      const added = await apiClient.addHealthFocus(label)
+      mergeCustomFocusOptions(added.focuses)
+      const focusId = added.focus_id || added.focuses.find((item) => item.label === label)?.id
+      if (!focusId) throw new Error('服务端没有返回关注项标识')
+      const generated = await apiClient.generateCustomFocusCard(range, focusId)
+      const card = normalizeCustomRiskCard(generated.card, `custom:${focusId}`, label)
+      mergeCustomFocusCard(card)
+      applyGeneratedFocusMeta(generated)
+      setSelectedRiskKeys((previous) => previous.includes(card.key) ? previous : [...previous, card.key])
+      setCustomFocusInput('')
+      setCustomFocusNotice(added.already_exists ? '已有关注的 AI 卡片已更新。' : 'AI 关注已添加。')
+    } catch (error) {
+      setCustomFocusError(userFacingErrorMessage(error, '添加 AI 关注失败'))
+    } finally {
+      setCustomFocusAdding(false)
+    }
+  }, [applyGeneratedFocusMeta, customFocusAdding, customFocusInput, health?.has_enough_data, mergeCustomFocusCard, mergeCustomFocusOptions, range])
+
+  const handleRefreshCustomFocus = useCallback(async (card: ExtendedRiskCard) => {
+    if (!card.is_custom || customFocusRefreshingKey) return
+    const focusId = card.key.replace(/^custom:/, '')
+    if (!focusId) return
+    setCustomFocusRefreshingKey(card.key)
+    setCustomFocusError('')
+    setCustomFocusNotice('')
+    try {
+      const generated = await apiClient.generateCustomFocusCard(range, focusId)
+      const nextCard = normalizeCustomRiskCard(generated.card, card.key, card.focus_label || card.title)
+      mergeCustomFocusCard(nextCard)
+      applyGeneratedFocusMeta(generated)
+      setSelectedRisk(nextCard)
+      setCustomFocusNotice('AI 卡片已更新。')
+    } catch (error) {
+      const message = userFacingErrorMessage(error, '刷新 AI 卡片失败')
+      setCustomFocusError(message)
+      void dialog.alert('更新失败', message, 'danger')
+    } finally {
+      setCustomFocusRefreshingKey(null)
+    }
+  }, [applyGeneratedFocusMeta, customFocusRefreshingKey, dialog, mergeCustomFocusCard, range])
+
+  const handleRemoveCustomFocus = useCallback(async (option: RiskOption) => {
+    if (!option.is_custom || customFocusRemovingKey) return
+    const focusId = option.key.replace(/^custom:/, '')
+    if (!focusId) return
+    const confirmed = await dialog.confirm({
+      title: '移除自定义关注',
+      message: `确定移除「${option.title}」吗？`,
+      kind: 'danger',
+      confirmText: '移除',
+    })
+    if (!confirmed) return
+
+    setCustomFocusRemovingKey(option.key)
+    setCustomFocusError('')
+    setCustomFocusNotice('')
+    try {
+      await apiClient.removeHealthFocus(focusId)
+      setSelectedRiskKeys((previous) => {
+        const next = previous.filter((key) => key !== option.key)
+        return next.length > 0 ? next : DEFAULT_RISK_KEYS
+      })
+      setSummary((previous) => {
+        if (!previous?.health_index) return previous
+        return {
+          ...previous,
+          health_index: {
+            ...previous.health_index,
+            custom_risk_cards: (previous.health_index.custom_risk_cards || []).filter((card) => card.key !== option.key),
+            all_risk_options: (previous.health_index.all_risk_options || []).filter((item) => item.key !== option.key),
+          },
+        }
+      })
+      if (selectedRisk?.key === option.key) setSelectedRisk(null)
+      setCustomFocusNotice('自定义关注已移除。')
+    } catch (error) {
+      setCustomFocusError(userFacingErrorMessage(error, '移除自定义关注失败'))
+    } finally {
+      setCustomFocusRemovingKey(null)
+    }
+  }, [customFocusRemovingKey, dialog, selectedRisk?.key])
 
   return (
     <View style={styles.page}>
@@ -234,7 +494,16 @@ export function StatsScreen() {
 
         {panel === 'health' ? (
           hasEnoughHealthData ? (
-            <HealthPanel riskCards={visibleRiskCards} health={health} onSelectRisk={setSelectedRisk} />
+            <HealthPanel
+              riskCards={visibleRiskCards}
+              health={health}
+              onSelectRisk={setSelectedRisk}
+              onOpenFocus={() => {
+                setCustomFocusError('')
+                setCustomFocusNotice('')
+                setRiskPickerOpen(true)
+              }}
+            />
           ) : null
         ) : null}
 
@@ -260,12 +529,11 @@ export function StatsScreen() {
               <Sparkles size={19} color={colors.brandDark} strokeWidth={2.4} />
               <View>
                 <Text style={styles.cardTitle}>更多分析</Text>
-                <Text style={styles.cardSubtitle}>AI、代谢和身体趋势</Text>
+                <Text style={styles.cardSubtitle}>代谢和身体趋势</Text>
               </View>
             </View>
           </View>
           <View style={styles.toolGrid}>
-            <AnalysisTool iconClass="icon-yiliaohangyedeICON-" label="AI 助手" onPress={() => navigation.navigate('AiAssistant')} />
             <AnalysisTool iconClass="icon-shentinianling" label="代谢分析" onPress={() => navigation.navigate('StatsMetabolic')} />
             <AnalysisTool iconClass="icon-shangzhang" label="身体趋势" onPress={() => navigation.navigate('BodyTrends')} />
           </View>
@@ -281,7 +549,33 @@ export function StatsScreen() {
           setRangeSheetOpen(false)
         }}
       />
-      <RiskDetailSheet card={selectedRisk} onClose={() => setSelectedRisk(null)} />
+      <RiskFocusSheet
+        visible={riskPickerOpen}
+        options={orderedRiskOptions}
+        selectedKeys={selectedRiskKeys}
+        selectedSummary={selectedRiskSummary}
+        customFocusMeta={customFocusMeta}
+        customFocusInput={customFocusInput}
+        customFocusAdding={customFocusAdding}
+        customFocusRemovingKey={customFocusRemovingKey}
+        error={customFocusError}
+        notice={customFocusNotice}
+        onInputChange={(value) => {
+          setCustomFocusInput(value)
+          if (customFocusError) setCustomFocusError('')
+          if (customFocusNotice) setCustomFocusNotice('')
+        }}
+        onAdd={() => void handleAddCustomFocus()}
+        onToggle={toggleRiskPreference}
+        onRemove={(option) => void handleRemoveCustomFocus(option)}
+        onClose={() => setRiskPickerOpen(false)}
+      />
+      <RiskDetailSheet
+        card={selectedRisk}
+        refreshing={Boolean(selectedRisk && customFocusRefreshingKey === selectedRisk.key)}
+        onRefresh={(card) => void handleRefreshCustomFocus(card)}
+        onClose={() => setSelectedRisk(null)}
+      />
     </View>
   )
 }
@@ -290,19 +584,26 @@ function HealthPanel({
   riskCards,
   health,
   onSelectRisk,
+  onOpenFocus,
 }: {
-  riskCards: RiskCard[]
-  health: StatsSummary['health_index']
-  onSelectRisk: (card: RiskCard) => void
+  riskCards: ExtendedRiskCard[]
+  health: ExtendedHealthIndex | undefined
+  onSelectRisk: (card: ExtendedRiskCard) => void
+  onOpenFocus: () => void
 }) {
   return (
     <>
       <View style={styles.riskSectionHeader}>
         <Text style={styles.riskSectionTitle}>健康指标关注</Text>
-        <View style={styles.riskFocusEditBtn}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="编辑我的健康关注"
+          style={({ pressed }) => [styles.riskFocusEditBtn, pressed && styles.pressed]}
+          onPress={onOpenFocus}
+        >
           <IconfontText className="iconfont icon-target" size={14} color={colors.brandDark} />
           <Text style={styles.riskFocusEditText}>我的关注</Text>
-        </View>
+        </Pressable>
       </View>
 
       {riskCards.length > 0 ? (
@@ -333,7 +634,7 @@ function HealthPanel({
   )
 }
 
-function RiskTile({ card, onPress }: { card: RiskCard; onPress: () => void }) {
+function RiskTile({ card, onPress }: { card: ExtendedRiskCard; onPress: () => void }) {
   const iconClass = riskIconClass(card.key)
   return (
     <Pressable style={({ pressed }) => [styles.riskTile, { backgroundColor: riskBgColor(card.key) }, pressed && styles.pressed]} onPress={onPress}>
@@ -347,6 +648,12 @@ function RiskTile({ card, onPress }: { card: RiskCard; onPress: () => void }) {
         </View>
       </View>
       <Text style={styles.riskTileTitle} numberOfLines={1}>{card.title}</Text>
+      {card.is_custom ? (
+        <View style={styles.riskTileAiRow}>
+          <Text style={styles.riskTileAiBadge}>AI</Text>
+          {card.needs_refresh ? <Text style={styles.riskTileRefreshHint}>待更新</Text> : null}
+        </View>
+      ) : null}
       <Text style={styles.riskTileSummary} numberOfLines={2}>{card.brief || card.summary}</Text>
     </Pressable>
   )
@@ -728,7 +1035,168 @@ function RangeSheet({
   )
 }
 
-function RiskDetailSheet({ card, onClose }: { card: RiskCard | null; onClose: () => void }) {
+function RiskFocusSheet({
+  visible,
+  options,
+  selectedKeys,
+  selectedSummary,
+  customFocusMeta,
+  customFocusInput,
+  customFocusAdding,
+  customFocusRemovingKey,
+  error,
+  notice,
+  onInputChange,
+  onAdd,
+  onToggle,
+  onRemove,
+  onClose,
+}: {
+  visible: boolean
+  options: RiskOption[]
+  selectedKeys: string[]
+  selectedSummary: string
+  customFocusMeta?: CustomFocusMeta
+  customFocusInput: string
+  customFocusAdding: boolean
+  customFocusRemovingKey: string | null
+  error: string
+  notice: string
+  onInputChange: (value: string) => void
+  onAdd: () => void
+  onToggle: (key: string) => void
+  onRemove: (option: RiskOption) => void
+  onClose: () => void
+}) {
+  const insets = useSafeAreaInsets()
+  const canSubmit = Boolean(customFocusInput.trim()) && !customFocusAdding
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={styles.sheetBackdrop} onPress={onClose}>
+        <Pressable
+          style={[styles.riskFocusPanel, { paddingBottom: Math.max(insets.bottom + 14, 22) }]}
+          onPress={(event) => event.stopPropagation()}
+        >
+          <View style={styles.sheetHandle} />
+          <View style={styles.riskFocusHeader}>
+            <View style={styles.riskFocusHeaderCopy}>
+              <Text style={styles.riskFocusTitle}>我的关注</Text>
+              <Text style={styles.riskFocusSubtitle}>选择你想优先看的健康方向</Text>
+            </View>
+            <Text style={styles.riskFocusCount}>已选 {options.filter((option) => selectedKeys.includes(option.key)).length}</Text>
+          </View>
+          <Text style={styles.riskFocusSummary} numberOfLines={2}>
+            当前：{selectedSummary || '暂无可展示的关注项'}
+          </Text>
+
+          <View style={styles.customFocusComposer}>
+            <TextInput
+              accessibilityLabel="自定义健康关注方向"
+              style={styles.customFocusInput}
+              value={customFocusInput}
+              maxLength={12}
+              placeholder="添加你关心的方向，如控尿酸"
+              placeholderTextColor="#94a3b8"
+              returnKeyType="done"
+              editable={!customFocusAdding}
+              onChangeText={onInputChange}
+              onSubmitEditing={() => {
+                if (canSubmit) onAdd()
+              }}
+            />
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="添加自定义关注"
+              style={({ pressed }) => [
+                styles.customFocusAddButton,
+                !canSubmit && styles.customFocusAddButtonDisabled,
+                pressed && canSubmit && styles.pressed,
+              ]}
+              disabled={!canSubmit}
+              onPress={onAdd}
+            >
+              {customFocusAdding ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Text style={styles.customFocusAddButtonText}>添加关注</Text>
+              )}
+            </Pressable>
+          </View>
+
+          {customFocusMeta ? (
+            <Text style={styles.customFocusMeta}>
+              AI 卡片每次消耗 {customFocusMeta.generate_cost} 积分，今日还可生成 {customFocusMeta.remaining_today} / {customFocusMeta.daily_limit} 次，最多 {customFocusMeta.max_focuses} 个自定义关注
+            </Text>
+          ) : null}
+          {error ? <Text style={styles.customFocusError}>{error}</Text> : null}
+          {notice ? <Text style={styles.customFocusNotice}>{notice}</Text> : null}
+
+          <ScrollView
+            style={styles.riskFocusScroll}
+            contentContainerStyle={styles.riskFocusGrid}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
+            {options.map((option) => {
+              const active = selectedKeys.includes(option.key)
+              const removing = customFocusRemovingKey === option.key
+              return (
+                <Pressable
+                  key={option.key}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: active, disabled: removing }}
+                  accessibilityLabel={`${option.title}${option.is_custom ? '，AI 自定义关注' : ''}${active ? '，已显示' : '，未显示'}`}
+                  style={({ pressed }) => [
+                    styles.riskFocusChip,
+                    active && styles.riskFocusChipActive,
+                    option.is_custom && styles.riskFocusChipCustom,
+                    pressed && !removing && styles.pressed,
+                  ]}
+                  disabled={removing}
+                  delayLongPress={450}
+                  onPress={() => onToggle(option.key)}
+                  onLongPress={() => {
+                    if (option.is_custom) onRemove(option)
+                  }}
+                >
+                  <View style={styles.riskFocusChipTitleRow}>
+                    <Text style={[styles.riskFocusChipTitle, active && styles.riskFocusChipTitleActive]} numberOfLines={1}>
+                      {option.title}
+                    </Text>
+                    {option.is_custom ? <Text style={styles.riskFocusChipAi}>AI</Text> : null}
+                    {removing ? <ActivityIndicator size="small" color={colors.brandDark} /> : null}
+                  </View>
+                  <Text style={styles.riskFocusChipAction}>
+                    {option.is_custom
+                      ? (active ? '点按隐藏 · 长按移除' : '点按显示 · 长按移除')
+                      : (active ? '显示中' : '点按添加')}
+                  </Text>
+                </Pressable>
+              )
+            })}
+          </ScrollView>
+
+          <Pressable style={({ pressed }) => [styles.riskFocusDoneButton, pressed && styles.pressed]} onPress={onClose}>
+            <Text style={styles.riskFocusDoneText}>完成</Text>
+          </Pressable>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  )
+}
+
+function RiskDetailSheet({
+  card,
+  refreshing,
+  onRefresh,
+  onClose,
+}: {
+  card: ExtendedRiskCard | null
+  refreshing: boolean
+  onRefresh: (card: ExtendedRiskCard) => void
+  onClose: () => void
+}) {
   const insets = useSafeAreaInsets()
   return (
     <Modal visible={Boolean(card)} transparent animationType="fade" onRequestClose={onClose}>
@@ -738,7 +1206,10 @@ function RiskDetailSheet({ card, onClose }: { card: RiskCard | null; onClose: ()
           {card ? (
             <>
               <View style={styles.riskDetailHeader}>
-                <Text style={styles.riskDetailTitle}>{card.title}</Text>
+                <View style={styles.riskDetailTitleRow}>
+                  <Text style={styles.riskDetailTitle}>{card.title}</Text>
+                  {card.is_custom ? <Text style={styles.riskDetailAiBadge}>AI</Text> : null}
+                </View>
                 <View style={styles.riskDetailScoreRow}>
                   <Text style={styles.riskDetailScore}>{Math.round(card.score)}</Text>
                   <Text style={styles.riskDetailScoreUnit}>分</Text>
@@ -747,6 +1218,9 @@ function RiskDetailSheet({ card, onClose }: { card: RiskCard | null; onClose: ()
                   </View>
                 </View>
               </View>
+              {card.is_custom ? (
+                <Text style={styles.riskDetailAiDisclaimer}>基于饮食趋势的趋势性参考，不构成医学诊断或治疗建议。</Text>
+              ) : null}
               <Text style={styles.riskDetailBodyText}>{card.summary || card.brief}</Text>
               <View style={styles.riskDetailDivider} />
               <Text style={styles.riskDetailLabel}>判断依据</Text>
@@ -757,6 +1231,25 @@ function RiskDetailSheet({ card, onClose }: { card: RiskCard | null; onClose: ()
               <View style={styles.riskDetailDelta}>
                 <Text style={styles.riskDetailDeltaText}>预计可提升 {Math.round(card.delta || 0)} 分</Text>
               </View>
+              {card.is_custom && card.needs_refresh ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="手动更新 AI 关注卡片"
+                  style={({ pressed }) => [
+                    styles.riskDetailRefreshBtn,
+                    refreshing && styles.riskDetailRefreshBtnDisabled,
+                    pressed && !refreshing && styles.pressed,
+                  ]}
+                  disabled={refreshing}
+                  onPress={() => onRefresh(card)}
+                >
+                  {refreshing ? (
+                    <ActivityIndicator size="small" color={colors.brandDark} />
+                  ) : (
+                    <Text style={styles.riskDetailRefreshText}>手动更新 AI 卡片</Text>
+                  )}
+                </Pressable>
+              ) : null}
               <Pressable style={({ pressed }) => [styles.riskDetailCloseBtn, pressed && styles.pressed]} onPress={onClose}>
                 <Text style={styles.riskDetailCloseText}>知道了</Text>
               </Pressable>
@@ -766,6 +1259,90 @@ function RiskDetailSheet({ card, onClose }: { card: RiskCard | null; onClose: ()
       </Pressable>
     </Modal>
   )
+}
+
+function mergeRiskOptions(
+  health: ExtendedHealthIndex | undefined,
+  systemCards: ExtendedRiskCard[],
+  customCards: ExtendedRiskCard[],
+): RiskOption[] {
+  const merged: RiskOption[] = []
+  const seen = new Set<string>()
+  const append = (option: RiskOption) => {
+    if (!option.key || seen.has(option.key)) return
+    seen.add(option.key)
+    merged.push(option)
+  }
+  const serverOptions = health?.all_risk_options || []
+  serverOptions.forEach(append)
+  systemCards.forEach((card) => append({
+    key: card.key,
+    title: card.title,
+    short: card.title,
+  }))
+  customCards.forEach((card) => append(customRiskCardToOption(card)))
+  return merged
+}
+
+function customRiskCardToOption(card: ExtendedRiskCard): RiskOption {
+  const title = card.focus_label || card.title
+  return {
+    key: card.key,
+    title,
+    short: title,
+    is_custom: true,
+  }
+}
+
+function customFocusToOption(focus: HealthFocusItem): RiskOption {
+  return {
+    key: `custom:${focus.id}`,
+    title: focus.label,
+    short: focus.label,
+    is_custom: true,
+  }
+}
+
+function pendingCustomRiskCardFromOption(option: RiskOption): ExtendedRiskCard {
+  return {
+    key: option.key,
+    title: option.title,
+    score: 60,
+    tone: 'neutral',
+    brief: '点开生成 AI 卡片',
+    summary: `已选择「${option.title}」作为自定义关注方向，当前周期还没有可展示的 AI 卡片。`,
+    basis: '该关注方向已保存，但当前统计周期尚未生成或刷新对应卡片。',
+    action: '点击下方手动更新 AI 卡片，基于近期饮食趋势生成参考。',
+    delta: 5,
+    is_custom: true,
+    needs_refresh: true,
+    focus_label: option.title,
+  }
+}
+
+function normalizeCustomRiskCard(value: unknown, fallbackKey: string, fallbackTitle: string): ExtendedRiskCard {
+  const record = value && typeof value === 'object' ? value as Record<string, unknown> : {}
+  const title = String(record.focus_label || record.title || fallbackTitle).trim() || fallbackTitle
+  return {
+    key: String(record.key || fallbackKey).trim() || fallbackKey,
+    title,
+    score: toSafeNumber(record.score, 60),
+    tone: normalizeRiskTone(record.tone),
+    brief: String(record.brief || 'AI 关注卡片已生成'),
+    summary: String(record.summary || record.brief || `已生成「${title}」的趋势参考。`),
+    basis: String(record.basis || '基于当前周期的饮食记录生成。'),
+    action: String(record.action || '继续保持记录，并从最容易执行的一项开始调整。'),
+    delta: toSafeNumber(record.delta, 0),
+    is_custom: true,
+    needs_refresh: Boolean(record.needs_refresh),
+    focus_label: String(record.focus_label || title),
+  }
+}
+
+function normalizeRiskTone(value: unknown): RiskCard['tone'] {
+  return value === 'positive' || value === 'warning' || value === 'danger' || value === 'neutral'
+    ? value
+    : 'neutral'
 }
 
 function insightStatusText(summary: StatsSummary | null): string {
@@ -793,12 +1370,26 @@ function scoreToLabel(score: number): string {
   return '重点关注'
 }
 
-function scoreToFocusOverview(score: number, hasRiskCards: boolean): string {
+function scoreToFocusOverview(score: number, hasRiskCards: boolean, hasCustomFocus = false): string {
   if (!hasRiskCards) return '继续记录后会生成你当前最需要关注的健康方向。'
-  if (score >= 78) return '你当前关注的核心指标整体更偏向保护，保持稳定记录即可。'
-  if (score >= 60) return '你当前关注的指标总体还算稳定，但已经有一些可优化项。'
-  if (score >= 42) return '你当前关注的指标出现明显拖累，建议优先处理分数最低的一项。'
-  return '你当前关注的指标处在较高压力区，先从最可执行的一项小步调整。'
+  if (score >= 78) {
+    return hasCustomFocus
+      ? '你当前关注的指标整体更偏向保护，自定义方向也会跟随卡片一起纳入参考。'
+      : '你当前关注的核心指标整体更偏向保护，保持稳定记录即可。'
+  }
+  if (score >= 60) {
+    return hasCustomFocus
+      ? '你当前关注的指标总体还算稳，但自定义方向和核心指标里已经有一些可优化项。'
+      : '你当前关注的指标总体还算稳定，但已经有一些可优化项。'
+  }
+  if (score >= 42) {
+    return hasCustomFocus
+      ? '你当前关注的指标已经出现明显拖累，建议优先处理分数最低的关注项。'
+      : '你当前关注的指标出现明显拖累，建议优先处理分数最低的一项。'
+  }
+  return hasCustomFocus
+    ? '你当前关注的指标处在较高压力区，先从最可执行的一项小步调整。'
+    : '你当前关注的核心指标处在较高压力区，先从最可执行的一项小步调整。'
 }
 
 function averageRiskScore(cards: RiskCard[]): number | null {
@@ -1252,6 +1843,29 @@ const styles = StyleSheet.create({
     fontSize: compactFont(14, 13),
     lineHeight: 18,
     fontWeight: '900',
+  },
+  riskTileAiRow: {
+    marginTop: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  riskTileAiBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: radius.pill,
+    overflow: 'hidden',
+    color: '#fff',
+    backgroundColor: colors.brand,
+    fontSize: 9,
+    lineHeight: 12,
+    fontWeight: '900',
+  },
+  riskTileRefreshHint: {
+    color: '#c07840',
+    fontSize: compactFont(10, 9),
+    lineHeight: 14,
+    fontWeight: '800',
   },
   riskTileSummary: {
     marginTop: 7,
@@ -1738,6 +2352,191 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     marginBottom: 12,
   },
+  riskFocusPanel: {
+    margin: 12,
+    maxHeight: '84%',
+    borderRadius: 20,
+    paddingHorizontal: 15,
+    paddingTop: 14,
+    backgroundColor: '#fff',
+  },
+  riskFocusHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  riskFocusHeaderCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  riskFocusTitle: {
+    color: '#1e2939',
+    fontSize: compactFont(18, 17),
+    lineHeight: 24,
+    fontWeight: '900',
+  },
+  riskFocusSubtitle: {
+    marginTop: 3,
+    color: '#64748b',
+    fontSize: compactFont(12, 11),
+    lineHeight: 17,
+  },
+  riskFocusCount: {
+    flexShrink: 0,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: radius.pill,
+    overflow: 'hidden',
+    color: colors.brandDark,
+    backgroundColor: colors.brandSoft,
+    fontSize: compactFont(11, 10),
+    fontWeight: '900',
+  },
+  riskFocusSummary: {
+    marginTop: 10,
+    color: '#475569',
+    fontSize: compactFont(12, 11),
+    lineHeight: 18,
+  },
+  customFocusComposer: {
+    marginTop: 13,
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: 8,
+  },
+  customFocusInput: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: 44,
+    borderRadius: 13,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    color: '#1e2939',
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    fontSize: compactFont(13, 12),
+  },
+  customFocusAddButton: {
+    minWidth: 94,
+    minHeight: 44,
+    paddingHorizontal: 13,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.brand,
+  },
+  customFocusAddButtonDisabled: {
+    opacity: 0.5,
+  },
+  customFocusAddButtonText: {
+    color: '#fff',
+    fontSize: compactFont(13, 12),
+    fontWeight: '900',
+  },
+  customFocusMeta: {
+    marginTop: 9,
+    color: '#64748b',
+    fontSize: compactFont(11, 10),
+    lineHeight: 16,
+  },
+  customFocusError: {
+    marginTop: 9,
+    padding: 9,
+    borderRadius: 10,
+    overflow: 'hidden',
+    color: '#b45353',
+    backgroundColor: '#fef2f2',
+    fontSize: compactFont(11, 10),
+    lineHeight: 16,
+  },
+  customFocusNotice: {
+    marginTop: 9,
+    padding: 9,
+    borderRadius: 10,
+    overflow: 'hidden',
+    color: '#2f7f62',
+    backgroundColor: colors.brandSoft,
+    fontSize: compactFont(11, 10),
+    lineHeight: 16,
+  },
+  riskFocusScroll: {
+    marginTop: 12,
+    flexGrow: 0,
+    flexShrink: 1,
+  },
+  riskFocusGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    gap: 8,
+    paddingBottom: 4,
+  },
+  riskFocusChip: {
+    width: '48.5%',
+    minHeight: 66,
+    paddingHorizontal: 11,
+    paddingVertical: 9,
+    borderRadius: 13,
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  riskFocusChipActive: {
+    backgroundColor: colors.brandSoft,
+    borderColor: 'rgba(92,184,150,0.45)',
+  },
+  riskFocusChipCustom: {
+    borderStyle: 'dashed',
+  },
+  riskFocusChipTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  riskFocusChipTitle: {
+    flex: 1,
+    minWidth: 0,
+    color: '#334155',
+    fontSize: compactFont(13, 12),
+    lineHeight: 18,
+    fontWeight: '900',
+  },
+  riskFocusChipTitleActive: {
+    color: colors.brandDark,
+  },
+  riskFocusChipAi: {
+    flexShrink: 0,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: radius.pill,
+    overflow: 'hidden',
+    color: '#fff',
+    backgroundColor: colors.brand,
+    fontSize: 8,
+    lineHeight: 11,
+    fontWeight: '900',
+  },
+  riskFocusChipAction: {
+    marginTop: 6,
+    color: '#64748b',
+    fontSize: compactFont(10, 9),
+    lineHeight: 14,
+  },
+  riskFocusDoneButton: {
+    marginTop: 13,
+    minHeight: 44,
+    borderRadius: radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.brand,
+  },
+  riskFocusDoneText: {
+    color: '#fff',
+    fontSize: compactFont(14, 13),
+    fontWeight: '900',
+  },
   rangeSheetList: {
     gap: 8,
   },
@@ -1785,10 +2584,28 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 12,
   },
+  riskDetailTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+  },
   riskDetailTitle: {
+    flexShrink: 1,
     color: '#1e2939',
     fontSize: compactFont(18, 17),
     lineHeight: 23,
+    fontWeight: '900',
+  },
+  riskDetailAiBadge: {
+    flexShrink: 0,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: radius.pill,
+    overflow: 'hidden',
+    color: '#fff',
+    backgroundColor: colors.brand,
+    fontSize: 9,
+    lineHeight: 13,
     fontWeight: '900',
   },
   riskDetailScoreRow: {
@@ -1829,6 +2646,16 @@ const styles = StyleSheet.create({
     fontSize: compactFont(13, 12),
     lineHeight: 19,
   },
+  riskDetailAiDisclaimer: {
+    marginBottom: 11,
+    padding: 10,
+    borderRadius: 11,
+    overflow: 'hidden',
+    color: '#64748b',
+    backgroundColor: '#f8fafc',
+    fontSize: compactFont(11, 10),
+    lineHeight: 16,
+  },
   riskDetailDivider: {
     height: 1,
     backgroundColor: '#eef2f7',
@@ -1841,6 +2668,24 @@ const styles = StyleSheet.create({
     backgroundColor: colors.brandSoft,
   },
   riskDetailDeltaText: {
+    color: colors.brandDark,
+    fontSize: compactFont(13, 12),
+    fontWeight: '900',
+  },
+  riskDetailRefreshBtn: {
+    marginTop: 12,
+    minHeight: 42,
+    borderRadius: radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.brandSoft,
+    borderWidth: 1,
+    borderColor: 'rgba(92,184,150,0.28)',
+  },
+  riskDetailRefreshBtnDisabled: {
+    opacity: 0.62,
+  },
+  riskDetailRefreshText: {
     color: colors.brandDark,
     fontSize: compactFont(13, 12),
     fontWeight: '900',

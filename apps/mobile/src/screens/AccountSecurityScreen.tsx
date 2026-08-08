@@ -1,33 +1,56 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
-import { useFocusEffect } from '@react-navigation/native'
-import { CheckCircle2, KeyRound, LockKeyhole, Save, ShieldCheck, Smartphone, type LucideIcon } from 'lucide-react-native'
+import { useFocusEffect, useNavigation } from '@react-navigation/native'
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
+import { CheckCircle2, KeyRound, LockKeyhole, Save, ShieldCheck, Smartphone, Trash2, type LucideIcon } from 'lucide-react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { UserInfo } from '@food-link/core'
 import { apiClient } from '../api'
 import { useAppDialog } from '../providers/DialogProvider'
 import { colors } from '../theme'
 import { userFacingErrorMessage } from '../utils/errors'
+import type { RootStackParamList } from '../navigation/types'
+
+const DEFAULT_SMS_COOLDOWN_SECONDS = 30
 
 export function AccountSecurityScreen() {
   const dialog = useAppDialog()
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const insets = useSafeAreaInsets()
   const [profile, setProfile] = useState<UserInfo | null>(null)
   const [phone, setPhone] = useState('')
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [verificationCode, setVerificationCode] = useState('')
+  const [verificationCodeSentTo, setVerificationCodeSentTo] = useState('')
+  const [codeSending, setCodeSending] = useState(false)
+  const [codeCooldownSeconds, setCodeCooldownSeconds] = useState(0)
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const normalizedPhone = normalizeMainlandPhone(phone)
+  const profilePhone = normalizeMainlandPhone(profile?.telephone)
   const trimmedPassword = newPassword.trim()
   const trimmedConfirmPassword = confirmPassword.trim()
+  const trimmedVerificationCode = verificationCode.trim()
   const phoneValid = /^1[3-9]\d{9}$/.test(normalizedPhone)
+  const phoneChanged = normalizedPhone !== profilePhone
+  const requiresPhoneVerification = phoneValid && phoneChanged
+  const verificationCodeValid = /^\d{6}$/.test(trimmedVerificationCode)
   const passwordLongEnough = trimmedPassword.length >= 8
   const passwordMatched = Boolean(trimmedConfirmPassword) && trimmedPassword === trimmedConfirmPassword
   const requiresCurrentPassword = Boolean(profile?.has_password)
   const currentPasswordReady = !requiresCurrentPassword || currentPassword.trim().length > 0
-  const canSave = phoneValid && passwordLongEnough && passwordMatched && currentPasswordReady && !saving
+  const phoneVerificationReady = !phoneChanged || verificationCodeValid
+  const canSave = phoneValid && passwordLongEnough && passwordMatched && currentPasswordReady && phoneVerificationReady && !saving
+
+  useEffect(() => {
+    if (codeCooldownSeconds <= 0) return undefined
+    const timer = setTimeout(() => {
+      setCodeCooldownSeconds((value) => Math.max(0, value - 1))
+    }, 1000)
+    return () => clearTimeout(timer)
+  }, [codeCooldownSeconds])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -35,6 +58,8 @@ export function AccountSecurityScreen() {
       const data = await apiClient.getUserProfile()
       setProfile(data)
       setPhone(data.telephone || '')
+      setVerificationCode('')
+      setVerificationCodeSentTo('')
     } catch (error) {
       await dialog.alert('获取账号信息失败', userFacingErrorMessage(error), 'danger')
     } finally {
@@ -47,6 +72,33 @@ export function AccountSecurityScreen() {
       void load()
     }, [load]),
   )
+
+  const handlePhoneChange = (value: string) => {
+    const nextPhone = normalizeMainlandPhone(value)
+    if (nextPhone !== normalizedPhone) {
+      setVerificationCode('')
+      setVerificationCodeSentTo('')
+    }
+    setPhone(value)
+  }
+
+  const sendVerificationCode = async () => {
+    if (!phoneValid) {
+      await dialog.alert('手机号格式不正确', '请填写 11 位大陆手机号。', 'warning')
+      return
+    }
+    setCodeSending(true)
+    try {
+      const result = await apiClient.sendSMSCode({ phone: normalizedPhone })
+      const cooldown = normalizePositiveSeconds(result.cooldown_seconds ?? result.retry_after_seconds) || DEFAULT_SMS_COOLDOWN_SECONDS
+      setCodeCooldownSeconds(cooldown)
+      setVerificationCodeSentTo(normalizedPhone)
+    } catch (error) {
+      await dialog.alert('发送失败', userFacingErrorMessage(error, '请稍后再试'), 'warning')
+    } finally {
+      setCodeSending(false)
+    }
+  }
 
   const save = async () => {
     if (!normalizedPhone) {
@@ -69,12 +121,17 @@ export function AccountSecurityScreen() {
       await dialog.alert('请输入当前密码', '修改已设置的密码登录方式需要先验证当前密码。', 'warning')
       return
     }
+    if (phoneChanged && !verificationCodeValid) {
+      await dialog.alert('请输入短信验证码', '首次绑定或更换手机号需要输入 6 位短信验证码。', 'warning')
+      return
+    }
     setSaving(true)
     try {
       await apiClient.setAccountPassword({
         phone: normalizedPhone,
         password: trimmedPassword,
         currentPassword: currentPassword.trim(),
+        verificationCode: phoneChanged ? trimmedVerificationCode : undefined,
       })
       setCurrentPassword('')
       setNewPassword('')
@@ -114,8 +171,23 @@ export function AccountSecurityScreen() {
             <Text style={styles.sectionTitle}>{profile?.has_password ? '修改手机号密码' : '设置手机号密码'}</Text>
             <Text style={styles.sectionBadge}>{profile?.has_password ? '已启用' : '未启用'}</Text>
           </View>
-          <Field label="手机号" value={phone} onChangeText={setPhone} placeholder="请输入 11 位手机号" keyboardType="phone-pad" />
-          <Text style={[styles.formHint, phone && !phoneValid && styles.formHintWarning]}>用于 App 手机号密码登录，保存后会同步到账号资料。</Text>
+          <Field label="手机号" value={phone} onChangeText={handlePhoneChange} placeholder="请输入 11 位手机号" keyboardType="phone-pad" />
+          <Text style={[styles.formHint, phone && !phoneValid && styles.formHintWarning]}>
+            {phoneChanged ? '首次绑定或更换手机号，需要验证该号码归属。' : '当前手机号未改变，本次无需短信验证。'}
+          </Text>
+          {requiresPhoneVerification ? (
+            <VerificationCodeField
+              value={verificationCode}
+              onChangeText={setVerificationCode}
+              onSend={sendVerificationCode}
+              sending={codeSending}
+              disabled={codeSending || codeCooldownSeconds > 0}
+              sendLabel={codeCooldownSeconds > 0 ? `${codeCooldownSeconds}s 后重发` : '发送验证码'}
+            />
+          ) : null}
+          {requiresPhoneVerification && verificationCodeSentTo === normalizedPhone ? (
+            <Text style={styles.formHint}>验证码已发送至 {maskPhone(normalizedPhone)}，15 分钟内有效且只能使用一次。</Text>
+          ) : null}
           {profile?.has_password ? (
             <>
               <Field
@@ -138,12 +210,21 @@ export function AccountSecurityScreen() {
 
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>说明</Text>
-          <Text style={styles.bodyText}>设置后，手机号和密码可以作为微信登录之外的备用方式。为了账号安全，修改已设置的密码时需要先验证当前密码。</Text>
+          <Text style={styles.bodyText}>设置后，手机号和密码可以作为微信登录之外的备用方式。首次绑定或更换手机号必须验证短信验证码；修改已设置的密码还需要验证当前密码。</Text>
         </View>
 
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>账号注销</Text>
-          <Text style={styles.bodyText}>注销账号入口保留在个人主页编辑页底部，操作前会二次确认。注销后账号数据会按协议处理，本机登录状态也会清空。</Text>
+          <Text style={styles.bodyText}>注销前必须输入指定确认文案。注销后账号数据会按协议处理，本机登录状态也会清空。</Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="注销账号"
+            style={styles.deleteAccountButton}
+            onPress={() => navigation.navigate('ProfileSettings', { action: 'delete-account' })}
+          >
+            <Trash2 size={16} color="#dc2626" strokeWidth={2.2} />
+            <Text style={styles.deleteAccountButtonText}>注销账号</Text>
+          </Pressable>
         </View>
       </ScrollView>
 
@@ -223,6 +304,49 @@ function Field({
   )
 }
 
+function VerificationCodeField({
+  value,
+  onChangeText,
+  onSend,
+  sending,
+  disabled,
+  sendLabel,
+}: {
+  value: string
+  onChangeText: (value: string) => void
+  onSend: () => void
+  sending: boolean
+  disabled: boolean
+  sendLabel: string
+}) {
+  return (
+    <View style={styles.field}>
+      <Text style={styles.fieldLabel}>短信验证码</Text>
+      <View style={styles.verificationRow}>
+        <TextInput
+          value={value}
+          onChangeText={(nextValue) => onChangeText(nextValue.replace(/\D/g, '').slice(0, 6))}
+          placeholder="请输入 6 位验证码"
+          keyboardType="number-pad"
+          maxLength={6}
+          autoCapitalize="none"
+          autoCorrect={false}
+          placeholderTextColor="#98a2b3"
+          style={[styles.input, styles.verificationInput]}
+        />
+        <Pressable
+          accessibilityRole="button"
+          disabled={disabled}
+          onPress={onSend}
+          style={[styles.sendCodeButton, disabled && styles.sendCodeButtonDisabled]}
+        >
+          {sending ? <ActivityIndicator color={colors.brandDark} size="small" /> : <Text style={[styles.sendCodeText, disabled && styles.sendCodeTextDisabled]}>{sendLabel}</Text>}
+        </Pressable>
+      </View>
+    </View>
+  )
+}
+
 function StatusPill({ label, active }: { label: string; active: boolean }) {
   return (
     <View style={[styles.statusPill, active && styles.statusPillActive]}>
@@ -236,6 +360,12 @@ function formatDate(value: string) {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
   return date.toLocaleString()
+}
+
+function normalizePositiveSeconds(value: unknown): number {
+  const seconds = Number(value)
+  if (!Number.isFinite(seconds) || seconds <= 0) return 0
+  return Math.max(1, Math.ceil(seconds))
 }
 
 const styles = StyleSheet.create({
@@ -374,10 +504,55 @@ const styles = StyleSheet.create({
     color: '#111827',
     backgroundColor: '#f8fafc',
   },
+  verificationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  verificationInput: {
+    flex: 1,
+  },
+  sendCodeButton: {
+    minWidth: 108,
+    minHeight: 44,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ecfdf3',
+  },
+  sendCodeButtonDisabled: {
+    backgroundColor: '#f1f5f9',
+  },
+  sendCodeText: {
+    color: colors.brandDark,
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  sendCodeTextDisabled: {
+    color: '#98a2b3',
+  },
   bodyText: {
     color: '#667085',
     fontSize: 13,
     lineHeight: 20,
+  },
+  deleteAccountButton: {
+    minHeight: 44,
+    marginTop: 14,
+    borderWidth: 1,
+    borderColor: '#fecaca',
+    borderRadius: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+    backgroundColor: '#fff7f7',
+  },
+  deleteAccountButtonText: {
+    color: '#dc2626',
+    fontSize: 14,
+    fontWeight: '900',
   },
   passwordStatusRow: {
     flexDirection: 'row',

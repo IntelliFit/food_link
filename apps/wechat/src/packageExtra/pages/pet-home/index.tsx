@@ -414,8 +414,8 @@ function PetHomePage() {
             </View>
             <View className='pet-home-action-item visibility' onClick={handleToggleHomePetHidden}>
               <View>
-                <Text className='pet-home-action-title'>首页悬浮宠物</Text>
-                <Text className='pet-home-action-desc'>{homePetHidden ? '当前首页不显示宠物，数据和成长仍会保留' : '当前首页会显示可拖动的小宠物'}</Text>
+                <Text className='pet-home-action-title'>首页成长伙伴</Text>
+                <Text className='pet-home-action-desc'>{homePetHidden ? '当前首页不显示伙伴卡片，数据和成长仍会保留' : '当前首页会在“伙伴”页展示状态、任务和聊天入口'}</Text>
               </View>
               <View className='pet-home-action-side'>
                 <Text className={`pet-home-visibility-status ${homePetHidden ? 'hidden' : ''}`}>

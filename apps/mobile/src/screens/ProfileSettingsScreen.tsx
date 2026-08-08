@@ -53,6 +53,13 @@ export function ProfileSettingsScreen() {
     getStoredUserId().then(setCurrentUserId).catch(() => setCurrentUserId(null))
   }, [])
 
+  useEffect(() => {
+    if (route.params?.action !== 'delete-account' || !isOwner) return
+    setDeleteConfirmation('')
+    setDeleteConfirmVisible(true)
+    navigation.setParams({ action: undefined })
+  }, [isOwner, navigation, route.params?.action])
+
   const load = useCallback(async () => {
     setLoading(true)
     try {

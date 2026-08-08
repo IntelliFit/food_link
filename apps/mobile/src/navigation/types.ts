@@ -1,4 +1,4 @@
-import type { AnalysisTask, CommunityFeedTargetType, ExecutionMode, FoodExpiryItem, ManualFoodItem, MealType } from '@food-link/core'
+import type { AnalysisTask, CommunityFeedTargetType, ExecutionMode, FoodExpiryItem, ManualFoodItem, MealType, PrecisionReferenceObjectInput } from '@food-link/core'
 
 export type ManualRecordSourceChannel = 'recommended' | 'campus' | 'favorites' | 'custom'
 
@@ -60,7 +60,13 @@ export type LocationSelection = {
 export type RootStackParamList = {
   Login: undefined
   MainTabs: undefined
-  Analyze: { source?: 'camera' | 'library'; mealType?: MealType; date?: string } | undefined
+  Analyze: {
+    source?: 'camera' | 'library'
+    mealType?: MealType
+    date?: string
+    precisionSessionId?: string
+    referenceObjects?: PrecisionReferenceObjectInput[]
+  } | undefined
   GooseDuckChicken: undefined
   AnalyzeLoading: { taskId?: string; imageUri?: string; imageUris?: string[]; mealType: MealType; date: string; task?: AnalysisTask; taskType?: 'food' | 'food_text' | 'exercise'; executionMode?: ExecutionMode } | undefined
   Result: { task: AnalysisTask; imageUri?: string; mealType: MealType; date: string }
@@ -72,14 +78,13 @@ export type RootStackParamList = {
   FoodLibrary: { initialTab?: 'all' | 'custom' | 'results' | 'create' } | undefined
   FoodLibraryDetail: { itemId?: string; item?: ManualFoodItem } | undefined
   DayRecord: { date?: string } | undefined
-  RecordDetail: { recordId: string }
+  RecordDetail: { recordId: string; initialAction?: 'edit' | 'share' | 'delete' }
   AnalyzeHistory: undefined
-  AiAssistant: undefined
   StatsMetabolic: undefined
   TrendDetail: { kind: 'weight' | 'water' | 'exercise'; date?: string }
   HealthProfile: undefined
   HealthProfileView: undefined
-  ProfileSettings: { userId?: string } | undefined
+  ProfileSettings: { userId?: string; action?: 'delete-account' } | undefined
   AccountSecurity: undefined
   BodyMetricRecord: { type: 'weight' | 'water' | 'exercise'; date?: string }
   Expiry: undefined

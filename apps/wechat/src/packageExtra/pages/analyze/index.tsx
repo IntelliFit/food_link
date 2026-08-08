@@ -953,13 +953,14 @@ function AnalyzePage() {
 
   let quotaBarClass = 'quota-bar'
   let quotaBarText = ''
+  let quotaBarLoading = false
   if (isBackfill) {
     const targetSummary = targetDateStatus ? getMembershipCreditSummary(targetDateStatus) : null
     const targetHasInfo = targetSummary?.hasInfo ?? false
     const targetRemaining = targetSummary?.remaining ?? 0
     const monthDay = `${Number(recordTargetDate.slice(5, 7))}月${Number(recordTargetDate.slice(8, 10))}日`
     if (!targetHasInfo) {
-      quotaBarText = `${monthDay}积分信息加载中`
+      quotaBarLoading = true
     } else if (targetRemaining < creditCost) {
       quotaBarClass += ' quota-bar--warn'
       quotaBarText = `${monthDay}积分不足 · 将扣除今日积分 · 今日剩余 ${creditsRemaining}`
@@ -979,7 +980,7 @@ function AnalyzePage() {
       }
       quotaBarText = `今日已用 ${creditsUsed}/${creditsMax} 积分 · 剩余 ${creditsRemaining}${precisionUpgradeHint ? `  →${precisionUpgradeHint}` : ''}`
     } else {
-      quotaBarText = `今日积分信息加载中${precisionUpgradeHint ? `  →${precisionUpgradeHint}` : ''}`
+      quotaBarLoading = true
     }
     if (membershipStatus?.is_pro) {
       quotaBarClass += ' quota-bar--pro'
@@ -1004,8 +1005,12 @@ function AnalyzePage() {
             if (!canUseStrictMode) Taro.navigateTo({ url: precisionUpgradeUrl })
           }}
         >
-          <Text className='quota-bar-dot' />
-          <Text className='quota-bar-text'>{quotaBarText}</Text>
+          {quotaBarLoading ? <View className='quota-bar-spinner' /> : (
+            <>
+              <Text className='quota-bar-dot' />
+              <Text className='quota-bar-text'>{quotaBarText}</Text>
+            </>
+          )}
         </View>
       )}
 

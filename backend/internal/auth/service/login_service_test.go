@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"food_link/backend/internal/auth/repo"
 	"food_link/backend/pkg/config"
@@ -150,6 +151,226 @@ func TestLoginService_RegisterAndLoginWithPhonePasswordOnly(t *testing.T) {
 	loggedIn, err := svc.LoginWithPassword(ctx, PasswordLoginInput{Phone: "13511679220", Password: "password123"})
 	require.NoError(t, err)
 	assert.Equal(t, registered.UserID, loggedIn.UserID)
+}
+
+func TestLoginService_SetPasswordFirstPhoneBindingRequiresSMSCode(t *testing.T) {
+	_, userRepo := setupLoginTestDB(t)
+	cfg := &config.Config{
+		App: config.AppConfig{Env: "development"},
+		JWT: config.JWTConfig{AccessTokenTTLSeconds: 3600, RefreshTokenTTLSeconds: 86400},
+	}
+	jwtSvc := NewJWTService("test-secret", 3600, 86400)
+	loginSvc := NewLoginService(cfg, userRepo, jwtSvc)
+	store := NewMemoryCodeStore()
+	smsSvc := NewSMSService(config.SMSConfig{}, "food_link", loginSvc, userRepo, jwtSvc, store, nil)
+	loginSvc.ConfigurePhoneCodeVerifier(smsSvc)
+	ctx := context.Background()
+
+	loggedIn, err := loginSvc.Login(ctx, LoginInput{TestOpenID: "set-password-first-binding"})
+	require.NoError(t, err)
+
+	_, err = loginSvc.SetPassword(ctx, loggedIn.UserID, SetPasswordInput{
+		Phone:    "13800138020",
+		Password: "newpassword123",
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "请输入验证码")
+
+	require.NoError(t, store.Set(ctx, smsSvc.smsCodeKey("13800138020"), "530836", 15*time.Minute))
+	_, err = loginSvc.SetPassword(ctx, loggedIn.UserID, SetPasswordInput{
+		Phone:            "13800138020",
+		Password:         "newpassword123",
+		VerificationCode: "530836",
+	})
+	require.NoError(t, err)
+
+	user, err := userRepo.FindByID(ctx, loggedIn.UserID)
+	require.NoError(t, err)
+	require.NotNil(t, user)
+	require.NotNil(t, user.Telephone)
+	assert.Equal(t, "13800138020", *user.Telephone)
+	assert.True(t, verifyUserPasswordWithFallback("newpassword123", user))
+
+	_, err = loginSvc.SetPassword(ctx, loggedIn.UserID, SetPasswordInput{
+		Phone:            "13800138021",
+		Password:         "anotherpassword123",
+		VerificationCode: "530836",
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "验证码错误或已过期")
+}
+
+func TestLoginService_SetPasswordSamePhoneDoesNotRequireSMSCode(t *testing.T) {
+	_, userRepo := setupLoginTestDB(t)
+	cfg := &config.Config{
+		App: config.AppConfig{Env: "development", AllowDebugRegister: true},
+		JWT: config.JWTConfig{AccessTokenTTLSeconds: 3600, RefreshTokenTTLSeconds: 86400},
+	}
+	jwtSvc := NewJWTService("test-secret", 3600, 86400)
+	loginSvc := NewLoginService(cfg, userRepo, jwtSvc)
+	ctx := context.Background()
+
+	registered, err := loginSvc.RegisterWithPassword(ctx, PasswordRegisterInput{
+		Phone:    "13511679220",
+		Password: "oldpassword123",
+	})
+	require.NoError(t, err)
+
+	_, err = loginSvc.SetPassword(ctx, registered.UserID, SetPasswordInput{
+		Phone:           "13511679220",
+		Password:        "newpassword123",
+		CurrentPassword: "oldpassword123",
+	})
+	require.NoError(t, err)
+
+	_, err = loginSvc.LoginWithPassword(ctx, PasswordLoginInput{Phone: "13511679220", Password: "newpassword123"})
+	require.NoError(t, err)
+}
+
+func TestLoginService_SetPasswordPhoneChangeChecksCurrentPasswordBeforeConsumingSMSCode(t *testing.T) {
+	_, userRepo := setupLoginTestDB(t)
+	cfg := &config.Config{
+		App: config.AppConfig{Env: "development", AllowDebugRegister: true},
+		JWT: config.JWTConfig{AccessTokenTTLSeconds: 3600, RefreshTokenTTLSeconds: 86400},
+	}
+	jwtSvc := NewJWTService("test-secret", 3600, 86400)
+	loginSvc := NewLoginService(cfg, userRepo, jwtSvc)
+	store := NewMemoryCodeStore()
+	smsSvc := NewSMSService(config.SMSConfig{}, "food_link", loginSvc, userRepo, jwtSvc, store, nil)
+	loginSvc.ConfigurePhoneCodeVerifier(smsSvc)
+	ctx := context.Background()
+
+	registered, err := loginSvc.RegisterWithPassword(ctx, PasswordRegisterInput{
+		Phone:    "13511679220",
+		Password: "oldpassword123",
+	})
+	require.NoError(t, err)
+	require.NoError(t, store.Set(ctx, smsSvc.smsCodeKey("13800138024"), "530836", 15*time.Minute))
+
+	_, err = loginSvc.SetPassword(ctx, registered.UserID, SetPasswordInput{
+		Phone:            "13800138024",
+		Password:         "newpassword123",
+		CurrentPassword:  "wrongpassword",
+		VerificationCode: "530836",
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "当前密码错误")
+
+	_, err = loginSvc.SetPassword(ctx, registered.UserID, SetPasswordInput{
+		Phone:            "13800138024",
+		Password:         "newpassword123",
+		CurrentPassword:  "oldpassword123",
+		VerificationCode: "530836",
+	})
+	require.NoError(t, err)
+
+	_, err = loginSvc.LoginWithPassword(ctx, PasswordLoginInput{Phone: "13800138024", Password: "newpassword123"})
+	require.NoError(t, err)
+	oldPhoneUser, err := userRepo.FindByTelephone(ctx, "13511679220")
+	require.NoError(t, err)
+	assert.Nil(t, oldPhoneUser)
+}
+
+func TestLoginService_ResetPasswordWithSMSUpdatesPasswordAndConsumesCode(t *testing.T) {
+	_, userRepo := setupLoginTestDB(t)
+	cfg := &config.Config{
+		App: config.AppConfig{Env: "development", AllowDebugRegister: true},
+		JWT: config.JWTConfig{AccessTokenTTLSeconds: 3600, RefreshTokenTTLSeconds: 86400},
+	}
+	jwtSvc := NewJWTService("test-secret", 3600, 86400)
+	loginSvc := NewLoginService(cfg, userRepo, jwtSvc)
+	store := NewMemoryCodeStore()
+	smsSvc := NewSMSService(config.SMSConfig{}, "food_link", loginSvc, userRepo, jwtSvc, store, nil)
+	loginSvc.ConfigurePhoneCodeVerifier(smsSvc)
+	ctx := context.Background()
+
+	registered, err := loginSvc.RegisterWithPassword(ctx, PasswordRegisterInput{
+		Phone:    "13511679220",
+		Password: "oldpassword123",
+	})
+	require.NoError(t, err)
+	require.NoError(t, store.Set(ctx, smsSvc.smsCodeKey("13511679220"), "530836", 15*time.Minute))
+
+	reset, err := loginSvc.ResetPasswordWithSMS(ctx, ResetPasswordInput{
+		Phone:    "13511679220",
+		Code:     "530836",
+		Password: "newpassword123",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, registered.UserID, reset.UserID)
+	assert.NotEmpty(t, reset.AccessToken)
+
+	_, err = loginSvc.LoginWithPassword(ctx, PasswordLoginInput{Phone: "13511679220", Password: "oldpassword123"})
+	require.Error(t, err)
+	_, err = loginSvc.LoginWithPassword(ctx, PasswordLoginInput{Phone: "13511679220", Password: "newpassword123"})
+	require.NoError(t, err)
+
+	_, err = loginSvc.ResetPasswordWithSMS(ctx, ResetPasswordInput{
+		Phone:    "13511679220",
+		Code:     "530836",
+		Password: "anotherpassword123",
+	})
+	assert.ErrorIs(t, err, ErrPasswordResetFailed)
+}
+
+func TestLoginService_ResetPasswordWithSMSDoesNotRevealMissingAccount(t *testing.T) {
+	_, userRepo := setupLoginTestDB(t)
+	cfg := &config.Config{
+		App: config.AppConfig{Env: "development"},
+		JWT: config.JWTConfig{AccessTokenTTLSeconds: 3600, RefreshTokenTTLSeconds: 86400},
+	}
+	jwtSvc := NewJWTService("test-secret", 3600, 86400)
+	loginSvc := NewLoginService(cfg, userRepo, jwtSvc)
+	store := NewMemoryCodeStore()
+	smsSvc := NewSMSService(config.SMSConfig{}, "food_link", loginSvc, userRepo, jwtSvc, store, nil)
+	loginSvc.ConfigurePhoneCodeVerifier(smsSvc)
+	ctx := context.Background()
+
+	require.NoError(t, store.Set(ctx, smsSvc.smsCodeKey("13800138025"), "530836", 15*time.Minute))
+	_, err := loginSvc.ResetPasswordWithSMS(ctx, ResetPasswordInput{
+		Phone:    "13800138025",
+		Code:     "530836",
+		Password: "newpassword123",
+	})
+	assert.ErrorIs(t, err, ErrPasswordResetFailed)
+	assert.Equal(t, "手机号或验证码错误，无法重置密码", err.Error())
+}
+
+func TestLoginService_ResetPasswordValidatesStrengthBeforeConsumingCode(t *testing.T) {
+	_, userRepo := setupLoginTestDB(t)
+	cfg := &config.Config{
+		App: config.AppConfig{Env: "development", AllowDebugRegister: true},
+		JWT: config.JWTConfig{AccessTokenTTLSeconds: 3600, RefreshTokenTTLSeconds: 86400},
+	}
+	jwtSvc := NewJWTService("test-secret", 3600, 86400)
+	loginSvc := NewLoginService(cfg, userRepo, jwtSvc)
+	store := NewMemoryCodeStore()
+	smsSvc := NewSMSService(config.SMSConfig{}, "food_link", loginSvc, userRepo, jwtSvc, store, nil)
+	loginSvc.ConfigurePhoneCodeVerifier(smsSvc)
+	ctx := context.Background()
+
+	registered, err := loginSvc.RegisterWithPassword(ctx, PasswordRegisterInput{
+		Phone:    "13511679220",
+		Password: "oldpassword123",
+	})
+	require.NoError(t, err)
+	require.NoError(t, store.Set(ctx, smsSvc.smsCodeKey("13511679220"), "530836", 15*time.Minute))
+
+	_, err = loginSvc.ResetPasswordWithSMS(ctx, ResetPasswordInput{
+		Phone:    "13511679220",
+		Code:     "530836",
+		Password: "short",
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "至少需要 8 位")
+
+	reset, err := loginSvc.ResetPasswordWithSMS(ctx, ResetPasswordInput{
+		Phone:    "13511679220",
+		Code:     "530836",
+		Password: "newpassword123",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, registered.UserID, reset.UserID)
 }
 
 func TestLoginService_RegisterAndLoginWithPhonePassword(t *testing.T) {
