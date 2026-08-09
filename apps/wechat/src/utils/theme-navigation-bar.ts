@@ -1,5 +1,6 @@
 import Taro from '@tarojs/taro'
 import type { AppColorScheme } from './app-color-scheme'
+import { HOME_DISPLAY_MODE_STORAGE_KEY } from './home-display-mode'
 
 interface NavigationBarThemeOptions {
   lightBackground?: string
@@ -7,11 +8,9 @@ interface NavigationBarThemeOptions {
   wellnessBackground?: string
 }
 
-const HOME_DISPLAY_MODE_KEY = 'home_display_mode_v1'
-
 function isWellnessMode(): boolean {
   try {
-    return Taro.getStorageSync(HOME_DISPLAY_MODE_KEY) === 'wellness'
+    return Taro.getStorageSync(HOME_DISPLAY_MODE_STORAGE_KEY) === 'wellness'
   } catch {
     return false
   }

@@ -2,12 +2,11 @@ import { View } from '@tarojs/components'
 import Taro, { useDidShow } from '@tarojs/taro'
 import React, { type PropsWithChildren } from 'react'
 import { useAppColorSchemeOptional } from './AppColorSchemeContext'
-
-const HOME_DISPLAY_MODE_KEY = 'home_display_mode_v1'
+import { HOME_DISPLAY_MODE_STORAGE_KEY } from '../utils/home-display-mode'
 
 function readWellnessMode(): boolean {
   try {
-    return Taro.getStorageSync(HOME_DISPLAY_MODE_KEY) === 'wellness'
+    return Taro.getStorageSync(HOME_DISPLAY_MODE_STORAGE_KEY) === 'wellness'
   } catch {
     return false
   }

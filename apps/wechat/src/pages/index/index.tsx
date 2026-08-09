@@ -18,7 +18,6 @@ import {
   getSharedFoodRecord,
   getFoodRecordById,
   getPetSummary,
-  claimPetEvent,
   getMyMembership,
   getRewardCenter,
   claimLoginCheckIn,
@@ -30,11 +29,8 @@ import {
   deleteFoodRecord,
   createUserRecipe,
   getFoodExpiryDashboard,
-  generateDietRecommendation,
   type DashboardTargets,
   type DashboardTargetsUpdateInput,
-  type DietRecommendationResult,
-  type DietRecommendationScene,
   type HomeAchievement,
   type HomeIntakeData,
   type HomeMealItem,
@@ -90,10 +86,8 @@ import { isAllowedRecordDate, isTodayRecordDate } from '../../utils/record-date'
 import { getMembershipCreditSummary, LOW_CREDIT_REWARD_HINT_THRESHOLD } from '../../utils/membership'
 import { useAppColorScheme } from '../../components/AppColorSchemeContext'
 import {
-  HOME_EXPERIENCE_PAGE_ORDER,
   getStoredHomeExperienceConfig,
   saveHomeExperienceConfig,
-  type HomeExperiencePageId,
 } from '../../utils/home-experience'
 
 // 导入拆分出的模块
@@ -119,9 +113,7 @@ import {
   MealRecordsDialog,
   MealRecordEditModal,
   MealRecordPosterModal,
-  DietRecommendationSheet,
   MicrosSection,
-  HomeExperienceBar,
   type MealPosterSharePayload,
 } from './components'
 import OnboardingGuide from '../../components/OnboardingGuide'
@@ -791,13 +783,6 @@ const MACRO_CONFIGS: Array<{
 function IndexPage() {
   const { scheme } = useAppColorScheme()
   const [homeExperienceConfig, setHomeExperienceConfig] = React.useState(getStoredHomeExperienceConfig)
-  const [activeHomeExperiencePage, setActiveHomeExperiencePage] = React.useState<HomeExperiencePageId>('status')
-  const homeExperienceSwipeRef = React.useRef<{
-    startX: number
-    startY: number
-    endX: number
-    endY: number
-  } | null>(null)
   const initialSelectedDate = formatDateKey(new Date())
   const initialHomeSelectedDate = initialSelectedDate
   const initialLocalSnapshot = getStoredHomeDashboardSnapshotByDate(initialHomeSelectedDate)
@@ -815,7 +800,6 @@ function IndexPage() {
   const [dataSyncing, setDataSyncing] = React.useState(false)
   const [petHidden, setPetHidden] = React.useState(getStoredPetHidden)
   const [petSummary, setPetSummary] = React.useState<PetSummary | null>(null)
-  const [petClaiming, setPetClaiming] = React.useState(false)
   const [membershipStatus, setMembershipStatus] = React.useState<MembershipStatus | null>(null)
   const [rewardCenter, setRewardCenter] = React.useState<RewardCenterResponse | null>(null)
   const [rewardHintIndex, setRewardHintIndex] = React.useState(0)
@@ -937,12 +921,7 @@ function IndexPage() {
   const [dailyPosterGenerating, setDailyPosterGenerating] = React.useState(false)
   const [dailyPosterImageUrl, setDailyPosterImageUrl] = React.useState<string | null>(null)
   const [showDailyPosterModal, setShowDailyPosterModal] = React.useState(false)
-  const [dietRecVisible, setDietRecVisible] = React.useState(false)
-  const [dietRecScene, setDietRecScene] = React.useState<DietRecommendationScene>('eat_out')
-  const [dietRecLoading, setDietRecLoading] = React.useState(false)
-  const [dietRecResult, setDietRecResult] = React.useState<DietRecommendationResult | null>(null)
   const [showHealthProfilePrompt, setShowHealthProfilePrompt] = React.useState(false)
-  const dietRecRequestSeqRef = React.useRef(0)
 
   const promptLoginCheckIn = React.useCallback(async (center: RewardCenterResponse | null) => {
     const checkIn = center?.check_in
@@ -992,7 +971,7 @@ function IndexPage() {
   const [mealActionRecord, setMealActionRecord] = React.useState<FoodRecord | null>(null)
   const mealFavoriteInFlightRef = React.useRef(false)
   const [showRecordEditModal, setShowRecordEditModal] = React.useState(false)
-  const homePageScrollLocked = showRecordEditModal || showHomeOnboardingGuide || dietRecVisible
+  const homePageScrollLocked = showRecordEditModal || showHomeOnboardingGuide
   const [showRecordPosterModal, setShowRecordPosterModal] = React.useState(false)
   /** 同一餐次多条记录时的选择面板 */
   const [mealRecordsDialogVisible, setMealRecordsDialogVisible] = React.useState(false)
@@ -2178,84 +2157,6 @@ function IndexPage() {
     })
   }
 
-  const buildDietRecommendationPayload = React.useCallback((scene: DietRecommendationScene) => {
-    const macros = intakeData.macros
-    const calorieRemaining = Math.max(0, Number((intakeData.target - intakeData.current).toFixed(1)))
-    const proteinGap = Math.max(0, Number(((macros.protein?.target || 0) - (macros.protein?.current || 0)).toFixed(1)))
-    const carbsGap = Math.max(0, Number(((macros.carbs?.target || 0) - (macros.carbs?.current || 0)).toFixed(1)))
-    const fatGap = Math.max(0, Number(((macros.fat?.target || 0) - (macros.fat?.current || 0)).toFixed(1)))
-    return {
-      scene,
-      date: mapCalendarDateToApi(selectedDateRef.current || selectedDate) || selectedDate,
-      calorie_remaining: calorieRemaining,
-      macro_gaps: {
-        calories: calorieRemaining,
-        protein: proteinGap,
-        carbs: carbsGap,
-        fat: fatGap
-      },
-      targets: {
-        calories: intakeData.target,
-        protein: macros.protein?.target || 0,
-        carbs: macros.carbs?.target || 0,
-        fat: macros.fat?.target || 0
-      },
-      current: {
-        calories: intakeData.current,
-        protein: macros.protein?.current || 0,
-        carbs: macros.carbs?.current || 0,
-        fat: macros.fat?.current || 0
-      },
-      meals: (meals || []).map((meal) => ({
-        type: meal.type,
-        name: meal.name,
-        description: meal.description || '',
-        calories: normalizeDisplayNumber(meal.calorie),
-        protein: normalizeDisplayNumber(meal.protein),
-        carbs: normalizeDisplayNumber(meal.carbs),
-        fat: normalizeDisplayNumber(meal.fat)
-      }))
-    }
-  }, [intakeData, meals, selectedDate])
-
-  const requestDietRecommendation = React.useCallback(async (scene: DietRecommendationScene) => {
-    if (!getAccessToken()) {
-      redirectToLogin()
-      return
-    }
-    setDietRecScene(scene)
-    setDietRecVisible(true)
-    setDietRecLoading(true)
-    const requestSeq = ++dietRecRequestSeqRef.current
-    try {
-      const result = await generateDietRecommendation(buildDietRecommendationPayload(scene))
-      if (requestSeq === dietRecRequestSeqRef.current) {
-        setDietRecResult(result)
-      }
-    } catch (error) {
-      if (requestSeq === dietRecRequestSeqRef.current) {
-        await showUnifiedApiError(error, '生成推荐失败')
-      }
-    } finally {
-      if (requestSeq === dietRecRequestSeqRef.current) {
-        setDietRecLoading(false)
-      }
-    }
-  }, [buildDietRecommendationPayload])
-
-  const openDietRecommendation = React.useCallback((scene: DietRecommendationScene) => {
-    void requestDietRecommendation(scene)
-  }, [requestDietRecommendation])
-
-  const handleDietRecommendationSceneChange = React.useCallback((scene: DietRecommendationScene) => {
-    if (scene === dietRecScene && dietRecResult) return
-    void requestDietRecommendation(scene)
-  }, [dietRecScene, dietRecResult, requestDietRecommendation])
-
-  const refreshDietRecommendation = React.useCallback(() => {
-    void requestDietRecommendation(dietRecScene)
-  }, [dietRecScene, requestDietRecommendation])
-
   // 切日专用轻量同步：仅拉取该日 dashboard + 运动，不重复请求周统计/身体指标
   const syncDashboardForDate = React.useCallback(async (date: string) => {
     // 若同日期请求已在进行中，跳过本次调用
@@ -2552,6 +2453,8 @@ function IndexPage() {
   const totalTarget = normalizeDisplayNumber(intakeData.target)
   const remainingCalories = Math.max(0, Number((totalTarget - totalCurrent).toFixed(1)))
   const calorieProgress = normalizeProgressPercent(intakeData.progress, totalCurrent, totalTarget)
+  const wellnessCaloriePct = Math.min(100, calculateProgressPercent(totalCurrent, totalTarget))
+  const wellnessGaugePct = wellnessCaloriePct * 0.75
   /** 摄入超过目标时，下方进度条用警示红（与营养素超标一致） */
   const isCalorieOver = totalCurrent > totalTarget
   /** 左侧主数字：未超标为剩余可摄入；超标为超出目标的量（正数） */
@@ -2681,7 +2584,6 @@ function IndexPage() {
     }
   }, [])
 
-  const petName = petSummary?.pet?.name || '成长伙伴'
   const healthyHabitScore = React.useMemo(() => {
     if (dashboardBusy || isGuest) return 0
     let score = 0
@@ -2701,7 +2603,6 @@ function IndexPage() {
     totalCurrent,
     totalTarget
   ])
-  const petEvent = petSummary?.event && !petSummary.event.is_claimed ? petSummary.event : null
   const petMood = petSummary?.status?.mood || (dashboardBusy || isGuest
     ? 'calm'
     : healthyHabitScore >= 3
@@ -2710,47 +2611,6 @@ function IndexPage() {
         ? 'calm'
         : 'sleepy')
   const petState = petSummary?.status?.state || petMood
-  const petLevelProgress = petSummary?.pet?.level_progress ?? Math.min(100, healthyHabitScore * 25)
-  const petLevelText = petSummary?.pet?.level ? `Lv.${petSummary.pet.level} · 成长 ${petLevelProgress}%` : `成长 ${petLevelProgress}%`
-  const petMessage = petEvent?.message || petSummary?.status?.message || (dashboardBusy
-    ? '我正在看你今天的状态'
-    : isGuest
-      ? '登录后我会记住你的成长'
-      : healthyHabitScore >= 3
-        ? '今天习惯很稳，我长大了一点'
-        : healthyHabitScore >= 1
-          ? '再完成一个小习惯，我会更有精神'
-          : '先记录一餐，我就知道怎么陪你啦')
-  const petTaskText = petEvent?.task_text || petSummary?.status?.task_text || (dashboardBusy || isGuest
-    ? '今日成长任务'
-    : healthyHabitScore >= 3
-      ? '已点亮多个好习惯'
-      : proteinTargetRaw > 0 && proteinCur < proteinTargetRaw * 0.75
-        ? '补一点蛋白质'
-        : todayWater.total < bodyMetrics.waterGoalMl * 0.6
-          ? '喝水达到 60%'
-          : totalCurrent <= 0
-            ? '记录一餐'
-            : '保持今日节奏')
-  const handleClaimPetEvent = React.useCallback(async () => {
-    if (!petEvent || petClaiming) return
-    setPetClaiming(true)
-    try {
-      const result = await claimPetEvent(petEvent.id)
-      setPetSummary((prev) => prev ? { ...prev, pet: result.pet, event: result.event, status: { ...prev.status, message: '奖励已收下，我又长大了一点。' } } : prev)
-      const parts: string[] = []
-      if (result.credits_awarded > 0) parts.push(`+${result.credits_awarded}积分`)
-      if (result.exp_awarded > 0) parts.push(`+${result.exp_awarded}经验`)
-      Taro.showToast({ title: parts.length ? `领取成功 ${parts.join(' ')}` : '已领取', icon: 'none' })
-    } catch (error) {
-      await showUnifiedApiError(error, '领取宠物奖励失败')
-    } finally {
-      setPetClaiming(false)
-    }
-  }, [petClaiming, petEvent])
-  const openPetChat = React.useCallback(() => {
-    Taro.navigateTo({ url: extraPkgUrl('/pages/pet-chat/index') })
-  }, [])
 
   const handleShareDailyPosterImage = React.useCallback(() => {
     if (!dailyPosterImageUrl) return
@@ -3093,59 +2953,17 @@ function IndexPage() {
     const nextMode = homeExperienceConfig.mode === 'wellness' ? 'balanced' : 'wellness'
     const saved = saveHomeExperienceConfig({ version: 2, mode: nextMode })
     setHomeExperienceConfig(saved)
-    if (nextMode === 'wellness') setActiveHomeExperiencePage('status')
     Taro.showToast({
       title: nextMode === 'wellness' ? '已切换至养生模式' : '已切换至均衡模式',
       icon: 'none',
     })
   }, [homeExperienceConfig.mode])
 
-  const selectHomeExperiencePage = React.useCallback((pageID: HomeExperiencePageId) => {
-    setActiveHomeExperiencePage(pageID)
-  }, [])
-
-  const handleHomeExperienceTouchStart = React.useCallback((event) => {
-    const touch = event.touches?.[0]
-    if (!touch) return
-    homeExperienceSwipeRef.current = {
-      startX: touch.clientX,
-      startY: touch.clientY,
-      endX: touch.clientX,
-      endY: touch.clientY,
-    }
-  }, [])
-
-  const handleHomeExperienceTouchMove = React.useCallback((event) => {
-    const touch = event.touches?.[0]
-    const gesture = homeExperienceSwipeRef.current
-    if (!touch || !gesture) return
-    gesture.endX = touch.clientX
-    gesture.endY = touch.clientY
-  }, [])
-
-  const handleHomeExperienceTouchEnd = React.useCallback(() => {
-    const gesture = homeExperienceSwipeRef.current
-    homeExperienceSwipeRef.current = null
-    if (!gesture) return
-    const dx = gesture.endX - gesture.startX
-    const dy = gesture.endY - gesture.startY
-    if (Math.abs(dx) < 56 || Math.abs(dx) <= Math.abs(dy) * 1.25) return
-    const currentIndex = HOME_EXPERIENCE_PAGE_ORDER.indexOf(activeHomeExperiencePage)
-    if (currentIndex < 0) return
-    const nextIndex = dx < 0
-      ? Math.min(HOME_EXPERIENCE_PAGE_ORDER.length - 1, currentIndex + 1)
-      : Math.max(0, currentIndex - 1)
-    if (nextIndex !== currentIndex) {
-      setActiveHomeExperiencePage(HOME_EXPERIENCE_PAGE_ORDER[nextIndex])
-    }
-  }, [activeHomeExperiencePage])
-
   const openPetHome = React.useCallback(() => {
     Taro.navigateTo({ url: extraPkgUrl('/pages/pet-home/index') })
   }, [])
 
   const isWellnessMode = homeExperienceConfig.mode === 'wellness'
-  const isBalancedMode = homeExperienceConfig.mode === 'balanced'
 
   return (
     <View
@@ -3226,63 +3044,6 @@ function IndexPage() {
           monthLoadError={calendarMonthLoadError}
         />
 
-        {isWellnessMode && (
-          <HomeExperienceBar
-            activePage={activeHomeExperiencePage}
-            onSelectPage={selectHomeExperiencePage}
-          />
-        )}
-
-        {showRewardHint && (
-          <View className='home-reward-hint-swiper'>
-            <Swiper
-              className='home-reward-hint-swiper__track'
-              current={activeRewardHintIndex}
-              circular
-              duration={300}
-              onChange={(e) => setRewardHintIndex(e.detail.current)}
-            >
-              {rewardHintBanners.map((banner) => (
-                <SwiperItem key={banner.key} className='home-reward-hint-swiper__item'>
-                  <View
-                    className={`home-reward-hint ${banner.className}`}
-                    onClick={() => handleRewardHintClick(banner.url)}
-                  >
-                    {banner.bgImage && (
-                      <Image
-                        className='home-reward-hint__bg'
-                        src={banner.bgImage}
-                        mode='aspectFill'
-                      />
-                    )}
-                    <View className='home-reward-hint__main'>
-                      <Text className='home-reward-hint__kicker'>{banner.kicker}</Text>
-                      <Text className='home-reward-hint__title'>{banner.title}</Text>
-                      <Text className='home-reward-hint__desc'>{banner.desc}</Text>
-                    </View>
-                    <View
-                      className='home-reward-hint__actions'
-                      onClick={(event) => {
-                        event.stopPropagation()
-                        handleRewardHintClick(banner.url)
-                      }}
-                    >
-                      <Text className='home-reward-hint__go'>{banner.actionText}</Text>
-                    </View>
-                  </View>
-                </SwiperItem>
-              ))}
-            </Swiper>
-            <View className='home-reward-hint__dots'>
-              {rewardHintBanners.map((banner, index) => (
-                <Text
-                  key={banner.key}
-                  className={`home-reward-hint__dot ${index === activeRewardHintIndex ? 'active' : ''}`}
-                />
-              ))}
-            </View>
-          </View>
-        )}
         {showBackfillHint && (
           <View className='home-backfill-hint'>
             <Text className='home-backfill-hint__dot' />
@@ -3297,16 +3058,89 @@ function IndexPage() {
         )}
 
         <View
-          key={`${homeExperienceConfig.mode}-${activeHomeExperiencePage}`}
-          className={`home-experience-stage home-experience-stage--${isBalancedMode ? 'balanced' : activeHomeExperiencePage}`}
-          onTouchStart={isWellnessMode ? handleHomeExperienceTouchStart : undefined}
-          onTouchMove={isWellnessMode ? handleHomeExperienceTouchMove : undefined}
-          onTouchEnd={isWellnessMode ? handleHomeExperienceTouchEnd : undefined}
-          onTouchCancel={isWellnessMode ? handleHomeExperienceTouchEnd : undefined}
+          key={homeExperienceConfig.mode}
+          className={`home-experience-stage home-experience-stage--${homeExperienceConfig.mode}`}
         >
 
-        {/* 热量总览卡片 + 三大营养素合并（仅展示与编辑目标，不整卡跳转） */}
-        {(isBalancedMode || isWellnessMode) && (
+        {/* 养生模式使用表盘；均衡模式保留横向热量卡。两者复用同一份营养数据。 */}
+        {isWellnessMode ? (
+          <View className='wellness-overview-card home-experience-card'>
+            <View className='wellness-overview-main'>
+              <View
+                className={`wellness-calorie-gauge${isCalorieOver ? ' is-over' : ''}`}
+                style={{ '--wellness-progress': `${wellnessGaugePct}%` } as React.CSSProperties}
+              >
+                <View className='wellness-calorie-gauge__center'>
+                  <Text className='wellness-calorie-gauge__label'>{isCalorieOver ? '已超出' : '剩余可摄入'}</Text>
+                  <Text className={`wellness-calorie-gauge__value${isCalorieOver ? ' is-over' : ''}`}>
+                    {dashboardBusy || isGuest
+                      ? '--'
+                      : formatNumberWithComma(Math.round(isCalorieOver ? totalCurrent - totalTarget : totalTarget - totalCurrent))}
+                  </Text>
+                  {dashboardBusy && <View className='loading-spinner wellness-calorie-gauge__spinner' />}
+                  <Text className='wellness-calorie-gauge__unit'>kcal</Text>
+                  <Text className='iconfont icon-a-144-lvye wellness-calorie-gauge__leaf' />
+                </View>
+              </View>
+
+              <View className='wellness-overview-detail'>
+                <View className='wellness-overview-summary-row'>
+                  <Text className='wellness-intake-summary'>
+                    已摄入 {dashboardBusy || isGuest ? '--' : formatDisplayNumber(Math.round(totalCurrent))} / {dashboardBusy || isGuest ? '--' : formatDisplayNumber(Math.round(totalTarget))} kcal
+                  </Text>
+                  <View className='wellness-target-edit' onClick={openTargetEditor}>
+                    <Text className='iconfont icon-target wellness-target-edit__icon' />
+                    <Text>目标</Text>
+                  </View>
+                </View>
+                <View className='wellness-total-progress'>
+                  <View className={`wellness-total-progress__fill${isCalorieOver ? ' is-over' : ''}`} style={{ width: `${wellnessCaloriePct}%` }} />
+                </View>
+                <View className='wellness-macros'>
+                  {MACRO_CONFIGS.map(({ key, label, unit, iconClass }) => {
+                    const macro = intakeData.macros[key]
+                    const current = normalizeDisplayNumber(macro?.current)
+                    const target = normalizeDisplayNumber(macro?.target)
+                    const pct = Math.min(100, calculateProgressPercent(current, target))
+                    const isMacroOver = current > target && target > 0
+                    return (
+                      <View key={key} className='wellness-macro'>
+                        <View className='wellness-macro__title'>
+                          <Text className={`iconfont ${iconClass} wellness-macro__icon`} />
+                          <Text>{label}</Text>
+                        </View>
+                        <View className='wellness-macro__numbers'>
+                          <Text className={`wellness-macro__current${isMacroOver ? ' is-over' : ''}`}>{dashboardBusy || isGuest ? '--' : formatDisplayNumber(current)}</Text>
+                          <Text className='wellness-macro__target'> / {dashboardBusy || isGuest ? '--' : formatDisplayNumber(target)}{unit}</Text>
+                        </View>
+                        <View className='wellness-macro__track'>
+                          <View className={`wellness-macro__fill${isMacroOver ? ' is-over' : ''}`} style={{ width: `${pct}%` }} />
+                        </View>
+                      </View>
+                    )
+                  })}
+                </View>
+              </View>
+            </View>
+
+            <View className={`nutrition-expand-shell wellness-nutrition-shell${nutritionExpanded ? ' is-expanded' : ''}`}>
+              <View className='nutrition-expand-main' onClick={() => setNutritionExpanded((value) => !value)}>
+                <View className='nutrition-expand-title-row'>
+                  <Text className='nutrition-expand-title'>营养概览</Text>
+                  <View className='nutrition-expand-affordance'>
+                    <Text className={`iconfont ${nutritionExpanded ? 'icon-collapse' : 'icon-expand'} nutrition-expand-affordance-icon`} />
+                    <Text className='nutrition-expand-affordance-text'>{nutritionExpanded ? '收起' : '展开更多'}</Text>
+                  </View>
+                </View>
+              </View>
+              {nutritionExpanded && (
+                <View className='nutrition-expanded-body wellness-nutrition-expanded-body'>
+                  <MicrosSection intakeData={intakeData} dashboardBusy={dashboardBusy} isGuest={isGuest} />
+                </View>
+              )}
+            </View>
+          </View>
+        ) : (
         <View className='main-card combined-card home-experience-card'>
           <View className='main-card-header'>
             <View className='main-card-title'>
@@ -3456,34 +3290,58 @@ function IndexPage() {
         </View>
         )}
 
-        {(isBalancedMode || activeHomeExperiencePage === 'recommendations') && (
-        <View className='diet-rec-entry home-experience-card'>
-          <View className='diet-rec-entry-main'>
-            <View className='diet-rec-entry-icon'>
-              <Text className='iconfont icon-canciguanli diet-rec-entry-icon-text' />
-            </View>
-            <View className='diet-rec-entry-copy'>
-              <Text className='diet-rec-entry-title'>今天吃什么</Text>
-              <Text className='diet-rec-entry-subtitle'>
-                {dashboardBusy || isGuest
-                  ? '按剩余目标推荐一餐'
-                  : `还可吃 ${formatDisplayNumber(Math.max(0, Math.round(intakeData.target - intakeData.current)))} kcal`}
-              </Text>
+        {showRewardHint && (
+          <View className='home-reward-hint-swiper'>
+            <Swiper
+              className='home-reward-hint-swiper__track'
+              current={activeRewardHintIndex}
+              circular
+              duration={300}
+              onChange={(e) => setRewardHintIndex(e.detail.current)}
+            >
+              {rewardHintBanners.map((banner) => (
+                <SwiperItem key={banner.key} className='home-reward-hint-swiper__item'>
+                  <View
+                    className={`home-reward-hint ${banner.className}`}
+                    onClick={() => handleRewardHintClick(banner.url)}
+                  >
+                    {banner.bgImage && (
+                      <Image
+                        className='home-reward-hint__bg'
+                        src={banner.bgImage}
+                        mode='aspectFill'
+                      />
+                    )}
+                    <View className='home-reward-hint__main'>
+                      <Text className='home-reward-hint__kicker'>{banner.kicker}</Text>
+                      <Text className='home-reward-hint__title'>{banner.title}</Text>
+                      <Text className='home-reward-hint__desc'>{banner.desc}</Text>
+                    </View>
+                    <View
+                      className='home-reward-hint__actions'
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        handleRewardHintClick(banner.url)
+                      }}
+                    >
+                      <Text className='home-reward-hint__go'>{banner.actionText}</Text>
+                    </View>
+                  </View>
+                </SwiperItem>
+              ))}
+            </Swiper>
+            <View className='home-reward-hint__dots'>
+              {rewardHintBanners.map((banner, index) => (
+                <Text
+                  key={banner.key}
+                  className={`home-reward-hint__dot ${index === activeRewardHintIndex ? 'active' : ''}`}
+                />
+              ))}
             </View>
           </View>
-          <View className='diet-rec-entry-actions'>
-            <View className='diet-rec-entry-btn' onClick={() => openDietRecommendation('eat_out')}>
-              <Text className='diet-rec-entry-btn-text'>外面吃</Text>
-            </View>
-            <View className='diet-rec-entry-btn primary' onClick={() => openDietRecommendation('cook_home')}>
-              <Text className='diet-rec-entry-btn-text primary'>自己做</Text>
-            </View>
-          </View>
-        </View>
         )}
 
         {/* 体重/喝水状态卡片 */}
-        {(isBalancedMode || activeHomeExperiencePage === 'records') && (
         <View className='body-status-section home-experience-card'>
           {/* 体重卡片 */}
           <View className='body-status-card weight-card' onClick={() => openBodyMetricRecord('weight')} onLongPress={openWeightEditor}>
@@ -3582,10 +3440,8 @@ function IndexPage() {
             </Text>
           </View>
         </View>
-        )}
 
         {/* 今日餐食区域 */}
-        {(isBalancedMode || activeHomeExperiencePage === 'records') && (
         <View className='meals-section home-experience-card'>
           <View className='section-header'>
             <View className='meals-title-wrap'>
@@ -3751,10 +3607,9 @@ function IndexPage() {
             )}
           </View>
         </View>
-        )}
 
         {/* 食物保质期：快到期提醒（数据来自首页 dashboard） */}
-        {(isBalancedMode || activeHomeExperiencePage === 'reminders') && showFoodExpiryBlock && (
+        {showFoodExpiryBlock && (
           <View className='expiry-section home-experience-card'>
             <View className='section-header'>
               <View className='meals-title-wrap'>
@@ -3841,88 +3696,9 @@ function IndexPage() {
         )}
 
         {/* 查看统计入口 */}
-        {(isBalancedMode || activeHomeExperiencePage === 'recommendations') && (
-          <View className='home-experience-card'>
-            <StatsEntry onClick={openDayRecordForSelectedDate} />
-          </View>
-        )}
-
-        {isWellnessMode
-          && activeHomeExperiencePage === 'reminders'
-          && !showRewardHint
-          && !showFoodExpiryBlock && (
-          <View className='home-experience-empty'>
-            <Text className='home-experience-empty__title'>这里暂时很安静</Text>
-            <Text className='home-experience-empty__desc'>登录后，这里会显示奖励与保质期提醒</Text>
-          </View>
-        )}
-
-        {isWellnessMode && activeHomeExperiencePage === 'companion' && (
-          <View className='home-partner-card home-experience-card'>
-            {petHidden ? (
-              <View className='home-partner-card__hidden'>
-                <View className='home-partner-card__hidden-icon'>
-                  <Text className='iconfont icon-good' />
-                </View>
-                <Text className='home-partner-card__hidden-title'>成长伙伴已隐藏</Text>
-                <Text className='home-partner-card__hidden-desc'>你的宠物数据和成长仍会保留，可在宠物小屋重新显示。</Text>
-                <View className='home-partner-card__primary-action' onClick={openPetHome}>
-                  <Text>打开宠物小屋</Text>
-                </View>
-              </View>
-            ) : (
-              <>
-                <View className='home-partner-card__hero'>
-                  <View className='home-partner-card__avatar-wrap' onClick={openPetHome}>
-                    <PetAvatar
-                      pet={petSummary?.pet}
-                      size='large'
-                      mood={petMood}
-                      state={petState}
-                      className='home-partner-card__avatar'
-                    />
-                  </View>
-                  <View className='home-partner-card__hero-copy'>
-                    <Text className='home-partner-card__eyebrow'>今日成长伙伴</Text>
-                    <Text className='home-partner-card__name'>{petName}</Text>
-                    <Text className='home-partner-card__message'>{petMessage}</Text>
-                  </View>
-                </View>
-                <View className='home-partner-card__progress-block'>
-                  <View className='home-partner-card__progress-top'>
-                    <Text className='home-partner-card__progress-label'>{petLevelText}</Text>
-                    <Text className='home-partner-card__task'>{petTaskText}</Text>
-                  </View>
-                  <View className='home-partner-card__progress-track'>
-                    <View
-                      className='home-partner-card__progress-fill'
-                      style={{ width: `${Math.max(0, Math.min(100, petLevelProgress))}%` }}
-                    />
-                  </View>
-                </View>
-                {petEvent ? (
-                  <View className='home-partner-card__reward'>
-                    <View className='home-partner-card__reward-copy'>
-                      <Text className='home-partner-card__reward-title'>{petEvent.title || '成长奖励待领取'}</Text>
-                      <Text className='home-partner-card__reward-desc'>{petEvent.task_text || '完成今天的小习惯后领取'}</Text>
-                    </View>
-                    <View className='home-partner-card__reward-action' onClick={handleClaimPetEvent}>
-                      {petClaiming ? <View className='btn-spinner' /> : <Text>领取</Text>}
-                    </View>
-                  </View>
-                ) : null}
-                <View className='home-partner-card__actions'>
-                  <View className='home-partner-card__secondary-action' onClick={openPetHome}>
-                    <Text>成长档案</Text>
-                  </View>
-                  <View className='home-partner-card__primary-action' onClick={openPetChat}>
-                    <Text>和{petName}聊聊</Text>
-                  </View>
-                </View>
-              </>
-            )}
-          </View>
-        )}
+        <View className='home-experience-card'>
+          <StatsEntry onClick={openDayRecordForSelectedDate} />
+        </View>
 
         </View>
 
@@ -4091,16 +3867,6 @@ function IndexPage() {
         storageKey={ONBOARDING_HOME_RECORD_GUIDE_KEY}
         onClose={closeHomeOnboardingGuide}
         onBeforeNext={handleHomeGuideBeforeNext}
-      />
-
-      <DietRecommendationSheet
-        visible={dietRecVisible}
-        scene={dietRecScene}
-        loading={dietRecLoading}
-        result={dietRecResult}
-        onClose={() => setDietRecVisible(false)}
-        onChangeScene={handleDietRecommendationSceneChange}
-        onRefresh={refreshDietRecommendation}
       />
 
       <View className='poster-canvas-wrap'>

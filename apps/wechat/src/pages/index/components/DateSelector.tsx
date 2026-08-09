@@ -1,6 +1,7 @@
 import { View, Text } from '@tarojs/components'
 import Taro from '@tarojs/taro'
 import React from 'react'
+import { IconCollapse, IconExpand } from '../../../components/iconfont'
 import { type WeekHeatmapCell } from '../types'
 import {
   buildCalendarRecordMap,
@@ -84,25 +85,29 @@ export function DateSelector({ cells, historyCells = [], selectedDate, onSelect,
   return (
     <View className={`date-selector-section ${expanded ? 'is-calendar-expanded' : ''}`}>
       <View className='date-calendar-toolbar'>
-        {expanded ? (
-          <View className='date-calendar-nav' onClick={() => showMonth(-1)}>
-            <Text>‹</Text>
-          </View>
-        ) : <View className='date-calendar-nav is-placeholder' />}
         <View className='date-calendar-title' onClick={toggleExpanded}>
           <Text className='date-calendar-title__text'>{formatCalendarMonthLabel(titleMonth)}</Text>
-          <Text className='date-calendar-title__arrow'>{expanded ? '⌃' : '⌄'}</Text>
+          {expanded ? (
+            <IconCollapse size={18} color='currentColor' className='date-calendar-title__indicator' />
+          ) : (
+            <IconExpand size={18} color='currentColor' className='date-calendar-title__indicator' />
+          )}
         </View>
-        {expanded ? (
-          <View
-            className={`date-calendar-nav ${isCurrentMonth ? 'is-disabled' : ''}`}
-            onClick={() => {
-              if (!isCurrentMonth) showMonth(1)
-            }}
-          >
-            <Text>›</Text>
+        {expanded && (
+          <View className='date-calendar-nav-group'>
+            <View className='date-calendar-nav' onClick={() => showMonth(-1)}>
+              <Text>‹</Text>
+            </View>
+            <View
+              className={`date-calendar-nav ${isCurrentMonth ? 'is-disabled' : ''}`}
+              onClick={() => {
+                if (!isCurrentMonth) showMonth(1)
+              }}
+            >
+              <Text>›</Text>
+            </View>
           </View>
-        ) : <View className='date-calendar-toggle' onClick={toggleExpanded}><Text>月历</Text></View>}
+        )}
       </View>
 
       {expanded ? (

@@ -293,61 +293,6 @@ $fl-dark-sk-grad: linear-gradient(90deg, $fl-dark-sk-a 25%, $fl-dark-sk-b 50%, $
   color: #7dd3b0 !important;
 }
 
-.fl-d .diet-rec-sheet,
-.fl-d .diet-rec-option {
-  background: $fl-dark-panel-bg !important;
-  box-shadow: 0 8rpx 28rpx rgb(0 0 0 / 35%) !important;
-}
-
-.fl-d .diet-rec-macro {
-  background: rgb(125 211 176 / 14%) !important;
-}
-
-.fl-d .diet-rec-title,
-.fl-d .diet-rec-gap-value,
-.fl-d .diet-rec-option-title,
-.fl-d .diet-rec-food-name {
-  color: $fl-dark-text !important;
-}
-
-.fl-d .diet-rec-summary,
-.fl-d .diet-rec-option-reason,
-.fl-d .diet-rec-food-amount,
-.fl-d .diet-rec-tip,
-.fl-d .diet-rec-alt,
-.fl-d .diet-rec-empty-text {
-  color: $fl-dark-text2 !important;
-}
-
-.fl-d .diet-rec-kicker,
-.fl-d .diet-rec-option-cal,
-.fl-d .diet-rec-macro {
-  color: $fl-dark-accent !important;
-}
-
-.fl-d .diet-rec-refresh {
-  background: $fl-dark-accent !important;
-}
-
-.fl-d .diet-rec-refresh-text {
-  color: #10201a !important;
-}
-
-.fl-d .diet-rec-tabs,
-.fl-d .diet-rec-close,
-.fl-d .diet-rec-gap-pill,
-.fl-d .diet-rec-food {
-  background: $fl-dark-panel-bg-soft !important;
-}
-
-.fl-d .diet-rec-tab.active {
-  background: $fl-dark-ghost-bg !important;
-}
-
-.fl-d .diet-rec-tab.active .diet-rec-tab-text {
-  color: $fl-dark-accent !important;
-}
-
 .fl-d .section-title,
 .fl-d .meals-title,
 .fl-d .expiry-title {
