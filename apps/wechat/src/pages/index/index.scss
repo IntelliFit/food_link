@@ -782,9 +782,8 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
     }
   }
 
-  .date-calendar-title__text,
-  .date-calendar-nav,
-  .date-calendar-toggle {
+  .date-calendar-title,
+  .date-calendar-nav {
     color: #315d43;
   }
 
@@ -1075,7 +1074,6 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 }
 
 .date-calendar-toolbar {
-  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1084,25 +1082,31 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 }
 
 .date-calendar-title {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
   display: flex;
   align-items: center;
   gap: 8rpx;
-  padding: 8rpx 18rpx;
+  padding: 8rpx 0;
+  color: #376d5a;
 }
 
 .date-calendar-title__text {
-  color: #376d5a;
+  color: inherit;
   font-size: 24rpx;
   line-height: 34rpx;
   font-weight: 700;
 }
 
-.date-calendar-nav,
-.date-calendar-toggle {
+.date-calendar-title__indicator {
+  flex-shrink: 0;
+}
+
+.date-calendar-nav-group {
+  display: flex;
+  align-items: center;
+  gap: 6rpx;
+}
+
+.date-calendar-nav {
   position: relative;
   z-index: 1;
   min-width: 54rpx;
@@ -1120,17 +1124,9 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
     background: rgb(92 184 150 / 10%);
   }
 
-  &.is-disabled,
-  &.is-placeholder {
+  &.is-disabled {
     opacity: 0.28;
   }
-}
-
-.date-calendar-toggle {
-  min-width: 72rpx;
-  padding: 0 12rpx;
-  box-sizing: border-box;
-  font-size: 22rpx;
 }
 
 .month-calendar {
