@@ -1217,7 +1217,7 @@ func TestMembershipService_GetInviteRewardStatusRecordsInviteePendingOneAction(t
 	require.Len(t, records, 1)
 	row := records[0].(map[string]any)
 	assert.Equal(t, 1, row["records_needed"])
-	assert.Contains(t, row["requirement_text"], "还需在另一个自然日再完成 1 次有效记录")
+	assert.Contains(t, row["requirement_text"], "还需在另一个自然日再完成 1 次有效使用")
 }
 
 func TestMembershipService_GetInviteRewardStatusRecordsInviterAllStatuses(t *testing.T) {
@@ -1253,6 +1253,9 @@ func TestMembershipService_GetInviteRewardStatusRecordsInviterAllStatuses(t *tes
 	repo := &mockMembershipRepo{
 		pendingInviteReferrals: rows[2:],
 		inviteReferralsForUser: rows,
+		membershipGrantsBySourceKey: map[string]*domain.UserMembershipGrant{
+			"invite-qualified:ref-completed:inviter": {ID: "grant-completed", UserID: "inviter", PlanCode: "light_monthly"},
+		},
 		users: map[string]*membershiprepo.User{
 			"invitee1": {ID: "invitee1", Nickname: &inviteeOne},
 			"invitee2": {ID: "invitee2", Nickname: &inviteeTwo},
@@ -1267,13 +1270,12 @@ func TestMembershipService_GetInviteRewardStatusRecordsInviterAllStatuses(t *tes
 	require.Len(t, asInviter, 1)
 	records := data["records"].([]any)
 	require.Len(t, records, 3)
-	assert.Equal(t, "待启用", records[0].(map[string]any)["status_label"])
+	assert.Equal(t, "已完成", records[0].(map[string]any)["status_label"])
 	assert.Equal(t, "好友一", records[0].(map[string]any)["other_nickname"])
 	assert.Equal(t, 7, records[0].(map[string]any)["reward_days"])
 	assert.Equal(t, "7 天轻度版会员", records[0].(map[string]any)["reward_label"])
-	assert.Contains(t, records[0].(map[string]any)["requirement_text"], "邀请人获得 7 天轻度版会员")
-	assert.Contains(t, records[0].(map[string]any)["requirement_text"], "好友获得 3 天轻度版会员")
-	assert.Contains(t, records[0].(map[string]any)["next_action_text"], "按需启用")
+	assert.Contains(t, records[0].(map[string]any)["requirement_text"], "已完成，双方已获得 7 天轻度版会员")
+	assert.Contains(t, records[0].(map[string]any)["next_action_text"], "会员奖励已发放")
 	assert.Equal(t, "未达成", records[1].(map[string]any)["status_label"])
 	assert.Equal(t, "邀请人当月奖励名额已满", records[1].(map[string]any)["blocked_reason_label"])
 	assert.Equal(t, "进行中", records[2].(map[string]any)["status_label"])
