@@ -1,6 +1,6 @@
 {
   "name": "@food-link/mobile",
-  "version": "0.0.0",
+  "version": "3.0.2",
   "private": true,
   "description": "Food Link mobile app POC",
   "main": "index.ts",

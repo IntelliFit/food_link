@@ -48,6 +48,7 @@
     "dev:weapp:online": "npm --workspace apps/wechat run dev:weapp:online",
     "dev:mobile": "node scripts/start-mobile-dev.cjs",
     "typecheck:mobile": "npm --workspace apps/mobile run typecheck",
+    "build:mobile:android:store": "python scripts/build_mobile_android_store.py",
     "build:mobile:ios:preview": "npm --workspace apps/mobile run build:ios:preview",
     "build:mobile:ios:production": "npm --workspace apps/mobile run build:ios:production",
     "release:mobile:android": "python scripts/release_mobile_android.py",
