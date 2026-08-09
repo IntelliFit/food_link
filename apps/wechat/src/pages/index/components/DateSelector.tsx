@@ -91,7 +91,6 @@ export function DateSelector({ cells, historyCells = [], selectedDate, onSelect,
         ) : <View className='date-calendar-nav is-placeholder' />}
         <View className='date-calendar-title' onClick={toggleExpanded}>
           <Text className='date-calendar-title__text'>{formatCalendarMonthLabel(titleMonth)}</Text>
-          <Text className='date-calendar-title__arrow'>{expanded ? '⌃' : '⌄'}</Text>
         </View>
         {expanded ? (
           <View

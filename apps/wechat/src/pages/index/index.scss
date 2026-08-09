@@ -751,8 +751,6 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   }
 
   .date-selector-section {
-    padding: 12rpx 10rpx;
-    border: 1rpx solid rgb(47 84 61 / 8%);
     border-radius: 30rpx;
     background: rgb(255 253 247 / 94%);
     box-shadow: 0 10rpx 26rpx rgb(35 71 50 / 10%);
@@ -760,9 +758,6 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   }
 
   .date-item {
-    height: 142rpx;
-    padding: 16rpx 0 12rpx;
-
     .date-day-name {
       color: #6e675a;
     }
@@ -788,7 +783,6 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   }
 
   .date-calendar-title__text,
-  .date-calendar-title__arrow,
   .date-calendar-nav,
   .date-calendar-toggle {
     color: #315d43;
@@ -1100,16 +1094,11 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   padding: 8rpx 18rpx;
 }
 
-.date-calendar-title__text,
-.date-calendar-title__arrow {
+.date-calendar-title__text {
   color: #376d5a;
   font-size: 24rpx;
   line-height: 34rpx;
   font-weight: 700;
-}
-
-.date-calendar-title__arrow {
-  font-size: 22rpx;
 }
 
 .date-calendar-nav,
