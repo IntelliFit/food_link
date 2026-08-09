@@ -1,37 +1,15 @@
 import Taro from '@tarojs/taro'
 
 export type HomeExperienceMode = 'wellness' | 'balanced'
-export type HomeExperiencePageId = 'status' | 'records' | 'recommendations' | 'reminders' | 'companion'
-
-export interface HomeExperiencePageMeta {
-  id: HomeExperiencePageId
-  shortName: string
-  iconClass: string
-}
 
 export interface HomeExperienceConfig {
   version: 2
   mode: HomeExperienceMode
 }
 
-export const HOME_EXPERIENCE_PAGE_ORDER: HomeExperiencePageId[] = [
-  'status',
-  'records',
-  'recommendations',
-  'reminders',
-  'companion',
-]
-
-export const HOME_EXPERIENCE_PAGES: Record<HomeExperiencePageId, HomeExperiencePageMeta> = {
-  status: { id: 'status', shortName: '状态', iconClass: 'icon-target' },
-  records: { id: 'records', shortName: '记录', iconClass: 'icon-canciguanli' },
-  recommendations: { id: 'recommendations', shortName: '建议', iconClass: 'icon-shiwu' },
-  reminders: { id: 'reminders', shortName: '提醒', iconClass: 'icon-kefulan' },
-  companion: { id: 'companion', shortName: '伙伴', iconClass: 'icon-good' },
-}
-
 const HOME_EXPERIENCE_STORAGE_KEY = 'home_experience_config_v2'
 const LEGACY_HOME_EXPERIENCE_STORAGE_KEY = 'home_experience_config_v1'
+const HOME_DISPLAY_MODE_KEY = 'home_display_mode_v1'
 
 export const DEFAULT_HOME_EXPERIENCE_CONFIG: HomeExperienceConfig = {
   version: 2,
@@ -47,6 +25,14 @@ function getStorageKey(prefix: string): string {
   }
 }
 
+function syncHomeDisplayMode(mode: HomeExperienceMode): void {
+  try {
+    Taro.setStorageSync(HOME_DISPLAY_MODE_KEY, mode)
+  } catch {
+    /* 底栏主题同步失败不影响用户模式配置读取 */
+  }
+}
+
 export function sanitizeHomeExperienceConfig(value: unknown): HomeExperienceConfig {
   if (!value || typeof value !== 'object') return { ...DEFAULT_HOME_EXPERIENCE_CONFIG }
   const legacyMode = (value as { mode?: unknown }).mode
@@ -59,10 +45,16 @@ export function sanitizeHomeExperienceConfig(value: unknown): HomeExperienceConf
 export function getStoredHomeExperienceConfig(): HomeExperienceConfig {
   try {
     const current = Taro.getStorageSync(getStorageKey(HOME_EXPERIENCE_STORAGE_KEY))
-    if (current) return sanitizeHomeExperienceConfig(current)
+    if (current) {
+      const sanitized = sanitizeHomeExperienceConfig(current)
+      syncHomeDisplayMode(sanitized.mode)
+      return sanitized
+    }
 
     const legacy = Taro.getStorageSync(getStorageKey(LEGACY_HOME_EXPERIENCE_STORAGE_KEY))
-    return sanitizeHomeExperienceConfig(legacy)
+    const sanitized = sanitizeHomeExperienceConfig(legacy)
+    syncHomeDisplayMode(sanitized.mode)
+    return sanitized
   } catch {
     return { ...DEFAULT_HOME_EXPERIENCE_CONFIG }
   }
@@ -75,5 +67,6 @@ export function saveHomeExperienceConfig(config: HomeExperienceConfig): HomeExpe
   } catch {
     /* 模式偏好保存失败不影响首页核心记录链路 */
   }
+  syncHomeDisplayMode(sanitized.mode)
   return sanitized
 }
