@@ -119,6 +119,7 @@ type App struct {
 
 type campusCatalogNutritionBackfiller interface {
 	SubmitPublishedNutritionBackfill(ctx context.Context, limit int) (int, error)
+	RepairCurrentAnalysisTasks(ctx context.Context, limit int) (campuscatalogservice.CurrentAnalysisRepairSummary, error)
 	RepairLegacyAnalysisTasks(ctx context.Context, limit int) (campuscatalogservice.LegacyAnalysisRepairSummary, error)
 	RetryFailedAnalysisTasks(ctx context.Context, limit int) (campuscatalogservice.FailedAnalysisRetrySummary, error)
 	TryAnalysisMaintenanceLeadership(ctx context.Context, fn func(context.Context) error) (bool, error)
@@ -1085,6 +1086,19 @@ func runCampusCatalogMaintenanceLoop(ctx context.Context, backfiller campusCatal
 func runCampusCatalogNutritionBackfill(parent context.Context, backfiller campusCatalogNutritionBackfiller) {
 	ctx, cancel := context.WithTimeout(parent, 2*time.Minute)
 	defer cancel()
+	current, currentErr := backfiller.RepairCurrentAnalysisTasks(ctx, 100)
+	if currentErr != nil {
+		logger.Error(ctx, "当前校园菜品分析任务对账失败", currentErr)
+	} else if current.Scanned > 0 || current.OrphanRetried > 0 {
+		logger.Info(ctx, "当前校园菜品分析任务对账完成",
+			slog.Int("scanned_count", current.Scanned),
+			slog.Int("published_count", current.Published),
+			slog.Int("marked_failed_count", current.MarkedFailed),
+			slog.Int("orphan_retried_count", current.OrphanRetried),
+			slog.Int("skipped_count", current.Skipped),
+			slog.Int("failed_count", current.Failed),
+		)
+	}
 	repair, repairErr := backfiller.RepairLegacyAnalysisTasks(ctx, 20)
 	if repairErr != nil {
 		logger.Error(ctx, "旧版校园菜品分析任务对账失败", repairErr)

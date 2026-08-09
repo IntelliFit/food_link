@@ -1243,7 +1243,7 @@ func TestAnalyzeService_AnalyzeImageStandardDoesNotFallbackToDoubaoWhenGeminiFai
 
 	require.Error(t, err)
 	assert.Equal(t, 0, doubaoClient.calls)
-	assert.Equal(t, 2, gemini3Client.calls)
+	assert.Equal(t, 1, gemini3Client.calls, "限流错误应立即返回，避免重复等待同一上游")
 }
 
 func TestAnalyzeService_AnalyzeImageStandardWebSearchRefinesWithSearchEvidence(t *testing.T) {

@@ -18,9 +18,15 @@ import (
 
 type recordingCampusNutritionBackfiller struct {
 	called   chan int
+	current  chan int
 	repaired chan int
 	retried  chan int
 	leader   chan struct{}
+}
+
+func (f *recordingCampusNutritionBackfiller) RepairCurrentAnalysisTasks(_ context.Context, limit int) (campuscatalogservice.CurrentAnalysisRepairSummary, error) {
+	f.current <- limit
+	return campuscatalogservice.CurrentAnalysisRepairSummary{Scanned: 1, MarkedFailed: 1}, nil
 }
 
 func (f *recordingCampusNutritionBackfiller) SubmitPublishedNutritionBackfill(_ context.Context, limit int) (int, error) {
@@ -51,7 +57,7 @@ func TestAppPackage(t *testing.T) {
 
 func TestStartCampusCatalogNutritionBackfillRunsImmediately(t *testing.T) {
 	app := &App{}
-	backfiller := &recordingCampusNutritionBackfiller{called: make(chan int, 1), repaired: make(chan int, 1), retried: make(chan int, 1), leader: make(chan struct{}, 1)}
+	backfiller := &recordingCampusNutritionBackfiller{called: make(chan int, 1), current: make(chan int, 1), repaired: make(chan int, 1), retried: make(chan int, 1), leader: make(chan struct{}, 1)}
 	app.startCampusCatalogNutritionBackfill(backfiller)
 	t.Cleanup(func() {
 		app.catalogBackfillCancel()
@@ -62,6 +68,12 @@ func TestStartCampusCatalogNutritionBackfillRunsImmediately(t *testing.T) {
 	case <-backfiller.leader:
 	case <-time.After(time.Second):
 		t.Fatal("校园菜品分析维护未尝试获取全局领导权")
+	}
+	select {
+	case limit := <-backfiller.current:
+		assert.Equal(t, 100, limit)
+	case <-time.After(time.Second):
+		t.Fatal("当前校园菜品分析任务未立即对账")
 	}
 	select {
 	case limit := <-backfiller.called:

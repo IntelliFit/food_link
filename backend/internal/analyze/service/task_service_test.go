@@ -664,7 +664,8 @@ func TestTaskService_PrepareAndEnqueueInternalRetryPreservesChainWithoutCredits(
 		Status:    "failed",
 		TextInput: func() *string { value := "校园菜品：番茄炒饭"; return &value }(),
 		Payload: map[string]any{
-			"execution_mode":         "standard",
+			"execution_mode":         "strict_separate",
+			"precision_session_id":   "retired-session",
 			"campus_catalog_item_id": "catalog-item",
 			"internal_benchmark":     true,
 		},
@@ -706,6 +707,47 @@ func TestTaskService_PrepareInternalRetryRejectsUserTask(t *testing.T) {
 	_, err := svc.PrepareInternalRetryTask(ctx, task.ID, "user-1")
 
 	require.ErrorIs(t, err, commonerrors.ErrForbidden)
+}
+
+func TestTaskService_PrepareInternalCampusRetryRepairsDoneTaskPayloadWithoutCredits(t *testing.T) {
+	_, taskRepo, precisionRepo, userRepo := setupTaskServiceTestDB(t)
+	svc := NewTaskService(taskRepo, precisionRepo, userRepo)
+	publisher := &recordingTaskPublisher{}
+	guard := &mockTaskCreditGuard{earnedUnits: 1}
+	svc.ConfigureTaskPublisher(publisher)
+	svc.ConfigureCreditGuard(guard)
+	ctx := context.Background()
+	text := "校园菜品：俄式红菜汤"
+	task := &analyzedomain.AnalysisTask{
+		UserID: "legacy-system-user", TaskType: "food_text", Status: "done", TextInput: &text,
+		Payload: map[string]any{
+			"execution_mode":         "standard",
+			"campus_catalog_item_id": "历史错误值",
+			"internal_benchmark":     true,
+		},
+	}
+	require.NoError(t, taskRepo.CreateTask(ctx, task))
+
+	result, err := svc.PrepareInternalCampusRetryTask(ctx, task.ID, "system-user", "catalog-item-authoritative")
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Empty(t, publisher.messages)
+	require.Empty(t, guard.validateCalls)
+	require.Empty(t, guard.consumeCalls)
+	require.Empty(t, guard.refundCalls)
+	retryTask, err := taskRepo.GetTaskByID(ctx, result.TaskID)
+	require.NoError(t, err)
+	require.Equal(t, "cancelled", retryTask.Status)
+	require.Equal(t, task.ID, retryTask.Payload["retry_source_task_id"])
+	require.Equal(t, "catalog-item-authoritative", retryTask.Payload["campus_catalog_item_id"])
+	require.Equal(t, "catalog-item-authoritative", retryTask.Payload["public_food_item_id"])
+	require.Equal(t, "campus_public_food", retryTask.Payload["public_food_source_type"])
+	require.Equal(t, true, retryTask.Payload["micronutrient_analysis_required"])
+	require.Equal(t, true, retryTask.Payload["internal_benchmark"])
+	require.Equal(t, "standard", retryTask.Payload["execution_mode"])
+	_, hasPrecisionSession := retryTask.Payload["precision_session_id"]
+	require.False(t, hasPrecisionSession)
 }
 
 func TestTaskService_RetryTask_RejectsDoneTask(t *testing.T) {

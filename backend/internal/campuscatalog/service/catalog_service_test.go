@@ -29,8 +29,14 @@ type fakeCatalogRepo struct {
 	missingNutrition    []domain.CatalogItem
 	hiddenPublicItemID  string
 	legacyCandidates    []domain.LegacyAnalysisCandidate
+	currentCandidates   []domain.CurrentAnalysisCandidate
+	orphanCandidates    []domain.CatalogItem
 	claimLegacy         bool
+	claimCurrent        bool
+	claimOrphan         bool
 	completedLegacyID   string
+	completeErr         error
+	markedCurrentIDs    []string
 	analysisProgress    *domain.AnalysisProgress
 	failedCandidates    []domain.CatalogItem
 	claimFailed         bool
@@ -126,6 +132,50 @@ func (f *fakeCatalogRepo) MarkAnalysisFailed(_ context.Context, itemID, message 
 	return nil
 }
 
+func (f *fakeCatalogRepo) ListCurrentTerminalAnalysisCandidates(context.Context, int) ([]domain.CurrentAnalysisCandidate, error) {
+	return append([]domain.CurrentAnalysisCandidate(nil), f.currentCandidates...), nil
+}
+
+func (f *fakeCatalogRepo) MarkCurrentTerminalAnalysisFailed(_ context.Context, itemID, taskID, message string, failedAt time.Time) (bool, error) {
+	if !f.claimCurrent {
+		return false, nil
+	}
+	f.markedCurrentIDs = append(f.markedCurrentIDs, itemID)
+	return true, nil
+}
+
+func (f *fakeCatalogRepo) CountOrphanPendingAnalysisCandidates(context.Context, time.Time) (int64, error) {
+	var count int64
+	for index := range f.orphanCandidates {
+		if f.orphanCandidates[index].Status == "analysis_pending" {
+			count++
+		}
+	}
+	return count, nil
+}
+
+func (f *fakeCatalogRepo) ListOrphanAnalysisCandidates(context.Context, time.Time, int) ([]domain.CatalogItem, error) {
+	return append([]domain.CatalogItem(nil), f.orphanCandidates...), nil
+}
+
+func (f *fakeCatalogRepo) ClaimOrphanAnalysis(_ context.Context, itemID string, expectedTaskID *string, staleBefore time.Time, message string, claimedAt time.Time) (bool, error) {
+	if !f.claimOrphan {
+		return false, nil
+	}
+	f.claimOrphan = false
+	for index := range f.orphanCandidates {
+		if f.orphanCandidates[index].ID == itemID {
+			copyItem := f.orphanCandidates[index]
+			copyItem.Status = "analysis_failed"
+			copyItem.AnalysisTaskID = nil
+			copyItem.AnalysisError = message
+			f.existingItem = &copyItem
+			break
+		}
+	}
+	return true, nil
+}
+
 func (f *fakeCatalogRepo) ListLegacyTerminalAnalysisCandidates(context.Context, int) ([]domain.LegacyAnalysisCandidate, error) {
 	return append([]domain.LegacyAnalysisCandidate(nil), f.legacyCandidates...), nil
 }
@@ -150,7 +200,7 @@ func (f *fakeCatalogRepo) ClaimLegacyAnalysisRetry(_ context.Context, itemID, ta
 
 func (f *fakeCatalogRepo) CompleteAnalyzedItem(_ context.Context, itemID, taskID string, result map[string]any, completedAt time.Time) error {
 	f.completedLegacyID = itemID
-	return nil
+	return f.completeErr
 }
 
 func (f *fakeCatalogRepo) TryAnalysisMaintenanceLeadership(ctx context.Context, fn func(context.Context) error) (bool, error) {
@@ -166,6 +216,7 @@ type fakeCatalogAnalyzeSubmitter struct {
 	input          analyzeservice.SubmitTaskInput
 	textInput      analyzeservice.SubmitTaskInput
 	retriedTaskID  string
+	retriedItemID  string
 	enqueuedTaskID string
 }
 
@@ -175,9 +226,10 @@ func (f *fakeCatalogAnalyzeSubmitter) SubmitInternalAnalyzeTask(_ context.Contex
 	return f.taskID, f.err
 }
 
-func (f *fakeCatalogAnalyzeSubmitter) PrepareInternalRetryTask(_ context.Context, taskID, userID string) (*analyzeservice.RetryTaskResult, error) {
+func (f *fakeCatalogAnalyzeSubmitter) PrepareInternalCampusRetryTask(_ context.Context, taskID, userID, catalogItemID string) (*analyzeservice.RetryTaskResult, error) {
 	f.userID = userID
 	f.retriedTaskID = taskID
+	f.retriedItemID = catalogItemID
 	if f.err != nil {
 		return nil, f.err
 	}
@@ -557,6 +609,66 @@ func TestRepairLegacyAnalysisRetriesTerminalTaskThroughCurrentPipeline(t *testin
 	require.Equal(t, true, submitter.textInput.ExtraPayload["micronutrient_analysis_required"])
 }
 
+func TestRepairCurrentAnalysisMarksUnpublishableDoneTaskForRetry(t *testing.T) {
+	item := domain.CatalogItem{ID: "current-item", Status: "analysis_pending"}
+	taskID := "current-done-task"
+	item.AnalysisTaskID = &taskID
+	repo := &fakeCatalogRepo{
+		currentCandidates: []domain.CurrentAnalysisCandidate{{
+			Item: item, TaskID: taskID, TaskType: "food_text", TaskStatus: "done",
+			TaskResult: map[string]any{"items": []any{map[string]any{"name": "红菜汤"}}},
+		}},
+		claimCurrent: true,
+		completeErr:  errors.New("missing precise nutrition"),
+	}
+	svc := NewCatalogService(repo, nil)
+
+	summary, err := svc.RepairCurrentAnalysisTasks(context.Background(), 100)
+
+	require.NoError(t, err)
+	require.Equal(t, 1, summary.Scanned)
+	require.Equal(t, 1, summary.MarkedFailed)
+	require.Equal(t, []string{item.ID}, repo.markedCurrentIDs)
+}
+
+func TestRepairCurrentAnalysisResubmitsPendingItemWithoutTask(t *testing.T) {
+	price := 8.0
+	item := domain.CatalogItem{
+		ID: "orphan-item", BatchID: "batch-1", EntryType: "dish", Name: "俄式红菜汤",
+		Status: "analysis_pending", PriceType: "fixed", Price: &price,
+	}
+	repo := &fakeCatalogRepo{orphanCandidates: []domain.CatalogItem{item}, claimOrphan: true}
+	submitter := &fakeCatalogAnalyzeSubmitter{taskID: "replacement-task"}
+	svc := NewCatalogService(repo, nil)
+	svc.ConfigureAnalysis(submitter, fakeCatalogAnalysisUserResolver{userID: "system-user"})
+
+	summary, err := svc.RepairCurrentAnalysisTasks(context.Background(), 100)
+
+	require.NoError(t, err)
+	require.Equal(t, 1, summary.OrphanRetried)
+	require.Equal(t, "replacement-task", repo.linkedTaskID)
+	require.Equal(t, "standard", *submitter.textInput.ExecutionMode)
+}
+
+func TestRepairCurrentAnalysisDefersOrphanUntilOtherPendingWorkDrains(t *testing.T) {
+	item := domain.CatalogItem{ID: "orphan-item", Status: "analysis_pending"}
+	repo := &fakeCatalogRepo{
+		orphanCandidates: []domain.CatalogItem{item},
+		analysisProgress: &domain.AnalysisProgress{StatusCounts: map[string]int64{"analysis_pending": 3}},
+		claimOrphan:      true,
+	}
+	submitter := &fakeCatalogAnalyzeSubmitter{taskID: "must-not-submit"}
+	svc := NewCatalogService(repo, nil)
+	svc.ConfigureAnalysis(submitter, fakeCatalogAnalysisUserResolver{userID: "system-user"})
+
+	summary, err := svc.RepairCurrentAnalysisTasks(context.Background(), 100)
+
+	require.NoError(t, err)
+	require.Zero(t, summary.OrphanRetried)
+	require.Empty(t, submitter.userID)
+	require.True(t, repo.claimOrphan)
+}
+
 func TestRepairLegacyAnalysisPublishesCompletedPreciseResultWithoutRetry(t *testing.T) {
 	item := domain.CatalogItem{ID: "precise-item", Status: "analysis_pending"}
 	taskID := "legacy-aggregate-task"
@@ -638,6 +750,7 @@ func TestRetryFailedAnalysisUsesExistingRetryPathAfterQueueDrains(t *testing.T) 
 	require.Equal(t, 1, summary.Retried)
 	require.Equal(t, "failed-item", repo.activatedFailedID)
 	require.Equal(t, "failed-task", submitter.retriedTaskID)
+	require.Equal(t, "failed-item", submitter.retriedItemID)
 	require.Equal(t, "retry-task", repo.linkedTaskID)
 	require.Equal(t, "retry-task", submitter.enqueuedTaskID)
 	require.Equal(t, "system-user", submitter.userID)

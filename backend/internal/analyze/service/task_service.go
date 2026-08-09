@@ -1030,6 +1030,56 @@ func (s *TaskService) PrepareInternalRetryTask(ctx context.Context, taskID, user
 	if err != nil {
 		return nil, err
 	}
+	return s.prepareInternalRetryTask(ctx, task, userID, input)
+}
+
+// PrepareInternalCampusRetryTask rebuilds the task currently linked by a
+// campus catalog item. Catalog reconciliation is allowed to replace invalid
+// terminal done/cancelled tasks as well as ordinary failures. The authoritative
+// catalog item ID is written back into the new payload so old malformed task
+// metadata cannot keep an item permanently stalled.
+func (s *TaskService) PrepareInternalCampusRetryTask(ctx context.Context, taskID, userID, catalogItemID string) (*RetryTaskResult, error) {
+	task, err := s.tasks.GetTaskByID(ctx, taskID)
+	if err != nil {
+		return nil, err
+	}
+	if task == nil {
+		return nil, errors.ErrNotFound
+	}
+	if !boolFromAny(task.Payload["internal_benchmark"]) {
+		return nil, errors.ErrForbidden
+	}
+	if !isCampusRetryableTaskStatus(task.Status) {
+		return nil, &errors.AppError{Code: 10002, Message: "校园菜品任务尚未结束，不能重新识别", HTTPStatus: 400}
+	}
+	catalogItemID = strings.TrimSpace(catalogItemID)
+	if catalogItemID == "" {
+		return nil, &errors.AppError{Code: 10002, Message: "校园菜品 ID 不能为空", HTTPStatus: 400}
+	}
+	input, err := s.retryInputFromTask(task)
+	if err != nil {
+		return nil, err
+	}
+	if input.ExtraPayload == nil {
+		input.ExtraPayload = map[string]any{}
+	}
+	input.ExtraPayload["campus_catalog_item_id"] = catalogItemID
+	input.ExtraPayload["public_food_item_id"] = catalogItemID
+	input.ExtraPayload["public_food_source_type"] = "campus_public_food"
+	input.ExtraPayload["micronutrient_analysis_required"] = true
+	input.ExtraPayload["internal_benchmark"] = true
+	for key := range input.ExtraPayload {
+		if strings.HasPrefix(key, "precision_") {
+			delete(input.ExtraPayload, key)
+		}
+	}
+	standardMode := defaultExecutionMode
+	input.ExecutionMode = &standardMode
+	input.PrecisionSessionID = nil
+	return s.prepareInternalRetryTask(ctx, task, userID, input)
+}
+
+func (s *TaskService) prepareInternalRetryTask(ctx context.Context, task *domain.AnalysisTask, userID string, input SubmitTaskInput) (*RetryTaskResult, error) {
 	recordedOn, mode, err := s.resolveSubmitContext(ctx, userID, input)
 	if err != nil {
 		return nil, err
@@ -1091,6 +1141,15 @@ func (s *TaskService) EnqueuePreparedInternalTask(ctx context.Context, taskID, u
 func isRetryableTaskStatus(status string) bool {
 	switch strings.TrimSpace(status) {
 	case "failed", "timed_out":
+		return true
+	default:
+		return false
+	}
+}
+
+func isCampusRetryableTaskStatus(status string) bool {
+	switch strings.TrimSpace(status) {
+	case "failed", "timed_out", "done", "cancelled":
 		return true
 	default:
 		return false

@@ -38,6 +38,11 @@ type CatalogRepository interface {
 	MarkAnalysisPending(ctx context.Context, item *domain.CatalogItem, adminID string, startedAt time.Time) error
 	LinkAnalysisTask(ctx context.Context, itemID, taskID string) error
 	MarkAnalysisFailed(ctx context.Context, itemID, message string, failedAt time.Time) error
+	ListCurrentTerminalAnalysisCandidates(ctx context.Context, limit int) ([]domain.CurrentAnalysisCandidate, error)
+	MarkCurrentTerminalAnalysisFailed(ctx context.Context, itemID, taskID, message string, failedAt time.Time) (bool, error)
+	CountOrphanPendingAnalysisCandidates(ctx context.Context, staleBefore time.Time) (int64, error)
+	ListOrphanAnalysisCandidates(ctx context.Context, staleBefore time.Time, limit int) ([]domain.CatalogItem, error)
+	ClaimOrphanAnalysis(ctx context.Context, itemID string, expectedTaskID *string, staleBefore time.Time, message string, claimedAt time.Time) (bool, error)
 	ListFailedAnalysisRetryCandidates(ctx context.Context, limit int) ([]domain.CatalogItem, error)
 	ActivatePreparedAnalysisRetry(ctx context.Context, itemID, sourceTaskID, retryTaskID string, startedAt time.Time) (bool, error)
 	ListLegacyTerminalAnalysisCandidates(ctx context.Context, limit int) ([]domain.LegacyAnalysisCandidate, error)
@@ -50,7 +55,7 @@ type CatalogRepository interface {
 type CatalogAnalyzeTaskSubmitter interface {
 	SubmitInternalAnalyzeTask(ctx context.Context, userID string, input analyzeservice.SubmitTaskInput) (string, error)
 	SubmitInternalTextTask(ctx context.Context, userID string, input analyzeservice.SubmitTaskInput) (string, error)
-	PrepareInternalRetryTask(ctx context.Context, taskID, userID string) (*analyzeservice.RetryTaskResult, error)
+	PrepareInternalCampusRetryTask(ctx context.Context, taskID, userID, catalogItemID string) (*analyzeservice.RetryTaskResult, error)
 	EnqueuePreparedInternalTask(ctx context.Context, taskID, userID string) error
 }
 
@@ -593,12 +598,118 @@ type LegacyAnalysisRepairSummary struct {
 	Failed    int
 }
 
+type CurrentAnalysisRepairSummary struct {
+	Scanned       int
+	Published     int
+	MarkedFailed  int
+	OrphanRetried int
+	Skipped       int
+	Failed        int
+}
+
 type FailedAnalysisRetrySummary struct {
 	Scanned  int
 	Retried  int
 	Skipped  int
 	Failed   int
 	Deferred bool
+}
+
+// RepairCurrentAnalysisTasks reconciles catalog rows whose current-pipeline
+// task is already terminal, plus pending rows that no longer have a task. A
+// valid done result is published directly; every other terminal result becomes
+// a retryable failure. Orphans are resubmitted through the existing publish
+// path so the queue can make progress again.
+func (s *CatalogService) RepairCurrentAnalysisTasks(ctx context.Context, limit int) (CurrentAnalysisRepairSummary, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	candidates, err := s.repo.ListCurrentTerminalAnalysisCandidates(ctx, limit)
+	if err != nil {
+		return CurrentAnalysisRepairSummary{}, err
+	}
+	summary := CurrentAnalysisRepairSummary{Scanned: len(candidates)}
+	for index := range candidates {
+		candidate := &candidates[index]
+		if candidate.TaskStatus == "done" {
+			if completeErr := s.repo.CompleteAnalyzedItem(ctx, candidate.Item.ID, candidate.TaskID, candidate.TaskResult, time.Now()); completeErr == nil {
+				summary.Published++
+				continue
+			}
+		}
+
+		reason := strings.TrimSpace(candidate.TaskError)
+		if reason == "" {
+			if candidate.TaskStatus == "done" {
+				reason = "分析任务已完成，但营养结果未通过当前上线校验，准备重新分析"
+			} else {
+				reason = "分析任务已结束但未产出可上线结果，准备重新分析"
+			}
+		}
+		claimed, claimErr := s.repo.MarkCurrentTerminalAnalysisFailed(ctx, candidate.Item.ID, candidate.TaskID, reason, time.Now())
+		if claimErr != nil {
+			summary.Failed++
+			logger.Warn(ctx, "收敛校园菜品终态分析任务失败",
+				slog.String("item_id", candidate.Item.ID), slog.String("analysis_task_id", candidate.TaskID), logger.Err(claimErr))
+			continue
+		}
+		if !claimed {
+			summary.Skipped++
+			continue
+		}
+		summary.MarkedFailed++
+	}
+
+	staleBefore := time.Now().Add(-10 * time.Minute)
+	orphanPendingCount, err := s.repo.CountOrphanPendingAnalysisCandidates(ctx, staleBefore)
+	if err != nil {
+		return summary, err
+	}
+	progress, err := s.repo.GetAnalysisProgress(ctx)
+	if err != nil {
+		return summary, err
+	}
+	if progress != nil && progress.StatusCounts["analysis_pending"] > orphanPendingCount {
+		return summary, nil
+	}
+	orphanLimit := limit
+	if orphanLimit > 20 {
+		orphanLimit = 20
+	}
+	orphans, err := s.repo.ListOrphanAnalysisCandidates(ctx, staleBefore, orphanLimit)
+	if err != nil {
+		return summary, err
+	}
+	if len(orphans) == 0 {
+		return summary, nil
+	}
+	if s.analyzeTasks == nil || s.analysisUsers == nil {
+		return summary, fmt.Errorf("校园菜品 AI 分析服务未配置")
+	}
+	for index := range orphans {
+		item := &orphans[index]
+		claimed, claimErr := s.repo.ClaimOrphanAnalysis(ctx, item.ID, item.AnalysisTaskID, staleBefore, "分析任务缺失，已重新提交", time.Now())
+		if claimErr != nil {
+			summary.Failed++
+			logger.Warn(ctx, "抢占无任务的校园菜品分析状态失败", slog.String("item_id", item.ID), logger.Err(claimErr))
+			continue
+		}
+		if !claimed {
+			summary.Skipped++
+			continue
+		}
+		adminID := ""
+		if item.PublishedByAdminID != nil {
+			adminID = strings.TrimSpace(*item.PublishedByAdminID)
+		}
+		if _, publishErr := s.PublishItem(ctx, adminID, item.ID); publishErr != nil {
+			summary.Failed++
+			logger.Warn(ctx, "无任务的校园菜品重新提交失败", slog.String("item_id", item.ID), logger.Err(publishErr))
+			continue
+		}
+		summary.OrphanRetried++
+	}
+	return summary, nil
 }
 
 // RetryFailedAnalysisTasks waits for the normal analysis queue to drain, then
@@ -639,7 +750,7 @@ func (s *CatalogService) RetryFailedAnalysisTasks(ctx context.Context, limit int
 			continue
 		}
 		sourceTaskID := strings.TrimSpace(*item.AnalysisTaskID)
-		retryResult, retryErr := s.analyzeTasks.PrepareInternalRetryTask(ctx, sourceTaskID, analysisUserID)
+		retryResult, retryErr := s.analyzeTasks.PrepareInternalCampusRetryTask(ctx, sourceTaskID, analysisUserID, item.ID)
 		if retryErr != nil {
 			summary.Failed++
 			logger.Warn(ctx, "校园菜品失败任务自动重试提交失败",

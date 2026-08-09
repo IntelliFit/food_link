@@ -128,3 +128,16 @@ type LegacyAnalysisCandidate struct {
 	TaskResult map[string]any
 	TaskError  string
 }
+
+// CurrentAnalysisCandidate is a catalog row still waiting on a terminal task
+// from the current food/food_text pipeline. Maintenance uses the persisted
+// result when it is publishable, otherwise it safely transitions the row to a
+// retryable failure instead of leaving permanent fake progress.
+type CurrentAnalysisCandidate struct {
+	Item       CatalogItem
+	TaskID     string
+	TaskType   string
+	TaskStatus string
+	TaskResult map[string]any
+	TaskError  string
+}

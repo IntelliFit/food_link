@@ -272,15 +272,118 @@ func (r *CatalogRepo) MarkAnalysisFailed(ctx context.Context, itemID, message st
 		}).Error
 }
 
+func (r *CatalogRepo) ListCurrentTerminalAnalysisCandidates(ctx context.Context, limit int) ([]domain.CurrentAnalysisCandidate, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	type candidateRow struct {
+		ItemID     string            `gorm:"column:item_id"`
+		TaskID     string            `gorm:"column:task_id"`
+		TaskType   string            `gorm:"column:task_type"`
+		TaskStatus string            `gorm:"column:task_status"`
+		TaskResult datatypes.JSONMap `gorm:"column:task_result"`
+		TaskError  string            `gorm:"column:task_error"`
+	}
+	var rows []candidateRow
+	internalTaskSQL := `COALESCE(t.payload::jsonb->>'internal_benchmark', 'false') = 'true'`
+	if r.db.Dialector.Name() == "sqlite" {
+		internalTaskSQL = `COALESCE(json_extract(t.payload, '$.internal_benchmark'), 0) = 1`
+	}
+	err := r.db.WithContext(ctx).
+		Table("campus_food_catalog_items AS c").
+		Select(`c.id AS item_id, t.id AS task_id, t.task_type, t.status AS task_status,
+			t.result AS task_result, COALESCE(t.error_message, '') AS task_error`).
+		Joins("JOIN analysis_tasks AS t ON t.id = c.analysis_task_id").
+		Where("c.status = ?", "analysis_pending").
+		Where("t.task_type IN ?", []string{"food", "food_text"}).
+		Where("t.status IN ?", []string{"done", "failed", "cancelled", "timed_out"}).
+		Where(internalTaskSQL).
+		Order("c.updated_at ASC, c.id ASC").
+		Limit(limit).
+		Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	result := make([]domain.CurrentAnalysisCandidate, 0, len(rows))
+	for _, row := range rows {
+		item, findErr := r.FindItemByID(ctx, row.ItemID)
+		if findErr != nil {
+			return nil, findErr
+		}
+		if item == nil {
+			continue
+		}
+		result = append(result, domain.CurrentAnalysisCandidate{
+			Item: *item, TaskID: row.TaskID, TaskType: row.TaskType, TaskStatus: row.TaskStatus,
+			TaskResult: map[string]any(row.TaskResult), TaskError: row.TaskError,
+		})
+	}
+	return result, nil
+}
+
+func (r *CatalogRepo) MarkCurrentTerminalAnalysisFailed(ctx context.Context, itemID, taskID, message string, failedAt time.Time) (bool, error) {
+	result := r.db.WithContext(ctx).Model(&domain.CatalogItem{}).
+		Where("id = ? AND analysis_task_id = ? AND status = ?", strings.TrimSpace(itemID), strings.TrimSpace(taskID), "analysis_pending").
+		Updates(map[string]any{
+			"status": "analysis_failed", "analysis_error": strings.TrimSpace(message),
+			"analysis_completed_at": failedAt, "updated_at": failedAt,
+		})
+	return result.RowsAffected == 1, result.Error
+}
+
+func (r *CatalogRepo) CountOrphanPendingAnalysisCandidates(ctx context.Context, staleBefore time.Time) (int64, error) {
+	var count int64
+	err := r.db.WithContext(ctx).
+		Table("campus_food_catalog_items AS c").
+		Joins("LEFT JOIN analysis_tasks AS t ON t.id = c.analysis_task_id").
+		Where("c.status = ? AND t.id IS NULL", "analysis_pending").
+		Where("COALESCE(c.updated_at, c.analysis_started_at, c.created_at) <= ?", staleBefore).
+		Count(&count).Error
+	return count, err
+}
+
+func (r *CatalogRepo) ListOrphanAnalysisCandidates(ctx context.Context, staleBefore time.Time, limit int) ([]domain.CatalogItem, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	var items []domain.CatalogItem
+	err := r.db.WithContext(ctx).
+		Table("campus_food_catalog_items AS c").
+		Select("c.*").
+		Joins("LEFT JOIN analysis_tasks AS t ON t.id = c.analysis_task_id").
+		Where("c.status IN ? AND t.id IS NULL", []string{"analysis_pending", "analysis_failed"}).
+		Where("COALESCE(c.updated_at, c.analysis_started_at, c.created_at) <= ?", staleBefore).
+		Order("c.updated_at ASC, c.id ASC").
+		Limit(limit).
+		Scan(&items).Error
+	return items, err
+}
+
+func (r *CatalogRepo) ClaimOrphanAnalysis(ctx context.Context, itemID string, expectedTaskID *string, staleBefore time.Time, message string, claimedAt time.Time) (bool, error) {
+	query := r.db.WithContext(ctx).Model(&domain.CatalogItem{}).
+		Where("id = ? AND status IN ?", strings.TrimSpace(itemID), []string{"analysis_pending", "analysis_failed"}).
+		Where("COALESCE(updated_at, analysis_started_at, created_at) <= ?", staleBefore)
+	if expectedTaskID == nil || strings.TrimSpace(*expectedTaskID) == "" {
+		query = query.Where("analysis_task_id IS NULL")
+	} else {
+		query = query.Where("analysis_task_id = ?", strings.TrimSpace(*expectedTaskID))
+	}
+	result := query.Updates(map[string]any{
+		"status": "analysis_failed", "analysis_task_id": nil,
+		"analysis_error": strings.TrimSpace(message), "analysis_completed_at": claimedAt, "updated_at": claimedAt,
+	})
+	return result.RowsAffected == 1, result.Error
+}
+
 func (r *CatalogRepo) ListFailedAnalysisRetryCandidates(ctx context.Context, limit int) ([]domain.CatalogItem, error) {
 	if limit <= 0 {
 		limit = 20
 	}
 	notRetriedSQL := `NOT (COALESCE(t.payload::jsonb, '{}'::jsonb) ? 'retry_source_task_id')`
-	campusTaskSQL := `COALESCE(t.payload::jsonb->>'campus_catalog_item_id', '') = c.id`
+	internalTaskSQL := `COALESCE(t.payload::jsonb->>'internal_benchmark', 'false') = 'true'`
 	if r.db.Dialector.Name() == "sqlite" {
 		notRetriedSQL = `json_extract(t.payload, '$.retry_source_task_id') IS NULL`
-		campusTaskSQL = `COALESCE(json_extract(t.payload, '$.campus_catalog_item_id'), '') = c.id`
+		internalTaskSQL = `COALESCE(json_extract(t.payload, '$.internal_benchmark'), 0) = 1`
 	}
 	var items []domain.CatalogItem
 	err := r.db.WithContext(ctx).
@@ -289,8 +392,8 @@ func (r *CatalogRepo) ListFailedAnalysisRetryCandidates(ctx context.Context, lim
 		Joins("JOIN analysis_tasks AS t ON t.id = c.analysis_task_id").
 		Where("c.status = ?", "analysis_failed").
 		Where("t.task_type IN ?", []string{"food", "food_text"}).
-		Where("t.status IN ?", []string{"failed", "timed_out"}).
-		Where(campusTaskSQL).
+		Where("t.status IN ?", []string{"failed", "timed_out", "done", "cancelled"}).
+		Where(internalTaskSQL).
 		Where(notRetriedSQL).
 		Order("c.analysis_completed_at ASC NULLS FIRST, c.updated_at ASC, c.id ASC").
 		Limit(limit).

@@ -301,6 +301,102 @@ func TestLegacyTerminalAnalysisCandidatesCanBeClaimedOnlyOnce(t *testing.T) {
 	require.Contains(t, saved.AnalysisError, "普通分析")
 }
 
+func TestCurrentTerminalAndOrphanAnalysisCandidatesConvergeSafely(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:"+uuid.NewString()+"?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&domain.CatalogItem{}, &analyzedomain.AnalysisTask{}))
+
+	doneTaskID := uuid.NewString()
+	legacyTaskID := uuid.NewString()
+	staleStartedAt := time.Now().Add(-20 * time.Minute)
+	doneItem := domain.CatalogItem{
+		ID: uuid.NewString(), BatchID: uuid.NewString(), EntryType: "dish", Name: "旧结果菜品",
+		Status: "analysis_pending", AnalysisTaskID: &doneTaskID,
+	}
+	orphanItem := domain.CatalogItem{
+		ID: uuid.NewString(), BatchID: uuid.NewString(), EntryType: "dish", Name: "无任务菜品",
+		Status: "analysis_pending", AnalysisStartedAt: &staleStartedAt, CreatedAt: &staleStartedAt, UpdatedAt: &staleStartedAt,
+	}
+	legacyItem := domain.CatalogItem{
+		ID: uuid.NewString(), BatchID: uuid.NewString(), EntryType: "dish", Name: "旧链路菜品",
+		Status: "analysis_pending", AnalysisTaskID: &legacyTaskID,
+	}
+	require.NoError(t, db.Create(&[]domain.CatalogItem{doneItem, orphanItem, legacyItem}).Error)
+	require.NoError(t, db.Create(&[]analyzedomain.AnalysisTask{
+		{
+			ID: doneTaskID, UserID: "system", TaskType: "food_text", Status: "done",
+			Payload: map[string]any{"campus_catalog_item_id": doneItem.ID, "internal_benchmark": true}, Result: map[string]any{"items": []any{map[string]any{"name": doneItem.Name}}},
+		},
+		{
+			ID: legacyTaskID, UserID: "system", TaskType: "precision_plan", Status: "done",
+			Payload: map[string]any{"campus_catalog_item_id": legacyItem.ID}, Result: map[string]any{},
+		},
+	}).Error)
+	repo := NewCatalogRepo(db)
+
+	candidates, err := repo.ListCurrentTerminalAnalysisCandidates(context.Background(), 100)
+	require.NoError(t, err)
+	require.Len(t, candidates, 1)
+	require.Equal(t, doneItem.ID, candidates[0].Item.ID)
+
+	claimed, err := repo.MarkCurrentTerminalAnalysisFailed(context.Background(), doneItem.ID, doneTaskID, "结果不完整", time.Now())
+	require.NoError(t, err)
+	require.True(t, claimed)
+	claimed, err = repo.MarkCurrentTerminalAnalysisFailed(context.Background(), doneItem.ID, doneTaskID, "重复收敛", time.Now())
+	require.NoError(t, err)
+	require.False(t, claimed)
+
+	staleBefore := time.Now().Add(-10 * time.Minute)
+	orphanPendingCount, err := repo.CountOrphanPendingAnalysisCandidates(context.Background(), staleBefore)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), orphanPendingCount)
+	orphans, err := repo.ListOrphanAnalysisCandidates(context.Background(), staleBefore, 20)
+	require.NoError(t, err)
+	require.Len(t, orphans, 1)
+	require.Equal(t, orphanItem.ID, orphans[0].ID)
+	claimed, err = repo.ClaimOrphanAnalysis(context.Background(), orphanItem.ID, nil, staleBefore, "任务缺失", time.Now())
+	require.NoError(t, err)
+	require.True(t, claimed)
+	orphans, err = repo.ListOrphanAnalysisCandidates(context.Background(), staleBefore, 20)
+	require.NoError(t, err)
+	require.Empty(t, orphans, "刚抢占的记录不能在同一安全窗口内重复提交")
+	recoveryCutoff := time.Now().Add(time.Minute)
+	orphans, err = repo.ListOrphanAnalysisCandidates(context.Background(), recoveryCutoff, 20)
+	require.NoError(t, err)
+	require.Len(t, orphans, 1, "提交失败冷却后，analysis_failed 无任务记录必须仍可恢复")
+	claimed, err = repo.ClaimOrphanAnalysis(context.Background(), orphanItem.ID, nil, recoveryCutoff, "重复抢占", time.Now())
+	require.NoError(t, err)
+	require.True(t, claimed)
+}
+
+func TestPostgresCandidateQueriesComparePayloadTextWithCatalogUUID(t *testing.T) {
+	db := testdb.New(t)
+	require.NoError(t, db.AutoMigrate(&domain.CatalogItem{}, &analyzedomain.AnalysisTask{}))
+	itemID := uuid.NewString()
+	taskID := uuid.NewString()
+	item := domain.CatalogItem{
+		ID: itemID, BatchID: uuid.NewString(), EntryType: "dish", Name: "UUID 对账菜品",
+		Status: "analysis_pending", AnalysisTaskID: &taskID,
+	}
+	task := analyzedomain.AnalysisTask{
+		ID: taskID, UserID: "system", TaskType: "food_text", Status: "done",
+		Payload: map[string]any{"campus_catalog_item_id": "历史错误值", "internal_benchmark": true}, Result: map[string]any{"items": []any{}},
+	}
+	require.NoError(t, db.Create(&item).Error)
+	require.NoError(t, db.Create(&task).Error)
+	repo := NewCatalogRepo(db)
+
+	current, err := repo.ListCurrentTerminalAnalysisCandidates(context.Background(), 10)
+	require.NoError(t, err)
+	require.Len(t, current, 1)
+
+	require.NoError(t, db.Model(&domain.CatalogItem{}).Where("id = ?", itemID).Update("status", "analysis_failed").Error)
+	require.NoError(t, db.Model(&analyzedomain.AnalysisTask{}).Where("id = ?", taskID).Update("status", "failed").Error)
+	failed, err := repo.ListFailedAnalysisRetryCandidates(context.Background(), 10)
+	require.NoError(t, err)
+	require.Len(t, failed, 1)
+}
+
 func TestFailedAnalysisRetryCandidatesExcludeTasksAlreadyRetried(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open("file:"+uuid.NewString()+"?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
@@ -314,8 +410,8 @@ func TestFailedAnalysisRetryCandidatesExcludeTasksAlreadyRetried(t *testing.T) {
 	}
 	require.NoError(t, db.Create(&items).Error)
 	require.NoError(t, db.Create(&[]analyzedomain.AnalysisTask{
-		{ID: firstTaskID, UserID: "system", TaskType: "food_text", Status: "failed", Payload: map[string]any{"campus_catalog_item_id": items[0].ID}},
-		{ID: alreadyRetriedTaskID, UserID: "system", TaskType: "food_text", Status: "failed", Payload: map[string]any{"campus_catalog_item_id": items[1].ID, "retry_source_task_id": "source-task"}},
+		{ID: firstTaskID, UserID: "system", TaskType: "food_text", Status: "done", Payload: map[string]any{"campus_catalog_item_id": "历史错误值", "internal_benchmark": true}},
+		{ID: alreadyRetriedTaskID, UserID: "system", TaskType: "food_text", Status: "failed", Payload: map[string]any{"campus_catalog_item_id": items[1].ID, "internal_benchmark": true, "retry_source_task_id": "source-task"}},
 	}).Error)
 	retryTaskID := uuid.NewString()
 	require.NoError(t, db.Create(&analyzedomain.AnalysisTask{
