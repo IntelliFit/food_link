@@ -1081,6 +1081,11 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   margin-bottom: 6rpx;
 }
 
+.date-selector-section:not(.is-calendar-expanded) .date-calendar-toolbar {
+  padding: 0 18rpx;
+  box-sizing: border-box;
+}
+
 .date-calendar-title {
   display: flex;
   align-items: center;

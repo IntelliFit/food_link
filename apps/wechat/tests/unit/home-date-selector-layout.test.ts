@@ -25,6 +25,11 @@ describe('home date selector layout', () => {
   const calendarToolbarStart = pageScss.indexOf('.date-calendar-toolbar {')
   const calendarToolbarEnd = pageScss.indexOf('\n}', calendarToolbarStart)
   const calendarToolbarStyles = pageScss.slice(calendarToolbarStart, calendarToolbarEnd)
+  const collapsedToolbarStart = pageScss.indexOf(
+    '.date-selector-section:not(.is-calendar-expanded) .date-calendar-toolbar {',
+  )
+  const collapsedToolbarEnd = pageScss.indexOf('\n}', collapsedToolbarStart)
+  const collapsedToolbarStyles = pageScss.slice(collapsedToolbarStart, collapsedToolbarEnd)
 
   it('keeps date selector geometry shared between balanced and wellness modes', () => {
     expect(wellnessDateSelectorStyles).not.toMatch(
@@ -44,5 +49,13 @@ describe('home date selector layout', () => {
     expect(calendarToolbarStyles).toMatch(/^\s*justify-content\s*:\s*space-between/m)
     expect(dateSelectorSource.indexOf("className='date-calendar-title'"))
       .toBeLessThan(dateSelectorSource.indexOf("className='date-calendar-nav-group'"))
+  })
+
+  it('keeps the collapsed month title aligned with the expanded inset', () => {
+    expect(pageScss).toMatch(
+      /\.date-selector-section\s*\{[\s\S]*?&\.is-calendar-expanded\s*\{[\s\S]*?padding:\s*12rpx 18rpx 18rpx/,
+    )
+    expect(collapsedToolbarStyles).toMatch(/^\s*padding\s*:\s*0 18rpx/m)
+    expect(collapsedToolbarStyles).toMatch(/^\s*box-sizing\s*:\s*border-box/m)
   })
 })
