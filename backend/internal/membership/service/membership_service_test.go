@@ -466,7 +466,10 @@ func (m *mockMembershipRepo) ChangeEarnedCredits(ctx context.Context, userID str
 		return existing, false, nil
 	}
 	m.user.EarnedCreditsBalance += delta
-	entry := &domain.UserEarnedCreditLedger{ID: "ledger1", UserID: userID, Delta: delta, BalanceAfter: m.user.EarnedCreditsBalance}
+	entry := &domain.UserEarnedCreditLedger{ID: "ledger1", UserID: userID, Delta: delta, BalanceAfter: m.user.EarnedCreditsBalance, Reason: reason, Meta: meta}
+	if relatedDate != "" {
+		entry.RelatedDate = &relatedDate
+	}
 	if sourceKey != "" {
 		entry.SourceKey = &sourceKey
 		m.ledgerByReasonSource[reason+"|"+sourceKey] = entry

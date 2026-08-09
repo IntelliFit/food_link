@@ -34,6 +34,8 @@ type mockMembershipService struct {
 	wechatNotifyErr              error
 	rewardCenterResult           map[string]any
 	rewardCenterErr              error
+	claimLoginCheckInResult      map[string]any
+	claimLoginCheckInErr         error
 	claimSharePosterRewardResult map[string]any
 	claimSharePosterRewardErr    error
 	papaySigningResult           map[string]any
@@ -51,6 +53,9 @@ func (m *mockMembershipService) GetMyMembership(ctx context.Context, userID stri
 }
 func (m *mockMembershipService) GetRewardCenter(ctx context.Context, userID string) (map[string]any, error) {
 	return m.rewardCenterResult, m.rewardCenterErr
+}
+func (m *mockMembershipService) ClaimLoginCheckIn(ctx context.Context, userID string) (map[string]any, error) {
+	return m.claimLoginCheckInResult, m.claimLoginCheckInErr
 }
 func (m *mockMembershipService) GetInviteRewardStatus(ctx context.Context, userID string) (map[string]any, error) {
 	return map[string]any{"eligible": false}, nil
@@ -121,6 +126,7 @@ func setupRouter(h *MembershipHandler) *gin.Engine {
 	r.POST("/api/payment/wechat/papay/pay/notify", h.PapayPaymentNotify)
 	r.POST("/api/payment/wechat/papay/contract/terminate-notify", h.PapayContractTerminateNotify)
 	r.POST("/api/membership/rewards/share-poster/claim", h.ClaimSharePosterReward)
+	r.POST("/api/membership/rewards/login-check-in/claim", h.ClaimLoginCheckIn)
 	return r
 }
 

@@ -3,6 +3,7 @@ import Taro, { useDidShow, useRouter } from '@tarojs/taro'
 import { useEffect, useMemo, useState } from 'react'
 import {
   getRewardCenter,
+  claimLoginCheckIn,
   getMyVouchers,
   useVoucher as activateReward,
   type RewardCenterResponse,
@@ -32,6 +33,7 @@ function RewardCenterPage() {
   const [data, setData] = useState<RewardCenterResponse | null>(null)
   const [vouchers, setVouchers] = useState<VoucherItem[]>([])
   const [activatingRewardID, setActivatingRewardID] = useState('')
+  const [checkingIn, setCheckingIn] = useState(false)
 
   useDidShow(() => {
     loadData()
@@ -91,7 +93,26 @@ function RewardCenterPage() {
     }
   }
 
+  const handleLoginCheckIn = async () => {
+    if (checkingIn || data?.check_in?.claimed_today) return
+    setCheckingIn(true)
+    try {
+      const result = await claimLoginCheckIn()
+      Taro.showToast({ title: `签到成功，+${result.reward_amount}积分`, icon: 'success' })
+      await loadData()
+    } catch (error: any) {
+      console.error('[reward-center] login check-in failed:', error)
+      Taro.showToast({ title: error?.message || '签到失败，请稍后重试', icon: 'none' })
+    } finally {
+      setCheckingIn(false)
+    }
+  }
+
   const handleTaskClick = (task: RewardCenterTask) => {
+    if (task.action_type === 'login_check_in') {
+      if (!isTaskDisabled(task)) void handleLoginCheckIn()
+      return
+    }
     if (!task.action_path || isTaskDisabled(task)) return
     const url = task.action_type === 'public_food_upload'
       ? extraPkgUrl('/pages/campus-food-share/index?task_mode=reward_center')
@@ -116,7 +137,7 @@ function RewardCenterPage() {
     <View className={`reward-center-page ${scheme === 'dark' ? 'reward-center-page--dark' : ''}`}>
       <View className='reward-hero'>
         <Text className='iconfont icon-a-144-lvye reward-hero__art' />
-        <Text className='reward-hero__title'>奖励积分</Text>
+        <Text className='reward-hero__title'>签到打卡赚积分</Text>
         <View className='reward-hero__level'>
           <Text className='reward-hero__level-text'>{levelRangeText} · Lv{levelMeta.level} {levelMeta.title}</Text>
           <View className='reward-hero__segments'>
@@ -174,9 +195,12 @@ function RewardCenterPage() {
                       <Text className='reward-quick-card__name'>{formatTaskName(task)}</Text>
                       <Text className='reward-quick-card__reward'>+{task.reward_amount}积分</Text>
                     </View>
+                    {task.description ? <Text className='reward-quick-card__desc'>{task.description}</Text> : null}
                   </View>
                   <Text className={`reward-quick-card__button ${disabled ? 'reward-quick-card__button--disabled' : ''}`}>
-                    {disabled ? '今日已满' : '去完成'}
+                    {task.action_type === 'login_check_in'
+                      ? (checkingIn ? '签到中' : (disabled ? '已签到' : '签到'))
+                      : (disabled ? '今日已满' : '去完成')}
                   </Text>
                 </View>
               )
@@ -301,6 +325,7 @@ function formatTaskName(task: RewardCenterTask): string {
 }
 
 function getTaskIconClass(task: RewardCenterTask): string {
+  if (task.action_type === 'login_check_in') return 'icon-good'
   if (task.action_type === 'share_poster') return 'icon-share'
   if (task.action_type === 'packaged_food_upload') return 'icon-picture'
   if (task.action_type === 'public_food_upload') return 'icon-foodshop'

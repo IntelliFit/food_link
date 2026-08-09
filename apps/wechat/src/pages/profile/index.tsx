@@ -288,8 +288,8 @@ function ProfilePage() {
     {
       id: 6,
       iconClass: 'icon-zengji',
-      title: '赚积分',
-      desc: '查看今天还能做哪些任务、每项上限和当前进度',
+      title: '签到打卡 · 上传食物赚积分',
+      desc: '每日签到、分享打卡或上传真实食物都能赚积分',
       path: extraPkgUrl('/pages/reward-center/index')
     },
     {

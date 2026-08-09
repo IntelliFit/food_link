@@ -28,6 +28,8 @@ func membershipAPILogMessage(action string) string {
 		return "虚拟支付订单创建成功"
 	case "share_poster_reward_claim_ok":
 		return "分享海报奖励领取完成"
+	case "login_check_in_claim_ok":
+		return "每日签到积分领取完成"
 	default:
 		return "会员接口处理完成"
 	}

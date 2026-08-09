@@ -569,6 +569,18 @@
   color: #f5fbf8;
 }
 
+.reward-quick-card__desc {
+  display: block;
+  margin-top: 6px;
+  font-size: 22px;
+  line-height: 30px;
+  color: #668078;
+}
+
+.reward-center-page--dark .reward-quick-card__desc {
+  color: #9ab8ae;
+}
+
 .reward-quick-card__reward {
   flex-shrink: 0;
   font-size: 22px;

@@ -21,6 +21,7 @@ import {
   claimPetEvent,
   getMyMembership,
   getRewardCenter,
+  claimLoginCheckIn,
   saveBodyWeightRecord,
   addBodyWaterLog,
   resetBodyWaterLogs,
@@ -818,6 +819,7 @@ function IndexPage() {
   const [membershipStatus, setMembershipStatus] = React.useState<MembershipStatus | null>(null)
   const [rewardCenter, setRewardCenter] = React.useState<RewardCenterResponse | null>(null)
   const [rewardHintIndex, setRewardHintIndex] = React.useState(0)
+  const promptedLoginCheckInDateRef = React.useRef('')
   const petSummarySeqRef = React.useRef(0)
   const [showTargetEditor, setShowTargetEditor] = React.useState(false)
   const [savingTargets, setSavingTargets] = React.useState(false)
@@ -942,6 +944,29 @@ function IndexPage() {
   const [showHealthProfilePrompt, setShowHealthProfilePrompt] = React.useState(false)
   const dietRecRequestSeqRef = React.useRef(0)
 
+  const promptLoginCheckIn = React.useCallback(async (center: RewardCenterResponse | null) => {
+    const checkIn = center?.check_in
+    if (!checkIn || checkIn.claimed_today || promptedLoginCheckInDateRef.current === checkIn.today) return
+    promptedLoginCheckInDateRef.current = checkIn.today
+    const { confirm } = await Taro.showModal({
+      title: '每日签到',
+      content: `连续签到第 ${checkIn.streak_days} 天，今天可领取 ${checkIn.reward_amount} 积分。断签后会从第 1 天重新计算。`,
+      confirmText: '立即签到',
+      cancelText: '稍后再签',
+      confirmColor: '#0fb47c',
+    })
+    if (!confirm) return
+    try {
+      const result = await claimLoginCheckIn()
+      Taro.showToast({ title: `签到成功，+${result.reward_amount}积分`, icon: 'success' })
+      const refreshed = await getRewardCenter().catch(() => null)
+      if (refreshed) setRewardCenter(refreshed)
+    } catch (error: any) {
+      console.error('[home] login check-in failed:', error)
+      Taro.showToast({ title: error?.message || '签到失败，请稍后重试', icon: 'none' })
+    }
+  }, [])
+
   const loadRewardHintData = React.useCallback(async () => {
     if (!getAccessToken()) {
       setMembershipStatus(null)
@@ -955,10 +980,11 @@ function IndexPage() {
       ])
       setMembershipStatus(membership)
       setRewardCenter(center)
+      await promptLoginCheckIn(center)
     } catch {
       // 奖励提示是增强信息，失败时不影响首页主链路。
     }
-  }, [])
+  }, [promptLoginCheckIn])
 
   // 餐食卡片操作状态
   const [mealActionSheetVisible, setMealActionSheetVisible] = React.useState(false)

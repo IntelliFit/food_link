@@ -1,3 +1,3 @@
 export default definePageConfig({
-  navigationBarTitleText: '赚积分',
+  navigationBarTitleText: '签到打卡赚积分',
 })

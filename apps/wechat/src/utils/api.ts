@@ -1664,11 +1664,26 @@ export interface ClaimSharePosterRewardInput {
 export interface RewardCenterTask {
   action_type: string
   name: string
+  description?: string
   reward_amount: number
   today_count: number
   daily_limit: number | null
   status: string
   action_path: string
+  streak_days?: number
+  claimed_today?: boolean
+}
+
+export interface LoginCheckInStatus {
+  claimed_today: boolean
+  streak_days: number
+  reward_amount: number
+  today: string
+}
+
+export interface LoginCheckInClaimResponse extends LoginCheckInStatus {
+  applied: boolean
+  earned_credits_balance: number
 }
 
 export interface RewardCenterResponse {
@@ -1679,6 +1694,7 @@ export interface RewardCenterResponse {
     total_count: number
   }
   tasks: RewardCenterTask[]
+  check_in: LoginCheckInStatus
   invite_reward?: InviteRewardCenterSummary | null
 }
 
@@ -4875,6 +4891,22 @@ export async function getRewardCenter(): Promise<RewardCenterResponse> {
   } catch (error: any) {
     console.error('获取赚积分任务失败:', error)
     throw new Error(error.message || '获取赚积分任务失败')
+  }
+}
+
+export async function claimLoginCheckIn(): Promise<LoginCheckInClaimResponse> {
+  try {
+    const response = await authenticatedRequest('/api/membership/rewards/login-check-in/claim', {
+      method: 'POST',
+    })
+    if (response.statusCode !== 200) {
+      const errorMsg = (response.data as any)?.detail || '签到失败，请稍后重试'
+      throw new Error(errorMsg)
+    }
+    return response.data as LoginCheckInClaimResponse
+  } catch (error: any) {
+    console.error('每日签到失败:', error)
+    throw new Error(error.message || '签到失败，请稍后重试')
   }
 }
 

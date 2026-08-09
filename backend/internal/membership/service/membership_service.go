@@ -1680,7 +1680,20 @@ func (s *MembershipService) GetRewardCenter(ctx context.Context, userID string) 
 	if err != nil {
 		return nil, err
 	}
+	checkIn, err := s.GetLoginCheckInStatus(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	checkInCount := 0
+	if checkIn.ClaimedToday {
+		checkInCount = 1
+	}
+	checkInTask := buildRewardTask("login_check_in", "每日签到", checkIn.RewardAmount, checkInCount, 1, "可签到", "")
+	checkInTask["description"] = fmt.Sprintf("连续第 %d 天，今日可得 %d 积分", checkIn.StreakDays, checkIn.RewardAmount)
+	checkInTask["streak_days"] = checkIn.StreakDays
+	checkInTask["claimed_today"] = checkIn.ClaimedToday
 	taskList := []map[string]any{
+		checkInTask,
 		buildRewardTask("share_poster", "每日分享打卡", sharePosterRewardCredits, shareCount, sharePosterDailyMaxEvents, "可去完成", "/pages/day-record/index?task_mode=reward_center"),
 		buildRewardTask("packaged_food_upload", "预包装零食/食物上传", packagedUploadRewardCredits, packagedCount, packagedUploadDailyMaxEvents, "可去完成", "/pages/packaged-food-edit/index?task_mode=reward_center"),
 		buildRewardTask("public_food_upload", "上传公共食物/校园食堂菜品", publicFoodUploadRewardCredits, publicCount, publicFoodUploadDailyMaxEvents, "可去完成", "/pages/food-library-share/index?task_mode=reward_center&campus_mode=1"),
@@ -1709,6 +1722,7 @@ func (s *MembershipService) GetRewardCenter(ctx context.Context, userID string) 
 			"total_count":     totalWithLimit,
 		},
 		"tasks":         taskList,
+		"check_in":      checkIn,
 		"invite_reward": inviteReward,
 	}, nil
 }

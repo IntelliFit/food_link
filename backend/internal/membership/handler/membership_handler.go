@@ -23,6 +23,7 @@ type MembershipService interface {
 	ListPlans(ctx context.Context, userID string) ([]map[string]any, error)
 	GetMyMembership(ctx context.Context, userID string, date string) (map[string]any, error)
 	GetRewardCenter(ctx context.Context, userID string) (map[string]any, error)
+	ClaimLoginCheckIn(ctx context.Context, userID string) (map[string]any, error)
 	GetInviteRewardStatus(ctx context.Context, userID string) (map[string]any, error)
 	CreatePaymentWithInput(ctx context.Context, userID string, input service.CreateMembershipPaymentInput) (map[string]any, error)
 	SyncWechatPayment(ctx context.Context, userID, orderNo string) (map[string]any, error)
@@ -144,6 +145,25 @@ func (h *MembershipHandler) GetRewardCenter(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
+	response.Success(c, data)
+}
+
+// POST /api/membership/rewards/login-check-in/claim
+func (h *MembershipHandler) ClaimLoginCheckIn(c *gin.Context) {
+	userID := c.GetString(authmw.ContextUserIDKey)
+	if userID == "" {
+		response.Error(c, commonerrors.ErrUnauthorized)
+		return
+	}
+	data, err := h.svc.ClaimLoginCheckIn(c.Request.Context(), userID)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	logMembershipAPI(c, "login_check_in_claim_ok",
+		slog.Int("streak_days", membershipMapInt(data, "streak_days")),
+		slog.Int("reward_amount", membershipMapInt(data, "reward_amount")),
+	)
 	response.Success(c, data)
 }
 
