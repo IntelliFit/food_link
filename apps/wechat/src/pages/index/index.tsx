@@ -29,11 +29,8 @@ import {
   deleteFoodRecord,
   createUserRecipe,
   getFoodExpiryDashboard,
-  generateDietRecommendation,
   type DashboardTargets,
   type DashboardTargetsUpdateInput,
-  type DietRecommendationResult,
-  type DietRecommendationScene,
   type HomeAchievement,
   type HomeIntakeData,
   type HomeMealItem,
@@ -116,7 +113,6 @@ import {
   MealRecordsDialog,
   MealRecordEditModal,
   MealRecordPosterModal,
-  DietRecommendationSheet,
   MicrosSection,
   type MealPosterSharePayload,
 } from './components'
@@ -925,12 +921,7 @@ function IndexPage() {
   const [dailyPosterGenerating, setDailyPosterGenerating] = React.useState(false)
   const [dailyPosterImageUrl, setDailyPosterImageUrl] = React.useState<string | null>(null)
   const [showDailyPosterModal, setShowDailyPosterModal] = React.useState(false)
-  const [dietRecVisible, setDietRecVisible] = React.useState(false)
-  const [dietRecScene, setDietRecScene] = React.useState<DietRecommendationScene>('eat_out')
-  const [dietRecLoading, setDietRecLoading] = React.useState(false)
-  const [dietRecResult, setDietRecResult] = React.useState<DietRecommendationResult | null>(null)
   const [showHealthProfilePrompt, setShowHealthProfilePrompt] = React.useState(false)
-  const dietRecRequestSeqRef = React.useRef(0)
 
   const promptLoginCheckIn = React.useCallback(async (center: RewardCenterResponse | null) => {
     const checkIn = center?.check_in
@@ -980,7 +971,7 @@ function IndexPage() {
   const [mealActionRecord, setMealActionRecord] = React.useState<FoodRecord | null>(null)
   const mealFavoriteInFlightRef = React.useRef(false)
   const [showRecordEditModal, setShowRecordEditModal] = React.useState(false)
-  const homePageScrollLocked = showRecordEditModal || showHomeOnboardingGuide || dietRecVisible
+  const homePageScrollLocked = showRecordEditModal || showHomeOnboardingGuide
   const [showRecordPosterModal, setShowRecordPosterModal] = React.useState(false)
   /** 同一餐次多条记录时的选择面板 */
   const [mealRecordsDialogVisible, setMealRecordsDialogVisible] = React.useState(false)
@@ -2166,84 +2157,6 @@ function IndexPage() {
     })
   }
 
-  const buildDietRecommendationPayload = React.useCallback((scene: DietRecommendationScene) => {
-    const macros = intakeData.macros
-    const calorieRemaining = Math.max(0, Number((intakeData.target - intakeData.current).toFixed(1)))
-    const proteinGap = Math.max(0, Number(((macros.protein?.target || 0) - (macros.protein?.current || 0)).toFixed(1)))
-    const carbsGap = Math.max(0, Number(((macros.carbs?.target || 0) - (macros.carbs?.current || 0)).toFixed(1)))
-    const fatGap = Math.max(0, Number(((macros.fat?.target || 0) - (macros.fat?.current || 0)).toFixed(1)))
-    return {
-      scene,
-      date: mapCalendarDateToApi(selectedDateRef.current || selectedDate) || selectedDate,
-      calorie_remaining: calorieRemaining,
-      macro_gaps: {
-        calories: calorieRemaining,
-        protein: proteinGap,
-        carbs: carbsGap,
-        fat: fatGap
-      },
-      targets: {
-        calories: intakeData.target,
-        protein: macros.protein?.target || 0,
-        carbs: macros.carbs?.target || 0,
-        fat: macros.fat?.target || 0
-      },
-      current: {
-        calories: intakeData.current,
-        protein: macros.protein?.current || 0,
-        carbs: macros.carbs?.current || 0,
-        fat: macros.fat?.current || 0
-      },
-      meals: (meals || []).map((meal) => ({
-        type: meal.type,
-        name: meal.name,
-        description: meal.description || '',
-        calories: normalizeDisplayNumber(meal.calorie),
-        protein: normalizeDisplayNumber(meal.protein),
-        carbs: normalizeDisplayNumber(meal.carbs),
-        fat: normalizeDisplayNumber(meal.fat)
-      }))
-    }
-  }, [intakeData, meals, selectedDate])
-
-  const requestDietRecommendation = React.useCallback(async (scene: DietRecommendationScene) => {
-    if (!getAccessToken()) {
-      redirectToLogin()
-      return
-    }
-    setDietRecScene(scene)
-    setDietRecVisible(true)
-    setDietRecLoading(true)
-    const requestSeq = ++dietRecRequestSeqRef.current
-    try {
-      const result = await generateDietRecommendation(buildDietRecommendationPayload(scene))
-      if (requestSeq === dietRecRequestSeqRef.current) {
-        setDietRecResult(result)
-      }
-    } catch (error) {
-      if (requestSeq === dietRecRequestSeqRef.current) {
-        await showUnifiedApiError(error, '生成推荐失败')
-      }
-    } finally {
-      if (requestSeq === dietRecRequestSeqRef.current) {
-        setDietRecLoading(false)
-      }
-    }
-  }, [buildDietRecommendationPayload])
-
-  const openDietRecommendation = React.useCallback((scene: DietRecommendationScene) => {
-    void requestDietRecommendation(scene)
-  }, [requestDietRecommendation])
-
-  const handleDietRecommendationSceneChange = React.useCallback((scene: DietRecommendationScene) => {
-    if (scene === dietRecScene && dietRecResult) return
-    void requestDietRecommendation(scene)
-  }, [dietRecScene, dietRecResult, requestDietRecommendation])
-
-  const refreshDietRecommendation = React.useCallback(() => {
-    void requestDietRecommendation(dietRecScene)
-  }, [dietRecScene, requestDietRecommendation])
-
   // 切日专用轻量同步：仅拉取该日 dashboard + 运动，不重复请求周统计/身体指标
   const syncDashboardForDate = React.useCallback(async (date: string) => {
     // 若同日期请求已在进行中，跳过本次调用
@@ -3130,56 +3043,6 @@ function IndexPage() {
           monthLoadError={calendarMonthLoadError}
         />
 
-        {showRewardHint && (
-          <View className='home-reward-hint-swiper'>
-            <Swiper
-              className='home-reward-hint-swiper__track'
-              current={activeRewardHintIndex}
-              circular
-              duration={300}
-              onChange={(e) => setRewardHintIndex(e.detail.current)}
-            >
-              {rewardHintBanners.map((banner) => (
-                <SwiperItem key={banner.key} className='home-reward-hint-swiper__item'>
-                  <View
-                    className={`home-reward-hint ${banner.className}`}
-                    onClick={() => handleRewardHintClick(banner.url)}
-                  >
-                    {banner.bgImage && (
-                      <Image
-                        className='home-reward-hint__bg'
-                        src={banner.bgImage}
-                        mode='aspectFill'
-                      />
-                    )}
-                    <View className='home-reward-hint__main'>
-                      <Text className='home-reward-hint__kicker'>{banner.kicker}</Text>
-                      <Text className='home-reward-hint__title'>{banner.title}</Text>
-                      <Text className='home-reward-hint__desc'>{banner.desc}</Text>
-                    </View>
-                    <View
-                      className='home-reward-hint__actions'
-                      onClick={(event) => {
-                        event.stopPropagation()
-                        handleRewardHintClick(banner.url)
-                      }}
-                    >
-                      <Text className='home-reward-hint__go'>{banner.actionText}</Text>
-                    </View>
-                  </View>
-                </SwiperItem>
-              ))}
-            </Swiper>
-            <View className='home-reward-hint__dots'>
-              {rewardHintBanners.map((banner, index) => (
-                <Text
-                  key={banner.key}
-                  className={`home-reward-hint__dot ${index === activeRewardHintIndex ? 'active' : ''}`}
-                />
-              ))}
-            </View>
-          </View>
-        )}
         {showBackfillHint && (
           <View className='home-backfill-hint'>
             <Text className='home-backfill-hint__dot' />
@@ -3426,29 +3289,56 @@ function IndexPage() {
         </View>
         )}
 
-        <View className='diet-rec-entry home-experience-card'>
-          <View className='diet-rec-entry-main'>
-            <View className='diet-rec-entry-icon'>
-              <Text className='iconfont icon-canciguanli diet-rec-entry-icon-text' />
-            </View>
-            <View className='diet-rec-entry-copy'>
-              <Text className='diet-rec-entry-title'>今天吃什么</Text>
-              <Text className='diet-rec-entry-subtitle'>
-                {dashboardBusy || isGuest
-                  ? '按剩余目标推荐一餐'
-                  : `还可吃 ${formatDisplayNumber(Math.max(0, Math.round(intakeData.target - intakeData.current)))} kcal`}
-              </Text>
+        {showRewardHint && (
+          <View className='home-reward-hint-swiper'>
+            <Swiper
+              className='home-reward-hint-swiper__track'
+              current={activeRewardHintIndex}
+              circular
+              duration={300}
+              onChange={(e) => setRewardHintIndex(e.detail.current)}
+            >
+              {rewardHintBanners.map((banner) => (
+                <SwiperItem key={banner.key} className='home-reward-hint-swiper__item'>
+                  <View
+                    className={`home-reward-hint ${banner.className}`}
+                    onClick={() => handleRewardHintClick(banner.url)}
+                  >
+                    {banner.bgImage && (
+                      <Image
+                        className='home-reward-hint__bg'
+                        src={banner.bgImage}
+                        mode='aspectFill'
+                      />
+                    )}
+                    <View className='home-reward-hint__main'>
+                      <Text className='home-reward-hint__kicker'>{banner.kicker}</Text>
+                      <Text className='home-reward-hint__title'>{banner.title}</Text>
+                      <Text className='home-reward-hint__desc'>{banner.desc}</Text>
+                    </View>
+                    <View
+                      className='home-reward-hint__actions'
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        handleRewardHintClick(banner.url)
+                      }}
+                    >
+                      <Text className='home-reward-hint__go'>{banner.actionText}</Text>
+                    </View>
+                  </View>
+                </SwiperItem>
+              ))}
+            </Swiper>
+            <View className='home-reward-hint__dots'>
+              {rewardHintBanners.map((banner, index) => (
+                <Text
+                  key={banner.key}
+                  className={`home-reward-hint__dot ${index === activeRewardHintIndex ? 'active' : ''}`}
+                />
+              ))}
             </View>
           </View>
-          <View className='diet-rec-entry-actions'>
-            <View className='diet-rec-entry-btn' onClick={() => openDietRecommendation('eat_out')}>
-              <Text className='diet-rec-entry-btn-text'>外面吃</Text>
-            </View>
-            <View className='diet-rec-entry-btn primary' onClick={() => openDietRecommendation('cook_home')}>
-              <Text className='diet-rec-entry-btn-text primary'>自己做</Text>
-            </View>
-          </View>
-        </View>
+        )}
 
         {/* 体重/喝水状态卡片 */}
         <View className='body-status-section home-experience-card'>
@@ -3976,16 +3866,6 @@ function IndexPage() {
         storageKey={ONBOARDING_HOME_RECORD_GUIDE_KEY}
         onClose={closeHomeOnboardingGuide}
         onBeforeNext={handleHomeGuideBeforeNext}
-      />
-
-      <DietRecommendationSheet
-        visible={dietRecVisible}
-        scene={dietRecScene}
-        loading={dietRecLoading}
-        result={dietRecResult}
-        onClose={() => setDietRecVisible(false)}
-        onChangeScene={handleDietRecommendationSceneChange}
-        onRefresh={refreshDietRecommendation}
       />
 
       <View className='poster-canvas-wrap'>
