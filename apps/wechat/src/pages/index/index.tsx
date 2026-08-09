@@ -2454,6 +2454,7 @@ function IndexPage() {
   const remainingCalories = Math.max(0, Number((totalTarget - totalCurrent).toFixed(1)))
   const calorieProgress = normalizeProgressPercent(intakeData.progress, totalCurrent, totalTarget)
   const wellnessCaloriePct = Math.min(100, calculateProgressPercent(totalCurrent, totalTarget))
+  const wellnessGaugePct = wellnessCaloriePct * 0.75
   /** 摄入超过目标时，下方进度条用警示红（与营养素超标一致） */
   const isCalorieOver = totalCurrent > totalTarget
   /** 左侧主数字：未超标为剩余可摄入；超标为超出目标的量（正数） */
@@ -3067,7 +3068,7 @@ function IndexPage() {
             <View className='wellness-overview-main'>
               <View
                 className={`wellness-calorie-gauge${isCalorieOver ? ' is-over' : ''}`}
-                style={{ '--wellness-progress': `${wellnessCaloriePct}%` } as React.CSSProperties}
+                style={{ '--wellness-progress': `${wellnessGaugePct}%` } as React.CSSProperties}
               >
                 <View className='wellness-calorie-gauge__center'>
                   <Text className='wellness-calorie-gauge__label'>{isCalorieOver ? '已超出' : '剩余可摄入'}</Text>

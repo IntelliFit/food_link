@@ -1,4 +1,5 @@
 import Taro from '@tarojs/taro'
+import { HOME_DISPLAY_MODE_STORAGE_KEY } from './home-display-mode'
 
 export type HomeExperienceMode = 'wellness' | 'balanced'
 
@@ -9,7 +10,6 @@ export interface HomeExperienceConfig {
 
 const HOME_EXPERIENCE_STORAGE_KEY = 'home_experience_config_v2'
 const LEGACY_HOME_EXPERIENCE_STORAGE_KEY = 'home_experience_config_v1'
-const HOME_DISPLAY_MODE_KEY = 'home_display_mode_v1'
 
 export const DEFAULT_HOME_EXPERIENCE_CONFIG: HomeExperienceConfig = {
   version: 2,
@@ -27,7 +27,7 @@ function getStorageKey(prefix: string): string {
 
 function syncHomeDisplayMode(mode: HomeExperienceMode): void {
   try {
-    Taro.setStorageSync(HOME_DISPLAY_MODE_KEY, mode)
+    Taro.setStorageSync(HOME_DISPLAY_MODE_STORAGE_KEY, mode)
   } catch {
     /* 底栏主题同步失败不影响用户模式配置读取 */
   }
