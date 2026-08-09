@@ -1,33 +1,10 @@
 import Taro from '@tarojs/taro'
 
 export type HomeExperienceMode = 'wellness' | 'balanced'
-export type HomeExperiencePageId = 'status' | 'records' | 'recommendations' | 'reminders' | 'companion'
-
-export interface HomeExperiencePageMeta {
-  id: HomeExperiencePageId
-  shortName: string
-  iconClass: string
-}
 
 export interface HomeExperienceConfig {
   version: 2
   mode: HomeExperienceMode
-}
-
-export const HOME_EXPERIENCE_PAGE_ORDER: HomeExperiencePageId[] = [
-  'status',
-  'records',
-  'recommendations',
-  'reminders',
-  'companion',
-]
-
-export const HOME_EXPERIENCE_PAGES: Record<HomeExperiencePageId, HomeExperiencePageMeta> = {
-  status: { id: 'status', shortName: '状态', iconClass: 'icon-target' },
-  records: { id: 'records', shortName: '记录', iconClass: 'icon-canciguanli' },
-  recommendations: { id: 'recommendations', shortName: '建议', iconClass: 'icon-shiwu' },
-  reminders: { id: 'reminders', shortName: '提醒', iconClass: 'icon-kefulan' },
-  companion: { id: 'companion', shortName: '伙伴', iconClass: 'icon-good' },
 }
 
 const HOME_EXPERIENCE_STORAGE_KEY = 'home_experience_config_v2'

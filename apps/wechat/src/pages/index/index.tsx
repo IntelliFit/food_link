@@ -90,10 +90,8 @@ import { isAllowedRecordDate, isTodayRecordDate } from '../../utils/record-date'
 import { getMembershipCreditSummary, LOW_CREDIT_REWARD_HINT_THRESHOLD } from '../../utils/membership'
 import { useAppColorScheme } from '../../components/AppColorSchemeContext'
 import {
-  HOME_EXPERIENCE_PAGE_ORDER,
   getStoredHomeExperienceConfig,
   saveHomeExperienceConfig,
-  type HomeExperiencePageId,
 } from '../../utils/home-experience'
 
 // 导入拆分出的模块
@@ -121,7 +119,6 @@ import {
   MealRecordPosterModal,
   DietRecommendationSheet,
   MicrosSection,
-  HomeExperienceBar,
   type MealPosterSharePayload,
 } from './components'
 import OnboardingGuide from '../../components/OnboardingGuide'
@@ -791,13 +788,6 @@ const MACRO_CONFIGS: Array<{
 function IndexPage() {
   const { scheme } = useAppColorScheme()
   const [homeExperienceConfig, setHomeExperienceConfig] = React.useState(getStoredHomeExperienceConfig)
-  const [activeHomeExperiencePage, setActiveHomeExperiencePage] = React.useState<HomeExperiencePageId>('status')
-  const homeExperienceSwipeRef = React.useRef<{
-    startX: number
-    startY: number
-    endX: number
-    endY: number
-  } | null>(null)
   const initialSelectedDate = formatDateKey(new Date())
   const initialHomeSelectedDate = initialSelectedDate
   const initialLocalSnapshot = getStoredHomeDashboardSnapshotByDate(initialHomeSelectedDate)
@@ -3093,59 +3083,17 @@ function IndexPage() {
     const nextMode = homeExperienceConfig.mode === 'wellness' ? 'balanced' : 'wellness'
     const saved = saveHomeExperienceConfig({ version: 2, mode: nextMode })
     setHomeExperienceConfig(saved)
-    if (nextMode === 'wellness') setActiveHomeExperiencePage('status')
     Taro.showToast({
       title: nextMode === 'wellness' ? '已切换至养生模式' : '已切换至均衡模式',
       icon: 'none',
     })
   }, [homeExperienceConfig.mode])
 
-  const selectHomeExperiencePage = React.useCallback((pageID: HomeExperiencePageId) => {
-    setActiveHomeExperiencePage(pageID)
-  }, [])
-
-  const handleHomeExperienceTouchStart = React.useCallback((event) => {
-    const touch = event.touches?.[0]
-    if (!touch) return
-    homeExperienceSwipeRef.current = {
-      startX: touch.clientX,
-      startY: touch.clientY,
-      endX: touch.clientX,
-      endY: touch.clientY,
-    }
-  }, [])
-
-  const handleHomeExperienceTouchMove = React.useCallback((event) => {
-    const touch = event.touches?.[0]
-    const gesture = homeExperienceSwipeRef.current
-    if (!touch || !gesture) return
-    gesture.endX = touch.clientX
-    gesture.endY = touch.clientY
-  }, [])
-
-  const handleHomeExperienceTouchEnd = React.useCallback(() => {
-    const gesture = homeExperienceSwipeRef.current
-    homeExperienceSwipeRef.current = null
-    if (!gesture) return
-    const dx = gesture.endX - gesture.startX
-    const dy = gesture.endY - gesture.startY
-    if (Math.abs(dx) < 56 || Math.abs(dx) <= Math.abs(dy) * 1.25) return
-    const currentIndex = HOME_EXPERIENCE_PAGE_ORDER.indexOf(activeHomeExperiencePage)
-    if (currentIndex < 0) return
-    const nextIndex = dx < 0
-      ? Math.min(HOME_EXPERIENCE_PAGE_ORDER.length - 1, currentIndex + 1)
-      : Math.max(0, currentIndex - 1)
-    if (nextIndex !== currentIndex) {
-      setActiveHomeExperiencePage(HOME_EXPERIENCE_PAGE_ORDER[nextIndex])
-    }
-  }, [activeHomeExperiencePage])
-
   const openPetHome = React.useCallback(() => {
     Taro.navigateTo({ url: extraPkgUrl('/pages/pet-home/index') })
   }, [])
 
   const isWellnessMode = homeExperienceConfig.mode === 'wellness'
-  const isBalancedMode = homeExperienceConfig.mode === 'balanced'
 
   return (
     <View
@@ -3226,13 +3174,6 @@ function IndexPage() {
           monthLoadError={calendarMonthLoadError}
         />
 
-        {isWellnessMode && (
-          <HomeExperienceBar
-            activePage={activeHomeExperiencePage}
-            onSelectPage={selectHomeExperiencePage}
-          />
-        )}
-
         {showRewardHint && (
           <View className='home-reward-hint-swiper'>
             <Swiper
@@ -3297,16 +3238,11 @@ function IndexPage() {
         )}
 
         <View
-          key={`${homeExperienceConfig.mode}-${activeHomeExperiencePage}`}
-          className={`home-experience-stage home-experience-stage--${isBalancedMode ? 'balanced' : activeHomeExperiencePage}`}
-          onTouchStart={isWellnessMode ? handleHomeExperienceTouchStart : undefined}
-          onTouchMove={isWellnessMode ? handleHomeExperienceTouchMove : undefined}
-          onTouchEnd={isWellnessMode ? handleHomeExperienceTouchEnd : undefined}
-          onTouchCancel={isWellnessMode ? handleHomeExperienceTouchEnd : undefined}
+          key={homeExperienceConfig.mode}
+          className={`home-experience-stage home-experience-stage--${homeExperienceConfig.mode}`}
         >
 
         {/* 热量总览卡片 + 三大营养素合并（仅展示与编辑目标，不整卡跳转） */}
-        {(isBalancedMode || isWellnessMode) && (
         <View className='main-card combined-card home-experience-card'>
           <View className='main-card-header'>
             <View className='main-card-title'>
@@ -3454,9 +3390,7 @@ function IndexPage() {
             )}
           </View>
         </View>
-        )}
 
-        {(isBalancedMode || activeHomeExperiencePage === 'recommendations') && (
         <View className='diet-rec-entry home-experience-card'>
           <View className='diet-rec-entry-main'>
             <View className='diet-rec-entry-icon'>
@@ -3480,10 +3414,8 @@ function IndexPage() {
             </View>
           </View>
         </View>
-        )}
 
         {/* 体重/喝水状态卡片 */}
-        {(isBalancedMode || activeHomeExperiencePage === 'records') && (
         <View className='body-status-section home-experience-card'>
           {/* 体重卡片 */}
           <View className='body-status-card weight-card' onClick={() => openBodyMetricRecord('weight')} onLongPress={openWeightEditor}>
@@ -3582,10 +3514,8 @@ function IndexPage() {
             </Text>
           </View>
         </View>
-        )}
 
         {/* 今日餐食区域 */}
-        {(isBalancedMode || activeHomeExperiencePage === 'records') && (
         <View className='meals-section home-experience-card'>
           <View className='section-header'>
             <View className='meals-title-wrap'>
@@ -3751,10 +3681,9 @@ function IndexPage() {
             )}
           </View>
         </View>
-        )}
 
         {/* 食物保质期：快到期提醒（数据来自首页 dashboard） */}
-        {(isBalancedMode || activeHomeExperiencePage === 'reminders') && showFoodExpiryBlock && (
+        {showFoodExpiryBlock && (
           <View className='expiry-section home-experience-card'>
             <View className='section-header'>
               <View className='meals-title-wrap'>
@@ -3841,23 +3770,11 @@ function IndexPage() {
         )}
 
         {/* 查看统计入口 */}
-        {(isBalancedMode || activeHomeExperiencePage === 'recommendations') && (
-          <View className='home-experience-card'>
-            <StatsEntry onClick={openDayRecordForSelectedDate} />
-          </View>
-        )}
+        <View className='home-experience-card'>
+          <StatsEntry onClick={openDayRecordForSelectedDate} />
+        </View>
 
-        {isWellnessMode
-          && activeHomeExperiencePage === 'reminders'
-          && !showRewardHint
-          && !showFoodExpiryBlock && (
-          <View className='home-experience-empty'>
-            <Text className='home-experience-empty__title'>这里暂时很安静</Text>
-            <Text className='home-experience-empty__desc'>登录后，这里会显示奖励与保质期提醒</Text>
-          </View>
-        )}
-
-        {isWellnessMode && activeHomeExperiencePage === 'companion' && (
+        {isWellnessMode && (
           <View className='home-partner-card home-experience-card'>
             {petHidden ? (
               <View className='home-partner-card__hidden'>

@@ -673,7 +673,15 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   font-size: 17rpx;
 }
 
-.home-page--wellness {
+.home-page--mode-wellness {
+  --home-mode-accent: #337a61;
+  --home-mode-accent-strong: #245b49;
+  --home-mode-soft: #e8eee3;
+  --home-mode-surface: #fffaf0;
+  --home-mode-text: #26352f;
+  --home-mode-muted: #75817b;
+  --home-mode-warm: #b98a52;
+
   background:
     radial-gradient(circle at 86% 5%, rgb(132 154 111 / 12%) 0, transparent 32%),
     linear-gradient(180deg, #fbf8f0 0%, #f5f3ea 46%, #eef2ed 100%);
@@ -687,15 +695,15 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
     color: #70786f;
   }
 
-  .home-mode-switch {
+  .greeting-mode-toggle {
     border-color: rgb(74 111 82 / 26%);
-    background: rgb(255 252 244 / 88%);
+    color: #f8edd3;
+    background: #285b44;
     box-shadow: 0 8rpx 24rpx rgb(70 89 73 / 10%);
   }
 
-  .home-mode-switch__arrow,
-  .home-mode-switch__text {
-    color: #3f7253;
+  .greeting-mode-toggle__switch {
+    color: #d8bd83;
   }
 
   .date-selector-section {
@@ -768,10 +776,93 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 
   .wellness-overview-card,
   .wellness-daily-advice,
+  .main-card,
+  .diet-rec-entry,
+  .meals-section,
+  .expiry-section,
   .body-status-card {
     border-color: rgb(190 162 110 / 28%);
     background: linear-gradient(145deg, #fffaf0 0%, #f4ecdc 100%);
-    box-shadow: 0 12rpx 30rpx rgb(3 26 18 / 24%);
+    box-shadow: 0 12rpx 30rpx rgb(36 62 49 / 8%);
+  }
+
+  .card-value,
+  .card-label,
+  .nutrition-expand-title,
+  .diet-rec-entry-title,
+  .meals-title,
+  .body-status-title,
+  .body-status-value {
+    color: #263b30;
+  }
+
+  .target-edit-btn,
+  .diet-rec-entry-btn {
+    border: 1rpx solid rgb(176 143 81 / 22%);
+    background: #f3e8d2;
+    box-shadow: none;
+  }
+
+  .target-edit-icon,
+  .target-edit-text,
+  .diet-rec-entry-icon-text,
+  .diet-rec-entry-btn-text,
+  .nutrition-expand-affordance-icon,
+  .nutrition-expand-affordance-text {
+    color: #426f55;
+  }
+
+  .diet-rec-entry-icon {
+    background: rgb(63 111 82 / 12%);
+  }
+
+  .diet-rec-entry-btn.primary {
+    border-color: #315f48;
+    background: #315f48;
+  }
+
+  .progress-bar-bg,
+  .macro-progress-bar-bg {
+    background: #ddd7c9;
+  }
+
+  .progress-bar-fill:not(.is-over) {
+    background: linear-gradient(90deg, #315f48, #76946d);
+  }
+
+  .home-backfill-hint {
+    border-color: rgb(176 143 81 / 28%);
+    background: rgb(239 227 202 / 72%);
+  }
+
+  .home-backfill-hint__dot,
+  .home-backfill-hint__action {
+    background: #315f48;
+  }
+
+  .home-backfill-hint__text,
+  .home-backfill-hint__cancel {
+    color: #315f48;
+  }
+
+  .stats-entry-card {
+    background: linear-gradient(135deg, #244f3b 0%, #53765d 100%);
+    box-shadow: 0 8rpx 24rpx rgb(31 70 52 / 18%);
+  }
+
+  .home-partner-card {
+    border-color: rgb(190 162 110 / 28%);
+    background: linear-gradient(145deg, #fffaf0 0%, #f4ecdc 100%);
+    box-shadow: 0 12rpx 30rpx rgb(36 62 49 / 8%);
+  }
+
+  .home-partner-card__avatar-wrap,
+  .home-partner-card__secondary-action {
+    border-color: rgb(63 111 82 / 18%);
+  }
+
+  .home-partner-card__progress-fill {
+    background: linear-gradient(90deg, #315f48, #76946d);
   }
 
   .wellness-calorie-gauge {
@@ -6561,34 +6652,6 @@ button.poster-share-channel--btn {
   }
 }
 
-// ==================== 首页生活方式模式 V1 =============.home-page--mode-wellness {
-  --home-mode-accent: #337a61;
-  --home-mode-accent-strong: #245b49;
-  --home-mode-soft: #eaf3ed;
-  --home-mode-surface: #fffdf8;
-  --home-mode-text: #26352f;
-  --home-mode-muted: #75817b;
-  --home-mode-warm: #b98a52;
-
-  background: #f6f3eb;
-
-  .main-card,
-  .diet-rec-entry,
-  .body-status-card,
-  .meals-section,
-  .expiry-section,
-  .stats-entry {
-    border-color: rgb(51 122 97 / 13%);
-    background: rgb(255 253 248 / 90%);
-    box-shadow: 0 10rpx 28rpx rgb(53 74 65 / 6%);
-  }
-
-  .progress-bar-fill,
-  .home-partner-card__progress-fill {
-    background: #4b987a;
-  }
-}
-
 .home-experience-stage {
   min-height: 320rpx;
   animation: home-experience-stage-in 180ms ease-out both;
@@ -6598,52 +6661,14 @@ button.poster-share-channel--btn {
   position: relative;
 }
 
-.home-experience-empty {
-  display: flex;
-  min-height: 360rpx;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 48rpx 36rpx;
-  border: 1rpx dashed rgb(117 129 123 / 34%);
-  border-radius: 28rpx;
-  color: var(--home-mode-text, #26352f);
-  text-align: center;
-  background: rgb(255 255 255 / 68%);
-}
-
-.home-experience-empty__title {
-  font-size: 28rpx;
-  font-weight: 780;
-  line-height: 40rpx;
-}
-
-.home-experience-empty__desc {
-  max-width: 520rpx;
-  margin-top: 8rpx;
-  color: var(--home-mode-muted, #75817b);
-  font-size: 21rpx;
-  line-height: 32rpx;
-}
-
-.home-experience-empty__action {
-  margin-top: 22rpx;
-  padding: 14rpx 24rpx;
-  border-radius: 999rpx;
-  color: #fff;
-  font-size: 21rpx;
-  font-weight: 740;
-  background: var(--home-mode-accent, #337a61);
-}
-
 .home-partner-card {
   position: relative;
   overflow: hidden;
   padding: 28rpx;
-  border: 1rpx solid rgb(122 86 189 / 15%);
+  border: 1rpx solid rgb(190 162 110 / 28%);
   border-radius: 32rpx;
   background: var(--home-mode-surface, #fffdfb);
-  box-shadow: 0 14rpx 34rpx rgb(67 48 82 / 8%);
+  box-shadow: 0 14rpx 34rpx rgb(53 74 65 / 8%);
 }
 
 .home-partner-card__hero {
@@ -6659,7 +6684,7 @@ button.poster-share-channel--btn {
   justify-content: center;
   width: 176rpx;
   height: 176rpx;
-  border: 1rpx solid rgb(122 86 189 / 14%);
+  border: 1rpx solid rgb(63 111 82 / 18%);
   border-radius: 32rpx;
   background: var(--home-mode-soft, #f1eafb);
 }
@@ -6815,7 +6840,7 @@ button.poster-share-channel--btn {
 }
 
 .home-partner-card__secondary-action {
-  border: 1rpx solid rgb(122 86 189 / 20%);
+  border: 1rpx solid rgb(63 111 82 / 20%);
   color: var(--home-mode-accent, #7a56bd);
   background: #fff;
 }
@@ -6880,8 +6905,7 @@ button.poster-share-channel--btn {
   .meals-section,
   .expiry-section,
   .stats-entry,
-  .home-partner-card,
-  .home-experience-empty {
+  .home-partner-card {
     border-color: rgb(255 255 255 / 8%);
     background: rgb(31 39 36 / 96%);
     box-shadow: none;
