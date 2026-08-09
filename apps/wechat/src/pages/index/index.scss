@@ -356,6 +356,10 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   border-radius: 50%;
   background: conic-gradient(from 225deg, #7fc6a5 0 var(--wellness-progress), #e7ece9 var(--wellness-progress) 75%, transparent 75% 100%);
 
+  &.is-over {
+    background: conic-gradient(from 225deg, $home-warning-red 0 var(--wellness-progress), #ead9d5 var(--wellness-progress) 75%, transparent 75% 100%);
+  }
+
   &::after {
     position: absolute;
     inset: 18rpx;
@@ -389,6 +393,17 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   font-weight: 750;
   line-height: 64rpx;
   letter-spacing: -1rpx;
+
+  &.is-over {
+    color: $home-warning-red;
+  }
+}
+
+.wellness-calorie-gauge__spinner {
+  width: 22rpx;
+  height: 22rpx;
+  margin-top: 4rpx;
+  border-width: 3rpx;
 }
 
 .wellness-calorie-gauge__leaf {
@@ -402,11 +417,40 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   min-width: 0;
 }
 
+.wellness-overview-summary-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12rpx;
+  flex-wrap: wrap;
+}
+
+.wellness-target-edit {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4rpx;
+  padding: 5rpx 10rpx;
+  border: 1rpx solid rgb(63 111 82 / 18%);
+  border-radius: 999rpx;
+  color: #426f55;
+  font-size: 18rpx;
+  font-weight: 700;
+  line-height: 26rpx;
+  background: rgb(232 238 227 / 82%);
+}
+
+.wellness-target-edit__icon {
+  font-size: 18rpx;
+}
+
 .wellness-intake-summary {
+  min-width: 0;
+  flex: 1 1 260rpx;
   color: #69756e;
-  font-size: 24rpx;
+  font-size: 21rpx;
   line-height: 36rpx;
-  white-space: nowrap;
+  white-space: normal;
 }
 
 .wellness-total-progress,
@@ -426,6 +470,10 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   height: 100%;
   border-radius: inherit;
   background: linear-gradient(90deg, #6bbb93, #99d29a);
+
+  &.is-over {
+    background: $home-warning-red;
+  }
 }
 
 .wellness-macros {
@@ -462,6 +510,10 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   color: #5ca479;
   font-size: 25rpx;
   font-weight: 700;
+
+  &.is-over {
+    color: $home-warning-red;
+  }
 }
 
 .wellness-macro__target {
@@ -674,14 +726,6 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 }
 
 .home-page--mode-wellness {
-  --home-mode-accent: #337a61;
-  --home-mode-accent-strong: #245b49;
-  --home-mode-soft: #e8eee3;
-  --home-mode-surface: #fffaf0;
-  --home-mode-text: #26352f;
-  --home-mode-muted: #75817b;
-  --home-mode-warm: #b98a52;
-
   background:
     radial-gradient(circle at 86% 5%, rgb(132 154 111 / 12%) 0, transparent 32%),
     linear-gradient(180deg, #fbf8f0 0%, #f5f3ea 46%, #eef2ed 100%);
@@ -786,6 +830,14 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
     box-shadow: 0 12rpx 30rpx rgb(36 62 49 / 8%);
   }
 
+  .meals-section,
+  .expiry-section {
+    overflow: hidden;
+    padding: 24rpx;
+    border-radius: 30rpx;
+    box-sizing: border-box;
+  }
+
   .card-value,
   .card-label,
   .nutrition-expand-title,
@@ -850,23 +902,12 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
     box-shadow: 0 8rpx 24rpx rgb(31 70 52 / 18%);
   }
 
-  .home-partner-card {
-    border-color: rgb(190 162 110 / 28%);
-    background: linear-gradient(145deg, #fffaf0 0%, #f4ecdc 100%);
-    box-shadow: 0 12rpx 30rpx rgb(36 62 49 / 8%);
-  }
-
-  .home-partner-card__avatar-wrap,
-  .home-partner-card__secondary-action {
-    border-color: rgb(63 111 82 / 18%);
-  }
-
-  .home-partner-card__progress-fill {
-    background: linear-gradient(90deg, #315f48, #76946d);
-  }
-
   .wellness-calorie-gauge {
     background: conic-gradient(from 225deg, #426f4f 0 var(--wellness-progress), #ddd8ca var(--wellness-progress) 75%, transparent 75% 100%);
+
+    &.is-over {
+      background: conic-gradient(from 225deg, $home-warning-red 0 var(--wellness-progress), #e2d3cb var(--wellness-progress) 75%, transparent 75% 100%);
+    }
 
     &::after {
       background: #fbf5e8;
@@ -877,6 +918,11 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   .wellness-macro__title,
   .body-status-value {
     color: #23352b;
+  }
+
+  .wellness-calorie-gauge__value.is-over,
+  .wellness-macro__current.is-over {
+    color: $home-warning-red;
   }
 
   .wellness-calorie-gauge__label,
@@ -902,6 +948,11 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   .wellness-total-progress__fill,
   .wellness-macro__fill {
     background: linear-gradient(90deg, #436f4f, #7e9d6e);
+  }
+
+  .wellness-total-progress__fill.is-over,
+  .wellness-macro__fill.is-over {
+    background: $home-warning-red;
   }
 
   .wellness-daily-advice {
@@ -6661,242 +6712,7 @@ button.poster-share-channel--btn {
   position: relative;
 }
 
-.home-partner-card {
-  position: relative;
-  overflow: hidden;
-  padding: 28rpx;
-  border: 1rpx solid rgb(190 162 110 / 28%);
-  border-radius: 32rpx;
-  background: var(--home-mode-surface, #fffdfb);
-  box-shadow: 0 14rpx 34rpx rgb(53 74 65 / 8%);
-}
-
-.home-partner-card__hero {
-  display: flex;
-  align-items: center;
-  gap: 24rpx;
-}
-
-.home-partner-card__avatar-wrap {
-  display: flex;
-  flex: 0 0 176rpx;
-  align-items: center;
-  justify-content: center;
-  width: 176rpx;
-  height: 176rpx;
-  border: 1rpx solid rgb(63 111 82 / 18%);
-  border-radius: 32rpx;
-  background: var(--home-mode-soft, #f1eafb);
-}
-
-.home-partner-card__avatar {
-  width: 154rpx;
-  height: 154rpx;
-}
-
-.home-partner-card__hero-copy {
-  display: flex;
-  min-width: 0;
-  flex: 1;
-  flex-direction: column;
-}
-
-.home-partner-card__eyebrow {
-  color: var(--home-mode-accent, #7a56bd);
-  font-size: 19rpx;
-  font-weight: 750;
-  letter-spacing: 1rpx;
-  line-height: 27rpx;
-}
-
-.home-partner-card__name {
-  margin-top: 3rpx;
-  color: var(--home-mode-text, #332b3d);
-  font-size: 36rpx;
-  font-weight: 820;
-  line-height: 48rpx;
-}
-
-.home-partner-card__message {
-  margin-top: 7rpx;
-  color: var(--home-mode-muted, #7d7288);
-  font-size: 22rpx;
-  line-height: 33rpx;
-}
-
-.home-partner-card__progress-block {
-  margin-top: 28rpx;
-  padding: 20rpx;
-  border-radius: 22rpx;
-  background: var(--home-mode-soft, #f1eafb);
-}
-
-.home-partner-card__progress-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16rpx;
-}
-
-.home-partner-card__progress-label {
-  color: var(--home-mode-text, #332b3d);
-  font-size: 21rpx;
-  font-weight: 760;
-}
-
-.home-partner-card__task {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--home-mode-muted, #7d7288);
-  font-size: 19rpx;
-  line-height: 28rpx;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.home-partner-card__progress-track {
-  height: 12rpx;
-  margin-top: 14rpx;
-  overflow: hidden;
-  border-radius: 999rpx;
-  background: rgb(255 255 255 / 78%);
-}
-
-.home-partner-card__progress-fill {
-  height: 100%;
-  border-radius: inherit;
-  background: var(--home-mode-accent, #7a56bd);
-  transition: width 280ms ease;
-}
-
-.home-partner-card__reward {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 18rpx;
-  margin-top: 18rpx;
-  padding: 18rpx 20rpx;
-  border: 1rpx solid rgb(233 130 100 / 18%);
-  border-radius: 22rpx;
-  background: #fff4ef;
-}
-
-.home-partner-card__reward-copy {
-  display: flex;
-  min-width: 0;
-  flex: 1;
-  flex-direction: column;
-}
-
-.home-partner-card__reward-title {
-  color: #704333;
-  font-size: 22rpx;
-  font-weight: 760;
-  line-height: 31rpx;
-}
-
-.home-partner-card__reward-desc {
-  margin-top: 2rpx;
-  overflow: hidden;
-  color: #a0715f;
-  font-size: 18rpx;
-  line-height: 27rpx;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.home-partner-card__reward-action {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  min-width: 88rpx;
-  min-height: 52rpx;
-  padding: 0 17rpx;
-  border-radius: 999rpx;
-  color: #fff;
-  font-size: 20rpx;
-  font-weight: 760;
-  background: #d87556;
-}
-
-.home-partner-card__actions {
-  display: flex;
-  gap: 14rpx;
-  margin-top: 24rpx;
-}
-
-.home-partner-card__secondary-action,
-.home-partner-card__primary-action {
-  display: flex;
-  min-height: 74rpx;
-  flex: 1;
-  align-items: center;
-  justify-content: center;
-  padding: 0 20rpx;
-  border-radius: 22rpx;
-  font-size: 23rpx;
-  font-weight: 760;
-}
-
-.home-partner-card__secondary-action {
-  border: 1rpx solid rgb(63 111 82 / 20%);
-  color: var(--home-mode-accent, #7a56bd);
-  background: #fff;
-}
-
-.home-partner-card__primary-action {
-  color: #fff;
-  background: var(--home-mode-accent, #7a56bd);
-}
-
-.home-partner-card__hidden {
-  display: flex;
-  min-height: 390rpx;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-}
-
-.home-partner-card__hidden-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 96rpx;
-  height: 96rpx;
-  border-radius: 28rpx;
-  color: var(--home-mode-accent, #7a56bd);
-  font-size: 40rpx;
-  background: var(--home-mode-soft, #f1eafb);
-}
-
-.home-partner-card__hidden-title {
-  margin-top: 20rpx;
-  color: var(--home-mode-text, #332b3d);
-  font-size: 28rpx;
-  font-weight: 780;
-}
-
-.home-partner-card__hidden-desc {
-  max-width: 500rpx;
-  margin-top: 8rpx;
-  color: var(--home-mode-muted, #7d7288);
-  font-size: 21rpx;
-  line-height: 32rpx;
-}
-
-.home-partner-card__hidden .home-partner-card__primary-action {
-  flex: 0 0 auto;
-  min-height: 68rpx;
-  margin-top: 22rpx;
-}
-
 .home-page--dark.home-page--mode-wellness {
-  --home-mode-surface: #202724;
-  --home-mode-text: #edf2ef;
-  --home-mode-muted: #9aa6a0;
-
   background: #141a18;
 
   .main-card,
@@ -6904,16 +6720,12 @@ button.poster-share-channel--btn {
   .body-status-card,
   .meals-section,
   .expiry-section,
-  .stats-entry,
-  .home-partner-card {
+  .stats-entry {
     border-color: rgb(255 255 255 / 8%);
     background: rgb(31 39 36 / 96%);
     box-shadow: none;
   }
 
-  .home-partner-card__secondary-action {
-    background: #262f2b;
-  }
 }
 
 @keyframes home-experience-stage-in {

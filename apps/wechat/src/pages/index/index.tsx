@@ -18,7 +18,6 @@ import {
   getSharedFoodRecord,
   getFoodRecordById,
   getPetSummary,
-  claimPetEvent,
   getMyMembership,
   getRewardCenter,
   claimLoginCheckIn,
@@ -805,7 +804,6 @@ function IndexPage() {
   const [dataSyncing, setDataSyncing] = React.useState(false)
   const [petHidden, setPetHidden] = React.useState(getStoredPetHidden)
   const [petSummary, setPetSummary] = React.useState<PetSummary | null>(null)
-  const [petClaiming, setPetClaiming] = React.useState(false)
   const [membershipStatus, setMembershipStatus] = React.useState<MembershipStatus | null>(null)
   const [rewardCenter, setRewardCenter] = React.useState<RewardCenterResponse | null>(null)
   const [rewardHintIndex, setRewardHintIndex] = React.useState(0)
@@ -2542,6 +2540,7 @@ function IndexPage() {
   const totalTarget = normalizeDisplayNumber(intakeData.target)
   const remainingCalories = Math.max(0, Number((totalTarget - totalCurrent).toFixed(1)))
   const calorieProgress = normalizeProgressPercent(intakeData.progress, totalCurrent, totalTarget)
+  const wellnessCaloriePct = Math.min(100, calculateProgressPercent(totalCurrent, totalTarget))
   /** 摄入超过目标时，下方进度条用警示红（与营养素超标一致） */
   const isCalorieOver = totalCurrent > totalTarget
   /** 左侧主数字：未超标为剩余可摄入；超标为超出目标的量（正数） */
@@ -2671,7 +2670,6 @@ function IndexPage() {
     }
   }, [])
 
-  const petName = petSummary?.pet?.name || '成长伙伴'
   const healthyHabitScore = React.useMemo(() => {
     if (dashboardBusy || isGuest) return 0
     let score = 0
@@ -2691,7 +2689,6 @@ function IndexPage() {
     totalCurrent,
     totalTarget
   ])
-  const petEvent = petSummary?.event && !petSummary.event.is_claimed ? petSummary.event : null
   const petMood = petSummary?.status?.mood || (dashboardBusy || isGuest
     ? 'calm'
     : healthyHabitScore >= 3
@@ -2700,47 +2697,6 @@ function IndexPage() {
         ? 'calm'
         : 'sleepy')
   const petState = petSummary?.status?.state || petMood
-  const petLevelProgress = petSummary?.pet?.level_progress ?? Math.min(100, healthyHabitScore * 25)
-  const petLevelText = petSummary?.pet?.level ? `Lv.${petSummary.pet.level} · 成长 ${petLevelProgress}%` : `成长 ${petLevelProgress}%`
-  const petMessage = petEvent?.message || petSummary?.status?.message || (dashboardBusy
-    ? '我正在看你今天的状态'
-    : isGuest
-      ? '登录后我会记住你的成长'
-      : healthyHabitScore >= 3
-        ? '今天习惯很稳，我长大了一点'
-        : healthyHabitScore >= 1
-          ? '再完成一个小习惯，我会更有精神'
-          : '先记录一餐，我就知道怎么陪你啦')
-  const petTaskText = petEvent?.task_text || petSummary?.status?.task_text || (dashboardBusy || isGuest
-    ? '今日成长任务'
-    : healthyHabitScore >= 3
-      ? '已点亮多个好习惯'
-      : proteinTargetRaw > 0 && proteinCur < proteinTargetRaw * 0.75
-        ? '补一点蛋白质'
-        : todayWater.total < bodyMetrics.waterGoalMl * 0.6
-          ? '喝水达到 60%'
-          : totalCurrent <= 0
-            ? '记录一餐'
-            : '保持今日节奏')
-  const handleClaimPetEvent = React.useCallback(async () => {
-    if (!petEvent || petClaiming) return
-    setPetClaiming(true)
-    try {
-      const result = await claimPetEvent(petEvent.id)
-      setPetSummary((prev) => prev ? { ...prev, pet: result.pet, event: result.event, status: { ...prev.status, message: '奖励已收下，我又长大了一点。' } } : prev)
-      const parts: string[] = []
-      if (result.credits_awarded > 0) parts.push(`+${result.credits_awarded}积分`)
-      if (result.exp_awarded > 0) parts.push(`+${result.exp_awarded}经验`)
-      Taro.showToast({ title: parts.length ? `领取成功 ${parts.join(' ')}` : '已领取', icon: 'none' })
-    } catch (error) {
-      await showUnifiedApiError(error, '领取宠物奖励失败')
-    } finally {
-      setPetClaiming(false)
-    }
-  }, [petClaiming, petEvent])
-  const openPetChat = React.useCallback(() => {
-    Taro.navigateTo({ url: extraPkgUrl('/pages/pet-chat/index') })
-  }, [])
 
   const handleShareDailyPosterImage = React.useCallback(() => {
     if (!dailyPosterImageUrl) return
@@ -3242,7 +3198,85 @@ function IndexPage() {
           className={`home-experience-stage home-experience-stage--${homeExperienceConfig.mode}`}
         >
 
-        {/* 热量总览卡片 + 三大营养素合并（仅展示与编辑目标，不整卡跳转） */}
+        {/* 养生模式使用表盘；均衡模式保留横向热量卡。两者复用同一份营养数据。 */}
+        {isWellnessMode ? (
+          <View className='wellness-overview-card home-experience-card'>
+            <View className='wellness-overview-main'>
+              <View
+                className={`wellness-calorie-gauge${isCalorieOver ? ' is-over' : ''}`}
+                style={{ '--wellness-progress': `${wellnessCaloriePct}%` } as React.CSSProperties}
+              >
+                <View className='wellness-calorie-gauge__center'>
+                  <Text className='wellness-calorie-gauge__label'>{isCalorieOver ? '已超出' : '剩余可摄入'}</Text>
+                  <Text className={`wellness-calorie-gauge__value${isCalorieOver ? ' is-over' : ''}`}>
+                    {dashboardBusy || isGuest
+                      ? '--'
+                      : formatNumberWithComma(Math.round(isCalorieOver ? totalCurrent - totalTarget : totalTarget - totalCurrent))}
+                  </Text>
+                  {dashboardBusy && <View className='loading-spinner wellness-calorie-gauge__spinner' />}
+                  <Text className='wellness-calorie-gauge__unit'>kcal</Text>
+                  <Text className='iconfont icon-a-144-lvye wellness-calorie-gauge__leaf' />
+                </View>
+              </View>
+
+              <View className='wellness-overview-detail'>
+                <View className='wellness-overview-summary-row'>
+                  <Text className='wellness-intake-summary'>
+                    已摄入 {dashboardBusy || isGuest ? '--' : formatDisplayNumber(Math.round(totalCurrent))} / {dashboardBusy || isGuest ? '--' : formatDisplayNumber(Math.round(totalTarget))} kcal
+                  </Text>
+                  <View className='wellness-target-edit' onClick={openTargetEditor}>
+                    <Text className='iconfont icon-target wellness-target-edit__icon' />
+                    <Text>目标</Text>
+                  </View>
+                </View>
+                <View className='wellness-total-progress'>
+                  <View className={`wellness-total-progress__fill${isCalorieOver ? ' is-over' : ''}`} style={{ width: `${wellnessCaloriePct}%` }} />
+                </View>
+                <View className='wellness-macros'>
+                  {MACRO_CONFIGS.map(({ key, label, unit, iconClass }) => {
+                    const macro = intakeData.macros[key]
+                    const current = normalizeDisplayNumber(macro?.current)
+                    const target = normalizeDisplayNumber(macro?.target)
+                    const pct = Math.min(100, calculateProgressPercent(current, target))
+                    const isMacroOver = current > target && target > 0
+                    return (
+                      <View key={key} className='wellness-macro'>
+                        <View className='wellness-macro__title'>
+                          <Text className={`iconfont ${iconClass} wellness-macro__icon`} />
+                          <Text>{label}</Text>
+                        </View>
+                        <View className='wellness-macro__numbers'>
+                          <Text className={`wellness-macro__current${isMacroOver ? ' is-over' : ''}`}>{dashboardBusy || isGuest ? '--' : formatDisplayNumber(current)}</Text>
+                          <Text className='wellness-macro__target'> / {dashboardBusy || isGuest ? '--' : formatDisplayNumber(target)}{unit}</Text>
+                        </View>
+                        <View className='wellness-macro__track'>
+                          <View className={`wellness-macro__fill${isMacroOver ? ' is-over' : ''}`} style={{ width: `${pct}%` }} />
+                        </View>
+                      </View>
+                    )
+                  })}
+                </View>
+              </View>
+            </View>
+
+            <View className={`nutrition-expand-shell wellness-nutrition-shell${nutritionExpanded ? ' is-expanded' : ''}`}>
+              <View className='nutrition-expand-main' onClick={() => setNutritionExpanded((value) => !value)}>
+                <View className='nutrition-expand-title-row'>
+                  <Text className='nutrition-expand-title'>营养概览</Text>
+                  <View className='nutrition-expand-affordance'>
+                    <Text className={`iconfont ${nutritionExpanded ? 'icon-collapse' : 'icon-expand'} nutrition-expand-affordance-icon`} />
+                    <Text className='nutrition-expand-affordance-text'>{nutritionExpanded ? '收起' : '展开更多'}</Text>
+                  </View>
+                </View>
+              </View>
+              {nutritionExpanded && (
+                <View className='nutrition-expanded-body wellness-nutrition-expanded-body'>
+                  <MicrosSection intakeData={intakeData} dashboardBusy={dashboardBusy} isGuest={isGuest} />
+                </View>
+              )}
+            </View>
+          </View>
+        ) : (
         <View className='main-card combined-card home-experience-card'>
           <View className='main-card-header'>
             <View className='main-card-title'>
@@ -3390,6 +3424,7 @@ function IndexPage() {
             )}
           </View>
         </View>
+        )}
 
         <View className='diet-rec-entry home-experience-card'>
           <View className='diet-rec-entry-main'>
@@ -3773,73 +3808,6 @@ function IndexPage() {
         <View className='home-experience-card'>
           <StatsEntry onClick={openDayRecordForSelectedDate} />
         </View>
-
-        {isWellnessMode && (
-          <View className='home-partner-card home-experience-card'>
-            {petHidden ? (
-              <View className='home-partner-card__hidden'>
-                <View className='home-partner-card__hidden-icon'>
-                  <Text className='iconfont icon-good' />
-                </View>
-                <Text className='home-partner-card__hidden-title'>成长伙伴已隐藏</Text>
-                <Text className='home-partner-card__hidden-desc'>你的宠物数据和成长仍会保留，可在宠物小屋重新显示。</Text>
-                <View className='home-partner-card__primary-action' onClick={openPetHome}>
-                  <Text>打开宠物小屋</Text>
-                </View>
-              </View>
-            ) : (
-              <>
-                <View className='home-partner-card__hero'>
-                  <View className='home-partner-card__avatar-wrap' onClick={openPetHome}>
-                    <PetAvatar
-                      pet={petSummary?.pet}
-                      size='large'
-                      mood={petMood}
-                      state={petState}
-                      className='home-partner-card__avatar'
-                    />
-                  </View>
-                  <View className='home-partner-card__hero-copy'>
-                    <Text className='home-partner-card__eyebrow'>今日成长伙伴</Text>
-                    <Text className='home-partner-card__name'>{petName}</Text>
-                    <Text className='home-partner-card__message'>{petMessage}</Text>
-                  </View>
-                </View>
-                <View className='home-partner-card__progress-block'>
-                  <View className='home-partner-card__progress-top'>
-                    <Text className='home-partner-card__progress-label'>{petLevelText}</Text>
-                    <Text className='home-partner-card__task'>{petTaskText}</Text>
-                  </View>
-                  <View className='home-partner-card__progress-track'>
-                    <View
-                      className='home-partner-card__progress-fill'
-                      style={{ width: `${Math.max(0, Math.min(100, petLevelProgress))}%` }}
-                    />
-                  </View>
-                </View>
-                {petEvent ? (
-                  <View className='home-partner-card__reward'>
-                    <View className='home-partner-card__reward-copy'>
-                      <Text className='home-partner-card__reward-title'>{petEvent.title || '成长奖励待领取'}</Text>
-                      <Text className='home-partner-card__reward-desc'>{petEvent.task_text || '完成今天的小习惯后领取'}</Text>
-                    </View>
-                    <View className='home-partner-card__reward-action' onClick={handleClaimPetEvent}>
-                      {petClaiming ? <View className='btn-spinner' /> : <Text>领取</Text>}
-                    </View>
-                  </View>
-                ) : null}
-                <View className='home-partner-card__actions'>
-                  <View className='home-partner-card__secondary-action' onClick={openPetHome}>
-                    <Text>成长档案</Text>
-                  </View>
-                  <View className='home-partner-card__primary-action' onClick={openPetChat}>
-                    <Text>和{petName}聊聊</Text>
-                  </View>
-                </View>
-              </>
-            )}
-          </View>
-        )}
 
         </View>
 
