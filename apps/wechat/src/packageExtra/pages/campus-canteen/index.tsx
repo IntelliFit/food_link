@@ -193,13 +193,16 @@ function CampusCanteenPage() {
 
   const fetchReadyCampusItems = useCallback(
     async (merchantName?: string) => {
+      const directoryFilter = selectedCanteen?.id
+        ? { canteen_id: selectedCanteen.id }
+        : selectedCampus?.id
+          ? { campus_id: selectedCampus.id }
+          : selectedSchool?.id
+            ? { school_id: selectedSchool.id }
+            : {};
       const request = {
         type: "campus" as const,
-        school_id: selectedSchool?.id,
-        campus_id: selectedCampus?.id,
-        canteen_id: selectedCanteen?.id,
-        school_name: selectedSchool?.name,
-        canteen_name: selectedCanteen?.name,
+        ...directoryFilter,
         merchant_name: merchantName,
         sort_by: sortBy,
         limit: 80,

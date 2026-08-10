@@ -44,6 +44,13 @@ func setupPublicFoodRepoTestDB(t *testing.T) *gorm.DB {
 		logo_url TEXT,
 		created_at TEXT
 	)`).Error)
+	require.NoError(t, db.Exec(`CREATE TABLE school_canteens (
+		id TEXT PRIMARY KEY,
+		school_id TEXT NOT NULL,
+		campus_id TEXT,
+		name TEXT NOT NULL,
+		status TEXT NOT NULL DEFAULT 'active'
+	)`).Error)
 	return db
 }
 
@@ -413,6 +420,87 @@ func TestPublicFoodRepo_ListPublishedCampusFilters(t *testing.T) {
 	require.NotNil(t, analyzed)
 	require.True(t, analyzed.IsCampusFood)
 	require.Equal(t, "published", analyzed.Status)
+}
+
+func TestPublicFoodRepo_ListPublishedCampusPrefersDirectoryIDsOverStaleNames(t *testing.T) {
+	db := setupPublicFoodRepoTestDB(t)
+	seedPublicFoodItems(t, db)
+	r := NewPublicFoodRepo(db)
+	ctx := context.Background()
+	isCampus := true
+
+	require.NoError(t, db.Model(&domain.PublicFoodItem{}).
+		Where("id = ?", "campus-1").
+		Updates(map[string]any{
+			"school_id":  "school-1",
+			"campus_id":  "stale-campus-id",
+			"canteen_id": "canteen-1",
+		}).Error)
+
+	rows, err := r.ListPublished(ctx, ListFilter{
+		IsCampusFood: &isCampus,
+		SchoolID:     "current-school-id",
+		CampusID:     "current-campus-id",
+		CanteenID:    "canteen-1",
+		SchoolName:   "后台已更新的学校名称",
+		CanteenName:  "后台已更新的食堂名称",
+		Limit:        10,
+	})
+
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, "campus-1", rows[0].ID)
+
+}
+
+func TestPublicFoodRepo_ListPublishedCampusUsesCanteenParentForCurrentCampus(t *testing.T) {
+	db := setupPublicFoodRepoTestDB(t)
+	seedPublicFoodItems(t, db)
+	r := NewPublicFoodRepo(db)
+	ctx := context.Background()
+	isCampus := true
+
+	require.NoError(t, db.Exec(`
+		INSERT INTO school_canteens (id, school_id, campus_id, name, status)
+		VALUES ('canteen-1', 'school-1', 'current-campus-id', '学一食堂', 'active')
+	`).Error)
+	require.NoError(t, db.Model(&domain.PublicFoodItem{}).
+		Where("id = ?", "campus-1").
+		Updates(map[string]any{
+			"school_id":  "school-1",
+			"campus_id":  "stale-campus-id",
+			"canteen_id": "canteen-1",
+		}).Error)
+
+	rows, err := r.ListPublished(ctx, ListFilter{
+		IsCampusFood: &isCampus,
+		CampusID:     "current-campus-id",
+		Limit:        10,
+	})
+
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, "campus-1", rows[0].ID)
+
+	staleRows, err := r.ListPublished(ctx, ListFilter{
+		IsCampusFood: &isCampus,
+		CampusID:     "stale-campus-id",
+		Limit:        10,
+	})
+	require.NoError(t, err)
+	require.Empty(t, staleRows)
+
+	require.NoError(t, db.Exec(`
+		UPDATE school_canteens SET campus_id = NULL WHERE id = 'canteen-1'
+	`).Error)
+	fallbackRows, err := r.ListPublished(ctx, ListFilter{
+		IsCampusFood: &isCampus,
+		CampusID:     "stale-campus-id",
+		Limit:        10,
+	})
+	require.NoError(t, err)
+	require.Len(t, fallbackRows, 1)
+	require.Equal(t, "campus-1", fallbackRows[0].ID)
 }
 
 func TestPublicFoodRepo_ListPublishedCampusSorts(t *testing.T) {

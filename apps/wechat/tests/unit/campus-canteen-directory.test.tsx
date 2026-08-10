@@ -112,6 +112,28 @@ describe('campus canteen directory', () => {
     expect(screen.queryByText('暂无校园食堂数据')).not.toBeInTheDocument()
   })
 
+  it('uses the selected canteen id without conflicting parent filters', async () => {
+    render(<CampusCanteenPage />)
+
+    await waitFor(() => expect(getMyMembership).toHaveBeenCalled())
+    fireEvent.click(screen.getByText('选择学校'))
+    fireEvent.click(screen.getByText('选择上海中医药大学'))
+    await waitFor(() => expect(screen.getByText('学生食堂')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('学生食堂'))
+
+    await waitFor(() => {
+      const calls = (getPublicFoodLibraryList as jest.Mock).mock.calls
+      const latestRequest = calls[calls.length - 2]?.[0]
+      expect(latestRequest).toEqual(
+        expect.objectContaining({ canteen_id: 'canteen-student', type: 'campus' }),
+      )
+      expect(latestRequest).not.toHaveProperty('school_id')
+      expect(latestRequest).not.toHaveProperty('campus_id')
+      expect(latestRequest).not.toHaveProperty('school_name')
+      expect(latestRequest).not.toHaveProperty('canteen_name')
+    })
+  })
+
   it('never renders pending or failed AI dishes in the client list', async () => {
     ;(getPublicFoodLibraryList as jest.Mock).mockResolvedValue({
       list: [
