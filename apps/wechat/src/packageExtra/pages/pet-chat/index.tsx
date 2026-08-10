@@ -139,6 +139,7 @@ function PetChatPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([buildIntroMessage('你的宠物')])
   const streamingTextRef = useRef('')
   const isEmptyConversation = !lastAnalysis && !sessionID && messages.length === 1 && messages[0]?.kind === 'intro'
+  const latestMessageID = messages.length > 0 ? `pet-chat-message-${messages[messages.length - 1].id}` : ''
 
   useDidShow(() => {
     applyThemeNavigationBar(scheme)
@@ -333,10 +334,10 @@ function PetChatPage() {
         </View>
       </View>
 
-      <ScrollView className='pet-chat-scroll' scrollY enhanced showScrollbar={false}>
+      <ScrollView className='pet-chat-scroll' scrollY enhanced showScrollbar={false} scrollIntoView={latestMessageID}>
         <View className='pet-chat-messages'>
           {messages.map((message) => (
-            <View key={message.id} className={`pet-chat-message ${message.role}`}>
+            <View id={`pet-chat-message-${message.id}`} key={message.id} className={`pet-chat-message ${message.role}`}>
               <View className='pet-chat-bubble'>
                 {message.role === 'pet' ? (
                   message.text ? (
