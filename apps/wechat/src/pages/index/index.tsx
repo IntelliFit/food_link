@@ -127,6 +127,7 @@ import {
 import { HOME_RECORD_ONBOARDING_STEPS } from './home-onboarding-steps'
 import { HOME_PET_PROFILE_CHANGED_EVENT } from '../../utils/pet-events'
 import { buildFoodRecordFavoriteDraft } from '../../utils/food-record-flow'
+import { openPetChat } from '../../utils/pet-navigation'
 
 const BACKFILL_HINT_DISMISSED_DATES_KEY = 'home_backfill_hint_dismissed_dates_v1'
 const HOME_SELECTED_DATE_KEY = 'home_selected_date_v1'
@@ -2959,10 +2960,6 @@ function IndexPage() {
     })
   }, [homeExperienceConfig.mode])
 
-  const openPetHome = React.useCallback(() => {
-    Taro.navigateTo({ url: extraPkgUrl('/pages/pet-home/index') })
-  }, [])
-
   const isWellnessMode = homeExperienceConfig.mode === 'wellness'
 
   return (
@@ -2998,7 +2995,7 @@ function IndexPage() {
               className='greeting-pet__avatar'
             />
           )}
-          onPetPress={openPetHome}
+          onPetPress={openPetChat}
         />
 
         {!getAccessToken() && (

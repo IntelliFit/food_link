@@ -16,7 +16,6 @@ import {
   showUnifiedApiError
 } from '../../../utils/api'
 import { withAuth } from '../../../utils/withAuth'
-import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
 import { PetAvatar } from '../../../components/PetAvatar'
@@ -26,6 +25,7 @@ import {
   showPrivacyAuthorizeFailure,
 } from '../../../utils/weapp-privacy'
 import { HOME_PET_PROFILE_CHANGED_EVENT } from '../../../utils/pet-events'
+import { openPetChat } from '../../../utils/pet-navigation'
 import './index.scss'
 
 const HOME_PET_HIDDEN_KEY = 'home_pet_companion_hidden_v1'
@@ -273,10 +273,6 @@ function PetHomePage() {
       Taro.showToast({ title: next ? '首页宠物已隐藏' : '首页宠物已显示', icon: 'none' })
       return next
     })
-  }, [])
-
-  const openPetChat = useCallback(() => {
-    Taro.navigateTo({ url: extraPkgUrl('/pages/pet-chat/index') })
   }, [])
 
   return (

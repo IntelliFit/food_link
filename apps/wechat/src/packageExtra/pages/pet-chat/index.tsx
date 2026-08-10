@@ -17,6 +17,7 @@ import {
 import { withAuth } from '../../../utils/withAuth'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
+import { openPetSettings } from '../../../utils/pet-navigation'
 import { PetAvatar } from '../../../components/PetAvatar'
 import { PetMarkdown } from './pet-markdown'
 import './index.scss'
@@ -138,6 +139,9 @@ function PetChatPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([buildIntroMessage('你的宠物')])
   const streamingTextRef = useRef('')
   const isEmptyConversation = !lastAnalysis && !sessionID && messages.length === 1 && messages[0]?.kind === 'intro'
+  const latestMessage = messages[messages.length - 1]
+  const latestMessageToken = latestMessage?.id.replace(/[^a-zA-Z0-9_-]/g, '-') || 'empty'
+  const latestMessageID = `pet-chat-bottom-${latestMessageToken}-${latestMessage?.text.length || 0}`
 
   useDidShow(() => {
     applyThemeNavigationBar(scheme)
@@ -316,11 +320,10 @@ function PetChatPage() {
   return (
     <View className={`pet-chat-page ${scheme === 'dark' ? 'pet-chat-page--dark' : ''}`}>
       <View className='pet-chat-topbar'>
-        <View className='pet-chat-identity'>
+        <View className='pet-chat-identity' onClick={openPetSettings}>
           <PetAvatar pet={petSummary?.pet} size={72} mood={petSummary?.status?.mood} state={petSummary?.status?.state} />
           <View className='pet-chat-identity-copy'>
             <Text className='pet-chat-identity-name'>{petName}</Text>
-            <Text className='pet-chat-identity-status'>{busy ? '正在整理你的记录' : '饮食与训练陪伴助手'}</Text>
           </View>
         </View>
         <View className='pet-chat-top-actions'>
@@ -333,10 +336,10 @@ function PetChatPage() {
         </View>
       </View>
 
-      <ScrollView className='pet-chat-scroll' scrollY enhanced showScrollbar={false}>
+      <ScrollView className='pet-chat-scroll' scrollY enhanced showScrollbar={false} scrollIntoView={latestMessageID}>
         <View className='pet-chat-messages'>
           {messages.map((message) => (
-            <View key={message.id} className={`pet-chat-message ${message.role}`}>
+            <View id={`pet-chat-message-${message.id}`} key={message.id} className={`pet-chat-message ${message.role}`}>
               <View className='pet-chat-bubble'>
                 {message.role === 'pet' ? (
                   message.text ? (
@@ -355,6 +358,7 @@ function PetChatPage() {
             </View>
           ))}
         </View>
+        <View id={latestMessageID} className='pet-chat-bottom-anchor' />
       </ScrollView>
 
       <View className='pet-chat-bottom-dock'>
