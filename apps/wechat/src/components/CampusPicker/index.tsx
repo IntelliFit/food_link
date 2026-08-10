@@ -61,14 +61,7 @@ export default function CampusPicker({
 
   const disabled = !school?.id;
   const isDark = scheme === "dark";
-  const areaLabel =
-    school?.location_type === "company"
-      ? "园区"
-      : school?.location_type === "community"
-        ? "社区区域"
-        : school?.location_type === "university"
-          ? "校区"
-          : "校区/园区/社区区域";
+  const areaLabel = "校区";
 
   return (
     <View
@@ -80,7 +73,7 @@ export default function CampusPicker({
           <View>
             <Text className='campus-picker-title'>选择{areaLabel}</Text>
             <Text className='campus-picker-subtitle'>
-              {school?.name || "请先选择学校、公司或社区"}
+              {school?.name || "请先选择学校"}
             </Text>
           </View>
           <Text className='campus-picker-close' onClick={onCancel}>

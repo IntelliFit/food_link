@@ -98,7 +98,7 @@ describe('campus canteen directory', () => {
     render(<CampusCanteenPage />)
 
     await waitFor(() => expect(getMyMembership).toHaveBeenCalled())
-    fireEvent.click(screen.getByText('选择学校/公司/社区'))
+    fireEvent.click(screen.getByText('选择学校'))
     fireEvent.click(screen.getByText('选择上海中医药大学'))
 
     await waitFor(() =>

@@ -39,12 +39,6 @@ import CampusMembershipGate from "../../../components/CampusMembershipGate";
 import { CAFETERIA_HERO_BG_URL } from "../../../utils/static-asset-cdn-url";
 
 type SortBy = "hot" | "high_protein" | "low_calorie" | "value";
-type LocationType = "university" | "company" | "community";
-const LOCATION_TYPE_OPTIONS: Array<{ value: LocationType; label: string }> = [
-  { value: "university", label: "学校" },
-  { value: "company", label: "公司" },
-  { value: "community", label: "社区" },
-];
 
 function normalizeText(value?: string | null): string {
   return String(value || "")
@@ -168,8 +162,6 @@ function CampusCanteenPage() {
   const [floorName, setFloorName] = useState("");
   const [windowName, setWindowName] = useState("");
   const [selectedWindow, setSelectedWindow] = useState<CanteenWindowItem | null>(null);
-  const [locationType, setLocationType] = useState<LocationType>("university");
-  const [locationTypeChosen, setLocationTypeChosen] = useState(false);
   const [showSchoolPicker, setShowSchoolPicker] = useState(false);
   const [showCampusPicker, setShowCampusPicker] = useState(false);
   const [showCanteenPicker, setShowCanteenPicker] = useState(false);
@@ -409,7 +401,7 @@ function CampusCanteenPage() {
 
   const openCanteenPicker = () => {
     if (!selectedSchool?.id) {
-      Taro.showToast({ title: "请先选择学校、公司或社区", icon: "none" });
+      Taro.showToast({ title: "请先选择学校", icon: "none" });
       return;
     }
     setShowCanteenPicker(true);
@@ -417,7 +409,7 @@ function CampusCanteenPage() {
 
   const openCampusPicker = () => {
     if (!selectedSchool?.id) {
-      Taro.showToast({ title: "请先选择学校、公司或社区", icon: "none" });
+      Taro.showToast({ title: "请先选择学校", icon: "none" });
       return;
     }
     setShowCampusPicker(true);
@@ -444,17 +436,7 @@ function CampusCanteenPage() {
     });
   };
 
-  const locationTypeLabel =
-    LOCATION_TYPE_OPTIONS.find((item) => item.value === locationType)?.label ||
-    "主体类型";
-  const areaLabel =
-    locationType === "company"
-      ? "园区"
-      : locationType === "community"
-        ? "社区区域"
-        : "校区";
-  const selectedSchoolName =
-    selectedSchool?.name || `选择${locationTypeLabel}名称`;
+  const selectedSchoolName = selectedSchool?.name || "选择学校";
   const visibleList = useMemo(() => {
     const floorKeyword = normalizeText(floorName);
     const windowKeyword = normalizeText(windowName);
@@ -759,13 +741,13 @@ function CampusCanteenPage() {
               onClick={() => setShowSchoolPicker(true)}
             >
               <Text className='filter-chip-text'>
-                {selectedSchool?.name || "选择学校/公司/社区"}
+                {selectedSchool?.name || "选择学校"}
               </Text>
               <Text className='iconfont icon-xiajiantou filter-chip-arrow' />
             </View>
             <View className='filter-chip filter-chip--area' onClick={openCampusPicker}>
               <Text className='filter-chip-text'>
-                {selectedCampus?.name || "选择校区/园区/社区区域"}
+                {selectedCampus?.name || "选择校区"}
               </Text>
               <Text className='iconfont icon-xiajiantou filter-chip-arrow' />
             </View>
@@ -803,7 +785,7 @@ function CampusCanteenPage() {
           </View>
           <View className='campus-feedback-row' onClick={() => void handleLocationFeedback()}>
             <Text className='iconfont icon-edit campus-feedback-icon' />
-            <Text className='campus-feedback-text'>主体、分区或食堂信息有误？点击反馈</Text>
+            <Text className='campus-feedback-text'>学校、校区或食堂信息有误？点击反馈</Text>
           </View>
         </View>
 
@@ -1030,10 +1012,7 @@ function CampusCanteenPage() {
 
         <SchoolPicker
           visible={showSchoolPicker}
-          locationType={locationTypeChosen ? locationType : undefined}
           onSelect={(school) => {
-            setLocationType(school.location_type || locationType);
-            setLocationTypeChosen(true);
             setSelectedSchool(school);
             setSelectedCampus(null);
             setSelectedCanteen(null);

@@ -53,53 +53,6 @@
   border-radius: 32rpx;
 }
 
-.school-picker-subject-row {
-  display: flex;
-  gap: 16rpx;
-  margin: 24rpx 32rpx 16rpx;
-}
-
-.school-picker-type-picker,
-.school-picker-subject-row .school-picker-search {
-  flex: 1 1 0;
-  width: 0;
-  min-width: 0;
-}
-
-.school-picker-subject-row .school-picker-search {
-  height: 72rpx;
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0 20rpx;
-
-  &.disabled {
-    opacity: 0.72;
-  }
-}
-
-.school-picker-type-select {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  height: 72rpx;
-  box-sizing: border-box;
-  padding: 0 20rpx;
-  color: #9ca3af;
-  font-size: 28rpx;
-  background: #f3f4f6;
-  border-radius: 32rpx;
-
-  &.selected {
-    color: #1f2937;
-  }
-}
-
-.school-picker-type-arrow {
-  flex: 0 0 auto;
-  margin-left: 8rpx;
-  color: #9ca3af;
-}
-
 .school-picker-search-icon {
   font-size: 28rpx;
   color: #9ca3af;
@@ -252,16 +205,6 @@
   .school-picker-search {
     background: #17231f;
     border: 1rpx solid rgb(255 255 255 / 5%);
-  }
-
-  .school-picker-type-select {
-    color: #9ca3a8;
-    background: #17231f;
-    border: 1rpx solid rgb(255 255 255 / 5%);
-
-    &.selected {
-      color: #dce6e2;
-    }
   }
 
   .school-picker-search-icon,

@@ -118,14 +118,7 @@ function CampusFoodSharePage() {
   const [membershipLoading, setMembershipLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const isCampusMember = !!membershipStatus?.is_pro;
-  const areaLabel =
-    selectedSchool?.location_type === "company"
-      ? "园区"
-      : selectedSchool?.location_type === "community"
-        ? "社区区域"
-        : selectedSchool?.location_type === "university"
-          ? "校区"
-          : "校区/园区/社区区域";
+  const areaLabel = "校区";
 
   const handleChooseImage = async () => {
     const remain = MAX_IMAGES - imageUrls.length;
@@ -574,7 +567,7 @@ function CampusFoodSharePage() {
           <View className='directory-form-row directory-form-row--two'>
             <View className='form-item directory-form-item'>
               <Text className='form-label'>
-                学校/公司/社区 <Text className='required'>*</Text>
+                学校 <Text className='required'>*</Text>
               </Text>
               <View
                 className='form-input picker-display'
@@ -583,7 +576,7 @@ function CampusFoodSharePage() {
                 <Text
                   className={schoolName ? "picker-value" : "picker-placeholder"}
                 >
-                  {schoolName || "选择学校/公司/社区"}
+                  {schoolName || "选择学校"}
                 </Text>
                 <Text className='picker-arrow'>⌄</Text>
               </View>
@@ -594,7 +587,7 @@ function CampusFoodSharePage() {
                 className='form-input picker-display'
                 onClick={() => {
                   if (!selectedSchool?.id && !schoolId) {
-                    Taro.showToast({ title: "请先选择高校、公司或社区", icon: "none" });
+                    Taro.showToast({ title: "请先选择学校", icon: "none" });
                     return;
                   }
                   setShowCampusPicker(true);
@@ -620,7 +613,7 @@ function CampusFoodSharePage() {
                 className='form-input picker-display'
                 onClick={() => {
                   if (!selectedSchool?.id && !schoolId) {
-                    Taro.showToast({ title: "请先选择高校、公司或社区", icon: "none" });
+                    Taro.showToast({ title: "请先选择学校", icon: "none" });
                     return;
                   }
                   setShowCanteenPicker(true);
