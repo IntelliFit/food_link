@@ -1033,12 +1033,6 @@ export interface PetClaimResult {
   earned_credits_balance?: number
 }
 
-export interface PetAppearanceRerollResult {
-  pet: PetProfile
-  credits_cost: number
-  earned_credits_balance?: number
-}
-
 export interface PetAppearanceSelectResult {
   pet: PetProfile
 }
@@ -3710,18 +3704,6 @@ export async function claimPetEvent(eventId: string): Promise<PetClaimResult> {
     throw new Error('领取宠物奖励失败')
   }
   return res.data as PetClaimResult
-}
-
-export async function rerollPetAppearance(): Promise<PetAppearanceRerollResult> {
-  const res = await authenticatedRequest('/api/pet/reroll-appearance', {
-    method: 'POST',
-    timeout: 10000,
-  })
-  if (res.statusCode !== 200) {
-    const msg = (res.data as any)?.message || '更换宠物外观失败'
-    throw new Error(msg)
-  }
-  return res.data as PetAppearanceRerollResult
 }
 
 export async function selectPetAppearance(candidateId: string): Promise<PetAppearanceSelectResult> {
