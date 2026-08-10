@@ -717,7 +717,7 @@ function ProfilePage() {
                       <Text className='credit-overview__label'>今日可用</Text>
                       <View className='credit-overview__value-row'>
                         <Text className='credit-overview__value'>{cSystemRemain}</Text>
-                        <Text className='credit-overview__unit'>积分</Text>
+                        <Text className='credit-overview__unit'>份</Text>
                       </View>
                       <Text className='credit-overview__meta'>每日清零 · 优先扣除</Text>
                     </View>
