@@ -60,10 +60,12 @@ describe('pet chat latest message', () => {
     expect(await screen.findByText('最近的回答')).toBeInTheDocument()
     const scrollView = container.querySelector('.pet-chat-scroll')
     const latestMessage = container.querySelector('#pet-chat-message-message-latest')
+    const bottomAnchor = container.querySelector('#pet-chat-bottom-message-latest-5')
 
     expect(latestMessage).toHaveTextContent('最近的回答')
+    expect(bottomAnchor).toBeInTheDocument()
     await waitFor(() => {
-      expect(scrollView).toHaveAttribute('scrollintoview', 'pet-chat-message-message-latest')
+      expect(scrollView).toHaveAttribute('scrollintoview', 'pet-chat-bottom-message-latest-5')
     })
   })
 })
