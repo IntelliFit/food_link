@@ -719,7 +719,7 @@ function ProfilePage() {
                         <Text className='credit-overview__value'>{cSystemRemain}</Text>
                         <Text className='credit-overview__unit'>积分</Text>
                       </View>
-                      <Text className='credit-overview__meta'>每日清零</Text>
+                      <Text className='credit-overview__meta'>每日清零 · 优先扣除</Text>
                     </View>
                     <View className='credit-overview__item'>
                       <Text className='credit-overview__label'>奖励积分</Text>
@@ -730,7 +730,6 @@ function ProfilePage() {
                       <Text className='credit-overview__meta'>长期保留</Text>
                     </View>
                   </View>
-                  <Text className='credit-spend-order'>AI 使用时优先扣今日额度</Text>
 
                   {hasDoubleBenefits && (
                     <Text className='card-benefit card-benefit--single-line'>{founderBenefitText}</Text>
