@@ -22,12 +22,13 @@ func main() {
 	onlyNutritionEmbeddings := flag.Bool("only-nutrition-embeddings", false, "only migrate nutrition semantic embedding storage")
 	onlyOnboardingStatus := flag.Bool("only-onboarding-status", false, "only add nullable onboarding status schema without data backfills")
 	onlyCampusDirectoryReviewed := flag.Bool("only-campus-directory-reviewed", false, "only publish the reviewed Beijing campus dining directory")
+	onlyCampusDirectoryPending := flag.Bool("only-campus-directory-pending", false, "only import pending-review campus dining research in one transaction")
 	onlyFoodRecordMood := flag.Bool("only-food-record-mood", false, "only add the optional food-record eating mood column and constraint")
 	onlyManualFoodSausage := flag.Bool("only-manual-food-sausage", false, "only normalize Taiwanese grilled sausage nutrition and historical records")
 	onlyCampusCatalogPublishing := flag.Bool("only-campus-catalog-publishing", false, "only add campus catalog publishing schema")
 	flag.Parse()
 	selectedOnlyModes := 0
-	for _, selected := range []bool{*onlyPapay, *onlyNutritionQuality, *onlyNutritionEmbeddings, *onlyOnboardingStatus, *onlyCampusDirectoryReviewed, *onlyFoodRecordMood, *onlyManualFoodSausage, *onlyCampusCatalogPublishing} {
+	for _, selected := range []bool{*onlyPapay, *onlyNutritionQuality, *onlyNutritionEmbeddings, *onlyOnboardingStatus, *onlyCampusDirectoryReviewed, *onlyCampusDirectoryPending, *onlyFoodRecordMood, *onlyManualFoodSausage, *onlyCampusCatalogPublishing} {
 		if selected {
 			selectedOnlyModes++
 		}
@@ -68,6 +69,8 @@ func main() {
 		migrateErr = migration.MigrateOnboardingStatus(ctx, db, cfg.Database.Schema)
 	} else if *onlyCampusDirectoryReviewed {
 		migrateErr = migration.PublishBeijingOwnerVerifiedDiningDirectory(ctx, db, cfg.Database.Schema)
+	} else if *onlyCampusDirectoryPending {
+		migrateErr = migration.ImportPendingCampusDirectoryResearch(ctx, db, cfg.Database.Schema)
 	} else if *onlyFoodRecordMood {
 		migrateErr = migration.MigrateFoodRecordMood(ctx, db, cfg.Database.Schema)
 	} else if *onlyManualFoodSausage {
@@ -98,6 +101,10 @@ func main() {
 	}
 	if *onlyOnboardingStatus {
 		log.Printf("新手引导状态迁移完成: config_dir=%s schema=%s", resolvedDir, schema)
+		return
+	}
+	if *onlyCampusDirectoryPending {
+		log.Printf("待审核校园食堂资料导入完成: config_dir=%s schema=%s", resolvedDir, schema)
 		return
 	}
 	if *onlyFoodRecordMood {
