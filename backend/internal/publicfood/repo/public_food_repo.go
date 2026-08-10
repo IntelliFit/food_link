@@ -149,17 +149,34 @@ func (r *PublicFoodRepo) ListPublished(ctx context.Context, f ListFilter) ([]dom
 	if f.MaxCalories != nil {
 		q = q.Where("p.total_calories <= ?", *f.MaxCalories)
 	}
-	if f.SchoolID != "" {
-		q = q.Where("p.school_id = ?", f.SchoolID)
-	}
-	if f.CampusID != "" {
-		q = q.Where("p.campus_id = ?", f.CampusID)
-	}
-	if f.CanteenID != "" {
-		q = q.Where("p.canteen_id = ?", f.CanteenID)
-	}
+	// Directory IDs form a hierarchy. The most specific selected ID is enough
+	// to identify its parents and must not be rejected by stale denormalized
+	// parent IDs on an already-published dish.
 	if f.WindowID != "" {
 		q = q.Where("p.window_id = ?", f.WindowID)
+	} else if f.CanteenID != "" {
+		q = q.Where("p.canteen_id = ?", f.CanteenID)
+	} else if f.CampusID != "" {
+		q = q.Where(`
+			EXISTS (
+				SELECT 1
+				FROM school_canteens directory_canteen
+				WHERE directory_canteen.id = p.canteen_id
+				  AND directory_canteen.status = 'active'
+				  AND directory_canteen.campus_id = ?
+			) OR (
+				p.campus_id = ?
+				AND NOT EXISTS (
+					SELECT 1
+					FROM school_canteens active_directory_canteen
+					WHERE active_directory_canteen.id = p.canteen_id
+					  AND active_directory_canteen.status = 'active'
+					  AND active_directory_canteen.campus_id IS NOT NULL
+				)
+			)
+		`, f.CampusID, f.CampusID)
+	} else if f.SchoolID != "" {
+		q = q.Where("p.school_id = ?", f.SchoolID)
 	}
 	itemType := normalizePublicFoodTypeFilter(f.Type)
 	if itemType != "" {
@@ -167,10 +184,13 @@ func (r *PublicFoodRepo) ListPublished(ctx context.Context, f ListFilter) ([]dom
 	} else if f.IsCampusFood != nil {
 		q = applyLegacyPublicFoodTypeWhere(q, "p", publicFoodTypeFromCampusFlag(*f.IsCampusFood))
 	}
-	if f.SchoolName != "" {
+	// Directory IDs are stable while display names may be normalized or edited
+	// after a dish is published. When both are present, use the ID as the source
+	// of truth so a stale name cannot hide correctly linked dishes.
+	if f.SchoolID == "" && f.CampusID == "" && f.CanteenID == "" && f.WindowID == "" && f.SchoolName != "" {
 		q = q.Where("p.school_name = ?", f.SchoolName)
 	}
-	if f.CanteenName != "" {
+	if f.CanteenID == "" && f.WindowID == "" && f.CanteenName != "" {
 		q = q.Where("p.canteen_name = ?", f.CanteenName)
 	}
 	if f.IsCampusHighlight != nil {
@@ -178,7 +198,14 @@ func (r *PublicFoodRepo) ListPublished(ctx context.Context, f ListFilter) ([]dom
 	}
 	switch f.SortBy {
 	case "hot":
-		q = q.Order("p.like_count desc")
+		if itemType == "campus" {
+			// Avoid an index-driven scan across the full public library before the
+			// campus filters are applied. Campus rows are a small filtered set, so
+			// sorting their normalized engagement values is both stable and fast.
+			q = q.Order("(COALESCE(p.like_count, 0) + COALESCE(p.collection_count, 0)) desc, p.published_at desc NULLS LAST, p.id asc")
+		} else {
+			q = q.Order("p.like_count desc")
+		}
 	case "rating":
 		q = q.Order("p.avg_rating desc")
 	case "high_protein":

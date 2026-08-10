@@ -44,6 +44,13 @@ func setupPublicFoodRepoTestDB(t *testing.T) *gorm.DB {
 		logo_url TEXT,
 		created_at TEXT
 	)`).Error)
+	require.NoError(t, db.Exec(`CREATE TABLE school_canteens (
+		id TEXT PRIMARY KEY,
+		school_id TEXT NOT NULL,
+		campus_id TEXT,
+		name TEXT NOT NULL,
+		status TEXT NOT NULL DEFAULT 'active'
+	)`).Error)
 	return db
 }
 
@@ -375,6 +382,115 @@ func TestPublicFoodRepo_ListPublishedCampusFilters(t *testing.T) {
 	require.Equal(t, "published", analyzed.Status)
 }
 
+func TestPublicFoodRepo_ListPublishedCampusUsesMostSpecificDirectoryID(t *testing.T) {
+	db := setupPublicFoodRepoTestDB(t)
+	now := time.Now().UTC()
+	staleSchoolID := "school-old"
+	staleCampusID := "campus-old"
+	canteenID := "canteen-current"
+	require.NoError(t, db.Exec(`
+		INSERT INTO school_canteens (id, school_id, campus_id, name, status)
+		VALUES (?, ?, ?, ?, 'active')
+	`, canteenID, "school-current", "campus-current", "当前食堂").Error)
+	require.NoError(t, db.Create(&domain.PublicFoodItem{
+		ID:           "campus-stale-parent",
+		UserID:       "user-1",
+		FoodName:     "历史父级菜品",
+		Status:       "published",
+		Type:         "campus",
+		IsCampusFood: true,
+		SchoolID:     &staleSchoolID,
+		CampusID:     &staleCampusID,
+		CanteenID:    &canteenID,
+		SchoolName:   "旧学校名",
+		CanteenName:  "旧食堂名",
+		PublishedAt:  &now,
+		CreatedAt:    &now,
+	}).Error)
+
+	rows, err := NewPublicFoodRepo(db).ListPublished(context.Background(), ListFilter{
+		Type:        "campus",
+		SchoolID:    "school-current",
+		CampusID:    "campus-current",
+		CanteenID:   canteenID,
+		SchoolName:  "当前学校名",
+		CanteenName: "当前食堂",
+		SortBy:      "hot",
+		Limit:       10,
+	})
+
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, "campus-stale-parent", rows[0].ID)
+}
+
+func TestPublicFoodRepo_ListPublishedCampusUsesActiveCanteenParent(t *testing.T) {
+	db := setupPublicFoodRepoTestDB(t)
+	now := time.Now().UTC()
+	oldCampusID := "campus-old"
+	canteenID := "canteen-current"
+	require.NoError(t, db.Exec(`
+		INSERT INTO school_canteens (id, school_id, campus_id, name, status)
+		VALUES (?, ?, ?, ?, 'active')
+	`, canteenID, "school-current", "campus-current", "当前食堂").Error)
+	require.NoError(t, db.Create(&domain.PublicFoodItem{
+		ID:           "campus-authoritative-parent",
+		UserID:       "user-1",
+		FoodName:     "目录父级菜品",
+		Status:       "published",
+		Type:         "campus",
+		IsCampusFood: true,
+		CampusID:     &oldCampusID,
+		CanteenID:    &canteenID,
+		PublishedAt:  &now,
+		CreatedAt:    &now,
+	}).Error)
+
+	r := NewPublicFoodRepo(db)
+	currentRows, err := r.ListPublished(context.Background(), ListFilter{
+		Type: "campus", CampusID: "campus-current", Limit: 10,
+	})
+	require.NoError(t, err)
+	require.Len(t, currentRows, 1)
+
+	oldRows, err := r.ListPublished(context.Background(), ListFilter{
+		Type: "campus", CampusID: oldCampusID, Limit: 10,
+	})
+	require.NoError(t, err)
+	require.Empty(t, oldRows)
+}
+
+func TestPublicFoodRepo_ListPublishedCampusFallsBackWhenCanteenParentIsNull(t *testing.T) {
+	db := setupPublicFoodRepoTestDB(t)
+	now := time.Now().UTC()
+	campusID := "campus-fallback"
+	canteenID := "canteen-without-campus"
+	require.NoError(t, db.Exec(`
+		INSERT INTO school_canteens (id, school_id, campus_id, name, status)
+		VALUES (?, ?, NULL, ?, 'active')
+	`, canteenID, "school-current", "待补校区食堂").Error)
+	require.NoError(t, db.Create(&domain.PublicFoodItem{
+		ID:           "campus-null-parent-fallback",
+		UserID:       "user-1",
+		FoodName:     "历史校区菜品",
+		Status:       "published",
+		Type:         "campus",
+		IsCampusFood: true,
+		CampusID:     &campusID,
+		CanteenID:    &canteenID,
+		PublishedAt:  &now,
+		CreatedAt:    &now,
+	}).Error)
+
+	rows, err := NewPublicFoodRepo(db).ListPublished(context.Background(), ListFilter{
+		Type: "campus", CampusID: campusID, Limit: 10,
+	})
+
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, "campus-null-parent-fallback", rows[0].ID)
+}
+
 func TestPublicFoodRepo_ListPublishedCampusSorts(t *testing.T) {
 	db := setupPublicFoodRepoTestDB(t)
 	seedPublicFoodItems(t, db)
@@ -408,6 +524,33 @@ func TestPublicFoodRepo_ListPublishedCampusSorts(t *testing.T) {
 			require.Equal(t, tt.secondID, rows[1].ID)
 		})
 	}
+}
+
+func TestPublicFoodRepo_ListPublishedStrictCampusHotUsesCombinedEngagement(t *testing.T) {
+	db := setupPublicFoodRepoTestDB(t)
+	now := time.Now().UTC()
+	items := []domain.PublicFoodItem{
+		{
+			ID: "campus-hot-low-engagement", UserID: "user-1", FoodName: "低互动菜品",
+			Status: "published", Type: "campus", IsCampusFood: true,
+			LikeCount: 10, CollectionCount: 1, PublishedAt: &now, CreatedAt: &now,
+		},
+		{
+			ID: "campus-hot-high-engagement", UserID: "user-2", FoodName: "高互动菜品",
+			Status: "published", Type: "campus", IsCampusFood: true,
+			LikeCount: 8, CollectionCount: 5, PublishedAt: &now, CreatedAt: &now,
+		},
+	}
+	require.NoError(t, db.Create(&items).Error)
+
+	rows, err := NewPublicFoodRepo(db).ListPublished(context.Background(), ListFilter{
+		Type: "campus", SortBy: "hot", Limit: 10,
+	})
+
+	require.NoError(t, err)
+	require.Len(t, rows, 2)
+	require.Equal(t, "campus-hot-high-engagement", rows[0].ID)
+	require.Equal(t, "campus-hot-low-engagement", rows[1].ID)
 }
 
 func TestPublicFoodRepo_GetItemReturnsSchoolLogoURL(t *testing.T) {
