@@ -17,6 +17,7 @@ import {
 import { withAuth } from '../../../utils/withAuth'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
+import { openPetSettings } from '../../../utils/pet-navigation'
 import { PetAvatar } from '../../../components/PetAvatar'
 import { PetMarkdown } from './pet-markdown'
 import './index.scss'
@@ -316,11 +317,10 @@ function PetChatPage() {
   return (
     <View className={`pet-chat-page ${scheme === 'dark' ? 'pet-chat-page--dark' : ''}`}>
       <View className='pet-chat-topbar'>
-        <View className='pet-chat-identity'>
+        <View className='pet-chat-identity' onClick={openPetSettings}>
           <PetAvatar pet={petSummary?.pet} size={72} mood={petSummary?.status?.mood} state={petSummary?.status?.state} />
           <View className='pet-chat-identity-copy'>
             <Text className='pet-chat-identity-name'>{petName}</Text>
-            <Text className='pet-chat-identity-status'>{busy ? '正在整理你的记录' : '饮食与训练陪伴助手'}</Text>
           </View>
         </View>
         <View className='pet-chat-top-actions'>
