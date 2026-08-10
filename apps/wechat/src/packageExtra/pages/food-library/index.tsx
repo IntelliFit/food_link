@@ -35,17 +35,22 @@ const CACHE_DURATION = 5 * 60 * 1000
 type TabMode = 'all' | 'campus' | 'collections' | 'mine'
 const RECORD_TEXT_LIBRARY_SELECTION_KEY = 'record_text_library_selection'
 
-function formatCampusPrice(item: PublicFoodLibraryItem): string {
-  if (item.price_type === 'range' && item.price_min != null && item.price_max != null) {
-    return `${item.price_min}-${item.price_max}元`
-  }
-  if (item.price == null || item.price <= 0) return '价格待补充'
-  const unit = item.price_unit || '元/份'
-  return `${item.price}${unit.replace(/^\d+/, '')}`
-}
-
 function campusLocation(item: PublicFoodLibraryItem): string {
-  return item.campus_location_text || [item.school_name, item.campus_name, item.canteen_name, item.floor, item.window_name].filter(Boolean).join(' · ')
+  const parts = item.campus_location_text
+    ? item.campus_location_text.split(/\s*·\s*/)
+    : [item.school_name, item.campus_name, item.canteen_name, item.floor, item.window_name]
+  const seen = new Set<string>()
+
+  return parts
+    .map(part => String(part || '').trim())
+    .filter((part) => {
+      if (!part) return false
+      const key = part.toLocaleLowerCase()
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+    .join(' · ')
 }
 
 function isCampusFoodItem(item: PublicFoodLibraryItem): boolean {
@@ -761,6 +766,8 @@ function FoodLibraryPage() {
           ) : (
           displayList.map((item, index) => {
             const isOwner = Boolean(currentUserId && item.user_id === currentUserId)
+            const campusFood = isCampusFoodItem(item)
+            const officialAuthor = !String(item.user_id || '').trim() && item.author?.nickname === '食探官方'
             return (
               <View
                 key={item.id}
@@ -780,34 +787,38 @@ function FoodLibraryPage() {
                     {item.suitable_for_fat_loss && (
                       <View className='fat-loss-badge'>适合减脂</View>
                     )}
-                    {isCampusFoodItem(item) && (
+                    {campusFood && (
                       <View className='campus-food-badge'>校园食堂</View>
                     )}
                   </View>
                   <View className='food-info'>
                     <Text className='food-title'>{item.food_name || item.description || '健康餐'}</Text>
-                    {item.description && item.food_name && (
+                    {item.description && item.food_name && !campusFood && (
                       <Text className='description-text'>{item.description}</Text>
                     )}
-                    {item.merchant_name && (
+                    {item.merchant_name && !campusFood && (
                       <View className='food-merchant'>
                         <Text className='merchant-icon iconfont icon-shiwu' />
                         <Text className='merchant-name'>{item.merchant_name}</Text>
                       </View>
                     )}
-                    {isCampusFoodItem(item) && (
+                    {campusFood && (
                       <View className='campus-food-meta'>
                         <Text className='campus-food-location'>{campusLocation(item) || '校园食堂'}</Text>
-                        <Text className='campus-food-price'>{formatCampusPrice(item)}</Text>
-                        <Text className='campus-food-nutrition'>蛋白 {item.total_protein.toFixed(0)}g</Text>
+                        <View className='campus-food-summary'>
+                          <Text className='campus-food-nutrition'>蛋白 {item.total_protein.toFixed(0)}g</Text>
+                          <Text className='campus-food-calories'>{item.total_calories.toFixed(0)} kcal</Text>
+                        </View>
                       </View>
                     )}
-                    <Text className='food-calories'>{item.total_calories.toFixed(0)} kcal</Text>
+                    {!campusFood && (
+                      <Text className='food-calories'>{item.total_calories.toFixed(0)} kcal</Text>
+                    )}
                   </View>
                 </View>
                 <View className='food-footer'>
                   <View className='food-author'>
-                    {item.author?.avatar ? (
+                    {!officialAuthor && item.author?.avatar ? (
                       <View
                         className='author-avatar'
                         onClick={(e) => {
@@ -819,11 +830,11 @@ function FoodLibraryPage() {
                       >
                         <Image className='author-avatar-img' src={item.author.avatar} />
                       </View>
-                    ) : (
+                    ) : !officialAuthor ? (
                       <View className='author-avatar' />
-                    )}
+                    ) : null}
                     <Text
-                      className='author-name'
+                      className={`author-name ${officialAuthor ? 'author-name--official' : ''}`}
                       onClick={(e) => {
                         e.stopPropagation()
                         if (item.author?.id) {

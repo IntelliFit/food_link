@@ -1,4 +1,8 @@
 // 公共食物库列表页样式
+$food-library-font-large: 30rpx;
+$food-library-font-body: 26rpx;
+$food-library-font-meta: 22rpx;
+
 .food-library-page {
   height: 100vh;
   background: #f9fafb;
@@ -15,7 +19,7 @@
 
 .pick-mode-title {
   display: block;
-  font-size: 30rpx;
+  font-size: $food-library-font-large;
   font-weight: 700;
   color: #0f172a;
 }
@@ -23,34 +27,34 @@
 .pick-mode-subtitle {
   display: block;
   margin-top: 8rpx;
-  font-size: 24rpx;
+  font-size: $food-library-font-meta;
   color: #475569;
   line-height: 1.5;
 }
 
 // ========== 骨架屏样式 ==========
 .skeleton-container {
-  padding: 0 32rpx;
+  padding: 0 24rpx;
 }
 
 .skeleton-food-card {
   background: #fff;
-  border-radius: 24rpx;
+  border-radius: 20rpx;
   overflow: hidden;
-  margin-bottom: 24rpx;
+  margin-bottom: 16rpx;
   box-shadow: 0 2rpx 16rpx rgb(0 0 0 / 4%);
 }
 
 .skeleton-main {
   display: flex;
-  padding: 24rpx;
-  gap: 20rpx;
+  padding: 18rpx;
+  gap: 16rpx;
 }
 
 .skeleton-image {
-  width: 220rpx;
-  height: 220rpx;
-  border-radius: 16rpx;
+  width: 176rpx;
+  height: 176rpx;
+  border-radius: 14rpx;
   flex-shrink: 0;
   background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
   background-size: 200% 100%;
@@ -68,7 +72,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16rpx 24rpx;
+  padding: 12rpx 18rpx;
   border-top: 1rpx solid #f3f4f6;
 }
 
@@ -113,7 +117,7 @@
 
 .tab-item {
   padding: 20rpx 28rpx;
-  font-size: 28rpx;
+  font-size: $food-library-font-body;
   font-weight: 500;
   color: #6b7280;
   margin-bottom: -1rpx;
@@ -164,7 +168,7 @@
 .search-input {
   flex: 1;
   height: 100%;
-  font-size: 28rpx;
+  font-size: $food-library-font-body;
   min-width: 0;
 }
 
@@ -172,7 +176,7 @@
   padding: 0 32rpx;
   height: 64rpx;
   line-height: 64rpx;
-  font-size: 28rpx;
+  font-size: $food-library-font-body;
   background: #5cb896;
   color: #fff;
   border-radius: 12rpx;
@@ -194,7 +198,7 @@
 }
 
 .sort-item {
-  font-size: 28rpx;
+  font-size: $food-library-font-body;
   color: #6a7282;
   padding: 8rpx 0;
   position: relative;
@@ -231,7 +235,7 @@
 }
 
 .sort-filter-text {
-  font-size: 26rpx;
+  font-size: $food-library-font-body;
   color: #6a7282;
 }
 
@@ -255,7 +259,7 @@
 }
 
 .filter-dropdown-label {
-  font-size: 28rpx;
+  font-size: $food-library-font-body;
   color: #6a7282;
   font-weight: 500;
   flex-shrink: 0;
@@ -271,7 +275,7 @@
   padding: 12rpx 24rpx;
   background: #f3f4f6;
   border-radius: 20rpx;
-  font-size: 26rpx;
+  font-size: $food-library-font-meta;
   color: #364153;
   transition: all 0.2s ease;
 
@@ -292,28 +296,28 @@
 }
 
 .list-content {
-  padding: 24rpx 32rpx 200rpx;
+  padding: 18rpx 24rpx 168rpx;
 }
 
 // 食物卡片
 .food-card {
   background: #fff;
-  border-radius: 24rpx;
+  border-radius: 20rpx;
   overflow: hidden;
-  margin-bottom: 24rpx;
+  margin-bottom: 16rpx;
   box-shadow: 0 2rpx 8rpx rgb(0 0 0 / 6%);
 }
 
 .food-card-main {
   display: flex;
-  padding: 24rpx;
-  gap: 20rpx;
+  padding: 18rpx;
+  gap: 16rpx;
 }
 
 .food-image-wrap {
-  width: 220rpx;
-  height: 220rpx;
-  border-radius: 16rpx;
+  width: 176rpx;
+  height: 176rpx;
+  border-radius: 14rpx;
   background: linear-gradient(135deg, #d0fae5 0%, #cbfbf1 100%);
   position: relative;
   flex-shrink: 0;
@@ -323,7 +327,7 @@
 .food-image {
   width: 100%;
   height: 100%;
-  border-radius: 16rpx;
+  border-radius: 14rpx;
 }
 
 .food-image-placeholder {
@@ -332,42 +336,42 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 28rpx;
+  font-size: $food-library-font-body;
   color: #9ca3af;
 }
 
 .card-badge-latest {
   position: absolute;
-  top: 12rpx;
-  left: 12rpx;
+  top: 8rpx;
+  left: 8rpx;
   background: #5cb896;
   color: #fff;
-  font-size: 20rpx;
-  padding: 4rpx 12rpx;
+  font-size: $food-library-font-meta;
+  padding: 2rpx 8rpx;
   border-radius: 8rpx;
   z-index: 2;
 }
 
 .fat-loss-badge {
   position: absolute;
-  top: 12rpx;
-  right: 12rpx;
+  top: 42rpx;
+  right: 8rpx;
   background: #5cb896;
   color: #fff;
-  font-size: 20rpx;
-  padding: 4rpx 12rpx;
+  font-size: $food-library-font-meta;
+  padding: 2rpx 8rpx;
   border-radius: 8rpx;
   z-index: 2;
 }
 
 .campus-food-badge {
   position: absolute;
-  right: 12rpx;
-  bottom: 12rpx;
-  padding: 6rpx 12rpx;
+  right: 8rpx;
+  bottom: 8rpx;
+  padding: 4rpx 10rpx;
   background: rgba(20, 184, 166, 0.92);
   color: #fff;
-  font-size: 20rpx;
+  font-size: $food-library-font-meta;
   border-radius: 999rpx;
   font-weight: 700;
   z-index: 2;
@@ -375,36 +379,45 @@
 
 .campus-food-meta {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10rpx;
-  margin: 8rpx 0 36rpx;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6rpx;
+  margin-top: 4rpx;
 }
 
 .campus-food-location {
-  width: 100%;
-  font-size: 22rpx;
-  line-height: 32rpx;
+  font-size: $food-library-font-meta;
+  line-height: 30rpx;
   color: #64748b;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.campus-food-price,
+.campus-food-summary {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  min-width: 0;
+}
+
 .campus-food-nutrition {
-  font-size: 22rpx;
-  line-height: 30rpx;
-  padding: 4rpx 10rpx;
-  border-radius: 10rpx;
+  font-size: $food-library-font-meta;
+  line-height: 28rpx;
+  padding: 2rpx 8rpx;
+  border-radius: 8rpx;
   background: #ecfdf5;
   color: #047857;
   font-weight: 700;
+  white-space: nowrap;
 }
 
-.campus-food-price {
-  background: #ecfdf5;
-  color: #047857;
+.campus-food-calories {
+  margin-left: auto;
+  color: #5cb896;
+  font-size: $food-library-font-body;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 .food-info {
@@ -413,30 +426,29 @@
   flex-direction: column;
   min-width: 0;
   position: relative;
-  padding-bottom: 4rpx;
 }
 
 .food-title {
-  font-size: 30rpx;
+  font-size: $food-library-font-large;
   font-weight: 700;
   color: #1e2939;
-  line-height: 42rpx;
+  line-height: 40rpx;
   display: -webkit-box;
   -webkit-line-clamp: 1;
   -webkit-box-orient: vertical;
   overflow: hidden;
-  margin-bottom: 8rpx;
+  margin-bottom: 2rpx;
 }
 
 .description-text {
-  font-size: 26rpx;
+  font-size: $food-library-font-body;
   color: #6b7280;
-  line-height: 36rpx;
+  line-height: 34rpx;
   display: -webkit-box;
   -webkit-line-clamp: 1;
   -webkit-box-orient: vertical;
   overflow: hidden;
-  margin-bottom: 8rpx;
+  margin-bottom: 2rpx;
 }
 
 .food-merchant {
@@ -447,12 +459,12 @@
 }
 
 .merchant-icon {
-  font-size: 22rpx;
+  font-size: $food-library-font-meta;
   color: #5cb896;
 }
 
 .merchant-name {
-  font-size: 22rpx;
+  font-size: $food-library-font-meta;
   color: #5cb896;
   background: #ecfdf5;
   padding: 4rpx 12rpx;
@@ -463,7 +475,7 @@
   position: absolute;
   right: 0;
   bottom: 0;
-  font-size: 28rpx;
+  font-size: $food-library-font-body;
   color: #5cb896;
   font-weight: 600;
 }
@@ -484,7 +496,7 @@
 }
 
 .rating-text {
-  font-size: 22rpx;
+  font-size: $food-library-font-meta;
   color: #f59e0b;
   font-weight: 600;
 }
@@ -505,7 +517,7 @@
 
 .location-text {
   flex: 1;
-  font-size: 24rpx;
+  font-size: $food-library-font-meta;
   color: #6a7282;
   line-height: 34rpx;
   display: -webkit-box;
@@ -525,7 +537,7 @@
   background: #f3f4f6;
   padding: 6rpx 16rpx;
   border-radius: 8rpx;
-  font-size: 22rpx;
+  font-size: $food-library-font-meta;
   color: #6a7282;
 }
 
@@ -533,19 +545,19 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16rpx 24rpx;
+  padding: 12rpx 18rpx;
   border-top: 1rpx solid #f3f4f6;
 }
 
 .food-author {
   display: flex;
   align-items: center;
-  gap: 12rpx;
+  gap: 8rpx;
 }
 
 .author-avatar {
-  width: 48rpx;
-  height: 48rpx;
+  width: 36rpx;
+  height: 36rpx;
   border-radius: 50%;
   background: #e5e7eb;
   overflow: hidden;
@@ -557,19 +569,23 @@
 }
 
 .author-name {
-  font-size: 24rpx;
+  font-size: $food-library-font-meta;
   color: #6a7282;
+}
+
+.author-name--official {
+  font-weight: 600;
 }
 
 .food-stats {
   display: flex;
-  gap: 24rpx;
+  gap: 16rpx;
 }
 
 .stat-item {
   display: flex;
   align-items: center;
-  gap: 8rpx;
+  gap: 4rpx;
 }
 
 .stat-icon {
@@ -586,7 +602,7 @@
 }
 
 .stat-count {
-  font-size: 24rpx;
+  font-size: $food-library-font-meta;
   color: #6a7282;
 }
 
@@ -611,7 +627,7 @@
 }
 
 .empty-text {
-  font-size: 28rpx;
+  font-size: $food-library-font-body;
   color: #6a7282;
   margin-bottom: 32rpx;
 }
@@ -619,7 +635,7 @@
 .empty-btn {
   background: #5cb896;
   color: #fff;
-  font-size: 28rpx;
+  font-size: $food-library-font-body;
   border-radius: 12rpx;
   padding: 16rpx 48rpx;
   display: inline-block;
@@ -634,7 +650,7 @@
 }
 
 .loading-text {
-  font-size: 28rpx;
+  font-size: $food-library-font-body;
   color: #6a7282;
 }
 
@@ -678,13 +694,13 @@
 
 .login-tip-text {
   display: block;
-  font-size: 28rpx;
+  font-size: $food-library-font-body;
   color: #6a7282;
   margin-bottom: 24rpx;
 }
 
 .login-tip-btn {
-  font-size: 28rpx;
+  font-size: $food-library-font-body;
   color: #4a9e7f;
   background: #ecfdf5;
   border-radius: 12rpx;
@@ -696,7 +712,7 @@
 .feedback-bar {
   padding: 32rpx 0 48rpx;
   text-align: center;
-  font-size: 26rpx;
+  font-size: $food-library-font-meta;
   line-height: 40rpx;
 }
 
@@ -787,11 +803,6 @@
   .login-tip-btn {
     background: rgb(92 184 150 / 13%);
     color: #6ee7b7;
-  }
-
-  .campus-food-price {
-    background: rgb(249 115 22 / 14%);
-    color: #fdba74;
   }
 
   .taste-rating {

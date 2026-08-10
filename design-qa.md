@@ -54,6 +54,29 @@ final result: passed
 
 ---
 
+# 公共食物库紧凑校园卡片设计 QA
+
+- 源视觉真值：`/var/folders/dl/j1hxj3fs3czd7lt458p170t80000gn/T/codex-clipboard-778bc45e-76f0-4d05-92e2-e89876bb3fa5.png`、`/var/folders/dl/j1hxj3fs3czd7lt458p170t80000gn/T/codex-clipboard-db17a72a-f552-4cf4-b8e0-0d792bb894ab.png`
+- 验证环境：微信开发者工具模拟器，登录用户，公共食物库浅色主题
+
+## Findings
+
+- 校园卡片正文只保留菜品名、学校/食堂/楼层位置、蛋白和热量；重复的食堂商户标签、第二行详细名称与价格已删除。
+- 校园位置文本会去除完全相同的重复片段，并继续用单行省略保护较长学校、食堂与窗口信息。
+- 页面正文统一为 30rpx、26rpx、22rpx 三档文字字号；iconfont 的图形尺寸独立于文字字号体系。
+- 卡片图片从 220rpx 缩至 176rpx，卡片内边距从 24rpx 缩至 18rpx，卡间距从 24rpx 缩至 16rpx，作者栏同步压缩。
+- “食探官方”只显示文字，不渲染头像或空头像占位；普通用户仍保留头像与昵称。
+- 运行态读取到 50 张校园卡片、50 行位置、50 行营养摘要、50 个官方文字署名、0 个作者头像；首卡约 367 × 138 CSS px，图片约 91 × 91 CSS px。
+- 运行态切换“校园食堂”标签成功，错误事件为 0；TypeScript、全量 ESLint、31 套/108 条 Jest、Sass 与 `git diff --check` 均通过。
+
+## Blocking issue
+
+- 微信开发者工具的 `App.captureScreenshot` 在当前会话持续返回 `fail to capture screenshot`。因此无法生成实现截图，也无法按 Product Design 要求把源图与实现图合成同视口并排视觉对比；本轮视觉截图 QA 标记为 blocked，节点、尺寸与交互验证已完成。
+
+final result: blocked
+
+---
+
 # 分析页双模式主卡区分设计 QA
 
 - 均衡模式：`/private/tmp/foodlink-balanced-stats-light-card.png`
