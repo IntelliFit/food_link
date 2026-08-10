@@ -12,8 +12,6 @@ import {
   deletePublicFoodLibraryComment,
   submitStructuredFeedback,
   showUnifiedApiError,
-  type CampusFoodMetric,
-  type CampusRelatedFeedItem,
   type Nutrients,
   type PublicFoodLibraryItem,
   type PublicFoodLibraryComment,
@@ -181,11 +179,8 @@ function FoodLibraryDetailPage() {
   const [submitting, setSubmitting] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
-  const [showMicronutrients, setShowMicronutrients] = useState(true)
+  const [showMicronutrients, setShowMicronutrients] = useState(false)
   const [contributingImages, setContributingImages] = useState(false)
-  const [campusMetrics, setCampusMetrics] = useState<CampusFoodMetric>({})
-  const [similarItems, setSimilarItems] = useState<PublicFoodLibraryItem[]>([])
-  const [relatedFeeds, setRelatedFeeds] = useState<CampusRelatedFeedItem[]>([])
   const pollTimerRef = useRef<NodeJS.Timeout | null>(null)
   const sceneRef = useRef(router.params.scene || '')
 
@@ -232,26 +227,17 @@ function FoodLibraryDetailPage() {
   const loadDetail = useCallback(async () => {
     setLoading(true)
     setCurrentImageIndex(0)
-    setCampusMetrics({})
-    setSimilarItems([])
-    setRelatedFeeds([])
     try {
       const shouldPreferCampus = sceneRef.current === 'campus'
       if (shouldPreferCampus) {
         const detail = await getCampusFoodDetail(itemId)
         setItem({ ...detail.item, ...detail.metrics })
-        setCampusMetrics(detail.metrics || {})
-        setSimilarItems(detail.similar_items || [])
-        setRelatedFeeds(detail.related_feeds || [])
         return
       }
       const data = await getPublicFoodLibraryItem(itemId)
       if (isCampusFoodItem(data)) {
         const detail = await getCampusFoodDetail(itemId)
         setItem({ ...detail.item, ...detail.metrics })
-        setCampusMetrics(detail.metrics || {})
-        setSimilarItems(detail.similar_items || [])
-        setRelatedFeeds(detail.related_feeds || [])
         return
       }
       setItem(data)
@@ -554,7 +540,8 @@ function FoodLibraryDetailPage() {
     }
   }
 
-  const pageClassName = `food-detail-page ${scheme === 'dark' ? 'food-detail-page--dark' : ''}`
+  const campusScene = sceneRef.current === 'campus' || Boolean(item && isCampusFoodItem(item))
+  const pageClassName = `food-detail-page ${campusScene ? 'food-detail-page--campus' : ''} ${scheme === 'dark' ? 'food-detail-page--dark' : ''}`
 
   if (loading) {
     return (
@@ -586,18 +573,19 @@ function FoodLibraryDetailPage() {
           </View>
         </View>
 
-        {/* 商家信息骨架 */}
-        <View className='skeleton-card'>
-          <View className='skeleton-block text-block' style={{ width: '30%', marginBottom: '32rpx', height: '40rpx' }} />
-          <View className='skeleton-row'>
-            <View className='skeleton-block' style={{ width: '40rpx', height: '40rpx' }} />
-            <View className='skeleton-block text-block' style={{ flex: 1, marginBottom: 0 }} />
+        {!campusScene && (
+          <View className='skeleton-card'>
+            <View className='skeleton-block text-block' style={{ width: '30%', marginBottom: '32rpx', height: '40rpx' }} />
+            <View className='skeleton-row'>
+              <View className='skeleton-block' style={{ width: '40rpx', height: '40rpx' }} />
+              <View className='skeleton-block text-block' style={{ flex: 1, marginBottom: 0 }} />
+            </View>
+            <View className='skeleton-row'>
+              <View className='skeleton-block' style={{ width: '40rpx', height: '40rpx' }} />
+              <View className='skeleton-block text-block' style={{ flex: 1, marginBottom: 0 }} />
+            </View>
           </View>
-          <View className='skeleton-row'>
-            <View className='skeleton-block' style={{ width: '40rpx', height: '40rpx' }} />
-            <View className='skeleton-block text-block' style={{ flex: 1, marginBottom: 0 }} />
-          </View>
-        </View>
+        )}
 
         {/* 评论骨架 */}
         <View className='skeleton-card'>
@@ -637,8 +625,6 @@ function FoodLibraryDetailPage() {
     : (item.image_path ? [item.image_path] : [])
   const currentUserId = String(Taro.getStorageSync('user_id') || '').trim()
   const isOwner = Boolean(currentUserId && item.user_id === currentUserId)
-  const campusProteinPerYuan = campusMetrics.protein_per_yuan ?? item.protein_per_yuan
-  const campusPricePer100Kcal = campusMetrics.price_per_100_kcal ?? item.price_per_100_kcal
   const analyzing = isAnalyzingItem(item)
   const analysisFailed = isAnalysisFailedItem(item)
   const nutritionPending = needsNutritionUpdate(item)
@@ -719,18 +705,6 @@ function FoodLibraryDetailPage() {
       )}
     </View>
   )
-  const renderCampusMiniCard = (card: PublicFoodLibraryItem) => (
-    <View key={card.id} className='campus-related-card' onClick={() => Taro.navigateTo({ url: `${extraPkgUrl('/pages/food-library-detail/index')}?id=${card.id}&scene=campus` })}>
-      {card.image_path ? (
-        <Image className='campus-related-image' src={card.image_path} mode='aspectFill' />
-      ) : (
-        <View className='campus-related-image campus-related-image--empty'>暂无图片</View>
-      )}
-      <Text className='campus-related-title'>{card.food_name || '未命名菜品'}</Text>
-      <Text className='campus-related-meta'>{fmtPriceDisplay(card)} · {hasNutrition(card) ? `${Math.round(card.total_calories || 0)} kcal` : '营养待更新'}</Text>
-    </View>
-  )
-
   return (
     <View className={pageClassName}>
       {/* 图片（支持多图轮播） */}
@@ -799,6 +773,22 @@ function FoodLibraryDetailPage() {
         {item.insight && (
           <Text className='info-insight'>{item.insight}</Text>
         )}
+        {isCampusFoodItem(item) && (
+          <View className='campus-summary'>
+            <View className='campus-summary-location'>
+              <Text className='iconfont icon-dizhi campus-location-icon' />
+              <Text className='campus-location'>{getCampusLocationText(item)}</Text>
+            </View>
+            <View className='campus-price-row'>
+              <Text className='campus-price'>{fmtPriceDisplay(item)}</Text>
+              <Text className='campus-portion'>{item.portion_description || '约 1 份'}</Text>
+            </View>
+            <Text className='campus-price-date'>价格更新于 {formatDateOnly(item.price_collected_at)}</Text>
+            {analyzing && <Text className='campus-analysis-tip'>营养信息正在精确分析，完成后自动更新。</Text>}
+            {nutritionPending && <Text className='campus-analysis-tip'>营养信息待更新，暂不建议一键记录。</Text>}
+            {analysisFailed && <Text className='campus-analysis-tip campus-analysis-tip--error'>营养分析失败，可通过纠错入口反馈。</Text>}
+          </View>
+        )}
         <View className='nutrients-row'>
           <View className='nutrient-item'>
             <Text className='nutrient-value'>{nutritionPending ? '--' : item.total_calories.toFixed(0)}</Text>
@@ -842,7 +832,7 @@ function FoodLibraryDetailPage() {
             )}
           </View>
         )}
-        <View className='author-row'>
+        {!isCampusFoodItem(item) && <View className='author-row'>
           {item.author?.avatar ? (
             <View className='author-avatar'>
               <Image className='author-avatar-img' src={item.author.avatar} />
@@ -856,108 +846,11 @@ function FoodLibraryDetailPage() {
             <Text className='author-name'>{item.author?.nickname || '用户'}</Text>
             <Text className='publish-time'>{formatTime(item.published_at)}</Text>
           </View>
-        </View>
+        </View>}
       </View>
 
-      {/* 校园食堂信息 */}
-      {isCampusFoodItem(item) && (
-        <View className='campus-card'>
-          {(() => {
-            return (
-              <>
-          <View className='campus-header-row'>
-            <Text className='campus-badge'>校园食堂</Text>
-            <Text className={`campus-fat-loss ${item.suitable_for_fat_loss ? 'active' : ''}`}>
-              {item.suitable_for_fat_loss ? '适合减脂' : '不标记减脂'}
-            </Text>
-            {item.portion_description && (
-              <Text className='campus-portion'>{item.portion_description}</Text>
-            )}
-          </View>
-          <View className='campus-info-grid'>
-            <View className='campus-info-cell'>
-              <Text className='campus-info-label'>学校</Text>
-              <View className='campus-info-value-row'>
-                <Text className='iconfont icon-dizhi campus-location-icon' />
-                <Text className='campus-info-value'>{item.school_name || '待补充'}</Text>
-              </View>
-            </View>
-            <View className='campus-info-cell'>
-              <Text className='campus-info-label'>食堂</Text>
-              <Text className='campus-info-value'>{item.canteen_name || '待补充'}</Text>
-            </View>
-            <View className='campus-info-cell'>
-              <Text className='campus-info-label'>楼层/窗口</Text>
-              <Text className='campus-info-value'>{[item.floor, item.window_name].filter(Boolean).join(' · ') || '待补充'}</Text>
-            </View>
-            <View className='campus-info-cell'>
-              <Text className='campus-info-label'>估算份量</Text>
-              <Text className='campus-info-value'>{item.portion_description || '约 1 份'}</Text>
-            </View>
-          </View>
-          <Text className='campus-location'>{getCampusLocationText(item)}</Text>
-          <View className='campus-price-row'>
-            <Text className='campus-price'>{fmtPriceDisplay(item)}</Text>
-            {!!campusProteinPerYuan && (
-              <Text className='campus-metric'>
-                蛋白质 {campusProteinPerYuan.toFixed(1)}g/元
-              </Text>
-            )}
-            {!!campusPricePer100Kcal && (
-              <Text className='campus-metric'>
-                {campusPricePer100Kcal.toFixed(2)}元/100kcal
-              </Text>
-            )}
-          </View>
-          <Text className='campus-price-date'>价格更新于 {formatDateOnly(item.price_collected_at)}</Text>
-          {analyzing && <Text className='campus-analysis-tip'>营养信息正在进行精确分析，完成后会自动补齐热量、宏量和 21 项微量营养。</Text>}
-          {nutritionPending && <Text className='campus-analysis-tip'>营养信息待更新，暂不建议一键记录。</Text>}
-          {analysisFailed && <Text className='campus-analysis-tip campus-analysis-tip--error'>营养分析失败，暂不建议一键记录，可通过纠错入口反馈。</Text>}
-              </>
-            )
-          })()}
-        </View>
-      )}
-
-      {isCampusFoodItem(item) && similarItems.length > 0 && (
-        <View className='campus-related-section'>
-          <View className='campus-section-head'>
-            <Text className='card-title'>同食堂相似菜品</Text>
-            <Text className='campus-section-subtitle'>同学校同食堂优先推荐</Text>
-          </View>
-          <ScrollView scrollX enhanced showScrollbar={false} className='campus-related-scroll'>
-            <View className='campus-related-list'>
-              {similarItems.map(renderCampusMiniCard)}
-            </View>
-          </ScrollView>
-        </View>
-      )}
-
-      {isCampusFoodItem(item) && relatedFeeds.length > 0 && (
-        <View className='campus-feed-section'>
-          <View className='campus-section-head'>
-            <Text className='card-title'>圈子相关动态</Text>
-            <Text className='campus-section-subtitle'>来自同食堂精选动态</Text>
-          </View>
-          {relatedFeeds.map(feed => (
-            <View key={feed.id} className='campus-feed-item' onClick={() => Taro.navigateTo({ url: `${extraPkgUrl('/pages/food-library-detail/index')}?id=${feed.id}&scene=campus` })}>
-              {feed.image_path ? (
-                <Image className='campus-feed-image' src={feed.image_path} mode='aspectFill' />
-              ) : (
-                <View className='campus-feed-image campus-feed-image--empty'>食堂</View>
-              )}
-              <View className='campus-feed-copy'>
-                <Text className='campus-feed-title'>{feed.food_name || '校园菜品动态'}</Text>
-                <Text className='campus-feed-meta'>{feed.campus_location || [feed.school_name, feed.canteen_name].filter(Boolean).join(' · ')}</Text>
-                <Text className='campus-feed-stats'>{Math.round(feed.total_calories || 0)} kcal · 蛋白 {Math.round(feed.total_protein || 0)}g · {feed.like_count} 赞</Text>
-              </View>
-            </View>
-          ))}
-        </View>
-      )}
-
       {/* 商家信息 */}
-      {(item.merchant_name || item.merchant_address || item.city) && (
+      {!isCampusFoodItem(item) && (item.merchant_name || item.merchant_address || item.city) && (
         <View className='merchant-card'>
           <Text className='card-title'>商家信息</Text>
           {item.merchant_name && (

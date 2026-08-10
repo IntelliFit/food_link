@@ -405,280 +405,6 @@
   }
 }
 
-// 校园食堂信息
-.campus-card {
-  background: #fff;
-  margin: 0 24rpx 24rpx;
-  border-radius: 32rpx;
-  padding: 32rpx 40rpx;
-  box-shadow: 0 2rpx 12rpx rgb(0 0 0 / 4%);
-}
-
-.campus-header-row {
-  display: flex;
-  align-items: center;
-  gap: 16rpx;
-  margin-bottom: 16rpx;
-}
-
-.campus-badge {
-  display: inline-block;
-  background: #f4faf8;
-  color: #047857;
-  font-size: 24rpx;
-  font-weight: 600;
-  padding: 6rpx 18rpx;
-  border-radius: 12rpx;
-}
-
-.campus-portion {
-  font-size: 28rpx;
-  color: #6b7280;
-}
-
-.campus-fat-loss {
-  font-size: 24rpx;
-  color: #94a3b8;
-  background: #f3f4f6;
-  padding: 6rpx 18rpx;
-  border-radius: 12rpx;
-
-  &.active {
-    color: #047857;
-    background: #dcfce7;
-  }
-}
-
-.campus-info-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16rpx;
-  margin: 22rpx 0;
-}
-
-.campus-info-cell {
-  background: #f9fafb;
-  border: 2rpx solid #eef2f7;
-  border-radius: 20rpx;
-  padding: 20rpx;
-  min-height: 104rpx;
-}
-
-.campus-info-label {
-  display: block;
-  font-size: 22rpx;
-  color: #94a3b8;
-  line-height: 30rpx;
-  margin-bottom: 8rpx;
-}
-
-.campus-info-value {
-  display: block;
-  font-size: 28rpx;
-  color: #111827;
-  font-weight: 600;
-  line-height: 38rpx;
-}
-
-.campus-info-value-row {
-  display: flex;
-  align-items: center;
-  gap: 10rpx;
-}
-
-.campus-location-icon {
-  font-size: 28rpx;
-  line-height: 1;
-  color: #9ca3af;
-  flex-shrink: 0;
-}
-
-.campus-location {
-  display: block;
-  font-size: 28rpx;
-  color: #374151;
-  line-height: 44rpx;
-  margin-bottom: 24rpx;
-}
-
-.campus-price-row {
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 16rpx;
-}
-
-.campus-price {
-  font-size: 44rpx;
-  font-weight: 700;
-  color: #047857;
-  line-height: 1;
-}
-
-.campus-metric {
-  font-size: 24rpx;
-  color: #9ca3af;
-  background: #f9fafb;
-  padding: 4rpx 12rpx;
-  border-radius: 8rpx;
-}
-
-.campus-price-date {
-  display: block;
-  margin-top: 14rpx;
-  font-size: 24rpx;
-  line-height: 34rpx;
-  color: #94a3b8;
-}
-
-.campus-analysis-tip {
-  display: block;
-  margin-top: 18rpx;
-  padding: 16rpx 20rpx;
-  border-radius: 16rpx;
-  background: #fff7ed;
-  color: #c2410c;
-  font-size: 24rpx;
-  line-height: 36rpx;
-
-  &--error {
-    background: #fef2f2;
-    color: #b91c1c;
-  }
-}
-
-.campus-related-section,
-.campus-feed-section {
-  background: #fff;
-  margin: 0 24rpx 24rpx;
-  border-radius: 32rpx;
-  padding: 32rpx 40rpx;
-  box-shadow: 0 2rpx 12rpx rgb(0 0 0 / 4%);
-}
-
-.campus-section-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 20rpx;
-  margin-bottom: 20rpx;
-
-  .card-title {
-    margin-bottom: 0;
-  }
-}
-
-.campus-section-subtitle {
-  flex-shrink: 0;
-  font-size: 24rpx;
-  color: #94a3b8;
-  line-height: 40rpx;
-}
-
-.campus-related-scroll {
-  width: 100%;
-  white-space: nowrap;
-}
-
-.campus-related-list {
-  display: flex;
-  gap: 20rpx;
-  padding-bottom: 4rpx;
-}
-
-.campus-related-card {
-  width: 220rpx;
-  flex: 0 0 220rpx;
-  background: #f9fafb;
-  border-radius: 22rpx;
-  overflow: hidden;
-  border: 2rpx solid #eef2f7;
-}
-
-.campus-related-image {
-  width: 220rpx;
-  height: 150rpx;
-  display: block;
-  background: #e5e7eb;
-}
-
-.campus-related-image--empty,
-.campus-feed-image--empty {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #94a3b8;
-  font-size: 24rpx;
-}
-
-.campus-related-title {
-  display: block;
-  padding: 16rpx 16rpx 6rpx;
-  font-size: 26rpx;
-  color: #111827;
-  font-weight: 700;
-  line-height: 34rpx;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.campus-related-meta {
-  display: block;
-  padding: 0 16rpx 16rpx;
-  font-size: 22rpx;
-  color: #64748b;
-  line-height: 30rpx;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.campus-feed-item {
-  display: flex;
-  gap: 20rpx;
-  padding: 22rpx 0;
-  border-bottom: 2rpx solid #f3f4f6;
-
-  &:last-child {
-    border-bottom: none;
-    padding-bottom: 0;
-  }
-}
-
-.campus-feed-image {
-  width: 128rpx;
-  height: 128rpx;
-  border-radius: 20rpx;
-  background: #e5e7eb;
-  flex-shrink: 0;
-}
-
-.campus-feed-copy {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 6rpx;
-}
-
-.campus-feed-title {
-  display: block;
-  color: #111827;
-  font-size: 30rpx;
-  font-weight: 700;
-  line-height: 40rpx;
-}
-
-.campus-feed-meta,
-.campus-feed-stats {
-  display: block;
-  color: #64748b;
-  font-size: 24rpx;
-  line-height: 34rpx;
-}
-
 // 商家信息
 .merchant-item {
   display: flex;
@@ -1867,3 +1593,270 @@
     color: #f2f7f4;
   }
 }
+
+/* campus-detail-typography:start */
+$campus-detail-font-title: 36rpx;
+$campus-detail-font-body: 28rpx;
+$campus-detail-font-meta: 24rpx;
+
+.food-detail-page--campus {
+  background: #f7f8f7;
+
+  // 校园详情只使用标题、正文、辅助信息三档文字；图标按轮廓独立设置。
+  .image-placeholder,
+  .image-contribution-title,
+  .image-contribution-hint,
+  .image-contribution-button,
+  .info-calories,
+  .info-description,
+  .info-insight,
+  .campus-location,
+  .nutrient-value,
+  .micronutrients-title,
+  .card-title,
+  .tag-item,
+  .notes-content,
+  .comment-name,
+  .comment-content,
+  .comment-reply-content,
+  .comments-empty,
+  .quick-comment-placeholder,
+  .action-btn,
+  .modal-close-icon,
+  .rating-label,
+  .comment-input,
+  .submit-btn,
+  .loading-text,
+  .action-sheet-label,
+  .action-sheet-cancel-text,
+  .more-icon {
+    font-size: $campus-detail-font-body;
+  }
+
+  .info-title,
+  .campus-price,
+  .modal-title {
+    font-size: $campus-detail-font-title;
+  }
+
+  .image-counter,
+  .fat-loss-badge,
+  .nutrient-label,
+  .micronutrients-status,
+  .micronutrients-toggle,
+  .micronutrient-label,
+  .micronutrient-value,
+  .campus-portion,
+  .campus-price-date,
+  .campus-analysis-tip,
+  .comments-count,
+  .comment-time,
+  .comment-action-reply,
+  .comment-reply-name,
+  .comment-reply-to,
+  .comment-reply-time,
+  .comment-reply-action,
+  .comment-reply-delete,
+  .action-badge,
+  .action-text,
+  .correction-bar,
+  .correction-hint,
+  .correction-link {
+    font-size: $campus-detail-font-meta;
+  }
+
+  .image-section {
+    height: 440rpx;
+    background: #eef1ef;
+  }
+
+  .info-card,
+  .tags-card,
+  .notes-card,
+  .comments-card,
+  .skeleton-card {
+    margin-right: 20rpx;
+    margin-left: 20rpx;
+    margin-bottom: 16rpx;
+    padding: 32rpx;
+    border: 2rpx solid #edf0ee;
+    border-radius: 24rpx;
+    box-shadow: none;
+  }
+
+  .info-card {
+    margin-top: -32rpx;
+  }
+
+  .info-header {
+    align-items: center;
+    margin-bottom: 16rpx;
+  }
+
+  .info-title {
+    line-height: 48rpx;
+  }
+
+  .info-calories-badge {
+    padding: 6rpx 14rpx;
+    border-radius: 12rpx;
+    background: transparent;
+  }
+
+  .info-description,
+  .info-insight {
+    margin-bottom: 16rpx;
+    line-height: 42rpx;
+  }
+
+  .campus-summary {
+    padding: 20rpx 0 24rpx;
+    border-top: 2rpx solid #edf0ee;
+  }
+
+  .campus-summary-location {
+    display: flex;
+    align-items: center;
+    gap: 10rpx;
+    margin-bottom: 16rpx;
+  }
+
+  .campus-location-icon {
+    flex-shrink: 0;
+    color: #9ca3af;
+    line-height: 1;
+  }
+
+  .campus-location {
+    min-width: 0;
+    margin: 0;
+    color: #4b5563;
+    line-height: 40rpx;
+  }
+
+  .campus-price-row {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 14rpx;
+  }
+
+  .campus-price {
+    color: #047857;
+    font-weight: 700;
+    line-height: 46rpx;
+  }
+
+  .campus-portion {
+    color: #6b7280;
+  }
+
+  .campus-price-date {
+    display: block;
+    margin-top: 8rpx;
+    color: #94a3b8;
+  }
+
+  .campus-analysis-tip {
+    display: block;
+    margin-top: 14rpx;
+    padding: 12rpx 16rpx;
+    border-radius: 12rpx;
+    background: #fff7ed;
+    color: #c2410c;
+    line-height: 34rpx;
+
+    &--error {
+      background: #fef2f2;
+      color: #b91c1c;
+    }
+  }
+
+  .nutrients-row {
+    margin: 0 0 24rpx;
+    padding: 24rpx 0;
+    border-color: #edf0ee;
+  }
+
+  .nutrient-item:not(:last-child)::after {
+    display: none;
+  }
+
+  .nutrient-value {
+    margin-bottom: 4rpx;
+    font-size: $campus-detail-font-body;
+  }
+
+  .micronutrients-panel {
+    margin: 0;
+    padding: 20rpx 0 0;
+    border: 0;
+    border-top: 2rpx solid #edf0ee;
+    border-radius: 0;
+    background: transparent;
+  }
+
+  .micronutrient-cell {
+    border: 0;
+    background: #f7f8f7;
+  }
+
+  .card-title {
+    margin-bottom: 20rpx;
+    padding-left: 0;
+
+    &::before {
+      display: none;
+    }
+  }
+
+  .comments-header {
+    margin-bottom: 20rpx;
+  }
+
+  .quick-comment-bar,
+  .comments-empty,
+  .comment-replies {
+    border-color: #edf0ee;
+    border-radius: 16rpx;
+    background: #f7f8f7;
+  }
+
+  .comment-item {
+    padding: 24rpx 0;
+  }
+
+  .bottom-bar {
+    border: 0;
+    border-top: 2rpx solid #edf0ee;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  &.food-detail-page--dark {
+    background: #101715;
+
+    .info-card,
+    .tags-card,
+    .notes-card,
+    .comments-card,
+    .skeleton-card {
+      border-color: rgb(255 255 255 / 8%);
+    }
+
+    .campus-summary,
+    .nutrients-row,
+    .micronutrients-panel,
+    .bottom-bar {
+      border-color: rgb(255 255 255 / 8%);
+    }
+
+    .micronutrient-cell,
+    .quick-comment-bar,
+    .comments-empty,
+    .comment-replies {
+      background: rgb(255 255 255 / 6%);
+    }
+  }
+}
+/* campus-detail-typography:end */
