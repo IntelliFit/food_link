@@ -86,11 +86,11 @@ describe('membership credit overview', () => {
 
     await waitFor(() => expect(screen.getByText('38')).toBeInTheDocument())
     expect(screen.getByText('今日可用')).toBeInTheDocument()
-    expect(screen.getByText('每日清零')).toBeInTheDocument()
+    expect(screen.getByText('每日清零 · 优先扣除')).toBeInTheDocument()
     expect(screen.getByText('奖励积分')).toBeInTheDocument()
     expect(screen.getByText('3')).toBeInTheDocument()
     expect(screen.getByText('长期保留')).toBeInTheDocument()
-    expect(screen.getByText('AI 使用时优先扣今日额度')).toBeInTheDocument()
+    expect(screen.queryByText('AI 使用时优先扣今日额度')).not.toBeInTheDocument()
     expect(container.querySelector('.progress-bar')).not.toBeInTheDocument()
     expect(container.querySelector('.segmented-progress')).not.toBeInTheDocument()
     expect(container.textContent).not.toMatch(/Lv\d|探味新芽/)
