@@ -18,10 +18,6 @@ import {
 import {
   getCurrentMembershipTier,
   getMembershipTierShortLabel,
-  getRewardLevelMeta,
-  getRewardLevelProgress,
-  formatRewardLevelRange,
-  type RewardLevelMeta,
 } from '../../utils/membership'
 import { extraPkgUrl } from '../../utils/subpackage-extra'
 import { useAppColorScheme } from '../../components/AppColorSchemeContext'
@@ -695,11 +691,6 @@ function ProfilePage() {
             const cUsed = membershipStatus?.daily_credits_used ?? 0
             const cSystemRemain = membershipStatus?.system_credits_remaining ?? Math.max(cMax - cUsed, 0)
             const cEarned = membershipStatus?.earned_credits_balance ?? 0
-            const systemProgressPct = cMax > 0 ? Math.min((cSystemRemain / cMax) * 100, 100) : 0
-            const rewardLevel = getRewardLevelMeta(cEarned)
-            const rewardProgressPct = getRewardLevelProgress(cEarned, rewardLevel)
-            const rewardRangeText = formatRewardLevelRange(cEarned, rewardLevel)
-            const systemAvailableText = cMax > 0 ? `可用 ${cSystemRemain}/${cMax}` : `可用 ${cSystemRemain}`
             const isTrial = !membershipStatus?.is_pro && !!membershipStatus?.trial_active
             const hasDoubleBenefits = !!membershipStatus?.early_user_paid_bonus_active || !!membershipStatus?.early_user_paid_bonus_eligible
             const currentTier = getCurrentMembershipTier(membershipStatus)
@@ -721,32 +712,22 @@ function ProfilePage() {
                   <Text className='card-badge'>{tierText}</Text>
                 </View>
                 <View className='card-body'>
-                  <View className='member-meter'>
-                    <View className='member-meter__head'>
-                      <Text className='member-meter__label'>系统可用（次日清0）</Text>
-                      <Text className='member-meter__value'>{systemAvailableText}</Text>
+                  <View className='credit-overview'>
+                    <View className='credit-overview__item'>
+                      <Text className='credit-overview__label'>今日可用</Text>
+                      <View className='credit-overview__value-row'>
+                        <Text className='credit-overview__value'>{cSystemRemain}</Text>
+                        <Text className='credit-overview__unit'>份</Text>
+                      </View>
+                      <Text className='credit-overview__meta'>每日清零 · 优先扣除</Text>
                     </View>
-                    <View className='progress-bar'>
-                      <View className='progress-inner' style={{ width: `${systemProgressPct}%` }} />
-                    </View>
-                  </View>
-
-                  <View className='member-meter'>
-                    <View className='member-meter__head'>
-                      <Text className='member-meter__label'>奖励积分（一直持有）</Text>
-                      <Text className='member-meter__value'>{`${rewardRangeText} · Lv${rewardLevel.level} ${rewardLevel.title}`}</Text>
-                    </View>
-                    <View className='segmented-progress'>
-                      {Array.from({ length: 10 }).map((_, i) => {
-                        const filledCount = Math.min(Math.max(Math.ceil(rewardProgressPct / 10), 0), 10)
-                        const isFilled = i < filledCount
-                        return (
-                          <View
-                            key={i}
-                            className={`segmented-progress__bar ${isFilled ? 'segmented-progress__bar--filled' : ''}`}
-                          />
-                        )
-                      })}
+                    <View className='credit-overview__item'>
+                      <Text className='credit-overview__label'>奖励积分</Text>
+                      <View className='credit-overview__value-row'>
+                        <Text className='credit-overview__value'>{cEarned}</Text>
+                        <Text className='credit-overview__unit'>积分</Text>
+                      </View>
+                      <Text className='credit-overview__meta'>长期保留</Text>
                     </View>
                   </View>
 

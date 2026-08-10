@@ -40,38 +40,15 @@
   font-weight: 850;
 }
 
-.reward-hero__level {
+.reward-hero__subtitle {
   position: relative;
   z-index: 1;
-  margin-top: 22px;
-}
-
-.reward-hero__level-text {
   display: block;
+  margin-top: 8px;
   font-size: 22px;
   line-height: 32px;
-  font-weight: 750;
-  color: rgba(255, 255, 255, 0.94);
-}
-
-.reward-hero__segments {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  height: 12px;
-  margin-top: 12px;
-}
-
-.reward-hero__seg {
-  flex: 1;
-  height: 100%;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.38);
-}
-
-.reward-hero__seg--filled {
-  background: #fbbf24;
-  box-shadow: 0 0 8px rgba(251, 191, 36, 0.32);
+  font-weight: 650;
+  color: rgba(255, 255, 255, 0.84);
 }
 
 .reward-hero__stats {
