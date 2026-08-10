@@ -433,7 +433,7 @@ func TestUpdateItemRejectsUnknownItem(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestUpdatePublishedItemMarksChangesPending(t *testing.T) {
+func TestUpdatePublishedItemKeepsPublishedWithoutReanalysis(t *testing.T) {
 	price := 8.0
 	repo := &fakeCatalogRepo{existingItem: &domain.CatalogItem{
 		ID: "item-1", BatchID: "batch-1", Status: "published", Name: "旧名称",
@@ -447,8 +447,41 @@ func TestUpdatePublishedItemMarksChangesPending(t *testing.T) {
 	})
 
 	require.NoError(t, err)
-	require.Equal(t, "changes_pending", repo.updatedItem.Status)
-	require.Equal(t, "changes_pending", item.Status)
+	require.Equal(t, "published", repo.updatedItem.Status)
+	require.Equal(t, "published", item.Status)
+}
+
+func TestPublishChangesPendingSyncsMetadataWithoutAnalysis(t *testing.T) {
+	price := 8.0
+	repo := &fakeCatalogRepo{existingItem: &domain.CatalogItem{
+		ID: "item-1", BatchID: "batch-1", Status: "changes_pending", EntryType: "dish", Name: "番茄炒饭",
+		OrganizationName: "清华大学", CanteenName: "紫荆园", PriceType: "fixed", Price: &price,
+	}}
+	svc := NewCatalogService(repo, nil)
+
+	item, err := svc.PublishItem(context.Background(), "admin-1", "item-1")
+
+	require.NoError(t, err)
+	require.NotNil(t, repo.updatedItem)
+	require.Equal(t, "published", repo.updatedItem.Status)
+	require.Equal(t, "published", item.Status)
+	require.Nil(t, repo.analysisPendingItem)
+}
+
+func TestUpdatePublishedItemRejectsRemovingRequiredClientFields(t *testing.T) {
+	publishedAt := time.Now()
+	repo := &fakeCatalogRepo{existingItem: &domain.CatalogItem{
+		ID: "item-1", BatchID: "batch-1", Status: "published", Name: "番茄炒饭",
+		OrganizationName: "清华大学", CanteenName: "紫荆园", PublishedAt: &publishedAt,
+	}}
+	svc := NewCatalogService(repo, nil)
+
+	_, err := svc.UpdateItem(context.Background(), "admin-1", "item-1", UpdateCatalogItemInput{
+		EntryType: "dish", Name: "", PriceType: "unknown", ServiceMode: "fixed_portion", WindowLayout: "standard",
+	})
+
+	require.ErrorContains(t, err, "必须保留名称和价格")
+	require.Nil(t, repo.updatedItem)
 }
 
 func TestUpdateItemRejectsChangesWhileAnalysisIsPending(t *testing.T) {

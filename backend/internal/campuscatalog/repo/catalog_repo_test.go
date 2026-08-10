@@ -59,6 +59,109 @@ func TestCompleteAnalyzedItemPublishesNutritionAndCatalogAtomically(t *testing.T
 	require.NotNil(t, catalog.AnalysisCompletedAt)
 }
 
+func TestUpdatePublishedItemSyncsMetadataWithoutChangingNutrition(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:"+uuid.NewString()+"?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&domain.CatalogItem{}, &publishedCatalogItem{}))
+
+	originalPrice := 12.0
+	updatedPrice := 15.0
+	now := time.Date(2026, 8, 10, 12, 0, 0, 0, time.UTC)
+	item := &domain.CatalogItem{
+		ID: uuid.NewString(), BatchID: uuid.NewString(), EntryType: "dish", Name: "番茄炒饭",
+		OrganizationName: "清华大学", AreaName: "校本部", CanteenName: "紫荆园", Floor: "1F", WindowName: "炒饭窗口",
+		PriceType: "fixed", Price: &originalPrice, PriceUnit: "元/份", PortionDescription: "1份",
+		ImagePaths: []string{"campus-food/old.jpg"}, CompletenessStatus: "complete", Status: "published",
+		PublishedAt: &now, UpdatedAt: &now,
+	}
+	require.NoError(t, db.Create(item).Error)
+	publicItem := &publishedCatalogItem{
+		ID: item.ID, FoodName: item.Name, ImagePaths: item.ImagePaths, Status: "published", Type: "campus",
+		TotalCalories: 420, TotalProtein: 12, TotalCarbs: 68, TotalFat: 11,
+		Items:      []map[string]any{{"name": "番茄炒饭", "micronutrient_analysis": "ai_precise_v1"}},
+		SchoolName: item.OrganizationName, CampusName: item.AreaName, CanteenName: item.CanteenName,
+		Floor: item.Floor, WindowName: item.WindowName, Price: &originalPrice, PriceType: "fixed",
+		PriceUnit: item.PriceUnit, PortionDescription: item.PortionDescription, PublishedAt: &now, UpdatedAt: &now,
+		IsCampusFood: true,
+	}
+	require.NoError(t, db.Create(publicItem).Error)
+
+	item.Name = "西红柿炒饭"
+	item.Description = "名称和价格已人工复核"
+	item.Price = &updatedPrice
+	item.PriceUnit = "元/例"
+	item.PortionDescription = "1例"
+	item.ImagePaths = []string{"campus-food/new.jpg"}
+	item.UpdatedAt = timePtr(now.Add(time.Hour))
+
+	require.NoError(t, NewCatalogRepo(db).UpdateItem(context.Background(), item))
+
+	var saved publishedCatalogItem
+	require.NoError(t, db.First(&saved, "id = ?", item.ID).Error)
+	require.Equal(t, "西红柿炒饭", saved.FoodName)
+	require.Equal(t, "名称和价格已人工复核", saved.Description)
+	require.Equal(t, updatedPrice, *saved.Price)
+	require.Equal(t, "元/例", saved.PriceUnit)
+	require.Equal(t, "1例", saved.PortionDescription)
+	require.Equal(t, []string{"campus-food/new.jpg"}, saved.ImagePaths)
+	require.Equal(t, 420.0, saved.TotalCalories)
+	require.Equal(t, 12.0, saved.TotalProtein)
+	require.Equal(t, 68.0, saved.TotalCarbs)
+	require.Equal(t, 11.0, saved.TotalFat)
+	require.Equal(t, "published", saved.Status)
+}
+
+func TestUpdatePublishedItemRollsBackWhenPublicSnapshotIsMissing(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:"+uuid.NewString()+"?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&domain.CatalogItem{}, &publishedCatalogItem{}))
+
+	item := &domain.CatalogItem{
+		ID: uuid.NewString(), BatchID: uuid.NewString(), EntryType: "dish", Name: "旧名称",
+		OrganizationName: "清华大学", CanteenName: "紫荆园", Status: "published",
+	}
+	require.NoError(t, db.Create(item).Error)
+	item.Name = "新名称"
+
+	err = NewCatalogRepo(db).UpdateItem(context.Background(), item)
+
+	require.ErrorContains(t, err, "published campus item")
+	var saved domain.CatalogItem
+	require.NoError(t, db.First(&saved, "id = ?", item.ID).Error)
+	require.Equal(t, "旧名称", saved.Name)
+}
+
+func TestUpdatePublishedItemPreservesAnalyzedDescriptionOnPriceOnlyEdit(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:"+uuid.NewString()+"?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&domain.CatalogItem{}, &publishedCatalogItem{}))
+
+	oldPrice, newPrice := 12.0, 13.0
+	now := time.Now()
+	item := &domain.CatalogItem{
+		ID: uuid.NewString(), BatchID: uuid.NewString(), EntryType: "dish", Name: "番茄炒饭",
+		OrganizationName: "清华大学", CanteenName: "紫荆园", Status: "published",
+		PriceType: "fixed", Price: &oldPrice, PriceUnit: "元/份", PublishedAt: &now, UpdatedAt: &now,
+	}
+	require.NoError(t, db.Create(item).Error)
+	require.NoError(t, db.Create(&publishedCatalogItem{
+		ID: item.ID, FoodName: item.Name, Status: "published", Type: "campus", Description: "AI 生成的营养说明",
+		ImagePaths: []string{}, Price: &oldPrice, PriceType: "fixed", PriceUnit: "元/份",
+		TotalCalories: 420, Items: []map[string]any{{"name": item.Name}}, PublishedAt: &now, UpdatedAt: &now,
+	}).Error)
+	item.Price = &newPrice
+	item.Description = ""
+
+	require.NoError(t, NewCatalogRepo(db).UpdateItem(context.Background(), item))
+
+	var saved publishedCatalogItem
+	require.NoError(t, db.First(&saved, "id = ?", item.ID).Error)
+	require.Equal(t, "AI 生成的营养说明", saved.Description)
+	require.Equal(t, newPrice, *saved.Price)
+}
+
+func timePtr(value time.Time) *time.Time { return &value }
+
 func TestCompleteAnalyzedItemRejectsEmptyNutritionWithoutPublishing(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open("file:"+uuid.NewString()+"?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)

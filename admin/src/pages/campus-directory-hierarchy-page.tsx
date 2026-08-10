@@ -156,7 +156,7 @@ const STATUS_LABELS: Record<string, string> = {
   inactive: "已停用",
   rejected: "已拒绝",
   draft: "草稿",
-  changes_pending: "有更新待分析",
+  changes_pending: "历史修改待同步",
   analysis_pending: "AI 分析中",
   analysis_failed: "AI 分析失败",
   published: "已上线",
@@ -467,10 +467,11 @@ export function CampusDirectoryPage({ onLogout, onMenuChange }: CampusDirectoryP
     setSaving(true);
     try {
       if (dishEditor.mode === "edit" && dishEditor.item) {
-        await adminRequest(`/api/admin/campus-food-collection/items/${encodeURIComponent(dishEditor.item.id)}`, {
+        const result = await adminRequest<{ item: CatalogItem }>(`/api/admin/campus-food-collection/items/${encodeURIComponent(dishEditor.item.id)}`, {
           method: "PATCH",
           body: JSON.stringify(catalogItemPayload(dishEditor.item, dishEditor.value, selectedWindow)),
         });
+        toast.success(result.item.status === "published" ? "资料已同步到小程序，原营养结果保持不变" : "菜品已保存");
       } else {
         const value = dishEditor.value;
         await adminRequest("/api/admin/campus-food-collection/batches", {
@@ -497,7 +498,7 @@ export function CampusDirectoryPage({ onLogout, onMenuChange }: CampusDirectoryP
           }),
         });
       }
-      toast.success(dishEditor.mode === "create" ? "菜品已创建为草稿" : "菜品已保存");
+      if (dishEditor.mode === "create") toast.success("菜品已创建为草稿");
       setDishEditor(null);
       await refreshCurrent();
     } catch (error) {
@@ -540,8 +541,10 @@ export function CampusDirectoryPage({ onLogout, onMenuChange }: CampusDirectoryP
   }
 
   async function publishItems(items: CatalogItem[]) {
-    const publishable = items.filter(isPublishable);
+    const publishable = items.filter(canSubmitPublishAction);
     if (!publishable.length) return;
+    if (publishable.length === 1 && publishable[0].status === "published" && !window.confirm("重新分析营养？普通文字、价格和位置修改保存后会直接同步，无需使用 AI。")) return;
+    if (publishable.length === 1 && publishable[0].status === "changes_pending" && !window.confirm("直接同步资料到小程序并保留原营养结果？此操作不会调用 AI。")) return;
     setPublishingIds(publishable.map((item) => item.id));
     const failed: string[] = [];
     await runWithConcurrency(publishable, 3, async (item) => {
@@ -554,7 +557,7 @@ export function CampusDirectoryPage({ onLogout, onMenuChange }: CampusDirectoryP
     setPublishingIds([]);
     setSelectedDishIds(failed);
     toast[failed.length ? "error" : "success"](
-      failed.length ? `${publishable.length - failed.length} 条已提交，${failed.length} 条失败` : `${publishable.length} 条已提交 AI 分析`,
+      failed.length ? `${publishable.length - failed.length} 条已提交，${failed.length} 条失败` : `${publishable.length} 条已提交处理`,
     );
     await Promise.all([refreshCurrent(), loadAnalysisProgress(true)]);
   }
@@ -838,7 +841,7 @@ function DishList(props: {
             <td className="p-3">{item.portion_description || "待补充"}</td>
             <td className="p-3 text-xs leading-6">{item.total_calories != null ? <><div>{formatNumber(item.total_calories)} kcal</div><div className="text-muted-foreground">蛋白 {formatNumber(item.total_protein)}g · 碳水 {formatNumber(item.total_carbs)}g · 脂肪 {formatNumber(item.total_fat)}g</div></> : <span className="text-muted-foreground">营养待分析</span>}</td>
             <td className="p-3"><StatusBadge status={item.status} /><div className="mt-2"><ClientBadge status={item.client_status || (item.status === "published" ? "published" : "")} /></div>{item.analysis_error ? <p className="mt-2 max-w-52 text-xs text-red-300" title={item.analysis_error}>{shortText(item.analysis_error, 52)}</p> : null}</td>
-            <td className="p-3"><div className="flex max-w-44 flex-wrap gap-2"><Button size="sm" variant="outline" onClick={() => props.onEdit(item)} disabled={item.status === "analysis_pending"}>编辑</Button><Button size="sm" onClick={() => props.onPublish(item)} disabled={!isPublishable(item) || publishing}>{publishing ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}{item.status === "analysis_failed" ? "重试" : "分析上线"}</Button><Button size="sm" variant="ghost" className="text-red-400" onClick={() => props.onDelete(item)} disabled={item.status === "analysis_pending"}><Trash2 className="size-4" /></Button></div></td>
+            <td className="p-3"><div className="flex max-w-44 flex-wrap gap-2"><Button size="sm" variant="outline" onClick={() => props.onEdit(item)} disabled={item.status === "analysis_pending"}>编辑</Button><Button size="sm" variant={item.status === "published" ? "outline" : "default"} onClick={() => props.onPublish(item)} disabled={!canSubmitPublishAction(item) || publishing}>{publishing ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}{item.status === "published" ? "重分析营养（可选）" : item.status === "changes_pending" ? "同步资料" : item.status === "analysis_failed" ? "重试" : "分析上线"}</Button><Button size="sm" variant="ghost" className="text-red-400" onClick={() => props.onDelete(item)} disabled={item.status === "analysis_pending"}><Trash2 className="size-4" /></Button></div></td>
           </tr>;
         })}</tbody>
       </table>
@@ -919,6 +922,7 @@ function catalogItemPayload(item: CatalogItem | undefined, value: Record<string,
 }
 
 function isPublishable(item: CatalogItem) { return item.status !== "published" && item.status !== "analysis_pending" && (item.missing_fields || []).every((field) => field === "image"); }
+function canSubmitPublishAction(item: CatalogItem) { return item.status === "published" || isPublishable(item); }
 function formatPrice(item: CatalogItem) { if (item.price != null) return `${formatNumber(item.price)}${item.price_unit || "元"}`; if (item.price_min != null || item.price_max != null) return `${formatNumber(item.price_min)}–${formatNumber(item.price_max)}${item.price_unit || "元"}`; if (item.price_text) return item.price_text; return "待补充"; }
 function formatNumber(value?: number) { return value == null ? "0" : Number(value).toFixed(Number(value) % 1 === 0 ? 0 : 1); }
 function shortText(value: string, length: number) { return value.length > length ? `${value.slice(0, length)}…` : value; }

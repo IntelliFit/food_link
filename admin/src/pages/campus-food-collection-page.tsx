@@ -471,7 +471,11 @@ export function CampusFoodCollectionPage({ onLogout, onMenuChange }: CampusFoodC
       setSelectedBatchItems((current) => current.map((currentItem) => (currentItem.id === item.item.id ? item.item : currentItem)))
       editingItem.previewUrls.forEach((url) => URL.revokeObjectURL(url))
       setEditingItem(null)
-      toast.success(item.item.missing_fields?.length ? '条目已保存，可继续补充剩余字段' : '条目已补充完整')
+      toast.success(item.item.status === 'published'
+        ? '资料已保存并同步到小程序，原营养结果保持不变'
+        : item.item.missing_fields?.length
+          ? '条目已保存，可继续补充剩余字段'
+          : '条目已补充完整')
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '条目保存失败')
     } finally {
@@ -480,23 +484,25 @@ export function CampusFoodCollectionPage({ onLogout, onMenuChange }: CampusFoodC
   }
 
   async function publishCatalogItem(item: CatalogItem) {
-    if (!isCatalogItemPublishable(item)) {
+    if (!canSubmitCatalogAction(item)) {
       toast.error(catalogPublishDisabledReason(item) || '当前条目不能提交上线')
       return
     }
-    const actionLabel = item.status === 'analysis_failed'
-      ? '重新提交 AI 分析'
-      : item.status === 'changes_pending'
-        ? '提交 AI 分析更新'
-        : '提交 AI 分析并上线'
-    if (!window.confirm(`${actionLabel}？AI 成功后将自动上线；首次上传在分析完成前不会出现在小程序。`)) return
+    if (item.status === 'published') {
+      if (!window.confirm('重新分析营养？分析期间小程序继续展示现有版本，成功后才会替换营养结果。普通文字、价格和位置修改无需使用此功能。')) return
+    } else if (item.status === 'changes_pending') {
+      if (!window.confirm('将已保存的文字、价格和位置等资料直接同步到小程序？原营养结果会保持不变，不会调用 AI。')) return
+    } else {
+      const actionLabel = item.status === 'analysis_failed' ? '重新提交 AI 分析' : '提交 AI 分析并上线'
+      if (!window.confirm(`${actionLabel}？AI 成功后将自动上线；首次上传在分析完成前不会出现在小程序。`)) return
+    }
     setPublishingItemId(item.id)
     try {
       const data = await adminRequest<{ item: CatalogItem }>(`/api/admin/campus-food-collection/items/${encodeURIComponent(item.id)}/publish`, {
         method: 'POST',
       })
       setSelectedBatchItems((current) => current.map((currentItem) => (currentItem.id === data.item.id ? data.item : currentItem)))
-      toast.success('AI 分析已提交，成功后自动上线')
+      toast.success(data.item.status === 'published' ? '资料已同步到小程序，原营养结果保持不变' : 'AI 分析已提交，成功后自动上线')
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '提交 AI 分析失败')
     } finally {
@@ -978,26 +984,26 @@ export function CampusFoodCollectionPage({ onLogout, onMenuChange }: CampusFoodC
             <div className='space-y-3'>
               <div className={`collection-batch-publish-toolbar ${batchPublishMode ? 'active' : ''}`}>
                 <div>
-                  <strong>{batchPublishMode ? `已选择 ${selectedPublishItems.length} 条` : `可提交分析 ${publishableBatchItems.length} 条`}</strong>
+                  <strong>{batchPublishMode ? `已选择 ${selectedPublishItems.length} 条` : `可提交上线 ${publishableBatchItems.length} 条`}</strong>
                   <p>
                     {batchPublishing
                       ? `正在提交 ${batchPublishDone}/${batchPublishTotal}`
                       : batchPublishMode
-                        ? '只可选择字段完整且不在分析中的条目；AI 失败项可直接重试。'
-                        : '批量提交原有 AI 食物分析，成功后自动上线；分析中会自动刷新状态。'}
+                        ? '草稿和失败项会提交 AI；历史资料修改会直接同步并保留原营养结果。'
+                        : '批量处理首次上线、失败重试和历史资料同步；分析中会自动刷新状态。'}
                   </p>
                 </div>
                 <div className='actions collection-batch-publish-actions'>
                   {batchPublishMode ? (
                     <>
                       <button type='button' onClick={toggleAllPublishableItems} disabled={batchPublishing || publishableBatchItems.length === 0}>
-                        {publishableBatchItems.length > 0 && selectedPublishItems.length === publishableBatchItems.length ? '取消全选' : '全选可分析'}
+                        {publishableBatchItems.length > 0 && selectedPublishItems.length === publishableBatchItems.length ? '取消全选' : '全选可上线'}
                       </button>
                       <button type='button' onClick={toggleBatchPublishMode} disabled={batchPublishing}>退出批量模式</button>
                       <button type='button' className='primary' onClick={() => void publishSelectedCatalogItems()} disabled={batchPublishing || selectedPublishItems.length === 0}>
                         {batchPublishing ? <span className='spinner small' /> : null}
                         <span className={batchPublishing ? 'ml-2' : ''}>
-                          {batchPublishing ? `提交中 ${batchPublishDone}/${batchPublishTotal}` : `批量提交 AI 分析并上线（${selectedPublishItems.length}）`}
+                          {batchPublishing ? `提交中 ${batchPublishDone}/${batchPublishTotal}` : `批量提交上线（${selectedPublishItems.length}）`}
                         </span>
                       </button>
                     </>
@@ -1024,6 +1030,7 @@ export function CampusFoodCollectionPage({ onLogout, onMenuChange }: CampusFoodC
                   <tbody>
                     {selectedBatchItems.map((item) => {
                       const publishable = isCatalogItemPublishable(item)
+                      const actionSubmittable = canSubmitCatalogAction(item)
                       const selected = selectedPublishItemIds.includes(item.id)
                       return (
                         <tr key={item.id} className={`border-b last:border-0 ${selected ? 'collection-item-selected' : ''}`}>
@@ -1068,9 +1075,9 @@ export function CampusFoodCollectionPage({ onLogout, onMenuChange }: CampusFoodC
                               <button type='button' className='min-h-8 px-3' onClick={() => openItemEditor(item)} disabled={publishingItemId === item.id || batchPublishing || item.status === 'analysis_pending'}>编辑补充</button>
                               <button
                                 type='button'
-                                className='primary min-h-8 px-3'
+                                className={`${item.status === 'published' ? '' : 'primary'} min-h-8 px-3`}
                                 onClick={() => void publishCatalogItem(item)}
-                                disabled={publishingItemId === item.id || batchPublishing || !publishable}
+                                disabled={publishingItemId === item.id || batchPublishing || !actionSubmittable}
                                 title={catalogPublishDisabledReason(item)}
                               >
                                 {publishingItemId === item.id ? <span className='spinner small' /> : null}
@@ -1469,6 +1476,10 @@ function isCatalogItemPublishable(item: CatalogItem): boolean {
     && (item.missing_fields || []).every((field) => field === 'image')
 }
 
+function canSubmitCatalogAction(item: CatalogItem): boolean {
+  return item.status === 'published' || isCatalogItemPublishable(item)
+}
+
 function toggleSimpleValue(values: string[], value: string): string[] {
   return values.includes(value) ? values.filter((item) => item !== value) : [...values, value]
 }
@@ -1542,15 +1553,15 @@ function catalogPublishStatusLabel(status: string): string {
 }
 
 function catalogPublishActionLabel(status: string): string {
-  if (status === 'published') return '已上线'
+  if (status === 'published') return '重新分析营养（可选）'
   if (status === 'analysis_pending') return 'AI 分析中'
   if (status === 'analysis_failed') return '重新分析'
-  if (status === 'changes_pending') return '分析更新并上线'
+  if (status === 'changes_pending') return '同步资料（无需 AI）'
   return 'AI 分析并上线'
 }
 
 function catalogPublishDisabledReason(item: CatalogItem): string | undefined {
-  if (item.status === 'published') return '该条目已经上线'
+  if (item.status === 'published') return '仅在食物本身变化、需要重算营养时使用；普通资料编辑保存后会直接同步'
   if (item.status === 'analysis_pending') return 'AI 分析进行中，请等待结果'
   if ((item.missing_fields || []).some((field) => field !== 'image')) return '请先补齐名称和价格'
   if ((item.missing_fields || []).includes('image')) return '无图菜品将使用文字 AI 分析，上线后可由用户共建补图'
