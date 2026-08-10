@@ -92,9 +92,6 @@ func AutoMigrate(ctx context.Context, db *gorm.DB, schema string) error {
 	if err := ensureCampusDirectoryImportBatchSeed(ctx, db); err != nil {
 		return err
 	}
-	if err := ensureCampusDirectoryPendingResearchSeed(ctx, db); err != nil {
-		return err
-	}
 	// Importing or approving reviewed campus-directory data is an explicit
 	// release action. Keep it behind the dedicated migration command so a
 	// routine schema migration cannot publish or rewrite directory records.
@@ -1448,7 +1445,7 @@ func ensureCampusDirectoryPendingResearchSeed(ctx context.Context, db *gorm.DB) 
 	return ensureCampusDirectoryResearchSeedFile(ctx, db, "data/campus_directory_pending_research_seed.json")
 }
 
-// ImportPendingCampusDirectoryResearch imports the reviewed research seed in a
+// ImportPendingCampusDirectoryResearch imports the pending-review research seed in a
 // single transaction. It is intentionally separate from schema migration so a
 // failed batch cannot leave a partially-created school hierarchy behind.
 func ImportPendingCampusDirectoryResearch(ctx context.Context, db *gorm.DB, schema string) error {
@@ -1924,7 +1921,7 @@ func ensureCampusDirectoryPendingBatch(ctx context.Context, db *gorm.DB, seed ca
 	if err := db.WithContext(ctx).Clauses(clause.OnConflict{
 		Columns: []clause.Column{{Name: "name"}},
 		DoUpdates: clause.AssignmentColumns([]string{
-			"region", "source_scope", "status", "total_schools", "total_campuses", "total_canteens", "total_windows", "total_sources", "notes", "updated_at",
+			"region", "source_scope", "total_schools", "total_campuses", "total_canteens", "total_windows", "total_sources", "notes", "updated_at",
 		}),
 	}).Create(&row).Error; err != nil {
 		return "", fmt.Errorf("upsert campus directory pending batch %q: %w", row.Name, err)
@@ -2071,7 +2068,15 @@ func ensureCampusDirectoryPendingSchoolResearch(ctx context.Context, db *gorm.DB
 		}
 		if len(canteenUpdates) > 0 {
 			canteenUpdates["updated_at"] = gorm.Expr("now()")
-			if err := db.WithContext(ctx).Table("school_canteens").Where("id = ? AND status = ?", *canteenID, "pending_review").Updates(canteenUpdates).Error; err != nil {
+			if err := db.WithContext(ctx).Table("school_canteens").
+				Where("id = ? AND status = ?", *canteenID, "pending_review").
+				Where(`CASE COALESCE(confidence_level, 'D')
+					WHEN 'A' THEN 1
+					WHEN 'B' THEN 2
+					WHEN 'C' THEN 3
+					ELSE 4
+				END >= ?`, campusEvidenceRank(confidence)).
+				Updates(canteenUpdates).Error; err != nil {
 				return fmt.Errorf("update pending canteen metadata %q/%q: %w", schoolName, name, err)
 			}
 		}
@@ -2237,6 +2242,7 @@ func ensureCampusDirectoryPendingSource(ctx context.Context, db *gorm.DB, batchI
 		} else {
 			updateQuery = updateQuery.Where("canteen_id = ?", *canteenID)
 		}
+		updateQuery = updateQuery.Where("review_status = ?", "pending_review")
 		return updateQuery.Updates(updates).Error
 	}
 	if err := db.WithContext(ctx).Create(&row).Error; err != nil {
@@ -2264,6 +2270,19 @@ func normalizeCampusEvidenceLevel(level string) string {
 		return "C"
 	default:
 		return "D"
+	}
+}
+
+func campusEvidenceRank(level string) int {
+	switch normalizeCampusEvidenceLevel(level) {
+	case "A":
+		return 1
+	case "B":
+		return 2
+	case "C":
+		return 3
+	default:
+		return 4
 	}
 }
 
