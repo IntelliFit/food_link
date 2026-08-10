@@ -228,17 +228,70 @@ func (r *CatalogRepo) FindItemByID(ctx context.Context, itemID string) (*domain.
 }
 
 func (r *CatalogRepo) UpdateItem(ctx context.Context, item *domain.CatalogItem) error {
-	return r.db.WithContext(ctx).
-		Model(&domain.CatalogItem{}).
-		Where("id = ? AND status <> ?", item.ID, "deleted").
-		Select(
-			"entry_type", "name", "description", "window_id", "floor", "window_name", "window_layout",
-			"meal_periods", "available_weekdays", "availability_note", "service_mode",
-			"price_type", "price", "price_min", "price_max", "price_unit", "price_text", "price_options",
-			"portion_description", "image_paths", "image_kind", "source_filename", "raw_text", "notes",
-			"missing_fields", "completeness_status", "status", "updated_at",
-		).
-		Updates(item).Error
+	if item == nil {
+		return errors.New("catalog item is nil")
+	}
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		catalogUpdate := tx.Model(&domain.CatalogItem{}).
+			Where("id = ? AND status <> ?", item.ID, "deleted").
+			Select(
+				"entry_type", "name", "description", "window_id", "floor", "window_name", "window_layout",
+				"meal_periods", "available_weekdays", "availability_note", "service_mode",
+				"price_type", "price", "price_min", "price_max", "price_unit", "price_text", "price_options",
+				"portion_description", "image_paths", "image_kind", "source_filename", "raw_text", "notes",
+				"missing_fields", "completeness_status", "status", "updated_at",
+			).
+			Updates(item)
+		if catalogUpdate.Error != nil {
+			return catalogUpdate.Error
+		}
+		if catalogUpdate.RowsAffected == 0 {
+			return fmt.Errorf("catalog item %s was not updated", item.ID)
+		}
+		if item.Status != "published" {
+			return nil
+		}
+
+		imagePaths := append([]string{}, item.ImagePaths...)
+		var imagePath *string
+		if len(imagePaths) > 0 {
+			first := imagePaths[0]
+			imagePath = &first
+		}
+		location := strings.Join(nonEmptyCatalogValues(item.OrganizationName, item.AreaName, item.CanteenName, item.Floor, item.WindowName), " · ")
+		publication := publishedCatalogItem{
+			ID: item.ID, ImagePath: imagePath, ImagePaths: imagePaths, Description: item.Description,
+			FoodName: item.Name, MerchantName: item.CanteenName, MerchantAddress: location, DetailAddress: location,
+			UpdatedAt: item.UpdatedAt, SchoolID: item.SchoolID, CampusID: item.CampusID, CanteenID: item.CanteenID,
+			WindowID: item.WindowID, SchoolName: item.OrganizationName, CampusName: item.AreaName,
+			CanteenName: item.CanteenName, Floor: item.Floor, WindowName: item.WindowName,
+			Price: item.Price, PriceType: publicPriceType(item.PriceType), PriceMin: item.PriceMin, PriceMax: item.PriceMax,
+			PriceUnit: item.PriceUnit, PriceCollectedAt: item.CapturedAt, PortionDescription: item.PortionDescription,
+			CampusLocationText: location,
+		}
+		publicColumns := []string{
+			"image_path", "image_paths", "food_name", "merchant_name", "merchant_address", "detail_address", "updated_at",
+			"school_id", "campus_id", "canteen_id", "window_id", "school_name", "campus_name", "canteen_name", "floor", "window_name",
+			"price", "price_type", "price_min", "price_max", "price_unit", "price_collected_at", "portion_description", "campus_location_text",
+		}
+		// An empty catalog description is common for AI-published rows. Preserve
+		// the analyzed public description on price/location-only edits, while an
+		// explicitly supplied description still replaces it.
+		if strings.TrimSpace(item.Description) != "" {
+			publicColumns = append(publicColumns, "description")
+		}
+		publicUpdate := tx.Model(&publishedCatalogItem{}).
+			Where("id = ? AND status = ?", item.ID, "published").
+			Select(publicColumns).
+			Updates(&publication)
+		if publicUpdate.Error != nil {
+			return publicUpdate.Error
+		}
+		if publicUpdate.RowsAffected == 0 {
+			return fmt.Errorf("published campus item %s was not found", item.ID)
+		}
+		return nil
+	})
 }
 
 func (r *CatalogRepo) MarkAnalysisPending(ctx context.Context, item *domain.CatalogItem, adminID string, startedAt time.Time) error {

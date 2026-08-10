@@ -420,10 +420,18 @@ func (s *CatalogService) UpdateItem(ctx context.Context, adminID, itemID string,
 	}
 	updated.ID = current.ID
 	updated.BatchID = current.BatchID
-	switch current.Status {
-	case "published", "changes_pending":
-		updated.Status = "changes_pending"
-	default:
+	// Editing catalog metadata must not spend another AI analysis. Once an item
+	// has a published nutrition snapshot, UpdateItem keeps that snapshot live
+	// and lets the repository atomically synchronize the editable metadata.
+	// Administrators can still explicitly call PublishItem to recalculate
+	// nutrition when the food itself has materially changed.
+	wasPublished := current.Status == "published" || current.Status == "changes_pending" || current.PublishedAt != nil
+	if wasPublished {
+		updated.Status = "published"
+		if blockers := catalogPublishBlockingFields(&updated); len(blockers) > 0 {
+			return nil, badRequest("已上线菜品必须保留名称和价格")
+		}
+	} else {
 		updated.Status = "draft"
 	}
 	updated.PublishedAt = current.PublishedAt
@@ -450,6 +458,7 @@ func (s *CatalogService) UpdateItem(ctx context.Context, adminID, itemID string,
 		slog.String("batch_id", current.BatchID),
 		slog.Int("image_count", len(updated.ImagePaths)),
 		slog.Int("missing_field_count", len(updated.MissingFields)),
+		slog.Bool("public_metadata_synced", wasPublished),
 	)
 	result := updated
 	items := []domain.CatalogItem{result}
@@ -479,6 +488,24 @@ func (s *CatalogService) PublishItem(ctx context.Context, adminID, itemID string
 	}
 	if blockers := catalogPublishBlockingFields(item); len(blockers) > 0 {
 		return nil, badRequest("请先补齐名称和价格后再提交上线")
+	}
+	// changes_pending is a legacy state produced by older admin builds. These
+	// rows already have a valid public nutrition snapshot, so synchronize their
+	// edited metadata directly instead of charging another AI analysis.
+	if item.Status == "changes_pending" {
+		syncedAt := time.Now()
+		item.Status = "published"
+		item.UpdatedAt = &syncedAt
+		if err := s.repo.UpdateItem(ctx, item); err != nil {
+			logger.Error(ctx, "同步历史校园菜品资料失败", err,
+				slog.String("admin_id", adminID), slog.String("item_id", itemID), slog.String("batch_id", item.BatchID))
+			return nil, err
+		}
+		logger.Info(ctx, "历史校园菜品资料已同步且未触发 AI 分析",
+			slog.String("admin_id", adminID), slog.String("item_id", itemID), slog.String("batch_id", item.BatchID))
+		items := []domain.CatalogItem{*item}
+		s.resolveItemImages(items)
+		return &items[0], nil
 	}
 	if s.analyzeTasks == nil || s.analysisUsers == nil {
 		return nil, fmt.Errorf("校园菜品 AI 分析服务未配置")

@@ -206,8 +206,12 @@ func (h *CatalogHandler) PublishItem(c *gin.Context) {
 	}
 	logger.Info(c.Request.Context(), "管理员提交食堂采集条目上线成功",
 		slog.String("admin_id", adminID), slog.String("item_id", item.ID))
+	message := "AI 分析任务已提交"
+	if item.Status == "published" {
+		message = "菜品资料已同步，营养结果保持不变"
+	}
 	c.JSON(http.StatusAccepted, gin.H{
-		"code": 0, "message": "AI 分析任务已提交", "data": gin.H{"item": item},
+		"code": 0, "message": message, "data": gin.H{"item": item},
 	})
 }
 
