@@ -127,6 +127,24 @@ function isClientReadyCampusItem(item: PublicFoodLibraryItem): boolean {
   return !isAnalyzingItem(item) && !isAnalysisFailedItem(item) && hasNutrition(item);
 }
 
+function sortCampusItemsByPopularity(
+  items: PublicFoodLibraryItem[],
+): PublicFoodLibraryItem[] {
+  return [...items].sort((a, b) => {
+    const engagementDiff =
+      (b.like_count || 0) + (b.collection_count || 0) -
+      ((a.like_count || 0) + (a.collection_count || 0));
+    if (engagementDiff !== 0) return engagementDiff;
+
+    const aPublishedAt = Date.parse(a.published_at || a.created_at || "");
+    const bPublishedAt = Date.parse(b.published_at || b.created_at || "");
+    const publishedDiff =
+      (Number.isFinite(bPublishedAt) ? bPublishedAt : 0) -
+      (Number.isFinite(aPublishedAt) ? aPublishedAt : 0);
+    return publishedDiff || a.id.localeCompare(b.id);
+  });
+}
+
 function CampusCanteenPage() {
   const { scheme } = useAppColorScheme();
   const [loggedIn, setLoggedIn] = useState(!!getAccessToken());
@@ -181,6 +199,34 @@ function CampusCanteenPage() {
     }
   }, []);
 
+  const fetchReadyCampusItems = useCallback(
+    async (merchantName?: string) => {
+      const request = {
+        type: "campus" as const,
+        school_id: selectedSchool?.id,
+        campus_id: selectedCampus?.id,
+        canteen_id: selectedCanteen?.id,
+        school_name: selectedSchool?.name,
+        canteen_name: selectedCanteen?.name,
+        merchant_name: merchantName,
+        sort_by: sortBy,
+        limit: 80,
+      };
+      const res = await getPublicFoodLibraryList(request);
+      const readyItems = (res.list || []).filter(isClientReadyCampusItem);
+      if (sortBy !== "hot" || readyItems.length > 0) return readyItems;
+
+      const fallback = await getPublicFoodLibraryList({
+        ...request,
+        sort_by: "high_protein",
+      });
+      return sortCampusItemsByPopularity(
+        (fallback.list || []).filter(isClientReadyCampusItem),
+      );
+    },
+    [sortBy, selectedSchool, selectedCampus, selectedCanteen],
+  );
+
   const loadList = useCallback(
     async (silent = false, force = false) => {
       if (!getAccessToken()) return;
@@ -189,18 +235,7 @@ function CampusCanteenPage() {
       if (!force && now - lastRefreshTime.current < 30000) return;
       if (!silent) setLoading(true);
       try {
-        const res = await getPublicFoodLibraryList({
-          type: "campus",
-          school_id: selectedSchool?.id,
-          campus_id: selectedCampus?.id,
-          canteen_id: selectedCanteen?.id,
-          school_name: selectedSchool?.name,
-          canteen_name: selectedCanteen?.name,
-          sort_by: sortBy,
-          limit: 80,
-        });
-        const newList = (res.list || []).filter(isClientReadyCampusItem);
-        setList(newList);
+        setList(await fetchReadyCampusItems());
         lastRefreshTime.current = Date.now();
       } catch (e: any) {
         console.error("加载校园食堂失败:", e);
@@ -213,10 +248,7 @@ function CampusCanteenPage() {
       }
     },
     [
-      sortBy,
-      selectedSchool,
-      selectedCampus,
-      selectedCanteen,
+      fetchReadyCampusItems,
       membershipStatus?.is_pro,
     ],
   );
@@ -304,18 +336,9 @@ function CampusCanteenPage() {
       return;
     }
     setLoading(true);
-    getPublicFoodLibraryList({
-      type: "campus",
-      school_id: selectedSchool?.id,
-      campus_id: selectedCampus?.id,
-      canteen_id: selectedCanteen?.id,
-      school_name: selectedSchool?.name,
-      merchant_name: kw,
-      sort_by: sortBy,
-      limit: 80,
-    })
-      .then((res) => {
-        setList((res.list || []).filter(isClientReadyCampusItem));
+    fetchReadyCampusItems(kw)
+      .then((items) => {
+        setList(items);
       })
       .catch(async (e: any) => {
         await showUnifiedApiError(e, "搜索失败");

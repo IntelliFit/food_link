@@ -128,4 +128,38 @@ describe('campus canteen directory', () => {
     expect(screen.queryByText('分析中菜品')).not.toBeInTheDocument()
     expect(screen.queryByText('分析失败，稍后重试')).not.toBeInTheDocument()
   })
+
+  it('falls back to ready campus dishes when the initial hot page is empty', async () => {
+    const readyDish = {
+      id: 'ready-fallback',
+      food_name: '高蛋白鸡肉饭',
+      status: 'published',
+      analysis_status: '',
+      total_calories: 520,
+      total_protein: 32,
+      total_carbs: 60,
+      total_fat: 14,
+      like_count: 8,
+      collection_count: 3,
+      items: [],
+    }
+    ;(getPublicFoodLibraryList as jest.Mock).mockImplementation(({ sort_by }) =>
+      Promise.resolve({ list: sort_by === 'hot' ? [] : [readyDish] }),
+    )
+
+    render(<CampusCanteenPage />)
+
+    await waitFor(() =>
+      expect(screen.getAllByText('高蛋白鸡肉饭').length).toBeGreaterThan(0),
+    )
+    expect(screen.getByText('热门')).toHaveClass('active')
+    expect(getPublicFoodLibraryList).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ sort_by: 'hot', type: 'campus' }),
+    )
+    expect(getPublicFoodLibraryList).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ sort_by: 'high_protein', type: 'campus' }),
+    )
+  })
 })
