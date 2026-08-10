@@ -1,6 +1,6 @@
 import { View, Text } from '@tarojs/components'
 import Taro, { useDidShow, useRouter } from '@tarojs/taro'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   getRewardCenter,
   claimLoginCheckIn,
@@ -18,12 +18,6 @@ import {
   SUBPACKAGE_USER_GROUP_ROOT,
 } from '../../../utils/subpackage-extra'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
-import {
-  getRewardLevelMeta,
-  getRewardLevelProgress,
-  formatRewardLevelRange,
-} from '../../../utils/membership'
-
 import './index.scss'
 
 function RewardCenterPage() {
@@ -129,24 +123,13 @@ function RewardCenterPage() {
   const rewardTasks = data?.tasks || []
 
   const balance = data?.earned_credits_balance ?? 0
-  const levelMeta = useMemo(() => getRewardLevelMeta(balance), [balance])
-  const levelProgress = useMemo(() => getRewardLevelProgress(balance, levelMeta), [balance, levelMeta])
-  const levelRangeText = useMemo(() => formatRewardLevelRange(balance, levelMeta), [balance, levelMeta])
 
   return (
     <View className={`reward-center-page ${scheme === 'dark' ? 'reward-center-page--dark' : ''}`}>
       <View className='reward-hero'>
         <Text className='iconfont icon-a-144-lvye reward-hero__art' />
         <Text className='reward-hero__title'>签到打卡赚积分</Text>
-        <View className='reward-hero__level'>
-          <Text className='reward-hero__level-text'>{levelRangeText} · Lv{levelMeta.level} {levelMeta.title}</Text>
-          <View className='reward-hero__segments'>
-            {Array.from({ length: 10 }).map((_, i) => {
-              const filledCount = Math.min(Math.max(Math.ceil(levelProgress / 10), 0), 10)
-              return <View key={i} className={`reward-hero__seg ${i < filledCount ? 'reward-hero__seg--filled' : ''}`} />
-            })}
-          </View>
-        </View>
+        <Text className='reward-hero__subtitle'>奖励积分长期保留，不会每日清零</Text>
         <View className='reward-hero__stats'>
           <View className='reward-stat'>
             <Text className='reward-stat__value'>{balance}</Text>
