@@ -207,7 +207,14 @@ func (r *PublicFoodRepo) ListPublished(ctx context.Context, f ListFilter) ([]dom
 	}
 	switch f.SortBy {
 	case "hot":
-		q = q.Order("p.like_count desc")
+		if itemType == "campus" {
+			// Avoid an index-driven scan across the full public library before the
+			// campus filters are applied. Campus rows are a small filtered set, so
+			// sorting their normalized engagement values is both stable and fast.
+			q = q.Order("(COALESCE(p.like_count, 0) + COALESCE(p.collection_count, 0)) desc, p.published_at desc NULLS LAST, p.id asc")
+		} else {
+			q = q.Order("p.like_count desc")
+		}
 	case "rating":
 		q = q.Order("p.avg_rating desc")
 	case "high_protein":

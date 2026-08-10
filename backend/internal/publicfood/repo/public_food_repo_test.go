@@ -538,6 +538,55 @@ func TestPublicFoodRepo_ListPublishedCampusSorts(t *testing.T) {
 	}
 }
 
+func TestPublicFoodRepo_ListPublishedStrictCampusHotUsesCombinedEngagement(t *testing.T) {
+	db := setupPublicFoodRepoTestDB(t)
+	now := time.Now().UTC()
+	items := []domain.PublicFoodItem{
+		{
+			ID:              "campus-hot-low-collection",
+			UserID:          "user-1",
+			FoodName:        "低收藏菜品",
+			Status:          "published",
+			Type:            "campus",
+			IsCampusFood:    true,
+			TotalCalories:   420,
+			TotalProtein:    30,
+			Items:           preciseCampusItemsForTest(),
+			LikeCount:       10,
+			CollectionCount: 1,
+			PublishedAt:     &now,
+			CreatedAt:       &now,
+		},
+		{
+			ID:              "campus-hot-high-engagement",
+			UserID:          "user-2",
+			FoodName:        "高收藏菜品",
+			Status:          "published",
+			Type:            "campus",
+			IsCampusFood:    true,
+			TotalCalories:   430,
+			TotalProtein:    31,
+			Items:           preciseCampusItemsForTest(),
+			LikeCount:       8,
+			CollectionCount: 5,
+			PublishedAt:     &now,
+			CreatedAt:       &now,
+		},
+	}
+	require.NoError(t, db.Create(&items).Error)
+
+	rows, err := NewPublicFoodRepo(db).ListPublished(context.Background(), ListFilter{
+		Type:   "campus",
+		SortBy: "hot",
+		Limit:  10,
+	})
+
+	require.NoError(t, err)
+	require.Len(t, rows, 2)
+	require.Equal(t, "campus-hot-high-engagement", rows[0].ID)
+	require.Equal(t, "campus-hot-low-collection", rows[1].ID)
+}
+
 func TestPublicFoodRepo_GetItemReturnsSchoolLogoURL(t *testing.T) {
 	db := setupPublicFoodRepoTestDB(t)
 	seedPublicFoodItems(t, db)

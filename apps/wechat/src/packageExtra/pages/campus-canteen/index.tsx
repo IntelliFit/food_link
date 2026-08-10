@@ -207,17 +207,25 @@ function CampusCanteenPage() {
         sort_by: sortBy,
         limit: 80,
       };
-      const res = await getPublicFoodLibraryList(request);
-      const readyItems = (res.list || []).filter(isClientReadyCampusItem);
-      if (sortBy !== "hot" || readyItems.length > 0) return readyItems;
+      const fetchHotFallback = async () => {
+        const fallback = await getPublicFoodLibraryList({
+          ...request,
+          sort_by: "high_protein",
+        });
+        return sortCampusItemsByPopularity(
+          (fallback.list || []).filter(isClientReadyCampusItem),
+        );
+      };
 
-      const fallback = await getPublicFoodLibraryList({
-        ...request,
-        sort_by: "high_protein",
-      });
-      return sortCampusItemsByPopularity(
-        (fallback.list || []).filter(isClientReadyCampusItem),
-      );
+      try {
+        const res = await getPublicFoodLibraryList(request);
+        const readyItems = (res.list || []).filter(isClientReadyCampusItem);
+        if (sortBy !== "hot" || readyItems.length > 0) return readyItems;
+        return fetchHotFallback();
+      } catch (error) {
+        if (sortBy !== "hot") throw error;
+        return fetchHotFallback();
+      }
     },
     [sortBy, selectedSchool, selectedCampus, selectedCanteen],
   );

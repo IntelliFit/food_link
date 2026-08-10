@@ -184,4 +184,38 @@ describe('campus canteen directory', () => {
       expect.objectContaining({ sort_by: 'high_protein', type: 'campus' }),
     )
   })
+
+  it('falls back to ready campus dishes when the initial hot request fails', async () => {
+    const readyDish = {
+      id: 'ready-after-hot-timeout',
+      food_name: '超时后可见鸡肉饭',
+      status: 'published',
+      analysis_status: '',
+      total_calories: 520,
+      total_protein: 32,
+      total_carbs: 60,
+      total_fat: 14,
+      items: [],
+    }
+    ;(getPublicFoodLibraryList as jest.Mock).mockImplementation(({ sort_by }) =>
+      sort_by === 'hot'
+        ? Promise.reject(new Error('request:fail timeout'))
+        : Promise.resolve({ list: [readyDish] }),
+    )
+
+    render(<CampusCanteenPage />)
+
+    await waitFor(() =>
+      expect(screen.getAllByText('超时后可见鸡肉饭').length).toBeGreaterThan(0),
+    )
+    expect(screen.getByText('热门')).toHaveClass('active')
+    expect(getPublicFoodLibraryList).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ sort_by: 'hot', type: 'campus' }),
+    )
+    expect(getPublicFoodLibraryList).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ sort_by: 'high_protein', type: 'campus' }),
+    )
+  })
 })
