@@ -771,7 +771,7 @@ function FoodLibraryPage() {
             return (
               <View
                 key={item.id}
-                className={`food-card ${fromRecord ? 'is-pick-mode' : ''}`}
+                className={`food-card ${campusFood ? 'food-card--campus' : ''} ${fromRecord ? 'is-pick-mode' : ''}`}
                 onClick={() => (fromRecord ? pickForRecord(item) : goDetail(item.id))}
               >
                 <View className='food-card-main'>

@@ -366,9 +366,9 @@ $food-library-font-meta: 22rpx;
 
 .campus-food-badge {
   position: absolute;
-  right: 8rpx;
-  bottom: 8rpx;
-  padding: 4rpx 10rpx;
+  right: 6rpx;
+  bottom: 6rpx;
+  padding: 2rpx 8rpx;
   background: rgba(20, 184, 166, 0.92);
   color: #fff;
   font-size: $food-library-font-meta;
@@ -381,13 +381,13 @@ $food-library-font-meta: 22rpx;
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 6rpx;
-  margin-top: 4rpx;
+  gap: 4rpx;
+  margin-top: 2rpx;
 }
 
 .campus-food-location {
   font-size: $food-library-font-meta;
-  line-height: 30rpx;
+  line-height: 28rpx;
   color: #64748b;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -397,14 +397,14 @@ $food-library-font-meta: 22rpx;
 .campus-food-summary {
   display: flex;
   align-items: center;
-  gap: 8rpx;
+  gap: 6rpx;
   min-width: 0;
 }
 
 .campus-food-nutrition {
   font-size: $food-library-font-meta;
-  line-height: 28rpx;
-  padding: 2rpx 8rpx;
+  line-height: 26rpx;
+  padding: 1rpx 6rpx;
   border-radius: 8rpx;
   background: #ecfdf5;
   color: #047857;
@@ -613,6 +613,61 @@ $food-library-font-meta: 22rpx;
 .delete-stat-icon {
   color: #ef4444;
   font-size: 28rpx;
+}
+
+.food-card--campus {
+  border-radius: 18rpx;
+  margin-bottom: 12rpx;
+
+  .food-card-main {
+    padding: 14rpx;
+    gap: 12rpx;
+  }
+
+  .food-image-wrap {
+    width: 144rpx;
+    height: 144rpx;
+    border-radius: 12rpx;
+  }
+
+  .food-image {
+    border-radius: 12rpx;
+  }
+
+  .card-badge-latest {
+    top: 6rpx;
+    left: 6rpx;
+    padding: 2rpx 6rpx;
+  }
+
+  .fat-loss-badge {
+    top: 36rpx;
+    right: 6rpx;
+    padding: 2rpx 6rpx;
+  }
+
+  .food-title {
+    line-height: 38rpx;
+    margin-bottom: 0;
+  }
+
+  .food-footer {
+    padding: 10rpx 14rpx;
+  }
+
+  .author-avatar {
+    width: 32rpx;
+    height: 32rpx;
+  }
+
+  .food-stats {
+    gap: 14rpx;
+  }
+
+  .stat-icon,
+  .delete-stat-icon {
+    font-size: 26rpx;
+  }
 }
 
 // 空状态
