@@ -379,6 +379,10 @@ export function PetAvatar({ pet, animal, size = 'medium', mood, state, mealState
       ? 'pet-avatar--motion-squash'
       : ''
 
+  // 请求当前宠物期间保持空白，避免先渲染旧版程序化默认形象，
+  // 再在接口返回后闪切为用户实际选择的内置角色。
+  if (!pet && !animal) return null
+
   return (
     <View
       className={`pet-avatar ${sizeClass} ${dimmed ? 'pet-avatar--dimmed' : ''} ${state === 'warming' ? 'pet-avatar--warming' : ''} ${customAvatarURL ? 'pet-avatar--custom' : ''} ${isPixelatedAvatar ? 'pet-avatar--pixelated' : ''} ${hasMotionFrames ? 'pet-avatar--has-motion-frames' : ''} ${blinking ? 'pet-avatar--blinking' : ''} ${motionClass} ${mealState ? `pet-avatar--meal-${mealState}` : ''} ${className || ''}`}
