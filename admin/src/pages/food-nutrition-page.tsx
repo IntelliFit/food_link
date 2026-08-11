@@ -209,7 +209,12 @@ export function FoodNutritionPage({ onLogout, onMenuChange }: FoodNutritionPageP
       return
     }
     const found = items.find((item) => item.id === selectedId)
-    if (found) setSelected(found)
+    if (found) {
+      setSelected(found)
+      return
+    }
+    setSelectedId(items[0]?.id || '')
+    setSelected(items[0] || null)
   }, [items, selectedId])
 
   async function loadList(nextPage = page) {
@@ -223,14 +228,22 @@ export function FoodNutritionPage({ onLogout, onMenuChange }: FoodNutritionPageP
         category,
       })
       const data = await adminRequest<ListResponse<FoodNutrition>>(`/api/admin/food-nutrition?${params.toString()}`)
-      const nextItems = (data.items || []).map(withFallbackCategory)
+      const categorizedItems = (data.items || []).map(withFallbackCategory)
+      const nextItems = category === 'all'
+        ? categorizedItems
+        : categorizedItems.filter((item) => item.category === category)
       setItems(nextItems)
       setCategories(data.categories?.length ? data.categories : defaultFoodCategories)
       setCategory(data.category || category)
       setTotal(data.total || 0)
       setPage(data.page || nextPage)
       setSelectedId((current) => current || nextItems[0]?.id || '')
-      setMessage(`共 ${data.total || 0} 条，当前显示 ${nextItems.length} 条`)
+      const correctedCount = categorizedItems.length - nextItems.length
+      setMessage(
+        correctedCount > 0
+          ? `共 ${data.total || 0} 条，当前显示 ${nextItems.length} 条（已排除 ${correctedCount} 条分类不符记录）`
+          : `共 ${data.total || 0} 条，当前显示 ${nextItems.length} 条`,
+      )
     } catch (error) {
       const text = error instanceof Error ? error.message : '读取失败'
       setMessage(text)
