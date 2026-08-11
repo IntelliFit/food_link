@@ -1,0 +1,64 @@
+[
+  {"city":"石家庄市","school_name":"河北师范大学","campus_name":"裕华校区","campus_address":"河北省石家庄市南二环东路20号","dining_venue":"第一餐厅","floor":"主食堂一楼","source_url":"https://www.hebtu.edu.cn/a/2014/09/09/392CD46E042D4ADB94CA73893C9D232B.html","source_date":null},
+  {"city":"石家庄市","school_name":"河北师范大学","campus_name":"裕华校区","campus_address":"河北省石家庄市南二环东路20号","dining_venue":"第二餐厅","floor":"主食堂二楼","source_url":"https://www.hebtu.edu.cn/a/2014/09/09/392CD46E042D4ADB94CA73893C9D232B.html","source_date":null},
+  {"city":"石家庄市","school_name":"河北师范大学","campus_name":"裕华校区","campus_address":"河北省石家庄市南二环东路20号","dining_venue":"凝味创意餐厅（第三餐厅）","floor":"主食堂三楼","source_url":"https://www.hebtu.edu.cn/a/2014/09/09/392CD46E042D4ADB94CA73893C9D232B.html","source_date":null},
+  {"city":"石家庄市","school_name":"河北师范大学","campus_name":"裕华校区","campus_address":"河北省石家庄市南二环东路20号","dining_venue":"第四餐厅","floor":"西食堂一楼","source_url":"https://www.hebtu.edu.cn/a/2014/09/09/392CD46E042D4ADB94CA73893C9D232B.html","source_date":null},
+  {"city":"石家庄市","school_name":"河北师范大学","campus_name":"裕华校区","campus_address":"河北省石家庄市南二环东路20号","dining_venue":"书香智慧餐厅（第五餐厅）","floor":"西食堂二楼","source_url":"https://www.hebtu.edu.cn/a/2014/09/09/392CD46E042D4ADB94CA73893C9D232B.html","source_date":null},
+  {"city":"石家庄市","school_name":"河北师范大学","campus_name":"裕华校区","campus_address":"河北省石家庄市南二环东路20号","dining_venue":"民族餐厅","floor":"西食堂一楼","source_url":"https://www.hebtu.edu.cn/a/2014/09/09/392CD46E042D4ADB94CA73893C9D232B.html","source_date":null},
+
+  {"city":"杭州市","school_name":"浙江大学","campus_name":"紫金港校区","campus_address":"浙江省杭州市西湖区余杭塘路866号","dining_venue":"休闲餐厅","floor":"紫金港食堂大楼一层西侧","source_url":"https://zulg.zju.edu.cn/guide/food.htm","source_date":null},
+  {"city":"杭州市","school_name":"浙江大学","campus_name":"紫金港校区","campus_address":"浙江省杭州市西湖区余杭塘路866号","dining_venue":"风味餐厅","floor":"紫金港食堂大楼一层东侧","source_url":"https://zulg.zju.edu.cn/guide/food.htm","source_date":null},
+  {"city":"杭州市","school_name":"浙江大学","campus_name":"紫金港校区","campus_address":"浙江省杭州市西湖区余杭塘路866号","dining_venue":"民族餐厅","floor":"紫金港食堂大楼二层西侧","source_url":"https://zulg.zju.edu.cn/guide/food.htm","source_date":null},
+  {"city":"杭州市","school_name":"浙江大学","campus_name":"紫金港校区","campus_address":"浙江省杭州市西湖区余杭塘路866号","dining_venue":"东区食堂","floor":"紫金港食堂大楼二层东侧","source_url":"https://zulg.zju.edu.cn/guide/food.htm","source_date":null},
+  {"city":"杭州市","school_name":"浙江大学","campus_name":"紫金港校区","campus_address":"浙江省杭州市西湖区余杭塘路866号","dining_venue":"西区食堂","floor":"紫金港食堂大楼二层西侧","source_url":"https://zulg.zju.edu.cn/guide/food.htm","source_date":null},
+  {"city":"杭州市","school_name":"浙江大学","campus_name":"紫金港校区","campus_address":"浙江省杭州市西湖区余杭塘路866号","dining_venue":"三楼餐厅","floor":"紫金港食堂大楼三层东侧","source_url":"https://zulg.zju.edu.cn/guide/food.htm","source_date":null},
+  {"city":"杭州市","school_name":"浙江大学","campus_name":"紫金港校区","campus_address":"浙江省杭州市西湖区余杭塘路866号","dining_venue":"临湖餐厅","floor":"一楼、二楼","source_url":"https://zulg.zju.edu.cn/guide/food.htm","source_date":null},
+  {"city":"杭州市","school_name":"浙江大学","campus_name":"紫金港校区","campus_address":"浙江省杭州市西湖区余杭塘路866号","dining_venue":"麦香餐厅","floor":"紫金港医学专业图书馆一楼","source_url":"https://zulg.zju.edu.cn/guide/food.htm","source_date":null},
+  {"city":"杭州市","school_name":"浙江大学","campus_name":"紫金港校区","campus_address":"浙江省杭州市西湖区余杭塘路866号","dining_venue":"澄月餐厅一楼","floor":"一楼","source_url":"https://zulg.zju.edu.cn/guide/food.htm","source_date":null},
+  {"city":"杭州市","school_name":"浙江大学","campus_name":"紫金港校区","campus_address":"浙江省杭州市西湖区余杭塘路866号","dining_venue":"澄月餐厅二楼","floor":"二楼","source_url":"https://zulg.zju.edu.cn/guide/food.htm","source_date":null},
+  {"city":"杭州市","school_name":"浙江大学","campus_name":"紫金港校区","campus_address":"浙江省杭州市西湖区余杭塘路866号","dining_venue":"玉湖餐厅一楼","floor":"一楼","source_url":"https://zulg.zju.edu.cn/guide/food.htm","source_date":null},
+  {"city":"杭州市","school_name":"浙江大学","campus_name":"紫金港校区","campus_address":"浙江省杭州市西湖区余杭塘路866号","dining_venue":"玉湖餐厅二楼","floor":"二楼","source_url":"https://zulg.zju.edu.cn/guide/food.htm","source_date":null},
+  {"city":"杭州市","school_name":"浙江大学","campus_name":"紫金港校区","campus_address":"浙江省杭州市西湖区余杭塘路866号","dining_venue":"银泉餐厅一楼","floor":"一楼","source_url":"https://zulg.zju.edu.cn/guide/food.htm","source_date":null},
+  {"city":"杭州市","school_name":"浙江大学","campus_name":"紫金港校区","campus_address":"浙江省杭州市西湖区余杭塘路866号","dining_venue":"银泉餐厅二楼","floor":"二楼","source_url":"https://zulg.zju.edu.cn/guide/food.htm","source_date":null},
+
+  {"city":"杭州市","school_name":"杭州电子科技大学","campus_name":"下沙校区","campus_address":"浙江省杭州市钱塘区白杨街道2号大街1158号","dining_venue":"第一餐厅","floor":"B17食堂一楼","source_url":"https://intedu.hdu.edu.cn/12717/list.htm","source_date":null},
+  {"city":"杭州市","school_name":"杭州电子科技大学","campus_name":"下沙校区","campus_address":"浙江省杭州市钱塘区白杨街道2号大街1158号","dining_venue":"中式快餐餐厅","floor":"B17食堂二楼","source_url":"https://intedu.hdu.edu.cn/12717/list.htm","source_date":null},
+  {"city":"杭州市","school_name":"杭州电子科技大学","campus_name":"下沙校区","campus_address":"浙江省杭州市钱塘区白杨街道2号大街1158号","dining_venue":"风味餐厅","floor":"B17食堂三楼","source_url":"https://intedu.hdu.edu.cn/12717/list.htm","source_date":null},
+  {"city":"杭州市","school_name":"杭州电子科技大学","campus_name":"下沙校区","campus_address":"浙江省杭州市钱塘区白杨街道2号大街1158号","dining_venue":"第三餐厅","floor":"B1食堂一楼","source_url":"https://intedu.hdu.edu.cn/12717/list.htm","source_date":null},
+  {"city":"杭州市","school_name":"杭州电子科技大学","campus_name":"下沙校区","campus_address":"浙江省杭州市钱塘区白杨街道2号大街1158号","dining_venue":"教工餐厅","floor":"B1食堂三楼","source_url":"https://intedu.hdu.edu.cn/12717/list.htm","source_date":null},
+  {"city":"杭州市","school_name":"杭州电子科技大学","campus_name":"下沙校区","campus_address":"浙江省杭州市钱塘区白杨街道2号大街1158号","dining_venue":"第五餐厅","floor":"B9食堂一楼","source_url":"https://intedu.hdu.edu.cn/12717/list.htm","source_date":null},
+  {"city":"杭州市","school_name":"杭州电子科技大学","campus_name":"下沙校区","campus_address":"浙江省杭州市钱塘区白杨街道2号大街1158号","dining_venue":"第六餐厅","floor":"B9食堂二楼","source_url":"https://intedu.hdu.edu.cn/12717/list.htm","source_date":null},
+  {"city":"杭州市","school_name":"杭州电子科技大学","campus_name":"下沙校区","campus_address":"浙江省杭州市钱塘区白杨街道2号大街1158号","dining_venue":"留学生餐厅","floor":"G区食堂二楼","source_url":"https://intedu.hdu.edu.cn/12717/list.htm","source_date":null},
+
+  {"city":"兰州市","school_name":"兰州大学","campus_name":"榆中校区","campus_address":"甘肃省兰州市榆中县夏官营镇","dining_venue":"综合体食堂","floor":"负一楼至四楼","source_url":"https://zsb.lzu.edu.cn/zhaoshengzixun/changjianwenti/2020/0312/122355.html","source_date":"2020-03-12"},
+  {"city":"兰州市","school_name":"兰州大学","campus_name":"榆中校区","campus_address":"甘肃省兰州市榆中县夏官营镇","dining_venue":"芝兰苑","floor":"一楼、二楼","source_url":"https://zsb.lzu.edu.cn/zhaoshengzixun/changjianwenti/2020/0312/122355.html","source_date":"2020-03-12"},
+  {"city":"兰州市","school_name":"兰州大学","campus_name":"榆中校区","campus_address":"甘肃省兰州市榆中县夏官营镇","dining_venue":"玉树苑","floor":"一楼、二楼、三楼（第三层为清真食堂）","source_url":"https://zsb.lzu.edu.cn/zhaoshengzixun/changjianwenti/2020/0312/122355.html","source_date":"2020-03-12"},
+  {"city":"兰州市","school_name":"兰州大学","campus_name":"榆中校区","campus_address":"甘肃省兰州市榆中县夏官营镇","dining_venue":"桃李食园（清真）","floor":"一楼","source_url":"https://zsb.lzu.edu.cn/zhaoshengzixun/changjianwenti/2020/0312/122355.html","source_date":"2020-03-12"},
+  {"city":"兰州市","school_name":"兰州大学","campus_name":"城关校区西区","campus_address":"甘肃省兰州市城关区天水南路222号","dining_venue":"丹桂苑食堂","floor":"一楼、二楼、三楼","source_url":"https://zsb.lzu.edu.cn/zhaoshengzixun/changjianwenti/2020/0312/122355.html","source_date":"2020-03-12"},
+
+  {"city":"贵阳市","school_name":"贵州大学","campus_name":"东校区","campus_address":"贵州省贵阳市花溪区","dining_venue":"双馨园食堂","floor":"一楼、二楼、三楼","source_url":"https://www.gzu.edu.cn/17054/list.htm","source_date":null},
+  {"city":"贵阳市","school_name":"贵州大学","campus_name":"东校区","campus_address":"贵州省贵阳市花溪区","dining_venue":"中山园食堂","floor":"一楼、二楼","source_url":"https://www.gzu.edu.cn/17054/list.htm","source_date":null},
+  {"city":"贵阳市","school_name":"贵州大学","campus_name":"西校区","campus_address":"贵州省贵阳市花溪区","dining_venue":"学生一食堂","floor":"一楼、二楼、三楼、四楼","source_url":"https://www.gzu.edu.cn/17054/list.htm","source_date":null},
+  {"city":"贵阳市","school_name":"贵州大学","campus_name":"西校区","campus_address":"贵州省贵阳市花溪区","dining_venue":"学生二食堂","floor":"一楼、二楼","source_url":"https://www.gzu.edu.cn/17054/list.htm","source_date":null},
+  {"city":"贵阳市","school_name":"贵州大学","campus_name":"西校区","campus_address":"贵州省贵阳市花溪区","dining_venue":"学生三食堂（致和苑）","floor":"一楼、二楼","source_url":"https://www.gzu.edu.cn/17054/list.htm","source_date":null},
+  {"city":"贵阳市","school_name":"贵州大学","campus_name":"西校区","campus_address":"贵州省贵阳市花溪区","dining_venue":"学生四食堂（逸香苑）","floor":"一楼、二楼、三楼","source_url":"https://www.gzu.edu.cn/17054/list.htm","source_date":null},
+  {"city":"贵阳市","school_name":"贵州大学","campus_name":"西校区","campus_address":"贵州省贵阳市花溪区","dining_venue":"学生五食堂（沁雅苑）","floor":"一楼、二楼、三楼","source_url":"https://www.gzu.edu.cn/17054/list.htm","source_date":null},
+  {"city":"贵阳市","school_name":"贵州大学","campus_name":"南校区","campus_address":"贵州省贵阳市花溪区","dining_venue":"南区学生食堂","floor":"一楼、二楼、三楼、四楼","source_url":"https://www.gzu.edu.cn/17054/list.htm","source_date":null},
+
+  {"city":"西宁市","school_name":"青海师范大学","campus_name":"城北校区","campus_address":"青海省西宁市城北区海湖大道延伸段38号","dining_venue":"馨园餐厅二楼食堂","floor":"二楼","source_url":"https://www.qhnu.edu.cn/index/tzgg.htm","source_date":"2026-06-26"},
+  {"city":"西宁市","school_name":"青海师范大学","campus_name":"城北校区","campus_address":"青海省西宁市城北区海湖大道延伸段38号","dining_venue":"清真餐厅二楼餐厅","floor":"二楼","source_url":"https://www.qhnu.edu.cn/info/1039/20706.htm","source_date":"2025-07-25"},
+
+  {"city":"乌鲁木齐市","school_name":"新疆医科大学","campus_name":"新医路校区","campus_address":"新疆维吾尔自治区乌鲁木齐市新市区新医路393号","dining_venue":"杏林餐厅","floor":"5号公寓楼一楼","source_url":"https://gjjyxy.xjmu.edu.cn/info/1061/1128.htm","source_date":null},
+  {"city":"乌鲁木齐市","school_name":"新疆医科大学","campus_name":"新医路校区","campus_address":"新疆维吾尔自治区乌鲁木齐市新市区新医路393号","dining_venue":"新怡餐厅","floor":"1号公寓一楼、二楼","source_url":"https://gjjyxy.xjmu.edu.cn/info/1061/1128.htm","source_date":null},
+
+  {"city":"长春市","school_name":"东北师范大学","campus_name":"人民大街校区","campus_address":"吉林省长春市人民大街5268号","dining_venue":"北苑食堂","floor":"一楼","source_url":"https://xxhb.nenu.edu.cn/__local/E/A0/FE/708F143F36DF0FFBD40EC23C91E_A414E41F_A400E.pdf","source_date":null},
+  {"city":"长春市","school_name":"东北师范大学","campus_name":"人民大街校区","campus_address":"吉林省长春市人民大街5268号","dining_venue":"南苑食堂","floor":"一楼","source_url":"https://xxhb.nenu.edu.cn/__local/E/A0/FE/708F143F36DF0FFBD40EC23C91E_A414E41F_A400E.pdf","source_date":null},
+  {"city":"长春市","school_name":"东北师范大学","campus_name":"净月大街校区","campus_address":"吉林省长春市净月大街2555号","dining_venue":"学生一食堂","floor":"二楼","source_url":"https://xxhb.nenu.edu.cn/xinshengyifengxin2020.pdf","source_date":null},
+  {"city":"长春市","school_name":"东北师范大学","campus_name":"净月大街校区","campus_address":"吉林省长春市净月大街2555号","dining_venue":"学生二食堂","floor":"一楼","source_url":"https://xxhb.nenu.edu.cn/xinshengyifengxin2020.pdf","source_date":null},
+
+  {"city":"银川市","school_name":"宁夏大学","campus_name":"怀远校区","campus_address":"宁夏回族自治区银川市西夏区贺兰山西路489号","dining_venue":"兰竹苑餐厅","floor":"一楼、二楼","source_url":"https://www.nxu.edu.cn/index/tzgg/254.htm","source_date":"2025-09-30"},
+
+  {"city":"合肥市","school_name":"合肥工业大学","campus_name":"屯溪路校区","campus_address":"安徽省合肥市屯溪路193号","dining_venue":"馨园食堂","floor":"二楼大厅","source_url":"https://zwb.hfut.edu.cn/info/1029/6075.htm","source_date":"2025-07-08"},
+
+  {"city":"重庆市","school_name":"重庆大学","campus_name":"科学城校区虎溪校园","campus_address":"重庆市高新区大学城南路55号","dining_venue":"第一学生食堂","floor":"一楼、二楼","source_url":"https://huxi.cqu.edu.cn/info/1023/4450.htm","source_date":"2025-07-07"}
+]
