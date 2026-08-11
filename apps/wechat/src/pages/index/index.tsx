@@ -2989,7 +2989,7 @@ function IndexPage() {
           petAvatar={petHidden ? undefined : (
             <PetAvatar
               pet={petSummary?.pet}
-              size={58}
+              size={67}
               mood={petMood}
               state={petState}
               className='greeting-pet__avatar'

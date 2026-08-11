@@ -198,35 +198,35 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 
 .greeting-pet {
   position: relative;
-  width: 108rpx;
-  height: 92rpx;
-  flex: 0 0 108rpx;
-  margin-right: 2rpx;
-  overflow: hidden;
+  width: 136rpx;
+  height: 116rpx;
+  flex: 0 0 136rpx;
+  margin-right: 4rpx;
+  overflow: visible;
 }
 
 .greeting-pet__motion {
   position: absolute;
   z-index: 1;
-  top: -17rpx;
-  left: -2rpx;
-  width: 112rpx;
-  height: 112rpx;
+  top: -9rpx;
+  left: 1rpx;
+  width: 134rpx;
+  height: 134rpx;
   transform-origin: 48% 88%;
   animation: greeting-pet-breathe 2.8s ease-in-out infinite;
 }
 
 .greeting-pet__avatar {
-  width: 112rpx !important;
-  height: 112rpx !important;
+  width: 134rpx !important;
+  height: 134rpx !important;
 }
 
 .greeting-pet__ground {
   position: absolute;
-  right: 10rpx;
-  bottom: 8rpx;
-  left: 8rpx;
-  height: 13rpx;
+  right: 12rpx;
+  bottom: 1rpx;
+  left: 10rpx;
+  height: 14rpx;
   border-radius: 50%;
   background: rgb(44 89 72 / 10%);
   animation: greeting-pet-shadow 2.8s ease-in-out infinite;
