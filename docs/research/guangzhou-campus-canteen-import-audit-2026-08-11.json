@@ -1,0 +1,655 @@
+{
+  "source_file": "guangzhou-campus-canteen-floor-review-2026-08-11.md",
+  "accepted_statuses": [
+    "current_official",
+    "confirmed_official"
+  ],
+  "school_count": 13,
+  "campus_count": 21,
+  "canteen_count": 43,
+  "source_url_count": 23,
+  "rows": [
+    {
+      "line": 26,
+      "school": "中山大学",
+      "campus": "广州校区北校园",
+      "canteen": "学一食堂",
+      "floor": "学生宿舍区综合楼一、二、三楼",
+      "status": "current_official",
+      "links": [
+        {
+          "title": "校园生活",
+          "url": "https://www.sysu.edu.cn/zdkd1/xysh.htm"
+        }
+      ]
+    },
+    {
+      "line": 27,
+      "school": "中山大学",
+      "campus": "广州校区北校园",
+      "canteen": "杏林阁教工餐厅",
+      "floor": "护理学院首层",
+      "status": "current_official",
+      "links": [
+        {
+          "title": "校园生活",
+          "url": "https://www.sysu.edu.cn/zdkd1/xysh.htm"
+        }
+      ]
+    },
+    {
+      "line": 28,
+      "school": "中山大学",
+      "campus": "广州校区东校园",
+      "canteen": "学一食堂",
+      "floor": "明德园 11 号楼首层",
+      "status": "current_official",
+      "links": [
+        {
+          "title": "校园生活",
+          "url": "https://www.sysu.edu.cn/zdkd1/xysh.htm"
+        }
+      ]
+    },
+    {
+      "line": 29,
+      "school": "中山大学",
+      "campus": "广州校区东校园",
+      "canteen": "学二食堂",
+      "floor": "明德园 11 号楼二层",
+      "status": "current_official",
+      "links": [
+        {
+          "title": "校园生活",
+          "url": "https://www.sysu.edu.cn/zdkd1/xysh.htm"
+        }
+      ]
+    },
+    {
+      "line": 30,
+      "school": "中山大学",
+      "campus": "广州校区东校园",
+      "canteen": "学三食堂",
+      "floor": "至善园 11 号楼首层",
+      "status": "current_official",
+      "links": [
+        {
+          "title": "校园生活",
+          "url": "https://www.sysu.edu.cn/zdkd1/xysh.htm"
+        }
+      ]
+    },
+    {
+      "line": 31,
+      "school": "中山大学",
+      "campus": "广州校区东校园",
+      "canteen": "学四食堂",
+      "floor": "至善园 11 号楼二层",
+      "status": "current_official",
+      "links": [
+        {
+          "title": "校园生活",
+          "url": "https://www.sysu.edu.cn/zdkd1/xysh.htm"
+        }
+      ]
+    },
+    {
+      "line": 32,
+      "school": "暨南大学",
+      "campus": "石牌校区（校本部）",
+      "canteen": "第一学生饭堂",
+      "floor": "膳堂大楼首层",
+      "status": "current_official",
+      "links": [
+        {
+          "title": "校内餐厅",
+          "url": "https://jnedp.jnu.edu.cn/xnct/list.htm"
+        },
+        {
+          "title": "校区地址",
+          "url": "https://www.jnu.edu.cn/yybb/list.htm"
+        }
+      ]
+    },
+    {
+      "line": 33,
+      "school": "暨南大学",
+      "campus": "石牌校区（校本部）",
+      "canteen": "第五学生饭堂",
+      "floor": "膳堂大楼二楼",
+      "status": "current_official",
+      "links": [
+        {
+          "title": "校内餐厅",
+          "url": "https://jnedp.jnu.edu.cn/xnct/list.htm"
+        },
+        {
+          "title": "校区地址",
+          "url": "https://www.jnu.edu.cn/yybb/list.htm"
+        }
+      ]
+    },
+    {
+      "line": 34,
+      "school": "暨南大学",
+      "campus": "石牌校区（校本部）",
+      "canteen": "第三学生饭堂",
+      "floor": "膳堂大楼三楼",
+      "status": "current_official",
+      "links": [
+        {
+          "title": "校内餐厅",
+          "url": "https://jnedp.jnu.edu.cn/xnct/list.htm"
+        },
+        {
+          "title": "校区地址",
+          "url": "https://www.jnu.edu.cn/yybb/list.htm"
+        }
+      ]
+    },
+    {
+      "line": 35,
+      "school": "华南理工大学",
+      "campus": "五山校区",
+      "canteen": "校园咖啡屋",
+      "floor": "逸夫人文馆一楼",
+      "status": "current_official",
+      "links": [
+        {
+          "title": "Dining",
+          "url": "https://sie.scut.edu.cn/2021/0608/c29524a432354/page.htm"
+        }
+      ]
+    },
+    {
+      "line": 36,
+      "school": "华南理工大学",
+      "campus": "五山校区",
+      "canteen": "西湖苑宾馆餐厅",
+      "floor": "西湖苑宾馆一楼",
+      "status": "current_official",
+      "links": [
+        {
+          "title": "Dining",
+          "url": "https://sie.scut.edu.cn/2021/0608/c29524a432354/page.htm"
+        }
+      ]
+    },
+    {
+      "line": 37,
+      "school": "华南理工大学",
+      "campus": "大学城校区",
+      "canteen": "学生第一饭堂清真餐饮区",
+      "floor": "三楼",
+      "status": "current_official",
+      "links": [
+        {
+          "title": "Dining",
+          "url": "https://sie.scut.edu.cn/2021/0608/c29524a432354/page.htm"
+        }
+      ]
+    },
+    {
+      "line": 38,
+      "school": "华南农业大学",
+      "campus": "五山校部",
+      "canteen": "莘园食堂",
+      "floor": "二楼",
+      "status": "current_official",
+      "links": [
+        {
+          "title": "学校简介",
+          "url": "https://www.scau.edu.cn/17623/list.htm"
+        },
+        {
+          "title": "食堂技能比赛",
+          "url": "https://www.scau.edu.cn/2026/0101/c17646a426088/page.htm"
+        }
+      ]
+    },
+    {
+      "line": 39,
+      "school": "广州医科大学",
+      "campus": "番禺校区",
+      "canteen": "番禺校区食堂",
+      "floor": "一楼、二楼、四楼",
+      "status": "current_official",
+      "links": [
+        {
+          "title": "餐饮",
+          "url": "https://www.gzhmu.edu.cn/xyfw/syxx/shfw/cy.htm"
+        }
+      ]
+    },
+    {
+      "line": 40,
+      "school": "广州医科大学",
+      "campus": "越秀校区",
+      "canteen": "越秀校区食堂",
+      "floor": "二楼餐饮区",
+      "status": "current_official",
+      "links": [
+        {
+          "title": "餐饮",
+          "url": "https://www.gzhmu.edu.cn/xyfw/syxx/shfw/cy.htm"
+        }
+      ]
+    },
+    {
+      "line": 41,
+      "school": "广州中医药大学",
+      "campus": "大学城校区",
+      "canteen": "第一食堂",
+      "floor": "一楼、二楼、三楼",
+      "status": "confirmed_official",
+      "links": [
+        {
+          "title": "校区简介",
+          "url": "https://www.gzucm.edu.cn/xxgk/xxjj.htm"
+        },
+        {
+          "title": "食堂活动",
+          "url": "https://hqglc.gzucm.edu.cn/info/1004/2227.htm"
+        }
+      ]
+    },
+    {
+      "line": 42,
+      "school": "广州中医药大学",
+      "campus": "大学城校区",
+      "canteen": "第二食堂",
+      "floor": "一楼、二楼",
+      "status": "confirmed_official",
+      "links": [
+        {
+          "title": "便民通讯录",
+          "url": "https://xxgk.gzucm.edu.cn/__local/C/71/38/B89F2EFFB9AF053366274F17AFB_FD586B2A_3A4A1.pdf"
+        },
+        {
+          "title": "食堂活动",
+          "url": "https://hqglc.gzucm.edu.cn/info/1004/2227.htm"
+        }
+      ]
+    },
+    {
+      "line": 43,
+      "school": "广州中医药大学",
+      "campus": "三元里校区",
+      "canteen": "学生食堂",
+      "floor": "北栋首层、二层",
+      "status": "confirmed_official",
+      "links": [
+        {
+          "title": "新学生宿舍楼说明",
+          "url": "https://hqglc.gzucm.edu.cn/info/1004/2021.htm"
+        }
+      ]
+    },
+    {
+      "line": 44,
+      "school": "华南师范大学",
+      "campus": "广州校区大学城校园",
+      "canteen": "翰园",
+      "floor": "二楼校友用餐专区",
+      "status": "current_official",
+      "links": [
+        {
+          "title": "饭堂开放日",
+          "url": "https://youth.scnu.edu.cn/news/2025/0304/18326.html"
+        },
+        {
+          "title": "校友返校餐饮",
+          "url": "https://news.scnu.edu.cn/20277"
+        }
+      ]
+    },
+    {
+      "line": 45,
+      "school": "华南师范大学",
+      "campus": "广州校区石牌校园",
+      "canteen": "沁园",
+      "floor": "二楼校友用餐专区",
+      "status": "current_official",
+      "links": [
+        {
+          "title": "饭堂开放日",
+          "url": "https://youth.scnu.edu.cn/news/2025/0304/18326.html"
+        },
+        {
+          "title": "校友返校餐饮",
+          "url": "https://news.scnu.edu.cn/20277"
+        }
+      ]
+    },
+    {
+      "line": 46,
+      "school": "广东外语外贸大学",
+      "campus": "白云山校区",
+      "canteen": "清雅园",
+      "floor": "一楼、二楼、三楼",
+      "status": "current_official",
+      "links": [
+        {
+          "title": "饮食服务",
+          "url": "https://hqc.gdufs.edu.cn/info/1002/1444.htm"
+        }
+      ]
+    },
+    {
+      "line": 47,
+      "school": "广东外语外贸大学",
+      "campus": "白云山校区",
+      "canteen": "学生第一食堂",
+      "floor": "一楼、二楼、三楼",
+      "status": "current_official",
+      "links": [
+        {
+          "title": "饮食服务",
+          "url": "https://hqc.gdufs.edu.cn/info/1002/1444.htm"
+        }
+      ]
+    },
+    {
+      "line": 48,
+      "school": "广东外语外贸大学",
+      "campus": "白云山校区",
+      "canteen": "学生第二食堂",
+      "floor": "一楼、二楼",
+      "status": "current_official",
+      "links": [
+        {
+          "title": "饮食服务",
+          "url": "https://hqc.gdufs.edu.cn/info/1002/1444.htm"
+        }
+      ]
+    },
+    {
+      "line": 49,
+      "school": "广东外语外贸大学",
+      "campus": "白云山校区",
+      "canteen": "学生第三食堂",
+      "floor": "一楼",
+      "status": "current_official",
+      "links": [
+        {
+          "title": "饮食服务",
+          "url": "https://hqc.gdufs.edu.cn/info/1002/1444.htm"
+        }
+      ]
+    },
+    {
+      "line": 50,
+      "school": "广东外语外贸大学",
+      "campus": "大学城校区",
+      "canteen": "学生第一食堂（文采园）",
+      "floor": "一楼、二楼",
+      "status": "current_official",
+      "links": [
+        {
+          "title": "饮食服务",
+          "url": "https://hqc.gdufs.edu.cn/info/1002/1444.htm"
+        }
+      ]
+    },
+    {
+      "line": 51,
+      "school": "广东外语外贸大学",
+      "campus": "大学城校区",
+      "canteen": "学生第二食堂（博雅园）",
+      "floor": "一楼、二楼",
+      "status": "current_official",
+      "links": [
+        {
+          "title": "饮食服务",
+          "url": "https://hqc.gdufs.edu.cn/info/1002/1444.htm"
+        }
+      ]
+    },
+    {
+      "line": 52,
+      "school": "广东外语外贸大学",
+      "campus": "大学城校区",
+      "canteen": "学生第三食堂（风采园）",
+      "floor": "一楼、二楼",
+      "status": "current_official",
+      "links": [
+        {
+          "title": "饮食服务",
+          "url": "https://hqc.gdufs.edu.cn/info/1002/1444.htm"
+        }
+      ]
+    },
+    {
+      "line": 53,
+      "school": "广东技术师范大学",
+      "campus": "白云校区",
+      "canteen": "学生第一食堂",
+      "floor": "一楼、二楼、三楼",
+      "status": "current_official",
+      "links": [
+        {
+          "title": "开学保障检查",
+          "url": "https://www.gpnu.edu.cn/info/1071/34134.htm"
+        },
+        {
+          "title": "档口招采",
+          "url": "https://www.gpnu.edu.cn/info/1040/21299.htm"
+        }
+      ]
+    },
+    {
+      "line": 54,
+      "school": "广东技术师范大学",
+      "campus": "白云校区",
+      "canteen": "第三食堂",
+      "floor": "一楼就餐区",
+      "status": "current_official",
+      "links": [
+        {
+          "title": "食品安全检查",
+          "url": "https://www.gpnu.edu.cn/info/1037/63391.htm"
+        }
+      ]
+    },
+    {
+      "line": 55,
+      "school": "广东工业大学",
+      "campus": "大学城校区",
+      "canteen": "东一食堂",
+      "floor": "一楼",
+      "status": "current_official",
+      "links": [
+        {
+          "title": "后勤改造",
+          "url": "https://www.gdut.edu.cn/info/1709/16567.htm"
+        }
+      ]
+    },
+    {
+      "line": 56,
+      "school": "广东工业大学",
+      "campus": "大学城校区",
+      "canteen": "西三食堂",
+      "floor": "一楼、二楼",
+      "status": "current_official",
+      "links": [
+        {
+          "title": "后勤改造",
+          "url": "https://www.gdut.edu.cn/info/1709/16567.htm"
+        }
+      ]
+    },
+    {
+      "line": 57,
+      "school": "广东工业大学",
+      "campus": "龙洞校区",
+      "canteen": "一期学生公寓食堂",
+      "floor": "二楼",
+      "status": "current_official",
+      "links": [
+        {
+          "title": "后勤改造",
+          "url": "https://www.gdut.edu.cn/info/1709/16567.htm"
+        }
+      ]
+    },
+    {
+      "line": 58,
+      "school": "广东工业大学",
+      "campus": "东风路校区",
+      "canteen": "北院食堂",
+      "floor": "一楼",
+      "status": "current_official",
+      "links": [
+        {
+          "title": "校园卡服务点",
+          "url": "https://yx.gdut.edu.cn/guangdonggongyedaxuexiaoyuankahuiyintongxinshengshiyongzhiyin20240709.pdf"
+        }
+      ]
+    },
+    {
+      "line": 59,
+      "school": "广州南方学院",
+      "campus": "广州从化校区",
+      "canteen": "西区食堂",
+      "floor": "西区一、二层",
+      "status": "current_official",
+      "links": [
+        {
+          "title": "生活服务",
+          "url": "https://www.nfu.edu.cn/xyfw/syxx/shfw.htm"
+        }
+      ]
+    },
+    {
+      "line": 60,
+      "school": "广州南方学院",
+      "campus": "广州从化校区",
+      "canteen": "第三食堂",
+      "floor": "东区一层",
+      "status": "current_official",
+      "links": [
+        {
+          "title": "生活服务",
+          "url": "https://www.nfu.edu.cn/xyfw/syxx/shfw.htm"
+        }
+      ]
+    },
+    {
+      "line": 61,
+      "school": "广州南方学院",
+      "campus": "广州从化校区",
+      "canteen": "第四食堂",
+      "floor": "东区二层",
+      "status": "current_official",
+      "links": [
+        {
+          "title": "生活服务",
+          "url": "https://www.nfu.edu.cn/xyfw/syxx/shfw.htm"
+        }
+      ]
+    },
+    {
+      "line": 62,
+      "school": "广州南方学院",
+      "campus": "广州从化校区",
+      "canteen": "第五食堂",
+      "floor": "中区一层",
+      "status": "current_official",
+      "links": [
+        {
+          "title": "生活服务",
+          "url": "https://www.nfu.edu.cn/xyfw/syxx/shfw.htm"
+        }
+      ]
+    },
+    {
+      "line": 63,
+      "school": "广州南方学院",
+      "campus": "广州从化校区",
+      "canteen": "第六食堂",
+      "floor": "中区二、三层",
+      "status": "current_official",
+      "links": [
+        {
+          "title": "生活服务",
+          "url": "https://www.nfu.edu.cn/xyfw/syxx/shfw.htm"
+        }
+      ]
+    },
+    {
+      "line": 64,
+      "school": "南方医科大学",
+      "campus": "校本部（广州）",
+      "canteen": "学生一食堂",
+      "floor": "17 栋西侧对面一楼",
+      "status": "confirmed_official",
+      "links": [
+        {
+          "title": "院内饮食服务",
+          "url": "https://portal.smu.edu.cn/twh/info/1046/1601.htm"
+        },
+        {
+          "title": "本科招生生活问答",
+          "url": "https://portal.smu.edu.cn/bkzs/info/1294/2494.htm"
+        }
+      ]
+    },
+    {
+      "line": 65,
+      "school": "南方医科大学",
+      "campus": "校本部（广州）",
+      "canteen": "学生二食堂",
+      "floor": "17 栋西侧对面二楼",
+      "status": "confirmed_official",
+      "links": [
+        {
+          "title": "院内饮食服务",
+          "url": "https://portal.smu.edu.cn/twh/info/1046/1601.htm"
+        }
+      ]
+    },
+    {
+      "line": 66,
+      "school": "南方医科大学",
+      "campus": "校本部（广州）",
+      "canteen": "学生三食堂",
+      "floor": "17 栋西侧对面三楼",
+      "status": "confirmed_official",
+      "links": [
+        {
+          "title": "院内饮食服务",
+          "url": "https://portal.smu.edu.cn/twh/info/1046/1601.htm"
+        }
+      ]
+    },
+    {
+      "line": 67,
+      "school": "南方医科大学",
+      "campus": "校本部（广州）",
+      "canteen": "学生四食堂",
+      "floor": "17 栋西侧对面四楼",
+      "status": "confirmed_official",
+      "links": [
+        {
+          "title": "院内饮食服务",
+          "url": "https://portal.smu.edu.cn/twh/info/1046/1601.htm"
+        }
+      ]
+    },
+    {
+      "line": 68,
+      "school": "广州美术学院",
+      "campus": "昌岗校区",
+      "canteen": "师生食堂",
+      "floor": "一、二层",
+      "status": "current_official",
+      "links": [
+        {
+          "title": "2025 食堂经营招标",
+          "url": "https://cgzx2.gzarts.edu.cn/portalwebController.do?goArticleDetail=&id=8a8a86da9470f1430194986ef44968e1"
+        }
+      ]
+    }
+  ]
+}
