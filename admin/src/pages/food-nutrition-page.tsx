@@ -58,6 +58,31 @@ type FoodCategory = {
   label: string
 }
 
+const defaultFoodCategories: FoodCategory[] = [
+  { key: 'staple', label: '主食' },
+  { key: 'protein', label: '肉蛋奶' },
+  { key: 'vegetable', label: '蔬菜' },
+  { key: 'fruit', label: '水果' },
+  { key: 'dairy', label: '乳品' },
+  { key: 'beverage', label: '饮品' },
+  { key: 'soup', label: '汤饮' },
+  { key: 'snack', label: '零食' },
+  { key: 'meal', label: '菜肴' },
+  { key: 'other', label: '其他' },
+]
+
+const categoryInferenceRules: Array<{ key: string; keywords: string[] }> = [
+  { key: 'soup', keywords: ['清汤', '汤', '羹', 'soup', 'broth'] },
+  { key: 'beverage', keywords: ['咖啡', '拿铁', '奶茶', '茶饮', '绿茶', '红茶', '乌龙茶', '饮料', '可乐', '果汁', '豆浆', 'coffee', 'latte', 'tea', 'drink'] },
+  { key: 'snack', keywords: ['坚果', '薯片', '饼干', '曲奇', '巧克力', '糖果', '糕点', '蛋糕', '零食', '瓜子', '花生', '杏仁', '核桃', 'cookie', 'snack', 'nuts'] },
+  { key: 'meal', keywords: ['沙拉', '便当', '套餐', '外卖', '饭团'] },
+  { key: 'staple', keywords: ['米饭', '糙米', '面条', '馒头', '包子', '粥', '燕麦', '红薯', '玉米', '土豆', '紫薯', '南瓜', '面包', '吐司', 'rice', 'noodle', 'bread', 'oat'] },
+  { key: 'protein', keywords: ['鸡', '牛肉', '猪肉', '羊肉', '肉末', '肉丸', '肉片', '瘦肉', '排骨', '猪骨', '香肠', '火腿', '培根', '鱼', '虾', '蛋', '豆腐', 'protein', 'chicken', 'beef', 'egg', 'tofu', 'fish'] },
+  { key: 'vegetable', keywords: ['菜', '西兰花', '生菜', '菠菜', '番茄', '黄瓜', '白菜', '秋葵', '时蔬', '蔬', 'broccoli', 'tomato', 'vegetable'] },
+  { key: 'fruit', keywords: ['苹果', '香蕉', '橙', '梨', '莓', '水果', '西瓜', '草莓', 'apple', 'banana', 'berry', 'fruit'] },
+  { key: 'dairy', keywords: ['酸奶', '牛奶', '奶酪', '芝士', 'cheese', 'milk', 'yogurt'] },
+]
+
 type FieldDef = {
   key: string
   label: string
@@ -143,7 +168,7 @@ export function FoodNutritionPage({ onLogout, onMenuChange }: FoodNutritionPageP
   const [query, setQuery] = useState(searchParams.get('q') ?? '')
   const [active, setActive] = useState(searchParams.get('active') ?? 'all')
   const [category, setCategory] = useState(searchParams.get('category') ?? 'all')
-  const [categories, setCategories] = useState<FoodCategory[]>([])
+  const [categories, setCategories] = useState<FoodCategory[]>(defaultFoodCategories)
   const [page, setPage] = useState(parseParamPage(searchParams.get('page'), 1))
   const [limit, setLimit] = useState(parseParamPage(searchParams.get('limit'), 40))
   const [items, setItems] = useState<FoodNutrition[]>([])
@@ -198,13 +223,14 @@ export function FoodNutritionPage({ onLogout, onMenuChange }: FoodNutritionPageP
         category,
       })
       const data = await adminRequest<ListResponse<FoodNutrition>>(`/api/admin/food-nutrition?${params.toString()}`)
-      setItems(data.items || [])
-      setCategories(data.categories || [])
+      const nextItems = (data.items || []).map(withFallbackCategory)
+      setItems(nextItems)
+      setCategories(data.categories?.length ? data.categories : defaultFoodCategories)
       setCategory(data.category || category)
       setTotal(data.total || 0)
       setPage(data.page || nextPage)
-      setSelectedId((current) => current || data.items?.[0]?.id || '')
-      setMessage(`共 ${data.total || 0} 条，当前显示 ${(data.items || []).length} 条`)
+      setSelectedId((current) => current || nextItems[0]?.id || '')
+      setMessage(`共 ${data.total || 0} 条，当前显示 ${nextItems.length} 条`)
     } catch (error) {
       const text = error instanceof Error ? error.message : '读取失败'
       setMessage(text)
@@ -219,8 +245,9 @@ export function FoodNutritionPage({ onLogout, onMenuChange }: FoodNutritionPageP
     setSelectedId(id)
     try {
       const data = await adminRequest<{ item: FoodNutrition }>(`/api/admin/food-nutrition/${encodeURIComponent(id)}`)
-      setSelected(data.item)
-      setItems((current) => current.map((item) => (item.id === id ? data.item : item)))
+      const nextItem = withFallbackCategory(data.item)
+      setSelected(nextItem)
+      setItems((current) => current.map((item) => (item.id === id ? nextItem : item)))
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '详情读取失败')
     }
@@ -233,8 +260,9 @@ export function FoodNutritionPage({ onLogout, onMenuChange }: FoodNutritionPageP
         method: 'PATCH',
         body: JSON.stringify(payload),
       })
-      setSelected(data.item)
-      setItems((current) => current.map((item) => (item.id === id ? data.item : item)))
+      const nextItem = withFallbackCategory(data.item)
+      setSelected(nextItem)
+      setItems((current) => current.map((item) => (item.id === id ? nextItem : item)))
       toast.success('保存成功')
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '保存失败')
@@ -250,9 +278,10 @@ export function FoodNutritionPage({ onLogout, onMenuChange }: FoodNutritionPageP
         method: 'POST',
         body: JSON.stringify(payload),
       })
-      setItems((current) => [data.item, ...current])
+      const nextItem = withFallbackCategory(data.item)
+      setItems((current) => [nextItem, ...current])
       setTotal((value) => value + 1)
-      setSelectedId(data.item.id)
+      setSelectedId(nextItem.id)
       setShowCreate(false)
       toast.success('创建成功')
     } catch (error) {
@@ -765,4 +794,17 @@ function cleanNum(value: number | undefined): string {
 function getCategoryLabel(categories: FoodCategory[], key?: string): string {
   if (!key) return '其他'
   return categories.find((item) => item.key === key)?.label || key
+}
+
+function withFallbackCategory(item: FoodNutrition): FoodNutrition {
+  if (item.category) return item
+  return { ...item, category: inferFoodCategory(item.canonical_name) }
+}
+
+function inferFoodCategory(name: string): string {
+  const normalized = name.trim().toLowerCase()
+  for (const rule of categoryInferenceRules) {
+    if (rule.keywords.some((keyword) => normalized.includes(keyword.toLowerCase()))) return rule.key
+  }
+  return 'other'
 }
