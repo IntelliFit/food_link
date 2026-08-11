@@ -2,11 +2,10 @@ package foodcategory
 
 import (
 	"fmt"
-	"sort"
 	"strings"
 )
 
-// Category is a user-facing food catalog category shared by the mini program and admin console.
+// Category is an admin nutrition-library category using the user-facing catalog labels.
 type Category struct {
 	Key   string `json:"key"`
 	Label string `json:"label"`
@@ -31,7 +30,7 @@ var categoryFilterPatterns = map[string][]string{
 	"snack":     {"%坚果%", "%薯片%", "%饼干%", "%曲奇%", "%巧克力%", "%方糖%", "%糖果%", "%软糖%", "%棒棒糖%", "%糕点%", "%蛋糕%", "%零食%", "%瓜子%", "%花生%", "%杏仁%", "%核桃%", "%cookie%", "%snack%", "%nuts%"},
 	"meal":      {"%沙拉%", "%便当%", "%套餐%", "%外卖%", "%餐%", "%饭团%", "%炒饭%"},
 	"staple":    {"%米饭%", "%白米饭%", "%糙米%", "%饭%", "%面条%", "%荞麦面%", "%馒头%", "%包子%", "%粥%", "%燕麦%", "%红薯%", "%玉米%", "%土豆%", "%紫薯%", "%南瓜%", "%面包%", "%吐司%"},
-	"protein":   {"%鸡%", "%牛肉%", "%猪肉%", "%红烧肉%", "%鱼%", "%虾%", "%蛋%", "%豆腐%", "%蛋白%", "%鸭%", "%鹅%"},
+	"protein":   {"%鸡%", "%牛肉%", "%猪肉%", "%羊肉%", "%红烧肉%", "%肉末%", "%肉丸%", "%肉片%", "%瘦肉%", "%排骨%", "%猪骨%", "%香肠%", "%火腿%", "%培根%", "%鱼%", "%虾%", "%蛋%", "%豆腐%", "%蛋白%", "%鸭%", "%鹅%"},
 	"vegetable": {"%菜%", "%西兰花%", "%生菜%", "%菠菜%", "%番茄%", "%黄瓜%", "%白菜%", "%秋葵%", "%时蔬%"},
 	"fruit":     {"%苹果%", "%香蕉%", "%橙%", "%梨%", "%莓%", "%水果%", "%西瓜%", "%草莓%"},
 	"dairy":     {"%奶%", "%酸奶%", "%牛奶%", "%奶酪%", "%芝士%"},
@@ -43,13 +42,15 @@ var categoryInferenceKeywords = map[string][]string{
 	"snack":     {"坚果", "薯片", "饼干", "曲奇", "巧克力", "方糖", "糖果", "软糖", "棒棒糖", "糕点", "蛋糕", "零食", "瓜子", "花生", "杏仁", "核桃", "cookie", "snack", "nuts"},
 	"meal":      {"沙拉", "便当", "套餐", "外卖", "餐", "饭团"},
 	"staple":    {"米饭", "白米饭", "糙米", "饭", "面条", "荞麦面", "馒头", "包子", "粥", "燕麦", "红薯", "玉米", "土豆", "紫薯", "南瓜", "面包", "吐司", "rice", "noodle", "bread", "oat"},
-	"protein":   {"鸡", "牛肉", "猪肉", "红烧肉", "鱼", "虾", "蛋", "豆腐", "protein", "chicken", "beef", "egg", "tofu", "fish"},
+	"protein":   {"鸡", "牛肉", "猪肉", "羊肉", "红烧肉", "肉末", "肉丸", "肉片", "瘦肉", "排骨", "猪骨", "香肠", "火腿", "培根", "鱼", "虾", "蛋", "豆腐", "protein", "chicken", "beef", "egg", "tofu", "fish"},
 	"vegetable": {"菜", "西兰花", "生菜", "菠菜", "番茄", "蔬", "时蔬", "broccoli", "tomato", "vegetable"},
 	"fruit":     {"苹果", "香蕉", "橙", "梨", "莓", "水果", "apple", "banana", "berry", "fruit"},
 	"dairy":     {"奶", "酸奶", "牛奶", "奶酪", "芝士", "cheese", "milk", "yogurt"},
 }
 
-// Categories returns a defensive copy in the same order used by the mini program.
+var categoryPrecedence = []string{"soup", "beverage", "snack", "meal", "protein", "staple", "vegetable", "fruit", "dairy"}
+
+// Categories returns a defensive copy in the same order shown to users.
 func Categories() []Category {
 	result := make([]Category, len(categories))
 	copy(result, categories)
@@ -76,16 +77,23 @@ func FilterSQL(column, category string) string {
 	if category == "all" {
 		return "TRUE"
 	}
+	return fmt.Sprintf("(%s) = '%s'", ExpressionSQL(column), category)
+}
+
+// ExpressionSQL returns one mutually exclusive category using the same precedence as Infer.
+func ExpressionSQL(column string) string {
 	conditions := Conditions(column)
-	if condition, ok := conditions[category]; ok {
-		return condition
+	var b strings.Builder
+	b.WriteString("CASE")
+	for _, key := range categoryPrecedence {
+		b.WriteString(" WHEN ")
+		b.WriteString(conditions[key])
+		b.WriteString(" THEN '")
+		b.WriteString(key)
+		b.WriteString("'")
 	}
-	known := make([]string, 0, len(conditions))
-	for _, condition := range conditions {
-		known = append(known, "("+condition+")")
-	}
-	sort.Strings(known)
-	return "NOT (" + strings.Join(known, " OR ") + ")"
+	b.WriteString(" ELSE 'other' END")
+	return b.String()
 }
 
 // Conditions returns the shared keyword predicates used to categorize nutrition-library names.
@@ -101,7 +109,7 @@ func Conditions(column string) map[string]string {
 // Infer applies the same precedence as the SQL category expression.
 func Infer(text string) string {
 	normalized := strings.ToLower(strings.TrimSpace(text))
-	for _, key := range []string{"soup", "beverage", "snack", "meal", "staple", "protein", "vegetable", "fruit", "dairy"} {
+	for _, key := range categoryPrecedence {
 		for _, keyword := range categoryInferenceKeywords[key] {
 			if strings.Contains(normalized, strings.ToLower(keyword)) {
 				return key

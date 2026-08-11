@@ -11,7 +11,9 @@ func TestInferUsesCatalogCategoryPrecedence(t *testing.T) {
 
 	assert.Equal(t, "vegetable", Infer("番茄"))
 	assert.Equal(t, "protein", Infer("番茄炒鸡蛋"))
-	assert.Equal(t, "staple", Infer("鸡肉炒饭"))
+	assert.Equal(t, "protein", Infer("麻辣烫（含豆腐、肉丸、土豆）"))
+	assert.Equal(t, "protein", Infer("卤猪骨肉"))
+	assert.Equal(t, "staple", Infer("无糖面包"))
 	assert.Equal(t, "dairy", Infer("纯牛奶"))
 	assert.Equal(t, "other", Infer("未知食物"))
 }
@@ -21,8 +23,10 @@ func TestFilterSQLSupportsAllAndOther(t *testing.T) {
 
 	assert.Equal(t, "TRUE", FilterSQL("canonical_name", "all"))
 	assert.Equal(t, "TRUE", FilterSQL("canonical_name", "invalid"))
+	assert.Contains(t, FilterSQL("canonical_name", "vegetable"), "CASE")
 	assert.Contains(t, FilterSQL("canonical_name", "vegetable"), "%番茄%")
-	assert.Contains(t, FilterSQL("canonical_name", "other"), "NOT (")
+	assert.Contains(t, FilterSQL("canonical_name", "vegetable"), "= 'vegetable'")
+	assert.Contains(t, FilterSQL("canonical_name", "other"), "ELSE 'other' END")
 }
 
 func TestCategoriesMatchUserCatalogLabels(t *testing.T) {
