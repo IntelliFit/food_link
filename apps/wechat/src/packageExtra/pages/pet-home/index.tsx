@@ -5,7 +5,6 @@ import {
   getMyMembership,
   getPetSummary,
   customizePetPixelAvatar,
-  rerollPetAppearance,
   claimPetEvent,
   selectPetAppearance,
   type MembershipStatus,
@@ -64,7 +63,6 @@ function isCandidateActive(candidate: PetAppearanceCandidate, pet?: PetProfile):
 function PetHomePage() {
   const { scheme } = useAppColorScheme()
   const [claiming, setClaiming] = useState(false)
-  const [rerolling, setRerolling] = useState(false)
   const [pixelAvatarCustomizing, setPixelAvatarCustomizing] = useState(false)
   const [pixelAvatarPreview, setPixelAvatarPreview] = useState<PetProfile | null>(null)
   const [selectingCandidateId, setSelectingCandidateId] = useState('')
@@ -106,7 +104,6 @@ function PetHomePage() {
   })
 
   const petEvent: PetOfflineEvent | null = petSummary?.event && !petSummary.event.is_claimed ? petSummary.event : null
-  const earnedCredits = membership?.earned_credits_balance ?? 0
   const totalCredits = membership?.total_credits_available ?? membership?.daily_credits_remaining ?? 0
   const selectionCandidates = petSummary?.pet?.selection_candidates || []
   const commonCandidates = selectionCandidates.filter((candidate) => Boolean(candidate.builtin_avatar_id))
@@ -146,42 +143,6 @@ function PetHomePage() {
       setClaiming(false)
     }
   }, [claiming, petEvent?.id])
-
-  const handleReroll = useCallback(async () => {
-    if (!petSummary?.pet || rerolling) return
-    if (earnedCredits < 5) {
-      Taro.showToast({ title: '奖励积分不足 5 分', icon: 'none' })
-      return
-    }
-    const modal = await Taro.showModal({
-      title: '随机换外观',
-      content: '会消耗 5 奖励积分，宠物名字和等级不变，只随机刷新颜色、体型、花纹和配饰。',
-      confirmText: '立即更换',
-      confirmColor: '#5cb896',
-      cancelText: '先看看'
-    })
-    if (!modal.confirm) return
-
-    try {
-      setRerolling(true)
-      const result = await rerollPetAppearance()
-      syncPetProfile(result.pet)
-      const earnedBalance = result.earned_credits_balance
-      if (typeof earnedBalance === 'number') {
-        setMembership((prev) => prev ? {
-          ...prev,
-          earned_credits_balance: earnedBalance,
-          total_credits_available: Math.max((prev.total_credits_available ?? totalCredits) - result.credits_cost, 0),
-          daily_credits_remaining: Math.max((prev.daily_credits_remaining ?? totalCredits) - result.credits_cost, 0),
-        } : prev)
-      }
-      Taro.showToast({ title: '外观已更新', icon: 'success' })
-    } catch (error) {
-      await showUnifiedApiError(error, '随机换外观失败')
-    } finally {
-      setRerolling(false)
-    }
-  }, [earnedCredits, petSummary?.pet, rerolling, syncPetProfile, totalCredits])
 
   const handleSelectCandidate = useCallback(async (candidate: PetAppearanceCandidate) => {
     if (!candidate?.id || selectingCandidateId) return
@@ -305,7 +266,10 @@ function PetHomePage() {
             <View className='pet-home-hero-copy'>
               <View className='pet-home-name-link' onClick={openPetChat}>
                 <Text className='pet-home-name'>{petSummary?.pet?.name || '健康伙伴'}</Text>
-                <Text className='iconfont icon-right pet-home-name-arrow' />
+                <View className='pet-home-chat-guide'>
+                  <Text className='pet-home-chat-guide-text'>进入对话</Text>
+                  <Text className='iconfont icon-right pet-home-name-arrow' />
+                </View>
               </View>
               {petEvent?.can_claim ? (
                 <View className='pet-home-hero-reward' onClick={handleClaim}>
@@ -420,16 +384,6 @@ function PetHomePage() {
                 <View className={`pet-home-toggle ${homePetHidden ? '' : 'active'}`}>
                   <View className='pet-home-toggle-knob' />
                 </View>
-              </View>
-            </View>
-            <View className='pet-home-action-item' onClick={handleReroll}>
-              <View>
-                <Text className='pet-home-action-title'>随机换外观</Text>
-                <Text className='pet-home-action-desc'>保留名字和等级，随机刷新体型、花纹与配饰</Text>
-              </View>
-              <View className='pet-home-action-side'>
-                <Text className='pet-home-action-cost'>{rerolling ? '处理中' : '5 积分'}</Text>
-                <Text className='iconfont icon-right pet-home-action-arrow' />
               </View>
             </View>
           </View>

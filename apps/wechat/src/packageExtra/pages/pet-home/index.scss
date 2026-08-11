@@ -293,8 +293,9 @@
 
 .pet-home-name-link {
   display: flex;
-  align-items: center;
-  gap: 10rpx;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2rpx;
   justify-content: flex-end;
   width: 100%;
   max-width: 100%;
@@ -318,11 +319,24 @@
   white-space: nowrap;
 }
 
+.pet-home-chat-guide {
+  display: flex;
+  align-items: center;
+  gap: 4rpx;
+}
+
+.pet-home-chat-guide-text {
+  color: #2f8766;
+  font-size: 21rpx;
+  font-weight: 700;
+  line-height: 30rpx;
+}
+
 .pet-home-name-arrow {
   flex-shrink: 0;
-  color: #5f6b66;
-  font-size: 24rpx;
-  line-height: 32rpx;
+  color: #2f8766;
+  font-size: 20rpx;
+  line-height: 30rpx;
 }
 
 .pet-home-hero-reward {
@@ -672,7 +686,11 @@
   }
 
   .pet-home-name-arrow {
-    color: rgb(214 226 220 / 72%);
+    color: #6ee7b7;
+  }
+
+  .pet-home-chat-guide-text {
+    color: #6ee7b7;
   }
 
   .pet-home-hero-reward {
