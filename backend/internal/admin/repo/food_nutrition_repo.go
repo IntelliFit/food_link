@@ -7,6 +7,7 @@ import (
 	"time"
 	"unicode"
 
+	"food_link/backend/internal/foodcategory"
 	"food_link/backend/internal/foodrecord/domain"
 
 	"github.com/google/uuid"
@@ -34,10 +35,11 @@ func NewFoodNutritionRepo(db *gorm.DB) *FoodNutritionRepo {
 }
 
 type ListFoodNutritionInput struct {
-	Query  string
-	Active string
-	Limit  int
-	Offset int
+	Query    string
+	Active   string
+	Category string
+	Limit    int
+	Offset   int
 }
 
 type FoodNutritionPatch map[string]any
@@ -62,6 +64,7 @@ func (r *FoodNutritionRepo) List(ctx context.Context, input ListFoodNutritionInp
 
 	q := strings.TrimSpace(input.Query)
 	active := strings.TrimSpace(input.Active)
+	category := foodcategory.NormalizeFilter(input.Category)
 	activeFilter := ""
 	switch active {
 	case "true":
@@ -73,6 +76,9 @@ func (r *FoodNutritionRepo) List(ctx context.Context, input ListFoodNutritionInp
 	// 没有搜索词时保持原来的简单列表
 	if q == "" {
 		query := r.db.WithContext(ctx).Model(&domain.FoodNutrition{})
+		if category != "all" {
+			query = query.Where(foodcategory.FilterSQL("canonical_name", category))
+		}
 		switch active {
 		case "true":
 			query = query.Where("is_active = ?", true)
@@ -92,6 +98,12 @@ func (r *FoodNutritionRepo) List(ctx context.Context, input ListFoodNutritionInp
 
 	like := "%" + strings.ToLower(q) + "%"
 	activeFilterInner := strings.ReplaceAll(activeFilter, "f.", "f2.")
+	categoryFilter := ""
+	categoryFilterInner := ""
+	if category != "all" {
+		categoryFilter = "AND " + foodcategory.FilterSQL("f.canonical_name", category)
+		categoryFilterInner = "AND " + foodcategory.FilterSQL("f2.canonical_name", category)
+	}
 
 	var total int64
 	countSQL := fmt.Sprintf(`
@@ -100,7 +112,8 @@ func (r *FoodNutritionRepo) List(ctx context.Context, input ListFoodNutritionInp
 		LEFT JOIN food_nutrition_aliases a ON a.food_id = f.id
 		WHERE (LOWER(f.canonical_name) LIKE ? OR LOWER(a.alias_name) LIKE ?)
 		%s
-	`, activeFilter)
+		%s
+	`, activeFilter, categoryFilter)
 	if err := r.db.WithContext(ctx).Raw(countSQL, like, like).Scan(&total).Error; err != nil {
 		return nil, err
 	}
@@ -113,6 +126,7 @@ func (r *FoodNutritionRepo) List(ctx context.Context, input ListFoodNutritionInp
 			FROM food_nutrition_library f2
 			LEFT JOIN food_nutrition_aliases a2 ON a2.food_id = f2.id
 			WHERE (LOWER(f2.canonical_name) LIKE ? OR LOWER(a2.alias_name) LIKE ?)
+			%s
 			%s
 		)
 		ORDER BY
@@ -130,7 +144,7 @@ func (r *FoodNutritionRepo) List(ctx context.Context, input ListFoodNutritionInp
 			LENGTH(f.canonical_name) ASC,
 			f.canonical_name ASC
 		LIMIT ? OFFSET ?
-	`, activeFilterInner)
+	`, activeFilterInner, categoryFilterInner)
 
 	var items []domain.FoodNutrition
 	if err := r.db.WithContext(ctx).Raw(listSQL, like, like, q, q, q, q, q, q, limit, offset).Scan(&items).Error; err != nil {

@@ -2,11 +2,14 @@ package handler
 
 import (
 	"context"
+	"log/slog"
 
 	"food_link/backend/internal/admin/repo"
 	"food_link/backend/internal/admin/service"
 	"food_link/backend/internal/common/response"
+	"food_link/backend/internal/foodcategory"
 	"food_link/backend/internal/foodrecord/domain"
+	"food_link/backend/pkg/logger"
 
 	"github.com/gin-gonic/gin"
 )
@@ -30,21 +33,35 @@ func NewFoodNutritionHandler(svc FoodNutritionService) *FoodNutritionHandler {
 func (h *FoodNutritionHandler) List(c *gin.Context) {
 	page := positiveInt(c.Query("page"), 1)
 	limit := positiveInt(c.Query("limit"), 40)
+	category := foodcategory.NormalizeFilter(c.Query("category"))
+	logger.Info(c.Request.Context(), "管理员读取营养食物库",
+		slog.String("food.category", category),
+		slog.Int("page", page),
+		slog.Int("page_size", limit),
+	)
 	result, err := h.svc.List(c.Request.Context(), service.ListFoodNutritionInput{
-		Query:  c.Query("q"),
-		Active: c.DefaultQuery("active", "all"),
-		Page:   page,
-		Limit:  limit,
+		Query:    c.Query("q"),
+		Active:   c.DefaultQuery("active", "all"),
+		Category: category,
+		Page:     page,
+		Limit:    limit,
 	})
 	if err != nil {
 		response.Error(c, err)
 		return
 	}
+	logger.Info(c.Request.Context(), "管理员读取营养食物库成功",
+		slog.String("food.category", category),
+		slog.Int("result.count", len(result.Items)),
+		slog.Int64("result.total", result.Total),
+	)
 	response.Success(c, gin.H{
-		"items": result.Items,
-		"page":  page,
-		"limit": limit,
-		"total": result.Total,
+		"items":      result.Items,
+		"categories": foodcategory.Categories(),
+		"category":   category,
+		"page":       page,
+		"limit":      limit,
+		"total":      result.Total,
 	})
 }
 

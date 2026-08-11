@@ -312,6 +312,7 @@ type FoodNutrition struct {
 	ID                    string            `gorm:"column:id" json:"id"`
 	CanonicalName         string            `gorm:"column:canonical_name" json:"canonical_name"`
 	NormalizedName        string            `gorm:"column:normalized_name" json:"normalized_name"`
+	Category              string            `gorm:"-" json:"category,omitempty"`
 	KcalPer100g           float64           `gorm:"column:kcal_per_100g" json:"kcal_per_100g"`
 	ProteinPer100g        float64           `gorm:"column:protein_per_100g" json:"protein_per_100g"`
 	CarbsPer100g          float64           `gorm:"column:carbs_per_100g" json:"carbs_per_100g"`

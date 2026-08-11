@@ -2,12 +2,15 @@ package service
 
 import (
 	"context"
+	"log/slog"
 	"strings"
 	"unicode"
 
 	"food_link/backend/internal/admin/repo"
 	commonerrors "food_link/backend/internal/common/errors"
+	"food_link/backend/internal/foodcategory"
 	"food_link/backend/internal/foodrecord/domain"
+	"food_link/backend/pkg/logger"
 	"food_link/backend/pkg/storage"
 )
 
@@ -29,10 +32,11 @@ func NewFoodNutritionService(repo FoodNutritionRepo, storage *storage.Client) *F
 }
 
 type ListFoodNutritionInput struct {
-	Query  string `form:"q"`
-	Active string `form:"active"`
-	Page   int    `form:"page"`
-	Limit  int    `form:"limit"`
+	Query    string `form:"q"`
+	Active   string `form:"active"`
+	Category string `form:"category"`
+	Page     int    `form:"page"`
+	Limit    int    `form:"limit"`
 }
 
 type CreateFoodNutritionInput struct {
@@ -112,15 +116,22 @@ func (s *FoodNutritionService) List(ctx context.Context, input ListFoodNutrition
 		page = 1
 	}
 	result, err := s.repo.List(ctx, repo.ListFoodNutritionInput{
-		Query:  input.Query,
-		Active: input.Active,
-		Limit:  limit,
-		Offset: (page - 1) * limit,
+		Query:    input.Query,
+		Active:   input.Active,
+		Category: input.Category,
+		Limit:    limit,
+		Offset:   (page - 1) * limit,
 	})
 	if err != nil {
+		logger.Error(ctx, "读取营养食物库失败", err,
+			slog.String("food.category", foodcategory.NormalizeFilter(input.Category)),
+			slog.Int("page", page),
+			slog.Int("page_size", limit),
+		)
 		return nil, err
 	}
 	for i := range result.Items {
+		result.Items[i].Category = foodcategory.Infer(result.Items[i].CanonicalName)
 		s.normalizeImages(&result.Items[i])
 	}
 	return result, nil
@@ -132,6 +143,7 @@ func (s *FoodNutritionService) Get(ctx context.Context, id string) (*domain.Food
 		return nil, err
 	}
 	s.normalizeImages(item)
+	item.Category = foodcategory.Infer(item.CanonicalName)
 	return item, nil
 }
 
@@ -180,6 +192,7 @@ func (s *FoodNutritionService) Create(ctx context.Context, input CreateFoodNutri
 		return nil, err
 	}
 	s.normalizeImages(created)
+	created.Category = foodcategory.Infer(created.CanonicalName)
 	return created, nil
 }
 
@@ -227,6 +240,7 @@ func (s *FoodNutritionService) Update(ctx context.Context, id string, input Upda
 	setBoolPtr(patch, "is_active", input.IsActive)
 	if len(patch) == 0 {
 		s.normalizeImages(current)
+		current.Category = foodcategory.Infer(current.CanonicalName)
 		return current, nil
 	}
 	updated, err := s.repo.Update(ctx, id, patch)
@@ -234,6 +248,7 @@ func (s *FoodNutritionService) Update(ctx context.Context, id string, input Upda
 		return nil, err
 	}
 	s.normalizeImages(updated)
+	updated.Category = foodcategory.Infer(updated.CanonicalName)
 	return updated, nil
 }
 
@@ -273,5 +288,3 @@ func normalizeFoodNutritionName(raw string) string {
 	}
 	return b.String()
 }
-
-

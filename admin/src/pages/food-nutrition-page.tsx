@@ -13,6 +13,7 @@ type FoodNutrition = {
   id: string
   canonical_name: string
   normalized_name?: string
+  category?: string
   source?: string
   image_paths?: string[]
   kcal_per_100g: number
@@ -45,9 +46,16 @@ type FoodNutrition = {
 
 type ListResponse<T> = {
   items: T[]
+  categories?: FoodCategory[]
+  category?: string
   page: number
   limit: number
   total: number
+}
+
+type FoodCategory = {
+  key: string
+  label: string
 }
 
 type FieldDef = {
@@ -134,6 +142,8 @@ export function FoodNutritionPage({ onLogout, onMenuChange }: FoodNutritionPageP
   const [searchParams, setSearchParams] = useSearchParams()
   const [query, setQuery] = useState(searchParams.get('q') ?? '')
   const [active, setActive] = useState(searchParams.get('active') ?? 'all')
+  const [category, setCategory] = useState(searchParams.get('category') ?? 'all')
+  const [categories, setCategories] = useState<FoodCategory[]>([])
   const [page, setPage] = useState(parseParamPage(searchParams.get('page'), 1))
   const [limit, setLimit] = useState(parseParamPage(searchParams.get('limit'), 40))
   const [items, setItems] = useState<FoodNutrition[]>([])
@@ -154,18 +164,19 @@ export function FoodNutritionPage({ onLogout, onMenuChange }: FoodNutritionPageP
   useEffect(() => {
     void loadList()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, limit, active, searchNonce])
+  }, [page, limit, active, category, searchNonce])
 
   useEffect(() => {
     const params = new URLSearchParams()
     const q = query.trim()
     if (q) params.set('q', q)
     if (active !== 'all') params.set('active', active)
+    if (category !== 'all') params.set('category', category)
     if (page !== 1) params.set('page', String(page))
     if (limit !== 40) params.set('limit', String(limit))
     setSearchParams(params, { replace: true })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, active, page, limit])
+  }, [query, active, category, page, limit])
 
   useEffect(() => {
     if (!selectedId) {
@@ -184,9 +195,12 @@ export function FoodNutritionPage({ onLogout, onMenuChange }: FoodNutritionPageP
         limit: String(limit),
         q: query.trim(),
         active,
+        category,
       })
       const data = await adminRequest<ListResponse<FoodNutrition>>(`/api/admin/food-nutrition?${params.toString()}`)
       setItems(data.items || [])
+      setCategories(data.categories || [])
+      setCategory(data.category || category)
       setTotal(data.total || 0)
       setPage(data.page || nextPage)
       setSelectedId((current) => current || data.items?.[0]?.id || '')
@@ -308,6 +322,18 @@ export function FoodNutritionPage({ onLogout, onMenuChange }: FoodNutritionPageP
             />
           </label>
           <SelectLabel
+            label="分类"
+            value={category}
+            onChange={(value) => {
+              setCategory(value)
+              setPage(1)
+            }}
+            options={[
+              ['all', '全部分类'],
+              ...categories.map((item) => [item.key, item.label] as [string, string]),
+            ]}
+          />
+          <SelectLabel
             label="启用"
             value={active}
             onChange={(value) => {
@@ -351,6 +377,7 @@ export function FoodNutritionPage({ onLogout, onMenuChange }: FoodNutritionPageP
                   <FoodCard
                     key={item.id}
                     item={item}
+                    categoryLabel={getCategoryLabel(categories, item.category)}
                     selected={item.id === selected?.id}
                     onClick={() => void loadDetail(item.id)}
                   />
@@ -362,6 +389,7 @@ export function FoodNutritionPage({ onLogout, onMenuChange }: FoodNutritionPageP
               <FoodEditor
                 key={selected.id}
                 item={selected}
+                categoryLabel={getCategoryLabel(categories, selected.category)}
                 saving={saving}
                 deleting={deleting}
                 onSave={saveItem}
@@ -489,10 +517,12 @@ function SkeletonRows() {
 
 function FoodCard({
   item,
+  categoryLabel,
   selected,
   onClick,
 }: {
   item: FoodNutrition
+  categoryLabel: string
   selected: boolean
   onClick: () => void
 }) {
@@ -510,6 +540,7 @@ function FoodCard({
         <h2>{item.canonical_name || '未命名'}</h2>
         <div className="meta-row">
           <span className={`pill ${item.is_active ? 'active' : 'inactive'}`}>{item.is_active ? '启用' : '停用'}</span>
+          <span className="pill">{categoryLabel}</span>
           <span className="pill">{item.source || '无来源'}</span>
           <span className="pill">{images.length} 图</span>
         </div>
@@ -534,6 +565,7 @@ function FoodCard({
 
 function FoodEditor({
   item,
+  categoryLabel,
   saving,
   deleting,
   onSave,
@@ -541,6 +573,7 @@ function FoodEditor({
   onDelete,
 }: {
   item: FoodNutrition
+  categoryLabel: string
   saving: boolean
   deleting: boolean
   onSave: (id: string, payload: Record<string, string | number | boolean | string[]>) => Promise<void>
@@ -561,7 +594,7 @@ function FoodEditor({
       <div className="editor-header">
         <div>
           <h2>{item.canonical_name || '未命名'}</h2>
-          <p>{item.id}</p>
+          <p>分类：{categoryLabel} · {item.id}</p>
         </div>
         <div className="actions" style={{ marginTop: 0 }}>
           <button type="button" onClick={() => onCopy(item.id)}>
@@ -727,4 +760,9 @@ function shortTitle(value: string): string {
 function cleanNum(value: number | undefined): string {
   if (value === undefined || value === null) return '-'
   return Number(value).toFixed(1).replace(/\.0$/, '')
+}
+
+function getCategoryLabel(categories: FoodCategory[], key?: string): string {
+  if (!key) return '其他'
+  return categories.find((item) => item.key === key)?.label || key
 }
