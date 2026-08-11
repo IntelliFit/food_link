@@ -1,0 +1,1051 @@
+[
+  {
+    "batch_name": "西安高校食堂目录-产品负责人确认-20260811",
+    "region": "陕西省西安市",
+    "source_scope": "产品负责人提供的《西安市高校校区及食堂信息明细表（2025-2026）》中 data可信度=ok 的记录",
+    "schools": [
+      {
+        "school": "西北大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "太白校区",
+            "aliases": [],
+            "address": "",
+            "source_url": ""
+          },
+          {
+            "name": "长安校区",
+            "aliases": [],
+            "address": "",
+            "source_url": ""
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "太白校区",
+            "name": "学生大食堂",
+            "aliases": [],
+            "location_text": "位于校区东南角，约50+档口",
+            "building_or_floor": "",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/f15d74dcf26c52d3d620c540",
+            "source_title": "西安市高校校区及食堂信息明细表（2025-2026，产品负责人确认 ok 行）",
+            "source_org": "food_link 产品负责人",
+            "source_type": "user_verified_owner_approved_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "核验结论：原表第5行 data可信度=ok\n办学性质：公办本科\n校区：太白校区\n食堂：学生大食堂\n原始说明：位于校区东南角，约50+档口",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "长安校区",
+            "name": "东食堂（紫荆苑）",
+            "aliases": [],
+            "location_text": "老食堂，多层",
+            "building_or_floor": "",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/9e0d235cf74093a0328aaab6",
+            "source_title": "西安市高校校区及食堂信息明细表（2025-2026，产品负责人确认 ok 行）",
+            "source_org": "food_link 产品负责人",
+            "source_type": "user_verified_owner_approved_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "核验结论：原表第6行 data可信度=ok\n办学性质：公办本科\n校区：长安校区\n食堂：东食堂（紫荆苑）\n原始说明：老食堂，多层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "长安校区",
+            "name": "西食堂（玉兰苑）",
+            "aliases": [],
+            "location_text": "新食堂，四层，最受欢迎",
+            "building_or_floor": "四层",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/21068e85a0372323b5e4d15b",
+            "source_title": "西安市高校校区及食堂信息明细表（2025-2026，产品负责人确认 ok 行）",
+            "source_org": "food_link 产品负责人",
+            "source_type": "user_verified_owner_approved_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "核验结论：原表第7行 data可信度=ok\n办学性质：公办本科\n校区：长安校区\n食堂：西食堂（玉兰苑）\n原始说明：新食堂，四层，最受欢迎\n明确楼层：四层",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "产品负责人于2026-08-11批准导入原表中 data可信度=ok 的西安高校食堂记录；warn 行未导入",
+          "原始 Excel SHA-256：d0fc52dcbfaaec57dd4c3310d3089f606eb853488229e41fed5b69786e4faad9"
+        ]
+      },
+      {
+        "school": "西安交通大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "兴庆校区",
+            "aliases": [],
+            "address": "",
+            "source_url": ""
+          },
+          {
+            "name": "雁塔校区",
+            "aliases": [],
+            "address": "",
+            "source_url": ""
+          },
+          {
+            "name": "创新港校区",
+            "aliases": [],
+            "address": "",
+            "source_url": ""
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "兴庆校区",
+            "name": "梧桐苑",
+            "aliases": [],
+            "location_text": "三层，特色小吃+自选+聚餐",
+            "building_or_floor": "三层",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/98c355f5bb0939da3c552c6f",
+            "source_title": "西安市高校校区及食堂信息明细表（2025-2026，产品负责人确认 ok 行）",
+            "source_org": "food_link 产品负责人",
+            "source_type": "user_verified_owner_approved_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "核验结论：原表第11行 data可信度=ok\n办学性质：公办本科\n校区：兴庆校区\n食堂：梧桐苑\n原始说明：三层，特色小吃+自选+聚餐\n明确楼层：三层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "兴庆校区",
+            "name": "康桥苑",
+            "aliases": [],
+            "location_text": "三层，炒菜/面食/米线/叉烧饭等",
+            "building_or_floor": "三层",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/4074fca3261f23d5b8824837",
+            "source_title": "西安市高校校区及食堂信息明细表（2025-2026，产品负责人确认 ok 行）",
+            "source_org": "food_link 产品负责人",
+            "source_type": "user_verified_owner_approved_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "核验结论：原表第12行 data可信度=ok\n办学性质：公办本科\n校区：兴庆校区\n食堂：康桥苑\n原始说明：三层，炒菜/面食/米线/叉烧饭等\n明确楼层：三层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "雁塔校区",
+            "name": "十五食堂（财经食堂）",
+            "aliases": [],
+            "location_text": "雁塔校区主要食堂",
+            "building_or_floor": "",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/e7e85daf744beddad009be96",
+            "source_title": "西安市高校校区及食堂信息明细表（2025-2026，产品负责人确认 ok 行）",
+            "source_org": "food_link 产品负责人",
+            "source_type": "user_verified_owner_approved_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "核验结论：原表第13行 data可信度=ok\n办学性质：公办本科\n校区：雁塔校区\n食堂：十五食堂（财经食堂）\n原始说明：雁塔校区主要食堂",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "创新港校区",
+            "name": "和鸣苑餐厅",
+            "aliases": [],
+            "location_text": "创新港校区食堂",
+            "building_or_floor": "",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/c97e1639a07b569ff7ac5f74",
+            "source_title": "西安市高校校区及食堂信息明细表（2025-2026，产品负责人确认 ok 行）",
+            "source_org": "food_link 产品负责人",
+            "source_type": "user_verified_owner_approved_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "核验结论：原表第14行 data可信度=ok\n办学性质：公办本科\n校区：创新港校区\n食堂：和鸣苑餐厅\n原始说明：创新港校区食堂",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "创新港校区",
+            "name": "朗清苑餐厅",
+            "aliases": [],
+            "location_text": "创新港校区食堂",
+            "building_or_floor": "",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/8a78f27a9efedec3b18e0a4d",
+            "source_title": "西安市高校校区及食堂信息明细表（2025-2026，产品负责人确认 ok 行）",
+            "source_org": "food_link 产品负责人",
+            "source_type": "user_verified_owner_approved_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "核验结论：原表第15行 data可信度=ok\n办学性质：公办本科\n校区：创新港校区\n食堂：朗清苑餐厅\n原始说明：创新港校区食堂",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "创新港校区",
+            "name": "惠风苑餐厅",
+            "aliases": [],
+            "location_text": "创新港校区食堂",
+            "building_or_floor": "",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/8e0f54794004d1b18d48fed9",
+            "source_title": "西安市高校校区及食堂信息明细表（2025-2026，产品负责人确认 ok 行）",
+            "source_org": "food_link 产品负责人",
+            "source_type": "user_verified_owner_approved_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "核验结论：原表第16行 data可信度=ok\n办学性质：公办本科\n校区：创新港校区\n食堂：惠风苑餐厅\n原始说明：创新港校区食堂",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "创新港校区",
+            "name": "同和苑餐厅",
+            "aliases": [],
+            "location_text": "一二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/aa1b09be86146ad95f389de0",
+            "source_title": "西安市高校校区及食堂信息明细表（2025-2026，产品负责人确认 ok 行）",
+            "source_org": "food_link 产品负责人",
+            "source_type": "user_verified_owner_approved_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "核验结论：原表第17行 data可信度=ok\n办学性质：公办本科\n校区：创新港校区\n食堂：同和苑餐厅\n原始说明：一二楼\n明确楼层：一楼、二楼",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "创新港校区",
+            "name": "涵英楼餐厅",
+            "aliases": [],
+            "location_text": "涵英楼(5号巨构)西辅楼负一层",
+            "building_or_floor": "负一层",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/47907115f19e2cc0d4ada4cb",
+            "source_title": "西安市高校校区及食堂信息明细表（2025-2026，产品负责人确认 ok 行）",
+            "source_org": "food_link 产品负责人",
+            "source_type": "user_verified_owner_approved_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "核验结论：原表第18行 data可信度=ok\n办学性质：公办本科\n校区：创新港校区\n食堂：涵英楼餐厅\n原始说明：涵英楼(5号巨构)西辅楼负一层\n明确楼层：负一层",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "产品负责人于2026-08-11批准导入原表中 data可信度=ok 的西安高校食堂记录；warn 行未导入",
+          "原始 Excel SHA-256：d0fc52dcbfaaec57dd4c3310d3089f606eb853488229e41fed5b69786e4faad9"
+        ]
+      },
+      {
+        "school": "西北工业大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "友谊校区",
+            "aliases": [],
+            "address": "",
+            "source_url": ""
+          },
+          {
+            "name": "长安校区",
+            "aliases": [],
+            "address": "",
+            "source_url": ""
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "友谊校区",
+            "name": "学生1餐厅",
+            "aliases": [],
+            "location_text": "老校区食堂",
+            "building_or_floor": "",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/77022fc042e2224ededaabc3",
+            "source_title": "西安市高校校区及食堂信息明细表（2025-2026，产品负责人确认 ok 行）",
+            "source_org": "food_link 产品负责人",
+            "source_type": "user_verified_owner_approved_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "核验结论：原表第19行 data可信度=ok\n办学性质：公办本科\n校区：友谊校区\n食堂：学生1餐厅\n原始说明：老校区食堂",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "友谊校区",
+            "name": "学生2餐厅",
+            "aliases": [],
+            "location_text": "老校区食堂",
+            "building_or_floor": "",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/713d4450b14f73e04b1b0458",
+            "source_title": "西安市高校校区及食堂信息明细表（2025-2026，产品负责人确认 ok 行）",
+            "source_org": "food_link 产品负责人",
+            "source_type": "user_verified_owner_approved_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "核验结论：原表第20行 data可信度=ok\n办学性质：公办本科\n校区：友谊校区\n食堂：学生2餐厅\n原始说明：老校区食堂",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "长安校区",
+            "name": "星天苑南餐厅",
+            "aliases": [],
+            "location_text": "三层，女生宿舍前",
+            "building_or_floor": "三层",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/3bf9e1454f75990ecea3d803",
+            "source_title": "西安市高校校区及食堂信息明细表（2025-2026，产品负责人确认 ok 行）",
+            "source_org": "food_link 产品负责人",
+            "source_type": "user_verified_owner_approved_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "核验结论：原表第21行 data可信度=ok\n办学性质：公办本科\n校区：长安校区\n食堂：星天苑南餐厅\n原始说明：三层，女生宿舍前\n明确楼层：三层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "长安校区",
+            "name": "星天苑北餐厅",
+            "aliases": [],
+            "location_text": "多层",
+            "building_or_floor": "",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/224185209385063d6f541e5a",
+            "source_title": "西安市高校校区及食堂信息明细表（2025-2026，产品负责人确认 ok 行）",
+            "source_org": "food_link 产品负责人",
+            "source_type": "user_verified_owner_approved_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "核验结论：原表第22行 data可信度=ok\n办学性质：公办本科\n校区：长安校区\n食堂：星天苑北餐厅\n原始说明：多层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "长安校区",
+            "name": "云天苑餐厅",
+            "aliases": [],
+            "location_text": "多层",
+            "building_or_floor": "",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/f19ec30c255e011d66139e5e",
+            "source_title": "西安市高校校区及食堂信息明细表（2025-2026，产品负责人确认 ok 行）",
+            "source_org": "food_link 产品负责人",
+            "source_type": "user_verified_owner_approved_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "核验结论：原表第23行 data可信度=ok\n办学性质：公办本科\n校区：长安校区\n食堂：云天苑餐厅\n原始说明：多层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "长安校区",
+            "name": "海天苑餐厅",
+            "aliases": [],
+            "location_text": "三层",
+            "building_or_floor": "三层",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/229ef476475ce5de286d4a51",
+            "source_title": "西安市高校校区及食堂信息明细表（2025-2026，产品负责人确认 ok 行）",
+            "source_org": "food_link 产品负责人",
+            "source_type": "user_verified_owner_approved_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "核验结论：原表第24行 data可信度=ok\n办学性质：公办本科\n校区：长安校区\n食堂：海天苑餐厅\n原始说明：三层\n明确楼层：三层",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "产品负责人于2026-08-11批准导入原表中 data可信度=ok 的西安高校食堂记录；warn 行未导入",
+          "原始 Excel SHA-256：d0fc52dcbfaaec57dd4c3310d3089f606eb853488229e41fed5b69786e4faad9"
+        ]
+      },
+      {
+        "school": "西安理工大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "曲江校区",
+            "aliases": [],
+            "address": "",
+            "source_url": ""
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "曲江校区",
+            "name": "第一餐厅",
+            "aliases": [],
+            "location_text": "早餐/小吃/烫菜",
+            "building_or_floor": "",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/22c726e98936a85f6da5385b",
+            "source_title": "西安市高校校区及食堂信息明细表（2025-2026，产品负责人确认 ok 行）",
+            "source_org": "food_link 产品负责人",
+            "source_type": "user_verified_owner_approved_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "核验结论：原表第26行 data可信度=ok\n办学性质：公办本科\n校区：曲江校区\n食堂：第一餐厅\n原始说明：早餐/小吃/烫菜",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "曲江校区",
+            "name": "第二餐厅",
+            "aliases": [],
+            "location_text": "川菜馆为主",
+            "building_or_floor": "",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/8ace00d2d0c766fab4550bb9",
+            "source_title": "西安市高校校区及食堂信息明细表（2025-2026，产品负责人确认 ok 行）",
+            "source_org": "food_link 产品负责人",
+            "source_type": "user_verified_owner_approved_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "核验结论：原表第27行 data可信度=ok\n办学性质：公办本科\n校区：曲江校区\n食堂：第二餐厅\n原始说明：川菜馆为主",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "曲江校区",
+            "name": "第三餐厅",
+            "aliases": [],
+            "location_text": "炒饭/煎饼/自选",
+            "building_or_floor": "",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/e28a66ab6b7a9912cb0bbace",
+            "source_title": "西安市高校校区及食堂信息明细表（2025-2026，产品负责人确认 ok 行）",
+            "source_org": "food_link 产品负责人",
+            "source_type": "user_verified_owner_approved_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "核验结论：原表第28行 data可信度=ok\n办学性质：公办本科\n校区：曲江校区\n食堂：第三餐厅\n原始说明：炒饭/煎饼/自选",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "曲江校区",
+            "name": "第四餐厅",
+            "aliases": [],
+            "location_text": "综合",
+            "building_or_floor": "",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/defe8964160113c98d2907f7",
+            "source_title": "西安市高校校区及食堂信息明细表（2025-2026，产品负责人确认 ok 行）",
+            "source_org": "food_link 产品负责人",
+            "source_type": "user_verified_owner_approved_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "核验结论：原表第29行 data可信度=ok\n办学性质：公办本科\n校区：曲江校区\n食堂：第四餐厅\n原始说明：综合",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "曲江校区",
+            "name": "第五餐厅",
+            "aliases": [],
+            "location_text": "新开设，花样多",
+            "building_or_floor": "",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/9e2830992db1b4c065a6be34",
+            "source_title": "西安市高校校区及食堂信息明细表（2025-2026，产品负责人确认 ok 行）",
+            "source_org": "food_link 产品负责人",
+            "source_type": "user_verified_owner_approved_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "核验结论：原表第30行 data可信度=ok\n办学性质：公办本科\n校区：曲江校区\n食堂：第五餐厅\n原始说明：新开设，花样多",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "产品负责人于2026-08-11批准导入原表中 data可信度=ok 的西安高校食堂记录；warn 行未导入",
+          "原始 Excel SHA-256：d0fc52dcbfaaec57dd4c3310d3089f606eb853488229e41fed5b69786e4faad9"
+        ]
+      },
+      {
+        "school": "西安电子科技大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "南校区（新校区）",
+            "aliases": [],
+            "address": "",
+            "source_url": ""
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "南校区（新校区）",
+            "name": "海棠餐厅",
+            "aliases": [],
+            "location_text": "紧邻学生公寓，有夜宵",
+            "building_or_floor": "",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/a89b2032ffdb34c536b80c8b",
+            "source_title": "西安市高校校区及食堂信息明细表（2025-2026，产品负责人确认 ok 行）",
+            "source_org": "food_link 产品负责人",
+            "source_type": "user_verified_owner_approved_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "核验结论：原表第36行 data可信度=ok\n办学性质：公办本科\n校区：南校区（新校区）\n食堂：海棠餐厅\n原始说明：紧邻学生公寓，有夜宵",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "南校区（新校区）",
+            "name": "竹园餐厅",
+            "aliases": [],
+            "location_text": "三楼含清真餐厅",
+            "building_or_floor": "三楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/8dca790de38e37e9fec27ad7",
+            "source_title": "西安市高校校区及食堂信息明细表（2025-2026，产品负责人确认 ok 行）",
+            "source_org": "food_link 产品负责人",
+            "source_type": "user_verified_owner_approved_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "核验结论：原表第37行 data可信度=ok\n办学性质：公办本科\n校区：南校区（新校区）\n食堂：竹园餐厅\n原始说明：三楼含清真餐厅\n明确楼层：三楼",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "南校区（新校区）",
+            "name": "丁香餐厅",
+            "aliases": [],
+            "location_text": "自助餐厅，菜品齐全",
+            "building_or_floor": "",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/4b0fe7f05d633a2dcbfc85b5",
+            "source_title": "西安市高校校区及食堂信息明细表（2025-2026，产品负责人确认 ok 行）",
+            "source_org": "food_link 产品负责人",
+            "source_type": "user_verified_owner_approved_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "核验结论：原表第38行 data可信度=ok\n办学性质：公办本科\n校区：南校区（新校区）\n食堂：丁香餐厅\n原始说明：自助餐厅，菜品齐全",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "产品负责人于2026-08-11批准导入原表中 data可信度=ok 的西安高校食堂记录；warn 行未导入",
+          "原始 Excel SHA-256：d0fc52dcbfaaec57dd4c3310d3089f606eb853488229e41fed5b69786e4faad9"
+        ]
+      },
+      {
+        "school": "西安建筑科技大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "雁塔校区",
+            "aliases": [],
+            "address": "",
+            "source_url": ""
+          },
+          {
+            "name": "草堂校区",
+            "aliases": [],
+            "address": "",
+            "source_url": ""
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "雁塔校区",
+            "name": "学生一食堂",
+            "aliases": [],
+            "location_text": "多层",
+            "building_or_floor": "",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/401f624de1b02452f99ec030",
+            "source_title": "西安市高校校区及食堂信息明细表（2025-2026，产品负责人确认 ok 行）",
+            "source_org": "food_link 产品负责人",
+            "source_type": "user_verified_owner_approved_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "核验结论：原表第43行 data可信度=ok\n办学性质：公办本科\n校区：雁塔校区\n食堂：学生一食堂\n原始说明：多层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "雁塔校区",
+            "name": "学生二食堂",
+            "aliases": [],
+            "location_text": "负一层起",
+            "building_or_floor": "负一层起",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/e4c2b528b00745688d8e81a0",
+            "source_title": "西安市高校校区及食堂信息明细表（2025-2026，产品负责人确认 ok 行）",
+            "source_org": "food_link 产品负责人",
+            "source_type": "user_verified_owner_approved_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "核验结论：原表第44行 data可信度=ok\n办学性质：公办本科\n校区：雁塔校区\n食堂：学生二食堂\n原始说明：负一层起\n明确楼层：负一层起",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "雁塔校区",
+            "name": "特色餐厅",
+            "aliases": [],
+            "location_text": "二楼特色餐厅",
+            "building_or_floor": "二楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/f706baabcf97438cf98f56c8",
+            "source_title": "西安市高校校区及食堂信息明细表（2025-2026，产品负责人确认 ok 行）",
+            "source_org": "food_link 产品负责人",
+            "source_type": "user_verified_owner_approved_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "核验结论：原表第45行 data可信度=ok\n办学性质：公办本科\n校区：雁塔校区\n食堂：特色餐厅\n原始说明：二楼特色餐厅\n明确楼层：二楼",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "草堂校区",
+            "name": "紫阁书院翠园餐厅",
+            "aliases": [],
+            "location_text": "草堂校区食堂",
+            "building_or_floor": "",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/6c1b57698ee7e13dc419aaa2",
+            "source_title": "西安市高校校区及食堂信息明细表（2025-2026，产品负责人确认 ok 行）",
+            "source_org": "food_link 产品负责人",
+            "source_type": "user_verified_owner_approved_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "核验结论：原表第46行 data可信度=ok\n办学性质：公办本科\n校区：草堂校区\n食堂：紫阁书院翠园餐厅\n原始说明：草堂校区食堂",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "草堂校区",
+            "name": "南山书院菊园餐厅",
+            "aliases": [],
+            "location_text": "南一层+北二层+北三层(民族)",
+            "building_or_floor": "南一层、北二层、北三层",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/2111bc71c0e618f73e178205",
+            "source_title": "西安市高校校区及食堂信息明细表（2025-2026，产品负责人确认 ok 行）",
+            "source_org": "food_link 产品负责人",
+            "source_type": "user_verified_owner_approved_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "核验结论：原表第47行 data可信度=ok\n办学性质：公办本科\n校区：草堂校区\n食堂：南山书院菊园餐厅\n原始说明：南一层+北二层+北三层(民族)\n明确楼层：南一层、北二层、北三层",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "产品负责人于2026-08-11批准导入原表中 data可信度=ok 的西安高校食堂记录；warn 行未导入",
+          "原始 Excel SHA-256：d0fc52dcbfaaec57dd4c3310d3089f606eb853488229e41fed5b69786e4faad9"
+        ]
+      },
+      {
+        "school": "西安工程大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "临潼校区",
+            "aliases": [],
+            "address": "",
+            "source_url": ""
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "临潼校区",
+            "name": "新食堂（综合食堂）",
+            "aliases": [],
+            "location_text": "三层+负一层，2015年开业",
+            "building_or_floor": "三层+负一层",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/8a9963783eed06c551025b72",
+            "source_title": "西安市高校校区及食堂信息明细表（2025-2026，产品负责人确认 ok 行）",
+            "source_org": "food_link 产品负责人",
+            "source_type": "user_verified_owner_approved_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "核验结论：原表第58行 data可信度=ok\n办学性质：公办本科\n校区：临潼校区\n食堂：新食堂（综合食堂）\n原始说明：三层+负一层，2015年开业\n明确楼层：三层+负一层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "临潼校区",
+            "name": "老食堂（餐饮大楼）",
+            "aliases": [],
+            "location_text": "三层，含民族清真餐厅",
+            "building_or_floor": "三层",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/9b05f35bd68fd8d6a7c63f0d",
+            "source_title": "西安市高校校区及食堂信息明细表（2025-2026，产品负责人确认 ok 行）",
+            "source_org": "food_link 产品负责人",
+            "source_type": "user_verified_owner_approved_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "核验结论：原表第59行 data可信度=ok\n办学性质：公办本科\n校区：临潼校区\n食堂：老食堂（餐饮大楼）\n原始说明：三层，含民族清真餐厅\n明确楼层：三层",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "产品负责人于2026-08-11批准导入原表中 data可信度=ok 的西安高校食堂记录；warn 行未导入",
+          "原始 Excel SHA-256：d0fc52dcbfaaec57dd4c3310d3089f606eb853488229e41fed5b69786e4faad9"
+        ]
+      },
+      {
+        "school": "长安大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "校本部（南二环/东区）",
+            "aliases": [],
+            "address": "",
+            "source_url": ""
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "校本部（南二环/东区）",
+            "name": "树蕙园餐厅",
+            "aliases": [],
+            "location_text": "东区主要食堂",
+            "building_or_floor": "",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/d71914903e4ac49cbd2e7c10",
+            "source_title": "西安市高校校区及食堂信息明细表（2025-2026，产品负责人确认 ok 行）",
+            "source_org": "food_link 产品负责人",
+            "source_type": "user_verified_owner_approved_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "核验结论：原表第61行 data可信度=ok\n办学性质：公办本科\n校区：校本部（南二环/东区）\n食堂：树蕙园餐厅\n原始说明：东区主要食堂",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "校本部（南二环/东区）",
+            "name": "滋兰苑餐厅",
+            "aliases": [],
+            "location_text": "西区主要食堂",
+            "building_or_floor": "",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/70722ee57404fa180612e9d9",
+            "source_title": "西安市高校校区及食堂信息明细表（2025-2026，产品负责人确认 ok 行）",
+            "source_org": "food_link 产品负责人",
+            "source_type": "user_verified_owner_approved_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "核验结论：原表第62行 data可信度=ok\n办学性质：公办本科\n校区：校本部（南二环/东区）\n食堂：滋兰苑餐厅\n原始说明：西区主要食堂",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "校本部（南二环/东区）",
+            "name": "天行健餐厅",
+            "aliases": [],
+            "location_text": "开小灶去处",
+            "building_or_floor": "",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/c919e8e538c0fe9496bc0482",
+            "source_title": "西安市高校校区及食堂信息明细表（2025-2026，产品负责人确认 ok 行）",
+            "source_org": "food_link 产品负责人",
+            "source_type": "user_verified_owner_approved_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "核验结论：原表第63行 data可信度=ok\n办学性质：公办本科\n校区：校本部（南二环/东区）\n食堂：天行健餐厅\n原始说明：开小灶去处",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "校本部（南二环/东区）",
+            "name": "西区新食堂",
+            "aliases": [],
+            "location_text": "自助/网红套餐/包间",
+            "building_or_floor": "",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/9d77c4cf084c9f41ecd6ef99",
+            "source_title": "西安市高校校区及食堂信息明细表（2025-2026，产品负责人确认 ok 行）",
+            "source_org": "food_link 产品负责人",
+            "source_type": "user_verified_owner_approved_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "核验结论：原表第64行 data可信度=ok\n办学性质：公办本科\n校区：校本部（南二环/东区）\n食堂：西区新食堂\n原始说明：自助/网红套餐/包间",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "产品负责人于2026-08-11批准导入原表中 data可信度=ok 的西安高校食堂记录；warn 行未导入",
+          "原始 Excel SHA-256：d0fc52dcbfaaec57dd4c3310d3089f606eb853488229e41fed5b69786e4faad9"
+        ]
+      },
+      {
+        "school": "陕西师范大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "长安校区",
+            "aliases": [],
+            "address": "",
+            "source_url": ""
+          },
+          {
+            "name": "雁塔校区",
+            "aliases": [],
+            "address": "",
+            "source_url": ""
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "长安校区",
+            "name": "阳光食府",
+            "aliases": [],
+            "location_text": "阳光苑一层，规模最大，400+品种",
+            "building_or_floor": "一层",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/9c5fe38a38c0ea83065b1ea8",
+            "source_title": "西安市高校校区及食堂信息明细表（2025-2026，产品负责人确认 ok 行）",
+            "source_org": "food_link 产品负责人",
+            "source_type": "user_verified_owner_approved_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "核验结论：原表第68行 data可信度=ok\n办学性质：公办本科\n校区：长安校区\n食堂：阳光食府\n原始说明：阳光苑一层，规模最大，400+品种\n明确楼层：一层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "长安校区",
+            "name": "榴花餐厅",
+            "aliases": [],
+            "location_text": "阳光苑二层，民族特色",
+            "building_or_floor": "二层",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/92bfb27c7427be2d84a6ea0d",
+            "source_title": "西安市高校校区及食堂信息明细表（2025-2026，产品负责人确认 ok 行）",
+            "source_org": "food_link 产品负责人",
+            "source_type": "user_verified_owner_approved_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "核验结论：原表第69行 data可信度=ok\n办学性质：公办本科\n校区：长安校区\n食堂：榴花餐厅\n原始说明：阳光苑二层，民族特色\n明确楼层：二层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "长安校区",
+            "name": "溢香楼餐厅",
+            "aliases": [],
+            "location_text": "品类最丰富",
+            "building_or_floor": "",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/bd6a9dad157ec840ce49358d",
+            "source_title": "西安市高校校区及食堂信息明细表（2025-2026，产品负责人确认 ok 行）",
+            "source_org": "food_link 产品负责人",
+            "source_type": "user_verified_owner_approved_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "核验结论：原表第70行 data可信度=ok\n办学性质：公办本科\n校区：长安校区\n食堂：溢香楼餐厅\n原始说明：品类最丰富",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "长安校区",
+            "name": "家园服务区",
+            "aliases": [],
+            "location_text": "一层，预制菜少",
+            "building_or_floor": "一层",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/ec29b4c54ac95c9405f2e1a3",
+            "source_title": "西安市高校校区及食堂信息明细表（2025-2026，产品负责人确认 ok 行）",
+            "source_org": "food_link 产品负责人",
+            "source_type": "user_verified_owner_approved_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "核验结论：原表第71行 data可信度=ok\n办学性质：公办本科\n校区：长安校区\n食堂：家园服务区\n原始说明：一层，预制菜少\n明确楼层：一层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "长安校区",
+            "name": "上林广场餐厅",
+            "aliases": [],
+            "location_text": "三层，校外承包",
+            "building_or_floor": "三层",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/21505ab8dd32acbce05b61f8",
+            "source_title": "西安市高校校区及食堂信息明细表（2025-2026，产品负责人确认 ok 行）",
+            "source_org": "food_link 产品负责人",
+            "source_type": "user_verified_owner_approved_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "核验结论：原表第72行 data可信度=ok\n办学性质：公办本科\n校区：长安校区\n食堂：上林广场餐厅\n原始说明：三层，校外承包\n明确楼层：三层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "雁塔校区",
+            "name": "学子食府",
+            "aliases": [],
+            "location_text": "一层，1200人容量，240+品种",
+            "building_or_floor": "一层",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/5302392210a9fdc4149c9a1c",
+            "source_title": "西安市高校校区及食堂信息明细表（2025-2026，产品负责人确认 ok 行）",
+            "source_org": "food_link 产品负责人",
+            "source_type": "user_verified_owner_approved_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "核验结论：原表第73行 data可信度=ok\n办学性质：公办本科\n校区：雁塔校区\n食堂：学子食府\n原始说明：一层，1200人容量，240+品种\n明确楼层：一层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "雁塔校区",
+            "name": "桃李园风味餐厅",
+            "aliases": [],
+            "location_text": "学子食府二层东侧",
+            "building_or_floor": "二层东侧",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/f09d827b585d70635a409364",
+            "source_title": "西安市高校校区及食堂信息明细表（2025-2026，产品负责人确认 ok 行）",
+            "source_org": "food_link 产品负责人",
+            "source_type": "user_verified_owner_approved_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "核验结论：原表第74行 data可信度=ok\n办学性质：公办本科\n校区：雁塔校区\n食堂：桃李园风味餐厅\n原始说明：学子食府二层东侧\n明确楼层：二层东侧",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "雁塔校区",
+            "name": "桃李园小炒餐厅",
+            "aliases": [],
+            "location_text": "学子食府二层西侧",
+            "building_or_floor": "二层西侧",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/dfc301d91683c2369238d4a0",
+            "source_title": "西安市高校校区及食堂信息明细表（2025-2026，产品负责人确认 ok 行）",
+            "source_org": "food_link 产品负责人",
+            "source_type": "user_verified_owner_approved_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "核验结论：原表第75行 data可信度=ok\n办学性质：公办本科\n校区：雁塔校区\n食堂：桃李园小炒餐厅\n原始说明：学子食府二层西侧\n明确楼层：二层西侧",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "雁塔校区",
+            "name": "墨香斋餐厅",
+            "aliases": [],
+            "location_text": "两层，民族菜品+风味小吃",
+            "building_or_floor": "两层",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/35c375263bf7bb8c5ded9478",
+            "source_title": "西安市高校校区及食堂信息明细表（2025-2026，产品负责人确认 ok 行）",
+            "source_org": "food_link 产品负责人",
+            "source_type": "user_verified_owner_approved_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "核验结论：原表第76行 data可信度=ok\n办学性质：公办本科\n校区：雁塔校区\n食堂：墨香斋餐厅\n原始说明：两层，民族菜品+风味小吃\n明确楼层：两层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "雁塔校区",
+            "name": "园丁面食屋",
+            "aliases": [],
+            "location_text": "面食特色，全天候供餐",
+            "building_or_floor": "",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/fd643e2958a0547d6a45160b",
+            "source_title": "西安市高校校区及食堂信息明细表（2025-2026，产品负责人确认 ok 行）",
+            "source_org": "food_link 产品负责人",
+            "source_type": "user_verified_owner_approved_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "核验结论：原表第77行 data可信度=ok\n办学性质：公办本科\n校区：雁塔校区\n食堂：园丁面食屋\n原始说明：面食特色，全天候供餐",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "产品负责人于2026-08-11批准导入原表中 data可信度=ok 的西安高校食堂记录；warn 行未导入",
+          "原始 Excel SHA-256：d0fc52dcbfaaec57dd4c3310d3089f606eb853488229e41fed5b69786e4faad9"
+        ]
+      },
+      {
+        "school": "西安外国语大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "长安校区",
+            "aliases": [],
+            "address": "",
+            "source_url": ""
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "长安校区",
+            "name": "第一食堂（学生食堂）",
+            "aliases": [],
+            "location_text": "三层，全天开放",
+            "building_or_floor": "三层",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/448ccd0b4896c81113f0b79e",
+            "source_title": "西安市高校校区及食堂信息明细表（2025-2026，产品负责人确认 ok 行）",
+            "source_org": "food_link 产品负责人",
+            "source_type": "user_verified_owner_approved_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "核验结论：原表第78行 data可信度=ok\n办学性质：公办本科\n校区：长安校区\n食堂：第一食堂（学生食堂）\n原始说明：三层，全天开放\n明确楼层：三层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "长安校区",
+            "name": "第二食堂（终南食府）",
+            "aliases": [],
+            "location_text": "新建，多商家入驻",
+            "building_or_floor": "",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/d85b114035573d36db33c022",
+            "source_title": "西安市高校校区及食堂信息明细表（2025-2026，产品负责人确认 ok 行）",
+            "source_org": "food_link 产品负责人",
+            "source_type": "user_verified_owner_approved_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "核验结论：原表第79行 data可信度=ok\n办学性质：公办本科\n校区：长安校区\n食堂：第二食堂（终南食府）\n原始说明：新建，多商家入驻",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "产品负责人于2026-08-11批准导入原表中 data可信度=ok 的西安高校食堂记录；warn 行未导入",
+          "原始 Excel SHA-256：d0fc52dcbfaaec57dd4c3310d3089f606eb853488229e41fed5b69786e4faad9"
+        ]
+      }
+    ]
+  }
+]

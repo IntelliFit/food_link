@@ -1,0 +1,1345 @@
+{
+  "source_file": "西安市高校校区食堂信息明细.xlsx",
+  "source_sha256": "d0fc52dcbfaaec57dd4c3310d3089f606eb853488229e41fed5b69786e4faad9",
+  "sheet": "西安高校校区食堂明细",
+  "accepted_rule": "数据可信度（G列）去空格并转小写后严格等于 ok",
+  "accepted_count": 48,
+  "rejected_count": 89,
+  "school_count": 10,
+  "campus_count": 16,
+  "canteen_count": 48,
+  "explicit_floor_count": 22,
+  "accepted_rows": [
+    {
+      "excel_row": 5,
+      "sequence": 1,
+      "school": "西北大学",
+      "campus": "太白校区",
+      "canteen": "学生大食堂",
+      "confidence": "ok",
+      "remark": "",
+      "building_or_floor": "",
+      "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/f15d74dcf26c52d3d620c540"
+    },
+    {
+      "excel_row": 6,
+      "sequence": 2,
+      "school": "西北大学",
+      "campus": "长安校区",
+      "canteen": "东食堂（紫荆苑）",
+      "confidence": "ok",
+      "remark": "",
+      "building_or_floor": "",
+      "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/9e0d235cf74093a0328aaab6"
+    },
+    {
+      "excel_row": 7,
+      "sequence": 3,
+      "school": "西北大学",
+      "campus": "长安校区",
+      "canteen": "西食堂（玉兰苑）",
+      "confidence": "ok",
+      "remark": "",
+      "building_or_floor": "四层",
+      "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/21068e85a0372323b5e4d15b"
+    },
+    {
+      "excel_row": 11,
+      "sequence": 7,
+      "school": "西安交通大学",
+      "campus": "兴庆校区",
+      "canteen": "梧桐苑",
+      "confidence": "ok",
+      "remark": "",
+      "building_or_floor": "三层",
+      "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/98c355f5bb0939da3c552c6f"
+    },
+    {
+      "excel_row": 12,
+      "sequence": 8,
+      "school": "西安交通大学",
+      "campus": "兴庆校区",
+      "canteen": "康桥苑",
+      "confidence": "ok",
+      "remark": "",
+      "building_or_floor": "三层",
+      "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/4074fca3261f23d5b8824837"
+    },
+    {
+      "excel_row": 13,
+      "sequence": 9,
+      "school": "西安交通大学",
+      "campus": "雁塔校区",
+      "canteen": "十五食堂（财经食堂）",
+      "confidence": "ok",
+      "remark": "",
+      "building_or_floor": "",
+      "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/e7e85daf744beddad009be96"
+    },
+    {
+      "excel_row": 14,
+      "sequence": 10,
+      "school": "西安交通大学",
+      "campus": "创新港校区",
+      "canteen": "和鸣苑餐厅",
+      "confidence": "ok",
+      "remark": "",
+      "building_or_floor": "",
+      "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/c97e1639a07b569ff7ac5f74"
+    },
+    {
+      "excel_row": 15,
+      "sequence": 11,
+      "school": "西安交通大学",
+      "campus": "创新港校区",
+      "canteen": "朗清苑餐厅",
+      "confidence": "ok",
+      "remark": "",
+      "building_or_floor": "",
+      "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/8a78f27a9efedec3b18e0a4d"
+    },
+    {
+      "excel_row": 16,
+      "sequence": 12,
+      "school": "西安交通大学",
+      "campus": "创新港校区",
+      "canteen": "惠风苑餐厅",
+      "confidence": "ok",
+      "remark": "",
+      "building_or_floor": "",
+      "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/8e0f54794004d1b18d48fed9"
+    },
+    {
+      "excel_row": 17,
+      "sequence": 13,
+      "school": "西安交通大学",
+      "campus": "创新港校区",
+      "canteen": "同和苑餐厅",
+      "confidence": "ok",
+      "remark": "",
+      "building_or_floor": "一楼、二楼",
+      "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/aa1b09be86146ad95f389de0"
+    },
+    {
+      "excel_row": 18,
+      "sequence": 14,
+      "school": "西安交通大学",
+      "campus": "创新港校区",
+      "canteen": "涵英楼餐厅",
+      "confidence": "ok",
+      "remark": "",
+      "building_or_floor": "负一层",
+      "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/47907115f19e2cc0d4ada4cb"
+    },
+    {
+      "excel_row": 19,
+      "sequence": 15,
+      "school": "西北工业大学",
+      "campus": "友谊校区",
+      "canteen": "学生1餐厅",
+      "confidence": "ok",
+      "remark": "",
+      "building_or_floor": "",
+      "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/77022fc042e2224ededaabc3"
+    },
+    {
+      "excel_row": 20,
+      "sequence": 16,
+      "school": "西北工业大学",
+      "campus": "友谊校区",
+      "canteen": "学生2餐厅",
+      "confidence": "ok",
+      "remark": "",
+      "building_or_floor": "",
+      "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/713d4450b14f73e04b1b0458"
+    },
+    {
+      "excel_row": 21,
+      "sequence": 17,
+      "school": "西北工业大学",
+      "campus": "长安校区",
+      "canteen": "星天苑南餐厅",
+      "confidence": "ok",
+      "remark": "",
+      "building_or_floor": "三层",
+      "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/3bf9e1454f75990ecea3d803"
+    },
+    {
+      "excel_row": 22,
+      "sequence": 18,
+      "school": "西北工业大学",
+      "campus": "长安校区",
+      "canteen": "星天苑北餐厅",
+      "confidence": "ok",
+      "remark": "",
+      "building_or_floor": "",
+      "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/224185209385063d6f541e5a"
+    },
+    {
+      "excel_row": 23,
+      "sequence": 19,
+      "school": "西北工业大学",
+      "campus": "长安校区",
+      "canteen": "云天苑餐厅",
+      "confidence": "ok",
+      "remark": "",
+      "building_or_floor": "",
+      "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/f19ec30c255e011d66139e5e"
+    },
+    {
+      "excel_row": 24,
+      "sequence": 20,
+      "school": "西北工业大学",
+      "campus": "长安校区",
+      "canteen": "海天苑餐厅",
+      "confidence": "ok",
+      "remark": "",
+      "building_or_floor": "三层",
+      "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/229ef476475ce5de286d4a51"
+    },
+    {
+      "excel_row": 26,
+      "sequence": 22,
+      "school": "西安理工大学",
+      "campus": "曲江校区",
+      "canteen": "第一餐厅",
+      "confidence": "ok",
+      "remark": "",
+      "building_or_floor": "",
+      "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/22c726e98936a85f6da5385b"
+    },
+    {
+      "excel_row": 27,
+      "sequence": 23,
+      "school": "西安理工大学",
+      "campus": "曲江校区",
+      "canteen": "第二餐厅",
+      "confidence": "ok",
+      "remark": "",
+      "building_or_floor": "",
+      "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/8ace00d2d0c766fab4550bb9"
+    },
+    {
+      "excel_row": 28,
+      "sequence": 24,
+      "school": "西安理工大学",
+      "campus": "曲江校区",
+      "canteen": "第三餐厅",
+      "confidence": "ok",
+      "remark": "",
+      "building_or_floor": "",
+      "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/e28a66ab6b7a9912cb0bbace"
+    },
+    {
+      "excel_row": 29,
+      "sequence": 25,
+      "school": "西安理工大学",
+      "campus": "曲江校区",
+      "canteen": "第四餐厅",
+      "confidence": "ok",
+      "remark": "",
+      "building_or_floor": "",
+      "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/defe8964160113c98d2907f7"
+    },
+    {
+      "excel_row": 30,
+      "sequence": 26,
+      "school": "西安理工大学",
+      "campus": "曲江校区",
+      "canteen": "第五餐厅",
+      "confidence": "ok",
+      "remark": "",
+      "building_or_floor": "",
+      "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/9e2830992db1b4c065a6be34"
+    },
+    {
+      "excel_row": 36,
+      "sequence": 32,
+      "school": "西安电子科技大学",
+      "campus": "南校区（新校区）",
+      "canteen": "海棠餐厅",
+      "confidence": "ok",
+      "remark": "",
+      "building_or_floor": "",
+      "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/a89b2032ffdb34c536b80c8b"
+    },
+    {
+      "excel_row": 37,
+      "sequence": 33,
+      "school": "西安电子科技大学",
+      "campus": "南校区（新校区）",
+      "canteen": "竹园餐厅",
+      "confidence": "ok",
+      "remark": "",
+      "building_or_floor": "三楼",
+      "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/8dca790de38e37e9fec27ad7"
+    },
+    {
+      "excel_row": 38,
+      "sequence": 34,
+      "school": "西安电子科技大学",
+      "campus": "南校区（新校区）",
+      "canteen": "丁香餐厅",
+      "confidence": "ok",
+      "remark": "",
+      "building_or_floor": "",
+      "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/4b0fe7f05d633a2dcbfc85b5"
+    },
+    {
+      "excel_row": 43,
+      "sequence": 39,
+      "school": "西安建筑科技大学",
+      "campus": "雁塔校区",
+      "canteen": "学生一食堂",
+      "confidence": "ok",
+      "remark": "",
+      "building_or_floor": "",
+      "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/401f624de1b02452f99ec030"
+    },
+    {
+      "excel_row": 44,
+      "sequence": 40,
+      "school": "西安建筑科技大学",
+      "campus": "雁塔校区",
+      "canteen": "学生二食堂",
+      "confidence": "ok",
+      "remark": "",
+      "building_or_floor": "负一层起",
+      "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/e4c2b528b00745688d8e81a0"
+    },
+    {
+      "excel_row": 45,
+      "sequence": 41,
+      "school": "西安建筑科技大学",
+      "campus": "雁塔校区",
+      "canteen": "特色餐厅",
+      "confidence": "ok",
+      "remark": "",
+      "building_or_floor": "二楼",
+      "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/f706baabcf97438cf98f56c8"
+    },
+    {
+      "excel_row": 46,
+      "sequence": 42,
+      "school": "西安建筑科技大学",
+      "campus": "草堂校区",
+      "canteen": "紫阁书院翠园餐厅",
+      "confidence": "ok",
+      "remark": "",
+      "building_or_floor": "",
+      "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/6c1b57698ee7e13dc419aaa2"
+    },
+    {
+      "excel_row": 47,
+      "sequence": 43,
+      "school": "西安建筑科技大学",
+      "campus": "草堂校区",
+      "canteen": "南山书院菊园餐厅",
+      "confidence": "ok",
+      "remark": "",
+      "building_or_floor": "南一层、北二层、北三层",
+      "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/2111bc71c0e618f73e178205"
+    },
+    {
+      "excel_row": 58,
+      "sequence": 54,
+      "school": "西安工程大学",
+      "campus": "临潼校区",
+      "canteen": "新食堂（综合食堂）",
+      "confidence": "ok",
+      "remark": "",
+      "building_or_floor": "三层+负一层",
+      "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/8a9963783eed06c551025b72"
+    },
+    {
+      "excel_row": 59,
+      "sequence": 55,
+      "school": "西安工程大学",
+      "campus": "临潼校区",
+      "canteen": "老食堂（餐饮大楼）",
+      "confidence": "ok",
+      "remark": "",
+      "building_or_floor": "三层",
+      "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/9b05f35bd68fd8d6a7c63f0d"
+    },
+    {
+      "excel_row": 61,
+      "sequence": 57,
+      "school": "长安大学",
+      "campus": "校本部（南二环/东区）",
+      "canteen": "树蕙园餐厅",
+      "confidence": "ok",
+      "remark": "",
+      "building_or_floor": "",
+      "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/d71914903e4ac49cbd2e7c10"
+    },
+    {
+      "excel_row": 62,
+      "sequence": 58,
+      "school": "长安大学",
+      "campus": "校本部（南二环/东区）",
+      "canteen": "滋兰苑餐厅",
+      "confidence": "ok",
+      "remark": "",
+      "building_or_floor": "",
+      "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/70722ee57404fa180612e9d9"
+    },
+    {
+      "excel_row": 63,
+      "sequence": 59,
+      "school": "长安大学",
+      "campus": "校本部（南二环/东区）",
+      "canteen": "天行健餐厅",
+      "confidence": "ok",
+      "remark": "",
+      "building_or_floor": "",
+      "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/c919e8e538c0fe9496bc0482"
+    },
+    {
+      "excel_row": 64,
+      "sequence": 60,
+      "school": "长安大学",
+      "campus": "校本部（南二环/东区）",
+      "canteen": "西区新食堂",
+      "confidence": "ok",
+      "remark": "",
+      "building_or_floor": "",
+      "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/9d77c4cf084c9f41ecd6ef99"
+    },
+    {
+      "excel_row": 68,
+      "sequence": 64,
+      "school": "陕西师范大学",
+      "campus": "长安校区",
+      "canteen": "阳光食府",
+      "confidence": "ok",
+      "remark": "",
+      "building_or_floor": "一层",
+      "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/9c5fe38a38c0ea83065b1ea8"
+    },
+    {
+      "excel_row": 69,
+      "sequence": 65,
+      "school": "陕西师范大学",
+      "campus": "长安校区",
+      "canteen": "榴花餐厅",
+      "confidence": "ok",
+      "remark": "",
+      "building_or_floor": "二层",
+      "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/92bfb27c7427be2d84a6ea0d"
+    },
+    {
+      "excel_row": 70,
+      "sequence": 66,
+      "school": "陕西师范大学",
+      "campus": "长安校区",
+      "canteen": "溢香楼餐厅",
+      "confidence": "ok",
+      "remark": "",
+      "building_or_floor": "",
+      "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/bd6a9dad157ec840ce49358d"
+    },
+    {
+      "excel_row": 71,
+      "sequence": 67,
+      "school": "陕西师范大学",
+      "campus": "长安校区",
+      "canteen": "家园服务区",
+      "confidence": "ok",
+      "remark": "",
+      "building_or_floor": "一层",
+      "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/ec29b4c54ac95c9405f2e1a3"
+    },
+    {
+      "excel_row": 72,
+      "sequence": 68,
+      "school": "陕西师范大学",
+      "campus": "长安校区",
+      "canteen": "上林广场餐厅",
+      "confidence": "ok",
+      "remark": "",
+      "building_or_floor": "三层",
+      "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/21505ab8dd32acbce05b61f8"
+    },
+    {
+      "excel_row": 73,
+      "sequence": 69,
+      "school": "陕西师范大学",
+      "campus": "雁塔校区",
+      "canteen": "学子食府",
+      "confidence": "ok",
+      "remark": "",
+      "building_or_floor": "一层",
+      "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/5302392210a9fdc4149c9a1c"
+    },
+    {
+      "excel_row": 74,
+      "sequence": 70,
+      "school": "陕西师范大学",
+      "campus": "雁塔校区",
+      "canteen": "桃李园风味餐厅",
+      "confidence": "ok",
+      "remark": "",
+      "building_or_floor": "二层东侧",
+      "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/f09d827b585d70635a409364"
+    },
+    {
+      "excel_row": 75,
+      "sequence": 71,
+      "school": "陕西师范大学",
+      "campus": "雁塔校区",
+      "canteen": "桃李园小炒餐厅",
+      "confidence": "ok",
+      "remark": "",
+      "building_or_floor": "二层西侧",
+      "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/dfc301d91683c2369238d4a0"
+    },
+    {
+      "excel_row": 76,
+      "sequence": 72,
+      "school": "陕西师范大学",
+      "campus": "雁塔校区",
+      "canteen": "墨香斋餐厅",
+      "confidence": "ok",
+      "remark": "",
+      "building_or_floor": "两层",
+      "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/35c375263bf7bb8c5ded9478"
+    },
+    {
+      "excel_row": 77,
+      "sequence": 73,
+      "school": "陕西师范大学",
+      "campus": "雁塔校区",
+      "canteen": "园丁面食屋",
+      "confidence": "ok",
+      "remark": "",
+      "building_or_floor": "",
+      "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/fd643e2958a0547d6a45160b"
+    },
+    {
+      "excel_row": 78,
+      "sequence": 74,
+      "school": "西安外国语大学",
+      "campus": "长安校区",
+      "canteen": "第一食堂（学生食堂）",
+      "confidence": "ok",
+      "remark": "",
+      "building_or_floor": "三层",
+      "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/448ccd0b4896c81113f0b79e"
+    },
+    {
+      "excel_row": 79,
+      "sequence": 75,
+      "school": "西安外国语大学",
+      "campus": "长安校区",
+      "canteen": "第二食堂（终南食府）",
+      "confidence": "ok",
+      "remark": "",
+      "building_or_floor": "",
+      "source_url": "owner-confirmation://xian-campus-dining/2026-08-11/d85b114035573d36db33c022"
+    }
+  ],
+  "rejected_rows": [
+    {
+      "excel_row": 8,
+      "sequence": 4,
+      "school": "西北大学",
+      "campus": "长安校区",
+      "canteen": "清真餐厅",
+      "confidence": "warn",
+      "remark": "数量待确认"
+    },
+    {
+      "excel_row": 9,
+      "sequence": 5,
+      "school": "西北大学",
+      "campus": "长安校区",
+      "canteen": "教工餐厅",
+      "confidence": "warn",
+      "remark": "数量待确认"
+    },
+    {
+      "excel_row": 10,
+      "sequence": 6,
+      "school": "西北大学",
+      "campus": "桃园校区",
+      "canteen": "学生食堂",
+      "confidence": "warn",
+      "remark": "可能已拆除，需核实"
+    },
+    {
+      "excel_row": 25,
+      "sequence": 21,
+      "school": "西北工业大学",
+      "campus": "长安校区",
+      "canteen": "巴铁餐厅",
+      "confidence": "warn",
+      "remark": "需确认是否独立食堂"
+    },
+    {
+      "excel_row": 31,
+      "sequence": 27,
+      "school": "西安理工大学",
+      "campus": "曲江校区",
+      "canteen": "民族餐厅",
+      "confidence": "warn",
+      "remark": "需确认是否独立"
+    },
+    {
+      "excel_row": 32,
+      "sequence": 28,
+      "school": "西安理工大学",
+      "campus": "曲江校区",
+      "canteen": "教工餐厅",
+      "confidence": "warn",
+      "remark": "需确认是否独立"
+    },
+    {
+      "excel_row": 33,
+      "sequence": 29,
+      "school": "西安理工大学",
+      "campus": "金花校区",
+      "canteen": "楼下食堂",
+      "confidence": "warn",
+      "remark": "需核实具体数量"
+    },
+    {
+      "excel_row": 34,
+      "sequence": 30,
+      "school": "西安理工大学",
+      "campus": "金花校区",
+      "canteen": "楼上食堂",
+      "confidence": "warn",
+      "remark": "需核实具体数量"
+    },
+    {
+      "excel_row": 35,
+      "sequence": 31,
+      "school": "西安理工大学",
+      "campus": "莲湖校区",
+      "canteen": "学生食堂",
+      "confidence": "warn",
+      "remark": "需核实"
+    },
+    {
+      "excel_row": 39,
+      "sequence": 35,
+      "school": "西安电子科技大学",
+      "campus": "北校区（老校区）",
+      "canteen": "西区食堂",
+      "confidence": "warn",
+      "remark": "需核实具体数量"
+    },
+    {
+      "excel_row": 40,
+      "sequence": 36,
+      "school": "西安工业大学",
+      "campus": "未央校区",
+      "canteen": "学生食堂（主食堂）",
+      "confidence": "warn",
+      "remark": "需核实食堂具体数量"
+    },
+    {
+      "excel_row": 41,
+      "sequence": 37,
+      "school": "西安工业大学",
+      "campus": "未央校区",
+      "canteen": "民族餐厅",
+      "confidence": "warn",
+      "remark": "需核实"
+    },
+    {
+      "excel_row": 42,
+      "sequence": 38,
+      "school": "西安工业大学",
+      "campus": "金花校区",
+      "canteen": "学生食堂",
+      "confidence": "warn",
+      "remark": "需核实"
+    },
+    {
+      "excel_row": 48,
+      "sequence": 44,
+      "school": "西安建筑科技大学",
+      "campus": "幸福校区（科技园）",
+      "canteen": "食堂",
+      "confidence": "warn",
+      "remark": "需核实"
+    },
+    {
+      "excel_row": 49,
+      "sequence": 45,
+      "school": "西安科技大学",
+      "campus": "雁塔校区",
+      "canteen": "学生食堂",
+      "confidence": "warn",
+      "remark": "需核实食堂具体数量"
+    },
+    {
+      "excel_row": 50,
+      "sequence": 46,
+      "school": "西安科技大学",
+      "campus": "临潼校区",
+      "canteen": "骊山校园食堂（主食堂）",
+      "confidence": "warn",
+      "remark": "需核实食堂具体数量"
+    },
+    {
+      "excel_row": 51,
+      "sequence": 47,
+      "school": "西安科技大学",
+      "campus": "临潼校区",
+      "canteen": "第二食堂",
+      "confidence": "warn",
+      "remark": "需核实是否存在"
+    },
+    {
+      "excel_row": 52,
+      "sequence": 48,
+      "school": "西安石油大学",
+      "campus": "雁塔校区",
+      "canteen": "学生食堂",
+      "confidence": "warn",
+      "remark": "需核实食堂具体数量"
+    },
+    {
+      "excel_row": 53,
+      "sequence": 49,
+      "school": "西安石油大学",
+      "campus": "明德校区",
+      "canteen": "学生食堂",
+      "confidence": "warn",
+      "remark": "需核实"
+    },
+    {
+      "excel_row": 54,
+      "sequence": 50,
+      "school": "西安石油大学",
+      "campus": "鄠邑校区",
+      "canteen": "学生食堂",
+      "confidence": "warn",
+      "remark": "需核实"
+    },
+    {
+      "excel_row": 55,
+      "sequence": 51,
+      "school": "陕西科技大学",
+      "campus": "未央校区",
+      "canteen": "学生食堂（主食堂）",
+      "confidence": "warn",
+      "remark": "需核实食堂具体数量"
+    },
+    {
+      "excel_row": 56,
+      "sequence": 52,
+      "school": "陕西科技大学",
+      "campus": "未央校区",
+      "canteen": "第二食堂",
+      "confidence": "warn",
+      "remark": "需核实"
+    },
+    {
+      "excel_row": 57,
+      "sequence": 53,
+      "school": "陕西科技大学",
+      "campus": "未央校区",
+      "canteen": "沁园餐厅",
+      "confidence": "warn",
+      "remark": "需核实"
+    },
+    {
+      "excel_row": 60,
+      "sequence": 56,
+      "school": "西安工程大学",
+      "campus": "金花校区",
+      "canteen": "学生食堂",
+      "confidence": "warn",
+      "remark": "需核实"
+    },
+    {
+      "excel_row": 65,
+      "sequence": 61,
+      "school": "长安大学",
+      "campus": "渭水校区",
+      "canteen": "学生食堂",
+      "confidence": "warn",
+      "remark": "需核实食堂具体数量"
+    },
+    {
+      "excel_row": 66,
+      "sequence": 62,
+      "school": "长安大学",
+      "campus": "雁塔校区",
+      "canteen": "学生食堂",
+      "confidence": "warn",
+      "remark": "需核实"
+    },
+    {
+      "excel_row": 67,
+      "sequence": 63,
+      "school": "长安大学",
+      "campus": "小寨校区",
+      "canteen": "学生食堂",
+      "confidence": "warn",
+      "remark": "需核实是否存在独立食堂"
+    },
+    {
+      "excel_row": 80,
+      "sequence": 76,
+      "school": "西安外国语大学",
+      "campus": "长安校区",
+      "canteen": "民族餐厅",
+      "confidence": "warn",
+      "remark": "需确认是否算独立食堂"
+    },
+    {
+      "excel_row": 81,
+      "sequence": 77,
+      "school": "西安外国语大学",
+      "campus": "雁塔校区",
+      "canteen": "学生食堂",
+      "confidence": "warn",
+      "remark": "需核实"
+    },
+    {
+      "excel_row": 82,
+      "sequence": 78,
+      "school": "西安外国语大学",
+      "campus": "雅荷校区",
+      "canteen": "食堂",
+      "confidence": "warn",
+      "remark": "需核实"
+    },
+    {
+      "excel_row": 83,
+      "sequence": 79,
+      "school": "西安外国语大学",
+      "campus": "振华校区",
+      "canteen": "食堂",
+      "confidence": "warn",
+      "remark": "需核实"
+    },
+    {
+      "excel_row": 84,
+      "sequence": 80,
+      "school": "西北政法大学",
+      "campus": "长安校区",
+      "canteen": "学生食堂（主食堂）",
+      "confidence": "warn",
+      "remark": "需核实食堂具体数量"
+    },
+    {
+      "excel_row": 85,
+      "sequence": 81,
+      "school": "西北政法大学",
+      "campus": "长安校区",
+      "canteen": "第二食堂",
+      "confidence": "warn",
+      "remark": "需核实"
+    },
+    {
+      "excel_row": 86,
+      "sequence": 82,
+      "school": "西北政法大学",
+      "campus": "雁塔校区",
+      "canteen": "学生餐厅",
+      "confidence": "warn",
+      "remark": "需核实"
+    },
+    {
+      "excel_row": 87,
+      "sequence": 83,
+      "school": "西安体育学院",
+      "campus": "含光校区",
+      "canteen": "学生食堂",
+      "confidence": "warn",
+      "remark": "需核实"
+    },
+    {
+      "excel_row": 88,
+      "sequence": 84,
+      "school": "西安体育学院",
+      "campus": "鄠邑校区",
+      "canteen": "学生食堂",
+      "confidence": "warn",
+      "remark": "需核实"
+    },
+    {
+      "excel_row": 89,
+      "sequence": 85,
+      "school": "西安音乐学院",
+      "campus": "长安中路校区",
+      "canteen": "学生食堂",
+      "confidence": "warn",
+      "remark": "需核实"
+    },
+    {
+      "excel_row": 90,
+      "sequence": 86,
+      "school": "西安美术学院",
+      "campus": "雁塔校区",
+      "canteen": "学生食堂",
+      "confidence": "warn",
+      "remark": "需核实"
+    },
+    {
+      "excel_row": 91,
+      "sequence": 87,
+      "school": "西安美术学院",
+      "campus": "长安校区",
+      "canteen": "学生食堂",
+      "confidence": "warn",
+      "remark": "需核实"
+    },
+    {
+      "excel_row": 92,
+      "sequence": 88,
+      "school": "西安美术学院",
+      "campus": "临潼校区",
+      "canteen": "学生食堂",
+      "confidence": "warn",
+      "remark": "需核实"
+    },
+    {
+      "excel_row": 93,
+      "sequence": 89,
+      "school": "西安文理学院",
+      "campus": "高新校区",
+      "canteen": "学生食堂",
+      "confidence": "warn",
+      "remark": "需核实"
+    },
+    {
+      "excel_row": 94,
+      "sequence": 90,
+      "school": "西安文理学院",
+      "campus": "书院校区",
+      "canteen": "学生食堂",
+      "confidence": "warn",
+      "remark": "需核实"
+    },
+    {
+      "excel_row": 95,
+      "sequence": 91,
+      "school": "西安财经大学",
+      "campus": "长安校区",
+      "canteen": "学生食堂（主食堂）",
+      "confidence": "warn",
+      "remark": "需核实食堂具体数量"
+    },
+    {
+      "excel_row": 96,
+      "sequence": 92,
+      "school": "西安财经大学",
+      "campus": "长安校区",
+      "canteen": "第二食堂",
+      "confidence": "warn",
+      "remark": "需核实"
+    },
+    {
+      "excel_row": 97,
+      "sequence": 93,
+      "school": "西安财经大学",
+      "campus": "雁塔校区",
+      "canteen": "学生食堂",
+      "confidence": "warn",
+      "remark": "需核实"
+    },
+    {
+      "excel_row": 98,
+      "sequence": 94,
+      "school": "西安财经大学",
+      "campus": "翠华西校区",
+      "canteen": "学生食堂",
+      "confidence": "warn",
+      "remark": "需核实"
+    },
+    {
+      "excel_row": 99,
+      "sequence": 95,
+      "school": "西安邮电大学",
+      "campus": "长安校区",
+      "canteen": "学生食堂（主食堂）",
+      "confidence": "warn",
+      "remark": "需核实食堂具体数量"
+    },
+    {
+      "excel_row": 100,
+      "sequence": 96,
+      "school": "西安邮电大学",
+      "campus": "长安校区",
+      "canteen": "第二食堂",
+      "confidence": "warn",
+      "remark": "需核实"
+    },
+    {
+      "excel_row": 101,
+      "sequence": 97,
+      "school": "西安邮电大学",
+      "campus": "雁塔校区",
+      "canteen": "学生食堂",
+      "confidence": "warn",
+      "remark": "需核实"
+    },
+    {
+      "excel_row": 102,
+      "sequence": 98,
+      "school": "西安航空学院",
+      "campus": "莲湖校区",
+      "canteen": "学生食堂",
+      "confidence": "warn",
+      "remark": "需核实"
+    },
+    {
+      "excel_row": 103,
+      "sequence": 99,
+      "school": "西安航空学院",
+      "campus": "阎良校区",
+      "canteen": "学生食堂",
+      "confidence": "warn",
+      "remark": "需核实"
+    },
+    {
+      "excel_row": 104,
+      "sequence": 100,
+      "school": "西安医学院",
+      "campus": "未央校区",
+      "canteen": "学生食堂",
+      "confidence": "warn",
+      "remark": "需核实"
+    },
+    {
+      "excel_row": 105,
+      "sequence": 101,
+      "school": "西安医学院",
+      "campus": "含光校区",
+      "canteen": "学生食堂",
+      "confidence": "warn",
+      "remark": "需核实"
+    },
+    {
+      "excel_row": 106,
+      "sequence": 102,
+      "school": "西安医学院",
+      "campus": "高新校区",
+      "canteen": "学生食堂",
+      "confidence": "warn",
+      "remark": "需核实"
+    },
+    {
+      "excel_row": 107,
+      "sequence": 103,
+      "school": "陕西学前师范学院",
+      "campus": "雁塔校区",
+      "canteen": "学生食堂",
+      "confidence": "warn",
+      "remark": "需核实"
+    },
+    {
+      "excel_row": 108,
+      "sequence": 104,
+      "school": "陕西学前师范学院",
+      "campus": "长安校区",
+      "canteen": "学生食堂",
+      "confidence": "warn",
+      "remark": "需核实"
+    },
+    {
+      "excel_row": 109,
+      "sequence": 105,
+      "school": "陕西警察学院",
+      "campus": "校区",
+      "canteen": "学生食堂",
+      "confidence": "warn",
+      "remark": "需核实"
+    },
+    {
+      "excel_row": 110,
+      "sequence": 106,
+      "school": "西安戏剧学院",
+      "campus": "校区待确认",
+      "canteen": "食堂待确认",
+      "confidence": "warn",
+      "remark": "2025年新设，需人工核实"
+    },
+    {
+      "excel_row": 112,
+      "sequence": 107,
+      "school": "西安培华学院",
+      "campus": "长安校区",
+      "canteen": "学生食堂",
+      "confidence": "warn",
+      "remark": "需核实"
+    },
+    {
+      "excel_row": 113,
+      "sequence": 108,
+      "school": "西安培华学院",
+      "campus": "高新校区",
+      "canteen": "学生食堂",
+      "confidence": "warn",
+      "remark": "需核实"
+    },
+    {
+      "excel_row": 114,
+      "sequence": 109,
+      "school": "西安培华学院",
+      "campus": "郭杜校区",
+      "canteen": "学生食堂",
+      "confidence": "warn",
+      "remark": "需核实"
+    },
+    {
+      "excel_row": 115,
+      "sequence": 110,
+      "school": "西安欧亚学院",
+      "campus": "雁塔区东仪路校区",
+      "canteen": "学生食堂",
+      "confidence": "warn",
+      "remark": "需核实"
+    },
+    {
+      "excel_row": 116,
+      "sequence": 111,
+      "school": "西安外事学院",
+      "campus": "雁塔区鱼斗路校区",
+      "canteen": "学生食堂",
+      "confidence": "warn",
+      "remark": "需核实"
+    },
+    {
+      "excel_row": 117,
+      "sequence": 112,
+      "school": "西安翻译学院",
+      "campus": "长安区太乙宫校区",
+      "canteen": "学生食堂",
+      "confidence": "warn",
+      "remark": "需核实"
+    },
+    {
+      "excel_row": 118,
+      "sequence": 113,
+      "school": "西京学院",
+      "campus": "长安区西京路校区",
+      "canteen": "学生食堂",
+      "confidence": "warn",
+      "remark": "需核实"
+    },
+    {
+      "excel_row": 119,
+      "sequence": 114,
+      "school": "西安思源学院",
+      "campus": "灞桥区水安路校区",
+      "canteen": "学生食堂",
+      "confidence": "warn",
+      "remark": "需核实"
+    },
+    {
+      "excel_row": 120,
+      "sequence": 115,
+      "school": "西安交通工程学院",
+      "campus": "鄠邑校区",
+      "canteen": "学生食堂",
+      "confidence": "warn",
+      "remark": "需核实"
+    },
+    {
+      "excel_row": 121,
+      "sequence": 116,
+      "school": "西安交通大学城市学院",
+      "campus": "未央区尚稷路校区",
+      "canteen": "学生食堂",
+      "confidence": "warn",
+      "remark": "需核实"
+    },
+    {
+      "excel_row": 122,
+      "sequence": 117,
+      "school": "西北大学现代学院",
+      "campus": "校区待确认",
+      "canteen": "学生食堂",
+      "confidence": "warn",
+      "remark": "需核实"
+    },
+    {
+      "excel_row": 123,
+      "sequence": 118,
+      "school": "西安建筑科技大学华清学院",
+      "campus": "校区待确认",
+      "canteen": "学生食堂",
+      "confidence": "warn",
+      "remark": "需核实"
+    },
+    {
+      "excel_row": 124,
+      "sequence": 119,
+      "school": "西安财经大学行知学院",
+      "campus": "校区待确认",
+      "canteen": "学生食堂",
+      "confidence": "warn",
+      "remark": "需核实"
+    },
+    {
+      "excel_row": 125,
+      "sequence": 120,
+      "school": "西安工商学院",
+      "campus": "高陵区鹿祥路校区",
+      "canteen": "学生食堂",
+      "confidence": "warn",
+      "remark": "需核实"
+    },
+    {
+      "excel_row": 126,
+      "sequence": 121,
+      "school": "延安大学西安创新学院",
+      "campus": "校区待确认",
+      "canteen": "学生食堂",
+      "confidence": "warn",
+      "remark": "需核实"
+    },
+    {
+      "excel_row": 127,
+      "sequence": 122,
+      "school": "西安电子科技大学长安学院",
+      "campus": "校区待确认",
+      "canteen": "学生食堂",
+      "confidence": "warn",
+      "remark": "需核实"
+    },
+    {
+      "excel_row": 128,
+      "sequence": 123,
+      "school": "西安汽车职业大学",
+      "campus": "临潼区秦王一路校区",
+      "canteen": "学生食堂",
+      "confidence": "warn",
+      "remark": "需核实"
+    },
+    {
+      "excel_row": 129,
+      "sequence": 124,
+      "school": "西安明德理工学院",
+      "campus": "长安区滦镇校区",
+      "canteen": "学生食堂",
+      "confidence": "warn",
+      "remark": "需核实"
+    },
+    {
+      "excel_row": 130,
+      "sequence": 125,
+      "school": "西安信息职业大学",
+      "campus": "长安区神禾三路校区",
+      "canteen": "学生食堂",
+      "confidence": "warn",
+      "remark": "需核实"
+    },
+    {
+      "excel_row": 131,
+      "sequence": 126,
+      "school": "长安大学兴华学院",
+      "campus": "校区待确认",
+      "canteen": "学生食堂",
+      "confidence": "warn",
+      "remark": "需核实"
+    },
+    {
+      "excel_row": 132,
+      "sequence": 127,
+      "school": "西安理工大学高科学院",
+      "campus": "校区待确认",
+      "canteen": "学生食堂",
+      "confidence": "warn",
+      "remark": "需核实"
+    },
+    {
+      "excel_row": 133,
+      "sequence": 128,
+      "school": "西安科技大学高新学院",
+      "campus": "校区待确认",
+      "canteen": "学生食堂",
+      "confidence": "warn",
+      "remark": "需核实"
+    },
+    {
+      "excel_row": 135,
+      "sequence": 129,
+      "school": "西安电力高等专科学校",
+      "campus": "新城区长乐西路校区",
+      "canteen": "学生食堂",
+      "confidence": "warn",
+      "remark": "需核实"
+    },
+    {
+      "excel_row": 136,
+      "sequence": 130,
+      "school": "陕西国防工业职业技术学院",
+      "campus": "西安市校区",
+      "canteen": "学生食堂",
+      "confidence": "warn",
+      "remark": "需核实"
+    },
+    {
+      "excel_row": 137,
+      "sequence": 131,
+      "school": "西安航空职业技术学院",
+      "campus": "南校区",
+      "canteen": "学生食堂",
+      "confidence": "warn",
+      "remark": "需核实"
+    },
+    {
+      "excel_row": 138,
+      "sequence": 132,
+      "school": "西安航空职业技术学院",
+      "campus": "北校区",
+      "canteen": "学生食堂",
+      "confidence": "warn",
+      "remark": "需核实"
+    },
+    {
+      "excel_row": 139,
+      "sequence": 133,
+      "school": "陕西交通职业技术学院",
+      "campus": "西安市校区",
+      "canteen": "学生食堂",
+      "confidence": "warn",
+      "remark": "需核实"
+    },
+    {
+      "excel_row": 140,
+      "sequence": 134,
+      "school": "陕西职业技术学院",
+      "campus": "西安市校区",
+      "canteen": "学生食堂",
+      "confidence": "warn",
+      "remark": "需核实"
+    },
+    {
+      "excel_row": 142,
+      "sequence": 135,
+      "school": "西安高新科技职业学院",
+      "campus": "西安市校区",
+      "canteen": "学生食堂",
+      "confidence": "warn",
+      "remark": "需核实"
+    },
+    {
+      "excel_row": 143,
+      "sequence": 136,
+      "school": "西安城市建设职业学院",
+      "campus": "西安市校区",
+      "canteen": "学生食堂",
+      "confidence": "warn",
+      "remark": "需核实"
+    },
+    {
+      "excel_row": 144,
+      "sequence": 137,
+      "school": "陕西电子信息职业技术学院",
+      "campus": "西安市校区",
+      "canteen": "学生食堂",
+      "confidence": "warn",
+      "remark": "需核实"
+    }
+  ]
+}
