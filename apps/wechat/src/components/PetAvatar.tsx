@@ -27,16 +27,22 @@ const BUILTIN_AVATAR_FRAMES: Record<string, {
   jump?: string
 }> = {
   'jianwen-01': {
-    idle: '/assets/pets/jianwen-01-idle.png',
-    blink: '/assets/pets/jianwen-01-blink.png',
-    squash: '/assets/pets/jianwen-01-squash.png',
-    jump: '/assets/pets/jianwen-01-jump.png',
+    idle: '/assets/pets/jianwen-01-idle.webp',
+    blink: '/assets/pets/jianwen-01-blink.webp',
+    squash: '/assets/pets/jianwen-01-squash.webp',
+    jump: '/assets/pets/jianwen-01-jump.webp',
   },
   'huatuo-01': {
-    idle: '/assets/pets/huatuo-01.png',
+    idle: '/assets/pets/huatuo-01.webp',
   },
   'taiji-xiaozi-01': {
-    idle: '/assets/pets/taiji-xiaozi-01.png',
+    idle: '/assets/pets/taiji-xiaozi-01.webp',
+  },
+  'xiaomai-01': {
+    idle: '/assets/pets/xiaomai-01.webp',
+  },
+  'doudou-01': {
+    idle: '/assets/pets/doudou-01.webp',
   },
 }
 
@@ -395,16 +401,17 @@ export function PetAvatar({ pet, animal, size = 'medium', mood, state, mealState
           className='pet-avatar__image pet-avatar__frame pet-avatar__frame--idle'
           src={customAvatarURL || src}
           mode='aspectFit'
+          webp
           lazyLoad={false}
         />
         {customAvatarBlinkURL ? (
-          <Image className='pet-avatar__frame pet-avatar__frame--blink' src={customAvatarBlinkURL} mode='aspectFit' lazyLoad={false} />
+          <Image className='pet-avatar__frame pet-avatar__frame--blink' src={customAvatarBlinkURL} mode='aspectFit' webp lazyLoad={false} />
         ) : null}
         {customAvatarSquashURL ? (
-          <Image className='pet-avatar__frame pet-avatar__frame--squash' src={customAvatarSquashURL} mode='aspectFit' lazyLoad={false} />
+          <Image className='pet-avatar__frame pet-avatar__frame--squash' src={customAvatarSquashURL} mode='aspectFit' webp lazyLoad={false} />
         ) : null}
         {customAvatarJumpURL ? (
-          <Image className='pet-avatar__frame pet-avatar__frame--jump' src={customAvatarJumpURL} mode='aspectFit' lazyLoad={false} />
+          <Image className='pet-avatar__frame pet-avatar__frame--jump' src={customAvatarJumpURL} mode='aspectFit' webp lazyLoad={false} />
         ) : null}
         {!customAvatarURL ? (
           <View className='pet-avatar__blink-overlay'>

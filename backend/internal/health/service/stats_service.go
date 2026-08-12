@@ -693,6 +693,10 @@ func petChatFeatureDescription(pet *petdomain.UserPet) string {
 		return "重视阴阳平衡、动静结合，擅长协调饮食、恢复与运动节奏"
 	case "jianwen-01":
 		return "重视健康记录和长期陪伴，擅长把复杂数据转成简单行动"
+	case "xiaomai-01":
+		return "擅长均衡搭配与规律三餐，喜欢把营养建议变成简单好吃的一餐"
+	case "doudou-01":
+		return "关注蛋白质和早餐搭配，擅长用轻松方式陪用户补足营养"
 	}
 	switch petChatMetaString(pet.Meta, "archetype") {
 	case "gentle_healer":

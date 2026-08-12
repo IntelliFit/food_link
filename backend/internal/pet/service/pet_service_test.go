@@ -332,7 +332,10 @@ func TestSummaryCreatesStablePetAndSingleOfflineEvent(t *testing.T) {
 	assert.Equal(t, 1, first.Event.CreditReward)
 	assert.Equal(t, archetypeLightLifestyle, first.Pet.Archetype)
 	assert.True(t, first.Pet.NeedsSelection)
-	require.Len(t, first.Pet.SelectionCandidates, 6)
+	require.Len(t, first.Pet.SelectionCandidates, 5)
+	for _, candidate := range first.Pet.SelectionCandidates {
+		assert.NotEmpty(t, candidate.BuiltinAvatarID)
+	}
 	assert.NotEmpty(t, first.Pet.MatchReasons)
 
 	second, err := svc.Summary(context.Background(), "user-1", "2026-05-20")
@@ -424,7 +427,7 @@ func TestSummaryAutoProfileMatchPreservesExistingProgress(t *testing.T) {
 	assert.Equal(t, 7, result.Pet.TotalEvents)
 	assert.Equal(t, archetypeProteinGuardian, result.Pet.Archetype)
 	assert.True(t, result.Pet.FreeProfileRematchAvailable)
-	require.Len(t, result.Pet.SelectionCandidates, 6)
+	require.Len(t, result.Pet.SelectionCandidates, 5)
 }
 
 func TestClaimEventIsIdempotent(t *testing.T) {
@@ -506,7 +509,7 @@ func TestSelectAppearanceUsesCurrentCandidatesAndIsIdempotent(t *testing.T) {
 
 	summary, err := svc.Summary(context.Background(), "user-1", "2026-05-20")
 	require.NoError(t, err)
-	require.Len(t, summary.Pet.SelectionCandidates, 6)
+	require.Len(t, summary.Pet.SelectionCandidates, 5)
 	candidate := summary.Pet.SelectionCandidates[1]
 
 	first, err := svc.SelectAppearance(context.Background(), "user-1", candidate.ID)
@@ -528,7 +531,7 @@ func TestSelectBuiltinAppearancePersistsAcrossSummary(t *testing.T) {
 
 	summary, err := svc.Summary(context.Background(), "user-1", "2026-05-20")
 	require.NoError(t, err)
-	require.Len(t, summary.Pet.SelectionCandidates, 6)
+	require.Len(t, summary.Pet.SelectionCandidates, 5)
 	var builtin AppearanceCandidate
 	for _, candidate := range summary.Pet.SelectionCandidates {
 		if candidate.BuiltinAvatarID == builtinAvatarJianwen01ID {
@@ -554,7 +557,7 @@ func TestSelectBuiltinAppearancePersistsAcrossSummary(t *testing.T) {
 
 func TestBuiltinAppearanceCandidatesIncludeWellnessCharacters(t *testing.T) {
 	candidates := builtinAppearanceCandidates()
-	require.Len(t, candidates, 3)
+	require.Len(t, candidates, 5)
 
 	byID := make(map[string]AppearanceCandidate, len(candidates))
 	for _, candidate := range candidates {
@@ -565,6 +568,8 @@ func TestBuiltinAppearanceCandidatesIncludeWellnessCharacters(t *testing.T) {
 
 	assert.Equal(t, "华佗", byID[builtinAvatarHuatuo01ID].Name)
 	assert.Equal(t, "太极小子", byID[builtinAvatarTaijiXiaoziID].Name)
+	assert.Equal(t, "小麦", byID[builtinAvatarXiaomai01ID].Name)
+	assert.Equal(t, "豆豆", byID[builtinAvatarDoudou01ID].Name)
 }
 
 func TestSelectWellnessBuiltinAppearancesPersists(t *testing.T) {
@@ -575,6 +580,8 @@ func TestSelectWellnessBuiltinAppearancesPersists(t *testing.T) {
 	}{
 		{name: "华佗", avatarID: builtinAvatarHuatuo01ID, petName: "华佗"},
 		{name: "太极小子", avatarID: builtinAvatarTaijiXiaoziID, petName: "太极小子"},
+		{name: "小麦", avatarID: builtinAvatarXiaomai01ID, petName: "小麦"},
+		{name: "豆豆", avatarID: builtinAvatarDoudou01ID, petName: "豆豆"},
 	}
 
 	for _, tt := range tests {
