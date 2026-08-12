@@ -10,28 +10,28 @@ const healthIndexMinRecordedDays = 2
 
 // HealthIndex 健康指数计算结果
 type HealthIndex struct {
-	HasEnoughData     bool              `json:"has_enough_data"`
-	OverallScore      int               `json:"overall_score"`
-	ProjectedScore    int               `json:"projected_score"`
-	OverallTrendLabel string            `json:"overall_trend_label"`
-	OverviewCopy      string            `json:"overview_copy"`
-	SignalChips       []SignalChip      `json:"signal_chips"`
-	RiskCards         []RiskCard        `json:"risk_cards"`
-	CustomRiskCards   []RiskCard        `json:"custom_risk_cards"`
-	AllRiskOptions    []RiskOption      `json:"all_risk_options"`
-	CustomFocusMeta   *CustomFocusMeta  `json:"custom_focus_meta,omitempty"`
-	TopIssues         []TopIssue        `json:"top_issues"`
-	ActionList        []string          `json:"action_list"`
-	ShowDisclaimer    bool              `json:"show_disclaimer"`
+	HasEnoughData     bool             `json:"has_enough_data"`
+	OverallScore      int              `json:"overall_score"`
+	ProjectedScore    int              `json:"projected_score"`
+	OverallTrendLabel string           `json:"overall_trend_label"`
+	OverviewCopy      string           `json:"overview_copy"`
+	SignalChips       []SignalChip     `json:"signal_chips"`
+	RiskCards         []RiskCard       `json:"risk_cards"`
+	CustomRiskCards   []RiskCard       `json:"custom_risk_cards"`
+	AllRiskOptions    []RiskOption     `json:"all_risk_options"`
+	CustomFocusMeta   *CustomFocusMeta `json:"custom_focus_meta,omitempty"`
+	TopIssues         []TopIssue       `json:"top_issues"`
+	ActionList        []string         `json:"action_list"`
+	ShowDisclaimer    bool             `json:"show_disclaimer"`
 }
 
 // CustomFocusMeta 自定义关注元信息
 type CustomFocusMeta struct {
-	MaxFocuses      int `json:"max_focuses"`
-	GenerateCost    int `json:"generate_cost"`
-	DailyLimit      int `json:"daily_limit"`
-	UsedToday       int `json:"used_today"`
-	RemainingToday  int `json:"remaining_today"`
+	MaxFocuses     int `json:"max_focuses"`
+	GenerateCost   int `json:"generate_cost"`
+	DailyLimit     int `json:"daily_limit"`
+	UsedToday      int `json:"used_today"`
+	RemainingToday int `json:"remaining_today"`
 }
 
 // SignalChip 信号芯片
@@ -71,14 +71,14 @@ type TopIssue struct {
 }
 
 var statsMicronutrientWeights = map[string]float64{
-	"fiber":            0.20,
-	"sodiumMg":         0.15,
-	"potassiumMg":      0.15,
-	"calciumMg":        0.15,
-	"ironMg":           0.10,
-	"vitaminARaeMcg":   0.05,
-	"vitaminCMg":       0.10,
-	"vitaminDMcg":      0.10,
+	"fiber":          0.20,
+	"sodiumMg":       0.15,
+	"potassiumMg":    0.15,
+	"calciumMg":      0.15,
+	"ironMg":         0.10,
+	"vitaminARaeMcg": 0.05,
+	"vitaminCMg":     0.10,
+	"vitaminDMcg":    0.10,
 }
 
 var statsSupplementSensitiveMicronutrients = map[string]bool{
@@ -285,19 +285,19 @@ func computeHealthIndex(comp *statsComputation, statsRange string) *HealthIndex 
 
 	weightTrendAdjustment, weightTrendSupportsGoal, weightTrendAgainstGoal := healthIndexWeightTrendAdjustment(comp, dietGoal)
 	weightScore := clampScore(
-		100-
-			weightEnergyOverRatio*40-
-			weightOverTargetRate*25-
-			snackOver15*0.5-
-			dinnerOver38*4.0+
-			weightTrendAdjustment+
+		100 -
+			weightEnergyOverRatio*40 -
+			weightOverTargetRate*25 -
+			snackOver15*0.5 -
+			dinnerOver38*4.0 +
+			weightTrendAdjustment +
 			weightBonus,
 	)
 
 	micronutrientScore, microBrief, microSummary, microBasis, microAction := computeMicronutrientScore(comp)
 	hasMicronutrientData := len(comp.MicronutrientDaily) > 0
 
-	baseScoreSum := float64(hypertensionScore+diabetesScore+cardioScore+weightScore)
+	baseScoreSum := float64(hypertensionScore + diabetesScore + cardioScore + weightScore)
 	scoreDivisor := 4
 	if hasMicronutrientData {
 		baseScoreSum += float64(micronutrientScore)
@@ -332,12 +332,12 @@ func computeHealthIndex(comp *statsComputation, statsRange string) *HealthIndex 
 	)
 
 	longevityScore := clampScore(
-		100-
-			energyOverRatio*28-
-			surplusRate*18-
-			dinnerOver35*1.2-
-			fatOver30*1.5-
-			carbOver50*1.0+
+		100 -
+			energyOverRatio*28 -
+			surplusRate*18 -
+			dinnerOver35*1.2 -
+			fatOver30*1.5 -
+			carbOver50*1.0 +
 			bonusIf(recordedDays >= thresholdDays(statsRange), 5),
 	)
 	weightOverTarget := weightTrendAgainstGoal || (weightEnergyOverRatio > 0.08 && !weightTrendSupportsGoal)
@@ -347,7 +347,7 @@ func computeHealthIndex(comp *statsComputation, statsRange string) *HealthIndex 
 	riskCards := []RiskCard{
 		{
 			Key:     "hypertension",
-			Title:   "血压管理友好度",
+			Title:   "餐次与能量分布",
 			Score:   hypertensionScore,
 			Tone:    scoreToTone(hypertensionScore),
 			Brief:   ifElseStr(dinnerPct > 40, "晚间负担偏重。", "分布基本可控。"),
@@ -358,29 +358,29 @@ func computeHealthIndex(comp *statsComputation, statsRange string) *HealthIndex 
 		},
 		{
 			Key:     "diabetes",
-			Title:   "血糖稳定友好度",
+			Title:   "碳水搭配表现",
 			Score:   diabetesScore,
 			Tone:    scoreToTone(diabetesScore),
-			Brief:   ifElseStr(macroPercent["carbs"] > 50, "主食偏重，支撑偏弱。", "代谢压力暂时可控。"),
-			Summary: ifElseStr(macroPercent["carbs"] > 50, "当前主要拖累是碳水占比偏高，同时蛋白质支撑不足。", "代谢结构不算差，但还可以把蛋白质和饱腹感做得更稳。"),
+			Brief:   ifElseStr(macroPercent["carbs"] > 50, "主食偏重，搭配不足。", "碳水搭配暂时较稳。"),
+			Summary: ifElseStr(macroPercent["carbs"] > 50, "当前饮食记录中碳水占比偏高，同时蛋白质搭配不足。", "近期碳水与蛋白质搭配较稳，还可以进一步增加饱腹感。"),
 			Basis:   fmt.Sprintf("碳水 %s，蛋白质 %s，加餐热量占比 %s。", formatPercent(macroPercent["carbs"]), formatPercent(macroPercent["protein"]), formatPercent(snackPct)),
 			Action:  ifElseStr(macroPercent["carbs"] > 50, "把一部分主食换成蛋白质或蔬菜，先从最常超标的一餐改起。", "保留当前主食量的同时，每餐补一个更稳定的蛋白来源。"),
 			Delta:   clampScore(ifElseFloat(macroPercent["carbs"] > 50, 12, 8) + ifElseFloat(macroPercent["protein"] < 20, 6, 0)),
 		},
 		{
 			Key:     "cardio",
-			Title:   "心血管友好度",
+			Title:   "控油饮食表现",
 			Score:   cardioScore,
 			Tone:    scoreToTone(cardioScore),
 			Brief:   ifElseStr(macroPercent["fat"] > 32, "高油频率偏多。", "整体还在中性区。"),
-			Summary: ifElseStr(macroPercent["fat"] > 32, "脂肪占比和连续超标频率一起拖累了心血管保护趋势。", "总体还在可接受区，但连续超标天数已经开始拉低长期保护感。"),
+			Summary: ifElseStr(macroPercent["fat"] > 32, "近期饮食记录中的脂肪占比与连续超标频率都偏高。", "近期控油表现总体尚可，但仍可减少连续超标的餐次。"),
 			Basis:   fmt.Sprintf("脂肪 %s，超出消耗天数 %d/%d，睡前餐占比 %s。", formatPercent(macroPercent["fat"]), surplusDays, recordedDays, formatPercent(dinnerPct)),
-			Action:  ifElseStr(macroPercent["fat"] > 32, "优先减少最常出现的高油菜和夜间加餐，不必一次性大幅节食。", "先把每周最容易超标的 2-3 餐压下来，保护分会更明显回升。"),
+			Action:  ifElseStr(macroPercent["fat"] > 32, "优先减少最常出现的高油菜和夜间加餐，不必一次性大幅节食。", "先调整每周最容易超标的 2-3 餐，控油饮食表现会更稳。"),
 			Delta:   clampScore(ifElseFloat(macroPercent["fat"] > 32, 10, 7) + ifElseFloat(surplusRate > 0.45, 5, 0)),
 		},
 		{
 			Key:     "weight",
-			Title:   "体重管理友好度",
+			Title:   "能量平衡表现",
 			Score:   weightScore,
 			Tone:    scoreToTone(weightScore),
 			Brief:   weightBrief,
@@ -391,7 +391,7 @@ func computeHealthIndex(comp *statsComputation, statsRange string) *HealthIndex 
 		},
 		{
 			Key:     "colorectal",
-			Title:   "肠道状态友好度",
+			Title:   "膳食结构规律度",
 			Score:   colorectalScore,
 			Tone:    scoreToTone(colorectalScore),
 			Brief:   ifElseStr(snackPct > 18, "结构偏散，重复性偏高。", "整体还算整齐。"),
@@ -402,7 +402,7 @@ func computeHealthIndex(comp *statsComputation, statsRange string) *HealthIndex 
 		},
 		{
 			Key:     "longevity",
-			Title:   "长期状态趋势",
+			Title:   "长期饮食稳定度",
 			Score:   longevityScore,
 			Tone:    scoreToTone(longevityScore),
 			Brief:   ifElseStr(surplusRate > 0.45, "重复性问题在拖分。", "长期趋势还能再修。"),
@@ -416,7 +416,7 @@ func computeHealthIndex(comp *statsComputation, statsRange string) *HealthIndex 
 	if hasMicronutrientData {
 		riskCards = append(riskCards, RiskCard{
 			Key:     "micronutrient",
-			Title:   "微量营养充足度",
+			Title:   "微量营养摄入覆盖",
 			Score:   micronutrientScore,
 			Tone:    scoreToTone(micronutrientScore),
 			Brief:   microBrief,
@@ -428,15 +428,15 @@ func computeHealthIndex(comp *statsComputation, statsRange string) *HealthIndex 
 	}
 
 	allRiskOptions := []RiskOption{
-		{Key: "hypertension", Title: "血压管理友好度", Short: "血压"},
-		{Key: "diabetes", Title: "血糖稳定友好度", Short: "血糖"},
-		{Key: "cardio", Title: "心血管友好度", Short: "心血管"},
-		{Key: "weight", Title: "体重管理友好度", Short: "体重"},
-		{Key: "colorectal", Title: "肠道状态友好度", Short: "肠道"},
-		{Key: "longevity", Title: "长期状态趋势", Short: "长期"},
+		{Key: "hypertension", Title: "餐次与能量分布", Short: "餐次分布"},
+		{Key: "diabetes", Title: "碳水搭配表现", Short: "碳水搭配"},
+		{Key: "cardio", Title: "控油饮食表现", Short: "控油"},
+		{Key: "weight", Title: "能量平衡表现", Short: "能量平衡"},
+		{Key: "colorectal", Title: "膳食结构规律度", Short: "膳食结构"},
+		{Key: "longevity", Title: "长期饮食稳定度", Short: "长期饮食"},
 	}
 	if hasMicronutrientData {
-		allRiskOptions = append(allRiskOptions, RiskOption{Key: "micronutrient", Title: "微量营养充足度", Short: "微量营养"})
+		allRiskOptions = append(allRiskOptions, RiskOption{Key: "micronutrient", Title: "微量营养摄入覆盖", Short: "微量营养"})
 	}
 
 	var topIssues []TopIssue
@@ -538,7 +538,7 @@ func healthIndexWeightCopy(dietGoal string, overTarget bool) (string, string, st
 			"保持总量不大改，优先把盈余放在训练日前后，少让高油加餐承担主要热量。"
 	case "fat_loss":
 		if overTarget {
-			return "重复超标在累积。",
+			return "重复超标正在累积。",
 				"日均摄入高于减脂参考目标，体重管理压力主要来自重复性超标。",
 				"先把最常超标的一餐减少约 1/4 主食或高油部分，再观察 1 周。"
 		}
@@ -547,7 +547,7 @@ func healthIndexWeightCopy(dietGoal string, overTarget bool) (string, string, st
 			"保持总量不大改，优先优化睡前餐和加餐的时段分布。"
 	default:
 		if overTarget {
-			return "重复超标在累积。",
+			return "重复超标正在累积。",
 				"平均摄入已经高于当前消耗，体重管理压力主要来自重复性超标。",
 				"先把最常超标的一餐减少约 1/4 主食或高油部分，再观察 1 周。"
 		}
@@ -632,28 +632,28 @@ func scoreToTone(score int) string {
 
 func scoreToLabel(score int) string {
 	if score >= 78 {
-		return "偏保护"
+		return "饮食较稳"
 	}
 	if score >= 60 {
-		return "基本中性"
+		return "基本平稳"
 	}
 	if score >= 42 {
-		return "需要关注"
+		return "有待调整"
 	}
-	return "重点关注"
+	return "优先调整"
 }
 
 func scoreToTrendCopy(score int) string {
 	if score >= 78 {
-		return "这段时间的饮食模式整体更偏向保护。"
+		return "这段时间的饮食结构整体较稳。"
 	}
 	if score >= 60 {
-		return "总体还算稳，但已经出现一些可逆转的拖累项。"
+		return "总体较稳，但仍有一些可以调整的饮食项。"
 	}
 	if score >= 42 {
-		return "最近的吃法已经在把你推向更高风险区。"
+		return "近期饮食结构中已有比较明显的短板。"
 	}
-	return "如果继续这样吃，长期风险趋势会比较不友好。"
+	return "近期饮食结构有较多可调整处，建议从一项小改变开始。"
 }
 
 func formatPercent(value float64) string {

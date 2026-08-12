@@ -1,8 +1,7 @@
-import { View, Text, ScrollView, Input } from '@tarojs/components'
-import { useState, useEffect, useCallback, useRef, type CSSProperties } from 'react'
+import { View, Text, ScrollView, Input, Switch } from '@tarojs/components'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import Taro, { useDidShow } from '@tarojs/taro'
 import { readStatsPageCache, writeStatsPageCache } from '../../utils/stats-page-cache'
-import { Switch } from '@taroify/core'
 import {
   getStatsSummary,
   generateStatsInsight,
@@ -20,6 +19,7 @@ import {
   type RiskTone,
 } from '../../utils/api'
 import { IconBreakfast, IconLunch, IconDinner, IconSnack, IconExpand, IconCollapse } from '../../components/iconfont'
+import { dietFocusShort, dietFocusTitle, shouldShowDietScore } from '../../utils/stats-diet-language'
 import './index.scss'
 import { withAuth, redirectToLogin } from '../../utils/withAuth'
 import { useAppColorScheme } from '../../components/AppColorSchemeContext'
@@ -290,7 +290,7 @@ type HeatmapCell = {
 type AnalysisPanelKey = 'health' | 'nutrition' | 'structure'
 
 const ANALYSIS_PANEL_TABS: Array<{ key: AnalysisPanelKey; label: string }> = [
-  { key: 'health', label: '健康指数' },
+  { key: 'health', label: '饮食倾向' },
   { key: 'nutrition', label: 'AI分析' },
   { key: 'structure', label: '热量分布' },
 ]
@@ -319,31 +319,31 @@ function scoreToTone(score: number): RiskTone {
 }
 
 function scoreToLabel(score: number): string {
-  if (score >= 78) return '偏保护'
-  if (score >= 60) return '基本中性'
-  if (score >= 42) return '需要关注'
-  return '重点关注'
+  if (score >= 78) return '饮食较稳'
+  if (score >= 60) return '基本平稳'
+  if (score >= 42) return '有待调整'
+  return '优先调整'
 }
 
 function scoreToFocusOverview(score: number, hasCustomFocus: boolean): string {
   if (score >= 78) {
     return hasCustomFocus
-      ? '你当前关注的指标整体更偏向保护，自定义方向也会跟随卡片一起纳入参考。'
-      : '你当前关注的核心指标整体更偏向保护。'
+      ? '近期饮食记录整体较稳，自定义方向也会随卡片一起纳入参考。'
+      : '近期饮食记录中的主要结构整体较稳。'
   }
   if (score >= 60) {
     return hasCustomFocus
-      ? '你当前关注的指标总体还算稳，但自定义方向和核心指标里已经有一些可优化项。'
-      : '你当前关注的核心指标总体还算稳，但已经出现一些可优化项。'
+      ? '近期饮食记录总体较稳，但自定义方向和主要结构中仍有可优化项。'
+      : '近期饮食记录总体较稳，但仍有一些可优化项。'
   }
   if (score >= 42) {
     return hasCustomFocus
-      ? '你当前关注的指标已经出现明显拖累，建议优先处理分数最低的关注项。'
-      : '你当前关注的核心指标已经出现明显拖累，建议优先处理分数最低的一项。'
+      ? '近期饮食结构中已有明显短板，建议优先调整分数最低的方向。'
+      : '近期饮食结构中已有明显短板，建议优先调整分数最低的一项。'
   }
   return hasCustomFocus
-    ? '你当前关注的指标处在较高压力区，先从最可执行的一项小步调整。'
-    : '你当前关注的核心指标处在较高压力区，先从最可执行的一项小步调整。'
+    ? '近期饮食结构有较多可调整处，先从最容易执行的一项开始。'
+    : '近期饮食结构有较多可调整处，先从最容易执行的一项开始。'
 }
 
 function riskCardIcon(key: string): string {
@@ -775,7 +775,7 @@ function StatsPage() {
   const handleGenerateInsight = useCallback(async () => {
     if (!data || insightActionLoading) return
     if (Math.max(0, toSafeNumber(data.recorded_days, 0)) <= 0) {
-      setInsightError('还没有饮食记录，先记录至少一餐后再生成 AI 风险解读。')
+      setInsightError('还没有饮食记录，先记录至少一餐后再生成 AI 饮食解读。')
       return
     }
 
@@ -1153,7 +1153,11 @@ function StatsPage() {
     base.forEach(item => {
       if (!item.key || seen.has(item.key)) return
       seen.add(item.key)
-      merged.push(item)
+      merged.push({
+        ...item,
+        title: dietFocusTitle(item.key, item.title),
+        short: dietFocusShort(item.key, item.short),
+      })
     })
     customRiskCards.forEach(card => {
       if (!card.key || seen.has(card.key)) return
@@ -1183,8 +1187,8 @@ function StatsPage() {
   const focusProjectedScore = projectedOverallScore
   const focusOverviewCopy = scoreToFocusOverview(focusOverallScore, hasVisibleCustomFocus)
   const focusScoreHint = hasVisibleCustomFocus
-    ? '按全部核心指标与自定义 AI 指标综合计算'
-    : '按全部核心关注指标综合计算'
+    ? '仅按饮食记录与所选方向估算，不代表实测健康指标'
+    : '仅按饮食记录估算，不代表血压、血糖等实测指标'
   const selectedRiskSummary = selectedRiskItems.map(item => item.short).join('、')
   const topIssues = healthIndex?.top_issues ?? []
   const actionList = healthIndex?.action_list ?? []
@@ -1247,9 +1251,9 @@ function StatsPage() {
               <Text className='iconfont icon-shangzhang health-index-gate-icon-text' />
             </View>
             <View className='health-index-gate-copy'>
-              <Text className='health-index-gate-title'>连续记录两天后显示健康指数</Text>
+              <Text className='health-index-gate-title'>连续记录两天后显示饮食倾向</Text>
               <Text className='health-index-gate-desc'>
-                当前已记录 {d.recorded_days ?? 0} 天。请连续记录两天以上，我们会基于更稳定的饮食趋势展示你的健康参考指数。
+                当前已记录 {d.recorded_days ?? 0} 天。连续记录两天以上后，这里会根据饮食结构与摄入趋势提供参考，不代表任何实测健康指标。
               </Text>
             </View>
           </View>
@@ -1258,7 +1262,7 @@ function StatsPage() {
             <View className='stats-card risk-overview-card'>
               <View className='risk-overview-top'>
                 <View className='risk-overview-copy'>
-                  <Text className='risk-overview-title'>关注综合分</Text>
+                  <Text className='risk-overview-title'>饮食表现参考分</Text>
                 </View>
                 <View className='risk-overview-actions'>
                   <View className={`risk-overview-badge tone-${scoreToTone(focusOverallScore)}`}>
@@ -1308,7 +1312,7 @@ function StatsPage() {
         {analysisPanel === 'health' && hasEnoughHealthIndexData ? (
           <>
         <View className='risk-section-header'>
-          <Text className='risk-section-title'>健康指标关注</Text>
+          <Text className='risk-section-title'>饮食关注方向</Text>
           <View
             className='risk-focus-edit-btn'
             onClick={(e) => {
@@ -1339,12 +1343,16 @@ function StatsPage() {
                     style={{ color: riskCardIconColor(card.key, scheme === 'dark') }}
                   />
                 </View>
-                <View className='risk-card-score-wrap'>
-                  <Text className='risk-card-score'>{card.score}</Text>
-                  <Text className='risk-card-score-unit'>分</Text>
-                </View>
+                {shouldShowDietScore(card.is_custom) ? (
+                  <View className='risk-card-score-wrap'>
+                    <Text className='risk-card-score'>{card.score}</Text>
+                    <Text className='risk-card-score-unit'>分</Text>
+                  </View>
+                ) : (
+                  <Text className='risk-card-ai-badge'>AI 饮食建议</Text>
+                )}
               </View>
-              <Text className='risk-card-title'>{card.title}</Text>
+              <Text className='risk-card-title'>{dietFocusTitle(card.key, card.title)}</Text>
               {card.is_custom ? (
                 <View className='risk-card-ai-badge-row'>
                   <Text className='risk-card-ai-badge'>AI</Text>
@@ -1372,7 +1380,7 @@ function StatsPage() {
               <View className='risk-focus-modal-header'>
                 <View className='risk-focus-modal-title-wrap'>
                   <Text className='risk-focus-modal-title'>我的关注</Text>
-                  <Text className='risk-focus-modal-subtitle'>选择你想优先看的健康方向</Text>
+                  <Text className='risk-focus-modal-subtitle'>选择你想优先查看的饮食方向</Text>
                 </View>
                 <View className='risk-focus-modal-count'>
                   <Text className='risk-focus-modal-count-text'>已选 {selectedRiskItems.length}</Text>
@@ -1459,24 +1467,24 @@ function StatsPage() {
               <View className='risk-detail-handle' />
               <View className='risk-detail-header'>
                 <View className='risk-detail-title-row'>
-                  <Text className='risk-detail-title'>{riskDetailModal.card.title}</Text>
+                  <Text className='risk-detail-title'>{dietFocusTitle(riskDetailModal.card.key, riskDetailModal.card.title)}</Text>
                   {riskDetailModal.card.is_custom ? (
                     <Text className='risk-detail-ai-badge'>AI</Text>
                   ) : null}
                 </View>
-                <View className='risk-detail-score-row'>
-                  <Text className='risk-detail-score'>{riskDetailModal.card.score}</Text>
-                  <Text className='risk-detail-score-unit'>分</Text>
-                  <View className={`risk-detail-badge tone-${riskDetailModal.card.tone}`}>
-                    <Text className='risk-detail-badge-text'>{scoreToLabel(riskDetailModal.card.score)}</Text>
+                {shouldShowDietScore(riskDetailModal.card.is_custom) ? (
+                  <View className='risk-detail-score-row'>
+                    <Text className='risk-detail-score'>{riskDetailModal.card.score}</Text>
+                    <Text className='risk-detail-score-unit'>分</Text>
+                    <View className={`risk-detail-badge tone-${riskDetailModal.card.tone}`}>
+                      <Text className='risk-detail-badge-text'>{scoreToLabel(riskDetailModal.card.score)}</Text>
+                    </View>
                   </View>
-                </View>
+                ) : null}
               </View>
               <View className='risk-detail-body'>
                 {riskDetailModal.card.is_custom ? (
-                  <Text className='risk-detail-ai-disclaimer'>
-                    基于饮食趋势的趋势性参考，不构成医学诊断或治疗建议。
-                  </Text>
+                  <Text className='risk-detail-ai-disclaimer'>仅根据饮食记录生成，不代表实测健康指标，也不用于医学诊断。</Text>
                 ) : null}
                 <Text className='risk-detail-section-text'>{riskDetailModal.card.summary}</Text>
                 <View className='risk-detail-divider' />
@@ -1485,9 +1493,11 @@ function StatsPage() {
                 <View className='risk-detail-divider' />
                 <Text className='risk-detail-section-label'>最小改善动作</Text>
                 <Text className='risk-detail-section-text'>{riskDetailModal.card.action}</Text>
-                <View className='risk-detail-delta'>
-                  <Text className='risk-detail-delta-text'>预计可提升 {riskDetailModal.card.delta} 分</Text>
-                </View>
+                {shouldShowDietScore(riskDetailModal.card.is_custom) ? (
+                  <View className='risk-detail-delta'>
+                    <Text className='risk-detail-delta-text'>预计可提升 {riskDetailModal.card.delta} 分</Text>
+                  </View>
+                ) : null}
                 {riskDetailModal.card.is_custom && riskDetailModal.card.needs_refresh ? (
                   <View
                     className={`risk-detail-refresh-btn${customFocusRefreshingKey === riskDetailModal.card.key ? ' is-loading' : ''}`}
@@ -1550,7 +1560,7 @@ function StatsPage() {
           </View>
           <View className='action-score-delta'>
             <Text className='action-score-delta__dot' />
-            <Text className='action-score-delta__text'>如果完成修改，综合健康分约为 {overallRiskScore} → {projectedOverallScore}</Text>
+            <Text className='action-score-delta__text'>如果按建议调整，饮食参考分预计为 {overallRiskScore} → {projectedOverallScore}</Text>
           </View>
 
           </>
@@ -1561,7 +1571,7 @@ function StatsPage() {
         <View className='stats-card ai-insight-card'>
           <View className='ai-insight-card-top'>
             <View className='ai-insight-card-title-wrap'>
-              <Text className='ai-insight-card-title'>AI 风险解读</Text>
+              <Text className='ai-insight-card-title'>AI 饮食解读</Text>
             </View>
           </View>
           <View className='ai-insight-card-body'>
@@ -1605,18 +1615,12 @@ function StatsPage() {
             ) : null}
             {!canUseStatsInsight ? (
               <View className='analysis-empty analysis-empty--gate'>
-                <Text className='analysis-empty-title'>先记录饮食后再生成 AI 风险解读</Text>
+                <Text className='analysis-empty-title'>先记录饮食后再生成 AI 饮食解读</Text>
                 <Text className='analysis-empty-text'>当前统计周期还没有饮食记录，暂时无法判断热量、餐次和宏量营养趋势。记录至少一餐后，这里会基于真实数据生成解读。</Text>
               </View>
             ) : insightActionLoading ? (
               <View className='analysis-loading-card'>
-                <View className='analysis-loading-card-header'>
-                  <Text className='iconfont icon-jiazaixiao analysis-loading-card-icon' />
-                  <View className='analysis-loading-card-copy'>
-                    <Text className='analysis-loading-card-title'>正在更新 AI 风险解读</Text>
-                    <Text className='analysis-loading-card-text'>会基于你当前统计周期的最新饮食记录重新生成这段分析。</Text>
-                  </View>
-                </View>
+                <Text className='iconfont icon-jiazaixiao analysis-loading-card-icon' />
                 <View className='analysis-skeleton-group'>
                   <View className='analysis-skeleton-line w-92' />
                   <View className='analysis-skeleton-line w-100' />
@@ -1682,7 +1686,7 @@ function StatsPage() {
                     className='chart-switch'
                     checked={showCalories}
                     onChange={(v: any) => setShowCalories(Boolean(typeof v === 'object' ? v?.detail?.value : v))}
-                    style={{ '--switch-checked-background-color': '#5cb896' } as CSSProperties}
+                    color='#5cb896'
                   />
                 </View>
               </View>
@@ -1946,7 +1950,7 @@ function StatsPage() {
         ) : null}
 
         <View className='stats-page-disclaimer'>
-          <Text className='stats-page-disclaimer__text'>结果仅供参考，不代替医学判断</Text>
+          <Text className='stats-page-disclaimer__text'>本页仅分析饮食记录，不代表任何实测健康指标，也不用于医学诊断</Text>
         </View>
       </ScrollView>
     </View>
