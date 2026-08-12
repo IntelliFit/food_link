@@ -31,4 +31,13 @@ describe('wellness home final layout', () => {
     expect(componentExports).not.toContain('DietRecommendationSheet')
     expect(pageScss).not.toContain('.diet-rec-')
   })
+
+  it('stacks macro intake and target values so narrow columns cannot overlap', () => {
+    expect(pageScss).toMatch(
+      /\.wellness-macro__numbers\s*\{[^}]*display:\s*flex;[^}]*flex-direction:\s*column;/,
+    )
+    expect(pageScss).toMatch(
+      /\.wellness-macro__target\s*\{[^}]*display:\s*block;/,
+    )
+  })
 })

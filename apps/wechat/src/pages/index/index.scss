@@ -503,6 +503,10 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 }
 
 .wellness-macro__numbers {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
   margin-top: 8rpx;
   white-space: nowrap;
 }
@@ -518,8 +522,10 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 }
 
 .wellness-macro__target {
+  display: block;
   color: #8c9691;
   font-size: 20rpx;
+  line-height: 28rpx;
 }
 
 .wellness-macro__track {
