@@ -289,6 +289,13 @@ function ProfilePage() {
       path: extraPkgUrl('/pages/reward-center/index')
     },
     {
+      id: 11,
+      iconClass: 'icon-duoren',
+      title: '邀请好友得会员',
+      desc: '好友有效使用 2 天，你得 7 天、好友得 3 天会员',
+      path: extraPkgUrl('/pages/invite-friends/index')
+    },
+    {
       id: 5,
       iconClass: 'icon-foodshop',
       title: '公共食物库',

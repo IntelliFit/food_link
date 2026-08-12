@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import * as React from 'react'
 import * as Taro from '@tarojs/taro'
 import ProfilePage from '../../src/pages/profile/index'
@@ -94,6 +94,16 @@ describe('membership credit overview', () => {
     expect(container.querySelector('.progress-bar')).not.toBeInTheDocument()
     expect(container.querySelector('.segmented-progress')).not.toBeInTheDocument()
     expect(container.textContent).not.toMatch(/Lv\d|探味新芽/)
+  })
+
+  it('keeps the invite friends membership entry on the profile page', async () => {
+    render(<ProfilePage />)
+
+    const inviteEntry = await screen.findByText('邀请好友得会员')
+    fireEvent.click(inviteEntry.closest('.list-item') as HTMLElement)
+    expect(Taro.navigateTo).toHaveBeenCalledWith({
+      url: '/packageExtra/pages/invite-friends/index',
+    })
   })
 
   it('does not assign a level to reward credits in the reward center', async () => {
