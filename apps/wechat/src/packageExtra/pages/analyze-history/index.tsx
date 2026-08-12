@@ -52,6 +52,7 @@ const STATUS_MAP: Record<string, string> = {
 }
 
 const ANALYZE_HISTORY_PAGE_SIZE = 20
+const ANALYZE_HISTORY_REQUEST_TIMEOUT_MS = 12_000
 
 /** 根据后端返回的 status + is_recorded 决定列表中展示的状态文案和样式类名 */
 const pickDisplayStatus = (task: AnalysisTask): { text: string; className: string } => {
@@ -429,6 +430,7 @@ function AnalyzeHistoryPage() {
   const { scheme } = useAppColorScheme()
   const [tasks, setTasks] = useState<AnalysisTask[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
   const [hasMore, setHasMore] = useState(false)
   const [showActionSheet, setShowActionSheet] = useState(false)
@@ -505,13 +507,14 @@ function AnalyzeHistoryPage() {
       nextOffsetRef.current = 0
       hasMoreRef.current = false
       setHasMore(false)
+      setLoadError(false)
       setLoading(true)
     }
     try {
       const search = keyword?.trim()
       const res = await withTimeout(
         listAnalyzeTasks({ limit: ANALYZE_HISTORY_PAGE_SIZE, offset, search }),
-        22000
+        ANALYZE_HISTORY_REQUEST_TIMEOUT_MS
       )
       const pageTasks = (res.tasks || []).filter((t) => {
         const payload = (t.payload || {}) as Record<string, unknown>
@@ -529,10 +532,15 @@ function AnalyzeHistoryPage() {
       nextOffsetRef.current = nextOffset
       hasMoreRef.current = nextHasMore
       setHasMore(nextHasMore)
+      setLoadError(false)
     } catch (e: any) {
       if (seq !== loadSeqRef.current) return
       console.error('[analyze-history] load failed', e)
-      await showUnifiedApiError(e, '加载失败')
+      if (!append) {
+        setLoadError(true)
+        setLoading(false)
+      }
+      void showUnifiedApiError(e, '加载失败')
     } finally {
       if (seq === loadSeqRef.current) {
         if (append) {
@@ -1065,6 +1073,17 @@ function AnalyzeHistoryPage() {
       >
         {loading ? (
           <View className='loading-wrap'><View className='loading-spinner-md' /></View>
+        ) : loadError && tasks.length === 0 ? (
+          <View className='empty load-error'>
+            <View className='empty-icon'>
+              <Text className='iconfont icon-jinggao' style={{ fontSize: '80rpx', color: '#9ca3af' }} />
+            </View>
+            <Text className='load-error-title'>记录加载失败</Text>
+            <Text className='empty-text'>网络或服务暂时不可用，请稍后重试</Text>
+            <View className='load-error-retry' onClick={() => void load(searchKeywordRef.current)}>
+              <Text className='load-error-retry-text'>重新加载</Text>
+            </View>
+          </View>
         ) : tasks.length === 0 ? (
           <View className='empty'>
             <View className='empty-icon'>

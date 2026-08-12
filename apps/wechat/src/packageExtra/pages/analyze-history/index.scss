@@ -754,6 +754,32 @@
   }
 }
 
+.load-error-title {
+  font-size: 30rpx;
+  line-height: 42rpx;
+  font-weight: 600;
+  color: #374151;
+}
+
+.load-error-retry {
+  margin-top: 8rpx;
+  padding: 18rpx 42rpx;
+  border-radius: 999rpx;
+  background: linear-gradient(135deg, #5cb896 0%, #49aa84 100%);
+  box-shadow: 0 8rpx 20rpx rgba(73, 170, 132, 0.2);
+
+  &:active {
+    opacity: 0.82;
+  }
+}
+
+.load-error-retry-text {
+  color: #fff;
+  font-size: 27rpx;
+  line-height: 38rpx;
+  font-weight: 600;
+}
+
 .loading-wrap {
   display: flex;
   justify-content: center;
@@ -838,6 +864,10 @@
   .empty .empty-text,
   .loading-wrap {
     color: rgba(214, 226, 220, 0.58);
+  }
+
+  .load-error-title {
+    color: #f2f7f4;
   }
 
   .search-input-wrap {
