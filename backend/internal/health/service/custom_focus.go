@@ -18,10 +18,18 @@ import (
 )
 
 const (
-	customFocusCreditCost = 1
-	customFocusDailyLimit = 3
-	customFocusMaxTokens  = 2048
+	customFocusCreditCost      = 1
+	customFocusDailyLimit      = 3
+	customFocusMaxTokens       = 2048
+	customFocusSemanticVersion = "diet-records-v2"
 )
+
+func customFocusDataFingerprint(comp *statsComputation) string {
+	if comp == nil {
+		return customFocusSemanticVersion + ":"
+	}
+	return customFocusSemanticVersion + ":" + comp.DataFingerprint
+}
 
 type customFocusCardPayload struct {
 	Score   int    `json:"score"`
@@ -81,7 +89,11 @@ func (s *StatsService) attachCustomRiskCards(ctx context.Context, comp *statsCom
 		if !ok {
 			continue
 		}
-		needsRefresh := cached.DataFingerprint != comp.DataFingerprint
+		needsRefresh := cached.DataFingerprint != customFocusDataFingerprint(comp)
+		if needsRefresh {
+			// 旧语义卡片可能包含健康档案推断或医学化文案；不展示，仅允许重新生成。
+			continue
+		}
 		customCards = append(customCards, domainCustomFocusToRiskCard(cached, needsRefresh))
 	}
 	healthIndex.CustomRiskCards = customCards
@@ -106,12 +118,12 @@ func domainCustomFocusToRiskCard(card domain.CustomFocusCard, needsRefresh bool)
 		Key:          customFocusKey(card.FocusID),
 		Title:        card.FocusLabel,
 		Score:        card.Score,
-		Tone:         scoreToTone(card.Score),
+		Tone:         "neutral",
 		Brief:        card.Brief,
 		Summary:      card.Summary,
 		Basis:        card.Basis,
 		Action:       card.Action,
-		Delta:        clampScore(ifElseFloat(needsRefresh, 8, 5)),
+		Delta:        0,
 		IsCustom:     true,
 		NeedsRefresh: needsRefresh,
 		FocusLabel:   card.FocusLabel,
@@ -184,7 +196,7 @@ func (s *StatsService) GenerateCustomFocusCard(ctx context.Context, userID, stat
 		FocusID:         focusID,
 		RangeType:       comp.StatsRange,
 		GeneratedDate:   generatedDate,
-		DataFingerprint: comp.DataFingerprint,
+		DataFingerprint: customFocusDataFingerprint(comp),
 		FocusLabel:      focusLabel,
 		Score:           payload.Score,
 		Brief:           payload.Brief,
@@ -267,15 +279,6 @@ func (s *StatsService) generateCustomFocusCardPayload(ctx context.Context, comp 
 }
 
 func buildCustomFocusCardPrompt(comp *statsComputation, focusLabel string) string {
-	healthIndex := computeHealthIndex(comp, comp.StatsRange)
-	anchor := ""
-	if healthIndex != nil {
-		for _, card := range healthIndex.RiskCards {
-			if card.Key == "hypertension" || card.Key == "diabetes" || card.Key == "cardio" || card.Key == "weight" {
-				anchor += fmt.Sprintf("- %s：%d 分\n", card.Title, card.Score)
-			}
-		}
-	}
 	statsText := fmt.Sprintf(`统计周期：%s
 日均摄入：%.0f kcal，TDEE：%d kcal
 宏量占比：蛋白质 %.1f%%、碳水 %.1f%%、脂肪 %.1f%%
@@ -288,22 +291,17 @@ func buildCustomFocusCardPrompt(comp *statsComputation, focusLabel string) strin
 		comp.MacroPercent["fat"],
 		comp.RecordedDays,
 	)
-	return fmt.Sprintf(`你是一位专业的营养师。请根据用户饮食统计，为自定义关注方向「%s」生成一张健康参考卡片。
+	return fmt.Sprintf(`你是一位营养记录助手。请为用户关注方向「%s」生成一张饮食观察卡片。
 
-%s
-
-四项核心规则分：
-%s
 %s
 
 要求：
 1. 只输出 JSON 对象，不要 Markdown，不要代码块。
 2. 字段：score(0-100整数)、brief(<=20字)、summary(<=80字)、basis(<=80字)、action(<=60字)。
-3. score 应参考四项核心规则分，结合该关注方向做趋势性判断，不要给出医学诊断。
-4. 若证据不足，score 取 55-70，并在 basis 中说明证据不足。`,
+3. 只根据可观察的饮食记录描述热量、宏量营养和记录天数，不使用健康档案，不推断疾病、生理指标或治疗效果。
+4. score 固定输出 0；客户端不会把自定义关注展示为健康分数。
+5. 若饮食记录不足以支持该关注方向，在 basis 中明确写“现有饮食记录证据不足”。`,
 		focusLabel,
-		formatStatsHealthProfile(comp.User, latestWeightFromBodyMetrics(comp.BodyMetrics)),
-		anchor,
 		statsText,
 	)
 }
@@ -323,7 +321,8 @@ func parseCustomFocusCardPayload(content string, comp *statsComputation, focusLa
 	if err := json.Unmarshal([]byte(content), &payload); err != nil {
 		return nil, err
 	}
-	payload.Score = clampScore(float64(payload.Score))
+	// 兼容既有存储结构，但自定义关注不再生成或展示健康式分数。
+	payload.Score = 0
 	payload.Brief = strings.TrimSpace(payload.Brief)
 	payload.Summary = strings.TrimSpace(payload.Summary)
 	payload.Basis = strings.TrimSpace(payload.Basis)
@@ -335,15 +334,10 @@ func parseCustomFocusCardPayload(content string, comp *statsComputation, focusLa
 }
 
 func fallbackCustomFocusCardPayload(comp *statsComputation, focusLabel string) *customFocusCardPayload {
-	healthIndex := computeHealthIndex(comp, comp.StatsRange)
-	score := 65
-	if healthIndex != nil && healthIndex.OverallScore > 0 {
-		score = healthIndex.OverallScore
-	}
 	return &customFocusCardPayload{
-		Score:   score,
-		Brief:   "趋势参考已生成",
-		Summary: fmt.Sprintf("基于你近期的饮食记录，「%s」方向还需要更多连续记录来形成稳定判断。", focusLabel),
+		Score:   0,
+		Brief:   "饮食观察已生成",
+		Summary: fmt.Sprintf("基于近期饮食记录整理了「%s」相关的可观察信号，不代表健康指标。", focusLabel),
 		Basis:   fmt.Sprintf("已记录 %d 天，日均摄入 %.0f kcal。", comp.RecordedDays, comp.AvgCaloriesPerDay),
 		Action:  "先保持连续记录，再根据卡片建议做小步调整。",
 	}
