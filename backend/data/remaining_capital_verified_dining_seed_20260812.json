@@ -1,0 +1,4126 @@
+[
+  {
+    "batch_name": "剩余省会高校官方食堂楼层-20260812",
+    "region": "23个省会及自治区首府（不含北京、上海、武汉、南京；长沙、哈尔滨、南昌、福州另批）",
+    "source_scope": "高校官网、官方后勤、官方迎新、官方采购公告及校内官方部门页面",
+    "schools": [
+      {
+        "school": "安徽建筑大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "金寨路校区",
+            "aliases": [],
+            "address": "安徽省合肥市包河区金寨南路856号",
+            "source_url": "https://www.ahjzu.edu.cn/"
+          },
+          {
+            "name": "紫云路校区",
+            "aliases": [],
+            "address": "安徽省合肥市蜀山区紫云路292号",
+            "source_url": "https://www.ahjzu.edu.cn/"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "金寨路校区",
+            "name": "北园餐厅二楼食堂",
+            "aliases": [],
+            "location_text": "二楼",
+            "building_or_floor": "二楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://www.ahjzu.edu.cn/hqjt/2023/0704/c7951a219524/page.htm",
+            "source_title": "安徽建筑大学官方校园餐饮资料",
+            "source_org": "安徽建筑大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：学校后勤通知明确北校区北园餐厅二楼食堂；学校现行官网把同址校区规范称为金寨路校区",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "金寨路校区",
+            "name": "北园餐厅一楼食堂",
+            "aliases": [],
+            "location_text": "一楼",
+            "building_or_floor": "一楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://www.ahjzu.edu.cn/hqjt/2023/0704/c7951a219524/page.htm",
+            "source_title": "安徽建筑大学官方校园餐饮资料",
+            "source_org": "安徽建筑大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：学校后勤通知明确北校区北园餐厅一楼食堂；学校现行官网把同址校区规范称为金寨路校区",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "紫云路校区",
+            "name": "紫云餐厅二楼食堂",
+            "aliases": [],
+            "location_text": "二楼",
+            "building_or_floor": "二楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://www.ahjzu.edu.cn/hqjt/2023/0704/c7951a219524/page.htm",
+            "source_title": "安徽建筑大学官方校园餐饮资料",
+            "source_org": "安徽建筑大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：学校后勤通知明确南校区紫云餐厅二楼食堂；学校现行官网把同址校区规范称为紫云路校区",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "紫云路校区",
+            "name": "紫云餐厅三楼食堂（风味窗口）",
+            "aliases": [],
+            "location_text": "三楼",
+            "building_or_floor": "三楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://www.ahjzu.edu.cn/hqjt/2023/0704/c7951a219524/page.htm",
+            "source_title": "安徽建筑大学官方校园餐饮资料",
+            "source_org": "安徽建筑大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：学校后勤通知明确南校区紫云餐厅三楼食堂（风味窗口）；学校现行官网把同址校区规范称为紫云路校区",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "紫云路校区",
+            "name": "紫云餐厅一楼食堂",
+            "aliases": [],
+            "location_text": "一楼",
+            "building_or_floor": "一楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://www.ahjzu.edu.cn/hqjt/2023/0704/c7951a219524/page.htm",
+            "source_title": "安徽建筑大学官方校园餐饮资料",
+            "source_org": "安徽建筑大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：学校后勤通知明确南校区紫云餐厅一楼食堂；学校现行官网把同址校区规范称为紫云路校区",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "2026-08-12按高校官方来源复核；只发布明确到城市、校区、餐饮点及实际就餐楼层的记录"
+        ]
+      },
+      {
+        "school": "重庆大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "沙坪坝校区A校园",
+            "aliases": [],
+            "address": "重庆市沙坪坝区沙正街174号",
+            "source_url": "https://www.cqu.edu.cn/info/1631/65061.htm"
+          },
+          {
+            "name": "沙坪坝校区B校园",
+            "aliases": [],
+            "address": "重庆市沙坪坝区沙北街83号",
+            "source_url": "https://hqc.cqu.edu.cn/fwzn/ysfwzx.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "沙坪坝校区A校园",
+            "name": "学生一食堂",
+            "aliases": [],
+            "location_text": "一楼",
+            "building_or_floor": "一楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://www.cqu.edu.cn/info/1631/65061.htm",
+            "source_title": "重庆大学官方校园餐饮资料",
+            "source_org": "重庆大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：重庆大学官方2026年后勤安排明确列出“A校园：学生一食堂一楼”",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "沙坪坝校区A校园",
+            "name": "学苑美食城",
+            "aliases": [],
+            "location_text": "二楼、三楼",
+            "building_or_floor": "二楼、三楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://hqc.cqu.edu.cn/fwzn/ysfwzx.htm",
+            "source_title": "重庆大学官方校园餐饮资料",
+            "source_org": "重庆大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：重庆大学后勤管理处饮食服务中心现行服务页明确标注A区学苑美食城位于2、3楼",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "沙坪坝校区B校园",
+            "name": "新苑风味餐厅",
+            "aliases": [],
+            "location_text": "二楼",
+            "building_or_floor": "二楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://hqc.cqu.edu.cn/fwzn/ysfwzx.htm",
+            "source_title": "重庆大学官方校园餐饮资料",
+            "source_org": "重庆大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：重庆大学后勤管理处饮食服务中心现行服务页明确标注B区新苑风味餐厅位于二楼",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "沙坪坝校区B校园",
+            "name": "新苑美食广场",
+            "aliases": [],
+            "location_text": "一楼",
+            "building_or_floor": "一楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://hqc.cqu.edu.cn/fwzn/ysfwzx.htm",
+            "source_title": "重庆大学官方校园餐饮资料",
+            "source_org": "重庆大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：重庆大学后勤管理处饮食服务中心现行服务页明确标注B区新苑美食广场位于一楼",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "2026-08-12按高校官方来源复核；只发布明确到城市、校区、餐饮点及实际就餐楼层的记录"
+        ]
+      },
+      {
+        "school": "东北大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "浑南校区",
+            "aliases": [],
+            "address": "辽宁省沈阳市浑南区创新路195号",
+            "source_url": "https://www.neu.edu.cn/xykd/5.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "浑南校区",
+            "name": "二食堂",
+            "aliases": [],
+            "location_text": "学生中心一层",
+            "building_or_floor": "学生中心一层",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://hnxqgwh.neu.edu.cn/2925/list.htm",
+            "source_title": "东北大学官方校园餐饮资料",
+            "source_org": "东北大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：浑南校区官方页面明确二食堂设于学生中心一层并持续供餐。",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "浑南校区",
+            "name": "一食堂",
+            "aliases": [],
+            "location_text": "一楼、二楼、三楼教工食堂",
+            "building_or_floor": "一楼、二楼、三楼教工食堂",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://hnxqgwh.neu.edu.cn/2925/list.htm",
+            "source_title": "东北大学官方校园餐饮资料",
+            "source_org": "东北大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：浑南校区官方页面明确一、二层供应基本伙食和风味品种，三层设教工食堂；由供餐用途而非建筑总层数确认。",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "2026-08-12按高校官方来源复核；只发布明确到城市、校区、餐饮点及实际就餐楼层的记录"
+        ]
+      },
+      {
+        "school": "东北师范大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "净月大街校区",
+            "aliases": [],
+            "address": "吉林省长春市净月大街2555号",
+            "source_url": "https://xxhb.nenu.edu.cn/xinshengyifengxin2020.pdf"
+          },
+          {
+            "name": "人民大街校区",
+            "aliases": [],
+            "address": "吉林省长春市人民大街5268号",
+            "source_url": "https://xxhb.nenu.edu.cn/__local/E/A0/FE/708F143F36DF0FFBD40EC23C91E_A414E41F_A400E.pdf"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "净月大街校区",
+            "name": "学生二食堂",
+            "aliases": [],
+            "location_text": "一楼",
+            "building_or_floor": "一楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://xxhb.nenu.edu.cn/xinshengyifengxin2020.pdf",
+            "source_title": "东北师范大学官方校园餐饮资料",
+            "source_org": "东北师范大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：2026-08-11重新查阅高校官方页面；页面同时明确校区、餐饮点和楼层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "净月大街校区",
+            "name": "学生一食堂",
+            "aliases": [],
+            "location_text": "二楼",
+            "building_or_floor": "二楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://xxhb.nenu.edu.cn/xinshengyifengxin2020.pdf",
+            "source_title": "东北师范大学官方校园餐饮资料",
+            "source_org": "东北师范大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：2026-08-11重新查阅高校官方页面；页面同时明确校区、餐饮点和楼层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "人民大街校区",
+            "name": "北苑食堂",
+            "aliases": [],
+            "location_text": "一楼",
+            "building_or_floor": "一楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://xxhb.nenu.edu.cn/__local/E/A0/FE/708F143F36DF0FFBD40EC23C91E_A414E41F_A400E.pdf",
+            "source_title": "东北师范大学官方校园餐饮资料",
+            "source_org": "东北师范大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：2026-08-11重新查阅高校官方页面；页面同时明确校区、餐饮点和楼层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "人民大街校区",
+            "name": "南苑食堂",
+            "aliases": [],
+            "location_text": "一楼",
+            "building_or_floor": "一楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://xxhb.nenu.edu.cn/__local/E/A0/FE/708F143F36DF0FFBD40EC23C91E_A414E41F_A400E.pdf",
+            "source_title": "东北师范大学官方校园餐饮资料",
+            "source_org": "东北师范大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：2026-08-11重新查阅高校官方页面；页面同时明确校区、餐饮点和楼层",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "2026-08-12按高校官方来源复核；只发布明确到城市、校区、餐饮点及实际就餐楼层的记录"
+        ]
+      },
+      {
+        "school": "广东工业大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "大学城校区",
+            "aliases": [],
+            "address": "广东省广州市番禺区广州大学城外环西路100号",
+            "source_url": "https://www.gdut.edu.cn/info/1709/16567.htm"
+          },
+          {
+            "name": "东风路校区",
+            "aliases": [],
+            "address": "广东省广州市越秀区东风东路729号",
+            "source_url": "https://yx.gdut.edu.cn/guangdonggongyedaxuexiaoyuankahuiyintongxinshengshiyongzhiyin20240709.pdf"
+          },
+          {
+            "name": "龙洞校区",
+            "aliases": [],
+            "address": "广东省广州市天河区迎龙路161号",
+            "source_url": "https://www.gdut.edu.cn/info/1709/16567.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "大学城校区",
+            "name": "东一食堂",
+            "aliases": [],
+            "location_text": "一楼",
+            "building_or_floor": "一楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://www.gdut.edu.cn/info/1709/16567.htm",
+            "source_title": "广东工业大学官方校园餐饮资料",
+            "source_org": "广东工业大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：复核仓库广州官方A级种子；核验状态：current_official；校区：大学城校区；餐饮点：东一食堂；楼层原文：一楼；官方来源：https://www.gdut.edu.cn/info/1709/16567.htm",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "大学城校区",
+            "name": "西三食堂",
+            "aliases": [],
+            "location_text": "一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://www.gdut.edu.cn/info/1709/16567.htm",
+            "source_title": "广东工业大学官方校园餐饮资料",
+            "source_org": "广东工业大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：复核仓库广州官方A级种子；核验状态：current_official；校区：大学城校区；餐饮点：西三食堂；楼层原文：一楼、二楼；官方来源：https://www.gdut.edu.cn/info/1709/16567.htm",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "东风路校区",
+            "name": "北院食堂",
+            "aliases": [],
+            "location_text": "一楼",
+            "building_or_floor": "一楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://yx.gdut.edu.cn/guangdonggongyedaxuexiaoyuankahuiyintongxinshengshiyongzhiyin20240709.pdf",
+            "source_title": "广东工业大学官方校园餐饮资料",
+            "source_org": "广东工业大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：复核仓库广州官方A级种子；核验状态：current_official；校区：东风路校区；餐饮点：北院食堂；楼层原文：一楼；官方来源：https://yx.gdut.edu.cn/guangdonggongyedaxuexiaoyuankahuiyintongxinshengshiyongzhiyin20240709.pdf",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "龙洞校区",
+            "name": "一期学生公寓食堂",
+            "aliases": [],
+            "location_text": "二楼",
+            "building_or_floor": "二楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://www.gdut.edu.cn/info/1709/16567.htm",
+            "source_title": "广东工业大学官方校园餐饮资料",
+            "source_org": "广东工业大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：复核仓库广州官方A级种子；核验状态：current_official；校区：龙洞校区；餐饮点：一期学生公寓食堂；楼层原文：二楼；官方来源：https://www.gdut.edu.cn/info/1709/16567.htm",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "2026-08-12按高校官方来源复核；只发布明确到城市、校区、餐饮点及实际就餐楼层的记录"
+        ]
+      },
+      {
+        "school": "广东技术师范大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "白云校区",
+            "aliases": [],
+            "address": "广东省广州市白云区江高镇环镇西路155号",
+            "source_url": "https://www.gpnu.edu.cn/info/1040/21299.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "白云校区",
+            "name": "第三食堂",
+            "aliases": [],
+            "location_text": "一楼就餐区",
+            "building_or_floor": "一楼就餐区",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://www.gpnu.edu.cn/info/1037/63391.htm",
+            "source_title": "广东技术师范大学官方校园餐饮资料",
+            "source_org": "广东技术师范大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：复核仓库广州官方A级种子；核验状态：current_official；校区：白云校区；餐饮点：第三食堂；楼层原文：一楼就餐区；官方来源：https://www.gpnu.edu.cn/info/1037/63391.htm",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "白云校区",
+            "name": "学生第一食堂",
+            "aliases": [],
+            "location_text": "一楼、二楼、三楼",
+            "building_or_floor": "一楼、二楼、三楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://www.gpnu.edu.cn/info/1071/34134.htm",
+            "source_title": "广东技术师范大学官方校园餐饮资料",
+            "source_org": "广东技术师范大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：复核仓库广州官方A级种子；核验状态：current_official；校区：白云校区；餐饮点：学生第一食堂；楼层原文：一楼、二楼、三楼；官方来源：https://www.gpnu.edu.cn/info/1071/34134.htm；https://www.gpnu.edu.cn/info/1040/21299.htm",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "2026-08-12按高校官方来源复核；只发布明确到城市、校区、餐饮点及实际就餐楼层的记录"
+        ]
+      },
+      {
+        "school": "广东外语外贸大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "白云山校区",
+            "aliases": [],
+            "address": "广东省广州市白云区白云大道北2号",
+            "source_url": "https://hqc.gdufs.edu.cn/info/1002/1444.htm"
+          },
+          {
+            "name": "大学城校区",
+            "aliases": [],
+            "address": "广东省广州市番禺区广州大学城外环东路178号",
+            "source_url": "https://hqc.gdufs.edu.cn/info/1002/1444.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "白云山校区",
+            "name": "清雅园",
+            "aliases": [],
+            "location_text": "一楼、二楼、三楼",
+            "building_or_floor": "一楼、二楼、三楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://hqc.gdufs.edu.cn/info/1002/1444.htm",
+            "source_title": "广东外语外贸大学官方校园餐饮资料",
+            "source_org": "广东外语外贸大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：复核仓库广州官方A级种子；核验状态：current_official；校区：白云山校区；餐饮点：清雅园；楼层原文：一楼、二楼、三楼；官方来源：https://hqc.gdufs.edu.cn/info/1002/1444.htm",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "白云山校区",
+            "name": "学生第二食堂",
+            "aliases": [],
+            "location_text": "一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://hqc.gdufs.edu.cn/info/1002/1444.htm",
+            "source_title": "广东外语外贸大学官方校园餐饮资料",
+            "source_org": "广东外语外贸大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：复核仓库广州官方A级种子；核验状态：current_official；校区：白云山校区；餐饮点：学生第二食堂；楼层原文：一楼、二楼；官方来源：https://hqc.gdufs.edu.cn/info/1002/1444.htm",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "白云山校区",
+            "name": "学生第三食堂",
+            "aliases": [],
+            "location_text": "一楼",
+            "building_or_floor": "一楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://hqc.gdufs.edu.cn/info/1002/1444.htm",
+            "source_title": "广东外语外贸大学官方校园餐饮资料",
+            "source_org": "广东外语外贸大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：复核仓库广州官方A级种子；核验状态：current_official；校区：白云山校区；餐饮点：学生第三食堂；楼层原文：一楼；官方来源：https://hqc.gdufs.edu.cn/info/1002/1444.htm",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "白云山校区",
+            "name": "学生第一食堂",
+            "aliases": [],
+            "location_text": "一楼、二楼、三楼",
+            "building_or_floor": "一楼、二楼、三楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://hqc.gdufs.edu.cn/info/1002/1444.htm",
+            "source_title": "广东外语外贸大学官方校园餐饮资料",
+            "source_org": "广东外语外贸大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：复核仓库广州官方A级种子；核验状态：current_official；校区：白云山校区；餐饮点：学生第一食堂；楼层原文：一楼、二楼、三楼；官方来源：https://hqc.gdufs.edu.cn/info/1002/1444.htm",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "大学城校区",
+            "name": "学生第二食堂（博雅园）",
+            "aliases": [],
+            "location_text": "一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://hqc.gdufs.edu.cn/info/1002/1444.htm",
+            "source_title": "广东外语外贸大学官方校园餐饮资料",
+            "source_org": "广东外语外贸大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：复核仓库广州官方A级种子；核验状态：current_official；校区：大学城校区；餐饮点：学生第二食堂（博雅园）；楼层原文：一楼、二楼；官方来源：https://hqc.gdufs.edu.cn/info/1002/1444.htm",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "大学城校区",
+            "name": "学生第三食堂（风采园）",
+            "aliases": [],
+            "location_text": "一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://hqc.gdufs.edu.cn/info/1002/1444.htm",
+            "source_title": "广东外语外贸大学官方校园餐饮资料",
+            "source_org": "广东外语外贸大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：复核仓库广州官方A级种子；核验状态：current_official；校区：大学城校区；餐饮点：学生第三食堂（风采园）；楼层原文：一楼、二楼；官方来源：https://hqc.gdufs.edu.cn/info/1002/1444.htm",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "大学城校区",
+            "name": "学生第一食堂（文采园）",
+            "aliases": [],
+            "location_text": "一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://hqc.gdufs.edu.cn/info/1002/1444.htm",
+            "source_title": "广东外语外贸大学官方校园餐饮资料",
+            "source_org": "广东外语外贸大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：复核仓库广州官方A级种子；核验状态：current_official；校区：大学城校区；餐饮点：学生第一食堂（文采园）；楼层原文：一楼、二楼；官方来源：https://hqc.gdufs.edu.cn/info/1002/1444.htm",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "2026-08-12按高校官方来源复核；只发布明确到城市、校区、餐饮点及实际就餐楼层的记录"
+        ]
+      },
+      {
+        "school": "广西大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "广西大学主校区",
+            "aliases": [],
+            "address": "广西南宁市大学东路100号",
+            "source_url": "https://www.gxu.edu.cn/"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "广西大学主校区",
+            "name": "萃苑餐厅",
+            "aliases": [],
+            "location_text": "一楼",
+            "building_or_floor": "一楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://www.gxu.edu.cn/info/1364/30499.htm",
+            "source_title": "广西大学官方校园餐饮资料",
+            "source_org": "广西大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：历史A级官方证据快照；校区与餐饮来源当前均返回2xx；已剔除异地校区和不明确楼层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "广西大学主校区",
+            "name": "南苑餐厅",
+            "aliases": [],
+            "location_text": "一楼",
+            "building_or_floor": "一楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://www.gxu.edu.cn/info/1364/30499.htm",
+            "source_title": "广西大学官方校园餐饮资料",
+            "source_org": "广西大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：历史A级官方证据快照；校区与餐饮来源当前均返回2xx；已剔除异地校区和不明确楼层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "广西大学主校区",
+            "name": "秀苑餐厅",
+            "aliases": [],
+            "location_text": "一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://www.gxu.edu.cn/info/1004/32126.htm",
+            "source_title": "广西大学官方校园餐饮资料",
+            "source_org": "广西大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：历史A级官方证据快照；校区与餐饮来源当前均返回2xx；已剔除异地校区和不明确楼层",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "2026-08-12按高校官方来源复核；只发布明确到城市、校区、餐饮点及实际就餐楼层的记录"
+        ]
+      },
+      {
+        "school": "广西中医药大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "仙葫校区",
+            "aliases": [],
+            "address": "广西壮族自治区南宁市青秀区五合大道13号",
+            "source_url": "https://www.gxtcmu.edu.cn/upload/history/main/uploadfiles/xwzx/2018/6/201806151935102987.pdf"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "仙葫校区",
+            "name": "五和食堂二、三楼餐厅",
+            "aliases": [],
+            "location_text": "二楼、三楼",
+            "building_or_floor": "二楼、三楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://www.gxtcmu.edu.cn/hqc/ksjs/content_67896",
+            "source_title": "广西中医药大学官方校园餐饮资料",
+            "source_org": "广西中医药大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：学校后勤膳食科简介明确仙葫校区五和食堂二、三楼餐厅为社会化服务食堂，官方招生资料明确校区地址",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "仙葫校区",
+            "name": "五和食堂一楼餐厅",
+            "aliases": [],
+            "location_text": "一楼",
+            "building_or_floor": "一楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://www.gxtcmu.edu.cn/hqc/ksjs/content_67896",
+            "source_title": "广西中医药大学官方校园餐饮资料",
+            "source_org": "广西中医药大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：学校后勤膳食科简介明确仙葫校区五和食堂一楼餐厅为校自营食堂，官方招生资料明确校区地址",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "2026-08-12按高校官方来源复核；只发布明确到城市、校区、餐饮点及实际就餐楼层的记录"
+        ]
+      },
+      {
+        "school": "广州美术学院",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "昌岗校区",
+            "aliases": [],
+            "address": "广东省广州市海珠区昌岗东路257号",
+            "source_url": "https://cgzx2.gzarts.edu.cn/portalwebController.do?goArticleDetail=&id=8a8a86da9470f1430194986ef44968e1"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "昌岗校区",
+            "name": "师生食堂",
+            "aliases": [],
+            "location_text": "一、二层",
+            "building_or_floor": "一、二层",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://cgzx2.gzarts.edu.cn/portalwebController.do?goArticleDetail=&id=8a8a86da9470f1430194986ef44968e1",
+            "source_title": "广州美术学院官方校园餐饮资料",
+            "source_org": "广州美术学院",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：复核仓库广州官方A级种子；核验状态：current_official；校区：昌岗校区；餐饮点：师生食堂；楼层原文：一、二层；官方来源：https://cgzx2.gzarts.edu.cn/portalwebController.do?goArticleDetail=&id=8a8a86da9470f1430194986ef44968e1",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "2026-08-12按高校官方来源复核；只发布明确到城市、校区、餐饮点及实际就餐楼层的记录"
+        ]
+      },
+      {
+        "school": "广州南方学院",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "广州从化校区",
+            "aliases": [],
+            "address": "广东省广州市从化区温泉大道882号",
+            "source_url": "https://www.nfu.edu.cn/xyfw/syxx/shfw.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "广州从化校区",
+            "name": "第六食堂",
+            "aliases": [],
+            "location_text": "中区二、三层",
+            "building_or_floor": "中区二、三层",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://www.nfu.edu.cn/xyfw/syxx/shfw.htm",
+            "source_title": "广州南方学院官方校园餐饮资料",
+            "source_org": "广州南方学院",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：复核仓库广州官方A级种子；核验状态：current_official；校区：广州从化校区；餐饮点：第六食堂；楼层原文：中区二、三层；官方来源：https://www.nfu.edu.cn/xyfw/syxx/shfw.htm",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "广州从化校区",
+            "name": "第三食堂",
+            "aliases": [],
+            "location_text": "东区一层",
+            "building_or_floor": "东区一层",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://www.nfu.edu.cn/xyfw/syxx/shfw.htm",
+            "source_title": "广州南方学院官方校园餐饮资料",
+            "source_org": "广州南方学院",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：复核仓库广州官方A级种子；核验状态：current_official；校区：广州从化校区；餐饮点：第三食堂；楼层原文：东区一层；官方来源：https://www.nfu.edu.cn/xyfw/syxx/shfw.htm",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "广州从化校区",
+            "name": "第四食堂",
+            "aliases": [],
+            "location_text": "东区二层",
+            "building_or_floor": "东区二层",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://www.nfu.edu.cn/xyfw/syxx/shfw.htm",
+            "source_title": "广州南方学院官方校园餐饮资料",
+            "source_org": "广州南方学院",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：复核仓库广州官方A级种子；核验状态：current_official；校区：广州从化校区；餐饮点：第四食堂；楼层原文：东区二层；官方来源：https://www.nfu.edu.cn/xyfw/syxx/shfw.htm",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "广州从化校区",
+            "name": "第五食堂",
+            "aliases": [],
+            "location_text": "中区一层",
+            "building_or_floor": "中区一层",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://www.nfu.edu.cn/xyfw/syxx/shfw.htm",
+            "source_title": "广州南方学院官方校园餐饮资料",
+            "source_org": "广州南方学院",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：复核仓库广州官方A级种子；核验状态：current_official；校区：广州从化校区；餐饮点：第五食堂；楼层原文：中区一层；官方来源：https://www.nfu.edu.cn/xyfw/syxx/shfw.htm",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "广州从化校区",
+            "name": "西区食堂",
+            "aliases": [],
+            "location_text": "西区一、二层",
+            "building_or_floor": "西区一、二层",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://www.nfu.edu.cn/xyfw/syxx/shfw.htm",
+            "source_title": "广州南方学院官方校园餐饮资料",
+            "source_org": "广州南方学院",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：复核仓库广州官方A级种子；核验状态：current_official；校区：广州从化校区；餐饮点：西区食堂；楼层原文：西区一、二层；官方来源：https://www.nfu.edu.cn/xyfw/syxx/shfw.htm",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "2026-08-12按高校官方来源复核；只发布明确到城市、校区、餐饮点及实际就餐楼层的记录"
+        ]
+      },
+      {
+        "school": "广州医科大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "番禺校区",
+            "aliases": [],
+            "address": "广东省广州市番禺区新造镇新造路1号",
+            "source_url": "https://www.gzhmu.edu.cn/xyfw/syxx/shfw/cy.htm"
+          },
+          {
+            "name": "越秀校区",
+            "aliases": [],
+            "address": "广东省广州市越秀区东风西路195号",
+            "source_url": "https://www.gzhmu.edu.cn/xyfw/syxx/shfw/cy.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "番禺校区",
+            "name": "番禺校区食堂",
+            "aliases": [],
+            "location_text": "一楼、二楼、四楼",
+            "building_or_floor": "一楼、二楼、四楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://www.gzhmu.edu.cn/xyfw/syxx/shfw/cy.htm",
+            "source_title": "广州医科大学官方校园餐饮资料",
+            "source_org": "广州医科大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：复核仓库广州官方A级种子；核验状态：current_official；校区：番禺校区；餐饮点：番禺校区食堂；楼层原文：一楼、二楼、四楼；官方来源：https://www.gzhmu.edu.cn/xyfw/syxx/shfw/cy.htm",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "越秀校区",
+            "name": "越秀校区食堂",
+            "aliases": [],
+            "location_text": "二楼餐饮区",
+            "building_or_floor": "二楼餐饮区",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://www.gzhmu.edu.cn/xyfw/syxx/shfw/cy.htm",
+            "source_title": "广州医科大学官方校园餐饮资料",
+            "source_org": "广州医科大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：复核仓库广州官方A级种子；核验状态：current_official；校区：越秀校区；餐饮点：越秀校区食堂；楼层原文：二楼餐饮区；官方来源：https://www.gzhmu.edu.cn/xyfw/syxx/shfw/cy.htm",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "2026-08-12按高校官方来源复核；只发布明确到城市、校区、餐饮点及实际就餐楼层的记录"
+        ]
+      },
+      {
+        "school": "广州中医药大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "大学城校区",
+            "aliases": [],
+            "address": "广东省广州市番禺区广州大学城外环东路232号",
+            "source_url": "https://hqglc.gzucm.edu.cn/info/1004/2227.htm"
+          },
+          {
+            "name": "三元里校区",
+            "aliases": [],
+            "address": "广东省广州市白云区机场路12号",
+            "source_url": "https://hqglc.gzucm.edu.cn/info/1004/2021.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "大学城校区",
+            "name": "第二食堂",
+            "aliases": [],
+            "location_text": "一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://xxgk.gzucm.edu.cn/__local/C/71/38/B89F2EFFB9AF053366274F17AFB_FD586B2A_3A4A1.pdf",
+            "source_title": "广州中医药大学官方校园餐饮资料",
+            "source_org": "广州中医药大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：复核仓库广州官方A级种子；核验状态：confirmed_official；校区：大学城校区；餐饮点：第二食堂；楼层原文：一楼、二楼；官方来源：https://xxgk.gzucm.edu.cn/__local/C/71/38/B89F2EFFB9AF053366274F17AFB_FD586B2A_3A4A1.pdf；https://hqglc.gzucm.edu.cn/info/1004/2227.htm",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "大学城校区",
+            "name": "第一食堂",
+            "aliases": [],
+            "location_text": "一楼、二楼、三楼",
+            "building_or_floor": "一楼、二楼、三楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://www.gzucm.edu.cn/xxgk/xxjj.htm",
+            "source_title": "广州中医药大学官方校园餐饮资料",
+            "source_org": "广州中医药大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：复核仓库广州官方A级种子；核验状态：confirmed_official；校区：大学城校区；餐饮点：第一食堂；楼层原文：一楼、二楼、三楼；官方来源：https://www.gzucm.edu.cn/xxgk/xxjj.htm；https://hqglc.gzucm.edu.cn/info/1004/2227.htm",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "三元里校区",
+            "name": "学生食堂",
+            "aliases": [],
+            "location_text": "北栋首层、二层",
+            "building_or_floor": "北栋首层、二层",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://hqglc.gzucm.edu.cn/info/1004/2021.htm",
+            "source_title": "广州中医药大学官方校园餐饮资料",
+            "source_org": "广州中医药大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：复核仓库广州官方A级种子；核验状态：confirmed_official；校区：三元里校区；餐饮点：学生食堂；楼层原文：北栋首层、二层；官方来源：https://hqglc.gzucm.edu.cn/info/1004/2021.htm",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "2026-08-12按高校官方来源复核；只发布明确到城市、校区、餐饮点及实际就餐楼层的记录"
+        ]
+      },
+      {
+        "school": "贵州大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "东校区",
+            "aliases": [],
+            "address": "贵州省贵阳市花溪区",
+            "source_url": "https://www.gzu.edu.cn/17054/list.htm"
+          },
+          {
+            "name": "南校区",
+            "aliases": [],
+            "address": "贵州省贵阳市花溪区",
+            "source_url": "https://www.gzu.edu.cn/17054/list.htm"
+          },
+          {
+            "name": "西校区",
+            "aliases": [],
+            "address": "贵州省贵阳市花溪区",
+            "source_url": "https://www.gzu.edu.cn/17054/list.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "东校区",
+            "name": "双馨园食堂",
+            "aliases": [],
+            "location_text": "一楼、二楼、三楼",
+            "building_or_floor": "一楼、二楼、三楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://www.gzu.edu.cn/17054/list.htm",
+            "source_title": "贵州大学官方校园餐饮资料",
+            "source_org": "贵州大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：2026-08-11重新查阅高校官方页面；页面同时明确校区、餐饮点和楼层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "东校区",
+            "name": "中山园食堂",
+            "aliases": [],
+            "location_text": "一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://www.gzu.edu.cn/17054/list.htm",
+            "source_title": "贵州大学官方校园餐饮资料",
+            "source_org": "贵州大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：2026-08-11重新查阅高校官方页面；页面同时明确校区、餐饮点和楼层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "南校区",
+            "name": "南区学生食堂",
+            "aliases": [],
+            "location_text": "一楼、二楼、三楼、四楼",
+            "building_or_floor": "一楼、二楼、三楼、四楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://www.gzu.edu.cn/17054/list.htm",
+            "source_title": "贵州大学官方校园餐饮资料",
+            "source_org": "贵州大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：2026-08-11重新查阅高校官方页面；页面同时明确校区、餐饮点和楼层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "西校区",
+            "name": "学生二食堂",
+            "aliases": [],
+            "location_text": "一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://www.gzu.edu.cn/17054/list.htm",
+            "source_title": "贵州大学官方校园餐饮资料",
+            "source_org": "贵州大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：2026-08-11重新查阅高校官方页面；页面同时明确校区、餐饮点和楼层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "西校区",
+            "name": "学生三食堂（致和苑）",
+            "aliases": [],
+            "location_text": "一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://www.gzu.edu.cn/17054/list.htm",
+            "source_title": "贵州大学官方校园餐饮资料",
+            "source_org": "贵州大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：2026-08-11重新查阅高校官方页面；页面同时明确校区、餐饮点和楼层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "西校区",
+            "name": "学生四食堂（逸香苑）",
+            "aliases": [],
+            "location_text": "一楼、二楼、三楼",
+            "building_or_floor": "一楼、二楼、三楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://www.gzu.edu.cn/17054/list.htm",
+            "source_title": "贵州大学官方校园餐饮资料",
+            "source_org": "贵州大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：2026-08-11重新查阅高校官方页面；页面同时明确校区、餐饮点和楼层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "西校区",
+            "name": "学生五食堂（沁雅苑）",
+            "aliases": [],
+            "location_text": "一楼、二楼、三楼",
+            "building_or_floor": "一楼、二楼、三楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://www.gzu.edu.cn/17054/list.htm",
+            "source_title": "贵州大学官方校园餐饮资料",
+            "source_org": "贵州大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：2026-08-11重新查阅高校官方页面；页面同时明确校区、餐饮点和楼层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "西校区",
+            "name": "学生一食堂",
+            "aliases": [],
+            "location_text": "一楼、二楼、三楼、四楼",
+            "building_or_floor": "一楼、二楼、三楼、四楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://www.gzu.edu.cn/17054/list.htm",
+            "source_title": "贵州大学官方校园餐饮资料",
+            "source_org": "贵州大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：2026-08-11重新查阅高校官方页面；页面同时明确校区、餐饮点和楼层",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "2026-08-12按高校官方来源复核；只发布明确到城市、校区、餐饮点及实际就餐楼层的记录"
+        ]
+      },
+      {
+        "school": "海南大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "观澜湖校区",
+            "aliases": [],
+            "address": "海南省海口市龙华区龙桥镇羊山大道52号",
+            "source_url": "https://yx.hainanu.edu.cn/xsdh/xzhd1.htm"
+          },
+          {
+            "name": "海甸校区",
+            "aliases": [],
+            "address": "海南省海口市美兰区人民大道58号",
+            "source_url": "https://www.hainanu.edu.cn/zjhd/hdzc.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "观澜湖校区",
+            "name": "湖畔餐厅",
+            "aliases": [],
+            "location_text": "一楼",
+            "building_or_floor": "一楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://he.hainanu.edu.cn/baozhang/info/1038/11333.htm",
+            "source_title": "海南大学官方校园餐饮资料",
+            "source_org": "海南大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：历史A级官方证据快照；校区与餐饮来源当前均返回2xx；已剔除异地校区和不明确楼层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "观澜湖校区",
+            "name": "湖畔餐厅（一期）二、三楼食堂",
+            "aliases": [],
+            "location_text": "二楼、三楼",
+            "building_or_floor": "二楼、三楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://bidding.hainanu.edu.cn/info/1017/11896.htm",
+            "source_title": "海南大学官方校园餐饮资料",
+            "source_org": "海南大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：海南大学采购招标中心2026年公告明确观澜湖校区一期湖畔餐厅二楼和三楼食堂；校区管委会明确门牌地址",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "海甸校区",
+            "name": "第六食堂二楼",
+            "aliases": [],
+            "location_text": "二楼",
+            "building_or_floor": "二楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://he.hainanu.edu.cn/baozhang/info/1061/19933.htm",
+            "source_title": "海南大学官方校园餐饮资料",
+            "source_org": "海南大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：历史A级官方证据快照；校区与餐饮来源当前均返回2xx；已剔除异地校区和不明确楼层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "海甸校区",
+            "name": "第六学生食堂三楼",
+            "aliases": [],
+            "location_text": "三楼",
+            "building_or_floor": "三楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://he.hainanu.edu.cn/baozhang/info/1038/11333.htm",
+            "source_title": "海南大学官方校园餐饮资料",
+            "source_org": "海南大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：海南大学官方校园生活指南明确海甸校区第六学生食堂三楼的供餐内容和时间；2025年维修公告继续列明六食堂三楼",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "海甸校区",
+            "name": "第六学生食堂一楼",
+            "aliases": [],
+            "location_text": "一楼",
+            "building_or_floor": "一楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://bidding.hainanu.edu.cn/info/1017/7466.htm",
+            "source_title": "海南大学官方校园餐饮资料",
+            "source_org": "海南大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：海南大学采购招标中心2025年委托经营公告明确海甸校区第六食堂一楼，合同期至2028年7月",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "海甸校区",
+            "name": "第五学生食堂二楼",
+            "aliases": [],
+            "location_text": "二楼",
+            "building_or_floor": "二楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://bidding.hainanu.edu.cn/info/1017/7466.htm",
+            "source_title": "海南大学官方校园餐饮资料",
+            "source_org": "海南大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：海南大学采购招标中心2025年委托经营公告明确海甸校区第五食堂二楼，合同期至2028年7月",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "海甸校区",
+            "name": "第五学生食堂一楼",
+            "aliases": [],
+            "location_text": "一楼",
+            "building_or_floor": "一楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://he.hainanu.edu.cn/baozhang/info/1061/19933.htm",
+            "source_title": "海南大学官方校园餐饮资料",
+            "source_org": "海南大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：历史A级官方证据快照；校区与餐饮来源当前均返回2xx；已剔除异地校区和不明确楼层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "海甸校区",
+            "name": "第一食堂一楼",
+            "aliases": [],
+            "location_text": "一楼",
+            "building_or_floor": "一楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://he.hainanu.edu.cn/baozhang/info/1033/13763.htm",
+            "source_title": "海南大学官方校园餐饮资料",
+            "source_org": "海南大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：海南大学2025年寒假生活指南明确海甸校区第一食堂一楼供餐；校区官网明确地址",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "2026-08-12按高校官方来源复核；只发布明确到城市、校区、餐饮点及实际就餐楼层的记录"
+        ]
+      },
+      {
+        "school": "杭州电子科技大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "下沙校区",
+            "aliases": [],
+            "address": "浙江省杭州市钱塘区白杨街道2号大街1158号",
+            "source_url": "https://intedu.hdu.edu.cn/12717/list.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "下沙校区",
+            "name": "第六餐厅",
+            "aliases": [],
+            "location_text": "B9食堂二楼",
+            "building_or_floor": "B9食堂二楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://intedu.hdu.edu.cn/12717/list.htm",
+            "source_title": "杭州电子科技大学官方校园餐饮资料",
+            "source_org": "杭州电子科技大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：2026-08-11重新查阅高校官方页面；页面同时明确校区、餐饮点和楼层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "下沙校区",
+            "name": "第三餐厅",
+            "aliases": [],
+            "location_text": "B1食堂一楼",
+            "building_or_floor": "B1食堂一楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://intedu.hdu.edu.cn/12717/list.htm",
+            "source_title": "杭州电子科技大学官方校园餐饮资料",
+            "source_org": "杭州电子科技大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：2026-08-11重新查阅高校官方页面；页面同时明确校区、餐饮点和楼层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "下沙校区",
+            "name": "第五餐厅",
+            "aliases": [],
+            "location_text": "B9食堂一楼",
+            "building_or_floor": "B9食堂一楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://intedu.hdu.edu.cn/12717/list.htm",
+            "source_title": "杭州电子科技大学官方校园餐饮资料",
+            "source_org": "杭州电子科技大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：2026-08-11重新查阅高校官方页面；页面同时明确校区、餐饮点和楼层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "下沙校区",
+            "name": "第一餐厅",
+            "aliases": [],
+            "location_text": "B17食堂一楼",
+            "building_or_floor": "B17食堂一楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://intedu.hdu.edu.cn/12717/list.htm",
+            "source_title": "杭州电子科技大学官方校园餐饮资料",
+            "source_org": "杭州电子科技大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：2026-08-11重新查阅高校官方页面；页面同时明确校区、餐饮点和楼层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "下沙校区",
+            "name": "风味餐厅",
+            "aliases": [],
+            "location_text": "B17食堂三楼",
+            "building_or_floor": "B17食堂三楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://intedu.hdu.edu.cn/12717/list.htm",
+            "source_title": "杭州电子科技大学官方校园餐饮资料",
+            "source_org": "杭州电子科技大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：2026-08-11重新查阅高校官方页面；页面同时明确校区、餐饮点和楼层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "下沙校区",
+            "name": "教工餐厅",
+            "aliases": [],
+            "location_text": "B1食堂三楼",
+            "building_or_floor": "B1食堂三楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://intedu.hdu.edu.cn/12717/list.htm",
+            "source_title": "杭州电子科技大学官方校园餐饮资料",
+            "source_org": "杭州电子科技大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：2026-08-11重新查阅高校官方页面；页面同时明确校区、餐饮点和楼层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "下沙校区",
+            "name": "留学生餐厅",
+            "aliases": [],
+            "location_text": "G区食堂二楼",
+            "building_or_floor": "G区食堂二楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://intedu.hdu.edu.cn/12717/list.htm",
+            "source_title": "杭州电子科技大学官方校园餐饮资料",
+            "source_org": "杭州电子科技大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：2026-08-11重新查阅高校官方页面；页面同时明确校区、餐饮点和楼层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "下沙校区",
+            "name": "中式快餐餐厅",
+            "aliases": [],
+            "location_text": "B17食堂二楼",
+            "building_or_floor": "B17食堂二楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://intedu.hdu.edu.cn/12717/list.htm",
+            "source_title": "杭州电子科技大学官方校园餐饮资料",
+            "source_org": "杭州电子科技大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：2026-08-11重新查阅高校官方页面；页面同时明确校区、餐饮点和楼层",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "2026-08-12按高校官方来源复核；只发布明确到城市、校区、餐饮点及实际就餐楼层的记录"
+        ]
+      },
+      {
+        "school": "合肥工业大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "屯溪路校区",
+            "aliases": [],
+            "address": "安徽省合肥市屯溪路193号",
+            "source_url": "https://zwb.hfut.edu.cn/info/1029/6075.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "屯溪路校区",
+            "name": "馨园食堂",
+            "aliases": [],
+            "location_text": "二楼大厅",
+            "building_or_floor": "二楼大厅",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://zwb.hfut.edu.cn/info/1029/6075.htm",
+            "source_title": "合肥工业大学官方校园餐饮资料",
+            "source_org": "合肥工业大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：2026-08-11重新查阅高校官方页面；页面同时明确校区、餐饮点和楼层",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "2026-08-12按高校官方来源复核；只发布明确到城市、校区、餐饮点及实际就餐楼层的记录"
+        ]
+      },
+      {
+        "school": "合肥师范学院",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "滨湖校区",
+            "aliases": [],
+            "address": "安徽省合肥市黄麓科教园区书香路",
+            "source_url": "https://bhb.hfnu.edu.cn/"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "滨湖校区",
+            "name": "二期食堂",
+            "aliases": [],
+            "location_text": "一楼",
+            "building_or_floor": "一楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://hqc.hfnu.edu.cn/info/1362/14201.htm",
+            "source_title": "合肥师范学院官方校园餐饮资料",
+            "source_org": "合肥师范学院",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：学校后勤处2025年现场调度会明确地点为滨湖校区二期食堂一楼，校区管理办公室明确地址",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "2026-08-12按高校官方来源复核；只发布明确到城市、校区、餐饮点及实际就餐楼层的记录"
+        ]
+      },
+      {
+        "school": "河北工业大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "北辰校区",
+            "aliases": [],
+            "address": "天津市北辰区双口镇西平道5340号",
+            "source_url": "https://www.hebut.edu.cn/jblm/hwjl/ylsngyxy/xysha/91731.htm"
+          },
+          {
+            "name": "红桥校区",
+            "aliases": [],
+            "address": "天津市红桥区丁字沽光荣道8号河北工业大学东院",
+            "source_url": "https://www.hebut.edu.cn/jblm/hwjl/ylsngyxy/xysha/91731.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "北辰校区",
+            "name": "东区食堂",
+            "aliases": [],
+            "location_text": "一楼、二楼东西侧、三楼多餐厅",
+            "building_or_floor": "一楼、二楼东西侧、三楼多餐厅",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://hq.hebut.edu.cn/gzdt/daae6bcc5ff44580ac92f1379f2ba90b.htm",
+            "source_title": "河北工业大学官方校园餐饮资料",
+            "source_org": "河北工业大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：历史A级官方证据快照；校区与餐饮来源当前均返回2xx；已剔除异地校区和不明确楼层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "北辰校区",
+            "name": "西区食堂",
+            "aliases": [],
+            "location_text": "一楼、二楼、三楼",
+            "building_or_floor": "一楼、二楼、三楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://hq.hebut.edu.cn/gzdt/daae6bcc5ff44580ac92f1379f2ba90b.htm",
+            "source_title": "河北工业大学官方校园餐饮资料",
+            "source_org": "河北工业大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：历史A级官方证据快照；校区与餐饮来源当前均返回2xx；已剔除异地校区和不明确楼层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "北辰校区",
+            "name": "西区新食堂",
+            "aliases": [],
+            "location_text": "含三楼火锅经营区域",
+            "building_or_floor": "含三楼火锅经营区域",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://hq.hebut.edu.cn/gzdt/daae6bcc5ff44580ac92f1379f2ba90b.htm",
+            "source_title": "河北工业大学官方校园餐饮资料",
+            "source_org": "河北工业大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：历史A级官方证据快照；校区与餐饮来源当前均返回2xx；已剔除异地校区和不明确楼层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "红桥校区",
+            "name": "南院学生食堂",
+            "aliases": [],
+            "location_text": "一楼、二楼；另有三楼委托经营公告",
+            "building_or_floor": "一楼、二楼；另有三楼委托经营公告",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://hq.hebut.edu.cn/gzdt/daae6bcc5ff44580ac92f1379f2ba90b.htm",
+            "source_title": "河北工业大学官方校园餐饮资料",
+            "source_org": "河北工业大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：历史A级官方证据快照；校区与餐饮来源当前均返回2xx；已剔除异地校区和不明确楼层",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "2026-08-12按高校官方来源复核；只发布明确到城市、校区、餐饮点及实际就餐楼层的记录"
+        ]
+      },
+      {
+        "school": "河北师范大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "裕华校区",
+            "aliases": [],
+            "address": "河北省石家庄市南二环东路20号",
+            "source_url": "https://www.hebtu.edu.cn/a/2014/09/09/392CD46E042D4ADB94CA73893C9D232B.html"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "裕华校区",
+            "name": "第二餐厅",
+            "aliases": [],
+            "location_text": "主食堂二楼",
+            "building_or_floor": "主食堂二楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://www.hebtu.edu.cn/a/2014/09/09/392CD46E042D4ADB94CA73893C9D232B.html",
+            "source_title": "河北师范大学官方校园餐饮资料",
+            "source_org": "河北师范大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：2026-08-11重新查阅高校官方页面；页面同时明确校区、餐饮点和楼层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "裕华校区",
+            "name": "第四餐厅",
+            "aliases": [],
+            "location_text": "西食堂一楼",
+            "building_or_floor": "西食堂一楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://www.hebtu.edu.cn/a/2014/09/09/392CD46E042D4ADB94CA73893C9D232B.html",
+            "source_title": "河北师范大学官方校园餐饮资料",
+            "source_org": "河北师范大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：2026-08-11重新查阅高校官方页面；页面同时明确校区、餐饮点和楼层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "裕华校区",
+            "name": "第一餐厅",
+            "aliases": [],
+            "location_text": "主食堂一楼",
+            "building_or_floor": "主食堂一楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://www.hebtu.edu.cn/a/2014/09/09/392CD46E042D4ADB94CA73893C9D232B.html",
+            "source_title": "河北师范大学官方校园餐饮资料",
+            "source_org": "河北师范大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：2026-08-11重新查阅高校官方页面；页面同时明确校区、餐饮点和楼层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "裕华校区",
+            "name": "民族餐厅",
+            "aliases": [],
+            "location_text": "西食堂一楼",
+            "building_or_floor": "西食堂一楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://www.hebtu.edu.cn/a/2014/09/09/392CD46E042D4ADB94CA73893C9D232B.html",
+            "source_title": "河北师范大学官方校园餐饮资料",
+            "source_org": "河北师范大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：2026-08-11重新查阅高校官方页面；页面同时明确校区、餐饮点和楼层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "裕华校区",
+            "name": "凝味创意餐厅（第三餐厅）",
+            "aliases": [],
+            "location_text": "主食堂三楼",
+            "building_or_floor": "主食堂三楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://www.hebtu.edu.cn/a/2014/09/09/392CD46E042D4ADB94CA73893C9D232B.html",
+            "source_title": "河北师范大学官方校园餐饮资料",
+            "source_org": "河北师范大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：2026-08-11重新查阅高校官方页面；页面同时明确校区、餐饮点和楼层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "裕华校区",
+            "name": "书香智慧餐厅（第五餐厅）",
+            "aliases": [],
+            "location_text": "西食堂二楼",
+            "building_or_floor": "西食堂二楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://www.hebtu.edu.cn/a/2014/09/09/392CD46E042D4ADB94CA73893C9D232B.html",
+            "source_title": "河北师范大学官方校园餐饮资料",
+            "source_org": "河北师范大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：2026-08-11重新查阅高校官方页面；页面同时明确校区、餐饮点和楼层",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "2026-08-12按高校官方来源复核；只发布明确到城市、校区、餐饮点及实际就餐楼层的记录"
+        ]
+      },
+      {
+        "school": "河北师范大学汇华学院",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "北院",
+            "aliases": [],
+            "address": "河北省石家庄市红旗大街469号",
+            "source_url": "https://huihua.hebtu.edu.cn/"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "北院",
+            "name": "汇德苑餐厅",
+            "aliases": [],
+            "location_text": "负一层",
+            "building_or_floor": "负一层",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://huihua.hebtu.edu.cn/news/index.php?id=13597&mods=cnews",
+            "source_title": "河北师范大学汇华学院官方校园餐饮资料",
+            "source_org": "河北师范大学汇华学院",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：2025年学院官方招标将餐饮中心负一层明确命名为汇德苑餐厅；学院官网确认地址。",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "北院",
+            "name": "汇馨苑餐厅（含回民餐厅）",
+            "aliases": [],
+            "location_text": "二层",
+            "building_or_floor": "二层",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://huihua.hebtu.edu.cn/news/index.php?id=13597&mods=cnews",
+            "source_title": "河北师范大学汇华学院官方校园餐饮资料",
+            "source_org": "河北师范大学汇华学院",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：2025年学院官方招标将餐饮中心二层明确命名为汇馨苑餐厅；学院官网确认地址。",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "北院",
+            "name": "汇雅苑餐厅",
+            "aliases": [],
+            "location_text": "一层",
+            "building_or_floor": "一层",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://huihua.hebtu.edu.cn/news/index.php?id=13597&mods=cnews",
+            "source_title": "河北师范大学汇华学院官方校园餐饮资料",
+            "source_org": "河北师范大学汇华学院",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：2025年学院官方招标将餐饮中心一层明确命名为汇雅苑餐厅；学院官网确认地址。",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "2026-08-12按高校官方来源复核；只发布明确到城市、校区、餐饮点及实际就餐楼层的记录"
+        ]
+      },
+      {
+        "school": "华南理工大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "大学城校区",
+            "aliases": [],
+            "address": "广东省广州市番禺区广州大学城外环东路382号",
+            "source_url": "https://sie.scut.edu.cn/2021/0608/c29524a432354/page.htm"
+          },
+          {
+            "name": "五山校区",
+            "aliases": [],
+            "address": "广东省广州市天河区五山路381号",
+            "source_url": "https://sie.scut.edu.cn/2021/0608/c29524a432354/page.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "大学城校区",
+            "name": "学生第一饭堂清真餐饮区",
+            "aliases": [],
+            "location_text": "三楼",
+            "building_or_floor": "三楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://sie.scut.edu.cn/2021/0608/c29524a432354/page.htm",
+            "source_title": "华南理工大学官方校园餐饮资料",
+            "source_org": "华南理工大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：复核仓库广州官方A级种子；核验状态：current_official；校区：大学城校区；餐饮点：学生第一饭堂清真餐饮区；楼层原文：三楼；官方来源：https://sie.scut.edu.cn/2021/0608/c29524a432354/page.htm",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "五山校区",
+            "name": "西湖苑宾馆餐厅",
+            "aliases": [],
+            "location_text": "西湖苑宾馆一楼",
+            "building_or_floor": "西湖苑宾馆一楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://sie.scut.edu.cn/2021/0608/c29524a432354/page.htm",
+            "source_title": "华南理工大学官方校园餐饮资料",
+            "source_org": "华南理工大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：复核仓库广州官方A级种子；核验状态：current_official；校区：五山校区；餐饮点：西湖苑宾馆餐厅；楼层原文：西湖苑宾馆一楼；官方来源：https://sie.scut.edu.cn/2021/0608/c29524a432354/page.htm",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "五山校区",
+            "name": "校园咖啡屋",
+            "aliases": [],
+            "location_text": "逸夫人文馆一楼",
+            "building_or_floor": "逸夫人文馆一楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://sie.scut.edu.cn/2021/0608/c29524a432354/page.htm",
+            "source_title": "华南理工大学官方校园餐饮资料",
+            "source_org": "华南理工大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：复核仓库广州官方A级种子；核验状态：current_official；校区：五山校区；餐饮点：校园咖啡屋；楼层原文：逸夫人文馆一楼；官方来源：https://sie.scut.edu.cn/2021/0608/c29524a432354/page.htm",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "2026-08-12按高校官方来源复核；只发布明确到城市、校区、餐饮点及实际就餐楼层的记录"
+        ]
+      },
+      {
+        "school": "华南农业大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "五山校部",
+            "aliases": [],
+            "address": "广东省广州市天河区五山路483号",
+            "source_url": "https://www.scau.edu.cn/2026/0101/c17646a426088/page.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "五山校部",
+            "name": "莘园食堂",
+            "aliases": [],
+            "location_text": "二楼",
+            "building_or_floor": "二楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://www.scau.edu.cn/17623/list.htm",
+            "source_title": "华南农业大学官方校园餐饮资料",
+            "source_org": "华南农业大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：复核仓库广州官方A级种子；核验状态：current_official；校区：五山校部；餐饮点：莘园食堂；楼层原文：二楼；官方来源：https://www.scau.edu.cn/17623/list.htm；https://www.scau.edu.cn/2026/0101/c17646a426088/page.htm",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "2026-08-12按高校官方来源复核；只发布明确到城市、校区、餐饮点及实际就餐楼层的记录"
+        ]
+      },
+      {
+        "school": "华南师范大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "广州校区大学城校园",
+            "aliases": [],
+            "address": "广东省广州市番禺区广州大学城外环西路378号",
+            "source_url": "https://news.scnu.edu.cn/20277"
+          },
+          {
+            "name": "广州校区石牌校园",
+            "aliases": [],
+            "address": "广东省广州市天河区中山大道西55号",
+            "source_url": "https://news.scnu.edu.cn/20277"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "广州校区大学城校园",
+            "name": "翰园",
+            "aliases": [],
+            "location_text": "二楼校友用餐专区",
+            "building_or_floor": "二楼校友用餐专区",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://youth.scnu.edu.cn/news/2025/0304/18326.html",
+            "source_title": "华南师范大学官方校园餐饮资料",
+            "source_org": "华南师范大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：复核仓库广州官方A级种子；核验状态：current_official；校区：广州校区大学城校园；餐饮点：翰园；楼层原文：二楼校友用餐专区；官方来源：https://youth.scnu.edu.cn/news/2025/0304/18326.html；https://news.scnu.edu.cn/20277",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "广州校区石牌校园",
+            "name": "沁园",
+            "aliases": [],
+            "location_text": "二楼校友用餐专区",
+            "building_or_floor": "二楼校友用餐专区",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://youth.scnu.edu.cn/news/2025/0304/18326.html",
+            "source_title": "华南师范大学官方校园餐饮资料",
+            "source_org": "华南师范大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：复核仓库广州官方A级种子；核验状态：current_official；校区：广州校区石牌校园；餐饮点：沁园；楼层原文：二楼校友用餐专区；官方来源：https://youth.scnu.edu.cn/news/2025/0304/18326.html；https://news.scnu.edu.cn/20277",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "2026-08-12按高校官方来源复核；只发布明确到城市、校区、餐饮点及实际就餐楼层的记录"
+        ]
+      },
+      {
+        "school": "济南大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "主校区",
+            "aliases": [],
+            "address": "山东省济南市南辛庄西路336号",
+            "source_url": "https://hqc.ujn.edu.cn/index.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "主校区",
+            "name": "第八食堂",
+            "aliases": [],
+            "location_text": "一楼、二楼、三楼",
+            "building_or_floor": "一楼、二楼、三楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://math.ujn.edu.cn/info/1078/8797.htm",
+            "source_title": "济南大学官方校园餐饮资料",
+            "source_org": "济南大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：学院官方迎新指南说明主校区第八食堂设三层；2024校报文章逐层描述一、二、三楼实际餐饮内容，排除仅建筑层数推断。",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "主校区",
+            "name": "第九食堂",
+            "aliases": [],
+            "location_text": "一楼、二楼、三楼",
+            "building_or_floor": "一楼、二楼、三楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://math.ujn.edu.cn/info/1078/8787.htm",
+            "source_title": "济南大学官方校园餐饮资料",
+            "source_org": "济南大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：学院官方迎新地图明确第九食堂有三层美食；2026校报进一步确认三楼餐饮合同，按餐饮用途保留。",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "2026-08-12按高校官方来源复核；只发布明确到城市、校区、餐饮点及实际就餐楼层的记录"
+        ]
+      },
+      {
+        "school": "暨南大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "石牌校区（校本部）",
+            "aliases": [],
+            "address": "广东省广州市天河区黄埔大道西601号",
+            "source_url": "https://www.jnu.edu.cn/yybb/list.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "石牌校区（校本部）",
+            "name": "第三学生饭堂",
+            "aliases": [],
+            "location_text": "膳堂大楼三楼",
+            "building_or_floor": "膳堂大楼三楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://jnedp.jnu.edu.cn/xnct/list.htm",
+            "source_title": "暨南大学官方校园餐饮资料",
+            "source_org": "暨南大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：复核仓库广州官方A级种子；核验状态：current_official；校区：石牌校区（校本部）；餐饮点：第三学生饭堂；楼层原文：膳堂大楼三楼；官方来源：https://jnedp.jnu.edu.cn/xnct/list.htm；https://www.jnu.edu.cn/yybb/list.htm",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "石牌校区（校本部）",
+            "name": "第五学生饭堂",
+            "aliases": [],
+            "location_text": "膳堂大楼二楼",
+            "building_or_floor": "膳堂大楼二楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://jnedp.jnu.edu.cn/xnct/list.htm",
+            "source_title": "暨南大学官方校园餐饮资料",
+            "source_org": "暨南大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：复核仓库广州官方A级种子；核验状态：current_official；校区：石牌校区（校本部）；餐饮点：第五学生饭堂；楼层原文：膳堂大楼二楼；官方来源：https://jnedp.jnu.edu.cn/xnct/list.htm；https://www.jnu.edu.cn/yybb/list.htm",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "石牌校区（校本部）",
+            "name": "第一学生饭堂",
+            "aliases": [],
+            "location_text": "膳堂大楼首层",
+            "building_or_floor": "膳堂大楼首层",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://jnedp.jnu.edu.cn/xnct/list.htm",
+            "source_title": "暨南大学官方校园餐饮资料",
+            "source_org": "暨南大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：复核仓库广州官方A级种子；核验状态：current_official；校区：石牌校区（校本部）；餐饮点：第一学生饭堂；楼层原文：膳堂大楼首层；官方来源：https://jnedp.jnu.edu.cn/xnct/list.htm；https://www.jnu.edu.cn/yybb/list.htm",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "2026-08-12按高校官方来源复核；只发布明确到城市、校区、餐饮点及实际就餐楼层的记录"
+        ]
+      },
+      {
+        "school": "昆明文理学院",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "龙泉校区",
+            "aliases": [],
+            "address": "",
+            "source_url": "https://www.caskm.edu.cn/index.php?c=show&id=4616"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "龙泉校区",
+            "name": "香樟苑餐厅",
+            "aliases": [],
+            "location_text": "后勤综合楼三楼",
+            "building_or_floor": "后勤综合楼三楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://www.caskm.edu.cn/index.php?c=show&id=4616",
+            "source_title": "昆明文理学院官方校园餐饮资料",
+            "source_org": "昆明文理学院",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：昆明文理学院官方龙泉校区服务指引明确香樟苑餐厅位于后勤综合楼3楼；地址未在该官方页面中给出，保持空值不推断",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "龙泉校区",
+            "name": "紫藤苑餐厅",
+            "aliases": [],
+            "location_text": "后勤综合楼二楼",
+            "building_or_floor": "后勤综合楼二楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://www.caskm.edu.cn/index.php?c=show&id=4616",
+            "source_title": "昆明文理学院官方校园餐饮资料",
+            "source_org": "昆明文理学院",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：昆明文理学院官方龙泉校区服务指引明确紫藤苑餐厅位于后勤综合楼2楼；地址未在该官方页面中给出，保持空值不推断",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "2026-08-12按高校官方来源复核；只发布明确到城市、校区、餐饮点及实际就餐楼层的记录"
+        ]
+      },
+      {
+        "school": "昆明医科大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "呈贡校区",
+            "aliases": [],
+            "address": "云南省昆明市呈贡区雨花街道春融西路1168号",
+            "source_url": "https://www.kmmu.edu.cn/Pages_2446_44524.aspx"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "呈贡校区",
+            "name": "东苑二食堂特色小吃点",
+            "aliases": [],
+            "location_text": "二楼",
+            "building_or_floor": "二楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://www.kmmu.edu.cn/Pages_2446_44524.aspx",
+            "source_title": "昆明医科大学官方校园餐饮资料",
+            "source_org": "昆明医科大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：昆明医科大学官方劳务外包公告明确地址为呈贡校区东苑食堂二楼小吃点",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "2026-08-12按高校官方来源复核；只发布明确到城市、校区、餐饮点及实际就餐楼层的记录"
+        ]
+      },
+      {
+        "school": "兰州大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "城关校区西区",
+            "aliases": [],
+            "address": "甘肃省兰州市城关区天水南路222号",
+            "source_url": "https://zsb.lzu.edu.cn/zhaoshengzixun/changjianwenti/2020/0312/122355.html"
+          },
+          {
+            "name": "榆中校区",
+            "aliases": [],
+            "address": "甘肃省兰州市榆中县夏官营镇",
+            "source_url": "https://zsb.lzu.edu.cn/zhaoshengzixun/changjianwenti/2020/0312/122355.html"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "城关校区西区",
+            "name": "丹桂苑食堂",
+            "aliases": [],
+            "location_text": "一楼、二楼、三楼",
+            "building_or_floor": "一楼、二楼、三楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://zsb.lzu.edu.cn/zhaoshengzixun/changjianwenti/2020/0312/122355.html",
+            "source_title": "兰州大学官方校园餐饮资料",
+            "source_org": "兰州大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：2026-08-11重新查阅高校官方页面；页面同时明确校区、餐饮点和楼层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "榆中校区",
+            "name": "桃李食园（清真）",
+            "aliases": [],
+            "location_text": "一楼",
+            "building_or_floor": "一楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://zsb.lzu.edu.cn/zhaoshengzixun/changjianwenti/2020/0312/122355.html",
+            "source_title": "兰州大学官方校园餐饮资料",
+            "source_org": "兰州大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：2026-08-11重新查阅高校官方页面；页面同时明确校区、餐饮点和楼层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "榆中校区",
+            "name": "玉树苑",
+            "aliases": [],
+            "location_text": "一楼、二楼、三楼（第三层为清真食堂）",
+            "building_or_floor": "一楼、二楼、三楼（第三层为清真食堂）",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://zsb.lzu.edu.cn/zhaoshengzixun/changjianwenti/2020/0312/122355.html",
+            "source_title": "兰州大学官方校园餐饮资料",
+            "source_org": "兰州大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：2026-08-11重新查阅高校官方页面；页面同时明确校区、餐饮点和楼层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "榆中校区",
+            "name": "芝兰苑",
+            "aliases": [],
+            "location_text": "一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://zsb.lzu.edu.cn/zhaoshengzixun/changjianwenti/2020/0312/122355.html",
+            "source_title": "兰州大学官方校园餐饮资料",
+            "source_org": "兰州大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：2026-08-11重新查阅高校官方页面；页面同时明确校区、餐饮点和楼层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "榆中校区",
+            "name": "综合体食堂",
+            "aliases": [],
+            "location_text": "负一楼至四楼",
+            "building_or_floor": "负一楼至四楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://zsb.lzu.edu.cn/zhaoshengzixun/changjianwenti/2020/0312/122355.html",
+            "source_title": "兰州大学官方校园餐饮资料",
+            "source_org": "兰州大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：2026-08-11重新查阅高校官方页面；页面同时明确校区、餐饮点和楼层",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "2026-08-12按高校官方来源复核；只发布明确到城市、校区、餐饮点及实际就餐楼层的记录"
+        ]
+      },
+      {
+        "school": "兰州交通大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "校本部",
+            "aliases": [],
+            "address": "甘肃省兰州市安宁区安宁西路88号",
+            "source_url": "https://www.lzjtu.edu.cn/info/1373/16675.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "校本部",
+            "name": "第五食堂（北苑餐厅）",
+            "aliases": [],
+            "location_text": "二楼",
+            "building_or_floor": "二楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://www.lzjtu.edu.cn/info/1373/16675.htm",
+            "source_title": "兰州交通大学官方校园餐饮资料",
+            "source_org": "兰州交通大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：兰州交通大学官方2026年饮食文化节报道直接写明第五食堂（北苑餐厅二楼）",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "2026-08-12按高校官方来源复核；只发布明确到城市、校区、餐饮点及实际就餐楼层的记录"
+        ]
+      },
+      {
+        "school": "辽宁大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "崇山校区",
+            "aliases": [],
+            "address": "辽宁省沈阳市皇姑区崇山中路66号",
+            "source_url": "https://www.lnu.edu.cn/xxgk/xxjj.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "崇山校区",
+            "name": "桃李园食堂",
+            "aliases": [],
+            "location_text": "一楼、二楼、三楼",
+            "building_or_floor": "一楼、二楼、三楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://hqgzc.lnu.edu.cn/info/1008/2540.htm",
+            "source_title": "辽宁大学官方校园餐饮资料",
+            "source_org": "辽宁大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：官方后勤竣工报道明确桃李园食堂一至三楼档口完成改造；同期营业通知确认二楼供餐。",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "2026-08-12按高校官方来源复核；只发布明确到城市、校区、餐饮点及实际就餐楼层的记录"
+        ]
+      },
+      {
+        "school": "南方医科大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "校本部（广州）",
+            "aliases": [],
+            "address": "广东省广州市白云区沙太南路1023-1063号",
+            "source_url": "https://portal.smu.edu.cn/bkzs/info/1294/2494.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "校本部（广州）",
+            "name": "学生二食堂",
+            "aliases": [],
+            "location_text": "17 栋西侧对面二楼",
+            "building_or_floor": "17 栋西侧对面二楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://portal.smu.edu.cn/twh/info/1046/1601.htm",
+            "source_title": "南方医科大学官方校园餐饮资料",
+            "source_org": "南方医科大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：复核仓库广州官方A级种子；核验状态：confirmed_official；校区：校本部（广州）；餐饮点：学生二食堂；楼层原文：17 栋西侧对面二楼；官方来源：https://portal.smu.edu.cn/twh/info/1046/1601.htm",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "校本部（广州）",
+            "name": "学生三食堂",
+            "aliases": [],
+            "location_text": "17 栋西侧对面三楼",
+            "building_or_floor": "17 栋西侧对面三楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://portal.smu.edu.cn/twh/info/1046/1601.htm",
+            "source_title": "南方医科大学官方校园餐饮资料",
+            "source_org": "南方医科大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：复核仓库广州官方A级种子；核验状态：confirmed_official；校区：校本部（广州）；餐饮点：学生三食堂；楼层原文：17 栋西侧对面三楼；官方来源：https://portal.smu.edu.cn/twh/info/1046/1601.htm",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "校本部（广州）",
+            "name": "学生四食堂",
+            "aliases": [],
+            "location_text": "17 栋西侧对面四楼",
+            "building_or_floor": "17 栋西侧对面四楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://portal.smu.edu.cn/twh/info/1046/1601.htm",
+            "source_title": "南方医科大学官方校园餐饮资料",
+            "source_org": "南方医科大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：复核仓库广州官方A级种子；核验状态：confirmed_official；校区：校本部（广州）；餐饮点：学生四食堂；楼层原文：17 栋西侧对面四楼；官方来源：https://portal.smu.edu.cn/twh/info/1046/1601.htm",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "校本部（广州）",
+            "name": "学生一食堂",
+            "aliases": [],
+            "location_text": "17 栋西侧对面一楼",
+            "building_or_floor": "17 栋西侧对面一楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://portal.smu.edu.cn/twh/info/1046/1601.htm",
+            "source_title": "南方医科大学官方校园餐饮资料",
+            "source_org": "南方医科大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：复核仓库广州官方A级种子；核验状态：confirmed_official；校区：校本部（广州）；餐饮点：学生一食堂；楼层原文：17 栋西侧对面一楼；官方来源：https://portal.smu.edu.cn/twh/info/1046/1601.htm；https://portal.smu.edu.cn/bkzs/info/1294/2494.htm",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "2026-08-12按高校官方来源复核；只发布明确到城市、校区、餐饮点及实际就餐楼层的记录"
+        ]
+      },
+      {
+        "school": "南开大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "八里台校区",
+            "aliases": [],
+            "address": "天津市南开区卫津路94号",
+            "source_url": "https://www.nankai.edu.cn/2025/0624/c17471a574322/page.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "八里台校区",
+            "name": "学二食堂",
+            "aliases": [],
+            "location_text": "一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://www.nankai.edu.cn/2025/0624/c17471a574322/page.htm",
+            "source_title": "南开大学官方校园餐饮资料",
+            "source_org": "南开大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：2025年暑假官方后勤指南逐层列出学二食堂一楼、二楼供餐状态；不是由建筑层数推断。",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "八里台校区",
+            "name": "学三食堂",
+            "aliases": [],
+            "location_text": "一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://www.nankai.edu.cn/2025/0624/c17471a574322/page.htm",
+            "source_title": "南开大学官方校园餐饮资料",
+            "source_org": "南开大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：2025年暑假官方后勤指南逐层列出学三食堂一楼、二楼供餐状态；不是由建筑层数推断。",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "2026-08-12按高校官方来源复核；只发布明确到城市、校区、餐饮点及实际就餐楼层的记录"
+        ]
+      },
+      {
+        "school": "内蒙古大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "玉泉校区",
+            "aliases": [],
+            "address": "内蒙古自治区呼和浩特市玉泉区昭君路24号",
+            "source_url": "https://hqc.imu.edu.cn/"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "玉泉校区",
+            "name": "东院食堂",
+            "aliases": [],
+            "location_text": "二楼餐厅、三楼餐厅",
+            "building_or_floor": "二楼餐厅、三楼餐厅",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://hqc.imu.edu.cn/info/1021/3418.htm",
+            "source_title": "内蒙古大学官方校园餐饮资料",
+            "source_org": "内蒙古大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：历史A级官方证据快照；校区与餐饮来源当前均返回2xx；已剔除异地校区和不明确楼层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "玉泉校区",
+            "name": "西院食堂",
+            "aliases": [],
+            "location_text": "二楼餐厅；含一楼南侧营业点",
+            "building_or_floor": "二楼餐厅；含一楼南侧营业点",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://hqc.imu.edu.cn/info/1021/3418.htm",
+            "source_title": "内蒙古大学官方校园餐饮资料",
+            "source_org": "内蒙古大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：历史A级官方证据快照；校区与餐饮来源当前均返回2xx；已剔除异地校区和不明确楼层",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "2026-08-12按高校官方来源复核；只发布明确到城市、校区、餐饮点及实际就餐楼层的记录"
+        ]
+      },
+      {
+        "school": "宁夏大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "怀远校区",
+            "aliases": [],
+            "address": "宁夏回族自治区银川市西夏区贺兰山西路489号",
+            "source_url": "https://www.nxu.edu.cn/index/tzgg/254.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "怀远校区",
+            "name": "兰竹苑餐厅",
+            "aliases": [],
+            "location_text": "一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://www.nxu.edu.cn/index/tzgg/254.htm",
+            "source_title": "宁夏大学官方校园餐饮资料",
+            "source_org": "宁夏大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：2026-08-11重新查阅高校官方页面；页面同时明确校区、餐饮点和楼层",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "2026-08-12按高校官方来源复核；只发布明确到城市、校区、餐饮点及实际就餐楼层的记录"
+        ]
+      },
+      {
+        "school": "青海师范大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "城北校区",
+            "aliases": [],
+            "address": "青海省西宁市城北区海湖大道延伸段38号",
+            "source_url": "https://www.qhnu.edu.cn/info/1039/20706.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "城北校区",
+            "name": "清真餐厅二楼餐厅",
+            "aliases": [],
+            "location_text": "二楼",
+            "building_or_floor": "二楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://www.qhnu.edu.cn/info/1039/20706.htm",
+            "source_title": "青海师范大学官方校园餐饮资料",
+            "source_org": "青海师范大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：2026-08-11重新查阅高校官方页面；页面同时明确校区、餐饮点和楼层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "城北校区",
+            "name": "馨园餐厅二楼食堂",
+            "aliases": [],
+            "location_text": "二楼",
+            "building_or_floor": "二楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://www.qhnu.edu.cn/index/tzgg.htm",
+            "source_title": "青海师范大学官方校园餐饮资料",
+            "source_org": "青海师范大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：2026-08-11重新查阅高校官方页面；页面同时明确校区、餐饮点和楼层",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "2026-08-12按高校官方来源复核；只发布明确到城市、校区、餐饮点及实际就餐楼层的记录"
+        ]
+      },
+      {
+        "school": "山东大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "趵突泉校区",
+            "aliases": [],
+            "address": "济南市文化西路44号",
+            "source_url": "https://www.job.sdu.edu.cn/xqzy.htm"
+          },
+          {
+            "name": "洪家楼校区",
+            "aliases": [],
+            "address": "济南市洪家楼5号",
+            "source_url": "https://www.job.sdu.edu.cn/xqzy.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "趵突泉校区",
+            "name": "杏园餐厅",
+            "aliases": [],
+            "location_text": "二楼清真、三楼零点区",
+            "building_or_floor": "二楼清真、三楼零点区",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://www.istudy.sdu.edu.cn/xysh/ct.htm",
+            "source_title": "山东大学官方校园餐饮资料",
+            "source_org": "山东大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：历史A级官方证据快照；校区与餐饮来源当前均返回2xx；已剔除异地校区和不明确楼层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "洪家楼校区",
+            "name": "第七食堂",
+            "aliases": [],
+            "location_text": "二楼教职工餐厅",
+            "building_or_floor": "二楼教职工餐厅",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://www.istudy.sdu.edu.cn/xysh/ct.htm",
+            "source_title": "山东大学官方校园餐饮资料",
+            "source_org": "山东大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：历史A级官方证据快照；校区与餐饮来源当前均返回2xx；已剔除异地校区和不明确楼层",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "2026-08-12按高校官方来源复核；只发布明确到城市、校区、餐饮点及实际就餐楼层的记录"
+        ]
+      },
+      {
+        "school": "太原理工大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "迎西校区",
+            "aliases": [],
+            "address": "中国山西省太原市万柏林区迎泽西大街79号",
+            "source_url": "https://www.tyut.edu.cn/"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "迎西校区",
+            "name": "清泽餐厅",
+            "aliases": [],
+            "location_text": "二、三层",
+            "building_or_floor": "二、三层",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://houqin.tyut.edu.cn/info/1010/6625.htm",
+            "source_title": "太原理工大学官方校园餐饮资料",
+            "source_org": "太原理工大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：历史A级官方证据快照；校区与餐饮来源当前均返回2xx；已剔除异地校区和不明确楼层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "迎西校区",
+            "name": "思源餐厅",
+            "aliases": [],
+            "location_text": "一层北、一层南、二层",
+            "building_or_floor": "一层北、一层南、二层",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://houqin.tyut.edu.cn/info/1010/6625.htm",
+            "source_title": "太原理工大学官方校园餐饮资料",
+            "source_org": "太原理工大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：历史A级官方证据快照；校区与餐饮来源当前均返回2xx；已剔除异地校区和不明确楼层",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "2026-08-12按高校官方来源复核；只发布明确到城市、校区、餐饮点及实际就餐楼层的记录"
+        ]
+      },
+      {
+        "school": "天津大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "北洋园校区",
+            "aliases": [],
+            "address": "天津市津南区雅观路135号",
+            "source_url": "https://zs.tju.edu.cn/ym21/lxwm/xxlxfs.htm"
+          },
+          {
+            "name": "卫津路校区",
+            "aliases": [],
+            "address": "天津市南开区卫津路92号",
+            "source_url": "https://zs.tju.edu.cn/ym21/lxwm/xxlxfs.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "北洋园校区",
+            "name": "留学生食堂",
+            "aliases": [],
+            "location_text": "留园二层",
+            "building_or_floor": "留园二层",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://yx.tju.edu.cn/jztd/ys/201806/t20180602_307309.htm",
+            "source_title": "天津大学官方校园餐饮资料",
+            "source_org": "天津大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：历史A级官方证据快照；校区与餐饮来源当前均返回2xx；已剔除异地校区和不明确楼层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "卫津路校区",
+            "name": "学四食堂",
+            "aliases": [],
+            "location_text": "一至三层",
+            "building_or_floor": "一至三层",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://yx.tju.edu.cn/jztd/ys/201806/t20180602_307309.htm",
+            "source_title": "天津大学官方校园餐饮资料",
+            "source_org": "天津大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：历史A级官方证据快照；校区与餐饮来源当前均返回2xx；已剔除异地校区和不明确楼层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "卫津路校区",
+            "name": "学五食堂",
+            "aliases": [],
+            "location_text": "二层清真食堂；三层套餐快餐等",
+            "building_or_floor": "二层清真食堂；三层套餐快餐等",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://yx.tju.edu.cn/jztd/ys/201806/t20180602_307309.htm",
+            "source_title": "天津大学官方校园餐饮资料",
+            "source_org": "天津大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：历史A级官方证据快照；校区与餐饮来源当前均返回2xx；已剔除异地校区和不明确楼层",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "2026-08-12按高校官方来源复核；只发布明确到城市、校区、餐饮点及实际就餐楼层的记录"
+        ]
+      },
+      {
+        "school": "天津科技大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "滨海校区",
+            "aliases": [],
+            "address": "天津经济技术开发区第十三大街9号",
+            "source_url": "https://www.tust.edu.cn/"
+          },
+          {
+            "name": "河西校区",
+            "aliases": [],
+            "address": "天津市河西区大沽南路1038号",
+            "source_url": "https://www.tust.edu.cn/"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "滨海校区",
+            "name": "第三学生食堂西区",
+            "aliases": [],
+            "location_text": "西一层、西二层",
+            "building_or_floor": "西一层、西二层",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://hq.tust.edu.cn/xwzx/gzdt/fd5cc1235a624244aad0000899096c97.htm",
+            "source_title": "天津科技大学官方校园餐饮资料",
+            "source_org": "天津科技大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：官方后勤改造报道明确第三学生食堂西一、西二层并说明开学前正式营业。",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "滨海校区",
+            "name": "第一学生食堂",
+            "aliases": [],
+            "location_text": "一楼、二楼、三楼",
+            "building_or_floor": "一楼、二楼、三楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://hq.tust.edu.cn/xwzx/gzdt/fd5cc1235a624244aad0000899096c97.htm",
+            "source_title": "天津科技大学官方校园餐饮资料",
+            "source_org": "天津科技大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：官方后勤改造报道明确涉及滨海校区第一学生食堂一、二、三层，并说明开学前正式营业。",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "河西校区",
+            "name": "第二学生食堂",
+            "aliases": [],
+            "location_text": "二楼",
+            "building_or_floor": "二楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://hq.tust.edu.cn/xwzx/gzdt/fd5cc1235a624244aad0000899096c97.htm",
+            "source_title": "天津科技大学官方校园餐饮资料",
+            "source_org": "天津科技大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：官方后勤改造报道明确河西校区第二学生食堂二层并说明开学前正式营业。",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "河西校区",
+            "name": "第一学生食堂",
+            "aliases": [],
+            "location_text": "一楼",
+            "building_or_floor": "一楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://hq.tust.edu.cn/xwzx/gzdt/fd5cc1235a624244aad0000899096c97.htm",
+            "source_title": "天津科技大学官方校园餐饮资料",
+            "source_org": "天津科技大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：官方后勤改造报道明确河西校区第一学生食堂一层并说明开学前正式营业。",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "2026-08-12按高校官方来源复核；只发布明确到城市、校区、餐饮点及实际就餐楼层的记录"
+        ]
+      },
+      {
+        "school": "天津师范大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "主校区",
+            "aliases": [],
+            "address": "天津市西青区宾水西道393号",
+            "source_url": "https://www.tjnu.edu.cn/xxgk/xxzc.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "主校区",
+            "name": "学生第二食堂",
+            "aliases": [],
+            "location_text": "二楼",
+            "building_or_floor": "二楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://www.tjnu.edu.cn/info/1064/8620.htm",
+            "source_title": "天津师范大学官方校园餐饮资料",
+            "source_org": "天津师范大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：2026年校级新闻明确活动在学生第二食堂二楼举行，学校章程确认主校区法定地址。",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "2026-08-12按高校官方来源复核；只发布明确到城市、校区、餐饮点及实际就餐楼层的记录"
+        ]
+      },
+      {
+        "school": "西安科技大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "临潼校区骊山校园",
+            "aliases": [],
+            "address": "陕西省西安市临潼区陕鼓大道48号",
+            "source_url": "https://hq.xust.edu.cn/info/1007/8418.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "临潼校区骊山校园",
+            "name": "骊绣苑餐厅",
+            "aliases": [],
+            "location_text": "一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://hq.xust.edu.cn/info/1007/8418.htm",
+            "source_title": "西安科技大学官方校园餐饮资料",
+            "source_org": "西安科技大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：西安科技大学后勤处2026年档口引进公告明确项目地点为临潼校区骊山校园骊绣苑一、二层餐厅",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "2026-08-12按高校官方来源复核；只发布明确到城市、校区、餐饮点及实际就餐楼层的记录"
+        ]
+      },
+      {
+        "school": "西安石油大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "鄠邑校区",
+            "aliases": [],
+            "address": "陕西省西安市鄠邑区沣京工业园沣京大道18号",
+            "source_url": "https://yx.xsyu.edu.cn/xxqzl/20200827/12131.html"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "鄠邑校区",
+            "name": "学生二食堂",
+            "aliases": [],
+            "location_text": "一楼、二楼、三楼",
+            "building_or_floor": "一楼、二楼、三楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://www.xsyu.edu.cn/info/1143/9113.htm",
+            "source_title": "西安石油大学官方校园餐饮资料",
+            "source_org": "西安石油大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：西安石油大学官方食堂介绍明确学生二食堂一层、二层为学生餐厅、三层为职工餐厅；校方鄠邑校区生活指南复核校区归属",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "2026-08-12按高校官方来源复核；只发布明确到城市、校区、餐饮点及实际就餐楼层的记录"
+        ]
+      },
+      {
+        "school": "西北大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "长安校区",
+            "aliases": [],
+            "address": "西安市长安区郭杜教育科技产业区学府大街1号",
+            "source_url": "https://hqjt.nwu.edu.cn/info/1146/4161.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "长安校区",
+            "name": "玉兰苑诚悦园餐厅",
+            "aliases": [],
+            "location_text": "二层",
+            "building_or_floor": "二层",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://ysfwzx.nwu.edu.cn/zxgk/ctfwsj1.htm",
+            "source_title": "西北大学官方校园餐饮资料",
+            "source_org": "西北大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：历史A级官方证据快照；校区与餐饮来源当前均返回2xx；已剔除异地校区和不明确楼层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "长安校区",
+            "name": "玉兰苑公颐园餐厅",
+            "aliases": [],
+            "location_text": "一层",
+            "building_or_floor": "一层",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://ysfwzx.nwu.edu.cn/zxgk/ctfwsj1.htm",
+            "source_title": "西北大学官方校园餐饮资料",
+            "source_org": "西北大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：历史A级官方证据快照；校区与餐饮来源当前均返回2xx；已剔除异地校区和不明确楼层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "长安校区",
+            "name": "玉兰苑朴园餐厅",
+            "aliases": [],
+            "location_text": "四层",
+            "building_or_floor": "四层",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://ysfwzx.nwu.edu.cn/zxgk/ctfwsj1.htm",
+            "source_title": "西北大学官方校园餐饮资料",
+            "source_org": "西北大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：历史A级官方证据快照；校区与餐饮来源当前均返回2xx；已剔除异地校区和不明确楼层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "长安校区",
+            "name": "玉兰苑勤育园餐厅",
+            "aliases": [],
+            "location_text": "三层",
+            "building_or_floor": "三层",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://ysfwzx.nwu.edu.cn/zxgk/ctfwsj1.htm",
+            "source_title": "西北大学官方校园餐饮资料",
+            "source_org": "西北大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：历史A级官方证据快照；校区与餐饮来源当前均返回2xx；已剔除异地校区和不明确楼层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "长安校区",
+            "name": "紫荆苑学生二餐厅",
+            "aliases": [],
+            "location_text": "二层",
+            "building_or_floor": "二层",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://ysfwzx.nwu.edu.cn/zxgk/ctfwsj1.htm",
+            "source_title": "西北大学官方校园餐饮资料",
+            "source_org": "西北大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：历史A级官方证据快照；校区与餐饮来源当前均返回2xx；已剔除异地校区和不明确楼层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "长安校区",
+            "name": "紫荆苑学生三餐厅",
+            "aliases": [],
+            "location_text": "三层",
+            "building_or_floor": "三层",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://ysfwzx.nwu.edu.cn/zxgk/ctfwsj1.htm",
+            "source_title": "西北大学官方校园餐饮资料",
+            "source_org": "西北大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：历史A级官方证据快照；校区与餐饮来源当前均返回2xx；已剔除异地校区和不明确楼层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "长安校区",
+            "name": "紫荆苑学生一餐厅",
+            "aliases": [],
+            "location_text": "一层",
+            "building_or_floor": "一层",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://ysfwzx.nwu.edu.cn/zxgk/ctfwsj1.htm",
+            "source_title": "西北大学官方校园餐饮资料",
+            "source_org": "西北大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：历史A级官方证据快照；校区与餐饮来源当前均返回2xx；已剔除异地校区和不明确楼层",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "2026-08-12按高校官方来源复核；只发布明确到城市、校区、餐饮点及实际就餐楼层的记录"
+        ]
+      },
+      {
+        "school": "西藏大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "纳金校区",
+            "aliases": [],
+            "address": "西藏自治区拉萨市城关区藏大东路10号",
+            "source_url": "https://xgc.utibet.edu.cn/info/1019/1279.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "纳金校区",
+            "name": "二食堂",
+            "aliases": [],
+            "location_text": "二楼",
+            "building_or_floor": "二楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://xgc.utibet.edu.cn/info/1018/1434.htm",
+            "source_title": "西藏大学官方校园餐饮资料",
+            "source_org": "西藏大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：西藏大学官方2025年午餐会报道明确写明活动地点为“纳金校区二食堂二楼”；校区地址由校方公告独立复核",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "2026-08-12按高校官方来源复核；只发布明确到城市、校区、餐饮点及实际就餐楼层的记录"
+        ]
+      },
+      {
+        "school": "西南交通大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "犀浦校区",
+            "aliases": [],
+            "address": "四川省成都市郫都区犀安路999号",
+            "source_url": "https://www.swjtu.edu.cn/"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "犀浦校区",
+            "name": "风华苑餐厅",
+            "aliases": [],
+            "location_text": "三食堂二楼",
+            "building_or_floor": "三食堂二楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://hqfw.swjtu.edu.cn/xnjdhouqin/phone_article.html?id=42",
+            "source_title": "西南交通大学官方校园餐饮资料",
+            "source_org": "西南交通大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：历史A级官方证据快照；校区与餐饮来源当前均返回2xx；已剔除异地校区和不明确楼层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "犀浦校区",
+            "name": "锦华苑餐厅",
+            "aliases": [],
+            "location_text": "二食堂二楼",
+            "building_or_floor": "二食堂二楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://hqfw.swjtu.edu.cn/xnjdhouqin/phone_article.html?id=42",
+            "source_title": "西南交通大学官方校园餐饮资料",
+            "source_org": "西南交通大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：历史A级官方证据快照；校区与餐饮来源当前均返回2xx；已剔除异地校区和不明确楼层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "犀浦校区",
+            "name": "锦馨苑餐厅",
+            "aliases": [],
+            "location_text": "四食堂二楼",
+            "building_or_floor": "四食堂二楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://hqfw.swjtu.edu.cn/xnjdhouqin/phone_article.html?id=42",
+            "source_title": "西南交通大学官方校园餐饮资料",
+            "source_org": "西南交通大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：历史A级官方证据快照；校区与餐饮来源当前均返回2xx；已剔除异地校区和不明确楼层",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "2026-08-12按高校官方来源复核；只发布明确到城市、校区、餐饮点及实际就餐楼层的记录"
+        ]
+      },
+      {
+        "school": "新疆农业大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "亚心校区",
+            "aliases": [],
+            "address": "新疆维吾尔自治区乌鲁木齐市沙依巴克区西山新镇聚安路888号",
+            "source_url": "https://xsxy.xjau.edu.cn/5988/list.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "亚心校区",
+            "name": "葡萄苑餐厅",
+            "aliases": [],
+            "location_text": "一楼、二楼、三楼",
+            "building_or_floor": "一楼、二楼、三楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://xsxy.xjau.edu.cn/5988/list.htm",
+            "source_title": "新疆农业大学官方校园餐饮资料",
+            "source_org": "新疆农业大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：新疆农业大学学生学院官方食堂管理页明确葡萄苑1-2层为基础餐厅、3楼为引导性餐厅，并给出校区地址",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "亚心校区",
+            "name": "石榴园餐厅",
+            "aliases": [],
+            "location_text": "一楼、二楼、三楼",
+            "building_or_floor": "一楼、二楼、三楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://xsxy.xjau.edu.cn/5988/list.htm",
+            "source_title": "新疆农业大学官方校园餐饮资料",
+            "source_org": "新疆农业大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：新疆农业大学学生学院官方食堂管理页明确石榴园餐厅1-3楼均为餐饮经营楼层，并给出校区地址",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "2026-08-12按高校官方来源复核；只发布明确到城市、校区、餐饮点及实际就餐楼层的记录"
+        ]
+      },
+      {
+        "school": "新疆医科大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "新医路校区",
+            "aliases": [],
+            "address": "新疆维吾尔自治区乌鲁木齐市新市区新医路393号",
+            "source_url": "https://gjjyxy.xjmu.edu.cn/info/1061/1128.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "新医路校区",
+            "name": "新怡餐厅",
+            "aliases": [],
+            "location_text": "1号公寓一楼、二楼",
+            "building_or_floor": "1号公寓一楼、二楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://gjjyxy.xjmu.edu.cn/info/1061/1128.htm",
+            "source_title": "新疆医科大学官方校园餐饮资料",
+            "source_org": "新疆医科大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：2026-08-11重新查阅高校官方页面；页面同时明确校区、餐饮点和楼层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "新医路校区",
+            "name": "杏林餐厅",
+            "aliases": [],
+            "location_text": "5号公寓楼一楼",
+            "building_or_floor": "5号公寓楼一楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://gjjyxy.xjmu.edu.cn/info/1061/1128.htm",
+            "source_title": "新疆医科大学官方校园餐饮资料",
+            "source_org": "新疆医科大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：2026-08-11重新查阅高校官方页面；页面同时明确校区、餐饮点和楼层",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "2026-08-12按高校官方来源复核；只发布明确到城市、校区、餐饮点及实际就餐楼层的记录"
+        ]
+      },
+      {
+        "school": "云南大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "呈贡校区",
+            "aliases": [],
+            "address": "昆明市呈贡区大学城东外环南路",
+            "source_url": "https://www.ynu.edu.cn/"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "呈贡校区",
+            "name": "馀味堂二楼食堂",
+            "aliases": [],
+            "location_text": "馀味堂二楼",
+            "building_or_floor": "馀味堂二楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://office.ynu.edu.cn/info/1076/1672.htm",
+            "source_title": "云南大学官方校园餐饮资料",
+            "source_org": "云南大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：历史A级官方证据快照；校区与餐饮来源当前均返回2xx；已剔除异地校区和不明确楼层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "呈贡校区",
+            "name": "馀味堂三楼食堂",
+            "aliases": [],
+            "location_text": "馀味堂三楼",
+            "building_or_floor": "馀味堂三楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://office.ynu.edu.cn/info/1076/1672.htm",
+            "source_title": "云南大学官方校园餐饮资料",
+            "source_org": "云南大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：历史A级官方证据快照；校区与餐饮来源当前均返回2xx；已剔除异地校区和不明确楼层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "呈贡校区",
+            "name": "馀味堂一楼食堂",
+            "aliases": [],
+            "location_text": "馀味堂一楼",
+            "building_or_floor": "馀味堂一楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://office.ynu.edu.cn/info/1076/1672.htm",
+            "source_title": "云南大学官方校园餐饮资料",
+            "source_org": "云南大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：历史A级官方证据快照；校区与餐饮来源当前均返回2xx；已剔除异地校区和不明确楼层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "呈贡校区",
+            "name": "知味堂二楼食堂",
+            "aliases": [],
+            "location_text": "知味堂二楼",
+            "building_or_floor": "知味堂二楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://office.ynu.edu.cn/info/1076/1672.htm",
+            "source_title": "云南大学官方校园餐饮资料",
+            "source_org": "云南大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：历史A级官方证据快照；校区与餐饮来源当前均返回2xx；已剔除异地校区和不明确楼层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "呈贡校区",
+            "name": "知味堂三楼餐厅",
+            "aliases": [],
+            "location_text": "知味堂三楼",
+            "building_or_floor": "知味堂三楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://www.hqjt.ynu.edu.cn/info/1028/3901.htm",
+            "source_title": "云南大学官方校园餐饮资料",
+            "source_org": "云南大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：历史A级官方证据快照；校区与餐饮来源当前均返回2xx；已剔除异地校区和不明确楼层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "呈贡校区",
+            "name": "知味堂一楼餐厅",
+            "aliases": [],
+            "location_text": "知味堂一楼",
+            "building_or_floor": "知味堂一楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://www.hqjt.ynu.edu.cn/info/1028/3901.htm",
+            "source_title": "云南大学官方校园餐饮资料",
+            "source_org": "云南大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：历史A级官方证据快照；校区与餐饮来源当前均返回2xx；已剔除异地校区和不明确楼层",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "2026-08-12按高校官方来源复核；只发布明确到城市、校区、餐饮点及实际就餐楼层的记录"
+        ]
+      },
+      {
+        "school": "浙江大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "玉泉校区",
+            "aliases": [],
+            "address": "浙江省杭州市西湖区浙大路38号",
+            "source_url": "https://www.zju.edu.cn/xxgk/list.htm"
+          },
+          {
+            "name": "紫金港校区",
+            "aliases": [],
+            "address": "浙江省杭州市西湖区余杭塘路866号",
+            "source_url": "https://zulg.zju.edu.cn/guide/food.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "玉泉校区",
+            "name": "第四食堂",
+            "aliases": [],
+            "location_text": "一楼",
+            "building_or_floor": "一楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://zulg.zju.edu.cn/guide/food.htm",
+            "source_title": "浙江大学官方校园餐饮资料",
+            "source_org": "浙江大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：浙江大学后勤集团现行餐饮服务页明确列出“第四食堂一楼”，地点为玉泉校医院对面",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "紫金港校区",
+            "name": "澄月餐厅二楼",
+            "aliases": [],
+            "location_text": "二楼",
+            "building_or_floor": "二楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://zulg.zju.edu.cn/guide/food.htm",
+            "source_title": "浙江大学官方校园餐饮资料",
+            "source_org": "浙江大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：2026-08-11重新查阅高校官方页面；页面同时明确校区、餐饮点和楼层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "紫金港校区",
+            "name": "澄月餐厅一楼",
+            "aliases": [],
+            "location_text": "一楼",
+            "building_or_floor": "一楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://zulg.zju.edu.cn/guide/food.htm",
+            "source_title": "浙江大学官方校园餐饮资料",
+            "source_org": "浙江大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：2026-08-11重新查阅高校官方页面；页面同时明确校区、餐饮点和楼层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "紫金港校区",
+            "name": "东区食堂",
+            "aliases": [],
+            "location_text": "紫金港食堂大楼二层东侧",
+            "building_or_floor": "紫金港食堂大楼二层东侧",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://zulg.zju.edu.cn/guide/food.htm",
+            "source_title": "浙江大学官方校园餐饮资料",
+            "source_org": "浙江大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：2026-08-11重新查阅高校官方页面；页面同时明确校区、餐饮点和楼层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "紫金港校区",
+            "name": "风味餐厅",
+            "aliases": [],
+            "location_text": "紫金港食堂大楼一层东侧",
+            "building_or_floor": "紫金港食堂大楼一层东侧",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://zulg.zju.edu.cn/guide/food.htm",
+            "source_title": "浙江大学官方校园餐饮资料",
+            "source_org": "浙江大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：2026-08-11重新查阅高校官方页面；页面同时明确校区、餐饮点和楼层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "紫金港校区",
+            "name": "临湖餐厅",
+            "aliases": [],
+            "location_text": "一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://zulg.zju.edu.cn/guide/food.htm",
+            "source_title": "浙江大学官方校园餐饮资料",
+            "source_org": "浙江大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：2026-08-11重新查阅高校官方页面；页面同时明确校区、餐饮点和楼层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "紫金港校区",
+            "name": "麦香餐厅",
+            "aliases": [],
+            "location_text": "紫金港医学专业图书馆一楼",
+            "building_or_floor": "紫金港医学专业图书馆一楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://zulg.zju.edu.cn/guide/food.htm",
+            "source_title": "浙江大学官方校园餐饮资料",
+            "source_org": "浙江大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：2026-08-11重新查阅高校官方页面；页面同时明确校区、餐饮点和楼层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "紫金港校区",
+            "name": "民族餐厅",
+            "aliases": [],
+            "location_text": "紫金港食堂大楼二层西侧",
+            "building_or_floor": "紫金港食堂大楼二层西侧",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://zulg.zju.edu.cn/guide/food.htm",
+            "source_title": "浙江大学官方校园餐饮资料",
+            "source_org": "浙江大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：2026-08-11重新查阅高校官方页面；页面同时明确校区、餐饮点和楼层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "紫金港校区",
+            "name": "三楼餐厅",
+            "aliases": [],
+            "location_text": "紫金港食堂大楼三层东侧",
+            "building_or_floor": "紫金港食堂大楼三层东侧",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://zulg.zju.edu.cn/guide/food.htm",
+            "source_title": "浙江大学官方校园餐饮资料",
+            "source_org": "浙江大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：2026-08-11重新查阅高校官方页面；页面同时明确校区、餐饮点和楼层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "紫金港校区",
+            "name": "西区食堂",
+            "aliases": [],
+            "location_text": "紫金港食堂大楼二层西侧",
+            "building_or_floor": "紫金港食堂大楼二层西侧",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://zulg.zju.edu.cn/guide/food.htm",
+            "source_title": "浙江大学官方校园餐饮资料",
+            "source_org": "浙江大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：2026-08-11重新查阅高校官方页面；页面同时明确校区、餐饮点和楼层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "紫金港校区",
+            "name": "休闲餐厅",
+            "aliases": [],
+            "location_text": "紫金港食堂大楼一层西侧",
+            "building_or_floor": "紫金港食堂大楼一层西侧",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://zulg.zju.edu.cn/guide/food.htm",
+            "source_title": "浙江大学官方校园餐饮资料",
+            "source_org": "浙江大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：2026-08-11重新查阅高校官方页面；页面同时明确校区、餐饮点和楼层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "紫金港校区",
+            "name": "银泉餐厅二楼",
+            "aliases": [],
+            "location_text": "二楼",
+            "building_or_floor": "二楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://zulg.zju.edu.cn/guide/food.htm",
+            "source_title": "浙江大学官方校园餐饮资料",
+            "source_org": "浙江大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：2026-08-11重新查阅高校官方页面；页面同时明确校区、餐饮点和楼层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "紫金港校区",
+            "name": "银泉餐厅一楼",
+            "aliases": [],
+            "location_text": "一楼",
+            "building_or_floor": "一楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://zulg.zju.edu.cn/guide/food.htm",
+            "source_title": "浙江大学官方校园餐饮资料",
+            "source_org": "浙江大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：2026-08-11重新查阅高校官方页面；页面同时明确校区、餐饮点和楼层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "紫金港校区",
+            "name": "玉湖餐厅二楼",
+            "aliases": [],
+            "location_text": "二楼",
+            "building_or_floor": "二楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://zulg.zju.edu.cn/guide/food.htm",
+            "source_title": "浙江大学官方校园餐饮资料",
+            "source_org": "浙江大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：2026-08-11重新查阅高校官方页面；页面同时明确校区、餐饮点和楼层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "紫金港校区",
+            "name": "玉湖餐厅一楼",
+            "aliases": [],
+            "location_text": "一楼",
+            "building_or_floor": "一楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://zulg.zju.edu.cn/guide/food.htm",
+            "source_title": "浙江大学官方校园餐饮资料",
+            "source_org": "浙江大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：2026-08-11重新查阅高校官方页面；页面同时明确校区、餐饮点和楼层",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "2026-08-12按高校官方来源复核；只发布明确到城市、校区、餐饮点及实际就餐楼层的记录"
+        ]
+      },
+      {
+        "school": "浙江师范大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "萧山校区",
+            "aliases": [],
+            "address": "浙江省杭州市萧山区宁围街道萧山高教园区耕文路1108号",
+            "source_url": "https://hys.zjnu.edu.cn/_t389/tzgg/list9.psp"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "萧山校区",
+            "name": "校区食堂保障性餐厅",
+            "aliases": [],
+            "location_text": "一楼",
+            "building_or_floor": "一楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://freshman.zjnu.edu.cn/hzxq/list.htm",
+            "source_title": "浙江师范大学官方校园餐饮资料",
+            "source_org": "浙江师范大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：浙江师范大学后勤页面明确萧山校区食堂一楼为保障性餐厅；校区官方页面明确萧山校区地址",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "萧山校区",
+            "name": "校区食堂美食餐厅",
+            "aliases": [],
+            "location_text": "二楼",
+            "building_or_floor": "二楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://freshman.zjnu.edu.cn/hzxq/list.htm",
+            "source_title": "浙江师范大学官方校园餐饮资料",
+            "source_org": "浙江师范大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：浙江师范大学后勤页面明确萧山校区食堂二楼为美食餐厅/美食广场；校区官方页面明确地址",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "2026-08-12按高校官方来源复核；只发布明确到城市、校区、餐饮点及实际就餐楼层的记录"
+        ]
+      },
+      {
+        "school": "郑州大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "主校区",
+            "aliases": [],
+            "address": "河南省郑州市科学大道100号",
+            "source_url": "https://ao.zzu.edu.cn/info/1793/5074.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "主校区",
+            "name": "风华园二楼餐厅",
+            "aliases": [],
+            "location_text": "二楼",
+            "building_or_floor": "二楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://www7.zzu.edu.cn/hqbzzx/info/1275/1505.htm",
+            "source_title": "郑州大学官方校园餐饮资料",
+            "source_org": "郑州大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：历史A级官方证据快照；校区与餐饮来源当前均返回2xx；已剔除异地校区和不明确楼层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "主校区",
+            "name": "风华园一楼餐厅",
+            "aliases": [],
+            "location_text": "一楼",
+            "building_or_floor": "一楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://www7.zzu.edu.cn/hqbzzx/info/1275/1505.htm",
+            "source_title": "郑州大学官方校园餐饮资料",
+            "source_org": "郑州大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：历史A级官方证据快照；校区与餐饮来源当前均返回2xx；已剔除异地校区和不明确楼层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "主校区",
+            "name": "聚英园餐厅",
+            "aliases": [],
+            "location_text": "一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://www15.zzu.edu.cn/info/1217/78764.htm",
+            "source_title": "郑州大学官方校园餐饮资料",
+            "source_org": "郑州大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：校级后勤调研报道明确主校区聚英园一楼餐厅、二楼餐厅，非楼宇层数推断。",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "主校区",
+            "name": "秋穗园二楼餐厅",
+            "aliases": [],
+            "location_text": "二楼",
+            "building_or_floor": "二楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://www.zzu.edu.cn/info/1442/81739.htm",
+            "source_title": "郑州大学官方校园餐饮资料",
+            "source_org": "郑州大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：历史A级官方证据快照；校区与餐饮来源当前均返回2xx；已剔除异地校区和不明确楼层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "主校区",
+            "name": "秋穗园三楼餐厅",
+            "aliases": [],
+            "location_text": "三楼",
+            "building_or_floor": "三楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://www7.zzu.edu.cn/hqbzzx/info/1275/1505.htm",
+            "source_title": "郑州大学官方校园餐饮资料",
+            "source_org": "郑州大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：历史A级官方证据快照；校区与餐饮来源当前均返回2xx；已剔除异地校区和不明确楼层",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "主校区",
+            "name": "秋穗园一楼餐厅",
+            "aliases": [],
+            "location_text": "一楼",
+            "building_or_floor": "一楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://www7.zzu.edu.cn/hqbzzx/info/1275/1505.htm",
+            "source_title": "郑州大学官方校园餐饮资料",
+            "source_org": "郑州大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：历史A级官方证据快照；校区与餐饮来源当前均返回2xx；已剔除异地校区和不明确楼层",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "2026-08-12按高校官方来源复核；只发布明确到城市、校区、餐饮点及实际就餐楼层的记录"
+        ]
+      },
+      {
+        "school": "中山大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "广州校区北校园",
+            "aliases": [],
+            "address": "广东省广州市越秀区中山二路74号",
+            "source_url": "https://www.sysu.edu.cn/zdkd1/xysh.htm"
+          },
+          {
+            "name": "广州校区东校园",
+            "aliases": [],
+            "address": "广东省广州市番禺区广州大学城外环东路132号",
+            "source_url": "https://www.sysu.edu.cn/zdkd1/xysh.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "广州校区北校园",
+            "name": "杏林阁教工餐厅",
+            "aliases": [],
+            "location_text": "护理学院首层",
+            "building_or_floor": "护理学院首层",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://www.sysu.edu.cn/zdkd1/xysh.htm",
+            "source_title": "中山大学官方校园餐饮资料",
+            "source_org": "中山大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：复核仓库广州官方A级种子；核验状态：current_official；校区：广州校区北校园；餐饮点：杏林阁教工餐厅；楼层原文：护理学院首层；官方来源：https://www.sysu.edu.cn/zdkd1/xysh.htm",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "广州校区北校园",
+            "name": "学一食堂",
+            "aliases": [],
+            "location_text": "学生宿舍区综合楼一、二、三楼",
+            "building_or_floor": "学生宿舍区综合楼一、二、三楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://www.sysu.edu.cn/zdkd1/xysh.htm",
+            "source_title": "中山大学官方校园餐饮资料",
+            "source_org": "中山大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：复核仓库广州官方A级种子；核验状态：current_official；校区：广州校区北校园；餐饮点：学一食堂；楼层原文：学生宿舍区综合楼一、二、三楼；官方来源：https://www.sysu.edu.cn/zdkd1/xysh.htm",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "广州校区东校园",
+            "name": "学二食堂",
+            "aliases": [],
+            "location_text": "明德园 11 号楼二层",
+            "building_or_floor": "明德园 11 号楼二层",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://www.sysu.edu.cn/zdkd1/xysh.htm",
+            "source_title": "中山大学官方校园餐饮资料",
+            "source_org": "中山大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：复核仓库广州官方A级种子；核验状态：current_official；校区：广州校区东校园；餐饮点：学二食堂；楼层原文：明德园 11 号楼二层；官方来源：https://www.sysu.edu.cn/zdkd1/xysh.htm",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "广州校区东校园",
+            "name": "学三食堂",
+            "aliases": [],
+            "location_text": "至善园 11 号楼首层",
+            "building_or_floor": "至善园 11 号楼首层",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://www.sysu.edu.cn/zdkd1/xysh.htm",
+            "source_title": "中山大学官方校园餐饮资料",
+            "source_org": "中山大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：复核仓库广州官方A级种子；核验状态：current_official；校区：广州校区东校园；餐饮点：学三食堂；楼层原文：至善园 11 号楼首层；官方来源：https://www.sysu.edu.cn/zdkd1/xysh.htm",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "广州校区东校园",
+            "name": "学四食堂",
+            "aliases": [],
+            "location_text": "至善园 11 号楼二层",
+            "building_or_floor": "至善园 11 号楼二层",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://www.sysu.edu.cn/zdkd1/xysh.htm",
+            "source_title": "中山大学官方校园餐饮资料",
+            "source_org": "中山大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：复核仓库广州官方A级种子；核验状态：current_official；校区：广州校区东校园；餐饮点：学四食堂；楼层原文：至善园 11 号楼二层；官方来源：https://www.sysu.edu.cn/zdkd1/xysh.htm",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "广州校区东校园",
+            "name": "学一食堂",
+            "aliases": [],
+            "location_text": "明德园 11 号楼首层",
+            "building_or_floor": "明德园 11 号楼首层",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://www.sysu.edu.cn/zdkd1/xysh.htm",
+            "source_title": "中山大学官方校园餐饮资料",
+            "source_org": "中山大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-12复核：复核仓库广州官方A级种子；核验状态：current_official；校区：广州校区东校园；餐饮点：学一食堂；楼层原文：明德园 11 号楼首层；官方来源：https://www.sysu.edu.cn/zdkd1/xysh.htm",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "2026-08-12按高校官方来源复核；只发布明确到城市、校区、餐饮点及实际就餐楼层的记录"
+        ]
+      }
+    ]
+  }
+]
