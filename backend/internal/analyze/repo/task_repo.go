@@ -18,6 +18,48 @@ type TaskRepo struct {
 	db *gorm.DB
 }
 
+// TaskHistorySummaryRow is the lightweight database projection used by the
+// analysis-history list. PostgreSQL extracts the required JSONB scalars, so the
+// complete payload/result documents are not transferred to or decoded by Go.
+type TaskHistorySummaryRow struct {
+	ID                       string     `gorm:"column:id"`
+	TaskType                 string     `gorm:"column:task_type"`
+	Status                   string     `gorm:"column:status"`
+	ImageURL                 *string    `gorm:"column:image_url"`
+	ImagePaths               []string   `gorm:"column:image_paths;serializer:json"`
+	TextInput                *string    `gorm:"column:text_input"`
+	IsViolated               bool       `gorm:"column:is_violated"`
+	ViolationReason          *string    `gorm:"column:violation_reason"`
+	CreatedAt                *time.Time `gorm:"column:created_at"`
+	UpdatedAt                *time.Time `gorm:"column:updated_at"`
+	CorrectionRootTaskID     string     `gorm:"column:correction_root_task_id"`
+	CorrectionSourceTaskID   string     `gorm:"column:correction_source_task_id"`
+	PayloadImageURL          string     `gorm:"column:payload_image_url"`
+	PayloadImageURLs         []string   `gorm:"column:payload_image_urls;serializer:json"`
+	PayloadText              string     `gorm:"column:payload_text"`
+	ExpiryRecognition        bool       `gorm:"column:expiry_recognition"`
+	Exercise                 bool       `gorm:"column:exercise"`
+	RedirectTaskID           string     `gorm:"column:redirect_task_id"`
+	ExecutionMode            string     `gorm:"column:execution_mode"`
+	SourceType               string     `gorm:"column:source_type"`
+	MealType                 string     `gorm:"column:meal_type"`
+	RecordedOn               string     `gorm:"column:recorded_on"`
+	HasResult                bool       `gorm:"column:has_result"`
+	FirstItemName            string     `gorm:"column:first_item_name"`
+	ItemCount                int        `gorm:"column:item_count"`
+	TotalCalories            float64    `gorm:"column:total_calories"`
+	RecognitionOutcome       string     `gorm:"column:recognition_outcome"`
+	NeedsEnergyNormalization bool       `gorm:"column:needs_energy_normalization"`
+}
+
+// TaskHistoryResultRow is fetched only for the small subset of legacy
+// ingredient-label tasks whose stored kJ values need the same normalization as
+// the full task endpoint. Normal history pages never transfer result JSONB.
+type TaskHistoryResultRow struct {
+	ID     string         `gorm:"column:id"`
+	Result map[string]any `gorm:"column:result;serializer:json"`
+}
+
 func NewTaskRepo(db *gorm.DB) *TaskRepo {
 	return &TaskRepo{db: db}
 }
@@ -340,6 +382,98 @@ func (r *TaskRepo) ListTasksByUserPage(ctx context.Context, userID, taskType, st
 	var tasks []domain.AnalysisTask
 	err := q.Find(&tasks).Error
 	return tasks, err
+}
+
+// ListTaskHistorySummaryRows returns only the scalar fields needed to build an
+// analysis-history page. JSONB operators extract small values in PostgreSQL, so
+// payload and result are not transferred to or decoded by the Go process.
+func (r *TaskRepo) ListTaskHistorySummaryRows(ctx context.Context, userID, status, search string, limit, offset int) ([]TaskHistorySummaryRow, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	q := applyAnalyzeHistoryTaskFilter(
+		r.db.WithContext(ctx).
+			Table("analysis_tasks").
+			Where("user_id = ?", userID),
+	).
+		Order("created_at DESC, id DESC").
+		Limit(limit).
+		Offset(offset)
+	if status != "" {
+		q = q.Where("status = ?", status)
+	}
+	if strings.TrimSpace(search) != "" {
+		q = q.Where("search_text ILIKE ?", "%"+strings.TrimSpace(search)+"%")
+	}
+
+	const projection = `
+		id,
+		task_type,
+		status,
+		image_url,
+		image_paths,
+		text_input,
+		is_violated,
+		violation_reason,
+		created_at,
+		updated_at,
+		COALESCE(payload->>'correction_root_task_id', '') AS correction_root_task_id,
+		COALESCE(payload->>'correction_source_task_id', '') AS correction_source_task_id,
+		COALESCE(payload->>'image_url', '') AS payload_image_url,
+		CASE WHEN jsonb_typeof(payload->'image_urls') = 'array' THEN payload->'image_urls' ELSE '[]'::jsonb END AS payload_image_urls,
+		COALESCE(payload->>'text', '') AS payload_text,
+		LOWER(COALESCE(payload->>'expiry_recognition', '')) IN ('true', '1') AS expiry_recognition,
+		LOWER(COALESCE(payload->>'exercise', '')) IN ('true', '1') AS exercise,
+		COALESCE(result->>'redirectTaskId', result->>'redirect_task_id', '') AS redirect_task_id,
+		COALESCE(payload->>'execution_mode', payload->>'executionMode', '') AS execution_mode,
+		COALESCE(payload->>'source_type', payload->>'sourceType', '') AS source_type,
+		COALESCE(payload->>'meal_type', payload->>'mealType', '') AS meal_type,
+		COALESCE(payload->>'date', payload->>'recorded_on', payload->>'recordedOn', '') AS recorded_on,
+		result IS NOT NULL AND result <> 'null'::jsonb AS has_result,
+		COALESCE(result#>>'{items,0,name}', '') AS first_item_name,
+		CASE WHEN jsonb_typeof(result->'items') = 'array' THEN jsonb_array_length(result->'items') ELSE 0 END AS item_count,
+		COALESCE((
+			SELECT SUM(CASE
+				WHEN jsonb_typeof(item->'nutrients'->'calories') = 'number'
+				THEN (item->'nutrients'->>'calories')::double precision
+				ELSE 0
+			END)
+			FROM jsonb_array_elements(
+				CASE WHEN jsonb_typeof(result->'items') = 'array' THEN result->'items' ELSE '[]'::jsonb END
+			) AS item
+		), 0) AS total_calories,
+		COALESCE(result->>'recognitionOutcome', result->>'recognition_outcome', '') AS recognition_outcome,
+		EXISTS (
+			SELECT 1
+			FROM jsonb_array_elements(
+				CASE WHEN jsonb_typeof(result->'items') = 'array' THEN result->'items' ELSE '[]'::jsonb END
+			) AS normalization_item
+			WHERE BTRIM(COALESCE(normalization_item->>'nutrition_source', '')) = 'ingredient_label'
+				OR BTRIM(COALESCE(normalization_item->>'resolve_status', '')) = 'ingredient_label'
+		) AS needs_energy_normalization`
+
+	var rows []TaskHistorySummaryRow
+	err := q.Select(projection).Scan(&rows).Error
+	return rows, err
+}
+
+// ListTaskHistoryResultsByIDs reads full results only for explicitly selected
+// legacy rows that require ingredient-label energy normalization.
+func (r *TaskRepo) ListTaskHistoryResultsByIDs(ctx context.Context, userID string, taskIDs []string) ([]TaskHistoryResultRow, error) {
+	if len(taskIDs) == 0 {
+		return nil, nil
+	}
+	var rows []TaskHistoryResultRow
+	err := r.db.WithContext(ctx).
+		Table("analysis_tasks").
+		Select("id, result").
+		Where("user_id = ?", userID).
+		Where("id IN ?", taskIDs).
+		Scan(&rows).Error
+	return rows, err
 }
 
 func (r *TaskRepo) CountTasksByUser(ctx context.Context, userID string) (int64, error) {

@@ -47,6 +47,10 @@ type paginatedTaskService interface {
 	ListTasksPage(ctx context.Context, userID, taskType, status, search string, limit, offset int) (service.TaskListPage, error)
 }
 
+type summaryPaginatedTaskService interface {
+	ListTaskSummariesPage(ctx context.Context, userID, status, search string, limit, offset int) (service.TaskSummaryListPage, error)
+}
+
 type AnalyzeHandler struct {
 	analyzeSvc AnalyzeService
 	taskSvc    TaskService
@@ -329,6 +333,7 @@ func (h *AnalyzeHandler) ListTasks(c *gin.Context) {
 	taskType := c.Query("task_type")
 	status := c.Query("status")
 	search := c.Query("search")
+	summaryMode := strings.TrimSpace(c.Query("summary")) == "1"
 	limit, _ := strconv.Atoi(c.Query("limit"))
 	if limit <= 0 {
 		limit = 50
@@ -355,10 +360,33 @@ func (h *AnalyzeHandler) ListTasks(c *gin.Context) {
 		slog.Int("limit", limit),
 		slog.Int("offset", offset),
 		slog.Bool("has_search", strings.TrimSpace(search) != ""),
+		slog.Bool("summary", summaryMode),
 	)
 
 	var page service.TaskListPage
 	var err error
+	if summaryMode && strings.TrimSpace(taskType) == "" {
+		if summaryPaginated, ok := h.taskSvc.(summaryPaginatedTaskService); ok {
+			summaryPage, summaryErr := summaryPaginated.ListTaskSummariesPage(c.Request.Context(), userID, status, search, limit, offset)
+			if summaryErr != nil {
+				logger.Error(c.Request.Context(), "查询识别记录摘要失败", summaryErr,
+					slog.String("user_id", userID),
+					slog.Int("limit", limit),
+					slog.Int("offset", offset),
+				)
+				response.Error(c, summaryErr)
+				return
+			}
+			logger.Info(c.Request.Context(), "查询识别记录摘要完成",
+				slog.String("user_id", userID),
+				slog.Int("returned_count", len(summaryPage.Tasks)),
+				slog.Int("next_offset", summaryPage.NextOffset),
+				slog.Bool("has_more", summaryPage.HasMore),
+			)
+			response.Success(c, summaryPage)
+			return
+		}
+	}
 	if paginated, ok := h.taskSvc.(paginatedTaskService); ok {
 		page, err = paginated.ListTasksPage(c.Request.Context(), userID, taskType, status, search, limit, offset)
 	} else {
@@ -370,6 +398,7 @@ func (h *AnalyzeHandler) ListTasks(c *gin.Context) {
 			slog.String("user_id", userID),
 			slog.Int("limit", limit),
 			slog.Int("offset", offset),
+			slog.Bool("summary", summaryMode),
 		)
 		response.Error(c, err)
 		return
@@ -379,7 +408,12 @@ func (h *AnalyzeHandler) ListTasks(c *gin.Context) {
 		slog.Int("returned_count", len(page.Tasks)),
 		slog.Int("next_offset", page.NextOffset),
 		slog.Bool("has_more", page.HasMore),
+		slog.Bool("summary", summaryMode),
 	)
+	if summaryMode {
+		response.Success(c, service.SummarizeTaskListPage(page))
+		return
+	}
 	response.Success(c, page)
 }
 

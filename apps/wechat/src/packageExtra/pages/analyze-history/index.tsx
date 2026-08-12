@@ -3,19 +3,20 @@ import { withAuth } from '../../../utils/withAuth'
 import { useEffect, useState, useCallback, useRef } from 'react'
 import Taro, { useDidShow, useDidHide } from '@tarojs/taro'
 import {
-  listAnalyzeTasks,
+  listAnalyzeTaskSummaries,
   deleteAnalysisTask,
   createUserRecipe,
+  getAnalyzeTask,
   getAccessToken,
   getHealthProfile,
   saveFoodRecord,
   retryAnalyzeTask,
   showUnifiedApiError,
   type AnalysisTask,
+  type AnalyzeTaskSummary,
   type AnalyzeResponse,
   type DeleteTaskResult,
   type ExecutionMode,
-  type AnalyzeRecognitionOutcome,
   type MealType,
 } from '../../../utils/api'
 import './index.scss'
@@ -53,7 +54,7 @@ const STATUS_MAP: Record<string, string> = {
 const ANALYZE_HISTORY_PAGE_SIZE = 20
 
 /** 根据后端返回的 status + is_recorded 决定列表中展示的状态文案和样式类名 */
-const pickDisplayStatus = (task: AnalysisTask): { text: string; className: string } => {
+const pickDisplayStatus = (task: AnalyzeTaskSummary): { text: string; className: string } => {
   if (task.status === 'pending' || task.status === 'processing') {
     return { text: '正在识别', className: 'status-recognizing' }
   }
@@ -134,44 +135,35 @@ const getTaskTimeForMealType = (task: AnalysisTask): Date | null => {
   return null
 }
 
-const normalizeRecognitionOutcome = (value: unknown): AnalyzeRecognitionOutcome => (
-  value === 'soft_reject' || value === 'hard_reject' ? value : 'ok'
+const getSummaryTaskMealType = (task: AnalyzeTaskSummary): MealType | undefined => (
+  normalizeMealType(task.meal_type)
 )
 
-const RECOGNITION_OUTCOME_LABEL: Record<AnalyzeRecognitionOutcome, string> = {
-  ok: '精准通过',
-  soft_reject: '建议重拍',
-  hard_reject: '建议拆拍',
+const getSummaryTaskTimeForMealType = (task: AnalyzeTaskSummary): Date | null => {
+  const value = task.recorded_on || task.created_at
+  const parsed = value ? new Date(value) : null
+  return parsed instanceof Date && !Number.isNaN(parsed.getTime()) ? parsed : null
 }
 
-const pickRecognitionOutcome = (task: AnalysisTask): AnalyzeRecognitionOutcome => {
-  const result = task.result as AnalyzeResponse | undefined
-  return normalizeRecognitionOutcome(result?.recognitionOutcome)
+const normalizeExecutionMode = (value: unknown): ExecutionMode | undefined => {
+  if (value === 'fast') return 'fast'
+  if (value === 'fast_web_search') return 'fast_web_search'
+  if (value === 'standard_web_search') return 'standard_web_search'
+  if (value === 'standard_packaged_experiment') return 'standard_packaged_experiment'
+  if (value === 'strict_separate') return 'strict_separate'
+  if (value === 'strict_web_search') return 'strict_web_search'
+  if (value === 'strict' || value === 'gemini35_flash' || value === 'gemini35_flash_grouped') return 'strict'
+  if (value === 'standard') return 'standard'
+  return undefined
 }
 
-const pickExecutionMode = (task: AnalysisTask): ExecutionMode => {
-  const taskAny = task as AnalysisTask & { execution_mode?: unknown }
-  if (taskAny.execution_mode === 'fast') return 'fast'
-  if (taskAny.execution_mode === 'fast_web_search') return 'fast_web_search'
-  if (taskAny.execution_mode === 'standard_web_search') return 'standard_web_search'
-  if (taskAny.execution_mode === 'standard_packaged_experiment') return 'standard_packaged_experiment'
-  if (taskAny.execution_mode === 'strict_separate') return 'strict_separate'
-  if (taskAny.execution_mode === 'strict_web_search') return 'strict_web_search'
-  if (taskAny.execution_mode === 'strict' || taskAny.execution_mode === 'gemini35_flash' || taskAny.execution_mode === 'gemini35_flash_grouped') {
-    return 'strict'
-  }
-  if (taskAny.execution_mode === 'standard') {
-    return 'standard'
-  }
-  const payloadMode = (task.payload as Record<string, unknown> | undefined)?.execution_mode
-  if (payloadMode === 'fast') return 'fast'
-  if (payloadMode === 'fast_web_search') return 'fast_web_search'
-  if (payloadMode === 'standard_web_search') return 'standard_web_search'
-  if (payloadMode === 'standard_packaged_experiment') return 'standard_packaged_experiment'
-  if (payloadMode === 'strict_separate') return 'strict_separate'
-  if (payloadMode === 'strict_web_search') return 'strict_web_search'
-  if (payloadMode === 'strict' || payloadMode === 'gemini35_flash' || payloadMode === 'gemini35_flash_grouped') return 'strict'
-  return 'standard'
+const pickExecutionMode = (task: AnalysisTask | AnalyzeTaskSummary): ExecutionMode => {
+  const directMode = 'execution_mode' in task ? normalizeExecutionMode(task.execution_mode) : undefined
+  if (directMode) return directMode
+  const payloadMode = 'payload' in task
+    ? normalizeExecutionMode(task.payload?.execution_mode)
+    : undefined
+  return payloadMode || 'standard'
 }
 
 const pickTextAvatar = (text: string | null | undefined): string => {
@@ -185,22 +177,20 @@ const pickTextAvatar = (text: string | null | undefined): string => {
   return compact.slice(0, Math.min(4, compact.length))
 }
 
-const pickTaskHeadline = (task: AnalysisTask): string => {
+const pickTaskHeadline = (task: AnalyzeTaskSummary): string => {
   if (task.status === 'violated' || task.is_violated) return '内容未通过审核'
   const sourceType = pickSourceTaskType(task)
   if (sourceType === 'food_text') {
-    const text = String(task.text_input || '').trim()
+    const text = String(task.text_preview || '').trim()
     return text || '文字记录'
   }
-  const result = task.result as AnalyzeResponse | undefined
-  const firstItem = result?.items?.[0]?.name?.trim()
+  const firstItem = task.result_summary?.first_item_name?.trim()
   if (firstItem) return firstItem
   return task.status === 'done' ? '饮食分析结果' : '图片记录'
 }
 
-const pickTaskMeta = (task: AnalysisTask): string => {
+const pickTaskMeta = (task: AnalyzeTaskSummary): string => {
   const sourceType = pickSourceTaskType(task)
-  const result = task.result as AnalyzeResponse | undefined
   if (task.status === 'violated' || task.is_violated) {
     return task.violation_reason || '该记录因内容问题不可查看'
   }
@@ -208,19 +198,15 @@ const pickTaskMeta = (task: AnalysisTask): string => {
     return '识别没有成功 · 点击卡片可用原记录重新识别'
   }
   if (sourceType === 'food_text') {
-    const count = result?.items?.length || 0
+    const count = task.result_summary?.item_count || 0
     return count > 0 ? `文字记录 · 识别出 ${count} 项食物` : '文字记录'
   }
-  const count = result?.items?.length || 0
+  const count = task.result_summary?.item_count || 0
   return count > 0 ? `图片记录 · 识别出 ${count} 项食物` : '图片记录'
 }
 
 // 获取总热量
-const getTotalCalories = (task: AnalysisTask): number => {
-  if (!task.result) return 0
-  const result = task.result as AnalyzeResponse
-  return result.items?.reduce((sum, item) => sum + (item.nutrients?.calories || 0), 0) || 0
-}
+const getTotalCalories = (task: AnalyzeTaskSummary): number => Number(task.result_summary?.total_calories) || 0
 
 const normalizeNumber = (value: unknown): number => {
   const n = Number(value)
@@ -233,7 +219,10 @@ const buildDefaultRecipeName = (task: AnalysisTask): string => {
   if (firstName) return firstName
   const desc = result?.description?.trim()
   if (desc) return desc.slice(0, 20)
-  return pickTaskHeadline(task)
+  if (pickSourceTaskType(task) === 'food_text') {
+    return String(task.text_input || '').trim() || '文字记录'
+  }
+  return task.status === 'done' ? '饮食分析结果' : '图片记录'
 }
 
 const pickTaskImageUrls = (task: AnalysisTask): string[] => {
@@ -262,11 +251,12 @@ const buildTaskNutritionTotals = (items: ReturnType<typeof buildTaskFoodItems>) 
   )
 )
 
-const pickSourceTaskType = (task: AnalysisTask): 'food' | 'food_text' => {
+const pickSourceTaskType = (task: AnalysisTask | AnalyzeTaskSummary): 'food' | 'food_text' => {
   const tt = task.task_type || ''
   if (tt === 'food_text' || tt.startsWith('food_text')) return 'food_text'
-  const payload = task.payload as Record<string, unknown> | undefined
-  return payload?.source_type === 'text' ? 'food_text' : 'food'
+  if ('source_type' in task && task.source_type === 'text') return 'food_text'
+  const payloadSourceType = 'payload' in task ? task.payload?.source_type : undefined
+  return payloadSourceType === 'text' ? 'food_text' : 'food'
 }
 
 /** 识别历史页展示的任务类型（与后端 analysis_tasks.task_type 一致，含 debug 队列后缀） */
@@ -298,7 +288,7 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
   })
 }
 
-function mergeAnalyzeHistoryTasks(current: AnalysisTask[], incoming: AnalysisTask[]): AnalysisTask[] {
+function mergeAnalyzeHistoryTasks(current: AnalyzeTaskSummary[], incoming: AnalyzeTaskSummary[]): AnalyzeTaskSummary[] {
   const byGroup = new Map(current.map(task => [task.history_group_key || task.id, task]))
   incoming.forEach((task) => {
     const groupKey = task.history_group_key || task.id
@@ -338,20 +328,19 @@ function formatTime(iso: string): { text: string; isToday: boolean } {
 }
 
 interface TaskCardProps {
-  task: AnalysisTask
-  onTap: (task: AnalysisTask) => void
-  onMore: (task: AnalysisTask) => void
+  task: AnalyzeTaskSummary
+  onTap: (task: AnalyzeTaskSummary) => void
+  onMore: (task: AnalyzeTaskSummary) => void
 }
 
 function TaskCard({ task, onTap, onMore }: TaskCardProps) {
   const mode = pickExecutionMode(task)
-  const recognitionOutcome = pickRecognitionOutcome(task)
-  const canShare = task.status === 'done' && task.result // 只有完成的才能分享
   const totalCalories = getTotalCalories(task)
   const sourceType = pickSourceTaskType(task)
   const headline = pickTaskHeadline(task)
   const meta = pickTaskMeta(task)
-  const textAvatar = pickTextAvatar(task.text_input)
+  const textAvatar = pickTextAvatar(task.text_preview)
+  const thumbnailUrl = task.image_url || task.image_paths?.[0]
   const timeInfo = formatTime(task.created_at)
 
   const handleMore = (e: any) => {
@@ -370,8 +359,8 @@ function TaskCard({ task, onTap, onMore }: TaskCardProps) {
             <View className='thumb-violated'>
               <Text className='iconfont icon-jinggao' style={{ fontSize: '48rpx', color: '#e57373' }} />
             </View>
-          ) : task.image_url ? (
-            <Image src={task.image_url} mode='aspectFill' />
+          ) : thumbnailUrl ? (
+            <Image src={thumbnailUrl} mode='aspectFill' lazyLoad />
           ) : sourceType === 'food_text' ? (
             <View className='thumb-placeholder thumb-placeholder--text'>
               <Text className='text-avatar'>{textAvatar}</Text>
@@ -426,12 +415,12 @@ function TaskCard({ task, onTap, onMore }: TaskCardProps) {
 
 function AnalyzeHistoryPage() {
   const { scheme } = useAppColorScheme()
-  const [tasks, setTasks] = useState<AnalysisTask[]>([])
+  const [tasks, setTasks] = useState<AnalyzeTaskSummary[]>([])
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [hasMore, setHasMore] = useState(false)
   const [showActionSheet, setShowActionSheet] = useState(false)
-  const [activeTask, setActiveTask] = useState<AnalysisTask | null>(null)
+  const [activeTask, setActiveTask] = useState<AnalyzeTaskSummary | null>(null)
   const [quickRecordTask, setQuickRecordTask] = useState<AnalysisTask | null>(null)
   const [quickRecordMealType, setQuickRecordMealType] = useState<SelectableMealType>('afternoon_snack')
   const [mealProfile, setMealProfile] = useState<MealTypeFromProfileInput | null>(null)
@@ -445,6 +434,7 @@ function AnalyzeHistoryPage() {
   const hasMoreRef = useRef(false)
   const loadingMoreRef = useRef(false)
   const searchKeywordRef = useRef('')
+  const detailPendingRef = useRef(new Map<string, Promise<AnalysisTask>>())
   const navBarHeight = getNavBarHeight()
 
   const handleBack = useCallback(() => {
@@ -485,11 +475,48 @@ function AnalyzeHistoryPage() {
     void loadMealTypeProfile()
   }, [])
 
-  const getQuickRecordMealTypeByProfile = (task: AnalysisTask): SelectableMealType => {
+  const getSummaryQuickRecordMealTypeByProfile = (task: AnalyzeTaskSummary): SelectableMealType => {
+    const taskDate = getSummaryTaskTimeForMealType(task) || new Date()
+    const inferred = inferDefaultMealTypeFromHealthProfile(mealProfile || undefined, taskDate)
+    return normalizeSelectableMealType(getSummaryTaskMealType(task), inferred)
+  }
+
+  const getDetailQuickRecordMealTypeByProfile = (task: AnalysisTask): SelectableMealType => {
     const taskDate = getTaskTimeForMealType(task) || new Date()
     const inferred = inferDefaultMealTypeFromHealthProfile(mealProfile || undefined, taskDate)
     return normalizeSelectableMealType(getTaskMealType(task), inferred)
   }
+
+  const ensureTaskDetail = useCallback((taskId: string): Promise<AnalysisTask> => {
+    const existing = detailPendingRef.current.get(taskId)
+    if (existing) return existing
+
+    const request = getAnalyzeTask(taskId)
+      .then((task) => {
+        if (!task || task.id !== taskId) throw new Error('服务器返回了错误的任务详情')
+        return task
+      })
+      .finally(() => {
+        if (detailPendingRef.current.get(taskId) === request) {
+          detailPendingRef.current.delete(taskId)
+        }
+      })
+    detailPendingRef.current.set(taskId, request)
+    return request
+  }, [])
+
+  const loadTaskDetail = useCallback(async (taskId: string): Promise<AnalysisTask | null> => {
+    try {
+      Taro.showLoading({ title: '', mask: true })
+      const task = await ensureTaskDetail(taskId)
+      Taro.hideLoading()
+      return task
+    } catch (error) {
+      Taro.hideLoading()
+      await showUnifiedApiError(error, '加载任务失败')
+      return null
+    }
+  }, [ensureTaskDetail])
 
   const load = useCallback(async (keyword?: string, append = false) => {
     if (append && (!hasMoreRef.current || loadingMoreRef.current)) return
@@ -509,15 +536,10 @@ function AnalyzeHistoryPage() {
     try {
       const search = keyword?.trim()
       const res = await withTimeout(
-        listAnalyzeTasks({ limit: ANALYZE_HISTORY_PAGE_SIZE, offset, search }),
+        listAnalyzeTaskSummaries({ limit: ANALYZE_HISTORY_PAGE_SIZE, offset, search }),
         22000
       )
-      const pageTasks = (res.tasks || []).filter((t) => {
-        const payload = (t.payload || {}) as Record<string, unknown>
-        if (payload.expiry_recognition) return false
-        if (payload.exercise) return false // 排除运动回退任务（payload.exercise=true）
-        return isAnalyzeHistoryTaskType(t.task_type)
-      })
+      const pageTasks = (res.tasks || []).filter((t) => isAnalyzeHistoryTaskType(t.task_type))
       pageTasks.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
       if (seq !== loadSeqRef.current) return
       setTasks(current => append ? mergeAnalyzeHistoryTasks(current, pageTasks) : pageTasks)
@@ -672,7 +694,7 @@ function AnalyzeHistoryPage() {
     }
   }
 
-  const handleMore = (task: AnalysisTask) => {
+  const handleMore = (task: AnalyzeTaskSummary) => {
     setActiveTask(task)
     setShowActionSheet(true)
   }
@@ -684,12 +706,17 @@ function AnalyzeHistoryPage() {
 
   const actionSheetShare = () => {
     if (!activeTask) return
-    if (activeTask.status === 'done' && activeTask.result) {
-      handleShare(activeTask)
-    } else {
-      Taro.showToast({ title: '只能分享已完成的任务', icon: 'none' })
-    }
+    const summary = activeTask
     closeActionSheet()
+    if (summary.status !== 'done' || !summary.has_result) {
+      Taro.showToast({ title: '只能分享已完成的任务', icon: 'none' })
+      return
+    }
+    void (async () => {
+      const task = await loadTaskDetail(summary.id)
+      if (!task) return
+      handleShare(task)
+    })()
   }
 
   const actionSheetRetry = () => {
@@ -699,7 +726,7 @@ function AnalyzeHistoryPage() {
     confirmRetryTask(task)
   }
 
-  const submitRetryTask = useCallback(async (task: AnalysisTask) => {
+  const submitRetryTask = useCallback(async (task: AnalysisTask | AnalyzeTaskSummary) => {
     if (task.status !== 'failed' && task.status !== 'timed_out') {
       Taro.showToast({ title: '当前任务不能重新识别', icon: 'none' })
       return
@@ -719,7 +746,7 @@ function AnalyzeHistoryPage() {
     }
   }, [load])
 
-  const confirmRetryTask = useCallback((task: AnalysisTask) => {
+  const confirmRetryTask = useCallback((task: AnalysisTask | AnalyzeTaskSummary) => {
     Taro.showModal({
       title: '重新识别',
       content: pickSourceTaskType(task) === 'food_text'
@@ -737,10 +764,10 @@ function AnalyzeHistoryPage() {
 
   const actionSheetSaveRecipe = () => {
     if (!activeTask) return
-    const task = activeTask
+    const summary = activeTask
     closeActionSheet()
 
-    if (task.status !== 'done' || !task.result) {
+    if (summary.status !== 'done' || !summary.has_result) {
       Taro.showToast({ title: '只能收藏已完成的任务', icon: 'none' })
       return
     }
@@ -749,10 +776,18 @@ function AnalyzeHistoryPage() {
       return
     }
 
-    const defaultName = buildDefaultRecipeName(task)
-    setRecipeModalTask(task)
-    setRecipeNameInput(defaultName)
-    setShowRecipeModal(true)
+    void (async () => {
+      const task = await loadTaskDetail(summary.id)
+      if (!task) return
+      if (task.status !== 'done' || !task.result) {
+        Taro.showToast({ title: '任务尚未完成，请刷新后重试', icon: 'none' })
+        return
+      }
+      const defaultName = buildDefaultRecipeName(task)
+      setRecipeModalTask(task)
+      setRecipeNameInput(defaultName)
+      setShowRecipeModal(true)
+    })()
   }
 
   const closeRecipeModal = () => {
@@ -817,14 +852,14 @@ function AnalyzeHistoryPage() {
 
   const actionSheetQuickRecord = () => {
     if (!activeTask) return
-    const task = activeTask
+    const summary = activeTask
     closeActionSheet()
 
-    if (task.status !== 'done' || !task.result) {
+    if (summary.status !== 'done' || !summary.has_result) {
       Taro.showToast({ title: '只能记录已完成的任务', icon: 'none' })
       return
     }
-    if (task.is_recorded) {
+    if (summary.is_recorded) {
       Taro.showToast({ title: '该餐已记录', icon: 'none' })
       return
     }
@@ -833,14 +868,26 @@ function AnalyzeHistoryPage() {
       return
     }
 
-    const result = task.result as AnalyzeResponse
-    const items = buildTaskFoodItems(result)
-    if (items.length === 0) {
-      Taro.showToast({ title: '没有可记录的食物', icon: 'none' })
-      return
-    }
-    setQuickRecordTask(task)
-    setQuickRecordMealType(getQuickRecordMealTypeByProfile(task))
+    void (async () => {
+      const task = await loadTaskDetail(summary.id)
+      if (!task) return
+      if (task.status !== 'done' || !task.result) {
+        Taro.showToast({ title: '任务尚未完成，请刷新后重试', icon: 'none' })
+        return
+      }
+      if (task.is_recorded) {
+        Taro.showToast({ title: '该餐已记录', icon: 'none' })
+        return
+      }
+      const result = task.result as AnalyzeResponse
+      const items = buildTaskFoodItems(result)
+      if (items.length === 0) {
+        Taro.showToast({ title: '没有可记录的食物', icon: 'none' })
+        return
+      }
+      setQuickRecordTask(task)
+      setQuickRecordMealType(getDetailQuickRecordMealTypeByProfile(task))
+    })()
   }
 
   const closeQuickRecordMealSelector = () => {
@@ -939,7 +986,7 @@ function AnalyzeHistoryPage() {
     })
   }
 
-  const onTaskTap = (task: AnalysisTask) => {
+  const openTaskDetail = (task: AnalysisTask) => {
     // 违规任务不允许查看详情
     if (task.status === 'violated' || task.is_violated) {
       Taro.showModal({
@@ -1028,6 +1075,33 @@ function AnalyzeHistoryPage() {
     }
   }
 
+  const onTaskTap = (task: AnalyzeTaskSummary) => {
+    if (task.status === 'violated' || task.is_violated) {
+      Taro.showModal({
+        title: '内容违规',
+        content: task.violation_reason || '该任务因内容违规被拦截，无法查看详情',
+        showCancel: false,
+        confirmText: '我知道了'
+      })
+      return
+    }
+    if (task.status === 'failed' || task.status === 'timed_out') {
+      confirmRetryTask(task)
+      return
+    }
+    if (task.status === 'done' && !task.has_result) {
+      Taro.showToast({ title: '任务结果暂不可用，请刷新后重试', icon: 'none' })
+      return
+    }
+    if (task.status === 'done' || task.status === 'pending' || task.status === 'processing') {
+      void (async () => {
+        const detail = await loadTaskDetail(task.id)
+        if (!detail) return
+        openTaskDetail(detail)
+      })()
+    }
+  }
+
   return (
     <View className={`analyze-history-page ${scheme === 'dark' ? 'analyze-history-page--dark' : ''}`}>
       <CustomNavBar
@@ -1103,12 +1177,12 @@ function AnalyzeHistoryPage() {
           <View className='action-sheet-content'>
             <View className='action-sheet-actions'>
               <View
-                className={`action-sheet-item ${activeTask.status === 'done' && activeTask.result && !activeTask.is_recorded ? '' : 'action-sheet-item--disabled'}`}
+                className={`action-sheet-item ${activeTask.status === 'done' && activeTask.has_result && !activeTask.is_recorded ? '' : 'action-sheet-item--disabled'}`}
                 onClick={actionSheetQuickRecord}
               >
                 <Text className='iconfont icon-canciguanli action-sheet-icon action-sheet-icon--record' />
                 <Text className='action-sheet-label'>
-                  {`快速记录到${MEAL_TYPE_LABELS[getQuickRecordMealTypeByProfile(activeTask)] || '餐食'}`}
+                  {`快速记录到${MEAL_TYPE_LABELS[getSummaryQuickRecordMealTypeByProfile(activeTask)] || '餐食'}`}
                 </Text>
               </View>
               <View className='action-sheet-divider' />
@@ -1121,7 +1195,7 @@ function AnalyzeHistoryPage() {
               </View>
               <View className='action-sheet-divider' />
               <View
-                className={`action-sheet-item ${activeTask.status === 'done' && activeTask.result ? '' : 'action-sheet-item--disabled'}`}
+                className={`action-sheet-item ${activeTask.status === 'done' && activeTask.has_result ? '' : 'action-sheet-item--disabled'}`}
                 onClick={actionSheetSaveRecipe}
               >
                 <Text className='iconfont icon-collection_fill action-sheet-icon action-sheet-icon--favorite' />
@@ -1129,7 +1203,7 @@ function AnalyzeHistoryPage() {
               </View>
               <View className='action-sheet-divider' />
               <View
-                className={`action-sheet-item ${activeTask.status === 'done' && activeTask.result ? '' : 'action-sheet-item--disabled'}`}
+                className={`action-sheet-item ${activeTask.status === 'done' && activeTask.has_result ? '' : 'action-sheet-item--disabled'}`}
                 onClick={actionSheetShare}
               >
                 <Text className='iconfont icon-shiwu action-sheet-icon action-sheet-icon--library' />

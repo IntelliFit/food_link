@@ -2950,6 +2950,42 @@ export interface AnalysisTask {
   updated_at: string
 }
 
+export interface AnalyzeTaskResultSummary {
+  first_item_name?: string
+  item_count: number
+  total_calories: number
+  recognition_outcome?: string
+}
+
+/**
+ * 识别记录列表使用的轻量任务结构。
+ *
+ * 列表接口不会返回 payload/result 等大字段；需要完整内容的交互应再调用
+ * getAnalyzeTask。字段保持可选以兼容 summary=1 上线前忽略该参数、仍返回
+ * AnalysisTask 的旧后端。
+ */
+export interface AnalyzeTaskSummary {
+  id: string
+  task_type: string
+  status: AnalysisTask['status']
+  image_url?: string | null
+  image_paths?: string[] | null
+  text_preview?: string
+  is_violated?: boolean
+  violation_reason?: string | null
+  is_recorded: boolean
+  record_id?: string
+  history_group_key?: string
+  has_result: boolean
+  execution_mode?: string
+  source_type?: string
+  meal_type?: string
+  recorded_on?: string
+  result_summary?: AnalyzeTaskResultSummary | null
+  created_at: string
+  updated_at?: string
+}
+
 export interface GooseDuckChickenClassifyResult {
   species: 'goose' | 'duck' | 'chicken' | 'unknown'
   label: string
@@ -3196,21 +3232,147 @@ export interface AnalyzeTaskListResponse {
   next_offset?: number
 }
 
-/** 查询当前用户的分析任务列表 */
-export async function listAnalyzeTasks(params?: { task_type?: string; status?: string; search?: string; limit?: number; offset?: number }): Promise<AnalyzeTaskListResponse> {
+export interface AnalyzeTaskSummaryListResponse {
+  tasks: AnalyzeTaskSummary[]
+  has_more?: boolean
+  next_offset?: number
+}
+
+export interface AnalyzeTaskListParams {
+  task_type?: string
+  status?: string
+  search?: string
+  limit?: number
+  offset?: number
+}
+
+function buildAnalyzeTaskListQuery(params?: AnalyzeTaskListParams, summary = false): string {
   const q = new URLSearchParams()
   if (params?.task_type) q.set('task_type', params.task_type)
   if (params?.status) q.set('status', params.status)
   if (params?.search?.trim()) q.set('search', params.search.trim())
   if (params?.limit != null && Number.isFinite(params.limit)) q.set('limit', String(Math.min(200, Math.max(1, Math.floor(params.limit)))))
   if (params?.offset != null && Number.isFinite(params.offset)) q.set('offset', String(Math.max(0, Math.floor(params.offset))))
-  const url = `/api/analyze/tasks${q.toString() ? '?' + q.toString() : ''}`
+  if (summary) q.set('summary', '1')
+  return q.toString()
+}
+
+function normalizeAnalyzeTaskTextPreview(value: unknown): string {
+  const normalized = String(value || '').replace(/\s+/g, ' ').trim()
+  const characters = Array.from(normalized)
+  return characters.length > 80 ? `${characters.slice(0, 80).join('')}…` : normalized
+}
+
+function readAnalyzeTaskString(values: Record<string, unknown> | undefined, ...keys: string[]): string {
+  for (const key of keys) {
+    const value = values?.[key]
+    if (typeof value === 'string' && value.trim()) return value.trim()
+  }
+  return ''
+}
+
+function isFullAnalysisTask(task: AnalysisTask | AnalyzeTaskSummary): task is AnalysisTask {
+  return 'user_id' in task
+}
+
+function summarizeFullAnalysisTask(task: AnalysisTask): AnalyzeTaskSummary {
+  const payload = task.payload || {}
+  const result = task.result && typeof task.result === 'object'
+    ? task.result as Partial<AnalyzeResponse>
+    : undefined
+  const items = Array.isArray(result?.items) ? result.items : []
+  const resultSummary = result
+    ? {
+        first_item_name: String(items[0]?.name || '').trim() || undefined,
+        item_count: items.length,
+        total_calories: items.reduce((sum, item) => sum + (Number(item?.nutrients?.calories) || 0), 0),
+        recognition_outcome: String(result.recognitionOutcome || '').trim() || undefined,
+      }
+    : undefined
+  const payloadSourceType = readAnalyzeTaskString(payload, 'source_type', 'sourceType')
+
+  return {
+    id: task.id,
+    task_type: task.task_type,
+    status: task.status,
+    image_url: task.image_url,
+    image_paths: task.image_paths,
+    text_preview: normalizeAnalyzeTaskTextPreview(task.text_input),
+    is_violated: task.is_violated,
+    violation_reason: task.violation_reason,
+    is_recorded: task.is_recorded === true,
+    record_id: task.record_id,
+    history_group_key: task.history_group_key,
+    has_result: Boolean(task.result),
+    execution_mode: readAnalyzeTaskString(payload, 'execution_mode', 'executionMode') || undefined,
+    source_type: payloadSourceType || (task.task_type.startsWith('food_text') ? 'text' : 'image'),
+    meal_type: readAnalyzeTaskString(payload, 'meal_type', 'mealType') || undefined,
+    recorded_on: readAnalyzeTaskString(payload, 'date', 'recorded_on', 'recordedOn') || undefined,
+    result_summary: resultSummary,
+    created_at: task.created_at,
+    updated_at: task.updated_at,
+  }
+}
+
+function normalizeAnalyzeTaskSummary(task: AnalysisTask | AnalyzeTaskSummary): AnalyzeTaskSummary {
+  if (isFullAnalysisTask(task)) return summarizeFullAnalysisTask(task)
+
+  const resultSummary = task.result_summary
+    ? {
+        first_item_name: String(task.result_summary.first_item_name || '').trim() || undefined,
+        item_count: Number(task.result_summary.item_count) || 0,
+        total_calories: Number(task.result_summary.total_calories) || 0,
+        recognition_outcome: String(task.result_summary.recognition_outcome || '').trim() || undefined,
+      }
+    : undefined
+
+  return {
+    ...task,
+    image_paths: Array.isArray(task.image_paths) ? task.image_paths : undefined,
+    text_preview: normalizeAnalyzeTaskTextPreview(task.text_preview),
+    is_recorded: task.is_recorded === true,
+    has_result: task.has_result === true,
+    result_summary: resultSummary,
+    created_at: String(task.created_at || task.updated_at || ''),
+  }
+}
+
+/** 查询当前用户的分析任务列表 */
+export async function listAnalyzeTasks(params?: AnalyzeTaskListParams): Promise<AnalyzeTaskListResponse> {
+  const query = buildAnalyzeTaskListQuery(params)
+  const url = `/api/analyze/tasks${query ? '?' + query : ''}`
   const res = await authenticatedRequest(url, { method: 'GET', timeout: 20000 })
   if (res.statusCode !== 200) {
     const msg = (res.data as any)?.detail || '获取任务列表失败'
     throw new Error(msg)
   }
   return res.data as AnalyzeTaskListResponse
+}
+
+/**
+ * 查询识别记录轻量摘要。
+ *
+ * 旧后端若忽略 summary=1 并返回完整 AnalysisTask，客户端会在内存中归一化
+ * 为相同摘要结构，确保后端与小程序可以独立灰度发布。
+ */
+export async function listAnalyzeTaskSummaries(params?: AnalyzeTaskListParams): Promise<AnalyzeTaskSummaryListResponse> {
+  const query = buildAnalyzeTaskListQuery(params, true)
+  const url = `/api/analyze/tasks${query ? '?' + query : ''}`
+  const res = await authenticatedRequest(url, { method: 'GET', timeout: 20000 })
+  if (res.statusCode !== 200) {
+    const msg = (res.data as any)?.detail || '获取任务列表失败'
+    throw new Error(msg)
+  }
+  const data = res.data as {
+    tasks?: Array<AnalysisTask | AnalyzeTaskSummary>
+    has_more?: boolean
+    next_offset?: number
+  }
+  return {
+    tasks: (data.tasks || []).map(normalizeAnalyzeTaskSummary),
+    has_more: data.has_more,
+    next_offset: data.next_offset,
+  }
 }
 
 /**
