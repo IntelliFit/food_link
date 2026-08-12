@@ -309,6 +309,11 @@ function InviteFriendsPage() {
         </View>
       </View>
 
+      <View className='invite-credit-notice'>
+        <Text className='invite-credit-notice__icon'>✓</Text>
+        <Text className='invite-credit-notice__text'>邀请、分享和领取会员奖励，全程不消耗积分</Text>
+      </View>
+
       <View className='invite-card inviter-card'>
         <View className='inviter-card__main'>
           {inviterAvatar ? (

@@ -292,7 +292,8 @@ function ProfilePage() {
       id: 11,
       iconClass: 'icon-duoren',
       title: '邀请好友得会员',
-      desc: '好友有效使用 2 天，你得 7 天、好友得 3 天会员',
+      desc: '全程不消耗积分 · 好友有效使用 2 天，双方得会员',
+      hint: '不消耗积分',
       path: extraPkgUrl('/pages/invite-friends/index')
     },
     {
@@ -760,6 +761,9 @@ function ProfilePage() {
               <ProfileListIcon name={service.iconClass} />
             </View>
             <Text className='list-title'>{service.title}</Text>
+            {(service as any).hint && (
+              <Text className='list-hint'>{(service as any).hint}</Text>
+            )}
             {(service as any).badgeCount > 0 && (
               <View className='list-badge'>
                 <Text className='list-badge-text'>{(service as any).badgeCount}</Text>

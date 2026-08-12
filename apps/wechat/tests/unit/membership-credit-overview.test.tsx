@@ -100,6 +100,7 @@ describe('membership credit overview', () => {
     render(<ProfilePage />)
 
     const inviteEntry = await screen.findByText('邀请好友得会员')
+    expect(screen.getByText('不消耗积分')).toBeInTheDocument()
     fireEvent.click(inviteEntry.closest('.list-item') as HTMLElement)
     expect(Taro.navigateTo).toHaveBeenCalledWith({
       url: '/packageExtra/pages/invite-friends/index',
