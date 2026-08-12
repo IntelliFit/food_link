@@ -139,7 +139,9 @@ function PetChatPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([buildIntroMessage('你的宠物')])
   const streamingTextRef = useRef('')
   const isEmptyConversation = !lastAnalysis && !sessionID && messages.length === 1 && messages[0]?.kind === 'intro'
-  const latestMessageID = messages.length > 0 ? `pet-chat-message-${messages[messages.length - 1].id}` : ''
+  const latestMessage = messages[messages.length - 1]
+  const latestMessageToken = latestMessage?.id.replace(/[^a-zA-Z0-9_-]/g, '-') || 'empty'
+  const latestMessageID = `pet-chat-bottom-${latestMessageToken}-${latestMessage?.text.length || 0}`
 
   useDidShow(() => {
     applyThemeNavigationBar(scheme)
@@ -356,6 +358,7 @@ function PetChatPage() {
             </View>
           ))}
         </View>
+        <View id={latestMessageID} className='pet-chat-bottom-anchor' />
       </ScrollView>
 
       <View className='pet-chat-bottom-dock'>
