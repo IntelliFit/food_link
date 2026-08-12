@@ -332,21 +332,6 @@ function InviteFriendsPage() {
         </View>
       )}
 
-      <View className='invite-card rules-card'>
-        <View className='rule-item'>
-          <Text className='rule-item__index'>01</Text>
-          <Text className='rule-item__text'>必须是从未注册过食探的新用户</Text>
-        </View>
-        <View className='rule-item'>
-          <Text className='rule-item__index'>02</Text>
-          <Text className='rule-item__text'>注册后 7 天内完成 2 个自然日任意功能使用</Text>
-        </View>
-        <View className='rule-item'>
-          <Text className='rule-item__index'>03</Text>
-          <Text className='rule-item__text'>达标后邀请人得 7 天、新朋友得 3 天；奖励可留到以后手动启用，邀请人每月最多奖励 10 位好友</Text>
-        </View>
-      </View>
-
       {isInviteOwner && (
         <View className='invite-card invite-progress-card'>
           <View className='invite-section-head'>
@@ -428,6 +413,21 @@ function InviteFriendsPage() {
           )}
         </View>
       )}
+
+      <View className='invite-card rules-card'>
+        <View className='rule-item'>
+          <Text className='rule-item__index'>01</Text>
+          <Text className='rule-item__text'>必须是从未注册过食探的新用户</Text>
+        </View>
+        <View className='rule-item'>
+          <Text className='rule-item__index'>02</Text>
+          <Text className='rule-item__text'>注册后 7 天内完成 2 个自然日任意功能使用</Text>
+        </View>
+        <View className='rule-item'>
+          <Text className='rule-item__index'>03</Text>
+          <Text className='rule-item__text'>达标后邀请人得 7 天、新朋友得 3 天；奖励可留到以后手动启用，邀请人每月最多奖励 10 位好友</Text>
+        </View>
+      </View>
 
       <View className='invite-actions'>
         {isInviteOwner ? (

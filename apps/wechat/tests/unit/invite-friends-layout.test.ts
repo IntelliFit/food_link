@@ -7,14 +7,14 @@ const invitePageSource = readFileSync(
 )
 
 describe('invite friends layout', () => {
-  it('places membership rewards before rules and invite progress', () => {
+  it('places membership rewards second and the rules card after invite progress', () => {
     const rewardsIndex = invitePageSource.indexOf("className='invite-card invite-rewards-section'")
     const rulesIndex = invitePageSource.indexOf("className='invite-card rules-card'")
     const progressIndex = invitePageSource.indexOf("className='invite-card invite-progress-card'")
 
     expect(rewardsIndex).toBeGreaterThan(-1)
-    expect(rewardsIndex).toBeLessThan(rulesIndex)
-    expect(rulesIndex).toBeLessThan(progressIndex)
+    expect(rewardsIndex).toBeLessThan(progressIndex)
+    expect(progressIndex).toBeLessThan(rulesIndex)
   })
 
   it('does not render or load the QR image sharing card', () => {
