@@ -137,20 +137,9 @@
   font-weight: 800;
   color: #f4f7f5;
   letter-spacing: 4rpx;
-  margin-bottom: 16rpx;
   position: relative;
   z-index: 1;
   text-shadow: 0 10rpx 28rpx rgb(0 0 0 / 20%);
-}
-
-.hero-subtitle {
-  font-size: 25rpx;
-  color: rgb(236 243 239 / 72%);
-  line-height: 1.8;
-  position: relative;
-  z-index: 1;
-  max-width: 560rpx;
-  margin: 0 auto;
 }
 
 .hero-founder-badge {
@@ -660,53 +649,6 @@
   box-shadow: 0 4rpx 20rpx rgb(0 100 60 / 8%);
   border: 2rpx solid #d1fae5;
   border-left: 5rpx solid #00bc7d;
-}
-
-.virtual-payment-notice {
-  margin: 16rpx 32rpx 0;
-  padding: 20rpx 24rpx;
-  border: 2rpx solid #a7f3d0;
-  border-radius: 18rpx;
-  background: linear-gradient(135deg, #ecfdf5 0%, #f0fdfa 100%);
-  box-shadow: 0 4rpx 16rpx rgb(0 188 125 / 10%);
-}
-
-.virtual-payment-notice-head {
-  display: flex;
-  align-items: center;
-  gap: 12rpx;
-}
-
-.virtual-payment-notice-badge {
-  flex-shrink: 0;
-  padding: 4rpx 12rpx;
-  border-radius: 999rpx;
-  background: #d1fae5;
-  color: #047857;
-  font-size: 20rpx;
-  font-weight: 700;
-}
-
-.virtual-payment-notice-title {
-  color: #064e3b;
-  font-size: 26rpx;
-  font-weight: 800;
-}
-
-.virtual-payment-notice-channel {
-  display: block;
-  margin-top: 10rpx;
-  color: #065f46;
-  font-size: 23rpx;
-  line-height: 1.55;
-}
-
-.virtual-payment-notice-detail {
-  display: block;
-  margin-top: 2rpx;
-  color: #4b5563;
-  font-size: 21rpx;
-  line-height: 1.5;
 }
 
 .plan-card-left {
@@ -1389,29 +1331,6 @@
 
   .plan-card {
     border-left-color: #6ee7b7;
-  }
-
-  .virtual-payment-notice {
-    background: linear-gradient(135deg, rgb(6 95 70 / 22%) 0%, rgb(15 118 110 / 14%) 100%);
-    border-color: rgb(110 231 183 / 30%);
-    box-shadow: 0 10rpx 28rpx rgb(0 0 0 / 20%);
-  }
-
-  .virtual-payment-notice-badge {
-    background: rgb(52 211 153 / 16%);
-    color: #a7f3d0;
-  }
-
-  .virtual-payment-notice-title {
-    color: #d1fae5;
-  }
-
-  .virtual-payment-notice-channel {
-    color: #a7f3d0;
-  }
-
-  .virtual-payment-notice-detail {
-    color: #93a39b;
   }
 
   .plan-save-tag {
