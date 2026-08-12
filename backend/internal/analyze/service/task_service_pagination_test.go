@@ -10,8 +10,10 @@ import (
 )
 
 func TestCollectAnalyzeHistoryPageSkipsExcludedRowsAndFillsVisiblePage(t *testing.T) {
-	raw := make([]domain.AnalysisTask, 0, 205)
-	for index := 0; index < analyzeHistoryScanBatch; index++ {
+	const limit = 2
+	batchSize := limit + 1
+	raw := make([]domain.AnalysisTask, 0, batchSize+3)
+	for index := 0; index < batchSize; index++ {
 		raw = append(raw, historyTask(fmt.Sprintf("excluded-%03d", index), "health_report", nil))
 	}
 	raw = append(raw,
@@ -20,12 +22,54 @@ func TestCollectAnalyzeHistoryPageSkipsExcludedRowsAndFillsVisiblePage(t *testin
 		historyTask("visible-3", "food", nil),
 	)
 
-	tasks, hasMore, nextOffset, err := collectAnalyzeHistoryPage(0, 2, sliceHistoryFetcher(raw))
+	tasks, hasMore, nextOffset, err := collectAnalyzeHistoryPage(0, limit, sliceHistoryFetcher(raw))
 
 	require.NoError(t, err)
 	require.True(t, hasMore)
 	require.Equal(t, []string{"visible-1", "visible-2"}, historyTaskIDs(tasks))
-	require.Equal(t, analyzeHistoryScanBatch+2, nextOffset)
+	require.Equal(t, batchSize+2, nextOffset)
+}
+
+func TestCollectAnalyzeHistoryPageFetchesOnlyOneLookAheadRow(t *testing.T) {
+	raw := make([]domain.AnalysisTask, 0, 100)
+	for index := 0; index < 100; index++ {
+		raw = append(raw, historyTask(fmt.Sprintf("visible-%03d", index), "food", nil))
+	}
+
+	var requestedLimits []int
+	fetch := func(offset, limit int) ([]domain.AnalysisTask, error) {
+		requestedLimits = append(requestedLimits, limit)
+		return sliceHistoryFetcher(raw)(offset, limit)
+	}
+	tasks, hasMore, nextOffset, err := collectAnalyzeHistoryPage(0, 20, fetch)
+
+	require.NoError(t, err)
+	require.True(t, hasMore)
+	require.Len(t, tasks, 20)
+	require.Equal(t, 20, nextOffset)
+	require.Equal(t, []int{21}, requestedLimits)
+}
+
+func TestCollectAnalyzeHistoryPageNarrowsFollowUpBatchToMissingLookAhead(t *testing.T) {
+	raw := []domain.AnalysisTask{
+		historyTask("excluded", "health_report", nil),
+		historyTask("visible-1", "food", nil),
+		historyTask("visible-2", "food", nil),
+		historyTask("visible-3", "food", nil),
+	}
+
+	var requestedLimits []int
+	fetch := func(offset, limit int) ([]domain.AnalysisTask, error) {
+		requestedLimits = append(requestedLimits, limit)
+		return sliceHistoryFetcher(raw)(offset, limit)
+	}
+	tasks, hasMore, nextOffset, err := collectAnalyzeHistoryPage(0, 2, fetch)
+
+	require.NoError(t, err)
+	require.True(t, hasMore)
+	require.Equal(t, []string{"visible-1", "visible-2"}, historyTaskIDs(tasks))
+	require.Equal(t, 3, nextOffset)
+	require.Equal(t, []int{3, 1}, requestedLimits)
 }
 
 func TestCollectAnalyzeHistoryPageDoesNotSkipLookAheadTask(t *testing.T) {

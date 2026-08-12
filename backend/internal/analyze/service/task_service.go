@@ -36,7 +36,6 @@ type TaskService struct {
 const (
 	waitingRecordBadgeWindow = 24 * time.Hour
 	maxFoodAnalyzeImages     = 3
-	analyzeHistoryScanBatch  = 200
 )
 
 const experimentalExecutionMode = "experimental"
@@ -1373,7 +1372,11 @@ func collectAnalyzeHistoryPage(offset, limit int, fetch analyzeHistoryPageFetche
 	tasks := make([]domain.AnalysisTask, 0, limit)
 
 	for {
-		batch, err := fetch(cursor, analyzeHistoryScanBatch)
+		// Only ask for the visible rows still needed plus one look-ahead row.
+		// If exclusions or duplicate groups consume that batch, the next loop
+		// continues from the raw cursor without repeatedly over-reading a full page.
+		batchSize := limit - len(tasks) + 1
+		batch, err := fetch(cursor, batchSize)
 		if err != nil {
 			return nil, false, offset, err
 		}
@@ -1400,7 +1403,7 @@ func collectAnalyzeHistoryPage(offset, limit int, fetch analyzeHistoryPageFetche
 		}
 
 		cursor += len(batch)
-		if len(batch) < analyzeHistoryScanBatch {
+		if len(batch) < batchSize {
 			return tasks, false, cursor, nil
 		}
 	}
