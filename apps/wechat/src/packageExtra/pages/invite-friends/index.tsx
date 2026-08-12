@@ -8,8 +8,6 @@ import {
   getFriendInviteProfileByCode,
   getMyVouchers,
   getRewardCenter,
-  getShareQrEnvVersion,
-  getUnlimitedQRCode,
   showUnifiedApiError,
   useVoucher as activateReward,
   type FriendInviteProfile,
@@ -32,8 +30,6 @@ function InviteFriendsPage() {
   const [profile, setProfile] = useState<FriendInviteProfile | null>(null)
   const [inviteCode, setInviteCode] = useState(routeInviteCode)
   const [loading, setLoading] = useState(true)
-  const [qrLoading, setQrLoading] = useState(false)
-  const [qrCodeImage, setQrCodeImage] = useState('')
   const [accepting, setAccepting] = useState(false)
   const [rewardLoading, setRewardLoading] = useState(false)
   const [rewardSummary, setRewardSummary] = useState<InviteRewardCenterSummary | null>(null)
@@ -132,36 +128,6 @@ function InviteFriendsPage() {
     }
   }, [currentUserId, routeFromUserId, routeInviteCode])
 
-  useEffect(() => {
-    if (!inviteCode || !isInviteOwner || !getAccessToken()) {
-      setQrCodeImage('')
-      return
-    }
-
-    let cancelled = false
-
-    const loadQr = async () => {
-      setQrLoading(true)
-      const scene = `fi=${inviteCode}`
-
-      try {
-        try {
-          const { base64 } = await getUnlimitedQRCode(scene, 'pages/index/index', getShareQrEnvVersion())
-          if (!cancelled) setQrCodeImage(base64)
-        } catch (error) {
-          console.warn('[invite-friends] qr load failed env=release', error)
-        }
-      } finally {
-        if (!cancelled) setQrLoading(false)
-      }
-    }
-
-    void loadQr()
-    return () => {
-      cancelled = true
-    }
-  }, [inviteCode, isInviteOwner])
-
   const loadInviteRewards = useCallback(async () => {
     if (!isInviteOwner || !getAccessToken()) {
       setRewardSummary(null)
@@ -207,11 +173,6 @@ function InviteFriendsPage() {
     }
     await Taro.setClipboardData({ data: inviteCode })
     Taro.showToast({ title: '邀请码已复制', icon: 'success' })
-  }
-
-  const handlePreviewQr = () => {
-    if (!qrCodeImage) return
-    Taro.previewImage({ urls: [qrCodeImage], current: qrCodeImage })
   }
 
   const handleActivateMembershipReward = async (reward: VoucherItem) => {
@@ -324,7 +285,7 @@ function InviteFriendsPage() {
             </Text>
             <Text className='inviter-desc'>
               {isInviteOwner
-                ? '邀请码、分享链接和二维码都能绑定邀请关系'
+                ? '邀请码和分享链接都能绑定邀请关系'
                 : '完成注册后继续记录饮食或运动，满足规则即可获得会员奖励'}
             </Text>
           </View>
@@ -334,6 +295,42 @@ function InviteFriendsPage() {
           <Text className='invite-code-chip__value'>{inviteCode || '--'}</Text>
         </View>
       </View>
+
+      {isInviteOwner && (
+        <View className='invite-card invite-rewards-section'>
+          <View className='invite-section-head'>
+            <View>
+              <Text className='invite-section-title'>可启用的会员奖励</Text>
+              <Text className='invite-section-desc'>奖励不会自动计时，等需要时再启用</Text>
+            </View>
+          </View>
+          {rewardLoading ? (
+            <View className='invite-section-loading'><View className='invite-spinner' /></View>
+          ) : membershipRewards.length === 0 ? (
+            <View className='invite-reward-empty'>达标后的 3 天或 7 天会员奖励会保存在这里</View>
+          ) : (
+            <View className='invite-reward-list'>
+              {membershipRewards.map(reward => {
+                const activating = activatingRewardID === reward.id
+                return (
+                  <View className='invite-reward-row' key={reward.id}>
+                    <View className='invite-reward-row__main'>
+                      <Text className='invite-reward-row__title'>{reward.title}</Text>
+                      <Text className='invite-reward-row__desc'>{reward.description || '邀请达标会员奖励'}</Text>
+                    </View>
+                    <View
+                      className={`invite-reward-row__button ${activating ? 'invite-reward-row__button--loading' : ''}`}
+                      onClick={() => handleActivateMembershipReward(reward)}
+                    >
+                      {activating ? <View className='invite-reward-row__spinner' /> : <Text>现在启用</Text>}
+                    </View>
+                  </View>
+                )
+              })}
+            </View>
+          )}
+        </View>
+      )}
 
       <View className='invite-card rules-card'>
         <View className='rule-item'>
@@ -429,60 +426,6 @@ function InviteFriendsPage() {
               )}
             </>
           )}
-        </View>
-      )}
-
-      {isInviteOwner && (
-        <View className='invite-card invite-rewards-section'>
-          <View className='invite-section-head'>
-            <View>
-              <Text className='invite-section-title'>可启用的会员奖励</Text>
-              <Text className='invite-section-desc'>奖励不会自动计时，等需要时再启用</Text>
-            </View>
-          </View>
-          {rewardLoading ? (
-            <View className='invite-section-loading'><View className='invite-spinner' /></View>
-          ) : membershipRewards.length === 0 ? (
-            <View className='invite-reward-empty'>达标后的 3 天或 7 天会员奖励会保存在这里</View>
-          ) : (
-            <View className='invite-reward-list'>
-              {membershipRewards.map(reward => {
-                const activating = activatingRewardID === reward.id
-                return (
-                  <View className='invite-reward-row' key={reward.id}>
-                    <View className='invite-reward-row__main'>
-                      <Text className='invite-reward-row__title'>{reward.title}</Text>
-                      <Text className='invite-reward-row__desc'>{reward.description || '邀请达标会员奖励'}</Text>
-                    </View>
-                    <View
-                      className={`invite-reward-row__button ${activating ? 'invite-reward-row__button--loading' : ''}`}
-                      onClick={() => handleActivateMembershipReward(reward)}
-                    >
-                      {activating ? <View className='invite-reward-row__spinner' /> : <Text>现在启用</Text>}
-                    </View>
-                  </View>
-                )
-              })}
-            </View>
-          )}
-        </View>
-      )}
-
-      {isInviteOwner && (
-        <View className='invite-card qr-card'>
-          <View className='qr-card__head'>
-            <Text className='qr-card__title'>扫码也能加入</Text>
-            <Text className='qr-card__desc'>把这个二维码展示给朋友，或保存后发到群里</Text>
-          </View>
-          <View className='qr-box' onClick={handlePreviewQr}>
-            {qrLoading ? (
-              <View className='qr-box__loading' />
-            ) : qrCodeImage ? (
-              <Image className='qr-box__image' src={qrCodeImage} mode='aspectFit' />
-            ) : (
-              <Text className='qr-box__fallback'>二维码暂不可用</Text>
-            )}
-          </View>
         </View>
       )}
 
