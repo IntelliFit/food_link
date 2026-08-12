@@ -287,6 +287,7 @@ export default function ExpiryEditPage() {
     () => !isEdit && draftItems.length === 1 && draftItems[0]?.sourceType === 'manual',
     [draftItems, isEdit],
   )
+  const recognitionCreditCost = Math.max(imagePaths.length, 1) * 2
 
   useEffect(() => {
     Taro.setNavigationBarTitle({ title: pageTitle })
@@ -755,7 +756,7 @@ export default function ExpiryEditPage() {
                     <Text className='expiry-ai-desc'>支持一张图里识别多个食物，也支持多张图一起识别。AI 会先帮你填能看出来的信息，剩下的你再补。</Text>
                   </View>
                   <View className='expiry-ai-cost'>
-                    <Text>2 积分/次</Text>
+                    <Text>消耗 {recognitionCreditCost} 积分</Text>
                   </View>
                 </View>
 

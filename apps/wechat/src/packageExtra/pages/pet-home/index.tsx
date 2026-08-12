@@ -428,7 +428,7 @@ function PetHomePage() {
                 <Text className='pet-home-action-desc'>保留名字和等级，随机刷新体型、花纹与配饰</Text>
               </View>
               <View className='pet-home-action-side'>
-                <Text className='pet-home-action-cost'>{rerolling ? '处理中' : '5 积分'}</Text>
+                <Text className='pet-home-action-cost'>{rerolling ? '处理中' : '消耗 5 积分'}</Text>
                 <Text className='iconfont icon-right pet-home-action-arrow' />
               </View>
             </View>

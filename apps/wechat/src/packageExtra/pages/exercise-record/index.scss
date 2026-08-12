@@ -499,6 +499,14 @@ $border-color: #e5e7eb;
   font-weight: 800;
 }
 
+.exercise-compose-cost {
+  display: block;
+  margin-top: 8rpx;
+  font-size: 22rpx;
+  line-height: 1.4;
+  color: $text-secondary;
+}
+
 .exercise-trend-link {
   flex: 0 0 auto;
   padding: 14rpx 20rpx;

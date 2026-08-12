@@ -697,17 +697,6 @@
     white-space: nowrap;
   }
 
-  .list-hint {
-    flex-shrink: 0;
-    padding: 6rpx 12rpx;
-    border-radius: 999rpx;
-    font-size: 20rpx;
-    line-height: 1.4;
-    font-weight: 600;
-    color: #047857;
-    background: #ecfdf5;
-  }
-
   .list-badge {
     display: flex;
     align-items: center;
@@ -858,11 +847,6 @@
 
   .list-title {
     color: #f2f7f4;
-  }
-
-  .list-hint {
-    color: #6ee7b7;
-    background: rgba(16, 185, 129, 0.14);
   }
 
   .list-desc {

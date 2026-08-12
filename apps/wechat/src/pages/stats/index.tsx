@@ -1146,6 +1146,7 @@ function StatsPage() {
   const customRiskCards = healthIndex?.custom_risk_cards ?? []
   const allDisplayRiskCards = [...riskCards, ...customRiskCards]
   const customFocusMeta = healthIndex?.custom_focus_meta
+  const customFocusCost = customFocusMeta?.generate_cost ?? 1
   const allRiskOptions = (() => {
     const base = healthIndex?.all_risk_options ?? []
     const seen = new Set<string>()
@@ -1394,13 +1395,13 @@ function StatsPage() {
                   }}
                 >
                   <Text className='risk-custom-focus-add-btn-text'>
-                    {customFocusAdding ? '生成中…' : '添加关注'}
+                    {customFocusAdding ? '生成中…' : `添加 · ${customFocusCost} 积分`}
                   </Text>
                 </View>
               </View>
               {customFocusMeta ? (
                 <Text className='risk-custom-focus-meta'>
-                  AI 卡片每次消耗 {customFocusMeta.generate_cost} 积分，今日还可生成 {customFocusMeta.remaining_today} / {customFocusMeta.daily_limit} 次，最多 {customFocusMeta.max_focuses} 个自定义关注
+                  今日剩余 {customFocusMeta.remaining_today}/{customFocusMeta.daily_limit} 次 · 最多 {customFocusMeta.max_focuses} 个
                 </Text>
               ) : null}
               <View className='risk-picker-grid risk-picker-grid--modal'>
@@ -1498,7 +1499,7 @@ function StatsPage() {
                     }}
                   >
                     <Text className='risk-detail-refresh-text'>
-                      {customFocusRefreshingKey === riskDetailModal.card.key ? '更新中…' : '手动更新 AI 卡片'}
+                      {customFocusRefreshingKey === riskDetailModal.card.key ? '更新中…' : `更新 · ${customFocusCost} 积分`}
                     </Text>
                   </View>
                 ) : null}
@@ -1574,7 +1575,7 @@ function StatsPage() {
                       : `当前展示的是 ${insightGeneratedDate} 生成的缓存。`}
                   </Text>
                   <Text className='analysis-status-subtext'>
-                    深度解读每次消耗 1 积分，今日还可更新 {insightRemainingToday} / {insightDailyLimit} 次。
+                    今日剩余 {insightRemainingToday}/{insightDailyLimit} 次
                   </Text>
                 </View>
                 {canGenerateInsight ? (
@@ -1588,7 +1589,7 @@ function StatsPage() {
                     {insightActionLoading ? (
                       <Text className='iconfont icon-jiazaixiao analysis-status-action-icon' />
                     ) : (
-                      <Text className='analysis-status-action-text'>手动更新</Text>
+                      <Text className='analysis-status-action-text'>更新 · 1 积分</Text>
                     )}
                   </View>
                 ) : (

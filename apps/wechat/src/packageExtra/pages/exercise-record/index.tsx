@@ -531,6 +531,7 @@ export default function ExerciseRecordPage() {
           <View>
             <Text className='exercise-compose-kicker'>{recordDateLabel}</Text>
             <Text className='exercise-compose-title'>记录运动</Text>
+            <Text className='exercise-compose-cost'>消耗 1 积分</Text>
           </View>
           <View className='exercise-trend-link' onClick={openTrend}>
             <Text className='exercise-trend-link-text'>查看趋势</Text>

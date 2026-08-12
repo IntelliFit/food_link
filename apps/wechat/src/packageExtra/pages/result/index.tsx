@@ -48,6 +48,7 @@ import { formatDateKey } from '../../../pages/index/utils/helpers'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { returnHomeAfterFoodRecord } from '../../../utils/food-record-flow'
 import { getStoredRecordTargetDate, persistRecordTargetDate } from '../../../utils/record-date'
+import { getFoodCorrectionCreditCost } from '../../../utils/membership'
 import { buildFoodRecordItemPayloadFromResultItem } from '../../../utils/food-record-item-payload'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
@@ -591,6 +592,7 @@ function ResultPage() {
   /** 当前识别会话是否已保存为饮食记录（可跳转详情，不再重复写入/发动态） */
   const [committedRecordId, setCommittedRecordId] = useState<string | null>(null)
   const [executionMode, setExecutionMode] = useState<ExecutionMode>('standard')
+  const correctionCreditCost = getFoodCorrectionCreditCost(executionMode)
   const [recognitionOutcome, setRecognitionOutcome] = useState<AnalyzeRecognitionOutcome>('ok')
   const [rejectionReason, setRejectionReason] = useState<string | null>(null)
   const [retakeGuidance, setRetakeGuidance] = useState<string[]>([])
@@ -3388,7 +3390,7 @@ function ResultPage() {
               onClick={handleSubmitCorrection}
             >
               {isResubmitting ? <View className='btn-spinner' /> : <Text className='iconfont icon-loading'></Text>}
-              <Text>{isResubmitting ? '' : '重新智能分析'}</Text>
+              <Text>{isResubmitting ? '' : <>重新分析 · {correctionCreditCost} 积分</>}</Text>
             </View>
           </View>
         </View>

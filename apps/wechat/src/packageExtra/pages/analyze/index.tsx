@@ -1347,7 +1347,7 @@ function AnalyzePage() {
                 ? '积分不足，暂不可分析'
                 : imagePaths.length === 0
                   ? '请先拍照或选图'
-                  : `分析 ${imagePaths.length} 张图片`}
+                  : `分析 ${imagePaths.length} 张 · 消耗 ${creditCost} 积分`}
             </Text>
           )}
         </View>

@@ -573,6 +573,14 @@ page {
   }
 }
 
+.pet-chat-credit-cost {
+  align-self: flex-end;
+  padding: 0 8rpx;
+  font-size: 20rpx;
+  line-height: 28rpx;
+  color: #6f8178;
+}
+
 .pet-chat-history-panel {
   position: fixed;
   inset: 0;
@@ -770,6 +778,10 @@ page {
     background: rgba(24, 35, 31, 0.72);
     border-color: rgba(112, 196, 149, 0.14);
     color: rgba(154, 215, 188, 0.72);
+  }
+
+  .pet-chat-credit-cost {
+    color: rgba(154, 215, 188, 0.62);
   }
 
   .pet-chat-message-text,

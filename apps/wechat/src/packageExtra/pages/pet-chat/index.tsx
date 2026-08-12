@@ -6,6 +6,7 @@ import {
   getLatestPetChatSession,
   getPetSummary,
   getStatsSummary,
+  estimatePetChat,
   listPetChatSessions,
   showUnifiedApiError,
   streamGeneratePetChat,
@@ -46,6 +47,17 @@ function nextID(prefix: string): string {
 
 function rangeLabel(range: RangeMode): string {
   return range === 'month' ? '最近 30 天' : '最近 7 天'
+}
+
+function questionRange(question: string, fallback: RangeMode): RangeMode {
+  return /30|月|长期/.test(question) ? 'month' : fallback
+}
+
+function creditCostFromError(error: unknown): number | null {
+  const match = String((error as Error)?.message || error || '').match(/需要\s*(\d+)\s*积分/)
+  if (!match) return null
+  const cost = Number(match[1])
+  return Number.isFinite(cost) && cost > 0 ? cost : null
 }
 
 function buildIntroMessage(petName: string): ChatMessage {
@@ -127,7 +139,10 @@ function PetChatPage() {
   const [petSummary, setPetSummary] = useState<PetSummary | null>(null)
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
+  const [estimatedCredits, setEstimatedCredits] = useState<number | null>(null)
+  const [estimatingCredits, setEstimatingCredits] = useState(false)
   const busyRef = useRef(false)
+  const estimateRequestRef = useRef(0)
   const historyLoadedRef = useRef(false)
   const [activeRange, setActiveRange] = useState<RangeMode>('week')
   const [lastAnalysis, setLastAnalysis] = useState<ChatMessage | null>(null)
@@ -171,6 +186,36 @@ function PetChatPage() {
       return prev
     })
   }, [petName])
+
+  useEffect(() => {
+    const question = input.trim()
+    const requestID = estimateRequestRef.current + 1
+    estimateRequestRef.current = requestID
+    if (!question) {
+      setEstimatedCredits(null)
+      setEstimatingCredits(false)
+      return
+    }
+
+    setEstimatedCredits(null)
+    setEstimatingCredits(true)
+    const timer = setTimeout(() => {
+      void estimatePetChat(question, questionRange(question, activeRange))
+        .then((result) => {
+          if (estimateRequestRef.current !== requestID) return
+          setEstimatedCredits(result.pricing.credits_charged)
+        })
+        .catch((error) => {
+          if (estimateRequestRef.current !== requestID) return
+          setEstimatedCredits(creditCostFromError(error))
+        })
+        .finally(() => {
+          if (estimateRequestRef.current === requestID) setEstimatingCredits(false)
+        })
+    }, 350)
+
+    return () => clearTimeout(timer)
+  }, [activeRange, input])
 
   const appendMessage = useCallback((message: ChatMessage) => {
     setMessages((prev) => [...prev, message])
@@ -302,18 +347,15 @@ function PetChatPage() {
     })
   }, [appendMessage, petName, sessionID, summary, updateMessage])
 
-  const handleQuickQuestion = useCallback((text: string, range: RangeMode) => {
-    if (busy || busyRef.current) return
-    void runAnalysis(text, range)
-  }, [busy, runAnalysis])
-
   const handleSend = useCallback(() => {
     const text = input.trim()
-    if (!text || busy || busyRef.current) return
+    if (!text || busy || busyRef.current || estimatingCredits || estimatedCredits === null) return
     setInput('')
-    const range: RangeMode = /30|月|长期/.test(text) ? 'month' : activeRange
+    const range = questionRange(text, activeRange)
     void runAnalysis(text, range)
-  }, [activeRange, busy, input, runAnalysis])
+  }, [activeRange, busy, estimatedCredits, estimatingCredits, input, runAnalysis])
+
+  const canSend = Boolean(input.trim()) && !busy && !estimatingCredits && estimatedCredits !== null
 
   return (
     <View className={`pet-chat-page ${scheme === 'dark' ? 'pet-chat-page--dark' : ''}`}>
@@ -365,9 +407,7 @@ function PetChatPage() {
               <View
                 key={text}
                 className='pet-chat-quick-chip follow'
-                onClick={() => {
-                  handleQuickQuestion(text, activeRange)
-                }}
+                onClick={() => setInput(text)}
               >
                 <Text>{text}</Text>
               </View>
@@ -386,10 +426,15 @@ function PetChatPage() {
             onConfirm={handleSend}
             disabled={busy}
           />
-          <View className={`pet-chat-send ${busy || !input.trim() ? 'disabled' : ''}`} onClick={handleSend}>
+          <View className={`pet-chat-send ${canSend ? '' : 'disabled'}`} onClick={handleSend}>
             <Text>发送</Text>
           </View>
         </View>
+        {input.trim() ? (
+          <Text className='pet-chat-credit-cost'>
+            {estimatedCredits === null ? '预计消耗 -- 积分' : <>预计消耗 {estimatedCredits} 积分</>}
+          </Text>
+        ) : null}
       </View>
 
       {historyOpen ? (

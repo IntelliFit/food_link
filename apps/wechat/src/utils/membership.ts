@@ -26,6 +26,8 @@ const TIER_ORDER: Record<MembershipTier, number> = {
 
 const STANDARD_FOOD_ANALYSIS_CREDIT_COST = 2
 const PRECISION_FOOD_ANALYSIS_CREDIT_COST = 4
+const STANDARD_FOOD_CORRECTION_CREDIT_COST = 1
+const PRECISION_FOOD_CORRECTION_CREDIT_COST = 2
 const EXERCISE_LOG_CREDIT_COST = 1
 
 export const LOW_CREDIT_REWARD_HINT_THRESHOLD = 4
@@ -56,6 +58,16 @@ export function getFoodAnalysisCreditCost(executionMode?: ExecutionMode | string
     ? PRECISION_FOOD_ANALYSIS_CREDIT_COST
     : STANDARD_FOOD_ANALYSIS_CREDIT_COST
   return unitCost * normalizedUnits
+}
+
+export function getFoodCorrectionCreditCost(executionMode?: ExecutionMode | string | null): number {
+  return executionMode === 'strict' ||
+    executionMode === 'strict_separate' ||
+    executionMode === 'strict_web_search' ||
+    executionMode === 'experimental' ||
+    executionMode === 'gemini35_flash_grouped'
+    ? PRECISION_FOOD_CORRECTION_CREDIT_COST
+    : STANDARD_FOOD_CORRECTION_CREDIT_COST
 }
 
 function getFoodAnalysisCreditLabel(executionMode?: ExecutionMode | string | null): string {
