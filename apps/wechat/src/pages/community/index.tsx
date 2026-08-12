@@ -52,8 +52,6 @@ import { ManualFoodCards } from './components/ManualFoodCards'
 import { ExerciseActivityCards, hasExerciseActivityCards } from './components/ExerciseActivityCards'
 import { FeedReportSheet } from './components/FeedReportSheet'
 import { FeedActionSheet, type FeedActionSheetAction } from './components/FeedActionSheet'
-import { Button as TaroifyButton } from '@taroify/core'
-import '@taroify/core/button/style'
 
 import { IconTrendingUp } from '../../components/iconfont'
 
@@ -2273,14 +2271,13 @@ function CommunityPage() {
             {!loggedIn && (
               <View className='login-tip' onClick={(e) => e.stopPropagation()}>
                 <Text className='login-tip-text'>登录后可添加好友、点赞和评论</Text>
-                <TaroifyButton
+                <Button
                   className='login-tip-btn'
-                  shape='round'
                   style={{ background: 'linear-gradient(to right, #00bc7d 0%, #00bba7 100%)', border: 'none', color: '#fff' }}
                   onClick={() => redirectToLogin()}
                 >
                   去登录
-                </TaroifyButton>
+                </Button>
               </View>
             )}
 

@@ -14,6 +14,7 @@ function setInjectedUrls(input: {
   trial?: string
   develop?: string
   override?: string
+  runtimeEnv?: 'development' | 'production'
 }): void {
   ;(global as typeof globalThis & {
     __API_BASE_URL_RELEASE__?: string
@@ -27,6 +28,8 @@ function setInjectedUrls(input: {
     input.develop ?? ''
   ;(global as typeof globalThis & { __API_BASE_URL_OVERRIDE__?: string }).__API_BASE_URL_OVERRIDE__ =
     input.override ?? ''
+  ;(global as typeof globalThis & { __RUNTIME_ENV__?: string }).__RUNTIME_ENV__ =
+    input.runtimeEnv ?? 'development'
 }
 
 function loadResolver(): typeof import('../../src/utils/api-base-url') {
@@ -68,8 +71,26 @@ describe('resolveApiBaseUrl', () => {
 
   it('uses release url when a production review runs with develop envVersion', () => {
     process.env.NODE_ENV = 'production'
+    setInjectedUrls({
+      release: 'https://api.healthymax.cn',
+      trial: 'https://dev.api.healthymax.cn',
+      develop: 'http://127.0.0.1:3010',
+      runtimeEnv: 'production',
+    })
     mockGetAccountInfoSync.mockReturnValue({ miniProgram: { envVersion: 'develop' } })
     expect(loadResolver().resolveApiBaseUrl()).toBe('https://api.healthymax.cn')
+  })
+
+  it('uses the develop url for an optimized development runtime', () => {
+    process.env.NODE_ENV = 'production'
+    setInjectedUrls({
+      release: 'https://api.healthymax.cn',
+      trial: 'https://dev.api.healthymax.cn',
+      develop: 'http://127.0.0.1:3010',
+      runtimeEnv: 'development',
+    })
+    mockGetAccountInfoSync.mockReturnValue({ miniProgram: { envVersion: 'develop' } })
+    expect(loadResolver().resolveApiBaseUrl()).toBe('http://127.0.0.1:3010')
   })
 
   it('falls back to trial url for a production review when release url is missing', () => {
@@ -77,6 +98,7 @@ describe('resolveApiBaseUrl', () => {
     setInjectedUrls({
       trial: 'https://dev.api.healthymax.cn',
       develop: 'http://127.0.0.1:3010',
+      runtimeEnv: 'production',
     })
     mockGetAccountInfoSync.mockReturnValue({ miniProgram: { envVersion: 'develop' } })
     expect(loadResolver().resolveApiBaseUrl()).toBe('https://dev.api.healthymax.cn')
@@ -93,6 +115,7 @@ describe('resolveApiBaseUrl', () => {
     setInjectedUrls({
       override: 'http://127.0.0.1:3010',
       release: 'https://api.healthymax.cn',
+      runtimeEnv: 'production',
     })
     mockGetAccountInfoSync.mockReturnValue({ miniProgram: { envVersion: 'develop' } })
     expect(loadResolver().resolveApiBaseUrl()).toBe('https://api.healthymax.cn')
@@ -103,6 +126,7 @@ describe('resolveApiBaseUrl', () => {
     setInjectedUrls({
       override: 'https://audit.api.healthymax.cn',
       release: 'https://api.healthymax.cn',
+      runtimeEnv: 'production',
     })
     mockGetAccountInfoSync.mockReturnValue({ miniProgram: { envVersion: 'develop' } })
     expect(loadResolver().resolveApiBaseUrl()).toBe('https://audit.api.healthymax.cn')

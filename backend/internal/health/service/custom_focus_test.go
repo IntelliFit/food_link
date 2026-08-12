@@ -15,15 +15,31 @@ func TestParseCustomFocusCardPayload(t *testing.T) {
 	comp := buildScreenshotLikeComputation()
 	payload, err := parseCustomFocusCardPayload(`{"score":72,"brief":"晚间负担偏重","summary":"睡前餐偏集中。","basis":"晚餐占比44%。","action":"前移一部分到午餐。"}`, comp, "控尿酸")
 	require.NoError(t, err)
-	assert.Equal(t, 72, payload.Score)
+	assert.Zero(t, payload.Score)
 	assert.Equal(t, "晚间负担偏重", payload.Brief)
 }
 
 func TestFallbackCustomFocusCardPayload(t *testing.T) {
 	comp := buildScreenshotLikeComputation()
 	payload := fallbackCustomFocusCardPayload(comp, "控尿酸")
-	assert.Greater(t, payload.Score, 0)
+	assert.Zero(t, payload.Score)
 	assert.Contains(t, payload.Summary, "控尿酸")
+}
+
+func TestBuildCustomFocusCardPromptUsesDietRecordsOnly(t *testing.T) {
+	comp := buildScreenshotLikeComputation()
+	comp.User = &domain.StatsUserProfile{HealthCondition: map[string]any{
+		"medical_history": "高血压",
+		"report_extract":  "血压 160/100",
+	}}
+
+	prompt := buildCustomFocusCardPrompt(comp, "控尿酸")
+
+	assert.NotContains(t, prompt, "高血压")
+	assert.NotContains(t, prompt, "160/100")
+	assert.NotContains(t, prompt, "健康参考卡片")
+	assert.Contains(t, prompt, "只根据可观察的饮食记录")
+	assert.Contains(t, prompt, "score 固定输出 0")
 }
 
 func TestGenerateCustomFocusCard_RequiresEnoughData(t *testing.T) {
@@ -91,7 +107,7 @@ func TestAttachCustomRiskCards(t *testing.T) {
 				UserID:          "u1",
 				FocusID:         "f1",
 				RangeType:       "week",
-				DataFingerprint: comp.DataFingerprint,
+				DataFingerprint: customFocusDataFingerprint(comp),
 				FocusLabel:      "控尿酸",
 				Score:           74,
 				Brief:           "趋势尚可",
@@ -108,4 +124,32 @@ func TestAttachCustomRiskCards(t *testing.T) {
 	require.Len(t, idx.CustomRiskCards, 1)
 	assert.Equal(t, "custom:f1", idx.CustomRiskCards[0].Key)
 	assert.NotNil(t, idx.CustomFocusMeta)
+}
+
+func TestAttachCustomRiskCardsRejectsLegacySemanticCache(t *testing.T) {
+	comp := buildScreenshotLikeComputation()
+	comp.User = &domain.StatsUserProfile{
+		ID: "u1",
+		HealthCondition: map[string]any{
+			"custom_health_focuses": []map[string]any{
+				{"id": "f1", "label": "控尿酸", "created_at": "2026-05-26T00:00:00Z"},
+			},
+		},
+	}
+	repo := &mockStatsRepo{customFocusCards: []domain.CustomFocusCard{{
+		UserID:          "u1",
+		FocusID:         "f1",
+		RangeType:       "week",
+		DataFingerprint: comp.DataFingerprint,
+		FocusLabel:      "控尿酸",
+		Score:           74,
+		Summary:         "旧健康档案推断内容",
+	}}}
+	svc := NewStatsService(repo, &mockBodyMetricsProvider{})
+	idx := computeHealthIndex(comp, "week")
+
+	err := svc.attachCustomRiskCards(context.Background(), comp, idx)
+
+	require.NoError(t, err)
+	assert.Empty(t, idx.CustomRiskCards)
 }

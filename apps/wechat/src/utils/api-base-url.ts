@@ -40,9 +40,13 @@ function readMiniProgramEnvVersion(): MiniProgramEnvVersion | undefined {
  * 各环境 URL 由构建配置注入，不在业务代码中写死域名。
  */
 export function resolveApiBaseUrl(): string {
-  const isProductionBuild = process.env.NODE_ENV === 'production'
+  const runtimeEnv = readInjectedString(
+    () => __RUNTIME_ENV__,
+    process.env.NODE_ENV === 'production' ? 'production' : 'development'
+  )
+  const isProductionRuntime = runtimeEnv === 'production'
   const override = readInjectedString(() => __API_BASE_URL_OVERRIDE__, '')
-  if (override && (!isProductionBuild || isSafeProductionOverride(override))) {
+  if (override && (!isProductionRuntime || isSafeProductionOverride(override))) {
     return normalizeBaseUrl(override)
   }
 
@@ -60,7 +64,7 @@ export function resolveApiBaseUrl(): string {
   if (envVersion === 'develop') {
     // 微信官方默认以 develop 身份运行审核中版本。production 上传包必须走
     // 审核可达的正式 API；仅 development 构建允许 develop 使用本机地址。
-    if (isProductionBuild) {
+    if (isProductionRuntime) {
       if (releaseUrl) {
         return normalizeBaseUrl(releaseUrl)
       }
@@ -73,10 +77,10 @@ export function resolveApiBaseUrl(): string {
   }
 
   // envVersion 不可用时：production 优先正式 API，development 优先本地 API。
-  if (isProductionBuild && releaseUrl) {
+  if (isProductionRuntime && releaseUrl) {
     return normalizeBaseUrl(releaseUrl)
   }
-  if (!isProductionBuild && developUrl) {
+  if (!isProductionRuntime && developUrl) {
     return normalizeBaseUrl(developUrl)
   }
   if (trialUrl) {

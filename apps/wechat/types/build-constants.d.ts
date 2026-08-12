@@ -2,11 +2,12 @@ declare const __API_BASE_URL_RELEASE__: string
 declare const __API_BASE_URL_TRIAL__: string
 declare const __API_BASE_URL_DEVELOP__: string
 declare const __API_BASE_URL_OVERRIDE__: string
+declare const __RUNTIME_ENV__: 'development' | 'production'
 declare const __ICON_CDN_BASE_URL__: string
 declare const __FOOD_IMAGES_CDN_BASE_URL__: string
 declare const __EXPIRY_SUBSCRIBE_TEMPLATE_ID__: string
 declare const __RECENT_REQUEST_TRACE_LIMIT__: string
-/** 由 config defineConstants 注入：仅 `NODE_ENV=development` 构建为 true */
+/** 由 config defineConstants 注入：development 运行环境为 true，与压缩模式无关 */
 declare const __ENABLE_DEV_DEBUG_UI__: boolean
 /** 由 config 从 package.json 注入，与发布版本号一致 */
 declare const __APP_VERSION__: string

@@ -113,6 +113,27 @@ func TestHealthIndex_ScreenshotLikeScenario(t *testing.T) {
 	assert.InDelta(t, 76, float64(scores["weight"]), 4)
 }
 
+func TestHealthIndex_UsesDietLanguageInsteadOfMeasuredHealthClaims(t *testing.T) {
+	idx := computeHealthIndex(buildScreenshotLikeComputation(), "week")
+	require.True(t, idx.HasEnoughData)
+
+	expectedTitles := map[string]string{
+		"hypertension":  "餐次与能量分布",
+		"diabetes":      "碳水搭配表现",
+		"cardio":        "控油饮食表现",
+		"weight":        "能量平衡表现",
+		"colorectal":    "膳食结构规律度",
+		"longevity":     "长期饮食稳定度",
+		"micronutrient": "微量营养摄入覆盖",
+	}
+	for _, card := range idx.RiskCards {
+		assert.Equal(t, expectedTitles[card.Key], card.Title, card.Key)
+		assert.NotContains(t, card.Title, "血压")
+		assert.NotContains(t, card.Title, "血糖")
+		assert.NotContains(t, card.Title, "心血管")
+	}
+}
+
 func TestHealthIndex_IdealDietCanReachHighScore(t *testing.T) {
 	idx := computeHealthIndex(buildIdealComputation(), "week")
 	require.True(t, idx.HasEnoughData)

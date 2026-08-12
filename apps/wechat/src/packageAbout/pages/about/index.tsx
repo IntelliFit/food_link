@@ -1,7 +1,5 @@
 import { View, Text, Image } from '@tarojs/components'
 import Taro from '@tarojs/taro'
-import { Cell } from '@taroify/core'
-import '@taroify/core/cell/style'
 import { FlPageThemeRoot } from '../../../components/FlPageThemeRoot'
 import { LOGIN_LOGO_URL } from '../../../utils/static-asset-cdn-url'
 import './index.scss'
@@ -38,9 +36,11 @@ export default function AboutPage() {
           </View>
 
           <View className='cell-group'>
-            <Cell title='官方邮箱' clickable isLink onClick={handleCopyEmail}>
+            <View className='about-email-cell' onClick={handleCopyEmail}>
+              <Text className='about-email-label'>官方邮箱</Text>
               <Text className='cell-value'>{officialEmail}</Text>
-            </Cell>
+              <Text className='about-email-arrow'>›</Text>
+            </View>
           </View>
 
           <View className='card'>

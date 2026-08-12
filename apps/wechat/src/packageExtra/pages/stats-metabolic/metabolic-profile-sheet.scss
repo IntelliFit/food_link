@@ -1,4 +1,14 @@
+.metabolic-profile-sheet-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 1300;
+  display: flex;
+  align-items: flex-end;
+  background: rgb(0 0 0 / 45%);
+}
+
 .metabolic-profile-sheet {
+  width: 100%;
   padding: 28rpx 32rpx calc(28rpx + env(safe-area-inset-bottom));
   background: #fff;
   border-radius: 28rpx 28rpx 0 0;

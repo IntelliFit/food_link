@@ -80,9 +80,29 @@
             margin-bottom: 24px;
             box-shadow: 0 1px 2px rgb(0 0 0 / 5%);
 
+            .about-email-cell {
+                min-height: 96rpx;
+                padding: 0 28rpx;
+                display: flex;
+                align-items: center;
+                gap: 16rpx;
+            }
+
+            .about-email-label {
+                color: #1f2937;
+                font-size: 28rpx;
+                font-weight: 500;
+            }
+
             .cell-value {
                 color: #9ca3af;
                 font-size: 28rpx;
+                margin-left: auto;
+            }
+
+            .about-email-arrow {
+                color: #9ca3af;
+                font-size: 36rpx;
             }
         }
     }
@@ -139,6 +159,10 @@
 
             .cell-value {
                 color: rgb(214 226 220 / 58%);
+            }
+
+            .about-email-label {
+                color: rgb(236 244 240 / 88%);
             }
         }
     }

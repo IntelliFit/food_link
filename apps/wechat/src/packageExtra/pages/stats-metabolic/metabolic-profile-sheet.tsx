@@ -4,8 +4,6 @@
 import { View, Text, Input } from '@tarojs/components'
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import Taro from '@tarojs/taro'
-import { Popup } from '@taroify/core'
-import '@taroify/core/popup/style'
 import {
   getUserProfile,
   updateHealthProfile,
@@ -260,7 +258,7 @@ export function MetabolicProfileSheet({
   if (!open) return null
 
   return (
-    <Popup open={open} placement='bottom' rounded onClose={onClose}>
+    <View className='metabolic-profile-sheet-layer' onClick={onClose}>
       <View className='metabolic-profile-sheet' onClick={(e) => e.stopPropagation()}>
         <Text className='metabolic-profile-sheet__title'>完善代谢档案</Text>
         <Text className='metabolic-profile-sheet__desc'>
@@ -340,6 +338,6 @@ export function MetabolicProfileSheet({
           </View>
         </View>
       </View>
-    </Popup>
+    </View>
   )
 }

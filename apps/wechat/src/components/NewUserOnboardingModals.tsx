@@ -1,6 +1,4 @@
 import { View, Text, Image, Button, Input } from '@tarojs/components'
-import { Button as TaroifyButton } from '@taroify/core'
-import '@taroify/core/button/style'
 import './NewUserOnboardingModals.scss'
 
 export interface NewUserOnboardingModalsProps {
@@ -53,9 +51,9 @@ export function NewUserOnboardingModals({
               >
                 授权手机号
               </Button>
-              <TaroifyButton className='skip-phone-btn' variant='text' onClick={onSkipPhone}>
+              <Button className='skip-phone-btn' onClick={onSkipPhone}>
                 暂不绑定
-              </TaroifyButton>
+              </Button>
             </View>
           </View>
         </View>
@@ -114,15 +112,13 @@ export function NewUserOnboardingModals({
               </View>
             </View>
 
-            <TaroifyButton
+            <Button
               className='save-btn'
-              block
-              shape='round'
               disabled={!tempAvatar || !tempNickname}
               onClick={onSaveProfile}
             >
               {profileSaveLabel}
-            </TaroifyButton>
+            </Button>
             {(!tempAvatar || !tempNickname) && (
               <Text className='profile-form-tip'>请完善头像和昵称后再进入</Text>
             )}

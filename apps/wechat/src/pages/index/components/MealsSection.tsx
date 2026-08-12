@@ -1,5 +1,4 @@
-import { View, Text, Image } from '@tarojs/components'
-import { Empty, Button } from '@taroify/core'
+import { View, Text, Image, Button } from '@tarojs/components'
 import { IconBreakfast, IconLunch, IconDinner, IconSnack, IconChevronRight } from '../../../components/iconfont'
 import { formatDisplayNumber } from '../utils/helpers'
 import { HOME_WARNING_RED } from '../utils/constants'
@@ -106,18 +105,9 @@ export function MealsSection({
           </View>
         ) : meals.length === 0 ? (
           <View className='meals-empty'>
-            <Empty>
-              <Empty.Image />
-              <Empty.Description>暂无今日餐食</Empty.Description>
-              <Button
-                shape='round'
-                color='primary'
-                className='empty-record-btn'
-                onClick={() => onQuickRecord('photo')}
-              >
-                去记录一餐
-              </Button>
-            </Empty>
+            <Text className='meals-empty-icon'>🍽️</Text>
+            <Text className='meals-empty-text'>暂无今日餐食</Text>
+            <Button className='empty-record-btn' onClick={() => onQuickRecord('photo')}>去记录一餐</Button>
           </View>
         ) : (
           meals.map((meal, index) => {

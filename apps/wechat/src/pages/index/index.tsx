@@ -1,8 +1,7 @@
-import { View, Text, Input, Image, Canvas, PageMeta, Swiper, SwiperItem } from '@tarojs/components'
+import { View, Text, Input, Image, Canvas, PageMeta, Swiper, SwiperItem, Button } from '@tarojs/components'
 import { CAFETERIA_HERO_BG_URL, GOOSE_DUCK_CHICKEN_BG_URL } from '../../utils/static-asset-cdn-url'
 import React from 'react'
 import Taro, { useDidShow, useShareAppMessage, useShareTimeline } from '@tarojs/taro'
-import { Empty, Button } from '@taroify/core'
 import {
   getHomeDashboard,
   getStatsSummary,
@@ -3472,18 +3471,9 @@ function IndexPage() {
               </View>
             ) : meals.length === 0 ? (
               <View className='meals-empty'>
-                <Empty>
-                  <Empty.Image />
-                  <Empty.Description>暂无今日餐食</Empty.Description>
-                  <Button
-                    shape='round'
-                    color='primary'
-                    className='empty-record-btn'
-                    onClick={handleQuickRecord}
-                  >
-                    去记录一餐
-                  </Button>
-                </Empty>
+                <Text className='meals-empty-icon'>🍽️</Text>
+                <Text className='meals-empty-text'>暂无今日餐食</Text>
+                <Button className='empty-record-btn' onClick={handleQuickRecord}>去记录一餐</Button>
               </View>
             ) : (
               meals.map((meal, index) => {

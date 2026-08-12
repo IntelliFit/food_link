@@ -1,5 +1,6 @@
 import { View, Text, Image, Input } from '@tarojs/components'
 import Taro, { useRouter } from '@tarojs/taro'
+import { isDevelopmentRuntime } from '../../../utils/runtime-environment'
 import { useState, useRef, useEffect } from 'react'
 import { Button as TaroifyButton } from '@taroify/core'
 import '@taroify/core/button/style'
@@ -180,7 +181,7 @@ export default function LoginPage() {
         allowDebugRegisterRef.current = allowDebugRegister
     }, [allowDebugRegister])
 
-    const isDev = process.env.NODE_ENV === 'development'
+    const isDev = isDevelopmentRuntime()
 
     const redirectFromQuery = safeDecodeURIComponent((router.params?.redirect || '').trim())
     const inviteCodeFromQuery = (router.params?.invite_code || router.params?.fi || '').trim()
