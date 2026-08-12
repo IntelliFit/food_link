@@ -2,6 +2,7 @@ import Taro from '@tarojs/taro'
 
 import { getRecentConsoleLogs } from './console-log-buffer'
 import { resolveApiBaseUrl } from './api-base-url'
+import { isDevelopmentRuntime } from './runtime-environment'
 import {
   collectFoodDisplayImageUrls,
   type FoodImageSource,
@@ -45,7 +46,7 @@ export const RECENT_REQUEST_TRACE_LIMIT = Math.min(
 )
 
 // 仅开发构建打印，避免真机/生产包无意义日志（且减少控制台副作用）
-if (process.env.NODE_ENV !== 'production') {
+if (isDevelopmentRuntime()) {
   console.log('[API] 运行时 API_BASE_URL:', API_BASE_URL)
   console.log('[API] 最近请求诊断条数:', RECENT_REQUEST_TRACE_LIMIT)
 }

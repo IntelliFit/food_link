@@ -1,4 +1,4 @@
-/** 主包仅保留 TabBar 五页，其余页面在 packageExtra 分包以降低主包体积（微信 2MB 限制） */
+/** 主包仅保留 TabBar 页面，其余页面进入分包；项目主包预算 1464KB，微信单包硬限制 2MB。 */
 const mainPages = [
   'pages/index/index',
   'pages/stats/index',

@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from 'fs'
 import { join } from 'path'
+import { spawnSync } from 'child_process'
 import { defineConfig, type UserConfigExport } from '@tarojs/cli'
 import { createStyleImportPlugin } from 'vite-plugin-style-import'
 
@@ -44,7 +45,12 @@ function parseEnvFile(filePath: string): Record<string, string> {
 }
 
 function loadTaroEnv(): void {
-  const mode = process.env.NODE_ENV === 'production' ? 'production' : 'development'
+  const runtimeEnv = process.env.TARO_APP_RUNTIME_ENV
+  const mode = runtimeEnv === 'production' || runtimeEnv === 'development'
+    ? runtimeEnv
+    : process.env.NODE_ENV === 'production'
+      ? 'production'
+      : 'development'
   const merged = {
     ...parseEnvFile(join(workspaceRoot, '.env')),
     ...parseEnvFile(join(workspaceRoot, `.env.${mode}`)),
@@ -67,6 +73,9 @@ const vantIconWoffBase64 = readFileSync(join(appRoot, 'src/assets/vant-icon/vant
 
 // https://taro-docs.jd.com/docs/next/config#defineconfig-辅助函数
 export default defineConfig<'vite'>(async (merge) => {
+  const isDevelopmentRuntime =
+    process.env.TARO_APP_RUNTIME_ENV === 'development' ||
+    process.env.NODE_ENV === 'development'
   const apiBaseUrlRelease = process.env.TARO_APP_API_BASE_URL_RELEASE || ''
   const apiBaseUrlTrial = process.env.TARO_APP_API_BASE_URL_TRIAL || ''
   const apiBaseUrlDevelop = process.env.TARO_APP_API_BASE_URL_DEVELOP || ''
@@ -100,6 +109,8 @@ export default defineConfig<'vite'>(async (merge) => {
       __API_BASE_URL_TRIAL__: JSON.stringify(apiBaseUrlTrial),
       __API_BASE_URL_DEVELOP__: JSON.stringify(apiBaseUrlDevelop),
       __API_BASE_URL_OVERRIDE__: JSON.stringify(apiBaseUrlOverride),
+      /** 运行时环境与构建压缩模式解耦；本地 watch 可使用 production 压缩但仍保持 development 行为。 */
+      __RUNTIME_ENV__: JSON.stringify(isDevelopmentRuntime ? 'development' : 'production'),
       __ICON_CDN_BASE_URL__: JSON.stringify(iconCdnBaseUrl),
       __FOOD_IMAGES_CDN_BASE_URL__: JSON.stringify(foodImagesCdnBaseUrl),
       __EXPIRY_SUBSCRIBE_TEMPLATE_ID__: JSON.stringify(expirySubscribeTemplateId),
@@ -107,8 +118,8 @@ export default defineConfig<'vite'>(async (merge) => {
       __RECENT_REQUEST_TRACE_LIMIT__: JSON.stringify(recentRequestTraceLimit),
       /** 反馈提交时附带的最近 console 日志条数 */
       __CONSOLE_LOG_BUFFER_LIMIT__: JSON.stringify(consoleLogBufferLimit),
-      /** 仅 development 构建为 true；上传/体验版等走 production 构建为 false，用于隐藏调试 UI 与调试保存分支 */
-      __ENABLE_DEV_DEBUG_UI__: JSON.stringify(process.env.NODE_ENV === 'development'),
+      /** 本地开发运行环境为 true；上传/体验版为 false，用于隐藏调试 UI 与调试保存分支 */
+      __ENABLE_DEV_DEBUG_UI__: JSON.stringify(isDevelopmentRuntime),
       /** 与 package.json version 同步，发布新版本时随 npm version 一并更新 */
       __APP_VERSION__: JSON.stringify(packageVersion),
     },
@@ -122,10 +133,26 @@ export default defineConfig<'vite'>(async (merge) => {
           from: 'custom-tab-bar',
           to: 'custom-tab-bar'
         },
-        {
-          from: 'src/assets/pets',
-          to: 'assets/pets'
-        },
+        ...[
+          'jianwen-01-idle',
+          'jianwen-01-blink',
+          'jianwen-01-squash',
+          'jianwen-01-jump',
+          'huatuo-01',
+          'taiji-xiaozi-01',
+          'xiaomai-01',
+          'doudou-01',
+        ].filter((name) => ['webp', 'png'].some((extension) => (
+          existsSync(join(appRoot, 'src', 'assets', 'pets', `${name}.${extension}`))
+        ))).map((name) => {
+          const extension = existsSync(join(appRoot, 'src', 'assets', 'pets', `${name}.webp`))
+            ? 'webp'
+            : 'png'
+          return {
+            from: `src/assets/pets/${name}.${extension}`,
+            to: `assets/pets/${name}.${extension}`,
+          }
+        }),
 
       ],
       options: {
@@ -165,7 +192,8 @@ export default defineConfig<'vite'>(async (merge) => {
             }
           },
         },
-        // debug: 开发构建时关闭压缩、保留 sourcemap，便于真机调试定位完整错误栈
+        // 开发环境保留 sourcemap；默认 dev:weapp 通过 production 构建模式启用 Taro 压缩，
+        // 再由 TARO_APP_RUNTIME_ENV=development 保留开发 API 和调试能力。
         {
           name: 'taro-debug-build',
           configResolved(config) {
@@ -178,11 +206,46 @@ export default defineConfig<'vite'>(async (merge) => {
             sassOptions.quietDeps = true
             sassOptions.silenceDeprecations = ['legacy-js-api', 'import']
             if (process.env.NODE_ENV === 'development') {
-              config.build.minify = false
               config.build.sourcemap = true
-              config.build.cssMinify = false
             }
           }
+        },
+        // Taroify 及其页面级依赖只允许由 packageExtra 页面引用，避免占用主包。
+        // 包体门禁会拒绝主包或其他分包同步 require 该 chunk。
+        {
+          name: 'taroify-chunk-to-package-extra',
+          configResolved(config) {
+            const ro = config.build.rollupOptions
+            const outs = ro.output
+            const list = Array.isArray(outs) ? outs : outs ? [outs] : []
+            const apply = (o: NonNullable<(typeof list)[number]>) => {
+              if (!o || typeof o !== 'object') return
+              const prevManual = o.manualChunks
+              o.manualChunks = (id: string, ctx: unknown) => {
+                if (/node_modules[\\/](?:@taroify[\\/]|@vant[\\/]area-data[\\/]|lodash[\\/]|react-transition-group[\\/]|dom-helpers[\\/]|classnames[\\/]|weapp-qrcode-canvas-2d[\\/])/.test(id)) {
+                  return 'taroify-vendor'
+                }
+                if (typeof prevManual === 'function') {
+                  return (prevManual as (a: string, b: unknown) => string | void).call(o, id, ctx)
+                }
+                return undefined
+              }
+              const prevNames = o.chunkFileNames
+              o.chunkFileNames = (chunkInfo) => {
+                if (chunkInfo.name === 'taroify-vendor') return 'packageExtra/taroify-vendor.js'
+                if (typeof prevNames === 'function') return prevNames(chunkInfo)
+                if (typeof prevNames === 'string') return prevNames
+                return '[name]-[hash].js'
+              }
+            }
+            if (list.length === 0) {
+              const o: Record<string, unknown> = {}
+              ro.output = o
+              apply(o)
+            } else {
+              list.forEach(apply)
+            }
+          },
         },
         // 将 ECharts/ZRender 打到代谢页专属分包，避免留在共享分包里继续挤占体积。
         {
@@ -227,6 +290,21 @@ export default defineConfig<'vite'>(async (merge) => {
               apply(o)
             } else {
               list.forEach(apply)
+            }
+          },
+        },
+        // 微信开发者工具按生成文件计入包体；每次 watch 写包后自动移除无效浏览器前缀。
+        {
+          name: 'optimize-weapp-wxss-after-build',
+          closeBundle() {
+            const result = spawnSync(
+              process.execPath,
+              [join(workspaceRoot, 'scripts', 'optimize-weapp-wxss.mjs'), join(appRoot, 'dist')],
+              { encoding: 'utf8' }
+            )
+            if (result.stdout?.trim()) console.log(result.stdout.trim())
+            if (result.status !== 0) {
+              throw new Error(result.stderr?.trim() || '微信小程序 WXSS 优化失败')
             }
           },
         },
@@ -288,6 +366,10 @@ export default defineConfig<'vite'>(async (merge) => {
   if (process.env.NODE_ENV === 'development') {
     // 本地开发构建配置（不混淆压缩）
     return merge({}, baseConfig, devConfig)
+  }
+  if (isDevelopmentRuntime) {
+    // 默认微信 watch：使用生产压缩控制主包体积，同时保留开发环境变量和调试能力。
+    return merge({}, baseConfig, prodConfig, devConfig)
   }
   // 生产构建配置（默认开启压缩混淆等）
   return merge({}, baseConfig, prodConfig)

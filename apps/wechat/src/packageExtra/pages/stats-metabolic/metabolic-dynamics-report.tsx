@@ -12,8 +12,6 @@ import type { ECharts } from 'echarts/core'
 import { buildMetabolicFluxChartOption } from './metabolic-echarts-option'
 import { patchWxCanvasNodeForEcharts } from './metabolic-echarts-wx-polyfill'
 import { installWxZrenderTextMeasure } from './metabolic-echarts-wx-zrender-platform'
-import { Popup } from '@taroify/core'
-import '@taroify/core/popup/style'
 import { useAppColorSchemeOptional } from '../../../components/AppColorSchemeContext'
 import {
   getExerciseDailyCalories,
@@ -574,15 +572,14 @@ function MetabolicPhysiologyPopup({
   onClose,
   physiology,
   user,
-}: MetabolicPhysiologyPopupProps): ReactElement {
+}: MetabolicPhysiologyPopupProps): ReactElement | null {
+  if (!open) return null
+
   return (
-    <Popup
-      open={open}
-      placement='bottom'
-      rounded
-      onClose={onClose}
+    <View
       className='metabolic-phys-popup__portal'
       style={{ zIndex: METABOLIC_PHYS_PANEL_Z }}
+      onClick={onClose}
     >
       <View className='metabolic-phys-popup' onClick={(e) => e.stopPropagation()}>
         <Text className='metabolic-phys-popup__title'>模拟所用基础数据</Text>
@@ -621,7 +618,7 @@ function MetabolicPhysiologyPopup({
           </View>
         </View>
       </View>
-    </Popup>
+    </View>
   )
 }
 

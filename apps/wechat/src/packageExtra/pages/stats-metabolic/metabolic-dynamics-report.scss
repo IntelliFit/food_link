@@ -551,18 +551,17 @@
 }
 
 /* 「基础」弹层：全宽不超出视口（避免 100% 相对错误父级导致撑破屏幕） */
-.metabolic-phys-popup__portal.taroify-popup {
+.metabolic-phys-popup__portal {
   position: fixed !important;
+  inset: 0 !important;
   left: 0 !important;
   right: 0 !important;
   width: 100vw !important;
   max-width: 100vw !important;
   box-sizing: border-box !important;
-}
-
-.metabolic-phys-popup__portal.taroify-popup--bottom {
-  width: 100vw !important;
-  max-width: 100vw !important;
+  display: flex;
+  align-items: flex-end;
+  background: rgb(0 0 0 / 45%);
 }
 
 /* 「基础」弹层：与模拟 resolvePhysiology 一致 */
@@ -573,6 +572,8 @@
   padding-bottom: calc(24rpx + env(safe-area-inset-bottom));
   box-sizing: border-box;
   overflow-x: hidden;
+  background: #fff;
+  border-radius: 28rpx 28rpx 0 0;
 }
 
 .metabolic-phys-popup__title {
