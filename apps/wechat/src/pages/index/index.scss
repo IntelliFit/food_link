@@ -2970,6 +2970,20 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 
 .meals-empty {
   padding: 40rpx 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.meals-empty-icon {
+  font-size: 64rpx;
+  line-height: 1;
+  margin-bottom: 16rpx;
+}
+
+.meals-empty-text {
+  color: $text-tertiary;
+  font-size: 28rpx;
 }
 
 .empty-record-btn {
@@ -2979,6 +2993,12 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   background: linear-gradient(to right, $primary-gradient-start 0%, $primary-gradient-end 100%);
   border: none;
   font-size: 28rpx;
+  line-height: 72rpx;
+  color: #fff;
+
+  &::after {
+    border: none;
+  }
 }
 
 .meal-item {
@@ -4308,6 +4328,7 @@ $sheet-float-max-height: calc(100vh - #{$sheet-float-gap-top} - env(safe-area-in
 .target-save-btn {
   background: linear-gradient(135deg, #5cb896 0%, #6bc4a6 100%) !important;
   border-color: #5cb896 !important;
+  color: #fff !important;
   
   &::after {
     border: none !important;

@@ -1,8 +1,7 @@
-import { View, Text, ScrollView, Input } from '@tarojs/components'
-import { useState, useEffect, useCallback, useRef, type CSSProperties } from 'react'
+import { View, Text, ScrollView, Input, Switch } from '@tarojs/components'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import Taro, { useDidShow } from '@tarojs/taro'
 import { readStatsPageCache, writeStatsPageCache } from '../../utils/stats-page-cache'
-import { Switch } from '@taroify/core'
 import {
   getStatsSummary,
   generateStatsInsight,
@@ -1682,8 +1681,8 @@ function StatsPage() {
                   <Switch
                     className='chart-switch'
                     checked={showCalories}
-                    onChange={(v: any) => setShowCalories(Boolean(typeof v === 'object' ? v?.detail?.value : v))}
-                    style={{ '--switch-checked-background-color': '#5cb896' } as CSSProperties}
+                    color='#5cb896'
+                    onChange={(event) => setShowCalories(event.detail.value)}
                   />
                 </View>
               </View>

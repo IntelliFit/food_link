@@ -174,6 +174,34 @@ function buildPackageReports(distDir, topCount) {
   }
 }
 
+function findInvalidCrossPackageRequires(distDir, reports) {
+  const subpackageRoots = reports.filter((report) => report.name !== 'main').map((report) => report.root)
+  if (subpackageRoots.length === 0) return []
+
+  const packageForFile = (relFile) =>
+    subpackageRoots.find((root) => startsWithRoot(relFile, root)) || 'main'
+
+  const violations = []
+  const requirePattern = /\brequire\(\s*['"]([^'"]+)['"]\s*\)/g
+  const jsFiles = reports.flatMap((report) => report.files).filter((candidate) => candidate.endsWith('.js'))
+  for (const file of jsFiles) {
+    const sourceRel = relativeFile(distDir, file)
+    const sourcePackage = packageForFile(sourceRel)
+    const source = fs.readFileSync(file, 'utf8')
+    for (const match of source.matchAll(requirePattern)) {
+      const request = match[1]
+      if (!request.startsWith('.')) continue
+      const resolved = normalizeSlashes(path.relative(distDir, path.resolve(path.dirname(file), request)))
+      const targetPackage = packageForFile(resolved)
+      // 分包可以复用主包模块；主包不能依赖分包，两个独立分包也不能同步互引。
+      if (targetPackage !== 'main' && targetPackage !== sourcePackage) {
+        violations.push(`${sourceRel} -> ${resolved} (${sourcePackage} -> ${targetPackage})`)
+      }
+    }
+  }
+  return violations
+}
+
 function statusFor(bytes, maxKb, budgetKb, warnKb) {
   const kb = bytesToKb(bytes)
   if (kb > maxKb) return 'FAIL'
@@ -187,6 +215,7 @@ function main() {
   const distDir = path.resolve(process.cwd(), options.dist)
   const { reports, totalBytes } = buildPackageReports(distDir, options.top)
   const failures = []
+  const crossPackageRequires = findInvalidCrossPackageRequires(distDir, reports)
 
   if (options.warnKb > options.budgetKb || options.budgetKb > options.maxKb) {
     throw new Error('体积阈值必须满足 warn-kb <= budget-kb <= max-kb')
@@ -219,6 +248,12 @@ function main() {
   console.log(`${totalStatus.padEnd(4)} ${'total'.padEnd(24)} ${formatKb(totalBytes).padStart(10)}`)
   if (totalStatus === 'FAIL') {
     failures.push(`total ${formatKb(totalBytes)} > ${options.totalMaxKb}KB`)
+  }
+
+  if (crossPackageRequires.length > 0) {
+    console.error('[weapp:size] JS 不得同步 require 其他分包模块：')
+    for (const violation of crossPackageRequires) console.error(`[weapp:size]   ${violation}`)
+    failures.push(`${crossPackageRequires.length} 个非法跨包同步依赖`)
   }
 
   if (failures.length > 0) {

@@ -1,5 +1,4 @@
-import { View, Text, Input } from '@tarojs/components'
-import { Button } from '@taroify/core'
+import { View, Text, Input, Button } from '@tarojs/components'
 import { type TargetEditorProps } from '../types'
 import { formatMacroNutrient, formatMicroNutrient } from '../../../utils/number-format'
 
@@ -210,9 +209,6 @@ export function TargetEditor({
 
         <View className='target-modal-footer'>
           <Button
-            block
-            color='primary'
-            shape='round'
             className='target-save-btn'
             onClick={onSave}
             loading={saving}
