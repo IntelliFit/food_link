@@ -6763,7 +6763,10 @@ export async function communityGetNotifications(limit: number = 20, type?: strin
   q.set('limit', String(limit))
   if (type) q.set('type', type)
   if (offset !== undefined) q.set('offset', String(offset))
-  const response = await authenticatedRequest(`/api/community/notifications?${q.toString()}`, { method: 'GET' })
+  const response = await authenticatedRequest(`/api/community/notifications?${q.toString()}`, {
+    method: 'GET',
+    timeout: 12000,
+  })
   if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '获取互动消息失败')
   return response.data as { list: FeedInteractionNotification[]; unread_count: number; has_more: boolean }
 }
@@ -6772,7 +6775,8 @@ export async function communityGetNotifications(limit: number = 20, type?: strin
 export async function communityMarkNotificationsRead(notificationIds?: string[]): Promise<{ updated: number; unread_count: number }> {
   const response = await authenticatedRequest('/api/community/notifications/read', {
     method: 'POST',
-    data: { notification_ids: notificationIds }
+    data: { notification_ids: notificationIds },
+    timeout: 10000,
   })
   if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '更新互动消息失败')
   return response.data as { updated: number; unread_count: number }

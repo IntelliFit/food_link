@@ -65,6 +65,16 @@
   font-size: 24rpx;
 }
 
+.notifications-retry-btn {
+  margin-top: 28rpx;
+  padding: 14rpx 30rpx;
+  border-radius: 999rpx;
+  color: #fff;
+  font-size: 24rpx;
+  font-weight: 600;
+  background: linear-gradient(135deg, #00bc7d 0%, #00a870 100%);
+}
+
 // ── Tab 标签栏 ──
 
 .notifications-tabs {

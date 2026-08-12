@@ -16,6 +16,23 @@ import { extraPkgUrl } from '../../../utils/subpackage-extra'
 type NotificationTab = 'all' | 'like' | 'comment'
 
 const PAGE_SIZE = 20
+const NOTIFICATIONS_TIMEOUT_MS = 12_000
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('互动消息加载超时')), timeoutMs)
+    promise.then(
+      (value) => {
+        clearTimeout(timer)
+        resolve(value)
+      },
+      (error) => {
+        clearTimeout(timer)
+        reject(error)
+      },
+    )
+  })
+}
 
 function formatTimeLabel(timeStr: string): string {
   if (!timeStr) return ''
@@ -72,6 +89,7 @@ function tabApiType(tab: NotificationTab): string {
 
 function InteractionNotificationsPage() {
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
   const [markingRead, setMarkingRead] = useState(false)
   const [unreadCount, setUnreadCount] = useState(0)
   const [list, setList] = useState<FeedInteractionNotification[]>([])
@@ -90,10 +108,22 @@ function InteractionNotificationsPage() {
   const likeCount = useMemo(() => list.filter((item) => isLikeType(getNotificationType(item))).length, [list])
   const commentCount = useMemo(() => list.filter((item) => isCommentType(getNotificationType(item))).length, [list])
 
+  const markNotificationsReadInBackground = useCallback(() => {
+    void communityMarkNotificationsRead()
+      .then((readRes) => {
+        setUnreadCount(readRes.unread_count || 0)
+        setList((prev) => prev.map((item) => ({ ...item, is_read: true })))
+      })
+      .catch(() => {
+        // 列表已经加载成功；保留未读状态和手动重试入口，不阻塞消息展示。
+      })
+  }, [])
+
   const loadNotifications = useCallback(async (tab: NotificationTab, offset: number, append: boolean) => {
     const isFirst = !append
     if (isFirst) {
       setLoading(true)
+      setLoadError(false)
       loadedRef.current = false
     } else {
       setLoadingMore(true)
@@ -101,7 +131,10 @@ function InteractionNotificationsPage() {
 
     try {
       const apiType = tabApiType(tab)
-      const res = await communityGetNotifications(PAGE_SIZE, apiType || undefined, offset)
+      const res = await withTimeout(
+        communityGetNotifications(PAGE_SIZE, apiType || undefined, offset),
+        NOTIFICATIONS_TIMEOUT_MS,
+      )
       const newList = res.list || []
 
       if (append) {
@@ -110,9 +143,7 @@ function InteractionNotificationsPage() {
         setList(newList)
         setUnreadCount(res.unread_count || 0)
         if ((res.unread_count || 0) > 0) {
-          const readRes = await communityMarkNotificationsRead()
-          setUnreadCount(readRes.unread_count || 0)
-          setList((prev) => prev.map((item) => ({ ...item, is_read: true })))
+          markNotificationsReadInBackground()
         }
       }
 
@@ -120,12 +151,16 @@ function InteractionNotificationsPage() {
       offsetRef.current = offset + newList.length
       loadedRef.current = true
     } catch (e) {
-      await showUnifiedApiError(e, '加载失败')
+      if (isFirst) {
+        setLoadError(true)
+      } else {
+        void showUnifiedApiError(e, '加载失败')
+      }
     } finally {
       setLoading(false)
       setLoadingMore(false)
     }
-  }, [])
+  }, [markNotificationsReadInBackground])
 
   Taro.useDidShow(() => {
     if (!loadedRef.current) {
@@ -234,6 +269,14 @@ function InteractionNotificationsPage() {
       {loading ? (
         <View className='notifications-loading'>
           <View className='loading-spinner-md' />
+        </View>
+      ) : loadError ? (
+        <View className='notifications-empty'>
+          <Text className='empty-title'>互动消息加载失败</Text>
+          <Text className='empty-subtitle'>请检查网络后重新加载</Text>
+          <View className='notifications-retry-btn' onClick={() => loadNotifications(activeTab, 0, false)}>
+            <Text>重新加载</Text>
+          </View>
         </View>
       ) : filteredList.length === 0 ? (
         <View className='notifications-empty'>
