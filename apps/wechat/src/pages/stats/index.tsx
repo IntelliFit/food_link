@@ -1,4 +1,4 @@
-import { View, Text, ScrollView, Input, Switch } from '@tarojs/components'
+import { View, Text, ScrollView, Input } from '@tarojs/components'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import Taro, { useDidShow } from '@tarojs/taro'
 import { readStatsPageCache, writeStatsPageCache } from '../../utils/stats-page-cache'
@@ -604,7 +604,6 @@ function StatsPage() {
   const [isTyping, setIsTyping] = useState(false)
   const [insightActionLoading, setInsightActionLoading] = useState(false)
   const [insightError, setInsightError] = useState<string | null>(null)
-  const [showCalories, setShowCalories] = useState(false)
   const [customFocusInput, setCustomFocusInput] = useState('')
   const [customFocusAdding, setCustomFocusAdding] = useState(false)
   const [customFocusRefreshingKey, setCustomFocusRefreshingKey] = useState<string | null>(null)
@@ -1675,26 +1674,13 @@ function StatsPage() {
           </View>
           {expandedSections.calories ? (
             <View className='card-collapsible-content'>
-              <View style={{ marginBottom: '20rpx' }}>
-                <View className='chart-switch-wrap' onClick={(e) => e.stopPropagation()}>
-                  <Text className='chart-switch-label'>显示数值</Text>
-                  <Switch
-                    className='chart-switch'
-                    checked={showCalories}
-                    color='#5cb896'
-                    onChange={(event) => setShowCalories(event.detail.value)}
-                  />
-                </View>
-              </View>
               {chartDays.length > 0 ? (
                 <View className='bar-chart-container'>
                   {chartDays.map((item) => {
                     const heightPct = Math.max((item.calories / maxDailyCalories) * 100, 10)
                     return (
                       <View key={item.date} className='chart-col'>
-                        {showCalories ? (
-                          <Text className='bar-calorie-text'>{Math.round(item.calories)}</Text>
-                        ) : null}
+                        <Text className='bar-calorie-text'>{Math.round(item.calories)}</Text>
                         <View className='bar-wrapper'>
                           <View
                             className={`bar-fill ${item.calories > tdee ? 'over' : ''}`}

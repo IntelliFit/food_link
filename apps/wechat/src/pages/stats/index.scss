@@ -2018,22 +2018,6 @@ $stats-blue-soft: #7aa9ce;
   gap: 12rpx;
 }
 
-.chart-switch-wrap {
-  display: flex;
-  align-items: center;
-  gap: 8rpx;
-}
-
-.chart-switch-label {
-  font-size: 20rpx;
-  color: #64748b;
-}
-
-.chart-switch {
-  transform: scale(0.75);
-  transform-origin: right center;
-}
-
 .bar-chart-container {
   display: flex;
   align-items: stretch;
