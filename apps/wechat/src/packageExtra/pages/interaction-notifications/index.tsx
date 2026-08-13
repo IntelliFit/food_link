@@ -1,6 +1,6 @@
 import { withAuth } from '../../../utils/withAuth'
 import { View, Text, Image, ScrollView } from '@tarojs/components'
-import { useCallback, useMemo, useRef, useState } from 'react'
+import * as React from 'react'
 import Taro from '@tarojs/taro'
 
 import {
@@ -71,61 +71,158 @@ function tabApiType(tab: NotificationTab): string {
 }
 
 function InteractionNotificationsPage() {
-  const [loading, setLoading] = useState(true)
-  const [markingRead, setMarkingRead] = useState(false)
-  const [unreadCount, setUnreadCount] = useState(0)
-  const [list, setList] = useState<FeedInteractionNotification[]>([])
-  const [activeTab, setActiveTab] = useState<NotificationTab>('all')
-  const [hasMore, setHasMore] = useState(false)
-  const [loadingMore, setLoadingMore] = useState(false)
-  const offsetRef = useRef(0)
-  const loadedRef = useRef(false)
+  const [loading, setLoading] = React.useState(true)
+  const [markingRead, setMarkingRead] = React.useState(false)
+  const [unreadCount, setUnreadCount] = React.useState(0)
+  const [list, setList] = React.useState<FeedInteractionNotification[]>([])
+  const [activeTab, setActiveTab] = React.useState<NotificationTab>('all')
+  const [hasMore, setHasMore] = React.useState(false)
+  const [loadingMore, setLoadingMore] = React.useState(false)
+  const offsetRef = React.useRef(0)
+  const loadedRef = React.useRef(false)
+  const loadSeqRef = React.useRef(0)
+  const listCommitTimerRef = React.useRef<number | null>(null)
 
-  const filteredList = useMemo(() => {
+  const logNotificationStage = React.useCallback((stage: string, details: Record<string, unknown> = {}) => {
+    console.log('[interaction-notifications-debug]', stage, details)
+  }, [])
+
+  const clearListCommitTimer = React.useCallback(() => {
+    if (listCommitTimerRef.current !== null) {
+      window.clearTimeout(listCommitTimerRef.current)
+      listCommitTimerRef.current = null
+    }
+  }, [])
+
+  const filteredList = React.useMemo(() => {
     if (activeTab === 'all') return list
     if (activeTab === 'like') return list.filter((item) => isLikeType(getNotificationType(item)))
     return list.filter((item) => isCommentType(getNotificationType(item)))
   }, [list, activeTab])
 
-  const likeCount = useMemo(() => list.filter((item) => isLikeType(getNotificationType(item))).length, [list])
-  const commentCount = useMemo(() => list.filter((item) => isCommentType(getNotificationType(item))).length, [list])
+  const likeCount = React.useMemo(() => list.filter((item) => isLikeType(getNotificationType(item))).length, [list])
+  const commentCount = React.useMemo(() => list.filter((item) => isCommentType(getNotificationType(item))).length, [list])
 
-  const loadNotifications = useCallback(async (tab: NotificationTab, offset: number, append: boolean) => {
+  React.useEffect(() => {
+    logNotificationStage('react-commit', {
+      active_tab: activeTab,
+      loading,
+      list_count: list.length,
+      visible_count: filteredList.length,
+    })
+  }, [activeTab, filteredList.length, list.length, loading, logNotificationStage])
+
+  React.useEffect(() => () => {
+    loadSeqRef.current += 1
+    clearListCommitTimer()
+  }, [clearListCommitTimer])
+
+  const loadNotifications = React.useCallback(async (tab: NotificationTab, offset: number, append: boolean) => {
+    const seq = ++loadSeqRef.current
+    const startedAt = Date.now()
     const isFirst = !append
     if (isFirst) {
+      clearListCommitTimer()
       setLoading(true)
       loadedRef.current = false
     } else {
       setLoadingMore(true)
     }
+    logNotificationStage('load-start', { seq, tab, offset, append })
 
     try {
       const apiType = tabApiType(tab)
       const res = await communityGetNotifications(PAGE_SIZE, apiType || undefined, offset)
+      if (seq !== loadSeqRef.current) return
       const newList = res.list || []
+      logNotificationStage('response-resolved', {
+        seq,
+        tab,
+        append,
+        duration_ms: Date.now() - startedAt,
+        item_count: newList.length,
+        unread_count: res.unread_count || 0,
+      })
 
       if (append) {
         setList((prev) => [...prev, ...newList])
       } else {
-        setList(newList)
         setUnreadCount(res.unread_count || 0)
-        if ((res.unread_count || 0) > 0) {
-          const readRes = await communityMarkNotificationsRead()
-          setUnreadCount(readRes.unread_count || 0)
-          setList((prev) => prev.map((item) => ({ ...item, is_read: true })))
-        }
+        // Android 真机上，移除 spinner 与创建整页消息卡片同批提交时，
+        // 宿主可能一直保留旧 spinner。先单独提交 loading=false，再异步提交列表。
+        setLoading(false)
+        logNotificationStage('loading-release-scheduled', {
+          seq,
+          tab,
+          duration_ms: Date.now() - startedAt,
+        })
+        listCommitTimerRef.current = window.setTimeout(() => {
+          if (seq !== loadSeqRef.current) return
+          setList(newList)
+          listCommitTimerRef.current = null
+          logNotificationStage('list-commit-scheduled', {
+            seq,
+            tab,
+            item_count: newList.length,
+            duration_ms: Date.now() - startedAt,
+          })
+
+          // 标记已读不应阻塞首屏展示。即使该请求失败，消息列表仍应正常显示。
+          if ((res.unread_count || 0) > 0) {
+            void communityMarkNotificationsRead()
+              .then((readRes) => {
+                if (seq !== loadSeqRef.current) return
+                setUnreadCount(readRes.unread_count || 0)
+                setList((prev) => prev.map((item) => ({ ...item, is_read: true })))
+                logNotificationStage('mark-read-resolved', {
+                  seq,
+                  unread_count: readRes.unread_count || 0,
+                  duration_ms: Date.now() - startedAt,
+                })
+              })
+              .catch((error) => {
+                logNotificationStage('mark-read-failed', {
+                  seq,
+                  message: String((error as Error)?.message || error || ''),
+                })
+              })
+          }
+        }, 80)
       }
 
       setHasMore(res.has_more)
       offsetRef.current = offset + newList.length
       loadedRef.current = true
     } catch (e) {
-      await showUnifiedApiError(e, '加载失败')
-    } finally {
+      if (seq !== loadSeqRef.current) return
       setLoading(false)
       setLoadingMore(false)
+      logNotificationStage('load-failed', {
+        seq,
+        tab,
+        append,
+        duration_ms: Date.now() - startedAt,
+        message: String((e as Error)?.message || e || ''),
+      })
+      await showUnifiedApiError(e, '加载失败')
+    } finally {
+      if (seq === loadSeqRef.current) {
+        if (append) setLoadingMore(false)
+        else setLoading(false)
+        logNotificationStage('load-finally', {
+          seq,
+          tab,
+          append,
+          duration_ms: Date.now() - startedAt,
+        })
+      }
     }
-  }, [])
+  }, [clearListCommitTimer, logNotificationStage])
+
+  Taro.useDidHide(() => {
+    loadSeqRef.current += 1
+    clearListCommitTimer()
+  })
 
   Taro.useDidShow(() => {
     if (!loadedRef.current) {
@@ -264,7 +361,7 @@ function InteractionNotificationsPage() {
                 onClick={(e) => handleAvatarClick(e, item.actor.id)}
               >
                 {item.actor.avatar ? (
-                  <Image className='notification-avatar-img' src={item.actor.avatar} mode='aspectFill' />
+                  <Image className='notification-avatar-img' src={item.actor.avatar} mode='aspectFill' lazyLoad />
                 ) : (
                   <Text className='notification-avatar-placeholder'>信</Text>
                 )}

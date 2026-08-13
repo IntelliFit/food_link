@@ -1,6 +1,6 @@
 import { View, Text, Image, Input } from '@tarojs/components'
 import Taro, { useRouter } from '@tarojs/taro'
-import { useState, useRef, useEffect } from 'react'
+import * as React from 'react'
 import { Button as TaroifyButton } from '@taroify/core'
 import '@taroify/core/button/style'
 import {
@@ -26,6 +26,8 @@ import { resolveRegistrationNickname, buildDefaultWechatNickname } from '../../.
 import { LOGIN_LOGO_URL } from '../../../utils/static-asset-cdn-url'
 import { clearPendingFriendInviteCode, readPendingFriendInviteCode } from '../../../utils/pending-friend-invite'
 import './index.scss'
+
+const { useEffect, useRef, useState } = React
 
 interface UserInfo {
     avatar: string
@@ -132,9 +134,61 @@ export default function LoginPage() {
     const [debugRegisterConfigLoading, setDebugRegisterConfigLoading] = useState(true)
     const [envVersion, setEnvVersion] = useState<string>('release')
     const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+    const loadingReleaseTimerRef = useRef<number | null>(null)
+    const loadingStartedAtRef = useRef(0)
     const allowDebugRegisterRef = useRef(allowDebugRegister)
     const inviteAcceptHandledRef = useRef('')
     const DEBUG_PHONE = '13511679220'
+
+    const logLoginStage = React.useCallback((stage: string, details: Record<string, unknown> = {}) => {
+        console.log('[login-loading-debug]', stage, details)
+    }, [])
+
+    const beginLoginLoading = React.useCallback((stage: string) => {
+        if (loadingReleaseTimerRef.current !== null) {
+            window.clearTimeout(loadingReleaseTimerRef.current)
+            loadingReleaseTimerRef.current = null
+        }
+        loadingStartedAtRef.current = Date.now()
+        setLoading(true)
+        logLoginStage('loading-start', { stage })
+    }, [logLoginStage])
+
+    const releaseLoginLoading = React.useCallback((stage: string) => {
+        if (loadingReleaseTimerRef.current !== null) {
+            window.clearTimeout(loadingReleaseTimerRef.current)
+        }
+        const startedAt = loadingStartedAtRef.current
+        // 将按钮 spinner 的移除放到独立宿主任务，避免与弹窗或页面跳转同批提交后
+        // Android 真机继续保留旧 loading 视图。
+        loadingReleaseTimerRef.current = window.setTimeout(() => {
+            setLoading(false)
+            loadingReleaseTimerRef.current = null
+            logLoginStage('loading-release-committed', {
+                stage,
+                duration_ms: startedAt > 0 ? Date.now() - startedAt : undefined,
+            })
+        }, 80)
+        logLoginStage('loading-release-scheduled', {
+            stage,
+            duration_ms: startedAt > 0 ? Date.now() - startedAt : undefined,
+        })
+    }, [logLoginStage])
+
+    useEffect(() => {
+        logLoginStage('react-commit', {
+            loading,
+            show_profile_form: showProfileForm,
+            show_phone_bind_modal: showPhoneBindModal,
+        })
+    }, [loading, logLoginStage, showPhoneBindModal, showProfileForm])
+
+    useEffect(() => () => {
+        if (loadingReleaseTimerRef.current !== null) {
+            window.clearTimeout(loadingReleaseTimerRef.current)
+            loadingReleaseTimerRef.current = null
+        }
+    }, [])
 
     useEffect(() => {
         allowDebugRegisterRef.current = allowDebugRegister
@@ -361,12 +415,19 @@ export default function LoginPage() {
             return
         }
         if (loading) return
-        setLoading(true)
+        beginLoginLoading('wechat-login')
         try {
             await cleanupGeneratedUserFiles()
+            logLoginStage('cleanup-resolved', {
+                duration_ms: Date.now() - loadingStartedAtRef.current,
+            })
 
             const loginRes = await Taro.login()
             if (!loginRes.code) throw new Error('获取登录凭证失败')
+            logLoginStage('wx-login-resolved', {
+                duration_ms: Date.now() - loadingStartedAtRef.current,
+                has_code: Boolean(loginRes.code),
+            })
             console.log('[invite-debug][login] 微信一键登录提交前邀请码状态', {
                 inviteCodeFromQuery,
                 inviteCodeFromRedirect,
@@ -375,6 +436,10 @@ export default function LoginPage() {
                 routerParams: router.params,
             })
             const loginData: LoginResponse = await login(loginRes.code, undefined, inviteCode)
+            logLoginStage('api-login-resolved', {
+                duration_ms: Date.now() - loadingStartedAtRef.current,
+                has_phone_number: Boolean(loginData.purePhoneNumber || loginData.phoneNumber),
+            })
             console.log('[invite-debug][login] 微信一键登录返回', {
                 userId: loginData.user_id,
                 hasAccessToken: Boolean(loginData.access_token),
@@ -382,11 +447,11 @@ export default function LoginPage() {
                 inviteCode,
             })
             await handleLoginSuccess(loginData)
+            releaseLoginLoading('wechat-login-success')
         } catch (error: any) {
             console.error('登录失败:', error)
+            releaseLoginLoading('wechat-login-error')
             await showLoginErrorToast(error, '登录失败')
-        } finally {
-            setLoading(false)
         }
     }
 
@@ -470,10 +535,10 @@ export default function LoginPage() {
                 const initialNickname = resolveRegistrationNickname(wxNickname || apiUserInfo.nickname, loginData.openid)
                 setTempAvatar(initialAvatar)
                 setTempNickname(initialNickname)
-                setLoading(false)
+                releaseLoginLoading('profile-form-ready')
                 setShowProfileForm(true) // 显示完善信息弹窗
             } else {
-                setLoading(false)
+                releaseLoginLoading('profile-ready')
                 // 库中已有手机号则直接返回；否则弹出授权手机号弹窗
                 if (loginData.purePhoneNumber) {
                     console.log('[invite-debug][login] 已有手机号，准备继续登录后流程', { inviteCode })
@@ -491,7 +556,7 @@ export default function LoginPage() {
             Taro.setStorageSync('isLoggedIn', true)
             Taro.removeStorageSync('userInfo')
             Taro.removeStorageSync('userRegisterTime')
-            setLoading(false)
+            releaseLoginLoading('profile-load-failed')
             setPendingOnboardingCompleted(true)
             setShowProfileForm(false)
             console.warn('[invite-debug][login] 用户资料拉取失败，跳过破坏性资料兜底并保护服务端资料', {

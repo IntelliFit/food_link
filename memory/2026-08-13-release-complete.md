@@ -7,3 +7,5 @@
 - 最终产物位于 `apps/wechat/dist`，正式版运行时请求 `https://api.healthymax.cn`。用户负责在微信开发者工具上传、提审和发布；当前版本仍为 3.0.2。
 - 原 `memory/2026-08-13.md` 当前不是有效 UTF-8，无法用 `apply_patch` 安全追加，因此本轮交接写入此文件。
 - 真机证明 API 200 后 spinner 仍可持续；新证据定位为 React/小程序宿主的状态批处理，非后端。识别记录页现在先结束请求函数，再独立渲染 6/20 张卡片，并增加无敏感信息的阶段日志。DevTools 最终验证 spinner=0、cards=6 后 cards=20、exceptions=0；release 主包 1835.2KB。
+- 用户补充互动消息三个 tab 与快捷登录也会在网络结束后持续 loading。已按同一宿主状态批处理问题修复：互动列表 loading 与 20 条卡片分离提交、标记已读后台执行，登录 loading 与资料弹窗/导航分离提交，并增加安全阶段日志。
+- release + WeApp DevTools mock 复验通过：登录 spinner 100ms 可见、200ms 起消失；互动消息 20 条渲染成功，全部/点赞/评论 tab 切换均无 spinner，exceptions=0。最终包 main 1835.2KB、packageExtra 1796.6KB、total 4493.0KB。
