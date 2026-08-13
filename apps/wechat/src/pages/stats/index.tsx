@@ -1,6 +1,11 @@
 import { View, Text, ScrollView, Input, Switch } from '@tarojs/components'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import Taro, { useDidShow } from '@tarojs/taro'
+import {
+  normalizeInsightText,
+  parseInsightInline,
+  parseInsightMarkdown,
+} from '@food-link/core'
 import { readStatsPageCache, writeStatsPageCache } from '../../utils/stats-page-cache'
 import {
   getStatsSummary,
@@ -68,145 +73,6 @@ function formatLocalDate(date: Date = new Date()): string {
   const month = `${date.getMonth() + 1}`.padStart(2, '0')
   const day = `${date.getDate()}`.padStart(2, '0')
   return `${year}-${month}-${day}`
-}
-
-function normalizeInsightText(raw: string): string {
-  if (!raw) return ''
-
-  return raw
-    .replace(/\r\n/g, '\n')
-    .replace(/```+/g, '')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim()
-}
-
-type InsightInlinePart = {
-  text: string
-  underline?: boolean
-  strong?: boolean
-}
-
-type InsightMarkdownBlock = {
-  type: 'heading' | 'paragraph' | 'list' | 'table'
-  text?: string
-  items?: string[]
-  headers?: string[]
-  rows?: string[][]
-}
-
-function parseInsightInline(text: string): InsightInlinePart[] {
-  const parts: InsightInlinePart[] = []
-  const pattern = /<u>(.*?)<\/u>|__(.*?)__|\*\*(.*?)\*\*/g
-  let cursor = 0
-  let match: RegExpExecArray | null
-  while ((match = pattern.exec(text)) !== null) {
-    if (match.index > cursor) {
-      parts.push({ text: text.slice(cursor, match.index) })
-    }
-    if (match[1] != null) {
-      parts.push({ text: match[1], underline: true })
-    } else if (match[2] != null) {
-      parts.push({ text: match[2], underline: true })
-    } else if (match[3] != null) {
-      parts.push({ text: match[3], strong: true })
-    }
-    cursor = pattern.lastIndex
-  }
-  if (cursor < text.length) {
-    parts.push({ text: text.slice(cursor) })
-  }
-  return parts.filter(part => part.text)
-}
-
-function stripInsightMarkdownPrefix(line: string): string {
-  return line
-    .replace(/^\s{0,3}#{1,6}\s*/, '')
-    .replace(/^\s*[-*+]\s+/, '')
-    .replace(/^\s*\d+[.)]\s+/, '')
-    .trim()
-}
-
-function parseMarkdownTableLine(line: string): string[] {
-  const cells = line.split('|').map(cell => cell.trim())
-  if (cells[0] === '') cells.shift()
-  if (cells[cells.length - 1] === '') cells.pop()
-  return cells
-}
-
-function isMarkdownTableDelimiter(line: string): boolean {
-  const trimmed = line.trim()
-  if (!trimmed.includes('|')) return false
-  const cells = parseMarkdownTableLine(trimmed)
-  return cells.length > 0 && cells.every(cell => /^:?-{2,}:?$/.test(cell))
-}
-
-function parseInsightMarkdown(text: string): InsightMarkdownBlock[] {
-  const blocks: InsightMarkdownBlock[] = []
-  const lines = normalizeInsightText(text).split('\n')
-  let paragraph: string[] = []
-  let listItems: string[] = []
-
-  const flushParagraph = () => {
-    if (paragraph.length) {
-      blocks.push({ type: 'paragraph', text: paragraph.join('\n').trim() })
-      paragraph = []
-    }
-  }
-  const flushList = () => {
-    if (listItems.length) {
-      blocks.push({ type: 'list', items: listItems })
-      listItems = []
-    }
-  }
-
-  for (let i = 0; i < lines.length; i++) {
-    const rawLine = lines[i]
-    const line = rawLine.trim()
-
-    if (!line) {
-      flushParagraph()
-      flushList()
-      continue
-    }
-
-    if (line.includes('|')) {
-      const nextLine = lines[i + 1]
-      if (nextLine !== undefined && isMarkdownTableDelimiter(nextLine)) {
-        flushParagraph()
-        flushList()
-        const headers = parseMarkdownTableLine(rawLine)
-        i++ // skip delimiter line
-        const rows: string[][] = []
-        i++ // start from first body row
-        while (i < lines.length && lines[i].trim().includes('|')) {
-          rows.push(parseMarkdownTableLine(lines[i]))
-          i++
-        }
-        blocks.push({ type: 'table', headers, rows })
-        i-- // let outer loop process the first non-table line
-        continue
-      }
-    }
-
-    if (/^\s{0,3}#{1,6}\s+/.test(rawLine)) {
-      flushParagraph()
-      flushList()
-      blocks.push({ type: 'heading', text: stripInsightMarkdownPrefix(rawLine) })
-      continue
-    }
-
-    if (/^\s*([-*+]|\d+[.)])\s+/.test(rawLine)) {
-      flushParagraph()
-      listItems.push(stripInsightMarkdownPrefix(rawLine))
-      continue
-    }
-
-    flushList()
-    paragraph.push(line)
-  }
-  flushParagraph()
-  flushList()
-  return blocks
 }
 
 function renderInsightInline(text: string) {
@@ -599,9 +465,6 @@ function StatsPage() {
   const [error, setError] = useState<string | null>(null)
   /** 未登录：可进入分析 Tab 浏览引导，不拉取需登录接口 */
   const [guestBrowse, setGuestBrowse] = useState(() => !hasAuthToken())
-  const [aiDisplayText, setAiDisplayText] = useState('')
-  const typingTimerRef = useRef<any>(null)
-  const [isTyping, setIsTyping] = useState(false)
   const [insightActionLoading, setInsightActionLoading] = useState(false)
   const [insightError, setInsightError] = useState<string | null>(null)
   const [showCalories, setShowCalories] = useState(false)
@@ -957,61 +820,6 @@ function StatsPage() {
     }
   }, [customFocusRefreshingKey, mergeCustomFocusCard, range])
 
-  // AI 洞察打字机效果：当 analysis_summary 从空变为非空时，按字符逐步显示
-  useEffect(() => {
-    const full = data?.analysis_summary || ''
-
-    // 如果还没有洞察，清空显示并停止打字
-    if (!full) {
-      setAiDisplayText('')
-      setIsTyping(false)
-      if (typingTimerRef.current) {
-        clearInterval(typingTimerRef.current)
-        typingTimerRef.current = null
-      }
-      return
-    }
-
-    // 已经完全展示，无需重新打字
-    if (aiDisplayText === full && !isTyping) {
-      return
-    }
-
-    if (typingTimerRef.current) {
-      clearInterval(typingTimerRef.current)
-      typingTimerRef.current = null
-    }
-
-    let index = 0
-    const step = 2 // 每次输出的字符数
-    setAiDisplayText('')
-    setIsTyping(true)
-
-    const timer = setInterval(() => {
-      index += step
-      if (index >= full.length) {
-        setAiDisplayText(full)
-        setIsTyping(false)
-        if (typingTimerRef.current) {
-          clearInterval(typingTimerRef.current)
-          typingTimerRef.current = null
-        }
-      } else {
-        setAiDisplayText(full.slice(0, index))
-      }
-    }, 40)
-
-    typingTimerRef.current = timer
-
-    return () => {
-      if (typingTimerRef.current) {
-        clearInterval(typingTimerRef.current)
-        typingTimerRef.current = null
-      }
-    }
-    // 只在后端完整洞察文本变化时重新触发打字
-  }, [data?.analysis_summary])
-
   if (guestBrowse) {
     return (
       <View className={`stats-page stats-page--guest ${scheme === 'dark' ? 'stats-page--dark' : ''}`}>
@@ -1068,9 +876,7 @@ function StatsPage() {
   const canUseStatsInsight = hasAnyDietData
   const canGenerateInsight = canUseStatsInsight && insightRemainingToday > 0
   const normalizedInsightText = normalizeInsightText(d.analysis_summary || '')
-  const displayInsightText = canUseStatsInsight
-    ? normalizeInsightText(aiDisplayText || (hasInsight && !isTyping ? normalizedInsightText : ''))
-    : ''
+  const displayInsightText = canUseStatsInsight && hasInsight ? normalizedInsightText : ''
   const bodyMetrics = d.body_metrics
   const macroPercent = {
     protein: toSafeNumber(d.macro_percent?.protein),
@@ -1627,13 +1433,6 @@ function StatsPage() {
               </View>
             ) : displayInsightText ? (
               <View className='analysis-content'>{renderInsightMarkdown(displayInsightText)}</View>
-            ) : isTyping ? (
-              <View className='analysis-loading'>
-                <Text className='iconfont icon-jiazaixiao analysis-loading-icon' />
-                <Text className='analysis-loading-text'>
-                  正在展示已生成的洞察...
-                </Text>
-              </View>
             ) : (
               <View className='analysis-empty'>
                 <Text className='analysis-empty-text'>这里不会在每次打开页面时自动重新分析。你可以在需要时手动生成一次。</Text>

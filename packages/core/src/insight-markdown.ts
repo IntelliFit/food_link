@@ -15,17 +15,23 @@ export type InsightMarkdownBlock = {
 export function normalizeInsightText(value: string): string {
   return value
     .replace(/\r\n/g, '\n')
+    // 仅把行首围栏后的首个单词当作语言标识；行内 ```1508``` 中的 1508 是正文。
+    .replace(/(^|\n)[ \t]*```[a-zA-Z0-9_-]*[ \t]*(?:\n|$)/g, '$1')
+    .replace(/```+/g, '')
     .replace(/\n{3,}/g, '\n\n')
     .trim()
 }
 
 export function parseInsightInline(text: string): InsightInlinePart[] {
   const parts: InsightInlinePart[] = []
-  const pattern = /<u>(.*?)<\/u>|__(.*?)__|\*\*(.*?)\*\*/g
+  // 模型可能在强调内容中主动换行，也可能把 HTML 标签转义成实体。
+  // 使用 [\s\S] 匹配跨行内容，并只解析白名单内的 u 标签，避免标记原样泄漏到 UI。
+  const normalized = text.replace(/&lt;(\/?u(?:\s[^&]*?)?)&gt;/gi, '<$1>')
+  const pattern = /<u(?:\s[^>]*)?>([\s\S]*?)<\/u\s*>|__([\s\S]*?)__|\*\*([\s\S]*?)\*\*/gi
   let cursor = 0
   let match: RegExpExecArray | null
-  while ((match = pattern.exec(text)) !== null) {
-    if (match.index > cursor) parts.push({ text: text.slice(cursor, match.index) })
+  while ((match = pattern.exec(normalized)) !== null) {
+    if (match.index > cursor) parts.push({ text: stripKnownInlineTags(normalized.slice(cursor, match.index)) })
     if (match[1] != null) {
       parts.push({ text: match[1], underline: true })
     } else if (match[2] != null) {
@@ -35,8 +41,12 @@ export function parseInsightInline(text: string): InsightInlinePart[] {
     }
     cursor = pattern.lastIndex
   }
-  if (cursor < text.length) parts.push({ text: text.slice(cursor) })
+  if (cursor < normalized.length) parts.push({ text: stripKnownInlineTags(normalized.slice(cursor)) })
   return parts.filter((part) => part.text)
+}
+
+function stripKnownInlineTags(value: string): string {
+  return value.replace(/<\/?u(?:\s[^>]*)?>/gi, '')
 }
 
 export function parseInsightMarkdown(text: string): InsightMarkdownBlock[] {

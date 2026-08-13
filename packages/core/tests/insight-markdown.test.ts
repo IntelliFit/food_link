@@ -1,4 +1,4 @@
-import { parseInsightInline, parseInsightMarkdown } from '../src'
+import { normalizeInsightText, parseInsightInline, parseInsightMarkdown } from '../src'
 
 describe('insight markdown helpers', () => {
   it('parses headings, lists, and inline emphasis', () => {
@@ -36,5 +36,28 @@ describe('insight markdown helpers', () => {
       ],
     })
     expect(blocks[1]).toEqual({ type: 'paragraph', text: '下一步先补早餐蛋白。' })
+  })
+
+  it('does not leak underline markup when model output wraps or escapes tags', () => {
+    expect(parseInsightInline('本期呈现 <u>饮食记录\n严重不足</u>，请补充记录。')).toEqual([
+      { text: '本期呈现 ' },
+      { text: '饮食记录\n严重不足', underline: true },
+      { text: '，请补充记录。' },
+    ])
+
+    expect(parseInsightInline('关注 &lt;u&gt;日均热量缺口&lt;/u&gt;。')).toEqual([
+      { text: '关注 ' },
+      { text: '日均热量缺口', underline: true },
+      { text: '。' },
+    ])
+
+    expect(parseInsightInline('异常 <u>未闭合标签')).toEqual([
+      { text: '异常 未闭合标签' },
+    ])
+  })
+
+  it('removes fenced markdown without dropping inline analysis values', () => {
+    expect(normalizeInsightText('热量 ```1508``` kcal')).toBe('热量 1508 kcal')
+    expect(normalizeInsightText('```markdown\n总体结论\n```')).toBe('总体结论')
   })
 })
