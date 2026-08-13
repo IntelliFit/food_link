@@ -1,6 +1,6 @@
 import { View, Text, Image, ScrollView, Input } from '@tarojs/components'
 import { withAuth } from '../../../utils/withAuth'
-import { useEffect, useState, useCallback, useRef } from 'react'
+import * as React from 'react'
 import Taro, { useDidShow, useDidHide } from '@tarojs/taro'
 import {
   listAnalyzeTaskSummaries,
@@ -52,6 +52,11 @@ const STATUS_MAP: Record<string, string> = {
 }
 
 const ANALYZE_HISTORY_PAGE_SIZE = 20
+const INITIAL_TASK_RENDER_COUNT = 6
+
+function logAnalyzeHistoryStage(stage: string, details: Record<string, unknown> = {}) {
+  console.info('[analyze-history-debug]', stage, details)
+}
 
 /** 根据后端返回的 status + is_recorded 决定列表中展示的状态文案和样式类名 */
 const pickDisplayStatus = (task: AnalyzeTaskSummary): { text: string; className: string } => {
@@ -302,9 +307,16 @@ function mergeAnalyzeHistoryTasks(current: AnalyzeTaskSummary[], incoming: Analy
 function formatTime(iso: string): { text: string; isToday: boolean } {
   try {
     const d = new Date(iso)
+    if (Number.isNaN(d.getTime())) return { text: '', isToday: false }
     const now = new Date()
-    const isToday = d.toDateString() === now.toDateString()
-    const timeStr = d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })
+    const sameDay = (left: Date, right: Date) => (
+      left.getFullYear() === right.getFullYear()
+      && left.getMonth() === right.getMonth()
+      && left.getDate() === right.getDate()
+    )
+    const pad2 = (value: number) => String(value).padStart(2, '0')
+    const isToday = sameDay(d, now)
+    const timeStr = `${pad2(d.getHours())}:${pad2(d.getMinutes())}`
     const hour = d.getHours()
     const period = hour < 12 ? '上午' : '下午'
     
@@ -315,12 +327,12 @@ function formatTime(iso: string): { text: string; isToday: boolean } {
     // 昨天
     const yesterday = new Date(now)
     yesterday.setDate(yesterday.getDate() - 1)
-    if (d.toDateString() === yesterday.toDateString()) {
+    if (sameDay(d, yesterday)) {
       return { text: `昨天 ${period}${timeStr}`, isToday: false }
     }
-    
+
     // 其他日期
-    const dateStr = d.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' })
+    const dateStr = `${pad2(d.getMonth() + 1)}/${pad2(d.getDate())}`
     return { text: `${dateStr} ${period}${timeStr}`, isToday: false }
   } catch {
     return { text: '', isToday: false }
@@ -333,7 +345,7 @@ interface TaskCardProps {
   onMore: (task: AnalyzeTaskSummary) => void
 }
 
-function TaskCard({ task, onTap, onMore }: TaskCardProps) {
+const TaskCard = React.memo(function TaskCard({ task, onTap, onMore }: TaskCardProps) {
   const mode = pickExecutionMode(task)
   const totalCalories = getTotalCalories(task)
   const sourceType = pickSourceTaskType(task)
@@ -411,33 +423,49 @@ function TaskCard({ task, onTap, onMore }: TaskCardProps) {
       </View>
     </View>
   )
-}
+})
 
 function AnalyzeHistoryPage() {
   const { scheme } = useAppColorScheme()
-  const [tasks, setTasks] = useState<AnalyzeTaskSummary[]>([])
-  const [loading, setLoading] = useState(true)
-  const [loadingMore, setLoadingMore] = useState(false)
-  const [hasMore, setHasMore] = useState(false)
-  const [showActionSheet, setShowActionSheet] = useState(false)
-  const [activeTask, setActiveTask] = useState<AnalyzeTaskSummary | null>(null)
-  const [quickRecordTask, setQuickRecordTask] = useState<AnalysisTask | null>(null)
-  const [quickRecordMealType, setQuickRecordMealType] = useState<SelectableMealType>('afternoon_snack')
-  const [mealProfile, setMealProfile] = useState<MealTypeFromProfileInput | null>(null)
-  const [showRecipeModal, setShowRecipeModal] = useState(false)
-  const [recipeModalTask, setRecipeModalTask] = useState<AnalysisTask | null>(null)
-  const [recipeNameInput, setRecipeNameInput] = useState('')
-  const [searchKeyword, setSearchKeyword] = useState('')
-  const searchDebounceRef = useRef(0)
-  const loadSeqRef = useRef(0)
-  const nextOffsetRef = useRef(0)
-  const hasMoreRef = useRef(false)
-  const loadingMoreRef = useRef(false)
-  const searchKeywordRef = useRef('')
-  const detailPendingRef = useRef(new Map<string, Promise<AnalysisTask>>())
+  const [tasks, setTasks] = React.useState<AnalyzeTaskSummary[]>([])
+  const [loading, setLoading] = React.useState(true)
+  const [loadingMore, setLoadingMore] = React.useState(false)
+  const [hasMore, setHasMore] = React.useState(false)
+  const [showActionSheet, setShowActionSheet] = React.useState(false)
+  const [activeTask, setActiveTask] = React.useState<AnalyzeTaskSummary | null>(null)
+  const [quickRecordTask, setQuickRecordTask] = React.useState<AnalysisTask | null>(null)
+  const [quickRecordMealType, setQuickRecordMealType] = React.useState<SelectableMealType>('afternoon_snack')
+  const [mealProfile, setMealProfile] = React.useState<MealTypeFromProfileInput | null>(null)
+  const [showRecipeModal, setShowRecipeModal] = React.useState(false)
+  const [recipeModalTask, setRecipeModalTask] = React.useState<AnalysisTask | null>(null)
+  const [recipeNameInput, setRecipeNameInput] = React.useState('')
+  const [searchKeyword, setSearchKeyword] = React.useState('')
+  const searchDebounceRef = React.useRef(0)
+  const taskRenderTimersRef = React.useRef<number[]>([])
+  const loadSeqRef = React.useRef(0)
+  const nextOffsetRef = React.useRef(0)
+  const hasMoreRef = React.useRef(false)
+  const loadingMoreRef = React.useRef(false)
+  const hasLoadedOnceRef = React.useRef(false)
+  const searchKeywordRef = React.useRef('')
+  const detailPendingRef = React.useRef(new Map<string, Promise<AnalysisTask>>())
   const navBarHeight = getNavBarHeight()
 
-  const handleBack = useCallback(() => {
+  const clearTaskRenderTimers = React.useCallback(() => {
+    taskRenderTimersRef.current.forEach(timer => window.clearTimeout(timer))
+    taskRenderTimersRef.current = []
+  }, [])
+
+  React.useEffect(() => {
+    logAnalyzeHistoryStage('react-commit', {
+      loading,
+      loading_more: loadingMore,
+      task_count: tasks.length,
+      has_more: hasMore,
+    })
+  }, [hasMore, loading, loadingMore, tasks.length])
+
+  const handleBack = React.useCallback(() => {
     const pages = Taro.getCurrentPages()
     if (pages.length > 1) {
       const previous = pages[pages.length - 2]
@@ -462,7 +490,7 @@ function AnalyzeHistoryPage() {
     Taro.switchTab({ url: '/pages/index/index' })
   }, [])
 
-  useEffect(() => {
+  React.useEffect(() => {
     const loadMealTypeProfile = async () => {
       if (!getAccessToken()) return
       try {
@@ -487,7 +515,7 @@ function AnalyzeHistoryPage() {
     return normalizeSelectableMealType(getTaskMealType(task), inferred)
   }
 
-  const ensureTaskDetail = useCallback((taskId: string): Promise<AnalysisTask> => {
+  const ensureTaskDetail = React.useCallback((taskId: string): Promise<AnalysisTask> => {
     const existing = detailPendingRef.current.get(taskId)
     if (existing) return existing
 
@@ -505,7 +533,7 @@ function AnalyzeHistoryPage() {
     return request
   }, [])
 
-  const loadTaskDetail = useCallback(async (taskId: string): Promise<AnalysisTask | null> => {
+  const loadTaskDetail = React.useCallback(async (taskId: string): Promise<AnalysisTask | null> => {
     try {
       Taro.showLoading({ title: '', mask: true })
       const task = await ensureTaskDetail(taskId)
@@ -518,20 +546,23 @@ function AnalyzeHistoryPage() {
     }
   }, [ensureTaskDetail])
 
-  const load = useCallback(async (keyword?: string, append = false) => {
+  const load = React.useCallback(async (keyword?: string, append = false) => {
     if (append && (!hasMoreRef.current || loadingMoreRef.current)) return
     const seq = append ? loadSeqRef.current : ++loadSeqRef.current
     const offset = append ? nextOffsetRef.current : 0
+    const startedAt = Date.now()
+    logAnalyzeHistoryStage('load-start', { seq, append, offset, has_search: Boolean(keyword?.trim()) })
     if (append) {
       loadingMoreRef.current = true
       setLoadingMore(true)
     } else {
+      clearTaskRenderTimers()
       loadingMoreRef.current = false
       setLoadingMore(false)
       nextOffsetRef.current = 0
       hasMoreRef.current = false
       setHasMore(false)
-      setLoading(true)
+      if (!hasLoadedOnceRef.current) setLoading(true)
     }
     try {
       const search = keyword?.trim()
@@ -539,20 +570,83 @@ function AnalyzeHistoryPage() {
         listAnalyzeTaskSummaries({ limit: ANALYZE_HISTORY_PAGE_SIZE, offset, search }),
         22000
       )
+      logAnalyzeHistoryStage('response-resolved', {
+        seq,
+        append,
+        duration_ms: Date.now() - startedAt,
+        response_task_count: Array.isArray(res.tasks) ? res.tasks.length : -1,
+      })
       const pageTasks = (res.tasks || []).filter((t) => isAnalyzeHistoryTaskType(t.task_type))
       pageTasks.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-      if (seq !== loadSeqRef.current) return
-      setTasks(current => append ? mergeAnalyzeHistoryTasks(current, pageTasks) : pageTasks)
+      if (seq !== loadSeqRef.current) {
+        logAnalyzeHistoryStage('response-stale', { seq, active_seq: loadSeqRef.current })
+        return
+      }
       const nextOffset = typeof res.next_offset === 'number' && Number.isFinite(res.next_offset)
         ? Math.max(offset, Math.floor(res.next_offset))
         : offset + (res.tasks || []).length
       const nextHasMore = res.has_more === true
-      nextOffsetRef.current = nextOffset
-      hasMoreRef.current = nextHasMore
-      setHasMore(nextHasMore)
+      if (append) {
+        nextOffsetRef.current = nextOffset
+        hasMoreRef.current = nextHasMore
+        setHasMore(nextHasMore)
+        setTasks(current => mergeAnalyzeHistoryTasks(current, pageTasks))
+        logAnalyzeHistoryStage('append-commit-scheduled', {
+          seq,
+          page_task_count: pageTasks.length,
+          duration_ms: Date.now() - startedAt,
+        })
+      } else {
+        // 先单独提交 loading=false。Android 真机创建 20 张卡片和图片节点时，
+        // 如果与移除 spinner 同批提交，旧 spinner 会一直保留到整批视图更新完成。
+        hasLoadedOnceRef.current = true
+        setLoading(false)
+        logAnalyzeHistoryStage('loading-release-scheduled', {
+          seq,
+          page_task_count: pageTasks.length,
+          duration_ms: Date.now() - startedAt,
+        })
+        if (pageTasks.length === 0) {
+          setTasks([])
+        } else {
+          // 独立 timer 让当前 async 请求函数先返回，防止 React/小程序宿主把
+          // loading=false 与 20 张卡片创建合并为一次昂贵的视图提交。
+          const initialTimer = window.setTimeout(() => {
+            if (seq !== loadSeqRef.current) return
+            setTasks(pageTasks.slice(0, INITIAL_TASK_RENDER_COUNT))
+            logAnalyzeHistoryStage('initial-cards-commit-scheduled', {
+              seq,
+              task_count: Math.min(INITIAL_TASK_RENDER_COUNT, pageTasks.length),
+              duration_ms: Date.now() - startedAt,
+            })
+          }, 80)
+          taskRenderTimersRef.current.push(initialTimer)
+          if (pageTasks.length > INITIAL_TASK_RENDER_COUNT) {
+            const allTimer = window.setTimeout(() => {
+              if (seq !== loadSeqRef.current) return
+              setTasks(pageTasks)
+              logAnalyzeHistoryStage('all-cards-commit-scheduled', {
+                seq,
+                task_count: pageTasks.length,
+                duration_ms: Date.now() - startedAt,
+              })
+            }, 480)
+            taskRenderTimersRef.current.push(allTimer)
+          }
+        }
+        nextOffsetRef.current = nextOffset
+        hasMoreRef.current = nextHasMore
+        setHasMore(nextHasMore)
+      }
     } catch (e: any) {
       if (seq !== loadSeqRef.current) return
-      console.error('[analyze-history] load failed', e)
+      console.error('[analyze-history] load failed', {
+        seq,
+        append,
+        duration_ms: Date.now() - startedAt,
+        message: String(e?.message || e || ''),
+      })
+      if (!append) setLoading(false)
       await showUnifiedApiError(e, '加载失败')
     } finally {
       if (seq === loadSeqRef.current) {
@@ -562,9 +656,14 @@ function AnalyzeHistoryPage() {
         } else {
           setLoading(false)
         }
+        logAnalyzeHistoryStage('load-finally', {
+          seq,
+          append,
+          duration_ms: Date.now() - startedAt,
+        })
       }
     }
-  }, [])
+  }, [clearTaskRenderTimers])
 
   const handleSearchInput = (value: string) => {
     setSearchKeyword(value)
@@ -586,11 +685,25 @@ function AnalyzeHistoryPage() {
   }
 
   useDidShow(() => {
+    let runtime: Record<string, unknown> = {}
+    try {
+      const systemInfo = Taro.getSystemInfoSync()
+      runtime = {
+        platform: systemInfo.platform,
+        system: systemInfo.system,
+        sdk_version: systemInfo.SDKVersion,
+        version: systemInfo.version,
+      }
+    } catch {
+      // ignore runtime diagnostics failure
+    }
+    logAnalyzeHistoryStage('page-show', runtime)
     applyThemeNavigationBar(scheme)
     void load(searchKeywordRef.current)
   })
 
   useDidHide(() => {
+    clearTaskRenderTimers()
     // 页面隐藏时：食物保质期已读继续沿用原逻辑
     const today = new Date().toISOString().slice(0, 10)
     Taro.setStorageSync('food_expiry_last_seen_date', today)
@@ -726,7 +839,7 @@ function AnalyzeHistoryPage() {
     confirmRetryTask(task)
   }
 
-  const submitRetryTask = useCallback(async (task: AnalysisTask | AnalyzeTaskSummary) => {
+  const submitRetryTask = React.useCallback(async (task: AnalysisTask | AnalyzeTaskSummary) => {
     if (task.status !== 'failed' && task.status !== 'timed_out') {
       Taro.showToast({ title: '当前任务不能重新识别', icon: 'none' })
       return
@@ -746,7 +859,7 @@ function AnalyzeHistoryPage() {
     }
   }, [load])
 
-  const confirmRetryTask = useCallback((task: AnalysisTask | AnalyzeTaskSummary) => {
+  const confirmRetryTask = React.useCallback((task: AnalysisTask | AnalyzeTaskSummary) => {
     Taro.showModal({
       title: '重新识别',
       content: pickSourceTaskType(task) === 'food_text'
