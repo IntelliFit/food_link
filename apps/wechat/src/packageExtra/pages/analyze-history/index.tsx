@@ -442,6 +442,7 @@ function AnalyzeHistoryPage() {
   const [searchKeyword, setSearchKeyword] = React.useState('')
   const searchDebounceRef = React.useRef(0)
   const taskRenderTimersRef = React.useRef<number[]>([])
+  const loadedTaskCountRef = React.useRef(0)
   const loadSeqRef = React.useRef(0)
   const nextOffsetRef = React.useRef(0)
   const hasMoreRef = React.useRef(false)
@@ -457,6 +458,7 @@ function AnalyzeHistoryPage() {
   }, [])
 
   React.useEffect(() => {
+    loadedTaskCountRef.current = tasks.length
     logAnalyzeHistoryStage('react-commit', {
       loading,
       loading_more: loadingMore,
@@ -546,12 +548,22 @@ function AnalyzeHistoryPage() {
     }
   }, [ensureTaskDetail])
 
-  const load = React.useCallback(async (keyword?: string, append = false) => {
+  const load = React.useCallback(async (keyword?: string, append = false, refreshLoadedRange = false) => {
     if (append && (!hasMoreRef.current || loadingMoreRef.current)) return
     const seq = append ? loadSeqRef.current : ++loadSeqRef.current
     const offset = append ? nextOffsetRef.current : 0
+    const refreshLimit = refreshLoadedRange
+      ? Math.min(200, Math.max(ANALYZE_HISTORY_PAGE_SIZE, loadedTaskCountRef.current))
+      : ANALYZE_HISTORY_PAGE_SIZE
     const startedAt = Date.now()
-    logAnalyzeHistoryStage('load-start', { seq, append, offset, has_search: Boolean(keyword?.trim()) })
+    logAnalyzeHistoryStage('load-start', {
+      seq,
+      append,
+      offset,
+      limit: append ? ANALYZE_HISTORY_PAGE_SIZE : refreshLimit,
+      refresh_loaded_range: refreshLoadedRange,
+      has_search: Boolean(keyword?.trim()),
+    })
     if (append) {
       loadingMoreRef.current = true
       setLoadingMore(true)
@@ -567,7 +579,11 @@ function AnalyzeHistoryPage() {
     try {
       const search = keyword?.trim()
       const res = await withTimeout(
-        listAnalyzeTaskSummaries({ limit: ANALYZE_HISTORY_PAGE_SIZE, offset, search }),
+        listAnalyzeTaskSummaries({
+          limit: append ? ANALYZE_HISTORY_PAGE_SIZE : refreshLimit,
+          offset,
+          search,
+        }),
         22000
       )
       logAnalyzeHistoryStage('response-resolved', {
@@ -706,7 +722,7 @@ function AnalyzeHistoryPage() {
     }
     logAnalyzeHistoryStage('page-show', runtime)
     applyThemeNavigationBar(scheme)
-    void load(searchKeywordRef.current)
+    void load(searchKeywordRef.current, false, hasLoadedOnceRef.current)
   })
 
   useDidHide(() => {
@@ -856,7 +872,7 @@ function AnalyzeHistoryPage() {
       const result = await retryAnalyzeTask(task.id)
       Taro.hideLoading()
       Taro.showToast({ title: '已重新识别', icon: 'success' })
-      void load(searchKeywordRef.current)
+      void load(searchKeywordRef.current, false, hasLoadedOnceRef.current)
       Taro.navigateTo({
         url: `${extraPkgUrl('/pages/analyze-loading/index')}?task_id=${encodeURIComponent(result.task_id)}&task_type=${encodeURIComponent(task.task_type || 'food')}&execution_mode=${pickExecutionMode(task)}`
       })
