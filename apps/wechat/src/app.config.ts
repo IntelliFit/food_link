@@ -41,7 +41,6 @@ const extraSubpackagePages = [
   'pages/interaction-notifications/index',
   'pages/interaction-feed-detail/index',
   'pages/circle-post-edit/index',
-  'pages/food-library-share/index',
   'pages/location-search/index',
   'pages/login/index',
   'pages/agreement/index',
@@ -75,8 +74,6 @@ export default defineAppConfig({
   // 否则会出现“应用仍是浅色态，但原生页面背景先变黑”的半黑半白混合态。
   darkmode: false,
   pages: mainPages,
-  // 微信支付委托代扣签约小程序，开通自动续费时由会员页跳转至该固定 AppID。
-  navigateToMiniProgramAppIdList: ['wxbd687630cd02ce1d'],
   subpackages: [
     {
       root: 'packageExtra',
@@ -100,6 +97,12 @@ export default defineAppConfig({
       root: 'packageUserGroup',
       name: 'user-group',
       pages: ['pages/user-group/index'],
+    },
+    {
+      // The region picker ships the full China area dataset. Keep it out of the main package and the nearly-full shared package.
+      root: 'packageFoodLibraryShare',
+      name: 'food-library-share',
+      pages: ['pages/food-library-share/index'],
     },
   ],
   window: {

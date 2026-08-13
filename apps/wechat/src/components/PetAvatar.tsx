@@ -1,10 +1,6 @@
 import { View, Image } from '@tarojs/components'
 import { useEffect, useMemo, useState } from 'react'
 import { derivePetAppearance, type PetAnimal, type PetAppearanceCandidate, type PetProfile } from '@food-link/core'
-import jianwenIdleAvatar from '../assets/pets/jianwen-01-idle.png'
-import jianwenBlinkAvatar from '../assets/pets/jianwen-01-blink.png'
-import jianwenSquashAvatar from '../assets/pets/jianwen-01-squash.png'
-import jianwenJumpAvatar from '../assets/pets/jianwen-01-jump.png'
 
 import './PetAvatar.scss'
 
@@ -32,10 +28,10 @@ const BUILTIN_AVATAR_FRAMES: Record<string, {
   jump: string
 }> = {
   'jianwen-01': {
-    idle: jianwenIdleAvatar,
-    blink: jianwenBlinkAvatar,
-    squash: jianwenSquashAvatar,
-    jump: jianwenJumpAvatar,
+    idle: '/assets/pets/jianwen-01-idle.png',
+    blink: '/assets/pets/jianwen-01-blink.png',
+    squash: '/assets/pets/jianwen-01-squash.png',
+    jump: '/assets/pets/jianwen-01-jump.png',
   },
 }
 

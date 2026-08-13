@@ -5,11 +5,13 @@ export const SUBPACKAGE_EXTRA_ROOT = '/packageExtra' as const
 export const SUBPACKAGE_ABOUT_ROOT = '/packageAbout' as const
 export const SUBPACKAGE_USER_GROUP_ROOT = '/packageUserGroup' as const
 export const SUBPACKAGE_STATS_METABOLIC_ROOT = '/packageStatsMetabolic' as const
+export const SUBPACKAGE_FOOD_LIBRARY_SHARE_ROOT = '/packageFoodLibraryShare' as const
 
 const EXTRA_PACKAGE_ROOT_BY_PAGE: Readonly<Record<string, string>> = {
   '/pages/about/index': SUBPACKAGE_ABOUT_ROOT,
   '/pages/user-group/index': SUBPACKAGE_USER_GROUP_ROOT,
   '/pages/stats-metabolic/index': SUBPACKAGE_STATS_METABOLIC_ROOT,
+  '/pages/food-library-share/index': SUBPACKAGE_FOOD_LIBRARY_SHARE_ROOT,
 }
 
 const KNOWN_EXTRA_PACKAGE_ROOTS = [
@@ -17,6 +19,7 @@ const KNOWN_EXTRA_PACKAGE_ROOTS = [
   SUBPACKAGE_ABOUT_ROOT,
   SUBPACKAGE_USER_GROUP_ROOT,
   SUBPACKAGE_STATS_METABOLIC_ROOT,
+  SUBPACKAGE_FOOD_LIBRARY_SHARE_ROOT,
 ] as const
 
 /** TabBar 主包页面（与 `getCurrentPageRoute()` 一致，形如 /pages/xxx/index） */
