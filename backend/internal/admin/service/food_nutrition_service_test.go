@@ -41,6 +41,7 @@ func TestFoodNutritionServiceListUsesSharedCategory(t *testing.T) {
 	repoStub := &foodNutritionRepoStub{items: []domain.FoodNutrition{
 		{ID: "tomato", CanonicalName: "番茄"},
 		{ID: "egg", CanonicalName: "番茄炒鸡蛋"},
+		{ID: "soybean", CanonicalName: "黄豆（干货，生重）"},
 	}}
 	svc := NewFoodNutritionService(repoStub, nil)
 
@@ -53,7 +54,8 @@ func TestFoodNutritionServiceListUsesSharedCategory(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "vegetable", repoStub.listInput.Category)
 	assert.Equal(t, 20, repoStub.listInput.Offset)
-	require.Len(t, result.Items, 2)
+	require.Len(t, result.Items, 3)
 	assert.Equal(t, "vegetable", result.Items[0].Category)
 	assert.Equal(t, "protein", result.Items[1].Category)
+	assert.Equal(t, "legume", result.Items[2].Category)
 }

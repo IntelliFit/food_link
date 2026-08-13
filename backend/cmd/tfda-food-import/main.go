@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"context"
 	"crypto/sha256"
+	"encoding/csv"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -21,6 +22,7 @@ import (
 	"unicode"
 
 	fooddomain "food_link/backend/internal/foodrecord/domain"
+	foodrepo "food_link/backend/internal/foodrecord/repo"
 	"food_link/backend/pkg/config"
 	"food_link/backend/pkg/database"
 
@@ -60,6 +62,7 @@ type options struct {
 	apply         bool
 	requireImages bool
 	timeout       time.Duration
+	verifyQueries string
 }
 
 type tfdaRow struct {
@@ -234,6 +237,9 @@ func main() {
 	if err != nil {
 		log.Fatalf("TFDA 导入失败（写库事务已回滚）: %v；报告=%s", err, opts.reportPath)
 	}
+	if err := verifyNutritionSearches(ctx, db, opts.verifyQueries); err != nil {
+		log.Fatalf("验证用户端营养搜索失败: %v", err)
+	}
 	fmt.Printf("TFDA 导入完成 source_foods=%d selected=%d ready=%d created=%d updated=%d present=%d rejected=%d conflicts=%d images=%d/%d aliases_created=%d aliases_updated=%d unsafe_blocked=%d apply=%v report=%s\n",
 		report.SourceFoods, report.Selected, report.Ready, report.Created, report.Updated,
 		report.AlreadyPresent, report.Rejected, report.Conflicts, report.WithImages, report.Selected,
@@ -243,7 +249,7 @@ func main() {
 func parseFlags() options {
 	var opts options
 	flag.StringVar(&opts.configDir, "config-dir", ".", "后端配置目录")
-	flag.StringVar(&opts.inputPath, "input", "tmp/tfda-import/tfda-food-nutrition.zip", "TFDA 官方 JSON 或 ZIP")
+	flag.StringVar(&opts.inputPath, "input", "tmp/tfda-import/tfda-food-nutrition.zip", "TFDA 官方 JSON、CSV 或 ZIP")
 	flag.StringVar(&opts.reviewPath, "review", "data/tfda_food_import_review.json", "人工审核 canonical/alias/图片复用清单")
 	flag.StringVar(&opts.reportPath, "report", "tmp/tfda-import/import-report.json", "审计报告路径")
 	flag.StringVar(&opts.onlyIDs, "only-ids", "", "仅处理逗号分隔的 TFDA 整合编号")
@@ -251,8 +257,53 @@ func parseFlags() options {
 	flag.BoolVar(&opts.apply, "apply", false, "写入数据库；默认 dry-run")
 	flag.BoolVar(&opts.requireImages, "require-images", false, "缺少有许可证图片时拒绝该条")
 	flag.DurationVar(&opts.timeout, "timeout", 30*time.Minute, "任务总超时")
+	flag.StringVar(&opts.verifyQueries, "verify-queries", "", "逗号分隔的用户端营养搜索词；输出实际召回名称")
 	flag.Parse()
 	return opts
+}
+
+func verifyNutritionSearches(ctx context.Context, db *gorm.DB, queryCSV string) error {
+	queries := splitAliases(queryCSV)
+	if len(queries) == 0 {
+		return nil
+	}
+	repository := foodrepo.NewFoodNutritionRepo(db)
+	for _, query := range queries {
+		foods, err := repository.Search(ctx, query, 10)
+		if err != nil {
+			return fmt.Errorf("搜索 %q: %w", query, err)
+		}
+		if err := validateNutritionSearchHits(query, foods); err != nil {
+			return err
+		}
+		names := make([]string, 0, len(foods))
+		for _, food := range foods {
+			names = append(names, food.CanonicalName)
+		}
+		fmt.Printf("TFDA 用户端搜索验证 query=%q results=%q\n", query, names)
+	}
+	return nil
+}
+
+func validateNutritionSearchHits(query string, foods []fooddomain.FoodNutrition) error {
+	if len(foods) == 0 {
+		return fmt.Errorf("搜索 %q 未召回任何营养食物", query)
+	}
+	return nil
+}
+
+func validateTFDACSVColumns(columns map[string]int) error {
+	required := []string{"整合編號", "樣品名稱", "分析項", "含量單位", "每100克含量"}
+	missing := make([]string, 0)
+	for _, name := range required {
+		if _, ok := columns[name]; !ok {
+			missing = append(missing, name)
+		}
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf("TFDA CSV 缺少必需欄位: %s", strings.Join(missing, ", "))
+	}
+	return nil
 }
 
 func readTFDA(path string, converter *opencc.OpenCC) (map[string]*sourceFood, int, string, error) {
@@ -260,94 +311,164 @@ func readTFDA(path string, converter *opencc.OpenCC) (map[string]*sourceFood, in
 	if err != nil {
 		return nil, 0, "", err
 	}
-	reader, closer, err := openJSONReader(path)
+	reader, format, closer, err := openDataReader(path)
 	if err != nil {
 		return nil, 0, "", err
 	}
 	defer closer()
-	dec := json.NewDecoder(reader)
-	token, err := dec.Token()
-	if err != nil || token != json.Delim('[') {
-		return nil, 0, "", errors.New("TFDA JSON 顶层必须是数组")
-	}
 	foods := map[string]*sourceFood{}
 	rowCount := 0
-	for dec.More() {
-		var row tfdaRow
-		if err := dec.Decode(&row); err != nil {
-			return nil, rowCount, "", err
-		}
+	consume := func(row tfdaRow) error {
 		rowCount++
-		id := strings.TrimSpace(row.IntegrationID)
-		name := strings.TrimSpace(row.SampleName)
-		if id == "" || name == "" {
-			continue
+		return accumulateTFDARow(foods, row, converter)
+	}
+	if format == "json" {
+		dec := json.NewDecoder(reader)
+		token, decodeErr := dec.Token()
+		if decodeErr != nil || token != json.Delim('[') {
+			return nil, 0, "", errors.New("TFDA JSON 顶层必须是数组")
 		}
-		food := foods[id]
-		if food == nil {
-			canonical, convErr := converter.Convert(name)
-			if convErr != nil {
-				return nil, rowCount, "", convErr
+		for dec.More() {
+			var row tfdaRow
+			if decodeErr := dec.Decode(&row); decodeErr != nil {
+				return nil, rowCount, "", decodeErr
 			}
-			food = &sourceFood{
-				IntegrationID: id, Category: strings.TrimSpace(row.Category), DataType: strings.TrimSpace(row.DataType),
-				OriginalName: name, CanonicalName: normalizePunctuation(strings.TrimSpace(canonical)),
-				CommonNames: stringValue(row.CommonNames), EnglishName: stringValue(row.EnglishName),
-				Description: stringValue(row.Description), WasteRate: stringValue(row.WasteRate),
-				Nutrients: map[string]nutrientValue{},
-			}
-			foods[id] = food
-		}
-		field, expectedUnit, ok := nutrientField(row.NutrientName)
-		if !ok || row.Per100g == nil || strings.TrimSpace(stringValue(row.Unit)) != expectedUnit {
-			continue
-		}
-		value, parseErr := parseNumber(*row.Per100g)
-		if parseErr != nil {
-			continue
-		}
-		nv := nutrientValue{Value: value, Unit: expectedUnit}
-		if row.SampleCount != nil {
-			if n, countErr := strconv.Atoi(strings.TrimSpace(*row.SampleCount)); countErr == nil {
-				nv.SampleCount = &n
+			if consumeErr := consume(row); consumeErr != nil {
+				return nil, rowCount, "", consumeErr
 			}
 		}
-		if row.StdDev != nil {
-			if std, stdErr := parseNumber(*row.StdDev); stdErr == nil {
-				nv.StdDev = &std
+	} else {
+		csvReader := csv.NewReader(reader)
+		csvReader.FieldsPerRecord = -1
+		header, readErr := csvReader.Read()
+		if readErr != nil {
+			return nil, 0, "", readErr
+		}
+		columns := map[string]int{}
+		for idx, name := range header {
+			columns[strings.TrimPrefix(strings.TrimSpace(name), "\ufeff")] = idx
+		}
+		if err := validateTFDACSVColumns(columns); err != nil {
+			return nil, 0, "", err
+		}
+		value := func(record []string, name string) string {
+			idx, ok := columns[name]
+			if !ok || idx >= len(record) {
+				return ""
+			}
+			return record[idx]
+		}
+		optional := func(record []string, name string) *string {
+			v := value(record, name)
+			if strings.TrimSpace(v) == "" {
+				return nil
+			}
+			return &v
+		}
+		for {
+			record, readErr := csvReader.Read()
+			if errors.Is(readErr, io.EOF) {
+				break
+			}
+			if readErr != nil {
+				return nil, rowCount, "", readErr
+			}
+			row := tfdaRow{
+				Category: value(record, "食品分類"), DataType: value(record, "資料類別"),
+				IntegrationID: value(record, "整合編號"), SampleName: value(record, "樣品名稱"),
+				CommonNames: optional(record, "俗名"), EnglishName: optional(record, "樣品英文名稱"),
+				Description: optional(record, "內容物描述"), WasteRate: optional(record, "廢棄率"),
+				NutrientCategory: value(record, "分析項分類"), NutrientName: value(record, "分析項"),
+				Unit: optional(record, "含量單位"), Per100g: optional(record, "每100克含量"),
+				SampleCount: optional(record, "樣本數"), StdDev: optional(record, "標準差"),
+			}
+			if consumeErr := consume(row); consumeErr != nil {
+				return nil, rowCount, "", consumeErr
 			}
 		}
-		food.Nutrients[field] = nv
+	}
+	if len(foods) == 0 {
+		return nil, rowCount, "", errors.New("TFDA 数据未解析出任何有效食物")
 	}
 	return foods, rowCount, dataHash, nil
 }
 
-func openJSONReader(path string) (io.Reader, func(), error) {
+func accumulateTFDARow(foods map[string]*sourceFood, row tfdaRow, converter *opencc.OpenCC) error {
+	id := strings.TrimSpace(row.IntegrationID)
+	name := strings.TrimSpace(row.SampleName)
+	if id == "" || name == "" {
+		return nil
+	}
+	food := foods[id]
+	if food == nil {
+		canonical, err := converter.Convert(name)
+		if err != nil {
+			return err
+		}
+		food = &sourceFood{
+			IntegrationID: id, Category: strings.TrimSpace(row.Category), DataType: strings.TrimSpace(row.DataType),
+			OriginalName: name, CanonicalName: normalizePunctuation(strings.TrimSpace(canonical)),
+			CommonNames: stringValue(row.CommonNames), EnglishName: stringValue(row.EnglishName),
+			Description: stringValue(row.Description), WasteRate: stringValue(row.WasteRate),
+			Nutrients: map[string]nutrientValue{},
+		}
+		foods[id] = food
+	}
+	field, expectedUnit, ok := nutrientField(row.NutrientName)
+	if !ok || row.Per100g == nil || strings.TrimSpace(stringValue(row.Unit)) != expectedUnit {
+		return nil
+	}
+	value, err := parseNumber(*row.Per100g)
+	if err != nil {
+		return nil
+	}
+	nv := nutrientValue{Value: value, Unit: expectedUnit}
+	if row.SampleCount != nil {
+		if n, countErr := strconv.Atoi(strings.TrimSpace(*row.SampleCount)); countErr == nil {
+			nv.SampleCount = &n
+		}
+	}
+	if row.StdDev != nil {
+		if std, stdErr := parseNumber(*row.StdDev); stdErr == nil {
+			nv.StdDev = &std
+		}
+	}
+	food.Nutrients[field] = nv
+	return nil
+}
+
+func openDataReader(path string) (io.Reader, string, func(), error) {
 	clean := filepath.Clean(path)
 	if strings.EqualFold(filepath.Ext(clean), ".zip") {
 		archive, err := zip.OpenReader(clean)
 		if err != nil {
-			return nil, func() {}, err
+			return nil, "", func() {}, err
 		}
 		for _, file := range archive.File {
-			if !strings.EqualFold(filepath.Ext(file.Name), ".json") {
+			ext := strings.ToLower(filepath.Ext(file.Name))
+			if ext != ".json" && ext != ".csv" {
 				continue
 			}
 			stream, openErr := file.Open()
 			if openErr != nil {
 				_ = archive.Close()
-				return nil, func() {}, openErr
+				return nil, "", func() {}, openErr
 			}
-			return stream, func() { _ = stream.Close(); _ = archive.Close() }, nil
+			return stream, strings.TrimPrefix(ext, "."), func() { _ = stream.Close(); _ = archive.Close() }, nil
 		}
 		_ = archive.Close()
-		return nil, func() {}, errors.New("ZIP 中没有 JSON 文件")
+		return nil, "", func() {}, errors.New("ZIP 中没有 JSON 或 CSV 文件")
 	}
 	file, err := os.Open(clean)
 	if err != nil {
-		return nil, func() {}, err
+		return nil, "", func() {}, err
 	}
-	return file, func() { _ = file.Close() }, nil
+	ext := strings.ToLower(filepath.Ext(clean))
+	if ext != ".json" && ext != ".csv" {
+		_ = file.Close()
+		return nil, "", func() {}, fmt.Errorf("不支持的 TFDA 文件格式 %s", ext)
+	}
+	return file, strings.TrimPrefix(ext, "."), func() { _ = file.Close() }, nil
 }
 
 func processFoods(ctx context.Context, db *gorm.DB, foods []*sourceFood, review reviewManifest, opts options, inputHash string, out *importReport) error {

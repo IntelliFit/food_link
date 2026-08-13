@@ -61,6 +61,7 @@ type FoodCategory = {
 const defaultFoodCategories: FoodCategory[] = [
   { key: 'staple', label: '主食' },
   { key: 'protein', label: '肉蛋奶' },
+  { key: 'legume', label: '豆类/豆制品' },
   { key: 'vegetable', label: '蔬菜' },
   { key: 'fruit', label: '水果' },
   { key: 'dairy', label: '乳品' },
@@ -73,10 +74,11 @@ const defaultFoodCategories: FoodCategory[] = [
 
 const categoryInferenceRules: Array<{ key: string; keywords: string[] }> = [
   { key: 'soup', keywords: ['清汤', '汤', '羹', 'soup', 'broth'] },
-  { key: 'beverage', keywords: ['咖啡', '拿铁', '奶茶', '茶饮', '绿茶', '红茶', '乌龙茶', '饮料', '可乐', '果汁', '豆浆', 'coffee', 'latte', 'tea', 'drink'] },
   { key: 'snack', keywords: ['坚果', '薯片', '饼干', '曲奇', '巧克力', '糖果', '糕点', '蛋糕', '零食', '瓜子', '花生', '杏仁', '核桃', 'cookie', 'snack', 'nuts'] },
   { key: 'meal', keywords: ['沙拉', '便当', '套餐', '外卖', '饭团'] },
-  { key: 'protein', keywords: ['鸡', '牛肉', '猪肉', '羊肉', '肉末', '肉丸', '肉片', '瘦肉', '排骨', '猪骨', '香肠', '火腿', '培根', '鱼', '虾', '蛋', '豆腐', 'protein', 'chicken', 'beef', 'egg', 'tofu', 'fish'] },
+  { key: 'protein', keywords: ['鸡', '牛肉', '猪肉', '羊肉', '红烧肉', '烧肉', '肉末', '肉丸', '肉片', '瘦肉', '排骨', '猪骨', '香肠', '火腿', '培根', '鱼', '虾', '蛋', 'protein', 'chicken', 'beef', 'egg', 'fish'] },
+  { key: 'legume', keywords: ['黄豆', '大豆', '黑豆', '红豆', '赤小豆', '绿豆', '蚕豆', '豌豆', '扁豆', '芸豆', '鹰嘴豆', '毛豆', '豆腐', '豆干', '豆皮', '腐竹', '豆浆', '豆粉', '豆奶', '纳豆', 'soybean', 'soy bean', 'black bean', 'yellow bean', 'chickpea', 'lentil', 'kidney bean', 'mung bean', 'adzuki', 'tofu', 'tempeh', 'natto', 'soy milk'] },
+  { key: 'beverage', keywords: ['咖啡', '拿铁', '奶茶', '茶饮', '绿茶', '红茶', '乌龙茶', '饮料', '可乐', '果汁', 'coffee', 'latte', 'tea', 'drink'] },
   { key: 'staple', keywords: ['米饭', '糙米', '面条', '馒头', '包子', '粥', '燕麦', '红薯', '玉米', '土豆', '紫薯', '南瓜', '面包', '吐司', 'rice', 'noodle', 'bread', 'oat'] },
   { key: 'vegetable', keywords: ['菜', '西兰花', '生菜', '菠菜', '番茄', '黄瓜', '白菜', '秋葵', '时蔬', '蔬', 'broccoli', 'tomato', 'vegetable'] },
   { key: 'fruit', keywords: ['苹果', '香蕉', '橙', '梨', '莓', '水果', '西瓜', '草莓', 'apple', 'banana', 'berry', 'fruit'] },

@@ -35,6 +35,56 @@ func TestReadTFDAPivotsLongRowsAndConvertsTraditionalChinese(t *testing.T) {
 	require.NoError(t, validateFood(foods["H1"]))
 }
 
+func TestReadTFDACSVHandlesBOMAndOfficialColumns(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "tfda.csv")
+	fixture := "\ufeff食品分類,資料類別,整合編號,樣品名稱,俗名,樣品英文名稱,內容物描述,廢棄率,分析項分類,分析項,含量單位,每100克含量,樣本數,標準差\n" +
+		"豆類,樣品基本資料,H1,黃豆,\"大豆,菽\",Soy bean,樣品狀態:乾貨,,一般成分,熱量,kcal,389,2,1.2\n" +
+		"豆類,樣品基本資料,H1,黃豆,,,,,一般成分,粗蛋白,g,35.6,,\n" +
+		"豆類,樣品基本資料,H1,黃豆,,,,,一般成分,總碳水化合物,g,33.0,,\n" +
+		"豆類,樣品基本資料,H1,黃豆,,,,,一般成分,粗脂肪,g,15.7,,\n"
+	require.NoError(t, os.WriteFile(path, []byte(fixture), 0o600))
+	converter, err := opencc.New("t2s")
+	require.NoError(t, err)
+
+	foods, rows, hash, err := readTFDA(path, converter)
+	require.NoError(t, err)
+	require.Equal(t, 4, rows)
+	require.NotEmpty(t, hash)
+	require.Equal(t, "黄豆", foods["H1"].CanonicalName)
+	require.Equal(t, "大豆,菽", foods["H1"].CommonNames)
+	require.Equal(t, 389.0, foods["H1"].Nutrients["kcal_per_100g"].Value)
+	require.NoError(t, validateFood(foods["H1"]))
+}
+
+func TestReadTFDACSVRejectsMissingRequiredColumns(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "tfda.csv")
+	require.NoError(t, os.WriteFile(path, []byte("整合編號,樣品名稱\nH1,黃豆\n"), 0o600))
+	converter, err := opencc.New("t2s")
+	require.NoError(t, err)
+
+	_, _, _, err = readTFDA(path, converter)
+	require.ErrorContains(t, err, "缺少必需欄位")
+}
+
+func TestReadTFDARejectsInputWithoutValidFoods(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "tfda.csv")
+	fixture := "整合編號,樣品名稱,分析項,含量單位,每100克含量\n,,,kcal,100\n"
+	require.NoError(t, os.WriteFile(path, []byte(fixture), 0o600))
+	converter, err := opencc.New("t2s")
+	require.NoError(t, err)
+
+	_, _, _, err = readTFDA(path, converter)
+	require.ErrorContains(t, err, "未解析出任何有效食物")
+}
+
+func TestValidateNutritionSearchHitsRejectsEmptyResults(t *testing.T) {
+	require.ErrorContains(t, validateNutritionSearchHits("黄豆", nil), "未召回任何营养食物")
+	require.NoError(t, validateNutritionSearchHits("黄豆", []fooddomain.FoodNutrition{{CanonicalName: "干黄豆"}}))
+}
+
 func TestNutrientFieldRejectsUnsafeDerivedMappings(t *testing.T) {
 	_, _, ok := nutrientField("視網醇當量(RE)")
 	require.False(t, ok)

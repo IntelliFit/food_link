@@ -1,6 +1,63 @@
 {
-  "version": "2026-08-01-p0-v1",
+  "version": "2026-08-12-p0-v2",
   "entries": {
+    "H02201": {
+      "canonical_name": "黄豆（干货，生重）",
+      "approved_aliases": ["干黄豆", "生黄豆", "黄豆（干货）", "大豆（干货）"],
+      "candidate_aliases": ["黄豆", "大豆", "菽"],
+      "replace_aliases": ["生黄豆"]
+    },
+    "H00801": {
+      "canonical_name": "黑豆（黑大豆，干货，生重）",
+      "approved_aliases": ["青仁黑豆", "生黑大豆", "干黑大豆", "黑大豆（干货）"],
+      "candidate_aliases": ["黑豆", "黑大豆", "乌豆", "枝仔豆"],
+      "replace_aliases": []
+    },
+    "O02902": {
+      "canonical_name": "豆浆（无糖）",
+      "adopt_existing": true,
+      "expected_existing_canonical": "豆浆(无糖)",
+      "expected_existing_source": "项目内置初始营养数据",
+      "approved_aliases": ["无糖豆浆", "原味无糖豆浆"],
+      "candidate_aliases": ["豆浆"],
+      "replace_aliases": []
+    },
+    "O02901": {
+      "canonical_name": "豆浆（含糖，包装）",
+      "approved_aliases": ["含糖豆浆", "包装含糖豆浆"],
+      "candidate_aliases": ["甜豆浆", "豆浆"],
+      "replace_aliases": []
+    },
+    "O03101": {
+      "canonical_name": "黑豆浆（含糖，包装）",
+      "approved_aliases": ["含糖黑豆浆", "包装黑豆浆"],
+      "candidate_aliases": ["黑豆浆"],
+      "replace_aliases": []
+    },
+    "O03201": {
+      "canonical_name": "豆浆粉（干粉）",
+      "approved_aliases": ["豆浆粉", "黄豆浆粉"],
+      "candidate_aliases": ["豆奶粉"],
+      "replace_aliases": []
+    },
+    "H01101": {
+      "canonical_name": "黑豆（黑大豆，烘烤）",
+      "approved_aliases": ["烘烤黑大豆", "烤黑豆"],
+      "candidate_aliases": ["烘烤黑豆", "炒黑豆"],
+      "replace_aliases": []
+    },
+    "H01001": {
+      "canonical_name": "黑豆粉（黑大豆粉）",
+      "approved_aliases": ["黑大豆粉"],
+      "candidate_aliases": ["黑豆粉"],
+      "replace_aliases": []
+    },
+    "H02401": {
+      "canonical_name": "黄豆粉（干粉）",
+      "approved_aliases": ["黄豆粉", "大豆粉"],
+      "candidate_aliases": [],
+      "replace_aliases": []
+    },
     "H1105101": {
       "canonical_name": "黄豆（干货，生重）",
       "approved_aliases": ["干黄豆", "生黄豆", "黄豆（干货）", "大豆（干货）"],
