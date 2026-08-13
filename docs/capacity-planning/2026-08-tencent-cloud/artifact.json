@@ -1,0 +1,162 @@
+{
+  "surface": "report",
+  "manifest": {
+    "version": 1,
+    "surface": "report",
+    "title": "FoodLink / CoachLink 腾讯云扩容采购建议",
+    "description": "基于当前服务器实测，为用户量增长 10–20 倍制定的腾讯云资源清单与谈判口径。",
+    "generatedAt": "2026-08-08T13:50:00Z",
+    "cards": [],
+    "charts": [
+      {
+        "id": "compute_capacity_chart",
+        "title": "建议生产计算底座",
+        "subtitle": "vCPU 总数；20 倍大促上限通过 4C8G 节点池扩至 9 台实现。",
+        "type": "bar",
+        "dataset": "compute_capacity",
+        "sourceId": "capacity_model",
+        "valueFormat": "number",
+        "encodings": {
+          "x": { "field": "scenario", "type": "nominal", "label": "场景" },
+          "y": { "field": "vcpu", "type": "quantitative", "label": "vCPU" },
+          "tooltip": [
+            { "field": "nodes", "type": "nominal", "label": "节点配置" },
+            { "field": "memory_gib", "type": "quantitative", "label": "内存 GiB", "format": "number" }
+          ]
+        }
+      }
+    ],
+    "tables": [
+      {
+        "id": "current_risks_table",
+        "title": "当前架构与主要风险",
+        "subtitle": "2026 年 8 月 8 日只读盘点；风险级别按宣传放量场景评估。",
+        "dataset": "current_risks",
+        "sourceId": "server_snapshot",
+        "defaultSort": { "field": "priority", "direction": "asc" },
+        "columns": [
+          { "field": "priority", "label": "优先级", "type": "number" },
+          { "field": "resource", "label": "资源", "type": "text" },
+          { "field": "current", "label": "当前状态", "type": "text" },
+          { "field": "risk", "label": "放量风险", "type": "text" }
+        ]
+      },
+      {
+        "id": "purchase_table",
+        "title": "腾讯云采购规格清单",
+        "subtitle": "起步档用于 10 倍增长；预留档用于 20 倍或集中宣传峰值，最终以压测数据校准。",
+        "dataset": "purchase_plan",
+        "sourceId": "capacity_model",
+        "defaultSort": { "field": "priority", "direction": "asc" },
+        "columns": [
+          { "field": "priority", "label": "优先级", "type": "number" },
+          { "field": "category", "label": "类别", "type": "text" },
+          { "field": "product", "label": "建议产品", "type": "text" },
+          { "field": "ten_x", "label": "10 倍建议起步档", "type": "text" },
+          { "field": "twenty_x", "label": "20 倍 / 大促预留档", "type": "text" },
+          { "field": "must_have", "label": "必须能力", "type": "text" }
+        ]
+      },
+      {
+        "id": "negotiation_table",
+        "title": "与腾讯云谈判时要求拆分报价",
+        "subtitle": "要求同时提供包年基线、按量弹性和 10 倍 / 20 倍阶梯折扣，避免只看单一机器单价。",
+        "dataset": "negotiation_items",
+        "sourceId": "capacity_model",
+        "defaultSort": { "field": "priority", "direction": "asc" },
+        "columns": [
+          { "field": "priority", "label": "优先级", "type": "number" },
+          { "field": "item", "label": "谈判项", "type": "text" },
+          { "field": "request", "label": "要求", "type": "text" },
+          { "field": "reason", "label": "原因", "type": "text" }
+        ]
+      }
+    ],
+    "sources": [
+      { "id": "server_snapshot", "label": "2026-08-08 服务器只读容量快照", "path": "evidence/server-capacity-snapshot.md" },
+      { "id": "capacity_model", "label": "10–20 倍容量模型与扩容阈值", "path": "evidence/capacity-model.md" },
+      { "id": "tencent_postgres", "label": "腾讯云 PostgreSQL 实例类型与规格", "path": "https://cloud.tencent.com/document/product/409/7562" },
+      { "id": "tencent_redis", "label": "腾讯云分布式缓存数据库产品概述", "path": "https://intl.cloud.tencent.com/zh/document/product/239/3205" },
+      { "id": "tencent_ckafka", "label": "腾讯云 CKafka 集群高可用", "path": "https://cloud.tencent.com/document/product/597/52786" },
+      { "id": "tencent_tke", "label": "腾讯云 TKE 节点池与弹性伸缩", "path": "https://intl.cloud.tencent.com/zh/document/product/457/35900" },
+      { "id": "tencent_cdn", "label": "腾讯云 CDN 计费概述", "path": "https://cloud.tencent.com/document/product/228/2949/" },
+      { "id": "tencent_cos", "label": "腾讯云 COS 的 CDN 加速配置", "path": "https://cloud.tencent.com/document/product/436/18670" }
+    ],
+    "blocks": [
+      { "id": "title", "type": "markdown", "body": "# FoodLink / CoachLink 腾讯云扩容采购建议" },
+      { "id": "executive_summary", "type": "markdown", "body": "## Executive Summary\n\n- **当前不是容量耗尽，而是单点风险过高。** 4C15G 单机同时承载 Kubernetes 控制面、生产与开发服务、PostgreSQL、Redis、Kafka 和监控；近 14 天整机 CPU 峰值已达 81.3%。\n- **先拆托管基础设施，再做计算弹性。** PostgreSQL、Redis、Kafka 数据量都很小，现阶段采购重点应是双机/多副本、跨可用区、备份与自动故障切换，而不是一次买很大的容量。\n- **10 倍建议采用 3×4C8G 的生产 TKE 底座，20 倍将弹性上限放到 6–9 个 4C8G 节点或 3×8C16G。** 生产和 dev 分离，API 最少 3 副本，配 HPA 与节点池自动扩缩。\n- **公网与 CDN 必须按最近 30 天账单再定价。** 当前源站出站峰值约 14.4 Mbps，但图片已使用 COS/CDN；不能简单乘 20。谈判时应要求 CDN 流量、HTTPS 请求、COS 请求与回源费用分别报价。" },
+      { "id": "baseline_heading", "type": "markdown", "body": "## 实测说明：业务容器轻，但共享单机峰值已不安全\n\nFoodLink 与 CoachLink 生产容器合计的 CPU 峰值很低，说明 Go 服务本身有较大余量；然而整机还承担开发环境、异步 worker、数据库、中间件、配置中心和完整可观测栈，近 14 天出现过 81.3% CPU 峰值。单机故障会同时失去入口、应用、数据库、缓存和队列，这比平均利用率更值得优先解决。", "sourceId": "server_snapshot" },
+      { "id": "current_risks_block", "type": "table", "tableId": "current_risks_table" },
+      { "id": "architecture_heading", "type": "markdown", "body": "## 推荐目标：计算保留弹性，状态组件全部托管\n\n生产环境应迁入独立 TKE 集群，至少跨 3 个可用区布置节点；数据库、缓存、消息队列改用腾讯云托管服务并保持同地域、同 VPC 私网访问。dev 环境与生产隔离，避免测试流量、编译任务或观测系统抢占生产资源。腾讯云官方能力支持 TKE 节点池自动扩缩、PostgreSQL 双机高可用、Redis 主从/多副本，以及 CKafka 跨可用区部署。" },
+      { "id": "purchase_intro", "type": "markdown", "body": "## 采购清单：先买高可用底座，再用指标触发扩容\n\n下表是可直接拿去询价的建议档位。长期包年只覆盖稳定基线，活动峰值通过按量节点、HPA、节点池自动扩容和 CDN 流量包承接。数据库与中间件先买高可用小规格，保留在线升配能力。" },
+      { "id": "compute_capacity_chart_block", "type": "chart", "chartId": "compute_capacity_chart" },
+      { "id": "compute_capacity_note", "type": "markdown", "body": "建议把 12 vCPU 作为 10 倍增长的跨可用区常驻底座，把 24 vCPU 作为 20 倍常驻方案；集中宣传时允许节点池短时扩到 36 vCPU。图中展示的是可用计算容量，不是对吞吐的线性承诺，实际扩容仍由压测、HPA 指标和第三方 AI 接口限额共同决定。", "sourceId": "capacity_model" },
+      { "id": "purchase_block", "type": "table", "tableId": "purchase_table" },
+      { "id": "official_fit", "type": "markdown", "body": "## 产品匹配依据\n\n- 腾讯云 PostgreSQL 提供一主一从高可用实例，并支持后续挂只读实例；4C16G 与 8C32G 均在官方规格范围内。\n- 腾讯云兼容 Redis 的标准架构支持主从与多副本，并可平滑扩容；当前 1.14 MiB 数据无需直接购买集群版。\n- CKafka 的跨可用区能力会将分区副本分散到不同可用区；当前自建单 broker、RF=1 应优先迁移。\n- TKE 节点池基于 Auto Scaling 与 cluster-autoscaler，可在 Pod 因资源不足无法调度时自动扩节点。\n- COS 可作为 CDN 源站并启用回源鉴权；CDN 对突发型业务通常适合按流量或流量包计费。" },
+      { "id": "negotiation_heading", "type": "markdown", "body": "## 谈判重点：争取阶梯价、迁移服务和突发额度\n\n不要只谈 CVM 单价。真正容易在宣传后失控的是 CDN/HTTPS 请求、COS 请求、日志量、跨可用区流量、数据库备份与消息保留费用。要求腾讯云用同一业务模型分别出 10 倍、20 倍和大促 2 小时突发三套报价，并给出升降配和退订条款。" },
+      { "id": "negotiation_block", "type": "table", "tableId": "negotiation_table" },
+      { "id": "next_steps", "type": "markdown", "body": "## 上线前必须完成的动作\n\n1. 导出最近 30 天腾讯云 COS/CDN 账单与监控：存储量、日新增对象、下行流量、峰值带宽、HTTPS 请求数、缓存命中率。\n2. 对 FoodLink 和 CoachLink 分别做 1×、5×、10×、20× 阶梯压测，记录 RPS、P95/P99、错误率、数据库连接/IOPS、Redis QPS 和 Kafka lag。\n3. 先迁移 PostgreSQL，再迁移 Redis 与 CKafka；每项都准备回滚窗口、双写/停写方案和数据校验。\n4. 生产 TKE 与 dev 分离，配置 PDB、反亲和、HPA、节点池自动扩缩、CLB 健康检查和 30% 资源缓冲。\n5. 宣传前做一次故障演练：下线一个节点、切换数据库主备、模拟 Redis 故障、暂停一个 Kafka 消费者，验证系统仍可服务。\n6. 排查当前失败的 certbot 服务，确认所有公网域名证书自动续期和到期告警。" },
+      { "id": "further_questions", "type": "markdown", "body": "## 还需要腾讯云和研发共同回答的问题\n\n- 预计的日活、峰值同时在线、每用户每日图片上传数和 AI 分析次数分别是多少？\n- 宣传流量是均匀增长，还是 10–30 分钟集中涌入？\n- CoachLink 的视频/动作分析是否需要 GPU，第三方模型接口是否有限流或单独计费？\n- 数据库可接受的 RPO/RTO 是多少，是否要求跨地域灾备？\n- 图片、健康文档和日志的法定保留期、隐私与等保要求是什么？" },
+      { "id": "caveats", "type": "markdown", "body": "## 假设与限制\n\n本报告使用 2026 年 8 月 8 日的即时快照和近 14 天 Prometheus 峰值。当前缺少 API 级 RPS/延迟、PostgreSQL TPS/IOPS/慢查询、Redis 命令分布、Kafka 字节吞吐以及 COS/CDN 账单；因此表内规格是谈判和压测起点，不是最终采购承诺。用户数增长与资源消耗并非线性关系，最终规格应以代表性用户旅程压测和活动流量模型为准。" }
+    ]
+  },
+  "snapshot": {
+    "version": 1,
+    "generatedAt": "2026-08-08T13:50:00Z",
+    "status": "ready",
+    "datasets": {
+      "baseline_metrics": [
+        { "metric": "CPU 峰值", "value": 81.33 },
+        { "metric": "内存峰值", "value": 72.58 },
+        { "metric": "PostgreSQL 数据目录", "value": 587 },
+        { "metric": "Redis 已用内存", "value": 1.14 }
+      ],
+      "compute_capacity": [
+        { "scenario": "当前单机总量", "vcpu": 4, "memory_gib": 15, "nodes": "1×4C15G（生产与基础设施混部）" },
+        { "scenario": "10倍常驻底座", "vcpu": 12, "memory_gib": 24, "nodes": "3×4C8G" },
+        { "scenario": "20倍常驻底座", "vcpu": 24, "memory_gib": 48, "nodes": "3×8C16G" },
+        { "scenario": "大促弹性上限", "vcpu": 36, "memory_gib": 72, "nodes": "9×4C8G" }
+      ],
+      "current_risks": [
+        { "priority": 1, "resource": "整体架构", "current": "单 Kubernetes 节点 + 单控制面，生产/dev/基础设施同机", "risk": "任一主机故障导致全栈中断；无法跨节点容灾" },
+        { "priority": 2, "resource": "PostgreSQL", "current": "单 Docker 容器，约 587 MiB", "risk": "无托管主备、自动切换和独立存储 SLA" },
+        { "priority": 3, "resource": "Kafka", "current": "单 broker、RF=1、约 145 MiB、lag=0", "risk": "broker 或磁盘故障可能中断队列并丢失未复制消息" },
+        { "priority": 4, "resource": "Redis", "current": "单实例、1.14 MiB、4 连接、0 淘汰", "risk": "容量很小但无高可用；验证码/限流状态可能随故障丢失" },
+        { "priority": 5, "resource": "计算与内存", "current": "4C15G；14 天 CPU 峰值 81.3%、内存峰值 72.6%", "risk": "宣传突发叠加后台任务时余量不足" },
+        { "priority": 6, "resource": "证书", "current": "certbot.service failed", "risk": "若自动续期链路失效，公网域名可能在证书到期后不可用" }
+      ],
+      "purchase_plan": [
+        { "priority": 1, "category": "生产计算", "product": "TKE 标准集群 + 普通节点池", "ten_x": "3×4C8G，跨 3 AZ；节点池 3–6 台", "twenty_x": "3×8C16G，或 4C8G 节点池 3–9 台", "must_have": "HPA、Cluster Autoscaler、PDB、反亲和、生产/dev 隔离、30% 余量" },
+        { "priority": 2, "category": "负载均衡", "product": "公网 CLB", "ten_x": "1 个生产 CLB，50–100 Mbps 可突发", "twenty_x": "100–300 Mbps 或按使用量计费；视源站回源峰值", "must_have": "HTTPS、健康检查、跨 AZ、连接数/RPS/P99/5xx 监控" },
+        { "priority": 3, "category": "关系数据库", "product": "TencentDB for PostgreSQL 17 双机高可用", "ten_x": "4C16G，200GB 高性能 SSD，自动备份", "twenty_x": "8C32G，500GB；必要时加 1 个同规格只读实例", "must_have": "跨 AZ、PITR 7–30 天、SSL、慢查询/审计、连接池、容量告警" },
+        { "priority": 4, "category": "缓存/会话/限流", "product": "腾讯云分布式缓存数据库（兼容 Redis）7.x 标准架构", "ten_x": "1GB，1 主 1 副本，跨 AZ", "twenty_x": "2–4GB，1 主 2 副本；指标触发后再转集群", "must_have": "自动故障切换、SSL、最大内存策略、慢日志、大 key/热 key 监控" },
+        { "priority": 5, "category": "消息队列", "product": "CKafka Serverless 或最小跨 AZ 高可用档", "ten_x": "生产 5MB/s、消费 10MB/s、100–200GB", "twenty_x": "生产 10MB/s、消费 20MB/s、300–500GB", "must_have": "3 副本、生产主题 ≥6 分区、7 天保留、lag/失败告警、死信/重试策略" },
+        { "priority": 6, "category": "对象存储", "product": "COS 标准存储", "ten_x": "按当前容量增长模型预购；商务占位 1–2TB", "twenty_x": "商务占位 3–5TB；以最近 30 天新增量修正", "must_have": "私有桶、CDN 回源鉴权、版本控制、生命周期、跨地域复制按 RPO 决定" },
+        { "priority": 7, "category": "内容分发", "product": "CDN / EdgeOne（视安全需求）", "ten_x": "先询 2TB/月流量包、100Mbps 峰值场景", "twenty_x": "询 5–10TB/月、300Mbps 峰值场景", "must_have": "HTTPS、缓存命中率 >90%、防盗链、URL 鉴权、回源保护、实时日志" },
+        { "priority": 8, "category": "安全", "product": "WAF + 基础 DDoS + 安全组/CAM/KMS", "ten_x": "公网 API 域名接 WAF；最小权限与密钥托管", "twenty_x": "按峰值 QPS 升 WAF 套餐；高防按活动风险临时启用", "must_have": "Bot/CC 防护、API 限流、漏洞扫描、密钥轮换、审计日志" },
+        { "priority": 9, "category": "可观测", "product": "Cloud Monitor + CLS + APM/Tracing", "ten_x": "核心指标 30 天，应用日志 14–30 天", "twenty_x": "按采样率控制成本；审计/安全日志独立保留", "must_have": "SLO、P95/P99、5xx、DB/Redis/Kafka、成本与容量告警" },
+        { "priority": 10, "category": "备份与灾备", "product": "DB 自动备份 + COS 版本/生命周期 + 跨地域备份", "ten_x": "RPO ≤15 分钟、RTO ≤60 分钟目标", "twenty_x": "关键期提高备份频率；按业务要求建设异地恢复", "must_have": "季度恢复演练、备份加密、备份账号隔离、明确恢复负责人" }
+      ],
+      "negotiation_items": [
+        { "priority": 1, "item": "三档整体报价", "request": "稳定基线包年、20 倍按量弹性、大促 2 小时突发分别报价", "reason": "避免为短时峰值全年买单" },
+        { "priority": 2, "item": "阶梯折扣与承诺消费", "request": "按 10 倍/20 倍用量提供阶梯折扣、流量包和可转配额度", "reason": "用户增长存在不确定性，需要扩缩容自由度" },
+        { "priority": 3, "item": "迁移服务", "request": "提供 PostgreSQL/Redis/Kafka 迁移工具、架构评审、割接值守与回滚支持", "reason": "迁移风险高于当前数据量本身" },
+        { "priority": 4, "item": "免费或优惠期", "request": "争取 1–3 个月双跑期、迁移流量减免、测试实例额度", "reason": "新旧系统需要并行验证" },
+        { "priority": 5, "item": "费用全口径", "request": "拆分 CDN 流量、HTTPS 请求、COS GET/PUT、回源、跨 AZ、日志、备份费用", "reason": "低单价资源的附加计费可能成为主要成本" },
+        { "priority": 6, "item": "SLA 与赔付", "request": "逐项确认 TKE/PG/Redis/CKafka/CLB SLA、故障切换指标和赔付规则", "reason": "采购目标是消除单点，不只是增加容量" },
+        { "priority": 7, "item": "配额与绿色通道", "request": "提前锁定 CVM、EIP、CLB、CDN、WAF、短信、AI API 等配额与活动支持群", "reason": "活动当天临时扩容可能受库存和配额限制" }
+      ]
+    },
+    "accessIssues": []
+  },
+  "sources": [
+    { "id": "server_snapshot", "query": { "engine": "postgresql", "sql": "SELECT * FROM (VALUES ('CPU 峰值',81.33),('内存峰值',72.58),('PostgreSQL 数据目录 MiB',587),('Redis 已用内存 MiB',1.14)) AS measured(metric,value)", "description": "将 2026-08-08 SSH、Prometheus、Kubernetes、Redis 和 Kafka 的已复核只读结果整理为报告基线。", "executed_at": "2026-08-08T13:41:00Z", "language": "sql", "tables_used": ["Prometheus node_exporter/cAdvisor metrics", "Kubernetes Metrics API", "Redis INFO", "Kafka topic and consumer-group metadata"] } },
+    { "id": "capacity_model", "query": { "engine": "postgresql", "sql": "SELECT * FROM (VALUES ('当前单机总量',4,15,'1×4C15G'),('10倍常驻底座',12,24,'3×4C8G'),('20倍常驻底座',24,48,'3×8C16G'),('大促弹性上限',36,72,'9×4C8G')) AS capacity(scenario,vcpu,memory_gib,nodes)", "description": "用当前 14 天峰值、数据规模、高可用目标和 10–20 倍增长假设推导采购起步档与扩容阈值。采购明细与推导全文保存在 evidence/capacity-model.md。", "executed_at": "2026-08-08T13:50:00Z", "language": "sql", "tables_used": ["evidence/server-capacity-snapshot.md", "evidence/capacity-model.md"] } },
+    { "id": "tencent_postgres", "query": { "engine": "web", "url": "https://cloud.tencent.com/document/product/409/7562", "description": "腾讯云 PostgreSQL 官方实例类型、CPU/内存、连接数与 IOPS 规格。", "executed_at": "2026-08-08T13:45:00Z" } },
+    { "id": "tencent_redis", "query": { "engine": "web", "url": "https://intl.cloud.tencent.com/zh/document/product/239/3205", "description": "腾讯云兼容 Redis 的标准/集群架构、高可用和扩缩容能力。", "executed_at": "2026-08-08T13:45:00Z" } },
+    { "id": "tencent_ckafka", "query": { "engine": "web", "url": "https://cloud.tencent.com/document/product/597/52786", "description": "腾讯云 CKafka 跨可用区和集群高可用说明。", "executed_at": "2026-08-08T13:45:00Z" } },
+    { "id": "tencent_tke", "query": { "engine": "web", "url": "https://intl.cloud.tencent.com/zh/document/product/457/35900", "description": "腾讯云 TKE 节点池与自动伸缩机制。", "executed_at": "2026-08-08T13:45:00Z" } },
+    { "id": "tencent_cdn", "query": { "engine": "web", "url": "https://cloud.tencent.com/document/product/228/2949/", "description": "腾讯云 CDN 按流量、峰值带宽、HTTPS 请求和流量包计费说明。", "executed_at": "2026-08-08T13:45:00Z" } },
+    { "id": "tencent_cos", "query": { "engine": "web", "url": "https://cloud.tencent.com/document/product/436/18670", "description": "腾讯云 COS 作为 CDN 源站、回源鉴权与缓存刷新配置说明。", "executed_at": "2026-08-08T13:45:00Z" } }
+  ]
+}
