@@ -1,10 +1,12 @@
 import Taro, { useDidShow } from '@tarojs/taro'
+import { View } from '@tarojs/components'
 import { useEffect, useState, useCallback } from 'react'
 import { FlPageThemeRoot } from '../components/FlPageThemeRoot'
 import { useAppColorScheme } from '../components/AppColorSchemeContext'
 import { getAccessToken } from './api'
 import { extraPkgUrl } from './subpackage-extra'
 import { applyThemeNavigationBar } from './theme-navigation-bar'
+import { acquireLoginNavigationLock } from './login-navigation-lock'
 
 // 不需要登录的页面白名单（含分包路径）
 const PUBLIC_PAGES = new Set([
@@ -71,6 +73,10 @@ export function redirectToLogin(redirectPath?: string) {
   // 检查当前页面是否已经是登录页，避免重复跳转
   const currentRoute = getCurrentPageRoute()
   if (currentRoute === loginBase) {
+    return
+  }
+
+  if (!acquireLoginNavigationLock()) {
     return
   }
   
@@ -199,8 +205,21 @@ export function withAuth<P extends object>(
       )
     }
 
-    // 未登录且不是公共页面，返回空（页面已经跳转了）
-    return null
+    // 登录分包跳转期间保留明确的可视化状态，避免用户看到纯空白页。
+    return (
+      <FlPageThemeRoot>
+        <View
+          style={{
+            minHeight: '100vh',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <View className='loading-spinner-md' />
+        </View>
+      </FlPageThemeRoot>
+    )
   }
 }
 

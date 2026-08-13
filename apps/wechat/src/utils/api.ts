@@ -7,6 +7,9 @@ import {
   type FoodImageSource,
 } from './food-display-image'
 import { extraPkgUrl } from './subpackage-extra'
+import { shouldHandleAuthenticationFailure } from './auth-request-state'
+import { acquireLoginNavigationLock } from './login-navigation-lock'
+import { resolveAuthenticatedRequestTimeout } from './request-timeout'
 import { createStreamingUTF8Decoder } from './streaming-utf8-decoder'
 import { withTransientRequestRetry } from './transient-request-retry'
 
@@ -4423,6 +4426,7 @@ function redirectToLogin(message: string = '登录已失效，请重新登录') 
       clearTokens()
     } catch (_) {}
   }
+  if (!acquireLoginNavigationLock()) return
   Taro.showToast({ title: message, icon: 'none' })
   Taro.redirectTo({ url: LOGIN_PAGE_URL })
 }
@@ -4453,6 +4457,7 @@ export async function authenticatedRequest(
     res = await Taro.request({
       url: requestUrl,
       ...options,
+      timeout: resolveAuthenticatedRequestTimeout(options.timeout),
       header: withNgrokBypassHeaders({
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
@@ -4475,7 +4480,9 @@ export async function authenticatedRequest(
     throw error
   }
   if (res.statusCode === 401 || res.statusCode === 403) {
-    redirectToLogin('登录已失效，请重新登录')
+    if (shouldHandleAuthenticationFailure(token, getAccessToken())) {
+      redirectToLogin('登录已失效，请重新登录')
+    }
     throw new Error('登录已失效，请重新登录')
   }
 
@@ -4483,7 +4490,9 @@ export async function authenticatedRequest(
   if (res.statusCode >= 400 && res.statusCode < 500) {
     const detail = (res.data as any)?.detail as string | undefined
     if (detail && (detail.includes('openid') || detail.includes('Token 中缺少 openid'))) {
-      redirectToLogin('登录状态异常，请重新登录')
+      if (shouldHandleAuthenticationFailure(token, getAccessToken())) {
+        redirectToLogin('登录状态异常，请重新登录')
+      }
       throw new Error(detail || '登录状态异常，请重新登录')
     }
   }
@@ -5254,7 +5263,8 @@ export async function uploadReportImage(base64Image: string): Promise<{ imageUrl
   try {
     const response = await authenticatedRequest('/api/user/health-profile/upload-report-image', {
       method: 'POST',
-      data: { base64Image }
+      data: { base64Image },
+      timeout: 60000,
     })
     if (response.statusCode !== 200) {
       const errorMsg = (response.data as any)?.detail || '上传失败'
@@ -5285,7 +5295,8 @@ export async function submitReportExtractionTask(input: {
   try {
     const response = await authenticatedRequest('/api/user/health-profile/submit-report-extraction-task', {
       method: 'POST',
-      data: imageUrls.length > 0 ? { imageUrl, imageUrls } : { imageUrl }
+      data: imageUrls.length > 0 ? { imageUrl, imageUrls } : { imageUrl },
+      timeout: 15000,
     })
     if (response.statusCode !== 200) {
       const errorMsg = (response.data as any)?.detail || '提交失败'
@@ -5313,7 +5324,8 @@ export async function extractHealthReportOcr(options: {
   try {
     const response = await authenticatedRequest('/api/user/health-profile/ocr-extract', {
       method: 'POST',
-      data: imageUrl ? { imageUrl } : { base64Image }
+      data: imageUrl ? { imageUrl } : { base64Image },
+      timeout: 90000,
     })
     if (response.statusCode !== 200) {
       const errorMsg = (response.data as any)?.detail || 'OCR 识别失败'
@@ -5338,7 +5350,8 @@ export async function uploadHealthReportOcr(base64Image: string): Promise<{
   try {
     const response = await authenticatedRequest('/api/user/health-profile/ocr', {
       method: 'POST',
-      data: { base64Image }
+      data: { base64Image },
+      timeout: 90000,
     })
     if (response.statusCode !== 200) {
       const errorMsg = (response.data as any)?.detail || 'OCR 识别失败'
