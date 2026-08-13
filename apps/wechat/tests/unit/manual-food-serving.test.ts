@@ -1,4 +1,5 @@
 import {
+  manualFoodDetailPortionNutrients,
   manualFoodDisplayInput,
   manualFoodResultPortionText,
   manualFoodWeightFromInput,
@@ -54,5 +55,64 @@ describe('manual-food-serving', () => {
       default_weight_grams: 12.5,
       display_unit: 'g',
     })).toBe(12.5)
+  })
+
+  it('scales all detail micronutrients from per-100g data to the displayed portion', () => {
+    const nutrients = manualFoodDetailPortionNutrients({
+      source: 'nutrition_library',
+      default_weight_grams: 55,
+      total_calories: 80,
+      total_protein: 6.8,
+      total_carbs: 0.6,
+      total_fat: 5.3,
+      nutrients_per_100g: {
+        calories: 145,
+        protein: 12.4,
+        carbs: 1.1,
+        fat: 9.6,
+        fiber: 0,
+        sugar: 0.4,
+        calciumMg: 50,
+        ironMg: 2,
+        vitaminDMcg: 2,
+      },
+      extra_nutrients: {
+        fiber: 0,
+        sugar: 0.4,
+        calciumMg: 50,
+        ironMg: 2,
+        vitaminDMcg: 2,
+      },
+    })
+
+    expect(nutrients.calciumMg).toBe(27.5)
+    expect(nutrients.ironMg).toBe(1.1)
+    expect(nutrients.vitaminDMcg).toBe(1.1)
+    expect(nutrients.protein).toBe(6.8)
+  })
+
+  it('uses per-100g micronutrients for custom portions instead of treating them as totals', () => {
+    const nutrients = manualFoodDetailPortionNutrients({
+      source: 'custom',
+      default_weight_grams: 200,
+      total_calories: 240,
+      total_protein: 20,
+      total_carbs: 30,
+      total_fat: 4,
+      nutrients_per_100g: {
+        calories: 120,
+        protein: 10,
+        carbs: 15,
+        fat: 2,
+        fiber: 3,
+        sugar: 1,
+        ironMg: 5,
+      },
+      extra_nutrients: { fiber: 3, sugar: 1, ironMg: 5 },
+    })
+
+    expect(nutrients.fiber).toBe(6)
+    expect(nutrients.ironMg).toBe(10)
+    expect(nutrients.calories).toBe(240)
   })
 })

@@ -38,6 +38,7 @@ import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
 import { chooseImageWithPrivacy, isPrivacyAuthorizeError, showPrivacyAuthorizeFailure } from '../../../utils/weapp-privacy'
 import { roundTo } from '../../../utils/number-format'
 import {
+  manualFoodDetailPortionNutrients,
   manualFoodDisplayInput,
   manualFoodResultPortionText,
   manualFoodWeightFromInput,
@@ -183,6 +184,14 @@ const CUSTOM_MICRO_FIELDS: CustomMicroField[] = [
   { key: 'vitaminB12Mcg', label: '维生素B12', unit: 'μg' },
 ]
 
+const DETAIL_EXTRA_FIELDS: CustomMicroField[] = [
+  { key: 'fiber', label: '膳食纤维', unit: 'g' },
+  { key: 'sugar', label: '糖', unit: 'g' },
+  { key: 'saturatedFat', label: '饱和脂肪', unit: 'g' },
+  { key: 'cholesterolMg', label: '胆固醇', unit: 'mg' },
+  ...CUSTOM_MICRO_FIELDS.filter((field) => field.key !== 'fiber' && field.key !== 'sugar'),
+]
+
 function formatDateKey(date: Date) {
   const year = date.getFullYear()
   const month = String(date.getMonth() + 1).padStart(2, '0')
@@ -228,6 +237,12 @@ function formatWeightGrams(value: number) {
 function nutrientNumber(nutrients: Partial<Nutrients> | undefined, key: NutrientKey) {
   const value = nutrients?.[key]
   return typeof value === 'number' && Number.isFinite(value) ? value : 0
+}
+
+function formatDetailNutrientValue(nutrients: Nutrients, field: CustomMicroField) {
+  const value = nutrientNumber(nutrients, field.key)
+  const digits = value >= 100 ? 0 : value >= 10 ? 1 : 2
+  return `${formatCompactNumber(value, digits)} ${field.unit}`
 }
 
 function scaledNutrients(source: Partial<Nutrients>, scale: number): Nutrients {
@@ -523,6 +538,7 @@ function RecordManualPage() {
   const [customShareToPublic, setCustomShareToPublic] = useState(false)
   const [customItems, setCustomItems] = useState<ManualFoodSearchResult[]>([])
   const [showSelectedDrawer, setShowSelectedDrawer] = useState(false)
+  const [detailItem, setDetailItem] = useState<ManualFoodSearchResult | null>(null)
   const entryTypeRef = useRef<FoodRecordEntryType>('food_library')
 
   const normalizedQuery = searchText.trim()
@@ -1269,7 +1285,7 @@ function RecordManualPage() {
       <View
         key={key}
         className='food-item'
-        onClick={() => handleAddItem(item)}
+        onClick={() => setDetailItem(item)}
       >
         <View className='food-cover'>
           {hasFoodDisplayImage(item) ? (
@@ -1304,16 +1320,29 @@ function RecordManualPage() {
             </Text>
           )}
         </View>
-        <View className={`add-btn ${selected ? 'active' : ''}`}>
-          <Text>
-            {selected
-              ? formatSelectedAmount(selected)
-              : '+'}
-          </Text>
+        <View className='food-add-action'>
+          <View
+            className={`add-btn ${selected ? 'active' : ''}`}
+            onClick={(event) => {
+              event.stopPropagation()
+              handleAddItem(item)
+              Taro.vibrateShort({ type: 'light' }).catch(() => {})
+            }}
+          >
+            <Text>+</Text>
+          </View>
+          {selected ? (
+            <Text className='food-selected-amount'>{formatSelectedAmount(selected)}</Text>
+          ) : null}
         </View>
       </View>
     )
   }
+
+  const detailNutrients = detailItem ? manualFoodDetailPortionNutrients(detailItem) : null
+  const visibleDetailFields = detailNutrients
+    ? DETAIL_EXTRA_FIELDS.filter((field) => nutrientNumber(detailNutrients, field.key) > 0)
+    : []
 
   return (
     <View className='record-manual-page'>
@@ -1657,6 +1686,99 @@ function RecordManualPage() {
             onClick={handleSave}
           >
             <Text>{saving ? '保存中...' : '保存到今天记录'}</Text>
+          </View>
+        </View>
+      )}
+
+      {detailItem && detailNutrients && (
+        <View className='food-detail-mask' onClick={() => setDetailItem(null)}>
+          <View className='food-detail-sheet' onClick={(event) => event.stopPropagation()}>
+            <View className='food-detail-handle' />
+            <View className='food-detail-header'>
+              <Text className='food-detail-title'>营养详情</Text>
+              <View className='food-detail-close' onClick={() => setDetailItem(null)}>
+                <Text className='iconfont icon-guanbi' />
+              </View>
+            </View>
+            <ScrollView className='food-detail-scroll' scrollY>
+              <View className='food-detail-hero'>
+                <View className='food-detail-cover'>
+                  {hasFoodDisplayImage(detailItem) ? (
+                    <Image
+                      className='food-detail-cover-image'
+                      src={pickFoodDisplayImageUrl(detailItem)}
+                      mode='aspectFill'
+                    />
+                  ) : (
+                    <View className='food-detail-cover-placeholder'>
+                      <Text className='iconfont icon-shiwu' />
+                    </View>
+                  )}
+                </View>
+                <View className='food-detail-hero-copy'>
+                  <View className='food-detail-name-row'>
+                    <Text className='food-detail-name'>{detailItem.title}</Text>
+                    <View className={`source-badge ${detailItem.source}`}>
+                      <Text>{detailItem.source_label || (detailItem.source === 'public_library' ? '真实餐食' : detailItem.source === 'packaged_food' ? '包装食品' : detailItem.source === 'custom' ? '自定义' : '标准食物')}</Text>
+                    </View>
+                  </View>
+                  <Text className='food-detail-portion'>当前展示份量：{resultPortionText(detailItem)}</Text>
+                  {detailItem.subtitle ? (
+                    <Text className='food-detail-subtitle'>{detailItem.subtitle}</Text>
+                  ) : null}
+                </View>
+              </View>
+
+              <View className='food-detail-section'>
+                <Text className='food-detail-section-title'>宏量营养</Text>
+                <View className='food-detail-macro-grid'>
+                  <View className='food-detail-macro is-calorie'>
+                    <Text className='food-detail-macro-label'>热量</Text>
+                    <Text className='food-detail-macro-value'>{Math.round(detailNutrients.calories)} kcal</Text>
+                  </View>
+                  <View className='food-detail-macro'>
+                    <Text className='food-detail-macro-label'>蛋白质</Text>
+                    <Text className='food-detail-macro-value'>{formatCompactNumber(detailNutrients.protein, 1)} g</Text>
+                  </View>
+                  <View className='food-detail-macro'>
+                    <Text className='food-detail-macro-label'>碳水</Text>
+                    <Text className='food-detail-macro-value'>{formatCompactNumber(detailNutrients.carbs, 1)} g</Text>
+                  </View>
+                  <View className='food-detail-macro'>
+                    <Text className='food-detail-macro-label'>脂肪</Text>
+                    <Text className='food-detail-macro-value'>{formatCompactNumber(detailNutrients.fat, 1)} g</Text>
+                  </View>
+                </View>
+              </View>
+
+              <View className='food-detail-section'>
+                <Text className='food-detail-section-title'>微量元素与其他营养</Text>
+                {visibleDetailFields.length > 0 ? (
+                  <View className='food-detail-nutrient-grid'>
+                    {visibleDetailFields.map((field) => (
+                      <View className='food-detail-nutrient' key={field.key}>
+                        <Text className='food-detail-nutrient-label'>{field.label}</Text>
+                        <Text className='food-detail-nutrient-value'>
+                          {formatDetailNutrientValue(detailNutrients, field)}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                ) : (
+                  <Text className='food-detail-empty'>该食物暂未收录更多微量营养数据</Text>
+                )}
+              </View>
+            </ScrollView>
+            <View
+              className='food-detail-add'
+              onClick={() => {
+                handleAddItem(detailItem)
+                Taro.vibrateShort({ type: 'light' }).catch(() => {})
+                setDetailItem(null)
+              }}
+            >
+              <Text>{selectedMap.has(getItemKey(detailItem)) ? '+ 再加一份' : '+ 加入本餐'}</Text>
+            </View>
           </View>
         </View>
       )}

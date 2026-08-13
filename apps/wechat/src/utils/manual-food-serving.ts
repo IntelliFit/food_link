@@ -1,3 +1,5 @@
+import type { ManualFoodSearchResult, Nutrients } from './api'
+
 export type ManualFoodDisplayUnit = 'g' | 'ml' | 'serving' | 'piece'
 
 export interface ManualFoodServingLike {
@@ -18,6 +20,84 @@ export interface SelectedManualFoodServingLike {
 function positiveNumber(value: unknown, fallback: number) {
   const parsed = Number(value)
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
+}
+
+type NutrientKey = keyof Nutrients
+
+const DETAIL_NUTRIENT_KEYS: NutrientKey[] = [
+  'calories',
+  'protein',
+  'carbs',
+  'fat',
+  'fiber',
+  'sugar',
+  'waterMl',
+  'water_ml',
+  'saturatedFat',
+  'cholesterolMg',
+  'sodium_mg',
+  'sodiumMg',
+  'potassiumMg',
+  'calciumMg',
+  'ironMg',
+  'magnesiumMg',
+  'zincMg',
+  'vitaminARaeMcg',
+  'vitaminCMg',
+  'vitaminDMcg',
+  'vitaminEMg',
+  'vitaminKMcg',
+  'thiaminMg',
+  'riboflavinMg',
+  'niacinMg',
+  'vitaminB6Mg',
+  'folateMcg',
+  'vitaminB12Mcg',
+]
+
+function nutrientNumber(nutrients: Partial<Nutrients> | undefined, key: NutrientKey) {
+  const value = nutrients?.[key]
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0
+}
+
+function roundNutrient(value: number, digits: number) {
+  const factor = 10 ** digits
+  return Math.round((value + Number.EPSILON) * factor) / factor
+}
+
+type ManualFoodDetailNutrientItem = Pick<
+  ManualFoodSearchResult,
+  | 'source'
+  | 'default_weight_grams'
+  | 'total_calories'
+  | 'total_protein'
+  | 'total_carbs'
+  | 'total_fat'
+  | 'nutrients_per_100g'
+  | 'extra_nutrients'
+>
+
+export function manualFoodDetailPortionNutrients(item: ManualFoodDetailNutrientItem): Nutrients {
+  const hasPer100gNutrients = DETAIL_NUTRIENT_KEYS.some(
+    (key) => nutrientNumber(item.nutrients_per_100g, key) > 0,
+  )
+  const source = hasPer100gNutrients ? item.nutrients_per_100g : item.extra_nutrients
+  const scale = hasPer100gNutrients ? practicalManualFoodDefaultWeight(item) / 100 : 1
+  const portion = {} as Nutrients
+
+  DETAIL_NUTRIENT_KEYS.forEach((key) => {
+    portion[key] = roundNutrient(nutrientNumber(source, key) * scale, 4) as never
+  })
+  if (!portion.sodium_mg && portion.sodiumMg) portion.sodium_mg = portion.sodiumMg
+  if (!portion.sodiumMg && portion.sodium_mg) portion.sodiumMg = portion.sodium_mg
+
+  return {
+    ...portion,
+    calories: roundNutrient(item.total_calories, 1),
+    protein: roundNutrient(item.total_protein, 1),
+    carbs: roundNutrient(item.total_carbs, 1),
+    fat: roundNutrient(item.total_fat, 1),
+  }
 }
 
 export function formatManualFoodWeight(value: number, precision = 1) {

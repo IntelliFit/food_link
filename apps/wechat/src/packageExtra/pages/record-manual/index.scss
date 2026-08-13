@@ -1024,6 +1024,27 @@ $rm-shadow-card: 0 8rpx 24rpx rgb(15 23 42 / 5%);
   border-color: $rm-primary-border;
 }
 
+.food-add-action {
+  flex: 0 0 92rpx;
+  width: 92rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4rpx;
+}
+
+.food-selected-amount {
+  display: block;
+  width: 100%;
+  font-size: 18rpx;
+  line-height: 26rpx;
+  color: $rm-primary;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .load-more {
   padding: $rm-s4 0 $rm-s2;
   text-align: center;
@@ -1455,4 +1476,258 @@ $rm-shadow-card: 0 8rpx 24rpx rgb(15 23 42 / 5%);
 
 .selected-drawer-primary.loading {
   opacity: 0.7;
+}
+
+.food-detail-mask {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  z-index: 70;
+  background: rgb(15 23 42 / 42%);
+  display: flex;
+  align-items: flex-end;
+}
+
+.food-detail-sheet {
+  width: 100%;
+  max-height: 88vh;
+  padding: 14rpx 24rpx calc(24rpx + env(safe-area-inset-bottom));
+  border-radius: 32rpx 32rpx 0 0;
+  background: #f8fffb;
+  box-shadow: 0 -20rpx 52rpx rgb(15 23 42 / 16%);
+  box-sizing: border-box;
+}
+
+.food-detail-handle {
+  width: 72rpx;
+  height: 8rpx;
+  margin: 0 auto 18rpx;
+  border-radius: 999rpx;
+  background: rgb(100 116 139 / 24%);
+}
+
+.food-detail-header,
+.food-detail-name-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+}
+
+.food-detail-header {
+  margin-bottom: 20rpx;
+}
+
+.food-detail-title {
+  font-size: 34rpx;
+  line-height: 46rpx;
+  font-weight: 700;
+  color: $rm-text-primary;
+}
+
+.food-detail-close {
+  width: 64rpx;
+  height: 64rpx;
+  border-radius: 50%;
+  background: rgb(15 23 42 / 6%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.food-detail-close .iconfont {
+  font-size: 26rpx;
+  color: #475569;
+}
+
+.food-detail-scroll {
+  max-height: 62vh;
+}
+
+.food-detail-hero {
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+  padding: 20rpx;
+  margin-bottom: 20rpx;
+  border: 1rpx solid $rm-primary-border;
+  border-radius: 22rpx;
+  background: #fff;
+}
+
+.food-detail-cover {
+  flex: 0 0 112rpx;
+  width: 112rpx;
+  height: 112rpx;
+}
+
+.food-detail-cover-image,
+.food-detail-cover-placeholder {
+  width: 100%;
+  height: 100%;
+  border-radius: 18rpx;
+  background: $rm-primary-muted;
+}
+
+.food-detail-cover-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.food-detail-cover-placeholder .iconfont {
+  font-size: 42rpx;
+  color: $rm-primary;
+}
+
+.food-detail-hero-copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.food-detail-name-row {
+  align-items: flex-start;
+  margin-bottom: 8rpx;
+}
+
+.food-detail-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 32rpx;
+  line-height: 44rpx;
+  font-weight: 700;
+  color: $rm-text-primary;
+}
+
+.food-detail-portion,
+.food-detail-subtitle {
+  display: block;
+  font-size: 22rpx;
+  line-height: 34rpx;
+  color: $rm-text-secondary;
+}
+
+.food-detail-subtitle {
+  margin-top: 4rpx;
+  color: $rm-text-tertiary;
+}
+
+.food-detail-section {
+  padding: 20rpx;
+  margin-bottom: 20rpx;
+  border: 1rpx solid $rm-border-light;
+  border-radius: 22rpx;
+  background: #fff;
+}
+
+.food-detail-section-title {
+  display: block;
+  margin-bottom: 16rpx;
+  font-size: 28rpx;
+  line-height: 40rpx;
+  font-weight: 700;
+  color: $rm-text-primary;
+}
+
+.food-detail-macro-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10rpx;
+}
+
+.food-detail-macro {
+  min-width: 0;
+  padding: 16rpx 8rpx;
+  border-radius: 16rpx;
+  background: $rm-primary-soft;
+  text-align: center;
+}
+
+.food-detail-macro.is-calorie {
+  background: #fff7ed;
+}
+
+.food-detail-macro-label,
+.food-detail-macro-value {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.food-detail-macro-label {
+  margin-bottom: 6rpx;
+  font-size: 20rpx;
+  line-height: 28rpx;
+  color: $rm-text-secondary;
+}
+
+.food-detail-macro-value {
+  font-size: 22rpx;
+  line-height: 32rpx;
+  font-weight: 700;
+  color: $rm-text-primary;
+}
+
+.food-detail-nutrient-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12rpx;
+}
+
+.food-detail-nutrient {
+  min-width: 0;
+  padding: 14rpx 16rpx;
+  border-radius: 14rpx;
+  background: $rm-bg-subtle;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10rpx;
+}
+
+.food-detail-nutrient-label,
+.food-detail-nutrient-value {
+  font-size: 22rpx;
+  line-height: 32rpx;
+}
+
+.food-detail-nutrient-label {
+  min-width: 0;
+  color: $rm-text-secondary;
+}
+
+.food-detail-nutrient-value {
+  flex: 0 0 auto;
+  font-weight: 700;
+  color: $rm-text-primary;
+}
+
+.food-detail-empty {
+  display: block;
+  padding: 18rpx 0;
+  font-size: 22rpx;
+  line-height: 34rpx;
+  color: $rm-text-tertiary;
+  text-align: center;
+}
+
+.food-detail-add {
+  min-height: 86rpx;
+  margin-top: 18rpx;
+  border-radius: 999rpx;
+  background: linear-gradient(135deg, $rm-primary 0%, $rm-primary-gradient-end 100%);
+  box-shadow: 0 10rpx 26rpx rgb(92 184 150 / 24%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.food-detail-add text {
+  font-size: 28rpx;
+  line-height: 40rpx;
+  font-weight: 700;
+  color: #fff;
 }
