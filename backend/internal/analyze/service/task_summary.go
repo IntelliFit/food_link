@@ -162,6 +162,7 @@ func (s *TaskService) ListTaskSummariesPage(ctx context.Context, userID, status,
 		// contain one to three images, and no payload/result JSON is introduced.
 		imageTask := domain.AnalysisTask{ImageURL: task.ImageURL, ImagePaths: task.ImagePaths}
 		s.normalizeTaskImages(&imageTask)
+		s.useAnalyzeHistoryThumbnail(&imageTask)
 		task.ImageURL = imageTask.ImageURL
 		task.ImagePaths = imageTask.ImagePaths
 		tasks = append(tasks, task)

@@ -9,6 +9,8 @@ import (
 
 	"food_link/backend/internal/analyze/domain"
 	"food_link/backend/internal/analyze/repo"
+	"food_link/backend/pkg/config"
+	"food_link/backend/pkg/storage"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -166,6 +168,26 @@ func TestSummarizeTaskListPageWithoutResult(t *testing.T) {
 	assert.Equal(t, "image", summaryPage.Tasks[0].SourceType)
 	assert.False(t, summaryPage.HasMore)
 	assert.Equal(t, 1, summaryPage.NextOffset)
+}
+
+func TestTaskServiceUseAnalyzeHistoryThumbnailPreservesOriginalPaths(t *testing.T) {
+	original := "https://cdn.example.com/food/users/u1/meal.jpg"
+	svc := &TaskService{storage: storage.New(config.StorageConfig{
+		CDNFoodImagesBaseURL: "https://cdn.example.com/food",
+	})}
+	task := domain.AnalysisTask{
+		ImageURL:   &original,
+		ImagePaths: []string{original, "https://cdn.example.com/food/users/u1/label.jpg"},
+	}
+
+	svc.useAnalyzeHistoryThumbnail(&task)
+
+	require.NotNil(t, task.ImageURL)
+	assert.Equal(t, "https://cdn.example.com/food/users/u1/meal.jpg?imageMogr2/thumbnail/240x", *task.ImageURL)
+	assert.Equal(t, []string{
+		"https://cdn.example.com/food/users/u1/meal.jpg",
+		"https://cdn.example.com/food/users/u1/label.jpg",
+	}, task.ImagePaths)
 }
 
 func TestCollectAnalyzeHistorySummaryPagePreservesVisiblePagination(t *testing.T) {

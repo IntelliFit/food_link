@@ -791,7 +791,8 @@ func (s *TaskService) ListTasksPage(ctx context.Context, userID, taskType, statu
 		nextOffset int
 		err        error
 	)
-	if strings.TrimSpace(taskType) == "" {
+	isAnalyzeHistory := strings.TrimSpace(taskType) == ""
+	if isAnalyzeHistory {
 		tasks, hasMore, nextOffset, err = collectAnalyzeHistoryPage(offset, limit, func(rawOffset, rawLimit int) ([]domain.AnalysisTask, error) {
 			return s.tasks.ListTasksByUserPage(ctx, userID, taskType, status, search, rawLimit, rawOffset)
 		})
@@ -820,6 +821,9 @@ func (s *TaskService) ListTasksPage(ctx context.Context, userID, taskType, statu
 	}
 	for i := range tasks {
 		s.normalizeTaskImages(&tasks[i])
+		if isAnalyzeHistory {
+			s.useAnalyzeHistoryThumbnail(&tasks[i])
+		}
 		normalizeIngredientLabelEnergyInResult(tasks[i].Result)
 		if tasks[i].Status == "done" {
 			if recordID, ok := recordedMap[tasks[i].ID]; ok {
@@ -1282,6 +1286,21 @@ func (s *TaskService) normalizeTaskImages(task *domain.AnalysisTask) {
 		}
 		task.ImageURL = &resolved
 		task.ImagePaths = []string{resolved}
+	}
+}
+
+const analyzeHistoryThumbnailWidth = 240
+
+// useAnalyzeHistoryThumbnail changes only the list-card image. ImagePaths stay
+// as original URLs so legacy clients still open, share, retry and save the
+// full-resolution image. GetTask never calls this helper.
+func (s *TaskService) useAnalyzeHistoryThumbnail(task *domain.AnalysisTask) {
+	if task == nil || task.ImageURL == nil || s.storage == nil {
+		return
+	}
+	thumbnailURL := s.storage.BuildImageThumbnailURL("food-images", *task.ImageURL, analyzeHistoryThumbnailWidth)
+	if thumbnailURL != "" {
+		task.ImageURL = &thumbnailURL
 	}
 }
 

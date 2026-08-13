@@ -165,6 +165,58 @@ func TestResolveReferenceURLs(t *testing.T) {
 	}, client.ResolveReferenceURLs("user-avatars", input))
 }
 
+func TestBuildImageThumbnailURL(t *testing.T) {
+	client := New(config.StorageConfig{
+		CDNFoodImagesBaseURL: "https://cdn.example.com/food",
+		COSFoodImagesBucket:  "food-bucket",
+		COSRegion:            "ap-shanghai",
+	})
+
+	tests := []struct {
+		name     string
+		input    string
+		width    int
+		expected string
+	}{
+		{
+			name:     "raw key resolves to CDN thumbnail",
+			input:    "users/u1/meal.jpg",
+			width:    240,
+			expected: "https://cdn.example.com/food/users/u1/meal.jpg?imageMogr2/thumbnail/240x",
+		},
+		{
+			name:     "existing query is preserved",
+			input:    "https://cdn.example.com/food/meal.jpg?version=2",
+			width:    240,
+			expected: "https://cdn.example.com/food/meal.jpg?version=2&imageMogr2/thumbnail/240x",
+		},
+		{
+			name:     "existing COS transform is not duplicated",
+			input:    "https://cdn.example.com/food/meal.jpg?imageMogr2/thumbnail/120x",
+			width:    240,
+			expected: "https://cdn.example.com/food/meal.jpg?imageMogr2/thumbnail/120x",
+		},
+		{
+			name:     "untrusted external image is unchanged",
+			input:    "https://images.example.net/meal.jpg",
+			width:    240,
+			expected: "https://images.example.net/meal.jpg",
+		},
+		{
+			name:     "invalid width leaves resolved image unchanged",
+			input:    "meal.jpg",
+			width:    0,
+			expected: "https://cdn.example.com/food/meal.jpg",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, client.BuildImageThumbnailURL("food-images", tt.input, tt.width))
+		})
+	}
+}
+
 func TestBucketName(t *testing.T) {
 	cfg := config.StorageConfig{
 		COSFoodImagesBucket:    "food-bucket",
