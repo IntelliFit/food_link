@@ -597,6 +597,7 @@ function AnalyzeHistoryPage() {
           duration_ms: Date.now() - startedAt,
         })
       } else {
+        const hadLoadedOnce = hasLoadedOnceRef.current
         // 先单独提交 loading=false。Android 真机创建 20 张卡片和图片节点时，
         // 如果与移除 spinner 同批提交，旧 spinner 会一直保留到整批视图更新完成。
         hasLoadedOnceRef.current = true
@@ -608,6 +609,12 @@ function AnalyzeHistoryPage() {
         })
         if (pageTasks.length === 0) {
           setTasks([])
+        } else if (hadLoadedOnce) {
+          // 从详情页返回时，ScrollView 会保留原滚动位置。后台刷新若再次执行
+          // “先 6 条、后全量”的首屏分批渲染，会让内容高度短暂缩水，宿主先把
+          // scrollTop 夹回顶部，再随着全量列表恢复到旧位置，造成明显闪烁。
+          // 已有列表时一次性提交完整刷新结果，保持滚动容器高度稳定。
+          setTasks(pageTasks)
         } else {
           // 独立 timer 让当前 async 请求函数先返回，防止 React/小程序宿主把
           // loading=false 与 20 张卡片创建合并为一次昂贵的视图提交。
