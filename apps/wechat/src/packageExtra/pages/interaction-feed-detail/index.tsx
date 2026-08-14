@@ -1,5 +1,5 @@
 import { View, Text, Image, ScrollView, Input } from '@tarojs/components'
-import { useCallback, useMemo, useRef, useState } from 'react'
+import * as React from 'react'
 import Taro from '@tarojs/taro'
 import {
   communityGetComments,
@@ -217,34 +217,57 @@ function aggregateMicroNutrients(record: CommunityFeedRecord | undefined | null)
 }
 
 function InteractionFeedDetailPage() {
-  const [targetType, setTargetType] = useState<CommunityFeedTargetType>('food_record')
-  const [targetCommentId, setTargetCommentId] = useState('')
-  const [feedItem, setFeedItem] = useState<CommunityFeedItem | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [submitting, setSubmitting] = useState(false)
-  const [commentContent, setCommentContent] = useState('')
-  const [replyTargetComment, setReplyTargetComment] = useState<FeedCommentItem | null>(null)
-  const [composerVisible, setComposerVisible] = useState(false)
-  const [editSheetVisible, setEditSheetVisible] = useState(false)
-  const [reportVisible, setReportVisible] = useState(false)
-  const [feedActionSheetVisible, setFeedActionSheetVisible] = useState(false)
-  const [reportMaskVisible, setReportMaskVisible] = useState(false)
-  const [feedTextExpanded, setFeedTextExpanded] = useState<Record<string, boolean>>({})
-  const [microsExpanded, setMicrosExpanded] = useState(false)
-  const [manualFoodsExpanded, setManualFoodsExpanded] = useState(false)
-  const likePendingRef = useRef(false)
+  const [targetType, setTargetType] = React.useState<CommunityFeedTargetType>('food_record')
+  const [targetCommentId, setTargetCommentId] = React.useState('')
+  const [feedItem, setFeedItem] = React.useState<CommunityFeedItem | null>(null)
+  const [loading, setLoading] = React.useState(true)
+  const [submitting, setSubmitting] = React.useState(false)
+  const [commentContent, setCommentContent] = React.useState('')
+  const [replyTargetComment, setReplyTargetComment] = React.useState<FeedCommentItem | null>(null)
+  const [composerVisible, setComposerVisible] = React.useState(false)
+  const [editSheetVisible, setEditSheetVisible] = React.useState(false)
+  const [reportVisible, setReportVisible] = React.useState(false)
+  const [feedActionSheetVisible, setFeedActionSheetVisible] = React.useState(false)
+  const [reportMaskVisible, setReportMaskVisible] = React.useState(false)
+  const [feedTextExpanded, setFeedTextExpanded] = React.useState<Record<string, boolean>>({})
+  const [microsExpanded, setMicrosExpanded] = React.useState(false)
+  const [manualFoodsExpanded, setManualFoodsExpanded] = React.useState(false)
+  const likePendingRef = React.useRef(false)
   const INITIAL_VISIBLE_MANUAL_FOODS = 3
-  const routeInitializationRef = useRef('')
+  const routeInitializationRef = React.useRef('')
+  const loadSeqRef = React.useRef(0)
+  const loadingReleaseTimerRef = React.useRef<number | null>(null)
 
-  const loadDetail = useCallback(async (nextRecordId: string, nextTargetType: CommunityFeedTargetType = 'food_record') => {
+  const logDetailStage = React.useCallback((stage: string, details: Record<string, unknown> = {}) => {
+    console.log('[interaction-feed-detail-debug]', stage, details)
+  }, [])
+
+  const clearLoadingReleaseTimer = React.useCallback(() => {
+    if (loadingReleaseTimerRef.current !== null) {
+      window.clearTimeout(loadingReleaseTimerRef.current)
+      loadingReleaseTimerRef.current = null
+    }
+  }, [])
+
+  const loadDetail = React.useCallback(async (nextRecordId: string, nextTargetType: CommunityFeedTargetType = 'food_record') => {
+    const seq = ++loadSeqRef.current
+    const startedAt = Date.now()
+    clearLoadingReleaseTimer()
+    logDetailStage('load-start', {
+      seq,
+      target_type: nextTargetType,
+      has_target_id: Boolean(nextRecordId),
+    })
     if (!nextRecordId) {
       setFeedItem(null)
       setLoading(false)
+      logDetailStage('load-skipped', { seq, reason: 'missing-target-id' })
       return
     }
     if (!getAccessToken()) {
       setFeedItem(null)
       setLoading(false)
+      logDetailStage('load-skipped', { seq, reason: 'missing-access-token' })
       redirectToLogin(`${extraPkgUrl('/pages/interaction-feed-detail/index')}?recordId=${encodeURIComponent(nextRecordId)}`)
       return
     }
@@ -260,24 +283,57 @@ function InteractionFeedDetailPage() {
       }
 
       const context = await withTimeout(communityGetFeedContext(nextRecordId, 5, nextTargetType))
+      if (seq !== loadSeqRef.current) return
+      logDetailStage('context-resolved', {
+        seq,
+        duration_ms: Date.now() - startedAt,
+      })
       const contextItem = context.item
       const commentsRes = await withTimeout(communityGetComments(nextRecordId, nextTargetType))
+      if (seq !== loadSeqRef.current) return
       const fullComments = commentsRes.list || []
       setFeedItem({
         ...contextItem,
         comments: fullComments,
         comment_count: Math.max(contextItem.comment_count || 0, fullComments.length)
       })
+      logDetailStage('detail-committed', {
+        seq,
+        duration_ms: Date.now() - startedAt,
+        comment_count: fullComments.length,
+        image_count: contextItem.record?.image_paths?.length || (contextItem.record?.image_path ? 1 : 0),
+      })
+
+      // 先在 spinner 后面挂载完整动态与评论树，再在独立宿主任务里只移除 spinner。
+      // 避免 Android 真机把“销毁 loading + 创建详情树”合并后继续保留旧 loading 视图。
+      loadingReleaseTimerRef.current = window.setTimeout(() => {
+        if (seq !== loadSeqRef.current) return
+        setLoading(false)
+        loadingReleaseTimerRef.current = null
+        logDetailStage('loading-release-committed', {
+          seq,
+          duration_ms: Date.now() - startedAt,
+        })
+      }, 80)
+      logDetailStage('loading-release-scheduled', {
+        seq,
+        duration_ms: Date.now() - startedAt,
+      })
     } catch (e) {
+      if (seq !== loadSeqRef.current) return
       console.error('加载动态详情失败:', e)
       await showUnifiedApiError(e, '加载失败')
       setFeedItem(null)
-    } finally {
       setLoading(false)
+      logDetailStage('load-failed', {
+        seq,
+        duration_ms: Date.now() - startedAt,
+        message: String((e as Error)?.message || e || ''),
+      })
     }
-  }, [])
+  }, [clearLoadingReleaseTimer, logDetailStage])
 
-  const hydrateFromOptions = useCallback((options: RouteOptions) => {
+  const hydrateFromOptions = React.useCallback((options: RouteOptions) => {
     const nextRecordId = pickRecordId(options)
     const nextTargetType = pickTargetType(options)
     const routeKey = `${nextTargetType}:${nextRecordId}`
@@ -309,7 +365,20 @@ function InteractionFeedDetailPage() {
     }
   })
 
-  const handleLike = useCallback(async () => {
+  React.useEffect(() => {
+    logDetailStage('react-commit', {
+      loading,
+      has_feed_item: Boolean(feedItem),
+      comment_count: feedItem?.comments?.length || 0,
+    })
+  }, [feedItem, loading, logDetailStage])
+
+  React.useEffect(() => () => {
+    loadSeqRef.current += 1
+    clearLoadingReleaseTimer()
+  }, [clearLoadingReleaseTimer])
+
+  const handleLike = React.useCallback(async () => {
     if (!feedItem || likePendingRef.current) return
     likePendingRef.current = true
     const prev = feedItem
@@ -333,18 +402,18 @@ function InteractionFeedDetailPage() {
     }
   }, [feedItem])
 
-  const openComposer = useCallback((reply?: FeedCommentItem | null) => {
+  const openComposer = React.useCallback((reply?: FeedCommentItem | null) => {
     setReplyTargetComment(reply || null)
     setComposerVisible(true)
   }, [])
 
-  const closeComposer = useCallback(() => {
+  const closeComposer = React.useCallback(() => {
     setComposerVisible(false)
     setReplyTargetComment(null)
     setCommentContent('')
   }, [])
 
-  const handleSubmitComment = useCallback(async () => {
+  const handleSubmitComment = React.useCallback(async () => {
     if (!feedItem) return
     const content = commentContent.trim()
     if (!content || submitting) return
@@ -364,9 +433,9 @@ function InteractionFeedDetailPage() {
     }
   }, [feedItem, commentContent, submitting, replyTargetComment, closeComposer, loadDetail])
 
-  const highlightCommentId = useMemo(() => targetCommentId.trim(), [targetCommentId])
+  const highlightCommentId = React.useMemo(() => targetCommentId.trim(), [targetCommentId])
 
-  const handleViewDetail = useCallback((id: string) => {
+  const handleViewDetail = React.useCallback((id: string) => {
     if (!id) return
     if (targetType === 'exercise_log') {
       const dateText = String(feedItem?.record?.record_time || feedItem?.record?.created_at || '').slice(0, 10)
@@ -380,7 +449,7 @@ function InteractionFeedDetailPage() {
     Taro.navigateTo({ url: `${extraPkgUrl('/pages/record-detail/index')}?id=${encodeURIComponent(id)}` })
   }, [targetType, feedItem])
 
-  const handleManualFoodCardClick = useCallback((row: ManualFoodSourceItem & { displayName: string; sourceLabel: string; imageUrl: string }) => {
+  const handleManualFoodCardClick = React.useCallback((row: ManualFoodSourceItem & { displayName: string; sourceLabel: string; imageUrl: string }) => {
     const manualSourceId = (row as any).manual_source_id as string | undefined
     const manualSource = String(row.manual_source || '')
     if (manualSourceId && (manualSource === 'public_library' || manualSource === 'nutrition_library' || manualSource === 'packaged_food')) {
@@ -388,7 +457,7 @@ function InteractionFeedDetailPage() {
     }
   }, [])
 
-  const handleDeleteFeedItem = useCallback(async () => {
+  const handleDeleteFeedItem = React.useCallback(async () => {
     if (!feedItem) return
     const ttype = getFeedTargetType(feedItem)
     const tid = getFeedTargetId(feedItem)
@@ -418,7 +487,7 @@ function InteractionFeedDetailPage() {
     }
   }, [feedItem])
 
-  const feedActionSheetActions = useMemo<FeedActionSheetAction[]>(() => {
+  const feedActionSheetActions = React.useMemo<FeedActionSheetAction[]>(() => {
     if (!feedItem) return []
     if (!feedItem.is_mine) {
       return [{ id: 'report', label: '举报', iconClass: 'icon-jinggao', danger: true }]
@@ -432,7 +501,7 @@ function InteractionFeedDetailPage() {
     return actions
   }, [feedItem])
 
-  const handleFeedActionSelect = useCallback((id: string) => {
+  const handleFeedActionSelect = React.useCallback((id: string) => {
     if (!feedItem) return
     if (!feedItem.is_mine) {
       if (id === 'report') setReportVisible(true)
@@ -457,11 +526,11 @@ function InteractionFeedDetailPage() {
     }
   }, [feedItem, handleDeleteFeedItem])
 
-  const toggleFeedTextExpanded = useCallback((key: string): void => {
+  const toggleFeedTextExpanded = React.useCallback((key: string): void => {
     setFeedTextExpanded((prev) => ({ ...prev, [key]: !prev[key] }))
   }, [])
 
-  const renderCollapsibleFeedText = useCallback((key: string, text: string, className = 'feed-content') => {
+  const renderCollapsibleFeedText = React.useCallback((key: string, text: string, className = 'feed-content') => {
     const expandable = shouldCollapseFeedText(text)
     const collapsed = expandable && !feedTextExpanded[key]
     return (
@@ -491,12 +560,14 @@ function InteractionFeedDetailPage() {
             <View className='interaction-feed-detail-loading'>
               <View className='interaction-feed-detail-loading-spinner' />
             </View>
-          ) : !feedItem ? (
+          ) : null}
+          {!loading && !feedItem ? (
             <View className='interaction-feed-detail-empty'>
               <Text className='interaction-feed-detail-empty-text'>未找到对应动态</Text>
             </View>
-          ) : (
-            <View className='feed-list'>
+          ) : null}
+          {feedItem ? (
+            <View className={`feed-list${loading ? ' interaction-feed-detail-preparing' : ''}`}>
               {(() => {
                 const exercise = isExerciseFeed(feedItem)
                 const isCirclePost = isCirclePostFeed(feedItem)
@@ -785,7 +856,7 @@ function InteractionFeedDetailPage() {
                 )
               })()}
             </View>
-          )}
+          ) : null}
         </View>
       </ScrollView>
 
