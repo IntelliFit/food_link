@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"food_link/backend/internal/analyze/domain"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type mockAnalyzeService struct {
@@ -73,6 +75,19 @@ type mockTaskService struct {
 	cleanupErr      error
 }
 
+type mockPaginatedTaskService struct {
+	*mockTaskService
+	page    service.TaskListPage
+	pageErr error
+}
+
+type mockSummaryPaginatedTaskService struct {
+	*mockPaginatedTaskService
+	summaryPage   service.TaskSummaryListPage
+	summaryErr    error
+	summaryCalled bool
+}
+
 func (m *mockTaskService) SubmitAnalyzeTask(ctx context.Context, userID string, input service.SubmitTaskInput) (string, error) {
 	return m.submitTaskID, m.submitErr
 }
@@ -84,6 +99,13 @@ func (m *mockTaskService) CreateBatchTask(ctx context.Context, userID string, im
 }
 func (m *mockTaskService) ListTasks(ctx context.Context, userID, taskType, status, search string, limit int) ([]domain.AnalysisTask, error) {
 	return m.tasks, m.listErr
+}
+func (m *mockPaginatedTaskService) ListTasksPage(ctx context.Context, userID, taskType, status, search string, limit, offset int) (service.TaskListPage, error) {
+	return m.page, m.pageErr
+}
+func (m *mockSummaryPaginatedTaskService) ListTaskSummariesPage(ctx context.Context, userID, status, search string, limit, offset int) (service.TaskSummaryListPage, error) {
+	m.summaryCalled = true
+	return m.summaryPage, m.summaryErr
 }
 func (m *mockTaskService) CountTasks(ctx context.Context, userID string) (int64, error) {
 	return m.count, m.countErr
@@ -307,6 +329,104 @@ func TestAnalyzeHandler_ListTasks(t *testing.T) {
 	data := resp["data"].(map[string]any)
 	tasks := data["tasks"].([]any)
 	assert.Len(t, tasks, 1)
+}
+
+func TestAnalyzeHandler_ListTasksSummary(t *testing.T) {
+	largeValue := strings.Repeat("x", 64*1024)
+	textInput := strings.Repeat("番茄炒蛋和米饭 ", 20)
+	imageURL := "https://example.com/food.jpg"
+	page := service.TaskListPage{
+		Tasks: []domain.AnalysisTask{{
+			ID:         "task-summary-1",
+			UserID:     "test-user-id",
+			TaskType:   "food_text",
+			Status:     "done",
+			ImageURL:   &imageURL,
+			TextInput:  &textInput,
+			IsRecorded: false,
+			Payload: map[string]any{
+				"execution_mode": "strict",
+				"source_type":    "text",
+				"meal_type":      "lunch",
+				"recorded_on":    "2026-08-12",
+				"large_value":    largeValue,
+			},
+			Result: map[string]any{
+				"items": []any{
+					map[string]any{"name": "番茄炒蛋", "nutrients": map[string]any{"calories": 120.0}},
+					map[string]any{"name": "米饭", "nutrients": map[string]any{"calories": 90.0}},
+				},
+				"recognitionOutcome": "soft_reject",
+				"large_value":        largeValue,
+			},
+		}},
+		HasMore:    true,
+		NextOffset: 27,
+	}
+	mockTask := &mockPaginatedTaskService{
+		mockTaskService: &mockTaskService{},
+		page:            page,
+	}
+	h := NewAnalyzeHandler(&mockAnalyzeService{}, mockTask, "admin-key")
+	r := setupRouter(h)
+
+	fullRecorder := httptest.NewRecorder()
+	fullRequest, _ := http.NewRequest(http.MethodGet, "/api/analyze/tasks?limit=20&offset=7", nil)
+	r.ServeHTTP(fullRecorder, fullRequest)
+	require.Equal(t, http.StatusOK, fullRecorder.Code)
+
+	summaryRecorder := httptest.NewRecorder()
+	summaryRequest, _ := http.NewRequest(http.MethodGet, "/api/analyze/tasks?summary=1&limit=20&offset=7", nil)
+	r.ServeHTTP(summaryRecorder, summaryRequest)
+	require.Equal(t, http.StatusOK, summaryRecorder.Code)
+
+	var fullResponse map[string]any
+	require.NoError(t, json.Unmarshal(fullRecorder.Body.Bytes(), &fullResponse))
+	fullData := fullResponse["data"].(map[string]any)
+	fullTask := fullData["tasks"].([]any)[0].(map[string]any)
+	assert.Contains(t, fullTask, "payload")
+	assert.Contains(t, fullTask, "result")
+
+	var summaryResponse map[string]any
+	require.NoError(t, json.Unmarshal(summaryRecorder.Body.Bytes(), &summaryResponse))
+	summaryData := summaryResponse["data"].(map[string]any)
+	summaryTask := summaryData["tasks"].([]any)[0].(map[string]any)
+	assert.NotContains(t, summaryTask, "payload")
+	assert.NotContains(t, summaryTask, "result")
+	assert.NotContains(t, summaryTask, "user_id")
+	assert.Equal(t, true, summaryData["has_more"])
+	assert.Equal(t, float64(27), summaryData["next_offset"])
+	assert.Equal(t, "strict", summaryTask["execution_mode"])
+	assert.Equal(t, "text", summaryTask["source_type"])
+	assert.Equal(t, "2026-08-12", summaryTask["recorded_on"])
+	resultSummary := summaryTask["result_summary"].(map[string]any)
+	assert.Equal(t, "番茄炒蛋", resultSummary["first_item_name"])
+	assert.Equal(t, float64(2), resultSummary["item_count"])
+	assert.Equal(t, 210.0, resultSummary["total_calories"])
+	t.Logf("full response bytes=%d, summary response bytes=%d", fullRecorder.Body.Len(), summaryRecorder.Body.Len())
+	assert.Less(t, summaryRecorder.Body.Len(), fullRecorder.Body.Len()/10)
+}
+
+func TestAnalyzeHandler_ListTasksSummaryUsesProjectedService(t *testing.T) {
+	mockTask := &mockSummaryPaginatedTaskService{
+		mockPaginatedTaskService: &mockPaginatedTaskService{
+			mockTaskService: &mockTaskService{},
+			pageErr:         errors.New("full page path must not run"),
+		},
+		summaryPage: service.TaskSummaryListPage{
+			Tasks:      []service.TaskSummary{{ID: "summary-only", TaskType: "food", Status: "done", HasResult: true}},
+			HasMore:    true,
+			NextOffset: 21,
+		},
+	}
+	h := NewAnalyzeHandler(&mockAnalyzeService{}, mockTask, "admin-key")
+	r := setupRouter(h)
+	recorder := httptest.NewRecorder()
+	request, _ := http.NewRequest(http.MethodGet, "/api/analyze/tasks?summary=1&limit=20", nil)
+	r.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusOK, recorder.Code)
+	assert.True(t, mockTask.summaryCalled)
+	assert.Contains(t, recorder.Body.String(), "summary-only")
 }
 
 func TestAnalyzeHandler_CountTasks(t *testing.T) {

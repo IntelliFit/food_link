@@ -57,6 +57,8 @@ describe('interaction notifications loading state', () => {
     await act(async () => {
       await Promise.resolve()
       await Promise.resolve()
+      jest.advanceTimersByTime(80)
+      await Promise.resolve()
     })
 
     expect(screen.getByText('20')).toBeInTheDocument()
@@ -95,6 +97,8 @@ describe('interaction notifications loading state', () => {
     await act(async () => {
       screen.getByText('重新加载').click()
       await Promise.resolve()
+      await Promise.resolve()
+      jest.advanceTimersByTime(80)
       await Promise.resolve()
     })
 

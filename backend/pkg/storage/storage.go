@@ -178,6 +178,43 @@ func (c *Client) ResolveReferenceURLs(bucketAlias string, values []string) []str
 	return out
 }
 
+// BuildImageThumbnailURL returns a Tencent COS image-processing URL for a
+// trusted public bucket image. Untrusted external URLs are deliberately left
+// untouched because they may not support COS query parameters.
+func (c *Client) BuildImageThumbnailURL(bucketAlias, value string, maxWidth int) string {
+	originalQuery := ""
+	if original, err := url.Parse(strings.TrimSpace(value)); err == nil && original.Host != "" {
+		if _, trusted := c.trustedBucketHosts(bucketAlias)[strings.ToLower(strings.TrimSpace(original.Host))]; trusted {
+			originalQuery = original.RawQuery
+		}
+	}
+	resolved := c.ResolveReferenceURL(bucketAlias, value)
+	if resolved == "" || maxWidth <= 0 {
+		return resolved
+	}
+	parsed, err := url.Parse(resolved)
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
+		return resolved
+	}
+	if _, trusted := c.trustedBucketHosts(bucketAlias)[strings.ToLower(strings.TrimSpace(parsed.Host))]; !trusted {
+		return resolved
+	}
+	if parsed.RawQuery == "" {
+		parsed.RawQuery = originalQuery
+	}
+	if strings.Contains(strings.ToLower(parsed.RawQuery), "imagemogr2/") {
+		return parsed.String()
+	}
+
+	transform := fmt.Sprintf("imageMogr2/thumbnail/%dx", maxWidth)
+	if parsed.RawQuery == "" {
+		parsed.RawQuery = transform
+	} else {
+		parsed.RawQuery += "&" + transform
+	}
+	return parsed.String()
+}
+
 func (c *Client) bucketBaseURL(bucketAlias string) string {
 	var base string
 	switch bucketAlias {

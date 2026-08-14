@@ -42,7 +42,6 @@ const extraSubpackagePages = [
   'pages/interaction-notifications/index',
   'pages/interaction-feed-detail/index',
   'pages/circle-post-edit/index',
-  'pages/food-library-share/index',
   'pages/location-search/index',
   'pages/login/index',
   'pages/agreement/index',
@@ -98,6 +97,12 @@ export default defineAppConfig({
       root: 'packageUserGroup',
       name: 'user-group',
       pages: ['pages/user-group/index'],
+    },
+    {
+      // The region picker ships the full China area dataset. Keep it out of the main package and the nearly-full shared package.
+      root: 'packageFoodLibraryShare',
+      name: 'food-library-share',
+      pages: ['pages/food-library-share/index'],
     },
   ],
   window: {

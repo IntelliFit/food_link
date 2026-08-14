@@ -353,6 +353,22 @@ func TestTaskService_ListTasks(t *testing.T) {
 	require.NotNil(t, imageTask)
 	assert.Equal(t, "https://cdn.example.com/food/legacy.jpg", *imageTask.ImageURL)
 	assert.Equal(t, []string{"https://cdn.example.com/food/legacy.jpg"}, imageTask.ImagePaths)
+
+	// The unfiltered endpoint is the recognition-history list consumed by old
+	// released clients. Only its card image is a thumbnail; original paths stay
+	// available for detail, retry and share actions.
+	historyTasks, err := svc.ListTasks(ctx, "user1", "", "", "", 10)
+	require.NoError(t, err)
+	var historyImageTask *analyzedomain.AnalysisTask
+	for i := range historyTasks {
+		if historyTasks[i].ImageURL != nil {
+			historyImageTask = &historyTasks[i]
+			break
+		}
+	}
+	require.NotNil(t, historyImageTask)
+	assert.Equal(t, "https://cdn.example.com/food/legacy.jpg?imageMogr2/thumbnail/240x", *historyImageTask.ImageURL)
+	assert.Equal(t, []string{"https://cdn.example.com/food/legacy.jpg"}, historyImageTask.ImagePaths)
 }
 
 func TestTaskService_ListTasksCollapsesRepeatedSameDayInput(t *testing.T) {

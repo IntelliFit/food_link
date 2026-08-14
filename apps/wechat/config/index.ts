@@ -122,10 +122,14 @@ export default defineConfig<'vite'>(async (merge) => {
           from: 'custom-tab-bar',
           to: 'custom-tab-bar'
         },
-        {
-          from: 'src/assets/pets',
-          to: 'assets/pets'
-        },
+        ...['idle', 'blink', 'squash', 'jump'].map((frame) => ({
+          from: `src/assets/pets/jianwen-01-${frame}.png`,
+          to: `assets/pets/jianwen-01-${frame}.png`,
+        })),
+        ...['huatuo-01', 'taiji-xiaozi-01'].map((avatar) => ({
+          from: `src/assets/pets/${avatar}.png`,
+          to: `assets/pets/${avatar}.png`,
+        })),
 
       ],
       options: {
@@ -185,6 +189,90 @@ export default defineConfig<'vite'>(async (merge) => {
           }
         },
         // 将 ECharts/ZRender 打到代谢页专属分包，避免留在共享分包里继续挤占体积。
+        // @vant/area-data is only used by the public-food sharing page. Keeping it in the global vendor
+        // chunk adds the complete China region table to the main package.
+        {
+          name: 'area-data-chunk-to-package-food-library-share',
+          configResolved(config) {
+            const ro = config.build.rollupOptions
+            const outs = ro.output
+            const list = Array.isArray(outs) ? outs : outs ? [outs] : []
+            const apply = (o: NonNullable<(typeof list)[number]>) => {
+              if (!o || typeof o !== 'object') return
+              const prevManual = o.manualChunks
+              o.manualChunks = (id: string, ctx: unknown) => {
+                if (/node_modules[\\/]@vant[\\/]area-data[\\/]/.test(id)) {
+                  return 'food-library-area-data'
+                }
+                if (typeof prevManual === 'function') {
+                  return (prevManual as (a: string, b: unknown) => string | void).call(
+                    o,
+                    id,
+                    ctx
+                  )
+                }
+                return undefined
+              }
+              const prevNames = o.chunkFileNames
+              o.chunkFileNames = (chunkInfo) => {
+                if (chunkInfo.name === 'food-library-area-data') {
+                  return 'packageFoodLibraryShare/area-data-vendor.js'
+                }
+                if (typeof prevNames === 'function') {
+                  return prevNames(chunkInfo)
+                }
+                if (typeof prevNames === 'string') {
+                  return prevNames
+                }
+                return '[name]-[hash].js'
+              }
+            }
+            if (list.length === 0) {
+              const o: Record<string, unknown> = {}
+              ro.output = o
+              apply(o)
+            } else {
+              list.forEach(apply)
+            }
+          },
+        },
+        {
+          name: 'qrcode-chunk-to-package-extra',
+          configResolved(config) {
+            const ro = config.build.rollupOptions
+            const outs = ro.output
+            const list = Array.isArray(outs) ? outs : outs ? [outs] : []
+            const apply = (o: NonNullable<(typeof list)[number]>) => {
+              if (!o || typeof o !== 'object') return
+              const prevManual = o.manualChunks
+              o.manualChunks = (id: string, ctx: unknown) => {
+                if (/node_modules[\\/]weapp-qrcode-canvas-2d[\\/]/.test(id)) {
+                  return 'profile-qrcode-vendor'
+                }
+                if (typeof prevManual === 'function') {
+                  return (prevManual as (a: string, b: unknown) => string | void).call(o, id, ctx)
+                }
+                return undefined
+              }
+              const prevNames = o.chunkFileNames
+              o.chunkFileNames = (chunkInfo) => {
+                if (chunkInfo.name === 'profile-qrcode-vendor') {
+                  return 'packageExtra/profile-qrcode-vendor.js'
+                }
+                if (typeof prevNames === 'function') return prevNames(chunkInfo)
+                if (typeof prevNames === 'string') return prevNames
+                return '[name]-[hash].js'
+              }
+            }
+            if (list.length === 0) {
+              const o: Record<string, unknown> = {}
+              ro.output = o
+              apply(o)
+            } else {
+              list.forEach(apply)
+            }
+          },
+        },
         {
           name: 'echarts-chunk-to-package-stats-metabolic',
           configResolved(config) {

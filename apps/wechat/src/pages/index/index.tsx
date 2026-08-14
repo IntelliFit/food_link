@@ -1,6 +1,6 @@
 import { View, Text, Input, Image, Canvas, PageMeta, Swiper, SwiperItem, Button } from '@tarojs/components'
 import { CAFETERIA_HERO_BG_URL, GOOSE_DUCK_CHICKEN_BG_URL } from '../../utils/static-asset-cdn-url'
-import React from 'react'
+import * as React from 'react'
 import Taro, { useDidShow, useShareAppMessage, useShareTimeline } from '@tarojs/taro'
 import {
   getHomeDashboard,

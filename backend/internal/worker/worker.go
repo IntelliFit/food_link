@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
+	"math/rand"
 	"regexp"
 	"sort"
 	"strconv"
@@ -37,18 +38,23 @@ import (
 )
 
 const (
-	precisionPlanModelName    = "gemini-3.5-flash"
-	precisionWeightModelName  = "gemini-3.5-flash"
-	strictSeparateModeName    = "strict_separate"
-	precisionRefineEnabled    = true
-	precisionRefineTimeout    = 25 * time.Second
-	taskLeaseDuration         = 5 * time.Minute
-	taskLeaseExtendEvery      = 30 * time.Second
-	taskRecoveryInterval      = 30 * time.Second
-	taskKafkaRecoveryInterval = 5 * time.Minute
-	taskKafkaRecoveryCooldown = 30 * time.Minute
-	taskRecoveryLeaderRetry   = 30 * time.Second
-	taskRecoveryBatchSize     = 200
+	precisionPlanModelName     = "gemini-3.5-flash"
+	precisionWeightModelName   = "gemini-3.5-flash"
+	strictSeparateModeName     = "strict_separate"
+	precisionRefineEnabled     = true
+	precisionRefineTimeout     = 25 * time.Second
+	taskLeaseDuration          = 5 * time.Minute
+	taskLeaseExtendEvery       = 30 * time.Second
+	taskRecoveryInterval       = 30 * time.Second
+	taskKafkaRecoveryInterval  = 5 * time.Minute
+	taskKafkaRecoveryCooldown  = 30 * time.Minute
+	taskRecoveryLeaderRetry    = 30 * time.Second
+	taskRecoveryBatchSize      = 200
+	expiryPollInitialBackoff   = 2 * time.Second
+	expiryPollMaxBackoff       = 30 * time.Second
+	expiryPollRecoveryEvery    = 60 * time.Second
+	expiryPollStaleAfter       = 10 * time.Minute
+	expiryPollOperationTimeout = time.Minute
 )
 
 var errTaskAttemptLost = errors.New("task attempt no longer owns task")
@@ -87,12 +93,13 @@ type Runner struct {
 	healthDocs    *userrepo.HealthDocumentRepo
 	users         *authrepo.UserRepo
 	expiry        *expiryservice.Recognizer
-	notifier      *expiryservice.NotificationWorker
+	notifier      expiryNotificationProcessor
 	exercise      *healthservice.ExerciseService
 	nutrition     *foodrecordservice.FoodNutritionService
 	queue         taskqueue.Queue
 	storage       *storage.Client
 	credit        CreditGuard
+	expiryPoll    expiryNotificationPollOptions
 }
 
 type analyzeRunner interface {
@@ -107,6 +114,22 @@ type analyzeRunner interface {
 
 type CreditGuard interface {
 	RefundEarnedCreditsAfterTaskFailure(ctx context.Context, userID string, creditsInfo map[string]any, cost int, spendReason, spendSourceKey, refundReason, refundSourceKey string, meta map[string]any) error
+}
+
+type expiryNotificationProcessor interface {
+	RecoverStaleProcessingJobs(context.Context, time.Duration) (int64, error)
+	ProcessNext(context.Context) (bool, error)
+}
+
+type expiryNotificationPollOptions struct {
+	initialBackoff   time.Duration
+	maxBackoff       time.Duration
+	recoveryEvery    time.Duration
+	staleAfter       time.Duration
+	operationTimeout time.Duration
+	now              func() time.Time
+	jitter           func(time.Duration) time.Duration
+	wait             func(context.Context, time.Duration) bool
 }
 
 type Options struct {
@@ -212,11 +235,22 @@ func (r *Runner) Run(ctx context.Context, opts Options) error {
 		defer wg.Done()
 		r.recoverLoop(ctx, taskTypes, opts.RecoveryInterval, queueDriver, opts.RecoveryLockKey)
 	}()
+	if r.notifier != nil && handlesExpiryNotificationTaskType(taskTypes) {
+		expiryPollOptions := r.expiryPoll
+		if expiryPollOptions.initialBackoff <= 0 {
+			expiryPollOptions.initialBackoff = opts.PollInterval
+		}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			r.runExpiryNotificationPoller(ctx, opts.WorkerID+"-expiry-notification", expiryPollOptions)
+		}()
+	}
 	for i := 0; i < opts.WorkerCount; i++ {
 		wg.Add(1)
 		go func(index int) {
 			defer wg.Done()
-			r.runLoop(ctx, fmt.Sprintf("%s-%d", opts.WorkerID, index), taskTypes, opts.PollInterval, opts.LeaseDuration, queueDriver)
+			r.runLoop(ctx, fmt.Sprintf("%s-%d", opts.WorkerID, index), taskTypes, opts.LeaseDuration, queueDriver)
 		}(i)
 	}
 	<-ctx.Done()
@@ -224,7 +258,7 @@ func (r *Runner) Run(ctx context.Context, opts Options) error {
 	return ctx.Err()
 }
 
-func (r *Runner) runLoop(ctx context.Context, workerID string, taskTypes []string, pollInterval, leaseDuration time.Duration, queueDriver string) {
+func (r *Runner) runLoop(ctx context.Context, workerID string, taskTypes []string, leaseDuration time.Duration, queueDriver string) {
 	metrics.IncWorkerLoop(queueDriver)
 	defer metrics.DecWorkerLoop(queueDriver)
 	backoff := time.Second
@@ -246,7 +280,7 @@ func (r *Runner) runLoop(ctx context.Context, workerID string, taskTypes []strin
 					)
 				}
 			}()
-			r.loop(ctx, workerID, taskTypes, deliveries, pollInterval, leaseDuration)
+			r.loop(ctx, workerID, taskTypes, deliveries, leaseDuration)
 		}()
 		if ctx.Err() != nil {
 			return
@@ -256,9 +290,7 @@ func (r *Runner) runLoop(ctx context.Context, workerID string, taskTypes []strin
 	}
 }
 
-func (r *Runner) loop(ctx context.Context, workerID string, taskTypes []string, deliveries <-chan taskqueue.Delivery, pollInterval, leaseDuration time.Duration) {
-	ticker := time.NewTicker(pollInterval)
-	defer ticker.Stop()
+func (r *Runner) loop(ctx context.Context, workerID string, taskTypes []string, deliveries <-chan taskqueue.Delivery, leaseDuration time.Duration) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -270,17 +302,6 @@ func (r *Runner) loop(ctx context.Context, workerID string, taskTypes []string, 
 				return
 			}
 			r.handleDelivery(ctx, workerID, taskTypes, leaseDuration, delivery)
-		case <-ticker.C:
-			if handlesTaskType(taskTypes, "expiry_notification") || handlesTaskType(taskTypes, "food_expiry_notification_job") {
-				handled, err := r.processExpiryNotification(ctx, workerID)
-				if err != nil {
-					r.errorLog(ctx, "处理保质期提醒失败", err, slog.String("worker_id", workerID))
-					continue
-				}
-				if handled {
-					continue
-				}
-			}
 		}
 	}
 }
@@ -476,27 +497,138 @@ func (r *Runner) handleDelivery(ctx context.Context, workerID string, taskTypes 
 	}
 }
 
-func (r *Runner) processExpiryNotification(ctx context.Context, workerID string) (bool, error) {
+func (r *Runner) runExpiryNotificationPoller(ctx context.Context, workerID string, rawOpts expiryNotificationPollOptions) {
 	if r.notifier == nil {
-		return false, nil
+		return
 	}
-	jobCtx, cancel := context.WithTimeout(ctx, time.Minute)
+	opts := normalizeExpiryNotificationPollOptions(rawOpts)
+	backoff := opts.initialBackoff
+	nextRecovery := opts.now()
+
+	for ctx.Err() == nil {
+		now := opts.now()
+		if !now.Before(nextRecovery) {
+			recovered, err := callExpiryNotificationRecovery(ctx, r.notifier, opts.operationTimeout, opts.staleAfter)
+			nextRecovery = opts.now().Add(opts.recoveryEvery)
+			if err != nil {
+				r.errorLog(ctx, "恢复超时的保质期提醒任务失败", err, slog.String("worker_id", workerID))
+			} else if recovered > 0 {
+				r.warn(ctx, "保质期提醒过期处理中任务已恢复",
+					slog.String("worker_id", workerID),
+					slog.Int64("job_count", recovered),
+				)
+			}
+		}
+
+		handled, err := callExpiryNotificationProcessNext(ctx, r.notifier, opts.operationTimeout)
+		if ctx.Err() != nil {
+			return
+		}
+		if err != nil {
+			r.errorLog(ctx, "处理保质期提醒失败", err, slog.String("worker_id", workerID))
+		}
+		if handled {
+			backoff = opts.initialBackoff
+			if err == nil {
+				r.info(ctx, "保质期提醒任务已处理", slog.String("worker_id", workerID))
+				continue
+			}
+		}
+
+		delay := opts.jitter(backoff)
+		if delay < 0 {
+			delay = 0
+		}
+		if !opts.wait(ctx, delay) {
+			return
+		}
+		backoff = nextExpiryNotificationBackoff(backoff, opts.maxBackoff)
+	}
+}
+
+func callExpiryNotificationRecovery(
+	ctx context.Context,
+	notifier expiryNotificationProcessor,
+	timeout time.Duration,
+	staleAfter time.Duration,
+) (recovered int64, err error) {
+	operationCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	recovered, err := r.notifier.RecoverStaleProcessingJobs(jobCtx, 10*time.Minute)
-	if err != nil {
-		return false, err
+	defer func() {
+		if recoveredValue := recover(); recoveredValue != nil {
+			err = fmt.Errorf("expiry notification recovery panic: %v", recoveredValue)
+		}
+	}()
+	return notifier.RecoverStaleProcessingJobs(operationCtx, staleAfter)
+}
+
+func callExpiryNotificationProcessNext(
+	ctx context.Context,
+	notifier expiryNotificationProcessor,
+	timeout time.Duration,
+) (handled bool, err error) {
+	operationCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	defer func() {
+		if recoveredValue := recover(); recoveredValue != nil {
+			handled = false
+			err = fmt.Errorf("expiry notification processing panic: %v", recoveredValue)
+		}
+	}()
+	return notifier.ProcessNext(operationCtx)
+}
+
+func normalizeExpiryNotificationPollOptions(opts expiryNotificationPollOptions) expiryNotificationPollOptions {
+	if opts.initialBackoff <= 0 {
+		opts.initialBackoff = expiryPollInitialBackoff
 	}
-	if recovered > 0 {
-		r.warn(ctx, "保质期提醒过期处理中任务已恢复",
-			slog.String("worker_id", workerID),
-			slog.Int64("job_count", recovered),
-		)
+	if opts.maxBackoff <= 0 {
+		opts.maxBackoff = expiryPollMaxBackoff
 	}
-	handled, err := r.notifier.ProcessNext(jobCtx)
-	if handled {
-		r.info(ctx, "保质期提醒任务已处理", slog.String("worker_id", workerID))
+	if opts.maxBackoff < opts.initialBackoff {
+		opts.maxBackoff = opts.initialBackoff
 	}
-	return handled, err
+	if opts.recoveryEvery <= 0 {
+		opts.recoveryEvery = expiryPollRecoveryEvery
+	}
+	if opts.staleAfter <= 0 {
+		opts.staleAfter = expiryPollStaleAfter
+	}
+	if opts.operationTimeout <= 0 {
+		opts.operationTimeout = expiryPollOperationTimeout
+	}
+	if opts.now == nil {
+		opts.now = time.Now
+	}
+	if opts.jitter == nil {
+		opts.jitter = jitterExpiryNotificationBackoff
+	}
+	if opts.wait == nil {
+		opts.wait = waitContext
+	}
+	return opts
+}
+
+func jitterExpiryNotificationBackoff(base time.Duration) time.Duration {
+	if base <= 0 {
+		return 0
+	}
+	const jitterRange = 0.2
+	factor := 1 - jitterRange + rand.Float64()*(2*jitterRange)
+	return time.Duration(float64(base) * factor)
+}
+
+func nextExpiryNotificationBackoff(current, maximum time.Duration) time.Duration {
+	if current <= 0 {
+		return expiryPollInitialBackoff
+	}
+	if maximum <= 0 {
+		maximum = expiryPollMaxBackoff
+	}
+	if current >= maximum || current > maximum/2 {
+		return maximum
+	}
+	return current * 2
 }
 
 func (r *Runner) enqueueTask(ctx context.Context, task *domain.AnalysisTask) error {
@@ -5153,6 +5285,10 @@ func analysisQueueTaskTypes(values []string) []string {
 	return out
 }
 
+func handlesExpiryNotificationTaskType(values []string) bool {
+	return handlesTaskType(values, "expiry_notification") || handlesTaskType(values, "food_expiry_notification_job")
+}
+
 func handlesTaskType(values []string, target string) bool {
 	for _, value := range values {
 		if value == target {
@@ -5163,14 +5299,20 @@ func handlesTaskType(values []string, target string) bool {
 }
 
 func sleepContext(ctx context.Context, d time.Duration) {
+	waitContext(ctx, d)
+}
+
+func waitContext(ctx context.Context, d time.Duration) bool {
 	if d <= 0 {
-		return
+		return ctx.Err() == nil
 	}
 	timer := time.NewTimer(d)
 	defer timer.Stop()
 	select {
 	case <-ctx.Done():
+		return false
 	case <-timer.C:
+		return true
 	}
 }
 

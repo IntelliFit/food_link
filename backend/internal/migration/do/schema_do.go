@@ -248,8 +248,8 @@ type UserVoucherDO struct {
 func (UserVoucherDO) TableName() string { return "user_vouchers" }
 
 type AnalysisTaskDO struct {
-	ID              string         `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
-	UserID          string         `gorm:"column:user_id;type:uuid;not null;index:idx_analysis_tasks_user_id"`
+	ID              string         `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid();index:idx_analysis_tasks_user_created_at_id,priority:3,sort:desc"`
+	UserID          string         `gorm:"column:user_id;type:uuid;not null;index:idx_analysis_tasks_user_id;index:idx_analysis_tasks_user_created_at_id,priority:1"`
 	TaskType        string         `gorm:"column:task_type;type:text;not null;index:idx_analysis_tasks_status_type,priority:2"`
 	ImageURL        *string        `gorm:"column:image_url;type:text"`
 	ImagePaths      []string       `gorm:"column:image_paths;type:jsonb;serializer:json;default:'[]'::jsonb"`
@@ -265,7 +265,7 @@ type AnalysisTaskDO struct {
 	AttemptCount    int            `gorm:"column:attempt_count;type:integer;not null;default:0"`
 	ProcessingAt    *time.Time     `gorm:"column:processing_started_at;type:timestamptz"`
 	LeaseUntil      *time.Time     `gorm:"column:lease_until;type:timestamptz;index:idx_analysis_tasks_status_lease,priority:2"`
-	CreatedAt       *time.Time     `gorm:"column:created_at;type:timestamptz;default:now();index:idx_analysis_tasks_created_at"`
+	CreatedAt       *time.Time     `gorm:"column:created_at;type:timestamptz;default:now();index:idx_analysis_tasks_created_at;index:idx_analysis_tasks_user_created_at_id,priority:2,sort:desc"`
 	UpdatedAt       *time.Time     `gorm:"column:updated_at;type:timestamptz;default:now()"`
 }
 

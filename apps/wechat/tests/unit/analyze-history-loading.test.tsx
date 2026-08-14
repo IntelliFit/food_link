@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import * as Taro from '@tarojs/taro'
 import AnalyzeHistoryPage from '../../src/packageExtra/pages/analyze-history/index'
-import { listAnalyzeTasks, showUnifiedApiError } from '../../src/utils/api'
+import { listAnalyzeTaskSummaries, showUnifiedApiError } from '../../src/utils/api'
 
 jest.mock('../../src/utils/withAuth', () => ({
   withAuth: (Component: any) => Component,
@@ -32,7 +32,7 @@ jest.mock('../../src/utils/home-dashboard-local-cache', () => ({
 }))
 
 jest.mock('../../src/utils/api', () => ({
-  listAnalyzeTasks: jest.fn(),
+  listAnalyzeTaskSummaries: jest.fn(),
   showUnifiedApiError: jest.fn(),
   getAccessToken: jest.fn(() => ''),
   getHealthProfile: jest.fn(),
@@ -61,13 +61,13 @@ describe('analyze history loading state', () => {
   })
 
   it('replaces the spinner with a persistent retry state when the list request times out', async () => {
-    ;(listAnalyzeTasks as jest.Mock).mockReturnValue(new Promise(() => {}))
+    ;(listAnalyzeTaskSummaries as jest.Mock).mockReturnValue(new Promise(() => {}))
 
     render(<AnalyzeHistoryPage />)
     expect(document.querySelector('.loading-spinner-md')).toBeInTheDocument()
 
     await act(async () => {
-      jest.advanceTimersByTime(12_000)
+      jest.advanceTimersByTime(22_000)
       await Promise.resolve()
     })
 
@@ -75,13 +75,18 @@ describe('analyze history loading state', () => {
     expect(screen.getByText('记录加载失败')).toBeInTheDocument()
     expect(screen.getByText('重新加载')).toBeInTheDocument()
 
-    ;(listAnalyzeTasks as jest.Mock).mockResolvedValue({
+    ;(listAnalyzeTaskSummaries as jest.Mock).mockResolvedValue({
       tasks: [{
         id: 'task-1',
-        user_id: 'user-1',
         task_type: 'food',
         status: 'done',
-        result: { items: [{ name: '番茄炒蛋', nutrients: { calories: 180 } }] },
+        is_recorded: false,
+        has_result: true,
+        result_summary: {
+          first_item_name: '番茄炒蛋',
+          item_count: 1,
+          total_calories: 180,
+        },
         created_at: '2026-08-12T12:00:00+08:00',
         updated_at: '2026-08-12T12:00:00+08:00',
       }],
@@ -93,9 +98,11 @@ describe('analyze history loading state', () => {
       fireEvent.click(screen.getByText('重新加载'))
       await Promise.resolve()
       await Promise.resolve()
+      jest.advanceTimersByTime(80)
+      await Promise.resolve()
     })
 
-    expect(listAnalyzeTasks).toHaveBeenCalledTimes(2)
+    expect(listAnalyzeTaskSummaries).toHaveBeenCalledTimes(2)
     expect(screen.getByText('番茄炒蛋')).toBeInTheDocument()
   })
 })

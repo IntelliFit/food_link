@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import * as React from 'react'
 import { View, Text, Input } from '@tarojs/components'
 import Taro from '@tarojs/taro'
 import { redirectToLogin } from '../../../utils/withAuth'
@@ -120,6 +120,10 @@ const QUICK_ACCESS_ITEMS = [
 
 const MEMBERSHIP_PREFLIGHT_TIMEOUT_MS = 1200
 
+function logRecordMenuStage(stage: string, details: Record<string, unknown> = {}) {
+  console.info('[record-menu-debug]', stage, details)
+}
+
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T | null> {
   return Promise.race([
     promise,
@@ -132,19 +136,20 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T
 export function RecordMenu({ visible, onClose, selectedDate }: RecordMenuProps) {
   const { scheme } = useAppColorScheme()
   const isDark = scheme === 'dark'
-  const [devToolsOpen, setDevToolsOpen] = useState(false)
-  const [onboardingPreviewOpen, setOnboardingPreviewOpen] = useState(false)
+  const [devToolsOpen, setDevToolsOpen] = React.useState(false)
+  const [onboardingPreviewOpen, setOnboardingPreviewOpen] = React.useState(false)
   /** 预置测试图 URL（仅 development 本地 UI 调试） */
-  const [previewImageUrl, setPreviewImageUrl] = useState('')
-  const [creditSheet, setCreditSheet] = useState<{ visible: boolean; membershipStatus: MembershipStatus | null }>({
+  const [previewImageUrl, setPreviewImageUrl] = React.useState('')
+  const [creditSheet, setCreditSheet] = React.useState<{ visible: boolean; membershipStatus: MembershipStatus | null }>({
     visible: false,
     membershipStatus: null,
   })
-  const [imagePickInProgress, setImagePickInProgress] = useState(false)
+  const [imagePickInProgress, setImagePickInProgress] = React.useState(false)
   /** 弹窗打开时预取会员状态，点击「相册上传」时直接使用缓存结果 */
-  const membershipPromiseRef = useRef<Promise<MembershipStatus | null> | null>(null)
+  const membershipPromiseRef = React.useRef<Promise<MembershipStatus | null> | null>(null)
 
-  useEffect(() => {
+  React.useEffect(() => {
+    logRecordMenuStage('visibility-commit', { visible })
     if (!visible) {
       setDevToolsOpen(false)
       setImagePickInProgress(false)
@@ -154,7 +159,28 @@ export function RecordMenu({ visible, onClose, selectedDate }: RecordMenuProps) 
     if (__ENABLE_DEV_DEBUG_UI__) {
       setPreviewImageUrl(getDevDebugUiTestImageUrl())
     }
-    membershipPromiseRef.current = getMyMembership().catch(() => null)
+    const startedAt = Date.now()
+    logRecordMenuStage('membership-prefetch-start')
+    try {
+      membershipPromiseRef.current = getMyMembership()
+        .then((membership) => {
+          logRecordMenuStage('membership-prefetch-resolved', { duration_ms: Date.now() - startedAt })
+          return membership
+        })
+        .catch((error: unknown) => {
+          logRecordMenuStage('membership-prefetch-failed', {
+            duration_ms: Date.now() - startedAt,
+            message: error instanceof Error ? error.message : String(error || ''),
+          })
+          return null
+        })
+    } catch (error: unknown) {
+      logRecordMenuStage('membership-prefetch-threw', {
+        duration_ms: Date.now() - startedAt,
+        message: error instanceof Error ? error.message : String(error || ''),
+      })
+      membershipPromiseRef.current = Promise.resolve(null)
+    }
   }, [visible])
 
   const closeBeforeNativePicker = () => {
@@ -234,14 +260,25 @@ export function RecordMenu({ visible, onClose, selectedDate }: RecordMenuProps) 
   const handleQuickAccessClick = (modeId: string) => {
     persistRecordTargetDate(selectedDate)
     onClose()
+    logRecordMenuStage('quick-access-click', { mode: modeId })
+    let target = ''
     switch (modeId) {
       case 'favorites':
-        Taro.navigateTo({ url: extraPkgUrl('/pages/recipes/index') })
+        target = extraPkgUrl('/pages/recipes/index')
         break
       case 'history':
-        Taro.navigateTo({ url: extraPkgUrl('/pages/analyze-history/index') })
+        target = extraPkgUrl('/pages/analyze-history/index')
         break
     }
+    if (!target) return
+    void Taro.navigateTo({
+      url: target,
+      success: () => logRecordMenuStage('quick-access-navigate-success', { mode: modeId }),
+      fail: (error) => logRecordMenuStage('quick-access-navigate-failed', {
+        mode: modeId,
+        message: String(error?.errMsg || ''),
+      }),
+    })
   }
 
   const runDevTool = (fn: () => void) => {

@@ -36,7 +36,6 @@ type TaskService struct {
 const (
 	waitingRecordBadgeWindow = 24 * time.Hour
 	maxFoodAnalyzeImages     = 3
-	analyzeHistoryScanBatch  = 200
 )
 
 const experimentalExecutionMode = "experimental"
@@ -792,7 +791,8 @@ func (s *TaskService) ListTasksPage(ctx context.Context, userID, taskType, statu
 		nextOffset int
 		err        error
 	)
-	if strings.TrimSpace(taskType) == "" {
+	isAnalyzeHistory := strings.TrimSpace(taskType) == ""
+	if isAnalyzeHistory {
 		tasks, hasMore, nextOffset, err = collectAnalyzeHistoryPage(offset, limit, func(rawOffset, rawLimit int) ([]domain.AnalysisTask, error) {
 			return s.tasks.ListTasksByUserPage(ctx, userID, taskType, status, search, rawLimit, rawOffset)
 		})
@@ -821,6 +821,9 @@ func (s *TaskService) ListTasksPage(ctx context.Context, userID, taskType, statu
 	}
 	for i := range tasks {
 		s.normalizeTaskImages(&tasks[i])
+		if isAnalyzeHistory {
+			s.useAnalyzeHistoryThumbnail(&tasks[i])
+		}
 		normalizeIngredientLabelEnergyInResult(tasks[i].Result)
 		if tasks[i].Status == "done" {
 			if recordID, ok := recordedMap[tasks[i].ID]; ok {
@@ -1428,6 +1431,21 @@ func (s *TaskService) normalizeTaskImages(task *domain.AnalysisTask) {
 	}
 }
 
+const analyzeHistoryThumbnailWidth = 240
+
+// useAnalyzeHistoryThumbnail changes only the list-card image. ImagePaths stay
+// as original URLs so legacy clients still open, share, retry and save the
+// full-resolution image. GetTask never calls this helper.
+func (s *TaskService) useAnalyzeHistoryThumbnail(task *domain.AnalysisTask) {
+	if task == nil || task.ImageURL == nil || s.storage == nil {
+		return
+	}
+	thumbnailURL := s.storage.BuildImageThumbnailURL("food-images", *task.ImageURL, analyzeHistoryThumbnailWidth)
+	if thumbnailURL != "" {
+		task.ImageURL = &thumbnailURL
+	}
+}
+
 func (s *TaskService) resolveFoodImageURL(path string) string {
 	if s.storage == nil {
 		return strings.TrimSpace(path)
@@ -1515,7 +1533,11 @@ func collectAnalyzeHistoryPage(offset, limit int, fetch analyzeHistoryPageFetche
 	tasks := make([]domain.AnalysisTask, 0, limit)
 
 	for {
-		batch, err := fetch(cursor, analyzeHistoryScanBatch)
+		// Only ask for the visible rows still needed plus one look-ahead row.
+		// If exclusions or duplicate groups consume that batch, the next loop
+		// continues from the raw cursor without repeatedly over-reading a full page.
+		batchSize := limit - len(tasks) + 1
+		batch, err := fetch(cursor, batchSize)
 		if err != nil {
 			return nil, false, offset, err
 		}
@@ -1542,7 +1564,7 @@ func collectAnalyzeHistoryPage(offset, limit int, fetch analyzeHistoryPageFetche
 		}
 
 		cursor += len(batch)
-		if len(batch) < analyzeHistoryScanBatch {
+		if len(batch) < batchSize {
 			return tasks, false, cursor, nil
 		}
 	}

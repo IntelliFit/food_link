@@ -850,6 +850,7 @@ WHERE COALESCE(display_name, '') = ''
 		// Analysis tasks search text column + index for name-based search
 		`ALTER TABLE analysis_tasks ADD COLUMN IF NOT EXISTS search_text text`,
 		`UPDATE analysis_tasks SET search_text = COALESCE(NULLIF(text_input, ''), result->'items'->0->>'name', result->>'description', '') WHERE search_text IS NULL OR search_text = ''`,
+		`CREATE INDEX IF NOT EXISTS idx_analysis_tasks_user_created_at_id ON analysis_tasks (user_id, created_at DESC, id DESC)`,
 		`CREATE INDEX IF NOT EXISTS idx_analysis_tasks_user_search_gin ON analysis_tasks USING gin (search_text gin_trgm_ops)`,
 		// Community search trigram indexes for keyword matching
 		`CREATE INDEX IF NOT EXISTS idx_weapp_user_nickname_gin ON weapp_user USING gin (nickname gin_trgm_ops)`,
