@@ -60,6 +60,33 @@ func TestNotificationRepoCountUnread(t *testing.T) {
 	assert.Equal(t, int64(1), count)
 }
 
+func TestNotificationRepoCommentGroupAndCountsIgnorePagination(t *testing.T) {
+	db := setupNotificationTestDB(t)
+	r := NewNotificationRepo(db)
+	ctx := context.Background()
+	actorID := "u2"
+
+	for _, notificationType := range []string{"like_received", "like_received", "comment_received", "reply_received", "comment_rejected"} {
+		assert.NoError(t, r.CreateNotification(ctx, &domain.FeedInteractionNotification{
+			RecipientUserID:  "u1",
+			ActorUserID:      &actorID,
+			NotificationType: notificationType,
+		}))
+	}
+
+	comments, err := r.ListNotifications(ctx, "u1", "comment", 2, 0)
+	assert.NoError(t, err)
+	assert.Len(t, comments, 2)
+	for _, notification := range comments {
+		assert.Contains(t, []string{"comment_received", "reply_received", "comment_rejected"}, notification.NotificationType)
+	}
+
+	counts, err := r.CountNotifications(ctx, "u1")
+	assert.NoError(t, err)
+	assert.Equal(t, int64(2), counts.LikeCount)
+	assert.Equal(t, int64(3), counts.CommentCount)
+}
+
 func TestNotificationRepoMarkRead(t *testing.T) {
 	db := setupNotificationTestDB(t)
 	r := NewNotificationRepo(db)
