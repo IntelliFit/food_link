@@ -21,6 +21,7 @@ export function LoginScreen() {
   const dialog = useAppDialog()
   const {
     loginWithWechat,
+    loginWithPassword,
     loginWithSMSCode,
     loginWithDebugAccount,
     loginWithUserId,
@@ -34,6 +35,7 @@ export function LoginScreen() {
   const [inviteCode, setInviteCode] = useState('')
   const [userId, setUserId] = useState('')
   const [password, setPassword] = useState('')
+  const [loginMode, setLoginMode] = useState<'sms' | 'password'>('sms')
   const [keyboardHeight, setKeyboardHeight] = useState(0)
   const scrollRef = useRef<ScrollView>(null)
 
@@ -136,7 +138,23 @@ export function LoginScreen() {
     run(() => loginWithWechat(inviteCode), '请稍后重试，或使用手机验证码登录')
   }
 
+  const loginWithPasswordAccount = () => {
+    const phone = accountPhone.trim()
+    const accountPassword = password.trim()
+    if (!isValidMainlandPhone(phone)) {
+      dialog.alert('手机号有误', '请输入 11 位大陆手机号。', 'warning')
+      return
+    }
+    if (!accountPassword) {
+      dialog.alert('请输入密码', undefined, 'warning')
+      return
+    }
+    if (!ensureAgreementAccepted()) return
+    run(() => loginWithPassword(phone, accountPassword), '请检查手机号和密码')
+  }
+
   const smsLoginReady = isValidMainlandPhone(accountPhone) && /^\d{6}$/.test(smsCode.trim())
+  const passwordLoginReady = isValidMainlandPhone(accountPhone) && Boolean(password.trim())
   const sendCodeReady = isValidMainlandPhone(accountPhone)
   const sendCodeDisabled = smsSending || smsCooldownSeconds > 0 || !sendCodeReady
   const sendCodeLabel = smsCooldownSeconds > 0 ? `${smsCooldownSeconds}s 后重发` : '发送验证码'
@@ -168,7 +186,7 @@ export function LoginScreen() {
       </View>
 
       <View style={styles.form}>
-        <Text style={styles.formHint}>手机号验证登录 / 注册</Text>
+        <Text style={styles.formHint}>{loginMode === 'sms' ? '手机号验证登录 / 注册' : '手机号密码登录'}</Text>
         <View style={styles.phoneRow}>
           <Text style={styles.countryCode}>+86</Text>
           <View style={styles.inputDivider} />
@@ -185,50 +203,83 @@ export function LoginScreen() {
           />
         </View>
 
-        <View style={styles.codeRow}>
-          <TextInput
-            value={smsCode}
-            onChangeText={(value) => setSmsCode(value.replace(/\D/g, '').slice(0, 6))}
-            placeholder="验证码"
-            keyboardType="number-pad"
-            maxLength={6}
-            style={styles.lineInput}
-            placeholderTextColor={colors.textMuted}
-            onFocus={() => scrollLoginFieldIntoView('code')}
-          />
-          <Pressable
-            disabled={sendCodeDisabled}
-            onPress={sendSMSCode}
-            style={({ pressed }) => [
-              styles.codeTextButton,
-              pressed && !sendCodeDisabled && styles.pressed,
-              sendCodeDisabled && styles.disabled,
-            ]}
-          >
-            {smsSending ? (
-              <ActivityIndicator color={colors.brandDark} />
-            ) : (
-              <Text style={[styles.codeText, (!sendCodeReady || smsCooldownSeconds > 0) && styles.codeTextDisabled]}>
-                {sendCodeLabel}
-              </Text>
-            )}
-          </Pressable>
-        </View>
+        {loginMode === 'sms' ? (
+          <>
+            <View style={styles.codeRow}>
+              <TextInput
+                value={smsCode}
+                onChangeText={(value) => setSmsCode(value.replace(/\D/g, '').slice(0, 6))}
+                placeholder="验证码"
+                keyboardType="number-pad"
+                maxLength={6}
+                style={styles.lineInput}
+                placeholderTextColor={colors.textMuted}
+                onFocus={() => scrollLoginFieldIntoView('code')}
+              />
+              <Pressable
+                disabled={sendCodeDisabled}
+                onPress={sendSMSCode}
+                style={({ pressed }) => [
+                  styles.codeTextButton,
+                  pressed && !sendCodeDisabled && styles.pressed,
+                  sendCodeDisabled && styles.disabled,
+                ]}
+              >
+                {smsSending ? (
+                  <ActivityIndicator color={colors.brandDark} />
+                ) : (
+                  <Text style={[styles.codeText, (!sendCodeReady || smsCooldownSeconds > 0) && styles.codeTextDisabled]}>
+                    {sendCodeLabel}
+                  </Text>
+                )}
+              </Pressable>
+            </View>
+            <Pressable
+              disabled={loading || !smsLoginReady}
+              onPress={loginWithCode}
+              style={({ pressed }) => [
+                styles.primaryButton,
+                pressed && smsLoginReady && !loading && styles.pressed,
+                (loading || !smsLoginReady) && styles.disabled,
+              ]}
+            >
+              {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryButtonText}>登录 / 注册</Text>}
+            </Pressable>
+          </>
+        ) : (
+          <>
+            <View style={styles.codeRow}>
+              <TextInput
+                value={password}
+                onChangeText={setPassword}
+                placeholder="密码"
+                secureTextEntry
+                autoCapitalize="none"
+                autoCorrect={false}
+                style={styles.lineInput}
+                placeholderTextColor={colors.textMuted}
+                onFocus={() => scrollLoginFieldIntoView('code')}
+              />
+            </View>
+            <Pressable
+              disabled={loading || !passwordLoginReady}
+              onPress={loginWithPasswordAccount}
+              style={({ pressed }) => [
+                styles.primaryButton,
+                pressed && passwordLoginReady && !loading && styles.pressed,
+                (loading || !passwordLoginReady) && styles.disabled,
+              ]}
+            >
+              {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryButtonText}>密码登录</Text>}
+            </Pressable>
+          </>
+        )}
 
         <Pressable
-          disabled={loading || !smsLoginReady}
-          onPress={loginWithCode}
-          style={({ pressed }) => [
-            styles.primaryButton,
-            pressed && smsLoginReady && !loading && styles.pressed,
-            (loading || !smsLoginReady) && styles.disabled,
-          ]}
+          onPress={() => setLoginMode((value) => (value === 'sms' ? 'password' : 'sms'))}
+          style={({ pressed }) => [styles.loginModeSwitch, pressed && styles.pressed]}
         >
-          {loading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.primaryButtonText}>登录 / 注册</Text>
-          )}
+          <Text style={styles.loginModeSwitchText}>{loginMode === 'sms' ? '使用账号密码登录' : '使用短信验证码登录'}</Text>
         </Pressable>
 
         <Pressable
@@ -426,6 +477,17 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '800',
+  },
+  loginModeSwitch: {
+    minHeight: 38,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8,
+  },
+  loginModeSwitchText: {
+    color: colors.brandDark,
+    fontSize: 13,
+    fontWeight: '700',
   },
   skipLoginButton: {
     minHeight: 48,
