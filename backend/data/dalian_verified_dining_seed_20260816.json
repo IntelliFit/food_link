@@ -1,0 +1,263 @@
+[
+  {
+    "batch_name": "大连高校官方食堂楼层确认集-20260816",
+    "region": "辽宁省大连市",
+    "source_scope": "高校官网、官方后勤、招生、迎新与校内刊物一手来源；正式校区、父食堂、实际餐饮楼层及2024—2026当前运营闭环",
+    "schools": [
+      {
+        "school": "东北财经大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "校本部",
+            "aliases": [],
+            "address": "辽宁省大连市沙河口区尖山街217号",
+            "source_url": "https://sie.dufe.edu.cn/content_88366.html"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "校本部",
+            "name": "第二食堂",
+            "aliases": [],
+            "location_text": "校本部第二食堂二楼",
+            "building_or_floor": "二楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "2026年7月4日至5日午餐于12:50前选餐",
+            "source_url": "https://jwc.dufe.edu.cn/content_99618.html",
+            "source_title": "关于做好2025-2026学年第二学期本科生期末考试工作的通知",
+            "source_org": "东北财经大学教务处",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026年期末考试通知明确教职工可到第二食堂二楼教工餐厅扫码或刷卡选用员工餐，直接证明二楼实际供餐。",
+            "review_status": "pending_review",
+            "additional_sources": []
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "学校标识码4121010173；唯一办学地址按校本部规范化。",
+          "二楼教工餐厅是第二食堂内部供餐区，不拆成独立父食堂。"
+        ]
+      },
+      {
+        "school": "大连医科大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "校本部",
+            "aliases": [],
+            "address": "辽宁省大连市旅顺南路西段9号",
+            "source_url": "https://recruit.dmu.edu.cn/info/1011/1895.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "校本部",
+            "name": "餐饮服务中心（大食堂）",
+            "aliases": ["餐饮服务中心", "大食堂"],
+            "location_text": "校本部主教学区餐饮服务中心一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "综合餐饮中心",
+            "audience": "师生",
+            "opening_hours_raw": "一楼7:00-21:00；二楼7:00-19:00（不同经营区时段略有差异）",
+            "source_url": "https://fresh.dmu.edu.cn/info/1004/1031.htm",
+            "source_title": "大连医科大学餐饮服务中心简介",
+            "source_org": "大连医科大学新生网站",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2024年官方简介逐项列出餐饮服务中心一层的观海小食集、星海三栈以及二层的云海、望海餐厅，并给出营业时间和餐品。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://zbcgzx.dmu.edu.cn/info/1040/2111.htm",
+                "source_title": "餐饮中心食堂经营与管理服务采购项目",
+                "source_org": "大连医科大学招标采购中心",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "校方采购原文明确餐饮服务中心为整体两层的物理食堂建筑；该旧材料只用于确认父实体物理关系，不单独证明当前运营。"
+              },
+              {
+                "source_url": "https://hqglc.dmu.edu.cn/info/1710/5522.htm",
+                "source_title": "餐饮服务中心召开安全警示会 全力筑牢食品安全‘防火墙’",
+                "source_org": "大连医科大学后勤管理处",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2025年后勤材料确认餐饮服务中心当前承担全校师生餐饮服务和食品安全责任。"
+              },
+              {
+                "source_url": "https://news.dmu.edu.cn/info/1238/28121.htm",
+                "source_title": "学校开展暑假前校园安全检查",
+                "source_org": "大连医科大学新闻网",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2025年学校现场检查民族餐厅、大食堂后厨、食材溯源和食品留样，补强当前运营闭环。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "学校标识码4121010161；招生章程只列旅顺南路西段9号，规范为校本部。",
+          "观海、星海三栈、云海、望海是整体两层父食堂内部分层经营区，不拆；碧海民族餐厅无楼层不纳入。"
+        ]
+      },
+      {
+        "school": "大连工业大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "主校区",
+            "aliases": [],
+            "address": "辽宁省大连市甘井子区轻工苑1号",
+            "source_url": "https://zsb.dep.dlpu.edu.cn/newstudent/view/aid/271/tag/zszc"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "主校区",
+            "name": "中心食堂",
+            "aliases": [],
+            "location_text": "主校区中心食堂一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "早餐7:00-8:30；午餐11:00-12:30；晚餐16:30-18:00",
+            "source_url": "https://www.dlpu.edu.cn/detail/2/bffa837419f3276e16d891813e71a223.html",
+            "source_title": "关于2026年寒假相关工作安排的通知",
+            "source_org": "大连工业大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026年寒假通知明确中心食堂一楼正常营业和保障餐安排，并写明二楼特色档口假期不营业及恢复三餐，直接确认一、二楼实际餐饮。",
+            "review_status": "pending_review",
+            "additional_sources": []
+          },
+          {
+            "campus": "主校区",
+            "name": "东山服务中心食堂",
+            "aliases": ["东山服务中心二楼食堂"],
+            "location_text": "主校区东山服务中心二楼",
+            "building_or_floor": "二楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "2026年1月9日结束假期前营业，2月26日恢复营业",
+            "source_url": "https://www.dlpu.edu.cn/detail/2/bffa837419f3276e16d891813e71a223.html",
+            "source_title": "关于2026年寒假相关工作安排的通知",
+            "source_org": "大连工业大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026年寒假通知明确东山服务中心二楼食堂的停业和恢复营业日期，直接确认二楼实际供餐。",
+            "review_status": "pending_review",
+            "additional_sources": []
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "学校标识码4121010152；招生章程明确轻工苑1号为主校区办学。",
+          "中心食堂二楼特色档口不拆；东山服务中心一楼超市排除，服务中心不另建正式校区。"
+        ]
+      },
+      {
+        "school": "大连民族大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "开发区校区",
+            "aliases": [],
+            "address": "辽宁省大连经济技术开发区辽河西路18号",
+            "source_url": "https://zs.dlnu.edu.cn/info/1038/1981.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "开发区校区",
+            "name": "嘉禾餐厅",
+            "aliases": ["嘉禾食堂"],
+            "location_text": "开发区校区嘉禾餐厅一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://new.dlnu.edu.cn/info/1043/33281.htm",
+            "source_title": "‘烹’然心动好‘食’光 ‘味’爱护航助成长——‘名厨名菜进校园’活动侧记",
+            "source_org": "大连民族大学党委宣传部",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2024年校方侧记明确开发区校区嘉禾食堂二楼档口现场制作并供应菜品，同时说明嘉禾餐厅一楼档口已引进并实际售卖餐食。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://new.dlnu.edu.cn/hqglc/info/1003/1454.htm",
+                "source_title": "筑牢校园食品安全防线 护航新学期师生健康",
+                "source_org": "大连民族大学后勤管理处",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2025年后勤检查确认开发区校区当前餐饮企业、食堂原材料集中采购和档口监管。"
+              },
+              {
+                "source_url": "https://new.dlnu.edu.cn/xcb/info/1017/1175.htm",
+                "source_title": "‘民族团结进步先进集体’风采展（二）",
+                "source_org": "大连民族大学党委宣传部",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2025年校方材料明确生活服务中心餐饮团队负责开发区校区嘉禾餐厅的餐饮服务保障。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "学校标识码4121012026；开发区校区与金石滩校区不得混归。",
+          "一、二楼档口和菜品均归并嘉禾餐厅父实体；金石滩校区瑞麦餐厅缺当前实际楼层不纳入。"
+        ]
+      },
+      {
+        "school": "辽宁师范大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "黄河路校区",
+            "aliases": [],
+            "address": "辽宁省大连市沙河口区黄河路850号",
+            "source_url": "https://zsb.lnnu.edu.cn/__local/6/43/C2/F61A43C8BE241135E5A0424AA05_8F0B6C34_7706ED.pdf"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "黄河路校区",
+            "name": "北山食府",
+            "aliases": [],
+            "location_text": "黄河路校区北山食府三楼",
+            "building_or_floor": "三楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://master.lnnu.edu.cn/__local/F/EC/29/F5A7E71A3EC1CA2FAB58B081BBD_DFD87B22_308ACDC.pdf?e=.pdf",
+            "source_title": "辽师研究生 / Postgraduates of Liaoning Normal University 第3期",
+            "source_org": "辽宁师范大学研究生院",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026年学校官方研究生刊物记录学生在北山食府三楼实际购买并食用玉米面，直接证明三楼餐饮服务。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://news.lnnu.edu.cn/info/1161/8168.htm",
+                "source_title": "大连市市场监督管理局局长阎明宇一行到我校检查食品安全",
+                "source_org": "辽宁师范大学新闻网",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2025年官方新闻确认检查组实地检查北山食府就餐区、操作间和原料库房，补强当前运营闭环。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "学校标识码4121010165；黄河路校区和西山湖校区是两个正式校区，不混归。",
+          "三楼餐品和售卖窗口不拆成父食堂。"
+        ]
+      }
+    ]
+  }
+]

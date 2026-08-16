@@ -1,0 +1,220 @@
+[
+  {
+    "batch_name": "潍坊高校官方食堂楼层确认集-20260816",
+    "region": "山东省潍坊市",
+    "source_scope": "高校官网、官方后勤、官方招采、官方招生与校内服务页；楼层与2024—2026当前运营证据闭环后收录",
+    "schools": [
+      {
+        "school": "山东畜牧兽医职业学院",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "南校区",
+            "aliases": [],
+            "address": "山东省潍坊市胜利东街88号",
+            "source_url": "https://www.sdmy.edu.cn/info/1025/14068.htm"
+          },
+          {
+            "name": "北校区",
+            "aliases": [],
+            "address": "山东省潍坊市胜利东街3031号",
+            "source_url": "https://zzrs.sdmy.edu.cn/info/1028/1731.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "南校区",
+            "name": "南校区学生食堂",
+            "aliases": [],
+            "location_text": "南校区学生食堂一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://www.sdmy.edu.cn/info/1025/14681.htm",
+            "source_title": "学校食堂餐饮服务采购项目招标公告",
+            "source_org": "山东畜牧兽医职业学院",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026年餐饮服务采购公告明确A包为南校区一楼、二楼学生食堂餐饮劳务服务采购，楼层、餐饮用途和当前运营在同一官方来源中闭环。",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "北校区",
+            "name": "北校区食堂",
+            "aliases": [],
+            "location_text": "北校区食堂一楼、二楼、三楼",
+            "building_or_floor": "一楼、二楼、三楼",
+            "service_type": "综合食堂",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://www.sdmy.edu.cn/info/1025/14681.htm",
+            "source_title": "学校食堂餐饮服务采购项目招标公告",
+            "source_org": "山东畜牧兽医职业学院",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026年餐饮服务采购公告分别明确北校区一楼、二楼学生食堂餐饮劳务服务及三楼教工食堂委托经营；三层作为同一父级食堂的楼层服务区归并。",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": ["采购包与一、二楼学生区及三楼教工区均为父食堂内部楼层，不拆成重复食堂。"]
+      },
+      {
+        "school": "山东第二医科大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "浮烟山校区",
+            "aliases": [],
+            "address": "山东省潍坊市宝通西街7166号",
+            "source_url": "https://www.sdsmu.edu.cn/2026/0715/c14a179359/page.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "浮烟山校区",
+            "name": "杏林餐厅",
+            "aliases": [],
+            "location_text": "浮烟山校区杏林餐厅一楼、二楼、三楼",
+            "building_or_floor": "一楼、二楼、三楼",
+            "service_type": "综合食堂",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://www.sdsmu.edu.cn/2026/0715/c14a179359/page.htm",
+            "source_title": "关于做好2026年暑假期间后勤服务工作的通知",
+            "source_org": "山东第二医科大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026年暑假后勤通知明确浮烟山校区杏林餐厅一、二楼营业到7月16日并安排恢复，三楼招待餐厅假期正常营业；三楼招待区归并到杏林餐厅父实体。",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": ["学校由潍坊医学院更名，按同一学校代码承接现名；虞河校区乐道餐厅缺实际楼层，未收录。"]
+      },
+      {
+        "school": "山东经贸职业学院",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "校本部",
+            "aliases": [],
+            "address": "山东省潍坊市潍城区青年路2799号",
+            "source_url": "https://www.sdecu.com/zsc/info/1025/1640.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "校本部",
+            "name": "教职工餐厅",
+            "aliases": [],
+            "location_text": "校本部教职工餐厅二楼",
+            "building_or_floor": "二楼",
+            "service_type": "教职工餐厅",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://www.sdecu.com/info/1211/140441.htm",
+            "source_title": "“一站式”学生社区丨“午间聊·书记有约”首期荣誉午宴温情启幕",
+            "source_org": "山东经贸职业学院学生工作处",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026年3月官方报道明确学院荣誉午宴在教职工餐厅二楼举行，师生现场实际用餐，直接证明二楼餐饮运营。",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": ["学校仅列一个当前正式办学地址且无校区专名，目录规范化为校本部；二楼不另建子食堂。"]
+      },
+      {
+        "school": "潍坊学院",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "主校区",
+            "aliases": [],
+            "address": "山东省潍坊市东风东街5147号",
+            "source_url": "https://www.wfu.edu.cn/main.htm"
+          },
+          {
+            "name": "安顺校区",
+            "aliases": [],
+            "address": "山东省潍坊市潍城区卧龙西街2829号",
+            "source_url": "https://www.wfu.edu.cn/main.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "主校区",
+            "name": "第二餐厅",
+            "aliases": [],
+            "location_text": "主校区第二餐厅二楼",
+            "building_or_floor": "二楼",
+            "service_type": "综合食堂",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://hqc.wfu.edu.cn/2025/0603/c3878a243597/page.htm",
+            "source_title": "浓情端午 爱满潍院——后勤服务处饮食服务中心开展师生迎端午主题活动",
+            "source_org": "潍坊学院后勤服务处饮食服务中心",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2025年端午活动明确在第二餐厅二楼和安顺校区餐厅分别组织师生制作并由餐厅煮制食品；两餐厅并列区分，第二餐厅归属主校区。",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "安顺校区",
+            "name": "安顺校区餐厅",
+            "aliases": [],
+            "location_text": "安顺校区餐厅一楼",
+            "building_or_floor": "一楼",
+            "service_type": "综合食堂",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://www.wfu.edu.cn/172/list1.htm",
+            "source_title": "潍坊学院安顺校区餐厅一楼餐饮服务采购项目公开招标公告",
+            "source_org": "潍坊学院",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "学校官网2026年1月公告题名直接明确安顺校区餐厅一楼餐饮服务采购；2025年端午活动和2026年校领导调研交叉确认该餐厅实际使用与设施运行。",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": ["楼层餐饮服务与活动区只作为父餐厅的楼层关系，不拆子食堂。"]
+      },
+      {
+        "school": "潍坊科技学院",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "校本部",
+            "aliases": [],
+            "address": "山东省寿光市金光街1299号",
+            "source_url": "https://jwc.wfust.edu.cn/"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "校本部",
+            "name": "天和餐厅",
+            "aliases": [],
+            "location_text": "校本部天和餐厅一楼",
+            "building_or_floor": "一楼",
+            "service_type": "综合食堂",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://wccy.wfust.edu.cn/__local/5/2A/22/86167A348EAEDD419DE6154CA13_034264C3_2E1DBE.pdf",
+            "source_title": "潍柴现代产业学院工作简报",
+            "source_org": "潍坊科技学院潍柴现代产业学院",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2024年学校工作简报明确智能制造学院在天和餐厅一楼举行中秋午餐会，校领导、学院负责人和学生共进午餐，直接证明一楼实际供餐。",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": ["学校官网仅列一个当前正式办学地址且无校区专名，目录规范化为校本部；天元餐厅二楼仅有2023年材料，未收录。"]
+      }
+    ]
+  }
+]

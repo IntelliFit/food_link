@@ -1,0 +1,112 @@
+[
+  {
+    "batch_name": "赣州高校官方食堂楼层确认集-20260816",
+    "region": "江西省赣州市",
+    "source_scope": "高校官网、官方后勤、招生与校内部门一手来源；正式校区、父食堂、实际餐饮楼层及2024—2026当前运营闭环",
+    "schools": [
+      {
+        "school": "赣南医科大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "蓉江校区",
+            "aliases": ["黄金校区"],
+            "address": "江西省赣州市蓉江新区和谐大道1号",
+            "source_url": "https://www.gmu.cn/info/1612/37098.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "蓉江校区",
+            "name": "第一食堂",
+            "aliases": ["一食堂"],
+            "location_text": "蓉江校区（原黄金校区）第一食堂一楼、二楼、三楼",
+            "building_or_floor": "一楼、二楼、三楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://hq.gmu.cn/info/1127/1853.htm",
+            "source_title": "2025年5月20日后勤接待日信息反馈",
+            "source_org": "赣南医科大学后勤保障中心",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "原黄金校区后勤反馈明确一食堂1楼、2楼已售卖现煮白粥，一食堂2楼风味档口已开设现炒窗口，直接确认一、二楼实际供餐。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://hq.gmu.cn/info/1127/1842.htm",
+                "source_title": "2024年11月28日后勤接待日信息反馈",
+                "source_org": "赣南医科大学后勤保障中心",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "原黄金校区后勤反馈建议师生到一食堂二楼和三楼错峰就餐，并明确两层同样物美价廉，直接确认三楼实际就餐。"
+              }
+            ]
+          },
+          {
+            "campus": "蓉江校区",
+            "name": "第二食堂",
+            "aliases": ["二食堂"],
+            "location_text": "蓉江校区（原黄金校区）第二食堂一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://hq.gmu.cn/info/1127/1853.htm",
+            "source_title": "2025年5月20日后勤接待日信息反馈",
+            "source_org": "赣南医科大学后勤保障中心",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "原黄金校区后勤反馈明确第二食堂一楼已售卖现煮白粥、二楼风味档口已开设现炒窗口，并处理二楼就餐环境问题。",
+            "review_status": "pending_review",
+            "additional_sources": []
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "学校标识码4136010413；赣南医学院更名为赣南医科大学，不能按旧名重复建校。",
+          "2025年10月学校将黄金校区正式规范为蓉江校区；seed使用当前校区名并保留黄金校区别名。",
+          "风味档口属于父食堂内部经营区，不拆分为独立食堂。"
+        ]
+      },
+      {
+        "school": "赣南科技学院",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "校本部",
+            "aliases": [],
+            "address": "江西省赣州市章贡区客家大道156号",
+            "source_url": "https://zs.gnust.edu.cn/info/1016/7451.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "校本部",
+            "name": "学校食堂",
+            "aliases": [],
+            "location_text": "学校食堂三楼",
+            "building_or_floor": "三楼",
+            "service_type": "综合食堂",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://xxxy.gnust.edu.cn/xwzx/xwdt/52.htm",
+            "source_title": "我校开展“劳动赣科”大学生实践成长计划系列活动之烹饪大赛",
+            "source_org": "赣南科技学院信息工程学院（现代教育技术中心）",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2025年5月10日学校食堂三楼教工食堂内使用标准化厨具现场煎炒烹炸，直接确认三楼实际餐饮功能。",
+            "review_status": "pending_review",
+            "additional_sources": []
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "学校标识码4136013434；江西理工大学应用科学学院已转设为赣南科技学院，不能按旧名重复建校。",
+          "三楼教工食堂是学校食堂内部楼层就餐区，只建立父级学校食堂。",
+          "馨芳园与馨香园名称无法确定是否同一实体，本批不据此新增一楼。"
+        ]
+      }
+    ]
+  }
+]

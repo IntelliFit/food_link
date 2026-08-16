@@ -1,0 +1,55 @@
+[
+  {
+    "batch_name": "辽阳高校官方食堂楼层确认集-20260816",
+    "region": "辽宁省辽阳市",
+    "source_scope": "高校官网、正式校区、质量报告与食品安全官方材料；正式辽阳校区、父食堂、实际餐饮楼层及2024—2026当前运营闭环",
+    "schools": [
+      {
+        "school": "辽宁建筑职业学院",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "北校区",
+            "aliases": [],
+            "address": "辽宁省辽阳市白塔区青年大街24号",
+            "source_url": "https://www.lnjzxy.edu.cn/channel/distribution"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "北校区",
+            "name": "北校区食堂",
+            "aliases": [],
+            "location_text": "北校区食堂负一层",
+            "building_or_floor": "B1（负一层）",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://www.lnjzxy.edu.cn/FileUploads/www/site/2025/02/15/ZZX48F5809044VGSDL.pdf",
+            "source_title": "辽宁建筑职业学院高等职业教育质量报告（2024年度）",
+            "source_org": "辽宁建筑职业学院",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2025年校方质量报告明确北校区食堂平台防水改造保障食堂负一层正常运营，直接证明B1实际餐饮运营，不是建筑总层数推断。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.lnjzxy.edu.cn/content/ZZXTEY2709044N17HA",
+                "source_title": "我校召开2026年食品安全工作现场办公会",
+                "source_org": "辽宁建筑职业学院党委宣传部",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2026年校方在北校区食堂召开食品安全现场办公会并查看就餐环境、操作区域和仓库，明确确保食堂运营，补强父食堂当前在营。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "学校标识码4121014189；本批只实例化官网提供正式地址的北校区，南校区缺楼层，西校区缺当前正式地址。",
+          "餐饮公司、食品安全中心、操作区域和档口均归并北校区食堂父实体。"
+        ]
+      }
+    ]
+  }
+]

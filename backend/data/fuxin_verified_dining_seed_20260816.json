@@ -1,0 +1,63 @@
+[
+  {
+    "batch_name": "阜新高校官方食堂楼层确认集-20260816",
+    "region": "辽宁省阜新市",
+    "source_scope": "高校官网、招生章程、总务处及学校新闻官方材料；正式阜新校区、父食堂、实际餐饮楼层及2024—2026当前运营闭环",
+    "schools": [
+      {
+        "school": "辽宁工程技术大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "玉龙校园",
+            "aliases": ["北校区", "阜新校区玉龙校园"],
+            "address": "辽宁省阜新市玉龙路88号",
+            "source_url": "https://bkzsxxw.lntu.edu.cn/news/detail/b019752c3856242a.html"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "玉龙校园",
+            "name": "玉龙校园食堂",
+            "aliases": ["北校区食堂"],
+            "location_text": "玉龙校园食堂一楼",
+            "building_or_floor": "一楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://zwc.lntu.edu.cn/tzgg.htm",
+            "source_title": "关于玉龙校园食堂一楼通过“揭榜挂帅”引进特色餐饮的通知",
+            "source_org": "辽宁工程技术大学总务处",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2025年校方总务处通知明确玉龙校园食堂一楼采取学校自营，并以2024年全年营业额筛选原一楼餐饮档口，直接证明一楼持续实际餐饮经营。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.lntu.edu.cn/info/1027/77941.htm",
+                "source_title": "我校召开2023-2025年度后勤十佳“文明班组”十佳“服务标兵”表彰大会",
+                "source_org": "辽宁工程技术大学",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2026年校方列出饮食服务中心玉龙校园一楼食堂经理及其保障师生需求的服务事迹，闭环改造后一楼当前餐饮运营。"
+              },
+              {
+                "source_url": "https://news.lntu.edu.cn/info/1003/391291.htm",
+                "source_title": "党委常委、副校长荣德生带队检查指导阜新校区开学准备工作",
+                "source_org": "辽宁工程技术大学总务处",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2026年开学检查明确覆盖中华路校园和玉龙校园，实地检查学生食堂并听取食堂供餐准备，补强玉龙校园父食堂当前运营。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "学校标识码4121010147；玉龙校园为正式校区，北校区仅作现行别名，不重复实例化。",
+          "一楼档口、饮食服务中心和一楼食堂经理均归并玉龙校园食堂父实体；二楼只有装修证据、三楼只有培训地点，均不激活。"
+        ]
+      }
+    ]
+  }
+]

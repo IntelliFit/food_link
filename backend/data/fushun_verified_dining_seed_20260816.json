@@ -1,0 +1,73 @@
+[
+  {
+    "batch_name": "抚顺高校官方食堂楼层确认集-20260816",
+    "region": "辽宁省抚顺市",
+    "source_scope": "高校官网、官方后勤、招生与迎新材料；正式抚顺校区、父食堂、实际餐饮楼层及2024—2026当前运营闭环",
+    "schools": [
+      {
+        "school": "辽宁石油化工大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "校本部",
+            "aliases": [],
+            "address": "辽宁省抚顺市望花区丹东路西段1号",
+            "source_url": "https://zhaosheng.lnpu.edu.cn/info/1035/3066.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "校本部",
+            "name": "美食天地",
+            "aliases": [],
+            "location_text": "校本部小骊校园超市三楼美食天地",
+            "building_or_floor": "三楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://xsc.lnpu.edu.cn/info/1181/2811.htm",
+            "source_title": "新生入学攻略②｜问学穿石，修身诚化，快来查收你的校园生活小常识",
+            "source_org": "辽宁石油化工大学学生工作处",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2024年校方迎新指南将美食天地列入校内五个食堂，明确位置为小骊校园超市三楼，并说明学生可在校内各食堂就餐，直接闭环三楼实际餐饮。",
+            "review_status": "pending_review",
+            "additional_sources": []
+          },
+          {
+            "campus": "校本部",
+            "name": "胜和食堂",
+            "aliases": ["行知食堂"],
+            "location_text": "校本部胜和食堂一楼",
+            "building_or_floor": "一楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "8:30-20:00（2025年暑期）",
+            "source_url": "https://xsc.lnpu.edu.cn/info/1181/2811.htm",
+            "source_title": "新生入学攻略②｜问学穿石，修身诚化，快来查收你的校园生活小常识",
+            "source_org": "辽宁石油化工大学学生工作处",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2024年校方迎新指南将行知食堂明确标注为胜和食堂一楼，并说明学生可在校内各食堂就餐；行知按内部名称归并胜和父实体。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://houqin.lnpu.edu.cn/info/1028/2900.htm",
+                "source_title": "关于2025年暑假期间供餐安排的通知",
+                "source_org": "辽宁石油化工大学后勤管理处",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2025年后勤通知明确胜和食堂暑期正常开放、开设五个风味档口并给出8:30至20:00营业时间，补强当前运营。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "学校标识码4121010148；招生章程只列丹东路西段1号，校内南区、北区不升格为正式校区。",
+          "行知食堂归并胜和食堂一楼；餐饮服务中心一楼仅有改造采购意向，龙源、民族、教工食堂缺合格楼层，均不补齐。"
+        ]
+      }
+    ]
+  }
+]

@@ -1,0 +1,131 @@
+[
+  {
+    "batch_name": "保定高校官方食堂楼层确认集-20260816",
+    "region": "河北省保定市",
+    "source_scope": "高校官网、官方后勤服务平台、官方招采及学校质量报告；只收录正式校区、餐饮实体、实际楼层和当前运营状态均可确认的记录",
+    "schools": [
+      {
+        "school": "华北电力大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "保定校区",
+            "aliases": ["华北电力大学（保定）"],
+            "address": "河北省保定市莲池区永华北大街619号；河北省保定市莲池区华电路689号",
+            "source_url": "https://osa.ncepu.edu.cn/bmgk/gzzd/68db3b1dcb48419db5038bce88d7284f.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "保定校区",
+            "name": "一餐厅",
+            "aliases": ["一食堂"],
+            "location_text": "保定校区一餐厅一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://bdhq.ncepu.edu.cn/ncepucenter/zxzx/index.htm",
+            "source_title": "投诉建议",
+            "source_org": "华北电力大学保定校区后勤服务平台",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-16复核：保定校区后勤服务平台当前服务分类直接列出‘一餐厅一楼、一餐厅二楼、瑞祥校区餐厅’，并有2026年相关已回复事项。",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "保定校区",
+            "name": "二餐厅",
+            "aliases": [],
+            "location_text": "保定校区二餐厅一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://bdhq.ncepu.edu.cn/ncepucenter/zxzx/index.htm",
+            "source_title": "投诉建议",
+            "source_org": "华北电力大学保定校区后勤服务平台",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-16复核：保定校区后勤服务平台当前服务分类直接列出‘二餐厅一楼，二餐厅二楼民族餐厅’。",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "保定校区",
+            "name": "三餐厅",
+            "aliases": [],
+            "location_text": "保定校区三餐厅一楼、二楼、三楼",
+            "building_or_floor": "一楼、二楼、三楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://bdhq.ncepu.edu.cn/ncepucenter/zxzx/index.htm",
+            "source_title": "投诉建议",
+            "source_org": "华北电力大学保定校区后勤服务平台",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-16复核：保定校区后勤服务平台当前服务分类分别列出‘三餐厅一楼、三餐厅二楼’和‘三餐厅三楼’。",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "保定校区",
+            "name": "聚博园",
+            "aliases": [],
+            "location_text": "保定校区聚博园一楼",
+            "building_or_floor": "一楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://bdhq.ncepu.edu.cn/ncepucenter/zxzx/index.htm",
+            "source_title": "投诉建议",
+            "source_org": "华北电力大学保定校区后勤服务平台",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-16复核：保定校区后勤服务平台当前服务分类直接列出‘聚博园一楼’。",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "学校章程确认保定校区及一校区、二校区地址；后勤页未逐餐厅绑定一校区/二校区，因此只使用正式上位名保定校区。",
+          "楼层全部来自2026年官方后勤服务分类，不由餐厅序号推断；优鲜餐厅、瑞祥校区餐厅因无楼层而排除。"
+        ]
+      },
+      {
+        "school": "河北工艺美术职业学院",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "竞秀校区",
+            "aliases": [],
+            "address": "河北省保定市竞秀区瑞祥大街102号",
+            "source_url": "https://hbgm.edu.cn/content/details487_21701.html"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "竞秀校区",
+            "name": "竞秀校区学生食堂",
+            "aliases": ["竞秀校区食堂"],
+            "location_text": "竞秀校区学生食堂一层、负一层",
+            "building_or_floor": "一层、负一层",
+            "service_type": "学生食堂",
+            "audience": "学生",
+            "opening_hours_raw": "",
+            "source_url": "https://hbgm.edu.cn/content/details487_21701.html",
+            "source_title": "河北工艺美术职业学院竞秀校区食堂委托经营管理招标公告",
+            "source_org": "河北工艺美术职业学院",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-16复核：2025年学校官网招标明确‘学生食堂共两层，其中，一层建筑面积约1145.25平方米，负一层建筑面积约945.04平方米’；学校2025质量报告确认已完成经营招标、改造就餐模式并增设特色档口。",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "2025年学校官网经营招标直接确认竞秀校区、食堂两层及两层就餐座位；同年学校质量报告确认完成招标和就餐模式改造。"
+        ]
+      }
+    ]
+  }
+]

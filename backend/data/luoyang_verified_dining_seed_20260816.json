@@ -1,0 +1,113 @@
+[
+  {
+    "batch_name": "洛阳高校官方食堂楼层确认集-20260816",
+    "region": "河南省洛阳市",
+    "source_scope": "高校官网、官方后勤、官方招采及官方校内服务页；楼层与2024—2026当前运营证据闭环后收录",
+    "schools": [
+      {
+        "school": "河南科技大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {"name": "开元校区", "aliases": [], "address": "河南省洛阳市洛龙区开元大道263号", "source_url": "https://rj.haust.edu.cn/__local/4/D0/56/A74849E181B83F3A702EE71A93B_3FF14BA7_7BD51.pdf"},
+          {"name": "西苑校区", "aliases": [], "address": "河南省洛阳市涧西区西苑路48号", "source_url": "https://rj.haust.edu.cn/__local/4/D0/56/A74849E181B83F3A702EE71A93B_3FF14BA7_7BD51.pdf"}
+        ],
+        "canteens": [
+          {
+            "campus": "开元校区", "name": "乾园餐厅", "aliases": [],
+            "location_text": "开元校区乾园餐厅二楼", "building_or_floor": "二楼", "service_type": "学生食堂", "audience": "师生",
+            "opening_hours_raw": "早餐7:00-8:30；中餐11:30-13:00；晚餐17:30-19:30",
+            "source_url": "https://www.haust.edu.cn/info/1049/329471.htm", "source_title": "后勤保障部关于2025年暑假后勤服务保障工作安排的通知", "source_org": "河南科技大学后勤保障部", "source_type": "official_university", "evidence_level": "A",
+            "evidence_excerpt": "2025年暑假饮食服务通知明确供餐食堂为“开元校区：乾园餐厅二楼”，并列三餐供餐时间、值班与监督电话。", "review_status": "pending_review"
+          },
+          {
+            "campus": "西苑校区", "name": "南苑餐厅", "aliases": [],
+            "location_text": "西苑校区南苑餐厅一楼", "building_or_floor": "一楼", "service_type": "学生食堂", "audience": "师生",
+            "opening_hours_raw": "早餐7:00-8:30；中餐11:30-13:00；晚餐17:30-19:30",
+            "source_url": "https://www.haust.edu.cn/info/1049/329471.htm", "source_title": "后勤保障部关于2025年暑假后勤服务保障工作安排的通知", "source_org": "河南科技大学后勤保障部", "source_type": "official_university", "evidence_level": "A",
+            "evidence_excerpt": "2025年暑假饮食服务通知明确供餐食堂为“西苑校区：南苑餐厅一楼”，并列三餐供餐时间、值班与监督电话。", "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": ["两条均为2025年实际供餐安排；楼层不是由校区楼号或食堂序号推断。"]
+      },
+      {
+        "school": "洛阳理工学院",
+        "review_status": "pending_review",
+        "campuses": [
+          {"name": "王城校区", "aliases": [], "address": "河南省洛阳市洛龙区王城大道90号", "source_url": "https://www.lit.edu.cn/tsg/xb2025/gk.htm"},
+          {"name": "开元校区", "aliases": [], "address": "河南省洛阳市洛龙区学子街8号", "source_url": "https://www.lit.edu.cn/tsg/xb2025/gk.htm"}
+        ],
+        "canteens": [
+          {
+            "campus": "王城校区", "name": "铭苑一餐厅", "aliases": [],
+            "location_text": "王城校区铭苑一餐厅一楼", "building_or_floor": "一楼", "service_type": "学生食堂", "audience": "师生",
+            "opening_hours_raw": "早餐7:00-9:00；午餐11:30-13:00；晚餐17:30-19:00",
+            "source_url": "https://www.lit.edu.cn/info/1042/36886.htm", "source_title": "关于学校值班餐厅及供餐时间安排的通知", "source_org": "洛阳理工学院后勤管理处", "source_type": "official_university", "evidence_level": "A",
+            "evidence_excerpt": "2024年寒假值班供餐通知明确“王城校区：铭苑一餐厅一楼”，并列早餐、午餐、晚餐供餐时间。", "review_status": "pending_review"
+          },
+          {
+            "campus": "开元校区", "name": "璞苑餐厅", "aliases": [],
+            "location_text": "开元校区璞苑餐厅一楼", "building_or_floor": "一楼", "service_type": "学生食堂", "audience": "师生",
+            "opening_hours_raw": "早餐7:00-9:00；午餐11:30-13:00；晚餐17:30-19:00",
+            "source_url": "https://www.lit.edu.cn/info/1042/36886.htm", "source_title": "关于学校值班餐厅及供餐时间安排的通知", "source_org": "洛阳理工学院后勤管理处", "source_type": "official_university", "evidence_level": "A",
+            "evidence_excerpt": "2024年寒假值班供餐通知明确“开元校区：璞苑餐厅一楼”，并列早餐、午餐、晚餐供餐时间。", "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": ["王城、开元校区地址由学校图书馆2025年当前概况页交叉确认。"]
+      },
+      {
+        "school": "洛阳师范学院",
+        "review_status": "pending_review",
+        "campuses": [
+          {"name": "伊滨校区", "aliases": [], "address": "河南省洛阳市伊滨区吉庆路6号", "source_url": "https://sites.lynu.edu.cn/ysfwzx/yczn.htm"}
+        ],
+        "canteens": [
+          {
+            "campus": "伊滨校区", "name": "桃园餐厅", "aliases": [],
+            "location_text": "伊滨校区桃园餐厅一楼、二楼、三楼", "building_or_floor": "一楼、二楼、三楼", "service_type": "学生食堂", "audience": "师生", "opening_hours_raw": "",
+            "source_url": "https://sites.lynu.edu.cn/ysfwzx/yczn.htm", "source_title": "用餐指南", "source_org": "洛阳师范学院饮食服务中心", "source_type": "official_university", "evidence_level": "A",
+            "evidence_excerpt": "当前官方用餐指南明确桃园餐厅位于伊滨校区，一楼为基本大伙，二楼、三楼为特色小吃。", "review_status": "pending_review"
+          },
+          {
+            "campus": "伊滨校区", "name": "李园餐厅", "aliases": [],
+            "location_text": "伊滨校区李园餐厅一楼、二楼、三楼", "building_or_floor": "一楼、二楼、三楼", "service_type": "学生食堂", "audience": "师生", "opening_hours_raw": "",
+            "source_url": "https://sites.lynu.edu.cn/ysfwzx/yczn.htm", "source_title": "用餐指南", "source_org": "洛阳师范学院饮食服务中心", "source_type": "official_university", "evidence_level": "A",
+            "evidence_excerpt": "当前官方用餐指南明确李园餐厅位于伊滨校区，一楼为基本大伙，二楼、三楼为特色小吃及培训服务供餐。", "review_status": "pending_review"
+          },
+          {
+            "campus": "伊滨校区", "name": "桂园餐厅", "aliases": [],
+            "location_text": "伊滨校区桂园餐厅一楼、二楼", "building_or_floor": "一楼、二楼", "service_type": "学生食堂", "audience": "师生", "opening_hours_raw": "",
+            "source_url": "https://sites.lynu.edu.cn/ysfwzx/yczn.htm", "source_title": "用餐指南", "source_org": "洛阳师范学院饮食服务中心", "source_type": "official_university", "evidence_level": "A",
+            "evidence_excerpt": "当前官方用餐指南明确桂园餐厅位于伊滨校区，一楼为基本大伙，二楼为特色小吃。", "review_status": "pending_review"
+          },
+          {
+            "campus": "伊滨校区", "name": "枣园餐厅", "aliases": [],
+            "location_text": "伊滨校区枣园餐厅一楼、二楼", "building_or_floor": "一楼、二楼", "service_type": "学生食堂", "audience": "师生", "opening_hours_raw": "",
+            "source_url": "https://sites.lynu.edu.cn/ysfwzx/yczn.htm", "source_title": "用餐指南", "source_org": "洛阳师范学院饮食服务中心", "source_type": "official_university", "evidence_level": "A",
+            "evidence_excerpt": "当前官方用餐指南明确枣园餐厅位于伊滨校区，一楼为基本大伙，二楼为特色小吃。", "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": ["四个餐厅的楼层均来自实际餐饮功能原文；特色小吃区不拆为独立食堂。"]
+      },
+      {
+        "school": "洛阳职业技术学院",
+        "review_status": "pending_review",
+        "campuses": [
+          {"name": "伊滨校区", "aliases": [], "address": "河南省洛阳市伊滨区科技大道6号", "source_url": "https://www.lypt.edu.cn/"}
+        ],
+        "canteens": [
+          {
+            "campus": "伊滨校区", "name": "二期学生食堂", "aliases": ["伊滨校区二期学生食堂"],
+            "location_text": "伊滨校区二期学生食堂一层、二层、三层", "building_or_floor": "一层、二层、三层", "service_type": "学生食堂", "audience": "师生", "opening_hours_raw": "早、中、晚餐",
+            "source_url": "https://cwb.lypt.edu.cn/2024/0823/c1093a47607/page.htm", "source_title": "洛阳职业技术学院伊滨校区二期学生食堂委托经营项目中标公告", "source_org": "洛阳职业技术学院财务与资产管理部", "source_type": "official_university", "evidence_level": "A",
+            "evidence_excerpt": "2024年中标公告分别明确食堂一层、二层、三层均经营早中晚餐，三个标段均有中标人且服务期限为自签约起5年；合并为一个父级食堂。", "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": ["三个标段是同一二期学生食堂的楼层经营安排，不按标段或经营公司拆分。"]
+      }
+    ]
+  }
+]

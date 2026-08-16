@@ -1,0 +1,333 @@
+[
+  {
+    "batch_name": "温州高校官方食堂楼层确认集-20260816",
+    "region": "浙江省温州市",
+    "source_scope": "高校官网、官方后勤、官方招采及官方校内服务页；楼层与2024—2026当前运营证据闭环后收录",
+    "schools": [
+      {
+        "school": "温州大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "茶山校区",
+            "aliases": ["茶山南校区"],
+            "address": "浙江省温州市瓯海区茶山高教园区",
+            "source_url": "https://jdxy.wzu.edu.cn/__local/8/1A/7C/A1C859F782162B11C677456BD06_AF383F8F_15341F.pdf"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "茶山校区",
+            "name": "B区食堂",
+            "aliases": ["B区餐厅"],
+            "location_text": "茶山校区B区食堂一层、二层",
+            "building_or_floor": "一层、二层",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://zczx.wzu.edu.cn/info/1081/31391.htm",
+            "source_title": "浙江乐诚工程咨询有限公司关于温州大学学生生活区B区食堂三楼餐厅合作经营服务的校内磋商公告",
+            "source_org": "温州大学招标与采购中心",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2024年公告明确B区食堂已有二楼学校自营餐厅和一楼合作经营餐厅；2026年温州大学发展有限公司活动仍将B区餐厅二层列为当前后勤服务点。三楼仅有装修经营计划，未收录。",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "一、二层属于同一B区食堂，不按经营方或楼层拆分；三楼未取得后续已投用闭环。"
+        ]
+      },
+      {
+        "school": "温州医科大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "茶山校区",
+            "aliases": [],
+            "address": "浙江省温州市瓯海区茶山街道高教园区",
+            "source_url": "https://xyw.wmu.edu.cn/info/1014/7056.htm"
+          },
+          {
+            "name": "学院路校区",
+            "aliases": [],
+            "address": "浙江省温州市鹿城区学院西路82号",
+            "source_url": "https://xyw.wmu.edu.cn/info/1014/7056.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "茶山校区",
+            "name": "一食堂",
+            "aliases": ["茶山校区一食堂"],
+            "location_text": "茶山校区一食堂二层",
+            "building_or_floor": "二层",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://www.wmu.edu.cn/info/1325/106011.htm",
+            "source_title": "浙江乐诚工程咨询有限公司关于温州医科大学茶山校区、学院路校区食堂档口合作经营的比选公告",
+            "source_org": "温州医科大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026年食堂档口合作经营比选明确茶山校区一食堂二楼1、2、3、5号档口；编号档口只证明父级食堂二层餐饮，不拆为多个食堂。",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "学院路校区",
+            "name": "学院路校区食堂",
+            "aliases": ["学院路食堂"],
+            "location_text": "学院路校区食堂二层",
+            "building_or_floor": "二层",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://www.wmu.edu.cn/info/1325/106011.htm",
+            "source_title": "浙江乐诚工程咨询有限公司关于温州医科大学茶山校区、学院路校区食堂档口合作经营的比选公告",
+            "source_org": "温州医科大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026年食堂档口合作经营比选明确学院路校区食堂二楼1、2、3号档口；编号档口合并到父级食堂二层。",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "本批只收录2026年官方招采再次明确到楼层的父级食堂，不把静态服务页中的所有历史楼层自动扩张为当前记录。"
+        ]
+      },
+      {
+        "school": "温州医科大学仁济学院",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "滨海校区",
+            "aliases": [],
+            "address": "浙江省温州市洞头区北岙街道海韵大道669号",
+            "source_url": "https://xyw.wmu.edu.cn/info/1014/7056.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "滨海校区",
+            "name": "滨海校区食堂",
+            "aliases": ["滨海食堂"],
+            "location_text": "滨海校区食堂三层",
+            "building_or_floor": "三层",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://www.wmu.edu.cn/info/1325/97371.htm",
+            "source_title": "温州历程招标有限公司关于温州医科大学滨海校区仁济学院食堂风味档口招商的结果公告",
+            "source_org": "温州医科大学仁济学院",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2025年结果公告明确采购人为温州医科大学仁济学院，滨海校区食堂三楼1—3号档口均有成交供应商；三个档口合并为一个父级食堂。四楼流标不收录。",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "该食堂只挂独立学校实体温州医科大学仁济学院，不重复挂温州医科大学；四楼12号档口流标，未激活。"
+        ]
+      },
+      {
+        "school": "温州肯恩大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "校本部",
+            "aliases": [],
+            "address": "浙江省温州市瓯海区丽岙街道大学路88号",
+            "source_url": "https://www.wku.edu.cn/zh-hans/lxwm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "校本部",
+            "name": "一号餐厅",
+            "aliases": ["No.1 Dining Hall"],
+            "location_text": "校本部一号餐厅一层、二层",
+            "building_or_floor": "一层、二层",
+            "service_type": "综合性食堂",
+            "audience": "师生",
+            "opening_hours_raw": "官网当前商业服务页列早餐、午餐、晚餐开放时间",
+            "source_url": "https://www.wku.edu.cn/en/org/lam/cs",
+            "source_title": "Commercial Services",
+            "source_org": "Wenzhou-Kean University Logistics and Assets Management",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "学校当前商业服务页明确No.1 Dining Hall一层提供中餐及炒菜、二层提供糕点西餐咖啡饮品并列开放时间；2024年毕业照通知继续使用一号餐厅二层。",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "校本部",
+            "name": "二号餐厅",
+            "aliases": ["No.2 Dining Hall"],
+            "location_text": "校本部二号餐厅一层",
+            "building_or_floor": "一层",
+            "service_type": "综合性食堂",
+            "audience": "师生",
+            "opening_hours_raw": "官网当前商业服务页列7:30—21:30开放",
+            "source_url": "https://www.wku.edu.cn/zh-hans/node/4868",
+            "source_title": "温州肯恩大学二号餐厅一层智能点餐改造提升工程校内公开招标公告",
+            "source_org": "温州肯恩大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2024年公告明确二号餐厅一层智能点餐提升改造；学校当前商业服务页继续列No.2 Dining Hall在营菜品与7:30—21:30开放时间。",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "官网只有大学路88号单一校园且未提供中文校区专名，校本部仅为Foodlink目录规范化标签，不反写成官网原文；三号餐厅缺实际楼层。"
+        ]
+      },
+      {
+        "school": "温州职业技术大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "高教园区校区",
+            "aliases": ["茶山校区"],
+            "address": "浙江省温州市瓯海区茶山高教园区（温州大学城）",
+            "source_url": "https://zs.wzvtc.cn/_upload/article/files/ff/20/756a9255448a9c95a88fb90fce94/83ef5da8-3cc1-4004-93b3-3490f11a9d3e.pdf"
+          },
+          {
+            "name": "瑞安校区",
+            "aliases": ["瑞安学院"],
+            "address": "浙江省温州市瑞安市飞云街道",
+            "source_url": "https://zs.wzvtc.cn/_upload/article/files/ff/20/756a9255448a9c95a88fb90fce94/83ef5da8-3cc1-4004-93b3-3490f11a9d3e.pdf"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "高教园区校区",
+            "name": "嘉禾餐厅",
+            "aliases": [],
+            "location_text": "高教园区校区嘉禾餐厅一层、二层",
+            "building_or_floor": "一层、二层",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://www.wzvtc.cn/show/8/27351.html",
+            "source_title": "温州职业技术学院茶山校区嘉禾餐厅一楼二楼五年租赁权评议结果公示",
+            "source_org": "温州职业技术学院（现温州职业技术大学）",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2025年评议结果明确茶山校区嘉禾餐厅一楼、二楼五年租赁权及受让方；2026年学校招生材料将同一办学点正式列为高教园区校区。",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "瑞安校区",
+            "name": "集云楼餐厅",
+            "aliases": ["集云楼二楼餐厅"],
+            "location_text": "瑞安校区集云楼餐厅二层",
+            "building_or_floor": "二层",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://www.wzvtc.cn/show/8/27344.html",
+            "source_title": "温州职业技术学院瑞安学院集云楼二楼餐厅五年租赁权评议结果公示",
+            "source_org": "温州职业技术学院（现温州职业技术大学）",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2025年评议结果明确瑞安学院集云楼二楼餐厅五年租赁权及受让方；2026年招生计划将对应办学点正式列为瑞安校区。",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "按学校代码4133010864对齐2026年升格后的当前学校实体；2025年温州职业技术学院经营合同属于同一学校历史名称，不新建旧名学校。"
+        ]
+      },
+      {
+        "school": "浙江工贸职业技术学院",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "瓯江口校区",
+            "aliases": [],
+            "address": "浙江省温州市瓯江口产业集聚区雁云路301号",
+            "source_url": "https://www.zjitc.net/"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "瓯江口校区",
+            "name": "康喜乐嘉餐厅",
+            "aliases": ["康喜乐嘉"],
+            "location_text": "瓯江口校区知辛楼一层康喜乐嘉餐厅",
+            "building_or_floor": "一层",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://www.zjitc.net/info/1012/61091.htm",
+            "source_title": "关于学校2024年暑假食堂商贸、医务室安排的通知",
+            "source_org": "浙江工贸职业技术学院总务处",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2024年暑假安排明确瓯江口校区知辛楼一楼康喜乐嘉的停供日期及2024年9月1日恢复营业日期。",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "瓯江口校区",
+            "name": "好味园餐厅",
+            "aliases": [],
+            "location_text": "瓯江口校区知辛楼二层好味园餐厅",
+            "building_or_floor": "二层",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://www.zjitc.net/info/1012/61091.htm",
+            "source_title": "关于学校2024年暑假食堂商贸、医务室安排的通知",
+            "source_org": "浙江工贸职业技术学院总务处",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2024年暑假安排明确瓯江口校区知辛楼二楼好味园餐厅停供及2024年9月4日恢复营业日期。",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "瓯江口校区",
+            "name": "中快餐厅",
+            "aliases": [],
+            "location_text": "瓯江口校区海川楼一层中快餐厅",
+            "building_or_floor": "一层",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://www.zjitc.net/info/1012/61091.htm",
+            "source_title": "关于学校2024年暑假食堂商贸、医务室安排的通知",
+            "source_org": "浙江工贸职业技术学院总务处",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2024年暑假安排明确瓯江口校区海川楼一楼中快餐厅正常营业至8月31日晚餐并于9月4日恢复。",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "瓯江口校区",
+            "name": "教工餐厅",
+            "aliases": ["瓯江口校区教工餐厅"],
+            "location_text": "瓯江口校区海川楼二层、三层教工餐厅",
+            "building_or_floor": "二层、三层",
+            "service_type": "教工餐厅",
+            "audience": "教职工",
+            "opening_hours_raw": "",
+            "source_url": "https://www.zjitc.net/info/1012/61091.htm",
+            "source_title": "关于学校2024年暑假食堂商贸、医务室安排的通知",
+            "source_org": "浙江工贸职业技术学院总务处",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2024年暑假安排明确瓯江口校区海川楼二楼、三楼教工餐厅停供及2024年9月4日恢复营业日期；跨层仍合并为一个食堂实体。",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "知辛楼、海川楼只作为校内定位，不从楼名推断楼层；四个餐厅各保留一个父级实体。"
+        ]
+      }
+    ]
+  }
+]

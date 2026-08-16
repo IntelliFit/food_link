@@ -1,0 +1,63 @@
+[
+  {
+    "batch_name": "盘锦高校官方食堂楼层确认集-20260816",
+    "region": "辽宁省盘锦市",
+    "source_scope": "高校官网、正式校区、总务与迎新官方材料；正式盘锦校区、父食堂、实际餐饮楼层及2024—2026当前运营闭环",
+    "schools": [
+      {
+        "school": "大连理工大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "盘锦校区",
+            "aliases": [],
+            "address": "辽宁省盘锦市辽东湾新区大工路2号",
+            "source_url": "https://panjin.dlut.edu.cn/xqgk1.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "盘锦校区",
+            "name": "第八食堂",
+            "aliases": [],
+            "location_text": "盘锦校区第八食堂一楼、二楼、三楼",
+            "building_or_floor": "一楼、二楼、三楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "早、中、晚餐",
+            "source_url": "https://panjin.dlut.edu.cn/info/1141/41793.htm",
+            "source_title": "盘锦校区关于2025年元旦及寒假放假安排的通知",
+            "source_org": "大连理工大学盘锦校区",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "校方2025寒假通知逐层列出第八食堂一楼大餐暂停与正常营业安排，以及二楼、三楼特色档口暂停后于2月22日恢复营业，并列早中晚开餐时间，直接证明三层实际供餐。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://panjin.dlut.edu.cn/info/1141/45433.htm",
+                "source_title": "总务部关于2025年暑假服务保障及值班安排的通知",
+                "source_org": "大连理工大学盘锦校区总务部",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2025暑假通知明确第八食堂一楼大餐档口正常营业并列早中晚供餐时段，其余档口8月30日恢复正常营业，补强当前运营。"
+              },
+              {
+                "source_url": "https://panjin.dlut.edu.cn/info/1140/45933.htm",
+                "source_title": "跨越山海 梦想启航 校区迎接2025级新生",
+                "source_org": "大连理工大学盘锦校区党政办公室",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2025级迎新官方报道明确校区食堂全天候开放营业，方便新生和家长就餐，进一步闭环当前实际供餐。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "学校标识码4121010141；盘锦校区是大连理工大学正式校区，不另建学校主体。",
+          "一楼大餐及二、三楼特色档口归并第八食堂；B12美食广场的‘共一层’仅为建筑层数，教工餐厅无楼层，均不新增。"
+        ]
+      }
+    ]
+  }
+]

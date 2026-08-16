@@ -1,0 +1,467 @@
+[
+  {
+    "batch_name": "沈阳高校官方食堂楼层确认集-20260816",
+    "region": "辽宁省沈阳市",
+    "source_scope": "高校官网、官方后勤、招采、招生、迎新与校内官方报道；正式校区、父食堂、实际餐饮楼层及2024—2026当前运营闭环",
+    "schools": [
+      {
+        "school": "沈阳农业大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "校本部",
+            "aliases": [],
+            "address": "辽宁省沈阳市沈河区东陵路120号",
+            "source_url": "https://www.syau.edu.cn/xxgk/dxzc.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "校本部",
+            "name": "五食堂",
+            "aliases": ["学生五食堂"],
+            "location_text": "校本部五食堂一楼、三楼",
+            "building_or_floor": "一楼、三楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://news.syau.edu.cn/info/1010/16482.htm",
+            "source_title": "沈阳日报：沈阳农业大学有个不一样的食堂——人间烟火皆‘人文’",
+            "source_org": "沈阳农业大学新闻网",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "校方新闻网报道五食堂一楼猪脚面档口排队和实际售卖，同时明确五食堂三楼午休用餐与旋转小火锅，直接确认一楼、三楼餐饮功能。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://news.syau.edu.cn/info/1010/22711.htm",
+                "source_title": "全程护航、全链保障——沈阳农业大学构建守护校园‘舌尖安全’新样本",
+                "source_org": "沈阳农业大学新闻网",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2025年校方新闻网材料点名二、三、四、五食堂并记录学生正在食堂用餐，补强五食堂当前运营闭环。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "学校标识码4121010157；法定住所为东陵路120号，规范为校本部。",
+          "猪脚面、旋转小火锅及档口归并五食堂父实体；二楼无合格实际餐饮证据，不补齐。"
+        ]
+      },
+      {
+        "school": "沈阳化工大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "校本部",
+            "aliases": [],
+            "address": "辽宁省沈阳经济技术开发区11号街",
+            "source_url": "https://zhaosheng.syuct.edu.cn/info/1018/1942.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "校本部",
+            "name": "二食堂",
+            "aliases": ["第二食堂"],
+            "location_text": "校本部二食堂二楼",
+            "building_or_floor": "二楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://www.syuct.edu.cn/info/1044/7288.htm",
+            "source_title": "升级改造‘寒假档’ 化大上演‘焕新记’",
+            "source_org": "沈阳化工大学党委宣传部",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026年官方报道明确重新规划二食堂二楼就餐区域、更新餐桌椅并优化菜品结构，以全新面貌迎接学生返校，直接闭环二楼实际就餐与当前运营。",
+            "review_status": "pending_review",
+            "additional_sources": []
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "学校标识码4121010149；招生章程只列沈阳经济技术开发区11号街，规范为校本部。",
+          "一食堂二楼只有委托管理采购和拟改造材料，不纳入。"
+        ]
+      },
+      {
+        "school": "沈阳城市建设学院",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "校本部",
+            "aliases": [],
+            "address": "辽宁省沈阳市浑南区全运五路501号",
+            "source_url": "https://jxgcxy.syucu.edu.cn/__local/4/FE/ED/97F21014A9DB696EE4FD7A165A5_B5F7A940_2D96E.pdf"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "校本部",
+            "name": "第一餐饮中心",
+            "aliases": ["第一食堂"],
+            "location_text": "校本部第一餐饮中心三楼",
+            "building_or_floor": "三楼",
+            "service_type": "综合餐饮中心",
+            "audience": "师生员工",
+            "opening_hours_raw": "教工餐厅11:30-13:00",
+            "source_url": "https://www.syucu.edu.cn/info/1661/262111.htm",
+            "source_title": "学校餐饮中心服务指南",
+            "source_org": "沈阳城市建设学院后勤集团餐饮中心",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "校方服务指南明确第一餐饮中心三层设有教工餐厅、每天提供餐饮服务并给出教工食堂服务时间；只保留被实际餐厅绑定的三楼。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.syucu.edu.cn/info/1841/349121.htm",
+                "source_title": "砥砺奋进 踏歌前行｜‘喜迎党代会’工作巡礼——办学条件与保障篇",
+                "source_org": "沈阳城市建设学院党政办公室",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2025年官方材料明确教工食堂新增餐线和煮面区域、缓解就餐高峰排队，补强第一餐饮中心三楼当前运营。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "学校标识码4121013208；唯一招生办学地址规范为校本部。",
+          "三楼教工食堂是第一餐饮中心内部餐厅，不另拆父实体；不从建筑共有三层推断一、二楼供餐。"
+        ]
+      },
+      {
+        "school": "沈阳工程学院",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "校本部",
+            "aliases": [],
+            "address": "辽宁省沈阳市沈北新区蒲昌路18号",
+            "source_url": "https://www.sie.edu.cn/xxgk/xxzc.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "校本部",
+            "name": "学生一食堂",
+            "aliases": ["一食堂", "学生第一食堂"],
+            "location_text": "校本部学生一食堂一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://www.sie.edu.cn/info/1968/53011.htm",
+            "source_title": "沈阳工程学院学生食堂委托经营权项目竞争性比选采购公告",
+            "source_org": "沈阳工程学院总务处",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2024年公告明确学校现有食堂为全校师生供餐，并逐项列学生一食堂一、二楼的热食、冷食和饮品制售经营内容。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://sie.edu.cn/info/1958/52611.htm",
+                "source_title": "沈阳工程学院举办‘爱在沈工 家的味道’毕业饺子宴送骄子活动",
+                "source_org": "沈阳工程学院党委宣传部",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2024年官方报道记录400余名师生在一食堂二楼实际同吃水饺，交叉确认实际餐饮。"
+              }
+            ]
+          },
+          {
+            "campus": "校本部",
+            "name": "学生二食堂",
+            "aliases": ["二食堂", "学生第二食堂"],
+            "location_text": "校本部学生二食堂一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://www.sie.edu.cn/info/1968/53011.htm",
+            "source_title": "沈阳工程学院学生食堂委托经营权项目竞争性比选采购公告",
+            "source_org": "沈阳工程学院总务处",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2024年公告明确学校现有食堂为全校师生供餐，并逐项列学生二食堂一、二楼的热食、冷食和饮品制售经营内容。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.sie.edu.cn/info/1958/57742.htm",
+                "source_title": "爱在沈工 家的味道｜沈阳工程学院2025年毕业饺子宴送骄子活动圆满举办",
+                "source_org": "沈阳工程学院党委宣传部",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2025年官方报道记录校领导与360名毕业生在二食堂二楼共享饺子，补强当前实际用餐。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "学校标识码4121011632；法定注册地址蒲昌路18号规范为校本部。",
+          "民族餐厅、内部标段和档口均归并对应父食堂；公告明确现有供餐及食品制售，不是仅从招标位置推断。"
+        ]
+      },
+      {
+        "school": "沈阳师范大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "校本部",
+            "aliases": [],
+            "address": "辽宁省沈阳市皇姑区黄河北大街253号",
+            "source_url": "https://yjs.synu.edu.cn/_upload/article/files/18/2a/a57618e74f119ec4bbd103ae8e47/f20c8faf-161b-4b7f-b874-8a7de5d20307.pdf"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "校本部",
+            "name": "南区学生餐饮中心",
+            "aliases": ["第一生活区（南区）食堂"],
+            "location_text": "校本部南区学生餐饮中心一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "学生餐饮中心",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://wxy.synu.edu.cn/2024/1109/c2695a96813/page.htm",
+            "source_title": "迎新季｜这里有一份入学指南请注意",
+            "source_org": "沈阳师范大学文学院",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2024年官方迎新指南明确南区学生餐饮中心共有两层且有近百家餐食档口，将两层与实际餐饮功能直接绑定。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://ssdtw.synu.edu.cn/2026/0305/c143a111772/page.htm",
+                "source_title": "我校‘一站式’学生社区举办‘月圆人团圆 巧手闹元宵’元宵节文化浸润系列活动",
+                "source_org": "沈阳师范大学校团委",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2026年官方活动在第一生活区南区食堂一楼由食堂面点人员现场煮制、分发和食用汤圆，补强一楼当前餐饮运营。"
+              }
+            ]
+          },
+          {
+            "campus": "校本部",
+            "name": "第二食堂（商服中心）",
+            "aliases": ["第二食堂", "商服中心二楼学生食堂"],
+            "location_text": "校本部商服中心二楼",
+            "building_or_floor": "二楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://wxy.synu.edu.cn/2024/1109/c2695a96813/page.htm",
+            "source_title": "迎新季｜这里有一份入学指南请注意",
+            "source_org": "沈阳师范大学文学院",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2024年官方迎新指南明确商服中心一楼为商铺、二楼为学生食堂；校方旧指南确认商服中心即第二食堂并列出二楼实际餐品。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.synu.edu.cn/2026/0522/c6740a113965/pagem.htm",
+                "source_title": "我校举办2026年全民营养周暨‘5·20’学生营养日主题活动",
+                "source_org": "沈阳师范大学后勤服务中心",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2026年后勤材料明确学校食堂当前提供多款科学配比、荤素相宜的健康餐品，补强全校食堂当前供餐。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "学校标识码4121010166；正式地址黄河北大街253号规范为校本部。",
+          "南区学生餐饮中心与商服中心是两个并列物理父实体；第二食堂与商服中心二楼学生食堂归并，档口不拆。"
+        ]
+      },
+      {
+        "school": "沈阳建筑大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "校本部",
+            "aliases": [],
+            "address": "辽宁省沈阳市浑南区浑南中路25号",
+            "source_url": "https://zs.sjzu.edu.cn/info/1031/17601.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "校本部",
+            "name": "一食堂",
+            "aliases": ["第一食堂", "第一餐饮中心一食堂"],
+            "location_text": "校本部一食堂一楼、二楼、三楼",
+            "building_or_floor": "一楼、二楼、三楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "2026年寒假分层停餐，2月28日或3月2日起恢复",
+            "source_url": "https://www.sjzu.edu.cn/info/1391/122811.htm",
+            "source_title": "后勤服务中心2026年寒假工作安排",
+            "source_org": "沈阳建筑大学后勤服务中心",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026年寒假安排逐层列一食堂一、二、三楼餐厅的暂停营业和恢复营业日期，直接确认三层实际供餐。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://hq.sjzu.edu.cn/info/1710/12595.htm",
+                "source_title": "第一餐饮中心打造‘共享学习空间’获好评",
+                "source_org": "沈阳建筑大学后勤服务中心",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2025年后勤报道明确在保障食堂日常供餐秩序的前提下使用一楼、二楼区域，补强一食堂当前运营。"
+              }
+            ]
+          },
+          {
+            "campus": "校本部",
+            "name": "二食堂",
+            "aliases": ["第二食堂", "第二餐饮中心二食堂"],
+            "location_text": "校本部二食堂一楼、二楼、三楼",
+            "building_or_floor": "一楼、二楼、三楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "2026年寒假正常营业并按就餐情况调整楼层，2月28日起全面恢复",
+            "source_url": "https://www.sjzu.edu.cn/info/1391/122811.htm",
+            "source_title": "后勤服务中心2026年寒假工作安排",
+            "source_org": "沈阳建筑大学后勤服务中心",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026年寒假安排明确二食堂一楼至三楼餐厅正常营业、按师生就餐情况调整开餐楼层并全面恢复，直接确认三层供餐。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.sjzu.edu.cn/info/1401/108711.htm",
+                "source_title": "后勤服务集团第二餐饮中心创新打造‘餐学一体’共享空间",
+                "source_org": "沈阳建筑大学后勤服务集团",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2025年官方报道明确二食堂一楼餐厅当前兼具就餐功能，补强父食堂当前运营。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "学校标识码4121010153；招生章程只列浑南中路25号，规范为校本部。",
+          "一、二食堂各层餐厅归并各自父实体；西部食堂民族餐厅无楼层不纳入。"
+        ]
+      },
+      {
+        "school": "沈阳科技学院",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "校本部",
+            "aliases": [],
+            "address": "辽宁省沈阳市浑南区全运二西路30号",
+            "source_url": "https://zhaosheng.syist.edu.cn/article/details/id/740.html"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "校本部",
+            "name": "学生食堂",
+            "aliases": [],
+            "location_text": "校本部学生食堂二楼、三楼",
+            "building_or_floor": "二楼、三楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://www.syist.edu.cn/article/details/id/4685.html",
+            "source_title": "‘喜迎党员大会’工作巡礼——办学条件和学校治理篇",
+            "source_org": "沈阳科技学院",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2025年官方材料明确学生食堂售卖区和就餐区升级，在食堂二、三层就餐区增设设备，并引进餐饮品牌，直接证明二、三楼当前餐饮功能。",
+            "review_status": "pending_review",
+            "additional_sources": []
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "学校标识码4121013621；招生章程只列全运二西路30号，规范为校本部。",
+          "餐饮品牌和售卖区均为学生食堂内部经营，不拆父实体。"
+        ]
+      },
+      {
+        "school": "沈阳航空航天大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "校本部",
+            "aliases": [],
+            "address": "辽宁省沈阳市沈北新区道义南大街37号",
+            "source_url": "https://zs.sau.edu.cn/info/1026/1635.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "校本部",
+            "name": "南区食堂",
+            "aliases": [],
+            "location_text": "校本部南区食堂一楼、二楼、三楼",
+            "building_or_floor": "一楼、二楼、三楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "2025年暑期分层停餐，8月21日起陆续恢复供餐",
+            "source_url": "https://accc.sau.edu.cn/info/1022/1252.htm",
+            "source_title": "暑期校园服务全指南",
+            "source_org": "沈阳航空航天大学自动化学院",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2025年官方暑期指南逐层列南区食堂一、二、三楼停止营业和恢复供餐安排，直接确认三层实际供餐。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.sau.edu.cn/info/1031/5419.htm",
+                "source_title": "这一年，我们在沈航拍下25帧光影，是旧岁写给新春的情书",
+                "source_org": "沈阳航空航天大学",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2026年学校官网记录清晨南区食堂包子和煎蛋现场，补强南区食堂当前实际供餐。"
+              }
+            ]
+          },
+          {
+            "campus": "校本部",
+            "name": "北区食堂",
+            "aliases": [],
+            "location_text": "校本部北区食堂一楼、二楼、三楼",
+            "building_or_floor": "一楼、二楼、三楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "一楼暑期正常供应三餐；二、三楼8月21日起陆续恢复供餐",
+            "source_url": "https://accc.sau.edu.cn/info/1022/1252.htm",
+            "source_title": "暑期校园服务全指南",
+            "source_org": "沈阳航空航天大学自动化学院",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2025年官方暑期指南明确北区食堂一楼正常营业并供应三餐，二楼、三楼分层停餐后恢复供餐，直接确认三层实际餐饮。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.sau.edu.cn/xcb/info/1021/1111.htm",
+                "source_title": "沈航为迎接提前返校的学子全面部署服务保障工作",
+                "source_org": "沈阳航空航天大学党委宣传部",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2025年官方报道确认食堂师傅提前返岗、准备食材和就餐环境，补强学校食堂当前运营。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "学校标识码4121010143；招生章程只列道义南大街37号，规范为校本部。",
+          "南区、北区是校本部内生活片区，不另建正式校区；两个物理食堂分别保留，内部楼层不拆父实体。"
+        ]
+      }
+    ]
+  }
+]

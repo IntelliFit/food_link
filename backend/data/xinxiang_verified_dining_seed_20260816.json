@@ -1,0 +1,309 @@
+[
+  {
+    "batch_name": "新乡高校官方食堂楼层确认集-20260816",
+    "region": "河南省新乡市",
+    "source_scope": "高校官网、官方后勤、国资招采、招生与校内部门一手来源；正式校区、父食堂、实际餐饮楼层及2024—2026当前运营闭环",
+    "schools": [
+      {
+        "school": "新乡学院",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "金穗校区",
+            "aliases": [],
+            "address": "河南省新乡市金穗大道东段191号",
+            "source_url": "https://hqc.xxu.edu.cn/info/1098/1418.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "金穗校区",
+            "name": "第二学生餐厅",
+            "aliases": ["第二餐厅"],
+            "location_text": "金穗校区第二学生餐厅二楼",
+            "building_or_floor": "二楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://www.xxu.edu.cn/info/1029/17843.htm",
+            "source_title": "校领导与2025届毕业生餐叙话别",
+            "source_org": "新乡学院",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "同一篇2025年官方报道先称学校第二学生餐厅，随后明确在第二餐厅二楼与毕业生代表共进午餐，直接确认二楼实际就餐。",
+            "review_status": "pending_review",
+            "additional_sources": []
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "学校标识码4141011071。",
+          "第二餐厅是同篇报道对第二学生餐厅的简称，不拆分父实体。",
+          "金穗校区第二餐厅楼顶的官方材料仅用于校区绑定，不从楼顶推断供餐楼层。"
+        ]
+      },
+      {
+        "school": "河南师范大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "建设路校区",
+            "aliases": ["主校区", "本部校区"],
+            "address": "河南省新乡市建设路东段46号",
+            "source_url": "https://www.htu.edu.cn/zs/2025/0529/c13750a347596/page.psp"
+          },
+          {
+            "name": "平原湖校区",
+            "aliases": [],
+            "address": "河南省新乡市红旗区经七路与纬八路交叉口",
+            "source_url": "https://www.htu.edu.cn/zs/2025/0529/c13750a347596/page.psp"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "建设路校区",
+            "name": "文轩阁餐厅",
+            "aliases": [],
+            "location_text": "建设路校区职工生活广场文轩阁餐厅一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "综合餐厅",
+            "audience": "师生",
+            "opening_hours_raw": "早餐7:00-10:00；午餐11:30-13:30；晚餐17:00-20:30",
+            "source_url": "https://www.htu.edu.cn/hqjt/2025/0709/c1479a351939/page.htm",
+            "source_title": "河南师范大学文轩阁餐厅餐饮服务商遴选项目公开比选公告",
+            "source_org": "河南师范大学后勤服务集团",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "公告明确对文轩阁餐厅一层、二层整体采购餐饮服务，并将两层纳入一日三餐食品生产加工销售工作。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.htu.edu.cn/hqjt/2026/0701/c1475a391281/page.htm",
+                "source_title": "关于2026年暑假期间后勤服务保障工作安排的通知",
+                "source_org": "河南师范大学后勤服务保障部等",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "建设路校区餐饮安排明确文轩阁餐厅假期仍按早餐、午餐、晚餐时段供餐。"
+              }
+            ]
+          },
+          {
+            "campus": "建设路校区",
+            "name": "学术交流中心主楼餐厅",
+            "aliases": [],
+            "location_text": "建设路校区学术交流中心主楼一楼餐厅、二楼教工餐厅",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "综合餐厅",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://www.htu.edu.cn/hqjt/2026/0116/c1475a370716/page.htm",
+            "source_title": "关于2026年寒假期间后勤服务保障工作相关安排的通知",
+            "source_org": "河南师范大学后勤服务保障部等",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "通知逐层列出学术交流中心主楼一楼餐厅、二楼教工餐厅的停业和恢复正常营业时间，直接确认两层实际餐饮运营。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.htu.edu.cn/hqjt/2026/0701/c1475a391281/page.htm",
+                "source_title": "关于2026年暑假期间后勤服务保障工作安排的通知",
+                "source_org": "河南师范大学后勤服务保障部等",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "建设路校区餐饮安排再次明确学术交流中心主楼餐厅正常营业。"
+              }
+            ]
+          },
+          {
+            "campus": "建设路校区",
+            "name": "学苑餐厅",
+            "aliases": [],
+            "location_text": "建设路校区西区学苑餐厅一楼西厅",
+            "building_or_floor": "一楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://www.htu.edu.cn/hqjt/2026/0116/c1475a370716/page.htm",
+            "source_title": "关于2026年寒假期间后勤服务保障工作相关安排的通知",
+            "source_org": "河南师范大学后勤服务保障部等",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "通知明确西校区学苑餐厅一楼西厅的停业日期及3月4日起恢复供餐，直接确认一楼实际供餐。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.htu.edu.cn/hqjt/2026/0701/c1475a391281/page.htm",
+                "source_title": "关于2026年暑假期间后勤服务保障工作安排的通知",
+                "source_org": "河南师范大学后勤服务保障部等",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "建设路校区餐饮安排明确学苑餐厅午餐后停供并于9月2日午餐恢复正常供餐。"
+              }
+            ]
+          },
+          {
+            "campus": "建设路校区",
+            "name": "东苑餐厅",
+            "aliases": [],
+            "location_text": "建设路校区东区东苑餐厅三楼",
+            "building_or_floor": "三楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://www.htu.edu.cn/xtw/2025/0527/c832a347267/page.htm",
+            "source_title": "我校“中华民族一家亲，共享舌尖民族情”美食文化节顺利举办",
+            "source_org": "共青团河南师范大学委员会",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2025年美食文化节在东苑餐厅三楼举办，东苑等校内餐厅现场提供拿手菜供学生品尝，直接确认三楼餐饮使用。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.htu.edu.cn/hqjt/2026/0701/c1475a391281/page.htm",
+                "source_title": "关于2026年暑假期间后勤服务保障工作安排的通知",
+                "source_org": "河南师范大学后勤服务保障部等",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "建设路校区餐饮安排明确东苑餐厅午餐后停供并于9月2日午餐恢复正常供餐。"
+              }
+            ]
+          },
+          {
+            "campus": "平原湖校区",
+            "name": "味轩餐厅",
+            "aliases": ["味轩食堂"],
+            "location_text": "平原湖校区味轩餐厅一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://www.htu.edu.cn/gzc/2024/0621/c14363a314646/page.htm",
+            "source_title": "河南师范大学平原湖校区餐厅劳务服务项目招标公告",
+            "source_org": "河南师范大学国有资产与实验室管理处",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "公告称味轩为平原湖校区唯一就餐场所，并逐层说明一楼基本大伙和风味窗口、二楼特色小吃窗口及民族餐厅的供餐内容。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.htu.edu.cn/hqjt/2026/0701/c1475a391281/page.htm",
+                "source_title": "关于2026年暑假期间后勤服务保障工作安排的通知",
+                "source_org": "河南师范大学后勤服务保障部等",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "平原湖校区餐饮安排明确味轩餐厅7月19日停止供餐、9月2日中午恢复正常供餐。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "学校标识码4141010476；建设路校区内部东区、西区不另建正式校区。",
+          "味轩各楼层窗口、民族餐厅、吧台和劳务标包均归并父食堂。",
+          "学术交流中心主楼一楼餐厅和二楼教工餐厅归并一个父实体；学苑西厅和东苑内部小餐厅均不拆分。"
+        ]
+      },
+      {
+        "school": "河南科技学院",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "西校区",
+            "aliases": [],
+            "address": "河南省新乡市红旗区华兰大道655号",
+            "source_url": "https://jxjyxy.hist.edu.cn/info/1029/5784.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "西校区",
+            "name": "第三学生餐厅",
+            "aliases": ["第三餐厅"],
+            "location_text": "西校区第三学生餐厅一楼、二楼、三楼",
+            "building_or_floor": "一楼、二楼、三楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://www.hist.edu.cn/info/1011/156051.htm",
+            "source_title": "校领导开展新学期调研工作",
+            "source_org": "河南科技学院",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2025年校领导进入第三学生餐厅，对一至三楼的学生就餐情况和餐饮服务人员工作状态逐层调研，并现场选购、品尝饭菜。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.hist.edu.cn/index/xydt/jdxy/34.htm",
+                "source_title": "垃圾分类齐行动，共筑绿色环保梦",
+                "source_org": "河南科技学院机电学院",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2024年官方报道明确活动地点位于西校区第三学生餐厅对面，直接绑定父食堂与西校区。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "学校标识码4141010467。",
+          "一至三楼是同一父食堂的实际就餐楼层，不拆分各售卖窗口和经营主体。"
+        ]
+      },
+      {
+        "school": "河南医药大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "红旗校区",
+            "aliases": ["红旗校区南校区", "南校区"],
+            "address": "河南省新乡市红旗区金穗大道601号",
+            "source_url": "https://zjc.xxmu.edu.cn/zsxxw/info/1013/1920.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "红旗校区",
+            "name": "溢香园",
+            "aliases": ["第二学生餐厅", "第二餐厅", "溢香园餐厅"],
+            "location_text": "红旗校区南校区溢香园（第二学生餐厅）一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "一日三餐",
+            "source_url": "https://cgzb.xxmu.edu.cn/jgggfw/3019.chtml",
+            "source_title": "新乡医学院第二学生餐厅招标遴选优质餐饮公司提供劳务服务项目中标结果公告",
+            "source_org": "河南医药大学采购招标网",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2025年中标结果明确第二学生餐厅即溢香园上下两层，26个档口，承担一日三餐食品生产加工销售，服务期三年。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.xxmu.edu.cn/info/1697/22672.htm",
+                "source_title": "关于开展“爱在端午，粽情新医”端午节活动的通知",
+                "source_org": "河南医药大学后勤保障部",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "官方后勤通知明确溢香园餐厅位于南校区；该稳定来源仅用于校区归属。"
+              },
+              {
+                "source_url": "https://www.xxmu.edu.cn/info/1697/26976.htm",
+                "source_title": "关于开展消防安全重点单位火灾疏散逃生演练的通知",
+                "source_org": "河南医药大学后勤保障部（保卫处）",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2026年学校继续将溢香园列为人员密集餐厅重点单位，完成同一父食堂当前状态闭环。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "学校标识码4141010472；新乡医学院于2025年更名为河南医药大学，按同一学校承接，不另建旧名。",
+          "当前正式校区名使用红旗校区，南校区作为红旗校区内部片区和别名保存，避免后续把北、西片区重复建成正式校区。",
+          "第二学生餐厅、第二餐厅、溢香园为同一父实体，26个档口和上下层经营区均不拆分。"
+        ]
+      }
+    ]
+  }
+]

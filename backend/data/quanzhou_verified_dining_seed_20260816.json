@@ -1,0 +1,166 @@
+[
+  {
+    "batch_name": "泉州高校官方食堂楼层确认集-20260816",
+    "region": "福建省泉州市",
+    "source_scope": "高校官网、官方后勤、校内官方招采及官方招生材料；仅收录校区、餐饮实体和实际供餐楼层均有直接文字证据的记录",
+    "schools": [
+      {
+        "school": "华侨大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "泉州校区",
+            "aliases": [],
+            "address": "福建省泉州市丰泽区城华北路269号",
+            "source_url": "https://xwgk.hqu.edu.cn/info/1020/13847.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "泉州校区",
+            "name": "学生第二餐厅",
+            "aliases": [],
+            "location_text": "泉州校区北区进强楼一层",
+            "building_or_floor": "进强楼一层",
+            "service_type": "食堂/餐厅",
+            "audience": "学生",
+            "opening_hours_raw": "",
+            "source_url": "https://lyxy.hqu.edu.cn/virtual_attach_file.vsb?afc=1UlVmkUm7YU4-YMNmQ2MzT2nzfVUzVTRM7liolCDL4TVLz70gihFp2hmCIa0USy4L1hfUSyPU49PL49iUN-PMmvZMNlZnm7sUmr2nlWfUmVFM4C8MmvDUNWFLz7aolUZgjfNQmOeLRCYMDQ1LmvxM498M188CzTTgIWTMILxCmfNozUaQIliCIQmgjfNQmOepdTZ_IbT6YhXptQ0g47aLmG0LzGbM1bw62t8c&e=.pdf&nid=1096&oid=1445817876&tid=1020",
+            "source_title": "中国旅游协会旅游教育分会会议指南",
+            "source_org": "华侨大学旅游学院",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-16复核：官方会议指南写明“学生第二餐厅、第三餐厅、第一餐厅，分别位于北区进强楼一至三层”；按原文‘分别’的一一对应关系，学生第二餐厅位于进强楼一层。",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "泉州校区",
+            "name": "学生第三餐厅",
+            "aliases": [],
+            "location_text": "泉州校区北区进强楼二层",
+            "building_or_floor": "进强楼二层",
+            "service_type": "食堂/餐厅",
+            "audience": "学生",
+            "opening_hours_raw": "",
+            "source_url": "https://lyxy.hqu.edu.cn/virtual_attach_file.vsb?afc=1UlVmkUm7YU4-YMNmQ2MzT2nzfVUzVTRM7liolCDL4TVLz70gihFp2hmCIa0USy4L1hfUSyPU49PL49iUN-PMmvZMNlZnm7sUmr2nlWfUmVFM4C8MmvDUNWFLz7aolUZgjfNQmOeLRCYMDQ1LmvxM498M188CzTTgIWTMILxCmfNozUaQIliCIQmgjfNQmOepdTZ_IbT6YhXptQ0g47aLmG0LzGbM1bw62t8c&e=.pdf&nid=1096&oid=1445817876&tid=1020",
+            "source_title": "中国旅游协会旅游教育分会会议指南",
+            "source_org": "华侨大学旅游学院",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-16复核：官方会议指南写明“学生第二餐厅、第三餐厅、第一餐厅，分别位于北区进强楼一至三层”；按原文‘分别’的一一对应关系，学生第三餐厅位于进强楼二层。",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "泉州校区",
+            "name": "清真餐厅",
+            "aliases": [],
+            "location_text": "泉州校区北区进强楼半地下层",
+            "building_or_floor": "进强楼半地下层",
+            "service_type": "民族特色餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://lyxy.hqu.edu.cn/virtual_attach_file.vsb?afc=1UlVmkUm7YU4-YMNmQ2MzT2nzfVUzVTRM7liolCDL4TVLz70gihFp2hmCIa0USy4L1hfUSyPU49PL49iUN-PMmvZMNlZnm7sUmr2nlWfUmVFM4C8MmvDUNWFLz7aolUZgjfNQmOeLRCYMDQ1LmvxM498M188CzTTgIWTMILxCmfNozUaQIliCIQmgjfNQmOepdTZ_IbT6YhXptQ0g47aLmG0LzGbM1bw62t8c&e=.pdf&nid=1096&oid=1445817876&tid=1020",
+            "source_title": "中国旅游协会旅游教育分会会议指南",
+            "source_org": "华侨大学旅游学院",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-16复核：官方会议指南明确“清真餐厅位于北区进强楼半地下层，是泉州校区唯一民族特色餐厅”。",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "泉州校区",
+            "name": "西苑餐厅",
+            "aliases": [],
+            "location_text": "泉州校区西区餐饮大楼一层",
+            "building_or_floor": "西区餐饮大楼一层",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://lyxy.hqu.edu.cn/virtual_attach_file.vsb?afc=1UlVmkUm7YU4-YMNmQ2MzT2nzfVUzVTRM7liolCDL4TVLz70gihFp2hmCIa0USy4L1hfUSyPU49PL49iUN-PMmvZMNlZnm7sUmr2nlWfUmVFM4C8MmvDUNWFLz7aolUZgjfNQmOeLRCYMDQ1LmvxM498M188CzTTgIWTMILxCmfNozUaQIliCIQmgjfNQmOepdTZ_IbT6YhXptQ0g47aLmG0LzGbM1bw62t8c&e=.pdf&nid=1096&oid=1445817876&tid=1020",
+            "source_title": "中国旅游协会旅游教育分会会议指南",
+            "source_org": "华侨大学旅游学院",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-16复核：官方会议指南明确“西苑餐厅位于西区餐饮大楼一层”。",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "2026-08-16按华侨大学官方信息公开网、学校新闻、党政办公室材料及旅游学院官方附件复核，仅收泉州校区记录。",
+          "学生第二、第三餐厅的楼层来自官方原文‘分别位于’的一一对应关系，不是由餐厅序号推断；学生第一餐厅因当前官方材料称‘原第一餐厅’而未纳入本 seed。"
+        ]
+      },
+      {
+        "school": "泉州师范学院",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "南安校区",
+            "aliases": [],
+            "address": "福建省泉州市南安市码头镇仙美街100号",
+            "source_url": "https://www.qztc.edu.cn/_upload/article/files/d6/a6/e972e90e41178ac02aaca8e47f3a/888970f5-a764-437d-986f-674ce045be34.pdf"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "南安校区",
+            "name": "南安校区新食堂",
+            "aliases": [],
+            "location_text": "南安校区综合实训楼一楼、二楼",
+            "building_or_floor": "综合实训楼一楼、二楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://www.qztc.edu.cn/zcglc/_t25/2026/0612/c6304a293887/pagem.htm",
+            "source_title": "泉州师范学院主校区第三食堂、南安校区食堂委托经营采购项目结果公告",
+            "source_org": "泉州师范学院资产管理处",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-16复核：学校结果公告明确“南安校区新食堂（综合实训楼一、二楼）”，并逐层写明“一楼就餐区域750平方米+后厨380平方米，二楼风味食堂950平方米”。",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "2026-08-16按泉州师范学院资产管理处官方采购结果公告复核；同一南安校区新食堂跨综合实训楼一、二楼，合并为一条食堂记录。"
+        ]
+      },
+      {
+        "school": "泉州海洋职业学院",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "校本部",
+            "aliases": [],
+            "address": "福建省石狮市祥芝镇古浮二十区1号",
+            "source_url": "https://www.qzoi.edu.cn/xygk/xxjj.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "校本部",
+            "name": "四号食堂",
+            "aliases": ["4#食堂"],
+            "location_text": "校本部船员综合楼一楼",
+            "building_or_floor": "船员综合楼一楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://www.qzoi.edu.cn/info/1331/15711.htm",
+            "source_title": "泉州海洋职业学院船员综合楼一楼（4#食堂）经营招标",
+            "source_org": "泉州海洋职业学院",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-16复核：学校官方招标项目名称和招标范围均写“船员综合楼一楼（4#食堂）”；项目概况另明确“四号食堂位于海员楼副楼”。",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "2026-08-16按学校官方招标及当前学校简介交叉复核；只保留招标直接确认的船员综合楼一楼，不把综合楼其他楼层并入四号食堂。"
+        ]
+      }
+    ]
+  }
+]

@@ -1,0 +1,247 @@
+[
+  {
+    "batch_name": "宁波高校官方食堂楼层确认集-20260816",
+    "review_status": "pending_review",
+    "schools": [
+      {
+        "school": "浙大宁波理工学院",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "校本部",
+            "aliases": ["钱湖南路校址"],
+            "address": "浙江省宁波市鄞州区钱湖南路1号",
+            "source_url": "https://www.nbt.edu.cn/__local/D/50/62/6C4E3ECFF136818A3FC0F061562_2E0237CA_464C5.pdf"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "校本部",
+            "name": "弘毅园餐厅",
+            "aliases": [],
+            "location_text": "校本部生活园区弘毅园餐厅一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://zsw.nbt.edu.cn/info/1016/2229.htm",
+            "source_title": "不出校门，生活无忧——便捷的校园生活服务",
+            "source_org": "浙大宁波理工学院招生办公室",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "官方餐饮服务页明确：弘毅园餐厅一楼为普通窗口，二楼为自选菜窗口；2025年学校招生公告再次列其为校内就餐餐厅。",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "校本部",
+            "name": "开物园餐厅",
+            "aliases": [],
+            "location_text": "校本部生活园区开物园餐厅一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://zsw.nbt.edu.cn/info/1016/2229.htm",
+            "source_title": "不出校门，生活无忧——便捷的校园生活服务",
+            "source_org": "浙大宁波理工学院招生办公室",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "官方餐饮服务页明确：开物园餐厅一楼为学生大众快餐，二楼为美食广场；2025年学校招生公告再次列其为校内就餐餐厅。",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "校本部",
+            "name": "求是园餐厅",
+            "aliases": [],
+            "location_text": "校本部求是园餐厅二楼",
+            "building_or_floor": "二楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://swzy.nbt.edu.cn/info/1075/3875.htm",
+            "source_title": "“宁”聚匠心，共话未来——生化学院5·20校友返校活动暨“与母校共发展”校友论坛",
+            "source_org": "浙大宁波理工学院化学工程与生命健康学院",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "官方学院页面明确活动地点为“学校求是园餐厅二楼”。",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": ["2025官方招生公告确认弘毅园、开物园仍在使用；校本部为单一法定办学校址的目录名。"]
+      },
+      {
+        "school": "浙江纺织服装职业技术学院",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "校本部",
+            "aliases": ["北高教园区校址"],
+            "address": "浙江省宁波市江北区风华路495号",
+            "source_url": "https://www.zjff.edu.cn/xxgknew/jbqk/gzzd/202110/t20211014_433843.html"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "校本部",
+            "name": "学府西苑食堂",
+            "aliases": [],
+            "location_text": "校本部学府西苑一楼、二楼、三楼食堂",
+            "building_or_floor": "一楼、二楼、三楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://www.zjff.edu.cn/xxgknew/zkxx/lqxx/202107/t20210709_430872.html",
+            "source_title": "2021级新生入学须知",
+            "source_org": "浙江纺织服装职业技术学院",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "官方新生须知明确“学校设有学府西苑一楼、二、三楼食堂”。",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "校本部",
+            "name": "学府东苑食堂",
+            "aliases": [],
+            "location_text": "校本部学府东苑一楼食堂",
+            "building_or_floor": "一楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://www.zjff.edu.cn/xxgknew/zkxx/lqxx/202107/t20210709_430872.html",
+            "source_title": "2021级新生入学须知",
+            "source_org": "浙江纺织服装职业技术学院",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "官方新生须知明确“学府东苑一楼食堂主营中式快餐及美食”。",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": ["学府东苑三楼为学生活动中心，虽提供风味小吃但不按食堂导入。"]
+      },
+      {
+        "school": "宁波城市职业技术学院",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "鄞州校区",
+            "aliases": ["本部校区"],
+            "address": "浙江省宁波市鄞州区学府路9号",
+            "source_url": "https://www.nbcc.cn/xxgk/2023/0912/c314a116318/page.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "鄞州校区",
+            "name": "学生食堂（公益性餐厅）",
+            "aliases": ["本部校区学生食堂"],
+            "location_text": "鄞州校区学生食堂（公益性餐厅）一楼",
+            "building_or_floor": "一楼",
+            "service_type": "学生食堂",
+            "audience": "学生",
+            "opening_hours_raw": "",
+            "source_url": "https://www.nbcc.cn/2018/0702/c44a11599/page.htm",
+            "source_title": "宁波城市职业技术学院本部校区学生食堂（公益性餐厅）承包项目招标公告",
+            "source_org": "宁波城市职业技术学院",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "官方招标明确本部校区学生食堂（公益性餐厅）“位于现餐厅一楼”；2022工作总结另确认鄞州校区食堂一楼维修。",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": ["学校后续文件将原本部校区称为鄞州校区，保留本部校区为别名。"]
+      },
+      {
+        "school": "浙江药科职业大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "奉化校区",
+            "aliases": [],
+            "address": "浙江省宁波市奉化区四明路666号",
+            "source_url": "https://www.zjpc.net.cn/__local/E/28/24/AA99E369ADEC94F334D60A3AAE5_73BE709B_9D6A3.pdf"
+          },
+          {
+            "name": "鄞州校区",
+            "aliases": [],
+            "address": "浙江省宁波市鄞州区鄞县大道东段888号",
+            "source_url": "https://www.zjpc.net.cn/info/1037/8507.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "奉化校区",
+            "name": "奉化校区食堂",
+            "aliases": [],
+            "location_text": "奉化校区食堂一楼、二楼、三楼餐厅",
+            "building_or_floor": "一楼、二楼、三楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://zwc.zjpc.net.cn/info/1074/1305.htm",
+            "source_title": "食堂经营服务经营项目结果公示",
+            "source_org": "浙江药科职业大学总务处",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "官方结果按奉化校区列出“食堂一楼中式餐厅”“食堂二、三楼餐厅”；2025年校方仍在奉化校区食堂三楼餐厅举办活动。",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "鄞州校区",
+            "name": "鄞州校区食堂",
+            "aliases": [],
+            "location_text": "鄞州校区食堂一楼、二楼、三楼餐厅",
+            "building_or_floor": "一楼、二楼、三楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://zwc.zjpc.net.cn/info/1074/1305.htm",
+            "source_title": "食堂经营服务经营项目结果公示",
+            "source_org": "浙江药科职业大学总务处",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "官方结果按鄞州校区列出“食堂一楼中式餐厅”“食堂二、三楼餐厅”；2025年度质量报告确认两校区食堂完成标准化改造与招标升级。",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": ["旧经营合同仅用于确认物理楼层，不导入运营商；2025年度质量报告确认两校区食堂设施继续存在并已升级。"]
+      },
+      {
+        "school": "宁波职业技术大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "东校区",
+            "aliases": ["北仑校区"],
+            "address": "浙江省宁波市北仑区庐山东路388号",
+            "source_url": "https://rsc.webs.nbpt.edu.cn/2026/0423/c906a5553391/page.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "东校区",
+            "name": "东校区学生食堂",
+            "aliases": ["食堂大楼", "学生食堂"],
+            "location_text": "东校区学生食堂一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "学生食堂",
+            "audience": "学生",
+            "opening_hours_raw": "",
+            "source_url": "https://zhaosheng.nbpt.edu.cn/a/2020320/818.shtml",
+            "source_title": "风味宁职院",
+            "source_org": "宁波职业技术大学招生办公室",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "官方招生页明确食堂大楼一层、二层为学生餐厅；另一官方招生页确认东校区共有4个食堂，2023年官方活动仍使用学生食堂二楼。",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": ["2026校方公告确认学校由宁波职业技术学院升格设立并继续使用东校区；目录使用当前正式校名。"]
+      }
+    ]
+  }
+]

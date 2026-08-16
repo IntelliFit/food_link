@@ -1,0 +1,125 @@
+[
+  {
+    "batch_name": "开封高校官方食堂楼层确认集-20260816",
+    "region": "河南省开封市",
+    "source_scope": "教育部及高校官网一手来源；正式校区、物理父食堂、实际供餐楼层及2024—2026当前运营闭环",
+    "schools": [
+      {
+        "school": "河南大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "明伦校区",
+            "aliases": [],
+            "address": "河南省开封市明伦街85号",
+            "source_url": "https://zs.henu.edu.cn/info/1034/6623.htm"
+          },
+          {
+            "name": "金明校区",
+            "aliases": [],
+            "address": "河南省开封市金明大道北段",
+            "source_url": "https://zs.henu.edu.cn/info/1034/6623.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "明伦校区",
+            "name": "中心食堂",
+            "aliases": [],
+            "location_text": "明伦校区中心食堂一楼",
+            "building_or_floor": "一楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "早餐7:00-8:30；午餐11:30-13:00；晚餐17:30-19:00",
+            "source_url": "https://news.henu.edu.cn/info/1009/185037.htm",
+            "source_title": "2026年寒假留校师生后勤保障服务工作安排",
+            "source_org": "河南大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026年寒假通知明确明伦校区中心食堂一楼为值班食堂，并逐项列出早餐、午餐、晚餐供餐时间。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://news.henu.edu.cn/info/1083/186167.htm",
+                "source_title": "校领导与留校师生员工共度除夕 共迎新春",
+                "source_org": "河南大学",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2026年除夕校方报道明确在明伦校区中心食堂与留校师生同吃年夜饭，补强父食堂当前实际运营。"
+              }
+            ]
+          },
+          {
+            "campus": "金明校区",
+            "name": "教苑餐厅",
+            "aliases": [],
+            "location_text": "金明校区教苑餐厅一楼",
+            "building_or_floor": "一楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "早餐7:00-8:30；午餐11:30-13:00；晚餐17:30-19:00",
+            "source_url": "https://hq.henu.edu.cn/info/1021/19961.htm",
+            "source_title": "2025年寒假留校师生后勤保障服务工作安排",
+            "source_org": "河南大学总务处（后勤集团总公司）",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2025年寒假通知明确金明校区教苑餐厅一楼继续为留校师生提供餐饮服务，并列每日三餐供餐时段。",
+            "review_status": "pending_review",
+            "additional_sources": []
+          },
+          {
+            "campus": "金明校区",
+            "name": "南苑餐厅",
+            "aliases": ["南苑食堂"],
+            "location_text": "金明校区南苑餐厅一楼",
+            "building_or_floor": "一楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "早餐7:00-8:30；午餐11:30-13:00；晚餐17:30-19:00",
+            "source_url": "https://news.henu.edu.cn/info/1009/185037.htm",
+            "source_title": "2026年寒假留校师生后勤保障服务工作安排",
+            "source_org": "河南大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026年寒假通知明确金明校区南苑餐厅一楼为值班食堂，并逐项列出每日三餐供餐时间。",
+            "review_status": "pending_review",
+            "additional_sources": []
+          },
+          {
+            "campus": "金明校区",
+            "name": "北苑餐厅",
+            "aliases": ["北苑食堂"],
+            "location_text": "金明校区北苑餐厅一楼",
+            "building_or_floor": "一楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "早餐7:00-8:30；午餐11:30-13:00；晚餐17:30-19:00",
+            "source_url": "https://news.henu.edu.cn/info/1009/185037.htm",
+            "source_title": "2026年寒假留校师生后勤保障服务工作安排",
+            "source_org": "河南大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026年寒假通知明确金明校区北苑餐厅一楼为值班食堂，并逐项列出每日三餐供餐时间。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://news.henu.edu.cn/info/1083/186167.htm",
+                "source_title": "校领导与留校师生员工共度除夕 共迎新春",
+                "source_org": "河南大学",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2026年除夕校方报道明确北苑餐厅后厨正在准备年夜饭，补强父食堂当前实际运营。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "学校标识码4141010475；仅纳入开封明伦、金明校区，郑州龙子湖校区不在本批地理范围。",
+          "南苑餐厅二楼只有特色窗口拟引进材料，未纳入；明伦学苑食堂逐层材料仍为未来式，未纳入。",
+          "窗口、特色档口和经营方均归并物理父食堂。"
+        ]
+      }
+    ]
+  }
+]

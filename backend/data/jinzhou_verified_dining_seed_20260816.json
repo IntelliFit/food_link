@@ -1,0 +1,179 @@
+[
+  {
+    "batch_name": "锦州高校官方食堂楼层确认集-20260816",
+    "region": "辽宁省锦州市",
+    "source_scope": "高校官网、官方资产经营、招生与校内官方报道；正式锦州校区、父食堂、实际餐饮楼层及2024—2026当前运营闭环",
+    "schools": [
+      {
+        "school": "辽宁工业大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "校本部",
+            "aliases": [],
+            "address": "辽宁省锦州市古塔区士英街169号",
+            "source_url": "https://www.lnut.edu.cn/info/1152/189385.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "校本部",
+            "name": "严谨园餐厅（三食堂）",
+            "aliases": ["严谨园餐厅", "三食堂"],
+            "location_text": "校本部严谨园餐厅二楼",
+            "building_or_floor": "二楼",
+            "service_type": "学生餐厅",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://zcjy.lnut.edu.cn/info/1022/1044.htm",
+            "source_title": "辽宁工业大学食堂简介",
+            "source_org": "辽宁工业大学资产经营中心",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "校方当前校园服务页明确严谨园餐厅（三食堂）二楼设清真风味区，并说明现在各食堂经营餐品种类齐全，直接绑定二楼实际供餐；清真风味区不拆父食堂。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.lnut.edu.cn/info/1150/188825.htm",
+                "source_title": "锦州市政府副市长孙志海一行到学校调研督导食品安全工作",
+                "source_org": "辽宁工业大学",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2024年校方报道记录现场查看严谨园餐厅就餐环境并听取学校食堂运营模式汇报，补强父食堂当前实际运营。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "学校标识码4121010154；招生章程只列士英街169号，规范为校本部。",
+          "清真风味区归并严谨园餐厅父实体；其他五个当前食堂缺合格实际楼层，不补齐。"
+        ]
+      },
+      {
+        "school": "辽宁铁道职业技术学院",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "凌河校区",
+            "aliases": [],
+            "address": "辽宁省锦州市凌河区松坡里129号",
+            "source_url": "https://www.lntdxy.edu.cn/zsxxw/info/1004/1272.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "凌河校区",
+            "name": "一食堂",
+            "aliases": ["凌河校区一食堂"],
+            "location_text": "凌河校区一食堂一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://www.lntdxy.edu.cn/info/1039/3242.htm",
+            "source_title": "辽宁铁道职业技术学院校园食堂委托经营项目竞争性磋商公告",
+            "source_org": "辽宁铁道职业技术学院",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2025年校方公告明确凌河校区一食堂一层、二层经营面积约2000平方米，并要求基本大伙与风味结合、设置民族窗口，直接绑定两层餐饮经营。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.lntdxy.edu.cn/hqfw/info/1012/1327.htm",
+                "source_title": "后勤服务中心寒假和开学情况总结",
+                "source_org": "辽宁铁道职业技术学院后勤服务中心",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2025年后勤总结记录实际餐饮服务、开学前食堂设施检修及提高饭菜种类和质量，闭环学校食堂当前开餐。"
+              },
+              {
+                "source_url": "https://www.lntdxy.edu.cn/hqfw/bmjj.htm",
+                "source_title": "餐饮服务中心部门简介",
+                "source_org": "辽宁铁道职业技术学院后勤服务",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "校方现行页面明确餐饮服务中心承担全校近300名教职工、7000名在校学生及培训员工就餐服务，补强当前运营。"
+              }
+            ]
+          },
+          {
+            "campus": "凌河校区",
+            "name": "教工食堂",
+            "aliases": ["凌河校区教工食堂"],
+            "location_text": "凌河校区教工食堂一楼",
+            "building_or_floor": "一楼",
+            "service_type": "教工食堂",
+            "audience": "教职工",
+            "opening_hours_raw": "工作日早餐、午餐",
+            "source_url": "https://www.lntdxy.edu.cn/info/1039/3242.htm",
+            "source_title": "辽宁铁道职业技术学院校园食堂委托经营项目竞争性磋商公告",
+            "source_org": "辽宁铁道职业技术学院",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2025年校方公告明确凌河校区教工食堂一层经营面积约1700平方米，并规定工作日早餐、午餐专门为教职工提供就餐服务，直接闭环一楼供餐。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.lntdxy.edu.cn/hqfw/info/1012/1327.htm",
+                "source_title": "后勤服务中心寒假和开学情况总结",
+                "source_org": "辽宁铁道职业技术学院后勤服务中心",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2025年后勤总结记录实际餐饮服务、开学前食堂设施检修及提高饭菜种类和质量，闭环学校食堂当前开餐。"
+              },
+              {
+                "source_url": "https://www.lntdxy.edu.cn/hqfw/bmjj.htm",
+                "source_title": "餐饮服务中心部门简介",
+                "source_org": "辽宁铁道职业技术学院后勤服务",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "校方现行页面明确餐饮服务中心承担全校教职工、在校学生及培训员工的就餐服务任务，补强当前运营。"
+              }
+            ]
+          },
+          {
+            "campus": "凌河校区",
+            "name": "二食堂",
+            "aliases": ["凌河校区二食堂"],
+            "location_text": "凌河校区二食堂一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://www.lntdxy.edu.cn/info/1039/3242.htm",
+            "source_title": "辽宁铁道职业技术学院校园食堂委托经营项目竞争性磋商公告",
+            "source_org": "辽宁铁道职业技术学院",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2025年校方公告明确凌河校区二食堂一层、二层经营面积约3176平方米，经营项目为基本大伙与风味结合，直接绑定两层餐饮经营。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.lntdxy.edu.cn/hqfw/info/1012/1327.htm",
+                "source_title": "后勤服务中心寒假和开学情况总结",
+                "source_org": "辽宁铁道职业技术学院后勤服务中心",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2025年后勤总结记录实际餐饮服务、开学前食堂设施检修及提高饭菜种类和质量，闭环学校食堂当前开餐。"
+              },
+              {
+                "source_url": "https://www.lntdxy.edu.cn/hqfw/bmjj.htm",
+                "source_title": "餐饮服务中心部门简介",
+                "source_org": "辽宁铁道职业技术学院后勤服务",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "校方现行页面明确餐饮服务中心承担全校近300名教职工、7000名在校学生及培训员工就餐服务，补强当前运营。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "学校标识码4121014188；学校有凌河、双凌两个校区，本批楼层正文只绑定凌河校区。",
+          "基本大伙、风味区、民族窗口和采购包均归并一食堂、二食堂、教工食堂父实体；双凌校区缺实际楼层，不补齐。"
+        ]
+      }
+    ]
+  }
+]

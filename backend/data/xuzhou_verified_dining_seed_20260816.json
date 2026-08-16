@@ -1,0 +1,44 @@
+[
+  {
+    "batch_name": "徐州高校官方食堂楼层确认集-20260816",
+    "region": "江苏省徐州市",
+    "source_scope": "高校官网、官方后勤及官方校内通报；楼层与2024—2026当前运营证据闭环后收录",
+    "schools": [
+      {
+        "school": "徐州医科大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "主校区",
+            "aliases": [],
+            "address": "江苏省徐州市云龙区铜山路209号",
+            "source_url": "https://www.xzhmu.edu.cn/xqzl/xyfj.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "主校区",
+            "name": "一食堂",
+            "aliases": ["学生一食堂"],
+            "location_text": "主校区一食堂一楼",
+            "building_or_floor": "一楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://bwc.xzhmu.edu.cn/info/1008/2010.htm",
+            "source_title": "2026年3月保卫处安全自查情况通报",
+            "source_org": "徐州医科大学党委保卫部（保卫处、人民武装部）",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026年安全自查表同一行明确校区为主校区、巡查部位为学生食堂，隐患为“一食堂一楼部分电线采用可燃塑胶管穿线”且已整改；2026年1月学校民生实事又确认2025年完成学生一食堂改造并强化从采购到供餐的全流程管理。",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "一楼作为父级一食堂的楼层覆盖，不创建“一食堂一楼”子食堂；三食堂缺楼层，原民族餐厅属于历史名称，均未加入。"
+        ]
+      }
+    ]
+  }
+]

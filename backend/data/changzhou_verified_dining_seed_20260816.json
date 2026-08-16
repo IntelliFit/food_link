@@ -1,0 +1,369 @@
+[
+  {
+    "batch_name": "常州高校官方食堂楼层确认集-20260816",
+    "region": "江苏省常州市",
+    "source_scope": "高校官网、官方后勤、官方招采及官方校内服务页；楼层与2024—2026当前运营证据闭环后收录",
+    "schools": [
+      {
+        "school": "常州信息职业技术大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "校本部",
+            "aliases": [],
+            "address": "江苏省常州市武进区鸣新中路22号",
+            "source_url": "https://czcit.edu.cn/zjcx/xxjj/xxjs.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "校本部",
+            "name": "第一食堂",
+            "aliases": ["一食堂"],
+            "location_text": "校本部第一食堂一楼、二楼、三楼",
+            "building_or_floor": "一楼、二楼、三楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://czcit.edu.cn/info/1056/25368.htm",
+            "source_title": "关于2023年中秋节、国庆节放假的通知",
+            "source_org": "常州信息职业技术大学（原常州信息职业技术学院）",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "餐饮中心安排逐项明确一食堂二楼、一楼正常营业，并称除一食堂三楼大厅外其余餐厅正常营业；2024年末通知确认2025年2月16日起所有餐厅恢复，2026年校内活动又在一食堂三楼开展餐饮制作与品尝。",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "校本部",
+            "name": "第二食堂",
+            "aliases": ["二食堂"],
+            "location_text": "校本部第二食堂一楼",
+            "building_or_floor": "一楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://www.czcit.edu.cn/info/1056/27568.htm",
+            "source_title": "关于2025年元旦和寒假放假的通知",
+            "source_org": "常州信息职业技术大学（原常州信息职业技术学院）",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2024年12月官方通知明确学生餐厅二食堂一楼寒假正常营业，并说明2025年2月16日起所有餐厅正常营业。",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "学校代码4132012317对应的高校于2026年6月升格并更为现名，沿用同一学校实体，不另建旧名学校。",
+          "官网只公布一个当前正式办学地址且无校区专名，目录规范化为校本部；一食堂三楼大厅不另建子食堂。"
+        ]
+      },
+      {
+        "school": "常州大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "科教城校区",
+            "aliases": [],
+            "address": "江苏省常州市武进区滆湖中路21号",
+            "source_url": "https://cdzs.cczu.edu.cn/lxwm/list.htm"
+          },
+          {
+            "name": "西太湖校区",
+            "aliases": [],
+            "address": "江苏省常州市武进区延政西大道2468号",
+            "source_url": "https://cdzs.cczu.edu.cn/lxwm/list.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "科教城校区",
+            "name": "第一食堂",
+            "aliases": [],
+            "location_text": "科教城校区第一食堂一楼、二楼、三楼",
+            "building_or_floor": "一楼、二楼、三楼",
+            "service_type": "综合食堂",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://hqglc.cczu.edu.cn/2025/0701/c6679a396176/page.htm",
+            "source_title": "关于科教城校区2025年暑假保障工作安排通知",
+            "source_org": "常州大学后勤管理处",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2025年暑假保障通知逐层列出第一食堂一楼餐厅、二楼餐厅、三楼西北风味餐厅的供餐或恢复供餐时间。",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "科教城校区",
+            "name": "第二食堂",
+            "aliases": [],
+            "location_text": "科教城校区第二食堂一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "综合食堂",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://hqglc.cczu.edu.cn/2025/0701/c6679a396176/page.htm",
+            "source_title": "关于科教城校区2025年暑假保障工作安排通知",
+            "source_org": "常州大学后勤管理处",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2025年暑假保障通知逐层列出第二食堂一楼大伙、二楼餐厅的供餐或恢复供餐时间；内部经营区不另建食堂。",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "西太湖校区",
+            "name": "第一餐厅",
+            "aliases": [],
+            "location_text": "西太湖校区第一餐厅一楼、二楼、三楼",
+            "building_or_floor": "一楼、二楼、三楼",
+            "service_type": "综合食堂",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://xthxq.cczu.edu.cn/2026/0703/c11547a418906/page.htm",
+            "source_title": "关于西太湖校区2026年暑假工作安排的通知",
+            "source_org": "常州大学西太湖校区管理委员会",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026年暑假通知逐层列出第一餐厅一楼、二楼、三楼的正常供餐、结束或恢复供餐时间。",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "西太湖校区",
+            "name": "第二餐厅",
+            "aliases": [],
+            "location_text": "西太湖校区第二餐厅一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "综合食堂",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://xthxq.cczu.edu.cn/2026/0703/c11547a418906/page.htm",
+            "source_title": "关于西太湖校区2026年暑假工作安排的通知",
+            "source_org": "常州大学西太湖校区管理委员会",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026年暑假通知逐层列出第二餐厅一楼、二楼的结束或恢复供餐时间；未给楼层的教工餐厅不并入。",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": ["三楼西北风味餐厅、一楼大伙等均作为父食堂的楼层经营区，不拆成重复食堂。"]
+      },
+      {
+        "school": "常州工学院",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "辽河路校区",
+            "aliases": [],
+            "address": "江苏省常州市新北区辽河路666号",
+            "source_url": "https://cgzb.czu.cn/cjgsfwl/5766.chtml"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "辽河路校区",
+            "name": "第一食堂（明湖餐厅）",
+            "aliases": ["第一食堂", "明湖餐厅"],
+            "location_text": "辽河路校区第一食堂（明湖餐厅）一楼、二楼、三楼",
+            "building_or_floor": "一楼、二楼、三楼",
+            "service_type": "综合食堂",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://cgzb.czu.cn/cjgsfwl/5766.chtml",
+            "source_title": "常州工学院食堂经营单位遴选项目中标（成交）结果公告",
+            "source_org": "常州工学院招投标办公室",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2025年中标公告明确第一食堂（明湖餐厅）一楼基本大伙、二楼风味特色、三楼教工餐厅，经营期5年并要求2025年8月27日前满足营业需求。",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "辽河路校区",
+            "name": "第二食堂（菁园餐厅）",
+            "aliases": ["第二食堂", "菁园餐厅"],
+            "location_text": "辽河路校区第二食堂（菁园餐厅）一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "综合食堂",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://cgzb.czu.cn/cjgsfwl/5766.chtml",
+            "source_title": "常州工学院食堂经营单位遴选项目中标（成交）结果公告",
+            "source_org": "常州工学院招投标办公室",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2025年中标公告明确第二食堂（菁园餐厅）一楼基本大伙、二楼风味特色，经营期5年并要求2025年8月27日前满足营业需求。",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "辽河路校区",
+            "name": "第三食堂（桃蹊餐厅）",
+            "aliases": ["第三食堂", "桃蹊餐厅"],
+            "location_text": "辽河路校区第三食堂（桃蹊餐厅）一楼、二楼、三楼北区",
+            "building_or_floor": "一楼、二楼、三楼北区",
+            "service_type": "综合食堂",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://cgzb.czu.cn/cjgsfwl/5766.chtml",
+            "source_title": "常州工学院食堂经营单位遴选项目中标（成交）结果公告",
+            "source_org": "常州工学院招投标办公室",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2025年中标公告明确第三食堂（桃蹊餐厅）一楼基本大伙、二楼风味特色、三楼北风味特色，经营期5年并要求2025年8月27日前满足营业需求。",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": ["经营单位、楼层品类和内部餐厅不拆成独立食堂。"]
+      },
+      {
+        "school": "常州工程职业技术学院",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "大学城校区",
+            "aliases": [],
+            "address": "江苏省常州市武进区滆湖中路33号",
+            "source_url": "https://czie.edu.cn/html/905/2025-07-14/content-47110.html"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "大学城校区",
+            "name": "第一食堂",
+            "aliases": [],
+            "location_text": "大学城校区第一食堂一楼、二楼、三楼",
+            "building_or_floor": "一楼、二楼、三楼",
+            "service_type": "综合食堂",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://hq.czie.edu.cn/2026_04/15_09/content-103812.html",
+            "source_title": "餐饮服务指南",
+            "source_org": "常州工程职业技术学院后勤管理处餐饮服务科",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026年餐饮服务指南明确第一食堂一楼、二楼学生餐厅及三楼教工餐厅，并提供逐层当前服务电话。",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "大学城校区",
+            "name": "第二食堂",
+            "aliases": [],
+            "location_text": "大学城校区第二食堂一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://hq.czie.edu.cn/2026_04/15_09/content-103812.html",
+            "source_title": "餐饮服务指南",
+            "source_org": "常州工程职业技术学院后勤管理处餐饮服务科",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026年餐饮服务指南明确第二食堂一楼学生餐厅、二楼学生餐厅，并提供逐层当前服务电话。",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": ["清潭校区旧建筑没有本轮食堂楼层闭环，未混入大学城校区。"]
+      },
+      {
+        "school": "常州纺织服装职业技术学院",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "校本部",
+            "aliases": [],
+            "address": "江苏省常州市武进区湖塘镇滆湖中路53号",
+            "source_url": "https://zs.cztgi.edu.cn/2025/0606/c3215a85088/page.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "校本部",
+            "name": "第二食堂",
+            "aliases": ["二食堂"],
+            "location_text": "校本部第二食堂一楼",
+            "building_or_floor": "一楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://hqb.cztgi.edu.cn/2025/0915/c2170a81823/page.htm",
+            "source_title": "后勤保障部全力做好服务保障学校迎新工作",
+            "source_org": "常州纺织服装职业技术学院后勤保障部",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2025年迎新保障报道明确第二食堂一楼食品安全设施和就餐环境完成提升，并说明各餐厅开展迎新供餐；同年一楼经营方遴选已完成。",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": ["官网只给一个当前正式办学地址且无校区专名，目录规范化为校本部；学海餐厅等为第二食堂一楼内部经营区。"]
+      },
+      {
+        "school": "江苏理工学院",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "校本部",
+            "aliases": [],
+            "address": "江苏省常州市中吴大道1801号",
+            "source_url": "https://www.jsut.edu.cn/30/list.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "校本部",
+            "name": "北苑食堂",
+            "aliases": ["北苑"],
+            "location_text": "校本部北苑食堂一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://hqfw.jsut.edu.cn/2026/0403/c2675a210300/page.htm",
+            "source_title": "关于2026年清明节期间后勤服务开放通知",
+            "source_org": "江苏理工学院后勤保障处",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026年清明节后勤通知明确北苑、南苑、西苑的一楼、二楼学生食堂正常供应；2025年寒假通知另确认北苑食堂一楼东餐厅正常供应。",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "校本部",
+            "name": "南苑食堂",
+            "aliases": ["南苑"],
+            "location_text": "校本部南苑食堂一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://hqfw.jsut.edu.cn/2026/0403/c2675a210300/page.htm",
+            "source_title": "关于2026年清明节期间后勤服务开放通知",
+            "source_org": "江苏理工学院后勤保障处",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026年清明节后勤通知明确北苑、南苑、西苑的一楼、二楼学生食堂正常供应。",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "校本部",
+            "name": "西苑食堂",
+            "aliases": ["西苑"],
+            "location_text": "校本部西苑食堂一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://hqfw.jsut.edu.cn/2026/0403/c2675a210300/page.htm",
+            "source_title": "关于2026年清明节期间后勤服务开放通知",
+            "source_org": "江苏理工学院后勤保障处",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026年清明节后勤通知明确北苑、南苑、西苑的一楼、二楼学生食堂正常供应。",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": ["官网只给一个当前正式办学地址且无校区专名，目录规范化为校本部；楼层内部经营区不另建食堂。"]
+      }
+    ]
+  }
+]

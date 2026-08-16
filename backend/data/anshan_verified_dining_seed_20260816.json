@@ -1,0 +1,136 @@
+[
+  {
+    "batch_name": "鞍山高校官方食堂楼层确认集-20260816",
+    "region": "辽宁省鞍山市",
+    "source_scope": "高校官网、官方后勤、招生与校长信箱；正式鞍山校区、父食堂、实际餐饮楼层及2024—2026当前运营闭环",
+    "schools": [
+      {
+        "school": "辽宁科技大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "校本部",
+            "aliases": [],
+            "address": "辽宁省鞍山市立山区千山中路189号",
+            "source_url": "https://zsjy.ustl.edu.cn/zsw/info/1011/1731.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "校本部",
+            "name": "莘园餐厅",
+            "aliases": ["莘园食堂"],
+            "location_text": "校本部莘园餐厅二楼、三楼",
+            "building_or_floor": "二楼、三楼",
+            "service_type": "学生餐厅",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://www.ustl.edu.cn/tjxq.jsp?leadermailid=D0B72165DB3126042C49C3A8CA5BB4D4&urltype=leadermail.LeaderMailContentUrl&wbtreeid=1056",
+            "source_title": "关于新食堂事宜（校长信箱信息详细）",
+            "source_org": "辽宁科技大学后勤处",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2025年校方回复明确莘园餐厅当年4月正式营业，并将三楼表述为当前用餐区；一楼仅出现大厅热水器，未计餐饮楼层。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.ustl.edu.cn/newxx/list.jsp?PAGENUM=13&totalpage=44&urltype=tree.TreeTempUrl&wbtreeid=1147",
+                "source_title": "关于桃园餐厅增设回民餐厅事宜（校长信箱回复）",
+                "source_org": "辽宁科技大学后勤与基建管理处",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2025年校方回复明确西区新建莘园餐厅二楼设清真档口，直接证明二楼实际供餐。"
+              }
+            ]
+          },
+          {
+            "campus": "校本部",
+            "name": "绿茵餐厅",
+            "aliases": ["绿茵食堂"],
+            "location_text": "校本部绿茵餐厅一楼、三楼",
+            "building_or_floor": "一楼、三楼",
+            "service_type": "学生餐厅",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://www.ustl.edu.cn/news/info/1003/9215.htm",
+            "source_title": "辽科大2024年暑假校园供餐服务保障工作圆满完成",
+            "source_org": "辽宁科技大学新闻网",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2024年校方报道明确绿茵餐厅一楼学生大菜档口营业42天并接待近万人次用餐，直接闭环一楼供餐。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.ustl.edu.cn/newxx/list.jsp?PAGENUM=13&totalpage=44&urltype=tree.TreeTempUrl&wbtreeid=1147",
+                "source_title": "关于桃园餐厅增设回民餐厅事宜（校长信箱回复）",
+                "source_org": "辽宁科技大学后勤与基建管理处",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2025年校方回复明确东区绿茵餐厅三楼设清真档口，直接证明三楼实际供餐。"
+              }
+            ]
+          },
+          {
+            "campus": "校本部",
+            "name": "桃园餐厅",
+            "aliases": ["桃园食堂"],
+            "location_text": "校本部桃园餐厅一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "学生餐厅",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://www.ustl.edu.cn/newxx/list.jsp?PAGENUM=13&totalpage=44&urltype=tree.TreeTempUrl&wbtreeid=1147",
+            "source_title": "关于桃园餐厅增设回民餐厅事宜（校长信箱回复）",
+            "source_org": "辽宁科技大学后勤与基建管理处",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2025年校方回复明确中区桃园餐厅一楼设清真餐食档口，直接证明一楼实际供餐。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.ustl.edu.cn/newxx/list.jsp?PAGENUM=4&totalpage=41&urltype=tree.TreeTempUrl&wbtreeid=1147",
+                "source_title": "关于学校建立共享厨房事宜（校长信箱回复）",
+                "source_org": "辽宁科技大学后勤与基建管理处",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2026年校方回复明确桃园餐厅二楼轻食自选档口供应肉类、蔬菜等餐食，直接证明二楼供餐。"
+              }
+            ]
+          },
+          {
+            "campus": "校本部",
+            "name": "龙源餐厅",
+            "aliases": ["龙源食堂"],
+            "location_text": "校本部龙源餐厅二楼、三楼",
+            "building_or_floor": "二楼、三楼",
+            "service_type": "学生餐厅",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://www.ustl.edu.cn/newxx/list.jsp?PAGENUM=4&totalpage=41&urltype=tree.TreeTempUrl&wbtreeid=1147",
+            "source_title": "关于学校建立共享厨房事宜（校长信箱回复）",
+            "source_org": "辽宁科技大学后勤与基建管理处",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026年校方回复明确龙源餐厅二楼轻食自选档口供应肉类、蔬菜等餐食，直接证明二楼供餐。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.ustl.edu.cn/newxx/list.jsp?PAGENUM=21&totalpage=61&urltype=tree.TreeTempUrl&wbtreeid=1147",
+                "source_title": "关于龙源食堂三楼共享厨房开放事宜（校长信箱回复）",
+                "source_org": "辽宁科技大学后勤与基建管理处",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2024年校方回复明确龙源餐厅三层回民档口可以单点菜品，直接证明三楼实际供餐。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "学校标识码4121010146；招生章程只列千山中路189号，规范为校本部。",
+          "清真、轻食、学生大菜等档口均归并父餐厅；莘园一楼、绿茵二楼、龙源一楼因证据不足不补齐。"
+        ]
+      }
+    ]
+  }
+]

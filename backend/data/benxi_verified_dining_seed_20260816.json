@@ -1,0 +1,82 @@
+[
+  {
+    "batch_name": "本溪高校官方食堂楼层确认集-20260816",
+    "region": "辽宁省本溪市",
+    "source_scope": "高校官网、官方后勤、招生与校内官方材料；正式本溪校区、父食堂、实际餐饮楼层及2024—2026当前运营闭环",
+    "schools": [
+      {
+        "school": "沈阳药科大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "南校区",
+            "aliases": [],
+            "address": "辽宁省本溪高新技术产业开发区华佗大街26号",
+            "source_url": "https://zs.syphu.edu.cn/__local/F/C1/7B/48D4A7B9999B0F09226BB8536FF_4A469095_3624E.pdf"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "南校区",
+            "name": "第一食堂",
+            "aliases": ["1食堂", "南校区1食堂"],
+            "location_text": "南校区第一食堂一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "餐饮服务电话24小时",
+            "source_url": "https://ld.syphu.edu.cn/info/1009/1989.htm",
+            "source_title": "沈阳药科大学后勤基建管理处服务电话",
+            "source_org": "沈阳药科大学后勤基建管理处",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "校方后勤服务电话页在‘餐饮服务电话（24小时）’下逐项列出‘南校区1食堂1楼’和‘南校区1食堂2楼’，直接绑定父食堂、实际餐饮楼层与持续餐饮服务。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://ld.syphu.edu.cn/info/1009/2283.htm",
+                "source_title": "后勤基建管理处党总支关于巡察整改情况的通告",
+                "source_org": "沈阳药科大学后勤基建管理处",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2025年官方通告明确新一轮食堂经营合同持续供餐，并在两个校区食堂各楼层设置学生意见受理处，补强各楼层当前运营。"
+              }
+            ]
+          },
+          {
+            "campus": "南校区",
+            "name": "第二食堂",
+            "aliases": ["2食堂", "南校区2食堂"],
+            "location_text": "南校区第二食堂一楼、二楼、三楼",
+            "building_or_floor": "一楼、二楼、三楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "餐饮服务电话24小时",
+            "source_url": "https://ld.syphu.edu.cn/info/1009/1989.htm",
+            "source_title": "沈阳药科大学后勤基建管理处服务电话",
+            "source_org": "沈阳药科大学后勤基建管理处",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "校方后勤服务电话页在‘餐饮服务电话（24小时）’下逐项列出‘南校区2食堂1楼’和‘南校区2食堂2楼、3楼’，直接绑定父食堂、实际餐饮楼层与持续餐饮服务。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://ld.syphu.edu.cn/info/1009/2283.htm",
+                "source_title": "后勤基建管理处党总支关于巡察整改情况的通告",
+                "source_org": "沈阳药科大学后勤基建管理处",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2025年官方通告明确新一轮食堂经营合同持续供餐，并在两个校区食堂各楼层设置学生意见受理处，补强各楼层当前运营。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "学校标识码4121010163；南校区正式地址在本溪，按实际行政地址归入本溪批次，不写入沈阳批次。",
+          "西区食堂一楼仅见教师节活动地点且父实体关系不明，不纳入；第一、第二食堂各楼层不拆成子食堂。"
+        ]
+      }
+    ]
+  }
+]

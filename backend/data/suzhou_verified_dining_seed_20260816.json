@@ -1,0 +1,262 @@
+[
+  {
+    "batch_name": "苏州高校官方食堂楼层确认集-20260816",
+    "region": "江苏省苏州市",
+    "source_scope": "高校官网、官方后勤、招采、招生、迎新与校园指南一手来源；正式校区、父食堂、实际餐饮楼层及2024—2026当前运营闭环",
+    "schools": [
+      {
+        "school": "苏州职业技术大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "石湖校区",
+            "aliases": [],
+            "address": "江苏省苏州市吴中区致能大道106号",
+            "source_url": "https://zhaosheng.jssvc.edu.cn/2026/0224/c1211a190094/page.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "石湖校区",
+            "name": "第二学生食堂",
+            "aliases": ["第二食堂"],
+            "location_text": "石湖校区南区第二学生食堂一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://www.jssvc.edu.cn/zfcg/202406/t20240626_307660.shtml",
+            "source_title": "苏州市职业大学关于第二、第四学生食堂餐饮服务商项目中标结果公告",
+            "source_org": "苏州职业技术大学采购与招标处",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "同代码旧校名下的2024年五年期餐饮服务公告明确第二学生食堂位于南区，一楼为学生大众伙食餐厅、二楼为风味小吃餐厅，可容纳3000人就餐。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://gw.jssvc.edu.cn/xww/xxyw/202509/t20250904_417468.shtml",
+                "source_title": "校领导带队开展2025年秋季学期开学前校园安全检查",
+                "source_org": "苏州职业技术大学保卫处",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2025年官方检查明确覆盖石湖校区第一、第二食堂的后厨、食品原料和餐具清洗消毒，完成当前运营闭环。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "学校标识码4132011054；苏州市职业大学更名为苏州职业技术大学，按同代码承接，不另建旧名。",
+          "一楼大众伙食、二楼风味小吃和承包商均属父食堂内部功能；第四学生食堂只写一个楼层而未给编号，不纳入。"
+        ]
+      },
+      {
+        "school": "苏州城市学院",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "校本部",
+            "aliases": [],
+            "address": "江苏省苏州市吴中区吴中大道1188号",
+            "source_url": "https://www.szcu.edu.cn/2023/0512/c551a52428/page.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "校本部",
+            "name": "学生第二食堂",
+            "aliases": ["第二食堂"],
+            "location_text": "校本部学生第二食堂一楼、二楼、三楼",
+            "building_or_floor": "一楼、二楼、三楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://www.szcu.edu.cn/2024/0702/c400a64834/page.htm",
+            "source_title": "关于暑期校内服务网点营业时间调整的通知",
+            "source_org": "苏州城市学院基建与后勤管理处",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2024年营业通知分别列第二食堂一楼每天8时至20时营业、二楼和三楼营业至7月6日，直接确认三层实际营业。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.szcu.edu.cn/zbxx/list12.htm",
+                "source_title": "苏州城市学院学生第二食堂一楼、三楼承包经营项目中标公告",
+                "source_org": "苏州城市学院采购信息",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2025年一楼、三楼经营项目明确一日三餐供应，服务期至2028年，补强同一父食堂当前运营。"
+              }
+            ]
+          },
+          {
+            "campus": "校本部",
+            "name": "教工餐厅",
+            "aliases": ["教工食堂"],
+            "location_text": "校本部师生服务大楼三楼教工餐厅",
+            "building_or_floor": "三楼",
+            "service_type": "教工餐厅",
+            "audience": "教职工",
+            "opening_hours_raw": "工作日午餐11:00-13:00",
+            "source_url": "https://www.szcu.edu.cn/zbxx/list17.htm",
+            "source_title": "苏州城市学院教工食堂服务项目采购公告",
+            "source_org": "苏州城市学院采购信息",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2025年采购公告明确教工餐厅位于师生服务大楼三楼，现满员用餐约900人，工作日11时至13时供应午餐，合同期两年。",
+            "review_status": "pending_review",
+            "additional_sources": []
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "学校标识码4132013983；苏州大学文正学院于2020年转设为苏州城市学院，不另建旧名。",
+          "学生第二食堂三层合并为一个父实体，大伙、风味、品牌和经营标段均不拆。"
+        ]
+      },
+      {
+        "school": "苏州信息职业技术学院",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "校本部",
+            "aliases": [],
+            "address": "江苏省苏州市吴江区鲈乡南路1237号",
+            "source_url": "https://www.szitu.edu.cn/detail/9704"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "校本部",
+            "name": "餐饮中心",
+            "aliases": [],
+            "location_text": "校本部餐饮中心二楼",
+            "building_or_floor": "二楼",
+            "service_type": "综合餐饮中心",
+            "audience": "师生及访客",
+            "opening_hours_raw": "",
+            "source_url": "https://dwbg.szitu.edu.cn/detail/8903",
+            "source_title": "苏州信息职业技术学院2025年提前招生考试（校测）第一轮考试通知",
+            "source_org": "苏州信息职业技术学院招生就业处",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2025年校测通知明确考生和家长可在校内餐饮中心二楼就餐并支持移动支付，直接确认二楼实际就餐。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.szitu.edu.cn/detail/9028",
+                "source_title": "苏州信息职业技术学院2025年提前招生考试（校测）第二轮考试通知",
+                "source_org": "苏州信息职业技术学院招生就业处",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "第二轮校测通知再次明确餐饮中心二楼可实际就餐。"
+              },
+              {
+                "source_url": "https://dwbg.szitu.edu.cn/detail/11522",
+                "source_title": "苏州信息职业技术学院食堂食材配送服务一标段废标公告",
+                "source_org": "苏州信息职业技术学院国资处",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2026年学校继续采购学生食堂大宗食材配送服务，补强当前食堂运营状态；楼层事实仍取2025实际就餐通知。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "学校标识码4132014256；官网未提供另一正式校区专名，按唯一办学地址规范为校本部。",
+          "支付方式、教工配送和食材标段不拆分父食堂。"
+        ]
+      },
+      {
+        "school": "西交利物浦大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "苏州工业园区校园",
+            "aliases": ["园区校园"],
+            "address": "江苏省苏州市工业园区独墅湖科教创新区仁爱路111号",
+            "source_url": "https://www.xjtlu.edu.cn/zh/campus-life"
+          },
+          {
+            "name": "西浦创业家学院（太仓）校园",
+            "aliases": ["太仓校园", "太仓校区"],
+            "address": "江苏省苏州市太仓市太仓大道111号",
+            "source_url": "https://www.xjtlu.edu.cn/zh/campus-life"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "苏州工业园区校园",
+            "name": "同发餐饮",
+            "aliases": ["TONGFA CANTEEN"],
+            "location_text": "苏州工业园区校园科学楼SA座地下一层同发餐饮",
+            "building_or_floor": "B1",
+            "service_type": "学生餐厅",
+            "audience": "师生",
+            "opening_hours_raw": "10:30-14:00；16:30-19:30",
+            "source_url": "https://www.xjtlu.edu.cn/wp-content/uploads/2025/06/International-Student-Welcome-Guide_SIP_AY2025-26.pdf",
+            "source_title": "XJTLU International Student Welcome Guide 2025-26",
+            "source_org": "西交利物浦大学学生事务办公室",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2025-26官方迎新指南明确同发餐饮位于科学楼SA座 basement floor，并列午、晚餐营业时段和实际菜品。",
+            "review_status": "pending_review",
+            "additional_sources": []
+          },
+          {
+            "campus": "苏州工业园区校园",
+            "name": "宏愿餐厅（北校区P122）",
+            "aliases": ["LIFE & HOPE CANTEENS"],
+            "location_text": "苏州工业园区校园北校区P122一楼宏愿餐厅",
+            "building_or_floor": "一楼",
+            "service_type": "学生餐厅",
+            "audience": "师生",
+            "opening_hours_raw": "早餐7:00-9:00；午餐10:45-13:30；晚餐16:30-19:00",
+            "source_url": "https://www.xjtlu.edu.cn/wp-content/uploads/2025/06/International-Student-Welcome-Guide_SIP_AY2025-26.pdf",
+            "source_title": "XJTLU International Student Welcome Guide 2025-26",
+            "source_org": "西交利物浦大学学生事务办公室",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2025-26官方迎新指南明确宏愿餐厅位于P122 ground floor，并列每日早、午、晚餐营业时段。",
+            "review_status": "pending_review",
+            "additional_sources": []
+          },
+          {
+            "campus": "西浦创业家学院（太仓）校园",
+            "name": "宏愿餐厅",
+            "aliases": ["LIFE & HOPE UNIVERSITY CANTEEN"],
+            "location_text": "西浦创业家学院（太仓）校园A栋一楼宏愿餐厅",
+            "building_or_floor": "一楼",
+            "service_type": "学生餐厅",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://www.xjtlu.edu.cn/wp-content/uploads/2025/06/XEC-International-Student-Welcome-Guide-AY2025-2026.pdf",
+            "source_title": "Entrepreneur College (Taicang) International Student Welcome Guide AY2025-2026",
+            "source_org": "西交利物浦大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2025-26官方太仓迎新指南明确宏愿餐厅位于A栋 ground floor并供应中餐。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.xjtlu.edu.cn/wp-content/uploads/2019/04/2025-Taicang-campus_Guidebook_En.pdf",
+                "source_title": "2025 Taicang Campus Guidebook",
+                "source_org": "西交利物浦大学",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2025官方太仓校园指南继续列出宏愿餐厅每日午、晚餐营业时间，补强当前运营。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "学校标识码4132016403；中外合作大学按独立法人学校实体处理。",
+          "园区校园北校区是正式校园内部片区，不另建校区；南校区宏愿餐厅因没有楼层不纳入。",
+          "园区P122宏愿餐厅与太仓A栋宏愿餐厅是不同物理地点，分别保留父实体；内部菜品、包间和零售商户不拆。"
+        ]
+      }
+    ]
+  }
+]

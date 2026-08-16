@@ -1,0 +1,208 @@
+[
+  {
+    "batch_name": "烟台高校官方食堂楼层确认集-20260816",
+    "region": "山东省烟台市",
+    "source_scope": "高校官网、校级后勤、校级招采、官方院系及招生章程；楼层结构与2024—2026当前运营证据闭环后收录",
+    "schools": [
+      {
+        "school": "烟台大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "主校区",
+            "aliases": [],
+            "address": "山东省烟台市莱山区清泉路30号",
+            "source_url": "https://www.ytu.edu.cn/info/1089/9439.htm"
+          },
+          {
+            "name": "八角湾校区",
+            "aliases": ["开发区科教园区"],
+            "address": "山东省烟台市黄渤海新区四平路1号",
+            "source_url": "https://computer.ytu.edu.cn/info/1026/5303.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "主校区",
+            "name": "学生第六餐厅",
+            "aliases": ["第六餐厅"],
+            "location_text": "主校区学生第六餐厅二楼",
+            "building_or_floor": "二楼",
+            "service_type": "学生餐厅",
+            "audience": "学生",
+            "opening_hours_raw": "",
+            "source_url": "https://hqc.ytu.edu.cn/info/1008/1544.htm",
+            "source_title": "后勤管理处关于2026年寒假期间有关事宜的通知",
+            "source_org": "烟台大学后勤管理处",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026年寒假通知明确保障餐厅为学生第六餐厅二楼并列供餐时间；同年校级新春团拜会原文同时确认主校区第六餐厅二楼。",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "八角湾校区",
+            "name": "梅园餐厅",
+            "aliases": [],
+            "location_text": "八角湾校区梅园餐厅一楼、二楼、三楼",
+            "building_or_floor": "一楼、二楼、三楼",
+            "service_type": "餐厅",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://chem.ytu.edu.cn/info/1030/5193.htm",
+            "source_title": "食在八角｜校园篇（二）：寻味食堂，解锁舌尖新趣",
+            "source_org": "烟台大学化学化工学院",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2025年官方校园餐饮文章逐项列出梅园餐厅一楼、二楼、三楼在营餐饮档口；2026年学校安全检查和毕业宴再次确认八角湾校区梅园餐厅在营。",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "梅园餐厅档口只作楼层证据，不拆成独立食堂；旧文称建筑共四层，但四楼没有实际供餐证据，未收录。",
+          "第七餐厅虽有在营和楼层线索，但尚不能由官方原文绑定正式校区，继续待补证。"
+        ]
+      },
+      {
+        "school": "山东工商学院",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "西校区",
+            "aliases": [],
+            "address": "山东省烟台市莱山区滨海中路191号",
+            "source_url": "https://zczb.sdtbu.edu.cn/info/1075/5712.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "西校区",
+            "name": "翕苑餐厅",
+            "aliases": ["翕园餐厅"],
+            "location_text": "西校区翕苑餐厅一楼",
+            "building_or_floor": "一楼",
+            "service_type": "餐厅",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://xxb.sdtbu.edu.cn/info/1103/2453.htm",
+            "source_title": "2024-2025第二学期第1周工作简报",
+            "source_org": "山东工商学院信息技术服务中心",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2025年简报确认翕苑餐厅一楼售饭卡机投入使用，并将该餐厅归属西校区；2026年校级招租继续使用西校区翕苑餐厅规范名。",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "规范名采用2026年官方招采的翕苑餐厅；同页翕园餐厅作为官方异写别名。网点编号不作为楼层。"
+        ]
+      },
+      {
+        "school": "山东城市服务职业学院",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "校本部",
+            "aliases": [],
+            "address": "山东省烟台市高新区科创西路60号",
+            "source_url": "https://sdcc.edu.cn/detail/11800"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "校本部",
+            "name": "学生食堂",
+            "aliases": ["食堂餐厅"],
+            "location_text": "校本部学生食堂一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "学生食堂",
+            "audience": "学生",
+            "opening_hours_raw": "",
+            "source_url": "https://sdcc.edu.cn/detail/11800",
+            "source_title": "校园卡使用须知",
+            "source_org": "山东城市服务职业学院",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "现行校园卡指南明确食堂消费并列出一楼餐厅、二楼餐厅和食堂餐厅二楼；2026年总务处材料确认学生食堂继续采购、加工和供餐。",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "学校公开材料只有一个当前办学校址且无专名；校本部是目录规范化标签，不冒充官网校区专名。"
+        ]
+      },
+      {
+        "school": "烟台理工学院",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "莱山校区",
+            "aliases": [],
+            "address": "山东省烟台市莱山区港城东大街100号",
+            "source_url": "https://www.yitsd.edu.cn/info/1026/23069.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "莱山校区",
+            "name": "第二餐厅",
+            "aliases": ["二餐"],
+            "location_text": "莱山校区第二餐厅二楼",
+            "building_or_floor": "二楼",
+            "service_type": "学生餐厅",
+            "audience": "学生",
+            "opening_hours_raw": "",
+            "source_url": "https://kj.yitsd.edu.cn/info/1126/4027.htm",
+            "source_title": "滴！您的校园介绍已送达，请注意查收~",
+            "source_org": "烟台理工学院会计与金融学院",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "官方校园介绍明确二餐位于一餐第二层；2025年学校工作报告确认第一、二餐厅完成改造升级，2026年学校正式使用莱山校区名称。",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "只录第二餐厅二楼；第三餐厅共有三层只是建筑总层数，未推断实际餐饮楼层。"
+        ]
+      },
+      {
+        "school": "烟台黄金职业学院",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "校本部",
+            "aliases": [],
+            "address": "山东省烟台市招远滨海新区金海大道996号",
+            "source_url": "https://www.ytgc.edu.cn/info/1201/20052.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "校本部",
+            "name": "学生食堂",
+            "aliases": ["一餐厅", "学生餐厅"],
+            "location_text": "校本部学生食堂一层",
+            "building_or_floor": "一层",
+            "service_type": "学生食堂",
+            "audience": "学生",
+            "opening_hours_raw": "",
+            "source_url": "https://xb.ytgc.edu.cn/hqc/info/1020/1022.htm",
+            "source_title": "后勤与资产处概况",
+            "source_org": "烟台黄金职业学院后勤与资产处",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "官方后勤页明确学生食堂一层开放；2026年学校端午活动和开学安全会议继续确认学生餐厅供餐及食堂全流程管理。",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "学生食堂、一餐厅、学生餐厅按同一实体去重；第二食堂计划2026年底建成，尚未投用，不收录。"
+        ]
+      }
+    ]
+  }
+]

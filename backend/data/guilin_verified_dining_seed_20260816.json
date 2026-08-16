@@ -1,0 +1,258 @@
+[
+  {
+    "batch_name": "桂林高校官方食堂楼层确认集-20260816",
+    "region": "广西壮族自治区桂林市",
+    "source_scope": "高校官网、官方后勤、官方院系、官方校友指南及官方招采；楼层与2024—2026当前运营证据闭环后收录",
+    "schools": [
+      {
+        "school": "广西师范大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "雁山校区",
+            "aliases": [],
+            "address": "广西壮族自治区桂林市雁山区雁中路1号",
+            "source_url": "https://www.gxnu.edu.cn/main.htm"
+          },
+          {
+            "name": "育才校区",
+            "aliases": [],
+            "address": "广西壮族自治区桂林市七星区育才路15号",
+            "source_url": "https://www.gxnu.edu.cn/main.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "雁山校区",
+            "name": "桃园餐厅",
+            "aliases": [],
+            "location_text": "雁山校区桃园餐厅一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "综合性食堂",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://www.gxnu.edu.cn/2019/0314/c11796a144347/page.psp",
+            "source_title": "我校雁山校区桃园餐厅二楼食堂正式启用",
+            "source_org": "广西师范大学宣传部",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "官方材料直接确认桃园餐厅一楼为公共用餐厅、二楼设基础窗口和特色美食；2019年二楼正式启用，2024年开学检查和校友指南继续确认雁山校区桃园餐厅当前运营。",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "育才校区",
+            "name": "西苑餐厅",
+            "aliases": [],
+            "location_text": "育才校区西苑餐厅一楼",
+            "building_or_floor": "一楼",
+            "service_type": "综合性食堂",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://www.gxnu.edu.cn/2020/0106/c11796a170202/page.htm",
+            "source_title": "广西师范大学2019年后勤十大新闻",
+            "source_org": "广西师范大学后勤保障处/后勤服务集团",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "学校后勤材料直接确认育才校区西苑餐厅一楼用餐空间；2024年官方校友指南继续将西苑餐厅列入当前校园餐厅并提供负责人联系方式。",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "2024指南另列桃园三楼餐厅，但无法排除与桃园餐厅的父子经营关系，本批不另建；校园卡充值点和内部服务部也不拆为食堂或窗口。"
+        ]
+      },
+      {
+        "school": "桂林理工大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "雁山校区",
+            "aliases": [],
+            "address": "广西壮族自治区桂林市雁山区雁山街319号",
+            "source_url": "https://www.glut.edu.cn/info/1073/41150.htm"
+          },
+          {
+            "name": "屏风校区",
+            "aliases": [],
+            "address": "广西壮族自治区桂林市七星区建干路12号",
+            "source_url": "https://www.glut.edu.cn/info/1073/41150.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "雁山校区",
+            "name": "二号食堂",
+            "aliases": ["雁山校区二号食堂"],
+            "location_text": "雁山校区二号食堂一楼",
+            "building_or_floor": "一楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://hqjt.glut.edu.cn/info/1064/4130.htm",
+            "source_title": "关于2024年寒假期间食堂开餐的通知",
+            "source_org": "桂林理工大学后勤服务中心",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2024年通知明确雁山校区二号食堂一楼供应早、中、晚三餐并在假期后恢复正常营业；2025年学校新学期检查继续走访二号食堂。",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "屏风校区",
+            "name": "屏风校区食堂",
+            "aliases": ["屏风食堂"],
+            "location_text": "屏风校区食堂一楼",
+            "building_or_floor": "一楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://www.glut.edu.cn/info/1077/20496.htm",
+            "source_title": "校领导带队深入屏风校区食堂开展设备安全运行专项检查",
+            "source_org": "桂林理工大学后勤服务中心",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2024年通知明确屏风校区食堂一楼供应三餐；2025年学校对屏风校区食堂一楼设备运行开展专项检查，确认同校区同食堂当前运营。",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "二号食堂中的序号只属于食堂名称，实际楼层来自官方原文一楼，不作数字推断。"
+        ]
+      },
+      {
+        "school": "桂林医科大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "临桂校区",
+            "aliases": [],
+            "address": "广西壮族自治区桂林市临桂区致远路1号",
+            "source_url": "https://www.glmc.edu.cn/__local/6/03/0C/3D0DCF318577C51A61C2C347905_D7A5A3B6_8B354.pdf"
+          },
+          {
+            "name": "乐群校区",
+            "aliases": [],
+            "address": "广西壮族自治区桂林市秀峰区乐群路20号",
+            "source_url": "https://www.glmc.edu.cn/__local/6/03/0C/3D0DCF318577C51A61C2C347905_D7A5A3B6_8B354.pdf"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "临桂校区",
+            "name": "春华苑食堂",
+            "aliases": ["春华苑"],
+            "location_text": "临桂校区春华苑食堂一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "学生食堂",
+            "audience": "师生及校外考生",
+            "opening_hours_raw": "",
+            "source_url": "https://mgmt.glmc.edu.cn/yjszs/info/1071/4438.htm",
+            "source_title": "桂林医科大学考点2026年全国硕士研究生招生考试温馨提示（二）",
+            "source_org": "桂林医科大学招生办",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2025年12月发布的2026研考保障通知明确临桂校区春华苑、秋实苑两个食堂一楼、二楼专设窗口提供餐饮服务。",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "临桂校区",
+            "name": "秋实苑食堂",
+            "aliases": ["秋实苑"],
+            "location_text": "临桂校区秋实苑食堂一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "学生食堂",
+            "audience": "师生及校外考生",
+            "opening_hours_raw": "",
+            "source_url": "https://mgmt.glmc.edu.cn/yjszs/info/1071/4438.htm",
+            "source_title": "桂林医科大学考点2026年全国硕士研究生招生考试温馨提示（二）",
+            "source_org": "桂林医科大学招生办",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2025年12月发布的2026研考保障通知明确临桂校区春华苑、秋实苑两个食堂一楼、二楼专设窗口提供餐饮服务。",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "乐群校区",
+            "name": "学生食堂",
+            "aliases": ["乐群校区学生食堂"],
+            "location_text": "乐群校区学生食堂一楼",
+            "building_or_floor": "一楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://www.glmc.edu.cn/hqglc/info/1041/4037.htm",
+            "source_title": "关于2024年寒假期间食堂开餐安排的通知",
+            "source_org": "桂林医科大学后勤管理处",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2024年寒假通知明确乐群校区学生食堂一楼供应早、中、晚餐；2025年食堂有害生物防治采购继续列乐群校区学生食堂一层为当前服务场地。",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "按学校代码4145010601对齐当前正式名桂林医科大学，不沿旧名桂林医学院新建；东城校区风华苑食堂楼层材料冲突，暂不收录。"
+        ]
+      },
+      {
+        "school": "桂林航天工业学院",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "南校区",
+            "aliases": [],
+            "address": "广西壮族自治区桂林市七星区金鸡路2号",
+            "source_url": "https://hqglc.guat.edu.cn/hqgk/lxwm.htm"
+          },
+          {
+            "name": "北校区",
+            "aliases": [],
+            "address": "广西壮族自治区桂林市七星区金鸡路2号",
+            "source_url": "https://dept5.guat.edu.cn/xygk/xyld.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "南校区",
+            "name": "南校区食堂",
+            "aliases": ["天宫楼食堂"],
+            "location_text": "南校区食堂二楼",
+            "building_or_floor": "二楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://dept7.guat.edu.cn/info/1148/3076.htm",
+            "source_title": "阅读内心：别赶路，去感受路",
+            "source_org": "桂林航天工业学院计算机科学与工程学院",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2024年校内官方院系文章直接记录在南校区食堂二楼用餐；2025—2027年度学校食堂大宗物资采购确认当前餐饮体系持续运营。内部品牌朱家小馆不另建食堂。",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "北校区",
+            "name": "莘子苑食堂",
+            "aliases": [],
+            "location_text": "北校区莘子苑食堂一楼",
+            "building_or_floor": "一楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://hqglc.guat.edu.cn/info/1028/3467.htm",
+            "source_title": "旧貌换新颜，打造师生满意的“幸福食堂”",
+            "source_org": "桂林航天工业学院后勤管理处",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "学校后勤改造材料直接确认北校区莘子苑食堂一楼餐厅；2025年后勤工作动态继续发布莘子苑食堂一楼餐饮新品，确认同名同楼层当前运营。",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "2025年投入使用的新食堂缺正式名称、校区及实际餐饮楼层，不收录；内部品牌和档口不拆为父级食堂。"
+        ]
+      }
+    ]
+  }
+]

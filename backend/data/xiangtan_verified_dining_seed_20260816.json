@@ -1,0 +1,201 @@
+[
+  {
+    "batch_name": "湘潭高校官方食堂楼层确认集-20260816",
+    "region": "湖南省湘潭市",
+    "source_scope": "高校官网、官方院系、官方新闻及官方招采；只收录正式校区、餐饮实体、实际楼层和当前运营状态均可确认的记录",
+    "schools": [
+      {
+        "school": "湘潭大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "校本部",
+            "aliases": ["湘潭大学本部"],
+            "address": "湖南省湘潭市雨湖区北二环路",
+            "source_url": "https://www.xtu.edu.cn/xysh/shss.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "校本部",
+            "name": "南苑师生餐厅",
+            "aliases": ["南苑餐厅"],
+            "location_text": "校本部南苑师生餐厅一楼、二楼、负一层、负二层",
+            "building_or_floor": "一楼、二楼、负一层、负二层",
+            "service_type": "师生餐厅",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://www.xtu.edu.cn/xysh/shss.htm",
+            "source_title": "生活设施",
+            "source_org": "湘潭大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "当前官网列该餐厅为现有餐厅，并明确一楼、二楼提供餐食，负一层、负二层为特色餐厅；负三层为生活超市，未计入餐饮楼层。",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "校本部",
+            "name": "琴湖学生餐厅",
+            "aliases": ["琴湖餐厅"],
+            "location_text": "校本部琴湖学生餐厅一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "学生餐厅",
+            "audience": "学生",
+            "opening_hours_raw": "",
+            "source_url": "https://www.xtu.edu.cn/xysh/shss.htm",
+            "source_title": "生活设施",
+            "source_org": "湘潭大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "当前官网称琴湖学生餐厅分为上下两层，并逐层说明一楼提供大众伙食、二楼提供自助餐等特色美食。",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "校本部",
+            "name": "北五餐厅",
+            "aliases": [],
+            "location_text": "校本部北五餐厅上、下两层",
+            "building_or_floor": "上、下两层",
+            "service_type": "餐厅",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://www.xtu.edu.cn/xysh/shss.htm",
+            "source_title": "生活设施",
+            "source_org": "湘潭大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "当前官网明确北五餐厅分为上下两层，并说明餐厅提供自助餐、烤肉饭等各类特色美食。",
+            "review_status": "pending_review"
+          },
+          {
+            "campus": "校本部",
+            "name": "金瀚林餐厅",
+            "aliases": ["金翰林餐厅"],
+            "location_text": "校本部金瀚林餐厅上、下两层",
+            "building_or_floor": "上、下两层",
+            "service_type": "餐厅",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://www.xtu.edu.cn/xysh/shss.htm",
+            "source_title": "生活设施",
+            "source_org": "湘潭大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "当前官网标题写金瀚林餐厅、正文写金翰林餐厅，并明确餐厅位于学生公寓内、分为上和下两层。",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "只计实际用于餐饮的一楼、二楼、负一层、负二层；南苑负三层为生活超市，排除。",
+          "千喜鹤餐厅位于南苑负一、负二层，是同一餐饮建筑内部经营区，为避免父子重复不另建食堂。"
+        ]
+      },
+      {
+        "school": "湘潭大学兴湘学院",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "校本部",
+            "aliases": ["兴湘学院院内"],
+            "address": "湖南省湘潭市雨湖区北二环路湘潭大学兴湘学院",
+            "source_url": "https://xxxy.xtu.edu.cn/xygk.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "校本部",
+            "name": "兴湘餐厅",
+            "aliases": [],
+            "location_text": "兴湘学院院内兴湘餐厅上、下两层",
+            "building_or_floor": "上、下两层",
+            "service_type": "餐厅",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://www.xtu.edu.cn/xysh/shss.htm",
+            "source_title": "生活设施",
+            "source_org": "湘潭大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "湘潭大学当前生活设施页明确兴湘餐厅位于兴湘学院院内，分为上、下两层；兴湘学院官网确认当前办学及地址。",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "餐厅按官方原文的院内归属写入独立学校实体湘潭大学兴湘学院，不重复挂到湘潭大学。"
+        ]
+      },
+      {
+        "school": "湖南科技大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "校本部",
+            "aliases": ["湖南科技大学本部"],
+            "address": "湖南省湘潭市桃园路",
+            "source_url": "https://news.hnust.edu.cn/kdyw/8853332a40f34c1a83c23b218b27a8d7.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "校本部",
+            "name": "八珍楼",
+            "aliases": ["八珍楼餐厅"],
+            "location_text": "校本部八珍楼一楼餐厅",
+            "building_or_floor": "一楼",
+            "service_type": "食堂/餐厅",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://law.hnust.edu.cn/xsgz/xgdt/981ce4cec6494a64beefaa7134fbd9aa.htm",
+            "source_title": "法学与公共管理学院成功举办2025级研究生新生“师生有约”午餐交流活动",
+            "source_org": "湖南科技大学法学与公共管理学院",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2025-09-23活动在八珍楼一楼餐厅举行；学校新闻网2025-09-08又确认在八珍楼检查食堂开餐准备和食品安全卫生。",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "楼层由2025年官方院系活动原文直接确认，当前运营由同年学校新闻网食堂开餐检查交叉支持。"
+        ]
+      },
+      {
+        "school": "湖南工程学院",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "北校区",
+            "aliases": [],
+            "address": "湖南省湘潭市岳塘区东湖路",
+            "source_url": "https://www.hnie.edu.cn/info/1045/10491.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "北校区",
+            "name": "学海二食堂",
+            "aliases": [],
+            "location_text": "北校区学海二食堂一楼",
+            "building_or_floor": "一楼",
+            "service_type": "学生食堂",
+            "audience": "学生",
+            "opening_hours_raw": "",
+            "source_url": "https://www.hnie.edu.cn/info/1045/10491.htm",
+            "source_title": "湖南工程学院食堂托管服务项目",
+            "source_org": "湖南工程学院",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2024-07-02学校托管招标直接写明学海二食堂（一楼），位于湘潭市东湖路湖南工程学院北校区，周边住宿学生约4300人。",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "同一招标的滨江食堂、南院食堂、明德二食堂没有实际楼层原文，未收录。"
+        ]
+      }
+    ]
+  }
+]

@@ -1,0 +1,227 @@
+[
+  {
+    "batch_name": "南阳高校官方食堂楼层确认集-20260816",
+    "region": "河南省南阳市",
+    "source_scope": "教育部、河南省教育厅及高校官网一手来源；正式校区、物理父食堂、实际供餐楼层及2024—2026当前运营闭环",
+    "schools": [
+      {
+        "school": "南阳医学高等专科学校",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "仲景东区",
+            "aliases": ["仲景校区东区", "东区"],
+            "address": "河南省南阳市北京南路300号",
+            "source_url": "https://www.nymc.edu.cn/info/1003/4280.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "仲景东区",
+            "name": "仲景东区餐厅",
+            "aliases": ["仲景东区食堂", "东区餐厅", "东区食堂"],
+            "location_text": "仲景东区餐厅一楼、二楼、三楼",
+            "building_or_floor": "一楼、二楼、三楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "一楼供应早餐等基本大伙；二楼、三楼供应多类风味餐品",
+            "source_url": "https://zyx.nymc.edu.cn/info/1081/3992.htm",
+            "source_title": "欢迎新生入校 领略南医风情——校园攻略",
+            "source_org": "南阳医学高等专科学校中医系",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "校方页面明确仲景东区开设一个三层餐厅，并逐层列出一楼基本大伙与早餐、二楼麻辣烫等、三楼老碗面和汉堡等实际餐品。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://yjs.nymc.edu.cn/__local/5/F6/62/543F3A732D969C1930332CBDC30_998B9DC9_9DFCAD.pdf?e=.pdf",
+                "source_title": "南阳医学高等专科学校高等职业教育质量年度报告（2025年度）",
+                "source_org": "南阳医学高等专科学校",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2025年度报告明确对三校区餐厅开展全面排查，并建立从采购到留样的食品安全全程监管体系，证明当前餐饮运营。"
+              },
+              {
+                "source_url": "https://www.nymc.edu.cn/info/1002/11099.htm",
+                "source_title": "我校举办第十二届“我们的节日”端午节主题活动",
+                "source_org": "南阳医学高等专科学校",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2026年校方报道明确活动位于仲景东区食堂二楼，用于交叉确认同一父食堂及楼层结构仍在使用。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "学校标识码4141013781。",
+          "基本大伙与各类餐品均为同一仲景东区餐厅内的楼层经营内容，不拆分为独立食堂。"
+        ]
+      },
+      {
+        "school": "南阳师范学院",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "卧龙校区",
+            "aliases": ["主校区"],
+            "address": "河南省南阳市卧龙区卧龙路1638号",
+            "source_url": "https://www2.nynu.edu.cn/xzbm/zhaosheng/info/1013/2372.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "卧龙校区",
+            "name": "中区学生餐厅",
+            "aliases": ["中区第一学生食堂", "中区第二学生食堂", "中区第三学生食堂"],
+            "location_text": "卧龙校区中区学生餐厅一楼、二楼、三楼",
+            "building_or_floor": "一楼、二楼、三楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "三餐开饭期间",
+            "source_url": "https://www2.nynu.edu.cn/xzbm/hqfwjt/info/1021/2554.htm",
+            "source_title": "餐饮服务指南",
+            "source_org": "南阳师范学院后勤管理与服务中心",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026年指南逐项列出中区一楼、二楼、三楼学生食堂经理，并明确学生食堂各楼层服务台在三餐开饭期间提供服务。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www2.nynu.edu.cn/xzbm/jiuye/info/1013/3091.htm",
+                "source_title": "校领导深入学生餐厅督导检查并开展陪餐活动",
+                "source_org": "南阳师范学院",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2026年校方在中区学生餐厅开展现场陪餐、自主选餐取餐并检查高峰供餐调度，闭环当前实际供餐。"
+              }
+            ]
+          },
+          {
+            "campus": "卧龙校区",
+            "name": "西区学生餐厅",
+            "aliases": ["西区第一学生食堂", "西区第二学生食堂", "西区第三学生食堂", "西区第四学生食堂"],
+            "location_text": "卧龙校区西区学生餐厅一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "三餐开饭期间",
+            "source_url": "https://www2.nynu.edu.cn/xzbm/hqfwjt/info/1021/2554.htm",
+            "source_title": "餐饮服务指南",
+            "source_org": "南阳师范学院后勤管理与服务中心",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026年指南将西区第一至第四学生食堂分别定位到一楼北、一楼南、二楼北、二楼南，并明确各楼层在三餐时段服务。",
+            "review_status": "pending_review",
+            "additional_sources": []
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "学校标识码4141010481；中区、西区均为卧龙校区内部片区，不另建校区。",
+          "中区第一至第三及西区第一至第四学生食堂按物理父餐厅归并，不按楼层或南北经营区拆分。"
+        ]
+      },
+      {
+        "school": "南阳理工学院",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "校本部",
+            "aliases": [],
+            "address": "河南省南阳市长江路80号",
+            "source_url": "https://zsw.nyist.edu.cn/info/1430/22286.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "校本部",
+            "name": "学苑餐厅",
+            "aliases": [],
+            "location_text": "校本部学苑餐厅一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "一楼供应早餐、午餐、晚餐；二楼供应午餐、晚餐",
+            "source_url": "https://hqzx.nyist.edu.cn/xyfw.htm",
+            "source_title": "校园服务",
+            "source_org": "南阳理工学院后勤服务中心",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "现行校园服务页明确学苑餐厅一楼为基本大伙餐厅并供应三餐，二楼为风味特色餐厅并供应午餐、晚餐。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.nyist.edu.cn/info/1042/73699.htm",
+                "source_title": "2024年校园美食文化节——我们的节日·暖心冬至“研”途可期活动通知",
+                "source_org": "南阳理工学院后勤管理处",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2024年通知明确三区餐厅在正常供餐基础上由部分窗口增加餐品，闭环学校餐厅体系实际运营。"
+              }
+            ]
+          },
+          {
+            "campus": "校本部",
+            "name": "南苑餐厅",
+            "aliases": [],
+            "location_text": "校本部南苑餐厅一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "一楼供应早餐、午餐、晚餐；二楼供应午餐、晚餐",
+            "source_url": "https://hqzx.nyist.edu.cn/xyfw.htm",
+            "source_title": "校园服务",
+            "source_org": "南阳理工学院后勤服务中心",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "现行校园服务页明确南苑餐厅一楼为基本大伙餐厅并供应三餐，二楼为风味特色餐厅并供应午餐、晚餐。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://hqzx.nyist.edu.cn/info/1059/18697.htm",
+                "source_title": "关于2026年暑假服务保障工作安排的通知",
+                "source_org": "南阳理工学院后勤服务中心",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2026年暑期通知明确南苑餐饮体系继续按早、中、晚餐值班供餐，补强校本部当前运营。"
+              }
+            ]
+          },
+          {
+            "campus": "校本部",
+            "name": "东苑餐厅",
+            "aliases": [],
+            "location_text": "校本部东苑餐厅一楼",
+            "building_or_floor": "一楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "供应早餐、午餐、晚餐",
+            "source_url": "https://hqzx.nyist.edu.cn/xyfw.htm",
+            "source_title": "校园服务",
+            "source_org": "南阳理工学院后勤服务中心",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "现行校园服务页明确东苑餐厅一楼为基本大伙餐厅，并供应早餐、午餐、晚餐。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.nyist.edu.cn/info/1042/73699.htm",
+                "source_title": "2024年校园美食文化节——我们的节日·暖心冬至“研”途可期活动通知",
+                "source_org": "南阳理工学院后勤管理处",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2024年通知明确三区餐厅在正常供餐基础上持续提供午餐，闭环学校餐厅体系实际运营。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "学校标识码4141011653；东区、东南区等均为校本部内部方位，不另建正式校区。",
+          "学苑民族区位于学苑餐厅二楼，归并父餐厅；无合格楼层的南苑民族、南苑风味及教工餐厅不纳入。"
+        ]
+      }
+    ]
+  }
+]

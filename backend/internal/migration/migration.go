@@ -1370,21 +1370,31 @@ type campusDirectoryResearchCampus struct {
 }
 
 type campusDirectoryResearchCanteen struct {
-	Campus          string   `json:"campus"`
-	Name            string   `json:"name"`
-	Aliases         []string `json:"aliases"`
-	LocationText    string   `json:"location_text"`
-	BuildingOrFloor string   `json:"building_or_floor"`
-	ServiceType     string   `json:"service_type"`
-	Audience        string   `json:"audience"`
-	OpeningHoursRaw string   `json:"opening_hours_raw"`
-	SourceURL       string   `json:"source_url"`
-	SourceTitle     string   `json:"source_title"`
-	SourceOrg       string   `json:"source_org"`
-	SourceType      string   `json:"source_type"`
-	EvidenceLevel   string   `json:"evidence_level"`
-	EvidenceExcerpt string   `json:"evidence_excerpt"`
-	ReviewStatus    string   `json:"review_status"`
+	Campus            string                          `json:"campus"`
+	Name              string                          `json:"name"`
+	Aliases           []string                        `json:"aliases"`
+	LocationText      string                          `json:"location_text"`
+	BuildingOrFloor   string                          `json:"building_or_floor"`
+	ServiceType       string                          `json:"service_type"`
+	Audience          string                          `json:"audience"`
+	OpeningHoursRaw   string                          `json:"opening_hours_raw"`
+	SourceURL         string                          `json:"source_url"`
+	SourceTitle       string                          `json:"source_title"`
+	SourceOrg         string                          `json:"source_org"`
+	SourceType        string                          `json:"source_type"`
+	EvidenceLevel     string                          `json:"evidence_level"`
+	EvidenceExcerpt   string                          `json:"evidence_excerpt"`
+	ReviewStatus      string                          `json:"review_status"`
+	AdditionalSources []campusDirectoryResearchSource `json:"additional_sources"`
+}
+
+type campusDirectoryResearchSource struct {
+	SourceURL       string `json:"source_url"`
+	SourceTitle     string `json:"source_title"`
+	SourceOrg       string `json:"source_org"`
+	SourceType      string `json:"source_type"`
+	EvidenceLevel   string `json:"evidence_level"`
+	EvidenceExcerpt string `json:"evidence_excerpt"`
 }
 
 type campusDirectoryResearchWindow struct {
@@ -1892,6 +1902,11 @@ func ensureCampusDirectoryPendingBatch(ctx context.Context, db *gorm.DB, seed ca
 			if strings.TrimSpace(canteen.SourceURL) != "" {
 				totalSources++
 			}
+			for _, source := range canteen.AdditionalSources {
+				if strings.TrimSpace(source.SourceURL) != "" {
+					totalSources++
+				}
+			}
 		}
 		for _, window := range school.Windows {
 			if strings.TrimSpace(window.SourceURL) != "" {
@@ -2086,6 +2101,19 @@ func ensureCampusDirectoryPendingSchoolResearch(ctx context.Context, db *gorm.DB
 		}
 		if err := ensureCampusDirectoryPendingSource(ctx, db, batchID, school.ID, campusID, canteenID, canteen); err != nil {
 			return err
+		}
+		for _, source := range canteen.AdditionalSources {
+			additional := campusDirectoryResearchCanteen{
+				SourceURL:       source.SourceURL,
+				SourceTitle:     source.SourceTitle,
+				SourceOrg:       source.SourceOrg,
+				SourceType:      source.SourceType,
+				EvidenceLevel:   source.EvidenceLevel,
+				EvidenceExcerpt: source.EvidenceExcerpt,
+			}
+			if err := ensureCampusDirectoryPendingSource(ctx, db, batchID, school.ID, campusID, canteenID, additional); err != nil {
+				return err
+			}
 		}
 		canteenIDs[campusCanteenKey(strings.TrimSpace(canteen.Campus), name)] = *canteenID
 	}
