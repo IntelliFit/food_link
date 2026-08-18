@@ -1,0 +1,174 @@
+[
+  {
+    "batch_name": "珠海高校官方食堂楼层确认集-20260818",
+    "region": "广东省珠海市",
+    "source_scope": "高校官网、后勤服务及当前运营通知；实际餐饮楼层与2024—2026当前运营证据闭环后收录",
+    "schools": [
+      {
+        "school": "中山大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "珠海校区",
+            "aliases": [],
+            "address": "广东省珠海市香洲区唐家湾镇大学路2号",
+            "source_url": "https://graduate.sysu.edu.cn/zsw/sites/default/files/2025-09/6%E3%80%81%E4%B8%AD%E5%B1%B1%E5%A4%A7%E5%AD%A62026%E5%B9%B4%E7%A1%95%E5%A3%AB%E7%A0%94%E7%A9%B6%E7%94%9F%E6%8B%9B%E7%94%9F%E5%8D%95%E4%BD%8D%E9%80%9A%E8%AE%AF%E5%BD%95.pdf"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "珠海校区",
+            "name": "榕园食堂",
+            "aliases": ["榕园二楼西北风味食堂"],
+            "location_text": "珠海校区榕园4号楼一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "一楼早餐6:30—9:30、午餐10:30—13:30、晚餐16:30—19:30；二楼早餐7:00—9:30、午餐11:00—13:30、晚餐17:00—19:30",
+            "source_url": "https://www.sysu.edu.cn/info/1171/1581.htm",
+            "source_title": "珠海校区饮食服务",
+            "source_org": "中山大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "校方饮食服务页明确榕园4号楼一层的三餐服务时间，并列榕园二楼西北风味食堂的三餐服务时间；二楼风味区归并至榕园食堂父体。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://fgw.sysu.edu.cn/zhuhai/sites/default/files/2026-01/%E9%99%84%E4%BB%B6%EF%BC%9A2025%E5%B9%B4%E5%BA%A6%E4%B8%AD%E5%B1%B1%E5%A4%A7%E5%AD%A6%E7%8F%A0%E6%B5%B7%E6%A0%A1%E5%8C%BA%E7%AE%A1%E7%90%86%E6%9C%8D%E5%8A%A1%E5%B7%A5%E4%BD%9C%E5%85%88%E8%BF%9B%E4%B8%AA%E4%BA%BA%E3%80%81%E5%85%88%E8%BF%9B%E9%9B%86%E4%BD%93%E5%85%AC%E7%A4%BA%E5%90%8D%E5%8D%95%EF%BC%881%EF%BC%89.pdf",
+                "source_title": "2025年度中山大学珠海校区管理服务工作先进个人、先进集体公示名单",
+                "source_org": "中山大学珠海校区管委会",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2026年1月发布的2025年度名单继续列出榕园食堂，闭合该父食堂当前运营。"
+              }
+            ]
+          },
+          {
+            "campus": "珠海校区",
+            "name": "若海食堂",
+            "aliases": ["若海餐厅"],
+            "location_text": "珠海校区若海食堂二楼、三楼、四楼",
+            "building_or_floor": "二楼、三楼、四楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "二楼早餐6:30—9:30、午餐10:30—13:30、晚餐16:30—19:30；三楼午餐10:30—13:30、晚餐16:30—19:30；四楼午餐10:30—13:30、晚餐16:30—19:30",
+            "source_url": "https://fgw.sysu.edu.cn/zhuhai/campuslife/sh",
+            "source_title": "生活设施",
+            "source_org": "中山大学珠海校区管委会",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "校区生活设施页逐层列出若海食堂二楼的早餐、午餐和晚餐，以及三楼、四楼的午餐和晚餐服务时间；五楼未列逐层供餐时间，不收录。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://fgw.sysu.edu.cn/zhuhai/sites/default/files/2026-01/%E9%99%84%E4%BB%B6%EF%BC%9A2025%E5%B9%B4%E5%BA%A6%E4%B8%AD%E5%B1%B1%E5%A4%A7%E5%AD%A6%E7%8F%A0%E6%B5%B7%E6%A0%A1%E5%8C%BA%E7%AE%A1%E7%90%86%E6%9C%8D%E5%8A%A1%E5%B7%A5%E4%BD%9C%E5%85%88%E8%BF%9B%E4%B8%AA%E4%BA%BA%E3%80%81%E5%85%88%E8%BF%9B%E9%9B%86%E4%BD%93%E5%85%AC%E7%A4%BA%E5%90%8D%E5%8D%95%EF%BC%881%EF%BC%89.pdf",
+                "source_title": "2025年度中山大学珠海校区管理服务工作先进个人、先进集体公示名单",
+                "source_org": "中山大学珠海校区管委会",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2026年1月发布的2025年度名单继续列出若海食堂，闭合该父食堂当前运营。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "榕园二楼西北风味食堂作为榕园食堂内部经营区归并，不另建父体。",
+          "荔园一楼、二楼已在目录中，不重复发布；岁月湖因当前运营反证排除；槿园不从建筑总层数推导供餐楼层。"
+        ]
+      },
+      {
+        "school": "北京师范大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "珠海校区",
+            "aliases": [],
+            "address": "广东省珠海市香洲区唐家湾金凤路18号",
+            "source_url": "https://www.bnuzh.edu.cn/"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "珠海校区",
+            "name": "学生第一食堂",
+            "aliases": ["学一食堂", "第一食堂"],
+            "location_text": "珠海校区粤华苑12栋学生第一食堂一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "一楼早餐6:30—9:30、午餐10:30—13:30、晚餐16:30—19:30；二楼早餐7:00—9:30、午餐11:00—13:30、晚餐17:00—19:30",
+            "source_url": "https://hqb.bnuzh.edu.cn/zhfw/cyfw/index.htm",
+            "source_title": "餐饮服务",
+            "source_org": "北京师范大学珠海校区后勤办公室",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "现行后勤餐饮服务页明确学一食堂位于粤华苑12栋，一楼为基本伙、二楼为特色餐饮，并逐层列出三餐营业时间。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://hqb.bnuzh.edu.cn/xwgg/tzgg/1aaf4ba226bd4072962ec721a33f135a.htm",
+                "source_title": "关于2025年暑假服务保障安排的通知",
+                "source_org": "北京师范大学珠海校区后勤办公室",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2025年暑假通知将学一食堂大众餐和学一食堂二楼西北餐厅列为值班供餐点，闭合两层当前运营；内部风味区不另拆父体。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "目录现有学生第一食堂复用并规范楼层；学一食堂为别名。",
+          "学三食堂一楼、湖畔餐厅一楼和二楼已在目录中，不重复发布。"
+        ]
+      },
+      {
+        "school": "珠海城市职业技术学院",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "校本部",
+            "aliases": ["金湾校区"],
+            "address": "广东省珠海市金湾区德城路680号",
+            "source_url": "https://dept.zhcpt.edu.cn/hq/info/1217/2281.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "校本部",
+            "name": "第二食堂",
+            "aliases": ["学二食堂", "莘莘餐厅"],
+            "location_text": "校本部第二食堂（莘莘餐厅）一楼",
+            "building_or_floor": "一楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "2026年寒假营业至1月26日，3月3日午餐起恢复开餐",
+            "source_url": "https://dept.zhcpt.edu.cn/hq/info/1217/2281.htm",
+            "source_title": "2026年寒假后勤服务工作安排",
+            "source_org": "珠海城市职业技术学院后勤保卫处",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026年寒假安排明确学二食堂（莘莘餐厅）一楼的在营档口、停餐日期和3月3日午餐复餐时间，直接闭合一楼实际供餐。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://dept.zhcpt.edu.cn/hq/info/1227/2141.htm",
+                "source_title": "新生指南8.0｜@2025级新生，校园饭堂宝藏吃法一键get！",
+                "source_org": "珠海城市职业技术学院后勤保卫处",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2025年官方新生指南介绍第二食堂的多个实际供餐档口和菜品，闭合父食堂当前运营。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "第二食堂、学二食堂和莘莘餐厅按同一物理父体归并。",
+          "学一、学三食堂与伟盛餐厅的父体绑定存在歧义，不收录。"
+        ]
+      }
+    ]
+  }
+]

@@ -395,12 +395,15 @@ func verifyVerifiedDiningBatch(ctx context.Context, db *gorm.DB, batch campusDir
 				if sourceURL == "" {
 					continue
 				}
-				var sources int64
-				if err := db.WithContext(ctx).Table("campus_directory_sources").Where("batch_id = (SELECT id FROM campus_directory_import_batches WHERE name = ?) AND canteen_id = ? AND source_url = ? AND evidence_level = ? AND review_status = ?", spec.BatchName, rows[0].ID, sourceURL, "A", "approved").Count(&sources).Error; err != nil {
+				// An already-approved source may have been introduced by an earlier
+				// batch. Reusing that exact canteen/source pair must not move it out
+				// of its original audit batch or require a duplicate source row.
+				sources, err := countApprovedVerifiedDiningSources(ctx, db, rows[0].ID, sourceURL)
+				if err != nil {
 					return err
 				}
-				if sources != 1 {
-					return fmt.Errorf("verify verified dining source %q/%q/%q/%s: got %d approved rows, want 1", schoolSeed.School, canteenSeed.Campus, canteenSeed.Name, sourceURL, sources)
+				if sources < 1 {
+					return fmt.Errorf("verify verified dining source %q/%q/%q/%s: got %d approved rows, want at least 1", schoolSeed.School, canteenSeed.Campus, canteenSeed.Name, sourceURL, sources)
 				}
 			}
 		}
@@ -413,6 +416,14 @@ func verifyVerifiedDiningBatch(ctx context.Context, db *gorm.DB, batch campusDir
 		return fmt.Errorf("verify verified dining approved batch %q: got %d rows, want 1", spec.BatchName, approved)
 	}
 	return nil
+}
+
+func countApprovedVerifiedDiningSources(ctx context.Context, db *gorm.DB, canteenID string, sourceURL string) (int64, error) {
+	var sources int64
+	err := db.WithContext(ctx).Table("campus_directory_sources").
+		Where("canteen_id = ? AND source_url = ? AND evidence_level = ? AND review_status = ?", canteenID, sourceURL, "A", "approved").
+		Count(&sources).Error
+	return sources, err
 }
 
 func validateVerifiedDiningBatchSpec(spec VerifiedDiningBatchSpec) error {
