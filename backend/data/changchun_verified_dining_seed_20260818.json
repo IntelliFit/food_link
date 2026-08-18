@@ -1,0 +1,113 @@
+[
+  {
+    "batch_name": "长春高校官方食堂楼层确认集-20260818",
+    "region": "长春市",
+    "source_scope": "高校官方后勤、招生章程及现行校园服务页面；严格确认正式校区、物理父食堂、实际餐饮楼层与2024—2026当前运营",
+    "schools": [
+      {
+        "school": "东北师范大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {"name":"人民大街校区","aliases":["自由校区"],"address":"吉林省长春市人民大街5268号","source_url":"https://www.nenu.edu.cn/xxgk/dxzc.htm"}
+        ],
+        "canteens": [
+          {"campus":"人民大街校区","name":"北苑餐厅","aliases":["北苑食堂","北苑清真餐厅"],"location_text":"北苑餐厅一楼基本伙、二楼民族餐厅","building_or_floor":"一楼、二楼","service_type":"学生食堂","audience":"师生","opening_hours_raw":"2024三餐安排；2025暑期供餐","source_url":"https://www.nenu.edu.cn/info/4871/266901.htm","source_title":"关于举办《中国教师发展报告2023》成果发布会暨师范生高质量发展学术研讨活动的通知","source_org":"东北师范大学","source_type":"official_university","evidence_level":"A","evidence_excerpt":"校方按三餐明确北苑一楼为基本伙食区、北苑二楼为清真餐厅。","review_status":"pending_review","additional_sources":[{"source_url":"https://hqc.nenu.edu.cn/info/1006/3434.htm","source_title":"关于2025-2026学年暑假期间后勤服务保障工作安排的通知","source_org":"东北师范大学后勤保障部","source_type":"official_university","evidence_level":"A","evidence_excerpt":"2025年通知点名北苑餐厅及二楼民族餐厅当前供餐。"}]},
+          {"campus":"人民大街校区","name":"南苑餐厅","aliases":["南苑食堂"],"location_text":"南苑餐厅二楼基本伙、三楼清真餐区","building_or_floor":"二楼、三楼","service_type":"学生食堂","audience":"师生","opening_hours_raw":"2024三餐安排；2025暑期供餐","source_url":"https://www.nenu.edu.cn/info/4871/266901.htm","source_title":"关于举办《中国教师发展报告2023》成果发布会暨师范生高质量发展学术研讨活动的通知","source_org":"东北师范大学","source_type":"official_university","evidence_level":"A","evidence_excerpt":"校方按三餐明确南苑二楼为基本伙食区、南苑三楼为清真餐厅。","review_status":"pending_review","additional_sources":[{"source_url":"https://hqc.nenu.edu.cn/info/1006/3434.htm","source_title":"关于2025-2026学年暑假期间后勤服务保障工作安排的通知","source_org":"东北师范大学后勤保障部","source_type":"official_university","evidence_level":"A","evidence_excerpt":"2025年通知点名南苑餐厅当前供餐。"}]}
+        ],
+        "windows": [],
+        "notes": ["自由校区归一为人民大街校区；民族餐区归并物理父食堂。"]
+      },
+      {
+        "school": "吉林大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {"name":"前卫南区（中心校区）","aliases":["前卫校区","中心校区"],"address":"吉林省长春市前进大街2699号","source_url":"https://gongkai.jlu.edu.cn/info/1028/1956.htm"},
+          {"name":"南岭校区","aliases":[],"address":"吉林省长春市人民大街5988号","source_url":"https://gongkai.jlu.edu.cn/info/1028/1956.htm"},
+          {"name":"南湖校区","aliases":[],"address":"吉林省长春市南湖大路5372号","source_url":"https://gongkai.jlu.edu.cn/info/1028/1956.htm"},
+          {"name":"和平校区","aliases":[],"address":"吉林省长春市西安大路5333号","source_url":"https://gongkai.jlu.edu.cn/info/1028/1956.htm"}
+        ],
+        "canteens": [
+          {"campus":"前卫南区（中心校区）","name":"莘子园餐厅","aliases":["莘子园食堂","莘子园回族餐厅"],"location_text":"莘子园一至三楼实际供餐","building_or_floor":"一楼、二楼、三楼","service_type":"学生食堂","audience":"师生","opening_hours_raw":"2025劳动节供餐安排","source_url":"https://phy.jlu.edu.cn/info/1052/5849.htm","source_title":"关于2025年劳动节放假的通知","source_org":"吉林大学物理学院行政综合办公室","source_type":"official_university","evidence_level":"A","evidence_excerpt":"通知直接将前卫一、二、民族餐厅对应为莘子园一、二、三楼并列开餐安排。","review_status":"pending_review"},
+          {"campus":"前卫南区（中心校区）","name":"湖畔餐厅","aliases":[],"location_text":"湖畔餐厅一楼、二楼","building_or_floor":"一楼、二楼","service_type":"学生食堂","audience":"师生","opening_hours_raw":"2025劳动节供餐安排","source_url":"https://phy.jlu.edu.cn/info/1052/5849.htm","source_title":"关于2025年劳动节放假的通知","source_org":"吉林大学物理学院行政综合办公室","source_type":"official_university","evidence_level":"A","evidence_excerpt":"通知明确湖畔二楼开餐、湖畔一楼节后恢复。","review_status":"pending_review"},
+          {"campus":"前卫南区（中心校区）","name":"基础园餐厅","aliases":["基础园食堂"],"location_text":"基础园餐厅一楼、二楼","building_or_floor":"一楼、二楼","service_type":"学生食堂","audience":"师生","opening_hours_raw":"2025当前供餐","source_url":"https://news.jlu.edu.cn/info/1080/34834.htm","source_title":"吉大食堂怎么样？","source_org":"吉林大学党委宣传部","source_type":"official_university","evidence_level":"A","evidence_excerpt":"校方逐层介绍基础园两层餐饮；2025供餐通知续活同一父体。","review_status":"pending_review","additional_sources":[{"source_url":"https://phy.jlu.edu.cn/info/1052/5849.htm","source_title":"关于2025年劳动节放假的通知","source_org":"吉林大学物理学院行政综合办公室","source_type":"official_university","evidence_level":"A","evidence_excerpt":"2025年通知点名基础园当前开餐。"}]},
+          {"campus":"前卫南区（中心校区）","name":"前卫四餐厅","aliases":["四食堂"],"location_text":"前卫四餐厅一楼打饭、二楼用餐","building_or_floor":"一楼、二楼","service_type":"学生食堂","audience":"师生","opening_hours_raw":"2025当前供餐","source_url":"https://news.jlu.edu.cn/info/1080/34834.htm","source_title":"吉大食堂怎么样？","source_org":"吉林大学党委宣传部","source_type":"official_university","evidence_level":"A","evidence_excerpt":"校方明确一楼打饭、二楼用餐；2025通知续活前卫四餐厅。","review_status":"pending_review","additional_sources":[{"source_url":"https://phy.jlu.edu.cn/info/1052/5849.htm","source_title":"关于2025年劳动节放假的通知","source_org":"吉林大学物理学院行政综合办公室","source_type":"official_university","evidence_level":"A","evidence_excerpt":"2025年通知点名前卫四餐厅当前开餐。"}]},
+          {"campus":"前卫南区（中心校区）","name":"大学城餐厅","aliases":[],"location_text":"大学城餐厅一楼、二楼","building_or_floor":"一楼、二楼","service_type":"学生食堂","audience":"师生","opening_hours_raw":"2025当前供餐","source_url":"https://news.jlu.edu.cn/info/1080/34834.htm","source_title":"吉大食堂怎么样？","source_org":"吉林大学党委宣传部","source_type":"official_university","evidence_level":"A","evidence_excerpt":"校方明确大学城两层均为餐饮；2025通知续活同一父体。","review_status":"pending_review","additional_sources":[{"source_url":"https://phy.jlu.edu.cn/info/1052/5849.htm","source_title":"关于2025年劳动节放假的通知","source_org":"吉林大学物理学院行政综合办公室","source_type":"official_university","evidence_level":"A","evidence_excerpt":"2025年通知点名大学城当前开餐。"}]},
+          {"campus":"南岭校区","name":"南岭二餐厅","aliases":["二餐厅"],"location_text":"南岭二餐厅一楼标准餐、二楼特色菜","building_or_floor":"一楼、二楼","service_type":"学生食堂","audience":"师生","opening_hours_raw":"2025当前供餐","source_url":"https://news.jlu.edu.cn/info/1080/34834.htm","source_title":"吉大食堂怎么样？","source_org":"吉林大学党委宣传部","source_type":"official_university","evidence_level":"A","evidence_excerpt":"校方明确南岭二餐厅一楼标准餐、二楼特色菜；2025通知续活。","review_status":"pending_review","additional_sources":[{"source_url":"https://phy.jlu.edu.cn/info/1052/5849.htm","source_title":"关于2025年劳动节放假的通知","source_org":"吉林大学物理学院行政综合办公室","source_type":"official_university","evidence_level":"A","evidence_excerpt":"2025年通知点名南岭二餐厅当前供餐。"}]},
+          {"campus":"南湖校区","name":"虹桥园餐厅","aliases":["南湖学生餐厅"],"location_text":"虹桥园餐厅一楼、二楼","building_or_floor":"一楼、二楼","service_type":"学生食堂","audience":"师生","opening_hours_raw":"2025当前运营","source_url":"https://news.jlu.edu.cn/info/1080/34834.htm","source_title":"吉大食堂怎么样？","source_org":"吉林大学党委宣传部","source_type":"official_university","evidence_level":"A","evidence_excerpt":"校方逐层介绍虹桥园两层窗口和餐品；2025食品安全检查续活同父。","review_status":"pending_review","additional_sources":[{"source_url":"https://news.jlu.edu.cn/info/1021/59127.htm","source_title":"学校开展新学期校园安全检查","source_org":"吉林大学","source_type":"official_university","evidence_level":"A","evidence_excerpt":"2025年检查直接覆盖南湖虹桥园食品与燃气安全。"}]},
+          {"campus":"和平校区","name":"学生食堂","aliases":["学生餐厅","西区学生餐厅"],"location_text":"和平学生食堂一楼、二楼","building_or_floor":"一楼、二楼","service_type":"学生食堂","audience":"师生","opening_hours_raw":"2025暑期供餐","source_url":"https://news.jlu.edu.cn/info/1080/34834.htm","source_title":"吉大食堂怎么样？","source_org":"吉林大学党委宣传部","source_type":"official_university","evidence_level":"A","evidence_excerpt":"校方逐层介绍和平学生食堂两层供餐；2025暑期通知续活现名西区学生餐厅。","review_status":"pending_review","additional_sources":[{"source_url":"https://phy.jlu.edu.cn/info/1052/6048.htm","source_title":"关于2025年暑假放假的通知","source_org":"吉林大学物理学院行政综合办公室","source_type":"official_university","evidence_level":"A","evidence_excerpt":"2025年通知点名和平校区西区学生餐厅供餐。"}]}
+        ],
+        "windows": [],
+        "notes": ["民族、回族经营区归并父食堂；仅发布具有严格楼层闭环的八个父体。"]
+      },
+      {
+        "school":"吉林农业大学","review_status":"pending_review",
+        "campuses":[{"name":"校本部","aliases":[],"address":"吉林省长春市新城大街2888号","source_url":"https://www.jlau.edu.cn/"}],
+        "canteens":[
+          {"campus":"校本部","name":"三食堂","aliases":["鸿之桐"],"location_text":"三食堂一楼、二楼实际扫码或就餐","building_or_floor":"一楼、二楼","service_type":"学生食堂","audience":"师生","opening_hours_raw":"2025—2026实际就餐","source_url":"https://yjsy.jlau.edu.cn/news.php?nid=760","source_title":"吉林农业大学2026年硕士研究生复试校外考生进校须知","source_org":"吉林农业大学研究生院","source_type":"official_university","evidence_level":"A","evidence_excerpt":"考生可在三食堂一楼扫码就餐；2025迎新报道补强二楼实际就餐。","review_status":"pending_review","additional_sources":[{"source_url":"https://xsc.jlau.edu.cn/info/1031/1374.htm","source_title":"迎新叙事","source_org":"吉林农业大学学生工作处","source_type":"official_university","evidence_level":"A","evidence_excerpt":"2025年报道写新生相约去三食堂二楼实际用餐。"}]},
+          {"campus":"校本部","name":"五食堂","aliases":["鸿之磐"],"location_text":"五食堂二楼大餐窗口","building_or_floor":"二楼","service_type":"学生食堂","audience":"师生","opening_hours_raw":"2026复试期间供餐","source_url":"https://yjsy.jlau.edu.cn/news.php?nid=760","source_title":"吉林农业大学2026年硕士研究生复试校外考生进校须知","source_org":"吉林农业大学研究生院","source_type":"official_university","evidence_level":"A","evidence_excerpt":"考生可在五食堂二楼大餐窗口扫码就餐。","review_status":"pending_review"}
+        ],"windows":[],"notes":["卡务点位不作为供餐楼层。"]
+      },
+      {
+        "school":"吉林外国语大学","review_status":"pending_review",
+        "campuses":[{"name":"校本部","aliases":[],"address":"吉林省长春市净月大街3658号","source_url":"https://xdb.jisu.edu.cn/info/1047/1422.htm"}],
+        "canteens":[
+          {"campus":"校本部","name":"学生食堂","aliases":[],"location_text":"学生食堂一楼、二楼","building_or_floor":"一楼、二楼","service_type":"学生食堂","audience":"师生","opening_hours_raw":"现行页面列各层服务时间","source_url":"https://hqzx.jisu.edu.cn/cyfw.htm","source_title":"餐饮服务","source_org":"吉林外国语大学后勤服务中心","source_type":"official_university","evidence_level":"A","evidence_excerpt":"页面逐层列一楼特色及清真档口、二楼基本伙和教工窗口，并给出服务时间。","review_status":"pending_review"},
+          {"campus":"校本部","name":"新味道食堂","aliases":["新味道食堂A座","新味道食堂B座"],"location_text":"新味道食堂一楼、二楼、三楼餐饮窗口","building_or_floor":"一楼、二楼、三楼","service_type":"学生食堂","audience":"师生","opening_hours_raw":"现行页面列各层服务时间","source_url":"https://hqzx.jisu.edu.cn/cyfw.htm","source_title":"餐饮服务","source_org":"吉林外国语大学后勤服务中心","source_type":"official_university","evidence_level":"A","evidence_excerpt":"官网将相接A/B座统称新味道食堂，逐层列一至三楼餐饮服务窗口和营业时间。","review_status":"pending_review","additional_sources":[{"source_url":"https://itc.jisu.edu.cn/info/1006/1516.htm","source_title":"一卡通建设报道","source_org":"吉林外国语大学信息化建设与管理中心","source_type":"official_university","evidence_level":"A","evidence_excerpt":"2025年报道以食堂区域262台POS补强当前运营。"}]}
+        ],"windows":[],"notes":["A/B座归并同一物理父食堂。"]
+      },
+      {
+        "school":"吉林财经大学","review_status":"pending_review",
+        "campuses":[{"name":"校本部","aliases":[],"address":"吉林省长春市净月大街3699号","source_url":"https://www.jlufe.edu.cn/"}],
+        "canteens":[
+          {"campus":"校本部","name":"学生一食堂","aliases":["一食堂"],"location_text":"学生一食堂一至三楼","building_or_floor":"一楼、二楼、三楼","service_type":"学生食堂","audience":"师生","opening_hours_raw":"2025改造后实际供餐","source_url":"https://newhqzc.jlufe.edu.cn/info/1022/1351.htm","source_title":"拉满你的期待值，2025吉财“变身记”来了！","source_org":"吉林财经大学后勤保障处","source_type":"official_university","evidence_level":"A","evidence_excerpt":"报道逐层列一楼22个档口、二楼12个档口及三楼教工食堂早餐午餐。","review_status":"pending_review"},
+          {"campus":"校本部","name":"学生二食堂","aliases":["二食堂"],"location_text":"学生二食堂一至三楼","building_or_floor":"一楼、二楼、三楼","service_type":"学生食堂","audience":"师生","opening_hours_raw":"2025改造后实际供餐","source_url":"https://newhqzc.jlufe.edu.cn/info/1022/1351.htm","source_title":"拉满你的期待值，2025吉财“变身记”来了！","source_org":"吉林财经大学后勤保障处","source_type":"official_university","evidence_level":"A","evidence_excerpt":"报道逐层列二食堂一楼16个、二楼15个、三楼8个档口及实际餐品。","review_status":"pending_review"}
+        ],"windows":[],"notes":["教工厅、活动场地及档口均归并所在物理父食堂。"]
+      },
+      {
+        "school":"吉林工程技术师范学院","review_status":"pending_review",
+        "campuses":[
+          {"name":"凯旋校区","aliases":[],"address":"吉林省长春市凯旋路3050号","source_url":"https://zs.jlenu.edu.cn/info/1087/5742.htm"},
+          {"name":"长德校区","aliases":[],"address":"吉林省长春新区米沙子工业集中区工师大路8号","source_url":"https://zs.jlenu.edu.cn/info/1087/5742.htm"}
+        ],
+        "canteens":[
+          {"campus":"凯旋校区","name":"大学生餐饮服务中心","aliases":[],"location_text":"凯旋校区餐饮服务中心一至三楼","building_or_floor":"一楼、二楼、三楼","service_type":"学生食堂","audience":"师生","opening_hours_raw":"2025实际运营；2026合同履约","source_url":"https://www.jlenu.edu.cn/info/1115/17603.htm","source_title":"食堂委托经营项目校内磋商公告","source_org":"吉林工程技术师范学院","source_type":"official_university","evidence_level":"A","evidence_excerpt":"材料明确凯旋校区一至三楼三餐功能；2025食堂开放日和食品安全会议闭合实际运营。","review_status":"pending_review","additional_sources":[{"source_url":"https://tw.jlenu.edu.cn/info/1065/10283.htm","source_title":"食堂开放日——“透明厨房”探秘之旅","source_org":"吉林工程技术师范学院团委与后勤","source_type":"official_university","evidence_level":"A","evidence_excerpt":"2025年开放日直接检查凯旋大学生餐饮服务中心当前后厨运营。"}]},
+          {"campus":"长德校区","name":"大学生餐饮服务中心","aliases":[],"location_text":"长德校区餐饮服务中心一至三楼","building_or_floor":"一楼、二楼、三楼","service_type":"学生食堂","audience":"师生","opening_hours_raw":"2025实际运营；2026合同履约","source_url":"https://www.jlenu.edu.cn/info/1115/17603.htm","source_title":"食堂委托经营项目校内磋商公告","source_org":"吉林工程技术师范学院","source_type":"official_university","evidence_level":"A","evidence_excerpt":"材料明确长德校区一至三楼三餐功能；2025食品安全会议覆盖该校区经营单位。","review_status":"pending_review","additional_sources":[{"source_url":"https://hqglc.jlenu.edu.cn/info/1038/3502.htm","source_title":"食品安全会议","source_org":"吉林工程技术师范学院后勤管理处","source_type":"official_university","evidence_level":"A","evidence_excerpt":"2025年会议覆盖长德校区当前食堂经营单位。"}]}
+        ],"windows":[],"notes":["三楼教工和特色档口归并父体。"]
+      },
+      {
+        "school":"吉林建筑大学","review_status":"pending_review",
+        "campuses":[{"name":"校本部","aliases":[],"address":"吉林省长春市新城大街5088号","source_url":"https://www.jlju.edu.cn/info/1026/123742.htm"}],
+        "canteens":[
+          {"campus":"校本部","name":"第一食堂","aliases":["一食堂"],"location_text":"第一食堂一至三楼","building_or_floor":"一楼、二楼、三楼","service_type":"学生食堂","audience":"师生","opening_hours_raw":"2024—2025节假日实际供餐","source_url":"https://www.jlju.edu.cn/index/tzgg/351.htm","source_title":"五一后勤保障通知","source_org":"吉林建筑大学","source_type":"official_university","evidence_level":"A","evidence_excerpt":"通知按餐次直接列第一食堂一、二、三楼实际供餐。","review_status":"pending_review","additional_sources":[{"source_url":"https://www.jlju.edu.cn/index/tzgg/372.htm","source_title":"国庆节后勤保障通知","source_org":"吉林建筑大学","source_type":"official_university","evidence_level":"A","evidence_excerpt":"2025年通知再次列第一食堂一、二层开放或恢复。"}]},
+          {"campus":"校本部","name":"第二食堂","aliases":["二食堂"],"location_text":"第二食堂一至三楼","building_or_floor":"一楼、二楼、三楼","service_type":"学生食堂","audience":"师生","opening_hours_raw":"2024—2025节假日实际供餐","source_url":"https://www.jlju.edu.cn/index/tzgg/351.htm","source_title":"五一后勤保障通知","source_org":"吉林建筑大学","source_type":"official_university","evidence_level":"A","evidence_excerpt":"通知按餐次直接列第二食堂一、二、三楼实际供餐。","review_status":"pending_review","additional_sources":[{"source_url":"https://www.jlju.edu.cn/index/tzgg/372.htm","source_title":"国庆节后勤保障通知","source_org":"吉林建筑大学","source_type":"official_university","evidence_level":"A","evidence_excerpt":"2025年通知再次列第二食堂一、二、三层开放或恢复。"}]}
+        ],"windows":[],"notes":["教工餐、特色厅和风味区归并父体。"]
+      },
+      {
+        "school":"吉林司法警官职业学院","review_status":"pending_review",
+        "campuses":[{"name":"合隆校区","aliases":["校本部"],"address":"吉林省长春市合隆经济开发区景苑路1号","source_url":"https://www.jlsfjy.cn/info/1221/6143.htm"}],
+        "canteens":[
+          {"campus":"合隆校区","name":"餐饮中心","aliases":[],"location_text":"餐饮中心一至三楼","building_or_floor":"一楼、二楼、三楼","service_type":"学生食堂","audience":"师生","opening_hours_raw":"2025当前使用","source_url":"https://www.jlsfjy.cn/info/1046/4983.htm","source_title":"餐饮中心委托经营项目","source_org":"吉林司法警官职业学院","source_type":"official_university","evidence_level":"A","evidence_excerpt":"材料明确一楼东西侧及二、三楼均为餐厅；2025维护与招生材料闭合当前使用。","review_status":"pending_review","additional_sources":[{"source_url":"https://www.jlsfjy.cn/info/1034/6263.htm","source_title":"招生简章","source_org":"吉林司法警官职业学院","source_type":"official_university","evidence_level":"A","evidence_excerpt":"2025年招生简章继续确认学生餐饮中心投入使用。"}]}
+        ],"windows":[],"notes":["教工区与学生区归并餐饮中心父体。"]
+      },
+      {
+        "school":"长春工业大学","review_status":"pending_review",
+        "campuses":[
+          {"name":"南湖校区","aliases":[],"address":"吉林省长春市延安大街2055号","source_url":"https://bzkzs.ccut.edu.cn/info/1076/1411.htm"},
+          {"name":"北湖校区","aliases":[],"address":"吉林省长春市北远达大街3000号","source_url":"https://bzkzs.ccut.edu.cn/info/1076/1411.htm"}
+        ],
+        "canteens":[
+          {"campus":"南湖校区","name":"南湖校区食堂","aliases":[],"location_text":"南湖校区食堂二楼基本餐窗口","building_or_floor":"二楼","service_type":"学生食堂","audience":"师生","opening_hours_raw":"2024暑假早中晚供餐","source_url":"https://dzb.ccut.edu.cn/info/1071/5706.htm","source_title":"关于做好2024年暑假放假及有关工作的通知","source_org":"长春工业大学党政办公室","source_type":"official_university","evidence_level":"A","evidence_excerpt":"服务表按早中晚时段直接列南湖校区食堂二楼基本餐窗口。","review_status":"pending_review","additional_sources":[{"source_url":"https://www.ccut.edu.cn/zsjyw/info/1099/1441.htm","source_title":"学校举办2025年校园开放日暨高考招生咨询会","source_org":"长春工业大学","source_type":"official_university","evidence_level":"A","evidence_excerpt":"2025年报道确认各校区食堂全天开放。"}]},
+          {"campus":"北湖校区","name":"北湖西区食堂","aliases":[],"location_text":"北湖西区食堂一楼基本餐窗口","building_or_floor":"一楼","service_type":"学生食堂","audience":"师生","opening_hours_raw":"2024暑假早中晚供餐","source_url":"https://dzb.ccut.edu.cn/info/1071/5706.htm","source_title":"关于做好2024年暑假放假及有关工作的通知","source_org":"长春工业大学党政办公室","source_type":"official_university","evidence_level":"A","evidence_excerpt":"服务表按早中晚时段直接列北湖西区食堂一楼基本餐窗口。","review_status":"pending_review","additional_sources":[{"source_url":"https://www.ccut.edu.cn/zsjyw/info/1099/1441.htm","source_title":"学校举办2025年校园开放日暨高考招生咨询会","source_org":"长春工业大学","source_type":"official_university","evidence_level":"A","evidence_excerpt":"2025年报道确认各校区食堂全天开放。"}]},
+          {"campus":"北湖校区","name":"北湖东区食堂","aliases":[],"location_text":"北湖东区食堂一楼基本餐窗口","building_or_floor":"一楼","service_type":"学生食堂","audience":"师生","opening_hours_raw":"2024暑假早中晚供餐","source_url":"https://dzb.ccut.edu.cn/info/1071/5706.htm","source_title":"关于做好2024年暑假放假及有关工作的通知","source_org":"长春工业大学党政办公室","source_type":"official_university","evidence_level":"A","evidence_excerpt":"服务表按早中晚时段直接列北湖东区食堂一楼基本餐窗口。","review_status":"pending_review","additional_sources":[{"source_url":"https://www.ccut.edu.cn/zsjyw/info/1099/1441.htm","source_title":"学校举办2025年校园开放日暨高考招生咨询会","source_org":"长春工业大学","source_type":"official_university","evidence_level":"A","evidence_excerpt":"2025年报道确认各校区食堂全天开放。"}]}
+        ],"windows":[],"notes":["北湖东、西区是同一正式北湖校区内的两个食堂运营区。"]
+      },
+      {
+        "school":"长春理工大学","review_status":"pending_review",
+        "campuses":[{"name":"东校区","aliases":[],"address":"吉林省长春市卫星路7089号","source_url":"https://zsb.cust.edu.cn/bkzn/zszc/83bb0c42dcea4cd4bc3baa7bcb75ad61.htm"}],
+        "canteens":[
+          {"campus":"东校区","name":"学生第一食堂","aliases":["第一食堂","一食堂"],"location_text":"学生第一食堂一楼热加工档口","building_or_floor":"一楼","service_type":"学生食堂","audience":"师生","opening_hours_raw":"2024—2025当前运营","source_url":"https://hq.cust.edu.cn/tzgg/3f1de97dd12343caad63b1402074d4f0.htm","source_title":"长春理工大学自营食堂档口招商公告","source_org":"长春理工大学后勤处","source_type":"official_university","evidence_level":"A","evidence_excerpt":"公告精确写学生第一食堂一楼四号档口经营热加工类项目；2024同父检查闭合当前运营。","review_status":"pending_review","additional_sources":[{"source_url":"https://www.cust.edu.cn/lgxw2026/273f7ced272d4c2a9ba3e716b193ff0c.htm","source_title":"学校开展新学期开学前综合检查","source_org":"长春理工大学","source_type":"official_university","evidence_level":"A","evidence_excerpt":"2024年检查点名东校区第一食堂并要求落实食品安全与服务保障。"}]}
+        ],"windows":[],"notes":["二楼办公室不作为供餐楼层。"]
+      }
+    ]
+  }
+]
