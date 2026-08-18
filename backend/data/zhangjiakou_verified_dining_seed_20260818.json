@@ -1,0 +1,101 @@
+[
+  {
+    "batch_name": "张家口高校官方食堂楼层确认集-20260818",
+    "region": "河北省张家口市",
+    "source_scope": "高校官网、后勤与招生官方页面中的正式校区地址、实际用餐楼层及同一父食堂当前营业证据；只收录学校、校区、物理父食堂、实际楼层和当前运营完整闭环的记录",
+    "schools": [
+      {
+        "school": "河北北方学院",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "西校区",
+            "aliases": ["主校区"],
+            "address": "河北省张家口市经济开发区钻石南路11号",
+            "source_url": "https://yjs.hebeinu.edu.cn/index.php?s=%2FShow%2Findex%2Fcid%2F11%2Fid%2F424.html"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "西校区",
+            "name": "学生餐厅",
+            "aliases": ["西校区学生餐厅"],
+            "location_text": "河北北方学院西校区学生餐厅一楼",
+            "building_or_floor": "一楼",
+            "service_type": "学生食堂",
+            "audience": "学生",
+            "opening_hours_raw": "2021年校方通知列早餐6:30—8:20、午餐11:00—12:30、晚餐17:00—18:50；2024年同父食堂通知列早餐7:00—8:30、午餐11:00—13:00、晚餐17:00—18:30",
+            "source_url": "https://www.hebeinu.edu.cn/houqinc/index.php?s=%2FShow%2Findex%2Fcid%2F7%2Fid%2F175.html",
+            "source_title": "后勤管理处服务温馨提示",
+            "source_org": "河北北方学院后勤管理处",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "校方2021年后勤通知明确写明西校区学生餐厅一楼的闭餐日期，并列出早餐、午餐、晚餐时段及学生分时段就餐要求，直接闭合父食堂、一楼和实际供餐。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.hebeinu.edu.cn/houqinc/index.php?s=%2FShow%2Findex%2Fcid%2F7%2Fid%2F283.html",
+                "source_title": "后勤服务温馨提示",
+                "source_org": "河北北方学院后勤管理处",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "校方2024年后勤通知继续以西校区学生餐厅同名父体发布闭餐安排，并列出早餐、午餐、晚餐时段，补强同一父食堂当前运营。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "只确认西校区学生餐厅一楼；东校区当前材料将旧名学生餐厅简称为餐厅，父体同一性不够明确，未纳入。",
+          "瑞贤餐厅有2025当前运营强证但无楼层，且未与学生餐厅建立官方物理同一性，不新增或合并。"
+        ]
+      },
+      {
+        "school": "张家口职业技术学院",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "校本部",
+            "aliases": ["主校区"],
+            "address": "河北省张家口市经济开发区胜利南路50号",
+            "source_url": "https://zsjyc.zjkptc.edu.cn/2026_06/18_09/content-29621.html"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "校本部",
+            "name": "第三食堂",
+            "aliases": [],
+            "location_text": "张家口职业技术学院校本部第三食堂一楼",
+            "building_or_floor": "一楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "官网现行生活指南列第三食堂用餐时间6:30—14:00、16:00—21:30",
+            "source_url": "https://tw.zjkptc.edu.cn/2022_09/20_11/content-26484.html",
+            "source_title": "叮！带你云游校园，提前开启大学生活",
+            "source_org": "共青团张家口职业技术学院委员会",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "校方2022年校园生活介绍在餐饮和大快朵颐语境中明确第三食堂只有一层，直接说明该父食堂实际用餐空间位于一楼。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.zjkptc.edu.cn/html/987/",
+                "source_title": "生活指南",
+                "source_org": "张家口职业技术学院",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "校方现行固定生活指南把第三食堂列为餐饮供应点，并明确每日用餐时间为6:30—14:00、16:00—21:30，闭合同名父食堂当前实际运营。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "第三食堂只有一层的旧精准餐饮语境由现行官网每日用餐时段闭环，不把编号三误当三楼。",
+          "文飨餐厅一楼月饼活动和二楼文化活动区均不能证明相应楼层售餐，不纳入。"
+        ]
+      }
+    ]
+  }
+]
