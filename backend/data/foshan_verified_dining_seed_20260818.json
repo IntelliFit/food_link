@@ -1,0 +1,255 @@
+[
+  {
+    "batch_name": "佛山高校官方食堂楼层确认集-20260818",
+    "region": "广东省佛山市",
+    "source_scope": "高校官网、官方招生、后勤及工会材料；实际餐饮楼层与2024—2026当前运营证据闭环后收录",
+    "schools": [
+      {
+        "school": "南方医科大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "顺德校区",
+            "aliases": [],
+            "address": "广东省佛山市顺德区容桂街马岗大道33号",
+            "source_url": "https://portal.smu.edu.cn/bkzs/info/1022/4854.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "顺德校区",
+            "name": "陶然轩",
+            "aliases": ["陶然轩学生食堂", "陶然轩餐厅"],
+            "location_text": "顺德校区陶然轩一楼、二楼、三楼",
+            "building_or_floor": "一楼、二楼、三楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://www.smu.edu.cn/info/1139/25439.htm",
+            "source_title": "@所有新生！期待的校园生活指南在这里！",
+            "source_org": "南方医科大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2023年校方指南明确顺德校区陶然轩为学生食堂，共三层：一楼为自选餐厅，二楼、三楼为特色餐饮档口；2024年本科招生生活页继续说明顺德校区有一幢三层的陶然轩餐厅，日常在食堂用餐，闭合当前运营。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://portal.smu.edu.cn/bkzs/info/1294/2494.htm",
+                "source_title": "生活类",
+                "source_org": "南方医科大学本科招生网",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2024年招生生活页明确顺德校区有一幢三层的陶然轩餐厅，并说明学生日常在食堂用餐，续接同名父食堂当前运营。"
+              }
+            ]
+          },
+          {
+            "campus": "顺德校区",
+            "name": "如意坊",
+            "aliases": ["如意坊生活服务中心", "如意坊美食街"],
+            "location_text": "顺德校区如意坊一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "校园餐饮生活综合体",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://www.smu.edu.cn/info/1139/25439.htm",
+            "source_title": "@所有新生！期待的校园生活指南在这里！",
+            "source_org": "南方医科大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2023年校方指南明确顺德校区如意坊共两层并含餐饮业态：一楼有饮品、便利店、蛋糕店和饼屋，二楼为小吃一条街；2024年本科招生生活页继续将其列为如意坊美食街和日常餐饮设施。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://portal.smu.edu.cn/bkzs/info/1294/2494.htm",
+                "source_title": "生活类",
+                "source_org": "南方医科大学本科招生网",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2024年招生生活页明确顺德校区现有如意坊美食街，且学生日常在食堂用餐，续接该物理餐饮生活综合体当前运营。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "陶然轩跨三层只建立一个物理父实体，内部自选餐厅和特色档口不拆分。",
+          "如意坊作为一个跨两层的物理餐饮生活综合体建档，内部品牌、商铺和小吃档口不拆分。"
+        ]
+      },
+      {
+        "school": "广东财经大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "佛山校区",
+            "aliases": ["三水校区"],
+            "address": "广东省佛山市三水区云东海街道学海中路1号",
+            "source_url": "https://zsb.gdufe.edu.cn/2025/0513/c3903a219805/page.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "佛山校区",
+            "name": "第二食堂",
+            "aliases": ["二饭"],
+            "location_text": "佛山校区第二食堂一楼",
+            "building_or_floor": "一楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://gsgh.gdufe.edu.cn/_upload/article/files/0d/f7/095149d14b89bf002efd048e9e8e/3acc8f30-9909-495b-9e32-28fc4588f3f9.pdf",
+            "source_title": "第八届教代会第一次会议提案办理情况一览表",
+            "source_org": "广东财经大学工会、教代会",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "校方教代会提案办理表把对象明确为佛山校区第二食堂教工窗口，记录餐堂由三楼迁至一楼与学生混堂并增加堂食座位；2026年校区通知明确三个食堂恢复正常供餐，闭合同名父食堂当前运营。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://ss.gdufe.edu.cn/2026/0109/c4776a232799/page.htm",
+                "source_title": "关于2026年寒假期间佛山校区食堂和师生综合服务中心停供餐安排的通知",
+                "source_org": "广东财经大学佛山校区工作部",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2026年1月校方通知明确佛山校区三个食堂于2月28日起均恢复正常供餐，闭合第二食堂当前运营。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "第二食堂教工窗口作为父食堂内部经营区归并；三楼是已迁离旧址，不激活。",
+          "第一、第三食堂和师生综合服务中心缺实际餐饮楼层，不顺带收录。"
+        ]
+      },
+      {
+        "school": "广州工商学院",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "佛山校区",
+            "aliases": ["三水校区"],
+            "address": "广东省佛山市三水区乐平镇三花路166号",
+            "source_url": "https://www.gzgs.edu.cn/__local/A/40/0A/38D01849FD8FD4DC6D9F5BDCF74_49BC5AE3_28D75.pdf"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "佛山校区",
+            "name": "第一食堂",
+            "aliases": ["一饭"],
+            "location_text": "佛山校区第一食堂一楼大众餐",
+            "building_or_floor": "一楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "工作日早餐7:00—8:30，午餐11:00—13:30，晚餐及夜宵16:30—22:30",
+            "source_url": "https://www.gzgs.edu.cn/hq/info/1059/1423.htm",
+            "source_title": "食堂餐饮服务",
+            "source_org": "广州工商学院后勤处",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2024年校方后勤页面明确三水校区共有4家食堂，并公布“两校区食堂一楼大众餐”工作日早餐、午餐、晚餐及夜宵供餐时段；2023级入学须知逐一列名三水校区第一至第四食堂。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.gzgs.edu.cn/xsc/info/1110/10901.htm",
+                "source_title": "2023级新生入学须知",
+                "source_org": "广州工商学院学生处",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "校方入学须知将三水校区餐饮供应点逐一列为第一、第二、第三、第四食堂，闭合4个物理父食堂名称。"
+              }
+            ]
+          },
+          {
+            "campus": "佛山校区",
+            "name": "第二食堂",
+            "aliases": ["二饭"],
+            "location_text": "佛山校区第二食堂一楼大众餐",
+            "building_or_floor": "一楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "工作日早餐7:00—8:30，午餐11:00—13:30，晚餐及夜宵16:30—22:30",
+            "source_url": "https://www.gzgs.edu.cn/hq/info/1059/1423.htm",
+            "source_title": "食堂餐饮服务",
+            "source_org": "广州工商学院后勤处",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2024年校方后勤页面明确三水校区共有4家食堂并点名第二食堂，同时公布“两校区食堂一楼大众餐”工作日早餐、午餐、晚餐及夜宵供餐时段。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.gzgs.edu.cn/xsc/info/1110/10901.htm",
+                "source_title": "2023级新生入学须知",
+                "source_org": "广州工商学院学生处",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "校方入学须知将三水校区餐饮供应点逐一列为第一、第二、第三、第四食堂，闭合4个物理父食堂名称。"
+              }
+            ]
+          },
+          {
+            "campus": "佛山校区",
+            "name": "第三食堂",
+            "aliases": ["三饭"],
+            "location_text": "佛山校区第三食堂一楼大众餐",
+            "building_or_floor": "一楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "工作日早餐7:00—8:30，午餐11:00—13:30，晚餐及夜宵16:30—22:30",
+            "source_url": "https://www.gzgs.edu.cn/hq/info/1059/1423.htm",
+            "source_title": "食堂餐饮服务",
+            "source_org": "广州工商学院后勤处",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2024年校方后勤页面明确三水校区共有4家食堂并点名第三食堂，同时公布“两校区食堂一楼大众餐”工作日早餐、午餐、晚餐及夜宵供餐时段。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.gzgs.edu.cn/xsc/info/1110/10901.htm",
+                "source_title": "2023级新生入学须知",
+                "source_org": "广州工商学院学生处",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "校方入学须知将三水校区餐饮供应点逐一列为第一、第二、第三、第四食堂，闭合4个物理父食堂名称。"
+              }
+            ]
+          },
+          {
+            "campus": "佛山校区",
+            "name": "第四食堂",
+            "aliases": ["四饭"],
+            "location_text": "佛山校区第四食堂一楼大众餐",
+            "building_or_floor": "一楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "工作日早餐7:00—8:30，午餐11:00—13:30，晚餐及夜宵16:30—22:30",
+            "source_url": "https://www.gzgs.edu.cn/hq/info/1059/1423.htm",
+            "source_title": "食堂餐饮服务",
+            "source_org": "广州工商学院后勤处",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2024年校方后勤页面明确三水校区共有4家食堂并点名第四食堂，同时公布“两校区食堂一楼大众餐”工作日早餐、午餐、晚餐及夜宵供餐时段。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.gzgs.edu.cn/xsc/info/1110/10901.htm",
+                "source_title": "2023级新生入学须知",
+                "source_org": "广州工商学院学生处",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "校方入学须知将三水校区餐饮供应点逐一列为第一、第二、第三、第四食堂，闭合4个物理父食堂名称。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "佛山校区与校内后勤材料所称三水校区按同一地址归并。",
+          "第三食堂三楼仅有餐具清洗投诉，不证明售餐、取餐或堂食；正德广场新食堂与既有四食堂别名或替代关系不明，均不收录。"
+        ]
+      }
+    ]
+  }
+]
