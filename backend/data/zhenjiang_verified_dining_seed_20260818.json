@@ -1,0 +1,286 @@
+[
+  {
+    "batch_name": "镇江高校官方食堂楼层确认集-20260818",
+    "region": "江苏省镇江市",
+    "source_scope": "高校官网、后勤服务、招生及当前运营材料；实际餐饮楼层与2024—2026当前运营证据闭环后收录",
+    "schools": [
+      {
+        "school": "江苏农林职业技术学院",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "本部校区",
+            "aliases": ["校本部"],
+            "address": "江苏省镇江市句容市文昌东路19号",
+            "source_url": "https://zsw.jsafc.edu.cn/info/1005/3428.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "本部校区",
+            "name": "农林食堂",
+            "aliases": ["本部学生食堂"],
+            "location_text": "本部校区农林食堂一楼、二楼、三楼",
+            "building_or_floor": "一楼、二楼、三楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "一至三楼均为学生餐饮经营区；2025同一农林食堂持续面向学生运营",
+            "source_url": "https://www.jsafc.edu.cn/info/1132/14372.htm",
+            "source_title": "江苏农林职业技术学院食堂委托经营服务招标公告",
+            "source_org": "江苏农林职业技术学院",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2022年校方文件逐层列明本部学生食堂一层、二层、三层大厅的实际餐饮经营业态；楼层事实由2025年同名农林食堂当前面向学生运营材料交叉闭合。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.jsafc.edu.cn/search.jsp?currentnum=132&newskeycode2=&searchScope=0&wbtreeid=1001",
+                "source_title": "后勤基建处举办趣味活动展风采 后勤巾帼绽芳华三八妇女节系列活动",
+                "source_org": "江苏农林职业技术学院",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2025年校方全文摘要点名农林食堂为学生筹备餐饮活动，证明同一物理父食堂当前持续面向学生运行。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "南校区是本部内部方位，不另建正式校区。",
+          "三楼民族餐厅是农林食堂内部经营区，不另建父食堂。"
+        ]
+      },
+      {
+        "school": "江苏大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "校本部",
+            "aliases": [],
+            "address": "江苏省镇江市京口区学府路301号",
+            "source_url": "https://www.ujs.edu.cn/xxgk/xxzc.htm"
+          },
+          {
+            "name": "北固校区",
+            "aliases": [],
+            "address": "江苏省镇江市京口区医政路3号",
+            "source_url": "https://www.ujs.edu.cn/xxgk/xxzc.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "校本部",
+            "name": "风华苑美食坊",
+            "aliases": [],
+            "location_text": "校本部风华苑美食坊一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "一、二楼均供应多类餐品，营业时间6:30—21:00",
+            "source_url": "https://hqc.ujs.edu.cn/v2025/fwzn/cyfw.htm",
+            "source_title": "餐饮服务",
+            "source_org": "江苏大学后勤管理处（后勤服务集团）",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "现行餐饮服务指南逐层列风华苑一楼、二楼供应的早点、面食、快餐、烤鱼、火锅等餐品，并给出当前营业时间。",
+            "review_status": "pending_review",
+            "additional_sources": []
+          },
+          {
+            "campus": "校本部",
+            "name": "六食堂",
+            "aliases": ["润江缘美食城", "润江缘民族餐厅"],
+            "location_text": "校本部六食堂二楼",
+            "building_or_floor": "二楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "2025年二楼餐饮窗口实际售餐，现行指南列六食堂及楼上经营区三餐供应",
+            "source_url": "https://hqc.ujs.edu.cn/czxx.jsp?b166995bc=10&b166995bp=8&b166995bt=239&urltype=tree.TreeTempUrl&wbtreeid=1332",
+            "source_title": "六食堂二楼兰州拉面炒刀削中的牛肉出现薰臭味处长信箱记录",
+            "source_org": "江苏大学后勤管理处",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2025年师生在六食堂二楼实际购买餐食，校方核查并处罚相关民族风味窗口，直接证明二楼售餐。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://hqc.ujs.edu.cn/v2025/fwzn/cyfw.htm",
+                "source_title": "餐饮服务",
+                "source_org": "江苏大学后勤管理处（后勤服务集团）",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "现行指南明确润江缘美食城位于六食堂楼上并列当前供应时段；美食城、民族餐厅及档口归并六食堂二楼父实体。"
+              }
+            ]
+          },
+          {
+            "campus": "校本部",
+            "name": "教工食堂",
+            "aliases": [],
+            "location_text": "校本部教工食堂二楼",
+            "building_or_floor": "二楼",
+            "service_type": "教工食堂",
+            "audience": "教职工及家属",
+            "opening_hours_raw": "2025年二楼每日午餐出餐，现行指南列三餐供应",
+            "source_url": "https://hqc.ujs.edu.cn/czxx.jsp?b166995bc=10&b166995bp=5&b166995bt=239&urltype=tree.TreeTempUrl&wbtreeid=1332",
+            "source_title": "教工食堂二楼饭菜凉处长信箱记录",
+            "source_org": "江苏大学后勤管理处",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2025年师生反馈每天中午在教工食堂二楼打饭，校方回复要求少量多次炒菜出餐并保证取餐温度，直接闭合当前供餐。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://hqc.ujs.edu.cn/v2025/fwzn/cyfw.htm",
+                "source_title": "餐饮服务",
+                "source_org": "江苏大学后勤管理处（后勤服务集团）",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "现行餐饮服务指南列教工食堂供应品种、三餐营业时段及负责人，交叉证明父食堂当前运营。"
+              }
+            ]
+          },
+          {
+            "campus": "北固校区",
+            "name": "北固食堂",
+            "aliases": [],
+            "location_text": "北固校区北固食堂一楼、二楼、三楼",
+            "building_or_floor": "一楼、二楼、三楼",
+            "service_type": "综合食堂",
+            "audience": "学生、职工及病员",
+            "opening_hours_raw": "一楼学生餐厅、二楼职工及病员餐厅、三楼营养餐厅，均按三餐时段供应",
+            "source_url": "https://hqc.ujs.edu.cn/v2025/fwzn/cyfw.htm",
+            "source_title": "餐饮服务",
+            "source_org": "江苏大学后勤管理处（后勤服务集团）",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "现行指南明确北固食堂分三层，一楼为学生餐厅、二楼为职工和病员餐厅、三楼为营养餐厅，并列三餐供应时段。",
+            "review_status": "pending_review",
+            "additional_sources": []
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "北固校区由现行学校章程明确为正式校区，附属医院不另建高校主体。",
+          "润江缘美食城、民族餐厅及具体窗口并入六食堂二楼；国际餐厅父楼边界不唯一，本批排除。"
+        ]
+      },
+      {
+        "school": "江苏大学京江学院",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "长山校区",
+            "aliases": ["校本部"],
+            "address": "江苏省镇江市丹徒区长香西大道537号",
+            "source_url": "https://jjxy.ujs.edu.cn/nry2024.jsp?urltype=news.NewsContentUrl&wbnewsid=49284&wbtreeid=1471"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "长山校区",
+            "name": "第一食堂",
+            "aliases": ["京江一食堂", "学生一食堂"],
+            "location_text": "长山校区第一食堂一楼、二楼、三楼",
+            "building_or_floor": "一楼、二楼、三楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "一楼基本大伙及早餐，二、三楼餐饮经营；2025同父食堂持续运营",
+            "source_url": "https://cgb.ujs.edu.cn/info/1681/120670.htm",
+            "source_title": "江苏大学食堂委托经营服务招标公告",
+            "source_org": "江苏大学采购与招标办公室、后勤管理处",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2023年校方文件明确京江一食堂位于长山校区，一层经营基本大伙并供应早餐，二、三层以餐饮为主要经营业态；2025同一父食堂当前强证闭环。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://jjxy.ujs.edu.cn/info/1631/59434.htm",
+                "source_title": "保障服务部举办校园食品安全专题培训",
+                "source_org": "江苏大学京江学院",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2025年校方记录食堂管理及工作人员参加培训，专家随后前往京江学院第一食堂指导食品加工操作，证明同一父食堂当前运营。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": ["二楼民族窗口并入第一食堂，不拆分父实体；第二食堂缺实际供餐数值楼层。"]
+      },
+      {
+        "school": "江苏科技大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "长山校区",
+            "aliases": [],
+            "address": "江苏省镇江市丹徒区长晖路666号",
+            "source_url": "https://www.just.edu.cn/11991/list.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "长山校区",
+            "name": "东苑食堂",
+            "aliases": ["东区食堂"],
+            "location_text": "长山校区东苑食堂一楼、二楼、三楼",
+            "building_or_floor": "一楼、二楼、三楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "一至三楼均有餐具回收点和逐层营业时段；2026同父日常运营实访",
+            "source_url": "https://zbb.just.edu.cn/_upload/article/files/83/37/fd07a5704f9e8b1c9875258c2980/339f249f-6976-47d6-b1d3-7065cb161c62.pdf",
+            "source_title": "江苏科技大学新校区食堂保洁及餐具回收服务采购招标文件",
+            "source_org": "江苏科技大学招投标工作办公室",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2020年校方文件逐层列东区食堂一至三楼的学生或教工食堂属性、餐具回收点和实际营业时段；2026现称东苑食堂的日常运营实访完成连续性闭环。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://hq.just.edu.cn/2026/0521/c7185a373253/page.htm",
+                "source_title": "江苏海洋大学来我校调研交流后勤餐饮管理工作",
+                "source_org": "江苏科技大学后勤集团",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2026年校方记录来访人员实地走访长山校区东苑食堂，了解食堂日常运营管理，闭合东区与东苑的新旧名称连续性。"
+              }
+            ]
+          },
+          {
+            "campus": "长山校区",
+            "name": "西苑食堂",
+            "aliases": ["西区食堂"],
+            "location_text": "长山校区西苑食堂一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "学生食堂",
+            "audience": "师生及入校考生",
+            "opening_hours_raw": "一、二楼均有餐具回收点和逐层营业时段；2025当前就餐服务点名同父食堂",
+            "source_url": "https://zbb.just.edu.cn/_upload/article/files/83/37/fd07a5704f9e8b1c9875258c2980/339f249f-6976-47d6-b1d3-7065cb161c62.pdf",
+            "source_title": "江苏科技大学新校区食堂保洁及餐具回收服务采购招标文件",
+            "source_org": "江苏科技大学招投标工作办公室",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2020年校方文件逐层列西区食堂一、二楼的学生食堂属性、餐具回收点和实际营业时段；2025现称西苑食堂的当前就餐服务完成连续性闭环。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://yjsb.just.edu.cn/2025/1216/c7124a369970/page.htm",
+                "source_title": "考点考生须知——2026年全国硕士研究生招生考试江苏科技大学考点",
+                "source_org": "江苏科技大学研究生招生办公室",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2025年校方明确长山校区食堂为考生提供就餐服务，餐券在西苑食堂一楼现场购买，点名同一父食堂当前运营。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "东区/东苑、西区/西苑分别为同一父食堂的新旧称呼。",
+          "西苑负一楼无餐具回收点和营业时段，不激活；内部教工区、窗口和运营公司不拆父实体。"
+        ]
+      }
+    ]
+  }
+]
