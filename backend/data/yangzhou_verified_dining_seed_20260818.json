@@ -1,0 +1,248 @@
+[
+  {
+    "batch_name": "扬州高校官方食堂楼层确认集-20260818",
+    "region": "江苏省扬州市",
+    "source_scope": "高校官网、后勤服务、招生及当前运营材料；实际餐饮楼层与2024—2026当前运营证据闭环后收录",
+    "schools": [
+      {
+        "school": "南京邮电大学通达学院",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "校本部",
+            "aliases": [],
+            "address": "江苏省扬州市邗江区润扬南路33号",
+            "source_url": "https://www.nytdc.edu.cn/63/list.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "校本部",
+            "name": "一食堂",
+            "aliases": ["第一食堂"],
+            "location_text": "校本部一食堂一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "一、二楼均设实际售卖窗口；2025—2026同一父食堂持续纳入餐饮运营与食品安全管理",
+            "source_url": "https://hqcg.nytdc.edu.cn/_upload/article/files/0d/c6/56ee4cab4effa6689e9478f20aad/f9dc1191-9d6c-4505-b325-25bbe3a190fa.pdf",
+            "source_title": "校园一卡通设施配套项目（二期）公开招标文件",
+            "source_org": "南京邮电大学通达学院",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2024年校方文件明确一食堂一至二楼为售卖窗口，并逐项列出一食堂一层、二层，证明两层是实际售餐区域；2025—2026同一父食堂当前运营材料完成连续性闭环。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.nytdc.edu.cn/2025/1208/c35a48109/page.htm",
+                "source_title": "让安全为美味护航，让节约为文化添彩——学院举办第四届校园美食文化节",
+                "source_org": "南京邮电大学通达学院",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2025年校方记录师生在一食堂二楼现场制作食品，交叉证明二楼当前处于同一食堂餐饮使用链。"
+              },
+              {
+                "source_url": "https://hqc.nytdc.edu.cn/2026/0420/c488a49426/pagem.htm",
+                "source_title": "后勤管理处组织食堂食品安全知识考试筑牢校园餐饮安全防线",
+                "source_org": "南京邮电大学通达学院后勤管理处",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2026年校方在一食堂一楼大厅组织覆盖各餐饮公司项目经理、食品安全员、仓库管理员及一线操作员工的考试，证明同一父食堂当前纳入常态餐饮运营管理。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "一食堂三楼只见监控节点，二食堂只见后场大屏，均缺逐层当前实际供餐强证，本批排除。",
+          "楼层售卖窗口属于同一物理父食堂，不拆成独立食堂。"
+        ]
+      },
+      {
+        "school": "扬州职业技术大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "瘦西湖校区",
+            "aliases": [],
+            "address": "江苏省扬州市邗江区翠岗路255号",
+            "source_url": "https://www.yzpc.edu.cn/2526/list.htm"
+          },
+          {
+            "name": "高邮湖校区",
+            "aliases": [],
+            "address": "江苏省扬州市高邮市正通新路1号",
+            "source_url": "https://www.yzpc.edu.cn/2526/list.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "瘦西湖校区",
+            "name": "第一食堂",
+            "aliases": ["一食堂"],
+            "location_text": "瘦西湖校区第一食堂一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "两层均供应早餐、午餐、晚餐及夜宵",
+            "source_url": "https://hqglc.yzpc.edu.cn/2025/0828/c2046a69987/page.htm",
+            "source_title": "瘦西湖校区后勤服务指南",
+            "source_org": "扬州职业技术大学后勤管理处",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2025年校方后勤指南逐项列出第一食堂一楼、二楼的早餐、午餐、晚餐及夜宵开餐时段，直接证明两层当前实际供餐。",
+            "review_status": "pending_review",
+            "additional_sources": []
+          },
+          {
+            "campus": "瘦西湖校区",
+            "name": "第二食堂",
+            "aliases": ["二食堂"],
+            "location_text": "瘦西湖校区第二食堂一楼",
+            "building_or_floor": "一楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "一楼供应早餐、午餐和晚餐；2025同一父食堂继续三餐及夜宵运营",
+            "source_url": "https://hqglc.yzpc.edu.cn/2024/1014/c2083a64216/page.htm",
+            "source_title": "扬州市职业大学后勤简报（第一百四十四期）",
+            "source_org": "扬州职业技术大学后勤管理处",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2024年校方后勤简报明确第二食堂一楼餐厅可在任意档口消费，并逐项列早餐、午餐、晚餐营业时间。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://hqglc.yzpc.edu.cn/2025/0828/c2046a69987/page.htm",
+                "source_title": "瘦西湖校区后勤服务指南",
+                "source_org": "扬州职业技术大学后勤管理处",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2025年指南继续列第二食堂早餐、午餐、晚餐及夜宵时段，闭合同一父食堂当前运营。"
+              }
+            ]
+          },
+          {
+            "campus": "高邮湖校区",
+            "name": "第一食堂",
+            "aliases": ["一食堂"],
+            "location_text": "高邮湖校区第一食堂一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "两层均供应早餐、中餐和晚餐",
+            "source_url": "https://hqglc.yzpc.edu.cn/2026/0402/c2046a72855/page.htm",
+            "source_title": "高邮湖校区后勤服务指南",
+            "source_org": "扬州职业技术大学后勤管理处",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026年校方明确高邮湖校区第一食堂已正常营业，一楼、二楼均提供基本大伙和特色风味，并逐层列三餐供餐时间。",
+            "review_status": "pending_review",
+            "additional_sources": []
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "新旧校名属于同一学校连续性，不另建扬州市职业大学主体。",
+          "民族、清真、教工服务区及水吧、超市、通信营业厅均不另建父食堂。"
+        ]
+      },
+      {
+        "school": "江海职业技术学院",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "校本部",
+            "aliases": [],
+            "address": "江苏省扬州市扬子江南路5号",
+            "source_url": "https://www.jhu.cn/B07ZSC/show.aspx?ID=1210&TypeID=48"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "校本部",
+            "name": "生活区食堂",
+            "aliases": ["学校生活区食堂"],
+            "location_text": "校本部生活区食堂一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "学生食堂",
+            "audience": "师生及入校考生",
+            "opening_hours_raw": "2026年校测期间一、二楼开放供餐，各窗口支持移动支付",
+            "source_url": "https://www.jhu.cn/B07ZSC/show.aspx?ID=1220&TypeID=48",
+            "source_title": "江海职业技术学院2026年提前招生第二轮校测通知",
+            "source_org": "江海职业技术学院",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026年校方同页给出扬子江南路5号校测地点，并明确学校生活区食堂一楼、二楼开放供餐，各窗口均支持微信、支付宝支付。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.jhu.cn/B07ZSC/show.aspx?ID=1210&TypeID=48",
+                "source_title": "江海职业技术学院2026年提前招生简章",
+                "source_org": "江海职业技术学院",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2026年校方招生简章确认学校主体、办学层次及扬州市扬子江南路5号办学地点。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": ["一、二楼为同一生活区食堂的楼层，不拆分父实体或窗口。"]
+      },
+      {
+        "school": "江苏旅游职业学院",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "九龙湖校区",
+            "aliases": ["九龙湖主校区"],
+            "address": "江苏省扬州市经济技术开发区毓秀路88号",
+            "source_url": "https://www.jstc.edu.cn/xygk/xxjj.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "九龙湖校区",
+            "name": "学校食堂",
+            "aliases": ["食堂"],
+            "location_text": "九龙湖校区学校食堂一楼、二楼、三楼",
+            "building_or_floor": "一楼、二楼、三楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "2026年劳动节、端午节逐层公布正常、值班或恢复供应安排",
+            "source_url": "https://www.jstc.edu.cn/hqglc/info/1008/3841.htm",
+            "source_title": "关于2026年劳动节学校食堂、生活服务场所开放时间安排的通知",
+            "source_org": "江苏旅游职业学院后勤服务与保障处",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026年劳动节通知逐层列一楼、二楼正常供应，三楼暂停后恢复正常供应，直接证明三层实际供餐。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.jstc.edu.cn/xgc/info/1024/16411.htm",
+                "source_title": "关于2026年端午节学校食堂、生活服务场所开放时间安排的通知",
+                "source_org": "江苏旅游职业学院",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2026年端午通知再次列一、二楼值班窗口营业并恢复正常营业，三楼恢复正常营业，交叉闭合逐层供餐。"
+              },
+              {
+                "source_url": "https://www.jstc.edu.cn/hqglc/info/1006/3931.htm",
+                "source_title": "现场部署强监管 严管严控保食安",
+                "source_org": "江苏旅游职业学院后勤服务与保障处",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2026年校方称食堂一楼至三楼负责人参加食安现场会，并由各楼层经理落实整改，确认三层属于同一学校食堂管理链。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "一至三楼归并为同一物理父食堂；餐饮公司、教工餐厅、茶吧均为子区域。",
+          "扬子津、瘦西湖两个具名校区缺独立精确地址和逐父食堂楼层闭环，不复制本食堂。"
+        ]
+      }
+    ]
+  }
+]
