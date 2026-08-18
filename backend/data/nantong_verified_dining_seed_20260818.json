@@ -1,0 +1,163 @@
+[
+  {
+    "batch_name": "南通高校官方食堂楼层确认集-20260818",
+    "region": "江苏省南通市",
+    "source_scope": "高校官网、后勤服务、招生及当前运营材料；实际餐饮楼层与2024—2026当前运营证据闭环后收录",
+    "schools": [
+      {
+        "school": "南通大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "啬园校区",
+            "aliases": [],
+            "address": "江苏省南通市崇川区啬园路9号",
+            "source_url": "https://www.ntu.edu.cn/70/list.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "啬园校区",
+            "name": "第三食堂",
+            "aliases": ["啬园校区三食堂", "三食堂"],
+            "location_text": "啬园校区第三食堂一楼",
+            "building_or_floor": "一楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "一楼餐饮经营区曾明确营业6:30—21:30；2025—2026同一父食堂持续提供餐饮服务",
+            "source_url": "https://hqbzb.ntu.edu.cn/_upload/article/files/15/ca/2b0880604c31900c6ef1876fc98f/08eb7426-ddf7-4ff7-a6d9-5416697ab80d.pdf",
+            "source_title": "通大后勤要闻",
+            "source_org": "南通大学后勤保障部",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "校方后勤刊记录2023年肯德基校园餐厅在啬园校区第三食堂一楼落户，列明营业时间，并记录前来取餐的师生络绎不绝；楼层事实由2025、2026同父食堂当前强证交叉闭合。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://hqbzb.ntu.edu.cn/2025/0918/c2679a273247/page.htm",
+                "source_title": "暖心守护育新人 躬身服务践初心——后勤保障部暑期暨迎新工作纪实",
+                "source_org": "南通大学后勤保障部",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2025年校方明确啬园校区第三食堂环境改造提升已为师生提供更加舒适便捷的用餐环境，证明改造后的当前餐饮使用。"
+              },
+              {
+                "source_url": "https://hqbzb.ntu.edu.cn/2026/0624/c2679a293926/page.htm",
+                "source_title": "江苏科技大学来校交流",
+                "source_org": "南通大学后勤保障部",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2026年校方围绕学生食堂运营和餐饮服务交流，并实地参观啬园校区第三食堂，闭合同一物理父食堂当前运营。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "肯德基及其他品牌、档口均为第三食堂内部经营区，不另建父食堂。",
+          "第三食堂二楼仅见遴选，三楼仅见即将开放或活动地点，本批均排除。"
+        ]
+      },
+      {
+        "school": "南通师范高等专科学校",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "开发区校区",
+            "aliases": [],
+            "address": "江苏省南通市经济技术开发区育贤路2号",
+            "source_url": "https://zjc.ntnc.edu.cn/2025/0512/c595a38494/page.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "开发区校区",
+            "name": "尚俭楼食堂",
+            "aliases": ["尚俭楼一楼食堂"],
+            "location_text": "开发区校区尚俭楼食堂一楼",
+            "building_or_floor": "一楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "2026年4月、5月均有师生在一楼食堂共进晚餐",
+            "source_url": "https://www.ntnc.edu.cn/2026/0415/c69a41417/page.htm",
+            "source_title": "三餐四季话成长——校党委委员、副校长赵园园与学生畅谈 共话校园生活与未来发展",
+            "source_org": "南通师范高等专科学校",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026年4月校方明确活动在开发区校区尚俭楼一楼食堂开展，校领导与学生边用餐边交流，直接证明一楼实际堂食。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.ntnc.edu.cn/2026/0519/c69a41782/page.htm",
+                "source_title": "三餐四季话成长第三期｜校长岳峰与学生倾心交流，护航筑梦",
+                "source_org": "南通师范高等专科学校",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2026年5月校方再次明确校长在开发区校区尚俭楼一楼食堂与学生代表共进晚餐，交叉闭合一楼当前堂食。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "开发区校区二楼食堂只有2025经营方遴选，缺履约后逐层实际供餐强证，本批排除。",
+          "崇川校区、如皋校区食堂缺实际餐饮楼层闭环，不创建占位实体。"
+        ]
+      },
+      {
+        "school": "南通职业大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "钟秀校区",
+            "aliases": [],
+            "address": "江苏省南通市崇川区通京大道999号",
+            "source_url": "https://zsw.ntvu.edu.cn/2025_06/04_10/content-32116.html"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "钟秀校区",
+            "name": "钟秀校区食堂",
+            "aliases": ["钟秀食堂"],
+            "location_text": "钟秀校区食堂一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "一楼提供早餐和套餐；一、二楼各经营区按假期安排停复餐",
+            "source_url": "https://hqglc.ntvu.edu.cn/2026_01/13_11/content-34400.shtml",
+            "source_title": "2026年寒假后勤服务相关安排",
+            "source_org": "南通职业大学后勤处",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026年公告明确钟秀校区所有食堂持续服务，一楼百润餐饮供应早餐和套餐，并明确所有食堂2月28日起全面恢复供餐；品牌经营区归并父食堂。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://hqglc.ntvu.edu.cn/2024_01/19_16/content-27863.shtml",
+                "source_title": "2024年寒假后勤相关服务安排",
+                "source_org": "南通职业大学后勤处",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2024年公告明确钟秀校区二楼特色小炒窗口暂停前实际营业，其他食堂继续营业，并写明全校食堂恢复营业日期，直接闭合二楼实际供餐。"
+              },
+              {
+                "source_url": "https://hqglc.ntvu.edu.cn/2026_01/04_15/content-34305.html",
+                "source_title": "南通职业大学食堂油烟机清洗询价公告",
+                "source_org": "南通职业大学后勤处",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2026年校方把通京大道999号钟秀校区食堂的厨房排油烟服务对象精确列为一楼南北、二楼南北四个经营区，用于楼层映射；激活依据仍为2024、2026实际供餐公告。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "钟秀一楼南、钟秀一楼北、钟秀二楼南、钟秀二楼北是同一物理食堂楼内经营区，归并一个父食堂。",
+          "百润、特色小炒及其他窗口均为内部经营单元，不另建父实体；青年路、海门校区食堂缺实际餐饮楼层。"
+        ]
+      }
+    ]
+  }
+]
