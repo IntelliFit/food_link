@@ -1,0 +1,263 @@
+[
+  {
+    "batch_name": "湘潭高校官方食堂楼层严格复核-20260820",
+    "region": "湖南省湘潭市",
+    "source_scope": "高校官网及官方院系、后勤、招采子站；只收录正式校区、唯一物理父食堂、实际餐饮楼层及2024—2026当前运营均可闭合的记录",
+    "schools": [
+      {
+        "school": "湘潭大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "校本部",
+            "aliases": ["湘潭大学本部"],
+            "address": "湖南省湘潭市雨湖区羊牯塘27号",
+            "source_url": "https://czgl.xtu.edu.cn/zbfzbgg/5756.chtml"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "校本部",
+            "name": "南苑师生餐厅",
+            "aliases": ["南苑餐厅"],
+            "location_text": "校本部南苑师生餐厅负二层、负一层、一楼、二楼",
+            "building_or_floor": "负二层、负一层、一楼、二楼",
+            "service_type": "师生餐厅",
+            "audience": "师生",
+            "opening_hours_raw": "当前校园生活页逐层列明大众伙食、早餐、自助餐及特色餐饮",
+            "source_url": "https://www.xtu.edu.cn/xysh/shss.htm",
+            "source_title": "生活设施",
+            "source_org": "湘潭大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "当前校园生活页明确南苑一楼提供大众伙食和早餐，二楼提供自助餐等特色美食，负一层、负二层为特色餐厅；负三层为生活超市，未计入餐饮楼层。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://czgl.xtu.edu.cn/zbfzbgg/5838.chtml",
+                "source_title": "【后勤处招商项目】湘潭大学自管餐厅特色网点招商项目（2026-02）招商公告",
+                "source_org": "湘潭大学后勤保障处、湘潭大学招标采购网",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2026-08-03公告逐项列南苑餐厅一楼、二楼的热食类特色主副食、包点及粉面制作销售网点，补强精确餐饮行为。"
+              }
+            ]
+          },
+          {
+            "campus": "校本部",
+            "name": "琴湖学生餐厅",
+            "aliases": ["琴湖餐厅"],
+            "location_text": "校本部琴湖学生餐厅一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "学生餐厅",
+            "audience": "学生",
+            "opening_hours_raw": "当前校园生活页逐层列明大众伙食、早餐、自助餐及特色餐饮",
+            "source_url": "https://www.xtu.edu.cn/xysh/shss.htm",
+            "source_title": "生活设施",
+            "source_org": "湘潭大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "当前校园生活页明确琴湖学生餐厅一楼提供大众伙食及早餐，二楼提供自助餐等特色美食。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://czgl.xtu.edu.cn/zbfzbgg/5838.chtml",
+                "source_title": "【后勤处招商项目】湘潭大学自管餐厅特色网点招商项目（2026-02）招商公告",
+                "source_org": "湘潭大学后勤保障处、湘潭大学招标采购网",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2026-08-03公告逐项列琴湖餐厅一楼、二楼的餐饮制作销售网点，与当前生活设施页相互闭合。"
+              }
+            ]
+          },
+          {
+            "campus": "校本部",
+            "name": "雅园餐厅",
+            "aliases": [],
+            "location_text": "校本部雅园餐厅一楼",
+            "building_or_floor": "一楼",
+            "service_type": "餐厅",
+            "audience": "师生",
+            "opening_hours_raw": "当前校园生活页确认提供大众伙食、早餐及特色美食",
+            "source_url": "https://czgl.xtu.edu.cn/zbfzbgg/5838.chtml",
+            "source_title": "【后勤处招商项目】湘潭大学自管餐厅特色网点招商项目（2026-02）招商公告",
+            "source_org": "湘潭大学后勤保障处、湘潭大学招标采购网",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-03公告把热食类特色主副食制作销售网点精确绑定到雅园餐厅一楼。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.xtu.edu.cn/xysh/shss.htm",
+                "source_title": "生活设施",
+                "source_org": "湘潭大学",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "当前校园生活页将雅园列为现有餐厅，并明确提供大众伙食、早餐类食品及各类特色美食，闭合同父当前餐饮。"
+              }
+            ]
+          },
+          {
+            "campus": "校本部",
+            "name": "西湖餐厅",
+            "aliases": [],
+            "location_text": "校本部西湖餐厅一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "餐厅",
+            "audience": "师生",
+            "opening_hours_raw": "2025—2026学年寒假期间实际开放",
+            "source_url": "https://czgl.xtu.edu.cn/zbfzbgg/5838.chtml",
+            "source_title": "【后勤处招商项目】湘潭大学自管餐厅特色网点招商项目（2026-02）招商公告",
+            "source_org": "湘潭大学后勤保障处、湘潭大学招标采购网",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-03公告把热食、自助餐等制作销售网点逐项绑定到西湖餐厅一楼、二楼。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://yjsc.xtu.edu.cn/info/1059/9118.htm",
+                "source_title": "关于做好2025-2026学年寒假研究生教育管理工作的通知",
+                "source_org": "湘潭大学研究生院",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2026-01-09通知明确寒假期间开放餐厅为南苑师生餐厅、西湖餐厅，闭合西湖同父当前实际开放。"
+              }
+            ]
+          },
+          {
+            "campus": "校本部",
+            "name": "金瀚林餐厅",
+            "aliases": ["金翰林餐厅"],
+            "location_text": "校本部金瀚林餐厅二楼",
+            "building_or_floor": "二楼",
+            "service_type": "餐厅",
+            "audience": "师生",
+            "opening_hours_raw": "当前校园生活页确认提供大众伙食及特色美食",
+            "source_url": "https://czgl.xtu.edu.cn/zbfzbgg/5838.chtml",
+            "source_title": "【后勤处招商项目】湘潭大学自管餐厅特色网点招商项目（2026-02）招商公告",
+            "source_org": "湘潭大学后勤保障处、湘潭大学招标采购网",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026-08-03公告把餐饮制作销售网点精确绑定到金翰林餐厅二楼；金翰林为金瀚林的官方异写。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.xtu.edu.cn/xysh/shss.htm",
+                "source_title": "生活设施",
+                "source_org": "湘潭大学",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "当前校园生活页将金瀚林列为现有餐厅，并明确提供大众伙食及各类特色美食；只用于闭合父体当前餐饮，不据上下层推导一楼。"
+              },
+              {
+                "source_url": "https://tw.xtu.edu.cn/info/1011/3221.htm",
+                "source_title": "五食堂主题活动报道",
+                "source_org": "湘潭大学团委",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2025-10-27报道把金瀚林列入西湖、南苑、金瀚林、北五、兴湘五食堂，仅辅助确认同名父体仍在校园餐饮场景。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "千喜鹤位于南苑负一、负二层，是同一物理父食堂内部经营区，不另建父实体。",
+          "北五只有上、下两层整体表述，未逐层绑定实际餐饮，旧Active撤回。",
+          "金瀚林只保留2026材料精确绑定的二楼，不从上、下两层推导一楼。"
+        ]
+      },
+      {
+        "school": "湖南科技大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "校本部",
+            "aliases": ["湖南科技大学本部"],
+            "address": "湖南省湘潭市桃园路",
+            "source_url": "https://www.hnust.edu.cn/"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "校本部",
+            "name": "八珍楼",
+            "aliases": ["八珍楼餐厅"],
+            "location_text": "校本部八珍楼一楼餐厅",
+            "building_or_floor": "一楼",
+            "service_type": "食堂/餐厅",
+            "audience": "师生",
+            "opening_hours_raw": "2025-09-23中午实际用餐",
+            "source_url": "https://law.hnust.edu.cn/xsgz/xgdt/981ce4cec6494a64beefaa7134fbd9aa.htm",
+            "source_title": "法学与公共管理学院成功举办2025级研究生新生“师生有约”午餐交流活动",
+            "source_org": "湖南科技大学法学与公共管理学院",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2025-09-23中午师生在八珍楼一楼餐厅共进午餐，直接绑定父食堂、一楼和实际堂食。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://news.hnust.edu.cn/kdyw/8853332a40f34c1a83c23b218b27a8d7.htm",
+                "source_title": "蒋丽忠带队检查校园基础设施建设改造情况",
+                "source_org": "湖南科技大学新闻网",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2025-09-08校方在八珍楼了解食堂开餐准备和食品安全卫生情况，闭合同父同期运营。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "昭潭书院是独立正式办学点，不复制桃园路校本部八珍楼。"
+        ]
+      },
+      {
+        "school": "湘潭理工学院",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "校本部",
+            "aliases": ["湘潭理工学院本部"],
+            "address": "湖南省湘潭市九华经济技术开发区潭州大道船形山路3号",
+            "source_url": "https://zs.xtit.edu.cn/lists/55.html"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "校本部",
+            "name": "温尔登食堂",
+            "aliases": ["温尔登二楼食堂"],
+            "location_text": "校本部温尔登食堂二楼",
+            "building_or_floor": "二楼",
+            "service_type": "学生食堂",
+            "audience": "学生",
+            "opening_hours_raw": "2024-04-21中午实际打饭、堂食",
+            "source_url": "https://xsc.xtit.edu.cn/92/143.html",
+            "source_title": "赵芊芊：在谷底野蛮生长",
+            "source_org": "湘潭理工学院学生工作处",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2024-04-21校方原文写温尔登二楼食堂中午饭菜飘香，学生排队打饭并坐下堂食，还记录餐盘回收和餐桌清理。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://news.xtit.edu.cn/49/1331.html",
+                "source_title": "新学期不设限，湘理邀你“飞驰人生”",
+                "source_org": "湘潭理工学院新闻网",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2026-03-11校方写湘理食堂已备好热乎饭菜，仅辅助确认学校当前餐饮持续运营，不用于扩充温尔登其他楼层。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "温尔登二楼食堂拆为物理父体温尔登食堂与二楼关系，不把整句建成父名。",
+          "8教学楼旁食堂一楼只是青年就业驿站位置，不作为一楼供餐证据。"
+        ]
+      }
+    ]
+  }
+]
