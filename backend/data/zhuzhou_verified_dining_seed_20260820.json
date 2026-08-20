@@ -1,0 +1,90 @@
+[
+  {
+    "batch_name": "株洲高校官方食堂楼层确认集-20260820",
+    "region": "株洲市",
+    "source_scope": "高校官方页面及主管部门材料；严格确认现行高校、正式校区、物理父食堂、实际餐饮楼层与2024—2026当前运营",
+    "schools": [
+      {
+        "school": "湖南化工职业技术大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "石峰校区（北院）",
+            "aliases": ["石峰校区北院", "北院"],
+            "address": "湖南省株洲市石峰区职教大学城智慧路118号",
+            "source_url": "https://www.hnhgzy.com/"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "石峰校区（北院）",
+            "name": "第一食堂",
+            "aliases": ["一食堂"],
+            "location_text": "第一食堂一楼、三楼",
+            "building_or_floor": "一楼、三楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "2024监管抽检；2025当前食品加工检查及堂食",
+            "source_url": "https://m.cqn.com.cn/ms/att/2024-12/04/6b982623-6598-4e4e-961f-65159f49bfd7.pdf",
+            "source_title": "食品安全抽样检验合格食品信息表",
+            "source_org": "株洲市食品药品检验所",
+            "source_type": "official_government",
+            "evidence_level": "A",
+            "evidence_excerpt": "监管抽检信息将智慧路118号、湖南化工职业技术学院一食堂一楼与已抽样食品精确绑定。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.hnhgzy.com/xwzx/hyxw/90e44ffe1dfc4806991644fbe35eedd8.htm",
+                "source_title": "校长隆平带队检查校园食堂食品安全工作",
+                "source_org": "湖南化工职业技术大学",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "学校检查食堂食品加工后，校领导及同行人员在一食堂三楼悦盛餐厅与学生一起就餐。"
+              }
+            ]
+          },
+          {
+            "campus": "石峰校区（北院）",
+            "name": "第二食堂",
+            "aliases": ["二食堂"],
+            "location_text": "第二食堂一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "2024—2025当前档口经营、食品加工及师生就餐",
+            "source_url": "https://www.hnhgzy.com/xwzx/hyxw/66fe3af10ad64fc99ab1a3d7ca9851b4.htm",
+            "source_title": "市领导督导检查学校食品安全工作",
+            "source_org": "湖南化工职业技术大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "学校报道检查二食堂一楼餐厅的档口经营、食品加工制作和环境卫生，证明一楼实际餐饮运行。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.hnhgzy.com/xwzx/hyxw/2c3aa7577a2f4ce18c8bf536e49c8a3b.htm",
+                "source_title": "学校组织召开校长与学生餐叙会",
+                "source_org": "湖南化工职业技术大学",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "学校在二食堂二楼餐厅举行餐叙会，围绕菜品、档口和学生用餐体验交流。"
+              },
+              {
+                "source_url": "https://www.hnhgzy.com/xdxxgcxy/xydt/d4ae17945bac4cf38771b93149b1eb6a.htm",
+                "source_title": "忆传统 暖寒冬——现代信息工程学院开展“冬至”包饺子活动",
+                "source_org": "湖南化工职业技术大学现代信息工程学院",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "师生在二食堂一楼制作并品尝食物，补强同父一楼当前使用。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "同代码由湖南化工职业技术学院升格，旧名材料承接，不另建学校。",
+          "悦盛餐厅归并第一食堂三楼经营区；第一食堂二楼和第二食堂四楼因缺当前逐层实际供餐证据不纳入。"
+        ]
+      }
+    ]
+  }
+]
