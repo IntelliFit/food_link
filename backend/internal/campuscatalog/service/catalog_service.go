@@ -429,7 +429,7 @@ func (s *CatalogService) UpdateItem(ctx context.Context, adminID, itemID string,
 	if wasPublished {
 		updated.Status = "published"
 		if blockers := catalogPublishBlockingFields(&updated); len(blockers) > 0 {
-			return nil, badRequest("已上线菜品必须保留名称和价格")
+			return nil, badRequest("已上线菜品必须保留名称，档口介绍不能作为菜品上线")
 		}
 	} else {
 		updated.Status = "draft"
@@ -487,7 +487,7 @@ func (s *CatalogService) PublishItem(ctx context.Context, adminID, itemID string
 		return &items[0], nil
 	}
 	if blockers := catalogPublishBlockingFields(item); len(blockers) > 0 {
-		return nil, badRequest("请先补齐名称和价格后再提交上线")
+		return nil, badRequest("请先补齐名称；档口介绍不能进行营养分析")
 	}
 	// changes_pending is a legacy state produced by older admin builds. These
 	// rows already have a valid public nutrition snapshot, so synchronize their
@@ -544,13 +544,14 @@ func (s *CatalogService) PublishItem(ctx context.Context, adminID, itemID string
 		"window_name":                     item.WindowName,
 	}
 	contextText := catalogAnalysisContext(item)
+	retryAsText := item.Status == "analysis_failed" && strings.Contains(item.AnalysisError, "响应超时") && strings.TrimSpace(contextText) != ""
 	input := analyzeservice.SubmitTaskInput{
 		ExecutionMode: &mode, SuggestRatioEnabled: true,
 		AdditionalContext: contextText, ExtraPayload: extraPayload,
 	}
 	var taskID string
 	var submitErr error
-	if len(imageURLs) > 0 {
+	if len(imageURLs) > 0 && !retryAsText {
 		input.ImageURLs = imageURLs
 		input.SourceType = "image"
 		input.ImageURL = imageURLs[0]
@@ -576,7 +577,8 @@ func (s *CatalogService) PublishItem(ctx context.Context, adminID, itemID string
 	item.AnalysisStartedAt = &startedAt
 	logger.Info(ctx, "食堂采集条目已提交 AI 分析",
 		slog.String("admin_id", adminID), slog.String("item_id", itemID), slog.String("batch_id", item.BatchID),
-		slog.String("analysis_task_id", taskID), slog.String("analysis_source_type", input.SourceType))
+		slog.String("analysis_task_id", taskID), slog.String("analysis_source_type", input.SourceType),
+		slog.Bool("image_timeout_text_fallback", retryAsText))
 	items := []domain.CatalogItem{*item}
 	s.resolveItemImages(items)
 	return &items[0], nil
@@ -893,7 +895,7 @@ func catalogAnalysisContext(item *domain.CatalogItem) string {
 
 func catalogPublishBlockingFields(item *domain.CatalogItem) []string {
 	if item == nil {
-		return []string{"name", "price"}
+		return []string{"name"}
 	}
 	seen := map[string]struct{}{}
 	blocking := make([]string, 0, len(item.MissingFields)+2)
@@ -905,7 +907,7 @@ func catalogPublishBlockingFields(item *domain.CatalogItem) []string {
 		blocking = append(blocking, field)
 	}
 	for _, field := range item.MissingFields {
-		if strings.TrimSpace(field) == "" || field == "image" {
+		if strings.TrimSpace(field) == "" || field == "image" || field == "price" {
 			continue
 		}
 		add(field)
@@ -913,9 +915,8 @@ func catalogPublishBlockingFields(item *domain.CatalogItem) []string {
 	if strings.TrimSpace(item.Name) == "" {
 		add("name")
 	}
-	hasPrice := item.Price != nil || item.PriceMin != nil || item.PriceMax != nil || strings.TrimSpace(item.PriceText) != "" || len(item.PriceOptions) > 0
-	if item.PriceType == "unknown" || !hasPrice {
-		add("price")
+	if strings.TrimSpace(item.EntryType) == "stall_overview" {
+		add("entry_type")
 	}
 	sort.Strings(blocking)
 	return blocking

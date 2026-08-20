@@ -179,17 +179,15 @@ func publishBlockingReasons(item catalogdomain.CatalogItem) []string {
 	reasons := map[string]struct{}{}
 	for _, field := range item.MissingFields {
 		field = strings.TrimSpace(field)
-		if field != "" && field != "image" {
+		if field != "" && field != "image" && field != "price" {
 			reasons[field] = struct{}{}
 		}
 	}
 	if strings.TrimSpace(item.Name) == "" {
 		reasons["name"] = struct{}{}
 	}
-	hasPrice := item.Price != nil || item.PriceMin != nil || item.PriceMax != nil ||
-		strings.TrimSpace(item.PriceText) != "" || len(item.PriceOptions) > 0
-	if item.PriceType == "unknown" || !hasPrice {
-		reasons["price"] = struct{}{}
+	if strings.TrimSpace(item.EntryType) == "stall_overview" {
+		reasons["entry_type"] = struct{}{}
 	}
 	out := make([]string, 0, len(reasons))
 	for reason := range reasons {

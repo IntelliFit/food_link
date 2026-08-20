@@ -468,7 +468,7 @@ func TestPublishChangesPendingSyncsMetadataWithoutAnalysis(t *testing.T) {
 	require.Nil(t, repo.analysisPendingItem)
 }
 
-func TestUpdatePublishedItemRejectsRemovingRequiredClientFields(t *testing.T) {
+func TestUpdatePublishedItemRejectsRemovingName(t *testing.T) {
 	publishedAt := time.Now()
 	repo := &fakeCatalogRepo{existingItem: &domain.CatalogItem{
 		ID: "item-1", BatchID: "batch-1", Status: "published", Name: "番茄炒饭",
@@ -480,7 +480,7 @@ func TestUpdatePublishedItemRejectsRemovingRequiredClientFields(t *testing.T) {
 		EntryType: "dish", Name: "", PriceType: "unknown", ServiceMode: "fixed_portion", WindowLayout: "standard",
 	})
 
-	require.ErrorContains(t, err, "必须保留名称和价格")
+	require.ErrorContains(t, err, "必须保留名称")
 	require.Nil(t, repo.updatedItem)
 }
 
@@ -521,7 +521,7 @@ func TestPublishItemAllowsMissingImageAndUsesExistingTextAnalysis(t *testing.T) 
 	require.Empty(t, submitter.input.SourceType)
 }
 
-func TestPublishItemStillRejectsMissingNameOrPrice(t *testing.T) {
+func TestPublishItemAllowsMissingPriceButStillRejectsMissingName(t *testing.T) {
 	repo := &fakeCatalogRepo{existingItem: &domain.CatalogItem{
 		ID: "item-1", Status: "draft", MissingFields: []string{"image", "price"}, CompletenessStatus: "incomplete",
 	}}
@@ -530,7 +530,38 @@ func TestPublishItemStillRejectsMissingNameOrPrice(t *testing.T) {
 	_, err := svc.PublishItem(context.Background(), "admin-1", "item-1")
 
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "名称和价格")
+	require.Contains(t, err.Error(), "补齐名称")
+	require.Nil(t, repo.analysisPendingItem)
+}
+
+func TestPublishItemAllowsNamedItemWithoutPrice(t *testing.T) {
+	repo := &fakeCatalogRepo{existingItem: &domain.CatalogItem{
+		ID: "item-1", BatchID: "batch-1", Status: "draft", EntryType: "dish", Name: "番茄炒蛋",
+		OrganizationName: "清华大学", CanteenName: "紫荆园", PriceType: "unknown",
+		MissingFields: []string{"image", "price"}, CompletenessStatus: "incomplete", RawText: "番茄炒蛋",
+	}}
+	submitter := &fakeCatalogAnalyzeSubmitter{taskID: "task-text-1"}
+	svc := NewCatalogService(repo, nil)
+	svc.ConfigureAnalysis(submitter, fakeCatalogAnalysisUserResolver{userID: "system-user-1"})
+
+	item, err := svc.PublishItem(context.Background(), "admin-1", "item-1")
+
+	require.NoError(t, err)
+	require.Equal(t, "analysis_pending", item.Status)
+	require.Equal(t, "text", submitter.textInput.SourceType)
+	require.Equal(t, "task-text-1", repo.linkedTaskID)
+}
+
+func TestPublishItemRejectsStallOverview(t *testing.T) {
+	repo := &fakeCatalogRepo{existingItem: &domain.CatalogItem{
+		ID: "item-1", Status: "draft", EntryType: "stall_overview", Name: "桃园食堂档口介绍",
+		MissingFields: []string{"price"},
+	}}
+	svc := NewCatalogService(repo, nil)
+
+	_, err := svc.PublishItem(context.Background(), "admin-1", "item-1")
+
+	require.ErrorContains(t, err, "档口介绍")
 	require.Nil(t, repo.analysisPendingItem)
 }
 
@@ -591,6 +622,27 @@ func TestPublishItemMarksAnalysisFailedWhenSubmissionFails(t *testing.T) {
 	require.Error(t, err)
 	require.NotNil(t, repo.analysisFailedItem)
 	require.Equal(t, "analysis_failed", repo.analysisFailedItem.Status)
+}
+
+func TestPublishItemRetriesImageTimeoutWithTextWithoutRemovingImages(t *testing.T) {
+	price := 12.0
+	repo := &fakeCatalogRepo{existingItem: &domain.CatalogItem{
+		ID: "item-1", BatchID: "batch-1", Status: "analysis_failed", EntryType: "dish", Name: "紫薯花卷",
+		OrganizationName: "AI原点社区", CanteenName: "园区食堂", ImagePaths: []string{"campus-food/roll.jpg"},
+		PriceType: "fixed", Price: &price, CompletenessStatus: "complete", AnalysisError: "AI 识别服务响应超时，请稍后重试",
+	}}
+	submitter := &fakeCatalogAnalyzeSubmitter{taskID: "task-text-retry"}
+	svc := NewCatalogService(repo, nil)
+	svc.ConfigureAnalysis(submitter, fakeCatalogAnalysisUserResolver{userID: "system-user-1"})
+
+	item, err := svc.PublishItem(context.Background(), "admin-1", "item-1")
+
+	require.NoError(t, err)
+	require.Equal(t, "analysis_pending", item.Status)
+	require.Equal(t, []string{"campus-food/roll.jpg"}, item.ImagePaths)
+	require.Equal(t, "text", submitter.textInput.SourceType)
+	require.Contains(t, submitter.textInput.TextInput, "紫薯花卷")
+	require.Empty(t, submitter.input.SourceType)
 }
 
 func TestPublishedNutritionBackfillReusesSingleTaskPrecisePublishPath(t *testing.T) {
