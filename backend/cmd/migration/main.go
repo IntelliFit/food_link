@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
@@ -19,6 +20,8 @@ func main() {
 	timeout := flag.Duration("timeout", 5*time.Minute, "migration timeout")
 	onlyPapay := flag.Bool("only-papay", false, "only migrate WeChat automatic-renewal contracts")
 	onlyNutritionQuality := flag.Bool("only-nutrition-quality", false, "only migrate nutrition quality tiers and alias approval status")
+	onlyNutritionStates := flag.Bool("only-nutrition-states", false, "only add nutrition state dimensions and reviewed common-state seeds")
+	verifyNutritionStates := flag.Bool("verify-nutrition-states", false, "read-only verification of nutrition state dimensions, seeds, aliases, and index")
 	onlyNutritionEmbeddings := flag.Bool("only-nutrition-embeddings", false, "only migrate nutrition semantic embedding storage")
 	onlyOnboardingStatus := flag.Bool("only-onboarding-status", false, "only add nullable onboarding status schema without data backfills")
 	onlyCampusDirectoryReviewed := flag.Bool("only-campus-directory-reviewed", false, "only publish the reviewed Beijing campus dining directory")
@@ -29,7 +32,7 @@ func main() {
 	onlySupplements := flag.Bool("only-supplements", false, "only add supplement catalog, cabinet, intake schema, and catalog seeds")
 	flag.Parse()
 	selectedOnlyModes := 0
-	for _, selected := range []bool{*onlyPapay, *onlyNutritionQuality, *onlyNutritionEmbeddings, *onlyOnboardingStatus, *onlyCampusDirectoryReviewed, *onlyCampusDirectoryPending, *onlyFoodRecordMood, *onlyManualFoodSausage, *onlyCampusCatalogPublishing, *onlySupplements} {
+	for _, selected := range []bool{*onlyPapay, *onlyNutritionQuality, *onlyNutritionStates, *verifyNutritionStates, *onlyNutritionEmbeddings, *onlyOnboardingStatus, *onlyCampusDirectoryReviewed, *onlyCampusDirectoryPending, *onlyFoodRecordMood, *onlyManualFoodSausage, *onlyCampusCatalogPublishing, *onlySupplements} {
 		if selected {
 			selectedOnlyModes++
 		}
@@ -59,11 +62,28 @@ func main() {
 	if err := database.Ping(ctx, db); err != nil {
 		log.Fatalf("数据库 ping 失败: %v", err)
 	}
+	if *verifyNutritionStates {
+		report, err := migration.VerifyNutritionStates(ctx, db)
+		if err != nil {
+			log.Fatalf("营养状态库只读验证失败: %v", err)
+		}
+		body, err := json.MarshalIndent(report, "", "  ")
+		if err != nil {
+			log.Fatalf("序列化营养状态库验证结果失败: %v", err)
+		}
+		fmt.Println(string(body))
+		if !report.Complete {
+			log.Fatal("营养状态库只读验证未通过")
+		}
+		return
+	}
 	var migrateErr error
 	if *onlyPapay {
 		migrateErr = migration.MigratePapayContracts(ctx, db, cfg.Database.Schema)
 	} else if *onlyNutritionQuality {
 		migrateErr = migration.MigrateNutritionQuality(ctx, db, cfg.Database.Schema)
+	} else if *onlyNutritionStates {
+		migrateErr = migration.MigrateNutritionStates(ctx, db, cfg.Database.Schema)
 	} else if *onlyNutritionEmbeddings {
 		migrateErr = migration.MigrateNutritionEmbeddings(ctx, db, cfg.Database.Schema)
 	} else if *onlyOnboardingStatus {
@@ -96,6 +116,10 @@ func main() {
 	}
 	if *onlyNutritionQuality {
 		log.Printf("营养可信等级迁移完成: config_dir=%s schema=%s", resolvedDir, schema)
+		return
+	}
+	if *onlyNutritionStates {
+		log.Printf("营养状态库迁移完成: config_dir=%s schema=%s", resolvedDir, schema)
 		return
 	}
 	if *onlyNutritionEmbeddings {

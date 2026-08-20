@@ -553,6 +553,8 @@ func (h *AnalyzeHandler) ContinuePrecisionSession(c *gin.Context) {
 		UserGoal                string                                 `json:"user_goal"`
 		RemainingCalories       *float64                               `json:"remaining_calories"`
 		SuggestRatioEnabled     bool                                   `json:"suggest_ratio_enabled"`
+		AnalysisEngine          string                                 `json:"analysis_engine"`
+		PreciseMicronutrients   bool                                   `json:"precise_micronutrients"`
 		IsMultiView             bool                                   `json:"is_multi_view"`
 		PreviousResult          map[string]any                         `json:"previousResult"`
 		CorrectionItems         []map[string]any                       `json:"correctionItems"`
@@ -590,6 +592,8 @@ func (h *AnalyzeHandler) ContinuePrecisionSession(c *gin.Context) {
 		UserGoal:                body.UserGoal,
 		RemainingCalories:       body.RemainingCalories,
 		SuggestRatioEnabled:     body.SuggestRatioEnabled,
+		AnalysisEngine:          body.AnalysisEngine,
+		PreciseMicronutrients:   body.PreciseMicronutrients,
 		AdditionalContext:       body.AdditionalContext,
 		ExecutionMode:           &mode,
 		PrecisionSessionID:      &sessionID,

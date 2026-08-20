@@ -140,6 +140,53 @@
   }
 }
 
+.text-engine-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12rpx;
+}
+
+.text-engine-option {
+  min-width: 0;
+  padding: 18rpx 14rpx;
+  border: 2rpx solid rgba(0, 188, 125, 0.12);
+  border-radius: 18rpx;
+  background: #fff;
+  box-sizing: border-box;
+
+  &.active {
+    border-color: #00bc7d;
+    background: rgba(0, 188, 125, 0.08);
+  }
+}
+
+.text-engine-option__label,
+.text-engine-option__description {
+  display: block;
+}
+
+.text-engine-option__label {
+  color: #1f2937;
+  font-size: 24rpx;
+  line-height: 34rpx;
+  font-weight: 700;
+}
+
+.text-engine-option__description {
+  margin-top: 6rpx;
+  color: #64748b;
+  font-size: 19rpx;
+  line-height: 28rpx;
+}
+
+.text-engine-note {
+  display: block;
+  margin-top: 12rpx;
+  color: #64748b;
+  font-size: 21rpx;
+  line-height: 32rpx;
+}
+
 // 餐次选择
 .meal-selector {
   display: grid;

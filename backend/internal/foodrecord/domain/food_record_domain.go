@@ -312,6 +312,12 @@ type FoodNutrition struct {
 	ID                    string            `gorm:"column:id" json:"id"`
 	CanonicalName         string            `gorm:"column:canonical_name" json:"canonical_name"`
 	NormalizedName        string            `gorm:"column:normalized_name" json:"normalized_name"`
+	BaseFoodKey           string            `gorm:"column:base_food_key" json:"base_food_key,omitempty"`
+	FoodState             string            `gorm:"column:food_state" json:"food_state,omitempty"`
+	WeightBasis           string            `gorm:"column:weight_basis" json:"weight_basis,omitempty"`
+	PreparationMethod     string            `gorm:"column:preparation_method" json:"preparation_method,omitempty"`
+	YieldFactor           *float64          `gorm:"column:yield_factor" json:"yield_factor,omitempty"`
+	StateTags             []string          `gorm:"column:state_tags;serializer:json" json:"state_tags,omitempty"`
 	Category              string            `gorm:"-" json:"category,omitempty"`
 	KcalPer100g           float64           `gorm:"column:kcal_per_100g" json:"kcal_per_100g"`
 	ProteinPer100g        float64           `gorm:"column:protein_per_100g" json:"protein_per_100g"`

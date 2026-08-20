@@ -8,6 +8,7 @@ import {
   getMyMembership,
   type CanonicalMealType,
   type MembershipStatus,
+  type AnalysisEngine,
 } from '../../../utils/api'
 import {
   getRecommendedMealTypeWithFallback,
@@ -22,6 +23,7 @@ import { withAuth } from '../../../utils/withAuth'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { getStoredRecordTargetDate, persistRecordTargetDate, getTodayRecordDateKey } from '../../../utils/record-date'
 import CreditShortageSheet from '../../../components/CreditShortageSheet'
+import { ANALYSIS_ENGINE_OPTIONS } from '../../../utils/analysis-engine'
 import './index.scss'
 
 const MEALS: Array<{ id: CanonicalMealType; name: string; icon: string }> = [
@@ -62,6 +64,7 @@ function RecordTextPage() {
   const [selectedMeal, setSelectedMeal] = useState(() => inferDefaultMealTypeFromLocalTime())
   const [dietGoal, setDietGoal] = useState('none')
   const [activityTiming, setActivityTiming] = useState('none')
+  const [analysisEngine, setAnalysisEngine] = useState<AnalysisEngine>('ai_direct')
   const [loading, setLoading] = useState(false)
   const [membershipStatus, setMembershipStatus] = useState<MembershipStatus | null>(null)
   const [targetDateStatus, setTargetDateStatus] = useState<MembershipStatus | null>(null)
@@ -162,6 +165,7 @@ function RecordTextPage() {
         diet_goal: dietGoal as any,
         activity_timing: activityTiming as any,
         suggest_ratio_enabled: readSuggestRatioPreference(),
+        analysis_engine: analysisEngine,
       })
       Taro.hideLoading()
       Taro.navigateTo({
@@ -291,6 +295,24 @@ function RecordTextPage() {
               autoHeight
             />
           </View>
+        </View>
+
+        {/* 营养计算方式 */}
+        <View className='input-section'>
+          <Text className='section-title'>营养计算方式</Text>
+          <View className='text-engine-options'>
+            {ANALYSIS_ENGINE_OPTIONS.map(option => (
+              <View
+                key={option.value}
+                className={`text-engine-option ${analysisEngine === option.value ? 'active' : ''}`}
+                onClick={() => setAnalysisEngine(option.value)}
+              >
+                <Text className='text-engine-option__label'>{option.label}</Text>
+                <Text className='text-engine-option__description'>{option.description}</Text>
+              </View>
+            ))}
+          </View>
+          <Text className='text-engine-note'>默认使用 AI 完整理解全部描述；你也可以切换校准路径进行效果对比。</Text>
         </View>
 
         {/* 餐次选择 */}
