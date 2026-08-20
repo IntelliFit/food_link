@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"io"
+	"log/slog"
 	"strconv"
 	"strings"
 
@@ -11,6 +12,7 @@ import (
 	"food_link/backend/internal/common/response"
 	"food_link/backend/internal/community/domain"
 	"food_link/backend/internal/community/service"
+	"food_link/backend/pkg/logger"
 
 	"github.com/gin-gonic/gin"
 )
@@ -303,11 +305,28 @@ func (h *CommunityHandler) ListNotifications(c *gin.Context) {
 			offset = n
 		}
 	}
+	logger.Info(c.Request.Context(), "开始查询互动消息",
+		slog.String("user_id", userID),
+		slog.String("notification_type", notificationType),
+		slog.Int("limit", limit),
+		slog.Int("offset", offset),
+	)
 	result, err := h.svc.ListNotifications(c.Request.Context(), userID, notificationType, limit, offset)
 	if err != nil {
+		logger.Error(c.Request.Context(), "查询互动消息失败", err,
+			slog.String("user_id", userID),
+			slog.String("notification_type", notificationType),
+		)
 		response.Error(c, err)
 		return
 	}
+	logger.Info(c.Request.Context(), "查询互动消息完成",
+		slog.String("user_id", userID),
+		slog.String("notification_type", notificationType),
+		slog.Int("result_count", len(result.List)),
+		slog.Int64("like_count", result.LikeCount),
+		slog.Int64("comment_count", result.CommentCount),
+	)
 	response.Success(c, result)
 }
 

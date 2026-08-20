@@ -14,6 +14,11 @@ type NotificationRepo struct {
 	db *gorm.DB
 }
 
+type NotificationCounts struct {
+	LikeCount    int64
+	CommentCount int64
+}
+
 func NewNotificationRepo(db *gorm.DB) *NotificationRepo {
 	return &NotificationRepo{db: db}
 }
@@ -79,7 +84,33 @@ func (r *NotificationRepo) FindRecentDuplicateForTarget(ctx context.Context, rec
 
 func (r *NotificationRepo) ListNotifications(ctx context.Context, userID, notificationType string, limit, offset int) ([]domain.FeedInteractionNotification, error) {
 	var rows []domain.FeedInteractionNotification
-	q := r.db.WithContext(ctx).
+	q := r.visibleNotificationsQuery(ctx, userID)
+	if notificationType == "comment" {
+		q = q.Where("notification_type IN ?", []string{"comment_received", "reply_received", "comment_rejected"})
+	} else if notificationType != "" {
+		q = q.Where("notification_type = ?", notificationType)
+	}
+	err := q.Order("created_at DESC").
+		Limit(limit).
+		Offset(offset).
+		Find(&rows).Error
+	return rows, err
+}
+
+func (r *NotificationRepo) CountNotifications(ctx context.Context, userID string) (NotificationCounts, error) {
+	var counts NotificationCounts
+	err := r.visibleNotificationsQuery(ctx, userID).
+		Select(`
+			COALESCE(SUM(CASE WHEN notification_type = 'like_received' THEN 1 ELSE 0 END), 0) AS like_count,
+			COALESCE(SUM(CASE WHEN notification_type IN ('comment_received', 'reply_received', 'comment_rejected') THEN 1 ELSE 0 END), 0) AS comment_count
+		`).
+		Scan(&counts).Error
+	return counts, err
+}
+
+func (r *NotificationRepo) visibleNotificationsQuery(ctx context.Context, userID string) *gorm.DB {
+	return r.db.WithContext(ctx).
+		Model(&domain.FeedInteractionNotification{}).
 		Where("recipient_user_id = ?", userID).
 		Where("(actor_user_id IS NULL OR actor_user_id != recipient_user_id)").
 		Where(`NOT EXISTS (
@@ -90,14 +121,6 @@ func (r *NotificationRepo) ListNotifications(ctx context.Context, userID, notifi
 				OR (ub.blocker_user_id = actor_user_id AND ub.blocked_user_id = ?)
 			  )
 		)`, userID, userID)
-	if notificationType != "" {
-		q = q.Where("notification_type = ?", notificationType)
-	}
-	err := q.Order("created_at DESC").
-		Limit(limit).
-		Offset(offset).
-		Find(&rows).Error
-	return rows, err
 }
 
 func (r *NotificationRepo) CountUnread(ctx context.Context, userID string) (int64, error) {

@@ -7320,7 +7320,15 @@ export async function communityGetCommentTasks(limit: number = 50): Promise<{ li
 }
 
 /** 获取圈子互动通知 */
-export async function communityGetNotifications(limit: number = 20, type?: string, offset?: number): Promise<{ list: FeedInteractionNotification[]; unread_count: number; has_more: boolean }> {
+export interface FeedInteractionNotificationList {
+  list: FeedInteractionNotification[]
+  unread_count: number
+  like_count: number
+  comment_count: number
+  has_more: boolean
+}
+
+export async function communityGetNotifications(limit: number = 20, type?: string, offset?: number): Promise<FeedInteractionNotificationList> {
   const q = new URLSearchParams()
   q.set('limit', String(limit))
   if (type) q.set('type', type)
@@ -7330,7 +7338,7 @@ export async function communityGetNotifications(limit: number = 20, type?: strin
     timeout: 12000,
   })
   if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '获取互动消息失败')
-  return response.data as { list: FeedInteractionNotification[]; unread_count: number; has_more: boolean }
+  return response.data as FeedInteractionNotificationList
 }
 
 /** 标记圈子互动通知已读 */
