@@ -26,8 +26,8 @@ FROM debian:bookworm-slim
 
 WORKDIR /app
 
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates ffmpeg tzdata \
+RUN apt-get -o Acquire::Retries=5 update \
+    && apt-get -o Acquire::Retries=5 install -y --no-install-recommends ca-certificates ffmpeg tzdata \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /out/food-link /app/food-link
