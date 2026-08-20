@@ -1,0 +1,217 @@
+[
+  {
+    "batch_name": "益阳高校官方食堂楼层确认集-20260820",
+    "region": "益阳市",
+    "source_scope": "高校官方页面及主管部门材料；严格确认现行高校、正式校区、物理父食堂、实际餐饮楼层与2024—2026当前运营",
+    "schools": [
+      {
+        "school": "湖南城市学院",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "校本部",
+            "aliases": ["主校区"],
+            "address": "湖南省益阳市迎宾东路518号",
+            "source_url": "https://www.hncu.edu.cn/info/1061/11562.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "校本部",
+            "name": "学生一食堂",
+            "aliases": ["一食堂", "第一食堂"],
+            "location_text": "第一餐饮中心一楼",
+            "building_or_floor": "一楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "2025年9月5日中餐起供餐",
+            "source_url": "https://www.hncu.edu.cn/xjjyhqglc/info/1113/2421.htm",
+            "source_title": "餐饮服务",
+            "source_org": "湖南城市学院后勤管理处",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "学校后勤页面明确学生一食堂位于第一餐饮中心一楼，约有1300个用餐座位，并列当前委托经营单位。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.hncu.edu.cn/xjjyhqglc/info/1094/3320.htm",
+                "source_title": "学生食堂供餐通知",
+                "source_org": "湖南城市学院后勤管理处",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2025年通知明确学生一食堂于9月5日中餐起开始供餐，闭合同一父食堂当前实际开餐。"
+              }
+            ]
+          },
+          {
+            "campus": "校本部",
+            "name": "学生二食堂",
+            "aliases": ["二食堂", "第二食堂"],
+            "location_text": "第二餐饮中心一楼",
+            "building_or_floor": "一楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "2025年暑假持续营业供餐",
+            "source_url": "https://www.hncu.edu.cn/xjjyhqglc/info/1113/2421.htm",
+            "source_title": "餐饮服务",
+            "source_org": "湖南城市学院后勤管理处",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "学校后勤页面明确学生二食堂位于第二餐饮中心一楼，约有1030个用餐座位，并列当前委托经营单位。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.hncu.edu.cn/xjjyhqglc/info/1094/3320.htm",
+                "source_title": "学生食堂供餐通知",
+                "source_org": "湖南城市学院后勤管理处",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2025年通知明确学生二食堂为暑假值班食堂并持续营业供餐，闭合同一父食堂当前实际运营。"
+              }
+            ]
+          },
+          {
+            "campus": "校本部",
+            "name": "学生三食堂",
+            "aliases": ["三食堂", "第三食堂"],
+            "location_text": "第二餐饮中心二楼",
+            "building_or_floor": "二楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "2025年9月5日中餐起供餐",
+            "source_url": "https://www.hncu.edu.cn/xjjyhqglc/info/1113/2421.htm",
+            "source_title": "餐饮服务",
+            "source_org": "湖南城市学院后勤管理处",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "学校后勤页面明确学生三食堂位于第二餐饮中心二楼，约有1080个用餐座位，并列当前委托经营单位。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.hncu.edu.cn/xjjyhqglc/info/1094/3320.htm",
+                "source_title": "学生食堂供餐通知",
+                "source_org": "湖南城市学院后勤管理处",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2025年通知明确学生三食堂于9月5日中餐起开始供餐，闭合同一父食堂当前实际开餐。"
+              }
+            ]
+          },
+          {
+            "campus": "校本部",
+            "name": "学生四食堂",
+            "aliases": ["四食堂", "第四食堂"],
+            "location_text": "第一餐饮中心二楼",
+            "building_or_floor": "二楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "2024年8月29日晚餐起供餐",
+            "source_url": "https://www.hncu.edu.cn/xjjyhqglc/info/1113/2421.htm",
+            "source_title": "餐饮服务",
+            "source_org": "湖南城市学院后勤管理处",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "学校后勤页面明确学生四食堂位于第一餐饮中心二楼，约有1050个用餐座位，并列当前委托经营单位。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.hncu.edu.cn/xjjyhqglc/info/1094/3040.htm",
+                "source_title": "食堂供餐通知",
+                "source_org": "湖南城市学院后勤管理处",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2024年通知明确学生四食堂于8月29日晚餐起供餐；本记录不依赖2025年仅为预计试营业的材料。"
+              }
+            ]
+          },
+          {
+            "campus": "校本部",
+            "name": "学生五食堂",
+            "aliases": ["五食堂", "第五食堂"],
+            "location_text": "第一餐饮中心二楼及三楼北面",
+            "building_or_floor": "二楼、三楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "2025年二楼9月5日中餐起、三楼9月8日起供餐",
+            "source_url": "https://www.hncu.edu.cn/xjjyhqglc/info/1113/2421.htm",
+            "source_title": "餐饮服务",
+            "source_org": "湖南城市学院后勤管理处",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "学校后勤页面明确学生五食堂位于第一餐饮中心二楼及三楼北面，约有230个用餐座位，并列当前委托经营单位。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.hncu.edu.cn/xjjyhqglc/info/1094/3040.htm",
+                "source_title": "食堂供餐通知",
+                "source_org": "湖南城市学院后勤管理处",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2024年通知明确学生五食堂二楼于8月29日晚餐起供餐，闭合二楼实际开餐。"
+              },
+              {
+                "source_url": "https://www.hncu.edu.cn/xjjyhqglc/info/1094/3320.htm",
+                "source_title": "学生食堂供餐通知",
+                "source_org": "湖南城市学院后勤管理处",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2025年通知明确学生五食堂二楼于9月5日中餐起供餐，三楼接待餐厅于9月8日开始营业；两层归并同一父食堂。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "校本部是目录对学校唯一现行益阳办学地址的规范名；学校2025年章程确认完整标识码4143011527。",
+          "第一、第二餐饮中心仅为承载楼宇，不另建食堂；学生五食堂二楼、三楼归并一个父实体，三楼接待餐厅不拆分。"
+        ]
+      },
+      {
+        "school": "益阳师范高等专科学校",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "校本部",
+            "aliases": ["益阳大道校区"],
+            "address": "湖南省益阳市益阳大道（西）238号",
+            "source_url": "https://www.newyishi.com/xxgk/xxzc.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "校本部",
+            "name": "学生食堂（食堂楼）",
+            "aliases": ["学生食堂", "食堂", "食堂楼"],
+            "location_text": "学生食堂一楼、二楼、三楼、四楼",
+            "building_or_floor": "一楼、二楼、三楼、四楼",
+            "service_type": "学生食堂",
+            "audience": "学生",
+            "opening_hours_raw": "2025年11月学生实际就餐满意率调查覆盖一至四楼",
+            "source_url": "https://hqjj.newyishi.com/info/1111/2102.htm",
+            "source_title": "我校11月学生食堂满意率超八成 聚焦需求优化餐饮服务",
+            "source_org": "益阳师范高等专科学校后勤基建处",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2025年学生食堂专项调查收回754份问卷，分别明确三、四楼食堂及一、二楼食堂满意率，并记录餐品口味、服务与学生实际就餐评价，直接闭合一至四楼当前餐饮使用。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://jwk.newyishi.com/info/1109/8212.htm",
+                "source_title": "益阳师范高等专科学校2025-2026-2学期期末考试实施方案",
+                "source_org": "益阳师范高等专科学校教务科研处（发展规划处）",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2026年方案把同一垂直建筑的五楼称为食堂五楼并仅用于体育考查，补强一至四楼属于同一食堂楼的父体边界，同时明确排除五楼餐饮关系。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "官方材料只按食堂楼层称呼且未给第二个物理父楼，故将一至四楼保守归并为一个学生食堂父实体。",
+          "食堂五楼仅为体育考查场地，没有售餐、取餐或堂食证据，不纳入餐饮楼层。"
+        ]
+      }
+    ]
+  }
+]
