@@ -162,7 +162,7 @@ function parseParamPage(value: string | null, fallback: number) {
   return Number.isFinite(n) && n > 0 ? n : fallback
 }
 
-/** 营养食物库管理页 */
+/** 标准食物库管理页 */
 export function FoodNutritionPage({ onLogout, onMenuChange }: FoodNutritionPageProps) {
   const [searchParams, setSearchParams] = useSearchParams()
   const [query, setQuery] = useState(searchParams.get('q') ?? '')
@@ -305,7 +305,7 @@ export function FoodNutritionPage({ onLogout, onMenuChange }: FoodNutritionPageP
   }
 
   async function deleteItem(id: string) {
-    if (!window.confirm('确定要删除这条营养食物吗？删除为软删除（标记停用）。')) return
+    if (!window.confirm('确定要删除这条标准食物吗？删除为软删除（标记停用）。')) return
     setDeleting(true)
     try {
       await adminRequest(`/api/admin/food-nutrition/${encodeURIComponent(id)}`, { method: 'DELETE' })
@@ -341,7 +341,7 @@ export function FoodNutritionPage({ onLogout, onMenuChange }: FoodNutritionPageP
     <div className="relative z-10 mx-auto grid min-h-[calc(100vh-2rem)] w-full max-w-[1540px] grid-cols-[256px_minmax(0,1fr)] gap-8 px-4 py-4">
       <AdminSidebar activeMenu="food-nutrition" onLogout={onLogout} onMenuChange={onMenuChange} />
       <main className="min-w-0 space-y-6 pb-8">
-        <PageHeader eyebrow="识别算法 / 营养食物库" title="营养食物库" apiBase={apiBase} />
+        <PageHeader eyebrow="识别算法 / 标准食物库" title="标准食物库" apiBase={apiBase} />
         <section className="stats-grid">
           <Stat label="当前筛选" value={String(total)} foot="条食物" />
           <Stat label="本页展示" value={String(items.length)} foot={loading ? '读取中' : '条记录'} />
@@ -447,7 +447,7 @@ export function FoodNutritionPage({ onLogout, onMenuChange }: FoodNutritionPageP
 
       {showCreate ? (
         <CreateModal
-          title="新建营养食物"
+          title="新建标准食物"
           creating={creating}
           onClose={() => setShowCreate(false)}
           onSubmit={createItem}
