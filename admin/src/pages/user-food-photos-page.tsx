@@ -32,7 +32,39 @@ type UserFoodPhoto = {
   user_avatar: string
   user_phone: string
   circle_visibility: 'visible' | 'not_shared' | 'not_applicable'
+  nutrition?: PhotoNutrition
   created_at: string
+}
+
+type PhotoNutrition = {
+  source: 'food_record' | 'analysis_result' | 'public_food'
+  item_count: number
+  item_names?: string[]
+  calories: number
+  protein: number
+  carbs: number
+  fat: number
+  fiber: number
+  sugar: number
+  saturated_fat: number
+  cholesterol_mg: number
+  sodium_mg: number
+  potassium_mg: number
+  calcium_mg: number
+  iron_mg: number
+  magnesium_mg: number
+  zinc_mg: number
+  vitamin_a_rae_mcg: number
+  vitamin_c_mg: number
+  vitamin_d_mcg: number
+  vitamin_e_mg: number
+  vitamin_k_mcg: number
+  thiamin_mg: number
+  riboflavin_mg: number
+  niacin_mg: number
+  vitamin_b6_mg: number
+  folate_mcg: number
+  vitamin_b12_mcg: number
 }
 
 type ListResponse = {
@@ -154,7 +186,7 @@ export function UserFoodPhotosPage({ onLogout, onMenuChange }: PageProps) {
                 食物照片
               </CardTitle>
               <CardDescription className='max-w-2xl text-base leading-relaxed'>
-                集中查看用户在食物识别、饮食记录、公共食物、包装食品纠错和食谱中上传的全部食物图片。同一图片会自动去重。
+                集中查看用户上传的全部食物图片、圈子可见性和分析后的营养元素。同一图片会自动去重，营养数据优先采用用户最终保存的饮食记录。
               </CardDescription>
             </div>
             <Badge variant='outline' className='max-w-xs shrink-0 whitespace-normal break-all px-3 py-1.5 text-xs font-normal'>
@@ -263,6 +295,9 @@ function PhotoCard({ item, onPreview }: { item: UserFoodPhoto; onPreview: () => 
         <span className={`absolute top-3 left-3 rounded-full border px-2.5 py-1 text-xs font-medium shadow-sm ${circleVisibilityClasses[item.circle_visibility]}`}>
           {circleVisibilityLabels[item.circle_visibility]}
         </span>
+        <span className={`absolute top-3 right-3 rounded-full border px-2.5 py-1 text-xs font-medium shadow-sm ${item.nutrition ? 'border-blue-300 bg-blue-50/95 text-blue-700' : 'border-slate-300 bg-slate-50/95 text-slate-500'}`}>
+          {item.nutrition ? '营养已分析' : '暂无营养'}
+        </span>
         <span className='absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-3 pt-10 pb-3 text-left text-xs text-white'>
           {formatTime(item.created_at)}
         </span>
@@ -279,6 +314,7 @@ function PhotoCard({ item, onPreview }: { item: UserFoodPhoto; onPreview: () => 
           <Badge variant='outline' className={statusClasses[item.status]}>{statusLabels[item.status] || item.status}</Badge>
         </div>
         {item.description ? <p className='line-clamp-2 text-sm leading-relaxed text-muted-foreground'>{item.description}</p> : null}
+        {item.nutrition ? <NutritionSummary nutrition={item.nutrition} /> : <p className='rounded-lg bg-muted/60 px-3 py-2 text-xs text-muted-foreground'>该图片尚无可用营养分析结果</p>}
         <div className='flex items-center justify-between gap-2 border-t pt-3'>
           <Badge variant='secondary'>{sourceLabels[item.source_type] || item.source_type}</Badge>
           <Button variant='ghost' size='sm' onClick={onPreview}>查看大图</Button>
@@ -320,6 +356,7 @@ function PhotoPreview({ item, onClose }: { item: UserFoodPhoto; onClose: () => v
             <PreviewRow label='来源 ID' value={item.source_id} />
             {item.record_id ? <PreviewRow label='记录 ID' value={item.record_id} /> : null}
             {item.description ? <PreviewRow label='识别摘要' value={item.description} /> : null}
+            <NutritionDetails nutrition={item.nutrition} />
           </div>
           <div className='mt-auto grid gap-2 pt-5'>
             <Button variant='outline' onClick={() => void handleCopy()}><Copy className='size-4' />复制图片地址</Button>
@@ -345,6 +382,69 @@ function FilterSelect({ label, value, onValueChange, options }: { label: string;
 
 function PreviewRow({ label, value }: { label: string; value: string }) {
   return <div><p className='text-xs font-medium text-muted-foreground'>{label}</p><p className='mt-1 break-words leading-relaxed'>{value}</p></div>
+}
+
+function NutritionSummary({ nutrition }: { nutrition: PhotoNutrition }) {
+  return (
+    <div className='grid grid-cols-4 gap-1.5 rounded-lg border bg-muted/30 p-2.5 text-center'>
+      <NutritionMetric label='热量' value={nutrition.calories} unit='kcal' compact />
+      <NutritionMetric label='蛋白质' value={nutrition.protein} unit='g' compact />
+      <NutritionMetric label='碳水' value={nutrition.carbs} unit='g' compact />
+      <NutritionMetric label='脂肪' value={nutrition.fat} unit='g' compact />
+    </div>
+  )
+}
+
+function NutritionDetails({ nutrition }: { nutrition?: PhotoNutrition }) {
+  if (!nutrition) {
+    return (
+      <div className='border-t pt-4'>
+        <p className='text-sm font-semibold'>营养元素</p>
+        <p className='mt-2 text-sm text-muted-foreground'>该图片尚无可用营养分析结果。</p>
+      </div>
+    )
+  }
+  const micronutrients = nutrientDetailMeta.filter(({ key }) => nutrition[key] > 0)
+  return (
+    <div className='space-y-3 border-t pt-4'>
+      <div className='flex flex-wrap items-center justify-between gap-2'>
+        <p className='text-sm font-semibold'>营养元素</p>
+        <Badge variant='secondary'>{nutritionSourceLabels[nutrition.source]}</Badge>
+      </div>
+      {nutrition.item_names?.length ? <p className='text-xs leading-relaxed text-muted-foreground'>识别食物：{nutrition.item_names.join('、')}</p> : null}
+      <div className='grid grid-cols-2 gap-2'>
+        <NutritionMetric label='热量' value={nutrition.calories} unit='kcal' />
+        <NutritionMetric label='蛋白质' value={nutrition.protein} unit='g' />
+        <NutritionMetric label='碳水化合物' value={nutrition.carbs} unit='g' />
+        <NutritionMetric label='脂肪' value={nutrition.fat} unit='g' />
+      </div>
+      {micronutrients.length ? (
+        <div className='grid grid-cols-2 gap-x-4 gap-y-2 rounded-lg border bg-muted/25 p-3'>
+          {micronutrients.map(({ key, label, unit }) => (
+            <div key={key} className='flex items-baseline justify-between gap-2 text-xs'>
+              <span className='text-muted-foreground'>{label}</span>
+              <span className='font-medium tabular-nums'>{formatNutrientValue(nutrition[key])} {unit}</span>
+            </div>
+          ))}
+        </div>
+      ) : <p className='text-xs text-muted-foreground'>暂无微量营养元素数据。</p>}
+    </div>
+  )
+}
+
+function NutritionMetric({ label, value, unit, compact = false }: { label: string; value: number; unit: string; compact?: boolean }) {
+  return (
+    <div className={compact ? 'min-w-0' : 'rounded-lg bg-background/80 p-2.5'}>
+      <p className='truncate text-[11px] text-muted-foreground'>{label}</p>
+      <p className={`${compact ? 'text-xs' : 'text-sm'} mt-0.5 font-semibold tabular-nums`}>{formatNutrientValue(value)}<span className='ml-0.5 text-[10px] font-normal text-muted-foreground'>{unit}</span></p>
+    </div>
+  )
+}
+
+function formatNutrientValue(value: number) {
+  if (!Number.isFinite(value)) return '0'
+  const rounded = Math.round(value * 10) / 10
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1)
 }
 
 function shortId(value: string) {
@@ -375,4 +475,36 @@ const circleVisibilityClasses: Record<UserFoodPhoto['circle_visibility'], string
   visible: 'border-emerald-300 bg-emerald-50/95 text-emerald-700',
   not_shared: 'border-amber-300 bg-amber-50/95 text-amber-800',
   not_applicable: 'border-slate-300 bg-slate-50/95 text-slate-600',
+}
+
+type NutrientDetailKey = Exclude<keyof PhotoNutrition, 'source' | 'item_count' | 'item_names' | 'calories' | 'protein' | 'carbs' | 'fat'>
+
+const nutrientDetailMeta: Array<{ key: NutrientDetailKey; label: string; unit: string }> = [
+  { key: 'fiber', label: '膳食纤维', unit: 'g' },
+  { key: 'sugar', label: '糖', unit: 'g' },
+  { key: 'saturated_fat', label: '饱和脂肪', unit: 'g' },
+  { key: 'cholesterol_mg', label: '胆固醇', unit: 'mg' },
+  { key: 'sodium_mg', label: '钠', unit: 'mg' },
+  { key: 'potassium_mg', label: '钾', unit: 'mg' },
+  { key: 'calcium_mg', label: '钙', unit: 'mg' },
+  { key: 'iron_mg', label: '铁', unit: 'mg' },
+  { key: 'magnesium_mg', label: '镁', unit: 'mg' },
+  { key: 'zinc_mg', label: '锌', unit: 'mg' },
+  { key: 'vitamin_a_rae_mcg', label: '维生素 A', unit: 'μg' },
+  { key: 'vitamin_c_mg', label: '维生素 C', unit: 'mg' },
+  { key: 'vitamin_d_mcg', label: '维生素 D', unit: 'μg' },
+  { key: 'vitamin_e_mg', label: '维生素 E', unit: 'mg' },
+  { key: 'vitamin_k_mcg', label: '维生素 K', unit: 'μg' },
+  { key: 'thiamin_mg', label: '维生素 B1', unit: 'mg' },
+  { key: 'riboflavin_mg', label: '维生素 B2', unit: 'mg' },
+  { key: 'niacin_mg', label: '烟酸', unit: 'mg' },
+  { key: 'vitamin_b6_mg', label: '维生素 B6', unit: 'mg' },
+  { key: 'folate_mcg', label: '叶酸', unit: 'μg' },
+  { key: 'vitamin_b12_mcg', label: '维生素 B12', unit: 'μg' },
+]
+
+const nutritionSourceLabels: Record<PhotoNutrition['source'], string> = {
+  food_record: '用户最终记录',
+  analysis_result: '图片分析结果',
+  public_food: '公共食物数据',
 }

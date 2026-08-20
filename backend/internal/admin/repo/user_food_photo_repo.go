@@ -2,9 +2,13 @@ package repo
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"time"
 
+	foodrecorddomain "food_link/backend/internal/foodrecord/domain"
+
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
@@ -26,21 +30,67 @@ type ListUserFoodPhotoInput struct {
 }
 
 type UserFoodPhoto struct {
-	SourceID         string    `gorm:"column:source_id" json:"source_id"`
-	SourceType       string    `gorm:"column:source_type" json:"source_type"`
-	TaskType         string    `gorm:"column:task_type" json:"task_type"`
-	Status           string    `gorm:"column:status" json:"status"`
-	RecordID         string    `gorm:"column:record_id" json:"record_id"`
-	ImagePath        string    `gorm:"column:image_path" json:"-"`
-	ImageURL         string    `gorm:"-" json:"image_url"`
-	ThumbnailURL     string    `gorm:"-" json:"thumbnail_url"`
-	Description      string    `gorm:"column:description" json:"description"`
-	UserID           string    `gorm:"column:user_id" json:"user_id"`
-	UserNickname     string    `gorm:"column:user_nickname" json:"user_nickname"`
-	UserAvatar       string    `gorm:"column:user_avatar" json:"user_avatar"`
-	UserPhone        string    `gorm:"column:user_phone" json:"user_phone"`
-	CircleVisibility string    `gorm:"column:circle_visibility" json:"circle_visibility"`
-	CreatedAt        time.Time `gorm:"column:created_at" json:"created_at"`
+	SourceID         string                  `gorm:"column:source_id" json:"source_id"`
+	SourceType       string                  `gorm:"column:source_type" json:"source_type"`
+	TaskType         string                  `gorm:"column:task_type" json:"task_type"`
+	Status           string                  `gorm:"column:status" json:"status"`
+	RecordID         string                  `gorm:"column:record_id" json:"record_id"`
+	ImagePath        string                  `gorm:"column:image_path" json:"-"`
+	ImageURL         string                  `gorm:"-" json:"image_url"`
+	ThumbnailURL     string                  `gorm:"-" json:"thumbnail_url"`
+	Description      string                  `gorm:"column:description" json:"description"`
+	UserID           string                  `gorm:"column:user_id" json:"user_id"`
+	UserNickname     string                  `gorm:"column:user_nickname" json:"user_nickname"`
+	UserAvatar       string                  `gorm:"column:user_avatar" json:"user_avatar"`
+	UserPhone        string                  `gorm:"column:user_phone" json:"user_phone"`
+	CircleVisibility string                  `gorm:"column:circle_visibility" json:"circle_visibility"`
+	Nutrition        *UserFoodPhotoNutrition `gorm:"-" json:"nutrition,omitempty"`
+	CreatedAt        time.Time               `gorm:"column:created_at" json:"created_at"`
+}
+
+type UserFoodPhotoNutrition struct {
+	Source         string   `json:"source"`
+	ItemCount      int      `json:"item_count"`
+	ItemNames      []string `json:"item_names,omitempty"`
+	Calories       float64  `json:"calories"`
+	Protein        float64  `json:"protein"`
+	Carbs          float64  `json:"carbs"`
+	Fat            float64  `json:"fat"`
+	Fiber          float64  `json:"fiber"`
+	Sugar          float64  `json:"sugar"`
+	SaturatedFat   float64  `json:"saturated_fat"`
+	CholesterolMg  float64  `json:"cholesterol_mg"`
+	SodiumMg       float64  `json:"sodium_mg"`
+	PotassiumMg    float64  `json:"potassium_mg"`
+	CalciumMg      float64  `json:"calcium_mg"`
+	IronMg         float64  `json:"iron_mg"`
+	MagnesiumMg    float64  `json:"magnesium_mg"`
+	ZincMg         float64  `json:"zinc_mg"`
+	VitaminARaeMcg float64  `json:"vitamin_a_rae_mcg"`
+	VitaminCMg     float64  `json:"vitamin_c_mg"`
+	VitaminDMcg    float64  `json:"vitamin_d_mcg"`
+	VitaminEMg     float64  `json:"vitamin_e_mg"`
+	VitaminKMcg    float64  `json:"vitamin_k_mcg"`
+	ThiaminMg      float64  `json:"thiamin_mg"`
+	RiboflavinMg   float64  `json:"riboflavin_mg"`
+	NiacinMg       float64  `json:"niacin_mg"`
+	VitaminB6Mg    float64  `json:"vitamin_b6_mg"`
+	FolateMcg      float64  `json:"folate_mcg"`
+	VitaminB12Mcg  float64  `json:"vitamin_b12_mcg"`
+}
+
+type userFoodPhotoNutritionRow struct {
+	ID            string         `gorm:"column:id"`
+	Items         datatypes.JSON `gorm:"column:items"`
+	TotalCalories float64        `gorm:"column:total_calories"`
+	TotalProtein  float64        `gorm:"column:total_protein"`
+	TotalCarbs    float64        `gorm:"column:total_carbs"`
+	TotalFat      float64        `gorm:"column:total_fat"`
+}
+
+type userFoodPhotoNutritionItem struct {
+	Name      string                             `json:"name"`
+	Nutrients foodrecorddomain.FoodItemNutrients `json:"nutrients"`
 }
 
 type ListUserFoodPhotoResult struct {
@@ -275,7 +325,152 @@ func (r *UserFoodPhotoRepo) List(ctx context.Context, input ListUserFoodPhotoInp
 		Scan(&items).Error; err != nil {
 		return nil, err
 	}
+	if err := r.attachNutrition(ctx, items); err != nil {
+		return nil, err
+	}
 	return &ListUserFoodPhotoResult{Items: items, Total: total}, nil
+}
+
+func (r *UserFoodPhotoRepo) attachNutrition(ctx context.Context, items []UserFoodPhoto) error {
+	recordIDs := make([]string, 0, len(items))
+	taskIDs := make([]string, 0, len(items))
+	publicFoodIDs := make([]string, 0, len(items))
+	for i := range items {
+		if items[i].RecordID != "" {
+			recordIDs = append(recordIDs, items[i].RecordID)
+		}
+		switch items[i].SourceType {
+		case "analysis_task":
+			taskIDs = append(taskIDs, items[i].SourceID)
+		case "public_food":
+			publicFoodIDs = append(publicFoodIDs, items[i].SourceID)
+		}
+	}
+
+	records, err := r.listNutritionRows(ctx, "user_food_records", recordIDs, "items")
+	if err != nil {
+		return err
+	}
+	tasks, err := r.listNutritionRows(ctx, "analysis_tasks", taskIDs,
+		"CASE WHEN jsonb_typeof(result->'items') = 'array' THEN result->'items' ELSE '[]'::jsonb END AS items, 0 AS total_calories, 0 AS total_protein, 0 AS total_carbs, 0 AS total_fat")
+	if err != nil {
+		return err
+	}
+	publicFoods, err := r.listNutritionRows(ctx, "public_food_library", publicFoodIDs, "items")
+	if err != nil {
+		return err
+	}
+
+	for i := range items {
+		item := &items[i]
+		if row, ok := records[item.RecordID]; ok {
+			item.Nutrition = buildUserFoodPhotoNutrition("food_record", row)
+		}
+		if item.Nutrition == nil && item.SourceType == "analysis_task" {
+			if row, ok := tasks[item.SourceID]; ok {
+				item.Nutrition = buildUserFoodPhotoNutrition("analysis_result", row)
+			}
+		}
+		if item.Nutrition == nil && item.SourceType == "public_food" {
+			if row, ok := publicFoods[item.SourceID]; ok {
+				item.Nutrition = buildUserFoodPhotoNutrition("public_food", row)
+			}
+		}
+	}
+	return nil
+}
+
+func (r *UserFoodPhotoRepo) listNutritionRows(ctx context.Context, table string, ids []string, itemsProjection string) (map[string]userFoodPhotoNutritionRow, error) {
+	rowsByID := make(map[string]userFoodPhotoNutritionRow, len(ids))
+	if len(ids) == 0 {
+		return rowsByID, nil
+	}
+	projection := "id::text AS id, " + itemsProjection
+	if itemsProjection == "items" {
+		projection += ", COALESCE(total_calories, 0) AS total_calories, COALESCE(total_protein, 0) AS total_protein, COALESCE(total_carbs, 0) AS total_carbs, COALESCE(total_fat, 0) AS total_fat"
+	}
+	var rows []userFoodPhotoNutritionRow
+	if err := r.db.WithContext(ctx).Table(table).Select(projection).Where("id::text IN ?", uniqueStrings(ids)).Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	for i := range rows {
+		rowsByID[rows[i].ID] = rows[i]
+	}
+	return rowsByID, nil
+}
+
+func buildUserFoodPhotoNutrition(source string, row userFoodPhotoNutritionRow) *UserFoodPhotoNutrition {
+	var items []userFoodPhotoNutritionItem
+	if len(row.Items) > 0 {
+		if err := json.Unmarshal(row.Items, &items); err != nil {
+			return nil
+		}
+	}
+	if len(items) == 0 && row.TotalCalories <= 0 && row.TotalProtein <= 0 && row.TotalCarbs <= 0 && row.TotalFat <= 0 {
+		return nil
+	}
+	nutrition := &UserFoodPhotoNutrition{Source: source, ItemCount: len(items)}
+	for i := range items {
+		item := items[i]
+		if name := strings.TrimSpace(item.Name); name != "" {
+			nutrition.ItemNames = append(nutrition.ItemNames, name)
+		}
+		n := item.Nutrients
+		nutrition.Calories += n.Calories
+		nutrition.Protein += n.Protein
+		nutrition.Carbs += n.Carbs
+		nutrition.Fat += n.Fat
+		nutrition.Fiber += n.Fiber
+		nutrition.Sugar += n.Sugar
+		nutrition.SaturatedFat += n.SaturatedFat
+		nutrition.CholesterolMg += n.CholesterolMg
+		nutrition.SodiumMg += n.SodiumMg
+		nutrition.PotassiumMg += n.PotassiumMg
+		nutrition.CalciumMg += n.CalciumMg
+		nutrition.IronMg += n.IronMg
+		nutrition.MagnesiumMg += n.MagnesiumMg
+		nutrition.ZincMg += n.ZincMg
+		nutrition.VitaminARaeMcg += n.VitaminARaeMcg
+		nutrition.VitaminCMg += n.VitaminCMg
+		nutrition.VitaminDMcg += n.VitaminDMcg
+		nutrition.VitaminEMg += n.VitaminEMg
+		nutrition.VitaminKMcg += n.VitaminKMcg
+		nutrition.ThiaminMg += n.ThiaminMg
+		nutrition.RiboflavinMg += n.RiboflavinMg
+		nutrition.NiacinMg += n.NiacinMg
+		nutrition.VitaminB6Mg += n.VitaminB6Mg
+		nutrition.FolateMcg += n.FolateMcg
+		nutrition.VitaminB12Mcg += n.VitaminB12Mcg
+	}
+	if row.TotalCalories > 0 {
+		nutrition.Calories = row.TotalCalories
+	}
+	if row.TotalProtein > 0 {
+		nutrition.Protein = row.TotalProtein
+	}
+	if row.TotalCarbs > 0 {
+		nutrition.Carbs = row.TotalCarbs
+	}
+	if row.TotalFat > 0 {
+		nutrition.Fat = row.TotalFat
+	}
+	return nutrition
+}
+
+func uniqueStrings(values []string) []string {
+	seen := make(map[string]struct{}, len(values))
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		result = append(result, value)
+	}
+	return result
 }
 
 func buildUserFoodPhotoFilters(input ListUserFoodPhotoInput) (string, []any) {

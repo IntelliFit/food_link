@@ -38,11 +38,16 @@ func setupUserFoodPhotoTestDB(t *testing.T) *UserFoodPhotoRepo {
 			user_id text NOT NULL,
 			image_path text,
 			image_paths jsonb NOT NULL DEFAULT '[]'::jsonb,
+			items jsonb NOT NULL DEFAULT '[]'::jsonb,
 			description text,
 			source_task_id text,
 			record_time timestamptz,
 			created_at timestamptz,
-			hidden_from_feed boolean NOT NULL DEFAULT false
+			hidden_from_feed boolean NOT NULL DEFAULT false,
+			total_calories numeric DEFAULT 0,
+			total_protein numeric DEFAULT 0,
+			total_carbs numeric DEFAULT 0,
+			total_fat numeric DEFAULT 0
 		);
 		CREATE TABLE public_food_library (
 			id text PRIMARY KEY,
@@ -50,6 +55,11 @@ func setupUserFoodPhotoTestDB(t *testing.T) *UserFoodPhotoRepo {
 			source_record_id text,
 			image_path text,
 			image_paths jsonb NOT NULL DEFAULT '[]'::jsonb,
+			items jsonb NOT NULL DEFAULT '[]'::jsonb,
+			total_calories numeric DEFAULT 0,
+			total_protein numeric DEFAULT 0,
+			total_carbs numeric DEFAULT 0,
+			total_fat numeric DEFAULT 0,
 			food_name text,
 			description text,
 			status text NOT NULL,
@@ -235,4 +245,45 @@ func TestUserFoodPhotoRepoListClassifiesAndFiltersCircleVisibility(t *testing.T)
 	notShared, err := repo.List(context.Background(), ListUserFoodPhotoInput{CircleVisibility: "not_shared", Limit: 40})
 	require.NoError(t, err)
 	assert.Equal(t, int64(3), notShared.Total)
+}
+
+func TestUserFoodPhotoRepoListCollectsNutritionFromRecordAndAnalysis(t *testing.T) {
+	repo := setupUserFoodPhotoTestDB(t)
+	now := time.Now().UTC()
+	require.NoError(t, repo.db.Exec(`INSERT INTO weapp_user (id, nickname) VALUES ('user-1', '营养用户')`).Error)
+	require.NoError(t, repo.db.Exec(`
+		INSERT INTO analysis_tasks (id, user_id, task_type, status, image_url, payload, result, created_at)
+		VALUES
+			('task-recorded', 'user-1', 'food', 'done', 'recorded.jpg', '{}', '{"items":[{"name":"旧分析","nutrients":{"calories":999,"protein":99}}]}', ?),
+			('task-only', 'user-1', 'food', 'done', 'analysis.jpg', '{}', '{"items":[{"name":"鸡蛋","nutrients":{"calories":120,"protein":10,"carbs":2,"fat":8,"fiber":1.5,"sodiumMg":230,"vitaminCMg":6}},{"name":"牛奶","nutrients":{"calories":80,"protein":4,"carbs":9,"fat":3,"calcium_mg":180,"vitamin_b12_mcg":1.2}}]}', ?)
+	`, now, now).Error)
+	require.NoError(t, repo.db.Exec(`
+		INSERT INTO user_food_records (id, user_id, image_path, source_task_id, items, total_calories, total_protein, total_carbs, total_fat, created_at)
+		VALUES ('record-1', 'user-1', 'recorded.jpg', 'task-recorded', '[{"name":"用户修正餐","nutrients":{"calories":450,"protein":28,"carbs":40,"fat":18,"ironMg":3.2}}]', 500, 30, 45, 20, ?)
+	`, now).Error)
+
+	result, err := repo.List(context.Background(), ListUserFoodPhotoInput{Limit: 40})
+
+	require.NoError(t, err)
+	byPath := map[string]UserFoodPhoto{}
+	for _, item := range result.Items {
+		byPath[item.ImagePath] = item
+	}
+	recorded := byPath["recorded.jpg"].Nutrition
+	require.NotNil(t, recorded)
+	assert.Equal(t, "food_record", recorded.Source)
+	assert.Equal(t, 500.0, recorded.Calories)
+	assert.Equal(t, 30.0, recorded.Protein)
+	assert.Equal(t, 3.2, recorded.IronMg)
+	assert.Equal(t, []string{"用户修正餐"}, recorded.ItemNames)
+
+	analysis := byPath["analysis.jpg"].Nutrition
+	require.NotNil(t, analysis)
+	assert.Equal(t, "analysis_result", analysis.Source)
+	assert.Equal(t, 200.0, analysis.Calories)
+	assert.Equal(t, 14.0, analysis.Protein)
+	assert.Equal(t, 230.0, analysis.SodiumMg)
+	assert.Equal(t, 180.0, analysis.CalciumMg)
+	assert.Equal(t, 1.2, analysis.VitaminB12Mcg)
+	assert.Equal(t, []string{"鸡蛋", "牛奶"}, analysis.ItemNames)
 }
