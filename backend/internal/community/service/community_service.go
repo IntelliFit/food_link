@@ -64,6 +64,7 @@ type NotificationRepo interface {
 	FindRecentDuplicate(ctx context.Context, recipientUserID, notificationType string, actorUserID, recordID, parentCommentID, commentID, contentPreview *string) (*domain.FeedInteractionNotification, error)
 	FindRecentDuplicateForTarget(ctx context.Context, recipientUserID, notificationType string, actorUserID *string, targetType string, targetID *string, parentCommentID, commentID, contentPreview *string) (*domain.FeedInteractionNotification, error)
 	ListNotifications(ctx context.Context, userID, notificationType string, limit, offset int) ([]domain.FeedInteractionNotification, error)
+	CountNotifications(ctx context.Context, userID string) (repo.NotificationCounts, error)
 	CountUnread(ctx context.Context, userID string) (int64, error)
 	MarkRead(ctx context.Context, userID string, notificationIDs []string) (int64, error)
 	ListCommentTasksByUser(ctx context.Context, userID, commentType string, limit int) ([]domain.CommentTask, error)
@@ -264,9 +265,11 @@ type NotificationItem struct {
 }
 
 type NotificationListResult struct {
-	List        []NotificationItem `json:"list"`
-	UnreadCount int64              `json:"unread_count"`
-	HasMore     bool               `json:"has_more"`
+	List         []NotificationItem `json:"list"`
+	UnreadCount  int64              `json:"unread_count"`
+	LikeCount    int64              `json:"like_count"`
+	CommentCount int64              `json:"comment_count"`
+	HasMore      bool               `json:"has_more"`
 }
 
 type MarkReadResult struct {
@@ -1712,6 +1715,10 @@ func (s *CommunityService) ListNotifications(ctx context.Context, userID, notifi
 	if err != nil {
 		return nil, err
 	}
+	counts, err := s.notifRepo.CountNotifications(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
 
 	actorIDs := make(map[string]bool)
 	for _, n := range notifications {
@@ -1765,9 +1772,11 @@ func (s *CommunityService) ListNotifications(ctx context.Context, userID, notifi
 		items = items[:limit]
 	}
 	return &NotificationListResult{
-		List:        items,
-		UnreadCount: unread,
-		HasMore:     hasMore,
+		List:         items,
+		UnreadCount:  unread,
+		LikeCount:    counts.LikeCount,
+		CommentCount: counts.CommentCount,
+		HasMore:      hasMore,
 	}, nil
 }
 

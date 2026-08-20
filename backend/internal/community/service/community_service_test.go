@@ -177,6 +177,8 @@ type mockNotificationRepo struct {
 	findDuplicateNotificationErr error
 	listNotifications            []domain.FeedInteractionNotification
 	listNotificationsErr         error
+	notificationCounts           repo.NotificationCounts
+	notificationCountsErr        error
 	countUnread                  int64
 	countUnreadErr               error
 	markReadRows                 int64
@@ -196,6 +198,9 @@ func (m *mockNotificationRepo) FindRecentDuplicateForTarget(ctx context.Context,
 }
 func (m *mockNotificationRepo) ListNotifications(ctx context.Context, userID, notificationType string, limit, offset int) ([]domain.FeedInteractionNotification, error) {
 	return m.listNotifications, m.listNotificationsErr
+}
+func (m *mockNotificationRepo) CountNotifications(ctx context.Context, userID string) (repo.NotificationCounts, error) {
+	return m.notificationCounts, m.notificationCountsErr
 }
 func (m *mockNotificationRepo) CountUnread(ctx context.Context, userID string) (int64, error) {
 	return m.countUnread, m.countUnreadErr
@@ -653,8 +658,9 @@ func TestListCommentTasks(t *testing.T) {
 
 func TestListNotifications(t *testing.T) {
 	mockNotif := &mockNotificationRepo{
-		listNotifications: []domain.FeedInteractionNotification{{ID: "n1", NotificationType: "like_received"}},
-		countUnread:       3,
+		listNotifications:  []domain.FeedInteractionNotification{{ID: "n1", NotificationType: "like_received"}},
+		notificationCounts: repo.NotificationCounts{LikeCount: 20, CommentCount: 6},
+		countUnread:        3,
 	}
 	mockFeed := &mockFeedRepo{profiles: map[string]*repo.UserProfile{}}
 	svc := newTestService(mockFeed, mockNotif, &mockUserRepo{})
@@ -662,6 +668,8 @@ func TestListNotifications(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Len(t, result.List, 1)
 	assert.Equal(t, int64(3), result.UnreadCount)
+	assert.Equal(t, int64(20), result.LikeCount)
+	assert.Equal(t, int64(6), result.CommentCount)
 }
 
 func TestMarkNotificationsRead(t *testing.T) {

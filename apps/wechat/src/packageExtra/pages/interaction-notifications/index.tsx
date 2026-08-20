@@ -83,7 +83,7 @@ function isCommentType(nt: string) { return nt === 'comment_received' || nt === 
 
 function tabApiType(tab: NotificationTab): string {
   if (tab === 'like') return 'like_received'
-  if (tab === 'comment') return 'comment_received'
+  if (tab === 'comment') return 'comment'
   return ''
 }
 
@@ -92,6 +92,8 @@ function InteractionNotificationsPage() {
   const [loadError, setLoadError] = React.useState(false)
   const [markingRead, setMarkingRead] = React.useState(false)
   const [unreadCount, setUnreadCount] = React.useState(0)
+  const [likeCount, setLikeCount] = React.useState(0)
+  const [commentCount, setCommentCount] = React.useState(0)
   const [list, setList] = React.useState<FeedInteractionNotification[]>([])
   const [activeTab, setActiveTab] = React.useState<NotificationTab>('all')
   const [hasMore, setHasMore] = React.useState(false)
@@ -117,9 +119,6 @@ function InteractionNotificationsPage() {
     if (activeTab === 'like') return list.filter((item) => isLikeType(getNotificationType(item)))
     return list.filter((item) => isCommentType(getNotificationType(item)))
   }, [list, activeTab])
-
-  const likeCount = React.useMemo(() => list.filter((item) => isLikeType(getNotificationType(item))).length, [list])
-  const commentCount = React.useMemo(() => list.filter((item) => isCommentType(getNotificationType(item))).length, [list])
 
   React.useEffect(() => {
     logNotificationStage('react-commit', {
@@ -158,6 +157,8 @@ function InteractionNotificationsPage() {
       if (seq !== loadSeqRef.current) return
       const newList = res.list || []
       setLoadError(false)
+      setLikeCount(res.like_count ?? newList.filter((item) => isLikeType(getNotificationType(item))).length)
+      setCommentCount(res.comment_count ?? newList.filter((item) => isCommentType(getNotificationType(item))).length)
       logNotificationStage('response-resolved', {
         seq,
         tab,
