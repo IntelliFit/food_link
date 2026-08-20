@@ -36,6 +36,12 @@ type recordingWorkerPublicFoodQueue struct {
 	recordingWorkerPublicFoodPublisher
 }
 
+type allowingWorkerCampusMembershipChecker struct{}
+
+func (allowingWorkerCampusMembershipChecker) IsCampusPublishingAllowed(context.Context, string) (bool, error) {
+	return true, nil
+}
+
 func (q *recordingWorkerPublicFoodQueue) Subscribe(ctx context.Context, opts taskqueue.SubscribeOptions) (<-chan taskqueue.Delivery, error) {
 	ch := make(chan taskqueue.Delivery)
 	close(ch)
@@ -59,8 +65,12 @@ func setupWorkerPublicFoodTestDB(t *testing.T) *gorm.DB {
 		&analyzedomain.PrecisionSessionRound{},
 		&analyzedomain.PrecisionItemEstimate{},
 		&publicfooddomain.PublicFoodItem{},
+		&campuscatalogdomain.CollectionBatch{},
 		&campuscatalogdomain.CatalogItem{},
 	))
+	require.NoError(t, db.Create(&campuscatalogdomain.CollectionBatch{
+		ID: "batch-1", BatchName: "高校食堂测试批次", VenueType: "university", Status: "active",
+	}).Error)
 	return db
 }
 
@@ -303,6 +313,7 @@ func TestCampusPublicFoodSubmitWaitsForWorkerCaloriesRecognition(t *testing.T) {
 	analyzeTaskSvc.ConfigureTaskPublisher(publisher)
 	svc := publicfoodservice.NewPublicFoodService(publicFood)
 	svc.ConfigureCampusAnalyzeTaskSubmitter(analyzeTaskSvc)
+	svc.ConfigureCampusMembershipChecker(allowingWorkerCampusMembershipChecker{})
 	imageURL := "https://example.com/campus-chicken-rice.jpg"
 	foodName := "鸡胸肉米饭"
 	schoolName := "北京大学"

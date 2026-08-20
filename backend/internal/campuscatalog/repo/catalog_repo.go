@@ -259,18 +259,23 @@ func (r *CatalogRepo) UpdateItem(ctx context.Context, item *domain.CatalogItem) 
 			imagePath = &first
 		}
 		location := strings.Join(nonEmptyCatalogValues(item.OrganizationName, item.AreaName, item.CanteenName, item.Floor, item.WindowName), " · ")
+		venue, err := resolvePublicationVenue(tx, item)
+		if err != nil {
+			return err
+		}
 		publication := publishedCatalogItem{
 			ID: item.ID, ImagePath: imagePath, ImagePaths: imagePaths, Description: item.Description,
 			FoodName: item.Name, MerchantName: item.CanteenName, MerchantAddress: location, DetailAddress: location,
-			UpdatedAt: item.UpdatedAt, SchoolID: item.SchoolID, CampusID: item.CampusID, CanteenID: item.CanteenID,
-			WindowID: item.WindowID, SchoolName: item.OrganizationName, CampusName: item.AreaName,
-			CanteenName: item.CanteenName, Floor: item.Floor, WindowName: item.WindowName,
+			UpdatedAt: item.UpdatedAt, Type: venue.Type, IsCampusFood: venue.IsCampusFood,
+			SchoolID: venue.SchoolID, CampusID: venue.CampusID, CanteenID: venue.CanteenID,
+			WindowID: venue.WindowID, SchoolName: venue.SchoolName, CampusName: venue.CampusName,
+			CanteenName: venue.CanteenName, Floor: venue.Floor, WindowName: venue.WindowName,
 			Price: item.Price, PriceType: publicPriceType(item.PriceType), PriceMin: item.PriceMin, PriceMax: item.PriceMax,
 			PriceUnit: item.PriceUnit, PriceCollectedAt: item.CapturedAt, PortionDescription: item.PortionDescription,
-			CampusLocationText: location,
+			CampusLocationText: venue.CampusLocationText,
 		}
 		publicColumns := []string{
-			"image_path", "image_paths", "food_name", "merchant_name", "merchant_address", "detail_address", "updated_at",
+			"image_path", "image_paths", "food_name", "merchant_name", "merchant_address", "detail_address", "updated_at", "type", "is_campus_food",
 			"school_id", "campus_id", "canteen_id", "window_id", "school_name", "campus_name", "canteen_name", "floor", "window_name",
 			"price", "price_type", "price_min", "price_max", "price_unit", "price_collected_at", "portion_description", "campus_location_text",
 		}
@@ -611,6 +616,41 @@ type publishedCatalogItem struct {
 
 func (publishedCatalogItem) TableName() string { return "public_food_library" }
 
+type publicationVenue struct {
+	Type               string
+	IsCampusFood       bool
+	SchoolID           *string
+	CampusID           *string
+	CanteenID          *string
+	WindowID           *string
+	SchoolName         string
+	CampusName         string
+	CanteenName        string
+	Floor              string
+	WindowName         string
+	CampusLocationText string
+}
+
+func resolvePublicationVenue(tx *gorm.DB, item *domain.CatalogItem) (publicationVenue, error) {
+	if tx == nil || item == nil {
+		return publicationVenue{}, errors.New("catalog publication venue is unavailable")
+	}
+	var batch domain.CollectionBatch
+	if err := tx.Select("id", "venue_type").First(&batch, "id = ?", strings.TrimSpace(item.BatchID)).Error; err != nil {
+		return publicationVenue{}, err
+	}
+	if strings.TrimSpace(batch.VenueType) != "university" {
+		return publicationVenue{Type: "common", IsCampusFood: false}, nil
+	}
+	location := strings.Join(nonEmptyCatalogValues(item.OrganizationName, item.AreaName, item.CanteenName, item.Floor, item.WindowName), " · ")
+	return publicationVenue{
+		Type: "campus", IsCampusFood: true,
+		SchoolID: item.SchoolID, CampusID: item.CampusID, CanteenID: item.CanteenID, WindowID: item.WindowID,
+		SchoolName: item.OrganizationName, CampusName: item.AreaName, CanteenName: item.CanteenName,
+		Floor: item.Floor, WindowName: item.WindowName, CampusLocationText: location,
+	}, nil
+}
+
 func (r *CatalogRepo) CompleteAnalyzedItem(ctx context.Context, itemID, taskID string, result map[string]any, completedAt time.Time) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var item domain.CatalogItem
@@ -645,18 +685,22 @@ func (r *CatalogRepo) CompleteAnalyzedItem(ctx context.Context, itemID, taskID s
 		if description == "" {
 			description = item.Description
 		}
+		venue, err := resolvePublicationVenue(tx, &item)
+		if err != nil {
+			return err
+		}
 		publication := publishedCatalogItem{
 			ID: item.ID, UserID: item.ContributorUserID, ImagePath: imagePath, ImagePaths: imagePaths,
 			AnalysisTaskID: &taskID, TotalCalories: nutrition.TotalCalories, TotalProtein: nutrition.TotalProtein,
 			TotalCarbs: nutrition.TotalCarbs, TotalFat: nutrition.TotalFat, Items: nutrition.Items,
 			Description: description, Insight: nutrition.Insight, FoodName: item.Name, MerchantName: item.CanteenName,
-			MerchantAddress: location, DetailAddress: location, Status: "published", Type: "campus",
-			PublishedAt: &completedAt, CreatedAt: &completedAt, UpdatedAt: &completedAt, IsCampusFood: true,
-			SchoolID: item.SchoolID, CampusID: item.CampusID, CanteenID: item.CanteenID, WindowID: item.WindowID,
-			SchoolName: item.OrganizationName, CampusName: item.AreaName, CanteenName: item.CanteenName,
-			Floor: item.Floor, WindowName: item.WindowName, Price: item.Price, PriceType: publicPriceType(item.PriceType),
+			MerchantAddress: location, DetailAddress: location, Status: "published", Type: venue.Type,
+			PublishedAt: &completedAt, CreatedAt: &completedAt, UpdatedAt: &completedAt, IsCampusFood: venue.IsCampusFood,
+			SchoolID: venue.SchoolID, CampusID: venue.CampusID, CanteenID: venue.CanteenID, WindowID: venue.WindowID,
+			SchoolName: venue.SchoolName, CampusName: venue.CampusName, CanteenName: venue.CanteenName,
+			Floor: venue.Floor, WindowName: venue.WindowName, Price: item.Price, PriceType: publicPriceType(item.PriceType),
 			PriceMin: item.PriceMin, PriceMax: item.PriceMax, PriceUnit: item.PriceUnit,
-			PriceCollectedAt: item.CapturedAt, PortionDescription: item.PortionDescription, CampusLocationText: location,
+			PriceCollectedAt: item.CapturedAt, PortionDescription: item.PortionDescription, CampusLocationText: venue.CampusLocationText,
 		}
 		columns := []string{
 			"user_id", "image_path", "image_paths", "analysis_task_id", "total_calories", "total_protein", "total_carbs", "total_fat", "items",
