@@ -43,6 +43,8 @@ func TestTextDirectPromptKeepsWholeSentenceAndUncertaintyContract(t *testing.T) 
 	assert.Contains(t, prompt, inputText)
 	assert.Contains(t, prompt, "整批总用料")
 	assert.Contains(t, prompt, "脱水只会浓缩")
+	assert.Contains(t, prompt, "addedIngredients")
+	assert.Contains(t, prompt, "isComposite")
 	assert.Contains(t, prompt, "uncertaintyNotes")
 }
 
@@ -70,6 +72,36 @@ func TestAIThenExactDBRejectsSameNameWithDifferentState(t *testing.T) {
 	assert.Equal(t, "no_compatible_exact_match", item["db_calibration_status"])
 	assert.Nil(t, item["matched_food_id"])
 	assert.InDelta(t, 360, numberFromAny(mapFromAny(item["nutrients"])["calories"]), 0.01)
+}
+
+func TestAIThenExactDBKeepsContextualRecipeEvenWhenStateMatches(t *testing.T) {
+	resolver := newFakeAnalyzeNutritionResolver()
+	resolver.rice.FoodState = "cooked"
+	svc := NewAnalyzeService(nil, nil, nil)
+	svc.ConfigureNutritionResolver(resolver)
+	parsed := analysisEngineParsedItem("白米饭", "cooked", 210, 4, 44, 2)
+	item := toItems(parsed["items"])[0]
+	item["isComposite"] = true
+	item["addedIngredients"] = []any{map[string]any{"name": "食用油", "amountGrams": 5}}
+	resp := sApplyExactForTest(svc, parsed)
+	result := toItems(resp["items"])[0]
+	assert.Equal(t, "contextual_recipe_ai_kept", result["db_calibration_status"])
+	assert.Nil(t, result["matched_food_id"])
+	assert.InDelta(t, 210, numberFromAny(mapFromAny(result["nutrients"])["calories"]), 0.01)
+}
+
+func TestAIThenExactDBRejectsWeightBasisMismatch(t *testing.T) {
+	resolver := newFakeAnalyzeNutritionResolver()
+	resolver.rice.FoodState = "cooked"
+	resolver.rice.WeightBasis = "cooked"
+	svc := NewAnalyzeService(nil, nil, nil)
+	svc.ConfigureNutritionResolver(resolver)
+	parsed := analysisEngineParsedItem("白米饭", "cooked", 360, 7, 78, 1)
+	toItems(parsed["items"])[0]["weightBasis"] = "dry"
+	resp := sApplyExactForTest(svc, parsed)
+	item := toItems(resp["items"])[0]
+	assert.Equal(t, "no_compatible_exact_match", item["db_calibration_status"])
+	assert.Nil(t, item["matched_food_id"])
 }
 
 func sApplyExactForTest(svc *AnalyzeService, parsed map[string]any) map[string]any {

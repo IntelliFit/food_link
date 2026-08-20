@@ -1149,6 +1149,7 @@ func buildPrompt(input AnalyzeInput, user *authrepo.User, executionMode string) 
 结合常识估算熟食密度、含水量、常见售卖分量，不要只看上表面面积。
 重量口径必须与营养数据库一致：estimatedWeightGrams 表示可食部净重。带壳、带骨、带核食物按去壳/去骨/去核后的可食重量估算，不把虾壳、蟹壳、贝壳、花生壳、瓜子壳、骨头、果核计入重量。
 明确的整批总用油/调料必须按物质守恒计入；脱水只会浓缩每100克营养，不会凭空增加脂肪。状态或原料重量未知时，在 uncertaintyNotes 写明假设，不要伪装成精确值。
+每个食物项必须输出 isComposite 和 addedIngredients。单一、无额外有热量配料的基础食物填 false/[]；只要包含额外油、糖、奶、酱料、调味汁或多个可食组分，填 true 并逐项记录。普通烹调水和无热量盐可不列为 addedIngredients。
 输出要求：
 - 简体中文
 - description <= 16字
@@ -1165,7 +1166,7 @@ Type rule:
 
 JSON:
 {
-  "items":[{"name":"","type":"normal","foodState":"","weightBasis":"as_served","basisEvidence":"","estimatedWeightGrams":0,"suggestedRatio":100,"assumptions":[],"nutrients":{"calories":0,"protein":0,"carbs":0,"fat":0,"fiber":0,"sugar":0}}],
+  "items":[{"name":"","type":"normal","foodState":"","weightBasis":"as_served","basisEvidence":"","isComposite":false,"addedIngredients":[],"estimatedWeightGrams":0,"suggestedRatio":100,"assumptions":[],"nutrients":{"calories":0,"protein":0,"carbs":0,"fat":0,"fiber":0,"sugar":0}}],
   "description":"",
   "insight":"",
   "context_advice":"",
@@ -1736,6 +1737,7 @@ func buildTextPrompt(input AnalyzeInput, user *authrepo.User, executionMode stri
 - 必须理解并保留整段原始输入中的每一项约束：原料、总量/单份量、整批总用油或调料、烹饪方式、含水/脱水程度、生熟状态和用户明确说“不知道”的信息；不得只截取食物名和成品重量后套常见成品
 - 整批总用料必须按整批物质守恒理解。例如用户说整批只放了 X 克油，不能把成品按常规高油商品估算；脱水只会浓缩每100克碳水和热量，不会凭空增加脂肪
 - foodState 描述实际状态，weightBasis 描述当前重量是 raw/dry/cooked/as_served/package_net 中哪种口径；basisEvidence 简要写明依据
+- 每项必须输出 isComposite 和 addedIngredients。单一、无额外有热量配料的基础食物填 false/[]；额外油、糖、奶、酱料、调味汁或多个可食组分必须填 true 并逐项记录。普通烹调水和无热量盐可不列入
 - 如果生原料重量、吸水/脱水率或可食比例未知，不要伪装成精确值；在 assumptions 和 uncertaintyNotes 中写明关键假设及其对结果的影响
 - 重量可基于常见份量估算，但必须是可食部净重；带壳、带骨、带核食物按去壳/去骨/去核后的重量，不把壳、骨头、果核计入营养计算
 - 如果用户在输入文字中明确声明了具体重量数值（如"59克"、"37g"、"100克"等），则 estimatedWeightGrams 必须严格等于该数值，禁止进行任何四舍五入、估算或修正
@@ -1751,7 +1753,7 @@ Type rule:
 
 JSON:
 {
-  "items":[{"name":"","type":"normal","foodState":"","weightBasis":"as_served","basisEvidence":"","estimatedWeightGrams":0,"suggestedRatio":100,"assumptions":[],"nutrients":{"calories":0,"protein":0,"carbs":0,"fat":0,"fiber":0,"sugar":0}}],
+  "items":[{"name":"","type":"normal","foodState":"","weightBasis":"as_served","basisEvidence":"","isComposite":false,"addedIngredients":[],"estimatedWeightGrams":0,"suggestedRatio":100,"assumptions":[],"nutrients":{"calories":0,"protein":0,"carbs":0,"fat":0,"fiber":0,"sugar":0}}],
   "description":"",
   "insight":"",
   "pfc_ratio_comment":"",

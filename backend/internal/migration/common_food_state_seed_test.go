@@ -14,7 +14,7 @@ import (
 
 func TestCommonFoodStateSeedsHaveExplicitStateBasisAndOfficialIDs(t *testing.T) {
 	seeds := commonFoodStateSeeds()
-	require.GreaterOrEqual(t, len(seeds), 10)
+	require.GreaterOrEqual(t, len(seeds), 28)
 	seen := map[string]bool{}
 	statesByBase := map[string]map[string]bool{}
 	for _, seed := range seeds {
@@ -37,6 +37,20 @@ func TestCommonFoodStateSeedsHaveExplicitStateBasisAndOfficialIDs(t *testing.T) 
 	assert.True(t, statesByBase["potato"]["cooked"])
 	assert.True(t, statesByBase["white_rice"]["raw"])
 	assert.True(t, statesByBase["white_rice"]["cooked"])
+	assert.True(t, statesByBase["sweet_potato"]["raw"])
+	assert.True(t, statesByBase["sweet_potato"]["baked"])
+	assert.True(t, statesByBase["sweet_potato"]["cooked"])
+	assert.True(t, statesByBase["whole_egg"]["raw"])
+	assert.True(t, statesByBase["whole_egg"]["cooked"])
+	assert.True(t, statesByBase["whole_egg"]["fried"])
+	assert.True(t, statesByBase["chicken_breast"]["raw"])
+	assert.True(t, statesByBase["chicken_breast"]["roasted"])
+	assert.True(t, statesByBase["lentil"]["dry"])
+	assert.True(t, statesByBase["lentil"]["cooked"])
+	assert.True(t, statesByBase["soybean"]["dry"])
+	assert.True(t, statesByBase["soybean"]["cooked"])
+	assert.True(t, statesByBase["chickpea"]["dry"])
+	assert.True(t, statesByBase["chickpea"]["cooked"])
 }
 
 func TestEnsureCommonFoodStateSeedIsIdempotentAndAliasesUsePersistedFoodID(t *testing.T) {

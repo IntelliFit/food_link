@@ -86,6 +86,10 @@ func (s *AnalyzeService) applyAIThenExactDBNutrition(ctx context.Context, resp m
 		if source := stringFromAny(item["nutrition_source"]); source == "ingredient_label" || source == "packaged_food_library" {
 			continue
 		}
+		if !exactDatabaseCalibrationAllowed(item) {
+			items[index]["db_calibration_status"] = "contextual_recipe_ai_kept"
+			continue
+		}
 		name := stringFromAny(item["name"])
 		query := nutritionResolveName(item, name, fullNutritionContext(input))
 		match, err := s.nutrition.ResolveFood(ctx, query)
@@ -295,7 +299,60 @@ func foodStateCompatible(item map[string]any, food *foodrecorddomain.FoodNutriti
 	if foodState == "" {
 		return false
 	}
-	return itemState == foodState
+	if itemState != foodState {
+		return false
+	}
+	itemBasis := normalizeWeightBasisToken(stringFromAny(firstNonNil(item["weightBasis"], item["weight_basis"])))
+	foodBasis := normalizeWeightBasisToken(food.WeightBasis)
+	return itemBasis == "" || itemBasis == "as_served" || foodBasis == "" || itemBasis == foodBasis
+}
+
+func exactDatabaseCalibrationAllowed(item map[string]any) bool {
+	if boolFromAny(firstNonNil(item["isComposite"], item["is_composite"])) {
+		return false
+	}
+	if numberFromAny(firstNonNil(item["ingredientCount"], item["ingredient_count"])) > 1 {
+		return false
+	}
+	for _, key := range []string{"addedIngredients", "added_ingredients", "recipeAdditions", "recipe_additions"} {
+		switch value := item[key].(type) {
+		case []any:
+			if len(value) > 0 {
+				return false
+			}
+		case []map[string]any:
+			if len(value) > 0 {
+				return false
+			}
+		case map[string]any:
+			if len(value) > 0 {
+				return false
+			}
+		case string:
+			if strings.TrimSpace(value) != "" && strings.TrimSpace(value) != "[]" {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func normalizeWeightBasisToken(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	switch {
+	case value == "raw" || value == "raw_edible" || strings.Contains(value, "生重") || strings.Contains(value, "raw"):
+		return "raw"
+	case value == "dry" || value == "dry_raw" || strings.Contains(value, "干重") || strings.Contains(value, "dry"):
+		return "dry"
+	case value == "cooked" || value == "cooked_edible" || strings.Contains(value, "熟重") || strings.Contains(value, "cooked"):
+		return "cooked"
+	case value == "as_served" || value == "served" || strings.Contains(value, "成品") || strings.Contains(value, "食用时"):
+		return "as_served"
+	case value == "package_net" || strings.Contains(value, "净含量"):
+		return "package_net"
+	default:
+		return ""
+	}
 }
 
 func normalizeFoodStateToken(value string) string {
@@ -309,7 +366,7 @@ func normalizeFoodStateToken(value string) string {
 		return "fried"
 	case value == "cooked" || strings.Contains(value, "水煮") || strings.Contains(value, "煮熟") || strings.Contains(value, "熟制") || strings.Contains(value, "熟"):
 		return "cooked"
-	case value == "baked" || strings.Contains(value, "烤") || strings.Contains(value, "焙"):
+	case value == "baked" || value == "roasted" || strings.Contains(value, "烤") || strings.Contains(value, "焙"):
 		return "baked"
 	case value == "raw" || value == "fresh" || strings.Contains(value, "生") || strings.Contains(value, "raw"):
 		return "raw"
