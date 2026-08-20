@@ -67,7 +67,8 @@ import {
   HOME_DASHBOARD_REFRESH_EVENT,
   HOME_INTAKE_DATA_CHANGED_EVENT,
   COMMUNITY_FEED_CHANGED_EVENT,
-  HOME_DASHBOARD_CACHE_TTL_MS
+  HOME_DASHBOARD_CACHE_TTL_MS,
+  type HomeDashboardRefreshPayload
 } from '../../utils/home-events'
 import { HOME_RECORD_MENU_FLAG_KEY, consumeHomeRecordMenuDate } from '../../utils/home-record-menu'
 import {
@@ -551,8 +552,10 @@ function normalizeBodyMetricsStorageKeys(metrics: BodyMetricsStorage): BodyMetri
 
 function getStoredBodyMetrics(): BodyMetricsStorage {
   try {
+    const currentUserId = String(Taro.getStorageSync('user_id') || '').trim()
+    if (!currentUserId) throw new Error('missing user id')
     const stored = Taro.getStorageSync('body_metrics_storage')
-    if (stored) {
+    if (stored && (stored as BodyMetricsStorage).userId === currentUserId) {
       const migrated = migrateLegacy2025BodyMetricKeys(stored as BodyMetricsStorage)
       return normalizeBodyMetricsStorageKeys(migrated)
     }
@@ -560,6 +563,7 @@ function getStoredBodyMetrics(): BodyMetricsStorage {
     // ignore
   }
   return {
+    userId: String(Taro.getStorageSync('user_id') || '').trim() || undefined,
     weightEntries: [],
     waterByDate: {},
     waterGoalMl: WATER_GOAL_DEFAULT
@@ -568,7 +572,9 @@ function getStoredBodyMetrics(): BodyMetricsStorage {
 
 function saveBodyMetrics(metrics: BodyMetricsStorage) {
   try {
-    Taro.setStorageSync('body_metrics_storage', metrics)
+    const userId = String(Taro.getStorageSync('user_id') || '').trim()
+    if (!userId) return
+    Taro.setStorageSync('body_metrics_storage', { ...metrics, userId })
   } catch {
     // ignore
   }
@@ -595,8 +601,10 @@ function applyCloudBodyMetrics(storage: BodyMetricsStorage, cloud: {
     for (const entry of cloud.weight_entries) {
       const d = bmDateKey(entry.date)
       byDate.set(d, {
+        id: entry.id,
         date: d,
         value: entry.value,
+        client_id: entry.client_id,
         recorded_at: entry.recorded_at || undefined
       })
     }
@@ -837,6 +845,8 @@ function IndexPage() {
   const waterBlurTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
   /** 快速切换日期时忽略非最新一次 dashboard 的响应（微信小程序无 AbortController，无法掐断请求） */
   const loadDashboardSeqRef = React.useRef(0)
+  /** 身体指标请求独立编号，避免保存后的新数据被较早发出的旧响应覆盖。 */
+  const bodyMetricsSeqRef = React.useRef(0)
   /** 切日同步专用的 seq ref，避免与 loadDashboard 共用导致竞态丢弃 */
   const syncDashboardSeqRef = React.useRef(0)
   /** 防止并发重复请求：同日期 dashboard 正在加载中时跳过新调用 */
@@ -1027,7 +1037,7 @@ function IndexPage() {
   }, [showDailyPosterModal, dailyPosterImageUrl])
 
   // 加载指定日期的首页数据
-  const loadDashboard = React.useCallback(async (targetDate?: string, silent = false) => {
+  const loadDashboard = React.useCallback(async (targetDate?: string, silent = false, force = false) => {
     const resolvedDate =
       targetDate !== undefined && targetDate !== ''
         ? targetDate
@@ -1035,6 +1045,7 @@ function IndexPage() {
 
     // 若同日期请求已在进行中，跳过本次调用（解决 useDidShow 多次触发导致的大量重复请求）
     if (
+      !force &&
       loadDashboardPendingRef.current &&
       loadDashboardPendingRef.current.date === resolvedDate
     ) {
@@ -1061,6 +1072,7 @@ function IndexPage() {
       setCalendarMonthLoadError(false)
       setLoading(false)
       setIsSwitchingDate(false)
+      loadDashboardPendingRef.current = null
       return
     }
 
@@ -1076,6 +1088,7 @@ function IndexPage() {
         console.error('[home-dashboard] getStatsSummary failed:', err)
         return null
       })
+      const bodyMetricsSeq = ++bodyMetricsSeqRef.current
       const bodyMetricsPromise = fetchBodyMetricsSummaryRetry()
       const exerciseLogsPromise = getExerciseLogs(exerciseLogParams).catch((err) => {
         console.error('[home-dashboard] getExerciseLogs failed:', err)
@@ -1087,18 +1100,6 @@ function IndexPage() {
         return
       }
       const intake = res.intakeData
-      // DEBUG: 打印首页餐食原始数据，排查 description / meal_record_entries 是否为空
-      console.log('[DEBUG] getHomeDashboard meals raw:', JSON.stringify(res.meals || [], null, 2))
-      if (Array.isArray(res.meals)) {
-        res.meals.forEach((m, i) => {
-          console.log(`[DEBUG] meal[${i}] type=${m.type} name=${m.name} description=${m.description} entriesCount=${Array.isArray(m.meal_record_entries) ? m.meal_record_entries.length : 'N/A'}`)
-          if (Array.isArray(m.meal_record_entries)) {
-            m.meal_record_entries.forEach((e, j) => {
-              console.log(`[DEBUG]   entry[${j}] id=${e.id} title=${e.title} total_calories=${e.total_calories}`)
-            })
-          }
-        })
-      }
       setIntakeData(intake)
       setNutritionTarget(res.nutritionTarget || null)
       setMeals(res.meals || [])
@@ -1156,87 +1157,76 @@ function IndexPage() {
       setLoading(false)
       setIsSwitchingDate(false)
 
-      const [stats, bodyMetricsRes, exerciseLogsRes] = await Promise.all([
+      // 辅助数据独立收尾，不能继续占用 dashboard 的 pending 锁；否则用户保存
+      // 体重/喝水后触发的强制刷新会被当成“重复请求”直接丢弃。
+      void Promise.all([
         statsPromise,
         bodyMetricsPromise,
         exerciseLogsPromise
-      ])
-      if (seq !== loadDashboardSeqRef.current) {
-        return
-      }
+      ]).then(([stats, bodyMetricsRes, exerciseLogsRes]) => {
+        if (seq !== loadDashboardSeqRef.current) return
 
-      if (exerciseLogsRes) {
-        nextExerciseKcal = mergeExerciseKcalFromDashboardAndLogs(
-          res.exerciseBurnedKcal,
-          exerciseLogsRes.total_calories
-        )
-        setExerciseBurnedKcal(nextExerciseKcal)
-        if (nextExerciseKcal !== initialExerciseKcal) {
-          const latestSnapshot = getStoredHomeDashboardSnapshotByDate(normalizedDate)
-          if (latestSnapshot) {
-            saveHomeDashboardSnapshot({
-              ...latestSnapshot,
-              updatedAt: Date.now(),
-              exerciseBurnedKcal: nextExerciseKcal
-            })
+        if (exerciseLogsRes) {
+          nextExerciseKcal = mergeExerciseKcalFromDashboardAndLogs(
+            res.exerciseBurnedKcal,
+            exerciseLogsRes.total_calories
+          )
+          setExerciseBurnedKcal(nextExerciseKcal)
+          if (nextExerciseKcal !== initialExerciseKcal) {
+            const latestSnapshot = getStoredHomeDashboardSnapshotByDate(normalizedDate)
+            if (latestSnapshot) {
+              saveHomeDashboardSnapshot({
+                ...latestSnapshot,
+                updatedAt: Date.now(),
+                exerciseBurnedKcal: nextExerciseKcal
+              })
+            }
           }
         }
-      }
 
-      // 从 storage 优先、stats 回退构建 7 天热力图；stats 失败时保留首屏缓存结果。
-      if (stats) {
-        setCalendarHistoryCells(buildCalendarHeatmapCellsFromStorage(stats))
-        const today = new Date()
-        const nextWeekHeatmapCells: WeekHeatmapCell[] = []
-        for (let offset = -3; offset <= 3; offset++) {
-          const date = new Date(today)
-          date.setDate(today.getDate() + offset)
-          const dateKey = formatDateKey(date)
-          const snap = getStoredHomeDashboardSnapshotByDate(dateKey)
-          const dayData = stats.daily_calories.find(d => normalizeTo2025(d.date) === normalizeTo2025(dateKey))
-          const calories = snap ? snap.intakeData.current : (dayData?.calories || 0)
-          const target = snap ? snap.intakeData.target : (stats.tdee || 2000)
-          const hasRecord = calories > 0 || Boolean(snap?.meals?.length)
-          nextWeekHeatmapCells.push({
-            date: dateKey,
-            dayName: SHORT_DAY_NAMES[date.getDay()],
-            dayNum: String(date.getDate()),
-            calories,
-            target,
-            intakeRatio: hasRecord ? calories / target : 0,
-            state: !hasRecord ? 'none' : calories > target ? 'surplus' : 'deficit',
-            isToday: offset === 0,
-            hasRecord
+        // 从 storage 优先、stats 回退构建 7 天热力图；stats 失败时保留首屏缓存结果。
+        if (stats) {
+          setCalendarHistoryCells(buildCalendarHeatmapCellsFromStorage(stats))
+          const today = new Date()
+          const nextWeekHeatmapCells: WeekHeatmapCell[] = []
+          for (let offset = -3; offset <= 3; offset++) {
+            const date = new Date(today)
+            date.setDate(today.getDate() + offset)
+            const dateKey = formatDateKey(date)
+            const snap = getStoredHomeDashboardSnapshotByDate(dateKey)
+            const dayData = stats.daily_calories.find(d => normalizeTo2025(d.date) === normalizeTo2025(dateKey))
+            const calories = snap ? snap.intakeData.current : (dayData?.calories || 0)
+            const target = snap ? snap.intakeData.target : (stats.tdee || 2000)
+            const hasRecord = calories > 0 || Boolean(snap?.meals?.length)
+            nextWeekHeatmapCells.push({
+              date: dateKey,
+              dayName: SHORT_DAY_NAMES[date.getDay()],
+              dayNum: String(date.getDate()),
+              calories,
+              target,
+              intakeRatio: hasRecord ? calories / target : 0,
+              state: !hasRecord ? 'none' : calories > target ? 'surplus' : 'deficit',
+              isToday: offset === 0,
+              hasRecord
+            })
+          }
+          setWeekHeatmapCells(nextWeekHeatmapCells)
+        }
+
+        if (bodyMetricsRes && bodyMetricsSeq === bodyMetricsSeqRef.current) {
+          setBodyMetrics(prev => {
+            const next = applyCloudBodyMetrics(prev, {
+              weight_entries: bodyMetricsRes.weight_entries,
+              water_daily: bodyMetricsRes.water_daily,
+              water_goal_ml: bodyMetricsRes.water_goal_ml
+            })
+            saveBodyMetrics(next)
+            return next
           })
         }
-        console.log('[DEBUG] weekHeatmapCells built:', nextWeekHeatmapCells.map(c => ({ date: c.date, state: c.state, calories: c.calories })))
-        setWeekHeatmapCells(nextWeekHeatmapCells)
-      }
-
-      // 应用云端身体指标数据（失败时仍规范化本机日期键，避免 2025/2026 混用导致按日切换永远不变）
-      console.log('[DEBUG] bodyMetricsRes:', JSON.stringify({
-        water_goal_ml: bodyMetricsRes?.water_goal_ml,
-        today_water: bodyMetricsRes?.today_water,
-        water_daily: bodyMetricsRes?.water_daily,
-        water_daily_length: bodyMetricsRes?.water_daily?.length
-      }))
-      if (bodyMetricsRes) {
-        setBodyMetrics(prev => {
-          const next = applyCloudBodyMetrics(prev, {
-            weight_entries: bodyMetricsRes.weight_entries,
-            water_daily: bodyMetricsRes.water_daily,
-            water_goal_ml: bodyMetricsRes.water_goal_ml
-          })
-          saveBodyMetrics(next)
-          return next
-        })
-      } else {
-        setBodyMetrics(prev => {
-          const next = normalizeBodyMetricsStorageKeys(prev)
-          saveBodyMetrics(next)
-          return next
-        })
-      }
+      }).catch((error) => {
+        console.error('[home-dashboard] 后台增强数据合并失败:', error)
+      })
 
     } catch (error) {
       if (seq !== loadDashboardSeqRef.current) {
@@ -1278,71 +1268,6 @@ function IndexPage() {
       }
     }
   }, [setIntakeData, setMeals, setWeekHeatmapCells, setTargetForm, setLoading, setIsSwitchingDate])
-
-  // 独立的后台缓存补齐逻辑：与主请求并行，互不干扰
-  async function ensureHomeDashboardCache(): Promise<void> {
-    if (!getAccessToken()) return
-    try {
-      const snapshots = getStoredHomeDashboardSnapshots()
-      if (snapshots.length >= 7) return
-      const today = new Date()
-      const missingDates: string[] = []
-      Array.from({ length: 7 }).forEach((_, idx) => {
-        const offset = idx - 6
-        const d = new Date(today)
-        d.setDate(today.getDate() + offset)
-        const dateKey = formatDateKey(d)
-        if (!getStoredHomeDashboardSnapshotByDate(dateKey)) {
-          missingDates.push(dateKey)
-        }
-      })
-      if (missingDates.length === 0) return
-      console.log('[dashboard-backfill] missing dates:', missingDates)
-      const results = await Promise.all(
-        missingDates.map(async (date) => {
-          try {
-            const dayRes = await getHomeDashboard(date)
-            const normDate = mapCalendarDateToApi(date) || date
-            return {
-              date: normDate,
-              updatedAt: Date.now(),
-              intakeData: dayRes.intakeData,
-              meals: dayRes.meals || [],
-              expirySummary: dayRes.expirySummary || DEFAULT_EXPIRY_SUMMARY,
-              exerciseBurnedKcal: dayRes.exerciseBurnedKcal || 0,
-              achievement: dayRes.achievement || { streak_days: 0, green_days: 0 },
-              nutritionTarget: dayRes.nutritionTarget || null,
-              supplementSummary: dayRes.supplementSummary || DEFAULT_SUPPLEMENT_SUMMARY,
-            } as HomeDashboardLocalSnapshot
-          } catch (err) {
-            console.error('[dashboard-backfill] fetch failed for', date, err)
-            return null
-          }
-        })
-      )
-      results.forEach((snapshot) => {
-        if (snapshot) saveHomeDashboardSnapshot(snapshot)
-      })
-      // 完成后从缓存刷新热图 UI
-      setWeekHeatmapCells(buildWeekHeatmapCellsFromStorage())
-      // 若当前选中日期已补齐，同步刷新首页数据
-      const currentDate = selectedDateRef.current || formatDateKey(new Date())
-      const refreshed = getStoredHomeDashboardSnapshotByDate(currentDate)
-      if (refreshed) {
-        setIntakeData(refreshed.intakeData)
-        setNutritionTarget(refreshed.nutritionTarget || null)
-        setMeals(refreshed.meals || [])
-        setExpirySummary(refreshed.expirySummary || DEFAULT_EXPIRY_SUMMARY)
-        setSupplementSummary(refreshed.supplementSummary || DEFAULT_SUPPLEMENT_SUMMARY)
-        setExerciseBurnedKcal(refreshed.exerciseBurnedKcal || 0)
-        setHomeAchievement(refreshed.achievement || { streak_days: 0, green_days: 0 })
-        setTargetForm(createTargetForm(refreshed.intakeData || DEFAULT_INTAKE))
-      }
-      console.log('[dashboard-backfill] done')
-    } catch (err) {
-      console.error('[dashboard-backfill] unhandled error', err)
-    }
-  }
 
   // 每次显示页面时刷新数据
   const skipNextRefreshRef = React.useRef(false)
@@ -1435,10 +1360,6 @@ function IndexPage() {
     )) {
       homeDataStaleRef.current = true
     }
-
-    // 独立启动缓存补齐，与主请求并行，互不干扰
-    // 放在 canCache 判断之前，确保即使主请求被跳过也会检查缓存
-    void ensureHomeDashboardCache()
 
     const last = homeLastLoadRef.current
     const localSnapshotChangedAfterLastLoad =
@@ -1539,9 +1460,34 @@ function IndexPage() {
     }
   }, [showDailyPosterModal])
 
+  const refreshBodyMetrics = React.useCallback(async () => {
+    if (!getAccessToken()) return
+    const seq = ++bodyMetricsSeqRef.current
+    try {
+      const res = await getBodyMetricsSummary('week')
+      if (seq !== bodyMetricsSeqRef.current) return
+      setBodyMetrics(prev => {
+        const next = applyCloudBodyMetrics(prev, {
+          weight_entries: res.weight_entries,
+          water_daily: res.water_daily,
+          water_goal_ml: res.water_goal_ml
+        })
+        saveBodyMetrics(next)
+        return next
+      })
+    } catch (error) {
+      console.error('刷新身体指标失败:', error)
+    }
+  }, [])
+
   /** 饮食/运动/保质期等变更：标记脏数据，并在需要时立即同步首页与身体指标 */
   React.useEffect(() => {
-    const markHomeStale = (payload?: { date?: string; force?: boolean }): void => {
+    const markHomeStale = (payload?: HomeDashboardRefreshPayload): void => {
+      if (payload?.bodyMetricsOnly) {
+        setBodyMetrics(getStoredBodyMetrics())
+        void refreshBodyMetrics()
+        return
+      }
       skipNextRefreshRef.current = false
       homeDataStaleRef.current = true
       const today = formatDateKey(new Date())
@@ -1553,7 +1499,7 @@ function IndexPage() {
       const localSnapshot = getStoredHomeDashboardSnapshotByDate(changedDate)
       if (!localSnapshot) {
         if (payload?.force) {
-          void loadDashboard(changedDate, true)
+          void loadDashboard(changedDate, true, true)
         }
         return
       }
@@ -1569,7 +1515,7 @@ function IndexPage() {
       // 从 storage 重新加载身体指标，使饮食记录保存后的乐观饮水更新立即生效
       setBodyMetrics(getStoredBodyMetrics())
       if (payload?.force) {
-        void loadDashboard(changedDate, true)
+        void loadDashboard(changedDate, true, true)
       }
     }
     Taro.eventCenter.on(FOOD_EXPIRY_CHANGED_EVENT, markHomeStale)
@@ -1580,7 +1526,7 @@ function IndexPage() {
       Taro.eventCenter.off(HOME_DASHBOARD_REFRESH_EVENT, markHomeStale)
       Taro.eventCenter.off(HOME_INTAKE_DATA_CHANGED_EVENT, markHomeStale)
     }
-  }, [])
+  }, [loadDashboard, refreshBodyMetrics])
 
   // 监听记录菜单标记变化（解决首页直接点击绿色按钮无响应问题）
   React.useEffect(() => {
@@ -2189,10 +2135,9 @@ function IndexPage() {
       return
     }
     try {
-      const [res, exerciseLogsRes, bodyMetricsRes] = await Promise.all([
+      const [res, exerciseLogsRes] = await Promise.all([
         getHomeDashboard(date),
-        getExerciseLogs({ date }).catch(() => null),
-        getBodyMetricsSummary('week').catch(() => null)
+        getExerciseLogs({ date }).catch(() => null)
       ])
       if (seq !== syncDashboardSeqRef.current) return
       const intake = res.intakeData
@@ -2227,17 +2172,6 @@ function IndexPage() {
         return [...prev.filter(cell => cell.date !== normalizedDate), nextCell]
           .sort((a, b) => a.date.localeCompare(b.date))
       })
-      if (bodyMetricsRes) {
-        setBodyMetrics(prev => {
-          const next = applyCloudBodyMetrics(prev, {
-            weight_entries: bodyMetricsRes.weight_entries,
-            water_daily: bodyMetricsRes.water_daily,
-            water_goal_ml: bodyMetricsRes.water_goal_ml
-          })
-          saveBodyMetrics(next)
-          return next
-        })
-      }
       // 同步更新该日期在周热图中的颜色
       setWeekHeatmapCells(prev => prev.map(cell => {
         if (cell.date !== date) return cell
@@ -2446,25 +2380,6 @@ function IndexPage() {
       urls: images
     })
   }
-
-  // 刷新身体指标数据
-  const refreshBodyMetrics = React.useCallback(async () => {
-    if (!getAccessToken()) return
-    try {
-      const res = await getBodyMetricsSummary('week')
-      setBodyMetrics(prev => {
-        const next = applyCloudBodyMetrics(prev, {
-          weight_entries: res.weight_entries,
-          water_daily: res.water_daily,
-          water_goal_ml: res.water_goal_ml
-        })
-        saveBodyMetrics(next)
-        return next
-      })
-    } catch (error) {
-      console.error('刷新身体指标失败:', error)
-    }
-  }, [])
 
   const totalCurrent = normalizeDisplayNumber(intakeData.current)
   const totalTarget = normalizeDisplayNumber(intakeData.target)

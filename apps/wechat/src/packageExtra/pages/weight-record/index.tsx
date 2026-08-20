@@ -10,6 +10,10 @@ import {
   type BodyMetricsSummary,
 } from '../../../utils/api'
 import { HOME_DASHBOARD_REFRESH_EVENT } from '../../../utils/home-events'
+import {
+  removeWeightFromBodyMetricsStorage,
+  upsertWeightInBodyMetricsStorage,
+} from '../../../utils/home-dashboard-local-cache'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { withAuth } from '../../../utils/withAuth'
 import {
@@ -57,10 +61,6 @@ function WeightRecordPage() {
     setRecordDate(initialDate)
   }, [initialDate])
 
-  useEffect(() => {
-    void loadData()
-  }, [loadData])
-
   useDidShow(() => {
     void loadData()
   })
@@ -84,8 +84,13 @@ function WeightRecordPage() {
     }
     setSaving(true)
     try {
-      await saveBodyWeightRecord(value, recordDate, `weight-${recordDate}-${Date.now()}`)
-      Taro.eventCenter.trigger(HOME_DASHBOARD_REFRESH_EVENT)
+      const result = await saveBodyWeightRecord(value, recordDate, `weight-${recordDate}-${Date.now()}`)
+      upsertWeightInBodyMetricsStorage(result.item)
+      Taro.eventCenter.trigger(HOME_DASHBOARD_REFRESH_EVENT, {
+        date: recordDate,
+        force: true,
+        bodyMetricsOnly: true,
+      })
       Taro.showToast({ title: '已记录体重', icon: 'success' })
       await loadData()
     } catch (err) {
@@ -110,7 +115,12 @@ function WeightRecordPage() {
         setDeletingId(item.id)
         try {
           await deleteBodyWeightRecord(item.id)
-          Taro.eventCenter.trigger(HOME_DASHBOARD_REFRESH_EVENT)
+          removeWeightFromBodyMetricsStorage(item)
+          Taro.eventCenter.trigger(HOME_DASHBOARD_REFRESH_EVENT, {
+            date: recordDate,
+            force: true,
+            bodyMetricsOnly: true,
+          })
           Taro.showToast({ title: '已删除', icon: 'success' })
           await loadData()
         } catch (err) {

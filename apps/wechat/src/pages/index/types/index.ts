@@ -1,12 +1,15 @@
 import { type HomeIntakeData, type HomeMealItem, type BodyMetricWaterDay, type HomeTargetCalibrationSuggestion } from '../../../utils/api'
 
 export interface WeightRecordEntry {
+  id?: string
   date: string
   value: number
-  recorded_at?: string
+  client_id?: string | null
+  recorded_at?: string | null
 }
 
 export interface BodyMetricsStorage {
+  userId?: string
   weightEntries: WeightRecordEntry[]
   waterByDate: Record<string, BodyMetricWaterDay>
   waterGoalMl: number

@@ -5,6 +5,8 @@
 import Taro from '@tarojs/taro'
 import {
   type BodyMetricWaterDay,
+  type BodyMetricWaterLogItem,
+  type BodyMetricWeightEntry,
   type FoodRecord,
   getAccessToken,
   getExerciseLogs,
@@ -160,9 +162,8 @@ export function saveHomeDashboardSnapshot(snapshot: HomeDashboardLocalSnapshot):
     .slice(0, HOME_DASHBOARD_LOCAL_CACHE_LIMIT)
   try {
     Taro.setStorageSync(HOME_DASHBOARD_LOCAL_CACHE_KEY, next)
-    console.log('[DEBUG] saveHomeDashboardSnapshot success, key=', HOME_DASHBOARD_LOCAL_CACHE_KEY, 'items=', next.length, 'bytes≈', JSON.stringify(next).length)
-  } catch (err: any) {
-    console.error('[DEBUG] saveHomeDashboardSnapshot FAILED:', err?.message || err, 'key=', HOME_DASHBOARD_LOCAL_CACHE_KEY, 'items=', next.length, 'bytes≈', JSON.stringify(next).length)
+  } catch (error) {
+    console.error('[home-dashboard-cache] 首页缓存写入失败:', error)
   }
 }
 
@@ -204,28 +205,128 @@ function calculateFoodRecordWaterMl(payload: SaveFoodRecordRequest): number {
 }
 
 const BODY_METRICS_STORAGE_KEY = 'body_metrics_storage'
+const DEFAULT_WATER_GOAL_ML = 2000
+
+function getWritableBodyMetricsStorage(): BodyMetricsStorage | null {
+  const userId = currentUserId()
+  if (!userId) return null
+  try {
+    const stored = Taro.getStorageSync(BODY_METRICS_STORAGE_KEY) as BodyMetricsStorage | undefined
+    if (stored?.userId === userId) {
+      return {
+        ...stored,
+        userId,
+        weightEntries: Array.isArray(stored.weightEntries) ? [...stored.weightEntries] : [],
+        waterByDate: stored.waterByDate ? { ...stored.waterByDate } : {},
+        waterGoalMl: Number(stored.waterGoalMl) || DEFAULT_WATER_GOAL_ML,
+      }
+    }
+  } catch {
+    // 损坏或旧账号缓存按空数据重建。
+  }
+  return {
+    userId,
+    weightEntries: [],
+    waterByDate: {},
+    waterGoalMl: DEFAULT_WATER_GOAL_ML,
+  }
+}
+
+function saveBodyMetricsStorage(storage: BodyMetricsStorage): void {
+  const userId = currentUserId()
+  if (!userId) return
+  try {
+    Taro.setStorageSync(BODY_METRICS_STORAGE_KEY, { ...storage, userId })
+  } catch {
+    // 本地缓存失败不影响已成功的云端写入。
+  }
+}
+
+/** 体重保存成功后立即更新首页缓存；同一天首页只展示最后一次记录。 */
+export function upsertWeightInBodyMetricsStorage(item: BodyMetricWeightEntry): void {
+  const stored = getWritableBodyMetricsStorage()
+  if (!stored) return
+  const date = mapCalendarDateToApi(item.date) || item.date
+  const nextItem = { ...item, date }
+  const nextEntries = stored.weightEntries.filter((entry) => entry.date !== date)
+  nextEntries.push(nextItem)
+  nextEntries.sort((a, b) => `${a.date} ${a.recorded_at || ''}`.localeCompare(`${b.date} ${b.recorded_at || ''}`))
+  saveBodyMetricsStorage({ ...stored, weightEntries: nextEntries.slice(-90) })
+}
+
+/** 删除体重后只移除对应的本地记录；云端摘要随后负责最终校准。 */
+export function removeWeightFromBodyMetricsStorage(item: BodyMetricWeightEntry): void {
+  const stored = getWritableBodyMetricsStorage()
+  if (!stored) return
+  const date = mapCalendarDateToApi(item.date) || item.date
+  const nextEntries = stored.weightEntries.filter((entry) => {
+    if (item.id && entry.id) return entry.id !== item.id
+    if (entry.date !== date) return true
+    if (entry.value !== item.value) return true
+    if (item.recorded_at && entry.recorded_at) return entry.recorded_at !== item.recorded_at
+    return false
+  })
+  saveBodyMetricsStorage({ ...stored, weightEntries: nextEntries })
+}
 
 /**
  * 饮食记录保存成功后，把食物含水量乐观添加到本机 body_metrics_storage，
  * 让首页饮水进度无需等云端身体指标接口即可立即更新。
  */
-export function addWaterToBodyMetricsStorage(calendarDate: string, amountMl: number): void {
+export function addWaterToBodyMetricsStorage(
+  calendarDate: string,
+  amountMl: number,
+  logItem?: BodyMetricWaterLogItem
+): void {
   if (amountMl <= 0) return
   const apiDate = mapCalendarDateToApi(calendarDate) || calendarDate
-  try {
-    const stored = Taro.getStorageSync(BODY_METRICS_STORAGE_KEY) as BodyMetricsStorage | undefined
-    if (!stored) return
-    const current = stored.waterByDate[apiDate] || { date: apiDate, total: 0, logs: [] }
-    stored.waterByDate[apiDate] = {
-      ...current,
-      date: apiDate,
-      total: current.total + amountMl,
-      logs: [...(current.logs || []), amountMl]
-    }
-    Taro.setStorageSync(BODY_METRICS_STORAGE_KEY, stored)
-  } catch {
-    // ignore
+  const stored = getWritableBodyMetricsStorage()
+  if (!stored) return
+  const current = stored.waterByDate[apiDate] || { date: apiDate, total: 0, logs: [] }
+  const roundedAmount = Math.max(0, Math.round(amountMl))
+  stored.waterByDate[apiDate] = {
+    ...current,
+    date: apiDate,
+    total: Math.max(0, Number(current.total) || 0) + roundedAmount,
+    logs: [...(current.logs || []), roundedAmount],
+    log_items: logItem
+      ? [...(current.log_items || []), { ...logItem, date: apiDate, amount_ml: roundedAmount }]
+      : current.log_items,
   }
+  saveBodyMetricsStorage(stored)
+}
+
+/** 删除一条喝水记录后同步扣减首页缓存。 */
+export function removeWaterFromBodyMetricsStorage(item: BodyMetricWaterLogItem): void {
+  const stored = getWritableBodyMetricsStorage()
+  if (!stored) return
+  const apiDate = mapCalendarDateToApi(item.date) || item.date
+  const current = stored.waterByDate[apiDate]
+  if (!current) return
+  const amount = Math.max(0, Math.round(Number(item.amount_ml) || 0))
+  const logs = [...(current.logs || [])]
+  const matchingLogIndex = logs.lastIndexOf(amount)
+  if (matchingLogIndex >= 0) logs.splice(matchingLogIndex, 1)
+  const logItems = (current.log_items || []).filter((entry) => {
+    if (item.id && entry.id) return entry.id !== item.id
+    return !(entry.amount_ml === item.amount_ml && entry.recorded_at === item.recorded_at)
+  })
+  stored.waterByDate[apiDate] = {
+    ...current,
+    total: Math.max(0, (Number(current.total) || 0) - amount),
+    logs,
+    log_items: logItems,
+  }
+  saveBodyMetricsStorage(stored)
+}
+
+/** 清空某天喝水记录后立即清空首页缓存。 */
+export function clearWaterFromBodyMetricsStorage(calendarDate: string): void {
+  const stored = getWritableBodyMetricsStorage()
+  if (!stored) return
+  const apiDate = mapCalendarDateToApi(calendarDate) || calendarDate
+  stored.waterByDate[apiDate] = { date: apiDate, total: 0, logs: [], log_items: [] }
+  saveBodyMetricsStorage(stored)
 }
 
 function formatLocalTimeHHmm(date = new Date()): string {
