@@ -16,7 +16,7 @@ import (
 func TestCompleteAnalyzedItemStoresEmptyImagePathsForTextOnlyDish(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open("file:"+uuid.NewString()+"?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&domain.CatalogItem{}, &publishedCatalogItem{}))
+	require.NoError(t, db.AutoMigrate(&domain.CollectionBatch{}, &domain.CatalogItem{}, &publishedCatalogItem{}))
 
 	price := 20.0
 	item := &domain.CatalogItem{
@@ -24,6 +24,7 @@ func TestCompleteAnalyzedItemStoresEmptyImagePathsForTextOnlyDish(t *testing.T) 
 		OrganizationName: "测试大学", CanteenName: "一食堂", PriceType: "fixed", Price: &price,
 		Status: "analysis_pending",
 	}
+	require.NoError(t, db.Create(&domain.CollectionBatch{ID: item.BatchID, VenueType: "university"}).Error)
 	require.NoError(t, db.Create(item).Error)
 
 	err = NewCatalogRepo(db).CompleteAnalyzedItem(context.Background(), item.ID, "task-text-only", map[string]any{

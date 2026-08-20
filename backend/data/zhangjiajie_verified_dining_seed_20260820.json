@@ -1,0 +1,56 @@
+[
+  {
+    "batch_name": "张家界高校官方食堂楼层确认集-20260820",
+    "region": "张家界市",
+    "source_scope": "高校官方页面及湖南省教育厅材料；严格确认现行高校、正式校区、物理父食堂、实际餐饮楼层与2024—2026当前运营",
+    "schools": [
+      {
+        "school": "张家界学院",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "校本部",
+            "aliases": ["本部"],
+            "address": "湖南省张家界市永定区大庸桥街道温泉路1号",
+            "source_url": "https://zs.zjjc.edu.cn/p121/zszc1/20260529/65709.html"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "校本部",
+            "name": "一食堂",
+            "aliases": ["第一食堂"],
+            "location_text": "校本部一食堂二楼、三楼",
+            "building_or_floor": "二楼、三楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "2024年商业餐饮经营配送位置；2026年新学期晚餐恢复",
+            "source_url": "https://bwc.zjjc.edu.cn/m154/gzzd/20241012/55948.html",
+            "source_title": "安全制度汇编",
+            "source_org": "张家界学院保卫处",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "学校制度在校园商业餐饮店铺、供应商和经营业主采购配送的连续语境中，明确批准大人快餐和一食堂二、三楼各配一辆三轮车，直接把一食堂二楼、三楼锁定为实际商业餐饮经营位置，而非建筑总层数、活动或工程地点。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://news.zjjc.edu.cn/p111/hzxw/20260226/62827.html",
+                "source_title": "收心聚气 定向攻坚：我校后勤基建处召开新学期工作专题会",
+                "source_org": "张家界学院新闻网、张家界学院后勤基建处",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "学校新学期开学保障报道明确“26日一食堂晚餐恢复”，直接证明同一物理父食堂在2026年恢复实际供餐，并与2024年二楼、三楼餐饮经营位置形成当前运营闭环。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "一食堂二楼、三楼归并为一个物理父食堂，不拆成独立餐饮实体。",
+          "一食堂一楼缺少实际售餐、取餐或堂食证据，不纳入本批。",
+          "吉首大学张家界学院是张家界学院转设前旧名，按同一现行学校承接，不重复建校。"
+        ]
+      }
+    ]
+  }
+]

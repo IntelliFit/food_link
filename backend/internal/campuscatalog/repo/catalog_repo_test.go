@@ -26,7 +26,7 @@ func TestPublicPriceTypeMapsCatalogEnums(t *testing.T) {
 func TestCompleteAnalyzedItemPublishesNutritionAndCatalogAtomically(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open("file:"+uuid.NewString()+"?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&domain.CatalogItem{}, &publishedCatalogItem{}))
+	require.NoError(t, db.AutoMigrate(&domain.CollectionBatch{}, &domain.CatalogItem{}, &publishedCatalogItem{}))
 
 	price := 12.0
 	item := &domain.CatalogItem{
@@ -34,6 +34,7 @@ func TestCompleteAnalyzedItemPublishesNutritionAndCatalogAtomically(t *testing.T
 		OrganizationName: "清华大学", CanteenName: "紫荆园", PriceType: "fixed", Price: &price,
 		PriceUnit: "元/份", ImagePaths: []string{"campus-food/rice.jpg"}, CompletenessStatus: "complete", Status: "analysis_pending",
 	}
+	require.NoError(t, db.Create(&domain.CollectionBatch{ID: item.BatchID, VenueType: "university"}).Error)
 	require.NoError(t, db.Create(item).Error)
 	repo := NewCatalogRepo(db)
 	completedAt := time.Date(2026, 8, 5, 12, 0, 0, 0, time.UTC)
@@ -51,6 +52,8 @@ func TestCompleteAnalyzedItemPublishesNutritionAndCatalogAtomically(t *testing.T
 	require.Equal(t, 420.0, publicItem.TotalCalories)
 	require.Equal(t, 12.0, publicItem.TotalProtein)
 	require.Equal(t, "task-1", *publicItem.AnalysisTaskID)
+	require.Equal(t, "campus", publicItem.Type)
+	require.True(t, publicItem.IsCampusFood)
 
 	var catalog domain.CatalogItem
 	require.NoError(t, db.First(&catalog, "id = ?", item.ID).Error)
@@ -59,10 +62,43 @@ func TestCompleteAnalyzedItemPublishesNutritionAndCatalogAtomically(t *testing.T
 	require.NotNil(t, catalog.AnalysisCompletedAt)
 }
 
+func TestCompleteAnalyzedOfficeParkItemPublishesWithoutCampusLabel(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:"+uuid.NewString()+"?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&domain.CollectionBatch{}, &domain.CatalogItem{}, &publishedCatalogItem{}))
+
+	batchID := uuid.NewString()
+	require.NoError(t, db.Create(&domain.CollectionBatch{ID: batchID, VenueType: "office_park"}).Error)
+	item := &domain.CatalogItem{
+		ID: uuid.NewString(), BatchID: batchID, EntryType: "dish", Name: "番茄炒蛋",
+		OrganizationName: "AI原点社区", AreaName: "北京海淀产业园", CanteenName: "园区食堂",
+		Floor: "1F", WindowName: "热菜档口", Status: "analysis_pending",
+	}
+	require.NoError(t, db.Create(item).Error)
+
+	require.NoError(t, NewCatalogRepo(db).CompleteAnalyzedItem(context.Background(), item.ID, "task-office", map[string]any{
+		"items": []map[string]any{{"name": item.Name, "micronutrient_analysis": "ai_precise_v1", "nutrients": map[string]any{
+			"calories": 180.0, "protein": 8.0, "carbs": 12.0, "fat": 11.0,
+		}}},
+	}, time.Now()))
+
+	var publicItem publishedCatalogItem
+	require.NoError(t, db.First(&publicItem, "id = ?", item.ID).Error)
+	require.Equal(t, "common", publicItem.Type)
+	require.False(t, publicItem.IsCampusFood)
+	require.Nil(t, publicItem.SchoolID)
+	require.Empty(t, publicItem.SchoolName)
+	require.Empty(t, publicItem.CampusName)
+	require.Empty(t, publicItem.CanteenName)
+	require.Empty(t, publicItem.CampusLocationText)
+	require.Equal(t, "园区食堂", publicItem.MerchantName)
+	require.Contains(t, publicItem.DetailAddress, "AI原点社区")
+}
+
 func TestUpdatePublishedItemSyncsMetadataWithoutChangingNutrition(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open("file:"+uuid.NewString()+"?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&domain.CatalogItem{}, &publishedCatalogItem{}))
+	require.NoError(t, db.AutoMigrate(&domain.CollectionBatch{}, &domain.CatalogItem{}, &publishedCatalogItem{}))
 
 	originalPrice := 12.0
 	updatedPrice := 15.0
@@ -74,6 +110,7 @@ func TestUpdatePublishedItemSyncsMetadataWithoutChangingNutrition(t *testing.T) 
 		ImagePaths: []string{"campus-food/old.jpg"}, CompletenessStatus: "complete", Status: "published",
 		PublishedAt: &now, UpdatedAt: &now,
 	}
+	require.NoError(t, db.Create(&domain.CollectionBatch{ID: item.BatchID, VenueType: "university"}).Error)
 	require.NoError(t, db.Create(item).Error)
 	publicItem := &publishedCatalogItem{
 		ID: item.ID, FoodName: item.Name, ImagePaths: item.ImagePaths, Status: "published", Type: "campus",
@@ -114,12 +151,13 @@ func TestUpdatePublishedItemSyncsMetadataWithoutChangingNutrition(t *testing.T) 
 func TestUpdatePublishedItemRollsBackWhenPublicSnapshotIsMissing(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open("file:"+uuid.NewString()+"?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&domain.CatalogItem{}, &publishedCatalogItem{}))
+	require.NoError(t, db.AutoMigrate(&domain.CollectionBatch{}, &domain.CatalogItem{}, &publishedCatalogItem{}))
 
 	item := &domain.CatalogItem{
 		ID: uuid.NewString(), BatchID: uuid.NewString(), EntryType: "dish", Name: "旧名称",
 		OrganizationName: "清华大学", CanteenName: "紫荆园", Status: "published",
 	}
+	require.NoError(t, db.Create(&domain.CollectionBatch{ID: item.BatchID, VenueType: "university"}).Error)
 	require.NoError(t, db.Create(item).Error)
 	item.Name = "新名称"
 
@@ -134,7 +172,7 @@ func TestUpdatePublishedItemRollsBackWhenPublicSnapshotIsMissing(t *testing.T) {
 func TestUpdatePublishedItemPreservesAnalyzedDescriptionOnPriceOnlyEdit(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open("file:"+uuid.NewString()+"?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&domain.CatalogItem{}, &publishedCatalogItem{}))
+	require.NoError(t, db.AutoMigrate(&domain.CollectionBatch{}, &domain.CatalogItem{}, &publishedCatalogItem{}))
 
 	oldPrice, newPrice := 12.0, 13.0
 	now := time.Now()
@@ -143,6 +181,7 @@ func TestUpdatePublishedItemPreservesAnalyzedDescriptionOnPriceOnlyEdit(t *testi
 		OrganizationName: "清华大学", CanteenName: "紫荆园", Status: "published",
 		PriceType: "fixed", Price: &oldPrice, PriceUnit: "元/份", PublishedAt: &now, UpdatedAt: &now,
 	}
+	require.NoError(t, db.Create(&domain.CollectionBatch{ID: item.BatchID, VenueType: "university"}).Error)
 	require.NoError(t, db.Create(item).Error)
 	require.NoError(t, db.Create(&publishedCatalogItem{
 		ID: item.ID, FoodName: item.Name, Status: "published", Type: "campus", Description: "AI 生成的营养说明",

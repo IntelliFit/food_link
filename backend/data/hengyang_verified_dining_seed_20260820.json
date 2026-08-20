@@ -1,0 +1,253 @@
+[
+  {
+    "batch_name": "衡阳高校官方食堂楼层严格复核-20260820",
+    "region": "湖南省衡阳市",
+    "source_scope": "高校、教育主管部门及政府监管一手来源；实际餐饮楼层与2024—2026同父当前运营双门槛；同步撤回活动、充值窗口和招采单证形成的旧Active记录",
+    "schools": [
+      {
+        "school": "南华大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "红湘校区",
+            "aliases": [],
+            "address": "湖南省衡阳市常胜西路28号",
+            "source_url": "https://www.usc.edu.cn/__local/6/35/74/6A3192A1DBA6D836EE04F4751B0_62A5CC07_506F2.pdf"
+          },
+          {
+            "name": "雨母校区",
+            "aliases": [],
+            "address": "湖南省衡阳市衡祁路228号",
+            "source_url": "https://www.usc.edu.cn/__local/6/35/74/6A3192A1DBA6D836EE04F4751B0_62A5CC07_506F2.pdf"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "红湘校区",
+            "name": "求是园食堂",
+            "aliases": [],
+            "location_text": "红湘校区求是园食堂一楼",
+            "building_or_floor": "一楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "2025年3月中午正常堂食；2024年同父菜品窗口与午餐运营",
+            "source_url": "https://yxy.usc.edu.cn/info/2465/9777.htm",
+            "source_title": "师生餐边叙，情暖求是园——衡阳医学院开展院领导与研究生“进食堂”餐叙活动",
+            "source_org": "南华大学衡阳医学院",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2025年3月12日中午，院领导、辅导员和研究生代表在北校求是园食堂一楼共进午餐并围坐餐桌，直接证明一楼实际堂食；不以包饺子活动地点单证激活。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://xcb.usc.edu.cn/info/1999/8513.htm",
+                "source_title": "副省长王俊寿一行来南华大学调研食品安全工作",
+                "source_org": "南华大学党委宣传部",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2024年调研组在求是园食堂检查菜品服务窗口、菜品价格和就餐环境，并与学生共用午餐，闭合同父当前正常供餐。"
+              }
+            ]
+          },
+          {
+            "campus": "红湘校区",
+            "name": "博学园食堂",
+            "aliases": [
+              "博学园学生食堂"
+            ],
+            "location_text": "红湘校区博学园食堂一楼",
+            "building_or_floor": "一楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "2022年寒假连续供餐与年夜饭；2025年开学食品卫生检查续活",
+            "source_url": "https://yjs.usc.edu.cn/info/1359/10577.htm",
+            "source_title": "我校开展“暖心南华、情系南华”主题新春系列活动",
+            "source_org": "南华大学党委研究生工作部、研究生院",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "官方报道明确留校学生在博学园一楼食堂包、吃饺子，并在红湘校区博学园食堂共进晚餐、享用年夜饭和连续餐票，证明一楼实际进餐；不以一卡通充值窗口单证激活。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://hqc.usc.edu.cn/info/1004/4339.htm",
+                "source_title": "副校长于涛带队检查春季开学工作",
+                "source_org": "南华大学后勤服务中心",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2025年春季开学检查点名红湘校区博学园食堂并现场检查食品卫生，闭合同父当前运营。"
+              }
+            ]
+          },
+          {
+            "campus": "雨母校区",
+            "name": "笃行园食堂",
+            "aliases": [
+              "笃行园二楼学生食堂"
+            ],
+            "location_text": "雨母校区笃行园食堂二楼",
+            "building_or_floor": "二楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "早餐06:30-08:30；中餐10:30-13:00；晚餐16:30-19:30（2022暑期值班时段）",
+            "source_url": "https://hqc.usc.edu.cn/info/1002/3568.htm",
+            "source_title": "关于2022年暑期食堂供餐安排的通知",
+            "source_org": "南华大学后勤服务中心饮食服务部",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "暑期供餐通知把雨母校区笃行园二楼学生食堂列为值班食堂，并逐项给出早餐、中餐、晚餐开餐时段，直接证明二楼正常供餐；一楼仅有亮化维护线索，不收录。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://hqc.usc.edu.cn/info/1004/4339.htm",
+                "source_title": "副校长于涛带队检查春季开学工作",
+                "source_org": "南华大学后勤服务中心",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2025年春季开学检查点名雨母校区笃行园食堂并现场检查食品卫生，闭合同父当前运营。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "求是园和博学园保留原父食堂ID，但以本批实际进餐与当前运营证据替换旧活动/充值窗口弱证链。笃行园仅发布有逐层三餐时段的二楼；一楼亮化、四楼一卡通和一站式服务均不作为餐饮楼层。船山学院共享红湘校区，不复制物理父食堂。"
+        ]
+      },
+      {
+        "school": "湖南工学院",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "校本部",
+            "aliases": [],
+            "address": "湖南省衡阳市珠晖区衡花路18号",
+            "source_url": "https://zs.hnit.edu.cn/info/1015/2654.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "校本部",
+            "name": "润泽学生公寓食堂",
+            "aliases": [
+              "润泽食堂"
+            ],
+            "location_text": "校本部润泽学生公寓食堂一楼售卖区、就餐区",
+            "building_or_floor": "一楼",
+            "service_type": "学生食堂",
+            "audience": "学生",
+            "opening_hours_raw": "2025年正常售卖、就餐；2026年满意度调查续活",
+            "source_url": "https://www.hnit.edu.cn/hqc/info/1002/2679.htm",
+            "source_title": "湖南工学院学生食堂突出问题整治专班开展学生食堂食品安全专项检查",
+            "source_org": "湖南工学院后勤基建处",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2025年专项检查明确润泽学生公寓食堂一楼为售卖区、就餐区，二、三楼为操作间；只发布一楼。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.hnit.edu.cn/hqc/info/1004/2929.htm",
+                "source_title": "2025年秋季学期食堂第二次满意度调查情况公示",
+                "source_org": "湖南工学院后勤基建处",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2026年1月对润泽学生公寓食堂开展满意度调查并按当前委托经营合同处理经营单位，闭合同父当前运营。"
+              }
+            ]
+          },
+          {
+            "campus": "校本部",
+            "name": "顺枫学生公寓A区食堂",
+            "aliases": [
+              "顺枫公寓A区食堂",
+              "顺枫食堂"
+            ],
+            "location_text": "校本部顺枫学生公寓A区食堂一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "学生食堂",
+            "audience": "学生",
+            "opening_hours_raw": "一、二楼学生基本大伙；2026年满意度调查续活",
+            "source_url": "https://www.hnit.edu.cn/info/1326/76668.htm",
+            "source_title": "湖南工学院顺枫学生公寓A区食堂托管经营项目招标公告",
+            "source_org": "湖南工学院",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2022年文件明确学生基本大伙设在顺枫学生公寓A区食堂一楼、二楼并已有营业窗口、售卖系统和餐饮设备；该招采文件仅用于精确楼层结构，须结合当前同父运营证据。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.hnit.edu.cn/hqc/info/1004/2929.htm",
+                "source_title": "2025年秋季学期食堂第二次满意度调查情况公示",
+                "source_org": "湖南工学院后勤基建处",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2026年1月顺枫学生公寓A区食堂满意度为93分，并按当前委托经营合同处理经营单位，闭合同父当前经营；三楼无售餐证据，不发布。"
+              },
+              {
+                "source_url": "https://www.hnit.edu.cn/info/1343/87490.htm",
+                "source_title": "校领导带队开展校园安全生产督查 筑牢消防安全防线",
+                "source_org": "湖南工学院",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2026年7月督查组进入顺枫食堂，将其作为当前人员密集场所检查疏散通道和安全出口，补强同父持续使用。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "学校当前只确认衡花路18号一个普通招生办学地点，沿用既有校本部目录规范化标签；该标签不是招生章程原文。润泽二、三楼操作间和顺枫三楼均不作为餐饮楼层。"
+        ]
+      },
+      {
+        "school": "衡阳师范学院",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "东校区",
+            "aliases": [
+              "新校区"
+            ],
+            "address": "湖南省衡阳市珠晖区衡花路16号",
+            "source_url": "https://zs.hynu.edu.cn/zszc.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "东校区",
+            "name": "东校区老食堂",
+            "aliases": [
+              "老食堂",
+              "智慧食堂"
+            ],
+            "location_text": "东校区老食堂二楼智慧食堂",
+            "building_or_floor": "二楼",
+            "service_type": "学生食堂",
+            "audience": "师生及校内考试考生",
+            "opening_hours_raw": "2024年考试期间正常就餐并支持微信扫码支付",
+            "source_url": "https://jwc.hynu.edu.cn/__local/5/E4/81/630D0C32E291DAB4390ABFCE7E5_035525E8_21AF0.pdf",
+            "source_title": "衡阳师范学院2024年专升本考试考生须知",
+            "source_org": "衡阳师范学院教务处",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "考生须知明确考试地点为东校区，考生可到智慧食堂就餐（老食堂二楼）并通过微信扫码支付，直接闭合父食堂、二楼和实际正常用餐。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://zs.hynu.edu.cn/zszc.htm",
+                "source_title": "衡阳师范学院2026年普通高校招生章程",
+                "source_org": "衡阳师范学院招生办公室",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2026年招生章程确认东校区地址为湖南省衡阳市珠晖区衡花路16号，闭合当前正式校区。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "东校区新食堂一楼只有包饺子活动地点，二楼只有2026年档口比选，缺履约后正常开餐；本批将该父食堂及其旧批次来源下线。"
+        ]
+      }
+    ]
+  }
+]

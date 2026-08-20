@@ -157,12 +157,8 @@ function InteractionNotificationsPage() {
       if (seq !== loadSeqRef.current) return
       const newList = res.list || []
       setLoadError(false)
-      setLikeCount(typeof res.like_count === 'number'
-        ? res.like_count
-        : newList.filter((item) => isLikeType(getNotificationType(item))).length)
-      setCommentCount(typeof res.comment_count === 'number'
-        ? res.comment_count
-        : newList.filter((item) => isCommentType(getNotificationType(item))).length)
+      setLikeCount(res.like_count ?? newList.filter((item) => isLikeType(getNotificationType(item))).length)
+      setCommentCount(res.comment_count ?? newList.filter((item) => isCommentType(getNotificationType(item))).length)
       logNotificationStage('response-resolved', {
         seq,
         tab,

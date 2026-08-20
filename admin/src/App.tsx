@@ -29,6 +29,7 @@ import { CampusDirectoryPage } from '@/pages/campus-directory-hierarchy-page'
 import { CampusFoodCollectionPage } from '@/pages/campus-food-collection-page'
 import { PaymentTestPage } from '@/pages/payment-test-page'
 import { UserRewardPage } from '@/pages/user-reward-page'
+import { UserFoodPhotosPage } from '@/pages/user-food-photos-page'
 import type { AdminMenuId } from '@/components/admin-sidebar'
 
 const MENU_PATHS: Record<AdminMenuId, string> = {
@@ -47,6 +48,7 @@ const MENU_PATHS: Record<AdminMenuId, string> = {
   'feed-reports': '/feed-reports',
   'payment-test': '/payment-test',
   'user-rewards': '/user-rewards',
+  'user-food-photos': '/user-food-photos',
   settings: '/settings',
 }
 
@@ -151,6 +153,7 @@ export function App() {
         <Route path='/campus-food-collection' element={<CampusFoodCollectionPage {...pageProps} />} />
         <Route path='/payment-test' element={<PaymentTestPage {...pageProps} />} />
         <Route path='/user-rewards' element={<UserRewardPage {...pageProps} />} />
+        <Route path='/user-food-photos' element={<UserFoodPhotosPage {...pageProps} />} />
         <Route path='*' element={<Navigate to='/overview' replace />} />
       </Routes>
       <Toaster richColors closeButton position='bottom-right' />
