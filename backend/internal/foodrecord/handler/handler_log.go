@@ -44,6 +44,10 @@ func foodRecordAPILogMessage(action string) string {
 		return "识别图片上传成功"
 	case "upload_analyze_image_file_ok":
 		return "识别图片文件上传成功"
+	case "upload_analyze_video_file":
+		return "识别视频上传请求进入"
+	case "upload_analyze_video_file_ok":
+		return "识别视频关键帧提取完成"
 	case "packaged_food_create_ok":
 		return "包装食品库记录保存成功"
 	case "packaged_nutrition_label_recognize_ok":

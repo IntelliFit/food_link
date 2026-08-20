@@ -1,5 +1,5 @@
 export default definePageConfig({
-  navigationBarTitleText: '补充零食数据',
+  navigationBarTitleText: '贡献包装食品',
   navigationBarBackgroundColor: '#f8fafc',
   navigationBarTextStyle: 'black',
   backgroundColor: '#f8fafc',

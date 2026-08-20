@@ -421,6 +421,32 @@ type FoodNutritionDO struct {
 
 func (FoodNutritionDO) TableName() string { return "food_nutrition_library" }
 
+type FoodNutritionContributionDO struct {
+	ID                 string         `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	UserID             string         `gorm:"column:user_id;type:uuid;not null;index:idx_food_nutrition_contributions_user_created,priority:1"`
+	CanonicalName      string         `gorm:"column:canonical_name;type:text;not null"`
+	NormalizedName     string         `gorm:"column:normalized_name;type:text;not null;index:idx_food_nutrition_contributions_status_name,priority:2"`
+	KcalPer100g        float64        `gorm:"column:kcal_per_100g;type:numeric;not null"`
+	ProteinPer100g     float64        `gorm:"column:protein_per_100g;type:numeric;not null;default:0"`
+	CarbsPer100g       float64        `gorm:"column:carbs_per_100g;type:numeric;not null;default:0"`
+	FatPer100g         float64        `gorm:"column:fat_per_100g;type:numeric;not null;default:0"`
+	SourceText         string         `gorm:"column:source_text;type:text;not null;default:''"`
+	EvidenceImagePaths []string       `gorm:"column:evidence_image_paths;type:jsonb;serializer:json;not null;default:'[]'::jsonb"`
+	ExtraNutrients     map[string]any `gorm:"column:extra_nutrients;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
+	Status             string         `gorm:"column:status;type:text;not null;default:'pending';index:idx_food_nutrition_contributions_status_name,priority:1"`
+	ReviewAction       *string        `gorm:"column:review_action;type:text"`
+	ReviewNote         string         `gorm:"column:review_note;type:text;not null;default:''"`
+	ReviewedBy         *string        `gorm:"column:reviewed_by;type:uuid"`
+	ReviewedAt         *time.Time     `gorm:"column:reviewed_at;type:timestamptz"`
+	TargetFoodID       *string        `gorm:"column:target_food_id;type:uuid;index:idx_food_nutrition_contributions_target_food"`
+	LegacyCustomFoodID *string        `gorm:"column:legacy_custom_food_id;type:uuid;uniqueIndex:idx_food_nutrition_contributions_legacy_custom"`
+	RewardedAt         *time.Time     `gorm:"column:rewarded_at;type:timestamptz"`
+	CreatedAt          time.Time      `gorm:"column:created_at;type:timestamptz;not null;default:now();index:idx_food_nutrition_contributions_user_created,priority:2,sort:desc"`
+	UpdatedAt          time.Time      `gorm:"column:updated_at;type:timestamptz;not null;default:now()"`
+}
+
+func (FoodNutritionContributionDO) TableName() string { return "food_nutrition_contributions" }
+
 type PackagedFoodDO struct {
 	ID                    string         `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
 	Brand                 string         `gorm:"column:brand;type:text;not null;default:'';index:idx_packaged_food_library_brand"`
@@ -890,6 +916,69 @@ type ExpiryNotificationJobDO struct {
 }
 
 func (ExpiryNotificationJobDO) TableName() string { return "food_expiry_notification_jobs" }
+
+// SupplementCatalogItemDO stores shared, system-maintained supplement
+// templates. Users copy a template into user_supplements before recording it.
+type SupplementCatalogItemDO struct {
+	ID           string           `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	Name         string           `gorm:"column:name;type:text;not null"`
+	Category     string           `gorm:"column:category;type:text;not null;index:idx_supplement_catalog_status_sort,priority:2"`
+	Description  string           `gorm:"column:description;type:text;not null;default:''"`
+	Brand        string           `gorm:"column:brand;type:text;not null;default:''"`
+	ImageURL     *string          `gorm:"column:image_url;type:text"`
+	ServingLabel string           `gorm:"column:serving_label;type:text;not null;default:'1份'"`
+	Components   []map[string]any `gorm:"column:components;type:jsonb;serializer:json;not null;default:'[]'::jsonb"`
+	SearchTerms  string           `gorm:"column:search_terms;type:text;not null;default:''"`
+	SortOrder    int              `gorm:"column:sort_order;type:integer;not null;default:0;index:idx_supplement_catalog_status_sort,priority:3"`
+	Status       string           `gorm:"column:status;type:text;not null;default:'active';index:idx_supplement_catalog_status_sort,priority:1"`
+	CreatedAt    time.Time        `gorm:"column:created_at;type:timestamptz;not null;default:now()"`
+	UpdatedAt    time.Time        `gorm:"column:updated_at;type:timestamptz;not null;default:now()"`
+}
+
+func (SupplementCatalogItemDO) TableName() string { return "supplement_catalog_items" }
+
+// UserSupplementDO stores a user's reusable supplement cabinet entry. Components
+// remain label snapshots in JSON so new nutrients and functional ingredients can
+// be recorded without expanding the food nutrition table for every new compound.
+type UserSupplementDO struct {
+	ID               string           `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	UserID           string           `gorm:"column:user_id;type:uuid;not null;index:idx_user_supplements_user_status,priority:1"`
+	Name             string           `gorm:"column:name;type:text;not null"`
+	Brand            string           `gorm:"column:brand;type:text;not null;default:''"`
+	Barcode          *string          `gorm:"column:barcode;type:text;index:idx_user_supplements_barcode"`
+	ImageURL         *string          `gorm:"column:image_url;type:text"`
+	DefaultServings  float64          `gorm:"column:default_servings;type:numeric(10,3);not null;default:1"`
+	ServingLabel     string           `gorm:"column:serving_label;type:text;not null;default:'1份'"`
+	ScheduleEnabled  bool             `gorm:"column:schedule_enabled;type:boolean;not null;default:false"`
+	ScheduleTime     *string          `gorm:"column:schedule_time;type:text"`
+	ScheduleDays     []int            `gorm:"column:schedule_days;type:jsonb;serializer:json;not null;default:'[]'::jsonb"`
+	Components       []map[string]any `gorm:"column:components;type:jsonb;serializer:json;not null;default:'[]'::jsonb"`
+	LabelConfirmedAt *time.Time       `gorm:"column:label_confirmed_at;type:timestamptz"`
+	Status           string           `gorm:"column:status;type:text;not null;default:'active';index:idx_user_supplements_user_status,priority:2"`
+	CreatedAt        time.Time        `gorm:"column:created_at;type:timestamptz;not null;default:now()"`
+	UpdatedAt        time.Time        `gorm:"column:updated_at;type:timestamptz;not null;default:now()"`
+}
+
+func (UserSupplementDO) TableName() string { return "user_supplements" }
+
+// SupplementIntakeDO is an immutable intake snapshot. Keeping the components at
+// record time prevents later label edits from rewriting historical nutrition.
+type SupplementIntakeDO struct {
+	ID                 string           `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	UserID             string           `gorm:"column:user_id;type:uuid;not null;index:idx_supplement_intakes_user_taken,priority:1;uniqueIndex:idx_supplement_intakes_user_idempotency,priority:1"`
+	SupplementID       string           `gorm:"column:supplement_id;type:uuid;not null;index:idx_supplement_intakes_supplement_id"`
+	SupplementName     string           `gorm:"column:supplement_name;type:text;not null"`
+	Servings           float64          `gorm:"column:servings;type:numeric(10,3);not null"`
+	ServingLabel       string           `gorm:"column:serving_label;type:text;not null"`
+	ComponentsSnapshot []map[string]any `gorm:"column:components_snapshot;type:jsonb;serializer:json;not null;default:'[]'::jsonb"`
+	TakenAt            time.Time        `gorm:"column:taken_at;type:timestamptz;not null;index:idx_supplement_intakes_user_taken,priority:2"`
+	Source             string           `gorm:"column:source;type:text;not null;default:'quick_log'"`
+	Note               *string          `gorm:"column:note;type:text"`
+	IdempotencyKey     *string          `gorm:"column:idempotency_key;type:text;uniqueIndex:idx_supplement_intakes_user_idempotency,priority:2,where:idempotency_key IS NOT NULL"`
+	CreatedAt          time.Time        `gorm:"column:created_at;type:timestamptz;not null;default:now()"`
+}
+
+func (SupplementIntakeDO) TableName() string { return "supplement_intakes" }
 
 type FriendRequestDO struct {
 	ID         string     `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
@@ -1726,6 +1815,7 @@ func AllModels() []any {
 		&AnalysisFeedbackSampleDO{},
 		&FoodRecordDO{},
 		&FoodNutritionDO{},
+		&FoodNutritionContributionDO{},
 		&PackagedFoodDO{},
 		&PackagedFoodCorrectionSubmissionDO{},
 		&PackagedFoodChangeLogDO{},
@@ -1751,6 +1841,9 @@ func AllModels() []any {
 		&UserCirclePostDO{},
 		&ExpiryItemDO{},
 		&ExpiryNotificationJobDO{},
+		&SupplementCatalogItemDO{},
+		&UserSupplementDO{},
+		&SupplementIntakeDO{},
 		&FriendRequestDO{},
 		&UserFriendDO{},
 		&UserBlockDO{},

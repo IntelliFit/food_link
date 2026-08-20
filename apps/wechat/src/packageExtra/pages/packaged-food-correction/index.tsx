@@ -153,7 +153,7 @@ function PackagedFoodCorrectionPage() {
         setItem(nextItem)
         setForm(formFromItem(nextItem))
       } catch (error) {
-        await showUnifiedApiError(error, '加载零食库商品失败')
+        await showUnifiedApiError(error, '加载包装食品库商品失败')
       } finally {
         setLoading(false)
       }
@@ -165,8 +165,8 @@ function PackagedFoodCorrectionPage() {
   }
 
   const chooseEvidenceImage = async () => {
-    if (evidenceImages.length >= 3) {
-      Taro.showToast({ title: '最多再补充 3 张证据图', icon: 'none' })
+    if (mergedImageUrls.length >= 5) {
+      Taro.showToast({ title: '包装图片总计最多5张', icon: 'none' })
       return
     }
     try {
@@ -177,9 +177,9 @@ function PackagedFoodCorrectionPage() {
       })
       const tempPath = chosen.tempFilePaths?.[0]
       if (!tempPath) return
-      Taro.showLoading({ title: '上传中...', mask: true })
+      Taro.showLoading({ title: '', mask: true })
       const uploaded = await uploadAnalyzeImageFile(tempPath)
-      setEvidenceImages((current) => Array.from(new Set([...current, uploaded.imageUrl])).slice(0, 3))
+      setEvidenceImages((current) => Array.from(new Set([...current, uploaded.imageUrl])).slice(0, 5))
       Taro.hideLoading()
       Taro.showToast({ title: '证据图已添加', icon: 'success' })
     } catch (error) {
@@ -254,7 +254,7 @@ function PackagedFoodCorrectionPage() {
     }
 
     setSaving(true)
-    Taro.showLoading({ title: '提交中...', mask: true })
+    Taro.showLoading({ title: '', mask: true })
     try {
       await submitPackagedFoodCorrection(payload)
       Taro.hideLoading()
@@ -262,7 +262,7 @@ function PackagedFoodCorrectionPage() {
       setTimeout(() => Taro.navigateBack(), 500)
     } catch (error) {
       Taro.hideLoading()
-      await showUnifiedApiError(error, '提交零食纠错失败')
+      await showUnifiedApiError(error, '提交包装食品纠错失败')
     } finally {
       setSaving(false)
     }
@@ -272,9 +272,9 @@ function PackagedFoodCorrectionPage() {
     <View className='packaged-food-correction-page'>
       <ScrollView className='packaged-food-correction-scroll' scrollY>
         <View className='section-card hero-card'>
-          <Text className='hero-title'>零食库纠错共建</Text>
+          <Text className='hero-title'>包装食品库纠错共建</Text>
           <Text className='hero-desc'>
-            请按包装实物修正信息，并补充图片证据。提案会进入后台审核，通过后才会更新正式零食库。
+            请按包装实物修正信息，并补充图片证据。提案会进入后台审核，通过后才会更新正式包装食品库。
           </Text>
           {!!item && (
             <View className='current-card'>
@@ -311,7 +311,7 @@ function PackagedFoodCorrectionPage() {
         <View className='section-card'>
           <Text className='section-title'>证据图片</Text>
           <Text className='section-hint'>
-            默认会带上当前商品原始入库图片；你也可以再补充最多 3 张更清晰的包装正面、营养表或配料表。
+            默认会带上当前商品原始入库图片；原图与补充图合计最多5张，可拍包装正面、营养表或配料表。
           </Text>
           <View className='image-grid'>
             {mergedImageUrls.map((url) => {

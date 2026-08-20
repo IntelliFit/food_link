@@ -537,6 +537,27 @@ func (m *mockMembershipRepo) UpdateRewardTaskUploadBySourceKey(ctx context.Conte
 	return row, nil
 }
 
+func TestMembershipService_AwardStandardFoodContributionIsIdempotentWithoutDailyCap(t *testing.T) {
+	repo := &mockMembershipRepo{user: &membershiprepo.User{ID: "u1"}}
+	svc := NewMembershipService(repo)
+
+	first, err := svc.AwardStandardFoodContribution(context.Background(), "u1", "contribution-1", map[string]any{"food_name": "熟鸡蛋"})
+	require.NoError(t, err)
+	require.Equal(t, true, first["awarded"])
+	require.Equal(t, 1, repo.user.EarnedCreditsBalance)
+
+	second, err := svc.AwardStandardFoodContribution(context.Background(), "u1", "contribution-1", nil)
+	require.NoError(t, err)
+	require.Equal(t, false, second["awarded"])
+	require.Equal(t, true, second["already_claimed"])
+	require.Equal(t, 1, repo.user.EarnedCreditsBalance)
+
+	third, err := svc.AwardStandardFoodContribution(context.Background(), "u1", "contribution-2", nil)
+	require.NoError(t, err)
+	require.Equal(t, true, third["awarded"])
+	require.Equal(t, 2, repo.user.EarnedCreditsBalance)
+}
+
 func TestMembershipService_ListPlans(t *testing.T) {
 	desc := "标准套餐"
 	original := 129.0

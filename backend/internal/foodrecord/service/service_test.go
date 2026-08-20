@@ -168,6 +168,69 @@ func TestFoodRecordService_SaveReconcilesAIGeneratedCalories(t *testing.T) {
 	assert.Equal(t, 860.0, updated.TotalCalories)
 }
 
+func TestFoodRecordService_MixedUserCorrectionAndAIRoundTripKeepsAuthoritativeCalories(t *testing.T) {
+	db := setupServiceTestDB(t)
+	svc := NewFoodRecordService(
+		foodrepo.NewFoodRecordRepo(db),
+		foodrepo.NewAnalysisTaskRepo(db),
+		repo.NewUserRepo(db),
+	)
+	userCorrection := "user_correction_context"
+	aiCategory := "gemini_generated"
+	aiSource := "qwen_generated"
+
+	record, err := svc.Save(context.Background(), "u1", SaveFoodRecordInput{
+		MealType:      "lunch",
+		TotalCalories: 999,
+		TotalProtein:  12.6,
+		TotalCarbs:    28.2,
+		TotalFat:      6.6,
+		Items: []domain.FoodItem{
+			{
+				Name: "咖喱", Weight: 150, Intake: 150, Ratio: 100,
+				NutritionSource: &userCorrection, NutritionSourceCategory: &aiCategory,
+				Nutrients: domain.FoodItemNutrients{Calories: 142, Protein: 2.6, Carbs: 18.2, Fat: 6.6},
+			},
+			{
+				Name: "米饭", Weight: 100, Intake: 50, Ratio: 50, NutritionSource: &aiSource,
+				Nutrients: domain.FoodItemNutrients{Calories: 120, Protein: 10, Carbs: 10},
+			},
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, 182.0, record.TotalCalories)
+	require.Equal(t, 142.0, record.Items[0].Nutrients.Calories)
+	require.Equal(t, 80.0, record.Items[1].Nutrients.Calories)
+
+	requestedCalories := 777.0
+	updated, err := svc.Update(context.Background(), "u1", record.ID, UpdateFoodRecordInput{TotalCalories: &requestedCalories})
+	require.NoError(t, err)
+	require.Equal(t, 182.0, updated.TotalCalories)
+	require.Equal(t, 142.0, updated.Items[0].Nutrients.Calories)
+}
+
+func TestFoodRecordService_PackagedLabelCaloriesAreNotReconciledAsAI(t *testing.T) {
+	db := setupServiceTestDB(t)
+	svc := NewFoodRecordService(
+		foodrepo.NewFoodRecordRepo(db),
+		foodrepo.NewAnalysisTaskRepo(db),
+		repo.NewUserRepo(db),
+	)
+	source := "packaged_food_library"
+	category := "database"
+	record, err := svc.Save(context.Background(), "u1", SaveFoodRecordInput{
+		MealType: "lunch", TotalCalories: 142, TotalProtein: 3.8, TotalCarbs: 27, TotalFat: 9.8,
+		Items: []domain.FoodItem{{
+			Name: "包装咖喱", Weight: 100, Intake: 100, Ratio: 100,
+			NutritionSource: &source, NutritionSourceCategory: &category,
+			Nutrients: domain.FoodItemNutrients{Calories: 142, Protein: 3.8, Carbs: 27, Fat: 9.8},
+		}},
+	})
+	require.NoError(t, err)
+	require.Equal(t, 142.0, record.TotalCalories)
+	require.Equal(t, 142.0, record.Items[0].Nutrients.Calories)
+}
+
 func TestReconcileAIGeneratedFoodItemsLeavesCuratedNutritionUntouched(t *testing.T) {
 	source := "ingredient_label"
 	items, reconciled := reconcileAIGeneratedFoodItems([]domain.FoodItem{{

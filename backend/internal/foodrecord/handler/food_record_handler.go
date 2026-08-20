@@ -6,6 +6,7 @@ import (
 	"math"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -43,6 +44,7 @@ type FoodRecordService interface {
 type UploadService interface {
 	UploadBase64(base64Image string) (string, error)
 	UploadFile(fileBytes []byte, ext, contentType string) (string, error)
+	UploadAnalyzeVideo(ctx context.Context, userID, videoPath string, sizeBytes int64) (*service.AnalyzeVideoUploadResult, error)
 }
 
 type FoodNutritionService interface {
@@ -362,6 +364,93 @@ func (h *FoodRecordHandler) UploadAnalyzeImageFile(c *gin.Context) {
 		slog.String("file.content_type", file.Header.Get("Content-Type")),
 	)
 	response.Success(c, gin.H{"imageUrl": imageURL})
+}
+
+// POST /api/upload-analyze-video-file
+func (h *FoodRecordHandler) UploadAnalyzeVideoFile(c *gin.Context) {
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, service.MaxAnalyzeVideoSizeBytes+1024*1024)
+	file, err := c.FormFile("file")
+	if err != nil {
+		response.Error(c, &commonerrors.AppError{Code: 10002, Message: "视频文件不能为空或超过上传限制", HTTPStatus: 400})
+		return
+	}
+	if file.Size <= 0 {
+		response.Error(c, &commonerrors.AppError{Code: 10002, Message: "视频文件为空", HTTPStatus: 400})
+		return
+	}
+	if file.Size > service.MaxAnalyzeVideoSizeBytes {
+		response.Error(c, &commonerrors.AppError{Code: 10002, Message: "视频过大，最多支持 8MB", HTTPStatus: http.StatusRequestEntityTooLarge})
+		return
+	}
+	contentType := strings.ToLower(strings.TrimSpace(file.Header.Get("Content-Type")))
+	ext := strings.ToLower(filepathExt(file.Filename))
+	if !isSupportedAnalyzeVideo(contentType, ext) {
+		response.Error(c, &commonerrors.AppError{Code: 10002, Message: "仅支持 MP4、MOV 或 M4V 视频", HTTPStatus: 400})
+		return
+	}
+	if ext == "" {
+		ext = ".mp4"
+	}
+
+	opened, err := file.Open()
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	defer opened.Close()
+	tempFile, err := os.CreateTemp("", "foodlink-analyze-video-*"+ext)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	tempPath := tempFile.Name()
+	defer os.Remove(tempPath)
+
+	written, copyErr := io.Copy(tempFile, io.LimitReader(opened, service.MaxAnalyzeVideoSizeBytes+1))
+	closeErr := tempFile.Close()
+	if copyErr != nil {
+		response.Error(c, copyErr)
+		return
+	}
+	if closeErr != nil {
+		response.Error(c, closeErr)
+		return
+	}
+	if written <= 0 || written != file.Size {
+		response.Error(c, &commonerrors.AppError{Code: 10002, Message: "视频上传不完整，请重新选择", HTTPStatus: 400})
+		return
+	}
+	if written > service.MaxAnalyzeVideoSizeBytes {
+		response.Error(c, &commonerrors.AppError{Code: 10002, Message: "视频过大，最多支持 8MB", HTTPStatus: http.StatusRequestEntityTooLarge})
+		return
+	}
+
+	userID := c.GetString(authmw.ContextUserIDKey)
+	logFoodRecordAPI(c, "upload_analyze_video_file", slog.Int64("file.size", written), slog.String("file.content_type", contentType))
+	result, err := h.uploadSvc.UploadAnalyzeVideo(c.Request.Context(), userID, tempPath, written)
+	if err != nil {
+		logFoodRecordAPIError(c, "upload_analyze_video_file", err, slog.Int64("file.size", written))
+		response.Error(c, err)
+		return
+	}
+	logFoodRecordAPI(c, "upload_analyze_video_file_ok",
+		slog.Int64("file.size", written),
+		slog.Int("keyframe_count", len(result.Keyframes)),
+		slog.Int64("video.duration_ms", result.DurationMS),
+	)
+	response.Success(c, result)
+}
+
+func isSupportedAnalyzeVideo(contentType, ext string) bool {
+	if strings.HasPrefix(contentType, "video/") {
+		return ext == "" || ext == ".mp4" || ext == ".mov" || ext == ".m4v"
+	}
+	switch ext {
+	case ".mp4", ".mov", ".m4v":
+	default:
+		return false
+	}
+	return contentType == "" || contentType == "application/octet-stream" || contentType == "application/mp4"
 }
 
 // GET /api/food-nutrition/search

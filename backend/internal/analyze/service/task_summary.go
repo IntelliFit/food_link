@@ -23,25 +23,27 @@ type TaskSummaryListPage struct {
 // TaskSummary contains only fields needed to render and paginate task history.
 // Large JSON documents such as payload and result must never be added here.
 type TaskSummary struct {
-	ID              string             `json:"id"`
-	TaskType        string             `json:"task_type"`
-	Status          string             `json:"status"`
-	ImageURL        *string            `json:"image_url,omitempty"`
-	ImagePaths      []string           `json:"image_paths,omitempty"`
-	TextPreview     string             `json:"text_preview,omitempty"`
-	IsViolated      bool               `json:"is_violated,omitempty"`
-	ViolationReason *string            `json:"violation_reason,omitempty"`
-	IsRecorded      bool               `json:"is_recorded"`
-	RecordID        string             `json:"record_id,omitempty"`
-	HistoryGroupKey string             `json:"history_group_key,omitempty"`
-	HasResult       bool               `json:"has_result"`
-	ExecutionMode   string             `json:"execution_mode,omitempty"`
-	SourceType      string             `json:"source_type,omitempty"`
-	MealType        string             `json:"meal_type,omitempty"`
-	RecordedOn      string             `json:"recorded_on,omitempty"`
-	ResultSummary   *TaskResultSummary `json:"result_summary,omitempty"`
-	CreatedAt       *time.Time         `json:"created_at,omitempty"`
-	UpdatedAt       *time.Time         `json:"updated_at,omitempty"`
+	ID                 string             `json:"id"`
+	TaskType           string             `json:"task_type"`
+	Status             string             `json:"status"`
+	ImageURL           *string            `json:"image_url,omitempty"`
+	ImagePaths         []string           `json:"image_paths,omitempty"`
+	TextPreview        string             `json:"text_preview,omitempty"`
+	IsViolated         bool               `json:"is_violated,omitempty"`
+	ViolationReason    *string            `json:"violation_reason,omitempty"`
+	IsRecorded         bool               `json:"is_recorded"`
+	RecordID           string             `json:"record_id,omitempty"`
+	HistoryGroupKey    string             `json:"history_group_key,omitempty"`
+	HasResult          bool               `json:"has_result"`
+	PrecisionStatus    string             `json:"precision_status,omitempty"`
+	UserActionRequired bool               `json:"user_action_required,omitempty"`
+	ExecutionMode      string             `json:"execution_mode,omitempty"`
+	SourceType         string             `json:"source_type,omitempty"`
+	MealType           string             `json:"meal_type,omitempty"`
+	RecordedOn         string             `json:"recorded_on,omitempty"`
+	ResultSummary      *TaskResultSummary `json:"result_summary,omitempty"`
+	CreatedAt          *time.Time         `json:"created_at,omitempty"`
+	UpdatedAt          *time.Time         `json:"updated_at,omitempty"`
 }
 
 type TaskResultSummary struct {
@@ -117,22 +119,24 @@ func (s *TaskService) ListTaskSummariesPage(ctx context.Context, userID, status,
 	for i := range rows {
 		row := rows[i]
 		task := TaskSummary{
-			ID:              row.ID,
-			TaskType:        row.TaskType,
-			Status:          row.Status,
-			ImageURL:        row.ImageURL,
-			ImagePaths:      row.ImagePaths,
-			TextPreview:     taskTextPreview(row.TextInput),
-			IsViolated:      row.IsViolated,
-			ViolationReason: row.ViolationReason,
-			HistoryGroupKey: summaryHistoryGroupKey(row),
-			HasResult:       row.HasResult,
-			ExecutionMode:   row.ExecutionMode,
-			SourceType:      row.SourceType,
-			MealType:        row.MealType,
-			RecordedOn:      row.RecordedOn,
-			CreatedAt:       row.CreatedAt,
-			UpdatedAt:       row.UpdatedAt,
+			ID:                 row.ID,
+			TaskType:           row.TaskType,
+			Status:             row.Status,
+			ImageURL:           row.ImageURL,
+			ImagePaths:         row.ImagePaths,
+			TextPreview:        taskTextPreview(row.TextInput),
+			IsViolated:         row.IsViolated,
+			ViolationReason:    row.ViolationReason,
+			HistoryGroupKey:    summaryHistoryGroupKey(row),
+			HasResult:          row.HasResult,
+			PrecisionStatus:    row.PrecisionStatus,
+			UserActionRequired: row.UserActionRequired,
+			ExecutionMode:      row.ExecutionMode,
+			SourceType:         row.SourceType,
+			MealType:           row.MealType,
+			RecordedOn:         row.RecordedOn,
+			CreatedAt:          row.CreatedAt,
+			UpdatedAt:          row.UpdatedAt,
 		}
 		if task.SourceType == "" {
 			if strings.HasPrefix(task.TaskType, "food_text") {
@@ -262,26 +266,45 @@ func summarizeTask(task domain.AnalysisTask) TaskSummary {
 	}
 
 	return TaskSummary{
-		ID:              task.ID,
-		TaskType:        task.TaskType,
-		Status:          task.Status,
-		ImageURL:        task.ImageURL,
-		ImagePaths:      task.ImagePaths,
-		TextPreview:     taskTextPreview(task.TextInput),
-		IsViolated:      task.IsViolated,
-		ViolationReason: task.ViolationReason,
-		IsRecorded:      task.IsRecorded,
-		RecordID:        task.RecordID,
-		HistoryGroupKey: task.HistoryGroupKey,
-		HasResult:       hasResult,
-		ExecutionMode:   firstSummaryString(payload, "execution_mode", "executionMode"),
-		SourceType:      taskSummarySourceType(task),
-		MealType:        firstSummaryString(payload, "meal_type", "mealType"),
-		RecordedOn:      firstSummaryString(payload, "date", "recorded_on", "recordedOn"),
-		ResultSummary:   resultSummary,
-		CreatedAt:       task.CreatedAt,
-		UpdatedAt:       task.UpdatedAt,
+		ID:                 task.ID,
+		TaskType:           task.TaskType,
+		Status:             task.Status,
+		ImageURL:           task.ImageURL,
+		ImagePaths:         task.ImagePaths,
+		TextPreview:        taskTextPreview(task.TextInput),
+		IsViolated:         task.IsViolated,
+		ViolationReason:    task.ViolationReason,
+		IsRecorded:         task.IsRecorded,
+		RecordID:           task.RecordID,
+		HistoryGroupKey:    task.HistoryGroupKey,
+		HasResult:          hasResult,
+		PrecisionStatus:    firstSummaryString(task.Result, "precisionStatus", "precision_status"),
+		UserActionRequired: summaryResultBool(task.Result, "userActionRequired", "user_action_required"),
+		ExecutionMode:      firstSummaryString(payload, "execution_mode", "executionMode"),
+		SourceType:         taskSummarySourceType(task),
+		MealType:           firstSummaryString(payload, "meal_type", "mealType"),
+		RecordedOn:         firstSummaryString(payload, "date", "recorded_on", "recordedOn"),
+		ResultSummary:      resultSummary,
+		CreatedAt:          task.CreatedAt,
+		UpdatedAt:          task.UpdatedAt,
 	}
+}
+
+func summaryResultBool(result map[string]any, keys ...string) bool {
+	for _, key := range keys {
+		value, ok := result[key]
+		if !ok {
+			continue
+		}
+		switch typed := value.(type) {
+		case bool:
+			return typed
+		case string:
+			normalized := strings.TrimSpace(typed)
+			return strings.EqualFold(normalized, "true") || normalized == "1"
+		}
+	}
+	return false
 }
 
 func summarizeTaskResult(result map[string]any) *TaskResultSummary {

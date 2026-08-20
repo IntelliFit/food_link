@@ -319,6 +319,26 @@ func (c *Client) UploadBytes(bucketAlias, key string, data []byte, contentType s
 	return c.BuildAccessURL(bucketAlias, key), nil
 }
 
+func (c *Client) DeleteObject(bucketAlias, value string) error {
+	key := c.ResolveObjectKey(bucketAlias, value)
+	if key == "" {
+		key = strings.TrimLeft(strings.TrimSpace(value), "/")
+	}
+	if key == "" {
+		return fmt.Errorf("empty object key for bucket %s", bucketAlias)
+	}
+	bucket := c.bucketName(bucketAlias)
+	if bucket == "" {
+		return fmt.Errorf("unknown bucket alias: %s", bucketAlias)
+	}
+	client, err := c.cosClient(bucket)
+	if err != nil {
+		return err
+	}
+	_, err = client.Object.Delete(context.Background(), key)
+	return err
+}
+
 func (c *Client) DownloadBytes(bucketAlias, value string) ([]byte, error) {
 	key := c.ResolveObjectKey(bucketAlias, value)
 	if key == "" {

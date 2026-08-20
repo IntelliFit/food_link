@@ -45,6 +45,8 @@ type TaskHistorySummaryRow struct {
 	MealType                 string     `gorm:"column:meal_type"`
 	RecordedOn               string     `gorm:"column:recorded_on"`
 	HasResult                bool       `gorm:"column:has_result"`
+	PrecisionStatus          string     `gorm:"column:precision_status"`
+	UserActionRequired       bool       `gorm:"column:user_action_required"`
 	FirstItemName            string     `gorm:"column:first_item_name"`
 	ItemCount                int        `gorm:"column:item_count"`
 	TotalCalories            float64    `gorm:"column:total_calories"`
@@ -433,6 +435,8 @@ func (r *TaskRepo) ListTaskHistorySummaryRows(ctx context.Context, userID, statu
 		COALESCE(payload->>'meal_type', payload->>'mealType', '') AS meal_type,
 		COALESCE(payload->>'date', payload->>'recorded_on', payload->>'recordedOn', '') AS recorded_on,
 		result IS NOT NULL AND result <> 'null'::jsonb AS has_result,
+		COALESCE(result->>'precisionStatus', result->>'precision_status', '') AS precision_status,
+		LOWER(COALESCE(result->>'userActionRequired', result->>'user_action_required', 'false')) IN ('true', '1') AS user_action_required,
 		COALESCE(result#>>'{items,0,name}', '') AS first_item_name,
 		CASE WHEN jsonb_typeof(result->'items') = 'array' THEN jsonb_array_length(result->'items') ELSE 0 END AS item_count,
 		COALESCE((

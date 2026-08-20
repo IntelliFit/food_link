@@ -11,6 +11,7 @@ import (
 	authrepo "food_link/backend/internal/auth/repo"
 	campuscatalogdomain "food_link/backend/internal/campuscatalog/domain"
 	campuscatalogrepo "food_link/backend/internal/campuscatalog/repo"
+	migrationdo "food_link/backend/internal/migration/do"
 	publicfooddomain "food_link/backend/internal/publicfood/domain"
 	publicfoodrepo "food_link/backend/internal/publicfood/repo"
 	publicfoodservice "food_link/backend/internal/publicfood/service"
@@ -34,6 +35,12 @@ func (p *recordingWorkerPublicFoodPublisher) PublishTask(ctx context.Context, ms
 
 type recordingWorkerPublicFoodQueue struct {
 	recordingWorkerPublicFoodPublisher
+}
+
+type allowWorkerCampusPublishing struct{}
+
+func (allowWorkerCampusPublishing) IsCampusPublishingAllowed(context.Context, string) (bool, error) {
+	return true, nil
 }
 
 func (q *recordingWorkerPublicFoodQueue) Subscribe(ctx context.Context, opts taskqueue.SubscribeOptions) (<-chan taskqueue.Delivery, error) {
@@ -60,6 +67,9 @@ func setupWorkerPublicFoodTestDB(t *testing.T) *gorm.DB {
 		&analyzedomain.PrecisionItemEstimate{},
 		&publicfooddomain.PublicFoodItem{},
 		&campuscatalogdomain.CatalogItem{},
+		&migrationdo.SchoolDO{},
+		&migrationdo.SchoolCampusDO{},
+		&migrationdo.SchoolCanteenDO{},
 	))
 	return db
 }
@@ -302,17 +312,34 @@ func TestCampusPublicFoodSubmitWaitsForWorkerCaloriesRecognition(t *testing.T) {
 	analyzeTaskSvc := analyzeservice.NewTaskService(taskRepo, precisionRepo, authrepo.NewUserRepo(db))
 	analyzeTaskSvc.ConfigureTaskPublisher(publisher)
 	svc := publicfoodservice.NewPublicFoodService(publicFood)
+	svc.ConfigureCampusMembershipChecker(allowWorkerCampusPublishing{})
 	svc.ConfigureCampusAnalyzeTaskSubmitter(analyzeTaskSvc)
 	imageURL := "https://example.com/campus-chicken-rice.jpg"
 	foodName := "鸡胸肉米饭"
 	schoolName := "北京大学"
+	campusName := "燕园校区"
 	canteenName := "学一食堂"
+	schoolID := "10000000-0000-4000-8000-000000000001"
+	campusID := "10000000-0000-4000-8000-000000000002"
+	canteenID := "10000000-0000-4000-8000-000000000003"
+	require.NoError(t, db.Create(&migrationdo.SchoolDO{ID: schoolID, Name: schoolName, Status: "active"}).Error)
+	require.NoError(t, db.Create(&migrationdo.SchoolCampusDO{
+		ID: campusID, SchoolID: schoolID, Name: campusName, Aliases: []string{}, Status: "active",
+	}).Error)
+	require.NoError(t, db.Create(&migrationdo.SchoolCanteenDO{
+		ID: canteenID, SchoolID: schoolID, CampusID: &campusID, Name: canteenName,
+		Aliases: []string{}, MealPeriods: []string{}, PaymentMethods: []string{}, Status: "active",
+	}).Error)
 
 	itemID, err := svc.Create(ctx, "user-1", publicfoodservice.CreateInput{
 		IsCampusFood: true,
 		FoodName:     &foodName,
 		SchoolName:   &schoolName,
+		CampusName:   &campusName,
 		CanteenName:  &canteenName,
+		SchoolID:     &schoolID,
+		CampusID:     &campusID,
+		CanteenID:    &canteenID,
 		ImagePath:    &imageURL,
 		ImagePaths:   []string{imageURL},
 	})
@@ -442,6 +469,79 @@ func TestWorkerProcessPrecisionPlanRelinksCampusPublicFoodToAggregateTask(t *tes
 	require.Equal(t, "campus_public_food", childTask.Payload["public_food_source_type"])
 	require.Equal(t, true, childTask.Payload["micronutrient_analysis_required"])
 	require.Equal(t, aggregateTask.ID, publisher.messages[1].TaskID)
+}
+
+func TestWorkerProcessPrecisionPlanPausesWithoutCreatingEstimateTasks(t *testing.T) {
+	db := setupWorkerPublicFoodTestDB(t)
+	ctx := context.Background()
+	taskRepo := analyzerepo.NewTaskRepo(db)
+	precisionRepo := analyzerepo.NewPrecisionRepo(db)
+	publisher := &recordingWorkerPublicFoodQueue{}
+	imageURLs := []string{"https://example.com/top.jpg", "https://example.com/oblique.jpg"}
+	session := &analyzedomain.PrecisionSession{
+		ID:            "precision-session-needs-input",
+		UserID:        "user-1",
+		SourceType:    "image",
+		ExecutionMode: "strict",
+		Status:        "collecting",
+		RoundIndex:    1,
+		LatestInputs: map[string]any{
+			"image_url":         imageURLs[0],
+			"image_urls":        imageURLs,
+			"capture_protocol":  dualAngleCaptureProtocol,
+			"precision_options": map[string]any{"interactive": true, "separate": false, "web_search": false},
+			"capture_views": []any{
+				map[string]any{"role": "top_down", "image_url": imageURLs[0]},
+				map[string]any{"role": "oblique_45", "image_url": imageURLs[1]},
+			},
+			"reference_object": map[string]any{"presence": "present", "kind": "标准卡片"},
+		},
+	}
+	require.NoError(t, precisionRepo.CreateSession(ctx, session))
+	planTask := &analyzedomain.AnalysisTask{
+		ID:         "task-precision-plan-needs-input",
+		UserID:     "user-1",
+		TaskType:   "precision_plan",
+		Status:     "pending",
+		ImageURL:   &imageURLs[0],
+		ImagePaths: imageURLs,
+		Payload: map[string]any{
+			"precision_session_id": session.ID,
+			"round_index":          1,
+			"source_type":          "image",
+			"execution_mode":       "strict",
+		},
+	}
+	require.NoError(t, taskRepo.CreateTask(ctx, planTask))
+	runner := &Runner{
+		tasks:     taskRepo,
+		precision: precisionRepo,
+		queue:     publisher,
+		analyze: &fakeWorkerAnalyzeRunner{result: map[string]any{
+			"precisionStatus": "needs_user_input",
+			"splitStrategy":   "user_annotation_required",
+			"questions": []any{
+				map[string]any{"id": "food_identity_1", "prompt": "右侧是鱼块还是鸡块？", "options": []any{"鱼块", "鸡块"}},
+			},
+			"itemsToEstimate": []any{
+				map[string]any{"item_key": "ambiguous", "item_name": "鸡块", "uncertainty_level": "high"},
+			},
+		}},
+	}
+
+	require.NoError(t, runner.processPrecisionPlan(ctx, planTask))
+	savedTask, err := taskRepo.GetTaskByID(ctx, planTask.ID)
+	require.NoError(t, err)
+	require.Equal(t, "done", savedTask.Status)
+	require.Equal(t, "needs_user_input", savedTask.Result["precisionStatus"])
+	require.Equal(t, true, savedTask.Result["userActionRequired"])
+	require.Empty(t, publisher.messages)
+	var estimateCount int64
+	require.NoError(t, db.Model(&analyzedomain.PrecisionItemEstimate{}).Count(&estimateCount).Error)
+	require.Zero(t, estimateCount)
+	savedSession, err := precisionRepo.GetSessionByID(ctx, session.ID)
+	require.NoError(t, err)
+	require.Equal(t, "needs_user_input", savedSession.Status)
 }
 
 func TestWorkerProcessPrecisionAggregateWritesBackCampusPublicFood(t *testing.T) {

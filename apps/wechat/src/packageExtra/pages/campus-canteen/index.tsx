@@ -125,6 +125,9 @@ function sortCampusItemsByPopularity(
   items: PublicFoodLibraryItem[],
 ): PublicFoodLibraryItem[] {
   return [...items].sort((a, b) => {
+    const imageDiff = Number(hasCampusImage(b)) - Number(hasCampusImage(a));
+    if (imageDiff !== 0) return imageDiff;
+
     const engagementDiff =
       (b.like_count || 0) + (b.collection_count || 0) -
       ((a.like_count || 0) + (a.collection_count || 0));
@@ -137,6 +140,10 @@ function sortCampusItemsByPopularity(
       (Number.isFinite(aPublishedAt) ? aPublishedAt : 0);
     return publishedDiff || a.id.localeCompare(b.id);
   });
+}
+
+function hasCampusImage(item: PublicFoodLibraryItem): boolean {
+  return Boolean(item.image_path || item.image_paths?.some((path) => !!path));
 }
 
 function CampusCanteenPage() {

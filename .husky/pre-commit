@@ -37,11 +37,39 @@ fi
 SNAPSHOT_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/foodlink-precommit.XXXXXX")"
 cleanup_snapshot() {
   case "$SNAPSHOT_ROOT" in
-    */foodlink-precommit.*) find "$SNAPSHOT_ROOT" -depth -delete 2>/dev/null || true ;;
+    */foodlink-precommit.*)
+      if command -v cygpath >/dev/null 2>&1 && command -v powershell.exe >/dev/null 2>&1; then
+        for DEPENDENCY_LINK in "$SNAPSHOT_ROOT/node_modules" "$SNAPSHOT_ROOT/admin/node_modules"; do
+          DEPENDENCY_LINK_WINDOWS="$(cygpath -aw "$DEPENDENCY_LINK")"
+          FOODLINK_LINK_TARGET="$DEPENDENCY_LINK_WINDOWS" powershell.exe -NoLogo -NoProfile -NonInteractive -Command \
+            '$path = $env:FOODLINK_LINK_TARGET; if (Test-Path -LiteralPath $path) { $item = Get-Item -LiteralPath $path -Force; if (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) { [System.IO.Directory]::Delete($item.FullName) } }' \
+            >/dev/null 2>&1 || true
+        done
+      fi
+      find "$SNAPSHOT_ROOT" -depth -delete 2>/dev/null || true
+      ;;
   esac
 }
 trap cleanup_snapshot EXIT HUP INT TERM
 git show :scripts/export-staged-snapshot.sh | sh -s -- "$SNAPSHOT_ROOT" || exit 1
+
+link_dependency_directory() {
+  SOURCE_DIRECTORY="$1"
+  TARGET_DIRECTORY="$2"
+  if command -v cygpath >/dev/null 2>&1 && command -v powershell.exe >/dev/null 2>&1; then
+    SOURCE_DIRECTORY_WINDOWS="$(cygpath -aw "$SOURCE_DIRECTORY")"
+    TARGET_DIRECTORY_WINDOWS="$(cygpath -aw "$TARGET_DIRECTORY")"
+    FOODLINK_LINK_SOURCE="$SOURCE_DIRECTORY_WINDOWS" \
+      FOODLINK_LINK_TARGET="$TARGET_DIRECTORY_WINDOWS" \
+      powershell.exe -NoLogo -NoProfile -NonInteractive -Command \
+      '$ErrorActionPreference = "Stop"; New-Item -ItemType Junction -Path $env:FOODLINK_LINK_TARGET -Target $env:FOODLINK_LINK_SOURCE | Out-Null' && return 0
+  fi
+  if ln -s "$SOURCE_DIRECTORY" "$TARGET_DIRECTORY" 2>/dev/null; then
+    return 0
+  fi
+  echo "[pre-commit] 无法挂载依赖目录：$SOURCE_DIRECTORY -> $TARGET_DIRECTORY"
+  return 1
+}
 
 echo "[pre-commit] Hook 语法检查..."
 sh -n "$SNAPSHOT_ROOT/.husky/pre-commit" || exit 1
@@ -53,7 +81,7 @@ fi
 
 WECHAT_FILES="$(printf '%s\n' "$STAGED_FILES" | grep -E '^apps/wechat/(src|tests|config)/|^apps/wechat/(package\.json|jest\.config\.[cm]?js|tsconfig(\.[^.]+)?\.json|\.eslintrc(\..+)?)$|^(package\.json|package-lock\.json|jest\.config\.[cm]?js|tsconfig(\.[^.]+)?\.json|\.eslintrc(\..+)?)$' || true)"
 if [ -n "$WECHAT_FILES" ] && [ -d node_modules ]; then
-  ln -s "$(pwd)/node_modules" "$SNAPSHOT_ROOT/node_modules"
+  link_dependency_directory "$(pwd)/node_modules" "$SNAPSHOT_ROOT/node_modules" || exit 1
 fi
 if [ -n "$WECHAT_FILES" ]; then
   echo "[pre-commit] 微信端 TypeScript 检查..."
@@ -76,7 +104,7 @@ fi
 ADMIN_FILES="$(printf '%s\n' "$STAGED_FILES" | grep -E '^admin/|^(package\.json|package-lock\.json)$' || true)"
 if [ -n "$ADMIN_FILES" ]; then
   if [ -d admin/node_modules ]; then
-    ln -s "$(pwd)/admin/node_modules" "$SNAPSHOT_ROOT/admin/node_modules"
+    link_dependency_directory "$(pwd)/admin/node_modules" "$SNAPSHOT_ROOT/admin/node_modules" || exit 1
   fi
 
   echo "[pre-commit] Admin 类型与构建检查..."
@@ -120,11 +148,11 @@ if [ -n "$GO_TRIGGER_FILES" ]; then
       fi
     done
     if [ "$GO_TEST_ALL" -eq 1 ]; then
-      go test ./...
+      go test -p 1 ./...
     else
       GO_PACKAGES="$(printf '%s\n' $GO_PACKAGES | sort -u | tr '\n' ' ')"
       # shellcheck disable=SC2086
-      go test $GO_PACKAGES
+      go test -p 1 $GO_PACKAGES
     fi
   ) || exit 1
 fi

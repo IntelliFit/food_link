@@ -537,26 +537,33 @@ func (h *AnalyzeHandler) CleanupTimeoutTasks(c *gin.Context) {
 // POST /api/precision-sessions/:session_id/continue
 func (h *AnalyzeHandler) ContinuePrecisionSession(c *gin.Context) {
 	var body struct {
-		SourceType            string           `json:"source_type"`
-		ImageURL              string           `json:"image_url"`
-		ImageURLs             []string         `json:"image_urls"`
-		Text                  string           `json:"text"`
-		Date                  *string          `json:"date"`
-		AdditionalContext     string           `json:"additionalContext"`
-		MealType              string           `json:"meal_type"`
-		TimezoneOffsetMinutes *int             `json:"timezone_offset_minutes"`
-		Province              string           `json:"province"`
-		City                  string           `json:"city"`
-		District              string           `json:"district"`
-		DietGoal              string           `json:"diet_goal"`
-		ActivityTiming        string           `json:"activity_timing"`
-		UserGoal              string           `json:"user_goal"`
-		RemainingCalories     *float64         `json:"remaining_calories"`
-		SuggestRatioEnabled   bool             `json:"suggest_ratio_enabled"`
-		IsMultiView           bool             `json:"is_multi_view"`
-		PreviousResult        map[string]any   `json:"previousResult"`
-		CorrectionItems       []map[string]any `json:"correctionItems"`
-		ReferenceObjects      []map[string]any `json:"reference_objects"`
+		SourceType              string                                 `json:"source_type"`
+		ImageURL                string                                 `json:"image_url"`
+		ImageURLs               []string                               `json:"image_urls"`
+		Text                    string                                 `json:"text"`
+		Date                    *string                                `json:"date"`
+		AdditionalContext       string                                 `json:"additionalContext"`
+		MealType                string                                 `json:"meal_type"`
+		TimezoneOffsetMinutes   *int                                   `json:"timezone_offset_minutes"`
+		Province                string                                 `json:"province"`
+		City                    string                                 `json:"city"`
+		District                string                                 `json:"district"`
+		DietGoal                string                                 `json:"diet_goal"`
+		ActivityTiming          string                                 `json:"activity_timing"`
+		UserGoal                string                                 `json:"user_goal"`
+		RemainingCalories       *float64                               `json:"remaining_calories"`
+		SuggestRatioEnabled     bool                                   `json:"suggest_ratio_enabled"`
+		IsMultiView             bool                                   `json:"is_multi_view"`
+		PreviousResult          map[string]any                         `json:"previousResult"`
+		CorrectionItems         []map[string]any                       `json:"correctionItems"`
+		ReferenceObjects        []map[string]any                       `json:"reference_objects"`
+		CaptureProtocol         string                                 `json:"capture_protocol"`
+		PrecisionOptions        *service.PrecisionOptionsInput         `json:"precision_options"`
+		CaptureViews            []service.PrecisionCaptureViewInput    `json:"capture_views"`
+		VideoCapture            map[string]any                         `json:"video_capture"`
+		ReferenceObject         *service.PrecisionReferenceObjectInput `json:"reference_object"`
+		Answers                 []service.PrecisionAnswerInput         `json:"answers"`
+		ContinueWithUncertainty bool                                   `json:"continue_with_uncertainty"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		response.Error(c, err)
@@ -568,29 +575,36 @@ func (h *AnalyzeHandler) ContinuePrecisionSession(c *gin.Context) {
 		return
 	}
 	sessionID := c.Param("session_id")
-	mode := "experimental"
+	mode := "strict"
 	input := service.SubmitTaskInput{
-		ImageURL:              strings.TrimSpace(body.ImageURL),
-		ImageURLs:             body.ImageURLs,
-		TextInput:             strings.TrimSpace(body.Text),
-		SourceType:            sourceType,
-		MealType:              body.MealType,
-		Province:              body.Province,
-		City:                  body.City,
-		District:              body.District,
-		DietGoal:              body.DietGoal,
-		ActivityTiming:        body.ActivityTiming,
-		UserGoal:              body.UserGoal,
-		RemainingCalories:     body.RemainingCalories,
-		SuggestRatioEnabled:   body.SuggestRatioEnabled,
-		AdditionalContext:     body.AdditionalContext,
-		ExecutionMode:         &mode,
-		PrecisionSessionID:    &sessionID,
-		TimezoneOffsetMinutes: body.TimezoneOffsetMinutes,
-		IsMultiView:           body.IsMultiView,
-		PreviousResult:        body.PreviousResult,
-		CorrectionItems:       body.CorrectionItems,
-		ReferenceObjects:      body.ReferenceObjects,
+		ImageURL:                strings.TrimSpace(body.ImageURL),
+		ImageURLs:               body.ImageURLs,
+		TextInput:               strings.TrimSpace(body.Text),
+		SourceType:              sourceType,
+		MealType:                body.MealType,
+		Province:                body.Province,
+		City:                    body.City,
+		District:                body.District,
+		DietGoal:                body.DietGoal,
+		ActivityTiming:          body.ActivityTiming,
+		UserGoal:                body.UserGoal,
+		RemainingCalories:       body.RemainingCalories,
+		SuggestRatioEnabled:     body.SuggestRatioEnabled,
+		AdditionalContext:       body.AdditionalContext,
+		ExecutionMode:           &mode,
+		PrecisionSessionID:      &sessionID,
+		TimezoneOffsetMinutes:   body.TimezoneOffsetMinutes,
+		IsMultiView:             body.IsMultiView,
+		PreviousResult:          body.PreviousResult,
+		CorrectionItems:         body.CorrectionItems,
+		ReferenceObjects:        body.ReferenceObjects,
+		CaptureProtocol:         body.CaptureProtocol,
+		PrecisionOptions:        body.PrecisionOptions,
+		CaptureViews:            body.CaptureViews,
+		VideoCapture:            body.VideoCapture,
+		ReferenceObject:         body.ReferenceObject,
+		Answers:                 body.Answers,
+		ContinueWithUncertainty: body.ContinueWithUncertainty,
 	}
 	if body.Date != nil {
 		input.Date = strings.TrimSpace(*body.Date)
@@ -599,13 +613,13 @@ func (h *AnalyzeHandler) ContinuePrecisionSession(c *gin.Context) {
 	var taskID string
 	var err error
 	if sourceType == "text" {
-		if input.TextInput == "" && input.AdditionalContext == "" && len(body.ReferenceObjects) == 0 {
+		if input.TextInput == "" && input.AdditionalContext == "" && len(body.ReferenceObjects) == 0 && body.ReferenceObject == nil && len(body.Answers) == 0 && !body.ContinueWithUncertainty {
 			response.Error(c, &errors.AppError{Code: 10002, Message: "请至少补充说明、参考物或新的文字描述", HTTPStatus: 400})
 			return
 		}
 		taskID, err = h.taskSvc.SubmitTextTask(c.Request.Context(), userID, input)
 	} else {
-		if input.ImageURL == "" && len(input.ImageURLs) == 0 && input.AdditionalContext == "" && len(body.ReferenceObjects) == 0 {
+		if input.ImageURL == "" && len(input.ImageURLs) == 0 && input.AdditionalContext == "" && len(body.ReferenceObjects) == 0 && body.ReferenceObject == nil && len(body.Answers) == 0 && !body.ContinueWithUncertainty {
 			response.Error(c, &errors.AppError{Code: 10002, Message: "请至少补充说明、参考物或新的图片", HTTPStatus: 400})
 			return
 		}

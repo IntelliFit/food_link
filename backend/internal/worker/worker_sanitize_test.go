@@ -860,15 +860,21 @@ func TestAttachPlannedItemMetadata_SingleItem(t *testing.T) {
 	}
 }
 
-func TestNormalizePrecisionPlanResult_AutoSingleShot(t *testing.T) {
+func TestNormalizePrecisionPlanResult_PreservesNeedsUserInput(t *testing.T) {
 	normalized := normalizePrecisionPlanResult(map[string]any{
 		"precisionStatus":      "needs_user_input",
 		"splitStrategy":        "single_item",
 		"detectedItemsSummary": []any{"白米饭", "青椒炒鸡块"},
+		"questions": []any{
+			map[string]any{"id": "q1", "prompt": "右侧是鸡块还是鱼块？", "options": []any{"鸡块", "鱼块"}},
+			map[string]any{"id": "q2", "prompt": "食物重量按熟重吗？"},
+			map[string]any{"id": "q3", "prompt": "是否额外加油？"},
+			map[string]any{"id": "q4", "prompt": "这一题不应展示"},
+		},
 	})
 
-	if got := stringFromMap(normalized, "precisionStatus"); got != "ready_for_estimate" {
-		t.Fatalf("expected ready_for_estimate, got %s", got)
+	if got := stringFromMap(normalized, "precisionStatus"); got != "needs_user_input" {
+		t.Fatalf("expected needs_user_input, got %s", got)
 	}
 	if got := stringFromMap(normalized, "splitStrategy"); got != "single_shot" {
 		t.Fatalf("expected single_shot for <=3 non-high items, got %s", got)
@@ -876,6 +882,52 @@ func TestNormalizePrecisionPlanResult_AutoSingleShot(t *testing.T) {
 	items := extractItems(normalized["itemsToEstimate"])
 	if len(items) != 2 {
 		t.Fatalf("expected detected summary converted to 2 estimate items, got %#v", items)
+	}
+	questions := normalizePrecisionQuestions(normalized["questions"])
+	if len(questions) != 3 {
+		t.Fatalf("expected at most 3 questions, got %#v", questions)
+	}
+	if !boolFromAny(normalized["userActionRequired"]) {
+		t.Fatalf("expected user action required")
+	}
+}
+
+func TestApplyPrecisionReferenceQuality_AbsentNeverHighConfidence(t *testing.T) {
+	result := applyPrecisionReferenceQuality(map[string]any{
+		"uncertaintyNotes": []any{"原始不确定性"},
+		"referenceQuality": map[string]any{"scale_confidence": "high"},
+	}, map[string]any{"presence": "absent"})
+	quality := mapFromAny(result["referenceQuality"])
+	if got := stringFromMap(quality, "scale_confidence"); got != "low" {
+		t.Fatalf("expected low scale confidence without reference, got %s", got)
+	}
+	if !boolFromAny(result["referenceObjectNeeded"]) {
+		t.Fatalf("expected referenceObjectNeeded when reference is absent")
+	}
+}
+
+func TestShouldPausePrecisionPlan(t *testing.T) {
+	tests := []struct {
+		name        string
+		status      string
+		interactive bool
+		continueNow bool
+		round       int
+		want        bool
+	}{
+		{name: "interactive ambiguity", status: "needs_user_input", interactive: true, round: 1, want: true},
+		{name: "interaction disabled", status: "needs_user_input", interactive: false, round: 1, want: false},
+		{name: "continue uncertain", status: "needs_user_input", interactive: true, continueNow: true, round: 1, want: false},
+		{name: "two followups exhausted", status: "needs_user_input", interactive: true, round: maxPrecisionRounds, want: false},
+		{name: "retake is mandatory", status: "needs_retake", interactive: false, continueNow: true, round: maxPrecisionRounds, want: true},
+		{name: "ready", status: "ready_for_estimate", interactive: true, round: 1, want: false},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := shouldPausePrecisionPlan(test.status, test.interactive, test.continueNow, test.round); got != test.want {
+				t.Fatalf("expected %v, got %v", test.want, got)
+			}
+		})
 	}
 }
 
@@ -1042,6 +1094,21 @@ func TestPrecisionPrompts_ForceEdibleNetWeight(t *testing.T) {
 			if !strings.Contains(prompt, expected) {
 				t.Fatalf("%s prompt missing edible-weight rule %q:\n%s", label, expected, prompt)
 			}
+		}
+	}
+}
+
+func TestPrecisionPlanPrompt_RequiresVideoCoverageAndRetake(t *testing.T) {
+	plan := buildPrecisionPlanPrompt("image", "图片输入", "", nil, nil, false, map[string]any{
+		"capture_protocol": videoCaptureProtocol,
+		"video_capture": map[string]any{
+			"duration_ms":     6000,
+			"source_retained": false,
+		},
+	})
+	for _, expected := range []string{"video_keyframes_v1", "自然横扫", "逐项靠近", "综合全部关键帧互补取证", "没有一帧同时完整包含所有食物", "没有已知尺寸参考物本身不是重拍理由", "needs_retake", "role 使用 video"} {
+		if !strings.Contains(plan, expected) {
+			t.Fatalf("video precision plan prompt missing rule %q:\n%s", expected, plan)
 		}
 	}
 }

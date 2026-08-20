@@ -400,8 +400,8 @@ function PackagedFoodTaskDetailPage() {
     <View className='packaged-task-detail-page'>
       <ScrollView className='packaged-task-detail-scroll' scrollY>
         <View className={`detail-hero status-${task?.status || 'pending'}`}>
-          <Text className='detail-hero-kicker'>零食上传任务</Text>
-          <Text className='detail-hero-title'>{packaged?.product_name || `零食照片 ${imageUrls.length || 1} 张`}</Text>
+          <Text className='detail-hero-kicker'>包装食品上传任务</Text>
+          <Text className='detail-hero-title'>{packaged?.product_name || `包装食品照片 ${imageUrls.length || 1} 张`}</Text>
           {task
             ? <Text className='detail-hero-status'>{statusText(task, packaged, reward)}</Text>
             : <View className='detail-hero-loading-spinner' />}

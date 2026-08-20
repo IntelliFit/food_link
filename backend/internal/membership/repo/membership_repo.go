@@ -1112,7 +1112,10 @@ func (r *MembershipRepo) CreateRewardTaskUpload(ctx context.Context, row *domain
 	if row.Meta == nil {
 		row.Meta = map[string]any{}
 	}
-	return r.db.WithContext(ctx).Create(row).Error
+	// source_key is the reward idempotency boundary. Concurrent review retries may
+	// both observe no row; the loser must reuse the winner instead of surfacing a
+	// unique-constraint error after credits were safely deduplicated.
+	return r.db.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(row).Error
 }
 
 func (r *MembershipRepo) UpdateRewardTaskUploadBySourceKey(ctx context.Context, userID, sourceKey string, updates map[string]any) (*domain.RewardTaskUpload, error) {

@@ -87,7 +87,6 @@ $stats-blue-soft: #7aa9ce;
     color: #294635;
   }
 
-  .stats-page__data-sync-spinner,
   .loading-spinner-md {
     border-color: rgb(49 95 67 / 20%);
     border-top-color: #315f43;
@@ -138,30 +137,6 @@ $stats-blue-soft: #7aa9ce;
   .risk-overview-badge-label {
     color: #356c55;
   }
-}
-
-/* 分析页：缓存先展示时，后台联网同步的微型指示器（fixed，不挤占布局） */
-.stats-page__data-sync {
-  position: fixed;
-  left: 228rpx;
-
-  top: $tab-page-fixed-control-top;
-  z-index: 200;
-  pointer-events: none;
-  width: 40rpx;
-  height: 40rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.stats-page__data-sync-spinner {
-  width: 28rpx;
-  height: 28rpx;
-  border-radius: 50%;
-  border: 3rpx solid rgb(92 184 150 / 22%);
-  border-top-color: $stats-primary;
-  animation: loading-spin 0.75s linear infinite;
 }
 
 .stats-range-dropdown {

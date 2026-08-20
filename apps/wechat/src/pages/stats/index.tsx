@@ -586,8 +586,6 @@ function StatsPage() {
     ai: false,
   })
 
-  /** 静默联网刷新中（已有缓存展示时）：左上角微型 spinner，不占文档流 */
-  const [dataSyncing, setDataSyncing] = useState(false)
   const [loading, setLoading] = useState(() => {
     if (!hasAuthToken()) return false
     return readStatsPageCache('week') === null
@@ -610,12 +608,15 @@ function StatsPage() {
   const [customFocusRefreshingKey, setCustomFocusRefreshingKey] = useState<string | null>(null)
 
   const fetchIdRef = useRef(0)
+  const refreshPendingRef = useRef<Partial<Record<'week' | 'month', number>>>({})
   const statsFirstShowRef = useRef(true)
 
   /**
    * 拉取分析页聚合数据；silent=true 时不顶掉界面（已有缓存时后台刷新并写盘）
    */
   const refreshFromNetwork = useCallback(async (r: 'week' | 'month', silent: boolean) => {
+    if (refreshPendingRef.current[r] !== undefined) return
+
     const token = Taro.getStorageSync('access_token')
     if (!token) {
       setGuestBrowse(true)
@@ -626,12 +627,11 @@ function StatsPage() {
 
     setGuestBrowse(false)
     const reqId = ++fetchIdRef.current
+    refreshPendingRef.current[r] = reqId
 
     if (!silent) {
       setLoading(true)
       setError(null)
-    } else {
-      setDataSyncing(true)
     }
 
     try {
@@ -734,11 +734,12 @@ function StatsPage() {
         await showUnifiedApiError(e, '获取统计失败')
       }
     } finally {
+      if (refreshPendingRef.current[r] === reqId) {
+        delete refreshPendingRef.current[r]
+      }
       if (reqId !== fetchIdRef.current) return
       if (!silent) {
         setLoading(false)
-      } else {
-        setDataSyncing(false)
       }
     }
   }, [])
@@ -1228,11 +1229,6 @@ function StatsPage() {
 
   return (
     <View className={`stats-page ${scheme === 'dark' ? 'stats-page--dark' : ''}`}>
-      {dataSyncing ? (
-        <View className='stats-page__data-sync'>
-          <View className='stats-page__data-sync-spinner' />
-        </View>
-      ) : null}
       <View
         className={`stats-range-dropdown ${loading ? 'is-loading' : ''}`}
         onClick={openRangeSelector}

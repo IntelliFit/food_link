@@ -15,6 +15,7 @@ type FoodNutrition = {
   normalized_name?: string
   category?: string
   source?: string
+  quality_tier?: string
   image_paths?: string[]
   kcal_per_100g: number
   protein_per_100g: number
@@ -42,6 +43,24 @@ type FoodNutrition = {
   folate_mcg_per_100g: number
   vitamin_b12_mcg_per_100g: number
   is_active: boolean
+}
+
+type FoodNutritionContribution = {
+  id: string
+  user_id: string
+  canonical_name: string
+  kcal_per_100g: number
+  protein_per_100g: number
+  carbs_per_100g: number
+  fat_per_100g: number
+  source_text: string
+  evidence_image_paths: string[]
+  status: 'pending' | 'approved' | 'rejected'
+  review_action?: 'approve_new' | 'merge_existing' | 'reject'
+  review_note?: string
+  target_food_id?: string
+  rewarded_at?: string
+  created_at: string
 }
 
 type ListResponse<T> = {
@@ -187,7 +206,7 @@ export function FoodNutritionPage({ onLogout, onMenuChange }: FoodNutritionPageP
   const totalPages = Math.max(1, Math.ceil(total / limit))
 
   useEffect(() => {
-    void loadList()
+    if (searchParams.get('view') !== 'contributions') void loadList()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, limit, active, category, searchNonce])
 
@@ -337,11 +356,26 @@ export function FoodNutritionPage({ onLogout, onMenuChange }: FoodNutritionPageP
     setSearchNonce((n) => n + 1)
   }
 
+  if (searchParams.get('view') === 'contributions') {
+    return (
+      <ContributionReviewView
+        onLogout={onLogout}
+        onMenuChange={onMenuChange}
+        apiBase={apiBase}
+        onShowLibrary={() => setSearchParams({}, { replace: true })}
+      />
+    )
+  }
+
   return (
     <div className="relative z-10 mx-auto grid min-h-[calc(100vh-2rem)] w-full max-w-[1540px] grid-cols-[256px_minmax(0,1fr)] gap-8 px-4 py-4">
       <AdminSidebar activeMenu="food-nutrition" onLogout={onLogout} onMenuChange={onMenuChange} />
       <main className="min-w-0 space-y-6 pb-8">
         <PageHeader eyebrow="识别算法 / 营养食物库" title="营养食物库" apiBase={apiBase} />
+        <section className="flex gap-2 rounded-xl border border-slate-200 bg-white p-2">
+          <button className="primary" type="button">标准食物库</button>
+          <button type="button" onClick={() => setSearchParams({ view: 'contributions' }, { replace: true })}>用户待审</button>
+        </section>
         <section className="stats-grid">
           <Stat label="当前筛选" value={String(total)} foot="条食物" />
           <Stat label="本页展示" value={String(items.length)} foot={loading ? '读取中' : '条记录'} />
@@ -453,6 +487,129 @@ export function FoodNutritionPage({ onLogout, onMenuChange }: FoodNutritionPageP
           onSubmit={createItem}
         />
       ) : null}
+    </div>
+  )
+}
+
+function ContributionReviewView({
+  onLogout,
+  onMenuChange,
+  apiBase,
+  onShowLibrary,
+}: FoodNutritionPageProps & { apiBase: string; onShowLibrary: () => void }) {
+  const [items, setItems] = useState<FoodNutritionContribution[]>([])
+  const [selected, setSelected] = useState<FoodNutritionContribution | null>(null)
+  const [status, setStatus] = useState('pending')
+  const [query, setQuery] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [reviewing, setReviewing] = useState(false)
+  const [reviewNote, setReviewNote] = useState('')
+  const [targetQuery, setTargetQuery] = useState('')
+  const [targetFoodId, setTargetFoodId] = useState('')
+  const [targetFoods, setTargetFoods] = useState<FoodNutrition[]>([])
+
+  async function load() {
+    setLoading(true)
+    try {
+      const params = new URLSearchParams({ status, q: query, limit: '100' })
+      const data = await adminRequest<ListResponse<FoodNutritionContribution>>(`/api/admin/food-nutrition-contributions?${params}`)
+      setItems(data.items || [])
+      setSelected((current) => (data.items || []).find((item) => item.id === current?.id) || data.items?.[0] || null)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '读取待审贡献失败')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { void load() }, [status])
+
+  async function searchTarget() {
+    const params = new URLSearchParams({ q: targetQuery.trim(), active: 'true', page: '1', limit: '20' })
+    try {
+      const data = await adminRequest<ListResponse<FoodNutrition>>(`/api/admin/food-nutrition?${params}`)
+      setTargetFoods(data.items || [])
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '搜索标准食物失败')
+    }
+  }
+
+  async function review(action: 'approve_new' | 'merge_existing' | 'reject') {
+    if (!selected) return
+    if (action === 'merge_existing' && !targetFoodId) {
+      toast.error('请选择要合并的标准食物')
+      return
+    }
+    if (action === 'reject' && !reviewNote.trim()) {
+      toast.error('驳回时必须填写原因')
+      return
+    }
+    setReviewing(true)
+    try {
+      await adminRequest(`/api/admin/food-nutrition-contributions/${encodeURIComponent(selected.id)}/review`, {
+        method: 'POST',
+        body: JSON.stringify({ action, target_food_id: targetFoodId || undefined, review_note: reviewNote.trim() }),
+      })
+      toast.success(action === 'reject' ? '已驳回' : '审核通过并已入库')
+      setReviewNote(''); setTargetFoodId(''); setTargetFoods([]); setTargetQuery('')
+      await load()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '审核失败')
+    } finally {
+      setReviewing(false)
+    }
+  }
+
+  return (
+    <div className="relative z-10 mx-auto grid min-h-[calc(100vh-2rem)] w-full max-w-[1540px] grid-cols-[256px_minmax(0,1fr)] gap-8 px-4 py-4">
+      <AdminSidebar activeMenu="food-nutrition" onLogout={onLogout} onMenuChange={onMenuChange} />
+      <main className="min-w-0 space-y-6 pb-8">
+        <PageHeader eyebrow="识别算法 / 营养食物库" title="用户标准食物贡献" apiBase={apiBase} />
+        <section className="flex gap-2 rounded-xl border border-slate-200 bg-white p-2">
+          <button type="button" onClick={onShowLibrary}>标准食物库</button>
+          <button className="primary" type="button">用户待审</button>
+        </section>
+        <section className="toolbar packaged-toolbar">
+          <label className="wide">搜索<input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="食物名或来源" /></label>
+          <SelectLabel label="状态" value={status} onChange={setStatus} options={[["pending", "待审核"], ["approved", "已通过"], ["rejected", "已驳回"], ["all", "全部"]]} />
+          <button className="primary" type="button" onClick={() => void load()}>刷新</button>
+        </section>
+        <section className="workspace packaged-workspace">
+          <div className="sku-list">
+            {loading ? <SkeletonRows /> : null}
+            {!loading && items.length === 0 ? <Empty title="没有贡献" desc="当前筛选条件下没有用户贡献。" /> : null}
+            {!loading ? items.map((item) => (
+              <article key={item.id} className={`sku-card ${selected?.id === item.id ? 'selected' : ''}`} onClick={() => setSelected(item)}>
+                <div className="thumb-strip">
+                  {item.evidence_image_paths?.[0] ? <img src={item.evidence_image_paths[0]} alt={item.canonical_name} /> : <div className="no-image">无图</div>}
+                </div>
+                <div className="sku-body">
+                  <h2>{item.canonical_name}</h2>
+                  <div className="meta-row"><span className="pill">{item.status}</span><span className="pill">{item.evidence_image_paths?.length || 0} 图</span></div>
+                  <div className="nutrition-line"><span><strong>{cleanNum(item.kcal_per_100g)}</strong>kcal</span><span><strong>{cleanNum(item.protein_per_100g)}</strong>蛋白</span><span><strong>{cleanNum(item.carbs_per_100g)}</strong>碳水</span><span><strong>{cleanNum(item.fat_per_100g)}</strong>脂肪</span></div>
+                </div>
+              </article>
+            )) : null}
+          </div>
+          <aside className="detail-panel sku-editor-panel">
+            {selected ? <>
+              <div className="editor-header"><div><h2>{selected.canonical_name}</h2><p>贡献人：{selected.user_id}</p></div><span className="pill">{selected.status}</span></div>
+              <section className="detail-section"><h3>每100g营养</h3><div className="nutrition-line"><span><strong>{cleanNum(selected.kcal_per_100g)}</strong>kcal</span><span><strong>{cleanNum(selected.protein_per_100g)}</strong>蛋白</span><span><strong>{cleanNum(selected.carbs_per_100g)}</strong>碳水</span><span><strong>{cleanNum(selected.fat_per_100g)}</strong>脂肪</span></div></section>
+              <section className="detail-section"><h3>来源说明</h3><p>{selected.source_text || '未填写（历史迁移记录）'}</p><div className="image-list">{selected.evidence_image_paths?.map((src) => <a key={src} href={src} target="_blank" rel="noreferrer"><img src={src} alt="证据" /></a>)}</div></section>
+              {selected.status === 'pending' ? <>
+                <section className="detail-section"><h3>审核备注</h3><textarea rows={3} value={reviewNote} onChange={(event) => setReviewNote(event.target.value)} placeholder="驳回时必填；通过时可选" /></section>
+                <section className="detail-section"><h3>合并到已有标准食物</h3><div className="flex gap-2"><input value={targetQuery} onChange={(event) => setTargetQuery(event.target.value)} placeholder="搜索标准食物" /><button type="button" onClick={() => void searchTarget()}>搜索</button></div>
+                  <div className="mt-3 space-y-2">{targetFoods.map((food) => <button key={food.id} type="button" className={`w-full text-left ${targetFoodId === food.id ? 'primary' : ''}`} onClick={() => setTargetFoodId(food.id)}>
+                    <strong>{food.canonical_name}</strong> · {cleanNum(food.kcal_per_100g)} kcal/100g<br />
+                    <small>{food.source || '无来源'} · {food.quality_tier || '未分级'} · P {cleanNum(food.protein_per_100g)} / C {cleanNum(food.carbs_per_100g)} / F {cleanNum(food.fat_per_100g)}</small>
+                  </button>)}</div>
+                </section>
+                <div className="actions"><button className="primary" disabled={reviewing} onClick={() => void review('approve_new')}>{reviewing ? <Spinner small /> : '审核为新食物'}</button><button disabled={reviewing || !targetFoodId} onClick={() => void review('merge_existing')}>合并已有食物</button><button className="destructive" disabled={reviewing} onClick={() => void review('reject')}>驳回</button></div>
+              </> : <section className="detail-section"><h3>审核结果</h3><p>{selected.review_action || '-'} · {selected.review_note || '无备注'}</p><p className="muted">目标食物：{selected.target_food_id || '-'} · 积分：{selected.rewarded_at ? '已发放' : '未发放'}</p></section>}
+            </> : <Empty title="选择一条贡献" desc="右侧会展示来源、证据和审核操作。" />}
+          </aside>
+        </section>
+      </main>
     </div>
   )
 }

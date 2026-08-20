@@ -73,6 +73,7 @@ type mockTaskService struct {
 	deleteErr       error
 	cleanupAffected int64
 	cleanupErr      error
+	lastSubmitInput service.SubmitTaskInput
 }
 
 type mockPaginatedTaskService struct {
@@ -89,9 +90,11 @@ type mockSummaryPaginatedTaskService struct {
 }
 
 func (m *mockTaskService) SubmitAnalyzeTask(ctx context.Context, userID string, input service.SubmitTaskInput) (string, error) {
+	m.lastSubmitInput = input
 	return m.submitTaskID, m.submitErr
 }
 func (m *mockTaskService) SubmitTextTask(ctx context.Context, userID string, input service.SubmitTaskInput) (string, error) {
+	m.lastSubmitInput = input
 	return m.submitTaskID, m.submitErr
 }
 func (m *mockTaskService) CreateBatchTask(ctx context.Context, userID string, imageURLs []string, payload map[string]any, result map[string]any) (string, error) {
@@ -149,6 +152,7 @@ func setupRouter(h *AnalyzeHandler) *gin.Engine {
 	r.POST("/api/analyze/goose-duck-chicken", h.ClassifyGooseDuckChicken)
 	r.POST("/api/analyze/submit", h.SubmitAnalyzeTask)
 	r.POST("/api/analyze-text/submit", h.SubmitTextTask)
+	r.POST("/api/precision-sessions/:session_id/continue", h.ContinuePrecisionSession)
 	r.GET("/api/analyze/tasks", h.ListTasks)
 	r.GET("/api/analyze/tasks/count", h.CountTasks)
 	r.GET("/api/analyze/tasks/status-count", h.CountTasksByStatus)
@@ -292,6 +296,33 @@ func TestAnalyzeHandler_SubmitAnalyzeTask(t *testing.T) {
 	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	data := resp["data"].(map[string]any)
 	assert.Equal(t, "task-123", data["task_id"])
+}
+
+func TestAnalyzeHandler_ContinuePrecisionSessionBindsAnswersAndSkipFlag(t *testing.T) {
+	mockSvc := &mockAnalyzeService{}
+	mockTask := &mockTaskService{submitTaskID: "task-precision-next"}
+	h := NewAnalyzeHandler(mockSvc, mockTask, "admin-key")
+	r := setupRouter(h)
+
+	body, _ := json.Marshal(map[string]any{
+		"source_type":               "image",
+		"answers":                   []map[string]any{{"question_id": "food_identity_1", "value": "chicken"}},
+		"continue_with_uncertainty": true,
+		"reference_object":          map[string]any{"presence": "absent"},
+	})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/precision-sessions/session-1/continue", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	require.NotNil(t, mockTask.lastSubmitInput.PrecisionSessionID)
+	assert.Equal(t, "session-1", *mockTask.lastSubmitInput.PrecisionSessionID)
+	assert.True(t, mockTask.lastSubmitInput.ContinueWithUncertainty)
+	require.Len(t, mockTask.lastSubmitInput.Answers, 1)
+	assert.Equal(t, "food_identity_1", mockTask.lastSubmitInput.Answers[0].QuestionID)
+	require.NotNil(t, mockTask.lastSubmitInput.ReferenceObject)
+	assert.Equal(t, "absent", mockTask.lastSubmitInput.ReferenceObject.Presence)
 }
 
 func TestAnalyzeHandler_SubmitTextTask(t *testing.T) {

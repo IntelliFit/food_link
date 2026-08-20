@@ -15,6 +15,7 @@ import {
 import { IconExercise } from '../../../components/iconfont'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { getStoredRecordTargetDate, persistRecordTargetDate } from '../../../utils/record-date'
+import { needsPrecisionUserAction } from '../../../utils/precision-mode'
 import './index.scss'
 
 /** 与记运动页一致，用于完成后清除「待同步」状态 */
@@ -1027,8 +1028,8 @@ const getNextTipIndex = (current?: number) => {
 }
 
 const POLL_INTERVAL = 2000
+const POLL_RETRY_MAX_INTERVAL = 16000
 const TIP_ROTATE_INTERVAL = 6000
-const ANALYZE_TIMEOUT = 5 * 60 * 1000
 
 const EXECUTION_MODE_META: Record<ExecutionMode, { title: string; desc: string }> = {
   lite: {
@@ -1294,11 +1295,12 @@ function AnalyzeLoadingPage() {
     Taro.getCurrentInstance().router?.params?.correction === '1'
   )
   const [imagePath, setImagePath] = useState<string>('')
-  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const pollFnRef = useRef<(() => Promise<void>) | null>(null)
   const tipTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const timeoutTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const elapsedTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const pollInFlightRef = useRef(false)
+  const pollFailureCountRef = useRef(0)
   const startTimeRef = useRef<number>(Date.now())
   const routeSignatureRef = useRef<string>('')
 
@@ -1377,6 +1379,7 @@ function AnalyzeLoadingPage() {
       setViolationReason('')
       setElapsedSeconds(0)
       setLastTaskStatusText(correctionMode ? '已提交纠错' : '已提交')
+      pollFailureCountRef.current = 0
       setInteractionIndex(prev => getNextInteractionIndex(prev))
       setSelectedQuizOption(null)
       setTipIndex(getNextTipIndex())
@@ -1433,33 +1436,6 @@ function AnalyzeLoadingPage() {
   }, [status])
 
   useEffect(() => {
-    if (!taskId || status !== 'loading' || isDebugMode) return
-
-    startTimeRef.current = Date.now()
-
-    timeoutTimerRef.current = setTimeout(() => {
-      setStatus('failed')
-      setErrorTraceId('')
-      setErrorMessage('分析超时，请重试')
-      if (pollTimerRef.current) {
-        clearInterval(pollTimerRef.current)
-        pollTimerRef.current = null
-      }
-      if (tipTimerRef.current) {
-        clearInterval(tipTimerRef.current)
-        tipTimerRef.current = null
-      }
-    }, ANALYZE_TIMEOUT)
-
-    return () => {
-      if (timeoutTimerRef.current) {
-        clearTimeout(timeoutTimerRef.current)
-        timeoutTimerRef.current = null
-      }
-    }
-  }, [taskId, status, isDebugMode, isCorrectionMode])
-
-  useEffect(() => {
     if (!taskId || status !== 'loading') return
 
     if (isDebugMode) {
@@ -1467,9 +1443,28 @@ function AnalyzeLoadingPage() {
       return
     }
 
-    const poll = async () => {
+    let cancelled = false
+    const scheduleNextPoll = (delay: number) => {
+      if (cancelled) return
+      if (pollTimerRef.current) clearTimeout(pollTimerRef.current)
+      pollTimerRef.current = setTimeout(() => {
+        void poll()
+      }, delay)
+    }
+
+    async function poll() {
+      if (cancelled) return
+      if (pollInFlightRef.current) {
+        // 当任务状态同步触发 effect 重建时，上一轮请求可能尚未结束；补排一次，
+        // 避免旧 effect 清理后新 effect 因“请求进行中”而永久停止查询。
+        scheduleNextPoll(POLL_INTERVAL)
+        return
+      }
+      pollInFlightRef.current = true
+      let settled = false
       try {
         const task: AnalysisTask = await getAnalyzeTask(taskId)
+        pollFailureCountRef.current = 0
         setLastTaskStatusText(task.status === 'processing' ? '处理中' : task.status === 'pending' ? '排队中' : '收尾中')
         const taskMode = pickExecutionModeFromTask(task)
         const effectiveTaskType = pickSourceTaskTypeFromTask(task)
@@ -1484,13 +1479,10 @@ function AnalyzeLoadingPage() {
         if (task.status === 'done' && task.result) {
           const exResult = task.result as unknown as ExerciseTaskResultPayload | undefined
           if (exResult?.exercise_log) {
+            settled = true
             setStatus('done')
-            if (timeoutTimerRef.current) {
-              clearTimeout(timeoutTimerRef.current)
-              timeoutTimerRef.current = null
-            }
             if (pollTimerRef.current) {
-              clearInterval(pollTimerRef.current)
+              clearTimeout(pollTimerRef.current)
               pollTimerRef.current = null
             }
             if (elapsedTimerRef.current) {
@@ -1511,16 +1503,33 @@ function AnalyzeLoadingPage() {
 
           const result = task.result as AnalyzeResponse
           if (result.redirectTaskId && result.redirectTaskId !== taskId) {
+            settled = true
             setTaskId(result.redirectTaskId)
             return
           }
-          setStatus('done')
-          if (timeoutTimerRef.current) {
-            clearTimeout(timeoutTimerRef.current)
-            timeoutTimerRef.current = null
+          const needsPrecisionAction = needsPrecisionUserAction(result)
+          if (needsPrecisionAction) {
+            settled = true
+            setStatus('done')
+            if (pollTimerRef.current) clearTimeout(pollTimerRef.current)
+            if (elapsedTimerRef.current) clearInterval(elapsedTimerRef.current)
+            pollTimerRef.current = null
+            elapsedTimerRef.current = null
+            persistResultImageFromTask(task)
+            Taro.setStorageSync('analyzeResult', JSON.stringify(result))
+            Taro.setStorageSync('analyzeSourceTaskId', taskId)
+            if (result.precisionSessionId) {
+              Taro.setStorageSync('analyzePrecisionSessionId', result.precisionSessionId)
+            }
+            Taro.redirectTo({
+              url: `${extraPkgUrl('/pages/precision-confirm/index')}?task_id=${encodeURIComponent(taskId)}`,
+            })
+            return
           }
+          settled = true
+          setStatus('done')
           if (pollTimerRef.current) {
-            clearInterval(pollTimerRef.current)
+            clearTimeout(pollTimerRef.current)
             pollTimerRef.current = null
           }
 
@@ -1573,15 +1582,12 @@ function AnalyzeLoadingPage() {
           return
         }
         if (task.status === 'failed' || task.status === 'timed_out') {
+          settled = true
           setStatus('failed')
           setErrorTraceId(pickAnalyzeTaskTraceId(task))
           setErrorMessage(normalizeAnalyzeTaskErrorMessage(task.error_message || (task.status === 'timed_out' ? (isCorrectionMode ? '纠错分析超时，请重试' : '分析超时，请重试') : (isCorrectionMode ? '纠错失败' : '识别失败'))))
-          if (timeoutTimerRef.current) {
-            clearTimeout(timeoutTimerRef.current)
-            timeoutTimerRef.current = null
-          }
           if (pollTimerRef.current) {
-            clearInterval(pollTimerRef.current)
+            clearTimeout(pollTimerRef.current)
             pollTimerRef.current = null
           }
 
@@ -1591,14 +1597,11 @@ function AnalyzeLoadingPage() {
           }
         }
         if (task.status === 'violated' || task.is_violated) {
+          settled = true
           setStatus('violated')
           setViolationReason(task.violation_reason || '内容违规')
-          if (timeoutTimerRef.current) {
-            clearTimeout(timeoutTimerRef.current)
-            timeoutTimerRef.current = null
-          }
           if (pollTimerRef.current) {
-            clearInterval(pollTimerRef.current)
+            clearTimeout(pollTimerRef.current)
             pollTimerRef.current = null
           }
 
@@ -1609,13 +1612,22 @@ function AnalyzeLoadingPage() {
         }
       } catch (e: any) {
         console.error('轮询任务失败:', e)
+        pollFailureCountRef.current += 1
+        setLastTaskStatusText('网络重连中')
+      } finally {
+        pollInFlightRef.current = false
+        if (!settled && !cancelled) {
+          const retryCount = Math.min(pollFailureCountRef.current, 3)
+          scheduleNextPoll(Math.min(POLL_RETRY_MAX_INTERVAL, POLL_INTERVAL * (2 ** retryCount)))
+        }
       }
     }
     pollFnRef.current = poll
-    poll()
-    pollTimerRef.current = setInterval(poll, POLL_INTERVAL)
+    void poll()
     return () => {
-      if (pollTimerRef.current) clearInterval(pollTimerRef.current)
+      cancelled = true
+      if (pollTimerRef.current) clearTimeout(pollTimerRef.current)
+      pollTimerRef.current = null
       pollFnRef.current = null
     }
   }, [taskId, taskType, status, executionMode, isDebugMode])

@@ -109,8 +109,12 @@ function RewardCenterPage() {
     }
     if (!task.action_path || isTaskDisabled(task)) return
     const url = task.action_type === 'public_food_upload'
-      ? extraPkgUrl('/pages/campus-food-share/index?task_mode=reward_center')
-      : resolveRewardTaskUrl(task.action_path)
+      ? extraPkgUrl('/pages/food-contribution/index?focus=public')
+      : task.action_type === 'packaged_food_upload'
+        ? extraPkgUrl('/pages/food-contribution/index?focus=packaged')
+        : task.action_type === 'standard_food_upload'
+          ? extraPkgUrl('/pages/standard-food-contribution/index?task_mode=reward_center')
+          : resolveRewardTaskUrl(task.action_path)
     Taro.navigateTo({
       url,
       fail: (error) => {
@@ -302,8 +306,10 @@ function isTaskDisabled(task: RewardCenterTask): boolean {
 
 function formatTaskName(task: RewardCenterTask): string {
   if (task.action_type === 'public_food_upload') {
-    return '上传公共食物/校园食堂菜品'
+    return '上传公共餐食'
   }
+  if (task.action_type === 'packaged_food_upload') return '上传包装食品'
+  if (task.action_type === 'standard_food_upload') return '贡献标准食物'
   return task.name
 }
 
@@ -312,6 +318,7 @@ function getTaskIconClass(task: RewardCenterTask): string {
   if (task.action_type === 'share_poster') return 'icon-share'
   if (task.action_type === 'packaged_food_upload') return 'icon-picture'
   if (task.action_type === 'public_food_upload') return 'icon-foodshop'
+  if (task.action_type === 'standard_food_upload') return 'icon-shiwu'
   return 'icon-good'
 }
 

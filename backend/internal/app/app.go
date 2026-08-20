@@ -41,6 +41,9 @@ import (
 	followhandler "food_link/backend/internal/follow/handler"
 	followrepo "food_link/backend/internal/follow/repo"
 	followservice "food_link/backend/internal/follow/service"
+	foodcontributionhandler "food_link/backend/internal/foodcontribution/handler"
+	foodcontributionrepo "food_link/backend/internal/foodcontribution/repo"
+	foodcontributionservice "food_link/backend/internal/foodcontribution/service"
 	foodrecordhandler "food_link/backend/internal/foodrecord/handler"
 	foodrecordrepo "food_link/backend/internal/foodrecord/repo"
 	foodrecordservice "food_link/backend/internal/foodrecord/service"
@@ -74,6 +77,9 @@ import (
 	searchrepo "food_link/backend/internal/search/repo"
 	searchservice "food_link/backend/internal/search/service"
 	"food_link/backend/internal/stub"
+	supplementhandler "food_link/backend/internal/supplement/handler"
+	supplementrepo "food_link/backend/internal/supplement/repo"
+	supplementservice "food_link/backend/internal/supplement/service"
 	systemhandler "food_link/backend/internal/system/handler"
 	"food_link/backend/internal/taskqueue"
 	testbackendhandler "food_link/backend/internal/testbackend/handler"
@@ -115,6 +121,7 @@ type App struct {
 	catalogBackfillCancel context.CancelFunc
 	catalogBackfillDone   chan struct{}
 	taskQueue             taskqueue.Queue
+	campusCatalogService  *campuscatalogservice.CatalogService
 }
 
 type campusCatalogNutritionBackfiller interface {
@@ -283,6 +290,10 @@ func New(cfg *config.Config) (*App, error) {
 
 	homeRepo := homerepo.NewHomeRepo(db)
 	dashboardService := homeservice.NewDashboardService(userRepo, homeRepo, storageClient)
+	supplementRepo := supplementrepo.NewSupplementRepo(db)
+	supplementSvc := supplementservice.NewSupplementService(supplementRepo)
+	supplementHandler := supplementhandler.NewSupplementHandler(supplementSvc)
+	dashboardService.ConfigureSupplementProvider(supplementSvc)
 	dashboardHandler := homehandler.NewDashboardHandler(dashboardService)
 
 	// Friend module DI
@@ -370,6 +381,9 @@ func New(cfg *config.Config) (*App, error) {
 	publicFoodSvc.ConfigureRewardTaskAwarder(membershipSvc)
 	publicFoodSvc.ConfigureBlockChecker(friendSvc)
 	publicFoodHandler := publicfoodhandler.NewPublicFoodHandler(publicFoodSvc)
+	foodContributionRepo := foodcontributionrepo.NewContributionRepo(db)
+	foodContributionSvc := foodcontributionservice.NewContributionService(foodContributionRepo, membershipSvc, storageClient)
+	foodContributionHandler := foodcontributionhandler.NewContributionHandler(foodContributionSvc)
 
 	// Recipe module DI
 	recipeRepo := reciperepo.NewRecipeRepo(db)
@@ -428,7 +442,9 @@ func New(cfg *config.Config) (*App, error) {
 		taskQueue:     taskQueue,
 	}
 	app.startEmbeddedWorker(cfg, analyzeTaskRepo, analyzePrecisionRepo, publicFoodRepo, campuscatalogrepo.NewCatalogRepo(db), analyzeSvc, ocrSvc, healthDocRepo, userRepo, expiryRecognizer, expiryNotifier, exerciseSvc, frNutritionSvc, membershipSvc, taskQueue, storageClient)
-	app.startNutritionEmbeddingMaintenance(nutritionEmbeddingMaintainer)
+	if os.Getenv("FOOD_LINK_DISABLE_BACKGROUND_MAINTENANCE") != "1" {
+		app.startNutritionEmbeddingMaintenance(nutritionEmbeddingMaintainer)
+	}
 
 	engine.POST("/api/login", loginHandler.Login)
 	engine.POST("/api/app/login/wechat", loginHandler.AppWechatLogin)
@@ -477,6 +493,13 @@ func New(cfg *config.Config) (*App, error) {
 
 	engine.GET("/api/home/dashboard", authmw.RequireJWT(jwtSvc), dashboardHandler.HomeDashboard)
 	engine.GET("/api/food-record/:record_id/poster-calorie-compare", authmw.RequireJWT(jwtSvc), dashboardHandler.PosterCalorieCompare)
+	engine.GET("/api/supplements", authmw.RequireJWT(jwtSvc), supplementHandler.List)
+	engine.GET("/api/supplements/catalog", authmw.RequireJWT(jwtSvc), supplementHandler.ListCatalog)
+	engine.POST("/api/supplements", authmw.RequireJWT(jwtSvc), supplementHandler.Create)
+	engine.PUT("/api/supplements/:item_id", authmw.RequireJWT(jwtSvc), supplementHandler.Update)
+	engine.GET("/api/supplements/dashboard", authmw.RequireJWT(jwtSvc), supplementHandler.Dashboard)
+	engine.POST("/api/supplements/:item_id/intakes", authmw.RequireJWT(jwtSvc), supplementHandler.Record)
+	engine.DELETE("/api/supplement-intakes/:intake_id", authmw.RequireJWT(jwtSvc), supplementHandler.DeleteIntake)
 	engine.DELETE("/api/community/feed/:record_id/comments/:comment_id", authmw.RequireJWT(jwtSvc), commentHandler.DeleteComment)
 
 	// Analyze routes
@@ -510,8 +533,9 @@ func New(cfg *config.Config) (*App, error) {
 	engine.GET("/api/food-record/:record_id", authmw.RequireJWT(jwtSvc), frHandler.GetFoodRecord)
 	engine.PUT("/api/food-record/:record_id", authmw.RequireJWT(jwtSvc), frHandler.UpdateFoodRecord)
 	engine.DELETE("/api/food-record/:record_id", authmw.RequireJWT(jwtSvc), frHandler.DeleteFoodRecord)
-	engine.POST("/api/upload-analyze-image", frHandler.UploadAnalyzeImage)
-	engine.POST("/api/upload-analyze-image-file", frHandler.UploadAnalyzeImageFile)
+	engine.POST("/api/upload-analyze-image", authmw.RequireJWT(jwtSvc), frHandler.UploadAnalyzeImage)
+	engine.POST("/api/upload-analyze-image-file", authmw.RequireJWT(jwtSvc), frHandler.UploadAnalyzeImageFile)
+	engine.POST("/api/upload-analyze-video-file", authmw.RequireJWT(jwtSvc), frHandler.UploadAnalyzeVideoFile)
 	engine.GET("/api/food-nutrition/search", authmw.RequireJWT(jwtSvc), frHandler.SearchFoodNutrition)
 	engine.GET("/api/food-nutrition/unresolved/top", authmw.RequireJWT(jwtSvc), frHandler.GetUnresolvedTop)
 	engine.POST("/api/packaged-food", authmw.RequireJWT(jwtSvc), frHandler.CreatePackagedFood)
@@ -648,6 +672,8 @@ func New(cfg *config.Config) (*App, error) {
 
 	// Public food library routes
 	engine.GET("/api/public-food-library", authmw.RequireJWT(jwtSvc), publicFoodHandler.List)
+	engine.POST("/api/food-nutrition-contributions", authmw.RequireJWT(jwtSvc), foodContributionHandler.Submit)
+	engine.GET("/api/food-nutrition-contributions/mine", authmw.RequireJWT(jwtSvc), foodContributionHandler.Mine)
 	engine.POST("/api/public-food-library", authmw.RequireJWT(jwtSvc), publicFoodHandler.Create)
 	engine.GET("/api/public-food-library/mine", authmw.RequireJWT(jwtSvc), publicFoodHandler.Mine)
 	engine.GET("/api/public-food-library/collections", authmw.RequireJWT(jwtSvc), publicFoodHandler.Collections)
@@ -776,7 +802,10 @@ func New(cfg *config.Config) (*App, error) {
 		analyzeTaskSvc,
 		campuscatalogservice.NewInternalAnalysisUserResolver(userRepo),
 	)
-	app.startCampusCatalogNutritionBackfill(adminCampusCatalogSvc)
+	app.campusCatalogService = adminCampusCatalogSvc
+	if os.Getenv("FOOD_LINK_DISABLE_BACKGROUND_MAINTENANCE") != "1" {
+		app.startCampusCatalogNutritionBackfill(adminCampusCatalogSvc)
+	}
 	adminCampusCatalogHandler := campuscataloghandler.NewCatalogHandler(adminCampusCatalogSvc)
 	adminAuth := adminAuthHandler.AdminAuth()
 	adminAPI := engine.Group("/api/admin", adminCORS(os.Getenv("ADMIN_CORS_ALLOWED_ORIGINS")))
@@ -795,6 +824,9 @@ func New(cfg *config.Config) (*App, error) {
 	adminAPI.GET("/packaged-food-corrections/:submission_id", adminAuth, adminPackagedCorrectionHandler.Get)
 	adminAPI.PATCH("/packaged-food-corrections/:submission_id/review", adminAuth, adminPackagedCorrectionHandler.Review)
 	adminAPI.GET("/food-nutrition", adminAuth, adminFoodNutritionHandler.List)
+	adminAPI.GET("/food-nutrition-contributions", adminAuth, foodContributionHandler.AdminList)
+	adminAPI.GET("/food-nutrition-contributions/:contribution_id", adminAuth, foodContributionHandler.AdminGet)
+	adminAPI.POST("/food-nutrition-contributions/:contribution_id/review", adminAuth, foodContributionHandler.AdminReview)
 	adminAPI.GET("/food-nutrition/:food_id", adminAuth, adminFoodNutritionHandler.Get)
 	adminAPI.POST("/food-nutrition", adminAuth, adminFoodNutritionHandler.Create)
 	adminAPI.PATCH("/food-nutrition/:food_id", adminAuth, adminFoodNutritionHandler.Update)
@@ -913,6 +945,14 @@ func resolvePixelAvatarAPIKey(external config.ExternalConfig) string {
 
 func (a *App) Engine() *gin.Engine {
 	return a.engine
+}
+
+// CampusCatalogService exposes the already-configured catalog service to
+// trusted in-process maintenance commands. Its task publisher shares this
+// App's worker queue, so normal image jobs are not stranded in a separate
+// in-memory queue.
+func (a *App) CampusCatalogService() *campuscatalogservice.CatalogService {
+	return a.campusCatalogService
 }
 
 func shouldTraceHTTPRequest(req *http.Request) bool {

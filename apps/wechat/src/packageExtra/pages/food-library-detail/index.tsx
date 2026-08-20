@@ -403,7 +403,7 @@ function FoodLibraryDetailPage() {
     if (!item || contributingImages || !isCampusFoodItem(item)) return
     try {
       const selection = await Taro.chooseMedia({
-        count: 3,
+        count: 5,
         mediaType: ['image'],
         sourceType: ['album', 'camera'],
         sizeType: ['compressed']

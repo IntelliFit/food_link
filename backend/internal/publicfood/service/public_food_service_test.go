@@ -17,6 +17,7 @@ import (
 	"food_link/backend/pkg/config"
 	"food_link/backend/pkg/storage"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	"food_link/backend/pkg/testdb"
@@ -107,7 +108,31 @@ func setupPublicFoodServiceTestDB(t *testing.T) *gorm.DB {
 		logo_url TEXT,
 		created_at TEXT
 	)`).Error)
+	require.NoError(t, db.Exec(`CREATE TABLE school_campuses (
+		id TEXT PRIMARY KEY,
+		school_id TEXT NOT NULL,
+		name TEXT NOT NULL,
+		status TEXT NOT NULL DEFAULT 'active'
+	)`).Error)
+	require.NoError(t, db.Exec(`CREATE TABLE school_canteens (
+		id TEXT PRIMARY KEY,
+		school_id TEXT NOT NULL,
+		campus_id TEXT,
+		name TEXT NOT NULL,
+		status TEXT NOT NULL DEFAULT 'active'
+	)`).Error)
 	return db
+}
+
+func seedCampusDirectoryForPublicFoodTest(t *testing.T, db *gorm.DB, schoolName, campusName, canteenName string) (string, string, string) {
+	t.Helper()
+	schoolID := "school-" + uuid.NewString()
+	campusID := "campus-" + uuid.NewString()
+	canteenID := "canteen-" + uuid.NewString()
+	require.NoError(t, db.Exec(`INSERT INTO schools (id, name, status) VALUES (?, ?, 'active')`, schoolID, schoolName).Error)
+	require.NoError(t, db.Exec(`INSERT INTO school_campuses (id, school_id, name, status) VALUES (?, ?, ?, 'active')`, campusID, schoolID, campusName).Error)
+	require.NoError(t, db.Exec(`INSERT INTO school_canteens (id, school_id, campus_id, name, status) VALUES (?, ?, ?, ?, 'active')`, canteenID, schoolID, campusID, canteenName).Error)
+	return schoolID, campusID, canteenID
 }
 
 func TestValidateCampusCreateInputRequiresCoreFields(t *testing.T) {
@@ -115,6 +140,10 @@ func TestValidateCampusCreateInputRequiresCoreFields(t *testing.T) {
 	school := "北京大学"
 	canteen := "学一食堂"
 	image := "https://example.com/food.jpg"
+	campus := "燕园校区"
+	schoolID := "school-1"
+	campusID := "campus-1"
+	canteenID := "canteen-1"
 
 	tests := []struct {
 		name  string
@@ -163,7 +192,11 @@ func TestValidateCampusCreateInputRequiresCoreFields(t *testing.T) {
 	err := validateCampusCreateInput(CreateInput{
 		IsCampusFood: true,
 		FoodName:     &foodName,
+		SchoolID:     &schoolID,
+		CampusID:     &campusID,
+		CanteenID:    &canteenID,
 		SchoolName:   &school,
+		CampusName:   &campus,
 		CanteenName:  &canteen,
 		ImagePath:    &image,
 	}, []string{image})
@@ -175,6 +208,10 @@ func TestValidateCampusRangePrice(t *testing.T) {
 	foodName := "麻辣烫"
 	school := "北京大学"
 	canteen := "学一食堂"
+	campus := "燕园校区"
+	schoolID := "school-1"
+	campusID := "campus-1"
+	canteenID := "canteen-1"
 	imagePaths := []string{"https://example.com/food.jpg"}
 	minPrice := 8.0
 	maxPrice := 15.0
@@ -182,7 +219,11 @@ func TestValidateCampusRangePrice(t *testing.T) {
 	err := validateCampusCreateInput(CreateInput{
 		IsCampusFood: true,
 		FoodName:     &foodName,
+		SchoolID:     &schoolID,
+		CampusID:     &campusID,
+		CanteenID:    &canteenID,
 		SchoolName:   &school,
+		CampusName:   &campus,
 		CanteenName:  &canteen,
 		PriceType:    &priceType,
 		PriceMin:     &minPrice,
@@ -194,7 +235,11 @@ func TestValidateCampusRangePrice(t *testing.T) {
 	err = validateCampusCreateInput(CreateInput{
 		IsCampusFood: true,
 		FoodName:     &foodName,
+		SchoolID:     &schoolID,
+		CampusID:     &campusID,
+		CanteenID:    &canteenID,
 		SchoolName:   &school,
+		CampusName:   &campus,
 		CanteenName:  &canteen,
 		PriceType:    &priceType,
 		PriceMin:     &minPrice,
@@ -302,7 +347,7 @@ func TestNormalizePublicFoodLocationInputHomemadeLocationOptional(t *testing.T) 
 	require.NoError(t, err)
 }
 
-func TestNormalizePublicFoodLocationInputNonHomemadeRequiresFullLocation(t *testing.T) {
+func TestNormalizePublicFoodLocationInputNonHomemadeLocationOptional(t *testing.T) {
 	province := "浙江省"
 	city := "杭州市"
 	input := CreateInput{
@@ -311,7 +356,7 @@ func TestNormalizePublicFoodLocationInputNonHomemadeRequiresFullLocation(t *test
 	}
 
 	err := normalizePublicFoodLocationInput(&input)
-	require.Error(t, err)
+	require.NoError(t, err)
 }
 
 func TestNormalizePublicFoodLocationInputNonCampusClearsPriceFields(t *testing.T) {
@@ -364,6 +409,7 @@ func TestPublicFoodServiceCreateCampusFoodPublishesAndStoresCampusFields(t *test
 	priceType := "fixed"
 	priceUnit := "份"
 	portion := "一荤一素"
+	schoolID, campusID, canteenID := seedCampusDirectoryForPublicFoodTest(t, db, school, campus, canteen)
 
 	id, err := svc.Create(ctx, "user-1", CreateInput{
 		IsCampusFood:       true,
@@ -371,6 +417,9 @@ func TestPublicFoodServiceCreateCampusFoodPublishesAndStoresCampusFields(t *test
 		SchoolName:         &school,
 		CampusName:         &campus,
 		CanteenName:        &canteen,
+		SchoolID:           &schoolID,
+		CampusID:           &campusID,
+		CanteenID:          &canteenID,
 		Floor:              &floor,
 		WindowName:         &window,
 		ImagePath:          &image,
@@ -440,6 +489,7 @@ func TestPublicFoodServiceCreateCampusFoodAcceptsPostedPayloadWithoutItems(t *te
 	imageURL := "http://cdn-food-images.coachlink.fit/2ff8d285-09e3-4b24-9dee-19861259a8c4.jpg"
 	foodName := "锦恢蜜汁拿铁"
 	schoolName := "中国科学技术大学"
+	campusName := "东校区"
 	canteenName := "测试"
 	floor := "1"
 	windowName := "1"
@@ -448,6 +498,7 @@ func TestPublicFoodServiceCreateCampusFoodAcceptsPostedPayloadWithoutItems(t *te
 	priceUnit := "元/份"
 	collectedAt := time.Date(2026, 6, 7, 0, 0, 0, 0, time.FixedZone("CST", 8*60*60))
 	portion := "中杯"
+	schoolID, campusID, canteenID := seedCampusDirectoryForPublicFoodTest(t, db, schoolName, campusName, canteenName)
 
 	itemID, err := svc.Create(ctx, "user-1", CreateInput{
 		ImagePath:          &imageURL,
@@ -457,7 +508,11 @@ func TestPublicFoodServiceCreateCampusFoodAcceptsPostedPayloadWithoutItems(t *te
 		UserTags:           []string{},
 		IsCampusFood:       true,
 		SchoolName:         &schoolName,
+		CampusName:         &campusName,
 		CanteenName:        &canteenName,
+		SchoolID:           &schoolID,
+		CampusID:           &campusID,
+		CanteenID:          &canteenID,
 		Floor:              &floor,
 		WindowName:         &windowName,
 		Price:              &price,
@@ -477,7 +532,7 @@ func TestPublicFoodServiceCreateCampusFoodAcceptsPostedPayloadWithoutItems(t *te
 	require.Equal(t, []string{}, saved.UserTags)
 	require.Equal(t, 0.0, saved.TotalCalories)
 	require.NotNil(t, saved.AnalysisTaskID)
-	require.Equal(t, "中国科学技术大学 · 测试 · 1 · 1", saved.CampusLocationText)
+	require.Equal(t, "中国科学技术大学 · 东校区 · 测试 · 1 · 1", saved.CampusLocationText)
 
 	var task analyzedomain.AnalysisTask
 	require.NoError(t, db.Where("id = ?", *saved.AnalysisTaskID).First(&task).Error)

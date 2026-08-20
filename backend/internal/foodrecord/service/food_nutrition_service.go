@@ -41,7 +41,7 @@ const (
 	packagedFoodIngestMethodSilentAnalyze  = "analyze_silent_capture"
 	packagedProductExtractTaskType         = "packaged_product_extract"
 	packagedNutritionLabelTaskType         = "packaged_nutrition_label"
-	packagedProductExtractMaxImages        = 3
+	packagedProductExtractMaxImages        = 5
 )
 
 type PackagedFoodInput struct {
@@ -498,7 +498,7 @@ func (s *FoodNutritionService) SubmitPackagedProductExtractTask(ctx context.Cont
 		return "", &commonerrors.AppError{Code: 10002, Message: "包装图片不能为空", HTTPStatus: 400}
 	}
 	if len(imageURLs) > packagedProductExtractMaxImages {
-		return "", &commonerrors.AppError{Code: 10002, Message: "同一种商品最多上传 3 张包装图片", HTTPStatus: 400}
+		return "", &commonerrors.AppError{Code: 10002, Message: "同一种商品最多上传 5 张包装图片", HTTPStatus: 400}
 	}
 	if s.taskRepo == nil || s.taskQueue == nil {
 		return "", &commonerrors.AppError{Code: 10000, Message: "预包装商品异步识别服务未配置", HTTPStatus: 500}
@@ -574,10 +574,10 @@ func buildPackagedProductExtractPrompt(recognizedNameHint string, imageCount int
 		hint = "无"
 	}
 	imageContext := buildPackagedImageCountContext(imageCount)
-	return `你是预包装食品 OCR 和结构化提取助手。现在会给你 1-3 张同一商品图片，可能包括包装正面、营养成分表、净含量、规格、配料表。
+	return `你是预包装食品 OCR 和结构化提取助手。现在会给你 1-5 张同一商品图片，可能包括包装正面、营养成分表、净含量、规格、配料表和细节图。
 ` + imageContext + `
 这些图片必须被视为同一个商品的一组照片，是同一包装在不同角度、不同折叠状态或大包装局部的补充信息。不要把多张图拆成多个商品，也不要因为多图而输出多个任务。
-如果包装较大、弯曲、反光或一张图拍不全，请综合 1-3 张图片互相补全品牌、品名、净含量/规格和营养成分表；若不同图片信息冲突，只记录冲突，不要编造。
+如果包装较大、弯曲、反光或一张图拍不全，请综合 1-5 张图片互相补全品牌、品名、净含量/规格和营养成分表；若不同图片信息冲突，只记录冲突，不要编造。
 请只提取图片中真实可见的信息，不要编造，不要根据常识补品牌和口味。
 不要在模型里做自由数学换算。你只负责提取标签上的原始数值、单位、口径（每100g/每100ml/每份）和份量信息。
 如果同一大包装是组合装/多口味，且营养成分表有两列或以上，请不要丢弃任一列：在 raw_label_payload 中按“口味/子商品名 + 每份重量”分别记录每列每份营养，例如“浓郁黑巧克力单支营养（42g）”。raw_nutrition_per_basis 仍只在标签只有一套营养表时填写。

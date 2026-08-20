@@ -1,4 +1,4 @@
-import { View, Text, Image, Textarea, PageMeta } from '@tarojs/components'
+import { View, Text, Image, Textarea, PageMeta, Video } from '@tarojs/components'
 import Taro, { useDidShow } from '@tarojs/taro'
 import { useEffect, useState, useRef, useCallback } from 'react'
 import {
@@ -6,6 +6,7 @@ import {
   compressImagePathForUpload,
   uploadAnalyzeImage,
   uploadAnalyzeImageFile,
+  uploadAnalyzeVideoFile,
   submitAnalyzeTask,
   continuePrecisionSession,
   getAccessToken,
@@ -21,7 +22,21 @@ import {
   PrecisionReferencePresetKey,
   showUnifiedApiError,
 } from '../../../utils/api'
-import type { AnalyzeResponse, AnalysisEngine, ExecutionMode, PrecisionReferenceObjectInput } from '../../../utils/api'
+import type {
+  AnalyzeResponse,
+  AnalyzeVideoUploadResult,
+  AnalysisEngine,
+  ExecutionMode,
+  PrecisionCaptureReferenceInput,
+  PrecisionReferenceObjectInput,
+} from '../../../utils/api'
+import {
+  buildDualAngleCaptureViews,
+  buildPrecisionOptions,
+  isPrecisionCaptureComplete,
+  isVideoKeyframeCaptureComplete,
+} from '../../../utils/precision-mode'
+import { compressAnalyzeVideoToLimit } from '../../../utils/analyze-video'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import {
   canUseStrictModeForMembership,
@@ -74,23 +89,35 @@ const ACTIVITY_TIMING_OPTIONS: Array<{ value: ActivityTiming; label: string; ico
 
 type ReferencePresetValue = PrecisionReferencePresetKey
 type AnalyzeBaseMode = 'fast' | 'standard' | 'strict'
+type PrecisionCaptureMode = 'photos' | 'video'
+
+interface SelectedAnalyzeVideo {
+  tempFilePath: string
+  duration: number
+  size: number
+  width: number
+  height: number
+}
 
 const REFERENCE_PRESETS: Array<{
   value: ReferencePresetValue
   label: string
   dimensions: PrecisionReferenceDimensions
 }> = [
-  { value: 'hand', label: '手掌', dimensions: { length: 175, width: 85, height: 25 } },
-  { value: 'campus_card', label: '常规卡片', dimensions: { length: 85.6, width: 54, height: 0.8 } },
+  { value: 'campus_card', label: '标准卡片', dimensions: { length: 85.6, width: 53.98, height: 0.8 } },
+  { value: 'round_plate', label: '圆形餐盘', dimensions: { diameter: 240 } },
   { value: 'large_card', label: '大卡片', dimensions: { length: 120, width: 76, height: 1 } },
   { value: 'custom', label: '自定义', dimensions: {} }
 ]
 
-const DEFAULT_REFERENCE_PRESET: ReferencePresetValue = 'hand'
+const DEFAULT_REFERENCE_PRESET: ReferencePresetValue = 'campus_card'
 const ANALYSIS_ENGINE_STORAGE_KEY = 'analyzeAnalysisEngine'
 const SUGGEST_RATIO_STORAGE_KEY = 'analyzeSuggestRatioEnabled'
 const ANALYZE_SUBMIT_DEBOUNCE_MS = 300
-const MAX_ANALYZE_IMAGES = 3
+const MAX_ANALYZE_IMAGES = 5
+const PRECISION_CAPTURE_ROLES = ['top_down', 'oblique_45'] as const
+const MAX_ANALYZE_VIDEO_SIZE_BYTES = 8 * 1024 * 1024
+const MAX_ANALYZE_VIDEO_DURATION_SECONDS = 12
 
 const normalizeAnalysisEngine = (value: unknown): AnalysisEngine => (
   value === 'legacy_direct' ? 'legacy_direct' : 'db_first'
@@ -152,9 +179,11 @@ const normalizeReferencePresetConfig = (
   const length = normalizePositiveReferenceDimension(dimensionsSource.length)
   const width = normalizePositiveReferenceDimension(dimensionsSource.width)
   const height = normalizePositiveReferenceDimension(dimensionsSource.height)
+  const diameter = normalizePositiveReferenceDimension(dimensionsSource.diameter)
   if (length != null) normalizedDimensions.length = length
   if (width != null) normalizedDimensions.width = width
   if (height != null) normalizedDimensions.height = height
+  if (diameter != null) normalizedDimensions.diameter = diameter
   return {
     reference_name: String((raw as PrecisionReferencePresetConfig).reference_name || fallbackLabel).trim() || fallbackLabel,
     dimensions_mm: Object.keys(normalizedDimensions).length > 0 ? normalizedDimensions : undefined,
@@ -416,6 +445,14 @@ function AnalyzePage() {
   const [activityTiming, setActivityTiming] = useState<ActivityTiming>('none')
   const [defaultMealType, setDefaultMealType] = useState<MealType>(() => inferDefaultMealTypeFromLocalTime())
   const [executionMode, setExecutionMode] = useState<ExecutionMode>('standard')
+  const [precisionInteractiveEnabled, setPrecisionInteractiveEnabled] = useState(true)
+  const [precisionSeparateEnabled, setPrecisionSeparateEnabled] = useState(false)
+  const [precisionWebSearchEnabled, setPrecisionWebSearchEnabled] = useState(false)
+  const [precisionCaptureMode, setPrecisionCaptureMode] = useState<PrecisionCaptureMode>('photos')
+  const [selectedVideo, setSelectedVideo] = useState<SelectedAnalyzeVideo | null>(null)
+  const [videoUploadResult, setVideoUploadResult] = useState<AnalyzeVideoUploadResult | null>(null)
+  const [videoUploadProgress, setVideoUploadProgress] = useState(0)
+  const [isVideoUploading, setIsVideoUploading] = useState(false)
   const [isMultiView, setIsMultiView] = useState(false)
   const [suggestRatioEnabled, setSuggestRatioEnabled] = useState<boolean>(() => readSuggestRatioPreference())
   const [isAnalyzing, setIsAnalyzing] = useState(false)
@@ -426,10 +463,12 @@ function AnalyzePage() {
     () => buildDefaultReferenceDefaults()
   )
   const [referencePreset, setReferencePreset] = useState<ReferencePresetValue>(DEFAULT_REFERENCE_PRESET)
-  const [referenceName, setReferenceName] = useState('手掌')
-  const [referenceLength, setReferenceLength] = useState('175')
-  const [referenceWidth, setReferenceWidth] = useState('85')
-  const [referenceHeight, setReferenceHeight] = useState('25')
+  const [hasReferenceObject, setHasReferenceObject] = useState(true)
+  const [referenceName, setReferenceName] = useState('标准卡片')
+  const [referenceLength, setReferenceLength] = useState('85.6')
+  const [referenceWidth, setReferenceWidth] = useState('53.98')
+  const [referenceHeight, setReferenceHeight] = useState('0.8')
+  const [referenceDiameter, setReferenceDiameter] = useState('')
   const [referencePlacementNote, setReferencePlacementNote] = useState('')
   const [creditSheet, setCreditSheet] = useState<{ visible: boolean; message?: string }>({
     visible: false,
@@ -483,7 +522,7 @@ function AnalyzePage() {
   const imagePathsRef = useRef<string[]>([])
   const routeSessionSignatureRef = useRef('')
   const analyzeSubmitDebounceRef = useRef(0)
-  imagePathsRef.current = imagePaths
+  imagePathsRef.current = imagePaths.filter(Boolean)
 
   const canUseStrictMode = canUseStrictModeForMembership(membershipStatus)
   const { hasInfo: hasCreditsInfo, max: creditsMax, used: creditsUsed, remaining: creditsRemaining } =
@@ -491,9 +530,16 @@ function AnalyzePage() {
   const precisionUpgradeUrl = getStrictModeUpgradeUrl(membershipStatus)
   const precisionUpgradeHint = canUseStrictMode ? '' : getStrictModeLockedHint(membershipStatus)
   const selectedBaseMode = resolveAnalyzeBaseMode(executionMode)
-  const isWebSearchEnabled = isWebSearchExecutionMode(executionMode)
-  const isSeparateFoodEstimateEnabled = executionMode === 'strict_separate'
   const isStrictBaseModeSelected = selectedBaseMode === 'strict'
+  const isVideoCaptureSelected = isStrictBaseModeSelected && precisionCaptureMode === 'video'
+  const isWebSearchEnabled = isStrictBaseModeSelected
+    ? precisionWebSearchEnabled
+    : isWebSearchExecutionMode(executionMode)
+  const isSeparateFoodEstimateEnabled = isStrictBaseModeSelected && precisionSeparateEnabled
+  const selectedImagePaths = imagePaths.filter(Boolean)
+  const precisionSlotsComplete = isPrecisionCaptureComplete(imagePaths)
+  const videoCaptureComplete = isVideoKeyframeCaptureComplete(videoUploadResult?.keyframes || [])
+  const precisionCaptureComplete = isVideoCaptureSelected ? videoCaptureComplete : precisionSlotsComplete
 
   const creditUnits = 1
   const isQuotaExhausted = isFoodAnalysisCreditExhausted(membershipStatus, executionMode, creditUnits)
@@ -529,11 +575,32 @@ function AnalyzePage() {
       })
       return
     }
-    const keepSeparate = baseMode === 'strict' && !isWebSearchEnabled && isSeparateFoodEstimateEnabled
-    setExecutionMode(resolveExecutionModeFromOptions(baseMode, isWebSearchEnabled, keepSeparate))
+    if (baseMode === 'strict') {
+      setExecutionMode('strict')
+      setImagePaths(prev => precisionCaptureMode === 'video'
+        ? (videoUploadResult?.keyframes.map(frame => frame.image_url) || [])
+        : [prev[0] || '', prev[1] || ''])
+      return
+    }
+    setImagePaths(prev => precisionCaptureMode === 'video' ? [] : prev.filter(Boolean))
+    setExecutionMode(resolveExecutionModeFromOptions(baseMode, isWebSearchEnabled, false))
+  }
+
+  const handlePrecisionCaptureModeTap = (mode: PrecisionCaptureMode) => {
+    if (isVideoUploading || mode === precisionCaptureMode) return
+    setPrecisionCaptureMode(mode)
+    if (mode === 'video') {
+      setImagePaths(videoUploadResult?.keyframes.map(frame => frame.image_url) || [])
+    } else {
+      setImagePaths(['', ''])
+    }
   }
 
   const toggleWebSearch = () => {
+    if (isStrictBaseModeSelected) {
+      setPrecisionWebSearchEnabled(value => !value)
+      return
+    }
     const nextValue = !isWebSearchEnabled
     const nextMode = resolveExecutionModeFromOptions(selectedBaseMode, nextValue, false)
     setExecutionMode(nextMode)
@@ -551,15 +618,24 @@ function AnalyzePage() {
       Taro.showToast({ title: '请先选择精准模式', icon: 'none' })
       return
     }
-    setExecutionMode(resolveExecutionModeFromOptions('strict', false, !isSeparateFoodEstimateEnabled))
+    setPrecisionSeparateEnabled(value => !value)
+  }
+
+  const togglePrecisionInteractive = () => {
+    if (!isStrictBaseModeSelected) {
+      Taro.showToast({ title: '请先选择精准模式', icon: 'none' })
+      return
+    }
+    setPrecisionInteractiveEnabled(value => !value)
   }
 
   // 每次进入拍照页都刷新配额（从分析结果页返回时）；无图时按当前时间刷新默认餐次
   useDidShow(() => {
     const params = Taro.getCurrentInstance().router?.params
     const nextSessionId = String(params?.precision_session_id || '').trim()
+    const requestedCaptureMode = String(params?.capture_mode || '').trim()
     const requestedAnalysisEngine = String(params?.analysis_engine || '').trim()
-    const nextSignature = `${nextSessionId}|${requestedAnalysisEngine}`
+    const nextSignature = `${nextSessionId}|${requestedAnalysisEngine}|${requestedCaptureMode}`
     if (routeSessionSignatureRef.current !== nextSignature) {
       routeSessionSignatureRef.current = nextSignature
       console.info('[analyze] sync route session', {
@@ -568,7 +644,8 @@ function AnalyzePage() {
       })
       setPrecisionSessionId(nextSessionId)
       if (nextSessionId) {
-        setExecutionMode('experimental')
+        setExecutionMode('strict')
+        if (requestedCaptureMode === 'video') setPrecisionCaptureMode('video')
       }
       if (requestedAnalysisEngine) {
         Taro.setStorageSync(ANALYSIS_ENGINE_STORAGE_KEY, normalizeAnalysisEngine(requestedAnalysisEngine))
@@ -596,12 +673,14 @@ function AnalyzePage() {
   useEffect(() => {
     const params = Taro.getCurrentInstance().router?.params
     const nextSessionId = String(params?.precision_session_id || '').trim()
+    const requestedCaptureMode = String(params?.capture_mode || '').trim()
     persistRecordTargetDate(String(params?.date || ''))
     const requestedAnalysisEngine = String(params?.analysis_engine || '').trim()
-    routeSessionSignatureRef.current = `${nextSessionId}|${requestedAnalysisEngine}`
+    routeSessionSignatureRef.current = `${nextSessionId}|${requestedAnalysisEngine}|${requestedCaptureMode}`
     setPrecisionSessionId(nextSessionId)
     if (nextSessionId) {
-      setExecutionMode('experimental')
+      setExecutionMode('strict')
+      if (requestedCaptureMode === 'video') setPrecisionCaptureMode('video')
     }
     if (requestedAnalysisEngine) {
       Taro.setStorageSync(ANALYSIS_ENGINE_STORAGE_KEY, normalizeAnalysisEngine(requestedAnalysisEngine))
@@ -645,6 +724,22 @@ function AnalyzePage() {
     // 2. 从本地存储获取图片路径 (用于拍照/相册后的跳转)
     const initStoredImagePath = async () => {
       try {
+        if (nextSessionId) {
+          if (requestedCaptureMode === 'video') {
+            setImagePaths([])
+            return
+          }
+          const storedRetakePaths = Taro.getStorageSync('analyzePrecisionRetakeImagePaths')
+          Taro.removeStorageSync('analyzePrecisionRetakeImagePaths')
+          Taro.removeStorageSync('analyzeImagePath')
+          Taro.removeStorageSync('analyzeImagePaths')
+          if (Array.isArray(storedRetakePaths)) {
+            setImagePaths([String(storedRetakePaths[0] || ''), String(storedRetakePaths[1] || '')])
+          } else {
+            setImagePaths(['', ''])
+          }
+          return
+        }
         const storedPaths = Taro.getStorageSync('analyzeImagePaths')
         const storedPath = Taro.getStorageSync('analyzeImagePath')
         if (storedPaths && Array.isArray(storedPaths) && storedPaths.length > 0) {
@@ -697,6 +792,7 @@ function AnalyzePage() {
     setReferenceLength(target.dimensions_mm?.length != null ? String(target.dimensions_mm.length) : '')
     setReferenceWidth(target.dimensions_mm?.width != null ? String(target.dimensions_mm.width) : '')
     setReferenceHeight(target.dimensions_mm?.height != null ? String(target.dimensions_mm.height) : '')
+    setReferenceDiameter(target.dimensions_mm?.diameter != null ? String(target.dimensions_mm.diameter) : '')
   }
 
   const handleReferencePresetSelect = (value: ReferencePresetValue) => {
@@ -710,6 +806,7 @@ function AnalyzePage() {
         length: normalizePositiveReferenceDimension(referenceLength),
         width: normalizePositiveReferenceDimension(referenceWidth),
         height: normalizePositiveReferenceDimension(referenceHeight),
+        diameter: normalizePositiveReferenceDimension(referenceDiameter),
       },
     }, getReferencePresetConfig(referencePreset).reference_name)
 
@@ -723,12 +820,13 @@ function AnalyzePage() {
   }
 
   const buildReferenceObjects = (): PrecisionReferenceObjectInput[] => {
-    if (executionMode !== 'experimental') return []
+    if (!isStrictBaseModeSelected || !hasReferenceObject) return []
     const name = referenceName.trim()
     if (!name) return []
     const length = normalizePositiveReferenceDimension(referenceLength)
     const width = normalizePositiveReferenceDimension(referenceWidth)
     const height = normalizePositiveReferenceDimension(referenceHeight)
+    const diameter = normalizePositiveReferenceDimension(referenceDiameter)
     return [{
       reference_type: referencePreset === 'custom' ? 'custom' : 'preset',
       reference_name: name,
@@ -736,9 +834,32 @@ function AnalyzePage() {
         ...(length != null ? { length } : {}),
         ...(width != null ? { width } : {}),
         ...(height != null ? { height } : {}),
+        ...(diameter != null ? { diameter } : {}),
       },
       placement_note: referencePlacementNote.trim() || undefined,
     }]
+  }
+
+  const buildPrecisionReferenceObject = (): PrecisionCaptureReferenceInput => {
+    if (!hasReferenceObject) {
+      return { presence: 'absent' }
+    }
+    const dimensions: Record<string, number> = {}
+    const length = normalizePositiveReferenceDimension(referenceLength)
+    const width = normalizePositiveReferenceDimension(referenceWidth)
+    const height = normalizePositiveReferenceDimension(referenceHeight)
+    const diameter = normalizePositiveReferenceDimension(referenceDiameter)
+    if (length != null) dimensions.length = length
+    if (width != null) dimensions.width = width
+    if (height != null) dimensions.height = height
+    if (diameter != null) dimensions.diameter = diameter
+    return {
+      presence: 'present',
+      kind: referenceName.trim() || getReferencePresetConfig(referencePreset).reference_name,
+      shape: referencePreset === 'round_plate' ? 'circle' : referencePreset === 'custom' ? 'custom' : 'rectangle',
+      dimensions_mm: dimensions,
+      placement_note: referencePlacementNote.trim() || undefined,
+    }
   }
 
   const handleChooseImage = async () => {
@@ -767,8 +888,142 @@ function AnalyzePage() {
     }
   }
 
+  const handleChoosePrecisionImage = async (role: 'top_down' | 'oblique_45') => {
+    const slotIndex = role === 'top_down' ? 0 : 1
+    try {
+      const res = await chooseImageWithPrivacy({
+        count: 1,
+        sizeType: ['original'],
+        sourceType: ['album', 'camera'],
+      })
+      const rawPath = String(res.tempFilePaths?.[0] || '').trim()
+      if (!rawPath) return
+      const [stablePath] = await persistImagePathsImmediately([rawPath])
+      const nextPath = stablePath || rawPath
+      setImagePaths(prev => {
+        const next = [prev[0] || '', prev[1] || '']
+        const otherIndex = slotIndex === 0 ? 1 : 0
+        if (next[otherIndex] && next[otherIndex] === nextPath) {
+          Taro.showToast({ title: '两个角度不能使用同一张图片', icon: 'none' })
+          return next
+        }
+        next[slotIndex] = nextPath
+        return next
+      })
+    } catch (e) {
+      if ((e as any)?.errMsg?.includes('cancel')) return
+      if (isPrivacyAuthorizeError(e)) {
+        showPrivacyAuthorizeFailure(e)
+        return
+      }
+      console.log('选择精准模式图片取消/失败', e)
+    }
+  }
+
+  const uploadSelectedAnalyzeVideo = async (video: SelectedAnalyzeVideo) => {
+    setIsVideoUploading(true)
+    setVideoUploadProgress(1)
+    setVideoUploadResult(null)
+    setImagePaths([])
+    try {
+      const result = await uploadAnalyzeVideoFile(video.tempFilePath, setVideoUploadProgress)
+      setVideoUploadResult(result)
+      setImagePaths(result.keyframes.map(frame => frame.image_url))
+      Taro.showToast({ title: '关键帧已提取', icon: 'success' })
+    } catch (error) {
+      setVideoUploadProgress(0)
+      await showUnifiedApiError(error, '视频处理失败，请重新录制')
+    } finally {
+      setIsVideoUploading(false)
+    }
+  }
+
+  const handleChooseAnalyzeVideo = async () => {
+    if (isVideoUploading) return
+    try {
+      const selected = await Taro.chooseVideo({
+        sourceType: ['camera', 'album'],
+        maxDuration: MAX_ANALYZE_VIDEO_DURATION_SECONDS,
+        compressed: false,
+        camera: 'back',
+      })
+      const duration = Number(selected.duration || 0)
+      if (duration < 2) {
+        Taro.showToast({ title: '请至少录制 2 秒', icon: 'none' })
+        return
+      }
+      if (duration > MAX_ANALYZE_VIDEO_DURATION_SECONDS + 0.25) {
+        Taro.showToast({ title: '视频最长支持 12 秒', icon: 'none' })
+        return
+      }
+
+      let tempFilePath = String(selected.tempFilePath || '').trim()
+      let size = Number(selected.size || 0)
+      if (!tempFilePath) throw new Error('没有取得视频文件')
+      if (size > MAX_ANALYZE_VIDEO_SIZE_BYTES) {
+        setIsVideoUploading(true)
+        try {
+          const compressed = await compressAnalyzeVideoToLimit(
+            { tempFilePath, size },
+            MAX_ANALYZE_VIDEO_SIZE_BYTES,
+            async (sourcePath, profile) => {
+              const output = await Taro.compressVideo({
+                src: sourcePath,
+                quality: 'medium',
+                bitrate: profile.bitrate,
+                fps: profile.fps,
+                resolution: profile.resolution,
+              })
+              const outputPath = String(output.tempFilePath || '').trim()
+              const outputInfo = outputPath ? await Taro.getFileInfo({ filePath: outputPath }) : null
+              return {
+                tempFilePath: outputPath,
+                size: Number(outputInfo && 'size' in outputInfo ? outputInfo.size : output.size || 0),
+              }
+            },
+          )
+          tempFilePath = compressed.tempFilePath
+          size = compressed.size
+        } finally {
+          setIsVideoUploading(false)
+        }
+      }
+      if (!tempFilePath || size <= 0 || size > MAX_ANALYZE_VIDEO_SIZE_BYTES) {
+        Taro.showToast({ title: '视频压缩后仍超过 8MB，请缩短后重试', icon: 'none', duration: 3000 })
+        return
+      }
+
+      const video: SelectedAnalyzeVideo = {
+        tempFilePath,
+        duration,
+        size,
+        width: Number(selected.width || 0),
+        height: Number(selected.height || 0),
+      }
+      setSelectedVideo(video)
+      await uploadSelectedAnalyzeVideo(video)
+    } catch (error: any) {
+      const message = String(error?.errMsg || error?.message || '')
+      if (message.includes('cancel')) return
+      await showUnifiedApiError(error, '选择视频失败，请重试')
+    }
+  }
+
+  const clearAnalyzeVideo = () => {
+    if (isVideoUploading) return
+    setSelectedVideo(null)
+    setVideoUploadResult(null)
+    setVideoUploadProgress(0)
+    setImagePaths([])
+  }
+
   const handleRemoveImage = (index: number) => {
     setImagePaths(prev => {
+      if (isStrictBaseModeSelected) {
+        const next = [prev[0] || '', prev[1] || '']
+        next[index] = ''
+        return next
+      }
       const newPaths = [...prev]
       newPaths.splice(index, 1)
       return newPaths
@@ -790,30 +1045,47 @@ function AnalyzePage() {
       Taro.showToast({ title: '请先登录后再使用识别功能', icon: 'none' })
       return
     }
-    if (imagePaths.length === 0) {
+    const submitImagePaths = isVideoCaptureSelected
+      ? (videoUploadResult?.keyframes.map(frame => frame.image_url) || [])
+      : isStrictBaseModeSelected
+        ? [imagePaths[0] || '', imagePaths[1] || ''].filter(Boolean)
+      : selectedImagePaths
+    if (submitImagePaths.length === 0) {
       Taro.showToast({ title: '请先选择图片', icon: 'none' })
       return
     }
-    if (imagePaths.length > MAX_ANALYZE_IMAGES) {
+    if (isVideoCaptureSelected && !videoCaptureComplete) {
+      Taro.showToast({ title: '请先录制视频并等待关键帧提取完成', icon: 'none' })
+      return
+    }
+    if (isStrictBaseModeSelected && !isVideoCaptureSelected && !precisionSlotsComplete) {
+      Taro.showToast({ title: '精准模式需要完整俯拍和 45° 斜拍各一张', icon: 'none' })
+      return
+    }
+    if (!isVideoCaptureSelected && submitImagePaths.length > MAX_ANALYZE_IMAGES) {
       Taro.showToast({ title: `最多支持 ${MAX_ANALYZE_IMAGES} 张图片`, icon: 'none' })
       return
     }
 
     setIsAnalyzing(true)
 
-    Taro.showLoading({ title: '上传图片...', mask: true })
+    Taro.showLoading({ title: '', mask: true })
 
     try {
-      // 1. 依次上传所有图片获取 URL
-      const imageUrls: string[] = []
-      for (const path of imagePaths) {
+      // 1. 并行上传图片并保持原始顺序，避免多角度识别把上传耗时串行叠加。
+      const imageUrls = await Promise.all(submitImagePaths.map(async path => {
+        if (/^https?:\/\//i.test(path)) {
+          return path
+        }
         const stablePath = await persistImagePathIfNeeded(path)
-        const uploadPath = await compressImagePathForUpload(stablePath || path)
+        const uploadPath = await compressImagePathForUpload(stablePath || path, {
+          // 精准双角度继续保留原像素，只复用原有 2.5MB 体积门槛；普通模式才收敛超高像素。
+          maxLongEdge: isStrictBaseModeSelected ? 0 : 2048,
+        })
 
         try {
           const { imageUrl } = await uploadAnalyzeImageFile(uploadPath || stablePath || path)
-          imageUrls.push(imageUrl)
-          continue
+          return imageUrl
         } catch (fileUploadError) {
           if (!shouldFallbackToLegacyAnalyzeUpload(fileUploadError)) {
             throw fileUploadError
@@ -823,43 +1095,69 @@ function AnalyzePage() {
 
         const base64 = await imageToBase64(uploadPath || stablePath || path)
         const { imageUrl } = await uploadAnalyzeImage(base64)
-        imageUrls.push(imageUrl)
-      }
+        return imageUrl
+      }))
 
       const primaryImageUrl = imageUrls[0]
       const referenceObjects = buildReferenceObjects()
       const nextReferenceDefaults = buildNextReferenceDefaults()
+      const precisionOptions = isStrictBaseModeSelected
+        ? buildPrecisionOptions(precisionInteractiveEnabled, precisionSeparateEnabled, precisionWebSearchEnabled)
+        : undefined
+      const captureViews = isVideoCaptureSelected
+        ? videoUploadResult?.keyframes
+        : isStrictBaseModeSelected
+          ? buildDualAngleCaptureViews(imageUrls)
+        : undefined
+      const precisionReferenceObject = isStrictBaseModeSelected ? buildPrecisionReferenceObject() : undefined
 
-      Taro.showLoading({ title: '提交任务...', mask: true })
+      Taro.showLoading({ title: '', mask: true })
       const commonPayload = {
         date: getStoredRecordTargetDate(),
         meal_type: mealType,
         diet_goal: 'none',
         activity_timing: activityTiming,
         additionalContext: additionalInfo || undefined,
-        is_multi_view: isMultiView,
+        is_multi_view: isStrictBaseModeSelected ? true : isMultiView,
         suggest_ratio_enabled: suggestRatioEnabled,
         reference_objects: referenceObjects.length > 0 ? referenceObjects : undefined,
+        capture_protocol: isVideoCaptureSelected
+          ? 'video_keyframes_v1' as const
+          : isStrictBaseModeSelected ? 'dual_angle_v1' as const : undefined,
+        precision_options: precisionOptions,
+        capture_views: captureViews,
+        video_capture: isVideoCaptureSelected && videoUploadResult ? {
+          video_id: videoUploadResult.video_id,
+          duration_ms: videoUploadResult.duration_ms,
+          width: videoUploadResult.width,
+          height: videoUploadResult.height,
+          size_bytes: videoUploadResult.size_bytes,
+          source_retained: false as const,
+        } : undefined,
+        reference_object: precisionReferenceObject,
       }
 
       // 保存图片路径供后续页面使用
-      if (imagePaths.length > 0) {
-        Taro.setStorageSync('analyzeImagePath', imagePaths[0])
-        Taro.setStorageSync('analyzeImagePaths', imagePaths)
+      if (submitImagePaths.length > 0) {
+        Taro.setStorageSync('analyzeImagePath', submitImagePaths[0])
+        Taro.setStorageSync('analyzeImagePaths', submitImagePaths)
       }
       Taro.setStorageSync('analyzeMealType', mealType)
       Taro.removeStorageSync('analyzeDietGoal')
       Taro.setStorageSync('analyzeActivityTiming', activityTiming)
       Taro.setStorageSync('analyzeExecutionMode', executionMode)
+      Taro.setStorageSync('analyzePrecisionCaptureMode', isVideoCaptureSelected ? 'video' : 'photos')
       Taro.setStorageSync(SUGGEST_RATIO_STORAGE_KEY, suggestRatioEnabled ? '1' : '0')
       const analysisEngine = normalizeAnalysisEngine(Taro.getStorageSync(ANALYSIS_ENGINE_STORAGE_KEY))
       Taro.setStorageSync(ANALYSIS_ENGINE_STORAGE_KEY, analysisEngine)
-      setSavedReferenceDefaults(nextReferenceDefaults)
-      updateHealthProfile({
-        precision_reference_defaults: nextReferenceDefaults,
-      }).catch((error) => {
-        console.warn('[analyze] 保存默认参考物失败', error)
-      })
+      if (isStrictBaseModeSelected && hasReferenceObject) {
+        setSavedReferenceDefaults(nextReferenceDefaults)
+        updateHealthProfile({
+          precision_reference_defaults: nextReferenceDefaults,
+        }).catch((error) => {
+          console.warn('[analyze] 保存默认参考物失败', error)
+        })
+      }
 
       // 图片分析统一走异步任务流程：
       // 多图也先进入 analyze-loading，由后台继续处理，用户可直接离开当前页。
@@ -916,7 +1214,7 @@ function AnalyzePage() {
 
   /** 主按钮：无图则唤起选图；有图则直接提交并进入 analyze-loading（与拍照后进页再分析一致） */
   const handleAnalyzePress = () => {
-    if (isAnalyzing) return
+    if (isAnalyzing || isVideoUploading) return
     const now = Date.now()
     if (now - analyzeSubmitDebounceRef.current < ANALYZE_SUBMIT_DEBOUNCE_MS) return
     analyzeSubmitDebounceRef.current = now
@@ -924,8 +1222,14 @@ function AnalyzePage() {
       setCreditSheet({ visible: true, message: getFoodAnalysisCreditBlockMessage(membershipStatus, executionMode, creditUnits) })
       return
     }
-    if (imagePaths.length === 0) {
-      void handleChooseImage()
+    if (selectedImagePaths.length === 0) {
+      if (isVideoCaptureSelected) {
+        void handleChooseAnalyzeVideo()
+      } else if (isStrictBaseModeSelected) {
+        void handleChoosePrecisionImage('top_down')
+      } else {
+        void handleChooseImage()
+      }
       return
     }
     void doAnalyze()
@@ -1018,6 +1322,14 @@ function AnalyzePage() {
       <View
         className='photo-tip-bar'
         onClick={() => {
+          if (isVideoCaptureSelected) {
+            setHelpSheet({
+              visible: true,
+              title: '视频拍摄建议',
+              content: '1. 可以自然横扫或逐个靠近食物\n2. 每种食物尽量清楚停留约半秒\n3. 尽量带到一帧整餐全景和一帧侧面高度\n4. 有参考物时让它随餐入镜\n5. 建议录制 4–8 秒，最长 12 秒',
+            })
+            return
+          }
           const meta = EXECUTION_MODE_META[executionMode]
           setHelpSheet({
             visible: true,
@@ -1027,13 +1339,126 @@ function AnalyzePage() {
         }}
       >
         <Text className='photo-tip-bar__dot' />
-        <Text className='photo-tip-bar__text'>摄影技巧</Text>
+        <Text className='photo-tip-bar__text'>{isVideoCaptureSelected ? '视频拍摄建议' : '摄影技巧'}</Text>
         <Text className='photo-tip-bar__action'>查看</Text>
       </View>
 
-      {/* 图片预览区域 (Grid) */}
+      {/* 精准采集方式 */}
+      {isStrictBaseModeSelected && (
+        <View className='precision-capture-mode-card'>
+          <View className='precision-capture-mode-copy'>
+            <Text className='precision-capture-mode-title'>采集方式</Text>
+            <Text className='precision-capture-mode-hint'>视频只提取关键帧，原视频不会保存</Text>
+          </View>
+          <View className='precision-capture-mode-switch'>
+            <View
+              className={`precision-capture-mode-option ${precisionCaptureMode === 'photos' ? 'active' : ''}`}
+              onClick={() => handlePrecisionCaptureModeTap('photos')}
+            >双角度照片</View>
+            <View
+              className={`precision-capture-mode-option ${precisionCaptureMode === 'video' ? 'active' : ''}`}
+              onClick={() => handlePrecisionCaptureModeTap('video')}
+            >短视频</View>
+          </View>
+        </View>
+      )}
+
+      {/* 图片或视频预览区域 */}
       <View className='image-preview-section'>
-        {imagePaths.length > 0 ? (
+        {isVideoCaptureSelected ? (
+          <View className='precision-video-capture'>
+            {selectedVideo ? (
+              <View className='precision-video-preview-wrap'>
+                <Video
+                  className='precision-video-preview'
+                  src={selectedVideo.tempFilePath}
+                  controls
+                  showCenterPlayBtn
+                  objectFit='cover'
+                />
+                <View className='precision-video-actions'>
+                  <View className='precision-video-action' onClick={() => void handleChooseAnalyzeVideo()}>重新录制</View>
+                  <View className='precision-video-action precision-video-action--danger' onClick={clearAnalyzeVideo}>移除</View>
+                </View>
+              </View>
+            ) : (
+              <View className='precision-video-empty' onClick={() => void handleChooseAnalyzeVideo()}>
+                <Text className='iconfont icon-xiangji precision-video-empty__icon' />
+                <Text className='precision-video-empty__title'>录制食物短视频</Text>
+                <Text className='precision-video-empty__hint'>自然扫过每种食物，尽量补一帧全景和侧面</Text>
+                <Text className='precision-video-empty__limit'>最长 12 秒 · 最大 8MB</Text>
+              </View>
+            )}
+
+            {isVideoUploading && (
+              <View className='precision-video-progress' aria-label='视频处理进度'>
+                <View className='precision-video-progress__track'>
+                  <View className='precision-video-progress__bar' style={{ width: `${Math.max(2, videoUploadProgress)}%` }} />
+                </View>
+                <Text className='precision-video-progress__percent'>{videoUploadProgress}%</Text>
+              </View>
+            )}
+
+            {videoUploadResult && (
+              <View className='precision-video-frames'>
+                <View className='precision-video-frames__header'>
+                  <Text className='precision-video-frames__title'>已提取 {videoUploadResult.keyframes.length} 个关键帧</Text>
+                  <Text className='precision-video-frames__meta'>{(videoUploadResult.duration_ms / 1000).toFixed(1)} 秒</Text>
+                </View>
+                <View className='precision-video-frames__grid'>
+                  {videoUploadResult.keyframes.map((frame, index) => (
+                    <View key={frame.role} className='precision-video-frame' onClick={() => handlePreviewImage(frame.image_url)}>
+                      <Image className='precision-video-frame__image' src={frame.image_url} mode='aspectFill' />
+                      <Text className='precision-video-frame__label'>{index + 1} · {((frame.timestamp_ms || 0) / 1000).toFixed(1)}s</Text>
+                    </View>
+                  ))}
+                </View>
+                <Text className='precision-capture-note'>系统会综合关键帧判断食物高度、遮挡和尺度；原视频处理后即删除。</Text>
+              </View>
+            )}
+          </View>
+        ) : isStrictBaseModeSelected ? (
+          <View className='precision-capture-grid'>
+            {PRECISION_CAPTURE_ROLES.map((role, index) => {
+              const path = imagePaths[index] || ''
+              const isTopDown = role === 'top_down'
+              return (
+                <View key={role} className={`precision-capture-slot ${path ? 'filled' : ''}`}>
+                  <View className='precision-capture-slot__header'>
+                    <Text className='precision-capture-slot__badge'>{index + 1}</Text>
+                    <View className='precision-capture-slot__copy'>
+                      <Text className='precision-capture-slot__title'>{isTopDown ? '完整俯拍' : '约 45° 斜拍'}</Text>
+                      <Text className='precision-capture-slot__hint'>
+                        {isTopDown ? '看清全部食物和占比' : '看清高度、容器边缘和遮挡'}
+                      </Text>
+                    </View>
+                  </View>
+                  {path ? (
+                    <View className='precision-capture-slot__preview'>
+                      <Image src={path} mode='aspectFill' className='precision-capture-slot__image' onClick={() => handlePreviewImage(path)} />
+                      <View className='precision-capture-slot__replace' onClick={() => handleChoosePrecisionImage(role)}>重拍/替换</View>
+                      <View
+                        className='remove-btn'
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleRemoveImage(index)
+                        }}
+                      >
+                        <Text className='close-icon'>×</Text>
+                      </View>
+                    </View>
+                  ) : (
+                    <View className='precision-capture-slot__empty' onClick={() => handleChoosePrecisionImage(role)}>
+                      <Text className='iconfont icon-xiangji precision-capture-slot__icon' />
+                      <Text className='precision-capture-slot__action'>拍摄或选择</Text>
+                    </View>
+                  )}
+                </View>
+              )
+            })}
+            <Text className='precision-capture-note'>两张必须是同一餐，且不能重复使用同一图片。</Text>
+          </View>
+        ) : imagePaths.length > 0 ? (
           <View className='image-grid'>
             {imagePaths.map((path, index) => (
               <View key={index} className={`grid-item ${isMultiView ? 'grid-item--multiview' : ''}`}>
@@ -1100,6 +1525,27 @@ function AnalyzePage() {
         </View>
 
         <View className='analysis-options-row'>
+          <View
+            className={`analysis-option-card ${precisionInteractiveEnabled && isStrictBaseModeSelected ? 'active' : ''} ${!isStrictBaseModeSelected ? 'disabled' : ''}`}
+            onClick={togglePrecisionInteractive}
+          >
+            <View className='analysis-option-card-left'>
+              <Text className='analysis-option-title'>交互确认</Text>
+              <View
+                className='help-icon'
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setHelpSheet({ visible: true, title: '交互确认', content: '精准模式默认开启。只有食物身份、状态口径、参考尺度或关键烹饪信息不清楚时才暂停，每轮最多 3 个问题；你也可以按当前信息继续估算。' })
+                }}
+              >
+                <Text className='help-icon-text'>?</Text>
+              </View>
+            </View>
+            <View className={`analysis-option-switch ${precisionInteractiveEnabled && isStrictBaseModeSelected ? 'analysis-option-switch--on' : ''}`}>
+              <View className='analysis-option-switch-knob' />
+            </View>
+          </View>
+
           <View className={`analysis-option-card ${isWebSearchEnabled ? 'active' : ''}`} onClick={toggleWebSearch}>
             <View className='analysis-option-card-left'>
               <Text className='analysis-option-title'>联网校准</Text>
@@ -1141,7 +1587,7 @@ function AnalyzePage() {
         )}
 
         {/* 多视角辅助模式 */}
-        <View className='multiview-compact'>
+        {!isStrictBaseModeSelected && <View className='multiview-compact'>
           <View className='multiview-compact-left'>
             <Text className='multiview-compact-title'>多视角辅助</Text>
             <View className='help-icon' onClick={() => openHelp('multiview')}>
@@ -1154,7 +1600,7 @@ function AnalyzePage() {
           >
             <View className='multiview-toggle-knob' />
           </View>
-        </View>
+        </View>}
 
         {/* AI摄入比例 */}
         <View className='multiview-compact'>
@@ -1198,21 +1644,35 @@ function AnalyzePage() {
         </View>
       </View>
 
-      {executionMode === 'experimental' && (
+      {isStrictBaseModeSelected && (
         <View className='details-section'>
         <View className='section-header'>
-          <Text className='section-title'>参考物</Text>
+          <Text className='section-title'>精准拍摄设置 · 参考物</Text>
         </View>
         <Text className='section-hint'>
-          可录入一个参考物和尺寸。默认会记住你常用的手掌或卡片大小，下次直接复用。
+          {isVideoCaptureSelected
+            ? '建议参考物在环绕过程中始终可见，默认标准卡片为 85.60 × 53.98 mm。也可以明确选择没有参考物，但结果会标记尺度不足。'
+            : '建议两张图使用同一个已知尺寸物体，默认标准卡片为 85.60 × 53.98 mm。也可以明确选择没有参考物，但结果会标记尺度不足。'}
         </Text>
 
           {precisionSessionId ? (
             <View className='precision-session-tip'>
-              <Text className='precision-session-tip-text'>当前正在继续上一轮精准估计，本次拍照会接到原会话继续判断。</Text>
+              <Text className='precision-session-tip-text'>当前正在继续上一轮精准估计，本次{isVideoCaptureSelected ? '视频' : '拍照'}会接到原会话继续判断。</Text>
             </View>
           ) : null}
 
+          <View className='state-options precision-presence-options'>
+            <View className={`state-option ${hasReferenceObject ? 'active' : ''}`} onClick={() => setHasReferenceObject(true)}>
+              <Text className='state-label'>已放参考物</Text>
+            </View>
+            <View className={`state-option ${!hasReferenceObject ? 'active' : ''}`} onClick={() => setHasReferenceObject(false)}>
+              <Text className='state-label'>没有参考物</Text>
+            </View>
+          </View>
+
+          {!hasReferenceObject ? (
+            <View className='precision-scale-warning'>本次仍可分析，但重量结果不会显示高尺度置信度。</View>
+          ) : <>
           <View className='state-options'>
             {REFERENCE_PRESETS.map((preset) => (
               <View
@@ -1237,7 +1697,19 @@ function AnalyzePage() {
                 showConfirmBar={false}
               />
             </View>
-            <View className='precision-reference-row'>
+            {referencePreset === 'round_plate' ? (
+              <View className='precision-reference-field'>
+                <Text className='precision-reference-label'>直径(mm)</Text>
+                <Textarea
+                  className='details-input precision-reference-input'
+                  value={referenceDiameter}
+                  onInput={(e) => setReferenceDiameter(e.detail.value)}
+                  maxlength={8}
+                  autoHeight
+                  showConfirmBar={false}
+                />
+              </View>
+            ) : <View className='precision-reference-row'>
               <View className='precision-reference-field short'>
                 <Text className='precision-reference-label'>长(mm)</Text>
                 <Textarea
@@ -1271,7 +1743,7 @@ function AnalyzePage() {
                   showConfirmBar={false}
                 />
               </View>
-            </View>
+            </View>}
             <View className='precision-reference-field'>
               <Text className='precision-reference-label'>摆放说明</Text>
               <Textarea
@@ -1286,6 +1758,7 @@ function AnalyzePage() {
               />
             </View>
           </View>
+          </>}
         </View>
       )}
 
@@ -1336,7 +1809,7 @@ function AnalyzePage() {
       {/* 确认按钮 */}
       <View className='confirm-section'>
         <View
-          className={`confirm-btn ${imagePaths.length === 0 || isAnalyzing || isQuotaExhausted ? 'disabled' : ''}`}
+          className={`confirm-btn ${selectedImagePaths.length === 0 || (isStrictBaseModeSelected && !precisionCaptureComplete) || isVideoUploading || isAnalyzing || isQuotaExhausted ? 'disabled' : ''}`}
           onClick={handleAnalyzePress}
         >
           {isAnalyzing ? (
@@ -1345,9 +1818,15 @@ function AnalyzePage() {
             <Text className='confirm-btn-text'>
               {isQuotaExhausted
                 ? '积分不足，暂不可分析'
-                : imagePaths.length === 0
-                  ? '请先拍照或选图'
-                  : `分析 ${imagePaths.length} 张 · 消耗 ${creditCost} 积分`}
+                : isVideoUploading
+                  ? `${videoUploadProgress}%`
+                  : selectedImagePaths.length === 0
+                    ? (isVideoCaptureSelected ? '请先录制环绕短视频' : '请先拍照或选图')
+                    : isStrictBaseModeSelected && !precisionCaptureComplete
+                      ? (isVideoCaptureSelected ? '请重新录制有效视频' : '请补齐两个拍摄角度')
+                      : isVideoCaptureSelected
+                        ? `分析 ${selectedImagePaths.length} 个关键帧 · 消耗 ${creditCost} 积分`
+                        : `分析 ${selectedImagePaths.length} 张 · 消耗 ${creditCost} 积分`}
             </Text>
           )}
         </View>

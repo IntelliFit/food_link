@@ -1104,6 +1104,30 @@ $rm-shadow-card: 0 8rpx 24rpx rgb(15 23 42 / 5%);
   gap: $rm-s2;
 }
 
+.weight-unit-switch {
+  display: inline-flex;
+  align-self: flex-start;
+  margin-top: 16px;
+  padding: 4px;
+  border-radius: 14px;
+  background: #f1f5f4;
+}
+
+.weight-unit-switch__item {
+  min-width: 88px;
+  padding: 10px 18px;
+  border-radius: 11px;
+  color: #718079;
+  font-size: 24px;
+  text-align: center;
+}
+
+.weight-unit-switch__item.active {
+  color: #008f64;
+  background: #ffffff;
+  box-shadow: 0 2px 10px rgba(14, 79, 60, 0.08);
+}
+
 .weight-input {
   width: 144rpx;
   height: $rm-s8;

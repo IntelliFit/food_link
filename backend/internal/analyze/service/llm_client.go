@@ -140,6 +140,14 @@ func (c *OfoxAIClient) AnalyzeWithoutThinking(ctx context.Context, prompt, image
 	return c.analyzeWithImagesAndTemperature(ctx, prompt, imageURLs, 0, "", map[string]any{"enable_thinking": false})
 }
 
+// AnalyzeWithImagesWithoutThinkingModel keeps the fast-path multimodal request
+// compact. Qwen enables thinking by default in the shared client, which is
+// useful for quality-oriented calls but wastes most of the latency budget for
+// real-time recognition and provider fallback.
+func (c *OfoxAIClient) AnalyzeWithImagesWithoutThinkingModel(ctx context.Context, prompt string, imageURLs []string, modelName string) (map[string]any, error) {
+	return c.analyzeWithImagesAndTemperature(ctx, prompt, imageURLs, 0, modelName, map[string]any{"enable_thinking": false})
+}
+
 // NewAnalyzeWithImagesAndTemperatureModelCall creates one logical model call.
 // For native Gemini requests, successfully downloaded inline images are retained
 // only inside the returned closure so retries do not download the same CDN object again.
@@ -207,7 +215,8 @@ func (c *OfoxAIClient) AnalyzeWithImagesDashScopeWebSearch(ctx context.Context, 
 		searchStrategy = "turbo"
 	}
 	extras := map[string]any{
-		"enable_search": true,
+		"enable_search":   true,
+		"enable_thinking": false,
 		"search_options": map[string]any{
 			"forced_search":   options.ForcedSearch,
 			"search_strategy": searchStrategy,
@@ -289,15 +298,11 @@ func (c *OfoxAIClient) doGeminiNativeRequest(ctx context.Context, model, prompt 
 
 func (c *OfoxAIClient) prepareGeminiNativeRequest(ctx context.Context, prompt string, imageURLs []string, temperature float64) ([]byte, error) {
 	parts := []map[string]any{{"text": prompt}}
-	for _, imageURL := range imageURLs {
-		imageURL = strings.TrimSpace(imageURL)
-		if imageURL == "" {
-			continue
-		}
-		inlineData, err := c.downloadGeminiInlineImage(ctx, imageURL)
-		if err != nil {
-			return nil, err
-		}
+	inlineImages, err := c.downloadGeminiInlineImages(ctx, imageURLs)
+	if err != nil {
+		return nil, err
+	}
+	for _, inlineData := range inlineImages {
 		parts = append(parts, map[string]any{"inlineData": inlineData})
 	}
 	body := map[string]any{
@@ -313,6 +318,41 @@ func (c *OfoxAIClient) prepareGeminiNativeRequest(ctx context.Context, prompt st
 		return nil, fmt.Errorf("encode Gemini request failed: %w", err)
 	}
 	return b, nil
+}
+
+func (c *OfoxAIClient) downloadGeminiInlineImages(ctx context.Context, imageURLs []string) ([]map[string]string, error) {
+	normalized := nonEmptyStrings(imageURLs)
+	if len(normalized) == 0 {
+		return nil, nil
+	}
+
+	downloadCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	images := make([]map[string]string, len(normalized))
+	var wg sync.WaitGroup
+	var firstErr error
+	var errOnce sync.Once
+	for index, imageURL := range normalized {
+		wg.Add(1)
+		go func(imageIndex int, sourceURL string) {
+			defer wg.Done()
+			inlineData, err := c.downloadGeminiInlineImage(downloadCtx, sourceURL)
+			if err != nil {
+				errOnce.Do(func() {
+					firstErr = err
+					cancel()
+				})
+				return
+			}
+			images[imageIndex] = inlineData
+		}(index, imageURL)
+	}
+	wg.Wait()
+	if firstErr != nil {
+		return nil, firstErr
+	}
+	return images, nil
 }
 
 func (c *OfoxAIClient) doGeminiNativePreparedRequest(ctx context.Context, model string, body []byte) (map[string]any, map[string]any, error) {

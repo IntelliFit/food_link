@@ -90,7 +90,7 @@
   margin-left: 8rpx;
 }
 
-/* 图片网格（最多 3 张，每张识别后叠加） */
+/* 图片网格（最多 5 张，多角度联合识别） */
 .share-image-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);

@@ -14,6 +14,7 @@ import {
 } from '../../../components/MealTypeSelector'
 import { buildFoodRecordItemPayloadFromResultItem } from '../../../utils/food-record-item-payload'
 import { formatMacroNutrient, formatMicroNutrient, roundTo } from '../../../utils/number-format'
+import { applyEnergyEdit } from '../../../utils/nutrition-edit'
 
 import './MealRecordEditModal.scss'
 
@@ -342,12 +343,12 @@ export function MealRecordEditModal({ visible, record, onClose, onSuccess }: Mea
       if (field === 'waterMl') {
         next[index] = { ...item, waterMl: nextNutrientValue }
       } else {
+        const nutrients = applyEnergyEdit(item.nutrients, field, nextNutrientValue)
         next[index] = {
           ...item,
-          nutrients: {
-            ...item.nutrients,
-            [field]: nextNutrientValue
-          }
+          nutritionSource: 'user_correction_context',
+          nutritionSourceCategory: 'user_correction_context',
+          nutrients,
         }
       }
       return next
@@ -633,6 +634,8 @@ export function MealRecordEditModal({ visible, record, onClose, onSuccess }: Mea
                         </View>
                       )}
                     </View>
+                    <Text className='ingredient-basis-label'>当前整份营养（约 {Math.round(item.weight)}g）</Text>
+                    <Text className='ingredient-per100-label'>每100g参考：{Math.round((item.nutrients.calories || 0) * 100 / Math.max(item.weight, 1))} kcal · 蛋白 {formatMacroNutrient((item.nutrients.protein || 0) * 100 / Math.max(item.weight, 1))}g · 碳水 {formatMacroNutrient((item.nutrients.carbs || 0) * 100 / Math.max(item.weight, 1))}g · 脂肪 {formatMacroNutrient((item.nutrients.fat || 0) * 100 / Math.max(item.weight, 1))}g</Text>
                   </View>
                 </View>
 

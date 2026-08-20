@@ -179,10 +179,227 @@ func TestTaskService_SubmitAnalyzeTask_StrictSeparateCreatesPrecisionPlan(t *tes
 
 	var session analyzedomain.PrecisionSession
 	require.NoError(t, db.First(&session, "id = ?", task.Payload["precision_session_id"]).Error)
-	assert.Equal(t, "experimental", session.ExecutionMode)
+	assert.Equal(t, "strict_separate", session.ExecutionMode)
 }
 
-func TestTaskService_SubmitAnalyzeTask_RejectsMoreThanThreeImages(t *testing.T) {
+func dualAngleSubmitInput() SubmitTaskInput {
+	mode := "strict"
+	interactive := true
+	return SubmitTaskInput{
+		ImageURLs:       []string{"https://example.com/top.jpg", "https://example.com/oblique.jpg"},
+		ExecutionMode:   &mode,
+		CaptureProtocol: dualAngleCaptureProtocol,
+		PrecisionOptions: &PrecisionOptionsInput{
+			Interactive: &interactive,
+		},
+		CaptureViews: []PrecisionCaptureViewInput{
+			{Role: "top_down", ImageURL: "https://example.com/top.jpg"},
+			{Role: "oblique_45", ImageURL: "https://example.com/oblique.jpg"},
+		},
+		ReferenceObject: &PrecisionReferenceObjectInput{
+			Presence:     "present",
+			Kind:         "标准卡片",
+			Shape:        "rectangle",
+			DimensionsMM: map[string]float64{"length": 85.6, "width": 53.98},
+		},
+	}
+}
+
+func videoKeyframeSubmitInput() SubmitTaskInput {
+	mode := "strict"
+	interactive := true
+	urls := []string{
+		"https://example.com/video-1.jpg",
+		"https://example.com/video-2.jpg",
+		"https://example.com/video-3.jpg",
+		"https://example.com/video-4.jpg",
+		"https://example.com/video-5.jpg",
+	}
+	views := make([]PrecisionCaptureViewInput, 0, len(urls))
+	for index, url := range urls {
+		views = append(views, PrecisionCaptureViewInput{
+			Role:        "video_keyframe_" + string(rune('1'+index)),
+			ImageURL:    url,
+			TimestampMS: int64(index+1) * 900,
+		})
+	}
+	return SubmitTaskInput{
+		ImageURLs:       urls,
+		ExecutionMode:   &mode,
+		CaptureProtocol: videoCaptureProtocol,
+		PrecisionOptions: &PrecisionOptionsInput{
+			Interactive: &interactive,
+		},
+		CaptureViews: views,
+		VideoCapture: map[string]any{
+			"video_id":        "video-1",
+			"duration_ms":     6000,
+			"source_retained": false,
+		},
+		ReferenceObject: &PrecisionReferenceObjectInput{Presence: "absent"},
+	}
+}
+
+func TestTaskService_SubmitAnalyzeTask_DualAngleCreatesInteractivePrecisionSession(t *testing.T) {
+	db, taskRepo, precisionRepo, userRepo := setupTaskServiceTestDB(t)
+	svc := NewTaskService(taskRepo, precisionRepo, userRepo)
+	ctx := context.Background()
+
+	taskID, err := svc.SubmitAnalyzeTask(ctx, "user1", dualAngleSubmitInput())
+	require.NoError(t, err)
+	task, err := taskRepo.GetTaskByID(ctx, taskID)
+	require.NoError(t, err)
+	require.Equal(t, "precision_plan", task.TaskType)
+	require.Equal(t, []string{"https://example.com/top.jpg", "https://example.com/oblique.jpg"}, task.ImagePaths)
+	assert.Equal(t, dualAngleCaptureProtocol, task.Payload["capture_protocol"])
+	assert.True(t, boolFromAny(mapFromAny(task.Payload["precision_options"])["interactive"]))
+
+	var session analyzedomain.PrecisionSession
+	require.NoError(t, db.First(&session, "id = ?", task.Payload["precision_session_id"]).Error)
+	assert.Equal(t, "strict", session.ExecutionMode)
+	assert.Len(t, session.ReferenceObjects, 1)
+}
+
+func TestTaskService_SubmitAnalyzeTask_DualAngleValidation(t *testing.T) {
+	_, taskRepo, precisionRepo, userRepo := setupTaskServiceTestDB(t)
+	svc := NewTaskService(taskRepo, precisionRepo, userRepo)
+	ctx := context.Background()
+
+	tests := []struct {
+		name   string
+		mutate func(*SubmitTaskInput)
+		want   string
+	}{
+		{name: "missing view", mutate: func(input *SubmitTaskInput) { input.CaptureViews = input.CaptureViews[:1] }, want: "俯拍和 45° 斜拍"},
+		{name: "duplicate image", mutate: func(input *SubmitTaskInput) { input.CaptureViews[1].ImageURL = input.CaptureViews[0].ImageURL }, want: "不同图片"},
+		{name: "missing reference declaration", mutate: func(input *SubmitTaskInput) { input.ReferenceObject = nil }, want: "声明参考物"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			input := dualAngleSubmitInput()
+			test.mutate(&input)
+			_, err := svc.SubmitAnalyzeTask(ctx, "user1", input)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), test.want)
+		})
+	}
+}
+
+func TestTaskService_SubmitAnalyzeTask_VideoKeyframesCreatePrecisionPlan(t *testing.T) {
+	_, taskRepo, precisionRepo, userRepo := setupTaskServiceTestDB(t)
+	svc := NewTaskService(taskRepo, precisionRepo, userRepo)
+	ctx := context.Background()
+
+	taskID, err := svc.SubmitAnalyzeTask(ctx, "user1", videoKeyframeSubmitInput())
+	require.NoError(t, err)
+	task, err := taskRepo.GetTaskByID(ctx, taskID)
+	require.NoError(t, err)
+	assert.Equal(t, "precision_plan", task.TaskType)
+	assert.Equal(t, videoCaptureProtocol, task.Payload["capture_protocol"])
+	assert.Len(t, task.ImagePaths, 5)
+	assert.Equal(t, "video-1", mapFromAny(task.Payload["video_capture"])["video_id"])
+	assert.True(t, boolFromAny(mapFromAny(task.Payload["precision_options"])["interactive"]))
+}
+
+func TestTaskService_SubmitAnalyzeTask_VideoKeyframeValidation(t *testing.T) {
+	_, taskRepo, precisionRepo, userRepo := setupTaskServiceTestDB(t)
+	svc := NewTaskService(taskRepo, precisionRepo, userRepo)
+	ctx := context.Background()
+
+	tests := []struct {
+		name   string
+		mutate func(*SubmitTaskInput)
+		want   string
+	}{
+		{name: "too few frames", mutate: func(input *SubmitTaskInput) {
+			input.CaptureViews = input.CaptureViews[:2]
+			input.ImageURLs = input.ImageURLs[:2]
+		}, want: "3 至 5"},
+		{name: "duplicate frame", mutate: func(input *SubmitTaskInput) {
+			input.CaptureViews[2].ImageURL = input.CaptureViews[1].ImageURL
+		}, want: "不能重复"},
+		{name: "wrong order", mutate: func(input *SubmitTaskInput) {
+			input.CaptureViews[1].Role = "video_keyframe_3"
+		}, want: "顺序无效"},
+		{name: "timestamp not increasing", mutate: func(input *SubmitTaskInput) {
+			input.CaptureViews[2].TimestampMS = input.CaptureViews[1].TimestampMS
+		}, want: "时间点必须按顺序递增"},
+		{name: "missing reference declaration", mutate: func(input *SubmitTaskInput) {
+			input.ReferenceObject = nil
+		}, want: "声明参考物"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			input := videoKeyframeSubmitInput()
+			test.mutate(&input)
+			_, err := svc.SubmitAnalyzeTask(ctx, "user1", input)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), test.want)
+		})
+	}
+}
+
+func TestTaskService_ContinuePrecisionSession_ReusesCreditsAndLimitsRounds(t *testing.T) {
+	_, taskRepo, precisionRepo, userRepo := setupTaskServiceTestDB(t)
+	svc := NewTaskService(taskRepo, precisionRepo, userRepo)
+	guard := &mockTaskCreditGuard{earnedUnits: 20}
+	svc.ConfigureCreditGuard(guard)
+	ctx := context.Background()
+
+	firstTaskID, err := svc.SubmitAnalyzeTask(ctx, "user1", dualAngleSubmitInput())
+	require.NoError(t, err)
+	firstTask, err := taskRepo.GetTaskByID(ctx, firstTaskID)
+	require.NoError(t, err)
+	sessionID := stringFromAny(firstTask.Payload["precision_session_id"])
+	require.NotEmpty(t, sessionID)
+	require.NoError(t, precisionRepo.UpdateSession(ctx, sessionID, map[string]any{"status": "needs_user_input"}))
+
+	mode := "strict"
+	secondTaskID, err := svc.SubmitAnalyzeTask(ctx, "user1", SubmitTaskInput{
+		ExecutionMode:      &mode,
+		PrecisionSessionID: &sessionID,
+		AdditionalContext:  "右侧是鸡块，食物均为熟重",
+		Answers:            []PrecisionAnswerInput{{QuestionID: "food_identity_1", Value: "chicken"}},
+	})
+	require.NoError(t, err)
+	require.Len(t, guard.validateCalls, 1)
+	require.Len(t, guard.consumeCalls, 1)
+	secondTask, err := taskRepo.GetTaskByID(ctx, secondTaskID)
+	require.NoError(t, err)
+	assert.Equal(t, firstTask.Payload["credit_group_id"], secondTask.Payload["credit_group_id"])
+	assert.Equal(t, firstTask.Payload["credit_usage"], secondTask.Payload["credit_usage"])
+
+	require.NoError(t, precisionRepo.UpdateSession(ctx, sessionID, map[string]any{"status": "needs_user_input", "round_index": maxPrecisionRounds}))
+	_, err = svc.SubmitAnalyzeTask(ctx, "user1", SubmitTaskInput{
+		ExecutionMode:           &mode,
+		PrecisionSessionID:      &sessionID,
+		ContinueWithUncertainty: true,
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "两轮免费补充上限")
+}
+
+func TestTaskService_ContinuePrecisionSession_RejectsOtherUser(t *testing.T) {
+	_, taskRepo, precisionRepo, userRepo := setupTaskServiceTestDB(t)
+	svc := NewTaskService(taskRepo, precisionRepo, userRepo)
+	ctx := context.Background()
+
+	firstTaskID, err := svc.SubmitAnalyzeTask(ctx, "user1", dualAngleSubmitInput())
+	require.NoError(t, err)
+	firstTask, err := taskRepo.GetTaskByID(ctx, firstTaskID)
+	require.NoError(t, err)
+	sessionID := stringFromAny(firstTask.Payload["precision_session_id"])
+	require.NoError(t, precisionRepo.UpdateSession(ctx, sessionID, map[string]any{"status": "needs_user_input"}))
+	mode := "strict"
+	_, err = svc.SubmitAnalyzeTask(ctx, "user2", SubmitTaskInput{
+		ExecutionMode:           &mode,
+		PrecisionSessionID:      &sessionID,
+		ContinueWithUncertainty: true,
+	})
+	require.Error(t, err)
+}
+
+func TestTaskService_SubmitAnalyzeTask_RejectsMoreThanFiveImages(t *testing.T) {
 	_, taskRepo, precisionRepo, userRepo := setupTaskServiceTestDB(t)
 	svc := NewTaskService(taskRepo, precisionRepo, userRepo)
 	guard := &mockTaskCreditGuard{}
@@ -194,10 +411,12 @@ func TestTaskService_SubmitAnalyzeTask_RejectsMoreThanThreeImages(t *testing.T) 
 		"https://example.com/2.jpg",
 		"https://example.com/3.jpg",
 		"https://example.com/4.jpg",
+		"https://example.com/5.jpg",
+		"https://example.com/6.jpg",
 	}})
 
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "最多支持 3 张图片")
+	assert.Contains(t, err.Error(), "最多支持 5 张图片")
 	assert.Empty(t, guard.validateCalls)
 }
 
@@ -664,6 +883,56 @@ func TestTaskService_RetryTask_ResubmitsFailedImageTaskWithExistingImages(t *tes
 	assert.Equal(t, true, retryTask.Payload["is_retry"])
 	assert.NotEqual(t, "old-group", stringFromAny(retryTask.Payload["credit_group_id"]))
 	assert.Equal(t, "standard_web_search", retryTask.Payload["execution_mode"])
+}
+
+func TestTaskService_RetryInputFromDualAngleTaskStartsFreshPrecisionSession(t *testing.T) {
+	topURL := "https://example.com/top.jpg"
+	obliqueURL := "https://example.com/oblique.jpg"
+	task := &analyzedomain.AnalysisTask{
+		ID:         "failed-dual-angle-task",
+		TaskType:   "food",
+		Status:     "failed",
+		ImagePaths: []string{topURL, obliqueURL},
+		Payload: map[string]any{
+			"execution_mode":       "strict",
+			"capture_protocol":     dualAngleCaptureProtocol,
+			"precision_session_id": "failed-session",
+			"round_index":          2,
+			"precision_options": map[string]any{
+				"interactive": true,
+				"separate":    true,
+				"web_search":  false,
+			},
+			"capture_views": []map[string]any{
+				{"role": "top_down", "image_url": topURL},
+				{"role": "oblique_45", "image_url": obliqueURL},
+			},
+			"reference_object": map[string]any{
+				"presence": "present",
+				"kind":     "standard_card",
+				"shape":    "rectangle",
+				"dimensions_mm": map[string]any{
+					"width":  85.60,
+					"height": 53.98,
+				},
+			},
+		},
+	}
+
+	input, err := (&TaskService{}).retryInputFromTask(task)
+
+	require.NoError(t, err)
+	assert.Equal(t, dualAngleCaptureProtocol, input.CaptureProtocol)
+	require.NotNil(t, input.PrecisionOptions)
+	assert.True(t, *input.PrecisionOptions.Interactive)
+	assert.True(t, input.PrecisionOptions.Separate)
+	require.Len(t, input.CaptureViews, 2)
+	assert.Equal(t, "top_down", input.CaptureViews[0].Role)
+	require.NotNil(t, input.ReferenceObject)
+	assert.Equal(t, 85.60, input.ReferenceObject.DimensionsMM["width"])
+	assert.Nil(t, input.PrecisionSessionID)
+	assert.NotContains(t, input.ExtraPayload, "precision_session_id")
+	assert.NotContains(t, input.ExtraPayload, "round_index")
 }
 
 func TestTaskService_PrepareAndEnqueueInternalRetryPreservesChainWithoutCredits(t *testing.T) {

@@ -15,7 +15,7 @@ func TestBuildPackagedProductExtractPromptTreatsImagesAsOneProduct(t *testing.T)
 		"同一个商品的一组照片",
 		"不要把多张图拆成多个商品",
 		"本次实际有 3 张图片",
-		"综合 1-3 张图片",
+		"综合 1-5 张图片",
 		"弯曲",
 		"大包装",
 		"组合装/多口味",
@@ -58,9 +58,9 @@ func TestSubmitPackagedProductExtractTaskValidatesImageCount(t *testing.T) {
 	}
 
 	_, err = svc.SubmitPackagedProductExtractTask(ctx, "u1", SubmitPackagedProductExtractInput{
-		ImageURLs: []string{"1", "2", "3", "4"},
+		ImageURLs: []string{"1", "2", "3", "4", "5", "6"},
 	})
-	if appErr, ok := err.(*commonerrors.AppError); !ok || appErr.HTTPStatus != 400 || !strings.Contains(appErr.Message, "最多上传 3 张") {
+	if appErr, ok := err.(*commonerrors.AppError); !ok || appErr.HTTPStatus != 400 || !strings.Contains(appErr.Message, "最多上传 5 张") {
 		t.Fatalf("too many images err=%#v want 400 max images AppError", err)
 	}
 }

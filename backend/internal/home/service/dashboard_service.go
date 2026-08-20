@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"log/slog"
 	"math"
 	"slices"
 	"strings"
@@ -12,6 +13,7 @@ import (
 	"food_link/backend/internal/nutrition"
 	"food_link/backend/internal/nutritionagg"
 	usersvc "food_link/backend/internal/user/service"
+	"food_link/backend/pkg/logger"
 	"food_link/backend/pkg/storage"
 )
 
@@ -36,9 +38,14 @@ var (
 )
 
 type DashboardService struct {
-	users   *userrepo.UserRepo
-	home    *homerepo.HomeRepo
-	storage *storage.Client
+	users               *userrepo.UserRepo
+	home                *homerepo.HomeRepo
+	storage             *storage.Client
+	supplementDailyData SupplementDailyProvider
+}
+
+type SupplementDailyProvider interface {
+	HomeSnapshot(ctx context.Context, userID, date string) (map[string]float64, map[string]any, error)
 }
 
 func NewDashboardService(users *userrepo.UserRepo, home *homerepo.HomeRepo, storageClient ...*storage.Client) *DashboardService {
@@ -47,6 +54,10 @@ func NewDashboardService(users *userrepo.UserRepo, home *homerepo.HomeRepo, stor
 		client = storageClient[0]
 	}
 	return &DashboardService{users: users, home: home, storage: client}
+}
+
+func (s *DashboardService) ConfigureSupplementProvider(provider SupplementDailyProvider) {
+	s.supplementDailyData = provider
 }
 
 func (s *DashboardService) HomeDashboard(ctx context.Context, userID, date string) (map[string]any, error) {
@@ -82,6 +93,25 @@ func (s *DashboardService) HomeDashboard(ctx context.Context, userID, date strin
 		mt := normalizeMealType(record.MealType, record.RecordTime)
 		byMeal[mt] = append(byMeal[mt], record)
 	}
+	foodMicros := cloneHomeMicronutrientTotals(micros)
+	supplementMicros := initHomeMicronutrientTotals()
+	supplementSummary := emptySupplementSummary(date)
+	if s.supplementDailyData != nil {
+		snapshot, summary, snapshotErr := s.supplementDailyData.HomeSnapshot(ctx, userID, date)
+		if snapshotErr != nil {
+			logger.Warn(ctx, "获取首页补剂汇总失败", slog.String("user_id", userID), slog.String("date", date), slog.String("error", snapshotErr.Error()))
+		} else {
+			for key, value := range snapshot {
+				if _, supported := supplementMicros[key]; !supported {
+					continue
+				}
+				supplementMicros[key] = value
+			}
+			if summary != nil {
+				supplementSummary = summary
+			}
+		}
+	}
 
 	meals := make([]map[string]any, 0)
 	mealTargets := buildMealTargets(targets["calorie_target"])
@@ -109,10 +139,11 @@ func (s *DashboardService) HomeDashboard(ctx context.Context, userID, date strin
 				"carbs":   map[string]any{"current": round1(totalCarbs), "target": targets["carbs_target"]},
 				"fat":     map[string]any{"current": round1(totalFat), "target": targets["fat_target"]},
 			},
-			"micros": buildHomeMicronutrientPayload(micros, targets),
+			"micros": buildHomeMicronutrientPayload(foodMicros, supplementMicros, targets),
 		},
 		"meals":              meals,
 		"expirySummary":      buildExpirySummary(expiryItems),
+		"supplementSummary":  supplementSummary,
 		"exerciseBurnedKcal": round1(float64(exerciseBurned)),
 		"nutritionTarget":    targetPlan.Response(),
 	}, nil
@@ -819,10 +850,27 @@ func addHomeMicronutrientTotals(target map[string]float64, addition map[string]f
 	}
 }
 
-func buildHomeMicronutrientPayload(totals map[string]float64, targets map[string]float64) map[string]any {
+func cloneHomeMicronutrientTotals(source map[string]float64) map[string]float64 {
+	result := initHomeMicronutrientTotals()
+	for key, value := range source {
+		result[key] = value
+	}
+	return result
+}
+
+func emptySupplementSummary(date string) map[string]any {
+	return map[string]any{
+		"date": date, "planned_count": 0, "completed_count": 0,
+		"functional_components": []any{}, "additional_nutrients": []any{}, "duplicate_components": []string{},
+	}
+}
+
+func buildHomeMicronutrientPayload(foodTotals, supplementTotals map[string]float64, targets map[string]float64) map[string]any {
 	payload := make(map[string]any, len(homeMicronutrientMetrics))
 	for _, metric := range homeMicronutrientMetrics {
-		current := totals[metric.Key]
+		foodCurrent := foodTotals[metric.Key]
+		supplementCurrent := supplementTotals[metric.Key]
+		current := foodCurrent + supplementCurrent
 		target := homeMicronutrientReferences[metric.Key]
 		if targetKey, ok := homeMicronutrientTargetKeyMap[metric.Key]; ok {
 			if custom, ok := targets[targetKey]; ok && custom > 0 {
@@ -834,9 +882,11 @@ func buildHomeMicronutrientPayload(totals map[string]float64, targets map[string
 			progress = math.Min(100.0, round1(current/target*100))
 		}
 		payload[metric.Key] = map[string]any{
-			"current":  round1(current),
-			"target":   target,
-			"progress": progress,
+			"current":            round1(current),
+			"food_current":       round1(foodCurrent),
+			"supplement_current": round1(supplementCurrent),
+			"target":             target,
+			"progress":           progress,
 		}
 	}
 	return payload

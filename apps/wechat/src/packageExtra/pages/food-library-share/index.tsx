@@ -97,7 +97,7 @@ function FoodLibrarySharePage() {
   const [selectedRecord, setSelectedRecord] = useState<FoodRecord | null>(null);
   const [loadingSourceRecord, setLoadingSourceRecord] = useState(false);
 
-  // 图片：最多 3 张，每张单独 AI 识别后叠加营养数据
+  // 图片：最多 5 张，作为同一餐食的多角度证据联合识别
   const [imagePaths, setImagePaths] = useState<string[]>([]);
   const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [imageUrl, setImageUrl] = useState(""); // 首图 URL，用于识别与提交
@@ -110,10 +110,6 @@ function FoodLibrarySharePage() {
   >([]);
   const [description, setDescription] = useState("");
   const [insight, setInsight] = useState("");
-  // 缓存每张图片的识别结果，避免重复识别
-  const [analyzeResultsMap, setAnalyzeResultsMap] = useState<
-    Record<string, Awaited<ReturnType<typeof analyzeFoodImage>>>
-  >({});
 
   // 商家信息
   const [foodName, setFoodName] = useState("");
@@ -407,21 +403,6 @@ function FoodLibrarySharePage() {
     }
   };
 
-  const isLocationValid = () => {
-    const hasProvince = !!province.trim();
-    const hasCity = !!city.trim();
-    if (isHomemade) {
-      return true;
-    }
-    return (
-      hasProvince &&
-      hasCity &&
-      !!district.trim() &&
-      latitude != null &&
-      longitude != null
-    );
-  };
-
   const inferFoodName = (
     record?: FoodRecord | null,
     nextItems?: Array<{ name: string }>,
@@ -475,17 +456,13 @@ function FoodLibrarySharePage() {
     if (inferredName) {
       setFoodName((prev) => prev.trim() || inferredName);
     }
-    setAnalyzeResultsMap({}); // 清空识别缓存
     setShowRecordModal(false);
   };
 
-  const MAX_IMAGES = 3;
+  const MAX_IMAGES = 5;
 
-  /** 根据缓存的识别结果聚合计算营养数据 */
-  const aggregateFromMap = (
-    urls: string[],
-    resultsMap: Record<string, Awaited<ReturnType<typeof analyzeFoodImage>>>,
-  ) => {
+  /** 把多角度图片作为同一餐食联合识别，避免逐图累加重复计算。 */
+  const analyzeCombinedImages = async (urls: string[]) => {
     if (urls.length === 0) {
       setDescription("");
       setInsight("");
@@ -496,42 +473,34 @@ function FoodLibrarySharePage() {
       setTotalFat(0);
       return;
     }
-    const results = urls.map((url) => resultsMap[url]).filter(Boolean);
-    const descriptions = results.map((r) => r.description).filter(Boolean);
-    const insights = results.map((r) => r.insight).filter(Boolean);
-    setDescription(descriptions.join("；"));
-    setInsight(insights.join("；"));
-    const allItems = results.flatMap((r) =>
-      (r.items || []).map((it) => ({
+    const result = await analyzeFoodImage({
+      image_url: urls[0],
+      image_urls: urls,
+      additionalContext: "这些图片是同一份餐食的不同角度，请合并判断一次，不要重复计算食物或热量。",
+    });
+    setDescription(result.description || "");
+    setInsight(result.insight || "");
+    const allItems = (result.items || []).map((it) => ({
         name: it.name,
         weight: it.estimatedWeightGrams,
         nutrients: it.nutrients,
-      })),
-    );
+      }));
     setItems(allItems);
-    let cal = 0;
-    let pro = 0;
-    let carb = 0;
-    let fat = 0;
-    results.forEach((r) => {
-      (r.items || []).forEach((it) => {
-        cal += it.nutrients?.calories || 0;
-        pro += it.nutrients?.protein || 0;
-        carb += it.nutrients?.carbs || 0;
-        fat += it.nutrients?.fat || 0;
-      });
-    });
+    const cal = allItems.reduce((sum, item) => sum + (item.nutrients?.calories || 0), 0);
+    const pro = allItems.reduce((sum, item) => sum + (item.nutrients?.protein || 0), 0);
+    const carb = allItems.reduce((sum, item) => sum + (item.nutrients?.carbs || 0), 0);
+    const fat = allItems.reduce((sum, item) => sum + (item.nutrients?.fat || 0), 0);
     setTotalCalories(cal);
     setTotalProtein(pro);
     setTotalCarbs(carb);
     setTotalFat(fat);
-    const inferredName = inferFoodName(null, allItems, descriptions.join("；"));
+    const inferredName = inferFoodName(null, allItems, result.description || "");
     if (inferredName) {
       setFoodName((prev) => prev.trim() || inferredName);
     }
   };
 
-  // 选择图片：最多 3 张，逐张上传后只识别新图片并叠加已有结果
+  // 选择图片：最多 5 张；每次以当前完整图片集重新做一次联合识别
   const handleChooseImage = async () => {
     const remain = MAX_IMAGES - imagePaths.length;
     if (remain <= 0) return;
@@ -546,7 +515,6 @@ function FoodLibrarySharePage() {
       setSelectedRecord(null);
       const prevPaths = imagePaths;
       const prevUrls = imageUrls;
-      const prevResultsMap = analyzeResultsMap;
       setImagePaths((p) => [...p, ...tempPaths]);
 
       if (isEditMode) {
@@ -588,30 +556,16 @@ function FoodLibrarySharePage() {
         setImageUrl(allUrls[0] || "");
         Taro.hideLoading();
 
-        // 只识别新上传的图片
-        const newResultsMap = { ...prevResultsMap };
-        for (let i = 0; i < newUrls.length; i++) {
-          Taro.showLoading({
-            title: `识别中 (${i + 1}/${newUrls.length})...`,
-            mask: true,
-          });
-          const analyzeRes = await analyzeFoodImage({ image_url: newUrls[i] });
-          newResultsMap[newUrls[i]] = analyzeRes;
-        }
-        setAnalyzeResultsMap(newResultsMap);
-        aggregateFromMap(allUrls, newResultsMap);
+        Taro.showLoading({ title: "识别中...", mask: true });
+        await analyzeCombinedImages(allUrls);
         Taro.showToast({
-          title:
-            newUrls.length > 1
-              ? `已识别 ${newUrls.length} 张并叠加`
-              : "识别成功",
+          title: allUrls.length > 1 ? `已联合识别 ${allUrls.length} 张` : "识别成功",
           icon: "success",
         });
       } catch (e: any) {
         setImagePaths(prevPaths);
         setImageUrls(prevUrls);
         setImageUrl(prevUrls[0] || "");
-        setAnalyzeResultsMap(prevResultsMap);
         await showUnifiedApiError(e, "上传或识别失败");
       } finally {
         Taro.hideLoading();
@@ -640,18 +594,27 @@ function FoodLibrarySharePage() {
   };
 
   const handleRemoveImage = (index: number) => {
-    const removedUrl = imageUrls[index];
     const nextPaths = imagePaths.filter((_, i) => i !== index);
     const nextUrls = imageUrls.filter((_, i) => i !== index);
     setImagePaths(nextPaths);
     setImageUrls(nextUrls);
     setImageUrl(nextUrls[0] || "");
     setSelectedRecord(null);
-    // 从缓存中移除对应结果
-    const newResultsMap = { ...analyzeResultsMap };
-    delete newResultsMap[removedUrl];
-    setAnalyzeResultsMap(newResultsMap);
-    aggregateFromMap(nextUrls, newResultsMap);
+    if (isEditMode) {
+      return;
+    }
+    if (nextUrls.length === 0) {
+      void analyzeCombinedImages([]);
+      return;
+    }
+    setAnalyzing(true);
+    Taro.showLoading({ title: "重新识别中...", mask: true });
+    void analyzeCombinedImages(nextUrls)
+      .catch((error) => showUnifiedApiError(error, "重新识别失败"))
+      .finally(() => {
+        Taro.hideLoading();
+        setAnalyzing(false);
+      });
   };
 
   type SelectedLocation = {
@@ -677,14 +640,14 @@ function FoodLibrarySharePage() {
     ).trim();
     setProvince(nextProvince);
 
-    // 设置城市（如果是直辖市则不设置城市）
+    // 直辖市也回填城市字段，保证已选位置能正常展示和筛选。
     if (
       nextProvince.includes("北京") ||
       nextProvince.includes("上海") ||
       nextProvince.includes("天津") ||
       nextProvince.includes("重庆")
     ) {
-      setCity("");
+      setCity(nextProvince);
     } else {
       setCity((cityMatch ? cityMatch[1] : "").trim());
     }
@@ -833,10 +796,6 @@ function FoodLibrarySharePage() {
         }
       }
     }
-    if (!isCampusFood && !isLocationValid()) {
-      Taro.showToast({ title: "请先补充完整商家位置", icon: "none" });
-      return;
-    }
 
     const { confirm } = await Taro.showModal({
       title: isEditMode ? "确认保存" : "确认提交",
@@ -858,7 +817,7 @@ function FoodLibrarySharePage() {
   const buildSubmitPayload = (): CreatePublicFoodLibraryRequest => {
     const fullAddress = [
       province,
-      city,
+      city.trim() === province.trim() ? "" : city,
       isHomemade ? "" : district,
       isHomemade ? "" : detailAddress,
     ]
@@ -1013,7 +972,7 @@ function FoodLibrarySharePage() {
         <View className='quick-upload-tip'>
           <Text className='quick-upload-title'>上传到公共食物库</Text>
           <Text className='quick-upload-subtitle'>
-            已自动带入刚识别的餐食，补充商家、位置或是否自制后即可上传。
+            已自动带入刚识别的餐食；商家和位置均可选，核对后即可上传。
           </Text>
         </View>
       )}
@@ -1044,12 +1003,12 @@ function FoodLibrarySharePage() {
         </View>
       )}
 
-      {/* 图片区域：最多 3 张，每张识别后叠加计算 */}
+      {/* 图片区域：最多 5 张，作为同一份餐食联合识别 */}
       <View className='image-section'>
         <Text className='section-title'>
           食物图片 <Text className='required'>*</Text>
           {displayLength > 0 && (
-            <Text className='image-count'>（{displayLength}/3）</Text>
+            <Text className='image-count'>（{displayLength}/{MAX_IMAGES}）</Text>
           )}
         </Text>
         {displayLength > 0 ? (
@@ -1087,7 +1046,7 @@ function FoodLibrarySharePage() {
           <View className='image-upload-area' onClick={handleChooseImage}>
             <Text className='upload-icon iconfont icon-paizhao-xianxing' />
             <Text className='upload-text'>
-              点击上传食物图片（最多 3 张，每张识别后叠加计算）
+              点击上传食物图片（最多 5 张，多角度联合识别）
             </Text>
           </View>
         )}
@@ -1424,8 +1383,7 @@ function FoodLibrarySharePage() {
       <View className='location-section'>
         <View className='location-title-row'>
           <Text className='section-title'>
-            {isHomemade ? "所在地区（可选）" : "商家地址"}{" "}
-            {!isHomemade && <Text className='required'>*</Text>}
+            {isHomemade ? "所在地区（可选）" : "商家地址（可选）"}
           </Text>
           {!isHomemade && (
             <View
@@ -1439,18 +1397,17 @@ function FoodLibrarySharePage() {
         </View>
         <View className='form-item' onClick={() => setShowCityPicker(true)}>
           <Text className='form-label'>
-            {isHomemade ? "省市（可选）" : "城市/区域"}{" "}
-            {!isHomemade && <Text className='required'>*</Text>}
+            {isHomemade ? "省市（可选）" : "城市/区域（可选）"}
           </Text>
           <View className='form-input city-display'>
             <Text className={province ? "city-value" : "city-placeholder"}>
               {province
-                ? `${province}${city ? " " + city : ""}${isHomemade ? "" : ` ${district}`}`.trim()
+                ? `${province}${city && city.trim() !== province.trim() ? " " + city : ""}${isHomemade ? "" : ` ${district}`}`.trim()
                 : isHomemade
                   ? locatingHomemadeCity
                     ? "正在定位所在城市..."
                     : "可选填所在省市"
-                  : "点击选择城市/区域（必填）"}
+                  : "可选择城市/区域，也可直接跳过"}
             </Text>
           </View>
         </View>

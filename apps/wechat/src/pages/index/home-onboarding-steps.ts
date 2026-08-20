@@ -16,7 +16,7 @@ export const HOME_RECORD_ONBOARDING_STEPS: OnboardingGuideStep[] = [
   {
     selector: '#record-menu-guide-album',
     title: '相册上传',
-    description: '如果你的相册里已经有想要提交的图片，则可以选择该功能。最多可同时上传 3 张，作为一次识别提交。',
+    description: '如果你的相册里已经有想要提交的图片，则可以选择该功能。最多可同时上传 5 张，作为一次识别提交。',
     padding: 10,
   },
   {

@@ -1,3 +1,3 @@
 export default definePageConfig({
-  navigationBarTitleText: '零食任务详情',
+  navigationBarTitleText: '包装食品任务详情',
 })

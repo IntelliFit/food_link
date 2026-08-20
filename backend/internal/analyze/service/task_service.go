@@ -35,7 +35,12 @@ type TaskService struct {
 
 const (
 	waitingRecordBadgeWindow = 24 * time.Hour
-	maxFoodAnalyzeImages     = 3
+	maxFoodAnalyzeImages     = 5
+	maxVideoAnalyzeFrames    = 5
+	analyzeHistoryScanBatch  = 200
+	dualAngleCaptureProtocol = "dual_angle_v1"
+	videoCaptureProtocol     = "video_keyframes_v1"
+	maxPrecisionRounds       = 3
 )
 
 const experimentalExecutionMode = "experimental"
@@ -67,35 +72,67 @@ func (s *TaskService) ConfigureTaskPublisher(queue taskqueue.Publisher) {
 }
 
 type SubmitTaskInput struct {
-	ImageURL               string           `json:"image_url"`
-	ImageURLs              []string         `json:"image_urls"`
-	Text                   string           `json:"text"`
-	TextInput              string           `json:"text_input"`
-	Date                   string           `json:"date"`
-	MealType               string           `json:"meal_type"`
-	Province               string           `json:"province"`
-	City                   string           `json:"city"`
-	District               string           `json:"district"`
-	DietGoal               string           `json:"diet_goal"`
-	ActivityTiming         string           `json:"activity_timing"`
-	UserGoal               string           `json:"user_goal"`
-	RemainingCalories      *float64         `json:"remaining_calories"`
-	SuggestRatioEnabled    bool             `json:"suggest_ratio_enabled"`
-	AdditionalContext      string           `json:"additionalContext"`
-	ModelName              string           `json:"modelName"`
-	ExecutionMode          *string          `json:"execution_mode"`
-	PrecisionSessionID     *string          `json:"precision_session_id"`
-	AnalysisEngine         string           `json:"analysis_engine"`
-	TimezoneOffsetMinutes  *int             `json:"timezone_offset_minutes"`
-	IsMultiView            bool             `json:"is_multi_view"`
-	PreviousResult         map[string]any   `json:"previousResult"`
-	CorrectionItems        []map[string]any `json:"correctionItems"`
-	CorrectionSourceTaskID string           `json:"correction_source_task_id"`
-	CorrectionRootTaskID   string           `json:"correction_root_task_id"`
-	ReferenceObjects       []map[string]any `json:"reference_objects"`
-	SourceType             string           `json:"source_type"`
-	ExtraPayload           map[string]any   `json:"-"`
-	RetrySourceTaskID      string           `json:"-"`
+	ImageURL                string                         `json:"image_url"`
+	ImageURLs               []string                       `json:"image_urls"`
+	Text                    string                         `json:"text"`
+	TextInput               string                         `json:"text_input"`
+	Date                    string                         `json:"date"`
+	MealType                string                         `json:"meal_type"`
+	Province                string                         `json:"province"`
+	City                    string                         `json:"city"`
+	District                string                         `json:"district"`
+	DietGoal                string                         `json:"diet_goal"`
+	ActivityTiming          string                         `json:"activity_timing"`
+	UserGoal                string                         `json:"user_goal"`
+	RemainingCalories       *float64                       `json:"remaining_calories"`
+	SuggestRatioEnabled     bool                           `json:"suggest_ratio_enabled"`
+	AdditionalContext       string                         `json:"additionalContext"`
+	ModelName               string                         `json:"modelName"`
+	ExecutionMode           *string                        `json:"execution_mode"`
+	PrecisionSessionID      *string                        `json:"precision_session_id"`
+	AnalysisEngine          string                         `json:"analysis_engine"`
+	TimezoneOffsetMinutes   *int                           `json:"timezone_offset_minutes"`
+	IsMultiView             bool                           `json:"is_multi_view"`
+	PreviousResult          map[string]any                 `json:"previousResult"`
+	CorrectionItems         []map[string]any               `json:"correctionItems"`
+	CorrectionSourceTaskID  string                         `json:"correction_source_task_id"`
+	CorrectionRootTaskID    string                         `json:"correction_root_task_id"`
+	ReferenceObjects        []map[string]any               `json:"reference_objects"`
+	CaptureProtocol         string                         `json:"capture_protocol"`
+	PrecisionOptions        *PrecisionOptionsInput         `json:"precision_options"`
+	CaptureViews            []PrecisionCaptureViewInput    `json:"capture_views"`
+	VideoCapture            map[string]any                 `json:"video_capture"`
+	ReferenceObject         *PrecisionReferenceObjectInput `json:"reference_object"`
+	Answers                 []PrecisionAnswerInput         `json:"answers"`
+	ContinueWithUncertainty bool                           `json:"continue_with_uncertainty"`
+	SourceType              string                         `json:"source_type"`
+	ExtraPayload            map[string]any                 `json:"-"`
+	RetrySourceTaskID       string                         `json:"-"`
+}
+
+type PrecisionOptionsInput struct {
+	Interactive *bool `json:"interactive"`
+	Separate    bool  `json:"separate"`
+	WebSearch   bool  `json:"web_search"`
+}
+
+type PrecisionCaptureViewInput struct {
+	Role        string `json:"role"`
+	ImageURL    string `json:"image_url"`
+	TimestampMS int64  `json:"timestamp_ms,omitempty"`
+}
+
+type PrecisionReferenceObjectInput struct {
+	Presence      string             `json:"presence"`
+	Kind          string             `json:"kind"`
+	Shape         string             `json:"shape"`
+	DimensionsMM  map[string]float64 `json:"dimensions_mm"`
+	PlacementNote string             `json:"placement_note"`
+}
+
+type PrecisionAnswerInput struct {
+	QuestionID string `json:"question_id"`
+	Value      any    `json:"value"`
 }
 
 type RetryTaskResult struct {
@@ -113,19 +150,29 @@ type TaskListPage struct {
 // SubmitAnalyzeTask 是面向用户 API 的入口，必须走积分检查。
 func (s *TaskService) SubmitAnalyzeTask(ctx context.Context, userID string, input SubmitTaskInput) (string, error) {
 	s.normalizeSubmitImages(&input)
-	if input.ImageURL == "" && len(input.ImageURLs) == 0 {
+	if err := validatePrecisionReferenceObject(input.ReferenceObject, false); err != nil {
+		return "", err
+	}
+	isContinuation := hasPrecisionSessionID(input)
+	if input.ImageURL == "" && len(input.ImageURLs) == 0 && !(isContinuation && hasPrecisionSupplement(input)) {
 		return "", &errors.AppError{Code: 10002, Message: "image_url 或 image_urls 不能为空", HTTPStatus: 400}
 	}
-	if imageCountForLog(input.ImageURL, input.ImageURLs) > maxFoodAnalyzeImages {
-		return "", &errors.AppError{Code: 10002, Message: "最多支持 3 张图片", HTTPStatus: 400}
+	if imageCountForLog(input.ImageURL, input.ImageURLs) > maxAnalyzeImagesForInput(input) {
+		return "", &errors.AppError{Code: 10002, Message: analyzeImageLimitMessage(input), HTTPStatus: 400}
 	}
 
+	if err := validatePrecisionCaptureInput(&input, isContinuation); err != nil {
+		return "", err
+	}
 	recordedOn, mode, err := s.resolveSubmitContext(ctx, userID, input)
 	if err != nil {
 		return "", err
 	}
 	payload := buildSubmitTaskPayload(input, recordedOn, mode)
 	s.attachCorrectionChain(ctx, userID, input, payload)
+	if isContinuation {
+		return s.createAndEnqueueAnalyzeTask(ctx, userID, input, payload, mode, nil, 0, "")
+	}
 
 	creditMode := s.resolveCreditMode(mode, input, payload)
 	creditsInfo, creditCost, err := s.applyFoodCreditGuard(ctx, userID, creditMode, input.Date, creditUnitsForInput(input), payload)
@@ -144,8 +191,11 @@ func (s *TaskService) SubmitInternalAnalyzeTask(ctx context.Context, userID stri
 	if input.ImageURL == "" && len(input.ImageURLs) == 0 {
 		return "", &errors.AppError{Code: 10002, Message: "image_url 或 image_urls 不能为空", HTTPStatus: 400}
 	}
-	if imageCountForLog(input.ImageURL, input.ImageURLs) > maxFoodAnalyzeImages {
-		return "", &errors.AppError{Code: 10002, Message: "最多支持 3 张图片", HTTPStatus: 400}
+	if imageCountForLog(input.ImageURL, input.ImageURLs) > maxAnalyzeImagesForInput(input) {
+		return "", &errors.AppError{Code: 10002, Message: analyzeImageLimitMessage(input), HTTPStatus: 400}
+	}
+	if err := validatePrecisionCaptureInput(&input, false); err != nil {
+		return "", err
 	}
 
 	recordedOn, mode, err := s.resolveSubmitContext(ctx, userID, input)
@@ -171,6 +221,9 @@ func (s *TaskService) SubmitTextTask(ctx context.Context, userID string, input S
 		input.TextInput = input.Text
 	}
 	s.normalizeSubmitImages(&input)
+	if err := validatePrecisionReferenceObject(input.ReferenceObject, false); err != nil {
+		return "", err
+	}
 	if input.TextInput == "" && !hasPrecisionSupplement(input) {
 		return "", &errors.AppError{Code: 10002, Message: "text 不能为空", HTTPStatus: 400}
 	}
@@ -181,6 +234,9 @@ func (s *TaskService) SubmitTextTask(ctx context.Context, userID string, input S
 	}
 	payload := buildSubmitTaskPayload(input, recordedOn, mode)
 	s.attachCorrectionChain(ctx, userID, input, payload)
+	if hasPrecisionSessionID(input) {
+		return s.createAndEnqueueTextTask(ctx, userID, input, payload, mode, nil, 0, "")
+	}
 
 	creditMode := s.resolveCreditMode(mode, input, payload)
 	creditsInfo, creditCost, err := s.applyFoodCreditGuard(ctx, userID, creditMode, input.Date, creditUnitsForInput(input), payload)
@@ -238,7 +294,7 @@ func (s *TaskService) resolveSubmitContext(ctx context.Context, userID string, i
 
 func (s *TaskService) resolveCreditMode(mode string, input SubmitTaskInput, payload map[string]any) string {
 	creditMode := mode
-	if mode == experimentalExecutionMode || mode == precisionSeparateExecutionMode || input.PrecisionSessionID != nil {
+	if mode == experimentalExecutionMode || mode == precisionSeparateExecutionMode || hasPrecisionSessionID(input) || isDualAngleCapture(input) {
 		creditMode = validExecutionMode
 	}
 	if mode == precisionSeparateExecutionMode {
@@ -251,7 +307,7 @@ func (s *TaskService) resolveCreditMode(mode string, input SubmitTaskInput, payl
 }
 
 func (s *TaskService) createAndEnqueueAnalyzeTask(ctx context.Context, userID string, input SubmitTaskInput, payload map[string]any, mode string, creditsInfo map[string]any, creditCost int, creditGroupID string) (string, error) {
-	if mode == experimentalExecutionMode || mode == precisionSeparateExecutionMode || input.PrecisionSessionID != nil {
+	if shouldUsePrecisionSession(mode, input) {
 		taskID, err := s.submitPrecisionTask(ctx, userID, input, payload, creditsInfo, creditCost, creditGroupID)
 		if err != nil {
 			return "", err
@@ -289,7 +345,7 @@ func (s *TaskService) createAndEnqueueAnalyzeTask(ctx context.Context, userID st
 }
 
 func (s *TaskService) createAndEnqueueTextTask(ctx context.Context, userID string, input SubmitTaskInput, payload map[string]any, mode string, creditsInfo map[string]any, creditCost int, creditGroupID string) (string, error) {
-	if mode == experimentalExecutionMode || mode == precisionSeparateExecutionMode || input.PrecisionSessionID != nil {
+	if shouldUsePrecisionSession(mode, input) {
 		taskID, err := s.submitPrecisionTask(ctx, userID, input, payload, creditsInfo, creditCost, creditGroupID)
 		if err != nil {
 			return "", err
@@ -485,6 +541,7 @@ func buildSubmitTaskPayload(input SubmitTaskInput, recordedOn, mode string) map[
 		"recorded_on":           recordedOn,
 	}
 	applySubmitCompatibilityPayload(payload, input)
+	applyPrecisionSubmitPayload(payload, input, mode)
 	return payload
 }
 
@@ -525,6 +582,248 @@ func applySubmitCompatibilityPayload(payload map[string]any, input SubmitTaskInp
 	}
 }
 
+func applyPrecisionSubmitPayload(payload map[string]any, input SubmitTaskInput, mode string) {
+	protocol := strings.ToLower(strings.TrimSpace(input.CaptureProtocol))
+	if protocol != "" {
+		payload["capture_protocol"] = protocol
+	}
+	options := precisionOptionsPayload(input, mode)
+	if len(options) > 0 {
+		payload["precision_options"] = options
+	}
+	if len(input.CaptureViews) > 0 {
+		views := make([]map[string]any, 0, len(input.CaptureViews))
+		for _, view := range input.CaptureViews {
+			item := map[string]any{
+				"role":      strings.ToLower(strings.TrimSpace(view.Role)),
+				"image_url": strings.TrimSpace(view.ImageURL),
+			}
+			if view.TimestampMS > 0 {
+				item["timestamp_ms"] = view.TimestampMS
+			}
+			views = append(views, item)
+		}
+		payload["capture_views"] = views
+	}
+	if len(input.VideoCapture) > 0 {
+		payload["video_capture"] = copyMap(input.VideoCapture)
+	}
+	if input.ReferenceObject != nil {
+		reference := precisionReferenceObjectPayload(input.ReferenceObject)
+		payload["reference_object"] = reference
+		if len(input.ReferenceObjects) == 0 && stringFromAny(reference["presence"]) == "present" {
+			payload["reference_objects"] = []map[string]any{precisionReferenceObjectAsLegacy(reference)}
+		} else if stringFromAny(reference["presence"]) == "absent" {
+			payload["reference_objects"] = []map[string]any{}
+		}
+	}
+	if len(input.Answers) > 0 {
+		answers := make([]map[string]any, 0, len(input.Answers))
+		for _, answer := range input.Answers {
+			questionID := strings.TrimSpace(answer.QuestionID)
+			if questionID == "" {
+				continue
+			}
+			answers = append(answers, map[string]any{"question_id": questionID, "value": answer.Value})
+		}
+		if len(answers) > 0 {
+			payload["answers"] = answers
+		}
+	}
+	if input.ContinueWithUncertainty {
+		payload["continue_with_uncertainty"] = true
+	}
+}
+
+func precisionOptionsPayload(input SubmitTaskInput, mode string) map[string]any {
+	interactive := isStructuredPrecisionCapture(input)
+	separate := mode == precisionSeparateExecutionMode
+	webSearch := mode == precisionWebSearchMode
+	if input.PrecisionOptions != nil {
+		if input.PrecisionOptions.Interactive != nil {
+			interactive = *input.PrecisionOptions.Interactive
+		}
+		separate = input.PrecisionOptions.Separate
+		webSearch = input.PrecisionOptions.WebSearch
+	}
+	if !interactive && !separate && !webSearch && !isStructuredPrecisionCapture(input) {
+		return nil
+	}
+	return map[string]any{
+		"interactive": interactive,
+		"separate":    separate,
+		"web_search":  webSearch,
+	}
+}
+
+func precisionReferenceObjectPayload(input *PrecisionReferenceObjectInput) map[string]any {
+	dimensions := map[string]any{}
+	for key, value := range input.DimensionsMM {
+		key = strings.ToLower(strings.TrimSpace(key))
+		if key != "" && value > 0 {
+			dimensions[key] = value
+		}
+	}
+	return map[string]any{
+		"presence":       strings.ToLower(strings.TrimSpace(input.Presence)),
+		"kind":           strings.TrimSpace(input.Kind),
+		"shape":          strings.ToLower(strings.TrimSpace(input.Shape)),
+		"dimensions_mm":  dimensions,
+		"placement_note": strings.TrimSpace(input.PlacementNote),
+	}
+}
+
+func precisionReferenceObjectAsLegacy(reference map[string]any) map[string]any {
+	return map[string]any{
+		"reference_type": "precision_reference",
+		"reference_name": firstNonEmptyValue(reference, "kind", "shape"),
+		"dimensions_mm":  reference["dimensions_mm"],
+		"placement_note": reference["placement_note"],
+	}
+}
+
+func firstNonEmptyValue(values map[string]any, keys ...string) string {
+	for _, key := range keys {
+		if value := stringFromAny(values[key]); value != "" {
+			return value
+		}
+	}
+	return "参考物"
+}
+
+func hasPrecisionSessionID(input SubmitTaskInput) bool {
+	return input.PrecisionSessionID != nil && strings.TrimSpace(*input.PrecisionSessionID) != ""
+}
+
+func isDualAngleCapture(input SubmitTaskInput) bool {
+	return strings.EqualFold(strings.TrimSpace(input.CaptureProtocol), dualAngleCaptureProtocol)
+}
+
+func isVideoKeyframeCapture(input SubmitTaskInput) bool {
+	return strings.EqualFold(strings.TrimSpace(input.CaptureProtocol), videoCaptureProtocol)
+}
+
+func isStructuredPrecisionCapture(input SubmitTaskInput) bool {
+	return isDualAngleCapture(input) || isVideoKeyframeCapture(input)
+}
+
+func maxAnalyzeImagesForInput(input SubmitTaskInput) int {
+	if isVideoKeyframeCapture(input) {
+		return maxVideoAnalyzeFrames
+	}
+	return maxFoodAnalyzeImages
+}
+
+func analyzeImageLimitMessage(input SubmitTaskInput) string {
+	if isVideoKeyframeCapture(input) {
+		return "视频模式最多支持 5 个关键帧"
+	}
+	return "最多支持 5 张图片"
+}
+
+func shouldUsePrecisionSession(mode string, input SubmitTaskInput) bool {
+	return mode == experimentalExecutionMode || mode == precisionSeparateExecutionMode || hasPrecisionSessionID(input) || isStructuredPrecisionCapture(input)
+}
+
+func validatePrecisionCaptureInput(input *SubmitTaskInput, isContinuation bool) error {
+	if input == nil || !isStructuredPrecisionCapture(*input) {
+		return nil
+	}
+	if isContinuation && len(input.CaptureViews) == 0 {
+		return nil
+	}
+	if isVideoKeyframeCapture(*input) {
+		return validateVideoKeyframeCaptureInput(input)
+	}
+	if len(input.CaptureViews) != 2 {
+		return &errors.AppError{Code: 10002, Message: "新版精准模式必须提交俯拍和 45° 斜拍各一张", HTTPStatus: 400}
+	}
+	roles := map[string]bool{}
+	urls := map[string]bool{}
+	orderedURLs := make([]string, 0, 2)
+	for _, view := range input.CaptureViews {
+		role := strings.ToLower(strings.TrimSpace(view.Role))
+		url := strings.TrimSpace(view.ImageURL)
+		if role != "top_down" && role != "oblique_45" {
+			return &errors.AppError{Code: 10002, Message: "capture_views 仅支持 top_down 和 oblique_45", HTTPStatus: 400}
+		}
+		if url == "" || roles[role] || urls[url] {
+			return &errors.AppError{Code: 10002, Message: "两个拍摄角度必须槽位完整且使用不同图片", HTTPStatus: 400}
+		}
+		roles[role] = true
+		urls[url] = true
+	}
+	if !roles["top_down"] || !roles["oblique_45"] {
+		return &errors.AppError{Code: 10002, Message: "请同时提交完整俯拍和约 45° 斜拍", HTTPStatus: 400}
+	}
+	for _, role := range []string{"top_down", "oblique_45"} {
+		for _, view := range input.CaptureViews {
+			if strings.EqualFold(strings.TrimSpace(view.Role), role) {
+				orderedURLs = append(orderedURLs, strings.TrimSpace(view.ImageURL))
+				break
+			}
+		}
+	}
+	input.ImageURL = orderedURLs[0]
+	input.ImageURLs = orderedURLs
+	return validatePrecisionReferenceObject(input.ReferenceObject, true)
+}
+
+func validateVideoKeyframeCaptureInput(input *SubmitTaskInput) error {
+	if len(input.CaptureViews) < 3 || len(input.CaptureViews) > maxVideoAnalyzeFrames {
+		return &errors.AppError{Code: 10002, Message: "视频精准模式必须提交 3 至 5 个关键帧", HTTPStatus: 400}
+	}
+	roles := map[string]bool{}
+	urls := map[string]bool{}
+	orderedURLs := make([]string, 0, len(input.CaptureViews))
+	lastTimestamp := int64(-1)
+	for index, view := range input.CaptureViews {
+		role := strings.ToLower(strings.TrimSpace(view.Role))
+		url := strings.TrimSpace(view.ImageURL)
+		expectedRole := fmt.Sprintf("video_keyframe_%d", index+1)
+		if role != expectedRole {
+			return &errors.AppError{Code: 10002, Message: "视频关键帧槽位顺序无效", HTTPStatus: 400}
+		}
+		if url == "" || roles[role] || urls[url] {
+			return &errors.AppError{Code: 10002, Message: "视频关键帧必须槽位完整且不能重复", HTTPStatus: 400}
+		}
+		if view.TimestampMS < 0 || (lastTimestamp >= 0 && view.TimestampMS <= lastTimestamp) {
+			return &errors.AppError{Code: 10002, Message: "视频关键帧时间点必须按顺序递增", HTTPStatus: 400}
+		}
+		roles[role] = true
+		urls[url] = true
+		orderedURLs = append(orderedURLs, url)
+		lastTimestamp = view.TimestampMS
+	}
+	input.ImageURL = orderedURLs[0]
+	input.ImageURLs = orderedURLs
+	return validatePrecisionReferenceObject(input.ReferenceObject, true)
+}
+
+func validatePrecisionReferenceObject(reference *PrecisionReferenceObjectInput, required bool) error {
+	if reference == nil {
+		if required {
+			return &errors.AppError{Code: 10002, Message: "请声明参考物，或明确选择没有参考物", HTTPStatus: 400}
+		}
+		return nil
+	}
+	presence := strings.ToLower(strings.TrimSpace(reference.Presence))
+	if presence != "present" && presence != "absent" {
+		return &errors.AppError{Code: 10002, Message: "reference_object.presence 必须为 present 或 absent", HTTPStatus: 400}
+	}
+	if presence == "present" {
+		if strings.TrimSpace(reference.Kind) == "" || len(reference.DimensionsMM) == 0 {
+			return &errors.AppError{Code: 10002, Message: "已放置参考物时必须填写类型和尺寸", HTTPStatus: 400}
+		}
+		for _, value := range reference.DimensionsMM {
+			if value <= 0 {
+				return &errors.AppError{Code: 10002, Message: "参考物尺寸必须大于 0", HTTPStatus: 400}
+			}
+		}
+	}
+	return nil
+}
+
 func (s *TaskService) attachCorrectionChain(ctx context.Context, userID string, input SubmitTaskInput, payload map[string]any) {
 	if len(input.CorrectionItems) == 0 && len(input.PreviousResult) == 0 {
 		return
@@ -550,11 +849,15 @@ func (s *TaskService) attachCorrectionChain(ctx context.Context, userID string, 
 }
 
 func hasPrecisionSupplement(input SubmitTaskInput) bool {
-	if input.PrecisionSessionID == nil || strings.TrimSpace(*input.PrecisionSessionID) == "" {
+	if !hasPrecisionSessionID(input) {
 		return false
 	}
 	return strings.TrimSpace(input.AdditionalContext) != "" ||
 		len(input.ReferenceObjects) > 0 ||
+		input.ReferenceObject != nil ||
+		len(input.CaptureViews) > 0 ||
+		len(input.Answers) > 0 ||
+		input.ContinueWithUncertainty ||
 		len(input.CorrectionItems) > 0 ||
 		len(input.PreviousResult) > 0
 }
@@ -634,6 +937,19 @@ func (s *TaskService) submitPrecisionTask(ctx context.Context, userID string, in
 		if !precisionSessionCanContinue(existing.Status) {
 			return "", &errors.AppError{Code: 10002, Message: "该精准模式会话已结束，无法继续", HTTPStatus: 400}
 		}
+		if existing.RoundIndex >= maxPrecisionRounds {
+			return "", &errors.AppError{Code: 10002, Message: "该精准模式会话已达到两轮免费补充上限", HTTPStatus: 400}
+		}
+		payload["execution_mode"] = existing.ExecutionMode
+		for _, key := range []string{"credit_group_id", "credit_usage", "capture_protocol", "precision_options", "capture_views", "video_capture", "reference_object"} {
+			if _, exists := payload[key]; exists {
+				continue
+			}
+			if value, ok := existing.LatestInputs[key]; ok {
+				payload[key] = value
+			}
+		}
+		creditGroupID = stringFromAny(payload["credit_group_id"])
 		nextRound := existing.RoundIndex + 1
 		latestInputs := copyMap(existing.LatestInputs)
 		for key, value := range payload {
@@ -645,8 +961,8 @@ func (s *TaskService) submitPrecisionTask(ctx context.Context, userID string, in
 			"latest_inputs": latestInputs,
 			"updated_at":    time.Now(),
 		}
-		if len(input.ReferenceObjects) > 0 {
-			sessionUpdates["reference_objects"] = referenceObjectsAsAny(input.ReferenceObjects)
+		if references := precisionReferenceObjectsForSession(input, payload); len(references) > 0 || input.ReferenceObject != nil {
+			sessionUpdates["reference_objects"] = references
 		}
 		if err := s.precision.UpdateSession(ctx, existing.ID, sessionUpdates); err != nil {
 			return "", err
@@ -663,14 +979,18 @@ func (s *TaskService) submitPrecisionTask(ctx context.Context, userID string, in
 		session.RoundIndex = nextRound
 		session.LatestInputs = latestInputs
 	} else {
+		executionMode := stringFromAny(payload["execution_mode"])
+		if executionMode == "" {
+			executionMode = experimentalExecutionMode
+		}
 		newSession := &domain.PrecisionSession{
 			UserID:           userID,
 			SourceType:       sourceType,
-			ExecutionMode:    "experimental",
+			ExecutionMode:    executionMode,
 			Status:           "collecting",
 			RoundIndex:       1,
 			LatestInputs:     payload,
-			ReferenceObjects: referenceObjectsAsAny(input.ReferenceObjects),
+			ReferenceObjects: precisionReferenceObjectsForSession(input, payload),
 		}
 		if err := s.precision.CreateSession(ctx, newSession); err != nil {
 			return "", err
@@ -689,9 +1009,17 @@ func (s *TaskService) submitPrecisionTask(ctx context.Context, userID string, in
 	payload["precision_session_id"] = session.ID
 	payload["round_index"] = session.RoundIndex
 
+	resolvedImageURLs := append([]string(nil), input.ImageURLs...)
+	if len(resolvedImageURLs) == 0 {
+		resolvedImageURLs = stringSliceFromAny(session.LatestInputs["image_urls"])
+	}
+	resolvedImageURL := input.ImageURL
+	if resolvedImageURL == "" {
+		resolvedImageURL = stringFromAny(session.LatestInputs["image_url"])
+	}
 	var imageURL *string
-	if input.ImageURL != "" {
-		imageURL = &input.ImageURL
+	if resolvedImageURL != "" {
+		imageURL = &resolvedImageURL
 	}
 
 	task := &domain.AnalysisTask{
@@ -699,7 +1027,7 @@ func (s *TaskService) submitPrecisionTask(ctx context.Context, userID string, in
 		TaskType:   "precision_plan",
 		Status:     "pending",
 		ImageURL:   imageURL,
-		ImagePaths: input.ImageURLs,
+		ImagePaths: resolvedImageURLs,
 		TextInput:  nil,
 		Payload:    payload,
 	}
@@ -737,7 +1065,7 @@ func copyMap(in map[string]any) map[string]any {
 
 func precisionSessionCanContinue(status string) bool {
 	switch status {
-	case "collecting", "estimating", "needs_user_input", "needs_retake", "active":
+	case "needs_user_input", "needs_retake", "active":
 		return true
 	default:
 		return false
@@ -764,6 +1092,20 @@ func referenceObjectsAsAny(items []map[string]any) []any {
 		out = append(out, item)
 	}
 	return out
+}
+
+func precisionReferenceObjectsForSession(input SubmitTaskInput, payload map[string]any) []any {
+	if len(input.ReferenceObjects) > 0 {
+		return referenceObjectsAsAny(input.ReferenceObjects)
+	}
+	switch items := payload["reference_objects"].(type) {
+	case []map[string]any:
+		return referenceObjectsAsAny(items)
+	case []any:
+		return append([]any(nil), items...)
+	default:
+		return []any{}
+	}
 }
 
 func (s *TaskService) ListTasks(ctx context.Context, userID, taskType, status, search string, limit int) ([]domain.AnalysisTask, error) {
@@ -871,6 +1213,9 @@ func (s *TaskService) CountTasksByStatus(ctx context.Context, userID string) (ma
 		case "pending", "processing":
 			recognizing++
 		case "done":
+			if precisionTaskNeedsUserAction(task) {
+				continue
+			}
 			if _, ok := recordedMap[task.ID]; ok {
 				recorded++
 			} else if task.CreatedAt != nil && task.CreatedAt.After(recentSince) {
@@ -897,6 +1242,14 @@ func (s *TaskService) CountTasksByStatus(ctx context.Context, userID string) (ma
 		"recorded":                  recorded,
 		"has_unseen_waiting_record": hasUnseen,
 	}, nil
+}
+
+func precisionTaskNeedsUserAction(task domain.AnalysisTask) bool {
+	if task.Status != "done" || task.Result == nil {
+		return false
+	}
+	status := stringFromAny(task.Result["precisionStatus"])
+	return boolFromAny(task.Result["userActionRequired"]) || status == "needs_user_input" || status == "needs_retake"
 }
 
 func (s *TaskService) GetTask(ctx context.Context, taskID, userID string) (*domain.AnalysisTask, error) {
@@ -1200,9 +1553,16 @@ func (s *TaskService) retryInputFromTask(task *domain.AnalysisTask) (SubmitTaskI
 		CorrectionRootTaskID:   stringFromAny(payload["correction_root_task_id"]),
 		ReferenceObjects:       mapSliceFromAny(payload["reference_objects"]),
 		SourceType:             stringFromAny(payload["source_type"]),
+		CaptureProtocol:        stringFromAny(payload["capture_protocol"]),
+		VideoCapture:           mapFromAny(payload["video_capture"]),
 		RetrySourceTaskID:      task.ID,
 		ExtraPayload:           payload,
 	}
+	if options := precisionOptionsInputFromAny(payload["precision_options"]); options != nil {
+		input.PrecisionOptions = options
+	}
+	input.CaptureViews = precisionCaptureViewsInputFromAny(payload["capture_views"])
+	input.ReferenceObject = precisionReferenceObjectInputFromAny(payload["reference_object"])
 	if input.Date == "" && task.CreatedAt != nil {
 		input.Date = task.CreatedAt.In(time.FixedZone("Asia/Shanghai", 8*60*60)).Format("2006-01-02")
 	}
@@ -1214,9 +1574,6 @@ func (s *TaskService) retryInputFromTask(task *domain.AnalysisTask) (SubmitTaskI
 	}
 	if mode := stringFromAny(payload["execution_mode"]); mode != "" {
 		input.ExecutionMode = &mode
-	}
-	if sessionID := stringFromAny(payload["precision_session_id"]); sessionID != "" {
-		input.PrecisionSessionID = &sessionID
 	}
 	if retrySourceType(task) == "food_text" {
 		if strings.TrimSpace(input.TextInput) == "" {
@@ -1238,6 +1595,43 @@ func removeRetryIncompatiblePayload(payload map[string]any) {
 	delete(payload, "credit_group_id")
 	delete(payload, "retry_source_task_id")
 	delete(payload, "is_retry")
+	delete(payload, "precision_session_id")
+	delete(payload, "round_index")
+}
+
+func precisionOptionsInputFromAny(value any) *PrecisionOptionsInput {
+	var options PrecisionOptionsInput
+	if !decodePayloadValue(value, &options) {
+		return nil
+	}
+	return &options
+}
+
+func precisionCaptureViewsInputFromAny(value any) []PrecisionCaptureViewInput {
+	var views []PrecisionCaptureViewInput
+	if !decodePayloadValue(value, &views) {
+		return nil
+	}
+	return views
+}
+
+func precisionReferenceObjectInputFromAny(value any) *PrecisionReferenceObjectInput {
+	var reference PrecisionReferenceObjectInput
+	if !decodePayloadValue(value, &reference) {
+		return nil
+	}
+	return &reference
+}
+
+func decodePayloadValue(value any, target any) bool {
+	if value == nil || target == nil {
+		return false
+	}
+	raw, err := json.Marshal(value)
+	if err != nil {
+		return false
+	}
+	return json.Unmarshal(raw, target) == nil
 }
 
 func firstImageURL(task *domain.AnalysisTask) string {

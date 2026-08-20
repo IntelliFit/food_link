@@ -85,3 +85,45 @@ func TestNormalizeFoodItems(t *testing.T) {
 		})
 	}
 }
+
+func TestReconcileAIGeneratedFoodItems_UserCorrectionOverridesHistoricalAICategory(t *testing.T) {
+	userCorrection := "user_correction_context"
+	aiCategory := "gemini_generated"
+	items, hasAI := reconcileAIGeneratedFoodItems([]domain.FoodItem{{
+		NutritionSource:         &userCorrection,
+		NutritionSourceCategory: &aiCategory,
+		Nutrients: domain.FoodItemNutrients{
+			Calories: 142,
+			Protein:  2.6,
+			Carbs:    18.2,
+			Fat:      6.6,
+		},
+	}})
+
+	if hasAI {
+		t.Fatal("user correction must not be treated as AI-generated nutrition")
+	}
+	if got := items[0].Nutrients.Calories; got != 142 {
+		t.Fatalf("corrected calories were overwritten: got %v want 142", got)
+	}
+}
+
+func TestReconcileAIGeneratedFoodItems_UntouchedAIRemainsReconciled(t *testing.T) {
+	aiSource := "gemini_generated"
+	items, hasAI := reconcileAIGeneratedFoodItems([]domain.FoodItem{{
+		NutritionSource: &aiSource,
+		Nutrients: domain.FoodItemNutrients{
+			Calories: 120,
+			Protein:  3.8,
+			Carbs:    27,
+			Fat:      9.8,
+		},
+	}})
+
+	if !hasAI {
+		t.Fatal("untouched AI nutrition should still be reconciled")
+	}
+	if got := items[0].Nutrients.Calories; got != 211.4 {
+		t.Fatalf("unexpected reconciled calories: got %v want 211.4", got)
+	}
+}

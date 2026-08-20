@@ -64,6 +64,7 @@ const (
 	packagedUploadDailyMaxEvents    = 0
 	publicFoodUploadRewardCredits   = 1
 	publicFoodUploadDailyMaxEvents  = 3
+	standardFoodUploadRewardCredits = 1
 )
 
 var wechatPayAPIBaseURL = "https://api.mch.weixin.qq.com"
@@ -1680,6 +1681,10 @@ func (s *MembershipService) GetRewardCenter(ctx context.Context, userID string) 
 	if err != nil {
 		return nil, err
 	}
+	standardCount, err := s.repo.CountRewardTaskUploads(ctx, userID, "standard_food_upload", today, "succeeded")
+	if err != nil {
+		return nil, err
+	}
 	checkIn, err := s.GetLoginCheckInStatus(ctx, userID)
 	if err != nil {
 		return nil, err
@@ -1695,8 +1700,9 @@ func (s *MembershipService) GetRewardCenter(ctx context.Context, userID string) 
 	taskList := []map[string]any{
 		checkInTask,
 		buildRewardTask("share_poster", "每日分享打卡", sharePosterRewardCredits, shareCount, sharePosterDailyMaxEvents, "可去完成", "/pages/day-record/index?task_mode=reward_center"),
-		buildRewardTask("packaged_food_upload", "预包装零食/食物上传", packagedUploadRewardCredits, packagedCount, packagedUploadDailyMaxEvents, "可去完成", "/pages/packaged-food-edit/index?task_mode=reward_center"),
-		buildRewardTask("public_food_upload", "上传公共食物/校园食堂菜品", publicFoodUploadRewardCredits, publicCount, publicFoodUploadDailyMaxEvents, "可去完成", "/pages/food-library-share/index?task_mode=reward_center&campus_mode=1"),
+		buildRewardTask("standard_food_upload", "贡献标准食物", standardFoodUploadRewardCredits, standardCount, 0, "可去完成", "/pages/standard-food-contribution/index?task_mode=reward_center"),
+		buildRewardTask("packaged_food_upload", "上传包装食品", packagedUploadRewardCredits, packagedCount, packagedUploadDailyMaxEvents, "可去完成", "/pages/food-contribution/index?focus=packaged"),
+		buildRewardTask("public_food_upload", "上传公共餐食", publicFoodUploadRewardCredits, publicCount, publicFoodUploadDailyMaxEvents, "可去完成", "/pages/food-contribution/index?focus=public"),
 	}
 	completed := 0
 	totalWithLimit := 0
@@ -1982,6 +1988,13 @@ func (s *MembershipService) AwardPublicFoodUpload(ctx context.Context, userID, p
 	})
 }
 
+func (s *MembershipService) AwardStandardFoodContribution(ctx context.Context, userID, contributionID string, meta map[string]any) (map[string]any, error) {
+	return s.awardRewardTask(ctx, rewardTaskAwardInput{
+		UserID: userID, TaskType: "standard_food_upload", RewardCredits: standardFoodUploadRewardCredits,
+		DailyMaxEvents: 0, SourceID: contributionID, Meta: meta,
+	})
+}
+
 type rewardTaskAwardInput struct {
 	UserID           string
 	TaskType         string
@@ -1990,12 +2003,13 @@ type rewardTaskAwardInput struct {
 	SourceTaskID     string
 	PackagedFoodID   string
 	PublicFoodItemID string
+	SourceID         string
 	Meta             map[string]any
 }
 
 func (s *MembershipService) awardRewardTask(ctx context.Context, input rewardTaskAwardInput) (map[string]any, error) {
 	today := time.Now().In(chinaLocation()).Format("2006-01-02")
-	sourceKey := rewardTaskSourceKey(input.TaskType, firstNonEmpty(input.SourceTaskID, input.PackagedFoodID, input.PublicFoodItemID))
+	sourceKey := rewardTaskSourceKey(input.TaskType, firstNonEmpty(input.SourceTaskID, input.PackagedFoodID, input.PublicFoodItemID, input.SourceID))
 	if sourceKey == "" {
 		return nil, &commonerrors.AppError{Code: 10002, Message: "奖励任务缺少来源标识", HTTPStatus: 400}
 	}

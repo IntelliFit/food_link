@@ -1,6 +1,6 @@
 import { View, Text } from '@tarojs/components'
-import { useMemo } from 'react'
-import { type HomeIntakeData, type Nutrients } from '../../../utils/api'
+import { useMemo, useState } from 'react'
+import { type HomeIntakeData, type Nutrients, type SupplementDashboardSummary } from '../../../utils/api'
 import { formatDisplayNumber } from '../utils/helpers'
 
 type HomeMicronutrientKey = keyof Pick<Nutrients,
@@ -33,6 +33,8 @@ type MicronutrientCard = {
   unit: string
   accent: string
   current: number
+  foodCurrent: number
+  supplementCurrent: number
   target: number
   progress: number
 }
@@ -66,14 +68,20 @@ const MICRONUTRIENT_CONFIGS: Array<{
   { key: 'vitaminB12Mcg', label: '维B12', unit: 'mcg', accent: '#9ecae1' },
 ]
 
-function parseMicronutrientValue(raw: unknown): { current: number; target: number; progress: number } {
+function parseMicronutrientValue(raw: unknown): { current: number; foodCurrent: number; supplementCurrent: number; target: number; progress: number } {
   if (raw && typeof raw === 'object') {
     const obj = raw as Record<string, unknown>
     const current = Number(obj.current)
     const target = Number(obj.target)
     const progress = Number(obj.progress)
+    const foodCurrent = Number(obj.food_current)
+    const supplementCurrent = Number(obj.supplement_current)
+    const normalizedCurrent = Number.isFinite(current) && current > 0 ? current : 0
+    const normalizedSupplement = Number.isFinite(supplementCurrent) && supplementCurrent > 0 ? supplementCurrent : 0
     return {
-      current: Number.isFinite(current) && current > 0 ? current : 0,
+      current: normalizedCurrent,
+      foodCurrent: Number.isFinite(foodCurrent) && foodCurrent > 0 ? foodCurrent : Math.max(0, normalizedCurrent - normalizedSupplement),
+      supplementCurrent: normalizedSupplement,
       target: Number.isFinite(target) && target > 0 ? target : 0,
       progress: Number.isFinite(progress) && progress > 0 ? progress : 0,
     }
@@ -81,6 +89,8 @@ function parseMicronutrientValue(raw: unknown): { current: number; target: numbe
   const value = Number(raw)
   return {
     current: Number.isFinite(value) && value > 0 ? value : 0,
+    foodCurrent: Number.isFinite(value) && value > 0 ? value : 0,
+    supplementCurrent: 0,
     target: 0,
     progress: 0,
   }
@@ -102,6 +112,8 @@ function useMicronutrients(intakeData: HomeIntakeData) {
         return {
           ...item,
           current: parsed.current,
+          foodCurrent: parsed.foodCurrent,
+          supplementCurrent: parsed.supplementCurrent,
           target: parsed.target,
           progress: parsed.progress,
         }
@@ -113,13 +125,16 @@ export interface MicrosSectionProps {
   intakeData: HomeIntakeData
   dashboardBusy: boolean
   isGuest: boolean
+  supplementSummary?: SupplementDashboardSummary
 }
 
 export function MicrosSection({
   intakeData,
   dashboardBusy,
   isGuest,
+  supplementSummary,
 }: MicrosSectionProps) {
+  const [expandedKey, setExpandedKey] = useState<HomeMicronutrientKey | null>(null)
   const micronutrients = useMicronutrients(intakeData)
   const hasMicros = micronutrients.length > 0
 
@@ -140,6 +155,10 @@ export function MicrosSection({
           <Text className='micros-preview-status-text'>{statusText}</Text>
         </View>
       </View>
+      <View className='micros-source-legend'>
+        <View><View className='micros-source-dot food' /><Text>食物</Text></View>
+        <View><View className='micros-source-dot supplement' /><Text>补剂</Text></View>
+      </View>
 
       {dashboardBusy ? (
         <View className='micros-preview-grid'>
@@ -156,10 +175,15 @@ export function MicrosSection({
           {micronutrients.map((item) => {
             const showTarget = item.target > 0
             const progressPct = Math.min(100, item.progress)
+            const hasSupplement = item.supplementCurrent > 0
+            const foodWidth = item.current > 0 ? (item.foodCurrent / item.current) * progressPct : 0
+            const supplementWidth = Math.max(0, progressPct - foodWidth)
+            const expanded = expandedKey === item.key
             return (
               <View
                 key={item.key}
-                className='micros-preview-card'
+                className={`micros-preview-card${hasSupplement ? ' has-supplement' : ''}${expanded ? ' is-source-expanded' : ''}`}
+                onClick={() => hasSupplement && setExpandedKey(expanded ? null : item.key)}
                 style={{
                   borderColor: `${item.accent}33`,
                   background: `${item.accent}10`,
@@ -182,12 +206,29 @@ export function MicrosSection({
                 {showTarget && (
                   <View className='micros-preview-progress-bg'>
                     <View
-                      className='micros-preview-progress-fill'
+                      className='micros-preview-progress-fill food'
                       style={{
-                        width: `${progressPct}%`,
-                        backgroundColor: item.accent,
+                        width: `${foodWidth || (hasSupplement ? 0 : progressPct)}%`,
+                        backgroundColor: hasSupplement ? '#61ae8d' : item.accent,
                       }}
                     />
+                    {hasSupplement && <View className='micros-preview-progress-fill supplement' style={{ width: `${supplementWidth}%` }} />}
+                  </View>
+                )}
+                {hasSupplement && (
+                  <View className='micros-source-compact'>
+                    <Text>食物 {formatMicronutrientValue(item.foodCurrent)}{item.unit}</Text>
+                    <Text>补剂 {formatMicronutrientValue(item.supplementCurrent)}{item.unit}</Text>
+                  </View>
+                )}
+                {showTarget && item.current > item.target && (
+                  <Text className='micros-reference-excess'>高于当前参考目标 {formatMicronutrientValue(item.current - item.target)}{item.unit}</Text>
+                )}
+                {expanded && (
+                  <View className='micros-source-detail'>
+                    <Text className='micros-source-detail-title'>营养素来源</Text>
+                    <View><Text>食物来源</Text><Text>{formatMicronutrientValue(item.foodCurrent)}{item.unit}</Text></View>
+                    <View><Text>补剂来源</Text><Text>{formatMicronutrientValue(item.supplementCurrent)}{item.unit}</Text></View>
                   </View>
                 )}
               </View>
@@ -199,6 +240,43 @@ export function MicrosSection({
           <Text className='micros-preview-empty-text'>
             {isGuest ? '登录后显示微量营养' : '记录饮食后显示微量营养'}
           </Text>
+        </View>
+      )}
+      {!!supplementSummary?.duplicate_components?.length && (
+        <View className='supplement-duplicate-banner'>
+          <Text>发现重复成分：{supplementSummary.duplicate_components.join('、')}。请核对补剂柜中的标签与计划。</Text>
+        </View>
+      )}
+      {!!supplementSummary?.additional_nutrients?.length && (
+        <View className='functional-components-panel'>
+          <View className='functional-components-head'>
+            <Text className='functional-components-title'>其他标签营养素</Text>
+            <Text className='functional-components-note'>已记录，暂未配置参考目标</Text>
+          </View>
+          <View className='functional-components-list'>
+            {supplementSummary.additional_nutrients.slice(0, 6).map((item) => (
+              <View key={`${item.code}-${item.unit}`} className='functional-component-item'>
+                <Text className='functional-component-name'>{item.name}</Text>
+                <Text className='functional-component-amount'>{formatMicronutrientValue(item.amount)}{item.unit}</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+      )}
+      {!!supplementSummary?.functional_components?.length && (
+        <View className='functional-components-panel'>
+          <View className='functional-components-head'>
+            <Text className='functional-components-title'>功能成分</Text>
+            <Text className='functional-components-note'>按实际摄入记录，不计入营养达标率</Text>
+          </View>
+          <View className='functional-components-list'>
+            {supplementSummary.functional_components.slice(0, 6).map((item) => (
+              <View key={`${item.code}-${item.unit}`} className='functional-component-item'>
+                <Text className='functional-component-name'>{item.name}</Text>
+                <Text className='functional-component-amount'>{formatMicronutrientValue(item.amount)}{item.unit}</Text>
+              </View>
+            ))}
+          </View>
         </View>
       )}
     </View>

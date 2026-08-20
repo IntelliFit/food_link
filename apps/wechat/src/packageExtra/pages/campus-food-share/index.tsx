@@ -40,7 +40,7 @@ import {
 import CampusMembershipGate from "../../../components/CampusMembershipGate";
 import "./index.scss";
 
-const MAX_IMAGES = 3;
+const MAX_IMAGES = 5;
 const CAMPUS_QUICK_TAGS = [
   "招牌菜",
   "性价比高",
@@ -509,7 +509,7 @@ function CampusFoodSharePage() {
           <Text className='section-title'>
             菜品图片 <Text className='required'>*</Text>
             {imageUrls.length > 0 && (
-              <Text className='image-count'>（{imageUrls.length}/3）</Text>
+              <Text className='image-count'>（{imageUrls.length}/{MAX_IMAGES}）</Text>
             )}
           </Text>
           {imageUrls.length > 0 ? (
@@ -546,7 +546,7 @@ function CampusFoodSharePage() {
           ) : (
             <View className='image-upload-area' onClick={handleChooseImage}>
               <Text className='upload-icon iconfont icon-paizhao-xianxing' />
-              <Text className='upload-text'>点击上传菜品图片（最多 3 张）</Text>
+              <Text className='upload-text'>点击上传菜品图片（最多 5 张）</Text>
             </View>
           )}
         </View>

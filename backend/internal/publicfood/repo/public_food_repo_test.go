@@ -538,6 +538,37 @@ func TestPublicFoodRepo_ListPublishedCampusSorts(t *testing.T) {
 	}
 }
 
+func TestPublicFoodRepo_ListPublishedCampusPrioritizesItemsWithImages(t *testing.T) {
+	db := setupPublicFoodRepoTestDB(t)
+	now := time.Now().UTC()
+	isCampus := true
+	items := []domain.PublicFoodItem{
+		{
+			ID: "campus-image-later", UserID: "user-image", FoodName: "有图菜品", Status: "published",
+			Type: "campus", IsCampusFood: true, TotalCalories: 360, TotalProtein: 20,
+			Items: preciseCampusItemsForTest(), ImagePaths: []string{"campus-food/with-image.jpg"},
+			LikeCount: 1, CollectionCount: 0, PublishedAt: &now, CreatedAt: &now,
+		},
+		{
+			ID: "campus-no-image-hot", UserID: "user-no-image", FoodName: "无图热门菜品", Status: "published",
+			Type: "campus", IsCampusFood: true, TotalCalories: 360, TotalProtein: 20,
+			Items: preciseCampusItemsForTest(), LikeCount: 99, CollectionCount: 99, PublishedAt: &now, CreatedAt: &now,
+		},
+	}
+	require.NoError(t, db.Create(&items).Error)
+
+	rows, err := NewPublicFoodRepo(db).ListPublished(context.Background(), ListFilter{
+		IsCampusFood: &isCampus,
+		SortBy:       "hot",
+		Limit:        10,
+	})
+
+	require.NoError(t, err)
+	require.Len(t, rows, 2)
+	require.Equal(t, "campus-image-later", rows[0].ID)
+	require.Equal(t, "campus-no-image-hot", rows[1].ID)
+}
+
 func TestPublicFoodRepo_ListPublishedStrictCampusHotUsesCombinedEngagement(t *testing.T) {
 	db := setupPublicFoodRepoTestDB(t)
 	now := time.Now().UTC()

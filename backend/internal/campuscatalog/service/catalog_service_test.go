@@ -468,7 +468,7 @@ func TestPublishChangesPendingSyncsMetadataWithoutAnalysis(t *testing.T) {
 	require.Nil(t, repo.analysisPendingItem)
 }
 
-func TestUpdatePublishedItemRejectsRemovingRequiredClientFields(t *testing.T) {
+func TestUpdatePublishedItemRejectsRemovingName(t *testing.T) {
 	publishedAt := time.Now()
 	repo := &fakeCatalogRepo{existingItem: &domain.CatalogItem{
 		ID: "item-1", BatchID: "batch-1", Status: "published", Name: "番茄炒饭",
@@ -480,7 +480,7 @@ func TestUpdatePublishedItemRejectsRemovingRequiredClientFields(t *testing.T) {
 		EntryType: "dish", Name: "", PriceType: "unknown", ServiceMode: "fixed_portion", WindowLayout: "standard",
 	})
 
-	require.ErrorContains(t, err, "必须保留名称和价格")
+	require.ErrorContains(t, err, "必须保留名称")
 	require.Nil(t, repo.updatedItem)
 }
 
@@ -521,16 +521,59 @@ func TestPublishItemAllowsMissingImageAndUsesExistingTextAnalysis(t *testing.T) 
 	require.Empty(t, submitter.input.SourceType)
 }
 
-func TestPublishItemStillRejectsMissingNameOrPrice(t *testing.T) {
+func TestPublishItemAllowsMissingPriceForNormalImageAnalysis(t *testing.T) {
 	repo := &fakeCatalogRepo{existingItem: &domain.CatalogItem{
-		ID: "item-1", Status: "draft", MissingFields: []string{"image", "price"}, CompletenessStatus: "incomplete",
+		ID: "item-1", BatchID: "batch-1", Status: "draft", EntryType: "dish", Name: "待补价格菜品",
+		OrganizationName: "AI原点社区", CanteenName: "社区食堂", ImagePaths: []string{"campus-food/dish.jpg"},
+		PriceType: "unknown", MissingFields: []string{"price"}, CompletenessStatus: "incomplete",
 	}}
+	submitter := &fakeCatalogAnalyzeSubmitter{taskID: "task-image-1"}
+	svc := NewCatalogService(repo, nil)
+	svc.ConfigureAnalysis(submitter, fakeCatalogAnalysisUserResolver{userID: "system-user-1"})
+
+	item, err := svc.PublishItem(context.Background(), "admin-1", "item-1")
+
+	require.NoError(t, err)
+	require.Equal(t, "analysis_pending", item.Status)
+	require.Equal(t, "image", submitter.input.SourceType)
+	require.Equal(t, "standard", *submitter.input.ExecutionMode)
+	require.Empty(t, submitter.input.CaptureProtocol)
+	require.Nil(t, submitter.input.PrecisionSessionID)
+	require.Nil(t, submitter.input.PrecisionOptions)
+	require.False(t, submitter.input.IsMultiView)
+}
+
+func TestPublishItemRetriesEmptyImageRecognitionWithOrdinaryDirectPrompt(t *testing.T) {
+	repo := &fakeCatalogRepo{existingItem: &domain.CatalogItem{
+		ID: "item-1", BatchID: "batch-1", Status: "analysis_failed", EntryType: "ingredient", Name: "豆芽",
+		OrganizationName: "AI原点社区", CanteenName: "社区食堂", ImagePaths: []string{"campus-food/bean-sprouts.jpg"},
+		PriceType: "unknown", MissingFields: []string{"price"}, CompletenessStatus: "incomplete",
+		AnalysisError: "校园菜品营养分析结果为空",
+	}}
+	submitter := &fakeCatalogAnalyzeSubmitter{taskID: "task-image-retry-1"}
+	svc := NewCatalogService(repo, nil)
+	svc.ConfigureAnalysis(submitter, fakeCatalogAnalysisUserResolver{userID: "system-user-1"})
+
+	item, err := svc.PublishItem(context.Background(), "admin-1", "item-1")
+
+	require.NoError(t, err)
+	require.Equal(t, "analysis_pending", item.Status)
+	require.Equal(t, "image", submitter.input.SourceType)
+	require.Equal(t, "standard", *submitter.input.ExecutionMode)
+	require.Equal(t, "legacy_direct", submitter.input.AnalysisEngine)
+	require.Empty(t, submitter.input.TextInput)
+	require.Empty(t, submitter.input.CaptureProtocol)
+	require.Nil(t, submitter.input.PrecisionSessionID)
+	require.False(t, submitter.input.IsMultiView)
+}
+
+func TestPublishItemStillRejectsMissingName(t *testing.T) {
+	repo := &fakeCatalogRepo{existingItem: &domain.CatalogItem{ID: "item-1", Status: "draft", MissingFields: []string{"name", "price"}}}
 	svc := NewCatalogService(repo, nil)
 
 	_, err := svc.PublishItem(context.Background(), "admin-1", "item-1")
 
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "名称和价格")
+	require.ErrorContains(t, err, "补齐名称")
 	require.Nil(t, repo.analysisPendingItem)
 }
 
@@ -558,6 +601,10 @@ func TestPublishItemQueuesExistingFoodAnalysisBeforePublishing(t *testing.T) {
 	require.Equal(t, "item-1", submitter.input.ExtraPayload["campus_catalog_item_id"])
 	require.Equal(t, true, submitter.input.ExtraPayload["micronutrient_analysis_required"])
 	require.Equal(t, "image", submitter.input.SourceType)
+	require.Empty(t, submitter.input.CaptureProtocol)
+	require.Nil(t, submitter.input.PrecisionSessionID)
+	require.Nil(t, submitter.input.PrecisionOptions)
+	require.False(t, submitter.input.IsMultiView)
 }
 
 func TestPublishItemDoesNotDuplicatePendingAnalysis(t *testing.T) {

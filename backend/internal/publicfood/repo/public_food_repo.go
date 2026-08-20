@@ -23,6 +23,8 @@ type PublicFoodRepo struct {
 	db *gorm.DB
 }
 
+const publicFoodTypeCampus = "campus"
+
 func NewPublicFoodRepo(db *gorm.DB) *PublicFoodRepo {
 	return &PublicFoodRepo{db: db}
 }
@@ -193,6 +195,12 @@ func (r *PublicFoodRepo) ListPublished(ctx context.Context, f ListFilter) ([]dom
 	} else if f.IsCampusFood != nil {
 		q = applyLegacyPublicFoodTypeWhere(q, "p", publicFoodTypeFromCampusFlag(*f.IsCampusFood))
 	}
+	// A real dish photo is more useful than a placeholder in the campus canteen
+	// feed. Keep this as the primary ordering rule for every campus sort, then
+	// apply the user-selected sort inside each image group.
+	if itemType == publicFoodTypeCampus || (itemType == "" && f.IsCampusFood != nil && *f.IsCampusFood) {
+		q = q.Order(campusImagePriorityOrder(r.db.Dialector.Name(), "p"))
+	}
 	// Directory IDs are stable while display names may be normalized or edited
 	// after a dish is published. When both are present, use the ID as the source
 	// of truth so a stale name cannot hide correctly linked dishes.
@@ -234,6 +242,30 @@ func (r *PublicFoodRepo) ListPublished(ctx context.Context, f ListFilter) ([]dom
 	}
 	err := q.Limit(f.Limit).Offset(f.Offset).Scan(&rows).Error
 	return rows, err
+}
+
+func campusImagePriorityOrder(dialect, alias string) string {
+	prefix := strings.TrimSpace(alias)
+	if prefix != "" {
+		prefix += "."
+	}
+	if dialect == "postgres" {
+		return `CASE
+			WHEN NULLIF(BTRIM(COALESCE(` + prefix + `image_path, '')), '') IS NOT NULL
+				OR (
+					jsonb_typeof(COALESCE(` + prefix + `image_paths::jsonb, '[]'::jsonb)) = 'array'
+					AND jsonb_array_length(COALESCE(` + prefix + `image_paths::jsonb, '[]'::jsonb)) > 0
+				) THEN 0
+			ELSE 1
+		END ASC`
+	}
+	// SQLite supports json_array_length and is used by repository tests. This
+	// fallback also keeps local non-PostgreSQL diagnostics deterministic.
+	return `CASE
+		WHEN TRIM(COALESCE(` + prefix + `image_path, '')) <> ''
+			OR COALESCE(json_array_length(` + prefix + `image_paths), 0) > 0 THEN 0
+		ELSE 1
+	END ASC`
 }
 
 func publicFoodTypeFromCampusFlag(isCampus bool) string {

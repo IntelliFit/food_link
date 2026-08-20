@@ -51,7 +51,8 @@ const (
 	statusDeleted               = "deleted"
 	publicFoodTypeCommon        = "common"
 	publicFoodTypeCampus        = "campus"
-	maxCampusContributionImages = 3
+	maxCampusContributionImages = 5
+	maxPublicFoodImages         = 5
 )
 
 func NewPublicFoodService(repo *repo.PublicFoodRepo, storageClient ...*storage.Client) *PublicFoodService {
@@ -184,6 +185,9 @@ func (s *PublicFoodService) Create(ctx context.Context, userID string, input Cre
 		}
 	}
 	imagePaths = s.normalizeFoodImageURLs(imagePaths)
+	if len(imagePaths) > maxPublicFoodImages {
+		return "", &commonerrors.AppError{Code: 10002, Message: "公共餐食最多上传5张图片", HTTPStatus: 400}
+	}
 	if err := validateCampusCreateInput(input, imagePaths); err != nil {
 		return "", err
 	}
@@ -569,7 +573,7 @@ func (s *PublicFoodService) ContributeCampusImages(ctx context.Context, userID, 
 		return nil, &commonerrors.AppError{Code: 10002, Message: "请选择要补充的菜品照片", HTTPStatus: 400}
 	}
 	if len(imagePaths) > maxCampusContributionImages {
-		return nil, &commonerrors.AppError{Code: 10002, Message: "一次最多补充 3 张菜品照片", HTTPStatus: 400}
+		return nil, &commonerrors.AppError{Code: 10002, Message: "一次最多补充 5 张菜品照片", HTTPStatus: 400}
 	}
 	item, accepted, err := s.repo.SetMissingCampusImages(ctx, itemID, imagePaths)
 	if err != nil {
@@ -592,6 +596,9 @@ func (s *PublicFoodService) Uncollect(ctx context.Context, userID, itemID string
 
 func (s *PublicFoodService) Update(ctx context.Context, userID, itemID string, input CreateInput) error {
 	normalizePublicFoodTypeInput(&input)
+	if len(input.ImagePaths) > maxPublicFoodImages {
+		return &commonerrors.AppError{Code: 10002, Message: "一次最多上传 5 张图片", HTTPStatus: 400}
+	}
 	item, err := s.repo.GetItem(ctx, itemID)
 	if err != nil {
 		return err
@@ -1319,12 +1326,6 @@ func normalizePublicFoodLocationInput(input *CreateInput) error {
 		input.Longitude = nil
 		return nil
 	}
-	if strings.TrimSpace(ptrString(input.Province)) == "" ||
-		strings.TrimSpace(ptrString(input.City)) == "" ||
-		strings.TrimSpace(ptrString(input.District)) == "" ||
-		input.Latitude == nil || input.Longitude == nil {
-		return &commonerrors.AppError{Code: 10002, Message: "公共食物库上传必须带完整地理位置", HTTPStatus: 400}
-	}
 	return nil
 }
 
@@ -1410,8 +1411,14 @@ func validateCampusCreateInput(input CreateInput, imagePaths []string) error {
 	if strings.TrimSpace(ptrString(input.SchoolName)) == "" {
 		return &commonerrors.AppError{Code: 10002, Message: "请选择学校", HTTPStatus: 400}
 	}
+	if strings.TrimSpace(ptrString(input.CampusName)) == "" {
+		return &commonerrors.AppError{Code: 10002, Message: "请选择校区", HTTPStatus: 400}
+	}
 	if strings.TrimSpace(ptrString(input.CanteenName)) == "" {
 		return &commonerrors.AppError{Code: 10002, Message: "请填写食堂名称", HTTPStatus: 400}
+	}
+	if strings.TrimSpace(ptrString(input.SchoolID)) == "" || strings.TrimSpace(ptrString(input.CampusID)) == "" || strings.TrimSpace(ptrString(input.CanteenID)) == "" {
+		return &commonerrors.AppError{Code: 10002, Message: "请选择已审核的学校、校区和食堂", HTTPStatus: 400}
 	}
 	if len(imagePaths) == 0 {
 		return &commonerrors.AppError{Code: 10002, Message: "请上传校园菜品图片", HTTPStatus: 400}

@@ -1,0 +1,20 @@
+.food-contribution-page { min-height: 100vh; box-sizing: border-box; padding: 28px 28px 60px; background: #f6f8f7; color: #16231f; }
+.contribution-hero { padding: 38px 34px; border-radius: 28px; background: linear-gradient(135deg, #e9fbf3, #f6fffb); }
+.contribution-hero__eyebrow, .contribution-hero__title, .contribution-hero__desc { display: block; }
+.contribution-hero__eyebrow { color: #00a875; font-size: 24px; font-weight: 600; }
+.contribution-hero__title { margin-top: 10px; font-size: 42px; font-weight: 700; }
+.contribution-hero__desc { margin-top: 14px; color: #66746f; font-size: 26px; line-height: 1.55; }
+.contribution-types { margin-top: 26px; border-radius: 24px; overflow: hidden; background: #fff; }
+.contribution-type { display: flex; align-items: center; gap: 22px; padding: 30px 26px; border-bottom: 1px solid #edf1ef; }
+.contribution-type:last-child { border-bottom: 0; }
+.contribution-type__icon { width: 76px; height: 76px; display: flex; align-items: center; justify-content: center; border-radius: 22px; background: #eaf9f3; color: #00a875; font-size: 34px; }
+.contribution-type__copy { flex: 1; min-width: 0; }
+.contribution-type__title, .contribution-type__desc { display: block; }
+.contribution-type__title { font-size: 30px; font-weight: 650; }
+.contribution-type__desc { margin-top: 8px; color: #7a8782; font-size: 24px; line-height: 1.4; }
+.contribution-type__arrow { color: #a4afab; font-size: 44px; }
+.contribution-note { margin-top: 24px; padding: 24px 28px; border-radius: 20px; background: #fff8e9; color: #8d6520; font-size: 23px; line-height: 1.5; }
+.food-contribution-page--dark { background: #07110f; color: #edf8f4; }
+.food-contribution-page--dark .contribution-hero { background: linear-gradient(135deg, #143128, #10231e); }
+.food-contribution-page--dark .contribution-types, .food-contribution-page--dark .contribution-note { background: #121d1a; }
+.food-contribution-page--dark .contribution-type { border-color: #26342f; }

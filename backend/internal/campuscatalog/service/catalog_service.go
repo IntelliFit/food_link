@@ -429,7 +429,7 @@ func (s *CatalogService) UpdateItem(ctx context.Context, adminID, itemID string,
 	if wasPublished {
 		updated.Status = "published"
 		if blockers := catalogPublishBlockingFields(&updated); len(blockers) > 0 {
-			return nil, badRequest("已上线菜品必须保留名称和价格")
+			return nil, badRequest("已上线菜品必须保留名称")
 		}
 	} else {
 		updated.Status = "draft"
@@ -487,7 +487,7 @@ func (s *CatalogService) PublishItem(ctx context.Context, adminID, itemID string
 		return &items[0], nil
 	}
 	if blockers := catalogPublishBlockingFields(item); len(blockers) > 0 {
-		return nil, badRequest("请先补齐名称和价格后再提交上线")
+		return nil, badRequest("请先补齐名称后再提交上线")
 	}
 	// changes_pending is a legacy state produced by older admin builds. These
 	// rows already have a valid public nutrition snapshot, so synchronize their
@@ -526,9 +526,11 @@ func (s *CatalogService) PublishItem(ctx context.Context, adminID, itemID string
 	if s.storage != nil {
 		imageURLs = s.storage.ResolveReferenceURLs("food-images", imageURLs)
 	}
-	// Campus dishes use the normal single-task analysis path. The worker keeps
-	// the precise micronutrient publication gate below, so we avoid the former
-	// plan -> item estimates -> aggregate fan-out without weakening nutrition.
+	// Campus collection always uses the normal single-image task. Never attach
+	// a capture protocol, precision session, or multi-view payload here: source
+	// photos are ordinary canteen evidence, not a dual-angle/video precision
+	// capture. The worker still enforces the precise micronutrient publication
+	// gate after this normal recognition task completes.
 	mode := "standard"
 	extraPayload := map[string]any{
 		"public_food_source_type":         "campus_public_food",
@@ -551,6 +553,12 @@ func (s *CatalogService) PublishItem(ctx context.Context, adminID, itemID string
 	var taskID string
 	var submitErr error
 	if len(imageURLs) > 0 {
+		if isEmptyImageRecognitionRetry(item) {
+			// Retry an empty result with the ordinary direct image prompt. The
+			// image and the existing evidence context remain intact; this is not
+			// a precision capture and does not turn the retry into text analysis.
+			input.AnalysisEngine = "legacy_direct"
+		}
 		input.ImageURLs = imageURLs
 		input.SourceType = "image"
 		input.ImageURL = imageURLs[0]
@@ -891,9 +899,16 @@ func catalogAnalysisContext(item *domain.CatalogItem) string {
 	return strings.Join(nonEmptyStrings(parts...), "；")
 }
 
+func isEmptyImageRecognitionRetry(item *domain.CatalogItem) bool {
+	return item != nil &&
+		item.Status == "analysis_failed" &&
+		strings.TrimSpace(item.Name) != "" &&
+		strings.Contains(item.AnalysisError, "营养分析结果为空")
+}
+
 func catalogPublishBlockingFields(item *domain.CatalogItem) []string {
 	if item == nil {
-		return []string{"name", "price"}
+		return []string{"name"}
 	}
 	seen := map[string]struct{}{}
 	blocking := make([]string, 0, len(item.MissingFields)+2)
@@ -905,17 +920,14 @@ func catalogPublishBlockingFields(item *domain.CatalogItem) []string {
 		blocking = append(blocking, field)
 	}
 	for _, field := range item.MissingFields {
-		if strings.TrimSpace(field) == "" || field == "image" {
+		field = strings.TrimSpace(field)
+		if field == "" || field == "image" || field == "price" {
 			continue
 		}
 		add(field)
 	}
 	if strings.TrimSpace(item.Name) == "" {
 		add("name")
-	}
-	hasPrice := item.Price != nil || item.PriceMin != nil || item.PriceMax != nil || strings.TrimSpace(item.PriceText) != "" || len(item.PriceOptions) > 0
-	if item.PriceType == "unknown" || !hasPrice {
-		add("price")
 	}
 	sort.Strings(blocking)
 	return blocking

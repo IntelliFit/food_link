@@ -52,6 +52,9 @@ func (s *FoodNutritionService) SubmitPackagedFoodCorrection(ctx context.Context,
 	if len(input.Payload.SourceImageURLs) == 0 {
 		return nil, &commonerrors.AppError{Code: 10002, Message: "至少需要一张包装或营养成分证据图", HTTPStatus: 400}
 	}
+	if len(input.Payload.SourceImageURLs) > 5 {
+		return nil, &commonerrors.AppError{Code: 10002, Message: "包装图片最多上传5张", HTTPStatus: 400}
+	}
 
 	patch := buildPackagedFoodPatch(input.Payload)
 	beforeSnapshot, err := foodrecordrepoSnapshot(*item)

@@ -163,16 +163,13 @@ func (s *FoodRecordService) Save(ctx context.Context, userID string, input SaveF
 	input.Items, aiGeneratedNutrition = reconcileAIGeneratedFoodItems(input.Items)
 	if aiGeneratedNutrition {
 		oldCalories := input.TotalCalories
-		protein, carbs, fat := recordMacroTotals(input.Items, input.TotalProtein, input.TotalCarbs, input.TotalFat)
-		input.TotalCalories = domain.MacroCalories(protein, carbs, fat)
+		input.TotalCalories = recordCalorieTotal(input.Items, input.TotalCalories)
 		if math.Abs(oldCalories-input.TotalCalories) > 0.0001 {
 			logger.Info(ctx, "AI生成营养热量已按三大营养素校准",
 				slog.String("user_id", userID),
 				slog.Float64("calories.before", oldCalories),
 				slog.Float64("calories.after", input.TotalCalories),
-				slog.Float64("protein_g", protein),
-				slog.Float64("carbs_g", carbs),
-				slog.Float64("fat_g", fat),
+				slog.Int("food_item_count", len(input.Items)),
 			)
 		}
 	}
@@ -407,6 +404,12 @@ func reconcileAIGeneratedFoodItems(items []domain.FoodItem) ([]domain.FoodItem, 
 	for i := range items {
 		source := foodRecordStringPtrValue(items[i].NutritionSource)
 		category := foodRecordStringPtrValue(items[i].NutritionSourceCategory)
+		// A user correction is authoritative even when the historical category still
+		// records where the original estimate came from. Previously the lingering AI
+		// category caused a corrected calorie value to be overwritten on save.
+		if strings.EqualFold(source, "user_correction_context") || strings.EqualFold(category, "user_correction_context") {
+			continue
+		}
 		if !domain.IsAIGeneratedNutritionSource(source) && !domain.IsAIGeneratedNutritionSource(category) {
 			continue
 		}
@@ -427,16 +430,16 @@ func foodRecordStringPtrValue(value *string) string {
 	return strings.TrimSpace(*value)
 }
 
-func recordMacroTotals(items []domain.FoodItem, protein, carbs, fat float64) (float64, float64, float64) {
-	if protein > 0 || carbs > 0 || fat > 0 {
-		return protein, carbs, fat
+func recordCalorieTotal(items []domain.FoodItem, fallback float64) float64 {
+	if len(items) == 0 {
+		return fallback
 	}
+	total := 0.0
 	for _, item := range items {
-		protein += item.Nutrients.Protein
-		carbs += item.Nutrients.Carbs
-		fat += item.Nutrients.Fat
+		ratio := math.Max(0, math.Min(100, item.Ratio)) / 100
+		total += item.Nutrients.Calories * ratio
 	}
-	return protein, carbs, fat
+	return math.Round(total*10) / 10
 }
 
 func validateNoSuspiciousZeroNutritionItems(items []domain.FoodItem) error {
@@ -713,22 +716,7 @@ func (s *FoodRecordService) Update(ctx context.Context, userID, recordID string,
 		}
 	}
 	if enforceAIGeneratedEnergy {
-		protein := existing.TotalProtein
-		carbs := existing.TotalCarbs
-		fat := existing.TotalFat
-		if input.Items != nil {
-			protein, carbs, fat = recordMacroTotals(effectiveItems, 0, 0, 0)
-		}
-		if input.TotalProtein != nil {
-			protein = *input.TotalProtein
-		}
-		if input.TotalCarbs != nil {
-			carbs = *input.TotalCarbs
-		}
-		if input.TotalFat != nil {
-			fat = *input.TotalFat
-		}
-		updates["total_calories"] = domain.MacroCalories(protein, carbs, fat)
+		updates["total_calories"] = recordCalorieTotal(effectiveItems, existing.TotalCalories)
 	}
 	if input.TotalCalories != nil && !enforceAIGeneratedEnergy {
 		updates["total_calories"] = *input.TotalCalories

@@ -5,8 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"net/textproto"
 	"testing"
 	"time"
 
@@ -76,8 +78,9 @@ func (m *mockFoodRecordService) RecommendMealType(ctx context.Context, userID st
 }
 
 type mockUploadService struct {
-	url string
-	err error
+	url         string
+	err         error
+	videoResult *service.AnalyzeVideoUploadResult
 }
 
 func (m *mockUploadService) UploadBase64(base64Image string) (string, error) {
@@ -85,6 +88,9 @@ func (m *mockUploadService) UploadBase64(base64Image string) (string, error) {
 }
 func (m *mockUploadService) UploadFile(fileBytes []byte, ext, contentType string) (string, error) {
 	return m.url, m.err
+}
+func (m *mockUploadService) UploadAnalyzeVideo(_ context.Context, _, _ string, _ int64) (*service.AnalyzeVideoUploadResult, error) {
+	return m.videoResult, m.err
 }
 
 type mockNutritionService struct {
@@ -173,6 +179,7 @@ func setupRouter(h *FoodRecordHandler) *gin.Engine {
 	r.GET("/share/food-record/:record_id", h.ShareFoodRecordPage)
 	r.POST("/api/upload-analyze-image", h.UploadAnalyzeImage)
 	r.POST("/api/upload-analyze-image-file", h.UploadAnalyzeImageFile)
+	r.POST("/api/upload-analyze-video-file", h.UploadAnalyzeVideoFile)
 	r.GET("/api/food-nutrition/search", h.SearchFoodNutrition)
 	r.GET("/api/food-nutrition/unresolved/top", h.GetUnresolvedTop)
 	r.POST("/api/packaged-food", h.CreatePackagedFood)
@@ -545,6 +552,66 @@ func TestUploadAnalyzeImage(t *testing.T) {
 	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	data := resp["data"].(map[string]any)
 	assert.Equal(t, "https://cdn.example.com/img.jpg", data["imageUrl"])
+}
+
+func TestUploadAnalyzeVideoFile(t *testing.T) {
+	mockSvc := &mockUploadService{videoResult: &service.AnalyzeVideoUploadResult{
+		CaptureProtocol: "video_keyframes_v1",
+		VideoID:         "video-1",
+		DurationMS:      6000,
+		SizeBytes:       4,
+		Keyframes: []service.AnalyzeVideoKeyframe{
+			{Role: "video_keyframe_1", ImageURL: "https://cdn.example/frame-1.jpg", TimestampMS: 500},
+			{Role: "video_keyframe_2", ImageURL: "https://cdn.example/frame-2.jpg", TimestampMS: 1500},
+			{Role: "video_keyframe_3", ImageURL: "https://cdn.example/frame-3.jpg", TimestampMS: 2500},
+		},
+	}}
+	h := NewFoodRecordHandler(nil, mockSvc, nil)
+	r := setupRouter(h)
+
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	header := make(map[string][]string)
+	header["Content-Disposition"] = []string{`form-data; name="file"; filename="meal.mp4"`}
+	header["Content-Type"] = []string{"video/mp4"}
+	part, err := writer.CreatePart(textproto.MIMEHeader(header))
+	require.NoError(t, err)
+	_, err = part.Write([]byte{0, 1, 2, 3})
+	require.NoError(t, err)
+	require.NoError(t, writer.Close())
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/upload-analyze-video-file", &body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	data := resp["data"].(map[string]any)
+	assert.Equal(t, "video_keyframes_v1", data["capture_protocol"])
+	assert.Len(t, data["keyframes"], 3)
+}
+
+func TestUploadAnalyzeVideoFileRejectsUnsupportedType(t *testing.T) {
+	mockSvc := &mockUploadService{}
+	h := NewFoodRecordHandler(nil, mockSvc, nil)
+	r := setupRouter(h)
+
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	part, err := writer.CreateFormFile("file", "meal.txt")
+	require.NoError(t, err)
+	_, err = part.Write([]byte("not video"))
+	require.NoError(t, err)
+	require.NoError(t, writer.Close())
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/upload-analyze-video-file", &body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
 
 func TestSearchFoodNutrition(t *testing.T) {

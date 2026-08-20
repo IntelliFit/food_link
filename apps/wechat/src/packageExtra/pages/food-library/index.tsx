@@ -516,7 +516,7 @@ function FoodLibraryPage() {
 
   // 跳转分享页
   const goShare = () => {
-    Taro.navigateTo({ url: extraPkgUrl('/pages/food-library-share/index') })
+    Taro.navigateTo({ url: extraPkgUrl('/pages/food-contribution/index?focus=public') })
   }
 
   // 提交反馈

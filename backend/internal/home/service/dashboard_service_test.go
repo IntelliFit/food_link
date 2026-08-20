@@ -30,6 +30,14 @@ func setupDashboardTestDB(t *testing.T) (*gorm.DB, *authrepo.UserRepo, *homerepo
 	return db, authrepo.NewUserRepo(db), homerepo.NewHomeRepo(db)
 }
 
+type dashboardSupplementStub struct{}
+
+func (dashboardSupplementStub) HomeSnapshot(context.Context, string, string) (map[string]float64, map[string]any, error) {
+	return map[string]float64{"vitaminCMg": 50}, map[string]any{
+		"planned_count": 1, "completed_count": 1, "functional_components": []any{},
+	}, nil
+}
+
 func TestDashboardService_HomeDashboard(t *testing.T) {
 	db, userRepo, homeRepo := setupDashboardTestDB(t)
 	svc := NewDashboardService(userRepo, homeRepo)
@@ -98,6 +106,26 @@ func TestDashboardService_HomeDashboard(t *testing.T) {
 	assert.Equal(t, 14.0, vitaminC["current"])
 	assert.Equal(t, 100.0, vitaminC["target"])
 	assert.Equal(t, 14.0, vitaminC["progress"])
+}
+
+func TestDashboardService_HomeDashboardSplitsFoodAndSupplementSources(t *testing.T) {
+	_, userRepo, homeRepo := setupDashboardTestDB(t)
+	svc := NewDashboardService(userRepo, homeRepo)
+	svc.ConfigureSupplementProvider(dashboardSupplementStub{})
+	ctx := context.Background()
+	user := &authrepo.User{OpenID: "supplement-source", HealthCondition: map[string]any{}}
+	require.NoError(t, userRepo.Create(ctx, user))
+
+	result, err := svc.HomeDashboard(ctx, user.ID, time.Now().Format("2006-01-02"))
+	require.NoError(t, err)
+	intake := result["intakeData"].(map[string]any)
+	micros := intake["micros"].(map[string]any)
+	vitaminC := micros["vitaminCMg"].(map[string]any)
+	assert.Equal(t, 0.0, vitaminC["food_current"])
+	assert.Equal(t, 50.0, vitaminC["supplement_current"])
+	assert.Equal(t, 50.0, vitaminC["current"])
+	assert.Equal(t, 50.0, vitaminC["progress"])
+	assert.NotNil(t, result["supplementSummary"])
 }
 
 func TestDashboardService_HomeDashboard_NoRecords(t *testing.T) {

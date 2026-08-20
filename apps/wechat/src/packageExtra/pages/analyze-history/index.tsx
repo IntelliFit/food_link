@@ -31,6 +31,8 @@ import {
 } from '../../../utils/home-dashboard-local-cache'
 import { formatDateKey } from '../../../pages/index/utils/helpers'
 import { buildFoodRecordItemPayloadFromAnalyzeItem } from '../../../utils/food-record-item-payload'
+import { needsPrecisionUserAction } from '../../../utils/precision-mode'
+import { returnHomeAfterFoodRecord } from '../../../utils/food-record-flow'
 import {
   MealTypeSelectSheet,
   normalizeSelectableMealType,
@@ -58,12 +60,21 @@ function logAnalyzeHistoryStage(stage: string, details: Record<string, unknown> 
   console.info('[analyze-history-debug]', stage, details)
 }
 
+const isPrecisionActionRequired = (task: AnalysisTask | AnalyzeTaskSummary): boolean => {
+  if (task.status !== 'done') return false
+  if ('user_action_required' in task && task.user_action_required === true) return true
+  if (!('result' in task)) return false
+  const result = task.result as AnalyzeResponse | undefined
+  return Boolean(result) && needsPrecisionUserAction(result)
+}
+
 /** 根据后端返回的 status + is_recorded 决定列表中展示的状态文案和样式类名 */
 const pickDisplayStatus = (task: AnalyzeTaskSummary): { text: string; className: string } => {
   if (task.status === 'pending' || task.status === 'processing') {
     return { text: '正在识别', className: 'status-recognizing' }
   }
   if (task.status === 'done') {
+    if (isPrecisionActionRequired(task)) return { text: '待补充', className: 'status-waiting' }
     if (task.is_recorded === true) return { text: '已经记录', className: 'status-recorded' }
     if (task.is_recorded === false) return { text: '等待记录', className: 'status-waiting' }
     return { text: '已完成', className: 'status-done' } // 兼容旧数据
@@ -184,6 +195,7 @@ const pickTextAvatar = (text: string | null | undefined): string => {
 
 const pickTaskHeadline = (task: AnalyzeTaskSummary): string => {
   if (task.status === 'violated' || task.is_violated) return '内容未通过审核'
+  if (isPrecisionActionRequired(task)) return '精准分析待确认'
   const sourceType = pickSourceTaskType(task)
   if (sourceType === 'food_text') {
     const text = String(task.text_preview || '').trim()
@@ -201,6 +213,9 @@ const pickTaskMeta = (task: AnalyzeTaskSummary): string => {
   }
   if (task.status === 'failed' || task.status === 'timed_out') {
     return '识别没有成功 · 点击卡片可用原记录重新识别'
+  }
+  if (isPrecisionActionRequired(task)) {
+    return task.precision_status === 'needs_retake' ? '请按要求补拍有效画面' : '补充关键信息后继续估重'
   }
   if (sourceType === 'food_text') {
     const count = task.result_summary?.item_count || 0
@@ -347,6 +362,8 @@ interface TaskCardProps {
 
 const TaskCard = React.memo(function TaskCard({ task, onTap, onMore }: TaskCardProps) {
   const mode = pickExecutionMode(task)
+  const recognitionOutcome = task.result_summary?.recognition_outcome || ''
+  const canShare = task.status === 'done' && task.has_result && !isPrecisionActionRequired(task)
   const totalCalories = getTotalCalories(task)
   const sourceType = pickSourceTaskType(task)
   const headline = pickTaskHeadline(task)
@@ -850,7 +867,7 @@ function AnalyzeHistoryPage() {
     if (!activeTask) return
     const summary = activeTask
     closeActionSheet()
-    if (summary.status !== 'done' || !summary.has_result) {
+    if (summary.status !== 'done' || !summary.has_result || isPrecisionActionRequired(summary)) {
       Taro.showToast({ title: '只能分享已完成的任务', icon: 'none' })
       return
     }
@@ -909,7 +926,7 @@ function AnalyzeHistoryPage() {
     const summary = activeTask
     closeActionSheet()
 
-    if (summary.status !== 'done' || !summary.has_result) {
+    if (summary.status !== 'done' || !summary.has_result || isPrecisionActionRequired(summary)) {
       Taro.showToast({ title: '只能收藏已完成的任务', icon: 'none' })
       return
     }
@@ -940,7 +957,7 @@ function AnalyzeHistoryPage() {
 
   const submitSaveRecipe = async () => {
     const task = recipeModalTask
-    if (!task || task.status !== 'done' || !task.result) return
+    if (!task || task.status !== 'done' || !task.result || isPrecisionActionRequired(task)) return
 
     const result = task.result as AnalyzeResponse
     const payload = (task.payload || {}) as Record<string, unknown>
@@ -997,7 +1014,7 @@ function AnalyzeHistoryPage() {
     const summary = activeTask
     closeActionSheet()
 
-    if (summary.status !== 'done' || !summary.has_result) {
+    if (summary.status !== 'done' || !summary.has_result || isPrecisionActionRequired(summary)) {
       Taro.showToast({ title: '只能记录已完成的任务', icon: 'none' })
       return
     }
@@ -1038,7 +1055,7 @@ function AnalyzeHistoryPage() {
 
   const confirmQuickRecordMealType = () => {
     const task = quickRecordTask
-    if (!task || task.status !== 'done' || !task.result || task.is_recorded) {
+    if (!task || task.status !== 'done' || !task.result || task.is_recorded || isPrecisionActionRequired(task)) {
       closeQuickRecordMealSelector()
       return
     }
@@ -1139,7 +1156,13 @@ function AnalyzeHistoryPage() {
       })
       return
     }
-    if (task.status === 'done' && task.result) {
+    if (isPrecisionActionRequired(task)) {
+      Taro.navigateTo({
+        url: `${extraPkgUrl('/pages/precision-confirm/index')}?task_id=${encodeURIComponent(task.id)}`,
+      })
+      return
+    }
+    if (task.status === 'done' && task.result && !isPrecisionActionRequired(task)) {
       const result = task.result as AnalyzeResponse
       const payload = task.payload || {}
       const sourceTaskType = pickSourceTaskType(task)
@@ -1330,7 +1353,7 @@ function AnalyzeHistoryPage() {
           <View className='action-sheet-content'>
             <View className='action-sheet-actions'>
               <View
-                className={`action-sheet-item ${activeTask.status === 'done' && activeTask.has_result && !activeTask.is_recorded ? '' : 'action-sheet-item--disabled'}`}
+                className={`action-sheet-item ${activeTask.status === 'done' && activeTask.has_result && !activeTask.is_recorded && !isPrecisionActionRequired(activeTask) ? '' : 'action-sheet-item--disabled'}`}
                 onClick={actionSheetQuickRecord}
               >
                 <Text className='iconfont icon-canciguanli action-sheet-icon action-sheet-icon--record' />
@@ -1348,7 +1371,7 @@ function AnalyzeHistoryPage() {
               </View>
               <View className='action-sheet-divider' />
               <View
-                className={`action-sheet-item ${activeTask.status === 'done' && activeTask.has_result ? '' : 'action-sheet-item--disabled'}`}
+                className={`action-sheet-item ${activeTask.status === 'done' && activeTask.has_result && !isPrecisionActionRequired(activeTask) ? '' : 'action-sheet-item--disabled'}`}
                 onClick={actionSheetSaveRecipe}
               >
                 <Text className='iconfont icon-collection_fill action-sheet-icon action-sheet-icon--favorite' />
@@ -1356,7 +1379,7 @@ function AnalyzeHistoryPage() {
               </View>
               <View className='action-sheet-divider' />
               <View
-                className={`action-sheet-item ${activeTask.status === 'done' && activeTask.has_result ? '' : 'action-sheet-item--disabled'}`}
+                className={`action-sheet-item ${activeTask.status === 'done' && activeTask.has_result && !isPrecisionActionRequired(activeTask) ? '' : 'action-sheet-item--disabled'}`}
                 onClick={actionSheetShare}
               >
                 <Text className='iconfont icon-shiwu action-sheet-icon action-sheet-icon--library' />

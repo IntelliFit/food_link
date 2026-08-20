@@ -41,8 +41,11 @@ const (
 	precisionPlanModelName     = "gemini-3.5-flash"
 	precisionWeightModelName   = "gemini-3.5-flash"
 	strictSeparateModeName     = "strict_separate"
+	dualAngleCaptureProtocol   = "dual_angle_v1"
+	videoCaptureProtocol       = "video_keyframes_v1"
 	precisionRefineEnabled     = true
 	precisionRefineTimeout     = 25 * time.Second
+	maxPrecisionRounds         = 3
 	taskLeaseDuration          = 5 * time.Minute
 	taskLeaseExtendEvery       = 30 * time.Second
 	taskRecoveryInterval       = 30 * time.Second
@@ -2326,14 +2329,35 @@ func (r *Runner) processPrecisionPlan(ctx context.Context, task *domain.Analysis
 	if executionMode == "" {
 		executionMode = session.ExecutionMode
 	}
-	strictSeparateMode := isStrictSeparateExecutionMode(executionMode)
-	prompt := buildPrecisionPlanPrompt(sourceType, rawInput, additionalContext, referenceObjects, previousRounds, strictSeparateMode)
+	options := mapFromAny(firstNonNil(latestInputs["precision_options"], task.Payload["precision_options"]))
+	interactiveMode := boolFromAny(options["interactive"])
+	strictSeparateMode := boolFromAny(options["separate"]) || isStrictSeparateExecutionMode(executionMode)
+	webSearchMode := boolFromAny(options["web_search"])
+	continueWithUncertainty := boolFromAny(firstNonNil(latestInputs["continue_with_uncertainty"], task.Payload["continue_with_uncertainty"]))
+	captureProtocol := firstNonEmptyString(latestInputs, "capture_protocol")
+	if captureProtocol == "" {
+		captureProtocol = stringFromMap(task.Payload, "capture_protocol")
+	}
+	planContext := map[string]any{
+		"precision_options":         options,
+		"capture_protocol":          captureProtocol,
+		"capture_views":             firstNonNil(latestInputs["capture_views"], task.Payload["capture_views"]),
+		"video_capture":             firstNonNil(latestInputs["video_capture"], task.Payload["video_capture"]),
+		"reference_object":          firstNonNil(latestInputs["reference_object"], task.Payload["reference_object"]),
+		"answers":                   firstNonNil(latestInputs["answers"], task.Payload["answers"]),
+		"continue_with_uncertainty": continueWithUncertainty,
+	}
+	if webSearchMode && sourceType == "image" {
+		planContext["web_search_precheck"] = r.runPrecisionWebSearchPrecheck(ctx, task, imageURLs, additionalContext, referenceObjects)
+	}
+	prompt := buildPrecisionPlanPrompt(sourceType, rawInput, additionalContext, referenceObjects, previousRounds, strictSeparateMode, planContext)
 	result, err := r.analyze.RunPrecisionJSONWithImages(ctx, sourceType, prompt, imageURLs, precisionPlanModelName)
 	if err != nil {
 		return err
 	}
 	result = normalizePrecisionPlanResult(result)
-	if strictSeparateMode {
+	result = applyPrecisionReferenceQuality(result, mapFromAny(planContext["reference_object"]))
+	if strictSeparateMode && captureProtocol != dualAngleCaptureProtocol && captureProtocol != videoCaptureProtocol {
 		result = forceSeparateMixedDishPlan(result)
 	}
 
@@ -2345,6 +2369,42 @@ func (r *Runner) processPrecisionPlan(ctx context.Context, task *domain.Analysis
 		PlannerResult: result,
 	}); err != nil {
 		return err
+	}
+
+	precisionStatus := stringFromMap(result, "precisionStatus")
+	shouldPause := shouldPausePrecisionPlan(precisionStatus, interactiveMode, continueWithUncertainty, roundIndex)
+	if precisionStatus == "needs_user_input" && !shouldPause {
+		result["precisionStatus"] = "ready_for_estimate"
+		result["userActionRequired"] = false
+		notes := stringSliceFromAny(result["uncertaintyNotes"])
+		notes = append(notes, "已按当前最可能信息继续估算，结果保留身份、口径或尺度不确定性。")
+		result["uncertaintyNotes"] = nilIfEmptyStrings(notes)
+	}
+	if shouldPause {
+		result["precisionSessionId"] = sessionID
+		result["precisionRoundIndex"] = roundIndex
+		result["userActionRequired"] = true
+		pending := precisionPendingRequirements(result)
+		if err := r.precision.UpdateSession(ctx, sessionID, map[string]any{
+			"status":                precisionStatus,
+			"latest_planner_result": result,
+			"pending_requirements":  pending,
+			"current_task_id":       task.ID,
+			"last_error":            nil,
+			"updated_at":            time.Now(),
+		}); err != nil {
+			return err
+		}
+		r.info(ctx, "精准模式等待用户补充",
+			slog.String("task_id", task.ID),
+			slog.String("session_id", sessionID),
+			slog.String("precision_status", precisionStatus),
+			slog.Int("round", roundIndex),
+		)
+		return r.completeTask(ctx, task, result)
+	}
+	if stringFromMap(result, "precisionStatus") != "ready_for_estimate" {
+		return fmt.Errorf("精准模式规划状态无法进入估重：%s", stringFromMap(result, "precisionStatus"))
 	}
 
 	plannedItems := buildPrecisionEstimateItems(result, sourceType)
@@ -2376,6 +2436,7 @@ func (r *Runner) processPrecisionPlan(ctx context.Context, task *domain.Analysis
 			"modelName":            precisionWeightModelName,
 			"planner_modelName":    precisionPlanModelName,
 		}
+		copyPrecisionPlanningPayload(latestInputs, groupPayload)
 		if strictSeparateMode {
 			groupPayload["execution_mode"] = strictSeparateModeName
 		}
@@ -2445,6 +2506,7 @@ func (r *Runner) processPrecisionPlan(ctx context.Context, task *domain.Analysis
 		"child_task_ids":       childTaskIDs,
 		"source_type":          sourceType,
 	}
+	copyPrecisionPlanningPayload(latestInputs, aggregatePayload)
 	copyCampusPublicFoodPayload(task.Payload, aggregatePayload)
 	if strictSeparateMode {
 		aggregatePayload["execution_mode"] = strictSeparateModeName
@@ -2501,6 +2563,13 @@ func (r *Runner) processPrecisionPlan(ctx context.Context, task *domain.Analysis
 	}
 	err = r.completeTask(ctx, task, result)
 	return err
+}
+
+func shouldPausePrecisionPlan(status string, interactive, continueWithUncertainty bool, roundIndex int) bool {
+	if status == "needs_retake" {
+		return true
+	}
+	return status == "needs_user_input" && interactive && !continueWithUncertainty && roundIndex < maxPrecisionRounds
 }
 
 func (r *Runner) processPrecisionItemEstimate(ctx context.Context, task *domain.AnalysisTask) error {
@@ -2681,6 +2750,13 @@ func (r *Runner) processPrecisionAggregate(ctx context.Context, task *domain.Ana
 	if err != nil {
 		return err
 	}
+	session, err := r.precision.GetSessionByID(ctx, sessionID)
+	if err != nil {
+		return err
+	}
+	if session != nil {
+		mergePrecisionPlannerContext(finalResult, session.LatestPlannerResult)
+	}
 	lookupSummary := finalResult["dbLookupSummary"]
 	r.info(ctx, "精确模式汇总完成",
 		slog.String("task_id", task.ID),
@@ -2755,7 +2831,6 @@ func normalizePrecisionPlanResult(parsed map[string]any) map[string]any {
 	for index := range itemsToEstimate {
 		itemsToEstimate[index] = normalizePrecisionStateMetadata(itemsToEstimate[index], "item_name")
 	}
-	precisionStatus = "ready_for_estimate"
 	if len(itemsToEstimate) > 1 && (splitStrategy == "single_item" || splitStrategy == "multi_item_parallel") {
 		hasHigh := false
 		for _, item := range itemsToEstimate {
@@ -2770,21 +2845,263 @@ func normalizePrecisionPlanResult(parsed map[string]any) map[string]any {
 			splitStrategy = "grouped_parallel"
 		}
 	}
+	questions := normalizePrecisionQuestions(firstNonNil(parsed["questions"], parsed["followupQuestions"]))
+	retakeRequirements := normalizePrecisionRetakeRequirements(firstNonNil(parsed["retakeRequirements"], parsed["retake_requirements"], parsed["retakeInstructions"], parsed["retakeGuidance"]))
+	referenceQuality := mapFromAny(firstNonNil(parsed["referenceQuality"], parsed["reference_quality"]))
+	if referenceQuality == nil {
+		referenceQuality = map[string]any{"status": "unknown", "notes": []string{}}
+	}
+	userActionRequired := precisionStatus == "needs_user_input" || precisionStatus == "needs_retake"
 	return map[string]any{
 		"precisionStatus":            precisionStatus,
 		"splitStrategy":              splitStrategy,
 		"detectedItemsSummary":       detectedItems,
-		"followupQuestions":          stringSliceFromAny(parsed["followupQuestions"]),
+		"questions":                  questions,
+		"followupQuestions":          precisionQuestionPrompts(questions),
+		"retakeRequirements":         retakeRequirements,
 		"retakeInstructions":         stringSliceFromAny(firstNonNil(parsed["retakeInstructions"], parsed["retakeGuidance"])),
 		"pendingRequirements":        stringSliceFromAny(parsed["pendingRequirements"]),
 		"referenceObjectNeeded":      boolFromAny(parsed["referenceObjectNeeded"]),
 		"referenceObjectSuggestions": stringSliceFromAny(parsed["referenceObjectSuggestions"]),
-		"uncertaintyNotes":           stringSliceFromAny(parsed["uncertaintyNotes"]),
+		"referenceQuality":           referenceQuality,
+		"uncertaintyNotes":           stringSliceFromAny(firstNonNil(parsed["uncertaintyNotes"], parsed["uncertainty_notes"])),
+		"userActionRequired":         userActionRequired,
 		"itemsToEstimate":            itemsToEstimate,
 		"rejectionReason":            stringFromMap(parsed, "rejectionReason"),
 		"description":                stringFromMap(parsed, "description"),
 		"insight":                    stringFromMap(parsed, "insight"),
 	}
+}
+
+func normalizePrecisionQuestions(value any) []map[string]any {
+	questions := make([]map[string]any, 0, 3)
+	switch items := value.(type) {
+	case []string:
+		for index, prompt := range items {
+			if prompt = strings.TrimSpace(prompt); prompt != "" {
+				questions = append(questions, map[string]any{"id": fmt.Sprintf("question_%d", index+1), "prompt": prompt, "type": "single_choice", "options": []any{}, "allowFreeText": true})
+			}
+		}
+	case []any:
+		for index, raw := range items {
+			if text, ok := raw.(string); ok {
+				if text = strings.TrimSpace(text); text != "" {
+					questions = append(questions, map[string]any{"id": fmt.Sprintf("question_%d", index+1), "prompt": text, "type": "single_choice", "options": []any{}, "allowFreeText": true})
+				}
+				continue
+			}
+			if item := mapFromAny(raw); item != nil {
+				questions = append(questions, normalizePrecisionQuestion(item, index))
+			}
+		}
+	case []map[string]any:
+		for index, item := range items {
+			questions = append(questions, normalizePrecisionQuestion(item, index))
+		}
+	}
+	if len(questions) > 3 {
+		questions = questions[:3]
+	}
+	return questions
+}
+
+func normalizePrecisionQuestion(item map[string]any, index int) map[string]any {
+	prompt := firstNonEmptyString(item, "prompt", "question", "text")
+	id := firstNonEmptyString(item, "id", "question_id", "questionId")
+	if id == "" {
+		id = fmt.Sprintf("question_%d", index+1)
+	}
+	options := []map[string]any{}
+	switch rawOptions := item["options"].(type) {
+	case []any:
+		for optionIndex, raw := range rawOptions {
+			if text, ok := raw.(string); ok {
+				text = strings.TrimSpace(text)
+				if text != "" {
+					options = append(options, map[string]any{"value": text, "label": text})
+				}
+				continue
+			}
+			if option := mapFromAny(raw); option != nil {
+				label := firstNonEmptyString(option, "label", "text", "value")
+				value := firstNonEmptyString(option, "value", "id", "label")
+				if value == "" {
+					value = fmt.Sprintf("option_%d", optionIndex+1)
+				}
+				options = append(options, map[string]any{"value": value, "label": label})
+			}
+		}
+	}
+	questionType := strings.ToLower(firstNonEmptyString(item, "type", "question_type", "questionType"))
+	if questionType == "" {
+		questionType = "single_choice"
+	}
+	allowFreeText := true
+	if _, exists := item["allowFreeText"]; exists {
+		allowFreeText = boolFromAny(item["allowFreeText"])
+	} else if _, exists := item["allow_free_text"]; exists {
+		allowFreeText = boolFromAny(item["allow_free_text"])
+	}
+	return map[string]any{"id": id, "prompt": prompt, "type": questionType, "options": options, "allowFreeText": allowFreeText}
+}
+
+func precisionQuestionPrompts(questions []map[string]any) []string {
+	out := make([]string, 0, len(questions))
+	for _, question := range questions {
+		if prompt := stringFromMap(question, "prompt"); prompt != "" {
+			out = append(out, prompt)
+		}
+	}
+	return out
+}
+
+func normalizePrecisionRetakeRequirements(value any) []map[string]any {
+	out := []map[string]any{}
+	switch items := value.(type) {
+	case []string:
+		for _, text := range items {
+			if text = strings.TrimSpace(text); text != "" {
+				out = append(out, map[string]any{"role": "both", "reason": text, "guidance": text})
+			}
+		}
+	case []any:
+		for _, raw := range items {
+			if text, ok := raw.(string); ok {
+				if text = strings.TrimSpace(text); text != "" {
+					out = append(out, map[string]any{"role": "both", "reason": text, "guidance": text})
+				}
+				continue
+			}
+			if item := mapFromAny(raw); item != nil {
+				out = append(out, map[string]any{
+					"role":     firstNonEmptyString(item, "role", "capture_role"),
+					"reason":   firstNonEmptyString(item, "reason", "issue"),
+					"guidance": firstNonEmptyString(item, "guidance", "instruction"),
+				})
+			}
+		}
+	case []map[string]any:
+		for _, item := range items {
+			out = append(out, map[string]any{
+				"role":     firstNonEmptyString(item, "role", "capture_role"),
+				"reason":   firstNonEmptyString(item, "reason", "issue"),
+				"guidance": firstNonEmptyString(item, "guidance", "instruction"),
+			})
+		}
+	}
+	return out
+}
+
+func precisionPendingRequirements(result map[string]any) []any {
+	out := []any{}
+	for _, question := range normalizePrecisionQuestions(result["questions"]) {
+		out = append(out, question)
+	}
+	for _, requirement := range normalizePrecisionRetakeRequirements(result["retakeRequirements"]) {
+		out = append(out, requirement)
+	}
+	for _, item := range stringSliceFromAny(result["pendingRequirements"]) {
+		out = append(out, item)
+	}
+	return out
+}
+
+func copyPrecisionPlanningPayload(source, target map[string]any) {
+	for _, key := range []string{"capture_protocol", "precision_options", "capture_views", "video_capture", "reference_object", "answers", "continue_with_uncertainty"} {
+		if value, ok := source[key]; ok {
+			target[key] = value
+		}
+	}
+}
+
+func applyPrecisionReferenceQuality(result, reference map[string]any) map[string]any {
+	if result == nil {
+		result = map[string]any{}
+	}
+	presence := strings.ToLower(stringFromMap(reference, "presence"))
+	if presence == "absent" {
+		notes := stringSliceFromAny(result["uncertaintyNotes"])
+		notes = append(notes, "本次明确未放置已知尺寸参考物，尺度信息不足，重量置信度不会标记为高。")
+		result["uncertaintyNotes"] = nilIfEmptyStrings(notes)
+		result["referenceObjectNeeded"] = true
+		result["referenceQuality"] = map[string]any{
+			"status":            "insufficient_scale",
+			"declared_presence": "absent",
+			"visible_in_both":   false,
+			"scale_confidence":  "low",
+			"notes":             []string{"用户选择没有参考物"},
+		}
+		return result
+	}
+	quality := mapFromAny(result["referenceQuality"])
+	if quality == nil {
+		quality = map[string]any{"status": "unknown", "notes": []string{}}
+	}
+	if presence != "" {
+		quality["declared_presence"] = presence
+	}
+	result["referenceQuality"] = quality
+	return result
+}
+
+func mergePrecisionPlannerContext(finalResult, plannerResult map[string]any) {
+	if finalResult == nil || plannerResult == nil {
+		return
+	}
+	for _, key := range []string{"referenceQuality", "detectedItemsSummary", "splitStrategy"} {
+		if value, ok := plannerResult[key]; ok {
+			finalResult[key] = value
+		}
+	}
+	notes := append(stringSliceFromAny(finalResult["uncertaintyNotes"]), stringSliceFromAny(plannerResult["uncertaintyNotes"])...)
+	finalResult["uncertaintyNotes"] = nilIfEmptyStrings(notes)
+	finalResult["userActionRequired"] = false
+}
+
+func (r *Runner) runPrecisionWebSearchPrecheck(ctx context.Context, task *domain.AnalysisTask, imageURLs []string, additionalContext string, referenceObjects []map[string]any) map[string]any {
+	mode := "strict_web_search"
+	callCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
+	defer cancel()
+	parsed, err := r.analyze.Analyze(callCtx, task.UserID, analyzeservice.AnalyzeInput{
+		ImageURL:          firstString(imageURLs),
+		ImageURLs:         imageURLs,
+		AdditionalContext: additionalContext,
+		ExecutionMode:     &mode,
+		AnalysisEngine:    "db_first",
+		ReferenceObjects:  referenceObjects,
+	})
+	if err != nil {
+		r.warn(ctx, "精准模式联网预检失败，继续由规划器判断",
+			slog.String("task_id", task.ID),
+			logger.Err(err),
+		)
+		return map[string]any{"status": "failed", "reason": sanitizeTaskErrorMessage(err)}
+	}
+	items := extractItems(parsed["items"])
+	compact := make([]map[string]any, 0, len(items))
+	for _, item := range items {
+		compact = append(compact, map[string]any{
+			"name":                  firstNonEmptyString(item, "name", "item_name"),
+			"package_match_status":  firstNonEmptyString(item, "package_match_status", "packageMatchStatus"),
+			"package_weight_source": firstNonEmptyString(item, "package_weight_source", "packageWeightSource"),
+			"estimatedWeightGrams":  item["estimatedWeightGrams"],
+		})
+		if len(compact) >= 6 {
+			break
+		}
+	}
+	return map[string]any{
+		"status":        "completed",
+		"items":         compact,
+		"hybrid_review": parsed["hybrid_review"],
+	}
+}
+
+func firstString(values []string) string {
+	if len(values) == 0 {
+		return ""
+	}
+	return values[0]
 }
 
 func isStrictSeparateExecutionMode(raw string) bool {
@@ -3407,7 +3724,7 @@ func normalizePrecisionFoodType(raw string) string {
 	}
 }
 
-func buildPrecisionPlanPrompt(sourceType, rawInput, additionalContext string, referenceObjects []map[string]any, previousRounds []domain.PrecisionSessionRound, strictSeparateMode bool) string {
+func buildPrecisionPlanPrompt(sourceType, rawInput, additionalContext string, referenceObjects []map[string]any, previousRounds []domain.PrecisionSessionRound, strictSeparateMode bool, runtimeContexts ...map[string]any) string {
 	previousContext := []string{}
 	start := len(previousRounds) - 3
 	if start < 0 {
@@ -3431,22 +3748,28 @@ func buildPrecisionPlanPrompt(sourceType, rawInput, additionalContext string, re
 	if additionalContext == "" {
 		additionalContext = "无"
 	}
+	runtimeContext := map[string]any{}
+	if len(runtimeContexts) > 0 && runtimeContexts[0] != nil {
+		runtimeContext = runtimeContexts[0]
+	}
+	runtimeJSON := "{}"
+	if encoded, err := json.Marshal(runtimeContext); err == nil {
+		runtimeJSON = string(encoded)
+	}
 	strictSeparateBlock := ""
 	if strictSeparateMode {
 		strictSeparateBlock = `精准分项模式额外要求：
 - 这个模式的首要目标是让用户能分别调整混合食物中不同成分的实际摄入比例；不要把明显混合食物只作为一道整菜输出。
-- 对牛肉面、鸡肉胡萝卜烩意面、盖饭、炒饭、炒面、汤面、麻辣烫、沙拉、咖喱饭、便当等混合食物，必须尽量拆成主食基底、蛋白质、可见蔬菜/配料、显著酱汁或汤底。
+- 对牛肉面、鸡肉胡萝卜烩意面、盖饭、炒饭、炒面、汤面、麻辣烫、沙拉、咖喱饭、便当等混合食物，只拆画面清楚可见或用户已经确认的主食、蛋白质、蔬菜、显著酱汁或汤底。
 - item_name 使用成分名，不使用整菜名；整菜名可写进 item_hint。例如“鸡肉胡萝卜烩意面”应拆为“意大利面”“鸡肉”“胡萝卜”，必要时再拆“酱汁”。
-- 对牛肉面，应拆为“牛肉”“面条”，如果青菜或汤底可见且影响摄入比例，也拆出“青菜”“汤底”。
-- 对盖饭，应拆为“米饭”“肉/蛋/豆制品主料”“可见蔬菜/配料”，酱汁明显时单独列“酱汁”或在主料 hint 中说明。
-- 只有某成分完全不可见且菜名/用户说明也不能确定时，才不拆；但主食基底和明确可见蛋白/蔬菜必须拆。
+- 对牛肉面，可见并能区分时拆为“牛肉”“面条”；青菜或汤底也必须有画面或用户说明证据。
+- 对盖饭，可见并能区分时拆为“米饭”“肉/蛋/豆制品主料”“可见蔬菜/配料”。
+- 不得只凭菜名强行补出隐藏成分；关键成分不清楚时先提问。
 - 每个拆出的成分都是后续单独估重对象，item_hint 必须提醒“只估计该成分，不把其它配料并入”。
 
 `
 	}
-	return fmt.Sprintf(`你是精准模式的直接估计规划器。你的任务不是跟用户对话，而是尽可能把当前画面/文本拆成可直接估计的主体，并为后续数据库营养检索提供结构化列表。
-
-请基于当前输入，返回 JSON，且 precisionStatus 统一使用 ready_for_estimate。
+	return fmt.Sprintf(`你是新版精准模式的采集质量与估重规划器。先判断信息是否足以估重；只有 ready_for_estimate 才会启动后续分项估重。
 
 当前输入类型：%s
 原始输入：
@@ -3460,9 +3783,19 @@ func buildPrecisionPlanPrompt(sourceType, rawInput, additionalContext string, re
 最近几轮历史（如有）：
 %s
 
+本轮结构化上下文（包含 precision_options、采集协议/画面槽位、参考物、历史回答以及联网预检）：
+%s
+
 %s要求：
-- 如果有多个主体食物，请拆成 itemsToEstimate，后续并行估计。
-- 如果当前是明显混合食物，且不同成分可能有不同实际摄入比例，也应拆成 itemsToEstimate，而不是只输出整道菜。
+- dual_angle_v1 必须核对两张照片是否为同一餐、top_down 与 oblique_45 角度是否明显不同、主体是否完整、是否模糊或严重遮挡；任一拍摄门槛不合格时返回 needs_retake，并在 retakeRequirements 中明确对应 role 和重拍方法。即使 interactive=false，也不能绕过画面质量门槛。
+- video_keyframes_v1 表示同一段短视频抽出的连续关键帧。用户可能自然横扫、逐项靠近或先局部后全景，不能仅因没有严格按俯视到 45° 的标准轨迹拍摄就要求重拍。必须综合全部关键帧互补取证：某个食物无需在每一帧都出现；连续视频中先后出现的清晰局部、容器边缘、高度视角和任一全景都可以共同支撑判断。
+- 视频中各食物只要在至少一个关键帧清晰出现，并能通过时间连续性确认属于同一餐，即使没有一帧同时完整包含所有食物，也可 ready_for_estimate，并按实际缺失的尺度/高度信息写入 uncertaintyNotes 和 referenceQuality。没有已知尺寸参考物本身不是重拍理由。
+- 只有关键主体在所有帧都不清楚、整体持续严重模糊/遮挡、无法确认是否同一餐，或关键食物从未出现可用于身份与体积判断的有效画面时，才返回 needs_retake；role 使用 video，并只说明必须补足的画面，不要求用户复刻固定运镜。
+- 声明参考物 presence=present 时，双角度照片需检查它是否在两图中都清楚可见；视频关键帧需检查它是否在至少两个不同视角中清楚可见且尺寸口径一致。presence=absent 允许继续，但 referenceQuality 必须是 insufficient_scale/low，且不得给出高尺度置信度。推荐标准卡片尺寸为 85.60 × 53.98 mm，不把手掌作为默认尺度。
+- 画面清楚可见的独立食物自动拆成 itemsToEstimate。混合菜内部只有 precision_options.separate=true 时才拆，并且只拆可见或已确认成分；不要只凭菜名强行拆分。
+- interactive=true 时，食物身份、熟/生或干/湿口径、参考尺度、明显隐藏成分、会显著改变热量的烹饪信息存在关键歧义时返回 needs_user_input。每轮最多 3 个 questions，优先给候选选项，并保留 allowFreeText=true。
+- interactive=false 或 continue_with_uncertainty=true 时，除重拍门槛外，采用最可能答案继续 ready_for_estimate，并把风险写入 uncertaintyNotes。
+- precision_options.web_search=true 时，先使用 web_search_precheck 解决包装规格、品牌和小众食物歧义；预检没有可靠证据时再提问，不能把搜索结果当作图片中新增食物。
 - 食物种类识别优先于重量估计。每个主体先列出 2-3 个最可能的候选食物，再根据视觉证据选择 item_name。
 - 重量口径必须与营养数据库一致：后续 estimatedWeightGrams 只计算可食部净重。遇到带壳、带骨、带核食物时，itemsToEstimate 仍列食物本身，但 visual_evidence/item_hint 需要提示后续按去壳/去骨/去核后的可食重量估算，不把壳、骨头、果核计入重量。
 - 每个主体必须同时输出 foodState（fresh/dry/hydrated/cooked/liquid/packaged）、weightBasis（dry/as_served/package_net）和 basisEvidence。foodState 描述食物当前形态，weightBasis 描述后续克重对应的营养口径。
@@ -3471,37 +3804,38 @@ func buildPrecisionPlanPrompt(sourceType, rawInput, additionalContext string, re
 - 不得把当前食用状态的湿重与干料每100g营养口径混用；不确定时依据画面中的汤汁、柔软度、膨胀状态和所在餐碗判断，并写入 basisEvidence。
 - 候选筛选必须看具体视觉证据：切法、形状、边缘/皮、是否有馅、颜色、纹理、菜梗/叶片比例、包裹方式、烹饪方式和所在区域；不要只按常见菜名猜。
 - 对容易混淆的食物必须显式区分：莴苣/莴笋片 vs 青菜/小白菜，百叶包/千张包/豆皮包 vs 蒸饺/馄饨，鱼块 vs 鸡块，豆干 vs 肉块。
-- 如果最可能名称不确定，item_name 填最可能的那个，candidate_names 保留 2-3 个候选，alternative_name 填次可能名称，visual_evidence 写选择依据。
-- 不要生成追问式输出，也不要要求用户补充后再继续。
-- 如果缺比例尺且会显著影响估重，请把 referenceObjectNeeded 设为 true，但仍然返回可估计主体。
+- 如果不构成关键歧义，item_name 填最可能名称，candidate_names 保留 2-3 个候选，alternative_name 填次可能名称，visual_evidence 写选择依据；构成关键歧义且可交互时必须提问，不要静默猜。
+- 如果缺比例尺且会显著影响估重，请把 referenceObjectNeeded 设为 true；用户明确选择无参考物时允许继续并标记尺度不足。
 - itemsToEstimate 中每个主体必须给 item_key、item_name、candidate_names、visual_evidence、foodState、weightBasis、basisEvidence、uncertainty_level，可选 item_hint / alternative_name。
 - uncertainty_level 规则：
   - low：单一食材、形状固定（如苹果、鸡蛋、鸡胸肉块、白米饭）
   - medium：普通菜肴、食材可见（如清炒西兰花、蒸蛋、切片水果）
   - high：混合菜、酱汁覆盖、油炸膨胀、无固定形状（如炒饭、炒面、咖喱、红烧肉、油条、粥、汤面）
-- 如果有 high 难度的食物且没有提供参考物，依旧返回 ready_for_estimate，并在 referenceObjectSuggestions / uncertaintyNotes 中给出建议。
-- followupQuestions 和 retakeInstructions 仅作内部备注，能留空就留空。
+- questions 的 options 结构为 [{"value":"...","label":"..."}]；id 在同一会话中保持稳定。
+- retakeRequirements 的 role 只能是 top_down、oblique_45、both 或 video；video_keyframes_v1 的画面问题统一使用 video。
 
 只返回 JSON，结构如下：
 {
-  "precisionStatus": "ready_for_estimate",
+  "precisionStatus": "needs_user_input | needs_retake | ready_for_estimate",
   "splitStrategy": "single_item | multi_item_parallel | single_shot | grouped_parallel | retake_required | user_annotation_required",
   "detectedItemsSummary": ["米饭", "鸡腿", "西兰花"],
-  "followupQuestions": [],
-  "retakeInstructions": [],
+  "questions": [{"id":"food_identity_1","prompt":"右侧块状食物更接近哪一种？","type":"single_choice","options":[{"value":"fish","label":"鱼块"},{"value":"chicken","label":"鸡块"}],"allowFreeText":true}],
+  "retakeRequirements": [{"role":"oblique_45 | video","reason":"斜拍或视频关键帧模糊，无法看清高度","guidance":"保持手机稳定，缓慢移动并包含完整容器边缘"}],
   "pendingRequirements": ["reference_object", "cook_method"],
   "referenceObjectNeeded": true,
-  "referenceObjectSuggestions": ["手掌", "常规卡片", "大卡片"],
+  "referenceObjectSuggestions": ["85.60 × 53.98 mm 标准卡片", "已知直径的圆形餐盘", "已知长宽高的物体"],
+  "referenceQuality": {"status":"good | partial | insufficient_scale | not_visible","visible_in_both":true,"scale_confidence":"high | medium | low","notes":[]},
   "uncertaintyNotes": ["米饭厚度不清楚"],
+  "userActionRequired": true,
   "rejectionReason": "当前主体遮挡严重",
-  "description": "可继续精估",
-  "insight": "先补充信息再进入精估。",
+  "description": "等待确认后继续精估",
+  "insight": "补充关键信息可降低重量误差。",
   "itemsToEstimate": [
     {"item_key": "rice", "item_name": "米饭", "candidate_names": ["米饭", "粥"], "alternative_name": "粥", "visual_evidence": "白色颗粒状主食，米粒边界清楚", "foodState": "cooked", "weightBasis": "as_served", "basisEvidence": "餐碗内已熟制，克重为当前食用状态", "item_hint": "主食区域", "requires_reference": false, "uncertainty_level": "low"},
     {"item_key": "wrapped_tofu_skin", "item_name": "百叶包", "candidate_names": ["百叶包", "蒸饺", "馄饨"], "alternative_name": "蒸饺", "visual_evidence": "外皮呈豆皮褶皱和方形包裹感，不是半透明面皮", "foodState": "cooked", "weightBasis": "as_served", "basisEvidence": "画面为已熟制可直接食用状态", "item_hint": "右侧包裹类主体", "requires_reference": false, "uncertainty_level": "medium"},
     {"item_key": "lettuce_stem", "item_name": "莴苣片", "candidate_names": ["莴苣片", "青菜", "西兰花梗"], "alternative_name": "青菜", "visual_evidence": "浅绿色厚片状茎部为主，叶片很少", "foodState": "cooked", "weightBasis": "as_served", "basisEvidence": "画面为已烹调蔬菜", "item_hint": "左侧绿色蔬菜", "requires_reference": false, "uncertainty_level": "medium"}
   ]
-}`, sourceType, rawInput, additionalContext, buildReferenceObjectsHint(referenceObjects), previousBlock, strictSeparateBlock)
+}`, sourceType, rawInput, additionalContext, buildReferenceObjectsHint(referenceObjects), previousBlock, runtimeJSON, strictSeparateBlock)
 }
 
 func buildPrecisionItemEstimatePromptFromPayload(sourceType string, payload map[string]any, textInput, additionalContext string, referenceObjects []map[string]any) (string, error) {

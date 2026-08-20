@@ -14,4 +14,8 @@ case "$DESTINATION" in
 esac
 
 mkdir -p "$DESTINATION"
-git checkout-index --all --prefix="${DESTINATION%/}/"
+# The index stores canonical LF content. Exporting through a Windows checkout
+# with core.autocrlf enabled rewrites every Go file to CRLF, causing gofmt to
+# report the whole staged snapshot as unformatted. Keep snapshot bytes aligned
+# with the index so validation is platform-independent.
+git -c core.autocrlf=false -c core.eol=lf checkout-index --all --prefix="${DESTINATION%/}/"

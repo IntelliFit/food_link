@@ -132,6 +132,17 @@
   color: #0f172a;
 }
 
+.ingredient-basis-label,
+.ingredient-per100-label {
+  display: block;
+  margin-top: 8px;
+  color: #74817c;
+  font-size: 22px;
+  line-height: 1.45;
+}
+
+.ingredient-basis-label { color: #3c4b46; font-weight: 600; }
+
 .edit-icon-wrapper {
   width: 44rpx;
   height: 44rpx;

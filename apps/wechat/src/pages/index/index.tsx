@@ -41,6 +41,7 @@ import {
   type BodyMetricWaterDay,
   type HomeFoodExpiryItem,
   type HomeFoodExpirySummary,
+  type SupplementDashboardSummary,
   type FoodRecord,
   type MembershipStatus,
   type RewardCenterResponse,
@@ -113,6 +114,7 @@ import {
   MealRecordEditModal,
   MealRecordPosterModal,
   MicrosSection,
+  TodaySupplementsSection,
   type MealPosterSharePayload,
 } from './components'
 import OnboardingGuide from '../../components/OnboardingGuide'
@@ -129,6 +131,13 @@ import { buildFoodRecordFavoriteDraft } from '../../utils/food-record-flow'
 import { openPetChat } from '../../utils/pet-navigation'
 
 const BACKFILL_HINT_DISMISSED_DATES_KEY = 'home_backfill_hint_dismissed_dates_v1'
+const DEFAULT_SUPPLEMENT_SUMMARY: SupplementDashboardSummary = {
+  planned_count: 0,
+  completed_count: 0,
+  functional_components: [],
+  additional_nutrients: [],
+  duplicate_components: [],
+}
 const HOME_SELECTED_DATE_KEY = 'home_selected_date_v1'
 const HOME_PET_HIDDEN_KEY = 'home_pet_companion_hidden_v1'
 const HOME_PET_HIDDEN_CHANGED_EVENT = 'home_pet_companion_hidden_changed'
@@ -790,14 +799,13 @@ function IndexPage() {
   const [nutritionTarget, setNutritionTarget] = React.useState<HomeNutritionTarget | null>(initialLocalSnapshot?.nutritionTarget || null)
   const [meals, setMeals] = React.useState<HomeMealItem[]>(initialLocalSnapshot?.meals || [])
   const [expirySummary, setExpirySummary] = React.useState<HomeFoodExpirySummary>(initialLocalSnapshot?.expirySummary || DEFAULT_EXPIRY_SUMMARY)
+  const [supplementSummary, setSupplementSummary] = React.useState<SupplementDashboardSummary>(initialLocalSnapshot?.supplementSummary || DEFAULT_SUPPLEMENT_SUMMARY)
   const [weekHeatmapCells, setWeekHeatmapCells] = React.useState<WeekHeatmapCell[]>(() => buildWeekHeatmapCellsFromStorage())
   const [calendarHistoryCells, setCalendarHistoryCells] = React.useState<WeekHeatmapCell[]>(() => buildCalendarHeatmapCellsFromStorage())
   const [calendarMonthLoading, setCalendarMonthLoading] = React.useState(false)
   const [calendarMonthLoadError, setCalendarMonthLoadError] = React.useState(false)
   const [loading, setLoading] = React.useState(!initialLocalSnapshot)
   const [isSwitchingDate, setIsSwitchingDate] = React.useState(false)
-  /** 后台静默同步中：左上角微型 spinner，不占文档流 */
-  const [dataSyncing, setDataSyncing] = React.useState(false)
   const [petHidden, setPetHidden] = React.useState(getStoredPetHidden)
   const [petSummary, setPetSummary] = React.useState<PetSummary | null>(null)
   const [membershipStatus, setMembershipStatus] = React.useState<MembershipStatus | null>(null)
@@ -1043,6 +1051,7 @@ function IndexPage() {
       setNutritionTarget(null)
       setMeals([])
       setExpirySummary(DEFAULT_EXPIRY_SUMMARY)
+      setSupplementSummary(DEFAULT_SUPPLEMENT_SUMMARY)
       setExerciseBurnedKcal(0)
       setHomeAchievement({ streak_days: 0, green_days: 0 })
       setTargetForm(createTargetForm(DEFAULT_INTAKE))
@@ -1057,8 +1066,6 @@ function IndexPage() {
 
     if (!silent) {
       setLoading(true)
-    } else {
-      setDataSyncing(true)
     }
     try {
       const exerciseLogParams = { date: resolvedDate }
@@ -1096,6 +1103,7 @@ function IndexPage() {
       setNutritionTarget(res.nutritionTarget || null)
       setMeals(res.meals || [])
       setExpirySummary(res.expirySummary || DEFAULT_EXPIRY_SUMMARY)
+      setSupplementSummary(res.supplementSummary || DEFAULT_SUPPLEMENT_SUMMARY)
       const initialExerciseKcal = mergeExerciseKcalFromDashboardAndLogs(res.exerciseBurnedKcal, undefined)
       let nextExerciseKcal = initialExerciseKcal
       setExerciseBurnedKcal(nextExerciseKcal)
@@ -1113,7 +1121,8 @@ function IndexPage() {
         expirySummary: res.expirySummary || DEFAULT_EXPIRY_SUMMARY,
         exerciseBurnedKcal: nextExerciseKcal,
         achievement: nextAchievement,
-        nutritionTarget: res.nutritionTarget || null
+        nutritionTarget: res.nutritionTarget || null,
+        supplementSummary: res.supplementSummary || DEFAULT_SUPPLEMENT_SUMMARY,
       }
       const currentSnapshot = getStoredHomeDashboardSnapshotByDate(normalizedDate)
       console.log('[DEBUG] about to save snapshot, date=', normalizedDate, 'currentSnapshotExists=', !!currentSnapshot)
@@ -1123,14 +1132,16 @@ function IndexPage() {
         expirySummary: currentSnapshot.expirySummary,
         exerciseBurnedKcal: currentSnapshot.exerciseBurnedKcal,
         achievement: currentSnapshot.achievement,
-        nutritionTarget: currentSnapshot.nutritionTarget || null
+        nutritionTarget: currentSnapshot.nutritionTarget || null,
+        supplementSummary: currentSnapshot.supplementSummary || DEFAULT_SUPPLEMENT_SUMMARY,
       }) !== JSON.stringify({
         intakeData: nextSnapshot.intakeData,
         meals: nextSnapshot.meals,
         expirySummary: nextSnapshot.expirySummary,
         exerciseBurnedKcal: nextSnapshot.exerciseBurnedKcal,
         achievement: nextSnapshot.achievement,
-        nutritionTarget: nextSnapshot.nutritionTarget || null
+        nutritionTarget: nextSnapshot.nutritionTarget || null,
+        supplementSummary: nextSnapshot.supplementSummary || DEFAULT_SUPPLEMENT_SUMMARY,
       })) {
         saveHomeDashboardSnapshot(nextSnapshot)
       } else {
@@ -1239,6 +1250,7 @@ function IndexPage() {
         setNutritionTarget(localFallback.nutritionTarget || null)
         setMeals(localFallback.meals || [])
         setExpirySummary(localFallback.expirySummary || DEFAULT_EXPIRY_SUMMARY)
+        setSupplementSummary(localFallback.supplementSummary || DEFAULT_SUPPLEMENT_SUMMARY)
         setExerciseBurnedKcal(localFallback.exerciseBurnedKcal || 0)
         setHomeAchievement(localFallback.achievement || { streak_days: 0, green_days: 0 })
         setTargetForm(createTargetForm(localFallback.intakeData || DEFAULT_INTAKE))
@@ -1249,6 +1261,7 @@ function IndexPage() {
         setNutritionTarget(null)
         setMeals([])
         setExpirySummary(DEFAULT_EXPIRY_SUMMARY)
+        setSupplementSummary(DEFAULT_SUPPLEMENT_SUMMARY)
         setExerciseBurnedKcal(0)
         setHomeAchievement({ streak_days: 0, green_days: 0 })
         setWeekHeatmapCells(createWeekHeatmapCells())
@@ -1262,7 +1275,6 @@ function IndexPage() {
       if (seq === loadDashboardSeqRef.current) {
         setLoading(false)
         setIsSwitchingDate(false)
-        setDataSyncing(false)
       }
     }
   }, [setIntakeData, setMeals, setWeekHeatmapCells, setTargetForm, setLoading, setIsSwitchingDate])
@@ -1299,7 +1311,8 @@ function IndexPage() {
               expirySummary: dayRes.expirySummary || DEFAULT_EXPIRY_SUMMARY,
               exerciseBurnedKcal: dayRes.exerciseBurnedKcal || 0,
               achievement: dayRes.achievement || { streak_days: 0, green_days: 0 },
-              nutritionTarget: dayRes.nutritionTarget || null
+              nutritionTarget: dayRes.nutritionTarget || null,
+              supplementSummary: dayRes.supplementSummary || DEFAULT_SUPPLEMENT_SUMMARY,
             } as HomeDashboardLocalSnapshot
           } catch (err) {
             console.error('[dashboard-backfill] fetch failed for', date, err)
@@ -1320,6 +1333,7 @@ function IndexPage() {
         setNutritionTarget(refreshed.nutritionTarget || null)
         setMeals(refreshed.meals || [])
         setExpirySummary(refreshed.expirySummary || DEFAULT_EXPIRY_SUMMARY)
+        setSupplementSummary(refreshed.supplementSummary || DEFAULT_SUPPLEMENT_SUMMARY)
         setExerciseBurnedKcal(refreshed.exerciseBurnedKcal || 0)
         setHomeAchievement(refreshed.achievement || { streak_days: 0, green_days: 0 })
         setTargetForm(createTargetForm(refreshed.intakeData || DEFAULT_INTAKE))
@@ -1443,6 +1457,7 @@ function IndexPage() {
       setNutritionTarget(localSnapshot.nutritionTarget || null)
       setMeals(localSnapshot.meals || [])
       setExpirySummary(localSnapshot.expirySummary || DEFAULT_EXPIRY_SUMMARY)
+      setSupplementSummary(localSnapshot.supplementSummary || DEFAULT_SUPPLEMENT_SUMMARY)
       setExerciseBurnedKcal(localSnapshot.exerciseBurnedKcal || 0)
       setHomeAchievement(localSnapshot.achievement || { streak_days: 0, green_days: 0 })
       setTargetForm(createTargetForm(localSnapshot.intakeData || DEFAULT_INTAKE))
@@ -1546,6 +1561,7 @@ function IndexPage() {
       setNutritionTarget(localSnapshot.nutritionTarget || null)
       setMeals(localSnapshot.meals || [])
       setExpirySummary(localSnapshot.expirySummary || DEFAULT_EXPIRY_SUMMARY)
+      setSupplementSummary(localSnapshot.supplementSummary || DEFAULT_SUPPLEMENT_SUMMARY)
       setExerciseBurnedKcal(localSnapshot.exerciseBurnedKcal || 0)
       setHomeAchievement(localSnapshot.achievement || { streak_days: 0, green_days: 0 })
       setTargetForm(createTargetForm(localSnapshot.intakeData || DEFAULT_INTAKE))
@@ -2172,7 +2188,6 @@ function IndexPage() {
       syncDashboardPendingRef.current = null
       return
     }
-    setDataSyncing(true)
     try {
       const [res, exerciseLogsRes, bodyMetricsRes] = await Promise.all([
         getHomeDashboard(date),
@@ -2186,6 +2201,7 @@ function IndexPage() {
       setIntakeData(intake)
       setMeals(res.meals || [])
       setExpirySummary(res.expirySummary || DEFAULT_EXPIRY_SUMMARY)
+      setSupplementSummary(res.supplementSummary || DEFAULT_SUPPLEMENT_SUMMARY)
       setExerciseBurnedKcal(nextExerciseKcal)
       setHomeAchievement(nextAchievement)
       setNutritionTarget(res.nutritionTarget || null)
@@ -2245,7 +2261,6 @@ function IndexPage() {
       if (syncDashboardPendingRef.current?.seq === seq) {
         syncDashboardPendingRef.current = null
       }
-      setDataSyncing(false)
     }
   }, [setIntakeData, setMeals, setExpirySummary, setExerciseBurnedKcal, setHomeAchievement, setTargetForm])
 
@@ -2261,6 +2276,7 @@ function IndexPage() {
       setNutritionTarget(localSnapshot.nutritionTarget || null)
       setMeals(localSnapshot.meals || [])
       setExpirySummary(localSnapshot.expirySummary || DEFAULT_EXPIRY_SUMMARY)
+      setSupplementSummary(localSnapshot.supplementSummary || DEFAULT_SUPPLEMENT_SUMMARY)
       setExerciseBurnedKcal(localSnapshot.exerciseBurnedKcal || 0)
       setHomeAchievement(localSnapshot.achievement || { streak_days: 0, green_days: 0 })
       setTargetForm(createTargetForm(localSnapshot.intakeData || DEFAULT_INTAKE))
@@ -2270,6 +2286,7 @@ function IndexPage() {
       setNutritionTarget(null)
       setMeals([])
       setExpirySummary(DEFAULT_EXPIRY_SUMMARY)
+      setSupplementSummary(DEFAULT_SUPPLEMENT_SUMMARY)
       setExerciseBurnedKcal(0)
       setHomeAchievement({ streak_days: 0, green_days: 0 })
       setTargetForm(createTargetForm(DEFAULT_INTAKE))
@@ -2972,12 +2989,6 @@ function IndexPage() {
             : 'overflow: visible;'
         }
       />
-      {/* 后台静默同步中：左上角微型 spinner */}
-      {dataSyncing ? (
-        <View className='home-page__data-sync'>
-          <View className='home-page__data-sync-spinner' />
-        </View>
-      ) : null}
       {/* 页面内容 */}
       <View className='page-content'>
         {/* 问候区 */}
@@ -3119,6 +3130,14 @@ function IndexPage() {
               </View>
             </View>
 
+            {!dashboardBusy && !isGuest && (
+              <TodaySupplementsSection
+                summary={supplementSummary}
+                canQuickRecord={isTodayRecordDate(selectedDate)}
+                onRecorded={setSupplementSummary}
+              />
+            )}
+
             <View className={`nutrition-expand-shell wellness-nutrition-shell${nutritionExpanded ? ' is-expanded' : ''}`}>
               <View className='nutrition-expand-main' onClick={() => setNutritionExpanded((value) => !value)}>
                 <View className='nutrition-expand-title-row'>
@@ -3131,7 +3150,7 @@ function IndexPage() {
               </View>
               {nutritionExpanded && (
                 <View className='nutrition-expanded-body wellness-nutrition-expanded-body'>
-                  <MicrosSection intakeData={intakeData} dashboardBusy={dashboardBusy} isGuest={isGuest} />
+                  <MicrosSection intakeData={intakeData} dashboardBusy={dashboardBusy} isGuest={isGuest} supplementSummary={supplementSummary} />
                 </View>
               )}
             </View>
@@ -3194,6 +3213,14 @@ function IndexPage() {
               />
             </View>
           </View>
+
+          {!dashboardBusy && !isGuest && (
+            <TodaySupplementsSection
+              summary={supplementSummary}
+              canQuickRecord={isTodayRecordDate(selectedDate)}
+              onRecorded={setSupplementSummary}
+            />
+          )}
 
           <View className={`nutrition-expand-shell${nutritionExpanded ? ' is-expanded' : ''}`}>
             <View
@@ -3279,6 +3306,7 @@ function IndexPage() {
                   intakeData={intakeData}
                   dashboardBusy={dashboardBusy}
                   isGuest={isGuest}
+                  supplementSummary={supplementSummary}
                 />
               </View>
             )}

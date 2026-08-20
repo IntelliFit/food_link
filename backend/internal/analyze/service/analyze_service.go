@@ -430,7 +430,7 @@ func (s *AnalyzeService) runPrecisionJSONWithImagesTemperature(ctx context.Conte
 	})
 	if allowFallback && err != nil && provider == "gemini" && len(imageURLs) > 0 && (isTransientLLMError(err) || IsLLMJSONParseError(err)) && s.dashscopeClient != nil {
 		fallbackCtx, fallbackCancel := context.WithTimeout(callCtx, visionFallbackTimeout)
-		fallbackCall := newAnalyzeWithImagesTemperatureModelCall(s.dashscopeClient, prompt, imageURLs, temperature, qwen36FlashModel)
+		fallbackCall := newAnalyzeWithImagesWithoutThinkingModelCall(s.dashscopeClient, prompt, imageURLs, qwen36FlashModel)
 		fallbackParsed, fallbackErr := analyzeWithJSONParseRetryPolicy(fallbackCtx, "precision_fallback", "qwen", qwen36FlashModel, postprocessRetryPolicy, fallbackCall)
 		fallbackCancel()
 		if fallbackErr == nil {
@@ -688,6 +688,17 @@ func newAnalyzeWithImagesTemperatureModelCall(client LLMClient, prompt string, i
 	return func(ctx context.Context) (map[string]any, error) {
 		return analyzeWithImagesTemperatureModel(ctx, client, prompt, imageURLs, temperature, modelName)
 	}
+}
+
+func newAnalyzeWithImagesWithoutThinkingModelCall(client LLMClient, prompt string, imageURLs []string, modelName string) func(context.Context) (map[string]any, error) {
+	if fastClient, ok := client.(interface {
+		AnalyzeWithImagesWithoutThinkingModel(context.Context, string, []string, string) (map[string]any, error)
+	}); ok {
+		return func(ctx context.Context) (map[string]any, error) {
+			return fastClient.AnalyzeWithImagesWithoutThinkingModel(ctx, prompt, imageURLs, modelName)
+		}
+	}
+	return newAnalyzeWithImagesTemperatureModelCall(client, prompt, imageURLs, 0, modelName)
 }
 
 func isTransientLLMError(err error) bool {
@@ -1011,7 +1022,7 @@ func foodAnalyzeImageURLs(input AnalyzeInput) []string {
 
 func validateFoodAnalyzeImageLimit(count int) error {
 	if count > maxFoodAnalyzeImages {
-		return &errors.AppError{Code: 10002, Message: "最多支持 3 张图片", HTTPStatus: 400}
+		return &errors.AppError{Code: 10002, Message: "最多支持 5 张图片", HTTPStatus: 400}
 	}
 	return nil
 }
@@ -2227,6 +2238,9 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 	}
 	defer analysisCallCancel()
 	primaryImageCall := newAnalyzeWithImagesTemperatureModelCall(client, prompt, imageURLs, 0, model)
+	if isFastExecutionMode(executionMode) {
+		primaryImageCall = newAnalyzeWithImagesWithoutThinkingModelCall(client, prompt, imageURLs, model)
+	}
 	visionPolicy := defaultLLMRetryPolicy
 	if provider == "gemini" && len(imageURLs) > 0 {
 		visionPolicy = realtimeVisionRetryPolicy
@@ -2270,7 +2284,7 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 	if err != nil && provider == "gemini" && len(imageURLs) > 0 && (isTransientLLMError(err) || IsLLMJSONParseError(err)) && s.dashscopeClient != nil {
 		primaryErr := err
 		fallbackCtx, fallbackCancel := context.WithTimeout(ctx, visionFallbackTimeout)
-		fallbackCall := newAnalyzeWithImagesTemperatureModelCall(s.dashscopeClient, prompt, imageURLs, 0, qwen36FlashModel)
+		fallbackCall := newAnalyzeWithImagesWithoutThinkingModelCall(s.dashscopeClient, prompt, imageURLs, qwen36FlashModel)
 		fallbackParsed, fallbackErr := analyzeWithJSONParseRetryPolicy(fallbackCtx, "food_image_fallback", "qwen", qwen36FlashModel, postprocessRetryPolicy, fallbackCall)
 		fallbackCancel()
 		if fallbackErr == nil {
@@ -2427,6 +2441,9 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 			}
 		}
 	}
+	hybridMeta["primary_provider"] = primaryProvider
+	hybridMeta["primary_model"] = primaryModel
+	hybridMeta["fallback_used"] = fallbackUsed
 	durationMs = float64(time.Since(start).Milliseconds())
 	apm.SetAttributes(ctx,
 		attribute.String("analysis.provider", provider),

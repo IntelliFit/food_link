@@ -115,6 +115,8 @@ interface SelectedItem {
   nutrientsPer100g?: Nutrients
   displayUnit: ManualDisplayUnit
   displayUnitLabel: string
+  naturalDisplayUnit: ManualDisplayUnit
+  naturalDisplayUnitLabel: string
   servingPresets: ServingPreset[]
   imagePath?: string | null
   recommendReason?: string
@@ -520,7 +522,6 @@ function RecordManualPage() {
   const [customImageLocalPath, setCustomImageLocalPath] = useState('')
   const [customImageUrl, setCustomImageUrl] = useState('')
   const [customImageUploading, setCustomImageUploading] = useState(false)
-  const [customShareToPublic, setCustomShareToPublic] = useState(false)
   const [customItems, setCustomItems] = useState<ManualFoodSearchResult[]>([])
   const [showSelectedDrawer, setShowSelectedDrawer] = useState(false)
   const entryTypeRef = useRef<FoodRecordEntryType>('food_library')
@@ -774,7 +775,6 @@ function RecordManualPage() {
     setCustomImageLocalPath('')
     setCustomImageUrl('')
     setCustomImageUploading(false)
-    setCustomShareToPublic(false)
   }
 
   const handleCustomMicroInput = (key: NutrientKey, value: string) => {
@@ -921,7 +921,7 @@ function RecordManualPage() {
           image_paths: customResult.image_paths || undefined,
           portion_label: customResult.portion_label,
           recommend_reason: customResult.recommend_reason,
-          share_to_public: customShareToPublic,
+          share_to_public: false,
         })
       } catch (e) {
         Taro.showToast({ title: '已先保存到本机', icon: 'none' })
@@ -1009,6 +1009,8 @@ function RecordManualPage() {
             nutrientsPer100g: item.nutrients_per_100g || undefined,
             displayUnit: servingProfile.displayUnit,
             displayUnitLabel: servingProfile.displayUnitLabel,
+            naturalDisplayUnit: servingProfile.displayUnit,
+            naturalDisplayUnitLabel: servingProfile.displayUnitLabel,
             servingPresets: servingProfile.servingPresets,
             imagePath: pickFoodDisplayImageUrl(item) || null,
             recommendReason: item.nutrition_highlights?.join(' · ') || item.recommend_reason,
@@ -1077,6 +1079,20 @@ function RecordManualPage() {
     const target = selectedMap.get(key)
     if (!target) return
     updateItemWeight(key, target.weight + delta)
+  }
+
+  const toggleItemWeightUnit = (key: string) => {
+    setSelectedItems((prev) => prev.map((item) => {
+      if (getItemKey(item) !== key) return item
+      const nextUnit: ManualDisplayUnit = item.displayUnit === 'g'
+        ? item.naturalDisplayUnit
+        : 'g'
+      const nextLabel = nextUnit === 'g'
+        ? 'g'
+        : item.naturalDisplayUnitLabel
+      const next = { ...item, displayUnit: nextUnit, displayUnitLabel: nextLabel }
+      return { ...next, weightInput: formatWeightInput(next) }
+    }))
   }
 
   const handleRemoveItem = (key: string) => {
@@ -1223,6 +1239,23 @@ function RecordManualPage() {
                     <Text>{preset.label}</Text>
                   </View>
                 ))}
+              </View>
+            )}
+
+            {(item.naturalDisplayUnit === 'piece' || item.naturalDisplayUnit === 'serving') && (
+              <View className='weight-unit-switch'>
+                <View
+                  className={`weight-unit-switch__item ${item.displayUnit !== 'g' ? 'active' : ''}`}
+                  onClick={() => item.displayUnit === 'g' && toggleItemWeightUnit(key)}
+                >
+                  <Text>{item.naturalDisplayUnit === 'piece' ? '按个' : '按份'}</Text>
+                </View>
+                <View
+                  className={`weight-unit-switch__item ${item.displayUnit === 'g' ? 'active' : ''}`}
+                  onClick={() => item.displayUnit !== 'g' && toggleItemWeightUnit(key)}
+                >
+                  <Text>按克</Text>
+                </View>
               </View>
             )}
 
@@ -1526,15 +1559,6 @@ function RecordManualPage() {
                   ))}
                 </View>
               )}
-              <View className='custom-public-row' onClick={() => setCustomShareToPublic((prev) => !prev)}>
-                <View className='custom-public-copy'>
-                  <Text className='custom-public-title'>贡献到公共临时库</Text>
-                  <Text className='custom-public-subtitle'>审核通过后可给大家复用</Text>
-                </View>
-                <View className={`custom-public-switch ${customShareToPublic ? 'active' : ''}`}>
-                  <View className='custom-public-knob' />
-                </View>
-              </View>
               <View className='custom-food-actions'>
                 <View className='custom-food-secondary' onClick={resetCustomDraft}>
                   <Text>清空</Text>

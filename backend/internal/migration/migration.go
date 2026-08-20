@@ -47,6 +47,9 @@ func AutoMigrate(ctx context.Context, db *gorm.DB, schema string) error {
 	if err := ensureIndexes(ctx, db); err != nil {
 		return err
 	}
+	if err := ensureFoodNutritionContributionBackfill(ctx, db); err != nil {
+		return err
+	}
 	if err := ensureNutritionQualityBackfill(ctx, db); err != nil {
 		return err
 	}
@@ -54,6 +57,9 @@ func AutoMigrate(ctx context.Context, db *gorm.DB, schema string) error {
 		return err
 	}
 	if err := ensureExerciseEnergySeed(ctx, db); err != nil {
+		return err
+	}
+	if err := ensureSupplementCatalogSeed(ctx, db); err != nil {
 		return err
 	}
 	if err := ensurePublicFoodTypeBackfill(ctx, db); err != nil {
@@ -134,6 +140,34 @@ func ensureOnboardingStatus(ctx context.Context, db *gorm.DB) error {
 	}
 	if !db.Migrator().HasColumn(&migrationdo.UserDO{}, "onboarding_draft_step") {
 		return fmt.Errorf("missing onboarding_draft_step column after auto migrate")
+	}
+	return nil
+}
+
+func ensureFoodNutritionContributionBackfill(ctx context.Context, db *gorm.DB) error {
+	if !db.Migrator().HasTable(&migrationdo.UserCustomFoodDO{}) || !db.Migrator().HasTable(&migrationdo.FoodNutritionContributionDO{}) {
+		return nil
+	}
+	statement := `
+		INSERT INTO food_nutrition_contributions (
+			user_id, canonical_name, normalized_name,
+			kcal_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g,
+			source_text, evidence_image_paths, extra_nutrients, status,
+			legacy_custom_food_id, created_at, updated_at
+		)
+		SELECT
+			user_id, title, normalized_title,
+			GREATEST(COALESCE(CASE WHEN trim(nutrients_per_100g->>'calories') ~ '^[+-]?([0-9]+([.][0-9]*)?|[.][0-9]+)$' THEN (nutrients_per_100g->>'calories')::numeric END, total_calories * 100 / NULLIF(default_weight_grams, 0), 0), 0),
+			GREATEST(COALESCE(CASE WHEN trim(nutrients_per_100g->>'protein') ~ '^[+-]?([0-9]+([.][0-9]*)?|[.][0-9]+)$' THEN (nutrients_per_100g->>'protein')::numeric END, total_protein * 100 / NULLIF(default_weight_grams, 0), 0), 0),
+			GREATEST(COALESCE(CASE WHEN trim(nutrients_per_100g->>'carbs') ~ '^[+-]?([0-9]+([.][0-9]*)?|[.][0-9]+)$' THEN (nutrients_per_100g->>'carbs')::numeric END, total_carbs * 100 / NULLIF(default_weight_grams, 0), 0), 0),
+			GREATEST(COALESCE(CASE WHEN trim(nutrients_per_100g->>'fat') ~ '^[+-]?([0-9]+([.][0-9]*)?|[.][0-9]+)$' THEN (nutrients_per_100g->>'fat')::numeric END, total_fat * 100 / NULLIF(default_weight_grams, 0), 0), 0),
+			'历史自定义食物公共库待审核记录', COALESCE(image_paths, '[]'::jsonb), COALESCE(extra_nutrients, '{}'::jsonb), 'pending',
+			id, COALESCE(created_at, now()), COALESCE(updated_at, now())
+		FROM user_custom_foods
+		WHERE public_status = 'pending'
+		ON CONFLICT (legacy_custom_food_id) DO NOTHING`
+	if err := db.WithContext(ctx).Exec(statement).Error; err != nil {
+		return fmt.Errorf("backfill legacy food nutrition contributions: %w", err)
 	}
 	return nil
 }
@@ -248,6 +282,72 @@ func MigrateCampusCatalogPublishing(ctx context.Context, db *gorm.DB, schema str
 	}
 	if err := db.WithContext(ctx).Exec(`ALTER TABLE public_food_library ALTER COLUMN user_id DROP NOT NULL`).Error; err != nil {
 		return fmt.Errorf("allow official public food author: %w", err)
+	}
+	return nil
+}
+
+// MigrateSupplements applies only the additive supplement cabinet and intake
+// schema. It intentionally avoids broad AutoMigrate backfills and seed jobs so
+// the supplement feature can be released independently.
+func MigrateSupplements(ctx context.Context, db *gorm.DB, schema string) error {
+	if err := prepareSchema(ctx, db, schema); err != nil {
+		return err
+	}
+	if err := db.WithContext(ctx).AutoMigrate(
+		&migrationdo.SupplementCatalogItemDO{},
+		&migrationdo.UserSupplementDO{},
+		&migrationdo.SupplementIntakeDO{},
+	); err != nil {
+		return fmt.Errorf("auto migrate supplement models: %w", err)
+	}
+	if err := ensureSupplementCatalogSeed(ctx, db); err != nil {
+		return err
+	}
+	for _, table := range []string{"supplement_catalog_items", "user_supplements", "supplement_intakes"} {
+		if !db.WithContext(ctx).Migrator().HasTable(table) {
+			return fmt.Errorf("missing supplement table after migration: %s", table)
+		}
+	}
+	for _, check := range []struct {
+		model any
+		index string
+	}{
+		{model: &migrationdo.SupplementCatalogItemDO{}, index: "idx_supplement_catalog_status_sort"},
+		{model: &migrationdo.UserSupplementDO{}, index: "idx_user_supplements_user_status"},
+		{model: &migrationdo.SupplementIntakeDO{}, index: "idx_supplement_intakes_user_taken"},
+		{model: &migrationdo.SupplementIntakeDO{}, index: "idx_supplement_intakes_user_idempotency"},
+	} {
+		if !db.WithContext(ctx).Migrator().HasIndex(check.model, check.index) {
+			return fmt.Errorf("missing supplement index after migration: %s", check.index)
+		}
+	}
+	return nil
+}
+
+func ensureSupplementCatalogSeed(ctx context.Context, db *gorm.DB) error {
+	type component = map[string]any
+	seeds := []migrationdo.SupplementCatalogItemDO{
+		{ID: "9d4a1000-0000-4000-8000-000000000001", Name: "维生素D3", Category: "vitamin", Description: "常用维生素模板，请按瓶身标签核对每份含量。", ServingLabel: "1粒", SearchTerms: "维D vitamin d cholecalciferol 胆钙化醇", SortOrder: 10, Status: "active", Components: []component{{"code": "vitamin_d", "name": "维生素D", "category": "nutrient", "amount": 25, "unit": "mcg", "nutrient_key": "vitaminDMcg"}}},
+		{ID: "9d4a1000-0000-4000-8000-000000000002", Name: "维生素C", Category: "vitamin", Description: "常用维生素模板，请按瓶身标签核对每份含量。", ServingLabel: "1片", SearchTerms: "vitamin c 抗坏血酸", SortOrder: 20, Status: "active", Components: []component{{"code": "vitamin_c", "name": "维生素C", "category": "nutrient", "amount": 500, "unit": "mg", "nutrient_key": "vitaminCMg"}}},
+		{ID: "9d4a1000-0000-4000-8000-000000000003", Name: "镁", Category: "mineral", Description: "矿物质模板，可按标签修改为甘氨酸镁、柠檬酸镁等具体形式。", ServingLabel: "2粒", SearchTerms: "magnesium 甘氨酸镁 柠檬酸镁", SortOrder: 30, Status: "active", Components: []component{{"code": "magnesium", "name": "镁", "category": "nutrient", "amount": 200, "unit": "mg", "nutrient_key": "magnesiumMg"}}},
+		{ID: "9d4a1000-0000-4000-8000-000000000004", Name: "锌", Category: "mineral", Description: "常用矿物质模板，请按瓶身标签核对每份含量。", ServingLabel: "1片", SearchTerms: "zinc 葡萄糖酸锌", SortOrder: 40, Status: "active", Components: []component{{"code": "zinc", "name": "锌", "category": "nutrient", "amount": 15, "unit": "mg", "nutrient_key": "zincMg"}}},
+		{ID: "9d4a1000-0000-4000-8000-000000000005", Name: "钙", Category: "mineral", Description: "常用矿物质模板，请按瓶身标签核对每份含量。", ServingLabel: "1片", SearchTerms: "calcium 碳酸钙 柠檬酸钙", SortOrder: 50, Status: "active", Components: []component{{"code": "calcium", "name": "钙", "category": "nutrient", "amount": 500, "unit": "mg", "nutrient_key": "calciumMg"}}},
+		{ID: "9d4a1000-0000-4000-8000-000000000006", Name: "铁", Category: "mineral", Description: "常用矿物质模板，请按瓶身标签核对每份含量。", ServingLabel: "1片", SearchTerms: "iron 富马酸亚铁 甘氨酸亚铁", SortOrder: 60, Status: "active", Components: []component{{"code": "iron", "name": "铁", "category": "nutrient", "amount": 18, "unit": "mg", "nutrient_key": "ironMg"}}},
+		{ID: "9d4a1000-0000-4000-8000-000000000007", Name: "维生素B12", Category: "vitamin", Description: "常用维生素模板，请按瓶身标签核对每份含量。", ServingLabel: "1片", SearchTerms: "vitamin b12 cobalamin 钴胺素", SortOrder: 70, Status: "active", Components: []component{{"code": "vitamin_b12", "name": "维生素B12", "category": "nutrient", "amount": 100, "unit": "mcg", "nutrient_key": "vitaminB12Mcg"}}},
+		{ID: "9d4a1000-0000-4000-8000-000000000008", Name: "叶酸", Category: "vitamin", Description: "常用维生素模板，请按瓶身标签核对每份含量。", ServingLabel: "1片", SearchTerms: "folate folic acid 维生素B9", SortOrder: 80, Status: "active", Components: []component{{"code": "folate", "name": "叶酸", "category": "nutrient", "amount": 400, "unit": "mcg", "nutrient_key": "folateMcg"}}},
+		{ID: "9d4a1000-0000-4000-8000-000000000009", Name: "鱼油（EPA+DHA）", Category: "wellness", Description: "功能成分模板，不把鱼油总量误当作 Omega-3 含量。", ServingLabel: "1粒", SearchTerms: "fish oil omega 3 欧米伽3 epa dha", SortOrder: 90, Status: "active", Components: []component{{"code": "epa", "name": "EPA", "category": "functional", "amount": 180, "unit": "mg"}, {"code": "dha", "name": "DHA", "category": "functional", "amount": 120, "unit": "mg"}}},
+		{ID: "9d4a1000-0000-4000-8000-000000000010", Name: "一水肌酸", Category: "sports", Description: "运动营养模板，作为功能成分记录。", ServingLabel: "1勺", SearchTerms: "creatine monohydrate 肌酸粉", SortOrder: 100, Status: "active", Components: []component{{"code": "creatine_monohydrate", "name": "一水肌酸", "category": "functional", "amount": 5, "unit": "g"}}},
+		{ID: "9d4a1000-0000-4000-8000-000000000011", Name: "益生菌", Category: "wellness", Description: "菌株与活菌数差异较大，请按瓶身标签补充或修改。", ServingLabel: "1粒", SearchTerms: "probiotic 乳酸菌 双歧杆菌", SortOrder: 110, Status: "active", Components: []component{{"code": "probiotics", "name": "益生菌", "category": "blend", "amount": 10, "unit": "B CFU"}}},
+		{ID: "9d4a1000-0000-4000-8000-000000000012", Name: "辅酶Q10", Category: "wellness", Description: "常用功能成分模板，请按瓶身标签核对每份含量。", ServingLabel: "1粒", SearchTerms: "coq10 coenzyme q10 ubiquinone 泛醌", SortOrder: 120, Status: "active", Components: []component{{"code": "coq10", "name": "辅酶Q10", "category": "functional", "amount": 100, "unit": "mg"}}},
+		{ID: "9d4a1000-0000-4000-8000-000000000013", Name: "叶黄素", Category: "wellness", Description: "常用功能成分模板，请按瓶身标签核对每份含量。", ServingLabel: "1粒", SearchTerms: "lutein 玉米黄质 护眼", SortOrder: 130, Status: "active", Components: []component{{"code": "lutein", "name": "叶黄素", "category": "functional", "amount": 10, "unit": "mg"}}},
+	}
+	for _, seed := range seeds {
+		if err := db.WithContext(ctx).Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "id"}},
+			DoUpdates: clause.AssignmentColumns([]string{"name", "category", "description", "brand", "image_url", "serving_label", "components", "search_terms", "sort_order", "status", "updated_at"}),
+		}).Create(&seed).Error; err != nil {
+			return fmt.Errorf("seed supplement catalog item %s: %w", seed.Name, err)
+		}
 	}
 	return nil
 }
@@ -444,7 +544,10 @@ func ensureConstraints(ctx context.Context, db *gorm.DB) error {
 		dropAndAddCheck("user_pet_daily_scores", "user_pet_daily_scores_score_check", `habit_score >= 0 AND exp_gained >= 0`),
 		dropAndAddCheck("user_credit_bonus_events", "user_credit_bonus_events_bonus_type_check", `bonus_type = ANY (ARRAY['share_poster'::text])`),
 		dropAndAddCheck("user_credit_bonus_events", "user_credit_bonus_events_credits_check", `credits >= 0`),
-		dropAndAddCheck("reward_task_uploads", "reward_task_uploads_task_type_check", `task_type = ANY (ARRAY['packaged_food_upload'::text,'public_food_upload'::text])`),
+		dropAndAddCheck("reward_task_uploads", "reward_task_uploads_task_type_check", `task_type = ANY (ARRAY['packaged_food_upload'::text,'public_food_upload'::text,'standard_food_upload'::text])`),
+		dropAndAddCheck("food_nutrition_contributions", "food_nutrition_contributions_status_check", `status = ANY (ARRAY['pending'::text,'approved'::text,'rejected'::text])`),
+		dropAndAddCheck("food_nutrition_contributions", "food_nutrition_contributions_review_action_check", `review_action IS NULL OR review_action = ANY (ARRAY['approve_new'::text,'merge_existing'::text,'reject'::text])`),
+		dropAndAddCheck("food_nutrition_contributions", "food_nutrition_contributions_nutrition_check", `kcal_per_100g >= 0 AND protein_per_100g >= 0 AND carbs_per_100g >= 0 AND fat_per_100g >= 0`),
 		dropAndAddCheck("reward_task_uploads", "reward_task_uploads_status_check", `status = ANY (ARRAY['pending'::text,'succeeded'::text,'failed'::text])`),
 		dropAndAddCheck("reward_task_uploads", "reward_task_uploads_reward_credits_check", `reward_credits >= 0`),
 		dropAndAddCheck("packaged_food_correction_submissions", "packaged_food_correction_submissions_status_check", `status = ANY (ARRAY['pending'::text,'applied'::text,'rejected'::text])`),
@@ -554,6 +657,10 @@ func ensureConstraints(ctx context.Context, db *gorm.DB) error {
 		addFK("user_credit_bonus_events_user_id_fkey", "user_credit_bonus_events", "user_id", "weapp_user", "id", "CASCADE"),
 		addFK("user_credit_bonus_events_source_record_id_fkey", "user_credit_bonus_events", "source_record_id", "user_food_records", "id", "SET NULL"),
 		addFK("reward_task_uploads_user_id_fkey", "reward_task_uploads", "user_id", "weapp_user", "id", "CASCADE"),
+		addFK("food_nutrition_contributions_user_id_fkey", "food_nutrition_contributions", "user_id", "weapp_user", "id", "CASCADE"),
+		addFK("food_nutrition_contributions_reviewed_by_fkey", "food_nutrition_contributions", "reviewed_by", "admin_accounts", "id", "SET NULL"),
+		addFK("food_nutrition_contributions_target_food_id_fkey", "food_nutrition_contributions", "target_food_id", "food_nutrition_library", "id", "SET NULL"),
+		addFK("food_nutrition_contributions_legacy_custom_food_id_fkey", "food_nutrition_contributions", "legacy_custom_food_id", "user_custom_foods", "id", "SET NULL"),
 		addFK("reward_task_uploads_source_task_id_fkey", "reward_task_uploads", "source_task_id", "analysis_tasks", "id", "SET NULL"),
 		addFK("reward_task_uploads_packaged_food_id_fkey", "reward_task_uploads", "packaged_food_id", "packaged_food_library", "id", "SET NULL"),
 		addFK("reward_task_uploads_public_food_item_id_fkey", "reward_task_uploads", "public_food_item_id", "public_food_library", "id", "SET NULL"),
@@ -753,6 +860,7 @@ WHERE COALESCE(display_name, '') = ''
 		`CREATE INDEX IF NOT EXISTS idx_packaged_food_correction_submissions_status_created_at ON packaged_food_correction_submissions (status, created_at DESC)`,
 		`CREATE INDEX IF NOT EXISTS idx_packaged_food_change_logs_food_created_at ON packaged_food_change_logs (packaged_food_id, created_at DESC)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_reward_task_uploads_source_key ON reward_task_uploads (source_key) WHERE source_key IS NOT NULL`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_food_nutrition_contributions_pending_user_name ON food_nutrition_contributions (user_id, normalized_name) WHERE status = 'pending'`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS precision_item_estimates_session_round_item_key_key ON precision_item_estimates (session_id, round_index, item_key)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS user_food_records_user_task_unique ON user_food_records (user_id, source_task_id)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_user_recipes_user_source_task_unique ON user_recipes (user_id, source_task_id) WHERE source_task_id IS NOT NULL`,

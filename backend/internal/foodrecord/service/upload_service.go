@@ -9,11 +9,17 @@ import (
 )
 
 type UploadService struct {
-	storage *storage.Client
+	storage        *storage.Client
+	videoStorage   analyzeVideoStorage
+	videoExtractor analyzeVideoFrameExtractor
 }
 
 func NewUploadService(storage *storage.Client) *UploadService {
-	return &UploadService{storage: storage}
+	return &UploadService{
+		storage:        storage,
+		videoStorage:   storage,
+		videoExtractor: ffmpegAnalyzeVideoFrameExtractor{},
+	}
 }
 
 func (s *UploadService) UploadBase64(base64Image string) (string, error) {

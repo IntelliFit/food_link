@@ -16,6 +16,7 @@ import {
   type HomeMealItem,
   type HomeMealRecordEntry,
   type HomeNutritionTarget,
+  type SupplementDashboardSummary,
   type SaveFoodRecordRequest
 } from './api'
 import { type BodyMetricsStorage } from '../pages/index/types'
@@ -25,6 +26,8 @@ export const HOME_DASHBOARD_LOCAL_CACHE_KEY = 'home_dashboard_local_cache'
 export const HOME_DASHBOARD_LOCAL_CACHE_LIMIT = 14
 
 export interface HomeDashboardLocalSnapshot {
+  /** 本地缓存必须与当前登录账号绑定，避免切换账号后展示上一账号的数据。 */
+  user_id?: string
   date: string
   updatedAt: number
   intakeData: HomeIntakeData
@@ -33,6 +36,7 @@ export interface HomeDashboardLocalSnapshot {
   exerciseBurnedKcal: number
   achievement: HomeAchievement
   nutritionTarget?: HomeNutritionTarget | null
+  supplementSummary?: SupplementDashboardSummary
 }
 
 export const DEFAULT_EXPIRY_SUMMARY: HomeFoodExpirySummary = {
@@ -71,6 +75,14 @@ function parseExerciseBurnedKcal(raw: unknown): number {
   return 0
 }
 
+function currentUserId(): string {
+  try {
+    return String(Taro.getStorageSync('user_id') || '').trim()
+  } catch {
+    return ''
+  }
+}
+
 /** 与记运动页同源：合并 dashboard 与 exercise-logs，取较大值 */
 function mergeExerciseKcalFromDashboardAndLogs(dashboardRaw: unknown, logsTotal: unknown): number {
   const dash = parseExerciseBurnedKcal(dashboardRaw)
@@ -107,12 +119,14 @@ export function getStoredHomeDashboardSnapshots(): HomeDashboardLocalSnapshot[] 
   try {
     const raw = Taro.getStorageSync(HOME_DASHBOARD_LOCAL_CACHE_KEY) as unknown
     if (!Array.isArray(raw)) return []
+    const userId = currentUserId()
+    if (!userId) return []
     const valid = raw
       .filter((item): item is HomeDashboardLocalSnapshot => {
         if (!item || typeof item !== 'object') return false
         const date = (item as { date?: unknown }).date
         if (typeof date !== 'string' || date.length === 0) return false
-        return true
+        return (item as { user_id?: unknown }).user_id === userId
       })
       .map((item) => ({
         ...item,
@@ -133,8 +147,11 @@ export function getStoredHomeDashboardSnapshotByDate(date: string): HomeDashboar
 }
 
 export function saveHomeDashboardSnapshot(snapshot: HomeDashboardLocalSnapshot): void {
+  const userId = currentUserId()
+  if (!userId) return
   const cleanedSnapshot = {
     ...snapshot,
+    user_id: userId,
     meals: stripMealFullRecords(snapshot.meals || [])
   }
   const current = getStoredHomeDashboardSnapshots().filter((item) => item.date !== cleanedSnapshot.date)

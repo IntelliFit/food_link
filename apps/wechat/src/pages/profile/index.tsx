@@ -289,6 +289,13 @@ function ProfilePage() {
       path: extraPkgUrl('/pages/reward-center/index')
     },
     {
+      id: 12,
+      iconClass: 'icon-shiwu',
+      title: '贡献食物数据',
+      desc: '补充标准食物、包装食品或公共餐食',
+      path: extraPkgUrl('/pages/food-contribution/index')
+    },
+    {
       id: 11,
       iconClass: 'icon-duoren',
       title: '邀请好友得会员',

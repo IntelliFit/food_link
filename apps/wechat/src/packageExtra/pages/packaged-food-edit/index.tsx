@@ -26,7 +26,7 @@ const PACKAGED_FOOD_EDIT_DRAFT_KEY = 'packagedFoodEditDraft'
 const PACKAGED_FOOD_EDIT_SAVED_KEY = 'packagedFoodEditSaved'
 const PACKAGED_FOOD_UPLOAD_TASKS_KEY = 'packagedFoodUploadTasks'
 const PACKAGED_FOOD_UPLOAD_CONSENT_KEY = 'packagedFoodUploadConsentV1'
-const MAX_REWARD_UPLOAD_IMAGES = 3
+const MAX_REWARD_UPLOAD_IMAGES = 5
 const KJ_PER_KCAL = 4.184
 
 type CaptureStep = 'front' | 'nutrition' | 'ingredients'
@@ -823,7 +823,7 @@ function PackagedFoodEditPage() {
       setLibrarySearchResults(results.slice(0, 6))
     } catch (error) {
       setLibrarySearchResults([])
-      await showUnifiedApiError(error, '搜索零食库失败')
+      await showUnifiedApiError(error, '搜索包装食品库失败')
     } finally {
       setLibrarySearchLoading(false)
     }
@@ -895,7 +895,7 @@ function PackagedFoodEditPage() {
       if (isPrivacyAuthorizeError(error)) {
         showPrivacyAuthorizeFailure(error)
       } else {
-        await showUnifiedApiError(error, '提交零食分析任务失败')
+        await showUnifiedApiError(error, '提交包装食品分析任务失败')
       }
     } finally {
       setRecognizing(false)
@@ -910,7 +910,7 @@ function PackagedFoodEditPage() {
       return
     }
     if (imageUrls.length > MAX_REWARD_UPLOAD_IMAGES) {
-      Taro.showToast({ title: '同一种商品最多 3 张图', icon: 'none' })
+      Taro.showToast({ title: '同一种商品最多 5 张图', icon: 'none' })
       return
     }
     setRecognizing(true)
@@ -940,7 +940,7 @@ function PackagedFoodEditPage() {
       showRewardSubmitConfirm(taskId, nextTasks)
     } catch (error) {
       Taro.hideLoading()
-      await showUnifiedApiError(error, '提交零食分析任务失败')
+      await showUnifiedApiError(error, '提交包装食品分析任务失败')
     } finally {
       setRecognizing(false)
     }
@@ -973,9 +973,17 @@ function PackagedFoodEditPage() {
     throw new Error('识别时间较长，请稍后重试')
   }
 
-  const runExtract = async (overrides?: Partial<CaptureImages>) => {
+  const runExtract = async (
+    overrides?: Partial<CaptureImages>,
+    supplementalImages: UploadedImage[] = manualImages,
+  ) => {
     const merged = { ...captureImages, ...overrides }
-    const imageUrls = [merged.front, merged.nutrition, merged.ingredients].filter(Boolean) as string[]
+    const imageUrls = Array.from(new Set([
+      merged.front,
+      merged.nutrition,
+      merged.ingredients,
+      ...supplementalImages.map(item => item.imageUrl),
+    ].filter(Boolean) as string[])).slice(0, MAX_REWARD_UPLOAD_IMAGES)
     if (imageUrls.length < 1) {
       return
     }
@@ -1016,6 +1024,8 @@ function PackagedFoodEditPage() {
         Taro.setStorageSync(PACKAGED_FOOD_EDIT_SAVED_KEY, {
           itemId: draft.itemId,
           packagedFoodId: result.packaged_food_id,
+          unitNutritionPer100g: result.unit_nutrition_per_100g,
+          productName: result.product_name,
         })
         Taro.removeStorageSync(PACKAGED_FOOD_EDIT_DRAFT_KEY)
         Taro.showToast({ title: '已自动入库', icon: 'success' })
@@ -1058,10 +1068,41 @@ function PackagedFoodEditPage() {
     }
   }
 
+  const handleGuidedDetailImages = async () => {
+    if (recognizing || sourceImageURLs.length >= MAX_REWARD_UPLOAD_IMAGES) return
+    setRecognizing(true)
+    try {
+      const allowed = await askPackagedUploadConsent()
+      if (!allowed) return
+      const remaining = MAX_REWARD_UPLOAD_IMAGES - sourceImageURLs.length
+      const uploaded = await chooseAndUploadImages(Math.min(2, remaining))
+      if (uploaded.length === 0) return
+      const existing = new Set(sourceImageURLs)
+      const nextDetails = [...manualImages]
+      uploaded.forEach((item) => {
+        if (!item.imageUrl || existing.has(item.imageUrl)) return
+        existing.add(item.imageUrl)
+        nextDetails.push(item)
+      })
+      const limitedDetails = nextDetails.slice(0, Math.max(0, MAX_REWARD_UPLOAD_IMAGES - 3))
+      setManualImages(limitedDetails)
+      await runExtract(undefined, limitedDetails)
+    } catch (error) {
+      if (isChooseImageCancel(error)) return
+      if (isPrivacyAuthorizeError(error)) {
+        showPrivacyAuthorizeFailure(error)
+      } else {
+        await showUnifiedApiError(error, '补拍包装细节图失败')
+      }
+    } finally {
+      setRecognizing(false)
+    }
+  }
+
   const handleSubmit = async () => {
     if (saving) return
     if (!draft.productName.trim()) {
-      Taro.showToast({ title: '请填写零食名称', icon: 'none' })
+      Taro.showToast({ title: '请填写包装食品名称', icon: 'none' })
       return
     }
     if (numberFromDraft(draft.netWeightG) <= 0) {
@@ -1133,6 +1174,16 @@ function PackagedFoodEditPage() {
       Taro.setStorageSync(PACKAGED_FOOD_EDIT_SAVED_KEY, {
         itemId: draft.itemId,
         packagedFoodId: item.id,
+        unitNutritionPer100g: {
+          calories: item.kcal_per_100g,
+          protein: item.protein_per_100g,
+          carbs: item.carbs_per_100g,
+          fat: item.fat_per_100g,
+          fiber: item.fiber_per_100g,
+          sugar: item.sugar_per_100g,
+          sodiumMg: item.sodium_mg_per_100g,
+        },
+        productName: item.display_name || item.product_name,
       })
       Taro.removeStorageSync(PACKAGED_FOOD_EDIT_DRAFT_KEY)
       Taro.hideLoading()
@@ -1140,7 +1191,7 @@ function PackagedFoodEditPage() {
       setTimeout(() => Taro.navigateBack(), 450)
     } catch (error) {
       Taro.hideLoading()
-      await showUnifiedApiError(error, '保存零食数据失败')
+      await showUnifiedApiError(error, '保存包装食品数据失败')
     } finally {
       setSaving(false)
     }
@@ -1155,10 +1206,10 @@ function PackagedFoodEditPage() {
       <ScrollView className='packaged-food-edit-scroll' scrollY>
         {isUploadMode && (
         <View className='edit-section wizard-section'>
-          <Text className='section-title'>预包装零食补库</Text>
+          <Text className='section-title'>贡献包装食品</Text>
           {isRewardTaskMode ? (
             <>
-              <Text className='wizard-desc'>一种食物一组照片。可以从相册一次选择 1-3 张，也可以用相机连续拍摄多张；确认后只会建立一个分析任务。</Text>
+              <Text className='wizard-desc'>一种食物一组照片。可以从相册一次选择 1-5 张，也可以用相机连续拍摄多张；确认后只会建立一个分析任务。</Text>
 
               <View className='shoot-case-list'>
                 <View className='shoot-case-card'>
@@ -1208,7 +1259,7 @@ function PackagedFoodEditPage() {
 
               <View className='library-search-card'>
                 <View className='library-search-head'>
-                  <Text className='library-search-title'>先搜零食库</Text>
+                  <Text className='library-search-title'>先搜包装食品库</Text>
                   <Text className='library-search-desc'>输入品牌、品名、口味或条码；搜到同款就不用上传。</Text>
                 </View>
                 <View className='library-search-row'>
@@ -1343,11 +1394,26 @@ function PackagedFoodEditPage() {
                     )}
                   </View>
                 )}
+                {manualImages.length > 0 && (
+                  <View className='reward-image-preview-grid manual-image-grid'>
+                    {manualImages.map((item, index) => (
+                      <View key={`${item.imageUrl}-${index}`} className='reward-image-preview'>
+                        <Image className='reward-image-preview-img' src={item.localPath || item.imageUrl} mode='aspectFill' />
+                        <Text className='reward-image-preview-badge'>细节 {index + 1}</Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
                 <Text className='capture-card-title'>{currentMeta.title}</Text>
                 <Text className='capture-card-desc'>{currentMeta.desc}</Text>
                 <View className={`recognize-btn ${recognizing ? 'loading' : ''}`} onClick={() => handleCaptureStep(currentStep)}>
                   <Text className='recognize-btn-text'>{recognizing ? '处理中' : currentMeta.cta}</Text>
                 </View>
+                {sourceImageURLs.length < MAX_REWARD_UPLOAD_IMAGES && (
+                  <View className='recognize-btn manual-image-btn' onClick={handleGuidedDetailImages}>
+                    <Text className='recognize-btn-text'>补拍可选细节图（最多2张）</Text>
+                  </View>
+                )}
               </View>
             </>
           )}
@@ -1370,7 +1436,7 @@ function PackagedFoodEditPage() {
                   {visibleUploadTasks.map((task) => (
                     <View key={task.taskId} className={`upload-task-item status-${task.status}`} onClick={() => openTaskDetail(task)}>
                       <View className='upload-task-item-main'>
-                        <Text className='upload-task-item-title'>{task.productName || `零食照片 ${task.imageCount} 张`}</Text>
+                        <Text className='upload-task-item-title'>{task.productName || `包装食品照片 ${task.imageCount} 张`}</Text>
                         <Text className='upload-task-item-desc'>{formatUploadTaskMessage(task)}</Text>
                         <Text className='upload-task-item-time'>{formatTaskTime(task.createdAt)}</Text>
                       </View>
@@ -1406,7 +1472,7 @@ function PackagedFoodEditPage() {
         {showSupplementBlocked && (
           <View className='edit-section supplement-blocked-card'>
             <Text className='section-title'>请先拍照识别</Text>
-            <Text className='wizard-desc'>零食补库以包装图片和 AI 提取为主。识别后如果缺少名称、规格或营养字段，再进入这里补充，不再单独创建纯手动商品。</Text>
+            <Text className='wizard-desc'>包装食品补库以包装图片和 AI 提取为主。识别后如果缺少名称、规格或营养字段，再进入这里补充。</Text>
             <View className='recognize-btn supplement-upload-btn' onClick={goUploadMode}>
               <Text className='recognize-btn-text'>去拍照上传</Text>
             </View>
@@ -1444,7 +1510,7 @@ function PackagedFoodEditPage() {
             <Text className='section-title'>基础信息</Text>
             <View className='field'>
               <Text className='field-label'>名称</Text>
-              <Input className={`field-input ${highlightedFieldClass('product_name')}`} value={draft.productName} placeholder='零食名称' onInput={(e) => updateField('productName', e.detail.value)} />
+              <Input className={`field-input ${highlightedFieldClass('product_name')}`} value={draft.productName} placeholder='包装食品名称' onInput={(e) => updateField('productName', e.detail.value)} />
             </View>
             <View className='field'>
               <Text className='field-label'>品牌</Text>

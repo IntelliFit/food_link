@@ -104,7 +104,7 @@ export type AnalysisEngine = 'legacy_direct' | 'db_first'
 export type AnalyzeRecognitionOutcome = 'ok' | 'soft_reject' | 'hard_reject'
 export type AllowedFoodCategory = 'carb' | 'lean_protein' | 'unknown'
 export type PrecisionSourceType = 'image' | 'text'
-export type PrecisionStatus = 'needs_user_input' | 'needs_retake' | 'estimating' | 'done'
+export type PrecisionStatus = 'needs_user_input' | 'needs_retake' | 'ready_for_estimate' | 'estimating' | 'done'
 export type PrecisionSplitStrategy =
   | 'single_item'
   | 'multi_item_parallel'
@@ -117,6 +117,7 @@ export interface PrecisionReferenceDimensions {
   length?: number
   width?: number
   height?: number
+  diameter?: number
 }
 
 export type PrecisionReferencePresetKey =
@@ -126,6 +127,7 @@ export type PrecisionReferencePresetKey =
   | 'chopsticks'
   | 'spoon'
   | 'bank_card'
+  | 'round_plate'
   | 'custom'
 
 export interface PrecisionReferenceObjectInput {
@@ -293,6 +295,10 @@ export interface AnalyzeResponse {
   retakeGuidance?: string[]
   allowedFoodCategory?: AllowedFoodCategory
   followupQuestions?: string[]
+  questions?: PrecisionQuestion[]
+  retakeRequirements?: PrecisionRetakeRequirement[]
+  referenceQuality?: PrecisionReferenceQuality
+  userActionRequired?: boolean
   precisionSessionId?: string
   precisionStatus?: PrecisionStatus
   precisionRoundIndex?: number
@@ -664,8 +670,180 @@ export interface FoodRecord {
 /** 首页微量元素单项（带每日参考摄入量与进度） */
 export interface HomeMicronutrientItem {
   current: number
+  food_current?: number
+  supplement_current?: number
   target: number
   progress: number
+}
+
+export interface PrecisionOptionsInput {
+  interactive: boolean
+  separate: boolean
+  web_search: boolean
+}
+
+export type PrecisionCaptureRole =
+  | 'top_down'
+  | 'oblique_45'
+  | 'video_keyframe_1'
+  | 'video_keyframe_2'
+  | 'video_keyframe_3'
+  | 'video_keyframe_4'
+  | 'video_keyframe_5'
+
+export interface PrecisionCaptureViewInput {
+  role: PrecisionCaptureRole
+  image_url: string
+  timestamp_ms?: number
+}
+
+export interface PrecisionCaptureReferenceInput {
+  presence: 'present' | 'absent'
+  kind?: string
+  shape?: 'rectangle' | 'circle' | 'box' | 'custom'
+  dimensions_mm?: Record<string, number>
+  placement_note?: string
+}
+
+export interface PrecisionQuestionOption {
+  value: string
+  label: string
+}
+
+export interface PrecisionQuestion {
+  id: string
+  prompt: string
+  type?: 'single_choice' | 'multiple_choice' | 'text'
+  options?: PrecisionQuestionOption[]
+  allowFreeText?: boolean
+}
+
+export interface PrecisionRetakeRequirement {
+  role: PrecisionCaptureRole | 'both' | 'video'
+  reason: string
+  guidance: string
+}
+
+export interface PrecisionReferenceQuality {
+  status?: 'good' | 'partial' | 'insufficient_scale' | 'not_visible' | 'unknown'
+  visible_in_both?: boolean
+  scale_confidence?: 'high' | 'medium' | 'low'
+  notes?: string[]
+}
+
+export interface PrecisionAnswerInput {
+  question_id: string
+  value: string | string[]
+}
+
+export interface AnalyzeVideoUploadResult {
+  capture_protocol: 'video_keyframes_v1'
+  video_id: string
+  duration_ms: number
+  width: number
+  height: number
+  size_bytes: number
+  keyframes: PrecisionCaptureViewInput[]
+}
+
+export type AnalyzeVideoCaptureMetadata = Omit<AnalyzeVideoUploadResult, 'capture_protocol' | 'keyframes'> & {
+  source_retained: false
+}
+
+export type SupplementComponentCategory = 'nutrient' | 'functional' | 'blend'
+
+export interface SupplementComponent {
+  code: string
+  name: string
+  category: SupplementComponentCategory
+  amount: number
+  unit: string
+  nutrient_key?: string
+  form?: string
+}
+
+export interface UserSupplement {
+  id: string
+  name: string
+  brand: string
+  barcode?: string | null
+  image_url?: string | null
+  default_servings: number
+  serving_label: string
+  schedule_enabled: boolean
+  schedule_time?: string | null
+  schedule_days: number[]
+  components: SupplementComponent[]
+  label_confirmed_at?: string | null
+  status: 'active' | 'archived' | string
+  created_at: string
+  updated_at: string
+}
+
+export interface SupplementCatalogItem {
+  id: string
+  name: string
+  category: 'vitamin' | 'mineral' | 'sports' | 'wellness' | string
+  description: string
+  brand: string
+  image_url?: string | null
+  serving_label: string
+  components: SupplementComponent[]
+  sort_order: number
+  status: string
+}
+
+export interface SupplementIntake {
+  id: string
+  supplement_id: string
+  supplement_name: string
+  servings: number
+  serving_label: string
+  components: SupplementComponent[]
+  taken_at: string
+  source: string
+  note?: string | null
+}
+
+export interface SupplementComponentTotal {
+  code: string
+  name: string
+  category: SupplementComponentCategory
+  amount: number
+  unit: string
+  form?: string
+}
+
+export interface SupplementDashboardSummary {
+  date?: string
+  planned_count: number
+  completed_count: number
+  pending_supplement?: UserSupplement | null
+  functional_components: SupplementComponentTotal[]
+  additional_nutrients: SupplementComponentTotal[]
+  duplicate_components: string[]
+}
+
+export interface SupplementDashboard extends SupplementDashboardSummary {
+  date: string
+  supplements: UserSupplement[]
+  intakes: SupplementIntake[]
+  nutrient_totals: Record<string, number>
+}
+
+export interface UpsertSupplementPayload {
+  name: string
+  brand?: string
+  barcode?: string | null
+  image_url?: string | null
+  default_servings?: number
+  serving_label?: string
+  schedule_enabled?: boolean
+  schedule_time?: string | null
+  schedule_days?: number[]
+  components: SupplementComponent[]
+  label_confirmed?: boolean
+  status?: string
 }
 
 /** 首页今日摄入与宏量 */
@@ -934,6 +1112,7 @@ export interface HomeDashboard {
   exerciseBurnedKcal?: number
   achievement?: HomeAchievement
   nutritionTarget?: HomeNutritionTarget
+  supplementSummary?: SupplementDashboardSummary
 }
 
 export interface PetProfile {
@@ -2182,11 +2361,29 @@ async function getLocalFileSize(localPath: string): Promise<number | null> {
   }
 }
 
+async function getLocalImageDimensions(localPath: string): Promise<{ width: number; height: number } | null> {
+  const raw = (localPath || '').trim()
+  if (!raw || /^https?:\/\//i.test(raw) || typeof Taro.getImageInfo !== 'function') return null
+
+  try {
+    const res = await Taro.getImageInfo({ src: raw })
+    const width = Number(res?.width)
+    const height = Number(res?.height)
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return null
+    return { width, height }
+  } catch {
+    return null
+  }
+}
+
 /**
  * 上传前压缩本地图片，尽量把请求体控制在安全范围。
  * 小程序端优先走文件直传；若后端仍是旧版，再回退 base64 上传。
  */
-export async function compressImagePathForUpload(localPath: string): Promise<string> {
+export async function compressImagePathForUpload(
+  localPath: string,
+  options: { maxLongEdge?: number } = {},
+): Promise<string> {
   const raw = (localPath || '').trim()
   if (!raw) return raw
   if (typeof Taro.getEnv === 'function' && Taro.getEnv() !== Taro.ENV_TYPE.WEAPP) {
@@ -2194,10 +2391,24 @@ export async function compressImagePathForUpload(localPath: string): Promise<str
   }
 
   const targetBytes = 2.5 * 1024 * 1024
-  const originalSize = await getLocalFileSize(raw)
-  if (originalSize !== null && originalSize <= targetBytes) {
+  const configuredMaxLongEdge = Number(options.maxLongEdge ?? 2048)
+  const maxLongEdge = Number.isFinite(configuredMaxLongEdge) ? Math.max(0, configuredMaxLongEdge) : 2048
+  const [originalSize, dimensions] = await Promise.all([
+    getLocalFileSize(raw),
+    getLocalImageDimensions(raw),
+  ])
+  const needsResize = Boolean(
+    dimensions && maxLongEdge > 0 && (dimensions.width > maxLongEdge || dimensions.height > maxLongEdge)
+  )
+  if (originalSize !== null && originalSize <= targetBytes && !needsResize) {
     return raw
   }
+
+  const resizeOptions = dimensions && needsResize
+    ? dimensions.width >= dimensions.height
+      ? { compressedWidth: maxLongEdge }
+      : { compressedHeight: maxLongEdge }
+    : {}
 
   const qualities = [88, 78, 68, 58]
   let bestPath = raw
@@ -2208,6 +2419,7 @@ export async function compressImagePathForUpload(localPath: string): Promise<str
       const res = await Taro.compressImage({
         src: bestPath || raw,
         quality,
+        ...resizeOptions,
       })
       const next = (res as { tempFilePath?: string })?.tempFilePath?.trim()
       if (!next) continue
@@ -2712,8 +2924,7 @@ export async function uploadAnalyzeImageFile(localPath: string): Promise<{ image
 }
 
 /**
- * 食物分析前上传图片到 Supabase，返回公网 URL。
- * 已登录时附带 Bearer，与异步分析任务一致；未登录的页面（如仅调试用）仍可上传。
+ * 食物分析前上传图片到对象存储，返回可访问 URL。服务端要求登录。
  */
 export async function uploadAnalyzeImage(base64Image: string): Promise<{ imageUrl: string }> {
   const token = getAccessToken()
@@ -2939,6 +3150,11 @@ export interface AnalyzeTaskSubmitParams {
   correction_root_task_id?: string
   precision_session_id?: string
   reference_objects?: PrecisionReferenceObjectInput[]
+  capture_protocol?: 'dual_angle_v1' | 'video_keyframes_v1'
+  precision_options?: PrecisionOptionsInput
+  capture_views?: PrecisionCaptureViewInput[]
+  video_capture?: AnalyzeVideoCaptureMetadata
+  reference_object?: PrecisionCaptureReferenceInput
   correctionItems?: Array<{
     name: string
     weight: number
@@ -3008,6 +3224,8 @@ export interface AnalyzeTaskSummary {
   record_id?: string
   history_group_key?: string
   has_result: boolean
+  precision_status?: PrecisionStatus
+  user_action_required?: boolean
   execution_mode?: string
   source_type?: string
   meal_type?: string
@@ -3217,6 +3435,69 @@ export interface ContinuePrecisionSessionParams {
   suggest_ratio_enabled?: boolean
   is_multi_view?: boolean
   reference_objects?: PrecisionReferenceObjectInput[]
+  capture_protocol?: 'dual_angle_v1' | 'video_keyframes_v1'
+  precision_options?: PrecisionOptionsInput
+  capture_views?: PrecisionCaptureViewInput[]
+  video_capture?: AnalyzeVideoCaptureMetadata
+  reference_object?: PrecisionCaptureReferenceInput
+  answers?: PrecisionAnswerInput[]
+  continue_with_uncertainty?: boolean
+}
+
+export async function uploadAnalyzeVideoFile(
+  localPath: string,
+  onProgress?: (progress: number) => void
+): Promise<AnalyzeVideoUploadResult> {
+  const filePath = (localPath || '').trim()
+  if (!filePath) throw new Error('视频路径为空')
+
+  const token = getAccessToken()
+  if (!token) throw new Error('请先登录后再上传视频')
+  const response = await new Promise<any>((resolve, reject) => {
+    const uploadTask = Taro.uploadFile({
+      url: `${API_BASE_URL}/api/upload-analyze-video-file`,
+      filePath,
+      name: 'file',
+      timeout: 180000,
+      header: withNgrokBypassHeaders({ Authorization: `Bearer ${token}` }),
+      success: resolve,
+      fail: reject,
+    }) as any
+    const handleProgress = (res: { progress?: number }) => {
+      onProgress?.(Math.max(1, Math.min(99, Number(res?.progress || 0))))
+    }
+    uploadTask?.progress?.(handleProgress)
+    uploadTask?.onProgressUpdate?.(handleProgress)
+  })
+
+  const parsedData = parseUploadAnalyzeResponseData(response?.data)
+  const payload = unwrapUploadAnalyzePayload(parsedData)
+  if (response?.statusCode !== 200) {
+    throwHttpErrorWithStatus(
+      Number(response?.statusCode || 0),
+      parsedData,
+      formatUploadAnalyzeHttpError(Number(response?.statusCode || 0), parsedData),
+      response?.header as Record<string, any> | undefined
+    )
+  }
+  const keyframes = Array.isArray(payload?.keyframes) ? payload.keyframes : []
+  if (payload?.capture_protocol !== 'video_keyframes_v1' || keyframes.length < 3) {
+    throw new Error('视频处理失败：服务端未返回足够关键帧')
+  }
+  onProgress?.(100)
+  return {
+    capture_protocol: 'video_keyframes_v1',
+    video_id: String(payload.video_id || ''),
+    duration_ms: Number(payload.duration_ms || 0),
+    width: Number(payload.width || 0),
+    height: Number(payload.height || 0),
+    size_bytes: Number(payload.size_bytes || 0),
+    keyframes: keyframes.map((frame: Record<string, any>) => ({
+      role: frame.role as PrecisionCaptureRole,
+      image_url: String(frame.image_url || ''),
+      timestamp_ms: Number(frame.timestamp_ms || 0),
+    })).filter((frame: PrecisionCaptureViewInput) => frame.image_url),
+  }
 }
 
 export async function continuePrecisionSession(
@@ -3335,6 +3616,8 @@ function summarizeFullAnalysisTask(task: AnalysisTask): AnalyzeTaskSummary {
     record_id: task.record_id,
     history_group_key: task.history_group_key,
     has_result: Boolean(task.result),
+    precision_status: (result?.precisionStatus as PrecisionStatus | undefined),
+    user_action_required: result?.userActionRequired === true,
     execution_mode: readAnalyzeTaskString(payload, 'execution_mode', 'executionMode') || undefined,
     source_type: payloadSourceType || (task.task_type.startsWith('food_text') ? 'text' : 'image'),
     meal_type: readAnalyzeTaskString(payload, 'meal_type', 'mealType') || undefined,
@@ -3805,6 +4088,92 @@ export async function getHomeDashboard(date?: string): Promise<HomeDashboard> {
     console.error('[DEBUG API] 解析响应数据失败:', parseErr)
     console.error('[DEBUG API] 原始数据:', JSON.stringify(res.data).slice(0, 500))
     throw parseErr
+  }
+}
+
+export async function listSupplements(status = 'active'): Promise<UserSupplement[]> {
+  const res = await authenticatedRequest(`/api/supplements?status=${encodeURIComponent(status)}`, {
+    method: 'GET',
+    timeout: 10000,
+  })
+  if (res.statusCode !== 200) {
+    throwHttpErrorWithStatus(res.statusCode, res.data, '获取补剂柜失败')
+  }
+  return unwrapResponse<{ items: UserSupplement[] }>(res).items || []
+}
+
+export async function listSupplementCatalog(query = ''): Promise<SupplementCatalogItem[]> {
+  const normalized = query.trim()
+  const suffix = normalized ? `?q=${encodeURIComponent(normalized)}` : ''
+  const res = await authenticatedRequest(`/api/supplements/catalog${suffix}`, {
+    method: 'GET',
+    timeout: 10000,
+  })
+  if (res.statusCode !== 200) {
+    throwHttpErrorWithStatus(res.statusCode, res.data, '获取公共补剂库失败')
+  }
+  return unwrapResponse<{ items: SupplementCatalogItem[] }>(res).items || []
+}
+
+export async function createSupplement(payload: UpsertSupplementPayload): Promise<UserSupplement> {
+  const res = await authenticatedRequest('/api/supplements', {
+    method: 'POST',
+    data: payload,
+    timeout: 15000,
+  })
+  if (res.statusCode !== 200) {
+    throwHttpErrorWithStatus(res.statusCode, res.data, '保存补剂失败')
+  }
+  return unwrapResponse<{ item: UserSupplement }>(res).item
+}
+
+export async function updateSupplement(itemId: string, payload: UpsertSupplementPayload): Promise<UserSupplement> {
+  const res = await authenticatedRequest(`/api/supplements/${encodeURIComponent(itemId)}`, {
+    method: 'PUT',
+    data: payload,
+    timeout: 15000,
+  })
+  if (res.statusCode !== 200) {
+    throwHttpErrorWithStatus(res.statusCode, res.data, '更新补剂失败')
+  }
+  return unwrapResponse<{ item: UserSupplement }>(res).item
+}
+
+export async function getSupplementDashboard(date?: string): Promise<SupplementDashboard> {
+  const apiDate = mapCalendarDateToApi(date)
+  const query = apiDate ? `?date=${encodeURIComponent(apiDate)}` : ''
+  const res = await authenticatedRequest(`/api/supplements/dashboard${query}`, {
+    method: 'GET',
+    timeout: 10000,
+  })
+  if (res.statusCode !== 200) {
+    throwHttpErrorWithStatus(res.statusCode, res.data, '获取今日补剂失败')
+  }
+  return unwrapResponse<SupplementDashboard>(res)
+}
+
+export async function recordSupplementIntake(
+  itemId: string,
+  payload: { servings?: number; taken_at?: string; note?: string; source?: string; idempotency_key?: string } = {},
+): Promise<SupplementIntake> {
+  const res = await authenticatedRequest(`/api/supplements/${encodeURIComponent(itemId)}/intakes`, {
+    method: 'POST',
+    data: payload,
+    timeout: 10000,
+  })
+  if (res.statusCode !== 200) {
+    throwHttpErrorWithStatus(res.statusCode, res.data, '记录补剂失败')
+  }
+  return unwrapResponse<{ intake: SupplementIntake }>(res).intake
+}
+
+export async function deleteSupplementIntake(intakeId: string): Promise<void> {
+  const res = await authenticatedRequest(`/api/supplement-intakes/${encodeURIComponent(intakeId)}`, {
+    method: 'DELETE',
+    timeout: 10000,
+  })
+  if (res.statusCode !== 200) {
+    throwHttpErrorWithStatus(res.statusCode, res.data, '删除补剂记录失败')
   }
 }
 
@@ -5767,6 +6136,55 @@ export interface FoodNutritionSearchCandidate {
   score: number
   source?: string
   unit_nutrition_per_100g: UnitNutritionPer100g
+}
+
+export type FoodNutritionContributionStatus = 'pending' | 'approved' | 'rejected'
+
+export interface FoodNutritionContribution {
+  id: string
+  user_id: string
+  canonical_name: string
+  normalized_name: string
+  kcal_per_100g: number
+  protein_per_100g: number
+  carbs_per_100g: number
+  fat_per_100g: number
+  source_text: string
+  evidence_image_paths: string[]
+  extra_nutrients?: Record<string, unknown>
+  status: FoodNutritionContributionStatus
+  review_action?: 'approve_new' | 'merge_existing' | 'reject'
+  review_note?: string
+  target_food_id?: string
+  rewarded_at?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface CreateFoodNutritionContributionRequest {
+  canonical_name: string
+  kcal_per_100g: number
+  protein_per_100g: number
+  carbs_per_100g: number
+  fat_per_100g: number
+  source_text?: string
+  evidence_image_paths?: string[]
+}
+
+export async function createFoodNutritionContribution(
+  payload: CreateFoodNutritionContributionRequest,
+): Promise<FoodNutritionContribution> {
+  const response = await authenticatedRequest('/api/food-nutrition-contributions', {
+    method: 'POST', data: payload, timeout: 15000,
+  })
+  return unwrapResponse<{ item: FoodNutritionContribution }>(response).item
+}
+
+export async function getMyFoodNutritionContributions(): Promise<FoodNutritionContribution[]> {
+  const response = await authenticatedRequest('/api/food-nutrition-contributions/mine', {
+    method: 'GET', timeout: 10000,
+  })
+  return unwrapResponse<{ items: FoodNutritionContribution[] }>(response).items || []
 }
 
 export async function fetchTopUnresolvedFoods(limit: number = 50): Promise<UnresolvedFoodLog[]> {

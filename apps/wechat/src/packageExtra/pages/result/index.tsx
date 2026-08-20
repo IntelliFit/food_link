@@ -46,6 +46,7 @@ import {
 } from '../../../utils/home-dashboard-local-cache'
 import { formatDateKey } from '../../../pages/index/utils/helpers'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
+import { applyEnergyEdit } from '../../../utils/nutrition-edit'
 import { returnHomeAfterFoodRecord } from '../../../utils/food-record-flow'
 import { getStoredRecordTargetDate, persistRecordTargetDate } from '../../../utils/record-date'
 import { getFoodCorrectionCreditCost } from '../../../utils/membership'
@@ -81,7 +82,7 @@ const ANALYSIS_ENGINE_STORAGE_KEY = 'analyzeAnalysisEngine'
 const SUGGEST_RATIO_STORAGE_KEY = 'analyzeSuggestRatioEnabled'
 const ANALYSIS_HEALTH_PROFILE_PROMPT_SHOWN_KEY = 'analysisHealthProfilePromptShown'
 const CORRECTION_SUBMIT_DEBOUNCE_MS = 300
-const MAX_ANALYZE_IMAGES = 3
+const MAX_ANALYZE_IMAGES = 5
 const EATING_MOOD_OPTIONS = [
   { value: 'happy', emoji: '😊', label: '开心' },
   { value: 'calm', emoji: '😌', label: '平静' },
@@ -165,13 +166,12 @@ const PRECISION_REFERENCE_PRESETS: Array<{
   label: string
   dimensions: PrecisionReferenceDimensions
 }> = [
-  { value: 'hand', label: '手掌', dimensions: { length: 175, width: 85, height: 25 } },
-  { value: 'campus_card', label: '常规卡片', dimensions: { length: 85.6, width: 54, height: 0.8 } },
+  { value: 'campus_card', label: '标准卡片', dimensions: { length: 85.6, width: 53.98, height: 0.8 } },
   { value: 'large_card', label: '大卡片', dimensions: { length: 120, width: 76, height: 1 } },
   { value: 'custom', label: '自定义', dimensions: {} },
 ]
 
-const DEFAULT_PRECISION_REFERENCE_PRESET: PrecisionReferencePresetValue = 'hand'
+const DEFAULT_PRECISION_REFERENCE_PRESET: PrecisionReferencePresetValue = 'campus_card'
 
 const normalizePositivePrecisionDimension = (value: unknown): number | undefined => {
   const num = Number(value)
@@ -613,10 +613,10 @@ function ResultPage() {
     () => buildDefaultPrecisionReferenceDefaults()
   )
   const [precisionReferencePreset, setPrecisionReferencePreset] = useState<PrecisionReferencePresetValue>(DEFAULT_PRECISION_REFERENCE_PRESET)
-  const [precisionReferenceName, setPrecisionReferenceName] = useState('手掌')
-  const [precisionReferenceLength, setPrecisionReferenceLength] = useState('175')
-  const [precisionReferenceWidth, setPrecisionReferenceWidth] = useState('85')
-  const [precisionReferenceHeight, setPrecisionReferenceHeight] = useState('25')
+  const [precisionReferenceName, setPrecisionReferenceName] = useState('标准卡片')
+  const [precisionReferenceLength, setPrecisionReferenceLength] = useState('85.6')
+  const [precisionReferenceWidth, setPrecisionReferenceWidth] = useState('53.98')
+  const [precisionReferenceHeight, setPrecisionReferenceHeight] = useState('0.8')
   const [precisionReferencePlacement, setPrecisionReferencePlacement] = useState('')
   const [defaultMealType, setDefaultMealType] = useState<SelectableMealType>(() => inferDefaultMealTypeFromLocalTime())
   const [insightCollapsed, setInsightCollapsed] = useState(false)
@@ -706,11 +706,32 @@ function ResultPage() {
       if (!Number.isFinite(itemId) || itemId <= 0) return
       Taro.removeStorageSync(PACKAGED_FOOD_EDIT_SAVED_KEY)
       setNutritionItems(items => {
-        const next = items.map(item => (
-          item.id === itemId
-            ? { ...item, nutritionSource: 'packaged_food_library', isUnresolved: false }
-            : item
-        ))
+        const next = items.map(item => {
+          if (item.id !== itemId) return item
+          const unit = normalizeItemNutrients(saved?.unitNutritionPer100g, 0)
+          const hasConfirmedNutrition = unit.calories > 0 || unit.protein > 0 || unit.carbs > 0 || unit.fat > 0
+          if (!hasConfirmedNutrition) {
+            return { ...item, nutritionSource: 'packaged_food_library', nutritionSourceCategory: 'database', isUnresolved: false }
+          }
+          const scaled = normalizeItemNutrients(scaleNutrients(unit, Math.max(item.weight, 0) / 100), 0)
+          const calories = scaled.calories > 0
+            ? scaled.calories
+            : calculateCaloriesFromMacros(scaled.protein, scaled.carbs, scaled.fat)
+          return {
+            ...item,
+            name: String(saved?.productName || item.name),
+            calorie: calories,
+            protein: scaled.protein,
+            carbs: scaled.carbs,
+            fat: scaled.fat,
+            nutrients: { ...scaled, calories },
+            unitNutritionPer100g: unit,
+            packagedFoodId: saved?.packagedFoodId || item.packagedFoodId,
+            nutritionSource: 'packaged_food_library',
+            nutritionSourceCategory: 'database',
+            isUnresolved: false,
+          }
+        })
         calculateNutritionStats(next)
         return next
       })
@@ -1013,7 +1034,8 @@ function ResultPage() {
   const shouldShowRecognitionCard = false
   const shouldShowFollowupCard = taskType === 'food_text' && followupQuestions.length > 0 && !isStrictMode
   const hasUploadableImage = taskType === 'food' && (imagePaths.length > 0 || !!imagePath)
-  const shouldShowPrecisionContinueCard = false
+  const shouldShowPrecisionContinueCard = Boolean(precisionSessionId)
+    && (precisionStatus === 'needs_user_input' || precisionStatus === 'needs_retake')
 
   const getPrecisionReferencePresetConfig = useCallback((
     value: PrecisionReferencePresetValue,
@@ -1371,30 +1393,44 @@ function ResultPage() {
           ? clampWaterMlForItem(Math.round(resolvedValue), item.weight)
           : Math.max(0, roundToSingleDecimal(resolvedValue))
         if (field === 'calories') {
+          const nextNutrients = applyEnergyEdit(item.nutrients, 'calories', normalizedValue)
           return {
             ...item,
             nutritionEdited: true,
-            calorie: Math.round(normalizedValue),
-            nutrients: {
-              ...item.nutrients,
-              calories: Math.round(normalizedValue)
-            }
+            calorie: nextNutrients.calories,
+            protein: nextNutrients.protein,
+            carbs: nextNutrients.carbs,
+            fat: nextNutrients.fat,
+            nutritionSource: 'user_correction_context',
+            nutritionSourceCategory: 'user_correction_context',
+            nutrients: nextNutrients,
           }
         }
+        if (field === 'waterMl') {
+          return {
+            ...item,
+            nutritionEdited: true,
+            waterMl: normalizedValue,
+            nutrients: {
+              ...item.nutrients,
+              waterMl: normalizedValue,
+              water_ml: normalizedValue,
+            },
+          }
+        }
+        const nextNutrients = applyEnergyEdit(item.nutrients, field, normalizedValue)
         const nextItem = {
           ...item,
           nutritionEdited: true,
           [field]: normalizedValue,
-          nutrients: {
-            ...item.nutrients,
-            [field]: normalizedValue,
-            ...(field === 'waterMl' ? { water_ml: normalizedValue } : {})
-          }
+          nutritionSource: 'user_correction_context',
+          nutritionSourceCategory: 'user_correction_context',
+          nutrients: nextNutrients,
         } as NutritionItem
-        if (field === 'waterMl') {
-          return nextItem
-        }
-        const nextCalories = calculateCaloriesFromMacros(nextItem.protein, nextItem.carbs, nextItem.fat)
+        nextItem.protein = nextNutrients.protein
+        nextItem.carbs = nextNutrients.carbs
+        nextItem.fat = nextNutrients.fat
+        const nextCalories = nextNutrients.calories
         return {
           ...nextItem,
           calorie: nextCalories,
@@ -1581,6 +1617,7 @@ function ResultPage() {
           packageWeightApplied: true,
           packageWeightReason: netLabel ? `已选择包装规格 ${netLabel}` : '已选择包装库候选规格',
           nutritionSource: 'packaged_food_library',
+          nutritionSourceCategory: 'database',
           isUnresolved: false,
           packagedPending: false
         } as NutritionItem
@@ -1656,7 +1693,29 @@ function ResultPage() {
   }
 
   const updateFoodEditDraftField = (field: keyof FoodEditDraft, value: string) => {
-    setFoodEditDraft(current => current ? { ...current, [field]: value } : current)
+    setFoodEditDraft(current => {
+      if (!current) return current
+      if (field !== 'calories' && field !== 'protein' && field !== 'carbs' && field !== 'fat') {
+        return { ...current, [field]: value }
+      }
+      const parsed = Number(value)
+      if (!Number.isFinite(parsed) || parsed < 0) return { ...current, [field]: value }
+      const nutrients = applyEnergyEdit({
+        calories: Number(current.calories) || 0,
+        protein: Number(current.protein) || 0,
+        carbs: Number(current.carbs) || 0,
+        fat: Number(current.fat) || 0,
+        fiber: 0,
+        sugar: 0,
+      }, field, parsed)
+      return {
+        ...current,
+        calories: field === 'calories' ? value : String(nutrients.calories),
+        protein: field === 'protein' ? value : formatMacroDisplay(nutrients.protein),
+        carbs: field === 'carbs' ? value : formatMacroDisplay(nutrients.carbs),
+        fat: field === 'fat' ? value : formatMacroDisplay(nutrients.fat),
+      }
+    })
   }
 
   const parseFoodEditNumber = (value: string) => {
@@ -1730,6 +1789,7 @@ function ResultPage() {
           },
           nutritionEdited: nutritionChanged || item.nutritionEdited,
           nutritionSource: nutritionChanged ? 'user_correction_context' : item.nutritionSource,
+          nutritionSourceCategory: nutritionChanged ? 'user_correction_context' : item.nutritionSourceCategory,
           packageMatchStatus: isPendingPackagedChoice ? 'user_confirmed' : item.packageMatchStatus,
           packageWeightSource: weightChanged || isPendingPackagedChoice ? 'user_context' : item.packageWeightSource,
           packageWeightApplied: weightChanged || isPendingPackagedChoice ? true : item.packageWeightApplied,
@@ -1822,7 +1882,7 @@ function ResultPage() {
     const productName = snackDraft.productName.trim()
     const netWeightG = numberFromDraft(snackDraft.netWeightG)
     if (!productName) {
-      Taro.showToast({ title: '请填写零食名称', icon: 'none' })
+      Taro.showToast({ title: '请填写包装食品名称', icon: 'none' })
       return
     }
     if (netWeightG <= 0) {
@@ -1843,20 +1903,20 @@ function ResultPage() {
       sodium_mg_per_100g: numberFromDraft(snackDraft.sodiumMg),
     }
     setSavingSnackDraft(true)
-    Taro.showLoading({ title: '保存零食数据...', mask: true })
+    Taro.showLoading({ title: '', mask: true })
     try {
       await createPackagedFood(payload)
       setNutritionItems(items => items.map(item => (
         item.id === snackDraft.itemId
-          ? { ...item, nutritionSource: 'packaged_food_library', isUnresolved: false }
+          ? { ...item, nutritionSource: 'packaged_food_library', nutritionSourceCategory: 'database', isUnresolved: false }
           : item
       )))
       setSnackDraft(null)
       Taro.hideLoading()
-      Taro.showToast({ title: '已保存到零食库', icon: 'success' })
+      Taro.showToast({ title: '已保存到包装食品库', icon: 'success' })
     } catch (error) {
       Taro.hideLoading()
-      await showUnifiedApiError(error, '保存零食数据失败')
+      await showUnifiedApiError(error, '保存包装食品数据失败')
     } finally {
       setSavingSnackDraft(false)
     }
@@ -1866,7 +1926,7 @@ function ResultPage() {
     // 避免用户快速连续点击导致重复保存
     if (saving) return
     if (nutritionItems.some(isPackagedChoicePending)) {
-      Taro.showToast({ title: '请先选择零食规格', icon: 'none' })
+      Taro.showToast({ title: '请先选择包装食品规格', icon: 'none' })
       return
     }
     // 从缓存获取分析时选择的状态
@@ -2079,7 +2139,7 @@ function ResultPage() {
       return
     }
     if (nutritionItems.some(isPackagedChoicePending)) {
-      Taro.showToast({ title: '请先选择零食规格', icon: 'none' })
+      Taro.showToast({ title: '请先选择包装食品规格', icon: 'none' })
       return
     }
 
@@ -2846,6 +2906,7 @@ function ResultPage() {
             <View className='ingredients-list'>
               {nutritionItems.map((item) => {
                 const detailRows = getNutrientDetailRows(item)
+                const per100 = item.unitNutritionPer100g || nutrientPer100FromItem(item)
                 const detailsExpanded = !!expandedNutritionDetailIds[item.id]
                 const ediblePortionHint = getEdiblePortionHint(item)
                 const packageChoicePending = isPackagedChoicePending(item)
@@ -2865,6 +2926,8 @@ function ResultPage() {
                         </View>
                       </View>
                     </View>
+                    <Text className='ingredient-basis-label'>当前整份营养（约 {Math.round(item.weight)}g）</Text>
+                    <Text className='ingredient-per100-label'>每100g参考：{Math.round(per100.calories || 0)} kcal · 蛋白 {formatMacroDisplay(per100.protein || 0)}g · 碳水 {formatMacroDisplay(per100.carbs || 0)}g · 脂肪 {formatMacroDisplay(per100.fat || 0)}g</Text>
                     {ediblePortionHint && (
                       <View className='ingredient-edible-portion-hint'>
                         <Text className='ingredient-edible-portion-hint-text'>{ediblePortionHint}</Text>
@@ -2875,13 +2938,13 @@ function ResultPage() {
                   {isSnackLikeItem(item) && (
                     <View className='snack-contribution-card'>
                       <View className='snack-contribution-copy'>
-                        <Text className='snack-contribution-title'>识别为零食</Text>
+                        <Text className='snack-contribution-title'>识别为包装食品</Text>
                         <Text className='snack-contribution-desc'>
-                          当前营养值会先按普通食物流程估算。你可以补充包装上的重量和营养成分，帮助完善零食数据库。
+                          当前营养值会先按普通食物流程估算。你可以补充包装上的重量和营养成分，帮助完善包装食品数据库。
                         </Text>
                       </View>
                       <View className='snack-contribution-action' onClick={() => openSnackContribution(item)}>
-                        <Text className='snack-contribution-action-text'>添加零食</Text>
+                        <Text className='snack-contribution-action-text'>添加包装食品</Text>
                       </View>
                     </View>
                   )}
@@ -3221,7 +3284,7 @@ function ResultPage() {
           onClick={(e) => e.stopPropagation()}
         >
           <View className='drawer-header'>
-            <Text className='drawer-title'>添加零食数据</Text>
+            <Text className='drawer-title'>添加包装食品数据</Text>
             <View className='drawer-close' onClick={() => setSnackDraft(null)}>
               <Text className='close-icon'>×</Text>
             </View>
@@ -3233,7 +3296,7 @@ function ResultPage() {
                 <Input
                   className='snack-form-input'
                   value={snackDraft.productName}
-                  placeholder='零食名称'
+                  placeholder='包装食品名称'
                   onInput={(e: any) => updateSnackDraftField('productName', e.detail.value)}
                 />
                 <Input
@@ -3293,7 +3356,9 @@ function ResultPage() {
               className={`drawer-submit-btn ${savingSnackDraft ? 'loading' : ''}`}
               onClick={handleSubmitSnackContribution}
             >
-              <Text className='drawer-submit-text'>{savingSnackDraft ? '保存中...' : '保存到零食库'}</Text>
+              {savingSnackDraft
+                ? <View className='btn-spinner' />
+                : <Text className='drawer-submit-text'>保存到包装食品库</Text>}
             </View>
           </View>
         </View>
