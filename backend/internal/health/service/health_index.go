@@ -10,28 +10,28 @@ const healthIndexMinRecordedDays = 2
 
 // HealthIndex 健康指数计算结果
 type HealthIndex struct {
-	HasEnoughData     bool              `json:"has_enough_data"`
-	OverallScore      int               `json:"overall_score"`
-	ProjectedScore    int               `json:"projected_score"`
-	OverallTrendLabel string            `json:"overall_trend_label"`
-	OverviewCopy      string            `json:"overview_copy"`
-	SignalChips       []SignalChip      `json:"signal_chips"`
-	RiskCards         []RiskCard        `json:"risk_cards"`
-	CustomRiskCards   []RiskCard        `json:"custom_risk_cards"`
-	AllRiskOptions    []RiskOption      `json:"all_risk_options"`
-	CustomFocusMeta   *CustomFocusMeta  `json:"custom_focus_meta,omitempty"`
-	TopIssues         []TopIssue        `json:"top_issues"`
-	ActionList        []string          `json:"action_list"`
-	ShowDisclaimer    bool              `json:"show_disclaimer"`
+	HasEnoughData     bool             `json:"has_enough_data"`
+	OverallScore      int              `json:"overall_score"`
+	ProjectedScore    int              `json:"projected_score"`
+	OverallTrendLabel string           `json:"overall_trend_label"`
+	OverviewCopy      string           `json:"overview_copy"`
+	SignalChips       []SignalChip     `json:"signal_chips"`
+	RiskCards         []RiskCard       `json:"risk_cards"`
+	CustomRiskCards   []RiskCard       `json:"custom_risk_cards"`
+	AllRiskOptions    []RiskOption     `json:"all_risk_options"`
+	CustomFocusMeta   *CustomFocusMeta `json:"custom_focus_meta,omitempty"`
+	TopIssues         []TopIssue       `json:"top_issues"`
+	ActionList        []string         `json:"action_list"`
+	ShowDisclaimer    bool             `json:"show_disclaimer"`
 }
 
 // CustomFocusMeta 自定义关注元信息
 type CustomFocusMeta struct {
-	MaxFocuses      int `json:"max_focuses"`
-	GenerateCost    int `json:"generate_cost"`
-	DailyLimit      int `json:"daily_limit"`
-	UsedToday       int `json:"used_today"`
-	RemainingToday  int `json:"remaining_today"`
+	MaxFocuses     int `json:"max_focuses"`
+	GenerateCost   int `json:"generate_cost"`
+	DailyLimit     int `json:"daily_limit"`
+	UsedToday      int `json:"used_today"`
+	RemainingToday int `json:"remaining_today"`
 }
 
 // SignalChip 信号芯片
@@ -71,14 +71,14 @@ type TopIssue struct {
 }
 
 var statsMicronutrientWeights = map[string]float64{
-	"fiber":            0.20,
-	"sodiumMg":         0.15,
-	"potassiumMg":      0.15,
-	"calciumMg":        0.15,
-	"ironMg":           0.10,
-	"vitaminARaeMcg":   0.05,
-	"vitaminCMg":       0.10,
-	"vitaminDMcg":      0.10,
+	"fiber":          0.20,
+	"sodiumMg":       0.15,
+	"potassiumMg":    0.15,
+	"calciumMg":      0.15,
+	"ironMg":         0.10,
+	"vitaminARaeMcg": 0.05,
+	"vitaminCMg":     0.10,
+	"vitaminDMcg":    0.10,
 }
 
 var statsSupplementSensitiveMicronutrients = map[string]bool{
@@ -285,19 +285,19 @@ func computeHealthIndex(comp *statsComputation, statsRange string) *HealthIndex 
 
 	weightTrendAdjustment, weightTrendSupportsGoal, weightTrendAgainstGoal := healthIndexWeightTrendAdjustment(comp, dietGoal)
 	weightScore := clampScore(
-		100-
-			weightEnergyOverRatio*40-
-			weightOverTargetRate*25-
-			snackOver15*0.5-
-			dinnerOver38*4.0+
-			weightTrendAdjustment+
+		100 -
+			weightEnergyOverRatio*40 -
+			weightOverTargetRate*25 -
+			snackOver15*0.5 -
+			dinnerOver38*4.0 +
+			weightTrendAdjustment +
 			weightBonus,
 	)
 
 	micronutrientScore, microBrief, microSummary, microBasis, microAction := computeMicronutrientScore(comp)
 	hasMicronutrientData := len(comp.MicronutrientDaily) > 0
 
-	baseScoreSum := float64(hypertensionScore+diabetesScore+cardioScore+weightScore)
+	baseScoreSum := float64(hypertensionScore + diabetesScore + cardioScore + weightScore)
 	scoreDivisor := 4
 	if hasMicronutrientData {
 		baseScoreSum += float64(micronutrientScore)
@@ -332,12 +332,12 @@ func computeHealthIndex(comp *statsComputation, statsRange string) *HealthIndex 
 	)
 
 	longevityScore := clampScore(
-		100-
-			energyOverRatio*28-
-			surplusRate*18-
-			dinnerOver35*1.2-
-			fatOver30*1.5-
-			carbOver50*1.0+
+		100 -
+			energyOverRatio*28 -
+			surplusRate*18 -
+			dinnerOver35*1.2 -
+			fatOver30*1.5 -
+			carbOver50*1.0 +
 			bonusIf(recordedDays >= thresholdDays(statsRange), 5),
 	)
 	weightOverTarget := weightTrendAgainstGoal || (weightEnergyOverRatio > 0.08 && !weightTrendSupportsGoal)

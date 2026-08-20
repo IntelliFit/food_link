@@ -1,11 +1,13 @@
 package handler
 
 import (
+	"log/slog"
 	"strconv"
 	"strings"
 
 	adminservice "food_link/backend/internal/admin/service"
 	"food_link/backend/internal/common/response"
+	"food_link/backend/pkg/logger"
 
 	"github.com/gin-gonic/gin"
 )
@@ -49,11 +51,23 @@ func (h *PackagedFoodCorrectionHandler) Review(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
-	detail, err := h.svc.Review(c.Request.Context(), c.Param("submission_id"), body, c.GetString("admin_account_id"))
+	submissionID := strings.TrimSpace(c.Param("submission_id"))
+	adminAccountID := strings.TrimSpace(c.GetString("admin_account_id"))
+	logger.Info(c.Request.Context(), "包装食品纠错审批请求进入",
+		slog.String("submission_id", submissionID),
+		slog.String("admin_account_id", adminAccountID),
+		slog.String("action", strings.TrimSpace(strings.ToLower(body.Action))),
+	)
+	detail, err := h.svc.Review(c.Request.Context(), submissionID, body, adminAccountID)
 	if err != nil {
 		response.Error(c, err)
 		return
 	}
+	logger.Info(c.Request.Context(), "包装食品纠错审批请求完成",
+		slog.String("submission_id", submissionID),
+		slog.String("admin_account_id", adminAccountID),
+		slog.String("status", detail.Submission.Status),
+	)
 	response.Success(c, gin.H{"message": reviewActionMessage(body.Action), "detail": detail})
 }
 

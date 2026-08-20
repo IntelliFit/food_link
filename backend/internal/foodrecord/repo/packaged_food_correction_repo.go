@@ -3,6 +3,7 @@ package repo
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"reflect"
 	"sort"
@@ -13,6 +14,12 @@ import (
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
+)
+
+var (
+	ErrPackagedFoodCorrectionAlreadyReviewed = errors.New("packaged food correction already reviewed")
+	ErrPackagedFoodCorrectionStale           = errors.New("packaged food correction is stale")
 )
 
 type ListPackagedFoodCorrectionsInput struct {
@@ -100,10 +107,13 @@ func (r *FoodNutritionRepo) ReviewPackagedFoodCorrectionSubmission(
 	var submission domain.PackagedFoodCorrectionSubmission
 	var food domain.PackagedFood
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Where("id = ?", strings.TrimSpace(submissionID)).First(&submission).Error; err != nil {
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ?", strings.TrimSpace(submissionID)).First(&submission).Error; err != nil {
 			return err
 		}
-		if err := tx.Where("id = ?", submission.PackagedFoodID).First(&food).Error; err != nil {
+		if submission.Status != "pending" {
+			return ErrPackagedFoodCorrectionAlreadyReviewed
+		}
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ?", submission.PackagedFoodID).First(&food).Error; err != nil {
 			return err
 		}
 
@@ -119,9 +129,10 @@ func (r *FoodNutritionRepo) ReviewPackagedFoodCorrectionSubmission(
 
 		if !approved {
 			updates["status"] = "rejected"
-			return tx.Model(&domain.PackagedFoodCorrectionSubmission{}).
-				Where("id = ?", submission.ID).
-				Updates(updates).Error
+			if err := updatePendingPackagedFoodCorrection(tx, submission.ID, updates); err != nil {
+				return err
+			}
+			return tx.Where("id = ?", submission.ID).First(&submission).Error
 		}
 
 		patch := cloneMap(submission.ProposedPatch)
@@ -130,14 +141,18 @@ func (r *FoodNutritionRepo) ReviewPackagedFoodCorrectionSubmission(
 			if reviewNote == "" {
 				updates["review_note"] = "提案未包含有效字段变更"
 			}
-			return tx.Model(&domain.PackagedFoodCorrectionSubmission{}).
-				Where("id = ?", submission.ID).
-				Updates(updates).Error
+			if err := updatePendingPackagedFoodCorrection(tx, submission.ID, updates); err != nil {
+				return err
+			}
+			return tx.Where("id = ?", submission.ID).First(&submission).Error
 		}
 
 		beforeSnapshot, err := packagedFoodSnapshot(food)
 		if err != nil {
 			return err
+		}
+		if !packagedFoodPatchBaseMatches(beforeSnapshot, submission.BeforeSnapshot, patch) {
+			return ErrPackagedFoodCorrectionStale
 		}
 		patch["updated_at"] = now
 		if err := tx.Model(&domain.PackagedFood{}).Where("id = ?", food.ID).Updates(patch).Error; err != nil {
@@ -166,9 +181,7 @@ func (r *FoodNutritionRepo) ReviewPackagedFoodCorrectionSubmission(
 
 		updates["status"] = "applied"
 		updates["applied_at"] = now
-		if err := tx.Model(&domain.PackagedFoodCorrectionSubmission{}).
-			Where("id = ?", submission.ID).
-			Updates(updates).Error; err != nil {
+		if err := updatePendingPackagedFoodCorrection(tx, submission.ID, updates); err != nil {
 			return err
 		}
 		return tx.Where("id = ?", submission.ID).First(&submission).Error
@@ -177,6 +190,28 @@ func (r *FoodNutritionRepo) ReviewPackagedFoodCorrectionSubmission(
 		return nil, nil, err
 	}
 	return &submission, &food, nil
+}
+
+func updatePendingPackagedFoodCorrection(tx *gorm.DB, submissionID string, updates map[string]any) error {
+	result := tx.Model(&domain.PackagedFoodCorrectionSubmission{}).
+		Where("id = ? AND status = ?", submissionID, "pending").
+		Updates(updates)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected != 1 {
+		return ErrPackagedFoodCorrectionAlreadyReviewed
+	}
+	return nil
+}
+
+func packagedFoodPatchBaseMatches(current, original, patch map[string]any) bool {
+	for field := range patch {
+		if !reflect.DeepEqual(normalizeComparableValue(current[field]), normalizeComparableValue(original[field])) {
+			return false
+		}
+	}
+	return true
 }
 
 func packagedFoodSnapshot(item domain.PackagedFood) (map[string]any, error) {

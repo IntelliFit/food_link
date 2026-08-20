@@ -710,6 +710,32 @@ func TestSubmitPackagedProductExtractTaskRejectsImageCount(t *testing.T) {
 	}
 }
 
+func TestSubmitPackagedFoodCorrectionPreservesProvidedFields(t *testing.T) {
+	mockSvc := &mockNutritionService{}
+	h := NewFoodRecordHandler(nil, nil, mockSvc)
+	r := setupRouter(h)
+
+	body, _ := json.Marshal(map[string]any{
+		"packaged_food_id":  "packaged-1",
+		"reason_type":       "nutrition_wrong",
+		"source_image_urls": []string{"https://cdn.example.com/evidence.jpg"},
+		"kcal_per_100g":     0,
+	})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/packaged-food/corrections", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	require.NotNil(t, mockSvc.submitCorrectionInput)
+	assert.Equal(t, map[string]bool{
+		"source_image_urls": true,
+		"kcal_per_100g":     true,
+	}, mockSvc.submitCorrectionInput.ProvidedFields)
+	assert.Zero(t, mockSvc.submitCorrectionInput.Payload.KcalPer100g)
+	assert.False(t, mockSvc.submitCorrectionInput.ProvidedFields["calcium_mg_per_100g"])
+}
+
 func TestSaveCriticalSamples(t *testing.T) {
 	mockSvc := &mockFoodRecordService{}
 	h := NewFoodRecordHandler(mockSvc, nil, nil)
