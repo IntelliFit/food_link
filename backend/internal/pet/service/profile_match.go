@@ -12,11 +12,13 @@ import (
 )
 
 const (
-	petProfileMatchVersion = 4
+	petProfileMatchVersion = 5
 
 	builtinAvatarJianwen01ID   = "jianwen-01"
 	builtinAvatarHuatuo01ID    = "huatuo-01"
 	builtinAvatarTaijiXiaoziID = "taiji-xiaozi-01"
+	builtinAvatarXiaomai01ID   = "xiaomai-01"
+	builtinAvatarDoudou01ID    = "doudou-01"
 	builtinAvatarType          = "builtin_person"
 
 	archetypeSteadyCaregiver = "steady_caregiver"
@@ -187,17 +189,7 @@ func matchReasonsForArchetype(archetype string, profile *repo.UserProfile) []str
 }
 
 func buildAppearanceCandidates(userID, fingerprint, archetype string, reasons []string) []AppearanceCandidate {
-	styles := []string{"pretty", "quirky", "stable"}
-	candidates := make([]AppearanceCandidate, 0, len(styles)+1)
-	for _, style := range styles {
-		// seed 不包含版本号，保证同画像同原型下的外观只由画像决定，
-		// 后端算法版本升级不会导致已生成的颜色/形状等自动变化。
-		seed := fmt.Sprintf("pet:%s:%s:%s:%s", userID, fingerprint, archetype, style)
-		candidate := candidateFromSeed(seed, archetype, style, reasons)
-		candidates = append(candidates, candidate)
-	}
-	candidates = append(candidates, builtinAppearanceCandidates()...)
-	return candidates
+	return builtinAppearanceCandidates()
 }
 
 func builtinAppearanceCandidates() []AppearanceCandidate {
@@ -249,6 +241,38 @@ func builtinAppearanceCandidates() []AppearanceCandidate {
 			MatchReasons:    []string{"阴阳平衡、动静结合，是内置的太极养生伙伴"},
 			AvatarType:      builtinAvatarType,
 			BuiltinAvatarID: builtinAvatarTaijiXiaoziID,
+		},
+		{
+			ID:              "builtin:" + builtinAvatarXiaomai01ID,
+			PetSeed:         "builtin:" + builtinAvatarXiaomai01ID,
+			Name:            "小麦",
+			Color:           "matcha",
+			Shape:           "round",
+			Pattern:         "pattern-0",
+			Accessory:       "leaf",
+			Personality:     "gentle",
+			Archetype:       archetypeSteadyCaregiver,
+			Style:           "classic",
+			Score:           96,
+			MatchReasons:    []string{"擅长均衡搭配与规律三餐，是内置的均衡饮食伙伴"},
+			AvatarType:      builtinAvatarType,
+			BuiltinAvatarID: builtinAvatarXiaomai01ID,
+		},
+		{
+			ID:              "builtin:" + builtinAvatarDoudou01ID,
+			PetSeed:         "builtin:" + builtinAvatarDoudou01ID,
+			Name:            "豆豆",
+			Color:           "cream",
+			Shape:           "bean",
+			Pattern:         "pattern-0",
+			Accessory:       "cap",
+			Personality:     "snacky",
+			Archetype:       archetypeProteinGuardian,
+			Style:           "classic",
+			Score:           96,
+			MatchReasons:    []string{"关注蛋白质与早餐搭配，是内置的营养助手"},
+			AvatarType:      builtinAvatarType,
+			BuiltinAvatarID: builtinAvatarDoudou01ID,
 		},
 	}
 }
