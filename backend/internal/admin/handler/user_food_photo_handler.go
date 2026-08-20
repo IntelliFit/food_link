@@ -32,6 +32,8 @@ func (h *UserFoodPhotoHandler) List(c *gin.Context) {
 		Source:           c.DefaultQuery("source", "all"),
 		Status:           c.DefaultQuery("status", "all"),
 		CircleVisibility: c.DefaultQuery("circle_visibility", "all"),
+		SortBy:           c.DefaultQuery("sort_by", "created_at"),
+		SortOrder:        c.DefaultQuery("sort_order", "desc"),
 		Page:             page,
 		Limit:            limit,
 	})
@@ -43,6 +45,8 @@ func (h *UserFoodPhotoHandler) List(c *gin.Context) {
 		slog.Int64("photo_count", result.Total),
 		slog.Int("page", page),
 		slog.Int("limit", limit),
+		slog.String("sort_by", c.DefaultQuery("sort_by", "created_at")),
+		slog.String("sort_order", c.DefaultQuery("sort_order", "desc")),
 	)
 	response.Success(c, gin.H{
 		"items": result.Items,

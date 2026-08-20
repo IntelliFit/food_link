@@ -287,3 +287,36 @@ func TestUserFoodPhotoRepoListCollectsNutritionFromRecordAndAnalysis(t *testing.
 	assert.Equal(t, 1.2, analysis.VitaminB12Mcg)
 	assert.Equal(t, []string{"鸡蛋", "牛奶"}, analysis.ItemNames)
 }
+
+func TestUserFoodPhotoRepoListSortsByTimeAndNutritionBeforePagination(t *testing.T) {
+	repo := setupUserFoodPhotoTestDB(t)
+	base := time.Now().UTC().Add(-3 * time.Hour)
+	require.NoError(t, repo.db.Exec(`INSERT INTO weapp_user (id, nickname) VALUES ('user-1', '排序用户')`).Error)
+	require.NoError(t, repo.db.Exec(`
+		INSERT INTO analysis_tasks (id, user_id, task_type, status, image_url, payload, result, created_at)
+		VALUES
+			('task-low', 'user-1', 'food', 'done', 'low.jpg', '{}', '{"items":[{"name":"低热量","nutrients":{"calories":100,"sodiumMg":50}}]}', ?),
+			('task-high', 'user-1', 'food', 'done', 'high.jpg', '{}', '{"items":[{"name":"高热量","nutrients":{"calories":500,"sodiumMg":300}}]}', ?),
+			('task-missing', 'user-1', 'food', 'done', 'missing.jpg', '{}', '{}', ?)
+	`, base.Add(2*time.Hour), base, base.Add(time.Hour)).Error)
+	require.NoError(t, repo.db.Exec(`
+		INSERT INTO user_food_records (id, user_id, image_path, source_task_id, items, total_calories, created_at)
+		VALUES ('record-high', 'user-1', 'high.jpg', 'task-high', '[{"name":"修正后","nutrients":{"calories":200,"sodiumMg":120}}]', 650, ?)
+	`, base).Error)
+
+	byCalories, err := repo.List(context.Background(), ListUserFoodPhotoInput{SortBy: "calories", SortOrder: "desc", Limit: 2})
+	require.NoError(t, err)
+	require.Len(t, byCalories.Items, 2)
+	assert.Equal(t, []string{"high.jpg", "low.jpg"}, []string{byCalories.Items[0].ImagePath, byCalories.Items[1].ImagePath})
+	assert.Equal(t, 650.0, byCalories.Items[0].Nutrition.Calories)
+
+	bySodium, err := repo.List(context.Background(), ListUserFoodPhotoInput{SortBy: "sodium_mg", SortOrder: "asc", Limit: 3})
+	require.NoError(t, err)
+	require.Len(t, bySodium.Items, 3)
+	assert.Equal(t, []string{"low.jpg", "high.jpg", "missing.jpg"}, []string{bySodium.Items[0].ImagePath, bySodium.Items[1].ImagePath, bySodium.Items[2].ImagePath})
+
+	byOldest, err := repo.List(context.Background(), ListUserFoodPhotoInput{SortBy: "created_at", SortOrder: "asc", Limit: 3})
+	require.NoError(t, err)
+	require.Len(t, byOldest.Items, 3)
+	assert.Equal(t, "high.jpg", byOldest.Items[0].ImagePath)
+}

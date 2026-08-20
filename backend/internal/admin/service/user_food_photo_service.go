@@ -28,6 +28,8 @@ type ListUserFoodPhotoInput struct {
 	Source           string
 	Status           string
 	CircleVisibility string
+	SortBy           string
+	SortOrder        string
 	Page             int
 	Limit            int
 }
@@ -49,6 +51,8 @@ func (s *UserFoodPhotoService) List(ctx context.Context, input ListUserFoodPhoto
 		Source:           strings.TrimSpace(input.Source),
 		Status:           strings.TrimSpace(input.Status),
 		CircleVisibility: strings.TrimSpace(input.CircleVisibility),
+		SortBy:           strings.TrimSpace(input.SortBy),
+		SortOrder:        strings.TrimSpace(input.SortOrder),
 		Limit:            limit,
 		Offset:           (page - 1) * limit,
 	})

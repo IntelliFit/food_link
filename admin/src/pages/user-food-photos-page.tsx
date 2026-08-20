@@ -108,6 +108,8 @@ export function UserFoodPhotosPage({ onLogout, onMenuChange }: PageProps) {
   const [source, setSource] = useState(searchParams.get('source') ?? 'all')
   const [status, setStatus] = useState(searchParams.get('status') ?? 'all')
   const [circleVisibility, setCircleVisibility] = useState(searchParams.get('circle_visibility') ?? 'all')
+  const [sortBy, setSortBy] = useState(searchParams.get('sort_by') ?? 'created_at')
+  const [sortOrder, setSortOrder] = useState(searchParams.get('sort_order') ?? 'desc')
   const [page, setPage] = useState(positiveInt(searchParams.get('page'), 1))
   const [limit, setLimit] = useState(positiveInt(searchParams.get('limit'), 40))
   const [items, setItems] = useState<UserFoodPhoto[]>([])
@@ -120,7 +122,7 @@ export function UserFoodPhotosPage({ onLogout, onMenuChange }: PageProps) {
   useEffect(() => {
     void loadPhotos()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, limit, source, status, circleVisibility, searchNonce])
+  }, [page, limit, source, status, circleVisibility, sortBy, sortOrder, searchNonce])
 
   useEffect(() => {
     const params = new URLSearchParams()
@@ -128,11 +130,13 @@ export function UserFoodPhotosPage({ onLogout, onMenuChange }: PageProps) {
     if (source !== 'all') params.set('source', source)
     if (status !== 'all') params.set('status', status)
     if (circleVisibility !== 'all') params.set('circle_visibility', circleVisibility)
+    if (sortBy !== 'created_at') params.set('sort_by', sortBy)
+    if (sortOrder !== 'desc') params.set('sort_order', sortOrder)
     if (page !== 1) params.set('page', String(page))
     if (limit !== 40) params.set('limit', String(limit))
     setSearchParams(params, { replace: true })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, source, status, circleVisibility, page, limit])
+  }, [query, source, status, circleVisibility, sortBy, sortOrder, page, limit])
 
   useEffect(() => {
     if (!preview) return
@@ -151,6 +155,8 @@ export function UserFoodPhotosPage({ onLogout, onMenuChange }: PageProps) {
         source,
         status,
         circle_visibility: circleVisibility,
+        sort_by: sortBy,
+        sort_order: sortOrder,
         page: String(nextPage),
         limit: String(limit),
       })
@@ -196,62 +202,70 @@ export function UserFoodPhotosPage({ onLogout, onMenuChange }: PageProps) {
         </Card>
 
         <Card>
-          <CardContent className='grid gap-4 pt-6 xl:grid-cols-[minmax(240px,2fr)_150px_170px_180px_110px_auto] xl:items-end'>
-            <div className='space-y-2'>
-              <Label htmlFor='photo-search'>搜索用户或内容</Label>
-              <div className='relative'>
-                <Search className='pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground' />
-                <Input
-                  id='photo-search'
-                  className='pl-9'
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  onKeyDown={(event) => event.key === 'Enter' && runSearch()}
-                  placeholder='昵称 / 手机号 / userId / 任务ID / 描述'
-                />
+          <CardContent className='space-y-5 pt-6'>
+            <div className='grid gap-4 xl:grid-cols-[minmax(240px,2fr)_150px_170px_180px_110px_auto] xl:items-end'>
+              <div className='space-y-2'>
+                <Label htmlFor='photo-search'>搜索用户或内容</Label>
+                <div className='relative'>
+                  <Search className='pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground' />
+                  <Input
+                    id='photo-search'
+                    className='pl-9'
+                    value={query}
+                    onChange={(event) => setQuery(event.target.value)}
+                    onKeyDown={(event) => event.key === 'Enter' && runSearch()}
+                    placeholder='昵称 / 手机号 / userId / 任务ID / 描述'
+                  />
+                </div>
               </div>
+              <FilterSelect label='来源' value={source} onValueChange={(value) => { setSource(value); setPage(1) }} options={[
+                ['all', '全部来源'],
+                ['analysis_task', '识别上传'],
+                ['food_record', '饮食记录'],
+                ['public_food', '公共食物'],
+                ['packaged_correction', '包装食品纠错'],
+                ['user_recipe', '用户食谱'],
+              ]} />
+              <FilterSelect label='状态' value={status} onValueChange={(value) => { setStatus(value); setPage(1) }} options={[
+                ['all', '全部状态'],
+                ['done', '分析完成'],
+                ['processing', '分析中'],
+                ['pending', '等待分析'],
+                ['failed', '分析失败'],
+                ['timed_out', '已超时'],
+                ['cancelled', '已取消'],
+                ['recorded', '已保存记录'],
+                ['published', '已发布'],
+                ['saved', '已保存'],
+              ]} />
+              <FilterSelect label='圈子可见性' value={circleVisibility} onValueChange={(value) => { setCircleVisibility(value); setPage(1) }} options={[
+                ['all', '全部可见性'],
+                ['visible', '已公开到圈子'],
+                ['not_shared', '未公开到圈子'],
+                ['not_applicable', '非圈子内容'],
+              ]} />
+              <FilterSelect label='每页' value={String(limit)} onValueChange={(value) => { setLimit(Number(value)); setPage(1) }} options={[
+                ['20', '20 张'],
+                ['40', '40 张'],
+                ['80', '80 张'],
+                ['100', '100 张'],
+              ]} />
+              <Button onClick={runSearch} disabled={loading} aria-label={loading ? '正在刷新' : '刷新照片'}>
+                {loading ? <Loader2 className='size-4 animate-spin' /> : <RefreshCw className='size-4' />}
+                {!loading ? '刷新' : null}
+              </Button>
             </div>
-            <FilterSelect label='来源' value={source} onValueChange={(value) => { setSource(value); setPage(1) }} options={[
-              ['all', '全部来源'],
-              ['analysis_task', '识别上传'],
-              ['food_record', '饮食记录'],
-              ['public_food', '公共食物'],
-              ['packaged_correction', '包装食品纠错'],
-              ['user_recipe', '用户食谱'],
-            ]} />
-            <FilterSelect label='状态' value={status} onValueChange={(value) => { setStatus(value); setPage(1) }} options={[
-              ['all', '全部状态'],
-              ['done', '分析完成'],
-              ['processing', '分析中'],
-              ['pending', '等待分析'],
-              ['failed', '分析失败'],
-              ['timed_out', '已超时'],
-              ['cancelled', '已取消'],
-              ['recorded', '已保存记录'],
-              ['published', '已发布'],
-              ['saved', '已保存'],
-            ]} />
-            <FilterSelect label='圈子可见性' value={circleVisibility} onValueChange={(value) => { setCircleVisibility(value); setPage(1) }} options={[
-              ['all', '全部可见性'],
-              ['visible', '已公开到圈子'],
-              ['not_shared', '未公开到圈子'],
-              ['not_applicable', '非圈子内容'],
-            ]} />
-            <FilterSelect label='每页' value={String(limit)} onValueChange={(value) => { setLimit(Number(value)); setPage(1) }} options={[
-              ['20', '20 张'],
-              ['40', '40 张'],
-              ['80', '80 张'],
-              ['100', '100 张'],
-            ]} />
-            <Button onClick={runSearch} disabled={loading} aria-label={loading ? '正在刷新' : '刷新照片'}>
-              {loading ? <Loader2 className='size-4 animate-spin' /> : <RefreshCw className='size-4' />}
-              {!loading ? '刷新' : null}
-            </Button>
+            <div className='grid gap-4 border-t pt-5 md:grid-cols-[minmax(260px,380px)_190px] md:items-end'>
+              <FilterSelect label='排列方式' value={sortBy} onValueChange={(value) => { setSortBy(value); setPage(1) }} options={photoSortOptions} />
+              <FilterSelect label='排序方向' value={sortOrder} onValueChange={(value) => { setSortOrder(value); setPage(1) }} options={sortBy === 'created_at'
+                ? [['desc', '最新优先'], ['asc', '最早优先']]
+                : [['desc', '从高到低'], ['asc', '从低到高']]} />
+            </div>
           </CardContent>
         </Card>
 
         <div className='flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card px-4 py-3 text-sm text-muted-foreground'>
-          <span>共 {total} 张，当前展示 {items.length} 张</span>
+          <span>共 {total} 张，当前展示 {items.length} 张 · {photoSortLabels[sortBy] || '上传时间'}（{sortBy === 'created_at' ? (sortOrder === 'asc' ? '最早优先' : '最新优先') : (sortOrder === 'asc' ? '从低到高' : '从高到低')}）</span>
           <div className='flex items-center gap-2'>
             <Button variant='outline' size='sm' disabled={page <= 1 || loading} onClick={() => setPage((value) => Math.max(1, value - 1))}>上一页</Button>
             <span className='px-1 tabular-nums'>第 {page} / {totalPages} 页</span>
@@ -476,6 +490,37 @@ const circleVisibilityClasses: Record<UserFoodPhoto['circle_visibility'], string
   not_shared: 'border-amber-300 bg-amber-50/95 text-amber-800',
   not_applicable: 'border-slate-300 bg-slate-50/95 text-slate-600',
 }
+
+const photoSortOptions: Array<[string, string]> = [
+  ['created_at', '上传时间'],
+  ['calories', '热量'],
+  ['protein', '蛋白质'],
+  ['carbs', '碳水化合物'],
+  ['fat', '脂肪'],
+  ['fiber', '膳食纤维'],
+  ['sugar', '糖'],
+  ['saturated_fat', '饱和脂肪'],
+  ['cholesterol_mg', '胆固醇'],
+  ['sodium_mg', '钠'],
+  ['potassium_mg', '钾'],
+  ['calcium_mg', '钙'],
+  ['iron_mg', '铁'],
+  ['magnesium_mg', '镁'],
+  ['zinc_mg', '锌'],
+  ['vitamin_a_rae_mcg', '维生素 A'],
+  ['vitamin_c_mg', '维生素 C'],
+  ['vitamin_d_mcg', '维生素 D'],
+  ['vitamin_e_mg', '维生素 E'],
+  ['vitamin_k_mcg', '维生素 K'],
+  ['thiamin_mg', '维生素 B1'],
+  ['riboflavin_mg', '维生素 B2'],
+  ['niacin_mg', '烟酸'],
+  ['vitamin_b6_mg', '维生素 B6'],
+  ['folate_mcg', '叶酸'],
+  ['vitamin_b12_mcg', '维生素 B12'],
+]
+
+const photoSortLabels = Object.fromEntries(photoSortOptions) as Record<string, string>
 
 type NutrientDetailKey = Exclude<keyof PhotoNutrition, 'source' | 'item_count' | 'item_names' | 'calories' | 'protein' | 'carbs' | 'fat'>
 

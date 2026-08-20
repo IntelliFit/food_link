@@ -25,6 +25,8 @@ type ListUserFoodPhotoInput struct {
 	Source           string
 	Status           string
 	CircleVisibility string
+	SortBy           string
+	SortOrder        string
 	Limit            int
 	Offset           int
 }
@@ -319,9 +321,11 @@ func (r *UserFoodPhotoRepo) List(ctx context.Context, input ListUserFoodPhotoInp
 	}
 
 	var items []UserFoodPhoto
+	listSQL := "SELECT * FROM (" + rowsSQL + ") AS photos " + whereSQL
+	listSQL, orderSQL := buildUserFoodPhotoSort(listSQL, input)
 	listArgs := append(append([]any{}, args...), limit, offset)
 	if err := r.db.WithContext(ctx).
-		Raw("SELECT * FROM ("+rowsSQL+") AS photos "+whereSQL+" ORDER BY created_at DESC, source_id DESC LIMIT ? OFFSET ?", listArgs...).
+		Raw(listSQL+" "+orderSQL+" LIMIT ? OFFSET ?", listArgs...).
 		Scan(&items).Error; err != nil {
 		return nil, err
 	}
@@ -329,6 +333,99 @@ func (r *UserFoodPhotoRepo) List(ctx context.Context, input ListUserFoodPhotoInp
 		return nil, err
 	}
 	return &ListUserFoodPhotoResult{Items: items, Total: total}, nil
+}
+
+type userFoodPhotoNutrientSort struct {
+	keys       []string
+	totalField string
+}
+
+var userFoodPhotoNutrientSorts = map[string]userFoodPhotoNutrientSort{
+	"calories":          {keys: []string{"calories"}, totalField: "total_calories"},
+	"protein":           {keys: []string{"protein"}, totalField: "total_protein"},
+	"carbs":             {keys: []string{"carbs", "carbohydrate", "carbohydrates"}, totalField: "total_carbs"},
+	"fat":               {keys: []string{"fat"}, totalField: "total_fat"},
+	"fiber":             {keys: []string{"fiber", "dietary_fiber", "fibre"}},
+	"sugar":             {keys: []string{"sugar", "total_sugar", "sugars"}},
+	"saturated_fat":     {keys: []string{"saturatedFat", "saturated_fat"}},
+	"cholesterol_mg":    {keys: []string{"cholesterolMg", "cholesterol_mg"}},
+	"sodium_mg":         {keys: []string{"sodiumMg", "sodium_mg"}},
+	"potassium_mg":      {keys: []string{"potassiumMg", "potassium_mg"}},
+	"calcium_mg":        {keys: []string{"calciumMg", "calcium_mg"}},
+	"iron_mg":           {keys: []string{"ironMg", "iron_mg"}},
+	"magnesium_mg":      {keys: []string{"magnesiumMg", "magnesium_mg"}},
+	"zinc_mg":           {keys: []string{"zincMg", "zinc_mg"}},
+	"vitamin_a_rae_mcg": {keys: []string{"vitaminARaeMcg", "vitamin_a_rae_mcg"}},
+	"vitamin_c_mg":      {keys: []string{"vitaminCMg", "vitamin_c_mg"}},
+	"vitamin_d_mcg":     {keys: []string{"vitaminDMcg", "vitamin_d_mcg"}},
+	"vitamin_e_mg":      {keys: []string{"vitaminEMg", "vitamin_e_mg"}},
+	"vitamin_k_mcg":     {keys: []string{"vitaminKMcg", "vitamin_k_mcg"}},
+	"thiamin_mg":        {keys: []string{"thiaminMg", "thiamin_mg"}},
+	"riboflavin_mg":     {keys: []string{"riboflavinMg", "riboflavin_mg"}},
+	"niacin_mg":         {keys: []string{"niacinMg", "niacin_mg"}},
+	"vitamin_b6_mg":     {keys: []string{"vitaminB6Mg", "vitamin_b6_mg"}},
+	"folate_mcg":        {keys: []string{"folateMcg", "folate_mcg"}},
+	"vitamin_b12_mcg":   {keys: []string{"vitaminB12Mcg", "vitamin_b12_mcg"}},
+}
+
+func buildUserFoodPhotoSort(filteredSQL string, input ListUserFoodPhotoInput) (string, string) {
+	direction := "DESC"
+	if strings.EqualFold(strings.TrimSpace(input.SortOrder), "asc") {
+		direction = "ASC"
+	}
+	sortBy := strings.TrimSpace(input.SortBy)
+	if sortBy == "" || sortBy == "created_at" {
+		return filteredSQL, "ORDER BY photos.created_at " + direction + ", photos.source_id DESC"
+	}
+	nutrient, ok := userFoodPhotoNutrientSorts[sortBy]
+	if !ok {
+		return filteredSQL, "ORDER BY photos.created_at " + direction + ", photos.source_id DESC"
+	}
+
+	itemValueSQL := buildUserFoodPhotoNutrientValueSQL(nutrient.keys)
+	query := `SELECT photos.*
+		FROM (` + filteredSQL + `) AS photos
+		LEFT JOIN user_food_records AS nutrition_record ON nutrition_record.id::text = photos.record_id
+		LEFT JOIN analysis_tasks AS nutrition_task ON photos.source_type = 'analysis_task' AND nutrition_task.id::text = photos.source_id
+		LEFT JOIN public_food_library AS nutrition_public ON photos.source_type = 'public_food' AND nutrition_public.id::text = photos.source_id
+		LEFT JOIN LATERAL (
+			SELECT COUNT(*) AS item_count, COALESCE(SUM(` + itemValueSQL + `), 0) AS nutrient_value
+			FROM jsonb_array_elements(` + userFoodPhotoNutritionItemsSQL + `) AS selected_item(item)
+		) AS nutrition_sort ON TRUE`
+
+	valueSQL := "CASE WHEN nutrition_sort.item_count > 0 THEN nutrition_sort.nutrient_value ELSE NULL END"
+	if nutrient.totalField != "" {
+		valueSQL = `CASE
+			WHEN nutrition_record.id IS NOT NULL AND (nutrition_record.` + nutrient.totalField + ` > 0 OR nutrition_sort.item_count > 0)
+				THEN COALESCE(NULLIF(nutrition_record.` + nutrient.totalField + `, 0), nutrition_sort.nutrient_value)
+			WHEN photos.source_type = 'public_food' AND nutrition_public.id IS NOT NULL AND (nutrition_public.` + nutrient.totalField + ` > 0 OR nutrition_sort.item_count > 0)
+				THEN COALESCE(NULLIF(nutrition_public.` + nutrient.totalField + `, 0), nutrition_sort.nutrient_value)
+			WHEN nutrition_sort.item_count > 0 THEN nutrition_sort.nutrient_value
+			ELSE NULL
+		END`
+	}
+	return query, "ORDER BY " + valueSQL + " " + direction + " NULLS LAST, photos.created_at DESC, photos.source_id DESC"
+}
+
+const userFoodPhotoNutritionItemsSQL = `CASE
+	WHEN nutrition_record.id IS NOT NULL AND (
+		CASE WHEN jsonb_typeof(nutrition_record.items) = 'array' THEN jsonb_array_length(nutrition_record.items) ELSE 0 END > 0
+		OR COALESCE(nutrition_record.total_calories, 0) > 0
+		OR COALESCE(nutrition_record.total_protein, 0) > 0
+		OR COALESCE(nutrition_record.total_carbs, 0) > 0
+		OR COALESCE(nutrition_record.total_fat, 0) > 0
+	) THEN CASE WHEN jsonb_typeof(nutrition_record.items) = 'array' THEN nutrition_record.items ELSE '[]'::jsonb END
+	WHEN photos.source_type = 'analysis_task' AND jsonb_typeof(nutrition_task.result->'items') = 'array' THEN nutrition_task.result->'items'
+	WHEN photos.source_type = 'public_food' AND jsonb_typeof(nutrition_public.items) = 'array' THEN nutrition_public.items
+	ELSE '[]'::jsonb
+END`
+
+func buildUserFoodPhotoNutrientValueSQL(keys []string) string {
+	clauses := make([]string, 0, len(keys))
+	for _, key := range keys {
+		clauses = append(clauses, "WHEN jsonb_typeof(selected_item.item->'nutrients'->'"+key+"') = 'number' THEN (selected_item.item->'nutrients'->>'"+key+"')::numeric")
+	}
+	return "CASE " + strings.Join(clauses, " ") + " ELSE 0 END"
 }
 
 func (r *UserFoodPhotoRepo) attachNutrition(ctx context.Context, items []UserFoodPhoto) error {
