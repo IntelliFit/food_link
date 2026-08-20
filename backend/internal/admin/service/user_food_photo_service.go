@@ -24,11 +24,12 @@ func NewUserFoodPhotoService(repo UserFoodPhotoReader, storageClient *storage.Cl
 }
 
 type ListUserFoodPhotoInput struct {
-	Query  string
-	Source string
-	Status string
-	Page   int
-	Limit  int
+	Query            string
+	Source           string
+	Status           string
+	CircleVisibility string
+	Page             int
+	Limit            int
 }
 
 func (s *UserFoodPhotoService) List(ctx context.Context, input ListUserFoodPhotoInput) (*repo.ListUserFoodPhotoResult, error) {
@@ -44,11 +45,12 @@ func (s *UserFoodPhotoService) List(ctx context.Context, input ListUserFoodPhoto
 		limit = 100
 	}
 	result, err := s.repo.List(ctx, repo.ListUserFoodPhotoInput{
-		Query:  strings.TrimSpace(input.Query),
-		Source: strings.TrimSpace(input.Source),
-		Status: strings.TrimSpace(input.Status),
-		Limit:  limit,
-		Offset: (page - 1) * limit,
+		Query:            strings.TrimSpace(input.Query),
+		Source:           strings.TrimSpace(input.Source),
+		Status:           strings.TrimSpace(input.Status),
+		CircleVisibility: strings.TrimSpace(input.CircleVisibility),
+		Limit:            limit,
+		Offset:           (page - 1) * limit,
 	})
 	if err != nil {
 		logger.Error(ctx, "读取用户食物照片失败", err,

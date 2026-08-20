@@ -17,28 +17,30 @@ func NewUserFoodPhotoRepo(db *gorm.DB) *UserFoodPhotoRepo {
 }
 
 type ListUserFoodPhotoInput struct {
-	Query  string
-	Source string
-	Status string
-	Limit  int
-	Offset int
+	Query            string
+	Source           string
+	Status           string
+	CircleVisibility string
+	Limit            int
+	Offset           int
 }
 
 type UserFoodPhoto struct {
-	SourceID     string    `gorm:"column:source_id" json:"source_id"`
-	SourceType   string    `gorm:"column:source_type" json:"source_type"`
-	TaskType     string    `gorm:"column:task_type" json:"task_type"`
-	Status       string    `gorm:"column:status" json:"status"`
-	RecordID     string    `gorm:"column:record_id" json:"record_id"`
-	ImagePath    string    `gorm:"column:image_path" json:"-"`
-	ImageURL     string    `gorm:"-" json:"image_url"`
-	ThumbnailURL string    `gorm:"-" json:"thumbnail_url"`
-	Description  string    `gorm:"column:description" json:"description"`
-	UserID       string    `gorm:"column:user_id" json:"user_id"`
-	UserNickname string    `gorm:"column:user_nickname" json:"user_nickname"`
-	UserAvatar   string    `gorm:"column:user_avatar" json:"user_avatar"`
-	UserPhone    string    `gorm:"column:user_phone" json:"user_phone"`
-	CreatedAt    time.Time `gorm:"column:created_at" json:"created_at"`
+	SourceID         string    `gorm:"column:source_id" json:"source_id"`
+	SourceType       string    `gorm:"column:source_type" json:"source_type"`
+	TaskType         string    `gorm:"column:task_type" json:"task_type"`
+	Status           string    `gorm:"column:status" json:"status"`
+	RecordID         string    `gorm:"column:record_id" json:"record_id"`
+	ImagePath        string    `gorm:"column:image_path" json:"-"`
+	ImageURL         string    `gorm:"-" json:"image_url"`
+	ThumbnailURL     string    `gorm:"-" json:"thumbnail_url"`
+	Description      string    `gorm:"column:description" json:"description"`
+	UserID           string    `gorm:"column:user_id" json:"user_id"`
+	UserNickname     string    `gorm:"column:user_nickname" json:"user_nickname"`
+	UserAvatar       string    `gorm:"column:user_avatar" json:"user_avatar"`
+	UserPhone        string    `gorm:"column:user_phone" json:"user_phone"`
+	CircleVisibility string    `gorm:"column:circle_visibility" json:"circle_visibility"`
+	CreatedAt        time.Time `gorm:"column:created_at" json:"created_at"`
 }
 
 type ListUserFoodPhotoResult struct {
@@ -188,9 +190,19 @@ SELECT
 	COALESCE(u.nickname, '') AS user_nickname,
 	COALESCE(u.avatar, '') AS user_avatar,
 	COALESCE(u.telephone, '') AS user_phone,
+	CASE
+		WHEN p.source_type IN ('analysis_task', 'food_record') OR p.record_id <> '' THEN
+			CASE
+				WHEN p.record_id = '' OR circle_record.id IS NULL THEN 'not_shared'
+				WHEN circle_record.hidden_from_feed OR NOT COALESCE(u.public_records, TRUE) THEN 'not_shared'
+				ELSE 'visible'
+			END
+		ELSE 'not_applicable'
+	END AS circle_visibility,
 	p.created_at
 FROM deduplicated AS p
 LEFT JOIN weapp_user AS u ON u.id::text = p.user_id
+LEFT JOIN user_food_records AS circle_record ON circle_record.id::text = p.record_id
 `
 
 const packagedCorrectionPhotosSQL = `
@@ -288,7 +300,20 @@ func buildUserFoodPhotoFilters(input ListUserFoodPhotoInput) (string, []any) {
 		conditions = append(conditions, "photos.status = ?")
 		args = append(args, status)
 	}
+	if visibility := strings.TrimSpace(input.CircleVisibility); isUserFoodPhotoCircleVisibility(visibility) {
+		conditions = append(conditions, "photos.circle_visibility = ?")
+		args = append(args, visibility)
+	}
 	return "WHERE " + strings.Join(conditions, " AND "), args
+}
+
+func isUserFoodPhotoCircleVisibility(visibility string) bool {
+	switch visibility {
+	case "visible", "not_shared", "not_applicable":
+		return true
+	default:
+		return false
+	}
 }
 
 func isUserFoodPhotoSource(source string) bool {

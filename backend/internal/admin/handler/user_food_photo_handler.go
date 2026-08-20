@@ -28,11 +28,12 @@ func (h *UserFoodPhotoHandler) List(c *gin.Context) {
 	page := positiveInt(c.Query("page"), 1)
 	limit := positiveInt(c.Query("limit"), 40)
 	result, err := h.svc.List(c.Request.Context(), service.ListUserFoodPhotoInput{
-		Query:  c.Query("q"),
-		Source: c.DefaultQuery("source", "all"),
-		Status: c.DefaultQuery("status", "all"),
-		Page:   page,
-		Limit:  limit,
+		Query:            c.Query("q"),
+		Source:           c.DefaultQuery("source", "all"),
+		Status:           c.DefaultQuery("status", "all"),
+		CircleVisibility: c.DefaultQuery("circle_visibility", "all"),
+		Page:             page,
+		Limit:            limit,
 	})
 	if err != nil {
 		response.Error(c, err)

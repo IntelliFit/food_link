@@ -31,6 +31,7 @@ type UserFoodPhoto = {
   user_nickname: string
   user_avatar: string
   user_phone: string
+  circle_visibility: 'visible' | 'not_shared' | 'not_applicable'
   created_at: string
 }
 
@@ -74,6 +75,7 @@ export function UserFoodPhotosPage({ onLogout, onMenuChange }: PageProps) {
   const [query, setQuery] = useState(searchParams.get('q') ?? '')
   const [source, setSource] = useState(searchParams.get('source') ?? 'all')
   const [status, setStatus] = useState(searchParams.get('status') ?? 'all')
+  const [circleVisibility, setCircleVisibility] = useState(searchParams.get('circle_visibility') ?? 'all')
   const [page, setPage] = useState(positiveInt(searchParams.get('page'), 1))
   const [limit, setLimit] = useState(positiveInt(searchParams.get('limit'), 40))
   const [items, setItems] = useState<UserFoodPhoto[]>([])
@@ -86,18 +88,19 @@ export function UserFoodPhotosPage({ onLogout, onMenuChange }: PageProps) {
   useEffect(() => {
     void loadPhotos()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, limit, source, status, searchNonce])
+  }, [page, limit, source, status, circleVisibility, searchNonce])
 
   useEffect(() => {
     const params = new URLSearchParams()
     if (query.trim()) params.set('q', query.trim())
     if (source !== 'all') params.set('source', source)
     if (status !== 'all') params.set('status', status)
+    if (circleVisibility !== 'all') params.set('circle_visibility', circleVisibility)
     if (page !== 1) params.set('page', String(page))
     if (limit !== 40) params.set('limit', String(limit))
     setSearchParams(params, { replace: true })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, source, status, page, limit])
+  }, [query, source, status, circleVisibility, page, limit])
 
   useEffect(() => {
     if (!preview) return
@@ -115,6 +118,7 @@ export function UserFoodPhotosPage({ onLogout, onMenuChange }: PageProps) {
         q: query.trim(),
         source,
         status,
+        circle_visibility: circleVisibility,
         page: String(nextPage),
         limit: String(limit),
       })
@@ -160,7 +164,7 @@ export function UserFoodPhotosPage({ onLogout, onMenuChange }: PageProps) {
         </Card>
 
         <Card>
-          <CardContent className='grid gap-4 pt-6 lg:grid-cols-[minmax(260px,2fr)_170px_170px_120px_auto] lg:items-end'>
+          <CardContent className='grid gap-4 pt-6 xl:grid-cols-[minmax(240px,2fr)_150px_170px_180px_110px_auto] xl:items-end'>
             <div className='space-y-2'>
               <Label htmlFor='photo-search'>搜索用户或内容</Label>
               <div className='relative'>
@@ -194,6 +198,12 @@ export function UserFoodPhotosPage({ onLogout, onMenuChange }: PageProps) {
               ['recorded', '已保存记录'],
               ['published', '已发布'],
               ['saved', '已保存'],
+            ]} />
+            <FilterSelect label='圈子可见性' value={circleVisibility} onValueChange={(value) => { setCircleVisibility(value); setPage(1) }} options={[
+              ['all', '全部可见性'],
+              ['visible', '已公开到圈子'],
+              ['not_shared', '未公开到圈子'],
+              ['not_applicable', '非圈子内容'],
             ]} />
             <FilterSelect label='每页' value={String(limit)} onValueChange={(value) => { setLimit(Number(value)); setPage(1) }} options={[
               ['20', '20 张'],
@@ -250,6 +260,9 @@ function PhotoCard({ item, onPreview }: { item: UserFoodPhoto; onPreview: () => 
           className='size-full object-cover transition-transform duration-300 group-hover:scale-[1.03]'
           loading='lazy'
         />
+        <span className={`absolute top-3 left-3 rounded-full border px-2.5 py-1 text-xs font-medium shadow-sm ${circleVisibilityClasses[item.circle_visibility]}`}>
+          {circleVisibilityLabels[item.circle_visibility]}
+        </span>
         <span className='absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-3 pt-10 pb-3 text-left text-xs text-white'>
           {formatTime(item.created_at)}
         </span>
@@ -302,6 +315,7 @@ function PhotoPreview({ item, onClose }: { item: UserFoodPhoto; onClose: () => v
             <PreviewRow label='上传时间' value={formatTime(item.created_at)} />
             <PreviewRow label='来源' value={sourceLabels[item.source_type] || item.source_type} />
             <PreviewRow label='状态' value={statusLabels[item.status] || item.status} />
+            <PreviewRow label='圈子可见性' value={circleVisibilityLabels[item.circle_visibility]} />
             {item.task_type ? <PreviewRow label='任务类型' value={item.task_type} /> : null}
             <PreviewRow label='来源 ID' value={item.source_id} />
             {item.record_id ? <PreviewRow label='记录 ID' value={item.record_id} /> : null}
@@ -349,4 +363,16 @@ const sourceLabels: Record<UserFoodPhoto['source_type'], string> = {
   public_food: '公共食物',
   packaged_correction: '包装食品纠错',
   user_recipe: '用户食谱',
+}
+
+const circleVisibilityLabels: Record<UserFoodPhoto['circle_visibility'], string> = {
+  visible: '已公开到圈子',
+  not_shared: '未公开到圈子',
+  not_applicable: '非圈子内容',
+}
+
+const circleVisibilityClasses: Record<UserFoodPhoto['circle_visibility'], string> = {
+  visible: 'border-emerald-300 bg-emerald-50/95 text-emerald-700',
+  not_shared: 'border-amber-300 bg-amber-50/95 text-amber-800',
+  not_applicable: 'border-slate-300 bg-slate-50/95 text-slate-600',
 }

@@ -18,7 +18,8 @@ func setupUserFoodPhotoTestDB(t *testing.T) *UserFoodPhotoRepo {
 			id text PRIMARY KEY,
 			nickname text,
 			avatar text,
-			telephone text
+			telephone text,
+			public_records boolean DEFAULT true
 		);
 		CREATE TABLE analysis_tasks (
 			id text PRIMARY KEY,
@@ -40,7 +41,8 @@ func setupUserFoodPhotoTestDB(t *testing.T) *UserFoodPhotoRepo {
 			description text,
 			source_task_id text,
 			record_time timestamptz,
-			created_at timestamptz
+			created_at timestamptz,
+			hidden_from_feed boolean NOT NULL DEFAULT false
 		);
 		CREATE TABLE public_food_library (
 			id text PRIMARY KEY,
@@ -183,4 +185,54 @@ func TestUserFoodPhotoRepoListStillWorksWithoutPackagedCorrectionTable(t *testin
 	assert.Equal(t, int64(1), result.Total)
 	require.Len(t, result.Items, 1)
 	assert.Equal(t, "meal.jpg", result.Items[0].ImagePath)
+}
+
+func TestUserFoodPhotoRepoListClassifiesAndFiltersCircleVisibility(t *testing.T) {
+	repo := setupUserFoodPhotoTestDB(t)
+	now := time.Now().UTC()
+	require.NoError(t, repo.db.Exec(`
+		INSERT INTO weapp_user (id, nickname, public_records)
+		VALUES ('user-public', '公开用户', true), ('user-private', '隐私用户', false)
+	`).Error)
+	require.NoError(t, repo.db.Exec(`
+		INSERT INTO analysis_tasks (id, user_id, task_type, status, image_url, payload, created_at)
+		VALUES
+			('task-visible', 'user-public', 'food', 'done', 'visible.jpg', '{}', ?),
+			('task-hidden', 'user-public', 'food', 'done', 'hidden.jpg', '{}', ?),
+			('task-unsaved', 'user-public', 'food', 'done', 'unsaved.jpg', '{}', ?),
+			('task-private-profile', 'user-private', 'food', 'done', 'private-profile.jpg', '{}', ?)
+	`, now, now, now, now).Error)
+	require.NoError(t, repo.db.Exec(`
+		INSERT INTO user_food_records (id, user_id, image_path, source_task_id, created_at, hidden_from_feed)
+		VALUES
+			('record-visible', 'user-public', 'visible.jpg', 'task-visible', ?, false),
+			('record-hidden', 'user-public', 'hidden.jpg', 'task-hidden', ?, true),
+			('record-private-profile', 'user-private', 'private-profile.jpg', 'task-private-profile', ?, false)
+	`, now, now, now).Error)
+	require.NoError(t, repo.db.Exec(`
+		INSERT INTO user_recipes (id, user_id, recipe_name, image_path, created_at)
+		VALUES ('recipe-1', 'user-public', '私房菜', 'recipe.jpg', ?)
+	`, now).Error)
+
+	all, err := repo.List(context.Background(), ListUserFoodPhotoInput{Limit: 40})
+	require.NoError(t, err)
+	byPath := map[string]UserFoodPhoto{}
+	for _, item := range all.Items {
+		byPath[item.ImagePath] = item
+	}
+	assert.Equal(t, "visible", byPath["visible.jpg"].CircleVisibility)
+	assert.Equal(t, "not_shared", byPath["hidden.jpg"].CircleVisibility)
+	assert.Equal(t, "not_shared", byPath["unsaved.jpg"].CircleVisibility)
+	assert.Equal(t, "not_shared", byPath["private-profile.jpg"].CircleVisibility)
+	assert.Equal(t, "not_applicable", byPath["recipe.jpg"].CircleVisibility)
+
+	visible, err := repo.List(context.Background(), ListUserFoodPhotoInput{CircleVisibility: "visible", Limit: 40})
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), visible.Total)
+	require.Len(t, visible.Items, 1)
+	assert.Equal(t, "visible.jpg", visible.Items[0].ImagePath)
+
+	notShared, err := repo.List(context.Background(), ListUserFoodPhotoInput{CircleVisibility: "not_shared", Limit: 40})
+	require.NoError(t, err)
+	assert.Equal(t, int64(3), notShared.Total)
 }
