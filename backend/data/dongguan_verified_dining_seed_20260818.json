@@ -1,0 +1,267 @@
+[
+  {
+    "batch_name": "东莞高校官方食堂楼层确认集-20260818",
+    "region": "广东省东莞市",
+    "source_scope": "高校官网、总务后勤、招生及校园运营材料；实际餐饮楼层与2024—2026当前运营证据闭环后收录",
+    "schools": [
+      {
+        "school": "东莞理工学院",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "松山湖校区",
+            "aliases": ["校本部"],
+            "address": "广东省东莞市松山湖大学路1号",
+            "source_url": "https://www.dgut.edu.cn/info/1066/84262.htm"
+          },
+          {
+            "name": "莞城校区",
+            "aliases": [],
+            "address": "广东省东莞市莞城街道学院路251号",
+            "source_url": "https://www.dgut.edu.cn/info/1066/84262.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "松山湖校区",
+            "name": "第一食堂",
+            "aliases": ["第一学生食堂"],
+            "location_text": "松山湖校区第一食堂一楼、二楼、三楼",
+            "building_or_floor": "一楼、二楼、三楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "一楼供应早餐、午餐、晚餐和宵夜；三楼圣元味智慧餐厅供应早餐、午餐和晚餐",
+            "source_url": "https://zwhqb.dgut.edu.cn/info/1871/37261.htm",
+            "source_title": "东莞理工学院自营食堂指南",
+            "source_org": "东莞理工学院总务后勤部",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2024年校方指南明确第一食堂一楼为大众食堂、二楼为就餐区、三楼为圣元味智慧餐厅，并分别列出一楼及三楼实际菜品和售卖时段；三楼经营区归并第一食堂父体。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://yjs.dgut.edu.cn/info/1024/20046.htm",
+                "source_title": "东莞理工学院2026年全国硕士研究生招生考试考点考生须知",
+                "source_org": "东莞理工学院研究生院",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2026年研考保障通知继续列第一食堂实际供餐，闭合该父食堂当前运营。"
+              }
+            ]
+          },
+          {
+            "campus": "松山湖校区",
+            "name": "第二食堂",
+            "aliases": [],
+            "location_text": "松山湖校区第二食堂一楼、二楼、三楼",
+            "building_or_floor": "一楼、二楼、三楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "一楼大众风味、二楼风味明档、三楼教工食堂均有实际售卖时段",
+            "source_url": "https://zwhqb.dgut.edu.cn/info/1871/37261.htm",
+            "source_title": "东莞理工学院自营食堂指南",
+            "source_org": "东莞理工学院总务后勤部",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2024年校方指南明确第二食堂一楼为大众食堂、二楼为风味食堂、三楼为教工餐厅，后续逐层列出实际菜品与售卖时间；各经营区归并第二食堂父体。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://yjs.dgut.edu.cn/info/1024/20046.htm",
+                "source_title": "东莞理工学院2026年全国硕士研究生招生考试考点考生须知",
+                "source_org": "东莞理工学院研究生院",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2026年研考保障通知继续列第二食堂一楼、二楼供餐；结合2024逐层指南及未见三楼停用反证，闭合父食堂当前运营。"
+              }
+            ]
+          },
+          {
+            "campus": "松山湖校区",
+            "name": "第三食堂",
+            "aliases": ["第三饭堂"],
+            "location_text": "松山湖校区第三食堂一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "供应早餐、午餐、晚餐和宵夜",
+            "source_url": "https://zwhqb.dgut.edu.cn/info/1871/37261.htm",
+            "source_title": "东莞理工学院自营食堂指南",
+            "source_org": "东莞理工学院总务后勤部",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2024年校方指南明确第三食堂一楼为大众餐厅、二楼为就餐区并设休闲餐饮区，同时列出实际服务时间和菜品；未列三楼，故只收录一、二楼。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://zwhqb.dgut.edu.cn/info/1791/39161.htm",
+                "source_title": "筑牢舌尖安全防线 学校开展智慧食堂专项监督检查工作",
+                "source_org": "东莞理工学院总务后勤部",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2025年学校对第三饭堂后厨、食材、留样和环境开展实际监督检查，闭合第三食堂当前餐饮运营。"
+              }
+            ]
+          },
+          {
+            "campus": "莞城校区",
+            "name": "第一食堂",
+            "aliases": ["志道学生食堂", "第一学生食堂"],
+            "location_text": "莞城校区第一食堂（志道学生食堂）一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "当前服务时间7:00—23:00",
+            "source_url": "https://zsb.dgut.edu.cn/bkszs/zszx/resource/dba363a3e3499428172b83d0e20da907.pdf",
+            "source_title": "2020 MY DETERMINED HANDBOOK OF DGUT",
+            "source_org": "东莞理工学院招生办公室",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "校方新生手册明确莞城校区第一学生食堂一楼提供自选菜、套餐，二楼为用餐区；2024同名同址志道学生食堂继续运营且无改层反证。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://zwhqb.dgut.edu.cn/info/1871/37261.htm",
+                "source_title": "东莞理工学院自营食堂指南",
+                "source_org": "东莞理工学院总务后勤部",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2024年指南以莞城校区第一食堂（志道学生食堂）列出当前7:00—23:00服务时间和实际餐食，闭合旧逐层资料的当前运营。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "圣元味智慧餐厅、楼层风味区和教工餐厅均归并所属物理父食堂。",
+          "第三食堂三楼只有旧设计用途且不在2024当前指南中，排除；莞城校外公寓食堂与旧第二学生食堂别名承接不明，排除。"
+        ]
+      },
+      {
+        "school": "东莞职业技术学院",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "松山湖校区",
+            "aliases": ["校本部"],
+            "address": "广东省东莞市松山湖大学路3号",
+            "source_url": "https://zsxx.dgpt.edu.cn/info/1098/1965.htm"
+          },
+          {
+            "name": "大岭山校区",
+            "aliases": ["大岭山分校区"],
+            "address": "广东省东莞市大岭山镇连平连马路183号",
+            "source_url": "https://zsxx.dgpt.edu.cn/info/1098/1965.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "松山湖校区",
+            "name": "第二食堂",
+            "aliases": ["树蕙餐厅"],
+            "location_text": "松山湖校区第二食堂（树蕙餐厅）二楼",
+            "building_or_floor": "二楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://www.dgpt.edu.cn/info/1002/15306.htm",
+            "source_title": "我校党委书记司琪带队检查食品安全工作",
+            "source_org": "东莞职业技术学院",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2025年校方在松山湖校区检查食材加工、餐具、留样和排队情况后，校领导在第二食堂二楼落座陪餐，直接闭合二楼实际堂食。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://hqgs.dgpt.edu.cn/info/1004/1498.htm",
+                "source_title": "聚焦后勤服务提质 共绘师生满意新篇",
+                "source_org": "东莞职业技术学院后勤服务单位",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2024年校方后勤报道明确树蕙餐厅即第二食堂并记录当前师生餐饮反馈，闭合父体别名和持续运营。"
+              }
+            ]
+          },
+          {
+            "campus": "大岭山校区",
+            "name": "匠心楼食堂",
+            "aliases": ["大岭山校区食堂"],
+            "location_text": "大岭山校区匠心楼食堂一楼",
+            "building_or_floor": "一楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://jsj.dgpt.edu.cn/info/1103/2943.htm",
+            "source_title": "冬至暖意浓，饺香汤圆甜——人工智能学院冬至活动",
+            "source_org": "东莞职业技术学院人工智能学院",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "校方报道把地点明确为大岭山校区匠心楼一楼食堂，并记录食堂备齐食材、工作人员指导蒸煮、师生轮流取餐和围坐堂食；与日常安全检查交叉后确认一楼。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://jsj.dgpt.edu.cn/info/1087/2828.htm",
+                "source_title": "贺定修校长带队到大岭山校区开展安全专项检查",
+                "source_org": "东莞职业技术学院人工智能学院",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2025年校方检查大岭山校区食堂厨房环境、食材存放、食品质量、留样及工作人员操作，闭合同一校区食堂日常运营。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "树蕙餐厅作为第二食堂别名归并。",
+          "采购文件中的自营食堂5层、外包1层是多父体汇总，未据此回填；道滘校区食堂及松山湖第一食堂缺逐层强证。"
+        ]
+      },
+      {
+        "school": "香港城市大学（东莞）",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "校本部",
+            "aliases": ["松山湖校区", "一期校园"],
+            "address": "广东省东莞市松山湖高新技术产业开发区高雄路8号",
+            "source_url": "https://uga.cityu-dg.edu.cn/en/node/3496"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "校本部",
+            "name": "学生餐厅",
+            "aliases": ["食堂"],
+            "location_text": "校本部学生餐厅一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "供应早餐、午餐和晚餐，并提供线上预订",
+            "source_url": "https://infohub.cityu-dg.edu.cn/html/0/241.html?lang=zh",
+            "source_title": "学生餐厅一周菜单（9月8日-9月14日）",
+            "source_org": "香港城市大学（东莞）校园运维处",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2025年官方菜单逐层列出一楼综合窗口、粉面小馆、自选称重餐线、轻味小厨，以及二楼套餐、水吧、粤式烧腊和特色风味窗口的实际菜品。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://infohub.cityu-dg.edu.cn/index/5.html",
+                "source_title": "通知动态",
+                "source_org": "香港城市大学（东莞）",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "学校通知栏目在2026年继续发布学生餐厅一周菜单和线上点餐系统通知，闭合学生餐厅当前运营。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "一楼、二楼所有餐线和窗口归并学生餐厅父体，不拆窗口。",
+          "二期新食堂尚属未来设施，不与当前学生餐厅混建。"
+        ]
+      }
+    ]
+  }
+]

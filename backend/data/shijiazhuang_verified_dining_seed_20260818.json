@@ -1,0 +1,434 @@
+[
+  {
+    "batch_name": "石家庄高校官方食堂楼层确认集-20260818",
+    "region": "河北省石家庄市",
+    "source_scope": "高校现行官网、后勤与招生页面及政府食品安全监管材料中的正式校区地址、物理父食堂、实际售餐楼层和2024—2026当前运营证据；既有楼层经营区先归并物理父体，仅发布完整闭环记录",
+    "schools": [
+      {
+        "school": "河北师范大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "裕华校区",
+            "aliases": ["校本部"],
+            "address": "河北省石家庄市南二环东路20号",
+            "source_url": "https://www.hebtu.edu.cn/a/2014/09/09/392CD46E042D4ADB94CA73893C9D232B.html"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "裕华校区",
+            "name": "主食堂",
+            "aliases": ["第一餐厅", "第二餐厅", "凝味创意餐厅（第三餐厅）"],
+            "location_text": "河北师范大学裕华校区主食堂一楼",
+            "building_or_floor": "一楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "2025年暑期早餐7:00—8:30、午餐11:00—12:30、晚餐17:00—18:30",
+            "source_url": "https://cjxy.hebtu.edu.cn/a/2025/07/04/750FADA180B04E3B8AF5249DF29410DB.html",
+            "source_title": "关于2025年暑期用餐安排的通知",
+            "source_org": "河北师范大学初等教育系",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "校方2025年暑期通知明确用餐地点为第一餐厅（主食堂一楼），并逐项列出早餐、午餐、晚餐供餐时间，直接闭合当前实际供餐。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.hebtu.edu.cn/a/2014/09/09/392CD46E042D4ADB94CA73893C9D232B.html",
+                "source_title": "饮食服务中心",
+                "source_org": "河北师范大学",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "学校现行服务页把第一至第三餐厅绑定主食堂、第四第五及民族餐厅绑定西食堂，并给出裕华校区南二环东路20号地址；本批只用其作父子结构和地址补证。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "第一、第二、第三餐厅是主食堂楼层经营区，第四、第五及民族餐厅是西食堂经营区；发布前归并物理父楼。",
+          "严格Active仅主食堂一楼；主食堂二三楼与西食堂各层缺日期化同父当前运营强证。"
+        ]
+      },
+      {
+        "school": "河北师范大学汇华学院",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "校本部",
+            "aliases": ["北院"],
+            "address": "河北省石家庄市红旗大街469号",
+            "source_url": "https://huihua.hebtu.edu.cn/"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "校本部",
+            "name": "餐饮中心",
+            "aliases": ["汇雅苑餐厅", "汇德苑餐厅", "汇馨苑餐厅（含回民餐厅）"],
+            "location_text": "河北师范大学汇华学院校本部餐饮中心负一层、一楼、二楼",
+            "building_or_floor": "负一层、一楼、二楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "2026年春季开学第一餐保障；负一层、二楼具名食堂开餐，一楼餐饮企业持续供餐",
+            "source_url": "https://huihua.hebtu.edu.cn/hqc/index.php?id=483&mods=show",
+            "source_title": "后勤处以优质服务保障助力师生顺利返校和新学期开学",
+            "source_org": "河北师范大学汇华学院后勤处",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026年开学保障报道明确汇德苑、汇馨苑更新服务并开展开学第一餐全流程保障，各食堂推出特色美食，闭合餐饮中心负一层与二楼当前开餐。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://huihua.hebtu.edu.cn/hqc/index.php?id=464&mods=show",
+                "source_title": "后勤处积极探索食堂智慧化监管模式",
+                "source_org": "河北师范大学汇华学院后勤处",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2025年页面明确一层食堂餐饮服务企业、就餐大厅、菜品留样与用餐监督，闭合餐饮中心一楼实际运营。"
+              },
+              {
+                "source_url": "https://huihua.hebtu.edu.cn/news/index.php?id=13597&mods=cnews",
+                "source_title": "学生食堂引进社会餐饮企业经营服务项目招标公告",
+                "source_org": "河北师范大学汇华学院",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2025年公告把汇德苑、汇雅苑、汇馨苑分别映射到同一餐饮中心负一层、一层、二层；仅作父体和楼层映射，由开学实际运营材料补强。"
+              },
+              {
+                "source_url": "https://huihua.hebtu.edu.cn/news/index.php?id=13846&mods=cnews",
+                "source_title": "我院召开食品安全现场办公会",
+                "source_org": "河北师范大学汇华学院",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2026年会议在餐饮中心汇德苑餐厅举行并现场检查食品贮存、加工制作和留样，交叉证明餐饮中心实际运营。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": ["汇德苑、汇雅苑、汇馨苑是餐饮中心负一层、一楼、二楼经营区，归并为一个物理父食堂。"]
+      },
+      {
+        "school": "河北科技大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "新校区",
+            "aliases": ["校本部"],
+            "address": "河北省石家庄市裕华区裕翔街26号",
+            "source_url": "https://yjsxy.web.hebust.edu.cn/zsgz/zsjz/c37e7535138e4f7a947e95bfda79e2fb.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "新校区",
+            "name": "学一餐厅A座",
+            "aliases": ["学一A"],
+            "location_text": "河北科技大学新校区学一餐厅A座一楼",
+            "building_or_floor": "一楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "2025年国庆中秋假期正常经营",
+            "source_url": "https://zongwu.web.hebust.edu.cn/bglc/xmgl/2c628380e889479188bef1b3a6d61e7f.htm",
+            "source_title": "后勤与校园建设管理处 国庆、中秋双节假前安全检查专刊（398）",
+            "source_org": "河北科技大学后勤与校园建设管理处",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2025年假期餐饮保障安排明确学一A一楼正常经营，并说明食品加工制作和售卖管理，闭合实际供餐。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://yjsxy.web.hebust.edu.cn/zsgz/zsjz/c37e7535138e4f7a947e95bfda79e2fb.htm",
+                "source_title": "河北科技大学2026年硕士研究生招生章程",
+                "source_org": "河北科技大学研究生院",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2026年招生章程确认学校身份及石家庄市裕翔街26号正式地址。"
+              }
+            ]
+          },
+          {
+            "campus": "新校区",
+            "name": "学一餐厅B座",
+            "aliases": ["学一B"],
+            "location_text": "河北科技大学新校区学一餐厅B座一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "学生食堂",
+            "audience": "师生及到校考生",
+            "opening_hours_raw": "2025年线下复试期间一楼、二楼均可用餐",
+            "source_url": "https://yjsxy.web.hebust.edu.cn/zsgz/zsgz_tzgg/6a99cffa016541db91c1642514673a21.htm",
+            "source_title": "河北科技大学2025年硕士研究生招生一志愿考生复试相关注意事项",
+            "source_org": "河北科技大学研究生院",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "校方2025年复试注意事项明确线下到校考生可到学一餐厅B座一楼、二楼用餐，直接闭合两层实际供餐。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://news.hebust.edu.cn/zhxw/492387dbdc6b42369f2398d4d1f065be.htm",
+                "source_title": "劳动实验田果实端上学生餐桌",
+                "source_org": "河北科技大学",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2025年报道明确在一餐厅B座一楼设置档口并向学生供应特色菜品，交叉证明B座一楼实际售餐。"
+              },
+              {
+                "source_url": "https://yjsxy.web.hebust.edu.cn/zsgz/zsjz/c37e7535138e4f7a947e95bfda79e2fb.htm",
+                "source_title": "河北科技大学2026年硕士研究生招生章程",
+                "source_org": "河北科技大学研究生院",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2026年招生章程确认学校身份及石家庄市裕翔街26号正式地址。"
+              }
+            ]
+          },
+          {
+            "campus": "新校区",
+            "name": "学二餐厅",
+            "aliases": ["学二"],
+            "location_text": "河北科技大学新校区学二餐厅一楼",
+            "building_or_floor": "一楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "2025年国庆中秋假期正常经营",
+            "source_url": "https://zongwu.web.hebust.edu.cn/bglc/xmgl/2c628380e889479188bef1b3a6d61e7f.htm",
+            "source_title": "后勤与校园建设管理处 国庆、中秋双节假前安全检查专刊（398）",
+            "source_org": "河北科技大学后勤与校园建设管理处",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2025年假期餐饮保障安排明确学二一楼正常经营，并说明食品加工制作和售卖管理，闭合实际供餐。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://yjsxy.web.hebust.edu.cn/zsgz/zsjz/c37e7535138e4f7a947e95bfda79e2fb.htm",
+                "source_title": "河北科技大学2026年硕士研究生招生章程",
+                "source_org": "河北科技大学研究生院",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2026年招生章程确认学校身份及石家庄市裕翔街26号正式地址。"
+              }
+            ]
+          },
+          {
+            "campus": "新校区",
+            "name": "学三餐厅",
+            "aliases": ["学三"],
+            "location_text": "河北科技大学新校区学三餐厅二楼",
+            "building_or_floor": "二楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "2025年国庆中秋假期正常经营",
+            "source_url": "https://zongwu.web.hebust.edu.cn/bglc/xmgl/2c628380e889479188bef1b3a6d61e7f.htm",
+            "source_title": "后勤与校园建设管理处 国庆、中秋双节假前安全检查专刊（398）",
+            "source_org": "河北科技大学后勤与校园建设管理处",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2025年假期餐饮保障安排明确学三二楼正常经营，并说明食品加工制作和售卖管理，闭合实际供餐。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://yjsxy.web.hebust.edu.cn/zsgz/zsjz/c37e7535138e4f7a947e95bfda79e2fb.htm",
+                "source_title": "河北科技大学2026年硕士研究生招生章程",
+                "source_org": "河北科技大学研究生院",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2026年招生章程确认学校身份及石家庄市裕翔街26号正式地址。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": ["学一A座与B座有不同座名，官方材料未证明同一物理建筑，保守保留为两个父体；民族餐厅无楼层不纳入。"]
+      },
+      {
+        "school": "河北外国语学院",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "校本部",
+            "aliases": [],
+            "address": "河北省石家庄市元氏县红旗北大街1218号",
+            "source_url": "https://www.hisu.edu.cn/info/6254.html"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "校本部",
+            "name": "第二食堂",
+            "aliases": ["二食堂"],
+            "location_text": "河北外国语学院校本部第二食堂三楼",
+            "building_or_floor": "三楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "2025年3月21日正式开业",
+            "source_url": "https://hisu.edu.cn/channel/hewaiyaowen-16.html",
+            "source_title": "河北外国语学院二食堂三楼开业，惊艳亮相成多元实训新地标",
+            "source_org": "河北外国语学院",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "学校河外要闻官方列表在2025年3月21日明确发布二食堂三楼开业条目，补足此前拟试运营材料的履约后实际开业闭环。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://hisu.edu.cn/info/6011.html",
+                "source_title": "河北外国语学院二食堂三楼：把春夏秋冬装进一座美食殿堂",
+                "source_org": "河北外国语学院",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2025年开业前介绍明确二食堂三楼设置各地美食、清真窗口及基本伙，可容纳3000人就餐；由3月21日开业记录闭合。"
+              },
+              {
+                "source_url": "https://www.hisu.edu.cn/info/6254.html",
+                "source_title": "河北外国语学院2025年小语种本科提前批招生简章",
+                "source_org": "河北外国语学院",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2025年招生简章确认学校正式地址为石家庄市元氏县红旗北大街1218号。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": ["3月17日拟试运营材料不单独激活，由3月21日校官网正式开业条目补齐。"]
+      },
+      {
+        "school": "石家庄医学高等专科学校",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "灵寿校区",
+            "aliases": ["校本部"],
+            "address": "河北省石家庄市灵寿县同新路1号",
+            "source_url": "https://www.sjzmc.cn/zsxxw/article/zkzs/show/29105"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "灵寿校区",
+            "name": "五食堂",
+            "aliases": ["第五食堂"],
+            "location_text": "石家庄医学高等专科学校灵寿校区五食堂一楼、二楼、三楼",
+            "building_or_floor": "一楼、二楼、三楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "2026年1月7日前一楼、三楼供餐，1月9日前二楼供餐",
+            "source_url": "https://www.sjzmc.cn/hqc/article/tzgg/show/26895",
+            "source_title": "寒假食堂停餐安排",
+            "source_org": "石家庄医学高等专科学校后勤处",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026年寒假通知明确五食堂一楼、三楼自1月7日起停止供餐，二楼保障后于1月9日起停止供餐，直接反证三个楼层在停餐节点前实际供餐。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.sjzmc.cn/zsxxw/article/zkzs/show/29105",
+                "source_title": "石家庄医学高等专科学校2026年招生章程",
+                "source_org": "石家庄医学高等专科学校",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2026年招生章程确认学校正式地址为河北省石家庄市灵寿县同新路1号。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": ["四食堂未取得实际楼层闭环，不纳入。"]
+      },
+      {
+        "school": "石家庄城市经济职业学院",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "岗上校区",
+            "aliases": [],
+            "address": "河北省石家庄经济技术开发区岗上镇文明路12号",
+            "source_url": "https://www.sjzcsjjxy.com/"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "岗上校区",
+            "name": "岗上校区餐厅",
+            "aliases": ["院内餐厅"],
+            "location_text": "石家庄城市经济职业学院岗上校区院内餐厅二楼、三楼",
+            "building_or_floor": "二楼、三楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "2024年政府食品安全监督抽检时实际经营",
+            "source_url": "https://gc.gov.cn/attachments/1/202404/18/2024%E5%B9%B4%E8%97%81%E5%9F%8E%E5%8C%BA%E6%9C%AC%E7%BA%A7%E9%A3%9F%E5%93%81%E5%AE%89%E5%85%A8%E7%9B%91%E7%9D%A3%E6%8A%BD%E6%A3%80%E5%90%88%E6%A0%B7%E5%93%81%E4%BF%A1%E6%81%AF%EF%BC%88%E7%AC%AC1%E6%9C%9F%EF%BC%8920240418100059180.pdf?sid=61d215b9-09aa-4893-898f-0e743f30ecdd",
+            "source_title": "2024年藁城区本级食品安全监督抽检合格样品信息（第1期）",
+            "source_org": "石家庄市藁城区市场监督管理局",
+            "source_type": "official_government",
+            "evidence_level": "A",
+            "evidence_excerpt": "政府监管抽检表把经营单位地址直接写为岗上镇岗上村文明路12号院内餐厅二楼、三楼，并记录食品抽检合格，闭合两层实际食品经营。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.sjzcsjjxy.com/",
+                "source_title": "石家庄城市经济职业学院官网首页",
+                "source_org": "石家庄城市经济职业学院",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "学校现行官网列岗上校区地址为石家庄经济技术开发区岗上镇文明路12号。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": ["餐厅无官方专名，采用不虚构品牌的描述性父体名；监管材料已唯一绑定校区院内餐厅。"]
+      },
+      {
+        "school": "石家庄学院",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "南校区",
+            "aliases": [],
+            "address": "河北省石家庄高新技术开发区珠峰大街288号",
+            "source_url": "https://www.sjzc.edu.cn/xcxy/col/1652680385693/2025/06/09/1749474060151.html"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "南校区",
+            "name": "南校区学生食堂",
+            "aliases": ["南校区一楼食堂", "南校区二楼食堂"],
+            "location_text": "石家庄学院南校区学生食堂一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "2025年秋季开学后已实际运行近两周",
+            "source_url": "https://hq.sjzc.edu.cn/columns/d6cf19c3-30db-479e-b9f1-4c8c98f68a34/202509/17/aa9af01b-769b-4d31-aebc-d9ad0f4d5e7c.html",
+            "source_title": "南校区学生食堂全方位升级改造完成",
+            "source_org": "石家庄学院后勤管理处",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2025年后勤报道明确南校区学生食堂一、二楼升级完成，并写明自开学至今近两周的实际运行达到预期，直接闭合两层当前运营。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.sjzc.edu.cn/xcxy/col/1652680385693/2025/06/09/1749474060151.html",
+                "source_title": "石家庄学院2025年招生章程",
+                "source_org": "石家庄学院",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2025年招生章程确认南校区正式地址为石家庄高新技术开发区珠峰大街288号。"
+              },
+              {
+                "source_url": "https://gzc.sjzc.edu.cn/col/1661398230139/2025/07/08/1751958034978.html",
+                "source_title": "南校区一、二楼食堂委托经营服务项目比选成交公告",
+                "source_org": "石家庄学院国有资产管理处",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2025年成交公告分别列一楼、二楼经营标段及至2030年的合同期限；只作楼层和连续性补证，由开学后实际运行报道激活。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": ["一楼、二楼经营标段归并为同一物理南校区学生食堂。"]
+      }
+    ]
+  }
+]

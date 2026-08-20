@@ -1473,7 +1473,9 @@ function toggleValue(values: string[], value: string): string[] {
 function isCatalogItemPublishable(item: CatalogItem): boolean {
   return item.status !== 'published'
     && item.status !== 'analysis_pending'
+    && item.entry_type !== 'stall_overview'
     && !!item.name?.trim()
+    && (item.missing_fields || []).every((field) => field === 'image' || field === 'price')
 }
 
 function canSubmitCatalogAction(item: CatalogItem): boolean {
@@ -1563,8 +1565,10 @@ function catalogPublishActionLabel(status: string): string {
 function catalogPublishDisabledReason(item: CatalogItem): string | undefined {
   if (item.status === 'published') return '仅在食物本身变化、需要重算营养时使用；普通资料编辑保存后会直接同步'
   if (item.status === 'analysis_pending') return 'AI 分析进行中，请等待结果'
-  if (!item.name?.trim() || (item.missing_fields || []).includes('name')) return '请先补齐名称'
-  if ((item.missing_fields || []).length) return '缺失信息会显示为待补充，不阻塞普通模式 AI 分析'
+  if (item.entry_type === 'stall_overview') return '档口介绍不是菜品，不进行营养分析'
+  if (!item.name?.trim() || (item.missing_fields || []).some((field) => field !== 'image' && field !== 'price')) return '请先补齐名称'
+  if ((item.missing_fields || []).includes('price')) return '缺价菜品可先进行 AI 营养分析，价格可后续补充'
+  if ((item.missing_fields || []).includes('image')) return '无图菜品将使用文字 AI 分析，上线后可由用户共建补图'
   return '选择此条目；将使用普通模式 AI 分析'
 }
 

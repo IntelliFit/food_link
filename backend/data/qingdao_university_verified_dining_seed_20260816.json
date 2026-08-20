@@ -1,0 +1,177 @@
+[
+  {
+    "batch_name": "青岛大学官方食堂楼层确认集-20260816",
+    "region": "山东省青岛市",
+    "source_scope": "青岛大学官网、青岛大学后勤管理处、青岛大学本科招生信息网；按物理父食堂归并楼层经营区",
+    "schools": [
+      {
+        "school": "青岛大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "浮山校区",
+            "aliases": [],
+            "address": "青岛市宁夏路308号",
+            "source_url": "https://www.qdu.edu.cn/xxgk/lxlx.htm"
+          },
+          {
+            "name": "金家岭校区",
+            "aliases": [],
+            "address": "青岛市松岭路93号",
+            "source_url": "https://zs.qdu.edu.cn/info/1006/1337.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "浮山校区",
+            "name": "仁园餐厅",
+            "aliases": ["仁园餐厅一楼食堂"],
+            "location_text": "一楼",
+            "building_or_floor": "一楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+          "source_url": "https://houqin.qdu.edu.cn/info/1027/4506.htm",
+          "source_title": "关于做好近期学生返校后勤服务保障工作的通知",
+            "source_org": "青岛大学后勤管理处",
+            "source_type": "official_university_logistics",
+            "evidence_level": "A",
+          "evidence_excerpt": "2025-02-12官方返校保障通知明确仁园餐厅一食堂自2月7日午餐起开始供餐；同文将其表述为仁园餐厅一楼，按物理父食堂规范为仁园餐厅。",
+            "review_status": "pending_review",
+            "additional_sources": []
+          },
+          {
+            "campus": "浮山校区",
+            "name": "浩园餐厅",
+            "aliases": ["浩园餐厅二楼", "浩园餐厅三楼"],
+            "location_text": "二楼、三楼",
+            "building_or_floor": "二楼、三楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://houqin.qdu.edu.cn/info/1027/4464.htm",
+            "source_title": "关于开展深夜食堂助力考试季活动的通知",
+            "source_org": "青岛大学后勤管理处",
+            "source_type": "official_university_logistics",
+            "evidence_level": "A",
+            "evidence_excerpt": "2024-12-05官方通知明确浩园餐厅二楼档口延长供餐；二楼、三楼归并为同一物理父食堂。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://houqin.qdu.edu.cn/info/1028/4065.htm",
+                "source_title": "后勤保障开学工作安排",
+                "source_org": "青岛大学后勤管理处",
+                "source_type": "official_university_logistics",
+                "evidence_level": "A",
+                "evidence_excerpt": "官方开学供餐表直接列出浩园餐厅（三楼）及供餐时间。"
+              }
+            ]
+          },
+          {
+            "campus": "浮山校区",
+            "name": "莘园餐厅",
+            "aliases": ["莘园餐厅一楼食堂", "莘园餐厅二楼食堂", "莘园餐厅三楼食堂"],
+            "location_text": "一楼、二楼、三楼",
+            "building_or_floor": "一楼、二楼、三楼",
+            "service_type": "食堂/餐厅",
+            "audience": "师生",
+            "opening_hours_raw": "",
+          "source_url": "https://houqin.qdu.edu.cn/info/1027/4506.htm",
+          "source_title": "关于做好近期学生返校后勤服务保障工作的通知",
+            "source_org": "青岛大学后勤管理处",
+            "source_type": "official_university_logistics",
+            "evidence_level": "A",
+          "evidence_excerpt": "2025-02-12官方返校保障通知明确莘园餐厅一食堂、二食堂自2月21日午餐起开始供餐；一楼、二楼按同一物理父食堂归并。",
+          "review_status": "pending_review",
+          "additional_sources": [
+            {
+              "source_url": "https://houqin.qdu.edu.cn/info/1027/4749.htm",
+              "source_title": "关于开展2026年食光饺融温暖迎新元旦迎新年主题活动的通知",
+              "source_org": "青岛大学后勤管理处",
+              "source_type": "official_university_logistics",
+              "evidence_level": "A",
+              "evidence_excerpt": "2026年官方通知明确莘园餐厅二楼、三楼水饺档口面向师生实际购买和用餐，补足三楼当前实际餐饮闭环。"
+            }
+          ]
+          },
+          {
+            "campus": "浮山校区",
+            "name": "滢园餐厅",
+            "aliases": ["滢园餐厅二楼", "滢园民族餐厅"],
+            "location_text": "一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "食堂/餐厅",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://houqin.qdu.edu.cn/info/1027/4464.htm",
+            "source_title": "关于开展深夜食堂助力考试季活动的通知",
+            "source_org": "青岛大学后勤管理处",
+            "source_type": "official_university_logistics",
+            "evidence_level": "A",
+            "evidence_excerpt": "2024-12-05官方通知明确滢园民族餐厅位于一楼、滢园餐厅二楼档口持续供餐；民族区按同一物理父食堂归并。",
+            "review_status": "pending_review",
+            "additional_sources": []
+          },
+          {
+            "campus": "浮山校区",
+            "name": "泓园餐厅",
+            "aliases": ["泓园餐厅一楼食堂", "泓园餐厅二楼食堂"],
+            "location_text": "一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://houqin.qdu.edu.cn/info/1027/4506.htm",
+            "source_title": "关于做好近期学生返校后勤服务保障工作的通知",
+            "source_org": "青岛大学后勤管理处",
+            "source_type": "official_university_logistics",
+            "evidence_level": "A",
+            "evidence_excerpt": "2025-02-12官方返校保障通知明确泓园餐厅一楼、二楼开始供餐；两层归并为同一物理父食堂。",
+            "review_status": "pending_review",
+            "additional_sources": []
+          },
+          {
+            "campus": "浮山校区",
+            "name": "浏园餐厅",
+            "aliases": ["浏园餐厅二楼"],
+            "location_text": "二楼",
+            "building_or_floor": "二楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://houqin.qdu.edu.cn/info/1027/4464.htm",
+            "source_title": "关于开展深夜食堂助力考试季活动的通知",
+            "source_org": "青岛大学后勤管理处",
+            "source_type": "official_university_logistics",
+            "evidence_level": "A",
+            "evidence_excerpt": "2024-12-05官方通知明确浏园餐厅二楼开放并延长供餐；按物理父食堂规范为浏园餐厅。",
+            "review_status": "pending_review",
+            "additional_sources": []
+          },
+          {
+            "campus": "金家岭校区",
+            "name": "第一餐厅",
+            "aliases": ["第一餐厅三楼", "一餐三楼"],
+            "location_text": "三楼",
+            "building_or_floor": "三楼",
+            "service_type": "食堂/餐厅",
+            "audience": "",
+            "opening_hours_raw": "",
+            "source_url": "https://houqin.qdu.edu.cn/info/1027/4464.htm",
+            "source_title": "关于开展深夜食堂助力考试季活动的通知",
+            "source_org": "青岛大学后勤管理处",
+            "source_type": "official_university_logistics",
+            "evidence_level": "A",
+            "evidence_excerpt": "2024-12-05官方通知明确金家岭校区第一餐厅三楼开放；三楼是父食堂楼层，不作为实体名称。",
+            "review_status": "pending_review",
+            "additional_sources": []
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "同一物理餐厅的楼层经营区、民族区和窗口均归并到父食堂；松山校区虽有正式地址，但本批无合格食堂楼层记录，不创建空校区。"
+        ]
+      }
+    ]
+  }
+]

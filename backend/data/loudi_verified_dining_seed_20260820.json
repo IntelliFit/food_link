@@ -1,0 +1,83 @@
+[
+  {
+    "batch_name": "娄底高校官方食堂楼层确认集-20260820",
+    "region": "娄底市",
+    "source_scope": "高校官方页面及湖南省教育厅材料；严格确认现行高校、正式校区、物理父食堂、实际餐饮楼层与2024—2026当前运营",
+    "schools": [
+      {
+        "school": "湖南人文科技学院",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "校本部",
+            "aliases": ["本部"],
+            "address": "湖南省娄底市娄星区氐星路487号",
+            "source_url": "https://www.huhst.edu.cn/nsy/info/1772/26551.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "校本部",
+            "name": "阳光公寓学生食堂",
+            "aliases": ["阳光公寓食堂", "汇鼎餐厅", "新雅餐厅"],
+            "location_text": "校本部阳光公寓学生食堂一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "2025年国庆假期逐层停餐、复餐安排",
+            "source_url": "https://www.huhst.edu.cn/jjc/info/1100/5952.htm",
+            "source_title": "关于2025年国庆期间食堂停餐、复餐安排的通知",
+            "source_org": "湖南人文科技学院后勤基建处",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "学校停复餐通知逐项列出阳光公寓汇鼎餐厅（一楼）和阳光公寓新雅餐厅（二楼），并分别给出停餐、复餐时间，直接闭合两层当前实际供餐；两名称是同一阳光公寓学生食堂的楼层经营区。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.huhst.edu.cn/jjc/info/1128/3161.htm",
+                "source_title": "湖南人文科技学院阳光公寓学生食堂项目室内空气检测工作竞价采购公告",
+                "source_org": "湖南人文科技学院后勤基建处",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "学校明确阳光公寓学生食堂为同一框架建筑，其中一、二楼为学生食堂，三、四楼为学生活动用房及办公室，用于锁定物理父体并排除三、四楼。"
+              }
+            ]
+          },
+          {
+            "campus": "校本部",
+            "name": "淳和楼食堂",
+            "aliases": ["淳和楼", "润甜餐厅"],
+            "location_text": "校本部淳和楼食堂四楼",
+            "building_or_floor": "四楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "2025年暑假开放供餐；2025年国庆停餐、复餐安排",
+            "source_url": "https://www.huhst.edu.cn/dbxb/info/1090/8346.htm",
+            "source_title": "湖南人文科技学院2025年暑假放假通知",
+            "source_org": "湖南人文科技学院党政办公室",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "学校放假通知明确假期开放食堂为淳和楼四楼的润甜餐厅，一次性闭合物理父楼、四楼和实际开放供餐；润甜仅作为四楼经营名。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.huhst.edu.cn/jjc/info/1100/5952.htm",
+                "source_title": "关于2025年国庆期间食堂停餐、复餐安排的通知",
+                "source_org": "湖南人文科技学院后勤基建处",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "学校国庆停复餐表点名淳和楼润甜餐厅并安排停餐、复餐时间，补强同父食堂当前实际运营。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "汇鼎餐厅和新雅餐厅分别是阳光公寓学生食堂一楼、二楼的经营区，只作为别名，不拆为独立物理父食堂。",
+          "润甜餐厅是淳和楼食堂四楼经营名，只作为别名；淳和楼一至三楼缺少逐层当前实际供餐证据，不纳入本批。",
+          "学校2026年招生章程只列氐星路487号一个办学地点；北斗区、阳光公寓等校内区域不另建正式校区。"
+        ]
+      }
+    ]
+  }
+]

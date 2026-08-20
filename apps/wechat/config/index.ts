@@ -123,12 +123,12 @@ export default defineConfig<'vite'>(async (merge) => {
           to: 'custom-tab-bar'
         },
         ...['idle', 'blink', 'squash', 'jump'].map((frame) => ({
-          from: `src/assets/pets/jianwen-01-${frame}.png`,
-          to: `assets/pets/jianwen-01-${frame}.png`,
+          from: `src/assets/pets/jianwen-01-${frame}.webp`,
+          to: `assets/pets/jianwen-01-${frame}.webp`,
         })),
-        ...['huatuo-01', 'taiji-xiaozi-01'].map((avatar) => ({
-          from: `src/assets/pets/${avatar}.png`,
-          to: `assets/pets/${avatar}.png`,
+        ...['huatuo-01', 'taiji-xiaozi-01', 'xiaomai-01', 'doudou-01'].map((avatar) => ({
+          from: `src/assets/pets/${avatar}.webp`,
+          to: `assets/pets/${avatar}.webp`,
         })),
 
       ],

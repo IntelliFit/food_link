@@ -151,5 +151,5 @@ export default defineAppConfig({
   },
   // 微信当前只允许在 requiredPrivateInfos 中声明定位/地址类接口；
   // chooseImage 等选图接口需在小程序后台“用户隐私保护指引”中声明，不能写进 app.json。
-  requiredPrivateInfos: ['getLocation'],
+  requiredPrivateInfos: ['getLocation', 'chooseLocation'],
 })

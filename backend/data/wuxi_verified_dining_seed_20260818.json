@@ -1,0 +1,288 @@
+[
+  {
+    "batch_name": "无锡高校官方食堂楼层确认集-20260818",
+    "region": "江苏省无锡市",
+    "source_scope": "高校官网、后勤服务、招生及当前运营通知；实际餐饮楼层与2024—2026当前运营证据闭环后收录",
+    "schools": [
+      {
+        "school": "无锡学院",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "校本部",
+            "aliases": [],
+            "address": "江苏省无锡市锡山区锡山大道333号",
+            "source_url": "https://xxgk.cwxu.edu.cn/info/1018/4414.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "校本部",
+            "name": "梅园餐厅",
+            "aliases": [],
+            "location_text": "校本部梅园餐厅一楼、二楼、三楼",
+            "building_or_floor": "一楼、二楼、三楼",
+            "service_type": "学生及教工餐厅",
+            "audience": "师生",
+            "opening_hours_raw": "一楼、二楼日常供餐；三楼工作日午餐；2026年五一假期后三层均恢复营业",
+            "source_url": "https://zwc.cwxu.edu.cn/info/1045/2234.htm",
+            "source_title": "我校梅园餐厅正式开业",
+            "source_org": "无锡学院后勤管理处",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2024年校方明确梅园餐厅正式全面开餐，一楼提供快餐、早餐、特色风味、面食和咖啡，二楼提供小吃快餐及烘焙，三楼提供教职工工作日午餐。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.cwxu.edu.cn/info/1039/20605.htm",
+                "source_title": "关于2026年五一假期期间餐厅营业安排的公告",
+                "source_org": "无锡学院后勤管理处",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2026年公告明确梅园餐厅一楼正常营业，二楼、三楼假期暂停后于5月5日晚餐恢复营业，闭合三层当前供餐。"
+              }
+            ]
+          },
+          {
+            "campus": "校本部",
+            "name": "桃园餐厅",
+            "aliases": [],
+            "location_text": "校本部桃园餐厅一楼、二楼、三楼",
+            "building_or_floor": "一楼、二楼、三楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "一楼供应早餐、午餐、晚餐；二楼、三楼按校历恢复正常供餐",
+            "source_url": "https://www.cwxu.edu.cn/info/1039/20605.htm",
+            "source_title": "关于2026年五一假期期间餐厅营业安排的公告",
+            "source_org": "无锡学院后勤管理处",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2026年公告明确桃园餐厅一楼正常营业，二楼、三楼假期暂停后于5月5日晚餐恢复营业，直接闭合三层当前供餐。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.cwxu.edu.cn/info/1039/18845.htm",
+                "source_title": "无锡学院后勤管理处2025年暑假服务公告",
+                "source_org": "无锡学院后勤管理处",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2025年暑假公告列出桃园餐厅一楼三餐营业时段，并明确二楼、三楼于9月6日起恢复正常供餐。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "梅园三楼教工餐厅属于梅园餐厅内部餐饮楼层，不另建父食堂。",
+          "李园仅有父食堂当前运营或后厨位置证据，缺2024—2026逐层日常供餐闭环，本批排除。"
+        ]
+      },
+      {
+        "school": "江苏信息职业技术学院",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "藕塘校区",
+            "aliases": [],
+            "address": "江苏省无锡市惠山区钱藕路1号",
+            "source_url": "https://zsxx.jsit.edu.cn/info/1033/1734.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "藕塘校区",
+            "name": "学生食堂",
+            "aliases": ["餐饮中心", "学生食堂（餐饮中心）"],
+            "location_text": "藕塘校区学生食堂一楼、二楼、三楼",
+            "building_or_floor": "一楼、二楼、三楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "一楼、二楼提供快餐服务，三楼提供特色餐饮及点餐服务",
+            "source_url": "https://www.jsit.edu.cn/hqc/bmgk/bmjj.htm",
+            "source_title": "部门简介",
+            "source_org": "江苏信息职业技术学院后勤管理处",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "校方后勤现行页面明确8000平方米学生食堂的一楼、二楼提供家常菜快餐，三楼提供特色餐饮、点餐和包厢服务，属于实际餐饮用途。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.jsit.edu.cn/info/1008/28431.htm",
+                "source_title": "开学第一天：校党委书记左同宇、校长张瑜走访慰问师生",
+                "source_org": "江苏信息职业技术学院",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2026年校领导到餐饮中心查看食材储存、食品加工、菜品价格和智能点餐设备运行，闭合同一学生食堂的当前运营。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "餐饮中心为同址学生食堂的运营称谓，按别名归并，不另建父食堂。",
+          "本轮楼层证据只闭环藕塘校区，不复制到东亭校区。"
+        ]
+      },
+      {
+        "school": "江南大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "蠡湖校区",
+            "aliases": [],
+            "address": "江苏省无锡市蠡湖大道1800号",
+            "source_url": "https://www.jiangnan.edu.cn/xxgk/xxjj.htm"
+          },
+          {
+            "name": "宜兴东氿校区",
+            "aliases": ["宜兴校区", "东氿校区"],
+            "address": "江苏省宜兴市太湖大道181号",
+            "source_url": "https://newcampus.jiangnan.edu.cn/info/1007/1351.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "蠡湖校区",
+            "name": "江南苑餐厅",
+            "aliases": ["一食堂", "第一食堂", "江南苑餐厅（一食堂）"],
+            "location_text": "蠡湖校区江南苑餐厅一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "一楼、二楼均供应早、中、晚餐",
+            "source_url": "https://hqc.jiangnan.edu.cn/fwzq/ysfw/jnyct_yst_jczn.htm",
+            "source_title": "江南苑餐厅（一食堂）就餐指南",
+            "source_org": "江南大学后勤管理处",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "官方就餐指南分别列出江南苑一楼餐厅、二楼餐厅的供应品种及早中晚服务时间，一食堂只是父食堂别名。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://news.jiangnan.edu.cn/info/1074/98478.htm",
+                "source_title": "江南大学举办2025年新春慰问活动暨留校学生年午宴",
+                "source_org": "江南大学",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2025年学校在蠡湖校区一食堂江南苑二楼为留校学生提供餐食，闭合同一父食堂当前运营。"
+              }
+            ]
+          },
+          {
+            "campus": "蠡湖校区",
+            "name": "梁溪苑餐厅",
+            "aliases": ["二食堂", "第二食堂", "梁溪苑餐厅（二食堂）"],
+            "location_text": "蠡湖校区梁溪苑餐厅一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "一楼、二楼均供应早、中、晚餐",
+            "source_url": "https://hqc.jiangnan.edu.cn/fwzq/ysfw/lxyct_est_jczn.htm",
+            "source_title": "梁溪苑餐厅（二食堂）就餐指南",
+            "source_org": "江南大学后勤管理处",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "官方就餐指南分别列出梁溪苑一楼餐厅、二楼餐厅的菜品与服务时间，二食堂只是父食堂别名。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://hqc.jiangnan.edu.cn/info/1063/7475.htm",
+                "source_title": "河南工程学院副校长张巧玲一行来我校调研交流",
+                "source_org": "江南大学后勤管理处",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2025年校方后勤报道实地参观第二食堂，结合官方父食堂别名映射，闭合梁溪苑当前运营。"
+              }
+            ]
+          },
+          {
+            "campus": "蠡湖校区",
+            "name": "蠡溪苑餐厅",
+            "aliases": ["三食堂", "第三食堂", "蠡溪苑餐厅（三食堂）"],
+            "location_text": "蠡湖校区蠡溪苑餐厅一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "一楼全天供应，二楼供应中餐、晚餐",
+            "source_url": "https://hqc.jiangnan.edu.cn/fwzq/ysfw/lxyct_sst_jczn.htm",
+            "source_title": "蠡溪苑餐厅（三食堂）就餐指南",
+            "source_org": "江南大学后勤管理处",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "官方就餐指南列出蠡溪苑一楼餐厅全天供应，以及二楼餐厅的大众快餐和中晚餐服务时间。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://news.jiangnan.edu.cn/info/1002/100563.htm",
+                "source_title": "校党委书记吴正国带队开展节前校园安全检查",
+                "source_org": "江南大学",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2025年校方检查第三食堂并重点查看食堂后厨油烟管道，闭合同一父食堂当前食品加工运行。"
+              }
+            ]
+          },
+          {
+            "campus": "蠡湖校区",
+            "name": "广溪苑餐厅",
+            "aliases": ["四食堂", "第四食堂", "广溪苑餐厅（四食堂）"],
+            "location_text": "蠡湖校区广溪苑餐厅一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "一楼、二楼均供应早、中、晚餐",
+            "source_url": "https://hqc.jiangnan.edu.cn/fwzq/ysfw/gxyct_sst_jczn.htm",
+            "source_title": "广溪苑餐厅（四食堂）就餐指南",
+            "source_org": "江南大学后勤管理处",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "官方就餐指南分别列出广溪苑一楼餐厅、二楼餐厅的供应品种与服务时间。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://yz.jiangnan.edu.cn/info/1012/3752.htm",
+                "source_title": "江南大学2026年硕士研究生复试考生须知",
+                "source_org": "江南大学研究生院",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2026年复试须知明确第四食堂二楼向复试考生开放就餐，闭合同一父食堂当前运营。"
+              }
+            ]
+          },
+          {
+            "campus": "宜兴东氿校区",
+            "name": "氿溪苑食堂",
+            "aliases": [],
+            "location_text": "宜兴东氿校区氿溪苑食堂一楼",
+            "building_or_floor": "一楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "一楼供应早餐、午餐、晚餐及夜宵",
+            "source_url": "https://newcampus.jiangnan.edu.cn/info/1007/1351.htm",
+            "source_title": "江南大学宜兴研究生院师生服务手册",
+            "source_org": "江南大学宜兴校区管理办公室",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "校方服务手册明确氿溪苑食堂一层为学生餐厅，供应早餐、午餐、晚餐及夜宵，并逐项列出服务时间。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://newcampus.jiangnan.edu.cn/info/1007/1601.htm",
+                "source_title": "倾听师生心声，共促校区发展——江南大学宜兴校区召开服务需求意见建议座谈会",
+                "source_org": "江南大学宜兴校区管理办公室",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2025年校方围绕校区食堂食品安全、菜品价格及生产、售卖整改，闭合氿溪苑当前运营。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "一食堂、二食堂、三食堂、四食堂均为父食堂编号别名，不是楼层；现库四个错误楼层字段应纠正为一楼、二楼。",
+          "梁溪苑二楼民族餐厅及各风味区、教工区、档口均归并所属物理父食堂；江阴校区父食堂缺实际餐饮楼层，本批不增补。"
+        ]
+      }
+    ]
+  }
+]

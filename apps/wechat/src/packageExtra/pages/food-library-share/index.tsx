@@ -705,7 +705,7 @@ function FoodLibrarySharePage() {
     }
   };
 
-  const handleNavigateLocationSearch = () => {
+  const navigateToLocationSearchPage = () => {
     Taro.navigateTo({
       url: extraPkgUrl("/pages/location-search/index"),
       success: (res) => {
@@ -714,6 +714,35 @@ function FoodLibrarySharePage() {
         });
       },
     });
+  };
+
+  const handleNavigateLocationSearch = async () => {
+    try {
+      const poi = await Taro.chooseLocation({});
+      applySelectedLocation({
+        name: poi.name,
+        address: poi.address,
+        longitude: poi.longitude,
+        latitude: poi.latitude,
+      });
+    } catch (e) {
+      const message = String((e as any)?.errMsg || (e as any)?.message || e || "");
+      if (message.toLowerCase().includes("cancel")) return;
+      if (isPrivacyAuthorizeError(e)) {
+        Taro.showModal({
+          title: "位置权限未生效",
+          content: "请先同意小程序隐私保护指引中的位置信息用途，再重新选择地址。",
+          showCancel: false,
+          confirmText: "知道了",
+        });
+        return;
+      }
+      Taro.showToast({
+        title: "已切换到地图选点",
+        icon: "none",
+      });
+      navigateToLocationSearchPage();
+    }
   };
 
   // 添加标签

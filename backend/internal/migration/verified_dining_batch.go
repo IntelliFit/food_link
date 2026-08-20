@@ -3,6 +3,7 @@ package migration
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -78,7 +79,7 @@ func InspectVerifiedDiningBatch(ctx context.Context, db *gorm.DB, schema string,
 			}
 			var count int64
 			if err := db.WithContext(ctx).Table("school_canteens").
-				Where("school_id = ? AND campus_id = ? AND lower(name) = lower(?)", school.ID, campusID, strings.TrimSpace(canteenSeed.Name)).
+				Where("school_id = ? AND campus_id = ? AND lower(name) IN ?", school.ID, campusID, verifiedDiningCanteenNames(canteenSeed)).
 				Where("status NOT IN ?", []string{"deleted", "rejected"}).Count(&count).Error; err != nil {
 				return nil, fmt.Errorf("inspect verified dining canteen %q/%q/%q: %w", schoolSeed.School, canteenSeed.Campus, canteenSeed.Name, err)
 			}
@@ -112,6 +113,9 @@ func PublishVerifiedDiningBatch(ctx context.Context, db *gorm.DB, schema string,
 			return err
 		}
 		if err := canonicalizeVerifiedDiningCampuses(ctx, tx, *batch); err != nil {
+			return err
+		}
+		if err := canonicalizeVerifiedDiningCanteens(ctx, tx, *batch); err != nil {
 			return err
 		}
 		if err := ensureCampusDirectoryResearchBatch(ctx, tx, *batch); err != nil {
@@ -176,6 +180,78 @@ func canonicalizeVerifiedDiningCampuses(ctx context.Context, db *gorm.DB, batch 
 }
 
 func verifiedDiningCampusNames(seed campusDirectoryResearchCampus) []string {
+	names := make([]string, 0, 1+len(seed.Aliases))
+	seen := map[string]struct{}{}
+	for _, value := range append([]string{seed.Name}, seed.Aliases...) {
+		value = strings.ToLower(strings.TrimSpace(value))
+		if value == "" {
+			continue
+		}
+		if _, exists := seen[value]; exists {
+			continue
+		}
+		seen[value] = struct{}{}
+		names = append(names, value)
+	}
+	return names
+}
+
+func canonicalizeVerifiedDiningCanteens(ctx context.Context, db *gorm.DB, batch campusDirectoryPendingResearchSeed) error {
+	for _, schoolSeed := range batch.Schools {
+		var school struct{ ID string }
+		if err := db.WithContext(ctx).Table("schools").Select("id").
+			Where("name = ? AND status = ?", strings.TrimSpace(schoolSeed.School), "active").Take(&school).Error; err != nil {
+			return fmt.Errorf("find verified dining canonical school %q: %w", schoolSeed.School, err)
+		}
+		campusIDs := make(map[string]string, len(schoolSeed.Campuses))
+		for _, campusSeed := range schoolSeed.Campuses {
+			var campus struct{ ID string }
+			if err := db.WithContext(ctx).Table("school_campuses").Select("id").
+				Where("school_id = ? AND lower(name) = lower(?) AND status <> ?", school.ID, strings.TrimSpace(campusSeed.Name), "deleted").Take(&campus).Error; err != nil {
+				if errors.Is(err, gorm.ErrRecordNotFound) {
+					continue
+				}
+				return fmt.Errorf("find verified dining canonical campus %q/%q: %w", schoolSeed.School, campusSeed.Name, err)
+			}
+			campusIDs[strings.TrimSpace(campusSeed.Name)] = campus.ID
+		}
+		for _, canteenSeed := range schoolSeed.Canteens {
+			campusID := campusIDs[strings.TrimSpace(canteenSeed.Campus)]
+			if campusID == "" {
+				continue
+			}
+			var canteens []struct {
+				ID   string
+				Name string
+			}
+			if err := db.WithContext(ctx).Table("school_canteens").Select("id, name").
+				Where("school_id = ? AND campus_id = ? AND lower(name) IN ?", school.ID, campusID, verifiedDiningCanteenNames(canteenSeed)).
+				Where("status NOT IN ?", []string{"deleted", "rejected"}).Find(&canteens).Error; err != nil {
+				return fmt.Errorf("find verified dining canonical canteen %q/%q/%q: %w", schoolSeed.School, canteenSeed.Campus, canteenSeed.Name, err)
+			}
+			if len(canteens) > 1 {
+				return fmt.Errorf("canonicalize verified dining canteen %q/%q/%q: found %d alias-matched rows", schoolSeed.School, canteenSeed.Campus, canteenSeed.Name, len(canteens))
+			}
+			if len(canteens) == 0 {
+				continue
+			}
+			aliasesJSON, err := json.Marshal(canteenSeed.Aliases)
+			if err != nil {
+				return fmt.Errorf("encode verified dining canteen aliases %q/%q/%q: %w", schoolSeed.School, canteenSeed.Campus, canteenSeed.Name, err)
+			}
+			if err := db.WithContext(ctx).Table("school_canteens").Where("id = ?", canteens[0].ID).Updates(map[string]any{
+				"name":       strings.TrimSpace(canteenSeed.Name),
+				"aliases":    gorm.Expr("?::jsonb", string(aliasesJSON)),
+				"updated_at": gorm.Expr("now()"),
+			}).Error; err != nil {
+				return fmt.Errorf("canonicalize verified dining canteen %q/%q/%q from %q: %w", schoolSeed.School, canteenSeed.Campus, canteenSeed.Name, canteens[0].Name, err)
+			}
+		}
+	}
+	return nil
+}
+
+func verifiedDiningCanteenNames(seed campusDirectoryResearchCanteen) []string {
 	names := make([]string, 0, 1+len(seed.Aliases))
 	seen := map[string]struct{}{}
 	for _, value := range append([]string{seed.Name}, seed.Aliases...) {
@@ -319,12 +395,15 @@ func verifyVerifiedDiningBatch(ctx context.Context, db *gorm.DB, batch campusDir
 				if sourceURL == "" {
 					continue
 				}
-				var sources int64
-				if err := db.WithContext(ctx).Table("campus_directory_sources").Where("batch_id = (SELECT id FROM campus_directory_import_batches WHERE name = ?) AND canteen_id = ? AND source_url = ? AND evidence_level = ? AND review_status = ?", spec.BatchName, rows[0].ID, sourceURL, "A", "approved").Count(&sources).Error; err != nil {
+				// An already-approved source may have been introduced by an earlier
+				// batch. Reusing that exact canteen/source pair must not move it out
+				// of its original audit batch or require a duplicate source row.
+				sources, err := countApprovedVerifiedDiningSources(ctx, db, rows[0].ID, sourceURL)
+				if err != nil {
 					return err
 				}
-				if sources != 1 {
-					return fmt.Errorf("verify verified dining source %q/%q/%q/%s: got %d approved rows, want 1", schoolSeed.School, canteenSeed.Campus, canteenSeed.Name, sourceURL, sources)
+				if sources < 1 {
+					return fmt.Errorf("verify verified dining source %q/%q/%q/%s: got %d approved rows, want at least 1", schoolSeed.School, canteenSeed.Campus, canteenSeed.Name, sourceURL, sources)
 				}
 			}
 		}
@@ -337,6 +416,14 @@ func verifyVerifiedDiningBatch(ctx context.Context, db *gorm.DB, batch campusDir
 		return fmt.Errorf("verify verified dining approved batch %q: got %d rows, want 1", spec.BatchName, approved)
 	}
 	return nil
+}
+
+func countApprovedVerifiedDiningSources(ctx context.Context, db *gorm.DB, canteenID string, sourceURL string) (int64, error) {
+	var sources int64
+	err := db.WithContext(ctx).Table("campus_directory_sources").
+		Where("canteen_id = ? AND source_url = ? AND evidence_level = ? AND review_status = ?", canteenID, sourceURL, "A", "approved").
+		Count(&sources).Error
+	return sources, err
 }
 
 func validateVerifiedDiningBatchSpec(spec VerifiedDiningBatchSpec) error {

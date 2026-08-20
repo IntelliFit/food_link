@@ -186,6 +186,9 @@ func publishBlockingReasons(item catalogdomain.CatalogItem) []string {
 	if strings.TrimSpace(item.Name) == "" {
 		reasons["name"] = struct{}{}
 	}
+	if strings.TrimSpace(item.EntryType) == "stall_overview" {
+		reasons["entry_type"] = struct{}{}
+	}
 	out := make([]string, 0, len(reasons))
 	for reason := range reasons {
 		out = append(out, reason)

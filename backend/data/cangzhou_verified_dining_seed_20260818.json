@@ -1,0 +1,55 @@
+[
+  {
+    "batch_name": "沧州高校官方食堂楼层确认集-20260818",
+    "region": "河北省沧州市",
+    "source_scope": "高校官网现行学校简介、校区地址与2025年实际供餐安排；仅收录学校、正式校区、物理父食堂、实际供餐楼层和当前运营均闭环的记录",
+    "schools": [
+      {
+        "school": "沧州航空职业学院",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "校本部",
+            "aliases": ["中捷校区"],
+            "address": "河北省沧州市黄骅市中捷产业园区新海东路",
+            "source_url": "https://www.czhkzy.com/1431.html"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "校本部",
+            "name": "桃李园食堂",
+            "aliases": [],
+            "location_text": "校本部桃李园食堂一层",
+            "building_or_floor": "一层",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "2025年国庆假期桃李园食堂一层大餐及两个特色窗口正常开放；早餐7:00—8:00、午餐11:30—12:30、晚餐17:30—18:30",
+            "source_url": "https://www.czhkzy.com/1110.html",
+            "source_title": "@全校师生，来查收这份国庆假期说明~",
+            "source_org": "沧州航空职业学院",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "校方2025年假期服务安排明确写明桃李园食堂一层大餐及两个特色窗口正常开放，并逐项给出早餐、午餐、晚餐服务时段，直接闭合父食堂、一层和实际供餐。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.czhkzy.com/1431.html",
+                "source_title": "恭喜录取！你的录取通知书即将到达~",
+                "source_org": "沧州航空职业学院",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "校方2025年招生页面明确校区地址为沧州市渤海新区中捷产业园区新海东路，并说明一期工程已建成餐厅，闭合正式校区与餐饮设施归属。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "两个特色窗口属于桃李园食堂一层内部经营区，不拆分为独立父食堂或窗口记录。",
+          "学校简介与招生地址页共同确认现行普通高校身份、正式校址及校内餐厅设施。"
+        ]
+      }
+    ]
+  }
+]

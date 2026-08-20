@@ -2,13 +2,10 @@ import { View, Text } from '@tarojs/components'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Taro, { useDidShow, usePullDownRefresh } from '@tarojs/taro'
 import {
-  getMyMembership,
   getPetSummary,
   customizePetPixelAvatar,
-  rerollPetAppearance,
   claimPetEvent,
   selectPetAppearance,
-  type MembershipStatus,
   type PetAppearanceCandidate,
   type PetOfflineEvent,
   type PetProfile,
@@ -64,12 +61,10 @@ function isCandidateActive(candidate: PetAppearanceCandidate, pet?: PetProfile):
 function PetHomePage() {
   const { scheme } = useAppColorScheme()
   const [claiming, setClaiming] = useState(false)
-  const [rerolling, setRerolling] = useState(false)
   const [pixelAvatarCustomizing, setPixelAvatarCustomizing] = useState(false)
   const [pixelAvatarPreview, setPixelAvatarPreview] = useState<PetProfile | null>(null)
   const [selectingCandidateId, setSelectingCandidateId] = useState('')
   const [petSummary, setPetSummary] = useState<PetSummary | null>(null)
-  const [membership, setMembership] = useState<MembershipStatus | null>(null)
   const [homePetHidden, setHomePetHidden] = useState(getStoredHomePetHidden)
   const pixelAvatarCustomizingRef = useRef(false)
 
@@ -80,12 +75,7 @@ function PetHomePage() {
 
   const loadData = useCallback(async () => {
     try {
-      const [pet, member] = await Promise.all([
-        getPetSummary(),
-        getMyMembership().catch(() => null),
-      ])
-      setPetSummary(pet)
-      setMembership(member)
+      setPetSummary(await getPetSummary())
     } catch (error) {
       await showUnifiedApiError(error, '加载宠物档案失败')
     }
@@ -106,8 +96,6 @@ function PetHomePage() {
   })
 
   const petEvent: PetOfflineEvent | null = petSummary?.event && !petSummary.event.is_claimed ? petSummary.event : null
-  const earnedCredits = membership?.earned_credits_balance ?? 0
-  const totalCredits = membership?.total_credits_available ?? membership?.daily_credits_remaining ?? 0
   const selectionCandidates = petSummary?.pet?.selection_candidates || []
   const commonCandidates = selectionCandidates.filter((candidate) => Boolean(candidate.builtin_avatar_id))
   const matchedCandidates = selectionCandidates.filter((candidate) => !candidate.builtin_avatar_id)
@@ -127,15 +115,6 @@ function PetHomePage() {
           is_claimed: true,
         },
       } : prev)
-      const earnedBalance = result.earned_credits_balance
-      if (typeof earnedBalance === 'number') {
-        setMembership((prev) => prev ? {
-          ...prev,
-          earned_credits_balance: earnedBalance,
-          total_credits_available: (prev.system_credits_remaining ?? 0) + earnedBalance,
-          daily_credits_remaining: (prev.system_credits_remaining ?? 0) + earnedBalance,
-        } : prev)
-      }
       Taro.showToast({
         title: result.credits_awarded > 0 ? `已领取 +${result.credits_awarded} 积分` : `已领取 +${result.exp_awarded} 经验`,
         icon: 'success'
@@ -146,42 +125,6 @@ function PetHomePage() {
       setClaiming(false)
     }
   }, [claiming, petEvent?.id])
-
-  const handleReroll = useCallback(async () => {
-    if (!petSummary?.pet || rerolling) return
-    if (earnedCredits < 5) {
-      Taro.showToast({ title: '奖励积分不足 5 分', icon: 'none' })
-      return
-    }
-    const modal = await Taro.showModal({
-      title: '随机换外观',
-      content: '会消耗 5 奖励积分，宠物名字和等级不变，只随机刷新颜色、体型、花纹和配饰。',
-      confirmText: '立即更换',
-      confirmColor: '#5cb896',
-      cancelText: '先看看'
-    })
-    if (!modal.confirm) return
-
-    try {
-      setRerolling(true)
-      const result = await rerollPetAppearance()
-      syncPetProfile(result.pet)
-      const earnedBalance = result.earned_credits_balance
-      if (typeof earnedBalance === 'number') {
-        setMembership((prev) => prev ? {
-          ...prev,
-          earned_credits_balance: earnedBalance,
-          total_credits_available: Math.max((prev.total_credits_available ?? totalCredits) - result.credits_cost, 0),
-          daily_credits_remaining: Math.max((prev.daily_credits_remaining ?? totalCredits) - result.credits_cost, 0),
-        } : prev)
-      }
-      Taro.showToast({ title: '外观已更新', icon: 'success' })
-    } catch (error) {
-      await showUnifiedApiError(error, '随机换外观失败')
-    } finally {
-      setRerolling(false)
-    }
-  }, [earnedCredits, petSummary?.pet, rerolling, syncPetProfile, totalCredits])
 
   const handleSelectCandidate = useCallback(async (candidate: PetAppearanceCandidate) => {
     if (!candidate?.id || selectingCandidateId) return
@@ -292,9 +235,9 @@ function PetHomePage() {
                 <Text className='pet-home-stage-stat-label'>等级</Text>
                 <Text className='pet-home-stage-stat-value'>Lv.{petSummary?.pet?.level || 1}</Text>
               </View>
-              <View className='pet-home-stage-stat pet-home-stage-stat--credits'>
-                <Text className='pet-home-stage-stat-label'>积分</Text>
-                <Text className='pet-home-stage-stat-value'>{totalCredits}</Text>
+              <View className='pet-home-stage-stat pet-home-stage-stat--experience'>
+                <Text className='pet-home-stage-stat-label'>经验</Text>
+                <Text className='pet-home-stage-stat-value'>{petSummary?.pet?.experience ?? 0}</Text>
               </View>
               <View className='pet-home-stage-stat pet-home-stage-stat--days'>
                 <Text className='pet-home-stage-stat-label'>陪伴</Text>
@@ -420,16 +363,6 @@ function PetHomePage() {
                 <View className={`pet-home-toggle ${homePetHidden ? '' : 'active'}`}>
                   <View className='pet-home-toggle-knob' />
                 </View>
-              </View>
-            </View>
-            <View className='pet-home-action-item' onClick={handleReroll}>
-              <View>
-                <Text className='pet-home-action-title'>随机换外观</Text>
-                <Text className='pet-home-action-desc'>保留名字和等级，随机刷新体型、花纹与配饰</Text>
-              </View>
-              <View className='pet-home-action-side'>
-                <Text className='pet-home-action-cost'>{rerolling ? '处理中' : '消耗 5 积分'}</Text>
-                <Text className='iconfont icon-right pet-home-action-arrow' />
               </View>
             </View>
           </View>

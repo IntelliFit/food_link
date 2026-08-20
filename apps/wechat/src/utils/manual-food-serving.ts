@@ -79,15 +79,19 @@ export function selectedManualFoodAmountText(item: SelectedManualFoodServingLike
 
 export function manualFoodDisplayInput(item: SelectedManualFoodServingLike, nextWeight = item.weight) {
   const weight = positiveNumber(nextWeight, item.defaultWeight)
-  if (item.displayUnit === 'piece' || item.displayUnit === 'serving') {
+  if (item.displayUnit === 'serving') {
     return formatManualFoodWeight(weight / positiveNumber(item.defaultWeight, 1))
   }
   return formatManualFoodWeight(weight)
 }
 
 export function manualFoodWeightFromInput(item: Pick<SelectedManualFoodServingLike, 'defaultWeight' | 'displayUnit'>, value: number) {
-  if (item.displayUnit === 'piece' || item.displayUnit === 'serving') {
+  if (item.displayUnit === 'serving') {
     return positiveNumber(item.defaultWeight, 1) * value
   }
   return value
+}
+
+export function manualFoodWeightInputUnit(item: Pick<SelectedManualFoodServingLike, 'displayUnit' | 'displayUnitLabel'>) {
+  return item.displayUnit === 'piece' ? 'g' : item.displayUnitLabel
 }

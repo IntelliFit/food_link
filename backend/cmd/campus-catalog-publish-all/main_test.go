@@ -15,16 +15,19 @@ func TestAuditCandidatesMatchesAdminPublishGate(t *testing.T) {
 		{ID: "pending", Name: "番茄炒饭", Status: "analysis_pending", PriceType: "fixed", Price: &price},
 		{ID: "published", Name: "小白菜鸡蛋", Status: "published", PriceType: "fixed", Price: &price},
 		{ID: "no-price", Name: "套餐组成项", Status: "ready", PriceType: "unknown", MissingFields: []string{"price"}},
+		{ID: "overview", Name: "档口介绍", EntryType: "stall_overview", Status: "ready", PriceType: "unknown", MissingFields: []string{"price"}},
 	}
 
 	report, candidates := auditCandidates(items, "dev/db/public", false)
 
-	require.Equal(t, 5, report.TotalItems)
+	require.Equal(t, 6, report.TotalItems)
 	require.Equal(t, 3, report.CandidateCount)
-	require.Zero(t, report.BlockedCount)
-	require.Empty(t, report.BlockedReasons)
+	require.Equal(t, 1, report.BlockedCount)
+	require.Equal(t, 1, report.BlockedReasons["entry_type"])
 	require.Equal(t, []string{"ready", "failed", "no-price"}, []string{candidates[0].ID, candidates[1].ID, candidates[2].ID})
 	require.Equal(t, []string{"ready", "failed", "no-price"}, []string{report.Candidates[0].ItemID, report.Candidates[1].ItemID, report.Candidates[2].ItemID})
+	require.Equal(t, "overview", report.BlockedItems[0].ItemID)
+	require.Equal(t, []string{"entry_type"}, report.BlockedItems[0].Reasons)
 }
 
 func TestPublishBlockingReasonsAllowsImageOnlyMissingField(t *testing.T) {

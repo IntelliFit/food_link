@@ -1,0 +1,71 @@
+[
+  {
+    "batch_name": "岳阳高校官方食堂楼层确认集-20260820",
+    "region": "岳阳市",
+    "source_scope": "高校官方页面及主管部门材料；严格确认现行高校、正式校区、物理父食堂、实际餐饮楼层与2024—2026当前运营",
+    "schools": [
+      {
+        "school": "湖南理工大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "校本部",
+            "aliases": ["主校区"],
+            "address": "湖南省岳阳市岳阳楼区湘北大道439号",
+            "source_url": "https://www.hnist.edu.cn/xxgk/xxzc.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "校本部",
+            "name": "二食堂",
+            "aliases": ["第二食堂"],
+            "location_text": "二食堂二楼",
+            "building_or_floor": "二楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "2023逐层具体菜品；2024同父增设售卖档口并完成开学准备；2026校内食堂运营管理",
+            "source_url": "https://news.hnist.cn/info/1005/36690.htm",
+            "source_title": "新学期，大家快来schoolwalk一下吧！",
+            "source_org": "湖南理工大学新闻网",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "学校官方报道明确二食堂二楼供应黄焖鸡、自选菜、盖码饭及粉面饭菜，将具体售餐内容绑定到二食堂二楼。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://news.hnist.cn/info/1002/38439.htm",
+                "source_title": "有颜值更有温度！这份“民生答卷”诚意满满",
+                "source_org": "湖南理工大学新闻网",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "学校点名二食堂升级改造并增加各类食品售卖档口，工程预计8月底完成并服务师生。"
+              },
+              {
+                "source_url": "https://news.hnist.cn/info/1002/38460.htm",
+                "source_title": "新面貌呈现新气象！新学期开学准备工作全部就绪",
+                "source_org": "湖南理工大学新闻网",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "学校检查二食堂开学准备，报道确认暑期维修改造项目实施和新学期开学准备全部就绪。"
+              },
+              {
+                "source_url": "https://www.hnist.edu.cn/index/zhxw.htm",
+                "source_title": "学校召开食堂专项整治工作专题调度会",
+                "source_org": "湖南理工大学",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2026年学校组织校内食堂托管经营方参加专项整治调度，补强当前餐饮体系持续运营。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "湖南理工学院于2026年同代码更名为湖南理工大学，旧名材料承接，不另建学校。",
+          "只纳入二食堂二楼；一食堂一楼缺2024—2026同父点名续活，其余食堂和楼层缺精确实际供餐证据。"
+        ]
+      }
+    ]
+  }
+]

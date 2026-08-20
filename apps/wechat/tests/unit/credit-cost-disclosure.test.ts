@@ -21,7 +21,6 @@ describe('credit cost disclosure', () => {
     expect(readSource('pages/stats/index.tsx')).toContain('更新 · 1 积分')
     expect(readSource('pages/stats/index.tsx')).toContain('更新 · ${customFocusCost} 积分')
     expect(readSource('packageExtra/pages/result/index.tsx')).toContain('重新分析 · {correctionCreditCost} 积分')
-    expect(readSource('packageExtra/pages/pet-home/index.tsx')).toContain("'消耗 5 积分'")
   })
 
   it('estimates dynamic pet chat cost before sending', () => {

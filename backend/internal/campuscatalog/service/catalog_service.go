@@ -429,7 +429,7 @@ func (s *CatalogService) UpdateItem(ctx context.Context, adminID, itemID string,
 	if wasPublished {
 		updated.Status = "published"
 		if blockers := catalogPublishBlockingFields(&updated); len(blockers) > 0 {
-			return nil, badRequest("已上线菜品必须保留名称")
+			return nil, badRequest("已上线菜品必须保留名称，档口介绍不能作为菜品上线")
 		}
 	} else {
 		updated.Status = "draft"
@@ -487,7 +487,7 @@ func (s *CatalogService) PublishItem(ctx context.Context, adminID, itemID string
 		return &items[0], nil
 	}
 	if blockers := catalogPublishBlockingFields(item); len(blockers) > 0 {
-		return nil, badRequest("请先补齐名称后再提交上线")
+		return nil, badRequest("请先补齐名称；档口介绍不能进行营养分析")
 	}
 	// changes_pending is a legacy state produced by older admin builds. These
 	// rows already have a valid public nutrition snapshot, so synchronize their
@@ -928,6 +928,9 @@ func catalogPublishBlockingFields(item *domain.CatalogItem) []string {
 	}
 	if strings.TrimSpace(item.Name) == "" {
 		add("name")
+	}
+	if strings.TrimSpace(item.EntryType) == "stall_overview" {
+		add("entry_type")
 	}
 	sort.Strings(blocking)
 	return blocking

@@ -1,0 +1,109 @@
+[
+  {
+    "batch_name": "秦皇岛高校官方食堂楼层确认集-20260818",
+    "region": "河北省秦皇岛市",
+    "source_scope": "高校官网、官方二级站点的正式校区地址、精准餐饮楼层及2025—2026同一父食堂当前运营证据；只收录四道门槛完整闭环的物理父食堂",
+    "schools": [
+      {
+        "school": "燕山大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "西校区",
+            "aliases": ["西区"],
+            "address": "河北省秦皇岛市海港区河北大街西段438号",
+            "source_url": "https://ies.ysu.edu.cn/xyjs/lxfs.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "西校区",
+            "name": "西校区大食堂",
+            "aliases": ["西区大食堂", "西校区学生大食堂"],
+            "location_text": "燕山大学西校区大食堂一层、二层、三层",
+            "building_or_floor": "一层、二层、三层",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "2025年12月校方通知明确燕园餐厅停业期间师生到西校区大食堂就餐；2026年4月校领导现场检查该食堂食品卫生和日常安全管理",
+            "source_url": "https://gjhzc.ysu.edu.cn/__local/3/FA/EB/99BA0A9884F9325E9F357E60992_55A52182_10B7020.pdf",
+            "source_title": "外教手册 Guide Book",
+            "source_org": "燕山大学国际合作处",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "校方2022年外教手册明确：燕大西校区大食堂分为三层，一层有清真餐厅，二层三层有面食、炒菜、火锅等特色窗口，直接证明三层均具有实际餐饮功能。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.ysu.edu.cn/ysdx_ssjgy.jsp?currentnum=43&newskeycode2=&searchScope=0&wbtreeid=5413",
+                "source_title": "关于西校区燕园餐厅停止营业的通知",
+                "source_org": "燕山大学后勤管理处",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "校方2025年12月通知明确，燕园餐厅停业期间请广大师生到西校区大食堂就餐，证明同名物理父食堂当前实际供餐。"
+              },
+              {
+                "source_url": "https://xxgk.ysu.edu.cn/info/1009/21948.htm",
+                "source_title": "校领导实地检查校园安全与项目建设",
+                "source_org": "燕山大学安全工作处",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "校方2026年4月报道明确校领导深入西校区大食堂并听取日常安全管理和食品卫生汇报，补强同一父食堂当前运营。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "一层清真餐厅和二、三层特色窗口均为西校区大食堂内部经营区，不拆分为独立父食堂。",
+          "精准楼层材料按服务器时间如实标为2022年，并以2025—2026同父食堂当前运营强证闭环。"
+        ]
+      },
+      {
+        "school": "东北大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "秦皇岛分校",
+            "aliases": ["东北大学秦皇岛分校", "校本部"],
+            "address": "河北省秦皇岛市经济技术开发区泰山路143号",
+            "source_url": "https://yx.neuq.edu.cn/info/1033/1054.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "秦皇岛分校",
+            "name": "第一学生餐厅",
+            "aliases": ["一食堂"],
+            "location_text": "东北大学秦皇岛分校第一学生餐厅二层休闲就餐区",
+            "building_or_floor": "二层",
+            "service_type": "学生食堂",
+            "audience": "学生",
+            "opening_hours_raw": "2025年迎新饮食指南列明一食堂自助档口10:30—13:20、17:00—19:20，其他档口6:30—21:00",
+            "source_url": "https://www.neuq.edu.cn/info/1103/6537.htm",
+            "source_title": "校领导到餐厅改造现场检查工作",
+            "source_org": "东北大学秦皇岛分校后勤管理处",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "校方2021年改造报道明确第一学生餐厅增设挑空二层休闲就餐区，且改造后的餐厅15个风味档口、2个水吧和1个自助取餐区同时开放，直接证明二层堂食功能。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://yx.neuq.edu.cn/info/1033/1054.htm",
+                "source_title": "饮食指南",
+                "source_org": "东北大学秦皇岛分校迎新网",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "校方2025年迎新饮食指南列出一食堂自助档口和其他档口的现行营业时段，并在页脚列明泰山路143号，闭合正式校区和同父食堂当前运营。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "东北大学秦皇岛分校按现有学校主体东北大学及正式校区秦皇岛分校承接，不另建学校。",
+          "只确认二层；现有材料未把档口或取餐区明确绑定一层，不能反推一层餐饮关系。"
+        ]
+      }
+    ]
+  }
+]

@@ -1,0 +1,100 @@
+[
+  {
+    "batch_name": "常德高校官方食堂楼层确认集-20260820",
+    "region": "常德市",
+    "source_scope": "高校官方页面及主管部门材料；严格确认现行高校、正式校区、物理父食堂、实际餐饮楼层与2024—2026当前运营",
+    "schools": [
+      {
+        "school": "湖南文理学院",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "西校区",
+            "aliases": ["老校区", "西院"],
+            "address": "湖南省常德市武陵区洞庭大道3150号",
+            "source_url": "https://www.huas.edu.cn/info/1017/15757.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "西校区",
+            "name": "一食堂",
+            "aliases": ["第一食堂", "老校区一食堂"],
+            "location_text": "西校区一食堂一楼餐厅",
+            "building_or_floor": "一楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "2025年春季开学第一餐午餐时段实际供餐",
+            "source_url": "https://scjg.changde.gov.cn/xwzx/ztzl/zzspaqwtlhhd/content_78143044",
+            "source_title": "守护开学“第一餐” 常德市场监管在行动",
+            "source_org": "常德市市场监督管理局",
+            "source_type": "official_government",
+            "evidence_level": "A",
+            "evidence_excerpt": "市市场监管局点名湖南文理学院老校区一食堂及一楼餐厅，列出当日菜品，并记载后厨厨师为师生准备午餐，直接闭合父食堂、一楼堂食和当前实际供餐。",
+            "review_status": "pending_review",
+            "additional_sources": []
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "学校2026年招生章程将洞庭大道3150号命名为西校区；同址官方材料中的老校区仅作为西校区内部片区别名，不另建校区。",
+          "只纳入一食堂一楼；其他食堂缺少精确实际餐饮楼层证据，四食堂两层楼仅为检查范围或建筑表述。"
+        ]
+      },
+      {
+        "school": "湖南应用技术学院",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "西校区",
+            "aliases": ["西区"],
+            "address": "湖南省常德市鼎城区善卷路2058号",
+            "source_url": "https://zs.hatu.edu.cn/zsshow/show1483.html"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "西校区",
+            "name": "二食堂",
+            "aliases": ["第二食堂"],
+            "location_text": "西校区二食堂一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "2022年逐层具体售餐；2024年午餐时段同父经营与错峰就餐调研；2025年同菜品续活",
+            "source_url": "https://tw.hatu.edu.cn/show/610.html",
+            "source_title": "湖应校园生活小指南",
+            "source_org": "共青团湖南应用技术学院委员会",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "学校指南把北方烤饼绑定二食堂一楼，把馄饨水饺、黄焖鸡和称重烤盘饭绑定二食堂二楼，具体菜品、制作与称价证明两层实际售餐。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://dzb.hatu.edu.cn/news/show992.html",
+                "source_title": "校长李旋旗带队深入教学楼、食堂走访调研",
+                "source_org": "湖南应用技术学院党政办公室",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2024年午餐时段，学校实地走访西校区二食堂，察看经营状况并研究错峰就餐、食品质量和不同时段用餐需求，闭合同一父食堂当前实际运营。"
+              },
+              {
+                "source_url": "https://pj.hatu.edu.cn/main/upload/202512/16/202512160931010903.pdf",
+                "source_title": "2025年11月教学督导工作简报",
+                "source_org": "湖南应用技术学院教学质量监控与评估中心",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2025年学生反馈继续点名二食堂烤盘饭；该菜品已由2022年指南精确定位二食堂二楼，用于补强同父同菜品持续实际售卖。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "学校2026年招生章程确认代码和善卷路2058号办学地点，2026年测试方案继续明确使用西校区。",
+          "北方烤饼、馄饨水饺、黄焖鸡和烤盘饭均为二食堂内部经营内容，不拆为父食堂；证据不迁移到东校区。"
+        ]
+      }
+    ]
+  }
+]

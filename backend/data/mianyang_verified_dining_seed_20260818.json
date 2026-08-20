@@ -1,0 +1,55 @@
+[
+  {
+    "batch_name": "绵阳高校官方食堂楼层确认集-20260818",
+    "region": "四川省绵阳市",
+    "source_scope": "高校官网、官方后勤及官方招生材料；楼层事实与2024—2026当前运营证据闭环后收录",
+    "schools": [
+      {
+        "school": "绵阳职业技术学院",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "校本部",
+            "aliases": ["本部"],
+            "address": "四川省绵阳市新一环路北段6号",
+            "source_url": "https://www.mypt.edu.cn/xxjj/xxzc.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "校本部",
+            "name": "第一食堂",
+            "aliases": ["一食堂"],
+            "location_text": "校本部第一食堂一楼",
+            "building_or_floor": "一楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "https://www.mypt.edu.cn/info/1042/15116.htm",
+            "source_title": "绵阳职业技术学院考点2023年研招考试（初试）考前公告",
+            "source_org": "绵阳职业技术学院",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "2022年校方研考公告将考试地点绑定四川省绵阳市新一环路北段6号，并明确“午餐可在学校第一食堂一楼就餐”；2025年6月校方后勤页面又明确学校自营第一食堂在本学期推出新菜、自选窗口现已开放且每日供应，闭合同名父食堂当前运营。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://ls.mypt.edu.cn/info/1073/1166.htm",
+                "source_title": "舌尖上的味蕾盛宴——今天，你品尝了吗？",
+                "source_org": "绵阳职业技术学院后勤与基建管理处",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2025年6月校方后勤页面明确学校自营第一食堂在本学期实际推出新菜，自选窗口现已开放且每日供应，闭合同名父食堂当前运营。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "第一食堂只建立一个物理父实体，一楼记录为实际就餐楼层；自选窗口和菜品不拆为独立食堂。",
+          "第二食堂及南校区食堂虽有2025年当前运营证据，但缺实际供餐楼层，未纳入。"
+        ]
+      }
+    ]
+  }
+]

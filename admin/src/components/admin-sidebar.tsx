@@ -72,7 +72,7 @@ const menuGroups: Array<{ label: string; items: AdminMenuItem[] }> = [
     items: [
       { id: 'packaged-foods', label: '包装食品', icon: Package },
       { id: 'packaged-food-corrections', label: '零食纠错', icon: Flag },
-      { id: 'food-nutrition', label: '营养食物', icon: Apple },
+      { id: 'food-nutrition', label: '标准食物库', icon: Apple },
       { id: 'nutrition-alias-review', label: '别名审核', icon: Tags },
       { id: 'public-food-library', label: '公共食物', icon: Utensils },
       { id: 'campus-directory', label: '校园食堂', icon: Building2 },

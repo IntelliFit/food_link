@@ -1,0 +1,269 @@
+[
+  {
+    "batch_name": "芜湖高校官方食堂楼层确认集-20260820",
+    "region": "芜湖市",
+    "source_scope": "高校官方后勤、招生章程及现行校园服务页面；严格确认正式校区、物理父食堂、实际餐饮楼层与2024—2026当前运营",
+    "schools": [
+      {
+        "school": "安徽信息工程学院",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "新芜校区",
+            "aliases": [],
+            "address": "安徽省芜湖市湾沚区新芜经济开发区永和路1号",
+            "source_url": "https://zsxx.aiit.edu.cn/info/182584"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "新芜校区",
+            "name": "陶然餐厅",
+            "aliases": [],
+            "location_text": "陶然餐厅一楼大厅",
+            "building_or_floor": "一楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "2026当前日常供餐",
+            "source_url": "https://www.aiit.edu.cn/info/185484",
+            "source_title": "后勤管理处组织开展食堂后厨开放日暨师生座谈交流活动",
+            "source_org": "安徽信息工程学院后勤管理处",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "校方记载座谈会在陶然餐厅一楼大厅举行，学生结合日常就餐体验提问，食堂经理现场回应。",
+            "review_status": "pending_review"
+          }
+        ],
+        "windows": [],
+        "notes": ["梅花、华工、玉兔的物理父体边界不明，不重复建实体。"]
+      },
+      {
+        "school": "安徽工程大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "校本部",
+            "aliases": [],
+            "address": "安徽省芜湖市北京中路8号",
+            "source_url": "https://zsb.ahpu.edu.cn/index.php?id=605"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "校本部",
+            "name": "第五食堂",
+            "aliases": ["东区食堂"],
+            "location_text": "东区第五食堂一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "2025暑期及2026寒假、春季开学供餐",
+            "source_url": "https://www.ahpu.edu.cn/_t1127/2025/0620/c5a250983/page.htm",
+            "source_title": "关于做好2025年暑期后勤保障工作的通知",
+            "source_org": "安徽工程大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "通知明确东区第五食堂一层提供膳食服务保障。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.ahpu.edu.cn/2026/0109/c5a263512/page.htm",
+                "source_title": "关于2026年寒假及春季开学后勤服务保障安排的通知",
+                "source_org": "安徽工程大学",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "通知逐层写东区食堂二楼停止供餐、一楼营业期限及春季恢复供餐安排。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": ["第三、第四食堂虽在同一父楼，但现行材料未给精确数值楼层，不纳入。"]
+      },
+      {
+        "school": "安徽师范大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "花津校区",
+            "aliases": [],
+            "address": "安徽省芜湖市九华南路189号",
+            "source_url": "https://zsxx.ahnu.edu.cn/info/1010/4223.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "花津校区",
+            "name": "学生第三食堂",
+            "aliases": ["第三食堂", "三食堂"],
+            "location_text": "学生第三食堂一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "2024日常供餐；2025暑期两层开放；现行餐饮服务",
+            "source_url": "https://ahnu.edu.cn/info/1108/102790.htm",
+            "source_title": "安徽师范大学学生食堂",
+            "source_org": "安徽师范大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "校方报道明确第三食堂一楼和二楼供应餐饮美食，满足师生日常用餐。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.ahnu.edu.cn/info/1106/142150.htm",
+                "source_title": "暑期留校学习生活指南（本次更新时间：2025年7月4日）",
+                "source_org": "安徽师范大学",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "指南明确花津校区三食堂一楼、二楼在7月和8月开放。"
+              },
+              {
+                "source_url": "https://zwc.ahnu.edu.cn/fwzn/cyfw/wmdst.htm",
+                "source_title": "我们的食堂",
+                "source_org": "安徽师范大学总务处",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "现行餐饮页继续将学生第三食堂列入早餐、午餐、晚餐和夜餐服务体系。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": ["赭山学生食堂楼层与经营交接状态冲突，整父暂缓。"]
+      },
+      {
+        "school": "芜湖职业技术大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "文津校区",
+            "aliases": [],
+            "address": "安徽省芜湖市文津西路201号",
+            "source_url": "https://lib.whit.edu.cn/info/1028/1861.htm"
+          },
+          {
+            "name": "白马校区",
+            "aliases": [],
+            "address": "安徽省芜湖市长江南路与白马山路交汇处",
+            "source_url": "https://lib.whit.edu.cn/info/1028/1861.htm"
+          },
+          {
+            "name": "南陵校区",
+            "aliases": [],
+            "address": "安徽省芜湖市南陵县龙池路1号",
+            "source_url": "https://lib.whit.edu.cn/info/1028/1861.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "文津校区",
+            "name": "第三食堂",
+            "aliases": ["原第三食堂", "第四食堂"],
+            "location_text": "第三食堂一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "2024结构；2026当前餐饮运行",
+            "source_url": "https://www.whit.edu.cn/info/1026/22419.htm",
+            "source_title": "芜湖职业技术学院文津校区、白马校区、南陵校区食堂经营权项目（1包）中标候选人公示",
+            "source_org": "芜湖职业技术大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "材料明确第三食堂一层餐厅及二层教工、团餐区域。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.whit.edu.cn/info/1026/22417.htm",
+                "source_title": "芜湖职业技术学院文津校区、白马校区、南陵校区食堂经营权项目（3包）中标候选人公示",
+                "source_org": "芜湖职业技术大学",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "材料明确第四食堂是原第三食堂二层内部经营区，应归并第三食堂父楼。"
+              },
+              {
+                "source_url": "https://clgc.whit.edu.cn/info/1085/3537.htm",
+                "source_title": "循环餐盒活动",
+                "source_org": "芜湖职业技术大学",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2026年材料点名第三食堂打包窗口、餐具回收处及师生实际使用，续证父体当前餐饮运行。"
+              }
+            ]
+          },
+          {
+            "campus": "白马校区",
+            "name": "学生食堂",
+            "aliases": ["一食堂"],
+            "location_text": "白马校区学生食堂一楼",
+            "building_or_floor": "一楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "2025检查；2026实际餐饮",
+            "source_url": "https://www.whit.edu.cn/info/1026/22422.htm",
+            "source_title": "芜湖职业技术学院文津校区、白马校区、南陵校区食堂经营权项目（5包）中标候选人公示",
+            "source_org": "芜湖职业技术大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "材料明确白马校区学生食堂一层餐厅。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.whit.edu.cn/info/1022/27086.htm",
+                "source_title": "校党委书记田昕调研白马、南陵校区",
+                "source_org": "芜湖职业技术大学",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2025年校领导实地察看白马校区食堂，确认同父当前运行。"
+              },
+              {
+                "source_url": "https://www.whit.edu.cn/zyjssfxy/info/1077/2321.htm",
+                "source_title": "“食”光正好，“味”来可期",
+                "source_org": "芜湖职业技术大学职业师范学院",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2026年材料写一食堂在学校食堂一楼大厅由档口备餐并供师生选购品尝。"
+              }
+            ]
+          },
+          {
+            "campus": "南陵校区",
+            "name": "学生食堂",
+            "aliases": [],
+            "location_text": "南陵校区学生食堂一楼",
+            "building_or_floor": "一楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "2024启用；2024—2025当前运行",
+            "source_url": "https://www.whit.edu.cn/info/1026/22430.htm",
+            "source_title": "芜湖职业技术学院文津校区、白马校区、南陵校区食堂经营权项目（7包）中标候选人公示",
+            "source_org": "芜湖职业技术大学",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "材料明确南陵校区学生食堂建筑虽有三层，当期只启用一层。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.whit.edu.cn/info/1031/23737.htm",
+                "source_title": "走进后厨，眼见为“食”——学校开展“食堂后厨开放日”活动",
+                "source_org": "芜湖职业技术大学",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2024年开放日直接进入南陵校区食堂后厨，核查实际加工、消毒、储存与留样。"
+              },
+              {
+                "source_url": "https://www.whit.edu.cn/info/1022/26484.htm",
+                "source_title": "校领导赴南陵校区调研",
+                "source_org": "芜湖职业技术大学",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2025年开学检查实地走访南陵校区食堂并核查后勤服务保障。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": ["文津第四食堂归并第三食堂二楼；文津第二及银湖旧楼层缺同父当前续活，不纳入。"]
+      }
+    ]
+  }
+]

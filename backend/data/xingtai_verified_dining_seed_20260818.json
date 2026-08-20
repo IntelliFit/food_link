@@ -1,0 +1,64 @@
+[
+  {
+    "batch_name": "邢台高校官方食堂楼层确认集-20260818",
+    "region": "河北省邢台市",
+    "source_scope": "高校官网中的现行招生章程、正式校址、父食堂逐层营业时间及当前食材保障；只收录学校、校区、物理父食堂、实际楼层和当前运营完整闭环的记录",
+    "schools": [
+      {
+        "school": "河北机电职业技术学院",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "校本部",
+            "aliases": ["泉北西大街校区"],
+            "address": "河北省邢台市信都区泉北西大街1169号",
+            "source_url": "https://zs.hbjd.edu.cn/info/1023/4358.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "校本部",
+            "name": "美其食餐厅",
+            "aliases": ["美其食食堂"],
+            "location_text": "河北机电职业技术学院校本部美其食餐厅一楼、二楼、三楼",
+            "building_or_floor": "一楼、二楼、三楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "一楼、二楼及教工餐厅6:30开门、20:00关门；三楼夜宵营业至21:30",
+            "source_url": "https://www.hbjd.edu.cn/info/1711/104341.htm",
+            "source_title": "河北机电职业技术学院美其食餐厅招聘物业服务项目询价公告",
+            "source_org": "河北机电职业技术学院",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "校方2025年公告在“美其食餐厅经营时”的语境中明确一、二层及教工餐厅6:30开门、20:00关门，三层夜宵营业至21:30，直接闭合父食堂一至三楼的实际餐饮运营。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://zs.hbjd.edu.cn/info/1023/4358.htm",
+                "source_title": "2026年河北机电职业技术学院招生章程",
+                "source_org": "河北机电职业技术学院招生网",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2026年招生章程确认学校为公办全日制普通高等院校，并给出学院地址河北省邢台市泉北西大街1169号。"
+              },
+              {
+                "source_url": "https://www.hbjd.edu.cn/info/1711/116961.htm",
+                "source_title": "河北机电职业技术学院食堂食材原料供应商入围项目竞争性磋商公告",
+                "source_org": "河北机电职业技术学院",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "校方2026年采购米面油肉菜等食堂原料并将保障期延续至2027年暑假，同时明确美其食餐厅四层为培训室；该件交叉证明当前食堂保障并把餐饮楼层边界限定在一至三楼。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "教工餐厅属于美其食餐厅内部经营区，不另拆物理父食堂。",
+          "美其食餐厅四楼被2026年官方材料明确为培训室，不计实际餐饮楼层。",
+          "其余五所基线高校缺少唯一父食堂、实际供餐楼层与当前运营的完整闭环，不写入本批。"
+        ]
+      }
+    ]
+  }
+]

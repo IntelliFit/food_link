@@ -1,0 +1,56 @@
+[
+  {
+    "batch_name": "承德高校官方食堂楼层确认集-20260818",
+    "region": "河北省承德市",
+    "source_scope": "高校官网中的正式校区地址、逐层食堂经营范围及招采节点后的实际在场就餐与食堂管理证据；只收录学校、校区、物理父食堂、实际楼层和当前运营完整闭环的记录",
+    "schools": [
+      {
+        "school": "河北旅游职业学院",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "北校区",
+            "aliases": ["北院"],
+            "address": "河北省承德市高教园区",
+            "source_url": "https://www.hbly.edu.cn/info/1122/6516.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "北校区",
+            "name": "学生食堂",
+            "aliases": ["北校区学生食堂", "北院食堂"],
+            "location_text": "河北旅游职业学院北校区学生食堂一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "2026年4月15日18:30晚餐时段，校方记录北院学生在食堂内且食堂经理到场维护就餐秩序",
+            "source_url": "https://www.hbly.edu.cn/info/1122/6516.htm",
+            "source_title": "河北旅游职业学院北校区学生食堂一、二楼经营单位招标采购服务项目招标公告",
+            "source_org": "河北旅游职业学院",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "校方2026年1月公告明确北校区学生食堂一层、二层均用于餐饮企业经营管理，并分别列出一层A/B区和二层A/B区；各区归并为同一物理父食堂的两个实际餐饮楼层。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.hbly.edu.cn/xsc/info/1027/1408.htm",
+                "source_title": "河北旅游职业学院关于玩拼豆和随意扫码的安全预警提示",
+                "source_org": "河北旅游职业学院学生工作部",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "校方记录2026年4月15日18:30左右在食堂内发现推广人员，食堂经理到场维护食堂就餐秩序，并向现场及相关北院学生核实情况，闭合招采节点后北校区父食堂的晚餐时段实际运营。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "一层A/B区和二层A/B区仅为同一北校区学生食堂内部经营区，不拆成四个父食堂。",
+          "北校区食堂三楼仅见2024经营中标及2026燃气改造，缺同层履约后实际售餐、取餐或堂食证据，不纳入。",
+          "南校区学生食堂缺实际楼层；承德县校区尚缺正式开学后的父食堂与楼层闭环，均不纳入。"
+        ]
+      }
+    ]
+  }
+]

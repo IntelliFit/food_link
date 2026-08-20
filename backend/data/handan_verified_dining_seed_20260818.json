@@ -1,0 +1,83 @@
+[
+  {
+    "batch_name": "邯郸高校官方食堂楼层确认集-20260818",
+    "region": "河北省邯郸市",
+    "source_scope": "高校现行招生章程与后勤官网中的正式校区地址、父食堂线上点餐、堂食或到店自取及逐层服务信息；只收录学校、校区、物理父食堂、实际楼层和当前运营完整闭环的记录",
+    "schools": [
+      {
+        "school": "邯郸幼儿师范高等专科学校",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "主校区",
+            "aliases": ["武安校区"],
+            "address": "河北省武安市恩元路66号",
+            "source_url": "https://zsw.hdyz.edu.cn/info/1042/4303.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "主校区",
+            "name": "思源居餐厅",
+            "aliases": ["思源居"],
+            "location_text": "邯郸幼儿师范高等专科学校主校区思源居餐厅一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "2025年后勤线上点餐服务支持堂食或打包，一楼、二楼均设就餐服务负责人",
+            "source_url": "https://hqbwc.hdyz.edu.cn/info/1075/4602.htm",
+            "source_title": "邯幼干饭人福利！食堂小程序点单，让你告别排队“人从众”",
+            "source_org": "邯郸幼儿师范高等专科学校后勤保卫科",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "校方后勤2025年页面点名思源居餐厅，说明线上点餐可选择堂食或打包，并按父食堂逐层列出思源居一层、二层的就餐服务负责人，直接闭合两层当前实际餐饮服务。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://zsw.hdyz.edu.cn/info/1042/4303.htm",
+                "source_title": "邯郸幼儿师范高等专科学校2026年招生章程",
+                "source_org": "邯郸幼儿师范高等专科学校招生信息网",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2026年招生章程确认学校代码4113014686、公办全日制普通高校身份，并将主校区绑定到河北省武安市恩元路66号。"
+              }
+            ]
+          },
+          {
+            "campus": "主校区",
+            "name": "锄禾居餐厅",
+            "aliases": ["锄禾居"],
+            "location_text": "邯郸幼儿师范高等专科学校主校区锄禾居餐厅一楼、二楼、三楼",
+            "building_or_floor": "一楼、二楼、三楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "2025年后勤线上点餐服务支持外卖配送或到店自取，一楼、二楼、三楼均设就餐服务负责人",
+            "source_url": "https://hqbwc.hdyz.edu.cn/info/1075/4602.htm",
+            "source_title": "邯幼干饭人福利！食堂小程序点单，让你告别排队“人从众”",
+            "source_org": "邯郸幼儿师范高等专科学校后勤保卫科",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "校方后勤2025年页面点名锄禾居餐厅，说明线上点餐可选择外卖配送或到店自取，并按父食堂逐层列出锄禾居一层、二层、三层的就餐服务负责人，直接闭合三层当前实际餐饮服务。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://zsw.hdyz.edu.cn/info/1042/4303.htm",
+                "source_title": "邯郸幼儿师范高等专科学校2026年招生章程",
+                "source_org": "邯郸幼儿师范高等专科学校招生信息网",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2026年招生章程确认学校代码4113014686、公办全日制普通高校身份，并将主校区绑定到河北省武安市恩元路66号。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "思源居与锄禾居分别是两个物理父食堂；点餐窗口、楼层负责人和餐饮档口均不另拆父体。",
+          "思源居只发布一楼、二楼；不使用‘两食堂共六层’的概括外推思源居三楼。",
+          "大名校区及其余七所基线高校缺少唯一父食堂、实际供餐楼层与当前运营的完整闭环，不写入本批。"
+        ]
+      }
+    ]
+  }
+]
