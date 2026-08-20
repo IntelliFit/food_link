@@ -166,3 +166,21 @@ func TestUserFoodPhotoRepoListIncludesEveryUserFoodPhotoSurface(t *testing.T) {
 	assert.Equal(t, "packaged_correction", byPath["label.jpg"].SourceType)
 	assert.Equal(t, "user_recipe", byPath["recipe.jpg"].SourceType)
 }
+
+func TestUserFoodPhotoRepoListStillWorksWithoutPackagedCorrectionTable(t *testing.T) {
+	repo := setupUserFoodPhotoTestDB(t)
+	now := time.Now().UTC()
+	require.NoError(t, repo.db.Exec(`DROP TABLE packaged_food_correction_submissions`).Error)
+	require.NoError(t, repo.db.Exec(`INSERT INTO weapp_user (id, nickname) VALUES ('user-1', '兼容用户')`).Error)
+	require.NoError(t, repo.db.Exec(`
+		INSERT INTO analysis_tasks (id, user_id, task_type, status, image_url, payload, created_at)
+		VALUES ('task-1', 'user-1', 'food', 'done', 'meal.jpg', '{}', ?)
+	`, now).Error)
+
+	result, err := repo.List(context.Background(), ListUserFoodPhotoInput{Limit: 40})
+
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), result.Total)
+	require.Len(t, result.Items, 1)
+	assert.Equal(t, "meal.jpg", result.Items[0].ImagePath)
+}

@@ -46,10 +46,10 @@ type ListUserFoodPhotoResult struct {
 	Total int64
 }
 
-// userFoodPhotoRowsSQL collects raw analysis uploads and saved record images.
+// userFoodPhotoRowsSQLTemplate collects raw analysis uploads and saved record images.
 // DISTINCT ON prevents the same uploaded object from appearing twice after an
 // analysis task is saved as a food record.
-const userFoodPhotoRowsSQL = `
+const userFoodPhotoRowsSQLTemplate = `
 WITH task_photos AS (
 	SELECT
 		t.id::text AS source_id,
@@ -144,21 +144,7 @@ public_food_photos AS (
 	WHERE p.user_id IS NOT NULL
 ),
 packaged_correction_photos AS (
-	SELECT
-		c.id::text AS source_id,
-		'packaged_correction'::text AS source_type,
-		''::text AS task_type,
-		c.status,
-		''::text AS record_id,
-		BTRIM(photo.image_path) AS image_path,
-		COALESCE(c.comment, '') AS description,
-		c.user_id::text AS user_id,
-		COALESCE(c.created_at, c.updated_at, NOW()) AS created_at,
-		2 AS source_priority
-	FROM packaged_food_correction_submissions AS c
-	CROSS JOIN LATERAL jsonb_array_elements_text(COALESCE(c.evidence_image_urls, '[]'::jsonb)) AS photo(image_path)
-	WHERE BTRIM(COALESCE(photo.image_path, '')) <> ''
-	AND c.deleted_at IS NULL
+	{{packaged_correction_photos}}
 ),
 recipe_photos AS (
 	SELECT
@@ -207,6 +193,47 @@ FROM deduplicated AS p
 LEFT JOIN weapp_user AS u ON u.id::text = p.user_id
 `
 
+const packagedCorrectionPhotosSQL = `
+	SELECT
+		c.id::text AS source_id,
+		'packaged_correction'::text AS source_type,
+		''::text AS task_type,
+		c.status,
+		''::text AS record_id,
+		BTRIM(photo.image_path) AS image_path,
+		COALESCE(c.comment, '') AS description,
+		c.user_id::text AS user_id,
+		COALESCE(c.created_at, c.updated_at, NOW()) AS created_at,
+		2 AS source_priority
+	FROM packaged_food_correction_submissions AS c
+	CROSS JOIN LATERAL jsonb_array_elements_text(COALESCE(c.evidence_image_urls, '[]'::jsonb)) AS photo(image_path)
+	WHERE BTRIM(COALESCE(photo.image_path, '')) <> ''
+	AND c.deleted_at IS NULL
+`
+
+const emptyPackagedCorrectionPhotosSQL = `
+	SELECT
+		NULL::text AS source_id,
+		'packaged_correction'::text AS source_type,
+		''::text AS task_type,
+		''::text AS status,
+		''::text AS record_id,
+		NULL::text AS image_path,
+		''::text AS description,
+		NULL::text AS user_id,
+		NULL::timestamptz AS created_at,
+		2 AS source_priority
+	WHERE FALSE
+`
+
+func buildUserFoodPhotoRowsSQL(includePackagedCorrections bool) string {
+	packagedCorrectionsSQL := emptyPackagedCorrectionPhotosSQL
+	if includePackagedCorrections {
+		packagedCorrectionsSQL = packagedCorrectionPhotosSQL
+	}
+	return strings.Replace(userFoodPhotoRowsSQLTemplate, "{{packaged_correction_photos}}", packagedCorrectionsSQL, 1)
+}
+
 func (r *UserFoodPhotoRepo) List(ctx context.Context, input ListUserFoodPhotoInput) (*ListUserFoodPhotoResult, error) {
 	limit := input.Limit
 	if limit <= 0 {
@@ -220,10 +247,11 @@ func (r *UserFoodPhotoRepo) List(ctx context.Context, input ListUserFoodPhotoInp
 		offset = 0
 	}
 
+	rowsSQL := buildUserFoodPhotoRowsSQL(r.db.WithContext(ctx).Migrator().HasTable("packaged_food_correction_submissions"))
 	whereSQL, args := buildUserFoodPhotoFilters(input)
 	var total int64
 	if err := r.db.WithContext(ctx).
-		Raw("SELECT COUNT(*) FROM ("+userFoodPhotoRowsSQL+") AS photos "+whereSQL, args...).
+		Raw("SELECT COUNT(*) FROM ("+rowsSQL+") AS photos "+whereSQL, args...).
 		Scan(&total).Error; err != nil {
 		return nil, err
 	}
@@ -231,7 +259,7 @@ func (r *UserFoodPhotoRepo) List(ctx context.Context, input ListUserFoodPhotoInp
 	var items []UserFoodPhoto
 	listArgs := append(append([]any{}, args...), limit, offset)
 	if err := r.db.WithContext(ctx).
-		Raw("SELECT * FROM ("+userFoodPhotoRowsSQL+") AS photos "+whereSQL+" ORDER BY created_at DESC, source_id DESC LIMIT ? OFFSET ?", listArgs...).
+		Raw("SELECT * FROM ("+rowsSQL+") AS photos "+whereSQL+" ORDER BY created_at DESC, source_id DESC LIMIT ? OFFSET ?", listArgs...).
 		Scan(&items).Error; err != nil {
 		return nil, err
 	}
