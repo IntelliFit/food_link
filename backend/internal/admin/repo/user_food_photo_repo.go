@@ -84,6 +84,12 @@ WITH task_photos AS (
 		t.task_type IN ('food', 'precision_plan')
 		OR t.task_type LIKE 'food_debug%'
 		OR t.task_type LIKE 'precision_plan_debug%'
+		OR t.task_type = 'packaged_nutrition_label'
+		OR t.task_type LIKE 'packaged_nutrition_label_debug%'
+		OR t.task_type = 'packaged_product_extract'
+		OR t.task_type LIKE 'packaged_product_extract_debug%'
+		OR t.task_type = 'expiry_recognize'
+		OR t.task_type LIKE 'expiry_recognize_debug%'
 	)
 	AND LOWER(COALESCE(t.payload->>'internal_benchmark', 'false')) <> 'true'
 	AND COALESCE(t.payload->>'campus_catalog_item_id', '') = ''
@@ -112,12 +118,75 @@ record_photos AS (
 		WHERE BTRIM(COALESCE(candidate.image_path, '')) <> ''
 	) AS photo
 ),
+public_food_photos AS (
+	SELECT
+		p.id::text AS source_id,
+		'public_food'::text AS source_type,
+		''::text AS task_type,
+		p.status,
+		COALESCE(p.source_record_id::text, '') AS record_id,
+		photo.image_path,
+		COALESCE(NULLIF(p.food_name, ''), NULLIF(p.description, ''), '') AS description,
+		p.user_id::text AS user_id,
+		COALESCE(p.created_at, p.updated_at, NOW()) AS created_at,
+		2 AS source_priority
+	FROM public_food_library AS p
+	CROSS JOIN LATERAL (
+		SELECT DISTINCT BTRIM(candidate.image_path) AS image_path
+		FROM (
+			SELECT value AS image_path
+			FROM jsonb_array_elements_text(COALESCE(p.image_paths, '[]'::jsonb)) AS paths(value)
+			UNION ALL
+			SELECT p.image_path
+		) AS candidate
+		WHERE BTRIM(COALESCE(candidate.image_path, '')) <> ''
+	) AS photo
+	WHERE p.user_id IS NOT NULL
+),
+packaged_correction_photos AS (
+	SELECT
+		c.id::text AS source_id,
+		'packaged_correction'::text AS source_type,
+		''::text AS task_type,
+		c.status,
+		''::text AS record_id,
+		BTRIM(photo.image_path) AS image_path,
+		COALESCE(c.comment, '') AS description,
+		c.user_id::text AS user_id,
+		COALESCE(c.created_at, c.updated_at, NOW()) AS created_at,
+		2 AS source_priority
+	FROM packaged_food_correction_submissions AS c
+	CROSS JOIN LATERAL jsonb_array_elements_text(COALESCE(c.evidence_image_urls, '[]'::jsonb)) AS photo(image_path)
+	WHERE BTRIM(COALESCE(photo.image_path, '')) <> ''
+	AND c.deleted_at IS NULL
+),
+recipe_photos AS (
+	SELECT
+		r.id::text AS source_id,
+		'user_recipe'::text AS source_type,
+		''::text AS task_type,
+		'saved'::text AS status,
+		''::text AS record_id,
+		BTRIM(r.image_path) AS image_path,
+		COALESCE(NULLIF(r.recipe_name, ''), NULLIF(r.description, ''), '') AS description,
+		r.user_id::text AS user_id,
+		COALESCE(r.created_at, r.updated_at, NOW()) AS created_at,
+		2 AS source_priority
+	FROM user_recipes AS r
+	WHERE BTRIM(COALESCE(r.image_path, '')) <> ''
+),
 deduplicated AS (
 	SELECT DISTINCT ON (user_id, image_path) *
 	FROM (
 		SELECT * FROM task_photos
 		UNION ALL
 		SELECT * FROM record_photos
+		UNION ALL
+		SELECT * FROM public_food_photos
+		UNION ALL
+		SELECT * FROM packaged_correction_photos
+		UNION ALL
+		SELECT * FROM recipe_photos
 	) AS combined
 	ORDER BY user_id, image_path, source_priority, created_at DESC
 )
@@ -183,7 +252,7 @@ func buildUserFoodPhotoFilters(input ListUserFoodPhotoInput) (string, []any) {
 		)`)
 		args = append(args, like, like, like, like, like)
 	}
-	if source := strings.TrimSpace(input.Source); source == "analysis_task" || source == "food_record" {
+	if source := strings.TrimSpace(input.Source); isUserFoodPhotoSource(source) {
 		conditions = append(conditions, "photos.source_type = ?")
 		args = append(args, source)
 	}
@@ -192,4 +261,13 @@ func buildUserFoodPhotoFilters(input ListUserFoodPhotoInput) (string, []any) {
 		args = append(args, status)
 	}
 	return "WHERE " + strings.Join(conditions, " AND "), args
+}
+
+func isUserFoodPhotoSource(source string) bool {
+	switch source {
+	case "analysis_task", "food_record", "public_food", "packaged_correction", "user_recipe":
+		return true
+	default:
+		return false
+	}
 }

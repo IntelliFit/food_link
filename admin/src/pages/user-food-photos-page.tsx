@@ -20,7 +20,7 @@ type PageProps = {
 
 type UserFoodPhoto = {
   source_id: string
-  source_type: 'analysis_task' | 'food_record'
+  source_type: 'analysis_task' | 'food_record' | 'public_food' | 'packaged_correction' | 'user_recipe'
   task_type: string
   status: string
   record_id: string
@@ -49,11 +49,15 @@ const statusLabels: Record<string, string> = {
   cancelled: '已取消',
   timed_out: '已超时',
   recorded: '已保存记录',
+  published: '已发布',
+  saved: '已保存',
 }
 
 const statusClasses: Record<string, string> = {
   done: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-400',
   recorded: 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-400',
+  published: 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-400',
+  saved: 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-400',
   failed: 'border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-400',
   timed_out: 'border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-400',
   processing: 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-400',
@@ -146,7 +150,7 @@ export function UserFoodPhotosPage({ onLogout, onMenuChange }: PageProps) {
                 食物照片
               </CardTitle>
               <CardDescription className='max-w-2xl text-base leading-relaxed'>
-                集中查看用户在食物识别和饮食记录中上传的图片。相同用户的同一图片会自动去重。
+                集中查看用户在食物识别、饮食记录、公共食物、包装食品纠错和食谱中上传的全部食物图片。同一图片会自动去重。
               </CardDescription>
             </div>
             <Badge variant='outline' className='max-w-xs shrink-0 whitespace-normal break-all px-3 py-1.5 text-xs font-normal'>
@@ -175,6 +179,9 @@ export function UserFoodPhotosPage({ onLogout, onMenuChange }: PageProps) {
               ['all', '全部来源'],
               ['analysis_task', '识别上传'],
               ['food_record', '饮食记录'],
+              ['public_food', '公共食物'],
+              ['packaged_correction', '包装食品纠错'],
+              ['user_recipe', '用户食谱'],
             ]} />
             <FilterSelect label='状态' value={status} onValueChange={(value) => { setStatus(value); setPage(1) }} options={[
               ['all', '全部状态'],
@@ -185,6 +192,8 @@ export function UserFoodPhotosPage({ onLogout, onMenuChange }: PageProps) {
               ['timed_out', '已超时'],
               ['cancelled', '已取消'],
               ['recorded', '已保存记录'],
+              ['published', '已发布'],
+              ['saved', '已保存'],
             ]} />
             <FilterSelect label='每页' value={String(limit)} onValueChange={(value) => { setLimit(Number(value)); setPage(1) }} options={[
               ['20', '20 张'],
@@ -258,7 +267,7 @@ function PhotoCard({ item, onPreview }: { item: UserFoodPhoto; onPreview: () => 
         </div>
         {item.description ? <p className='line-clamp-2 text-sm leading-relaxed text-muted-foreground'>{item.description}</p> : null}
         <div className='flex items-center justify-between gap-2 border-t pt-3'>
-          <Badge variant='secondary'>{item.source_type === 'analysis_task' ? '识别上传' : '饮食记录'}</Badge>
+          <Badge variant='secondary'>{sourceLabels[item.source_type] || item.source_type}</Badge>
           <Button variant='ghost' size='sm' onClick={onPreview}>查看大图</Button>
         </div>
       </CardContent>
@@ -291,7 +300,7 @@ function PhotoPreview({ item, onClose }: { item: UserFoodPhoto; onClose: () => v
           </div>
           <div className='mt-5 space-y-4 overflow-y-auto text-sm'>
             <PreviewRow label='上传时间' value={formatTime(item.created_at)} />
-            <PreviewRow label='来源' value={item.source_type === 'analysis_task' ? '食物识别上传' : '饮食记录补图'} />
+            <PreviewRow label='来源' value={sourceLabels[item.source_type] || item.source_type} />
             <PreviewRow label='状态' value={statusLabels[item.status] || item.status} />
             {item.task_type ? <PreviewRow label='任务类型' value={item.task_type} /> : null}
             <PreviewRow label='来源 ID' value={item.source_id} />
@@ -332,4 +341,12 @@ function formatTime(value: string) {
   if (!value) return '-'
   const date = new Date(value)
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString('zh-CN', { hour12: false })
+}
+
+const sourceLabels: Record<UserFoodPhoto['source_type'], string> = {
+  analysis_task: '识别上传',
+  food_record: '饮食记录',
+  public_food: '公共食物',
+  packaged_correction: '包装食品纠错',
+  user_recipe: '用户食谱',
 }

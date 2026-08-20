@@ -41,6 +41,37 @@ func setupUserFoodPhotoTestDB(t *testing.T) *UserFoodPhotoRepo {
 			source_task_id text,
 			record_time timestamptz,
 			created_at timestamptz
+		);
+		CREATE TABLE public_food_library (
+			id text PRIMARY KEY,
+			user_id text,
+			source_record_id text,
+			image_path text,
+			image_paths jsonb NOT NULL DEFAULT '[]'::jsonb,
+			food_name text,
+			description text,
+			status text NOT NULL,
+			created_at timestamptz,
+			updated_at timestamptz
+		);
+		CREATE TABLE packaged_food_correction_submissions (
+			id text PRIMARY KEY,
+			user_id text NOT NULL,
+			status text NOT NULL,
+			comment text,
+			evidence_image_urls jsonb NOT NULL DEFAULT '[]'::jsonb,
+			created_at timestamptz,
+			updated_at timestamptz,
+			deleted_at timestamptz
+		);
+		CREATE TABLE user_recipes (
+			id text PRIMARY KEY,
+			user_id text NOT NULL,
+			recipe_name text NOT NULL,
+			description text,
+			image_path text,
+			created_at timestamptz,
+			updated_at timestamptz
 		)
 	`).Error)
 	return NewUserFoodPhotoRepo(db)
@@ -95,4 +126,43 @@ func TestUserFoodPhotoRepoListFiltersByUserAndStatus(t *testing.T) {
 	assert.Equal(t, int64(1), result.Total)
 	require.Len(t, result.Items, 1)
 	assert.Equal(t, "failed.jpg", result.Items[0].ImagePath)
+}
+
+func TestUserFoodPhotoRepoListIncludesEveryUserFoodPhotoSurface(t *testing.T) {
+	repo := setupUserFoodPhotoTestDB(t)
+	now := time.Now().UTC()
+	require.NoError(t, repo.db.Exec(`INSERT INTO weapp_user (id, nickname) VALUES ('user-1', '全量用户')`).Error)
+	require.NoError(t, repo.db.Exec(`
+		INSERT INTO analysis_tasks (id, user_id, task_type, status, image_url, payload, created_at)
+		VALUES
+			('packaged-task', 'user-1', 'packaged_product_extract', 'done', 'packaged.jpg', '{}', ?),
+			('expiry-task', 'user-1', 'expiry_recognize', 'done', 'expiry.jpg', '{}', ?)
+	`, now, now).Error)
+	require.NoError(t, repo.db.Exec(`
+		INSERT INTO public_food_library (id, user_id, image_path, image_paths, food_name, status, created_at)
+		VALUES ('public-1', 'user-1', 'public.jpg', '[]', '用户分享菜品', 'published', ?)
+	`, now).Error)
+	require.NoError(t, repo.db.Exec(`
+		INSERT INTO packaged_food_correction_submissions (id, user_id, status, comment, evidence_image_urls, created_at)
+		VALUES ('correction-1', 'user-1', 'pending', '包装营养标签', '["label.jpg"]', ?)
+	`, now).Error)
+	require.NoError(t, repo.db.Exec(`
+		INSERT INTO user_recipes (id, user_id, recipe_name, image_path, created_at)
+		VALUES ('recipe-1', 'user-1', '番茄炒蛋', 'recipe.jpg', ?)
+	`, now).Error)
+
+	result, err := repo.List(context.Background(), ListUserFoodPhotoInput{Limit: 40})
+
+	require.NoError(t, err)
+	assert.Equal(t, int64(5), result.Total)
+	require.Len(t, result.Items, 5)
+	byPath := map[string]UserFoodPhoto{}
+	for _, item := range result.Items {
+		byPath[item.ImagePath] = item
+	}
+	assert.Equal(t, "analysis_task", byPath["packaged.jpg"].SourceType)
+	assert.Equal(t, "analysis_task", byPath["expiry.jpg"].SourceType)
+	assert.Equal(t, "public_food", byPath["public.jpg"].SourceType)
+	assert.Equal(t, "packaged_correction", byPath["label.jpg"].SourceType)
+	assert.Equal(t, "user_recipe", byPath["recipe.jpg"].SourceType)
 }
