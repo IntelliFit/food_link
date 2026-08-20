@@ -40,6 +40,7 @@ import { roundTo } from '../../../utils/number-format'
 import {
   manualFoodDisplayInput,
   manualFoodResultPortionText,
+  manualFoodWeightInputUnit,
   manualFoodWeightFromInput,
   practicalManualFoodDefaultWeight,
   selectedManualFoodAmountText,
@@ -1198,7 +1199,7 @@ function RecordManualPage() {
                     {item.displayUnit === 'serving'
                       ? item.portionLabel
                       : item.displayUnit === 'piece'
-                        ? '按个数'
+                        ? '可按克重'
                         : item.displayUnit === 'ml'
                           ? '按毫升'
                           : '按克重'}
@@ -1226,7 +1227,7 @@ function RecordManualPage() {
               </View>
             )}
 
-            {item.displayUnit === 'g' && (
+            {(item.displayUnit === 'g' || item.displayUnit === 'piece') && (
               <View className='quick-adjust-row'>
                 {[-50, -10, 10, 50].map((delta) => (
                   <View
@@ -1251,7 +1252,7 @@ function RecordManualPage() {
                   commitWeightInput(key)
                 }}
               />
-              <Text className='weight-unit'>{item.displayUnitLabel}</Text>
+              <Text className='weight-unit'>{manualFoodWeightInputUnit(item)}</Text>
               <View className='remove-btn' onClick={() => handleRemoveItem(key)}>
                 <Text className='iconfont icon-shanchu' />
               </View>

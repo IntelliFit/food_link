@@ -1,6 +1,7 @@
 import {
   manualFoodDisplayInput,
   manualFoodResultPortionText,
+  manualFoodWeightInputUnit,
   manualFoodWeightFromInput,
   practicalManualFoodDefaultWeight,
   selectedManualFoodAmountText,
@@ -22,16 +23,29 @@ describe('manual-food-serving', () => {
     })).toBe('1个（约55g）')
   })
 
-  it('uses each food default weight instead of a hard-coded 55g piece', () => {
+  it('edits piece-based foods by grams while retaining the piece equivalent', () => {
     const eggWhite = {
       weight: 33,
       defaultWeight: 33,
       displayUnit: 'piece' as const,
       displayUnitLabel: '个',
     }
-    expect(manualFoodDisplayInput(eggWhite)).toBe('1')
-    expect(manualFoodWeightFromInput(eggWhite, 2)).toBe(66)
+    expect(manualFoodDisplayInput(eggWhite)).toBe('33')
+    expect(manualFoodWeightFromInput(eggWhite, 66)).toBe(66)
+    expect(manualFoodWeightInputUnit(eggWhite)).toBe('g')
     expect(selectedManualFoodAmountText(eggWhite)).toBe('1个（约33g）')
+  })
+
+  it('continues to edit serving-based foods by serving count', () => {
+    const meal = {
+      weight: 300,
+      defaultWeight: 200,
+      displayUnit: 'serving' as const,
+      displayUnitLabel: '份',
+    }
+    expect(manualFoodDisplayInput(meal)).toBe('1.5')
+    expect(manualFoodWeightFromInput(meal, 2)).toBe(400)
+    expect(manualFoodWeightInputUnit(meal)).toBe('份')
   })
 
   it('rounds historical nutrition-library averages to practical whole grams', () => {
