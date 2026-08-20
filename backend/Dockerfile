@@ -20,9 +20,7 @@ ARG TARGETOS=linux
 ARG TARGETARCH=amd64
 ENV CGO_ENABLED=0
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
-    go build -trimpath -ldflags="-s -w" -o /out/food-link ./cmd/server \
-    && CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
-    go build -trimpath -ldflags="-s -w" -o /out/food-source-sync ./cmd/food-source-sync
+    go build -trimpath -ldflags="-s -w" -o /out/food-link ./cmd/server
 
 FROM debian:bookworm-slim
 
@@ -33,7 +31,6 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /out/food-link /app/food-link
-COPY --from=builder /out/food-source-sync /app/food-source-sync
 COPY docs/backend-api-prd/ROUTE_MAP.md /app/docs/backend-api-prd/ROUTE_MAP.md
 COPY static /app/static
 COPY data /app/data
