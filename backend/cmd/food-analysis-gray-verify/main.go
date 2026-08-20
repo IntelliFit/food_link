@@ -2006,7 +2006,10 @@ func caseNameFromRef(ref string) string {
 		}
 		return "remote_image"
 	}
-	base := filepath.Base(ref)
+	// filepath.Base only recognizes separators for the host OS. Gray suites are
+	// commonly shared between Windows and macOS, so normalize Windows paths
+	// before deriving a stable case name.
+	base := filepath.Base(strings.ReplaceAll(ref, `\`, "/"))
 	name := strings.TrimSuffix(base, filepath.Ext(base))
 	if name == "" || name == "." {
 		return "case"
