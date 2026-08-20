@@ -407,6 +407,13 @@ func reconcileAIGeneratedFoodItems(items []domain.FoodItem) ([]domain.FoodItem, 
 	for i := range items {
 		source := foodRecordStringPtrValue(items[i].NutritionSource)
 		category := foodRecordStringPtrValue(items[i].NutritionSourceCategory)
+		// A result-page correction is authoritative user input. The correction
+		// keeps the original source category for audit purposes, so category may
+		// still look AI-generated even though the user explicitly replaced the
+		// calories. Do not overwrite that value with a 4/4/9 recalculation.
+		if strings.EqualFold(source, "user_correction_context") {
+			continue
+		}
 		if !domain.IsAIGeneratedNutritionSource(source) && !domain.IsAIGeneratedNutritionSource(category) {
 			continue
 		}

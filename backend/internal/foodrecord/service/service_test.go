@@ -185,6 +185,59 @@ func TestReconcileAIGeneratedFoodItemsLeavesCuratedNutritionUntouched(t *testing
 	assert.Equal(t, 123.0, items[0].Nutrients.Calories)
 }
 
+func TestReconcileAIGeneratedFoodItemsPreservesUserCorrectedCalories(t *testing.T) {
+	source := "user_correction_context"
+	category := "llm_generated"
+	items, reconciled := reconcileAIGeneratedFoodItems([]domain.FoodItem{{
+		NutritionSource:         &source,
+		NutritionSourceCategory: &category,
+		Nutrients: domain.FoodItemNutrients{
+			Calories: 456,
+			Protein:  10,
+			Carbs:    20,
+			Fat:      5,
+		},
+	}})
+
+	assert.False(t, reconciled)
+	require.Len(t, items, 1)
+	assert.Equal(t, 456.0, items[0].Nutrients.Calories)
+}
+
+func TestFoodRecordServiceSavePersistsUserCorrectedCalories(t *testing.T) {
+	db := setupServiceTestDB(t)
+	svc := NewFoodRecordService(foodrepo.NewFoodRecordRepo(db), foodrepo.NewAnalysisTaskRepo(db), repo.NewUserRepo(db))
+	source := "user_correction_context"
+	category := "llm_generated"
+
+	record, err := svc.Save(context.Background(), "u1", SaveFoodRecordInput{
+		MealType:      "dinner",
+		TotalCalories: 456,
+		TotalProtein:  10,
+		TotalCarbs:    20,
+		TotalFat:      5,
+		Items: []domain.FoodItem{{
+			Name:                    "用户修正食物",
+			Weight:                  100,
+			Intake:                  100,
+			Ratio:                   100,
+			NutritionSource:         &source,
+			NutritionSourceCategory: &category,
+			Nutrients: domain.FoodItemNutrients{
+				Calories: 456,
+				Protein:  10,
+				Carbs:    20,
+				Fat:      5,
+			},
+		}},
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, 456.0, record.TotalCalories)
+	require.Len(t, record.Items, 1)
+	assert.Equal(t, 456.0, record.Items[0].Nutrients.Calories)
+}
+
 func TestFoodRecordService_SavePersistsValidEatingMood(t *testing.T) {
 	db := setupServiceTestDB(t)
 	svc := NewFoodRecordService(foodrepo.NewFoodRecordRepo(db), foodrepo.NewAnalysisTaskRepo(db), repo.NewUserRepo(db))
