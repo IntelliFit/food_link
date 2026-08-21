@@ -1044,7 +1044,7 @@ func (s *CommunityService) HealthLeaderboard(ctx context.Context, viewerUserID s
 		go func() {
 			defer workers.Done()
 			for index := range jobs {
-				score, recordedDays, eligible, scoreErr := s.healthScoreProvider.GetOverallHealthIndexScore(ctx, authorIDs[index], "week")
+				score, recordedDays, eligible, scoreErr := s.healthScoreProvider.GetOverallHealthIndexScore(ctx, authorIDs[index], "calendar_week")
 				outcomes[index] = healthScoreOutcome{score: score, recordedDays: recordedDays, eligible: eligible, err: scoreErr}
 			}
 		}()

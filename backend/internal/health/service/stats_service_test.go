@@ -29,6 +29,36 @@ type mockStatsRepo struct {
 	foodRecordsQueryCount int
 }
 
+func TestResolveStatsRangeUTCAtCalendarWeekStartsOnMonday(t *testing.T) {
+	now := time.Date(2026, 8, 21, 16, 30, 0, 0, chinaTZ)
+
+	startDate, endDate, startUTC, endUTC := resolveStatsRangeUTCAt("calendar_week", now)
+
+	assert.Equal(t, "2026-08-17", startDate)
+	assert.Equal(t, "2026-08-21", endDate)
+	assert.Equal(t, "2026-08-16T16:00:00Z", startUTC.Format(time.RFC3339))
+	assert.Equal(t, "2026-08-21T16:00:00Z", endUTC.Format(time.RFC3339))
+}
+
+func TestResolveStatsRangeUTCAtCalendarWeekKeepsSundayInCurrentWeek(t *testing.T) {
+	now := time.Date(2026, 8, 23, 23, 59, 0, 0, chinaTZ)
+
+	startDate, endDate, startUTC, endUTC := resolveStatsRangeUTCAt("calendar_week", now)
+
+	assert.Equal(t, "2026-08-17", startDate)
+	assert.Equal(t, "2026-08-23", endDate)
+	assert.Equal(t, 7*24*time.Hour, endUTC.Sub(startUTC))
+}
+
+func TestResolveStatsRangeUTCAtWeekRemainsRollingSevenDays(t *testing.T) {
+	now := time.Date(2026, 8, 21, 16, 30, 0, 0, chinaTZ)
+
+	startDate, endDate, _, _ := resolveStatsRangeUTCAt("week", now)
+
+	assert.Equal(t, "2026-08-15", startDate)
+	assert.Equal(t, "2026-08-21", endDate)
+}
+
 func (m *mockStatsRepo) GetFoodRecordsForDateRange(ctx context.Context, userID string, startUTC, endUTC time.Time) ([]domain.FoodRecord, error) {
 	m.foodRecordsQueryCount++
 	return m.records, nil

@@ -1278,8 +1278,9 @@ func (s *StatsService) petChatModel() string {
 }
 
 func (s *StatsService) buildStatsComputation(ctx context.Context, userID string, statsRange string, fallbackTDEE int, fallbackStreakDays int) (*statsComputation, error) {
+	rangeSelector := statsRange
 	statsRange = normalizeStatsRange(statsRange)
-	startDate, endDate, startUTC, endUTC := resolveStatsRangeUTC(statsRange)
+	startDate, endDate, startUTC, endUTC := resolveStatsRangeUTC(rangeSelector)
 
 	records, err := s.repo.GetFoodRecordsForDateRange(ctx, userID, startUTC, endUTC)
 	if err != nil {
@@ -2422,7 +2423,21 @@ func initMealCalories() map[string]float64 {
 }
 
 func resolveStatsRangeUTC(statsRange string) (string, string, time.Time, time.Time) {
-	now := time.Now().In(chinaTZ)
+	return resolveStatsRangeUTCAt(statsRange, time.Now())
+}
+
+func resolveStatsRangeUTCAt(statsRange string, now time.Time) (string, string, time.Time, time.Time) {
+	now = now.In(chinaTZ)
+	if strings.TrimSpace(statsRange) == "calendar_week" {
+		weekday := now.Weekday()
+		if weekday == time.Sunday {
+			weekday = 7
+		}
+		todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, chinaTZ)
+		start := todayStart.AddDate(0, 0, -int(weekday-1))
+		endExclusive := todayStart.AddDate(0, 0, 1)
+		return start.Format("2006-01-02"), todayStart.Format("2006-01-02"), start.UTC(), endExclusive.UTC()
+	}
 	endDate := now.Format("2006-01-02")
 	var daysBack int
 	switch normalizeStatsRange(statsRange) {

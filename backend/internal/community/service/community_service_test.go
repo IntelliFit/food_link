@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -267,10 +268,15 @@ type mockHealthScore struct {
 }
 
 type mockHealthScoreProvider struct {
-	scores map[string]mockHealthScore
+	scores          map[string]mockHealthScore
+	mu              sync.Mutex
+	requestedRanges []string
 }
 
-func (m *mockHealthScoreProvider) GetOverallHealthIndexScore(_ context.Context, userID, _ string) (int, int, bool, error) {
+func (m *mockHealthScoreProvider) GetOverallHealthIndexScore(_ context.Context, userID, statsRange string) (int, int, bool, error) {
+	m.mu.Lock()
+	m.requestedRanges = append(m.requestedRanges, statsRange)
+	m.mu.Unlock()
 	value := m.scores[userID]
 	return value.score, value.recordedDays, value.eligible, nil
 }
@@ -515,11 +521,12 @@ func TestHealthLeaderboardUsesExistingOverallScoreAndSkipsInsufficientData(t *te
 		},
 	}
 	svc := newTestService(mockFeed, &mockNotificationRepo{}, &mockUserRepo{})
-	svc.ConfigureHealthScoreProvider(&mockHealthScoreProvider{scores: map[string]mockHealthScore{
+	provider := &mockHealthScoreProvider{scores: map[string]mockHealthScore{
 		"u1": {score: 82, recordedDays: 6, eligible: true},
 		"u2": {score: 91, recordedDays: 5, eligible: true},
 		"u3": {score: 99, recordedDays: 1, eligible: false},
-	}})
+	}}
+	svc.ConfigureHealthScoreProvider(provider)
 
 	result, err := svc.HealthLeaderboard(context.Background(), "u1")
 
@@ -529,6 +536,10 @@ func TestHealthLeaderboardUsesExistingOverallScoreAndSkipsInsufficientData(t *te
 	assert.Equal(t, 91, result.List[0].HealthIndex)
 	assert.Equal(t, 2, result.List[1].Rank)
 	assert.True(t, result.List[1].IsMe)
+	provider.mu.Lock()
+	assert.Len(t, provider.requestedRanges, 3)
+	assert.Equal(t, []string{"calendar_week", "calendar_week", "calendar_week"}, provider.requestedRanges)
+	provider.mu.Unlock()
 }
 
 func TestFoodNutrientLeaderboardAddsRankAndMetadata(t *testing.T) {
