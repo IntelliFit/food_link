@@ -100,7 +100,7 @@ export type ExecutionMode =
   | 'experimental'
   | 'gemini35_flash'
   | 'gemini35_flash_grouped'
-export type AnalysisEngine = 'legacy_direct' | 'db_first'
+export type AnalysisEngine = 'ai_direct' | 'ai_then_db_exact' | 'db_candidates_ai' | 'legacy_direct' | 'db_first'
 export type AnalyzeRecognitionOutcome = 'ok' | 'soft_reject' | 'hard_reject'
 export type AllowedFoodCategory = 'carb' | 'lean_protein' | 'unknown'
 export type PrecisionSourceType = 'image' | 'text'
@@ -287,6 +287,7 @@ export interface AnalyzeResponse {
   absorption_notes?: string
   context_advice?: string
   analysis_engine?: AnalysisEngine
+  precise_micronutrients?: { requested?: boolean; status?: string; item_count?: number; reason?: string }
   analysis_duration_ms?: number
   resolved_count?: number
   unresolved_count?: number
@@ -3139,6 +3140,7 @@ export interface AnalyzeTaskSubmitParams {
   is_multi_view?: boolean
   execution_mode?: ExecutionMode
   analysis_engine?: AnalysisEngine
+  precise_micronutrients?: boolean
   previousResult?: AnalyzeResponse
   correction_source_task_id?: string
   correction_root_task_id?: string
@@ -3365,6 +3367,7 @@ export interface AnalyzeTextTaskSubmitParams {
   additionalContext?: string
   execution_mode?: ExecutionMode
   analysis_engine?: AnalysisEngine
+  precise_micronutrients?: boolean
   previousResult?: AnalyzeResponse
   correction_source_task_id?: string
   correction_root_task_id?: string
@@ -3427,6 +3430,8 @@ export interface ContinuePrecisionSessionParams {
   user_goal?: string
   remaining_calories?: number
   suggest_ratio_enabled?: boolean
+  analysis_engine?: AnalysisEngine
+  precise_micronutrients?: boolean
   is_multi_view?: boolean
   reference_objects?: PrecisionReferenceObjectInput[]
   capture_protocol?: 'dual_angle_v1' | 'video_keyframes_v1'
@@ -4894,6 +4899,7 @@ export function clearAllStorage() {
     Taro.removeStorageSync('dietGoal')
     Taro.removeStorageSync('stats_page_bundle_v1')
     Taro.removeStorageSync('home_dashboard_local_cache')
+    Taro.removeStorageSync('body_metrics_storage')
 
     // 清除业务数据（可选，根据需求决定是否清除）
     // Taro.removeStorageSync('analyzeImagePath')

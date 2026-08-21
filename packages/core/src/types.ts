@@ -31,7 +31,7 @@ export type ExecutionMode =
   | 'gemini35_flash'
   | 'gemini35_flash_grouped'
 
-export type AnalysisEngine = 'legacy_direct' | 'db_first'
+export type AnalysisEngine = 'ai_direct' | 'ai_then_db_exact' | 'db_candidates_ai' | 'legacy_direct' | 'db_first'
 
 export type PrecisionSourceType = 'image' | 'text'
 

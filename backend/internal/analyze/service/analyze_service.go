@@ -905,6 +905,7 @@ type AnalyzeInput struct {
 	ExecutionMode         *string          `json:"execution_mode"`
 	ModelName             string           `json:"modelName"`
 	AnalysisEngine        string           `json:"analysis_engine"`
+	PreciseMicronutrients bool             `json:"precise_micronutrients"`
 	IsMultiView           bool             `json:"is_multi_view"`
 	ReferenceObjects      []map[string]any `json:"reference_objects"`
 	PreviousResult        map[string]any   `json:"previousResult"`
@@ -1082,7 +1083,7 @@ func mealName(mealType string, tzOffset *int) string {
 }
 
 func buildPrompt(input AnalyzeInput, user *authrepo.User, executionMode string) string {
-	if executionMode == liteExecutionMode && strings.TrimSpace(input.Text) == "" {
+	if executionMode == liteExecutionMode && strings.TrimSpace(input.Text) == "" && !analysisEngineProducesNutrition(input.AnalysisEngine) {
 		return buildLiteImageDBFirstPrompt(input, user)
 	}
 	if (isPrecisionLikeExecutionMode(executionMode) || isGemini35ExecutionMode(executionMode)) && strings.TrimSpace(input.Text) == "" {
@@ -1092,7 +1093,7 @@ func buildPrompt(input AnalyzeInput, user *authrepo.User, executionMode string) 
 		}
 		return buildGemini35ImageDBFirstPrompt(input, user, promptMode)
 	}
-	if executionMode != validExecutionMode && !strings.EqualFold(input.AnalysisEngine, "legacy_direct") {
+	if executionMode != validExecutionMode && !analysisEngineProducesNutrition(input.AnalysisEngine) {
 		if strings.TrimSpace(input.Text) != "" {
 			return buildTextDBFirstPrompt(input, user)
 		}
@@ -1105,7 +1106,7 @@ func buildPrompt(input AnalyzeInput, user *authrepo.User, executionMode string) 
 
 	additionalLine := ""
 	if input.AdditionalContext != "" {
-		additionalLine = fmt.Sprintf(`用户补充背景信息: "%s"。请根据此信息调整对隐形成分或烹饪方式的判断。`, input.AdditionalContext)
+		additionalLine = fmt.Sprintf(`用户补充背景信息: "%s"。必须完整理解其中每个细节，包括整批总用料、烹饪方式、脱水/吸水和生熟重量口径；不得把文字缩成食物名后套常见版本。`, input.AdditionalContext)
 	}
 	imageInputHint := buildImageInputHint(input)
 
@@ -1147,6 +1148,8 @@ func buildPrompt(input AnalyzeInput, user *authrepo.User, executionMode string) 
 若画面里有筷子、勺子、手掌、包装、餐盒、碗盘等参照物，请利用参照物。
 结合常识估算熟食密度、含水量、常见售卖分量，不要只看上表面面积。
 重量口径必须与营养数据库一致：estimatedWeightGrams 表示可食部净重。带壳、带骨、带核食物按去壳/去骨/去核后的可食重量估算，不把虾壳、蟹壳、贝壳、花生壳、瓜子壳、骨头、果核计入重量。
+明确的整批总用油/调料必须按物质守恒计入；脱水只会浓缩每100克营养，不会凭空增加脂肪。状态或原料重量未知时，在 uncertaintyNotes 写明假设，不要伪装成精确值。
+每个食物项必须输出 isComposite 和 addedIngredients。单一、无额外有热量配料的基础食物填 false/[]；只要包含额外油、糖、奶、酱料、调味汁或多个可食组分，填 true 并逐项记录。普通烹调水和无热量盐可不列为 addedIngredients。
 输出要求：
 - 简体中文
 - description <= 16字
@@ -1163,10 +1166,11 @@ Type rule:
 
 JSON:
 {
-  "items":[{"name":"","type":"normal","estimatedWeightGrams":0,"suggestedRatio":100,"nutrients":{"calories":0,"protein":0,"carbs":0,"fat":0,"fiber":0,"sugar":0}}],
+  "items":[{"name":"","type":"normal","foodState":"","weightBasis":"as_served","basisEvidence":"","isComposite":false,"addedIngredients":[],"estimatedWeightGrams":0,"suggestedRatio":100,"assumptions":[],"nutrients":{"calories":0,"protein":0,"carbs":0,"fat":0,"fiber":0,"sugar":0}}],
   "description":"",
   "insight":"",
-  "context_advice":""
+  "context_advice":"",
+  "uncertaintyNotes":[]
 	}`, compact, imageInputHint, additionalLine)
 	}
 
@@ -1489,7 +1493,7 @@ func buildGemini35ImageDBFirstPrompt(input AnalyzeInput, user *authrepo.User, ex
 	}
 	imageInputHint := buildImageInputHint(input)
 	groupLine := "本通道为 Gemini 3.5 Flash 直接识别：一次性输出完整食物清单。"
-	return fmt.Sprintf(`你是专业的食物图像识别与可食部重量估算助手。请基于图片直接识别食物；营养由后端数据库统一查表补充，你不需要输出任何营养数值。
+	prompt := fmt.Sprintf(`你是专业的食物图像识别与可食部重量估算助手。请基于图片直接识别食物；营养由后端数据库统一查表补充，你不需要输出任何营养数值。
 %s%s%s
 %s
 
@@ -1587,6 +1591,12 @@ JSON:
 }
 
 注意：ingredients 为可选字段，仅当该 item 识别到配料表/营养成分表时才输出；未识别到时请省略或置 null。`, tagBlock, imageInputHint, additionalLine, groupLine, imageEdiblePortionPromptRules())
+	if analysisEngineProducesNutrition(input.AnalysisEngine) {
+		prompt += `
+
+营养估算补充要求：本次需要先给出基于完整图片和用户补充信息的独立营养估算，后端随后只把状态库候选作为证据交给 AI 复核，不保证采用候选。每个 item 必须额外输出 nutrients，字段至少包括 calories、protein、carbs、fat、fiber、sugar；数值是该 item 在 estimatedWeightGrams 下的总量。明确的总用油、调料、脱水/吸水、生熟重量口径必须作为一个整体理解，不得按名称套用常见高油或常见含水版本。`
+	}
+	return prompt
 }
 
 func buildGemini35GroupedPlanPrompt(input AnalyzeInput, user *authrepo.User) string {
@@ -1724,6 +1734,11 @@ func buildTextPrompt(input AnalyzeInput, user *authrepo.User, executionMode stri
 输出要求：
 - 简体中文
 - 根据自然语言拆分食物，不要虚构用户没有提到的主食物
+- 必须理解并保留整段原始输入中的每一项约束：原料、总量/单份量、整批总用油或调料、烹饪方式、含水/脱水程度、生熟状态和用户明确说“不知道”的信息；不得只截取食物名和成品重量后套常见成品
+- 整批总用料必须按整批物质守恒理解。例如用户说整批只放了 X 克油，不能把成品按常规高油商品估算；脱水只会浓缩每100克碳水和热量，不会凭空增加脂肪
+- foodState 描述实际状态，weightBasis 描述当前重量是 raw/dry/cooked/as_served/package_net 中哪种口径；basisEvidence 简要写明依据
+- 每项必须输出 isComposite 和 addedIngredients。单一、无额外有热量配料的基础食物填 false/[]；额外油、糖、奶、酱料、调味汁或多个可食组分必须填 true 并逐项记录。普通烹调水和无热量盐可不列入
+- 如果生原料重量、吸水/脱水率或可食比例未知，不要伪装成精确值；在 assumptions 和 uncertaintyNotes 中写明关键假设及其对结果的影响
 - 重量可基于常见份量估算，但必须是可食部净重；带壳、带骨、带核食物按去壳/去骨/去核后的重量，不把壳、骨头、果核计入营养计算
 - 如果用户在输入文字中明确声明了具体重量数值（如"59克"、"37g"、"100克"等），则 estimatedWeightGrams 必须严格等于该数值，禁止进行任何四舍五入、估算或修正
 - description <= 24字
@@ -1738,13 +1753,14 @@ Type rule:
 
 JSON:
 {
-  "items":[{"name":"","type":"normal","estimatedWeightGrams":0,"suggestedRatio":100,"nutrients":{"calories":0,"protein":0,"carbs":0,"fat":0,"fiber":0,"sugar":0}}],
+  "items":[{"name":"","type":"normal","foodState":"","weightBasis":"as_served","basisEvidence":"","isComposite":false,"addedIngredients":[],"estimatedWeightGrams":0,"suggestedRatio":100,"assumptions":[],"nutrients":{"calories":0,"protein":0,"carbs":0,"fat":0,"fiber":0,"sugar":0}}],
   "description":"",
   "insight":"",
   "pfc_ratio_comment":"",
   "eating_order_advice":"",
   "absorption_notes":"",
-  "context_advice":""
+  "context_advice":"",
+  "uncertaintyNotes":[]
 }`, strings.TrimSpace(input.Text), tags, contextLine, modeLine)
 }
 
@@ -2153,6 +2169,7 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 	if userID != "" && s.users != nil {
 		user, _ = s.users.FindByID(ctx, userID)
 	}
+	input.AnalysisEngine = normalizeAnalysisEngine(input.AnalysisEngine, executionMode, false)
 
 	prompt := buildPrompt(input, user, executionMode)
 
@@ -4449,6 +4466,7 @@ func (s *AnalyzeService) AnalyzeText(ctx context.Context, userID string, input A
 	if userID != "" && s.users != nil {
 		user, _ = s.users.FindByID(ctx, userID)
 	}
+	input.AnalysisEngine = normalizeAnalysisEngine(input.AnalysisEngine, executionMode, true)
 	prompt := buildPrompt(input, user, executionMode)
 	provider, model := resolveModelConfig(input.ModelName)
 	var client LLMClient
@@ -4697,6 +4715,8 @@ func buildAnalyzeResponse(parsed map[string]any, executionMode, provider, model 
 		"analysis_duration_ms": durationMs,
 		"resolved_count":       len(items),
 		"unresolved_count":     0,
+		"uncertaintyNotes":     toStringSlice(parsed["uncertaintyNotes"]),
+		"followupQuestions":    toStringSlice(parsed["followupQuestions"]),
 	}
 
 	if executionMode != validExecutionMode {
@@ -4707,13 +4727,11 @@ func buildAnalyzeResponse(parsed map[string]any, executionMode, provider, model 
 		resp["rejectionReason"] = nil
 		resp["retakeGuidance"] = nil
 		resp["allowedFoodCategory"] = nil
-		resp["followupQuestions"] = nil
 	} else {
 		resp["recognitionOutcome"] = optStr(parsed["recognitionOutcome"])
 		resp["rejectionReason"] = optStr(parsed["rejectionReason"])
 		resp["retakeGuidance"] = toStringSlice(parsed["retakeGuidance"])
 		resp["allowedFoodCategory"] = optStr(parsed["allowedFoodCategory"])
-		resp["followupQuestions"] = toStringSlice(parsed["followupQuestions"])
 	}
 
 	_ = provider
@@ -5083,10 +5101,13 @@ func modelResultFrom(result map[string]any, err error, modelName string) map[str
 
 func (s *AnalyzeService) finalizeAnalyzeResponse(ctx context.Context, userID string, parsed map[string]any, input AnalyzeInput, executionMode, provider, model string, durationMs float64) (map[string]any, error) {
 	resp := buildAnalyzeResponse(parsed, executionMode, provider, model, durationMs)
-	if strings.EqualFold(input.AnalysisEngine, "legacy_direct") {
-		resp["analysis_engine"] = "legacy_direct"
-		return s.applySuggestedRatios(ctx, resp, input), nil
+	engine := strings.ToLower(strings.TrimSpace(input.AnalysisEngine))
+	if engine == "" {
+		engine = analysisEngineLegacyDBFirst
+	} else {
+		engine = normalizeAnalysisEngine(engine, executionMode, strings.TrimSpace(input.Text) != "")
 	}
+	input.AnalysisEngine = engine
 	fastMode := isFastExecutionMode(executionMode)
 	postprocessCtx := ctx
 	postprocessCancel := func() {}
@@ -5101,16 +5122,35 @@ func (s *AnalyzeService) finalizeAnalyzeResponse(ctx context.Context, userID str
 	} else {
 		resp = s.applyEdiblePortionRatios(postprocessCtx, resp, input)
 	}
-	resp = s.applyDBFirstNutritionWithOptions(postprocessCtx, resp, dbFirstNutritionOptions{
-		additionalContext:            input.AdditionalContext,
-		packagedIntegrationEnabled:   true,
-		packagedExperimentCompatMode: isPackagedExperimentExecutionMode(executionMode),
-		// Even fast mode may only reuse a non-exact library row after the small
-		// no-thinking identity model confirms full equivalence. On timeout it
-		// falls through to fresh nutrition estimation instead of fuzzy reuse.
-		skipSemanticRerank:       false,
-		nutritionFallbackTimeout: fastModeDuration(fastMode, fastNutritionFallbackTimeout),
-	})
+	switch engine {
+	case analysisEngineLegacyDirect, analysisEngineAIDirect:
+		resp = finalizeAIDirectNutrition(resp, engine)
+		resp = s.applyAuthoritativePackagedNutrition(postprocessCtx, resp)
+	case analysisEngineAIThenDBExact:
+		resp = s.applyAIThenExactDBNutrition(postprocessCtx, resp, input)
+	case analysisEngineDBCandidates:
+		resp = s.applyCandidateGuidedNutrition(postprocessCtx, resp, input)
+	default:
+		resp = s.applyDBFirstNutritionWithOptions(postprocessCtx, resp, dbFirstNutritionOptions{
+			additionalContext:            fullNutritionContext(input),
+			packagedIntegrationEnabled:   true,
+			packagedExperimentCompatMode: isPackagedExperimentExecutionMode(executionMode),
+			skipSemanticRerank:           false,
+			nutritionFallbackTimeout:     fastModeDuration(fastMode, fastNutritionFallbackTimeout),
+		})
+	}
+	if input.PreciseMicronutrients {
+		items, err := s.ApplyPreciseMicronutrientsToResolvedItems(postprocessCtx, toItems(resp["items"]), fullNutritionContext(input))
+		if err != nil {
+			resp["precise_micronutrients"] = map[string]any{"requested": true, "status": "failed", "reason": err.Error()}
+			logger.Warn(ctx, "精准微量营养补全失败，保留基础营养结果", logger.Err(err), slog.String("analysis_engine", engine))
+		} else {
+			resp["items"] = items
+			resp["precise_micronutrients"] = map[string]any{"requested": true, "status": "completed", "item_count": len(items)}
+		}
+	} else {
+		resp["precise_micronutrients"] = map[string]any{"requested": false, "status": "not_requested"}
+	}
 	resp = s.applySuggestedRatios(postprocessCtx, resp, input)
 	return resp, nil
 }
@@ -5307,6 +5347,7 @@ type nutritionCandidateQuery struct {
 	FoodState           string `json:"foodState,omitempty"`
 	WeightBasis         string `json:"weightBasis,omitempty"`
 	RecognitionEvidence string `json:"recognitionEvidence,omitempty"`
+	FullContext         string `json:"fullContext,omitempty"`
 }
 
 type nutritionFallbackResult struct {
@@ -7861,6 +7902,11 @@ func (s *AnalyzeService) rerankNutritionCandidatesWithAI(ctx context.Context, qu
 				"carbsPer100g":   round4(row.Food.CarbsPer100g),
 				"fatPer100g":     round4(row.Food.FatPer100g),
 				"source":         row.Food.Source,
+				"baseFoodKey":    row.Food.BaseFoodKey,
+				"foodState":      row.Food.FoodState,
+				"weightBasis":    row.Food.WeightBasis,
+				"preparation":    row.Food.PreparationMethod,
+				"stateTags":      row.Food.StateTags,
 			})
 		}
 		requestItems = append(requestItems, requestItem{
@@ -7875,7 +7921,7 @@ func (s *AnalyzeService) rerankNutritionCandidatesWithAI(ctx context.Context, qu
 	sort.SliceStable(requestItems, func(i, j int) bool {
 		return requestItems[i].Index < requestItems[j].Index
 	})
-	systemPrompt := "你是低延迟食物身份核验器，不是相似度排序器。给定识别名称、食物状态、重量口径和最多5个营养库候选，只能在候选与输入是同一种食物、同一加工/烹饪状态、同一配方组成、同一干湿营养口径时复用。共享关键词、属于同类或营养看起来接近都不算匹配。任何关键字段不确定都必须拒绝复用。只返回JSON。"
+	systemPrompt := "你是食物身份与营养口径核验器，不是相似度排序器。必须阅读用户完整原始描述，逐项考虑原料、数量、总用料、加工/烹饪状态、脱水或吸水、生熟重量口径和包装标签。给定最多5个营养库候选，只能在候选与输入是同一种食物、同一加工/烹饪状态、同一配方组成、同一干湿营养口径时复用。共享关键词、属于同类或营养看起来接近都不算匹配。任何关键字段不确定都必须拒绝候选并保留AI原始估算。只返回JSON。"
 	userPrompt := map[string]any{
 		"task": "逐项判断候选中是否存在可以按同一每100克营养口径直接复用的完全同一食物",
 		"rules": []string{

@@ -53,6 +53,9 @@ func AutoMigrate(ctx context.Context, db *gorm.DB, schema string) error {
 	if err := ensureNutritionQualityBackfill(ctx, db); err != nil {
 		return err
 	}
+	if err := ensureCommonFoodStateSeed(ctx, db); err != nil {
+		return err
+	}
 	if err := ensureTrialEntitlementIndexes(ctx, db); err != nil {
 		return err
 	}
@@ -199,7 +202,306 @@ func MigrateNutritionQuality(ctx context.Context, db *gorm.DB, schema string) er
 	if err := ensureNutritionQualityConstraints(ctx, db); err != nil {
 		return err
 	}
-	return ensureNutritionQualityBackfill(ctx, db)
+	if err := ensureNutritionQualityBackfill(ctx, db); err != nil {
+		return err
+	}
+	return ensureCommonFoodStateSeed(ctx, db)
+}
+
+// MigrateNutritionStates adds explicit preparation/state dimensions and the
+// reviewed common-state anchors without running unrelated application seeds.
+func MigrateNutritionStates(ctx context.Context, db *gorm.DB, schema string) error {
+	if err := prepareSchema(ctx, db, schema); err != nil {
+		return err
+	}
+	if err := db.WithContext(ctx).AutoMigrate(
+		&migrationdo.FoodNutritionDO{},
+		&migrationdo.FoodNutritionAliasDO{},
+	); err != nil {
+		return fmt.Errorf("auto migrate nutrition states: %w", err)
+	}
+	if err := ensureNutritionQualityConstraints(ctx, db); err != nil {
+		return err
+	}
+	return ensureCommonFoodStateSeed(ctx, db)
+}
+
+type commonFoodStateSeed struct {
+	ID                string
+	CanonicalName     string
+	NormalizedName    string
+	BaseFoodKey       string
+	FoodState         string
+	WeightBasis       string
+	PreparationMethod string
+	StateTags         []string
+	Kcal              float64
+	Protein           float64
+	Carbs             float64
+	Fat               float64
+	FDCID             int
+	Aliases           []string
+}
+
+type NutritionStateVerificationRow struct {
+	ID                string  `gorm:"column:id" json:"id"`
+	CanonicalName     string  `gorm:"column:canonical_name" json:"canonical_name"`
+	NormalizedName    string  `gorm:"column:normalized_name" json:"normalized_name"`
+	BaseFoodKey       string  `gorm:"column:base_food_key" json:"base_food_key"`
+	FoodState         string  `gorm:"column:food_state" json:"food_state"`
+	WeightBasis       string  `gorm:"column:weight_basis" json:"weight_basis"`
+	PreparationMethod string  `gorm:"column:preparation_method" json:"preparation_method"`
+	QualityTier       string  `gorm:"column:quality_tier" json:"quality_tier"`
+	IsActive          bool    `gorm:"column:is_active" json:"is_active"`
+	KcalPer100g       float64 `gorm:"column:kcal_per_100g" json:"kcal_per_100g"`
+}
+
+type NutritionStateVerification struct {
+	Complete              bool                            `json:"complete"`
+	ExpectedCount         int                             `json:"expected_count"`
+	FoundCount            int                             `json:"found_count"`
+	VisibleCount          int                             `json:"visible_count"`
+	StateMetadataCount    int                             `json:"state_metadata_count"`
+	ExpectedAliasCount    int                             `json:"expected_alias_count"`
+	ApprovedAliasCount    int64                           `json:"approved_alias_count"`
+	CompositeIndexPresent bool                            `json:"composite_index_present"`
+	MissingNormalized     []string                        `json:"missing_normalized_names"`
+	InvalidNormalized     []string                        `json:"invalid_normalized_names"`
+	MissingAliases        []string                        `json:"missing_aliases"`
+	InvalidAliases        []string                        `json:"invalid_aliases"`
+	Rows                  []NutritionStateVerificationRow `json:"rows"`
+}
+
+func commonFoodStateSeeds() []commonFoodStateSeed {
+	return []commonFoodStateSeed{
+		{ID: "a1000000-0000-4000-8000-000000000001", CanonicalName: "土豆（生，带皮可食部）", NormalizedName: "土豆生带皮可食部", BaseFoodKey: "potato", FoodState: "raw", WeightBasis: "raw_edible", PreparationMethod: "raw", StateTags: []string{"生", "带皮", "可食部"}, Kcal: 77, Protein: 2.05, Carbs: 17.5, Fat: 0.09, FDCID: 170026, Aliases: []string{"生土豆（带皮）", "生马铃薯（带皮）"}},
+		{ID: "a1000000-0000-4000-8000-000000000002", CanonicalName: "土豆（烤，带皮，无额外油）", NormalizedName: "土豆烤带皮无额外油", BaseFoodKey: "potato", FoodState: "baked", WeightBasis: "cooked_edible", PreparationMethod: "baked_no_added_oil", StateTags: []string{"烤", "带皮", "无额外油"}, Kcal: 93, Protein: 2.5, Carbs: 21.2, Fat: 0.13, FDCID: 170111, Aliases: []string{"无油烤土豆", "烤马铃薯（无额外油）"}},
+		{ID: "a1000000-0000-4000-8000-000000000003", CanonicalName: "土豆（水煮，去皮，无盐）", NormalizedName: "土豆水煮去皮无盐", BaseFoodKey: "potato", FoodState: "cooked", WeightBasis: "cooked_edible", PreparationMethod: "boiled", StateTags: []string{"水煮", "去皮", "无盐"}, Kcal: 86, Protein: 1.71, Carbs: 20, Fat: 0.1, FDCID: 170440, Aliases: []string{"水煮土豆（去皮）", "水煮马铃薯（去皮）"}},
+		{ID: "a1000000-0000-4000-8000-000000000004", CanonicalName: "马铃薯粉（干）", NormalizedName: "马铃薯粉干", BaseFoodKey: "potato", FoodState: "dry", WeightBasis: "dry", PreparationMethod: "milled_dehydrated", StateTags: []string{"干制", "粉"}, Kcal: 357, Protein: 6.9, Carbs: 83.1, Fat: 0.34, FDCID: 168446, Aliases: []string{"土豆粉（干）"}},
+		{ID: "a1000000-0000-4000-8000-000000000005", CanonicalName: "白米（生）", NormalizedName: "白米生", BaseFoodKey: "white_rice", FoodState: "raw", WeightBasis: "dry_raw", PreparationMethod: "uncooked", StateTags: []string{"生", "干重"}, Kcal: 365, Protein: 7.13, Carbs: 80, Fat: 0.66, FDCID: 169756, Aliases: []string{"生白米", "大米（生重）"}},
+		{ID: "a1000000-0000-4000-8000-000000000006", CanonicalName: "米饭（白米，熟）", NormalizedName: "米饭白米熟", BaseFoodKey: "white_rice", FoodState: "cooked", WeightBasis: "cooked", PreparationMethod: "boiled", StateTags: []string{"熟", "含水"}, Kcal: 130, Protein: 2.69, Carbs: 28.2, Fat: 0.28, FDCID: 169757, Aliases: []string{"熟白米饭", "白米饭（熟重）"}},
+		{ID: "a1000000-0000-4000-8000-000000000007", CanonicalName: "燕麦片（干）", NormalizedName: "燕麦片干", BaseFoodKey: "oats", FoodState: "dry", WeightBasis: "dry", PreparationMethod: "uncooked", StateTags: []string{"干", "未加水"}, Kcal: 379, Protein: 13.2, Carbs: 67.7, Fat: 6.52, FDCID: 173904, Aliases: []string{"干燕麦片", "燕麦片（干重）"}},
+		{ID: "a1000000-0000-4000-8000-000000000008", CanonicalName: "燕麦粥（水煮）", NormalizedName: "燕麦粥水煮", BaseFoodKey: "oats", FoodState: "cooked", WeightBasis: "cooked", PreparationMethod: "boiled_with_water", StateTags: []string{"熟", "水煮", "含水"}, Kcal: 71, Protein: 2.54, Carbs: 12, Fat: 1.52, FDCID: 173905, Aliases: []string{"水煮燕麦粥", "熟燕麦片（加水）"}},
+		{ID: "a1000000-0000-4000-8000-000000000009", CanonicalName: "意大利面（干）", NormalizedName: "意大利面干", BaseFoodKey: "pasta", FoodState: "dry", WeightBasis: "dry", PreparationMethod: "uncooked", StateTags: []string{"干", "未煮"}, Kcal: 371, Protein: 13, Carbs: 74.7, Fat: 1.51, FDCID: 168927, Aliases: []string{"干意面", "意面（干重）"}},
+		{ID: "a1000000-0000-4000-8000-000000000010", CanonicalName: "意大利面（水煮，无盐）", NormalizedName: "意大利面水煮无盐", BaseFoodKey: "pasta", FoodState: "cooked", WeightBasis: "cooked", PreparationMethod: "boiled", StateTags: []string{"熟", "水煮", "含水"}, Kcal: 158, Protein: 5.8, Carbs: 30.9, Fat: 0.93, FDCID: 168928, Aliases: []string{"熟意面（水煮）", "意面（熟重）"}},
+		{ID: "a1000000-0000-4000-8000-000000000011", CanonicalName: "红薯（生，可食部）", NormalizedName: "红薯生可食部", BaseFoodKey: "sweet_potato", FoodState: "raw", WeightBasis: "raw_edible", PreparationMethod: "raw", StateTags: []string{"生", "可食部"}, Kcal: 86, Protein: 1.57, Carbs: 20.12, Fat: 0.05, FDCID: 168482, Aliases: []string{"生红薯", "生甘薯"}},
+		{ID: "a1000000-0000-4000-8000-000000000012", CanonicalName: "红薯（烤，带皮取肉，无盐无额外油）", NormalizedName: "红薯烤带皮取肉无盐无额外油", BaseFoodKey: "sweet_potato", FoodState: "baked", WeightBasis: "cooked_edible", PreparationMethod: "baked_no_added_oil", StateTags: []string{"烤", "带皮取肉", "无盐", "无额外油"}, Kcal: 90, Protein: 2.01, Carbs: 20.71, Fat: 0.15, FDCID: 168483, Aliases: []string{"烤红薯（无额外油）", "烤地瓜（无额外油）"}},
+		{ID: "a1000000-0000-4000-8000-000000000013", CanonicalName: "红薯（水煮，去皮）", NormalizedName: "红薯水煮去皮", BaseFoodKey: "sweet_potato", FoodState: "cooked", WeightBasis: "cooked_edible", PreparationMethod: "boiled", StateTags: []string{"水煮", "去皮", "熟"}, Kcal: 76, Protein: 1.37, Carbs: 17.72, Fat: 0.14, FDCID: 168484, Aliases: []string{"水煮红薯（去皮）", "水煮地瓜（去皮）"}},
+		{ID: "a1000000-0000-4000-8000-000000000014", CanonicalName: "鸡蛋（全蛋，生，鲜）", NormalizedName: "鸡蛋全蛋生鲜", BaseFoodKey: "whole_egg", FoodState: "raw", WeightBasis: "raw_edible", PreparationMethod: "raw", StateTags: []string{"全蛋", "生", "鲜"}, Kcal: 143, Protein: 12.56, Carbs: 0.72, Fat: 9.51, FDCID: 171287, Aliases: []string{"生鸡蛋（全蛋）", "鲜鸡蛋（生全蛋）"}},
+		{ID: "a1000000-0000-4000-8000-000000000015", CanonicalName: "鸡蛋（全蛋，硬煮）", NormalizedName: "鸡蛋全蛋硬煮", BaseFoodKey: "whole_egg", FoodState: "cooked", WeightBasis: "cooked_edible", PreparationMethod: "hard_boiled", StateTags: []string{"全蛋", "硬煮", "熟"}, Kcal: 155, Protein: 12.58, Carbs: 1.12, Fat: 10.61, FDCID: 173424, Aliases: []string{"水煮鸡蛋（全蛋）", "白煮蛋（全蛋）"}},
+		{ID: "a1000000-0000-4000-8000-000000000016", CanonicalName: "鸡蛋（全蛋，煎制）", NormalizedName: "鸡蛋全蛋煎制", BaseFoodKey: "whole_egg", FoodState: "fried", WeightBasis: "cooked_edible", PreparationMethod: "fried", StateTags: []string{"全蛋", "煎制", "熟"}, Kcal: 196, Protein: 13.61, Carbs: 0.83, Fat: 14.84, FDCID: 173423, Aliases: []string{"煎鸡蛋（全蛋，USDA平均）", "煎蛋（全蛋，USDA平均）"}},
+		{ID: "a1000000-0000-4000-8000-000000000017", CanonicalName: "鸡胸肉（去皮去骨，生）", NormalizedName: "鸡胸肉去皮去骨生", BaseFoodKey: "chicken_breast", FoodState: "raw", WeightBasis: "raw_edible", PreparationMethod: "raw", StateTags: []string{"去皮", "去骨", "生"}, Kcal: 120, Protein: 22.5, Carbs: 0, Fat: 2.62, FDCID: 171077, Aliases: []string{"生鸡胸肉（去皮去骨）", "去皮鸡胸肉（生重）"}},
+		{ID: "a1000000-0000-4000-8000-000000000018", CanonicalName: "鸡胸肉（去皮，烤熟）", NormalizedName: "鸡胸肉去皮烤熟", BaseFoodKey: "chicken_breast", FoodState: "roasted", WeightBasis: "cooked_edible", PreparationMethod: "roasted", StateTags: []string{"去皮", "烤", "熟"}, Kcal: 165, Protein: 31.02, Carbs: 0, Fat: 3.57, FDCID: 171477, Aliases: []string{"烤鸡胸肉（去皮）", "去皮鸡胸肉（烤熟）"}},
+		{ID: "a1000000-0000-4000-8000-000000000019", CanonicalName: "小扁豆（干，生）", NormalizedName: "小扁豆干生", BaseFoodKey: "lentil", FoodState: "dry", WeightBasis: "dry_raw", PreparationMethod: "uncooked", StateTags: []string{"干", "生", "成熟籽"}, Kcal: 352, Protein: 24.63, Carbs: 63.35, Fat: 1.06, FDCID: 172420, Aliases: []string{"干小扁豆", "小扁豆（干重）"}},
+		{ID: "a1000000-0000-4000-8000-000000000020", CanonicalName: "小扁豆（水煮，无盐）", NormalizedName: "小扁豆水煮无盐", BaseFoodKey: "lentil", FoodState: "cooked", WeightBasis: "cooked", PreparationMethod: "boiled", StateTags: []string{"水煮", "无盐", "熟"}, Kcal: 116, Protein: 9.02, Carbs: 20.13, Fat: 0.38, FDCID: 172421, Aliases: []string{"水煮小扁豆（无盐）", "熟小扁豆（水煮）"}},
+		{ID: "a1000000-0000-4000-8000-000000000021", CanonicalName: "黄豆（成熟籽，干，生）", NormalizedName: "黄豆成熟籽干生", BaseFoodKey: "soybean", FoodState: "dry", WeightBasis: "dry_raw", PreparationMethod: "uncooked", StateTags: []string{"成熟籽", "干", "生"}, Kcal: 446, Protein: 36.49, Carbs: 30.16, Fat: 19.94, FDCID: 174270, Aliases: []string{"干黄豆（生）", "大豆（干重，生）"}},
+		{ID: "a1000000-0000-4000-8000-000000000022", CanonicalName: "黄豆（成熟籽，水煮，加盐）", NormalizedName: "黄豆成熟籽水煮加盐", BaseFoodKey: "soybean", FoodState: "cooked", WeightBasis: "cooked", PreparationMethod: "boiled_with_salt", StateTags: []string{"成熟籽", "水煮", "加盐", "熟"}, Kcal: 172, Protein: 18.21, Carbs: 8.36, Fat: 8.97, FDCID: 174299, Aliases: []string{"水煮黄豆（加盐）", "熟黄豆（水煮加盐）"}},
+		{ID: "a1000000-0000-4000-8000-000000000023", CanonicalName: "鹰嘴豆（成熟籽，干，生）", NormalizedName: "鹰嘴豆成熟籽干生", BaseFoodKey: "chickpea", FoodState: "dry", WeightBasis: "dry_raw", PreparationMethod: "uncooked", StateTags: []string{"成熟籽", "干", "生"}, Kcal: 378, Protein: 20.47, Carbs: 62.95, Fat: 6.04, FDCID: 173756, Aliases: []string{"干鹰嘴豆（生）", "鹰嘴豆（干重）"}},
+		{ID: "a1000000-0000-4000-8000-000000000024", CanonicalName: "鹰嘴豆（水煮，无盐）", NormalizedName: "鹰嘴豆水煮无盐", BaseFoodKey: "chickpea", FoodState: "cooked", WeightBasis: "cooked", PreparationMethod: "boiled", StateTags: []string{"水煮", "无盐", "熟"}, Kcal: 164, Protein: 8.86, Carbs: 27.42, Fat: 2.59, FDCID: 173757, Aliases: []string{"水煮鹰嘴豆（无盐）", "熟鹰嘴豆（水煮）"}},
+		{ID: "a1000000-0000-4000-8000-000000000025", CanonicalName: "胡萝卜（生）", NormalizedName: "胡萝卜生", BaseFoodKey: "carrot", FoodState: "raw", WeightBasis: "raw_edible", PreparationMethod: "raw", StateTags: []string{"生", "可食部"}, Kcal: 41, Protein: 0.93, Carbs: 9.58, Fat: 0.24, FDCID: 170393, Aliases: []string{"生胡萝卜", "胡萝卜（生重）"}},
+		{ID: "a1000000-0000-4000-8000-000000000026", CanonicalName: "胡萝卜（水煮沥干，无盐）", NormalizedName: "胡萝卜水煮沥干无盐", BaseFoodKey: "carrot", FoodState: "cooked", WeightBasis: "cooked_edible", PreparationMethod: "boiled_drained", StateTags: []string{"水煮", "沥干", "无盐", "熟"}, Kcal: 35, Protein: 0.76, Carbs: 8.22, Fat: 0.18, FDCID: 170394, Aliases: []string{"水煮胡萝卜（无盐）", "熟胡萝卜（水煮）"}},
+		{ID: "a1000000-0000-4000-8000-000000000027", CanonicalName: "西兰花（生）", NormalizedName: "西兰花生", BaseFoodKey: "broccoli", FoodState: "raw", WeightBasis: "raw_edible", PreparationMethod: "raw", StateTags: []string{"生", "可食部"}, Kcal: 34, Protein: 2.82, Carbs: 6.64, Fat: 0.37, FDCID: 170379, Aliases: []string{"生西兰花", "绿花椰菜（生）"}},
+		{ID: "a1000000-0000-4000-8000-000000000028", CanonicalName: "西兰花（水煮沥干，无盐）", NormalizedName: "西兰花水煮沥干无盐", BaseFoodKey: "broccoli", FoodState: "cooked", WeightBasis: "cooked_edible", PreparationMethod: "boiled_drained", StateTags: []string{"水煮", "沥干", "无盐", "熟"}, Kcal: 35, Protein: 2.38, Carbs: 7.18, Fat: 0.41, FDCID: 169967, Aliases: []string{"水煮西兰花（无盐）", "熟绿花椰菜（水煮）"}},
+	}
+}
+
+// VerifyNutritionStates performs a read-only audit of the state dimensions and
+// common authoritative anchors. It is intentionally separate from migration so
+// deploy and operations workflows can prove the database state without writes.
+func VerifyNutritionStates(ctx context.Context, db *gorm.DB) (*NutritionStateVerification, error) {
+	seeds := commonFoodStateSeeds()
+	report := &NutritionStateVerification{
+		ExpectedCount:     len(seeds),
+		MissingNormalized: []string{},
+		InvalidNormalized: []string{},
+		MissingAliases:    []string{},
+		InvalidAliases:    []string{},
+		Rows:              []NutritionStateVerificationRow{},
+	}
+	normalizedNames := make([]string, 0, len(seeds))
+	for _, seed := range seeds {
+		normalizedNames = append(normalizedNames, seed.NormalizedName)
+		report.ExpectedAliasCount += len(seed.Aliases)
+	}
+	if !db.Migrator().HasTable(&migrationdo.FoodNutritionDO{}) {
+		report.MissingNormalized = append(report.MissingNormalized, normalizedNames...)
+		return report, nil
+	}
+	if err := db.WithContext(ctx).Model(&migrationdo.FoodNutritionDO{}).
+		Where("normalized_name IN ?", normalizedNames).Order("normalized_name ASC").Find(&report.Rows).Error; err != nil {
+		return nil, fmt.Errorf("verify nutrition state rows: %w", err)
+	}
+	report.FoundCount = len(report.Rows)
+	rowsByName := make(map[string]NutritionStateVerificationRow, len(report.Rows))
+	for _, row := range report.Rows {
+		rowsByName[row.NormalizedName] = row
+		if row.IsActive && isTrustedNutritionQualityTier(row.QualityTier) {
+			report.VisibleCount++
+		}
+		if strings.TrimSpace(row.BaseFoodKey) != "" && strings.TrimSpace(row.FoodState) != "" &&
+			strings.TrimSpace(row.WeightBasis) != "" && strings.TrimSpace(row.PreparationMethod) != "" {
+			report.StateMetadataCount++
+		}
+	}
+	for _, seed := range seeds {
+		row, ok := rowsByName[seed.NormalizedName]
+		if !ok {
+			report.MissingNormalized = append(report.MissingNormalized, seed.NormalizedName)
+			continue
+		}
+		if !row.IsActive || !isTrustedNutritionQualityTier(row.QualityTier) ||
+			strings.TrimSpace(row.BaseFoodKey) == "" || strings.TrimSpace(row.FoodState) == "" ||
+			strings.TrimSpace(row.WeightBasis) == "" || strings.TrimSpace(row.PreparationMethod) == "" {
+			report.InvalidNormalized = append(report.InvalidNormalized, seed.NormalizedName)
+		}
+	}
+	expectedAliasFoodIDs := map[string]string{}
+	for _, seed := range seeds {
+		row, ok := rowsByName[seed.NormalizedName]
+		if !ok {
+			continue
+		}
+		for _, aliasName := range seed.Aliases {
+			normalizedAlias := normalizeCommonFoodStateAlias(aliasName)
+			expectedAliasFoodIDs[normalizedAlias] = row.ID
+		}
+	}
+	if len(expectedAliasFoodIDs) > 0 && db.Migrator().HasTable(&migrationdo.FoodNutritionAliasDO{}) {
+		aliasNames := make([]string, 0, len(expectedAliasFoodIDs))
+		for aliasName := range expectedAliasFoodIDs {
+			aliasNames = append(aliasNames, aliasName)
+		}
+		var aliases []migrationdo.FoodNutritionAliasDO
+		if err := db.WithContext(ctx).Where("normalized_alias IN ?", aliasNames).Find(&aliases).Error; err != nil {
+			return nil, fmt.Errorf("verify nutrition state aliases: %w", err)
+		}
+		aliasesByName := make(map[string]migrationdo.FoodNutritionAliasDO, len(aliases))
+		for _, alias := range aliases {
+			aliasesByName[alias.NormalizedAlias] = alias
+		}
+		for aliasName, expectedFoodID := range expectedAliasFoodIDs {
+			alias, ok := aliasesByName[aliasName]
+			if !ok {
+				report.MissingAliases = append(report.MissingAliases, aliasName)
+				continue
+			}
+			if alias.FoodID != expectedFoodID || alias.MatchStatus != "approved_exact" {
+				report.InvalidAliases = append(report.InvalidAliases, aliasName)
+				continue
+			}
+			report.ApprovedAliasCount++
+		}
+	}
+	report.CompositeIndexPresent = db.Migrator().HasIndex(&migrationdo.FoodNutritionDO{}, "idx_food_nutrition_library_base_state")
+	report.Complete = report.FoundCount == report.ExpectedCount &&
+		report.VisibleCount == report.ExpectedCount &&
+		report.StateMetadataCount == report.ExpectedCount &&
+		len(report.MissingNormalized) == 0 && len(report.InvalidNormalized) == 0 &&
+		len(report.MissingAliases) == 0 && len(report.InvalidAliases) == 0 &&
+		report.ApprovedAliasCount == int64(report.ExpectedAliasCount) && report.CompositeIndexPresent
+	return report, nil
+}
+
+func isTrustedNutritionQualityTier(value string) bool {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "authoritative", "reviewed_estimate", "legacy_curated":
+		return true
+	default:
+		return false
+	}
+}
+
+func ensureCommonFoodStateSeed(ctx context.Context, db *gorm.DB) error {
+	if !db.Migrator().HasTable(&migrationdo.FoodNutritionDO{}) {
+		return nil
+	}
+	source := "USDA FoodData Central SR Legacy"
+	return db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		for _, seed := range commonFoodStateSeeds() {
+			row := migrationdo.FoodNutritionDO{
+				ID: seed.ID, CanonicalName: seed.CanonicalName, NormalizedName: seed.NormalizedName,
+				BaseFoodKey: seed.BaseFoodKey, FoodState: seed.FoodState, WeightBasis: seed.WeightBasis,
+				PreparationMethod: seed.PreparationMethod, StateTags: seed.StateTags,
+				KcalPer100g: seed.Kcal, ProteinPer100g: seed.Protein, CarbsPer100g: seed.Carbs, FatPer100g: seed.Fat,
+				IsActive: true, Source: &source, QualityTier: "authoritative",
+				QualityEvidence: commonFoodStateQualityEvidence(seed),
+			}
+
+			var persisted migrationdo.FoodNutritionDO
+			err := tx.Where("normalized_name = ?", seed.NormalizedName).Take(&persisted).Error
+			switch {
+			case errors.Is(err, gorm.ErrRecordNotFound):
+				if err := tx.Create(&row).Error; err != nil {
+					return fmt.Errorf("seed common food state %s: %w", seed.CanonicalName, err)
+				}
+				persisted = row
+			case err != nil:
+				return fmt.Errorf("resolve common food state %s: %w", seed.CanonicalName, err)
+			default:
+				metadata := migrationdo.FoodNutritionDO{
+					BaseFoodKey: seed.BaseFoodKey, FoodState: seed.FoodState, WeightBasis: seed.WeightBasis,
+					PreparationMethod: seed.PreparationMethod, StateTags: seed.StateTags,
+				}
+				fields := []string{"base_food_key", "food_state", "weight_basis", "preparation_method", "state_tags"}
+				if shouldUpgradeCommonFoodStateSeed(persisted) {
+					metadata.CanonicalName = seed.CanonicalName
+					metadata.KcalPer100g = seed.Kcal
+					metadata.ProteinPer100g = seed.Protein
+					metadata.CarbsPer100g = seed.Carbs
+					metadata.FatPer100g = seed.Fat
+					metadata.IsActive = true
+					metadata.Source = &source
+					metadata.QualityTier = "authoritative"
+					metadata.QualityEvidence = commonFoodStateQualityEvidence(seed)
+					fields = append(fields,
+						"canonical_name", "kcal_per_100g", "protein_per_100g", "carbs_per_100g", "fat_per_100g",
+						"is_active", "source", "quality_tier", "quality_evidence",
+					)
+				}
+				if err := tx.Model(&migrationdo.FoodNutritionDO{}).Where("id = ?", persisted.ID).Select(fields).Updates(&metadata).Error; err != nil {
+					return fmt.Errorf("update common food state %s: %w", seed.CanonicalName, err)
+				}
+			}
+
+			for aliasIndex, aliasName := range seed.Aliases {
+				alias := migrationdo.FoodNutritionAliasDO{
+					ID:     fmt.Sprintf("b%07d-0000-4000-8000-%012d", seed.FDCID%10000000, aliasIndex+1),
+					FoodID: persisted.ID, AliasName: aliasName, NormalizedAlias: normalizeCommonFoodStateAlias(aliasName),
+					MatchStatus:      "approved_exact",
+					ApprovalEvidence: map[string]any{"reason": "same food and explicit state/basis", "source": "system_common_state_seed"},
+				}
+				if err := tx.Clauses(clause.OnConflict{
+					Columns: []clause.Column{{Name: "normalized_alias"}},
+					DoUpdates: clause.AssignmentColumns([]string{
+						"food_id", "alias_name", "match_status", "approval_evidence", "updated_at",
+					}),
+				}).Create(&alias).Error; err != nil {
+					return fmt.Errorf("seed common food state alias %s: %w", aliasName, err)
+				}
+			}
+		}
+		return nil
+	})
+}
+
+func normalizeCommonFoodStateAlias(value string) string {
+	return strings.NewReplacer("（", "", "）", "", " ", "").Replace(value)
+}
+
+func commonFoodStateQualityEvidence(seed commonFoodStateSeed) map[string]any {
+	return map[string]any{
+		"source_name": "USDA FoodData Central", "data_type": "SR Legacy", "fdc_id": seed.FDCID,
+		"basis": "per 100 g edible portion", "license": "CC0 1.0", "verified_on": "2026-08-21",
+	}
+}
+
+func shouldUpgradeCommonFoodStateSeed(existing migrationdo.FoodNutritionDO) bool {
+	switch strings.ToLower(strings.TrimSpace(existing.QualityTier)) {
+	case "", "plausible", "unreviewed", "rejected":
+		return true
+	default:
+		return false
+	}
 }
 
 // MigrateNutritionEmbeddings applies only the semantic-retrieval storage. It

@@ -2367,7 +2367,13 @@ func TestAnalyzeService_AnalyzeImageIntegratesPackagedFoodAcrossMainModes(t *tes
 
 			items := toItems(resp["items"])
 			require.Len(t, items, 2)
-			assert.Equal(t, "library_exact_canonical", items[0]["nutrition_source"])
+			expectedFirstSource := "library_exact_canonical"
+			if mode == fastExecutionMode {
+				expectedFirstSource = analysisEngineAIDirect
+			} else if isPrecisionLikeExecutionMode(mode) {
+				expectedFirstSource = analysisEngineDBCandidates
+			}
+			assert.Equal(t, expectedFirstSource, items[0]["nutrition_source"])
 			assert.Equal(t, "packaged_food_library", items[1]["nutrition_source"])
 			assert.Equal(t, "pkg-taoli-dousha", items[1]["matched_food_id"])
 			assert.Equal(t, 55.0, items[1]["estimatedWeightGrams"])
@@ -2375,7 +2381,7 @@ func TestAnalyzeService_AnalyzeImageIntegratesPackagedFoodAcrossMainModes(t *tes
 
 			meta, ok := resp["packaged_food_resolution"].(map[string]any)
 			require.True(t, ok)
-			assert.Equal(t, "integrated", meta["mode"])
+			assert.Equal(t, "authoritative_exception", meta["mode"])
 			assert.Equal(t, 1, meta["triggered_count"])
 			assert.Equal(t, 1, meta["matched_count"])
 		})
@@ -2407,7 +2413,13 @@ func TestAnalyzeService_AnalyzeImageIntegratesPackagedFoodAcrossWebSearchModes(t
 
 			items := toItems(resp["items"])
 			require.Len(t, items, 2)
-			assert.Equal(t, "library_exact_canonical", items[0]["nutrition_source"])
+			expectedFirstSource := "library_exact_canonical"
+			if mode == fastWebSearchMode {
+				expectedFirstSource = analysisEngineAIDirect
+			} else if mode == precisionWebSearchMode {
+				expectedFirstSource = analysisEngineDBCandidates
+			}
+			assert.Equal(t, expectedFirstSource, items[0]["nutrition_source"])
 			assert.Equal(t, "packaged_food_library", items[1]["nutrition_source"])
 			assert.Equal(t, 55.0, items[1]["estimatedWeightGrams"])
 			assert.Equal(t, true, items[1]["package_weight_applied"])

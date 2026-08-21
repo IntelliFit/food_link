@@ -19,7 +19,6 @@ import {
   submitAnalysisFeedback,
   ANALYSIS_FEEDBACK_SUBMISSION_ENABLED,
   type ExecutionMode,
-  type AnalysisEngine,
   type AnalyzeRecognitionOutcome,
   type AllowedFoodCategory,
   type PrecisionReferenceDefaults,
@@ -33,6 +32,7 @@ import {
   showUnifiedApiError,
 } from '../../../utils/api'
 import { normalizeRuntimeExecutionMode } from '../../../utils/execution-mode'
+import { ANALYSIS_ENGINE_OPTIONS, normalizeAnalysisEngine } from '../../../utils/analysis-engine'
 import { foodRecordFromSavePayload } from '../../../utils/dev-record-preview'
 import { getRecommendedMealTypeWithFallback, inferDefaultMealTypeFromLocalTime } from '../../../utils/infer-default-meal-type'
 import { getAiInsightCollapsed, setAiInsightCollapsed } from '../../../utils/ai-insight-collapsed'
@@ -136,10 +136,6 @@ const getExecutionModeLabel = (value: ExecutionMode): string => {
   if (value === 'strict' || value === 'gemini35_flash' || value === 'gemini35_flash_grouped') return '精准'
   return '普通'
 }
-
-const normalizeAnalysisEngine = (value: unknown): AnalysisEngine => (
-  value === 'legacy_direct' ? 'legacy_direct' : 'db_first'
-)
 
 const normalizeTaskType = (value: unknown): 'food' | 'food_text' => (
   value === 'food_text' ? 'food_text' : 'food'
@@ -592,6 +588,10 @@ function ResultPage() {
   /** 当前识别会话是否已保存为饮食记录（可跳转详情，不再重复写入/发动态） */
   const [committedRecordId, setCommittedRecordId] = useState<string | null>(null)
   const [executionMode, setExecutionMode] = useState<ExecutionMode>('standard')
+  const [analysisEngine, setAnalysisEngine] = useState(() => normalizeAnalysisEngine(
+    Taro.getStorageSync(ANALYSIS_ENGINE_STORAGE_KEY),
+    'standard',
+  ))
   const correctionCreditCost = getFoodCorrectionCreditCost(executionMode)
   const [recognitionOutcome, setRecognitionOutcome] = useState<AnalyzeRecognitionOutcome>('ok')
   const [rejectionReason, setRejectionReason] = useState<string | null>(null)
@@ -964,7 +964,9 @@ function ResultPage() {
       const storedPrecisionSessionId = String(Taro.getStorageSync('analyzePrecisionSessionId') || '').trim()
       setTaskType(storedTaskType)
       setTextRecordInput(storedTextInput)
-      setExecutionMode(normalizeExecutionMode(storedMode))
+      const normalizedStoredMode = normalizeExecutionMode(storedMode)
+      setExecutionMode(normalizedStoredMode)
+      setAnalysisEngine(normalizeAnalysisEngine(Taro.getStorageSync(ANALYSIS_ENGINE_STORAGE_KEY), normalizedStoredMode))
       setPrecisionSessionId(storedPrecisionSessionId)
 
       if (storedTaskType === 'food_text') {
@@ -2319,7 +2321,7 @@ function ResultPage() {
           const savedDietGoal = Taro.getStorageSync('analyzeDietGoal')
           const savedActivityTiming = Taro.getStorageSync('analyzeActivityTiming')
           const savedExecutionMode = normalizeRuntimeExecutionMode(Taro.getStorageSync('analyzeExecutionMode') || executionMode)
-          const savedAnalysisEngine = normalizeAnalysisEngine(Taro.getStorageSync(ANALYSIS_ENGINE_STORAGE_KEY))
+          const savedAnalysisEngine = normalizeAnalysisEngine(Taro.getStorageSync(ANALYSIS_ENGINE_STORAGE_KEY), savedExecutionMode)
           const correctionSourceTaskId = String(Taro.getStorageSync('analyzeSourceTaskId') || '').trim()
           const previousResult: AnalyzeResponse = {
             description,
@@ -2536,6 +2538,11 @@ function ResultPage() {
               <View className={`execution-mode-tag ${executionMode}`}>
                 <Text className='execution-mode-tag-text'>
                   {getExecutionModeLabel(executionMode)}
+                </Text>
+              </View>
+              <View className='analysis-engine-result-tag'>
+                <Text className='analysis-engine-result-tag-text'>
+                  {ANALYSIS_ENGINE_OPTIONS.find(option => option.value === analysisEngine)?.label || '营养估算'}
                 </Text>
               </View>
               <Text className='execution-mode-default-link' onClick={handleDefaultModeEdit}>

@@ -11,6 +11,11 @@ import {
   type BodyMetricsSummary,
 } from '../../../utils/api'
 import { HOME_DASHBOARD_REFRESH_EVENT } from '../../../utils/home-events'
+import {
+  addWaterToBodyMetricsStorage,
+  clearWaterFromBodyMetricsStorage,
+  removeWaterFromBodyMetricsStorage,
+} from '../../../utils/home-dashboard-local-cache'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { withAuth } from '../../../utils/withAuth'
 import {
@@ -53,10 +58,6 @@ function WaterRecordPage() {
     setRecordDate(initialDate)
   }, [initialDate])
 
-  useEffect(() => {
-    void loadData()
-  }, [loadData])
-
   useDidShow(() => {
     void loadData()
   })
@@ -75,8 +76,13 @@ function WaterRecordPage() {
     }
     setSavingAmount(marker)
     try {
-      await addBodyWaterLog(Math.round(amount), recordDate)
-      Taro.eventCenter.trigger(HOME_DASHBOARD_REFRESH_EVENT)
+      const result = await addBodyWaterLog(Math.round(amount), recordDate)
+      addWaterToBodyMetricsStorage(recordDate, Math.round(amount), result.item)
+      Taro.eventCenter.trigger(HOME_DASHBOARD_REFRESH_EVENT, {
+        date: recordDate,
+        force: true,
+        bodyMetricsOnly: true,
+      })
       Taro.showToast({ title: `已加 ${Math.round(amount)}ml`, icon: 'success' })
       setCustomAmount('')
       await loadData()
@@ -103,7 +109,12 @@ function WaterRecordPage() {
         setClearing(true)
         try {
           await resetBodyWaterLogs(recordDate)
-          Taro.eventCenter.trigger(HOME_DASHBOARD_REFRESH_EVENT)
+          clearWaterFromBodyMetricsStorage(recordDate)
+          Taro.eventCenter.trigger(HOME_DASHBOARD_REFRESH_EVENT, {
+            date: recordDate,
+            force: true,
+            bodyMetricsOnly: true,
+          })
           Taro.showToast({ title: '已清空', icon: 'success' })
           await loadData()
         } catch (err) {
@@ -131,7 +142,12 @@ function WaterRecordPage() {
         setDeletingLogId(logId)
         try {
           await deleteBodyWaterLog(logId)
-          Taro.eventCenter.trigger(HOME_DASHBOARD_REFRESH_EVENT)
+          removeWaterFromBodyMetricsStorage(item)
+          Taro.eventCenter.trigger(HOME_DASHBOARD_REFRESH_EVENT, {
+            date: recordDate,
+            force: true,
+            bodyMetricsOnly: true,
+          })
           Taro.showToast({ title: '已删除', icon: 'success' })
           await loadData()
         } catch (err) {

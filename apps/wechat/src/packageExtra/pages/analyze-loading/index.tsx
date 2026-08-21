@@ -7,7 +7,6 @@ import {
   sanitizeUserFacingErrorMessage,
   showUnifiedApiError,
   type AnalysisTask,
-  type AnalysisEngine,
   type AnalyzeResponse,
   type ExecutionMode,
   type ExerciseTaskResultPayload
@@ -16,15 +15,12 @@ import { IconExercise } from '../../../components/iconfont'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { getStoredRecordTargetDate, persistRecordTargetDate } from '../../../utils/record-date'
 import { needsPrecisionUserAction } from '../../../utils/precision-mode'
+import { normalizeAnalysisEngine } from '../../../utils/analysis-engine'
 import './index.scss'
 
 /** 与记运动页一致，用于完成后清除「待同步」状态 */
 const EXERCISE_PENDING_TASK_KEY = 'exercise_pending_task_id'
 const ANALYSIS_ENGINE_STORAGE_KEY = 'analyzeAnalysisEngine'
-
-const normalizeAnalysisEngine = (value: unknown): AnalysisEngine => (
-  value === 'legacy_direct' ? 'legacy_direct' : 'db_first'
-)
 
 // 健康小知识
 const HEALTH_TIPS = [
@@ -1391,7 +1387,7 @@ function AnalyzeLoadingPage() {
     Taro.setStorageSync('analyzeExecutionMode', mode)
     Taro.setStorageSync('analyzeTaskType', type)
     if (requestedAnalysisEngine) {
-      Taro.setStorageSync(ANALYSIS_ENGINE_STORAGE_KEY, normalizeAnalysisEngine(requestedAnalysisEngine))
+      Taro.setStorageSync(ANALYSIS_ENGINE_STORAGE_KEY, normalizeAnalysisEngine(requestedAnalysisEngine, mode))
     }
     if (correctionMode) {
       Taro.setNavigationBarTitle({ title: '纠错分析中' })
@@ -1543,7 +1539,8 @@ function AnalyzeLoadingPage() {
           const targetDate = persistRecordTargetDate(String((payload.recorded_on as string) || getStoredRecordTargetDate()))
           const settledMode = taskMode || executionMode
           const settledAnalysisEngine = normalizeAnalysisEngine(
-            result.analysis_engine || (payload as Record<string, unknown>).analysis_engine
+            result.analysis_engine || (payload as Record<string, unknown>).analysis_engine,
+            settledMode,
           )
           Taro.setStorageSync('analyzeExecutionMode', settledMode)
           Taro.setStorageSync(ANALYSIS_ENGINE_STORAGE_KEY, settledAnalysisEngine)

@@ -58,6 +58,11 @@ import {
 } from '../../../utils/membership'
 import CreditShortageSheet from '../../../components/CreditShortageSheet'
 import { getStoredRecordTargetDate, persistRecordTargetDate, getTodayRecordDateKey } from '../../../utils/record-date'
+import {
+  ANALYSIS_ENGINE_OPTIONS,
+  defaultAnalysisEngineForMode,
+  normalizeAnalysisEngine,
+} from '../../../utils/analysis-engine'
 import { chooseImageWithPrivacy, isPrivacyAuthorizeError, showPrivacyAuthorizeFailure } from '../../../utils/weapp-privacy'
 import './index.scss'
 import { withAuth } from '../../../utils/withAuth'
@@ -118,10 +123,6 @@ const MAX_ANALYZE_IMAGES = 5
 const PRECISION_CAPTURE_ROLES = ['top_down', 'oblique_45'] as const
 const MAX_ANALYZE_VIDEO_SIZE_BYTES = 8 * 1024 * 1024
 const MAX_ANALYZE_VIDEO_DURATION_SECONDS = 12
-
-const normalizeAnalysisEngine = (value: unknown): AnalysisEngine => (
-  value === 'legacy_direct' ? 'legacy_direct' : 'db_first'
-)
 
 const readSuggestRatioPreference = (): boolean => {
   const saved = Taro.getStorageSync(SUGGEST_RATIO_STORAGE_KEY)
@@ -445,6 +446,10 @@ function AnalyzePage() {
   const [activityTiming, setActivityTiming] = useState<ActivityTiming>('none')
   const [defaultMealType, setDefaultMealType] = useState<MealType>(() => inferDefaultMealTypeFromLocalTime())
   const [executionMode, setExecutionMode] = useState<ExecutionMode>('standard')
+  const [analysisEngine, setAnalysisEngine] = useState<AnalysisEngine>(() => (
+    normalizeAnalysisEngine(Taro.getStorageSync(ANALYSIS_ENGINE_STORAGE_KEY), 'standard')
+  ))
+  const [preciseMicronutrients, setPreciseMicronutrients] = useState(false)
   const [precisionInteractiveEnabled, setPrecisionInteractiveEnabled] = useState(true)
   const [precisionSeparateEnabled, setPrecisionSeparateEnabled] = useState(false)
   const [precisionWebSearchEnabled, setPrecisionWebSearchEnabled] = useState(false)
@@ -548,6 +553,8 @@ function AnalyzePage() {
     if (!membershipStatus) return
     if (isPrecisionExecutionMode(executionMode) && !canUseStrictMode && !precisionSessionId) {
       setExecutionMode('standard')
+      setAnalysisEngine(defaultAnalysisEngineForMode('standard'))
+      setPreciseMicronutrients(false)
     }
   }, [membershipStatus, executionMode, canUseStrictMode, precisionSessionId])
 
@@ -577,13 +584,23 @@ function AnalyzePage() {
     }
     if (baseMode === 'strict') {
       setExecutionMode('strict')
+      setAnalysisEngine(defaultAnalysisEngineForMode('strict'))
       setImagePaths(prev => precisionCaptureMode === 'video'
         ? (videoUploadResult?.keyframes.map(frame => frame.image_url) || [])
         : [prev[0] || '', prev[1] || ''])
       return
     }
     setImagePaths(prev => precisionCaptureMode === 'video' ? [] : prev.filter(Boolean))
-    setExecutionMode(resolveExecutionModeFromOptions(baseMode, isWebSearchEnabled, false))
+    const nextMode = resolveExecutionModeFromOptions(baseMode, isWebSearchEnabled, false)
+    setExecutionMode(nextMode)
+    setAnalysisEngine(defaultAnalysisEngineForMode(nextMode))
+    setPreciseMicronutrients(false)
+  }
+
+  const handleAnalysisEngineTap = (engine: AnalysisEngine) => {
+    setAnalysisEngine(engine)
+    Taro.setStorageSync(ANALYSIS_ENGINE_STORAGE_KEY, engine)
+    if (engine !== 'db_candidates_ai') setPreciseMicronutrients(false)
   }
 
   const handlePrecisionCaptureModeTap = (mode: PrecisionCaptureMode) => {
@@ -648,7 +665,9 @@ function AnalyzePage() {
         if (requestedCaptureMode === 'video') setPrecisionCaptureMode('video')
       }
       if (requestedAnalysisEngine) {
-        Taro.setStorageSync(ANALYSIS_ENGINE_STORAGE_KEY, normalizeAnalysisEngine(requestedAnalysisEngine))
+        const requestedEngine = normalizeAnalysisEngine(requestedAnalysisEngine, nextSessionId ? 'strict' : executionMode)
+        setAnalysisEngine(requestedEngine)
+        Taro.setStorageSync(ANALYSIS_ENGINE_STORAGE_KEY, requestedEngine)
       }
     }
     if (getAccessToken()) {
@@ -683,7 +702,9 @@ function AnalyzePage() {
       if (requestedCaptureMode === 'video') setPrecisionCaptureMode('video')
     }
     if (requestedAnalysisEngine) {
-      Taro.setStorageSync(ANALYSIS_ENGINE_STORAGE_KEY, normalizeAnalysisEngine(requestedAnalysisEngine))
+      const requestedEngine = normalizeAnalysisEngine(requestedAnalysisEngine, nextSessionId ? 'strict' : executionMode)
+      setAnalysisEngine(requestedEngine)
+      Taro.setStorageSync(ANALYSIS_ENGINE_STORAGE_KEY, requestedEngine)
     }
 
     // 1. 获取分析默认配置
@@ -695,7 +716,9 @@ function AnalyzePage() {
         setDefaultMealType(inferredMealType)
         setMealType(inferredMealType)
         if (!nextSessionId && profile.execution_mode) {
-          setExecutionMode(normalizeAvailableExecutionMode(profile.execution_mode))
+          const profileMode = normalizeAvailableExecutionMode(profile.execution_mode)
+          setExecutionMode(profileMode)
+          if (!requestedAnalysisEngine) setAnalysisEngine(defaultAnalysisEngineForMode(profileMode))
         }
           const referenceDefaults = normalizeReferenceDefaults(profile.health_condition?.precision_reference_defaults)
           setSavedReferenceDefaults(referenceDefaults)
@@ -1120,6 +1143,8 @@ function AnalyzePage() {
         additionalContext: additionalInfo || undefined,
         is_multi_view: isStrictBaseModeSelected ? true : isMultiView,
         suggest_ratio_enabled: suggestRatioEnabled,
+        analysis_engine: analysisEngine,
+        precise_micronutrients: preciseMicronutrients && analysisEngine === 'db_candidates_ai' && canUseStrictMode,
         reference_objects: referenceObjects.length > 0 ? referenceObjects : undefined,
         capture_protocol: isVideoCaptureSelected
           ? 'video_keyframes_v1' as const
@@ -1148,7 +1173,6 @@ function AnalyzePage() {
       Taro.setStorageSync('analyzeExecutionMode', executionMode)
       Taro.setStorageSync('analyzePrecisionCaptureMode', isVideoCaptureSelected ? 'video' : 'photos')
       Taro.setStorageSync(SUGGEST_RATIO_STORAGE_KEY, suggestRatioEnabled ? '1' : '0')
-      const analysisEngine = normalizeAnalysisEngine(Taro.getStorageSync(ANALYSIS_ENGINE_STORAGE_KEY))
       Taro.setStorageSync(ANALYSIS_ENGINE_STORAGE_KEY, analysisEngine)
       if (isStrictBaseModeSelected && hasReferenceObject) {
         setSavedReferenceDefaults(nextReferenceDefaults)
@@ -1173,7 +1197,6 @@ function AnalyzePage() {
             image_urls: imageUrls,
             // modelName 默认不传，由后端按当前模式选择识别通道。
             execution_mode: executionMode,
-            analysis_engine: analysisEngine,
             ...commonPayload,
           })
       const task_id = String(
@@ -1522,6 +1545,45 @@ function AnalyzePage() {
               {!canUseStrictMode ? '精准锁定' : '精准'}
             </View>
           </View>
+        </View>
+
+        <View className='analysis-engine-section'>
+          <View className='analysis-engine-header'>
+            <Text className='multiview-compact-title'>营养计算方式</Text>
+            <View
+              className='help-icon'
+              onClick={() => setHelpSheet({
+                visible: true,
+                title: '营养计算方式',
+                content: 'AI估算会完整理解当前输入且不套标准食物库；标准库校准只接受名称、状态和重量口径一致的精确项；精准候选会把候选连同完整上下文交给AI，并允许拒绝全部候选。',
+              })}
+            >
+              <Text className='help-icon-text'>?</Text>
+            </View>
+          </View>
+          <View className='analysis-engine-options'>
+            {ANALYSIS_ENGINE_OPTIONS.map(option => (
+              <View
+                key={option.value}
+                className={`analysis-engine-option ${analysisEngine === option.value ? 'active' : ''}`}
+                onClick={() => handleAnalysisEngineTap(option.value)}
+              >
+                <Text className='analysis-engine-option__label'>{option.label}</Text>
+                <Text className='analysis-engine-option__description'>{option.description}</Text>
+              </View>
+            ))}
+          </View>
+          {analysisEngine === 'db_candidates_ai' && isStrictBaseModeSelected && (
+            <View className='analysis-engine-micro-row' onClick={() => setPreciseMicronutrients(value => !value)}>
+              <View>
+                <Text className='analysis-engine-micro-title'>会员微量元素</Text>
+                <Text className='analysis-engine-micro-description'>额外补齐维生素、矿物质和营养来源</Text>
+              </View>
+              <View className={`analysis-option-switch ${preciseMicronutrients ? 'analysis-option-switch--on' : ''}`}>
+                <View className='analysis-option-switch-knob' />
+              </View>
+            </View>
+          )}
         </View>
 
         <View className='analysis-options-row'>

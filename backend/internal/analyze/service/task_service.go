@@ -91,6 +91,7 @@ type SubmitTaskInput struct {
 	ExecutionMode           *string                        `json:"execution_mode"`
 	PrecisionSessionID      *string                        `json:"precision_session_id"`
 	AnalysisEngine          string                         `json:"analysis_engine"`
+	PreciseMicronutrients   bool                           `json:"precise_micronutrients"`
 	TimezoneOffsetMinutes   *int                           `json:"timezone_offset_minutes"`
 	IsMultiView             bool                           `json:"is_multi_view"`
 	PreviousResult          map[string]any                 `json:"previousResult"`
@@ -168,6 +169,8 @@ func (s *TaskService) SubmitAnalyzeTask(ctx context.Context, userID string, inpu
 	if err != nil {
 		return "", err
 	}
+	input.AnalysisEngine = normalizeAnalysisEngine(input.AnalysisEngine, mode, false)
+	input.PreciseMicronutrients = input.PreciseMicronutrients && isPrecisionLikeExecutionMode(mode)
 	payload := buildSubmitTaskPayload(input, recordedOn, mode)
 	s.attachCorrectionChain(ctx, userID, input, payload)
 	if isContinuation {
@@ -202,6 +205,8 @@ func (s *TaskService) SubmitInternalAnalyzeTask(ctx context.Context, userID stri
 	if err != nil {
 		return "", err
 	}
+	input.AnalysisEngine = normalizeAnalysisEngine(input.AnalysisEngine, mode, false)
+	input.PreciseMicronutrients = input.PreciseMicronutrients && isPrecisionLikeExecutionMode(mode)
 	payload := buildSubmitTaskPayload(input, recordedOn, mode)
 	s.attachCorrectionChain(ctx, userID, input, payload)
 	payload["internal_benchmark"] = true
@@ -232,6 +237,8 @@ func (s *TaskService) SubmitTextTask(ctx context.Context, userID string, input S
 	if err != nil {
 		return "", err
 	}
+	input.AnalysisEngine = normalizeAnalysisEngine(input.AnalysisEngine, mode, true)
+	input.PreciseMicronutrients = input.PreciseMicronutrients && isPrecisionLikeExecutionMode(mode)
 	payload := buildSubmitTaskPayload(input, recordedOn, mode)
 	s.attachCorrectionChain(ctx, userID, input, payload)
 	if hasPrecisionSessionID(input) {
@@ -262,6 +269,8 @@ func (s *TaskService) SubmitInternalTextTask(ctx context.Context, userID string,
 	if err != nil {
 		return "", err
 	}
+	input.AnalysisEngine = normalizeAnalysisEngine(input.AnalysisEngine, mode, true)
+	input.PreciseMicronutrients = input.PreciseMicronutrients && isPrecisionLikeExecutionMode(mode)
 	payload := buildSubmitTaskPayload(input, recordedOn, mode)
 	s.attachCorrectionChain(ctx, userID, input, payload)
 	payload["internal_benchmark"] = true
@@ -525,20 +534,21 @@ func correctionCreditMode(mode string) string {
 
 func buildSubmitTaskPayload(input SubmitTaskInput, recordedOn, mode string) map[string]any {
 	payload := map[string]any{
-		"meal_type":             input.MealType,
-		"province":              input.Province,
-		"city":                  input.City,
-		"district":              input.District,
-		"diet_goal":             input.DietGoal,
-		"activity_timing":       input.ActivityTiming,
-		"user_goal":             input.UserGoal,
-		"remaining_calories":    input.RemainingCalories,
-		"suggest_ratio_enabled": input.SuggestRatioEnabled,
-		"additionalContext":     input.AdditionalContext,
-		"modelName":             input.ModelName,
-		"execution_mode":        mode,
-		"analysis_engine":       input.AnalysisEngine,
-		"recorded_on":           recordedOn,
+		"meal_type":              input.MealType,
+		"province":               input.Province,
+		"city":                   input.City,
+		"district":               input.District,
+		"diet_goal":              input.DietGoal,
+		"activity_timing":        input.ActivityTiming,
+		"user_goal":              input.UserGoal,
+		"remaining_calories":     input.RemainingCalories,
+		"suggest_ratio_enabled":  input.SuggestRatioEnabled,
+		"additionalContext":      input.AdditionalContext,
+		"modelName":              input.ModelName,
+		"execution_mode":         mode,
+		"analysis_engine":        input.AnalysisEngine,
+		"precise_micronutrients": input.PreciseMicronutrients,
+		"recorded_on":            recordedOn,
 	}
 	applySubmitCompatibilityPayload(payload, input)
 	applyPrecisionSubmitPayload(payload, input, mode)
@@ -1546,6 +1556,7 @@ func (s *TaskService) retryInputFromTask(task *domain.AnalysisTask) (SubmitTaskI
 		AdditionalContext:      stringFromAny(payload["additionalContext"]),
 		ModelName:              stringFromAny(payload["modelName"]),
 		AnalysisEngine:         stringFromAny(payload["analysis_engine"]),
+		PreciseMicronutrients:  boolFromAny(payload["precise_micronutrients"]),
 		IsMultiView:            boolFromAny(payload["is_multi_view"]),
 		PreviousResult:         mapFromAny(payload["previousResult"]),
 		CorrectionItems:        mapSliceFromAny(payload["correctionItems"]),

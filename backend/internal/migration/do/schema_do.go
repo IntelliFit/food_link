@@ -380,6 +380,12 @@ type FoodNutritionDO struct {
 	ID                    string            `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
 	CanonicalName         string            `gorm:"column:canonical_name;type:text;not null;index:idx_food_nutrition_library_canonical_name"`
 	NormalizedName        string            `gorm:"column:normalized_name;type:text;not null;unique"`
+	BaseFoodKey           string            `gorm:"column:base_food_key;type:text;not null;default:'';index:idx_food_nutrition_library_base_state,priority:1"`
+	FoodState             string            `gorm:"column:food_state;type:text;not null;default:'';index:idx_food_nutrition_library_base_state,priority:2"`
+	WeightBasis           string            `gorm:"column:weight_basis;type:text;not null;default:''"`
+	PreparationMethod     string            `gorm:"column:preparation_method;type:text;not null;default:''"`
+	YieldFactor           *float64          `gorm:"column:yield_factor;type:numeric"`
+	StateTags             []string          `gorm:"column:state_tags;type:jsonb;serializer:json;not null;default:'[]'::jsonb"`
 	KcalPer100g           float64           `gorm:"column:kcal_per_100g;type:numeric;not null;default:0"`
 	ProteinPer100g        float64           `gorm:"column:protein_per_100g;type:numeric;not null;default:0"`
 	CarbsPer100g          float64           `gorm:"column:carbs_per_100g;type:numeric;not null;default:0"`

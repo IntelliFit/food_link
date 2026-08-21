@@ -244,6 +244,21 @@
   color: #047857;
 }
 
+.analysis-engine-result-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 8rpx 14rpx;
+  border-radius: 999rpx;
+  background: #ecfdf5;
+  border: 1rpx solid #a7f3d0;
+}
+
+.analysis-engine-result-tag-text {
+  color: #047857;
+  font-size: 21rpx;
+  font-weight: 600;
+}
+
 .execution-mode-default-link {
   flex-shrink: 0;
   font-size: 24rpx;

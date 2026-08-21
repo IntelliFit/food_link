@@ -107,14 +107,15 @@ describe('InteractionFeedDetailPage loading', () => {
       await Promise.resolve()
     })
 
-    expect(view.container.querySelector('.interaction-feed-detail-loading-spinner')).toBeInTheDocument()
-    expect(view.getByText('烤脆骨肉筋串')).toBeInTheDocument()
+    expect(view.container.querySelector('.interaction-feed-detail-loading-spinner')).not.toBeInTheDocument()
+    expect(view.container.querySelector('.interaction-feed-detail-content-pending')).toBeInTheDocument()
 
     await act(async () => {
       jest.advanceTimersByTime(80)
       await Promise.resolve()
     })
 
+    expect(view.getByText('烤脆骨肉筋串')).toBeInTheDocument()
     expect(communityGetComments).toHaveBeenCalledWith('record-1', 'food_record')
     expect(view.container.querySelector('.interaction-feed-detail-loading-spinner')).not.toBeInTheDocument()
   })

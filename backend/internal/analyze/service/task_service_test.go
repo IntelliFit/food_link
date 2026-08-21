@@ -475,6 +475,16 @@ func TestBuildSubmitTaskPayloadPreservesIntegratedPackagedCorrectionFields(t *te
 	assert.Equal(t, 90.0, nutrients["calories"])
 }
 
+func TestBuildSubmitTaskPayloadPreservesNutritionEngineAndMicronutrientEntitlement(t *testing.T) {
+	payload := buildSubmitTaskPayload(SubmitTaskInput{
+		AnalysisEngine:        analysisEngineDBCandidates,
+		PreciseMicronutrients: true,
+	}, "2026-08-21", precisionExecutionMode)
+
+	assert.Equal(t, analysisEngineDBCandidates, payload["analysis_engine"])
+	assert.Equal(t, true, payload["precise_micronutrients"])
+}
+
 func TestTaskService_EnqueueTaskPublishesQueueMessage(t *testing.T) {
 	svc := &TaskService{}
 	publisher := &recordingTaskPublisher{}

@@ -1,8 +1,6 @@
 import { View, Text, Image, ScrollView, Input } from '@tarojs/components'
 import * as React from 'react'
 import Taro from '@tarojs/taro'
-
-const { useCallback, useMemo } = React
 import {
   communityGetComments,
   communityGetFeedContext,
@@ -40,6 +38,11 @@ import './index.scss'
 const COLLAPSIBLE_FEED_TEXT_RUNE_THRESHOLD = 90
 const DETAIL_CONTENT_COMMIT_DELAY_MS = 80
 const DETAIL_REQUEST_TIMEOUT_MS = 12000
+const { useCallback, useEffect, useMemo, useRef, useState } = React
+
+function logFeedDetailStage(stage: string, details: Record<string, unknown> = {}) {
+  console.info('[interaction-feed-detail-debug]', stage, details)
+}
 
 async function withDetailTimeout<T>(task: Promise<T>, timeoutMs = DETAIL_REQUEST_TIMEOUT_MS): Promise<T> {
   let timer: number | null = null
@@ -235,57 +238,63 @@ function aggregateMicroNutrients(record: CommunityFeedRecord | undefined | null)
 }
 
 export function InteractionFeedDetailPage() {
-  const [targetType, setTargetType] = React.useState<CommunityFeedTargetType>('food_record')
-  const [targetCommentId, setTargetCommentId] = React.useState('')
-  const [feedItem, setFeedItem] = React.useState<CommunityFeedItem | null>(null)
-  const [loading, setLoading] = React.useState(true)
-  const [submitting, setSubmitting] = React.useState(false)
-  const [commentContent, setCommentContent] = React.useState('')
-  const [replyTargetComment, setReplyTargetComment] = React.useState<FeedCommentItem | null>(null)
-  const [composerVisible, setComposerVisible] = React.useState(false)
-  const [editSheetVisible, setEditSheetVisible] = React.useState(false)
-  const [reportVisible, setReportVisible] = React.useState(false)
-  const [feedActionSheetVisible, setFeedActionSheetVisible] = React.useState(false)
-  const [reportMaskVisible, setReportMaskVisible] = React.useState(false)
-  const [feedTextExpanded, setFeedTextExpanded] = React.useState<Record<string, boolean>>({})
-  const [microsExpanded, setMicrosExpanded] = React.useState(false)
-  const [manualFoodsExpanded, setManualFoodsExpanded] = React.useState(false)
-  const likePendingRef = React.useRef(false)
+  const [targetType, setTargetType] = useState<CommunityFeedTargetType>('food_record')
+  const [targetCommentId, setTargetCommentId] = useState('')
+  const [feedItem, setFeedItem] = useState<CommunityFeedItem | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [detailCommitPending, setDetailCommitPending] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [commentContent, setCommentContent] = useState('')
+  const [replyTargetComment, setReplyTargetComment] = useState<FeedCommentItem | null>(null)
+  const [composerVisible, setComposerVisible] = useState(false)
+  const [editSheetVisible, setEditSheetVisible] = useState(false)
+  const [reportVisible, setReportVisible] = useState(false)
+  const [feedActionSheetVisible, setFeedActionSheetVisible] = useState(false)
+  const [reportMaskVisible, setReportMaskVisible] = useState(false)
+  const [feedTextExpanded, setFeedTextExpanded] = useState<Record<string, boolean>>({})
+  const [microsExpanded, setMicrosExpanded] = useState(false)
+  const [manualFoodsExpanded, setManualFoodsExpanded] = useState(false)
+  const likePendingRef = useRef(false)
   const INITIAL_VISIBLE_MANUAL_FOODS = 3
-  const routeInitializationRef = React.useRef('')
-  const loadSeqRef = React.useRef(0)
-  const loadingReleaseTimerRef = React.useRef<number | null>(null)
+  const routeInitializationRef = useRef('')
+  const loadSeqRef = useRef(0)
+  const detailCommitTimerRef = useRef<number | null>(null)
 
-  const logDetailStage = React.useCallback((stage: string, details: Record<string, unknown> = {}) => {
-    console.log('[interaction-feed-detail-debug]', stage, details)
-  }, [])
-
-  const clearLoadingReleaseTimer = React.useCallback(() => {
-    if (loadingReleaseTimerRef.current !== null) {
-      window.clearTimeout(loadingReleaseTimerRef.current)
-      loadingReleaseTimerRef.current = null
+  const clearDetailCommitTimer = useCallback(() => {
+    if (detailCommitTimerRef.current !== null) {
+      window.clearTimeout(detailCommitTimerRef.current)
+      detailCommitTimerRef.current = null
     }
   }, [])
 
-  const loadDetail = React.useCallback(async (nextRecordId: string, nextTargetType: CommunityFeedTargetType = 'food_record') => {
+  useEffect(() => {
+    logFeedDetailStage('react-commit', {
+      loading,
+      detail_commit_pending: detailCommitPending,
+      has_feed_item: Boolean(feedItem),
+      comment_count: feedItem?.comments?.length || 0,
+    })
+  }, [detailCommitPending, feedItem, loading])
+
+  useEffect(() => () => {
+    loadSeqRef.current += 1
+    clearDetailCommitTimer()
+  }, [clearDetailCommitTimer])
+
+  const loadDetail = useCallback(async (nextRecordId: string, nextTargetType: CommunityFeedTargetType = 'food_record') => {
     const seq = ++loadSeqRef.current
     const startedAt = Date.now()
-    clearLoadingReleaseTimer()
-    logDetailStage('load-start', {
-      seq,
-      target_type: nextTargetType,
-      has_target_id: Boolean(nextRecordId),
-    })
+    clearDetailCommitTimer()
     if (!nextRecordId) {
       setFeedItem(null)
+      setDetailCommitPending(false)
       setLoading(false)
-      logDetailStage('load-skipped', { seq, reason: 'missing-target-id' })
       return
     }
     if (!getAccessToken()) {
       setFeedItem(null)
+      setDetailCommitPending(false)
       setLoading(false)
-      logDetailStage('load-skipped', { seq, reason: 'missing-access-token' })
       const query = [
         `targetType=${encodeURIComponent(nextTargetType)}`,
         `targetId=${encodeURIComponent(nextRecordId)}`,
@@ -294,78 +303,76 @@ export function InteractionFeedDetailPage() {
       redirectToLogin(`${extraPkgUrl('/pages/interaction-feed-detail/index')}?${query}`)
       return
     }
+    setDetailCommitPending(false)
     setLoading(true)
+    logFeedDetailStage('load-start', {
+      seq,
+      target_type: nextTargetType,
+      target_id: nextRecordId,
+    })
     try {
       const context = await withDetailTimeout(communityGetFeedContext(nextRecordId, 5, nextTargetType))
       if (seq !== loadSeqRef.current) return
       const contextItem = context.item
       if (!contextItem?.record) throw new Error('动态详情数据不完整')
-      logDetailStage('context-resolved', {
+      logFeedDetailStage('context-resolved', {
         seq,
         duration_ms: Date.now() - startedAt,
         initial_comment_count: contextItem.comments?.length || 0,
       })
-      setFeedItem(contextItem)
-      logDetailStage('detail-committed', {
-        seq,
-        duration_ms: Date.now() - startedAt,
-        comment_count: contextItem.comments?.length || 0,
-        image_count: contextItem.record?.image_paths?.length || (contextItem.record?.image_path ? 1 : 0),
-      })
-
-      // 先在 spinner 后面挂载动态主体，再在独立宿主任务里只移除 spinner。
-      // 避免 Android 真机把“销毁 loading + 创建详情树”合并后继续保留旧 loading 视图。
-      loadingReleaseTimerRef.current = window.setTimeout(() => {
+      // Android 真机上，移除 spinner 与创建完整动态卡片同批提交时，宿主可能
+      // 一直保留旧 spinner。先单独提交 loading=false，再异步创建详情卡片。
+      setLoading(false)
+      setDetailCommitPending(true)
+      detailCommitTimerRef.current = window.setTimeout(() => {
         if (seq !== loadSeqRef.current) return
-        setLoading(false)
-        loadingReleaseTimerRef.current = null
-        logDetailStage('loading-release-committed', {
+        setFeedItem(contextItem)
+        setDetailCommitPending(false)
+        detailCommitTimerRef.current = null
+        logFeedDetailStage('content-commit-scheduled', {
           seq,
           duration_ms: Date.now() - startedAt,
         })
-      }, DETAIL_CONTENT_COMMIT_DELAY_MS)
-      logDetailStage('loading-release-scheduled', {
-        seq,
-        duration_ms: Date.now() - startedAt,
-      })
 
-      // context 已经包含首屏评论。完整评论是渐进增强，不阻塞动态主体展示。
-      void withDetailTimeout(communityGetComments(nextRecordId, nextTargetType))
-        .then((commentsRes) => {
-          if (seq !== loadSeqRef.current) return
-          const fullComments = commentsRes.list || []
-          setFeedItem((current) => current ? {
-            ...current,
-            comments: fullComments,
-            comment_count: Math.max(current.comment_count || 0, fullComments.length),
-          } : current)
-          logDetailStage('comments-resolved', {
-            seq,
-            duration_ms: Date.now() - startedAt,
-            comment_count: fullComments.length,
+        // context 已经包含首屏评论。完整评论是渐进增强，不应阻塞动态主体展示。
+        void withDetailTimeout(communityGetComments(nextRecordId, nextTargetType))
+          .then((commentsRes) => {
+            if (seq !== loadSeqRef.current) return
+            const fullComments = commentsRes.list || []
+            setFeedItem((current) => current ? {
+              ...current,
+              comments: fullComments,
+              comment_count: Math.max(current.comment_count || 0, fullComments.length),
+            } : current)
+            logFeedDetailStage('comments-resolved', {
+              seq,
+              duration_ms: Date.now() - startedAt,
+              comment_count: fullComments.length,
+            })
           })
-        })
-        .catch((error) => {
-          if (seq !== loadSeqRef.current) return
-          console.warn('[interaction-feed-detail-debug] comments-load-failed', {
-            seq,
-            duration_ms: Date.now() - startedAt,
-            message: String((error as Error)?.message || error || ''),
+          .catch((error) => {
+            if (seq !== loadSeqRef.current) return
+            console.warn('[interaction-feed-detail-debug] comments-load-failed', {
+              seq,
+              duration_ms: Date.now() - startedAt,
+              message: String((error as Error)?.message || error || ''),
+            })
           })
-        })
+      }, DETAIL_CONTENT_COMMIT_DELAY_MS)
     } catch (e) {
       if (seq !== loadSeqRef.current) return
       console.error('加载动态详情失败:', e)
-      await showUnifiedApiError(e, '加载失败')
+      setDetailCommitPending(false)
       setFeedItem(null)
       setLoading(false)
-      logDetailStage('load-failed', {
+      logFeedDetailStage('load-failed', {
         seq,
         duration_ms: Date.now() - startedAt,
         message: String((e as Error)?.message || e || ''),
       })
+      await showUnifiedApiError(e, '加载失败')
     }
-  }, [clearLoadingReleaseTimer, logDetailStage])
+  }, [clearDetailCommitTimer])
 
   const hydrateFromOptions = useCallback((options: RouteOptions) => {
     const nextRecordId = pickRecordId(options)
@@ -398,19 +405,6 @@ export function InteractionFeedDetailPage() {
       hydrateFromOptions(options)
     }
   })
-
-  React.useEffect(() => {
-    logDetailStage('react-commit', {
-      loading,
-      has_feed_item: Boolean(feedItem),
-      comment_count: feedItem?.comments?.length || 0,
-    })
-  }, [feedItem, loading, logDetailStage])
-
-  React.useEffect(() => () => {
-    loadSeqRef.current += 1
-    clearLoadingReleaseTimer()
-  }, [clearLoadingReleaseTimer])
 
   const handleLike = useCallback(async () => {
     if (!feedItem || likePendingRef.current) return
@@ -594,13 +588,12 @@ export function InteractionFeedDetailPage() {
             <View className='interaction-feed-detail-loading'>
               <View className='interaction-feed-detail-loading-spinner' />
             </View>
-          ) : null}
-          {!feedItem ? (
-            !loading ? (
-              <View className='interaction-feed-detail-empty'>
-                <Text className='interaction-feed-detail-empty-text'>未找到对应动态</Text>
-              </View>
-            ) : null
+          ) : detailCommitPending ? (
+            <View className='interaction-feed-detail-content-pending' />
+          ) : !feedItem ? (
+            <View className='interaction-feed-detail-empty'>
+              <Text className='interaction-feed-detail-empty-text'>未找到对应动态</Text>
+            </View>
           ) : (
             <View className='feed-list'>
               {(() => {
