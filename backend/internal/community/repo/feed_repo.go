@@ -678,7 +678,6 @@ func (r *FeedRepo) GetFoodNutrientRanking(ctx context.Context, nutrient string, 
 	err := r.db.WithContext(ctx).Table("food_nutrition_library").
 		Select(fmt.Sprintf("id, canonical_name AS name, image_path, %s AS value", column)).
 		Where("is_active = ?", true).
-		Where("quality_tier IN ?", []string{"authoritative", "reviewed_estimate", "legacy_curated"}).
 		Where("kcal_per_100g > 0 AND canonical_name ~ ?", "[一-龥]").
 		Where("canonical_name IN ?", leaderboardFoodNames(nutrient)).
 		Where(column + " > 0").
