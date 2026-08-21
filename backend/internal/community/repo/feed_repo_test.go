@@ -280,13 +280,14 @@ func TestFeedRepoGetFoodNutrientRanking(t *testing.T) {
 	)`).Error)
 	assert.NoError(t, db.Exec(`INSERT INTO food_nutrition_library
 		(id, canonical_name, is_active, quality_tier, kcal_per_100g, protein_per_100g) VALUES
-		('f1', '鸡胸肉', true, 'authoritative', 165, 28.8),
+		('f1', '鸡胸肉（熟）', true, 'authoritative', 165, 28.8),
 		('f2', '金枪鱼', true, 'reviewed_estimate', 132, 29),
 		('f3', '停用食物', false, 'authoritative', 300, 99),
 		('f4', '未审核食物', true, 'unreviewed', 260, 88),
 		('f5', 'English Food', true, 'authoritative', 240, 77),
 		('f6', '乳清蛋白粉', true, 'authoritative', 390, 78.4),
-		('f7', '鸡蛋', true, 'unreviewed', 144, 12.7)`).Error)
+		('f7', '鸡蛋（全蛋）', true, 'unreviewed', 144, 12.7),
+		('f8', '鸡蛋（煮）', true, 'authoritative', 155, 13.1)`).Error)
 
 	rows, err := NewFeedRepo(db).GetFoodNutrientRanking(context.Background(), "protein", 10)
 
@@ -297,5 +298,5 @@ func TestFeedRepoGetFoodNutrientRanking(t *testing.T) {
 	assert.Equal(t, "鸡胸肉", rows[1].Name)
 	assert.Equal(t, 28.8, rows[1].Value)
 	assert.Equal(t, "鸡蛋", rows[2].Name)
-	assert.Equal(t, 12.7, rows[2].Value)
+	assert.Equal(t, 13.1, rows[2].Value)
 }

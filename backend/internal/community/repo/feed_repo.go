@@ -652,10 +652,6 @@ var foodNutrientColumns = map[string]string{
 	"folate":      "folate_mcg_per_100g",
 }
 
-var proteinLeaderboardBasicFoods = []string{
-	"金枪鱼", "鸡胸肉", "牛肉", "猪里脊", "猪里脊肉", "虾仁", "虾", "三文鱼", "鸡肉", "鸡蛋", "豆腐", "牛奶",
-}
-
 var everydayLeaderboardFoods = []string{
 	"鸡蛋", "牛奶", "酸奶", "豆腐", "豆腐干", "黄豆", "黑豆", "毛豆",
 	"金枪鱼", "鸡胸肉", "牛肉", "猪里脊", "猪里脊肉", "虾", "虾仁", "三文鱼",
@@ -674,12 +670,15 @@ func (r *FeedRepo) GetFoodNutrientRanking(ctx context.Context, nutrient string, 
 	if limit <= 0 || limit > 100 {
 		limit = 50
 	}
+	if nutrient == "protein" {
+		return r.getProteinFoodRanking(ctx, column, limit)
+	}
 	var rows []NutrientFoodRow
 	err := r.db.WithContext(ctx).Table("food_nutrition_library").
 		Select(fmt.Sprintf("id, canonical_name AS name, image_path, %s AS value", column)).
 		Where("is_active = ?", true).
 		Where("kcal_per_100g > 0 AND canonical_name ~ ?", "[一-龥]").
-		Where("canonical_name IN ?", leaderboardFoodNames(nutrient)).
+		Where("canonical_name IN ?", everydayLeaderboardFoods).
 		Where(column + " > 0").
 		Order(column + " DESC, canonical_name ASC").
 		Limit(limit).
@@ -687,11 +686,42 @@ func (r *FeedRepo) GetFoodNutrientRanking(ctx context.Context, nutrient string, 
 	return rows, err
 }
 
-func leaderboardFoodNames(nutrient string) []string {
-	if nutrient == "protein" {
-		return proteinLeaderboardBasicFoods
-	}
-	return everydayLeaderboardFoods
+func (r *FeedRepo) getProteinFoodRanking(ctx context.Context, column string, limit int) ([]NutrientFoodRow, error) {
+	const displayNameCase = `CASE
+		WHEN canonical_name ~ '金枪鱼' THEN '金枪鱼'
+		WHEN canonical_name ~ '鸡胸' THEN '鸡胸肉'
+		WHEN canonical_name ~ '^牛肉' THEN '牛肉'
+		WHEN canonical_name ~ '猪里脊' THEN '猪里脊肉'
+		WHEN canonical_name ~ '虾仁' THEN '虾仁'
+		WHEN canonical_name ~ '^虾($|[（(，,])' THEN '虾'
+		WHEN canonical_name ~ '三文鱼' THEN '三文鱼'
+		WHEN canonical_name ~ '^鸡肉' THEN '鸡肉'
+		WHEN canonical_name ~ '^鸡蛋($|[（(，,])' THEN '鸡蛋'
+		WHEN canonical_name ~ '^豆腐($|[（(，,])' THEN '豆腐'
+		WHEN canonical_name ~ '^牛奶($|[（(，,])' THEN '牛奶'
+	END`
+	query := fmt.Sprintf(`
+		WITH candidates AS (
+			SELECT id, %s AS name, image_path, %s AS value
+			FROM food_nutrition_library
+			WHERE is_active = TRUE
+				AND kcal_per_100g > 0
+				AND %s > 0
+		), ranked AS (
+			SELECT id, name, image_path, value,
+				ROW_NUMBER() OVER (PARTITION BY name ORDER BY value DESC, id ASC) AS family_rank
+			FROM candidates
+			WHERE name IS NOT NULL
+		)
+		SELECT id, name, image_path, value
+		FROM ranked
+		WHERE family_rank = 1
+		ORDER BY value DESC, name ASC
+		LIMIT ?`, displayNameCase, column, column)
+
+	var rows []NutrientFoodRow
+	err := r.db.WithContext(ctx).Raw(query, limit).Scan(&rows).Error
+	return rows, err
 }
 
 func isDuplicateError(err error) bool {
