@@ -287,7 +287,8 @@ func TestFeedRepoGetFoodNutrientRanking(t *testing.T) {
 		('f5', 'English Food', true, 'authoritative', 240, 77),
 		('f6', '乳清蛋白粉', true, 'authoritative', 390, 78.4),
 		('f7', '鸡蛋（全蛋）', true, 'unreviewed', 144, 12.7),
-		('f8', '鸡蛋（煮）', true, 'authoritative', 155, 13.1)`).Error)
+		('f8', '鸡蛋（煮）', true, 'authoritative', 155, 13.1),
+		('f9', '鸡胸肉干', true, 'authoritative', 280, 46.5)`).Error)
 
 	rows, err := NewFeedRepo(db).GetFoodNutrientRanking(context.Background(), "protein", 10)
 

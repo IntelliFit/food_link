@@ -702,14 +702,19 @@ func (r *FeedRepo) getProteinFoodRanking(ctx context.Context, column string, lim
 	END`
 	query := fmt.Sprintf(`
 		WITH candidates AS (
-			SELECT id, %s AS name, image_path, %s AS value
+			SELECT id, canonical_name AS source_name, %s AS name, image_path, %s AS value
 			FROM food_nutrition_library
 			WHERE is_active = TRUE
 				AND kcal_per_100g > 0
 				AND %s > 0
+				AND canonical_name !~ '(干|脯|松|粉|罐头|腌|熏|炸|脱水)'
 		), ranked AS (
 			SELECT id, name, image_path, value,
-				ROW_NUMBER() OVER (PARTITION BY name ORDER BY value DESC, id ASC) AS family_rank
+				ROW_NUMBER() OVER (
+					PARTITION BY name
+					ORDER BY CASE WHEN source_name = name THEN 0 ELSE 1 END,
+						CHAR_LENGTH(source_name), source_name ASC, id ASC
+				) AS family_rank
 			FROM candidates
 			WHERE name IS NOT NULL
 		)
