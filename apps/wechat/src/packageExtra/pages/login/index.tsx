@@ -1,4 +1,4 @@
-import { View, Text, Image, Input } from '@tarojs/components'
+import { View, Text, Image, Input, Button } from '@tarojs/components'
 import Taro, { useRouter } from '@tarojs/taro'
 import * as React from 'react'
 import { Button as TaroifyButton } from '@taroify/core'
@@ -445,8 +445,8 @@ export default function LoginPage() {
         await finishLoginFlow()
     }
 
-    /** 微信一键登录：只完成登录，头像/昵称由用户在资料页自行选择或填写。 */
-    const handleWxLogin = async () => {
+    /** 手机号快捷登录：一次取得会话凭证和手机号授权，避免登录后再次打断用户。 */
+    const handlePhoneLogin = async (e: { detail?: { code?: string } }) => {
         if (!agreed) {
             Taro.showToast({
                 title: '请先阅读并勾选同意《用户服务协议》及《隐私政策》',
@@ -455,7 +455,13 @@ export default function LoginPage() {
             return
         }
         if (loading) return
-        beginLoginLoading('wechat-login')
+        const phoneCode = String(e.detail?.code || '').trim()
+        if (!phoneCode) {
+            Taro.showToast({ title: '请授权手机号后继续', icon: 'none' })
+            return
+        }
+
+        beginLoginLoading('phone-login')
         try {
             await cleanupGeneratedUserFiles()
             logLoginStage('cleanup-resolved', {
@@ -468,29 +474,29 @@ export default function LoginPage() {
                 duration_ms: Date.now() - loadingStartedAtRef.current,
                 has_code: Boolean(loginRes.code),
             })
-            console.log('[invite-debug][login] 微信一键登录提交前邀请码状态', {
+            console.log('[invite-debug][login] 手机号快捷登录提交前邀请码状态', {
                 inviteCodeFromQuery,
                 inviteCodeFromRedirect,
                 inviteCodeFromStorage,
                 finalInviteCode: inviteCode,
                 routerParams: router.params,
             })
-            const loginData: LoginResponse = await login(loginRes.code, undefined, inviteCode)
+            const loginData: LoginResponse = await login(loginRes.code, phoneCode, inviteCode)
             logLoginStage('api-login-resolved', {
                 duration_ms: Date.now() - loadingStartedAtRef.current,
                 has_phone_number: Boolean(loginData.purePhoneNumber || loginData.phoneNumber),
             })
-            console.log('[invite-debug][login] 微信一键登录返回', {
+            console.log('[invite-debug][login] 手机号快捷登录返回', {
                 userId: loginData.user_id,
                 hasAccessToken: Boolean(loginData.access_token),
                 hasPhoneNumber: Boolean(loginData.purePhoneNumber || loginData.phoneNumber),
                 inviteCode,
             })
             await handleLoginSuccess(loginData)
-            releaseLoginLoading('wechat-login-success')
+            releaseLoginLoading('phone-login-success')
         } catch (error: any) {
             console.error('登录失败:', error)
-            releaseLoginLoading('wechat-login-error')
+            releaseLoginLoading('phone-login-error')
             await showLoginErrorToast(error, '登录失败')
         }
     }
@@ -729,14 +735,15 @@ export default function LoginPage() {
             )}
 
             <View className='login-actions'>
-                <TaroifyButton
-                  className='wx-login-btn'
-                  shape='round'
-                  onClick={handleWxLogin}
+                <Button
+                  className='phone-login-btn'
+                  openType='getPhoneNumber'
+                  onGetPhoneNumber={handlePhoneLogin}
+                  disabled={loading}
                   loading={loading && !showProfileForm}
                 >
-                    微信快捷登录
-                </TaroifyButton>
+                    手机号快捷登录
+                </Button>
                 <TaroifyButton
                   className='skip-login-btn'
                   variant='text'

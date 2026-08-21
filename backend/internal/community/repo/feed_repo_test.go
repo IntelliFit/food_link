@@ -263,3 +263,41 @@ func TestFeedRepoGetCheckinCounts(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, 2, counts["u1"])
 }
+
+func TestFeedRepoGetFoodNutrientRanking(t *testing.T) {
+	db := setupFeedTestDB(t)
+	assert.NoError(t, db.Exec(`CREATE TABLE food_nutrition_library (
+		id text primary key, canonical_name text not null, image_path text,
+		is_active boolean not null default true, quality_tier text not null default 'authoritative',
+		kcal_per_100g numeric not null default 0, protein_per_100g numeric not null default 0,
+		fiber_per_100g numeric not null default 0, calcium_mg_per_100g numeric not null default 0,
+		iron_mg_per_100g numeric not null default 0, potassium_mg_per_100g numeric not null default 0,
+		magnesium_mg_per_100g numeric not null default 0, zinc_mg_per_100g numeric not null default 0,
+		vitamin_a_rae_mcg_per_100g numeric not null default 0, vitamin_c_mg_per_100g numeric not null default 0,
+		vitamin_d_mcg_per_100g numeric not null default 0, vitamin_e_mg_per_100g numeric not null default 0,
+		vitamin_k_mcg_per_100g numeric not null default 0, vitamin_b12_mcg_per_100g numeric not null default 0,
+		folate_mcg_per_100g numeric not null default 0
+	)`).Error)
+	assert.NoError(t, db.Exec(`INSERT INTO food_nutrition_library
+		(id, canonical_name, is_active, quality_tier, kcal_per_100g, protein_per_100g) VALUES
+		('f1', '鸡胸肉（熟）', true, 'authoritative', 165, 28.8),
+		('f2', '金枪鱼', true, 'reviewed_estimate', 132, 29),
+		('f3', '停用食物', false, 'authoritative', 300, 99),
+		('f4', '未审核食物', true, 'unreviewed', 260, 88),
+		('f5', 'English Food', true, 'authoritative', 240, 77),
+		('f6', '乳清蛋白粉', true, 'authoritative', 390, 78.4),
+		('f7', '鸡蛋（全蛋）', true, 'unreviewed', 144, 12.7),
+		('f8', '鸡蛋（煮）', true, 'authoritative', 155, 13.1),
+		('f9', '鸡胸肉干', true, 'authoritative', 280, 46.5)`).Error)
+
+	rows, err := NewFeedRepo(db).GetFoodNutrientRanking(context.Background(), "protein", 10)
+
+	assert.NoError(t, err)
+	assert.Len(t, rows, 3)
+	assert.Equal(t, "金枪鱼", rows[0].Name)
+	assert.Equal(t, 29.0, rows[0].Value)
+	assert.Equal(t, "鸡胸肉", rows[1].Name)
+	assert.Equal(t, 28.8, rows[1].Value)
+	assert.Equal(t, "鸡蛋", rows[2].Name)
+	assert.Equal(t, 13.1, rows[2].Value)
+}

@@ -18,30 +18,34 @@ import (
 )
 
 type mockCommunityService struct {
-	publicFeed       []service.FeedItem
-	publicFeedParams *service.FeedParams
-	publicFeedErr    error
-	friendFeed       []service.FeedItem
-	friendFeedErr    error
-	leaderboard      *service.LeaderboardResult
-	leaderboardErr   error
-	likeMsg          string
-	likeErr          error
-	unlikeMsg        string
-	unlikeErr        error
-	hideErr          error
-	comments         []service.CommentItem
-	commentsErr      error
-	feedContext      *service.FeedContextResult
-	feedContextErr   error
-	postComment      *service.CommentItem
-	postCommentErr   error
-	commentTasks     []domain.CommentTask
-	commentTasksErr  error
-	notifications    *service.NotificationListResult
-	notificationsErr error
-	markRead         *service.MarkReadResult
-	markReadErr      error
+	publicFeed           []service.FeedItem
+	publicFeedParams     *service.FeedParams
+	publicFeedErr        error
+	friendFeed           []service.FeedItem
+	friendFeedErr        error
+	leaderboard          *service.LeaderboardResult
+	leaderboardErr       error
+	healthLeaderboard    *service.HealthLeaderboardResult
+	healthLeaderboardErr error
+	foodLeaderboard      *service.FoodNutrientLeaderboardResult
+	foodLeaderboardErr   error
+	likeMsg              string
+	likeErr              error
+	unlikeMsg            string
+	unlikeErr            error
+	hideErr              error
+	comments             []service.CommentItem
+	commentsErr          error
+	feedContext          *service.FeedContextResult
+	feedContextErr       error
+	postComment          *service.CommentItem
+	postCommentErr       error
+	commentTasks         []domain.CommentTask
+	commentTasksErr      error
+	notifications        *service.NotificationListResult
+	notificationsErr     error
+	markRead             *service.MarkReadResult
+	markReadErr          error
 }
 
 func (m *mockCommunityService) PublicFeed(ctx context.Context, params service.FeedParams) ([]service.FeedItem, error) {
@@ -53,6 +57,12 @@ func (m *mockCommunityService) FriendFeed(ctx context.Context, userID string, pa
 }
 func (m *mockCommunityService) CheckinLeaderboard(ctx context.Context, viewerUserID string) (*service.LeaderboardResult, error) {
 	return m.leaderboard, m.leaderboardErr
+}
+func (m *mockCommunityService) HealthLeaderboard(ctx context.Context, viewerUserID string) (*service.HealthLeaderboardResult, error) {
+	return m.healthLeaderboard, m.healthLeaderboardErr
+}
+func (m *mockCommunityService) FoodNutrientLeaderboard(ctx context.Context, nutrient string, limit int) (*service.FoodNutrientLeaderboardResult, error) {
+	return m.foodLeaderboard, m.foodLeaderboardErr
 }
 func (m *mockCommunityService) LikeFeed(ctx context.Context, userID, recordID string) (string, error) {
 	return m.likeMsg, m.likeErr
@@ -128,6 +138,8 @@ func setupCommunityRouter(h *CommunityHandler) *gin.Engine {
 	r.GET("/api/community/public-feed", h.PublicFeed)
 	r.GET("/api/community/feed", h.Feed)
 	r.GET("/api/community/checkin-leaderboard", h.CheckinLeaderboard)
+	r.GET("/api/community/health-leaderboard", h.HealthLeaderboard)
+	r.GET("/api/community/food-nutrient-leaderboard", h.FoodNutrientLeaderboard)
 	r.POST("/api/community/feed/:record_id/like", h.LikeFeed)
 	r.DELETE("/api/community/feed/:record_id/like", h.UnlikeFeed)
 	r.POST("/api/community/feed/:record_id/hide", h.HideFeed)
@@ -185,6 +197,37 @@ func TestCheckinLeaderboard(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest(http.MethodGet, "/api/community/checkin-leaderboard", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+func TestHealthLeaderboard(t *testing.T) {
+	mockSvc := &mockCommunityService{healthLeaderboard: &service.HealthLeaderboardResult{
+		WeekStart: "2024-01-01",
+		List:      []service.HealthLeaderboardItem{{Rank: 1, HealthIndex: 88}},
+	}}
+	h := NewCommunityHandler(mockSvc)
+	r := setupCommunityRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/api/community/health-leaderboard", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+func TestFoodNutrientLeaderboard(t *testing.T) {
+	mockSvc := &mockCommunityService{foodLeaderboard: &service.FoodNutrientLeaderboardResult{
+		Nutrient: "protein",
+		Unit:     "g",
+		List:     []service.FoodNutrientLeaderboardItem{{Rank: 1, Name: "黄豆", Value: 36}},
+	}}
+	h := NewCommunityHandler(mockSvc)
+	r := setupCommunityRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/api/community/food-nutrient-leaderboard?nutrient=protein&limit=2", nil)
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)

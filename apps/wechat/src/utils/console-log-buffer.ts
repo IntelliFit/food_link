@@ -11,7 +11,6 @@ export type ConsoleLogEntry = {
 const CONSOLE_LOG_STORAGE_KEY = 'recent_console_logs_v1'
 const DEFAULT_CONSOLE_LOG_LIMIT = 80
 const MAX_CONSOLE_LOG_LIMIT = 120
-
 declare const __CONSOLE_LOG_BUFFER_LIMIT__: string
 
 function readConsoleLogLimit(): number {
@@ -29,6 +28,7 @@ export const CONSOLE_LOG_BUFFER_LIMIT = readConsoleLogLimit()
 
 let consoleLogBuffer: ConsoleLogEntry[] | null = null
 let installed = false
+let persistTimer: ReturnType<typeof setTimeout> | null = null
 
 function formatConsoleArgs(args: unknown[]): string {
   return args
@@ -62,18 +62,25 @@ function loadConsoleLogs(): ConsoleLogEntry[] {
 }
 
 function persistConsoleLogs(items: ConsoleLogEntry[]): void {
-  try {
-    Taro.setStorageSync(CONSOLE_LOG_STORAGE_KEY, items)
-  } catch {
+  void Taro.setStorage({ key: CONSOLE_LOG_STORAGE_KEY, data: items }).catch(() => {
     // 本地诊断缓存失败不影响主流程
-  }
+  })
+}
+
+/** 合并密集 console 输出，避免每条日志都同步阻塞小程序 JS 主线程。 */
+function schedulePersistConsoleLogs(): void {
+  if (persistTimer) return
+  persistTimer = setTimeout(() => {
+    persistTimer = null
+    persistConsoleLogs(consoleLogBuffer || [])
+  }, 500)
 }
 
 function appendConsoleLog(entry: ConsoleLogEntry): void {
   if (CONSOLE_LOG_BUFFER_LIMIT <= 0) return
   const next = trimConsoleLogs([...loadConsoleLogs(), entry])
   consoleLogBuffer = next
-  persistConsoleLogs(next)
+  schedulePersistConsoleLogs()
 }
 
 /** 安装 console 拦截，采集最近日志供反馈诊断附带 */
@@ -102,8 +109,21 @@ export function getRecentConsoleLogs(limit = CONSOLE_LOG_BUFFER_LIMIT): ConsoleL
   return loadConsoleLogs().slice(-normalizedLimit)
 }
 
+/** App 进入后台前尽快保存；高频日志路径仍只做内存追加。 */
+export function flushRecentConsoleLogs(): void {
+  if (persistTimer) {
+    clearTimeout(persistTimer)
+    persistTimer = null
+  }
+  persistConsoleLogs([...(consoleLogBuffer || [])])
+}
+
 /** 供 profile 清除缓存时重置 */
 export function clearRecentConsoleLogs(): void {
+  if (persistTimer) {
+    clearTimeout(persistTimer)
+    persistTimer = null
+  }
   consoleLogBuffer = []
   try {
     Taro.removeStorageSync(CONSOLE_LOG_STORAGE_KEY)

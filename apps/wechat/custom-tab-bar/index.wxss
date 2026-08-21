@@ -142,6 +142,26 @@
   line-height: 1;
 }
 
+.center-icon-wrapper.is-opening {
+  box-shadow: 0 5rpx 16rpx rgba(92, 184, 150, 0.4), 0 2rpx 6rpx rgba(0, 0, 0, 0.06);
+}
+
+.center-opening-spinner {
+  width: 42rpx;
+  height: 42rpx;
+  box-sizing: border-box;
+  border: 5rpx solid rgba(255, 255, 255, 0.45);
+  border-top-color: #ffffff;
+  border-radius: 50%;
+  animation: center-opening-spin 0.7s linear infinite;
+}
+
+@keyframes center-opening-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 /* 我的按钮上的红点提醒 */
 .profile-icon-wrapper {
   position: relative;
@@ -225,4 +245,9 @@
 
 .custom-tab-bar--wellness .center-icon {
   color: #285c40;
+}
+
+.custom-tab-bar--wellness .center-opening-spinner {
+  border-color: rgba(40, 92, 64, 0.28);
+  border-top-color: #285c40;
 }

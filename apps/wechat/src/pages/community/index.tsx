@@ -21,6 +21,7 @@ import {
   communityPostComment,
   communityDeleteComment,
   communityGetCheckinLeaderboard,
+  communityGetFoodNutrientLeaderboard,
   communityHideFeed,
   getUnreadMessageCount,
   deleteCirclePost,
@@ -38,6 +39,7 @@ import {
   type CommunityFeedTargetType,
   type FeedCommentItem,
   type CheckinLeaderboardItem,
+  type FoodNutrientLeaderboardItem,
   type MealType,
   type DietGoal,
   type CommunityFeedRecord,
@@ -58,6 +60,7 @@ import { IconTrendingUp } from '../../components/iconfont'
 import './index.scss'
 import { withAuth, redirectToLogin } from '../../utils/withAuth'
 import { extraPkgUrl } from '../../utils/subpackage-extra'
+import { settleRankingPreviewRequests } from './ranking-preview'
 import { COMMUNITY_FEED_CHANGED_EVENT } from '../../utils/home-events'
 import { chooseImageWithPrivacy, isPrivacyAuthorizeError, showPrivacyAuthorizeFailure } from '../../utils/weapp-privacy'
 import { useAppColorScheme } from '../../components/AppColorSchemeContext'
@@ -518,6 +521,8 @@ function CommunityPage() {
 
   /** 打卡榜预览（横幅内展示前三名，点开看完整榜） */
   const [lbPreviewTop, setLbPreviewTop] = useState<CheckinLeaderboardItem[]>([])
+  /** 食物营养榜预览（默认蛋白质，每 100g） */
+  const [foodRankingPreview, setFoodRankingPreview] = useState<FoodNutrientLeaderboardItem[]>([])
   /** 下拉刷新时横幅内显示加载态 */
   const [lbPreviewLoading, setLbPreviewLoading] = useState(false)
   /** 任意请求进行中（含静默），用于首次进入时骨架 */
@@ -570,20 +575,28 @@ function CommunityPage() {
     offsetRef.current = offset
   }, [offset])
 
-  const loadCheckinPreview = useCallback(async (silent = true) => {
-    if (!getAccessToken()) {
+  const loadRankingPreview = useCallback(async (silent = true) => {
+    const hasAccessToken = Boolean(getAccessToken())
+    if (!hasAccessToken) {
       setLbPreviewTop([])
-      setLbPreviewFetching(false)
-      return
     }
     if (!silent) setLbPreviewLoading(true)
     setLbPreviewFetching(true)
     try {
-      const res = await communityGetCheckinLeaderboard()
-      const list = res.list || []
-      setLbPreviewTop(list.slice(0, 3))
-    } catch {
-      // 保留上次预览，避免请求失败时横幅突然变空
+      const result = await settleRankingPreviewRequests(
+        hasAccessToken ? communityGetCheckinLeaderboard() : null,
+        communityGetFoodNutrientLeaderboard('protein', 2)
+      )
+      if (result.user?.status === 'fulfilled') {
+        setLbPreviewTop((result.user.value.list || []).slice(0, 2))
+      } else if (result.user?.status === 'rejected') {
+        console.error('加载用户排行榜预览失败:', result.user.reason)
+      }
+      if (result.food.status === 'fulfilled') {
+        setFoodRankingPreview((result.food.value.list || []).slice(0, 2))
+      } else {
+        console.error('加载食物排行榜预览失败:', result.food.reason)
+      }
     } finally {
       setLbPreviewFetching(false)
       if (!silent) setLbPreviewLoading(false)
@@ -1049,12 +1062,12 @@ function CommunityPage() {
     const tasks: Promise<void>[] = [refreshFeed(false, true)]
     if (getAccessToken()) {
       tasks.push(loadFriendsAndRequests(false))
-      tasks.push(loadCheckinPreview(false))
+      tasks.push(loadRankingPreview(false))
       tasks.push(loadInteractionNotificationsBadge())
       tasks.push(loadUnreadMessageCount())
     }
     Promise.all(tasks)
-  }, [loadFriendsAndRequests, refreshFeed, loadCheckinPreview, loadInteractionNotificationsBadge, loadUnreadMessageCount])
+  }, [loadFriendsAndRequests, refreshFeed, loadRankingPreview, loadInteractionNotificationsBadge, loadUnreadMessageCount])
 
   // 评论栏弹出后延迟聚焦，等滑入动画完成
   useEffect(() => {
@@ -1201,7 +1214,7 @@ function CommunityPage() {
       // Feed 是首屏关键请求。排行榜、消息角标和好友申请稍后再拉，
       // 避免与 Feed/好友列表同时抢占后端仅 10 个数据库连接。
       setTimeout(() => {
-        void loadCheckinPreview(true)
+        void loadRankingPreview(true)
         void loadInteractionNotificationsBadge()
         void loadUnreadMessageCount()
         if (!needRefreshFriends) {
@@ -1210,6 +1223,7 @@ function CommunityPage() {
       }, 300)
     } else {
       setLbPreviewTop([])
+      setFoodRankingPreview([])
       setUnreadNotificationCount(0)
       setUnreadMessageCount(0)
       setRequests([])
@@ -2138,72 +2152,107 @@ function CommunityPage() {
               if (expandedCommentRecordId) closeCommentModal()
             }}
           >
-            {/* 本周打卡排行榜：页面首屏优先展示 */}
-            <View
-              className='ranking-banner'
-              onClick={(e) => {
-                e.stopPropagation()
-                if (!getAccessToken()) {
-                  redirectToLogin()
-                  return
-                }
-                Taro.navigateTo({ url: extraPkgUrl('/pages/checkin-leaderboard/index') })
-              }}
-            >
+            {/* 排行榜：左侧用户榜，右侧食物营养榜 */}
+            <View className='ranking-banner' onClick={(e) => e.stopPropagation()}>
               <View className='ranking-head'>
                 <View className='ranking-icon-wrap'>
-                  <IconTrendingUp size={36} color='rgb(255 255 255 / 95%)' />
+                  <IconTrendingUp size={34} color='rgb(255 255 255 / 95%)' />
                 </View>
-                <View className='ranking-head-text'>
-                  <Text className='ranking-title'>本周打卡排行榜</Text>
-                  <Text className='ranking-subtitle'>看看谁是本周最活跃</Text>
+                <Text className='ranking-title'>排行榜</Text>
+                <Text className='ranking-week-tag'>本周</Text>
+              </View>
+
+              <View className='ranking-columns'>
+                <View
+                  className='ranking-column ranking-user-column'
+                  onClick={() => {
+                    if (!getAccessToken()) return redirectToLogin()
+                    Taro.navigateTo({ url: extraPkgUrl('/pages/checkin-leaderboard/index?section=user') })
+                  }}
+                >
+                  <Text className='ranking-column-title'>用户榜</Text>
+                  <View className='ranking-mini-tabs'>
+                    <Text className='ranking-mini-tab active'>打卡</Text>
+                    <Text
+                      className='ranking-mini-tab'
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        if (!getAccessToken()) return redirectToLogin()
+                        Taro.navigateTo({ url: extraPkgUrl('/pages/checkin-leaderboard/index?section=user&ranking=health') })
+                      }}
+                    >健康</Text>
+                  </View>
+                  <View className='ranking-mini-list'>
+                    {(lbPreviewLoading || (lbPreviewFetching && lbPreviewTop.length === 0)) ? (
+                      <View className='ranking-mini-skeleton'><View /><View /></View>
+                    ) : lbPreviewTop.length > 0 ? lbPreviewTop.map(row => (
+                      <View className='ranking-mini-row' key={row.user_id}>
+                        <Text className={`ranking-mini-rank rank-${row.rank}`}>{row.rank}</Text>
+                        <View className='ranking-mini-avatar-wrap'>
+                          {row.avatar ? (
+                            <Image className='ranking-mini-avatar' src={row.avatar} mode='aspectFill' />
+                          ) : (
+                            <Text className='iconfont icon-duoren ranking-mini-placeholder' />
+                          )}
+                        </View>
+                        <Text className='ranking-mini-name' numberOfLines={1}>{row.nickname}</Text>
+                        <Text className='ranking-mini-value'>{row.checkin_count}次</Text>
+                      </View>
+                    )) : <Text className='ranking-mini-empty'>暂无打卡</Text>}
+                  </View>
+                  <Text className='ranking-column-link'>查看用户榜 ›</Text>
+                </View>
+
+                <View className='ranking-column-divider' />
+
+                <View
+                  className='ranking-column ranking-food-column'
+                  onClick={() => {
+                    if (!getAccessToken()) return redirectToLogin()
+                    Taro.navigateTo({ url: extraPkgUrl('/pages/checkin-leaderboard/index?section=food&nutrient=protein') })
+                  }}
+                >
+                  <Text className='ranking-column-title'>食物榜</Text>
+                  <View className='ranking-mini-tabs ranking-food-tabs'>
+                    <Text className='ranking-mini-tab active'>蛋白质</Text>
+                    <Text
+                      className='ranking-mini-tab'
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        if (!getAccessToken()) return redirectToLogin()
+                        Taro.navigateTo({ url: extraPkgUrl('/pages/checkin-leaderboard/index?section=food&nutrient=fiber') })
+                      }}
+                    >纤维</Text>
+                    <Text
+                      className='ranking-mini-tab'
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        if (!getAccessToken()) return redirectToLogin()
+                        Taro.navigateTo({ url: extraPkgUrl('/pages/checkin-leaderboard/index?section=food&nutrient=calcium') })
+                      }}
+                    >钙</Text>
+                  </View>
+                  <View className='ranking-mini-list'>
+                    {(lbPreviewLoading || (lbPreviewFetching && foodRankingPreview.length === 0)) ? (
+                      <View className='ranking-mini-skeleton'><View /><View /></View>
+                    ) : foodRankingPreview.length > 0 ? foodRankingPreview.map(row => (
+                      <View className='ranking-mini-row' key={row.food_id}>
+                        <Text className={`ranking-mini-rank rank-${row.rank}`}>{row.rank}</Text>
+                        <View className='ranking-mini-avatar-wrap'>
+                          {row.image_url ? (
+                            <Image className='ranking-mini-avatar' src={row.image_url} mode='aspectFill' />
+                          ) : (
+                            <Text className='iconfont icon-shiwu ranking-mini-placeholder is-food' />
+                          )}
+                        </View>
+                        <Text className='ranking-mini-name' numberOfLines={1}>{row.name}</Text>
+                        <Text className='ranking-mini-value'>{Number(row.value.toFixed(1))}g</Text>
+                      </View>
+                    )) : <Text className='ranking-mini-empty'>暂无食物</Text>}
+                  </View>
+                  <Text className='ranking-column-link'>更多营养素 ›</Text>
                 </View>
               </View>
-              {loggedIn ? (
-                <View className='ranking-preview'>
-                  {(lbPreviewLoading || (lbPreviewFetching && lbPreviewTop.length === 0)) ? (
-                    <View className='ranking-preview-skeleton'>
-                      <View className='ranking-preview-sk-dot' />
-                      <View className='ranking-preview-sk-dot' />
-                      <View className='ranking-preview-sk-dot' />
-                    </View>
-                  ) : lbPreviewTop.length > 0 ? (
-                    <View className='ranking-preview-row'>
-                      {lbPreviewTop.map((row) => (
-                        <View
-                          key={row.user_id}
-                          className={`ranking-preview-cell${row.is_me ? ' is-me' : ''}`}
-                        >
-                          <Text
-                            className={`ranking-preview-rank ${row.rank === 1 ? 'r1' : row.rank === 2 ? 'r2' : 'r3'}`}
-                          >
-                            {row.rank}
-                          </Text>
-                          <View className='ranking-preview-avatar-wrap'>
-                            {row.avatar ? (
-                              <Image
-                                className='ranking-preview-avatar'
-                                src={row.avatar}
-                                mode='aspectFill'
-                              />
-                            ) : (
-                              <View className='ranking-preview-avatar-fallback'>
-                                <Text className='iconfont icon-duoren ranking-preview-avatar-ico' />
-                              </View>
-                            )}
-                          </View>
-                          <Text className='ranking-preview-name' numberOfLines={1}>
-                            {row.nickname}
-                          </Text>
-                          <Text className='ranking-preview-count'>{row.checkin_count}次</Text>
-                        </View>
-                      ))}
-                    </View>
-                  ) : (
-                    <Text className='ranking-preview-placeholder'>暂无预览，下拉刷新试试</Text>
-                  )}
-                </View>
-              ) : null}
             </View>
 
             {/* 快捷入口：三键等分；有待处理申请时在「好友管理」右上角绝对定位角标（不占流），点击进入「收到的请求」 */}

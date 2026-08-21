@@ -12,6 +12,7 @@ import {
   getAnalyzeTaskCount,
   getFriendCount,
   getFavoriteCount,
+  clearRecentRequestTraces,
   MembershipStatus,
   FoodExpiryDashboard
 } from '../../utils/api'
@@ -560,7 +561,7 @@ function ProfilePage() {
           })
 
           // 意见反馈诊断缓存
-          Taro.removeStorageSync('recent_request_traces_v1')
+          clearRecentRequestTraces()
           clearRecentConsoleLogs()
 
           await cleanupGeneratedUserFiles()

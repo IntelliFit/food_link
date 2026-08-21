@@ -80,6 +80,13 @@ type UserProfile struct {
 	PetLevel      *int   `gorm:"-"`
 }
 
+type NutrientFoodRow struct {
+	ID        string  `gorm:"column:id"`
+	Name      string  `gorm:"column:name"`
+	ImagePath *string `gorm:"column:image_path"`
+	Value     float64 `gorm:"column:value"`
+}
+
 func (UserProfile) TableName() string { return "weapp_user" }
 
 type LikeInfo struct {
@@ -626,6 +633,99 @@ func (r *FeedRepo) GetCheckinCounts(ctx context.Context, userIDs []string, weekS
 		result[row.UserID] = row.Count
 	}
 	return result, nil
+}
+
+var foodNutrientColumns = map[string]string{
+	"protein":     "protein_per_100g",
+	"fiber":       "fiber_per_100g",
+	"calcium":     "calcium_mg_per_100g",
+	"iron":        "iron_mg_per_100g",
+	"potassium":   "potassium_mg_per_100g",
+	"magnesium":   "magnesium_mg_per_100g",
+	"zinc":        "zinc_mg_per_100g",
+	"vitamin_a":   "vitamin_a_rae_mcg_per_100g",
+	"vitamin_c":   "vitamin_c_mg_per_100g",
+	"vitamin_d":   "vitamin_d_mcg_per_100g",
+	"vitamin_e":   "vitamin_e_mg_per_100g",
+	"vitamin_k":   "vitamin_k_mcg_per_100g",
+	"vitamin_b12": "vitamin_b12_mcg_per_100g",
+	"folate":      "folate_mcg_per_100g",
+}
+
+var everydayLeaderboardFoods = []string{
+	"鸡蛋", "牛奶", "酸奶", "豆腐", "豆腐干", "黄豆", "黑豆", "毛豆",
+	"金枪鱼", "鸡胸肉", "牛肉", "猪里脊", "猪里脊肉", "虾", "虾仁", "三文鱼",
+	"燕麦", "糙米", "玉米", "土豆", "红薯", "全麦面包",
+	"西兰花", "菠菜", "胡萝卜", "番茄", "黄瓜", "南瓜", "香菇", "海带", "紫菜",
+	"苹果", "香蕉", "橙子", "蓝莓", "草莓", "梨", "猕猴桃", "牛油果",
+	"花生", "核桃", "杏仁", "白芝麻", "黑芝麻", "奇亚籽", "虾皮", "猪肝", "鸭血",
+}
+
+func (r *FeedRepo) GetFoodNutrientRanking(ctx context.Context, nutrient string, limit int) ([]NutrientFoodRow, error) {
+	nutrient = strings.TrimSpace(nutrient)
+	column, ok := foodNutrientColumns[nutrient]
+	if !ok {
+		return nil, fmt.Errorf("不支持的营养素: %s", nutrient)
+	}
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+	if nutrient == "protein" {
+		return r.getProteinFoodRanking(ctx, column, limit)
+	}
+	var rows []NutrientFoodRow
+	err := r.db.WithContext(ctx).Table("food_nutrition_library").
+		Select(fmt.Sprintf("id, canonical_name AS name, image_path, %s AS value", column)).
+		Where("is_active = ?", true).
+		Where("kcal_per_100g > 0 AND canonical_name ~ ?", "[一-龥]").
+		Where("canonical_name IN ?", everydayLeaderboardFoods).
+		Where(column + " > 0").
+		Order(column + " DESC, canonical_name ASC").
+		Limit(limit).
+		Scan(&rows).Error
+	return rows, err
+}
+
+func (r *FeedRepo) getProteinFoodRanking(ctx context.Context, column string, limit int) ([]NutrientFoodRow, error) {
+	const displayNameCase = `CASE
+		WHEN canonical_name ~ '金枪鱼' THEN '金枪鱼'
+		WHEN canonical_name ~ '鸡胸' THEN '鸡胸肉'
+		WHEN canonical_name ~ '^牛肉' THEN '牛肉'
+		WHEN canonical_name ~ '猪里脊' THEN '猪里脊肉'
+		WHEN canonical_name ~ '虾仁' THEN '虾仁'
+		WHEN canonical_name ~ '^虾($|[（(，,])' THEN '虾'
+		WHEN canonical_name ~ '三文鱼' THEN '三文鱼'
+		WHEN canonical_name ~ '^鸡肉' THEN '鸡肉'
+		WHEN canonical_name ~ '^鸡蛋($|[（(，,])' THEN '鸡蛋'
+		WHEN canonical_name ~ '^豆腐($|[（(，,])' THEN '豆腐'
+		WHEN canonical_name ~ '^牛奶($|[（(，,])' THEN '牛奶'
+	END`
+	query := fmt.Sprintf(`
+		WITH candidates AS (
+			SELECT id, canonical_name AS source_name, %s AS name, image_path, %s AS value
+			FROM food_nutrition_library
+			WHERE is_active = TRUE
+				AND kcal_per_100g > 0
+				AND %s > 0
+				AND canonical_name !~ '(干|乾|脯|松|粉|罐头|腌|熏|炸|脱水)'
+		), ranked AS (
+			SELECT id, name, image_path, value,
+				ROW_NUMBER() OVER (
+					PARTITION BY name
+					ORDER BY value DESC, CHAR_LENGTH(source_name), source_name ASC, id ASC
+				) AS family_rank
+			FROM candidates
+			WHERE name IS NOT NULL
+		)
+		SELECT id, name, image_path, value
+		FROM ranked
+		WHERE family_rank = 1
+		ORDER BY value DESC, name ASC
+		LIMIT ?`, displayNameCase, column, column)
+
+	var rows []NutrientFoodRow
+	err := r.db.WithContext(ctx).Raw(query, limit).Scan(&rows).Error
+	return rows, err
 }
 
 func isDuplicateError(err error) bool {

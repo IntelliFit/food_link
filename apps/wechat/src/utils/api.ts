@@ -2576,6 +2576,7 @@ function extractHostNameFromHeaders(headers: Record<string, any> | undefined): s
 }
 
 const RECENT_REQUEST_TRACE_STORAGE_KEY = 'recent_request_traces_v1'
+const RECENT_REQUEST_TRACE_PERSIST_DELAY_MS = 800
 
 export interface RecentRequestTrace {
   method: string
@@ -2609,6 +2610,7 @@ function trimRecentRequestTraces(items: RecentRequestTrace[]): RecentRequestTrac
 }
 
 let recentRequestTraces: RecentRequestTrace[] | null = null
+let recentRequestTracePersistTimer: ReturnType<typeof setTimeout> | null = null
 
 function loadRecentRequestTraces(): RecentRequestTrace[] {
   if (recentRequestTraces) return recentRequestTraces
@@ -2623,23 +2625,59 @@ function loadRecentRequestTraces(): RecentRequestTrace[] {
 
 function persistRecentRequestTraces(items: RecentRequestTrace[]): void {
   try {
-    Taro.setStorageSync(RECENT_REQUEST_TRACE_STORAGE_KEY, items)
-  } catch (error) {
-    console.warn('[API TRACE] 保存最近请求诊断失败', error)
+    Taro.setStorage({
+      key: RECENT_REQUEST_TRACE_STORAGE_KEY,
+      data: items,
+      fail: () => {
+        // 诊断缓存失败不影响业务请求，也避免在失败回调中继续制造 console 写入。
+      },
+    })
+  } catch {
+    // ignore diagnostic persistence errors
   }
+}
+
+function scheduleRecentRequestTracePersist(): void {
+  if (recentRequestTracePersistTimer) return
+  recentRequestTracePersistTimer = setTimeout(() => {
+    recentRequestTracePersistTimer = null
+    persistRecentRequestTraces([...(recentRequestTraces || [])])
+  }, RECENT_REQUEST_TRACE_PERSIST_DELAY_MS)
 }
 
 function recordRecentRequestTrace(entry: RecentRequestTrace): void {
   if (RECENT_REQUEST_TRACE_LIMIT <= 0) return
   const next = trimRecentRequestTraces([...loadRecentRequestTraces(), entry])
   recentRequestTraces = next
-  persistRecentRequestTraces(next)
+  scheduleRecentRequestTracePersist()
 }
 
 export function getRecentRequestTraces(limit = RECENT_REQUEST_TRACE_LIMIT): RecentRequestTrace[] {
   const normalizedLimit = Math.min(RECENT_REQUEST_TRACE_LIMIT, Math.max(0, Math.floor(limit)))
   if (normalizedLimit <= 0) return []
   return loadRecentRequestTraces().slice(-normalizedLimit)
+}
+
+/** App 进入后台前尽快保存；请求完成热路径不再同步写 storage。 */
+export function flushRecentRequestTraces(): void {
+  if (recentRequestTracePersistTimer) {
+    clearTimeout(recentRequestTracePersistTimer)
+    recentRequestTracePersistTimer = null
+  }
+  persistRecentRequestTraces([...(recentRequestTraces || [])])
+}
+
+export function clearRecentRequestTraces(): void {
+  if (recentRequestTracePersistTimer) {
+    clearTimeout(recentRequestTracePersistTimer)
+    recentRequestTracePersistTimer = null
+  }
+  recentRequestTraces = []
+  try {
+    Taro.removeStorageSync(RECENT_REQUEST_TRACE_STORAGE_KEY)
+  } catch {
+    // ignore
+  }
 }
 
 function extractRequestErrorMessage(error: unknown): string | undefined {
@@ -2660,7 +2698,7 @@ function recordResponseTrace(params: {
   url: string
   method?: string
   startedAt: number
-  response?: Taro.request.SuccessCallbackResult<any>
+  response?: { statusCode?: number; header?: Record<string, any> }
   error?: unknown
 }): void {
   const { url, method, startedAt, response, error } = params
@@ -2887,18 +2925,27 @@ export async function uploadAnalyzeImageFile(localPath: string): Promise<{ image
   }
 
   const token = getAccessToken()
-  const response = await new Promise<any>((resolve, reject) => {
-    Taro.uploadFile({
-      url: `${API_BASE_URL}/api/upload-analyze-image-file`,
-      filePath,
-      name: 'file',
-      header: withNgrokBypassHeaders({
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      }),
-      success: resolve,
-      fail: reject,
+  const uploadUrl = `${API_BASE_URL}/api/upload-analyze-image-file`
+  const startedAt = Date.now()
+  let response: any
+  try {
+    response = await new Promise<any>((resolve, reject) => {
+      Taro.uploadFile({
+        url: uploadUrl,
+        filePath,
+        name: 'file',
+        header: withNgrokBypassHeaders({
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        }),
+        success: resolve,
+        fail: reject,
+      })
     })
-  })
+    recordResponseTrace({ url: uploadUrl, method: 'POST', startedAt, response })
+  } catch (error) {
+    recordResponseTrace({ url: uploadUrl, method: 'POST', startedAt, error })
+    throw error
+  }
 
   const parsedData = parseUploadAnalyzeResponseData(response?.data)
   const payload = unwrapUploadAnalyzePayload(parsedData)
@@ -2923,16 +2970,25 @@ export async function uploadAnalyzeImageFile(localPath: string): Promise<{ image
  */
 export async function uploadAnalyzeImage(base64Image: string): Promise<{ imageUrl: string }> {
   const token = getAccessToken()
-  const response = await Taro.request({
-    url: `${API_BASE_URL}/api/upload-analyze-image`,
-    method: 'POST',
-    header: withNgrokBypassHeaders({
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    }),
-    data: { base64Image },
-    timeout: 60000,
-  })
+  const uploadUrl = `${API_BASE_URL}/api/upload-analyze-image`
+  const startedAt = Date.now()
+  let response: Taro.request.SuccessCallbackResult<any>
+  try {
+    response = await Taro.request({
+      url: uploadUrl,
+      method: 'POST',
+      header: withNgrokBypassHeaders({
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      }),
+      data: { base64Image },
+      timeout: 60000,
+    })
+    recordResponseTrace({ url: uploadUrl, method: 'POST', startedAt, response })
+  } catch (error) {
+    recordResponseTrace({ url: uploadUrl, method: 'POST', startedAt, error })
+    throw error
+  }
   if (response.statusCode !== 200) {
     throwHttpErrorWithStatus(
       response.statusCode,
@@ -4859,6 +4915,10 @@ export function getAccessToken(): string | null {
  */
 export function saveTokens(accessToken: string, refreshToken: string, user_id: string) {
   try {
+    const previousUserId = String(Taro.getStorageSync('user_id') || '').trim()
+    if (previousUserId && previousUserId !== String(user_id || '').trim()) {
+      clearMembershipMemoryCache()
+    }
     Taro.setStorageSync('access_token', accessToken)
     Taro.setStorageSync('refresh_token', refreshToken)
     Taro.setStorageSync('user_id', user_id)
@@ -4872,6 +4932,7 @@ export function saveTokens(accessToken: string, refreshToken: string, user_id: s
  */
 export function clearTokens() {
   try {
+    clearMembershipMemoryCache()
     Taro.removeStorageSync('access_token')
     Taro.removeStorageSync('refresh_token')
     Taro.removeStorageSync('user_id')
@@ -5325,12 +5386,27 @@ let _membershipPending: Promise<MembershipStatus> | null = null
 let _membershipPendingKey = ''
 const MEMBERSHIP_CACHE_TTL_MS = 30_000
 
+function clearMembershipMemoryCache(): void {
+  _membershipCache.clear()
+  _membershipPending = null
+  _membershipPendingKey = ''
+}
+
+function getMembershipCacheOwnerId(): string {
+  try {
+    return String(Taro.getStorageSync('user_id') || '').trim() || 'unknown-user'
+  } catch {
+    return 'unknown-user'
+  }
+}
+
 /**
  * 获取当前用户会员状态（带 30s 缓存，复用 in-flight 请求）
  * @param date 可选，查询指定日期的积分状态（YYYY-MM-DD），不传则查今天
  */
 export async function getMyMembership(date?: string, options?: { forceRefresh?: boolean }): Promise<MembershipStatus> {
-  const key = (date || '').trim()
+  const dateKey = (date || '').trim()
+  const key = `${getMembershipCacheOwnerId()}:${dateKey}`
   const forceRefresh = options?.forceRefresh === true
   const cached = _membershipCache.get(key)
   if (!forceRefresh && cached && Date.now() < cached.expiresAt) {
@@ -5343,7 +5419,7 @@ export async function getMyMembership(date?: string, options?: { forceRefresh?: 
   _membershipPendingKey = key
   _membershipPending = (async () => {
     try {
-      const url = key ? `/api/membership/me?date=${encodeURIComponent(key)}` : '/api/membership/me'
+      const url = dateKey ? `/api/membership/me?date=${encodeURIComponent(dateKey)}` : '/api/membership/me'
       const response = await authenticatedRequest(url, {
         method: 'GET',
         timeout: 15000
@@ -6586,6 +6662,32 @@ export interface CheckinLeaderboardItem {
   is_me: boolean
 }
 
+export interface HealthLeaderboardItem {
+  rank: number
+  user_id: string
+  nickname: string
+  avatar: string
+  health_index: number
+  recorded_days: number
+  is_me: boolean
+}
+
+export interface FoodNutrientLeaderboardItem {
+  rank: number
+  food_id: string
+  name: string
+  image_url: string
+  value: number
+}
+
+export interface FoodNutrientLeaderboardResult {
+  nutrient: string
+  label: string
+  unit: string
+  basis: string
+  list: FoodNutrientLeaderboardItem[]
+}
+
 export type CommunityFeedSortBy = 'recommended' | 'latest' | 'hot' | 'balanced'
 export type CommunityAuthorScope = 'all' | 'priority' | 'public'
 export type CommunityFeedTargetType = 'food_record' | 'exercise_log' | 'campus_food' | 'circle_post'
@@ -7202,6 +7304,28 @@ export async function communityGetCheckinLeaderboard(): Promise<{
     week_end: string
     list: CheckinLeaderboardItem[]
   }
+}
+
+export async function communityGetHealthLeaderboard(): Promise<{
+  week_start: string
+  week_end: string
+  list: HealthLeaderboardItem[]
+}> {
+  const response = await authenticatedRequest('/api/community/health-leaderboard', { method: 'GET' })
+  if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '获取健康排行榜失败')
+  return response.data as { week_start: string; week_end: string; list: HealthLeaderboardItem[] }
+}
+
+export async function communityGetFoodNutrientLeaderboard(
+  nutrient: string,
+  limit: number = 50
+): Promise<FoodNutrientLeaderboardResult> {
+  const response = await authenticatedRequest(
+    `/api/community/food-nutrient-leaderboard?nutrient=${encodeURIComponent(nutrient)}&limit=${limit}`,
+    { method: 'GET' }
+  )
+  if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '获取食物排行榜失败')
+  return response.data as FoodNutrientLeaderboardResult
 }
 
 /** 公共 Feed：无需登录，返回公开用户的饮食记录 */

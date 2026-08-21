@@ -1,11 +1,11 @@
 import './perf-polyfill'
-import { installConsoleLogCapture } from './utils/console-log-buffer'
+import { flushRecentConsoleLogs, installConsoleLogCapture } from './utils/console-log-buffer'
 
 installConsoleLogCapture()
 
 import { createElement, type PropsWithChildren, useEffect } from 'react'
 import Taro, { useLaunch } from '@tarojs/taro'
-import { getAccessToken } from './utils/api'
+import { flushRecentRequestTraces, getAccessToken } from './utils/api'
 import { extraPkgUrl } from './utils/subpackage-extra'
 import { writePendingFriendInviteCode } from './utils/pending-friend-invite'
 import { AppColorSchemeProvider } from './components/AppColorSchemeContext'
@@ -140,14 +140,54 @@ function App({ children }: PropsWithChildren<any>) {
   })
 
   useEffect(() => {
+    const getCurrentRoute = () => {
+      try {
+        const pages = Taro.getCurrentPages()
+        return String(pages[pages.length - 1]?.route || '')
+      } catch {
+        return ''
+      }
+    }
     const onShow = (options: any) => {
       console.log('[app] onAppShow, options:', options)
       handleInviteScene(options)
       handleDeepLink(options)
     }
+    const onHide = () => {
+      flushRecentRequestTraces()
+      flushRecentConsoleLogs()
+    }
+    const onGlobalError = (error: unknown) => {
+      console.error('[app-global-error]', {
+        route: getCurrentRoute(),
+        message: String(error || '').slice(0, 1200),
+      })
+    }
+    const onUnhandledRejection = (event: { reason?: unknown }) => {
+      const reason = event?.reason
+      console.error('[app-unhandled-rejection]', {
+        route: getCurrentRoute(),
+        message: reason instanceof Error ? reason.message : String(reason || '').slice(0, 1200),
+      })
+    }
+    const onMemoryWarning = (event: { level?: number }) => {
+      console.warn('[app-memory-warning]', {
+        route: getCurrentRoute(),
+        level: event?.level,
+      })
+    }
+    const taroAppEvents = Taro as any
     Taro.onAppShow(onShow)
+    Taro.onAppHide(onHide)
+    taroAppEvents.onError?.(onGlobalError)
+    taroAppEvents.onUnhandledRejection?.(onUnhandledRejection)
+    taroAppEvents.onMemoryWarning?.(onMemoryWarning)
     return () => {
       Taro.offAppShow(onShow)
+      Taro.offAppHide(onHide)
+      taroAppEvents.offError?.(onGlobalError)
+      taroAppEvents.offUnhandledRejection?.(onUnhandledRejection)
+      taroAppEvents.offMemoryWarning?.(onMemoryWarning)
     }
   }, [])
 

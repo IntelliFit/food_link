@@ -2,7 +2,7 @@
   <view 
     wx:for="{{tabList}}" 
     wx:key="index"
-    class="tab-item {{item.isCenter ? 'center-item' : ''}} {{selectedIndex === index ? 'selected' : ''}}"
+    class="tab-item {{item.isCenter ? 'center-item' : ''}} {{item.isCenter && recordOpening ? 'center-item--opening' : ''}} {{selectedIndex === index ? 'selected' : ''}}"
     data-index="{{index}}"
     data-path="{{item.pagePath}}"
     data-iscenter="{{item.isCenter}}"
@@ -25,8 +25,9 @@
         </view>
       </block>
       <block wx:elif="{{item.isCenter}}">
-        <view class="center-icon-wrapper">
-          <text class="iconfont icon-paizhao-xianxing center-icon"></text>
+        <view class="center-icon-wrapper {{recordOpening ? 'is-opening' : ''}}">
+          <view wx:if="{{recordOpening}}" class="center-opening-spinner"></view>
+          <text wx:else class="iconfont icon-paizhao-xianxing center-icon"></text>
         </view>
       </block>
     </view>

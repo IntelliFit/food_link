@@ -59,18 +59,20 @@
         flex-direction: column;
         gap: 32rpx;
 
-        .wx-login-btn {
+        .phone-login-btn {
             width: 100%;
-
-            --button-default-height: 96rpx;
-            --button-border-radius: 48rpx;
-
+            height: 96rpx;
+            line-height: 96rpx;
+            border-radius: 48rpx;
             font-size: 32rpx;
             font-weight: 500;
-            // 覆盖 Taroify 默认样式以匹配设计
             background: linear-gradient(to right, #00bc7d 0%, #00bba7 100%);
             border: none;
             color: #fff;
+
+            &::after {
+                border: none;
+            }
         }
 
         /* 原生 Button（getPhoneNumber）与主按钮同风格 */
