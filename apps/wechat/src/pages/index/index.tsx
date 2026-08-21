@@ -1081,7 +1081,6 @@ function IndexPage() {
     }
     try {
       const exerciseLogParams = { date: resolvedDate }
-      console.log('[DEBUG] loadDashboard start, date=', resolvedDate, 'seq=', seq)
       // 首页主数据是首屏唯一硬依赖。其余接口提前并发启动，但都作为后台增强，
       // 不能因为弱网超时而阻塞已经成功返回的 dashboard 渲染。
       const statsPromise = getStatsSummary('month').catch((err) => {
@@ -1126,7 +1125,6 @@ function IndexPage() {
         supplementSummary: res.supplementSummary || DEFAULT_SUPPLEMENT_SUMMARY,
       }
       const currentSnapshot = getStoredHomeDashboardSnapshotByDate(normalizedDate)
-      console.log('[DEBUG] about to save snapshot, date=', normalizedDate, 'currentSnapshotExists=', !!currentSnapshot)
       if (!currentSnapshot || JSON.stringify({
         intakeData: currentSnapshot.intakeData,
         meals: currentSnapshot.meals,
@@ -1559,7 +1557,6 @@ function IndexPage() {
   // 额外：监听全局事件（备用方案，确保可靠性）
   React.useEffect(() => {
     const showRecordMenuHandler = () => {
-      console.log('[DEBUG] 通过全局事件触发显示记录菜单')
       openRecordMenuFromRequest()
     }
     Taro.eventCenter.on('showRecordMenu', showRecordMenuHandler)
@@ -1571,7 +1568,6 @@ function IndexPage() {
   // 额外方案：监听 app 实例上的事件中心（供原生组件如 custom-tab-bar 使用）
   React.useEffect(() => {
     const showRecordMenuHandler = () => {
-      console.log('[DEBUG] 通过 app eventCenter 触发显示记录菜单')
       openRecordMenuFromRequest()
     }
 
@@ -1588,7 +1584,7 @@ function IndexPage() {
         app.eventCenter.callbacks['showRecordMenu'] = showRecordMenuHandler
       }
     } catch (err) {
-      console.error('[DEBUG] 注册 app eventCenter 失败:', err)
+      console.error('[home-record-menu] 注册 app eventCenter 失败:', err)
     }
 
     return () => {
@@ -1598,7 +1594,7 @@ function IndexPage() {
           delete app.eventCenter.callbacks['showRecordMenu']
         }
       } catch (err) {
-        console.error('[DEBUG] 清理 app eventCenter 失败:', err)
+        console.error('[home-record-menu] 清理 app eventCenter 失败:', err)
       }
     }
   }, [openRecordMenuFromRequest])
@@ -2199,13 +2195,11 @@ function IndexPage() {
   }, [setIntakeData, setMeals, setExpirySummary, setExerciseBurnedKcal, setHomeAchievement, setTargetForm])
 
   const handleDateSelect = (date: string) => {
-    console.log('[DEBUG] 点击日期:', date, '当前日期:', selectedDate)
     skipNextRefreshRef.current = true
     const committedDate = commitSelectedDate(date)
     // 1. 无条件从本地缓存读取并立刻渲染
     const localSnapshot = getStoredHomeDashboardSnapshotByDate(committedDate)
     if (localSnapshot) {
-      console.log('[DEBUG] 命中本地缓存:', committedDate)
       setIntakeData(localSnapshot.intakeData)
       setNutritionTarget(localSnapshot.nutritionTarget || null)
       setMeals(localSnapshot.meals || [])
@@ -2215,7 +2209,6 @@ function IndexPage() {
       setHomeAchievement(localSnapshot.achievement || { streak_days: 0, green_days: 0 })
       setTargetForm(createTargetForm(localSnapshot.intakeData || DEFAULT_INTAKE))
     } else {
-      console.log('[DEBUG] 未命中本地缓存, 清空为默认态:', committedDate)
       setIntakeData(DEFAULT_INTAKE)
       setNutritionTarget(null)
       setMeals([])
