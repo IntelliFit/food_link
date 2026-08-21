@@ -6586,6 +6586,32 @@ export interface CheckinLeaderboardItem {
   is_me: boolean
 }
 
+export interface HealthLeaderboardItem {
+  rank: number
+  user_id: string
+  nickname: string
+  avatar: string
+  health_index: number
+  recorded_days: number
+  is_me: boolean
+}
+
+export interface FoodNutrientLeaderboardItem {
+  rank: number
+  food_id: string
+  name: string
+  image_url: string
+  value: number
+}
+
+export interface FoodNutrientLeaderboardResult {
+  nutrient: string
+  label: string
+  unit: string
+  basis: string
+  list: FoodNutrientLeaderboardItem[]
+}
+
 export type CommunityFeedSortBy = 'recommended' | 'latest' | 'hot' | 'balanced'
 export type CommunityAuthorScope = 'all' | 'priority' | 'public'
 export type CommunityFeedTargetType = 'food_record' | 'exercise_log' | 'campus_food' | 'circle_post'
@@ -7202,6 +7228,28 @@ export async function communityGetCheckinLeaderboard(): Promise<{
     week_end: string
     list: CheckinLeaderboardItem[]
   }
+}
+
+export async function communityGetHealthLeaderboard(): Promise<{
+  week_start: string
+  week_end: string
+  list: HealthLeaderboardItem[]
+}> {
+  const response = await authenticatedRequest('/api/community/health-leaderboard', { method: 'GET' })
+  if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '获取健康排行榜失败')
+  return response.data as { week_start: string; week_end: string; list: HealthLeaderboardItem[] }
+}
+
+export async function communityGetFoodNutrientLeaderboard(
+  nutrient: string,
+  limit: number = 50
+): Promise<FoodNutrientLeaderboardResult> {
+  const response = await authenticatedRequest(
+    `/api/community/food-nutrient-leaderboard?nutrient=${encodeURIComponent(nutrient)}&limit=${limit}`,
+    { method: 'GET' }
+  )
+  if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '获取食物排行榜失败')
+  return response.data as FoodNutrientLeaderboardResult
 }
 
 /** 公共 Feed：无需登录，返回公开用户的饮食记录 */

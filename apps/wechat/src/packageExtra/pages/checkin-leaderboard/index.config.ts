@@ -1,3 +1,3 @@
 export default definePageConfig({
-  navigationBarTitleText: '本周打卡排行榜'
+  navigationBarTitleText: '排行榜'
 })

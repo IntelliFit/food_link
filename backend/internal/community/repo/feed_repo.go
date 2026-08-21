@@ -80,6 +80,13 @@ type UserProfile struct {
 	PetLevel      *int   `gorm:"-"`
 }
 
+type NutrientFoodRow struct {
+	ID        string  `gorm:"column:id"`
+	Name      string  `gorm:"column:name"`
+	ImagePath *string `gorm:"column:image_path"`
+	Value     float64 `gorm:"column:value"`
+}
+
 func (UserProfile) TableName() string { return "weapp_user" }
 
 type LikeInfo struct {
@@ -626,6 +633,44 @@ func (r *FeedRepo) GetCheckinCounts(ctx context.Context, userIDs []string, weekS
 		result[row.UserID] = row.Count
 	}
 	return result, nil
+}
+
+var foodNutrientColumns = map[string]string{
+	"protein":     "protein_per_100g",
+	"fiber":       "fiber_per_100g",
+	"calcium":     "calcium_mg_per_100g",
+	"iron":        "iron_mg_per_100g",
+	"potassium":   "potassium_mg_per_100g",
+	"magnesium":   "magnesium_mg_per_100g",
+	"zinc":        "zinc_mg_per_100g",
+	"vitamin_a":   "vitamin_a_rae_mcg_per_100g",
+	"vitamin_c":   "vitamin_c_mg_per_100g",
+	"vitamin_d":   "vitamin_d_mcg_per_100g",
+	"vitamin_e":   "vitamin_e_mg_per_100g",
+	"vitamin_k":   "vitamin_k_mcg_per_100g",
+	"vitamin_b12": "vitamin_b12_mcg_per_100g",
+	"folate":      "folate_mcg_per_100g",
+}
+
+func (r *FeedRepo) GetFoodNutrientRanking(ctx context.Context, nutrient string, limit int) ([]NutrientFoodRow, error) {
+	column, ok := foodNutrientColumns[strings.TrimSpace(nutrient)]
+	if !ok {
+		return nil, fmt.Errorf("不支持的营养素: %s", nutrient)
+	}
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+	var rows []NutrientFoodRow
+	err := r.db.WithContext(ctx).Table("food_nutrition_library").
+		Select(fmt.Sprintf("id, canonical_name AS name, image_path, %s AS value", column)).
+		Where("is_active = ?", true).
+		Where("quality_tier IN ?", []string{"authoritative", "reviewed_estimate", "legacy_curated"}).
+		Where("kcal_per_100g > 0 AND canonical_name ~ ?", "[一-龥]").
+		Where(column + " > 0").
+		Order(column + " DESC, canonical_name ASC").
+		Limit(limit).
+		Scan(&rows).Error
+	return rows, err
 }
 
 func isDuplicateError(err error) bool {

@@ -48,6 +48,8 @@ type mockFeedRepo struct {
 	profilesErr                error
 	checkinCounts              map[string]int
 	checkinCountsErr           error
+	nutrientFoods              []repo.NutrientFoodRow
+	nutrientFoodsErr           error
 	createdFeedReport          *domain.FeedReport
 	existingFeedReport         *domain.FeedReport
 }
@@ -147,6 +149,9 @@ func (m *mockFeedRepo) GetUserProfiles(ctx context.Context, userIDs []string) (m
 }
 func (m *mockFeedRepo) GetCheckinCounts(ctx context.Context, userIDs []string, weekStart, weekEnd time.Time) (map[string]int, error) {
 	return m.checkinCounts, m.checkinCountsErr
+}
+func (m *mockFeedRepo) GetFoodNutrientRanking(ctx context.Context, nutrient string, limit int) ([]repo.NutrientFoodRow, error) {
+	return m.nutrientFoods, m.nutrientFoodsErr
 }
 func (m *mockFeedRepo) CreateCirclePost(ctx context.Context, post *domain.UserCirclePost) error {
 	return nil
@@ -253,6 +258,21 @@ func (m *mockSystemMessageSender) SendSystemMessage(ctx context.Context, receive
 
 func newTestService(feed FeedRepo, notif NotificationRepo, user UserFinder) *CommunityService {
 	return NewCommunityService(feed, notif, user, nil, nil, nil, nil)
+}
+
+type mockHealthScore struct {
+	score        int
+	recordedDays int
+	eligible     bool
+}
+
+type mockHealthScoreProvider struct {
+	scores map[string]mockHealthScore
+}
+
+func (m *mockHealthScoreProvider) GetOverallHealthIndexScore(_ context.Context, userID, _ string) (int, int, bool, error) {
+	value := m.scores[userID]
+	return value.score, value.recordedDays, value.eligible, nil
 }
 
 func TestPublicFeed(t *testing.T) {
@@ -483,6 +503,49 @@ func TestCheckinLeaderboard(t *testing.T) {
 	assert.NotNil(t, result)
 	assert.Len(t, result.List, 2)
 	assert.Equal(t, 1, result.List[0].Rank)
+}
+
+func TestHealthLeaderboardUsesExistingOverallScoreAndSkipsInsufficientData(t *testing.T) {
+	mockFeed := &mockFeedRepo{
+		friendIDs: []string{"u2", "u3"},
+		profiles: map[string]*repo.UserProfile{
+			"u1": {ID: "u1", Nickname: "我"},
+			"u2": {ID: "u2", Nickname: "好友甲"},
+			"u3": {ID: "u3", Nickname: "好友乙"},
+		},
+	}
+	svc := newTestService(mockFeed, &mockNotificationRepo{}, &mockUserRepo{})
+	svc.ConfigureHealthScoreProvider(&mockHealthScoreProvider{scores: map[string]mockHealthScore{
+		"u1": {score: 82, recordedDays: 6, eligible: true},
+		"u2": {score: 91, recordedDays: 5, eligible: true},
+		"u3": {score: 99, recordedDays: 1, eligible: false},
+	}})
+
+	result, err := svc.HealthLeaderboard(context.Background(), "u1")
+
+	assert.NoError(t, err)
+	assert.Len(t, result.List, 2)
+	assert.Equal(t, "u2", result.List[0].UserID)
+	assert.Equal(t, 91, result.List[0].HealthIndex)
+	assert.Equal(t, 2, result.List[1].Rank)
+	assert.True(t, result.List[1].IsMe)
+}
+
+func TestFoodNutrientLeaderboardAddsRankAndMetadata(t *testing.T) {
+	mockFeed := &mockFeedRepo{nutrientFoods: []repo.NutrientFoodRow{
+		{ID: "f1", Name: "鸡胸肉", Value: 31},
+		{ID: "f2", Name: "金枪鱼", Value: 29},
+	}}
+	svc := newTestService(mockFeed, &mockNotificationRepo{}, &mockUserRepo{})
+
+	result, err := svc.FoodNutrientLeaderboard(context.Background(), "protein", 10)
+
+	assert.NoError(t, err)
+	assert.Equal(t, "蛋白质", result.Label)
+	assert.Equal(t, "g", result.Unit)
+	assert.Equal(t, "每100g", result.Basis)
+	assert.Equal(t, 1, result.List[0].Rank)
+	assert.Equal(t, "鸡胸肉", result.List[0].Name)
 }
 
 func TestLikeFeedNotFound(t *testing.T) {

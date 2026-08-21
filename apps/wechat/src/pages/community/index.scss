@@ -570,19 +570,19 @@ $community-border-soft: rgb(92 184 150 / 18%);
   line-height: 32rpx;
 }
 
-// 本周打卡排行榜：与「我的」页「剩余积分」member-card--free 同系渐变、描边、内高光与装饰光晕
+// 圈子排行榜：同一张绿色入口卡中并列用户榜与食物榜，保持首页信息密度紧凑。
 .ranking-banner {
   position: relative;
   overflow: hidden;
   margin: 16rpx 24rpx 16rpx;
-  padding: 36rpx 32rpx;
+  padding: 24rpx 24rpx 22rpx;
   background: linear-gradient(145deg, #5cb896 0%, #7bc4a8 30%, #5cb896 70%, #4a9e7d 100%);
   border-radius: 28rpx;
   border: 1rpx solid rgba(255, 255, 255, 0.1);
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 20rpx;
+  gap: 18rpx;
   box-shadow:
     0 12rpx 40rpx rgb(92 184 150 / 28%),
     inset 0 1rpx 0 rgba(255, 255, 255, 0.15);
@@ -625,25 +625,14 @@ $community-border-soft: rgb(92 184 150 / 18%);
   position: relative;
   z-index: 1;
   display: flex;
-  align-items: flex-start;
-  gap: 20rpx;
+  align-items: center;
+  gap: 14rpx;
   min-width: 0;
 }
 
-.ranking-head-text {
-  position: relative;
-  z-index: 1;
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4rpx;
-}
-
-// 与首页 .stats-entry-icon 一致：白底半透明方角图标槽
 .ranking-icon-wrap {
-  width: 64rpx;
-  height: 64rpx;
+  width: 52rpx;
+  height: 52rpx;
   background: rgb(255 255 255 / 20%);
   border-radius: 16rpx;
   display: flex;
@@ -652,189 +641,225 @@ $community-border-soft: rgb(92 184 150 / 18%);
   flex-shrink: 0;
 }
 
-// 前三名直接铺在绿底上，无额外浅底容器
-.ranking-preview {
+.ranking-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 30rpx;
+  font-weight: 700;
+  color: #fff;
+  line-height: 42rpx;
+  letter-spacing: 1rpx;
+  text-shadow: 0 2rpx 10rpx rgba(0, 0, 0, 0.18);
+}
+
+.ranking-week-tag {
+  padding: 5rpx 12rpx;
+  border-radius: 999rpx;
+  background: rgb(255 255 255 / 16%);
+  color: rgb(255 255 255 / 88%);
+  font-size: 18rpx;
+  line-height: 26rpx;
+}
+
+.ranking-columns {
   position: relative;
   z-index: 1;
-  width: 100%;
-  margin: 0;
-  padding: 0;
-  background: none;
-  border-radius: 0;
-  box-sizing: border-box;
-}
-
-.ranking-preview-row {
   display: flex;
-  flex-direction: row;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12rpx;
+  align-items: stretch;
+  min-width: 0;
 }
 
-.ranking-preview-cell {
+.ranking-column {
   flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 4rpx;
 }
 
-.ranking-preview-rank {
-  font-size: 20rpx;
-  font-weight: 800;
-  color: #fef9c3;
-  line-height: 1;
+.ranking-user-column {
+  padding-right: 18rpx;
+}
 
-  &.r1 {
+.ranking-food-column {
+  padding-left: 18rpx;
+}
+
+.ranking-column-divider {
+  width: 1rpx;
+  flex-shrink: 0;
+  background: linear-gradient(180deg, transparent, rgb(255 255 255 / 28%) 18%, rgb(255 255 255 / 28%) 82%, transparent);
+}
+
+.ranking-column-title {
+  color: #fff;
+  font-size: 25rpx;
+  font-weight: 700;
+  line-height: 34rpx;
+}
+
+.ranking-mini-tabs {
+  height: 38rpx;
+  margin-top: 8rpx;
+  display: flex;
+  align-items: center;
+  gap: 5rpx;
+  white-space: nowrap;
+}
+
+.ranking-mini-tab {
+  padding: 3rpx 9rpx;
+  border-radius: 999rpx;
+  color: rgb(255 255 255 / 70%);
+  font-size: 18rpx;
+  line-height: 28rpx;
+
+  &.active {
+    background: rgb(255 255 255 / 20%);
+    color: #fff;
+    font-weight: 600;
+  }
+}
+
+.ranking-food-tabs {
+  gap: 2rpx;
+
+  .ranking-mini-tab {
+    padding-right: 6rpx;
+    padding-left: 6rpx;
+  }
+}
+
+.ranking-mini-list {
+  min-height: 94rpx;
+  margin-top: 8rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.ranking-mini-row {
+  height: 42rpx;
+  display: flex;
+  align-items: center;
+  gap: 6rpx;
+  min-width: 0;
+}
+
+.ranking-mini-rank {
+  width: 20rpx;
+  flex-shrink: 0;
+  color: rgb(255 255 255 / 72%);
+  font-size: 18rpx;
+  font-weight: 800;
+  text-align: center;
+
+  &.rank-1 {
     color: #fef08a;
   }
 
-  &.r2 {
-    color: #f1f5f9;
-  }
-
-  &.r3 {
-    color: #fed7aa;
+  &.rank-2 {
+    color: #e2e8f0;
   }
 }
 
-.ranking-preview-avatar-wrap {
-  width: 64rpx;
-  height: 64rpx;
+.ranking-mini-avatar-wrap {
+  width: 38rpx;
+  height: 38rpx;
   border-radius: 50%;
   overflow: hidden;
   background: rgb(255 255 255 / 22%);
-  border: 3rpx solid rgb(255 255 255 / 50%);
+  border: 2rpx solid rgb(255 255 255 / 42%);
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
 }
 
-.ranking-preview-avatar {
+.ranking-mini-avatar {
   width: 100%;
   height: 100%;
 }
 
-.ranking-preview-avatar-fallback {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgb(255 255 255 / 18%);
-}
-
-.ranking-preview-avatar-ico {
-  font-size: 28rpx;
+.ranking-mini-placeholder {
+  font-size: 20rpx;
   color: rgb(255 255 255 / 88%);
   line-height: 1;
 
   &::before {
     font-size: inherit;
   }
+
+  &.is-food {
+    font-size: 22rpx;
+  }
 }
 
-.ranking-preview-name {
+.ranking-mini-name {
+  flex: 1;
+  min-width: 0;
   font-size: 18rpx;
-  color: #fff;
-  max-width: 100%;
-  text-align: center;
-  line-height: 1.3;
+  color: rgb(255 255 255 / 92%);
+  line-height: 28rpx;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.ranking-preview-count {
+.ranking-mini-value {
+  flex-shrink: 0;
   font-size: 18rpx;
   color: #fef3c6;
   font-weight: 600;
-  line-height: 1.2;
+  line-height: 28rpx;
 }
 
-// 当前登录用户在预览条中仅做高亮，不改变尺寸，避免前三头像大小不一致
-.ranking-preview-cell.is-me {
-  .ranking-preview-rank {
-    color: #fff7cc;
-  }
-
-  .ranking-preview-avatar-wrap {
-    border-color: #fff7cc;
-    box-shadow: 0 0 0 4rpx rgb(255 247 204 / 22%), 0 8rpx 20rpx rgb(15 23 42 / 12%);
-  }
-
-  .ranking-preview-avatar-ico {
-    color: #fff;
-  }
-
-  .ranking-preview-name {
-    font-weight: 700;
-  }
-
-  .ranking-preview-count {
-    color: #fff7cc;
-  }
-}
-
-.ranking-preview-placeholder {
+.ranking-mini-empty {
   display: block;
-  font-size: 20rpx;
-  color: rgb(255 255 255 / 85%);
-  text-align: center;
-  padding: 0;
+  padding: 28rpx 0 0;
+  color: rgb(255 255 255 / 68%);
+  font-size: 18rpx;
 }
 
-.ranking-preview-skeleton {
+.ranking-column-link {
+  margin-top: 9rpx;
+  color: rgb(255 255 255 / 76%);
+  font-size: 18rpx;
+  line-height: 28rpx;
+}
+
+.ranking-mini-skeleton {
+  min-height: 94rpx;
   display: flex;
-  flex-direction: row;
-  align-items: center;
-  justify-content: space-between;
-  gap: 24rpx;
-  padding: 0;
-}
+  flex-direction: column;
+  justify-content: center;
+  gap: 12rpx;
 
-.ranking-preview-sk-dot {
-  width: 64rpx;
-  height: 64rpx;
-  border-radius: 50%;
-  background: rgb(255 255 255 / 28%);
-  animation: rankingPreviewPulse 1.1s ease-in-out infinite;
-
-  &:nth-child(2) {
-    animation-delay: 0.15s;
+  > view {
+    width: 100%;
+    height: 30rpx;
+    border-radius: 15rpx;
+    background: linear-gradient(90deg, rgb(255 255 255 / 11%), rgb(255 255 255 / 25%), rgb(255 255 255 / 11%));
+    background-size: 200% 100%;
+    animation: rankingPreviewPulse 1.1s ease-in-out infinite;
   }
 
-  &:nth-child(3) {
-    animation-delay: 0.3s;
+  > view:nth-child(2) {
+    width: 82%;
+    animation-delay: 0.15s;
   }
 }
 
 @keyframes rankingPreviewPulse {
   0%,
   100% {
-    opacity: 0.45;
-    transform: scale(0.96);
+    opacity: 0.5;
+    background-position: 100% 0;
   }
 
   50% {
     opacity: 1;
-    transform: scale(1);
+    background-position: 0 0;
   }
-}
-
-.ranking-title {
-  font-size: 32rpx;
-  font-weight: 700;
-  color: #fff;
-  line-height: 44rpx;
-  letter-spacing: 1rpx;
-  text-shadow: 0 2rpx 10rpx rgba(0, 0, 0, 0.2);
-}
-
-.ranking-subtitle {
-  font-size: 24rpx;
-  color: rgba(255, 255, 255, 0.9);
-  line-height: 34rpx;
-  text-shadow: 0 1rpx 3rpx rgba(0, 0, 0, 0.12);
 }
 
 // 好友动态：标题+筛选为全宽白底，列表区无左右边距

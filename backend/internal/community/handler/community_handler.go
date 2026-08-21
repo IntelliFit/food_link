@@ -21,6 +21,8 @@ type CommunityService interface {
 	PublicFeed(ctx context.Context, params service.FeedParams) ([]service.FeedItem, error)
 	FriendFeed(ctx context.Context, userID string, params service.FeedParams) ([]service.FeedItem, error)
 	CheckinLeaderboard(ctx context.Context, viewerUserID string) (*service.LeaderboardResult, error)
+	HealthLeaderboard(ctx context.Context, viewerUserID string) (*service.HealthLeaderboardResult, error)
+	FoodNutrientLeaderboard(ctx context.Context, nutrient string, limit int) (*service.FoodNutrientLeaderboardResult, error)
 	LikeFeed(ctx context.Context, userID, recordID string) (string, error)
 	LikeFeedTarget(ctx context.Context, userID, targetType, targetID string) (string, error)
 	UnlikeFeed(ctx context.Context, userID, recordID string) (string, error)
@@ -91,6 +93,33 @@ func (h *CommunityHandler) CheckinLeaderboard(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
+	response.Success(c, result)
+}
+
+func (h *CommunityHandler) HealthLeaderboard(c *gin.Context) {
+	userID := c.GetString(authmw.ContextUserIDKey)
+	logger.Info(c.Request.Context(), "进入好友健康指数排行榜", slog.String("user_id", userID))
+	result, err := h.svc.HealthLeaderboard(c.Request.Context(), userID)
+	if err != nil {
+		logger.Error(c.Request.Context(), "获取好友健康指数排行榜失败", err, slog.String("user_id", userID))
+		response.Error(c, err)
+		return
+	}
+	logger.Info(c.Request.Context(), "完成好友健康指数排行榜", slog.String("user_id", userID), slog.Int("user_count", len(result.List)))
+	response.Success(c, result)
+}
+
+func (h *CommunityHandler) FoodNutrientLeaderboard(c *gin.Context) {
+	nutrient := strings.TrimSpace(c.DefaultQuery("nutrient", "protein"))
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
+	logger.Info(c.Request.Context(), "进入食物营养素排行榜", slog.String("nutrient", nutrient))
+	result, err := h.svc.FoodNutrientLeaderboard(c.Request.Context(), nutrient, limit)
+	if err != nil {
+		logger.Error(c.Request.Context(), "获取食物营养素排行榜失败", err, slog.String("nutrient", nutrient))
+		response.Error(c, err)
+		return
+	}
+	logger.Info(c.Request.Context(), "完成食物营养素排行榜", slog.String("nutrient", nutrient), slog.Int("food_count", len(result.List)))
 	response.Success(c, result)
 }
 

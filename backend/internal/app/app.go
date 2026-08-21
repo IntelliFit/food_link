@@ -326,6 +326,7 @@ func New(cfg *config.Config) (*App, error) {
 	exerciseSvc.ConfigureTaskPublisher(taskQueue)
 	exerciseSvc.ConfigureStorage(storageClient)
 	statsSvc := healthservice.NewStatsService(statsRepo, bodyMetricsSvc, cfg)
+	communitySvc.ConfigureHealthScoreProvider(statsSvc)
 	healthHandler := healthhandler.NewHealthHandler(bodyMetricsSvc, exerciseSvc, statsSvc)
 
 	// Membership module DI
@@ -586,6 +587,8 @@ func New(cfg *config.Config) (*App, error) {
 	engine.GET("/api/community/public-feed", authmw.OptionalJWT(jwtSvc), communityHandler.PublicFeed)
 	engine.GET("/api/community/feed", authmw.RequireJWT(jwtSvc), communityHandler.Feed)
 	engine.GET("/api/community/checkin-leaderboard", authmw.RequireJWT(jwtSvc), communityHandler.CheckinLeaderboard)
+	engine.GET("/api/community/health-leaderboard", authmw.RequireJWT(jwtSvc), communityHandler.HealthLeaderboard)
+	engine.GET("/api/community/food-nutrient-leaderboard", authmw.OptionalJWT(jwtSvc), communityHandler.FoodNutrientLeaderboard)
 	engine.POST("/api/community/feed/:record_id/like", authmw.RequireJWT(jwtSvc), communityHandler.LikeFeed)
 	engine.DELETE("/api/community/feed/:record_id/like", authmw.RequireJWT(jwtSvc), communityHandler.UnlikeFeed)
 	engine.POST("/api/community/feed/:record_id/hide", authmw.RequireJWT(jwtSvc), communityHandler.HideFeed)

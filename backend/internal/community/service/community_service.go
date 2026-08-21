@@ -50,6 +50,7 @@ type FeedRepo interface {
 	IsFriend(ctx context.Context, userID, friendID string) (bool, error)
 	GetUserProfiles(ctx context.Context, userIDs []string) (map[string]*repo.UserProfile, error)
 	GetCheckinCounts(ctx context.Context, userIDs []string, weekStart, weekEnd time.Time) (map[string]int, error)
+	GetFoodNutrientRanking(ctx context.Context, nutrient string, limit int) ([]repo.NutrientFoodRow, error)
 	CreateCirclePost(ctx context.Context, post *domain.UserCirclePost) error
 	GetCirclePostByID(ctx context.Context, postID string) (*domain.UserCirclePost, error)
 	UpdateCirclePost(ctx context.Context, userID, postID, title, body string, imagePaths []string, nutrition *domain.CirclePostNutrition) error
@@ -79,6 +80,7 @@ type CommunityService struct {
 	systemMessageSender SystemMessageSender
 	storage             *storage.Client
 	blockChecker        BlockChecker
+	healthScoreProvider HealthScoreProvider
 }
 
 type UserFinder interface {
@@ -88,6 +90,10 @@ type UserFinder interface {
 type BlockChecker interface {
 	IsBlockedEither(ctx context.Context, userA, userB string) (bool, error)
 	GetBlockedPairUserIDs(ctx context.Context, userID string) ([]string, error)
+}
+
+type HealthScoreProvider interface {
+	GetOverallHealthIndexScore(ctx context.Context, userID, statsRange string) (score int, recordedDays int, eligible bool, err error)
 }
 
 type ReportNotifier interface {
@@ -116,6 +122,10 @@ func NewCommunityService(feedRepo FeedRepo, notifRepo NotificationRepo, userRepo
 
 func (s *CommunityService) ConfigureBlockChecker(checker BlockChecker) {
 	s.blockChecker = checker
+}
+
+func (s *CommunityService) ConfigureHealthScoreProvider(provider HealthScoreProvider) {
+	s.healthScoreProvider = provider
 }
 
 func (s *CommunityService) isBlockedEither(ctx context.Context, userA, userB string) (bool, error) {
@@ -248,6 +258,38 @@ type LeaderboardResult struct {
 	WeekStart string            `json:"week_start"`
 	WeekEnd   string            `json:"week_end"`
 	List      []LeaderboardItem `json:"list"`
+}
+
+type HealthLeaderboardItem struct {
+	UserID       string `json:"user_id"`
+	Nickname     string `json:"nickname"`
+	Avatar       string `json:"avatar"`
+	HealthIndex  int    `json:"health_index"`
+	RecordedDays int    `json:"recorded_days"`
+	IsMe         bool   `json:"is_me"`
+	Rank         int    `json:"rank"`
+}
+
+type HealthLeaderboardResult struct {
+	WeekStart string                  `json:"week_start"`
+	WeekEnd   string                  `json:"week_end"`
+	List      []HealthLeaderboardItem `json:"list"`
+}
+
+type FoodNutrientLeaderboardItem struct {
+	Rank     int     `json:"rank"`
+	FoodID   string  `json:"food_id"`
+	Name     string  `json:"name"`
+	ImageURL string  `json:"image_url"`
+	Value    float64 `json:"value"`
+}
+
+type FoodNutrientLeaderboardResult struct {
+	Nutrient string                        `json:"nutrient"`
+	Label    string                        `json:"label"`
+	Unit     string                        `json:"unit"`
+	Basis    string                        `json:"basis"`
+	List     []FoodNutrientLeaderboardItem `json:"list"`
 }
 
 type NotificationItem struct {
@@ -837,7 +879,13 @@ type leaderboardCacheEntry struct {
 	expiresAt time.Time
 }
 
+type healthLeaderboardCacheEntry struct {
+	result    *HealthLeaderboardResult
+	expiresAt time.Time
+}
+
 var leaderboardCache sync.Map
+var healthLeaderboardCache sync.Map
 
 func chinaWeekWindow(now time.Time) (time.Time, time.Time, string, string) {
 	nowCN := now.In(chinaTZ)
@@ -936,6 +984,160 @@ func (s *CommunityService) CheckinLeaderboard(ctx context.Context, viewerUserID 
 		expiresAt: time.Now().Add(5 * time.Minute),
 	})
 	return result, nil
+}
+
+func (s *CommunityService) HealthLeaderboard(ctx context.Context, viewerUserID string) (*HealthLeaderboardResult, error) {
+	if s.healthScoreProvider == nil {
+		return nil, fmt.Errorf("健康指数服务未配置")
+	}
+	friendIDs, err := s.feedRepo.GetFriendIDs(ctx, viewerUserID)
+	if err != nil {
+		return nil, err
+	}
+	blockedSet := s.blockedUserSet(ctx, viewerUserID)
+	blockedIDs := make([]string, 0, len(blockedSet))
+	for blockedID := range blockedSet {
+		blockedIDs = append(blockedIDs, blockedID)
+	}
+	sort.Strings(blockedIDs)
+	authorIDSet := map[string]bool{viewerUserID: true}
+	for _, friendID := range friendIDs {
+		if !blockedSet[friendID] {
+			authorIDSet[friendID] = true
+		}
+	}
+	authorIDs := make([]string, 0, len(authorIDSet))
+	for userID := range authorIDSet {
+		authorIDs = append(authorIDs, userID)
+	}
+	sort.Strings(authorIDs)
+
+	_, _, weekStart, weekEnd := chinaWeekWindow(time.Now())
+	cacheKey := viewerUserID + ":" + weekStart + ":" + strings.Join(blockedIDs, ",")
+	if cached, ok := healthLeaderboardCache.Load(cacheKey); ok {
+		entry := cached.(healthLeaderboardCacheEntry)
+		if time.Now().Before(entry.expiresAt) {
+			return entry.result, nil
+		}
+		healthLeaderboardCache.Delete(cacheKey)
+	}
+
+	profiles, err := s.feedRepo.GetUserProfiles(ctx, authorIDs)
+	if err != nil {
+		return nil, err
+	}
+	type healthScoreOutcome struct {
+		score        int
+		recordedDays int
+		eligible     bool
+		err          error
+	}
+	outcomes := make([]healthScoreOutcome, len(authorIDs))
+	jobs := make(chan int)
+	workerCount := 4
+	if len(authorIDs) < workerCount {
+		workerCount = len(authorIDs)
+	}
+	var workers sync.WaitGroup
+	for worker := 0; worker < workerCount; worker++ {
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			for index := range jobs {
+				score, recordedDays, eligible, scoreErr := s.healthScoreProvider.GetOverallHealthIndexScore(ctx, authorIDs[index], "week")
+				outcomes[index] = healthScoreOutcome{score: score, recordedDays: recordedDays, eligible: eligible, err: scoreErr}
+			}
+		}()
+	}
+	for index := range authorIDs {
+		jobs <- index
+	}
+	close(jobs)
+	workers.Wait()
+
+	items := make([]HealthLeaderboardItem, 0, len(authorIDs))
+	for index, userID := range authorIDs {
+		outcome := outcomes[index]
+		if outcome.err != nil {
+			return nil, outcome.err
+		}
+		if !outcome.eligible {
+			continue
+		}
+		profile := profiles[userID]
+		nickname := "用户"
+		avatar := ""
+		if profile != nil {
+			if strings.TrimSpace(profile.Nickname) != "" {
+				nickname = profile.Nickname
+			}
+			avatar = s.resolveAvatarURL(profile.Avatar)
+		}
+		items = append(items, HealthLeaderboardItem{
+			UserID: userID, Nickname: nickname, Avatar: avatar,
+			HealthIndex: outcome.score, RecordedDays: outcome.recordedDays, IsMe: userID == viewerUserID,
+		})
+	}
+	sort.Slice(items, func(i, j int) bool {
+		if items[i].HealthIndex != items[j].HealthIndex {
+			return items[i].HealthIndex > items[j].HealthIndex
+		}
+		if items[i].RecordedDays != items[j].RecordedDays {
+			return items[i].RecordedDays > items[j].RecordedDays
+		}
+		return items[i].Nickname < items[j].Nickname
+	})
+	for index := range items {
+		items[index].Rank = index + 1
+	}
+	result := &HealthLeaderboardResult{WeekStart: weekStart, WeekEnd: weekEnd, List: items}
+	healthLeaderboardCache.Store(cacheKey, healthLeaderboardCacheEntry{result: result, expiresAt: time.Now().Add(5 * time.Minute)})
+	return result, nil
+}
+
+var foodNutrientMeta = map[string]struct {
+	Label string
+	Unit  string
+}{
+	"protein":     {Label: "蛋白质", Unit: "g"},
+	"fiber":       {Label: "膳食纤维", Unit: "g"},
+	"calcium":     {Label: "钙", Unit: "mg"},
+	"iron":        {Label: "铁", Unit: "mg"},
+	"potassium":   {Label: "钾", Unit: "mg"},
+	"magnesium":   {Label: "镁", Unit: "mg"},
+	"zinc":        {Label: "锌", Unit: "mg"},
+	"vitamin_a":   {Label: "维生素A", Unit: "mcg RAE"},
+	"vitamin_c":   {Label: "维生素C", Unit: "mg"},
+	"vitamin_d":   {Label: "维生素D", Unit: "mcg"},
+	"vitamin_e":   {Label: "维生素E", Unit: "mg"},
+	"vitamin_k":   {Label: "维生素K", Unit: "mcg"},
+	"vitamin_b12": {Label: "维生素B12", Unit: "mcg"},
+	"folate":      {Label: "叶酸", Unit: "mcg"},
+}
+
+func (s *CommunityService) FoodNutrientLeaderboard(ctx context.Context, nutrient string, limit int) (*FoodNutrientLeaderboardResult, error) {
+	nutrient = strings.TrimSpace(nutrient)
+	meta, ok := foodNutrientMeta[nutrient]
+	if !ok {
+		return nil, &commonerrors.AppError{Code: 10002, Message: "不支持的营养素", HTTPStatus: 400}
+	}
+	rows, err := s.feedRepo.GetFoodNutrientRanking(ctx, nutrient, limit)
+	if err != nil {
+		return nil, err
+	}
+	items := make([]FoodNutrientLeaderboardItem, 0, len(rows))
+	for index, row := range rows {
+		imageURL := ""
+		if row.ImagePath != nil {
+			imageURL = s.resolveFoodImageURL(*row.ImagePath)
+		}
+		items = append(items, FoodNutrientLeaderboardItem{
+			Rank: index + 1, FoodID: row.ID, Name: row.Name, ImageURL: imageURL, Value: row.Value,
+		})
+	}
+	return &FoodNutrientLeaderboardResult{
+		Nutrient: nutrient, Label: meta.Label, Unit: meta.Unit, Basis: "每100g", List: items,
+	}, nil
 }
 
 func (s *CommunityService) LikeFeed(ctx context.Context, userID, recordID string) (string, error) {

@@ -443,6 +443,17 @@ func (s *StatsService) GetSummary(ctx context.Context, userID string, statsRange
 	}, nil
 }
 
+// GetOverallHealthIndexScore exposes the same aggregate score used by the
+// Analysis page without generating AI copy or maintaining a second formula.
+func (s *StatsService) GetOverallHealthIndexScore(ctx context.Context, userID, statsRange string) (int, int, bool, error) {
+	comp, err := s.buildStatsComputation(ctx, userID, statsRange, 0, 0)
+	if err != nil {
+		return 0, 0, false, err
+	}
+	index := computeHealthIndex(comp, statsRange)
+	return index.OverallScore, comp.RecordedDays, index.HasEnoughData, nil
+}
+
 func (s *StatsService) GetCalendarMonth(ctx context.Context, userID, month string, fallbackTDEE int) (*CalendarMonthSummary, error) {
 	start, err := time.ParseInLocation("2006-01", month, chinaTZ)
 	if err != nil || start.Format("2006-01") != month {

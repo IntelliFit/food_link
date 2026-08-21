@@ -263,3 +263,33 @@ func TestFeedRepoGetCheckinCounts(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, 2, counts["u1"])
 }
+
+func TestFeedRepoGetFoodNutrientRanking(t *testing.T) {
+	db := setupFeedTestDB(t)
+	assert.NoError(t, db.Exec(`CREATE TABLE food_nutrition_library (
+		id text primary key, canonical_name text not null, image_path text,
+		is_active boolean not null default true, quality_tier text not null default 'authoritative',
+		kcal_per_100g numeric not null default 0, protein_per_100g numeric not null default 0,
+		fiber_per_100g numeric not null default 0, calcium_mg_per_100g numeric not null default 0,
+		iron_mg_per_100g numeric not null default 0, potassium_mg_per_100g numeric not null default 0,
+		magnesium_mg_per_100g numeric not null default 0, zinc_mg_per_100g numeric not null default 0,
+		vitamin_a_rae_mcg_per_100g numeric not null default 0, vitamin_c_mg_per_100g numeric not null default 0,
+		vitamin_d_mcg_per_100g numeric not null default 0, vitamin_e_mg_per_100g numeric not null default 0,
+		vitamin_k_mcg_per_100g numeric not null default 0, vitamin_b12_mcg_per_100g numeric not null default 0,
+		folate_mcg_per_100g numeric not null default 0
+	)`).Error)
+	assert.NoError(t, db.Exec(`INSERT INTO food_nutrition_library
+		(id, canonical_name, is_active, quality_tier, kcal_per_100g, protein_per_100g) VALUES
+		('f1', '鸡胸肉', true, 'authoritative', 165, 31),
+		('f2', '金枪鱼', true, 'reviewed_estimate', 132, 29),
+		('f3', '停用食物', false, 'authoritative', 300, 99),
+		('f4', '未审核食物', true, 'unreviewed', 260, 88),
+		('f5', 'English Food', true, 'authoritative', 240, 77)`).Error)
+
+	rows, err := NewFeedRepo(db).GetFoodNutrientRanking(context.Background(), "protein", 10)
+
+	assert.NoError(t, err)
+	assert.Len(t, rows, 2)
+	assert.Equal(t, "鸡胸肉", rows[0].Name)
+	assert.Equal(t, 31.0, rows[0].Value)
+}
