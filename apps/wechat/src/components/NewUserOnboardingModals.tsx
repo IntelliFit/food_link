@@ -40,8 +40,8 @@ export function NewUserOnboardingModals({
           ) : null}
           <View className='profile-form-content'>
             <View className='profile-form-header'>
-              <Text className='profile-form-title'>完善账号</Text>
-              <Text className='profile-form-desc'>授权手机号便于好友搜索与账号安全</Text>
+              <Text className='profile-form-title'>手机号快捷登录</Text>
+              <Text className='profile-form-desc'>用于账号安全、跨端登录和好友搜索</Text>
             </View>
             <View className='phone-bind-actions'>
               <Button
@@ -49,7 +49,7 @@ export function NewUserOnboardingModals({
                 openType='getPhoneNumber'
                 onGetPhoneNumber={onBindPhone}
               >
-                授权手机号
+                手机号快捷登录
               </Button>
               <Button className='skip-phone-btn' onClick={onSkipPhone}>
                 暂不绑定
@@ -69,7 +69,7 @@ export function NewUserOnboardingModals({
           <View className='profile-form-content'>
             <View className='profile-form-header'>
               <Text className='profile-form-title'>完善个人信息</Text>
-              <Text className='profile-form-desc'>点击头像选择图片；点击昵称输入框可使用微信昵称</Text>
+              <Text className='profile-form-desc'>点击头像选择图片；点击昵称输入框可快速填写昵称</Text>
             </View>
             <View className='profile-form-body'>
               <View className='avatar-choose-wrapper'>
