@@ -53,6 +53,7 @@ Component({
   data: {
     selectedIndex: 0,
     hidden: false,
+    recordOpening: false,
     /** 与 React 端 `fl_app_color_scheme` 同步，供深色底栏 */
     colorScheme: 'light',
     /** 养生模式使用全局墨绿导航配色，跨 Tab 保持直到切回均衡模式 */
@@ -90,28 +91,95 @@ Component({
   
   lifetimes: {
     attached() {
+      this.refreshState()
+      this.startPolling()
+    },
+
+    detached() {
+      this.stopPolling()
+      this.clearRecordOpenTimers()
+    }
+  },
+
+  // Tab 页会常驻页面栈；只让当前可见页的自定义 TabBar 轮询，避免多个隐藏实例长期抢占 JS 线程。
+  pageLifetimes: {
+    show() {
+      this.refreshState()
+      this.startPolling()
+    },
+    hide() {
+      this.stopPolling()
+    }
+  },
+
+  methods: {
+    refreshState() {
       this.updateSelected()
       this.updateHidden()
       this.updateColorScheme()
       this.updateHomeMode()
       this.updateWaitingBadge()
-      this.data.timer = setInterval(() => {
-        this.updateSelected()
-        this.updateHidden()
-        this.updateColorScheme()
-        this.updateHomeMode()
-        this.updateWaitingBadge()
+    },
+
+    startPolling() {
+      if (this._pollTimer) return
+      this._pollTimer = setInterval(() => {
+        this.refreshState()
       }, 300)
     },
-    
-    detached() {
-      if (this.data.timer) {
-        clearInterval(this.data.timer)
+
+    stopPolling() {
+      if (!this._pollTimer) return
+      clearInterval(this._pollTimer)
+      this._pollTimer = null
+    },
+
+    clearRecordOpenTimers() {
+      const timers = Array.isArray(this._recordOpenTimers) ? this._recordOpenTimers : []
+      timers.forEach((timer) => clearTimeout(timer))
+      this._recordOpenTimers = []
+    },
+
+    finishRecordOpening(opened) {
+      this.clearRecordOpenTimers()
+      if (opened) {
+        try {
+          wx.removeStorageSync('showRecordMenuModal')
+        } catch (e) {}
       }
-    }
-  },
-  
-  methods: {
+      if (this.data.recordOpening) {
+        this.setData({ recordOpening: false })
+      }
+    },
+
+    openRecordMenuWithRetry() {
+      this.clearRecordOpenTimers()
+      // 页面切换和 React effect 注册存在先后顺序；用少量有界重试替代首页 50ms、持续 60 秒的轮询。
+      const retryDelays = [0, 80, 180, 350, 650]
+      const attempt = (index) => {
+        if (triggerRecordMenu(getCurrentPages())) {
+          this.finishRecordOpening(true)
+          return
+        }
+        if (index >= retryDelays.length - 1) {
+          // 首页组件若发生渲染异常，底栏仍然存在。此时直接进入已有分析页，
+          // 让用户仍可在空图片态选择拍照/相册，不把核心记录能力绑死在首页弹层上。
+          wx.navigateTo({
+            url: '/packageExtra/pages/analyze/index',
+            success: () => this.finishRecordOpening(true),
+            fail: () => {
+              this.finishRecordOpening(false)
+              wx.showToast({ title: '记录入口打开失败，请重试', icon: 'none' })
+            },
+          })
+          return
+        }
+        const timer = setTimeout(() => attempt(index + 1), retryDelays[index + 1])
+        this._recordOpenTimers.push(timer)
+      }
+      attempt(0)
+    },
+
     updateSelected() {
       try {
         const pages = getCurrentPages()
@@ -196,23 +264,27 @@ Component({
       const { index, path, iscenter } = e.currentTarget.dataset
 
       if (iscenter) {
+        if (this.data.recordOpening) return
+        this.setData({ recordOpening: true })
         wx.setStorageSync('showRecordMenuModal', true)
 
         const pages = getCurrentPages()
         const isAlreadyHome = pages.length > 0 && pages[pages.length - 1].route === 'pages/index/index'
         
         if (isAlreadyHome) {
-          triggerRecordMenu(pages)
+          this.openRecordMenuWithRetry()
           return
         }
 
         wx.switchTab({ 
           url: '/pages/index/index',
           success: () => {
-            setTimeout(() => {
-              triggerRecordMenu(getCurrentPages())
-            }, 150)
-          }
+            this.openRecordMenuWithRetry()
+          },
+          fail: () => {
+            this.finishRecordOpening(false)
+            wx.showToast({ title: '首页打开失败，请重试', icon: 'none' })
+          },
         })
         return
       }

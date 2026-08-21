@@ -1,7 +1,7 @@
 import { View, Text, Input, Image, Canvas, PageMeta, Swiper, SwiperItem, Button } from '@tarojs/components'
 import { CAFETERIA_HERO_BG_URL, GOOSE_DUCK_CHICKEN_BG_URL } from '../../utils/static-asset-cdn-url'
 import * as React from 'react'
-import Taro, { useDidShow, useShareAppMessage, useShareTimeline } from '@tarojs/taro'
+import Taro, { useDidHide, useDidShow, useShareAppMessage, useShareTimeline } from '@tarojs/taro'
 import {
   getHomeDashboard,
   getStatsSummary,
@@ -1024,6 +1024,35 @@ function IndexPage() {
     }
   }, [])
 
+  const homeVisibleRef = React.useRef(false)
+  const homeAuxiliaryTimersRef = React.useRef<Set<ReturnType<typeof setTimeout>>>(new Set())
+  const clearHomeAuxiliaryTimers = React.useCallback(() => {
+    homeAuxiliaryTimersRef.current.forEach((timer) => clearTimeout(timer))
+    homeAuxiliaryTimersRef.current.clear()
+  }, [])
+  const scheduleHomeAuxiliaryTask = React.useCallback((task: () => void | Promise<void>, delayMs: number) => {
+    const timer = setTimeout(() => {
+      homeAuxiliaryTimersRef.current.delete(timer)
+      if (!homeVisibleRef.current) return
+      try {
+        void task()
+      } catch {
+        // 首页增强任务失败不影响主数据与交互。
+      }
+    }, delayMs)
+    homeAuxiliaryTimersRef.current.add(timer)
+  }, [])
+
+  useDidHide(() => {
+    homeVisibleRef.current = false
+    clearHomeAuxiliaryTimers()
+  })
+
+  React.useEffect(() => () => {
+    homeVisibleRef.current = false
+    clearHomeAuxiliaryTimers()
+  }, [clearHomeAuxiliaryTimers])
+
   const handleMealPosterShareContext = React.useCallback((ctx: MealPosterSharePayload | null) => {
     mealPosterShareForAppMessageRef.current = ctx
   }, [])
@@ -1080,20 +1109,8 @@ function IndexPage() {
       setLoading(true)
     }
     try {
-      const exerciseLogParams = { date: resolvedDate }
-      // 首页主数据是首屏唯一硬依赖。其余接口提前并发启动，但都作为后台增强，
-      // 不能因为弱网超时而阻塞已经成功返回的 dashboard 渲染。
-      const statsPromise = getStatsSummary('month').catch((err) => {
-        console.error('[home-dashboard] getStatsSummary failed:', err)
-        return null
-      })
-      const bodyMetricsSeq = ++bodyMetricsSeqRef.current
-      const bodyMetricsPromise = fetchBodyMetricsSummaryRetry()
-      const exerciseLogsPromise = getExerciseLogs(exerciseLogParams).catch((err) => {
-        console.error('[home-dashboard] getExerciseLogs failed:', err)
-        return null
-      })
-
+      // 首页主数据是首屏唯一硬依赖；先让它独占首轮网络与渲染时机，
+      // 再启动统计、身体指标和运动增强，避免页面显示瞬间同时回调多个大对象。
       const res = await getHomeDashboard(resolvedDate)
       if (seq !== loadDashboardSeqRef.current) {
         return
@@ -1154,6 +1171,17 @@ function IndexPage() {
       homeDataStaleRef.current = false
       setLoading(false)
       setIsSwitchingDate(false)
+
+      const statsPromise = getStatsSummary('month').catch((err) => {
+        console.error('[home-dashboard] getStatsSummary failed:', err)
+        return null
+      })
+      const bodyMetricsSeq = ++bodyMetricsSeqRef.current
+      const bodyMetricsPromise = fetchBodyMetricsSummaryRetry()
+      const exerciseLogsPromise = getExerciseLogs({ date: resolvedDate }).catch((err) => {
+        console.error('[home-dashboard] getExerciseLogs failed:', err)
+        return null
+      })
 
       // 辅助数据独立收尾，不能继续占用 dashboard 的 pending 锁；否则用户保存
       // 体重/喝水后触发的强制刷新会被当成“重复请求”直接丢弃。
@@ -1271,16 +1299,20 @@ function IndexPage() {
   const skipNextRefreshRef = React.useRef(false)
 
   useDidShow(() => {
+    homeVisibleRef.current = true
+    clearHomeAuxiliaryTimers()
     setPetHidden(getStoredPetHidden())
     if (getAccessToken()) {
-      void getHealthProfile()
-        .then((profile) => {
-          const status = profile.onboarding_status || (profile.onboarding_completed === true ? 'completed' : 'pending')
-          setShowHealthProfilePrompt(status !== 'completed' && !isHealthProfileReminderSnoozed())
-        })
-        .catch(() => {
-          // 档案提示为增强信息，读取失败不影响首页主链路。
-        })
+      scheduleHomeAuxiliaryTask(async () => {
+        await getHealthProfile()
+          .then((profile) => {
+            const status = profile.onboarding_status || (profile.onboarding_completed === true ? 'completed' : 'pending')
+            setShowHealthProfilePrompt(status !== 'completed' && !isHealthProfileReminderSnoozed())
+          })
+          .catch(() => {
+            // 档案提示为增强信息，读取失败不影响首页主链路。
+          })
+      }, 180)
     } else {
       setShowHealthProfilePrompt(false)
     }
@@ -1327,10 +1359,10 @@ function IndexPage() {
       return
     }
 
-    void loadRewardHintData()
+    scheduleHomeAuxiliaryTask(loadRewardHintData, 360)
 
     // 刷新食物保质期待办数量
-    void (async () => {
+    scheduleHomeAuxiliaryTask(async () => {
       try {
         const expiry = await getFoodExpiryDashboard().catch(() => null)
         // 计算 profile tab badge 总数：食物保质期待办 + 好友请求
@@ -1346,7 +1378,7 @@ function IndexPage() {
       } catch {
         // 静默失败，保留旧值
       }
-    })()
+    }, 540)
 
     // 若本地缓存的 meals 缺少营养聚合字段，视为脏数据，强制走云端刷新
     const localSnapshot = getStoredHomeDashboardSnapshotByDate(targetDate)
@@ -1525,34 +1557,6 @@ function IndexPage() {
       Taro.eventCenter.off(HOME_INTAKE_DATA_CHANGED_EVENT, markHomeStale)
     }
   }, [loadDashboard, refreshBodyMetrics])
-
-  // 监听记录菜单标记变化（解决首页直接点击绿色按钮无响应问题）
-  React.useEffect(() => {
-    const checkRecordMenuFlag = () => {
-      const shouldShow = Taro.getStorageSync(HOME_RECORD_MENU_FLAG_KEY)
-      if (shouldShow) {
-        Taro.removeStorageSync(HOME_RECORD_MENU_FLAG_KEY)
-        openRecordMenuFromRequest()
-      }
-    }
-
-    // 立即检查一次
-    checkRecordMenuFlag()
-
-    // 设置轮询检查（每50ms检查一次，最多检查60秒）
-    // 使用更短的间隔和更长的持续时间，确保捕获标记
-    let checkCount = 0
-    const maxChecks = 1200
-    const timer = setInterval(() => {
-      checkRecordMenuFlag()
-      checkCount++
-      if (checkCount >= maxChecks) {
-        clearInterval(timer)
-      }
-    }, 50)
-
-    return () => clearInterval(timer)
-  }, [openRecordMenuFromRequest])
 
   // 额外：监听全局事件（备用方案，确保可靠性）
   React.useEffect(() => {

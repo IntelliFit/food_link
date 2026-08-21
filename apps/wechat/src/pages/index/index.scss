@@ -5287,6 +5287,10 @@ $sheet-float-max-height: calc(100vh - #{$sheet-float-gap-top} - env(safe-area-in
   border: 1rpx solid transparent;
 }
 
+.record-menu-grid-card--pending {
+  opacity: 0.82;
+}
+
 .record-menu-new-badge {
   position: absolute;
   top: 16rpx;
@@ -5310,6 +5314,15 @@ $sheet-float-max-height: calc(100vh - #{$sheet-float-gap-top} - env(safe-area-in
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.record-menu-action-spinner {
+  width: 34rpx;
+  height: 34rpx;
+  box-sizing: border-box;
+  border: 4rpx solid rgb(148 163 184 / 26%);
+  border-radius: 50%;
+  animation: btn-spin 0.7s linear infinite;
 }
 
 .record-menu-grid-text-wrap {

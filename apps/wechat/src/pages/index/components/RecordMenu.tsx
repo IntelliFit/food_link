@@ -26,7 +26,13 @@ import {
 import { getDevDebugUiTestImageUrl, setDevDebugUiTestImageUrl } from '../../../utils/dev-debug-storage'
 import { persistRecordTargetDate } from '../../../utils/record-date'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
-import { chooseImageWithPrivacy, isPrivacyAuthorizeError, showPrivacyAuthorizeFailure } from '../../../utils/weapp-privacy'
+import {
+  chooseImageWithPrivacy,
+  isCameraAuthorizationError,
+  isPrivacyAuthorizeError,
+  showCameraAuthorizationFailure,
+  showPrivacyAuthorizeFailure,
+} from '../../../utils/weapp-privacy'
 import CreditShortageSheet from '../../../components/CreditShortageSheet'
 import { DevNewUserOnboardingPreview } from '../../../components/DevNewUserOnboardingPreview'
 
@@ -118,19 +124,24 @@ const QUICK_ACCESS_ITEMS = [
   },
 ] as const
 
-const MEMBERSHIP_PREFLIGHT_TIMEOUT_MS = 1200
+const MEMBERSHIP_PREFLIGHT_TIMEOUT_MS = 500
 
 function logRecordMenuStage(stage: string, details: Record<string, unknown> = {}) {
   console.info('[record-menu-debug]', stage, details)
 }
 
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T | null> {
-  return Promise.race([
-    promise,
-    new Promise<null>((resolve) => {
-      setTimeout(() => resolve(null), timeoutMs)
-    }),
-  ])
+  let timer: ReturnType<typeof setTimeout> | null = null
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<null>((resolve) => {
+        timer = setTimeout(() => resolve(null), timeoutMs)
+      }),
+    ])
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
 }
 
 export function RecordMenu({ visible, onClose, selectedDate }: RecordMenuProps) {
@@ -145,6 +156,8 @@ export function RecordMenu({ visible, onClose, selectedDate }: RecordMenuProps) 
     membershipStatus: null,
   })
   const [imagePickInProgress, setImagePickInProgress] = React.useState(false)
+  const [imagePreflightMode, setImagePreflightMode] = React.useState<string | null>(null)
+  const imagePickLockRef = React.useRef(false)
   /** 弹窗打开时预取会员状态，点击「相册上传」时直接使用缓存结果 */
   const membershipPromiseRef = React.useRef<Promise<MembershipStatus | null> | null>(null)
 
@@ -153,6 +166,7 @@ export function RecordMenu({ visible, onClose, selectedDate }: RecordMenuProps) 
     if (!visible) {
       setDevToolsOpen(false)
       setImagePickInProgress(false)
+      setImagePreflightMode(null)
       membershipPromiseRef.current = null
       return
     }
@@ -198,27 +212,52 @@ export function RecordMenu({ visible, onClose, selectedDate }: RecordMenuProps) 
     switch (modeId) {
       case 'camera':
       case 'album': {
+        const interactionId = `record_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+        logRecordMenuStage('image-action-tap', { interaction_id: interactionId, mode: modeId })
         // 与 record 页「相册」一致：先校验今日次数，避免选图上传后 submit 才 429
         if (!getAccessToken()) {
+          logRecordMenuStage('image-action-no-token', { interaction_id: interactionId, mode: modeId })
           redirectToLogin()
           break
         }
+        if (imagePickLockRef.current) {
+          logRecordMenuStage('image-action-duplicate-ignored', { interaction_id: interactionId, mode: modeId })
+          break
+        }
+        imagePickLockRef.current = true
+        setImagePreflightMode(modeId)
         void (async () => {
           try {
+            const preflightStartedAt = Date.now()
             // 优先使用弹窗打开时预取的结果，未命中则降级发起新请求
             const membershipStatus = await withTimeout(
               membershipPromiseRef.current ?? getMyMembership(),
               MEMBERSHIP_PREFLIGHT_TIMEOUT_MS
             )
+            logRecordMenuStage('membership-preflight-finished', {
+              interaction_id: interactionId,
+              mode: modeId,
+              duration_ms: Date.now() - preflightStartedAt,
+              resolved: membershipStatus !== null,
+            })
             if (membershipStatus && isFoodAnalysisCreditExhausted(membershipStatus)) {
+              logRecordMenuStage('membership-preflight-blocked', { interaction_id: interactionId, mode: modeId })
               setCreditSheet({ visible: true, membershipStatus })
               return
             }
-          } catch {
+          } catch (error) {
+            logRecordMenuStage('membership-preflight-error', {
+              interaction_id: interactionId,
+              mode: modeId,
+              message: error instanceof Error ? error.message : String(error || ''),
+            })
             // 会员接口失败时仍允许选图，由分析提交接口提示
           }
+          setImagePreflightMode(null)
           setImagePickInProgress(true)
           await closeBeforeNativePicker()
+          const pickerStartedAt = Date.now()
+          logRecordMenuStage('native-picker-start', { interaction_id: interactionId, mode: modeId })
           try {
             const res = await chooseImageWithPrivacy({
               count: modeId === 'album' ? 5 : 1,
@@ -226,13 +265,32 @@ export function RecordMenu({ visible, onClose, selectedDate }: RecordMenuProps) 
               sourceType: modeId === 'camera' ? ['camera'] : ['album'],
             })
             const tempPaths = res.tempFilePaths || []
-            if (tempPaths.length <= 0) return
+            logRecordMenuStage('native-picker-success', {
+              interaction_id: interactionId,
+              mode: modeId,
+              duration_ms: Date.now() - pickerStartedAt,
+              image_count: tempPaths.length,
+            })
+            if (tempPaths.length <= 0) {
+              logRecordMenuStage('native-picker-empty', { interaction_id: interactionId, mode: modeId })
+              return
+            }
             Taro.setStorageSync('analyzeImagePath', tempPaths[0])
             Taro.setStorageSync('analyzeImagePaths', tempPaths)
             await Taro.navigateTo({ url: `${extraPkgUrl('/pages/analyze/index')}?date=${encodeURIComponent(recordDate)}` })
+            logRecordMenuStage('analyze-page-navigate-success', { interaction_id: interactionId, mode: modeId })
           } catch (err: any) {
-            if (err.errMsg?.includes('cancel')) return
+            if (err.errMsg?.includes('cancel')) {
+              logRecordMenuStage('native-picker-cancel', { interaction_id: interactionId, mode: modeId })
+              return
+            }
             const message = String(err?.errMsg || err?.message || '')
+            logRecordMenuStage('native-picker-failed', {
+              interaction_id: interactionId,
+              mode: modeId,
+              duration_ms: Date.now() - pickerStartedAt,
+              message,
+            })
             if (message.includes('navigateTo')) {
               Taro.showToast({ title: '进入识别设置失败，请重试', icon: 'none' })
               return
@@ -241,9 +299,18 @@ export function RecordMenu({ visible, onClose, selectedDate }: RecordMenuProps) 
               showPrivacyAuthorizeFailure(err)
               return
             }
+            if (modeId === 'camera' && isCameraAuthorizationError(err)) {
+              showCameraAuthorizationFailure()
+              return
+            }
             void showUnifiedApiError(new Error('选择图片失败'), '选择图片失败')
           }
-        })()
+        })().finally(() => {
+          // 会员额度拦截、原生选择器失败和页面跳转都必须释放同步锁。
+          imagePickLockRef.current = false
+          setImagePreflightMode(null)
+          setImagePickInProgress(false)
+        })
         break
       }
       case 'text':
@@ -316,7 +383,7 @@ export function RecordMenu({ visible, onClose, selectedDate }: RecordMenuProps) 
               <View
                 key={feature.id}
                 id={`record-menu-guide-${feature.id}`}
-                className={`record-menu-grid-card record-menu-grid-card--${feature.id}`}
+                className={`record-menu-grid-card record-menu-grid-card--${feature.id}${imagePreflightMode === feature.id ? ' record-menu-grid-card--pending' : ''}`}
                 style={{ backgroundColor: featureBackground, borderColor: featureBorder }}
                 onClick={() => handleGridClick(feature.id)}
               >
@@ -326,7 +393,11 @@ export function RecordMenu({ visible, onClose, selectedDate }: RecordMenuProps) 
                   </View>
                 )}
                 <View className='record-menu-grid-icon-wrap' style={{ backgroundColor: iconBackground }}>
-                  <IconComponent size={40} color={featureColor} />
+                  {imagePreflightMode === feature.id ? (
+                    <View className='record-menu-action-spinner' style={{ borderTopColor: featureColor }} />
+                  ) : (
+                    <IconComponent size={40} color={featureColor} />
+                  )}
                 </View>
                 <View className='record-menu-grid-text-wrap'>
                   <Text className='record-menu-grid-label' style={{ color: featureColor }}>

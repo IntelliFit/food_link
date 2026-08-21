@@ -2,7 +2,13 @@ import Taro from '@tarojs/taro'
 import { getAccessToken, getMyMembership } from './api'
 import { redirectToLogin } from './withAuth'
 import { extraPkgUrl } from './subpackage-extra'
-import { chooseImageWithPrivacy, isPrivacyAuthorizeError, showPrivacyAuthorizeFailure } from './weapp-privacy'
+import {
+  chooseImageWithPrivacy,
+  isCameraAuthorizationError,
+  isPrivacyAuthorizeError,
+  showCameraAuthorizationFailure,
+  showPrivacyAuthorizeFailure,
+} from './weapp-privacy'
 
 const MEMBERSHIP_PREFLIGHT_TIMEOUT_MS = 1200
 
@@ -98,28 +104,8 @@ export async function pickImageAndOpenAnalyze(sourceType: Array<'album' | 'camer
       showPrivacyAuthorizeFailure(err)
       return
     }
-    const raw = err.errMsg || ''
-    const msg = raw.toLowerCase()
-    /** 避免宽泛匹配 permission（部分机型错误文案含该词但并非用户关权限） */
-    const cameraAuthLike =
-      sourceType.includes('camera') &&
-      (msg.includes('auth deny') ||
-        msg.includes('auth denied') ||
-        msg.includes('authorize') ||
-        msg.includes('no permission') ||
-        (msg.includes('permission') && (msg.includes('camera') || msg.includes('scope'))) ||
-        raw.includes('用户拒绝') ||
-        raw.includes('不允许使用摄像头'))
-    if (cameraAuthLike) {
-      Taro.showModal({
-        title: '需要相机权限',
-        content: '请在微信小程序设置中允许使用摄像头；若已开启仍失败，可返回首页点击「相册上传」完成图片分析。',
-        confirmText: '去设置',
-        cancelText: '取消',
-        success: (r) => {
-          if (r.confirm) Taro.openSetting()
-        }
-      })
+    if (sourceType.includes('camera') && isCameraAuthorizationError(err)) {
+      showCameraAuthorizationFailure()
       return
     }
     Taro.showToast({

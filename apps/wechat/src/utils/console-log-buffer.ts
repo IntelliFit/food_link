@@ -11,7 +11,6 @@ export type ConsoleLogEntry = {
 const CONSOLE_LOG_STORAGE_KEY = 'recent_console_logs_v1'
 const DEFAULT_CONSOLE_LOG_LIMIT = 80
 const MAX_CONSOLE_LOG_LIMIT = 120
-
 declare const __CONSOLE_LOG_BUFFER_LIMIT__: string
 
 function readConsoleLogLimit(): number {
@@ -108,6 +107,15 @@ export function getRecentConsoleLogs(limit = CONSOLE_LOG_BUFFER_LIMIT): ConsoleL
   const normalizedLimit = Math.min(CONSOLE_LOG_BUFFER_LIMIT, Math.max(0, Math.floor(limit)))
   if (normalizedLimit <= 0) return []
   return loadConsoleLogs().slice(-normalizedLimit)
+}
+
+/** App 进入后台前尽快保存；高频日志路径仍只做内存追加。 */
+export function flushRecentConsoleLogs(): void {
+  if (persistTimer) {
+    clearTimeout(persistTimer)
+    persistTimer = null
+  }
+  persistConsoleLogs([...(consoleLogBuffer || [])])
 }
 
 /** 供 profile 清除缓存时重置 */

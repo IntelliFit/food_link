@@ -26,6 +26,32 @@ export function isPrivacyAuthorizeError(error: unknown): boolean {
   return isPrivacyScopeNotDeclaredError(error) || isPrivacyAuthorizationDeniedError(error)
 }
 
+export function isCameraAuthorizationError(error: unknown): boolean {
+  const raw = String((error as any)?.errMsg || (error as any)?.message || error || '')
+  const message = raw.toLowerCase()
+  return (
+    message.includes('auth deny') ||
+    message.includes('auth denied') ||
+    message.includes('authorize') ||
+    message.includes('no permission') ||
+    (message.includes('permission') && (message.includes('camera') || message.includes('scope'))) ||
+    raw.includes('用户拒绝') ||
+    raw.includes('不允许使用摄像头')
+  )
+}
+
+export function showCameraAuthorizationFailure(): void {
+  Taro.showModal({
+    title: '需要相机权限',
+    content: '请在微信小程序设置中允许使用摄像头；若已开启仍失败，可返回首页点击「相册上传」完成图片分析。',
+    confirmText: '去设置',
+    cancelText: '取消',
+    success: (result) => {
+      if (result.confirm) void Taro.openSetting()
+    },
+  })
+}
+
 export async function ensureWeappPrivacyAuthorized(): Promise<void> {
   if (Taro.getEnv() !== Taro.ENV_TYPE.WEAPP) return
   const wxApi = getWxPrivacyApi()
