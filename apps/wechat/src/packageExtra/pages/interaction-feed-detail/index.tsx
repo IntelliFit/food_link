@@ -1,6 +1,8 @@
 import { View, Text, Image, ScrollView, Input } from '@tarojs/components'
 import * as React from 'react'
 import Taro from '@tarojs/taro'
+
+const { useCallback, useMemo } = React
 import {
   communityGetComments,
   communityGetFeedContext,
@@ -365,7 +367,7 @@ export function InteractionFeedDetailPage() {
     }
   }, [clearLoadingReleaseTimer, logDetailStage])
 
-  const hydrateFromOptions = React.useCallback((options: RouteOptions) => {
+  const hydrateFromOptions = useCallback((options: RouteOptions) => {
     const nextRecordId = pickRecordId(options)
     const nextTargetType = pickTargetType(options)
     const routeKey = `${nextTargetType}:${nextRecordId}`
@@ -410,7 +412,7 @@ export function InteractionFeedDetailPage() {
     clearLoadingReleaseTimer()
   }, [clearLoadingReleaseTimer])
 
-  const handleLike = React.useCallback(async () => {
+  const handleLike = useCallback(async () => {
     if (!feedItem || likePendingRef.current) return
     likePendingRef.current = true
     const prev = feedItem
@@ -434,18 +436,18 @@ export function InteractionFeedDetailPage() {
     }
   }, [feedItem])
 
-  const openComposer = React.useCallback((reply?: FeedCommentItem | null) => {
+  const openComposer = useCallback((reply?: FeedCommentItem | null) => {
     setReplyTargetComment(reply || null)
     setComposerVisible(true)
   }, [])
 
-  const closeComposer = React.useCallback(() => {
+  const closeComposer = useCallback(() => {
     setComposerVisible(false)
     setReplyTargetComment(null)
     setCommentContent('')
   }, [])
 
-  const handleSubmitComment = React.useCallback(async () => {
+  const handleSubmitComment = useCallback(async () => {
     if (!feedItem) return
     const content = commentContent.trim()
     if (!content || submitting) return
@@ -465,9 +467,9 @@ export function InteractionFeedDetailPage() {
     }
   }, [feedItem, commentContent, submitting, replyTargetComment, closeComposer, loadDetail])
 
-  const highlightCommentId = React.useMemo(() => targetCommentId.trim(), [targetCommentId])
+  const highlightCommentId = useMemo(() => targetCommentId.trim(), [targetCommentId])
 
-  const handleViewDetail = React.useCallback((id: string) => {
+  const handleViewDetail = useCallback((id: string) => {
     if (!id) return
     if (targetType === 'exercise_log') {
       const dateText = String(feedItem?.record?.record_time || feedItem?.record?.created_at || '').slice(0, 10)
@@ -481,7 +483,7 @@ export function InteractionFeedDetailPage() {
     Taro.navigateTo({ url: `${extraPkgUrl('/pages/record-detail/index')}?id=${encodeURIComponent(id)}` })
   }, [targetType, feedItem])
 
-  const handleManualFoodCardClick = React.useCallback((row: ManualFoodSourceItem & { displayName: string; sourceLabel: string; imageUrl: string }) => {
+  const handleManualFoodCardClick = useCallback((row: ManualFoodSourceItem & { displayName: string; sourceLabel: string; imageUrl: string }) => {
     const manualSourceId = (row as any).manual_source_id as string | undefined
     const manualSource = String(row.manual_source || '')
     if (manualSourceId && (manualSource === 'public_library' || manualSource === 'nutrition_library' || manualSource === 'packaged_food')) {
@@ -489,7 +491,7 @@ export function InteractionFeedDetailPage() {
     }
   }, [])
 
-  const handleDeleteFeedItem = React.useCallback(async () => {
+  const handleDeleteFeedItem = useCallback(async () => {
     if (!feedItem) return
     const ttype = getFeedTargetType(feedItem)
     const tid = getFeedTargetId(feedItem)
@@ -519,7 +521,7 @@ export function InteractionFeedDetailPage() {
     }
   }, [feedItem])
 
-  const feedActionSheetActions = React.useMemo<FeedActionSheetAction[]>(() => {
+  const feedActionSheetActions = useMemo<FeedActionSheetAction[]>(() => {
     if (!feedItem) return []
     if (!feedItem.is_mine) {
       return [{ id: 'report', label: '举报', iconClass: 'icon-jinggao', danger: true }]
@@ -533,7 +535,7 @@ export function InteractionFeedDetailPage() {
     return actions
   }, [feedItem])
 
-  const handleFeedActionSelect = React.useCallback((id: string) => {
+  const handleFeedActionSelect = useCallback((id: string) => {
     if (!feedItem) return
     if (!feedItem.is_mine) {
       if (id === 'report') setReportVisible(true)
@@ -558,11 +560,11 @@ export function InteractionFeedDetailPage() {
     }
   }, [feedItem, handleDeleteFeedItem])
 
-  const toggleFeedTextExpanded = React.useCallback((key: string): void => {
+  const toggleFeedTextExpanded = useCallback((key: string): void => {
     setFeedTextExpanded((prev) => ({ ...prev, [key]: !prev[key] }))
   }, [])
 
-  const renderCollapsibleFeedText = React.useCallback((key: string, text: string, className = 'feed-content') => {
+  const renderCollapsibleFeedText = useCallback((key: string, text: string, className = 'feed-content') => {
     const expandable = shouldCollapseFeedText(text)
     const collapsed = expandable && !feedTextExpanded[key]
     return (
@@ -593,13 +595,14 @@ export function InteractionFeedDetailPage() {
               <View className='interaction-feed-detail-loading-spinner' />
             </View>
           ) : null}
-          {!loading && !feedItem ? (
-            <View className='interaction-feed-detail-empty'>
-              <Text className='interaction-feed-detail-empty-text'>未找到对应动态</Text>
-            </View>
-          ) : null}
-          {feedItem ? (
-            <View className={`feed-list${loading ? ' interaction-feed-detail-preparing' : ''}`}>
+          {!feedItem ? (
+            !loading ? (
+              <View className='interaction-feed-detail-empty'>
+                <Text className='interaction-feed-detail-empty-text'>未找到对应动态</Text>
+              </View>
+            ) : null
+          ) : (
+            <View className='feed-list'>
               {(() => {
                 const exercise = isExerciseFeed(feedItem)
                 const isCirclePost = isCirclePostFeed(feedItem)
@@ -888,7 +891,7 @@ export function InteractionFeedDetailPage() {
                 )
               })()}
             </View>
-          ) : null}
+          )}
         </View>
       </ScrollView>
 

@@ -16,6 +16,7 @@ type SubmitPackagedFoodCorrectionInput struct {
 	ReasonType     string
 	Comment        string
 	Payload        PackagedFoodInput
+	ProvidedFields map[string]bool
 }
 
 func (s *FoodNutritionService) GetPackagedFood(ctx context.Context, id string) (*domain.PackagedFood, error) {
@@ -56,7 +57,7 @@ func (s *FoodNutritionService) SubmitPackagedFoodCorrection(ctx context.Context,
 		return nil, &commonerrors.AppError{Code: 10002, Message: "包装图片最多上传5张", HTTPStatus: 400}
 	}
 
-	patch := buildPackagedFoodPatch(input.Payload)
+	patch := buildPackagedFoodPatch(input.Payload, input.ProvidedFields)
 	beforeSnapshot, err := foodrecordrepoSnapshot(*item)
 	if err != nil {
 		return nil, err
@@ -88,8 +89,8 @@ func (s *FoodNutritionService) SubmitPackagedFoodCorrection(ctx context.Context,
 	return submission, nil
 }
 
-func buildPackagedFoodPatch(input PackagedFoodInput) map[string]any {
-	return map[string]any{
+func buildPackagedFoodPatch(input PackagedFoodInput, providedFields map[string]bool) map[string]any {
+	candidates := map[string]any{
 		"brand":                      strings.TrimSpace(input.Brand),
 		"product_name":               strings.TrimSpace(input.ProductName),
 		"display_name":               firstNonEmpty(strings.TrimSpace(input.DisplayName), strings.TrimSpace(input.ProductName)),
@@ -134,6 +135,13 @@ func buildPackagedFoodPatch(input PackagedFoodInput) map[string]any {
 		"folate_mcg_per_100g":        input.FolateMcgPer100g,
 		"vitamin_b12_mcg_per_100g":   input.VitaminB12McgPer100g,
 	}
+	patch := make(map[string]any, len(providedFields))
+	for field := range providedFields {
+		if value, ok := candidates[field]; ok {
+			patch[field] = value
+		}
+	}
+	return patch
 }
 
 func foodrecordrepoSnapshot(item domain.PackagedFood) (map[string]any, error) {

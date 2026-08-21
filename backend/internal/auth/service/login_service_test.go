@@ -194,6 +194,7 @@ func TestLoginService_SetPasswordFirstPhoneBindingRequiresSMSCode(t *testing.T) 
 	_, err = loginSvc.SetPassword(ctx, loggedIn.UserID, SetPasswordInput{
 		Phone:            "13800138021",
 		Password:         "anotherpassword123",
+		CurrentPassword:  "newpassword123",
 		VerificationCode: "530836",
 	})
 	require.Error(t, err)

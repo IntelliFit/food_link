@@ -1,0 +1,128 @@
+[
+  {
+    "batch_name": "永州高校官方食堂楼层确认集-20260820",
+    "region": "永州市",
+    "source_scope": "高校及政府官方页面；严格确认现行高校、正式校区、物理父食堂、实际餐饮楼层与2024—2026当前运营",
+    "schools": [
+      {
+        "school": "湖南科技学院",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "校本部",
+            "aliases": [
+              "本部"
+            ],
+            "address": "湖南省永州市零陵区杨梓塘路130号",
+            "source_url": "https://zs.huse.edu.cn/info/1042/11211.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "校本部",
+            "name": "桃园食堂",
+            "aliases": [
+              "桃园学生食堂"
+            ],
+            "location_text": "校本部桃园食堂二楼",
+            "building_or_floor": "二楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "2025年毕业午餐实际堂食；2025年迎新期间继续提供正常餐饮服务",
+            "source_url": "https://www.huse.edu.cn/yyxy/info/1021/11891.htm",
+            "source_title": "音乐与舞蹈学院组织毕业生参加“温情毕业季、餐忆科院情”毕业午餐活动",
+            "source_org": "湖南科技学院音乐与舞蹈学院",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "学校二级学院报道明确，学院老师、辅导员在桃园食堂二楼与2025届毕业生共进学校准备的毕业午餐，直接证明二楼实际供餐和堂食；不由三层建筑外推一楼、三楼。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.huse.edu.cn/hqfwzx/info/1009/9921.htm",
+                "source_title": "新湖南：提升餐饮服务质量，加强食品安全教育——湖南科技学院开展“迎新美食节”系列活动",
+                "source_org": "湖南科技学院后勤服务中心",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2025年校方后勤点名桃园食堂处于学校正常饮食服务体系，组织食品安全教育并鼓励新生到食堂就餐，闭合同父当前运营。"
+              }
+            ]
+          },
+          {
+            "campus": "校本部",
+            "name": "松园食堂",
+            "aliases": [
+              "松园学生食堂",
+              "松原食堂"
+            ],
+            "location_text": "校本部松园食堂二楼",
+            "building_or_floor": "二楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "2023年二楼毕业会餐实际堂食；2025年同父菜品试吃和正常供应",
+            "source_url": "https://www.huse.edu.cn/info/1032/72881.htm",
+            "source_title": "红网：湖南科技学院请毕业生吃毕业大餐",
+            "source_org": "湖南科技学院宣传部",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "学校宣传部供稿页逐一写明桃园食堂二楼、松园食堂二楼同时启动毕业会餐，毕业生进入松园食堂二楼实际享用饭菜；仅取精确二楼，不由两层建筑外推一楼。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.huse.edu.cn/hqfwzx/info/1009/9921.htm",
+                "source_title": "新湖南：提升餐饮服务质量，加强食品安全教育——湖南科技学院开展“迎新美食节”系列活动",
+                "source_org": "湖南科技学院后勤服务中心",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2025年校方后勤点名松园食堂正在开展菜品试吃，并依据师生投票调整菜品供应比例，证明同一父食堂当前实际餐饮经营。"
+              }
+            ]
+          },
+          {
+            "campus": "校本部",
+            "name": "荷园食堂",
+            "aliases": [
+              "荷园学生食堂"
+            ],
+            "location_text": "校本部荷园食堂一楼、二楼",
+            "building_or_floor": "一楼、二楼",
+            "service_type": "学生及教职工食堂",
+            "audience": "师生",
+            "opening_hours_raw": "2025年早、中、晚餐实际接待新生",
+            "source_url": "https://zs.huse.edu.cn/__local/0/DF/9C/19B688B5B130224AE5E619B44CD_CBEFBD22_F1D909.pdf?e=.pdf",
+            "source_title": "湖南科技学院招生手册",
+            "source_org": "湖南科技学院招生宣传协会",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "校方招生宣传手册在餐饮章节明确荷园食堂一楼是学生食堂、二楼是老师食堂，并描述两层为师生提供多样餐食；一、二楼归并为同一物理父食堂。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.huse.edu.cn/zcyztbglc/info/1030/2308.htm",
+                "source_title": "湖南科技学院荷园食堂二楼托管经营服务项目招标公告",
+                "source_org": "湖南科技学院资产与招投标管理处",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "校方2023年公告独立确认荷园食堂二楼为高校食堂托管经营空间；该招采来源只作楼层命名交叉证明，不单独用于激活。"
+              },
+              {
+                "source_url": "https://www.huse.edu.cn/hqfwzx/info/1009/9921.htm",
+                "source_title": "新湖南：提升餐饮服务质量，加强食品安全教育——湖南科技学院开展“迎新美食节”系列活动",
+                "source_org": "湖南科技学院后勤服务中心",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "2025年校方后勤点名荷园食堂在早、中、晚餐实际接待新生并调查菜价，闭合同一父食堂当前正常供餐。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "校本部为Foodlink对学校唯一正式办学地点的标准化名称，地址以2025年招生章程为准。",
+          "桃园、松园各只保留有实际堂食证据的二楼；不按建筑总层数外推其他楼层。",
+          "荷园一楼学生食堂区、二楼教师食堂区归并为同一物理父食堂，不另建楼层子食堂。",
+          "竹园食堂虽有2025年当前供餐证据，但缺少精确实际餐饮楼层，不纳入本批。"
+        ]
+      }
+    ]
+  }
+]

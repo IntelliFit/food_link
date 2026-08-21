@@ -1,0 +1,64 @@
+[
+  {
+    "batch_name": "郴州高校官方食堂楼层确认集-20260820",
+    "region": "郴州市",
+    "source_scope": "高校及政府官方页面；严格确认现行高校、正式校区、物理父食堂、实际餐饮楼层与2024—2026当前运营",
+    "schools": [
+      {
+        "school": "湘南学院",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "王仙校区",
+            "aliases": ["王仙岭校区", "主校区"],
+            "address": "湖南省郴州市郴州大道889号",
+            "source_url": "https://www.xnu.edu.cn/html/891/2025-02-20/content-27198.html"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "王仙校区",
+            "name": "学生第一食堂",
+            "aliases": ["第一食堂", "一食堂"],
+            "location_text": "王仙校区学生第一食堂二楼",
+            "building_or_floor": "二楼",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "2023年提质改造后全时段开放；2024年同父食堂现场餐饮食品抽检",
+            "source_url": "https://www.xnu.edu.cn/m/891/2017-07-04/content-1365.html",
+            "source_title": "湘南学院学生第一、第二食堂餐饮服务外包招标公告",
+            "source_org": "湘南学院",
+            "source_type": "official_university",
+            "evidence_level": "A",
+            "evidence_excerpt": "学校公告明确学生第一食堂位于郴州大道889号王仙岭校区原湘京食堂二楼；同楼一楼另有学生第二食堂和超市、三楼另有学生第四食堂、四楼为宿舍，因此只把二楼归入学生第一食堂，不按建筑总层数外推。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.xnu.edu.cn/html/909/2023-09-05/content-23315.html",
+                "source_title": "湘南学院第一食堂提质改造完成，正式营业！",
+                "source_org": "湘南学院后勤管理处",
+                "source_type": "official_university",
+                "evidence_level": "A",
+                "evidence_excerpt": "学校后勤报道明确学生第一食堂完成提质改造后于9月1日正式营业，并全时段对外开放，为师生提供实际就餐服务。"
+              },
+              {
+                "source_url": "https://amr.hunan.gov.cn/amr/ztx/ssjygkx/spcj/202407/33361575/files/3cbaa22d13b04ae18ac9b9e02c768643.pdf",
+                "source_title": "食品安全抽样检验项目合格食品信息表（2024年第8期附件）",
+                "source_org": "湖南省市场监督管理局",
+                "source_type": "official_government",
+                "evidence_level": "A",
+                "evidence_excerpt": "官方附件第166至168项被抽样单位均为湘南学院第一食堂，列红糖馒头、豆沙馒头、粉丝包子三种餐饮食品，生产日期均为2024年3月8日，证明同一父食堂在2024年实际制作和供应餐食。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "现行招生章程使用王仙校区，2017年食堂公告使用王仙岭校区，两者门牌均为郴州大道889号，按同一校区归一。",
+          "学生第一食堂二楼只作为一个物理父食堂的楼层关系，不另拆楼层经营区；原湘京食堂为楼宇旧称，不另建父食堂。",
+          "学生第二食堂一楼、学生第四食堂三楼缺少2024—2026同父实际运营证据，不纳入本批。"
+        ]
+      }
+    ]
+  }
+]

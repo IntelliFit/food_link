@@ -66,11 +66,15 @@ func setupWorkerPublicFoodTestDB(t *testing.T) *gorm.DB {
 		&analyzedomain.PrecisionSessionRound{},
 		&analyzedomain.PrecisionItemEstimate{},
 		&publicfooddomain.PublicFoodItem{},
+		&campuscatalogdomain.CollectionBatch{},
 		&campuscatalogdomain.CatalogItem{},
 		&migrationdo.SchoolDO{},
 		&migrationdo.SchoolCampusDO{},
 		&migrationdo.SchoolCanteenDO{},
 	))
+	require.NoError(t, db.Create(&campuscatalogdomain.CollectionBatch{
+		ID: "batch-1", BatchName: "高校食堂测试批次", VenueType: "university", Status: "active",
+	}).Error)
 	return db
 }
 

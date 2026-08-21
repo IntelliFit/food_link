@@ -650,17 +650,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '800',
   },
-  loginModeSwitch: {
-    minHeight: 38,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 8,
-  },
-  loginModeSwitchText: {
-    color: colors.brandDark,
-    fontSize: 13,
-    fontWeight: '700',
-  },
   skipLoginButton: {
     minHeight: 48,
     alignItems: 'center',

@@ -18,6 +18,7 @@ import (
 	"food_link/backend/internal/foodrecord/service"
 
 	"github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin/binding"
 	"log/slog"
 )
 
@@ -634,6 +635,11 @@ func (h *FoodRecordHandler) GetPackagedFood(c *gin.Context) {
 
 // POST /api/packaged-food/corrections
 func (h *FoodRecordHandler) SubmitPackagedFoodCorrection(c *gin.Context) {
+	var rawFields map[string]any
+	if err := c.ShouldBindBodyWith(&rawFields, binding.JSON); err != nil {
+		response.Error(c, err)
+		return
+	}
 	var body struct {
 		PackagedFoodID        string         `json:"packaged_food_id"`
 		ReasonType            string         `json:"reason_type"`
@@ -690,14 +696,29 @@ func (h *FoodRecordHandler) SubmitPackagedFoodCorrection(c *gin.Context) {
 		FolateMcgPer100g      float64        `json:"folate_mcg_per_100g"`
 		VitaminB12McgPer100g  float64        `json:"vitamin_b12_mcg_per_100g"`
 	}
-	if err := c.ShouldBindJSON(&body); err != nil {
+	if err := c.ShouldBindBodyWith(&body, binding.JSON); err != nil {
 		response.Error(c, err)
 		return
 	}
+	providedFields := make(map[string]bool, len(rawFields))
+	for field := range rawFields {
+		switch field {
+		case "packaged_food_id", "reason_type", "comment":
+			continue
+		default:
+			providedFields[field] = true
+		}
+	}
+	logFoodRecordAPI(c, "packaged_food_correction_submit",
+		slog.String("packaged_food_id", strings.TrimSpace(body.PackagedFoodID)),
+		slog.String("reason_type", strings.TrimSpace(body.ReasonType)),
+		slog.Int("provided_field_count", len(providedFields)),
+	)
 	item, err := h.nutritionSvc.SubmitPackagedFoodCorrection(c.Request.Context(), c.GetString(authmw.ContextUserIDKey), service.SubmitPackagedFoodCorrectionInput{
 		PackagedFoodID: body.PackagedFoodID,
 		ReasonType:     body.ReasonType,
 		Comment:        body.Comment,
+		ProvidedFields: providedFields,
 		Payload: service.PackagedFoodInput{
 			Brand:                 body.Brand,
 			ProductName:           body.ProductName,
@@ -756,6 +777,11 @@ func (h *FoodRecordHandler) SubmitPackagedFoodCorrection(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
+	logFoodRecordAPI(c, "packaged_food_correction_submit_ok",
+		slog.String("submission_id", item.ID),
+		slog.String("packaged_food_id", item.PackagedFoodID),
+		slog.Int("changed_field_count", len(item.ProposedPatch)),
+	)
 	response.Success(c, gin.H{"id": item.ID, "message": "纠错提案已提交，等待审核", "item": item})
 }
 

@@ -10,6 +10,7 @@ import {
   LayoutDashboard,
   LogOut,
   MessageSquareText,
+  Images,
   Package,
   ScanLine,
   Settings,
@@ -39,6 +40,7 @@ export type AdminMenuId =
   | 'feed-reports'
   | 'payment-test'
   | 'user-rewards'
+  | 'user-food-photos'
   | 'settings'
 
 type AdminSidebarProps = {
@@ -75,6 +77,7 @@ const menuGroups: Array<{ label: string; items: AdminMenuItem[] }> = [
       { id: 'food-nutrition', label: '标准食物库', icon: Apple },
       { id: 'nutrition-alias-review', label: '别名审核', icon: Tags },
       { id: 'public-food-library', label: '公共食物', icon: Utensils },
+      { id: 'user-food-photos', label: '食物照片', icon: Images },
       { id: 'campus-directory', label: '校园食堂', icon: Building2 },
       { id: 'campus-food-collection', label: '食堂采集', icon: ScanLine },
       { id: 'exercise-energy', label: '运动库', icon: Activity },
