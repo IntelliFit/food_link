@@ -60,6 +60,7 @@ import { IconTrendingUp } from '../../components/iconfont'
 import './index.scss'
 import { withAuth, redirectToLogin } from '../../utils/withAuth'
 import { extraPkgUrl } from '../../utils/subpackage-extra'
+import { settleRankingPreviewRequests } from './ranking-preview'
 import { COMMUNITY_FEED_CHANGED_EVENT } from '../../utils/home-events'
 import { chooseImageWithPrivacy, isPrivacyAuthorizeError, showPrivacyAuthorizeFailure } from '../../utils/weapp-privacy'
 import { useAppColorScheme } from '../../components/AppColorSchemeContext'
@@ -575,23 +576,27 @@ function CommunityPage() {
   }, [offset])
 
   const loadRankingPreview = useCallback(async (silent = true) => {
-    if (!getAccessToken()) {
+    const hasAccessToken = Boolean(getAccessToken())
+    if (!hasAccessToken) {
       setLbPreviewTop([])
-      setFoodRankingPreview([])
-      setLbPreviewFetching(false)
-      return
     }
     if (!silent) setLbPreviewLoading(true)
     setLbPreviewFetching(true)
     try {
-      const [userResult, foodResult] = await Promise.all([
-        communityGetCheckinLeaderboard(),
-        communityGetFoodNutrientLeaderboard('protein', 2),
-      ])
-      setLbPreviewTop((userResult.list || []).slice(0, 2))
-      setFoodRankingPreview((foodResult.list || []).slice(0, 2))
-    } catch {
-      // 保留上次预览，避免请求失败时横幅突然变空
+      const result = await settleRankingPreviewRequests(
+        hasAccessToken ? communityGetCheckinLeaderboard() : null,
+        communityGetFoodNutrientLeaderboard('protein', 2)
+      )
+      if (result.user?.status === 'fulfilled') {
+        setLbPreviewTop((result.user.value.list || []).slice(0, 2))
+      } else if (result.user?.status === 'rejected') {
+        console.error('加载用户排行榜预览失败:', result.user.reason)
+      }
+      if (result.food.status === 'fulfilled') {
+        setFoodRankingPreview((result.food.value.list || []).slice(0, 2))
+      } else {
+        console.error('加载食物排行榜预览失败:', result.food.reason)
+      }
     } finally {
       setLbPreviewFetching(false)
       if (!silent) setLbPreviewLoading(false)
