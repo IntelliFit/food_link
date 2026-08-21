@@ -652,8 +652,22 @@ var foodNutrientColumns = map[string]string{
 	"folate":      "folate_mcg_per_100g",
 }
 
+var proteinLeaderboardBasicFoods = []string{
+	"金枪鱼", "鸡胸肉", "牛肉", "猪里脊", "猪里脊肉", "虾仁", "虾", "三文鱼", "鸡肉", "鸡蛋", "豆腐", "牛奶",
+}
+
+var everydayLeaderboardFoods = []string{
+	"鸡蛋", "牛奶", "酸奶", "豆腐", "豆腐干", "黄豆", "黑豆", "毛豆",
+	"金枪鱼", "鸡胸肉", "牛肉", "猪里脊", "猪里脊肉", "虾", "虾仁", "三文鱼",
+	"燕麦", "糙米", "玉米", "土豆", "红薯", "全麦面包",
+	"西兰花", "菠菜", "胡萝卜", "番茄", "黄瓜", "南瓜", "香菇", "海带", "紫菜",
+	"苹果", "香蕉", "橙子", "蓝莓", "草莓", "梨", "猕猴桃", "牛油果",
+	"花生", "核桃", "杏仁", "白芝麻", "黑芝麻", "奇亚籽", "虾皮", "猪肝", "鸭血",
+}
+
 func (r *FeedRepo) GetFoodNutrientRanking(ctx context.Context, nutrient string, limit int) ([]NutrientFoodRow, error) {
-	column, ok := foodNutrientColumns[strings.TrimSpace(nutrient)]
+	nutrient = strings.TrimSpace(nutrient)
+	column, ok := foodNutrientColumns[nutrient]
 	if !ok {
 		return nil, fmt.Errorf("不支持的营养素: %s", nutrient)
 	}
@@ -666,11 +680,19 @@ func (r *FeedRepo) GetFoodNutrientRanking(ctx context.Context, nutrient string, 
 		Where("is_active = ?", true).
 		Where("quality_tier IN ?", []string{"authoritative", "reviewed_estimate", "legacy_curated"}).
 		Where("kcal_per_100g > 0 AND canonical_name ~ ?", "[一-龥]").
+		Where("canonical_name IN ?", leaderboardFoodNames(nutrient)).
 		Where(column + " > 0").
 		Order(column + " DESC, canonical_name ASC").
 		Limit(limit).
 		Scan(&rows).Error
 	return rows, err
+}
+
+func leaderboardFoodNames(nutrient string) []string {
+	if nutrient == "protein" {
+		return proteinLeaderboardBasicFoods
+	}
+	return everydayLeaderboardFoods
 }
 
 func isDuplicateError(err error) bool {
