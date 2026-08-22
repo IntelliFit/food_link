@@ -291,22 +291,58 @@ func TestFeedRepoGetFoodNutrientRanking(t *testing.T) {
 		('f9', '鸡胸肉干', true, 'authoritative', 280, 46.5),
 		('f10', '鸡肉（熟）', true, 'authoritative', 190, 15.2),
 		('f11', '虾', true, 'authoritative', 99, 20.1),
-		('f12', '虾仁', true, 'authoritative', 120, 43.7)`).Error)
+		('f12', '虾仁', true, 'authoritative', 99, 24),
+		('f13', '虾米[海米，虾仁]', true, 'authoritative', 201, 43.7),
+		('f14', '牛肉水饺', true, 'authoritative', 220, 40),
+		('f15', '鸡蛋（卤制，市售）', true, 'authoritative', 191, 15.7)`).Error)
 
 	rows, err := NewFeedRepo(db).GetFoodNutrientRanking(context.Background(), "protein", 10)
 
 	assert.NoError(t, err)
 	assert.Len(t, rows, 4)
-	assert.Equal(t, "虾仁", rows[0].Name)
-	assert.Equal(t, 43.7, rows[0].Value)
-	assert.Equal(t, "金枪鱼", rows[1].Name)
-	assert.Equal(t, 29.0, rows[1].Value)
-	assert.Equal(t, "鸡胸肉", rows[2].Name)
-	assert.Equal(t, 28.8, rows[2].Value)
+	assert.Equal(t, "金枪鱼", rows[0].Name)
+	assert.Equal(t, 29.0, rows[0].Value)
+	assert.Equal(t, "鸡胸肉", rows[1].Name)
+	assert.Equal(t, 28.8, rows[1].Value)
+	assert.Equal(t, "虾仁", rows[2].Name)
+	assert.Equal(t, 24.0, rows[2].Value)
 	assert.Equal(t, "鸡蛋", rows[3].Name)
 	assert.Equal(t, 13.1, rows[3].Value)
 	for _, row := range rows {
 		assert.NotEqual(t, "鸡肉", row.Name)
 		assert.NotEqual(t, "虾", row.Name)
+		assert.NotEqual(t, 43.7, row.Value)
+		assert.NotEqual(t, 15.7, row.Value)
 	}
+}
+
+func TestFeedRepoGetFoodNutrientRankingExcludesIncomparableOrUnreviewedValues(t *testing.T) {
+	db := setupFeedTestDB(t)
+	assert.NoError(t, db.Exec(`CREATE TABLE food_nutrition_library (
+		id text primary key, canonical_name text not null, image_path text,
+		is_active boolean not null default true, quality_tier text not null default 'authoritative',
+		kcal_per_100g numeric not null default 0, protein_per_100g numeric not null default 0,
+		fiber_per_100g numeric not null default 0, calcium_mg_per_100g numeric not null default 0,
+		iron_mg_per_100g numeric not null default 0, potassium_mg_per_100g numeric not null default 0,
+		magnesium_mg_per_100g numeric not null default 0, zinc_mg_per_100g numeric not null default 0,
+		vitamin_a_rae_mcg_per_100g numeric not null default 0, vitamin_c_mg_per_100g numeric not null default 0,
+		vitamin_d_mcg_per_100g numeric not null default 0, vitamin_e_mg_per_100g numeric not null default 0,
+		vitamin_k_mcg_per_100g numeric not null default 0, vitamin_b12_mcg_per_100g numeric not null default 0,
+		folate_mcg_per_100g numeric not null default 0
+	)`).Error)
+	assert.NoError(t, db.Exec(`INSERT INTO food_nutrition_library
+		(id, canonical_name, quality_tier, kcal_per_100g, vitamin_e_mg_per_100g) VALUES
+		('e1', '白芝麻', 'legacy_curated', 573, 25.4),
+		('e2', '黑芝麻', 'legacy_curated', 573, 20),
+		('e3', '花生', 'authoritative', 567, 8.33),
+		('e4', '牛油果', 'authoritative', 160, 2.07),
+		('e5', '杏仁', 'unreviewed', 579, 99)`).Error)
+
+	rows, err := NewFeedRepo(db).GetFoodNutrientRanking(context.Background(), "vitamin_e", 10)
+
+	assert.NoError(t, err)
+	assert.Equal(t, []NutrientFoodRow{
+		{ID: "e3", Name: "花生", Value: 8.33},
+		{ID: "e4", Name: "牛油果", Value: 2.07},
+	}, rows)
 }

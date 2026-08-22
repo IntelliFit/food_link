@@ -661,6 +661,13 @@ var everydayLeaderboardFoods = []string{
 	"花生", "核桃", "杏仁", "白芝麻", "黑芝麻", "奇亚籽", "虾皮", "猪肝", "鸭血",
 }
 
+var nutrientLeaderboardExcludedFoods = map[string][]string{
+	// 现有芝麻记录未注明维生素 E 是 alpha-tocopherol 还是总生育酚，不能与
+	// USDA alpha-tocopherol 口径的食物混排。鸭血的铁值也缺少可追溯检测来源。
+	"vitamin_e": {"白芝麻", "黑芝麻"},
+	"iron":      {"鸭血"},
+}
+
 func (r *FeedRepo) GetFoodNutrientRanking(ctx context.Context, nutrient string, limit int) ([]NutrientFoodRow, error) {
 	nutrient = strings.TrimSpace(nutrient)
 	column, ok := foodNutrientColumns[nutrient]
@@ -674,29 +681,32 @@ func (r *FeedRepo) GetFoodNutrientRanking(ctx context.Context, nutrient string, 
 		return r.getProteinFoodRanking(ctx, column, limit)
 	}
 	var rows []NutrientFoodRow
-	err := r.db.WithContext(ctx).Table("food_nutrition_library").
+	query := r.db.WithContext(ctx).Table("food_nutrition_library").
 		Select(fmt.Sprintf("id, canonical_name AS name, image_path, %s AS value", column)).
 		Where("is_active = ?", true).
+		Where("quality_tier IN ?", []string{"authoritative", "reviewed_estimate", "legacy_curated"}).
 		Where("kcal_per_100g > 0 AND canonical_name ~ ?", "[一-龥]").
 		Where("canonical_name IN ?", everydayLeaderboardFoods).
 		Where(column + " > 0").
-		Order(column + " DESC, canonical_name ASC").
-		Limit(limit).
-		Scan(&rows).Error
+		Order(column + " DESC, canonical_name ASC")
+	if excludedNames := nutrientLeaderboardExcludedFoods[nutrient]; len(excludedNames) > 0 {
+		query = query.Where("canonical_name NOT IN ?", excludedNames)
+	}
+	err := query.Limit(limit).Scan(&rows).Error
 	return rows, err
 }
 
 func (r *FeedRepo) getProteinFoodRanking(ctx context.Context, column string, limit int) ([]NutrientFoodRow, error) {
 	const familyCase = `CASE
-		WHEN canonical_name ~ '金枪鱼' THEN 'tuna'
-		WHEN canonical_name ~ '鸡胸|^鸡肉' THEN 'chicken'
-		WHEN canonical_name ~ '^牛肉' THEN 'beef'
-		WHEN canonical_name ~ '猪里脊' THEN 'pork_tenderloin'
-		WHEN canonical_name ~ '虾仁|^虾($|[（(，,])' THEN 'shrimp'
-		WHEN canonical_name ~ '三文鱼' THEN 'salmon'
-		WHEN canonical_name ~ '^鸡蛋($|[（(，,])' THEN 'egg'
-		WHEN canonical_name ~ '^豆腐($|[（(，,])' THEN 'tofu'
-		WHEN canonical_name ~ '^牛奶($|[（(，,])' THEN 'milk'
+		WHEN canonical_name ~ '^金枪鱼($|[（(].*[）)]$)' THEN 'tuna'
+		WHEN canonical_name ~ '^(鸡胸肉|鸡肉)($|[（(].*[）)]$)' THEN 'chicken'
+		WHEN canonical_name ~ '^牛肉($|[（(].*[）)]$)' THEN 'beef'
+		WHEN canonical_name ~ '^(猪里脊|猪里脊肉)($|[（(].*[）)]$)' THEN 'pork_tenderloin'
+		WHEN canonical_name ~ '^(虾|虾仁)($|[（(].*[）)]$)' THEN 'shrimp'
+		WHEN canonical_name ~ '^三文鱼($|[（(].*[）)]$)' THEN 'salmon'
+		WHEN canonical_name ~ '^鸡蛋($|[（(].*[）)]$)' THEN 'egg'
+		WHEN canonical_name ~ '^豆腐($|[（(].*[）)]$)' THEN 'tofu'
+		WHEN canonical_name ~ '^牛奶($|[（(].*[）)]$)' THEN 'milk'
 	END`
 	const displayNameCase = `CASE
 		WHEN canonical_name ~ '金枪鱼' THEN '金枪鱼'
@@ -716,9 +726,10 @@ func (r *FeedRepo) getProteinFoodRanking(ctx context.Context, column string, lim
 			SELECT id, canonical_name AS source_name, %s AS family, %s AS name, image_path, %s AS value
 			FROM food_nutrition_library
 			WHERE is_active = TRUE
+				AND quality_tier IN ('authoritative', 'reviewed_estimate', 'legacy_curated')
 				AND kcal_per_100g > 0
 				AND %s > 0
-				AND canonical_name !~ '(干|乾|脯|松|粉|罐头|腌|熏|炸|脱水)'
+				AND canonical_name !~ '(干|乾|脯|松|粉|罐头|腌|卤|熏|炸|煎|炒|脱水|市售|带骨|带壳|虾米|海米)'
 		), ranked AS (
 			SELECT id, name, image_path, value,
 				ROW_NUMBER() OVER (
