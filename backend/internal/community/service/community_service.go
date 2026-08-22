@@ -25,8 +25,8 @@ import (
 var chinaTZ = time.FixedZone("Asia/Shanghai", 8*60*60)
 
 type FeedRepo interface {
-	ListPublicFeed(ctx context.Context, authorIDs []string, contentType, mealType, dietGoal, date, sortBy string, limit int) ([]repo.FeedRecord, error)
-	ListFriendFeed(ctx context.Context, authorIDs []string, contentType, mealType, dietGoal, date, sortBy string, limit int) ([]repo.FeedRecord, error)
+	ListPublicFeed(ctx context.Context, authorIDs []string, contentType, mealType, dietGoal, date, sortBy string, limit int, cursor *repo.FeedCursor) ([]repo.FeedRecord, error)
+	ListFriendFeed(ctx context.Context, authorIDs []string, contentType, mealType, dietGoal, date, sortBy string, limit int, cursor *repo.FeedCursor) ([]repo.FeedRecord, error)
 	GetFeedRecordByID(ctx context.Context, recordID string) (*repo.FeedRecord, error)
 	GetFeedTargetByID(ctx context.Context, targetType, targetID string) (*repo.FeedRecord, error)
 	HideFeedRecord(ctx context.Context, userID, recordID string) error
@@ -42,6 +42,7 @@ type FeedRepo interface {
 	ListCommentsForTarget(ctx context.Context, targetType, targetID string, limit int) ([]domain.FeedComment, error)
 	ListCommentsByRecordIDs(ctx context.Context, recordIDs []string) ([]domain.FeedComment, error)
 	ListCommentsByTargets(ctx context.Context, targets []repo.FeedTarget) ([]domain.FeedComment, error)
+	ListCommentPreviewsByTargets(ctx context.Context, targets []repo.FeedTarget, perTargetLimit int, excludedUserIDs []string) ([]domain.FeedComment, map[string]int, error)
 	GetCommentByID(ctx context.Context, commentID string) (*domain.FeedComment, error)
 	FindRecentDuplicate(ctx context.Context, userID, recordID, content string, parentCommentID, replyToUserID *string, window time.Duration) (*domain.FeedComment, error)
 	FindRecentDuplicateForTarget(ctx context.Context, userID, targetType, targetID, content string, parentCommentID, replyToUserID *string, window time.Duration) (*domain.FeedComment, error)
@@ -208,6 +209,60 @@ type FeedParams struct {
 	AuthorScope       string
 	AuthorID          string
 	ViewerUserID      string
+	BeforeTime        *time.Time
+	BeforeKey         string
+}
+
+const (
+	MaxFeedPageSize        = 50
+	MaxFeedCommentsPreview = 10
+	MaxCommunityListLimit  = 100
+	MaxFeedLegacyOffset    = 5000
+)
+
+func NormalizeFeedParams(params FeedParams) FeedParams {
+	if params.Offset < 0 {
+		params.Offset = 0
+	} else if params.Offset > MaxFeedLegacyOffset {
+		params.Offset = MaxFeedLegacyOffset
+	}
+	if params.Limit <= 0 {
+		params.Limit = 20
+	} else if params.Limit > MaxFeedPageSize {
+		params.Limit = MaxFeedPageSize
+	}
+	if params.CommentsLimit < 0 {
+		params.CommentsLimit = 0
+	} else if params.CommentsLimit > MaxFeedCommentsPreview {
+		params.CommentsLimit = MaxFeedCommentsPreview
+	}
+	if params.SortBy == "latest" && params.BeforeTime != nil && !params.BeforeTime.IsZero() && strings.TrimSpace(params.BeforeKey) != "" {
+		params.Offset = 0
+	} else {
+		params.BeforeTime = nil
+		params.BeforeKey = ""
+	}
+	return params
+}
+
+func normalizeCommunityListLimit(limit, fallback int) int {
+	if limit <= 0 {
+		return fallback
+	}
+	if limit > MaxCommunityListLimit {
+		return MaxCommunityListLimit
+	}
+	return limit
+}
+
+func normalizeLegacyOffset(offset int) int {
+	if offset < 0 {
+		return 0
+	}
+	if offset > MaxFeedLegacyOffset {
+		return MaxFeedLegacyOffset
+	}
+	return offset
 }
 
 type FeedItem struct {
@@ -320,12 +375,17 @@ type MarkReadResult struct {
 }
 
 func (s *CommunityService) PublicFeed(ctx context.Context, params FeedParams) ([]FeedItem, error) {
+	params = NormalizeFeedParams(params)
 	return s.publicFeed(ctx, params, params.ViewerUserID)
 }
 
 func (s *CommunityService) publicFeed(ctx context.Context, params FeedParams, viewerUserID string) ([]FeedItem, error) {
 	customRank := params.SortBy == "recommended" || params.SortBy == "hot" || params.SortBy == "balanced"
 	candidateLimit := params.Offset + params.Limit
+	cursor := feedCursorFromParams(params)
+	if cursor != nil {
+		candidateLimit = params.Limit
+	}
 	if customRank {
 		candidateLimit = max(max(params.Offset+params.Limit+40, params.Limit*3), 60)
 	}
@@ -334,7 +394,7 @@ func (s *CommunityService) publicFeed(ctx context.Context, params FeedParams, vi
 	if params.AuthorID != "" {
 		authorIDs = []string{params.AuthorID}
 	}
-	records, err := s.feedRepo.ListPublicFeed(ctx, authorIDs, params.ContentType, params.MealType, params.DietGoal, params.Date, params.SortBy, candidateLimit)
+	records, err := s.feedRepo.ListPublicFeed(ctx, authorIDs, params.ContentType, params.MealType, params.DietGoal, params.Date, params.SortBy, candidateLimit, cursor)
 	if err != nil {
 		return nil, err
 	}
@@ -361,7 +421,7 @@ func (s *CommunityService) publicFeed(ctx context.Context, params FeedParams, vi
 	if customRank {
 		records = s.sortAndSlice(records, params, likesMap, commentCountMap, nil)
 	} else {
-		records = sliceRecords(records, params.Offset, params.Limit)
+		records = sliceRecords(records, feedPageOffset(params), params.Limit)
 	}
 
 	if len(records) == 0 {
@@ -433,6 +493,7 @@ func (s *CommunityService) publicFeed(ctx context.Context, params FeedParams, vi
 }
 
 func (s *CommunityService) FriendFeed(ctx context.Context, userID string, params FeedParams) ([]FeedItem, error) {
+	params = NormalizeFeedParams(params)
 	if params.AuthorID == "" && params.AuthorScope == "public" {
 		return s.publicFeed(ctx, params, userID)
 	}
@@ -481,11 +542,15 @@ func (s *CommunityService) FriendFeed(ctx context.Context, userID string, params
 
 	customRank := params.SortBy == "recommended" || params.SortBy == "hot" || params.SortBy == "balanced"
 	candidateLimit := params.Offset + params.Limit
+	cursor := feedCursorFromParams(params)
+	if cursor != nil {
+		candidateLimit = params.Limit
+	}
 	if customRank {
 		candidateLimit = max(max(params.Offset+params.Limit+40, params.Limit*3), 60)
 	}
 
-	records, err := s.feedRepo.ListFriendFeed(ctx, authorIDs, params.ContentType, params.MealType, params.DietGoal, params.Date, params.SortBy, candidateLimit)
+	records, err := s.feedRepo.ListFriendFeed(ctx, authorIDs, params.ContentType, params.MealType, params.DietGoal, params.Date, params.SortBy, candidateLimit, cursor)
 	if err != nil {
 		return nil, err
 	}
@@ -512,7 +577,7 @@ func (s *CommunityService) FriendFeed(ctx context.Context, userID string, params
 	if customRank {
 		records = s.sortAndSlice(records, params, likesMap, commentCountMap, nil)
 	} else {
-		records = sliceRecords(records, params.Offset, params.Limit)
+		records = sliceRecords(records, feedPageOffset(params), params.Limit)
 	}
 
 	if len(records) == 0 {
@@ -613,6 +678,20 @@ func sliceRecords(records []repo.FeedRecord, offset, limit int) []repo.FeedRecor
 	return records[offset:end]
 }
 
+func feedCursorFromParams(params FeedParams) *repo.FeedCursor {
+	if params.SortBy != "latest" || params.BeforeTime == nil || params.BeforeTime.IsZero() || strings.TrimSpace(params.BeforeKey) == "" {
+		return nil
+	}
+	return &repo.FeedCursor{BeforeTime: params.BeforeTime.UTC(), BeforeKey: strings.TrimSpace(params.BeforeKey)}
+}
+
+func feedPageOffset(params FeedParams) int {
+	if feedCursorFromParams(params) != nil {
+		return 0
+	}
+	return params.Offset
+}
+
 func (s *CommunityService) getCommentCounts(ctx context.Context, viewerUserID string, recordIDs []string) map[string]int {
 	targets := make([]repo.FeedTarget, 0, len(recordIDs))
 	for _, id := range recordIDs {
@@ -630,14 +709,9 @@ func (s *CommunityService) getCommentCountsForTargets(ctx context.Context, viewe
 	if len(targets) == 0 {
 		return map[string]int{}
 	}
-	comments, err := s.feedRepo.ListCommentsByTargets(ctx, targets)
+	_, counts, err := s.feedRepo.ListCommentPreviewsByTargets(ctx, targets, 0, s.blockedUserIDs(ctx, viewerUserID))
 	if err != nil {
 		return map[string]int{}
-	}
-	comments = s.filterBlockedComments(ctx, viewerUserID, comments)
-	counts := make(map[string]int)
-	for _, c := range comments {
-		counts[commentTargetKey(c)]++
 	}
 	return counts
 }
@@ -664,16 +738,13 @@ func (s *CommunityService) getCommentsAndCountsForTargets(ctx context.Context, v
 	if len(targets) == 0 {
 		return map[string][]CommentItem{}, map[string]int{}
 	}
-	comments, err := s.feedRepo.ListCommentsByTargets(ctx, targets)
+	comments, commentCounts, err := s.feedRepo.ListCommentPreviewsByTargets(ctx, targets, commentsLimit, s.blockedUserIDs(ctx, viewerUserID))
 	if err != nil {
 		return map[string][]CommentItem{}, map[string]int{}
 	}
-	comments = s.filterBlockedComments(ctx, viewerUserID, comments)
 
-	commentCounts := make(map[string]int)
 	userIDs := make(map[string]bool)
 	for _, c := range comments {
-		commentCounts[commentTargetKey(c)]++
 		userIDs[c.UserID] = true
 		if c.ReplyToUserID != nil {
 			userIDs[*c.ReplyToUserID] = true
@@ -692,9 +763,6 @@ func (s *CommunityService) getCommentsAndCountsForTargets(ctx context.Context, v
 
 	result := make(map[string][]CommentItem)
 	for targetKey, list := range recordComments {
-		if commentsLimit > 0 && len(list) > commentsLimit {
-			list = list[len(list)-commentsLimit:]
-		}
 		items := make([]CommentItem, 0, len(list))
 		for _, c := range list {
 			author := profiles[c.UserID]
@@ -720,6 +788,15 @@ func (s *CommunityService) getCommentsAndCountsForTargets(ctx context.Context, v
 		result[targetKey] = items
 	}
 	return result, commentCounts
+}
+
+func (s *CommunityService) blockedUserIDs(ctx context.Context, viewerUserID string) []string {
+	blocked := s.blockedUserSet(ctx, viewerUserID)
+	ids := make([]string, 0, len(blocked))
+	for id := range blocked {
+		ids = append(ids, id)
+	}
+	return ids
 }
 
 func strOr(profile *repo.UserProfile, fallback string) string {
@@ -1215,6 +1292,7 @@ func (s *CommunityService) ListComments(ctx context.Context, viewerUserID, recor
 }
 
 func (s *CommunityService) ListTargetComments(ctx context.Context, viewerUserID, targetType, targetID string, limit int) ([]CommentItem, error) {
+	limit = normalizeCommunityListLimit(limit, 50)
 	targetType = normalizeServiceTargetType(targetType)
 	record, err := s.feedRepo.GetFeedTargetByID(ctx, targetType, targetID)
 	if err != nil {
@@ -1561,6 +1639,7 @@ func (s *CommunityService) commentToItem(ctx context.Context, comment *domain.Fe
 }
 
 func (s *CommunityService) ListCommentTasks(ctx context.Context, userID string, limit int) ([]domain.CommentTask, error) {
+	limit = normalizeCommunityListLimit(limit, 50)
 	return s.notifRepo.ListCommentTasksByUser(ctx, userID, "feed", limit)
 }
 
@@ -1904,17 +1983,18 @@ func stringPtrOrNil(s string) *string {
 }
 
 func (s *CommunityService) ListNotifications(ctx context.Context, userID, notificationType string, limit, offset int) (*NotificationListResult, error) {
+	limit = normalizeCommunityListLimit(limit, 50)
+	offset = normalizeLegacyOffset(offset)
 	notifications, err := s.notifRepo.ListNotifications(ctx, userID, notificationType, limit+1, offset)
 	if err != nil {
 		return nil, err
 	}
-	unread, err := s.notifRepo.CountUnread(ctx, userID)
-	if err != nil {
-		return nil, err
-	}
-	counts, err := s.notifRepo.CountNotifications(ctx, userID)
-	if err != nil {
-		return nil, err
+	var counts repo.NotificationCounts
+	if offset == 0 {
+		counts, err = s.notifRepo.CountNotifications(ctx, userID)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	actorIDs := make(map[string]bool)
@@ -1970,7 +2050,7 @@ func (s *CommunityService) ListNotifications(ctx context.Context, userID, notifi
 	}
 	return &NotificationListResult{
 		List:         items,
-		UnreadCount:  unread,
+		UnreadCount:  counts.UnreadCount,
 		LikeCount:    counts.LikeCount,
 		CommentCount: counts.CommentCount,
 		HasMore:      hasMore,

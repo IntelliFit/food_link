@@ -99,6 +99,11 @@ type FeedTarget struct {
 	TargetID   string
 }
 
+type FeedCursor struct {
+	BeforeTime time.Time
+	BeforeKey  string
+}
+
 type FeedRepo struct {
 	db *gorm.DB
 }
@@ -119,32 +124,18 @@ func exerciseItemsEmptyLiteral(db *gorm.DB) string {
 	return "'[]'"
 }
 
-func (r *FeedRepo) ListPublicFeed(ctx context.Context, authorIDs []string, contentType, mealType, dietGoal, date, sortBy string, limit int) ([]FeedRecord, error) {
-	var publicUserIDs []string
-	q := r.db.WithContext(ctx).Table("weapp_user").
-		Select("id").Where("COALESCE(public_records, TRUE) = TRUE")
-	if len(authorIDs) > 0 {
-		q = q.Where("id IN ?", authorIDs)
-	}
-	err := q.Pluck("id", &publicUserIDs).Error
-	if err != nil {
-		return nil, err
-	}
-	if len(publicUserIDs) == 0 {
-		return nil, nil
-	}
-
-	return r.listFeedByAuthors(ctx, publicUserIDs, contentType, mealType, dietGoal, date, sortBy, limit)
+func (r *FeedRepo) ListPublicFeed(ctx context.Context, authorIDs []string, contentType, mealType, dietGoal, date, sortBy string, limit int, cursor *FeedCursor) ([]FeedRecord, error) {
+	return r.listFeedByAuthors(ctx, authorIDs, true, contentType, mealType, dietGoal, date, sortBy, limit, cursor)
 }
 
-func (r *FeedRepo) ListFriendFeed(ctx context.Context, authorIDs []string, contentType, mealType, dietGoal, date, sortBy string, limit int) ([]FeedRecord, error) {
+func (r *FeedRepo) ListFriendFeed(ctx context.Context, authorIDs []string, contentType, mealType, dietGoal, date, sortBy string, limit int, cursor *FeedCursor) ([]FeedRecord, error) {
 	if len(authorIDs) == 0 {
 		return nil, nil
 	}
-	return r.listFeedByAuthors(ctx, authorIDs, contentType, mealType, dietGoal, date, sortBy, limit)
+	return r.listFeedByAuthors(ctx, authorIDs, false, contentType, mealType, dietGoal, date, sortBy, limit, cursor)
 }
 
-func (r *FeedRepo) listFeedByAuthors(ctx context.Context, authorIDs []string, contentType, mealType, dietGoal, date, sortBy string, limit int) ([]FeedRecord, error) {
+func (r *FeedRepo) listFeedByAuthors(ctx context.Context, authorIDs []string, publicOnly bool, contentType, mealType, dietGoal, date, sortBy string, limit int, cursor *FeedCursor) ([]FeedRecord, error) {
 	contentType = NormalizeTargetType(contentType)
 	if contentType == "" {
 		contentType = "all"
@@ -158,21 +149,21 @@ func (r *FeedRepo) listFeedByAuthors(ctx context.Context, authorIDs []string, co
 		return campusRows, nil
 	}
 	if contentType == "all" || contentType == FeedTargetFoodRecord {
-		foodRows, err := r.listFoodFeedByAuthors(ctx, authorIDs, mealType, dietGoal, date, sortBy, limit)
+		foodRows, err := r.listFoodFeedByAuthors(ctx, authorIDs, publicOnly, mealType, dietGoal, date, sortBy, limit, cursor)
 		if err != nil {
 			return nil, err
 		}
 		rows = append(rows, foodRows...)
 	}
 	if contentType == "all" || contentType == FeedTargetExerciseLog {
-		exerciseRows, err := r.listExerciseFeedByAuthors(ctx, authorIDs, date, sortBy, limit)
+		exerciseRows, err := r.listExerciseFeedByAuthors(ctx, authorIDs, publicOnly, date, sortBy, limit, cursor)
 		if err != nil {
 			return nil, err
 		}
 		rows = append(rows, exerciseRows...)
 	}
 	if contentType == "all" || contentType == FeedTargetCirclePost {
-		circleRows, err := r.listCirclePostsByAuthors(ctx, authorIDs, date, sortBy, limit)
+		circleRows, err := r.listCirclePostsByAuthors(ctx, authorIDs, publicOnly, date, sortBy, limit, cursor)
 		if err != nil {
 			return nil, err
 		}
@@ -192,10 +183,11 @@ func (r *FeedRepo) listFeedByAuthors(ctx context.Context, authorIDs []string, co
 	return rows, nil
 }
 
-func (r *FeedRepo) listFoodFeedByAuthors(ctx context.Context, authorIDs []string, mealType, dietGoal, date, sortBy string, limit int) ([]FeedRecord, error) {
+func (r *FeedRepo) listFoodFeedByAuthors(ctx context.Context, authorIDs []string, publicOnly bool, mealType, dietGoal, date, sortBy string, limit int, cursor *FeedCursor) ([]FeedRecord, error) {
 	q := r.db.WithContext(ctx).Table("user_food_records").
 		Select("'food_record' AS feed_type, id, user_id, meal_type, record_time, created_at, total_calories, total_protein, total_carbs, total_fat, image_path, image_paths, description, items, diet_goal, entry_type, recipe_id, hidden_from_feed").
-		Where("user_id IN ? AND hidden_from_feed = ?", authorIDs, false)
+		Where("hidden_from_feed = ?", false)
+	q = r.applyFeedAuthorScope(q, authorIDs, publicOnly)
 	if mealType != "" {
 		q = q.Where("meal_type = ?", mealType)
 	}
@@ -209,6 +201,7 @@ func (r *FeedRepo) listFoodFeedByAuthors(ctx context.Context, authorIDs []string
 		}
 		q = q.Where("record_time >= ? AND record_time < ?", start, end)
 	}
+	q = applyLatestFeedCursor(q, "created_at", FeedTargetFoodRecord, sortBy, cursor)
 
 	var rows []FeedRecord
 	orderColumn := "record_time DESC, id DESC"
@@ -219,10 +212,11 @@ func (r *FeedRepo) listFoodFeedByAuthors(ctx context.Context, authorIDs []string
 	return rows, err
 }
 
-func (r *FeedRepo) listExerciseFeedByAuthors(ctx context.Context, authorIDs []string, date, sortBy string, limit int) ([]FeedRecord, error) {
+func (r *FeedRepo) listExerciseFeedByAuthors(ctx context.Context, authorIDs []string, publicOnly bool, date, sortBy string, limit int, cursor *FeedCursor) ([]FeedRecord, error) {
 	q := r.db.WithContext(ctx).Table("user_exercise_logs").
 		Select("'exercise_log' AS feed_type, id, user_id, '' AS meal_type, COALESCE(recorded_at, created_at, recorded_on::timestamptz) AS record_time, created_at, COALESCE(calories_burned, 0) AS total_calories, 0 AS total_protein, 0 AS total_carbs, 0 AS total_fat, image_url AS image_path, exercise_desc AS description, hidden_from_feed, exercise_type, exercise_desc, calories_burned, duration_min, ai_reasoning, "+r.exerciseItemsSelect()).
-		Where("user_id IN ? AND hidden_from_feed = ?", authorIDs, false)
+		Where("hidden_from_feed = ?", false)
+	q = r.applyFeedAuthorScope(q, authorIDs, publicOnly)
 	if date != "" {
 		start, end, err := chinaDateWindow(date)
 		if err != nil {
@@ -230,6 +224,7 @@ func (r *FeedRepo) listExerciseFeedByAuthors(ctx context.Context, authorIDs []st
 		}
 		q = q.Where("recorded_on >= ? AND recorded_on < ?", start, end)
 	}
+	q = applyLatestFeedCursor(q, "created_at", FeedTargetExerciseLog, sortBy, cursor)
 	var rows []FeedRecord
 	orderColumn := "record_time DESC, id DESC"
 	if sortBy == "latest" {
@@ -239,10 +234,11 @@ func (r *FeedRepo) listExerciseFeedByAuthors(ctx context.Context, authorIDs []st
 	return rows, err
 }
 
-func (r *FeedRepo) listCirclePostsByAuthors(ctx context.Context, authorIDs []string, date, sortBy string, limit int) ([]FeedRecord, error) {
+func (r *FeedRepo) listCirclePostsByAuthors(ctx context.Context, authorIDs []string, publicOnly bool, date, sortBy string, limit int, cursor *FeedCursor) ([]FeedRecord, error) {
 	q := r.db.WithContext(ctx).Table("user_circle_posts").
 		Select("'circle_post' AS feed_type, id, user_id, '' AS meal_type, created_at AS record_time, created_at, COALESCE(total_calories, 0) AS total_calories, COALESCE(total_protein, 0) AS total_protein, COALESCE(total_carbs, 0) AS total_carbs, COALESCE(total_fat, 0) AS total_fat, fiber, sugar, sodium_mg, total_weight_grams, NULL::text AS image_path, image_paths, NULL::text AS description, title, body, '[]'::jsonb AS items, '' AS diet_goal, hidden_from_feed, NULL::text AS exercise_type, NULL::text AS exercise_desc, NULL::numeric AS calories_burned, NULL::int AS duration_min, NULL::text AS ai_reasoning").
-		Where("user_id IN ? AND hidden_from_feed = ?", authorIDs, false)
+		Where("hidden_from_feed = ?", false)
+	q = r.applyFeedAuthorScope(q, authorIDs, publicOnly)
 	if date != "" {
 		start, end, err := chinaDateWindow(date)
 		if err != nil {
@@ -250,6 +246,7 @@ func (r *FeedRepo) listCirclePostsByAuthors(ctx context.Context, authorIDs []str
 		}
 		q = q.Where("created_at >= ? AND created_at < ?", start, end)
 	}
+	q = applyLatestFeedCursor(q, "created_at", FeedTargetCirclePost, sortBy, cursor)
 	var rows []FeedRecord
 	orderColumn := "record_time DESC, id DESC"
 	if sortBy == "latest" {
@@ -257,6 +254,38 @@ func (r *FeedRepo) listCirclePostsByAuthors(ctx context.Context, authorIDs []str
 	}
 	err := q.Order(orderColumn).Limit(limit).Find(&rows).Error
 	return rows, err
+}
+
+func (r *FeedRepo) applyFeedAuthorScope(q *gorm.DB, authorIDs []string, publicOnly bool) *gorm.DB {
+	if len(authorIDs) > 0 {
+		q = q.Where("user_id IN ?", authorIDs)
+	}
+	if publicOnly {
+		publicUsers := r.db.Table("weapp_user").
+			Select("id").
+			Where("COALESCE(public_records, TRUE) = TRUE")
+		q = q.Where("user_id IN (?)", publicUsers)
+	}
+	return q
+}
+
+func applyLatestFeedCursor(q *gorm.DB, timeColumn, feedType, sortBy string, cursor *FeedCursor) *gorm.DB {
+	if cursor == nil || cursor.BeforeTime.IsZero() || sortBy != "latest" {
+		return q
+	}
+	parts := strings.SplitN(cursor.BeforeKey, ":", 2)
+	if len(parts) != 2 || strings.TrimSpace(parts[1]) == "" {
+		return q.Where(timeColumn+" < ?", cursor.BeforeTime)
+	}
+	cursorType, cursorID := NormalizeTargetType(parts[0]), strings.TrimSpace(parts[1])
+	switch strings.Compare(feedType, cursorType) {
+	case -1:
+		return q.Where(timeColumn+" <= ?", cursor.BeforeTime)
+	case 0:
+		return q.Where("("+timeColumn+" < ? OR ("+timeColumn+" = ? AND id < ?))", cursor.BeforeTime, cursor.BeforeTime, cursorID)
+	default:
+		return q.Where(timeColumn+" < ?", cursor.BeforeTime)
+	}
 }
 
 func (r *FeedRepo) listCampusFeed(ctx context.Context, limit int) ([]FeedRecord, error) {
@@ -411,31 +440,35 @@ func (r *FeedRepo) GetLikesForTargets(ctx context.Context, targets []FeedTarget,
 	if len(targets) == 0 {
 		return map[string]*LikeInfo{}, nil
 	}
-	var likes []domain.FeedLike
-	q := r.db.WithContext(ctx)
-	q = applyTargetFilter(q, targets, true)
-	err := q.Find(&likes).Error
-	if err != nil {
-		return nil, err
-	}
-
 	result := make(map[string]*LikeInfo)
 	for _, target := range targets {
 		result[FeedTargetKey(target.TargetType, target.TargetID)] = &LikeInfo{Count: 0, Liked: false}
 	}
-	for _, like := range likes {
-		targetType, targetID := like.TargetType, like.TargetID
-		if targetType == "" && like.RecordID != nil {
-			targetType, targetID = FeedTargetFoodRecord, *like.RecordID
-		}
-		info := result[FeedTargetKey(targetType, targetID)]
+
+	type aggregateRow struct {
+		TargetType string `gorm:"column:target_type"`
+		TargetID   string `gorm:"column:target_id"`
+		Count      int    `gorm:"column:like_count"`
+		LikedCount int    `gorm:"column:liked_count"`
+	}
+	const targetTypeExpr = "COALESCE(NULLIF(target_type, ''), 'food_record')"
+	const targetIDExpr = "COALESCE(target_id, record_id)"
+	var rows []aggregateRow
+	q := r.db.WithContext(ctx).Model(&domain.FeedLike{})
+	q = applyTargetFilter(q, targets, true)
+	if err := q.
+		Select(targetTypeExpr+" AS target_type, "+targetIDExpr+" AS target_id, COUNT(*) AS like_count, SUM(CASE WHEN user_id = ? THEN 1 ELSE 0 END) AS liked_count", currentUserID).
+		Group(targetTypeExpr + ", " + targetIDExpr).
+		Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		info := result[FeedTargetKey(row.TargetType, row.TargetID)]
 		if info == nil {
 			continue
 		}
-		info.Count++
-		if currentUserID != "" && like.UserID == currentUserID {
-			info.Liked = true
-		}
+		info.Count = row.Count
+		info.Liked = row.LikedCount > 0
 	}
 	return result, nil
 }
@@ -488,6 +521,63 @@ func (r *FeedRepo) ListCommentsByTargets(ctx context.Context, targets []FeedTarg
 	q = applyTargetFilter(q, targets, true).Order("created_at ASC")
 	err := q.Find(&rows).Error
 	return rows, err
+}
+
+func (r *FeedRepo) ListCommentPreviewsByTargets(ctx context.Context, targets []FeedTarget, perTargetLimit int, excludedUserIDs []string) ([]domain.FeedComment, map[string]int, error) {
+	targets = normalizeTargets(targets)
+	counts := make(map[string]int, len(targets))
+	for _, target := range targets {
+		counts[FeedTargetKey(target.TargetType, target.TargetID)] = 0
+	}
+	if len(targets) == 0 {
+		return nil, counts, nil
+	}
+
+	baseQuery := func() *gorm.DB {
+		q := r.db.WithContext(ctx).Model(&domain.FeedComment{})
+		q = applyTargetFilter(q, targets, true)
+		if len(excludedUserIDs) > 0 {
+			q = q.Where(
+				"user_id NOT IN ? AND (reply_to_user_id IS NULL OR reply_to_user_id NOT IN ?)",
+				excludedUserIDs,
+				excludedUserIDs,
+			)
+		}
+		return q
+	}
+	const targetTypeExpr = "COALESCE(NULLIF(target_type, ''), 'food_record')"
+	const targetIDExpr = "COALESCE(target_id, record_id)"
+	type countRow struct {
+		TargetType string `gorm:"column:target_type"`
+		TargetID   string `gorm:"column:target_id"`
+		Count      int    `gorm:"column:comment_count"`
+	}
+	var countRows []countRow
+	if err := baseQuery().
+		Select(targetTypeExpr + " AS target_type, " + targetIDExpr + " AS target_id, COUNT(*) AS comment_count").
+		Group(targetTypeExpr + ", " + targetIDExpr).
+		Scan(&countRows).Error; err != nil {
+		return nil, nil, err
+	}
+	for _, row := range countRows {
+		counts[FeedTargetKey(row.TargetType, row.TargetID)] = row.Count
+	}
+	if perTargetLimit <= 0 {
+		return nil, counts, nil
+	}
+
+	ranked := baseQuery().Select(
+		"feed_comments.*, ROW_NUMBER() OVER (PARTITION BY " + targetTypeExpr + ", " + targetIDExpr + " ORDER BY created_at DESC NULLS LAST, id DESC) AS row_num",
+	)
+	var comments []domain.FeedComment
+	if err := r.db.WithContext(ctx).
+		Table("(?) AS ranked_comments", ranked).
+		Where("row_num <= ?", perTargetLimit).
+		Order(targetTypeExpr + ", " + targetIDExpr + ", created_at ASC NULLS FIRST, id ASC").
+		Scan(&comments).Error; err != nil {
+		return nil, nil, err
+	}
+	return comments, counts, nil
 }
 
 func (r *FeedRepo) GetCommentByID(ctx context.Context, commentID string) (*domain.FeedComment, error) {

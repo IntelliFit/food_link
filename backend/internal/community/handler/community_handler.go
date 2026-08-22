@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"strconv"
 	"strings"
+	"time"
 
 	authmw "food_link/backend/internal/auth"
 	commonerrors "food_link/backend/internal/common/errors"
@@ -193,7 +194,7 @@ func (h *CommunityHandler) ListComments(c *gin.Context) {
 	limit := 50
 	if l := c.Query("limit"); l != "" {
 		if n, err := strconv.Atoi(l); err == nil && n > 0 {
-			limit = n
+			limit = min(n, service.MaxCommunityListLimit)
 		}
 	}
 	items, err := h.svc.ListComments(c.Request.Context(), userID, recordID, limit)
@@ -209,7 +210,7 @@ func (h *CommunityHandler) ListTargetComments(c *gin.Context) {
 	limit := 50
 	if l := c.Query("limit"); l != "" {
 		if n, err := strconv.Atoi(l); err == nil && n > 0 {
-			limit = n
+			limit = min(n, service.MaxCommunityListLimit)
 		}
 	}
 	items, err := h.svc.ListTargetComments(c.Request.Context(), userID, c.Param("target_type"), c.Param("target_id"), limit)
@@ -311,7 +312,7 @@ func (h *CommunityHandler) ListCommentTasks(c *gin.Context) {
 	limit := 50
 	if l := c.Query("limit"); l != "" {
 		if n, err := strconv.Atoi(l); err == nil && n > 0 {
-			limit = n
+			limit = min(n, service.MaxCommunityListLimit)
 		}
 	}
 	tasks, err := h.svc.ListCommentTasks(c.Request.Context(), userID, limit)
@@ -327,14 +328,14 @@ func (h *CommunityHandler) ListNotifications(c *gin.Context) {
 	limit := 50
 	if l := c.Query("limit"); l != "" {
 		if n, err := strconv.Atoi(l); err == nil && n > 0 {
-			limit = n
+			limit = min(n, service.MaxCommunityListLimit)
 		}
 	}
 	notificationType := c.Query("type")
 	offset := 0
 	if o := c.Query("offset"); o != "" {
 		if n, err := strconv.Atoi(o); err == nil && n >= 0 {
-			offset = n
+			offset = min(n, service.MaxFeedLegacyOffset)
 		}
 	}
 	logger.Info(c.Request.Context(), "开始查询互动消息",
@@ -557,5 +558,11 @@ func parseFeedParams(c *gin.Context) service.FeedParams {
 	if s := c.Query("sort_by"); s != "" {
 		params.SortBy = s
 	}
-	return params
+	if rawTime := strings.TrimSpace(c.Query("before_time")); rawTime != "" {
+		if beforeTime, err := time.Parse(time.RFC3339Nano, rawTime); err == nil {
+			params.BeforeTime = &beforeTime
+			params.BeforeKey = strings.TrimSpace(c.Query("before_key"))
+		}
+	}
+	return service.NormalizeFeedParams(params)
 }

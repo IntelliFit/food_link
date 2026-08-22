@@ -2,6 +2,8 @@ package repo
 
 import (
 	"context"
+	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -9,6 +11,7 @@ import (
 	"food_link/backend/pkg/testdb"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 )
 
@@ -60,15 +63,50 @@ func TestFeedRepoListPublicFeed(t *testing.T) {
 	assert.NoError(t, db.Create(&FeedRecord{ID: "r2", UserID: "u1", MealType: "lunch", HiddenFromFeed: true}).Error)
 	assert.NoError(t, db.Create(&FeedRecord{ID: "r3", UserID: "u2", MealType: "lunch", HiddenFromFeed: false}).Error)
 
-	records, err := r.ListPublicFeed(ctx, nil, "food_record", "", "", "", "", 10)
+	records, err := r.ListPublicFeed(ctx, nil, "food_record", "", "", "", "", 10, nil)
 	assert.NoError(t, err)
 	assert.Len(t, records, 2)
 
 	// 指定 author_id 过滤
-	records, err = r.ListPublicFeed(ctx, []string{"u2"}, "food_record", "", "", "", "", 10)
+	records, err = r.ListPublicFeed(ctx, []string{"u2"}, "food_record", "", "", "", "", 10, nil)
 	assert.NoError(t, err)
 	assert.Len(t, records, 1)
 	assert.Equal(t, "r3", records[0].ID)
+}
+
+func TestFeedRepoListPublicFeedDoesNotMaterializeEveryPublicUser(t *testing.T) {
+	db := setupFeedTestDB(t)
+	const userCount = 100
+	users := make([]UserProfile, 0, userCount)
+	for i := 0; i < userCount; i++ {
+		isPublic := true
+		users = append(users, UserProfile{
+			ID:            fmt.Sprintf("public-user-%03d", i),
+			Nickname:      "公开用户",
+			PublicRecords: &isPublic,
+		})
+	}
+	require.NoError(t, db.CreateInBatches(users, 100).Error)
+	require.NoError(t, db.Create(&FeedRecord{
+		ID: "public-record", UserID: users[0].ID, MealType: "lunch", HiddenFromFeed: false,
+	}).Error)
+
+	var mu sync.Mutex
+	maxRowsRead := int64(0)
+	callbackName := "feed-test:capture-row-count"
+	require.NoError(t, db.Callback().Query().After("gorm:query").Register(callbackName, func(tx *gorm.DB) {
+		mu.Lock()
+		defer mu.Unlock()
+		if tx.RowsAffected > maxRowsRead {
+			maxRowsRead = tx.RowsAffected
+		}
+	}))
+	t.Cleanup(func() { _ = db.Callback().Query().Remove(callbackName) })
+
+	rows, err := NewFeedRepo(db).ListPublicFeed(context.Background(), nil, FeedTargetFoodRecord, "", "", "", "latest", 1, nil)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.LessOrEqual(t, maxRowsRead, int64(10), "请求一条 Feed 时不应读取全部公开用户，单次读取了 %d 行", maxRowsRead)
 }
 
 func TestFeedRepoListFriendFeed(t *testing.T) {
@@ -79,10 +117,31 @@ func TestFeedRepoListFriendFeed(t *testing.T) {
 	assert.NoError(t, db.Create(&FeedRecord{ID: "r1", UserID: "u1", MealType: "lunch", HiddenFromFeed: false}).Error)
 	assert.NoError(t, db.Create(&FeedRecord{ID: "r2", UserID: "u1", MealType: "lunch", HiddenFromFeed: true}).Error)
 
-	records, err := r.ListFriendFeed(ctx, []string{"u1"}, "food_record", "", "", "", "", 10)
+	records, err := r.ListFriendFeed(ctx, []string{"u1"}, "food_record", "", "", "", "", 10, nil)
 	assert.NoError(t, err)
 	assert.Len(t, records, 1)
 	assert.Equal(t, "r1", records[0].ID)
+}
+
+func TestFeedRepoListPublicFeedSupportsStableLatestCursor(t *testing.T) {
+	db := setupFeedTestDB(t)
+	r := NewFeedRepo(db)
+	ctx := context.Background()
+	isPublic := true
+	require.NoError(t, db.Create(&UserProfile{ID: "cursor-user", Nickname: "Cursor", PublicRecords: &isPublic}).Error)
+	createdAt := time.Date(2026, 8, 22, 8, 0, 0, 0, time.UTC)
+	for _, id := range []string{"r3", "r2", "r1"} {
+		recordTime := createdAt
+		require.NoError(t, db.Create(&FeedRecord{ID: id, UserID: "cursor-user", CreatedAt: &recordTime, RecordTime: &recordTime}).Error)
+	}
+
+	rows, err := r.ListPublicFeed(ctx, nil, FeedTargetFoodRecord, "", "", "", "latest", 10, &FeedCursor{
+		BeforeTime: createdAt,
+		BeforeKey:  FeedTargetKey(FeedTargetFoodRecord, "r2"),
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, "r1", rows[0].ID)
 }
 
 func TestFeedRepoGetFeedRecordByID(t *testing.T) {
@@ -156,6 +215,41 @@ func TestFeedRepoGetLikesForRecords(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, 2, likesMap["r1"].Count)
 	assert.True(t, likesMap["r1"].Liked)
+}
+
+func TestFeedRepoGetLikesForTargetsAggregatesInDatabase(t *testing.T) {
+	db := setupFeedTestDB(t)
+	r := NewFeedRepo(db)
+	ctx := context.Background()
+
+	likes := make([]domain.FeedLike, 0, 100)
+	for i := 0; i < 100; i++ {
+		likes = append(likes, domain.FeedLike{
+			ID:         fmt.Sprintf("like-%03d", i),
+			UserID:     fmt.Sprintf("user-%03d", i),
+			TargetType: FeedTargetFoodRecord,
+			TargetID:   "r1",
+		})
+	}
+	require.NoError(t, db.CreateInBatches(likes, 100).Error)
+
+	var mu sync.Mutex
+	maxRowsRead := int64(0)
+	callbackName := "feed-test:capture-like-row-count"
+	require.NoError(t, db.Callback().Query().After("gorm:query").Register(callbackName, func(tx *gorm.DB) {
+		mu.Lock()
+		defer mu.Unlock()
+		if tx.RowsAffected > maxRowsRead {
+			maxRowsRead = tx.RowsAffected
+		}
+	}))
+	t.Cleanup(func() { _ = db.Callback().Query().Remove(callbackName) })
+
+	result, err := r.GetLikesForTargets(ctx, []FeedTarget{{TargetType: FeedTargetFoodRecord, TargetID: "r1"}}, "user-042")
+	require.NoError(t, err)
+	require.Equal(t, 100, result[FeedTargetKey(FeedTargetFoodRecord, "r1")].Count)
+	require.True(t, result[FeedTargetKey(FeedTargetFoodRecord, "r1")].Liked)
+	require.LessOrEqual(t, maxRowsRead, int64(2), "聚合点赞时不应读取全部点赞明细，单次读取了 %d 行", maxRowsRead)
 }
 
 func TestFeedRepoAddComment(t *testing.T) {
