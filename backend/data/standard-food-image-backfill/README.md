@@ -10,6 +10,10 @@
    cd backend
    .\scripts\backfill-baseline.ps1
    ```
+   如需同时导出按用户实际引用次数排序的缺图清单，可直接运行：
+   ```powershell
+   go run ./cmd/standard-food-image-backfill --config-dir . --stats-only --stats-missing-limit 100 --stats-output data/standard-food-image-backfill/baseline.json
+   ```
 3. 试跑 200 条 dry-run：
    ```powershell
    .\scripts\backfill-phase1-dryrun.ps1

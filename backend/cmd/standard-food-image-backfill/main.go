@@ -130,6 +130,7 @@ type options struct {
 	timing                  bool
 	statsOnly               bool
 	statsOutput             string
+	statsMissingLimit       int
 	checkpointEvery         int
 	auditExisting           bool
 	auditOutput             string
@@ -266,6 +267,7 @@ func parseFlags() options {
 	flag.BoolVar(&opts.timing, "timing", false, "print per-stage durations to stdout")
 	flag.BoolVar(&opts.statsOnly, "stats-only", false, "print backfill baseline stats and exit")
 	flag.StringVar(&opts.statsOutput, "stats-output", "", "write --stats-only JSON to this file")
+	flag.IntVar(&opts.statsMissingLimit, "stats-missing-limit", 0, "include the first N missing foods ordered by user references in --stats-only output")
 	flag.IntVar(&opts.checkpointEvery, "checkpoint-every", 1, "save state.json every N processed foods (0=only at end)")
 	flag.BoolVar(&opts.auditExisting, "audit-existing", false, "audit existing food images without changing COS or database")
 	flag.StringVar(&opts.auditOutput, "audit-output", "tmp/food-image-audit/report.json", "resumable JSON report for --audit-existing")
