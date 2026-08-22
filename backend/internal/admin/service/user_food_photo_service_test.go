@@ -13,8 +13,14 @@ import (
 )
 
 type fakeUserFoodPhotoReader struct {
-	input repo.ListUserFoodPhotoInput
-	items []repo.UserFoodPhoto
+	input           repo.ListUserFoodPhotoInput
+	items           []repo.UserFoodPhoto
+	annotationInput repo.UpsertUserFoodPhotoAnnotationInput
+}
+
+func (f *fakeUserFoodPhotoReader) UpsertAnnotation(_ context.Context, input repo.UpsertUserFoodPhotoAnnotationInput) (*repo.UserFoodPhotoAnnotation, error) {
+	f.annotationInput = input
+	return &repo.UserFoodPhotoAnnotation{UserID: input.UserID, ImagePath: input.ImagePath, ReviewStatus: input.ReviewStatus, ExclusionReason: input.ExclusionReason}, nil
 }
 
 func (f *fakeUserFoodPhotoReader) List(_ context.Context, input repo.ListUserFoodPhotoInput) (*repo.ListUserFoodPhotoResult, error) {
@@ -59,4 +65,30 @@ func TestUserFoodPhotoServiceListCapsPageSize(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 100, reader.input.Limit)
 	assert.Equal(t, 0, reader.input.Offset)
+}
+
+func TestUserFoodPhotoServiceSaveAnnotationNormalizesLabels(t *testing.T) {
+	repository := &fakeUserFoodPhotoReader{}
+	svc := NewUserFoodPhotoService(repository, nil)
+
+	item, err := svc.SaveAnnotation(context.Background(), SaveUserFoodPhotoAnnotationInput{
+		UserID: " user-1 ", ImageKey: " meal.jpg ", ReviewStatus: "kept",
+		Labels: []string{"takeout", "fruit", "takeout"}, ExclusionReason: "non_food",
+	}, "admin-1")
+
+	require.NoError(t, err)
+	assert.Equal(t, "kept", item.ReviewStatus)
+	assert.Equal(t, []string{"fruit", "takeout"}, repository.annotationInput.Labels)
+	assert.Empty(t, repository.annotationInput.ExclusionReason)
+}
+
+func TestUserFoodPhotoServiceSaveAnnotationRequiresExclusionReason(t *testing.T) {
+	svc := NewUserFoodPhotoService(&fakeUserFoodPhotoReader{}, nil)
+
+	_, err := svc.SaveAnnotation(context.Background(), SaveUserFoodPhotoAnnotationInput{
+		UserID: "user-1", ImageKey: "prop.jpg", ReviewStatus: "excluded",
+	}, "admin-1")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "排除")
 }

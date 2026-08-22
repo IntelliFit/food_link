@@ -849,6 +849,7 @@ func New(cfg *config.Config) (*App, error) {
 	adminAPI.PATCH("/public-food-library/:item_id", adminAuth, adminPublicFoodHandler.Update)
 	adminAPI.DELETE("/public-food-library/:item_id", adminAuth, adminPublicFoodHandler.Delete)
 	adminAPI.GET("/user-food-photos", adminAuth, adminUserFoodPhotoHandler.List)
+	adminAPI.PUT("/user-food-photos/annotation", adminAuth, adminUserFoodPhotoHandler.SaveAnnotation)
 	adminAPI.GET("/campus-directory/schools", adminAuth, adminCampusDirectoryHandler.ListSchools)
 	adminAPI.GET("/campus-directory/schools/:school_id/summary", adminAuth, adminCampusDirectoryHandler.GetSchoolSummary)
 	adminAPI.POST("/campus-directory/schools", adminAuth, adminCampusDirectoryHandler.CreateSchool)

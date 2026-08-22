@@ -84,6 +84,18 @@ func setupUserFoodPhotoTestDB(t *testing.T) *UserFoodPhotoRepo {
 			image_path text,
 			created_at timestamptz,
 			updated_at timestamptz
+		);
+		CREATE TABLE user_food_photo_annotations (
+			id text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+			user_id text NOT NULL,
+			image_path text NOT NULL,
+			review_status text NOT NULL DEFAULT 'pending',
+			labels jsonb NOT NULL DEFAULT '[]'::jsonb,
+			exclusion_reason text NOT NULL DEFAULT '',
+			reviewed_by text,
+			created_at timestamptz NOT NULL DEFAULT now(),
+			updated_at timestamptz NOT NULL DEFAULT now(),
+			UNIQUE (user_id, image_path)
 		)
 	`).Error)
 	return NewUserFoodPhotoRepo(db)
@@ -195,6 +207,24 @@ func TestUserFoodPhotoRepoListStillWorksWithoutPackagedCorrectionTable(t *testin
 	assert.Equal(t, int64(1), result.Total)
 	require.Len(t, result.Items, 1)
 	assert.Equal(t, "meal.jpg", result.Items[0].ImagePath)
+}
+
+func TestUserFoodPhotoRepoListTreatsPhotosAsPendingBeforeAnnotationMigration(t *testing.T) {
+	repo := setupUserFoodPhotoTestDB(t)
+	now := time.Now().UTC()
+	require.NoError(t, repo.db.Exec(`DROP TABLE user_food_photo_annotations`).Error)
+	require.NoError(t, repo.db.Exec(`INSERT INTO weapp_user (id, nickname) VALUES ('user-1', '兼容标注用户')`).Error)
+	require.NoError(t, repo.db.Exec(`
+		INSERT INTO analysis_tasks (id, user_id, task_type, status, image_url, payload, created_at)
+		VALUES ('task-1', 'user-1', 'food', 'done', 'meal.jpg', '{}', ?)
+	`, now).Error)
+
+	result, err := repo.List(context.Background(), ListUserFoodPhotoInput{AnnotationStatus: "pending", Limit: 20})
+
+	require.NoError(t, err)
+	require.Len(t, result.Items, 1)
+	assert.Equal(t, "pending", result.Items[0].AnnotationStatus)
+	assert.Empty(t, result.Items[0].AnnotationLabels)
 }
 
 func TestUserFoodPhotoRepoListClassifiesAndFiltersCircleVisibility(t *testing.T) {
@@ -319,4 +349,39 @@ func TestUserFoodPhotoRepoListSortsByTimeAndNutritionBeforePagination(t *testing
 	require.NoError(t, err)
 	require.Len(t, byOldest.Items, 3)
 	assert.Equal(t, "high.jpg", byOldest.Items[0].ImagePath)
+}
+
+func TestUserFoodPhotoRepoUpsertsAndFiltersAnnotations(t *testing.T) {
+	repo := setupUserFoodPhotoTestDB(t)
+	now := time.Now().UTC()
+	require.NoError(t, repo.db.Exec(`INSERT INTO weapp_user (id, nickname) VALUES ('user-1', '标注用户')`).Error)
+	require.NoError(t, repo.db.Exec(`
+		INSERT INTO analysis_tasks (id, user_id, task_type, status, image_url, payload, created_at)
+		VALUES ('task-fruit', 'user-1', 'food', 'done', 'fruit.jpg', '{}', ?),
+		       ('task-prop', 'user-1', 'food', 'done', 'prop.jpg', '{}', ?)
+	`, now, now).Error)
+
+	kept, err := repo.UpsertAnnotation(context.Background(), UpsertUserFoodPhotoAnnotationInput{
+		UserID: "user-1", ImagePath: "fruit.jpg", ReviewStatus: "kept", Labels: []string{"fruit"}, ReviewedBy: "admin-1",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "kept", kept.ReviewStatus)
+	assert.Equal(t, []string{"fruit"}, []string(kept.Labels))
+
+	_, err = repo.UpsertAnnotation(context.Background(), UpsertUserFoodPhotoAnnotationInput{
+		UserID: "user-1", ImagePath: "prop.jpg", ReviewStatus: "excluded", ExclusionReason: "non_food", ReviewedBy: "admin-1",
+	})
+	require.NoError(t, err)
+
+	fruit, err := repo.List(context.Background(), ListUserFoodPhotoInput{AnnotationStatus: "kept", AnnotationLabel: "fruit", Limit: 20})
+	require.NoError(t, err)
+	require.Len(t, fruit.Items, 1)
+	assert.Equal(t, "fruit.jpg", fruit.Items[0].ImagePath)
+	assert.Equal(t, "kept", fruit.Items[0].AnnotationStatus)
+	assert.Equal(t, []string{"fruit"}, []string(fruit.Items[0].AnnotationLabels))
+
+	excluded, err := repo.List(context.Background(), ListUserFoodPhotoInput{AnnotationStatus: "excluded", Limit: 20})
+	require.NoError(t, err)
+	require.Len(t, excluded.Items, 1)
+	assert.Equal(t, "non_food", excluded.Items[0].ExclusionReason)
 }

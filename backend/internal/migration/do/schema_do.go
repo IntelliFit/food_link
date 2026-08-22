@@ -1724,6 +1724,20 @@ type CampusDirectorySourceDO struct {
 
 func (CampusDirectorySourceDO) TableName() string { return "campus_directory_sources" }
 
+type UserFoodPhotoAnnotationDO struct {
+	ID              string     `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	UserID          string     `gorm:"column:user_id;type:uuid;not null;uniqueIndex:idx_user_food_photo_annotations_identity,priority:1;index:idx_user_food_photo_annotations_status,priority:2"`
+	ImagePath       string     `gorm:"column:image_path;type:text;not null;uniqueIndex:idx_user_food_photo_annotations_identity,priority:2"`
+	ReviewStatus    string     `gorm:"column:review_status;type:text;not null;default:'pending';index:idx_user_food_photo_annotations_status,priority:1"`
+	Labels          []string   `gorm:"column:labels;type:jsonb;serializer:json;not null;default:'[]'::jsonb;index:idx_user_food_photo_annotations_labels,type:gin"`
+	ExclusionReason string     `gorm:"column:exclusion_reason;type:text;not null;default:''"`
+	ReviewedBy      *string    `gorm:"column:reviewed_by;type:uuid"`
+	CreatedAt       *time.Time `gorm:"column:created_at;type:timestamptz;not null;default:now()"`
+	UpdatedAt       *time.Time `gorm:"column:updated_at;type:timestamptz;not null;default:now()"`
+}
+
+func (UserFoodPhotoAnnotationDO) TableName() string { return "user_food_photo_annotations" }
+
 type FoodWeightLabeledSampleDO struct {
 	ID               string         `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
 	BatchName        string         `gorm:"column:batch_name;type:text;not null"`
@@ -1890,6 +1904,7 @@ func AllModels() []any {
 		&CampusFoodCatalogItemDO{},
 		&CampusCanteenApplicationDO{},
 		&CampusDirectorySourceDO{},
+		&UserFoodPhotoAnnotationDO{},
 		&FoodWeightLabeledSampleDO{},
 		&BenchmarkRunDO{},
 		&BenchmarkRunSampleDO{},
