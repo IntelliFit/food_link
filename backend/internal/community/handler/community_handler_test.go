@@ -15,6 +15,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type mockCommunityService struct {
@@ -205,7 +206,10 @@ func TestCheckinLeaderboard(t *testing.T) {
 func TestHealthLeaderboard(t *testing.T) {
 	mockSvc := &mockCommunityService{healthLeaderboard: &service.HealthLeaderboardResult{
 		WeekStart: "2024-01-01",
-		List:      []service.HealthLeaderboardItem{{Rank: 1, HealthIndex: 88}},
+		ScoringRule: service.HealthLeaderboardScoringRule{
+			Label: "本周健康饮食分", TotalPoints: 100, MinimumRecordedDays: 4,
+		},
+		List: []service.HealthLeaderboardItem{{Rank: 1, HealthIndex: 88}},
 	}}
 	h := NewCommunityHandler(mockSvc)
 	r := setupCommunityRouter(h)
@@ -215,6 +219,16 @@ func TestHealthLeaderboard(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Contains(t, w.Body.String(), `"scoring_rule"`)
+	assert.Contains(t, w.Body.String(), `"minimum_recorded_days":4`)
+	var payload struct {
+		Data struct {
+			List []map[string]any `json:"list"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &payload))
+	_, exposesPrivateBreakdown := payload.Data.List[0]["diet_quality_points"]
+	assert.False(t, exposesPrivateBreakdown)
 }
 
 func TestFoodNutrientLeaderboard(t *testing.T) {

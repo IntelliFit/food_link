@@ -262,23 +262,26 @@ func newTestService(feed FeedRepo, notif NotificationRepo, user UserFinder) *Com
 }
 
 type mockHealthScore struct {
-	score        int
-	recordedDays int
-	eligible     bool
+	score             float64
+	recordedDays      int
+	dietQualityPoints float64
+	continuityPoints  float64
+	stabilityPoints   float64
+	eligible          bool
 }
 
 type mockHealthScoreProvider struct {
-	scores          map[string]mockHealthScore
-	mu              sync.Mutex
-	requestedRanges []string
+	scores           map[string]mockHealthScore
+	mu               sync.Mutex
+	requestedUserIDs []string
 }
 
-func (m *mockHealthScoreProvider) GetOverallHealthIndexScore(_ context.Context, userID, statsRange string) (int, int, bool, error) {
+func (m *mockHealthScoreProvider) GetWeeklyHealthLeaderboardScore(_ context.Context, userID string) (float64, int, float64, float64, float64, bool, error) {
 	m.mu.Lock()
-	m.requestedRanges = append(m.requestedRanges, statsRange)
+	m.requestedUserIDs = append(m.requestedUserIDs, userID)
 	m.mu.Unlock()
 	value := m.scores[userID]
-	return value.score, value.recordedDays, value.eligible, nil
+	return value.score, value.recordedDays, value.dietQualityPoints, value.continuityPoints, value.stabilityPoints, value.eligible, nil
 }
 
 func TestPublicFeed(t *testing.T) {
@@ -516,7 +519,7 @@ func TestCheckinLeaderboardUsesAllWeeklyParticipantsAndKeepsHealthScopeIndepende
 	assert.Equal(t, "u3", result.List[0].UserID)
 }
 
-func TestHealthLeaderboardUsesExistingOverallScoreAndSkipsInsufficientData(t *testing.T) {
+func TestHealthLeaderboardUsesCalibratedWeeklyScoreAndSkipsInsufficientData(t *testing.T) {
 	mockFeed := &mockFeedRepo{
 		friendIDs: []string{"u2", "u3"},
 		profiles: map[string]*repo.UserProfile{
@@ -527,9 +530,9 @@ func TestHealthLeaderboardUsesExistingOverallScoreAndSkipsInsufficientData(t *te
 	}
 	svc := newTestService(mockFeed, &mockNotificationRepo{}, &mockUserRepo{})
 	provider := &mockHealthScoreProvider{scores: map[string]mockHealthScore{
-		"u1": {score: 82, recordedDays: 6, eligible: true},
-		"u2": {score: 91, recordedDays: 5, eligible: true},
-		"u3": {score: 99, recordedDays: 1, eligible: false},
+		"u1": {score: 87.2, recordedDays: 6, dietQualityPoints: 62.2, continuityPoints: 15, stabilityPoints: 10, eligible: true},
+		"u2": {score: 88.5, recordedDays: 5, dietQualityPoints: 68.2, continuityPoints: 12.5, stabilityPoints: 7.8, eligible: true},
+		"u3": {score: 91, recordedDays: 1, eligible: false},
 	}}
 	svc.ConfigureHealthScoreProvider(provider)
 
@@ -538,12 +541,17 @@ func TestHealthLeaderboardUsesExistingOverallScoreAndSkipsInsufficientData(t *te
 	assert.NoError(t, err)
 	assert.Len(t, result.List, 2)
 	assert.Equal(t, "u2", result.List[0].UserID)
-	assert.Equal(t, 91, result.List[0].HealthIndex)
+	assert.InDelta(t, 88.5, result.List[0].HealthIndex, 0.001)
+	assert.Nil(t, result.List[0].DietQualityPoints)
 	assert.Equal(t, 2, result.List[1].Rank)
 	assert.True(t, result.List[1].IsMe)
+	assert.InDelta(t, 62.2, *result.List[1].DietQualityPoints, 0.001)
+	assert.InDelta(t, 15.0, *result.List[1].ContinuityPoints, 0.001)
+	assert.InDelta(t, 10.0, *result.List[1].StabilityPoints, 0.001)
+	assert.Equal(t, 4, result.ScoringRule.MinimumRecordedDays)
+	assert.Equal(t, 75, result.ScoringRule.DietQualityPoints)
 	provider.mu.Lock()
-	assert.Len(t, provider.requestedRanges, 3)
-	assert.Equal(t, []string{"calendar_week", "calendar_week", "calendar_week"}, provider.requestedRanges)
+	assert.ElementsMatch(t, []string{"u1", "u2", "u3"}, provider.requestedUserIDs)
 	provider.mu.Unlock()
 }
 

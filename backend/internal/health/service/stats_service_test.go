@@ -40,6 +40,65 @@ func TestResolveStatsRangeUTCAtCalendarWeekStartsOnMonday(t *testing.T) {
 	assert.Equal(t, "2026-08-21T16:00:00Z", endUTC.Format(time.RFC3339))
 }
 
+func TestComputeWeeklyHealthLeaderboardScoreUsesCalibratedWeights(t *testing.T) {
+	now := time.Date(2026, 8, 22, 12, 0, 0, 0, chinaTZ) // Saturday, six elapsed days.
+	comp := &statsComputation{
+		RecordedDays: 4,
+		RecordedDaily: []DailyCalories{
+			{Date: "2026-08-17", Calories: 1000},
+			{Date: "2026-08-18", Calories: 1000},
+			{Date: "2026-08-20", Calories: 1000},
+			{Date: "2026-08-22", Calories: 1000},
+		},
+	}
+
+	result := computeWeeklyHealthLeaderboardScore(comp, 90, now)
+
+	assert.True(t, result.Eligible)
+	assert.Equal(t, 4, result.RecordedDays)
+	assert.InDelta(t, 67.5, result.DietQualityPoints, 0.001)
+	assert.InDelta(t, 10.0, result.ContinuityPoints, 0.001)
+	assert.InDelta(t, 10.0, result.StabilityPoints, 0.001)
+	assert.InDelta(t, 87.5, result.Score, 0.001)
+}
+
+func TestComputeWeeklyHealthLeaderboardScoreRequiresFourRecordedDays(t *testing.T) {
+	now := time.Date(2026, 8, 22, 12, 0, 0, 0, chinaTZ)
+	comp := &statsComputation{
+		RecordedDays: 3,
+		RecordedDaily: []DailyCalories{
+			{Date: "2026-08-17", Calories: 800},
+			{Date: "2026-08-18", Calories: 1000},
+			{Date: "2026-08-19", Calories: 1200},
+		},
+	}
+
+	result := computeWeeklyHealthLeaderboardScore(comp, 92, now)
+
+	assert.False(t, result.Eligible)
+	assert.InDelta(t, 69.0, result.DietQualityPoints, 0.001)
+	assert.InDelta(t, 7.5, result.ContinuityPoints, 0.001)
+	assert.InDelta(t, 8.4, result.StabilityPoints, 0.001)
+}
+
+func TestComputeWeeklyHealthLeaderboardScoreUsesDailyCoefficientOfVariation(t *testing.T) {
+	now := time.Date(2026, 8, 22, 12, 0, 0, 0, chinaTZ)
+	comp := &statsComputation{
+		RecordedDays: 4,
+		RecordedDaily: []DailyCalories{
+			{Date: "2026-08-17", Calories: 1000},
+			{Date: "2026-08-18", Calories: 1100},
+			{Date: "2026-08-19", Calories: 900},
+			{Date: "2026-08-20", Calories: 1000},
+		},
+	}
+
+	result := computeWeeklyHealthLeaderboardScore(comp, 90, now)
+
+	assert.InDelta(t, 9.3, result.StabilityPoints, 0.001)
+	assert.InDelta(t, 86.8, result.Score, 0.001)
+}
+
 func TestResolveStatsRangeUTCAtCalendarWeekKeepsSundayInCurrentWeek(t *testing.T) {
 	now := time.Date(2026, 8, 23, 23, 59, 0, 0, chinaTZ)
 
