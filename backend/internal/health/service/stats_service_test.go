@@ -559,6 +559,9 @@ func TestStatsService_StreamNutritionInsightRetriesTransientUpstreamFailure(t *t
 	requestCount := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requestCount++
+		var body map[string]any
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+		assert.Equal(t, false, body["enable_thinking"])
 		if requestCount == 1 {
 			http.Error(w, `{"error":{"message":"gateway temporarily unavailable"}}`, http.StatusServiceUnavailable)
 			return
@@ -824,6 +827,7 @@ func TestStatsService_GeneratePetChatRetriesHarshTone(t *testing.T) {
 		var body map[string]any
 		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
 		assert.Equal(t, float64(petChatMaxTokens), body["max_tokens"])
+		assert.Equal(t, false, body["enable_thinking"])
 		messages, ok := body["messages"].([]any)
 		require.True(t, ok)
 		require.NotEmpty(t, messages)

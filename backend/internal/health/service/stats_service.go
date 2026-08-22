@@ -1238,7 +1238,9 @@ func (s *StatsService) generatePetChatAnswer(ctx context.Context, comp *statsCom
 	var lastErr error
 	var retryFeedback string
 	for attempt := 0; attempt < statsInsightMaxAttempts; attempt++ {
-		generation, err := s.requestNutritionInsight(ctx, baseURL, apiKey, model, prompt, retryFeedback, petChatMaxTokens)
+		generation, err := s.requestNutritionInsight(ctx, baseURL, apiKey, model, prompt, retryFeedback, petChatMaxTokens, map[string]any{
+			"enable_thinking": false,
+		})
 		if err != nil {
 			lastErr = err
 			break
@@ -1482,10 +1484,10 @@ func (s *StatsService) generateNutritionInsight(ctx context.Context, comp *stats
 	return statsInsightGeneration{}, fmt.Errorf("文本模型返回了空响应")
 }
 
-func (s *StatsService) requestNutritionInsight(ctx context.Context, baseURL, apiKey, model, prompt, retryFeedback string, maxTokens int) (statsInsightGeneration, error) {
+func (s *StatsService) requestNutritionInsight(ctx context.Context, baseURL, apiKey, model, prompt, retryFeedback string, maxTokens int, extraBody ...map[string]any) (statsInsightGeneration, error) {
 	var lastErr error
 	for attempt := 1; attempt <= statsInsightNetworkMaxAttempts; attempt++ {
-		generation, err := s.requestNutritionInsightOnce(ctx, baseURL, apiKey, model, prompt, retryFeedback, maxTokens)
+		generation, err := s.requestNutritionInsightOnce(ctx, baseURL, apiKey, model, prompt, retryFeedback, maxTokens, extraBody...)
 		if err == nil {
 			return generation, nil
 		}
@@ -1512,7 +1514,7 @@ func (s *StatsService) requestNutritionInsight(ctx context.Context, baseURL, api
 	return statsInsightGeneration{}, lastErr
 }
 
-func (s *StatsService) requestNutritionInsightOnce(ctx context.Context, baseURL, apiKey, model, prompt, retryFeedback string, maxTokens int) (statsInsightGeneration, error) {
+func (s *StatsService) requestNutritionInsightOnce(ctx context.Context, baseURL, apiKey, model, prompt, retryFeedback string, maxTokens int, extraBody ...map[string]any) (statsInsightGeneration, error) {
 	messages := []map[string]string{
 		{"role": "user", "content": prompt},
 	}
@@ -1525,6 +1527,11 @@ func (s *StatsService) requestNutritionInsightOnce(ctx context.Context, baseURL,
 		"temperature": 0.6,
 		"max_tokens":  maxTokens,
 		"stream":      false,
+	}
+	if len(extraBody) > 0 {
+		for key, value := range extraBody[0] {
+			body[key] = value
+		}
 	}
 	bodyBytes, _ := json.Marshal(body)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/chat/completions", bytes.NewReader(bodyBytes))
@@ -1621,11 +1628,12 @@ func isTransientStatsInsightError(err error) bool {
 
 func (s *StatsService) streamNutritionInsight(ctx context.Context, baseURL, apiKey, model, prompt string, maxTokens int) (<-chan string, error) {
 	body := map[string]any{
-		"model":       model,
-		"messages":    []map[string]string{{"role": "user", "content": prompt}},
-		"temperature": 0.6,
-		"max_tokens":  maxTokens,
-		"stream":      true,
+		"model":           model,
+		"messages":        []map[string]string{{"role": "user", "content": prompt}},
+		"temperature":     0.6,
+		"max_tokens":      maxTokens,
+		"stream":          true,
+		"enable_thinking": false,
 	}
 	bodyBytes, _ := json.Marshal(body)
 	var resp *http.Response
