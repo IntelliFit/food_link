@@ -3748,6 +3748,27 @@ func TestBuildGemini35GroupedPlanPromptIncludesIngredientsOutput(t *testing.T) {
 	assert.Contains(t, prompt, "nutritionPer100g")
 }
 
+func TestImageAnalysisPromptsSplitIndependentlyConsumableMealComponents(t *testing.T) {
+	input := AnalyzeInput{ImageURL: "https://example.com/beef-rice.jpg"}
+	prompts := map[string]string{
+		"standard_db_first": buildImageDBFirstPrompt(input, nil),
+		"lite_db_first":     buildLiteImageDBFirstPrompt(input, nil),
+		"gemini_direct":     buildGemini35ImageDBFirstPrompt(input, nil, "gemini35_flash"),
+		"gemini_group_plan": buildGemini35GroupedPlanPrompt(input, nil),
+		"strict":            buildPrompt(input, nil, validExecutionMode),
+		"direct_nutrition":  buildPrompt(AnalyzeInput{ImageURL: input.ImageURL, AnalysisEngine: analysisEngineAIDirect}, nil, defaultExecutionMode),
+	}
+
+	for name, prompt := range prompts {
+		t.Run(name, func(t *testing.T) {
+			assert.Contains(t, prompt, "可独立吃完或剩余")
+			assert.Contains(t, prompt, "牛肉、菜心、米饭")
+			assert.Contains(t, prompt, "分别输出为独立 item")
+			assert.NotContains(t, prompt, "混合菜无法可靠拆分时，作为一道常见菜名输出")
+		})
+	}
+}
+
 func TestParseItemsPreservesIngredients(t *testing.T) {
 	parsed := map[string]any{
 		"items": []any{

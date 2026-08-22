@@ -903,6 +903,13 @@ transitiontransition
   font-weight: 500;
 }
 
+.section-ratio-hint {
+  margin: -14rpx 8rpx 0;
+  font-size: 24rpx;
+  line-height: 1.5;
+  color: #64748b;
+}
+
 .quick-ratio-btn {
   font-size: 26rpx;
   color: #00bc7d;
@@ -2718,6 +2725,7 @@ transitiontransition
   }
 
   .section-count,
+  .section-ratio-hint,
   .calories-label,
   .weight-text,
   .control-label,
