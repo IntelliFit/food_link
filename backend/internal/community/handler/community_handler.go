@@ -88,11 +88,14 @@ func (h *CommunityHandler) Feed(c *gin.Context) {
 
 func (h *CommunityHandler) CheckinLeaderboard(c *gin.Context) {
 	userID := c.GetString(authmw.ContextUserIDKey)
+	logger.Info(c.Request.Context(), "进入全体用户饮食记录排行榜", slog.String("user_id", userID))
 	result, err := h.svc.CheckinLeaderboard(c.Request.Context(), userID)
 	if err != nil {
+		logger.Error(c.Request.Context(), "获取全体用户饮食记录排行榜失败", err, slog.String("user_id", userID))
 		response.Error(c, err)
 		return
 	}
+	logger.Info(c.Request.Context(), "完成全体用户饮食记录排行榜", slog.String("user_id", userID), slog.Int("user_count", len(result.List)))
 	response.Success(c, result)
 }
 

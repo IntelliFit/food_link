@@ -148,7 +148,7 @@ func (m *mockFeedRepo) IsFriend(ctx context.Context, userID, friendID string) (b
 func (m *mockFeedRepo) GetUserProfiles(ctx context.Context, userIDs []string) (map[string]*repo.UserProfile, error) {
 	return m.profiles, m.profilesErr
 }
-func (m *mockFeedRepo) GetCheckinCounts(ctx context.Context, userIDs []string, weekStart, weekEnd time.Time) (map[string]int, error) {
+func (m *mockFeedRepo) GetWeeklyCheckinCounts(ctx context.Context, weekStart, weekEnd time.Time) (map[string]int, error) {
 	return m.checkinCounts, m.checkinCountsErr
 }
 func (m *mockFeedRepo) GetFoodNutrientRanking(ctx context.Context, nutrient string, limit int) ([]repo.NutrientFoodRow, error) {
@@ -497,18 +497,23 @@ func TestChinaWeekWindowSundayStaysInSameNaturalWeek(t *testing.T) {
 	assert.Equal(t, "2026-05-18T00:00:00+08:00", end.Format(time.RFC3339))
 }
 
-func TestCheckinLeaderboard(t *testing.T) {
+func TestCheckinLeaderboardUsesAllWeeklyParticipantsAndKeepsHealthScopeIndependent(t *testing.T) {
 	mockFeed := &mockFeedRepo{
 		friendIDs:     []string{"u2"},
-		checkinCounts: map[string]int{"u1": 5, "u2": 3},
-		profiles:      map[string]*repo.UserProfile{"u1": {ID: "u1", Nickname: "Alice"}, "u2": {ID: "u2", Nickname: "Bob"}},
+		checkinCounts: map[string]int{"u1": 5, "u2": 3, "u3": 8},
+		profiles: map[string]*repo.UserProfile{
+			"u1": {ID: "u1", Nickname: "Alice"},
+			"u2": {ID: "u2", Nickname: "Bob"},
+			"u3": {ID: "u3", Nickname: "非好友用户"},
+		},
 	}
 	svc := newTestService(mockFeed, &mockNotificationRepo{}, &mockUserRepo{})
 	result, err := svc.CheckinLeaderboard(context.Background(), "u1")
 	assert.NoError(t, err)
 	assert.NotNil(t, result)
-	assert.Len(t, result.List, 2)
+	assert.Len(t, result.List, 3)
 	assert.Equal(t, 1, result.List[0].Rank)
+	assert.Equal(t, "u3", result.List[0].UserID)
 }
 
 func TestHealthLeaderboardUsesExistingOverallScoreAndSkipsInsufficientData(t *testing.T) {

@@ -49,7 +49,7 @@ type FeedRepo interface {
 	GetFriendIDs(ctx context.Context, userID string) ([]string, error)
 	IsFriend(ctx context.Context, userID, friendID string) (bool, error)
 	GetUserProfiles(ctx context.Context, userIDs []string) (map[string]*repo.UserProfile, error)
-	GetCheckinCounts(ctx context.Context, userIDs []string, weekStart, weekEnd time.Time) (map[string]int, error)
+	GetWeeklyCheckinCounts(ctx context.Context, weekStart, weekEnd time.Time) (map[string]int, error)
 	GetFoodNutrientRanking(ctx context.Context, nutrient string, limit int) ([]repo.NutrientFoodRow, error)
 	CreateCirclePost(ctx context.Context, post *domain.UserCirclePost) error
 	GetCirclePostByID(ctx context.Context, postID string) (*domain.UserCirclePost, error)
@@ -900,28 +900,12 @@ func chinaWeekWindow(now time.Time) (time.Time, time.Time, string, string) {
 }
 
 func (s *CommunityService) CheckinLeaderboard(ctx context.Context, viewerUserID string) (*LeaderboardResult, error) {
-	friendIDs, err := s.feedRepo.GetFriendIDs(ctx, viewerUserID)
-	if err != nil {
-		return nil, err
-	}
 	blockedSet := s.blockedUserSet(ctx, viewerUserID)
 	blockedIDs := make([]string, 0, len(blockedSet))
 	for id := range blockedSet {
 		blockedIDs = append(blockedIDs, id)
 	}
 	sort.Strings(blockedIDs)
-	authorIDSet := make(map[string]bool)
-	authorIDSet[viewerUserID] = true
-	for _, fid := range friendIDs {
-		if blockedSet[fid] {
-			continue
-		}
-		authorIDSet[fid] = true
-	}
-	authorIDs := make([]string, 0, len(authorIDSet))
-	for id := range authorIDSet {
-		authorIDs = append(authorIDs, id)
-	}
 
 	weekStartCN, weekEndCN, weekStartStr, weekEndStr := chinaWeekWindow(time.Now())
 
@@ -934,9 +918,17 @@ func (s *CommunityService) CheckinLeaderboard(ctx context.Context, viewerUserID 
 		leaderboardCache.Delete(cacheKey)
 	}
 
-	counts, err := s.feedRepo.GetCheckinCounts(ctx, authorIDs, weekStartCN.UTC(), weekEndCN.UTC())
+	counts, err := s.feedRepo.GetWeeklyCheckinCounts(ctx, weekStartCN.UTC(), weekEndCN.UTC())
 	if err != nil {
 		return nil, err
+	}
+	authorIDs := make([]string, 0, len(counts))
+	for userID := range counts {
+		if userID == "" || blockedSet[userID] {
+			delete(counts, userID)
+			continue
+		}
+		authorIDs = append(authorIDs, userID)
 	}
 
 	profiles, err := s.feedRepo.GetUserProfiles(ctx, authorIDs)
@@ -968,7 +960,10 @@ func (s *CommunityService) CheckinLeaderboard(ctx context.Context, viewerUserID 
 		if items[i].CheckinCount != items[j].CheckinCount {
 			return items[i].CheckinCount > items[j].CheckinCount
 		}
-		return items[i].Nickname < items[j].Nickname
+		if items[i].Nickname != items[j].Nickname {
+			return items[i].Nickname < items[j].Nickname
+		}
+		return items[i].UserID < items[j].UserID
 	})
 	for i := range items {
 		items[i].Rank = i + 1

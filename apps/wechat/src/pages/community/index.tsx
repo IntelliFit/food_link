@@ -2172,7 +2172,7 @@ function CommunityPage() {
                 >
                   <Text className='ranking-column-title'>用户榜</Text>
                   <View className='ranking-mini-tabs'>
-                    <Text className='ranking-mini-tab active'>打卡</Text>
+                    <Text className='ranking-mini-tab active'>全体记录</Text>
                     <Text
                       className='ranking-mini-tab'
                       onClick={(event) => {
@@ -2180,7 +2180,7 @@ function CommunityPage() {
                         if (!getAccessToken()) return redirectToLogin()
                         Taro.navigateTo({ url: extraPkgUrl('/pages/checkin-leaderboard/index?section=user&ranking=health') })
                       }}
-                    >健康</Text>
+                    >好友健康</Text>
                   </View>
                   <View className='ranking-mini-list'>
                     {(lbPreviewLoading || (lbPreviewFetching && lbPreviewTop.length === 0)) ? (
@@ -2198,9 +2198,9 @@ function CommunityPage() {
                         <Text className='ranking-mini-name' numberOfLines={1}>{row.nickname}</Text>
                         <Text className='ranking-mini-value'>{row.checkin_count}次</Text>
                       </View>
-                    )) : <Text className='ranking-mini-empty'>暂无打卡</Text>}
+                    )) : <Text className='ranking-mini-empty'>暂无记录</Text>}
                   </View>
-                  <Text className='ranking-column-link'>查看用户榜 ›</Text>
+                  <Text className='ranking-column-link'>查看全体用户榜 ›</Text>
                 </View>
 
                 <View className='ranking-column-divider' />

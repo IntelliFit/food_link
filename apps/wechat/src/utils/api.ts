@@ -6653,7 +6653,7 @@ export interface LegacyFriendInviteRequestResult {
   avatar: string
 }
 
-/** 本周好友圈打卡排行榜条目 */
+/** 本周全体用户饮食记录排行榜条目 */
 export interface CheckinLeaderboardItem {
   rank: number
   user_id: string
@@ -7292,7 +7292,7 @@ export async function communityGetFeed(
   return response.data as { list: CommunityFeedItem[]; has_more?: boolean }
 }
 
-/** 本周打卡排行榜（自己 + 好友，按饮食记录条数） */
+/** 本周全体用户饮食记录排行榜（按饮食记录条数） */
 export async function communityGetCheckinLeaderboard(): Promise<{
   week_start: string
   week_end: string

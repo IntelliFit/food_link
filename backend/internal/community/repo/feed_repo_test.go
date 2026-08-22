@@ -250,7 +250,7 @@ func TestFeedRepoGetUserProfiles(t *testing.T) {
 	assert.Equal(t, 12, *profiles["u1"].PetLevel)
 }
 
-func TestFeedRepoGetCheckinCounts(t *testing.T) {
+func TestFeedRepoGetWeeklyCheckinCountsIncludesNonFriendUsers(t *testing.T) {
 	db := setupFeedTestDB(t)
 	r := NewFeedRepo(db)
 	ctx := context.Background()
@@ -258,10 +258,12 @@ func TestFeedRepoGetCheckinCounts(t *testing.T) {
 	now := time.Now().UTC()
 	assert.NoError(t, db.Create(&FeedRecord{ID: "r1", UserID: "u1", RecordTime: &now}).Error)
 	assert.NoError(t, db.Create(&FeedRecord{ID: "r2", UserID: "u1", RecordTime: &now}).Error)
+	assert.NoError(t, db.Create(&FeedRecord{ID: "r3", UserID: "u2", RecordTime: &now}).Error)
 
-	counts, err := r.GetCheckinCounts(ctx, []string{"u1"}, now.Add(-time.Hour), now.Add(time.Hour))
+	counts, err := r.GetWeeklyCheckinCounts(ctx, now.Add(-time.Hour), now.Add(time.Hour))
 	assert.NoError(t, err)
 	assert.Equal(t, 2, counts["u1"])
+	assert.Equal(t, 1, counts["u2"])
 }
 
 func TestFeedRepoGetFoodNutrientRanking(t *testing.T) {

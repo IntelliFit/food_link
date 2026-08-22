@@ -20,6 +20,13 @@ describe('community leaderboard redesign', () => {
     expect(communitySource).toContain('nutrient=calcium')
   })
 
+  it('makes the user scope explicit for each weekly ranking', () => {
+    expect(communitySource).toContain('全体记录')
+    expect(communitySource).toContain('好友健康')
+    expect(leaderboardSource).toContain("isHealth ? '好友' : '全体用户'")
+    expect(leaderboardSource).toContain('饮食记录榜')
+  })
+
   it('keeps health as one aggregate index and omits scoring instructions', () => {
     expect(leaderboardSource).toContain('按「分析」页的综合健康指数排名')
     expect(leaderboardSource).toContain('健康榜')

@@ -52,7 +52,7 @@ function normalizeCheckinRows(list: CheckinLeaderboardItem[]): UserRankingRow[] 
     nickname: row.nickname,
     avatar: row.avatar,
     value: row.checkin_count,
-    detail: `${row.checkin_count}次打卡`,
+    detail: `${row.checkin_count}次饮食记录`,
     isMe: row.is_me,
   }))
 }
@@ -180,7 +180,7 @@ function CheckinLeaderboardPage() {
       )
     }
     if (userRows.length === 0) {
-      return <View className='leaderboard-state'>{isHealth ? '本周暂无满足条件的健康指数' : '暂无打卡数据'}</View>
+      return <View className='leaderboard-state'>{isHealth ? '本周暂无满足条件的健康指数' : '本周暂无饮食记录'}</View>
     }
     return (
       <>
@@ -228,7 +228,7 @@ function CheckinLeaderboardPage() {
             <View
               className={`leaderboard-segment${userRankingType === 'checkin' ? ' active' : ''}`}
               onClick={() => setUserRankingType('checkin')}
-            >打卡榜</View>
+            >饮食记录榜</View>
             <View
               className={`leaderboard-segment${userRankingType === 'health' ? ' active' : ''}`}
               onClick={() => setUserRankingType('health')}
@@ -249,7 +249,9 @@ function CheckinLeaderboardPage() {
         )}
         <View className='leaderboard-period-row'>
           <Text className='iconfont icon-rili leaderboard-period-icon' />
-          <Text>{section === 'food' ? `${selectedNutrient.label} · 标准食物库 · 每100g` : `本周 ${weekStart}${weekEnd ? ` – ${weekEnd}` : ''}`}</Text>
+          <Text>{section === 'food'
+            ? `${selectedNutrient.label} · 标准食物库 · 每100g`
+            : `${isHealth ? '好友' : '全体用户'} · 本周 ${weekStart}${weekEnd ? ` – ${weekEnd}` : ''}`}</Text>
         </View>
         {section === 'user' && isHealth ? (
           <Text className='leaderboard-source'>按「分析」页的综合健康指数排名</Text>

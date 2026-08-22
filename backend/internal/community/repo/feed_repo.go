@@ -611,10 +611,7 @@ func (r *FeedRepo) GetUserProfiles(ctx context.Context, userIDs []string) (map[s
 	return result, nil
 }
 
-func (r *FeedRepo) GetCheckinCounts(ctx context.Context, userIDs []string, weekStart, weekEnd time.Time) (map[string]int, error) {
-	if len(userIDs) == 0 {
-		return map[string]int{}, nil
-	}
+func (r *FeedRepo) GetWeeklyCheckinCounts(ctx context.Context, weekStart, weekEnd time.Time) (map[string]int, error) {
 	type checkinRow struct {
 		UserID string `gorm:"column:user_id"`
 		Count  int    `gorm:"column:count"`
@@ -622,7 +619,7 @@ func (r *FeedRepo) GetCheckinCounts(ctx context.Context, userIDs []string, weekS
 	var rows []checkinRow
 	err := r.db.WithContext(ctx).Table("user_food_records").
 		Select("user_id, COUNT(*) as count").
-		Where("user_id IN ? AND record_time >= ? AND record_time < ?", userIDs, weekStart, weekEnd).
+		Where("record_time >= ? AND record_time < ?", weekStart, weekEnd).
 		Group("user_id").
 		Scan(&rows).Error
 	if err != nil {
