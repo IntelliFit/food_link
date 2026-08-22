@@ -37,9 +37,13 @@ func main() {
 	configDir := flag.String("config-dir", ".", "directory containing config.yaml")
 	apply := flag.Bool("apply", false, "persist annotations; default is dry-run")
 	refreshAutomated := flag.Bool("refresh-automated", false, "recompute records without a manual reviewer")
+	refreshReviewed := flag.Bool("refresh-reviewed", false, "also recompute manually reviewed records; requires --refresh-automated")
 	maxPhotos := flag.Int("max", 0, "maximum unannotated photos to classify; 0 means all")
 	timeout := flag.Duration("timeout", 20*time.Minute, "batch timeout")
 	flag.Parse()
+	if *refreshReviewed && !*refreshAutomated {
+		log.Fatal("--refresh-reviewed 必须与 --refresh-automated 一起使用")
+	}
 
 	cfg, err := config.Load(*configDir)
 	if err != nil {
@@ -61,7 +65,7 @@ func main() {
 		log.Fatalf("数据库 ping 失败: %v", err)
 	}
 
-	annotations, stats, err := collectAnnotations(ctx, db, *maxPhotos, *refreshAutomated)
+	annotations, stats, err := collectAnnotations(ctx, db, *maxPhotos, *refreshAutomated, *refreshReviewed)
 	if err != nil {
 		log.Fatalf("预演用户食物照片清洗失败: %v", err)
 	}
@@ -87,9 +91,11 @@ func main() {
 				"exclusion_reason": gorm.Expr("EXCLUDED.exclusion_reason"),
 				"updated_at":       gorm.Expr("NOW()"),
 			})
-			onConflict.Where = clause.Where{Exprs: []clause.Expression{
-				clause.Expr{SQL: "user_food_photo_annotations.reviewed_by IS NULL"},
-			}}
+			if !*refreshReviewed {
+				onConflict.Where = clause.Where{Exprs: []clause.Expression{
+					clause.Expr{SQL: "user_food_photo_annotations.reviewed_by IS NULL"},
+				}}
+			}
 		}
 		return tx.Clauses(onConflict).CreateInBatches(annotations, 200).Error
 	}); err != nil {
@@ -102,7 +108,7 @@ func main() {
 	fmt.Printf("自动清洗写入完成: attempted=%d annotation_table_total=%d\n", len(annotations), persisted)
 }
 
-func collectAnnotations(ctx context.Context, db *gorm.DB, maxPhotos int, refreshAutomated bool) ([]adminrepo.UserFoodPhotoAnnotation, cleanupStats, error) {
+func collectAnnotations(ctx context.Context, db *gorm.DB, maxPhotos int, refreshAutomated, refreshReviewed bool) ([]adminrepo.UserFoodPhotoAnnotation, cleanupStats, error) {
 	photoRepo := adminrepo.NewUserFoodPhotoRepo(db)
 	stats := cleanupStats{
 		Reasons:   make(map[string]int),
@@ -143,7 +149,7 @@ func collectAnnotations(ctx context.Context, db *gorm.DB, maxPhotos int, refresh
 				continue
 			}
 			seenIdentities[identityKey] = struct{}{}
-			if _, manual := manualKeys[identityKey]; manual {
+			if _, manual := manualKeys[identityKey]; manual && !refreshReviewed {
 				if photo.AnnotationStatus == "kept" && photo.SourceID != "" {
 					keptSources[photo.SourceType+"\x00"+photo.SourceID] = struct{}{}
 				}

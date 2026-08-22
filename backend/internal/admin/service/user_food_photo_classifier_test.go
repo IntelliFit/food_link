@@ -22,6 +22,11 @@ func TestClassifyUserFoodPhotoForRanking(t *testing.T) {
 			status: "kept", labels: []string{"beverage", "fruit"},
 		},
 		{
+			name:   "recognizes named fruit juice as beverage",
+			photo:  photoWithNutrition("中式家常午餐", "油炸花生米", "橙汁"),
+			status: "kept", labels: []string{"beverage", "fruit", "home_cooked", "snack"},
+		},
+		{
 			name: "adds takeout only from explicit context",
 			photo: func() repo.UserFoodPhoto {
 				photo := photoWithNutrition("外卖盒中的牛肉饭", "牛肉饭")
