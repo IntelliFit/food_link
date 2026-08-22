@@ -75,7 +75,7 @@ flowchart LR
 ```
 
 1. **加载配置**：`--config-dir` 指向 `backend/`，连接 Apollo/本地库。
-2. **拉取任务**：按 `limit`/`offset`、`--food-id`、`--food-ids` 或断点状态筛选食物。
+2. **拉取任务**：按用户食物记录引用次数降序优先处理，再按 `limit`/`offset`、`--food-id`、`--food-ids` 或断点状态筛选食物。
 3. **Bing 搜图**（默认 `--image-search bing`）：见下文「Bing 取图逻辑」。
 4. **下载候选**：每张图带 `Referer`（优先来源页 `purl`，否则 Bing 搜索页）。
 5. **视觉判定**：DashScope OpenAI 兼容接口，默认自动选用 `qwen3.5-flash`；需 `food_match`、`no_watermark` 且 `confidence >= threshold`（默认 0.72）。
@@ -101,10 +101,11 @@ flowchart LR
 
 ## DashScope 鉴权
 
-1. **`backend/.env` 中的 `DASHSCOPE_API_KEY`**（推荐，见 `.env.example`）
-2. 进程环境变量 `DASHSCOPE_API_KEY`（覆盖 .env）
-3. 可选 `--dashscope-api-key-file` 文件覆盖
-4. 可选 `DASHSCOPE_BASE_URL`（默认北京 `https://dashscope.aliyuncs.com/compatible-mode/v1`）
+1. 临时进程环境变量 `FOOD_IMAGE_VISION_API_KEY`（最高优先级）
+2. **`backend/.env` 中的 `DASHSCOPE_API_KEY`**（见 `.env.example`）
+3. 进程环境变量 `DASHSCOPE_API_KEY`
+4. 可选 `--dashscope-api-key-file` 文件覆盖
+5. 上述均未配置时，自动复用项目 Apollo/本地配置中的 `external.dashscope_api_key` 与 `external.dashscope_base_url`；密钥只注入当前进程，不写入输出文件
 
 验证 API（拉模型列表 + Bing 取图 + 判定）：
 
@@ -206,4 +207,3 @@ go run ./cmd/standard-food-image-backfill --config-dir . --test-api
 ## 配置文件
 
 本项目采用 apollo 作为配置系统，访问 https://apollo.paper2ppt.work/ 可以管理配置。
-

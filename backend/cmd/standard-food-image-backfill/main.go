@@ -37,6 +37,7 @@ type foodRow struct {
 	CanonicalName  string `json:"canonical_name"`
 	NormalizedName string `json:"normalized_name"`
 	Aliases        string `json:"aliases,omitempty"`
+	Uses           int64  `json:"uses,omitempty"`
 }
 
 type imageCandidate struct {
@@ -148,6 +149,15 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), opts.timeout)
 	defer cancel()
 
+	if opts.statsOnly {
+		if err := runStats(ctx, opts); err != nil {
+			log.Fatalf("统计失败: %v", err)
+		}
+		return
+	}
+	if err := hydrateVisionRuntimeConfig(&opts); err != nil {
+		log.Fatalf("加载视觉模型配置失败: %v", err)
+	}
 	if opts.testAPI {
 		if err := runTestAPI(ctx, opts); err != nil {
 			log.Fatalf("DashScope API 验证失败: %v", err)
@@ -163,12 +173,6 @@ func main() {
 	if strings.TrimSpace(opts.localImage) != "" {
 		if err := runLocalImageBackfill(ctx, opts); err != nil {
 			log.Fatalf("本地图片回填失败: %v", err)
-		}
-		return
-	}
-	if opts.statsOnly {
-		if err := runStats(ctx, opts); err != nil {
-			log.Fatalf("统计失败: %v", err)
 		}
 		return
 	}
@@ -190,6 +194,37 @@ func main() {
 	if err := runBackfill(ctx, opts); err != nil {
 		log.Fatalf("标准食物图片回填失败: %v", err)
 	}
+}
+
+// hydrateVisionRuntimeConfig lets the offline backfill command reuse the same
+// Apollo/file configuration as the backend service. Explicit process or local
+// .env values still take precedence, and the credential remains process-local.
+func hydrateVisionRuntimeConfig(opts *options) error {
+	if opts == nil {
+		return errors.New("options is nil")
+	}
+	keyConfigured := loadDashScopeAPIKey(opts.configDir, opts.visionAPIKeyPath) != ""
+	baseConfigured := strings.TrimSpace(opts.dashscopeBaseURL) != "" || strings.TrimSpace(os.Getenv("DASHSCOPE_BASE_URL")) != ""
+	if keyConfigured && baseConfigured {
+		return nil
+	}
+	cfg, err := config.Load(opts.configDir)
+	if err != nil {
+		return err
+	}
+	return applyVisionRuntimeConfig(opts, cfg.External, keyConfigured, baseConfigured)
+}
+
+func applyVisionRuntimeConfig(opts *options, external config.ExternalConfig, keyConfigured, baseConfigured bool) error {
+	if !keyConfigured && strings.TrimSpace(external.DashScopeAPIKey) != "" {
+		if err := os.Setenv("FOOD_IMAGE_VISION_API_KEY", strings.TrimSpace(external.DashScopeAPIKey)); err != nil {
+			return err
+		}
+	}
+	if !baseConfigured && strings.TrimSpace(external.DashScopeBaseURL) != "" {
+		opts.dashscopeBaseURL = strings.TrimRight(strings.TrimSpace(external.DashScopeBaseURL), "/")
+	}
+	return nil
 }
 
 func parseFlags() options {
@@ -411,16 +446,26 @@ WHERE f.is_active = TRUE
 		args = append(args, strings.TrimSpace(opts.foodID))
 	}
 	sql := `
+WITH refs AS (
+  SELECT item->>'manual_source_id' AS food_id, COUNT(*)::bigint AS uses
+  FROM user_food_records r
+  CROSS JOIN LATERAL jsonb_array_elements(r.items) AS item
+  WHERE item->>'manual_source' = 'nutrition_library'
+    AND COALESCE(item->>'manual_source_id', '') <> ''
+  GROUP BY item->>'manual_source_id'
+)
 SELECT
   f.id::text AS id,
   f.canonical_name,
   f.normalized_name,
-  COALESCE(string_agg(a.alias_name, ' ' ORDER BY a.alias_name), '') AS aliases
+  COALESCE(string_agg(a.alias_name, ' ' ORDER BY a.alias_name), '') AS aliases,
+  COALESCE(refs.uses, 0)::bigint AS uses
 FROM food_nutrition_library f
 LEFT JOIN food_nutrition_aliases a ON a.food_id = f.id
+LEFT JOIN refs ON refs.food_id = f.id::text
 ` + where + `
-GROUP BY f.id, f.canonical_name, f.normalized_name
-ORDER BY (f.canonical_name ~ '[\u4e00-\u9fff]') DESC, f.updated_at ASC NULLS FIRST, f.canonical_name ASC`
+GROUP BY f.id, f.canonical_name, f.normalized_name, refs.uses
+ORDER BY COALESCE(refs.uses, 0) DESC, (f.canonical_name ~ '[\u4e00-\u9fff]') DESC, f.updated_at ASC NULLS FIRST, f.canonical_name ASC`
 	if opts.limit > 0 {
 		sql += " LIMIT ?"
 		args = append(args, opts.limit)
@@ -669,6 +714,7 @@ func candidateQueries(food foodRow) []string {
 	// 与用户浏览器搜索一致：优先纯食物名，再尝试带后缀的查询。
 	values := []string{
 		name,
+		name + " 高清 无水印 实拍",
 		name + " 美食",
 		name + " 实拍",
 		name + " 食物 图片",

@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"food_link/backend/pkg/config"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -31,6 +33,28 @@ func TestLoadTemporaryFoodImageVisionAPIKeyTakesPriority(t *testing.T) {
 	t.Setenv("FOOD_IMAGE_VISION_API_KEY", "sk-temporary")
 	t.Setenv("DASHSCOPE_API_KEY", "sk-configured")
 	assert.Equal(t, "sk-temporary", loadDashScopeAPIKey(t.TempDir(), ""))
+}
+
+func TestHydrateVisionRuntimeConfigUsesProjectConfig(t *testing.T) {
+	t.Setenv("FOOD_IMAGE_VISION_API_KEY", "")
+	opts := options{}
+	require.NoError(t, applyVisionRuntimeConfig(&opts, config.ExternalConfig{
+		DashScopeAPIKey:  "project-key",
+		DashScopeBaseURL: "https://dashscope.example.com/compatible-mode/v1/",
+	}, false, false))
+	assert.Equal(t, "project-key", os.Getenv("FOOD_IMAGE_VISION_API_KEY"))
+	assert.Equal(t, "https://dashscope.example.com/compatible-mode/v1", opts.dashscopeBaseURL)
+}
+
+func TestHydrateVisionRuntimeConfigPreservesExplicitValues(t *testing.T) {
+	t.Setenv("FOOD_IMAGE_VISION_API_KEY", "explicit-key")
+	opts := options{}
+	require.NoError(t, applyVisionRuntimeConfig(&opts, config.ExternalConfig{
+		DashScopeAPIKey:  "project-key",
+		DashScopeBaseURL: "https://project.example.com/v1",
+	}, true, true))
+	assert.Equal(t, "explicit-key", os.Getenv("FOOD_IMAGE_VISION_API_KEY"))
+	assert.Empty(t, opts.dashscopeBaseURL)
 }
 
 func TestPickQwenFlashModel(t *testing.T) {
@@ -72,7 +96,7 @@ func TestCandidateQueriesDedup(t *testing.T) {
 		seen[q] = true
 	}
 	assert.Equal(t, "苹果", queries[0])
-	assert.Equal(t, "苹果 美食", queries[1])
+	assert.Equal(t, "苹果 高清 无水印 实拍", queries[1])
 }
 
 func TestLooksLikeImageURL(t *testing.T) {

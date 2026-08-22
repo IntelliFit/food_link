@@ -302,7 +302,14 @@ func loadReviewedCandidates(opts options) ([]reviewedCandidate, error) {
 
 func verifyAndApplyReviewedImage(ctx context.Context, db *gorm.DB, storageClient *storage.Client, client *visionClient, opts options, entry reviewedImageEntry) reviewedImageEntry {
 	entry.ProcessedAt = time.Now()
-	img, err := downloadCandidateHTTP(ctx, imageCandidate{ImageURL: entry.CandidateURL}, "")
+	// Missing-image candidates originate from Bing search. Preserve the same
+	// browser headers and referer during the fresh verification pass; several
+	// source CDNs reject an otherwise identical second download without them.
+	imageSearch := ""
+	if entry.Kind == reviewedKindMissing {
+		imageSearch = "bing"
+	}
+	img, err := downloadCandidateHTTP(ctx, imageCandidate{ImageURL: entry.CandidateURL}, imageSearch)
 	if err != nil {
 		entry.Status, entry.Reason = "candidate_download_failed", err.Error()
 		return entry
