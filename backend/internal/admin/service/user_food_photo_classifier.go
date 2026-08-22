@@ -37,15 +37,13 @@ var photoRankingLabelMarkers = map[string][]string{
 		"薯片", "薯条", "饼干", "曲奇", "威化", "糖果", "巧克力", "辣条", "果冻", "布丁",
 		"坚果", "瓜子", "花生", "开心果", "腰果", "杏仁", "核桃", "碧根果", "夏威夷果",
 		"话梅", "果脯", "蜜饯", "肉脯", "肉干", "海苔", "爆米花", "锅巴", "虾条", "雪饼", "仙贝",
+		"蛋糕", "面包", "吐司", "甜甜圈", "泡芙", "蛋挞", "马卡龙", "冰淇淋", "冰激凌",
+		"雪糕", "慕斯", "芝士", "奶油", "华夫饼", "松饼", "可颂", "甜品",
 	},
 	"beverage": {
 		"饮料", "奶茶", "咖啡", "果汁", "豆浆", "酸奶", "牛奶", "汽水", "可乐", "苏打水",
 		"橙汁", "苹果汁", "葡萄汁", "西瓜汁", "甘蔗汁", "梨汁", "柠檬汁", "芒果汁", "椰子水",
 		"气泡水", "椰汁", "椰奶", "茶饮", "啤酒", "红酒", "白酒", "鸡尾酒", "冰沙", "奶昔",
-	},
-	"dessert": {
-		"蛋糕", "面包", "吐司", "甜甜圈", "泡芙", "蛋挞", "马卡龙", "冰淇淋", "冰激凌",
-		"雪糕", "慕斯", "芝士", "奶油", "布丁", "曲奇", "华夫饼", "松饼", "可颂", "甜品",
 	},
 	"takeout": {
 		"外卖", "配送餐", "打包盒", "一次性餐盒", "外卖盒", "外带", "takeaway", "delivery",
@@ -91,9 +89,6 @@ func ClassifyUserFoodPhotoForRanking(photo repo.UserFoodPhoto) UserFoodPhotoClas
 		if containsAny(text, markers) {
 			labels = append(labels, label)
 		}
-	}
-	if strings.Contains(taskType, "packaged_product_extract") || photo.SourceType == "packaged_correction" {
-		labels = append(labels, "packaged_food")
 	}
 	labels = uniqueSortedStrings(labels)
 	return UserFoodPhotoClassification{ReviewStatus: "kept", Labels: labels}

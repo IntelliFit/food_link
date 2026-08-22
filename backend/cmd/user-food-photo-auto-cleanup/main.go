@@ -38,6 +38,7 @@ func main() {
 	apply := flag.Bool("apply", false, "persist annotations; default is dry-run")
 	refreshAutomated := flag.Bool("refresh-automated", false, "recompute records without a manual reviewer")
 	refreshReviewed := flag.Bool("refresh-reviewed", false, "also recompute manually reviewed records; requires --refresh-automated")
+	normalizeLabels := flag.Bool("normalize-labels", false, "merge dessert into snack and remove packaged_food without reclassifying photos")
 	maxPhotos := flag.Int("max", 0, "maximum unannotated photos to classify; 0 means all")
 	timeout := flag.Duration("timeout", 20*time.Minute, "batch timeout")
 	flag.Parse()
@@ -63,6 +64,18 @@ func main() {
 	defer cancel()
 	if err := database.Ping(ctx, db); err != nil {
 		log.Fatalf("数据库 ping 失败: %v", err)
+	}
+	if *normalizeLabels {
+		stats, err := normalizeStoredPhotoLabels(ctx, db, *apply)
+		if err != nil {
+			log.Fatalf("规范化用户食物照片标签失败: %v", err)
+		}
+		fmt.Printf("标签规范化完成: mode=%s total=%d changed=%d dessert_merged=%d packaged_food_removed=%d\n",
+			map[bool]string{false: "dry-run", true: "apply"}[*apply], stats.Total, stats.Changed, stats.DessertMerged, stats.PackagedFoodRemoved)
+		if !*apply {
+			fmt.Println("dry-run only; pass --apply to persist these label changes")
+		}
+		return
 	}
 
 	annotations, stats, err := collectAnnotations(ctx, db, *maxPhotos, *refreshAutomated, *refreshReviewed)

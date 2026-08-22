@@ -11,6 +11,8 @@ import (
 	commonerrors "food_link/backend/internal/common/errors"
 	"food_link/backend/pkg/logger"
 	"food_link/backend/pkg/storage"
+
+	"gorm.io/datatypes"
 )
 
 type UserFoodPhotoRepository interface {
@@ -73,6 +75,9 @@ func (s *UserFoodPhotoService) List(ctx context.Context, input ListUserFoodPhoto
 	}
 	for i := range result.Items {
 		item := &result.Items[i]
+		if normalized, valid := NormalizeUserFoodPhotoLabels([]string(item.AnnotationLabels)); valid {
+			item.AnnotationLabels = datatypes.NewJSONSlice(normalized)
+		}
 		if s.storage == nil {
 			item.ImageURL = item.ImagePath
 			item.ThumbnailURL = item.ImagePath
@@ -95,7 +100,7 @@ type SaveUserFoodPhotoAnnotationInput struct {
 
 var userFoodPhotoLabels = map[string]struct{}{
 	"snack": {}, "fruit": {}, "takeout": {}, "home_cooked": {},
-	"restaurant": {}, "beverage": {}, "dessert": {}, "packaged_food": {},
+	"restaurant": {}, "beverage": {},
 }
 
 var userFoodPhotoExclusionReasons = map[string]struct{}{
@@ -114,20 +119,10 @@ func (s *UserFoodPhotoService) SaveAnnotation(ctx context.Context, input SaveUse
 	if input.ReviewStatus != "pending" && input.ReviewStatus != "kept" && input.ReviewStatus != "excluded" {
 		return nil, badUserFoodPhotoAnnotationRequest("清洗状态无效")
 	}
-	labels := make([]string, 0, len(input.Labels))
-	seen := make(map[string]struct{}, len(input.Labels))
-	for _, raw := range input.Labels {
-		label := strings.TrimSpace(raw)
-		if _, ok := userFoodPhotoLabels[label]; !ok {
-			return nil, badUserFoodPhotoAnnotationRequest("包含不支持的食物标签")
-		}
-		if _, ok := seen[label]; ok {
-			continue
-		}
-		seen[label] = struct{}{}
-		labels = append(labels, label)
+	labels, validLabels := NormalizeUserFoodPhotoLabels(input.Labels)
+	if !validLabels {
+		return nil, badUserFoodPhotoAnnotationRequest("包含不支持的食物标签")
 	}
-	sort.Strings(labels)
 	if input.ReviewStatus == "excluded" {
 		if _, ok := userFoodPhotoExclusionReasons[input.ExclusionReason]; !ok {
 			return nil, badUserFoodPhotoAnnotationRequest("排除图片时必须选择有效原因")
@@ -146,6 +141,32 @@ func (s *UserFoodPhotoService) SaveAnnotation(ctx context.Context, input SaveUse
 		return nil, err
 	}
 	return item, nil
+}
+
+// NormalizeUserFoodPhotoLabels keeps the ranking taxonomy canonical while
+// accepting the two retired values from stale Admin clients and stored rows.
+func NormalizeUserFoodPhotoLabels(rawLabels []string) ([]string, bool) {
+	labels := make([]string, 0, len(rawLabels))
+	seen := make(map[string]struct{}, len(rawLabels))
+	for _, raw := range rawLabels {
+		label := strings.TrimSpace(raw)
+		switch label {
+		case "dessert":
+			label = "snack"
+		case "packaged_food":
+			continue
+		}
+		if _, ok := userFoodPhotoLabels[label]; !ok {
+			return nil, false
+		}
+		if _, ok := seen[label]; ok {
+			continue
+		}
+		seen[label] = struct{}{}
+		labels = append(labels, label)
+	}
+	sort.Strings(labels)
+	return labels, true
 }
 
 func badUserFoodPhotoAnnotationRequest(message string) error {

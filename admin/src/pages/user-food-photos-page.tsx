@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Skeleton } from '@/components/ui/skeleton'
 import { adminRequest, copyText, displayApiBase } from '@/lib/api'
 import { createLatestRequestGate } from '@/lib/latest-request'
-import { recognizedLabelOptions } from '@/lib/photo-annotation'
+import { annotationLabelOptions, recognizedLabelOptions, type AnnotationLabel } from '@/lib/photo-annotation'
 
 type PageProps = {
   onLogout: () => void
@@ -44,7 +44,6 @@ type UserFoodPhoto = {
 }
 
 type AnnotationStatus = 'pending' | 'kept' | 'excluded'
-type AnnotationLabel = 'snack' | 'fruit' | 'takeout' | 'home_cooked' | 'restaurant' | 'beverage' | 'dessert' | 'packaged_food'
 type ExclusionReason = 'non_food' | 'multi_dish_scene' | 'unusable' | 'duplicate' | 'label_or_package_only' | 'other'
 
 type AnnotationResponse = {
@@ -128,17 +127,6 @@ const annotationStatusClasses: Record<AnnotationStatus, string> = {
   kept: 'border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300',
   excluded: 'border-red-300 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300',
 }
-
-const annotationLabelOptions: Array<[AnnotationLabel, string]> = [
-  ['snack', '零食'],
-  ['fruit', '水果'],
-  ['takeout', '外卖'],
-  ['home_cooked', '家常菜'],
-  ['restaurant', '堂食'],
-  ['beverage', '饮品'],
-  ['dessert', '甜品烘焙'],
-  ['packaged_food', '包装食品'],
-]
 
 const exclusionReasonOptions: Array<[ExclusionReason, string]> = [
   ['non_food', '非食物 / 道具 / 截图'],
@@ -592,7 +580,7 @@ function PhotoPreview({ item, saving, onAnnotate, onClose }: {
   )
 }
 
-function FilterSelect({ label, value, onValueChange, options }: { label: string; value: string; onValueChange: (value: string) => void; options: Array<[string, string]> }) {
+function FilterSelect({ label, value, onValueChange, options }: { label: string; value: string; onValueChange: (value: string) => void; options: ReadonlyArray<readonly [string, string]> }) {
   return (
     <div className='space-y-2'>
       <Label>{label}</Label>

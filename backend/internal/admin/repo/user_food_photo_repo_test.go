@@ -358,8 +358,9 @@ func TestUserFoodPhotoRepoUpsertsAndFiltersAnnotations(t *testing.T) {
 	require.NoError(t, repo.db.Exec(`
 		INSERT INTO analysis_tasks (id, user_id, task_type, status, image_url, payload, created_at)
 		VALUES ('task-fruit', 'user-1', 'food', 'done', 'fruit.jpg', '{}', ?),
-		       ('task-prop', 'user-1', 'food', 'done', 'prop.jpg', '{}', ?)
-	`, now, now).Error)
+		       ('task-prop', 'user-1', 'food', 'done', 'prop.jpg', '{}', ?),
+		       ('task-dessert', 'user-1', 'food', 'done', 'dessert.jpg', '{}', ?)
+	`, now, now, now).Error)
 
 	kept, err := repo.UpsertAnnotation(context.Background(), UpsertUserFoodPhotoAnnotationInput{
 		UserID: "user-1", ImagePath: "fruit.jpg", ReviewStatus: "kept", Labels: []string{"fruit"}, ReviewedBy: "admin-1",
@@ -372,6 +373,10 @@ func TestUserFoodPhotoRepoUpsertsAndFiltersAnnotations(t *testing.T) {
 		UserID: "user-1", ImagePath: "prop.jpg", ReviewStatus: "excluded", ExclusionReason: "non_food", ReviewedBy: "admin-1",
 	})
 	require.NoError(t, err)
+	_, err = repo.UpsertAnnotation(context.Background(), UpsertUserFoodPhotoAnnotationInput{
+		UserID: "user-1", ImagePath: "dessert.jpg", ReviewStatus: "kept", Labels: []string{"dessert"}, ReviewedBy: "admin-1",
+	})
+	require.NoError(t, err)
 
 	fruit, err := repo.List(context.Background(), ListUserFoodPhotoInput{AnnotationStatus: "kept", AnnotationLabel: "fruit", Limit: 20})
 	require.NoError(t, err)
@@ -379,6 +384,11 @@ func TestUserFoodPhotoRepoUpsertsAndFiltersAnnotations(t *testing.T) {
 	assert.Equal(t, "fruit.jpg", fruit.Items[0].ImagePath)
 	assert.Equal(t, "kept", fruit.Items[0].AnnotationStatus)
 	assert.Equal(t, []string{"fruit"}, []string(fruit.Items[0].AnnotationLabels))
+
+	snacks, err := repo.List(context.Background(), ListUserFoodPhotoInput{AnnotationStatus: "kept", AnnotationLabel: "snack", Limit: 20})
+	require.NoError(t, err)
+	require.Len(t, snacks.Items, 1)
+	assert.Equal(t, "dessert.jpg", snacks.Items[0].ImagePath)
 
 	excluded, err := repo.List(context.Background(), ListUserFoodPhotoInput{AnnotationStatus: "excluded", Limit: 20})
 	require.NoError(t, err)

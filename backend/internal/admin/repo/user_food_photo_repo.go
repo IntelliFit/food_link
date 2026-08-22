@@ -689,9 +689,18 @@ func buildUserFoodPhotoFilters(input ListUserFoodPhotoInput) (string, []any) {
 		args = append(args, annotationStatus)
 	}
 	if label := strings.TrimSpace(input.AnnotationLabel); label != "" && label != "all" {
-		conditions = append(conditions, "photos.annotation_labels @> ?::jsonb")
-		encoded, _ := json.Marshal([]string{label})
-		args = append(args, string(encoded))
+		if label == "snack" || label == "dessert" {
+			conditions = append(conditions, "(photos.annotation_labels @> ?::jsonb OR photos.annotation_labels @> ?::jsonb)")
+			snack, _ := json.Marshal([]string{"snack"})
+			dessert, _ := json.Marshal([]string{"dessert"})
+			args = append(args, string(snack), string(dessert))
+		} else if label == "packaged_food" {
+			conditions = append(conditions, "FALSE")
+		} else {
+			conditions = append(conditions, "photos.annotation_labels @> ?::jsonb")
+			encoded, _ := json.Marshal([]string{label})
+			args = append(args, string(encoded))
+		}
 	}
 	return "WHERE " + strings.Join(conditions, " AND "), args
 }

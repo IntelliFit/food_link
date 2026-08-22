@@ -1,7 +1,13 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { recognizedLabelOptions } from '../src/lib/photo-annotation.ts'
+import { annotationLabelOptions, recognizedLabelOptions } from '../src/lib/photo-annotation.ts'
+
+test('photo annotation taxonomy keeps only ranking labels', () => {
+  assert.deepEqual(annotationLabelOptions.map(([value]) => value), [
+    'snack', 'fruit', 'takeout', 'home_cooked', 'restaurant', 'beverage',
+  ])
+})
 
 test('compact photo cards expose only recognized food labels', () => {
   const options: Array<['snack' | 'fruit' | 'beverage', string]> = [

@@ -27,6 +27,20 @@ func TestClassifyUserFoodPhotoForRanking(t *testing.T) {
 			status: "kept", labels: []string{"beverage", "fruit", "home_cooked", "snack"},
 		},
 		{
+			name:   "merges baked desserts into snack",
+			photo:  photoWithNutrition("奶油蛋糕", "蛋糕"),
+			status: "kept", labels: []string{"snack"},
+		},
+		{
+			name: "does not add a packaged food label",
+			photo: func() repo.UserFoodPhoto {
+				photo := photoWithNutrition("袋装薯片", "薯片")
+				photo.SourceType = "packaged_correction"
+				return photo
+			}(),
+			status: "kept", labels: []string{"snack"},
+		},
+		{
 			name: "adds takeout only from explicit context",
 			photo: func() repo.UserFoodPhoto {
 				photo := photoWithNutrition("外卖盒中的牛肉饭", "牛肉饭")

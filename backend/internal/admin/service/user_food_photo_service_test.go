@@ -10,6 +10,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/datatypes"
 )
 
 type fakeUserFoodPhotoReader struct {
@@ -30,8 +31,9 @@ func (f *fakeUserFoodPhotoReader) List(_ context.Context, input repo.ListUserFoo
 
 func TestUserFoodPhotoServiceListPaginatesAndResolvesImages(t *testing.T) {
 	reader := &fakeUserFoodPhotoReader{items: []repo.UserFoodPhoto{{
-		ImagePath:  "users/u1/meal.jpg",
-		UserAvatar: "avatars/u1.jpg",
+		ImagePath:        "users/u1/meal.jpg",
+		UserAvatar:       "avatars/u1.jpg",
+		AnnotationLabels: datatypes.NewJSONSlice([]string{"dessert", "packaged_food"}),
 	}}}
 	storageClient := storage.New(config.StorageConfig{
 		CDNFoodImagesBaseURL:  "https://food.example.com",
@@ -54,6 +56,7 @@ func TestUserFoodPhotoServiceListPaginatesAndResolvesImages(t *testing.T) {
 	assert.Equal(t, "https://food.example.com/users/u1/meal.jpg", result.Items[0].ImageURL)
 	assert.Contains(t, result.Items[0].ThumbnailURL, "https://food.example.com/users/u1/meal.jpg")
 	assert.Equal(t, "https://avatar.example.com/avatars/u1.jpg", result.Items[0].UserAvatar)
+	assert.Equal(t, []string{"snack"}, []string(result.Items[0].AnnotationLabels))
 }
 
 func TestUserFoodPhotoServiceListCapsPageSize(t *testing.T) {
@@ -73,12 +76,12 @@ func TestUserFoodPhotoServiceSaveAnnotationNormalizesLabels(t *testing.T) {
 
 	item, err := svc.SaveAnnotation(context.Background(), SaveUserFoodPhotoAnnotationInput{
 		UserID: " user-1 ", ImageKey: " meal.jpg ", ReviewStatus: "kept",
-		Labels: []string{"takeout", "fruit", "takeout"}, ExclusionReason: "non_food",
+		Labels: []string{"takeout", "fruit", "takeout", "dessert", "packaged_food"}, ExclusionReason: "non_food",
 	}, "admin-1")
 
 	require.NoError(t, err)
 	assert.Equal(t, "kept", item.ReviewStatus)
-	assert.Equal(t, []string{"fruit", "takeout"}, repository.annotationInput.Labels)
+	assert.Equal(t, []string{"fruit", "snack", "takeout"}, repository.annotationInput.Labels)
 	assert.Empty(t, repository.annotationInput.ExclusionReason)
 }
 
