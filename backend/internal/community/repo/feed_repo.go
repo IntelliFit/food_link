@@ -687,6 +687,17 @@ func (r *FeedRepo) GetFoodNutrientRanking(ctx context.Context, nutrient string, 
 }
 
 func (r *FeedRepo) getProteinFoodRanking(ctx context.Context, column string, limit int) ([]NutrientFoodRow, error) {
+	const familyCase = `CASE
+		WHEN canonical_name ~ '金枪鱼' THEN 'tuna'
+		WHEN canonical_name ~ '鸡胸|^鸡肉' THEN 'chicken'
+		WHEN canonical_name ~ '^牛肉' THEN 'beef'
+		WHEN canonical_name ~ '猪里脊' THEN 'pork_tenderloin'
+		WHEN canonical_name ~ '虾仁|^虾($|[（(，,])' THEN 'shrimp'
+		WHEN canonical_name ~ '三文鱼' THEN 'salmon'
+		WHEN canonical_name ~ '^鸡蛋($|[（(，,])' THEN 'egg'
+		WHEN canonical_name ~ '^豆腐($|[（(，,])' THEN 'tofu'
+		WHEN canonical_name ~ '^牛奶($|[（(，,])' THEN 'milk'
+	END`
 	const displayNameCase = `CASE
 		WHEN canonical_name ~ '金枪鱼' THEN '金枪鱼'
 		WHEN canonical_name ~ '鸡胸' THEN '鸡胸肉'
@@ -702,7 +713,7 @@ func (r *FeedRepo) getProteinFoodRanking(ctx context.Context, column string, lim
 	END`
 	query := fmt.Sprintf(`
 		WITH candidates AS (
-			SELECT id, canonical_name AS source_name, %s AS name, image_path, %s AS value
+			SELECT id, canonical_name AS source_name, %s AS family, %s AS name, image_path, %s AS value
 			FROM food_nutrition_library
 			WHERE is_active = TRUE
 				AND kcal_per_100g > 0
@@ -711,17 +722,17 @@ func (r *FeedRepo) getProteinFoodRanking(ctx context.Context, column string, lim
 		), ranked AS (
 			SELECT id, name, image_path, value,
 				ROW_NUMBER() OVER (
-					PARTITION BY name
+					PARTITION BY family
 					ORDER BY value DESC, CHAR_LENGTH(source_name), source_name ASC, id ASC
 				) AS family_rank
 			FROM candidates
-			WHERE name IS NOT NULL
+			WHERE family IS NOT NULL AND name IS NOT NULL
 		)
 		SELECT id, name, image_path, value
 		FROM ranked
 		WHERE family_rank = 1
 		ORDER BY value DESC, name ASC
-		LIMIT ?`, displayNameCase, column, column)
+		LIMIT ?`, familyCase, displayNameCase, column, column)
 
 	var rows []NutrientFoodRow
 	err := r.db.WithContext(ctx).Raw(query, limit).Scan(&rows).Error

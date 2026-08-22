@@ -288,16 +288,25 @@ func TestFeedRepoGetFoodNutrientRanking(t *testing.T) {
 		('f6', '乳清蛋白粉', true, 'authoritative', 390, 78.4),
 		('f7', '鸡蛋（全蛋）', true, 'unreviewed', 144, 12.7),
 		('f8', '鸡蛋（煮）', true, 'authoritative', 155, 13.1),
-		('f9', '鸡胸肉干', true, 'authoritative', 280, 46.5)`).Error)
+		('f9', '鸡胸肉干', true, 'authoritative', 280, 46.5),
+		('f10', '鸡肉（熟）', true, 'authoritative', 190, 15.2),
+		('f11', '虾', true, 'authoritative', 99, 20.1),
+		('f12', '虾仁', true, 'authoritative', 120, 43.7)`).Error)
 
 	rows, err := NewFeedRepo(db).GetFoodNutrientRanking(context.Background(), "protein", 10)
 
 	assert.NoError(t, err)
-	assert.Len(t, rows, 3)
-	assert.Equal(t, "金枪鱼", rows[0].Name)
-	assert.Equal(t, 29.0, rows[0].Value)
-	assert.Equal(t, "鸡胸肉", rows[1].Name)
-	assert.Equal(t, 28.8, rows[1].Value)
-	assert.Equal(t, "鸡蛋", rows[2].Name)
-	assert.Equal(t, 13.1, rows[2].Value)
+	assert.Len(t, rows, 4)
+	assert.Equal(t, "虾仁", rows[0].Name)
+	assert.Equal(t, 43.7, rows[0].Value)
+	assert.Equal(t, "金枪鱼", rows[1].Name)
+	assert.Equal(t, 29.0, rows[1].Value)
+	assert.Equal(t, "鸡胸肉", rows[2].Name)
+	assert.Equal(t, 28.8, rows[2].Value)
+	assert.Equal(t, "鸡蛋", rows[3].Name)
+	assert.Equal(t, 13.1, rows[3].Value)
+	for _, row := range rows {
+		assert.NotEqual(t, "鸡肉", row.Name)
+		assert.NotEqual(t, "虾", row.Name)
+	}
 }
