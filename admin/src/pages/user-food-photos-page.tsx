@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Ban, CheckCircle2, Copy, ExternalLink, ImageOff, Images, Loader2, RefreshCw, Search, X } from 'lucide-react'
 import { useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -12,6 +12,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { adminRequest, copyText, displayApiBase } from '@/lib/api'
+import { createLatestRequestGate } from '@/lib/latest-request'
 
 type PageProps = {
   onLogout: () => void
@@ -172,12 +173,16 @@ export function UserFoodPhotosPage({ onLogout, onMenuChange }: PageProps) {
   const [searchNonce, setSearchNonce] = useState(0)
   const [preview, setPreview] = useState<UserFoodPhoto | null>(null)
   const [savingAnnotationKey, setSavingAnnotationKey] = useState('')
+  const requestGateRef = useRef<ReturnType<typeof createLatestRequestGate> | null>(null)
+  if (!requestGateRef.current) requestGateRef.current = createLatestRequestGate()
   const totalPages = Math.max(1, Math.ceil(total / limit))
 
   useEffect(() => {
     void loadPhotos()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, limit, source, status, circleVisibility, annotationStatus, annotationLabel, sortBy, sortOrder, searchNonce])
+
+  useEffect(() => () => requestGateRef.current?.dispose(), [])
 
   useEffect(() => {
     const params = new URLSearchParams()
@@ -205,6 +210,8 @@ export function UserFoodPhotosPage({ onLogout, onMenuChange }: PageProps) {
   }, [preview])
 
   async function loadPhotos(nextPage = page) {
+    const requestGate = requestGateRef.current!
+    const request = requestGate.begin()
     setLoading(true)
     try {
       const params = new URLSearchParams({
@@ -219,16 +226,21 @@ export function UserFoodPhotosPage({ onLogout, onMenuChange }: PageProps) {
         page: String(nextPage),
         limit: String(limit),
       })
-      const data = await adminRequest<ListResponse>(`/api/admin/user-food-photos?${params.toString()}`)
+      const data = await adminRequest<ListResponse>(`/api/admin/user-food-photos?${params.toString()}`, {
+        cache: 'no-store',
+        signal: request.signal,
+      })
+      if (!requestGate.isLatest(request.id)) return
       setItems(data.items || [])
       setTotal(data.total || 0)
       setPage(data.page || nextPage)
     } catch (error) {
+      if (!requestGate.isLatest(request.id) || request.signal.aborted) return
       setItems([])
       setTotal(0)
       toast.error(error instanceof Error ? error.message : '照片读取失败')
     } finally {
-      setLoading(false)
+      if (requestGate.isLatest(request.id)) setLoading(false)
     }
   }
 
