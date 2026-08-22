@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Skeleton } from '@/components/ui/skeleton'
 import { adminRequest, copyText, displayApiBase } from '@/lib/api'
 import { createLatestRequestGate } from '@/lib/latest-request'
+import { recognizedLabelOptions } from '@/lib/photo-annotation'
 
 type PageProps = {
   onLogout: () => void
@@ -474,9 +475,28 @@ function AnnotationControls({ item, saving, onAnnotate, compact = false }: {
   compact?: boolean
 }) {
   const labels = item.annotation_labels || []
+  const recognizedLabels = recognizedLabelOptions(labels, annotationLabelOptions)
   function toggleLabel(label: AnnotationLabel) {
     const nextLabels = labels.includes(label) ? labels.filter((itemLabel) => itemLabel !== label) : [...labels, label]
     onAnnotate('kept', nextLabels)
+  }
+  if (compact) {
+    return (
+      <div className='flex min-h-5 flex-wrap items-center gap-1'>
+        <Badge variant='outline' className={`h-5 rounded-full px-1.5 text-[10px] leading-none ${annotationStatusClasses[item.annotation_status]}`}>
+          {saving ? <Loader2 className='mr-1 size-2.5 animate-spin' /> : null}
+          {annotationStatusLabels[item.annotation_status]}
+        </Badge>
+        {item.annotation_status === 'kept' ? recognizedLabels.map(([value, label]) => (
+          <Badge key={value} variant='outline' className='h-5 rounded-full border-primary/30 bg-primary/10 px-1.5 text-[10px] leading-none text-primary'>
+            {label}
+          </Badge>
+        )) : null}
+        {item.annotation_status === 'excluded' && item.exclusion_reason ? (
+          <span className='truncate text-[10px] text-muted-foreground'>{exclusionReasonNames[item.exclusion_reason]}</span>
+        ) : null}
+      </div>
+    )
   }
   return (
     <div className='space-y-2.5 rounded-lg border bg-muted/20 p-3'>
@@ -496,7 +516,7 @@ function AnnotationControls({ item, saving, onAnnotate, compact = false }: {
             type='button'
             variant={labels.includes(value) && item.annotation_status === 'kept' ? 'default' : 'outline'}
             size='sm'
-            className={compact ? 'h-7 px-2 text-[11px]' : 'h-8 text-xs'}
+            className='h-8 text-xs'
             disabled={saving}
             aria-pressed={labels.includes(value)}
             onClick={() => toggleLabel(value)}
