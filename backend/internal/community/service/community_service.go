@@ -93,7 +93,7 @@ type BlockChecker interface {
 }
 
 type HealthScoreProvider interface {
-	GetOverallHealthIndexScore(ctx context.Context, userID, statsRange string) (score int, recordedDays int, eligible bool, err error)
+	GetWeeklyHealthLeaderboardScore(ctx context.Context, userID string) (score float64, recordedDays int, dietQualityPoints, continuityPoints, stabilityPoints float64, eligible bool, err error)
 }
 
 type ReportNotifier interface {
@@ -261,19 +261,33 @@ type LeaderboardResult struct {
 }
 
 type HealthLeaderboardItem struct {
-	UserID       string `json:"user_id"`
-	Nickname     string `json:"nickname"`
-	Avatar       string `json:"avatar"`
-	HealthIndex  int    `json:"health_index"`
-	RecordedDays int    `json:"recorded_days"`
-	IsMe         bool   `json:"is_me"`
-	Rank         int    `json:"rank"`
+	UserID            string   `json:"user_id"`
+	Nickname          string   `json:"nickname"`
+	Avatar            string   `json:"avatar"`
+	HealthIndex       float64  `json:"health_index"`
+	RecordedDays      int      `json:"recorded_days"`
+	DietQualityPoints *float64 `json:"diet_quality_points,omitempty"`
+	ContinuityPoints  *float64 `json:"continuity_points,omitempty"`
+	StabilityPoints   *float64 `json:"stability_points,omitempty"`
+	IsMe              bool     `json:"is_me"`
+	Rank              int      `json:"rank"`
+}
+
+type HealthLeaderboardScoringRule struct {
+	Label                 string `json:"label"`
+	TotalPoints           int    `json:"total_points"`
+	DietQualityPoints     int    `json:"diet_quality_points"`
+	ContinuityPoints      int    `json:"continuity_points"`
+	StabilityPoints       int    `json:"stability_points"`
+	MinimumRecordedDays   int    `json:"minimum_recorded_days"`
+	ContinuityDescription string `json:"continuity_description"`
 }
 
 type HealthLeaderboardResult struct {
-	WeekStart string                  `json:"week_start"`
-	WeekEnd   string                  `json:"week_end"`
-	List      []HealthLeaderboardItem `json:"list"`
+	WeekStart   string                       `json:"week_start"`
+	WeekEnd     string                       `json:"week_end"`
+	ScoringRule HealthLeaderboardScoringRule `json:"scoring_rule"`
+	List        []HealthLeaderboardItem      `json:"list"`
 }
 
 type FoodNutrientLeaderboardItem struct {
@@ -1022,10 +1036,13 @@ func (s *CommunityService) HealthLeaderboard(ctx context.Context, viewerUserID s
 		return nil, err
 	}
 	type healthScoreOutcome struct {
-		score        int
-		recordedDays int
-		eligible     bool
-		err          error
+		score             float64
+		recordedDays      int
+		dietQualityPoints float64
+		continuityPoints  float64
+		stabilityPoints   float64
+		eligible          bool
+		err               error
 	}
 	outcomes := make([]healthScoreOutcome, len(authorIDs))
 	jobs := make(chan int)
@@ -1039,8 +1056,12 @@ func (s *CommunityService) HealthLeaderboard(ctx context.Context, viewerUserID s
 		go func() {
 			defer workers.Done()
 			for index := range jobs {
-				score, recordedDays, eligible, scoreErr := s.healthScoreProvider.GetOverallHealthIndexScore(ctx, authorIDs[index], "calendar_week")
-				outcomes[index] = healthScoreOutcome{score: score, recordedDays: recordedDays, eligible: eligible, err: scoreErr}
+				score, recordedDays, dietQualityPoints, continuityPoints, stabilityPoints, eligible, scoreErr := s.healthScoreProvider.GetWeeklyHealthLeaderboardScore(ctx, authorIDs[index])
+				outcomes[index] = healthScoreOutcome{
+					score: score, recordedDays: recordedDays,
+					dietQualityPoints: dietQualityPoints, continuityPoints: continuityPoints, stabilityPoints: stabilityPoints,
+					eligible: eligible, err: scoreErr,
+				}
 			}
 		}()
 	}
@@ -1068,10 +1089,16 @@ func (s *CommunityService) HealthLeaderboard(ctx context.Context, viewerUserID s
 			}
 			avatar = s.resolveAvatarURL(profile.Avatar)
 		}
-		items = append(items, HealthLeaderboardItem{
+		item := HealthLeaderboardItem{
 			UserID: userID, Nickname: nickname, Avatar: avatar,
 			HealthIndex: outcome.score, RecordedDays: outcome.recordedDays, IsMe: userID == viewerUserID,
-		})
+		}
+		if item.IsMe {
+			item.DietQualityPoints = float64Ptr(outcome.dietQualityPoints)
+			item.ContinuityPoints = float64Ptr(outcome.continuityPoints)
+			item.StabilityPoints = float64Ptr(outcome.stabilityPoints)
+		}
+		items = append(items, item)
 	}
 	sort.Slice(items, func(i, j int) bool {
 		if items[i].HealthIndex != items[j].HealthIndex {
@@ -1085,7 +1112,20 @@ func (s *CommunityService) HealthLeaderboard(ctx context.Context, viewerUserID s
 	for index := range items {
 		items[index].Rank = index + 1
 	}
-	result := &HealthLeaderboardResult{WeekStart: weekStart, WeekEnd: weekEnd, List: items}
+	result := &HealthLeaderboardResult{
+		WeekStart: weekStart,
+		WeekEnd:   weekEnd,
+		ScoringRule: HealthLeaderboardScoringRule{
+			Label:                 "本周健康饮食分",
+			TotalPoints:           100,
+			DietQualityPoints:     75,
+			ContinuityPoints:      15,
+			StabilityPoints:       10,
+			MinimumRecordedDays:   4,
+			ContinuityDescription: "按本周已过去天数计算",
+		},
+		List: items,
+	}
 	healthLeaderboardCache.Store(cacheKey, healthLeaderboardCacheEntry{result: result, expiresAt: time.Now().Add(5 * time.Minute)})
 	return result, nil
 }
@@ -1894,6 +1934,10 @@ func (s *CommunityService) normalizeCirclePostImageURLs(userID string, imageURLs
 
 func timePtr(t time.Time) *time.Time {
 	return &t
+}
+
+func float64Ptr(value float64) *float64 {
+	return &value
 }
 
 func stringPtrOrNil(s string) *string {

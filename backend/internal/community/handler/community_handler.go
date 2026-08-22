@@ -101,14 +101,14 @@ func (h *CommunityHandler) CheckinLeaderboard(c *gin.Context) {
 
 func (h *CommunityHandler) HealthLeaderboard(c *gin.Context) {
 	userID := c.GetString(authmw.ContextUserIDKey)
-	logger.Info(c.Request.Context(), "进入好友健康指数排行榜", slog.String("user_id", userID))
+	logger.Info(c.Request.Context(), "进入好友健康饮食排行榜", slog.String("user_id", userID))
 	result, err := h.svc.HealthLeaderboard(c.Request.Context(), userID)
 	if err != nil {
-		logger.Error(c.Request.Context(), "获取好友健康指数排行榜失败", err, slog.String("user_id", userID))
+		logger.Error(c.Request.Context(), "获取好友健康饮食排行榜失败", err, slog.String("user_id", userID))
 		response.Error(c, err)
 		return
 	}
-	logger.Info(c.Request.Context(), "完成好友健康指数排行榜", slog.String("user_id", userID), slog.Int("user_count", len(result.List)))
+	logger.Info(c.Request.Context(), "完成好友健康饮食排行榜", slog.String("user_id", userID), slog.Int("user_count", len(result.List)))
 	response.Success(c, result)
 }
 

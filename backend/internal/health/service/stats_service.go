@@ -444,15 +444,67 @@ func (s *StatsService) GetSummary(ctx context.Context, userID string, statsRange
 	}, nil
 }
 
-// GetOverallHealthIndexScore exposes the same aggregate score used by the
-// Analysis page without generating AI copy or maintaining a second formula.
-func (s *StatsService) GetOverallHealthIndexScore(ctx context.Context, userID, statsRange string) (int, int, bool, error) {
-	comp, err := s.buildStatsComputation(ctx, userID, statsRange, 0, 0)
-	if err != nil {
-		return 0, 0, false, err
+const healthLeaderboardMinRecordedDays = 4
+
+type weeklyHealthLeaderboardScore struct {
+	Score             float64
+	RecordedDays      int
+	DietQualityPoints float64
+	ContinuityPoints  float64
+	StabilityPoints   float64
+	Eligible          bool
+}
+
+func computeWeeklyHealthLeaderboardScore(comp *statsComputation, overallScore int, now time.Time) weeklyHealthLeaderboardScore {
+	if comp == nil {
+		return weeklyHealthLeaderboardScore{}
 	}
-	index := computeHealthIndex(comp, statsRange)
-	return index.OverallScore, comp.RecordedDays, index.HasEnoughData, nil
+
+	dietQualityPoints := round1(math.Max(0, math.Min(100, float64(overallScore))) * 0.75)
+	elapsedDays := (int(now.In(chinaTZ).Weekday())+6)%7 + 1
+	continuityRatio := math.Min(float64(comp.RecordedDays)/float64(elapsedDays), 1)
+	continuityPoints := round1(continuityRatio * 15)
+
+	stabilityPoints := 0.0
+	if len(comp.RecordedDaily) > 0 {
+		mean := 0.0
+		for _, day := range comp.RecordedDaily {
+			mean += day.Calories
+		}
+		mean /= float64(len(comp.RecordedDaily))
+		if mean > 0 {
+			variance := 0.0
+			for _, day := range comp.RecordedDaily {
+				delta := day.Calories - mean
+				variance += delta * delta
+			}
+			variance /= float64(len(comp.RecordedDaily))
+			coefficientOfVariation := math.Sqrt(variance) / mean
+			stabilityPoints = round1(math.Max(0, 10*(1-coefficientOfVariation)))
+		}
+	}
+
+	return weeklyHealthLeaderboardScore{
+		Score:             round1(dietQualityPoints + continuityPoints + stabilityPoints),
+		RecordedDays:      comp.RecordedDays,
+		DietQualityPoints: dietQualityPoints,
+		ContinuityPoints:  continuityPoints,
+		StabilityPoints:   stabilityPoints,
+		Eligible:          comp.RecordedDays >= healthLeaderboardMinRecordedDays,
+	}
+}
+
+// GetWeeklyHealthLeaderboardScore keeps 75% of the existing dietary-quality
+// signal and uses the remaining 25 points to reward weekly continuity and
+// day-to-day stability. It does not generate AI copy.
+func (s *StatsService) GetWeeklyHealthLeaderboardScore(ctx context.Context, userID string) (score float64, recordedDays int, dietQualityPoints, continuityPoints, stabilityPoints float64, eligible bool, err error) {
+	comp, err := s.buildStatsComputation(ctx, userID, "calendar_week", 0, 0)
+	if err != nil {
+		return 0, 0, 0, 0, 0, false, err
+	}
+	index := computeHealthIndex(comp, "calendar_week")
+	result := computeWeeklyHealthLeaderboardScore(comp, index.OverallScore, time.Now())
+	return result.Score, result.RecordedDays, result.DietQualityPoints, result.ContinuityPoints, result.StabilityPoints, result.Eligible, nil
 }
 
 func (s *StatsService) GetCalendarMonth(ctx context.Context, userID, month string, fallbackTDEE int) (*CalendarMonthSummary, error) {

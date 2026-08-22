@@ -6670,7 +6670,20 @@ export interface HealthLeaderboardItem {
   avatar: string
   health_index: number
   recorded_days: number
+  diet_quality_points?: number
+  continuity_points?: number
+  stability_points?: number
   is_me: boolean
+}
+
+export interface HealthLeaderboardScoringRule {
+  label: string
+  total_points: number
+  diet_quality_points: number
+  continuity_points: number
+  stability_points: number
+  minimum_recorded_days: number
+  continuity_description: string
 }
 
 export interface FoodNutrientLeaderboardItem {
@@ -7310,11 +7323,17 @@ export async function communityGetCheckinLeaderboard(): Promise<{
 export async function communityGetHealthLeaderboard(): Promise<{
   week_start: string
   week_end: string
+  scoring_rule: HealthLeaderboardScoringRule
   list: HealthLeaderboardItem[]
 }> {
   const response = await authenticatedRequest('/api/community/health-leaderboard', { method: 'GET' })
   if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '获取健康排行榜失败')
-  return response.data as { week_start: string; week_end: string; list: HealthLeaderboardItem[] }
+  return response.data as {
+    week_start: string
+    week_end: string
+    scoring_rule: HealthLeaderboardScoringRule
+    list: HealthLeaderboardItem[]
+  }
 }
 
 export async function communityGetFoodNutrientLeaderboard(

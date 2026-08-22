@@ -27,11 +27,13 @@ describe('community leaderboard redesign', () => {
     expect(leaderboardSource).toContain('饮食记录榜')
   })
 
-  it('keeps health as one aggregate index and omits scoring instructions', () => {
-    expect(leaderboardSource).toContain('按「分析」页的综合健康指数排名')
-    expect(leaderboardSource).toContain('健康榜')
-    expect(leaderboardSource).not.toContain('计分说明')
-    expect(leaderboardSource).not.toContain('健康指标')
+  it('explains the calibrated weekly healthy-eating score', () => {
+    expect(leaderboardSource).toContain('健康饮食榜')
+    expect(leaderboardSource).toContain('计分说明')
+    expect(leaderboardSource).toContain('饮食质量')
+    expect(leaderboardSource).toContain('记录连续性')
+    expect(leaderboardSource).toContain('日间稳定性')
+    expect(leaderboardSource).toContain('至少记录')
   })
 
   it('provides nutrient rankings on a per-100g basis', () => {
