@@ -54,7 +54,7 @@ func runStats(ctx context.Context, opts options) error {
 	if err != nil {
 		return err
 	}
-	if err := database.Ping(ctx, pinnedDB); err != nil {
+	if err := conn.PingContext(ctx); err != nil {
 		return err
 	}
 	if cfg.Database.Schema != "" {
