@@ -730,10 +730,31 @@ func TestBuildPetChatPromptRequiresGentleTone(t *testing.T) {
 	assert.Contains(t, prompt, "用户完成目标、数据改善或习惯有进步时")
 	assert.Contains(t, prompt, "不要调侃、挖苦、训话、责备")
 	assert.Contains(t, prompt, "避免“你这”“坎儿”“别一口气这么猛”")
-	assert.Contains(t, prompt, "我们可以")
-	assert.Contains(t, prompt, "1-2 个明天可以尝试的小建议")
+	assert.Contains(t, prompt, "短问、事实问答或简短追问通常用 80-180 字")
+	assert.Contains(t, prompt, "默认不使用标题")
+	assert.Contains(t, prompt, "不要模仿历史回复的标题、段落结构、开场白或结尾句")
+	assert.Contains(t, prompt, "只有用户在询问怎么做、要求制定计划")
+	assert.NotContains(t, prompt, "一句话回应")
+	assert.NotContains(t, prompt, "结合记录看")
+	assert.NotContains(t, prompt, "明天一起试试")
 	assert.Contains(t, prompt, "适合聊天气泡的纯文本")
 	assert.Contains(t, prompt, "不要输出 #、*、**、_、反引号")
+}
+
+func TestFallbackPetChatAnswerDoesNotForceTomorrowAction(t *testing.T) {
+	answer := fallbackPetChatAnswer(&statsComputation{
+		StatsRange:        "week",
+		RecordedDays:      2,
+		AvgCaloriesPerDay: 1200,
+		CalSurplusDeficit: -300,
+		TotalProtein:      90,
+		TotalCarbs:        180,
+		TotalFat:          50,
+	}, "最近吃得怎么样？")
+
+	assert.NotContains(t, answer, "你问的是")
+	assert.NotContains(t, answer, "明天可以先做一个小实验")
+	assert.Contains(t, answer, "最近 7 天")
 }
 
 func TestPetChatCompanionUsesSelectedBuiltinPetProfile(t *testing.T) {
