@@ -53,6 +53,9 @@ func AutoMigrate(ctx context.Context, db *gorm.DB, schema string) error {
 	if err := ensureNutritionQualityBackfill(ctx, db); err != nil {
 		return err
 	}
+	if err := ensureUsdaNutrientMappingBackfill(ctx, db); err != nil {
+		return err
+	}
 	if err := ensureCommonFoodStateSeed(ctx, db); err != nil {
 		return err
 	}
@@ -3266,6 +3269,25 @@ WHERE quality_tier = 'unreviewed'
 		if err := db.WithContext(ctx).Exec(statement).Error; err != nil {
 			return fmt.Errorf("backfill nutrition quality tier: %w", err)
 		}
+	}
+	return nil
+}
+
+func ensureUsdaNutrientMappingBackfill(ctx context.Context, db *gorm.DB) error {
+	const mappingVersion = "v2_1114_1177"
+	statement := `UPDATE food_nutrition_library
+SET vitamin_d_mcg_per_100g = 0,
+    folate_mcg_per_100g = 0,
+    quality_evidence = COALESCE(quality_evidence, '{}'::jsonb) || jsonb_build_object(
+      'usda_nutrient_mapping_quarantine', 'legacy_values_cleared',
+      'required_usda_nutrient_mapping_version', CAST(? AS text)
+    ),
+    updated_at = now()
+WHERE source LIKE '美国农业部食物数据中心%'
+  AND COALESCE(quality_evidence->>'usda_nutrient_mapping_version', '') <> ?
+  AND (vitamin_d_mcg_per_100g <> 0 OR folate_mcg_per_100g <> 0)`
+	if err := db.WithContext(ctx).Exec(statement, mappingVersion, mappingVersion).Error; err != nil {
+		return fmt.Errorf("quarantine legacy USDA vitamin D and folate values: %w", err)
 	}
 	return nil
 }
