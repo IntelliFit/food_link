@@ -463,7 +463,7 @@ func buildUserFoodPhotoSort(filteredSQL string, input ListUserFoodPhotoInput) (s
 	}
 	sortBy := strings.TrimSpace(input.SortBy)
 	if sortBy == "" || sortBy == "created_at" {
-		return filteredSQL, "ORDER BY photos.created_at " + direction + ", photos.source_id DESC"
+		return filteredSQL, "ORDER BY photos.created_at " + direction + ", photos.source_id DESC, photos.image_path ASC"
 	}
 	nutrient, ok := userFoodPhotoNutrientSorts[sortBy]
 	if !ok {
