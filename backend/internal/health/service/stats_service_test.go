@@ -561,7 +561,7 @@ func TestStatsService_StreamNutritionInsightRetriesTransientUpstreamFailure(t *t
 		requestCount++
 		var body map[string]any
 		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
-		assert.Equal(t, false, body["enable_thinking"])
+		assert.Equal(t, true, body["enable_thinking"])
 		if requestCount == 1 {
 			http.Error(w, `{"error":{"message":"gateway temporarily unavailable"}}`, http.StatusServiceUnavailable)
 			return
@@ -572,7 +572,7 @@ func TestStatsService_StreamNutritionInsightRetriesTransientUpstreamFailure(t *t
 	defer server.Close()
 
 	svc := NewStatsService(&mockStatsRepo{}, &mockBodyMetricsProvider{})
-	textChan, err := svc.streamNutritionInsight(context.Background(), server.URL, "test-key", "deepseek-v4-pro", "test prompt", statsInsightMaxTokens)
+	textChan, err := svc.streamNutritionInsight(context.Background(), server.URL, "test-key", "deepseek-v4-pro", "test prompt", statsInsightMaxTokens, true)
 	require.NoError(t, err)
 
 	var content strings.Builder

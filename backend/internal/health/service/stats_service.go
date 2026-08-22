@@ -287,10 +287,11 @@ type statsInsightGeneration struct {
 }
 
 type PetChatInput struct {
-	Question   string `json:"question"`
-	Range      string `json:"range"`
-	SessionID  string `json:"session_id"`
-	NewSession bool   `json:"new_session"`
+	Question       string `json:"question"`
+	Range          string `json:"range"`
+	SessionID      string `json:"session_id"`
+	NewSession     bool   `json:"new_session"`
+	EnableThinking bool   `json:"enable_thinking"`
 }
 
 type PetChatEstimateResult struct {
@@ -752,7 +753,7 @@ func (s *StatsService) GeneratePetChat(ctx context.Context, userID string, input
 		)
 		historyMessages = nil
 	}
-	generation, err := s.generatePetChatAnswer(ctx, comp, estimate.Question, historyMessages)
+	generation, err := s.generatePetChatAnswer(ctx, comp, estimate.Question, historyMessages, input.EnableThinking)
 	if err != nil {
 		logger.Warn(ctx, "宠物对话大模型生成失败",
 			logger.UserID(userID),
@@ -853,7 +854,7 @@ func (s *StatsService) GeneratePetChatStream(ctx context.Context, userID string,
 		} else {
 			prompt := buildPetChatPrompt(comp, estimate.Question, historyMessages)
 			modelStarted := time.Now()
-			textChan, err := s.streamNutritionInsight(ctx, baseURL, apiKey, model, prompt, petChatMaxTokens)
+			textChan, err := s.streamNutritionInsight(ctx, baseURL, apiKey, model, prompt, petChatMaxTokens, input.EnableThinking)
 			if err != nil {
 				streamErr = err
 			} else {
@@ -1226,7 +1227,7 @@ func (s *StatsService) SaveInsight(ctx context.Context, userID string, content s
 	return s.repo.UpsertInsightCache(ctx, userID, comp.StatsRange, today, comp.DataFingerprint, sanitizeStatsInsightText(content))
 }
 
-func (s *StatsService) generatePetChatAnswer(ctx context.Context, comp *statsComputation, question string, historyMessages []domain.PetChatMessage) (statsInsightGeneration, error) {
+func (s *StatsService) generatePetChatAnswer(ctx context.Context, comp *statsComputation, question string, historyMessages []domain.PetChatMessage, enableThinking bool) (statsInsightGeneration, error) {
 	llm := s.preferredTextLLM()
 	apiKey := llm.APIKey
 	baseURL := llm.BaseURL
@@ -1239,7 +1240,7 @@ func (s *StatsService) generatePetChatAnswer(ctx context.Context, comp *statsCom
 	var retryFeedback string
 	for attempt := 0; attempt < statsInsightMaxAttempts; attempt++ {
 		generation, err := s.requestNutritionInsight(ctx, baseURL, apiKey, model, prompt, retryFeedback, petChatMaxTokens, map[string]any{
-			"enable_thinking": false,
+			"enable_thinking": enableThinking,
 		})
 		if err != nil {
 			lastErr = err
@@ -1626,14 +1627,14 @@ func isTransientStatsInsightError(err error) bool {
 	return false
 }
 
-func (s *StatsService) streamNutritionInsight(ctx context.Context, baseURL, apiKey, model, prompt string, maxTokens int) (<-chan string, error) {
+func (s *StatsService) streamNutritionInsight(ctx context.Context, baseURL, apiKey, model, prompt string, maxTokens int, enableThinking bool) (<-chan string, error) {
 	body := map[string]any{
 		"model":           model,
 		"messages":        []map[string]string{{"role": "user", "content": prompt}},
 		"temperature":     0.6,
 		"max_tokens":      maxTokens,
 		"stream":          true,
-		"enable_thinking": false,
+		"enable_thinking": enableThinking,
 	}
 	bodyBytes, _ := json.Marshal(body)
 	var resp *http.Response
