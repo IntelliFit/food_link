@@ -67,6 +67,9 @@ import { useAppColorScheme } from '../../components/AppColorSchemeContext'
 import { FlPageThemeRoot } from '../../components/FlPageThemeRoot'
 import { applyThemeNavigationBar } from '../../utils/theme-navigation-bar'
 import { CommunityFoodRecordEditSheet } from './components/CommunityFoodRecordEditSheet'
+import { appendBoundedUnique, getFeedPageRequest, getLatestFeedCursor, type LatestFeedCursor } from '../../utils/list-pagination'
+
+const MAX_FEED_WINDOW_ITEMS = 200
 
 /** 同一条动态、同一回复目标、同一内容在短窗口内视为重复点击 */
 const COMMENT_SEND_DEBOUNCE_MS = 450
@@ -354,6 +357,7 @@ function buildFeedQueryParams(
   authorScope: CommunityAuthorScope,
   priorityAuthorIds: string[],
   authorId?: string,
+  cursor?: LatestFeedCursor | null,
 ) {
   return {
     sort_by: sortBy,
@@ -363,6 +367,8 @@ function buildFeedQueryParams(
     author_scope: authorId ? 'all' : authorScope,
     priority_author_ids: authorId ? undefined : (authorScope === 'priority' ? priorityAuthorIds : undefined),
     author_id: authorId || undefined,
+    before_time: cursor?.before_time,
+    before_key: cursor?.before_key,
   }
 }
 
@@ -397,15 +403,8 @@ function dedupeFeedItems(list: CommunityFeedItem[]): CommunityFeedItem[] {
 function appendUniqueFeedItems(
   existing: CommunityFeedItem[],
   incoming: CommunityFeedItem[]
-): { list: CommunityFeedItem[]; added: number } {
-  const seen = new Set(existing.map(getFeedTargetKey).filter(Boolean))
-  const unique = incoming.filter((item) => {
-    const id = getFeedTargetKey(item)
-    if (!id || seen.has(id)) return false
-    seen.add(id)
-    return true
-  })
-  return { list: [...existing, ...unique], added: unique.length }
+): { list: CommunityFeedItem[]; added: number; reachedLimit: boolean } {
+  return appendBoundedUnique(existing, incoming, (item: CommunityFeedItem) => getFeedTargetKey(item), MAX_FEED_WINDOW_ITEMS)
 }
 
 function getFeedTargetType(item: CommunityFeedItem | null | undefined): CommunityFeedTargetType {
@@ -450,6 +449,7 @@ function CommunityPage() {
   const [requests, setRequests] = useState<FriendRequestItem[]>([])
   const [feedList, setFeedList] = useState<CommunityFeedItem[]>([])
   const feedListRef = useRef<CommunityFeedItem[]>([])
+  const feedCursorRef = useRef<LatestFeedCursor | null>(null)
   const [loadingFriends, setLoadingFriends] = useState(false)
   const [loadingFeed, setLoadingFeed] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
@@ -661,8 +661,9 @@ function CommunityPage() {
         try {
           const parsed = JSON.parse(cachedFeed)
           if (Array.isArray(parsed) && parsed.length > 0) {
-            const list = dedupeFeedItems(parsed)
+            const list = appendUniqueFeedItems([], dedupeFeedItems(parsed)).list
             feedListRef.current = list
+            feedCursorRef.current = getLatestFeedCursor(list)
             offsetRef.current = list.length
             setFeedList(list)
             setOffset(list.length) // 同步更新 offset，确保后续 loadMore 正确
@@ -943,6 +944,7 @@ function CommunityPage() {
 
     try {
       const token = getAccessToken()
+      const pageRequest = getFeedPageRequest(feedSortBy, feedCursorRef.current, 0, true)
       const params = buildFeedQueryParams(
         feedSortBy,
         feedContentType,
@@ -951,6 +953,7 @@ function CommunityPage() {
         token ? feedAuthorScope : 'all',
         priorityAuthorIds,
         feedSearchAuthorId,
+        pageRequest.cursor,
       )
       const requestKey = buildFeedQueryKey(Boolean(token), params)
       feedQueryKeyRef.current = requestKey
@@ -968,6 +971,7 @@ function CommunityPage() {
       if (feedQueryKeyRef.current !== requestKey || feedRequestGenerationRef.current !== requestGeneration) return
 
       feedListRef.current = list
+      feedCursorRef.current = feedSortBy === 'latest' ? getLatestFeedCursor(baseList) : null
       offsetRef.current = list.length
       setFeedList(list)
       setOffset(list.length)
@@ -996,6 +1000,7 @@ function CommunityPage() {
     const requestGeneration = feedRequestGenerationRef.current
     try {
       const token = getAccessToken()
+      const pageRequest = getFeedPageRequest(feedSortBy, feedCursorRef.current, requestedOffset, false)
       const params = buildFeedQueryParams(
         feedSortBy,
         feedContentType,
@@ -1004,14 +1009,15 @@ function CommunityPage() {
         token ? feedAuthorScope : 'all',
         priorityAuthorIds,
         feedSearchAuthorId,
+        pageRequest.cursor,
       )
       const requestKey = buildFeedQueryKey(Boolean(token), params)
       if (!feedQueryKeyRef.current) {
         feedQueryKeyRef.current = requestKey
       }
       const res = token
-        ? await communityGetFeed(undefined, requestedOffset, PAGE_SIZE, true, 5, params)
-        : await communityGetPublicFeed(requestedOffset, PAGE_SIZE, true, 5, params)
+        ? await communityGetFeed(undefined, pageRequest.offset, PAGE_SIZE, true, 5, params)
+        : await communityGetPublicFeed(pageRequest.offset, PAGE_SIZE, true, 5, params)
       const baseList = res.list || []
       const list = dedupeFeedItems(token ? await mergeFeedTempComments(baseList, false) : baseList).map(
         normalizeCommunityFeedItem
@@ -1025,10 +1031,13 @@ function CommunityPage() {
       }
       const merged = appendUniqueFeedItems(feedListRef.current, list)
       feedListRef.current = merged.list
-      offsetRef.current = merged.list.length
+      if (feedSortBy === 'latest') {
+        feedCursorRef.current = getLatestFeedCursor(baseList)
+      }
+      offsetRef.current = requestedOffset + baseList.length
       setFeedList(merged.list)
-      setOffset(merged.list.length)
-      setHasMore((res.has_more ?? list.length >= PAGE_SIZE) && merged.added > 0)
+      setOffset(offsetRef.current)
+      setHasMore(!merged.reachedLimit && (res.has_more ?? list.length >= PAGE_SIZE) && merged.added > 0)
       saveToCache(merged.list)
     } catch (e) {
       await showUnifiedApiError(e, '加载更多失败')
@@ -1111,6 +1120,7 @@ function CommunityPage() {
       feedRequestGenerationRef.current += 1
       syncCurrentFeedQueryKey()
       feedListRef.current = []
+      feedCursorRef.current = null
       offsetRef.current = 0
       setFeedInitialLoaded(false)
       setShowSkeleton(true)
@@ -1148,6 +1158,7 @@ function CommunityPage() {
     feedRequestGenerationRef.current += 1
     syncCurrentFeedQueryKey()
     feedListRef.current = []
+    feedCursorRef.current = null
     offsetRef.current = 0
     setFeedInitialLoaded(false)
     setShowSkeleton(true)

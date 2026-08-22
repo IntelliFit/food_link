@@ -55,14 +55,14 @@ type mockFeedRepo struct {
 	existingFeedReport         *domain.FeedReport
 }
 
-func (m *mockFeedRepo) ListPublicFeed(ctx context.Context, authorIDs []string, contentType, mealType, dietGoal, date, sortBy string, limit int) ([]repo.FeedRecord, error) {
+func (m *mockFeedRepo) ListPublicFeed(ctx context.Context, authorIDs []string, contentType, mealType, dietGoal, date, sortBy string, limit int, cursor *repo.FeedCursor) ([]repo.FeedRecord, error) {
 	m.listPublicFeedLimit = limit
 	m.listPublicFeedCalled = true
 	m.listPublicFeedContentType = contentType
 	m.listPublicFeedAuthorIDs = authorIDs
 	return m.listPublicFeed, m.listPublicFeedErr
 }
-func (m *mockFeedRepo) ListFriendFeed(ctx context.Context, authorIDs []string, contentType, mealType, dietGoal, date, sortBy string, limit int) ([]repo.FeedRecord, error) {
+func (m *mockFeedRepo) ListFriendFeed(ctx context.Context, authorIDs []string, contentType, mealType, dietGoal, date, sortBy string, limit int, cursor *repo.FeedCursor) ([]repo.FeedRecord, error) {
 	m.listFriendFeedLimit = limit
 	m.listFriendFeedCalled = true
 	return m.listFriendFeed, m.listFriendFeedErr
@@ -127,6 +127,19 @@ func (m *mockFeedRepo) ListCommentsByRecordIDs(ctx context.Context, recordIDs []
 func (m *mockFeedRepo) ListCommentsByTargets(ctx context.Context, targets []repo.FeedTarget) ([]domain.FeedComment, error) {
 	return m.listCommentsByRecordIDs, m.listCommentsByRecordIDsErr
 }
+func (m *mockFeedRepo) ListCommentPreviewsByTargets(ctx context.Context, targets []repo.FeedTarget, perTargetLimit int, excludedUserIDs []string) ([]domain.FeedComment, map[string]int, error) {
+	counts := make(map[string]int)
+	for _, comment := range m.listCommentsByRecordIDs {
+		targetType := comment.TargetType
+		targetID := comment.TargetID
+		if targetID == "" && comment.RecordID != nil {
+			targetType = repo.FeedTargetFoodRecord
+			targetID = *comment.RecordID
+		}
+		counts[repo.FeedTargetKey(targetType, targetID)]++
+	}
+	return m.listCommentsByRecordIDs, counts, m.listCommentsByRecordIDsErr
+}
 func (m *mockFeedRepo) GetCommentByID(ctx context.Context, commentID string) (*domain.FeedComment, error) {
 	return m.getComment, m.getCommentErr
 }
@@ -183,10 +196,14 @@ type mockNotificationRepo struct {
 	findDuplicateNotificationErr error
 	listNotifications            []domain.FeedInteractionNotification
 	listNotificationsErr         error
+	listNotificationsLimit       int
+	listNotificationsOffset      int
 	notificationCounts           repo.NotificationCounts
 	notificationCountsErr        error
+	countNotificationsCalls      int
 	countUnread                  int64
 	countUnreadErr               error
+	countUnreadCalls             int
 	markReadRows                 int64
 	markReadErr                  error
 	listCommentTasks             []domain.CommentTask
@@ -203,12 +220,16 @@ func (m *mockNotificationRepo) FindRecentDuplicateForTarget(ctx context.Context,
 	return m.findDuplicateNotification, m.findDuplicateNotificationErr
 }
 func (m *mockNotificationRepo) ListNotifications(ctx context.Context, userID, notificationType string, limit, offset int) ([]domain.FeedInteractionNotification, error) {
+	m.listNotificationsLimit = limit
+	m.listNotificationsOffset = offset
 	return m.listNotifications, m.listNotificationsErr
 }
 func (m *mockNotificationRepo) CountNotifications(ctx context.Context, userID string) (repo.NotificationCounts, error) {
+	m.countNotificationsCalls++
 	return m.notificationCounts, m.notificationCountsErr
 }
 func (m *mockNotificationRepo) CountUnread(ctx context.Context, userID string) (int64, error) {
+	m.countUnreadCalls++
 	return m.countUnread, m.countUnreadErr
 }
 func (m *mockNotificationRepo) MarkRead(ctx context.Context, userID string, notificationIDs []string) (int64, error) {
@@ -733,8 +754,7 @@ func TestListCommentTasks(t *testing.T) {
 func TestListNotifications(t *testing.T) {
 	mockNotif := &mockNotificationRepo{
 		listNotifications:  []domain.FeedInteractionNotification{{ID: "n1", NotificationType: "like_received"}},
-		notificationCounts: repo.NotificationCounts{LikeCount: 20, CommentCount: 6},
-		countUnread:        3,
+		notificationCounts: repo.NotificationCounts{LikeCount: 20, CommentCount: 6, UnreadCount: 3},
 	}
 	mockFeed := &mockFeedRepo{profiles: map[string]*repo.UserProfile{}}
 	svc := newTestService(mockFeed, mockNotif, &mockUserRepo{})
@@ -744,6 +764,34 @@ func TestListNotifications(t *testing.T) {
 	assert.Equal(t, int64(3), result.UnreadCount)
 	assert.Equal(t, int64(20), result.LikeCount)
 	assert.Equal(t, int64(6), result.CommentCount)
+	assert.Equal(t, 1, mockNotif.countNotificationsCalls)
+	assert.Equal(t, 0, mockNotif.countUnreadCalls)
+}
+
+func TestListNotificationsSkipsHistoricalCountsForLaterPages(t *testing.T) {
+	mockNotif := &mockNotificationRepo{listNotifications: []domain.FeedInteractionNotification{{ID: "n2"}}}
+	svc := newTestService(&mockFeedRepo{profiles: map[string]*repo.UserProfile{}}, mockNotif, &mockUserRepo{})
+
+	result, err := svc.ListNotifications(context.Background(), "u1", "", 20, 20)
+	assert.NoError(t, err)
+	assert.Len(t, result.List, 1)
+	assert.Equal(t, 0, mockNotif.countNotificationsCalls)
+	assert.Equal(t, 0, mockNotif.countUnreadCalls)
+}
+
+func TestCommunityServiceClampsClientControlledLimits(t *testing.T) {
+	mockFeed := &mockFeedRepo{}
+	mockNotif := &mockNotificationRepo{}
+	svc := newTestService(mockFeed, mockNotif, &mockUserRepo{})
+
+	_, err := svc.PublicFeed(context.Background(), FeedParams{Offset: 999999, Limit: 999999, CommentsLimit: 999999})
+	assert.NoError(t, err)
+	assert.Equal(t, MaxFeedLegacyOffset+MaxFeedPageSize, mockFeed.listPublicFeedLimit)
+
+	_, err = svc.ListNotifications(context.Background(), "u1", "", 999999, 999999)
+	assert.NoError(t, err)
+	assert.Equal(t, MaxCommunityListLimit+1, mockNotif.listNotificationsLimit)
+	assert.Equal(t, MaxFeedLegacyOffset, mockNotif.listNotificationsOffset)
 }
 
 func TestMarkNotificationsRead(t *testing.T) {

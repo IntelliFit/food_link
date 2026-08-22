@@ -17,6 +17,7 @@ type NotificationRepo struct {
 type NotificationCounts struct {
 	LikeCount    int64
 	CommentCount int64
+	UnreadCount  int64
 }
 
 func NewNotificationRepo(db *gorm.DB) *NotificationRepo {
@@ -90,7 +91,7 @@ func (r *NotificationRepo) ListNotifications(ctx context.Context, userID, notifi
 	} else if notificationType != "" {
 		q = q.Where("notification_type = ?", notificationType)
 	}
-	err := q.Order("created_at DESC").
+	err := q.Order("created_at DESC, id DESC").
 		Limit(limit).
 		Offset(offset).
 		Find(&rows).Error
@@ -102,7 +103,8 @@ func (r *NotificationRepo) CountNotifications(ctx context.Context, userID string
 	err := r.visibleNotificationsQuery(ctx, userID).
 		Select(`
 			COALESCE(SUM(CASE WHEN notification_type = 'like_received' THEN 1 ELSE 0 END), 0) AS like_count,
-			COALESCE(SUM(CASE WHEN notification_type IN ('comment_received', 'reply_received', 'comment_rejected') THEN 1 ELSE 0 END), 0) AS comment_count
+			COALESCE(SUM(CASE WHEN notification_type IN ('comment_received', 'reply_received', 'comment_rejected') THEN 1 ELSE 0 END), 0) AS comment_count,
+			COALESCE(SUM(CASE WHEN is_read = FALSE THEN 1 ELSE 0 END), 0) AS unread_count
 		`).
 		Scan(&counts).Error
 	return counts, err

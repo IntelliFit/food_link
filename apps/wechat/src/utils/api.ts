@@ -6702,6 +6702,8 @@ export interface CommunityFeedQueryParams {
   priority_author_ids?: string[]
   author_scope?: CommunityAuthorScope
   author_id?: string
+  before_time?: string
+  before_key?: string
 }
 
 export interface CirclePostNutritionInput {
@@ -7285,6 +7287,9 @@ export async function communityGetFeed(
     q += `&priority_author_ids=${encodeURIComponent(params.priority_author_ids.join(','))}`
   }
   if (params?.author_id) q += `&author_id=${encodeURIComponent(params.author_id)}`
+  if (params?.before_time && params?.before_key) {
+    q += `&before_time=${encodeURIComponent(params.before_time)}&before_key=${encodeURIComponent(params.before_key)}`
+  }
   const response = await withTransientRequestRetry(() =>
     authenticatedRequest(`/api/community/feed${q}`, { method: 'GET', timeout: 15000 })
   )
@@ -7335,7 +7340,7 @@ export async function communityGetPublicFeed(
   limit: number = 20,
   includeComments: boolean = true,
   commentsLimit: number = 5,
-  params?: Pick<CommunityFeedQueryParams, 'meal_type' | 'diet_goal' | 'sort_by' | 'content_type' | 'author_id'>
+  params?: Pick<CommunityFeedQueryParams, 'meal_type' | 'diet_goal' | 'sort_by' | 'content_type' | 'author_id' | 'before_time' | 'before_key'>
 ): Promise<{ list: CommunityFeedItem[]; has_more?: boolean }> {
   let q = `?offset=${offset}&limit=${limit}&include_comments=${includeComments}&comments_limit=${commentsLimit}`
   if (params?.meal_type) q += `&meal_type=${encodeURIComponent(params.meal_type)}`
@@ -7343,6 +7348,9 @@ export async function communityGetPublicFeed(
   if (params?.sort_by) q += `&sort_by=${encodeURIComponent(params.sort_by)}`
   if (params?.content_type) q += `&content_type=${encodeURIComponent(params.content_type)}`
   if (params?.author_id) q += `&author_id=${encodeURIComponent(params.author_id)}`
+  if (params?.before_time && params?.before_key) {
+    q += `&before_time=${encodeURIComponent(params.before_time)}&before_key=${encodeURIComponent(params.before_key)}`
+  }
   const token = getAccessToken()
   const response = await withTransientRequestRetry(async () => {
     const result = await Taro.request({
