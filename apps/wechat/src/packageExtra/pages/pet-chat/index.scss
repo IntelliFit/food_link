@@ -25,6 +25,42 @@ page {
   z-index: 1;
 }
 
+.pet-chat-thinking-switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20rpx;
+  min-height: 58rpx;
+  margin-bottom: 10rpx;
+  padding: 0 8rpx;
+}
+
+.pet-chat-thinking-switch-copy {
+  display: flex;
+  align-items: baseline;
+  gap: 12rpx;
+  min-width: 0;
+}
+
+.pet-chat-thinking-switch-title {
+  color: #315044;
+  font-size: 23rpx;
+  line-height: 32rpx;
+  font-weight: 800;
+}
+
+.pet-chat-thinking-switch-note {
+  color: #829188;
+  font-size: 20rpx;
+  line-height: 28rpx;
+}
+
+.pet-chat-thinking-switch {
+  flex-shrink: 0;
+  transform: scale(0.78);
+  transform-origin: right center;
+}
+
 .pet-chat-topbar {
   display: flex;
   align-items: center;
@@ -782,6 +818,14 @@ page {
 
   .pet-chat-credit-cost {
     color: rgba(154, 215, 188, 0.62);
+  }
+
+  .pet-chat-thinking-switch-title {
+    color: rgba(225, 239, 229, 0.86);
+  }
+
+  .pet-chat-thinking-switch-note {
+    color: rgba(154, 215, 188, 0.56);
   }
 
   .pet-chat-message-text,

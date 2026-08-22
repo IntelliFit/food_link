@@ -144,10 +144,11 @@ func (h *PetHandler) CustomizePixelAvatar(c *gin.Context) {
 }
 
 type petChatRequest struct {
-	Question   string `json:"question"`
-	Range      string `json:"range"`
-	SessionID  string `json:"session_id"`
-	NewSession bool   `json:"new_session"`
+	Question       string `json:"question"`
+	Range          string `json:"range"`
+	SessionID      string `json:"session_id"`
+	NewSession     bool   `json:"new_session"`
+	EnableThinking bool   `json:"enable_thinking"`
 }
 
 type petChatAppendRequest struct {
@@ -174,10 +175,12 @@ func (h *PetHandler) EstimateChat(c *gin.Context) {
 		slog.String("user_id", userID),
 		slog.String("range", strings.TrimSpace(req.Range)),
 		slog.Int("question_length", len([]rune(strings.TrimSpace(req.Question)))),
+		slog.Bool("enable_thinking", req.EnableThinking),
 	)
 	data, err := h.chat.EstimatePetChat(c.Request.Context(), userID, healthservice.PetChatInput{
-		Question: strings.TrimSpace(req.Question),
-		Range:    strings.TrimSpace(req.Range),
+		Question:       strings.TrimSpace(req.Question),
+		Range:          strings.TrimSpace(req.Range),
+		EnableThinking: req.EnableThinking,
 	})
 	if err != nil {
 		response.Error(c, err)
@@ -212,12 +215,14 @@ func (h *PetHandler) Chat(c *gin.Context) {
 		slog.String("user_id", userID),
 		slog.String("range", strings.TrimSpace(req.Range)),
 		slog.Int("question_length", len([]rune(strings.TrimSpace(req.Question)))),
+		slog.Bool("enable_thinking", req.EnableThinking),
 	)
 	data, err := h.chat.GeneratePetChat(c.Request.Context(), userID, healthservice.PetChatInput{
-		Question:   strings.TrimSpace(req.Question),
-		Range:      strings.TrimSpace(req.Range),
-		SessionID:  strings.TrimSpace(req.SessionID),
-		NewSession: req.NewSession,
+		Question:       strings.TrimSpace(req.Question),
+		Range:          strings.TrimSpace(req.Range),
+		SessionID:      strings.TrimSpace(req.SessionID),
+		NewSession:     req.NewSession,
+		EnableThinking: req.EnableThinking,
 	})
 	if err != nil {
 		response.Error(c, err)
@@ -252,12 +257,14 @@ func (h *PetHandler) ChatStream(c *gin.Context) {
 		slog.String("user_id", userID),
 		slog.String("range", strings.TrimSpace(req.Range)),
 		slog.Int("question_length", len([]rune(strings.TrimSpace(req.Question)))),
+		slog.Bool("enable_thinking", req.EnableThinking),
 	)
 	chunkChan, err := h.chat.GeneratePetChatStream(c.Request.Context(), userID, healthservice.PetChatInput{
-		Question:   strings.TrimSpace(req.Question),
-		Range:      strings.TrimSpace(req.Range),
-		SessionID:  strings.TrimSpace(req.SessionID),
-		NewSession: req.NewSession,
+		Question:       strings.TrimSpace(req.Question),
+		Range:          strings.TrimSpace(req.Range),
+		SessionID:      strings.TrimSpace(req.SessionID),
+		NewSession:     req.NewSession,
+		EnableThinking: req.EnableThinking,
 	})
 	if err != nil {
 		response.Error(c, err)

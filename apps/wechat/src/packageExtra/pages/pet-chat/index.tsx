@@ -1,4 +1,4 @@
-import { View, Text, Input, ScrollView } from '@tarojs/components'
+import { View, Text, Input, ScrollView, Switch } from '@tarojs/components'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Taro, { useDidShow } from '@tarojs/taro'
 import {
@@ -141,6 +141,7 @@ function PetChatPage() {
   const [busy, setBusy] = useState(false)
   const [estimatedCredits, setEstimatedCredits] = useState<number | null>(null)
   const [estimatingCredits, setEstimatingCredits] = useState(false)
+  const [enableThinking, setEnableThinking] = useState(false)
   const busyRef = useRef(false)
   const estimateRequestRef = useRef(0)
   const historyLoadedRef = useRef(false)
@@ -200,7 +201,7 @@ function PetChatPage() {
     setEstimatedCredits(null)
     setEstimatingCredits(true)
     const timer = setTimeout(() => {
-      void estimatePetChat(question, questionRange(question, activeRange))
+      void estimatePetChat(question, questionRange(question, activeRange), enableThinking)
         .then((result) => {
           if (estimateRequestRef.current !== requestID) return
           setEstimatedCredits(result.pricing.credits_charged)
@@ -215,7 +216,7 @@ function PetChatPage() {
     }, 350)
 
     return () => clearTimeout(timer)
-  }, [activeRange, input])
+  }, [activeRange, enableThinking, input])
 
   const appendMessage = useCallback((message: ChatMessage) => {
     setMessages((prev) => [...prev, message])
@@ -344,8 +345,8 @@ function PetChatPage() {
         }))
         finish()
       },
-    })
-  }, [appendMessage, petName, sessionID, summary, updateMessage])
+    }, enableThinking)
+  }, [appendMessage, enableThinking, petName, sessionID, summary, updateMessage])
 
   const handleSend = useCallback(() => {
     const text = input.trim()
@@ -401,6 +402,22 @@ function PetChatPage() {
       </ScrollView>
 
       <View className='pet-chat-bottom-dock'>
+        <View className='pet-chat-thinking-switch-row'>
+          <View className='pet-chat-thinking-switch-copy'>
+            <Text className='pet-chat-thinking-switch-title'>深度思考</Text>
+            <Text className='pet-chat-thinking-switch-note'>更细致，回复会更慢</Text>
+          </View>
+          <Switch
+            className='pet-chat-thinking-switch'
+            checked={enableThinking}
+            disabled={busy}
+            color='#55a77c'
+            aria-label='深度思考开关'
+            onChange={(event) => setEnableThinking(Boolean(
+              event.detail?.value ?? (event.currentTarget as unknown as { checked?: boolean }).checked
+            ))}
+          />
+        </View>
         <ScrollView className='pet-chat-quick-row' scrollX enhanced showScrollbar={false}>
           <View className='pet-chat-quick-row-inner'>
             {FOLLOW_UPS.map((text) => (

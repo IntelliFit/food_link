@@ -55,9 +55,10 @@ describe('streamGeneratePetChat', () => {
       onChunk,
       onDone,
       onError,
-    })
+    }, true)
 
     expect(request).toHaveBeenCalledTimes(1)
+    expect(request.mock.calls[0][0].data).toEqual(expect.objectContaining({ enable_thinking: true }))
     expect(onChunkReceived).toBeDefined()
 
     const chunkEvent = utf8Buffer('data: {"type":"chunk","text":"你好"}\n\n')

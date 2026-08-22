@@ -56,7 +56,7 @@ describe('pet chat credit cost', () => {
       await Promise.resolve()
     })
 
-    expect(estimatePetChat).toHaveBeenCalledWith('推荐食谱', 'week')
+    expect(estimatePetChat).toHaveBeenCalledWith('推荐食谱', 'week', false)
     expect(screen.getByText('预计消耗 3 积分')).toBeInTheDocument()
 
     fireEvent.click(screen.getByText('发送'))
@@ -66,6 +66,31 @@ describe('pet chat credit cost', () => {
       '',
       true,
       expect.any(Object),
+      false,
+    )
+  })
+
+  it('enables deep thinking for estimates and generated replies', async () => {
+    render(<PetChatPage />)
+
+    fireEvent.click(screen.getByLabelText('深度思考开关'))
+    fireEvent.click(screen.getByText('推荐食谱'))
+
+    await act(async () => {
+      jest.advanceTimersByTime(350)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(estimatePetChat).toHaveBeenCalledWith('推荐食谱', 'week', true)
+    fireEvent.click(screen.getByText('发送'))
+    expect(streamGeneratePetChat).toHaveBeenCalledWith(
+      '推荐食谱',
+      'week',
+      '',
+      true,
+      expect.any(Object),
+      true,
     )
   })
 })

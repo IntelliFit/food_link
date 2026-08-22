@@ -4594,10 +4594,10 @@ export async function generateStatsInsight(range: 'week' | 'month'): Promise<{
   }>(res)
 }
 
-export async function estimatePetChat(question: string, range: 'week' | 'month'): Promise<PetChatEstimateResponse> {
+export async function estimatePetChat(question: string, range: 'week' | 'month', enableThinking = false): Promise<PetChatEstimateResponse> {
   const res = await authenticatedRequest('/api/pet/chat/estimate', {
     method: 'POST',
-    data: { question, range },
+    data: { question, range, enable_thinking: enableThinking },
     timeout: 30000
   })
   if (res.statusCode !== 200) {
@@ -4606,10 +4606,10 @@ export async function estimatePetChat(question: string, range: 'week' | 'month')
   return unwrapResponse<PetChatEstimateResponse>(res)
 }
 
-export async function generatePetChat(question: string, range: 'week' | 'month', sessionId = '', newSession = false): Promise<PetChatResponse> {
+export async function generatePetChat(question: string, range: 'week' | 'month', sessionId = '', newSession = false, enableThinking = false): Promise<PetChatResponse> {
   const res = await authenticatedRequest('/api/pet/chat', {
     method: 'POST',
-    data: { question, range, session_id: sessionId, new_session: newSession },
+    data: { question, range, session_id: sessionId, new_session: newSession, enable_thinking: enableThinking },
     timeout: 90000
   })
   if (res.statusCode !== 200) {
@@ -4630,7 +4630,8 @@ export function streamGeneratePetChat(
   range: 'week' | 'month',
   sessionId = '',
   newSession = false,
-  callbacks: StreamGeneratePetChatCallbacks
+  callbacks: StreamGeneratePetChatCallbacks,
+  enableThinking = false
 ): () => void {
   const token = getAccessToken()
   if (!token) {
@@ -4699,7 +4700,7 @@ export function streamGeneratePetChat(
         'Content-Type': 'application/json',
         'Accept': 'text/event-stream',
       }),
-      data: { question, range, session_id: sessionId, new_session: newSession },
+      data: { question, range, session_id: sessionId, new_session: newSession, enable_thinking: enableThinking },
       enableChunked: true,
       timeout: 180000,
       success: (res) => {
