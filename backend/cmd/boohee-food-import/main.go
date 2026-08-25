@@ -408,6 +408,9 @@ func almostEqual(left, right float64) bool {
 func normalizeName(value string) string {
 	var builder strings.Builder
 	for _, r := range strings.ToLower(strings.TrimSpace(value)) {
+		if r == '氽' {
+			r = '汆'
+		}
 		if unicode.IsLetter(r) || unicode.IsDigit(r) {
 			builder.WriteRune(r)
 		}

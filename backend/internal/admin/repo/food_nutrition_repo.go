@@ -18,6 +18,12 @@ import (
 func normalizeFoodNutritionName(raw string) string {
 	var b strings.Builder
 	for _, r := range strings.ToLower(strings.TrimSpace(raw)) {
+		// “氽” is a common visual/typing variant of the culinary character “汆”.
+		// Folding it prevents entries such as 酸菜氽白肉/酸菜汆白肉 from
+		// bypassing the normalized-name duplicate guard.
+		if r == '氽' {
+			r = '汆'
+		}
 		if unicode.IsLetter(r) || unicode.IsDigit(r) {
 			b.WriteRune(r)
 		}
@@ -90,7 +96,10 @@ func (r *FoodNutritionRepo) List(ctx context.Context, input ListFoodNutritionInp
 			return nil, err
 		}
 		var items []domain.FoodNutrition
-		if err := query.Order("updated_at DESC NULLS LAST, created_at DESC NULLS LAST").Offset(offset).Limit(limit).Find(&items).Error; err != nil {
+		if err := query.
+			Order("CASE WHEN NULLIF(BTRIM(COALESCE(image_path, '')), '') IS NOT NULL OR jsonb_array_length(COALESCE(image_paths, '[]'::jsonb)) > 0 THEN 0 ELSE 1 END ASC").
+			Order("updated_at DESC NULLS LAST, created_at DESC NULLS LAST, id ASC").
+			Offset(offset).Limit(limit).Find(&items).Error; err != nil {
 			return nil, err
 		}
 		return &ListFoodNutritionResult{Items: items, Total: total}, nil
@@ -130,6 +139,7 @@ func (r *FoodNutritionRepo) List(ctx context.Context, input ListFoodNutritionInp
 			%s
 		)
 		ORDER BY
+			CASE WHEN NULLIF(BTRIM(COALESCE(f.image_path, '')), '') IS NOT NULL OR jsonb_array_length(COALESCE(f.image_paths, '[]'::jsonb)) > 0 THEN 0 ELSE 1 END ASC,
 			CASE
 				WHEN LOWER(f.canonical_name) = LOWER(?) THEN 0
 				WHEN EXISTS (SELECT 1 FROM food_nutrition_aliases a3 WHERE a3.food_id = f.id AND LOWER(a3.alias_name) = LOWER(?)) THEN 1
@@ -142,7 +152,8 @@ func (r *FoodNutritionRepo) List(ctx context.Context, input ListFoodNutritionInp
 			CASE WHEN f.canonical_name ~ '[一-龥]' THEN 0 ELSE 1 END ASC,
 			CASE WHEN f.source LIKE 'usda%%' THEN 2 ELSE 0 END ASC,
 			LENGTH(f.canonical_name) ASC,
-			f.canonical_name ASC
+			f.canonical_name ASC,
+			f.id ASC
 		LIMIT ? OFFSET ?
 	`, activeFilterInner, categoryFilterInner)
 

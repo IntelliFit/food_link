@@ -58,6 +58,10 @@ func TestBuildCandidatesRejectsNormalizedDuplicates(t *testing.T) {
 	assert.Contains(t, rejected[0].Reason, "重复")
 }
 
+func TestNormalizeNameFoldsCulinaryVariant(t *testing.T) {
+	assert.Equal(t, normalizeName("酸菜汆白肉"), normalizeName("酸菜氽白肉"))
+}
+
 func TestSplitCellReference(t *testing.T) {
 	column, row := splitCellReference("O1003")
 	assert.Equal(t, "O", column)
