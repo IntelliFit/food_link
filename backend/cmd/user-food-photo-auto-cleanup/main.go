@@ -1,25 +1,41 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"flag"
 	"fmt"
+	"image"
+	_ "image/gif"
+	_ "image/jpeg"
+	_ "image/png"
+	"io"
 	"log"
+	"net/http"
+	"net/url"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	adminrepo "food_link/backend/internal/admin/repo"
 	adminservice "food_link/backend/internal/admin/service"
 	"food_link/backend/pkg/config"
 	"food_link/backend/pkg/database"
+	"food_link/backend/pkg/storage"
 
+	_ "golang.org/x/image/webp"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
 
-const cleanupPageSize = 500
+const (
+	cleanupPageSize             = 500
+	rankableImageDownloadLimit  = 20 << 20
+	rankableImageRequestTimeout = 15 * time.Second
+	rankableImageWorkers        = 16
+)
 
 type cleanupStats struct {
 	Total           int64
@@ -31,6 +47,15 @@ type cleanupStats struct {
 	Reasons         map[string]int
 	Labels          map[string]int
 	FoodNames       map[string]int
+	RankableChecked int
+	RankablePassed  int
+	RankableRemoved map[string]int
+}
+
+type rankableImageQualityGate struct {
+	httpClient  *http.Client
+	storage     *storage.Client
+	trustedHost string
 }
 
 func main() {
@@ -95,8 +120,12 @@ func main() {
 		}
 		return
 	}
+	qualityGate, err := newRankableImageQualityGate(cfg.Storage)
+	if err != nil {
+		log.Fatalf("初始化排行榜图片质量门禁失败: %v", err)
+	}
 
-	annotations, stats, err := collectAnnotations(ctx, db, *maxPhotos, *refreshAutomated, *refreshReviewed, strings.TrimSpace(*onlyLabel))
+	annotations, stats, err := collectAnnotations(ctx, db, qualityGate, *maxPhotos, *refreshAutomated, *refreshReviewed, strings.TrimSpace(*onlyLabel))
 	if err != nil {
 		log.Fatalf("预演用户食物照片清洗失败: %v", err)
 	}
@@ -108,6 +137,9 @@ func main() {
 	if len(annotations) == 0 {
 		fmt.Println("没有需要写入的未标注照片")
 		return
+	}
+	if failures := rankableImageOperationalFailures(stats.RankableRemoved); stats.RankableChecked > 0 && failures*10 > stats.RankableChecked {
+		log.Fatalf("排行榜图片读取失败比例过高: failures=%d checked=%d；已阻止写入，请检查 CDN 后重试", failures, stats.RankableChecked)
 	}
 	if err := db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		onConflict := clause.OnConflict{
@@ -234,12 +266,13 @@ func auditStoredLabel(ctx context.Context, db *gorm.DB, label string) error {
 	return nil
 }
 
-func collectAnnotations(ctx context.Context, db *gorm.DB, maxPhotos int, refreshAutomated, refreshReviewed bool, onlyLabel string) ([]adminrepo.UserFoodPhotoAnnotation, cleanupStats, error) {
+func collectAnnotations(ctx context.Context, db *gorm.DB, qualityGate *rankableImageQualityGate, maxPhotos int, refreshAutomated, refreshReviewed bool, onlyLabel string) ([]adminrepo.UserFoodPhotoAnnotation, cleanupStats, error) {
 	photoRepo := adminrepo.NewUserFoodPhotoRepo(db)
 	stats := cleanupStats{
-		Reasons:   make(map[string]int),
-		Labels:    make(map[string]int),
-		FoodNames: make(map[string]int),
+		Reasons:         make(map[string]int),
+		Labels:          make(map[string]int),
+		FoodNames:       make(map[string]int),
+		RankableRemoved: make(map[string]int),
 	}
 	manualKeys, err := loadManualAnnotationKeys(ctx, db)
 	if err != nil {
@@ -269,6 +302,7 @@ func collectAnnotations(ctx context.Context, db *gorm.DB, maxPhotos int, refresh
 		if len(result.Items) == 0 {
 			break
 		}
+		qualityAssessments := assessPageRankableImages(ctx, result.Items, qualityGate)
 		for _, photo := range result.Items {
 			stats.Scanned++
 			identityKey := photo.UserID + "\x00" + photo.ImagePath
@@ -288,6 +322,16 @@ func collectAnnotations(ctx context.Context, db *gorm.DB, maxPhotos int, refresh
 				continue
 			}
 			classification := adminservice.ClassifyUserFoodPhotoForRanking(photo)
+			if containsString(classification.Labels, "rankable") {
+				stats.RankableChecked++
+				assessment := qualityAssessments[identityKey]
+				if assessment.Eligible {
+					stats.RankablePassed++
+				} else {
+					classification.Labels = removeString(classification.Labels, "rankable")
+					stats.RankableRemoved[assessment.Reason]++
+				}
+			}
 			if classification.ReviewStatus == "kept" && photo.SourceID != "" {
 				sourceKey := photo.SourceType + "\x00" + photo.SourceID
 				if _, duplicate := keptSources[sourceKey]; duplicate {
@@ -336,6 +380,39 @@ func collectAnnotations(ctx context.Context, db *gorm.DB, maxPhotos int, refresh
 	return annotations, stats, nil
 }
 
+func assessPageRankableImages(ctx context.Context, photos []adminrepo.UserFoodPhoto, qualityGate *rankableImageQualityGate) map[string]adminservice.RankableImageQualityAssessment {
+	type job struct {
+		key       string
+		imagePath string
+	}
+	jobs := make(chan job)
+	results := make(map[string]adminservice.RankableImageQualityAssessment)
+	var resultsMu sync.Mutex
+	var workers sync.WaitGroup
+	for range rankableImageWorkers {
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			for item := range jobs {
+				assessment := qualityGate.assess(ctx, item.imagePath)
+				resultsMu.Lock()
+				results[item.key] = assessment
+				resultsMu.Unlock()
+			}
+		}()
+	}
+	for _, photo := range photos {
+		classification := adminservice.ClassifyUserFoodPhotoForRanking(photo)
+		if !containsString(classification.Labels, "rankable") {
+			continue
+		}
+		jobs <- job{key: photo.UserID + "\x00" + photo.ImagePath, imagePath: photo.ImagePath}
+	}
+	close(jobs)
+	workers.Wait()
+	return results
+}
+
 func loadManualAnnotationKeys(ctx context.Context, db *gorm.DB) (map[string]struct{}, error) {
 	type annotationIdentity struct {
 		UserID    string `gorm:"column:user_id"`
@@ -362,7 +439,71 @@ func printStats(stats cleanupStats, applying bool) {
 		mode, stats.Total, stats.Scanned, stats.SkippedExisting, stats.Kept, stats.KeptUnlabeled, stats.Excluded)
 	printSortedCounts("exclusion_reasons", stats.Reasons, 0)
 	printSortedCounts("labels", stats.Labels, 0)
+	fmt.Printf("rankable_image_quality: checked=%d passed=%d removed=%d\n",
+		stats.RankableChecked, stats.RankablePassed, stats.RankableChecked-stats.RankablePassed)
+	printSortedCounts("rankable_removed_reasons", stats.RankableRemoved, 0)
 	printSortedCounts("top_rankable_food_names", stats.FoodNames, 30)
+}
+
+func newRankableImageQualityGate(cfg config.StorageConfig) (*rankableImageQualityGate, error) {
+	baseURL, err := url.Parse(strings.TrimSpace(cfg.CDNFoodImagesBaseURL))
+	if err != nil || baseURL.Scheme != "https" || baseURL.Host == "" {
+		return nil, fmt.Errorf("food-images CDN 地址无效")
+	}
+	return &rankableImageQualityGate{
+		httpClient:  &http.Client{Timeout: rankableImageRequestTimeout},
+		storage:     storage.New(cfg),
+		trustedHost: strings.ToLower(baseURL.Host),
+	}, nil
+}
+
+func (g *rankableImageQualityGate) assess(ctx context.Context, imagePath string) adminservice.RankableImageQualityAssessment {
+	resolved := g.storage.ResolveReferenceURL("food-images", imagePath)
+	parsed, err := url.Parse(resolved)
+	if err != nil || parsed.Scheme != "https" || strings.ToLower(parsed.Host) != g.trustedHost {
+		return adminservice.RankableImageQualityAssessment{Reason: "untrusted_or_missing_url"}
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, resolved, nil)
+	if err != nil {
+		return adminservice.RankableImageQualityAssessment{Reason: "download_failed"}
+	}
+	resp, err := g.httpClient.Do(req)
+	if err != nil {
+		return adminservice.RankableImageQualityAssessment{Reason: "download_failed"}
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return adminservice.RankableImageQualityAssessment{Reason: "http_error"}
+	}
+	if resp.ContentLength > rankableImageDownloadLimit {
+		return adminservice.RankableImageQualityAssessment{Reason: "file_too_large"}
+	}
+	data, err := io.ReadAll(io.LimitReader(resp.Body, rankableImageDownloadLimit+1))
+	if err != nil {
+		return adminservice.RankableImageQualityAssessment{Reason: "download_failed"}
+	}
+	if len(data) == 0 || len(data) > rankableImageDownloadLimit {
+		return adminservice.RankableImageQualityAssessment{Reason: "file_too_large"}
+	}
+	img, _, err := image.Decode(bytes.NewReader(data))
+	if err != nil {
+		return adminservice.RankableImageQualityAssessment{Reason: "decode_failed"}
+	}
+	return adminservice.AssessRankableImageQuality(img)
+}
+
+func removeString(values []string, target string) []string {
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		if value != target {
+			result = append(result, value)
+		}
+	}
+	return result
+}
+
+func rankableImageOperationalFailures(reasons map[string]int) int {
+	return reasons["download_failed"] + reasons["http_error"] + reasons["decode_failed"] + reasons["untrusted_or_missing_url"]
 }
 
 func printSortedCounts(title string, values map[string]int, limit int) {

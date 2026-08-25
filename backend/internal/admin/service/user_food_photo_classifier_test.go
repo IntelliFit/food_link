@@ -189,6 +189,16 @@ func TestClassifyUserFoodPhotoForRanking(t *testing.T) {
 			status: "kept", labels: []string{},
 		},
 		{
+			name:   "does not rank a distant food scene",
+			photo:  photoWithNutrition("餐厅远景中的一份意大利面", "意大利面"),
+			status: "kept", labels: []string{"restaurant"},
+		},
+		{
+			name:   "does not rank food with a cluttered background",
+			photo:  photoWithNutrition("桌面杂物旁的一碗牛肉面", "牛肉面"),
+			status: "kept", labels: []string{},
+		},
+		{
 			name:   "does not rank several plates of the same dish",
 			photo:  photoWithNutrition("两盘麻辣烫串串，含蔬菜、豆制品、丸子等", "麻辣烫串串"),
 			status: "kept", labels: []string{},
