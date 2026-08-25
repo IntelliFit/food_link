@@ -356,8 +356,10 @@ func (r *UserFoodPhotoRepo) List(ctx context.Context, input ListUserFoodPhotoInp
 	if limit <= 0 {
 		limit = 40
 	}
-	if limit > 100 {
-		limit = 100
+	// HTTP callers are capped at 100 by the service. Offline cleanup jobs use
+	// larger pages to avoid rebuilding the photo-union query for every 100 rows.
+	if limit > 500 {
+		limit = 500
 	}
 	offset := input.Offset
 	if offset < 0 {

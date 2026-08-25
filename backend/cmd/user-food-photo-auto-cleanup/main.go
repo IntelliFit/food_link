@@ -19,7 +19,7 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-const cleanupPageSize = 100
+const cleanupPageSize = 500
 
 type cleanupStats struct {
 	Total           int64
@@ -38,12 +38,18 @@ func main() {
 	apply := flag.Bool("apply", false, "persist annotations; default is dry-run")
 	refreshAutomated := flag.Bool("refresh-automated", false, "recompute records without a manual reviewer")
 	refreshReviewed := flag.Bool("refresh-reviewed", false, "also recompute manually reviewed records; requires --refresh-automated")
+	onlyLabel := flag.String("only-label", "", "with --refresh-automated, only recompute rows currently carrying this label")
 	normalizeLabels := flag.Bool("normalize-labels", false, "merge dessert into snack and remove packaged_food without reclassifying photos")
+	auditLabel := flag.String("audit-label", "", "read-only audit of currently stored annotations with this label")
+	auditDerivedLabel := flag.String("audit-derived-label", "", "read-only audit of photos that the current classifier would assign this label")
 	maxPhotos := flag.Int("max", 0, "maximum unannotated photos to classify; 0 means all")
 	timeout := flag.Duration("timeout", 20*time.Minute, "batch timeout")
 	flag.Parse()
 	if *refreshReviewed && !*refreshAutomated {
 		log.Fatal("--refresh-reviewed 必须与 --refresh-automated 一起使用")
+	}
+	if strings.TrimSpace(*onlyLabel) != "" && !*refreshAutomated {
+		log.Fatal("--only-label 必须与 --refresh-automated 一起使用")
 	}
 
 	cfg, err := config.Load(*configDir)
@@ -77,8 +83,20 @@ func main() {
 		}
 		return
 	}
+	if strings.TrimSpace(*auditLabel) != "" {
+		if err := auditStoredLabel(ctx, db, strings.TrimSpace(*auditLabel)); err != nil {
+			log.Fatalf("审查用户食物照片标签失败: %v", err)
+		}
+		return
+	}
+	if strings.TrimSpace(*auditDerivedLabel) != "" {
+		if err := auditDerivedPhotoLabel(ctx, db, strings.TrimSpace(*auditDerivedLabel), *maxPhotos); err != nil {
+			log.Fatalf("审查推导用户食物照片标签失败: %v", err)
+		}
+		return
+	}
 
-	annotations, stats, err := collectAnnotations(ctx, db, *maxPhotos, *refreshAutomated, *refreshReviewed)
+	annotations, stats, err := collectAnnotations(ctx, db, *maxPhotos, *refreshAutomated, *refreshReviewed, strings.TrimSpace(*onlyLabel))
 	if err != nil {
 		log.Fatalf("预演用户食物照片清洗失败: %v", err)
 	}
@@ -121,7 +139,102 @@ func main() {
 	fmt.Printf("自动清洗写入完成: attempted=%d annotation_table_total=%d\n", len(annotations), persisted)
 }
 
-func collectAnnotations(ctx context.Context, db *gorm.DB, maxPhotos int, refreshAutomated, refreshReviewed bool) ([]adminrepo.UserFoodPhotoAnnotation, cleanupStats, error) {
+func auditDerivedPhotoLabel(ctx context.Context, db *gorm.DB, label string, maxMatches int) error {
+	photoRepo := adminrepo.NewUserFoodPhotoRepo(db)
+	offset := 0
+	matches := 0
+	keptSources := make(map[string]struct{})
+	for {
+		result, err := photoRepo.List(ctx, adminrepo.ListUserFoodPhotoInput{
+			AnnotationStatus: "all",
+			SortBy:           "created_at",
+			SortOrder:        "desc",
+			Limit:            cleanupPageSize,
+			Offset:           offset,
+		})
+		if err != nil {
+			return err
+		}
+		for _, photo := range result.Items {
+			classification := adminservice.ClassifyUserFoodPhotoForRanking(photo)
+			if classification.ReviewStatus == "kept" && photo.SourceID != "" {
+				sourceKey := photo.SourceType + "\x00" + photo.SourceID
+				if _, duplicate := keptSources[sourceKey]; duplicate {
+					classification = adminservice.UserFoodPhotoClassification{ReviewStatus: "excluded", ExclusionReason: "duplicate"}
+				} else {
+					keptSources[sourceKey] = struct{}{}
+				}
+			}
+			if !containsString(classification.Labels, label) {
+				continue
+			}
+			itemNames := ""
+			if photo.Nutrition != nil {
+				itemNames = strings.Join(photo.Nutrition.ItemNames, " | ")
+			}
+			fmt.Printf("%s\t%s\t%s\t%s\t%s\n",
+				photo.CreatedAt.Format(time.RFC3339), photo.SourceType, photo.SourceID, photo.Description, itemNames)
+			matches++
+			if maxMatches > 0 && matches >= maxMatches {
+				fmt.Printf("derived_label=%s matches_shown=%d truncated=true\n", label, matches)
+				return nil
+			}
+		}
+		offset += len(result.Items)
+		if len(result.Items) == 0 || int64(offset) >= result.Total {
+			break
+		}
+	}
+	fmt.Printf("derived_label=%s matches=%d truncated=false\n", label, matches)
+	return nil
+}
+
+func containsString(values []string, target string) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
+}
+
+func auditStoredLabel(ctx context.Context, db *gorm.DB, label string) error {
+	photoRepo := adminrepo.NewUserFoodPhotoRepo(db)
+	offset := 0
+	for {
+		result, err := photoRepo.List(ctx, adminrepo.ListUserFoodPhotoInput{
+			AnnotationStatus: "kept",
+			AnnotationLabel:  label,
+			SortBy:           "created_at",
+			SortOrder:        "desc",
+			Limit:            cleanupPageSize,
+			Offset:           offset,
+		})
+		if err != nil {
+			return err
+		}
+		if offset == 0 {
+			fmt.Printf("stored_label=%s total=%d\n", label, result.Total)
+		}
+		for _, photo := range result.Items {
+			itemNames := ""
+			if photo.Nutrition != nil {
+				itemNames = strings.Join(photo.Nutrition.ItemNames, " | ")
+			}
+			classification := adminservice.ClassifyUserFoodPhotoForRanking(photo)
+			fmt.Printf("%s\t%s\t%s\t%s\t%s\t%s\n",
+				photo.CreatedAt.Format(time.RFC3339), photo.SourceType, photo.SourceID,
+				strings.Join(classification.Labels, ","), photo.Description, itemNames)
+		}
+		offset += len(result.Items)
+		if len(result.Items) == 0 || int64(offset) >= result.Total {
+			break
+		}
+	}
+	return nil
+}
+
+func collectAnnotations(ctx context.Context, db *gorm.DB, maxPhotos int, refreshAutomated, refreshReviewed bool, onlyLabel string) ([]adminrepo.UserFoodPhotoAnnotation, cleanupStats, error) {
 	photoRepo := adminrepo.NewUserFoodPhotoRepo(db)
 	stats := cleanupStats{
 		Reasons:   make(map[string]int),
@@ -143,6 +256,7 @@ func collectAnnotations(ctx context.Context, db *gorm.DB, maxPhotos int, refresh
 		}
 		result, err := photoRepo.List(ctx, adminrepo.ListUserFoodPhotoInput{
 			AnnotationStatus: annotationStatus,
+			AnnotationLabel:  onlyLabel,
 			SortBy:           "created_at",
 			SortOrder:        "desc",
 			Limit:            cleanupPageSize,
@@ -195,7 +309,7 @@ func collectAnnotations(ctx context.Context, db *gorm.DB, maxPhotos int, refresh
 				if len(classification.Labels) == 0 {
 					stats.KeptUnlabeled++
 				}
-				if photo.Nutrition != nil {
+				if containsString(classification.Labels, "rankable") && photo.Nutrition != nil {
 					for _, name := range photo.Nutrition.ItemNames {
 						name = strings.TrimSpace(name)
 						if name != "" {

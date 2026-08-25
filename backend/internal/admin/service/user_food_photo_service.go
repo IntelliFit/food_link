@@ -99,7 +99,7 @@ type SaveUserFoodPhotoAnnotationInput struct {
 }
 
 var userFoodPhotoLabels = map[string]struct{}{
-	"snack": {}, "fruit": {}, "takeout": {}, "home_cooked": {},
+	"rankable": {}, "snack": {}, "fruit": {}, "takeout": {}, "home_cooked": {},
 	"restaurant": {}, "beverage": {},
 }
 

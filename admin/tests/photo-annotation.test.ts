@@ -5,7 +5,7 @@ import { annotationLabelOptions, recognizedLabelOptions } from '../src/lib/photo
 
 test('photo annotation taxonomy keeps only ranking labels', () => {
   assert.deepEqual(annotationLabelOptions.map(([value]) => value), [
-    'snack', 'fruit', 'takeout', 'home_cooked', 'restaurant', 'beverage',
+    'rankable', 'snack', 'fruit', 'takeout', 'home_cooked', 'restaurant', 'beverage',
   ])
 })
 

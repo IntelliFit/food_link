@@ -1,4 +1,5 @@
 export const annotationLabelOptions = [
+  ['rankable', '可用'],
   ['snack', '零食'],
   ['fruit', '水果'],
   ['takeout', '外卖'],

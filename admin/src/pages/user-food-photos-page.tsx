@@ -283,7 +283,7 @@ export function UserFoodPhotosPage({ onLogout, onMenuChange }: PageProps) {
                 食物照片
               </CardTitle>
               <CardDescription className='max-w-2xl text-base leading-relaxed'>
-                先清洗无效图片，再进行零食、水果、外卖等多标签标注。排除操作只影响标注数据集，不删除用户原图或饮食记录。
+                先清洗无效图片，再进行可用、零食、水果、外卖等多标签标注。“可用”表示单个食物主体清晰，可进入后续排行榜；排除操作不删除用户原图或饮食记录。
               </CardDescription>
             </div>
             <Badge variant='outline' className='max-w-xs shrink-0 whitespace-normal break-all px-3 py-1.5 text-xs font-normal'>

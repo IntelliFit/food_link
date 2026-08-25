@@ -76,12 +76,12 @@ func TestUserFoodPhotoServiceSaveAnnotationNormalizesLabels(t *testing.T) {
 
 	item, err := svc.SaveAnnotation(context.Background(), SaveUserFoodPhotoAnnotationInput{
 		UserID: " user-1 ", ImageKey: " meal.jpg ", ReviewStatus: "kept",
-		Labels: []string{"takeout", "fruit", "takeout", "dessert", "packaged_food"}, ExclusionReason: "non_food",
+		Labels: []string{"takeout", "fruit", "rankable", "takeout", "dessert", "packaged_food"}, ExclusionReason: "non_food",
 	}, "admin-1")
 
 	require.NoError(t, err)
 	assert.Equal(t, "kept", item.ReviewStatus)
-	assert.Equal(t, []string{"fruit", "snack", "takeout"}, repository.annotationInput.Labels)
+	assert.Equal(t, []string{"fruit", "rankable", "snack", "takeout"}, repository.annotationInput.Labels)
 	assert.Empty(t, repository.annotationInput.ExclusionReason)
 }
 
