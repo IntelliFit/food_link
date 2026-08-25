@@ -22,6 +22,11 @@ import {
   showPrivacyAuthorizeFailure,
 } from '../../../utils/weapp-privacy'
 import { HOME_PET_PROFILE_CHANGED_EVENT } from '../../../utils/pet-events'
+import {
+  getStoredPetSummary,
+  loadPetSummaryWithRetry,
+  saveStoredPetSummary,
+} from '../../../utils/pet-summary-cache'
 import { openPetChat } from '../../../utils/pet-navigation'
 import './index.scss'
 
@@ -64,18 +69,23 @@ function PetHomePage() {
   const [pixelAvatarCustomizing, setPixelAvatarCustomizing] = useState(false)
   const [pixelAvatarPreview, setPixelAvatarPreview] = useState<PetProfile | null>(null)
   const [selectingCandidateId, setSelectingCandidateId] = useState('')
-  const [petSummary, setPetSummary] = useState<PetSummary | null>(null)
+  const [petSummary, setPetSummary] = useState<PetSummary | null>(getStoredPetSummary)
   const [homePetHidden, setHomePetHidden] = useState(getStoredHomePetHidden)
   const pixelAvatarCustomizingRef = useRef(false)
 
   const syncPetProfile = useCallback((pet: PetProfile) => {
-    setPetSummary((previous) => previous ? { ...previous, pet } : previous)
+    setPetSummary((previous) => {
+      if (!previous) return previous
+      const next = { ...previous, pet }
+      saveStoredPetSummary(next)
+      return next
+    })
     Taro.eventCenter.trigger(HOME_PET_PROFILE_CHANGED_EVENT, pet)
   }, [])
 
   const loadData = useCallback(async () => {
     try {
-      setPetSummary(await getPetSummary())
+      setPetSummary(await loadPetSummaryWithRetry(() => getPetSummary()))
     } catch (error) {
       await showUnifiedApiError(error, '加载宠物档案失败')
     }

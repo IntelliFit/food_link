@@ -20,6 +20,7 @@ import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
 import { openPetSettings } from '../../../utils/pet-navigation'
 import { PetAvatar } from '../../../components/PetAvatar'
+import { getStoredPetSummary, loadPetSummaryWithRetry } from '../../../utils/pet-summary-cache'
 import { PetMarkdown } from './pet-markdown'
 import './index.scss'
 
@@ -136,7 +137,7 @@ function buildActions(question: string): string[] {
 function PetChatPage() {
   const { scheme } = useAppColorScheme()
   const [summary, setSummary] = useState<StatsSummary | null>(null)
-  const [petSummary, setPetSummary] = useState<PetSummary | null>(null)
+  const [petSummary, setPetSummary] = useState<PetSummary | null>(getStoredPetSummary)
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
   const [estimatedCredits, setEstimatedCredits] = useState<number | null>(null)
@@ -161,7 +162,7 @@ function PetChatPage() {
     applyThemeNavigationBar(scheme)
     void Promise.all([
       getStatsSummary('week').then(setSummary).catch(() => null),
-      getPetSummary().then(setPetSummary).catch(() => null),
+      loadPetSummaryWithRetry(() => getPetSummary()).then(setPetSummary).catch(() => null),
       (async () => {
         if (historyLoadedRef.current) return
         historyLoadedRef.current = true

@@ -128,6 +128,11 @@ import {
 } from '../../utils/onboarding-guide-storage'
 import { HOME_RECORD_ONBOARDING_STEPS } from './home-onboarding-steps'
 import { HOME_PET_PROFILE_CHANGED_EVENT } from '../../utils/pet-events'
+import {
+  getStoredPetSummary,
+  loadPetSummaryWithRetry,
+  saveStoredPetSummary,
+} from '../../utils/pet-summary-cache'
 import { buildFoodRecordFavoriteDraft } from '../../utils/food-record-flow'
 import { openPetChat } from '../../utils/pet-navigation'
 
@@ -815,7 +820,7 @@ function IndexPage() {
   const [loading, setLoading] = React.useState(!initialLocalSnapshot)
   const [isSwitchingDate, setIsSwitchingDate] = React.useState(false)
   const [petHidden, setPetHidden] = React.useState(getStoredPetHidden)
-  const [petSummary, setPetSummary] = React.useState<PetSummary | null>(null)
+  const [petSummary, setPetSummary] = React.useState<PetSummary | null>(getStoredPetSummary)
   const [membershipStatus, setMembershipStatus] = React.useState<MembershipStatus | null>(null)
   const [rewardCenter, setRewardCenter] = React.useState<RewardCenterResponse | null>(null)
   const [rewardHintIndex, setRewardHintIndex] = React.useState(0)
@@ -2476,15 +2481,12 @@ function IndexPage() {
     }
     const seq = ++petSummarySeqRef.current
     try {
-      const summary = await getPetSummary(date)
+      const summary = await loadPetSummaryWithRetry(() => getPetSummary(date))
       if (seq === petSummarySeqRef.current) {
         setPetSummary(summary)
       }
     } catch (error) {
-      console.warn('宠物状态加载失败，使用本地原型兜底:', error)
-      if (seq === petSummarySeqRef.current) {
-        setPetSummary(null)
-      }
+      console.warn('宠物状态加载失败，保留上次成功形象:', error)
     }
   }, [])
 
@@ -2505,7 +2507,12 @@ function IndexPage() {
   React.useEffect(() => {
     const handlePetProfileChanged = (pet: PetProfile) => {
       if (!pet?.id) return
-      setPetSummary((previous) => previous ? { ...previous, pet } : previous)
+      setPetSummary((previous) => {
+        if (!previous) return previous
+        const next = { ...previous, pet }
+        saveStoredPetSummary(next)
+        return next
+      })
     }
     Taro.eventCenter.on(HOME_PET_PROFILE_CHANGED_EVENT, handlePetProfileChanged)
     return () => {

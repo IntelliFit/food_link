@@ -40,7 +40,7 @@ describe('pet chat latest message', () => {
     })
     ;(Taro as typeof Taro & { setNavigationBarTitle: jest.Mock }).setNavigationBarTitle = jest.fn()
     ;(getStatsSummary as jest.Mock).mockResolvedValue({ range: 'week' })
-    ;(getPetSummary as jest.Mock).mockResolvedValue({ pet: { name: '团团' } })
+    ;(getPetSummary as jest.Mock).mockResolvedValue({ pet: { id: 'pet-1', name: '团团' } })
     ;(getLatestPetChatSession as jest.Mock).mockResolvedValue({
       session: { id: 'session-1', range_type: 'week' },
       messages: [

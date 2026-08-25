@@ -281,14 +281,23 @@ export function PetAvatar({ pet, animal, size = 'medium', mood, state, mealState
   const customAvatarBlinkURL = builtinFrames?.blink || String(pet?.pixel_avatar_blink_url || '').trim()
   const customAvatarSquashURL = builtinFrames?.squash || String(pet?.pixel_avatar_squash_url || '').trim()
   const customAvatarJumpURL = builtinFrames?.jump || String(pet?.pixel_avatar_jump_url || '').trim()
-  const hasMotionFrames = Boolean(customAvatarSquashURL && customAvatarJumpURL)
   const isPixelatedAvatar = pet?.avatar_type === 'pixel_self'
     || String(pet?.builtin_avatar_id || '').trim() === 'jianwen-01'
   const [blinking, setBlinking] = useState(false)
   const [motionFrame, setMotionFrame] = useState<PetMotionFrame>('idle')
+  const [customAvatarLoadFailed, setCustomAvatarLoadFailed] = useState(false)
+  const activeCustomAvatarURL = customAvatarLoadFailed ? '' : customAvatarURL
+  const activeCustomAvatarBlinkURL = customAvatarLoadFailed ? '' : customAvatarBlinkURL
+  const activeCustomAvatarSquashURL = customAvatarLoadFailed ? '' : customAvatarSquashURL
+  const activeCustomAvatarJumpURL = customAvatarLoadFailed ? '' : customAvatarJumpURL
+  const hasMotionFrames = Boolean(activeCustomAvatarSquashURL && activeCustomAvatarJumpURL)
 
   useEffect(() => {
-    if (customAvatarURL && !customAvatarBlinkURL) {
+    setCustomAvatarLoadFailed(false)
+  }, [customAvatarURL])
+
+  useEffect(() => {
+    if (activeCustomAvatarURL && !activeCustomAvatarBlinkURL) {
       setBlinking(false)
       return undefined
     }
@@ -317,7 +326,7 @@ export function PetAvatar({ pet, animal, size = 'medium', mood, state, mealState
       disposed = true
       if (timer) clearTimeout(timer)
     }
-  }, [customAvatarBlinkURL, customAvatarURL])
+  }, [activeCustomAvatarBlinkURL, activeCustomAvatarURL])
 
   useEffect(() => {
     if (motion !== 'companion') {
@@ -391,7 +400,7 @@ export function PetAvatar({ pet, animal, size = 'medium', mood, state, mealState
 
   return (
     <View
-      className={`pet-avatar ${sizeClass} ${dimmed ? 'pet-avatar--dimmed' : ''} ${state === 'warming' ? 'pet-avatar--warming' : ''} ${customAvatarURL ? 'pet-avatar--custom' : ''} ${isPixelatedAvatar ? 'pet-avatar--pixelated' : ''} ${hasMotionFrames ? 'pet-avatar--has-motion-frames' : ''} ${blinking ? 'pet-avatar--blinking' : ''} ${motionClass} ${mealState ? `pet-avatar--meal-${mealState}` : ''} ${className || ''}`}
+      className={`pet-avatar ${sizeClass} ${dimmed ? 'pet-avatar--dimmed' : ''} ${state === 'warming' ? 'pet-avatar--warming' : ''} ${activeCustomAvatarURL ? 'pet-avatar--custom' : ''} ${isPixelatedAvatar ? 'pet-avatar--pixelated' : ''} ${hasMotionFrames ? 'pet-avatar--has-motion-frames' : ''} ${blinking ? 'pet-avatar--blinking' : ''} ${motionClass} ${mealState ? `pet-avatar--meal-${mealState}` : ''} ${className || ''}`}
       style={sizeStyle}
       aria-label={label}
       role='img'
@@ -399,18 +408,19 @@ export function PetAvatar({ pet, animal, size = 'medium', mood, state, mealState
       <View className='pet-avatar__body'>
         <Image
           className='pet-avatar__image pet-avatar__frame pet-avatar__frame--idle'
-          src={customAvatarURL || src}
+          src={activeCustomAvatarURL || src}
           mode='aspectFit'
           lazyLoad={false}
+          onError={() => setCustomAvatarLoadFailed(true)}
         />
-        {customAvatarBlinkURL ? (
-          <Image className='pet-avatar__frame pet-avatar__frame--blink' src={customAvatarBlinkURL} mode='aspectFit' lazyLoad={false} />
+        {activeCustomAvatarBlinkURL ? (
+          <Image className='pet-avatar__frame pet-avatar__frame--blink' src={activeCustomAvatarBlinkURL} mode='aspectFit' lazyLoad={false} onError={() => setCustomAvatarLoadFailed(true)} />
         ) : null}
-        {customAvatarSquashURL ? (
-          <Image className='pet-avatar__frame pet-avatar__frame--squash' src={customAvatarSquashURL} mode='aspectFit' lazyLoad={false} />
+        {activeCustomAvatarSquashURL ? (
+          <Image className='pet-avatar__frame pet-avatar__frame--squash' src={activeCustomAvatarSquashURL} mode='aspectFit' lazyLoad={false} onError={() => setCustomAvatarLoadFailed(true)} />
         ) : null}
-        {customAvatarJumpURL ? (
-          <Image className='pet-avatar__frame pet-avatar__frame--jump' src={customAvatarJumpURL} mode='aspectFit' lazyLoad={false} />
+        {activeCustomAvatarJumpURL ? (
+          <Image className='pet-avatar__frame pet-avatar__frame--jump' src={activeCustomAvatarJumpURL} mode='aspectFit' lazyLoad={false} onError={() => setCustomAvatarLoadFailed(true)} />
         ) : null}
         {!customAvatarURL ? (
           <View className='pet-avatar__blink-overlay'>

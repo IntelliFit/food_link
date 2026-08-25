@@ -4962,6 +4962,7 @@ export function clearAllStorage() {
     Taro.removeStorageSync('stats_page_bundle_v1')
     Taro.removeStorageSync('home_dashboard_local_cache')
     Taro.removeStorageSync('body_metrics_storage')
+    Taro.removeStorageSync('pet_summary_cache_v1')
 
     // 清除业务数据（可选，根据需求决定是否清除）
     // Taro.removeStorageSync('analyzeImagePath')

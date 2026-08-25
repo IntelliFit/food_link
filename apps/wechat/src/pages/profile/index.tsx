@@ -25,6 +25,7 @@ import { useAppColorScheme } from '../../components/AppColorSchemeContext'
 import { cleanupGeneratedUserFiles } from '../../utils/weapp-user-files'
 import { clearAllOnboardingGuides } from '../../utils/onboarding-guide-storage'
 import { clearRecentConsoleLogs } from '../../utils/console-log-buffer'
+import { PET_SUMMARY_CACHE_KEY } from '../../utils/pet-summary-cache'
 
 import './index.scss'
 import { withAuth, redirectToLogin } from '../../utils/withAuth'
@@ -499,6 +500,7 @@ function ProfilePage() {
           Taro.removeStorageSync('showRecordMenuModal')
           Taro.removeStorageSync('home_pet_companion_collapsed_v1')
           Taro.removeStorageSync('home_pet_companion_float_position_v1')
+          Taro.removeStorageSync(PET_SUMMARY_CACHE_KEY)
 
           // 识别记录 / 结果页相关缓存
           Taro.removeStorageSync('analyzeResult')
