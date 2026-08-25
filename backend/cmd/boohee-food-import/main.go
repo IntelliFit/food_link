@@ -40,6 +40,7 @@ type options struct {
 	report    string
 	source    string
 	apply     bool
+	audit     bool
 	timeout   time.Duration
 }
 
@@ -106,6 +107,7 @@ type importReport struct {
 	SkippedExisting int           `json:"skipped_existing"`
 	Verified        int           `json:"verified"`
 	Entries         []reportEntry `json:"entries"`
+	Audit           *auditReport  `json:"audit,omitempty"`
 }
 
 type existingFood struct {
@@ -152,6 +154,9 @@ func main() {
 		SourceRows: len(rows), Candidates: len(candidates), Rejected: rejected,
 	}
 	process := func(tx *gorm.DB) error {
+		if opts.audit {
+			return auditCandidates(ctx, tx, candidates, opts.source, opts.apply, &report)
+		}
 		return processCandidates(ctx, tx, candidates, opts.source, filepath.Base(opts.inputPath), opts.apply, &report)
 	}
 	if opts.apply {
@@ -164,7 +169,7 @@ func main() {
 	} else {
 		err = process(db)
 	}
-	if err == nil {
+	if err == nil && !opts.audit {
 		report.Verified, err = verifyApplied(ctx, db, candidates, opts.source)
 	}
 	report.FinishedAt = time.Now()
@@ -173,6 +178,12 @@ func main() {
 	}
 	if err != nil {
 		log.Fatalf("薄荷健康食物导入失败（事务已回滚）: %v；报告=%s", err, opts.report)
+	}
+	if opts.audit {
+		fmt.Printf("薄荷健康食物审核完成 database=%s@%s source=%s approved=%d needs_user_review=%d verified=%d apply=%v report=%s\n",
+			report.DatabaseName, report.DatabaseHost, report.Source, report.Audit.Approved, report.Audit.NeedsUserReview,
+			report.Audit.Verified, opts.apply, opts.report)
+		return
 	}
 	fmt.Printf("薄荷健康食物导入完成 database=%s@%s source_rows=%d candidates=%d rejected=%d created=%d updated=%d skipped_existing=%d verified=%d apply=%v report=%s\n",
 		report.DatabaseName, report.DatabaseHost, report.SourceRows, report.Candidates, len(report.Rejected), report.Created,
@@ -186,6 +197,7 @@ func parseFlags() options {
 	flag.StringVar(&opts.report, "report", "tmp/boohee-import-report.json", "审计报告路径")
 	flag.StringVar(&opts.source, "source", defaultSource, "写入 food_nutrition_library.source 的来源标签")
 	flag.BoolVar(&opts.apply, "apply", false, "写入数据库；默认只读预演")
+	flag.BoolVar(&opts.audit, "audit", false, "审核已导入的同来源记录；默认只读预演，配合 --apply 写入审核结果")
 	flag.DurationVar(&opts.timeout, "timeout", 10*time.Minute, "任务总超时")
 	flag.Parse()
 	if strings.TrimSpace(opts.inputPath) == "" {
