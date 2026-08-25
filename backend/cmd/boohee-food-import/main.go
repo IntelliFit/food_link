@@ -299,11 +299,23 @@ func processCandidates(ctx context.Context, db *gorm.DB, candidates []importCand
 	for _, food := range existing {
 		existingByName[food.NormalizedName] = food
 	}
+	aliasConflicts, err := loadAliasConflicts(ctx, db, names)
+	if err != nil {
+		return err
+	}
 	for _, candidate := range candidates {
 		current, found := existingByName[candidate.NormalizedName]
 		if found && current.Source != source {
 			report.SkippedExisting++
 			report.Entries = append(report.Entries, reportEntry{Sequence: candidate.Sequence, CanonicalName: candidate.CanonicalName, FoodID: current.ID, Action: "skipped_existing", Reason: "同名食物已有其他来源，未覆盖"})
+			continue
+		}
+		if conflict := aliasConflicts[candidate.NormalizedName]; isApprovedAliasDuplicate(current, found, conflict) {
+			report.SkippedExisting++
+			report.Entries = append(report.Entries, reportEntry{
+				Sequence: candidate.Sequence, CanonicalName: candidate.CanonicalName, FoodID: conflict.FoodID,
+				Action: "skipped_existing", Reason: "名称已是现有标准食物的 approved_exact 别名，未重复新建；target=" + conflict.TargetName,
+			})
 			continue
 		}
 		id := current.ID
@@ -342,6 +354,13 @@ func processCandidates(ctx context.Context, db *gorm.DB, candidates []importCand
 		report.Entries = append(report.Entries, reportEntry{Sequence: candidate.Sequence, CanonicalName: candidate.CanonicalName, FoodID: id, Action: action, Reason: "source=" + source + "; input=" + inputFile})
 	}
 	return nil
+}
+
+func isApprovedAliasDuplicate(current existingFood, found bool, conflict *aliasAuditConflict) bool {
+	if conflict == nil || conflict.MatchStatus != fooddomain.NutritionAliasApprovedExact {
+		return false
+	}
+	return !found || conflict.FoodID != current.ID
 }
 
 func verifyApplied(ctx context.Context, db *gorm.DB, candidates []importCandidate, source string) (int, error) {

@@ -68,6 +68,21 @@ func TestImportedRowsRemainInactiveUntilSourceEvidenceIsReviewed(t *testing.T) {
 	assert.Equal(t, "unreviewed", defaultQualityTier)
 }
 
+func TestApprovedExactAliasIsTreatedAsExistingFood(t *testing.T) {
+	conflict := &aliasAuditConflict{FoodID: "existing-food", TargetName: "纯牛奶", MatchStatus: "approved_exact"}
+
+	assert.True(t, isApprovedAliasDuplicate(existingFood{}, false, conflict))
+	assert.True(t, isApprovedAliasDuplicate(existingFood{ID: "imported-food"}, true, conflict))
+	assert.False(t, isApprovedAliasDuplicate(existingFood{ID: "existing-food"}, true, conflict))
+}
+
+func TestUnapprovedAliasDoesNotCauseAutomaticDeduplication(t *testing.T) {
+	for _, status := range []string{"candidate_only", "blocked"} {
+		conflict := &aliasAuditConflict{FoodID: "other-food", MatchStatus: status}
+		assert.False(t, isApprovedAliasDuplicate(existingFood{}, false, conflict), status)
+	}
+}
+
 func TestAuditApprovesConsistentImportedFood(t *testing.T) {
 	candidate := importCandidate{
 		Sequence: 1, CanonicalName: "鸡蛋（煮）", NormalizedName: normalizeName("鸡蛋（煮）"),
