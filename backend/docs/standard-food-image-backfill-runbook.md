@@ -2,10 +2,14 @@
 
 > 工具说明见 [../README.md](../README.md)。本文描述 **1 万+ 条** 的持续化批处理。
 
-## 1. 规模基线（已跑通）
+## 1. 规模基线
 
-`nutrition_library` 约 **12,458** 条、当前 **0%** 有图（`manual-food-image-audit`）。
-回填 CLI 队列更严： `is_active`、`kcal_per_100g > 0`、无 `image_path`/`image_paths`。
+回填 CLI 只统计 `is_active=true`、`kcal_per_100g > 0` 的可用标准食物，并把
+`image_path`、`image_paths` 都为空的记录放入缺图队列。每次处理前后都应重新生成统计，
+不要把历史数量当作当前基线。
+
+2026-08-26 首批低成本复用完成后的 development 基线为：符合口径 11,405 条、已有图
+8,971 条、缺图 2,434 条；剩余队列最高用户引用次数为 0。
 
 ```powershell
 cd backend
@@ -107,7 +111,7 @@ go run ./cmd/standard-food-image-backfill `
   --success-json tmp/food-image-audit/full-missing-success.json
 ```
 
-只有人工复核报告后，才允许单独使用 `--apply` 上传 COS 并填充仍为空的数据库字段。已有非空图片不会被该写入路径覆盖。
+该命令只生成候选报告；通用找图模式即使传入 `--apply` 也会被门禁拒绝。人工复核候选后，必须使用下节的 `--reviewed-apply` 二次复核与 allowlist 路径写入。已有非空图片不会被该写入路径覆盖。
 
 ### 高置信报告二次复核与安全写入
 
@@ -132,3 +136,65 @@ go run ./cmd/standard-food-image-backfill `
 - 替换已有图片时，旧图必须在现场第二次判定中仍为高置信错配；
 - 上传新对象后按审计前的 `image_path`、`image_paths` 做条件更新，扫描后被他人修改的行自动跳过；
 - 不删除旧 COS 对象；输出清单保留旧值、新 key、来源 URL 与两轮模型结果，可用于回滚和追责。
+
+## 9. 低成本回填顺序
+
+按以下顺序处理，前一层没有合格候选时才进入下一层：
+
+1. **库内图片复用**：零新增 COS 存储、零联网图片版权风险。只允许视觉上等价的食物，模型初筛后仍需本地人工看图。
+2. **Wikimedia Commons**：只接受明确的 CC0、Public Domain、CC BY 或 CC BY-SA；必须保存文件页、作者和许可证 URL。
+3. **AI 生成**：仅用于常见、视觉特征明确且前两层均无结果的食物。零引用长尾默认延后，不为追求缺图总数归零而批量生成。
+
+普通搜索引擎图片没有清晰授权信息时不得写入，即使视觉模型判定匹配也只能留作 dry-run 参考。
+任何 `library` / `commons` / `bing` / `google` 搜索结果都不能通过通用 `--apply` 直接写库；网络图统一走 `--reviewed-apply`，库内复用统一走 `--library-reuse-apply`。
+
+### 库内图片复用 dry-run
+
+```bash
+cd backend
+go run ./cmd/standard-food-image-backfill \
+  --image-search library \
+  --limit 50 \
+  --workers 8 \
+  --max-candidates 4 \
+  --threshold 0.95 \
+  --success-json tmp/standard-food-image-library-reuse-success.json
+```
+
+下载成功报告中的候选并本地人工看图，只把确认等价的记录写入 allowlist。正式应用前先执行不带
+`--apply` 的预演；预演通过后再增加 `--apply`：
+
+```bash
+go run ./cmd/standard-food-image-backfill \
+  --library-reuse-apply \
+  --library-reuse-report tmp/standard-food-image-library-reuse-success.json \
+  --library-reuse-allowlist tmp/standard-food-image-library-reuse-allowlist.json \
+  --library-reuse-output tmp/standard-food-image-library-reuse-preflight.json
+
+go run ./cmd/standard-food-image-backfill \
+  --library-reuse-apply \
+  --library-reuse-report tmp/standard-food-image-library-reuse-success.json \
+  --library-reuse-allowlist tmp/standard-food-image-library-reuse-allowlist.json \
+  --library-reuse-output tmp/standard-food-image-library-reuse-applied.json \
+  --apply
+```
+
+该写入模式会核对报告、人工白名单、目标缺图状态和来源图片 key，并在单个事务中条件更新；
+不会再次上传图片。`quality_evidence.image_reuse` 会记录来源食物和人工复核信息。
+
+### Commons 合规图片 dry-run
+
+```bash
+go run ./cmd/standard-food-image-backfill \
+  --image-search commons \
+  --limit 50 \
+  --workers 4 \
+  --max-candidates 6 \
+  --threshold 0.95 \
+  --success-json tmp/standard-food-image-commons-success.json
+```
+
+Commons 路径仍需人工复核后才能写入。写入时保留 `image_source_url`、
+`image_source_label` 和 `image_license`，以满足署名和来源追溯要求。将上述 success JSON
+传给 `--reviewed-missing-report`，按“高置信报告二次复核与安全写入”流程生成复核报告和 allowlist，
+再使用 `--reviewed-apply --apply` 正式写入。

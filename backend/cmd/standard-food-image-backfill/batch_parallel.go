@@ -21,21 +21,27 @@ import (
 )
 
 type successRecord struct {
-	FoodID       string         `json:"food_id"`
-	FoodName     string         `json:"food_name"`
-	Status       string         `json:"status"`
-	CandidateURL string         `json:"candidate_url"`
-	Query        string         `json:"query"`
-	Confidence   float64        `json:"confidence"`
-	FoodMatch    bool           `json:"food_match"`
-	NoWatermark  bool           `json:"no_watermark"`
-	Reason       string         `json:"reason"`
-	ObjectKey    string         `json:"object_key,omitempty"`
-	AccessURL    string         `json:"access_url,omitempty"`
-	Uploaded     bool           `json:"uploaded"`
-	DBUpdated    bool           `json:"db_updated"`
-	ProcessedAt  time.Time      `json:"processed_at"`
-	Decision     *imageDecision `json:"decision,omitempty"`
+	FoodID         string         `json:"food_id"`
+	FoodName       string         `json:"food_name"`
+	Status         string         `json:"status"`
+	CandidateURL   string         `json:"candidate_url"`
+	CandidatePage  string         `json:"candidate_page,omitempty"`
+	Query          string         `json:"query"`
+	SourceLabel    string         `json:"source_label,omitempty"`
+	License        string         `json:"license,omitempty"`
+	SourceFoodID   string         `json:"source_food_id,omitempty"`
+	SourceFoodName string         `json:"source_food_name,omitempty"`
+	Confidence     float64        `json:"confidence"`
+	FoodMatch      bool           `json:"food_match"`
+	NoWatermark    bool           `json:"no_watermark"`
+	Reason         string         `json:"reason"`
+	ObjectKey      string         `json:"object_key,omitempty"`
+	AccessURL      string         `json:"access_url,omitempty"`
+	Uploaded       bool           `json:"uploaded"`
+	DBUpdated      bool           `json:"db_updated"`
+	Reused         bool           `json:"reused"`
+	ProcessedAt    time.Time      `json:"processed_at"`
+	Decision       *imageDecision `json:"decision,omitempty"`
 }
 
 type successSummary struct {
@@ -233,11 +239,12 @@ SELECT
   f.id::text AS id,
   f.canonical_name,
   f.normalized_name,
+	COALESCE(f.base_food_key, '') AS base_food_key,
   COALESCE(string_agg(a.alias_name, ' ' ORDER BY a.alias_name), '') AS aliases
 FROM food_nutrition_library f
 LEFT JOIN food_nutrition_aliases a ON a.food_id = f.id
 WHERE f.id::text IN (` + strings.Join(placeholders, ",") + `)
-GROUP BY f.id, f.canonical_name, f.normalized_name`
+GROUP BY f.id, f.canonical_name, f.normalized_name, f.base_food_key`
 	var rows []foodRow
 	if err := db.WithContext(ctx).Raw(sql, args...).Scan(&rows).Error; err != nil {
 		return nil, err
@@ -258,17 +265,23 @@ func isSuccessStatus(status string) bool {
 
 func resultToSuccessRecord(result resultRow) successRecord {
 	rec := successRecord{
-		FoodID:       result.FoodID,
-		FoodName:     result.FoodName,
-		Status:       result.Status,
-		CandidateURL: result.Candidate,
-		Query:        result.Query,
-		ObjectKey:    result.ObjectKey,
-		AccessURL:    result.AccessURL,
-		Uploaded:     result.Uploaded,
-		DBUpdated:    result.DBUpdated,
-		ProcessedAt:  result.ProcessedAt,
-		Decision:     result.Decision,
+		FoodID:         result.FoodID,
+		FoodName:       result.FoodName,
+		Status:         result.Status,
+		CandidateURL:   result.Candidate,
+		CandidatePage:  result.CandidatePage,
+		Query:          result.Query,
+		SourceLabel:    result.SourceLabel,
+		License:        result.License,
+		SourceFoodID:   result.SourceFoodID,
+		SourceFoodName: result.SourceFoodName,
+		ObjectKey:      result.ObjectKey,
+		AccessURL:      result.AccessURL,
+		Uploaded:       result.Uploaded,
+		DBUpdated:      result.DBUpdated,
+		Reused:         result.Reused,
+		ProcessedAt:    result.ProcessedAt,
+		Decision:       result.Decision,
 	}
 	if result.Decision != nil {
 		rec.Confidence = result.Decision.Confidence
