@@ -1,0 +1,2059 @@
+[
+  {
+    "batch_name": "河南本科院校食堂汇总-用户确认可见-20260826",
+    "region": "河南省",
+    "source_scope": "用户提供的河南本科院校校区食堂汇总_2026-08-25.xlsx中“已核实”行；仅发布24行、14所学校、49个食堂，不发布7行“基本核实”和15行“待核实”",
+    "schools": [
+      {
+        "school": "河南中医药大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "龙子湖校区",
+            "aliases": [],
+            "address": "郑州市金水东路156号",
+            "source_url": "https://ptzs.hactcm.edu.cn/info/2096/12466.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "龙子湖校区",
+            "name": "杏苑餐厅",
+            "aliases": [],
+            "location_text": "龙子湖校区 杏苑餐厅 三层",
+            "building_or_floor": "三层",
+            "service_type": "综合餐厅",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://henan-campus-dining/2026-08-26/38d75c9bd50e516138d94403",
+            "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx（原表第1条“已核实”）",
+            "source_org": "food_link 用户提供资料",
+            "source_type": "user_requested_verified_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "原表序号：1\n办学层次：公办普通本科\n校区：龙子湖校区\n食堂：杏苑餐厅\n核实状态：已核实\n原表说明：餐厅名称来自学校官方新生指南；校区口径以学校现行办学资质材料为准。\n明确楼层：三层",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://ptzs.hactcm.edu.cn/info/2096/12466.htm",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 1",
+                "source_org": "河南中医药大学",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第1条列出的来源1；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              },
+              {
+                "source_url": "https://zyrz.hactcm.edu.cn/info/1161/2621.htm",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 2",
+                "source_org": "河南中医药大学",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第1条列出的来源2；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              }
+            ]
+          },
+          {
+            "campus": "龙子湖校区",
+            "name": "橘井餐厅",
+            "aliases": [],
+            "location_text": "龙子湖校区 橘井餐厅 二层",
+            "building_or_floor": "二层",
+            "service_type": "综合餐厅（含清真餐饮）",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://henan-campus-dining/2026-08-26/fba81d67fe39c295298af7e5",
+            "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx（原表第1条“已核实”）",
+            "source_org": "food_link 用户提供资料",
+            "source_type": "user_requested_verified_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "原表序号：1\n办学层次：公办普通本科\n校区：龙子湖校区\n食堂：橘井餐厅\n核实状态：已核实\n原表说明：餐厅名称来自学校官方新生指南；校区口径以学校现行办学资质材料为准。\n明确楼层：二层",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://ptzs.hactcm.edu.cn/info/2096/12466.htm",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 1",
+                "source_org": "河南中医药大学",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第1条列出的来源1；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              },
+              {
+                "source_url": "https://zyrz.hactcm.edu.cn/info/1161/2621.htm",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 2",
+                "source_org": "河南中医药大学",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第1条列出的来源2；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "用户于2026-08-26要求上传并让用户端可见；仅纳入原表“已核实”行，排除“基本核实/待核实”行。",
+          "原始 Excel SHA-256：ee2a426d682af89fb71746c793b216e07909bc3ed346fbfddd5c534a368a03ee"
+        ]
+      },
+      {
+        "school": "河南体育学院",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "登封校区",
+            "aliases": [],
+            "address": "登封市大禹路146号",
+            "source_url": "https://14879.gaokao.haedu.cn/policy/brochure/2026/0521/152003.html"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "登封校区",
+            "name": "运动员餐厅",
+            "aliases": [],
+            "location_text": "登封校区 运动员餐厅",
+            "building_or_floor": "",
+            "service_type": "综合餐厅",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://henan-campus-dining/2026-08-26/df109579f8b964b7b1895db9",
+            "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx（原表第7条“已核实”）",
+            "source_org": "food_link 用户提供资料",
+            "source_type": "user_requested_verified_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "原表序号：7\n办学层次：公办普通本科\n校区：登封校区\n食堂：运动员餐厅\n核实状态：已核实\n原表说明：现行政府采购项目明确使用该餐厅名称。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://14879.gaokao.haedu.cn/policy/brochure/2026/0521/152003.html",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 1",
+                "source_org": "河南体育学院",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第7条列出的来源1；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              },
+              {
+                "source_url": "https://sanmenxia.zfcg.henan.gov.cn/henan/content?infoId=1874594",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 2",
+                "source_org": "河南体育学院",
+                "source_type": "official_government",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第7条列出的来源2；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "用户于2026-08-26要求上传并让用户端可见；仅纳入原表“已核实”行，排除“基本核实/待核实”行。",
+          "原始 Excel SHA-256：ee2a426d682af89fb71746c793b216e07909bc3ed346fbfddd5c534a368a03ee"
+        ]
+      },
+      {
+        "school": "河南农业大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "龙子湖校区",
+            "aliases": [],
+            "address": "郑州市郑东新区平安大道218号",
+            "source_url": "https://www.henau.edu.cn/"
+          },
+          {
+            "name": "文化路校区",
+            "aliases": [],
+            "address": "郑州市金水区农业路63号",
+            "source_url": "https://www.henau.edu.cn/"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "龙子湖校区",
+            "name": "南苑餐厅",
+            "aliases": [],
+            "location_text": "龙子湖校区 南苑餐厅",
+            "building_or_floor": "",
+            "service_type": "综合餐厅",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://henan-campus-dining/2026-08-26/5a447e917f353db70a2d0111",
+            "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx（原表第9条“已核实”）",
+            "source_org": "food_link 用户提供资料",
+            "source_type": "user_requested_verified_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "原表序号：9\n办学层次：公办普通本科\n校区：龙子湖校区\n食堂：南苑餐厅\n核实状态：已核实\n原表说明：学校2025年官方餐饮活动报道明确列出三处。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.henau.edu.cn/",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 1",
+                "source_org": "河南农业大学",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第9条列出的来源1；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              },
+              {
+                "source_url": "https://www.henau.edu.cn/info/1141/45039.htm",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 2",
+                "source_org": "河南农业大学",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第9条列出的来源2；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              }
+            ]
+          },
+          {
+            "campus": "龙子湖校区",
+            "name": "北苑餐厅",
+            "aliases": [],
+            "location_text": "龙子湖校区 北苑餐厅",
+            "building_or_floor": "",
+            "service_type": "综合餐厅",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://henan-campus-dining/2026-08-26/9db357fa45fa6a3730a68eeb",
+            "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx（原表第9条“已核实”）",
+            "source_org": "food_link 用户提供资料",
+            "source_type": "user_requested_verified_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "原表序号：9\n办学层次：公办普通本科\n校区：龙子湖校区\n食堂：北苑餐厅\n核实状态：已核实\n原表说明：学校2025年官方餐饮活动报道明确列出三处。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.henau.edu.cn/",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 1",
+                "source_org": "河南农业大学",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第9条列出的来源1；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              },
+              {
+                "source_url": "https://www.henau.edu.cn/info/1141/45039.htm",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 2",
+                "source_org": "河南农业大学",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第9条列出的来源2；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              }
+            ]
+          },
+          {
+            "campus": "龙子湖校区",
+            "name": "西苑餐厅",
+            "aliases": [],
+            "location_text": "龙子湖校区 西苑餐厅",
+            "building_or_floor": "",
+            "service_type": "综合餐厅",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://henan-campus-dining/2026-08-26/2187935473ba2ce3351b8d6a",
+            "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx（原表第9条“已核实”）",
+            "source_org": "food_link 用户提供资料",
+            "source_type": "user_requested_verified_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "原表序号：9\n办学层次：公办普通本科\n校区：龙子湖校区\n食堂：西苑餐厅\n核实状态：已核实\n原表说明：学校2025年官方餐饮活动报道明确列出三处。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.henau.edu.cn/",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 1",
+                "source_org": "河南农业大学",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第9条列出的来源1；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              },
+              {
+                "source_url": "https://www.henau.edu.cn/info/1141/45039.htm",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 2",
+                "source_org": "河南农业大学",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第9条列出的来源2；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              }
+            ]
+          },
+          {
+            "campus": "文化路校区",
+            "name": "学二食堂",
+            "aliases": [],
+            "location_text": "文化路校区 学二食堂",
+            "building_or_floor": "",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://henan-campus-dining/2026-08-26/22e1b8dcf53251449238822c",
+            "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx（原表第10条“已核实”）",
+            "source_org": "food_link 用户提供资料",
+            "source_type": "user_requested_verified_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "原表序号：10\n办学层次：公办普通本科\n校区：文化路校区\n食堂：学二食堂\n核实状态：已核实\n原表说明：现行官方假期服务通知列出名称。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.henau.edu.cn/",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 1",
+                "source_org": "河南农业大学",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第10条列出的来源1；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              },
+              {
+                "source_url": "https://www.henau.edu.cn/info/1004/39556.htm",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 2",
+                "source_org": "河南农业大学",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第10条列出的来源2；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              }
+            ]
+          },
+          {
+            "campus": "文化路校区",
+            "name": "桃李园学生公寓餐厅",
+            "aliases": [],
+            "location_text": "文化路校区 桃李园学生公寓餐厅",
+            "building_or_floor": "",
+            "service_type": "综合餐厅",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://henan-campus-dining/2026-08-26/97abf52732f083848ba9997b",
+            "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx（原表第10条“已核实”）",
+            "source_org": "food_link 用户提供资料",
+            "source_type": "user_requested_verified_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "原表序号：10\n办学层次：公办普通本科\n校区：文化路校区\n食堂：桃李园学生公寓餐厅\n核实状态：已核实\n原表说明：现行官方假期服务通知列出名称。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.henau.edu.cn/",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 1",
+                "source_org": "河南农业大学",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第10条列出的来源1；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              },
+              {
+                "source_url": "https://www.henau.edu.cn/info/1004/39556.htm",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 2",
+                "source_org": "河南农业大学",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第10条列出的来源2；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "用户于2026-08-26要求上传并让用户端可见；仅纳入原表“已核实”行，排除“基本核实/待核实”行。",
+          "原始 Excel SHA-256：ee2a426d682af89fb71746c793b216e07909bc3ed346fbfddd5c534a368a03ee"
+        ]
+      },
+      {
+        "school": "河南医药大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "红旗校区",
+            "aliases": [],
+            "address": "新乡市红旗区金穗大道601号",
+            "source_url": "https://zjc.xxmu.edu.cn/zsxxw/info/1013/1920.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "红旗校区",
+            "name": "知味堂",
+            "aliases": [],
+            "location_text": "红旗校区 知味堂",
+            "building_or_floor": "",
+            "service_type": "综合餐厅",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://henan-campus-dining/2026-08-26/7919e651f31d7e00a86712e7",
+            "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx（原表第12条“已核实”）",
+            "source_org": "food_link 用户提供资料",
+            "source_type": "user_requested_verified_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "原表序号：12\n办学层次：公办普通本科\n校区：红旗校区\n食堂：知味堂\n核实状态：已核实\n原表说明：2025年更名后的现行校名；餐厅名称由学校2025—2026年官方资料交叉核实。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://zjc.xxmu.edu.cn/zsxxw/info/1013/1920.htm",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 1",
+                "source_org": "河南医药大学",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第12条列出的来源1；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              },
+              {
+                "source_url": "https://www.xxmu.edu.cn/info/1697/26976.htm",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 2",
+                "source_org": "河南医药大学",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第12条列出的来源2；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              }
+            ]
+          },
+          {
+            "campus": "红旗校区",
+            "name": "溢香园",
+            "aliases": [],
+            "location_text": "红旗校区 溢香园",
+            "building_or_floor": "",
+            "service_type": "综合餐厅",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://henan-campus-dining/2026-08-26/79c9f540e798ff15580127e1",
+            "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx（原表第12条“已核实”）",
+            "source_org": "food_link 用户提供资料",
+            "source_type": "user_requested_verified_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "原表序号：12\n办学层次：公办普通本科\n校区：红旗校区\n食堂：溢香园\n核实状态：已核实\n原表说明：2025年更名后的现行校名；餐厅名称由学校2025—2026年官方资料交叉核实。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://zjc.xxmu.edu.cn/zsxxw/info/1013/1920.htm",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 1",
+                "source_org": "河南医药大学",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第12条列出的来源1；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              },
+              {
+                "source_url": "https://www.xxmu.edu.cn/info/1697/26976.htm",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 2",
+                "source_org": "河南医药大学",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第12条列出的来源2；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              }
+            ]
+          },
+          {
+            "campus": "红旗校区",
+            "name": "思源餐厅",
+            "aliases": [],
+            "location_text": "红旗校区 思源餐厅",
+            "building_or_floor": "",
+            "service_type": "综合餐厅",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://henan-campus-dining/2026-08-26/c317be623b33faa6829b46e2",
+            "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx（原表第12条“已核实”）",
+            "source_org": "food_link 用户提供资料",
+            "source_type": "user_requested_verified_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "原表序号：12\n办学层次：公办普通本科\n校区：红旗校区\n食堂：思源餐厅\n核实状态：已核实\n原表说明：2025年更名后的现行校名；餐厅名称由学校2025—2026年官方资料交叉核实。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://zjc.xxmu.edu.cn/zsxxw/info/1013/1920.htm",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 1",
+                "source_org": "河南医药大学",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第12条列出的来源1；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              },
+              {
+                "source_url": "https://www.xxmu.edu.cn/info/1697/26976.htm",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 2",
+                "source_org": "河南医药大学",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第12条列出的来源2；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "用户于2026-08-26要求上传并让用户端可见；仅纳入原表“已核实”行，排除“基本核实/待核实”行。",
+          "原始 Excel SHA-256：ee2a426d682af89fb71746c793b216e07909bc3ed346fbfddd5c534a368a03ee"
+        ]
+      },
+      {
+        "school": "河南城建学院",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "龙翔校区",
+            "aliases": [],
+            "address": "平顶山市新城区龙翔大道",
+            "source_url": "https://jjc.huuc.edu.cn/ghjs/xyjz.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "龙翔校区",
+            "name": "梅香园餐厅",
+            "aliases": [],
+            "location_text": "龙翔校区 梅香园餐厅",
+            "building_or_floor": "",
+            "service_type": "综合餐厅",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://henan-campus-dining/2026-08-26/01422530536d7e0cc6c7e500",
+            "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx（原表第15条“已核实”）",
+            "source_org": "food_link 用户提供资料",
+            "source_type": "user_requested_verified_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "原表序号：15\n办学层次：公办普通本科\n校区：龙翔校区\n食堂：梅香园餐厅\n核实状态：已核实\n原表说明：学校校园建筑页和官方报道可交叉确认。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://jjc.huuc.edu.cn/ghjs/xyjz.htm",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 1",
+                "source_org": "河南城建学院",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第15条列出的来源1；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              },
+              {
+                "source_url": "https://www.huuc.edu.cn/info/1002/11188.htm",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 2",
+                "source_org": "河南城建学院",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第15条列出的来源2；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "用户于2026-08-26要求上传并让用户端可见；仅纳入原表“已核实”行，排除“基本核实/待核实”行。",
+          "原始 Excel SHA-256：ee2a426d682af89fb71746c793b216e07909bc3ed346fbfddd5c534a368a03ee"
+        ]
+      },
+      {
+        "school": "河南大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "明伦校区",
+            "aliases": [],
+            "address": "开封市顺河回族区明伦街85号",
+            "source_url": "https://www.henu.edu.cn/zjhd/xqsyt.htm"
+          },
+          {
+            "name": "金明校区",
+            "aliases": [],
+            "address": "开封市龙亭区金明大道北段",
+            "source_url": "https://www.henu.edu.cn/zjhd/xqsyt.htm"
+          },
+          {
+            "name": "郑州校区",
+            "aliases": [
+              "龙子湖校区",
+              "郑州校区（龙子湖校区）"
+            ],
+            "address": "郑州市郑东新区明理路北段379号",
+            "source_url": "https://www.henu.edu.cn/zjhd/xqsyt.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "明伦校区",
+            "name": "中心食堂",
+            "aliases": [],
+            "location_text": "明伦校区 中心食堂",
+            "building_or_floor": "",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://henan-campus-dining/2026-08-26/aa1b22e130f06e4c1e85f7ef",
+            "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx（原表第17条“已核实”）",
+            "source_org": "food_link 用户提供资料",
+            "source_type": "user_requested_verified_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "原表序号：17\n办学层次：公办普通本科\n校区：明伦校区\n食堂：中心食堂\n核实状态：已核实\n原表说明：中心食堂为2026年官方现行名称；学苑食堂见学校基建公开资料。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.henu.edu.cn/zjhd/xqsyt.htm",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 1",
+                "source_org": "河南大学",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第17条列出的来源1；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              },
+              {
+                "source_url": "https://news.henu.edu.cn/xxxw/2248.htm",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 2",
+                "source_org": "河南大学",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第17条列出的来源2；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              }
+            ]
+          },
+          {
+            "campus": "明伦校区",
+            "name": "学苑食堂",
+            "aliases": [],
+            "location_text": "明伦校区 学苑食堂",
+            "building_or_floor": "",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://henan-campus-dining/2026-08-26/f0c711bbf872cb2e5d8505b3",
+            "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx（原表第17条“已核实”）",
+            "source_org": "food_link 用户提供资料",
+            "source_type": "user_requested_verified_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "原表序号：17\n办学层次：公办普通本科\n校区：明伦校区\n食堂：学苑食堂\n核实状态：已核实\n原表说明：中心食堂为2026年官方现行名称；学苑食堂见学校基建公开资料。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.henu.edu.cn/zjhd/xqsyt.htm",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 1",
+                "source_org": "河南大学",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第17条列出的来源1；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              },
+              {
+                "source_url": "https://news.henu.edu.cn/xxxw/2248.htm",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 2",
+                "source_org": "河南大学",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第17条列出的来源2；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              }
+            ]
+          },
+          {
+            "campus": "金明校区",
+            "name": "南苑餐厅",
+            "aliases": [],
+            "location_text": "金明校区 南苑餐厅",
+            "building_or_floor": "",
+            "service_type": "综合餐厅",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://henan-campus-dining/2026-08-26/7df987b8b2fb4f70eb0bb3f6",
+            "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx（原表第18条“已核实”）",
+            "source_org": "food_link 用户提供资料",
+            "source_type": "user_requested_verified_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "原表序号：18\n办学层次：公办普通本科\n校区：金明校区\n食堂：南苑餐厅\n核实状态：已核实\n原表说明：南苑、北苑由2026年官方信息确认；东苑、教苑由校方服务通知确认。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.henu.edu.cn/zjhd/xqsyt.htm",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 1",
+                "source_org": "河南大学",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第18条列出的来源1；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              },
+              {
+                "source_url": "https://news.henu.edu.cn/xxxw/2248.htm",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 2",
+                "source_org": "河南大学",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第18条列出的来源2；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              }
+            ]
+          },
+          {
+            "campus": "金明校区",
+            "name": "北苑餐厅",
+            "aliases": [],
+            "location_text": "金明校区 北苑餐厅",
+            "building_or_floor": "",
+            "service_type": "综合餐厅",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://henan-campus-dining/2026-08-26/7f6cb5c5296ea3144e1bf741",
+            "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx（原表第18条“已核实”）",
+            "source_org": "food_link 用户提供资料",
+            "source_type": "user_requested_verified_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "原表序号：18\n办学层次：公办普通本科\n校区：金明校区\n食堂：北苑餐厅\n核实状态：已核实\n原表说明：南苑、北苑由2026年官方信息确认；东苑、教苑由校方服务通知确认。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.henu.edu.cn/zjhd/xqsyt.htm",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 1",
+                "source_org": "河南大学",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第18条列出的来源1；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              },
+              {
+                "source_url": "https://news.henu.edu.cn/xxxw/2248.htm",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 2",
+                "source_org": "河南大学",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第18条列出的来源2；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              }
+            ]
+          },
+          {
+            "campus": "金明校区",
+            "name": "东苑餐厅",
+            "aliases": [],
+            "location_text": "金明校区 东苑餐厅",
+            "building_or_floor": "",
+            "service_type": "综合餐厅",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://henan-campus-dining/2026-08-26/61daa75956cbae9a0838df8b",
+            "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx（原表第18条“已核实”）",
+            "source_org": "food_link 用户提供资料",
+            "source_type": "user_requested_verified_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "原表序号：18\n办学层次：公办普通本科\n校区：金明校区\n食堂：东苑餐厅\n核实状态：已核实\n原表说明：南苑、北苑由2026年官方信息确认；东苑、教苑由校方服务通知确认。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.henu.edu.cn/zjhd/xqsyt.htm",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 1",
+                "source_org": "河南大学",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第18条列出的来源1；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              },
+              {
+                "source_url": "https://news.henu.edu.cn/xxxw/2248.htm",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 2",
+                "source_org": "河南大学",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第18条列出的来源2；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              }
+            ]
+          },
+          {
+            "campus": "金明校区",
+            "name": "教苑餐厅",
+            "aliases": [],
+            "location_text": "金明校区 教苑餐厅",
+            "building_or_floor": "",
+            "service_type": "综合餐厅",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://henan-campus-dining/2026-08-26/7ab8001431d8cb2cf23b80ae",
+            "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx（原表第18条“已核实”）",
+            "source_org": "food_link 用户提供资料",
+            "source_type": "user_requested_verified_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "原表序号：18\n办学层次：公办普通本科\n校区：金明校区\n食堂：教苑餐厅\n核实状态：已核实\n原表说明：南苑、北苑由2026年官方信息确认；东苑、教苑由校方服务通知确认。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.henu.edu.cn/zjhd/xqsyt.htm",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 1",
+                "source_org": "河南大学",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第18条列出的来源1；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              },
+              {
+                "source_url": "https://news.henu.edu.cn/xxxw/2248.htm",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 2",
+                "source_org": "河南大学",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第18条列出的来源2；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              }
+            ]
+          },
+          {
+            "campus": "郑州校区",
+            "name": "右岸餐厅",
+            "aliases": [],
+            "location_text": "郑州校区 右岸餐厅",
+            "building_or_floor": "",
+            "service_type": "综合餐厅",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://henan-campus-dining/2026-08-26/84249c49fd100f6fe4cf23f8",
+            "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx（原表第19条“已核实”）",
+            "source_org": "food_link 用户提供资料",
+            "source_type": "user_requested_verified_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "原表序号：19\n办学层次：公办普通本科\n校区：郑州校区\n食堂：右岸餐厅\n核实状态：已核实\n原表说明：校区地图/办学资料中使用该餐厅名称。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.henu.edu.cn/zjhd/xqsyt.htm",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 1",
+                "source_org": "河南大学",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第19条列出的来源1；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              },
+              {
+                "source_url": "https://kyc.henu.edu.cn/__local/F/98/90/AC6B62699A8429B68D2A6838DE6_ABE2FDF9_2984EC.pdf",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 2",
+                "source_org": "河南大学",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第19条列出的来源2；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "用户于2026-08-26要求上传并让用户端可见；仅纳入原表“已核实”行，排除“基本核实/待核实”行。",
+          "原始 Excel SHA-256：ee2a426d682af89fb71746c793b216e07909bc3ed346fbfddd5c534a368a03ee"
+        ]
+      },
+      {
+        "school": "河南工业大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "莲花街校区",
+            "aliases": [],
+            "address": "郑州市高新区莲花街100号",
+            "source_url": "https://www.haut.edu.cn/info/1120/1030.htm"
+          },
+          {
+            "name": "嵩山路校区",
+            "aliases": [],
+            "address": "郑州市中原区嵩山南路140号",
+            "source_url": "https://www.haut.edu.cn/info/1120/1030.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "莲花街校区",
+            "name": "知味餐厅",
+            "aliases": [
+              "一餐厅"
+            ],
+            "location_text": "莲花街校区 知味餐厅",
+            "building_or_floor": "",
+            "service_type": "综合餐厅",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://henan-campus-dining/2026-08-26/db0a4784a1fd6f0f9844f5f3",
+            "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx（原表第20条“已核实”）",
+            "source_org": "food_link 用户提供资料",
+            "source_type": "user_requested_verified_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "原表序号：20\n办学层次：公办普通本科\n校区：莲花街校区\n食堂：知味餐厅\n核实状态：已核实\n原表说明：后勤服务集团2025—2026年通知中持续使用。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.haut.edu.cn/info/1120/1030.htm",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 1",
+                "source_org": "河南工业大学",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第20条列出的来源1；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              },
+              {
+                "source_url": "https://hqjt.haut.edu.cn/xwgg/tzgg.htm",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 2",
+                "source_org": "河南工业大学",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第20条列出的来源2；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              }
+            ]
+          },
+          {
+            "campus": "莲花街校区",
+            "name": "知雅餐厅",
+            "aliases": [],
+            "location_text": "莲花街校区 知雅餐厅",
+            "building_or_floor": "",
+            "service_type": "综合餐厅",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://henan-campus-dining/2026-08-26/51ddacb7785eb0d4d29f6e36",
+            "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx（原表第20条“已核实”）",
+            "source_org": "food_link 用户提供资料",
+            "source_type": "user_requested_verified_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "原表序号：20\n办学层次：公办普通本科\n校区：莲花街校区\n食堂：知雅餐厅\n核实状态：已核实\n原表说明：后勤服务集团2025—2026年通知中持续使用。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.haut.edu.cn/info/1120/1030.htm",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 1",
+                "source_org": "河南工业大学",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第20条列出的来源1；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              },
+              {
+                "source_url": "https://hqjt.haut.edu.cn/xwgg/tzgg.htm",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 2",
+                "source_org": "河南工业大学",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第20条列出的来源2；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              }
+            ]
+          },
+          {
+            "campus": "嵩山路校区",
+            "name": "粮缘餐厅",
+            "aliases": [],
+            "location_text": "嵩山路校区 粮缘餐厅",
+            "building_or_floor": "",
+            "service_type": "综合餐厅",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://henan-campus-dining/2026-08-26/aa4e92b18ebf72ba74385c42",
+            "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx（原表第21条“已核实”）",
+            "source_org": "food_link 用户提供资料",
+            "source_type": "user_requested_verified_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "原表序号：21\n办学层次：公办普通本科\n校区：嵩山路校区\n食堂：粮缘餐厅\n核实状态：已核实\n原表说明：后勤服务集团现行通知中使用该名称。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.haut.edu.cn/info/1120/1030.htm",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 1",
+                "source_org": "河南工业大学",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第21条列出的来源1；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              },
+              {
+                "source_url": "https://hqjt.haut.edu.cn/xwgg/tzgg.htm",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 2",
+                "source_org": "河南工业大学",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第21条列出的来源2；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "用户于2026-08-26要求上传并让用户端可见；仅纳入原表“已核实”行，排除“基本核实/待核实”行。",
+          "原始 Excel SHA-256：ee2a426d682af89fb71746c793b216e07909bc3ed346fbfddd5c534a368a03ee"
+        ]
+      },
+      {
+        "school": "河南工业职业技术大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "孔明路校区",
+            "aliases": [],
+            "address": "南阳市杜诗路1666号",
+            "source_url": "https://www.hnpi.edu.cn/zsxx/2026/0323/c1482a120658/page.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "孔明路校区",
+            "name": "思源餐厅",
+            "aliases": [],
+            "location_text": "孔明路校区 思源餐厅",
+            "building_or_floor": "",
+            "service_type": "综合餐厅",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://henan-campus-dining/2026-08-26/f868b4c888184f8d06e01156",
+            "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx（原表第23条“已核实”）",
+            "source_org": "food_link 用户提供资料",
+            "source_type": "user_requested_verified_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "原表序号：23\n办学层次：公办职业本科\n校区：孔明路校区\n食堂：思源餐厅\n核实状态：已核实\n原表说明：2026招生章程确认校区；学校官方报道列明餐厅名称。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.hnpi.edu.cn/zsxx/2026/0323/c1482a120658/page.htm",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 1",
+                "source_org": "河南工业职业技术大学",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第23条列出的来源1；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              },
+              {
+                "source_url": "https://www.hnpi.edu.cn/dzb/2024/0926/c1460a60962/page.htm",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 2",
+                "source_org": "河南工业职业技术大学",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第23条列出的来源2；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              }
+            ]
+          },
+          {
+            "campus": "孔明路校区",
+            "name": "丰源餐厅",
+            "aliases": [],
+            "location_text": "孔明路校区 丰源餐厅",
+            "building_or_floor": "",
+            "service_type": "综合餐厅",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://henan-campus-dining/2026-08-26/8c0a58cb8c3446a62c839381",
+            "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx（原表第23条“已核实”）",
+            "source_org": "food_link 用户提供资料",
+            "source_type": "user_requested_verified_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "原表序号：23\n办学层次：公办职业本科\n校区：孔明路校区\n食堂：丰源餐厅\n核实状态：已核实\n原表说明：2026招生章程确认校区；学校官方报道列明餐厅名称。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.hnpi.edu.cn/zsxx/2026/0323/c1482a120658/page.htm",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 1",
+                "source_org": "河南工业职业技术大学",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第23条列出的来源1；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              },
+              {
+                "source_url": "https://www.hnpi.edu.cn/dzb/2024/0926/c1460a60962/page.htm",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 2",
+                "source_org": "河南工业职业技术大学",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第23条列出的来源2；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "用户于2026-08-26要求上传并让用户端可见；仅纳入原表“已核实”行，排除“基本核实/待核实”行。",
+          "原始 Excel SHA-256：ee2a426d682af89fb71746c793b216e07909bc3ed346fbfddd5c534a368a03ee"
+        ]
+      },
+      {
+        "school": "河南工学院",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "主校区",
+            "aliases": [],
+            "address": "新乡市平原路东段699号",
+            "source_url": "https://www.hait.edu.cn/info/1187/16503.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "主校区",
+            "name": "文苑餐厅",
+            "aliases": [],
+            "location_text": "主校区 文苑餐厅",
+            "building_or_floor": "",
+            "service_type": "综合餐厅",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://henan-campus-dining/2026-08-26/d2627650039ef55d39bb1881",
+            "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx（原表第26条“已核实”）",
+            "source_org": "food_link 用户提供资料",
+            "source_type": "user_requested_verified_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "原表序号：26\n办学层次：公办普通本科\n校区：主校区\n食堂：文苑餐厅\n核实状态：已核实\n原表说明：三处名称均可在学校近年官方页面中核实。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.hait.edu.cn/info/1187/16503.htm",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 1",
+                "source_org": "河南工学院",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第26条列出的来源1；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              },
+              {
+                "source_url": "https://www.hait.edu.cn/info/1039/15791.htm",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 2",
+                "source_org": "河南工学院",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第26条列出的来源2；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              }
+            ]
+          },
+          {
+            "campus": "主校区",
+            "name": "静苑餐厅",
+            "aliases": [],
+            "location_text": "主校区 静苑餐厅",
+            "building_or_floor": "",
+            "service_type": "综合餐厅",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://henan-campus-dining/2026-08-26/5f542b21e87769220f2ec417",
+            "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx（原表第26条“已核实”）",
+            "source_org": "food_link 用户提供资料",
+            "source_type": "user_requested_verified_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "原表序号：26\n办学层次：公办普通本科\n校区：主校区\n食堂：静苑餐厅\n核实状态：已核实\n原表说明：三处名称均可在学校近年官方页面中核实。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.hait.edu.cn/info/1187/16503.htm",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 1",
+                "source_org": "河南工学院",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第26条列出的来源1；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              },
+              {
+                "source_url": "https://www.hait.edu.cn/info/1039/15791.htm",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 2",
+                "source_org": "河南工学院",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第26条列出的来源2；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              }
+            ]
+          },
+          {
+            "campus": "主校区",
+            "name": "科苑餐厅",
+            "aliases": [],
+            "location_text": "主校区 科苑餐厅",
+            "building_or_floor": "",
+            "service_type": "综合餐厅",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://henan-campus-dining/2026-08-26/28ee6ac1853a39a524c4b34e",
+            "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx（原表第26条“已核实”）",
+            "source_org": "food_link 用户提供资料",
+            "source_type": "user_requested_verified_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "原表序号：26\n办学层次：公办普通本科\n校区：主校区\n食堂：科苑餐厅\n核实状态：已核实\n原表说明：三处名称均可在学校近年官方页面中核实。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.hait.edu.cn/info/1187/16503.htm",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 1",
+                "source_org": "河南工学院",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第26条列出的来源1；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              },
+              {
+                "source_url": "https://www.hait.edu.cn/info/1039/15791.htm",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 2",
+                "source_org": "河南工学院",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第26条列出的来源2；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "用户于2026-08-26要求上传并让用户端可见；仅纳入原表“已核实”行，排除“基本核实/待核实”行。",
+          "原始 Excel SHA-256：ee2a426d682af89fb71746c793b216e07909bc3ed346fbfddd5c534a368a03ee"
+        ]
+      },
+      {
+        "school": "河南师范大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "建设路校区",
+            "aliases": [],
+            "address": "新乡市牧野区建设东路46号",
+            "source_url": "https://www.htu.edu.cn/zs/2026/0622/c142a390207/page.htm"
+          },
+          {
+            "name": "平原湖校区",
+            "aliases": [],
+            "address": "新乡市红旗区经开区经七路与纬八路交叉口",
+            "source_url": "https://www.htu.edu.cn/pyh/xqgk/list.htm"
+          },
+          {
+            "name": "科技创新港校区",
+            "aliases": [],
+            "address": "新乡市平原示范区长江大道600号",
+            "source_url": "https://www.htu.edu.cn/fxcs/lxwm/list.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "建设路校区",
+            "name": "学苑餐厅",
+            "aliases": [],
+            "location_text": "建设路校区 学苑餐厅",
+            "building_or_floor": "",
+            "service_type": "综合餐厅",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://henan-campus-dining/2026-08-26/aff2b59b4021e33c66051d9b",
+            "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx（原表第30条“已核实”）",
+            "source_org": "food_link 用户提供资料",
+            "source_type": "user_requested_verified_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "原表序号：30\n办学层次：公办普通本科\n校区：建设路校区\n食堂：学苑餐厅\n核实状态：已核实\n原表说明：学校近年餐饮服务和活动通知可确认。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.htu.edu.cn/zs/2026/0622/c142a390207/page.htm",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 1",
+                "source_org": "河南师范大学",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第30条列出的来源1；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              },
+              {
+                "source_url": "https://www.htu.edu.cn/bwc/_t42/2025/1224/c688a367786/page.htm",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 2",
+                "source_org": "河南师范大学",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第30条列出的来源2；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              }
+            ]
+          },
+          {
+            "campus": "建设路校区",
+            "name": "东苑餐厅",
+            "aliases": [],
+            "location_text": "建设路校区 东苑餐厅",
+            "building_or_floor": "",
+            "service_type": "综合餐厅",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://henan-campus-dining/2026-08-26/6c3db1f8971fcd75d61eaf85",
+            "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx（原表第30条“已核实”）",
+            "source_org": "food_link 用户提供资料",
+            "source_type": "user_requested_verified_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "原表序号：30\n办学层次：公办普通本科\n校区：建设路校区\n食堂：东苑餐厅\n核实状态：已核实\n原表说明：学校近年餐饮服务和活动通知可确认。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.htu.edu.cn/zs/2026/0622/c142a390207/page.htm",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 1",
+                "source_org": "河南师范大学",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第30条列出的来源1；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              },
+              {
+                "source_url": "https://www.htu.edu.cn/bwc/_t42/2025/1224/c688a367786/page.htm",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 2",
+                "source_org": "河南师范大学",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第30条列出的来源2；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              }
+            ]
+          },
+          {
+            "campus": "建设路校区",
+            "name": "学府餐厅",
+            "aliases": [],
+            "location_text": "建设路校区 学府餐厅",
+            "building_or_floor": "",
+            "service_type": "综合餐厅",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://henan-campus-dining/2026-08-26/1cd532cf66e8ddafaa6e8b64",
+            "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx（原表第30条“已核实”）",
+            "source_org": "food_link 用户提供资料",
+            "source_type": "user_requested_verified_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "原表序号：30\n办学层次：公办普通本科\n校区：建设路校区\n食堂：学府餐厅\n核实状态：已核实\n原表说明：学校近年餐饮服务和活动通知可确认。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.htu.edu.cn/zs/2026/0622/c142a390207/page.htm",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 1",
+                "source_org": "河南师范大学",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第30条列出的来源1；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              },
+              {
+                "source_url": "https://www.htu.edu.cn/bwc/_t42/2025/1224/c688a367786/page.htm",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 2",
+                "source_org": "河南师范大学",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第30条列出的来源2；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              }
+            ]
+          },
+          {
+            "campus": "建设路校区",
+            "name": "文轩阁餐厅",
+            "aliases": [],
+            "location_text": "建设路校区 文轩阁餐厅",
+            "building_or_floor": "",
+            "service_type": "综合餐厅",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://henan-campus-dining/2026-08-26/b7dd64cc1d3eb9071fa8ec2d",
+            "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx（原表第30条“已核实”）",
+            "source_org": "food_link 用户提供资料",
+            "source_type": "user_requested_verified_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "原表序号：30\n办学层次：公办普通本科\n校区：建设路校区\n食堂：文轩阁餐厅\n核实状态：已核实\n原表说明：学校近年餐饮服务和活动通知可确认。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.htu.edu.cn/zs/2026/0622/c142a390207/page.htm",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 1",
+                "source_org": "河南师范大学",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第30条列出的来源1；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              },
+              {
+                "source_url": "https://www.htu.edu.cn/bwc/_t42/2025/1224/c688a367786/page.htm",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 2",
+                "source_org": "河南师范大学",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第30条列出的来源2；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              }
+            ]
+          },
+          {
+            "campus": "平原湖校区",
+            "name": "味轩餐厅",
+            "aliases": [],
+            "location_text": "平原湖校区 味轩餐厅",
+            "building_or_floor": "",
+            "service_type": "综合餐厅",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://henan-campus-dining/2026-08-26/74d2b5b4d1be715b6de0f3fa",
+            "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx（原表第31条“已核实”）",
+            "source_org": "food_link 用户提供资料",
+            "source_type": "user_requested_verified_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "原表序号：31\n办学层次：公办普通本科\n校区：平原湖校区\n食堂：味轩餐厅\n核实状态：已核实\n原表说明：学校采购页面明确为平原湖校区唯一餐厅。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.htu.edu.cn/pyh/xqgk/list.htm",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 1",
+                "source_org": "河南师范大学",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第31条列出的来源1；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              },
+              {
+                "source_url": "https://www.htu.edu.cn/gzc/2024/0621/c14363a314646/page.htm",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 2",
+                "source_org": "河南师范大学",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第31条列出的来源2；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              }
+            ]
+          },
+          {
+            "campus": "科技创新港校区",
+            "name": "寻味轩餐厅",
+            "aliases": [],
+            "location_text": "科技创新港校区 寻味轩餐厅",
+            "building_or_floor": "",
+            "service_type": "综合餐厅",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://henan-campus-dining/2026-08-26/b0661b23a071675fde387dfc",
+            "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx（原表第32条“已核实”）",
+            "source_org": "food_link 用户提供资料",
+            "source_type": "user_requested_verified_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "原表序号：32\n办学层次：公办普通本科\n校区：科技创新港校区\n食堂：寻味轩餐厅\n核实状态：已核实\n原表说明：2026年寒假服务通知明确现行运营名；2025资料曾称学苑餐厅。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.htu.edu.cn/fxcs/lxwm/list.htm",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 1",
+                "source_org": "河南师范大学",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第32条列出的来源1；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              },
+              {
+                "source_url": "https://www.htu.edu.cn/kjcxg/2026/0123/c23549a371431/page.htm",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 2",
+                "source_org": "河南师范大学",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第32条列出的来源2；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "用户于2026-08-26要求上传并让用户端可见；仅纳入原表“已核实”行，排除“基本核实/待核实”行。",
+          "原始 Excel SHA-256：ee2a426d682af89fb71746c793b216e07909bc3ed346fbfddd5c534a368a03ee"
+        ]
+      },
+      {
+        "school": "河南开封科技传媒学院",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "复兴大道校区",
+            "aliases": [],
+            "address": "开封市东京大道西段",
+            "source_url": "https://www.humc.edu.cn/2018/02-13/2969.html"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "复兴大道校区",
+            "name": "一餐厅",
+            "aliases": [],
+            "location_text": "复兴大道校区 一餐厅",
+            "building_or_floor": "",
+            "service_type": "综合餐厅",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://henan-campus-dining/2026-08-26/601e1c0f314caf61acf1d243",
+            "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx（原表第35条“已核实”）",
+            "source_org": "food_link 用户提供资料",
+            "source_type": "user_requested_verified_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "原表序号：35\n办学层次：民办普通本科\n校区：复兴大道校区\n食堂：一餐厅\n核实状态：已核实\n原表说明：2025—2026年学校页面分别确认。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.humc.edu.cn/2018/02-13/2969.html",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 1",
+                "source_org": "河南开封科技传媒学院",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第35条列出的来源1；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              },
+              {
+                "source_url": "https://www.humc.edu.cn/2026/05-26/457205.html",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 2",
+                "source_org": "河南开封科技传媒学院",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第35条列出的来源2；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              }
+            ]
+          },
+          {
+            "campus": "复兴大道校区",
+            "name": "二餐厅",
+            "aliases": [],
+            "location_text": "复兴大道校区 二餐厅",
+            "building_or_floor": "",
+            "service_type": "综合餐厅",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://henan-campus-dining/2026-08-26/3ed982ff8616e6950168b249",
+            "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx（原表第35条“已核实”）",
+            "source_org": "food_link 用户提供资料",
+            "source_type": "user_requested_verified_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "原表序号：35\n办学层次：民办普通本科\n校区：复兴大道校区\n食堂：二餐厅\n核实状态：已核实\n原表说明：2025—2026年学校页面分别确认。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.humc.edu.cn/2018/02-13/2969.html",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 1",
+                "source_org": "河南开封科技传媒学院",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第35条列出的来源1；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              },
+              {
+                "source_url": "https://www.humc.edu.cn/2026/05-26/457205.html",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 2",
+                "source_org": "河南开封科技传媒学院",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第35条列出的来源2；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "用户于2026-08-26要求上传并让用户端可见；仅纳入原表“已核实”行，排除“基本核实/待核实”行。",
+          "原始 Excel SHA-256：ee2a426d682af89fb71746c793b216e07909bc3ed346fbfddd5c534a368a03ee"
+        ]
+      },
+      {
+        "school": "河南牧业经济学院",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "龙子湖校区",
+            "aliases": [],
+            "address": "郑州市郑东新区龙子湖北路6号",
+            "source_url": "https://zhaosheng.hnuahe.edu.cn/info/1009/3774.htm"
+          },
+          {
+            "name": "英才校区",
+            "aliases": [],
+            "address": "郑州市惠济区英才街146号",
+            "source_url": "https://zhaosheng.hnuahe.edu.cn/info/1009/3774.htm"
+          },
+          {
+            "name": "北林校区",
+            "aliases": [],
+            "address": "郑州市金水区北林路16号",
+            "source_url": "https://zhaosheng.hnuahe.edu.cn/info/1009/3774.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "龙子湖校区",
+            "name": "醒园",
+            "aliases": [
+              "一食堂"
+            ],
+            "location_text": "龙子湖校区 醒园 一楼",
+            "building_or_floor": "一楼",
+            "service_type": "综合餐厅",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://henan-campus-dining/2026-08-26/4f0e5fed06200233aad7597e",
+            "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx（原表第36条“已核实”）",
+            "source_org": "food_link 用户提供资料",
+            "source_type": "user_requested_verified_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "原表序号：36\n办学层次：公办普通本科\n校区：龙子湖校区\n食堂：醒园\n核实状态：已核实\n原表说明：2025年学校经营项目公告明确名称和位置。\n明确楼层：一楼",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://zhaosheng.hnuahe.edu.cn/info/1009/3774.htm",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 1",
+                "source_org": "河南牧业经济学院",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第36条列出的来源1；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              },
+              {
+                "source_url": "https://www.hnuahe.edu.cn/info/1034/11909.htm",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 2",
+                "source_org": "河南牧业经济学院",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第36条列出的来源2；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              }
+            ]
+          },
+          {
+            "campus": "龙子湖校区",
+            "name": "随园",
+            "aliases": [
+              "二食堂"
+            ],
+            "location_text": "龙子湖校区 随园 二楼、三楼",
+            "building_or_floor": "二楼、三楼",
+            "service_type": "综合餐厅（含教工食堂）",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://henan-campus-dining/2026-08-26/892f3d58175f52b3c629ee28",
+            "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx（原表第36条“已核实”）",
+            "source_org": "food_link 用户提供资料",
+            "source_type": "user_requested_verified_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "原表序号：36\n办学层次：公办普通本科\n校区：龙子湖校区\n食堂：随园\n核实状态：已核实\n原表说明：2025年学校经营项目公告明确名称和位置。\n明确楼层：二楼、三楼",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://zhaosheng.hnuahe.edu.cn/info/1009/3774.htm",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 1",
+                "source_org": "河南牧业经济学院",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第36条列出的来源1；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              },
+              {
+                "source_url": "https://www.hnuahe.edu.cn/info/1034/11909.htm",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 2",
+                "source_org": "河南牧业经济学院",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第36条列出的来源2；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              }
+            ]
+          },
+          {
+            "campus": "英才校区",
+            "name": "菊园学生食堂",
+            "aliases": [],
+            "location_text": "英才校区 菊园学生食堂",
+            "building_or_floor": "",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://henan-campus-dining/2026-08-26/2e62103680713461baaa2835",
+            "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx（原表第37条“已核实”）",
+            "source_org": "food_link 用户提供资料",
+            "source_type": "user_requested_verified_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "原表序号：37\n办学层次：公办普通本科\n校区：英才校区\n食堂：菊园学生食堂\n核实状态：已核实\n原表说明：现行招生章程确认地址，学校项目公告确认餐厅名称。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://zhaosheng.hnuahe.edu.cn/info/1009/3774.htm",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 1",
+                "source_org": "河南牧业经济学院",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第37条列出的来源1；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              },
+              {
+                "source_url": "https://www.hnuahe.edu.cn/info/1034/11909.htm",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 2",
+                "source_org": "河南牧业经济学院",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第37条列出的来源2；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              }
+            ]
+          },
+          {
+            "campus": "北林校区",
+            "name": "学生第二食堂",
+            "aliases": [],
+            "location_text": "北林校区 学生第二食堂",
+            "building_or_floor": "",
+            "service_type": "学生食堂",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://henan-campus-dining/2026-08-26/de6d533729c2210d04db89af",
+            "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx（原表第38条“已核实”）",
+            "source_org": "food_link 用户提供资料",
+            "source_type": "user_requested_verified_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "原表序号：38\n办学层次：公办普通本科\n校区：北林校区\n食堂：学生第二食堂\n核实状态：已核实\n原表说明：学校2025年经营项目公告使用该名称。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://zhaosheng.hnuahe.edu.cn/info/1009/3774.htm",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 1",
+                "source_org": "河南牧业经济学院",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第38条列出的来源1；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              },
+              {
+                "source_url": "https://www.hnuahe.edu.cn/info/1034/11909.htm",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 2",
+                "source_org": "河南牧业经济学院",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第38条列出的来源2；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "用户于2026-08-26要求上传并让用户端可见；仅纳入原表“已核实”行，排除“基本核实/待核实”行。",
+          "原始 Excel SHA-256：ee2a426d682af89fb71746c793b216e07909bc3ed346fbfddd5c534a368a03ee"
+        ]
+      },
+      {
+        "school": "河南理工大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "南校区",
+            "aliases": [],
+            "address": "焦作市世纪路2001号",
+            "source_url": "https://www.hpu.edu.cn/jxky.htm"
+          },
+          {
+            "name": "北校区",
+            "aliases": [],
+            "address": "焦作市解放中路142号",
+            "source_url": "https://www.hpu.edu.cn/jxky.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "南校区",
+            "name": "学苑餐厅",
+            "aliases": [],
+            "location_text": "南校区 学苑餐厅",
+            "building_or_floor": "",
+            "service_type": "综合餐厅",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://henan-campus-dining/2026-08-26/0f3d524c0d9bc066e30d339f",
+            "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx（原表第39条“已核实”）",
+            "source_org": "food_link 用户提供资料",
+            "source_type": "user_requested_verified_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "原表序号：39\n办学层次：公办普通本科\n校区：南校区\n食堂：学苑餐厅\n核实状态：已核实\n原表说明：学校2025年餐饮劳动计划明确校区与餐厅名称。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.hpu.edu.cn/jxky.htm",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 1",
+                "source_org": "河南理工大学",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第39条列出的来源1；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              },
+              {
+                "source_url": "https://etc.hpu.edu.cn/__local/D/99/5C/28177D842BD1ADC87E3C29E5459_A041EFE4_8F190.pdf",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 2",
+                "source_org": "河南理工大学",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第39条列出的来源2；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              }
+            ]
+          },
+          {
+            "campus": "南校区",
+            "name": "学子餐厅",
+            "aliases": [],
+            "location_text": "南校区 学子餐厅",
+            "building_or_floor": "",
+            "service_type": "综合餐厅",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://henan-campus-dining/2026-08-26/ccb31e5a4026aba7366157b3",
+            "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx（原表第39条“已核实”）",
+            "source_org": "food_link 用户提供资料",
+            "source_type": "user_requested_verified_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "原表序号：39\n办学层次：公办普通本科\n校区：南校区\n食堂：学子餐厅\n核实状态：已核实\n原表说明：学校2025年餐饮劳动计划明确校区与餐厅名称。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.hpu.edu.cn/jxky.htm",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 1",
+                "source_org": "河南理工大学",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第39条列出的来源1；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              },
+              {
+                "source_url": "https://etc.hpu.edu.cn/__local/D/99/5C/28177D842BD1ADC87E3C29E5459_A041EFE4_8F190.pdf",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 2",
+                "source_org": "河南理工大学",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第39条列出的来源2；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              }
+            ]
+          },
+          {
+            "campus": "南校区",
+            "name": "学士餐厅",
+            "aliases": [],
+            "location_text": "南校区 学士餐厅",
+            "building_or_floor": "",
+            "service_type": "综合餐厅",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://henan-campus-dining/2026-08-26/8a2744c215a0acfd97551ee4",
+            "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx（原表第39条“已核实”）",
+            "source_org": "food_link 用户提供资料",
+            "source_type": "user_requested_verified_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "原表序号：39\n办学层次：公办普通本科\n校区：南校区\n食堂：学士餐厅\n核实状态：已核实\n原表说明：学校2025年餐饮劳动计划明确校区与餐厅名称。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.hpu.edu.cn/jxky.htm",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 1",
+                "source_org": "河南理工大学",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第39条列出的来源1；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              },
+              {
+                "source_url": "https://etc.hpu.edu.cn/__local/D/99/5C/28177D842BD1ADC87E3C29E5459_A041EFE4_8F190.pdf",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 2",
+                "source_org": "河南理工大学",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第39条列出的来源2；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              }
+            ]
+          },
+          {
+            "campus": "南校区",
+            "name": "学府餐厅",
+            "aliases": [],
+            "location_text": "南校区 学府餐厅",
+            "building_or_floor": "",
+            "service_type": "综合餐厅",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://henan-campus-dining/2026-08-26/68b9b60db474ac9154a26ca9",
+            "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx（原表第39条“已核实”）",
+            "source_org": "food_link 用户提供资料",
+            "source_type": "user_requested_verified_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "原表序号：39\n办学层次：公办普通本科\n校区：南校区\n食堂：学府餐厅\n核实状态：已核实\n原表说明：学校2025年餐饮劳动计划明确校区与餐厅名称。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.hpu.edu.cn/jxky.htm",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 1",
+                "source_org": "河南理工大学",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第39条列出的来源1；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              },
+              {
+                "source_url": "https://etc.hpu.edu.cn/__local/D/99/5C/28177D842BD1ADC87E3C29E5459_A041EFE4_8F190.pdf",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 2",
+                "source_org": "河南理工大学",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第39条列出的来源2；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              }
+            ]
+          },
+          {
+            "campus": "南校区",
+            "name": "学海餐厅",
+            "aliases": [],
+            "location_text": "南校区 学海餐厅",
+            "building_or_floor": "",
+            "service_type": "综合餐厅",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://henan-campus-dining/2026-08-26/142a51d8c47f19c35ebea821",
+            "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx（原表第39条“已核实”）",
+            "source_org": "food_link 用户提供资料",
+            "source_type": "user_requested_verified_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "原表序号：39\n办学层次：公办普通本科\n校区：南校区\n食堂：学海餐厅\n核实状态：已核实\n原表说明：学校2025年餐饮劳动计划明确校区与餐厅名称。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.hpu.edu.cn/jxky.htm",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 1",
+                "source_org": "河南理工大学",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第39条列出的来源1；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              },
+              {
+                "source_url": "https://etc.hpu.edu.cn/__local/D/99/5C/28177D842BD1ADC87E3C29E5459_A041EFE4_8F190.pdf",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 2",
+                "source_org": "河南理工大学",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第39条列出的来源2；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              }
+            ]
+          },
+          {
+            "campus": "北校区",
+            "name": "学林餐厅",
+            "aliases": [],
+            "location_text": "北校区 学林餐厅",
+            "building_or_floor": "",
+            "service_type": "综合餐厅",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://henan-campus-dining/2026-08-26/4b69162120839e8d9c55fa3d",
+            "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx（原表第40条“已核实”）",
+            "source_org": "food_link 用户提供资料",
+            "source_type": "user_requested_verified_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "原表序号：40\n办学层次：公办普通本科\n校区：北校区\n食堂：学林餐厅\n核实状态：已核实\n原表说明：学校2025年餐饮劳动计划明确校区与餐厅名称。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.hpu.edu.cn/jxky.htm",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 1",
+                "source_org": "河南理工大学",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第40条列出的来源1；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              },
+              {
+                "source_url": "https://etc.hpu.edu.cn/__local/D/99/5C/28177D842BD1ADC87E3C29E5459_A041EFE4_8F190.pdf",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 2",
+                "source_org": "河南理工大学",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第40条列出的来源2；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "用户于2026-08-26要求上传并让用户端可见；仅纳入原表“已核实”行，排除“基本核实/待核实”行。",
+          "原始 Excel SHA-256：ee2a426d682af89fb71746c793b216e07909bc3ed346fbfddd5c534a368a03ee"
+        ]
+      },
+      {
+        "school": "河南科技大学",
+        "review_status": "pending_review",
+        "campuses": [
+          {
+            "name": "开元校区",
+            "aliases": [],
+            "address": "洛阳市洛龙区开元大道263号",
+            "source_url": "https://www.haust.edu.cn/xxgk/xydt.htm"
+          },
+          {
+            "name": "西苑校区",
+            "aliases": [],
+            "address": "洛阳市涧西区西苑路48号",
+            "source_url": "https://www.haust.edu.cn/info/1049/24003.htm"
+          }
+        ],
+        "canteens": [
+          {
+            "campus": "开元校区",
+            "name": "嘉园餐厅",
+            "aliases": [],
+            "location_text": "开元校区 嘉园餐厅",
+            "building_or_floor": "",
+            "service_type": "综合餐厅",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://henan-campus-dining/2026-08-26/da781c036403fef4caa58eb3",
+            "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx（原表第43条“已核实”）",
+            "source_org": "food_link 用户提供资料",
+            "source_type": "user_requested_verified_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "原表序号：43\n办学层次：公办普通本科\n校区：开元校区\n食堂：嘉园餐厅\n核实状态：已核实\n原表说明：学校现行生活服务和后勤报道可确认。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.haust.edu.cn/xxgk/xydt.htm",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 1",
+                "source_org": "河南科技大学",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第43条列出的来源1；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              },
+              {
+                "source_url": "https://www.haust.edu.cn/info/1049/329471.htm",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 2",
+                "source_org": "河南科技大学",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第43条列出的来源2；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              }
+            ]
+          },
+          {
+            "campus": "开元校区",
+            "name": "菁园餐厅",
+            "aliases": [],
+            "location_text": "开元校区 菁园餐厅",
+            "building_or_floor": "",
+            "service_type": "综合餐厅",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://henan-campus-dining/2026-08-26/26fead51179a498f523519a6",
+            "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx（原表第43条“已核实”）",
+            "source_org": "food_link 用户提供资料",
+            "source_type": "user_requested_verified_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "原表序号：43\n办学层次：公办普通本科\n校区：开元校区\n食堂：菁园餐厅\n核实状态：已核实\n原表说明：学校现行生活服务和后勤报道可确认。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.haust.edu.cn/xxgk/xydt.htm",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 1",
+                "source_org": "河南科技大学",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第43条列出的来源1；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              },
+              {
+                "source_url": "https://www.haust.edu.cn/info/1049/329471.htm",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 2",
+                "source_org": "河南科技大学",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第43条列出的来源2；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              }
+            ]
+          },
+          {
+            "campus": "开元校区",
+            "name": "乾园餐厅",
+            "aliases": [],
+            "location_text": "开元校区 乾园餐厅",
+            "building_or_floor": "",
+            "service_type": "综合餐厅",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://henan-campus-dining/2026-08-26/a5253f6dd0437bbf639321f0",
+            "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx（原表第43条“已核实”）",
+            "source_org": "food_link 用户提供资料",
+            "source_type": "user_requested_verified_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "原表序号：43\n办学层次：公办普通本科\n校区：开元校区\n食堂：乾园餐厅\n核实状态：已核实\n原表说明：学校现行生活服务和后勤报道可确认。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.haust.edu.cn/xxgk/xydt.htm",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 1",
+                "source_org": "河南科技大学",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第43条列出的来源1；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              },
+              {
+                "source_url": "https://www.haust.edu.cn/info/1049/329471.htm",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 2",
+                "source_org": "河南科技大学",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第43条列出的来源2；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              }
+            ]
+          },
+          {
+            "campus": "西苑校区",
+            "name": "南苑餐厅",
+            "aliases": [],
+            "location_text": "西苑校区 南苑餐厅",
+            "building_or_floor": "",
+            "service_type": "综合餐厅",
+            "audience": "师生",
+            "opening_hours_raw": "",
+            "source_url": "owner-confirmation://henan-campus-dining/2026-08-26/39151d54613bead5155f8558",
+            "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx（原表第44条“已核实”）",
+            "source_org": "food_link 用户提供资料",
+            "source_type": "user_requested_verified_compilation",
+            "evidence_level": "D",
+            "evidence_excerpt": "原表序号：44\n办学层次：公办普通本科\n校区：西苑校区\n食堂：南苑餐厅\n核实状态：已核实\n原表说明：学校2025年官方后勤信息明确名称。",
+            "review_status": "pending_review",
+            "additional_sources": [
+              {
+                "source_url": "https://www.haust.edu.cn/info/1049/24003.htm",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 1",
+                "source_org": "河南科技大学",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第44条列出的来源1；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              },
+              {
+                "source_url": "https://www.haust.edu.cn/info/1049/329471.htm",
+                "source_title": "河南本科院校校区食堂汇总_2026-08-25.xlsx 原表来源 2",
+                "source_org": "河南科技大学",
+                "source_type": "official_university",
+                "evidence_level": "D",
+                "evidence_excerpt": "原表第44条列出的来源2；随用户确认行一并保留，导入过程未把网页内容自动升级为A/B/C级证据。"
+              }
+            ]
+          }
+        ],
+        "windows": [],
+        "notes": [
+          "用户于2026-08-26要求上传并让用户端可见；仅纳入原表“已核实”行，排除“基本核实/待核实”行。",
+          "原始 Excel SHA-256：ee2a426d682af89fb71746c793b216e07909bc3ed346fbfddd5c534a368a03ee"
+        ]
+      }
+    ]
+  }
+]
