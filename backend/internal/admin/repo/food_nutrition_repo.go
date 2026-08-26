@@ -178,6 +178,9 @@ func (r *FoodNutritionRepo) Create(ctx context.Context, item *domain.FoodNutriti
 	}
 	item.CanonicalName = strings.TrimSpace(item.CanonicalName)
 	item.NormalizedName = normalizeFoodNutritionName(item.CanonicalName)
+	if item.StateTags == nil {
+		item.StateTags = []string{}
+	}
 	if domain.IsAIGeneratedNutritionSource(item.Source) && strings.TrimSpace(item.QualityTier) != domain.NutritionQualityReviewedEstimate {
 		item.QualityTier = domain.NutritionQualityPlausible
 		item.IsActive = false

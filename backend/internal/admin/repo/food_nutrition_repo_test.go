@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"food_link/backend/internal/foodrecord/domain"
+	migrationdo "food_link/backend/internal/migration/do"
 	"food_link/backend/pkg/testdb"
 
 	"github.com/stretchr/testify/assert"
@@ -39,6 +41,36 @@ func setupFoodNutritionRepoTest(t *testing.T) *FoodNutritionRepo {
 		)
 	`).Error)
 	return NewFoodNutritionRepo(db)
+}
+
+func setupFoodNutritionRepoCreateTest(t *testing.T) *FoodNutritionRepo {
+	t.Helper()
+	db := testdb.New(t)
+	require.NoError(t, db.AutoMigrate(&migrationdo.FoodNutritionDO{}, &migrationdo.FoodNutritionAliasDO{}))
+	return NewFoodNutritionRepo(db)
+}
+
+func TestFoodNutritionRepoCreatePersistsEmptyStateTags(t *testing.T) {
+	repository := setupFoodNutritionRepoCreateTest(t)
+
+	created, err := repository.Create(context.Background(), &domain.FoodNutrition{
+		CanonicalName: "粥里香 黑米粥",
+		Source:        "mint_health_food_batch_003",
+		ImagePaths:    []string{},
+		IsActive:      true,
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, created)
+	assert.NotNil(t, created.StateTags)
+	assert.Empty(t, created.StateTags)
+
+	var stateTags string
+	require.NoError(t, repository.db.Raw(
+		"SELECT state_tags FROM food_nutrition_library WHERE id = ?",
+		created.ID,
+	).Scan(&stateTags).Error)
+	assert.JSONEq(t, `[]`, stateTags)
 }
 
 func TestFoodNutritionRepoListPrioritizesFoodsWithImages(t *testing.T) {

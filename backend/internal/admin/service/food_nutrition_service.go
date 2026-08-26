@@ -157,6 +157,7 @@ func (s *FoodNutritionService) Create(ctx context.Context, input CreateFoodNutri
 		NormalizedName:        normalizeFoodNutritionName(name),
 		Source:                strings.TrimSpace(input.Source),
 		ImagePaths:            normalizeStringSlice(input.ImagePaths),
+		StateTags:             []string{},
 		KcalPer100g:           input.KcalPer100g,
 		ProteinPer100g:        input.ProteinPer100g,
 		CarbsPer100g:          input.CarbsPer100g,
