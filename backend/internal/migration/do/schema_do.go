@@ -346,8 +346,8 @@ type PrecisionItemEstimateDO struct {
 func (PrecisionItemEstimateDO) TableName() string { return "precision_item_estimates" }
 
 type FoodRecordDO struct {
-	ID               string           `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
-	UserID           string           `gorm:"column:user_id;type:uuid;not null;index:idx_user_food_records_user_id"`
+	ID               string           `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid();index:idx_user_food_records_user_record_time,priority:3,sort:desc;index:idx_user_food_records_user_created,priority:3,sort:desc;index:idx_user_food_records_feed_created,priority:2,sort:desc,where:hidden_from_feed = false"`
+	UserID           string           `gorm:"column:user_id;type:uuid;not null;index:idx_user_food_records_user_id;index:idx_user_food_records_user_record_time,priority:1;index:idx_user_food_records_user_created,priority:1"`
 	MealType         string           `gorm:"column:meal_type;type:text;not null;index:idx_user_food_records_meal_type"`
 	ImagePath        *string          `gorm:"column:image_path;type:text"`
 	ImagePaths       []string         `gorm:"column:image_paths;type:jsonb;serializer:json;default:'[]'::jsonb"`
@@ -359,8 +359,8 @@ type FoodRecordDO struct {
 	TotalCarbs       *float64         `gorm:"column:total_carbs;type:numeric;default:0"`
 	TotalFat         *float64         `gorm:"column:total_fat;type:numeric;default:0"`
 	TotalWeightGrams *int             `gorm:"column:total_weight_grams;type:integer;default:0"`
-	RecordTime       *time.Time       `gorm:"column:record_time;type:timestamptz;default:now();index:idx_user_food_records_record_time"`
-	CreatedAt        *time.Time       `gorm:"column:created_at;type:timestamptz;default:now();index:idx_user_food_records_created_at"`
+	RecordTime       *time.Time       `gorm:"column:record_time;type:timestamptz;default:now();index:idx_user_food_records_record_time;index:idx_user_food_records_user_record_time,priority:2,sort:desc"`
+	CreatedAt        *time.Time       `gorm:"column:created_at;type:timestamptz;default:now();index:idx_user_food_records_created_at;index:idx_user_food_records_user_created,priority:2,sort:desc;index:idx_user_food_records_feed_created,priority:1,sort:desc,where:hidden_from_feed = false"`
 	ContextState     *string          `gorm:"column:context_state;type:text"`
 	PFCRatioComment  *string          `gorm:"column:pfc_ratio_comment;type:text"`
 	AbsorptionNotes  *string          `gorm:"column:absorption_notes;type:text"`
@@ -808,8 +808,8 @@ type FeedCommentDO struct {
 func (FeedCommentDO) TableName() string { return "feed_comments" }
 
 type FeedInteractionNotificationDO struct {
-	ID               string     `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
-	RecipientUserID  string     `gorm:"column:recipient_user_id;type:uuid;not null;index:idx_feed_interaction_notifications_recipient,priority:1"`
+	ID               string     `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid();index:idx_feed_interaction_notifications_recipient_created,priority:3,sort:desc"`
+	RecipientUserID  string     `gorm:"column:recipient_user_id;type:uuid;not null;index:idx_feed_interaction_notifications_recipient,priority:1;index:idx_feed_interaction_notifications_recipient_created,priority:1"`
 	ActorUserID      *string    `gorm:"column:actor_user_id;type:uuid"`
 	RecordID         *string    `gorm:"column:record_id;type:uuid;index:idx_feed_interaction_notifications_record_id"`
 	TargetType       string     `gorm:"column:target_type;type:text;not null;default:'food_record';index:idx_feed_interaction_notifications_target,priority:1"`
@@ -819,7 +819,7 @@ type FeedInteractionNotificationDO struct {
 	NotificationType string     `gorm:"column:notification_type;type:text;not null"`
 	ContentPreview   *string    `gorm:"column:content_preview;type:text"`
 	IsRead           bool       `gorm:"column:is_read;type:boolean;not null;default:false;index:idx_feed_interaction_notifications_recipient,priority:2"`
-	CreatedAt        *time.Time `gorm:"column:created_at;type:timestamptz;default:now();index:idx_feed_interaction_notifications_recipient,priority:3,sort:desc"`
+	CreatedAt        *time.Time `gorm:"column:created_at;type:timestamptz;default:now();index:idx_feed_interaction_notifications_recipient,priority:3,sort:desc;index:idx_feed_interaction_notifications_recipient_created,priority:2,sort:desc"`
 	ReadAt           *time.Time `gorm:"column:read_at;type:timestamptz"`
 }
 
@@ -865,8 +865,8 @@ type FeedReportDO struct {
 func (FeedReportDO) TableName() string { return "feed_reports" }
 
 type UserCirclePostDO struct {
-	ID               string     `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
-	UserID           string     `gorm:"column:user_id;type:uuid;not null;index:idx_user_circle_posts_user_id"`
+	ID               string     `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid();index:idx_user_circle_posts_user_created_page,priority:3,sort:desc,where:hidden_from_feed = false;index:idx_user_circle_posts_feed_created,priority:2,sort:desc,where:hidden_from_feed = false"`
+	UserID           string     `gorm:"column:user_id;type:uuid;not null;index:idx_user_circle_posts_user_id;index:idx_user_circle_posts_user_created_page,priority:1,where:hidden_from_feed = false"`
 	Title            *string    `gorm:"column:title;type:text"`
 	Body             *string    `gorm:"column:body;type:text"`
 	Content          string     `gorm:"column:content;type:text;not null;default:''"`
@@ -880,7 +880,7 @@ type UserCirclePostDO struct {
 	SodiumMg         *float64   `gorm:"column:sodium_mg;type:numeric(10,2)"`
 	TotalWeightGrams *float64   `gorm:"column:total_weight_grams;type:numeric(10,2)"`
 	HiddenFromFeed   bool       `gorm:"column:hidden_from_feed;type:boolean;not null;default:false"`
-	CreatedAt        *time.Time `gorm:"column:created_at;type:timestamptz;default:now();index:idx_user_circle_posts_user_created_at"`
+	CreatedAt        *time.Time `gorm:"column:created_at;type:timestamptz;default:now();index:idx_user_circle_posts_user_created_at;index:idx_user_circle_posts_user_created_page,priority:2,sort:desc,where:hidden_from_feed = false;index:idx_user_circle_posts_feed_created,priority:1,sort:desc,where:hidden_from_feed = false"`
 	UpdatedAt        *time.Time `gorm:"column:updated_at;type:timestamptz;default:now()"`
 }
 
@@ -1059,14 +1059,14 @@ type PrivateMessageReportDO struct {
 func (PrivateMessageReportDO) TableName() string { return "private_message_reports" }
 
 type BodyWeightRecordDO struct {
-	ID             string    `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
-	UserID         string    `gorm:"column:user_id;type:uuid;not null;index:idx_user_weight_records_user_date,priority:1;index:idx_user_weight_records_user_created_at,priority:1;index:idx_user_weight_records_user_client_record_id,priority:1,where:client_record_id IS NOT NULL"`
-	RecordedOn     time.Time `gorm:"column:recorded_on;type:date;not null;index:idx_user_weight_records_user_date,priority:2"`
+	ID             string    `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid();index:idx_user_weight_records_daily_latest,priority:4,sort:desc"`
+	UserID         string    `gorm:"column:user_id;type:uuid;not null;index:idx_user_weight_records_user_date,priority:1;index:idx_user_weight_records_user_created_at,priority:1;index:idx_user_weight_records_user_client_record_id,priority:1,where:client_record_id IS NOT NULL;index:idx_user_weight_records_daily_latest,priority:1"`
+	RecordedOn     time.Time `gorm:"column:recorded_on;type:date;not null;index:idx_user_weight_records_user_date,priority:2;index:idx_user_weight_records_daily_latest,priority:2"`
 	ClientRecordID *string   `gorm:"column:client_record_id;type:text;index:idx_user_weight_records_user_client_record_id,priority:2,where:client_record_id IS NOT NULL"`
 	WeightKg       float64   `gorm:"column:weight_kg;type:numeric(6,2);not null"`
 	SourceType     string    `gorm:"column:source_type;type:text;not null;default:'manual'"`
 	Note           *string   `gorm:"column:note;type:text"`
-	CreatedAt      time.Time `gorm:"column:created_at;type:timestamptz;not null;default:now();index:idx_user_weight_records_user_created_at,priority:2,sort:desc"`
+	CreatedAt      time.Time `gorm:"column:created_at;type:timestamptz;not null;default:now();index:idx_user_weight_records_user_created_at,priority:2,sort:desc;index:idx_user_weight_records_daily_latest,priority:3,sort:desc"`
 	UpdatedAt      time.Time `gorm:"column:updated_at;type:timestamptz;not null;default:now()"`
 }
 
@@ -1094,8 +1094,8 @@ type BodyMetricSettingsDO struct {
 func (BodyMetricSettingsDO) TableName() string { return "user_body_metric_settings" }
 
 type ExerciseLogDO struct {
-	ID             string           `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
-	UserID         string           `gorm:"column:user_id;type:uuid;not null;index:idx_user_exercise_logs_user_date,priority:1;index:idx_user_exercise_logs_user_recorded_at,priority:1"`
+	ID             string           `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid();index:idx_user_exercise_logs_user_created,priority:3,sort:desc,where:hidden_from_feed = false;index:idx_user_exercise_logs_feed_created,priority:2,sort:desc,where:hidden_from_feed = false"`
+	UserID         string           `gorm:"column:user_id;type:uuid;not null;index:idx_user_exercise_logs_user_date,priority:1;index:idx_user_exercise_logs_user_recorded_at,priority:1;index:idx_user_exercise_logs_user_created,priority:1,where:hidden_from_feed = false"`
 	ExerciseDesc   string           `gorm:"column:exercise_desc;type:text;not null"`
 	ExerciseType   *string          `gorm:"column:exercise_type;type:text"`
 	ImageURL       *string          `gorm:"column:image_url;type:text"`
@@ -1106,7 +1106,7 @@ type ExerciseLogDO struct {
 	AIReasoning    *string          `gorm:"column:ai_reasoning;type:text"`
 	ExerciseItems  []map[string]any `gorm:"column:exercise_items;type:jsonb;serializer:json;not null;default:'[]'::jsonb"`
 	HiddenFromFeed bool             `gorm:"column:hidden_from_feed;type:boolean;not null;default:false;index:idx_user_exercise_logs_hidden_from_feed"`
-	CreatedAt      time.Time        `gorm:"column:created_at;type:timestamptz;not null;default:now()"`
+	CreatedAt      time.Time        `gorm:"column:created_at;type:timestamptz;not null;default:now();index:idx_user_exercise_logs_user_created,priority:2,sort:desc,where:hidden_from_feed = false;index:idx_user_exercise_logs_feed_created,priority:1,sort:desc,where:hidden_from_feed = false"`
 }
 
 func (ExerciseLogDO) TableName() string { return "user_exercise_logs" }

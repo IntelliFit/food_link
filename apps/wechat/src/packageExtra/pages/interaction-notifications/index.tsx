@@ -12,10 +12,12 @@ import {
 
 import './index.scss'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
+import { appendBoundedUnique } from '../../../utils/list-pagination'
 
 type NotificationTab = 'all' | 'like' | 'comment'
 
 const PAGE_SIZE = 20
+const MAX_NOTIFICATION_WINDOW_ITEMS = 200
 const NOTIFICATIONS_TIMEOUT_MS = 12_000
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
@@ -157,8 +159,10 @@ function InteractionNotificationsPage() {
       if (seq !== loadSeqRef.current) return
       const newList = res.list || []
       setLoadError(false)
-      setLikeCount(res.like_count ?? newList.filter((item) => isLikeType(getNotificationType(item))).length)
-      setCommentCount(res.comment_count ?? newList.filter((item) => isCommentType(getNotificationType(item))).length)
+      if (!append) {
+        setLikeCount(res.like_count ?? newList.filter((item) => isLikeType(getNotificationType(item))).length)
+        setCommentCount(res.comment_count ?? newList.filter((item) => isCommentType(getNotificationType(item))).length)
+      }
       logNotificationStage('response-resolved', {
         seq,
         tab,
@@ -169,7 +173,7 @@ function InteractionNotificationsPage() {
       })
 
       if (append) {
-        setList((prev) => [...prev, ...newList])
+        setList((prev) => appendBoundedUnique(prev, newList, (item) => item.id, MAX_NOTIFICATION_WINDOW_ITEMS).list)
       } else {
         setUnreadCount(res.unread_count || 0)
         // Android 真机上，移除 spinner 与创建整页消息卡片同批提交时，
@@ -214,8 +218,8 @@ function InteractionNotificationsPage() {
         }, 80)
       }
 
-      setHasMore(res.has_more)
       offsetRef.current = offset + newList.length
+      setHasMore(res.has_more && offsetRef.current < MAX_NOTIFICATION_WINDOW_ITEMS)
       loadedRef.current = true
     } catch (e) {
       if (seq !== loadSeqRef.current) return

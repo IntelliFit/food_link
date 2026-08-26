@@ -41,6 +41,24 @@ func (r *BodyMetricsRepo) ListWeightRecords(ctx context.Context, userID string, 
 	return rows, err
 }
 
+func (r *BodyMetricsRepo) ListDailyWeightRecords(ctx context.Context, userID string, startDate, endDate string) ([]domain.BodyWeightRecord, error) {
+	q := r.db.WithContext(ctx).Model(&domain.BodyWeightRecord{}).Where("user_id = ?", userID)
+	if startDate != "" {
+		q = q.Where("recorded_on >= ?", startDate)
+	}
+	if endDate != "" {
+		q = q.Where("recorded_on <= ?", endDate)
+	}
+	ranked := q.Select("user_weight_records.*, ROW_NUMBER() OVER (PARTITION BY recorded_on ORDER BY created_at DESC, id DESC) AS row_num")
+	var rows []domain.BodyWeightRecord
+	err := r.db.WithContext(ctx).
+		Table("(?) AS ranked_weight_records", ranked).
+		Where("row_num = 1").
+		Order("recorded_on ASC, created_at ASC").
+		Scan(&rows).Error
+	return rows, err
+}
+
 func (r *BodyMetricsRepo) GetLatestWeightRecord(ctx context.Context, userID string) (*domain.BodyWeightRecord, error) {
 	var row domain.BodyWeightRecord
 	if err := r.db.WithContext(ctx).Where("user_id = ?", userID).Order("recorded_on desc, created_at desc").First(&row).Error; err != nil {

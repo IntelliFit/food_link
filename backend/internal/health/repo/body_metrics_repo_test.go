@@ -61,6 +61,22 @@ func TestBodyMetricsRepo_WeightCRUD(t *testing.T) {
 	assert.Empty(t, records)
 }
 
+func TestBodyMetricsRepoListDailyWeightRecordsReturnsLatestPerDay(t *testing.T) {
+	db := setupBodyMetricsTestDB(t)
+	r := NewBodyMetricsRepo(db)
+	ctx := context.Background()
+	day := time.Date(2026, 8, 22, 0, 0, 0, 0, time.UTC)
+	earlier := time.Date(2026, 8, 22, 8, 0, 0, 0, time.UTC)
+	later := earlier.Add(time.Hour)
+	require.NoError(t, db.Create(&domain.BodyWeightRecord{ID: "w1", UserID: "user-1", RecordedOn: &day, WeightKg: 70, CreatedAt: &earlier}).Error)
+	require.NoError(t, db.Create(&domain.BodyWeightRecord{ID: "w2", UserID: "user-1", RecordedOn: &day, WeightKg: 69.5, CreatedAt: &later}).Error)
+
+	rows, err := r.ListDailyWeightRecords(ctx, "user-1", "2026-08-01", "2026-08-31")
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, 69.5, rows[0].WeightKg)
+}
+
 func TestBodyMetricsRepo_WaterCRUD(t *testing.T) {
 	db := setupBodyMetricsTestDB(t)
 	r := NewBodyMetricsRepo(db)

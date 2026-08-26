@@ -93,11 +93,55 @@
   color: #4f8163;
 }
 
-.leaderboard-source {
+.health-score-explanation {
+  margin-top: 16rpx;
+  padding: 20rpx 22rpx;
+  border: 1rpx solid #dce9e0;
+  border-radius: 20rpx;
+  background: linear-gradient(135deg, #f1f8f3 0%, #fbfdfb 100%);
+}
+
+.health-score-explanation-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.health-score-explanation-title {
+  color: #355e45;
+  font-size: 25rpx;
+  font-weight: 700;
+}
+
+.health-score-explanation-total {
+  color: #6f7f77;
+  font-size: 21rpx;
+}
+
+.health-score-formula,
+.health-score-rule,
+.health-score-my-breakdown {
   display: block;
-  margin-top: 8rpx;
-  font-size: 22rpx;
-  color: #8a9691;
+  margin-top: 9rpx;
+  line-height: 1.5;
+}
+
+.health-score-formula {
+  color: #46564e;
+  font-size: 23rpx;
+}
+
+.health-score-rule {
+  color: #7b8982;
+  font-size: 21rpx;
+}
+
+.health-score-my-breakdown {
+  padding-top: 10rpx;
+  border-top: 1rpx solid #dce9e0;
+  color: #4b7b5d;
+  font-size: 21rpx;
+  font-weight: 600;
 }
 
 .leaderboard-scroll {

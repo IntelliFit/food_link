@@ -11,6 +11,7 @@ import {
   type CheckinLeaderboardItem,
   type FoodNutrientLeaderboardItem,
   type HealthLeaderboardItem,
+  type HealthLeaderboardScoringRule,
 } from '../../../utils/api'
 import './index.scss'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
@@ -26,6 +27,9 @@ type UserRankingRow = {
   value: number
   detail: string
   isMe: boolean
+  dietQualityPoints?: number
+  continuityPoints?: number
+  stabilityPoints?: number
 }
 
 const NUTRIENT_OPTIONS = [
@@ -66,6 +70,9 @@ function normalizeHealthRows(list: HealthLeaderboardItem[]): UserRankingRow[] {
     value: row.health_index,
     detail: `本周记录${row.recorded_days}天`,
     isMe: row.is_me,
+    dietQualityPoints: row.diet_quality_points,
+    continuityPoints: row.continuity_points,
+    stabilityPoints: row.stability_points,
   }))
 }
 
@@ -97,6 +104,7 @@ function CheckinLeaderboardPage() {
   const [weekStart, setWeekStart] = useState('')
   const [weekEnd, setWeekEnd] = useState('')
   const [foodUnit, setFoodUnit] = useState('g')
+  const [healthScoringRule, setHealthScoringRule] = useState<HealthLeaderboardScoringRule | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -117,6 +125,7 @@ function CheckinLeaderboardPage() {
         const result = await communityGetHealthLeaderboard()
         setWeekStart(result.week_start)
         setWeekEnd(result.week_end)
+        setHealthScoringRule(result.scoring_rule)
         setUserRows(normalizeHealthRows(result.list || []))
       } else {
         const result = await communityGetCheckinLeaderboard()
@@ -180,7 +189,7 @@ function CheckinLeaderboardPage() {
       )
     }
     if (userRows.length === 0) {
-      return <View className='leaderboard-state'>{isHealth ? '本周暂无满足条件的健康指数' : '本周暂无饮食记录'}</View>
+      return <View className='leaderboard-state'>{isHealth ? '本周暂无满足条件的健康饮食分' : '本周暂无饮食记录'}</View>
     }
     return (
       <>
@@ -232,7 +241,7 @@ function CheckinLeaderboardPage() {
             <View
               className={`leaderboard-segment${userRankingType === 'health' ? ' active' : ''}`}
               onClick={() => setUserRankingType('health')}
-            >健康榜</View>
+            >健康饮食榜</View>
           </View>
         ) : (
           <ScrollView scrollX enhanced showScrollbar={false} className='nutrient-scroll'>
@@ -254,7 +263,26 @@ function CheckinLeaderboardPage() {
             : `${isHealth ? '好友' : '全体用户'} · 本周 ${weekStart}${weekEnd ? ` – ${weekEnd}` : ''}`}</Text>
         </View>
         {section === 'user' && isHealth ? (
-          <Text className='leaderboard-source'>按「分析」页的综合健康指数排名</Text>
+          <View className='health-score-explanation'>
+            <View className='health-score-explanation-head'>
+              <Text className='health-score-explanation-title'>计分说明</Text>
+              <Text className='health-score-explanation-total'>满分{healthScoringRule?.total_points || 100}分</Text>
+            </View>
+            <Text className='health-score-formula'>
+              饮食质量{healthScoringRule?.diet_quality_points || 75}分
+              {' + '}记录连续性{healthScoringRule?.continuity_points || 15}分
+              {' + '}日间稳定性{healthScoringRule?.stability_points || 10}分
+            </Text>
+            <Text className='health-score-rule'>
+              至少记录{healthScoringRule?.minimum_recorded_days || 4}天入榜；
+              {healthScoringRule?.continuity_description || '连续性按本周已过去天数计算'}
+            </Text>
+            {me?.dietQualityPoints != null && me.continuityPoints != null && me.stabilityPoints != null ? (
+              <Text className='health-score-my-breakdown'>
+                我的得分：饮食质量 {me.dietQualityPoints}/75 · 连续性 {me.continuityPoints}/15 · 稳定性 {me.stabilityPoints}/10
+              </Text>
+            ) : null}
+          </View>
         ) : null}
       </View>
 
