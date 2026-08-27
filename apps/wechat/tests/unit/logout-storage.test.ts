@@ -6,5 +6,6 @@ describe('logout storage cleanup', () => {
     clearAllStorage()
 
     expect(Taro.removeStorageSync).toHaveBeenCalledWith('home_dashboard_local_cache')
+    expect(Taro.removeStorageSync).toHaveBeenCalledWith('pet_summary_cache_v1')
   })
 })

@@ -54,6 +54,8 @@ describe('pet home appearance actions', () => {
     })
     ;(getPetSummary as jest.Mock).mockResolvedValue({
       pet: {
+        id: 'pet-1',
+        name: '豆豆',
         level: 1,
         experience: 88,
         level_exp: 88,
@@ -70,8 +72,8 @@ describe('pet home appearance actions', () => {
     render(<PetHomePage />)
     act(() => didShowCallback?.())
 
-    await waitFor(() => expect(screen.getByText('经验')).toBeInTheDocument())
-    expect(screen.getAllByText('88')).toHaveLength(1)
+    await waitFor(() => expect(screen.getAllByText('88')).toHaveLength(1))
+    expect(screen.getByText('经验')).toBeInTheDocument()
     expect(screen.queryByText('积分')).not.toBeInTheDocument()
   })
 })
