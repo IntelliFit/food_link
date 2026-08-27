@@ -453,11 +453,18 @@ func (r *FeedRepo) GetLikesForTargets(ctx context.Context, targets []FeedTarget,
 	}
 	const targetTypeExpr = "COALESCE(NULLIF(target_type, ''), 'food_record')"
 	const targetIDExpr = "COALESCE(target_id, record_id)"
+	likedCountExpr := "0 AS liked_count"
+	likedCountArgs := []any{}
+	currentUserID = strings.TrimSpace(currentUserID)
+	if currentUserID != "" {
+		likedCountExpr = "SUM(CASE WHEN user_id = ? THEN 1 ELSE 0 END) AS liked_count"
+		likedCountArgs = append(likedCountArgs, currentUserID)
+	}
 	var rows []aggregateRow
 	q := r.db.WithContext(ctx).Model(&domain.FeedLike{})
 	q = applyTargetFilter(q, targets, true)
 	if err := q.
-		Select(targetTypeExpr+" AS target_type, "+targetIDExpr+" AS target_id, COUNT(*) AS like_count, SUM(CASE WHEN user_id = ? THEN 1 ELSE 0 END) AS liked_count", currentUserID).
+		Select(targetTypeExpr+" AS target_type, "+targetIDExpr+" AS target_id, COUNT(*) AS like_count, "+likedCountExpr, likedCountArgs...).
 		Group(targetTypeExpr + ", " + targetIDExpr).
 		Scan(&rows).Error; err != nil {
 		return nil, err
