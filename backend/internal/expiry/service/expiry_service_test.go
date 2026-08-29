@@ -130,6 +130,40 @@ func TestExpiryService_Subscribe(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestBuildNotificationPayloadUsesCurrentWechatTemplateKeywords(t *testing.T) {
+	china := time.FixedZone("Asia/Shanghai", 8*60*60)
+	item := &domain.ExpiryItem{
+		FoodName:    "冷藏牛奶",
+		StorageType: "refrigerated",
+		ExpireDate:  time.Date(2026, 8, 22, 0, 0, 0, 0, china),
+	}
+
+	payload := buildNotificationPayload(item)
+
+	assert.Equal(t, map[string]any{
+		"thing12": map[string]any{"value": "冷藏牛奶"},
+		"time1":   map[string]any{"value": "2026-08-22 09:00"},
+		"thing4":  map[string]any{"value": "今天到期，请优先处理"},
+		"thing17": map[string]any{"value": "冷藏"},
+	}, payload)
+	assert.NotContains(t, payload, "thing1")
+	assert.NotContains(t, payload, "time2")
+	assert.NotContains(t, payload, "character_string5")
+}
+
+func TestBuildNotificationPayloadTruncatesThingValues(t *testing.T) {
+	item := &domain.ExpiryItem{
+		FoodName:    "这是一个超过微信订阅消息二十字符限制的超长食物名称",
+		StorageType: "refrigerated",
+		ExpireDate:  time.Date(2026, 8, 22, 0, 0, 0, 0, time.UTC),
+	}
+
+	payload := buildNotificationPayload(item)
+	name := payload["thing12"].(map[string]any)["value"].(string)
+
+	assert.Len(t, []rune(name), 20)
+}
+
 func TestExpiryService_Recognize(t *testing.T) {
 	expiryRepo, taskRepo := setupTestDB(t)
 	svc := NewExpiryService(expiryRepo, taskRepo)

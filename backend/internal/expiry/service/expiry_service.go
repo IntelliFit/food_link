@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -422,29 +421,18 @@ func buildNotificationPayload(item *domain.ExpiryItem) map[string]any {
 		timeValue = expireDate + " 09:00"
 	}
 	return map[string]any{
-		"thing1":            map[string]any{"value": nonEmpty(item.FoodName, "未命名食物")},
-		"time2":             map[string]any{"value": timeValue},
-		"thing3":            map[string]any{"value": "今天到期，请优先处理"},
-		"thing4":            map[string]any{"value": nonEmpty(storageTypeLabel(item.StorageType), "未填写")},
-		"character_string5": map[string]any{"value": normalizeCharacterString(ptrStringValue(item.QuantityNote), "NA")},
+		"thing12": map[string]any{"value": templateThingValue(item.FoodName, "未命名食物")},
+		"time1":   map[string]any{"value": timeValue},
+		"thing4":  map[string]any{"value": "今天到期，请优先处理"},
+		"thing17": map[string]any{"value": templateThingValue(storageTypeLabel(item.StorageType), "未填写")},
 	}
 }
 
-var characterStringRe = regexp.MustCompile(`[^A-Za-z0-9\s\-_.,:/+#()xX]`)
-
-func normalizeCharacterString(value string, fallback string) string {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return fallback
-	}
-	value = characterStringRe.ReplaceAllString(value, "")
-	value = strings.Join(strings.Fields(value), " ")
+func templateThingValue(value, fallback string) string {
+	value = nonEmpty(value, fallback)
 	runes := []rune(value)
-	if len(runes) > 32 {
-		value = string(runes[:32])
-	}
-	if strings.TrimSpace(value) == "" {
-		return fallback
+	if len(runes) > 20 {
+		return string(runes[:20])
 	}
 	return value
 }
@@ -460,13 +448,6 @@ func storageTypeLabel(value string) string {
 	default:
 		return value
 	}
-}
-
-func ptrStringValue(value *string) string {
-	if value == nil {
-		return ""
-	}
-	return *value
 }
 
 func nonEmpty(value, fallback string) string {
