@@ -117,35 +117,6 @@
   line-height: 26rpx;
 }
 
-.analysis-engine-micro-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16rpx;
-  margin-top: 12rpx;
-  padding: 12rpx 14rpx;
-  border-radius: 14rpx;
-  background: #f0fdf7;
-}
-
-.analysis-engine-micro-title,
-.analysis-engine-micro-description {
-  display: block;
-}
-
-.analysis-engine-micro-title {
-  color: #065f46;
-  font-size: 22rpx;
-  font-weight: 700;
-}
-
-.analysis-engine-micro-description {
-  margin-top: 2rpx;
-  color: #047857;
-  font-size: 18rpx;
-  line-height: 26rpx;
-}
-
 .analysis-options-row {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

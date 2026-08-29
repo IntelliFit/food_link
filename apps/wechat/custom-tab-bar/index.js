@@ -1,5 +1,9 @@
 const APP_COLOR_SCHEME_KEY = 'fl_app_color_scheme'
 const HOME_DISPLAY_MODE_KEY = 'home_display_mode_v1'
+const ANALYZE_TASK_REMINDER_STORAGE_KEY = 'analyze_task_reminder_state_v1'
+const ANALYZE_TASK_REMINDER_OPEN_KEY = 'analyze_task_reminder_open_task_v1'
+const ANALYZE_TASK_REMINDER_OPEN_EVENT = 'openAnalyzeTaskReminder'
+const ANALYZE_TASK_REMINDER_OPEN_HISTORY_KEY = 'analyze_task_reminder_open_history_v1'
 
 function readStorageFlag(key) {
   try {
@@ -59,6 +63,9 @@ Component({
     /** 养生模式使用全局墨绿导航配色，跨 Tab 保持直到切回均衡模式 */
     wellnessActive: false,
     profileTabBadgeCount: 0,
+    analyzeReminderKind: 'idle',
+    analyzeReminderCount: 0,
+    analyzeReminderTaskId: '',
     tabList: [
       { 
         id: 'home',
@@ -222,18 +229,102 @@ Component({
 
     updateWaitingBadge() {
       try {
+        const now = Date.now()
+        if (this._lastWaitingBadgeRefreshAt && now - this._lastWaitingBadgeRefreshAt < 1000) return
+        this._lastWaitingBadgeRefreshAt = now
         const token = wx.getStorageSync('access_token')
         if (!token) {
-          if (this.data.profileTabBadgeCount !== 0) {
-            this.setData({ profileTabBadgeCount: 0 })
+          if (
+            this.data.profileTabBadgeCount !== 0 ||
+            this.data.analyzeReminderKind !== 'idle' ||
+            this.data.analyzeReminderCount !== 0 ||
+            this.data.analyzeReminderTaskId
+          ) {
+            this.setData({
+              profileTabBadgeCount: 0,
+              analyzeReminderKind: 'idle',
+              analyzeReminderCount: 0,
+              analyzeReminderTaskId: '',
+            })
           }
           return
         }
         const profileBadge = Number(wx.getStorageSync('profile_tab_badge_count') || 0)
-        if (profileBadge !== this.data.profileTabBadgeCount) {
-          this.setData({ profileTabBadgeCount: profileBadge })
+        let reminder = null
+        try {
+          const raw = wx.getStorageSync(ANALYZE_TASK_REMINDER_STORAGE_KEY)
+          reminder = typeof raw === 'string' ? JSON.parse(raw) : raw
+        } catch (e) {}
+        const currentUserId = String(wx.getStorageSync('user_id') || '').trim()
+        const validReminder = reminder && reminder.userId === currentUserId ? reminder : null
+        const reminderKind = validReminder ? String(validReminder.kind || 'idle') : 'idle'
+        const reminderCount = reminderKind === 'waiting_record'
+          ? Math.max(0, Number(validReminder.waitingRecord) || 0)
+          : reminderKind === 'recognizing'
+            ? Math.max(0, Number(validReminder.recognizing) || 0)
+            : 0
+        const reminderTaskId = validReminder ? String(validReminder.taskId || '').trim() : ''
+        if (
+          profileBadge !== this.data.profileTabBadgeCount ||
+          reminderKind !== this.data.analyzeReminderKind ||
+          reminderCount !== this.data.analyzeReminderCount ||
+          reminderTaskId !== this.data.analyzeReminderTaskId
+        ) {
+          this.setData({
+            profileTabBadgeCount: profileBadge,
+            analyzeReminderKind: reminderKind,
+            analyzeReminderCount: reminderCount,
+            analyzeReminderTaskId: reminderTaskId,
+          })
         }
       } catch (e) {}
+    },
+
+    openAnalyzeReminder() {
+      const taskId = String(this.data.analyzeReminderTaskId || '').trim()
+      if (!taskId) return
+      const openHistory = this.data.analyzeReminderKind === 'waiting_record'
+      try {
+        if (openHistory) {
+          const raw = wx.getStorageSync(ANALYZE_TASK_REMINDER_STORAGE_KEY)
+          const reminder = typeof raw === 'string' ? JSON.parse(raw) : raw
+          if (reminder) {
+            wx.setStorageSync(ANALYZE_TASK_REMINDER_STORAGE_KEY, JSON.stringify({
+              ...reminder,
+              kind: 'idle',
+              waitingRecord: 0,
+              taskId: '',
+              hasUnseen: false,
+              updatedAt: Date.now(),
+            }))
+          }
+          wx.setStorageSync(ANALYZE_TASK_REMINDER_OPEN_HISTORY_KEY, '1')
+          this.setData({ analyzeReminderKind: 'idle', analyzeReminderCount: 0, analyzeReminderTaskId: '' })
+        } else {
+          wx.setStorageSync(ANALYZE_TASK_REMINDER_OPEN_KEY, taskId)
+        }
+      } catch (e) {}
+      if (openHistory) {
+        wx.navigateTo({
+          url: '/packageExtra/pages/analyze-history/index',
+          fail: () => wx.switchTab({ url: '/pages/index/index' }),
+        })
+        return
+      }
+      const pages = getCurrentPages()
+      const currentPage = pages && pages[pages.length - 1]
+      if (currentPage && currentPage.route === 'pages/index/index') {
+        try {
+          const app = typeof getApp === 'function' ? getApp() : null
+          const eventCenter = app && app.__taroAppInstance && app.__taroAppInstance.eventCenter
+          if (eventCenter && typeof eventCenter.trigger === 'function') {
+            wx.removeStorageSync(ANALYZE_TASK_REMINDER_OPEN_KEY)
+            eventCenter.trigger(ANALYZE_TASK_REMINDER_OPEN_EVENT, taskId)
+            return
+          }
+        } catch (e) {}
+      }
+      wx.switchTab({ url: '/pages/index/index' })
     },
 
     updateHidden() {

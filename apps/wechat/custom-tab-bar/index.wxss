@@ -156,6 +156,46 @@
   animation: center-opening-spin 0.7s linear infinite;
 }
 
+.center-task-badge {
+  position: absolute;
+  z-index: 12;
+  top: -8rpx;
+  right: -6rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  border: 4rpx solid #fff;
+  border-radius: 24rpx;
+}
+
+.center-task-badge--waiting {
+  min-width: 42rpx;
+  height: 42rpx;
+  padding: 0 8rpx;
+  background: #f59e0b;
+  color: #fff;
+  font-size: 21rpx;
+  font-weight: 700;
+  line-height: 34rpx;
+}
+
+.center-task-badge--recognizing {
+  width: 30rpx;
+  height: 30rpx;
+  background: #60a5fa;
+  animation: center-task-badge-pulse 1.25s ease-in-out infinite;
+}
+
+@keyframes center-task-badge-pulse {
+  0%, 100% { opacity: 0.7; transform: scale(0.86); }
+  50% { opacity: 1; transform: scale(1.08); }
+}
+
+.custom-tab-bar--dark .center-task-badge {
+  border-color: #1a2220;
+}
+
 @keyframes center-opening-spin {
   to {
     transform: rotate(360deg);

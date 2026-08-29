@@ -367,6 +367,165 @@ page {
   margin-top: 16rpx;
 }
 
+.pet-chat-diet-result {
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+  margin-top: 22rpx;
+}
+
+.pet-chat-diet-context {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+  padding: 16rpx 18rpx;
+  border-radius: 18rpx;
+  background: rgba(238, 248, 235, 0.92);
+}
+
+.pet-chat-diet-context-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2rpx;
+}
+
+.pet-chat-diet-context-school,
+.pet-chat-diet-context-source {
+  display: block;
+}
+
+.pet-chat-diet-context-school {
+  color: #1d4939;
+  font-size: 25rpx;
+  line-height: 34rpx;
+  font-weight: 900;
+}
+
+.pet-chat-diet-context-source {
+  color: rgba(35, 72, 60, 0.58);
+  font-size: 20rpx;
+  line-height: 28rpx;
+}
+
+.pet-chat-campus-save {
+  flex-shrink: 0;
+  padding: 10rpx 16rpx;
+  border-radius: 999rpx;
+  background: #2f8f6f;
+  color: #ffffff;
+  font-size: 21rpx;
+  line-height: 28rpx;
+  font-weight: 800;
+
+  &.saved {
+    background: rgba(47, 143, 111, 0.1);
+    color: #2f8f6f;
+  }
+}
+
+.pet-chat-diet-options {
+  display: flex;
+  flex-direction: column;
+  gap: 14rpx;
+}
+
+.pet-chat-diet-card {
+  padding: 20rpx;
+  border: 1rpx solid rgba(47, 143, 111, 0.14);
+  border-radius: 22rpx;
+  background: #fbfdfb;
+
+  &.clickable {
+    box-shadow: 0 8rpx 22rpx rgba(39, 112, 83, 0.07);
+  }
+}
+
+.pet-chat-diet-card-head {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+}
+
+.pet-chat-diet-card-rank {
+  flex-shrink: 0;
+  width: 34rpx;
+  height: 34rpx;
+  border-radius: 50%;
+  background: #2f8f6f;
+  color: #ffffff;
+  font-size: 20rpx;
+  line-height: 34rpx;
+  font-weight: 900;
+  text-align: center;
+}
+
+.pet-chat-diet-card-title {
+  flex: 1;
+  min-width: 0;
+  color: #183a31;
+  font-size: 27rpx;
+  line-height: 36rpx;
+  font-weight: 900;
+}
+
+.pet-chat-diet-card-price {
+  flex-shrink: 0;
+  color: #d07b2d;
+  font-size: 23rpx;
+  line-height: 32rpx;
+  font-weight: 900;
+}
+
+.pet-chat-diet-card-location,
+.pet-chat-diet-card-evidence,
+.pet-chat-diet-card-reason,
+.pet-chat-diet-card-link {
+  display: block;
+}
+
+.pet-chat-diet-card-location {
+  margin-top: 10rpx;
+  color: #3a6657;
+  font-size: 22rpx;
+  line-height: 32rpx;
+  font-weight: 700;
+}
+
+.pet-chat-diet-card-macros {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8rpx 14rpx;
+  margin-top: 12rpx;
+  color: rgba(35, 72, 60, 0.68);
+  font-size: 21rpx;
+  line-height: 30rpx;
+}
+
+.pet-chat-diet-card-evidence {
+  margin-top: 8rpx;
+  color: rgba(47, 143, 111, 0.82);
+  font-size: 20rpx;
+  line-height: 28rpx;
+  font-weight: 700;
+}
+
+.pet-chat-diet-card-reason {
+  margin-top: 10rpx;
+  color: rgba(35, 72, 60, 0.72);
+  font-size: 22rpx;
+  line-height: 32rpx;
+}
+
+.pet-chat-diet-card-link {
+  margin-top: 12rpx;
+  color: #2f8f6f;
+  font-size: 22rpx;
+  line-height: 30rpx;
+  font-weight: 900;
+}
+
 .pet-chat-action-chip {
   padding: 9rpx 15rpx;
   border-radius: 999rpx;
@@ -915,6 +1074,25 @@ page {
 
   .pet-chat-history-skeleton-item {
     background: rgba(255, 255, 255, 0.04);
+  }
+
+  .pet-chat-diet-context,
+  .pet-chat-diet-card {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(112, 196, 149, 0.16);
+  }
+
+  .pet-chat-diet-context-school,
+  .pet-chat-diet-card-title,
+  .pet-chat-diet-card-location {
+    color: #edf8f1;
+  }
+
+  .pet-chat-diet-context-source,
+  .pet-chat-diet-card-macros,
+  .pet-chat-diet-card-evidence,
+  .pet-chat-diet-card-reason {
+    color: rgba(225, 239, 229, 0.62);
   }
 }
 

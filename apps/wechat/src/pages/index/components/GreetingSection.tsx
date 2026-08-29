@@ -10,9 +10,15 @@ interface GreetingSectionProps {
   onModeToggle: () => void
   petAvatar?: ReactNode
   onPetPress?: () => void
+  petReminder?: {
+    text: string
+    tone: 'recognizing' | 'waiting' | 'recorded' | 'meal'
+    count?: number
+  }
+  onPetReminderPress?: () => void
 }
 
-export function GreetingSection({ mode, onModeToggle, petAvatar, onPetPress }: GreetingSectionProps) {
+export function GreetingSection({ mode, onModeToggle, petAvatar, onPetPress, petReminder, onPetReminderPress }: GreetingSectionProps) {
   const { text, iconClass } = getGreeting()
   const isWellness = mode === 'wellness'
 
@@ -25,13 +31,26 @@ export function GreetingSection({ mode, onModeToggle, petAvatar, onPetPress }: G
             <View className='greeting-pet__ground' />
           </View>
         ) : null}
-        <View className='greeting-text'>
-          <View className='greeting-title'>
-            <Text className={`iconfont ${iconClass} greeting-title-icon`} />
-            <Text>{text}</Text>
+        {petReminder ? (
+          <View
+            id='home-pet-analyze-reminder'
+            className={`greeting-pet-reminder greeting-pet-reminder--${petReminder.tone}`}
+            onClick={onPetReminderPress}
+          >
+            <Text className='greeting-pet-reminder__text'>{petReminder.text}</Text>
+            {petReminder.count && petReminder.count > 1 ? (
+              <Text className='greeting-pet-reminder__count'>{petReminder.count}</Text>
+            ) : null}
           </View>
-          <Text className='greeting-subtitle'>今天也要健康饮食哦</Text>
-        </View>
+        ) : (
+          <View className='greeting-text'>
+            <View className='greeting-title'>
+              <Text className={`iconfont ${iconClass} greeting-title-icon`} />
+              <Text>{text}</Text>
+            </View>
+            <Text className='greeting-subtitle'>今天也要健康饮食哦</Text>
+          </View>
+        )}
       </View>
       <View
         id='home-mode-toggle'

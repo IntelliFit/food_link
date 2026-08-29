@@ -520,6 +520,171 @@ $border-color: #e5e7eb;
   font-weight: 700;
 }
 
+.exercise-mode-switch {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12rpx;
+  margin-bottom: 18rpx;
+  padding: 8rpx;
+  border-radius: 20rpx;
+  background: $bg-color;
+}
+
+.exercise-mode-option {
+  min-width: 0;
+  padding: 18rpx 16rpx;
+  border: 2rpx solid transparent;
+  border-radius: 16rpx;
+  text-align: center;
+
+  &.is-active {
+    border-color: rgb(249 115 22 / 35%);
+    background: $card-bg;
+    box-shadow: 0 4rpx 14rpx rgb(249 115 22 / 9%);
+
+    .exercise-mode-option__title {
+      color: $exercise-color;
+    }
+  }
+}
+
+.exercise-mode-option__title,
+.exercise-mode-option__desc {
+  display: block;
+}
+
+.exercise-mode-option__title {
+  font-size: 26rpx;
+  line-height: 1.35;
+  color: $text-primary;
+  font-weight: 700;
+}
+
+.exercise-mode-option__desc {
+  margin-top: 4rpx;
+  font-size: 21rpx;
+  line-height: 1.35;
+  color: $text-tertiary;
+}
+
+.exercise-precision-panel {
+  margin-bottom: 18rpx;
+  padding: 22rpx;
+  border: 2rpx solid rgb(249 115 22 / 18%);
+  border-radius: 20rpx;
+  background: linear-gradient(145deg, #fffaf6 0%, #fff 100%);
+}
+
+.exercise-precision-heading {
+  margin-bottom: 20rpx;
+}
+
+.exercise-precision-title,
+.exercise-precision-tip,
+.exercise-precision-label {
+  display: block;
+}
+
+.exercise-precision-title {
+  font-size: 27rpx;
+  color: $text-primary;
+  font-weight: 750;
+}
+
+.exercise-precision-tip {
+  margin-top: 6rpx;
+  font-size: 21rpx;
+  line-height: 1.5;
+  color: $exercise-color;
+}
+
+.exercise-precision-field {
+  min-width: 0;
+  margin-top: 18rpx;
+
+  &:first-of-type {
+    margin-top: 0;
+  }
+}
+
+.exercise-precision-label {
+  margin-bottom: 10rpx;
+  font-size: 23rpx;
+  color: $text-secondary;
+  font-weight: 650;
+}
+
+.exercise-precision-input-wrap {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  padding: 0 16rpx;
+  border: 2rpx solid $border-color;
+  border-radius: 14rpx;
+  background: $card-bg;
+}
+
+.exercise-precision-input {
+  flex: 1;
+  min-width: 0;
+  height: 70rpx;
+  font-size: 25rpx;
+  color: $text-primary;
+}
+
+.exercise-precision-unit {
+  flex: 0 0 auto;
+  margin-left: 8rpx;
+  font-size: 21rpx;
+  color: $text-tertiary;
+}
+
+.exercise-intensity-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10rpx;
+}
+
+.exercise-intensity-option {
+  padding: 14rpx 8rpx;
+  border: 2rpx solid $border-color;
+  border-radius: 14rpx;
+  background: $card-bg;
+  text-align: center;
+  font-size: 23rpx;
+  color: $text-secondary;
+
+  &.is-active {
+    border-color: $exercise-color;
+    color: $exercise-color;
+    background: $exercise-light;
+    font-weight: 700;
+  }
+}
+
+.exercise-precision-inline-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12rpx;
+}
+
+.exercise-precision-field--half {
+  min-width: 0;
+}
+
+.exercise-precision-breakdown {
+  width: 100%;
+  min-height: 100rpx;
+  box-sizing: border-box;
+  padding: 16rpx;
+  border: 2rpx solid $border-color;
+  border-radius: 14rpx;
+  background: $card-bg;
+  font-size: 24rpx;
+  line-height: 1.55;
+  color: $text-primary;
+}
+
 .image-preview-wrap {
   width: 100%;
   box-sizing: border-box;

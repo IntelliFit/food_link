@@ -6,6 +6,7 @@ import {
   customizePetPixelAvatar,
   claimPetEvent,
   selectPetAppearance,
+  updatePetName,
   type PetAppearanceCandidate,
   type PetOfflineEvent,
   type PetProfile,
@@ -64,9 +65,11 @@ function PetHomePage() {
   const [pixelAvatarCustomizing, setPixelAvatarCustomizing] = useState(false)
   const [pixelAvatarPreview, setPixelAvatarPreview] = useState<PetProfile | null>(null)
   const [selectingCandidateId, setSelectingCandidateId] = useState('')
+  const [renamingPet, setRenamingPet] = useState(false)
   const [petSummary, setPetSummary] = useState<PetSummary | null>(null)
   const [homePetHidden, setHomePetHidden] = useState(getStoredHomePetHidden)
   const pixelAvatarCustomizingRef = useRef(false)
+  const renamingPetRef = useRef(false)
 
   const syncPetProfile = useCallback((pet: PetProfile) => {
     setPetSummary((previous) => previous ? { ...previous, pet } : previous)
@@ -139,6 +142,46 @@ function PetHomePage() {
       setSelectingCandidateId('')
     }
   }, [selectingCandidateId, syncPetProfile])
+
+  const handleRenamePet = useCallback(async () => {
+    if (renamingPetRef.current) return
+    renamingPetRef.current = true
+    try {
+      const naming = await Taro.showModal({
+        title: '给宠物改名',
+        content: petSummary?.pet?.name || '',
+        confirmText: '保存',
+        cancelText: '取消',
+        // @ts-ignore 微信小程序支持可编辑 Modal，输入结果通过 content 返回。
+        editable: true,
+        // @ts-ignore
+        placeholderText: '请输入宠物名字（最多 12 个字）',
+      })
+      if (!naming.confirm) return
+      const petName = String((naming as any).content || '').trim()
+      if (!petName) {
+        Taro.showToast({ title: '请输入宠物名字', icon: 'none' })
+        return
+      }
+      if (Array.from(petName).length > 12) {
+        Taro.showToast({ title: '宠物名字最多 12 个字', icon: 'none' })
+        return
+      }
+      if (petName === petSummary?.pet?.name) return
+
+      setRenamingPet(true)
+      const result = await updatePetName(petName)
+      syncPetProfile(result.pet)
+      Taro.showToast({ title: `以后就叫${result.pet.name}啦`, icon: 'success' })
+    } catch (error) {
+      const message = String((error as any)?.errMsg || (error as any)?.message || '')
+      if (message.toLowerCase().includes('cancel')) return
+      await showUnifiedApiError(error, '宠物改名失败')
+    } finally {
+      renamingPetRef.current = false
+      setRenamingPet(false)
+    }
+  }, [petSummary?.pet?.name, syncPetProfile])
 
   const handleCustomizePixelAvatar = useCallback(async () => {
     if (pixelAvatarCustomizingRef.current) return
@@ -246,9 +289,19 @@ function PetHomePage() {
             </View>
 
             <View className='pet-home-hero-copy'>
-              <View className='pet-home-name-link' onClick={openPetChat}>
-                <Text className='pet-home-name'>{petSummary?.pet?.name || '健康伙伴'}</Text>
-                <Text className='iconfont icon-right pet-home-name-arrow' />
+              <View className='pet-home-name-row'>
+                <View className='pet-home-name-link' onClick={openPetChat}>
+                  <Text className='pet-home-name'>{petSummary?.pet?.name || '健康伙伴'}</Text>
+                  <Text className='iconfont icon-right pet-home-name-arrow' />
+                </View>
+                <View className='pet-home-rename-button' onClick={handleRenamePet}>
+                  {renamingPet ? (
+                    <View className='pet-home-rename-spinner' />
+                  ) : (
+                    <Text className='iconfont icon-edit pet-home-rename-icon' />
+                  )}
+                  <Text className='pet-home-rename-text'>{renamingPet ? '' : '改名'}</Text>
+                </View>
               </View>
               {petEvent?.can_claim ? (
                 <View className='pet-home-hero-reward' onClick={handleClaim}>

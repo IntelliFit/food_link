@@ -1,4 +1,4 @@
-import { View, Text, ScrollView, Image, Textarea } from '@tarojs/components'
+import { View, Text, ScrollView, Image, Input, Textarea } from '@tarojs/components'
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import Taro, { useDidShow } from '@tarojs/taro'
 import { IconExercise } from '../../../components/iconfont'
@@ -44,6 +44,15 @@ const EXERCISE_QUICK_PRESETS: string[] = [
 ]
 
 const COLLAPSIBLE_TEXT_RUNE_THRESHOLD = 90
+
+type ExerciseEstimationMode = 'standard' | 'precision'
+type ExerciseIntensity = 'low' | 'moderate' | 'high'
+
+const EXERCISE_INTENSITY_OPTIONS: Array<{ value: ExerciseIntensity; label: string }> = [
+  { value: 'low', label: '轻松' },
+  { value: 'moderate', label: '中等' },
+  { value: 'high', label: '吃力' },
+]
 
 interface ExerciseRecord {
   id: string
@@ -136,6 +145,12 @@ export default function ExerciseRecordPage() {
     status: null,
   })
   const [selectedImagePath, setSelectedImagePath] = useState('')
+  const [estimationMode, setEstimationMode] = useState<ExerciseEstimationMode>('standard')
+  const [precisionDuration, setPrecisionDuration] = useState('')
+  const [precisionIntensity, setPrecisionIntensity] = useState<ExerciseIntensity>('moderate')
+  const [precisionHeartRate, setPrecisionHeartRate] = useState('')
+  const [precisionDistance, setPrecisionDistance] = useState('')
+  const [precisionBreakdown, setPrecisionBreakdown] = useState('')
   const currentRecordDateRef = useRef(recordDate)
   const pollingTaskIdsRef = useRef<Set<string>>(new Set())
 
@@ -369,6 +384,22 @@ export default function ExerciseRecordPage() {
       Taro.navigateTo({ url: '/pages/login/index' })
       return
     }
+    const precisionEnabled = estimationMode === 'precision'
+    const totalDurationMin = Number(precisionDuration)
+    const averageHeartRate = Number(precisionHeartRate)
+    const distanceKm = Number(precisionDistance)
+    if (precisionEnabled && (!Number.isFinite(totalDurationMin) || totalDurationMin < 1 || totalDurationMin > 480)) {
+      Taro.showToast({ title: '请填写 1–480 分钟的总时长', icon: 'none' })
+      return
+    }
+    if (precisionEnabled && precisionHeartRate && (!Number.isFinite(averageHeartRate) || averageHeartRate < 30 || averageHeartRate > 250)) {
+      Taro.showToast({ title: '平均心率请填写 30–250', icon: 'none' })
+      return
+    }
+    if (precisionEnabled && precisionDistance && (!Number.isFinite(distanceKm) || distanceKm <= 0 || distanceKm > 1000)) {
+      Taro.showToast({ title: '运动距离填写有误', icon: 'none' })
+      return
+    }
     const targetRecordDate = persistRecordTargetDate(
       normalizeRecordDate(currentRecordDateRef.current || recordDate)
     )
@@ -410,12 +441,22 @@ export default function ExerciseRecordPage() {
       const { task_id: taskId } = await createExerciseLog({
         exercise_desc: content,
         image_url: uploadedImageUrl || undefined,
-        date: targetRecordDate
+        date: targetRecordDate,
+        estimation_mode: estimationMode,
+        total_duration_min: precisionEnabled ? totalDurationMin : undefined,
+        intensity: precisionEnabled ? precisionIntensity : undefined,
+        average_heart_rate: precisionEnabled && precisionHeartRate ? averageHeartRate : undefined,
+        distance_km: precisionEnabled && precisionDistance ? distanceKm : undefined,
+        exercise_breakdown: precisionEnabled ? precisionBreakdown : undefined,
       })
       const clientId = `c_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`
       const createdAt = new Date().toISOString()
       setInputValue('')
       setSelectedImagePath('')
+      setPrecisionDuration('')
+      setPrecisionHeartRate('')
+      setPrecisionDistance('')
+      setPrecisionBreakdown('')
       setPendingItems((prev) => [
         ...prev,
         { clientId, taskId, content: displayContent, status: 'pending', createdAt, recordDate: targetRecordDate }
@@ -537,6 +578,101 @@ export default function ExerciseRecordPage() {
             <Text className='exercise-trend-link-text'>查看趋势</Text>
           </View>
         </View>
+        <View className='exercise-mode-switch' data-testid='exercise-mode-switch'>
+          <View
+            className={`exercise-mode-option ${estimationMode === 'standard' ? 'is-active' : ''}`}
+            onClick={() => setEstimationMode('standard')}
+          >
+            <Text className='exercise-mode-option__title'>标准估算</Text>
+            <Text className='exercise-mode-option__desc'>按整次描述估算</Text>
+          </View>
+          <View
+            className={`exercise-mode-option ${estimationMode === 'precision' ? 'is-active' : ''}`}
+            onClick={() => setEstimationMode('precision')}
+          >
+            <Text className='exercise-mode-option__title'>精准估算</Text>
+            <Text className='exercise-mode-option__desc'>补充训练细节</Text>
+          </View>
+        </View>
+        {estimationMode === 'precision' ? (
+          <View className='exercise-precision-panel' data-testid='exercise-precision-panel'>
+            <View className='exercise-precision-heading'>
+              <Text className='exercise-precision-title'>补充信息，减少猜测</Text>
+              <Text className='exercise-precision-tip'>总时长只会用于整次训练，不会复制给每个动作</Text>
+            </View>
+            <View className='exercise-precision-field'>
+              <Text className='exercise-precision-label'>整次总时长 *</Text>
+              <View className='exercise-precision-input-wrap'>
+                <Input
+                  className='exercise-precision-input'
+                  type='number'
+                  value={precisionDuration}
+                  onInput={(e) => setPrecisionDuration(e.detail.value)}
+                  placeholder='例如 40'
+                  disabled={submitting}
+                />
+                <Text className='exercise-precision-unit'>分钟</Text>
+              </View>
+            </View>
+            <View className='exercise-precision-field'>
+              <Text className='exercise-precision-label'>主观强度</Text>
+              <View className='exercise-intensity-options'>
+                {EXERCISE_INTENSITY_OPTIONS.map((option) => (
+                  <View
+                    key={option.value}
+                    className={`exercise-intensity-option ${precisionIntensity === option.value ? 'is-active' : ''}`}
+                    onClick={() => setPrecisionIntensity(option.value)}
+                  >
+                    <Text>{option.label}</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+            <View className='exercise-precision-inline-fields'>
+              <View className='exercise-precision-field exercise-precision-field--half'>
+                <Text className='exercise-precision-label'>平均心率（选填）</Text>
+                <View className='exercise-precision-input-wrap'>
+                  <Input
+                    className='exercise-precision-input'
+                    type='number'
+                    value={precisionHeartRate}
+                    onInput={(e) => setPrecisionHeartRate(e.detail.value)}
+                    placeholder='例如 135'
+                    disabled={submitting}
+                  />
+                  <Text className='exercise-precision-unit'>次/分</Text>
+                </View>
+              </View>
+              <View className='exercise-precision-field exercise-precision-field--half'>
+                <Text className='exercise-precision-label'>距离（选填）</Text>
+                <View className='exercise-precision-input-wrap'>
+                  <Input
+                    className='exercise-precision-input'
+                    type='digit'
+                    value={precisionDistance}
+                    onInput={(e) => setPrecisionDistance(e.detail.value)}
+                    placeholder='例如 5.2'
+                    disabled={submitting}
+                  />
+                  <Text className='exercise-precision-unit'>公里</Text>
+                </View>
+              </View>
+            </View>
+            <View className='exercise-precision-field'>
+              <Text className='exercise-precision-label'>动作时间或组次（选填）</Text>
+              <Textarea
+                className='exercise-precision-breakdown'
+                value={precisionBreakdown}
+                onInput={(e) => setPrecisionBreakdown(e.detail.value)}
+                placeholder='例如：深蹲 4×12、俯卧撑 4×10；或深蹲15分钟、俯卧撑10分钟'
+                maxlength={1000}
+                autoHeight
+                showConfirmBar={false}
+                disabled={submitting}
+              />
+            </View>
+          </View>
+        ) : null}
         <View className='quick-examples-strip'>
           <Text className='quick-examples-title'>试试这样说：</Text>
           <ScrollView

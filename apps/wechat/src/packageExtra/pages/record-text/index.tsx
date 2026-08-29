@@ -166,6 +166,7 @@ function RecordTextPage() {
         activity_timing: activityTiming as any,
         suggest_ratio_enabled: readSuggestRatioPreference(),
         analysis_engine: analysisEngine,
+        precise_micronutrients: true,
       })
       Taro.hideLoading()
       Taro.navigateTo({
@@ -312,7 +313,7 @@ function RecordTextPage() {
               </View>
             ))}
           </View>
-          <Text className='text-engine-note'>默认使用 AI 完整理解全部描述；你也可以切换校准路径进行效果对比。</Text>
+          <Text className='text-engine-note'>默认使用速度最快的 AI 估算；另外两种数据库方式会慢一些，但命中兼容数据时结果更稳定，微量元素通常也更准确。</Text>
         </View>
 
         {/* 餐次选择 */}

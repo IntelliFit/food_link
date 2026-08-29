@@ -75,6 +75,48 @@ describe('streamGeneratePetChat', () => {
     expect(onError).not.toHaveBeenCalled()
   })
 
+  it('dispatches campus Agent progress and structured results while ignoring unknown events', () => {
+    let onChunkReceived: ChunkHandler | undefined
+    request.mockReturnValue({
+      onChunkReceived: jest.fn((handler: ChunkHandler) => {
+        onChunkReceived = handler
+      }),
+      abort: jest.fn(),
+    })
+    const onProgress = jest.fn()
+    const onDietResult = jest.fn()
+    const onChunk = jest.fn()
+    const onDone = jest.fn()
+
+    streamGeneratePetChat('我是清华学生，今天吃什么？', 'week', '', true, {
+      onProgress,
+      onDietResult,
+      onChunk,
+      onDone,
+      onError: jest.fn(),
+    })
+
+    onChunkReceived?.({
+      data: utf8Buffer([
+        'data: {"type":"progress","progress":{"agent_run_id":"run-1","step":1,"label":"正在读取今日目标","status":"running"}}',
+        '',
+        'data: {"type":"future_event","value":true}',
+        '',
+        'data: {"type":"diet_result","diet_result":{"agent_run_id":"run-1","answer":"已核对","recommendation":{"recommendations":[]},"evidence":[],"tool_trace":[],"agent_used":true,"tool_count":2}}',
+        '',
+        'data: {"type":"chunk","text":"已核对"}',
+        '',
+        'data: {"type":"done","meta":{"session_id":"session-campus"}}',
+        '',
+      ].join('\n') + '\n'),
+    })
+
+    expect(onProgress).toHaveBeenCalledWith(expect.objectContaining({ label: '正在读取今日目标' }))
+    expect(onDietResult).toHaveBeenCalledWith(expect.objectContaining({ agent_used: true, tool_count: 2 }))
+    expect(onChunk).toHaveBeenCalledWith('已核对')
+    expect(onDone).toHaveBeenCalledWith(expect.objectContaining({ session_id: 'session-campus' }))
+  })
+
   it('reports a synchronous request initialization failure instead of throwing', () => {
     request.mockImplementation(() => {
       throw new Error('request init failed')

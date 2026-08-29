@@ -58,6 +58,7 @@ const SETTING_ICON_TONES: Record<number, ProfileListIconTone> = {
   1: { color: '#4c92b3', backgroundColor: '#ecf7fc', darkColor: '#81d6fb', darkBackgroundColor: 'rgba(129, 214, 251, 0.16)' },
   3: { color: '#48a185', backgroundColor: '#effcf7', darkColor: '#7df0cc', darkBackgroundColor: 'rgba(125, 240, 204, 0.16)' },
   5: { color: '#a4744a', backgroundColor: '#fcf5ea', darkColor: '#f1bc8a', darkBackgroundColor: 'rgba(241, 188, 138, 0.16)' },
+  6: { color: '#d97706', backgroundColor: '#fff7e6', darkColor: '#fbbf24', darkBackgroundColor: 'rgba(251, 191, 36, 0.16)' },
 }
 
 function getProfileListIconStyle(id: number, tones: Record<number, ProfileListIconTone>, scheme: string) {
@@ -336,6 +337,7 @@ function ProfilePage() {
   // 设置项
   const settings = [
     { id: 1, iconClass: 'icon-user', title: '账号安全' },
+    { id: 6, iconClass: 'icon-paizhao-xianxing', title: '记录设置' },
     { id: 3, iconClass: 'icon-jiesuo', title: '隐私设置' },
     { id: 5, iconClass: 'icon-all', title: '关于我们' }
   ]
@@ -409,6 +411,10 @@ function ProfilePage() {
     // 账号安全
     if (setting.id === 1) {
       Taro.navigateTo({ url: extraPkgUrl('/pages/account-security/index') })
+      return
+    }
+    if (setting.id === 6) {
+      Taro.navigateTo({ url: extraPkgUrl('/pages/record-settings/index') })
       return
     }
     // 隐私设置
@@ -499,6 +505,7 @@ function ProfilePage() {
           Taro.removeStorageSync('showRecordMenuModal')
           Taro.removeStorageSync('home_pet_companion_collapsed_v1')
           Taro.removeStorageSync('home_pet_companion_float_position_v1')
+          Taro.removeStorageSync('home_pet_meal_prompt_seen_v1')
 
           // 识别记录 / 结果页相关缓存
           Taro.removeStorageSync('analyzeResult')
