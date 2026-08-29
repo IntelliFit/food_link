@@ -953,6 +953,7 @@ type UserSupplementDO struct {
 	Brand            string           `gorm:"column:brand;type:text;not null;default:''"`
 	Barcode          *string          `gorm:"column:barcode;type:text;index:idx_user_supplements_barcode"`
 	ImageURL         *string          `gorm:"column:image_url;type:text"`
+	ImageURLs        []string         `gorm:"column:image_urls;type:jsonb;serializer:json;not null;default:'[]'::jsonb"`
 	DefaultServings  float64          `gorm:"column:default_servings;type:numeric(10,3);not null;default:1"`
 	ServingLabel     string           `gorm:"column:serving_label;type:text;not null;default:'1份'"`
 	ScheduleEnabled  bool             `gorm:"column:schedule_enabled;type:boolean;not null;default:false"`

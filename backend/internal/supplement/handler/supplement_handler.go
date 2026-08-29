@@ -25,6 +25,7 @@ type SupplementService interface {
 	Record(ctx context.Context, userID, itemID string, input service.RecordInput) (*domain.SupplementIntake, error)
 	DeleteIntake(ctx context.Context, userID, intakeID string) error
 	Dashboard(ctx context.Context, userID, date string) (*service.DashboardResult, error)
+	RecognizeLabel(ctx context.Context, imageURLs []string) (*service.LabelRecognitionResult, error)
 }
 
 type SupplementHandler struct{ svc SupplementService }
@@ -38,6 +39,7 @@ type supplementBody struct {
 	Brand           string             `json:"brand"`
 	Barcode         *string            `json:"barcode"`
 	ImageURL        *string            `json:"image_url"`
+	ImageURLs       []string           `json:"image_urls"`
 	DefaultServings float64            `json:"default_servings"`
 	ServingLabel    string             `json:"serving_label"`
 	ScheduleEnabled bool               `json:"schedule_enabled"`
@@ -71,6 +73,25 @@ func (h *SupplementHandler) ListCatalog(c *gin.Context) {
 	}
 	logger.Info(c.Request.Context(), "公共补剂库查询完成", slog.String("user_id", userID), slog.Int("item_count", len(items)))
 	response.Success(c, gin.H{"items": items})
+}
+
+func (h *SupplementHandler) RecognizeLabel(c *gin.Context) {
+	var body struct {
+		ImageURLs []string `json:"image_urls"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		response.Error(c, err)
+		return
+	}
+	userID := c.GetString(authmw.ContextUserIDKey)
+	logger.Info(c.Request.Context(), "收到补剂标签多图识别请求", slog.String("user_id", userID), slog.Int("image_count", len(body.ImageURLs)))
+	result, err := h.svc.RecognizeLabel(c.Request.Context(), body.ImageURLs)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	logger.Info(c.Request.Context(), "补剂标签多图识别请求完成", slog.String("user_id", userID), slog.Int("component_count", len(result.Components)))
+	response.Success(c, gin.H{"supplement": result})
 }
 
 func (h *SupplementHandler) Create(c *gin.Context) {
@@ -166,7 +187,7 @@ func (h *SupplementHandler) DeleteIntake(c *gin.Context) {
 
 func toUpsertInput(body supplementBody) service.UpsertInput {
 	return service.UpsertInput{
-		Name: body.Name, Brand: body.Brand, Barcode: body.Barcode, ImageURL: body.ImageURL,
+		Name: body.Name, Brand: body.Brand, Barcode: body.Barcode, ImageURL: body.ImageURL, ImageURLs: body.ImageURLs,
 		DefaultServings: body.DefaultServings, ServingLabel: body.ServingLabel,
 		ScheduleEnabled: body.ScheduleEnabled, ScheduleTime: body.ScheduleTime, ScheduleDays: body.ScheduleDays,
 		Components: body.Components, LabelConfirmed: body.LabelConfirmed, Status: body.Status,

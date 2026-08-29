@@ -678,6 +678,9 @@ func MigrateSupplements(ctx context.Context, db *gorm.DB, schema string) error {
 			return fmt.Errorf("missing supplement table after migration: %s", table)
 		}
 	}
+	if !db.WithContext(ctx).Migrator().HasColumn(&migrationdo.UserSupplementDO{}, "image_urls") {
+		return fmt.Errorf("missing supplement column after migration: user_supplements.image_urls")
+	}
 	for _, check := range []struct {
 		model any
 		index string

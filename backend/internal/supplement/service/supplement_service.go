@@ -22,7 +22,8 @@ import (
 var scheduleTimePattern = regexp.MustCompile(`^(?:[01]\d|2[0-3]):[0-5]\d$`)
 
 type SupplementService struct {
-	repo *repo.SupplementRepo
+	repo              *repo.SupplementRepo
+	labelVisionClient LabelVisionClient
 }
 
 func NewSupplementService(repo *repo.SupplementRepo) *SupplementService {
@@ -34,6 +35,7 @@ type UpsertInput struct {
 	Brand           string
 	Barcode         *string
 	ImageURL        *string
+	ImageURLs       []string
 	DefaultServings float64
 	ServingLabel    string
 	ScheduleEnabled bool
@@ -116,20 +118,21 @@ func (s *SupplementService) Update(ctx context.Context, userID, itemID string, i
 	if current == nil {
 		return nil, commonerrors.ErrNotFound
 	}
+	// Older mini-program builds only send image_url. Treat an omitted image_urls
+	// field as "keep the existing label set" so editing a plan cannot silently
+	// discard the back-label photos saved by a newer client. An explicit empty
+	// image_urls array still clears the images.
+	if input.ImageURLs == nil {
+		input.ImageURLs = append([]string(nil), current.ImageURLs...)
+		if input.ImageURL == nil {
+			input.ImageURL = current.ImageURL
+		}
+	}
 	item, err := buildSupplement(userID, input)
 	if err != nil {
 		return nil, err
 	}
-	updates := map[string]any{
-		"name": item.Name, "brand": item.Brand, "barcode": item.Barcode, "image_url": item.ImageURL,
-		"default_servings": item.DefaultServings, "serving_label": item.ServingLabel,
-		"schedule_enabled": item.ScheduleEnabled, "schedule_time": item.ScheduleTime,
-		"schedule_days": item.ScheduleDays, "components": item.Components, "status": item.Status,
-	}
-	if item.LabelConfirmedAt != nil {
-		updates["label_confirmed_at"] = item.LabelConfirmedAt
-	}
-	updated, err := s.repo.Update(ctx, userID, itemID, updates)
+	updated, err := s.repo.Update(ctx, userID, itemID, item)
 	if err != nil {
 		logger.Error(ctx, "更新补剂柜条目失败", err, slog.String("user_id", userID), slog.String("supplement_id", itemID))
 		return nil, err
@@ -287,12 +290,43 @@ func buildSupplement(userID string, input UpsertInput) (*domain.UserSupplement, 
 	if input.LabelConfirmed {
 		confirmedAt = &now
 	}
+	imageURLs, err := normalizeSupplementImageURLs(input.ImageURLs, input.ImageURL)
+	if err != nil {
+		return nil, err
+	}
+	var coverImageURL *string
+	if len(imageURLs) > 0 {
+		coverImageURL = &imageURLs[0]
+	}
 	return &domain.UserSupplement{
 		UserID: userID, Name: name, Brand: strings.TrimSpace(input.Brand), Barcode: cleanOptional(input.Barcode),
-		ImageURL: cleanOptional(input.ImageURL), DefaultServings: servings, ServingLabel: servingLabel,
+		ImageURL: coverImageURL, ImageURLs: imageURLs, DefaultServings: servings, ServingLabel: servingLabel,
 		ScheduleEnabled: input.ScheduleEnabled, ScheduleTime: scheduleTime, ScheduleDays: scheduleDays,
 		Components: components, LabelConfirmedAt: confirmedAt, Status: status,
 	}, nil
+}
+
+func normalizeSupplementImageURLs(values []string, fallback *string) ([]string, error) {
+	if len(values) > maxSupplementLabelImages {
+		return nil, badRequest("补剂标签图片不能超过 3 张")
+	}
+	seen := map[string]bool{}
+	out := make([]string, 0, maxSupplementLabelImages)
+	appendURL := func(raw string) {
+		value := strings.TrimSpace(raw)
+		if value == "" || seen[value] || len(out) >= maxSupplementLabelImages {
+			return
+		}
+		seen[value] = true
+		out = append(out, value)
+	}
+	for _, value := range values {
+		appendURL(value)
+	}
+	if len(out) == 0 && fallback != nil {
+		appendURL(*fallback)
+	}
+	return out, nil
 }
 
 func normalizeComponents(input []domain.Component) ([]domain.Component, error) {

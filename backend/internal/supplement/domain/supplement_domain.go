@@ -49,6 +49,7 @@ type UserSupplement struct {
 	Brand            string      `gorm:"column:brand" json:"brand"`
 	Barcode          *string     `gorm:"column:barcode" json:"barcode,omitempty"`
 	ImageURL         *string     `gorm:"column:image_url" json:"image_url,omitempty"`
+	ImageURLs        []string    `gorm:"column:image_urls;serializer:json" json:"image_urls"`
 	DefaultServings  float64     `gorm:"column:default_servings" json:"default_servings"`
 	ServingLabel     string      `gorm:"column:serving_label" json:"serving_label"`
 	ScheduleEnabled  bool        `gorm:"column:schedule_enabled" json:"schedule_enabled"`
