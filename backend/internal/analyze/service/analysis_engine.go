@@ -29,7 +29,7 @@ func normalizeAnalysisEngine(engine, executionMode string, textInput bool) strin
 	if isPrecisionLikeExecutionMode(executionMode) || isGemini35ExecutionMode(executionMode) {
 		return analysisEngineDBCandidates
 	}
-	return analysisEngineAIThenDBExact
+	return analysisEngineAIDirect
 }
 
 func analysisEngineProducesNutrition(engine string) bool {

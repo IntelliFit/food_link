@@ -24,13 +24,14 @@ import (
 )
 
 type TaskService struct {
-	tasks       *repo.TaskRepo
-	precision   *repo.PrecisionRepo
-	users       *authrepo.UserRepo
-	storage     *storage.Client
-	creditGuard CreditGuard
-	taskQueue   taskqueue.Publisher
-	recordRepo  *foodrecordrepo.FoodRecordRepo
+	tasks        *repo.TaskRepo
+	precision    *repo.PrecisionRepo
+	users        *authrepo.UserRepo
+	storage      *storage.Client
+	creditGuard  CreditGuard
+	taskQueue    taskqueue.Publisher
+	recordRepo   *foodrecordrepo.FoodRecordRepo
+	autoRecorder AutoRecordExecutor
 }
 
 const (
@@ -55,6 +56,21 @@ func NewTaskService(tasks *repo.TaskRepo, precision *repo.PrecisionRepo, users *
 
 func (s *TaskService) ConfigureRecordRepo(repo *foodrecordrepo.FoodRecordRepo) {
 	s.recordRepo = repo
+}
+
+type AutoRecordExecutor interface {
+	AutoRecordCompletedTask(ctx context.Context, task *domain.AnalysisTask) (string, bool, error)
+}
+
+func (s *TaskService) ConfigureAutoRecorder(recorder AutoRecordExecutor) {
+	s.autoRecorder = recorder
+}
+
+type AutoRecordPreferenceResult struct {
+	Enabled  bool   `json:"enabled"`
+	MealType string `json:"meal_type,omitempty"`
+	Status   string `json:"status"`
+	RecordID string `json:"record_id,omitempty"`
 }
 
 type CreditGuard interface {
@@ -150,6 +166,9 @@ type TaskListPage struct {
 
 // SubmitAnalyzeTask 是面向用户 API 的入口，必须走积分检查。
 func (s *TaskService) SubmitAnalyzeTask(ctx context.Context, userID string, input SubmitTaskInput) (string, error) {
+	if err := validateSubmittedImageReferences(input); err != nil {
+		return "", err
+	}
 	s.normalizeSubmitImages(&input)
 	if err := validatePrecisionReferenceObject(input.ReferenceObject, false); err != nil {
 		return "", err
@@ -170,7 +189,6 @@ func (s *TaskService) SubmitAnalyzeTask(ctx context.Context, userID string, inpu
 		return "", err
 	}
 	input.AnalysisEngine = normalizeAnalysisEngine(input.AnalysisEngine, mode, false)
-	input.PreciseMicronutrients = input.PreciseMicronutrients && isPrecisionLikeExecutionMode(mode)
 	payload := buildSubmitTaskPayload(input, recordedOn, mode)
 	s.attachCorrectionChain(ctx, userID, input, payload)
 	if isContinuation {
@@ -190,6 +208,9 @@ func (s *TaskService) SubmitAnalyzeTask(ctx context.Context, userID string, inpu
 // SubmitInternalAnalyzeTask 仅用于内部系统（如 Admin Benchmark），不参与积分系统。
 // 调用方必须是可信内部服务；payload 会标记 internal_benchmark 以便追踪。
 func (s *TaskService) SubmitInternalAnalyzeTask(ctx context.Context, userID string, input SubmitTaskInput) (string, error) {
+	if err := validateSubmittedImageReferences(input); err != nil {
+		return "", err
+	}
 	s.normalizeSubmitImages(&input)
 	if input.ImageURL == "" && len(input.ImageURLs) == 0 {
 		return "", &errors.AppError{Code: 10002, Message: "image_url 或 image_urls 不能为空", HTTPStatus: 400}
@@ -206,7 +227,6 @@ func (s *TaskService) SubmitInternalAnalyzeTask(ctx context.Context, userID stri
 		return "", err
 	}
 	input.AnalysisEngine = normalizeAnalysisEngine(input.AnalysisEngine, mode, false)
-	input.PreciseMicronutrients = input.PreciseMicronutrients && isPrecisionLikeExecutionMode(mode)
 	payload := buildSubmitTaskPayload(input, recordedOn, mode)
 	s.attachCorrectionChain(ctx, userID, input, payload)
 	payload["internal_benchmark"] = true
@@ -225,6 +245,9 @@ func (s *TaskService) SubmitTextTask(ctx context.Context, userID string, input S
 	if input.TextInput == "" {
 		input.TextInput = input.Text
 	}
+	if err := validateSubmittedImageReferences(input); err != nil {
+		return "", err
+	}
 	s.normalizeSubmitImages(&input)
 	if err := validatePrecisionReferenceObject(input.ReferenceObject, false); err != nil {
 		return "", err
@@ -238,7 +261,6 @@ func (s *TaskService) SubmitTextTask(ctx context.Context, userID string, input S
 		return "", err
 	}
 	input.AnalysisEngine = normalizeAnalysisEngine(input.AnalysisEngine, mode, true)
-	input.PreciseMicronutrients = input.PreciseMicronutrients && isPrecisionLikeExecutionMode(mode)
 	payload := buildSubmitTaskPayload(input, recordedOn, mode)
 	s.attachCorrectionChain(ctx, userID, input, payload)
 	if hasPrecisionSessionID(input) {
@@ -260,6 +282,9 @@ func (s *TaskService) SubmitInternalTextTask(ctx context.Context, userID string,
 	if input.TextInput == "" {
 		input.TextInput = input.Text
 	}
+	if err := validateSubmittedImageReferences(input); err != nil {
+		return "", err
+	}
 	s.normalizeSubmitImages(&input)
 	if input.TextInput == "" && !hasPrecisionSupplement(input) {
 		return "", &errors.AppError{Code: 10002, Message: "text 不能为空", HTTPStatus: 400}
@@ -270,7 +295,6 @@ func (s *TaskService) SubmitInternalTextTask(ctx context.Context, userID string,
 		return "", err
 	}
 	input.AnalysisEngine = normalizeAnalysisEngine(input.AnalysisEngine, mode, true)
-	input.PreciseMicronutrients = input.PreciseMicronutrients && isPrecisionLikeExecutionMode(mode)
 	payload := buildSubmitTaskPayload(input, recordedOn, mode)
 	s.attachCorrectionChain(ctx, userID, input, payload)
 	payload["internal_benchmark"] = true
@@ -547,7 +571,7 @@ func buildSubmitTaskPayload(input SubmitTaskInput, recordedOn, mode string) map[
 		"modelName":              input.ModelName,
 		"execution_mode":         mode,
 		"analysis_engine":        input.AnalysisEngine,
-		"precise_micronutrients": input.PreciseMicronutrients,
+		"precise_micronutrients": true,
 		"recorded_on":            recordedOn,
 	}
 	applySubmitCompatibilityPayload(payload, input)
@@ -1217,41 +1241,143 @@ func (s *TaskService) CountTasksByStatus(ctx context.Context, userID string) (ma
 	}
 	var recognizing, waitingRecord, recorded int64
 	waitingTasks := make([]domain.AnalysisTask, 0)
+	latestRecognizingTaskID := ""
+	latestWaitingRecordTaskID := ""
+	latestAutoRecordedTaskID := ""
+	latestAutoRecordedRecordID := ""
+	var latestAutoRecordedAt *time.Time
 	recentSince := time.Now().Add(-waitingRecordBadgeWindow)
 	for _, task := range tasks {
+		reminderAt := analyzeTaskReminderTime(task)
 		switch task.Status {
 		case "pending", "processing":
 			recognizing++
+			if latestRecognizingTaskID == "" {
+				latestRecognizingTaskID = task.ID
+			}
 		case "done":
 			if precisionTaskNeedsUserAction(task) {
 				continue
 			}
-			if _, ok := recordedMap[task.ID]; ok {
+			if recordID, ok := recordedMap[task.ID]; ok {
 				recorded++
+				if latestAutoRecordedTaskID == "" && boolFromAny(task.Payload["auto_record_requested"]) && task.CreatedAt != nil && task.CreatedAt.After(recentSince) {
+					latestAutoRecordedTaskID = task.ID
+					latestAutoRecordedRecordID = recordID
+					latestAutoRecordedAt = reminderAt
+				}
 			} else if task.CreatedAt != nil && task.CreatedAt.After(recentSince) {
 				waitingRecord++
 				waitingTasks = append(waitingTasks, task)
-			}
-		}
-	}
-	hasUnseen := waitingRecord > 0
-	if hasUnseen && s.users != nil {
-		if user, err := s.users.FindByID(ctx, userID); err == nil && user != nil && user.LastSeenAnalyzeHistory != nil {
-			hasUnseen = false
-			for _, task := range waitingTasks {
-				if task.CreatedAt != nil && task.CreatedAt.After(*user.LastSeenAnalyzeHistory) {
-					hasUnseen = true
-					break
+				if latestWaitingRecordTaskID == "" {
+					latestWaitingRecordTaskID = task.ID
 				}
 			}
 		}
 	}
+	hasUnseen := waitingRecord > 0
+	hasUnseenAutoRecorded := latestAutoRecordedTaskID != ""
+	if (hasUnseen || hasUnseenAutoRecorded) && s.users != nil {
+		if user, err := s.users.FindByID(ctx, userID); err == nil && user != nil && user.LastSeenAnalyzeHistory != nil {
+			hasUnseen = false
+			for _, task := range waitingTasks {
+				if reminderAt := analyzeTaskReminderTime(task); reminderAt != nil && reminderAt.After(*user.LastSeenAnalyzeHistory) {
+					hasUnseen = true
+					break
+				}
+			}
+			if latestAutoRecordedAt == nil || !latestAutoRecordedAt.After(*user.LastSeenAnalyzeHistory) {
+				hasUnseenAutoRecorded = false
+			}
+		}
+	}
 	return map[string]any{
-		"recognizing":               recognizing,
-		"waiting_record":            waitingRecord,
-		"recorded":                  recorded,
-		"has_unseen_waiting_record": hasUnseen,
+		"recognizing":                    recognizing,
+		"waiting_record":                 waitingRecord,
+		"recorded":                       recorded,
+		"has_unseen_waiting_record":      hasUnseen,
+		"latest_recognizing_task_id":     latestRecognizingTaskID,
+		"latest_waiting_record_task_id":  latestWaitingRecordTaskID,
+		"latest_auto_recorded_task_id":   latestAutoRecordedTaskID,
+		"latest_auto_recorded_record_id": latestAutoRecordedRecordID,
+		"has_unseen_auto_recorded":       hasUnseenAutoRecorded,
 	}, nil
+}
+
+func analyzeTaskReminderTime(task domain.AnalysisTask) *time.Time {
+	if task.UpdatedAt != nil {
+		return task.UpdatedAt
+	}
+	return task.CreatedAt
+}
+
+func (s *TaskService) SetTaskAutoRecord(ctx context.Context, taskID, userID, mealType string, enabled bool) (*AutoRecordPreferenceResult, error) {
+	task, err := s.GetTask(ctx, strings.TrimSpace(taskID), strings.TrimSpace(userID))
+	if err != nil {
+		return nil, err
+	}
+	if task == nil {
+		return nil, errors.ErrNotFound
+	}
+	if task.TaskType != "food" && task.TaskType != "food_text" {
+		return nil, &errors.AppError{Code: 10002, Message: "该识别任务不支持自动记录", HTTPStatus: 400}
+	}
+	payload := make(map[string]any, len(task.Payload)+4)
+	for key, value := range task.Payload {
+		payload[key] = value
+	}
+	if enabled {
+		mealType = normalizeAutoRecordMealType(mealType)
+		if mealType == "" {
+			return nil, &errors.AppError{Code: 10002, Message: "请选择要记录的餐次", HTTPStatus: 400}
+		}
+		payload["auto_record_requested"] = true
+		payload["auto_record_meal_type"] = mealType
+		payload["auto_record_requested_at"] = time.Now().Format(time.RFC3339Nano)
+	} else {
+		payload["auto_record_requested"] = false
+		delete(payload, "auto_record_meal_type")
+		delete(payload, "auto_record_requested_at")
+	}
+	if err := s.tasks.UpdateTaskPayload(ctx, task.ID, payload); err != nil {
+		return nil, err
+	}
+	result := &AutoRecordPreferenceResult{Enabled: enabled, MealType: mealType, Status: task.Status}
+	logger.Info(ctx, "更新识别任务自动记录设置",
+		slog.String("user_id", userID),
+		slog.String("task_id", task.ID),
+		slog.Bool("auto_record.enabled", enabled),
+		slog.String("meal_type", mealType),
+		slog.String("task.status", task.Status),
+	)
+	if enabled && task.Status == "done" && s.autoRecorder != nil {
+		freshTask, lookupErr := s.tasks.GetTaskByID(ctx, task.ID)
+		if lookupErr != nil {
+			return nil, lookupErr
+		}
+		if freshTask != nil {
+			recordID, saved, saveErr := s.autoRecorder.AutoRecordCompletedTask(ctx, freshTask)
+			if saveErr != nil {
+				return nil, saveErr
+			}
+			if saved || recordID != "" {
+				result.RecordID = recordID
+				result.Status = "recorded"
+			}
+		}
+	}
+	return result, nil
+}
+
+func normalizeAutoRecordMealType(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "breakfast", "morning_snack", "lunch", "afternoon_snack", "dinner", "evening_snack":
+		return strings.ToLower(strings.TrimSpace(value))
+	case "snack":
+		return "afternoon_snack"
+	default:
+		return ""
+	}
 }
 
 func precisionTaskNeedsUserAction(task domain.AnalysisTask) bool {
@@ -1899,6 +2025,35 @@ func (s *TaskService) normalizeSubmitImages(input *SubmitTaskInput) {
 	} else {
 		input.ImageURLs = nil
 	}
+}
+
+func validateSubmittedImageReferences(input SubmitTaskInput) error {
+	values := make([]string, 0, len(input.ImageURLs)+1)
+	values = append(values, input.ImageURL)
+	values = append(values, input.ImageURLs...)
+	for _, value := range values {
+		if isWeappLocalImageReference(value) {
+			return &errors.AppError{
+				Code:       10002,
+				Message:    "图片尚未上传完成，请重新选择图片后再试",
+				HTTPStatus: 400,
+			}
+		}
+	}
+	return nil
+}
+
+func isWeappLocalImageReference(value string) bool {
+	lower := strings.ToLower(strings.TrimSpace(value))
+	for _, prefix := range []string{
+		"http://tmp/", "https://tmp/", "http://usr/", "https://usr/",
+		"wxfile://tmp/", "wxfile://usr/",
+	} {
+		if strings.HasPrefix(lower, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 func filterAnalyzeHistoryTasks(tasks []domain.AnalysisTask) []domain.AnalysisTask {

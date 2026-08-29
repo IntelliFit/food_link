@@ -9,6 +9,7 @@ import (
 
 	. "github.com/agiledragon/gomonkey/v2"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 
 	"food_link/backend/internal/auth/repo"
@@ -461,6 +462,30 @@ func TestUserService_UpdateHealthProfile(t *testing.T) {
 	assert.Equal(t, "system_initial", hc["dashboard_targets_mode"])
 	targets := hc["dashboard_targets"].(map[string]float64)
 	assert.Greater(t, targets["calorie_target"], 0.0)
+}
+
+func TestUserService_UpdateHealthProfileSavesValidatedCampusPreference(t *testing.T) {
+	db := setupTestDB(t)
+	require.NoError(t, db.Exec(`CREATE TABLE schools (id TEXT PRIMARY KEY, name TEXT, status TEXT)`).Error)
+	require.NoError(t, db.Exec(`CREATE TABLE school_campuses (id TEXT PRIMARY KEY, school_id TEXT, name TEXT, status TEXT)`).Error)
+	require.NoError(t, db.Exec(`INSERT INTO schools (id, name, status) VALUES ('pku-id', '北京大学', 'active')`).Error)
+	require.NoError(t, db.Exec(`INSERT INTO school_campuses (id, school_id, name, status) VALUES ('pku-main', 'pku-id', '燕园校区', 'active')`).Error)
+
+	userRepo := repo.NewUserRepo(db)
+	svc := NewUserService(userRepo, userrepo.NewHealthDocumentRepo(db), userrepo.NewModeSwitchLogRepo(db), nil)
+	user := &repo.User{OpenID: "campus-pref-user"}
+	require.NoError(t, userRepo.Create(context.Background(), user))
+
+	result, err := svc.UpdateHealthProfile(context.Background(), user.ID, UpdateHealthProfileInput{
+		CampusDiningPreference: &CampusDiningPreferenceInput{SchoolID: "pku-id", CampusID: "pku-main"},
+	})
+	require.NoError(t, err)
+	healthCondition := result["health_condition"].(map[string]any)
+	preference := healthCondition["campus_dining_preference"].(map[string]any)
+	assert.Equal(t, "pku-id", preference["school_id"])
+	assert.Equal(t, "北京大学", preference["school_name"])
+	assert.Equal(t, "pku-main", preference["campus_id"])
+	assert.Equal(t, "燕园校区", preference["campus_name"])
 }
 
 func TestUserService_UpdateHealthProfile_ModeChange(t *testing.T) {

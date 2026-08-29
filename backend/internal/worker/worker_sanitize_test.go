@@ -207,12 +207,14 @@ func (workerEmptyWebSearcher) Search(ctx context.Context, query string, limit in
 
 type workerFakeNutritionFallbackEstimator struct {
 	candidates        []analyzeservice.UnresolvedNutritionCandidate
+	calls             [][]analyzeservice.UnresolvedNutritionCandidate
 	additionalContext string
 	rows              map[int]map[string]any
 }
 
 func (f *workerFakeNutritionFallbackEstimator) Estimate(ctx context.Context, candidates []analyzeservice.UnresolvedNutritionCandidate, additionalContext string) (map[int]map[string]any, error) {
 	f.candidates = append([]analyzeservice.UnresolvedNutritionCandidate(nil), candidates...)
+	f.calls = append(f.calls, append([]analyzeservice.UnresolvedNutritionCandidate(nil), candidates...))
 	f.additionalContext = additionalContext
 	return f.rows, nil
 }
@@ -535,12 +537,10 @@ func TestRunFoodAnalysisWithAnalyzeServiceIntegratesPackagedFood(t *testing.T) {
 			if err != nil {
 				t.Fatalf("runFoodAnalysis returned error: %v", err)
 			}
-			// This fixture has no food that needs edible-portion inference and no
-			// remaining-calorie budget that would require a suggested-ratio call.
-			// The only LLM call should therefore be the initial vision analysis;
-			// nutrition is resolved deterministically from the configured libraries.
-			if llm.calls != 1 {
-				t.Fatalf("expected one vision model call for %s mode, got %d", mode, llm.calls)
+			// 宏量营养由库确定，但完整微量元素固定开启；该通用 mock 同时承接
+			// 一次视觉识别和两次微量补全尝试，因此总调用数固定为 3。
+			if llm.calls != 3 {
+				t.Fatalf("expected vision plus mandatory micronutrient calls for %s mode, got %d", mode, llm.calls)
 			}
 			items := extractItems(result["items"])
 			if len(items) != 2 {
@@ -628,11 +628,18 @@ func TestRunFoodAnalysisWithAnalyzeServiceFallsBackToAIWhenPackagedFoodMisses(t 
 			if llm.calls != 1 {
 				t.Fatalf("expected one vision model call for %s mode, got %d", mode, llm.calls)
 			}
-			if len(fallback.candidates) != 1 {
-				t.Fatalf("expected one nutrition fallback candidate, got %#v", fallback.candidates)
+			if len(fallback.calls) != 2 {
+				t.Fatalf("expected macro fallback and mandatory micronutrient enrichment, got %#v", fallback.calls)
 			}
-			if fallback.candidates[0].Name != "未收录包装豆干" || fallback.candidates[0].EstimatedWeightGrams != 30 {
-				t.Fatalf("unexpected fallback candidate: %#v", fallback.candidates[0])
+			macroCandidates := fallback.calls[0]
+			if len(macroCandidates) != 1 {
+				t.Fatalf("expected one macro nutrition fallback candidate, got %#v", macroCandidates)
+			}
+			if macroCandidates[0].Name != "未收录包装豆干" || macroCandidates[0].EstimatedWeightGrams != 30 {
+				t.Fatalf("unexpected macro fallback candidate: %#v", macroCandidates[0])
+			}
+			if len(fallback.calls[1]) != 2 {
+				t.Fatalf("expected both items to enter mandatory micronutrient enrichment, got %#v", fallback.calls[1])
 			}
 			if fallback.additionalContext != "包装库没有命中时允许 AI 保守估算" {
 				t.Fatalf("additional context not passed to nutrition fallback: %s", fallback.additionalContext)

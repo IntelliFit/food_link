@@ -119,6 +119,28 @@ func TestTaskService_SubmitAnalyzeTask_EmptyInput(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestTaskService_SubmitAnalyzeTask_RejectsWeappLocalImageReference(t *testing.T) {
+	_, taskRepo, precisionRepo, userRepo := setupTaskServiceTestDB(t)
+	svc := NewTaskService(taskRepo, precisionRepo, userRepo)
+	ctx := context.Background()
+
+	for _, imageURL := range []string{
+		"http://usr/analyze_123.png",
+		"http://tmp/photo.png",
+		"wxfile://usr/analyze_123.png",
+		"wxfile://tmp/photo.png",
+	} {
+		t.Run(imageURL, func(t *testing.T) {
+			_, err := svc.SubmitAnalyzeTask(ctx, "user1", SubmitTaskInput{ImageURL: imageURL})
+			require.Error(t, err)
+			var appErr *commonerrors.AppError
+			require.ErrorAs(t, err, &appErr)
+			assert.Equal(t, 400, appErr.HTTPStatus)
+			assert.Contains(t, appErr.Message, "尚未上传")
+		})
+	}
+}
+
 func TestTaskService_SubmitAnalyzeTask_Success(t *testing.T) {
 	_, taskRepo, precisionRepo, userRepo := setupTaskServiceTestDB(t)
 	svc := NewTaskService(taskRepo, precisionRepo, userRepo)
@@ -475,11 +497,10 @@ func TestBuildSubmitTaskPayloadPreservesIntegratedPackagedCorrectionFields(t *te
 	assert.Equal(t, 90.0, nutrients["calories"])
 }
 
-func TestBuildSubmitTaskPayloadPreservesNutritionEngineAndMicronutrientEntitlement(t *testing.T) {
+func TestBuildSubmitTaskPayloadAlwaysEnablesCompleteMicronutrients(t *testing.T) {
 	payload := buildSubmitTaskPayload(SubmitTaskInput{
-		AnalysisEngine:        analysisEngineDBCandidates,
-		PreciseMicronutrients: true,
-	}, "2026-08-21", precisionExecutionMode)
+		AnalysisEngine: analysisEngineDBCandidates,
+	}, "2026-08-21", defaultExecutionMode)
 
 	assert.Equal(t, analysisEngineDBCandidates, payload["analysis_engine"])
 	assert.Equal(t, true, payload["precise_micronutrients"])
@@ -513,13 +534,17 @@ func TestTaskService_SubmitTextTask_Success(t *testing.T) {
 	svc := NewTaskService(taskRepo, precisionRepo, userRepo)
 	ctx := context.Background()
 
-	taskID, err := svc.SubmitTextTask(ctx, "user1", SubmitTaskInput{TextInput: "一碗米饭"})
+	taskID, err := svc.SubmitTextTask(ctx, "user1", SubmitTaskInput{
+		TextInput: "一碗米饭",
+	})
 	require.NoError(t, err)
 	assert.NotEmpty(t, taskID)
 
 	task, err := taskRepo.GetTaskByID(ctx, taskID)
 	require.NoError(t, err)
 	assert.Equal(t, "food_text", task.TaskType)
+	assert.Equal(t, analysisEngineAIDirect, task.Payload["analysis_engine"])
+	assert.Equal(t, true, task.Payload["precise_micronutrients"])
 }
 
 func TestTaskService_SubmitTextTask_ReservesCreditsWithRefundGroup(t *testing.T) {

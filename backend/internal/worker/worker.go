@@ -99,6 +99,7 @@ type Runner struct {
 	notifier      expiryNotificationProcessor
 	exercise      *healthservice.ExerciseService
 	nutrition     *foodrecordservice.FoodNutritionService
+	autoRecorder  analysisAutoRecorder
 	queue         taskqueue.Queue
 	storage       *storage.Client
 	credit        CreditGuard
@@ -117,6 +118,10 @@ type analyzeRunner interface {
 
 type CreditGuard interface {
 	RefundEarnedCreditsAfterTaskFailure(ctx context.Context, userID string, creditsInfo map[string]any, cost int, spendReason, spendSourceKey, refundReason, refundSourceKey string, meta map[string]any) error
+}
+
+type analysisAutoRecorder interface {
+	AutoRecordCompletedTask(context.Context, *domain.AnalysisTask) (string, bool, error)
 }
 
 type expiryNotificationProcessor interface {
@@ -188,6 +193,10 @@ func (r *Runner) ConfigureCreditGuard(guard CreditGuard) {
 
 func (r *Runner) ConfigureCampusCatalog(repo *campuscatalogrepo.CatalogRepo) {
 	r.campusCatalog = repo
+}
+
+func (r *Runner) ConfigureAutoRecorder(recorder analysisAutoRecorder) {
+	r.autoRecorder = recorder
 }
 
 func (r *Runner) Run(ctx context.Context, opts Options) error {
@@ -5255,6 +5264,16 @@ func (r *Runner) completeTask(ctx context.Context, task *domain.AnalysisTask, re
 	}
 	task.Status = "done"
 	task.Result = result
+	if r.autoRecorder != nil {
+		freshTask, lookupErr := r.tasks.GetTaskByID(ctx, task.ID)
+		if lookupErr != nil {
+			r.warn(ctx, "读取自动记录任务设置失败", slog.String("task_id", task.ID), logger.Err(lookupErr))
+		} else if freshTask != nil {
+			if _, _, autoRecordErr := r.autoRecorder.AutoRecordCompletedTask(ctx, freshTask); autoRecordErr != nil {
+				r.warn(ctx, "识别任务自动记录失败，保留为待确认", slog.String("task_id", task.ID), logger.Err(autoRecordErr))
+			}
+		}
+	}
 	if err := r.captureCorrectionFeedbackSample(ctx, task, result, ""); err != nil {
 		r.warn(ctx, "采集纠错反馈样本失败",
 			slog.String("task_id", task.ID),

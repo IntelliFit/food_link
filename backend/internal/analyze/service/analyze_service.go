@@ -504,6 +504,17 @@ func (s *AnalyzeService) ApplyDBFirstToItemsWithPreciseMicronutrients(ctx contex
 // step separate prevents campus single-task analysis from repeating database,
 // embedding and semantic-rerank work before the precise micronutrient call.
 func (s *AnalyzeService) ApplyPreciseMicronutrientsToResolvedItems(ctx context.Context, items []map[string]any, additionalContext string) ([]map[string]any, error) {
+	return s.applyPreciseMicronutrientsToResolvedItems(ctx, items, additionalContext, false)
+}
+
+// ApplyUserRequestedMicronutrientsToResolvedItems keeps a complete existing
+// database profile authoritative. AI only fills micronutrients when the current
+// result does not already contain a usable complete profile.
+func (s *AnalyzeService) ApplyUserRequestedMicronutrientsToResolvedItems(ctx context.Context, items []map[string]any, additionalContext string) ([]map[string]any, error) {
+	return s.applyPreciseMicronutrientsToResolvedItems(ctx, items, additionalContext, true)
+}
+
+func (s *AnalyzeService) applyPreciseMicronutrientsToResolvedItems(ctx context.Context, items []map[string]any, additionalContext string, preferCompleteExisting bool) ([]map[string]any, error) {
 	resolved := make([]map[string]any, 0, len(items))
 	for _, item := range items {
 		resolved = append(resolved, copyAnyMap(item))
@@ -517,10 +528,15 @@ func (s *AnalyzeService) ApplyPreciseMicronutrientsToResolvedItems(ctx context.C
 		name := strings.TrimSpace(fmt.Sprintf("%v", item["name"]))
 		weight := nutritionWeightFromItem(item)
 		if name == "" || weight <= 0 {
-			return nil, fmt.Errorf("校园菜品微量营养精确分析缺少有效名称或份量")
+			return nil, fmt.Errorf("完整微量营养分析缺少有效名称或份量")
 		}
 		existingSource := strings.TrimSpace(fmt.Sprintf("%v", item["nutrition_source"]))
 		existingUnit := copyAnyMap(mapFromAny(item["unit_nutrition_per_100g"]))
+		if preferCompleteExisting && validatePreciseMicronutrientUnit(existingUnit) == nil {
+			existingUnit[fallbackNutritionSourceKey] = firstNonEmptyString(existingSource, "existing_nutrition")
+			rows[index] = existingUnit
+			continue
+		}
 		if foodrecorddomain.IsAIGeneratedNutritionSource(existingSource) && validatePreciseMicronutrientUnit(existingUnit) == nil {
 			existingUnit[fallbackNutritionSourceKey] = existingSource
 			rows[index] = existingUnit
@@ -538,7 +554,7 @@ func (s *AnalyzeService) ApplyPreciseMicronutrientsToResolvedItems(ctx context.C
 	if len(candidates) > 0 {
 		generatedRows, err := s.estimateNutritionWithFallback(ctx, candidates, additionalContext)
 		if err != nil {
-			return nil, fmt.Errorf("校园菜品微量营养精确分析失败: %w", err)
+			return nil, fmt.Errorf("完整微量营养分析失败: %w", err)
 		}
 		for index, unit := range generatedRows {
 			rows[index] = unit
@@ -547,14 +563,14 @@ func (s *AnalyzeService) ApplyPreciseMicronutrientsToResolvedItems(ctx context.C
 	for index := range resolved {
 		unit, ok := rows[index]
 		if !ok || len(unit) == 0 {
-			return nil, fmt.Errorf("校园菜品微量营养精确分析未返回第 %d 项结果", index+1)
+			return nil, fmt.Errorf("完整微量营养分析未返回第 %d 项结果", index+1)
 		}
 		source := popFallbackSource(unit, "")
 		if source == "" {
-			return nil, fmt.Errorf("校园菜品微量营养精确分析缺少第 %d 项来源", index+1)
+			return nil, fmt.Errorf("完整微量营养分析缺少第 %d 项来源", index+1)
 		}
 		if err := validatePreciseMicronutrientUnit(unit); err != nil {
-			return nil, fmt.Errorf("校园菜品第 %d 项微量营养结果不完整: %w", index+1, err)
+			return nil, fmt.Errorf("第 %d 项微量营养结果不完整: %w", index+1, err)
 		}
 		weight := nutritionWeightFromItem(resolved[index])
 		scaled := scaleNutrition(unit, weight)
@@ -2163,6 +2179,7 @@ func (s *AnalyzeService) resolveImageModelConfig(modelName string) (provider, mo
 
 // Analyze performs single-image or text analysis synchronously.
 func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input AnalyzeInput) (map[string]any, error) {
+	input.PreciseMicronutrients = true
 	s.normalizeFoodImageInput(&input)
 	executionMode := s.resolveExecutionMode(ctx, userID, input.ExecutionMode)
 	isCorrection := len(input.CorrectionItems) > 0 || len(input.PreviousResult) > 0
@@ -4483,6 +4500,7 @@ func isEmptyAnalyzeAny(value any) bool {
 
 // AnalyzeText performs text-only analysis.
 func (s *AnalyzeService) AnalyzeText(ctx context.Context, userID string, input AnalyzeInput) (map[string]any, error) {
+	input.PreciseMicronutrients = true
 	executionMode := s.resolveExecutionMode(ctx, userID, input.ExecutionMode)
 	var user *authrepo.User
 	if userID != "" && s.users != nil {
@@ -5125,7 +5143,7 @@ func (s *AnalyzeService) finalizeAnalyzeResponse(ctx context.Context, userID str
 	resp := buildAnalyzeResponse(parsed, executionMode, provider, model, durationMs)
 	engine := strings.ToLower(strings.TrimSpace(input.AnalysisEngine))
 	if engine == "" {
-		engine = analysisEngineLegacyDBFirst
+		engine = normalizeAnalysisEngine("", executionMode, strings.TrimSpace(input.Text) != "")
 	} else {
 		engine = normalizeAnalysisEngine(engine, executionMode, strings.TrimSpace(input.Text) != "")
 	}
@@ -5147,7 +5165,6 @@ func (s *AnalyzeService) finalizeAnalyzeResponse(ctx context.Context, userID str
 	switch engine {
 	case analysisEngineLegacyDirect, analysisEngineAIDirect:
 		resp = finalizeAIDirectNutrition(resp, engine)
-		resp = s.applyAuthoritativePackagedNutrition(postprocessCtx, resp)
 	case analysisEngineAIThenDBExact:
 		resp = s.applyAIThenExactDBNutrition(postprocessCtx, resp, input)
 	case analysisEngineDBCandidates:
@@ -5162,7 +5179,7 @@ func (s *AnalyzeService) finalizeAnalyzeResponse(ctx context.Context, userID str
 		})
 	}
 	if input.PreciseMicronutrients {
-		items, err := s.ApplyPreciseMicronutrientsToResolvedItems(postprocessCtx, toItems(resp["items"]), fullNutritionContext(input))
+		items, err := s.ApplyUserRequestedMicronutrientsToResolvedItems(postprocessCtx, toItems(resp["items"]), fullNutritionContext(input))
 		if err != nil {
 			resp["precise_micronutrients"] = map[string]any{"requested": true, "status": "failed", "reason": err.Error()}
 			logger.Warn(ctx, "精准微量营养补全失败，保留基础营养结果", logger.Err(err), slog.String("analysis_engine", engine))
