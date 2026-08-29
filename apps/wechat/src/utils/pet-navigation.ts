@@ -19,8 +19,10 @@ function openWithoutStacking(url: string): void {
   Taro.navigateTo({ url })
 }
 
-export function openPetChat(): void {
-  openWithoutStacking(extraPkgUrl('/pages/pet-chat/index'))
+export function openPetChat(starterQuestion?: unknown): void {
+  const starter = typeof starterQuestion === 'string' ? starterQuestion.trim() : ''
+  const query = starter ? `?starter=${encodeURIComponent(starter)}` : ''
+  openWithoutStacking(`${extraPkgUrl('/pages/pet-chat/index')}${query}`)
 }
 
 export function openPetSettings(): void {

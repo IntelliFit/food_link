@@ -1,6 +1,28 @@
 import Taro from '@tarojs/taro'
 
 const GENERATED_USER_FILE_PREFIXES = ['analyze_', 'expiry_', 'cv_'] as const
+const WEAPP_HTTP_FILE_PATH_PATTERN = /^https?:\/\/(tmp|usr)(?=\/|$)/i
+const WEAPP_FILE_PATH_PATTERN = /^wxfile:\/\/(tmp|usr)(?=\/|$)/i
+
+/**
+ * 微信开发者工具的 webview 渲染可能把 wxfile://tmp、wxfile://usr 暴露为
+ * http://tmp、http://usr。它们是本地虚拟文件，不是可供后端或 AI 访问的公网 URL。
+ */
+export function normalizeWeappLocalFilePath(path: string): string {
+  const raw = String(path || '').trim()
+  if (!raw) return ''
+  return raw.replace(WEAPP_HTTP_FILE_PATH_PATTERN, (_match, location: string) => `wxfile://${location}`)
+}
+
+export function isWeappLocalFilePath(path: string): boolean {
+  const raw = String(path || '').trim()
+  return WEAPP_HTTP_FILE_PATH_PATTERN.test(raw) || WEAPP_FILE_PATH_PATTERN.test(raw)
+}
+
+export function isPublicHttpImageURL(path: string): boolean {
+  const raw = String(path || '').trim()
+  return /^https?:\/\//i.test(raw) && !isWeappLocalFilePath(raw)
+}
 
 function getUserDataPath(): string {
   return String((Taro as unknown as { env?: { USER_DATA_PATH?: string } }).env?.USER_DATA_PATH || '').trim()

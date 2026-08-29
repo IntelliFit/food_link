@@ -73,6 +73,10 @@ import {
 } from '../../../utils/onboarding-guide-storage'
 import { ANALYZE_PREP_ONBOARDING_STEPS } from './analyze-onboarding-steps'
 import { PAGE_SCROLL_LOCK_STYLE, usePageScrollLock } from '../../../utils/page-scroll-lock'
+import {
+  isPublicHttpImageURL,
+  normalizeWeappLocalFilePath,
+} from '../../../utils/weapp-user-files'
 
 /** 餐次（分析前选择，AI 将结合餐次分析） */
 const MEAL_OPTIONS: Array<{ value: MealType; label: string; iconClass: string }> = [
@@ -337,12 +341,7 @@ const EXECUTION_MODE_META: Record<ExecutionMode, { title: string; desc: string; 
 }
 
 const normalizeTmpPath = (path: string): string => {
-  const raw = (path || '').trim()
-  if (!raw) return ''
-  if (/^https?:\/\/tmp\//i.test(raw)) {
-    return raw.replace(/^https?:\/\/tmp\//i, 'wxfile://tmp/')
-  }
-  return raw
+  return normalizeWeappLocalFilePath(path)
 }
 
 const isTempImagePath = (path: string): boolean => {
@@ -446,10 +445,7 @@ function AnalyzePage() {
   const [activityTiming, setActivityTiming] = useState<ActivityTiming>('none')
   const [defaultMealType, setDefaultMealType] = useState<MealType>(() => inferDefaultMealTypeFromLocalTime())
   const [executionMode, setExecutionMode] = useState<ExecutionMode>('standard')
-  const [analysisEngine, setAnalysisEngine] = useState<AnalysisEngine>(() => (
-    normalizeAnalysisEngine(Taro.getStorageSync(ANALYSIS_ENGINE_STORAGE_KEY), 'standard')
-  ))
-  const [preciseMicronutrients, setPreciseMicronutrients] = useState(false)
+  const [analysisEngine, setAnalysisEngine] = useState<AnalysisEngine>(() => defaultAnalysisEngineForMode('standard'))
   const [precisionInteractiveEnabled, setPrecisionInteractiveEnabled] = useState(true)
   const [precisionSeparateEnabled, setPrecisionSeparateEnabled] = useState(false)
   const [precisionWebSearchEnabled, setPrecisionWebSearchEnabled] = useState(false)
@@ -554,7 +550,6 @@ function AnalyzePage() {
     if (isPrecisionExecutionMode(executionMode) && !canUseStrictMode && !precisionSessionId) {
       setExecutionMode('standard')
       setAnalysisEngine(defaultAnalysisEngineForMode('standard'))
-      setPreciseMicronutrients(false)
     }
   }, [membershipStatus, executionMode, canUseStrictMode, precisionSessionId])
 
@@ -594,13 +589,11 @@ function AnalyzePage() {
     const nextMode = resolveExecutionModeFromOptions(baseMode, isWebSearchEnabled, false)
     setExecutionMode(nextMode)
     setAnalysisEngine(defaultAnalysisEngineForMode(nextMode))
-    setPreciseMicronutrients(false)
   }
 
   const handleAnalysisEngineTap = (engine: AnalysisEngine) => {
     setAnalysisEngine(engine)
     Taro.setStorageSync(ANALYSIS_ENGINE_STORAGE_KEY, engine)
-    if (engine !== 'db_candidates_ai') setPreciseMicronutrients(false)
   }
 
   const handlePrecisionCaptureModeTap = (mode: PrecisionCaptureMode) => {
@@ -1097,17 +1090,18 @@ function AnalyzePage() {
     try {
       // 1. 并行上传图片并保持原始顺序，避免多角度识别把上传耗时串行叠加。
       const imageUrls = await Promise.all(submitImagePaths.map(async path => {
-        if (/^https?:\/\//i.test(path)) {
-          return path
+        const sourcePath = String(path || '').trim()
+        if (isPublicHttpImageURL(sourcePath)) {
+          return sourcePath
         }
-        const stablePath = await persistImagePathIfNeeded(path)
-        const uploadPath = await compressImagePathForUpload(stablePath || path, {
+        const stablePath = await persistImagePathIfNeeded(sourcePath)
+        const uploadPath = await compressImagePathForUpload(stablePath || sourcePath, {
           // 精准双角度继续保留原像素，只复用原有 2.5MB 体积门槛；普通模式才收敛超高像素。
           maxLongEdge: isStrictBaseModeSelected ? 0 : 2048,
         })
 
         try {
-          const { imageUrl } = await uploadAnalyzeImageFile(uploadPath || stablePath || path)
+          const { imageUrl } = await uploadAnalyzeImageFile(uploadPath || stablePath || sourcePath)
           return imageUrl
         } catch (fileUploadError) {
           if (!shouldFallbackToLegacyAnalyzeUpload(fileUploadError)) {
@@ -1116,7 +1110,7 @@ function AnalyzePage() {
           console.warn('文件直传接口暂不可用，回退 base64 上传:', fileUploadError)
         }
 
-        const base64 = await imageToBase64(uploadPath || stablePath || path)
+        const base64 = await imageToBase64(uploadPath || stablePath || sourcePath)
         const { imageUrl } = await uploadAnalyzeImage(base64)
         return imageUrl
       }))
@@ -1144,7 +1138,7 @@ function AnalyzePage() {
         is_multi_view: isStrictBaseModeSelected ? true : isMultiView,
         suggest_ratio_enabled: suggestRatioEnabled,
         analysis_engine: analysisEngine,
-        precise_micronutrients: preciseMicronutrients && analysisEngine === 'db_candidates_ai' && canUseStrictMode,
+        precise_micronutrients: true,
         reference_objects: referenceObjects.length > 0 ? referenceObjects : undefined,
         capture_protocol: isVideoCaptureSelected
           ? 'video_keyframes_v1' as const
@@ -1555,7 +1549,7 @@ function AnalyzePage() {
               onClick={() => setHelpSheet({
                 visible: true,
                 title: '营养计算方式',
-                content: 'AI估算会完整理解当前输入且不套标准食物库；标准库校准只接受名称、状态和重量口径一致的精确项；精准候选会把候选连同完整上下文交给AI，并允许拒绝全部候选。',
+                content: 'AI估算速度最快，会完整理解当前输入且不套标准食物库；标准库校准和数据库候选需要额外查询与复核，速度会慢一些，但命中兼容数据时营养结果更稳定，微量元素通常也更准确。所有方式都会提供完整微量元素。',
               })}
             >
               <Text className='help-icon-text'>?</Text>
@@ -1573,17 +1567,6 @@ function AnalyzePage() {
               </View>
             ))}
           </View>
-          {analysisEngine === 'db_candidates_ai' && isStrictBaseModeSelected && (
-            <View className='analysis-engine-micro-row' onClick={() => setPreciseMicronutrients(value => !value)}>
-              <View>
-                <Text className='analysis-engine-micro-title'>会员微量元素</Text>
-                <Text className='analysis-engine-micro-description'>额外补齐维生素、矿物质和营养来源</Text>
-              </View>
-              <View className={`analysis-option-switch ${preciseMicronutrients ? 'analysis-option-switch--on' : ''}`}>
-                <View className='analysis-option-switch-knob' />
-              </View>
-            </View>
-          )}
         </View>
 
         <View className='analysis-options-row'>

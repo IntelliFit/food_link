@@ -160,7 +160,7 @@ func TestPublicFoodHandlerListMapsCampusFilters(t *testing.T) {
 	r := setupPublicFoodHandlerRouter(svc)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(http.MethodGet, "/api/public-food-library?is_campus_food=true&school_name=北京大学&canteen_name=学一食堂&sort_by=hot&limit=80", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/public-food-library?is_campus_food=true&school_name=北京大学&canteen_name=学一食堂&floor=一层&window_name=低脂窗口&keyword=鸡胸&sort_by=hot&limit=80", nil)
 	r.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusOK, w.Code)
@@ -168,6 +168,9 @@ func TestPublicFoodHandlerListMapsCampusFilters(t *testing.T) {
 	require.True(t, *svc.listFilter.IsCampusFood)
 	require.Equal(t, "北京大学", svc.listFilter.SchoolName)
 	require.Equal(t, "学一食堂", svc.listFilter.CanteenName)
+	require.Equal(t, "一层", svc.listFilter.Floor)
+	require.Equal(t, "低脂窗口", svc.listFilter.WindowName)
+	require.Equal(t, "鸡胸", svc.listFilter.Keyword)
 	require.Equal(t, "hot", svc.listFilter.SortBy)
 	require.Equal(t, 80, svc.listFilter.Limit)
 }

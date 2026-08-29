@@ -43,6 +43,10 @@ type TaskService interface {
 	SubmitFeedback(ctx context.Context, userID string, input service.SubmitFeedbackInput) error
 }
 
+type taskAutoRecordService interface {
+	SetTaskAutoRecord(ctx context.Context, taskID, userID, mealType string, enabled bool) (*service.AutoRecordPreferenceResult, error)
+}
+
 type paginatedTaskService interface {
 	ListTasksPage(ctx context.Context, userID, taskType, status, search string, limit, offset int) (service.TaskListPage, error)
 }
@@ -478,6 +482,39 @@ func (h *AnalyzeHandler) UpdateTaskResult(c *gin.Context) {
 		return
 	}
 	response.Success(c, map[string]bool{"success": true})
+}
+
+// PUT /api/analyze/tasks/:task_id/auto-record (jwt_required)
+func (h *AnalyzeHandler) SetTaskAutoRecord(c *gin.Context) {
+	userID := c.GetString(authmw.ContextUserIDKey)
+	taskID := strings.TrimSpace(c.Param("task_id"))
+	bindTaskIDToRequest(c, taskID)
+	var body struct {
+		Enabled  bool   `json:"enabled"`
+		MealType string `json:"meal_type"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		response.Error(c, err)
+		return
+	}
+	autoRecordSvc, ok := h.taskSvc.(taskAutoRecordService)
+	if !ok {
+		response.Error(c, &errors.AppError{Code: 10005, Message: "自动记录服务暂不可用", HTTPStatus: http.StatusServiceUnavailable})
+		return
+	}
+	result, err := autoRecordSvc.SetTaskAutoRecord(c.Request.Context(), taskID, userID, body.MealType, body.Enabled)
+	if err != nil {
+		logAnalyzeAPIError(c, "set_task_auto_record", err, logger.AnalysisTaskID(taskID))
+		response.Error(c, err)
+		return
+	}
+	logAnalyzeAPI(c, "set_task_auto_record_ok",
+		logger.AnalysisTaskID(taskID),
+		slog.Bool("auto_record.enabled", result.Enabled),
+		slog.String("meal_type", result.MealType),
+		slog.String("task.status", result.Status),
+	)
+	response.Success(c, result)
 }
 
 // POST /api/analyze/tasks/retry (jwt_required)

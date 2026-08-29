@@ -237,6 +237,98 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   flex: 1;
 }
 
+.greeting-pet-reminder {
+  position: relative;
+  min-width: 0;
+  max-width: 390rpx;
+  box-sizing: border-box;
+  margin: 2rpx 10rpx 0 10rpx;
+  padding: 16rpx 42rpx 16rpx 22rpx;
+  border: 2rpx solid rgba(92, 184, 150, 0.26);
+  border-radius: 22rpx;
+  background: #fff;
+  box-shadow: 0 8rpx 24rpx rgba(31, 79, 63, 0.09);
+
+  &::before {
+    position: absolute;
+    top: 30rpx;
+    left: -12rpx;
+    width: 20rpx;
+    height: 20rpx;
+    border-bottom: 2rpx solid rgba(92, 184, 150, 0.26);
+    border-left: 2rpx solid rgba(92, 184, 150, 0.26);
+    background: inherit;
+    content: '';
+    transform: rotate(45deg);
+  }
+}
+
+.greeting-pet-reminder--waiting {
+  border-color: rgba(245, 158, 11, 0.38);
+  background: #fffaf0;
+}
+
+.greeting-pet-reminder--recorded {
+  background: #effbf6;
+}
+
+.greeting-pet-reminder--meal {
+  border-color: rgba(47, 143, 111, 0.3);
+  background: #f1faf4;
+}
+
+.greeting-pet-reminder__text {
+  display: block;
+  color: #27483d;
+  font-size: 25rpx;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.greeting-pet-reminder__count {
+  position: absolute;
+  top: -12rpx;
+  right: -8rpx;
+  min-width: 34rpx;
+  height: 34rpx;
+  box-sizing: border-box;
+  padding: 0 8rpx;
+  border: 3rpx solid #fff;
+  border-radius: 18rpx;
+  background: #f59e0b;
+  color: #fff;
+  font-size: 20rpx;
+  font-weight: 700;
+  line-height: 28rpx;
+  text-align: center;
+}
+
+.home-page--dark {
+  .greeting-pet-reminder {
+    border-color: rgba(125, 240, 204, 0.24);
+    background: #18251f;
+    box-shadow: none;
+  }
+
+  .greeting-pet-reminder--waiting {
+    border-color: rgba(251, 191, 36, 0.34);
+    background: #2b2518;
+  }
+
+  .greeting-pet-reminder--meal {
+    border-color: rgba(112, 196, 149, 0.28);
+    background: #172a22;
+  }
+
+  .greeting-pet-reminder__text {
+    color: #e5f5ee;
+  }
+
+  .greeting-pet-reminder__count {
+    border-color: #101716;
+  }
+}
+
 .greeting-title {
   display: flex;
   align-items: center;
@@ -2454,14 +2546,29 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 }
 
 .micros-preview-card.has-supplement {
-  grid-column: span 2;
-  background: #fbfdfc !important;
+  cursor: pointer;
 }
 
-.micros-preview-card.is-source-expanded {
-  grid-column: 1 / -1;
-  border-color: rgb(0 169 118 / 46%) !important;
-  box-shadow: 0 8rpx 22rpx rgb(29 101 77 / 8%);
+.micros-preview-card-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4rpx;
+}
+
+.micros-supplement-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 23rpx;
+  height: 23rpx;
+  flex-shrink: 0;
+  border-radius: 999rpx;
+  font-size: 14rpx;
+  line-height: 23rpx;
+  font-weight: 800;
+  color: #fff;
+  background: #5d8fcb;
 }
 
 .micros-preview-progress-bg { display: flex; }
@@ -2471,48 +2578,33 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   border-radius: 0 9999rpx 9999rpx 0;
 }
 
-.micros-source-compact {
-  display: flex;
-  justify-content: space-between;
-  gap: 8rpx;
-  margin-top: 7rpx;
-
-  text {
-    font-size: 15rpx;
-    color: #7a8792;
-  }
+.micros-source-sheet-layer { position: fixed; inset: 0; z-index: 1300; }
+.micros-source-sheet-mask { position: absolute; inset: 0; background: rgb(15 23 42 / 42%); }
+.micros-source-sheet {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  box-sizing: border-box;
+  padding: 14rpx 30rpx calc(34rpx + env(safe-area-inset-bottom));
+  border-radius: 30rpx 30rpx 0 0;
+  background: #fff;
+  box-shadow: 0 -14rpx 40rpx rgb(15 23 42 / 12%);
 }
-
-.micros-reference-excess {
-  display: block;
-  margin-top: 6rpx;
-  font-size: 15rpx;
-  color: #567ba7;
-}
-
-.micros-source-detail {
-  margin: 10rpx -2rpx -2rpx;
-  padding: 12rpx 12rpx 8rpx;
-  border-radius: 12rpx;
-  background: #f2f8f5;
-
-  > view {
-    display: flex;
-    justify-content: space-between;
-    margin-top: 7rpx;
-
-    text {
-      font-size: 18rpx;
-      color: #66766f;
-    }
-  }
-}
-
-.micros-source-detail-title {
-  font-size: 19rpx;
-  font-weight: 750;
-  color: #3e7964;
-}
+.micros-source-sheet-handle { width: 68rpx; height: 7rpx; margin: 0 auto 24rpx; border-radius: 999rpx; background: #d8dfdc; }
+.micros-source-sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 20rpx; }
+.micros-source-sheet-kicker { display: block; font-size: 19rpx; color: #7a8792; }
+.micros-source-sheet-title { display: block; margin-top: 4rpx; font-size: 34rpx; font-weight: 800; color: #263b34; }
+.micros-source-sheet-close { display: flex; align-items: center; justify-content: center; width: 54rpx; height: 54rpx; border-radius: 999rpx; color: #65746f; background: #f1f5f3; }
+.micros-source-sheet-close text { font-size: 36rpx; line-height: 50rpx; }
+.micros-source-sheet-total { display: flex; align-items: baseline; justify-content: space-between; margin-top: 28rpx; font-size: 22rpx; color: #718079; }
+.micros-source-sheet-total text:last-child { font-size: 34rpx; font-weight: 800; color: #263b34; }
+.micros-source-sheet-bar { display: flex; width: 100%; height: 13rpx; margin-top: 15rpx; overflow: hidden; border-radius: 999rpx; background: #edf1ef; }
+.micros-source-sheet-bar .food { background: #61ae8d; }
+.micros-source-sheet-bar .supplement { background: #5d8fcb; }
+.micros-source-sheet-row { display: flex; align-items: center; justify-content: space-between; min-height: 70rpx; border-bottom: 1rpx solid #edf1ef; font-size: 24rpx; color: #42554f; }
+.micros-source-sheet-row > view { display: flex; align-items: center; gap: 12rpx; }
+.micros-source-sheet-note { display: block; margin-top: 20rpx; padding: 16rpx 18rpx; border-radius: 16rpx; font-size: 21rpx; line-height: 32rpx; color: #567067; background: #f2f8f5; }
 
 .functional-components-panel {
   margin-top: 14rpx;
@@ -4795,6 +4887,25 @@ $sheet-float-max-height: calc(100vh - #{$sheet-float-gap-top} - env(safe-area-in
 
   .micros-preview-card-label {
     color: #cbd5e1;
+  }
+
+  .micros-source-sheet {
+    background: #1e2925;
+  }
+
+  .micros-source-sheet-title,
+  .micros-source-sheet-total text:last-child,
+  .micros-source-sheet-row {
+    color: #e2eee9;
+  }
+
+  .micros-source-sheet-close,
+  .micros-source-sheet-note {
+    background: #293732;
+  }
+
+  .micros-source-sheet-row {
+    border-bottom-color: #33413c;
   }
 
   .micros-preview-empty-text {

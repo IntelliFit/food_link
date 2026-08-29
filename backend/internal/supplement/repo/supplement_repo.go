@@ -54,11 +54,19 @@ func (r *SupplementRepo) Get(ctx context.Context, userID, itemID string) (*domai
 	return &item, err
 }
 
-func (r *SupplementRepo) Update(ctx context.Context, userID, itemID string, updates map[string]any) (*domain.UserSupplement, error) {
-	updates["updated_at"] = time.Now()
+func (r *SupplementRepo) Update(ctx context.Context, userID, itemID string, item *domain.UserSupplement) (*domain.UserSupplement, error) {
+	item.UpdatedAt = time.Now()
+	fields := []string{
+		"name", "brand", "barcode", "image_url", "image_urls", "default_servings", "serving_label",
+		"schedule_enabled", "schedule_time", "schedule_days", "components", "status", "updated_at",
+	}
+	if item.LabelConfirmedAt != nil {
+		fields = append(fields, "label_confirmed_at")
+	}
 	res := r.db.WithContext(ctx).Model(&domain.UserSupplement{}).
 		Where("id = ? AND user_id = ?", itemID, userID).
-		Updates(updates)
+		Select(fields).
+		Updates(item)
 	if res.Error != nil {
 		return nil, res.Error
 	}

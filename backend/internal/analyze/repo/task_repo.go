@@ -568,6 +568,15 @@ func (r *TaskRepo) UpdateTaskResult(ctx context.Context, taskID string, result m
 	return r.db.WithContext(ctx).Save(&task).Error
 }
 
+func (r *TaskRepo) UpdateTaskPayload(ctx context.Context, taskID string, payload map[string]any) error {
+	return r.db.WithContext(ctx).Model(&domain.AnalysisTask{}).
+		Where("id = ?", taskID).
+		Updates(map[string]any{
+			"payload":    datatypes.JSONMap(payload),
+			"updated_at": time.Now(),
+		}).Error
+}
+
 func (r *TaskRepo) CompleteTask(ctx context.Context, taskID string, result map[string]any) (bool, error) {
 	updates := map[string]any{
 		"status":        "done",

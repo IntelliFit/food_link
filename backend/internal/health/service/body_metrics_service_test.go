@@ -12,11 +12,14 @@ import (
 )
 
 type mockBodyMetricsRepo struct {
-	weightRecords []domain.BodyWeightRecord
-	waterLogs     []domain.BodyWaterLog
-	settings      *domain.BodyMetricSettings
-	userProfile   *domain.BodyMetricUserProfile
-	profileUpdate map[string]any
+	weightRecords    []domain.BodyWeightRecord
+	waterLogs        []domain.BodyWaterLog
+	settings         *domain.BodyMetricSettings
+	userProfile      *domain.BodyMetricUserProfile
+	profileUpdate    map[string]any
+	waterStartDate   string
+	waterEndDate     string
+	dailyWeightCalls int
 }
 
 func (m *mockBodyMetricsRepo) CreateWeightRecord(ctx context.Context, record *domain.BodyWeightRecord) error {
@@ -25,6 +28,11 @@ func (m *mockBodyMetricsRepo) CreateWeightRecord(ctx context.Context, record *do
 }
 
 func (m *mockBodyMetricsRepo) ListWeightRecords(ctx context.Context, userID string, startDate, endDate string) ([]domain.BodyWeightRecord, error) {
+	return m.weightRecords, nil
+}
+
+func (m *mockBodyMetricsRepo) ListDailyWeightRecords(ctx context.Context, userID string, startDate, endDate string) ([]domain.BodyWeightRecord, error) {
+	m.dailyWeightCalls++
 	return m.weightRecords, nil
 }
 
@@ -55,6 +63,8 @@ func (m *mockBodyMetricsRepo) CreateWaterLog(ctx context.Context, log *domain.Bo
 }
 
 func (m *mockBodyMetricsRepo) GetWaterLogsByDate(ctx context.Context, userID string, startDate, endDate string) ([]domain.BodyWaterLog, error) {
+	m.waterStartDate = startDate
+	m.waterEndDate = endDate
 	return m.waterLogs, nil
 }
 
@@ -139,6 +149,9 @@ func TestBodyMetricsService_GetSummary(t *testing.T) {
 	assert.NotNil(t, summary.PreviousWeight)
 	assert.NotNil(t, summary.WeightChange)
 	assert.Equal(t, -0.5, *summary.WeightChange)
+	assert.Equal(t, 1, repo.dailyWeightCalls)
+	assert.Equal(t, summary.StartDate, repo.waterStartDate)
+	assert.Equal(t, summary.EndDate, repo.waterEndDate)
 }
 
 func TestBodyMetricsService_GetSummaryUsesLatestWeightForSameDate(t *testing.T) {

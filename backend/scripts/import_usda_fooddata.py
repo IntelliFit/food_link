@@ -39,6 +39,7 @@ API_BASE_URL = "https://api.nal.usda.gov/fdc/v1"
 DEFAULT_PAGE_SIZE = 200
 DEFAULT_BATCH_SIZE = 200
 DEFAULT_TIMEOUT_SECONDS = 30.0
+USDA_NUTRIENT_MAPPING_VERSION = "v2_1114_1177"
 DEFAULT_RATE_SLEEP_SECONDS = 0.15
 
 DEFAULT_DATASET_URLS = {
@@ -47,7 +48,8 @@ DEFAULT_DATASET_URLS = {
     "Survey (FNDDS)": "https://fdc.nal.usda.gov/fdc-datasets/FoodData_Central_survey_food_json_2024-10-31.zip",
 }
 
-# USDA 甯歌钀ュ吇瀛楁銆傝剼鏈細鍚屾椂鎸?nutrient id / 鍚嶇О鍋氬厹搴曡瘑鍒€?ENERGY_IDS = {1008, 2047, 2048}
+# USDA nutrient fields are identified by nutrient ID first, with exact-name fallbacks.
+ENERGY_IDS = {1008, 2047, 2048}
 PROTEIN_IDS = {1003}
 CARBS_IDS = {1005}
 FAT_IDS = {1004}
@@ -63,7 +65,9 @@ MAGNESIUM_IDS = {1090}
 ZINC_IDS = {1095}
 VITAMIN_A_IDS = {1106}
 VITAMIN_C_IDS = {1162}
-VITAMIN_D_IDS = {1114, 1115}
+# 1114 is Vitamin D (D2 + D3) in mcg. Do not mix in 1110 (IU) or 1115
+# (25-hydroxy vitamin D2), which are different units/analytes.
+VITAMIN_D_IDS = {1114}
 VITAMIN_E_IDS = {1109}
 VITAMIN_K_IDS = {1185}
 THIAMIN_IDS = {1165}
@@ -104,6 +108,15 @@ def _usda_source_label(data_type: str) -> str:
     if normalized in {"branded", "branded foods"}:
         return "美国农业部食物数据中心（Branded Foods）"
     return "美国农业部食物数据中心"
+
+
+def _usda_quality_evidence(fdc_id: int, data_type: str) -> Dict[str, Any]:
+    return {
+        "source_authority": "USDA FoodData Central",
+        "usda_fdc_id": int(fdc_id),
+        "usda_data_type": data_type,
+        "usda_nutrient_mapping_version": USDA_NUTRIENT_MAPPING_VERSION,
+    }
 
 
 def _normalize_food_name(name: str) -> str:
@@ -324,7 +337,11 @@ def _pick_macros(food: Dict[str, Any]) -> Dict[str, float]:
             vitamin_c_value = value
             continue
 
-        if vitamin_d_value is None and (nutrient_id in VITAMIN_D_IDS or "vitamin d" in name):
+        if nutrient_id in VITAMIN_D_IDS:
+            vitamin_d_value = value
+            continue
+
+        if vitamin_d_value is None and nutrient_id is None and _looks_like_exact(name, "vitamin d (d2 + d3)"):
             vitamin_d_value = value
             continue
 
@@ -352,7 +369,11 @@ def _pick_macros(food: Dict[str, Any]) -> Dict[str, float]:
             vitamin_b6_value = value
             continue
 
-        if folate_value is None and (nutrient_id in FOLATE_IDS or "folate, dfe" in name):
+        if nutrient_id in FOLATE_IDS:
+            folate_value = value
+            continue
+
+        if folate_value is None and nutrient_id is None and _looks_like_exact(name, "folate, total"):
             folate_value = value
             continue
 
@@ -456,6 +477,7 @@ class ImportFoodRow:
             "folate_mcg_per_100g": self.folate_mcg_per_100g,
             "vitamin_b12_mcg_per_100g": self.vitamin_b12_mcg_per_100g,
             "source": self.source,
+            "quality_evidence": _usda_quality_evidence(self.usda_fdc_id, self.usda_data_type),
             "is_active": True,
         }
 
@@ -749,6 +771,7 @@ def _insert_rows(rows: Sequence[ImportFoodRow], batch_size: int, update_existing
                 "folate_mcg_per_100g": row.folate_mcg_per_100g,
                 "vitamin_b12_mcg_per_100g": row.vitamin_b12_mcg_per_100g,
                 "source": row.source,
+                "quality_evidence": _usda_quality_evidence(row.usda_fdc_id, row.usda_data_type),
                 "updated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             }).eq("normalized_name", row.normalized_name).execute()
             updated += 1
@@ -795,7 +818,8 @@ def _write_sql(rows: Sequence[ImportFoodRow], output_path: Path) -> None:
             f"{row.vitamin_b6_mg_per_100g}, "
             f"{row.folate_mcg_per_100g}, "
             f"{row.vitamin_b12_mcg_per_100g}, "
-            f"{_sql_quote(row.source)}"
+            f"{_sql_quote(row.source)}, "
+            f"{_sql_quote(json.dumps(_usda_quality_evidence(row.usda_fdc_id, row.usda_data_type), ensure_ascii=False, sort_keys=True))}::jsonb"
             ")"
         )
 
@@ -830,7 +854,8 @@ def _write_sql(rows: Sequence[ImportFoodRow], output_path: Path) -> None:
         "  vitamin_b6_mg_per_100g,\n"
         "  folate_mcg_per_100g,\n"
         "  vitamin_b12_mcg_per_100g,\n"
-        "  source\n"
+        "  source,\n"
+        "  quality_evidence\n"
         ")\nvalues\n"
         + ",\n".join(values_sql)
         + "\n"
@@ -862,6 +887,7 @@ def _write_sql(rows: Sequence[ImportFoodRow], output_path: Path) -> None:
         "  folate_mcg_per_100g = excluded.folate_mcg_per_100g,\n"
         "  vitamin_b12_mcg_per_100g = excluded.vitamin_b12_mcg_per_100g,\n"
         "  source = excluded.source,\n"
+        "  quality_evidence = excluded.quality_evidence,\n"
         "  updated_at = now();\n"
     )
     output_path.write_text(body, encoding="utf-8")

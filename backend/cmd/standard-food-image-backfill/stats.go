@@ -11,19 +11,23 @@ import (
 
 	"food_link/backend/pkg/config"
 	"food_link/backend/pkg/database"
+
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
 )
 
 type backfillBaseline struct {
-	GeneratedAt time.Time `json:"generated_at"`
-	Schema      string    `json:"schema,omitempty"`
+	GeneratedAt time.Time      `json:"generated_at"`
+	Schema      string         `json:"schema,omitempty"`
 	Eligible    baselineCounts `json:"eligible"`
 	WithImage   baselineCounts `json:"with_image"`
 	Missing     baselineCounts `json:"missing_backfill_queue"`
+	MissingRows []foodRow      `json:"missing_foods,omitempty"`
 }
 
 type baselineCounts struct {
-	Total      int64 `json:"total"`
-	HanNames   int64 `json:"han_canonical_names,omitempty"`
+	Total       int64 `json:"total"`
+	HanNames    int64 `json:"han_canonical_names,omitempty"`
 	NonHanNames int64 `json:"non_han_canonical_names,omitempty"`
 }
 
@@ -37,17 +41,28 @@ func runStats(ctx context.Context, opts options) error {
 		return err
 	}
 	sqlDB, err := db.DB()
-	if err == nil {
-		defer sqlDB.Close()
+	if err != nil {
+		return err
 	}
-	if err := database.Ping(ctx, db); err != nil {
+	defer sqlDB.Close()
+	conn, err := sqlDB.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	pinnedDB, err := gorm.Open(postgres.New(postgres.Config{Conn: conn}), &gorm.Config{})
+	if err != nil {
+		return err
+	}
+	if err := conn.PingContext(ctx); err != nil {
 		return err
 	}
 	if cfg.Database.Schema != "" {
-		if err := db.WithContext(ctx).Exec("SET search_path TO " + quoteIdent(cfg.Database.Schema)).Error; err != nil {
+		if err := pinnedDB.WithContext(ctx).Exec("SET search_path TO " + quoteIdent(cfg.Database.Schema)).Error; err != nil {
 			return err
 		}
 	}
+	db = pinnedDB
 
 	const eligibleWhere = `
 f.is_active = TRUE AND COALESCE(f.kcal_per_100g, 0) > 0`
@@ -61,9 +76,9 @@ f.is_active = TRUE AND COALESCE(f.kcal_per_100g, 0) > 0`
   )`
 
 	type row struct {
-		Total   int64
-		Han     int64
-		NonHan  int64
+		Total  int64
+		Han    int64
+		NonHan int64
 	}
 	scan := func(where string) (baselineCounts, error) {
 		var r row
@@ -104,6 +119,16 @@ WHERE ` + where
 	out.Missing, err2 = scan(missingWhere)
 	if err2 != nil {
 		return err2
+	}
+	if opts.statsMissingLimit > 0 {
+		listOpts := opts
+		listOpts.limit = opts.statsMissingLimit
+		listOpts.offset = 0
+		listOpts.foodID = ""
+		out.MissingRows, err2 = queryMissingFoods(ctx, db, listOpts)
+		if err2 != nil {
+			return err2
+		}
 	}
 
 	data, err := json.MarshalIndent(out, "", "  ")

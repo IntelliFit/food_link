@@ -36,23 +36,35 @@ type foodRow struct {
 	ID             string `json:"id"`
 	CanonicalName  string `json:"canonical_name"`
 	NormalizedName string `json:"normalized_name"`
+	BaseFoodKey    string `json:"base_food_key,omitempty"`
 	Aliases        string `json:"aliases,omitempty"`
+	Uses           int64  `json:"uses,omitempty"`
 }
 
 type imageCandidate struct {
-	ImageURL string `json:"image_url"`
-	PageURL  string `json:"page_url,omitempty"`
-	Query    string `json:"query"`
+	ImageURL       string `json:"image_url"`
+	PageURL        string `json:"page_url,omitempty"`
+	Query          string `json:"query"`
+	ReuseObjectKey string `json:"reuse_object_key,omitempty"`
+	SourceLabel    string `json:"source_label,omitempty"`
+	License        string `json:"license,omitempty"`
+	SourceFoodID   string `json:"source_food_id,omitempty"`
+	SourceFoodName string `json:"source_food_name,omitempty"`
 }
 
 type downloadedImage struct {
-	URL         string
-	PageURL     string
-	Query       string
-	Data        []byte
-	ContentType string
-	Ext         string
-	SHA256      string
+	URL            string
+	PageURL        string
+	Query          string
+	Data           []byte
+	ContentType    string
+	Ext            string
+	SHA256         string
+	ReuseObjectKey string
+	SourceLabel    string
+	License        string
+	SourceFoodID   string
+	SourceFoodName string
 }
 
 var imageDownloadHTTPClient = func() *http.Client {
@@ -62,19 +74,25 @@ var imageDownloadHTTPClient = func() *http.Client {
 }()
 
 type resultRow struct {
-	FoodID      string         `json:"food_id"`
-	FoodName    string         `json:"food_name"`
-	Status      string         `json:"status"`
-	Reason      string         `json:"reason,omitempty"`
-	Candidate   string         `json:"candidate,omitempty"`
-	TriedURLs   []string       `json:"tried_urls,omitempty"`
-	Query       string         `json:"query,omitempty"`
-	Decision    *imageDecision `json:"decision,omitempty"`
-	ObjectKey   string         `json:"object_key,omitempty"`
-	AccessURL   string         `json:"access_url,omitempty"`
-	Uploaded    bool           `json:"uploaded"`
-	DBUpdated   bool           `json:"db_updated"`
-	ProcessedAt time.Time      `json:"processed_at"`
+	FoodID         string         `json:"food_id"`
+	FoodName       string         `json:"food_name"`
+	Status         string         `json:"status"`
+	Reason         string         `json:"reason,omitempty"`
+	Candidate      string         `json:"candidate,omitempty"`
+	CandidatePage  string         `json:"candidate_page,omitempty"`
+	TriedURLs      []string       `json:"tried_urls,omitempty"`
+	Query          string         `json:"query,omitempty"`
+	SourceLabel    string         `json:"source_label,omitempty"`
+	License        string         `json:"license,omitempty"`
+	SourceFoodID   string         `json:"source_food_id,omitempty"`
+	SourceFoodName string         `json:"source_food_name,omitempty"`
+	Decision       *imageDecision `json:"decision,omitempty"`
+	ObjectKey      string         `json:"object_key,omitempty"`
+	AccessURL      string         `json:"access_url,omitempty"`
+	Reused         bool           `json:"reused"`
+	Uploaded       bool           `json:"uploaded"`
+	DBUpdated      bool           `json:"db_updated"`
+	ProcessedAt    time.Time      `json:"processed_at"`
 }
 
 type stateFile struct {
@@ -129,6 +147,7 @@ type options struct {
 	timing                  bool
 	statsOnly               bool
 	statsOutput             string
+	statsMissingLimit       int
 	checkpointEvery         int
 	auditExisting           bool
 	auditOutput             string
@@ -140,14 +159,36 @@ type options struct {
 	reviewedAllowlistReport string
 	reviewedOutput          string
 	reviewedMinConfidence   float64
+	libraryReuseApply       bool
+	libraryReuseReport      string
+	libraryReuseAllowlist   string
+	libraryReuseOutput      string
 }
 
 func main() {
 	opts := parseFlags()
+	if err := validateApplyMode(opts); err != nil {
+		log.Fatalf("写入门禁校验失败: %v", err)
+	}
 	loadBackendEnv(opts.configDir)
 	ctx, cancel := context.WithTimeout(context.Background(), opts.timeout)
 	defer cancel()
 
+	if opts.statsOnly {
+		if err := runStats(ctx, opts); err != nil {
+			log.Fatalf("统计失败: %v", err)
+		}
+		return
+	}
+	if opts.libraryReuseApply {
+		if err := runApprovedLibraryReuse(ctx, opts); err != nil {
+			log.Fatalf("库内图片复用失败: %v", err)
+		}
+		return
+	}
+	if err := hydrateVisionRuntimeConfig(&opts); err != nil {
+		log.Fatalf("加载视觉模型配置失败: %v", err)
+	}
 	if opts.testAPI {
 		if err := runTestAPI(ctx, opts); err != nil {
 			log.Fatalf("DashScope API 验证失败: %v", err)
@@ -163,12 +204,6 @@ func main() {
 	if strings.TrimSpace(opts.localImage) != "" {
 		if err := runLocalImageBackfill(ctx, opts); err != nil {
 			log.Fatalf("本地图片回填失败: %v", err)
-		}
-		return
-	}
-	if opts.statsOnly {
-		if err := runStats(ctx, opts); err != nil {
-			log.Fatalf("统计失败: %v", err)
 		}
 		return
 	}
@@ -190,6 +225,66 @@ func main() {
 	if err := runBackfill(ctx, opts); err != nil {
 		log.Fatalf("标准食物图片回填失败: %v", err)
 	}
+}
+
+func validateApplyMode(opts options) error {
+	if !opts.apply {
+		return nil
+	}
+	if opts.statsOnly || opts.libraryReuseApply || opts.testAPI || opts.demo {
+		return nil
+	}
+	if strings.TrimSpace(opts.localImage) != "" {
+		if opts.trustLocal {
+			return nil
+		}
+		return errors.New("本地图片 --apply 必须显式使用 --trust-local-image")
+	}
+	if opts.reviewedApply {
+		return validateReviewedApplyMode(opts)
+	}
+	if opts.auditExisting {
+		return nil
+	}
+	return errors.New("通用 --apply 已禁用；网络候选必须使用 --reviewed-apply 的两轮复核与 allowlist，库内复用必须使用 --library-reuse-apply 的人工 allowlist 事务路径")
+}
+
+func validateReviewedApplyMode(opts options) error {
+	if opts.apply && strings.TrimSpace(opts.reviewedAllowlistReport) == "" {
+		return errors.New("--reviewed-apply --apply 必须提供 --reviewed-allowlist-report")
+	}
+	return nil
+}
+
+// hydrateVisionRuntimeConfig lets the offline backfill command reuse the same
+// Apollo/file configuration as the backend service. Explicit process or local
+// .env values still take precedence, and the credential remains process-local.
+func hydrateVisionRuntimeConfig(opts *options) error {
+	if opts == nil {
+		return errors.New("options is nil")
+	}
+	keyConfigured := loadDashScopeAPIKey(opts.configDir, opts.visionAPIKeyPath) != ""
+	baseConfigured := strings.TrimSpace(opts.dashscopeBaseURL) != "" || strings.TrimSpace(os.Getenv("DASHSCOPE_BASE_URL")) != ""
+	if keyConfigured && baseConfigured {
+		return nil
+	}
+	cfg, err := config.Load(opts.configDir)
+	if err != nil {
+		return err
+	}
+	return applyVisionRuntimeConfig(opts, cfg.External, keyConfigured, baseConfigured)
+}
+
+func applyVisionRuntimeConfig(opts *options, external config.ExternalConfig, keyConfigured, baseConfigured bool) error {
+	if !keyConfigured && strings.TrimSpace(external.DashScopeAPIKey) != "" {
+		if err := os.Setenv("FOOD_IMAGE_VISION_API_KEY", strings.TrimSpace(external.DashScopeAPIKey)); err != nil {
+			return err
+		}
+	}
+	if !baseConfigured && strings.TrimSpace(external.DashScopeBaseURL) != "" {
+		opts.dashscopeBaseURL = strings.TrimRight(strings.TrimSpace(external.DashScopeBaseURL), "/")
+	}
+	return nil
 }
 
 func parseFlags() options {
@@ -219,7 +314,7 @@ func parseFlags() options {
 	flag.StringVar(&opts.localImage, "local-image", "", "use a local image file instead of Bing search; requires --food-id")
 	flag.BoolVar(&opts.trustLocal, "trust-local-image", false, "with --local-image, skip vision model and accept the file (for upload path verification only)")
 	flag.IntVar(&opts.workers, "workers", 1, "parallel worker count for batch processing")
-	flag.StringVar(&opts.imageSearch, "image-search", "bing", "image search provider: google or bing")
+	flag.StringVar(&opts.imageSearch, "image-search", "bing", "image search provider: library, commons, google or bing")
 	flag.StringVar(&opts.foodIDs, "food-ids", "", "comma-separated food ids to process (overrides limit/offset)")
 	flag.StringVar(&opts.successJSON, "success-json", "", "write matched successes to this JSON file")
 	flag.BoolVar(&opts.forceReprocess, "force-reprocess", false, "ignore resume state and reprocess foods")
@@ -231,6 +326,7 @@ func parseFlags() options {
 	flag.BoolVar(&opts.timing, "timing", false, "print per-stage durations to stdout")
 	flag.BoolVar(&opts.statsOnly, "stats-only", false, "print backfill baseline stats and exit")
 	flag.StringVar(&opts.statsOutput, "stats-output", "", "write --stats-only JSON to this file")
+	flag.IntVar(&opts.statsMissingLimit, "stats-missing-limit", 0, "include the first N missing foods ordered by user references in --stats-only output")
 	flag.IntVar(&opts.checkpointEvery, "checkpoint-every", 1, "save state.json every N processed foods (0=only at end)")
 	flag.BoolVar(&opts.auditExisting, "audit-existing", false, "audit existing food images without changing COS or database")
 	flag.StringVar(&opts.auditOutput, "audit-output", "tmp/food-image-audit/report.json", "resumable JSON report for --audit-existing")
@@ -242,9 +338,13 @@ func parseFlags() options {
 	flag.StringVar(&opts.reviewedAllowlistReport, "reviewed-allowlist-report", "", "optional prior reviewed report; only entries with status=verified are eligible")
 	flag.StringVar(&opts.reviewedOutput, "reviewed-output", "tmp/food-image-audit/reviewed-apply-report.json", "atomic verification/apply manifest")
 	flag.Float64Var(&opts.reviewedMinConfidence, "reviewed-min-confidence", 0.95, "minimum confidence required in both audit and fresh verification")
+	flag.BoolVar(&opts.libraryReuseApply, "library-reuse-apply", false, "apply a manually approved library-image reuse allowlist without external AI calls")
+	flag.StringVar(&opts.libraryReuseReport, "library-reuse-report", "", "dry-run library reuse success JSON used by --library-reuse-apply")
+	flag.StringVar(&opts.libraryReuseAllowlist, "library-reuse-allowlist", "", "manual allowlist JSON used by --library-reuse-apply")
+	flag.StringVar(&opts.libraryReuseOutput, "library-reuse-output", "tmp/standard-food-image-library-reuse-apply.json", "verification/apply report for --library-reuse-apply")
 	flag.Parse()
-	if opts.imageSearch != "google" && opts.imageSearch != "bing" {
-		log.Fatalf("不支持的 image-search: %s（仅 google 或 bing）", opts.imageSearch)
+	if opts.imageSearch != "library" && opts.imageSearch != "commons" && opts.imageSearch != "google" && opts.imageSearch != "bing" {
+		log.Fatalf("不支持的 image-search: %s（仅 library、commons、google 或 bing）", opts.imageSearch)
 	}
 	if opts.apply {
 		opts.dryRun = false
@@ -411,16 +511,27 @@ WHERE f.is_active = TRUE
 		args = append(args, strings.TrimSpace(opts.foodID))
 	}
 	sql := `
+WITH refs AS (
+  SELECT item->>'manual_source_id' AS food_id, COUNT(*)::bigint AS uses
+  FROM user_food_records r
+  CROSS JOIN LATERAL jsonb_array_elements(r.items) AS item
+  WHERE item->>'manual_source' = 'nutrition_library'
+    AND COALESCE(item->>'manual_source_id', '') <> ''
+  GROUP BY item->>'manual_source_id'
+)
 SELECT
   f.id::text AS id,
   f.canonical_name,
   f.normalized_name,
-  COALESCE(string_agg(a.alias_name, ' ' ORDER BY a.alias_name), '') AS aliases
+	COALESCE(f.base_food_key, '') AS base_food_key,
+  COALESCE(string_agg(a.alias_name, ' ' ORDER BY a.alias_name), '') AS aliases,
+  COALESCE(refs.uses, 0)::bigint AS uses
 FROM food_nutrition_library f
 LEFT JOIN food_nutrition_aliases a ON a.food_id = f.id
+LEFT JOIN refs ON refs.food_id = f.id::text
 ` + where + `
-GROUP BY f.id, f.canonical_name, f.normalized_name
-ORDER BY (f.canonical_name ~ '[\u4e00-\u9fff]') DESC, f.updated_at ASC NULLS FIRST, f.canonical_name ASC`
+GROUP BY f.id, f.canonical_name, f.normalized_name, f.base_food_key, refs.uses
+ORDER BY COALESCE(refs.uses, 0) DESC, (f.canonical_name ~ '[\u4e00-\u9fff]') DESC, f.updated_at ASC NULLS FIRST, f.canonical_name ASC`
 	if opts.limit > 0 {
 		sql += " LIMIT ?"
 		args = append(args, opts.limit)
@@ -450,7 +561,12 @@ func processFood(ctx context.Context, db *gorm.DB, storageClient *storage.Client
 		bingStartPage += entry.Attempts % bingMaxSearchPages
 	}
 	searchStart := time.Now()
-	candidates := searchCandidates(food, opts.sleep, opts.imageSearch, opts.searchQueryLimit, opts.searchPerQuery, bingStartPage)
+	var candidates []imageCandidate
+	if opts.imageSearch == "library" {
+		candidates = searchLibraryImageCandidates(ctx, db, storageClient, food, opts.searchPerQuery)
+	} else {
+		candidates = searchCandidates(ctx, food, opts.sleep, opts.imageSearch, opts.searchQueryLimit, opts.searchPerQuery, bingStartPage)
+	}
 	candidates = filterUntriedCandidates(candidates, tried)
 	printTiming(opts, "image_search provider=%s duration=%s candidates=%d tried=%d bing_page=%d",
 		opts.imageSearch, time.Since(searchStart).Round(time.Millisecond), len(candidates), len(tried), bingStartPage)
@@ -497,7 +613,12 @@ func processFood(ctx context.Context, db *gorm.DB, storageClient *storage.Client
 		visionOK++
 		printTiming(opts, "vision_ok idx=%d duration=%s food_match=%v no_watermark=%v match=%v confidence=%.2f", i+1, visionDur.Round(time.Millisecond), decision.FoodMatch, decision.NoWatermark, decision.Match, decision.Confidence)
 		result.Candidate = img.URL
+		result.CandidatePage = img.PageURL
 		result.Query = img.Query
+		result.SourceLabel = img.SourceLabel
+		result.License = img.License
+		result.SourceFoodID = img.SourceFoodID
+		result.SourceFoodName = img.SourceFoodName
 		result.Decision = decision
 		if !decision.Match || decision.Confidence < opts.threshold {
 			result.Status = "no_match"
@@ -505,7 +626,12 @@ func processFood(ctx context.Context, db *gorm.DB, storageClient *storage.Client
 			lastNoMatchReason = decision.Reason
 			continue
 		}
-		key := buildObjectKey(opts.keyPrefix, food.ID, img.SHA256, img.Ext)
+		key := img.ReuseObjectKey
+		if key == "" {
+			key = buildObjectKey(opts.keyPrefix, food.ID, img.SHA256, img.Ext)
+		} else {
+			result.Reused = true
+		}
 		result.ObjectKey = key
 		result.AccessURL = storageClient.BuildAccessURL("food-images", key)
 		if opts.dryRun {
@@ -513,17 +639,19 @@ func processFood(ctx context.Context, db *gorm.DB, storageClient *storage.Client
 			result.Reason = "matched but dry-run"
 			return result
 		}
-		uploadedURL, err := storageClient.UploadBytes("food-images", key, img.Data, img.ContentType)
-		if err != nil {
-			result.Status = "upload_failed"
-			result.Reason = err.Error()
-			return result
+		if !result.Reused {
+			uploadedURL, err := storageClient.UploadBytes("food-images", key, img.Data, img.ContentType)
+			if err != nil {
+				result.Status = "upload_failed"
+				result.Reason = err.Error()
+				return result
+			}
+			result.Uploaded = true
+			if uploadedURL != "" {
+				result.AccessURL = uploadedURL
+			}
 		}
-		result.Uploaded = true
-		if uploadedURL != "" {
-			result.AccessURL = uploadedURL
-		}
-		if err := updateFoodImage(ctx, db, food.ID, key); err != nil {
+		if err := updateFoodImageWithMetadata(ctx, db, food.ID, key, result.CandidatePage, result.SourceLabel, result.License); err != nil {
 			result.Status = "db_update_failed"
 			result.Reason = err.Error()
 			return result
@@ -552,12 +680,30 @@ func processFood(ctx context.Context, db *gorm.DB, storageClient *storage.Client
 }
 
 func updateFoodImage(ctx context.Context, db *gorm.DB, foodID, key string) error {
+	return updateFoodImageWithMetadata(ctx, db, foodID, key, "", "", "")
+}
+
+func updateFoodImageWithMetadata(ctx context.Context, db *gorm.DB, foodID, key, sourceURL, sourceLabel, license string) error {
 	paths := []string{key}
 	pathsJSON, err := json.Marshal(paths)
 	if err != nil {
 		return err
 	}
 	return db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		updates := map[string]interface{}{
+			"image_path":  key,
+			"image_paths": datatypes.JSON(pathsJSON),
+			"updated_at":  gorm.Expr("now()"),
+		}
+		if strings.TrimSpace(sourceURL) != "" {
+			updates["image_source_url"] = strings.TrimSpace(sourceURL)
+		}
+		if strings.TrimSpace(sourceLabel) != "" {
+			updates["image_source_label"] = strings.TrimSpace(sourceLabel)
+		}
+		if strings.TrimSpace(license) != "" {
+			updates["image_license"] = strings.TrimSpace(license)
+		}
 		res := tx.Table("food_nutrition_library").
 			Where("id::text = ?", foodID).
 			Where("NULLIF(trim(COALESCE(image_path, '')), '') IS NULL").
@@ -566,11 +712,7 @@ func updateFoodImage(ctx context.Context, db *gorm.DB, foodID, key string) error
     FROM jsonb_array_elements_text(COALESCE(image_paths, '[]'::jsonb)) AS image_url
     WHERE NULLIF(trim(image_url), '') IS NOT NULL
   )`).
-			Updates(map[string]interface{}{
-				"image_path":  key,
-				"image_paths": datatypes.JSON(pathsJSON),
-				"updated_at":  gorm.Expr("now()"),
-			})
+			Updates(updates)
 		if res.Error != nil {
 			return res.Error
 		}
@@ -581,7 +723,7 @@ func updateFoodImage(ctx context.Context, db *gorm.DB, foodID, key string) error
 	})
 }
 
-func searchCandidates(food foodRow, sleep time.Duration, imageSearch string, searchQueryLimit, searchPerQuery, bingStartPage int) []imageCandidate {
+func searchCandidates(ctx context.Context, food foodRow, sleep time.Duration, imageSearch string, searchQueryLimit, searchPerQuery, bingStartPage int) []imageCandidate {
 	queries := candidateQueries(food)
 	out := []imageCandidate{}
 	seen := map[string]bool{}
@@ -596,6 +738,20 @@ func searchCandidates(food foodRow, sleep time.Duration, imageSearch string, sea
 		var batch []imageCandidate
 		if imageSearch == "bing" {
 			batch = searchBingImages(query, perQuery, bingStartPage)
+		} else if imageSearch == "commons" {
+			commons, err := searchCommonsImages(ctx, imageDownloadHTTPClient, query, perQuery)
+			if err == nil {
+				for _, candidate := range commons {
+					label := strings.TrimSpace(candidate.Author)
+					if label == "" {
+						label = strings.TrimSpace(candidate.Credit)
+					}
+					batch = append(batch, imageCandidate{
+						ImageURL: candidate.ImageURL, PageURL: candidate.PageURL,
+						SourceLabel: label, License: formatCommonsLicense(candidate.LicenseName, candidate.LicenseURL),
+					})
+				}
+			}
 		} else {
 			batch = searchGoogleImages(query, perQuery)
 		}
@@ -619,6 +775,18 @@ func searchCandidates(food foodRow, sleep time.Duration, imageSearch string, sea
 		sortCandidatesByURLPreference(out)
 	}
 	return out
+}
+
+func formatCommonsLicense(name, licenseURL string) string {
+	name = strings.TrimSpace(name)
+	licenseURL = strings.TrimSpace(licenseURL)
+	if name == "" {
+		return licenseURL
+	}
+	if licenseURL == "" {
+		return name
+	}
+	return name + " | " + licenseURL
 }
 
 func triedURLSet(urls []string) map[string]bool {
@@ -669,6 +837,7 @@ func candidateQueries(food foodRow) []string {
 	// 与用户浏览器搜索一致：优先纯食物名，再尝试带后缀的查询。
 	values := []string{
 		name,
+		name + " 高清 无水印 实拍",
 		name + " 美食",
 		name + " 实拍",
 		name + " 食物 图片",
@@ -701,6 +870,11 @@ func downloadCandidateImage(ctx context.Context, candidate imageCandidate, image
 		}
 		img.Query = candidate.Query
 		img.PageURL = candidate.PageURL
+		img.ReuseObjectKey = candidate.ReuseObjectKey
+		img.SourceLabel = candidate.SourceLabel
+		img.License = candidate.License
+		img.SourceFoodID = candidate.SourceFoodID
+		img.SourceFoodName = candidate.SourceFoodName
 		return img, nil
 	}
 	return downloadCandidateHTTP(ctx, candidate, imageSearch)
@@ -781,13 +955,18 @@ func downloadCandidateHTTP(ctx context.Context, candidate imageCandidate, imageS
 	sum := sha256.Sum256(data)
 	ext := extensionForContentType(contentType)
 	return &downloadedImage{
-		URL:         candidate.ImageURL,
-		PageURL:     candidate.PageURL,
-		Query:       candidate.Query,
-		Data:        data,
-		ContentType: contentType,
-		Ext:         ext,
-		SHA256:      hex.EncodeToString(sum[:]),
+		URL:            candidate.ImageURL,
+		PageURL:        candidate.PageURL,
+		Query:          candidate.Query,
+		Data:           data,
+		ContentType:    contentType,
+		Ext:            ext,
+		SHA256:         hex.EncodeToString(sum[:]),
+		ReuseObjectKey: candidate.ReuseObjectKey,
+		SourceLabel:    candidate.SourceLabel,
+		License:        candidate.License,
+		SourceFoodID:   candidate.SourceFoodID,
+		SourceFoodName: candidate.SourceFoodName,
 	}, nil
 }
 

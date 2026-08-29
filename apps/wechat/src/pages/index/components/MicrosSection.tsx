@@ -134,9 +134,15 @@ export function MicrosSection({
   isGuest,
   supplementSummary,
 }: MicrosSectionProps) {
-  const [expandedKey, setExpandedKey] = useState<HomeMicronutrientKey | null>(null)
+  const [sourceDetailKey, setSourceDetailKey] = useState<HomeMicronutrientKey | null>(null)
   const micronutrients = useMicronutrients(intakeData)
   const hasMicros = micronutrients.length > 0
+  const sourceDetail = sourceDetailKey
+    ? micronutrients.find((item) => item.key === sourceDetailKey) || null
+    : null
+  const sourceDetailTotal = sourceDetail?.current || 0
+  const sourceDetailFoodWidth = sourceDetailTotal > 0 ? (sourceDetail?.foodCurrent || 0) / sourceDetailTotal * 100 : 0
+  const sourceDetailSupplementWidth = Math.max(0, 100 - sourceDetailFoodWidth)
 
   const statusText = useMemo(() => {
     if (dashboardBusy) return '同步中'
@@ -178,18 +184,20 @@ export function MicrosSection({
             const hasSupplement = item.supplementCurrent > 0
             const foodWidth = item.current > 0 ? (item.foodCurrent / item.current) * progressPct : 0
             const supplementWidth = Math.max(0, progressPct - foodWidth)
-            const expanded = expandedKey === item.key
             return (
               <View
                 key={item.key}
-                className={`micros-preview-card${hasSupplement ? ' has-supplement' : ''}${expanded ? ' is-source-expanded' : ''}`}
-                onClick={() => hasSupplement && setExpandedKey(expanded ? null : item.key)}
+                className={`micros-preview-card${hasSupplement ? ' has-supplement' : ''}`}
+                onClick={() => hasSupplement && setSourceDetailKey(item.key)}
                 style={{
                   borderColor: `${item.accent}33`,
                   background: `${item.accent}10`,
                 }}
               >
-                <Text className='micros-preview-card-label'>{item.label}</Text>
+                <View className='micros-preview-card-label-row'>
+                  <Text className='micros-preview-card-label'>{item.label}</Text>
+                  {hasSupplement && <Text className='micros-supplement-badge'>补</Text>}
+                </View>
                 <View className='micros-preview-card-value-row'>
                   <Text className='micros-preview-card-value' style={{ color: item.accent }}>
                     {formatMicronutrientValue(item.current)}
@@ -213,22 +221,6 @@ export function MicrosSection({
                       }}
                     />
                     {hasSupplement && <View className='micros-preview-progress-fill supplement' style={{ width: `${supplementWidth}%` }} />}
-                  </View>
-                )}
-                {hasSupplement && (
-                  <View className='micros-source-compact'>
-                    <Text>食物 {formatMicronutrientValue(item.foodCurrent)}{item.unit}</Text>
-                    <Text>补剂 {formatMicronutrientValue(item.supplementCurrent)}{item.unit}</Text>
-                  </View>
-                )}
-                {showTarget && item.current > item.target && (
-                  <Text className='micros-reference-excess'>高于当前参考目标 {formatMicronutrientValue(item.current - item.target)}{item.unit}</Text>
-                )}
-                {expanded && (
-                  <View className='micros-source-detail'>
-                    <Text className='micros-source-detail-title'>营养素来源</Text>
-                    <View><Text>食物来源</Text><Text>{formatMicronutrientValue(item.foodCurrent)}{item.unit}</Text></View>
-                    <View><Text>补剂来源</Text><Text>{formatMicronutrientValue(item.supplementCurrent)}{item.unit}</Text></View>
                   </View>
                 )}
               </View>
@@ -276,6 +268,43 @@ export function MicrosSection({
                 <Text className='functional-component-amount'>{formatMicronutrientValue(item.amount)}{item.unit}</Text>
               </View>
             ))}
+          </View>
+        </View>
+      )}
+      {sourceDetail && (
+        <View className='micros-source-sheet-layer' catchMove>
+          <View className='micros-source-sheet-mask' onClick={() => setSourceDetailKey(null)} />
+          <View className='micros-source-sheet' catchMove onClick={(event) => event.stopPropagation()}>
+            <View className='micros-source-sheet-handle' />
+            <View className='micros-source-sheet-head'>
+              <View>
+                <Text className='micros-source-sheet-kicker'>营养素来源</Text>
+                <Text className='micros-source-sheet-title'>{sourceDetail.label}</Text>
+              </View>
+              <View className='micros-source-sheet-close' onClick={() => setSourceDetailKey(null)}><Text>×</Text></View>
+            </View>
+            <View className='micros-source-sheet-total'>
+              <Text>今日合计</Text>
+              <Text>{formatMicronutrientValue(sourceDetail.current)}{sourceDetail.unit}</Text>
+            </View>
+            <View className='micros-source-sheet-bar'>
+              <View className='food' style={{ width: `${sourceDetailFoodWidth}%` }} />
+              <View className='supplement' style={{ width: `${sourceDetailSupplementWidth}%` }} />
+            </View>
+            <View className='micros-source-sheet-row'>
+              <View><View className='micros-source-dot food' /><Text>食物</Text></View>
+              <Text>{formatMicronutrientValue(sourceDetail.foodCurrent)}{sourceDetail.unit}</Text>
+            </View>
+            <View className='micros-source-sheet-row'>
+              <View><View className='micros-source-dot supplement' /><Text>补剂</Text></View>
+              <Text>{formatMicronutrientValue(sourceDetail.supplementCurrent)}{sourceDetail.unit}</Text>
+            </View>
+            {sourceDetail.target > 0 && (
+              <Text className='micros-source-sheet-note'>
+                当前参考目标 {formatMicronutrientValue(sourceDetail.target)}{sourceDetail.unit}
+                {sourceDetail.current > sourceDetail.target ? `，合计高出 ${formatMicronutrientValue(sourceDetail.current - sourceDetail.target)}${sourceDetail.unit}` : ''}
+              </Text>
+            )}
           </View>
         </View>
       )}

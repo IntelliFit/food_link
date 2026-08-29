@@ -33,6 +33,7 @@ import { formatDateKey } from '../../../pages/index/utils/helpers'
 import { buildFoodRecordItemPayloadFromAnalyzeItem } from '../../../utils/food-record-item-payload'
 import { needsPrecisionUserAction } from '../../../utils/precision-mode'
 import { returnHomeAfterFoodRecord } from '../../../utils/food-record-flow'
+import { acknowledgeAnalyzeTaskReminders } from '../../../utils/analyze-task-reminder'
 import {
   MealTypeSelectSheet,
   normalizeSelectableMealType,
@@ -731,6 +732,10 @@ function AnalyzeHistoryPage() {
   }
 
   useDidShow(() => {
+    // 进入识别列表即视为用户已经看过本批提醒；是否真正保存记录是独立状态。
+    void acknowledgeAnalyzeTaskReminders().catch((error) => {
+      console.warn('标记识别提醒已查看失败:', error)
+    })
     let runtime: Record<string, unknown> = {}
     try {
       const systemInfo = Taro.getSystemInfoSync()

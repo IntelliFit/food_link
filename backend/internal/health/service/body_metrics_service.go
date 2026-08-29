@@ -20,6 +20,7 @@ const defaultWaterGoalMl = 2000
 type BodyMetricsRepo interface {
 	CreateWeightRecord(ctx context.Context, record *domain.BodyWeightRecord) error
 	ListWeightRecords(ctx context.Context, userID string, startDate, endDate string) ([]domain.BodyWeightRecord, error)
+	ListDailyWeightRecords(ctx context.Context, userID string, startDate, endDate string) ([]domain.BodyWeightRecord, error)
 	GetLatestWeightRecord(ctx context.Context, userID string) (*domain.BodyWeightRecord, error)
 	DeleteWeightRecordByID(ctx context.Context, userID string, recordID string) (int64, error)
 	CreateWaterLog(ctx context.Context, log *domain.BodyWaterLog) error
@@ -85,12 +86,12 @@ func (s *BodyMetricsService) GetSummary(ctx context.Context, userID string, stat
 	extendedStart := time.Now().In(chinaTZ).AddDate(-2, 0, 0).Format("2006-01-02")
 	extendedEnd := time.Now().In(chinaTZ).Format("2006-01-02")
 
-	weightRows, err := s.repo.ListWeightRecords(ctx, userID, extendedStart, extendedEnd)
+	weightRows, err := s.repo.ListDailyWeightRecords(ctx, userID, extendedStart, extendedEnd)
 	if err != nil {
 		return nil, err
 	}
 
-	waterLogs, err := s.repo.GetWaterLogsByDate(ctx, userID, extendedStart, extendedEnd)
+	waterLogs, err := s.repo.GetWaterLogsByDate(ctx, userID, startDate, endDate)
 	if err != nil {
 		return nil, err
 	}

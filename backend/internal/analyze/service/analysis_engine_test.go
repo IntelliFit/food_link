@@ -33,7 +33,7 @@ func analysisEngineParsedItem(name, state string, calories, protein, carbs, fat 
 func TestNormalizeAnalysisEngineDefaultsByInputAndMode(t *testing.T) {
 	assert.Equal(t, analysisEngineAIDirect, normalizeAnalysisEngine("", "standard", true))
 	assert.Equal(t, analysisEngineAIDirect, normalizeAnalysisEngine("", "fast", false))
-	assert.Equal(t, analysisEngineAIThenDBExact, normalizeAnalysisEngine("", "standard", false))
+	assert.Equal(t, analysisEngineAIDirect, normalizeAnalysisEngine("", "standard", false))
 	assert.Equal(t, analysisEngineDBCandidates, normalizeAnalysisEngine("", "strict", false))
 }
 
@@ -60,6 +60,50 @@ func TestAIDirectKeepsContextualNutritionWithoutStandardFoodLookup(t *testing.T)
 	assert.Equal(t, analysisEngineAIDirect, item["nutrition_source"])
 	assert.Nil(t, item["matched_food_id"])
 	assert.InDelta(t, 210, numberFromAny(mapFromAny(item["nutrients"])["calories"]), 0.01)
+}
+
+func TestAIDirectDoesNotUsePackagedFoodDatabase(t *testing.T) {
+	svc := NewAnalyzeService(nil, nil, nil)
+	svc.ConfigureNutritionResolver(newFakeAnalyzeNutritionResolver())
+	resp, err := svc.finalizeAnalyzeResponse(context.Background(), "", mixedMealWithPackagedFoodParsed(), AnalyzeInput{
+		AnalysisEngine: analysisEngineAIDirect,
+	}, defaultExecutionMode, "qwen", qwen36FlashModel, 1)
+	require.NoError(t, err)
+
+	items := toItems(resp["items"])
+	require.Len(t, items, 2)
+	assert.Equal(t, analysisEngineAIDirect, items[1]["nutrition_source"])
+	assert.Nil(t, items[1]["matched_food_id"])
+	assert.NotContains(t, resp, "packaged_food_resolution")
+}
+
+func TestUserRequestedMicronutrientsPreferCompleteDatabaseValues(t *testing.T) {
+	fallback := &fakeNutritionFallbackEstimator{}
+	svc := NewAnalyzeService(nil, nil, nil)
+	svc.ConfigureNutritionFallbackEstimator(fallback)
+	unit := zeroUnitNutritionPer100g()
+	unit["calories"] = 116.0
+	unit["protein"] = 2.6
+	unit["carbs"] = 25.9
+	unit["fat"] = 0.3
+	unit["fiber"] = 0.4
+	unit["sodiumMg"] = 2.0
+	unit["potassiumMg"] = 30.0
+	unit["calciumMg"] = 5.0
+	unit["ironMg"] = 0.2
+
+	items, err := svc.ApplyUserRequestedMicronutrientsToResolvedItems(context.Background(), []map[string]any{{
+		"name":                    "白米饭",
+		"estimatedWeightGrams":    100.0,
+		"nutrition_source":        "library_exact_canonical",
+		"nutrients":               scaleNutrition(unit, 100),
+		"unit_nutrition_per_100g": unit,
+	}}, "一碗白米饭")
+	require.NoError(t, err)
+	require.Len(t, items, 1)
+	assert.Equal(t, 0, fallback.calls)
+	assert.Equal(t, "library_exact_canonical", items[0]["micronutrient_source"])
+	assert.Equal(t, 30.0, mapFromAny(items[0]["nutrients"])["potassiumMg"])
 }
 
 func TestAIThenExactDBRejectsSameNameWithDifferentState(t *testing.T) {

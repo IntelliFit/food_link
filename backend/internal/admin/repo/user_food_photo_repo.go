@@ -10,6 +10,7 @@ import (
 
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type UserFoodPhotoRepo struct {
@@ -27,27 +28,56 @@ type ListUserFoodPhotoInput struct {
 	CircleVisibility string
 	SortBy           string
 	SortOrder        string
+	AnnotationStatus string
+	AnnotationLabel  string
 	Limit            int
 	Offset           int
 }
 
 type UserFoodPhoto struct {
-	SourceID         string                  `gorm:"column:source_id" json:"source_id"`
-	SourceType       string                  `gorm:"column:source_type" json:"source_type"`
-	TaskType         string                  `gorm:"column:task_type" json:"task_type"`
-	Status           string                  `gorm:"column:status" json:"status"`
-	RecordID         string                  `gorm:"column:record_id" json:"record_id"`
-	ImagePath        string                  `gorm:"column:image_path" json:"-"`
-	ImageURL         string                  `gorm:"-" json:"image_url"`
-	ThumbnailURL     string                  `gorm:"-" json:"thumbnail_url"`
-	Description      string                  `gorm:"column:description" json:"description"`
-	UserID           string                  `gorm:"column:user_id" json:"user_id"`
-	UserNickname     string                  `gorm:"column:user_nickname" json:"user_nickname"`
-	UserAvatar       string                  `gorm:"column:user_avatar" json:"user_avatar"`
-	UserPhone        string                  `gorm:"column:user_phone" json:"user_phone"`
-	CircleVisibility string                  `gorm:"column:circle_visibility" json:"circle_visibility"`
-	Nutrition        *UserFoodPhotoNutrition `gorm:"-" json:"nutrition,omitempty"`
-	CreatedAt        time.Time               `gorm:"column:created_at" json:"created_at"`
+	SourceID            string                      `gorm:"column:source_id" json:"source_id"`
+	SourceType          string                      `gorm:"column:source_type" json:"source_type"`
+	TaskType            string                      `gorm:"column:task_type" json:"task_type"`
+	Status              string                      `gorm:"column:status" json:"status"`
+	RecordID            string                      `gorm:"column:record_id" json:"record_id"`
+	ImagePath           string                      `gorm:"column:image_path" json:"image_key"`
+	ImageURL            string                      `gorm:"-" json:"image_url"`
+	ThumbnailURL        string                      `gorm:"-" json:"thumbnail_url"`
+	Description         string                      `gorm:"column:description" json:"description"`
+	UserID              string                      `gorm:"column:user_id" json:"user_id"`
+	UserNickname        string                      `gorm:"column:user_nickname" json:"user_nickname"`
+	UserAvatar          string                      `gorm:"column:user_avatar" json:"user_avatar"`
+	UserPhone           string                      `gorm:"column:user_phone" json:"user_phone"`
+	CircleVisibility    string                      `gorm:"column:circle_visibility" json:"circle_visibility"`
+	AnnotationStatus    string                      `gorm:"column:annotation_status" json:"annotation_status"`
+	AnnotationLabels    datatypes.JSONSlice[string] `gorm:"column:annotation_labels" json:"annotation_labels"`
+	ExclusionReason     string                      `gorm:"column:exclusion_reason" json:"exclusion_reason"`
+	AnnotationUpdatedAt *time.Time                  `gorm:"column:annotation_updated_at" json:"annotation_updated_at,omitempty"`
+	Nutrition           *UserFoodPhotoNutrition     `gorm:"-" json:"nutrition,omitempty"`
+	CreatedAt           time.Time                   `gorm:"column:created_at" json:"created_at"`
+}
+
+type UserFoodPhotoAnnotation struct {
+	ID              string                      `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	UserID          string                      `gorm:"column:user_id;type:uuid;not null;uniqueIndex:idx_user_food_photo_annotations_identity,priority:1" json:"user_id"`
+	ImagePath       string                      `gorm:"column:image_path;type:text;not null;uniqueIndex:idx_user_food_photo_annotations_identity,priority:2" json:"image_key"`
+	ReviewStatus    string                      `gorm:"column:review_status;type:text;not null;default:'pending'" json:"review_status"`
+	Labels          datatypes.JSONSlice[string] `gorm:"column:labels;type:jsonb;not null;default:'[]'::jsonb" json:"labels"`
+	ExclusionReason string                      `gorm:"column:exclusion_reason;type:text;not null;default:''" json:"exclusion_reason"`
+	ReviewedBy      *string                     `gorm:"column:reviewed_by;type:uuid" json:"reviewed_by,omitempty"`
+	CreatedAt       time.Time                   `gorm:"column:created_at;type:timestamptz;not null;default:now()" json:"created_at"`
+	UpdatedAt       time.Time                   `gorm:"column:updated_at;type:timestamptz;not null;default:now()" json:"updated_at"`
+}
+
+func (UserFoodPhotoAnnotation) TableName() string { return "user_food_photo_annotations" }
+
+type UpsertUserFoodPhotoAnnotationInput struct {
+	UserID          string
+	ImagePath       string
+	ReviewStatus    string
+	Labels          []string
+	ExclusionReason string
+	ReviewedBy      string
 }
 
 type UserFoodPhotoNutrition struct {
@@ -251,11 +281,26 @@ SELECT
 			END
 		ELSE 'not_applicable'
 	END AS circle_visibility,
+	{{annotation_columns}},
 	p.created_at
 FROM deduplicated AS p
 LEFT JOIN weapp_user AS u ON u.id::text = p.user_id
 LEFT JOIN user_food_records AS circle_record ON circle_record.id::text = p.record_id
+{{annotation_join}}
 `
+
+const userFoodPhotoAnnotationColumnsSQL = `COALESCE(annotation.review_status, 'pending') AS annotation_status,
+	COALESCE(annotation.labels, '[]'::jsonb) AS annotation_labels,
+	COALESCE(annotation.exclusion_reason, '') AS exclusion_reason,
+	annotation.updated_at AS annotation_updated_at`
+
+const emptyUserFoodPhotoAnnotationColumnsSQL = `'pending'::text AS annotation_status,
+	'[]'::jsonb AS annotation_labels,
+	''::text AS exclusion_reason,
+	NULL::timestamptz AS annotation_updated_at`
+
+const userFoodPhotoAnnotationJoinSQL = `LEFT JOIN user_food_photo_annotations AS annotation
+	ON annotation.user_id::text = p.user_id AND annotation.image_path = p.image_path`
 
 const packagedCorrectionPhotosSQL = `
 	SELECT
@@ -290,12 +335,20 @@ const emptyPackagedCorrectionPhotosSQL = `
 	WHERE FALSE
 `
 
-func buildUserFoodPhotoRowsSQL(includePackagedCorrections bool) string {
+func buildUserFoodPhotoRowsSQL(includePackagedCorrections, includeAnnotations bool) string {
 	packagedCorrectionsSQL := emptyPackagedCorrectionPhotosSQL
 	if includePackagedCorrections {
 		packagedCorrectionsSQL = packagedCorrectionPhotosSQL
 	}
-	return strings.Replace(userFoodPhotoRowsSQLTemplate, "{{packaged_correction_photos}}", packagedCorrectionsSQL, 1)
+	annotationColumnsSQL := emptyUserFoodPhotoAnnotationColumnsSQL
+	annotationJoinSQL := ""
+	if includeAnnotations {
+		annotationColumnsSQL = userFoodPhotoAnnotationColumnsSQL
+		annotationJoinSQL = userFoodPhotoAnnotationJoinSQL
+	}
+	query := strings.Replace(userFoodPhotoRowsSQLTemplate, "{{packaged_correction_photos}}", packagedCorrectionsSQL, 1)
+	query = strings.Replace(query, "{{annotation_columns}}", annotationColumnsSQL, 1)
+	return strings.Replace(query, "{{annotation_join}}", annotationJoinSQL, 1)
 }
 
 func (r *UserFoodPhotoRepo) List(ctx context.Context, input ListUserFoodPhotoInput) (*ListUserFoodPhotoResult, error) {
@@ -303,15 +356,21 @@ func (r *UserFoodPhotoRepo) List(ctx context.Context, input ListUserFoodPhotoInp
 	if limit <= 0 {
 		limit = 40
 	}
-	if limit > 100 {
-		limit = 100
+	// HTTP callers are capped at 100 by the service. Offline cleanup jobs use
+	// larger pages to avoid rebuilding the photo-union query for every 100 rows.
+	if limit > 500 {
+		limit = 500
 	}
 	offset := input.Offset
 	if offset < 0 {
 		offset = 0
 	}
 
-	rowsSQL := buildUserFoodPhotoRowsSQL(r.db.WithContext(ctx).Migrator().HasTable("packaged_food_correction_submissions"))
+	migrator := r.db.WithContext(ctx).Migrator()
+	rowsSQL := buildUserFoodPhotoRowsSQL(
+		migrator.HasTable("packaged_food_correction_submissions"),
+		migrator.HasTable("user_food_photo_annotations"),
+	)
 	whereSQL, args := buildUserFoodPhotoFilters(input)
 	var total int64
 	if err := r.db.WithContext(ctx).
@@ -333,6 +392,37 @@ func (r *UserFoodPhotoRepo) List(ctx context.Context, input ListUserFoodPhotoInp
 		return nil, err
 	}
 	return &ListUserFoodPhotoResult{Items: items, Total: total}, nil
+}
+
+func (r *UserFoodPhotoRepo) UpsertAnnotation(ctx context.Context, input UpsertUserFoodPhotoAnnotationInput) (*UserFoodPhotoAnnotation, error) {
+	item := UserFoodPhotoAnnotation{
+		UserID:          input.UserID,
+		ImagePath:       input.ImagePath,
+		ReviewStatus:    input.ReviewStatus,
+		Labels:          datatypes.NewJSONSlice(input.Labels),
+		ExclusionReason: input.ExclusionReason,
+	}
+	if input.ReviewedBy != "" {
+		item.ReviewedBy = &input.ReviewedBy
+	}
+	if err := r.db.WithContext(ctx).Clauses(clause.OnConflict{
+		Columns: []clause.Column{{Name: "user_id"}, {Name: "image_path"}},
+		DoUpdates: clause.Assignments(map[string]any{
+			"review_status":    item.ReviewStatus,
+			"labels":           item.Labels,
+			"exclusion_reason": item.ExclusionReason,
+			"reviewed_by":      item.ReviewedBy,
+			"updated_at":       gorm.Expr("NOW()"),
+		}),
+	}).Create(&item).Error; err != nil {
+		return nil, err
+	}
+	if err := r.db.WithContext(ctx).
+		Where("user_id = ? AND image_path = ?", input.UserID, input.ImagePath).
+		First(&item).Error; err != nil {
+		return nil, err
+	}
+	return &item, nil
 }
 
 type userFoodPhotoNutrientSort struct {
@@ -375,7 +465,7 @@ func buildUserFoodPhotoSort(filteredSQL string, input ListUserFoodPhotoInput) (s
 	}
 	sortBy := strings.TrimSpace(input.SortBy)
 	if sortBy == "" || sortBy == "created_at" {
-		return filteredSQL, "ORDER BY photos.created_at " + direction + ", photos.source_id DESC"
+		return filteredSQL, "ORDER BY photos.created_at " + direction + ", photos.source_id DESC, photos.image_path ASC"
 	}
 	nutrient, ok := userFoodPhotoNutrientSorts[sortBy]
 	if !ok {
@@ -596,7 +686,34 @@ func buildUserFoodPhotoFilters(input ListUserFoodPhotoInput) (string, []any) {
 		conditions = append(conditions, "photos.circle_visibility = ?")
 		args = append(args, visibility)
 	}
+	if annotationStatus := strings.TrimSpace(input.AnnotationStatus); isUserFoodPhotoAnnotationStatus(annotationStatus) {
+		conditions = append(conditions, "photos.annotation_status = ?")
+		args = append(args, annotationStatus)
+	}
+	if label := strings.TrimSpace(input.AnnotationLabel); label != "" && label != "all" {
+		if label == "snack" || label == "dessert" {
+			conditions = append(conditions, "(photos.annotation_labels @> ?::jsonb OR photos.annotation_labels @> ?::jsonb)")
+			snack, _ := json.Marshal([]string{"snack"})
+			dessert, _ := json.Marshal([]string{"dessert"})
+			args = append(args, string(snack), string(dessert))
+		} else if label == "packaged_food" {
+			conditions = append(conditions, "FALSE")
+		} else {
+			conditions = append(conditions, "photos.annotation_labels @> ?::jsonb")
+			encoded, _ := json.Marshal([]string{label})
+			args = append(args, string(encoded))
+		}
+	}
 	return "WHERE " + strings.Join(conditions, " AND "), args
+}
+
+func isUserFoodPhotoAnnotationStatus(status string) bool {
+	switch status {
+	case "pending", "kept", "excluded":
+		return true
+	default:
+		return false
+	}
 }
 
 func isUserFoodPhotoCircleVisibility(visibility string) bool {

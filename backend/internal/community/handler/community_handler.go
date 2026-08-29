@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"strconv"
 	"strings"
+	"time"
 
 	authmw "food_link/backend/internal/auth"
 	commonerrors "food_link/backend/internal/common/errors"
@@ -88,24 +89,27 @@ func (h *CommunityHandler) Feed(c *gin.Context) {
 
 func (h *CommunityHandler) CheckinLeaderboard(c *gin.Context) {
 	userID := c.GetString(authmw.ContextUserIDKey)
+	logger.Info(c.Request.Context(), "进入全体用户饮食记录排行榜", slog.String("user_id", userID))
 	result, err := h.svc.CheckinLeaderboard(c.Request.Context(), userID)
 	if err != nil {
+		logger.Error(c.Request.Context(), "获取全体用户饮食记录排行榜失败", err, slog.String("user_id", userID))
 		response.Error(c, err)
 		return
 	}
+	logger.Info(c.Request.Context(), "完成全体用户饮食记录排行榜", slog.String("user_id", userID), slog.Int("user_count", len(result.List)))
 	response.Success(c, result)
 }
 
 func (h *CommunityHandler) HealthLeaderboard(c *gin.Context) {
 	userID := c.GetString(authmw.ContextUserIDKey)
-	logger.Info(c.Request.Context(), "进入好友健康指数排行榜", slog.String("user_id", userID))
+	logger.Info(c.Request.Context(), "进入好友健康饮食排行榜", slog.String("user_id", userID))
 	result, err := h.svc.HealthLeaderboard(c.Request.Context(), userID)
 	if err != nil {
-		logger.Error(c.Request.Context(), "获取好友健康指数排行榜失败", err, slog.String("user_id", userID))
+		logger.Error(c.Request.Context(), "获取好友健康饮食排行榜失败", err, slog.String("user_id", userID))
 		response.Error(c, err)
 		return
 	}
-	logger.Info(c.Request.Context(), "完成好友健康指数排行榜", slog.String("user_id", userID), slog.Int("user_count", len(result.List)))
+	logger.Info(c.Request.Context(), "完成好友健康饮食排行榜", slog.String("user_id", userID), slog.Int("user_count", len(result.List)))
 	response.Success(c, result)
 }
 
@@ -190,7 +194,7 @@ func (h *CommunityHandler) ListComments(c *gin.Context) {
 	limit := 50
 	if l := c.Query("limit"); l != "" {
 		if n, err := strconv.Atoi(l); err == nil && n > 0 {
-			limit = n
+			limit = min(n, service.MaxCommunityListLimit)
 		}
 	}
 	items, err := h.svc.ListComments(c.Request.Context(), userID, recordID, limit)
@@ -206,7 +210,7 @@ func (h *CommunityHandler) ListTargetComments(c *gin.Context) {
 	limit := 50
 	if l := c.Query("limit"); l != "" {
 		if n, err := strconv.Atoi(l); err == nil && n > 0 {
-			limit = n
+			limit = min(n, service.MaxCommunityListLimit)
 		}
 	}
 	items, err := h.svc.ListTargetComments(c.Request.Context(), userID, c.Param("target_type"), c.Param("target_id"), limit)
@@ -308,7 +312,7 @@ func (h *CommunityHandler) ListCommentTasks(c *gin.Context) {
 	limit := 50
 	if l := c.Query("limit"); l != "" {
 		if n, err := strconv.Atoi(l); err == nil && n > 0 {
-			limit = n
+			limit = min(n, service.MaxCommunityListLimit)
 		}
 	}
 	tasks, err := h.svc.ListCommentTasks(c.Request.Context(), userID, limit)
@@ -324,14 +328,14 @@ func (h *CommunityHandler) ListNotifications(c *gin.Context) {
 	limit := 50
 	if l := c.Query("limit"); l != "" {
 		if n, err := strconv.Atoi(l); err == nil && n > 0 {
-			limit = n
+			limit = min(n, service.MaxCommunityListLimit)
 		}
 	}
 	notificationType := c.Query("type")
 	offset := 0
 	if o := c.Query("offset"); o != "" {
 		if n, err := strconv.Atoi(o); err == nil && n >= 0 {
-			offset = n
+			offset = min(n, service.MaxFeedLegacyOffset)
 		}
 	}
 	logger.Info(c.Request.Context(), "开始查询互动消息",
@@ -554,5 +558,11 @@ func parseFeedParams(c *gin.Context) service.FeedParams {
 	if s := c.Query("sort_by"); s != "" {
 		params.SortBy = s
 	}
-	return params
+	if rawTime := strings.TrimSpace(c.Query("before_time")); rawTime != "" {
+		if beforeTime, err := time.Parse(time.RFC3339Nano, rawTime); err == nil {
+			params.BeforeTime = &beforeTime
+			params.BeforeKey = strings.TrimSpace(c.Query("before_key"))
+		}
+	}
+	return service.NormalizeFeedParams(params)
 }

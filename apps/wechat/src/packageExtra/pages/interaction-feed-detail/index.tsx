@@ -410,10 +410,14 @@ export function InteractionFeedDetailPage() {
     if (!feedItem || likePendingRef.current) return
     likePendingRef.current = true
     const prev = feedItem
+    const previousLikeCount = Number(feedItem.like_count)
+    const safeLikeCount = Number.isFinite(previousLikeCount)
+      ? Math.max(0, Math.trunc(previousLikeCount))
+      : 0
     const optimistic = {
       ...feedItem,
       liked: !feedItem.liked,
-      like_count: Math.max(0, feedItem.like_count + (feedItem.liked ? -1 : 1))
+      like_count: Math.max(0, safeLikeCount + (feedItem.liked ? -1 : 1))
     }
     setFeedItem(optimistic)
     try {
@@ -739,19 +743,13 @@ export function InteractionFeedDetailPage() {
                           <Text className='feed-calorie-num'>{(exercise ? exerciseKcal : Number(feedItem.record.total_calories || 0)).toFixed(0)}</Text>
                           <Text className='feed-calorie-unit'> kcal{exercise ? ' 消耗' : ''}</Text>
                         </View>
-                        <View className='feed-macros feed-tap-to-detail' onClick={() => handleViewDetail(feedItem.record.id)}>
-                          {exercise
-                            ? renderCollapsibleFeedText(
-                              `${detailTargetKey}-reasoning`,
-                              feedItem.record.ai_reasoning || 'AI 已根据运动内容估算消耗',
-                              'feed-macros-text'
-                            )
-                            : (
-                              <Text className='feed-macros-text'>
-                                蛋白质 {Math.round(feedItem.record.total_protein ?? 0)}g · 碳水 {Math.round(feedItem.record.total_carbs ?? 0)}g · 脂肪 {Math.round(feedItem.record.total_fat ?? 0)}g
-                              </Text>
-                            )}
-                        </View>
+                        {!exercise ? (
+                          <View className='feed-macros feed-tap-to-detail' onClick={() => handleViewDetail(feedItem.record.id)}>
+                            <Text className='feed-macros-text'>
+                              蛋白质 {Math.round(feedItem.record.total_protein ?? 0)}g · 碳水 {Math.round(feedItem.record.total_carbs ?? 0)}g · 脂肪 {Math.round(feedItem.record.total_fat ?? 0)}g
+                            </Text>
+                          </View>
+                        ) : null}
                       </View>
                     )}
 
@@ -804,7 +802,9 @@ export function InteractionFeedDetailPage() {
                       <View className='feed-actions-left'>
                         <View className='action-item' onClick={handleLike}>
                           <Text className={`action-icon iconfont icon-good ${feedItem.liked ? 'liked' : ''}`} />
-                          <Text className='action-count'>{feedItem.like_count}</Text>
+                          <Text className='action-count'>
+                            {Number.isFinite(Number(feedItem.like_count)) ? Math.max(0, Math.trunc(Number(feedItem.like_count))) : 0}
+                          </Text>
                         </View>
                         <View
                           className='action-item feed-action-comment'

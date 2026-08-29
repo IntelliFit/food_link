@@ -291,13 +291,22 @@
   min-width: 0;
 }
 
+.pet-home-name-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12rpx;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
 .pet-home-name-link {
   display: flex;
   align-items: center;
-  gap: 10rpx;
+  gap: 8rpx;
   justify-content: flex-end;
-  width: 100%;
-  max-width: 100%;
+  min-width: 0;
   min-height: 78rpx;
   padding: 8rpx 0;
 
@@ -323,6 +332,40 @@
   color: #5f6b66;
   font-size: 24rpx;
   line-height: 32rpx;
+}
+
+.pet-home-rename-button {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 6rpx;
+  min-width: 92rpx;
+  min-height: 48rpx;
+  padding: 4rpx 14rpx;
+  border-radius: 999rpx;
+  background: rgb(92 184 150 / 12%);
+  box-sizing: border-box;
+
+  &:active {
+    opacity: 0.62;
+  }
+}
+
+.pet-home-rename-icon,
+.pet-home-rename-text {
+  color: #2f7f62;
+  font-size: 21rpx;
+  line-height: 30rpx;
+}
+
+.pet-home-rename-spinner {
+  width: 24rpx;
+  height: 24rpx;
+  border: 3rpx solid rgb(92 184 150 / 22%);
+  border-top-color: #5cb896;
+  border-radius: 50%;
+  animation: pet-home-spin 0.8s linear infinite;
 }
 
 .pet-home-hero-reward {
@@ -673,6 +716,15 @@
 
   .pet-home-name-arrow {
     color: rgb(214 226 220 / 72%);
+  }
+
+  .pet-home-rename-button {
+    background: rgb(92 184 150 / 16%);
+  }
+
+  .pet-home-rename-icon,
+  .pet-home-rename-text {
+    color: #8cd8b8;
   }
 
   .pet-home-hero-reward {

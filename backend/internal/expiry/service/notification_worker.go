@@ -261,19 +261,10 @@ func notificationPage(snapshot map[string]any) string {
 	return page
 }
 
-func notificationTemplateData(snapshot map[string]any, item *domain.ExpiryItem) map[string]any {
-	data, ok := snapshot["data"].(map[string]any)
-	if !ok {
-		return buildNotificationPayload(item)
-	}
-	out := copyMap(data)
-	characterField, ok := out["character_string5"].(map[string]any)
-	if !ok {
-		characterField = map[string]any{}
-	}
-	characterField["value"] = normalizeCharacterString(stringFromMapValue(characterField["value"]), normalizeCharacterString(ptrStringValue(item.QuantityNote), "NA"))
-	out["character_string5"] = characterField
-	return out
+func notificationTemplateData(_ map[string]any, item *domain.ExpiryItem) map[string]any {
+	// 模板字段由微信公共模板固定定义。发送时始终按当前条目重建，避免旧任务快照
+	// 中的历史字段（thing1/time2/character_string5）污染新模板并触发参数错误。
+	return buildNotificationPayload(item)
 }
 
 func copyMap(in map[string]any) map[string]any {

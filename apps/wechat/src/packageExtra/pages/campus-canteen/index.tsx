@@ -153,6 +153,7 @@ function CampusCanteenPage() {
   const [list, setList] = useState<PublicFoodLibraryItem[]>([]);
   const [sortBy, setSortBy] = useState<SortBy>("hot");
   const [searchKeyword, setSearchKeyword] = useState("");
+  const [appliedSearchKeyword, setAppliedSearchKeyword] = useState("");
   const [selectedSchool, setSelectedSchool] = useState<SchoolItem | null>(null);
   const [selectedCampus, setSelectedCampus] = useState<SchoolCampusItem | null>(
     null,
@@ -199,8 +200,10 @@ function CampusCanteenPage() {
   }, []);
 
   const fetchReadyCampusItems = useCallback(
-    async (merchantName?: string) => {
-      const directoryFilter = selectedCanteen?.id
+    async (keyword = appliedSearchKeyword) => {
+      const directoryFilter = selectedWindow?.id
+        ? { window_id: selectedWindow.id }
+        : selectedCanteen?.id
         ? { canteen_id: selectedCanteen.id }
         : selectedCampus?.id
           ? { campus_id: selectedCampus.id }
@@ -210,7 +213,9 @@ function CampusCanteenPage() {
       const request = {
         type: "campus" as const,
         ...directoryFilter,
-        merchant_name: merchantName,
+        keyword: keyword || undefined,
+        floor: floorName || undefined,
+        window_name: selectedWindow?.id ? undefined : windowName || undefined,
         sort_by: sortBy,
         limit: 80,
       };
@@ -234,18 +239,31 @@ function CampusCanteenPage() {
         return fetchHotFallback();
       }
     },
-    [sortBy, selectedSchool, selectedCampus, selectedCanteen],
+    [
+      appliedSearchKeyword,
+      floorName,
+      selectedSchool,
+      selectedCampus,
+      selectedCanteen,
+      selectedWindow?.id,
+      sortBy,
+      windowName,
+    ],
   );
 
   const loadList = useCallback(
-    async (silent = false, force = false) => {
+    async (
+      silent = false,
+      force = false,
+      keyword = appliedSearchKeyword,
+    ) => {
       if (!getAccessToken()) return;
       if (!membershipStatus?.is_pro) return;
       const now = Date.now();
       if (!force && now - lastRefreshTime.current < 30000) return;
       if (!silent) setLoading(true);
       try {
-        setList(await fetchReadyCampusItems());
+        setList(await fetchReadyCampusItems(keyword));
         lastRefreshTime.current = Date.now();
       } catch (e: any) {
         console.error("加载校园食堂失败:", e);
@@ -260,6 +278,7 @@ function CampusCanteenPage() {
     [
       fetchReadyCampusItems,
       membershipStatus?.is_pro,
+      appliedSearchKeyword,
     ],
   );
 
@@ -289,6 +308,9 @@ function CampusCanteenPage() {
     selectedSchool,
     selectedCampus,
     selectedCanteen,
+    floorName,
+    selectedWindow?.id,
+    appliedSearchKeyword,
   ]);
 
   useEffect(() => {
@@ -338,24 +360,21 @@ function CampusCanteenPage() {
   }, [loadList]);
 
   const handleSearch = () => {
-    // 校园食堂列表中搜索：复用 merchant_name 参数做食物名搜索
     const kw = searchKeyword.trim();
     if (!isCampusMember) return;
-    if (!kw) {
-      loadList(false, true);
+    lastRefreshTime.current = 0;
+    if (kw === appliedSearchKeyword) {
+      void loadList(false, true, kw);
       return;
     }
-    setLoading(true);
-    fetchReadyCampusItems(kw)
-      .then((items) => {
-        setList(items);
-      })
-      .catch(async (e: any) => {
-        await showUnifiedApiError(e, "搜索失败");
-      })
-      .finally(() => {
-        setLoading(false);
-      });
+    setAppliedSearchKeyword(kw);
+  };
+
+  const clearSearch = () => {
+    setSearchKeyword("");
+    if (!appliedSearchKeyword) return;
+    lastRefreshTime.current = 0;
+    setAppliedSearchKeyword("");
   };
 
   const handleLocationFeedback = async () => {
@@ -455,6 +474,25 @@ function CampusCanteenPage() {
   };
 
   const selectedSchoolName = selectedSchool?.name || "选择学校";
+  const hasActiveFilters = Boolean(
+    selectedSchool ||
+      selectedCampus ||
+      selectedCanteen ||
+      floorName ||
+      selectedWindow ||
+      appliedSearchKeyword,
+  );
+  const clearFilters = () => {
+    lastRefreshTime.current = 0;
+    setSearchKeyword("");
+    setAppliedSearchKeyword("");
+    setSelectedSchool(null);
+    setSelectedCampus(null);
+    setSelectedCanteen(null);
+    setSelectedWindow(null);
+    setFloorName("");
+    setWindowName("");
+  };
   const visibleList = useMemo(() => {
     const floorKeyword = normalizeText(floorName);
     const windowKeyword = normalizeText(windowName);
@@ -753,6 +791,17 @@ function CampusCanteenPage() {
 
         {/* 头部筛选区 */}
         <View className='campus-header'>
+          <View className='filter-guide'>
+            <View>
+              <Text className='filter-guide-title'>按地点筛选</Text>
+              <Text className='filter-guide-hint'>学校、校区、食堂、楼层、窗口</Text>
+            </View>
+            {hasActiveFilters && (
+              <Text className='filter-clear-btn' onClick={clearFilters}>
+                清除筛选
+              </Text>
+            )}
+          </View>
           <View className='filter-row filter-row--equal'>
             <View
               className='filter-chip filter-chip--entity'
@@ -791,7 +840,7 @@ function CampusCanteenPage() {
               <Text className='search-input-icon iconfont icon-sousuo' />
               <Input
                 className='search-input'
-                placeholder='搜索菜名'
+                placeholder='搜菜名、学校、食堂或地点'
                 value={searchKeyword}
                 onInput={(e) => setSearchKeyword(e.detail.value)}
                 onConfirm={handleSearch}
@@ -801,6 +850,16 @@ function CampusCanteenPage() {
               搜索
             </Button>
           </View>
+          {appliedSearchKeyword && (
+            <View className='search-active-row'>
+              <Text className='search-active-text'>
+                正在搜索“{appliedSearchKeyword}”
+              </Text>
+              <Text className='search-active-clear' onClick={clearSearch}>
+                清除搜索
+              </Text>
+            </View>
+          )}
           <View className='campus-feedback-row' onClick={() => void handleLocationFeedback()}>
             <Text className='iconfont icon-edit campus-feedback-icon' />
             <Text className='campus-feedback-text'>学校、校区或食堂信息有误？点击反馈</Text>
@@ -809,6 +868,7 @@ function CampusCanteenPage() {
 
         {/* 排序区 */}
         <View className='sort-section'>
+          <Text className='sort-label'>排序</Text>
           <View
             className={`sort-item ${sortBy === "hot" ? "active" : ""}`}
             onClick={() => setSortBy("hot")}

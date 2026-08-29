@@ -12,12 +12,24 @@ describe('pet builtin avatar assets', () => {
   )
 
   it.each([
-    ['xiaomai-01', 'xiaomai-01.webp'],
-    ['doudou-01', 'doudou-01.webp'],
-  ])('registers %s with a bundled image', (avatarID, filename) => {
+    ['jianwen-01', 'jianwen-01-idle.png'],
+    ['huatuo-01', 'huatuo-01.png'],
+    ['taiji-xiaozi-01', 'taiji-xiaozi-01.png'],
+    ['xiaomai-01', 'xiaomai-01.png'],
+    ['doudou-01', 'doudou-01.png'],
+  ])('registers %s with a locally compatible PNG image', (avatarID, filename) => {
     expect(componentSource).toContain(`'${avatarID}'`)
     expect(componentSource).toContain(`/assets/pets/${filename}`)
     expect(fs.existsSync(path.resolve(__dirname, `../../src/assets/pets/${filename}`))).toBe(true)
-    expect(buildConfigSource).toContain(`'xiaomai-01', 'doudou-01'`)
+  })
+
+  it('does not use local WebP files for builtin avatars', () => {
+    expect(componentSource).not.toMatch(/\/assets\/pets\/[^'"`]+\.webp/)
+    expect(buildConfigSource).not.toMatch(/src\/assets\/pets\/[^'"`]+\.webp/)
+  })
+
+  it('copies the compatible PNG files into the mini-program package', () => {
+    expect(buildConfigSource).toContain('src/assets/pets/jianwen-01-${frame}.png')
+    expect(buildConfigSource).toContain('src/assets/pets/${avatar}.png')
   })
 })

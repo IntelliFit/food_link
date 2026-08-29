@@ -2904,11 +2904,13 @@ function ResultPage() {
           <View className='ingredients-section'>
             <View className='section-title-row'>
               <View className='section-title-group'>
-                <Text className='section-title'>包含成分</Text>
+                <Text className='section-title'>食物明细</Text>
                 <Text className='section-count'>({nutritionItems.length}种)</Text>
               </View>
               <Text className='quick-ratio-btn' onClick={() => setQuickRatioSheetVisible(true)}>快捷比例</Text>
             </View>
+
+            <Text className='section-ratio-hint'>每种食物可单独调整实际食用比例</Text>
 
             <View className='ingredients-list'>
               {nutritionItems.map((item) => {

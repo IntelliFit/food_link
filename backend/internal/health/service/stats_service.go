@@ -45,7 +45,9 @@ type StatsRepo interface {
 	GetCustomFocusCard(ctx context.Context, userID, rangeType, focusID string) (*domain.CustomFocusCard, error)
 	CountCustomFocusGenerationsToday(ctx context.Context, userID string) (int64, error)
 	CountCustomFocusGenerationsTodayForFocus(ctx context.Context, userID, focusID string) (int64, error)
-	GetDietRecommendationCandidates(ctx context.Context, userID string, scene string, limit int) ([]domain.DietRecommendationCandidate, error)
+	GetDietRecommendationCandidates(ctx context.Context, userID string, scene string, scope domain.DietRecommendationScope, limit int) ([]domain.DietRecommendationCandidate, error)
+	SearchCampusDietCandidates(ctx context.Context, filter domain.CampusDietSearchFilter) ([]domain.DietRecommendationCandidate, int64, error)
+	ResolveDietRecommendationSchool(ctx context.Context, question string) (*domain.DietRecommendationSchool, error)
 	CreatePetChatSession(ctx context.Context, session domain.PetChatSession) (*domain.PetChatSession, error)
 	GetPetChatSession(ctx context.Context, userID, sessionID string) (*domain.PetChatSession, error)
 	GetPetChatSessionMessages(ctx context.Context, userID, sessionID string, limit int) ([]domain.PetChatMessage, error)
@@ -287,10 +289,11 @@ type statsInsightGeneration struct {
 }
 
 type PetChatInput struct {
-	Question   string `json:"question"`
-	Range      string `json:"range"`
-	SessionID  string `json:"session_id"`
-	NewSession bool   `json:"new_session"`
+	Question       string `json:"question"`
+	Range          string `json:"range"`
+	SessionID      string `json:"session_id"`
+	NewSession     bool   `json:"new_session"`
+	EnableThinking bool   `json:"enable_thinking"`
 }
 
 type PetChatEstimateResult struct {
@@ -363,22 +366,26 @@ type PetChatAppendInput struct {
 	Messages  []PetChatAppendMessage `json:"messages"`
 }
 
+type PetChatStreamMeta struct {
+	SessionID          string                 `json:"session_id"`
+	UserMessageID      string                 `json:"user_message_id,omitempty"`
+	AssistantMessageID string                 `json:"assistant_message_id,omitempty"`
+	Range              string                 `json:"range"`
+	RangeLabel         string                 `json:"range_label"`
+	RecordedDays       int                    `json:"recorded_days"`
+	CreditsCharged     int                    `json:"credits_charged"`
+	BillingStatus      string                 `json:"billing_status"`
+	AIUsagePricing     *billing.PricingResult `json:"ai_usage_pricing,omitempty"`
+	EstimatedPricing   billing.PricingResult  `json:"estimated_pricing"`
+}
+
 type PetChatStreamChunk struct {
-	Type  string `json:"type"`
-	Text  string `json:"text,omitempty"`
-	Error string `json:"error,omitempty"`
-	Meta  *struct {
-		SessionID          string                 `json:"session_id"`
-		UserMessageID      string                 `json:"user_message_id,omitempty"`
-		AssistantMessageID string                 `json:"assistant_message_id,omitempty"`
-		Range              string                 `json:"range"`
-		RangeLabel         string                 `json:"range_label"`
-		RecordedDays       int                    `json:"recorded_days"`
-		CreditsCharged     int                    `json:"credits_charged"`
-		BillingStatus      string                 `json:"billing_status"`
-		AIUsagePricing     *billing.PricingResult `json:"ai_usage_pricing,omitempty"`
-		EstimatedPricing   billing.PricingResult  `json:"estimated_pricing"`
-	} `json:"meta,omitempty"`
+	Type       string                   `json:"type"`
+	Text       string                   `json:"text,omitempty"`
+	Error      string                   `json:"error,omitempty"`
+	Progress   *CampusDietAgentProgress `json:"progress,omitempty"`
+	DietResult *CampusDietAgentResult   `json:"diet_result,omitempty"`
+	Meta       *PetChatStreamMeta       `json:"meta,omitempty"`
 }
 
 func (s *StatsService) GetSummary(ctx context.Context, userID string, statsRange string, fallbackTDEE int, fallbackStreakDays int) (*StatsSummary, error) {
@@ -443,15 +450,67 @@ func (s *StatsService) GetSummary(ctx context.Context, userID string, statsRange
 	}, nil
 }
 
-// GetOverallHealthIndexScore exposes the same aggregate score used by the
-// Analysis page without generating AI copy or maintaining a second formula.
-func (s *StatsService) GetOverallHealthIndexScore(ctx context.Context, userID, statsRange string) (int, int, bool, error) {
-	comp, err := s.buildStatsComputation(ctx, userID, statsRange, 0, 0)
-	if err != nil {
-		return 0, 0, false, err
+const healthLeaderboardMinRecordedDays = 4
+
+type weeklyHealthLeaderboardScore struct {
+	Score             float64
+	RecordedDays      int
+	DietQualityPoints float64
+	ContinuityPoints  float64
+	StabilityPoints   float64
+	Eligible          bool
+}
+
+func computeWeeklyHealthLeaderboardScore(comp *statsComputation, overallScore int, now time.Time) weeklyHealthLeaderboardScore {
+	if comp == nil {
+		return weeklyHealthLeaderboardScore{}
 	}
-	index := computeHealthIndex(comp, statsRange)
-	return index.OverallScore, comp.RecordedDays, index.HasEnoughData, nil
+
+	dietQualityPoints := round1(math.Max(0, math.Min(100, float64(overallScore))) * 0.75)
+	elapsedDays := (int(now.In(chinaTZ).Weekday())+6)%7 + 1
+	continuityRatio := math.Min(float64(comp.RecordedDays)/float64(elapsedDays), 1)
+	continuityPoints := round1(continuityRatio * 15)
+
+	stabilityPoints := 0.0
+	if len(comp.RecordedDaily) > 0 {
+		mean := 0.0
+		for _, day := range comp.RecordedDaily {
+			mean += day.Calories
+		}
+		mean /= float64(len(comp.RecordedDaily))
+		if mean > 0 {
+			variance := 0.0
+			for _, day := range comp.RecordedDaily {
+				delta := day.Calories - mean
+				variance += delta * delta
+			}
+			variance /= float64(len(comp.RecordedDaily))
+			coefficientOfVariation := math.Sqrt(variance) / mean
+			stabilityPoints = round1(math.Max(0, 10*(1-coefficientOfVariation)))
+		}
+	}
+
+	return weeklyHealthLeaderboardScore{
+		Score:             round1(dietQualityPoints + continuityPoints + stabilityPoints),
+		RecordedDays:      comp.RecordedDays,
+		DietQualityPoints: dietQualityPoints,
+		ContinuityPoints:  continuityPoints,
+		StabilityPoints:   stabilityPoints,
+		Eligible:          comp.RecordedDays >= healthLeaderboardMinRecordedDays,
+	}
+}
+
+// GetWeeklyHealthLeaderboardScore keeps 75% of the existing dietary-quality
+// signal and uses the remaining 25 points to reward weekly continuity and
+// day-to-day stability. It does not generate AI copy.
+func (s *StatsService) GetWeeklyHealthLeaderboardScore(ctx context.Context, userID string) (score float64, recordedDays int, dietQualityPoints, continuityPoints, stabilityPoints float64, eligible bool, err error) {
+	comp, err := s.buildStatsComputation(ctx, userID, "calendar_week", 0, 0)
+	if err != nil {
+		return 0, 0, 0, 0, 0, false, err
+	}
+	index := computeHealthIndex(comp, "calendar_week")
+	result := computeWeeklyHealthLeaderboardScore(comp, index.OverallScore, time.Now())
+	return result.Score, result.RecordedDays, result.DietQualityPoints, result.ContinuityPoints, result.StabilityPoints, result.Eligible, nil
 }
 
 func (s *StatsService) GetCalendarMonth(ctx context.Context, userID, month string, fallbackTDEE int) (*CalendarMonthSummary, error) {
@@ -752,7 +811,7 @@ func (s *StatsService) GeneratePetChat(ctx context.Context, userID string, input
 		)
 		historyMessages = nil
 	}
-	generation, err := s.generatePetChatAnswer(ctx, comp, estimate.Question, historyMessages)
+	generation, err := s.generatePetChatAnswer(ctx, comp, estimate.Question, historyMessages, input.EnableThinking)
 	if err != nil {
 		logger.Warn(ctx, "宠物对话大模型生成失败",
 			logger.UserID(userID),
@@ -810,6 +869,9 @@ func (s *StatsService) GeneratePetChat(ctx context.Context, userID string, input
 }
 
 func (s *StatsService) GeneratePetChatStream(ctx context.Context, userID string, input PetChatInput) (<-chan PetChatStreamChunk, error) {
+	if s.shouldUseCampusDietAgent(ctx, userID, input) {
+		return s.GenerateCampusDietAgentStream(ctx, userID, input)
+	}
 	requestStarted := time.Now()
 	estimate, comp, err := s.preparePetChat(ctx, userID, input)
 	if err != nil {
@@ -853,7 +915,7 @@ func (s *StatsService) GeneratePetChatStream(ctx context.Context, userID string,
 		} else {
 			prompt := buildPetChatPrompt(comp, estimate.Question, historyMessages)
 			modelStarted := time.Now()
-			textChan, err := s.streamNutritionInsight(ctx, baseURL, apiKey, model, prompt, petChatMaxTokens)
+			textChan, err := s.streamNutritionInsight(ctx, baseURL, apiKey, model, prompt, petChatMaxTokens, input.EnableThinking)
 			if err != nil {
 				streamErr = err
 			} else {
@@ -954,18 +1016,7 @@ func (s *StatsService) GeneratePetChatStream(ctx context.Context, userID string,
 		)
 		chunkChan <- PetChatStreamChunk{
 			Type: "done",
-			Meta: &struct {
-				SessionID          string                 `json:"session_id"`
-				UserMessageID      string                 `json:"user_message_id,omitempty"`
-				AssistantMessageID string                 `json:"assistant_message_id,omitempty"`
-				Range              string                 `json:"range"`
-				RangeLabel         string                 `json:"range_label"`
-				RecordedDays       int                    `json:"recorded_days"`
-				CreditsCharged     int                    `json:"credits_charged"`
-				BillingStatus      string                 `json:"billing_status"`
-				AIUsagePricing     *billing.PricingResult `json:"ai_usage_pricing,omitempty"`
-				EstimatedPricing   billing.PricingResult  `json:"estimated_pricing"`
-			}{
+			Meta: &PetChatStreamMeta{
 				SessionID:          session.ID,
 				UserMessageID:      userMessageID,
 				AssistantMessageID: assistantMessageID,
@@ -1226,7 +1277,7 @@ func (s *StatsService) SaveInsight(ctx context.Context, userID string, content s
 	return s.repo.UpsertInsightCache(ctx, userID, comp.StatsRange, today, comp.DataFingerprint, sanitizeStatsInsightText(content))
 }
 
-func (s *StatsService) generatePetChatAnswer(ctx context.Context, comp *statsComputation, question string, historyMessages []domain.PetChatMessage) (statsInsightGeneration, error) {
+func (s *StatsService) generatePetChatAnswer(ctx context.Context, comp *statsComputation, question string, historyMessages []domain.PetChatMessage, enableThinking bool) (statsInsightGeneration, error) {
 	llm := s.preferredTextLLM()
 	apiKey := llm.APIKey
 	baseURL := llm.BaseURL
@@ -1238,7 +1289,9 @@ func (s *StatsService) generatePetChatAnswer(ctx context.Context, comp *statsCom
 	var lastErr error
 	var retryFeedback string
 	for attempt := 0; attempt < statsInsightMaxAttempts; attempt++ {
-		generation, err := s.requestNutritionInsight(ctx, baseURL, apiKey, model, prompt, retryFeedback, petChatMaxTokens)
+		generation, err := s.requestNutritionInsight(ctx, baseURL, apiKey, model, prompt, retryFeedback, petChatMaxTokens, map[string]any{
+			"enable_thinking": enableThinking,
+		})
 		if err != nil {
 			lastErr = err
 			break
@@ -1482,10 +1535,10 @@ func (s *StatsService) generateNutritionInsight(ctx context.Context, comp *stats
 	return statsInsightGeneration{}, fmt.Errorf("文本模型返回了空响应")
 }
 
-func (s *StatsService) requestNutritionInsight(ctx context.Context, baseURL, apiKey, model, prompt, retryFeedback string, maxTokens int) (statsInsightGeneration, error) {
+func (s *StatsService) requestNutritionInsight(ctx context.Context, baseURL, apiKey, model, prompt, retryFeedback string, maxTokens int, extraBody ...map[string]any) (statsInsightGeneration, error) {
 	var lastErr error
 	for attempt := 1; attempt <= statsInsightNetworkMaxAttempts; attempt++ {
-		generation, err := s.requestNutritionInsightOnce(ctx, baseURL, apiKey, model, prompt, retryFeedback, maxTokens)
+		generation, err := s.requestNutritionInsightOnce(ctx, baseURL, apiKey, model, prompt, retryFeedback, maxTokens, extraBody...)
 		if err == nil {
 			return generation, nil
 		}
@@ -1512,7 +1565,7 @@ func (s *StatsService) requestNutritionInsight(ctx context.Context, baseURL, api
 	return statsInsightGeneration{}, lastErr
 }
 
-func (s *StatsService) requestNutritionInsightOnce(ctx context.Context, baseURL, apiKey, model, prompt, retryFeedback string, maxTokens int) (statsInsightGeneration, error) {
+func (s *StatsService) requestNutritionInsightOnce(ctx context.Context, baseURL, apiKey, model, prompt, retryFeedback string, maxTokens int, extraBody ...map[string]any) (statsInsightGeneration, error) {
 	messages := []map[string]string{
 		{"role": "user", "content": prompt},
 	}
@@ -1525,6 +1578,11 @@ func (s *StatsService) requestNutritionInsightOnce(ctx context.Context, baseURL,
 		"temperature": 0.6,
 		"max_tokens":  maxTokens,
 		"stream":      false,
+	}
+	if len(extraBody) > 0 {
+		for key, value := range extraBody[0] {
+			body[key] = value
+		}
 	}
 	bodyBytes, _ := json.Marshal(body)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/chat/completions", bytes.NewReader(bodyBytes))
@@ -1619,13 +1677,14 @@ func isTransientStatsInsightError(err error) bool {
 	return false
 }
 
-func (s *StatsService) streamNutritionInsight(ctx context.Context, baseURL, apiKey, model, prompt string, maxTokens int) (<-chan string, error) {
+func (s *StatsService) streamNutritionInsight(ctx context.Context, baseURL, apiKey, model, prompt string, maxTokens int, enableThinking bool) (<-chan string, error) {
 	body := map[string]any{
-		"model":       model,
-		"messages":    []map[string]string{{"role": "user", "content": prompt}},
-		"temperature": 0.6,
-		"max_tokens":  maxTokens,
-		"stream":      true,
+		"model":           model,
+		"messages":        []map[string]string{{"role": "user", "content": prompt}},
+		"temperature":     0.6,
+		"max_tokens":      maxTokens,
+		"stream":          true,
+		"enable_thinking": enableThinking,
 	}
 	bodyBytes, _ := json.Marshal(body)
 	var resp *http.Response
@@ -2088,9 +2147,9 @@ func buildPetChatPrompt(comp *statsComputation, question string, historyMessages
 %s
 
 回答要求：
-1. 先直接回应用户当前问题，再结合数据做简短分析，最后给出 1-2 个明天可以尝试的小建议。
-2. 优先结合饮食记录、营养数据、运动记录和最近对话；关注长期变化，不只评价单次饮食。发现稳定趋势或历史习惯时，可以自然地说“我发现你最近……”或“我们之前聊过……”，但只能引用实际提供的数据和历史，不能假装记得不存在的内容。
-3. 温暖、亲近、有陪伴感，但不要装可爱过头。多使用“我们可以”“一起试试”“明天先试试”，少用命令式表达。
+1. 先直接回答用户当前的问题，再按实际需要补充数据依据或追问；不要为了显得完整而固定拼出“回应、分析、建议”三段。
+2. 优先结合饮食记录、营养数据、运动记录和最近对话；关注长期变化，不只评价单次饮食。历史对话只用来理解事实、指代和用户偏好，不要模仿历史回复的标题、段落结构、开场白或结尾句。发现稳定趋势或历史习惯时，可以自然地提到，但只能引用实际提供的数据和历史，不能假装记得不存在的内容。
+3. 温暖、亲近、有陪伴感，但不要装可爱过头。建议采用合作式而非命令式表达，但句式应随上下文变化，不要反复使用同一句开场白、口头禅或结尾。
 4. 不批评、不制造焦虑。不要调侃、挖苦、训话、责备、阴阳怪气或评价用户本人；避免“你这”“坎儿”“别一口气这么猛”“管不住嘴”“不争气”等表达。
 5. 用户完成目标、数据改善或习惯有进步时，要具体指出进步并主动鼓励；饮食偏离目标时不要指责，帮助寻找下一步调整方法。
 6. 必须结合可用的健康档案、身体指标、饮食目标、活动水平、训练摘要、作息、病史、过敏、忌口、体检摘要和用户当前关注。没有对应数据时明确说“目前记录还不足”或“这部分只能推测”，不编造。
@@ -2098,7 +2157,10 @@ func buildPetChatPrompt(comp *statsComputation, question string, historyMessages
 8. 用户提到微量元素、维生素、矿物质、钙、铁、锌、钠钾或膳食纤维时，优先引用微量营养线索；字段缺失时说明是当前记录字段不足。
 9. 当前追问很短时，例如“为什么”“有什么关系”“只看微量元素”，要从最近对话中还原指代后回答，不要只说“我们继续刚才的话题”。
 10. 不进行医学诊断，不提供治疗结论，不自称医生、营养师、专业营养师、注册营养师或持证营养师。
-11. 使用适合聊天气泡的纯文本，控制在 250-450 字。可用“一句话回应”“结合记录看”“明天一起试试”这类自然短标题；不要 Markdown、JSON、代码块或表格，不要输出 #、*、**、_、反引号等格式符号。
+11. 根据问题复杂度自由选择 1-3 个自然段。短问、事实问答或简短追问通常用 80-180 字；需要结合多项数据分析或制定计划时用 180-350 字。默认不使用标题；只有信息确实需要分层时才使用与当前问题直接相关的短标题，不要提供固定栏目名或示例标题。
+12. 只有用户在询问怎么做、要求制定计划，或数据显示存在明确且可执行的改进点时，才给出 1-2 条行动建议。事实问答、简短追问、情绪表达或数据不足时不强行加建议；时间范围跟随用户问题，不固定设为第二天。
+13. 对缺失记录要说“当前记录里没有”，不要推断用户实际没吃、没训练或没有某个习惯。必要时用一句自然的追问补齐关键信息。
+14. 使用适合聊天气泡的纯文本；不要 Markdown、JSON、代码块或表格，不要输出 #、*、**、_、反引号等格式符号。
 `,
 		companion.Name,
 		companion.Personality,
@@ -2204,11 +2266,45 @@ func buildPetChatHistoryPromptBlock(messages []domain.PetChatMessage) string {
 			role = "宠物"
 		}
 		lines = append(lines, fmt.Sprintf("- %s：%s", role, trimStatsRunes(content, 220)))
+		if structured := petChatStructuredDietHistoryLine(msg); structured != "" {
+			lines = append(lines, structured)
+		}
 	}
 	if len(lines) == 0 {
 		return "无历史对话。"
 	}
 	return strings.Join(lines, "\n")
+}
+
+func petChatStructuredDietHistoryLine(message domain.PetChatMessage) string {
+	if message.MessageType != "diet_recommendation" || len(message.Meta) == 0 {
+		return ""
+	}
+	raw, ok := message.Meta["diet_recommendation"]
+	if !ok || raw == nil {
+		return ""
+	}
+	encoded, err := json.Marshal(raw)
+	if err != nil {
+		return ""
+	}
+	var result DietRecommendationResult
+	if err := json.Unmarshal(encoded, &result); err != nil || len(result.Recommendations) == 0 {
+		return ""
+	}
+	items := make([]string, 0, 5)
+	for _, option := range result.Recommendations {
+		if len(items) >= 5 {
+			break
+		}
+		location := strings.Join(compactDietStrings(option.CanteenName, option.Floor, option.WindowName), "/")
+		items = append(items, fmt.Sprintf("%s[source_id=%s, %.1fkcal, 蛋白%.1fg, 碳水%.1fg, 脂肪%.1fg, 位置=%s]",
+			option.Title, option.SourceID, option.Calories, option.Protein, option.Carbs, option.Fat, defaultIfEmpty(location, "未记录")))
+	}
+	if len(items) == 0 {
+		return ""
+	}
+	return "  结构化校园餐证据（只能据此引用）：" + strings.Join(items, "；")
 }
 
 func normalizePetChatQuestion(question string) string {
@@ -2260,7 +2356,7 @@ func fallbackPetChatAnswer(comp *statsComputation, question string) string {
 			exerciseHint += fmt.Sprintf("，总时长约 %d 分钟", comp.ExerciseSummary.TotalDurationMin)
 		}
 	}
-	return fmt.Sprintf("我先用本地统计给你一个轻量判断：你问的是“%s”。%s里共有 %d 天饮食记录，日均摄入约 %.0f kcal，和日常消耗估算相差 %+.0f kcal。蛋白质总量 %.1fg、碳水 %.1fg、脂肪 %.1fg%s%s。\n\n这次没有调用到深度模型，所以我只能先看大方向：如果你感觉训练状态下滑，优先检查训练日前后有没有稳定主食、总热量是不是连续偏低、蛋白质是不是分散到每餐。明天可以先做一个小实验：训练前补一份主食，训练后补蛋白和碳水，然后记录体感。", question, statsRangeLabel(comp.StatsRange), comp.RecordedDays, comp.AvgCaloriesPerDay, comp.CalSurplusDeficit, comp.TotalProtein, comp.TotalCarbs, comp.TotalFat, microHint, exerciseHint)
+	return fmt.Sprintf("从%s的记录看，目前有 %d 天饮食数据，日均摄入约 %.0f kcal，和日常消耗估算相差 %+.0f kcal。蛋白质总量 %.1fg、碳水 %.1fg、脂肪 %.1fg%s%s。\n\n这次深度分析暂时不可用，我先只说记录里能确定的大方向。如果你想继续细化“%s”，可以再告诉我最想解决的具体问题。", statsRangeLabel(comp.StatsRange), comp.RecordedDays, comp.AvgCaloriesPerDay, comp.CalSurplusDeficit, comp.TotalProtein, comp.TotalCarbs, comp.TotalFat, microHint, exerciseHint, question)
 }
 
 func fallbackStatsInsight(comp *statsComputation) string {

@@ -1138,6 +1138,7 @@ func TestAnalyzeService_AnalyzeText(t *testing.T) {
 	result, err := svc.AnalyzeText(ctx, "", AnalyzeInput{Text: "一碗米饭"})
 	require.NoError(t, err)
 	assert.Equal(t, "text test", result["description"])
+	assert.Equal(t, true, mapFromAny(result["precise_micronutrients"])["requested"])
 	assert.Equal(t, 1, qwenClient.calls)
 	assert.Equal(t, 0, doubaoClient.calls)
 }
@@ -1955,8 +1956,10 @@ func TestAnalyzeService_AnalyzeImageFallsBackToQwenWithoutRetryingTimedOutGemini
 
 	require.NoError(t, err)
 	assert.Equal(t, "千问快速回退", result["description"])
-	assert.Equal(t, 1, geminiClient.calls)
-	assert.Equal(t, 1, qwenClient.calls)
+	// 完整微量元素固定开启，因此主识别和微量补全各发起一次独立调用；
+	// 两个阶段都应直接回退千问，不能在同一阶段重试超时的 Gemini。
+	assert.Equal(t, 2, geminiClient.calls)
+	assert.Equal(t, 2, qwenClient.calls)
 }
 
 func TestAnalyzeService_RunPrecisionJSONUsesDedicatedGemini35Client(t *testing.T) {
@@ -2258,13 +2261,13 @@ func mixedMealWithSugarfreePackagedDrinkParsed() map[string]any {
 	}
 }
 
-func TestAnalyzeService_FinalizeAnalyzeResponseIntegratesPackagedFoodAcrossMainModes(t *testing.T) {
+func TestAnalyzeService_FinalizeAnalyzeResponseIntegratesPackagedFoodWithDatabaseEngineAcrossMainModes(t *testing.T) {
 	for _, mode := range []string{fastExecutionMode, defaultExecutionMode, precisionExecutionMode, precisionSeparateExecutionMode} {
 		t.Run(mode, func(t *testing.T) {
 			svc := NewAnalyzeService(&mockLLMClient{}, &mockLLMClient{}, nil)
 			svc.nutrition = newFakeAnalyzeNutritionResolver()
 
-			resp, err := svc.finalizeAnalyzeResponse(context.Background(), "", mixedMealWithPackagedFoodParsed(), AnalyzeInput{}, mode, "fake", "fake-model", 12)
+			resp, err := svc.finalizeAnalyzeResponse(context.Background(), "", mixedMealWithPackagedFoodParsed(), AnalyzeInput{AnalysisEngine: analysisEngineAIThenDBExact}, mode, "fake", "fake-model", 12)
 			require.NoError(t, err)
 
 			items := toItems(resp["items"])
@@ -2276,7 +2279,7 @@ func TestAnalyzeService_FinalizeAnalyzeResponseIntegratesPackagedFoodAcrossMainM
 			assert.Equal(t, "packaged_food_library", items[1]["nutrition_source"])
 			assert.Equal(t, "pkg-taoli-dousha", items[1]["matched_food_id"])
 			assert.Equal(t, 55.0, items[1]["estimatedWeightGrams"])
-			assert.Equal(t, 55.0, items[1]["grossWeightGrams"])
+			assert.Equal(t, 80.0, items[1]["grossWeightGrams"], "标准库校准只修正计算重量，保留视觉识别的原始毛重")
 			assert.Equal(t, true, items[1]["package_weight_applied"])
 			nutrients := items[1]["nutrients"].(map[string]any)
 			assert.Equal(t, 176.0, nutrients["calories"])
@@ -2291,7 +2294,7 @@ func TestAnalyzeService_FinalizeAnalyzeResponseIntegratesPackagedFoodAcrossMainM
 	}
 }
 
-func TestAnalyzeService_FinalizeAnalyzeResponseIntegratesSugarfreePackagedDrinkAcrossModes(t *testing.T) {
+func TestAnalyzeService_FinalizeAnalyzeResponseIntegratesSugarfreePackagedDrinkWithDatabaseEngineAcrossModes(t *testing.T) {
 	modes := []string{
 		fastExecutionMode,
 		defaultExecutionMode,
@@ -2312,7 +2315,7 @@ func TestAnalyzeService_FinalizeAnalyzeResponseIntegratesSugarfreePackagedDrinkA
 			svc := NewAnalyzeService(&mockLLMClient{}, ratioClient, nil)
 			svc.nutrition = newFakeAnalyzeNutritionResolver()
 
-			resp, err := svc.finalizeAnalyzeResponse(context.Background(), "", mixedMealWithSugarfreePackagedDrinkParsed(), AnalyzeInput{SuggestRatioEnabled: true, RemainingCalories: floatPtr(100)}, mode, "fake", "fake-model", 12)
+			resp, err := svc.finalizeAnalyzeResponse(context.Background(), "", mixedMealWithSugarfreePackagedDrinkParsed(), AnalyzeInput{SuggestRatioEnabled: true, RemainingCalories: floatPtr(100), AnalysisEngine: analysisEngineAIThenDBExact}, mode, "fake", "fake-model", 12)
 			require.NoError(t, err)
 
 			assert.Equal(t, 2, resp["resolved_count"])
@@ -2349,7 +2352,7 @@ func TestAnalyzeService_FinalizeAnalyzeResponseIntegratesSugarfreePackagedDrinkA
 	}
 }
 
-func TestAnalyzeService_AnalyzeImageIntegratesPackagedFoodAcrossMainModes(t *testing.T) {
+func TestAnalyzeService_AnalyzeImageIntegratesPackagedFoodWithDatabaseEngineAcrossMainModes(t *testing.T) {
 	for _, mode := range []string{fastExecutionMode, defaultExecutionMode, precisionExecutionMode, precisionSeparateExecutionMode} {
 		t.Run(mode, func(t *testing.T) {
 			modelClient := &mockLLMClient{result: mixedMealWithPackagedFoodParsed()}
@@ -2360,20 +2363,15 @@ func TestAnalyzeService_AnalyzeImageIntegratesPackagedFoodAcrossMainModes(t *tes
 
 			modeValue := mode
 			resp, err := svc.Analyze(context.Background(), "", AnalyzeInput{
-				ImageURL:      "https://example.com/mixed-meal.jpg",
-				ExecutionMode: &modeValue,
+				ImageURL:       "https://example.com/mixed-meal.jpg",
+				ExecutionMode:  &modeValue,
+				AnalysisEngine: analysisEngineAIThenDBExact,
 			})
 			require.NoError(t, err)
 
 			items := toItems(resp["items"])
 			require.Len(t, items, 2)
-			expectedFirstSource := "library_exact_canonical"
-			if mode == fastExecutionMode {
-				expectedFirstSource = analysisEngineAIDirect
-			} else if isPrecisionLikeExecutionMode(mode) {
-				expectedFirstSource = analysisEngineDBCandidates
-			}
-			assert.Equal(t, expectedFirstSource, items[0]["nutrition_source"])
+			assert.Equal(t, "library_exact_canonical", items[0]["nutrition_source"])
 			assert.Equal(t, "packaged_food_library", items[1]["nutrition_source"])
 			assert.Equal(t, "pkg-taoli-dousha", items[1]["matched_food_id"])
 			assert.Equal(t, 55.0, items[1]["estimatedWeightGrams"])
@@ -2388,7 +2386,7 @@ func TestAnalyzeService_AnalyzeImageIntegratesPackagedFoodAcrossMainModes(t *tes
 	}
 }
 
-func TestAnalyzeService_AnalyzeImageIntegratesPackagedFoodAcrossWebSearchModes(t *testing.T) {
+func TestAnalyzeService_AnalyzeImageIntegratesPackagedFoodWithDatabaseEngineAcrossWebSearchModes(t *testing.T) {
 	for _, mode := range []string{fastWebSearchMode, standardWebSearchMode, precisionWebSearchMode} {
 		t.Run(mode, func(t *testing.T) {
 			svc := NewAnalyzeService(&multiImageLLMClient{err: assert.AnError}, &multiImageLLMClient{result: mixedMealWithPackagedFoodParsed()}, nil)
@@ -2406,20 +2404,15 @@ func TestAnalyzeService_AnalyzeImageIntegratesPackagedFoodAcrossWebSearchModes(t
 
 			modeValue := mode
 			resp, err := svc.Analyze(context.Background(), "", AnalyzeInput{
-				ImageURL:      "https://example.com/mixed-meal.jpg",
-				ExecutionMode: &modeValue,
+				ImageURL:       "https://example.com/mixed-meal.jpg",
+				ExecutionMode:  &modeValue,
+				AnalysisEngine: analysisEngineAIThenDBExact,
 			})
 			require.NoError(t, err)
 
 			items := toItems(resp["items"])
 			require.Len(t, items, 2)
-			expectedFirstSource := "library_exact_canonical"
-			if mode == fastWebSearchMode {
-				expectedFirstSource = analysisEngineAIDirect
-			} else if mode == precisionWebSearchMode {
-				expectedFirstSource = analysisEngineDBCandidates
-			}
-			assert.Equal(t, expectedFirstSource, items[0]["nutrition_source"])
+			assert.Equal(t, "library_exact_canonical", items[0]["nutrition_source"])
 			assert.Equal(t, "packaged_food_library", items[1]["nutrition_source"])
 			assert.Equal(t, 55.0, items[1]["estimatedWeightGrams"])
 			assert.Equal(t, true, items[1]["package_weight_applied"])
@@ -2451,7 +2444,7 @@ func TestAnalyzeService_FinalizeAnalyzeResponseFallsBackWhenPackagedFoodMisses(t
 				"grossWeightGrams":     40.0,
 			},
 		},
-	}, AnalyzeInput{}, defaultExecutionMode, "fake", "fake-model", 12)
+	}, AnalyzeInput{AnalysisEngine: analysisEngineLegacyDBFirst}, defaultExecutionMode, "fake", "fake-model", 12)
 	require.NoError(t, err)
 
 	items := toItems(resp["items"])
@@ -2497,7 +2490,7 @@ func TestAnalyzeService_FinalizeAnalyzeResponseGeneratesNutritionWhenPackagedAnd
 				"grossWeightGrams":     30.0,
 			},
 		},
-	}, AnalyzeInput{AdditionalContext: "包装库未命中时允许 AI 保守估算"}, defaultExecutionMode, "fake", "fake-model", 12)
+	}, AnalyzeInput{AdditionalContext: "包装库未命中时允许 AI 保守估算", AnalysisEngine: analysisEngineLegacyDBFirst}, defaultExecutionMode, "fake", "fake-model", 12)
 	require.NoError(t, err)
 
 	items := toItems(resp["items"])
@@ -2557,7 +2550,7 @@ func TestAnalyzeService_FinalizeAnalyzeResponseFallsBackToQwenWhenDeepSeekFails(
 				"grossWeightGrams":     50.0,
 			},
 		},
-	}, AnalyzeInput{}, defaultExecutionMode, "fake", "fake-model", 12)
+	}, AnalyzeInput{AnalysisEngine: analysisEngineLegacyDBFirst}, defaultExecutionMode, "fake", "fake-model", 12)
 	require.NoError(t, err)
 
 	require.Len(t, deepseekFallback.candidates, 1)
@@ -2823,7 +2816,7 @@ func TestApplyPreciseMicronutrientsToResolvedItemsSkipsSecondDBResolution(t *tes
 	require.Equal(t, 232.0, mapFromAny(items[0]["nutrients"])["calories"])
 }
 
-func TestAnalyzeService_FinalizeFastModeUsesOnlyQwenPostprocessing(t *testing.T) {
+func TestAnalyzeService_FinalizeFastDatabaseModeUsesOnlyQwenPostprocessing(t *testing.T) {
 	resolver := newFakeAnalyzeNutritionResolver()
 	qwen := &sequenceLLMClient{results: []map[string]any{
 		{
@@ -2865,7 +2858,7 @@ func TestAnalyzeService_FinalizeFastModeUsesOnlyQwenPostprocessing(t *testing.T)
 			"estimatedWeightGrams": 30.0,
 			"grossWeightGrams":     30.0,
 		}},
-	}, AnalyzeInput{SuggestRatioEnabled: true, RemainingCalories: floatPtr(10)}, fastExecutionMode, "qwen", qwen36FlashModel, 6000)
+	}, AnalyzeInput{SuggestRatioEnabled: true, RemainingCalories: floatPtr(10), AnalysisEngine: analysisEngineLegacyDBFirst}, fastExecutionMode, "qwen", qwen36FlashModel, 6000)
 	require.NoError(t, err)
 
 	assert.Equal(t, int32(0), deepseekCalls.Load())
@@ -2905,7 +2898,7 @@ func TestAnalyzeService_FinalizeAnalyzeResponseAdjustsImplausibleFallbackCalorie
 				"grossWeightGrams":     50.0,
 			},
 		},
-	}, AnalyzeInput{}, defaultExecutionMode, "fake", "fake-model", 12)
+	}, AnalyzeInput{AnalysisEngine: analysisEngineLegacyDBFirst}, defaultExecutionMode, "fake", "fake-model", 12)
 	require.NoError(t, err)
 
 	items := toItems(resp["items"])
@@ -2936,7 +2929,7 @@ func TestAnalyzeService_FinalizeAnalyzeResponseAdjustsImplausibleLibraryCalories
 				"grossWeightGrams":     200.0,
 			},
 		},
-	}, AnalyzeInput{}, defaultExecutionMode, "fake", "fake-model", 12)
+	}, AnalyzeInput{AnalysisEngine: analysisEngineLegacyDBFirst}, defaultExecutionMode, "fake", "fake-model", 12)
 	require.NoError(t, err)
 
 	items := toItems(resp["items"])
@@ -3173,7 +3166,7 @@ func TestAnalyzeService_ApplyDBFirstToItemsUserCorrectionWeightWinsOverPackagedA
 	assert.Equal(t, 88.0, nutrients["calories"])
 }
 
-func TestAnalyzeService_FinalizeAnalyzeResponseKeepsPackagedWeightWithSuggestRatio(t *testing.T) {
+func TestAnalyzeService_FinalizeAnalyzeResponseKeepsPackagedWeightWithSuggestRatioAndDatabaseEngine(t *testing.T) {
 	modes := []string{
 		fastExecutionMode,
 		defaultExecutionMode,
@@ -3194,7 +3187,7 @@ func TestAnalyzeService_FinalizeAnalyzeResponseKeepsPackagedWeightWithSuggestRat
 			svc := NewAnalyzeService(&mockLLMClient{}, ratioClient, nil)
 			svc.nutrition = newFakeAnalyzeNutritionResolver()
 
-			resp, err := svc.finalizeAnalyzeResponse(context.Background(), "", mixedMealWithPackagedFoodParsed(), AnalyzeInput{SuggestRatioEnabled: true, RemainingCalories: floatPtr(100)}, mode, "fake", "fake-model", 12)
+			resp, err := svc.finalizeAnalyzeResponse(context.Background(), "", mixedMealWithPackagedFoodParsed(), AnalyzeInput{SuggestRatioEnabled: true, RemainingCalories: floatPtr(100), AnalysisEngine: analysisEngineAIThenDBExact}, mode, "fake", "fake-model", 12)
 			require.NoError(t, err)
 
 			assert.Equal(t, true, resp["suggest_ratio_enabled"])
@@ -3746,6 +3739,27 @@ func TestBuildGemini35GroupedPlanPromptIncludesIngredientsOutput(t *testing.T) {
 	assert.Contains(t, prompt, "ingredients")
 	assert.Contains(t, prompt, "ingredientsText")
 	assert.Contains(t, prompt, "nutritionPer100g")
+}
+
+func TestImageAnalysisPromptsSplitIndependentlyConsumableMealComponents(t *testing.T) {
+	input := AnalyzeInput{ImageURL: "https://example.com/beef-rice.jpg"}
+	prompts := map[string]string{
+		"standard_db_first": buildImageDBFirstPrompt(input, nil),
+		"lite_db_first":     buildLiteImageDBFirstPrompt(input, nil),
+		"gemini_direct":     buildGemini35ImageDBFirstPrompt(input, nil, "gemini35_flash"),
+		"gemini_group_plan": buildGemini35GroupedPlanPrompt(input, nil),
+		"strict":            buildPrompt(input, nil, validExecutionMode),
+		"direct_nutrition":  buildPrompt(AnalyzeInput{ImageURL: input.ImageURL, AnalysisEngine: analysisEngineAIDirect}, nil, defaultExecutionMode),
+	}
+
+	for name, prompt := range prompts {
+		t.Run(name, func(t *testing.T) {
+			assert.Contains(t, prompt, "可独立吃完或剩余")
+			assert.Contains(t, prompt, "牛肉、菜心、米饭")
+			assert.Contains(t, prompt, "分别输出为独立 item")
+			assert.NotContains(t, prompt, "混合菜无法可靠拆分时，作为一道常见菜名输出")
+		})
+	}
 }
 
 func TestParseItemsPreservesIngredients(t *testing.T) {

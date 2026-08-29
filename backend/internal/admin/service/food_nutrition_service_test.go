@@ -14,6 +14,7 @@ import (
 type foodNutritionRepoStub struct {
 	listInput repo.ListFoodNutritionInput
 	items     []domain.FoodNutrition
+	created   *domain.FoodNutrition
 }
 
 func (s *foodNutritionRepoStub) List(_ context.Context, input repo.ListFoodNutritionInput) (*repo.ListFoodNutritionResult, error) {
@@ -25,8 +26,9 @@ func (s *foodNutritionRepoStub) Get(context.Context, string) (*domain.FoodNutrit
 	return nil, nil
 }
 
-func (s *foodNutritionRepoStub) Create(context.Context, *domain.FoodNutrition) (*domain.FoodNutrition, error) {
-	return nil, nil
+func (s *foodNutritionRepoStub) Create(_ context.Context, item *domain.FoodNutrition) (*domain.FoodNutrition, error) {
+	s.created = item
+	return item, nil
 }
 
 func (s *foodNutritionRepoStub) Update(context.Context, string, repo.FoodNutritionPatch) (*domain.FoodNutrition, error) {
@@ -56,4 +58,23 @@ func TestFoodNutritionServiceListUsesSharedCategory(t *testing.T) {
 	require.Len(t, result.Items, 2)
 	assert.Equal(t, "vegetable", result.Items[0].Category)
 	assert.Equal(t, "protein", result.Items[1].Category)
+}
+
+func TestFoodNutritionServiceCreateInitializesStateTags(t *testing.T) {
+	t.Parallel()
+
+	repoStub := &foodNutritionRepoStub{}
+	svc := NewFoodNutritionService(repoStub, nil)
+
+	created, err := svc.Create(context.Background(), CreateFoodNutritionInput{
+		CanonicalName: "粥里香 黑米粥",
+		Source:        "mint_health_food_batch_003",
+		IsActive:      true,
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, created)
+	require.NotNil(t, repoStub.created)
+	assert.NotNil(t, repoStub.created.StateTags)
+	assert.Empty(t, repoStub.created.StateTags)
 }

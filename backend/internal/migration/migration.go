@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"database/sql"
 	_ "embed"
 	"encoding/base64"
 	"encoding/json"
@@ -24,6 +25,70 @@ import (
 var officialHigherEducation2026Data string
 
 var identifierPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
+var growthPerformanceIndexes = []struct {
+	name       string
+	table      string
+	definition string
+}{
+	{"idx_feed_interaction_notifications_recipient_created", "feed_interaction_notifications", "(recipient_user_id, created_at DESC, id DESC)"},
+	{"idx_user_food_records_user_record_time", "user_food_records", "(user_id, record_time DESC, id DESC)"},
+	{"idx_user_food_records_user_created", "user_food_records", "(user_id, created_at DESC, id DESC)"},
+	{"idx_user_food_records_feed_created", "user_food_records", "(created_at DESC, id DESC) WHERE hidden_from_feed = false"},
+	{"idx_user_exercise_logs_user_created", "user_exercise_logs", "(user_id, created_at DESC, id DESC) WHERE hidden_from_feed = false"},
+	{"idx_user_exercise_logs_feed_created", "user_exercise_logs", "(created_at DESC, id DESC) WHERE hidden_from_feed = false"},
+	{"idx_user_circle_posts_user_created_page", "user_circle_posts", "(user_id, created_at DESC, id DESC) WHERE hidden_from_feed = false"},
+	{"idx_user_circle_posts_feed_created", "user_circle_posts", "(created_at DESC, id DESC) WHERE hidden_from_feed = false"},
+	{"idx_user_weight_records_daily_latest", "user_weight_records", "(user_id, recorded_on, created_at DESC, id DESC)"},
+}
+
+// MigrateGrowthPerformanceIndexes applies only the indexes used by the
+// growth-sensitive feed, notification, and body-summary reads. It deliberately
+// avoids AutoMigrate, data backfills, seeds, and unrelated schema changes.
+func MigrateGrowthPerformanceIndexes(ctx context.Context, db *gorm.DB, schema string) error {
+	if schema == "" {
+		schema = "public"
+	}
+	if !identifierPattern.MatchString(schema) {
+		return fmt.Errorf("invalid database schema: %q", schema)
+	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		return fmt.Errorf("get database connection pool: %w", err)
+	}
+	conn, err := sqlDB.Conn(ctx)
+	if err != nil {
+		return fmt.Errorf("pin database connection: %w", err)
+	}
+	defer conn.Close()
+
+	for _, index := range growthPerformanceIndexes {
+		var valid bool
+		err := conn.QueryRowContext(ctx, `
+			SELECT i.indisvalid
+			FROM pg_class c
+			JOIN pg_namespace n ON n.oid = c.relnamespace
+			JOIN pg_index i ON i.indexrelid = c.oid
+			WHERE n.nspname = $1 AND c.relname = $2
+		`, schema, index.name).Scan(&valid)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("inspect growth performance index %s: %w", index.name, err)
+		}
+		if err == nil && !valid {
+			dropSQL := "DROP INDEX CONCURRENTLY " + quoteIdent(schema) + "." + quoteIdent(index.name)
+			if _, err := conn.ExecContext(ctx, dropSQL); err != nil {
+				return fmt.Errorf("drop invalid growth performance index %s: %w", index.name, err)
+			}
+		}
+
+		createSQL := "CREATE INDEX CONCURRENTLY IF NOT EXISTS " + quoteIdent(index.name) +
+			" ON " + quoteIdent(schema) + "." + quoteIdent(index.table) + " " + index.definition
+		if _, err := conn.ExecContext(ctx, createSQL); err != nil {
+			return fmt.Errorf("create growth performance index %s: %w", index.name, err)
+		}
+	}
+	return nil
+}
 
 func AutoMigrate(ctx context.Context, db *gorm.DB, schema string) error {
 	if err := prepareSchema(ctx, db, schema); err != nil {
@@ -51,6 +116,9 @@ func AutoMigrate(ctx context.Context, db *gorm.DB, schema string) error {
 		return err
 	}
 	if err := ensureNutritionQualityBackfill(ctx, db); err != nil {
+		return err
+	}
+	if err := ensureUsdaNutrientMappingBackfill(ctx, db); err != nil {
 		return err
 	}
 	if err := ensureCommonFoodStateSeed(ctx, db); err != nil {
@@ -609,6 +677,9 @@ func MigrateSupplements(ctx context.Context, db *gorm.DB, schema string) error {
 		if !db.WithContext(ctx).Migrator().HasTable(table) {
 			return fmt.Errorf("missing supplement table after migration: %s", table)
 		}
+	}
+	if !db.WithContext(ctx).Migrator().HasColumn(&migrationdo.UserSupplementDO{}, "image_urls") {
+		return fmt.Errorf("missing supplement column after migration: user_supplements.image_urls")
 	}
 	for _, check := range []struct {
 		model any
@@ -3266,6 +3337,25 @@ WHERE quality_tier = 'unreviewed'
 		if err := db.WithContext(ctx).Exec(statement).Error; err != nil {
 			return fmt.Errorf("backfill nutrition quality tier: %w", err)
 		}
+	}
+	return nil
+}
+
+func ensureUsdaNutrientMappingBackfill(ctx context.Context, db *gorm.DB) error {
+	const mappingVersion = "v2_1114_1177"
+	statement := `UPDATE food_nutrition_library
+SET vitamin_d_mcg_per_100g = 0,
+    folate_mcg_per_100g = 0,
+    quality_evidence = COALESCE(quality_evidence, '{}'::jsonb) || jsonb_build_object(
+      'usda_nutrient_mapping_quarantine', 'legacy_values_cleared',
+      'required_usda_nutrient_mapping_version', CAST(? AS text)
+    ),
+    updated_at = now()
+WHERE source LIKE '美国农业部食物数据中心%'
+  AND COALESCE(quality_evidence->>'usda_nutrient_mapping_version', '') <> ?
+  AND (vitamin_d_mcg_per_100g <> 0 OR folate_mcg_per_100g <> 0)`
+	if err := db.WithContext(ctx).Exec(statement, mappingVersion, mappingVersion).Error; err != nil {
+		return fmt.Errorf("quarantine legacy USDA vitamin D and folate values: %w", err)
 	}
 	return nil
 }

@@ -422,6 +422,56 @@ func TestPublicFoodRepo_ListPublishedCampusFilters(t *testing.T) {
 	require.Equal(t, "published", analyzed.Status)
 }
 
+func TestPublicFoodRepo_ListPublishedCampusSearchesFoodAndLocation(t *testing.T) {
+	db := setupPublicFoodRepoTestDB(t)
+	seedPublicFoodItems(t, db)
+	r := NewPublicFoodRepo(db)
+	ctx := context.Background()
+	isCampus := true
+
+	foodRows, err := r.ListPublished(ctx, ListFilter{
+		IsCampusFood: &isCampus,
+		Keyword:      "鸡胸",
+		Limit:        10,
+	})
+
+	require.NoError(t, err)
+	require.Len(t, foodRows, 1)
+	require.Equal(t, "campus-1", foodRows[0].ID)
+
+	locationRows, err := r.ListPublished(ctx, ListFilter{
+		IsCampusFood: &isCampus,
+		Keyword:      "家园食堂",
+		Limit:        10,
+	})
+
+	require.NoError(t, err)
+	require.Len(t, locationRows, 1)
+	require.Equal(t, "campus-2", locationRows[0].ID)
+}
+
+func TestPublicFoodRepo_ListPublishedCampusFiltersFloorAndWindow(t *testing.T) {
+	db := setupPublicFoodRepoTestDB(t)
+	seedPublicFoodItems(t, db)
+	r := NewPublicFoodRepo(db)
+	ctx := context.Background()
+	isCampus := true
+
+	rows, err := r.ListPublished(ctx, ListFilter{
+		IsCampusFood: &isCampus,
+		Floor:        "一层",
+		WindowName:   "低脂窗口",
+		Limit:        10,
+	})
+
+	require.NoError(t, err)
+	require.NotEmpty(t, rows)
+	for _, row := range rows {
+		require.Equal(t, "一层", row.Floor)
+		require.Equal(t, "低脂窗口", row.WindowName)
+	}
+}
+
 func TestPublicFoodRepo_ListPublishedCampusPrefersDirectoryIDsOverStaleNames(t *testing.T) {
 	db := setupPublicFoodRepoTestDB(t)
 	seedPublicFoodItems(t, db)

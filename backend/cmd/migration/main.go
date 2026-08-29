@@ -30,9 +30,10 @@ func main() {
 	onlyManualFoodSausage := flag.Bool("only-manual-food-sausage", false, "only normalize Taiwanese grilled sausage nutrition and historical records")
 	onlyCampusCatalogPublishing := flag.Bool("only-campus-catalog-publishing", false, "only add campus catalog publishing schema")
 	onlySupplements := flag.Bool("only-supplements", false, "only add supplement catalog, cabinet, intake schema, and catalog seeds")
+	onlyGrowthPerformanceIndexes := flag.Bool("only-growth-performance-indexes", false, "only create growth-sensitive feed, notification, and body-summary indexes")
 	flag.Parse()
 	selectedOnlyModes := 0
-	for _, selected := range []bool{*onlyPapay, *onlyNutritionQuality, *onlyNutritionStates, *verifyNutritionStates, *onlyNutritionEmbeddings, *onlyOnboardingStatus, *onlyCampusDirectoryReviewed, *onlyCampusDirectoryPending, *onlyFoodRecordMood, *onlyManualFoodSausage, *onlyCampusCatalogPublishing, *onlySupplements} {
+	for _, selected := range []bool{*onlyPapay, *onlyNutritionQuality, *onlyNutritionStates, *verifyNutritionStates, *onlyNutritionEmbeddings, *onlyOnboardingStatus, *onlyCampusDirectoryReviewed, *onlyCampusDirectoryPending, *onlyFoodRecordMood, *onlyManualFoodSausage, *onlyCampusCatalogPublishing, *onlySupplements, *onlyGrowthPerformanceIndexes} {
 		if selected {
 			selectedOnlyModes++
 		}
@@ -100,6 +101,8 @@ func main() {
 		migrateErr = migration.MigrateCampusCatalogPublishing(ctx, db, cfg.Database.Schema)
 	} else if *onlySupplements {
 		migrateErr = migration.MigrateSupplements(ctx, db, cfg.Database.Schema)
+	} else if *onlyGrowthPerformanceIndexes {
+		migrateErr = migration.MigrateGrowthPerformanceIndexes(ctx, db, cfg.Database.Schema)
 	} else {
 		migrateErr = migration.AutoMigrate(ctx, db, cfg.Database.Schema)
 	}
@@ -148,6 +151,10 @@ func main() {
 	}
 	if *onlySupplements {
 		log.Printf("补剂公共库与记录结构迁移完成: config_dir=%s schema=%s", resolvedDir, schema)
+		return
+	}
+	if *onlyGrowthPerformanceIndexes {
+		log.Printf("增长型查询性能索引迁移完成: config_dir=%s schema=%s", resolvedDir, schema)
 		return
 	}
 	log.Printf("数据库迁移完成: config_dir=%s schema=%s", resolvedDir, schema)

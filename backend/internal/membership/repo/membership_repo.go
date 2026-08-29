@@ -387,9 +387,12 @@ func (r *MembershipRepo) GrantMembership(ctx context.Context, input domain.Membe
 			"first_activated_at":   firstActivatedAt,
 			"current_period_start": membershipTimeOr(current.CurrentPeriodStart, start),
 			"expires_at":           expires,
-			"auto_renew":           false,
-			"daily_credits":        effectiveDailyCredits,
-			"updated_at":           now,
+			// A time-limited gift must not alter the user's WeChat automatic-renewal
+			// agreement. New memberships are created with auto-renew disabled above;
+			// existing memberships retain their contract state.
+			"auto_renew":    current.AutoRenew,
+			"daily_credits": effectiveDailyCredits,
+			"updated_at":    now,
 		}
 		if current.Status != "active" || current.ExpiresAt == nil || !current.ExpiresAt.After(now) {
 			updates["current_period_start"] = start
@@ -482,6 +485,35 @@ func (r *MembershipRepo) GetLatestPaidMembershipPayment(ctx context.Context, use
 		}
 	}
 	return nil, nil
+}
+
+// ListLatestRealPaidMembershipPayments returns one latest paid, non-test
+// membership order per user. It deliberately excludes zero-value administrative
+// records so campaign grants target customers who actually paid.
+func (r *MembershipRepo) ListLatestRealPaidMembershipPayments(ctx context.Context) ([]domain.MembershipPayment, error) {
+	var rows []domain.MembershipPayment
+	if err := r.db.WithContext(ctx).
+		Where("status = ? AND amount > ?", "paid", 0).
+		Order("paid_at DESC NULLS LAST").
+		Order("created_at DESC").
+		Order("id DESC").
+		Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	seenUserIDs := make(map[string]struct{}, len(rows))
+	latest := make([]domain.MembershipPayment, 0, len(rows))
+	for _, row := range rows {
+		userID := strings.TrimSpace(row.UserID)
+		if userID == "" || !isMembershipPlanCode(row.PlanCode) || isPaymentTestPlanCode(row.PlanCode) {
+			continue
+		}
+		if _, exists := seenUserIDs[userID]; exists {
+			continue
+		}
+		seenUserIDs[userID] = struct{}{}
+		latest = append(latest, row)
+	}
+	return latest, nil
 }
 
 func (r *MembershipRepo) GetFirstMembershipTrialBatchRank(ctx context.Context, userID string, limit int) (int, error) {

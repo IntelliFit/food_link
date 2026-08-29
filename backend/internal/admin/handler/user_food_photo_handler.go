@@ -14,6 +14,7 @@ import (
 
 type AdminUserFoodPhotoService interface {
 	List(ctx context.Context, input service.ListUserFoodPhotoInput) (*repo.ListUserFoodPhotoResult, error)
+	SaveAnnotation(ctx context.Context, input service.SaveUserFoodPhotoAnnotationInput, reviewerID string) (*repo.UserFoodPhotoAnnotation, error)
 }
 
 type UserFoodPhotoHandler struct {
@@ -34,6 +35,8 @@ func (h *UserFoodPhotoHandler) List(c *gin.Context) {
 		CircleVisibility: c.DefaultQuery("circle_visibility", "all"),
 		SortBy:           c.DefaultQuery("sort_by", "created_at"),
 		SortOrder:        c.DefaultQuery("sort_order", "desc"),
+		AnnotationStatus: c.DefaultQuery("annotation_status", "all"),
+		AnnotationLabel:  c.DefaultQuery("annotation_label", "all"),
 		Page:             page,
 		Limit:            limit,
 	})
@@ -54,4 +57,24 @@ func (h *UserFoodPhotoHandler) List(c *gin.Context) {
 		"limit": limit,
 		"total": result.Total,
 	})
+}
+
+func (h *UserFoodPhotoHandler) SaveAnnotation(c *gin.Context) {
+	var body service.SaveUserFoodPhotoAnnotationInput
+	if err := c.ShouldBindJSON(&body); err != nil {
+		response.Error(c, err)
+		return
+	}
+	item, err := h.svc.SaveAnnotation(c.Request.Context(), body, c.GetString("admin_account_id"))
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	logger.Info(c.Request.Context(), "管理员标注用户食物照片",
+		slog.String("user_id", item.UserID),
+		slog.String("review_status", item.ReviewStatus),
+		slog.Int("label_count", len(item.Labels)),
+		slog.String("reviewer_id", c.GetString("admin_account_id")),
+	)
+	response.Success(c, gin.H{"message": "标注已保存", "annotation": item})
 }

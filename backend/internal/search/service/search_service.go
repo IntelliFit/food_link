@@ -172,9 +172,7 @@ func (s *SearchService) SearchContent(ctx context.Context, currentUserID, keywor
 			manualItems = s.extractManualFoodItemsFromMaps(items)
 		}
 		var exerciseItems []map[string]any
-		if row.TargetType == "exercise_log" {
-			exerciseItems = s.parseRecordItems(row.ExerciseItems)
-		}
+		// 运动动作拆分只用于内部估算；圈子搜索结果保持用户原文与整次总消耗。
 
 		desc := row.Description
 		if row.TargetType == "circle_post" {

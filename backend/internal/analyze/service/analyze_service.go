@@ -504,6 +504,17 @@ func (s *AnalyzeService) ApplyDBFirstToItemsWithPreciseMicronutrients(ctx contex
 // step separate prevents campus single-task analysis from repeating database,
 // embedding and semantic-rerank work before the precise micronutrient call.
 func (s *AnalyzeService) ApplyPreciseMicronutrientsToResolvedItems(ctx context.Context, items []map[string]any, additionalContext string) ([]map[string]any, error) {
+	return s.applyPreciseMicronutrientsToResolvedItems(ctx, items, additionalContext, false)
+}
+
+// ApplyUserRequestedMicronutrientsToResolvedItems keeps a complete existing
+// database profile authoritative. AI only fills micronutrients when the current
+// result does not already contain a usable complete profile.
+func (s *AnalyzeService) ApplyUserRequestedMicronutrientsToResolvedItems(ctx context.Context, items []map[string]any, additionalContext string) ([]map[string]any, error) {
+	return s.applyPreciseMicronutrientsToResolvedItems(ctx, items, additionalContext, true)
+}
+
+func (s *AnalyzeService) applyPreciseMicronutrientsToResolvedItems(ctx context.Context, items []map[string]any, additionalContext string, preferCompleteExisting bool) ([]map[string]any, error) {
 	resolved := make([]map[string]any, 0, len(items))
 	for _, item := range items {
 		resolved = append(resolved, copyAnyMap(item))
@@ -517,10 +528,15 @@ func (s *AnalyzeService) ApplyPreciseMicronutrientsToResolvedItems(ctx context.C
 		name := strings.TrimSpace(fmt.Sprintf("%v", item["name"]))
 		weight := nutritionWeightFromItem(item)
 		if name == "" || weight <= 0 {
-			return nil, fmt.Errorf("校园菜品微量营养精确分析缺少有效名称或份量")
+			return nil, fmt.Errorf("完整微量营养分析缺少有效名称或份量")
 		}
 		existingSource := strings.TrimSpace(fmt.Sprintf("%v", item["nutrition_source"]))
 		existingUnit := copyAnyMap(mapFromAny(item["unit_nutrition_per_100g"]))
+		if preferCompleteExisting && validatePreciseMicronutrientUnit(existingUnit) == nil {
+			existingUnit[fallbackNutritionSourceKey] = firstNonEmptyString(existingSource, "existing_nutrition")
+			rows[index] = existingUnit
+			continue
+		}
 		if foodrecorddomain.IsAIGeneratedNutritionSource(existingSource) && validatePreciseMicronutrientUnit(existingUnit) == nil {
 			existingUnit[fallbackNutritionSourceKey] = existingSource
 			rows[index] = existingUnit
@@ -538,7 +554,7 @@ func (s *AnalyzeService) ApplyPreciseMicronutrientsToResolvedItems(ctx context.C
 	if len(candidates) > 0 {
 		generatedRows, err := s.estimateNutritionWithFallback(ctx, candidates, additionalContext)
 		if err != nil {
-			return nil, fmt.Errorf("校园菜品微量营养精确分析失败: %w", err)
+			return nil, fmt.Errorf("完整微量营养分析失败: %w", err)
 		}
 		for index, unit := range generatedRows {
 			rows[index] = unit
@@ -547,14 +563,14 @@ func (s *AnalyzeService) ApplyPreciseMicronutrientsToResolvedItems(ctx context.C
 	for index := range resolved {
 		unit, ok := rows[index]
 		if !ok || len(unit) == 0 {
-			return nil, fmt.Errorf("校园菜品微量营养精确分析未返回第 %d 项结果", index+1)
+			return nil, fmt.Errorf("完整微量营养分析未返回第 %d 项结果", index+1)
 		}
 		source := popFallbackSource(unit, "")
 		if source == "" {
-			return nil, fmt.Errorf("校园菜品微量营养精确分析缺少第 %d 项来源", index+1)
+			return nil, fmt.Errorf("完整微量营养分析缺少第 %d 项来源", index+1)
 		}
 		if err := validatePreciseMicronutrientUnit(unit); err != nil {
-			return nil, fmt.Errorf("校园菜品第 %d 项微量营养结果不完整: %w", index+1, err)
+			return nil, fmt.Errorf("第 %d 项微量营养结果不完整: %w", index+1, err)
 		}
 		weight := nutritionWeightFromItem(resolved[index])
 		scaled := scaleNutrition(unit, weight)
@@ -1144,6 +1160,9 @@ func buildPrompt(input AnalyzeInput, user *authrepo.User, executionMode string) 
 		}
 		return fmt.Sprintf(`识别图片中的食物，估算重量和营养，仅返回 JSON。
 	%s%s%s
+
+`+imageMealComponentSeparationRules()+`
+
 	估重时请优先看：占盘面积、厚度/高度、堆叠体积、容器大小、透视关系。
 若画面里有筷子、勺子、手掌、包装、餐盒、碗盘等参照物，请利用参照物。
 结合常识估算熟食密度、含水量、常见售卖分量，不要只看上表面面积。
@@ -1215,6 +1234,8 @@ JSON:
 
 	return fmt.Sprintf(`请作为专业的营养师分析这张图片。
 	%s
+
+`+imageMealComponentSeparationRules()+`
 
 	1. 识别图中所有不同的食物单品。
 2. 估算每种食物的重量（克）和详细营养成分；重量必须是可食部净重，带壳/带骨/带核食物按去壳、去骨、去核后的重量估算。
@@ -1296,6 +1317,15 @@ func imageEdiblePortionPromptRules() string {
 - 这些视觉初估字段会进入现有第二步文本模型复核；第二步只做校验和有依据的修正，因此本轮必须先给出完整、可自洽的初估，不能只填毛重`
 }
 
+func imageMealComponentSeparationRules() string {
+	return `组合餐食拆分规则（拆分标准是用户能否分别吃完或剩余）：
+- 同一餐盒、碗、盘或菜品名称不代表只能输出一个食物项；只要主要组成在图片中可见、可区分，而且用户可能可独立吃完或剩余，就必须分别输出为独立 item
+- 例如菜心牛肉饭应把牛肉、菜心、米饭分别输出为独立 item；另有肉卷、鸡蛋、饮料等也各自单列，不能合并成“菜心牛肉饭配肉卷”一个 item
+- 盖饭、拼盘、便当、沙拉、火锅、麻辣烫等组合餐，优先按可见的主食、肉类、蔬菜、蛋类和其它可独立夹取/保留的主要组成拆分；每项分别估算重量和营养
+- 不要为了拆分而猜测图片中看不见的配料；油、盐、酱汁、调味料及无法从成品中独立食用的少量辅料，仍计入对应菜品，不机械拆成 item
+- 边界或重量不够确定时，可以给出保守估计并在 evidence/assumptions 中说明，但不能因此把清楚可见、可独立吃完或剩余的主要组成重新合并成整餐一个 item`
+}
+
 func buildImageDBFirstPrompt(input AnalyzeInput, user *authrepo.User) string {
 	tagBlock := ""
 	if tags := buildContextTags(input, user); len(tags) > 0 {
@@ -1309,6 +1339,8 @@ func buildImageDBFirstPrompt(input AnalyzeInput, user *authrepo.User) string {
 	correctionBlock := buildCorrectionContextBlock(input)
 	return fmt.Sprintf(`你是专业的食物图像识别与份量估算助手。请识别图片中的食物，只输出实际可见的可食用食物名称、可食部分重量和该食物中可计入饮水参考的含水量；营养成分由后端数据库统一查表计算，请绝对不要自行输出或估算卡路里、蛋白质等任何营养数值。
 	%s%s%s%s
+`+imageMealComponentSeparationRules()+`
+
 核心扫描与识别规则：
 - 只识别图片中实际可见的食物，不补充看不见的食物
 - 请按区域逐一扫描画面：左侧、中央、右侧、下方、背景/被遮挡处；如果某个区域存在独立食物或独立食品包装，应单独列为一项
@@ -1328,7 +1360,7 @@ func buildImageDBFirstPrompt(input AnalyzeInput, user *authrepo.User) string {
 - name 仍写食物本身；不可食部分必须由本次视觉识别按原图呈现状态直接折算
 - 相同食物合并为一项，明显不同食物分开
 - 食物名称使用简体中文，尽量具体、标准、常见，方便命中营养库
-- 混合菜无法可靠拆分时，作为一道常见菜名输出，不要猜测不可见成分
+- 无法独立食用且视觉上不可分离的复合菜可保留菜名，但不得借此合并清楚可见的主食、肉类、蔬菜等主要组成
 
 重量规则：
 - grossWeightGrams 必须是数字，单位克，表示图片中可见食物的原始可见总重量；带壳、带骨、带核时先估整份原始重量，不要扣壳/骨/核
@@ -1415,6 +1447,8 @@ func buildLiteImageDBFirstPrompt(input AnalyzeInput, user *authrepo.User) string
 	imageInputHint := buildImageInputHint(input)
 	return fmt.Sprintf(`你是轻量食物图像识别助手。请基于图片识别可见食物，必要时使用 web_search 补充包装食品、小众水果、进口零食、品牌食品的公开信息；只返回 JSON，不要输出解释。
 %s%s%s
+`+imageMealComponentSeparationRules()+`
+
 轻量模式目标：
 - 单次完成食物名称和可食部净重估计，不输出营养；营养由后端数据库查表
 - 食物名称用简体中文，尽量标准、具体，方便命中营养库
@@ -1496,6 +1530,8 @@ func buildGemini35ImageDBFirstPrompt(input AnalyzeInput, user *authrepo.User, ex
 	prompt := fmt.Sprintf(`你是专业的食物图像识别与可食部重量估算助手。请基于图片直接识别食物；营养由后端数据库统一查表补充，你不需要输出任何营养数值。
 %s%s%s
 %s
+
+`+imageMealComponentSeparationRules()+`
 
 深度识别与多模态对齐规则：
 - 必须逐区扫描画面：左侧、中央、右侧、下方、背景/被遮挡处
@@ -1611,6 +1647,8 @@ func buildGemini35GroupedPlanPrompt(input AnalyzeInput, user *authrepo.User) str
 	imageInputHint := buildImageInputHint(input)
 	return fmt.Sprintf(`你是专业的食物图像识别规划助手。当前任务只做第一阶段：看清楚图片里有哪些独立食物/包装食品，并按空间、遮挡和包装归属分成最多 2 组；不要把主要精力放在精确估重上。
 %s%s%s
+
+`+imageMealComponentSeparationRules()+`
 
 第一阶段目标：
 - 锁定食物清单：图片里所有独立食物、独立包装食品、被部分遮挡但仍能确认是完整独立食品包装的对象，都必须列出
@@ -2141,6 +2179,7 @@ func (s *AnalyzeService) resolveImageModelConfig(modelName string) (provider, mo
 
 // Analyze performs single-image or text analysis synchronously.
 func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input AnalyzeInput) (map[string]any, error) {
+	input.PreciseMicronutrients = true
 	s.normalizeFoodImageInput(&input)
 	executionMode := s.resolveExecutionMode(ctx, userID, input.ExecutionMode)
 	isCorrection := len(input.CorrectionItems) > 0 || len(input.PreviousResult) > 0
@@ -2860,7 +2899,7 @@ func buildGemini35GroupedWeightPrompt(input AnalyzeInput, plan map[string]any) s
 %s
 
 %s估重要求:
-- 第一阶段的食物清单默认已经锁定；第二阶段主要估重量，不要随意新增、删除或改名
+- 第一阶段的食物清单已经按组合餐拆分规则锁定；第二阶段主要估重量，不要随意新增、删除或改名
 - 只有当图片中有非常强的反证时，才允许在 alternativeNames 或 recognitionEvidence 中说明名称疑点；最终 name 仍尽量沿用第一阶段
 - groupId 只能使用第一阶段给出的 1 或 2；不要重新发明更多组
 - 先估每组总毛重，再把组内毛重分配到各 item，并分别判断每项原图中是否存在不可食结构
@@ -4461,6 +4500,7 @@ func isEmptyAnalyzeAny(value any) bool {
 
 // AnalyzeText performs text-only analysis.
 func (s *AnalyzeService) AnalyzeText(ctx context.Context, userID string, input AnalyzeInput) (map[string]any, error) {
+	input.PreciseMicronutrients = true
 	executionMode := s.resolveExecutionMode(ctx, userID, input.ExecutionMode)
 	var user *authrepo.User
 	if userID != "" && s.users != nil {
@@ -5103,7 +5143,7 @@ func (s *AnalyzeService) finalizeAnalyzeResponse(ctx context.Context, userID str
 	resp := buildAnalyzeResponse(parsed, executionMode, provider, model, durationMs)
 	engine := strings.ToLower(strings.TrimSpace(input.AnalysisEngine))
 	if engine == "" {
-		engine = analysisEngineLegacyDBFirst
+		engine = normalizeAnalysisEngine("", executionMode, strings.TrimSpace(input.Text) != "")
 	} else {
 		engine = normalizeAnalysisEngine(engine, executionMode, strings.TrimSpace(input.Text) != "")
 	}
@@ -5125,7 +5165,6 @@ func (s *AnalyzeService) finalizeAnalyzeResponse(ctx context.Context, userID str
 	switch engine {
 	case analysisEngineLegacyDirect, analysisEngineAIDirect:
 		resp = finalizeAIDirectNutrition(resp, engine)
-		resp = s.applyAuthoritativePackagedNutrition(postprocessCtx, resp)
 	case analysisEngineAIThenDBExact:
 		resp = s.applyAIThenExactDBNutrition(postprocessCtx, resp, input)
 	case analysisEngineDBCandidates:
@@ -5140,7 +5179,7 @@ func (s *AnalyzeService) finalizeAnalyzeResponse(ctx context.Context, userID str
 		})
 	}
 	if input.PreciseMicronutrients {
-		items, err := s.ApplyPreciseMicronutrientsToResolvedItems(postprocessCtx, toItems(resp["items"]), fullNutritionContext(input))
+		items, err := s.ApplyUserRequestedMicronutrientsToResolvedItems(postprocessCtx, toItems(resp["items"]), fullNutritionContext(input))
 		if err != nil {
 			resp["precise_micronutrients"] = map[string]any{"requested": true, "status": "failed", "reason": err.Error()}
 			logger.Warn(ctx, "精准微量营养补全失败，保留基础营养结果", logger.Err(err), slog.String("analysis_engine", engine))

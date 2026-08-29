@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { Copy, ExternalLink, ImageOff, Images, Loader2, RefreshCw, Search, X } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { Ban, CheckCircle2, Copy, ExternalLink, ImageOff, Images, Loader2, RefreshCw, Search, X } from 'lucide-react'
 import { useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 
@@ -12,6 +12,8 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { adminRequest, copyText, displayApiBase } from '@/lib/api'
+import { createLatestRequestGate } from '@/lib/latest-request'
+import { annotationLabelOptions, recognizedLabelOptions, type AnnotationLabel } from '@/lib/photo-annotation'
 
 type PageProps = {
   onLogout: () => void
@@ -24,6 +26,7 @@ type UserFoodPhoto = {
   task_type: string
   status: string
   record_id: string
+  image_key: string
   image_url: string
   thumbnail_url: string
   description: string
@@ -32,8 +35,24 @@ type UserFoodPhoto = {
   user_avatar: string
   user_phone: string
   circle_visibility: 'visible' | 'not_shared' | 'not_applicable'
+  annotation_status: AnnotationStatus
+  annotation_labels: AnnotationLabel[]
+  exclusion_reason: ExclusionReason | ''
+  annotation_updated_at?: string
   nutrition?: PhotoNutrition
   created_at: string
+}
+
+type AnnotationStatus = 'pending' | 'kept' | 'excluded'
+type ExclusionReason = 'non_food' | 'multi_dish_scene' | 'unusable' | 'duplicate' | 'label_or_package_only' | 'other'
+
+type AnnotationResponse = {
+  annotation: {
+    review_status: AnnotationStatus
+    labels: AnnotationLabel[]
+    exclusion_reason: ExclusionReason | ''
+    updated_at: string
+  }
 }
 
 type PhotoNutrition = {
@@ -97,6 +116,29 @@ const statusClasses: Record<string, string> = {
   pending: 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-400',
 }
 
+const annotationStatusLabels: Record<AnnotationStatus, string> = {
+  pending: '待清洗',
+  kept: '已保留',
+  excluded: '已排除',
+}
+
+const annotationStatusClasses: Record<AnnotationStatus, string> = {
+  pending: 'border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300',
+  kept: 'border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300',
+  excluded: 'border-red-300 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300',
+}
+
+const exclusionReasonOptions: Array<[ExclusionReason, string]> = [
+  ['non_food', '非食物 / 道具 / 截图'],
+  ['multi_dish_scene', '一桌多菜 / 场景过杂'],
+  ['unusable', '模糊遮挡 / 主体不可用'],
+  ['duplicate', '重复或近似重复'],
+  ['label_or_package_only', '仅包装或营养标签'],
+  ['other', '其他无效内容'],
+]
+
+const exclusionReasonNames = Object.fromEntries(exclusionReasonOptions) as Record<ExclusionReason, string>
+
 function positiveInt(value: string | null, fallback: number) {
   const parsed = Number.parseInt(value ?? '', 10)
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
@@ -108,6 +150,8 @@ export function UserFoodPhotosPage({ onLogout, onMenuChange }: PageProps) {
   const [source, setSource] = useState(searchParams.get('source') ?? 'all')
   const [status, setStatus] = useState(searchParams.get('status') ?? 'all')
   const [circleVisibility, setCircleVisibility] = useState(searchParams.get('circle_visibility') ?? 'all')
+  const [annotationStatus, setAnnotationStatus] = useState(searchParams.get('annotation_status') ?? 'all')
+  const [annotationLabel, setAnnotationLabel] = useState(searchParams.get('annotation_label') ?? 'all')
   const [sortBy, setSortBy] = useState(searchParams.get('sort_by') ?? 'created_at')
   const [sortOrder, setSortOrder] = useState(searchParams.get('sort_order') ?? 'desc')
   const [page, setPage] = useState(positiveInt(searchParams.get('page'), 1))
@@ -117,12 +161,17 @@ export function UserFoodPhotosPage({ onLogout, onMenuChange }: PageProps) {
   const [loading, setLoading] = useState(false)
   const [searchNonce, setSearchNonce] = useState(0)
   const [preview, setPreview] = useState<UserFoodPhoto | null>(null)
+  const [savingAnnotationKey, setSavingAnnotationKey] = useState('')
+  const requestGateRef = useRef<ReturnType<typeof createLatestRequestGate> | null>(null)
+  if (!requestGateRef.current) requestGateRef.current = createLatestRequestGate()
   const totalPages = Math.max(1, Math.ceil(total / limit))
 
   useEffect(() => {
     void loadPhotos()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, limit, source, status, circleVisibility, sortBy, sortOrder, searchNonce])
+  }, [page, limit, source, status, circleVisibility, annotationStatus, annotationLabel, sortBy, sortOrder, searchNonce])
+
+  useEffect(() => () => requestGateRef.current?.dispose(), [])
 
   useEffect(() => {
     const params = new URLSearchParams()
@@ -130,13 +179,15 @@ export function UserFoodPhotosPage({ onLogout, onMenuChange }: PageProps) {
     if (source !== 'all') params.set('source', source)
     if (status !== 'all') params.set('status', status)
     if (circleVisibility !== 'all') params.set('circle_visibility', circleVisibility)
+    if (annotationStatus !== 'all') params.set('annotation_status', annotationStatus)
+    if (annotationLabel !== 'all') params.set('annotation_label', annotationLabel)
     if (sortBy !== 'created_at') params.set('sort_by', sortBy)
     if (sortOrder !== 'desc') params.set('sort_order', sortOrder)
     if (page !== 1) params.set('page', String(page))
     if (limit !== 40) params.set('limit', String(limit))
     setSearchParams(params, { replace: true })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, source, status, circleVisibility, sortBy, sortOrder, page, limit])
+  }, [query, source, status, circleVisibility, annotationStatus, annotationLabel, sortBy, sortOrder, page, limit])
 
   useEffect(() => {
     if (!preview) return
@@ -148,6 +199,8 @@ export function UserFoodPhotosPage({ onLogout, onMenuChange }: PageProps) {
   }, [preview])
 
   async function loadPhotos(nextPage = page) {
+    const requestGate = requestGateRef.current!
+    const request = requestGate.begin()
     setLoading(true)
     try {
       const params = new URLSearchParams({
@@ -155,27 +208,65 @@ export function UserFoodPhotosPage({ onLogout, onMenuChange }: PageProps) {
         source,
         status,
         circle_visibility: circleVisibility,
+        annotation_status: annotationStatus,
+        annotation_label: annotationLabel,
         sort_by: sortBy,
         sort_order: sortOrder,
         page: String(nextPage),
         limit: String(limit),
       })
-      const data = await adminRequest<ListResponse>(`/api/admin/user-food-photos?${params.toString()}`)
+      const data = await adminRequest<ListResponse>(`/api/admin/user-food-photos?${params.toString()}`, {
+        cache: 'no-store',
+        signal: request.signal,
+      })
+      if (!requestGate.isLatest(request.id)) return
       setItems(data.items || [])
       setTotal(data.total || 0)
       setPage(data.page || nextPage)
     } catch (error) {
+      if (!requestGate.isLatest(request.id) || request.signal.aborted) return
       setItems([])
       setTotal(0)
       toast.error(error instanceof Error ? error.message : '照片读取失败')
     } finally {
-      setLoading(false)
+      if (requestGate.isLatest(request.id)) setLoading(false)
     }
   }
 
   function runSearch() {
     setPage(1)
     setSearchNonce((value) => value + 1)
+  }
+
+  async function saveAnnotation(item: UserFoodPhoto, reviewStatus: AnnotationStatus, labels: AnnotationLabel[], exclusionReason = '') {
+    const annotationKey = `${item.user_id}-${item.image_key}`
+    setSavingAnnotationKey(annotationKey)
+    try {
+      const data = await adminRequest<AnnotationResponse>('/api/admin/user-food-photos/annotation', {
+        method: 'PUT',
+        body: JSON.stringify({
+          user_id: item.user_id,
+          image_key: item.image_key,
+          review_status: reviewStatus,
+          labels,
+          exclusion_reason: exclusionReason,
+        }),
+      })
+      const nextItem: UserFoodPhoto = {
+        ...item,
+        annotation_status: data.annotation.review_status,
+        annotation_labels: data.annotation.labels || [],
+        exclusion_reason: data.annotation.exclusion_reason || '',
+        annotation_updated_at: data.annotation.updated_at,
+      }
+      setItems((current) => current.map((photo) => photo.user_id === item.user_id && photo.image_key === item.image_key ? nextItem : photo))
+      setPreview((current) => current?.user_id === item.user_id && current.image_key === item.image_key ? nextItem : current)
+      toast.success(reviewStatus === 'excluded' ? '已从标注数据集中排除' : reviewStatus === 'kept' ? '已保留并保存标签' : '已恢复为待清洗')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '保存标注失败')
+    } finally {
+      setSavingAnnotationKey('')
+    }
   }
 
   return (
@@ -192,7 +283,7 @@ export function UserFoodPhotosPage({ onLogout, onMenuChange }: PageProps) {
                 食物照片
               </CardTitle>
               <CardDescription className='max-w-2xl text-base leading-relaxed'>
-                集中查看用户上传的全部食物图片、圈子可见性和分析后的营养元素。同一图片会自动去重，营养数据优先采用用户最终保存的饮食记录。
+                先清洗无效图片，再进行可用、零食、水果、外卖等多标签标注。“可用”表示单个食物主体清晰，可进入后续排行榜；排除操作不删除用户原图或饮食记录。
               </CardDescription>
             </div>
             <Badge variant='outline' className='max-w-xs shrink-0 whitespace-normal break-all px-3 py-1.5 text-xs font-normal'>
@@ -255,7 +346,17 @@ export function UserFoodPhotosPage({ onLogout, onMenuChange }: PageProps) {
                 {!loading ? '刷新' : null}
               </Button>
             </div>
-            <div className='grid gap-4 border-t pt-5 md:grid-cols-[minmax(260px,380px)_190px] md:items-end'>
+            <div className='grid gap-4 border-t pt-5 md:grid-cols-[180px_190px_minmax(260px,380px)_190px] md:items-end'>
+              <FilterSelect label='清洗状态' value={annotationStatus} onValueChange={(value) => { setAnnotationStatus(value); setPage(1) }} options={[
+                ['all', '全部清洗状态'],
+                ['pending', '待清洗'],
+                ['kept', '已保留'],
+                ['excluded', '已排除'],
+              ]} />
+              <FilterSelect label='食物标签' value={annotationLabel} onValueChange={(value) => { setAnnotationLabel(value); setPage(1) }} options={[
+                ['all', '全部标签'],
+                ...annotationLabelOptions,
+              ]} />
               <FilterSelect label='排列方式' value={sortBy} onValueChange={(value) => { setSortBy(value); setPage(1) }} options={photoSortOptions} />
               <FilterSelect label='排序方向' value={sortOrder} onValueChange={(value) => { setSortOrder(value); setPage(1) }} options={sortBy === 'created_at'
                 ? [['desc', '最新优先'], ['asc', '最早优先']]
@@ -285,17 +386,33 @@ export function UserFoodPhotosPage({ onLogout, onMenuChange }: PageProps) {
           </div>
         ) : (
           <div className='grid items-start gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4'>
-            {items.map((item) => <PhotoCard key={`${item.user_id}-${item.image_url}`} item={item} onPreview={() => setPreview(item)} />)}
+            {items.map((item) => <PhotoCard
+              key={`${item.user_id}-${item.image_url}`}
+              item={item}
+              saving={savingAnnotationKey === `${item.user_id}-${item.image_key}`}
+              onAnnotate={(reviewStatus, labels, reason) => void saveAnnotation(item, reviewStatus, labels, reason)}
+              onPreview={() => setPreview(item)}
+            />)}
           </div>
         )}
       </main>
 
-      {preview ? <PhotoPreview item={preview} onClose={() => setPreview(null)} /> : null}
+      {preview ? <PhotoPreview
+        item={preview}
+        saving={savingAnnotationKey === `${preview.user_id}-${preview.image_key}`}
+        onAnnotate={(reviewStatus, labels, reason) => void saveAnnotation(preview, reviewStatus, labels, reason)}
+        onClose={() => setPreview(null)}
+      /> : null}
     </div>
   )
 }
 
-function PhotoCard({ item, onPreview }: { item: UserFoodPhoto; onPreview: () => void }) {
+function PhotoCard({ item, saving, onAnnotate, onPreview }: {
+  item: UserFoodPhoto
+  saving: boolean
+  onAnnotate: (status: AnnotationStatus, labels: AnnotationLabel[], reason?: string) => void
+  onPreview: () => void
+}) {
   const userName = item.user_nickname || item.user_phone || `用户 ${shortId(item.user_id)}`
   return (
     <Card className='group overflow-hidden transition-all hover:border-primary/30 hover:shadow-lg'>
@@ -329,6 +446,7 @@ function PhotoCard({ item, onPreview }: { item: UserFoodPhoto; onPreview: () => 
         </div>
         {item.description ? <p className='line-clamp-2 text-sm leading-relaxed text-muted-foreground'>{item.description}</p> : null}
         {item.nutrition ? <NutritionSummary nutrition={item.nutrition} /> : <p className='rounded-lg bg-muted/60 px-3 py-2 text-xs text-muted-foreground'>该图片尚无可用营养分析结果</p>}
+        <AnnotationControls item={item} saving={saving} onAnnotate={onAnnotate} compact />
         <div className='flex items-center justify-between gap-2 border-t pt-3'>
           <Badge variant='secondary'>{sourceLabels[item.source_type] || item.source_type}</Badge>
           <Button variant='ghost' size='sm' onClick={onPreview}>查看大图</Button>
@@ -338,7 +456,82 @@ function PhotoCard({ item, onPreview }: { item: UserFoodPhoto; onPreview: () => 
   )
 }
 
-function PhotoPreview({ item, onClose }: { item: UserFoodPhoto; onClose: () => void }) {
+function AnnotationControls({ item, saving, onAnnotate, compact = false }: {
+  item: UserFoodPhoto
+  saving: boolean
+  onAnnotate: (status: AnnotationStatus, labels: AnnotationLabel[], reason?: string) => void
+  compact?: boolean
+}) {
+  const labels = item.annotation_labels || []
+  const recognizedLabels = recognizedLabelOptions(labels, annotationLabelOptions)
+  function toggleLabel(label: AnnotationLabel) {
+    const nextLabels = labels.includes(label) ? labels.filter((itemLabel) => itemLabel !== label) : [...labels, label]
+    onAnnotate('kept', nextLabels)
+  }
+  if (compact) {
+    return (
+      <div className='flex min-h-5 flex-wrap items-center gap-1'>
+        <Badge variant='outline' className={`h-5 rounded-full px-1.5 text-[10px] leading-none ${annotationStatusClasses[item.annotation_status]}`}>
+          {saving ? <Loader2 className='mr-1 size-2.5 animate-spin' /> : null}
+          {annotationStatusLabels[item.annotation_status]}
+        </Badge>
+        {item.annotation_status === 'kept' ? recognizedLabels.map(([value, label]) => (
+          <Badge key={value} variant='outline' className='h-5 rounded-full border-primary/30 bg-primary/10 px-1.5 text-[10px] leading-none text-primary'>
+            {label}
+          </Badge>
+        )) : null}
+        {item.annotation_status === 'excluded' && item.exclusion_reason ? (
+          <span className='truncate text-[10px] text-muted-foreground'>{exclusionReasonNames[item.exclusion_reason]}</span>
+        ) : null}
+      </div>
+    )
+  }
+  return (
+    <div className='space-y-2.5 rounded-lg border bg-muted/20 p-3'>
+      <div className='flex items-center justify-between gap-2'>
+        <Badge variant='outline' className={annotationStatusClasses[item.annotation_status]}>
+          {saving ? <Loader2 className='mr-1 size-3 animate-spin' /> : null}
+          {annotationStatusLabels[item.annotation_status]}
+        </Badge>
+        {item.annotation_status === 'excluded' && item.exclusion_reason ? (
+          <span className='truncate text-[11px] text-muted-foreground'>{exclusionReasonNames[item.exclusion_reason]}</span>
+        ) : null}
+      </div>
+      <div className='flex flex-wrap gap-1.5'>
+        {annotationLabelOptions.map(([value, label]) => (
+          <Button
+            key={value}
+            type='button'
+            variant={labels.includes(value) && item.annotation_status === 'kept' ? 'default' : 'outline'}
+            size='sm'
+            className='h-8 text-xs'
+            disabled={saving}
+            aria-pressed={labels.includes(value)}
+            onClick={() => toggleLabel(value)}
+          >
+            {label}
+          </Button>
+        ))}
+      </div>
+      <div className='grid grid-cols-2 gap-2'>
+        <Button type='button' size='sm' variant='outline' disabled={saving} onClick={() => onAnnotate('kept', labels)}>
+          <CheckCircle2 className='size-3.5' />保留
+        </Button>
+        <Select disabled={saving} onValueChange={(reason) => onAnnotate('excluded', [], reason)}>
+          <SelectTrigger className='h-9 text-xs text-destructive'><Ban className='size-3.5' /><SelectValue placeholder='排除原因' /></SelectTrigger>
+          <SelectContent>{exclusionReasonOptions.map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent>
+        </Select>
+      </div>
+    </div>
+  )
+}
+
+function PhotoPreview({ item, saving, onAnnotate, onClose }: {
+  item: UserFoodPhoto
+  saving: boolean
+  onAnnotate: (status: AnnotationStatus, labels: AnnotationLabel[], reason?: string) => void
+  onClose: () => void
+}) {
   async function handleCopy() {
     try {
       await copyText(item.image_url)
@@ -370,6 +563,11 @@ function PhotoPreview({ item, onClose }: { item: UserFoodPhoto; onClose: () => v
             <PreviewRow label='来源 ID' value={item.source_id} />
             {item.record_id ? <PreviewRow label='记录 ID' value={item.record_id} /> : null}
             {item.description ? <PreviewRow label='识别摘要' value={item.description} /> : null}
+            <div className='space-y-2 border-t pt-4'>
+              <p className='text-sm font-semibold'>数据清洗与分类</p>
+              <p className='text-xs leading-relaxed text-muted-foreground'>“一桌多菜”仅指无法明确对应单份餐食的复杂场景；同一份餐盘里有多个食物仍可保留并打标签。</p>
+              <AnnotationControls item={item} saving={saving} onAnnotate={onAnnotate} />
+            </div>
             <NutritionDetails nutrition={item.nutrition} />
           </div>
           <div className='mt-auto grid gap-2 pt-5'>
@@ -382,7 +580,7 @@ function PhotoPreview({ item, onClose }: { item: UserFoodPhoto; onClose: () => v
   )
 }
 
-function FilterSelect({ label, value, onValueChange, options }: { label: string; value: string; onValueChange: (value: string) => void; options: Array<[string, string]> }) {
+function FilterSelect({ label, value, onValueChange, options }: { label: string; value: string; onValueChange: (value: string) => void; options: ReadonlyArray<readonly [string, string]> }) {
   return (
     <div className='space-y-2'>
       <Label>{label}</Label>

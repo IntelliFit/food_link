@@ -9,6 +9,10 @@ import {
 import { extraPkgUrl } from './subpackage-extra'
 import { createStreamingUTF8Decoder } from './streaming-utf8-decoder'
 import { withTransientRequestRetry } from './transient-request-retry'
+import {
+  isPublicHttpImageURL,
+  normalizeWeappLocalFilePath,
+} from './weapp-user-files'
 
 declare const __RECENT_REQUEST_TRACE_LIMIT__: string
 
@@ -769,6 +773,7 @@ export interface UserSupplement {
   brand: string
   barcode?: string | null
   image_url?: string | null
+  image_urls?: string[]
   default_servings: number
   serving_label: string
   schedule_enabled: boolean
@@ -837,6 +842,7 @@ export interface UpsertSupplementPayload {
   brand?: string
   barcode?: string | null
   image_url?: string | null
+  image_urls?: string[]
   default_servings?: number
   serving_label?: string
   schedule_enabled?: boolean
@@ -1200,6 +1206,14 @@ export interface PetSummary {
   today: PetDailyScore
   status: PetStatus
   event?: PetOfflineEvent | null
+  meal_prompt?: {
+    kind: 'meal_recommendation'
+    meal_type: 'breakfast' | 'lunch' | 'dinner'
+    scheduled_time: string
+    schedule_source: 'default' | 'learned'
+    text: string
+    starter_question: string
+  } | null
   rewards: {
     daily_credit_cap: number
   }
@@ -1280,6 +1294,16 @@ export interface DietRecommendationMealContext {
 export interface DietRecommendationRequest {
   scene: DietRecommendationScene
   date?: string
+  question?: string
+  meal_type?: 'breakfast' | 'lunch' | 'dinner' | string
+  school_id?: string
+  school_name?: string
+  campus_id?: string
+  campus_name?: string
+  session_id?: string
+  new_session?: boolean
+  follow_up_intent?: 'more' | 'location' | 'compare' | 'context'
+  recommended_source_ids?: string[]
   calorie_remaining: number
   macro_gaps: DietRecommendationMacroContext
   targets: DietRecommendationMacroContext
@@ -1308,6 +1332,24 @@ export interface DietRecommendationOption {
   items: DietRecommendationFoodItem[]
   tips?: string[]
   alternatives?: string[]
+  is_campus_food?: boolean
+  school_id?: string
+  school_name?: string
+  campus_id?: string
+  campus_name?: string
+  canteen_id?: string
+  canteen_name?: string
+  window_id?: string
+  window_name?: string
+  floor?: string
+  price?: number
+  price_unit?: string
+  image_path?: string
+  nutrition_basis?: 'library_record' | 'library_estimate' | 'nutrition_label' | string
+  nutrition_source_category?: string
+  weight_method?: string
+  weight_confidence?: number
+  uncertainty_level?: string
 }
 
 export interface DietRecommendationResult {
@@ -1318,6 +1360,26 @@ export interface DietRecommendationResult {
   macro_gaps: DietRecommendationMacroContext
   recommendations: DietRecommendationOption[]
   generated_by?: string
+  ai_used?: boolean
+  candidate_count?: number
+  ai_rerank_count?: number
+  resolved_school?: {
+    id: string
+    name: string
+  }
+  campus_id?: string
+  campus_name?: string
+  session_id?: string
+  user_message_id?: string
+  assistant_message_id?: string
+  agent_constraints?: {
+    goal?: string
+    max_calories?: number
+    max_price?: number
+    min_protein?: number
+    max_fat?: number
+    sort_by?: string
+  }
 }
 
 const DASHBOARD_TARGETS_STORAGE_KEY = 'food_link_dashboard_targets_v1'
@@ -2122,6 +2184,12 @@ export interface HealthCondition {
   daily_life_activity_level?: string
   report_extract?: ReportExtract | null
   precision_reference_defaults?: PrecisionReferenceDefaults
+  campus_dining_preference?: {
+    school_id: string
+    school_name: string
+    campus_id?: string
+    campus_name?: string
+  }
   [key: string]: unknown
 }
 
@@ -2180,6 +2248,51 @@ export interface HealthProfileUpdateRequest {
   dashboard_targets?: DashboardTargets
   /** 精准模式默认参考物配置，写入 health_condition.precision_reference_defaults */
   precision_reference_defaults?: PrecisionReferenceDefaults
+  /** 宠物校园餐推荐的常用学校/校区；学校 ID 为空时清除。 */
+  campus_dining_preference?: {
+    school_id: string
+    campus_id?: string
+  }
+}
+
+export interface CampusDietAgentProgress {
+  agent_run_id: string
+  step: number
+  label: string
+  tool_name?: string
+  status: 'running' | 'success' | 'failed' | string
+  result_count?: number
+}
+
+export interface CampusDietAgentToolTrace {
+  tool_name: string
+  status: string
+  result_count?: number
+  duration_ms: number
+}
+
+export interface CampusDietAgentEvidence {
+  source_id: string
+  food_name: string
+  calories: number
+  protein: number
+  carbs: number
+  fat: number
+  nutrition_basis: string
+  weight_method?: string
+  weight_confidence?: number
+  uncertainty_level?: string
+}
+
+export interface CampusDietAgentResult {
+  agent_run_id: string
+  answer: string
+  recommendation: DietRecommendationResult
+  evidence: CampusDietAgentEvidence[]
+  tool_trace: CampusDietAgentToolTrace[]
+  agent_used: boolean
+  tool_count: number
+  fallback_reason?: string
 }
 
 // 更新用户信息请求接口
@@ -2252,14 +2365,6 @@ export async function imageToBase64(imagePath: string): Promise<string> {
     })
   }
 
-  const normalizeTmpPath = (path: string) => {
-    // 开发者工具 webview 渲染下常见临时路径：http://tmp/xxx
-    if (/^https?:\/\/tmp\//i.test(path)) {
-      return path.replace(/^https?:\/\/tmp\//i, 'wxfile://tmp/')
-    }
-    return path
-  }
-
   const candidatePaths: string[] = []
   const pushCandidate = (path?: string) => {
     const next = (path || '').trim()
@@ -2270,10 +2375,10 @@ export async function imageToBase64(imagePath: string): Promise<string> {
   }
 
   pushCandidate(raw)
-  const normalizedRaw = normalizeTmpPath(raw)
+  const normalizedRaw = normalizeWeappLocalFilePath(raw)
   pushCandidate(normalizedRaw)
 
-  if (/^https?:\/\//i.test(raw) && !/^https?:\/\/tmp\//i.test(raw)) {
+  if (isPublicHttpImageURL(raw)) {
     try {
       const dl = await Taro.downloadFile({ url: raw })
       if (dl.statusCode !== 200 || !dl.tempFilePath) {
@@ -2379,7 +2484,7 @@ export async function compressImagePathForUpload(
   localPath: string,
   options: { maxLongEdge?: number } = {},
 ): Promise<string> {
-  const raw = (localPath || '').trim()
+  const raw = String(localPath || '').trim()
   if (!raw) return raw
   if (typeof Taro.getEnv === 'function' && Taro.getEnv() !== Taro.ENV_TYPE.WEAPP) {
     return raw
@@ -2919,7 +3024,9 @@ function unwrapUploadAnalyzePayload(parsedData: Record<string, any> | null): Rec
 }
 
 export async function uploadAnalyzeImageFile(localPath: string): Promise<{ imageUrl: string }> {
-  const filePath = (localPath || '').trim()
+  // 开发者工具 webview 渲染会返回 http://tmp 或 http://usr；它们虽然长得像
+  // HTTP URL，实际是 uploadFile 可读取的本地虚拟路径，必须保留原样。
+  const filePath = String(localPath || '').trim()
   if (!filePath) {
     throw new Error('图片路径为空')
   }
@@ -3109,6 +3216,7 @@ export interface AnalyzeTextParams {
   remaining_calories?: number
   suggest_ratio_enabled?: boolean
   analysis_engine?: AnalysisEngine
+  precise_micronutrients?: boolean
 }
 
 /**
@@ -3117,14 +3225,15 @@ export interface AnalyzeTextParams {
  * @returns Promise<AnalyzeResponse>
  */
 export async function analyzeFoodText(params: AnalyzeTextParams | string): Promise<AnalyzeResponse> {
-  const payload = typeof params === 'string' ? { text: params.trim() } : {
+  const payload = typeof params === 'string' ? { text: params.trim(), precise_micronutrients: true } : {
     text: params.text.trim(),
     ...(params.user_goal != null && { user_goal: params.user_goal }),
     ...(params.diet_goal != null && { diet_goal: params.diet_goal }),
     ...(params.activity_timing != null && { activity_timing: params.activity_timing }),
     ...(params.remaining_calories != null && { remaining_calories: params.remaining_calories }),
     ...(params.suggest_ratio_enabled != null && { suggest_ratio_enabled: params.suggest_ratio_enabled }),
-    ...(params.analysis_engine != null && { analysis_engine: params.analysis_engine })
+    ...(params.analysis_engine != null && { analysis_engine: params.analysis_engine }),
+    precise_micronutrients: true,
   }
   try {
     const response = await Taro.request({
@@ -3315,6 +3424,20 @@ export interface AnalyzeTaskStatusCount {
   waiting_record: number
   recorded: number
   has_unseen_waiting_record: boolean
+  latest_recognizing_task_id?: string
+  latest_waiting_record_task_id?: string
+  latest_auto_recorded_task_id?: string
+  latest_auto_recorded_record_id?: string
+  has_unseen_auto_recorded?: boolean
+}
+
+export interface SupplementLabelRecognition {
+  name: string
+  brand: string
+  serving_label: string
+  components: SupplementComponent[]
+  confidence: number
+  raw_text?: string
 }
 
 export async function getAnalyzeTaskStatusCount(): Promise<AnalyzeTaskStatusCount> {
@@ -3323,6 +3446,25 @@ export async function getAnalyzeTaskStatusCount(): Promise<AnalyzeTaskStatusCoun
     throw new Error((res.data as any)?.detail || '获取任务状态数量失败')
   }
   return res.data as AnalyzeTaskStatusCount
+}
+
+export interface AnalyzeTaskAutoRecordResult {
+  enabled: boolean
+  meal_type?: string
+  status: string
+  record_id?: string
+}
+
+export async function setAnalyzeTaskAutoRecord(taskId: string, enabled: boolean, mealType?: MealType): Promise<AnalyzeTaskAutoRecordResult> {
+  const res = await authenticatedRequest(`/api/analyze/tasks/${encodeURIComponent(taskId)}/auto-record`, {
+    method: 'PUT',
+    data: { enabled, meal_type: mealType || '' },
+    timeout: 10000,
+  })
+  if (res.statusCode !== 200) {
+    throwHttpErrorWithStatus(res.statusCode, res.data, enabled ? '开启自动记录失败' : '关闭自动记录失败')
+  }
+  return res.data as AnalyzeTaskAutoRecordResult
 }
 
 /** 标记用户已查看识别记录列表 */
@@ -3336,7 +3478,7 @@ export async function markAnalyzeHistorySeen(): Promise<{ success: boolean }> {
 
 /** 提交食物分析任务，立即返回 task_id */
 export async function submitAnalyzeTask(body: AnalyzeTaskSubmitParams): Promise<{ task_id: string; message: string }> {
-  const payload = await enrichAnalyzePayloadWithGeoContext(body)
+  const payload = await enrichAnalyzePayloadWithGeoContext({ ...body, precise_micronutrients: true })
   const res = await authenticatedRequest('/api/analyze/submit', {
     method: 'POST',
     data: payload,
@@ -3449,7 +3591,7 @@ export interface AnalyzeTextTaskSubmitParams {
 
 /** 提交文字分析任务（异步） */
 export async function submitTextAnalyzeTask(body: AnalyzeTextTaskSubmitParams): Promise<{ task_id: string; message: string }> {
-  const payload = await enrichAnalyzePayloadWithGeoContext(body)
+  const payload = await enrichAnalyzePayloadWithGeoContext({ ...body, precise_micronutrients: true })
   const res = await authenticatedRequest('/api/analyze-text/submit', {
     method: 'POST',
     data: payload,
@@ -4170,6 +4312,20 @@ export async function listSupplementCatalog(query = ''): Promise<SupplementCatal
   return unwrapResponse<{ items: SupplementCatalogItem[] }>(res).items || []
 }
 
+export async function recognizeSupplementLabel(imageUrls: string[]): Promise<SupplementLabelRecognition> {
+  const normalized = imageUrls.map((item) => item.trim()).filter(Boolean).slice(0, 3)
+  if (!normalized.length) throw new Error('请至少上传一张补剂标签图片')
+  const res = await authenticatedRequest('/api/supplements/label/recognize', {
+    method: 'POST',
+    data: { image_urls: normalized },
+    timeout: 90000,
+  })
+  if (res.statusCode !== 200) {
+    throwHttpErrorWithStatus(res.statusCode, res.data, '识别补剂标签失败')
+  }
+  return unwrapResponse<{ supplement: SupplementLabelRecognition }>(res).supplement
+}
+
 export async function createSupplement(payload: UpsertSupplementPayload): Promise<UserSupplement> {
   const res = await authenticatedRequest('/api/supplements', {
     method: 'POST',
@@ -4240,6 +4396,21 @@ export async function getPetSummary(date?: string): Promise<PetSummary> {
     throw new Error('获取宠物状态失败')
   }
   return res.data as PetSummary
+}
+
+export async function updatePetName(petName: string): Promise<{ pet: PetProfile }> {
+  const name = (petName || '').trim()
+  if (!name) throw new Error('请输入宠物名字')
+  if (Array.from(name).length > 12) throw new Error('宠物名字最多 12 个字')
+  const res = await authenticatedRequest('/api/pet/name', {
+    method: 'PUT',
+    data: { name },
+    timeout: 10000,
+  })
+  if (res.statusCode !== 200) {
+    throwHttpErrorWithStatus(res.statusCode, res.data, '宠物改名失败')
+  }
+  return res.data as { pet: PetProfile }
 }
 
 export async function customizePetPixelAvatar(localPath: string, petName: string): Promise<{ pet: PetProfile }> {
@@ -4594,10 +4765,10 @@ export async function generateStatsInsight(range: 'week' | 'month'): Promise<{
   }>(res)
 }
 
-export async function estimatePetChat(question: string, range: 'week' | 'month'): Promise<PetChatEstimateResponse> {
+export async function estimatePetChat(question: string, range: 'week' | 'month', enableThinking = false): Promise<PetChatEstimateResponse> {
   const res = await authenticatedRequest('/api/pet/chat/estimate', {
     method: 'POST',
-    data: { question, range },
+    data: { question, range, enable_thinking: enableThinking },
     timeout: 30000
   })
   if (res.statusCode !== 200) {
@@ -4606,10 +4777,10 @@ export async function estimatePetChat(question: string, range: 'week' | 'month')
   return unwrapResponse<PetChatEstimateResponse>(res)
 }
 
-export async function generatePetChat(question: string, range: 'week' | 'month', sessionId = '', newSession = false): Promise<PetChatResponse> {
+export async function generatePetChat(question: string, range: 'week' | 'month', sessionId = '', newSession = false, enableThinking = false): Promise<PetChatResponse> {
   const res = await authenticatedRequest('/api/pet/chat', {
     method: 'POST',
-    data: { question, range, session_id: sessionId, new_session: newSession },
+    data: { question, range, session_id: sessionId, new_session: newSession, enable_thinking: enableThinking },
     timeout: 90000
   })
   if (res.statusCode !== 200) {
@@ -4620,6 +4791,8 @@ export async function generatePetChat(question: string, range: 'week' | 'month',
 
 export interface StreamGeneratePetChatCallbacks {
   onStart?: () => void
+  onProgress?: (progress: CampusDietAgentProgress) => void
+  onDietResult?: (result: CampusDietAgentResult) => void
   onChunk: (text: string) => void
   onDone: (meta: PetChatStreamMeta) => void
   onError: (error: Error) => void
@@ -4630,7 +4803,8 @@ export function streamGeneratePetChat(
   range: 'week' | 'month',
   sessionId = '',
   newSession = false,
-  callbacks: StreamGeneratePetChatCallbacks
+  callbacks: StreamGeneratePetChatCallbacks,
+  enableThinking = false
 ): () => void {
   const token = getAccessToken()
   if (!token) {
@@ -4674,9 +4848,20 @@ export function streamGeneratePetChat(
       }
       if (!dataLine) continue
       try {
-        const parsed = JSON.parse(dataLine) as { type: string; text?: string; error?: string; meta?: PetChatStreamMeta }
+        const parsed = JSON.parse(dataLine) as {
+          type: string
+          text?: string
+          error?: string
+          progress?: CampusDietAgentProgress
+          diet_result?: CampusDietAgentResult
+          meta?: PetChatStreamMeta
+        }
         if (parsed.type === 'chunk' && typeof parsed.text === 'string') {
           callbacks.onChunk(parsed.text)
+        } else if (parsed.type === 'progress' && parsed.progress) {
+          callbacks.onProgress?.(parsed.progress)
+        } else if (parsed.type === 'diet_result' && parsed.diet_result) {
+          callbacks.onDietResult?.(parsed.diet_result)
         } else if (parsed.type === 'done' && parsed.meta) {
           settled = true
           clearRequestTimeout()
@@ -4699,7 +4884,7 @@ export function streamGeneratePetChat(
         'Content-Type': 'application/json',
         'Accept': 'text/event-stream',
       }),
-      data: { question, range, session_id: sessionId, new_session: newSession },
+      data: { question, range, session_id: sessionId, new_session: newSession, enable_thinking: enableThinking },
       enableChunked: true,
       timeout: 180000,
       success: (res) => {
@@ -6652,7 +6837,7 @@ export interface LegacyFriendInviteRequestResult {
   avatar: string
 }
 
-/** 本周好友圈打卡排行榜条目 */
+/** 本周全体用户饮食记录排行榜条目 */
 export interface CheckinLeaderboardItem {
   rank: number
   user_id: string
@@ -6669,7 +6854,20 @@ export interface HealthLeaderboardItem {
   avatar: string
   health_index: number
   recorded_days: number
+  diet_quality_points?: number
+  continuity_points?: number
+  stability_points?: number
   is_me: boolean
+}
+
+export interface HealthLeaderboardScoringRule {
+  label: string
+  total_points: number
+  diet_quality_points: number
+  continuity_points: number
+  stability_points: number
+  minimum_recorded_days: number
+  continuity_description: string
 }
 
 export interface FoodNutrientLeaderboardItem {
@@ -6701,6 +6899,8 @@ export interface CommunityFeedQueryParams {
   priority_author_ids?: string[]
   author_scope?: CommunityAuthorScope
   author_id?: string
+  before_time?: string
+  before_key?: string
 }
 
 export interface CirclePostNutritionInput {
@@ -7284,6 +7484,9 @@ export async function communityGetFeed(
     q += `&priority_author_ids=${encodeURIComponent(params.priority_author_ids.join(','))}`
   }
   if (params?.author_id) q += `&author_id=${encodeURIComponent(params.author_id)}`
+  if (params?.before_time && params?.before_key) {
+    q += `&before_time=${encodeURIComponent(params.before_time)}&before_key=${encodeURIComponent(params.before_key)}`
+  }
   const response = await withTransientRequestRetry(() =>
     authenticatedRequest(`/api/community/feed${q}`, { method: 'GET', timeout: 15000 })
   )
@@ -7291,7 +7494,7 @@ export async function communityGetFeed(
   return response.data as { list: CommunityFeedItem[]; has_more?: boolean }
 }
 
-/** 本周打卡排行榜（自己 + 好友，按饮食记录条数） */
+/** 本周全体用户饮食记录排行榜（按饮食记录条数） */
 export async function communityGetCheckinLeaderboard(): Promise<{
   week_start: string
   week_end: string
@@ -7309,11 +7512,17 @@ export async function communityGetCheckinLeaderboard(): Promise<{
 export async function communityGetHealthLeaderboard(): Promise<{
   week_start: string
   week_end: string
+  scoring_rule: HealthLeaderboardScoringRule
   list: HealthLeaderboardItem[]
 }> {
   const response = await authenticatedRequest('/api/community/health-leaderboard', { method: 'GET' })
   if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '获取健康排行榜失败')
-  return response.data as { week_start: string; week_end: string; list: HealthLeaderboardItem[] }
+  return response.data as {
+    week_start: string
+    week_end: string
+    scoring_rule: HealthLeaderboardScoringRule
+    list: HealthLeaderboardItem[]
+  }
 }
 
 export async function communityGetFoodNutrientLeaderboard(
@@ -7334,7 +7543,7 @@ export async function communityGetPublicFeed(
   limit: number = 20,
   includeComments: boolean = true,
   commentsLimit: number = 5,
-  params?: Pick<CommunityFeedQueryParams, 'meal_type' | 'diet_goal' | 'sort_by' | 'content_type' | 'author_id'>
+  params?: Pick<CommunityFeedQueryParams, 'meal_type' | 'diet_goal' | 'sort_by' | 'content_type' | 'author_id' | 'before_time' | 'before_key'>
 ): Promise<{ list: CommunityFeedItem[]; has_more?: boolean }> {
   let q = `?offset=${offset}&limit=${limit}&include_comments=${includeComments}&comments_limit=${commentsLimit}`
   if (params?.meal_type) q += `&meal_type=${encodeURIComponent(params.meal_type)}`
@@ -7342,6 +7551,9 @@ export async function communityGetPublicFeed(
   if (params?.sort_by) q += `&sort_by=${encodeURIComponent(params.sort_by)}`
   if (params?.content_type) q += `&content_type=${encodeURIComponent(params.content_type)}`
   if (params?.author_id) q += `&author_id=${encodeURIComponent(params.author_id)}`
+  if (params?.before_time && params?.before_key) {
+    q += `&before_time=${encodeURIComponent(params.before_time)}&before_key=${encodeURIComponent(params.before_key)}`
+  }
   const token = getAccessToken()
   const response = await withTransientRequestRetry(async () => {
     const result = await Taro.request({
@@ -7826,6 +8038,8 @@ export interface CreatePublicFoodLibraryRequest {
 /** 公共食物库列表查询参数 */
 export interface PublicFoodLibraryListParams {
   city?: string
+  /** 搜索菜名、学校/校区/食堂、楼层/窗口及地址 */
+  keyword?: string
   suitable_for_fat_loss?: boolean
   merchant_name?: string
   min_calories?: number
@@ -7841,6 +8055,8 @@ export interface PublicFoodLibraryListParams {
   window_id?: string
   school_name?: string
   canteen_name?: string
+  floor?: string
+  window_name?: string
   is_campus_highlight?: boolean
 }
 
@@ -7865,6 +8081,7 @@ export async function getPublicFoodLibraryList(
 ): Promise<{ list: PublicFoodLibraryItem[] }> {
   const q = new URLSearchParams()
   if (params?.city) q.set('city', params.city)
+  if (params?.keyword) q.set('keyword', params.keyword)
   if (params?.suitable_for_fat_loss !== undefined) q.set('suitable_for_fat_loss', String(params.suitable_for_fat_loss))
   if (params?.merchant_name) q.set('merchant_name', params.merchant_name)
   if (params?.min_calories !== undefined) q.set('min_calories', String(params.min_calories))
@@ -7880,6 +8097,8 @@ export async function getPublicFoodLibraryList(
   if (params?.window_id) q.set('window_id', params.window_id)
   if (params?.school_name) q.set('school_name', params.school_name)
   if (params?.canteen_name) q.set('canteen_name', params.canteen_name)
+  if (params?.floor) q.set('floor', params.floor)
+  if (params?.window_name) q.set('window_name', params.window_name)
   if (params?.is_campus_highlight !== undefined) q.set('is_campus_highlight', String(params.is_campus_highlight))
   const qs = q.toString()
   const url = qs ? `/api/public-food-library?${qs}` : '/api/public-food-library'
@@ -8350,6 +8569,12 @@ export async function createExerciseLog(data: {
   exercise_desc: string
   image_url?: string
   date?: string
+  estimation_mode?: 'standard' | 'precision'
+  total_duration_min?: number
+  intensity?: 'low' | 'moderate' | 'high'
+  average_heart_rate?: number
+  distance_km?: number
+  exercise_breakdown?: string
 }): Promise<{ task_id: string; message: string }> {
   const trimmed = data.exercise_desc.trim()
   const parts: string[] = [`exercise_desc=${encodeURIComponent(trimmed)}`]
@@ -8358,6 +8583,24 @@ export async function createExerciseLog(data: {
   }
   if (data.date) {
     parts.push(`date=${encodeURIComponent(data.date)}`)
+  }
+  if (data.estimation_mode) {
+    parts.push(`estimation_mode=${encodeURIComponent(data.estimation_mode)}`)
+  }
+  if (data.total_duration_min && data.total_duration_min > 0) {
+    parts.push(`total_duration_min=${encodeURIComponent(String(data.total_duration_min))}`)
+  }
+  if (data.intensity) {
+    parts.push(`intensity=${encodeURIComponent(data.intensity)}`)
+  }
+  if (data.average_heart_rate && data.average_heart_rate > 0) {
+    parts.push(`average_heart_rate=${encodeURIComponent(String(data.average_heart_rate))}`)
+  }
+  if (data.distance_km && data.distance_km > 0) {
+    parts.push(`distance_km=${encodeURIComponent(String(data.distance_km))}`)
+  }
+  if (data.exercise_breakdown?.trim()) {
+    parts.push(`exercise_breakdown=${encodeURIComponent(data.exercise_breakdown.trim())}`)
   }
   const response = await authenticatedRequest('/api/exercise-logs', {
     method: 'POST',

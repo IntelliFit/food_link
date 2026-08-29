@@ -32,6 +32,12 @@ type reviewedImageEntry struct {
 	FoodName              string         `json:"food_name"`
 	Uses                  int64          `json:"uses,omitempty"`
 	CandidateURL          string         `json:"candidate_url"`
+	CandidatePage         string         `json:"candidate_page,omitempty"`
+	ReuseObjectKey        string         `json:"reuse_object_key,omitempty"`
+	SourceLabel           string         `json:"source_label,omitempty"`
+	ImageLicense          string         `json:"image_license,omitempty"`
+	SourceFoodID          string         `json:"source_food_id,omitempty"`
+	SourceFoodName        string         `json:"source_food_name,omitempty"`
 	AuditedImagePath      string         `json:"audited_image_path,omitempty"`
 	OldImagePath          string         `json:"old_image_path,omitempty"`
 	OldImagePaths         string         `json:"old_image_paths"`
@@ -44,6 +50,7 @@ type reviewedImageEntry struct {
 	ObjectKey             string         `json:"object_key,omitempty"`
 	AccessURL             string         `json:"access_url,omitempty"`
 	Uploaded              bool           `json:"uploaded"`
+	Reused                bool           `json:"reused"`
 	DBUpdated             bool           `json:"db_updated"`
 	ProcessedAt           time.Time      `json:"processed_at,omitempty"`
 }
@@ -66,6 +73,12 @@ type reviewedCandidate struct {
 	FoodName              string
 	Uses                  int64
 	CandidateURL          string
+	CandidatePage         string
+	ReuseObjectKey        string
+	SourceLabel           string
+	ImageLicense          string
+	SourceFoodID          string
+	SourceFoodName        string
 	ExpectedOldImagePath  string
 	AuditDecision         *imageDecision
 	AuditOldImageDecision *imageDecision
@@ -78,6 +91,9 @@ type imageDBSnapshot struct {
 }
 
 func runReviewedImageApply(ctx context.Context, opts options) error {
+	if err := validateReviewedApplyMode(opts); err != nil {
+		return err
+	}
 	if strings.TrimSpace(opts.reviewedMissingReport) == "" && strings.TrimSpace(opts.reviewedExistingReport) == "" {
 		return errors.New("--reviewed-apply 至少需要一个审计报告")
 	}
@@ -128,6 +144,9 @@ func runReviewedImageApply(ctx context.Context, opts options) error {
 		entry := reviewedImageEntry{
 			Kind: candidate.Kind, FoodID: candidate.FoodID, FoodName: candidate.FoodName,
 			Uses: candidate.Uses, CandidateURL: candidate.CandidateURL,
+			CandidatePage: candidate.CandidatePage, ReuseObjectKey: candidate.ReuseObjectKey,
+			SourceLabel: candidate.SourceLabel, ImageLicense: candidate.ImageLicense,
+			SourceFoodID: candidate.SourceFoodID, SourceFoodName: candidate.SourceFoodName,
 			AuditedImagePath: candidate.ExpectedOldImagePath,
 			AuditDecision:    candidate.AuditDecision, AuditOldImageDecision: candidate.AuditOldImageDecision,
 			Status: "planned",
@@ -224,9 +243,16 @@ func loadReviewedCandidates(opts options) ([]reviewedCandidate, error) {
 			if decision == nil || item.CandidateURL == "" || !decision.Match || !decision.FoodMatch || !decision.NoWatermark || decision.Confidence < opts.reviewedMinConfidence {
 				continue
 			}
+			reuseObjectKey := ""
+			if item.Reused {
+				reuseObjectKey = item.ObjectKey
+			}
 			out = append(out, reviewedCandidate{
 				Kind: reviewedKindMissing, FoodID: item.FoodID, FoodName: item.FoodName,
-				CandidateURL: item.CandidateURL, AuditDecision: decision,
+				CandidateURL: item.CandidateURL, CandidatePage: item.CandidatePage,
+				ReuseObjectKey: reuseObjectKey, SourceLabel: item.SourceLabel,
+				ImageLicense: item.License, SourceFoodID: item.SourceFoodID,
+				SourceFoodName: item.SourceFoodName, AuditDecision: decision,
 			})
 		}
 	}
@@ -282,27 +308,50 @@ func loadReviewedCandidates(opts options) ([]reviewedCandidate, error) {
 		if err := readJSONFile(path, &allowlist); err != nil {
 			return nil, fmt.Errorf("读取复核白名单: %w", err)
 		}
-		allowed := make(map[string]bool, len(allowlist.Entries))
+		allowed := make(map[string]reviewedImageEntry, len(allowlist.Entries))
 		for key, entry := range allowlist.Entries {
 			if entry.Status == "verified" {
-				allowed[key] = true
+				allowed[key] = entry
 			}
 		}
 		allowlisted := make([]reviewedCandidate, 0, len(filtered))
+		changed := 0
 		for _, candidate := range filtered {
-			if allowed[reviewedEntryKey(candidate.Kind, candidate.FoodID)] {
+			entry, ok := allowed[reviewedEntryKey(candidate.Kind, candidate.FoodID)]
+			if ok && reviewedCandidateMatchesAllowlist(candidate, entry) {
 				allowlisted = append(allowlisted, candidate)
+			} else if ok {
+				changed++
 			}
 		}
-		fmt.Printf("[reviewed-preflight] allowlisted=%d source=%s\n", len(allowlisted), path)
+		fmt.Printf("[reviewed-preflight] allowlisted=%d changed_since_review=%d source=%s\n", len(allowlisted), changed, path)
 		filtered = allowlisted
 	}
 	return filtered, nil
 }
 
+func reviewedCandidateMatchesAllowlist(candidate reviewedCandidate, entry reviewedImageEntry) bool {
+	return candidate.Kind == entry.Kind &&
+		candidate.FoodID == entry.FoodID &&
+		strings.TrimSpace(candidate.CandidateURL) == strings.TrimSpace(entry.CandidateURL) &&
+		strings.TrimSpace(candidate.CandidatePage) == strings.TrimSpace(entry.CandidatePage) &&
+		strings.TrimSpace(candidate.ReuseObjectKey) == strings.TrimSpace(entry.ReuseObjectKey) &&
+		strings.TrimSpace(candidate.SourceLabel) == strings.TrimSpace(entry.SourceLabel) &&
+		strings.TrimSpace(candidate.ImageLicense) == strings.TrimSpace(entry.ImageLicense) &&
+		strings.TrimSpace(candidate.SourceFoodID) == strings.TrimSpace(entry.SourceFoodID) &&
+		strings.TrimSpace(candidate.SourceFoodName) == strings.TrimSpace(entry.SourceFoodName) &&
+		strings.TrimSpace(candidate.ExpectedOldImagePath) == strings.TrimSpace(entry.AuditedImagePath)
+}
+
 func verifyAndApplyReviewedImage(ctx context.Context, db *gorm.DB, storageClient *storage.Client, client *visionClient, opts options, entry reviewedImageEntry) reviewedImageEntry {
 	entry.ProcessedAt = time.Now()
-	img, err := downloadCandidateHTTP(ctx, imageCandidate{ImageURL: entry.CandidateURL}, "")
+	// Web-search candidates need browser headers during the fresh pass. Library
+	// reuse candidates use our own CDN and keep their existing COS object key.
+	imageSearch := ""
+	if entry.Kind == reviewedKindMissing && entry.ReuseObjectKey == "" {
+		imageSearch = "bing"
+	}
+	img, err := downloadCandidateHTTP(ctx, imageCandidate{ImageURL: entry.CandidateURL, PageURL: entry.CandidatePage}, imageSearch)
 	if err != nil {
 		entry.Status, entry.Reason = "candidate_download_failed", err.Error()
 		return entry
@@ -339,21 +388,28 @@ func verifyAndApplyReviewedImage(ctx context.Context, db *gorm.DB, storageClient
 		}
 	}
 
-	entry.ObjectKey = buildObjectKey(opts.keyPrefix, entry.FoodID, img.SHA256, img.Ext)
+	entry.ObjectKey = strings.TrimSpace(entry.ReuseObjectKey)
+	if entry.ObjectKey == "" {
+		entry.ObjectKey = buildObjectKey(opts.keyPrefix, entry.FoodID, img.SHA256, img.Ext)
+	} else {
+		entry.Reused = true
+	}
 	entry.AccessURL = storageClient.BuildAccessURL("food-images", entry.ObjectKey)
 	if !opts.apply {
 		entry.Status = "verified"
 		entry.Reason = "fresh verification passed; dry-run"
 		return entry
 	}
-	uploadedURL, err := storageClient.UploadBytes("food-images", entry.ObjectKey, img.Data, img.ContentType)
-	if err != nil {
-		entry.Status, entry.Reason = "upload_failed", err.Error()
-		return entry
-	}
-	entry.Uploaded = true
-	if uploadedURL != "" {
-		entry.AccessURL = uploadedURL
+	if !entry.Reused {
+		uploadedURL, err := storageClient.UploadBytes("food-images", entry.ObjectKey, img.Data, img.ContentType)
+		if err != nil {
+			entry.Status, entry.Reason = "upload_failed", err.Error()
+			return entry
+		}
+		entry.Uploaded = true
+		if uploadedURL != "" {
+			entry.AccessURL = uploadedURL
+		}
 	}
 	if err := conditionallyUpdateReviewedImage(ctx, db, entry); err != nil {
 		entry.Status, entry.Reason = "db_update_failed", err.Error()
@@ -361,7 +417,11 @@ func verifyAndApplyReviewedImage(ctx context.Context, db *gorm.DB, storageClient
 	}
 	entry.DBUpdated = true
 	entry.Status = "applied"
-	entry.Reason = "uploaded to COS and conditionally updated database"
+	if entry.Reused {
+		entry.Reason = "reused existing COS object and conditionally updated database"
+	} else {
+		entry.Reason = "uploaded to COS and conditionally updated database"
+	}
 	return entry
 }
 
@@ -421,9 +481,19 @@ func conditionallyUpdateReviewedImage(ctx context.Context, db *gorm.DB, entry re
 SELECT 1 FROM jsonb_array_elements_text(COALESCE(image_paths, '[]'::jsonb)) AS image_url
 WHERE NULLIF(trim(image_url), '') IS NOT NULL)`)
 	}
-	res := query.Updates(map[string]any{
+	updates := map[string]any{
 		"image_path": entry.ObjectKey, "image_paths": datatypes.JSON(pathsJSON), "updated_at": gorm.Expr("now()"),
-	})
+	}
+	if strings.TrimSpace(entry.CandidatePage) != "" {
+		updates["image_source_url"] = strings.TrimSpace(entry.CandidatePage)
+	}
+	if strings.TrimSpace(entry.SourceLabel) != "" {
+		updates["image_source_label"] = strings.TrimSpace(entry.SourceLabel)
+	}
+	if strings.TrimSpace(entry.ImageLicense) != "" {
+		updates["image_license"] = strings.TrimSpace(entry.ImageLicense)
+	}
+	res := query.Updates(updates)
 	if res.Error != nil {
 		return res.Error
 	}

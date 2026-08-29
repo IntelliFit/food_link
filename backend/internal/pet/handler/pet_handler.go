@@ -24,6 +24,7 @@ type PetService interface {
 	ClaimEvent(ctx context.Context, userID, eventID string) (*service.ClaimResult, error)
 	RerollAppearance(ctx context.Context, userID string) (*service.AppearanceRerollResult, error)
 	SelectAppearance(ctx context.Context, userID, candidateID string) (*service.AppearanceSelectResult, error)
+	UpdateName(ctx context.Context, userID, name string) (*service.PetNameUpdateResult, error)
 	CustomizePixelAvatar(ctx context.Context, userID, name string, source []byte) (*service.PixelAvatarResult, error)
 }
 
@@ -66,6 +67,50 @@ func (h *PetHandler) Summary(c *gin.Context) {
 		response.Error(c, &commonerrors.AppError{Code: 10000, Message: "获取宠物状态失败", HTTPStatus: 500})
 		return
 	}
+	response.Success(c, data)
+}
+
+type updatePetNameRequest struct {
+	Name string `json:"name"`
+}
+
+func (h *PetHandler) UpdateName(c *gin.Context) {
+	userID := c.GetString(authmw.ContextUserIDKey)
+	if userID == "" {
+		response.Error(c, commonerrors.ErrUnauthorized)
+		return
+	}
+	var req updatePetNameRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, &commonerrors.AppError{Code: 10002, Message: "请输入宠物名字", HTTPStatus: http.StatusBadRequest})
+		return
+	}
+
+	name := strings.TrimSpace(req.Name)
+	logger.Info(c.Request.Context(), "宠物改名请求进入",
+		slog.String("user_id", userID),
+		slog.Int("name_length", len([]rune(name))),
+	)
+	data, err := h.svc.UpdateName(c.Request.Context(), userID, name)
+	if err != nil {
+		if errors.Is(err, service.ErrInvalidPetName) {
+			logger.Warn(c.Request.Context(), "宠物名字格式不合法",
+				slog.String("user_id", userID),
+				slog.Int("name_length", len([]rune(name))),
+			)
+			response.Error(c, &commonerrors.AppError{Code: 10002, Message: "宠物名字需为 1–12 个字", HTTPStatus: http.StatusBadRequest})
+			return
+		}
+		logger.Error(c.Request.Context(), "宠物改名失败", err,
+			slog.String("user_id", userID),
+		)
+		response.Error(c, &commonerrors.AppError{Code: 10000, Message: "宠物改名失败，请稍后重试", HTTPStatus: http.StatusInternalServerError})
+		return
+	}
+	logger.Info(c.Request.Context(), "宠物改名完成",
+		slog.String("user_id", userID),
+		slog.String("pet_id", data.Pet.ID),
+	)
 	response.Success(c, data)
 }
 
@@ -127,7 +172,7 @@ func (h *PetHandler) CustomizePixelAvatar(c *gin.Context) {
 			return
 		}
 		if errors.Is(err, service.ErrInvalidPetName) {
-			response.Error(c, &commonerrors.AppError{Code: 10002, Message: "宠物名字最多 12 个字", HTTPStatus: http.StatusBadRequest})
+			response.Error(c, &commonerrors.AppError{Code: 10002, Message: "宠物名字需为 1–12 个字", HTTPStatus: http.StatusBadRequest})
 			return
 		}
 		logger.Error(c.Request.Context(), "生成用户像素分身失败", err,
@@ -144,10 +189,11 @@ func (h *PetHandler) CustomizePixelAvatar(c *gin.Context) {
 }
 
 type petChatRequest struct {
-	Question   string `json:"question"`
-	Range      string `json:"range"`
-	SessionID  string `json:"session_id"`
-	NewSession bool   `json:"new_session"`
+	Question       string `json:"question"`
+	Range          string `json:"range"`
+	SessionID      string `json:"session_id"`
+	NewSession     bool   `json:"new_session"`
+	EnableThinking bool   `json:"enable_thinking"`
 }
 
 type petChatAppendRequest struct {
@@ -174,10 +220,12 @@ func (h *PetHandler) EstimateChat(c *gin.Context) {
 		slog.String("user_id", userID),
 		slog.String("range", strings.TrimSpace(req.Range)),
 		slog.Int("question_length", len([]rune(strings.TrimSpace(req.Question)))),
+		slog.Bool("enable_thinking", req.EnableThinking),
 	)
 	data, err := h.chat.EstimatePetChat(c.Request.Context(), userID, healthservice.PetChatInput{
-		Question: strings.TrimSpace(req.Question),
-		Range:    strings.TrimSpace(req.Range),
+		Question:       strings.TrimSpace(req.Question),
+		Range:          strings.TrimSpace(req.Range),
+		EnableThinking: req.EnableThinking,
 	})
 	if err != nil {
 		response.Error(c, err)
@@ -212,12 +260,14 @@ func (h *PetHandler) Chat(c *gin.Context) {
 		slog.String("user_id", userID),
 		slog.String("range", strings.TrimSpace(req.Range)),
 		slog.Int("question_length", len([]rune(strings.TrimSpace(req.Question)))),
+		slog.Bool("enable_thinking", req.EnableThinking),
 	)
 	data, err := h.chat.GeneratePetChat(c.Request.Context(), userID, healthservice.PetChatInput{
-		Question:   strings.TrimSpace(req.Question),
-		Range:      strings.TrimSpace(req.Range),
-		SessionID:  strings.TrimSpace(req.SessionID),
-		NewSession: req.NewSession,
+		Question:       strings.TrimSpace(req.Question),
+		Range:          strings.TrimSpace(req.Range),
+		SessionID:      strings.TrimSpace(req.SessionID),
+		NewSession:     req.NewSession,
+		EnableThinking: req.EnableThinking,
 	})
 	if err != nil {
 		response.Error(c, err)
@@ -252,12 +302,14 @@ func (h *PetHandler) ChatStream(c *gin.Context) {
 		slog.String("user_id", userID),
 		slog.String("range", strings.TrimSpace(req.Range)),
 		slog.Int("question_length", len([]rune(strings.TrimSpace(req.Question)))),
+		slog.Bool("enable_thinking", req.EnableThinking),
 	)
 	chunkChan, err := h.chat.GeneratePetChatStream(c.Request.Context(), userID, healthservice.PetChatInput{
-		Question:   strings.TrimSpace(req.Question),
-		Range:      strings.TrimSpace(req.Range),
-		SessionID:  strings.TrimSpace(req.SessionID),
-		NewSession: req.NewSession,
+		Question:       strings.TrimSpace(req.Question),
+		Range:          strings.TrimSpace(req.Range),
+		SessionID:      strings.TrimSpace(req.SessionID),
+		NewSession:     req.NewSession,
+		EnableThinking: req.EnableThinking,
 	})
 	if err != nil {
 		response.Error(c, err)

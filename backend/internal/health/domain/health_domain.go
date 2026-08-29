@@ -210,16 +210,64 @@ type DietRecommendationFoodItem struct {
 	SourceID string `json:"source_id,omitempty"`
 }
 
+type DietRecommendationScope struct {
+	SchoolID         string
+	CampusID         string
+	IncludeSourceIDs []string
+	ExcludeSourceIDs []string
+}
+
+type CampusDietSearchFilter struct {
+	SchoolID         string
+	CampusID         string
+	Keyword          string
+	CanteenName      string
+	IncludeSourceIDs []string
+	ExcludeSourceIDs []string
+	MaxCalories      *float64
+	MinProtein       *float64
+	MaxFat           *float64
+	MaxPrice         *float64
+	TargetCalories   *float64
+	SortBy           string
+	Limit            int
+	Offset           int
+}
+
+type DietRecommendationSchool struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
 type DietRecommendationCandidate struct {
-	Source      string                       `json:"source"`
-	SourceID    string                       `json:"source_id,omitempty"`
-	Title       string                       `json:"title"`
-	Description string                       `json:"description,omitempty"`
-	Calories    float64                      `json:"calories"`
-	Protein     float64                      `json:"protein"`
-	Carbs       float64                      `json:"carbs"`
-	Fat         float64                      `json:"fat"`
-	Items       []DietRecommendationFoodItem `json:"items"`
+	Source                  string                       `json:"source"`
+	SourceID                string                       `json:"source_id,omitempty"`
+	Title                   string                       `json:"title"`
+	Description             string                       `json:"description,omitempty"`
+	Calories                float64                      `json:"calories"`
+	Protein                 float64                      `json:"protein"`
+	Carbs                   float64                      `json:"carbs"`
+	Fat                     float64                      `json:"fat"`
+	Items                   []DietRecommendationFoodItem `json:"items"`
+	IsCampusFood            bool                         `json:"is_campus_food,omitempty"`
+	SchoolID                string                       `json:"school_id,omitempty"`
+	SchoolName              string                       `json:"school_name,omitempty"`
+	CampusID                string                       `json:"campus_id,omitempty"`
+	CampusName              string                       `json:"campus_name,omitempty"`
+	CanteenID               string                       `json:"canteen_id,omitempty"`
+	CanteenName             string                       `json:"canteen_name,omitempty"`
+	WindowID                string                       `json:"window_id,omitempty"`
+	WindowName              string                       `json:"window_name,omitempty"`
+	Floor                   string                       `json:"floor,omitempty"`
+	Price                   float64                      `json:"price,omitempty"`
+	PriceUnit               string                       `json:"price_unit,omitempty"`
+	ImagePath               string                       `json:"image_path,omitempty"`
+	PortionDescription      string                       `json:"portion_description,omitempty"`
+	NutritionBasis          string                       `json:"nutrition_basis,omitempty"`
+	NutritionSourceCategory string                       `json:"nutrition_source_category,omitempty"`
+	WeightMethod            string                       `json:"weight_method,omitempty"`
+	WeightConfidence        float64                      `json:"weight_confidence,omitempty"`
+	UncertaintyLevel        string                       `json:"uncertainty_level,omitempty"`
 }
 
 // AnalysisTask — table: analysis_tasks

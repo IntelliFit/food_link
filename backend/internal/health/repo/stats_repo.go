@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -159,8 +160,10 @@ func (r *StatsRepo) CountInsightGenerationsToday(ctx context.Context, userID str
 	return count, err
 }
 
-func (r *StatsRepo) GetDietRecommendationCandidates(ctx context.Context, userID string, scene string, limit int) ([]domain.DietRecommendationCandidate, error) {
-	if limit <= 0 || limit > 50 {
+func (r *StatsRepo) GetDietRecommendationCandidates(ctx context.Context, userID string, scene string, scope domain.DietRecommendationScope, limit int) ([]domain.DietRecommendationCandidate, error) {
+	// 校园推荐会先扫描本校完整已发布菜品池，再在 service 层做营养初筛和 AI 重排。
+	// 这里保留上限防止异常请求无界读取；普通推荐仍使用 24 条的小候选池。
+	if limit <= 0 || limit > 3000 {
 		limit = 24
 	}
 	out := make([]domain.DietRecommendationCandidate, 0, limit)
@@ -170,13 +173,23 @@ func (r *StatsRepo) GetDietRecommendationCandidates(ctx context.Context, userID 
 	}
 
 	if scene == "eat_out" {
-		out = append(out, r.getPublicFoodRecommendationCandidates(ctx, perSourceLimit+3)...)
+		publicLimit := perSourceLimit + 3
+		if scope.SchoolID != "" {
+			publicLimit = limit
+		}
+		out = append(out, r.getPublicFoodRecommendationCandidates(ctx, scope, publicLimit)...)
+		if scope.SchoolID != "" {
+			if len(out) > limit {
+				out = out[:limit]
+			}
+			return out, nil
+		}
 		out = append(out, r.getUserFoodRecordRecommendationCandidates(ctx, userID, perSourceLimit)...)
 		out = append(out, r.getNutritionRecommendationCandidates(ctx, perSourceLimit)...)
 	} else {
 		out = append(out, r.getNutritionRecommendationCandidates(ctx, perSourceLimit+5)...)
 		out = append(out, r.getUserFoodRecordRecommendationCandidates(ctx, userID, perSourceLimit)...)
-		out = append(out, r.getPublicFoodRecommendationCandidates(ctx, perSourceLimit)...)
+		out = append(out, r.getPublicFoodRecommendationCandidates(ctx, scope, perSourceLimit)...)
 	}
 	if len(out) > limit {
 		out = out[:limit]
@@ -185,23 +198,160 @@ func (r *StatsRepo) GetDietRecommendationCandidates(ctx context.Context, userID 
 }
 
 type dietRecommendationRow struct {
-	ID          string  `gorm:"column:id"`
-	Title       string  `gorm:"column:title"`
-	Description string  `gorm:"column:description"`
-	Calories    float64 `gorm:"column:calories"`
-	Protein     float64 `gorm:"column:protein"`
-	Carbs       float64 `gorm:"column:carbs"`
-	Fat         float64 `gorm:"column:fat"`
-	ItemsJSON   string  `gorm:"column:items_json"`
+	ID           string  `gorm:"column:id"`
+	Title        string  `gorm:"column:title"`
+	Description  string  `gorm:"column:description"`
+	Calories     float64 `gorm:"column:calories"`
+	Protein      float64 `gorm:"column:protein"`
+	Carbs        float64 `gorm:"column:carbs"`
+	Fat          float64 `gorm:"column:fat"`
+	ItemsJSON    string  `gorm:"column:items_json"`
+	IsCampusFood bool    `gorm:"column:is_campus_food"`
+	SchoolID     string  `gorm:"column:school_id"`
+	SchoolName   string  `gorm:"column:school_name"`
+	CampusID     string  `gorm:"column:campus_id"`
+	CampusName   string  `gorm:"column:campus_name"`
+	CanteenID    string  `gorm:"column:canteen_id"`
+	CanteenName  string  `gorm:"column:canteen_name"`
+	WindowID     string  `gorm:"column:window_id"`
+	WindowName   string  `gorm:"column:window_name"`
+	Floor        string  `gorm:"column:floor"`
+	Price        float64 `gorm:"column:price"`
+	PriceUnit    string  `gorm:"column:price_unit"`
+	ImagePath    string  `gorm:"column:image_path"`
 }
 
-func (r *StatsRepo) getPublicFoodRecommendationCandidates(ctx context.Context, limit int) []domain.DietRecommendationCandidate {
-	var rows []dietRecommendationRow
-	err := r.db.WithContext(ctx).
+func (r *StatsRepo) SearchCampusDietCandidates(ctx context.Context, filter domain.CampusDietSearchFilter) ([]domain.DietRecommendationCandidate, int64, error) {
+	filter.SchoolID = strings.TrimSpace(filter.SchoolID)
+	if filter.SchoolID == "" {
+		return nil, 0, fmt.Errorf("school_id required")
+	}
+	if filter.Limit <= 0 || filter.Limit > 20 {
+		filter.Limit = 20
+	}
+	if filter.Offset < 0 {
+		filter.Offset = 0
+	}
+	if filter.Offset > 3000 {
+		filter.Offset = 3000
+	}
+
+	base := r.db.WithContext(ctx).
 		Table("public_food_library").
-		Select("id, COALESCE(NULLIF(food_name, ''), NULLIF(description, ''), '公共食物') AS title, COALESCE(description, '') AS description, total_calories AS calories, total_protein AS protein, total_carbs AS carbs, total_fat AS fat, COALESCE(CAST(items AS TEXT), '[]') AS items_json").
-		Where("status = ? AND total_calories > 0", "published").
-		Order("RANDOM()").
+		Where(`status = ? AND COALESCE(is_campus_food, false) = true AND school_id = ? AND total_calories > 0
+			AND COALESCE(food_name, '') !~* '(餐盒|打包盒|包装盒|纸袋|塑料袋|餐具|筷子|勺子|吸管|杯盖|餐巾)'`, "published", filter.SchoolID)
+	if campusID := strings.TrimSpace(filter.CampusID); campusID != "" {
+		base = base.Where("campus_id = ?", campusID)
+	}
+	if keyword := strings.TrimSpace(filter.Keyword); keyword != "" {
+		like := "%" + keyword + "%"
+		base = base.Where(`(
+			food_name ILIKE ? OR description ILIKE ? OR canteen_name ILIKE ?
+			OR window_name ILIKE ? OR floor ILIKE ?
+		)`, like, like, like, like, like)
+	}
+	if canteenName := strings.TrimSpace(filter.CanteenName); canteenName != "" {
+		base = base.Where("canteen_name ILIKE ?", "%"+canteenName+"%")
+	}
+	if len(filter.IncludeSourceIDs) > 0 {
+		base = base.Where("id IN ?", filter.IncludeSourceIDs)
+	}
+	if len(filter.ExcludeSourceIDs) > 0 {
+		base = base.Where("id NOT IN ?", filter.ExcludeSourceIDs)
+	}
+	if filter.MaxCalories != nil && *filter.MaxCalories > 0 {
+		base = base.Where("total_calories <= ?", *filter.MaxCalories)
+	}
+	if filter.MinProtein != nil && *filter.MinProtein > 0 {
+		base = base.Where("total_protein >= ?", *filter.MinProtein)
+	}
+	if filter.MaxFat != nil && *filter.MaxFat > 0 {
+		base = base.Where("total_fat <= ?", *filter.MaxFat)
+	}
+	if filter.MaxPrice != nil && *filter.MaxPrice > 0 {
+		base = base.Where(`price > 0 AND price <= ?
+			AND COALESCE(price_unit, '') !~* '(两|克|千克|公斤|斤|kg|/g|每|只|个|串|枚|片|粒)'`, *filter.MaxPrice)
+	} else if strings.TrimSpace(filter.SortBy) == "lowest_price" {
+		base = base.Where(`price > 0
+			AND COALESCE(price_unit, '') !~* '(两|克|千克|公斤|斤|kg|/g|每|只|个|串|枚|片|粒)'`)
+	}
+
+	var total int64
+	if err := base.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	var rows []dietRecommendationRow
+	q := base.Select(`id, COALESCE(NULLIF(food_name, ''), NULLIF(description, ''), '校园餐') AS title,
+		COALESCE(description, '') AS description, total_calories AS calories,
+		total_protein AS protein, total_carbs AS carbs, total_fat AS fat,
+		COALESCE(CAST(items AS TEXT), '[]') AS items_json,
+		COALESCE(is_campus_food, false) AS is_campus_food,
+		COALESCE(CAST(school_id AS TEXT), '') AS school_id, COALESCE(school_name, '') AS school_name,
+		COALESCE(CAST(campus_id AS TEXT), '') AS campus_id, COALESCE(campus_name, '') AS campus_name,
+		COALESCE(CAST(canteen_id AS TEXT), '') AS canteen_id, COALESCE(canteen_name, '') AS canteen_name,
+		COALESCE(CAST(window_id AS TEXT), '') AS window_id, COALESCE(window_name, '') AS window_name,
+		COALESCE(floor, '') AS floor, COALESCE(price, 0) AS price,
+		COALESCE(price_unit, '') AS price_unit, COALESCE(image_path, '') AS image_path`)
+	switch strings.TrimSpace(filter.SortBy) {
+	case "lowest_calories":
+		q = q.Order("total_calories ASC")
+	case "highest_protein":
+		q = q.Order("total_protein DESC, total_calories ASC")
+	case "protein_density":
+		q = q.Order("(total_protein / NULLIF(total_calories, 0)) DESC, total_protein DESC")
+	case "lowest_price":
+		q = q.Order("CASE WHEN COALESCE(price, 0) > 0 THEN 0 ELSE 1 END ASC, price ASC")
+	default:
+		if filter.TargetCalories != nil && *filter.TargetCalories > 0 {
+			q = q.Order(gorm.Expr("ABS(total_calories - ?) ASC", *filter.TargetCalories))
+		}
+		q = q.Order("total_protein DESC, total_calories ASC")
+	}
+	q = q.Order("CASE WHEN COALESCE(image_path, '') <> '' THEN 0 ELSE 1 END ASC").Order("published_at DESC")
+	if err := q.Offset(filter.Offset).Limit(filter.Limit).Scan(&rows).Error; err != nil {
+		return nil, 0, err
+	}
+	return rowsToDietRecommendationCandidates(rows, "public_food_library"), total, nil
+}
+
+func (r *StatsRepo) getPublicFoodRecommendationCandidates(ctx context.Context, scope domain.DietRecommendationScope, limit int) []domain.DietRecommendationCandidate {
+	var rows []dietRecommendationRow
+	q := r.db.WithContext(ctx).
+		Table("public_food_library").
+		Select(`id, COALESCE(NULLIF(food_name, ''), NULLIF(description, ''), '公共食物') AS title,
+			COALESCE(description, '') AS description, total_calories AS calories,
+			total_protein AS protein, total_carbs AS carbs, total_fat AS fat,
+			COALESCE(CAST(items AS TEXT), '[]') AS items_json,
+			COALESCE(is_campus_food, false) AS is_campus_food,
+			COALESCE(CAST(school_id AS TEXT), '') AS school_id, COALESCE(school_name, '') AS school_name,
+			COALESCE(CAST(campus_id AS TEXT), '') AS campus_id, COALESCE(campus_name, '') AS campus_name,
+			COALESCE(CAST(canteen_id AS TEXT), '') AS canteen_id, COALESCE(canteen_name, '') AS canteen_name,
+			COALESCE(CAST(window_id AS TEXT), '') AS window_id, COALESCE(window_name, '') AS window_name,
+			COALESCE(floor, '') AS floor, COALESCE(price, 0) AS price,
+			COALESCE(price_unit, '') AS price_unit, COALESCE(image_path, '') AS image_path`).
+		Where("status = ? AND total_calories > 0", "published")
+	if strings.TrimSpace(scope.CampusID) != "" {
+		q = q.Where("campus_id = ?", strings.TrimSpace(scope.CampusID))
+	} else if strings.TrimSpace(scope.SchoolID) != "" {
+		q = q.Where("school_id = ?", strings.TrimSpace(scope.SchoolID))
+	} else {
+		q = q.Where("COALESCE(is_campus_food, false) = false")
+	}
+	if len(scope.IncludeSourceIDs) > 0 {
+		q = q.Where("id IN ?", scope.IncludeSourceIDs)
+	}
+	if len(scope.ExcludeSourceIDs) > 0 {
+		q = q.Where("id NOT IN ?", scope.ExcludeSourceIDs)
+	}
+	if strings.TrimSpace(scope.SchoolID) != "" {
+		q = q.Where("COALESCE(is_campus_food, false) = true").
+			Order("CASE WHEN COALESCE(image_path, '') <> '' THEN 0 ELSE 1 END ASC").
+			Order("published_at DESC")
+	} else {
+		q = q.Order("RANDOM()")
+	}
+	err := q.
 		Limit(limit).
 		Scan(&rows).Error
 	if err != nil {
@@ -280,19 +430,130 @@ func rowsToDietRecommendationCandidates(rows []dietRecommendationRow, source str
 		if title == "" {
 			title = "餐食方案"
 		}
+		rawItems := parseDietRecommendationItems(row.ItemsJSON)
+		evidence := dietRecommendationNutritionEvidence(rawItems)
 		out = append(out, domain.DietRecommendationCandidate{
-			Source:      source,
-			SourceID:    row.ID,
-			Title:       title,
-			Description: strings.TrimSpace(row.Description),
-			Calories:    row.Calories,
-			Protein:     row.Protein,
-			Carbs:       row.Carbs,
-			Fat:         row.Fat,
-			Items:       normalizeDietRecommendationItems(parseDietRecommendationItems(row.ItemsJSON), source, row.ID, title),
+			Source:                  source,
+			SourceID:                row.ID,
+			Title:                   title,
+			Description:             strings.TrimSpace(row.Description),
+			Calories:                row.Calories,
+			Protein:                 row.Protein,
+			Carbs:                   row.Carbs,
+			Fat:                     row.Fat,
+			Items:                   normalizeDietRecommendationItems(rawItems, source, row.ID, title),
+			IsCampusFood:            row.IsCampusFood,
+			SchoolID:                strings.TrimSpace(row.SchoolID),
+			SchoolName:              strings.TrimSpace(row.SchoolName),
+			CampusID:                strings.TrimSpace(row.CampusID),
+			CampusName:              strings.TrimSpace(row.CampusName),
+			CanteenID:               strings.TrimSpace(row.CanteenID),
+			CanteenName:             strings.TrimSpace(row.CanteenName),
+			WindowID:                strings.TrimSpace(row.WindowID),
+			WindowName:              strings.TrimSpace(row.WindowName),
+			Floor:                   strings.TrimSpace(row.Floor),
+			Price:                   row.Price,
+			PriceUnit:               strings.TrimSpace(row.PriceUnit),
+			ImagePath:               strings.TrimSpace(row.ImagePath),
+			NutritionBasis:          evidence.Basis,
+			NutritionSourceCategory: evidence.SourceCategory,
+			WeightMethod:            evidence.WeightMethod,
+			WeightConfidence:        evidence.WeightConfidence,
+			UncertaintyLevel:        evidence.UncertaintyLevel,
 		})
 	}
 	return out
+}
+
+type dietRecommendationNutritionEvidenceValue struct {
+	Basis            string
+	SourceCategory   string
+	WeightMethod     string
+	WeightConfidence float64
+	UncertaintyLevel string
+}
+
+func dietRecommendationNutritionEvidence(items []map[string]any) dietRecommendationNutritionEvidenceValue {
+	evidence := dietRecommendationNutritionEvidenceValue{Basis: "library_record"}
+	for _, item := range items {
+		sourceCategory := strings.TrimSpace(fmt.Sprintf("%v", item["nutrition_source_category"]))
+		weightMethod := strings.TrimSpace(fmt.Sprintf("%v", item["weight_method"]))
+		uncertainty := strings.TrimSpace(fmt.Sprintf("%v", item["uncertainty_level"]))
+		if sourceCategory != "" && sourceCategory != "<nil>" {
+			evidence.SourceCategory = sourceCategory
+		}
+		if weightMethod != "" && weightMethod != "<nil>" {
+			evidence.WeightMethod = weightMethod
+		}
+		if uncertainty != "" && uncertainty != "<nil>" {
+			evidence.UncertaintyLevel = uncertainty
+		}
+		if value, ok := floatFromAny(item["weight_confidence"]); ok {
+			evidence.WeightConfidence = value
+		}
+		if strings.Contains(strings.ToLower(sourceCategory), "label") {
+			evidence.Basis = "nutrition_label"
+		} else if sourceCategory == "llm_generated" || weightMethod == "visual_estimate" || weightMethod == "ai_estimate" {
+			evidence.Basis = "library_estimate"
+		}
+		break
+	}
+	return evidence
+}
+
+func floatFromAny(value any) (float64, bool) {
+	switch typed := value.(type) {
+	case float64:
+		return typed, true
+	case float32:
+		return float64(typed), true
+	case int:
+		return float64(typed), true
+	case json.Number:
+		parsed, err := typed.Float64()
+		return parsed, err == nil
+	case string:
+		parsed, err := strconv.ParseFloat(strings.TrimSpace(typed), 64)
+		return parsed, err == nil
+	default:
+		return 0, false
+	}
+}
+
+func (r *StatsRepo) ResolveDietRecommendationSchool(ctx context.Context, question string) (*domain.DietRecommendationSchool, error) {
+	normalized := strings.NewReplacer(" ", "", "\t", "", "\n", "", "\r", "").Replace(strings.TrimSpace(question))
+	if normalized == "" {
+		return nil, nil
+	}
+	aliases := map[string]string{"北大": "北京大学", "清华": "清华大学"}
+	for alias, canonical := range aliases {
+		if strings.Contains(normalized, alias) {
+			var row domain.DietRecommendationSchool
+			err := r.db.WithContext(ctx).Table("schools").Select("id, name").Where("name = ? AND status = ?", canonical, "active").First(&row).Error
+			if err == nil {
+				return &row, nil
+			}
+			if err != gorm.ErrRecordNotFound {
+				return nil, err
+			}
+		}
+	}
+	var rows []domain.DietRecommendationSchool
+	if err := r.db.WithContext(ctx).Table("schools").Select("id, name").Where("status = ?", "active").Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	var best *domain.DietRecommendationSchool
+	for i := range rows {
+		name := strings.ReplaceAll(strings.TrimSpace(rows[i].Name), " ", "")
+		if name == "" || !strings.Contains(normalized, name) {
+			continue
+		}
+		if best == nil || len([]rune(name)) > len([]rune(best.Name)) {
+			candidate := rows[i]
+			best = &candidate
+		}
+	}
+	return best, nil
 }
 
 func parseDietRecommendationItems(raw string) []map[string]any {

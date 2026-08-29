@@ -56,6 +56,7 @@ const extraSubpackagePages = [
   'pages/search-results/index',
   'pages/account-security/index',
   'pages/privacy-settings/index',
+  'pages/record-settings/index',
   'pages/pet-home/index',
   'pages/pet-chat/index',
   'pages/friends/index',

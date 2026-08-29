@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"strings"
@@ -17,6 +18,7 @@ import (
 	"food_link/backend/pkg/storage"
 
 	"gorm.io/datatypes"
+	"gorm.io/gorm"
 
 	"log/slog"
 )
@@ -209,6 +211,12 @@ type UpdateHealthProfileInput struct {
 	ReportExtract              map[string]any               `json:"report_extract"`
 	ReportImageURL             *string                      `json:"report_image_url"`
 	PrecisionReferenceDefaults map[string]any               `json:"precision_reference_defaults"`
+	CampusDiningPreference     *CampusDiningPreferenceInput `json:"campus_dining_preference"`
+}
+
+type CampusDiningPreferenceInput struct {
+	SchoolID string `json:"school_id"`
+	CampusID string `json:"campus_id,omitempty"`
 }
 
 type StringList []string
@@ -344,6 +352,17 @@ func (s *UserService) UpdateHealthProfile(ctx context.Context, userID string, in
 			healthCondition["precision_reference_defaults"] = normalized
 		} else {
 			delete(healthCondition, "precision_reference_defaults")
+		}
+	}
+	if input.CampusDiningPreference != nil {
+		preference, err := s.resolveCampusDiningPreference(ctx, *input.CampusDiningPreference)
+		if err != nil {
+			return nil, err
+		}
+		if preference == nil {
+			delete(healthCondition, "campus_dining_preference")
+		} else {
+			healthCondition["campus_dining_preference"] = preference
 		}
 	}
 
@@ -485,6 +504,55 @@ func (s *UserService) UpdateHealthProfile(ctx context.Context, userID string, in
 	}
 
 	return s.buildHealthProfileResponse(updated), nil
+}
+
+func (s *UserService) resolveCampusDiningPreference(ctx context.Context, input CampusDiningPreferenceInput) (map[string]any, error) {
+	schoolID := strings.TrimSpace(input.SchoolID)
+	campusID := strings.TrimSpace(input.CampusID)
+	if schoolID == "" {
+		return nil, nil
+	}
+
+	var school struct {
+		ID   string `gorm:"column:id"`
+		Name string `gorm:"column:name"`
+	}
+	if err := s.users.DB().WithContext(ctx).
+		Table("schools").
+		Select("id, name").
+		Where("id = ? AND status = ?", schoolID, "active").
+		Take(&school).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, &commonerrors.AppError{Code: 10002, Message: "请选择有效的学校", HTTPStatus: 400}
+		}
+		return nil, err
+	}
+
+	preference := map[string]any{
+		"school_id":   school.ID,
+		"school_name": strings.TrimSpace(school.Name),
+	}
+	if campusID == "" {
+		return preference, nil
+	}
+
+	var campus struct {
+		ID   string `gorm:"column:id"`
+		Name string `gorm:"column:name"`
+	}
+	if err := s.users.DB().WithContext(ctx).
+		Table("school_campuses").
+		Select("id, name").
+		Where("id = ? AND school_id = ? AND status = ?", campusID, schoolID, "active").
+		Take(&campus).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, &commonerrors.AppError{Code: 10002, Message: "请选择该学校下的有效校区", HTTPStatus: 400}
+		}
+		return nil, err
+	}
+	preference["campus_id"] = campus.ID
+	preference["campus_name"] = strings.TrimSpace(campus.Name)
+	return preference, nil
 }
 
 func (s *UserService) GetRecordDays(ctx context.Context, userID string) (int64, error) {

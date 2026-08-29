@@ -205,9 +205,8 @@ func NewSearchRepo(db *gorm.DB) *SearchRepo {
 }
 
 func (r *SearchRepo) exerciseItemsTextSelect(ctx context.Context) string {
-	if r.db.WithContext(ctx).Migrator().HasColumn("user_exercise_logs", "exercise_items") {
-		return "CAST(uel.exercise_items AS text)"
-	}
+	// 圈子搜索与圈子列表保持一致：动作拆分只作为内部估算证据，
+	// 对外只返回用户原文和整次训练总消耗。
 	return "CAST('[]' AS text)"
 }
 

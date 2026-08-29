@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -25,6 +26,11 @@ type mockStatsRepo struct {
 	recordDates           []string
 	insights              []domain.StatsInsight
 	candidates            []domain.DietRecommendationCandidate
+	resolvedSchool        *domain.DietRecommendationSchool
+	lastDietScope         domain.DietRecommendationScope
+	campusSearchFilters   []domain.CampusDietSearchFilter
+	campusSearchErr       error
+	petChatMessages       []domain.PetChatMessage
 	customFocusCards      []domain.CustomFocusCard
 	foodRecordsQueryCount int
 }
@@ -38,6 +44,65 @@ func TestResolveStatsRangeUTCAtCalendarWeekStartsOnMonday(t *testing.T) {
 	assert.Equal(t, "2026-08-21", endDate)
 	assert.Equal(t, "2026-08-16T16:00:00Z", startUTC.Format(time.RFC3339))
 	assert.Equal(t, "2026-08-21T16:00:00Z", endUTC.Format(time.RFC3339))
+}
+
+func TestComputeWeeklyHealthLeaderboardScoreUsesCalibratedWeights(t *testing.T) {
+	now := time.Date(2026, 8, 22, 12, 0, 0, 0, chinaTZ) // Saturday, six elapsed days.
+	comp := &statsComputation{
+		RecordedDays: 4,
+		RecordedDaily: []DailyCalories{
+			{Date: "2026-08-17", Calories: 1000},
+			{Date: "2026-08-18", Calories: 1000},
+			{Date: "2026-08-20", Calories: 1000},
+			{Date: "2026-08-22", Calories: 1000},
+		},
+	}
+
+	result := computeWeeklyHealthLeaderboardScore(comp, 90, now)
+
+	assert.True(t, result.Eligible)
+	assert.Equal(t, 4, result.RecordedDays)
+	assert.InDelta(t, 67.5, result.DietQualityPoints, 0.001)
+	assert.InDelta(t, 10.0, result.ContinuityPoints, 0.001)
+	assert.InDelta(t, 10.0, result.StabilityPoints, 0.001)
+	assert.InDelta(t, 87.5, result.Score, 0.001)
+}
+
+func TestComputeWeeklyHealthLeaderboardScoreRequiresFourRecordedDays(t *testing.T) {
+	now := time.Date(2026, 8, 22, 12, 0, 0, 0, chinaTZ)
+	comp := &statsComputation{
+		RecordedDays: 3,
+		RecordedDaily: []DailyCalories{
+			{Date: "2026-08-17", Calories: 800},
+			{Date: "2026-08-18", Calories: 1000},
+			{Date: "2026-08-19", Calories: 1200},
+		},
+	}
+
+	result := computeWeeklyHealthLeaderboardScore(comp, 92, now)
+
+	assert.False(t, result.Eligible)
+	assert.InDelta(t, 69.0, result.DietQualityPoints, 0.001)
+	assert.InDelta(t, 7.5, result.ContinuityPoints, 0.001)
+	assert.InDelta(t, 8.4, result.StabilityPoints, 0.001)
+}
+
+func TestComputeWeeklyHealthLeaderboardScoreUsesDailyCoefficientOfVariation(t *testing.T) {
+	now := time.Date(2026, 8, 22, 12, 0, 0, 0, chinaTZ)
+	comp := &statsComputation{
+		RecordedDays: 4,
+		RecordedDaily: []DailyCalories{
+			{Date: "2026-08-17", Calories: 1000},
+			{Date: "2026-08-18", Calories: 1100},
+			{Date: "2026-08-19", Calories: 900},
+			{Date: "2026-08-20", Calories: 1000},
+		},
+	}
+
+	result := computeWeeklyHealthLeaderboardScore(comp, 90, now)
+
+	assert.InDelta(t, 9.3, result.StabilityPoints, 0.001)
+	assert.InDelta(t, 86.8, result.Score, 0.001)
 }
 
 func TestResolveStatsRangeUTCAtCalendarWeekKeepsSundayInCurrentWeek(t *testing.T) {
@@ -167,11 +232,82 @@ func (m *mockStatsRepo) CountCustomFocusGenerationsTodayForFocus(ctx context.Con
 	return 0, nil
 }
 
-func (m *mockStatsRepo) GetDietRecommendationCandidates(ctx context.Context, userID string, scene string, limit int) ([]domain.DietRecommendationCandidate, error) {
+func (m *mockStatsRepo) GetDietRecommendationCandidates(ctx context.Context, userID string, scene string, scope domain.DietRecommendationScope, limit int) ([]domain.DietRecommendationCandidate, error) {
+	m.lastDietScope = scope
 	return m.candidates, nil
 }
 
+func (m *mockStatsRepo) SearchCampusDietCandidates(ctx context.Context, filter domain.CampusDietSearchFilter) ([]domain.DietRecommendationCandidate, int64, error) {
+	m.campusSearchFilters = append(m.campusSearchFilters, filter)
+	if m.campusSearchErr != nil {
+		return nil, 0, m.campusSearchErr
+	}
+	include := make(map[string]bool, len(filter.IncludeSourceIDs))
+	for _, id := range filter.IncludeSourceIDs {
+		include[id] = true
+	}
+	exclude := make(map[string]bool, len(filter.ExcludeSourceIDs))
+	for _, id := range filter.ExcludeSourceIDs {
+		exclude[id] = true
+	}
+	result := make([]domain.DietRecommendationCandidate, 0, len(m.candidates))
+	for _, candidate := range m.candidates {
+		if filter.SchoolID != "" && candidate.SchoolID != filter.SchoolID {
+			continue
+		}
+		if len(include) > 0 && !include[candidate.SourceID] {
+			continue
+		}
+		if exclude[candidate.SourceID] {
+			continue
+		}
+		if filter.MaxCalories != nil && candidate.Calories > *filter.MaxCalories {
+			continue
+		}
+		if filter.MaxPrice != nil && (candidate.Price <= 0 || candidate.Price > *filter.MaxPrice) {
+			continue
+		}
+		if filter.MinProtein != nil && candidate.Protein < *filter.MinProtein {
+			continue
+		}
+		if filter.MaxFat != nil && candidate.Fat > *filter.MaxFat {
+			continue
+		}
+		result = append(result, candidate)
+	}
+	switch filter.SortBy {
+	case "lowest_price":
+		sort.SliceStable(result, func(i, j int) bool { return result[i].Price < result[j].Price })
+	case "lowest_calories":
+		sort.SliceStable(result, func(i, j int) bool { return result[i].Calories < result[j].Calories })
+	case "highest_protein":
+		sort.SliceStable(result, func(i, j int) bool { return result[i].Protein > result[j].Protein })
+	case "protein_density":
+		sort.SliceStable(result, func(i, j int) bool {
+			return result[i].Protein/result[i].Calories > result[j].Protein/result[j].Calories
+		})
+	}
+	total := int64(len(result))
+	if filter.Offset >= len(result) {
+		return []domain.DietRecommendationCandidate{}, total, nil
+	}
+	if filter.Offset > 0 {
+		result = result[filter.Offset:]
+	}
+	if filter.Limit > 0 && len(result) > filter.Limit {
+		result = result[:filter.Limit]
+	}
+	return result, total, nil
+}
+
+func (m *mockStatsRepo) ResolveDietRecommendationSchool(ctx context.Context, question string) (*domain.DietRecommendationSchool, error) {
+	return m.resolvedSchool, nil
+}
+
 func (m *mockStatsRepo) CreatePetChatSession(ctx context.Context, session domain.PetChatSession) (*domain.PetChatSession, error) {
+	if session.ID == "" {
+		session.ID = "session-diet"
+	}
 	return &session, nil
 }
 
@@ -180,7 +316,7 @@ func (m *mockStatsRepo) GetPetChatSession(ctx context.Context, userID, sessionID
 }
 
 func (m *mockStatsRepo) GetPetChatSessionMessages(ctx context.Context, userID, sessionID string, limit int) ([]domain.PetChatMessage, error) {
-	return nil, nil
+	return m.petChatMessages, nil
 }
 
 func (m *mockStatsRepo) ListPetChatSessions(ctx context.Context, userID string, limit int) ([]domain.PetChatSession, error) {
@@ -192,6 +328,10 @@ func (m *mockStatsRepo) GetLatestPetChatSessionWithMessages(ctx context.Context,
 }
 
 func (m *mockStatsRepo) AddPetChatMessage(ctx context.Context, message domain.PetChatMessage) (*domain.PetChatMessage, error) {
+	if message.ID == "" {
+		message.ID = fmt.Sprintf("message-%d", len(m.petChatMessages)+1)
+	}
+	m.petChatMessages = append(m.petChatMessages, message)
 	return &message, nil
 }
 
@@ -559,6 +699,9 @@ func TestStatsService_StreamNutritionInsightRetriesTransientUpstreamFailure(t *t
 	requestCount := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requestCount++
+		var body map[string]any
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+		assert.Equal(t, true, body["enable_thinking"])
 		if requestCount == 1 {
 			http.Error(w, `{"error":{"message":"gateway temporarily unavailable"}}`, http.StatusServiceUnavailable)
 			return
@@ -569,7 +712,7 @@ func TestStatsService_StreamNutritionInsightRetriesTransientUpstreamFailure(t *t
 	defer server.Close()
 
 	svc := NewStatsService(&mockStatsRepo{}, &mockBodyMetricsProvider{})
-	textChan, err := svc.streamNutritionInsight(context.Background(), server.URL, "test-key", "deepseek-v4-pro", "test prompt", statsInsightMaxTokens)
+	textChan, err := svc.streamNutritionInsight(context.Background(), server.URL, "test-key", "deepseek-v4-pro", "test prompt", statsInsightMaxTokens, true)
 	require.NoError(t, err)
 
 	var content strings.Builder
@@ -727,10 +870,31 @@ func TestBuildPetChatPromptRequiresGentleTone(t *testing.T) {
 	assert.Contains(t, prompt, "用户完成目标、数据改善或习惯有进步时")
 	assert.Contains(t, prompt, "不要调侃、挖苦、训话、责备")
 	assert.Contains(t, prompt, "避免“你这”“坎儿”“别一口气这么猛”")
-	assert.Contains(t, prompt, "我们可以")
-	assert.Contains(t, prompt, "1-2 个明天可以尝试的小建议")
+	assert.Contains(t, prompt, "短问、事实问答或简短追问通常用 80-180 字")
+	assert.Contains(t, prompt, "默认不使用标题")
+	assert.Contains(t, prompt, "不要模仿历史回复的标题、段落结构、开场白或结尾句")
+	assert.Contains(t, prompt, "只有用户在询问怎么做、要求制定计划")
+	assert.NotContains(t, prompt, "一句话回应")
+	assert.NotContains(t, prompt, "结合记录看")
+	assert.NotContains(t, prompt, "明天一起试试")
 	assert.Contains(t, prompt, "适合聊天气泡的纯文本")
 	assert.Contains(t, prompt, "不要输出 #、*、**、_、反引号")
+}
+
+func TestFallbackPetChatAnswerDoesNotForceTomorrowAction(t *testing.T) {
+	answer := fallbackPetChatAnswer(&statsComputation{
+		StatsRange:        "week",
+		RecordedDays:      2,
+		AvgCaloriesPerDay: 1200,
+		CalSurplusDeficit: -300,
+		TotalProtein:      90,
+		TotalCarbs:        180,
+		TotalFat:          50,
+	}, "最近吃得怎么样？")
+
+	assert.NotContains(t, answer, "你问的是")
+	assert.NotContains(t, answer, "明天可以先做一个小实验")
+	assert.Contains(t, answer, "最近 7 天")
 }
 
 func TestPetChatCompanionUsesSelectedBuiltinPetProfile(t *testing.T) {
@@ -824,6 +988,7 @@ func TestStatsService_GeneratePetChatRetriesHarshTone(t *testing.T) {
 		var body map[string]any
 		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
 		assert.Equal(t, float64(petChatMaxTokens), body["max_tokens"])
+		assert.Equal(t, false, body["enable_thinking"])
 		messages, ok := body["messages"].([]any)
 		require.True(t, ok)
 		require.NotEmpty(t, messages)
@@ -954,6 +1119,100 @@ func TestStatsService_GenerateDietRecommendationUsesCandidatesFallback(t *testin
 	assert.Len(t, result.Recommendations, 5)
 	assert.NotEmpty(t, result.Recommendations[0].Source)
 	assert.NotEmpty(t, result.Recommendations[0].Items[0].Source)
+}
+
+func TestStatsService_GenerateDietRecommendationUsesRealCampusCandidates(t *testing.T) {
+	repo := &mockStatsRepo{
+		resolvedSchool: &domain.DietRecommendationSchool{ID: "pku-id", Name: "北京大学"},
+		candidates: []domain.DietRecommendationCandidate{
+			{Source: "public_food_library", SourceID: "dish-1", Title: "鲈鱼", Calories: 420, Protein: 36, Carbs: 12, Fat: 18, IsCampusFood: true, SchoolID: "pku-id", SchoolName: "北京大学", CanteenName: "家园食堂", Floor: "3F"},
+			{Source: "public_food_library", SourceID: "dish-2", Title: "鸭架汤", Calories: 260, Protein: 25, Carbs: 8, Fat: 12, IsCampusFood: true, SchoolID: "pku-id", SchoolName: "北京大学", CanteenName: "勺园食堂"},
+			{Source: "public_food_library", SourceID: "dish-3", Title: "云南野生菌汤小锅", Calories: 510, Protein: 24, Carbs: 55, Fat: 20, IsCampusFood: true, SchoolID: "pku-id", SchoolName: "北京大学", CanteenName: "家园食堂", Floor: "4F", WindowName: "愉火锅"},
+			{Source: "public_food_library", SourceID: "dish-4", Title: "鸡肉饭", Calories: 620, Protein: 34, Carbs: 76, Fat: 18, IsCampusFood: true, SchoolID: "pku-id", SchoolName: "北京大学", CanteenName: "农园食堂"},
+		},
+	}
+	svc := NewStatsService(repo, &mockBodyMetricsProvider{})
+	result, err := svc.GenerateDietRecommendation(context.Background(), "u1", DietRecommendationInput{
+		Scene:            "eat_out",
+		Date:             "2026-08-22",
+		Question:         "我是北大学生，今天午餐吃什么？",
+		MealType:         "lunch",
+		CalorieRemaining: 900,
+		Targets:          DietRecommendationMacro{Calories: 2000, Protein: 100, Carbs: 240, Fat: 60},
+		MacroGaps:        DietRecommendationMacro{Protein: 45, Carbs: 80, Fat: 20},
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, result.ResolvedSchool)
+	assert.Equal(t, "北京大学", result.ResolvedSchool.Name)
+	assert.Equal(t, "pku-id", repo.lastDietScope.SchoolID)
+	assert.Equal(t, "campus_database", result.GeneratedBy)
+	require.Len(t, result.Recommendations, 3)
+	assert.Equal(t, "public_food_library", result.Recommendations[0].Source)
+	assert.NotEmpty(t, result.Recommendations[0].SourceID)
+	assert.True(t, result.Recommendations[0].IsCampusFood)
+	assert.NotEmpty(t, result.SessionID)
+	require.Len(t, repo.petChatMessages, 2)
+	assert.Equal(t, "diet_recommendation", repo.petChatMessages[1].MessageType)
+}
+
+func TestStatsService_GenerateDietRecommendationLabelsGeneralFallbackWhenCampusIsEmpty(t *testing.T) {
+	repo := &mockStatsRepo{
+		resolvedSchool: &domain.DietRecommendationSchool{ID: "empty-school", Name: "示例大学"},
+	}
+	svc := NewStatsService(repo, &mockBodyMetricsProvider{})
+	result, err := svc.GenerateDietRecommendation(context.Background(), "u1", DietRecommendationInput{
+		Scene:            "eat_out",
+		Date:             "2026-08-22",
+		Question:         "我是示例大学学生，今天吃什么？",
+		CalorieRemaining: 600,
+		Targets:          DietRecommendationMacro{Calories: 2000, Protein: 100, Carbs: 240, Fat: 60},
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, "campus_general_fallback", result.GeneratedBy)
+	assert.Contains(t, result.Summary, "通用备选，不代表该校食堂")
+	require.NotEmpty(t, result.Recommendations)
+	assert.False(t, result.Recommendations[0].IsCampusFood)
+}
+
+func TestStatsService_GenerateDietRecommendationCarriesStructuredFollowUpScope(t *testing.T) {
+	repo := &mockStatsRepo{
+		resolvedSchool: &domain.DietRecommendationSchool{ID: "thu-id", Name: "清华大学"},
+		candidates: []domain.DietRecommendationCandidate{
+			{Source: "public_food_library", SourceID: "dish-4", Title: "鲑鱼饭", Calories: 510, Protein: 32, Carbs: 55, Fat: 16, IsCampusFood: true, SchoolID: "thu-id", SchoolName: "清华大学", CanteenName: "桃李园"},
+		},
+	}
+	svc := NewStatsService(repo, &mockBodyMetricsProvider{})
+
+	result, err := svc.GenerateDietRecommendation(context.Background(), "u1", DietRecommendationInput{
+		Scene:                "eat_out",
+		Date:                 "2026-08-22",
+		Question:             "还有没有其他选择？",
+		SessionID:            "session-diet",
+		FollowUpIntent:       "more",
+		RecommendedSourceIDs: []string{"dish-1", "dish-2", "dish-3"},
+		CalorieRemaining:     700,
+		Targets:              DietRecommendationMacro{Calories: 2000, Protein: 100, Carbs: 240, Fat: 60},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"dish-1", "dish-2", "dish-3"}, repo.lastDietScope.ExcludeSourceIDs)
+	assert.Empty(t, repo.lastDietScope.IncludeSourceIDs)
+	assert.Equal(t, "再换一批校园菜品", result.Title)
+
+	_, err = svc.GenerateDietRecommendation(context.Background(), "u1", DietRecommendationInput{
+		Scene:                "eat_out",
+		Date:                 "2026-08-22",
+		Question:             "你推荐的菜在哪里？",
+		SessionID:            "session-diet",
+		FollowUpIntent:       "location",
+		RecommendedSourceIDs: []string{"dish-4"},
+		CalorieRemaining:     700,
+		Targets:              DietRecommendationMacro{Calories: 2000, Protein: 100, Carbs: 240, Fat: 60},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"dish-4"}, repo.lastDietScope.IncludeSourceIDs)
+	assert.Empty(t, repo.lastDietScope.ExcludeSourceIDs)
 }
 
 func TestStatsService_SaveInsight(t *testing.T) {

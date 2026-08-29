@@ -15,6 +15,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type mockCommunityService struct {
@@ -205,7 +206,10 @@ func TestCheckinLeaderboard(t *testing.T) {
 func TestHealthLeaderboard(t *testing.T) {
 	mockSvc := &mockCommunityService{healthLeaderboard: &service.HealthLeaderboardResult{
 		WeekStart: "2024-01-01",
-		List:      []service.HealthLeaderboardItem{{Rank: 1, HealthIndex: 88}},
+		ScoringRule: service.HealthLeaderboardScoringRule{
+			Label: "本周健康饮食分", TotalPoints: 100, MinimumRecordedDays: 4,
+		},
+		List: []service.HealthLeaderboardItem{{Rank: 1, HealthIndex: 88}},
 	}}
 	h := NewCommunityHandler(mockSvc)
 	r := setupCommunityRouter(h)
@@ -215,6 +219,16 @@ func TestHealthLeaderboard(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Contains(t, w.Body.String(), `"scoring_rule"`)
+	assert.Contains(t, w.Body.String(), `"minimum_recorded_days":4`)
+	var payload struct {
+		Data struct {
+			List []map[string]any `json:"list"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &payload))
+	_, exposesPrivateBreakdown := payload.Data.List[0]["diet_quality_points"]
+	assert.False(t, exposesPrivateBreakdown)
 }
 
 func TestFoodNutrientLeaderboard(t *testing.T) {
@@ -426,6 +440,29 @@ func TestFeedWithParams(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+func TestParseFeedParamsClampsClientControlledLimits(t *testing.T) {
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Request = httptest.NewRequest(http.MethodGet, "/api/community/public-feed?offset=999999&limit=999999&comments_limit=999999", nil)
+
+	params := parseFeedParams(ctx)
+
+	assert.Equal(t, service.MaxFeedLegacyOffset, params.Offset)
+	assert.Equal(t, service.MaxFeedPageSize, params.Limit)
+	assert.Equal(t, service.MaxFeedCommentsPreview, params.CommentsLimit)
+}
+
+func TestParseFeedParamsAcceptsStableLatestCursor(t *testing.T) {
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Request = httptest.NewRequest(http.MethodGet, "/api/community/public-feed?sort_by=latest&offset=100&before_time=2026-08-22T08%3A00%3A00Z&before_key=food_record%3Ar2", nil)
+
+	params := parseFeedParams(ctx)
+
+	require.NotNil(t, params.BeforeTime)
+	assert.Equal(t, "2026-08-22T08:00:00Z", params.BeforeTime.Format(time.RFC3339))
+	assert.Equal(t, "food_record:r2", params.BeforeKey)
+	assert.Equal(t, 0, params.Offset)
 }
 
 func TestCheckinLeaderboardError(t *testing.T) {

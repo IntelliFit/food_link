@@ -28,6 +28,18 @@
         <view class="center-icon-wrapper {{recordOpening ? 'is-opening' : ''}}">
           <view wx:if="{{recordOpening}}" class="center-opening-spinner"></view>
           <text wx:else class="iconfont icon-paizhao-xianxing center-icon"></text>
+          <view
+            wx:if="{{analyzeReminderKind === 'waiting_record' && analyzeReminderCount > 0}}"
+            class="center-task-badge center-task-badge--waiting"
+            catchtap="openAnalyzeReminder"
+          >
+            <text>{{analyzeReminderCount > 9 ? '9+' : analyzeReminderCount}}</text>
+          </view>
+          <view
+            wx:elif="{{analyzeReminderKind === 'recognizing' && analyzeReminderCount > 0}}"
+            class="center-task-badge center-task-badge--recognizing"
+            catchtap="openAnalyzeReminder"
+          />
         </view>
       </block>
     </view>

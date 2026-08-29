@@ -130,6 +130,17 @@ import { HOME_RECORD_ONBOARDING_STEPS } from './home-onboarding-steps'
 import { HOME_PET_PROFILE_CHANGED_EVENT } from '../../utils/pet-events'
 import { buildFoodRecordFavoriteDraft } from '../../utils/food-record-flow'
 import { openPetChat } from '../../utils/pet-navigation'
+import {
+  ANALYZE_TASK_REMINDER_CHANGED_EVENT,
+  ANALYZE_TASK_REMINDER_OPEN_KEY,
+  ANALYZE_TASK_REMINDER_OPEN_EVENT,
+  ANALYZE_TASK_REMINDER_OPEN_HISTORY_KEY,
+  acknowledgeAnalyzeTaskReminders,
+  readAnalyzeTaskReminderState,
+  syncAnalyzeTaskReminderState,
+  type AnalyzeTaskReminderState,
+} from '../../utils/analyze-task-reminder'
+import { openAnalyzeTaskFromReminder } from '../../utils/open-analyze-task'
 
 const BACKFILL_HINT_DISMISSED_DATES_KEY = 'home_backfill_hint_dismissed_dates_v1'
 const DEFAULT_SUPPLEMENT_SUMMARY: SupplementDashboardSummary = {
@@ -142,6 +153,7 @@ const DEFAULT_SUPPLEMENT_SUMMARY: SupplementDashboardSummary = {
 const HOME_SELECTED_DATE_KEY = 'home_selected_date_v1'
 const HOME_PET_HIDDEN_KEY = 'home_pet_companion_hidden_v1'
 const HOME_PET_HIDDEN_CHANGED_EVENT = 'home_pet_companion_hidden_changed'
+const HOME_PET_MEAL_PROMPT_SEEN_KEY = 'home_pet_meal_prompt_seen_v1'
 const CANVAS_ICON_FONT_SOURCE = __ICON_CDN_BASE_URL__
   ? `url("${__ICON_CDN_BASE_URL__.replace(/\/+$/, '')}/iconfont.ttf")`
   : ''
@@ -163,6 +175,30 @@ function getLastHomeSelectedDate(fallback: string): string {
     if (isValidHomeDate(stored)) return stored
   } catch (_) {}
   return isValidHomeDate(fallback) ? fallback : formatDateKey(new Date())
+}
+
+function homeMealPromptSeenKey(date: string, mealType: string): string {
+  const userID = String(Taro.getStorageSync('user_id') || '').trim()
+  return `${userID || 'guest'}:${date}:${mealType}`
+}
+
+function hasSeenHomeMealPrompt(date: string, mealType: string): boolean {
+  try {
+    const stored = Taro.getStorageSync(HOME_PET_MEAL_PROMPT_SEEN_KEY)
+    return Boolean(stored && typeof stored === 'object' && stored[homeMealPromptSeenKey(date, mealType)] === true)
+  } catch (_) {
+    return false
+  }
+}
+
+function markHomeMealPromptSeen(date: string, mealType: string): void {
+  try {
+    const current = Taro.getStorageSync(HOME_PET_MEAL_PROMPT_SEEN_KEY)
+    const next = current && typeof current === 'object' ? { ...current } : {}
+    next[homeMealPromptSeenKey(date, mealType)] = true
+    const entries = Object.entries(next).slice(-30)
+    Taro.setStorageSync(HOME_PET_MEAL_PROMPT_SEEN_KEY, Object.fromEntries(entries))
+  } catch (_) {}
 }
 
 function getTodayLocalDateKey(): string {
@@ -816,6 +852,7 @@ function IndexPage() {
   const [isSwitchingDate, setIsSwitchingDate] = React.useState(false)
   const [petHidden, setPetHidden] = React.useState(getStoredPetHidden)
   const [petSummary, setPetSummary] = React.useState<PetSummary | null>(null)
+  const [analyzeReminder, setAnalyzeReminder] = React.useState<AnalyzeTaskReminderState>(readAnalyzeTaskReminderState)
   const [membershipStatus, setMembershipStatus] = React.useState<MembershipStatus | null>(null)
   const [rewardCenter, setRewardCenter] = React.useState<RewardCenterResponse | null>(null)
   const [rewardHintIndex, setRewardHintIndex] = React.useState(0)
@@ -2488,6 +2525,33 @@ function IndexPage() {
     }
   }, [])
 
+  const refreshAnalyzeReminder = React.useCallback(async () => {
+    try {
+      setAnalyzeReminder(await syncAnalyzeTaskReminderState())
+    } catch (error) {
+      console.warn('识别提醒状态同步失败:', error)
+      setAnalyzeReminder(readAnalyzeTaskReminderState())
+    }
+  }, [])
+
+  React.useEffect(() => {
+    const handleReminderChanged = (state: AnalyzeTaskReminderState) => setAnalyzeReminder(state)
+    const handleReminderOpen = (taskId: string) => void openAnalyzeTaskFromReminder(taskId)
+    Taro.eventCenter.on(ANALYZE_TASK_REMINDER_CHANGED_EVENT, handleReminderChanged)
+    Taro.eventCenter.on(ANALYZE_TASK_REMINDER_OPEN_EVENT, handleReminderOpen)
+    void refreshAnalyzeReminder()
+    return () => {
+      Taro.eventCenter.off(ANALYZE_TASK_REMINDER_CHANGED_EVENT, handleReminderChanged)
+      Taro.eventCenter.off(ANALYZE_TASK_REMINDER_OPEN_EVENT, handleReminderOpen)
+    }
+  }, [refreshAnalyzeReminder])
+
+  React.useEffect(() => {
+    if (analyzeReminder.recognizing <= 0) return undefined
+    const timer = setInterval(() => void refreshAnalyzeReminder(), 5000)
+    return () => clearInterval(timer)
+  }, [analyzeReminder.recognizing, refreshAnalyzeReminder])
+
   React.useEffect(() => {
     void loadPetSummary(selectedDate)
   }, [loadPetSummary, selectedDate])
@@ -2495,11 +2559,25 @@ function IndexPage() {
   const petDidShowCountRef = React.useRef(0)
 
   useDidShow(() => {
+    const shouldOpenHistory = Taro.getStorageSync(ANALYZE_TASK_REMINDER_OPEN_HISTORY_KEY) === '1'
+    if (shouldOpenHistory) {
+      Taro.removeStorageSync(ANALYZE_TASK_REMINDER_OPEN_HISTORY_KEY)
+      void acknowledgeAnalyzeTaskReminders().catch(() => undefined)
+      Taro.navigateTo({ url: extraPkgUrl('/pages/analyze-history/index') })
+      return
+    }
+    const pendingTaskId = String(Taro.getStorageSync(ANALYZE_TASK_REMINDER_OPEN_KEY) || '').trim()
+    if (pendingTaskId) {
+      Taro.removeStorageSync(ANALYZE_TASK_REMINDER_OPEN_KEY)
+      void openAnalyzeTaskFromReminder(pendingTaskId)
+      return
+    }
     if (petDidShowCountRef.current === 0) {
       petDidShowCountRef.current += 1
       return
     }
     void loadPetSummary(selectedDateRef.current)
+    void refreshAnalyzeReminder()
   })
 
   React.useEffect(() => {
@@ -2540,6 +2618,63 @@ function IndexPage() {
         ? 'calm'
         : 'sleepy')
   const petState = petSummary?.status?.state || petMood
+  const petAnalyzeReminder = React.useMemo(() => {
+    if (!analyzeReminder.taskId) return undefined
+    if (analyzeReminder.kind === 'waiting_record') {
+      return {
+        text: analyzeReminder.waitingRecord > 1
+          ? `${analyzeReminder.waitingRecord} 份餐食识别好啦，点我查看`
+          : '这份餐食识别好啦，点我查看',
+        tone: 'waiting' as const,
+        count: analyzeReminder.waitingRecord,
+      }
+    }
+    if (analyzeReminder.kind === 'auto_recorded') {
+      return { text: '这份餐食已经帮你记好啦，点我查看', tone: 'recorded' as const }
+    }
+    if (analyzeReminder.kind === 'recognizing') {
+      return { text: '我还在认真识别，完成后马上告诉你', tone: 'recognizing' as const }
+    }
+    return undefined
+  }, [analyzeReminder])
+
+  const petMealReminder = React.useMemo(() => {
+    const prompt = petSummary?.meal_prompt
+    if (!prompt || petHidden || !getAccessToken()) return undefined
+    if (hasSeenHomeMealPrompt(selectedDate, prompt.meal_type)) return undefined
+    return {
+      text: prompt.text,
+      tone: 'meal' as const,
+      starterQuestion: prompt.starter_question,
+      mealType: prompt.meal_type,
+    }
+  }, [petHidden, petSummary?.meal_prompt, selectedDate])
+
+  const petReminder = petAnalyzeReminder || petMealReminder
+
+  React.useEffect(() => {
+    if (petAnalyzeReminder || !petMealReminder) return
+    markHomeMealPromptSeen(selectedDate, petMealReminder.mealType)
+  }, [petAnalyzeReminder, petMealReminder, selectedDate])
+
+  const handlePetAnalyzeReminderPress = React.useCallback(() => {
+    if (!petAnalyzeReminder && petMealReminder) {
+      openPetChat(petMealReminder.starterQuestion)
+      return
+    }
+    if (!analyzeReminder.taskId) {
+      openPetChat()
+      return
+    }
+    if (analyzeReminder.kind === 'waiting_record' || analyzeReminder.kind === 'auto_recorded') {
+      void acknowledgeAnalyzeTaskReminders().catch(() => undefined)
+      Taro.navigateTo({ url: extraPkgUrl('/pages/analyze-history/index') })
+      return
+    }
+    void openAnalyzeTaskFromReminder(analyzeReminder.taskId).finally(() => {
+      setTimeout(() => void refreshAnalyzeReminder(), 600)
+    })
+  }, [analyzeReminder.kind, analyzeReminder.taskId, petAnalyzeReminder, petMealReminder, refreshAnalyzeReminder])
 
   const handleShareDailyPosterImage = React.useCallback(() => {
     if (!dailyPosterImageUrl) return
@@ -2918,6 +3053,8 @@ function IndexPage() {
             />
           )}
           onPetPress={openPetChat}
+          petReminder={petReminder}
+          onPetReminderPress={handlePetAnalyzeReminderPress}
         />
 
         {!getAccessToken() && (

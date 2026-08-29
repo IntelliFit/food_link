@@ -145,7 +145,7 @@ func TestSearchContentBackfillsFoodRecordImageFromManualItems(t *testing.T) {
 	require.Equal(t, []string{"https://cdn.example.com/egg.jpg"}, results[0].ImagePaths)
 }
 
-func TestSearchContentPassesExerciseItems(t *testing.T) {
+func TestSearchContentHidesInternalExerciseItems(t *testing.T) {
 	exerciseItemsJSON := `[
 		{
 			"name": "杠铃深蹲",
@@ -178,8 +178,6 @@ func TestSearchContentPassesExerciseItems(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, hasMore)
 	require.Len(t, results, 1)
-	require.Len(t, results[0].ExerciseItems, 1)
-	require.Equal(t, "杠铃深蹲", results[0].ExerciseItems[0]["name"])
-	require.Equal(t, float64(18), results[0].ExerciseItems[0]["duration_min"])
+	require.Empty(t, results[0].ExerciseItems)
 	require.Equal(t, durationMin, *results[0].DurationMin)
 }

@@ -1,6 +1,6 @@
-import { View, Text, Input, ScrollView } from '@tarojs/components'
-import { useCallback, useEffect, useRef, useState } from 'react'
-import Taro, { useDidShow } from '@tarojs/taro'
+import { View, Text, Input, ScrollView, Switch } from '@tarojs/components'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import Taro, { useDidShow, useLoad } from '@tarojs/taro'
 import {
   getPetChatSession,
   getLatestPetChatSession,
@@ -10,6 +10,9 @@ import {
   listPetChatSessions,
   showUnifiedApiError,
   streamGeneratePetChat,
+  updateHealthProfile,
+  type DietRecommendationOption,
+  type DietRecommendationResult,
   type PetChatHistoryMessage,
   type PetChatSessionSummary,
   type PetSummary,
@@ -21,6 +24,7 @@ import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
 import { openPetSettings } from '../../../utils/pet-navigation'
 import { PetAvatar } from '../../../components/PetAvatar'
 import { PetMarkdown } from './pet-markdown'
+import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import './index.scss'
 
 type ChatRole = 'pet' | 'user'
@@ -30,12 +34,14 @@ type ChatMessage = {
   id: string
   role: ChatRole
   text: string
-  kind?: 'intro' | 'analysis' | 'local'
+  kind?: 'intro' | 'analysis' | 'local' | 'diet_recommendation'
   clues?: string[]
   actions?: string[]
+  recommendation?: DietRecommendationResult
 }
 
 const FOLLOW_UPS = [
+  '今天吃什么',
   '饮食怎么调整？',
   '推荐食谱',
   '训练怎么安排？',
@@ -51,6 +57,84 @@ function rangeLabel(range: RangeMode): string {
 
 function questionRange(question: string, fallback: RangeMode): RangeMode {
   return /30|月|长期/.test(question) ? 'month' : fallback
+}
+
+export function isDietRecommendationQuestion(question: string): boolean {
+  const normalized = question.replace(/\s+/g, '')
+  return /吃什么|推荐(?:一道|一些|几个)?(?:菜|餐|食物)|(?:北大|清华|大学|学院|学校).*学生|学生.*(?:北大|清华|大学|学院|学校)/.test(normalized)
+}
+
+export type DietRecommendationIntent = 'initial' | 'refine' | 'more' | 'location' | 'compare' | 'context'
+
+export function classifyDietRecommendationIntent(question: string, hasActiveRecommendation: boolean): DietRecommendationIntent | null {
+  const normalized = question.replace(/\s+/g, '')
+  if (hasActiveRecommendation) {
+    const explicitTopicSwitch = /训练|运动|跑步|力量|睡眠|作息|喝水|补剂|体检|体重趋势/.test(normalized)
+      && !/吃|菜|餐|食堂|饮食/.test(normalized)
+    if (explicitTopicSwitch) return null
+    if (/在哪|在哪里|哪里|哪个食堂|什么食堂|位置|几楼|楼层|窗口|档口|怎么去/.test(normalized)) return 'location'
+    if (/还有|其他|再来|再换|换一批|更多|多推荐|再推荐|别的|另外/.test(normalized)) return 'more'
+    if (/(?:哪个|哪道|哪款).*(?:适合|更好|优先|减脂|蛋白|热量)|更适合|热量最低|蛋白最高/.test(normalized)) return 'compare'
+    if (/(?:\d+(?:\.\d+)?)(?:元|块|千卡|大卡|卡路里|kcal|卡)|太贵|贵了|便宜|实惠|预算|减脂|减肥|增肌|高蛋白|低脂|清淡|少油/.test(normalized)) return 'refine'
+    if (/刚才|前面|上面|这些|这(?:几|三|五|[0-9０-９]+)个|你推荐的|那几个|各自|分别|解释|为什么|热量|卡路里|蛋白|碳水|脂肪|营养|价格/.test(normalized)) return 'context'
+  }
+  return isDietRecommendationQuestion(question) ? 'initial' : null
+}
+
+function recommendationSourceIDs(result?: DietRecommendationResult): string[] {
+  const ids = (result?.recommendations || [])
+    .filter((option) => option.source === 'public_food_library')
+    .map((option) => String(option.source_id || '').trim())
+    .filter(Boolean)
+  return Array.from(new Set(ids))
+}
+
+function activeDietRecommendationContext(messages: ChatMessage[]): { latest?: DietRecommendationResult; sourceIDs: string[] } {
+  let latest: DietRecommendationResult | undefined
+  let sourceIDs: string[] = []
+  for (const message of messages) {
+    if (message.recommendation) {
+      latest = message.recommendation
+      sourceIDs = Array.from(new Set([...sourceIDs, ...recommendationSourceIDs(message.recommendation)]))
+      continue
+    }
+    if (latest && message.role === 'user' && !classifyDietRecommendationIntent(message.text, true)) {
+      latest = undefined
+      sourceIDs = []
+    }
+  }
+  return { latest, sourceIDs }
+}
+
+export function inferMealType(question: string, now = new Date()): 'breakfast' | 'lunch' | 'dinner' {
+  if (/早餐|早饭|早上/.test(question)) return 'breakfast'
+  if (/午餐|午饭|中午/.test(question)) return 'lunch'
+  if (/晚餐|晚饭|晚上|夜宵/.test(question)) return 'dinner'
+  const minute = now.getHours() * 60 + now.getMinutes()
+  if (minute < 10 * 60 + 30) return 'breakfast'
+  if (minute < 15 * 60) return 'lunch'
+  return 'dinner'
+}
+
+function localDateString(now = new Date()): string {
+  const year = now.getFullYear()
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  const day = String(now.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+export function recommendationLocation(option: DietRecommendationOption): string {
+  return [option.campus_name, option.canteen_name, option.floor, option.window_name]
+    .map((value) => String(value || '').trim())
+    .filter(Boolean)
+    .join(' · ')
+}
+
+export function recommendationPrice(option: DietRecommendationOption): string {
+  const price = Number(option.price || 0)
+  if (!(price > 0)) return ''
+  const unit = String(option.price_unit || '').trim().replace(/^元\/?/, '')
+  return `¥${Number.isInteger(price) ? price : price.toFixed(1)}${unit ? `/${unit}` : ''}`
 }
 
 function creditCostFromError(error: unknown): number | null {
@@ -71,13 +155,17 @@ function buildIntroMessage(petName: string): ChatMessage {
 
 function mapHistoryMessage(item: PetChatHistoryMessage): ChatMessage {
   const meta = item.meta || {}
+  const recommendation = item.message_type === 'diet_recommendation' && meta.diet_recommendation && typeof meta.diet_recommendation === 'object'
+    ? meta.diet_recommendation as DietRecommendationResult
+    : undefined
   return {
     id: item.id || nextID('history'),
     role: item.role === 'user' ? 'user' : 'pet',
-    kind: item.message_type === 'analysis' ? 'analysis' : item.message_type === 'local' ? 'local' : undefined,
+    kind: item.message_type === 'analysis' ? 'analysis' : item.message_type === 'local' ? 'local' : item.message_type === 'diet_recommendation' ? 'diet_recommendation' : undefined,
     text: item.content || '',
     clues: Array.isArray(meta.clues) ? meta.clues.map(String) : undefined,
     actions: Array.isArray(meta.actions) ? meta.actions.map(String) : undefined,
+    recommendation,
   }
 }
 
@@ -141,6 +229,7 @@ function PetChatPage() {
   const [busy, setBusy] = useState(false)
   const [estimatedCredits, setEstimatedCredits] = useState<number | null>(null)
   const [estimatingCredits, setEstimatingCredits] = useState(false)
+  const [enableThinking, setEnableThinking] = useState(false)
   const busyRef = useRef(false)
   const estimateRequestRef = useRef(0)
   const historyLoadedRef = useRef(false)
@@ -150,11 +239,28 @@ function PetChatPage() {
   const [historyOpen, setHistoryOpen] = useState(false)
   const [historyLoading, setHistoryLoading] = useState(false)
   const [sessions, setSessions] = useState<PetChatSessionSummary[]>([])
+  const [savedSchoolIDs, setSavedSchoolIDs] = useState<string[]>([])
   const petName = petSummary?.pet?.name || '你的宠物'
   const [messages, setMessages] = useState<ChatMessage[]>([buildIntroMessage('你的宠物')])
   const streamingTextRef = useRef('')
+  const streamingDietRecommendationRef = useRef<DietRecommendationResult | null>(null)
+  const activeDietContext = useMemo(
+    () => activeDietRecommendationContext(messages),
+    [messages],
+  )
+  const latestDietRecommendation = activeDietContext.latest
   const isEmptyConversation = !lastAnalysis && !sessionID && messages.length === 1 && messages[0]?.kind === 'intro'
   const latestMessageID = messages.length > 0 ? `pet-chat-message-${messages[messages.length - 1].id}` : ''
+
+  useLoad((options) => {
+    const rawStarter = typeof options?.starter === 'string' ? options.starter : ''
+    if (!rawStarter) return
+    try {
+      setInput(decodeURIComponent(rawStarter))
+    } catch {
+      setInput(rawStarter)
+    }
+  })
 
   useDidShow(() => {
     applyThemeNavigationBar(scheme)
@@ -196,11 +302,16 @@ function PetChatPage() {
       setEstimatingCredits(false)
       return
     }
+    if (classifyDietRecommendationIntent(question, Boolean(latestDietRecommendation))) {
+      setEstimatedCredits(1)
+      setEstimatingCredits(false)
+      return
+    }
 
     setEstimatedCredits(null)
     setEstimatingCredits(true)
     const timer = setTimeout(() => {
-      void estimatePetChat(question, questionRange(question, activeRange))
+      void estimatePetChat(question, questionRange(question, activeRange), enableThinking)
         .then((result) => {
           if (estimateRequestRef.current !== requestID) return
           setEstimatedCredits(result.pricing.credits_charged)
@@ -215,7 +326,7 @@ function PetChatPage() {
     }, 350)
 
     return () => clearTimeout(timer)
-  }, [activeRange, input])
+  }, [activeRange, enableThinking, input, latestDietRecommendation])
 
   const appendMessage = useCallback((message: ChatMessage) => {
     setMessages((prev) => [...prev, message])
@@ -284,6 +395,7 @@ function PetChatPage() {
     busyRef.current = true
     setBusy(true)
     streamingTextRef.current = ''
+    streamingDietRecommendationRef.current = null
 
     setActiveRange(range)
     appendMessage({ id: nextID('user'), role: 'user', text: question })
@@ -296,31 +408,49 @@ function PetChatPage() {
       busyRef.current = false
       setBusy(false)
       streamingTextRef.current = ''
+      streamingDietRecommendationRef.current = null
     }
 
     streamGeneratePetChat(question, range, sessionID, !sessionID, {
       onStart: () => {
         // first chunk will arrive soon
       },
+      onProgress: (progress) => {
+        if (streamingTextRef.current) return
+        updateMessage(streamingMessageID, (message) => ({
+          ...message,
+          text: progress.label,
+        }))
+      },
+      onDietResult: (result) => {
+        streamingDietRecommendationRef.current = result.recommendation
+        updateMessage(streamingMessageID, (message) => ({
+          ...message,
+          kind: 'diet_recommendation',
+          recommendation: result.recommendation,
+        }))
+      },
       onChunk: (text) => {
         streamingTextRef.current += text
-        updateMessage(streamingMessageID, (m) => ({ ...m, text: m.text + text }))
+        updateMessage(streamingMessageID, (message) => ({ ...message, text: streamingTextRef.current }))
       },
       onDone: (meta) => {
         if (meta.session_id) setSessionID(meta.session_id)
         const finalText = streamingTextRef.current || '我看完了，但这次没有生成足够明确的结论。可以先多记录几餐再试。'
+        const recommendation = streamingDietRecommendationRef.current || undefined
         const message: ChatMessage = {
           id: streamingMessageID,
           role: 'pet',
-          kind: 'analysis',
+          kind: recommendation ? 'diet_recommendation' : 'analysis',
           text: finalText,
-          clues: buildClues(nextSummary, finalText),
-          actions: buildActions(question),
+          clues: recommendation ? undefined : buildClues(nextSummary, finalText),
+          actions: recommendation ? undefined : buildActions(question),
+          recommendation,
         }
         setLastAnalysis(message)
         updateMessage(streamingMessageID, () => message)
         finish()
-        if (!nextSummary) {
+        if (!recommendation && !nextSummary) {
           getStatsSummary(range)
             .then((next) => {
               nextSummary = next
@@ -344,8 +474,39 @@ function PetChatPage() {
         }))
         finish()
       },
+    }, enableThinking)
+  }, [appendMessage, enableThinking, petName, sessionID, summary, updateMessage])
+
+  const openRecommendationDetail = useCallback((option: DietRecommendationOption) => {
+    const itemID = String(option.source_id || '').trim()
+    if (!itemID || option.source !== 'public_food_library') return
+    Taro.navigateTo({
+      url: `${extraPkgUrl('/pages/food-library-detail/index')}?id=${encodeURIComponent(itemID)}${option.is_campus_food ? '&scene=campus' : ''}`,
     })
-  }, [appendMessage, petName, sessionID, summary, updateMessage])
+  }, [])
+
+  const saveCampusPreference = useCallback(async (result: DietRecommendationResult) => {
+    const school = result.resolved_school
+    if (!school?.id || savedSchoolIDs.includes(school.id)) return
+    const { confirm } = await Taro.showModal({
+      title: '设为常用学校',
+      content: `以后没有特别说明时，优先推荐${school.name}的校园餐。`,
+      confirmText: '确认保存',
+    })
+    if (!confirm) return
+    try {
+      await updateHealthProfile({
+        campus_dining_preference: {
+          school_id: school.id,
+          campus_id: result.campus_id || undefined,
+        },
+      })
+      setSavedSchoolIDs((previous) => [...previous, school.id])
+      Taro.showToast({ title: '已设为常用学校', icon: 'success' })
+    } catch (error) {
+      await showUnifiedApiError(error, '保存常用学校失败')
+    }
+  }, [savedSchoolIDs])
 
   const handleSend = useCallback(() => {
     const text = input.trim()
@@ -394,6 +555,73 @@ function PetChatPage() {
                 ) : (
                   <Text className='pet-chat-message-text'>{message.text}</Text>
                 )}
+                {message.role === 'pet' && message.recommendation ? (
+                  <View className='pet-chat-diet-result'>
+                    {message.recommendation.resolved_school ? (
+                      <View className='pet-chat-diet-context'>
+                        <View className='pet-chat-diet-context-copy'>
+                          <Text className='pet-chat-diet-context-school'>{message.recommendation.resolved_school.name}</Text>
+                          <Text className='pet-chat-diet-context-source'>
+                            {message.recommendation.ai_used
+                              ? `真实校园食物库 · Agent 工具核对 ${message.recommendation.ai_rerank_count || 0} 道`
+                              : (message.recommendation.recommendations || []).some((option) => option.is_campus_food)
+                                ? message.recommendation.generated_by === 'campus_agent_database_fallback'
+                                  ? '真实校园食物库 · 数据库兜底 · 未扣积分'
+                                  : '真实校园食物库 · 规则兜底'
+                                : message.recommendation.generated_by === 'campus_agent_database_fallback'
+                                  ? '真实校园食物库 · 当前条件无匹配 · 未扣积分'
+                                  : '本校暂无匹配菜品'}
+                          </Text>
+                        </View>
+                        <View
+                          className={`pet-chat-campus-save ${savedSchoolIDs.includes(message.recommendation.resolved_school.id) ? 'saved' : ''}`}
+                          onClick={() => void saveCampusPreference(message.recommendation as DietRecommendationResult)}
+                        >
+                          <Text>{savedSchoolIDs.includes(message.recommendation.resolved_school.id) ? '已设为常用' : '设为常用学校'}</Text>
+                        </View>
+                      </View>
+                    ) : null}
+                    <View className='pet-chat-diet-options'>
+                      {(message.recommendation.recommendations || []).slice(0, 5).map((option, index) => {
+                        const location = recommendationLocation(option)
+                        const price = recommendationPrice(option)
+                        const canOpen = option.source === 'public_food_library' && Boolean(option.source_id)
+                        const isEstimated = option.nutrition_basis === 'library_estimate'
+                        const portion = String(option.items?.[0]?.amount || '').trim()
+                        const weightMethod = option.weight_method === 'visual_estimate'
+                          ? '视觉估重'
+                          : option.weight_method === 'ai_estimate' ? 'AI 估重' : ''
+                        return (
+                          <View
+                            key={`${option.source || 'option'}-${option.source_id || index}`}
+                            className={`pet-chat-diet-card ${canOpen ? 'clickable' : ''}`}
+                            onClick={() => openRecommendationDetail(option)}
+                          >
+                            <View className='pet-chat-diet-card-head'>
+                              <Text className='pet-chat-diet-card-rank'>{index + 1}</Text>
+                              <Text className='pet-chat-diet-card-title'>{option.title}</Text>
+                              {price ? <Text className='pet-chat-diet-card-price'>{price}</Text> : null}
+                            </View>
+                            {location ? <Text className='pet-chat-diet-card-location'>{location}</Text> : null}
+                            <View className='pet-chat-diet-card-macros'>
+                              <Text>{isEstimated ? '≈' : ''}{Math.round(option.calories || 0)} kcal</Text>
+                              <Text>蛋白 {isEstimated ? '≈' : ''}{Math.round(option.protein || 0)}g</Text>
+                              <Text>碳水 {isEstimated ? '≈' : ''}{Math.round(option.carbs || 0)}g</Text>
+                              <Text>脂肪 {isEstimated ? '≈' : ''}{Math.round(option.fat || 0)}g</Text>
+                            </View>
+                            <Text className='pet-chat-diet-card-evidence'>
+                              {isEstimated
+                                ? `库内估算${portion ? ` · 份量 ${portion}` : ''}${weightMethod ? ` · ${weightMethod}` : ''}${option.weight_confidence ? ` · 置信度 ${Math.round(option.weight_confidence * 100)}%` : ''}`
+                                : option.nutrition_basis === 'nutrition_label' ? '包装营养标签记录' : '校园库营养记录'}
+                            </Text>
+                            <Text className='pet-chat-diet-card-reason'>{option.reason}</Text>
+                            {canOpen ? <Text className='pet-chat-diet-card-link'>查看菜品详情 ›</Text> : null}
+                          </View>
+                        )
+                      })}
+                    </View>
+                  </View>
+                ) : null}
               </View>
             </View>
           ))}
@@ -401,6 +629,22 @@ function PetChatPage() {
       </ScrollView>
 
       <View className='pet-chat-bottom-dock'>
+        <View className='pet-chat-thinking-switch-row'>
+          <View className='pet-chat-thinking-switch-copy'>
+            <Text className='pet-chat-thinking-switch-title'>深度思考</Text>
+            <Text className='pet-chat-thinking-switch-note'>更细致，回复会更慢</Text>
+          </View>
+          <Switch
+            className='pet-chat-thinking-switch'
+            checked={enableThinking}
+            disabled={busy}
+            color='#55a77c'
+            aria-label='深度思考开关'
+            onChange={(event) => setEnableThinking(Boolean(
+              event.detail?.value ?? (event.currentTarget as unknown as { checked?: boolean }).checked
+            ))}
+          />
+        </View>
         <ScrollView className='pet-chat-quick-row' scrollX enhanced showScrollbar={false}>
           <View className='pet-chat-quick-row-inner'>
             {FOLLOW_UPS.map((text) => (

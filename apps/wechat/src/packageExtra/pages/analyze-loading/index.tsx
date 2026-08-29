@@ -4,23 +4,52 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import Taro, { useDidShow } from '@tarojs/taro'
 import {
   getAnalyzeTask,
+  setAnalyzeTaskAutoRecord,
   sanitizeUserFacingErrorMessage,
   showUnifiedApiError,
   type AnalysisTask,
   type AnalyzeResponse,
   type ExecutionMode,
-  type ExerciseTaskResultPayload
+  type ExerciseTaskResultPayload,
+  type MealType,
 } from '../../../utils/api'
 import { IconExercise } from '../../../components/iconfont'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { getStoredRecordTargetDate, persistRecordTargetDate } from '../../../utils/record-date'
 import { needsPrecisionUserAction } from '../../../utils/precision-mode'
 import { normalizeAnalysisEngine } from '../../../utils/analysis-engine'
+import {
+  markAnalyzeTaskRecognizing,
+  readAutoRecordPreference,
+  syncAnalyzeTaskReminderState,
+} from '../../../utils/analyze-task-reminder'
 import './index.scss'
 
 /** 与记运动页一致，用于完成后清除「待同步」状态 */
 const EXERCISE_PENDING_TASK_KEY = 'exercise_pending_task_id'
 const ANALYSIS_ENGINE_STORAGE_KEY = 'analyzeAnalysisEngine'
+
+const AUTO_RECORD_MEAL_LABELS: Record<string, string> = {
+  breakfast: '早餐',
+  morning_snack: '早加餐',
+  lunch: '午餐',
+  afternoon_snack: '午加餐',
+  dinner: '晚餐',
+  evening_snack: '晚加餐',
+  snack: '午加餐',
+}
+
+const getAutoRecordMealType = () => {
+  const stored = String(Taro.getStorageSync('analyzeMealType') || '').trim()
+  if (AUTO_RECORD_MEAL_LABELS[stored]) return stored === 'snack' ? 'afternoon_snack' : stored
+  const hour = new Date().getHours()
+  if (hour < 10) return 'breakfast'
+  if (hour < 11) return 'morning_snack'
+  if (hour < 14) return 'lunch'
+  if (hour < 17) return 'afternoon_snack'
+  if (hour < 21) return 'dinner'
+  return 'evening_snack'
+}
 
 // 健康小知识
 const HEALTH_TIPS = [
@@ -1291,6 +1320,8 @@ function AnalyzeLoadingPage() {
     Taro.getCurrentInstance().router?.params?.correction === '1'
   )
   const [imagePath, setImagePath] = useState<string>('')
+  const [autoRecordEnabled, setAutoRecordEnabled] = useState(() => readAutoRecordPreference().enabled)
+  const [autoRecordUpdating, setAutoRecordUpdating] = useState(false)
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const pollFnRef = useRef<(() => Promise<void>) | null>(null)
   const tipTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -1299,6 +1330,12 @@ function AnalyzeLoadingPage() {
   const pollFailureCountRef = useRef(0)
   const startTimeRef = useRef<number>(Date.now())
   const routeSignatureRef = useRef<string>('')
+  const autoRecordEnabledRef = useRef(autoRecordEnabled)
+  const autoRecordAppliedTaskRef = useRef('')
+
+  useEffect(() => {
+    autoRecordEnabledRef.current = autoRecordEnabled
+  }, [autoRecordEnabled])
 
   const syncImagePathFromStorage = useCallback(() => {
     try {
@@ -1417,6 +1454,20 @@ function AnalyzeLoadingPage() {
   }, [syncRouteTaskFromParams])
 
   useEffect(() => {
+    if (!taskId || taskType === 'exercise' || isCorrectionMode || isDebugMode) return
+    markAnalyzeTaskRecognizing(taskId)
+    if (!autoRecordEnabled || autoRecordAppliedTaskRef.current === taskId) return
+    autoRecordAppliedTaskRef.current = taskId
+    const mealType = getAutoRecordMealType() as MealType
+    void setAnalyzeTaskAutoRecord(taskId, true, mealType).catch((error) => {
+      autoRecordAppliedTaskRef.current = ''
+      setAutoRecordEnabled(false)
+      autoRecordEnabledRef.current = false
+      console.error('应用默认自动记录失败:', error)
+    })
+  }, [autoRecordEnabled, isCorrectionMode, isDebugMode, taskId, taskType])
+
+  useEffect(() => {
     if (status !== 'loading') return
 
     elapsedTimerRef.current = setInterval(() => {
@@ -1521,6 +1572,27 @@ function AnalyzeLoadingPage() {
               url: `${extraPkgUrl('/pages/precision-confirm/index')}?task_id=${encodeURIComponent(taskId)}`,
             })
             return
+          }
+          if (autoRecordEnabledRef.current && !isCorrectionMode) {
+            try {
+              const autoRecordResult = await setAnalyzeTaskAutoRecord(taskId, true, getAutoRecordMealType() as MealType)
+              if (autoRecordResult.status === 'recorded' || autoRecordResult.record_id) {
+                settled = true
+                setStatus('done')
+                if (pollTimerRef.current) clearTimeout(pollTimerRef.current)
+                if (elapsedTimerRef.current) clearInterval(elapsedTimerRef.current)
+                pollTimerRef.current = null
+                elapsedTimerRef.current = null
+                void syncAnalyzeTaskReminderState().catch(() => undefined)
+                Taro.showToast({ title: `已自动记入${AUTO_RECORD_MEAL_LABELS[getAutoRecordMealType()]}`, icon: 'success' })
+                setTimeout(() => Taro.switchTab({ url: '/pages/index/index' }), 500)
+                return
+              }
+            } catch (error) {
+              console.error('任务完成后自动记录失败，进入结果确认:', error)
+              setAutoRecordEnabled(false)
+              autoRecordEnabledRef.current = false
+            }
           }
           settled = true
           setStatus('done')
@@ -1656,16 +1728,42 @@ function AnalyzeLoadingPage() {
       return
     }
     Taro.showModal({
-      title: '稍后查看',
-      content: isCorrectionMode ? '纠错分析将在后台继续，完成后可在「我的」「识别记录」中查看结果。' : '分析将在后台继续，完成后可在「我的」「识别记录」中查看结果。',
+      title: '放心先离开',
+      content: isCorrectionMode ? '纠错分析会在后台继续，完成后可在识别记录中查看。' : '识别会在后台继续。完成后，首页小宠物和底部摄像头角标会提醒你。',
       showCancel: true,
-      confirmText: '去历史',
+      confirmText: '去首页',
+      cancelText: '继续等待',
       success: res => {
         if (res.confirm) {
-          Taro.redirectTo({ url: extraPkgUrl('/pages/analyze-history/index') })
+          markAnalyzeTaskRecognizing(taskId)
+          Taro.switchTab({ url: '/pages/index/index' })
         }
       }
     })
+  }
+
+  const handleToggleAutoRecord = async () => {
+    if (!taskId || autoRecordUpdating) return
+    const next = !autoRecordEnabled
+    const mealType = getAutoRecordMealType()
+    setAutoRecordUpdating(true)
+    try {
+      const result = await setAnalyzeTaskAutoRecord(taskId, next, mealType as MealType)
+      setAutoRecordEnabled(next)
+      autoRecordEnabledRef.current = next
+      autoRecordAppliedTaskRef.current = next ? taskId : ''
+      Taro.showToast({
+        title: next
+          ? (result.status === 'recorded' ? `已自动记入${AUTO_RECORD_MEAL_LABELS[mealType]}` : `完成后记入${AUTO_RECORD_MEAL_LABELS[mealType]}`)
+          : '本次已关闭自动记录',
+        icon: next && result.status === 'recorded' ? 'success' : 'none',
+      })
+      void syncAnalyzeTaskReminderState().catch(() => undefined)
+    } catch (error) {
+      await showUnifiedApiError(error, next ? '开启自动记录失败' : '关闭自动记录失败')
+    } finally {
+      setAutoRecordUpdating(false)
+    }
   }
 
   const handleGoHistory = () => {
@@ -1853,8 +1951,28 @@ function AnalyzeLoadingPage() {
         </View>
 
         <View className='bottom-actions'>
+          {!isCorrectionMode && taskType !== 'exercise' && elapsedSeconds >= 5 && (
+            <View
+              className={`btn-auto-record-v3${autoRecordEnabled ? ' is-enabled' : ''}${autoRecordUpdating ? ' is-updating' : ''}`}
+              onClick={() => void handleToggleAutoRecord()}
+            >
+              <Text className='btn-auto-record-title-v3'>
+                {autoRecordUpdating
+                  ? ''
+                  : autoRecordEnabled
+                    ? `完成后将自动记入${AUTO_RECORD_MEAL_LABELS[getAutoRecordMealType()]}`
+                    : `完成后自动记入${AUTO_RECORD_MEAL_LABELS[getAutoRecordMealType()]}`}
+              </Text>
+              {!autoRecordUpdating && (
+                <Text className='btn-auto-record-desc-v3'>
+                  {autoRecordEnabled ? '本次已开启，离开页面也会继续' : '仅对本次生效；长期默认可到“我的－记录设置”设置'}
+                </Text>
+              )}
+              {autoRecordUpdating && <View className='auto-record-spinner-v3' />}
+            </View>
+          )}
           <View className='btn-leave-v3' onClick={handleLeave}>
-            <Text className='btn-leave-text-v3'>先离开，稍后查看</Text>
+            <Text className='btn-leave-text-v3'>先去首页，完成后小宠物提醒我</Text>
           </View>
           {isDebugMode && (
             <View className='btn-exit-debug-v3' onClick={() => Taro.navigateBack()}>
