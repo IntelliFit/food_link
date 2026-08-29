@@ -1686,7 +1686,13 @@ func ensureOfficialHigherEducationDirectory(ctx context.Context, db *gorm.DB) er
 			FROM official_higher_education_sync AS source
 			WHERE school.location_type = 'university'
 				AND (school.official_code IS NULL OR trim(school.official_code) = '')
-				AND regexp_replace(replace(replace(school.name, '（', '('), '）', ')'), '\s+', '', 'g') = source.normalized_name`).Error; err != nil {
+				AND regexp_replace(replace(replace(school.name, '（', '('), '）', ')'), '\s+', '', 'g') = source.normalized_name
+				AND NOT EXISTS (
+					SELECT 1
+					FROM schools AS claimed
+					WHERE claimed.official_code = source.official_code
+						AND claimed.id <> school.id
+				)`).Error; err != nil {
 			return fmt.Errorf("match legacy higher education institutions by name: %w", err)
 		}
 		if err := tx.Exec(`INSERT INTO schools (
