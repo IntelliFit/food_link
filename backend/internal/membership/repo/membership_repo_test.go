@@ -108,6 +108,7 @@ func TestMembershipRepo_GrantMembershipExtendsActiveHigherPlan(t *testing.T) {
 		FirstActivatedAt:   &start,
 		CurrentPeriodStart: &start,
 		ExpiresAt:          &expires,
+		AutoRenew:          true,
 		DailyCredits:       20,
 	}).Error)
 
@@ -128,6 +129,7 @@ func TestMembershipRepo_GrantMembershipExtendsActiveHigherPlan(t *testing.T) {
 	require.NotNil(t, membership.CurrentPlanCode)
 	assert.Equal(t, "standard_monthly", *membership.CurrentPlanCode)
 	assert.Equal(t, 20, membership.DailyCredits)
+	assert.True(t, membership.AutoRenew)
 	assert.WithinDuration(t, expires.AddDate(0, 0, 7), *membership.ExpiresAt, time.Second)
 	require.NotNil(t, grant.StartsAt)
 	assert.WithinDuration(t, expires, *grant.StartsAt, time.Second)
