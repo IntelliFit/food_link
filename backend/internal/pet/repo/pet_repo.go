@@ -183,6 +183,15 @@ func (r *PetRepo) ListFoodRecordsByDate(ctx context.Context, userID, date string
 	return rows, err
 }
 
+func (r *PetRepo) ListRecentFoodRecords(ctx context.Context, userID string, start, end time.Time) ([]FoodRecord, error) {
+	var rows []FoodRecord
+	err := r.db.WithContext(ctx).
+		Where("user_id = ? AND record_time >= ? AND record_time < ?", userID, start, end).
+		Order("record_time ASC").
+		Find(&rows).Error
+	return rows, err
+}
+
 func (r *PetRepo) GetLatestFoodRecordDate(ctx context.Context, userID string, beforeOrOn string) (string, error) {
 	_, end, err := chinaDateWindow(beforeOrOn)
 	if err != nil {

@@ -31,6 +31,7 @@ func NewPublicFoodRepo(db *gorm.DB) *PublicFoodRepo {
 
 type ListFilter struct {
 	City               string
+	Keyword            string
 	SuitableForFatLoss *bool
 	MerchantName       string
 	MinCalories        *float64
@@ -46,6 +47,8 @@ type ListFilter struct {
 	WindowID           string
 	SchoolName         string
 	CanteenName        string
+	Floor              string
+	WindowName         string
 	IsCampusHighlight  *bool
 	ViewerUserID       string
 }
@@ -154,6 +157,22 @@ func (r *PublicFoodRepo) ListPublished(ctx context.Context, f ListFilter) ([]dom
 	if f.MerchantName != "" {
 		q = q.Where("p.merchant_name ILIKE ?", "%"+f.MerchantName+"%")
 	}
+	if f.Keyword != "" {
+		like := "%" + f.Keyword + "%"
+		q = q.Where(`(
+			p.food_name ILIKE ?
+			OR p.merchant_name ILIKE ?
+			OR p.school_name ILIKE ?
+			OR p.campus_name ILIKE ?
+			OR p.canteen_name ILIKE ?
+			OR p.floor ILIKE ?
+			OR p.window_name ILIKE ?
+			OR p.campus_location_text ILIKE ?
+			OR p.city ILIKE ?
+			OR p.district ILIKE ?
+			OR p.detail_address ILIKE ?
+		)`, like, like, like, like, like, like, like, like, like, like, like)
+	}
 	if f.MinCalories != nil {
 		q = q.Where("p.total_calories >= ?", *f.MinCalories)
 	}
@@ -209,6 +228,12 @@ func (r *PublicFoodRepo) ListPublished(ctx context.Context, f ListFilter) ([]dom
 	}
 	if f.CanteenID == "" && f.WindowID == "" && f.CanteenName != "" {
 		q = q.Where("p.canteen_name = ?", f.CanteenName)
+	}
+	if f.Floor != "" {
+		q = q.Where("p.floor = ?", f.Floor)
+	}
+	if f.WindowName != "" {
+		q = q.Where("p.window_name = ?", f.WindowName)
 	}
 	if f.IsCampusHighlight != nil {
 		q = q.Where("p.is_campus_highlight = ?", *f.IsCampusHighlight)

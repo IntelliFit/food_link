@@ -136,6 +136,19 @@ func (f *fakePetRepo) ListFoodRecordsByDate(ctx context.Context, userID, date st
 	return f.foodByDate[date], nil
 }
 
+func (f *fakePetRepo) ListRecentFoodRecords(ctx context.Context, userID string, start, end time.Time) ([]repo.FoodRecord, error) {
+	rows := make([]repo.FoodRecord, 0)
+	for _, records := range f.foodByDate {
+		for _, record := range records {
+			if record.RecordTime == nil || record.RecordTime.Before(start) || !record.RecordTime.Before(end) {
+				continue
+			}
+			rows = append(rows, record)
+		}
+	}
+	return rows, nil
+}
+
 func (f *fakePetRepo) GetLatestFoodRecordDate(ctx context.Context, userID string, beforeOrOn string) (string, error) {
 	target, err := parseChinaDate(beforeOrOn)
 	if err != nil {

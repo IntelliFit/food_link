@@ -45,7 +45,9 @@ type StatsRepo interface {
 	GetCustomFocusCard(ctx context.Context, userID, rangeType, focusID string) (*domain.CustomFocusCard, error)
 	CountCustomFocusGenerationsToday(ctx context.Context, userID string) (int64, error)
 	CountCustomFocusGenerationsTodayForFocus(ctx context.Context, userID, focusID string) (int64, error)
-	GetDietRecommendationCandidates(ctx context.Context, userID string, scene string, limit int) ([]domain.DietRecommendationCandidate, error)
+	GetDietRecommendationCandidates(ctx context.Context, userID string, scene string, scope domain.DietRecommendationScope, limit int) ([]domain.DietRecommendationCandidate, error)
+	SearchCampusDietCandidates(ctx context.Context, filter domain.CampusDietSearchFilter) ([]domain.DietRecommendationCandidate, int64, error)
+	ResolveDietRecommendationSchool(ctx context.Context, question string) (*domain.DietRecommendationSchool, error)
 	CreatePetChatSession(ctx context.Context, session domain.PetChatSession) (*domain.PetChatSession, error)
 	GetPetChatSession(ctx context.Context, userID, sessionID string) (*domain.PetChatSession, error)
 	GetPetChatSessionMessages(ctx context.Context, userID, sessionID string, limit int) ([]domain.PetChatMessage, error)
@@ -364,22 +366,26 @@ type PetChatAppendInput struct {
 	Messages  []PetChatAppendMessage `json:"messages"`
 }
 
+type PetChatStreamMeta struct {
+	SessionID          string                 `json:"session_id"`
+	UserMessageID      string                 `json:"user_message_id,omitempty"`
+	AssistantMessageID string                 `json:"assistant_message_id,omitempty"`
+	Range              string                 `json:"range"`
+	RangeLabel         string                 `json:"range_label"`
+	RecordedDays       int                    `json:"recorded_days"`
+	CreditsCharged     int                    `json:"credits_charged"`
+	BillingStatus      string                 `json:"billing_status"`
+	AIUsagePricing     *billing.PricingResult `json:"ai_usage_pricing,omitempty"`
+	EstimatedPricing   billing.PricingResult  `json:"estimated_pricing"`
+}
+
 type PetChatStreamChunk struct {
-	Type  string `json:"type"`
-	Text  string `json:"text,omitempty"`
-	Error string `json:"error,omitempty"`
-	Meta  *struct {
-		SessionID          string                 `json:"session_id"`
-		UserMessageID      string                 `json:"user_message_id,omitempty"`
-		AssistantMessageID string                 `json:"assistant_message_id,omitempty"`
-		Range              string                 `json:"range"`
-		RangeLabel         string                 `json:"range_label"`
-		RecordedDays       int                    `json:"recorded_days"`
-		CreditsCharged     int                    `json:"credits_charged"`
-		BillingStatus      string                 `json:"billing_status"`
-		AIUsagePricing     *billing.PricingResult `json:"ai_usage_pricing,omitempty"`
-		EstimatedPricing   billing.PricingResult  `json:"estimated_pricing"`
-	} `json:"meta,omitempty"`
+	Type       string                   `json:"type"`
+	Text       string                   `json:"text,omitempty"`
+	Error      string                   `json:"error,omitempty"`
+	Progress   *CampusDietAgentProgress `json:"progress,omitempty"`
+	DietResult *CampusDietAgentResult   `json:"diet_result,omitempty"`
+	Meta       *PetChatStreamMeta       `json:"meta,omitempty"`
 }
 
 func (s *StatsService) GetSummary(ctx context.Context, userID string, statsRange string, fallbackTDEE int, fallbackStreakDays int) (*StatsSummary, error) {
@@ -863,6 +869,9 @@ func (s *StatsService) GeneratePetChat(ctx context.Context, userID string, input
 }
 
 func (s *StatsService) GeneratePetChatStream(ctx context.Context, userID string, input PetChatInput) (<-chan PetChatStreamChunk, error) {
+	if s.shouldUseCampusDietAgent(ctx, userID, input) {
+		return s.GenerateCampusDietAgentStream(ctx, userID, input)
+	}
 	requestStarted := time.Now()
 	estimate, comp, err := s.preparePetChat(ctx, userID, input)
 	if err != nil {
@@ -1007,18 +1016,7 @@ func (s *StatsService) GeneratePetChatStream(ctx context.Context, userID string,
 		)
 		chunkChan <- PetChatStreamChunk{
 			Type: "done",
-			Meta: &struct {
-				SessionID          string                 `json:"session_id"`
-				UserMessageID      string                 `json:"user_message_id,omitempty"`
-				AssistantMessageID string                 `json:"assistant_message_id,omitempty"`
-				Range              string                 `json:"range"`
-				RangeLabel         string                 `json:"range_label"`
-				RecordedDays       int                    `json:"recorded_days"`
-				CreditsCharged     int                    `json:"credits_charged"`
-				BillingStatus      string                 `json:"billing_status"`
-				AIUsagePricing     *billing.PricingResult `json:"ai_usage_pricing,omitempty"`
-				EstimatedPricing   billing.PricingResult  `json:"estimated_pricing"`
-			}{
+			Meta: &PetChatStreamMeta{
 				SessionID:          session.ID,
 				UserMessageID:      userMessageID,
 				AssistantMessageID: assistantMessageID,
@@ -2268,11 +2266,45 @@ func buildPetChatHistoryPromptBlock(messages []domain.PetChatMessage) string {
 			role = "宠物"
 		}
 		lines = append(lines, fmt.Sprintf("- %s：%s", role, trimStatsRunes(content, 220)))
+		if structured := petChatStructuredDietHistoryLine(msg); structured != "" {
+			lines = append(lines, structured)
+		}
 	}
 	if len(lines) == 0 {
 		return "无历史对话。"
 	}
 	return strings.Join(lines, "\n")
+}
+
+func petChatStructuredDietHistoryLine(message domain.PetChatMessage) string {
+	if message.MessageType != "diet_recommendation" || len(message.Meta) == 0 {
+		return ""
+	}
+	raw, ok := message.Meta["diet_recommendation"]
+	if !ok || raw == nil {
+		return ""
+	}
+	encoded, err := json.Marshal(raw)
+	if err != nil {
+		return ""
+	}
+	var result DietRecommendationResult
+	if err := json.Unmarshal(encoded, &result); err != nil || len(result.Recommendations) == 0 {
+		return ""
+	}
+	items := make([]string, 0, 5)
+	for _, option := range result.Recommendations {
+		if len(items) >= 5 {
+			break
+		}
+		location := strings.Join(compactDietStrings(option.CanteenName, option.Floor, option.WindowName), "/")
+		items = append(items, fmt.Sprintf("%s[source_id=%s, %.1fkcal, 蛋白%.1fg, 碳水%.1fg, 脂肪%.1fg, 位置=%s]",
+			option.Title, option.SourceID, option.Calories, option.Protein, option.Carbs, option.Fat, defaultIfEmpty(location, "未记录")))
+	}
+	if len(items) == 0 {
+		return ""
+	}
+	return "  结构化校园餐证据（只能据此引用）：" + strings.Join(items, "；")
 }
 
 func normalizePetChatQuestion(question string) string {

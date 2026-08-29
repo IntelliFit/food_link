@@ -144,6 +144,7 @@ func (h *PublicFoodHandler) Create(c *gin.Context) {
 func (h *PublicFoodHandler) List(c *gin.Context) {
 	filter := repo.ListFilter{
 		City:         c.Query("city"),
+		Keyword:      c.Query("keyword"),
 		MerchantName: c.Query("merchant_name"),
 		SortBy:       c.DefaultQuery("sort_by", "latest"),
 		Limit:        intQuery(c, "limit", 20),
@@ -155,6 +156,8 @@ func (h *PublicFoodHandler) List(c *gin.Context) {
 		WindowID:     c.Query("window_id"),
 		SchoolName:   c.Query("school_name"),
 		CanteenName:  c.Query("canteen_name"),
+		Floor:        c.Query("floor"),
+		WindowName:   c.Query("window_name"),
 	}
 	if raw := c.Query("suitable_for_fat_loss"); raw != "" {
 		if v, err := strconv.ParseBool(raw); err == nil {

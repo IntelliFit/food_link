@@ -109,6 +109,30 @@ func TestFeedRepoListPublicFeedDoesNotMaterializeEveryPublicUser(t *testing.T) {
 	require.LessOrEqual(t, maxRowsRead, int64(10), "请求一条 Feed 时不应读取全部公开用户，单次读取了 %d 行", maxRowsRead)
 }
 
+func TestFeedRepoExerciseFeedKeepsOriginalTextAndHidesInternalItems(t *testing.T) {
+	db := setupFeedTestDB(t)
+	r := NewFeedRepo(db)
+	ctx := context.Background()
+	original := "自重深蹲、俯卧撑、双杠臂屈伸，我一共用了40分钟"
+
+	assert.NoError(t, db.Create(&UserProfile{ID: "u1", Nickname: "Alice", Avatar: "a1"}).Error)
+	assert.NoError(t, db.Model(&UserProfile{}).Where("id = ?", "u1").Update("public_records", true).Error)
+	assert.NoError(t, db.Exec(`
+		INSERT INTO user_exercise_logs (
+			id, user_id, exercise_desc, exercise_type, calories_burned, duration_min,
+			recorded_on, recorded_at, ai_reasoning, exercise_items, hidden_from_feed, created_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, false, ?)
+	`, "ex1", "u1", original, "综合自重训练", 150, 40, time.Now(), time.Now(), "整次训练整体估算",
+		`[{"name":"自重深蹲","duration_min":40,"met":3.5},{"name":"俯卧撑","duration_min":40,"met":4}]`, time.Now()).Error)
+
+	records, err := r.ListPublicFeed(ctx, nil, FeedTargetExerciseLog, "", "", "", "", 10, nil)
+	require.NoError(t, err)
+	require.Len(t, records, 1)
+	assert.Equal(t, original, *records[0].ExerciseDesc)
+	assert.Empty(t, records[0].ExerciseItems)
+	assert.Nil(t, records[0].AIReasoning)
+}
+
 func TestFeedRepoListFriendFeed(t *testing.T) {
 	db := setupFeedTestDB(t)
 	r := NewFeedRepo(db)

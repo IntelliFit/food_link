@@ -114,7 +114,9 @@ func NewFeedRepo(db *gorm.DB) *FeedRepo {
 
 func (r *FeedRepo) exerciseItemsSelect() string {
 	emptyItems := exerciseItemsEmptyLiteral(r.db)
-	return fmt.Sprintf("COALESCE(exercise_items, %s) AS exercise_items", emptyItems)
+	// 圈子只展示用户原文和整次训练总消耗。动作拆分属于内部估算证据，
+	// 不应把一次训练改写成多个对外发布的运动项目。
+	return fmt.Sprintf("%s AS exercise_items", emptyItems)
 }
 
 func exerciseItemsEmptyLiteral(db *gorm.DB) string {
@@ -214,7 +216,7 @@ func (r *FeedRepo) listFoodFeedByAuthors(ctx context.Context, authorIDs []string
 
 func (r *FeedRepo) listExerciseFeedByAuthors(ctx context.Context, authorIDs []string, publicOnly bool, date, sortBy string, limit int, cursor *FeedCursor) ([]FeedRecord, error) {
 	q := r.db.WithContext(ctx).Table("user_exercise_logs").
-		Select("'exercise_log' AS feed_type, id, user_id, '' AS meal_type, COALESCE(recorded_at, created_at, recorded_on::timestamptz) AS record_time, created_at, COALESCE(calories_burned, 0) AS total_calories, 0 AS total_protein, 0 AS total_carbs, 0 AS total_fat, image_url AS image_path, exercise_desc AS description, hidden_from_feed, exercise_type, exercise_desc, calories_burned, duration_min, ai_reasoning, "+r.exerciseItemsSelect()).
+		Select("'exercise_log' AS feed_type, id, user_id, '' AS meal_type, COALESCE(recorded_at, created_at, recorded_on::timestamptz) AS record_time, created_at, COALESCE(calories_burned, 0) AS total_calories, 0 AS total_protein, 0 AS total_carbs, 0 AS total_fat, image_url AS image_path, exercise_desc AS description, hidden_from_feed, exercise_type, exercise_desc, calories_burned, duration_min, NULL::text AS ai_reasoning, "+r.exerciseItemsSelect()).
 		Where("hidden_from_feed = ?", false)
 	q = r.applyFeedAuthorScope(q, authorIDs, publicOnly)
 	if date != "" {
@@ -325,7 +327,7 @@ func (r *FeedRepo) GetFeedTargetByID(ctx context.Context, targetType, targetID s
 	if targetType == FeedTargetExerciseLog {
 		var row FeedRecord
 		err := r.db.WithContext(ctx).Table("user_exercise_logs").
-			Select("'exercise_log' AS feed_type, id, user_id, '' AS meal_type, COALESCE(recorded_at, created_at, recorded_on::timestamptz) AS record_time, created_at, COALESCE(calories_burned, 0) AS total_calories, 0 AS total_protein, 0 AS total_carbs, 0 AS total_fat, image_url AS image_path, exercise_desc AS description, hidden_from_feed, exercise_type, exercise_desc, calories_burned, duration_min, ai_reasoning, "+r.exerciseItemsSelect()).
+			Select("'exercise_log' AS feed_type, id, user_id, '' AS meal_type, COALESCE(recorded_at, created_at, recorded_on::timestamptz) AS record_time, created_at, COALESCE(calories_burned, 0) AS total_calories, 0 AS total_protein, 0 AS total_carbs, 0 AS total_fat, image_url AS image_path, exercise_desc AS description, hidden_from_feed, exercise_type, exercise_desc, calories_burned, duration_min, NULL::text AS ai_reasoning, "+r.exerciseItemsSelect()).
 			Where("id = ?", targetID).
 			First(&row).Error
 		if err != nil {

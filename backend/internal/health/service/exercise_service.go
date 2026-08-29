@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -56,6 +57,15 @@ type ExerciseService struct {
 	client      *http.Client
 	storage     *storage.Client
 	taskQueue   taskqueue.Publisher
+}
+
+type ExercisePrecisionDetails struct {
+	Enabled          bool
+	TotalDurationMin int
+	Intensity        string
+	AverageHeartRate int
+	DistanceKm       float64
+	Breakdown        string
 }
 
 type exerciseJSONLLMConfig struct {
@@ -193,6 +203,7 @@ func (s *ExerciseService) ListLogsByRange(ctx context.Context, userID string, da
 			"exercise_type":   nil,
 			"image_url":       nil,
 			"calories_burned": calories,
+			"duration_min":    nil,
 			"exercise_items":  log.ExerciseItems,
 			"recorded_on":     nil,
 			"recorded_at":     nil,
@@ -201,6 +212,9 @@ func (s *ExerciseService) ListLogsByRange(ctx context.Context, userID string, da
 		}
 		if log.AIReasoning != nil {
 			item["ai_reasoning"] = *log.AIReasoning
+		}
+		if log.DurationMin != nil {
+			item["duration_min"] = *log.DurationMin
 		}
 		if log.ExerciseType != nil {
 			item["exercise_type"] = *log.ExerciseType
@@ -233,6 +247,10 @@ func (s *ExerciseService) CreateLog(ctx context.Context, userID string, exercise
 }
 
 func (s *ExerciseService) CreateLogWithDate(ctx context.Context, userID string, exerciseDesc string, date string, imageURL string) (map[string]any, error) {
+	return s.CreateLogWithDateAndDetails(ctx, userID, exerciseDesc, date, imageURL, ExercisePrecisionDetails{})
+}
+
+func (s *ExerciseService) CreateLogWithDateAndDetails(ctx context.Context, userID string, exerciseDesc string, date string, imageURL string, precision ExercisePrecisionDetails) (map[string]any, error) {
 	desc := strings.TrimSpace(exerciseDesc)
 	imageURL = s.resolveFoodImageURL(imageURL)
 	if desc == "" && imageURL == "" {
@@ -240,6 +258,10 @@ func (s *ExerciseService) CreateLogWithDate(ctx context.Context, userID string, 
 	}
 	if len([]rune(desc)) > exerciseMaxDescriptionRunes {
 		return nil, &commonerrors.AppError{Code: 10002, Message: "运动描述过长", HTTPStatus: 400}
+	}
+	precision, err := normalizeExercisePrecisionDetails(precision)
+	if err != nil {
+		return nil, err
 	}
 
 	recordedOn, err := dateutil.ResolveRecordedOnDate(date, "date")
@@ -269,6 +291,18 @@ func (s *ExerciseService) CreateLogWithDate(ctx context.Context, userID string, 
 			"estimation_source": "go_exercise_worker",
 		},
 		CreatedAt: &now,
+	}
+	if precision.Enabled {
+		task.Payload["estimation_mode"] = "precision"
+		task.Payload["precision_details"] = map[string]any{
+			"total_duration_min": precision.TotalDurationMin,
+			"intensity":          precision.Intensity,
+			"average_heart_rate": precision.AverageHeartRate,
+			"distance_km":        precision.DistanceKm,
+			"breakdown":          precision.Breakdown,
+		}
+	} else {
+		task.Payload["estimation_mode"] = "standard"
 	}
 	creditGroupID := uuid.New().String()
 	task.Payload["credit_group_id"] = creditGroupID
@@ -327,6 +361,55 @@ func (s *ExerciseService) refundExerciseCredits(ctx context.Context, userID stri
 			"task_type":       "exercise",
 		},
 	)
+}
+
+func normalizeExercisePrecisionDetails(details ExercisePrecisionDetails) (ExercisePrecisionDetails, error) {
+	if !details.Enabled {
+		return ExercisePrecisionDetails{}, nil
+	}
+	if details.TotalDurationMin < 1 || details.TotalDurationMin > 480 {
+		return ExercisePrecisionDetails{}, &commonerrors.AppError{Code: 10002, Message: "精准估算请填写 1 到 480 分钟的总时长", HTTPStatus: 400}
+	}
+	details.Intensity = normalizeExerciseIntensityText(details.Intensity)
+	if details.AverageHeartRate != 0 && (details.AverageHeartRate < 30 || details.AverageHeartRate > 250) {
+		return ExercisePrecisionDetails{}, &commonerrors.AppError{Code: 10002, Message: "平均心率应在 30 到 250 次/分钟之间", HTTPStatus: 400}
+	}
+	if details.DistanceKm < 0 || details.DistanceKm > 1000 {
+		return ExercisePrecisionDetails{}, &commonerrors.AppError{Code: 10002, Message: "运动距离应在 0 到 1000 公里之间", HTTPStatus: 400}
+	}
+	details.Breakdown = strings.TrimSpace(details.Breakdown)
+	if len([]rune(details.Breakdown)) > 1000 {
+		return ExercisePrecisionDetails{}, &commonerrors.AppError{Code: 10002, Message: "动作分配说明过长", HTTPStatus: 400}
+	}
+	return details, nil
+}
+
+func buildExerciseEstimationDescription(original string, payload map[string]any) string {
+	if strings.TrimSpace(fmt.Sprintf("%v", payload["estimation_mode"])) != "precision" {
+		return original
+	}
+	details := mapFromAny(payload["precision_details"])
+	if len(details) == 0 {
+		return original
+	}
+	parts := []string{strings.TrimSpace(original), "用户已确认的精准信息（优先于模型推测）："}
+	if duration := intFromAny(details["total_duration_min"]); duration > 0 {
+		parts = append(parts, fmt.Sprintf("整次训练总时长：%d分钟（只能使用一次，不是每个动作的时长）", duration))
+	}
+	if intensity := normalizeExerciseIntensityText(fmt.Sprintf("%v", details["intensity"])); intensity != "" {
+		labels := map[string]string{"low": "轻松", "moderate": "中等", "high": "吃力"}
+		parts = append(parts, "主观强度："+labels[intensity])
+	}
+	if heartRate := intFromAny(details["average_heart_rate"]); heartRate > 0 {
+		parts = append(parts, fmt.Sprintf("平均心率：%d次/分钟", heartRate))
+	}
+	if distance, ok := floatFromAny(details["distance_km"]); ok && distance > 0 {
+		parts = append(parts, fmt.Sprintf("运动距离：%.2f公里", distance))
+	}
+	if breakdown := strings.TrimSpace(fmt.Sprintf("%v", details["breakdown"])); breakdown != "" && breakdown != "<nil>" {
+		parts = append(parts, "动作时间或组次分配："+breakdown)
+	}
+	return strings.Join(parts, "\n")
 }
 
 func (s *ExerciseService) enqueueTask(ctx context.Context, taskID, taskType string) error {
@@ -490,7 +573,8 @@ func (s *ExerciseService) ProcessExerciseTask(ctx context.Context, userID, exerc
 			return nil, err
 		}
 	}
-	estimate, err := s.estimateExerciseCalories(ctx, desc, imageURL, profileSnapshot)
+	estimationDesc := buildExerciseEstimationDescription(desc, payload)
+	estimate, err := s.estimateExerciseCalories(ctx, estimationDesc, imageURL, profileSnapshot)
 	if err != nil {
 		status = "estimate_error"
 		return nil, err
@@ -502,6 +586,11 @@ func (s *ExerciseService) ProcessExerciseTask(ctx context.Context, userID, exerc
 		recordedDate, _ = parseChinaDate(recordedOn)
 	}
 	calories := float64(estimate.CaloriesKcal)
+	var durationMin *int
+	if estimate.DurationMin > 0 {
+		value := estimate.DurationMin
+		durationMin = &value
+	}
 	reasoning := estimate.Reasoning
 	logDesc := resolveExerciseLogDesc(desc, estimate)
 	exerciseItems := exerciseItemsFromEstimate(desc, estimate)
@@ -520,6 +609,7 @@ func (s *ExerciseService) ProcessExerciseTask(ctx context.Context, userID, exerc
 		ExerciseType:   exerciseType,
 		ImageURL:       storedImageURL,
 		CaloriesBurned: &calories,
+		DurationMin:    durationMin,
 		RecordedOn:     &recordedDate,
 		RecordedAt:     &now,
 		AIReasoning:    &reasoning,
@@ -542,6 +632,7 @@ func (s *ExerciseService) ProcessExerciseTask(ctx context.Context, userID, exerc
 		"exercise_type":   estimate.ExerciseType,
 		"image_url":       imageURL,
 		"calories_burned": int(calories),
+		"duration_min":    estimate.DurationMin,
 		"exercise_items":  exerciseItems,
 		"recorded_on":     recordedOn,
 		"recorded_at":     now.Format(time.RFC3339),
@@ -555,6 +646,7 @@ func (s *ExerciseService) ProcessExerciseTask(ctx context.Context, userID, exerc
 		"profile_snapshot":   profileSnapshot,
 		"today_total":        total,
 		"exercise_type":      estimate.ExerciseType,
+		"estimation_mode":    strings.TrimSpace(fmt.Sprintf("%v", payload["estimation_mode"])),
 	}, nil
 }
 
@@ -573,6 +665,7 @@ func (s *ExerciseService) activateInviteReward(ctx context.Context, userID, acti
 
 type ExerciseEstimate struct {
 	CaloriesKcal int
+	DurationMin  int
 	Raw          string
 	Reasoning    string
 	Source       string
@@ -644,6 +737,9 @@ func exerciseItemsFromEstimate(inputDesc string, estimate ExerciseEstimate) []ma
 		return nil
 	}
 	durationMin, sets, reps := extractExerciseMetrics(inputDesc)
+	if estimate.DurationMin > 0 {
+		durationMin = estimate.DurationMin
+	}
 	return []map[string]any{{
 		"name":          exerciseType,
 		"duration_min":  durationMin,
@@ -680,6 +776,12 @@ func extractDurationMinutes(text string) int {
 	if len(matches) >= 2 {
 		if v, err := strconv.ParseFloat(matches[1], 64); err == nil {
 			return int(v + 0.5)
+		}
+	}
+	matches = exerciseHourRe.FindStringSubmatch(text)
+	if len(matches) >= 2 {
+		if v, err := strconv.ParseFloat(matches[1], 64); err == nil {
+			return int(v*60 + 0.5)
 		}
 	}
 	return 0
@@ -768,15 +870,14 @@ var (
 	exerciseSetRepRe       = regexp.MustCompile(`(\d+)\s*组\s*(\d+)\s*次`)
 	exerciseSetSecondRe    = regexp.MustCompile(`(\d+)\s*组\s*(\d+)\s*秒`)
 	exerciseMinuteRe       = regexp.MustCompile(`(?i)(\d+(?:\.\d+)?)\s*(?:分钟|min|mins|minute|minutes)`)
+	exerciseHourRe         = regexp.MustCompile(`(?i)(\d+(?:\.\d+)?)\s*(?:小时|个小时|h|hr|hrs|hour|hours)`)
+	exerciseTotalMinuteRe  = regexp.MustCompile(`(?i)(?:一共|总共|共计|总计|合计|累计|总时长|全程|整个(?:训练|锻炼|运动)?)[^\d]{0,12}(\d+(?:\.\d+)?)\s*(?:分钟|min|mins|minute|minutes)`)
+	exerciseTotalHourRe    = regexp.MustCompile(`(?i)(?:一共|总共|共计|总计|合计|累计|总时长|全程|整个(?:训练|锻炼|运动)?)[^\d]{0,12}(\d+(?:\.\d+)?)\s*(?:小时|个小时|h|hr|hrs|hour|hours)`)
 	exerciseEachSecondRe   = regexp.MustCompile(`各\s*(\d+)\s*秒`)
 )
 
 func resolveExerciseLogDesc(inputDesc string, estimate ExerciseEstimate) string {
 	desc := strings.TrimSpace(inputDesc)
-	exerciseType := strings.TrimSpace(estimate.ExerciseType)
-	if isWeakExerciseTitle(desc) && exerciseType != "" {
-		return trimRunes(exerciseType, 20)
-	}
 	if desc != "" {
 		return desc
 	}
@@ -809,52 +910,7 @@ func isWeakExerciseTitle(value string) bool {
 
 func (s *ExerciseService) estimateExerciseCalories(ctx context.Context, desc, imageURL string, profileSnapshot map[string]any) (ExerciseEstimate, error) {
 	imageURL = strings.TrimSpace(imageURL)
-	if len([]rune(strings.TrimSpace(desc))) > exerciseLongTextThresholdRunes {
-		return s.estimateLongExerciseCalories(ctx, desc, profileSnapshot)
-	}
-	if shouldPreferLibraryMETForStructuredText(desc) {
-		estimate, err := s.estimateLongExerciseCalories(ctx, desc, profileSnapshot)
-		if err == nil {
-			return estimate, nil
-		}
-		logger.Warn(ctx, "短文本运动改走 MET 结构化估算失败，回退到直接热量估算",
-			logger.Stage("exercise_estimate"),
-			logger.Truncated("exercise_desc", desc, 120),
-			logger.Err(err),
-		)
-	}
-	if imageURL != "" {
-		return s.estimateSingleExerciseCalories(ctx, desc, imageURL, profileSnapshot)
-	}
-	segments := splitExerciseSegments(desc)
-	if shouldEstimateBySegments(desc, segments) {
-		total := 0
-		rows := make([]map[string]any, 0, len(segments))
-		for _, segment := range segments {
-			estimate, err := s.estimateSingleExerciseCalories(ctx, segment, "", profileSnapshot)
-			if err != nil {
-				return ExerciseEstimate{}, err
-			}
-			total += estimate.CaloriesKcal
-			rows = append(rows, map[string]any{
-				"segment":       segment,
-				"calories_kcal": estimate.CaloriesKcal,
-				"reasoning":     estimate.Reasoning,
-				"source":        estimate.Source,
-			})
-		}
-		reasoningParts := []string{}
-		for _, row := range rows {
-			reasoningParts = append(reasoningParts, fmt.Sprintf("%s≈%dkcal", trimRunes(fmt.Sprintf("%v", row["segment"]), 16), row["calories_kcal"]))
-		}
-		reasoning := "分项估算：" + strings.Join(reasoningParts, "；")
-		if len([]rune(reasoning)) > 200 {
-			reasoning = trimRunes(reasoning, 200) + "..."
-		}
-		rawBytes, _ := json.Marshal(map[string]any{"segments": rows, "calories_kcal": total, "reasoning": reasoning})
-		return ExerciseEstimate{CaloriesKcal: total, Raw: string(rawBytes), Reasoning: reasoning, Source: "segmented"}, nil
-	}
-	return s.estimateSingleExerciseCalories(ctx, desc, "", profileSnapshot)
+	return s.estimateSingleExerciseCalories(ctx, desc, imageURL, profileSnapshot)
 }
 
 func (s *ExerciseService) estimateLongExerciseCalories(ctx context.Context, desc string, profileSnapshot map[string]any) (ExerciseEstimate, error) {
@@ -963,6 +1019,11 @@ func (s *ExerciseService) resolveExerciseMET(ctx context.Context, item extracted
 func (s *ExerciseService) estimateSingleExerciseCalories(ctx context.Context, desc, imageURL string, profileSnapshot map[string]any) (ExerciseEstimate, error) {
 	estimate, err := s.estimateExerciseCaloriesWithLLM(ctx, desc, imageURL, profileSnapshot)
 	if err == nil {
+		if totalDuration, ok := extractExplicitTotalDurationMinutes(desc); ok {
+			estimate.DurationMin = int(totalDuration + 0.5)
+		} else if estimate.DurationMin <= 0 {
+			estimate.DurationMin = extractDurationMinutes(desc)
+		}
 		return estimate, nil
 	}
 	return ExerciseEstimate{}, err
@@ -1012,9 +1073,9 @@ func (s *ExerciseService) estimateExerciseCaloriesWithLLM(ctx context.Context, d
 		userPrompt += "\n\n" + profileText + "\n\n请结合这些真实信息估算；只有缺失字段才允许合理假设。"
 	}
 	userContent := any(userPrompt)
-	systemPrompt := "你是运动热量估算助手。只输出 JSON 对象，不要 markdown。格式为 {\"exercise_type\":\"运动类型\",\"reasoning\":\"一句简短中文\",\"calories_kcal\":123}。exercise_type 为识别出的运动类型名称（如跑步、游泳等），不超过 20 字；reasoning 不超过 80 个汉字。注意：calories_kcal 只应表示该运动或活动相比静息状态额外消耗的能量，不得包含基础代谢；若用户描述的是睡眠、静卧、休息等低活动状态且未体现明显身体活动或生理负荷，额外消耗应接近 0。"
+	systemPrompt := "你是运动热量估算助手。把用户描述视为一次完整训练，只给整次训练的总消耗，不要把多个动作分别计算后展示，也不要输出 items、MET 或分项热量。严格区分总时长与单项时长：用户说‘一共/总共/总时长40分钟’时，整次训练只能按40分钟估算，绝不能把40分钟重复套到每个动作。只输出 JSON 对象，不要 markdown。格式为 {\"exercise_type\":\"运动类型概括\",\"duration_min\":40,\"reasoning\":\"一句简短中文\",\"calories_kcal\":123}。exercise_type 不超过20字，reasoning 不超过80个汉字。calories_kcal 只表示整次运动相比静息状态的额外能量，不包含基础代谢；信息不足时保守估算并在 reasoning 中说明缺少的关键信息。"
 	if imageURL != "" {
-		systemPrompt = "你是运动热量估算助手。可根据图片识别运动类型、强度和可能时长，并结合文字描述估算热量。若图片是训练打卡截图或健身记录卡，必须先 OCR 读取每个动作、重量、次数、组数、总耗时、截图中的消耗热量，再综合估算；多项动作不要只按一个普通运动粗估。只输出 JSON 对象，不要 markdown。格式为 {\"exercise_type\":\"运动类型标题\",\"reasoning\":\"一句简短中文\",\"calories_kcal\":123}。exercise_type 应概括图片里的主要训练内容，例如 卧推力量训练、背部力量训练、跑步机慢跑，不要输出 一般运动；不超过 20 字。reasoning 不超过 80 个汉字。注意：calories_kcal 只应表示该运动或活动相比静息状态额外消耗的能量，不得包含基础代谢；若用户描述的是睡眠、静卧、休息等低活动状态且未体现明显身体活动或生理负荷，额外消耗应接近 0。"
+		systemPrompt = "你是运动热量估算助手。结合用户原文和图片，把内容视为一次完整训练，只给整次训练的总消耗，不要输出 items、MET 或分项热量。若图片是训练打卡截图，先读取动作、重量、次数、组数、整次总耗时、心率或设备总消耗；严格区分总时长和单项时长，同一个总时长只能使用一次。只输出 JSON 对象，不要 markdown。格式为 {\"exercise_type\":\"运动类型概括\",\"duration_min\":40,\"reasoning\":\"一句简短中文\",\"calories_kcal\":123}。calories_kcal 只表示整次运动相比静息状态的额外能量，不包含基础代谢；信息不足时保守估算并说明缺少的关键信息。"
 		userContent = []map[string]any{
 			{"type": "text", "text": userPrompt},
 			{"type": "image_url", "image_url": map[string]string{"url": imageURL}},
@@ -1075,15 +1136,6 @@ func (s *ExerciseService) estimateExerciseCaloriesWithLLM(ctx context.Context, d
 	raw := strings.TrimSpace(parsed.Choices[0].Message.Content)
 	estimate, err := parseExerciseEstimateJSON(raw)
 	if err != nil {
-		if strings.Contains(err.Error(), "missing calories_kcal") && len([]rune(strings.TrimSpace(desc))) > exerciseLongTextThresholdRunes {
-			logger.Warn(ctx, "运动热量大模型返回长文本结构，切换长文本识别链路",
-				logger.Stage("llm_parse"),
-				logger.ProviderModel(provider, model),
-				logger.LLMResponseSummary(raw),
-				slog.Int("exercise_desc_len", len([]rune(strings.TrimSpace(desc)))),
-			)
-			return s.estimateLongExerciseCalories(ctx, desc, profileSnapshot)
-		}
 		status = "result_parse_error"
 		metrics.ObserveLLMCall("exercise", "doubao", model, status, time.Since(start))
 		logger.Warn(ctx, "运动热量大模型结果解析失败",
@@ -1111,7 +1163,7 @@ func (s *ExerciseService) estimateExerciseCaloriesWithLLM(ctx context.Context, d
 
 func (s *ExerciseService) extractExerciseItemsWithLLM(ctx context.Context, desc string) ([]extractedExerciseItem, string, error) {
 	raw, err := s.callExerciseJSONLLM(ctx,
-		"你是运动记录结构化助手。只输出 JSON 对象，不要 markdown。格式为 {\"items\":[{\"name\":\"运动名称\",\"duration_min\":30,\"sets\":0,\"reps\":0,\"intensity\":\"low|moderate|high\",\"evidence\":\"原文片段\"}]}。必须列出用户文字中所有明确提到的运动或训练动作；能从“半小时/一小时/20min/3组12次”等表达推断时长或组数。无法确定时长但有组数时 duration_min 可按常见训练节奏粗估；完全无有效运动则 items 为空数组。",
+		"你是运动记录结构化助手。只输出 JSON 对象，不要 markdown。格式为 {\"total_duration_min\":40,\"items\":[{\"name\":\"运动名称\",\"duration_min\":15,\"sets\":0,\"reps\":0,\"intensity\":\"low|moderate|high\",\"evidence\":\"原文片段\"}]}。必须列出用户文字中所有明确提到的运动或训练动作。严格区分总时长和单项时长：用户说“一共/总共/总时长40分钟”时，40只属于 total_duration_min，绝对不能复制给每个动作；若原文没有各动作时长，应合理分配且所有动作 duration_min 之和不得超过总时长。能从“半小时/一小时/20min/3组12次”等表达推断时长或组数。完全无有效运动则 items 为空数组。",
 		"用户运动描述："+strings.TrimSpace(desc),
 		900,
 	)
@@ -1318,7 +1370,8 @@ func parseExerciseEstimateJSON(raw string) (ExerciseEstimate, error) {
 	if exerciseType == "" || exerciseType == "<nil>" {
 		exerciseType = ""
 	}
-	return ExerciseEstimate{CaloriesKcal: clampInt(calories, 1, 5000), Reasoning: reasoning, ExerciseType: exerciseType}, nil
+	durationMin := intFromAny(firstNonNil(payload["duration_min"], payload["duration_minutes"], payload["minutes"]))
+	return ExerciseEstimate{CaloriesKcal: clampInt(calories, 1, 5000), DurationMin: clampInt(durationMin, 0, 480), Reasoning: reasoning, ExerciseType: exerciseType}, nil
 }
 
 func validateExerciseJSONContent(raw string) error {
@@ -1459,6 +1512,10 @@ func parseExerciseDurationMinutes(evidence, name string, sets int) float64 {
 	if match := exerciseMinuteRe.FindStringSubmatch(evidence); len(match) == 2 {
 		minutes, _ := strconv.ParseFloat(match[1], 64)
 		return minutes
+	}
+	if match := exerciseHourRe.FindStringSubmatch(evidence); len(match) == 2 {
+		hours, _ := strconv.ParseFloat(match[1], 64)
+		return hours * 60
 	}
 	if match := exerciseSetSecondRe.FindStringSubmatch(evidence); len(match) == 3 {
 		setCount, _ := strconv.Atoi(match[1])
@@ -1649,6 +1706,22 @@ func normalizeExerciseDuration(durationMin float64, sets int, reps int) float64 
 		return estimated
 	}
 	return 10
+}
+
+func extractExplicitTotalDurationMinutes(text string) (float64, bool) {
+	if match := exerciseTotalMinuteRe.FindStringSubmatch(strings.TrimSpace(text)); len(match) == 2 {
+		minutes, err := strconv.ParseFloat(match[1], 64)
+		if err == nil && minutes > 0 {
+			return math.Min(minutes, 480), true
+		}
+	}
+	if match := exerciseTotalHourRe.FindStringSubmatch(strings.TrimSpace(text)); len(match) == 2 {
+		hours, err := strconv.ParseFloat(match[1], 64)
+		if err == nil && hours > 0 {
+			return math.Min(hours*60, 480), true
+		}
+	}
+	return 0, false
 }
 
 func exerciseWeightFromProfile(snapshot map[string]any) float64 {

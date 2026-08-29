@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"hash/fnv"
 	"math"
+	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	membershipdomain "food_link/backend/internal/membership/domain"
 	petdomain "food_link/backend/internal/pet/domain"
@@ -18,7 +20,10 @@ const (
 	nextLevelExp            = 100
 	maxOfflineCreditDaily   = 1
 	petAppearanceRerollCost = 5
+	maxPetNameRunes         = 12
 )
+
+var ErrInvalidPetName = errors.New("invalid pet name")
 
 var (
 	petColors        = []string{"mint", "berry", "sunny", "aqua", "grape", "peach", "cream", "matcha"}
@@ -38,6 +43,7 @@ type PetRepo interface {
 	SelectAppearance(ctx context.Context, userID, petID string, updates map[string]any) (*petdomain.UserPet, error)
 	AddPetExperience(ctx context.Context, petID string, delta int) (*petdomain.UserPet, error)
 	ListFoodRecordsByDate(ctx context.Context, userID, date string) ([]repo.FoodRecord, error)
+	ListRecentFoodRecords(ctx context.Context, userID string, start, end time.Time) ([]repo.FoodRecord, error)
 	GetLatestFoodRecordDate(ctx context.Context, userID string, beforeOrOn string) (string, error)
 	SumWaterByDate(ctx context.Context, userID, date string) (int, error)
 	SumExerciseByDate(ctx context.Context, userID, date string) (int, error)
@@ -57,10 +63,11 @@ type Service struct {
 	repo                 PetRepo
 	storage              PetAvatarStorage
 	pixelAvatarGenerator PixelAvatarGenerator
+	now                  func() time.Time
 }
 
 func NewService(repo PetRepo) *Service {
-	return &Service{repo: repo}
+	return &Service{repo: repo, now: time.Now}
 }
 
 type PetAvatarStorage interface {
@@ -81,11 +88,21 @@ func (s *Service) ConfigurePixelAvatarGenerator(generator PixelAvatarGenerator) 
 }
 
 type Summary struct {
-	Pet     PetProfile     `json:"pet"`
-	Today   DailyScoreView `json:"today"`
-	Status  PetStatus      `json:"status"`
-	Event   *EventView     `json:"event,omitempty"`
-	Rewards RewardPolicy   `json:"rewards"`
+	Pet        PetProfile     `json:"pet"`
+	Today      DailyScoreView `json:"today"`
+	Status     PetStatus      `json:"status"`
+	Event      *EventView     `json:"event,omitempty"`
+	MealPrompt *MealPrompt    `json:"meal_prompt,omitempty"`
+	Rewards    RewardPolicy   `json:"rewards"`
+}
+
+type MealPrompt struct {
+	Kind            string `json:"kind"`
+	MealType        string `json:"meal_type"`
+	ScheduledTime   string `json:"scheduled_time"`
+	ScheduleSource  string `json:"schedule_source"`
+	Text            string `json:"text"`
+	StarterQuestion string `json:"starter_question"`
 }
 
 type PetProfile struct {
@@ -172,6 +189,10 @@ type AppearanceSelectResult struct {
 	Pet PetProfile `json:"pet"`
 }
 
+type PetNameUpdateResult struct {
+	Pet PetProfile `json:"pet"`
+}
+
 func ChinaToday() string {
 	return time.Now().In(chinaTZ()).Format("2006-01-02")
 }
@@ -234,13 +255,111 @@ func (s *Service) Summary(ctx context.Context, userID, date string) (*Summary, e
 		status.Mood = "surprised"
 		status.State = "surprised"
 	}
+	mealPrompt, _ := s.buildMealPrompt(ctx, userID, date)
 	return &Summary{
-		Pet:     s.profileFromPet(pet),
-		Today:   dailyScoreView(todayScore),
-		Status:  status,
-		Event:   eventView(event),
-		Rewards: RewardPolicy{DailyCreditCap: maxOfflineCreditDaily},
+		Pet:        s.profileFromPet(pet),
+		Today:      dailyScoreView(todayScore),
+		Status:     status,
+		Event:      eventView(event),
+		MealPrompt: mealPrompt,
+		Rewards:    RewardPolicy{DailyCreditCap: maxOfflineCreditDaily},
 	}, nil
+}
+
+type mealPromptRule struct {
+	mealType      string
+	label         string
+	defaultMinute int
+	validStart    int
+	validEnd      int
+}
+
+var mealPromptRules = []mealPromptRule{
+	{mealType: "breakfast", label: "早餐", defaultMinute: 8 * 60, validStart: 5 * 60, validEnd: 10*60 + 30},
+	{mealType: "lunch", label: "午餐", defaultMinute: 12 * 60, validStart: 10*60 + 30, validEnd: 15 * 60},
+	{mealType: "dinner", label: "晚餐", defaultMinute: 18*60 + 30, validStart: 16*60 + 30, validEnd: 22 * 60},
+}
+
+func (s *Service) buildMealPrompt(ctx context.Context, userID, date string) (*MealPrompt, error) {
+	now := time.Now()
+	if s.now != nil {
+		now = s.now()
+	}
+	now = now.In(chinaTZ())
+	if date != now.Format("2006-01-02") {
+		return nil, nil
+	}
+
+	todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, chinaTZ())
+	records, err := s.repo.ListRecentFoodRecords(ctx, userID, todayStart.AddDate(0, 0, -28), todayStart.AddDate(0, 0, 1))
+	if err != nil {
+		return nil, err
+	}
+	currentMinute := now.Hour()*60 + now.Minute()
+	for _, rule := range mealPromptRules {
+		if hasMealRecordOnDate(records, rule.mealType, date) {
+			continue
+		}
+		scheduledMinute, source := learnedMealMinute(records, rule, date)
+		if currentMinute < scheduledMinute-30 || currentMinute > scheduledMinute+45 {
+			continue
+		}
+		return &MealPrompt{
+			Kind:            "meal_recommendation",
+			MealType:        rule.mealType,
+			ScheduledTime:   fmt.Sprintf("%02d:%02d", scheduledMinute/60, scheduledMinute%60),
+			ScheduleSource:  source,
+			Text:            "不知道今天吃什么？我可以按你的目标推荐。",
+			StarterQuestion: "今天" + rule.label + "吃什么？",
+		}, nil
+	}
+	return nil, nil
+}
+
+func hasMealRecordOnDate(records []repo.FoodRecord, mealType, date string) bool {
+	for _, record := range records {
+		if strings.TrimSpace(record.MealType) != mealType || record.RecordTime == nil {
+			continue
+		}
+		if record.RecordTime.In(chinaTZ()).Format("2006-01-02") == date {
+			return true
+		}
+	}
+	return false
+}
+
+func learnedMealMinute(records []repo.FoodRecord, rule mealPromptRule, today string) (int, string) {
+	earliestByDate := map[string]int{}
+	for _, record := range records {
+		if strings.TrimSpace(record.MealType) != rule.mealType || record.RecordTime == nil {
+			continue
+		}
+		local := record.RecordTime.In(chinaTZ())
+		date := local.Format("2006-01-02")
+		if date == today {
+			continue
+		}
+		minute := local.Hour()*60 + local.Minute()
+		if minute < rule.validStart || minute > rule.validEnd {
+			continue
+		}
+		if previous, ok := earliestByDate[date]; !ok || minute < previous {
+			earliestByDate[date] = minute
+		}
+	}
+	if len(earliestByDate) < 5 {
+		return rule.defaultMinute, "default"
+	}
+	minutes := make([]int, 0, len(earliestByDate))
+	for _, minute := range earliestByDate {
+		minutes = append(minutes, minute)
+	}
+	sort.Ints(minutes)
+	middle := len(minutes) / 2
+	if len(minutes)%2 == 1 {
+		return minutes[middle], "learned"
+	}
+	return (minutes[middle-1] + minutes[middle]) / 2, "learned"
 }
 
 func (s *Service) ClaimEvent(ctx context.Context, userID, eventID string) (*ClaimResult, error) {
@@ -377,16 +496,19 @@ func (s *Service) SelectAppearance(ctx context.Context, userID, candidateID stri
 		delete(meta, "avatar_type")
 		delete(meta, "builtin_avatar_id")
 	}
-	updatedPet, err := s.repo.SelectAppearance(ctx, userID, pet.ID, map[string]any{
+	updates := map[string]any{
 		"pet_seed":    selected.PetSeed,
-		"name":        selected.Name,
 		"color":       selected.Color,
 		"shape":       selected.Shape,
 		"pattern":     selected.Pattern,
 		"accessory":   selected.Accessory,
 		"personality": selected.Personality,
 		"meta":        meta,
-	})
+	}
+	if !boolFromMeta(meta, "custom_name") {
+		updates["name"] = selected.Name
+	}
+	updatedPet, err := s.repo.SelectAppearance(ctx, userID, pet.ID, updates)
 	if err != nil {
 		return nil, err
 	}
@@ -394,6 +516,50 @@ func (s *Service) SelectAppearance(ctx context.Context, userID, candidateID stri
 		return nil, nil
 	}
 	return &AppearanceSelectResult{Pet: s.profileFromPet(updatedPet)}, nil
+}
+
+func (s *Service) UpdateName(ctx context.Context, userID, name string) (*PetNameUpdateResult, error) {
+	name, err := normalizePetName(name)
+	if err != nil {
+		return nil, err
+	}
+	profile, err := s.repo.GetUserProfile(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	pet, err := s.ensurePet(ctx, userID, profile)
+	if err != nil {
+		return nil, err
+	}
+	if pet == nil {
+		return nil, errors.New("pet profile not found")
+	}
+
+	meta := cloneMeta(pet.Meta)
+	meta["custom_name"] = true
+	now := time.Now()
+	if s.now != nil {
+		now = s.now()
+	}
+	meta["custom_name_updated_at"] = now.UTC().Format(time.RFC3339)
+	if err := s.repo.UpdatePet(ctx, pet.ID, map[string]any{
+		"name": name,
+		"meta": meta,
+	}); err != nil {
+		return nil, err
+	}
+	pet.Name = name
+	pet.Meta = meta
+	return &PetNameUpdateResult{Pet: s.profileFromPet(pet)}, nil
+}
+
+func normalizePetName(name string) (string, error) {
+	name = strings.TrimSpace(name)
+	length := utf8.RuneCountInString(name)
+	if length == 0 || length > maxPetNameRunes {
+		return "", ErrInvalidPetName
+	}
+	return name, nil
 }
 
 func IsInsufficientEarnedCreditsError(err error) bool {

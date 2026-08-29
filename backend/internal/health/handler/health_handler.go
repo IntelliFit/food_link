@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -40,6 +41,10 @@ type ExerciseService interface {
 type ExerciseServiceWithRange interface {
 	ListLogsByRange(ctx context.Context, userID string, date string, startDate string, endDate string) (map[string]any, error)
 	CreateLogWithDate(ctx context.Context, userID string, exerciseDesc string, date string, imageURL string) (map[string]any, error)
+}
+
+type ExerciseServiceWithPrecision interface {
+	CreateLogWithDateAndDetails(ctx context.Context, userID string, exerciseDesc string, date string, imageURL string, precision service.ExercisePrecisionDetails) (map[string]any, error)
 }
 
 type StatsService interface {
@@ -423,9 +428,15 @@ func (h *HealthHandler) GetExerciseLogs(c *gin.Context) {
 // POST /api/exercise-logs
 func (h *HealthHandler) CreateExerciseLog(c *gin.Context) {
 	var body struct {
-		ExerciseDesc string `json:"exercise_desc" form:"exercise_desc"`
-		Date         string `json:"date" form:"date"`
-		ImageURL     string `json:"image_url" form:"image_url"`
+		ExerciseDesc     string  `json:"exercise_desc" form:"exercise_desc"`
+		Date             string  `json:"date" form:"date"`
+		ImageURL         string  `json:"image_url" form:"image_url"`
+		EstimationMode   string  `json:"estimation_mode" form:"estimation_mode"`
+		TotalDurationMin int     `json:"total_duration_min" form:"total_duration_min"`
+		Intensity        string  `json:"intensity" form:"intensity"`
+		AverageHeartRate int     `json:"average_heart_rate" form:"average_heart_rate"`
+		DistanceKm       float64 `json:"distance_km" form:"distance_km"`
+		Breakdown        string  `json:"exercise_breakdown" form:"exercise_breakdown"`
 	}
 	if strings.Contains(strings.ToLower(c.GetHeader("Content-Type")), "application/x-www-form-urlencoded") {
 		if err := c.ShouldBind(&body); err != nil {
@@ -439,9 +450,28 @@ func (h *HealthHandler) CreateExerciseLog(c *gin.Context) {
 		}
 	}
 	userID := c.GetString(authmw.ContextUserIDKey)
+	estimationMode := strings.ToLower(strings.TrimSpace(body.EstimationMode))
+	if estimationMode != "precision" {
+		estimationMode = "standard"
+	}
+	logger.Info(c.Request.Context(), "运动记录请求进入",
+		logger.UserID(userID),
+		slog.String("estimation_mode", estimationMode),
+		slog.Bool("has_image", strings.TrimSpace(body.ImageURL) != ""),
+		slog.Int("description_length", len([]rune(strings.TrimSpace(body.ExerciseDesc)))),
+	)
 	var result map[string]any
 	var err error
-	if svc, ok := h.exercise.(ExerciseServiceWithRange); ok {
+	if svc, ok := h.exercise.(ExerciseServiceWithPrecision); ok {
+		result, err = svc.CreateLogWithDateAndDetails(c.Request.Context(), userID, body.ExerciseDesc, body.Date, body.ImageURL, service.ExercisePrecisionDetails{
+			Enabled:          strings.EqualFold(strings.TrimSpace(body.EstimationMode), "precision"),
+			TotalDurationMin: body.TotalDurationMin,
+			Intensity:        body.Intensity,
+			AverageHeartRate: body.AverageHeartRate,
+			DistanceKm:       body.DistanceKm,
+			Breakdown:        body.Breakdown,
+		})
+	} else if svc, ok := h.exercise.(ExerciseServiceWithRange); ok {
 		result, err = svc.CreateLogWithDate(c.Request.Context(), userID, body.ExerciseDesc, body.Date, body.ImageURL)
 	} else {
 		result, err = h.exercise.CreateLog(c.Request.Context(), userID, body.ExerciseDesc)
@@ -450,6 +480,11 @@ func (h *HealthHandler) CreateExerciseLog(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
+	logger.Info(c.Request.Context(), "运动记录任务提交完成",
+		logger.UserID(userID),
+		slog.String("estimation_mode", estimationMode),
+		slog.String("task_id", strings.TrimSpace(fmt.Sprintf("%v", result["task_id"]))),
+	)
 	response.Success(c, result)
 }
 
