@@ -278,6 +278,7 @@ func New(cfg *config.Config) (*App, error) {
 	frNutritionRepo := foodrecordrepo.NewFoodNutritionRepo(db)
 	bodyMetricsRepo := healthrepo.NewBodyMetricsRepo(db)
 	frSvc := foodrecordservice.NewFoodRecordService(frRepo, frTaskRepo, userRepo, storageClient)
+	analyzeTaskSvc.ConfigureAutoRecorder(frSvc)
 	frSvc.ConfigureWaterLogRecorder(bodyMetricsRepo)
 	frUploadSvc := foodrecordservice.NewUploadService(storageClient)
 	frNutritionSvc := foodrecordservice.NewFoodNutritionService(frNutritionRepo)
@@ -292,6 +293,9 @@ func New(cfg *config.Config) (*App, error) {
 	dashboardService := homeservice.NewDashboardService(userRepo, homeRepo, storageClient)
 	supplementRepo := supplementrepo.NewSupplementRepo(db)
 	supplementSvc := supplementservice.NewSupplementService(supplementRepo)
+	if gemini35Client != nil {
+		supplementSvc.ConfigureLabelVisionClient(gemini35Client)
+	}
 	supplementHandler := supplementhandler.NewSupplementHandler(supplementSvc)
 	dashboardService.ConfigureSupplementProvider(supplementSvc)
 	dashboardHandler := homehandler.NewDashboardHandler(dashboardService)
@@ -442,7 +446,7 @@ func New(cfg *config.Config) (*App, error) {
 		shutdownLog:   logShutdown,
 		taskQueue:     taskQueue,
 	}
-	app.startEmbeddedWorker(cfg, analyzeTaskRepo, analyzePrecisionRepo, publicFoodRepo, campuscatalogrepo.NewCatalogRepo(db), analyzeSvc, ocrSvc, healthDocRepo, userRepo, expiryRecognizer, expiryNotifier, exerciseSvc, frNutritionSvc, membershipSvc, taskQueue, storageClient)
+	app.startEmbeddedWorker(cfg, analyzeTaskRepo, analyzePrecisionRepo, publicFoodRepo, campuscatalogrepo.NewCatalogRepo(db), analyzeSvc, ocrSvc, healthDocRepo, userRepo, expiryRecognizer, expiryNotifier, exerciseSvc, frNutritionSvc, frSvc, membershipSvc, taskQueue, storageClient)
 	if os.Getenv("FOOD_LINK_DISABLE_BACKGROUND_MAINTENANCE") != "1" {
 		app.startNutritionEmbeddingMaintenance(nutritionEmbeddingMaintainer)
 	}
@@ -496,6 +500,7 @@ func New(cfg *config.Config) (*App, error) {
 	engine.GET("/api/food-record/:record_id/poster-calorie-compare", authmw.RequireJWT(jwtSvc), dashboardHandler.PosterCalorieCompare)
 	engine.GET("/api/supplements", authmw.RequireJWT(jwtSvc), supplementHandler.List)
 	engine.GET("/api/supplements/catalog", authmw.RequireJWT(jwtSvc), supplementHandler.ListCatalog)
+	engine.POST("/api/supplements/label/recognize", authmw.RequireJWT(jwtSvc), supplementHandler.RecognizeLabel)
 	engine.POST("/api/supplements", authmw.RequireJWT(jwtSvc), supplementHandler.Create)
 	engine.PUT("/api/supplements/:item_id", authmw.RequireJWT(jwtSvc), supplementHandler.Update)
 	engine.GET("/api/supplements/dashboard", authmw.RequireJWT(jwtSvc), supplementHandler.Dashboard)
@@ -518,6 +523,7 @@ func New(cfg *config.Config) (*App, error) {
 	engine.POST("/api/analyze/tasks/retry", authmw.RequireJWT(jwtSvc), analyzeHandler.RetryTask)
 	engine.GET("/api/analyze/tasks/:task_id", authmw.RequireJWT(jwtSvc), analyzeHandler.GetTask)
 	engine.PATCH("/api/analyze/tasks/:task_id/result", authmw.RequireJWT(jwtSvc), analyzeHandler.UpdateTaskResult)
+	engine.PUT("/api/analyze/tasks/:task_id/auto-record", authmw.RequireJWT(jwtSvc), analyzeHandler.SetTaskAutoRecord)
 	engine.DELETE("/api/analyze/tasks/:task_id", authmw.RequireJWT(jwtSvc), analyzeHandler.DeleteTask)
 	engine.POST("/api/analyze/tasks/cleanup-timeout", analyzeHandler.CleanupTimeoutTasks)
 	engine.POST("/api/analyze/feedback", authmw.RequireJWT(jwtSvc), analyzeHandler.SubmitFeedback)
@@ -661,6 +667,7 @@ func New(cfg *config.Config) (*App, error) {
 
 	// Pet companion routes
 	engine.GET("/api/pet/summary", authmw.RequireJWT(jwtSvc), petHandler.Summary)
+	engine.PUT("/api/pet/name", authmw.RequireJWT(jwtSvc), petHandler.UpdateName)
 	engine.POST("/api/pet/pixel-avatar", authmw.RequireJWT(jwtSvc), petHandler.CustomizePixelAvatar)
 	engine.GET("/api/pet/chat/latest", authmw.RequireJWT(jwtSvc), petHandler.LatestChat)
 	engine.GET("/api/pet/chat/sessions", authmw.RequireJWT(jwtSvc), petHandler.ChatSessions)
@@ -984,6 +991,7 @@ func (a *App) startEmbeddedWorker(
 	expiryNotifier *expiryservice.NotificationWorker,
 	exerciseSvc *healthservice.ExerciseService,
 	nutritionSvc *foodrecordservice.FoodNutritionService,
+	foodRecordSvc *foodrecordservice.FoodRecordService,
 	membershipSvc *membershipservice.MembershipService,
 	taskQueue taskqueue.Queue,
 	storageClient *storage.Client,
@@ -1019,6 +1027,7 @@ func (a *App) startEmbeddedWorker(
 	)
 	runner.ConfigureCreditGuard(membershipSvc)
 	runner.ConfigureCampusCatalog(campusCatalogRepo)
+	runner.ConfigureAutoRecorder(foodRecordSvc)
 
 	workerCtx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
