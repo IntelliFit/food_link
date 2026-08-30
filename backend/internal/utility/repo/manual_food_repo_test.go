@@ -187,9 +187,9 @@ func TestManualFoodRepoSearchDedupesAliasesAfterNutritionMapping(t *testing.T) {
 	require.NoError(t, db.Exec(`
 		INSERT INTO user_food_records (id, user_id, items, record_time) VALUES
 		('r1', 'u1', '[{"name":"烤香肠","intake":51,"nutrients":{"calories":178.5,"protein":8.67,"carbs":3.06,"fat":14.28}}]', CURRENT_TIMESTAMP),
-		('r2', 'u2', '[{"name":"烤香肠","intake":51,"nutrients":{"calories":178.5,"protein":8.67,"carbs":3.06,"fat":14.28}}]', CURRENT_TIMESTAMP),
+		('r2', 'u1', '[{"name":"烤香肠","intake":51,"nutrients":{"calories":178.5,"protein":8.67,"carbs":3.06,"fat":14.28}}]', CURRENT_TIMESTAMP),
 		('r3', 'u1', '[{"name":"台式烤香肠","intake":51,"nutrients":{"calories":178.5,"protein":8.67,"carbs":3.06,"fat":14.28}}]', CURRENT_TIMESTAMP),
-		('r4', 'u2', '[{"name":"台式烤香肠","intake":51,"nutrients":{"calories":178.5,"protein":8.67,"carbs":3.06,"fat":14.28}}]', CURRENT_TIMESTAMP)
+		('r4', 'u1', '[{"name":"台式烤香肠","intake":51,"nutrients":{"calories":178.5,"protein":8.67,"carbs":3.06,"fat":14.28}}]', CURRENT_TIMESTAMP)
 	`).Error)
 
 	items, err := r.Search(ctx, "u1", "烤香肠", 20)

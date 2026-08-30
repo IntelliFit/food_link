@@ -2667,6 +2667,9 @@ func packagedDefaultWeight(item fooddomain.PackagedFood) float64 {
 	if servingWeight := validPackagedServingWeight(item); servingWeight > 0 {
 		return servingWeight
 	}
+	if strings.Contains(strings.ToLower(stringPtrValue(item.NutritionBasisUnit)), "100ml") && item.ServingWeightG > 750 {
+		return 500
+	}
 	if netContent := packagedNetContentWeight(item); netContent > 0 && netContent <= 500 {
 		return netContent
 	}
@@ -2687,7 +2690,7 @@ func packagedPortionLabel(item fooddomain.PackagedFood) string {
 	if servingWeight := validPackagedServingWeight(item); servingWeight > 0 {
 		return fmt.Sprintf("%.0f%s", servingWeight, unit)
 	}
-	if unit == "ml" && item.NetContentValue > 750 {
+	if unit == "ml" && (item.NetContentValue > 750 || item.ServingWeightG > 750) {
 		return "500ml"
 	}
 	if unit == "ml" && item.NetContentValue > 750 {
