@@ -1594,7 +1594,7 @@ function RecordManualPage() {
                 <Text className='section-title'>{normalizedQuery ? '搜索结果' : activeCategoryLabel}</Text>
                 <Text className='library-subtitle'>
                   {normalizedQuery
-                    ? `围绕“${normalizedQuery}”优先展示高频食物`
+					? `围绕“${normalizedQuery}”优先展示精准匹配`
                     : statsText}
                 </Text>
               </View>

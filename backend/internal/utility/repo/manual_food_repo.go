@@ -231,10 +231,24 @@ func (r *ManualFoodRepo) searchCustomFoods(ctx context.Context, userID string, q
 		return []domain.ManualFoodResult{}, nil
 	}
 	var rows []domain.UserCustomFood
-	like := "%" + strings.ToLower(strings.TrimSpace(query)) + "%"
+	normalizedQuery := strings.ToLower(strings.TrimSpace(query))
+	like := "%" + normalizedQuery + "%"
 	if err := r.db.WithContext(ctx).
 		Where("user_id = ? AND status <> ? AND LOWER(title) LIKE ?", userID, "deleted", like).
-		Order("updated_at desc NULLS LAST, created_at desc NULLS LAST").
+		Clauses(clause.OrderBy{
+			Expression: clause.Expr{
+				SQL: `CASE
+					WHEN LOWER(title) = ? THEN 0
+					WHEN LOWER(title) LIKE ? THEN 1
+					ELSE 2
+				END, updated_at DESC NULLS LAST, created_at DESC NULLS LAST`,
+				Vars: []any{
+					normalizedQuery,
+					normalizedQuery + "%",
+				},
+				WithoutParentheses: true,
+			},
+		}).
 		Limit(limit).
 		Find(&rows).Error; err != nil {
 		return nil, err
@@ -319,15 +333,7 @@ func (r *ManualFoodRepo) Search(ctx context.Context, userID string, keyword stri
 	results = append(results, nutritionRows...)
 
 	sort.SliceStable(results, func(i, j int) bool {
-		left := manualFoodDisplayScore(results[i], query)
-		right := manualFoodDisplayScore(results[j], query)
-		if left == right {
-			if results[i].UsageCount == results[j].UsageCount {
-				return results[i].Title < results[j].Title
-			}
-			return results[i].UsageCount > results[j].UsageCount
-		}
-		return left > right
+		return manualFoodResultLess(results[i], results[j], query)
 	})
 	results = dedupeManualFoodResults(results)
 	results = r.enrichManualFoodResultsWithNutritionLibrary(ctx, results)
@@ -349,12 +355,7 @@ func (r *ManualFoodRepo) SearchPackaged(ctx context.Context, keyword string, lim
 		return nil, err
 	}
 	sort.SliceStable(results, func(i, j int) bool {
-		left := manualFoodDisplayScore(results[i], query)
-		right := manualFoodDisplayScore(results[j], query)
-		if left == right {
-			return results[i].Title < results[j].Title
-		}
-		return left > right
+		return manualFoodResultLess(results[i], results[j], query)
 	})
 	if len(results) > limit {
 		results = results[:limit]
@@ -777,6 +778,7 @@ func (r *ManualFoodRepo) searchRecentItems(ctx context.Context, userID string, q
 		return nil, nil
 	}
 	terms := expandedSearchTerms(query)
+	normalizedQuery := strings.ToLower(strings.TrimSpace(query))
 	type row struct {
 		ManualSource       string          `gorm:"column:manual_source"`
 		ManualSourceID     string          `gorm:"column:manual_source_id"`
@@ -794,7 +796,12 @@ func (r *ManualFoodRepo) searchRecentItems(ctx context.Context, userID string, q
 		`)
 		args = append(args, "%"+strings.ToLower(term)+"%")
 	}
-	args = append(args, limit)
+	args = append(args,
+		normalizedQuery,
+		normalizedQuery+"%",
+		"%"+normalizedQuery+"%",
+		limit,
+	)
 	var rows []row
 	err := r.db.WithContext(ctx).Raw(fmt.Sprintf(`
 		SELECT
@@ -812,7 +819,14 @@ func (r *ManualFoodRepo) searchRecentItems(ctx context.Context, userID string, q
 			AND COALESCE(item->>'manual_source_id', '') <> ''
 			AND (%s)
 		GROUP BY 1,2,3,4
-		ORDER BY usage_count DESC, latest_record_time DESC
+		ORDER BY
+			CASE
+				WHEN LOWER(COALESCE(NULLIF(item->>'manual_source_title', ''), NULLIF(item->>'name', ''))) = ? THEN 0
+				WHEN LOWER(COALESCE(NULLIF(item->>'manual_source_title', ''), NULLIF(item->>'name', ''))) LIKE ? THEN 1
+				WHEN LOWER(COALESCE(NULLIF(item->>'manual_source_title', ''), NULLIF(item->>'name', ''))) LIKE ? THEN 2
+				ELSE 3
+			END,
+			usage_count DESC, latest_record_time DESC
 		LIMIT ?
 	`, strings.Join(conditions, " OR ")), args...).Scan(&rows).Error
 	if err != nil {
@@ -882,6 +896,7 @@ func (r *ManualFoodRepo) refreshRecentPackagedFoods(ctx context.Context, results
 
 func (r *ManualFoodRepo) searchPublicLibrary(ctx context.Context, userID string, query string, limit int) ([]domain.ManualFoodResult, error) {
 	terms := expandedSearchTerms(query)
+	normalizedQuery := strings.ToLower(strings.TrimSpace(query))
 	type row struct {
 		publicdomain.PublicFoodItem
 		UsageCount int `gorm:"column:usage_count"`
@@ -907,7 +922,12 @@ func (r *ManualFoodRepo) searchPublicLibrary(ctx context.Context, userID string,
 		`)
 		args = append(args, like, like, like, like)
 	}
-	args = append(args, limit)
+	args = append(args,
+		normalizedQuery,
+		normalizedQuery+"%",
+		"%"+normalizedQuery+"%",
+		limit,
+	)
 	var rows []row
 	err := r.db.WithContext(ctx).Raw(fmt.Sprintf(`
 		SELECT
@@ -926,7 +946,14 @@ func (r *ManualFoodRepo) searchPublicLibrary(ctx context.Context, userID string,
 		) usage ON usage.source_id = p.id::text
 		WHERE p.status = 'published'
 			AND (%s)
-		ORDER BY usage_count DESC, p.collection_count DESC, p.like_count DESC, p.published_at DESC NULLS LAST
+		ORDER BY
+			CASE
+				WHEN LOWER(COALESCE(p.food_name, '')) = ? THEN 0
+				WHEN LOWER(COALESCE(p.food_name, '')) LIKE ? THEN 1
+				WHEN LOWER(COALESCE(p.food_name, '')) LIKE ? THEN 2
+				ELSE 3
+			END,
+			usage_count DESC, p.collection_count DESC, p.like_count DESC, p.published_at DESC NULLS LAST
 		LIMIT ?
 	`, usageWhere, strings.Join(conditions, " OR ")), args...).Scan(&rows).Error
 	if err != nil {
@@ -944,6 +971,7 @@ func (r *ManualFoodRepo) searchPublicLibrary(ctx context.Context, userID string,
 
 func (r *ManualFoodRepo) searchPackagedLibrary(ctx context.Context, query string, limit int) ([]domain.ManualFoodResult, error) {
 	terms := expandedSearchTerms(query)
+	normalizedQuery := strings.ToLower(strings.TrimSpace(query))
 	conditions := make([]string, 0, len(terms))
 	args := []any{}
 	for _, term := range terms {
@@ -961,7 +989,12 @@ func (r *ManualFoodRepo) searchPackagedLibrary(ctx context.Context, query string
 		`)
 		args = append(args, like, like, like, like, like, like, like, like, like)
 	}
-	args = append(args, query+"%", limit)
+	args = append(args,
+		normalizedQuery,
+		normalizedQuery+"%",
+		"%"+normalizedQuery+"%",
+		limit,
+	)
 	var rows []fooddomain.PackagedFood
 	err := r.db.WithContext(ctx).Raw(fmt.Sprintf(`
 		SELECT *
@@ -971,7 +1004,12 @@ func (r *ManualFoodRepo) searchPackagedLibrary(ctx context.Context, query string
 			AND COALESCE(NULLIF(review_status, ''), 'active') = 'active'
 			AND (%s)
 		ORDER BY
-			CASE WHEN LOWER(COALESCE(display_name, product_name)) LIKE LOWER(?) THEN 0 ELSE 1 END,
+			CASE
+				WHEN LOWER(COALESCE(NULLIF(display_name, ''), product_name, '')) = ? THEN 0
+				WHEN LOWER(COALESCE(NULLIF(display_name, ''), product_name, '')) LIKE ? THEN 1
+				WHEN LOWER(COALESCE(NULLIF(display_name, ''), product_name, '')) LIKE ? THEN 2
+				ELSE 3
+			END,
 			updated_at DESC NULLS LAST,
 			product_name ASC
 		LIMIT ?
@@ -989,12 +1027,21 @@ func (r *ManualFoodRepo) searchPackagedLibrary(ctx context.Context, query string
 
 func (r *ManualFoodRepo) searchNutritionLibrary(ctx context.Context, query string, limit int) ([]domain.ManualFoodResult, error) {
 	terms := expandedSearchTerms(query)
+	normalizedQuery := strings.ToLower(strings.TrimSpace(query))
 	type row struct {
 		fooddomain.FoodNutrition
 		MatchSource string `gorm:"column:match_source"`
 	}
 	conditions := make([]string, 0, len(terms))
-	args := []any{}
+	args := []any{
+		"%" + normalizedQuery + "%",
+		normalizedQuery,
+		normalizedQuery,
+		normalizedQuery + "%",
+		normalizedQuery + "%",
+		"%" + normalizedQuery + "%",
+		"%" + normalizedQuery + "%",
+	}
 	for _, term := range terms {
 		like := "%" + strings.ToLower(term) + "%"
 		conditions = append(conditions, `
@@ -1003,23 +1050,35 @@ func (r *ManualFoodRepo) searchNutritionLibrary(ctx context.Context, query strin
 		`)
 		args = append(args, like, like)
 	}
-	args = append([]any{"%" + strings.ToLower(query) + "%"}, args...)
 	args = append(args, limit)
 	var rows []row
 	err := r.db.WithContext(ctx).Raw(fmt.Sprintf(`
-		SELECT DISTINCT ON (f.id)
-			f.*,
-			CASE
-				WHEN LOWER(f.canonical_name) LIKE ? THEN 'canonical'
-				ELSE 'alias'
-			END AS match_source
-		FROM food_nutrition_library f
-		LEFT JOIN food_nutrition_aliases a ON a.food_id = f.id AND a.match_status = 'approved_exact'
-		WHERE f.is_active = TRUE
-			AND f.kcal_per_100g > 0
-			AND f.quality_tier IN ('authoritative','reviewed_estimate','legacy_curated')
-			AND (%s)
-		ORDER BY f.id, match_source ASC, %s
+		SELECT ranked.*
+		FROM (
+			SELECT DISTINCT ON (f.id)
+				f.*,
+				CASE
+					WHEN LOWER(f.canonical_name) LIKE ? THEN 'canonical'
+					ELSE 'alias'
+				END AS match_source,
+				CASE
+					WHEN LOWER(f.canonical_name) = ? THEN 0
+					WHEN LOWER(COALESCE(a.alias_name, '')) = ? THEN 1
+					WHEN LOWER(f.canonical_name) LIKE ? THEN 2
+					WHEN LOWER(COALESCE(a.alias_name, '')) LIKE ? THEN 3
+					WHEN LOWER(f.canonical_name) LIKE ? THEN 4
+					WHEN LOWER(COALESCE(a.alias_name, '')) LIKE ? THEN 5
+					ELSE 6
+				END AS query_match_rank
+			FROM food_nutrition_library f
+			LEFT JOIN food_nutrition_aliases a ON a.food_id = f.id AND a.match_status = 'approved_exact'
+			WHERE f.is_active = TRUE
+				AND f.kcal_per_100g > 0
+				AND f.quality_tier IN ('authoritative','reviewed_estimate','legacy_curated')
+				AND (%s)
+			ORDER BY f.id, query_match_rank ASC, a.alias_name ASC NULLS LAST
+		) AS ranked
+		ORDER BY ranked.query_match_rank ASC, %s
 		LIMIT ?
 	`, strings.Join(conditions, " OR "), nutritionSearchOrderSQL()), args...).Scan(&rows).Error
 	if err != nil {
@@ -1869,6 +1928,47 @@ func manualFoodDisplayScore(item domain.ManualFoodResult, query string) float64 
 	return score
 }
 
+func manualFoodTitleMatchRank(title string, query string) int {
+	title = strings.ToLower(strings.TrimSpace(title))
+	query = strings.ToLower(strings.TrimSpace(query))
+	switch {
+	case query == "":
+		return 3
+	case title == query:
+		return 0
+	case strings.HasPrefix(title, query):
+		return 1
+	case strings.Contains(title, query):
+		return 2
+	default:
+		return 3
+	}
+}
+
+func manualFoodResultLess(left domain.ManualFoodResult, right domain.ManualFoodResult, query string) bool {
+	leftRank := manualFoodTitleMatchRank(left.Title, query)
+	rightRank := manualFoodTitleMatchRank(right.Title, query)
+	if leftRank != rightRank {
+		return leftRank < rightRank
+	}
+
+	leftScore := manualFoodDisplayScore(left, query)
+	rightScore := manualFoodDisplayScore(right, query)
+	if leftScore != rightScore {
+		return leftScore > rightScore
+	}
+	if left.UsageCount != right.UsageCount {
+		return left.UsageCount > right.UsageCount
+	}
+	if left.Title != right.Title {
+		return left.Title < right.Title
+	}
+	if left.Source != right.Source {
+		return left.Source < right.Source
+	}
+	return left.ID < right.ID
+}
+
 func dedupeManualFoodResults(items []domain.ManualFoodResult) []domain.ManualFoodResult {
 	seen := map[string]bool{}
 	out := make([]domain.ManualFoodResult, 0, len(items))
@@ -2329,9 +2429,9 @@ func nutritionBrowseOrderSQL() string {
 
 func nutritionSearchOrderSQL() string {
 	return `
-		CASE WHEN f.canonical_name ~ '[一-龥]' THEN 0 ELSE 2 END ASC,
-		CASE WHEN f.source LIKE 'usda%' THEN 2 ELSE 0 END ASC,
-		f.canonical_name ASC
+		CASE WHEN ranked.canonical_name ~ '[一-龥]' THEN 0 ELSE 2 END ASC,
+		CASE WHEN ranked.source LIKE 'usda%' THEN 2 ELSE 0 END ASC,
+		ranked.canonical_name ASC
 	`
 }
 
