@@ -18,6 +18,11 @@ describe('developer docs page', () => {
       'Idempotency-Key',
       'HTTP 402',
       '第一个应用赠送 100 点',
+      '不懂代码？直接把接入任务交给 AI',
+      'https://healthymax.cn/developer/ai-guide.md',
+      '复制给 AI',
+      '查看接口定义（OpenAPI YAML）',
     ]) expect(html).toContain(expected)
+    expect(html).not.toContain('查看机器可读 OpenAPI')
   })
 })

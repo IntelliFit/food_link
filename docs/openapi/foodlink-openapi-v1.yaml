@@ -9,6 +9,7 @@ info:
 externalDocs:
   description: 食探开放平台完整开发文档
   url: https://healthymax.cn/developer/docs
+x-ai-integration-guide: https://healthymax.cn/developer/ai-guide.md
 servers:
   - url: https://dev.api.healthymax.cn
     description: 开发/封闭测试环境

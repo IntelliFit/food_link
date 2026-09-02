@@ -247,3 +247,14 @@ const openApiSource = path.resolve(__dirname, '..', '..', 'docs', 'openapi', 'fo
 const openApiTarget = path.join(distDir, 'openapi', 'foodlink-openapi-v1.yaml')
 await fs.mkdir(path.dirname(openApiTarget), { recursive: true })
 await fs.copyFile(openApiSource, openApiTarget)
+
+const aiGuideSource = path.resolve(__dirname, '..', '..', 'docs', 'ai', 'foodlink-ai-integration.md')
+const aiGuideTarget = path.join(distDir, 'developer', 'ai-guide.md')
+await fs.mkdir(path.dirname(aiGuideTarget), { recursive: true })
+await fs.copyFile(aiGuideSource, aiGuideTarget)
+
+const llmsSource = path.resolve(__dirname, '..', '..', 'docs', 'ai', 'llms.txt')
+await fs.copyFile(llmsSource, path.join(distDir, 'llms.txt'))
+
+const mcpReadmeSource = path.resolve(__dirname, '..', '..', 'integrations', 'foodlink-mcp', 'README.md')
+await fs.copyFile(mcpReadmeSource, path.join(distDir, 'developer', 'mcp-readme.md'))

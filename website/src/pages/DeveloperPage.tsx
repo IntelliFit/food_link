@@ -24,7 +24,7 @@ export function DeveloperPage() {
             <div className="flex flex-wrap gap-3">
               <Button size="lg" render={<Link to="/developer/console" />}>进入开发者控制台 <ArrowRight /></Button>
               <Button size="lg" variant="outline" render={<Link to="/developer/docs" />}>查看完整开发文档</Button>
-              <Button size="lg" variant="ghost" render={<a href="/openapi/foodlink-openapi-v1.yaml" download />}>下载 OpenAPI 3.1</Button>
+              <Button size="lg" variant="ghost" render={<a href="/developer/ai-guide.md" download />}>下载给 AI 的接入说明</Button>
             </div>
           </div>
           <div className="rounded-3xl border border-border bg-card p-5 shadow-xl shadow-primary/5 md:p-8">

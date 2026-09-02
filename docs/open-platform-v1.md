@@ -8,6 +8,8 @@
 
 OpenAPI 3.1 文件：[`docs/openapi/foodlink-openapi-v1.yaml`](./openapi/foodlink-openapi-v1.yaml)。
 
+面向 AI Agent 的自包含接入说明：[`docs/ai/foodlink-ai-integration.md`](./ai/foodlink-ai-integration.md)。正式站可直接把 `https://healthymax.cn/developer/ai-guide.md` 交给 AI 阅读；`https://healthymax.cn/llms.txt` 提供精简入口索引。OpenAPI 是严格的接口结构定义，AI Guide 则补充工具选择、调用顺序、点数、安全和错误恢复决策，两者共同使用。
+
 ## 封闭测试计费
 
 API 点数与小程序会员、个人积分完全分开。当前点数只是成本权重，不代表人民币价格：

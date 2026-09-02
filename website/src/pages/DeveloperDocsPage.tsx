@@ -1,5 +1,5 @@
-import { ArrowRight, BookOpen, Bot, Camera, CircleDollarSign, Database, KeyRound, ShieldCheck, Terminal } from 'lucide-react'
-import type { ReactNode } from 'react'
+import { ArrowRight, BookOpen, Bot, Camera, Check, CircleDollarSign, Copy, Database, KeyRound, ShieldCheck, Sparkles, Terminal } from 'lucide-react'
+import { useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { SiteFooter } from '@/components/layout/SiteFooter'
 import { SiteHeader } from '@/components/layout/SiteHeader'
@@ -8,6 +8,7 @@ import { openApiBaseURL } from '@/lib/developer-api'
 
 const navItems = [
   ['overview', '接入概览'],
+  ['ai-handoff', '直接交给 AI'],
   ['authentication', '鉴权与幂等'],
   ['image-analysis', '图片识别'],
   ['text-analysis', '文字分析'],
@@ -17,6 +18,14 @@ const navItems = [
   ['mcp', 'MCP / WorkBuddy'],
   ['billing', '计费与错误码'],
 ] as const
+
+const aiHandoffPrompt = `请阅读食探 AI 接入说明：
+https://healthymax.cn/developer/ai-guide.md
+
+接口结构定义：
+https://healthymax.cn/openapi/foodlink-openapi-v1.yaml
+
+请根据说明帮我完成食探 API 或 MCP 接入。先询问我的目标客户端和 API Key 文件路径，不要让我把完整 Key 粘贴到聊天里。先执行不扣点的账户检查；产生分析点数前告诉我预计消耗。图片按“上传→分析→轮询”，同一请求重试必须复用幂等键，余额不足时不要自动付款。`
 
 const analysisParameters = [
   ['text', 'string', '与 image_urls 二选一', '自然语言餐食描述，例如“一碗牛肉面，少喝汤”。'],
@@ -80,6 +89,8 @@ function ParamTable({ rows }: { rows: readonly (readonly string[])[] }) {
 }
 
 export function DeveloperDocsPage() {
+  const [promptCopied, setPromptCopied] = useState(false)
+
   return (
     <div className="min-h-screen bg-background">
       <SiteHeader />
@@ -89,7 +100,7 @@ export function DeveloperDocsPage() {
             <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground"><Link className="hover:text-primary" to="/developer">开放平台</Link><span>/</span><span>开发文档</span><span className="rounded-full bg-primary/10 px-2 py-1 text-xs font-medium text-primary">v0.2 Beta</span></div>
             <div className="mt-6 flex flex-col justify-between gap-8 lg:flex-row lg:items-end">
               <div><h1 className="text-4xl font-bold tracking-tight md:text-5xl">FoodLink Open API</h1><p className="mt-4 max-w-3xl text-lg leading-8 text-muted-foreground">从图片上传、普通/精准食物识别，到营养库搜索和 MCP 接入的完整说明。当前环境 API 基址：<code className="rounded bg-muted px-2 py-1 text-sm text-foreground">{openApiBaseURL}</code></p></div>
-              <div className="flex flex-wrap gap-3"><Button render={<Link to="/developer/console" />}>创建应用与 Key <ArrowRight /></Button><Button variant="outline" render={<a href="/openapi/foodlink-openapi-v1.yaml" download />}>下载 OpenAPI 3.1</Button></div>
+              <div className="flex flex-wrap gap-3"><Button render={<Link to="/developer/console" />}>创建应用与 Key <ArrowRight /></Button><Button variant="outline" render={<a href="#ai-handoff" />}>直接交给 AI</Button><Button variant="ghost" render={<a href="/openapi/foodlink-openapi-v1.yaml" download />}>下载接口定义</Button></div>
             </div>
           </div>
         </section>
@@ -111,6 +122,23 @@ export function DeveloperDocsPage() {
                 ['GET', '/foods/search', '搜索可信营养库'],
               ].map(([method, path, description]) => <div key={path} className="grid gap-2 p-4 text-sm md:grid-cols-[64px_250px_1fr]"><strong className={method === 'POST' ? 'text-amber-600' : 'text-primary'}>{method}</strong><code>{path}</code><span className="text-muted-foreground">{description}</span></div>)}</div></div>
               <div className="mt-5 rounded-2xl border border-primary/20 bg-primary/5 p-5 text-sm leading-7"><strong>测试额度规则：</strong>每个开发者账号只有第一次创建的第一个应用赠送 100 点；继续创建 Agent/App 不再重复赠送。应用之间余额独立。</div>
+            </DocSection>
+
+            <DocSection id="ai-handoff" title="不懂代码？直接把接入任务交给 AI" intro="OpenAPI 是严格的接口字典，适合生成代码和校验参数；AI 接入说明还包含调用顺序、何时用图片或文字、如何控制点数、密钥安全和失败恢复。把下面这段话完整交给 Codex、WorkBuddy 或其他编程 AI 即可。">
+              <div className="rounded-2xl border border-primary/20 bg-primary/5 p-5 md:p-6">
+                <div className="flex items-start gap-3"><span className="rounded-xl bg-primary p-2 text-primary-foreground"><Sparkles className="size-5" /></span><div><h3 className="font-semibold">AI 自助接入提示</h3><p className="mt-1 text-sm leading-6 text-muted-foreground">AI 会先读取自包含指南，再结合 OpenAPI 生成配置或代码；它仍需要你提供 Key 的本机文件路径。</p></div></div>
+                <pre className="mt-5 overflow-x-auto whitespace-pre-wrap rounded-2xl bg-background p-4 text-sm leading-7 ring-1 ring-border"><code>{aiHandoffPrompt}</code></pre>
+                <div className="mt-4 flex flex-wrap gap-3">
+                  <Button onClick={async () => { await navigator.clipboard.writeText(aiHandoffPrompt); setPromptCopied(true); window.setTimeout(() => setPromptCopied(false), 1500) }}>{promptCopied ? <Check /> : <Copy />}{promptCopied ? '已复制，可以发给 AI' : '复制给 AI'}</Button>
+                  <Button variant="outline" render={<a href="/developer/ai-guide.md" download />}>下载 AI 接入说明（Markdown）</Button>
+                  <Button variant="ghost" render={<a href="/llms.txt" />}>查看 AI 入口索引</Button>
+                </div>
+              </div>
+              <div className="mt-5 grid gap-4 md:grid-cols-3">{[
+                ['AI Guide', '告诉 AI 如何决策、调用、轮询、计费和保护 Key。'],
+                ['OpenAPI YAML', '告诉工具每个接口的精确字段、类型和返回结构。'],
+                ['MCP', '目标客户端支持 MCP 时，直接安装 7 个现成工具，少写代码。'],
+              ].map(([title, text]) => <div key={title} className="rounded-2xl border border-border p-5"><strong>{title}</strong><p className="mt-2 text-sm leading-6 text-muted-foreground">{text}</p></div>)}</div>
             </DocSection>
 
             <DocSection id="authentication" title="鉴权与幂等" intro="完整 API Key 只展示一次。推荐通过环境变量或只读文件注入，不要写入前端代码、聊天记录或设备固件。">
@@ -158,7 +186,7 @@ export function DeveloperDocsPage() {
             <DocSection id="billing" title="计费、余额与错误码" intro="可通过 GET /account 查询应用、scope 和余额。每个开发者账号仅首次创建的第一个应用赠送 100 点；后续应用从 0 点开始。">
               <div className="mb-5 grid gap-3 sm:grid-cols-3">{[['文字分析', '2 点 / 次'], ['普通图片', '5 点 / 张'], ['精准图片', '15 点 / 张']].map(([label, value]) => <div key={label} className="rounded-2xl border border-border p-5"><CircleDollarSign className="size-6 text-primary" /><p className="mt-3 text-sm text-muted-foreground">{label}</p><strong className="mt-1 block text-lg">{value}</strong></div>)}</div>
               <div className="overflow-hidden rounded-2xl border border-border"><div className="divide-y divide-border">{errorCodes.map(([code, description]) => <div key={code} className="grid gap-2 p-4 md:grid-cols-[80px_1fr]"><code className="font-semibold text-primary">HTTP {code}</code><p className="text-sm leading-6 text-muted-foreground">{description}</p></div>)}</div></div>
-              <div className="mt-7 flex flex-wrap gap-3"><Button render={<Link to="/developer/console" />}>进入控制台 <ArrowRight /></Button><Button variant="outline" render={<a href="/openapi/foodlink-openapi-v1.yaml" />}>查看机器可读 OpenAPI</Button></div>
+              <div className="mt-7 flex flex-wrap gap-3"><Button render={<Link to="/developer/console" />}>进入控制台 <ArrowRight /></Button><Button variant="outline" render={<a href="/developer/ai-guide.md" />}>打开给 AI 的接入说明</Button><Button variant="ghost" render={<a href="/openapi/foodlink-openapi-v1.yaml" />}>查看接口定义（OpenAPI YAML）</Button></div>
             </DocSection>
           </div>
         </div>

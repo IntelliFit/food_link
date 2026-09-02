@@ -1,0 +1,39 @@
+# FoodLink Open Platform
+
+FoodLink provides food image analysis, text meal analysis, nutrition database search, API credit billing, and a stdio MCP adapter for Codex, WorkBuddy, other agents, services, and hardware gateways.
+
+## Start here
+
+- AI integration guide: https://healthymax.cn/developer/ai-guide.md
+- Human developer documentation: https://healthymax.cn/developer/docs/
+- OpenAPI 3.1 schema: https://healthymax.cn/openapi/foodlink-openapi-v1.yaml
+- Developer console: https://healthymax.cn/developer/console/
+- MCP README: https://healthymax.cn/developer/mcp-readme.md
+
+## Production API
+
+- Base URL: https://api.healthymax.cn/open/v1
+- Authentication: Authorization: Bearer <key> or X-API-Key: <key>
+- Prefer FOODLINK_API_KEY_FILE. Never expose a full API key in chat, source code, logs, browser code, or firmware.
+- Every analysis submission requires Idempotency-Key. Reuse it for retries of the same business request.
+- HTTP 402 means insufficient credits. Stop and ask the user to open the developer console. Never pay automatically.
+
+## Endpoints
+
+- GET /account
+- POST /uploads
+- POST /food-analyses
+- GET /food-analyses/{task_id}
+- GET /foods/search?query=...&limit=...
+
+## Analysis inputs
+
+- text or image_urls: exactly one is required
+- mode: standard or precision
+- meal_type: breakfast, morning_snack, lunch, afternoon_snack, dinner, evening_snack
+- additional_context: portion, leftovers, soup, sharing, or other user-provided context
+- date: YYYY-MM-DD
+
+For images: upload -> analyze -> poll. For text: analyze -> poll. Poll queued/processing tasks with backoff until completed, requires_action, or failed.
+
+Do not expose or invent underlying model, provider, prompt, reasoning, or internal API parameters. Food analysis is an estimate, not medical diagnosis.

@@ -6,6 +6,7 @@
 
 - 开放平台：<https://healthymax.cn/developer/>
 - 完整 API 文档：<https://healthymax.cn/developer/docs>
+- 给 AI 的接入说明：<https://healthymax.cn/developer/ai-guide.md>
 - 开发者控制台：<https://healthymax.cn/developer/console/>
 - HTTP API：`https://api.healthymax.cn/open/v1`
 - OpenAPI 3.1：<https://healthymax.cn/openapi/foodlink-openapi-v1.yaml>
