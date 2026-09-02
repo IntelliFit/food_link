@@ -88,7 +88,7 @@ export function DeveloperDocsPage() {
           <div className="mx-auto max-w-7xl px-4 py-12 md:px-8 md:py-16">
             <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground"><Link className="hover:text-primary" to="/developer">开放平台</Link><span>/</span><span>开发文档</span><span className="rounded-full bg-primary/10 px-2 py-1 text-xs font-medium text-primary">v0.2 Beta</span></div>
             <div className="mt-6 flex flex-col justify-between gap-8 lg:flex-row lg:items-end">
-              <div><h1 className="text-4xl font-bold tracking-tight md:text-5xl">FoodLink Open API</h1><p className="mt-4 max-w-3xl text-lg leading-8 text-muted-foreground">从图片上传、普通/精准食物识别，到营养库搜索和 MCP 接入的完整说明。正式 API 基址：<code className="rounded bg-muted px-2 py-1 text-sm text-foreground">{openApiBaseURL}</code></p></div>
+              <div><h1 className="text-4xl font-bold tracking-tight md:text-5xl">FoodLink Open API</h1><p className="mt-4 max-w-3xl text-lg leading-8 text-muted-foreground">从图片上传、普通/精准食物识别，到营养库搜索和 MCP 接入的完整说明。当前环境 API 基址：<code className="rounded bg-muted px-2 py-1 text-sm text-foreground">{openApiBaseURL}</code></p></div>
               <div className="flex flex-wrap gap-3"><Button render={<Link to="/developer/console" />}>创建应用与 Key <ArrowRight /></Button><Button variant="outline" render={<a href="/openapi/foodlink-openapi-v1.yaml" download />}>下载 OpenAPI 3.1</Button></div>
             </div>
           </div>
