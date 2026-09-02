@@ -199,6 +199,7 @@ type WechatPayConfig struct {
 	AppID                       string `mapstructure:"app_id"`
 	MchID                       string `mapstructure:"mchid"`
 	NotifyURL                   string `mapstructure:"notify_url"`
+	OpenAPINotifyURL            string `mapstructure:"open_api_notify_url"`
 	SerialNo                    string `mapstructure:"serial_no"`
 	APIV3Key                    string `mapstructure:"api_v3_key"`
 	APIV2Key                    string `mapstructure:"api_v2_key"`
@@ -429,6 +430,9 @@ func applyLocalConfigOverrides(v *viper.Viper) error {
 	}
 	if fileCfg.Wechat.Pay.NotifyURL != "" {
 		v.Set("wechat.pay.notify_url", fileCfg.Wechat.Pay.NotifyURL)
+	}
+	if fileCfg.Wechat.Pay.OpenAPINotifyURL != "" {
+		v.Set("wechat.pay.open_api_notify_url", fileCfg.Wechat.Pay.OpenAPINotifyURL)
 	}
 	if fileCfg.Wechat.Pay.SerialNo != "" {
 		v.Set("wechat.pay.serial_no", fileCfg.Wechat.Pay.SerialNo)
@@ -1074,6 +1078,7 @@ var cloudConfigKeyAliases = map[string]string{
 	"WECHAT_PAY_APP_ID":                       "wechat.pay.app_id",
 	"WECHAT_PAY_MCHID":                        "wechat.pay.mchid",
 	"WECHAT_PAY_NOTIFY_URL":                   "wechat.pay.notify_url",
+	"WECHAT_PAY_OPEN_API_NOTIFY_URL":          "wechat.pay.open_api_notify_url",
 	"WECHAT_PAY_SERIAL_NO":                    "wechat.pay.serial_no",
 	"WECHAT_PAY_API_V3_KEY":                   "wechat.pay.api_v3_key",
 	"WECHAT_PAY_API_V2_KEY":                   "wechat.pay.api_v2_key",
@@ -1241,6 +1246,7 @@ func trimWechatConfig(cfg *WechatConfig) {
 	cfg.Pay.AppID = strings.TrimSpace(cfg.Pay.AppID)
 	cfg.Pay.MchID = strings.TrimSpace(cfg.Pay.MchID)
 	cfg.Pay.NotifyURL = strings.TrimSpace(cfg.Pay.NotifyURL)
+	cfg.Pay.OpenAPINotifyURL = strings.TrimSpace(cfg.Pay.OpenAPINotifyURL)
 	cfg.Pay.SerialNo = strings.TrimSpace(cfg.Pay.SerialNo)
 	cfg.Pay.APIV3Key = strings.TrimSpace(cfg.Pay.APIV3Key)
 	cfg.Pay.PrivateKey = strings.TrimSpace(cfg.Pay.PrivateKey)
@@ -1386,6 +1392,9 @@ func (c *Config) ResolvedWechatPay() WechatPayConfig {
 	if pay.NotifyURL == "" {
 		pay.NotifyURL = c.WechatPay.NotifyURL
 	}
+	if pay.OpenAPINotifyURL == "" {
+		pay.OpenAPINotifyURL = c.WechatPay.OpenAPINotifyURL
+	}
 	if pay.SerialNo == "" {
 		pay.SerialNo = c.WechatPay.SerialNo
 	}
@@ -1529,6 +1538,7 @@ func bindLegacyEnv(v *viper.Viper) {
 	_ = v.BindEnv("wechat.pay.app_id", "WECHAT_PAY_APP_ID")
 	_ = v.BindEnv("wechat.pay.mchid", "WECHAT_PAY_MCHID")
 	_ = v.BindEnv("wechat.pay.notify_url", "WECHAT_PAY_NOTIFY_URL")
+	_ = v.BindEnv("wechat.pay.open_api_notify_url", "WECHAT_PAY_OPEN_API_NOTIFY_URL")
 	_ = v.BindEnv("wechat.pay.serial_no", "WECHAT_PAY_SERIAL_NO")
 	_ = v.BindEnv("wechat.pay.api_v3_key", "WECHAT_PAY_API_V3_KEY")
 	_ = v.BindEnv("wechat.pay.api_v2_key", "WECHAT_PAY_API_V2_KEY")
@@ -1546,6 +1556,7 @@ func bindLegacyEnv(v *viper.Viper) {
 	_ = v.BindEnv("wechat_pay.app_id", "WECHAT_PAY_APP_ID")
 	_ = v.BindEnv("wechat_pay.mchid", "WECHAT_PAY_MCHID")
 	_ = v.BindEnv("wechat_pay.notify_url", "WECHAT_PAY_NOTIFY_URL")
+	_ = v.BindEnv("wechat_pay.open_api_notify_url", "WECHAT_PAY_OPEN_API_NOTIFY_URL")
 	_ = v.BindEnv("wechat_pay.serial_no", "WECHAT_PAY_SERIAL_NO")
 	_ = v.BindEnv("wechat_pay.api_v3_key", "WECHAT_PAY_API_V3_KEY")
 	_ = v.BindEnv("wechat_pay.api_v2_key", "WECHAT_PAY_API_V2_KEY")

@@ -1815,6 +1815,101 @@ type PackagedFoodTestRunDO struct {
 
 func (PackagedFoodTestRunDO) TableName() string { return "packaged_food_test_runs" }
 
+type OpenAPIAppDO struct {
+	ID            string     `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	OwnerUserID   *string    `gorm:"column:owner_user_id;type:uuid;index:idx_open_api_apps_owner_created,priority:1"`
+	Name          string     `gorm:"column:name;type:text;not null"`
+	Status        string     `gorm:"column:status;type:text;not null;default:'active';index:idx_open_api_apps_status"`
+	ServiceUserID string     `gorm:"column:service_user_id;type:uuid;not null;uniqueIndex:idx_open_api_apps_service_user_id"`
+	BalanceUnits  int64      `gorm:"column:balance_units;type:bigint;not null;default:0"`
+	CreatedAt     *time.Time `gorm:"column:created_at;type:timestamptz;not null;default:now();index:idx_open_api_apps_owner_created,priority:2,sort:desc"`
+	UpdatedAt     *time.Time `gorm:"column:updated_at;type:timestamptz;not null;default:now()"`
+}
+
+func (OpenAPIAppDO) TableName() string { return "open_api_apps" }
+
+type OpenAPIKeyDO struct {
+	ID         string     `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	AppID      string     `gorm:"column:app_id;type:uuid;not null;index:idx_open_api_keys_app_id"`
+	Name       string     `gorm:"column:name;type:text;not null;default:'default'"`
+	KeyPrefix  string     `gorm:"column:key_prefix;type:text;not null;index:idx_open_api_keys_prefix"`
+	SecretHash string     `gorm:"column:secret_hash;type:text;not null;uniqueIndex:idx_open_api_keys_secret_hash"`
+	Scopes     []string   `gorm:"column:scopes;type:jsonb;serializer:json;not null;default:'[]'::jsonb"`
+	Status     string     `gorm:"column:status;type:text;not null;default:'active';index:idx_open_api_keys_status"`
+	LastUsedAt *time.Time `gorm:"column:last_used_at;type:timestamptz"`
+	ExpiresAt  *time.Time `gorm:"column:expires_at;type:timestamptz"`
+	CreatedAt  *time.Time `gorm:"column:created_at;type:timestamptz;not null;default:now()"`
+	UpdatedAt  *time.Time `gorm:"column:updated_at;type:timestamptz;not null;default:now()"`
+}
+
+func (OpenAPIKeyDO) TableName() string { return "open_api_keys" }
+
+type OpenAPIRequestDO struct {
+	ID             string         `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	AppID          string         `gorm:"column:app_id;type:uuid;not null;uniqueIndex:idx_open_api_requests_app_idempotency,priority:1;index:idx_open_api_requests_app_created,priority:1"`
+	IdempotencyKey string         `gorm:"column:idempotency_key;type:text;not null;uniqueIndex:idx_open_api_requests_app_idempotency,priority:2"`
+	Operation      string         `gorm:"column:operation;type:text;not null"`
+	Status         string         `gorm:"column:status;type:text;not null;default:'reserved';index:idx_open_api_requests_status"`
+	CostUnits      int64          `gorm:"column:cost_units;type:bigint;not null"`
+	TaskID         *string        `gorm:"column:task_id;type:uuid;uniqueIndex:idx_open_api_requests_task_id,where:task_id IS NOT NULL"`
+	ErrorMessage   *string        `gorm:"column:error_message;type:text"`
+	Metadata       map[string]any `gorm:"column:metadata;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
+	CreatedAt      *time.Time     `gorm:"column:created_at;type:timestamptz;not null;default:now();index:idx_open_api_requests_app_created,priority:2,sort:desc"`
+	UpdatedAt      *time.Time     `gorm:"column:updated_at;type:timestamptz;not null;default:now()"`
+}
+
+func (OpenAPIRequestDO) TableName() string { return "open_api_requests" }
+
+type OpenAPIUsageLedgerDO struct {
+	ID           string         `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	AppID        string         `gorm:"column:app_id;type:uuid;not null;index:idx_open_api_usage_ledger_app_created,priority:1"`
+	RequestID    *string        `gorm:"column:request_id;type:uuid;index:idx_open_api_usage_ledger_request_id"`
+	EntryType    string         `gorm:"column:entry_type;type:text;not null;index:idx_open_api_usage_ledger_entry_type"`
+	DeltaUnits   int64          `gorm:"column:delta_units;type:bigint;not null"`
+	BalanceAfter int64          `gorm:"column:balance_after;type:bigint;not null"`
+	ReferenceKey string         `gorm:"column:reference_key;type:text;not null;uniqueIndex:idx_open_api_usage_ledger_reference_key"`
+	Description  string         `gorm:"column:description;type:text;not null;default:''"`
+	Metadata     map[string]any `gorm:"column:metadata;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
+	CreatedAt    *time.Time     `gorm:"column:created_at;type:timestamptz;not null;default:now();index:idx_open_api_usage_ledger_app_created,priority:2,sort:desc"`
+}
+
+func (OpenAPIUsageLedgerDO) TableName() string { return "open_api_usage_ledger" }
+
+type OpenAPICreditPackageDO struct {
+	Code        string     `gorm:"column:code;type:text;primaryKey"`
+	Name        string     `gorm:"column:name;type:text;not null"`
+	Description string     `gorm:"column:description;type:text;not null;default:''"`
+	Units       int64      `gorm:"column:units;type:bigint;not null"`
+	AmountFen   int        `gorm:"column:amount_fen;type:integer;not null"`
+	IsActive    bool       `gorm:"column:is_active;type:boolean;not null;default:false;index:idx_open_api_credit_packages_active_sort,priority:1"`
+	SortOrder   int        `gorm:"column:sort_order;type:integer;not null;default:0;index:idx_open_api_credit_packages_active_sort,priority:2"`
+	CreatedAt   *time.Time `gorm:"column:created_at;type:timestamptz;not null;default:now()"`
+	UpdatedAt   *time.Time `gorm:"column:updated_at;type:timestamptz;not null;default:now()"`
+}
+
+func (OpenAPICreditPackageDO) TableName() string { return "open_api_credit_packages" }
+
+type OpenAPIPaymentOrderDO struct {
+	ID                  string         `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	OrderNo             string         `gorm:"column:order_no;type:text;not null;uniqueIndex:idx_open_api_payment_orders_order_no"`
+	OwnerUserID         string         `gorm:"column:owner_user_id;type:uuid;not null;index:idx_open_api_payment_orders_owner_created,priority:1"`
+	AppID               string         `gorm:"column:app_id;type:uuid;not null;index:idx_open_api_payment_orders_app_created,priority:1"`
+	PackageCode         string         `gorm:"column:package_code;type:text;not null"`
+	Units               int64          `gorm:"column:units;type:bigint;not null"`
+	AmountFen           int            `gorm:"column:amount_fen;type:integer;not null"`
+	Status              string         `gorm:"column:status;type:text;not null;default:'pending';index:idx_open_api_payment_orders_status"`
+	PayChannel          string         `gorm:"column:pay_channel;type:text;not null;default:'wechat_native'"`
+	CodeURL             *string        `gorm:"column:code_url;type:text"`
+	WechatTransactionID *string        `gorm:"column:wechat_transaction_id;type:text;uniqueIndex:idx_open_api_payment_orders_wechat_tx,where:wechat_transaction_id IS NOT NULL"`
+	PaidAt              *time.Time     `gorm:"column:paid_at;type:timestamptz"`
+	ExpiresAt           *time.Time     `gorm:"column:expires_at;type:timestamptz"`
+	NotifyPayload       map[string]any `gorm:"column:notify_payload;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
+	CreatedAt           *time.Time     `gorm:"column:created_at;type:timestamptz;not null;default:now();index:idx_open_api_payment_orders_owner_created,priority:2,sort:desc;index:idx_open_api_payment_orders_app_created,priority:2,sort:desc"`
+	UpdatedAt           *time.Time     `gorm:"column:updated_at;type:timestamptz;not null;default:now()"`
+}
+
+func (OpenAPIPaymentOrderDO) TableName() string { return "open_api_payment_orders" }
+
 func AllModels() []any {
 	return []any{
 		&UserDO{},
@@ -1910,5 +2005,11 @@ func AllModels() []any {
 		&BenchmarkRunDO{},
 		&BenchmarkRunSampleDO{},
 		&PackagedFoodTestRunDO{},
+		&OpenAPIAppDO{},
+		&OpenAPIKeyDO{},
+		&OpenAPIRequestDO{},
+		&OpenAPIUsageLedgerDO{},
+		&OpenAPICreditPackageDO{},
+		&OpenAPIPaymentOrderDO{},
 	}
 }

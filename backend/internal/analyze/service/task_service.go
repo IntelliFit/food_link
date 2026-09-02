@@ -205,6 +205,41 @@ func (s *TaskService) SubmitAnalyzeTask(ctx context.Context, userID string, inpu
 	return s.createAndEnqueueAnalyzeTask(ctx, userID, input, payload, mode, creditsInfo, creditCost, creditGroupID)
 }
 
+// SubmitOpenAnalyzeTask 仅供开放平台服务调用。开放平台在自己的不可变账本中
+// 完成额度预留和退款，因此这里不得再次走个人会员积分系统。
+func (s *TaskService) SubmitOpenAnalyzeTask(ctx context.Context, userID string, input SubmitTaskInput) (string, error) {
+	if !boolFromAny(input.ExtraPayload["open_api"]) || strings.TrimSpace(stringFromAny(input.ExtraPayload["open_api_app_id"])) == "" {
+		return "", errors.ErrForbidden
+	}
+	if err := validateSubmittedImageReferences(input); err != nil {
+		return "", err
+	}
+	s.normalizeSubmitImages(&input)
+	if input.ImageURL == "" && len(input.ImageURLs) == 0 {
+		return "", &errors.AppError{Code: 10002, Message: "image_url 或 image_urls 不能为空", HTTPStatus: 400}
+	}
+	if imageCountForLog(input.ImageURL, input.ImageURLs) > maxAnalyzeImagesForInput(input) {
+		return "", &errors.AppError{Code: 10002, Message: analyzeImageLimitMessage(input), HTTPStatus: 400}
+	}
+	if err := validatePrecisionCaptureInput(&input, false); err != nil {
+		return "", err
+	}
+	recordedOn, mode, err := s.resolveSubmitContext(ctx, userID, input)
+	if err != nil {
+		return "", err
+	}
+	input.AnalysisEngine = normalizeAnalysisEngine(input.AnalysisEngine, mode, false)
+	payload := buildSubmitTaskPayload(input, recordedOn, mode)
+	payload["billing_source"] = "open_api"
+	logger.Info(ctx, "开放平台图片分析进入任务系统",
+		slog.String("user_id", userID),
+		slog.String("open_api.app_id", stringFromAny(payload["open_api_app_id"])),
+		slog.String("open_api.request_id", stringFromAny(payload["open_api_request_id"])),
+		slog.String("execution_mode", mode),
+	)
+	return s.createAndEnqueueAnalyzeTask(ctx, userID, input, payload, mode, nil, 0, "")
+}
+
 // SubmitInternalAnalyzeTask 仅用于内部系统（如 Admin Benchmark），不参与积分系统。
 // 调用方必须是可信内部服务；payload 会标记 internal_benchmark 以便追踪。
 func (s *TaskService) SubmitInternalAnalyzeTask(ctx context.Context, userID string, input SubmitTaskInput) (string, error) {
@@ -275,6 +310,33 @@ func (s *TaskService) SubmitTextTask(ctx context.Context, userID string, input S
 	creditGroupID := ensureCreditGroupID(payload)
 
 	return s.createAndEnqueueTextTask(ctx, userID, input, payload, mode, creditsInfo, creditCost, creditGroupID)
+}
+
+// SubmitOpenTextTask 与 SubmitOpenAnalyzeTask 使用相同的开放平台额度边界。
+func (s *TaskService) SubmitOpenTextTask(ctx context.Context, userID string, input SubmitTaskInput) (string, error) {
+	if !boolFromAny(input.ExtraPayload["open_api"]) || strings.TrimSpace(stringFromAny(input.ExtraPayload["open_api_app_id"])) == "" {
+		return "", errors.ErrForbidden
+	}
+	if input.TextInput == "" {
+		input.TextInput = input.Text
+	}
+	if strings.TrimSpace(input.TextInput) == "" {
+		return "", &errors.AppError{Code: 10002, Message: "text 不能为空", HTTPStatus: 400}
+	}
+	recordedOn, mode, err := s.resolveSubmitContext(ctx, userID, input)
+	if err != nil {
+		return "", err
+	}
+	input.AnalysisEngine = normalizeAnalysisEngine(input.AnalysisEngine, mode, true)
+	payload := buildSubmitTaskPayload(input, recordedOn, mode)
+	payload["billing_source"] = "open_api"
+	logger.Info(ctx, "开放平台文本分析进入任务系统",
+		slog.String("user_id", userID),
+		slog.String("open_api.app_id", stringFromAny(payload["open_api_app_id"])),
+		slog.String("open_api.request_id", stringFromAny(payload["open_api_request_id"])),
+		slog.String("execution_mode", mode),
+	)
+	return s.createAndEnqueueTextTask(ctx, userID, input, payload, mode, nil, 0, "")
 }
 
 // SubmitInternalTextTask 仅用于内部系统（如 Admin Benchmark），不参与积分系统。

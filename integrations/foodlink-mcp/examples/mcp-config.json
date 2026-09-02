@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "foodlink": {
+      "command": "node",
+      "args": ["C:/foodlink-mcp/src/server.mjs"],
+      "env": {
+        "FOODLINK_API_KEY_FILE": "C:/Users/YOUR_NAME/.foodlink/api-key",
+        "FOODLINK_API_BASE_URL": "https://api.healthymax.cn/open/v1",
+        "FOODLINK_DEVELOPER_URL": "https://healthymax.cn/developer/console/"
+      }
+    }
+  }
+}

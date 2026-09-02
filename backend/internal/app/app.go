@@ -63,6 +63,10 @@ import (
 	messagehandler "food_link/backend/internal/message/handler"
 	messagerepo "food_link/backend/internal/message/repo"
 	messageservice "food_link/backend/internal/message/service"
+	openplatformhandler "food_link/backend/internal/openplatform/handler"
+	openplatformratelimit "food_link/backend/internal/openplatform/ratelimit"
+	openplatformrepo "food_link/backend/internal/openplatform/repo"
+	openplatformservice "food_link/backend/internal/openplatform/service"
 	pethandler "food_link/backend/internal/pet/handler"
 	petrepo "food_link/backend/internal/pet/repo"
 	petservice "food_link/backend/internal/pet/service"
@@ -102,6 +106,7 @@ import (
 	"food_link/backend/pkg/metrics"
 	"food_link/backend/pkg/storage"
 	tracing "food_link/backend/pkg/trace"
+	"food_link/backend/pkg/wechatpay"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -120,6 +125,8 @@ type App struct {
 	embeddingDone         chan struct{}
 	catalogBackfillCancel context.CancelFunc
 	catalogBackfillDone   chan struct{}
+	openPlatformCancel    context.CancelFunc
+	openPlatformDone      chan struct{}
 	taskQueue             taskqueue.Queue
 	campusCatalogService  *campuscatalogservice.CatalogService
 }
@@ -130,6 +137,11 @@ type campusCatalogNutritionBackfiller interface {
 	RepairLegacyAnalysisTasks(ctx context.Context, limit int) (campuscatalogservice.LegacyAnalysisRepairSummary, error)
 	RetryFailedAnalysisTasks(ctx context.Context, limit int) (campuscatalogservice.FailedAnalysisRetrySummary, error)
 	TryAnalysisMaintenanceLeadership(ctx context.Context, fn func(context.Context) error) (bool, error)
+}
+
+type openPlatformReconciler interface {
+	ReconcileUsage(ctx context.Context, limit int) (openplatformservice.ReconciliationSummary, error)
+	TryReconciliationLeadership(ctx context.Context, fn func(context.Context) error) (bool, error)
 }
 
 func New(cfg *config.Config) (*App, error) {
@@ -164,6 +176,7 @@ func New(cfg *config.Config) (*App, error) {
 	engine.Use(logger.RequestLogger())
 	engine.Use(metrics.GinMiddleware())
 	engine.Use(logger.Recovery())
+	engine.Use(developerPortalCORS(os.Getenv("DEVELOPER_CORS_ALLOWED_ORIGINS"), cfg.App.Env))
 
 	storageClient := storage.New(cfg.Storage)
 	taskQueue, err := taskqueue.New(cfg.TaskQueue)
@@ -288,6 +301,24 @@ func New(cfg *config.Config) (*App, error) {
 	}
 	frNutritionSvc.ConfigureAsyncTasks(analyzeTaskRepo, taskQueue)
 	frHandler := foodrecordhandler.NewFoodRecordHandler(frSvc, frUploadSvc, frNutritionSvc)
+	openPlatformRepo := openplatformrepo.New(db)
+	openPlatformSvc := openplatformservice.New(openPlatformRepo, analyzeTaskSvc, frNutritionSvc, storageClient)
+	openPayCfg := cfg.ResolvedWechatPay()
+	openPayAppID := strings.TrimSpace(openPayCfg.AppID)
+	if openPayAppID == "" {
+		openPayAppID = cfg.WechatMiniProgramAppID()
+	}
+	openPayNotifyURL := openPlatformWechatPayNotifyURL(cfg.App.Env, openPayCfg.OpenAPINotifyURL)
+	if strings.TrimSpace(openPayCfg.MchID) != "" && strings.TrimSpace(openPayCfg.SerialNo) != "" && openPayAppID != "" && openPayNotifyURL != "" && strings.TrimSpace(openPayCfg.PrivateKey) != "" {
+		openPayClient := wechatpay.NewClient(openPayCfg.MchID, openPayCfg.SerialNo, openPayAppID, openPayNotifyURL, openPayCfg.PrivateKey)
+		openPlatformSvc.ConfigurePayment(openPayClient, openplatformservice.PaymentConfig{PublicKey: openPayCfg.PublicKey, APIV3Key: openPayCfg.APIV3Key})
+	}
+	openPlatformHandler := openplatformhandler.New(openPlatformSvc)
+	openPlatformLimiter, err := openplatformratelimit.New(cfg.Redis, cfg.App.Env)
+	if err != nil {
+		return nil, fmt.Errorf("初始化开放平台限流器失败: %w", err)
+	}
+	openPlatformHandler.ConfigureRateLimiter(openPlatformLimiter)
 
 	homeRepo := homerepo.NewHomeRepo(db)
 	dashboardService := homeservice.NewDashboardService(userRepo, homeRepo, storageClient)
@@ -448,6 +479,7 @@ func New(cfg *config.Config) (*App, error) {
 	}
 	app.startEmbeddedWorker(cfg, analyzeTaskRepo, analyzePrecisionRepo, publicFoodRepo, campuscatalogrepo.NewCatalogRepo(db), analyzeSvc, ocrSvc, healthDocRepo, userRepo, expiryRecognizer, expiryNotifier, exerciseSvc, frNutritionSvc, frSvc, membershipSvc, taskQueue, storageClient)
 	if os.Getenv("FOOD_LINK_DISABLE_BACKGROUND_MAINTENANCE") != "1" {
+		app.startOpenPlatformReconciliation(openPlatformSvc)
 		app.startNutritionEmbeddingMaintenance(nutritionEmbeddingMaintainer)
 	}
 
@@ -528,6 +560,10 @@ func New(cfg *config.Config) (*App, error) {
 	engine.POST("/api/analyze/tasks/cleanup-timeout", analyzeHandler.CleanupTimeoutTasks)
 	engine.POST("/api/analyze/feedback", authmw.RequireJWT(jwtSvc), analyzeHandler.SubmitFeedback)
 	engine.POST("/api/precision-sessions/:session_id/continue", authmw.RequireJWT(jwtSvc), analyzeHandler.ContinuePrecisionSession)
+
+	// Open Platform routes use developer API credentials and a separate usage ledger.
+	openPlatformHandler.RegisterRoutes(engine)
+	openPlatformHandler.RegisterDeveloperRoutes(engine, authmw.RequireJWT(jwtSvc))
 
 	// FoodRecord routes
 	engine.POST("/api/food-record/save", authmw.RequireJWT(jwtSvc), frHandler.SaveFoodRecord)
@@ -1127,6 +1163,68 @@ func (a *App) startCampusCatalogNutritionBackfill(backfiller campusCatalogNutrit
 	logger.Info(context.Background(), "历史校园菜品营养补分析维护已启动")
 }
 
+func (a *App) startOpenPlatformReconciliation(reconciler openPlatformReconciler) {
+	if reconciler == nil {
+		return
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	a.openPlatformCancel = cancel
+	a.openPlatformDone = done
+	go func() {
+		defer close(done)
+		for ctx.Err() == nil {
+			acquired, err := reconciler.TryReconciliationLeadership(ctx, func(leaderCtx context.Context) error {
+				runOpenPlatformReconciliationLoop(leaderCtx, reconciler)
+				return nil
+			})
+			if ctx.Err() != nil {
+				break
+			}
+			if err != nil {
+				logger.Error(context.Background(), "开放平台点数对账领导权获取失败", err)
+			} else if acquired {
+				logger.Warn(context.Background(), "开放平台点数对账领导实例意外退出，准备重新选举")
+			}
+			timer := time.NewTimer(30 * time.Second)
+			select {
+			case <-ctx.Done():
+				timer.Stop()
+			case <-timer.C:
+			}
+		}
+		logger.Info(context.Background(), "开放平台点数自动对账已停止")
+	}()
+	logger.Info(context.Background(), "开放平台点数自动对账已启动")
+}
+
+func runOpenPlatformReconciliationLoop(ctx context.Context, reconciler openPlatformReconciler) {
+	runOpenPlatformReconciliation(ctx, reconciler)
+	ticker := time.NewTicker(time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			runOpenPlatformReconciliation(ctx, reconciler)
+		}
+	}
+}
+
+func runOpenPlatformReconciliation(parent context.Context, reconciler openPlatformReconciler) {
+	ctx, cancel := context.WithTimeout(parent, 30*time.Second)
+	defer cancel()
+	summary, err := reconciler.ReconcileUsage(ctx, 100)
+	if err != nil {
+		logger.Error(ctx, "开放平台点数自动对账失败", err)
+		return
+	}
+	if summary.Scanned > 0 {
+		logger.Info(ctx, "开放平台点数自动对账完成", slog.Int("scanned_count", summary.Scanned), slog.Int("refunded_count", summary.Refunded), slog.Int("skipped_count", summary.Skipped))
+	}
+}
+
 func runCampusCatalogMaintenanceLoop(ctx context.Context, backfiller campusCatalogNutritionBackfiller) {
 	runCampusCatalogNutritionBackfill(ctx, backfiller)
 	ticker := time.NewTicker(2 * time.Minute)
@@ -1232,6 +1330,16 @@ func embeddedWorkerID(cfg *config.Config) string {
 }
 
 func (a *App) Close(ctx context.Context) error {
+	if a.openPlatformCancel != nil {
+		a.openPlatformCancel()
+	}
+	if a.openPlatformDone != nil {
+		select {
+		case <-a.openPlatformDone:
+		case <-ctx.Done():
+			logger.Warn(context.Background(), "开放平台点数自动对账关闭超时", logger.Err(ctx.Err()))
+		}
+	}
 	if a.catalogBackfillCancel != nil {
 		a.catalogBackfillCancel()
 	}
@@ -1323,6 +1431,57 @@ func isAdminCORSOriginAllowed(origin string, allowedOrigins map[string]struct{})
 	}
 	_, ok := allowedOrigins[origin]
 	return ok
+}
+
+func developerPortalCORS(rawOrigins, environment string) gin.HandlerFunc {
+	// Public cross-origin traffic is handled by the ingress so that website
+	// endpoints outside this middleware share one CORS policy. Keep only
+	// explicitly configured origins here to avoid duplicate ACAO headers.
+	allowed := map[string]struct{}{}
+	for origin := range parseAdminCORSOrigins(rawOrigins) {
+		allowed[origin] = struct{}{}
+	}
+	if strings.ToLower(strings.TrimSpace(environment)) != "production" {
+		allowed["http://localhost:5173"] = struct{}{}
+		allowed["http://127.0.0.1:5173"] = struct{}{}
+	}
+	return func(c *gin.Context) {
+		path := c.Request.URL.Path
+		isDeveloperPath := strings.HasPrefix(path, "/api/developer/") || path == "/api/developer"
+		isDeveloperAuth := path == "/api/app/sms/send-code" || path == "/api/app/login/sms"
+		if !isDeveloperPath && !isDeveloperAuth {
+			c.Next()
+			return
+		}
+		origin := strings.TrimSpace(c.GetHeader("Origin"))
+		if _, ok := allowed[origin]; ok {
+			c.Header("Access-Control-Allow-Origin", origin)
+			c.Header("Vary", "Origin")
+			c.Header("Access-Control-Allow-Headers", "Authorization, Content-Type")
+			c.Header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
+			c.Header("Access-Control-Max-Age", "600")
+		}
+		if c.Request.Method == http.MethodOptions {
+			if _, ok := allowed[origin]; ok {
+				c.AbortWithStatus(http.StatusNoContent)
+				return
+			}
+			c.AbortWithStatus(http.StatusForbidden)
+			return
+		}
+		c.Next()
+	}
+}
+
+func openPlatformWechatPayNotifyURL(environment, configured string) string {
+	if value := strings.TrimSpace(configured); value != "" {
+		return value
+	}
+	host := "https://dev.api.healthymax.cn"
+	if strings.EqualFold(strings.TrimSpace(environment), "production") {
+		host = "https://api.healthymax.cn"
+	}
+	return host + "/api/developer/payment/wechat/notify"
 }
 
 func registerSpecs(engine *gin.Engine, specs []routes.Spec, jwtSvc *authservice.JWTService) {
