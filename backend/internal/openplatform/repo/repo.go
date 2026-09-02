@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	authrepo "food_link/backend/internal/auth/repo"
@@ -347,6 +348,9 @@ func (r *Repository) TopUp(ctx context.Context, appID string, units int64, refer
 func (r *Repository) CreateAppAndKey(ctx context.Context, app *domain.App, key *domain.APIKey, user *authrepo.User, initialUnits int64) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		now := time.Now()
+		grantUnits := initialUnits
+		grantReference := ""
+		grantDescription := "开放平台封闭测试赠送点数"
 		if user.ID == "" {
 			user.ID = uuid.NewString()
 		}
@@ -356,8 +360,21 @@ func (r *Repository) CreateAppAndKey(ctx context.Context, app *domain.App, key *
 		if app.ID == "" {
 			app.ID = uuid.NewString()
 		}
+		grantReference = "initial:" + app.ID
+		if app.OwnerUserID != nil && strings.TrimSpace(*app.OwnerUserID) != "" {
+			ownerUserID := strings.TrimSpace(*app.OwnerUserID)
+			var existingOwnedApps int64
+			if err := tx.Model(&domain.App{}).Where("owner_user_id = ?", ownerUserID).Count(&existingOwnedApps).Error; err != nil {
+				return err
+			}
+			if existingOwnedApps > 0 {
+				grantUnits = 0
+			}
+			grantReference = "developer-welcome:" + ownerUserID
+			grantDescription = "开发者账号首次创建应用赠送点数"
+		}
 		app.ServiceUserID = user.ID
-		app.BalanceUnits = initialUnits
+		app.BalanceUnits = 0
 		app.Status = domain.AppStatusActive
 		app.CreatedAt = &now
 		app.UpdatedAt = &now
@@ -374,19 +391,33 @@ func (r *Repository) CreateAppAndKey(ctx context.Context, app *domain.App, key *
 		if err := tx.Create(key).Error; err != nil {
 			return err
 		}
-		if initialUnits > 0 {
+		if grantUnits > 0 {
 			ledger := domain.UsageLedger{
 				ID:           uuid.NewString(),
 				AppID:        app.ID,
 				EntryType:    "promotional_grant",
-				DeltaUnits:   initialUnits,
-				BalanceAfter: initialUnits,
-				ReferenceKey: "initial:" + app.ID,
-				Description:  "开放平台封闭测试赠送点数",
+				DeltaUnits:   grantUnits,
+				BalanceAfter: grantUnits,
+				ReferenceKey: grantReference,
+				Description:  grantDescription,
 				Metadata:     map[string]any{},
 				CreatedAt:    &now,
 			}
-			if err := tx.Create(&ledger).Error; err != nil {
+			created := tx.Clauses(clause.OnConflict{
+				Columns:   []clause.Column{{Name: "reference_key"}},
+				DoNothing: true,
+			}).Create(&ledger)
+			if created.Error != nil {
+				return created.Error
+			}
+			if created.RowsAffected == 0 {
+				return nil
+			}
+			app.BalanceUnits = grantUnits
+			if err := tx.Model(&domain.App{}).Where("id = ?", app.ID).Updates(map[string]any{
+				"balance_units": grantUnits,
+				"updated_at":    now,
+			}).Error; err != nil {
 				return err
 			}
 		}

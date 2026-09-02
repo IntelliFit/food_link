@@ -63,6 +63,14 @@ const routeConfigs = [
     index: true,
   },
   {
+    path: '/developer/docs',
+    title: '食探开放平台开发文档丨API 参数与 MCP',
+    description: '食探开放平台完整开发文档：图片上传、普通与精准食物识别、文字分析、营养搜索、异步任务、计费和 MCP 接入。',
+    keywords: '食探,食物识别API文档,营养API参数,MCP文档,图片识别API,AI Agent',
+    ogType: 'website',
+    index: true,
+  },
+  {
     path: '/developer/console',
     title: '开发者控制台丨智健食探',
     description: '管理食探开放平台应用、API Key、点数和充值订单。',

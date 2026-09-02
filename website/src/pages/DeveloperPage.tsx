@@ -1,4 +1,4 @@
-import { ArrowRight, Bot, Braces, Cpu, KeyRound, ShieldCheck, WalletCards } from 'lucide-react'
+import { ArrowRight, Bot, Braces, Camera, Cpu, KeyRound, ShieldCheck, WalletCards } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { SiteFooter } from '@/components/layout/SiteFooter'
 import { SiteHeader } from '@/components/layout/SiteHeader'
@@ -23,17 +23,24 @@ export function DeveloperPage() {
             <p className="max-w-2xl text-base leading-8 text-muted-foreground md:text-lg">一套 API 覆盖上传、食物识别、营养搜索、点数计费和调用审计。余额不足时返回 402，由调用方提示用户前往官网充值，不会突然代替用户发起付款。</p>
             <div className="flex flex-wrap gap-3">
               <Button size="lg" render={<Link to="/developer/console" />}>进入开发者控制台 <ArrowRight /></Button>
-              <Button size="lg" variant="outline" render={<a href="#quickstart" />}>查看快速开始</Button>
+              <Button size="lg" variant="outline" render={<Link to="/developer/docs" />}>查看完整开发文档</Button>
               <Button size="lg" variant="ghost" render={<a href="/openapi/foodlink-openapi-v1.yaml" download />}>下载 OpenAPI 3.1</Button>
             </div>
           </div>
           <div className="rounded-3xl border border-border bg-card p-5 shadow-xl shadow-primary/5 md:p-8">
-            <div className="mb-5 flex items-center justify-between"><span className="font-semibold">POST /open/v1/food-analyses</span><span className="rounded-full bg-primary/10 px-2 py-1 text-xs text-primary">202 Accepted</span></div>
-            <pre className="overflow-x-auto rounded-2xl bg-foreground p-5 text-sm leading-7 text-background"><code>{`curl ${openApiBaseURL}/food-analyses \\
+            <div className="mb-5 flex items-center justify-between"><span className="flex items-center gap-2 font-semibold"><Camera className="size-4 text-primary" /> 图片识别完整链路</span><span className="rounded-full bg-primary/10 px-2 py-1 text-xs text-primary">上传 → 分析 → 轮询</span></div>
+            <pre className="overflow-x-auto rounded-2xl bg-foreground p-5 text-xs leading-6 text-background md:text-sm"><code>{`# 1. 上传图片
+curl ${openApiBaseURL}/uploads \\
   -H "Authorization: Bearer $FOODLINK_API_KEY" \\
-  -H "Idempotency-Key: meal-20260901-001" \\
+  -F "file=@meal.jpg"
+
+# 2. 使用返回的 image_url 提交分析
+curl ${openApiBaseURL}/food-analyses \\
+  -H "Authorization: Bearer $FOODLINK_API_KEY" \\
+  -H "Idempotency-Key: meal-photo-001" \\
   -H "Content-Type: application/json" \\
-  -d '{"text":"一碗牛肉面","mode":"standard"}'`}</code></pre>
+  -d '{"image_urls":["..."],"mode":"precision",
+       "meal_type":"lunch","additional_context":"没喝汤"}'`}</code></pre>
           </div>
         </section>
 
@@ -45,7 +52,7 @@ export function DeveloperPage() {
           <div className="rounded-3xl border border-border bg-card p-6 md:p-10">
             <h2 className="mb-8 text-2xl font-bold md:text-3xl">从 0 到第一次调用</h2>
             <ol className="grid gap-5 md:grid-cols-3">
-              {[['1', '短信登录并创建应用', '首次创建赠送 100 个 Beta 测试点。'], ['2', '复制一次性 API Key', '服务端只保存哈希；密钥只展示一次。'], ['3', '调用 API 或安装 MCP', '文字 2 点，普通图片 5 点/张，精准图片 15 点/张。']].map(([n, title, text]) => <li key={n} className="flex gap-4"><span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground">{n}</span><div><h3 className="font-semibold">{title}</h3><p className="mt-1 text-sm leading-6 text-muted-foreground">{text}</p></div></li>)}
+              {[['1', '短信登录并创建应用', '每个开发者账号仅第一个应用赠送 100 个测试点。'], ['2', '复制一次性 API Key', '服务端只保存哈希；密钥只展示一次。'], ['3', '按完整文档接入', '支持文字、图片、多图、普通/精准模式、营养搜索、任务轮询与 MCP。']].map(([n, title, text]) => <li key={n} className="flex gap-4"><span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground">{n}</span><div><h3 className="font-semibold">{title}</h3><p className="mt-1 text-sm leading-6 text-muted-foreground">{text}</p></div></li>)}
             </ol>
           </div>
         </section>

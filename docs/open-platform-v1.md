@@ -19,15 +19,13 @@ API 点数与小程序会员、个人积分完全分开。当前点数只是成�
 | 精准图片分析 | 15 点/张 |
 | 营养库搜索 | Beta 期免费，受 Scope 约束 |
 
-封闭测试应用默认可赠送 1,000 点。正式定价应先记录至少一周真实的模型、存储、带宽、失败率和人工支持成本，再确定充值比例。推荐商业形态为：
+官网开发者账号仅在第一次创建的第一个应用赠送 100 点；管理员通过 `openapi-admin` 签发的验收应用可显式指定初始点数，不受该网页赠送规则影响。推荐商业形态为：
 
 1. 免费试用点数，有有效期；
 2. 个人开发者预充值点数包；
 3. 硬件/企业客户采用月度保底额度，超额按点数结算；
 4. 失败、超时、取消或违规终态退回本次预留点数；
 5. 充值与退款全部写入不可变账本，支付回调使用唯一 reference 防止重复到账。
-
-当前 Beta 在调用方查询失败任务时执行幂等退款。正式公开前还应增加后台失败任务对账器，避免调用方中途停止轮询时延迟退款。
 
 当前实现已增加每分钟自动对账器：通过 PostgreSQL advisory lock 在多 Pod 中选出唯一执行实例，自动扫描失败终态和超过 10 分钟仍未提交成功的预留请求并幂等退点。因此调用方停止轮询也不会永久占用点数。
 
@@ -39,7 +37,7 @@ API 点数与小程序会员、个人积分完全分开。当前点数只是成�
 
 - 使用现有食探手机号短信验证码登录，首次登录自动创建账号。
 - 每个开发者最多 5 个应用，每个应用最多 5 个有效 API Key。
-- 官网新建应用赠送 100 个 Beta 测试点；完整 API Key 只显示一次，数据库仅保存 SHA-256 摘要。
+- 每个开发者账号仅在首次创建的第一个应用赠送 100 个 Beta 测试点；继续创建应用不重复赠送，且应用余额彼此独立。完整 API Key 只显示一次，数据库仅保存 SHA-256 摘要。
 - PC 官网使用微信 Native 支付二维码。服务端验签、解密并核对订单金额后，才在事务中把订单置为 paid 并增加点数。
 - 支付订单号和账本 reference 均有唯一约束，重复微信回调不会重复加点。
 - 控制台轮询会主动调用微信商户查单；即使支付回调暂时丢失，查到 SUCCESS 且金额一致后也会幂等入账。
@@ -65,6 +63,21 @@ go run ./cmd/openapi-admin -config-dir . -action upsert-package `
 ## MCP
 
 本地 stdio MCP 位于 [`integrations/foodlink-mcp`](../integrations/foodlink-mcp)，提供余额、文字分析、图片上传、图片分析、结果查询、营养搜索和充值地址 7 个工具。完整的 Codex TOML、WorkBuddy/通用 JSON、PowerShell 验收脚本和安全说明见该目录 README 与 `examples/`。
+
+## 食物分析完整参数
+
+`POST /open/v1/food-analyses` 同时服务文字和图片分析。`text` 与 `image_urls` 必须二选一，不能同时提交。
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `text` | string | 与 `image_urls` 二选一 | 自然语言餐食描述；文字分析固定 2 点/次 |
+| `image_urls` | string[] | 与 `text` 二选一 | 必须来自当前应用的上传接口；最多 5 张 |
+| `mode` | `standard` / `precision` | 否 | 默认 `standard`；普通图片 5 点/张，精准图片 15 点/张 |
+| `meal_type` | enum | 否 | `breakfast`、`morning_snack`、`lunch`、`afternoon_snack`、`dinner`、`evening_snack` |
+| `additional_context` | string | 否 | 补充“没有喝汤”“只吃一半”等图片无法确定的信息 |
+| `date` | `YYYY-MM-DD` | 否 | 餐食发生日期 |
+
+图片完整调用顺序为：`POST /uploads` → `POST /food-analyses` → `GET /food-analyses/{task_id}`。提交分析时必须发送 `Idempotency-Key`；网络重试必须复用原值。
 
 ## 部署前准备
 

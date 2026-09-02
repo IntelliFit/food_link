@@ -8,6 +8,7 @@ import { LandingPage } from '@/pages/LandingPage'
 import { PrivacyPage } from '@/pages/PrivacyPage'
 import { DeveloperPage } from '@/pages/DeveloperPage'
 import { DeveloperConsolePage } from '@/pages/DeveloperConsolePage'
+import { DeveloperDocsPage } from '@/pages/DeveloperDocsPage'
 
 function App() {
   return (
@@ -21,6 +22,7 @@ function App() {
       <Route path="/agreement" element={<AgreementPage />} />
       <Route path="/privacy" element={<PrivacyPage />} />
       <Route path="/developer" element={<DeveloperPage />} />
+      <Route path="/developer/docs" element={<DeveloperDocsPage />} />
       <Route path="/developer/console" element={<DeveloperConsolePage />} />
       </Routes>
     </>

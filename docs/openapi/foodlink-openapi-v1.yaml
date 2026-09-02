@@ -6,6 +6,9 @@ info:
     食探开放平台封闭测试 API。API 点数与小程序会员积分独立。
     所有写请求必须使用 HTTPS；分析提交必须携带 Idempotency-Key。
     所有接口使用分布式固定窗口限流，并通过 X-RateLimit-* 响应头返回额度；超限返回 429。
+externalDocs:
+  description: 食探开放平台完整开发文档
+  url: https://healthymax.cn/developer/docs
 servers:
   - url: https://dev.api.healthymax.cn
     description: 开发/封闭测试环境
@@ -287,6 +290,7 @@ components:
         text:
           type: string
           description: 与 image_urls 二选一
+          examples: ["番茄炒蛋一份、米饭约 150 克"]
         image_urls:
           type: array
           maxItems: 5
@@ -303,9 +307,11 @@ components:
           enum: [breakfast, morning_snack, lunch, afternoon_snack, dinner, evening_snack]
         additional_context:
           type: string
+          examples: ["米饭只吃了一半，没有喝汤"]
         date:
           type: string
           format: date
+          examples: ["2026-09-03"]
       oneOf:
         - required: [text]
         - required: [image_urls]

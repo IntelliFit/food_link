@@ -55,6 +55,38 @@ func TestDeveloperAppOwnershipAndKeyRevocation(t *testing.T) {
 	require.ErrorIs(t, err, openrepo.ErrInvalidCredential)
 }
 
+func TestDeveloperWelcomeGrantIsLimitedToFirstAppPerOwner(t *testing.T) {
+	ctx := context.Background()
+	repository, platform := newOpenPlatformRepo(t)
+
+	first, err := platform.CreateDeveloperApp(ctx, "owner-welcome", "第一个 Agent")
+	require.NoError(t, err)
+	require.Equal(t, int64(100), first.App.BalanceUnits)
+
+	second, err := platform.CreateDeveloperApp(ctx, "owner-welcome", "第二个 Agent")
+	require.NoError(t, err)
+	require.Zero(t, second.App.BalanceUnits)
+
+	apps, err := repository.ListAppsByOwner(ctx, "owner-welcome")
+	require.NoError(t, err)
+	require.Len(t, apps, 2)
+	require.Equal(t, int64(100), apps[0].BalanceUnits+apps[1].BalanceUnits)
+
+	firstLedger, err := repository.ListLedger(ctx, first.App.ID, 10)
+	require.NoError(t, err)
+	require.Len(t, firstLedger, 1)
+	require.Equal(t, "developer-welcome:owner-welcome", firstLedger[0].ReferenceKey)
+	require.Equal(t, int64(100), firstLedger[0].DeltaUnits)
+
+	secondLedger, err := repository.ListLedger(ctx, second.App.ID, 10)
+	require.NoError(t, err)
+	require.Empty(t, secondLedger)
+
+	anotherOwner, err := platform.CreateDeveloperApp(ctx, "owner-welcome-2", "另一个账号")
+	require.NoError(t, err)
+	require.Equal(t, int64(100), anotherOwner.App.BalanceUnits)
+}
+
 func TestPaidOrderCreditsExactlyOnce(t *testing.T) {
 	ctx := context.Background()
 	repository, platform := newOpenPlatformRepo(t)

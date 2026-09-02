@@ -5,6 +5,7 @@
 正式地址：
 
 - 开放平台：<https://healthymax.cn/developer/>
+- 完整 API 文档：<https://healthymax.cn/developer/docs>
 - 开发者控制台：<https://healthymax.cn/developer/console/>
 - HTTP API：`https://api.healthymax.cn/open/v1`
 - OpenAPI 3.1：<https://healthymax.cn/openapi/foodlink-openapi-v1.yaml>
@@ -15,6 +16,8 @@
 2. 在开发者控制台短信登录，创建应用和 API Key。
 3. 立即保存完整 Key；页面只展示一次，服务端只保存哈希。
 4. 把本目录复制到需要使用的电脑，例如 `C:/foodlink-mcp`。
+
+每个开发者账号仅第一个应用赠送 100 点；继续创建应用不会重复获得赠送点数，各应用余额独立。
 
 推荐把 Key 单独保存为只读文件，而不是写进 JSON、TOML 或聊天记录：
 

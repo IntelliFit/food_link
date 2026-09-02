@@ -67,7 +67,7 @@ type UsageLedger struct {
 	EntryType    string         `json:"entry_type" gorm:"column:entry_type"`
 	DeltaUnits   int64          `json:"delta_units" gorm:"column:delta_units"`
 	BalanceAfter int64          `json:"balance_after" gorm:"column:balance_after"`
-	ReferenceKey string         `json:"reference_key" gorm:"column:reference_key"`
+	ReferenceKey string         `json:"reference_key" gorm:"column:reference_key;uniqueIndex:idx_open_api_usage_ledger_reference_key"`
 	Description  string         `json:"description" gorm:"column:description"`
 	Metadata     map[string]any `json:"metadata,omitempty" gorm:"column:metadata;serializer:json"`
 	CreatedAt    *time.Time     `json:"created_at,omitempty" gorm:"column:created_at"`
