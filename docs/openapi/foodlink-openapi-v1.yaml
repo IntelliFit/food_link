@@ -10,7 +10,7 @@ servers:
   - url: https://dev.api.healthymax.cn
     description: 开发/封闭测试环境
   - url: https://api.healthymax.cn
-    description: 正式环境（尚未开放）
+    description: 正式环境
 security:
   - apiKey: []
 paths:
