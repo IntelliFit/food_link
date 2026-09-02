@@ -77,8 +77,16 @@ func newTestOpenPlatform(t *testing.T) (*gin.Engine, *openservice.KeyMaterial, *
 		TaskType: "food_text",
 		Status:   "done",
 		Result: map[string]any{
-			"items":     []any{map[string]any{"name": "米饭", "provider": "hidden-provider"}},
-			"modelName": "hidden-model",
+			"items": []any{map[string]any{
+				"name":                      "米饭",
+				"provider":                  "hidden-provider",
+				"ediblePortionSource":       "hidden-edible-source",
+				"micronutrient_source":      "hidden-micronutrient-source",
+				"nutrition_source":          "ai_direct",
+				"nutrition_source_category": "database",
+			}},
+			"modelName":      "hidden-model",
+			"prompt_version": "hidden-prompt-version",
 		},
 		CreatedAt: &now,
 		UpdatedAt: &now,
@@ -125,6 +133,11 @@ func TestOpenPlatformTextAnalysisCanBeCalledAndRetriedIdempotently(t *testing.T)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	require.NotContains(t, w.Body.String(), "hidden-model")
 	require.NotContains(t, w.Body.String(), "hidden-provider")
+	require.NotContains(t, w.Body.String(), "hidden-edible-source")
+	require.NotContains(t, w.Body.String(), "hidden-micronutrient-source")
+	require.NotContains(t, w.Body.String(), "hidden-prompt-version")
+	require.Contains(t, w.Body.String(), `"nutrition_source":"ai_direct"`)
+	require.Contains(t, w.Body.String(), `"nutrition_source_category":"database"`)
 	require.Contains(t, w.Body.String(), `"status":"completed"`)
 }
 

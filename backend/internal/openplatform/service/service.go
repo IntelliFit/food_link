@@ -834,7 +834,7 @@ func sanitizeResultValue(value any) any {
 		for key, item := range typed {
 			normalizedKey := strings.NewReplacer("-", "_", ".", "_").Replace(strings.ToLower(strings.TrimSpace(key)))
 			switch normalizedKey {
-			case "debug", "raw_response", "prompt", "provider", "provider_metadata", "model", "model_name", "modelname", "analysis_engine", "analysisengine", "llm_metadata":
+			case "debug", "raw_response", "prompt", "prompt_version", "provider", "provider_metadata", "model", "model_name", "modelname", "analysis_engine", "analysisengine", "llm_metadata", "llm_provider", "llm_model", "fallback_provider", "fallback_model", "reasoning", "reasoning_content", "edible_portion_source", "edibleportionsource", "micronutrient_source":
 				continue
 			default:
 				result[key] = sanitizeResultValue(item)
