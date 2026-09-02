@@ -82,6 +82,22 @@ export const pageSeoByPath: Record<string, PageSeoConfig> = {
     image: siteSeo.ogImage,
     imageAlt: siteSeo.ogImageAlt,
   },
+  '/developer': {
+    title: `食探开放平台丨API 与 MCP`,
+    description: `通过食探开放平台 API 与 MCP，为 Agent、应用和硬件接入食物识别与可信营养数据。`,
+    path: '/developer',
+    keywords: `${brand.shortName},食物识别API,营养API,MCP,AI Agent,硬件接入`,
+    image: siteSeo.ogImage,
+    imageAlt: siteSeo.ogImageAlt,
+  },
+  '/developer/console': {
+    title: `开发者控制台丨${brand.fullName}`,
+    description: `管理食探开放平台应用、API Key、点数和充值订单。`,
+    path: '/developer/console',
+    index: false,
+    image: siteSeo.ogImage,
+    imageAlt: siteSeo.ogImageAlt,
+  },
 }
 
 const sharePageSeo: PageSeoConfig = {

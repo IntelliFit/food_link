@@ -1,0 +1,369 @@
+openapi: 3.1.0
+info:
+  title: FoodLink Open API
+  version: 0.2.0-beta
+  description: |
+    食探开放平台封闭测试 API。API 点数与小程序会员积分独立。
+    所有写请求必须使用 HTTPS；分析提交必须携带 Idempotency-Key。
+    所有接口使用分布式固定窗口限流，并通过 X-RateLimit-* 响应头返回额度；超限返回 429。
+servers:
+  - url: https://dev.api.healthymax.cn
+    description: 开发/封闭测试环境
+  - url: https://api.healthymax.cn
+    description: 正式环境（尚未开放）
+security:
+  - apiKey: []
+paths:
+  /open/v1/account:
+    get:
+      summary: 查看当前应用、权限与点数余额
+      operationId: getOpenAPIAccount
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "503":
+          $ref: "#/components/responses/RateLimiterUnavailable"
+  /open/v1/uploads:
+    post:
+      summary: 上传食物图片
+      operationId: uploadFoodImage
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: JPEG、PNG 或 WebP，最大 8MB
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UploadResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+  /open/v1/food-analyses:
+    post:
+      summary: 提交食物图片或文字分析
+      operationId: createFoodAnalysis
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            maxLength: 128
+          description: 调用方生成的唯一请求标识；重试必须复用原值
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AnalysisInput"
+      responses:
+        "202":
+          description: 已接受；使用 Location 或 task_id 查询状态
+          headers:
+            Location:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnalysisSubmissionResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "402":
+          description: API 点数不足
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: 幂等键冲突或原请求尚未完成提交
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+  /open/v1/food-analyses/{task_id}:
+    get:
+      summary: 查询食物分析任务
+      operationId: getFoodAnalysis
+      parameters:
+        - name: task_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnalysisResultResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: 当前应用没有该任务
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+  /open/v1/foods/search:
+    get:
+      summary: 搜索可信营养库
+      operationId: searchFoodNutrition
+      parameters:
+        - name: query
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 20
+            default: 5
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [code, message, data]
+                properties:
+                  code:
+                    const: 0
+                  message:
+                    const: ok
+                  data:
+                    type: object
+                    required: [items]
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          type: object
+                          additionalProperties: true
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+components:
+  securitySchemes:
+    apiKey:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: flk_beta_ 开头的封闭测试密钥，也可作为 Bearer Token 发送
+  responses:
+    BadRequest:
+      description: 请求参数错误
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Unauthorized:
+      description: 缺少或使用了无效凭证
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Forbidden:
+      description: 凭证缺少所需 Scope
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    RateLimited:
+      description: 超出当前凭证或应用的每分钟请求额度
+      headers:
+        X-RateLimit-Limit:
+          schema: { type: integer }
+        X-RateLimit-Remaining:
+          schema: { type: integer }
+        X-RateLimit-Reset:
+          schema: { type: integer, format: int64 }
+        Retry-After:
+          schema: { type: integer }
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    RateLimiterUnavailable:
+      description: 生产环境分布式限流服务不可用，系统按失败关闭策略拒绝请求
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+    AccountResponse:
+      type: object
+      required: [code, message, data]
+      properties:
+        code:
+          const: 0
+        message:
+          const: ok
+        data:
+          type: object
+          required: [app_id, app_name, balance_units, scopes]
+          properties:
+            app_id:
+              type: string
+              format: uuid
+            app_name:
+              type: string
+            balance_units:
+              type: integer
+              format: int64
+            scopes:
+              type: array
+              items:
+                type: string
+    UploadResponse:
+      type: object
+      required: [code, message, data]
+      properties:
+        code:
+          const: 0
+        message:
+          const: ok
+        data:
+          type: object
+          required: [image_url, bytes, mime_type]
+          properties:
+            image_url:
+              type: string
+              format: uri
+            bytes:
+              type: integer
+            mime_type:
+              type: string
+    AnalysisInput:
+      type: object
+      properties:
+        text:
+          type: string
+          description: 与 image_urls 二选一
+        image_urls:
+          type: array
+          maxItems: 5
+          description: 必须来自当前应用的 /open/v1/uploads
+          items:
+            type: string
+            format: uri
+        mode:
+          type: string
+          enum: [standard, precision]
+          default: standard
+        meal_type:
+          type: string
+          enum: [breakfast, morning_snack, lunch, afternoon_snack, dinner, evening_snack]
+        additional_context:
+          type: string
+        date:
+          type: string
+          format: date
+      oneOf:
+        - required: [text]
+        - required: [image_urls]
+    AnalysisSubmissionResponse:
+      type: object
+      required: [code, message, data]
+      properties:
+        code:
+          const: 0
+        message:
+          const: ok
+        data:
+          type: object
+          required: [task_id, status, cost_units, balance_units, idempotent, status_endpoint]
+          properties:
+            task_id:
+              type: string
+            status:
+              const: queued
+            cost_units:
+              type: integer
+            balance_units:
+              type: integer
+            idempotent:
+              type: boolean
+            status_endpoint:
+              type: string
+    AnalysisResultResponse:
+      type: object
+      required: [code, message, data]
+      properties:
+        code:
+          const: 0
+        message:
+          const: ok
+        data:
+          type: object
+          required: [task_id, status, cost_units]
+          properties:
+            task_id:
+              type: string
+            status:
+              type: string
+              enum: [queued, processing, requires_action, completed, failed]
+            result:
+              type: object
+              additionalProperties: true
+            error_message:
+              type: string
+            cost_units:
+              type: integer
+            balance_units:
+              type: integer
+            refunded:
+              type: boolean
+            created_at:
+              type: string
+              format: date-time
+            updated_at:
+              type: string
+              format: date-time

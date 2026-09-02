@@ -23,6 +23,7 @@ export function SiteFooter() {
           </div>
 
           <nav className="flex flex-wrap gap-x-4 gap-y-2 text-sm" aria-label="法律与联系">
+            <Link to="/developer" className="inline-flex min-h-10 items-center text-muted-foreground transition-colors hover:text-foreground">开放平台</Link>
             <Link
               to={footer.links.terms.href}
               className="inline-flex min-h-10 items-center text-muted-foreground transition-colors hover:text-foreground"

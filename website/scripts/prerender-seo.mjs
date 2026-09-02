@@ -54,6 +54,22 @@ const routeConfigs = [
     ogType: 'website',
     index: true,
   },
+  {
+    path: '/developer',
+    title: '食探开放平台丨API 与 MCP',
+    description: '通过食探开放平台 API 与 MCP，为 Agent、应用和硬件接入食物识别与可信营养数据。',
+    keywords: '食探,食物识别API,营养API,MCP,AI Agent,硬件接入',
+    ogType: 'website',
+    index: true,
+  },
+  {
+    path: '/developer/console',
+    title: '开发者控制台丨智健食探',
+    description: '管理食探开放平台应用、API Key、点数和充值订单。',
+    keywords: '食探,开放平台,开发者控制台,API Key',
+    ogType: 'website',
+    index: false,
+  },
 ]
 
 function absoluteUrl(routePath) {
@@ -218,3 +234,8 @@ for (const route of routeConfigs) {
 }
 
 await fs.writeFile(path.join(distDir, 'sitemap.xml'), buildSitemap(routeConfigs), 'utf8')
+
+const openApiSource = path.resolve(__dirname, '..', '..', 'docs', 'openapi', 'foodlink-openapi-v1.yaml')
+const openApiTarget = path.join(distDir, 'openapi', 'foodlink-openapi-v1.yaml')
+await fs.mkdir(path.dirname(openApiTarget), { recursive: true })
+await fs.copyFile(openApiSource, openApiTarget)
