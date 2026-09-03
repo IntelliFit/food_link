@@ -1,0 +1,12 @@
+/downloads/*.zip
+  Content-Type: application/zip
+  Content-Disposition: attachment
+  X-Content-Type-Options: nosniff
+
+/downloads/*.sha256
+  Content-Type: text/plain; charset=utf-8
+  X-Content-Type-Options: nosniff
+
+/downloads/*-manifest.json
+  Content-Type: application/json; charset=utf-8
+  X-Content-Type-Options: nosniff

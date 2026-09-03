@@ -1,4 +1,4 @@
-import { ArrowRight, Bot, Braces, Camera, Cpu, KeyRound, ShieldCheck, WalletCards } from 'lucide-react'
+import { ArrowRight, Bot, Braces, Camera, Cpu, Download, KeyRound, ShieldCheck, WalletCards } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { SiteFooter } from '@/components/layout/SiteFooter'
 import { SiteHeader } from '@/components/layout/SiteHeader'
@@ -24,6 +24,7 @@ export function DeveloperPage() {
             <div className="flex flex-wrap gap-3">
               <Button size="lg" render={<Link to="/developer/console" />}>进入开发者控制台 <ArrowRight /></Button>
               <Button size="lg" variant="outline" render={<Link to="/developer/docs" />}>查看完整开发文档</Button>
+              <Button size="lg" variant="outline" render={<a href="/downloads/foodlink-mcp-latest.zip" download />}><Download />下载官方 MCP</Button>
               <Button size="lg" variant="ghost" render={<a href="/developer/ai-guide.md" download />}>下载给 AI 的接入说明</Button>
             </div>
           </div>

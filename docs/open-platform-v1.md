@@ -64,7 +64,7 @@ go run ./cmd/openapi-admin -config-dir . -action upsert-package `
 
 ## MCP
 
-本地 stdio MCP 位于 [`integrations/foodlink-mcp`](../integrations/foodlink-mcp)，提供余额、文字分析、图片上传、图片分析、结果查询、营养搜索和充值地址 7 个工具。完整的 Codex TOML、WorkBuddy/通用 JSON、PowerShell 验收脚本和安全说明见该目录 README 与 `examples/`。
+本地 stdio MCP 位于 [`integrations/foodlink-mcp`](../integrations/foodlink-mcp)，提供余额、文字分析、图片上传、图片分析、结果查询、营养搜索和充值地址 7 个工具。正式公开 ZIP 为 `https://healthymax.cn/downloads/foodlink-mcp-latest.zip`，版本、字节数与 SHA-256 清单为 `https://healthymax.cn/downloads/foodlink-mcp-manifest.json`；下载无需登录且不含 Key。完整的 Codex TOML、WorkBuddy/通用 JSON、PowerShell 验收脚本和安全说明见该目录 README 与 `examples/`。
 
 ## 食物分析完整参数
 
@@ -118,7 +118,7 @@ go run ./cmd/openapi-admin `
 
 ## 另一台电脑调用
 
-只需要正式环境地址和 API Key，不需要后端仓库源码。若使用 MCP，再复制 `integrations/foodlink-mcp` 目录到目标电脑。
+只需要正式环境地址和 API Key，不需要后端仓库源码。若使用 MCP，从公开 manifest 获取 ZIP 地址并校验 SHA-256 后解压；不得猜测下载路径或只凭 HTTP 200 判断文件存在。
 
 ### 1. 检查凭证与余额
 

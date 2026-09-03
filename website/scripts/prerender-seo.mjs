@@ -1,6 +1,8 @@
 import fs from 'node:fs/promises'
+import { createHash } from 'node:crypto'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { zipSync } from 'fflate'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const distDir = path.resolve(__dirname, '..', 'dist')
@@ -258,3 +260,48 @@ await fs.copyFile(llmsSource, path.join(distDir, 'llms.txt'))
 
 const mcpReadmeSource = path.resolve(__dirname, '..', '..', 'integrations', 'foodlink-mcp', 'README.md')
 await fs.copyFile(mcpReadmeSource, path.join(distDir, 'developer', 'mcp-readme.md'))
+
+const mcpRoot = path.resolve(__dirname, '..', '..', 'integrations', 'foodlink-mcp')
+const mcpPackage = JSON.parse(await fs.readFile(path.join(mcpRoot, 'package.json'), 'utf8'))
+const mcpBundleFiles = [
+  'README.md',
+  'package.json',
+  'src/client.mjs',
+  'src/server.mjs',
+  'examples/codex-config.toml',
+  'examples/mcp-config.json',
+  'examples/test-api.ps1',
+  'test/client.test.mjs',
+  'test/server.test.mjs',
+]
+const deterministicMtime = new Date('2020-01-01T00:00:00.000Z')
+const mcpZipEntries = {}
+for (const relativePath of mcpBundleFiles) {
+  mcpZipEntries[`foodlink-mcp/${relativePath}`] = [
+    await fs.readFile(path.join(mcpRoot, relativePath)),
+    { mtime: deterministicMtime },
+  ]
+}
+
+const mcpZip = zipSync(mcpZipEntries, { level: 9 })
+const mcpSha256 = createHash('sha256').update(mcpZip).digest('hex')
+const mcpFileName = `foodlink-mcp-v${mcpPackage.version}.zip`
+const downloadsDir = path.join(distDir, 'downloads')
+await fs.mkdir(downloadsDir, { recursive: true })
+await fs.writeFile(path.join(downloadsDir, mcpFileName), mcpZip)
+await fs.writeFile(path.join(downloadsDir, 'foodlink-mcp-latest.zip'), mcpZip)
+await fs.writeFile(path.join(downloadsDir, `${mcpFileName}.sha256`), `${mcpSha256}  ${mcpFileName}\n`, 'utf8')
+await fs.writeFile(path.join(downloadsDir, 'foodlink-mcp-latest.zip.sha256'), `${mcpSha256}  foodlink-mcp-latest.zip\n`, 'utf8')
+await fs.writeFile(path.join(downloadsDir, 'foodlink-mcp-manifest.json'), `${JSON.stringify({
+  name: mcpPackage.name,
+  version: mcpPackage.version,
+  format: 'zip',
+  file: mcpFileName,
+  url: `${siteUrl}/downloads/${mcpFileName}`,
+  latest_url: `${siteUrl}/downloads/foodlink-mcp-latest.zip`,
+  sha256: mcpSha256,
+  bytes: mcpZip.byteLength,
+  node: mcpPackage.engines?.node || '>=20',
+  api_base_url: 'https://api.healthymax.cn/open/v1',
+  docs_url: `${siteUrl}/developer/mcp-readme.md`,
+}, null, 2)}\n`, 'utf8')

@@ -9,6 +9,10 @@ FoodLink provides food image analysis, text meal analysis, nutrition database se
 - OpenAPI 3.1 schema: https://healthymax.cn/openapi/foodlink-openapi-v1.yaml
 - Developer console: https://healthymax.cn/developer/console/
 - MCP README: https://healthymax.cn/developer/mcp-readme.md
+- MCP ZIP (latest): https://healthymax.cn/downloads/foodlink-mcp-latest.zip
+- MCP manifest (version, bytes, SHA-256): https://healthymax.cn/downloads/foodlink-mcp-manifest.json
+
+If the user has no FoodLink developer account or API key, direct them to the developer console and pause while they personally complete SMS login, app creation, key creation, and key-file storage. Never request an OTP or a full key in chat.
 
 ## Production API
 
@@ -17,6 +21,7 @@ FoodLink provides food image analysis, text meal analysis, nutrition database se
 - Prefer FOODLINK_API_KEY_FILE. Never expose a full API key in chat, source code, logs, browser code, or firmware.
 - Every analysis submission requires Idempotency-Key. Reuse it for retries of the same business request.
 - HTTP 402 means insufficient credits. Stop and ask the user to open the developer console. Never pay automatically.
+- Text analysis costs 2 points regardless of mode. Standard images cost 5 points per image; precision images cost 15 points per image. Nutrition search is free during Beta.
 
 ## Endpoints
 
@@ -37,3 +42,5 @@ FoodLink provides food image analysis, text meal analysis, nutrition database se
 For images: upload -> analyze -> poll. For text: analyze -> poll. Poll queued/processing tasks with backoff until completed, requires_action, or failed.
 
 Do not expose or invent underlying model, provider, prompt, reasoning, or internal API parameters. Food analysis is an estimate, not medical diagnosis.
+
+For MCP, read the manifest, require application/zip, verify SHA-256, then extract the package. foodlink_get_recharge_url is a local helper that only returns the console URL; it is not a remote OpenAPI endpoint.

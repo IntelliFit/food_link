@@ -15,6 +15,8 @@
 - 人类开发文档：<https://healthymax.cn/developer/docs/>
 - OpenAPI 3.1：<https://healthymax.cn/openapi/foodlink-openapi-v1.yaml>
 - MCP 使用说明：<https://healthymax.cn/developer/mcp-readme.md>
+- MCP 最新 ZIP：<https://healthymax.cn/downloads/foodlink-mcp-latest.zip>
+- MCP 下载清单与 SHA-256：<https://healthymax.cn/downloads/foodlink-mcp-manifest.json>
 - AI 入口索引：<https://healthymax.cn/llms.txt>
 
 除非用户明确要求内部 Preview，否则使用正式 API。不要把 `dev.api.healthymax.cn` 写进正式集成。
@@ -22,10 +24,12 @@
 ## 开始前必须做的事
 
 1. 询问用户要接入的目标：Codex、WorkBuddy、其他 MCP 客户端、后端服务，还是硬件网关。
-2. 询问 API Key 的**文件路径**，或指导用户设置 `FOODLINK_API_KEY_FILE`。不要要求用户在聊天里粘贴完整 Key。
-3. 先调用不扣分析点数的 `GET /account`，确认 Key、scope 和余额。
-4. 再按用户输入类型选择图片、文字或营养搜索流程。
-5. 在产生点数消耗前告诉用户预计点数；不得自动充值或自动付款。
+2. 询问用户是否已经拥有食探开发者账号和 API Key。
+3. 如果没有账号或 Key：引导用户打开 <https://healthymax.cn/developer/console/>，由用户本人完成短信登录、创建应用、创建 Key 和保存密钥文件。此时暂停等待；不要代填验证码、代登录或代付款。完整 Key 只展示一次。
+4. 如果已有 Key：只询问 API Key 的**文件路径**，或指导用户设置 `FOODLINK_API_KEY_FILE`。不要要求用户在聊天里粘贴完整 Key。
+5. 先调用不扣分析点数的 `GET /account`，确认 Key、scope 和余额。
+6. 再按用户输入类型选择图片、文字或营养搜索流程。
+7. 在产生点数消耗前告诉用户预计点数；不得自动充值或自动付款。
 
 ## 鉴权
 
@@ -76,6 +80,8 @@ X-API-Key: flk_beta_...
 | 精准图片分析 | 15 点/张 |
 
 多图按图片数量计费。失败、取消、超时或违规终态由服务端幂等退款。
+
+文字请求可以携带 `mode`，但无论使用 `standard` 还是 `precision`，当前都固定消耗 2 点；15 点只适用于精准**图片**分析。
 
 ## HTTP API 流程
 
@@ -203,6 +209,22 @@ curl "https://api.healthymax.cn/open/v1/foods/search?query=鸡胸肉&limit=5" \
 
 目标客户端支持 stdio MCP 时，优先使用官方 MCP 包。Node.js 需 20 或更高版本。
 
+官方包当前通过公开 ZIP 分发，不需要登录即可下载。不要猜测下载路径，也不要仅凭 HTTP 200 判断成功；先读取 manifest，再校验响应类型和 SHA-256：
+
+```powershell
+$manifestUrl = "https://healthymax.cn/downloads/foodlink-mcp-manifest.json"
+$manifest = Invoke-RestMethod -Uri $manifestUrl
+$zipPath = Join-Path $env:TEMP $manifest.file
+$head = Invoke-WebRequest -Method Head -Uri $manifest.latest_url
+if ($head.Headers['Content-Type'] -notlike 'application/zip*') { throw 'MCP 下载地址没有返回 ZIP' }
+Invoke-WebRequest -Uri $manifest.latest_url -OutFile $zipPath
+$actual = (Get-FileHash -Algorithm SHA256 -LiteralPath $zipPath).Hash.ToLowerInvariant()
+if ($actual -ne $manifest.sha256) { throw 'MCP ZIP 的 SHA-256 校验失败' }
+Expand-Archive -LiteralPath $zipPath -DestinationPath (Join-Path $env:USERPROFILE '.foodlink') -Force
+```
+
+解压后的默认源码路径为 `%USERPROFILE%/.foodlink/foodlink-mcp/src/server.mjs`。配置时必须替换成目标电脑的真实路径；ZIP 内不包含 API Key。
+
 ```json
 {
   "mcpServers": {
@@ -230,6 +252,10 @@ curl "https://api.healthymax.cn/open/v1/foods/search?query=鸡胸肉&limit=5" \
 - `foodlink_get_recharge_url`
 
 工具调用顺序与 HTTP 流程相同。图片必须先 `foodlink_upload_image`；分析提交后必须 `foodlink_get_analysis` 轮询。
+
+`foodlink_get_recharge_url` 是 MCP 内的本地便利工具，只返回开发者控制台 URL；它没有对应的远程 HTTP endpoint，也不会创建订单或发起付款。
+
+OpenAPI 的 `servers[].url` 是主机地址，paths 已包含 `/open/v1`。从 OpenAPI 生成客户端时按规范拼接，不要重复得到 `/open/v1/open/v1/...`。
 
 ## 错误处理
 

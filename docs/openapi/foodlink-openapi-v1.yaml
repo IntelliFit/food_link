@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: FoodLink Open API
-  version: 0.2.0-beta
+  version: 0.2.1-beta
   description: |
     食探开放平台封闭测试 API。API 点数与小程序会员积分独立。
     所有写请求必须使用 HTTPS；分析提交必须携带 Idempotency-Key。
@@ -10,6 +10,21 @@ externalDocs:
   description: 食探开放平台完整开发文档
   url: https://healthymax.cn/developer/docs
 x-ai-integration-guide: https://healthymax.cn/developer/ai-guide.md
+x-foodlink-billing:
+  unit: api_point
+  beta_costs:
+    text_analysis: 2
+    standard_image_analysis_per_image: 5
+    precision_image_analysis_per_image: 15
+    nutrition_search: 0
+  notes:
+    - 文字分析接受 mode，但无论 standard 或 precision 均固定 2 点。
+    - 图片按张计费；失败、取消、超时或违规终态由服务端幂等退款。
+x-foodlink-mcp:
+  download_manifest: https://healthymax.cn/downloads/foodlink-mcp-manifest.json
+  local_only_tools:
+    - name: foodlink_get_recharge_url
+      description: 本地返回开发者控制台地址，不对应远程 HTTP endpoint，也不会发起支付。
 servers:
   - url: https://dev.api.healthymax.cn
     description: 开发/封闭测试环境
@@ -17,6 +32,7 @@ servers:
     description: 正式环境
 security:
   - apiKey: []
+  - bearerAuth: []
 paths:
   /open/v1/account:
     get:
@@ -192,7 +208,12 @@ components:
       type: apiKey
       in: header
       name: X-API-Key
-      description: flk_beta_ 开头的封闭测试密钥，也可作为 Bearer Token 发送
+      description: flk_beta_ 开头的封闭测试密钥
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: FoodLinkAPIKey
+      description: 在 Authorization 请求头中发送同一把 flk_beta_ API Key
   responses:
     BadRequest:
       description: 请求参数错误
@@ -290,7 +311,7 @@ components:
       properties:
         text:
           type: string
-          description: 与 image_urls 二选一
+          description: 与 image_urls 二选一；文字分析无论 mode 均固定消耗 2 点
           examples: ["番茄炒蛋一份、米饭约 150 克"]
         image_urls:
           type: array
@@ -303,6 +324,7 @@ components:
           type: string
           enum: [standard, precision]
           default: standard
+          description: 图片 standard 为 5 点/张、precision 为 15 点/张；文字请求的 mode 不改变固定 2 点计费
         meal_type:
           type: string
           enum: [breakfast, morning_snack, lunch, afternoon_snack, dinner, evening_snack]
@@ -330,10 +352,12 @@ components:
           properties:
             task_id:
               type: string
+              format: uuid
             status:
               const: queued
             cost_units:
               type: integer
+              description: 本次实际预留的 API 点数
             balance_units:
               type: integer
             idempotent:
@@ -354,6 +378,7 @@ components:
           properties:
             task_id:
               type: string
+              format: uuid
             status:
               type: string
               enum: [queued, processing, requires_action, completed, failed]
@@ -364,6 +389,7 @@ components:
               type: string
             cost_units:
               type: integer
+              description: 本次分析消耗的 API 点数
             balance_units:
               type: integer
             refunded:

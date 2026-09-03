@@ -1,4 +1,4 @@
-import { ArrowRight, BookOpen, Bot, Camera, Check, CircleDollarSign, Copy, Database, KeyRound, ShieldCheck, Sparkles, Terminal } from 'lucide-react'
+import { ArrowRight, BookOpen, Bot, Camera, Check, CircleDollarSign, Copy, Database, Download, KeyRound, ShieldCheck, Sparkles, Terminal } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { SiteFooter } from '@/components/layout/SiteFooter'
@@ -19,18 +19,28 @@ const navItems = [
   ['billing', '计费与错误码'],
 ] as const
 
+const mcpDownloadURL = '/downloads/foodlink-mcp-latest.zip'
+const mcpManifestURL = '/downloads/foodlink-mcp-manifest.json'
+
 const aiHandoffPrompt = `请阅读食探 AI 接入说明：
 https://healthymax.cn/developer/ai-guide.md
 
 接口结构定义：
 https://healthymax.cn/openapi/foodlink-openapi-v1.yaml
 
-请根据说明帮我完成食探 API 或 MCP 接入。先询问我的目标客户端和 API Key 文件路径，不要让我把完整 Key 粘贴到聊天里。先执行不扣点的账户检查；产生分析点数前告诉我预计消耗。图片按“上传→分析→轮询”，同一请求重试必须复用幂等键，余额不足时不要自动付款。`
+官方 MCP 下载清单：
+https://healthymax.cn/downloads/foodlink-mcp-manifest.json
+
+请根据说明帮我完成食探 API 或 MCP 接入。先询问我的目标客户端，以及我是否已有食探开发者账号和 API Key。
+
+如果我还没有账号或 Key，请引导我打开 https://healthymax.cn/developer/console/，由我本人完成短信登录、创建应用、创建 Key 和保存密钥文件；你在此暂停等待，不要代填验证码、代付款，也不要让我把完整 Key 粘贴到聊天里。
+
+如果我已有 Key，只询问 Key 的本机文件路径。目标客户端支持 stdio MCP 时，读取 manifest、下载官方 ZIP、校验 Content-Type 与 SHA-256 后安装；否则使用 HTTP API。先执行不扣点的账户检查和营养搜索；产生分析点数前告诉我预计消耗。图片按“上传→分析→轮询”，同一请求重试必须复用幂等键，余额不足时不要自动付款。`
 
 const analysisParameters = [
   ['text', 'string', '与 image_urls 二选一', '自然语言餐食描述，例如“一碗牛肉面，少喝汤”。'],
   ['image_urls', 'string[]', '与 text 二选一', '先通过上传接口取得；最多 5 张，且必须属于当前应用。'],
-  ['mode', 'standard | precision', '否', 'standard 普通识别；precision 精准识别。默认 standard。'],
+  ['mode', 'standard | precision', '否', '图片：standard 5 点/张、precision 15 点/张；文字请求无论 mode 均固定 2 点。默认 standard。'],
   ['meal_type', 'enum', '否', 'breakfast、morning_snack、lunch、afternoon_snack、dinner、evening_snack。'],
   ['additional_context', 'string', '否', '补充不可从图片确定的信息，如“没有喝汤”“米饭只吃一半”。'],
   ['date', 'YYYY-MM-DD', '否', '餐食发生日期，例如 2026-09-03。'],
@@ -100,7 +110,7 @@ export function DeveloperDocsPage() {
             <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground"><Link className="hover:text-primary" to="/developer">开放平台</Link><span>/</span><span>开发文档</span><span className="rounded-full bg-primary/10 px-2 py-1 text-xs font-medium text-primary">v0.2 Beta</span></div>
             <div className="mt-6 flex flex-col justify-between gap-8 lg:flex-row lg:items-end">
               <div><h1 className="text-4xl font-bold tracking-tight md:text-5xl">FoodLink Open API</h1><p className="mt-4 max-w-3xl text-lg leading-8 text-muted-foreground">从图片上传、普通/精准食物识别，到营养库搜索和 MCP 接入的完整说明。当前环境 API 基址：<code className="rounded bg-muted px-2 py-1 text-sm text-foreground">{openApiBaseURL}</code></p></div>
-              <div className="flex flex-wrap gap-3"><Button render={<Link to="/developer/console" />}>创建应用与 Key <ArrowRight /></Button><Button variant="outline" render={<a href="#ai-handoff" />}>直接交给 AI</Button><Button variant="ghost" render={<a href="/openapi/foodlink-openapi-v1.yaml" download />}>下载接口定义</Button></div>
+              <div className="flex flex-wrap gap-3"><Button render={<Link to="/developer/console" />}>创建应用与 Key <ArrowRight /></Button><Button variant="outline" render={<a href={mcpDownloadURL} download />}><Download />下载官方 MCP</Button><Button variant="outline" render={<a href="#ai-handoff" />}>直接交给 AI</Button><Button variant="ghost" render={<a href="/openapi/foodlink-openapi-v1.yaml" download />}>下载接口定义</Button></div>
             </div>
           </div>
         </section>
@@ -126,7 +136,7 @@ export function DeveloperDocsPage() {
 
             <DocSection id="ai-handoff" title="不懂代码？直接把接入任务交给 AI" intro="OpenAPI 是严格的接口字典，适合生成代码和校验参数；AI 接入说明还包含调用顺序、何时用图片或文字、如何控制点数、密钥安全和失败恢复。把下面这段话完整交给 Codex、WorkBuddy 或其他编程 AI 即可。">
               <div className="rounded-2xl border border-primary/20 bg-primary/5 p-5 md:p-6">
-                <div className="flex items-start gap-3"><span className="rounded-xl bg-primary p-2 text-primary-foreground"><Sparkles className="size-5" /></span><div><h3 className="font-semibold">AI 自助接入提示</h3><p className="mt-1 text-sm leading-6 text-muted-foreground">AI 会先读取自包含指南，再结合 OpenAPI 生成配置或代码；它仍需要你提供 Key 的本机文件路径。</p></div></div>
+                <div className="flex items-start gap-3"><span className="rounded-xl bg-primary p-2 text-primary-foreground"><Sparkles className="size-5" /></span><div><h3 className="font-semibold">AI 自助接入提示</h3><p className="mt-1 text-sm leading-6 text-muted-foreground">AI 会先判断你是否已有账号和 Key；没有时引导你本人注册，有时只读取 Key 的本机文件路径。支持 MCP 的客户端还会下载并校验官方安装包。</p></div></div>
                 <pre className="mt-5 overflow-x-auto whitespace-pre-wrap rounded-2xl bg-background p-4 text-sm leading-7 ring-1 ring-border"><code>{aiHandoffPrompt}</code></pre>
                 <div className="mt-4 flex flex-wrap gap-3">
                   <Button onClick={async () => { await navigator.clipboard.writeText(aiHandoffPrompt); setPromptCopied(true); window.setTimeout(() => setPromptCopied(false), 1500) }}>{promptCopied ? <Check /> : <Copy />}{promptCopied ? '已复制，可以发给 AI' : '复制给 AI'}</Button>
@@ -178,8 +188,10 @@ export function DeveloperDocsPage() {
               <CodeBlock title="GET /foods/search">{`curl "${openApiBaseURL}/foods/search?query=鸡胸肉&limit=5" \\\n  -H "Authorization: Bearer $FOODLINK_API_KEY"`}</CodeBlock>
             </DocSection>
 
-            <DocSection id="mcp" title="MCP / WorkBuddy / Codex" intro="MCP 是本地 stdio 适配器，不保存余额，也不会自动支付。安装包内有完整 README、Codex TOML、通用 MCP JSON 和 PowerShell 验证脚本。">
+            <DocSection id="mcp" title="MCP / WorkBuddy / Codex" intro="MCP 是本地 stdio 适配器，不保存余额，也不会自动支付。官方 ZIP 无需登录即可下载，包含完整 README、Codex TOML、通用 MCP JSON 和 PowerShell 验证脚本。">
+              <div className="mb-5 flex flex-col justify-between gap-4 rounded-2xl border border-primary/20 bg-primary/5 p-5 md:flex-row md:items-center"><div><h3 className="font-semibold">官方 MCP v0.1.0</h3><p className="mt-1 text-sm leading-6 text-muted-foreground">下载前可读取 manifest 获取版本、文件大小和 SHA-256；下载后必须校验，不能只看 HTTP 200。</p></div><div className="flex flex-wrap gap-3"><Button render={<a href={mcpDownloadURL} download />}><Download />下载 ZIP</Button><Button variant="outline" render={<a href={mcpManifestURL} />}>查看 manifest</Button><Button variant="ghost" render={<a href="/developer/mcp-readme.md" />}>安装说明</Button></div></div>
               <div className="grid gap-4 md:grid-cols-2"><div className="rounded-2xl border border-border p-5"><Terminal className="text-primary" /><h3 className="mt-3 font-semibold">7 个工具</h3><p className="mt-2 text-sm leading-7 text-muted-foreground"><code>foodlink_get_account</code><br /><code>foodlink_upload_image</code><br /><code>foodlink_analyze_images</code><br /><code>foodlink_analyze_text</code><br /><code>foodlink_get_analysis</code><br /><code>foodlink_search_food</code><br /><code>foodlink_get_recharge_url</code></p></div><div className="rounded-2xl border border-border p-5"><BookOpen className="text-primary" /><h3 className="mt-3 font-semibold">Agent 调用顺序</h3><p className="mt-2 text-sm leading-7 text-muted-foreground">图片：上传 → 分析 → 轮询。<br />文字：分析 → 轮询。<br />遇到 402：只返回充值页并等待用户确认。<br />重试：必须复用 idempotency_key。</p></div></div>
+              <p className="mt-5 rounded-xl bg-muted p-4 text-sm leading-6 text-muted-foreground"><code>foodlink_get_recharge_url</code> 是本地便利工具，只返回开发者控制台地址，不会请求支付接口，也不是 OpenAPI 中的远程 endpoint。</p>
               <CodeBlock title="通用 MCP 配置">{`{\n  "mcpServers": {\n    "foodlink": {\n      "command": "node",\n      "args": ["C:/foodlink-mcp/src/server.mjs"],\n      "env": {\n        "FOODLINK_API_KEY_FILE": "C:/Users/YOU/.foodlink/api-key",\n        "FOODLINK_API_BASE_URL": "${openApiBaseURL}"\n      }\n    }\n  }\n}`}</CodeBlock>
             </DocSection>
 

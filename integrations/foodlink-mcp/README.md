@@ -10,13 +10,32 @@
 - 开发者控制台：<https://healthymax.cn/developer/console/>
 - HTTP API：`https://api.healthymax.cn/open/v1`
 - OpenAPI 3.1：<https://healthymax.cn/openapi/foodlink-openapi-v1.yaml>
+- 官方 ZIP：<https://healthymax.cn/downloads/foodlink-mcp-latest.zip>
+- 下载清单与 SHA-256：<https://healthymax.cn/downloads/foodlink-mcp-manifest.json>
+
+## 下载与校验
+
+MCP 包无需登录即可下载，也不包含 API Key。不要猜测下载地址或只检查 HTTP 200；先读取官方 manifest，确认响应为 ZIP 并校验 SHA-256：
+
+```powershell
+$manifest = Invoke-RestMethod "https://healthymax.cn/downloads/foodlink-mcp-manifest.json"
+$zipPath = Join-Path $env:TEMP $manifest.file
+$head = Invoke-WebRequest -Method Head -Uri $manifest.latest_url
+if ($head.Headers['Content-Type'] -notlike 'application/zip*') { throw '下载地址没有返回 ZIP' }
+Invoke-WebRequest -Uri $manifest.latest_url -OutFile $zipPath
+$actual = (Get-FileHash -Algorithm SHA256 -LiteralPath $zipPath).Hash.ToLowerInvariant()
+if ($actual -ne $manifest.sha256) { throw 'SHA-256 校验失败' }
+Expand-Archive -LiteralPath $zipPath -DestinationPath (Join-Path $env:USERPROFILE '.foodlink') -Force
+```
+
+默认解压后路径为 `%USERPROFILE%/.foodlink/foodlink-mcp`。下方的 `C:/foodlink-mcp` 只是便于阅读的占位路径，配置时需替换成目标电脑上的真实路径。
 
 ## 准备工作
 
 1. 安装 Node.js 20 或更高版本，运行 `node --version` 确认。
 2. 在开发者控制台短信登录，创建应用和 API Key。
 3. 立即保存完整 Key；页面只展示一次，服务端只保存哈希。
-4. 把本目录复制到需要使用的电脑，例如 `C:/foodlink-mcp`。
+4. 下载并校验官方 ZIP，或把本目录复制到需要使用的电脑。
 
 每个开发者账号仅第一个应用赠送 100 点；继续创建应用不会重复获得赠送点数，各应用余额独立。
 
@@ -110,9 +129,11 @@ mcporter call --stdio "node C:/foodlink-mcp/src/server.mjs" foodlink_get_account
 
 图片流程必须是 `foodlink_upload_image` → `foodlink_analyze_images` → `foodlink_get_analysis`。文字和图片分析都是异步任务；状态为 `queued` 或 `processing` 时继续轮询，直到 `completed` 或 `failed`。
 
+`foodlink_get_recharge_url` 是本地便利工具，只返回开发者控制台地址。它不是远程 HTTP API，不会创建订单或自动付款。
+
 ## 计费与错误处理
 
-- 文字分析 2 点，普通图片 5 点，精准图片 15 点。
+- 文字分析无论 mode 均为 2 点；普通图片 5 点/张，精准图片 15 点/张。
 - 同一业务请求重试时必须复用 `idempotency_key`，否则会被视为新请求并再次扣点。
 - HTTP 402 表示余额不足。MCP 只返回充值地址，用户确认后自行打开网页支付。
 - HTTP 429 表示限流，应根据 `Retry-After` 稍后重试。

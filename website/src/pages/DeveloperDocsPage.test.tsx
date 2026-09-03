@@ -22,6 +22,12 @@ describe('developer docs page', () => {
       'https://healthymax.cn/developer/ai-guide.md',
       '复制给 AI',
       '查看接口定义（OpenAPI YAML）',
+      '/downloads/foodlink-mcp-latest.zip',
+      '/downloads/foodlink-mcp-manifest.json',
+      '如果我还没有账号或 Key',
+      '下载官方 MCP',
+      '不是 OpenAPI 中的远程 endpoint',
+      '文字请求无论 mode 均固定 2 点',
     ]) expect(html).toContain(expected)
     expect(html).not.toContain('查看机器可读 OpenAPI')
   })
