@@ -1,12 +1,21 @@
-/downloads/*.zip
+/downloads/foodlink-mcp-v0.1.0.zip
   Content-Type: application/zip
   Content-Disposition: attachment
   X-Content-Type-Options: nosniff
 
-/downloads/*.sha256
+/downloads/foodlink-mcp-latest.zip
+  Content-Type: application/zip
+  Content-Disposition: attachment
+  X-Content-Type-Options: nosniff
+
+/downloads/foodlink-mcp-v0.1.0.zip.sha256
   Content-Type: text/plain; charset=utf-8
   X-Content-Type-Options: nosniff
 
-/downloads/*-manifest.json
+/downloads/foodlink-mcp-latest.zip.sha256
+  Content-Type: text/plain; charset=utf-8
+  X-Content-Type-Options: nosniff
+
+/downloads/foodlink-mcp-manifest.json
   Content-Type: application/json; charset=utf-8
   X-Content-Type-Options: nosniff
