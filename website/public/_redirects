@@ -1,1 +1,1 @@
-/share/food-record/* /index.html 200
+/share/food-record/:recordId / 200
