@@ -8687,6 +8687,8 @@ export interface SchoolCanteenItem {
   audience?: string
   meal_periods?: string[]
   opening_hours_raw?: string
+  /** A=高、B=中、C=低、D=极低；低等级资料会持续校正。 */
+  confidence_level?: "A" | "B" | "C" | "D"
   status?: string
   sort_order?: number
 }

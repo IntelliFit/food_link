@@ -25,6 +25,19 @@ interface CanteenPickerProps {
   onApplicationSubmitted?: () => void;
 }
 
+function confidenceLabel(level?: SchoolCanteenItem["confidence_level"]): string {
+  switch (level) {
+    case "B":
+      return "资料置信度：中";
+    case "C":
+      return "资料置信度：低，待校正";
+    case "D":
+      return "资料置信度：极低，待校正";
+    default:
+      return "";
+  }
+}
+
 export default function CanteenPicker({
   visible,
   school,
@@ -202,9 +215,18 @@ export default function CanteenPicker({
                       })
                     }
                   >
-                    <Text className='canteen-picker-item-name'>
-                      {item.name}
-                    </Text>
+                    <View className='canteen-picker-item-title-row'>
+                      <Text className='canteen-picker-item-name'>
+                        {item.name}
+                      </Text>
+                      {confidenceLabel(item.confidence_level) && (
+                        <Text
+                          className={`canteen-picker-confidence canteen-picker-confidence--${item.confidence_level}`}
+                        >
+                          {confidenceLabel(item.confidence_level)}
+                        </Text>
+                      )}
+                    </View>
                     <Text className='canteen-picker-item-meta'>
                       {[
                         item.campus_name || campus?.name,

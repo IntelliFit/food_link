@@ -260,3 +260,39 @@
     background: #0b1411;
   }
 }
+
+.canteen-picker-item-title-row {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+
+.canteen-picker-item-title-row .canteen-picker-item-name {
+  min-width: 0;
+  flex: 1;
+}
+
+.canteen-picker-confidence {
+  flex-shrink: 0;
+  padding: 3rpx 10rpx;
+  color: #9a6700;
+  background: #fff8db;
+  border-radius: 8rpx;
+  font-size: 20rpx;
+  line-height: 1.4;
+}
+
+.canteen-picker-confidence--D {
+  color: #a83a1c;
+  background: #fff0eb;
+}
+
+.canteen-picker-overlay--dark .canteen-picker-confidence {
+  color: #f2cf80;
+  background: #3b2e0d;
+}
+
+.canteen-picker-overlay--dark .canteen-picker-confidence--D {
+  color: #f7b8a1;
+  background: #3f1e16;
+}
