@@ -1867,6 +1867,7 @@ type campusDirectoryResearchItem struct {
 	Campuses     []campusDirectoryResearchCampus  `json:"campuses"`
 	Canteens     []campusDirectoryResearchCanteen `json:"canteens"`
 	Windows      []campusDirectoryResearchWindow  `json:"windows"`
+	Dishes       []campusDirectoryResearchDish    `json:"dishes"`
 	Notes        []string                         `json:"notes"`
 }
 
@@ -1878,22 +1879,23 @@ type campusDirectoryResearchCampus struct {
 }
 
 type campusDirectoryResearchCanteen struct {
-	Campus            string                          `json:"campus"`
-	Name              string                          `json:"name"`
-	Aliases           []string                        `json:"aliases"`
-	LocationText      string                          `json:"location_text"`
-	BuildingOrFloor   string                          `json:"building_or_floor"`
-	ServiceType       string                          `json:"service_type"`
-	Audience          string                          `json:"audience"`
-	OpeningHoursRaw   string                          `json:"opening_hours_raw"`
-	SourceURL         string                          `json:"source_url"`
-	SourceTitle       string                          `json:"source_title"`
-	SourceOrg         string                          `json:"source_org"`
-	SourceType        string                          `json:"source_type"`
-	EvidenceLevel     string                          `json:"evidence_level"`
-	EvidenceExcerpt   string                          `json:"evidence_excerpt"`
-	ReviewStatus      string                          `json:"review_status"`
-	AdditionalSources []campusDirectoryResearchSource `json:"additional_sources"`
+	Campus               string                          `json:"campus"`
+	Name                 string                          `json:"name"`
+	Aliases              []string                        `json:"aliases"`
+	LocationText         string                          `json:"location_text"`
+	BuildingOrFloor      string                          `json:"building_or_floor"`
+	ClearBuildingOrFloor bool                            `json:"clear_building_or_floor"`
+	ServiceType          string                          `json:"service_type"`
+	Audience             string                          `json:"audience"`
+	OpeningHoursRaw      string                          `json:"opening_hours_raw"`
+	SourceURL            string                          `json:"source_url"`
+	SourceTitle          string                          `json:"source_title"`
+	SourceOrg            string                          `json:"source_org"`
+	SourceType           string                          `json:"source_type"`
+	EvidenceLevel        string                          `json:"evidence_level"`
+	EvidenceExcerpt      string                          `json:"evidence_excerpt"`
+	ReviewStatus         string                          `json:"review_status"`
+	AdditionalSources    []campusDirectoryResearchSource `json:"additional_sources"`
 }
 
 type campusDirectoryResearchSource struct {
@@ -1918,6 +1920,24 @@ type campusDirectoryResearchWindow struct {
 	EvidenceLevel   string   `json:"evidence_level"`
 	EvidenceExcerpt string   `json:"evidence_excerpt"`
 	ReviewStatus    string   `json:"review_status"`
+}
+
+// campusDirectoryResearchDish is deliberately lean: public webpages often
+// identify a dish and its serving place but omit price, photo, and nutrition.
+// Those facts are preserved as draft catalog records for later enrichment.
+type campusDirectoryResearchDish struct {
+	Campus          string `json:"campus"`
+	Canteen         string `json:"canteen"`
+	Window          string `json:"window"`
+	Name            string `json:"name"`
+	Floor           string `json:"floor"`
+	SourceURL       string `json:"source_url"`
+	SourceTitle     string `json:"source_title"`
+	SourceOrg       string `json:"source_org"`
+	SourceType      string `json:"source_type"`
+	EvidenceLevel   string `json:"evidence_level"`
+	EvidenceExcerpt string `json:"evidence_excerpt"`
+	ReviewStatus    string `json:"review_status"`
 }
 
 func ensureCampusDirectoryImportBatchSeed(ctx context.Context, db *gorm.DB) error {
@@ -2421,6 +2441,11 @@ func ensureCampusDirectoryPendingBatch(ctx context.Context, db *gorm.DB, seed ca
 				totalSources++
 			}
 		}
+		for _, dish := range school.Dishes {
+			if strings.TrimSpace(dish.SourceURL) != "" {
+				totalSources++
+			}
+		}
 		for _, note := range school.Notes {
 			if trimmed := strings.TrimSpace(note); trimmed != "" {
 				noteParts = append(noteParts, strings.TrimSpace(school.School)+": "+trimmed)
@@ -2519,6 +2544,14 @@ func ensureCampusDirectoryPendingSchoolResearch(ctx context.Context, db *gorm.DB
 				return fmt.Errorf("update pending campus metadata %q/%q: %w", schoolName, name, err)
 			}
 		}
+		if status == "active" {
+			// Reviewed active evidence may promote an older pending or inactive
+			// campus, while pending research never downgrades an active record.
+			if err := db.WithContext(ctx).Table("school_campuses").Where("id = ?", saved.ID).
+				Updates(map[string]any{"status": "active", "updated_at": gorm.Expr("now()")}).Error; err != nil {
+				return fmt.Errorf("activate reviewed campus %q/%q: %w", schoolName, name, err)
+			}
+		}
 		campusIDs[name] = saved.ID
 		for _, alias := range campus.Aliases {
 			alias = strings.TrimSpace(alias)
@@ -2558,6 +2591,10 @@ func ensureCampusDirectoryPendingSchoolResearch(ctx context.Context, db *gorm.DB
 			SortOrder:       i + 1,
 		}
 		if row.Status == "" {
+			row.Status = "pending_review"
+		}
+		if isExplicitUnresolvedCanteenPlaceholderName(name) {
+			// Generic research markers are never selectable formal canteens.
 			row.Status = "pending_review"
 		}
 		if err := db.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&row).Error; err != nil {
@@ -2602,6 +2639,23 @@ func ensureCampusDirectoryPendingSchoolResearch(ctx context.Context, db *gorm.DB
 				END >= ?`, campusEvidenceRank(confidence)).
 				Updates(canteenUpdates).Error; err != nil {
 				return fmt.Errorf("update pending canteen metadata %q/%q: %w", schoolName, name, err)
+			}
+		}
+		transitionUpdates := map[string]any{}
+		if row.Status == "active" {
+			transitionUpdates["status"] = "active"
+		} else if isExplicitUnresolvedCanteenPlaceholderName(name) {
+			transitionUpdates["status"] = "pending_review"
+		}
+		if canteen.ClearBuildingOrFloor {
+			// Blank means no new information unless the reviewed seed explicitly
+			// requests removal of an obsolete building or floor value.
+			transitionUpdates["building_or_floor"] = nil
+		}
+		if len(transitionUpdates) > 0 {
+			transitionUpdates["updated_at"] = gorm.Expr("now()")
+			if err := db.WithContext(ctx).Table("school_canteens").Where("id = ?", *canteenID).Updates(transitionUpdates).Error; err != nil {
+				return fmt.Errorf("apply reviewed canteen transition %q/%q: %w", schoolName, name, err)
 			}
 		}
 		if err := restoreCanteenConfidenceFromApprovedSource(ctx, db, *canteenID); err != nil {
@@ -2662,6 +2716,15 @@ func ensureCampusDirectoryPendingSchoolResearch(ctx context.Context, db *gorm.DB
 		if err := db.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&row).Error; err != nil {
 			return fmt.Errorf("insert pending window %q/%q/%q: %w", schoolName, canteenName, name, err)
 		}
+		if row.Status == "active" {
+			// Keep the existing ID when reviewed evidence promotes a pending window,
+			// so collected dish references remain valid.
+			if err := db.WithContext(ctx).Table("canteen_windows").
+				Where("school_id = ? AND canteen_id = ? AND lower(name) = lower(?) AND status = ?", school.ID, canteenID, name, "pending_review").
+				Updates(map[string]any{"status": "active", "updated_at": gorm.Expr("now()")}).Error; err != nil {
+				return fmt.Errorf("activate reviewed window %q/%q/%q: %w", schoolName, canteenName, name, err)
+			}
+		}
 		evidence := campusDirectoryResearchCanteen{
 			SourceURL:       window.SourceURL,
 			SourceTitle:     window.SourceTitle,
@@ -2671,6 +2734,29 @@ func ensureCampusDirectoryPendingSchoolResearch(ctx context.Context, db *gorm.DB
 			EvidenceExcerpt: window.EvidenceExcerpt,
 		}
 		if err := ensureCampusDirectoryPendingSource(ctx, db, batchID, school.ID, campusID, &canteenID, evidence); err != nil {
+			return err
+		}
+	}
+	for _, dish := range seed.Dishes {
+		name := strings.TrimSpace(dish.Name)
+		canteenName := strings.TrimSpace(dish.Canteen)
+		campusName := strings.TrimSpace(dish.Campus)
+		if name == "" || canteenName == "" {
+			continue
+		}
+		var campusID *string
+		if id := campusIDs[campusName]; id != "" {
+			campusID = &id
+		}
+		canteenID := canteenIDs[campusCanteenKey(campusName, canteenName)]
+		if canteenID == "" {
+			found, findErr := findCampusDirectoryCanteenID(ctx, db, school.ID, campusID, canteenName)
+			if findErr != nil {
+				return fmt.Errorf("find pending dish parent %q/%q/%q: %w", schoolName, canteenName, name, findErr)
+			}
+			canteenID = *found
+		}
+		if err := ensureCampusDirectoryResearchDish(ctx, db, batchID, school.ID, schoolName, campusID, campusName, canteenID, canteenName, dish); err != nil {
 			return err
 		}
 	}
@@ -2788,6 +2874,160 @@ func ensureCampusDirectoryPendingSource(ctx context.Context, db *gorm.DB, batchI
 	return nil
 }
 
+// ensureCampusDirectoryResearchDish keeps sparse web evidence in the existing
+// campus catalog workflow. A dish found in a school notice is useful for
+// discovery, but cannot be published until price, image, and nutrition have
+// been supplemented and reviewed.
+func ensureCampusDirectoryResearchDish(
+	ctx context.Context,
+	db *gorm.DB,
+	directoryBatchID string,
+	schoolID string,
+	schoolName string,
+	campusID *string,
+	campusName string,
+	canteenID string,
+	canteenName string,
+	dish campusDirectoryResearchDish,
+) error {
+	collectionBatchID, err := ensureCampusDirectoryResearchDishBatch(
+		ctx, db, directoryBatchID, schoolID, schoolName, campusID, campusName, canteenID, canteenName,
+	)
+	if err != nil {
+		return err
+	}
+
+	windowName := strings.TrimSpace(dish.Window)
+	var windowID *string
+	if windowName != "" {
+		query := db.WithContext(ctx).Table("canteen_windows").
+			Select("id").
+			Where("canteen_id = ? AND lower(name) = lower(?) AND status <> ?", canteenID, windowName, "deleted")
+		if floor := strings.TrimSpace(dish.Floor); floor != "" {
+			query = query.Where("(lower(COALESCE(floor, '')) = lower(?) OR COALESCE(floor, '') = '')", floor)
+		}
+		var saved struct{ ID string }
+		if err := query.Order("sort_order ASC, name ASC").Take(&saved).Error; err == nil {
+			windowID = &saved.ID
+		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return fmt.Errorf("find pending dish window %q/%q/%q: %w", schoolName, canteenName, windowName, err)
+		}
+	}
+
+	dishName := strings.TrimSpace(dish.Name)
+	query := db.WithContext(ctx).Table("campus_food_catalog_items").
+		Where("batch_id = ? AND canteen_id = ? AND lower(name) = lower(?) AND COALESCE(floor, '') = ?", collectionBatchID, canteenID, dishName, strings.TrimSpace(dish.Floor))
+	if windowID == nil {
+		query = query.Where("window_id IS NULL")
+	} else {
+		query = query.Where("window_id = ?", *windowID)
+	}
+	var existingCount int64
+	if err := query.Count(&existingCount).Error; err != nil {
+		return fmt.Errorf("count imported campus dish %q/%q: %w", schoolName, dishName, err)
+	}
+	if existingCount > 0 {
+		return nil
+	}
+
+	row := migrationdo.CampusFoodCatalogItemDO{
+		BatchID:            collectionBatchID,
+		EntryType:          "dish",
+		Name:               stringPtr(dishName),
+		SchoolID:           &schoolID,
+		CampusID:           campusID,
+		CanteenID:          &canteenID,
+		WindowID:           windowID,
+		OrganizationName:   schoolName,
+		AreaName:           optionalStringPtr(campusName),
+		CanteenName:        canteenName,
+		Floor:              optionalStringPtr(dish.Floor),
+		WindowName:         optionalStringPtr(windowName),
+		WindowLayout:       "unknown",
+		MealPeriods:        []string{},
+		AvailableWeekdays:  []string{},
+		ServiceMode:        "unknown",
+		PriceType:          "unknown",
+		PriceOptions:       map[string]any{},
+		ImagePaths:         []string{},
+		ImageKind:          "dish",
+		SourceFilename:     stringPtr("campus-directory-research-import"),
+		RawText:            optionalStringPtr(dish.EvidenceExcerpt),
+		Notes:              optionalStringPtr(campusDirectoryResearchDishNote(dish)),
+		MissingFields:      []string{"price", "image", "nutrition"},
+		CompletenessStatus: "incomplete",
+		Status:             "draft",
+	}
+	if err := db.WithContext(ctx).Create(&row).Error; err != nil {
+		return fmt.Errorf("insert imported campus dish %q/%q: %w", schoolName, dishName, err)
+	}
+	return nil
+}
+
+func ensureCampusDirectoryResearchDishBatch(
+	ctx context.Context,
+	db *gorm.DB,
+	directoryBatchID string,
+	schoolID string,
+	schoolName string,
+	campusID *string,
+	campusName string,
+	canteenID string,
+	canteenName string,
+) (string, error) {
+	clientKey := "campus-directory-research-dishes:" + directoryBatchID + ":" + canteenID
+	row := migrationdo.CampusFoodCollectionBatchDO{
+		ClientBatchKey:      clientKey,
+		BatchName:           "公开餐饮资料菜品补采-" + schoolName + "-" + canteenName,
+		VenueType:           "university",
+		SchoolID:            &schoolID,
+		CampusID:            campusID,
+		CanteenID:           &canteenID,
+		OrganizationName:    schoolName,
+		AreaName:            optionalStringPtr(campusName),
+		CanteenName:         canteenName,
+		DefaultWindowLayout: "unknown",
+		DefaultServiceMode:  "unknown",
+		DefaultMealPeriods:  []string{},
+		SourceNote:          stringPtr("学校公开餐饮资料自动导入；菜品待补价格、图片和营养信息后再上线"),
+		Status:              "submitted",
+	}
+	if err := db.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&row).Error; err != nil {
+		return "", fmt.Errorf("insert campus dish collection batch %q/%q: %w", schoolName, canteenName, err)
+	}
+	var saved struct{ ID string }
+	if err := db.WithContext(ctx).Table("campus_food_collection_batches").Select("id").Where("client_batch_key = ?", clientKey).Take(&saved).Error; err != nil {
+		return "", fmt.Errorf("find campus dish collection batch %q/%q: %w", schoolName, canteenName, err)
+	}
+	return saved.ID, nil
+}
+
+func optionalStringPtr(value string) *string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+	return &value
+}
+
+func campusDirectoryResearchDishNote(dish campusDirectoryResearchDish) string {
+	parts := []string{
+		"来源链接: " + strings.TrimSpace(dish.SourceURL),
+		"来源标题: " + strings.TrimSpace(dish.SourceTitle),
+		"来源机构: " + strings.TrimSpace(dish.SourceOrg),
+		"来源类型: " + strings.TrimSpace(dish.SourceType),
+		"证据等级: " + normalizeCampusEvidenceLevel(dish.EvidenceLevel),
+		"复核状态: " + strings.TrimSpace(dish.ReviewStatus),
+	}
+	nonEmpty := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if !strings.HasSuffix(part, ": ") {
+			nonEmpty = append(nonEmpty, part)
+		}
+	}
+	return strings.Join(nonEmpty, "；")
+}
+
 func normalizePendingReviewStatus(status string) string {
 	switch strings.TrimSpace(status) {
 	case "active", "inactive", "rejected", "deleted":
@@ -2795,6 +3035,22 @@ func normalizePendingReviewStatus(status string) string {
 	default:
 		return "pending_review"
 	}
+}
+
+func isExplicitUnresolvedCanteenPlaceholderName(name string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(name))
+	for _, marker := range []string{
+		"官方未提供专名",
+		"专名待核",
+		"未命名食堂",
+		"食堂（待核）",
+		"canteen placeholder",
+	} {
+		if strings.Contains(normalized, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 func normalizeCampusEvidenceLevel(level string) string {

@@ -30,6 +30,8 @@ type coverage struct {
 	CanteenEvidenceLevels map[string]int64 `json:"canteen_evidence_levels"`
 	Windows               int64            `json:"windows"`
 	WindowStatuses        map[string]int64 `json:"window_statuses"`
+	Dishes                int64            `json:"dishes"`
+	DishStatuses          map[string]int64 `json:"dish_statuses"`
 	Sources               int64            `json:"sources"`
 	SourceReviewStatuses  map[string]int64 `json:"source_review_statuses"`
 	LocationsWithCanteens int64            `json:"locations_with_canteens"`
@@ -106,6 +108,7 @@ func main() {
 		CanteenStatuses:       map[string]int64{},
 		CanteenEvidenceLevels: map[string]int64{},
 		WindowStatuses:        map[string]int64{},
+		DishStatuses:          map[string]int64{},
 		SourceReviewStatuses:  map[string]int64{},
 		DetailedAuditStatuses: map[string]int64{},
 	}
@@ -160,6 +163,13 @@ func main() {
 	if err := collectGroupedCounts(ctx, db, "canteen_windows", "status", out.WindowStatuses); err != nil {
 		log.Fatalf("统计窗口状态失败: %v", err)
 	}
+	if err := db.WithContext(ctx).Table("campus_food_catalog_items").Where("status <> ?", "deleted").Count(&out.Dishes).Error; err != nil {
+		log.Fatalf("统计菜品目录失败: %v", err)
+	}
+	if err := collectGroupedCounts(ctx, db, "campus_food_catalog_items", "status", out.DishStatuses); err != nil {
+		log.Fatalf("统计菜品目录状态失败: %v", err)
+	}
+	delete(out.DishStatuses, "deleted")
 	if err := db.WithContext(ctx).Table("campus_directory_sources").Count(&out.Sources).Error; err != nil {
 		log.Fatalf("统计目录来源失败: %v", err)
 	}
