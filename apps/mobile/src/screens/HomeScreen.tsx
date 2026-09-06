@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ActivityIndicator, Image, ImageBackground, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, useWindowDimensions, View } from 'react-native'
+import { AccessibilityInfo, ActivityIndicator, Animated, Image, ImageBackground, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, useWindowDimensions, View } from 'react-native'
 import { useFocusEffect, useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
-import { getMealTypeLabel, inferDefaultMealTypeFromLocalTime, type BodyMetricWaterDay, type BodyMetricWeightEntry, type DietRecommendationResult, type HomeDashboard, type HomeMealItem, type HomeMealRecordEntry, type StatsSummary } from '@food-link/core'
+import { getMealTypeLabel, inferDefaultMealTypeFromLocalTime, type AnalysisTask, type AnalyzeTaskStatusCount, type BodyMetricWaterDay, type BodyMetricWeightEntry, type DietRecommendationResult, type HomeDashboard, type HomeMealItem, type HomeMealRecordEntry, type PetSummary, type RewardCenterResponse, type StatsSummary } from '@food-link/core'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import Svg, { Circle as SvgCircle } from 'react-native-svg'
 import { useAuth } from '../providers/AuthProvider'
 import { apiClient, getStoredUserId } from '../api'
-import { FloatingPetCompanion } from '../components/FloatingPetCompanion'
+import { PetAvatar } from '../components/PetAvatar'
 import { HomeMicrosSection } from '../components/HomeMicrosSection'
+import { TodaySupplementsCard } from './SupplementScreens'
 import { IconfontText } from '../components/Iconfont'
 import { RecordActionSheet, type RecordAction } from '../components/RecordActionSheet'
 import { SHOW_DEBUG_LOGIN } from '../config'
@@ -16,8 +18,9 @@ import type { RootStackParamList } from '../navigation/types'
 import { useAppDialog } from '../providers/DialogProvider'
 import { useColorScheme } from '../providers/ColorSchemeProvider'
 import { colors, compactFont } from '../theme'
-import { formatShortDate, todayKey } from '../utils/date'
+import { todayKey } from '../utils/date'
 import { userFacingErrorMessage } from '../utils/errors'
+import { DEFAULT_HOME_EXPERIENCE_CONFIG, getStoredHomeExperienceConfig, saveHomeExperienceConfig, type HomeExperienceMode } from '../utils/homeExperience'
 import { consumeHomeRecordMenuDate, onHomeRecordMenuRequest } from '../utils/home-record-menu'
 import {
   dismissHomeBackfillDate,
@@ -28,7 +31,9 @@ import {
   markHomeRecordGuideCompleted,
   snoozeHealthProfileReminder,
 } from '../utils/homeGuidance'
-import { getHomePetCollapsed, getHomePetHidden, setHomePetCollapsed as persistHomePetCollapsed } from '../utils/petPreferences'
+import { getHomePetHidden } from '../utils/petPreferences'
+import { hasSeenHomePetMealPrompt, markHomePetMealPromptSeen } from '../utils/homePetReminders'
+import { needsPrecisionUserAction } from '../utils/precisionTask'
 
 type TargetField = 'calorieTarget' | 'proteinTarget' | 'carbsTarget' | 'fatTarget'
 type TargetForm = Record<TargetField, string>
@@ -54,6 +59,22 @@ type HomeBanner = {
 }
 type DietRecommendationScene = 'eat_out' | 'cook_home'
 type RecordDetailInitialAction = 'edit' | 'share' | 'delete'
+type HomePetReminderTone = 'recognizing' | 'waiting' | 'recorded' | 'meal'
+type HomePetAnalyzeReminder = {
+  kind: 'recognizing' | 'waiting_record' | 'auto_recorded'
+  taskId: string
+  text: string
+  tone: HomePetReminderTone
+  count?: number
+}
+type HomePetMealReminder = {
+  kind: 'meal'
+  text: string
+  tone: 'meal'
+  starterQuestion: string
+  mealType: 'breakfast' | 'lunch' | 'dinner'
+}
+type HomePetReminder = HomePetAnalyzeReminder | HomePetMealReminder
 
 const targetFieldMeta: Array<{ key: TargetField; label: string; unit: string; step: number }> = [
   { key: 'calorieTarget', label: '基础摄入目标', unit: 'kcal', step: 100 },
@@ -96,15 +117,32 @@ export function HomeScreen() {
     syncing,
     error,
     loadHome,
-  } = useHomeDashboard(selectedDate)
+  } = useHomeDashboard(selectedDate, isAuthenticated)
+  const openLogin = useCallback(() => {
+    navigation.getParent()?.navigate('Login', { redirectTab: 'HomeTab' })
+  }, [navigation])
+  const requireAuth = useCallback((action: () => void) => {
+    if (!isAuthenticated) {
+      openLogin()
+      return
+    }
+    action()
+  }, [isAuthenticated, openLogin])
   const [activeBannerIndex, setActiveBannerIndex] = useState(0)
+  const [rewardCenter, setRewardCenter] = useState<RewardCenterResponse | null>(null)
+  const promptedLoginCheckInDateRef = useRef('')
   const [showRecordMenu, setShowRecordMenu] = useState(false)
   const [showTargetEditor, setShowTargetEditor] = useState(false)
   const [savingTargets, setSavingTargets] = useState(false)
   const [homePetHidden, setHomePetHidden] = useState(false)
-  const [homePetCollapsed, setHomePetCollapsed] = useState(false)
   const [nutritionExpanded, setNutritionExpanded] = useState(false)
   const [currentUserId, setCurrentUserId] = useState('')
+  const [homeExperienceMode, setHomeExperienceMode] = useState<HomeExperienceMode>(DEFAULT_HOME_EXPERIENCE_CONFIG.mode)
+  const [modeFeedback, setModeFeedback] = useState<string | null>(null)
+  const [reduceMotion, setReduceMotion] = useState(false)
+  const [analyzeTaskCounts, setAnalyzeTaskCounts] = useState<AnalyzeTaskStatusCount | null>(null)
+  const [petMealReminder, setPetMealReminder] = useState<HomePetMealReminder | null>(null)
+  const modeTransitionOpacity = useRef(new Animated.Value(1)).current
   const [showHealthProfilePrompt, setShowHealthProfilePrompt] = useState(false)
   const [showHomeRecordGuide, setShowHomeRecordGuide] = useState(false)
   const [dismissedBackfillDates, setDismissedBackfillDates] = useState<string[]>([])
@@ -126,6 +164,7 @@ export function HomeScreen() {
   const calorieRemaining = Math.max(0, calorieTarget - calorieCurrent)
   const isCalorieOver = calorieTarget > 0 && calorieCurrent > calorieTarget
   const dashboardBusy = loading || syncing
+  const isWellnessMode = homeExperienceMode === 'wellness'
 
   // 体重/喝水/运动（与微信小程序首页逻辑对齐）
   const weightSummary = useMemo(() => {
@@ -157,6 +196,8 @@ export function HomeScreen() {
     [todayDateKey, recordDate, calorieCurrent, calorieTarget, weekStats],
   )
   const bannerWidth = Math.max(280, windowWidth - 32)
+  const availableRewardCredits = getAvailableRewardCredits(rewardCenter)
+  const rewardHintTaskText = formatRewardHintTaskText(rewardCenter)
   const homeBanners: HomeBanner[] = [
     {
       key: 'goose-duck-chicken',
@@ -165,7 +206,7 @@ export function HomeScreen() {
       desc: '上传一张图片，只围绕鹅 / 鸭 / 鸡做判断',
       actionText: '去识别',
       tone: 'goose',
-      onPress: () => navigation.navigate('GooseDuckChicken'),
+      onPress: () => requireAuth(() => navigation.navigate('GooseDuckChicken')),
     },
     {
       key: 'campus',
@@ -177,15 +218,15 @@ export function HomeScreen() {
       imageUrl: CAFETERIA_HERO_BG_URL,
       onPress: () => navigation.navigate('CampusCanteen'),
     },
-    {
+    ...(availableRewardCredits > 0 ? [{
       key: 'reward',
-      kicker: '今日任务',
-      title: '赚积分换权益',
-      desc: '上传、打卡和反馈都能积累奖励积分',
+      kicker: '今日可赚积分',
+      title: '今天还可以赚 ' + availableRewardCredits + ' 积分',
+      desc: rewardHintTaskText,
       actionText: '去赚',
-      tone: 'green',
-      onPress: () => navigation.navigate('RewardCenter'),
-    },
+      tone: 'green' as const,
+      onPress: () => requireAuth(() => navigation.navigate('RewardCenter')),
+    }] : []),
     {
       key: 'feedback',
       kicker: '帮助食探成长',
@@ -193,13 +234,17 @@ export function HomeScreen() {
       desc: '遇到体验问题可以直接反馈给我们',
       actionText: '去反馈',
       tone: 'gold',
-      onPress: () => navigation.navigate('AboutFeedback'),
+      onPress: () => requireAuth(() => navigation.navigate('AboutFeedback')),
     },
   ]
 
   const openAnalyze = useCallback((source: 'camera' | 'library') => {
+    if (!isAuthenticated) {
+      openLogin()
+      return
+    }
     navigation.navigate('Analyze', { source, mealType, date: recordDate })
-  }, [navigation, mealType, recordDate])
+  }, [isAuthenticated, mealType, navigation, openLogin, recordDate])
 
   const openRecordMenuFromRequest = useCallback(() => {
     void consumeHomeRecordMenuDate().then((pendingDate) => {
@@ -239,6 +284,33 @@ export function HomeScreen() {
   useEffect(() => onHomeRecordMenuRequest(openRecordMenuFromRequest), [openRecordMenuFromRequest])
 
   useEffect(() => {
+    let active = true
+    void getStoredHomeExperienceConfig(currentUserId).then((config) => {
+      if (active) setHomeExperienceMode(config.mode)
+    })
+    return () => {
+      active = false
+    }
+  }, [currentUserId])
+  useEffect(() => {
+    let active = true
+    void AccessibilityInfo.isReduceMotionEnabled().then((enabled) => {
+      if (active) setReduceMotion(enabled)
+    })
+    const subscription = AccessibilityInfo.addEventListener('reduceMotionChanged', setReduceMotion)
+    return () => {
+      active = false
+      subscription.remove()
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!modeFeedback) return
+    const timeout = setTimeout(() => setModeFeedback(null), 1600)
+    return () => clearTimeout(timeout)
+  }, [modeFeedback])
+
+  useEffect(() => {
     if (!showTargetEditor) {
       setTargetForm(targetFormFromDashboard(dashboard))
     }
@@ -253,10 +325,55 @@ export function HomeScreen() {
   useFocusEffect(
     useCallback(() => {
       let active = true
-      void Promise.all([getHomePetHidden(), getHomePetCollapsed()]).then(([hidden, collapsed]) => {
-        if (!active) return
-        setHomePetHidden(hidden)
-        setHomePetCollapsed(collapsed)
+      let timer: ReturnType<typeof setTimeout> | null = null
+      if (!isAuthenticated) {
+        setRewardCenter(null)
+        return () => {
+          active = false
+        }
+      }
+
+      timer = setTimeout(() => {
+        void apiClient.getRewardCenter()
+          .then(async (center) => {
+            if (!active) return
+            setRewardCenter(center)
+            const checkIn = center.check_in
+            if (!checkIn || checkIn.claimed_today || promptedLoginCheckInDateRef.current === checkIn.today) return
+            promptedLoginCheckInDateRef.current = checkIn.today
+            const confirmed = await dialog.confirm({
+              title: '每日签到',
+              message: '连续签到第 ' + checkIn.streak_days + ' 天，今天可领取 ' + checkIn.reward_amount + ' 积分。断签后会从第 1 天重新计算。',
+              confirmText: '立即签到',
+              cancelText: '稍后再签',
+            })
+            if (!active || !confirmed) return
+            try {
+              const result = await apiClient.claimLoginCheckIn()
+              await dialog.alert('签到成功', '+' + result.reward_amount + ' 积分', 'success')
+              const refreshed = await apiClient.getRewardCenter().catch(() => null)
+              if (active && refreshed) setRewardCenter(refreshed)
+            } catch (error) {
+              if (active) await dialog.alert('签到失败', userFacingErrorMessage(error), 'danger')
+            }
+          })
+          .catch(() => {
+            if (active) setRewardCenter(null)
+          })
+      }, 360)
+
+      return () => {
+        active = false
+        if (timer) clearTimeout(timer)
+      }
+    }, [dialog, isAuthenticated]),
+  )
+
+  useFocusEffect(
+    useCallback(() => {
+      let active = true
+      void getHomePetHidden().then((hidden) => {
+        if (active) setHomePetHidden(hidden)
       })
       return () => {
         active = false
@@ -269,6 +386,7 @@ export function HomeScreen() {
       let active = true
       if (!isAuthenticated) {
         setCurrentUserId('')
+
         setShowHealthProfilePrompt(false)
         setShowHomeRecordGuide(false)
         setDismissedBackfillDates([])
@@ -304,7 +422,132 @@ export function HomeScreen() {
       }
     }, [isAuthenticated]),
   )
+  useFocusEffect(
+    useCallback(() => {
+      let active = true
+      let timer: ReturnType<typeof setInterval> | null = null
+      if (!isAuthenticated) {
+        setAnalyzeTaskCounts(null)
+        return () => {
+          active = false
+        }
+      }
 
+      const sync = async () => {
+        try {
+          const counts = await apiClient.getAnalyzeTaskStatusCount()
+          if (active) setAnalyzeTaskCounts(counts)
+        } catch {
+          // Keep the last good reminder state when a background refresh briefly fails.
+        }
+      }
+
+      void sync()
+      if (Number(analyzeTaskCounts?.recognizing || 0) > 0) {
+        timer = setInterval(() => void sync(), 5000)
+      }
+
+      return () => {
+        active = false
+        if (timer) clearInterval(timer)
+      }
+    }, [analyzeTaskCounts?.recognizing, isAuthenticated]),
+  )
+
+  const petAnalyzeReminder = useMemo(
+    () => buildHomePetAnalyzeReminder(analyzeTaskCounts),
+    [analyzeTaskCounts],
+  )
+
+  useEffect(() => {
+    let active = true
+    const prompt = petSummary?.meal_prompt
+    if (
+      !isAuthenticated
+      || homePetHidden
+      || petAnalyzeReminder
+      || !prompt
+      || !currentUserId
+    ) {
+      setPetMealReminder(null)
+      return () => {
+        active = false
+      }
+    }
+
+    void (async () => {
+      const seen = await hasSeenHomePetMealPrompt(currentUserId, selectedDate, prompt.meal_type)
+      if (!active) return
+      if (seen) {
+        setPetMealReminder(null)
+        return
+      }
+      setPetMealReminder({
+        kind: 'meal',
+        text: prompt.text,
+        tone: 'meal',
+        starterQuestion: prompt.starter_question,
+        mealType: prompt.meal_type,
+      })
+      void markHomePetMealPromptSeen(currentUserId, selectedDate, prompt.meal_type).catch(() => undefined)
+    })().catch(() => {
+      if (active) setPetMealReminder(null)
+    })
+
+    return () => {
+      active = false
+    }
+  }, [currentUserId, homePetHidden, isAuthenticated, petAnalyzeReminder, petSummary?.meal_prompt, selectedDate])
+
+  const petReminder: HomePetReminder | null = petAnalyzeReminder || petMealReminder
+
+  const openAnalyzeTaskReminder = useCallback(async (taskId: string) => {
+    const normalizedTaskId = taskId.trim()
+    if (!normalizedTaskId) return
+    try {
+      const task = await apiClient.getAnalyzeTask(normalizedTaskId)
+      const taskType = isHomeReminderTextTask(task) ? 'food_text' : 'food'
+      const taskMealType = homeReminderTaskMealType(task, mealType)
+      const taskDate = homeReminderTaskDate(task, recordDate)
+      const status = String(task.status || '')
+      if (['pending', 'queued', 'running', 'processing'].includes(status)) {
+        navigation.navigate('AnalyzeLoading', {
+          taskId: task.id,
+          mealType: taskMealType,
+          date: taskDate,
+          taskType,
+        })
+        return
+      }
+      if (status === 'done' && task.result) {
+        if (taskType === 'food_text') navigation.navigate('TextResult', { task, mealType: taskMealType, date: taskDate })
+        else if (needsPrecisionUserAction(task)) navigation.navigate('PrecisionConfirm', { taskId: task.id, mealType: taskMealType, date: taskDate })
+        else navigation.navigate('Result', { task, mealType: taskMealType, date: taskDate })
+        void apiClient.markAnalyzeHistorySeen().catch(() => undefined)
+        return
+      }
+      navigation.navigate('AnalyzeHistory')
+    } catch (error) {
+      await dialog.alert('暂时无法打开识别结果', userFacingErrorMessage(error), 'warning')
+    }
+  }, [dialog, mealType, navigation, recordDate])
+
+  const handlePetReminderPress = useCallback(() => {
+    if (petReminder?.kind === 'meal') {
+      navigation.navigate('PetChat', { starterQuestion: petReminder.starterQuestion })
+      return
+    }
+    if (!petAnalyzeReminder) {
+      navigation.navigate('PetChat')
+      return
+    }
+    if (petAnalyzeReminder.kind === 'waiting_record' || petAnalyzeReminder.kind === 'auto_recorded') {
+      void apiClient.markAnalyzeHistorySeen().catch(() => undefined)
+      navigation.navigate('AnalyzeHistory')
+      return
+    }
+    void openAnalyzeTaskReminder(petAnalyzeReminder.taskId)
+  }, [navigation, openAnalyzeTaskReminder, petAnalyzeReminder, petReminder])
   const dismissHealthProfilePrompt = useCallback(async () => {
     if (!currentUserId) return
     await snoozeHealthProfileReminder(currentUserId)
@@ -409,6 +652,10 @@ export function HomeScreen() {
   }, [buildDietRecommendationPayload, dialog, isAuthenticated, navigation])
 
   const openTargetEditor = useCallback(() => {
+    if (!isAuthenticated) {
+      openLogin()
+      return
+    }
     setTargetForm(targetFormFromDashboard(dashboard))
     setShowTargetEditor(true)
     apiClient.getDashboardTargets()
@@ -471,10 +718,6 @@ export function HomeScreen() {
     }
   }, [dialog, loadHome, recordDate, targetForm])
 
-  const updateHomePetCollapsed = useCallback((collapsed: boolean) => {
-    setHomePetCollapsed(collapsed)
-    void persistHomePetCollapsed(collapsed)
-  }, [])
 
   const showBackfillHint = isAuthenticated
     && isAllowedHomeRecordDate(recordDate)
@@ -495,12 +738,28 @@ export function HomeScreen() {
   }, [currentUserId, dialog, recordDate])
 
   const dynamicStyles = useHomeDynamicStyles(isDark)
-  const themeColors = useHomeThemeColors(isDark)
-
+  const themeColors = useHomeThemeColors(isDark, isWellnessMode)
+  const toggleHomeExperienceMode = useCallback(() => {
+    const mode: HomeExperienceMode = homeExperienceMode === 'wellness' ? 'balanced' : 'wellness'
+    modeTransitionOpacity.stopAnimation()
+    if (reduceMotion) {
+      modeTransitionOpacity.setValue(1)
+    } else {
+      modeTransitionOpacity.setValue(0)
+      Animated.timing(modeTransitionOpacity, {
+        toValue: 1,
+        duration: 190,
+        useNativeDriver: true,
+      }).start()
+    }
+    setHomeExperienceMode(mode)
+    setModeFeedback(`已切换至${mode === 'wellness' ? '养生' : '均衡'}模式`)
+    void saveHomeExperienceConfig(currentUserId, { version: 2, mode })
+  }, [currentUserId, homeExperienceMode, modeTransitionOpacity, reduceMotion])
   return (
     <View style={[styles.homeRoot, { backgroundColor: themeColors.background }]}>
       <View pointerEvents="none" style={styles.homeBackgroundLayer}>
-        <View style={[styles.homeBackgroundTopTint, { backgroundColor: themeColors.backgroundTopTint }]} />
+        <View style={[styles.homeBackgroundTopTint, { backgroundColor: isWellnessMode ? themeColors.wellnessBackgroundTopTint : themeColors.backgroundTopTint }]} />
         <View style={[styles.homeBackgroundSoftTint, { backgroundColor: themeColors.backgroundSoftTint }]} />
       </View>
       <ScrollView
@@ -521,13 +780,31 @@ export function HomeScreen() {
         }
         showsVerticalScrollIndicator={false}
       >
-        <HomeGreeting recordDate={recordDate} mealType={mealType} themeColors={themeColors} />
+        <HomeGreeting
+          mode={homeExperienceMode}
+          onModeToggle={toggleHomeExperienceMode}
+          petSummary={petSummary}
+          petHidden={homePetHidden}
+          petReminder={petReminder}
+          onPetReminderPress={handlePetReminderPress}
+          isDark={isDark}
+          onPetPress={() => requireAuth(() => navigation.navigate('PetChat'))}
+          themeColors={themeColors}
+        />
+        {!isAuthenticated ? (
+          <Pressable accessibilityRole="button" accessibilityLabel="去登录同步饮食记录和健康数据" style={({ pressed }) => [styles.homeLoginBanner, { backgroundColor: themeColors.cardBackground, borderColor: themeColors.cardBorder }, pressed && styles.pressed]} onPress={openLogin}>
+            <Text style={[styles.homeLoginBannerText, { color: themeColors.textSecondary }]}>登录后可同步饮食记录、身体数据与云端目标</Text>
+            <View style={styles.homeLoginBannerButton}>
+              <Text style={styles.homeLoginBannerButtonText}>去登录</Text>
+            </View>
+          </Pressable>
+        ) : null}
         {showHealthProfilePrompt ? (
           <HomeHealthProfilePrompt
             themeColors={themeColors}
             onOpen={() => {
               setShowHealthProfilePrompt(false)
-              navigation.navigate('HealthProfile')
+              requireAuth(() => navigation.navigate('HealthProfile'))
             }}
             onSnooze={() => void dismissHealthProfilePrompt()}
           />
@@ -541,13 +818,6 @@ export function HomeScreen() {
           />
         ) : null}
         {error ? <Text style={[styles.error, { color: themeColors.danger }]}>{error}</Text> : null}
-        <HomeBannerCarousel
-          banners={homeBanners}
-          activeIndex={activeBannerIndex}
-          bannerWidth={bannerWidth}
-          onIndexChange={setActiveBannerIndex}
-          themeColors={themeColors}
-        />
         {showBackfillHint ? (
           <HomeBackfillHint
             themeColors={themeColors}
@@ -555,26 +825,63 @@ export function HomeScreen() {
             onDismiss={() => void dismissBackfillHint()}
           />
         ) : null}
-        <HomeCalorieCard
-          current={calorieCurrent}
-          target={calorieTarget}
-          remaining={calorieRemaining}
-          progress={calorieProgress}
-          isOver={isCalorieOver}
-          intakeData={intakeData}
-          onOpenTargetEditor={openTargetEditor}
-          nutritionExpanded={nutritionExpanded}
-          onToggleNutrition={() => setNutritionExpanded((v) => !v)}
-          isDark={isDark}
-          themeColors={themeColors}
-        />
-        <HomeDietRecommendationEntry
-          remaining={calorieRemaining}
-          busy={dashboardBusy}
-          themeColors={themeColors}
-          onEatOut={() => void requestDietRecommendation('eat_out')}
-          onCookHome={() => void requestDietRecommendation('cook_home')}
-        />
+        <Animated.View style={{ opacity: modeTransitionOpacity }}>
+          {isWellnessMode ? (
+            <HomeWellnessCalorieCard
+              current={calorieCurrent}
+              target={calorieTarget}
+              remaining={calorieRemaining}
+              progress={calorieProgress}
+              isOver={isCalorieOver}
+              intakeData={intakeData}
+              onOpenTargetEditor={openTargetEditor}
+              nutritionExpanded={nutritionExpanded}
+              onToggleNutrition={() => setNutritionExpanded((v) => !v)}
+              themeColors={themeColors}
+              dashboardBusy={dashboardBusy}
+              isGuest={!isAuthenticated}
+              supplementSummary={dashboard?.supplementSummary}
+              reduceMotion={reduceMotion}
+            />
+          ) : (
+            <HomeCalorieCard
+              current={calorieCurrent}
+              target={calorieTarget}
+              remaining={calorieRemaining}
+              progress={calorieProgress}
+              isOver={isCalorieOver}
+              intakeData={intakeData}
+              onOpenTargetEditor={openTargetEditor}
+              nutritionExpanded={nutritionExpanded}
+              onToggleNutrition={() => setNutritionExpanded((v) => !v)}
+              isDark={isDark}
+              themeColors={themeColors}
+              dashboardBusy={dashboardBusy}
+              isGuest={!isAuthenticated}
+              supplementSummary={dashboard?.supplementSummary}
+              reduceMotion={reduceMotion}
+            />
+          )}
+</Animated.View>
+        {!isAuthenticated ? (
+          <HomeDietRecommendationEntry
+            remaining={calorieRemaining}
+            busy={dashboardBusy}
+            themeColors={themeColors}
+            onEatOut={() => void requestDietRecommendation('eat_out')}
+            onCookHome={() => void requestDietRecommendation('cook_home')}
+          />
+        ) : null}
+        {isAuthenticated ? (
+          <HomeBannerCarousel
+            banners={homeBanners}
+            activeIndex={activeBannerIndex}
+            bannerWidth={bannerWidth}
+            onIndexChange={setActiveBannerIndex}
+            themeColors={themeColors}
+            reduceMotion={reduceMotion}
+          />
+        ) : null}
         <HomeBodyStatusStrip
           weightSummary={weightSummary}
           todayWater={todayWater}
@@ -588,19 +895,21 @@ export function HomeScreen() {
         />
         <HomeMealsSection
           meals={dashboard?.meals || []}
-          onOpenAll={() => navigation.navigate('DayRecord', { date: recordDate })}
+          onOpenAll={() => requireAuth(() => navigation.navigate('DayRecord', { date: recordDate }))}
           onQuickRecord={() => openAnalyze('camera')}
           onOpenHistory={() => navigation.navigate('AnalyzeHistory')}
           onOpenMeal={handleOpenMeal}
           isDark={isDark}
           themeColors={themeColors}
         />
-        <HomeExpirySection
-          summary={dashboard?.expirySummary || null}
-          themeColors={themeColors}
-          onOpen={() => navigation.navigate('Expiry')}
-        />
-        <HomeStatsEntry onPress={() => navigation.navigate('DayRecord', { date: recordDate })} />
+        {isAuthenticated ? (
+          <HomeExpirySection
+            summary={dashboard?.expirySummary || null}
+            themeColors={themeColors}
+            onOpen={() => navigation.navigate('Expiry')}
+          />
+        ) : null}
+        <HomeStatsEntry onPress={() => requireAuth(() => navigation.navigate('DayRecord', { date: recordDate }))} />
         {SHOW_DEBUG_LOGIN ? (
           <View style={styles.homeDevActions}>
             <HomeMiniAction label="识别记录" onPress={() => navigation.navigate('AnalyzeHistory')} themeColors={themeColors} />
@@ -693,42 +1002,40 @@ export function HomeScreen() {
         onClose={() => setShowRecordMenu(false)}
         onSelect={handleSelectRecordAction}
       />
-      {petSummary && !homePetHidden ? (
-        <FloatingPetCompanion
-          summary={petSummary}
-          collapsed={homePetCollapsed}
-          onCollapsedChange={updateHomePetCollapsed}
-          onOpenHome={() => navigation.navigate('PetHome')}
-          onOpenChat={() => navigation.navigate('PetChat')}
-        />
+      {modeFeedback ? (
+        <View pointerEvents="none" accessibilityLiveRegion="polite" style={[styles.modeFeedbackToast, { top: insets.top + 76, backgroundColor: themeColors.modeFeedbackBg }]}>
+          <Text style={styles.modeFeedbackToastText}>{modeFeedback}</Text>
+        </View>
       ) : null}
+
     </View>
   )
 }
 
-function useHomeThemeColors(isDark: boolean) {
+function useHomeThemeColors(isDark: boolean, isWellnessMode: boolean) {
   return useMemo(
     () => ({
-      background: isDark ? '#0d1312' : colors.background,
+      background: isDark ? '#0d1312' : isWellnessMode ? '#f3efe1' : colors.background,
       backgroundTopTint: isDark ? '#111a18' : '#eaf7f0',
-      backgroundSoftTint: isDark ? 'rgba(92, 184, 150, 0.03)' : 'rgba(92, 184, 150, 0.04)',
+      wellnessBackgroundTopTint: isDark ? '#182019' : '#f4f0e2',
+      backgroundSoftTint: isDark ? 'rgba(92, 184, 150, 0.03)' : isWellnessMode ? 'rgba(100, 122, 92, 0.045)' : 'rgba(92, 184, 150, 0.04)',
       text: isDark ? '#f2f7f4' : colors.text,
       textSecondary: isDark ? '#a3b3ad' : colors.textSecondary,
       textMuted: isDark ? '#6b7d76' : colors.textMuted,
       surface: isDark ? '#181f1d' : colors.surface,
       surfaceMuted: isDark ? '#1e2623' : colors.surfaceMuted,
       border: isDark ? 'rgba(255,255,255,0.08)' : colors.border,
-      cardBackground: isDark ? '#181f1d' : '#fff',
-      cardBorder: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(227, 233, 238, 0.82)',
-      bodyStatusCard: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.54)',
+      cardBackground: isDark ? '#181f1d' : isWellnessMode ? '#fffdf7' : '#fff',
+      cardBorder: isDark ? 'rgba(255,255,255,0.08)' : isWellnessMode ? 'rgba(103, 138, 119, 0.12)' : 'rgba(227, 233, 238, 0.82)',
+      bodyStatusCard: isDark ? 'rgba(255,255,255,0.06)' : isWellnessMode ? 'rgba(255,253,247,0.78)' : 'rgba(255,255,255,0.54)',
       bodyStatusCardBorder: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(255,255,255,0.62)',
-      emptyMealCard: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.54)',
+      emptyMealCard: isDark ? 'rgba(255,255,255,0.06)' : isWellnessMode ? 'rgba(255,253,247,0.76)' : 'rgba(255,255,255,0.54)',
       emptyMealCardBorder: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(255,255,255,0.62)',
       mealCard: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.56)',
       mealCardBorder: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(255,255,255,0.62)',
       mealCardWarningBorder: isDark ? 'rgba(229, 115, 115, 0.32)' : 'rgba(229, 115, 115, 0.32)',
       mealCardWarningBg: isDark ? 'rgba(239, 68, 68, 0.10)' : '#fef8f8',
-      macroCard: isDark ? 'rgba(255,255,255,0.06)' : '#fff',
+      macroCard: isDark ? 'rgba(255,255,255,0.06)' : isWellnessMode ? 'rgba(243, 247, 240, 0.74)' : '#fff',
       macroCardOver: isDark ? 'rgba(239, 68, 68, 0.14)' : '#fef3f2',
       macroCardOverBorder: isDark ? 'rgba(239, 68, 68, 0.35)' : '#fecaca',
       progressTrack: isDark ? 'rgba(255,255,255,0.10)' : '#e5e7eb',
@@ -747,7 +1054,10 @@ function useHomeThemeColors(isDark: boolean) {
       cancelButton: isDark ? 'rgba(255,255,255,0.10)' : '#f3f4f6',
       calibrationCard: isDark ? 'rgba(240, 152, 92, 0.14)' : '#fff7ed',
       dateSelectedBg: isDark ? 'rgba(0, 188, 125, 0.45)' : 'rgba(0, 188, 125, 0.55)',
-      dateCircle: isDark ? '#181f1d' : '#fff',
+      dateCircle: isDark ? '#181f1d' : isWellnessMode ? '#fffdf7' : '#fff',
+      dateSectionBg: isDark ? 'rgba(255,255,255,0.04)' : isWellnessMode ? 'rgba(255,253,247,0.62)' : 'rgba(255,255,255,0.42)',
+      dateSectionBorder: isDark ? 'rgba(255,255,255,0.07)' : isWellnessMode ? 'rgba(103, 138, 119, 0.10)' : 'rgba(47, 84, 61, 0.06)',
+      dateMonthText: isDark ? '#a8c5b8' : '#376d5a',
       dateText: isDark ? '#f2f7f4' : colors.text,
       dateTextMuted: isDark ? '#6b7d76' : colors.textMuted,
       danger: isDark ? '#ff6b6b' : colors.danger,
@@ -762,8 +1072,13 @@ function useHomeThemeColors(isDark: boolean) {
       expiryPillBg: isDark ? 'rgba(255,255,255,0.08)' : '#f8fafc',
       miniActionBg: isDark ? 'rgba(255,255,255,0.08)' : '#fff',
       miniActionText: isDark ? '#7dd3aa' : colors.brandDark,
+      modeToggleBg: isDark ? 'rgba(125, 211, 170, 0.12)' : isWellnessMode ? 'rgba(255, 255, 255, 0.78)' : 'rgba(255, 255, 255, 0.72)',
+      modeToggleBorder: isDark ? 'rgba(125, 211, 170, 0.22)' : 'rgba(92, 184, 150, 0.24)',
+      modeToggleText: isDark ? '#9fe3c0' : '#2d6f57',
+      modeToggleArrow: isDark ? '#7dd3aa' : '#4fa47f',
+      modeFeedbackBg: isDark ? '#294c3f' : '#315f4d',
     }),
-    [isDark],
+    [isDark, isWellnessMode],
   )
 }
 
@@ -862,11 +1177,10 @@ function HomeDietRecommendationEntry({
       <View style={styles.homeDietEntryMain}>
         <View style={styles.homeDietEntryIcon}><IconfontText className="iconfont icon-canciguanli" size={20} color={colors.brandDark} /></View>
         <View style={styles.homeDietEntryCopy}>
-          <Text style={[styles.homeDietEntryTitle, { color: themeColors.text }]}>今天吃什么</Text>
-          <Text style={[styles.homeDietEntrySubtitle, { color: themeColors.textSecondary }]}>{busy ? '按剩余目标推荐一餐' : `还可吃 ${Math.max(0, Math.round(remaining))} kcal`}</Text>
+          <Text numberOfLines={1} style={[styles.homeDietEntryTitle, { color: themeColors.text }]}>今天吃什么</Text>
+          <Text numberOfLines={1} style={[styles.homeDietEntrySubtitle, { color: themeColors.textSecondary }]}>{busy ? '按剩余目标推荐一餐' : `还可吃 ${Math.max(0, Math.round(remaining))} kcal`}</Text>
         </View>
       </View>
-      <Text style={[styles.homeDietEntryCredit, { color: themeColors.textMuted }]}>每次生成消耗 1 次系统额度；不足时使用奖励积分</Text>
       <View style={styles.homeDietEntryActions}>
         <Pressable style={[styles.homeDietEntryButton, { backgroundColor: themeColors.surfaceMuted }]} onPress={onEatOut}><Text style={[styles.homeDietEntryButtonText, { color: themeColors.textSecondary }]}>外面吃</Text></Pressable>
         <Pressable style={[styles.homeDietEntryButton, styles.homeDietEntryButtonPrimary]} onPress={onCookHome}><Text style={styles.homeDietEntryButtonPrimaryText}>自己做</Text></Pressable>
@@ -1079,16 +1393,31 @@ function HomeBannerCarousel({
   bannerWidth,
   onIndexChange,
   themeColors,
+  reduceMotion,
 }: {
   banners: HomeBanner[]
   activeIndex: number
   bannerWidth: number
   onIndexChange: (index: number) => void
   themeColors: ReturnType<typeof useHomeThemeColors>
+  reduceMotion: boolean
 }) {
+  const scrollRef = useRef<ScrollView>(null)
+
+  useEffect(() => {
+    if (reduceMotion || banners.length < 2) return undefined
+    const timer = setInterval(() => {
+      const nextIndex = (activeIndex + 1) % banners.length
+      scrollRef.current?.scrollTo({ x: nextIndex * (bannerWidth + 10), animated: true })
+      onIndexChange(nextIndex)
+    }, 4200)
+    return () => clearInterval(timer)
+  }, [activeIndex, bannerWidth, banners.length, onIndexChange, reduceMotion])
+
   return (
     <View style={styles.homeBannerCarousel}>
       <ScrollView
+        ref={scrollRef}
         horizontal
         pagingEnabled
         snapToInterval={bannerWidth + 10}
@@ -1209,19 +1538,114 @@ function TargetFieldRow({
   )
 }
 
-function HomeGreeting({ recordDate, mealType, themeColors }: { recordDate: string; mealType: string; themeColors: ReturnType<typeof useHomeThemeColors> }) {
+function HomeGreeting({
+  mode,
+  onModeToggle,
+  petSummary,
+  petHidden,
+  onPetPress,
+  petReminder,
+  onPetReminderPress,
+  isDark,
+  themeColors,
+}: {
+  mode: HomeExperienceMode
+  onModeToggle: () => void
+  petSummary: PetSummary | null
+  petHidden: boolean
+  onPetPress: () => void
+  petReminder: HomePetReminder | null
+  onPetReminderPress: () => void
+  isDark: boolean
+  themeColors: ReturnType<typeof useHomeThemeColors>
+}) {
+  const isWellness = mode === 'wellness'
+  const pet = petSummary?.pet
+  const reminderPalette = homePetReminderPalette(petReminder?.tone || 'recognizing', isDark)
   return (
     <View style={styles.greetingSection}>
-      <View style={styles.greetingText}>
-        <Text style={[styles.greetingTitle, { color: themeColors.text }]}>{homeGreeting()}</Text>
-        <Text style={[styles.greetingSubtitle, { color: themeColors.textSecondary }]}>
-          今天也要健康饮食哦 · {formatShortDate(recordDate)} · {getMealTypeLabel(mealType)}
-        </Text>
+      <View style={styles.greetingMain}>
+        {!petHidden ? (
+          <Pressable
+            testID="home-greeting-pet"
+            accessibilityRole="button"
+            accessibilityLabel={`和${pet?.name || '成长伙伴'}聊聊`}
+            accessibilityHint="打开伙伴对话"
+            hitSlop={4}
+            style={({ pressed }) => [styles.greetingPet, pressed && styles.homeModeTogglePressed]}
+            onPress={onPetPress}
+          >
+            <PetAvatar
+              pet={pet}
+              size={67}
+              mood={petSummary?.status.mood}
+              state={petSummary?.status.state}
+              mealState={petSummary?.status.meal_state}
+              motion="companion"
+            />
+            <View pointerEvents="none" style={styles.greetingPetGround} />
+          </Pressable>
+        ) : null}
+        {petReminder ? (
+          <Pressable
+            testID="home-pet-analyze-reminder"
+            accessibilityRole="button"
+            accessibilityLabel={petReminder.text}
+            accessibilityHint={petReminder.kind === 'meal' ? '打开伙伴对话并带入推荐问题' : '查看识别进度或结果'}
+            style={({ pressed }) => [
+              styles.greetingPetReminder,
+              { backgroundColor: reminderPalette.background, borderColor: reminderPalette.border },
+              pressed && styles.greetingPetReminderPressed,
+            ]}
+            onPress={onPetReminderPress}
+          >
+            <View
+              pointerEvents="none"
+              style={[
+                styles.greetingPetReminderTail,
+                { backgroundColor: reminderPalette.background, borderColor: reminderPalette.border },
+              ]}
+            />
+            <Text style={[styles.greetingPetReminderText, { color: reminderPalette.text }]}>{petReminder.text}</Text>
+            {petReminder.kind !== 'meal' && petReminder.count && petReminder.count > 1 ? (
+              <Text
+                accessibilityLabel={`${petReminder.count}份`}
+                style={[
+                  styles.greetingPetReminderCount,
+                  { borderColor: reminderPalette.countBorder },
+                ]}
+              >
+                {petReminder.count}
+              </Text>
+            ) : null}
+          </Pressable>
+        ) : (
+          <View style={styles.greetingText}>
+            <Text style={[styles.greetingTitle, { color: themeColors.text }]}>{homeGreeting()}</Text>
+            <Text style={[styles.greetingSubtitle, { color: themeColors.textSecondary }]}>今天也要健康饮食哦</Text>
+          </View>
+        )}
       </View>
+      <Pressable
+        testID="home-mode-toggle"
+        accessibilityRole="button"
+        accessibilityLabel={`当前${isWellness ? '养生' : '均衡'}模式，点击切换`}
+        accessibilityHint={`切换到${isWellness ? '均衡' : '养生'}首页`}
+        accessibilityState={{ selected: isWellness }}
+        hitSlop={4}
+        style={({ pressed }) => [
+          styles.homeModeToggle,
+          { backgroundColor: themeColors.modeToggleBg, borderColor: themeColors.modeToggleBorder },
+          pressed && styles.homeModeTogglePressed,
+        ]}
+        onPress={onModeToggle}
+      >
+        <Text style={[styles.homeModeToggleLabel, { color: themeColors.modeToggleText }]}>{isWellness ? '养生' : '均衡'}</Text>
+        <Text style={[styles.homeModeToggleSwitch, { color: themeColors.modeToggleArrow }]}>⇄</Text>
+      </Pressable>
     </View>
   )
 }
-
 function HomeDateSelector({
   cells,
   selectedDate,
@@ -1233,43 +1657,239 @@ function HomeDateSelector({
   onSelect: (date: string) => void
   themeColors: ReturnType<typeof useHomeThemeColors>
 }) {
+  const [calendarExpanded, setCalendarExpanded] = useState(false)
+  const [year, month] = selectedDate.split('-').map(Number)
+  const [visibleMonth, setVisibleMonth] = useState(() => new Date(year, month - 1, 1))
+  useEffect(() => setVisibleMonth(new Date(year, month - 1, 1)), [month, year])
+  const monthLabel = `${visibleMonth.getFullYear()}年${visibleMonth.getMonth() + 1}月`
+  const monthCells = useMemo(() => {
+    const first = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth(), 1)
+    const offset = (first.getDay() + 6) % 7
+    const days = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() + 1, 0).getDate()
+    return Array.from({ length: offset + days }, (_, index) => {
+      if (index < offset) return null
+      const date = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth(), index - offset + 1)
+      const dateKey = formatDateKeyFromDate(date)
+      return { date: dateKey, dayNum: String(date.getDate()), enabled: isAllowedHomeRecordDate(dateKey) }
+    })
+  }, [visibleMonth])
   return (
     <View style={styles.dateSelectorSection}>
-      <View style={styles.dateList}>
-        {cells.map((cell) => {
-          const recorded = cell.calories > 0
-          const over = recorded && cell.target > 0 && cell.calories > cell.target
-          const selected = selectedDate === cell.date
-          return (
-            <Pressable
-              key={cell.date}
-              style={({ pressed }) => [
-                styles.dateItem,
-                selected && { backgroundColor: themeColors.dateSelectedBg },
-                pressed && styles.dateItemPressed,
-              ]}
-              onPress={() => onSelect(cell.date)}
-            >
-              <Text style={[styles.dateDayName, selected ? { color: '#fff' } : { color: themeColors.dateTextMuted }]}>{cell.dayName}</Text>
-              <View
-                style={[
-                  styles.dateDayCircle,
-                  recorded && { backgroundColor: colors.brand },
-                  over && { backgroundColor: colors.homeWarningRed },
-                  selected && [styles.dateDayCircleSelected, { backgroundColor: 'transparent' }],
-                  !selected && { backgroundColor: themeColors.dateCircle },
-                ]}
-              >
-                <Text style={[styles.dateNumText, (recorded || selected) && { color: '#fff' }, !recorded && !selected && { color: themeColors.dateText }]}>{cell.dayNum}</Text>
-              </View>
-            </Pressable>
-          )
-        })}
+      <View style={styles.dateCalendarToolbar}>
+        {calendarExpanded ? (
+          <Pressable accessibilityRole="button" accessibilityLabel="上个月" style={styles.dateCalendarControl} onPress={() => setVisibleMonth((value) => new Date(value.getFullYear(), value.getMonth() - 1, 1))}>
+            <Text style={[styles.dateCalendarControlText, { color: themeColors.dateMonthText }]}>‹</Text>
+          </Pressable>
+        ) : <View style={styles.dateCalendarControl} />}
+        <Pressable accessibilityRole="button" accessibilityLabel={calendarExpanded ? '收起月历' : '展开月历'} style={styles.dateCalendarTitle} onPress={() => setCalendarExpanded((value) => !value)}>
+          <Text style={[styles.dateMonthLabel, { color: themeColors.dateMonthText }]}>{monthLabel}</Text>
+          <Text style={[styles.dateCalendarChevron, { color: themeColors.dateMonthText }]}>{calendarExpanded ? '⌃' : '⌄'}</Text>
+        </Pressable>
+        {calendarExpanded ? (
+          <Pressable accessibilityRole="button" accessibilityLabel="下个月" style={styles.dateCalendarControl} onPress={() => setVisibleMonth((value) => new Date(value.getFullYear(), value.getMonth() + 1, 1))}>
+            <Text style={[styles.dateCalendarControlText, { color: themeColors.dateMonthText }]}>›</Text>
+          </Pressable>
+        ) : (
+          <Pressable accessibilityRole="button" accessibilityLabel="展开月历" style={styles.dateCalendarControl} onPress={() => setCalendarExpanded(true)}>
+            <Text style={[styles.dateCalendarToggleText, { color: themeColors.dateMonthText }]}>月历</Text>
+          </Pressable>
+        )}
       </View>
+      {calendarExpanded ? (
+        <View style={styles.monthCalendar}>
+          <View style={styles.monthCalendarWeekdays}>
+            {['一', '二', '三', '四', '五', '六', '日'].map((label) => <Text key={label} style={[styles.monthCalendarWeekday, { color: themeColors.dateTextMuted }]}>{label}</Text>)}
+          </View>
+          <View style={styles.monthCalendarGrid}>
+            {monthCells.map((cell, index) => cell ? (
+              <Pressable
+                key={cell.date}
+                disabled={!cell.enabled}
+                accessibilityRole="button"
+                accessibilityLabel={`${cell.date}${cell.enabled ? '' : '，不可选择'}`}
+                accessibilityState={{ selected: cell.date === selectedDate, disabled: !cell.enabled }}
+                style={({ pressed }) => [styles.monthCalendarCell, cell.date === selectedDate && { backgroundColor: themeColors.dateSelectedBg }, !cell.enabled && styles.monthCalendarCellDisabled, pressed && styles.dateItemPressed]}
+                onPress={() => onSelect(cell.date)}
+              >
+                <Text style={[styles.monthCalendarDay, { color: themeColors.dateText }, cell.date === selectedDate && styles.dateNumTextLight]}>{cell.dayNum}</Text>
+              </Pressable>
+            ) : <View key={`empty-${index}`} style={styles.monthCalendarCell} />)}
+          </View>
+        </View>
+      ) : (
+        <View style={styles.dateList}>
+          {cells.map((cell) => {
+            const recorded = cell.calories > 0
+            const over = recorded && cell.target > 0 && cell.calories > cell.target
+            const selected = selectedDate === cell.date
+            return (
+              <Pressable key={cell.date} accessibilityRole="button" accessibilityLabel={`${cell.date}，${cell.dayName}${recorded ? '，已有饮食记录' : '，暂无饮食记录'}`} accessibilityState={{ selected }} style={({ pressed }) => [styles.dateItem, selected && { backgroundColor: themeColors.dateSelectedBg }, pressed && styles.dateItemPressed]} onPress={() => onSelect(cell.date)}>
+                <Text style={[styles.dateDayName, selected ? { color: '#fff' } : { color: themeColors.dateTextMuted }]}>{cell.dayName}</Text>
+                <View style={[styles.dateDayCircle, recorded && { backgroundColor: colors.brand }, over && { backgroundColor: colors.homeWarningRed }, selected && [styles.dateDayCircleSelected, { backgroundColor: 'transparent' }], !selected && { backgroundColor: themeColors.dateCircle }]}>
+                  <Text style={[styles.dateNumText, (recorded || selected) && { color: '#fff' }, !recorded && !selected && { color: themeColors.dateText }]}>{cell.dayNum}</Text>
+                </View>
+              </Pressable>
+            )
+          })}
+        </View>
+      )}
     </View>
   )
 }
 
+function HomeWellnessCalorieCard({
+  current,
+  target,
+  remaining,
+  progress,
+  isOver,
+  intakeData,
+  onOpenTargetEditor,
+  nutritionExpanded,
+  onToggleNutrition,
+  themeColors,
+  dashboardBusy,
+  isGuest,
+  supplementSummary,
+  reduceMotion,
+}: {
+  current: number
+  target: number
+  remaining: number
+  progress: number
+  isOver: boolean
+  intakeData?: HomeDashboard['intakeData']
+  onOpenTargetEditor: () => void
+  nutritionExpanded: boolean
+  onToggleNutrition: () => void
+  themeColors: ReturnType<typeof useHomeThemeColors>
+  dashboardBusy: boolean
+  isGuest: boolean
+  supplementSummary?: HomeDashboard['supplementSummary']
+  reduceMotion: boolean
+}) {
+  const size = 122
+  const stroke = 9
+  const radius = (size - stroke) / 2
+  const circumference = 2 * Math.PI * radius
+  const arcLength = circumference * 0.75
+  const normalizedProgress = clamp(progress, 0, 100)
+  const progressLength = arcLength * (normalizedProgress / 100)
+  const displayValue = Math.round(isOver ? current - target : remaining)
+
+  return (
+    <View
+      testID="home-wellness-overview"
+      style={[styles.wellnessMainCard, { backgroundColor: themeColors.cardBackground, borderColor: themeColors.cardBorder }]}
+    >
+      <View style={styles.wellnessOverviewRow}>
+        <View style={styles.wellnessGaugeWrap}>
+          <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+            <SvgCircle
+              cx={size / 2}
+              cy={size / 2}
+              r={radius}
+              fill="none"
+              stroke={themeColors.progressTrack}
+              strokeWidth={stroke}
+              strokeLinecap="round"
+              strokeDasharray={`${arcLength} ${circumference - arcLength}`}
+              transform={`rotate(135 ${size / 2} ${size / 2})`}
+            />
+            <SvgCircle
+              cx={size / 2}
+              cy={size / 2}
+              r={radius}
+              fill="none"
+              stroke={isOver ? themeColors.over : '#7fc6a5'}
+              strokeWidth={stroke}
+              strokeLinecap="round"
+              strokeDasharray={`${Math.max(progressLength, 0.01)} ${circumference}`}
+              transform={`rotate(135 ${size / 2} ${size / 2})`}
+            />
+          </Svg>
+          <View pointerEvents="none" style={styles.wellnessGaugeCenter}>
+            <Text style={[styles.wellnessGaugeLabel, { color: themeColors.textSecondary }]}>{isOver ? '已超出' : '剩余可摄入'}</Text>
+            <Text style={[styles.wellnessGaugeValue, { color: isOver ? themeColors.over : themeColors.text }]} adjustsFontSizeToFit numberOfLines={1}>{displayValue}</Text>
+            <Text style={[styles.wellnessGaugeUnit, { color: themeColors.textMuted }]}>kcal</Text>
+            <IconfontText className="iconfont icon-a-144-lvye" size={13} color="#8abc72" />
+          </View>
+        </View>
+        <View style={styles.wellnessOverviewDetail}>
+          <View style={styles.wellnessSummaryRow}>
+            <Text style={[styles.wellnessIntakeSummary, { color: themeColors.textSecondary }]} numberOfLines={2}>
+              已摄入 {Math.round(current)} / {Math.round(target)} kcal
+            </Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="设置营养目标"
+              hitSlop={8}
+              style={({ pressed }) => [styles.wellnessTargetEdit, { backgroundColor: themeColors.nutritionAffordanceBg, borderColor: themeColors.modeToggleBorder }, pressed && styles.pressed]}
+              onPress={onOpenTargetEditor}
+            >
+              <IconfontText className="iconfont icon-target" size={10} color={themeColors.bodyStatusChangeDown} />
+              <Text style={[styles.wellnessTargetEditText, { color: themeColors.bodyStatusChangeDown }]}>目标</Text>
+            </Pressable>
+          </View>
+          <View style={[styles.wellnessTotalProgress, { backgroundColor: themeColors.progressTrack }]}>
+            <View style={[styles.wellnessTotalProgressFill, { width: `${normalizedProgress}%`, backgroundColor: isOver ? themeColors.over : '#7fc6a5' }]} />
+          </View>
+          <View style={styles.wellnessMacroGrid}>
+            {macroConfigs.map((config) => {
+              const macroCurrent = Number(intakeData?.macros?.[config.key]?.current || 0)
+              const macroTarget = Number(intakeData?.macros?.[config.key]?.target || 0)
+              const macroProgress = macroTarget > 0 ? clamp((macroCurrent / macroTarget) * 100, 0, 100) : 0
+              const macroOver = macroTarget > 0 && macroCurrent > macroTarget
+              return (
+                <View key={config.key} style={styles.wellnessMacroItem}>
+                  <View style={styles.wellnessMacroTitleRow}>
+                    <IconfontText className={config.iconClass} size={10} color={config.color} />
+                    <Text style={[styles.wellnessMacroTitle, { color: themeColors.text }]} numberOfLines={1}>{config.label}</Text>
+                  </View>
+                  <Text style={[styles.wellnessMacroCurrent, { color: macroOver ? themeColors.over : themeColors.bodyStatusChangeDown }]} numberOfLines={1}>{formatHomeNumber(macroCurrent)}</Text>
+                  <Text style={[styles.wellnessMacroTarget, { color: themeColors.textMuted }]} numberOfLines={1}>/ {formatHomeNumber(macroTarget)}{config.unit}</Text>
+                  <View style={[styles.wellnessMacroTrack, { backgroundColor: themeColors.progressTrack }]}>
+                    <View style={[styles.wellnessMacroFill, { width: `${macroProgress}%`, backgroundColor: macroOver ? themeColors.over : '#7fc6a5' }]} />
+                  </View>
+                </View>
+              )
+            })}
+          </View>
+        </View>
+      </View>
+      {!isGuest ? <TodaySupplementsCard summary={supplementSummary} embedded /> : null}
+      <View style={styles.wellnessNutritionShell}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="营养概览"
+          accessibilityState={{ expanded: nutritionExpanded }}
+          style={({ pressed }) => [styles.nutritionExpandTitleRow, pressed && styles.pressed]}
+          onPress={onToggleNutrition}
+        >
+          <Text style={[styles.nutritionTitle, { color: themeColors.nutritionTitle }]}>营养概览</Text>
+          <View style={[styles.nutritionExpandAffordance, { backgroundColor: themeColors.nutritionAffordanceBg }]}>
+            <IconfontText
+              className="iconfont icon-right-arrow"
+              size={14}
+              color={themeColors.nutritionAffordanceText}
+              style={{ transform: [{ rotate: nutritionExpanded ? '270deg' : '90deg' }] }}
+            />
+            <Text style={[styles.nutritionExpandAffordanceText, { color: themeColors.nutritionAffordanceText }]}>{nutritionExpanded ? '收起' : '展开更多'}</Text>
+          </View>
+        </Pressable>
+        {nutritionExpanded ? (
+          <HomeMicrosSection
+            intakeData={intakeData}
+            dashboardBusy={dashboardBusy}
+            isGuest={isGuest}
+            supplementSummary={supplementSummary}
+            reduceMotion={reduceMotion}
+          />
+        ) : null}
+      </View>
+    </View>
+  )
+}
 function HomeCalorieCard({
   current,
   target,
@@ -1282,6 +1902,10 @@ function HomeCalorieCard({
   onToggleNutrition,
   isDark,
   themeColors,
+  dashboardBusy,
+  isGuest,
+  supplementSummary,
+  reduceMotion,
 }: {
   current: number
   target: number
@@ -1294,6 +1918,10 @@ function HomeCalorieCard({
   onToggleNutrition: () => void
   isDark: boolean
   themeColors: ReturnType<typeof useHomeThemeColors>
+  dashboardBusy: boolean
+  isGuest: boolean
+  supplementSummary?: HomeDashboard['supplementSummary']
+  reduceMotion: boolean
 }) {
   return (
     <View style={[styles.mainCard, { backgroundColor: themeColors.cardBackground, borderColor: themeColors.cardBorder }]}>
@@ -1322,10 +1950,18 @@ function HomeCalorieCard({
           <View style={[styles.progressBarFill, isOver && { backgroundColor: themeColors.over }, { width: `${clamp(progress, 0, 100)}%` }]} />
         </View>
       </View>
+      {!isGuest ? <TodaySupplementsCard summary={supplementSummary} embedded /> : null}
       <View style={styles.nutritionShell}>
         <View style={styles.nutritionExpandTitleRow}>
           <Text style={[styles.nutritionTitle, { color: themeColors.nutritionTitle }]}>营养概览</Text>
-          <TouchableOpacity activeOpacity={0.75} onPress={onToggleNutrition}>
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel="营养概览"
+            accessibilityState={{ expanded: nutritionExpanded }}
+            activeOpacity={0.75}
+            onPress={onToggleNutrition}
+            style={styles.nutritionExpandButton}
+          >
             <View style={[styles.nutritionExpandAffordance, { backgroundColor: themeColors.nutritionAffordanceBg }]}>
               <IconfontText
                 className="iconfont icon-right-arrow"
@@ -1338,7 +1974,15 @@ function HomeCalorieCard({
           </TouchableOpacity>
         </View>
         <HomeMacroSection intakeData={intakeData} themeColors={themeColors} />
-        {nutritionExpanded && <HomeMicrosSection intakeData={intakeData} />}
+        {nutritionExpanded ? (
+          <HomeMicrosSection
+            intakeData={intakeData}
+            dashboardBusy={dashboardBusy}
+            isGuest={isGuest}
+            supplementSummary={supplementSummary}
+            reduceMotion={reduceMotion}
+          />
+        ) : null}
       </View>
     </View>
   )
@@ -1912,10 +2556,128 @@ function homeGreeting(): string {
   return '晚上好'
 }
 
+
+function buildHomePetAnalyzeReminder(counts: AnalyzeTaskStatusCount | null): HomePetAnalyzeReminder | null {
+  if (!counts) return null
+  const waitingRecord = Math.max(0, Number(counts.waiting_record || 0))
+  const waitingTaskId = String(counts.latest_waiting_record_task_id || '').trim()
+  if (counts.has_unseen_waiting_record === true && waitingRecord > 0 && waitingTaskId) {
+    return {
+      kind: 'waiting_record',
+      taskId: waitingTaskId,
+      text: waitingRecord > 1 ? `${waitingRecord} 份餐食识别好啦，点我查看` : '这份餐食识别好啦，点我查看',
+      tone: 'waiting',
+      count: waitingRecord,
+    }
+  }
+  const autoRecordedTaskId = String(counts.latest_auto_recorded_task_id || '').trim()
+  if (counts.has_unseen_auto_recorded === true && autoRecordedTaskId) {
+    return {
+      kind: 'auto_recorded',
+      taskId: autoRecordedTaskId,
+      text: '这份餐食已经帮你记好啦，点我查看',
+      tone: 'recorded',
+    }
+  }
+  const recognizing = Math.max(0, Number(counts.recognizing || 0))
+  const recognizingTaskId = String(counts.latest_recognizing_task_id || '').trim()
+  if (recognizing > 0 && recognizingTaskId) {
+    return {
+      kind: 'recognizing',
+      taskId: recognizingTaskId,
+      text: '我还在认真识别，完成后马上告诉你',
+      tone: 'recognizing',
+    }
+  }
+  return null
+}
+
+function isHomeReminderTextTask(task: AnalysisTask): boolean {
+  return task.task_type === 'food_text' || task.task_type.startsWith('food_text') || task.payload?.source_type === 'text'
+}
+
+function homeReminderTaskMealType(
+  task: AnalysisTask,
+  fallback: ReturnType<typeof inferDefaultMealTypeFromLocalTime>,
+): ReturnType<typeof inferDefaultMealTypeFromLocalTime> {
+  const payload = task.payload || {}
+  const normalized = String(
+    payload.auto_record_meal_type || payload.meal_type || payload.mealType || '',
+  ).trim()
+  if (normalized === 'snack') return 'afternoon_snack'
+  if (['breakfast', 'morning_snack', 'lunch', 'afternoon_snack', 'dinner', 'evening_snack'].includes(normalized)) {
+    return normalized as ReturnType<typeof inferDefaultMealTypeFromLocalTime>
+  }
+  return fallback
+}
+
+function homeReminderTaskDate(task: AnalysisTask, fallback: string): string {
+  const payload = task.payload || {}
+  return String(payload.date || payload.recorded_on || payload.recordedOn || '').trim() || fallback
+}
+
+function homePetReminderPalette(tone: HomePetReminderTone, isDark: boolean) {
+  if (isDark) {
+    return {
+      background: tone === 'waiting' ? '#2b2518' : tone === 'meal' ? '#172a22' : '#18251f',
+      border: tone === 'waiting' ? 'rgba(251, 191, 36, 0.34)' : tone === 'meal' ? 'rgba(112, 196, 149, 0.28)' : 'rgba(125, 240, 204, 0.24)',
+      text: '#e5f5ee',
+      countBorder: '#101716',
+    }
+  }
+  return {
+    background: tone === 'waiting' ? '#fffaf0' : tone === 'recorded' ? '#effbf6' : tone === 'meal' ? '#f1faf4' : '#ffffff',
+    border: tone === 'waiting' ? 'rgba(245, 158, 11, 0.38)' : tone === 'meal' ? 'rgba(47, 143, 111, 0.30)' : 'rgba(92, 184, 150, 0.26)',
+    text: '#27483d',
+    countBorder: '#ffffff',
+  }
+}
+
+function isRewardTaskAvailable(task: RewardCenterResponse['tasks'][number]): boolean {
+  if (task.action_type !== 'login_check_in' && !task.action_path) return false
+  return !(typeof task.daily_limit === 'number' && task.daily_limit > 0 && task.today_count >= task.daily_limit)
+}
+
+function getAvailableRewardCredits(center: RewardCenterResponse | null): number {
+  return (center?.tasks || [])
+    .filter(isRewardTaskAvailable)
+    .reduce((sum, task) => sum + Math.max(Number(task.reward_amount || 0), 0), 0)
+}
+
+function formatRewardHintTaskText(center: RewardCenterResponse | null): string {
+  const labels = (center?.tasks || [])
+    .filter(isRewardTaskAvailable)
+    .slice(0, 2)
+    .map((task) => task.name.replace(/^每日/, '') + ' +' + task.reward_amount)
+  return labels.length > 0 ? labels.join(' · ') : '完成任务即可补充奖励积分'
+}
 const styles = StyleSheet.create({
   homeRoot: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  modeFeedbackToast: {
+    position: 'absolute',
+    alignSelf: 'center',
+    zIndex: 40,
+    minHeight: 36,
+    maxWidth: '82%',
+    borderRadius: 18,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.16,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 8,
+  },
+  modeFeedbackToastText: {
+    color: '#fff',
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: '700',
+    textAlign: 'center',
   },
   homeBackgroundLayer: {
     position: 'absolute',
@@ -1940,6 +2702,39 @@ const styles = StyleSheet.create({
     right: 0,
     height: 360,
     backgroundColor: 'rgba(92, 184, 150, 0.04)',
+  },
+  homeLoginBanner: {
+    minHeight: 62,
+    marginBottom: 14,
+    paddingHorizontal: 15,
+    paddingVertical: 11,
+    borderRadius: 16,
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  homeLoginBannerText: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 19,
+    fontWeight: '600',
+  },
+  homeLoginBannerButton: {
+    minWidth: 78,
+    minHeight: 38,
+    paddingHorizontal: 16,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.brand,
+  },
+  homeLoginBannerButtonText: {
+    color: '#fff',
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '800',
   },
   error: {
     color: colors.danger,
@@ -2151,6 +2946,7 @@ const styles = StyleSheet.create({
   },
   homeBannerCarousel: {
     position: 'relative',
+    marginTop: 2,
     marginBottom: 10,
   },
   homeBannerTrack: {
@@ -2161,7 +2957,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   homeBanner: {
-    minHeight: 90,
+    minHeight: 72,
     justifyContent: 'flex-end',
     overflow: 'hidden',
   },
@@ -2181,10 +2977,10 @@ const styles = StyleSheet.create({
     borderRadius: 14,
   },
   homeBannerOverlay: {
-    minHeight: 90,
-    paddingTop: 12,
+    minHeight: 72,
+    paddingTop: 9,
     paddingHorizontal: 12,
-    paddingBottom: 24,
+    paddingBottom: 18,
     flexDirection: 'row',
     alignItems: 'flex-end',
     justifyContent: 'space-between',
@@ -2200,26 +2996,26 @@ const styles = StyleSheet.create({
     color: colors.brandDark,
     fontSize: 10,
     fontWeight: '800',
-    marginBottom: 4,
+    marginBottom: 2,
   },
   homeBannerTitle: {
     color: colors.text,
-    fontSize: compactFont(17, 16),
+    fontSize: compactFont(15, 14),
     fontWeight: '800',
-    lineHeight: 21,
-    marginBottom: 4,
+    lineHeight: 18,
+    marginBottom: 2,
   },
   homeBannerSubtitle: {
     color: colors.textSecondary,
-    fontSize: 12,
-    lineHeight: 16,
+    fontSize: 10,
+    lineHeight: 13,
     fontWeight: '700',
   },
   homeBannerTextLight: {
     color: '#fff',
   },
   homeBannerButton: {
-    minHeight: 32,
+    minHeight: 28,
     borderRadius: 999,
     paddingHorizontal: 12,
     alignItems: 'center',
@@ -2240,7 +3036,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 0,
     right: 0,
-    bottom: 8,
+    bottom: 3,
     zIndex: 3,
     minHeight: 16,
     flexDirection: 'row',
@@ -2415,9 +3211,92 @@ const styles = StyleSheet.create({
   greetingSection: {
     paddingTop: 4,
     marginBottom: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  greetingMain: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  greetingPet: {
+    position: 'relative',
+    width: 67,
+    height: 72,
+    flexShrink: 0,
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+  },
+  greetingPetGround: {
+    position: 'absolute',
+    left: 12,
+    right: 12,
+    bottom: 1,
+    height: 7,
+    borderRadius: 999,
+    backgroundColor: 'rgba(47, 127, 98, 0.12)',
+    transform: [{ scaleX: 0.92 }],
+  },
+  greetingPetReminder: {
+    position: 'relative',
+    flex: 1,
+    minWidth: 0,
+    minHeight: 48,
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderRadius: 11,
+    paddingVertical: 10,
+    paddingLeft: 12,
+    paddingRight: 28,
+    shadowColor: '#1f4f3f',
+    shadowOpacity: 0.09,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 1,
+  },
+  greetingPetReminderPressed: {
+    opacity: 0.78,
+    transform: [{ scale: 0.985 }],
+  },
+  greetingPetReminderTail: {
+    position: 'absolute',
+    left: -7,
+    top: 17,
+    width: 12,
+    height: 12,
+    borderLeftWidth: 1,
+    borderBottomWidth: 1,
+    transform: [{ rotate: '45deg' }],
+  },
+  greetingPetReminderText: {
+    flexShrink: 1,
+    fontSize: compactFont(13, 12),
+    lineHeight: 19,
+    fontWeight: '700',
+  },
+  greetingPetReminderCount: {
+    position: 'absolute',
+    top: -9,
+    right: -5,
+    minWidth: 21,
+    height: 21,
+    paddingHorizontal: 5,
+    borderWidth: 2,
+    borderRadius: 11,
+    backgroundColor: '#f59e0b',
+    color: '#ffffff',
+    fontSize: 10,
+    lineHeight: 17,
+    fontWeight: '800',
+    textAlign: 'center',
+    textAlignVertical: 'center',
   },
   greetingText: {
     flex: 1,
+    minWidth: 0,
   },
   greetingTitle: {
     color: colors.text,
@@ -2431,21 +3310,78 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
   },
-  dateSelectorSection: {
-    marginBottom: 8,
+  homeModeToggle: {
+    minHeight: 48,
+    minWidth: 84,
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    shadowColor: '#37745d',
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 1,
   },
+  homeModeTogglePressed: {
+    opacity: 0.86,
+    transform: [{ scale: 0.97 }],
+  },
+  homeModeToggleLabel: {
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '800',
+  },
+  homeModeToggleSwitch: {
+    fontSize: 16,
+    lineHeight: 18,
+    fontWeight: '700',
+  },
+dateSelectorSection: {
+    marginBottom: 10,
+  },
+  dateCalendarToolbar: {
+    minHeight: 44,
+    marginBottom: 3,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  dateCalendarTitle: {
+    minHeight: 44,
+    paddingHorizontal: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  dateCalendarControl: { width: 56, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
+  dateCalendarControlText: { fontSize: 25, lineHeight: 28, fontWeight: '700' },
+  dateCalendarToggleText: { fontSize: 12, lineHeight: 18, fontWeight: '700' },
+  dateCalendarChevron: { fontSize: 13, lineHeight: 18, fontWeight: '700' },
+  dateMonthLabel: { fontSize: 12, lineHeight: 18, fontWeight: '700' },
+  monthCalendar: { paddingBottom: 8 },
+  monthCalendarWeekdays: { flexDirection: 'row' },
+  monthCalendarWeekday: { width: '14.2857%', textAlign: 'center', fontSize: 11, lineHeight: 28, fontWeight: '600' },
+  monthCalendarGrid: { flexDirection: 'row', flexWrap: 'wrap' },
+  monthCalendarCell: { width: '14.2857%', minHeight: 44, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  monthCalendarCellDisabled: { opacity: 0.28 },
+  monthCalendarDay: { fontSize: 13, lineHeight: 18, fontWeight: '700' },
   dateList: {
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
   dateItem: {
-    width: 44,
-    height: 80,
-    borderRadius: 22,
+    width: 42,
+    height: 64,
+    borderRadius: 19,
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingTop: 11,
-    paddingBottom: 8,
+    paddingTop: 7,
+    paddingBottom: 6,
   },
   dateItemSelected: {
     backgroundColor: 'rgba(0, 188, 125, 0.55)',
@@ -2497,6 +3433,148 @@ const styles = StyleSheet.create({
   },
   dateNumTextLight: {
     color: '#fff',
+  },
+  wellnessMainCard: {
+    borderRadius: 18,
+    paddingHorizontal: 12,
+    paddingTop: 12,
+    paddingBottom: 8,
+    marginBottom: 8,
+    borderWidth: 1,
+    shadowColor: '#547862',
+    shadowOpacity: 0.08,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 7 },
+    elevation: 2,
+  },
+  wellnessOverviewRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  wellnessGaugeWrap: {
+    width: 122,
+    height: 122,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  wellnessGaugeCenter: {
+    position: 'absolute',
+    top: 8,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 18,
+  },
+  wellnessGaugeLabel: {
+    fontSize: 10,
+    lineHeight: 14,
+    fontWeight: '700',
+  },
+  wellnessGaugeValue: {
+    maxWidth: 84,
+    marginTop: 1,
+    fontSize: 26,
+    lineHeight: 31,
+    fontWeight: '800',
+  },
+  wellnessGaugeUnit: {
+    marginTop: -1,
+    fontSize: 10,
+    lineHeight: 13,
+    fontWeight: '600',
+  },
+  wellnessOverviewDetail: {
+    flex: 1,
+    minWidth: 0,
+  },
+  wellnessSummaryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 5,
+  },
+  wellnessIntakeSummary: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 10,
+    lineHeight: 14,
+    fontWeight: '600',
+  },
+  wellnessTargetEdit: {
+    minHeight: 28,
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 7,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 3,
+  },
+  wellnessTargetEditText: {
+    fontSize: 9,
+    lineHeight: 12,
+    fontWeight: '800',
+  },
+  wellnessTotalProgress: {
+    height: 6,
+    marginTop: 8,
+    marginBottom: 12,
+    borderRadius: 999,
+    overflow: 'hidden',
+  },
+  wellnessTotalProgressFill: {
+    height: '100%',
+    borderRadius: 999,
+  },
+  wellnessMacroGrid: {
+    flexDirection: 'row',
+    gap: 5,
+  },
+  wellnessMacroItem: {
+    flex: 1,
+    minWidth: 0,
+  },
+  wellnessMacroTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
+  wellnessMacroTitle: {
+    flexShrink: 1,
+    fontSize: 9,
+    lineHeight: 12,
+    fontWeight: '600',
+  },
+  wellnessMacroCurrent: {
+    marginTop: 3,
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: '800',
+  },
+  wellnessMacroTarget: {
+    fontSize: 8,
+    lineHeight: 11,
+  },
+  wellnessMacroTrack: {
+    height: 4,
+    marginTop: 4,
+    borderRadius: 999,
+    overflow: 'hidden',
+  },
+  wellnessMacroFill: {
+    height: '100%',
+    borderRadius: 999,
+  },
+  wellnessNutritionShell: {
+    minHeight: 44,
+    marginTop: 8,
+    paddingTop: 4,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(120, 145, 130, 0.22)',
+    justifyContent: 'center',
   },
   mainCard: {
     borderRadius: 16,
@@ -2593,12 +3671,16 @@ const styles = StyleSheet.create({
     borderRadius: 11,
   },
   nutritionExpandTitleRow: {
+    minHeight: 48,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 12,
-    paddingVertical: 8,
     marginBottom: 8,
+  },
+  nutritionExpandButton: {
+    minHeight: 48,
+    justifyContent: 'center',
   },
   nutritionTitle: {
     color: '#34495e',
@@ -3209,16 +4291,23 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
   },
-  homeDietEntry: {
-    marginBottom: 16,
+homeDietEntry: {
+    minHeight: 72,
+    marginBottom: 12,
     borderWidth: 1,
-    borderRadius: 20,
-    padding: 14,
-  },
-  homeDietEntryMain: {
+    borderRadius: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 8,
+  },
+  homeDietEntryMain: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   homeDietEntryIcon: {
     width: 42,
@@ -3230,28 +4319,18 @@ const styles = StyleSheet.create({
   },
   homeDietEntryCopy: {
     flex: 1,
+    minWidth: 0,
   },
-  homeDietEntryTitle: {
-    fontSize: 15,
-    fontWeight: '900',
-  },
-  homeDietEntrySubtitle: {
-    marginTop: 3,
-    fontSize: 12,
-  },
-  homeDietEntryCredit: {
-    marginTop: 9,
-    fontSize: 10,
-    lineHeight: 15,
-  },
+  homeDietEntryTitle: { fontSize: 15, lineHeight: 20, fontWeight: '900' },
+  homeDietEntrySubtitle: { marginTop: 2, fontSize: 11, lineHeight: 16 },
   homeDietEntryActions: {
-    marginTop: 10,
+    width: 136,
     flexDirection: 'row',
-    gap: 8,
+    gap: 6,
   },
   homeDietEntryButton: {
     flex: 1,
-    minHeight: 38,
+    minHeight: 44,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',

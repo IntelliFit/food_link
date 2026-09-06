@@ -3,7 +3,7 @@
     "name": "智健食探",
     "slug": "food-link-mobile",
     "scheme": "foodlink",
-    "version": "3.0.2",
+    "version": "4.5.0",
     "icon": "./assets/icon.png",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
@@ -15,14 +15,15 @@
     },
     "android": {
       "package": "cn.healthymax.foodlink",
-      "versionCode": 4,
+      "googleServicesFile": "./google-services.json",
+      "versionCode": 62,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#F8FBF5"
       }
     },
     "extra": {
-      "apiBaseUrl": "http://10.0.2.2:3010",
+      "apiBaseUrl": "https://dev.api.healthymax.cn",
       "shareBaseUrl": "https://healthymax.cn",
       "wechatAppId": "wx62da2262ae3ff06c",
       "eas": {
@@ -31,6 +32,7 @@
     },
     "plugins": [
       "expo-status-bar",
+      "expo-notifications",
       [
         "expo-media-library",
         {

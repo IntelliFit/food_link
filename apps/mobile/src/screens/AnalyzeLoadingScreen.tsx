@@ -1,15 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Animated, Easing, Image, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
+import { ActivityIndicator, Animated, Easing, Image, Pressable, ScrollView, StyleSheet, Switch, Text, useWindowDimensions, View } from 'react-native'
 import { StatusBar } from 'expo-status-bar'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import type { AnalysisTask, ExecutionMode, MealType } from '@food-link/core'
 import { apiClient } from '../api'
+import { useAppDialog } from '../providers/DialogProvider'
 import type { RootStackParamList } from '../navigation/types'
 import { colors } from '../theme'
 import { todayKey } from '../utils/date'
+import { readAutoRecordPreference } from '../utils/autoRecordPreference'
 import { userFacingErrorMessage, userFacingMessage } from '../utils/errors'
+import { needsPrecisionUserAction } from '../utils/precisionTask'
 
 type AnalyzeLoadingRoute = RouteProp<RootStackParamList, 'AnalyzeLoading'>
 type AnalyzeTaskKind = 'food' | 'food_text' | 'exercise'
@@ -69,6 +72,7 @@ const WAITING_INTERACTION_CARDS: WaitingInteractionCard[] = [
 export function AnalyzeLoadingScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const route = useRoute<AnalyzeLoadingRoute>()
+  const dialog = useAppDialog()
   const insets = useSafeAreaInsets()
   const { width, height } = useWindowDimensions()
   const scanProgress = useRef(new Animated.Value(0)).current
@@ -89,6 +93,10 @@ export function AnalyzeLoadingScreen() {
   const [tipIndex, setTipIndex] = useState(0)
   const [interactionIndex, setInteractionIndex] = useState(0)
   const [selectedQuizOption, setSelectedQuizOption] = useState<number | null>(null)
+  const [autoRecordEnabled, setAutoRecordEnabled] = useState(false)
+  const autoRecordEnabledRef = useRef(false)
+  const [autoRecordPreferenceReady, setAutoRecordPreferenceReady] = useState(false)
+  const [autoRecordBusy, setAutoRecordBusy] = useState(false)
   const frameSize = Math.min(Math.max(width - 40, 260), 320)
   const scanTranslateY = scanProgress.interpolate({
     inputRange: [0, 1],
@@ -143,8 +151,29 @@ export function AnalyzeLoadingScreen() {
   }, [])
 
   useEffect(() => {
+    let active = true
+    setAutoRecordPreferenceReady(false)
+    void readAutoRecordPreference().then((enabled) => {
+      if (!active) return
+      autoRecordEnabledRef.current = enabled
+      setAutoRecordEnabled(enabled)
+    }).catch(() => {
+      if (!active) return
+      autoRecordEnabledRef.current = false
+      setAutoRecordEnabled(false)
+    }).finally(() => {
+      if (active) setAutoRecordPreferenceReady(true)
+    })
+    return () => {
+      active = false
+    }
+  }, [taskId])
+
+  useEffect(() => {
+    if (!autoRecordPreferenceReady) return undefined
     let cancelled = false
 
+    const navigateHome = () => navigation.replace('MainTabs', { screen: 'HomeTab' })
     const navigateWithTask = (task: AnalysisTask) => {
       if (resolveTaskKind(task, params?.taskType) === 'exercise') {
         navigation.replace('BodyMetricRecord', { type: 'exercise' })
@@ -152,6 +181,10 @@ export function AnalyzeLoadingScreen() {
       }
       if (isTextFoodTask(task, params?.taskType)) {
         navigation.replace('TextResult', { task, mealType, date })
+        return
+      }
+      if (needsPrecisionUserAction(task)) {
+        navigation.replace('PrecisionConfirm', { taskId: task.id, mealType, date })
         return
       }
       navigation.replace('Result', {
@@ -162,8 +195,26 @@ export function AnalyzeLoadingScreen() {
       })
     }
 
+    const configureAutoRecord = async (enabled: boolean) => {
+      if (!taskId || isExerciseAnalysis) return null
+      setAutoRecordBusy(true)
+      try {
+        const result = await apiClient.setAnalyzeTaskAutoRecord(taskId, enabled, mealType)
+        if (cancelled) return result
+        autoRecordEnabledRef.current = result.enabled
+        setAutoRecordEnabled(result.enabled)
+        return result
+      } finally {
+        if (!cancelled) setAutoRecordBusy(false)
+      }
+    }
+
     const pollTask = async () => {
       if (routeTask) {
+        if (routeTask.is_recorded || routeTask.record_id) {
+          navigateHome()
+          return
+        }
         navigateWithTask(routeTask)
         return
       }
@@ -176,6 +227,22 @@ export function AnalyzeLoadingScreen() {
         return
       }
 
+      if (!isExerciseAnalysis) {
+        try {
+          const result = await configureAutoRecord(autoRecordEnabledRef.current)
+          if (result && isAutoRecorded(result)) {
+            navigateHome()
+            return
+          }
+        } catch (error) {
+          if (autoRecordEnabledRef.current) {
+            autoRecordEnabledRef.current = false
+            setAutoRecordEnabled(false)
+            void dialog.alert('自动记录暂未开启', userFacingErrorMessage(error, '本次识别完成后仍可在结果页确认并记录。'), 'warning')
+          }
+        }
+      }
+
       let consecutivePollFailures = 0
       while (!cancelled) {
         try {
@@ -185,6 +252,24 @@ export function AnalyzeLoadingScreen() {
           setTaskStatusText(statusLabel(task.status))
 
           if (task.status === 'done') {
+            if (task.is_recorded || task.record_id) {
+              navigateHome()
+              return
+            }
+            if (autoRecordEnabledRef.current && !isExerciseAnalysis) {
+              for (let attempt = 0; attempt < 4 && !cancelled; attempt += 1) {
+                try {
+                  const result = await configureAutoRecord(true)
+                  if (result && isAutoRecorded(result)) {
+                    navigateHome()
+                    return
+                  }
+                } catch {
+                  break
+                }
+                await new Promise((resolve) => setTimeout(resolve, 750))
+              }
+            }
             navigateWithTask(task)
             return
           }
@@ -228,7 +313,26 @@ export function AnalyzeLoadingScreen() {
     return () => {
       cancelled = true
     }
-  }, [date, mealType, navigation, params?.taskType, previewImageUri, routeTask, taskId])
+  }, [autoRecordPreferenceReady, date, dialog, isExerciseAnalysis, mealType, navigation, params?.taskType, previewImageUri, routeTask, taskId])
+  const handleAutoRecordChange = async (enabled: boolean) => {
+    if (!taskId || isExerciseAnalysis || autoRecordBusy) return
+    const previous = autoRecordEnabledRef.current
+    autoRecordEnabledRef.current = enabled
+    setAutoRecordEnabled(enabled)
+    setAutoRecordBusy(true)
+    try {
+      const result = await apiClient.setAnalyzeTaskAutoRecord(taskId, enabled, mealType)
+      autoRecordEnabledRef.current = result.enabled
+      setAutoRecordEnabled(result.enabled)
+      if (isAutoRecorded(result)) navigation.replace('MainTabs', { screen: 'HomeTab' })
+    } catch (error) {
+      autoRecordEnabledRef.current = previous
+      setAutoRecordEnabled(previous)
+      void dialog.alert('自动记录设置失败', userFacingErrorMessage(error), 'danger')
+    } finally {
+      setAutoRecordBusy(false)
+    }
+  }
 
   const handleNextInteraction = () => {
     setInteractionIndex((current) => (current + 1) % WAITING_INTERACTION_CARDS.length)
@@ -337,6 +441,26 @@ export function AnalyzeLoadingScreen() {
           ) : null}
         </View>
 
+        {!isExerciseAnalysis && taskId && elapsedSeconds >= 5 ? (
+          <View style={styles.autoRecordCard}>
+            <View style={styles.autoRecordCopy}>
+              <Text style={styles.autoRecordTitle}>{autoRecordEnabled ? `完成后将自动记入${mealTypeLabel(mealType)}` : `完成后自动记入${mealTypeLabel(mealType)}`}</Text>
+              <Text style={styles.autoRecordDescription}>{autoRecordEnabled ? '本次已开启，离开页面也会继续' : '仅对本次生效；长期默认可到“我的－记录设置”设置'}</Text>
+            </View>
+            <View style={styles.autoRecordControl}>
+              {autoRecordBusy ? <ActivityIndicator size="small" color="#6ee7b7" /> : null}
+              <Switch
+                accessibilityLabel={`完成后自动记入${mealTypeLabel(mealType)}`}
+                value={autoRecordEnabled}
+                disabled={autoRecordBusy}
+                onValueChange={(enabled) => void handleAutoRecordChange(enabled)}
+                trackColor={{ false: 'rgba(255,255,255,0.24)', true: 'rgba(110,231,183,0.5)' }}
+                thumbColor={autoRecordEnabled ? '#6ee7b7' : '#ffffff'}
+              />
+            </View>
+          </View>
+        ) : null}
+
         <View style={styles.waitingCard}>
           <View style={styles.waitingHead}>
             <Text style={styles.waitingEyebrow}>{interactionCard.eyebrow}</Text>
@@ -419,6 +543,23 @@ function OutcomeScreen({
       <Text style={styles.outcomeFooter}>食探 · 智能健康管理助手</Text>
     </View>
   )
+}
+
+function isAutoRecorded(result: { status?: string; record_id?: string }): boolean {
+  return result.status === 'recorded' || Boolean(result.record_id)
+}
+
+function mealTypeLabel(mealType: MealType): string {
+  const labels: Record<MealType, string> = {
+    breakfast: '早餐',
+    morning_snack: '上午加餐',
+    lunch: '午餐',
+    afternoon_snack: '下午加餐',
+    dinner: '晚餐',
+    evening_snack: '夜间加餐',
+    snack: '加餐',
+  }
+  return labels[mealType] || '本餐'
 }
 
 function resolveTaskKind(task?: AnalysisTask, routeTaskType?: string): AnalyzeTaskKind {
@@ -776,6 +917,42 @@ const styles = StyleSheet.create({
     color: 'rgba(254, 240, 138, 0.94)',
     fontSize: 11,
     lineHeight: 17,
+  },
+  autoRecordCard: {
+    minHeight: 78,
+    borderRadius: 18,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.28)',
+    backgroundColor: 'rgba(13, 39, 31, 0.58)',
+    paddingHorizontal: 15,
+    paddingVertical: 12,
+    marginBottom: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  autoRecordCopy: {
+    flex: 1,
+    minWidth: 0,
+    paddingRight: 10,
+  },
+  autoRecordTitle: {
+    color: 'rgba(255,255,255,0.96)',
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '800',
+  },
+  autoRecordDescription: {
+    marginTop: 4,
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 11,
+    lineHeight: 17,
+  },
+  autoRecordControl: {
+    minWidth: 54,
+    minHeight: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 2,
   },
   waitingCard: {
     width: '100%',

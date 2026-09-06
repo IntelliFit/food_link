@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import {
   ActivityIndicator,
   Alert,
+  FlatList,
   Image,
   Keyboard,
   KeyboardAvoidingView,
@@ -10,6 +11,7 @@ import {
   Pressable,
   RefreshControl,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   TextInput,
@@ -23,7 +25,7 @@ import * as ImagePicker from 'expo-image-picker'
 import { CommonActions, useFocusEffect, useNavigation, useRoute, type RouteProp } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { Clock, Copy, Edit3, Flag, Heart, Image as ImageIcon, MessageCircle, MoreHorizontal, NotebookPen, Send, Star, Trash2, UserRound, X } from 'lucide-react-native'
+import { Bookmark, Camera, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Clock, Copy, Crown, Edit3, Flag, Heart, Image as ImageIcon, Leaf, Lightbulb, Maximize2, MessageCircle, MoreHorizontal, NotebookPen, Plus, Search, Send, Share2, SlidersHorizontal, Star, Store, Trash2, UserRound, UtensilsCrossed, X, type LucideIcon } from 'lucide-react-native'
 import {
   getMealTypeLabel,
   inferDefaultMealTypeFromLocalTime,
@@ -38,6 +40,7 @@ import {
   type MembershipPaymentOrder,
   type MembershipPlan,
   type MembershipStatus,
+  type Nutrients,
   type PrivateMessageItem,
   type PublicFoodComment,
   type PublicFoodItem,
@@ -46,6 +49,7 @@ import {
 import { apiClient, getStoredUserId } from '../api'
 import { AppButton } from '../components/AppButton'
 import type { RootStackParamList } from '../navigation/types'
+import { useColorScheme } from '../providers/ColorSchemeProvider'
 import { colors } from '../theme'
 import { formatDateTime, todayKey } from '../utils/date'
 import { emitHomeIntakeDataChangedEvent } from '../utils/home-events'
@@ -69,10 +73,10 @@ const membershipBaseTierDailyCredits: Record<MembershipTierKey, number> = {
   standard: 20,
   advanced: 40,
 }
-const membershipTierMeta: Record<MembershipTierKey, { icon: string; name: string; short: string; summary: string; precision: boolean; scene: string }> = {
-  light: { icon: '✦', name: '轻度版', short: '轻度', summary: '适合轻量记录，不含精准模式', precision: false, scene: '轻量记录' },
-  standard: { icon: '★', name: '标准版', short: '标准', summary: '含精准模式，适合日常使用', precision: true, scene: '日常使用' },
-  advanced: { icon: '♛', name: '进阶版', short: '进阶', summary: '含精准模式，适合高频使用', precision: true, scene: '高频使用' },
+const membershipTierMeta: Record<MembershipTierKey, { icon: LucideIcon; name: string; short: string; summary: string; precision: boolean; scene: string }> = {
+  light: { icon: Leaf, name: '轻度版', short: '轻度', summary: '适合轻量记录，不含精准模式', precision: false, scene: '轻量记录' },
+  standard: { icon: Star, name: '标准版', short: '标准', summary: '含精准模式，适合日常使用', precision: true, scene: '日常使用' },
+  advanced: { icon: Crown, name: '进阶版', short: '进阶', summary: '含精准模式，适合高频使用', precision: true, scene: '高频使用' },
 }
 const membershipPeriodMeta: Record<MembershipPeriodKey, { label: string; unit: string }> = {
   monthly: { label: '月卡', unit: '/月' },
@@ -94,6 +98,7 @@ type PublicFoodReplyTarget = {
 export function MembershipCenterScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const insets = useSafeAreaInsets()
+  const { isDark } = useColorScheme()
   const [membership, setMembership] = useState<MembershipStatus | null>(null)
   const [plans, setPlans] = useState<MembershipPlan[]>([])
   const [lastOrder, setLastOrder] = useState<MembershipPaymentOrder | null>(null)
@@ -297,22 +302,22 @@ export function MembershipCenterScreen() {
   }
 
   return (
-    <View style={styles.membershipPage}>
+    <View style={[styles.membershipPage, isDark ? styles.membershipPageDark : null]}>
       <ScrollView
         style={styles.membershipScroll}
         contentContainerStyle={[styles.membershipPageContent, { paddingBottom: Math.max(insets.bottom, 16) + 40 }]}
-        refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor="#00bc7d" colors={['#00bc7d']} />}
+        refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor={isDark ? '#7dd3b0' : '#00bc7d'} colors={[isDark ? '#7dd3b0' : '#00bc7d']} />}
       >
       <View style={styles.membershipHero}>
-        <View style={styles.membershipHeroEmblemRow}>
-          <Text style={[styles.membershipHeroLaurel, styles.membershipHeroLaurelLeft]}>❦</Text>
+        <View style={styles.membershipHeroEmblemRow} accessible={false} importantForAccessibility="no-hide-descendants">
+          <Leaf size={27} color="rgba(218,230,220,0.34)" style={styles.membershipHeroLaurelLeft} />
           <View style={styles.membershipHeroIconShell}>
             <View style={styles.membershipHeroIconHalo} />
             <View style={styles.membershipHeroIconWrap}>
               <Star size={30} color="#f7fff8" strokeWidth={2.6} />
             </View>
           </View>
-          <Text style={[styles.membershipHeroLaurel, styles.membershipHeroLaurelRight]}>❦</Text>
+          <Leaf size={27} color="rgba(218,230,220,0.34)" style={styles.membershipHeroLaurelRight} />
         </View>
         <Text style={styles.membershipHeroTitle}>食探会员</Text>
         <Text style={styles.membershipHeroSubtitle}>
@@ -352,8 +357,8 @@ export function MembershipCenterScreen() {
       </View>
 
       <View style={styles.membershipSectionHead}>
-        <Text style={styles.membershipSectionTitle}>选择档位</Text>
-        <Text style={styles.membershipSectionHint}>系统积分次日刷新，奖励积分可累计</Text>
+        <Text style={[styles.membershipSectionTitle, isDark ? styles.membershipSectionTitleDark : null]}>选择档位</Text>
+        <Text style={[styles.membershipSectionHint, isDark ? styles.membershipSectionHintDark : null]}>系统积分次日刷新，奖励积分可累计</Text>
       </View>
       <View style={styles.membershipTierGrid}>
         {availableTierKeys.map((tier) => {
@@ -361,29 +366,39 @@ export function MembershipCenterScreen() {
           const planForTier = findMembershipPlan(sortedPlans, tier, selectedPeriod) || sortedPlans.find((plan) => membershipPlanTierKey(plan) === tier)
           const isCurrent = Boolean(membership?.is_pro && planForTier?.code === membership.current_plan_code)
           const meta = membershipTierMeta[tier]
+          const TierIcon = meta.icon
           return (
             <Pressable
               key={tier}
-              style={[styles.membershipTierCard, active ? styles.membershipTierCardActive : null]}
+              style={({ pressed }) => [
+                styles.membershipTierCard,
+                active ? styles.membershipTierCardActive : null,
+                isDark ? styles.membershipTierCardDark : null,
+                active && isDark ? styles.membershipTierCardActiveDark : null,
+                pressed ? styles.membershipPressed : null,
+              ]}
               onPress={() => selectTier(tier)}
               disabled={!planForTier}
+              accessibilityRole="radio"
+              accessibilityLabel={meta.name + '，每日 ' + tierCreditsDisplay[tier] + ' 积分，' + meta.summary}
+              accessibilityState={{ checked: active, disabled: !planForTier }}
             >
               {isCurrent ? <Text style={styles.membershipTierBadge}>当前</Text> : tier === 'advanced' ? <Text style={styles.membershipTierBadge}>高配</Text> : null}
               <View style={styles.membershipTierHead}>
-                <Text style={styles.membershipTierIcon}>{meta.icon}</Text>
-                <Text style={styles.membershipTierName}>{meta.name}</Text>
+                <TierIcon size={16} color={isDark ? '#7dd3b0' : '#00bc7d'} strokeWidth={2.4} />
+                <Text style={[styles.membershipTierName, isDark ? styles.membershipTierNameDark : null]}>{meta.name}</Text>
               </View>
-              <Text style={styles.membershipTierCredits}>{tierCreditsDisplay[tier]}</Text>
-              <Text style={styles.membershipTierUnit}>积分 / 日</Text>
-              <Text style={styles.membershipTierSummary} numberOfLines={2}>{meta.summary || planForTier?.description}</Text>
+              <Text style={[styles.membershipTierCredits, isDark ? styles.membershipTierCreditsDark : null]}>{tierCreditsDisplay[tier]}</Text>
+              <Text style={[styles.membershipTierUnit, isDark ? styles.membershipTierUnitDark : null]}>积分 / 日</Text>
+              <Text style={[styles.membershipTierSummary, isDark ? styles.membershipTierSummaryDark : null]}>{meta.summary || planForTier?.description}</Text>
             </Pressable>
           )
         })}
       </View>
 
       <View style={styles.membershipSectionHead}>
-        <Text style={styles.membershipSectionTitle}>选择周期</Text>
-        <Text style={styles.membershipSectionHint}>{membership?.is_pro ? '随时可升级档位' : '长期订阅更划算'}</Text>
+        <Text style={[styles.membershipSectionTitle, isDark ? styles.membershipSectionTitleDark : null]}>选择周期</Text>
+        <Text style={[styles.membershipSectionHint, isDark ? styles.membershipSectionHintDark : null]}>{membership?.is_pro ? '随时可升级档位' : '长期订阅更划算'}</Text>
       </View>
       <View style={styles.membershipPeriodTabs}>
         {availablePeriodKeys.map((period) => {
@@ -398,37 +413,46 @@ export function MembershipCenterScreen() {
           return (
             <Pressable
               key={period}
-              style={[styles.membershipPeriodTab, active ? styles.membershipPeriodTabActive : null]}
+              style={({ pressed }) => [
+                styles.membershipPeriodTab,
+                active ? styles.membershipPeriodTabActive : null,
+                isDark ? styles.membershipPeriodTabDark : null,
+                active && isDark ? styles.membershipPeriodTabActiveDark : null,
+                pressed ? styles.membershipPressed : null,
+              ]}
               onPress={() => selectPeriod(period)}
               disabled={!planForPeriod}
+              accessibilityRole="radio"
+              accessibilityLabel={membershipPeriodMeta[period].label + '，' + (planForPeriod ? '¥' + money(planForPeriod.amount) + membershipPeriodMeta[period].unit : '暂无套餐')}
+              accessibilityState={{ checked: active, disabled: !planForPeriod }}
             >
               {period === 'yearly' && planForPeriod?.savings ? <Text style={styles.membershipPeriodRecommend}>推荐</Text> : null}
-              <Text style={styles.membershipPeriodLabel}>{membershipPeriodMeta[period].label}</Text>
-              <Text style={styles.membershipPeriodPrice}>
+              <Text style={[styles.membershipPeriodLabel, isDark ? styles.membershipPeriodLabelDark : null]}>{membershipPeriodMeta[period].label}</Text>
+              <Text style={[styles.membershipPeriodPrice, isDark ? styles.membershipPeriodPriceDark : null]}>
                 ¥{planForPeriod ? money(planForPeriod.amount) : '--'}
-                <Text style={styles.membershipPeriodUnit}>{membershipPeriodMeta[period].unit}</Text>
+                <Text style={[styles.membershipPeriodUnit, isDark ? styles.membershipPeriodUnitDark : null]}>{membershipPeriodMeta[period].unit}</Text>
               </Text>
               {membership?.is_pro && planForPeriod?.code === membership.current_plan_code ? (
-                <Text style={styles.membershipPeriodCurrent}>当前周期</Text>
+                <Text style={[styles.membershipPeriodCurrent, isDark ? styles.membershipPeriodCurrentDark : null]}>当前周期</Text>
               ) : saveText ? (
-                <Text style={styles.membershipPeriodSave}>{saveText}</Text>
+                <Text style={[styles.membershipPeriodSave, isDark ? styles.membershipPeriodSaveDark : null]}>{saveText}</Text>
               ) : null}
-              <Text style={styles.membershipPeriodWatermark}>{membershipPeriodWatermarks[period]}</Text>
+              <Text style={[styles.membershipPeriodWatermark, isDark ? styles.membershipPeriodWatermarkDark : null]}>{membershipPeriodWatermarks[period]}</Text>
             </Pressable>
           )
         })}
       </View>
 
       {selectedPlan ? (
-        <View style={styles.membershipPlanSummary}>
+        <View style={[styles.membershipPlanSummary, isDark ? styles.membershipPlanSummaryDark : null]}>
           <View style={styles.flex}>
-            <Text style={styles.membershipPlanName}>{selectedPlan.name}</Text>
-            <Text style={styles.membershipPlanDesc} numberOfLines={2}>
+            <Text style={[styles.membershipPlanName, isDark ? styles.membershipPlanNameDark : null]}>{selectedPlan.name}</Text>
+            <Text style={[styles.membershipPlanDesc, isDark ? styles.membershipPlanDescDark : null]}>
               {founderEligible
                 ? `创始用户开通后每日 ${tierCreditsDisplay[selectedTier]} 系统积分 · ${membershipTierMeta[selectedTier]?.summary || selectedPlan.description || '系统积分次日刷新，奖励积分另计累计'}`
                 : membershipTierMeta[selectedTier]?.summary || selectedPlan.description || `${planTierText(selectedPlan.tier)} · 每日 ${selectedPlan.daily_credits || 0} 系统积分`}
             </Text>
-            {perMonthDisplay ? <Text style={styles.membershipPlanMeta}>≈ ¥{perMonthDisplay} / 月</Text> : null}
+            {perMonthDisplay ? <Text style={[styles.membershipPlanMeta, isDark ? styles.membershipPlanMetaDark : null]}>≈ ¥{perMonthDisplay} / 月</Text> : null}
             {savingsAmount ? (
               <View style={styles.membershipPlanSaveTag}>
                 <Text style={styles.membershipPlanSaveTagText}>立省 ¥{money(savingsAmount)}</Text>
@@ -436,57 +460,60 @@ export function MembershipCenterScreen() {
             ) : null}
           </View>
           <View style={styles.membershipPlanPriceBlock}>
-            <Text style={styles.membershipPlanPrice}>¥{money(selectedPlan.amount)}</Text>
-            <Text style={styles.membershipPlanPeriod}>{membershipPeriodMeta[selectedPeriod].unit}</Text>
+            <Text style={[styles.membershipPlanPrice, isDark ? styles.membershipPlanPriceDark : null]}>¥{money(selectedPlan.amount)}</Text>
+            <Text style={[styles.membershipPlanPeriod, isDark ? styles.membershipPlanPeriodDark : null]}>{membershipPeriodMeta[selectedPeriod].unit}</Text>
             {originalAmountDisplay ? (
-              <Text style={styles.membershipPlanOriginalPrice}>原价 ¥{originalAmountDisplay}{membershipPeriodMeta[selectedPeriod].unit}</Text>
+              <Text style={[styles.membershipPlanOriginalPrice, isDark ? styles.membershipPlanOriginalPriceDark : null]}>原价 ¥{originalAmountDisplay}{membershipPeriodMeta[selectedPeriod].unit}</Text>
             ) : null}
           </View>
         </View>
       ) : null}
 
-      <View style={styles.membershipFeaturesCard}>
-        <View style={styles.membershipFeaturesHeader}>
+      <View style={[styles.membershipFeaturesCard, isDark ? styles.membershipFeaturesCardDark : null]}>
+        <View style={[styles.membershipFeaturesHeader, isDark ? styles.membershipFeaturesHeaderDark : null]}>
           {membershipTierKeys.map((tier) => (
             <View
               key={tier}
-              style={[styles.membershipFeaturesHeadCell, selectedTier === tier ? styles.membershipFeaturesHeadCellActive : null]}
+              style={[styles.membershipFeaturesHeadCell, selectedTier === tier ? styles.membershipFeaturesHeadCellActive : null, selectedTier === tier && isDark ? styles.membershipFeaturesHeadCellActiveDark : null]}
             >
-              <Text style={styles.membershipFeaturesHeadText}>{membershipTierMeta[tier].short}</Text>
+              <Text style={[styles.membershipFeaturesHeadText, isDark ? styles.membershipFeaturesHeadTextDark : null]}>{membershipTierMeta[tier].short}</Text>
             </View>
           ))}
         </View>
         {tierFeatureRows.map((row) => (
-          <View key={row.label} style={styles.membershipFeaturesRow}>
-            <View style={styles.membershipFeaturesLabelCell}>
-              <Text style={styles.membershipFeaturesLabelText}>{row.label}</Text>
+          <View key={row.label} style={[styles.membershipFeaturesRow, isDark ? styles.membershipFeaturesRowDark : null]}>
+            <View style={[styles.membershipFeaturesLabelCell, isDark ? styles.membershipFeaturesLabelCellDark : null]}>
+              <Text style={[styles.membershipFeaturesLabelText, isDark ? styles.membershipFeaturesLabelTextDark : null]}>{row.label}</Text>
             </View>
             {membershipTierKeys.map((tier) => (
               <View
                 key={tier}
-                style={[styles.membershipFeaturesValueCell, selectedTier === tier ? styles.membershipFeaturesValueCellActive : null]}
+                style={[styles.membershipFeaturesValueCell, selectedTier === tier ? styles.membershipFeaturesValueCellActive : null, selectedTier === tier && isDark ? styles.membershipFeaturesValueCellActiveDark : null]}
               >
-                <Text style={styles.membershipFeaturesValueText}>{row.values[tier]}</Text>
+                <Text style={[styles.membershipFeaturesValueText, isDark ? styles.membershipFeaturesValueTextDark : null]}>{row.values[tier]}</Text>
               </View>
             ))}
           </View>
         ))}
       </View>
-      <Text style={styles.membershipFeaturesFootnote}>当前对比表只展示已真实上线的差异；后续新能力上线后再补充说明。</Text>
+      <Text style={[styles.membershipFeaturesFootnote, isDark ? styles.membershipFeaturesFootnoteDark : null]}>当前对比表只展示已真实上线的差异；后续新能力上线后再补充说明。</Text>
 
-      <View style={styles.membershipCreditsHintCard}>
-        <Text style={styles.membershipCreditsHintTitle}>💡 积分消耗</Text>
-        <Text style={styles.membershipCreditsHintItem}>· 创始用户礼遇：前 1000 名注册用户或前 100 名付费用户，开通会员后每日套餐积分翻倍</Text>
-        <Text style={styles.membershipCreditsHintItem}>· 运动记录：1 积分 / 次</Text>
-        <Text style={styles.membershipCreditsHintItem}>· 基础记录 / 基础分析：2 积分 / 次</Text>
-        <Text style={styles.membershipCreditsHintItem}>· 精准模式：4 积分 / 次</Text>
-        <Text style={[styles.membershipCreditsHintItem, styles.membershipCreditsHintItemMuted]}>· 系统积分每日发放，次日 00:00 刷新；邀请、分享等奖励积分累计不清零</Text>
-        <Text style={styles.membershipCreditsHintItem}>· 邀请好友：好友在 7 天内完成 2 个自然日有效使用后，双方各得 15 积分并转入累计余额</Text>
-        <Text style={styles.membershipCreditsHintItem}>· 分享海报成功：每日奖励 1 积分，转入累计余额</Text>
+      <View style={[styles.membershipCreditsHintCard, isDark ? styles.membershipCreditsHintCardDark : null]}>
+        <View style={styles.membershipCreditsHintHeading}>
+          <Lightbulb size={16} color={isDark ? '#fde68a' : '#92400e'} strokeWidth={2.3} />
+          <Text style={[styles.membershipCreditsHintTitle, isDark ? styles.membershipCreditsHintTitleDark : null]}>积分消耗</Text>
+        </View>
+        <Text style={[styles.membershipCreditsHintItem, isDark ? styles.membershipCreditsHintItemDark : null]}>· 创始用户礼遇：前 1000 名注册用户或前 100 名付费用户，开通会员后每日套餐积分翻倍</Text>
+        <Text style={[styles.membershipCreditsHintItem, isDark ? styles.membershipCreditsHintItemDark : null]}>· 运动记录：1 积分 / 次</Text>
+        <Text style={[styles.membershipCreditsHintItem, isDark ? styles.membershipCreditsHintItemDark : null]}>· 基础记录 / 基础分析：2 积分 / 次</Text>
+        <Text style={[styles.membershipCreditsHintItem, isDark ? styles.membershipCreditsHintItemDark : null]}>· 精准模式：4 积分 / 次</Text>
+        <Text style={[styles.membershipCreditsHintItem, styles.membershipCreditsHintItemMuted, isDark ? styles.membershipCreditsHintItemMutedDark : null]}>· 系统积分每日发放，次日 00:00 刷新；邀请、分享等奖励积分累计不清零</Text>
+        <Text style={[styles.membershipCreditsHintItem, isDark ? styles.membershipCreditsHintItemDark : null]}>· 邀请好友：新朋友在 7 天内完成 2 个自然日有效使用后，邀请人得 7 天轻度版、新朋友得 3 天轻度版；奖励需手动启用</Text>
+        <Text style={[styles.membershipCreditsHintItem, isDark ? styles.membershipCreditsHintItemDark : null]}>· 分享海报成功：每日奖励 1 积分，转入累计余额</Text>
       </View>
 
       {membership ? (
-        <View style={styles.membershipStatusCard}>
+        <View style={[styles.membershipStatusCard, isDark ? styles.membershipStatusCardDark : null]}>
           <MembershipStatusRow label="当前状态" value={membershipStatusText(membership)} active={isPro || isTrial} />
           {founderEligible ? (
             <>
@@ -525,18 +552,22 @@ export function MembershipCenterScreen() {
       {selectedPlan ? (
         <View style={styles.membershipSubscribeSection}>
           {isPro ? (
-            <Text style={styles.membershipRenewTip}>
+            <Text style={[styles.membershipRenewTip, isDark ? styles.membershipRenewTipDark : null]}>
               {paidBonusActive ? `创始用户权益已生效，当前会员积分 x${founderMultiplier}` : '会员生效中，可升档或续费'}
             </Text>
           ) : null}
           <Pressable
-            style={[
+            style={({ pressed }) => [
               styles.membershipSubscribeButton,
               isPro ? styles.membershipSubscribeButtonRenew : null,
               loading ? styles.membershipSubscribeButtonDisabled : null,
+              pressed ? styles.membershipPressed : null,
             ]}
             disabled={loading}
             onPress={previewPayment}
+            accessibilityRole="button"
+            accessibilityLabel={actionButtonText}
+            accessibilityState={{ disabled: loading, busy: loading }}
           >
             {loading ? (
               <ActivityIndicator color="#ffffff" />
@@ -544,20 +575,20 @@ export function MembershipCenterScreen() {
               <Text style={styles.membershipSubscribeButtonText}>{actionButtonText}</Text>
             )}
           </Pressable>
-          <Text style={styles.membershipSubscribeHint}>
+          <Text style={[styles.membershipSubscribeHint, isDark ? styles.membershipSubscribeHintDark : null]}>
             {paymentModePreview(membership, selectedPlan)} · 到期后不自动续费
           </Text>
         </View>
       ) : null}
 
       <View style={styles.membershipActionRow}>
-        <SmallButton label="自动续费审核" onPress={() => navigation.navigate('AutoRenewAudit')} />
-        <SmallButton label="会员协议" onPress={() => navigation.navigate('MembershipAgreement')} />
+        <MembershipLinkButton label="自动续费审核" onPress={() => navigation.navigate('AutoRenewAudit')} />
+        <MembershipLinkButton label="会员协议" onPress={() => navigation.navigate('MembershipAgreement')} />
       </View>
 
       {lastOrder ? (
-        <View style={styles.membershipStatusCard}>
-          <Text style={styles.membershipInfoCardTitle}>最近订单</Text>
+        <View style={[styles.membershipStatusCard, isDark ? styles.membershipStatusCardDark : null]}>
+          <Text style={[styles.membershipInfoCardTitle, isDark ? styles.membershipInfoCardTitleDark : null]}>最近订单</Text>
           <MembershipStatusRow label="订单号" value={lastOrder.order_no} />
           <MembershipStatusRow label="订单状态" value={paymentStatusText(lastOrder.status)} />
           <MembershipStatusRow label="订单类型" value={orderModeText(lastOrder.order_mode)} />
@@ -569,7 +600,7 @@ export function MembershipCenterScreen() {
           <MembershipStatusRow label="支付参数" value={lastOrder.pay_params ? '已生成' : '未生成'} />
           <UpgradeTermsBlock order={lastOrder} />
           <View style={styles.buttonRow}>
-            <SmallButton label="同步状态" onPress={syncOrder} />
+            <MembershipLinkButton label="同步状态" onPress={syncOrder} />
           </View>
         </View>
       ) : null}
@@ -817,6 +848,9 @@ export function RecipesScreen() {
 
 type PublicFoodMode = 'all' | 'campus' | 'mine' | 'collections'
 type PublicFoodSort = 'latest' | 'hot' | 'rating'
+type PublicFoodBusyKind = 'like' | 'collect' | 'delete'
+type PublicFoodItemsByMode = Record<PublicFoodMode, PublicFoodItem[]>
+type PublicFoodLoadingByMode = Record<PublicFoodMode, boolean>
 
 const publicFoodTabOptions: Array<{ value: PublicFoodMode; label: string }> = [
   { value: 'all', label: '全部' },
@@ -831,140 +865,349 @@ const publicFoodSortOptions: Array<{ value: PublicFoodSort; label: string }> = [
   { value: 'rating', label: '评分' },
 ]
 
+function createPublicFoodItemsByMode(): PublicFoodItemsByMode {
+  return { all: [], campus: [], collections: [], mine: [] }
+}
+
+function createPublicFoodLoadingByMode(): PublicFoodLoadingByMode {
+  return { all: false, campus: false, collections: false, mine: false }
+}
+
+function isCampusPublicFoodItem(item: PublicFoodItem | null | undefined): boolean {
+  return Boolean(item && (item.is_campus_food || String(item.type || '').trim().toLowerCase() === 'campus'))
+}
+
 export function PublicFoodScreen() {
   const route = useRoute<RouteProp<RootStackParamList, 'PublicFood'>>()
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const insets = useSafeAreaInsets()
+  const { width: screenWidth, fontScale } = useWindowDimensions()
+  const { isDark } = useColorScheme()
   const initialMode: PublicFoodMode = route.params?.mode || 'all'
   const [mode, setMode] = useState<PublicFoodMode>(initialMode)
-  const [items, setItems] = useState<PublicFoodItem[]>([])
-  const [loading, setLoading] = useState(false)
+  const [itemsByMode, setItemsByMode] = useState<PublicFoodItemsByMode>(createPublicFoodItemsByMode)
+  const [loadingByMode, setLoadingByMode] = useState<PublicFoodLoadingByMode>(createPublicFoodLoadingByMode)
   const [sortBy, setSortBy] = useState<PublicFoodSort>('latest')
   const [filterFatLoss, setFilterFatLoss] = useState<boolean | undefined>(undefined)
   const [searchKeyword, setSearchKeyword] = useState('')
   const [appliedMerchant, setAppliedMerchant] = useState('')
+  const [filterOpen, setFilterOpen] = useState(false)
+  const [currentUserId, setCurrentUserId] = useState('')
+  const [busyAction, setBusyAction] = useState<{ itemId: string; kind: PublicFoodBusyKind } | null>(null)
+  const activeModeRef = useRef(mode)
+  const actionBusyRef = useRef(false)
+  const requestSequenceRef = useRef<Record<PublicFoodMode, number>>({ all: 0, campus: 0, collections: 0, mine: 0 })
 
-  const load = useCallback(async () => {
-    setLoading(true)
+  const items = itemsByMode[mode]
+  const loading = loadingByMode[mode]
+  const browseMode = mode === 'all' || mode === 'campus'
+  const showBrowseFilters = mode === 'all'
+  const compactLayout = screenWidth < 380 || fontScale > 1.15
+
+  useEffect(() => {
+    activeModeRef.current = mode
+  }, [mode])
+
+  useEffect(() => {
+    let mounted = true
+    void getStoredUserId().then((id) => {
+      if (mounted) setCurrentUserId(String(id || '').trim())
+    })
+    return () => {
+      mounted = false
+    }
+  }, [])
+
+  const load = useCallback(async (targetMode: PublicFoodMode) => {
+    const sequence = requestSequenceRef.current[targetMode] + 1
+    requestSequenceRef.current[targetMode] = sequence
+    setLoadingByMode((current) => ({ ...current, [targetMode]: true }))
     try {
-      if (mode === 'mine') {
+      let nextItems: PublicFoodItem[]
+      if (targetMode === 'mine') {
         const data = await apiClient.listMyPublicFoods()
-        setItems(data.list || [])
-      } else if (mode === 'collections') {
+        nextItems = data.list || []
+      } else if (targetMode === 'collections') {
         const data = await apiClient.listCollectedPublicFoods()
-        setItems(data.list || [])
+        nextItems = data.list || []
       } else {
         const data = await apiClient.listPublicFoods({
           limit: 50,
           sortBy,
-          merchantName: appliedMerchant || undefined,
-          suitableForFatLoss: filterFatLoss,
-          isCampusFood: mode === 'campus' ? true : undefined,
-          type: mode === 'campus' ? 'campus' : undefined,
+          merchantName: targetMode === 'all' ? appliedMerchant || undefined : undefined,
+          suitableForFatLoss: targetMode === 'all' ? filterFatLoss : undefined,
+          type: targetMode === 'campus' ? 'campus' : undefined,
         })
-        setItems(data.list || [])
+        nextItems = data.list || []
       }
+      if (requestSequenceRef.current[targetMode] !== sequence) return
+      setItemsByMode((current) => ({ ...current, [targetMode]: nextItems }))
     } catch (error) {
-      showError('获取公共食物失败', error)
+      if (requestSequenceRef.current[targetMode] === sequence && activeModeRef.current === targetMode) {
+        showError('获取公共食物失败', error)
+      }
     } finally {
-      setLoading(false)
+      if (requestSequenceRef.current[targetMode] === sequence) {
+        setLoadingByMode((current) => ({ ...current, [targetMode]: false }))
+      }
     }
-  }, [appliedMerchant, filterFatLoss, mode, sortBy])
+  }, [appliedMerchant, filterFatLoss, sortBy])
 
-  useEffect(() => {
-    void load()
-  }, [load])
+  useFocusEffect(useCallback(() => {
+    void load(mode)
+  }, [load, mode]))
 
-  const browseMode = mode === 'all' || mode === 'campus'
-  const showBrowseFilters = mode === 'all'
-  const [filterOpen, setFilterOpen] = useState(false)
-  const applySearch = () => {
-    setAppliedMerchant(searchKeyword.trim())
+  const switchMode = (nextMode: PublicFoodMode) => {
+    setMode(nextMode)
+    setFilterOpen(false)
+    Keyboard.dismiss()
   }
+
+  const applySearch = () => {
+    const nextKeyword = searchKeyword.trim()
+    Keyboard.dismiss()
+    setFilterOpen(false)
+    if (nextKeyword === appliedMerchant) {
+      void load('all')
+      return
+    }
+    setAppliedMerchant(nextKeyword)
+  }
+
+  const selectSort = (nextSort: PublicFoodSort) => {
+    setFilterOpen(false)
+    if (nextSort === sortBy) {
+      void load('all')
+      return
+    }
+    setSortBy(nextSort)
+  }
+
+  const selectFatLossFilter = (nextValue: boolean | undefined) => {
+    setFilterOpen(false)
+    if (nextValue === filterFatLoss) {
+      void load('all')
+      return
+    }
+    setFilterFatLoss(nextValue)
+  }
+
   const clearFilters = () => {
     setSearchKeyword('')
     setAppliedMerchant('')
     setFilterFatLoss(undefined)
     setFilterOpen(false)
+    Keyboard.dismiss()
   }
 
+  const updateItemAcrossModes = (itemId: string, update: (item: PublicFoodItem) => PublicFoodItem, removeFromCollections = false) => {
+    setItemsByMode((current) => {
+      const next = { ...current }
+      ;(Object.keys(next) as PublicFoodMode[]).forEach((key) => {
+        next[key] = key === 'collections' && removeFromCollections
+          ? current[key].filter((entry) => entry.id !== itemId)
+          : current[key].map((entry) => entry.id === itemId ? update(entry) : entry)
+      })
+      return next
+    })
+  }
+
+  const toggleLike = async (item: PublicFoodItem) => {
+    if (actionBusyRef.current) return
+    actionBusyRef.current = true
+    const previous = itemsByMode
+    setBusyAction({ itemId: item.id, kind: 'like' })
+    updateItemAcrossModes(item.id, (entry) => ({
+      ...entry,
+      liked: !item.liked,
+      like_count: Math.max(0, (entry.like_count || 0) + (item.liked ? -1 : 1)),
+    }))
+    try {
+      await apiClient.publicFoodLike(item.id, Boolean(item.liked))
+    } catch (error) {
+      setItemsByMode(previous)
+      showError('点赞失败', error)
+    } finally {
+      actionBusyRef.current = false
+      setBusyAction(null)
+    }
+  }
+
+  const toggleCollect = async (item: PublicFoodItem) => {
+    if (actionBusyRef.current) return
+    actionBusyRef.current = true
+    const previous = itemsByMode
+    setBusyAction({ itemId: item.id, kind: 'collect' })
+    updateItemAcrossModes(item.id, (entry) => ({
+      ...entry,
+      collected: !item.collected,
+      collection_count: Math.max(0, (entry.collection_count || 0) + (item.collected ? -1 : 1)),
+    }), Boolean(item.collected))
+    try {
+      await apiClient.publicFoodCollect(item.id, Boolean(item.collected))
+    } catch (error) {
+      setItemsByMode(previous)
+      showError('收藏失败', error)
+    } finally {
+      actionBusyRef.current = false
+      setBusyAction(null)
+    }
+  }
+
+  const deleteItem = async (item: PublicFoodItem) => {
+    if (actionBusyRef.current) return
+    actionBusyRef.current = true
+    setBusyAction({ itemId: item.id, kind: 'delete' })
+    try {
+      await apiClient.deletePublicFood(item.id)
+      setItemsByMode((current) => {
+        const next = { ...current }
+        ;(Object.keys(next) as PublicFoodMode[]).forEach((key) => {
+          next[key] = current[key].filter((entry) => entry.id !== item.id)
+        })
+        return next
+      })
+    } catch (error) {
+      showError('删除失败', error)
+    } finally {
+      actionBusyRef.current = false
+      setBusyAction(null)
+    }
+  }
+
+  const confirmDelete = (item: PublicFoodItem) => {
+    Alert.alert('删除上传', '删除后这条食物会从公共库下架，其他用户将无法继续查看。', [
+      { text: '取消', style: 'cancel' },
+      { text: '删除', style: 'destructive', onPress: () => void deleteItem(item) },
+    ])
+  }
+
+  const openDetail = (item: PublicFoodItem) => {
+    navigation.navigate('PublicFoodDetail', { itemId: item.id, isCampus: isCampusPublicFoodItem(item) })
+  }
+
+  const listEmpty = loading ? (
+    mode === 'all'
+      ? <PublicFoodSkeletonList isDark={isDark} compact={compactLayout} />
+      : <View style={styles.publicFoodLoadingState}><ActivityIndicator size="small" color={isDark ? '#6ee7b7' : colors.brand} /></View>
+  ) : (
+    <PublicFoodEmpty
+      mode={mode}
+      text={publicFoodEmptyText(mode, appliedMerchant, filterFatLoss)}
+      isDark={isDark}
+      onExplore={() => switchMode('all')}
+      onCampus={() => navigation.navigate('CampusCanteen')}
+      onShare={() => navigation.navigate('PublicFoodShare', { mode: mode === 'campus' ? 'campus' : 'public' })}
+    />
+  )
+
   return (
-    <View style={styles.publicFoodScreen}>
-      <View style={styles.publicFoodTabs}>
-        {publicFoodTabOptions.map((option) => (
-          <Pressable
-            key={option.value}
-            style={[styles.publicFoodTab, mode === option.value && styles.publicFoodTabActive]}
-            onPress={() => {
-              setMode(option.value)
-              setFilterOpen(false)
-            }}
-          >
-            <Text style={[styles.publicFoodTabText, mode === option.value && styles.publicFoodTabTextActive]}>
-              {option.label}
-            </Text>
-          </Pressable>
-        ))}
+    <View style={[styles.publicFoodScreen, isDark ? styles.publicFoodScreenDark : null]}>
+      <View style={[styles.publicFoodTabs, isDark ? styles.publicFoodSurfaceDark : null, isDark ? styles.publicFoodBorderDark : null]} accessibilityRole="tablist">
+        {publicFoodTabOptions.map((option) => {
+          const selected = mode === option.value
+          return (
+            <Pressable
+              key={option.value}
+              style={({ pressed }) => [styles.publicFoodTab, selected ? styles.publicFoodTabActive : null, pressed ? styles.publicFoodControlPressed : null]}
+              onPress={() => switchMode(option.value)}
+              accessibilityRole="tab"
+              accessibilityLabel={`${option.label}食物列表`}
+              accessibilityState={{ selected }}
+            >
+              <Text numberOfLines={2} style={[styles.publicFoodTabText, isDark ? styles.publicFoodTextSecondaryDark : null, selected ? styles.publicFoodTabTextActive : null, selected && isDark ? styles.publicFoodAccentTextDark : null]}>
+                {option.label}
+              </Text>
+            </Pressable>
+          )
+        })}
       </View>
 
       {showBrowseFilters ? (
         <>
-          <View style={styles.publicFoodSearchSection}>
+          <View style={[styles.publicFoodSearchSection, isDark ? styles.publicFoodSurfaceDark : null, isDark ? styles.publicFoodBorderDark : null]}>
             <View style={styles.publicFoodSearchRow}>
-              <View style={styles.publicFoodSearchInputWrap}>
-                <Text style={styles.publicFoodSearchIcon}>⌕</Text>
+              <View style={[styles.publicFoodSearchInputWrap, isDark ? styles.publicFoodFieldDark : null]}>
+                <Search size={20} color={isDark ? '#91a39b' : colors.textMuted} strokeWidth={2.1} />
                 <TextInput
                   value={searchKeyword}
                   onChangeText={setSearchKeyword}
                   onSubmitEditing={applySearch}
                   placeholder="搜索商家名称或食物"
-                  placeholderTextColor={colors.textMuted}
+                  placeholderTextColor={isDark ? '#7f8c87' : colors.textMuted}
                   returnKeyType="search"
-                  style={styles.publicFoodSearchInput}
+                  autoCorrect={false}
+                  style={[styles.publicFoodSearchInput, isDark ? styles.publicFoodTextPrimaryDark : null]}
+                  accessibilityLabel="搜索商家名称或食物"
                 />
+                {searchKeyword ? (
+                  <Pressable
+                    hitSlop={6}
+                    style={({ pressed }) => [styles.publicFoodSearchClear, pressed ? styles.publicFoodControlPressed : null]}
+                    onPress={() => setSearchKeyword('')}
+                    accessibilityRole="button"
+                    accessibilityLabel="清空搜索输入"
+                  >
+                    <X size={18} color={isDark ? '#91a39b' : colors.textMuted} strokeWidth={2.2} />
+                  </Pressable>
+                ) : null}
               </View>
-              <Pressable style={styles.publicFoodSearchButton} onPress={applySearch}>
+              <Pressable style={({ pressed }) => [styles.publicFoodSearchButton, pressed ? styles.publicFoodPrimaryPressed : null]} onPress={applySearch} accessibilityRole="button" accessibilityLabel="执行食物搜索">
                 <Text style={styles.publicFoodSearchButtonText}>搜索</Text>
               </Pressable>
             </View>
           </View>
 
-          <View style={styles.publicFoodSortSection}>
-            <View style={styles.publicFoodSortLeft}>
-              {publicFoodSortOptions.map((option) => (
-                <Pressable key={option.value} style={styles.publicFoodSortItem} onPress={() => setSortBy(option.value)}>
-                  <Text style={[styles.publicFoodSortText, sortBy === option.value && styles.publicFoodSortTextActive]}>
-                    {option.label}
-                  </Text>
-                  {sortBy === option.value ? <View style={styles.publicFoodSortUnderline} /> : null}
-                </Pressable>
-              ))}
+          <View style={[styles.publicFoodSortSection, compactLayout ? styles.publicFoodSortSectionCompact : null, filterOpen ? styles.publicFoodSortSectionFilterOpen : null, compactLayout && filterOpen ? styles.publicFoodSortSectionCompactFilterOpen : null, isDark ? styles.publicFoodScreenDark : null, isDark ? styles.publicFoodBorderDark : null]}>
+            <View style={[styles.publicFoodSortLeft, compactLayout ? styles.publicFoodSortLeftCompact : null]} accessibilityRole="radiogroup">
+              {publicFoodSortOptions.map((option) => {
+                const selected = sortBy === option.value
+                return (
+                  <Pressable
+                    key={option.value}
+                    style={({ pressed }) => [styles.publicFoodSortItem, pressed ? styles.publicFoodControlPressed : null]}
+                    onPress={() => selectSort(option.value)}
+                    accessibilityRole="radio"
+                    accessibilityLabel={`按${option.label}排序`}
+                    accessibilityState={{ checked: selected }}
+                  >
+                    <Text style={[styles.publicFoodSortText, isDark ? styles.publicFoodTextSecondaryDark : null, selected ? styles.publicFoodSortTextActive : null, selected && isDark ? styles.publicFoodAccentTextDark : null]}>{option.label}</Text>
+                    {selected ? <View style={[styles.publicFoodSortUnderline, isDark ? styles.publicFoodAccentBackgroundDark : null]} /> : null}
+                  </Pressable>
+                )
+              })}
             </View>
-            <Pressable style={styles.publicFoodFilterButton} onPress={() => setFilterOpen((value) => !value)}>
-              <Text style={styles.publicFoodFilterIcon}>☰</Text>
-              <Text style={styles.publicFoodFilterText}>筛选</Text>
+            <Pressable
+              style={({ pressed }) => [styles.publicFoodFilterButton, compactLayout ? styles.publicFoodFilterButtonCompact : null, isDark ? styles.publicFoodFieldDark : null, filterOpen ? styles.publicFoodFilterButtonActive : null, isDark && filterOpen ? styles.publicFoodFilterButtonActiveDark : null, pressed ? styles.publicFoodControlPressed : null]}
+              onPress={() => setFilterOpen((value) => !value)}
+              accessibilityRole="button"
+              accessibilityLabel="筛选食物类型"
+              accessibilityState={{ expanded: filterOpen, selected: filterFatLoss === true }}
+            >
+              <SlidersHorizontal size={18} color={filterOpen || filterFatLoss ? (isDark ? '#6ee7b7' : colors.brand) : (isDark ? '#b7c5bf' : colors.textSecondary)} strokeWidth={2.1} />
+              <Text style={[styles.publicFoodFilterText, isDark ? styles.publicFoodTextSecondaryDark : null, (filterOpen || filterFatLoss) ? styles.publicFoodFilterTextActive : null, (filterOpen || filterFatLoss) && isDark ? styles.publicFoodAccentTextDark : null]}>筛选</Text>
             </Pressable>
             {filterOpen ? (
-              <View style={styles.publicFoodFilterPanel}>
-                <Text style={styles.publicFoodFilterLabel}>类型</Text>
-                <View style={styles.publicFoodFilterOptions}>
+              <View style={[styles.publicFoodFilterPanel, compactLayout ? styles.publicFoodFilterPanelCompact : null, isDark ? styles.publicFoodFilterPanelDark : null]} accessibilityLabel="食物类型筛选面板">
+                <Text style={[styles.publicFoodFilterLabel, isDark ? styles.publicFoodTextSecondaryDark : null]}>类型</Text>
+                <View style={styles.publicFoodFilterOptions} accessibilityRole="radiogroup">
                   <Pressable
-                    style={[styles.publicFoodFilterOption, filterFatLoss == null && styles.publicFoodFilterOptionActive]}
-                    onPress={() => {
-                      setFilterFatLoss(undefined)
-                      setFilterOpen(false)
-                    }}
+                    style={({ pressed }) => [styles.publicFoodFilterOption, isDark ? styles.publicFoodFilterOptionDark : null, filterFatLoss == null ? styles.publicFoodFilterOptionActive : null, filterFatLoss == null && isDark ? styles.publicFoodFilterOptionActiveDark : null, pressed ? styles.publicFoodControlPressed : null]}
+                    onPress={() => selectFatLossFilter(undefined)}
+                    accessibilityRole="radio"
+                    accessibilityLabel="全部类型"
+                    accessibilityState={{ checked: filterFatLoss == null }}
                   >
-                    <Text style={[styles.publicFoodFilterOptionText, filterFatLoss == null && styles.publicFoodFilterOptionTextActive]}>全部</Text>
+                    <Text style={[styles.publicFoodFilterOptionText, isDark ? styles.publicFoodTextSecondaryDark : null, filterFatLoss == null ? styles.publicFoodFilterOptionTextActive : null, filterFatLoss == null && isDark ? styles.publicFoodAccentTextDark : null]}>全部</Text>
                   </Pressable>
                   <Pressable
-                    style={[styles.publicFoodFilterOption, filterFatLoss === true && styles.publicFoodFilterOptionActive]}
-                    onPress={() => {
-                      setFilterFatLoss(true)
-                      setFilterOpen(false)
-                    }}
+                    style={({ pressed }) => [styles.publicFoodFilterOption, isDark ? styles.publicFoodFilterOptionDark : null, filterFatLoss === true ? styles.publicFoodFilterOptionActive : null, filterFatLoss === true && isDark ? styles.publicFoodFilterOptionActiveDark : null, pressed ? styles.publicFoodControlPressed : null]}
+                    onPress={() => selectFatLossFilter(true)}
+                    accessibilityRole="radio"
+                    accessibilityLabel="只看适合减脂"
+                    accessibilityState={{ checked: filterFatLoss === true }}
                   >
-                    <Text style={[styles.publicFoodFilterOptionText, filterFatLoss === true && styles.publicFoodFilterOptionTextActive]}>适合减脂</Text>
+                    <Text style={[styles.publicFoodFilterOptionText, isDark ? styles.publicFoodTextSecondaryDark : null, filterFatLoss === true ? styles.publicFoodFilterOptionTextActive : null, filterFatLoss === true && isDark ? styles.publicFoodAccentTextDark : null]}>适合减脂</Text>
                   </Pressable>
                 </View>
               </View>
@@ -972,54 +1215,57 @@ export function PublicFoodScreen() {
           </View>
 
           {appliedMerchant || filterFatLoss ? (
-            <View style={styles.publicFoodAppliedFilters}>
-              {appliedMerchant ? <Pill text={`搜索：${appliedMerchant}`} /> : null}
-              {filterFatLoss ? <Pill text="适合减脂" /> : null}
-              <Pressable onPress={clearFilters}>
-                <Text style={styles.publicFoodClearFilter}>清除</Text>
+            <View style={[styles.publicFoodAppliedFilters, isDark ? styles.publicFoodScreenDark : null, isDark ? styles.publicFoodBorderDark : null]} accessibilityLabel="已应用筛选条件">
+              {appliedMerchant ? <View style={[styles.publicFoodAppliedChip, isDark ? styles.publicFoodAppliedChipDark : null]}><Text style={[styles.publicFoodAppliedChipText, isDark ? styles.publicFoodAccentTextDark : null]}>搜索：{appliedMerchant}</Text></View> : null}
+              {filterFatLoss ? <View style={[styles.publicFoodAppliedChip, isDark ? styles.publicFoodAppliedChipDark : null]}><Text style={[styles.publicFoodAppliedChipText, isDark ? styles.publicFoodAccentTextDark : null]}>适合减脂</Text></View> : null}
+              <Pressable style={({ pressed }) => [styles.publicFoodClearFilterButton, pressed ? styles.publicFoodControlPressed : null]} onPress={clearFilters} accessibilityRole="button" accessibilityLabel="清除全部筛选条件">
+                <Text style={[styles.publicFoodClearFilter, isDark ? styles.publicFoodTextSecondaryDark : null]}>清除</Text>
               </Pressable>
             </View>
           ) : null}
         </>
       ) : null}
 
-      <ScrollView
+      <FlatList<PublicFoodItem>
+        data={items}
+        keyExtractor={(item) => item.id}
         style={styles.publicFoodListScroll}
-        contentContainerStyle={[styles.publicFoodListScrollerContent, { paddingBottom: insets.bottom + 100 }]}
-        refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor={colors.brand} />}
-        showsVerticalScrollIndicator={false}
-      >
-        {loading && items.length === 0 ? <PublicFoodSkeletonList /> : null}
-        {!loading && items.length === 0 ? (
-          <PublicFoodEmpty
-            mode={mode}
-            text={publicFoodEmptyText(mode, appliedMerchant, filterFatLoss)}
-            onExplore={() => setMode('all')}
-            onCampus={() => navigation.navigate('CampusCanteen')}
-            onShare={() => navigation.navigate('PublicFoodShare', { mode: mode === 'campus' ? 'campus' : 'public' })}
+        contentContainerStyle={[styles.publicFoodListScrollerContent, items.length === 0 && !loading ? styles.publicFoodListScrollerEmpty : null, { paddingBottom: insets.bottom + 100 }]}
+        renderItem={({ item, index }) => (
+          <PublicFoodCard
+            item={item}
+            latest={sortBy === 'latest' && index === 0 && browseMode}
+            isDark={isDark}
+            compact={compactLayout}
+            isOwner={Boolean(currentUserId && publicFoodOwnerId(item) === currentUserId)}
+            busyKind={busyAction?.itemId === item.id ? busyAction.kind : null}
+            actionsDisabled={Boolean(busyAction)}
+            onPress={() => openDetail(item)}
+            onAuthorPress={item.author?.id ? () => navigation.navigate('ProfileSettings', { userId: String(item.author?.id) }) : undefined}
+            onLike={() => void toggleLike(item)}
+            onCollect={() => void toggleCollect(item)}
+            onComment={() => openDetail(item)}
+            onDelete={() => confirmDelete(item)}
           />
-        ) : null}
-        {items.length > 0 ? (
-          <View style={styles.publicFoodListContent}>
-            {items.map((item, index) => (
-              <PublicFoodCard
-                key={item.id}
-                item={item}
-                latest={sortBy === 'latest' && index === 0 && browseMode}
-                onPress={() => navigation.navigate('PublicFoodDetail', { itemId: item.id, isCampus: Boolean(item.is_campus_food) })}
-              />
-            ))}
-          </View>
-        ) : null}
-      </ScrollView>
+        )}
+        ListEmptyComponent={listEmpty}
+        refreshControl={<RefreshControl refreshing={loading && items.length > 0} onRefresh={() => void load(mode)} colors={[isDark ? '#6ee7b7' : colors.brand]} tintColor={isDark ? '#6ee7b7' : colors.brand} />}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        initialNumToRender={8}
+        maxToRenderPerBatch={10}
+        windowSize={7}
+        removeClippedSubviews={Platform.OS === 'android'}
+      />
 
       <Pressable
-        style={[styles.publicFoodFab, { bottom: insets.bottom + 18 }]}
+        style={({ pressed }) => [styles.publicFoodFab, { bottom: insets.bottom + 18 }, pressed ? styles.publicFoodFabPressed : null]}
         onPress={() => navigation.navigate('PublicFoodShare', { mode: mode === 'campus' ? 'campus' : 'public' })}
         accessibilityRole="button"
-        accessibilityLabel="分享公共食物"
+        accessibilityLabel={mode === 'campus' ? '补充校园餐' : '分享公共食物'}
       >
-        <Text style={styles.publicFoodFabText}>+</Text>
+        <Plus size={26} color="#fff" strokeWidth={2.4} />
       </Pressable>
     </View>
   )
@@ -1029,43 +1275,50 @@ export function PublicFoodDetailScreen() {
   const route = useRoute<RouteProp<RootStackParamList, 'PublicFoodDetail'>>()
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const insets = useSafeAreaInsets()
-  const { width: screenWidth } = useWindowDimensions()
+  const { width: screenWidth, height: screenHeight, fontScale } = useWindowDimensions()
+  const { isDark } = useColorScheme()
   const [item, setItem] = useState<PublicFoodItem | null>(null)
-  const [campusMetrics, setCampusMetrics] = useState<{ protein_per_yuan?: number; price_per_100_kcal?: number } | null>(null)
-  const [similarItems, setSimilarItems] = useState<PublicFoodItem[]>([])
-  const [relatedFeeds, setRelatedFeeds] = useState<CampusRelatedFeedItem[]>([])
   const [comments, setComments] = useState<PublicFoodComment[]>([])
   const [comment, setComment] = useState('')
+  const [commentRating, setCommentRating] = useState(0)
   const [replyTarget, setReplyTarget] = useState<PublicFoodReplyTarget | null>(null)
   const [feedback, setFeedback] = useState('')
   const [loading, setLoading] = useState(true)
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
+  const [previewImageIndex, setPreviewImageIndex] = useState(0)
+  const [imagePreviewVisible, setImagePreviewVisible] = useState(false)
+  const [showMicronutrients, setShowMicronutrients] = useState(false)
+  const [commentModalVisible, setCommentModalVisible] = useState(false)
+  const [actionSheetVisible, setActionSheetVisible] = useState(false)
+  const [feedbackModalVisible, setFeedbackModalVisible] = useState(false)
+  const [submittingComment, setSubmittingComment] = useState(false)
+  const [submittingFeedback, setSubmittingFeedback] = useState(false)
+  const [contributingImages, setContributingImages] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [actionBusy, setActionBusy] = useState<'like' | 'collect' | ''>('')
   const [currentUserId, setCurrentUserId] = useState('')
   const commentInputRef = useRef<TextInput | null>(null)
+  const previewScrollRef = useRef<ScrollView | null>(null)
 
-  const load = useCallback(async () => {
-    setLoading(true)
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true)
     try {
-      const [detailData, commentData] = await Promise.all([
-        route.params.isCampus
-          ? apiClient.getCampusFoodDetail(route.params.itemId)
-          : apiClient.getPublicFood(route.params.itemId).then((publicItem) => ({
-            item: publicItem,
-            metrics: undefined,
-            similar_items: [] as PublicFoodItem[],
-            related_feeds: [] as CampusRelatedFeedItem[],
-          })),
-        apiClient.listPublicFoodComments(route.params.itemId).catch(() => ({ list: [] as PublicFoodComment[] })),
-      ])
+      let detailData: { item: PublicFoodItem }
+      if (route.params.isCampus) {
+        detailData = await apiClient.getCampusFoodDetail(route.params.itemId)
+      } else {
+        const publicItem = await apiClient.getPublicFood(route.params.itemId)
+        detailData = isCampusPublicFoodItem(publicItem)
+          ? await apiClient.getCampusFoodDetail(route.params.itemId)
+          : { item: publicItem }
+      }
+      const commentData = await apiClient.listPublicFoodComments(route.params.itemId).catch(() => ({ list: [] as PublicFoodComment[] }))
       setItem(detailData.item)
-      setCampusMetrics(detailData.metrics || null)
-      setSimilarItems(detailData.similar_items || [])
-      setRelatedFeeds(detailData.related_feeds || [])
       setComments(commentData.list || [])
     } catch (error) {
-      showError('获取食物详情失败', error)
+      if (!silent) showError('获取食物详情失败', error)
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
   }, [route.params.itemId, route.params.isCampus])
 
@@ -1075,7 +1328,21 @@ export function PublicFoodDetailScreen() {
 
   useEffect(() => {
     setCurrentImageIndex(0)
+    setPreviewImageIndex(0)
+    setImagePreviewVisible(false)
+    setShowMicronutrients(false)
+    setCommentModalVisible(false)
+    setActionSheetVisible(false)
+    setFeedbackModalVisible(false)
   }, [route.params.itemId])
+
+  useEffect(() => {
+    if (!item || !isPublicFoodAnalyzing(item)) return undefined
+    const timer = setInterval(() => {
+      void load(true)
+    }, 8000)
+    return () => clearInterval(timer)
+  }, [item, load])
 
   useEffect(() => {
     let mounted = true
@@ -1088,49 +1355,91 @@ export function PublicFoodDetailScreen() {
   }, [])
 
   const toggleLike = async () => {
-    if (!item) return
+    if (!item || actionBusy) return
     const previous = item
+    setActionBusy('like')
     setItem({ ...item, liked: !item.liked, like_count: Math.max(0, (item.like_count || 0) + (item.liked ? -1 : 1)) })
     try {
       await apiClient.publicFoodLike(item.id, Boolean(item.liked))
     } catch (error) {
       setItem(previous)
       showError('点赞失败', error)
+    } finally {
+      setActionBusy('')
     }
   }
 
   const toggleCollect = async () => {
-    if (!item) return
+    if (!item || actionBusy) return
     const previous = item
+    setActionBusy('collect')
     setItem({ ...item, collected: !item.collected, collection_count: Math.max(0, (item.collection_count || 0) + (item.collected ? -1 : 1)) })
     try {
       await apiClient.publicFoodCollect(item.id, Boolean(item.collected))
     } catch (error) {
       setItem(previous)
       showError('收藏失败', error)
+    } finally {
+      setActionBusy('')
     }
   }
 
+  const openCommentComposer = (target?: PublicFoodReplyTarget) => {
+    setReplyTarget(target || null)
+    if (target) setCommentRating(0)
+    setCommentModalVisible(true)
+    setTimeout(() => commentInputRef.current?.focus(), 120)
+  }
+
+  const closeCommentComposer = () => {
+    if (submittingComment) return
+    setCommentModalVisible(false)
+    setReplyTarget(null)
+    Keyboard.dismiss()
+  }
+
   const addComment = async () => {
-    if (!item) return
-    setLoading(true)
+    if (!item || submittingComment) return
+    const content = comment.trim()
+    if (!content) {
+      Alert.alert('还不能发布', '请输入评论内容。')
+      return
+    }
+    setSubmittingComment(true)
     try {
-      await apiClient.addPublicFoodComment(item.id, comment, undefined, replyTarget ? {
-        parentCommentId: replyTarget.parentCommentId,
-        replyToUserId: replyTarget.replyToUserId,
-      } : undefined)
+      const response = await apiClient.addPublicFoodComment(
+        item.id,
+        content,
+        replyTarget ? undefined : (commentRating || undefined),
+        replyTarget ? {
+          parentCommentId: replyTarget.parentCommentId,
+          replyToUserId: replyTarget.replyToUserId,
+        } : undefined,
+      )
+      const nextComment = response.comment
+      if (replyTarget) {
+        setComments((current) => current.map((entry) => (
+          entry.id === replyTarget.parentCommentId
+            ? { ...entry, replies: [...(entry.replies || []), nextComment] }
+            : entry
+        )))
+      } else {
+        setComments((current) => [{ ...nextComment, replies: nextComment.replies || [] }, ...current])
+      }
+      setItem((current) => current ? { ...current, comment_count: (current.comment_count || 0) + 1 } : current)
       setComment('')
+      setCommentRating(0)
       setReplyTarget(null)
-      await load()
+      setCommentModalVisible(false)
     } catch (error) {
-      showError('评论失败', error)
+      showError(replyTarget ? '回复失败' : '评论失败', error)
     } finally {
-      setLoading(false)
+      setSubmittingComment(false)
     }
   }
 
   const startReply = (parent: PublicFoodComment, target: PublicFoodComment = parent) => {
-    setReplyTarget({
+    openCommentComposer({
       parentCommentId: parent.parent_comment_id || parent.id,
       replyToUserId: target.user_id,
       nickname: target.nickname || '用户',
@@ -1139,17 +1448,20 @@ export function PublicFoodDetailScreen() {
 
   const removeComment = async (entry: PublicFoodComment) => {
     if (!item) return
-    setLoading(true)
     try {
       await apiClient.deletePublicFoodComment(item.id, entry.id)
-      if (replyTarget?.parentCommentId === entry.id || replyTarget?.replyToUserId === entry.user_id) {
-        setReplyTarget(null)
+      const removedCount = 1 + (entry.replies?.length || 0)
+      if (entry.parent_comment_id) {
+        setComments((current) => current.map((commentEntry) => ({
+          ...commentEntry,
+          replies: (commentEntry.replies || []).filter((reply) => reply.id !== entry.id),
+        })))
+      } else {
+        setComments((current) => current.filter((commentEntry) => commentEntry.id !== entry.id))
       }
-      await load()
+      setItem((current) => current ? { ...current, comment_count: Math.max(0, (current.comment_count || 0) - removedCount) } : current)
     } catch (error) {
       showError('删除评论失败', error)
-    } finally {
-      setLoading(false)
     }
   }
 
@@ -1161,38 +1473,63 @@ export function PublicFoodDetailScreen() {
   }
 
   const submitFeedback = async () => {
-    if (!item) return
-    setLoading(true)
+    if (!item || submittingFeedback) return
+    const content = feedback.trim()
+    if (!content) {
+      Alert.alert('请补充说明', '请描述食物名称、热量或其他有误的地方。')
+      return
+    }
+    setSubmittingFeedback(true)
     try {
-      await apiClient.submitPublicFoodFeedback(item.id, feedback)
+      await apiClient.submitPublicFoodFeedback(item.id, content)
       setFeedback('')
-      Alert.alert('已提交', '反馈已发送')
+      setFeedbackModalVisible(false)
+      Alert.alert('修正已提交', '感谢反馈，我们会尽快核对。')
     } catch (error) {
-      showError('反馈失败', error)
+      showError('提交失败', error)
     } finally {
-      setLoading(false)
+      setSubmittingFeedback(false)
     }
   }
 
   const remove = async () => {
-    if (!item) return
-    setLoading(true)
+    if (!item || deleting) return
+    setDeleting(true)
     try {
       await apiClient.deletePublicFood(item.id)
-      Alert.alert('已删除', '公共食物已删除')
-      navigation.goBack()
+      setActionSheetVisible(false)
+      Alert.alert('已删除', '公共食物已删除', [{ text: '确定', onPress: () => navigation.goBack() }])
     } catch (error) {
       showError('删除失败', error)
     } finally {
-      setLoading(false)
+      setDeleting(false)
     }
   }
 
   const confirmRemove = () => {
+    setActionSheetVisible(false)
     Alert.alert('删除上传', '删除后这条食物会从公共库下架，其他用户将无法继续查看。', [
       { text: '取消', style: 'cancel' },
       { text: '删除', style: 'destructive', onPress: () => void remove() },
     ])
+  }
+
+  const shareItem = async () => {
+    if (!item) return
+    setActionSheetVisible(false)
+    const title = publicFoodTitle(item)
+    const message = [
+      title,
+      publicFoodSubtitle(item),
+      isCampusPublicFoodItem(item) ? publicFoodLocationText(item) : '',
+      item.total_calories > 0 ? `${Math.round(item.total_calories)} kcal` : '',
+      '来自食探公共食物库',
+    ].filter(Boolean).join('\n')
+    try {
+      await Share.share({ title, message })
+    } catch (error) {
+      showError('分享失败', error)
+    }
   }
 
   const quickRecord = () => {
@@ -1211,65 +1548,66 @@ export function PublicFoodDetailScreen() {
     }
     navigation.navigate('ManualRecord', {
       quickItem: manualFoodItemFromPublicFood(item),
-      sourceChannel: item.is_campus_food ? 'campus' : 'recommended',
+      sourceChannel: isCampusPublicFoodItem(item) ? 'campus' : 'recommended',
     })
   }
 
+  const uploadContributionAssets = async (assets: ImagePicker.ImagePickerAsset[]) => {
+    if (!item || !assets.length || contributingImages) return
+    setContributingImages(true)
+    try {
+      const uploaded: string[] = []
+      for (const asset of assets.slice(0, 5)) {
+        const result = await apiClient.uploadAnalyzeImageFile({
+          fileUri: asset.uri,
+          fileName: asset.fileName || 'campus-food.jpg',
+          mimeType: asset.mimeType || 'image/jpeg',
+        })
+        uploaded.push(result.imageUrl)
+      }
+      const result = await apiClient.contributeCampusFoodImages(item.id, uploaded)
+      if (result.image_paths.length) {
+        setItem((current) => current ? {
+          ...current,
+          image_path: result.image_paths[0],
+          image_paths: result.image_paths,
+        } : current)
+        setCurrentImageIndex(0)
+      }
+      Alert.alert(result.accepted ? '感谢共建' : '已有用户补图', result.accepted ? '照片已补充到这道校园餐。' : '这道菜已经有可用照片了。')
+    } catch (error) {
+      showError('补充照片失败', error)
+    } finally {
+      setContributingImages(false)
+    }
+  }
+
+  const pickContributionImages = async (source: 'camera' | 'library') => {
+    const result = source === 'camera'
+      ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.86, allowsEditing: false })
+      : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsMultipleSelection: true, selectionLimit: 5, quality: 0.86, allowsEditing: false })
+    if (!result.canceled) await uploadContributionAssets(result.assets)
+  }
+
+  const openContributionSource = () => {
+    if (contributingImages) return
+    Alert.alert('补充真实照片', '选择照片来源，最多补充 5 张。', [
+      { text: '拍照', onPress: () => void pickContributionImages('camera') },
+      { text: '从相册选择', onPress: () => void pickContributionImages('library') },
+      { text: '取消', style: 'cancel' },
+    ])
+  }
+
+  const openImagePreview = (index: number) => {
+    setPreviewImageIndex(index)
+    setImagePreviewVisible(true)
+    setTimeout(() => previewScrollRef.current?.scrollTo({ x: Math.max(screenWidth, 1) * index, animated: false }), 80)
+  }
+
   const isOwner = Boolean(item && currentUserId && publicFoodOwnerId(item) === currentUserId)
-  const isCampusDetail = Boolean(item?.is_campus_food || route.params.isCampus)
+  const isCampusDetail = Boolean(isCampusPublicFoodItem(item) || route.params.isCampus)
   const commentTotal = countPublicFoodComments(comments)
-  const openPublicFood = (nextItem: PublicFoodItem) => {
-    navigation.push('PublicFoodDetail', { itemId: nextItem.id, isCampus: Boolean(nextItem.is_campus_food) })
-  }
-  const openRelatedFeed = (feed: CampusRelatedFeedItem) => {
-    navigation.navigate('CommunityFeedDetail', { targetId: feed.id, targetType: 'campus_food' })
-  }
-  const renderSimilarItem = (entry: PublicFoodItem) => {
-    const image = primaryImage(entry)
-    return (
-      <Pressable key={entry.id} style={styles.relatedFoodItem} onPress={() => openPublicFood(entry)}>
-        {image ? (
-          <Image source={{ uri: image }} style={styles.relatedFoodImage} />
-        ) : (
-          <View style={styles.relatedFoodImageFallback}>
-            <Text style={styles.relatedFoodImageText}>餐</Text>
-          </View>
-        )}
-        <Text style={styles.itemName} numberOfLines={1}>{entry.food_name || '校园餐'}</Text>
-        <Text style={styles.subtitle} numberOfLines={1}>{publicFoodLocationText(entry)}</Text>
-        <View style={styles.nutritionRow}>
-          <Pill text={`${Math.round(entry.total_calories || 0)} kcal`} />
-          <Pill text={`P ${Math.round(entry.total_protein || 0)}g`} />
-        </View>
-      </Pressable>
-    )
-  }
-  const renderRelatedFeed = (feed: CampusRelatedFeedItem) => {
-    const image = primaryImage(feed)
-    return (
-      <Pressable key={feed.id} style={styles.relatedFeedRow} onPress={() => openRelatedFeed(feed)}>
-        {image ? (
-          <Image source={{ uri: image }} style={styles.relatedFeedImage} />
-        ) : (
-          <View style={styles.relatedFeedImageFallback}>
-            <Text style={styles.relatedFoodImageText}>食堂</Text>
-          </View>
-        )}
-        <View style={styles.flex}>
-          <View style={styles.rowBetween}>
-            <Text style={[styles.itemName, styles.relatedFeedTitle]} numberOfLines={1}>{feed.food_name || '校园餐动态'}</Text>
-            <Text style={styles.kcal}>{Math.round(feed.total_calories || 0)} kcal</Text>
-          </View>
-          <Text style={styles.subtitle} numberOfLines={1}>{campusRelatedFeedLocationText(feed)}</Text>
-          <View style={styles.nutritionRow}>
-            <Pill text={`蛋白 ${Math.round(feed.total_protein || 0)}g`} />
-            <Pill text={`赞 ${feed.like_count || 0}`} />
-            <Pill text={`评 ${feed.comment_count || 0}`} />
-          </View>
-        </View>
-      </Pressable>
-    )
-  }
+
   const renderComment = (entry: PublicFoodComment, parent?: PublicFoodComment) => {
     const isReply = Boolean(parent)
     const canDelete = Boolean(currentUserId && entry.user_id === currentUserId)
@@ -1277,51 +1615,51 @@ export function PublicFoodDetailScreen() {
       ? `回复 ${entry.reply_to_nickname} · `
       : ''
     return (
-      <View key={entry.id} style={[styles.publicFoodDetailCommentRow, isReply && styles.publicFoodDetailReplyRow]}>
+      <View key={entry.id} style={[styles.publicFoodDetailCommentRow, isDark ? styles.publicFoodDetailCommentRowDark : null, isReply ? styles.publicFoodDetailReplyRow : null, isReply && isDark ? styles.publicFoodDetailReplyRowDark : null]}>
         <View style={styles.publicFoodDetailCommentHead}>
           {entry.avatar ? (
-            <Image source={{ uri: entry.avatar }} style={isReply ? styles.publicFoodDetailReplyAvatar : styles.publicFoodDetailCommentAvatar} />
+            <Image source={{ uri: entry.avatar }} style={isReply ? styles.publicFoodDetailReplyAvatar : styles.publicFoodDetailCommentAvatar} accessibilityLabel={`${entry.nickname || '用户'}的头像`} />
           ) : (
-            <View style={isReply ? styles.publicFoodDetailReplyAvatarFallback : styles.publicFoodDetailCommentAvatarFallback}>
-              <Text style={styles.publicFoodDetailCommentAvatarText}>{publicFoodAuthorInitial(entry.nickname || '用户')}</Text>
+            <View style={[isReply ? styles.publicFoodDetailReplyAvatarFallback : styles.publicFoodDetailCommentAvatarFallback, isDark ? styles.publicFoodDetailAvatarFallbackDark : null]}>
+              <UserRound size={isReply ? 14 : 18} color={isDark ? '#7dd3b0' : colors.brandDark} strokeWidth={2.1} />
             </View>
           )}
           <View style={styles.flex}>
             <View style={styles.publicFoodDetailCommentMeta}>
-              <Text style={styles.publicFoodDetailCommentName} numberOfLines={1}>{entry.nickname || '用户'}</Text>
-              {entry.rating ? <Text style={styles.publicFoodDetailRating}>{entry.rating} 分</Text> : null}
+              <Text style={[styles.publicFoodDetailCommentName, isDark ? styles.publicFoodDetailCommentNameDark : null]}>{entry.nickname || '用户'}</Text>
+              {entry.rating ? (
+                <View style={styles.publicFoodDetailRatingStars} accessibilityLabel={`评分 ${entry.rating} 星`}>
+                  {[1, 2, 3, 4, 5].map((value) => <Star key={value} size={12} color="#f59e0b" fill={value <= Number(entry.rating) ? '#f59e0b' : 'transparent'} strokeWidth={2} />)}
+                </View>
+              ) : null}
             </View>
-            <Text style={styles.publicFoodDetailCommentTime}>{formatDateTime(entry.created_at)}</Text>
+            <Text style={[styles.publicFoodDetailCommentTime, isDark ? styles.publicFoodDetailMutedTextDark : null]}>{formatDateTime(entry.created_at)}</Text>
           </View>
         </View>
-        <Text style={styles.publicFoodDetailCommentContent}>{replyPrefix}{entry.content}</Text>
+        <Text style={[styles.publicFoodDetailCommentContent, isDark ? styles.publicFoodDetailCommentContentDark : null]}>{replyPrefix}{entry.content}</Text>
         <View style={styles.publicFoodDetailCommentActions}>
-          <Pressable style={styles.publicFoodDetailTextAction} onPress={() => startReply(parent || entry, entry)}>
-            <Text style={styles.publicFoodDetailTextActionText}>回复</Text>
+          <Pressable style={({ pressed }) => [styles.publicFoodDetailTextAction, pressed ? styles.pressed : null]} onPress={() => startReply(parent || entry, entry)} accessibilityRole="button" accessibilityLabel={`回复 ${entry.nickname || '用户'}`}>
+            <Text style={[styles.publicFoodDetailTextActionText, isDark ? styles.publicFoodDetailTextActionTextDark : null]}>回复</Text>
           </Pressable>
           {canDelete ? (
-            <Pressable style={styles.publicFoodDetailTextAction} onPress={() => confirmRemoveComment(entry)}>
+            <Pressable style={({ pressed }) => [styles.publicFoodDetailTextAction, pressed ? styles.pressed : null]} onPress={() => confirmRemoveComment(entry)} accessibilityRole="button" accessibilityLabel="删除评论">
               <Text style={[styles.publicFoodDetailTextActionText, styles.publicFoodDetailDangerText]}>删除</Text>
             </Pressable>
           ) : null}
         </View>
-        {!isReply && entry.replies?.length ? (
-          <View style={styles.publicFoodDetailReplies}>
-            {entry.replies.map((reply) => renderComment(reply, entry))}
-          </View>
-        ) : null}
+        {!isReply && entry.replies?.length ? <View style={styles.publicFoodDetailReplies}>{entry.replies.map((reply) => renderComment(reply, entry))}</View> : null}
       </View>
     )
   }
 
   if (!item && loading) {
     return (
-      <View style={styles.publicFoodDetailScreen}>
+      <View style={[styles.publicFoodDetailScreen, isDark ? styles.publicFoodDetailScreenDark : null]}>
         <ScrollView
-          style={styles.publicFoodDetailScroll}
+          style={[styles.publicFoodDetailScroll, isDark ? styles.publicFoodDetailScrollDark : null]}
           contentContainerStyle={[styles.publicFoodDetailContent, { paddingBottom: insets.bottom + 112 }]}
           showsVerticalScrollIndicator={false}
-          refreshControl={<RefreshControl refreshing={loading} onRefresh={load} colors={[colors.brand]} tintColor={colors.brand} />}
+          refreshControl={<RefreshControl refreshing={loading} onRefresh={() => void load()} colors={[isDark ? '#7dd3b0' : colors.brand]} tintColor={isDark ? '#7dd3b0' : colors.brand} />}
         >
           <PublicFoodDetailSkeleton />
         </ScrollView>
@@ -1331,12 +1669,12 @@ export function PublicFoodDetailScreen() {
 
   if (!item) {
     return (
-      <View style={styles.publicFoodDetailScreen}>
+      <View style={[styles.publicFoodDetailScreen, isDark ? styles.publicFoodDetailScreenDark : null]}>
         <ScrollView
-          style={styles.publicFoodDetailScroll}
+          style={[styles.publicFoodDetailScroll, isDark ? styles.publicFoodDetailScrollDark : null]}
           contentContainerStyle={[styles.publicFoodDetailContent, { paddingBottom: insets.bottom + 112 }]}
           showsVerticalScrollIndicator={false}
-          refreshControl={<RefreshControl refreshing={loading} onRefresh={load} colors={[colors.brand]} tintColor={colors.brand} />}
+          refreshControl={<RefreshControl refreshing={loading} onRefresh={() => void load()} colors={[isDark ? '#7dd3b0' : colors.brand]} tintColor={isDark ? '#7dd3b0' : colors.brand} />}
         >
           <PublicFoodDetailEmpty onBack={() => navigation.goBack()} />
         </ScrollView>
@@ -1354,19 +1692,27 @@ export function PublicFoodDetailScreen() {
   const authorName = publicFoodAuthorName(item)
   const canQuickRecord = !analyzing && !analysisFailed && !nutritionPending
   const heroWidth = Math.max(screenWidth, 1)
+  const micronutrientRows = publicFoodMicronutrientRows(item)
+  const hasPreciseMicronutrients = micronutrientRows.some((row) => row.value > 0)
+  const micronutrientColumns = screenWidth >= 390 && fontScale <= 1.15 ? 3 : 2
+  const micronutrientCellWidth = `${100 / micronutrientColumns - 2}%` as `${number}%`
   const onHeroScrollEnd = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     setCurrentImageIndex(Math.round(event.nativeEvent.contentOffset.x / heroWidth))
   }
+  const onPreviewScrollEnd = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    setPreviewImageIndex(Math.round(event.nativeEvent.contentOffset.x / heroWidth))
+  }
 
   return (
-    <View style={styles.publicFoodDetailScreen}>
+    <View style={[styles.publicFoodDetailScreen, isDark ? styles.publicFoodDetailScreenDark : null]}>
       <ScrollView
-        style={styles.publicFoodDetailScroll}
-        contentContainerStyle={[styles.publicFoodDetailContent, { paddingBottom: insets.bottom + 132 }]}
+        style={[styles.publicFoodDetailScroll, isDark ? styles.publicFoodDetailScrollDark : null]}
+        contentContainerStyle={[styles.publicFoodDetailContent, { paddingBottom: insets.bottom + 148 }]}
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={loading} onRefresh={load} colors={[colors.brand]} tintColor={colors.brand} />}
+        keyboardShouldPersistTaps="handled"
+        refreshControl={<RefreshControl refreshing={loading} onRefresh={() => void load()} colors={[isDark ? '#7dd3b0' : colors.brand]} tintColor={isDark ? '#7dd3b0' : colors.brand} />}
       >
-        <View style={styles.publicFoodDetailImageSection}>
+        <View style={[styles.publicFoodDetailImageSection, isDark ? styles.publicFoodDetailImageSectionDark : null]}>
           {imageList.length ? (
             <ScrollView
               horizontal
@@ -1376,225 +1722,314 @@ export function PublicFoodDetailScreen() {
               style={styles.publicFoodDetailImageScroller}
             >
               {imageList.map((src, index) => (
-                <View key={`${src}-${index}`} style={[styles.publicFoodDetailImageSlide, { width: heroWidth }]}>
-                  <Image source={{ uri: src }} style={styles.publicFoodDetailImage} resizeMode="cover" />
-                </View>
+                <Pressable
+                  key={`${src}-${index}`}
+                  style={({ pressed }) => [styles.publicFoodDetailImageSlide, isDark ? styles.publicFoodDetailImageSlideDark : null, { width: heroWidth }, pressed ? styles.publicFoodDetailImagePressed : null]}
+                  onPress={() => openImagePreview(index)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`预览食物图片 ${index + 1}，共 ${imageList.length} 张`}
+                >
+                  <Image source={{ uri: src }} style={styles.publicFoodDetailImage} resizeMode="cover" accessibilityIgnoresInvertColors />
+                  <View style={styles.publicFoodDetailImageExpandBadge}><Maximize2 size={16} color="#fff" strokeWidth={2.2} /></View>
+                </Pressable>
               ))}
             </ScrollView>
           ) : (
-            <View style={styles.publicFoodDetailImagePlaceholder}>
-              <Text style={styles.publicFoodDetailImagePlaceholderText}>暂无图片</Text>
+            <View style={[styles.publicFoodDetailImagePlaceholder, isDark ? styles.publicFoodDetailImagePlaceholderDark : null]}>
+              <View style={[styles.publicFoodDetailContributionIcon, isDark ? styles.publicFoodDetailContributionIconDark : null]}>
+                <Camera size={27} color={isDark ? '#7dd3b0' : colors.brand} strokeWidth={2.1} />
+              </View>
+              <Text style={[styles.publicFoodDetailContributionTitle, isDark ? styles.publicFoodDetailTitleDark : null]}>这道菜还没有照片</Text>
+              <Text style={[styles.publicFoodDetailContributionHint, isDark ? styles.publicFoodDetailTextSecondaryDark : null]}>拍一张真实菜品照片，和同学们一起完善校园食堂</Text>
+              {isCampusDetail ? (
+                <Pressable
+                  disabled={contributingImages}
+                  style={({ pressed }) => [styles.publicFoodDetailContributionButton, contributingImages ? styles.publicFoodDetailActionDisabled : null, pressed ? styles.pressed : null]}
+                  onPress={openContributionSource}
+                  accessibilityRole="button"
+                  accessibilityLabel="补充校园餐照片"
+                  accessibilityState={{ disabled: contributingImages, busy: contributingImages }}
+                >
+                  {contributingImages ? <ActivityIndicator size="small" color="#fff" /> : <Camera size={17} color="#fff" strokeWidth={2.2} />}
+                  {!contributingImages ? <Text style={styles.publicFoodDetailContributionButtonText}>补充照片</Text> : null}
+                </Pressable>
+              ) : null}
             </View>
           )}
-          {imageList.length > 1 ? (
-            <View style={styles.publicFoodDetailImageCounter}>
-              <Text style={styles.publicFoodDetailImageCounterText}>{currentImageIndex + 1}/{imageList.length}</Text>
-            </View>
-          ) : null}
-          {item.suitable_for_fat_loss ? (
-            <View style={styles.publicFoodDetailFatLossBadge}>
-              <Text style={styles.publicFoodDetailFatLossText}>适合减脂</Text>
-            </View>
-          ) : null}
+          {imageList.length > 1 ? <View style={styles.publicFoodDetailImageCounter}><Text style={styles.publicFoodDetailImageCounterText}>{currentImageIndex + 1}/{imageList.length}</Text></View> : null}
+          {item.suitable_for_fat_loss ? <View style={styles.publicFoodDetailFatLossBadge}><Text style={styles.publicFoodDetailFatLossText}>适合减脂</Text></View> : null}
         </View>
 
-        <View style={styles.publicFoodDetailInfoCard}>
+        <View style={[styles.publicFoodDetailInfoCard, isDark ? styles.publicFoodDetailInfoCardDark : null]}>
           <View style={styles.publicFoodDetailInfoHeader}>
-            <Text style={styles.publicFoodDetailTitle} numberOfLines={2}>{detailTitle}</Text>
-            <View style={styles.publicFoodDetailCaloriesBadge}>
-              <Text style={styles.publicFoodDetailCaloriesText}>
-                {nutritionPending ? '营养待更新' : `${Math.round(item.total_calories || 0)} kcal`}
-              </Text>
+            <Text style={[styles.publicFoodDetailTitle, isDark ? styles.publicFoodDetailTitleDark : null]}>{detailTitle}</Text>
+            <View style={[styles.publicFoodDetailCaloriesBadge, isDark ? styles.publicFoodDetailCaloriesBadgeDark : null]}>
+              <Text style={[styles.publicFoodDetailCaloriesText, isDark ? styles.publicFoodDetailCaloriesTextDark : null]}>{nutritionPending ? '营养待更新' : `${Math.round(item.total_calories || 0)} kcal`}</Text>
             </View>
           </View>
-          {detailSubtitle ? <Text style={styles.publicFoodDetailDesc}>{detailSubtitle}</Text> : null}
-          {item.insight ? <Text style={styles.publicFoodDetailInsight}>{item.insight}</Text> : null}
+          {detailSubtitle ? <Text style={[styles.publicFoodDetailDesc, isDark ? styles.publicFoodDetailTextSecondaryDark : null]}>{detailSubtitle}</Text> : null}
+          {item.insight ? <Text style={[styles.publicFoodDetailInsight, isDark ? styles.publicFoodDetailInsightDark : null]}>{item.insight}</Text> : null}
 
-          <View style={styles.publicFoodDetailNutrients}>
+          {isCampusDetail ? (
+            <View style={[styles.publicFoodDetailCampusSummary, isDark ? styles.publicFoodDetailCampusSummaryDark : null]}>
+              <View style={styles.publicFoodDetailCampusLocationRow}>
+                <Text style={[styles.publicFoodDetailLocation, isDark ? styles.publicFoodDetailTextPrimaryDark : null]}>{publicFoodLocationText(item)}</Text>
+              </View>
+              <View style={styles.publicFoodDetailPriceRow}>
+                <Text style={[styles.publicFoodDetailPrice, isDark ? styles.publicFoodDetailPriceDark : null]}>{priceText || '价格待补充'}</Text>
+                <Text style={[styles.publicFoodDetailCampusPortion, isDark ? styles.publicFoodDetailTextSecondaryDark : null]}>{item.portion_description || '约 1 份'}</Text>
+              </View>
+              <Text style={[styles.publicFoodDetailMuted, isDark ? styles.publicFoodDetailMutedTextDark : null]}>价格更新于 {dateText(item.price_collected_at)}</Text>
+              {analyzing ? <Text style={[styles.publicFoodDetailAnalysisTip, isDark ? styles.publicFoodDetailAnalysisTipDark : null]}>营养信息正在精确分析，完成后自动更新。</Text> : null}
+              {nutritionPending ? <Text style={[styles.publicFoodDetailAnalysisTip, isDark ? styles.publicFoodDetailAnalysisTipDark : null]}>营养信息待更新，暂不建议一键记录。</Text> : null}
+              {analysisFailed ? <Text style={[styles.publicFoodDetailAnalysisTip, styles.publicFoodDetailAnalysisTipError, isDark ? styles.publicFoodDetailAnalysisTipErrorDark : null]}>营养分析失败，可通过纠错入口反馈。</Text> : null}
+            </View>
+          ) : null}
+
+          <View style={[styles.publicFoodDetailNutrients, isDark ? styles.publicFoodDetailNutrientsDark : null]}>
             <PublicFoodNutrientCell value={nutritionPending ? '--' : Math.round(item.total_calories || 0).toString()} label="热量 kcal" />
             <PublicFoodNutrientCell value={nutritionPending ? '--' : `${round1(item.total_protein)}g`} label="蛋白质" />
             <PublicFoodNutrientCell value={nutritionPending ? '--' : `${round1(item.total_carbs)}g`} label="碳水" />
             <PublicFoodNutrientCell value={nutritionPending ? '--' : `${round1(item.total_fat)}g`} label="脂肪" last />
           </View>
 
-          <View style={styles.publicFoodDetailAuthorRow}>
-            {item.author?.avatar ? (
-              <Image source={{ uri: item.author.avatar }} style={styles.publicFoodDetailAuthorAvatar} />
-            ) : (
-              <View style={styles.publicFoodDetailAuthorFallback}>
-                <Text style={styles.publicFoodDetailAuthorInitial}>{publicFoodAuthorInitial(authorName)}</Text>
-              </View>
-            )}
-            <View style={styles.flex}>
-              <Text style={styles.publicFoodDetailAuthorName} numberOfLines={1}>{authorName}</Text>
-              <Text style={styles.publicFoodDetailPublished}>{publicFoodPublishedText(item)}</Text>
+          {isCampusDetail ? (
+            <View style={[styles.publicFoodDetailMicronutrients, isDark ? styles.publicFoodDetailMicronutrientsDark : null]}>
+              <Pressable
+                disabled={!hasPreciseMicronutrients}
+                style={({ pressed }) => [styles.publicFoodDetailMicronutrientsHeader, pressed && hasPreciseMicronutrients ? styles.pressed : null]}
+                onPress={() => setShowMicronutrients((value) => !value)}
+                accessibilityRole="button"
+                accessibilityLabel={hasPreciseMicronutrients ? `${showMicronutrients ? '收起' : '查看'} 21 项精确微量营养` : '精确微量营养待分析'}
+                accessibilityState={{ expanded: showMicronutrients, disabled: !hasPreciseMicronutrients }}
+              >
+                <View style={styles.flex}>
+                  <Text style={[styles.publicFoodDetailMicronutrientsTitle, isDark ? styles.publicFoodDetailTitleDark : null]}>AI 精确微量营养</Text>
+                  <Text style={[styles.publicFoodDetailMicronutrientsStatus, hasPreciseMicronutrients ? styles.publicFoodDetailMicronutrientsStatusReady : null, isDark ? styles.publicFoodDetailMutedTextDark : null]}>{hasPreciseMicronutrients ? '已完成 21 项' : '待精确分析'}</Text>
+                </View>
+                {hasPreciseMicronutrients ? (
+                  <View style={styles.publicFoodDetailMicronutrientsToggle}>
+                    <Text style={[styles.publicFoodDetailMicronutrientsToggleText, isDark ? styles.publicFoodDetailTextSecondaryDark : null]}>{showMicronutrients ? '收起' : '查看全部'}</Text>
+                    {showMicronutrients ? <ChevronUp size={17} color={isDark ? '#b3bdb8' : '#64748b'} strokeWidth={2.2} /> : <ChevronDown size={17} color={isDark ? '#b3bdb8' : '#64748b'} strokeWidth={2.2} />}
+                  </View>
+                ) : null}
+              </Pressable>
+              {showMicronutrients && hasPreciseMicronutrients ? (
+                <View style={styles.publicFoodDetailMicronutrientsGrid}>
+                  {micronutrientRows.map((row) => (
+                    <View key={row.key} style={[styles.publicFoodDetailMicronutrientCell, isDark ? styles.publicFoodDetailMicronutrientCellDark : null, { width: micronutrientCellWidth }]}>
+                      <Text style={[styles.publicFoodDetailMicronutrientLabel, isDark ? styles.publicFoodDetailMutedTextDark : null]}>{row.label}</Text>
+                      <Text style={[styles.publicFoodDetailMicronutrientValue, isDark ? styles.publicFoodDetailTitleDark : null]}>{formatPublicFoodMicronutrientValue(row.value)} {row.unit}</Text>
+                    </View>
+                  ))}
+                </View>
+              ) : null}
             </View>
-          </View>
+          ) : null}
+
+          {!isCampusDetail ? (
+            <View style={styles.publicFoodDetailAuthorRow}>
+              {item.author?.avatar ? <Image source={{ uri: item.author.avatar }} style={styles.publicFoodDetailAuthorAvatar} accessibilityLabel={`${authorName}的头像`} /> : <View style={[styles.publicFoodDetailAuthorFallback, isDark ? styles.publicFoodDetailAvatarFallbackDark : null]}><UserRound size={19} color={isDark ? '#7dd3b0' : colors.brandDark} strokeWidth={2.1} /></View>}
+              <View style={styles.flex}>
+                <Text style={[styles.publicFoodDetailAuthorName, isDark ? styles.publicFoodDetailTitleDark : null]}>{authorName}</Text>
+                <Text style={[styles.publicFoodDetailPublished, isDark ? styles.publicFoodDetailMutedTextDark : null]}>{publicFoodPublishedText(item)}</Text>
+              </View>
+            </View>
+          ) : null}
         </View>
 
-        {isCampusDetail ? (
-          <View style={styles.publicFoodDetailCard}>
-            <View style={styles.publicFoodDetailCampusHeader}>
-              <Text style={styles.publicFoodDetailCampusBadge}>校园食堂</Text>
-              <Text style={[styles.publicFoodDetailCampusFatLoss, item.suitable_for_fat_loss && styles.publicFoodDetailCampusFatLossActive]}>
-                {item.suitable_for_fat_loss ? '适合减脂' : '未标记减脂'}
-              </Text>
-              {item.portion_description ? <Text style={styles.publicFoodDetailCampusPortion}>{item.portion_description}</Text> : null}
-            </View>
-            <View style={styles.publicFoodDetailGrid}>
-              <PublicFoodInfoCell label="学校" value={item.school_name || item.campus_name || '待补充'} />
-              <PublicFoodInfoCell label="食堂" value={item.canteen_name || '待补充'} />
-              <PublicFoodInfoCell label="楼层/窗口" value={[item.floor, item.window_name].filter(Boolean).join(' · ') || '待补充'} />
-              <PublicFoodInfoCell label="估算份量" value={item.portion_description || '约 1 份'} />
-            </View>
-            <Text style={styles.publicFoodDetailLocation}>{publicFoodLocationText(item)}</Text>
-            <View style={styles.publicFoodDetailPriceRow}>
-              <Text style={styles.publicFoodDetailPrice}>{priceText || '价格待补充'}</Text>
-              {campusMetrics?.protein_per_yuan ? <Text style={styles.publicFoodDetailMetric}>蛋白 {round1(campusMetrics.protein_per_yuan)}g/元</Text> : null}
-              {campusMetrics?.price_per_100_kcal ? <Text style={styles.publicFoodDetailMetric}>{round1(campusMetrics.price_per_100_kcal)}元/100kcal</Text> : null}
-            </View>
-            <Text style={styles.publicFoodDetailMuted}>价格更新于 {dateText(item.price_collected_at)}</Text>
-            {analyzing ? <Text style={styles.publicFoodDetailAnalysisTip}>营养信息正在分析中，完成后会自动补齐热量和宏量营养素。</Text> : null}
-            {nutritionPending ? <Text style={styles.publicFoodDetailAnalysisTip}>营养信息待更新，暂不建议一键记录。</Text> : null}
-            {analysisFailed ? <Text style={[styles.publicFoodDetailAnalysisTip, styles.publicFoodDetailAnalysisTipError]}>营养分析失败，暂不建议一键记录，可通过纠错入口反馈。</Text> : null}
-          </View>
-        ) : null}
-
         {!isCampusDetail && (item.merchant_name || item.merchant_address || item.city || item.taste_rating != null) ? (
-          <View style={styles.publicFoodDetailCard}>
+          <View style={[styles.publicFoodDetailCard, isDark ? styles.publicFoodDetailCardDark : null]}>
             <PublicFoodDetailCardTitle title="商家信息" />
-            {item.merchant_name ? <InfoRow label="商家" value={item.merchant_name} /> : null}
-            {item.merchant_address ? <InfoRow label="地址" value={item.merchant_address} /> : null}
-            {item.city ? <InfoRow label="城市" value={`${item.city}${item.district ? ` ${item.district}` : ''}`} /> : null}
-            {item.taste_rating != null ? <InfoRow label="口味评分" value={`${item.taste_rating}/5`} /> : null}
+            {item.merchant_name ? <PublicFoodDetailInfoRow label="商家" value={item.merchant_name} /> : null}
+            {item.merchant_address ? <PublicFoodDetailInfoRow label="地址" value={item.merchant_address} /> : null}
+            {item.city ? <PublicFoodDetailInfoRow label="城市" value={`${item.city}${item.district ? ` ${item.district}` : ''}`} /> : null}
+            {item.taste_rating != null ? <PublicFoodDetailInfoRow label="口味评分" value={`${item.taste_rating}/5`} /> : null}
           </View>
         ) : null}
 
         {item.user_tags?.length ? (
-          <View style={styles.publicFoodDetailCard}>
+          <View style={[styles.publicFoodDetailCard, isDark ? styles.publicFoodDetailCardDark : null]}>
             <PublicFoodDetailCardTitle title="标签" />
             <View style={styles.publicFoodDetailTags}>
-              {item.user_tags.map((tag) => <Text key={tag} style={styles.publicFoodDetailTag}>{tag}</Text>)}
+              {item.user_tags.map((tag) => <Text key={tag} style={[styles.publicFoodDetailTag, isDark ? styles.publicFoodDetailTagDark : null]}>{tag}</Text>)}
             </View>
           </View>
         ) : null}
 
         {item.user_notes ? (
-          <View style={styles.publicFoodDetailCard}>
+          <View style={[styles.publicFoodDetailCard, isDark ? styles.publicFoodDetailCardDark : null]}>
             <PublicFoodDetailCardTitle title="用户评价" />
-            <Text style={styles.publicFoodDetailNotes}>{item.user_notes}</Text>
+            <Text style={[styles.publicFoodDetailNotes, isDark ? styles.publicFoodDetailCommentContentDark : null]}>{item.user_notes}</Text>
           </View>
         ) : null}
 
-        {isCampusDetail && similarItems.length > 0 ? (
-          <View style={styles.publicFoodDetailCard}>
-            <View style={styles.publicFoodDetailSectionHead}>
-              <PublicFoodDetailCardTitle title="同食堂相似菜品" />
-              <Text style={styles.publicFoodDetailSectionHint}>同学校同食堂优先推荐</Text>
-            </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.relatedFoodScroll}>
-              {similarItems.map(renderSimilarItem)}
-            </ScrollView>
-          </View>
-        ) : null}
-
-        {isCampusDetail && relatedFeeds.length > 0 ? (
-          <View style={styles.publicFoodDetailCard}>
-            <View style={styles.publicFoodDetailSectionHead}>
-              <PublicFoodDetailCardTitle title="圈子相关动态" />
-              <Text style={styles.publicFoodDetailSectionHint}>来自同食堂精选动态</Text>
-            </View>
-            <View style={styles.relatedFeedList}>
-              {relatedFeeds.map(renderRelatedFeed)}
-            </View>
-          </View>
-        ) : null}
-
-        <View style={styles.publicFoodDetailCard}>
+        <View style={[styles.publicFoodDetailCard, isDark ? styles.publicFoodDetailCardDark : null]}>
           <View style={styles.publicFoodDetailCommentsHead}>
             <PublicFoodDetailCardTitle title="评论" />
-            <Text style={styles.publicFoodDetailCommentCount}>{commentTotal} 条</Text>
+            <Text style={[styles.publicFoodDetailCommentCount, isDark ? styles.publicFoodDetailCommentCountDark : null]}>{commentTotal} 条</Text>
           </View>
-          <View style={styles.publicFoodDetailQuickComment}>
-            <View style={styles.publicFoodDetailQuickAvatar}>
-              <Text style={styles.publicFoodDetailCommentAvatarText}>我</Text>
-            </View>
-            <TextInput
-              ref={commentInputRef}
-              value={comment}
-              onChangeText={setComment}
-              placeholder={replyTarget ? `回复 @${replyTarget.nickname}` : '理性发言'}
-              placeholderTextColor={colors.textMuted}
-              style={styles.publicFoodDetailQuickInput}
-              multiline
-            />
-          </View>
-          {replyTarget ? (
-            <View style={styles.replyTargetBar}>
-              <Text style={styles.subtitle}>正在回复 {replyTarget.nickname}</Text>
-              <SmallButton label="取消回复" onPress={() => setReplyTarget(null)} />
-            </View>
-          ) : null}
-          <AppButton label={replyTarget ? '发布回复' : '发布评论'} variant="secondary" loading={loading} onPress={addComment} />
-          {comments.length === 0 ? <Text style={styles.publicFoodDetailEmptyComments}>暂无评论，快来抢沙发</Text> : null}
-          {comments.map((entry) => renderComment(entry))}
-        </View>
-
-        <View style={styles.publicFoodDetailCard}>
-          <PublicFoodDetailCardTitle title="修正食物信息" />
-          <Field label="反馈内容" value={feedback} onChangeText={setFeedback} multiline />
-          <AppButton label="提交纠错" variant="ghost" loading={loading} onPress={submitFeedback} />
+          <Pressable
+            style={({ pressed }) => [styles.publicFoodDetailQuickComment, isDark ? styles.publicFoodDetailQuickCommentDark : null, pressed ? styles.pressed : null]}
+            onPress={() => openCommentComposer()}
+            accessibilityRole="button"
+            accessibilityLabel="发表评论"
+          >
+            <View style={[styles.publicFoodDetailQuickAvatar, isDark ? styles.publicFoodDetailAvatarFallbackDark : null]}><UserRound size={16} color={isDark ? '#7dd3b0' : colors.brandDark} strokeWidth={2.1} /></View>
+            <Text style={[styles.publicFoodDetailQuickPlaceholder, isDark ? styles.publicFoodDetailMutedTextDark : null]}>理性发言</Text>
+          </Pressable>
+          {comments.length === 0 ? <Text style={[styles.publicFoodDetailEmptyComments, isDark ? styles.publicFoodDetailEmptyCommentsDark : null]}>暂无评论，快来抢沙发</Text> : comments.map((entry) => renderComment(entry))}
         </View>
       </ScrollView>
 
-      <View style={[styles.publicFoodDetailBottomBar, { paddingBottom: Math.max(insets.bottom, 10) }]}>
+      <View style={[styles.publicFoodDetailBottomBar, isDark ? styles.publicFoodDetailBottomBarDark : null, { paddingBottom: Math.max(insets.bottom, 10) }]}>
         <View style={styles.publicFoodDetailBottomTop}>
           {isCampusDetail ? (
             <Pressable
-              style={[styles.publicFoodDetailQuickRecord, !canQuickRecord && styles.publicFoodDetailQuickRecordDisabled]}
+              disabled={!canQuickRecord}
+              style={({ pressed }) => [styles.publicFoodDetailQuickRecord, !canQuickRecord ? styles.publicFoodDetailQuickRecordDisabled : null, pressed && canQuickRecord ? styles.pressed : null]}
               onPress={quickRecord}
+              accessibilityRole="button"
+              accessibilityLabel={analyzing ? '营养分析中，暂不能记录' : analysisFailed ? '营养分析失败，暂不能记录' : nutritionPending ? '营养信息待更新，暂不能记录' : '一键记录到今天'}
+              accessibilityState={{ disabled: !canQuickRecord }}
             >
-              <Text style={styles.publicFoodDetailQuickRecordText}>
-                {analyzing ? '分析中' : analysisFailed ? '暂不可记' : '一键记录'}
-              </Text>
+              <Text style={styles.publicFoodDetailQuickRecordText}>{analyzing ? '分析中' : analysisFailed || nutritionPending ? '暂不可记' : '一键记录'}</Text>
             </Pressable>
           ) : null}
           <View style={styles.publicFoodDetailBottomActions}>
-            <Pressable style={[styles.publicFoodDetailIconAction, item.liked && styles.publicFoodDetailIconActionLiked]} onPress={toggleLike}>
-              <Text style={[styles.publicFoodDetailIconText, item.liked && styles.publicFoodDetailIconTextLiked]}>赞</Text>
-              {item.like_count ? <Text style={styles.publicFoodDetailActionBadge}>{item.like_count}</Text> : null}
+            <Pressable
+              disabled={Boolean(actionBusy)}
+              style={({ pressed }) => [styles.publicFoodDetailIconAction, item.liked ? styles.publicFoodDetailIconActionLiked : null, isDark && item.liked ? styles.publicFoodDetailIconActionLikedDark : null, pressed ? styles.pressed : null]}
+              onPress={toggleLike}
+              accessibilityRole="button"
+              accessibilityLabel={`${item.liked ? '取消点赞' : '点赞'}，当前 ${item.like_count || 0} 个赞`}
+              accessibilityState={{ selected: Boolean(item.liked), busy: actionBusy === 'like', disabled: Boolean(actionBusy) }}
+            >
+              {actionBusy === 'like' ? <ActivityIndicator size="small" color={isDark ? '#fb7185' : '#e11d48'} /> : <Heart size={21} color={item.liked ? '#e11d48' : isDark ? '#b3bdb8' : '#64748b'} fill={item.liked ? '#e11d48' : 'transparent'} strokeWidth={2.2} />}
+              {item.like_count ? <Text style={[styles.publicFoodDetailActionBadge, isDark ? styles.publicFoodDetailActionBadgeDark : null]}>{item.like_count}</Text> : null}
             </Pressable>
-            <Pressable style={[styles.publicFoodDetailIconAction, item.collected && styles.publicFoodDetailIconActionCollected]} onPress={toggleCollect}>
-              <Text style={[styles.publicFoodDetailIconText, item.collected && styles.publicFoodDetailIconTextCollected]}>藏</Text>
-              {item.collection_count ? <Text style={styles.publicFoodDetailActionBadge}>{item.collection_count}</Text> : null}
+            <Pressable
+              disabled={Boolean(actionBusy)}
+              style={({ pressed }) => [styles.publicFoodDetailIconAction, item.collected ? styles.publicFoodDetailIconActionCollected : null, isDark && item.collected ? styles.publicFoodDetailIconActionCollectedDark : null, pressed ? styles.pressed : null]}
+              onPress={toggleCollect}
+              accessibilityRole="button"
+              accessibilityLabel={`${item.collected ? '取消收藏' : '收藏'}，当前 ${item.collection_count || 0} 个收藏`}
+              accessibilityState={{ selected: Boolean(item.collected), busy: actionBusy === 'collect', disabled: Boolean(actionBusy) }}
+            >
+              {actionBusy === 'collect' ? <ActivityIndicator size="small" color="#f59e0b" /> : <Bookmark size={21} color={item.collected ? '#d97706' : isDark ? '#b3bdb8' : '#64748b'} fill={item.collected ? '#fbbf24' : 'transparent'} strokeWidth={2.2} />}
+              {item.collection_count ? <Text style={[styles.publicFoodDetailActionBadge, isDark ? styles.publicFoodDetailActionBadgeDark : null]}>{item.collection_count}</Text> : null}
             </Pressable>
-            <Pressable style={styles.publicFoodDetailIconAction} onPress={() => {
-              setReplyTarget(null)
-              commentInputRef.current?.focus()
-            }}>
-              <Text style={styles.publicFoodDetailIconText}>评</Text>
-              {commentTotal ? <Text style={styles.publicFoodDetailActionBadge}>{commentTotal}</Text> : null}
+            <Pressable style={({ pressed }) => [styles.publicFoodDetailIconAction, pressed ? styles.pressed : null]} onPress={() => openCommentComposer()} accessibilityRole="button" accessibilityLabel={`发表评论，当前 ${commentTotal} 条评论`}>
+              <MessageCircle size={21} color={isDark ? '#b3bdb8' : '#64748b'} strokeWidth={2.2} />
+              {commentTotal ? <Text style={[styles.publicFoodDetailActionBadge, isDark ? styles.publicFoodDetailActionBadgeDark : null]}>{commentTotal}</Text> : null}
             </Pressable>
-            {isOwner ? (
-              <Pressable
-                style={styles.publicFoodDetailIconAction}
-                onPress={() => navigation.navigate('PublicFoodShare', { editId: item.id, mode: item.is_campus_food ? 'campus' : 'public' })}
-              >
-                <Text style={styles.publicFoodDetailIconText}>编</Text>
-              </Pressable>
-            ) : null}
-            {isOwner ? (
-              <Pressable style={styles.publicFoodDetailIconAction} onPress={confirmRemove}>
-                <Text style={[styles.publicFoodDetailIconText, styles.publicFoodDetailDangerText]}>删</Text>
-              </Pressable>
-            ) : null}
+            <Pressable style={({ pressed }) => [styles.publicFoodDetailIconAction, pressed ? styles.pressed : null]} onPress={() => setActionSheetVisible(true)} accessibilityRole="button" accessibilityLabel="更多食物操作" accessibilityState={{ expanded: actionSheetVisible }}>
+              <MoreHorizontal size={22} color={isDark ? '#b3bdb8' : '#64748b'} strokeWidth={2.3} />
+            </Pressable>
           </View>
         </View>
         <View style={styles.publicFoodDetailCorrectionBar}>
-          <Text style={styles.publicFoodDetailCorrectionHint}>信息有误？</Text>
-          <Text style={styles.publicFoodDetailCorrectionLink}>可在下方提交修正</Text>
+          <Text style={[styles.publicFoodDetailCorrectionHint, isDark ? styles.publicFoodDetailMutedTextDark : null]}>信息有误？</Text>
+          <Pressable style={({ pressed }) => [styles.publicFoodDetailCorrectionButton, pressed ? styles.pressed : null]} onPress={() => setFeedbackModalVisible(true)} accessibilityRole="button" accessibilityLabel="修正食物信息">
+            <Text style={[styles.publicFoodDetailCorrectionLink, isDark ? styles.publicFoodDetailCaloriesTextDark : null]}>点击修正</Text>
+          </Pressable>
         </View>
       </View>
+
+      <Modal visible={imagePreviewVisible} transparent animationType="fade" statusBarTranslucent onRequestClose={() => setImagePreviewVisible(false)}>
+        <View style={styles.publicFoodDetailPreviewModal}>
+          <View style={[styles.publicFoodDetailPreviewHeader, { paddingTop: insets.top + 8 }]}>
+            <Text style={styles.publicFoodDetailPreviewTitle}>食物图片预览</Text>
+            <Text style={styles.publicFoodDetailPreviewCounter}>{imageList.length ? `${previewImageIndex + 1}/${imageList.length}` : ''}</Text>
+            <Pressable style={({ pressed }) => [styles.publicFoodDetailPreviewClose, pressed ? styles.publicFoodDetailPreviewPressed : null]} onPress={() => setImagePreviewVisible(false)} accessibilityRole="button" accessibilityLabel="关闭图片预览">
+              <X size={24} color="#fff" strokeWidth={2.2} />
+            </Pressable>
+          </View>
+          <ScrollView ref={previewScrollRef} horizontal pagingEnabled showsHorizontalScrollIndicator={false} onMomentumScrollEnd={onPreviewScrollEnd} style={styles.publicFoodDetailPreviewScroller}>
+            {imageList.map((src, index) => <View key={`${src}-preview-${index}`} style={[styles.publicFoodDetailPreviewSlide, { width: heroWidth, height: screenHeight }]}><Image source={{ uri: src }} style={styles.publicFoodDetailPreviewImage} resizeMode="contain" accessibilityLabel={`${detailTitle} 图片 ${index + 1}`} accessibilityIgnoresInvertColors /></View>)}
+          </ScrollView>
+          {imageList.length > 1 ? (
+            <View style={[styles.publicFoodDetailPreviewControls, { paddingBottom: insets.bottom + 16 }]}>
+              <Pressable disabled={previewImageIndex === 0} style={({ pressed }) => [styles.publicFoodDetailPreviewControl, previewImageIndex === 0 ? styles.publicFoodDetailPreviewControlDisabled : null, pressed ? styles.publicFoodDetailPreviewPressed : null]} onPress={() => { const next = Math.max(0, previewImageIndex - 1); setPreviewImageIndex(next); previewScrollRef.current?.scrollTo({ x: next * heroWidth, animated: true }) }} accessibilityRole="button" accessibilityLabel="上一张图片" accessibilityState={{ disabled: previewImageIndex === 0 }}><ChevronLeft size={24} color="#fff" strokeWidth={2.4} /></Pressable>
+              <Pressable disabled={previewImageIndex >= imageList.length - 1} style={({ pressed }) => [styles.publicFoodDetailPreviewControl, previewImageIndex >= imageList.length - 1 ? styles.publicFoodDetailPreviewControlDisabled : null, pressed ? styles.publicFoodDetailPreviewPressed : null]} onPress={() => { const next = Math.min(imageList.length - 1, previewImageIndex + 1); setPreviewImageIndex(next); previewScrollRef.current?.scrollTo({ x: next * heroWidth, animated: true }) }} accessibilityRole="button" accessibilityLabel="下一张图片" accessibilityState={{ disabled: previewImageIndex >= imageList.length - 1 }}><ChevronRight size={24} color="#fff" strokeWidth={2.4} /></Pressable>
+            </View>
+          ) : null}
+        </View>
+      </Modal>
+
+      <Modal visible={commentModalVisible} transparent animationType="slide" statusBarTranslucent onRequestClose={closeCommentComposer}>
+        <KeyboardAvoidingView style={styles.publicFoodDetailModalRoot} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <Pressable style={styles.publicFoodDetailModalBackdrop} onPress={closeCommentComposer} accessibilityRole="button" accessibilityLabel="关闭评论弹层">
+            <Pressable style={[styles.publicFoodDetailComposerSheet, isDark ? styles.publicFoodDetailComposerSheetDark : null, { paddingBottom: Math.max(insets.bottom, 18) }]} onPress={(event) => event.stopPropagation()}>
+              <View style={[styles.publicFoodDetailSheetHandle, isDark ? styles.publicFoodDetailSheetHandleDark : null]} />
+              <View style={styles.publicFoodDetailComposerHeader}>
+                <Text style={[styles.publicFoodDetailComposerTitle, isDark ? styles.publicFoodDetailTitleDark : null]}>{replyTarget ? `回复 @${replyTarget.nickname}` : '发表评论'}</Text>
+                <Pressable style={({ pressed }) => [styles.publicFoodDetailSheetClose, pressed ? styles.pressed : null]} onPress={closeCommentComposer} accessibilityRole="button" accessibilityLabel="关闭评论弹层"><X size={21} color={isDark ? '#b3bdb8' : '#64748b'} strokeWidth={2.2} /></Pressable>
+              </View>
+              {!replyTarget ? (
+                <View style={styles.publicFoodDetailRatingRow}>
+                  <Text style={[styles.publicFoodDetailRatingLabel, isDark ? styles.publicFoodDetailTextSecondaryDark : null]}>评分（可选）</Text>
+                  <View style={styles.publicFoodDetailRatingButtons} accessibilityRole="radiogroup">
+                    {[1, 2, 3, 4, 5].map((value) => {
+                      const selected = value <= commentRating
+                      return <Pressable key={value} style={({ pressed }) => [styles.publicFoodDetailRatingButton, isDark ? styles.publicFoodDetailRatingButtonDark : null, pressed ? styles.pressed : null]} onPress={() => setCommentRating(value === commentRating ? 0 : value)} accessibilityRole="radio" accessibilityLabel={`${value} 星`} accessibilityState={{ checked: commentRating === value }}><Star size={23} color="#f59e0b" fill={selected ? '#f59e0b' : 'transparent'} strokeWidth={2} /></Pressable>
+                    })}
+                  </View>
+                </View>
+              ) : null}
+              <TextInput
+                ref={commentInputRef}
+                value={comment}
+                onChangeText={setComment}
+                placeholder={replyTarget ? `回复 @${replyTarget.nickname}...` : '分享你的想法...'}
+                placeholderTextColor={isDark ? '#7f8c87' : colors.textMuted}
+                multiline
+                maxLength={500}
+                textAlignVertical="top"
+                style={[styles.publicFoodDetailComposerInput, isDark ? styles.publicFoodDetailComposerInputDark : null]}
+                accessibilityLabel={replyTarget ? `回复 ${replyTarget.nickname}` : '评论内容'}
+              />
+              <Pressable disabled={!comment.trim() || submittingComment} style={({ pressed }) => [styles.publicFoodDetailComposerSubmit, (!comment.trim() || submittingComment) ? styles.publicFoodDetailActionDisabled : null, pressed && comment.trim() && !submittingComment ? styles.pressed : null]} onPress={() => void addComment()} accessibilityRole="button" accessibilityLabel={replyTarget ? '发布回复' : '发表评论'} accessibilityState={{ disabled: !comment.trim() || submittingComment, busy: submittingComment }}>
+                {submittingComment ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.publicFoodDetailComposerSubmitText}>{replyTarget ? '发布回复' : '发表评论'}</Text>}
+              </Pressable>
+            </Pressable>
+          </Pressable>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      <Modal visible={feedbackModalVisible} transparent animationType="slide" statusBarTranslucent onRequestClose={() => !submittingFeedback && setFeedbackModalVisible(false)}>
+        <KeyboardAvoidingView style={styles.publicFoodDetailModalRoot} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <Pressable style={styles.publicFoodDetailModalBackdrop} onPress={() => !submittingFeedback && setFeedbackModalVisible(false)} accessibilityRole="button" accessibilityLabel="关闭修正弹层">
+            <Pressable style={[styles.publicFoodDetailComposerSheet, isDark ? styles.publicFoodDetailComposerSheetDark : null, { paddingBottom: Math.max(insets.bottom, 18) }]} onPress={(event) => event.stopPropagation()}>
+              <View style={[styles.publicFoodDetailSheetHandle, isDark ? styles.publicFoodDetailSheetHandleDark : null]} />
+              <View style={styles.publicFoodDetailComposerHeader}>
+                <View style={styles.flex}>
+                  <Text style={[styles.publicFoodDetailComposerTitle, isDark ? styles.publicFoodDetailTitleDark : null]}>修正食物信息</Text>
+                  <Text style={[styles.publicFoodDetailComposerHint, isDark ? styles.publicFoodDetailTextSecondaryDark : null]}>请说明食物名称、热量或其他有误的地方</Text>
+                </View>
+                <Pressable style={({ pressed }) => [styles.publicFoodDetailSheetClose, pressed ? styles.pressed : null]} onPress={() => setFeedbackModalVisible(false)} accessibilityRole="button" accessibilityLabel="关闭修正弹层"><X size={21} color={isDark ? '#b3bdb8' : '#64748b'} strokeWidth={2.2} /></Pressable>
+              </View>
+              <TextInput value={feedback} onChangeText={setFeedback} placeholder="请输入修正说明..." placeholderTextColor={isDark ? '#7f8c87' : colors.textMuted} multiline maxLength={500} textAlignVertical="top" style={[styles.publicFoodDetailComposerInput, isDark ? styles.publicFoodDetailComposerInputDark : null]} accessibilityLabel="修正说明" />
+              <Pressable disabled={!feedback.trim() || submittingFeedback} style={({ pressed }) => [styles.publicFoodDetailComposerSubmit, (!feedback.trim() || submittingFeedback) ? styles.publicFoodDetailActionDisabled : null, pressed && feedback.trim() && !submittingFeedback ? styles.pressed : null]} onPress={() => void submitFeedback()} accessibilityRole="button" accessibilityLabel="提交修正" accessibilityState={{ disabled: !feedback.trim() || submittingFeedback, busy: submittingFeedback }}>
+                {submittingFeedback ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.publicFoodDetailComposerSubmitText}>提交修正</Text>}
+              </Pressable>
+            </Pressable>
+          </Pressable>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      <Modal visible={actionSheetVisible} transparent animationType="slide" statusBarTranslucent onRequestClose={() => setActionSheetVisible(false)}>
+        <Pressable style={styles.publicFoodDetailModalBackdrop} onPress={() => setActionSheetVisible(false)} accessibilityRole="button" accessibilityLabel="关闭更多操作">
+          <Pressable style={[styles.publicFoodDetailActionSheet, isDark ? styles.publicFoodDetailActionSheetDark : null, { paddingBottom: Math.max(insets.bottom, 18) }]} onPress={(event) => event.stopPropagation()}>
+            <View style={[styles.publicFoodDetailSheetHandle, isDark ? styles.publicFoodDetailSheetHandleDark : null]} />
+            <Text style={[styles.publicFoodDetailSheetTitle, isDark ? styles.publicFoodDetailTitleDark : null]}>食物操作</Text>
+            <Pressable style={({ pressed }) => [styles.publicFoodDetailSheetAction, isDark ? styles.publicFoodDetailSheetActionDark : null, pressed ? styles.pressed : null]} onPress={() => void shareItem()} accessibilityRole="button" accessibilityLabel="转发给朋友"><Share2 size={21} color={isDark ? '#7dd3b0' : colors.brand} strokeWidth={2.2} /><Text style={[styles.publicFoodDetailSheetActionText, isDark ? styles.publicFoodDetailSheetActionTextDark : null]}>转发给朋友</Text></Pressable>
+            {isOwner ? <Pressable style={({ pressed }) => [styles.publicFoodDetailSheetAction, isDark ? styles.publicFoodDetailSheetActionDark : null, pressed ? styles.pressed : null]} onPress={() => { setActionSheetVisible(false); navigation.navigate('PublicFoodShare', { editId: item.id, mode: isCampusPublicFoodItem(item) ? 'campus' : 'public' }) }} accessibilityRole="button" accessibilityLabel="编辑食物"><Edit3 size={21} color={isDark ? '#7dd3b0' : colors.brand} strokeWidth={2.2} /><Text style={[styles.publicFoodDetailSheetActionText, isDark ? styles.publicFoodDetailSheetActionTextDark : null]}>编辑</Text></Pressable> : null}
+            {isOwner ? <Pressable disabled={deleting} style={({ pressed }) => [styles.publicFoodDetailSheetAction, styles.publicFoodDetailSheetActionDanger, isDark ? styles.publicFoodDetailSheetActionDark : null, pressed ? styles.pressed : null]} onPress={confirmRemove} accessibilityRole="button" accessibilityLabel="删除食物" accessibilityState={{ disabled: deleting, busy: deleting }}>{deleting ? <ActivityIndicator size="small" color={colors.danger} /> : <Trash2 size={21} color={colors.danger} strokeWidth={2.2} />}<Text style={[styles.publicFoodDetailSheetActionText, styles.publicFoodDetailDangerText]}>删除</Text></Pressable> : null}
+            <Pressable style={({ pressed }) => [styles.publicFoodDetailSheetCancel, isDark ? styles.publicFoodDetailSheetCancelDark : null, pressed ? styles.pressed : null]} onPress={() => setActionSheetVisible(false)} accessibilityRole="button" accessibilityLabel="取消"><Text style={[styles.publicFoodDetailSheetCancelText, isDark ? styles.publicFoodDetailSheetActionTextDark : null]}>取消</Text></Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   )
 }
@@ -1603,7 +2038,10 @@ export function CommunityFeedDetailScreen() {
   const route = useRoute<RouteProp<RootStackParamList, 'CommunityFeedDetail'>>()
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const insets = useSafeAreaInsets()
+  const { isDark } = useColorScheme()
+  const { width: screenWidth, height: screenHeight, fontScale } = useWindowDimensions()
   const commentInputRef = useRef<TextInput | null>(null)
+  const imagePreviewRef = useRef<ScrollView | null>(null)
   const [context, setContext] = useState<CommunityFeedContext | null>(null)
   const [comment, setComment] = useState('')
   const [reportText, setReportText] = useState('')
@@ -1619,6 +2057,9 @@ export function CommunityFeedDetailScreen() {
   const [commentInputFocused, setCommentInputFocused] = useState(false)
   const [currentUserId, setCurrentUserId] = useState('')
   const [deletingCommentId, setDeletingCommentId] = useState('')
+  const [manualFoodsExpanded, setManualFoodsExpanded] = useState(false)
+  const [microsExpanded, setMicrosExpanded] = useState(false)
+  const [previewImageIndex, setPreviewImageIndex] = useState<number | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -1633,6 +2074,9 @@ export function CommunityFeedDetailScreen() {
   }, [route.params.targetId, route.params.targetType])
 
   useEffect(() => {
+    setManualFoodsExpanded(false)
+    setMicrosExpanded(false)
+    setPreviewImageIndex(null)
     void load()
   }, [load])
 
@@ -1664,11 +2108,44 @@ export function CommunityFeedDetailScreen() {
   const recordTitle = communityDetailTitle(record, route.params.targetType)
   const recordBody = communityDetailBody(record, route.params.targetType)
   const images = communityDetailImages(record)
+  const displayImages = images.slice(0, 9)
   const comments = context?.comments || []
   const hasNutrition = communityDetailHasNutrition(record)
+  const manualFoodItems = useMemo(
+    () => communityDetailShouldRenderManualFoodCards(record) && !isExercise && !isCirclePost
+      ? communityDetailManualFoodItems(record?.items)
+      : [],
+    [isCirclePost, isExercise, record],
+  )
+  const visibleManualFoodItems = manualFoodsExpanded ? manualFoodItems : manualFoodItems.slice(0, 3)
+  const microRows = useMemo(
+    () => isExercise ? [] : communityDetailMicroRows(record, isCirclePost),
+    [isCirclePost, isExercise, record],
+  )
+  const useThreeMicroColumns = screenWidth >= 390 && fontScale <= 1.15
   const bottomBarKeyboardOffset = Platform.OS === 'android'
     ? keyboardHeight || (commentInputFocused ? 360 : 0)
     : 0
+
+  const openImagePreview = (index: number) => {
+    const nextIndex = Math.min(Math.max(index, 0), Math.max(displayImages.length - 1, 0))
+    setPreviewImageIndex(nextIndex)
+    setTimeout(() => imagePreviewRef.current?.scrollTo({ x: nextIndex * screenWidth, animated: false }), 0)
+  }
+
+  const scrollImagePreviewTo = (index: number) => {
+    const nextIndex = Math.min(Math.max(index, 0), Math.max(displayImages.length - 1, 0))
+    setPreviewImageIndex(nextIndex)
+    imagePreviewRef.current?.scrollTo({ x: nextIndex * screenWidth, animated: true })
+  }
+
+  const handleImagePreviewScrollEnd = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const nextIndex = Math.min(
+      Math.max(Math.round(event.nativeEvent.contentOffset.x / Math.max(screenWidth, 1)), 0),
+      Math.max(displayImages.length - 1, 0),
+    )
+    setPreviewImageIndex(nextIndex)
+  }
 
   const addComment = async () => {
     const content = comment.trim()
@@ -1809,7 +2286,7 @@ export function CommunityFeedDetailScreen() {
   }
 
   return (
-    <View style={styles.communityDetailPage}>
+    <View style={[styles.communityDetailPage, isDark ? styles.communityDetailPageDark : null]}>
       <ScrollView
         style={styles.communityDetailScroll}
         contentContainerStyle={[
@@ -1823,119 +2300,300 @@ export function CommunityFeedDetailScreen() {
           <CommunityDetailSkeleton />
         ) : !record ? (
           <View style={styles.communityDetailEmpty}>
-            <Text style={styles.communityDetailEmptyText}>未找到对应动态</Text>
+            <Text style={[styles.communityDetailEmptyText, isDark ? styles.communityDetailEmptyTextDark : null]}>未找到对应动态</Text>
           </View>
         ) : (
           <View style={styles.communityDetailFeedList}>
-            <View style={[styles.communityDetailFeedCard, isExercise && styles.communityDetailFeedCardExercise, isCirclePost && styles.communityDetailFeedCardCirclePost]}>
+            <View style={[
+              styles.communityDetailFeedCard,
+              isExercise ? styles.communityDetailFeedCardExercise : null,
+              isCirclePost ? styles.communityDetailFeedCardCirclePost : null,
+              isDark ? styles.communityDetailFeedCardDark : null,
+              isExercise && isDark ? styles.communityDetailFeedCardExerciseDark : null,
+            ]}>
               <View style={styles.communityDetailMomentsRow}>
                 <Pressable
-                  style={styles.communityDetailAvatarCol}
+                  style={({ pressed }) => [styles.communityDetailAvatarCol, pressed ? styles.pressed : null]}
                   onPress={() => author?.id ? navigation.navigate('ProfileSettings', { userId: author.id }) : undefined}
-                  hitSlop={8}
+                  disabled={!author?.id}
+                  accessibilityRole="button"
+                  accessibilityLabel={`查看${context?.is_mine ? '我' : author?.nickname || '食友'}的主页`}
+                  accessibilityState={{ disabled: !author?.id }}
                 >
                   {author?.avatar ? (
-                    <Image source={{ uri: author.avatar }} style={styles.communityDetailAvatar} />
+                    <Image
+                      source={{ uri: author.avatar }}
+                      style={[styles.communityDetailAvatar, isDark ? styles.communityDetailAvatarDark : null]}
+                      accessibilityIgnoresInvertColors
+                    />
                   ) : (
-                    <View style={styles.communityDetailAvatarFallback}>
-                      <UserRound size={18} color={colors.brand} strokeWidth={2.1} />
+                    <View style={[styles.communityDetailAvatarFallback, isDark ? styles.communityDetailAvatarFallbackDark : null]}>
+                      <UserRound size={18} color={isDark ? '#7dd3b0' : colors.brand} strokeWidth={2.1} />
                     </View>
                   )}
                 </Pressable>
 
                 <View style={styles.communityDetailMainCol}>
                   <Pressable
-                    style={styles.communityDetailNameBlock}
+                    style={({ pressed }) => [styles.communityDetailNameBlock, pressed ? styles.pressed : null]}
                     onPress={() => author?.id ? navigation.navigate('ProfileSettings', { userId: author.id }) : undefined}
+                    disabled={!author?.id}
+                    accessibilityRole="button"
+                    accessibilityLabel={`查看${context?.is_mine ? '我' : author?.nickname || '食友'}的主页`}
+                    accessibilityState={{ disabled: !author?.id }}
                   >
-                    <Text style={styles.communityDetailUserName} numberOfLines={1}>{context?.is_mine ? '我' : author?.nickname || '食友'}</Text>
-                    <Text style={styles.communityDetailPostTime} numberOfLines={1}>{communityDetailMeta(record, route.params.targetType)}</Text>
+                    <Text style={[styles.communityDetailUserName, isDark ? styles.communityDetailUserNameDark : null]}>{context?.is_mine ? '我' : author?.nickname || '食友'}</Text>
+                    <Text style={[styles.communityDetailPostTime, isDark ? styles.communityDetailPostTimeDark : null]}>{communityDetailMeta(record, route.params.targetType)}</Text>
                   </Pressable>
 
                   {communityDetailTag(record, route.params.targetType) ? (
                     <View style={styles.communityDetailTags}>
-                      <Text style={[styles.communityDetailTag, isExercise && styles.communityDetailTagExercise]} numberOfLines={1}>
+                      <Text style={[
+                        styles.communityDetailTag,
+                        isExercise ? styles.communityDetailTagExercise : null,
+                        isDark ? styles.communityDetailTagDark : null,
+                        isExercise && isDark ? styles.communityDetailTagExerciseDark : null,
+                      ]}>
                         {communityDetailTag(record, route.params.targetType)}
                       </Text>
                     </View>
                   ) : null}
 
-                  {recordTitle ? <Text style={styles.communityDetailTitle}>{recordTitle}</Text> : null}
-                  {recordBody ? <Text style={styles.communityDetailBody}>{recordBody}</Text> : null}
+                  {recordTitle ? <Text style={[styles.communityDetailTitle, isDark ? styles.communityDetailTitleDark : null]}>{recordTitle}</Text> : null}
+                  {recordBody ? <Text style={[styles.communityDetailBody, isDark ? styles.communityDetailBodyDark : null]}>{recordBody}</Text> : null}
 
-                  {images.length > 0 ? (
-                    <View style={[styles.communityDetailImageGrid, images.length === 1 && styles.communityDetailImageGridSingle]}>
-                      {images.slice(0, 9).map((url, index) => (
-                        <Image
+                  {displayImages.length > 0 ? (
+                    <View style={[styles.communityDetailImageGrid, displayImages.length === 1 && styles.communityDetailImageGridSingle]}>
+                      {displayImages.map((url, index) => (
+                        <Pressable
                           key={`${url}-${index}`}
-                          source={{ uri: url }}
-                          style={images.length === 1 ? styles.communityDetailImageSingle : styles.communityDetailImageTile}
-                        />
+                          style={({ pressed }) => [
+                            displayImages.length === 1 ? styles.communityDetailImageSingle : styles.communityDetailImageTile,
+                            isDark ? styles.communityDetailImageDark : null,
+                            pressed ? styles.communityDetailImagePressed : null,
+                          ]}
+                          onPress={() => openImagePreview(index)}
+                          accessibilityRole="button"
+                          accessibilityLabel={`预览动态图片 ${index + 1}，共 ${displayImages.length} 张`}
+                        >
+                          <Image
+                            source={{ uri: url }}
+                            style={styles.communityDetailImageFill}
+                            resizeMode="cover"
+                            accessibilityIgnoresInvertColors
+                          />
+                          <View style={styles.communityDetailImagePreviewBadge} pointerEvents="none">
+                            <Maximize2 size={14} color="#fff" strokeWidth={2.3} />
+                          </View>
+                        </Pressable>
                       ))}
                     </View>
                   ) : null}
 
+                  {manualFoodItems.length > 0 ? (
+                    <View style={styles.communityDetailManualFoods}>
+                      {visibleManualFoodItems.map((item, index) => {
+                        const canOpenDetail = Boolean(item.sourceId)
+                        return (
+                          <Pressable
+                            key={`${item.sourceId || item.displayName}-${index}`}
+                            style={({ pressed }) => [
+                              styles.communityDetailManualFoodCard,
+                              isDark ? styles.communityDetailManualFoodCardDark : null,
+                              pressed && canOpenDetail ? styles.communityDetailManualFoodCardPressed : null,
+                            ]}
+                            disabled={!canOpenDetail}
+                            onPress={() => {
+                              if (item.sourceId) navigation.navigate('FoodLibraryDetail', { item: item.detailItem })
+                            }}
+                            accessibilityRole="button"
+                            accessibilityLabel={`${item.displayName}${item.sourceLabel ? `，${item.sourceLabel}` : ''}${item.calories > 0 ? `，${Math.round(item.calories)} 千卡` : ''}`}
+                            accessibilityHint={canOpenDetail ? '查看食物库详情' : undefined}
+                            accessibilityState={{ disabled: !canOpenDetail }}
+                          >
+                            {item.imageUrl ? (
+                              <Image source={{ uri: item.imageUrl }} style={styles.communityDetailManualFoodImage} resizeMode="cover" accessibilityIgnoresInvertColors />
+                            ) : (
+                              <View style={[styles.communityDetailManualFoodImageFallback, isDark ? styles.communityDetailManualFoodImageFallbackDark : null]}>
+                                <ImageIcon size={18} color={isDark ? '#9ca3a8' : '#94a3b8'} strokeWidth={2} />
+                              </View>
+                            )}
+                            <View style={styles.communityDetailManualFoodInfo}>
+                              <Text style={[styles.communityDetailManualFoodTitle, isDark ? styles.communityDetailManualFoodTitleDark : null]} numberOfLines={2}>{item.displayName}</Text>
+                              <View style={styles.communityDetailManualFoodMeta}>
+                                {item.sourceLabel ? <Text style={[styles.communityDetailManualFoodBadge, isDark ? styles.communityDetailManualFoodBadgeDark : null]}>{item.sourceLabel}</Text> : null}
+                                {item.calories > 0 ? <Text style={[styles.communityDetailManualFoodCalories, isDark ? styles.communityDetailManualFoodCaloriesDark : null]}>{Math.round(item.calories)} kcal</Text> : null}
+                              </View>
+                            </View>
+                            {canOpenDetail ? <ChevronRight size={18} color={isDark ? '#9ca3a8' : '#94a3b8'} strokeWidth={2.2} /> : null}
+                          </Pressable>
+                        )
+                      })}
+                      {manualFoodItems.length > 3 ? (
+                        <Pressable
+                          style={({ pressed }) => [styles.communityDetailManualFoodExpand, isDark ? styles.communityDetailManualFoodExpandDark : null, pressed ? styles.pressed : null]}
+                          onPress={() => setManualFoodsExpanded((previous) => !previous)}
+                          accessibilityRole="button"
+                          accessibilityLabel={manualFoodsExpanded ? '收起手工食物' : `展开其余 ${manualFoodItems.length - 3} 项手工食物`}
+                          accessibilityState={{ expanded: manualFoodsExpanded }}
+                        >
+                          <Text style={[styles.communityDetailManualFoodExpandText, isDark ? styles.communityDetailManualFoodExpandTextDark : null]}>
+                            {manualFoodsExpanded ? '收起' : `展开更多（${manualFoodItems.length - 3}）`}
+                          </Text>
+                          {manualFoodsExpanded
+                            ? <ChevronUp size={17} color={isDark ? '#b3bdb8' : '#64748b'} strokeWidth={2.2} />
+                            : <ChevronDown size={17} color={isDark ? '#b3bdb8' : '#64748b'} strokeWidth={2.2} />}
+                        </Pressable>
+                      ) : null}
+                    </View>
+                  ) : null}
+
                   {hasNutrition ? (
-                    <View style={[styles.communityDetailMetaCard, isExercise && styles.communityDetailMetaCardExercise]}>
+                    <View style={[
+                      styles.communityDetailMetaCard,
+                      isExercise ? styles.communityDetailMetaCardExercise : null,
+                      isDark ? styles.communityDetailMetaCardDark : null,
+                      isExercise && isDark ? styles.communityDetailMetaCardExerciseDark : null,
+                    ]}>
                       <View style={[styles.communityDetailCalorie, isExercise && styles.communityDetailCalorieExercise]}>
-                        <Text style={styles.communityDetailCalorieNum}>{communityDetailKcal(record, route.params.targetType)}</Text>
-                        <Text style={styles.communityDetailCalorieUnit}>kcal{isExercise ? ' 消耗' : ''}</Text>
+                        <Text style={[styles.communityDetailCalorieNum, isDark ? styles.communityDetailCalorieNumDark : null]}>{communityDetailKcal(record, route.params.targetType)}</Text>
+                        <Text style={[styles.communityDetailCalorieUnit, isDark ? styles.communityDetailCalorieUnitDark : null]}>kcal{isExercise ? ' 消耗' : ''}</Text>
                       </View>
                       <View style={styles.communityDetailMacros}>
-                        <Text style={[styles.communityDetailMacrosText, isExercise && styles.communityDetailMacrosTextExercise]} numberOfLines={3}>
+                        <Text style={[
+                          styles.communityDetailMacrosText,
+                          isExercise ? styles.communityDetailMacrosTextExercise : null,
+                          isDark ? styles.communityDetailMacrosTextDark : null,
+                          isExercise && isDark ? styles.communityDetailMacrosTextExerciseDark : null,
+                        ]}>
                           {communityDetailMacroText(record, route.params.targetType)}
                         </Text>
                       </View>
                     </View>
                   ) : null}
+                  {microRows.length > 0 ? (
+                    <View style={[styles.communityDetailMicros, isDark ? styles.communityDetailMicrosDark : null]}>
+                      <Pressable
+                        style={({ pressed }) => [styles.communityDetailMicrosHead, pressed ? styles.pressed : null]}
+                        onPress={() => setMicrosExpanded((previous) => !previous)}
+                        accessibilityRole="button"
+                        accessibilityLabel={microsExpanded ? '收起微量元素' : `展开 ${microRows.length} 项微量元素`}
+                        accessibilityState={{ expanded: microsExpanded }}
+                      >
+                        <Text style={[styles.communityDetailMicrosTitle, isDark ? styles.communityDetailMicrosTitleDark : null]}>微量元素</Text>
+                        <View style={styles.communityDetailMicrosToggle}>
+                          <Text style={[styles.communityDetailMicrosToggleText, isDark ? styles.communityDetailMicrosToggleTextDark : null]}>{microsExpanded ? '收起' : '展开'}</Text>
+                          {microsExpanded
+                            ? <ChevronUp size={17} color={isDark ? '#b3bdb8' : '#64748b'} strokeWidth={2.2} />
+                            : <ChevronDown size={17} color={isDark ? '#b3bdb8' : '#64748b'} strokeWidth={2.2} />}
+                        </View>
+                      </Pressable>
+                      {!microsExpanded ? (
+                        <Text style={[styles.communityDetailMicrosSummary, isDark ? styles.communityDetailMicrosSummaryDark : null]}>
+                          {microRows.slice(0, 3).map((row) => `${row.meta.label} ${communityDetailFormatMicroValue(row.value)}${row.meta.unit}`).join(' · ')}
+                          {microRows.length > 3 ? ` 等 ${microRows.length} 项` : ''}
+                        </Text>
+                      ) : (
+                        <View style={styles.communityDetailMicrosGrid}>
+                          {microRows.map((row) => (
+                            <View
+                              key={row.meta.key}
+                              style={[
+                                styles.communityDetailMicroCell,
+                                { width: useThreeMicroColumns ? '31.5%' : '48.5%', backgroundColor: `${row.color}14`, borderColor: `${row.color}33` },
+                                isDark ? styles.communityDetailMicroCellDark : null,
+                              ]}
+                              accessible
+                              accessibilityLabel={`${row.meta.label} ${communityDetailFormatMicroValue(row.value)} ${row.meta.unit}`}
+                            >
+                              <Text style={[styles.communityDetailMicroLabel, { color: `${row.color}cc` }]}>{row.meta.label}</Text>
+                              <View style={styles.communityDetailMicroValueRow}>
+                                <Text style={[styles.communityDetailMicroValue, { color: row.color }]}>{communityDetailFormatMicroValue(row.value)}</Text>
+                                <Text style={[styles.communityDetailMicroUnit, { color: `${row.color}cc` }]}>{row.meta.unit}</Text>
+                              </View>
+                            </View>
+                          ))}
+                        </View>
+                      )}
+                    </View>
+                  ) : null}
 
                   <View style={styles.communityDetailActions}>
                     <View style={styles.communityDetailActionsLeft}>
-                      <Pressable style={styles.communityDetailActionItem} onPress={toggleLike} hitSlop={8}>
+                      <Pressable
+                        style={({ pressed }) => [styles.communityDetailActionItem, pressed ? styles.pressed : null]}
+                        onPress={toggleLike}
+                        disabled={liking}
+                        accessibilityRole="button"
+                        accessibilityLabel={context?.liked ? `取消点赞，当前 ${context?.like_count || 0} 个赞` : `点赞，当前 ${context?.like_count || 0} 个赞`}
+                        accessibilityState={{ selected: Boolean(context?.liked), disabled: liking, busy: liking }}
+                      >
                         {liking ? (
                           <ActivityIndicator size="small" color={colors.danger} />
                         ) : (
-                          <Heart size={19} color={context?.liked ? colors.danger : '#64748b'} fill={context?.liked ? colors.danger : 'transparent'} strokeWidth={2.2} />
+                          <Heart size={19} color={context?.liked ? colors.danger : isDark ? '#9ca3a8' : '#64748b'} fill={context?.liked ? colors.danger : 'transparent'} strokeWidth={2.2} />
                         )}
-                        <Text style={[styles.communityDetailActionCount, context?.liked && styles.communityDetailActionCountActive]}>{context?.like_count || 0}</Text>
+                        <Text style={[styles.communityDetailActionCount, isDark ? styles.communityDetailActionCountDark : null, context?.liked ? styles.communityDetailActionCountActive : null]}>{context?.like_count || 0}</Text>
                       </Pressable>
-                      <Pressable style={styles.communityDetailActionItem} onPress={() => focusCommentInput(null)} hitSlop={8}>
-                        <MessageCircle size={19} color="#64748b" strokeWidth={2.2} />
-                        <Text style={styles.communityDetailActionCount}>评论 {context?.comment_count || comments.length || 0}</Text>
+                      <Pressable
+                        style={({ pressed }) => [styles.communityDetailActionItem, pressed ? styles.pressed : null]}
+                        onPress={() => focusCommentInput(null)}
+                        accessibilityRole="button"
+                        accessibilityLabel={`发表评论，当前 ${context?.comment_count || comments.length || 0} 条评论`}
+                      >
+                        <MessageCircle size={19} color={isDark ? '#9ca3a8' : '#64748b'} strokeWidth={2.2} />
+                        <Text style={[styles.communityDetailActionCount, isDark ? styles.communityDetailActionCountDark : null]}>评论 {context?.comment_count || comments.length || 0}</Text>
                       </Pressable>
                     </View>
-                    <Pressable style={styles.communityDetailManageBox} onPress={() => setActionSheetVisible(true)} hitSlop={8}>
-                      <MoreHorizontal size={19} color="#64748b" strokeWidth={2.3} />
+                    <Pressable
+                      style={({ pressed }) => [styles.communityDetailManageBox, isDark ? styles.communityDetailManageBoxDark : null, pressed ? styles.pressed : null]}
+                      onPress={() => setActionSheetVisible(true)}
+                      accessibilityRole="button"
+                      accessibilityLabel="更多动态操作"
+                    >
+                      <MoreHorizontal size={19} color={isDark ? '#9ca3a8' : '#64748b'} strokeWidth={2.3} />
                     </Pressable>
                   </View>
 
                   {comments.length > 0 ? (
-                    <View style={styles.communityDetailComments}>
+                    <View style={[styles.communityDetailComments, isDark ? styles.communityDetailCommentsDark : null]}>
                       {comments.map((entry) => {
                         const canDeleteComment = Boolean(currentUserId && entry.user_id === currentUserId) || Boolean(context?.is_mine)
                         return (
                         <Pressable
                           key={entry.id}
-                          style={[styles.communityDetailCommentItem, entry.reply_to_user_id && styles.communityDetailCommentReply, deletingCommentId === entry.id && styles.communityDetailCommentDeleting]}
+                          style={({ pressed }) => [
+                            styles.communityDetailCommentItem,
+                            entry.reply_to_user_id ? styles.communityDetailCommentReply : null,
+                            entry.reply_to_user_id && isDark ? styles.communityDetailCommentReplyDark : null,
+                            deletingCommentId === entry.id ? styles.communityDetailCommentDeleting : null,
+                            pressed ? styles.pressed : null,
+                          ]}
                           onPress={() => focusCommentInput(entry)}
-                          onLongPress={() => deleteComment(entry)}
+                          onLongPress={canDeleteComment ? () => deleteComment(entry) : undefined}
                           delayLongPress={420}
+                          accessibilityRole="button"
+                          accessibilityLabel={`${entry.nickname || '用户'}评论：${entry.content}`}
+                          accessibilityHint={canDeleteComment ? '轻点回复，长按删除' : '轻点回复'}
+                          accessibilityState={{ disabled: deletingCommentId === entry.id }}
                         >
-                          <View style={styles.communityDetailCommentAvatar}>
+                          <View style={[styles.communityDetailCommentAvatar, isDark ? styles.communityDetailCommentAvatarDark : null]}>
                             {entry.avatar ? <Image source={{ uri: entry.avatar }} style={styles.communityDetailCommentAvatarImage} /> : null}
                           </View>
                           <View style={styles.communityDetailCommentBody}>
                             <View style={styles.communityDetailCommentMetaLine}>
-                              <Text style={styles.communityDetailCommentAuthor} numberOfLines={1}>{entry.nickname || '用户'}</Text>
-                              {entry.reply_to_user_id ? <Text style={styles.communityDetailCommentReplyTo} numberOfLines={1}>回复 {entry.reply_to_nickname || '用户'}</Text> : null}
+                              <Text style={[styles.communityDetailCommentAuthor, isDark ? styles.communityDetailCommentAuthorDark : null]}>{entry.nickname || '用户'}</Text>
+                              {entry.reply_to_user_id ? <Text style={[styles.communityDetailCommentReplyTo, isDark ? styles.communityDetailCommentReplyToDark : null]}>回复 {entry.reply_to_nickname || '用户'}</Text> : null}
                             </View>
-                            <Text style={styles.communityDetailCommentText}>{entry.content}</Text>
+                            <Text style={[styles.communityDetailCommentText, isDark ? styles.communityDetailCommentTextDark : null]}>{entry.content}</Text>
                           </View>
                           {canDeleteComment ? (
                             <Pressable
-                              style={styles.communityDetailCommentDelete}
-                              hitSlop={8}
+                              style={({ pressed }) => [styles.communityDetailCommentDelete, pressed ? styles.pressed : null]}
                               disabled={Boolean(deletingCommentId)}
+                              accessibilityRole="button"
+                              accessibilityLabel={`删除${entry.nickname || '用户'}的评论`}
+                              accessibilityState={{ disabled: Boolean(deletingCommentId), busy: deletingCommentId === entry.id }}
                               onPress={(event) => {
                                 event.stopPropagation()
                                 deleteComment(entry)
@@ -1949,8 +2607,13 @@ export function CommunityFeedDetailScreen() {
                       })}
                     </View>
                   ) : (
-                    <Pressable style={styles.communityDetailCommentEmpty} onPress={() => focusCommentInput(null)}>
-                      <Text style={styles.communityDetailCommentEmptyText}>还没有评论，来抢沙发</Text>
+                    <Pressable
+                      style={({ pressed }) => [styles.communityDetailCommentEmpty, isDark ? styles.communityDetailCommentEmptyDark : null, pressed ? styles.pressed : null]}
+                      onPress={() => focusCommentInput(null)}
+                      accessibilityRole="button"
+                      accessibilityLabel="还没有评论，发表评论"
+                    >
+                      <Text style={[styles.communityDetailCommentEmptyText, isDark ? styles.communityDetailCommentEmptyTextDark : null]}>还没有评论，来抢沙发</Text>
                     </Pressable>
                   )}
                 </View>
@@ -1963,13 +2626,18 @@ export function CommunityFeedDetailScreen() {
       {record ? (
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={[styles.communityDetailBottomBar, { bottom: bottomBarKeyboardOffset, paddingBottom: Math.max(insets.bottom, 10) }]}
+          style={[styles.communityDetailBottomBar, isDark ? styles.communityDetailBottomBarDark : null, { bottom: bottomBarKeyboardOffset, paddingBottom: Math.max(insets.bottom, 10) }]}
         >
           {replyTarget ? (
-            <View style={styles.communityDetailReplyBar}>
-              <Text style={styles.communityDetailReplyText} numberOfLines={1}>回复 {replyTarget.nickname || '用户'}</Text>
-              <Pressable hitSlop={8} onPress={() => setReplyTarget(null)}>
-                <X size={15} color="#64748b" strokeWidth={2.2} />
+            <View style={[styles.communityDetailReplyBar, isDark ? styles.communityDetailReplyBarDark : null]}>
+              <Text style={[styles.communityDetailReplyText, isDark ? styles.communityDetailReplyTextDark : null]}>回复 {replyTarget.nickname || '用户'}</Text>
+              <Pressable
+                style={({ pressed }) => [styles.communityDetailReplyClose, pressed ? styles.pressed : null]}
+                onPress={() => setReplyTarget(null)}
+                accessibilityRole="button"
+                accessibilityLabel="取消回复"
+              >
+                <X size={16} color={isDark ? '#9ca3a8' : '#64748b'} strokeWidth={2.2} />
               </Pressable>
             </View>
           ) : null}
@@ -1979,8 +2647,9 @@ export function CommunityFeedDetailScreen() {
               value={comment}
               onChangeText={setComment}
               placeholder={replyTarget ? `回复 ${replyTarget.nickname || '用户'}...` : '说点什么...'}
-              placeholderTextColor="#94a3b8"
-              style={styles.communityDetailCommentInput}
+              placeholderTextColor={isDark ? '#7f8c87' : '#94a3b8'}
+              style={[styles.communityDetailCommentInput, isDark ? styles.communityDetailCommentInputDark : null]}
+              accessibilityLabel={replyTarget ? `回复 ${replyTarget.nickname || '用户'}` : '发表评论'}
               onFocus={() => setCommentInputFocused(true)}
               onBlur={() => setCommentInputFocused(false)}
               returnKeyType="send"
@@ -1988,21 +2657,94 @@ export function CommunityFeedDetailScreen() {
               maxLength={500}
             />
             <Pressable
-              style={[styles.communityDetailSendButton, (!comment.trim() || submittingComment) && styles.communityDetailSendButtonDisabled, comment.trim() && styles.communityDetailSendButtonReady]}
+              style={({ pressed }) => [
+                styles.communityDetailSendButton,
+                isDark ? styles.communityDetailSendButtonDark : null,
+                !comment.trim() || submittingComment ? styles.communityDetailSendButtonDisabled : null,
+                (!comment.trim() || submittingComment) && isDark ? styles.communityDetailSendButtonDisabledDark : null,
+                comment.trim() && !submittingComment ? styles.communityDetailSendButtonReady : null,
+                pressed ? styles.pressed : null,
+              ]}
               onPress={() => void addComment()}
               disabled={!comment.trim() || submittingComment}
+              accessibilityRole="button"
+              accessibilityLabel="发送评论"
+              accessibilityState={{ disabled: !comment.trim() || submittingComment, busy: submittingComment }}
             >
-              {submittingComment ? <ActivityIndicator size="small" color="#fff" /> : <Send size={18} color={comment.trim() ? '#fff' : '#94a3b8'} strokeWidth={2.4} />}
+              {submittingComment ? <ActivityIndicator size="small" color="#fff" /> : <Send size={18} color={comment.trim() ? '#fff' : isDark ? '#7f8c87' : '#94a3b8'} strokeWidth={2.4} />}
             </Pressable>
           </View>
         </KeyboardAvoidingView>
       ) : null}
 
+      <Modal
+        visible={previewImageIndex !== null && displayImages.length > 0}
+        transparent
+        animationType="fade"
+        presentationStyle="overFullScreen"
+        statusBarTranslucent
+        onRequestClose={() => setPreviewImageIndex(null)}
+      >
+        <View style={styles.communityDetailImagePreview} accessibilityViewIsModal>
+          <ScrollView
+            ref={imagePreviewRef}
+            horizontal
+            pagingEnabled
+            bounces={false}
+            showsHorizontalScrollIndicator={false}
+            onMomentumScrollEnd={handleImagePreviewScrollEnd}
+            scrollEventThrottle={16}
+            accessibilityLabel="动态图片预览"
+          >
+            {displayImages.map((url, index) => (
+              <View key={`preview-${url}-${index}`} style={[styles.communityDetailImagePreviewSlide, { width: screenWidth, height: screenHeight }]}>
+                <Image source={{ uri: url }} style={styles.communityDetailImagePreviewImage} resizeMode="contain" accessibilityIgnoresInvertColors />
+              </View>
+            ))}
+          </ScrollView>
+          <Pressable
+            style={({ pressed }) => [styles.communityDetailImagePreviewClose, { top: Math.max(insets.top, 12) + 6 }, pressed ? styles.communityDetailImagePreviewControlPressed : null]}
+            onPress={() => setPreviewImageIndex(null)}
+            accessibilityRole="button"
+            accessibilityLabel="关闭图片预览"
+          >
+            <X size={23} color="#fff" strokeWidth={2.3} />
+          </Pressable>
+          {displayImages.length > 1 && previewImageIndex !== null ? (
+            <>
+              {previewImageIndex > 0 ? (
+                <Pressable
+                  style={({ pressed }) => [styles.communityDetailImagePreviewPrevious, pressed ? styles.communityDetailImagePreviewControlPressed : null]}
+                  onPress={() => scrollImagePreviewTo(previewImageIndex - 1)}
+                  accessibilityRole="button"
+                  accessibilityLabel="上一张图片"
+                >
+                  <ChevronLeft size={26} color="#fff" strokeWidth={2.3} />
+                </Pressable>
+              ) : null}
+              {previewImageIndex < displayImages.length - 1 ? (
+                <Pressable
+                  style={({ pressed }) => [styles.communityDetailImagePreviewNext, pressed ? styles.communityDetailImagePreviewControlPressed : null]}
+                  onPress={() => scrollImagePreviewTo(previewImageIndex + 1)}
+                  accessibilityRole="button"
+                  accessibilityLabel="下一张图片"
+                >
+                  <ChevronRight size={26} color="#fff" strokeWidth={2.3} />
+                </Pressable>
+              ) : null}
+              <View style={[styles.communityDetailImagePreviewCounter, { bottom: Math.max(insets.bottom, 18) + 12 }]} accessible accessibilityLabel={`第 ${previewImageIndex + 1} 张，共 ${displayImages.length} 张`}>
+                <Text style={styles.communityDetailImagePreviewCounterText}>{previewImageIndex + 1} / {displayImages.length}</Text>
+              </View>
+            </>
+          ) : null}
+        </View>
+      </Modal>
+
       <Modal visible={actionSheetVisible} transparent animationType="fade" onRequestClose={() => setActionSheetVisible(false)}>
         <Pressable style={styles.communityDetailSheetMask} onPress={() => setActionSheetVisible(false)}>
-          <Pressable style={[styles.communityDetailActionSheet, { paddingBottom: Math.max(insets.bottom, 18) }]} onPress={(event) => event.stopPropagation()}>
-            <View style={styles.communityDetailSheetHandle} />
-            <Text style={styles.communityDetailSheetTitle}>动态操作</Text>
+          <Pressable style={[styles.communityDetailActionSheet, isDark ? styles.communityDetailActionSheetDark : null, { paddingBottom: Math.max(insets.bottom, 18) }]} onPress={(event) => event.stopPropagation()}>
+            <View style={[styles.communityDetailSheetHandle, isDark ? styles.communityDetailSheetHandleDark : null]} />
+            <Text style={[styles.communityDetailSheetTitle, isDark ? styles.communityDetailSheetTitleDark : null]}>动态操作</Text>
             {isMine ? (
               <>
                 <CommunityDetailSheetAction icon={<Edit3 size={18} color={colors.brand} strokeWidth={2.2} />} label="编辑动态" onPress={editPost} />
@@ -2018,21 +2760,29 @@ export function CommunityFeedDetailScreen() {
 
       <Modal visible={reportSheetVisible} transparent animationType="slide" onRequestClose={() => setReportSheetVisible(false)}>
         <Pressable style={styles.communityDetailSheetMask} onPress={() => setReportSheetVisible(false)}>
-          <Pressable style={[styles.communityDetailReportSheet, { paddingBottom: Math.max(insets.bottom, 18) }]} onPress={(event) => event.stopPropagation()}>
-            <View style={styles.communityDetailSheetHandle} />
-            <Text style={styles.communityDetailSheetTitle}>举报动态</Text>
-            <Text style={styles.communityDetailReportHint}>请补充违规、广告或不适内容说明。</Text>
+          <Pressable style={[styles.communityDetailReportSheet, isDark ? styles.communityDetailReportSheetDark : null, { paddingBottom: Math.max(insets.bottom, 18) }]} onPress={(event) => event.stopPropagation()}>
+            <View style={[styles.communityDetailSheetHandle, isDark ? styles.communityDetailSheetHandleDark : null]} />
+            <Text style={[styles.communityDetailSheetTitle, isDark ? styles.communityDetailSheetTitleDark : null]}>举报动态</Text>
+            <Text style={[styles.communityDetailReportHint, isDark ? styles.communityDetailReportHintDark : null]}>请补充违规、广告或不适内容说明。</Text>
             <TextInput
               value={reportText}
               onChangeText={setReportText}
               placeholder="说明原因"
-              placeholderTextColor="#94a3b8"
+              placeholderTextColor={isDark ? '#7f8c87' : '#94a3b8'}
               multiline
               textAlignVertical="top"
-              style={styles.communityDetailReportInput}
+              style={[styles.communityDetailReportInput, isDark ? styles.communityDetailReportInputDark : null]}
               maxLength={300}
+              accessibilityLabel="举报原因说明"
             />
-            <Pressable style={styles.communityDetailReportButton} onPress={() => void report()} disabled={reporting}>
+            <Pressable
+              style={({ pressed }) => [styles.communityDetailReportButton, reporting ? styles.communityDetailReportButtonDisabled : null, pressed ? styles.pressed : null]}
+              onPress={() => void report()}
+              disabled={reporting}
+              accessibilityRole="button"
+              accessibilityLabel="提交举报"
+              accessibilityState={{ disabled: reporting, busy: reporting }}
+            >
               {reporting ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.communityDetailReportButtonText}>提交举报</Text>}
             </Pressable>
           </Pressable>
@@ -2043,17 +2793,235 @@ export function CommunityFeedDetailScreen() {
 }
 
 type CommunityDetailRecord = NonNullable<CommunityFeedContext['record']>
+type CommunityDetailRuntimeItem = CommunityDetailRecord['items'][number] & { source_label?: string | null }
+type CommunityDetailRuntimeRecord = CommunityDetailRecord & { entry_type?: string | null; recipe_id?: string | null }
+type CommunityDetailManualFoodItem = {
+  displayName: string
+  sourceLabel: string
+  sourceId: string
+  imageUrl: string
+  calories: number
+  detailItem: ManualFoodItem
+}
+
+type CommunityDetailMicroKey =
+  | 'fiber' | 'sugar' | 'saturatedFat' | 'cholesterolMg' | 'sodiumMg' | 'potassiumMg'
+  | 'calciumMg' | 'ironMg' | 'magnesiumMg' | 'zincMg' | 'vitaminARaeMcg' | 'vitaminCMg'
+  | 'vitaminDMcg' | 'vitaminEMg' | 'vitaminKMcg' | 'thiaminMg' | 'riboflavinMg'
+  | 'niacinMg' | 'vitaminB6Mg' | 'folateMcg' | 'vitaminB12Mcg'
+
+type CommunityDetailMicroMeta = { key: CommunityDetailMicroKey; label: string; unit: string }
+type CommunityDetailMicroRow = { meta: CommunityDetailMicroMeta; value: number; color: string }
+
+const communityDetailMicroMeta: CommunityDetailMicroMeta[] = [
+  { key: 'fiber', label: '膳食纤维', unit: 'g' },
+  { key: 'sugar', label: '糖', unit: 'g' },
+  { key: 'saturatedFat', label: '饱和脂肪', unit: 'g' },
+  { key: 'cholesterolMg', label: '胆固醇', unit: 'mg' },
+  { key: 'sodiumMg', label: '钠', unit: 'mg' },
+  { key: 'potassiumMg', label: '钾', unit: 'mg' },
+  { key: 'calciumMg', label: '钙', unit: 'mg' },
+  { key: 'ironMg', label: '铁', unit: 'mg' },
+  { key: 'magnesiumMg', label: '镁', unit: 'mg' },
+  { key: 'zincMg', label: '锌', unit: 'mg' },
+  { key: 'vitaminARaeMcg', label: '维生素A', unit: 'mcg' },
+  { key: 'vitaminCMg', label: '维生素C', unit: 'mg' },
+  { key: 'vitaminDMcg', label: '维生素D', unit: 'mcg' },
+  { key: 'vitaminEMg', label: '维生素E', unit: 'mg' },
+  { key: 'vitaminKMcg', label: '维生素K', unit: 'mcg' },
+  { key: 'thiaminMg', label: '维生素B1', unit: 'mg' },
+  { key: 'riboflavinMg', label: '维生素B2', unit: 'mg' },
+  { key: 'niacinMg', label: '烟酸', unit: 'mg' },
+  { key: 'vitaminB6Mg', label: '维生素B6', unit: 'mg' },
+  { key: 'folateMcg', label: '叶酸', unit: 'mcg' },
+  { key: 'vitaminB12Mcg', label: '维生素B12', unit: 'mcg' },
+]
+
+const communityDetailMicroColors: Record<CommunityDetailMicroKey, string> = {
+  fiber: '#5dbb8a',
+  sugar: '#e88cb8',
+  saturatedFat: '#d4a373',
+  cholesterolMg: '#bc8f8f',
+  sodiumMg: '#ef8b73',
+  potassiumMg: '#57a99a',
+  calciumMg: '#6aa7d8',
+  ironMg: '#d88d5a',
+  magnesiumMg: '#7eb8da',
+  zincMg: '#a8a4ce',
+  vitaminARaeMcg: '#e0a14a',
+  vitaminCMg: '#71c16f',
+  vitaminDMcg: '#8a7be0',
+  vitaminEMg: '#c0a46e',
+  vitaminKMcg: '#8fbc8f',
+  thiaminMg: '#d4a5a5',
+  riboflavinMg: '#9fb4cc',
+  niacinMg: '#b8a9c9',
+  vitaminB6Mg: '#a3c4a3',
+  folateMcg: '#d8b4a0',
+  vitaminB12Mcg: '#9ecae1',
+}
+
+function communityDetailResolveManualSource(item: CommunityDetailRuntimeItem): { source: string; sourceId: string; sourceTitle: string } {
+  const explicitSource = String(item.manual_source || '').trim()
+  if (explicitSource) {
+    return {
+      source: explicitSource,
+      sourceId: String(item.manual_source_id || '').trim(),
+      sourceTitle: String(item.manual_source_title || item.name || '').trim(),
+    }
+  }
+  const packagedFoodId = String(item.packaged_food_id || '').trim()
+  const matchedFoodId = String(item.matched_food_id || '').trim()
+  const nutritionSource = String(item.nutrition_source || '').trim().toLowerCase()
+  const nutritionSourceCategory = String(item.nutrition_source_category || '').trim().toLowerCase()
+  if (packagedFoodId || nutritionSource.includes('packaged')) {
+    return { source: 'packaged_food', sourceId: packagedFoodId, sourceTitle: String(item.name || '').trim() }
+  }
+  if (matchedFoodId || (nutritionSourceCategory === 'database' && nutritionSource.includes('library'))) {
+    return { source: 'nutrition_library', sourceId: matchedFoodId, sourceTitle: String(item.name || '').trim() }
+  }
+  return { source: '', sourceId: '', sourceTitle: '' }
+}
+
+function communityDetailManualSourceLabel(source: string, fallbackLabel: string): string {
+  if (fallbackLabel) return fallbackLabel
+  switch (source) {
+    case 'public_library':
+      return '真实餐食'
+    case 'packaged_food':
+      return '包装食品'
+    case 'nutrition_library':
+      return '常用食物'
+    default:
+      return ''
+  }
+}
+
+function communityDetailManualFoodItems(items: CommunityDetailRecord['items'] | null | undefined): CommunityDetailManualFoodItem[] {
+  if (!Array.isArray(items)) return []
+  return items.flatMap((baseItem) => {
+    const item = baseItem as CommunityDetailRuntimeItem
+    const resolved = communityDetailResolveManualSource(item)
+    if (!resolved.source) return []
+    const imageUrls = Array.from(new Set([
+      ...(Array.isArray(item.image_paths) ? item.image_paths : []),
+      item.image_path || '',
+    ].map((url) => String(url || '').trim()).filter(Boolean)))
+    const consumedWeight = [Number(item.intake), Number(item.weight)].find((value) => Number.isFinite(value) && value > 0) || 100
+    const portionMatch = String(item.manual_portion_label || '').match(/([\d.]+)\s*(?:g|克|ml|毫升)/i)
+    const portionWeight = Number(portionMatch?.[1] || 0)
+    const defaultWeight = Number.isFinite(portionWeight) && portionWeight > 0 ? portionWeight : consumedWeight
+    const defaultScale = consumedWeight > 0 ? defaultWeight / consumedWeight : 1
+    const per100Scale = consumedWeight > 0 ? 100 / consumedWeight : 1
+    const sourceLabel = communityDetailManualSourceLabel(resolved.source, String(item.source_label || '').trim())
+    const displayName = resolved.sourceTitle || String(item.name || '').trim() || '食物'
+    const per100Nutrients = Object.fromEntries(
+      Object.entries(item.nutrients || {}).flatMap(([key, rawValue]) => {
+        const value = Number(rawValue)
+        return Number.isFinite(value) ? [[key, value * per100Scale]] : []
+      }),
+    ) as Record<string, number>
+    const detailItem: ManualFoodItem = {
+      id: resolved.sourceId || undefined,
+      source_id: resolved.sourceId || undefined,
+      source: resolved.source,
+      source_label: sourceLabel,
+      title: displayName,
+      name: displayName,
+      default_weight_grams: defaultWeight,
+      total_calories: Number(item.nutrients?.calories || 0) * defaultScale,
+      total_protein: Number(item.nutrients?.protein || 0) * defaultScale,
+      total_carbs: Number(item.nutrients?.carbs || 0) * defaultScale,
+      total_fat: Number(item.nutrients?.fat || 0) * defaultScale,
+      portion_label: String(item.manual_portion_label || '').trim() || `${Math.round(defaultWeight)}g`,
+      recommend_reason: '来自动态中的食物库记录',
+      image_path: imageUrls[0] || null,
+      image_paths: imageUrls,
+      nutrients_per_100g: per100Nutrients,
+      extra_nutrients: per100Nutrients,
+    }
+    return [{
+      displayName,
+      sourceLabel,
+      sourceId: resolved.sourceId,
+      imageUrl: imageUrls[0] || '',
+      calories: Number(item.nutrients?.calories || 0),
+      detailItem,
+    }]
+  })
+}
+
+function communityDetailShouldRenderManualFoodCards(record: CommunityDetailRecord | null | undefined): boolean {
+  if (!record) return false
+  const runtimeRecord = record as CommunityDetailRuntimeRecord
+  const entryType = String(runtimeRecord.entry_type || '').trim()
+  const hasItems = communityDetailManualFoodItems(runtimeRecord.items).length > 0
+  if (entryType) {
+    return (entryType === 'food_library' || entryType === 'public_food_library') && hasItems
+  }
+  if (String(runtimeRecord.source_task_id || '').trim() || String(runtimeRecord.recipe_id || '').trim()) return false
+  const description = String(runtimeRecord.description || '').trim()
+  return (description.startsWith('手动记录：') || description.startsWith('手动记录:')) && hasItems
+}
+
+function communityDetailResolveItemRatio(item: CommunityDetailRecord['items'][number]): number {
+  const ratio = Number(item.ratio)
+  if (Number.isFinite(ratio) && ratio > 0) return Math.min(100, ratio)
+  const intake = Number(item.intake)
+  const weight = Number(item.weight)
+  if (Number.isFinite(intake) && Number.isFinite(weight) && intake >= 0 && weight > 0) {
+    return Math.min(100, Math.round((intake / weight) * 1000) / 10)
+  }
+  return 100
+}
+
+function communityDetailReadNutrient(nutrients: Nutrients | null | undefined, key: CommunityDetailMicroKey): number {
+  if (!nutrients) return 0
+  const directValue = nutrients[key]
+  if (directValue !== undefined && directValue !== null) return Number(directValue)
+  if (key === 'sodiumMg') return Number(nutrients.sodium_mg || 0)
+  return 0
+}
+
+function communityDetailFormatMicroValue(value: number): string {
+  if (value >= 10) return String(Math.round(value))
+  if (value >= 1) return String(Math.round(value * 10) / 10)
+  return String(Math.round(value * 100) / 100)
+}
+
+function communityDetailMicroRows(
+  record: CommunityDetailRecord | null | undefined,
+  isCirclePost: boolean,
+): CommunityDetailMicroRow[] {
+  if (!record) return []
+  if (isCirclePost) {
+    return communityDetailMicroMeta.map((meta) => {
+      let value = 0
+      if (meta.key === 'fiber') value = Number(record.fiber || 0)
+      else if (meta.key === 'sugar') value = Number(record.sugar || 0)
+      else if (meta.key === 'sodiumMg') value = Number(record.sodium_mg || 0)
+      return { meta, value, color: communityDetailMicroColors[meta.key] }
+    }).filter(({ value }) => value > 0)
+  }
+  return communityDetailMicroMeta.map((meta) => {
+    const value = (record.items || []).reduce((sum, item) => (
+      sum + communityDetailReadNutrient(item.nutrients, meta.key) * (communityDetailResolveItemRatio(item) / 100)
+    ), 0)
+    return { meta, value, color: communityDetailMicroColors[meta.key] }
+  }).filter(({ value }) => value > 0)
+}
 
 function CommunityDetailSkeleton() {
+  const { isDark } = useColorScheme()
   return (
-    <View style={styles.communityDetailSkeleton}>
-      <View style={styles.communityDetailSkeletonAvatar} />
+    <View style={[styles.communityDetailSkeleton, isDark ? styles.communityDetailSkeletonDark : null]}>
+      <View style={[styles.communityDetailSkeletonAvatar, isDark ? styles.communityDetailSkeletonPlaceholderDark : null]} />
       <View style={styles.communityDetailSkeletonMain}>
-        <View style={[styles.communityDetailSkeletonLine, styles.communityDetailSkeletonName]} />
-        <View style={[styles.communityDetailSkeletonLine, styles.communityDetailSkeletonTime]} />
-        <View style={[styles.communityDetailSkeletonLine, styles.communityDetailSkeletonText]} />
-        <View style={[styles.communityDetailSkeletonLine, styles.communityDetailSkeletonTextShort]} />
-        <View style={styles.communityDetailSkeletonImage}>
+        <View style={[styles.communityDetailSkeletonLine, styles.communityDetailSkeletonName, isDark ? styles.communityDetailSkeletonPlaceholderDark : null]} />
+        <View style={[styles.communityDetailSkeletonLine, styles.communityDetailSkeletonTime, isDark ? styles.communityDetailSkeletonPlaceholderDark : null]} />
+        <View style={[styles.communityDetailSkeletonLine, styles.communityDetailSkeletonText, isDark ? styles.communityDetailSkeletonPlaceholderDark : null]} />
+        <View style={[styles.communityDetailSkeletonLine, styles.communityDetailSkeletonTextShort, isDark ? styles.communityDetailSkeletonPlaceholderDark : null]} />
+        <View style={[styles.communityDetailSkeletonImage, isDark ? styles.communityDetailSkeletonImageDark : null]}>
           <ActivityIndicator color={colors.brand} />
         </View>
       </View>
@@ -2074,10 +3042,22 @@ function CommunityDetailSheetAction({
   muted?: boolean
   onPress: () => void
 }) {
+  const { isDark } = useColorScheme()
   return (
-    <Pressable style={({ pressed }) => [styles.communityDetailSheetAction, pressed && styles.pressed]} onPress={onPress}>
+    <Pressable
+      style={({ pressed }) => [styles.communityDetailSheetAction, isDark ? styles.communityDetailSheetActionDark : null, pressed ? styles.pressed : null]}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+    >
       {icon ? <View style={styles.communityDetailSheetActionIcon}>{icon}</View> : null}
-      <Text style={[styles.communityDetailSheetActionText, danger && styles.communityDetailSheetActionDanger, muted && styles.communityDetailSheetActionMuted]}>
+      <Text style={[
+        styles.communityDetailSheetActionText,
+        isDark ? styles.communityDetailSheetActionTextDark : null,
+        danger ? styles.communityDetailSheetActionDanger : null,
+        muted ? styles.communityDetailSheetActionMuted : null,
+        muted && isDark ? styles.communityDetailSheetActionMutedDark : null,
+      ]}>
         {label}
       </Text>
     </Pressable>
@@ -2749,100 +3729,178 @@ export function BodyTrendsScreen() {
 function PublicFoodCard({
   item,
   latest,
+  isDark,
+  compact,
+  isOwner,
+  busyKind,
+  actionsDisabled,
   onPress,
+  onAuthorPress,
+  onLike,
+  onCollect,
+  onComment,
+  onDelete,
 }: {
   item: PublicFoodItem
   latest?: boolean
+  isDark: boolean
+  compact: boolean
+  isOwner: boolean
+  busyKind: PublicFoodBusyKind | null
+  actionsDisabled: boolean
   onPress: () => void
+  onAuthorPress?: () => void
+  onLike: () => void
+  onCollect: () => void
+  onComment: () => void
+  onDelete: () => void
 }) {
   const image = primaryImage(item)
   const title = publicFoodTitle(item)
   const subtitle = publicFoodSubtitle(item)
   const authorName = publicFoodAuthorName(item)
-  const priceText = publicFoodPriceText(item)
+  const campusFood = isCampusPublicFoodItem(item)
+  const officialAuthor = !publicFoodOwnerId(item) && authorName === '食探官方'
+  const statsColor = isDark ? '#aab8b2' : '#64748b'
+  const actionDisabled = actionsDisabled && !busyKind
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => [styles.publicFoodCard, pressed && styles.publicFoodCardPressed]}>
-      <View style={styles.publicFoodCardMain}>
-        <View style={styles.publicFoodImageWrap}>
+    <View style={[styles.publicFoodCard, isDark ? styles.publicFoodCardDark : null]}>
+      <Pressable
+        onPress={onPress}
+        style={({ pressed }) => [pressed ? styles.publicFoodCardPressed : null]}
+        accessibilityRole="button"
+        accessibilityLabel={`${title}，${Math.round(item.total_calories || 0)} 千卡${campusFood ? `，${publicFoodLocationText(item)}` : ''}`}
+        accessibilityHint="打开食物详情"
+      >
+        <View style={[styles.publicFoodCardMain, compact ? styles.publicFoodCardMainCompact : null]}>
+        <View style={[styles.publicFoodImageWrap, compact ? styles.publicFoodImageWrapCompact : null, isDark ? styles.publicFoodImageWrapDark : null]}>
           {image ? (
-            <Image source={{ uri: image }} style={styles.publicFoodImage} resizeMode="cover" />
+            <Image source={{ uri: image }} style={styles.publicFoodImage} resizeMode="cover" accessibilityLabel={`${title}食物图片`} accessibilityIgnoresInvertColors />
           ) : (
-            <View style={styles.publicFoodImageFallback}>
-              <Text style={styles.publicFoodImageFallbackText}>暂无图片</Text>
+            <View style={[styles.publicFoodImageFallback, isDark ? styles.publicFoodImageFallbackDark : null]}>
+              <UtensilsCrossed size={25} color={isDark ? '#6ee7b7' : colors.brandDark} strokeWidth={1.9} />
+              <Text style={[styles.publicFoodImageFallbackText, isDark ? styles.publicFoodTextSecondaryDark : null]}>暂无图片</Text>
             </View>
           )}
-          {latest ? (
-            <View style={styles.publicFoodLatestBadge}>
-              <Text style={styles.publicFoodBadgeText}>最新</Text>
-            </View>
-          ) : null}
-          {item.suitable_for_fat_loss ? (
-            <View style={styles.publicFoodFatLossBadge}>
-              <Text style={styles.publicFoodBadgeText}>适合减脂</Text>
-            </View>
-          ) : null}
-          {item.is_campus_food ? (
-            <View style={styles.publicFoodCampusBadge}>
-              <Text style={styles.publicFoodBadgeText}>校园食堂</Text>
-            </View>
-          ) : null}
+          {latest ? <View style={styles.publicFoodLatestBadge}><Text style={styles.publicFoodBadgeText}>最新</Text></View> : null}
+          {item.suitable_for_fat_loss ? <View style={styles.publicFoodFatLossBadge}><Text style={styles.publicFoodBadgeText}>适合减脂</Text></View> : null}
+          {campusFood ? <View style={styles.publicFoodCampusBadge}><Text style={styles.publicFoodBadgeText}>校园食堂</Text></View> : null}
         </View>
         <View style={styles.publicFoodInfo}>
-          <Text style={styles.publicFoodTitle} numberOfLines={1}>{title}</Text>
-          {subtitle ? <Text style={styles.publicFoodDesc} numberOfLines={1}>{subtitle}</Text> : null}
-          {item.merchant_name ? (
-            <View style={styles.publicFoodMerchant}>
-              <Text style={styles.publicFoodMerchantText} numberOfLines={1}>{item.merchant_name}</Text>
+          <Text style={[styles.publicFoodTitle, isDark ? styles.publicFoodTextPrimaryDark : null]} numberOfLines={compact ? 2 : 1}>{title}</Text>
+          {!campusFood && subtitle ? <Text style={[styles.publicFoodDesc, isDark ? styles.publicFoodTextSecondaryDark : null]} numberOfLines={compact ? 2 : 1}>{subtitle}</Text> : null}
+          {!campusFood && item.merchant_name ? (
+            <View style={[styles.publicFoodMerchant, isDark ? styles.publicFoodMerchantDark : null]}>
+              <Store size={13} color={isDark ? '#6ee7b7' : colors.brandDark} strokeWidth={2} />
+              <Text style={[styles.publicFoodMerchantText, isDark ? styles.publicFoodAccentTextDark : null]} numberOfLines={1}>{item.merchant_name}</Text>
             </View>
           ) : null}
-          {item.is_campus_food ? (
+          {campusFood ? (
             <View style={styles.publicFoodCampusMeta}>
-              <Text style={styles.publicFoodCampusLocation} numberOfLines={1}>{publicFoodLocationText(item)}</Text>
-              {priceText ? <Text style={styles.publicFoodCampusChip}>{priceText}</Text> : null}
-              {item.total_protein > 0 ? <Text style={styles.publicFoodCampusChip}>蛋白 {Math.round(item.total_protein)}g</Text> : null}
+              <Text style={[styles.publicFoodCampusLocation, isDark ? styles.publicFoodTextSecondaryDark : null]} numberOfLines={2}>{publicFoodLocationText(item) || '校园食堂'}</Text>
+              <View style={styles.publicFoodCampusSummary}>
+                <Text style={[styles.publicFoodCampusChip, isDark ? styles.publicFoodCampusChipDark : null]}>蛋白 {Math.round(item.total_protein || 0)}g</Text>
+                <Text style={[styles.publicFoodCampusCalories, isDark ? styles.publicFoodAccentTextDark : null]}>{Math.round(item.total_calories || 0)} kcal</Text>
+              </View>
+            </View>
+          ) : (
+            <Text style={[styles.publicFoodCalories, isDark ? styles.publicFoodAccentTextDark : null]}>{Math.round(item.total_calories || 0)} kcal</Text>
+          )}
+        </View>
+        </View>
+      </Pressable>
+      <View style={[styles.publicFoodFooter, compact ? styles.publicFoodFooterCompact : null, isDark ? styles.publicFoodBorderDark : null]}>
+        <Pressable
+          disabled={!onAuthorPress}
+          style={({ pressed }) => [styles.publicFoodAuthor, compact ? styles.publicFoodAuthorCompact : null, pressed && onAuthorPress ? styles.publicFoodControlPressed : null]}
+          onPress={(event) => {
+            event.stopPropagation()
+            onAuthorPress?.()
+          }}
+          accessibilityRole={onAuthorPress ? 'button' : undefined}
+          accessibilityLabel={onAuthorPress ? `查看${authorName}的个人主页` : authorName}
+        >
+          {!officialAuthor && item.author?.avatar ? (
+            <Image source={{ uri: item.author.avatar }} style={styles.publicFoodAuthorAvatar} accessibilityLabel={`${authorName}的头像`} />
+          ) : !officialAuthor ? (
+            <View style={[styles.publicFoodAuthorAvatarFallback, isDark ? styles.publicFoodAuthorAvatarFallbackDark : null]}>
+              <UserRound size={14} color={isDark ? '#6ee7b7' : colors.brandDark} strokeWidth={2} />
             </View>
           ) : null}
-          <Text style={styles.publicFoodCalories}>{Math.round(item.total_calories || 0)} kcal</Text>
-        </View>
-      </View>
-      <View style={styles.publicFoodFooter}>
-        <View style={styles.publicFoodAuthor}>
-          {item.author?.avatar ? (
-            <Image source={{ uri: item.author.avatar }} style={styles.publicFoodAuthorAvatar} />
-          ) : (
-            <View style={styles.publicFoodAuthorAvatarFallback}>
-              <Text style={styles.publicFoodAuthorAvatarText}>{publicFoodAuthorInitial(authorName)}</Text>
+          <Text style={[styles.publicFoodAuthorName, isDark ? styles.publicFoodTextSecondaryDark : null, officialAuthor ? styles.publicFoodAuthorNameOfficial : null]} numberOfLines={1}>{authorName}</Text>
+        </Pressable>
+        <View style={[styles.publicFoodStats, compact ? styles.publicFoodStatsCompact : null]}>
+          <Pressable
+            disabled={actionsDisabled}
+            style={({ pressed }) => [styles.publicFoodStatAction, item.liked ? styles.publicFoodStatActionLiked : null, item.liked && isDark ? styles.publicFoodStatActionLikedDark : null, actionDisabled ? styles.publicFoodActionDisabled : null, pressed && !actionsDisabled ? styles.publicFoodControlPressed : null]}
+            onPress={(event) => { event.stopPropagation(); onLike() }}
+            accessibilityRole="button"
+            accessibilityLabel={`${item.liked ? '取消点赞' : '点赞'}，当前 ${item.like_count || 0} 个赞`}
+            accessibilityState={{ selected: Boolean(item.liked), disabled: actionsDisabled, busy: busyKind === 'like' }}
+          >
+            {busyKind === 'like' ? <ActivityIndicator size="small" color="#e11d48" /> : <Heart size={17} color={item.liked ? '#e11d48' : statsColor} fill={item.liked ? '#e11d48' : 'transparent'} strokeWidth={2.1} />}
+            <Text style={[styles.publicFoodStatCount, isDark ? styles.publicFoodTextSecondaryDark : null, item.liked ? styles.publicFoodStatCountLiked : null]}>{item.like_count || 0}</Text>
+          </Pressable>
+          <Pressable
+            disabled={actionsDisabled}
+            style={({ pressed }) => [styles.publicFoodStatAction, item.collected ? styles.publicFoodStatActionCollected : null, item.collected && isDark ? styles.publicFoodStatActionCollectedDark : null, actionDisabled ? styles.publicFoodActionDisabled : null, pressed && !actionsDisabled ? styles.publicFoodControlPressed : null]}
+            onPress={(event) => { event.stopPropagation(); onCollect() }}
+            accessibilityRole="button"
+            accessibilityLabel={`${item.collected ? '取消收藏' : '收藏'}，当前 ${item.collection_count || 0} 个收藏`}
+            accessibilityState={{ selected: Boolean(item.collected), disabled: actionsDisabled, busy: busyKind === 'collect' }}
+          >
+            {busyKind === 'collect' ? <ActivityIndicator size="small" color="#d97706" /> : <Bookmark size={17} color={item.collected ? '#d97706' : statsColor} fill={item.collected ? '#fbbf24' : 'transparent'} strokeWidth={2.1} />}
+            <Text style={[styles.publicFoodStatCount, isDark ? styles.publicFoodTextSecondaryDark : null]}>{item.collection_count || 0}</Text>
+          </Pressable>
+          <Pressable
+            style={({ pressed }) => [styles.publicFoodStatAction, pressed ? styles.publicFoodControlPressed : null]}
+            onPress={(event) => { event.stopPropagation(); onComment() }}
+            accessibilityRole="button"
+            accessibilityLabel={`查看评论，当前 ${item.comment_count || 0} 条`}
+          >
+            <MessageCircle size={17} color={statsColor} strokeWidth={2.1} />
+            {item.comment_count ? <Text style={[styles.publicFoodStatCount, isDark ? styles.publicFoodTextSecondaryDark : null]}>{item.comment_count}</Text> : null}
+          </Pressable>
+          {item.avg_rating && item.avg_rating > 0 ? (
+            <View style={styles.publicFoodStatDisplay} accessibilityLabel={`平均评分 ${round1(item.avg_rating)} 星`}>
+              <Star size={16} color="#f59e0b" fill="#f59e0b" strokeWidth={2} />
+              <Text style={styles.publicFoodRatingCount}>{round1(item.avg_rating)}</Text>
             </View>
-          )}
-          <Text style={styles.publicFoodAuthorName} numberOfLines={1}>{authorName}</Text>
-        </View>
-        <View style={styles.publicFoodStats}>
-          {item.avg_rating ? <Text style={styles.publicFoodStatText}>评分 {round1(item.avg_rating)}</Text> : null}
-          <Text style={styles.publicFoodStatText}>赞 {item.like_count || 0}</Text>
-          <Text style={styles.publicFoodStatText}>评 {item.comment_count || 0}</Text>
-          <Text style={styles.publicFoodStatText}>藏 {item.collection_count || 0}</Text>
+          ) : null}
+          {isOwner ? (
+            <Pressable
+              disabled={actionsDisabled}
+              style={({ pressed }) => [styles.publicFoodStatAction, actionDisabled ? styles.publicFoodActionDisabled : null, pressed && !actionsDisabled ? styles.publicFoodControlPressed : null]}
+              onPress={(event) => { event.stopPropagation(); onDelete() }}
+              accessibilityRole="button"
+              accessibilityLabel="删除这条公共食物"
+              accessibilityState={{ disabled: actionsDisabled, busy: busyKind === 'delete' }}
+            >
+              {busyKind === 'delete' ? <ActivityIndicator size="small" color={colors.danger} /> : <Trash2 size={17} color={colors.danger} strokeWidth={2.1} />}
+            </Pressable>
+          ) : null}
         </View>
       </View>
-    </Pressable>
+    </View>
   )
 }
 
-function PublicFoodSkeletonList() {
+function PublicFoodSkeletonList({ isDark, compact }: { isDark: boolean; compact: boolean }) {
   return (
-    <View style={styles.publicFoodListContent}>
+    <View style={styles.publicFoodListContent} accessible={false} importantForAccessibility="no-hide-descendants">
       {[1, 2, 3].map((item) => (
-        <View key={item} style={styles.publicFoodSkeletonCard}>
-          <View style={styles.publicFoodSkeletonMain}>
-            <View style={styles.publicFoodSkeletonImage} />
+        <View key={item} style={[styles.publicFoodSkeletonCard, isDark ? styles.publicFoodSkeletonCardDark : null]}>
+          <View style={[styles.publicFoodSkeletonMain, compact ? styles.publicFoodCardMainCompact : null]}>
+            <View style={[styles.publicFoodSkeletonImage, compact ? styles.publicFoodImageWrapCompact : null, isDark ? styles.publicFoodSkeletonPlaceholderDark : null]} />
             <View style={styles.flex}>
-              <View style={[styles.publicFoodSkeletonLine, { width: '70%', height: 16 }]} />
-              <View style={[styles.publicFoodSkeletonLine, { width: '92%', height: 12 }]} />
-              <View style={[styles.publicFoodSkeletonLine, { width: '45%', height: 14, marginTop: 'auto' }]} />
+              <View style={[styles.publicFoodSkeletonLine, isDark ? styles.publicFoodSkeletonPlaceholderDark : null, { width: '70%', height: 16 }]} />
+              <View style={[styles.publicFoodSkeletonLine, isDark ? styles.publicFoodSkeletonPlaceholderDark : null, { width: '92%', height: 12 }]} />
+              <View style={[styles.publicFoodSkeletonLine, isDark ? styles.publicFoodSkeletonPlaceholderDark : null, { width: '45%', height: 14, marginTop: 'auto' }]} />
             </View>
           </View>
-          <View style={styles.publicFoodSkeletonFooter}>
-            <View style={[styles.publicFoodSkeletonLine, { width: 76, height: 12 }]} />
-            <View style={[styles.publicFoodSkeletonLine, { width: 116, height: 12 }]} />
+          <View style={[styles.publicFoodSkeletonFooter, isDark ? styles.publicFoodBorderDark : null]}>
+            <View style={[styles.publicFoodSkeletonLine, isDark ? styles.publicFoodSkeletonPlaceholderDark : null, { width: 76, height: 12 }]} />
+            <View style={[styles.publicFoodSkeletonLine, isDark ? styles.publicFoodSkeletonPlaceholderDark : null, { width: 116, height: 12 }]} />
           </View>
         </View>
       ))}
@@ -2853,12 +3911,14 @@ function PublicFoodSkeletonList() {
 function PublicFoodEmpty({
   mode,
   text,
+  isDark,
   onExplore,
   onCampus,
   onShare,
 }: {
   mode: PublicFoodMode
   text: string
+  isDark: boolean
   onExplore: () => void
   onCampus: () => void
   onShare: () => void
@@ -2868,11 +3928,12 @@ function PublicFoodEmpty({
     : mode === 'campus'
       ? { label: '去校园专区', onPress: onCampus }
       : { label: '去分享', onPress: onShare }
+  const EmptyIcon = mode === 'collections' ? Bookmark : mode === 'campus' ? UtensilsCrossed : Leaf
   return (
     <View style={styles.publicFoodEmpty}>
-      <Text style={styles.publicFoodEmptyIcon}>食</Text>
-      <Text style={styles.publicFoodEmptyText}>{text}</Text>
-      <Pressable style={styles.publicFoodEmptyButton} onPress={action.onPress}>
+      <View style={[styles.publicFoodEmptyIconWrap, isDark ? styles.publicFoodEmptyIconWrapDark : null]}><EmptyIcon size={29} color={isDark ? '#6ee7b7' : colors.brandDark} strokeWidth={2} /></View>
+      <Text style={[styles.publicFoodEmptyText, isDark ? styles.publicFoodTextSecondaryDark : null]}>{text}</Text>
+      <Pressable style={({ pressed }) => [styles.publicFoodEmptyButton, pressed ? styles.publicFoodPrimaryPressed : null]} onPress={action.onPress} accessibilityRole="button" accessibilityLabel={action.label}>
         <Text style={styles.publicFoodEmptyButtonText}>{action.label}</Text>
       </Pressable>
     </View>
@@ -2880,86 +3941,90 @@ function PublicFoodEmpty({
 }
 
 function PublicFoodDetailSkeleton() {
+  const { isDark } = useColorScheme()
   return (
-    <View>
-      <View style={styles.publicFoodDetailSkeletonImage} />
-      <View style={[styles.publicFoodDetailInfoCard, styles.publicFoodDetailSkeletonCard]}>
+    <View accessibilityLabel="正在加载食物详情">
+      <View style={[styles.publicFoodDetailSkeletonImage, isDark ? styles.publicFoodDetailSkeletonPlaceholderDark : null]} />
+      <View style={[styles.publicFoodDetailInfoCard, styles.publicFoodDetailSkeletonCard, isDark ? styles.publicFoodDetailInfoCardDark : null]}>
         <View style={styles.publicFoodDetailSkeletonHead}>
-          <View style={[styles.publicFoodDetailSkeletonLine, { width: '58%', height: 24 }]} />
-          <View style={[styles.publicFoodDetailSkeletonLine, { width: 96, height: 30, borderRadius: 15 }]} />
+          <View style={[styles.publicFoodDetailSkeletonLine, isDark ? styles.publicFoodDetailSkeletonPlaceholderDark : null, { width: '58%', height: 24 }]} />
+          <View style={[styles.publicFoodDetailSkeletonLine, isDark ? styles.publicFoodDetailSkeletonPlaceholderDark : null, { width: 96, height: 30, borderRadius: 15 }]} />
         </View>
-        <View style={[styles.publicFoodDetailSkeletonLine, { width: '100%', height: 16 }]} />
-        <View style={[styles.publicFoodDetailSkeletonLine, { width: '72%', height: 16 }]} />
+        <View style={[styles.publicFoodDetailSkeletonLine, isDark ? styles.publicFoodDetailSkeletonPlaceholderDark : null, { width: '100%', height: 16 }]} />
+        <View style={[styles.publicFoodDetailSkeletonLine, isDark ? styles.publicFoodDetailSkeletonPlaceholderDark : null, { width: '72%', height: 16 }]} />
         <View style={styles.publicFoodDetailSkeletonNutrients}>
-          {[1, 2, 3, 4].map((item) => (
-            <View key={item} style={[styles.publicFoodDetailSkeletonLine, { flex: 1, height: 46 }]} />
-          ))}
+          {[1, 2, 3, 4].map((entry) => <View key={entry} style={[styles.publicFoodDetailSkeletonLine, isDark ? styles.publicFoodDetailSkeletonPlaceholderDark : null, { flex: 1, height: 46 }]} />)}
         </View>
         <View style={styles.publicFoodDetailSkeletonAuthor}>
-          <View style={styles.publicFoodDetailSkeletonAvatar} />
+          <View style={[styles.publicFoodDetailSkeletonAvatar, isDark ? styles.publicFoodDetailSkeletonPlaceholderDark : null]} />
           <View style={styles.flex}>
-            <View style={[styles.publicFoodDetailSkeletonLine, { width: '42%', height: 14 }]} />
-            <View style={[styles.publicFoodDetailSkeletonLine, { width: '30%', height: 12 }]} />
+            <View style={[styles.publicFoodDetailSkeletonLine, isDark ? styles.publicFoodDetailSkeletonPlaceholderDark : null, { width: '42%', height: 14 }]} />
+            <View style={[styles.publicFoodDetailSkeletonLine, isDark ? styles.publicFoodDetailSkeletonPlaceholderDark : null, { width: '30%', height: 12 }]} />
           </View>
         </View>
       </View>
-      <View style={styles.publicFoodDetailCard}>
-        <View style={[styles.publicFoodDetailSkeletonLine, { width: '34%', height: 18 }]} />
-        <View style={[styles.publicFoodDetailSkeletonLine, { width: '100%', height: 44 }]} />
-        <View style={[styles.publicFoodDetailSkeletonLine, { width: '86%', height: 44 }]} />
+      <View style={[styles.publicFoodDetailCard, isDark ? styles.publicFoodDetailCardDark : null]}>
+        <View style={[styles.publicFoodDetailSkeletonLine, isDark ? styles.publicFoodDetailSkeletonPlaceholderDark : null, { width: '34%', height: 18 }]} />
+        <View style={[styles.publicFoodDetailSkeletonLine, isDark ? styles.publicFoodDetailSkeletonPlaceholderDark : null, { width: '100%', height: 44 }]} />
+        <View style={[styles.publicFoodDetailSkeletonLine, isDark ? styles.publicFoodDetailSkeletonPlaceholderDark : null, { width: '86%', height: 44 }]} />
       </View>
     </View>
   )
 }
 
 function PublicFoodDetailEmpty({ onBack }: { onBack: () => void }) {
+  const { isDark } = useColorScheme()
   return (
     <View style={styles.publicFoodDetailEmptyState}>
-      <Text style={styles.publicFoodEmptyIcon}>食</Text>
-      <Text style={styles.publicFoodDetailEmptyTitle}>内容不存在</Text>
-      <Text style={styles.publicFoodDetailEmptyText}>这份公共食物可能已经删除或下架。</Text>
-      <Pressable style={styles.publicFoodEmptyButton} onPress={onBack}>
+      <View style={[styles.publicFoodDetailEmptyIconWrap, isDark ? styles.publicFoodDetailAvatarFallbackDark : null]}><Leaf size={24} color={isDark ? '#7dd3b0' : colors.brandDark} strokeWidth={2.2} /></View>
+      <Text style={[styles.publicFoodDetailEmptyTitle, isDark ? styles.publicFoodDetailTitleDark : null]}>内容不存在</Text>
+      <Text style={[styles.publicFoodDetailEmptyText, isDark ? styles.publicFoodDetailTextSecondaryDark : null]}>这份公共食物可能已经删除或下架。</Text>
+      <Pressable style={({ pressed }) => [styles.publicFoodEmptyButton, pressed ? styles.pressed : null]} onPress={onBack} accessibilityRole="button" accessibilityLabel="返回公共食物库">
         <Text style={styles.publicFoodEmptyButtonText}>返回</Text>
       </Pressable>
     </View>
   )
 }
 
-function PublicFoodNutrientCell({
-  value,
-  label,
-  last,
-}: {
-  value: string
-  label: string
-  last?: boolean
-}) {
+function PublicFoodNutrientCell({ value, label, last }: { value: string; label: string; last?: boolean }) {
+  const { isDark } = useColorScheme()
   return (
-    <View style={[styles.publicFoodDetailNutrientItem, !last && styles.publicFoodDetailNutrientDivider]}>
-      <Text style={styles.publicFoodDetailNutrientValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.72}>{value}</Text>
-      <Text style={styles.publicFoodDetailNutrientLabel}>{label}</Text>
+    <View style={[styles.publicFoodDetailNutrientItem, !last ? styles.publicFoodDetailNutrientDivider : null, !last && isDark ? styles.publicFoodDetailNutrientDividerDark : null]}>
+      <Text style={[styles.publicFoodDetailNutrientValue, isDark ? styles.publicFoodDetailTitleDark : null]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.72}>{value}</Text>
+      <Text style={[styles.publicFoodDetailNutrientLabel, isDark ? styles.publicFoodDetailTextSecondaryDark : null]}>{label}</Text>
     </View>
   )
 }
 
 function PublicFoodInfoCell({ label, value }: { label: string; value: string }) {
+  const { isDark } = useColorScheme()
   return (
-    <View style={styles.publicFoodDetailInfoCell}>
-      <Text style={styles.publicFoodDetailInfoLabel}>{label}</Text>
-      <Text style={styles.publicFoodDetailInfoValue} numberOfLines={2}>{value}</Text>
+    <View style={[styles.publicFoodDetailInfoCell, isDark ? styles.publicFoodDetailInfoCellDark : null]}>
+      <Text style={[styles.publicFoodDetailInfoLabel, isDark ? styles.publicFoodDetailMutedTextDark : null]}>{label}</Text>
+      <Text style={[styles.publicFoodDetailInfoValue, isDark ? styles.publicFoodDetailTitleDark : null]}>{value}</Text>
+    </View>
+  )
+}
+
+function PublicFoodDetailInfoRow({ label, value }: { label: string; value: string }) {
+  const { isDark } = useColorScheme()
+  return (
+    <View style={[styles.publicFoodDetailInfoRow, isDark ? styles.publicFoodDetailInfoRowDark : null]}>
+      <Text style={[styles.publicFoodDetailInfoRowLabel, isDark ? styles.publicFoodDetailMutedTextDark : null]}>{label}</Text>
+      <Text style={[styles.publicFoodDetailInfoRowValue, isDark ? styles.publicFoodDetailTextPrimaryDark : null]}>{value}</Text>
     </View>
   )
 }
 
 function PublicFoodDetailCardTitle({ title }: { title: string }) {
+  const { isDark } = useColorScheme()
   return (
     <View style={styles.publicFoodDetailCardTitleRow}>
       <View style={styles.publicFoodDetailCardTitleBar} />
-      <Text style={styles.publicFoodDetailCardTitle}>{title}</Text>
+      <Text style={[styles.publicFoodDetailCardTitle, isDark ? styles.publicFoodDetailTitleDark : null]}>{title}</Text>
     </View>
   )
 }
-
 function ConversationRow({
   conversation,
   currentUserId,
@@ -3274,13 +4339,35 @@ function InfoRow({ label, value }: { label: string; value: string }) {
 }
 
 function MembershipStatusRow({ label, value, active }: { label: string; value: string; active?: boolean }) {
+  const { isDark } = useColorScheme()
   return (
-    <View style={styles.membershipStatusRow}>
-      <Text style={styles.membershipStatusLabel}>{label}</Text>
-      <Text style={[styles.membershipStatusValue, active ? styles.membershipStatusValueActive : null]} numberOfLines={2}>
+    <View style={[styles.membershipStatusRow, isDark ? styles.membershipStatusRowDark : null]}>
+      <Text style={[styles.membershipStatusLabel, isDark ? styles.membershipStatusLabelDark : null]}>{label}</Text>
+      <Text style={[styles.membershipStatusValue, isDark ? styles.membershipStatusValueDark : null, active ? styles.membershipStatusValueActive : null, active && isDark ? styles.membershipStatusValueActiveDark : null]}>
         {value}
       </Text>
     </View>
+  )
+}
+
+function MembershipLinkButton({ label, disabled, onPress }: { label: string; disabled?: boolean; onPress: () => void }) {
+  const { isDark } = useColorScheme()
+  return (
+    <Pressable
+      disabled={disabled}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.membershipLinkButton,
+        isDark ? styles.membershipLinkButtonDark : null,
+        disabled ? styles.membershipLinkButtonDisabled : null,
+        pressed ? styles.membershipPressed : null,
+      ]}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled: Boolean(disabled) }}
+    >
+      <Text style={[styles.membershipLinkButtonText, isDark ? styles.membershipLinkButtonTextDark : null]}>{label}</Text>
+    </Pressable>
   )
 }
 
@@ -3295,7 +4382,7 @@ function UpgradeTermsBlock({ order }: { order: MembershipPaymentOrder }) {
   if (!rows.length) return null
   return (
     <View style={styles.metaBlock}>
-      {rows.map((row) => <InfoRow key={row.label} label={row.label} value={row.value} />)}
+      {rows.map((row) => <MembershipStatusRow key={row.label} label={row.label} value={row.value} />)}
     </View>
   )
 }
@@ -3313,6 +4400,28 @@ function primaryImage(item: { image_paths?: string[] | null; image_path?: string
   return item?.image_paths?.[0] || item?.image_path || undefined
 }
 
+type PublicFoodMicronutrientRow = CommunityDetailMicroMeta & { value: number }
+
+function publicFoodMicronutrientRows(item: PublicFoodItem): PublicFoodMicronutrientRow[] {
+  const totals = new Map<CommunityDetailMicroKey, number>()
+  ;(item.items || []).forEach((row) => {
+    const nutrients = asRecord(row.nutrients)
+    if (!nutrients) return
+    communityDetailMicroMeta.forEach(({ key }) => {
+      const rawValue = key === 'sodiumMg' ? (nutrients[key] ?? nutrients.sodium_mg) : nutrients[key]
+      const value = Number(rawValue || 0)
+      if (Number.isFinite(value)) totals.set(key, (totals.get(key) || 0) + value)
+    })
+  })
+  return communityDetailMicroMeta.map((definition) => ({ ...definition, value: totals.get(definition.key) || 0 }))
+}
+
+function formatPublicFoodMicronutrientValue(value: number): string {
+  if (value <= 0) return '0'
+  if (value < 0.01) return '<0.01'
+  if (value < 10) return value.toFixed(2).replace(/0+$/, '').replace(/\.$/, '')
+  return value.toFixed(1).replace(/\.0$/, '')
+}
 function publicFoodImageList(item: { image_paths?: string[] | null; image_path?: string | null } | null): string[] {
   if (!item) return []
   const images = Array.isArray(item.image_paths) ? item.image_paths.filter(Boolean) : []
@@ -3321,12 +4430,12 @@ function publicFoodImageList(item: { image_paths?: string[] | null; image_path?:
 }
 
 function publicFoodTitle(item: PublicFoodItem): string {
-  return String(item.food_name || item.description || (item.is_campus_food ? '校园菜品' : '健康餐食')).trim()
+  return String(item.food_name || item.description || (isCampusPublicFoodItem(item) ? '校园菜品' : '健康餐食')).trim()
 }
 
 function publicFoodSubtitle(item: PublicFoodItem): string {
   if (item.description && item.food_name) return String(item.description).trim()
-  if (item.is_campus_food) return publicFoodLocationText(item)
+  if (isCampusPublicFoodItem(item)) return publicFoodLocationText(item)
   return String(item.merchant_address || item.detail_address || item.city || item.recommend_reason || '').trim()
 }
 
@@ -3367,11 +4476,21 @@ function publicFoodOwnerId(item: PublicFoodItem | null): string {
 
 function publicFoodLocationText(item: PublicFoodItem | null): string {
   if (!item) return '--'
-  const campusParts = [item.school_name || item.campus_name, item.canteen_name, item.floor, item.window_name]
+  const rawParts = item.campus_location_text
+    ? item.campus_location_text.split(/\s*·\s*/)
+    : [item.school_name, item.campus_name, item.canteen_name, item.floor, item.window_name]
+  const seen = new Set<string>()
+  const campusParts = rawParts
     .map((part) => String(part || '').trim())
-    .filter(Boolean)
+    .filter((part) => {
+      if (!part) return false
+      const key = part.toLocaleLowerCase()
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
   if (campusParts.length) return campusParts.join(' · ')
-  return item.campus_location_text || item.merchant_address || item.detail_address || item.merchant_name || item.city || '--'
+  return item.merchant_address || item.detail_address || item.merchant_name || item.city || '--'
 }
 
 function campusRelatedFeedLocationText(item: CampusRelatedFeedItem): string {
@@ -3408,7 +4527,7 @@ function needsPublicFoodNutritionUpdate(item: PublicFoodItem | null): boolean {
 function manualFoodItemFromPublicFood(item: PublicFoodItem): ManualFoodItem {
   const firstItem = asRecord(item.items?.[0])
   const defaultWeight = firstNumber(firstItem?.intake, firstItem?.weight, item.total_calories > 0 ? 1 : 100) || 100
-  const title = String(item.food_name || item.description || (item.is_campus_food ? '校园菜品' : '公共食物')).trim()
+  const title = String(item.food_name || item.description || (isCampusPublicFoodItem(item) ? '校园菜品' : '公共食物')).trim()
   const portionLabel = String(firstItem?.manual_portion_label || item.portion_description || '1份').trim()
   return {
     id: item.id,
@@ -3416,17 +4535,17 @@ function manualFoodItemFromPublicFood(item: PublicFoodItem): ManualFoodItem {
     name: title,
     source: 'public_library',
     source_id: item.id,
-    source_label: item.is_campus_food ? '校园食堂' : '真实餐食',
+    source_label: isCampusPublicFoodItem(item) ? '校园食堂' : '真实餐食',
     default_weight_grams: defaultWeight,
     total_calories: Number(item.total_calories || 0),
     total_protein: Number(item.total_protein || 0),
     total_carbs: Number(item.total_carbs || 0),
     total_fat: Number(item.total_fat || 0),
     portion_label: portionLabel || '1份',
-    recommend_reason: item.is_campus_food ? '校园真实菜品，热量价格一目了然' : '整份复用更快，适合商家餐和外卖',
+    recommend_reason: isCampusPublicFoodItem(item) ? '校园真实菜品，热量价格一目了然' : '整份复用更快，适合商家餐和外卖',
     image_path: item.image_path,
     image_paths: item.image_paths,
-    is_campus_food: item.is_campus_food,
+    is_campus_food: isCampusPublicFoodItem(item),
     type: item.type,
     campus_location_text: item.campus_location_text,
     school_name: item.school_name,
@@ -3964,6 +5083,7 @@ const styles = StyleSheet.create({
   },
   communityDetailAvatarCol: {
     width: 44,
+    minHeight: 44,
     alignItems: 'center',
   },
   communityDetailAvatar: {
@@ -3985,7 +5105,7 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   communityDetailNameBlock: {
-    minHeight: 42,
+    minHeight: 44,
     justifyContent: 'center',
   },
   communityDetailUserName: {
@@ -4044,19 +5164,124 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
   },
   communityDetailImageSingle: {
+    overflow: 'hidden',
     width: '100%',
     height: 214,
     borderRadius: 9,
     backgroundColor: '#e2e8f0',
   },
   communityDetailImageTile: {
+    overflow: 'hidden',
     width: '31.8%',
     aspectRatio: 1,
     borderRadius: 7,
     backgroundColor: '#e2e8f0',
   },
+  communityDetailImagePressed: {
+    opacity: 0.78,
+  },
+  communityDetailImageFill: {
+    width: '100%',
+    height: '100%',
+  },
+  communityDetailImagePreviewBadge: {
+    position: 'absolute',
+    right: 6,
+    bottom: 6,
+    width: 28,
+    height: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 14,
+    backgroundColor: 'rgba(15,23,42,0.72)',
+  },
+  communityDetailManualFoods: {
+    gap: 7,
+    marginTop: 8,
+  },
+  communityDetailManualFoodCard: {
+    minHeight: 58,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderWidth: 1,
+    borderColor: '#edf2f7',
+    borderRadius: 10,
+    padding: 7,
+    backgroundColor: '#fff',
+  },
+  communityDetailManualFoodCardPressed: {
+    opacity: 0.76,
+  },
+  communityDetailManualFoodImage: {
+    width: 42,
+    height: 42,
+    flexShrink: 0,
+    borderRadius: 7,
+    backgroundColor: '#e2e8f0',
+  },
+  communityDetailManualFoodImageFallback: {
+    width: 42,
+    height: 42,
+    flexShrink: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 7,
+    backgroundColor: '#f1f5f9',
+  },
+  communityDetailManualFoodInfo: {
+    flex: 1,
+    minWidth: 0,
+  },
+  communityDetailManualFoodTitle: {
+    color: '#1f2937',
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '800',
+  },
+  communityDetailManualFoodMeta: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 4,
+  },
+  communityDetailManualFoodBadge: {
+    overflow: 'hidden',
+    borderRadius: 999,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    backgroundColor: '#ecfdf5',
+    color: '#059669',
+    fontSize: 10,
+    lineHeight: 14,
+    fontWeight: '700',
+  },
+  communityDetailManualFoodCalories: {
+    color: '#64748b',
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: '600',
+  },
+  communityDetailManualFoodExpand: {
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    backgroundColor: '#f1f5f9',
+  },
+  communityDetailManualFoodExpandText: {
+    color: '#64748b',
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '700',
+  },
   communityDetailMetaCard: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     gap: 12,
     marginTop: 10,
@@ -4099,22 +5324,100 @@ const styles = StyleSheet.create({
   communityDetailMacrosTextExercise: {
     color: '#075985',
   },
-  communityDetailActions: {
+  communityDetailMicros: {
+    marginTop: 8,
+    borderRadius: 8,
+    padding: 8,
+    backgroundColor: '#f8fafc',
+  },
+  communityDetailMicrosHead: {
+    minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: 12,
+    gap: 10,
+  },
+  communityDetailMicrosTitle: {
+    flex: 1,
+    color: '#334155',
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '800',
+  },
+  communityDetailMicrosToggle: {
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  communityDetailMicrosToggleText: {
+    color: '#64748b',
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: '700',
+  },
+  communityDetailMicrosSummary: {
+    marginBottom: 4,
+    color: '#64748b',
+    fontSize: 11,
+    lineHeight: 17,
+  },
+  communityDetailMicrosGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  communityDetailMicroCell: {
+    minHeight: 64,
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 8,
+  },
+  communityDetailMicroLabel: {
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: '700',
+  },
+  communityDetailMicroValueRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'baseline',
+    gap: 3,
+    marginTop: 4,
+  },
+  communityDetailMicroValue: {
+    fontSize: 16,
+    lineHeight: 20,
+    fontWeight: '900',
+  },
+  communityDetailMicroUnit: {
+    fontSize: 10,
+    lineHeight: 14,
+    fontWeight: '700',
+  },
+  communityDetailActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    marginTop: 10,
   },
   communityDetailActionsLeft: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
-    gap: 18,
+    gap: 8,
   },
   communityDetailActionItem: {
-    minHeight: 30,
+    minHeight: 44,
+    minWidth: 44,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 5,
+    paddingHorizontal: 4,
   },
   communityDetailActionCount: {
     color: '#64748b',
@@ -4126,11 +5429,11 @@ const styles = StyleSheet.create({
     color: colors.danger,
   },
   communityDetailManageBox: {
-    width: 32,
-    height: 30,
+    width: 44,
+    height: 44,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 15,
+    borderRadius: 22,
     backgroundColor: '#f1f5f9',
   },
   communityDetailComments: {
@@ -4141,6 +5444,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#f8fafc',
   },
   communityDetailCommentItem: {
+    minHeight: 48,
     flexDirection: 'row',
     gap: 8,
     paddingVertical: 8,
@@ -4172,11 +5476,13 @@ const styles = StyleSheet.create({
   },
   communityDetailCommentMetaLine: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     gap: 6,
   },
   communityDetailCommentAuthor: {
-    maxWidth: 132,
+    maxWidth: 200,
+    flexShrink: 1,
     color: '#475569',
     fontSize: 12,
     lineHeight: 16,
@@ -4195,13 +5501,15 @@ const styles = StyleSheet.create({
     lineHeight: 19,
   },
   communityDetailCommentDelete: {
-    width: 30,
-    height: 30,
+    width: 44,
+    height: 44,
     flexShrink: 0,
     alignItems: 'center',
     justifyContent: 'center',
   },
   communityDetailCommentEmpty: {
+    minHeight: 48,
+    justifyContent: 'center',
     marginTop: 10,
     borderRadius: 10,
     paddingHorizontal: 12,
@@ -4239,22 +5547,23 @@ const styles = StyleSheet.create({
   },
   communityDetailReplyText: {
     flex: 1,
+    flexWrap: 'wrap',
     color: '#64748b',
     fontSize: 12,
     lineHeight: 16,
     fontWeight: '700',
   },
   communityDetailCommentComposer: {
-    minHeight: 42,
+    minHeight: 48,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
   communityDetailCommentInput: {
     flex: 1,
-    minHeight: 38,
-    maxHeight: 86,
-    borderRadius: 19,
+    minHeight: 44,
+    maxHeight: 96,
+    borderRadius: 22,
     paddingHorizontal: 14,
     paddingVertical: 8,
     backgroundColor: '#f1f5f9',
@@ -4263,11 +5572,11 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   communityDetailSendButton: {
-    width: 38,
-    height: 38,
+    width: 44,
+    height: 44,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 19,
+    borderRadius: 22,
     backgroundColor: '#e2e8f0',
   },
   communityDetailSendButtonDisabled: {
@@ -4276,10 +5585,82 @@ const styles = StyleSheet.create({
   communityDetailSendButtonReady: {
     backgroundColor: colors.brand,
   },
+  communityDetailImagePreview: {
+    flex: 1,
+    backgroundColor: '#000',
+  },
+  communityDetailImagePreviewSlide: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  communityDetailImagePreviewImage: {
+    width: '100%',
+    height: '100%',
+  },
+  communityDetailImagePreviewClose: {
+    position: 'absolute',
+    right: 14,
+    zIndex: 3,
+    elevation: 3,
+    width: 48,
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 24,
+    backgroundColor: 'rgba(30,41,59,0.72)',
+  },
+  communityDetailImagePreviewPrevious: {
+    position: 'absolute',
+    left: 12,
+    top: '50%',
+    zIndex: 3,
+    elevation: 3,
+    width: 48,
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: -24,
+    borderRadius: 24,
+    backgroundColor: 'rgba(30,41,59,0.66)',
+  },
+  communityDetailImagePreviewNext: {
+    position: 'absolute',
+    right: 12,
+    top: '50%',
+    zIndex: 3,
+    elevation: 3,
+    width: 48,
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: -24,
+    borderRadius: 24,
+    backgroundColor: 'rgba(30,41,59,0.66)',
+  },
+  communityDetailImagePreviewControlPressed: {
+    opacity: 0.58,
+  },
+  communityDetailImagePreviewCounter: {
+    position: 'absolute',
+    alignSelf: 'center',
+    zIndex: 3,
+    elevation: 3,
+    minHeight: 32,
+    justifyContent: 'center',
+    borderRadius: 16,
+    paddingHorizontal: 13,
+    backgroundColor: 'rgba(30,41,59,0.78)',
+  },
+  communityDetailImagePreviewCounterText: {
+    color: '#fff',
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '800',
+  },
   communityDetailSheetMask: {
     flex: 1,
     justifyContent: 'flex-end',
-    backgroundColor: 'rgba(15,23,42,0.38)',
+    backgroundColor: 'rgba(0,0,0,0.52)',
   },
   communityDetailActionSheet: {
     borderTopLeftRadius: 18,
@@ -4357,12 +5738,15 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   communityDetailReportButton: {
-    minHeight: 44,
+    minHeight: 48,
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 12,
-    borderRadius: 22,
+    borderRadius: 24,
     backgroundColor: colors.brand,
+  },
+  communityDetailReportButtonDisabled: {
+    opacity: 0.5,
   },
   communityDetailReportButtonText: {
     color: '#fff',
@@ -4424,6 +5808,206 @@ const styles = StyleSheet.create({
     marginTop: 4,
     borderRadius: 9,
     backgroundColor: '#f1f5f9',
+  },
+  communityDetailPageDark: {
+    backgroundColor: '#141c1a',
+  },
+  communityDetailFeedCardDark: {
+    borderColor: '#3d5d51',
+    backgroundColor: '#1a2220',
+  },
+  communityDetailFeedCardExerciseDark: {
+    borderColor: '#5d4a35',
+    backgroundColor: '#211d18',
+  },
+  communityDetailAvatarDark: {
+    backgroundColor: '#27322f',
+  },
+  communityDetailAvatarFallbackDark: {
+    backgroundColor: '#27322f',
+  },
+  communityDetailUserNameDark: {
+    color: '#9bb8e8',
+  },
+  communityDetailPostTimeDark: {
+    color: '#9ca3a8',
+  },
+  communityDetailTagDark: {
+    backgroundColor: '#22332d',
+    color: '#7dd3b0',
+  },
+  communityDetailTagExerciseDark: {
+    backgroundColor: '#342d22',
+    color: '#f4c17a',
+  },
+  communityDetailTitleDark: {
+    color: '#e8ece9',
+  },
+  communityDetailBodyDark: {
+    color: '#d2d8d4',
+  },
+  communityDetailImageDark: {
+    backgroundColor: '#27322f',
+  },
+  communityDetailManualFoodCardDark: {
+    borderColor: '#3d5d51',
+    backgroundColor: '#1d2724',
+  },
+  communityDetailManualFoodImageFallbackDark: {
+    backgroundColor: '#27322f',
+  },
+  communityDetailManualFoodTitleDark: {
+    color: '#e8ece9',
+  },
+  communityDetailManualFoodBadgeDark: {
+    backgroundColor: '#22332d',
+    color: '#7dd3b0',
+  },
+  communityDetailManualFoodCaloriesDark: {
+    color: '#9ca3a8',
+  },
+  communityDetailManualFoodExpandDark: {
+    backgroundColor: '#27322f',
+  },
+  communityDetailManualFoodExpandTextDark: {
+    color: '#b3bdb8',
+  },
+  communityDetailMicrosDark: {
+    backgroundColor: '#18211f',
+  },
+  communityDetailMicrosTitleDark: {
+    color: '#e8ece9',
+  },
+  communityDetailMicrosToggleTextDark: {
+    color: '#b3bdb8',
+  },
+  communityDetailMicrosSummaryDark: {
+    color: '#b3bdb8',
+  },
+  communityDetailMicroCellDark: {
+    borderColor: '#3d5d51',
+    backgroundColor: '#1d2724',
+  },
+  communityDetailMetaCardDark: {
+    borderWidth: 1,
+    borderColor: '#3d5d51',
+    backgroundColor: '#18211f',
+  },
+  communityDetailMetaCardExerciseDark: {
+    borderColor: '#5d4a35',
+    backgroundColor: '#29231b',
+  },
+  communityDetailCalorieNumDark: {
+    color: '#7dd3b0',
+  },
+  communityDetailCalorieUnitDark: {
+    color: '#9ca3a8',
+  },
+  communityDetailMacrosTextDark: {
+    color: '#a7e2c9',
+  },
+  communityDetailMacrosTextExerciseDark: {
+    color: '#f0c98c',
+  },
+  communityDetailActionCountDark: {
+    color: '#9ca3a8',
+  },
+  communityDetailManageBoxDark: {
+    backgroundColor: '#27322f',
+  },
+  communityDetailCommentsDark: {
+    backgroundColor: '#141c1a',
+  },
+  communityDetailCommentReplyDark: {
+    borderLeftColor: '#3d5d51',
+  },
+  communityDetailCommentAvatarDark: {
+    backgroundColor: '#27322f',
+  },
+  communityDetailCommentAuthorDark: {
+    color: '#8ab4e8',
+  },
+  communityDetailCommentReplyToDark: {
+    color: '#9ca3a8',
+  },
+  communityDetailCommentTextDark: {
+    color: '#e8ece9',
+  },
+  communityDetailCommentEmptyDark: {
+    backgroundColor: '#141c1a',
+  },
+  communityDetailCommentEmptyTextDark: {
+    color: '#9ca3a8',
+  },
+  communityDetailBottomBarDark: {
+    borderTopColor: '#3d5d51',
+    backgroundColor: '#1d2724',
+  },
+  communityDetailReplyBarDark: {
+    backgroundColor: '#27322f',
+  },
+  communityDetailReplyTextDark: {
+    color: '#b3bdb8',
+  },
+  communityDetailReplyClose: {
+    width: 44,
+    height: 44,
+    flexShrink: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: -8,
+    marginRight: -8,
+  },
+  communityDetailCommentInputDark: {
+    backgroundColor: '#222c29',
+    color: '#e8ece9',
+  },
+  communityDetailSendButtonDark: {
+    backgroundColor: '#27322f',
+  },
+  communityDetailSendButtonDisabledDark: {
+    backgroundColor: '#27322f',
+  },
+  communityDetailActionSheetDark: {
+    backgroundColor: '#1d2724',
+  },
+  communityDetailReportSheetDark: {
+    backgroundColor: '#1d2724',
+  },
+  communityDetailSheetHandleDark: {
+    backgroundColor: '#3d5d51',
+  },
+  communityDetailSheetTitleDark: {
+    color: '#e8ece9',
+  },
+  communityDetailSheetActionDark: {
+    borderTopColor: '#3d5d51',
+  },
+  communityDetailSheetActionTextDark: {
+    color: '#e8ece9',
+  },
+  communityDetailSheetActionMutedDark: {
+    color: '#9ca3a8',
+  },
+  communityDetailReportHintDark: {
+    color: '#9ca3a8',
+  },
+  communityDetailReportInputDark: {
+    borderColor: '#3d5d51',
+    backgroundColor: '#222c29',
+    color: '#e8ece9',
+  },
+  communityDetailEmptyTextDark: {
+    color: '#9ca3a8',
+  },
+  communityDetailSkeletonDark: {
+    backgroundColor: '#1a2220',
+  },
+  communityDetailSkeletonPlaceholderDark: {
+    backgroundColor: '#27322f',
+  },
+  communityDetailSkeletonImageDark: {
+    backgroundColor: '#222c29',
   },
   membershipPage: {
     flex: 1,
@@ -4576,6 +6160,7 @@ const styles = StyleSheet.create({
   },
   membershipSectionHead: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'baseline',
     justifyContent: 'space-between',
     gap: 10,
@@ -4596,11 +6181,14 @@ const styles = StyleSheet.create({
   },
   membershipTierGrid: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 8,
     paddingHorizontal: 16,
   },
   membershipTierCard: {
-    flex: 1,
+    flexGrow: 1,
+    flexBasis: 100,
+    minWidth: 96,
     minHeight: 138,
     alignItems: 'center',
     borderWidth: 1,
@@ -4668,11 +6256,14 @@ const styles = StyleSheet.create({
   },
   membershipPeriodTabs: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 8,
     paddingHorizontal: 16,
   },
   membershipPeriodTab: {
-    flex: 1,
+    flexGrow: 1,
+    flexBasis: 100,
+    minWidth: 96,
     minHeight: 98,
     alignItems: 'flex-start',
     justifyContent: 'center',
@@ -4752,7 +6343,8 @@ const styles = StyleSheet.create({
   },
   membershipPlanSummary: {
     flexDirection: 'row',
-    alignItems: 'center',
+    flexWrap: 'wrap',
+    alignItems: 'flex-start',
     gap: 12,
     marginHorizontal: 16,
     marginTop: 12,
@@ -4809,6 +6401,7 @@ const styles = StyleSheet.create({
   membershipPlanPriceBlock: {
     alignItems: 'flex-end',
     minWidth: 82,
+    marginLeft: 'auto',
   },
   membershipPlanPrice: {
     color: '#00bc7d',
@@ -4848,7 +6441,7 @@ const styles = StyleSheet.create({
   },
   membershipFeaturesHeader: {
     flexDirection: 'row',
-    paddingLeft: 70,
+    paddingLeft: 76,
     borderBottomWidth: 1,
     borderBottomColor: '#d1fae5',
     backgroundColor: '#f6fdf9',
@@ -4874,7 +6467,7 @@ const styles = StyleSheet.create({
     borderBottomColor: '#f0f5f2',
   },
   membershipFeaturesLabelCell: {
-    width: 70,
+    width: 76,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#fafcfb',
@@ -4920,6 +6513,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 11,
     backgroundColor: '#fffdf5',
+  },
+  membershipCreditsHintHeading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    marginBottom: 2,
   },
   membershipCreditsHintTitle: {
     color: '#92400e',
@@ -5018,6 +6617,197 @@ const styles = StyleSheet.create({
     color: '#9ca3af',
     fontSize: 11,
     textAlign: 'center',
+  },
+  membershipPressed: {
+    opacity: 0.78,
+  },
+  membershipLinkButton: {
+    minHeight: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#a7f3d0',
+    borderRadius: 999,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    backgroundColor: '#ffffff',
+  },
+  membershipLinkButtonDark: {
+    borderColor: 'rgba(125,211,176,0.28)',
+    backgroundColor: 'rgba(255,255,255,0.04)',
+  },
+  membershipLinkButtonDisabled: {
+    opacity: 0.52,
+  },
+  membershipLinkButtonText: {
+    color: '#047857',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  membershipLinkButtonTextDark: {
+    color: '#7dd3b0',
+  },
+  membershipPageDark: {
+    backgroundColor: '#0f1413',
+  },
+  membershipSectionTitleDark: {
+    color: '#eef4f1',
+  },
+  membershipSectionHintDark: {
+    color: '#93a39b',
+  },
+  membershipTierCardDark: {
+    borderColor: 'rgba(125,211,176,0.16)',
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    shadowColor: '#000000',
+    shadowOpacity: 0.26,
+  },
+  membershipTierCardActiveDark: {
+    borderColor: 'rgba(125,211,176,0.58)',
+    backgroundColor: 'rgba(125,211,176,0.14)',
+    shadowColor: '#000000',
+    shadowOpacity: 0.3,
+  },
+  membershipTierNameDark: {
+    color: '#edf6f0',
+  },
+  membershipTierCreditsDark: {
+    color: '#7dd3b0',
+  },
+  membershipTierUnitDark: {
+    color: '#afbbb4',
+  },
+  membershipTierSummaryDark: {
+    color: '#afbbb4',
+  },
+  membershipPeriodTabDark: {
+    borderColor: 'rgba(125,211,176,0.16)',
+    backgroundColor: 'rgba(255,255,255,0.04)',
+  },
+  membershipPeriodTabActiveDark: {
+    borderColor: 'rgba(125,211,176,0.58)',
+    backgroundColor: 'rgba(125,211,176,0.14)',
+  },
+  membershipPeriodLabelDark: {
+    color: '#edf6f0',
+  },
+  membershipPeriodPriceDark: {
+    color: '#edf6f0',
+  },
+  membershipPeriodUnitDark: {
+    color: '#b6c2bc',
+  },
+  membershipPeriodWatermarkDark: {
+    color: 'rgba(255,255,255,0.08)',
+  },
+  membershipPeriodSaveDark: {
+    color: '#fecaca',
+    backgroundColor: 'rgba(127,29,29,0.22)',
+  },
+  membershipPeriodCurrentDark: {
+    color: '#a7f3d0',
+    backgroundColor: 'rgba(6,95,70,0.22)',
+  },
+  membershipPlanSummaryDark: {
+    borderLeftColor: '#6ee7b7',
+    borderColor: 'rgba(125,211,176,0.16)',
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    shadowColor: '#000000',
+    shadowOpacity: 0.26,
+  },
+  membershipPlanNameDark: {
+    color: '#edf6f0',
+  },
+  membershipPlanPriceDark: {
+    color: '#7dd3b0',
+  },
+  membershipPlanDescDark: {
+    color: '#afbbb4',
+  },
+  membershipPlanMetaDark: {
+    color: '#7dd3b0',
+  },
+  membershipPlanPeriodDark: {
+    color: '#93a39b',
+  },
+  membershipPlanOriginalPriceDark: {
+    color: '#7f8a85',
+  },
+  membershipFeaturesCardDark: {
+    borderWidth: 1,
+    borderColor: 'rgba(125,211,176,0.16)',
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    shadowColor: '#000000',
+    shadowOpacity: 0.26,
+  },
+  membershipFeaturesHeaderDark: {
+    borderBottomColor: 'rgba(125,211,176,0.14)',
+    backgroundColor: 'rgba(255,255,255,0.03)',
+  },
+  membershipFeaturesHeadCellActiveDark: {
+    backgroundColor: 'rgba(125,211,176,0.1)',
+  },
+  membershipFeaturesHeadTextDark: {
+    color: '#edf6f0',
+  },
+  membershipFeaturesRowDark: {
+    borderBottomColor: 'rgba(255,255,255,0.06)',
+  },
+  membershipFeaturesLabelCellDark: {
+    backgroundColor: 'rgba(255,255,255,0.02)',
+  },
+  membershipFeaturesLabelTextDark: {
+    color: '#edf6f0',
+  },
+  membershipFeaturesValueCellActiveDark: {
+    backgroundColor: 'rgba(125,211,176,0.1)',
+  },
+  membershipFeaturesValueTextDark: {
+    color: '#7dd3b0',
+  },
+  membershipFeaturesFootnoteDark: {
+    color: '#93a39b',
+  },
+  membershipCreditsHintCardDark: {
+    borderColor: 'rgba(251,191,36,0.22)',
+    backgroundColor: 'rgba(146,64,14,0.14)',
+  },
+  membershipCreditsHintTitleDark: {
+    color: '#fde68a',
+  },
+  membershipCreditsHintItemDark: {
+    color: '#f3ead2',
+  },
+  membershipCreditsHintItemMutedDark: {
+    color: '#cbbd96',
+  },
+  membershipStatusCardDark: {
+    borderWidth: 1,
+    borderColor: 'rgba(125,211,176,0.16)',
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    shadowColor: '#000000',
+    shadowOpacity: 0.26,
+  },
+  membershipStatusRowDark: {
+    borderBottomColor: 'rgba(255,255,255,0.06)',
+  },
+  membershipStatusLabelDark: {
+    color: '#93a39b',
+  },
+  membershipStatusValueDark: {
+    color: '#edf6f0',
+  },
+  membershipStatusValueActiveDark: {
+    color: '#7dd3b0',
+  },
+  membershipInfoCardTitleDark: {
+    color: '#edf6f0',
+  },
+  membershipRenewTipDark: {
+    color: '#93a39b',
+  },
+  membershipSubscribeHintDark: {
+    color: '#93a39b',
   },
   payGuideText: {
     color: colors.textSecondary,
@@ -5546,9 +7336,45 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f9fafb',
   },
+  publicFoodScreenDark: {
+    backgroundColor: '#101715',
+  },
+  publicFoodSurfaceDark: {
+    backgroundColor: '#18211f',
+  },
+  publicFoodBorderDark: {
+    borderColor: 'rgba(255,255,255,0.08)',
+    borderTopColor: 'rgba(255,255,255,0.08)',
+    borderBottomColor: 'rgba(255,255,255,0.08)',
+  },
+  publicFoodFieldDark: {
+    borderColor: '#303b37',
+    backgroundColor: '#222c29',
+  },
+  publicFoodTextPrimaryDark: {
+    color: '#f2f7f4',
+  },
+  publicFoodTextSecondaryDark: {
+    color: '#aab8b2',
+  },
+  publicFoodAccentTextDark: {
+    color: '#6ee7b7',
+  },
+  publicFoodAccentBackgroundDark: {
+    backgroundColor: '#6ee7b7',
+  },
+  publicFoodControlPressed: {
+    opacity: 0.68,
+  },
+  publicFoodPrimaryPressed: {
+    opacity: 0.82,
+  },
+  publicFoodActionDisabled: {
+    opacity: 0.45,
+  },
   publicFoodTabs: {
-    paddingHorizontal: 16,
-    paddingTop: 12,
+    paddingHorizontal: 12,
+    paddingTop: 8,
     flexDirection: 'row',
     alignItems: 'flex-end',
     backgroundColor: colors.surface,
@@ -5557,10 +7383,10 @@ const styles = StyleSheet.create({
   },
   publicFoodTab: {
     flex: 1,
-    minHeight: 48,
+    minHeight: 52,
     alignItems: 'center',
     justifyContent: 'center',
-    borderBottomWidth: 2,
+    borderBottomWidth: 3,
     borderBottomColor: 'transparent',
     paddingHorizontal: 4,
   },
@@ -5575,10 +7401,11 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   publicFoodTabTextActive: {
-    color: colors.brand,
-    fontWeight: '800',
+    color: colors.brandDark,
+    fontWeight: '900',
   },
   publicFoodSearchSection: {
+    zIndex: 8,
     paddingHorizontal: 16,
     paddingVertical: 12,
     backgroundColor: colors.surface,
@@ -5592,41 +7419,49 @@ const styles = StyleSheet.create({
   },
   publicFoodSearchInputWrap: {
     flex: 1,
-    minHeight: 36,
-    borderRadius: 8,
-    paddingHorizontal: 10,
+    minHeight: 48,
+    borderWidth: 1,
+    borderColor: '#edf1ef',
+    borderRadius: 12,
+    paddingLeft: 12,
+    paddingRight: 4,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 7,
-    backgroundColor: '#f9fafb',
-  },
-  publicFoodSearchIcon: {
-    color: colors.textMuted,
-    fontSize: 13,
-    fontWeight: '800',
+    gap: 8,
+    backgroundColor: '#f8faf9',
   },
   publicFoodSearchInput: {
     flex: 1,
-    minHeight: 36,
+    minHeight: 48,
     paddingVertical: 0,
     color: colors.text,
-    fontSize: 14,
+    fontSize: 15,
+    lineHeight: 21,
+  },
+  publicFoodSearchClear: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   publicFoodSearchButton: {
-    minHeight: 36,
-    borderRadius: 8,
-    paddingHorizontal: 18,
+    minWidth: 76,
+    minHeight: 48,
+    borderRadius: 12,
+    paddingHorizontal: 16,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.brand,
   },
   publicFoodSearchButtonText: {
     color: '#fff',
-    fontSize: 14,
-    fontWeight: '800',
+    fontSize: 15,
+    fontWeight: '900',
   },
   publicFoodSortSection: {
-    minHeight: 48,
+    zIndex: 20,
+    minHeight: 56,
     paddingHorizontal: 16,
     flexDirection: 'row',
     alignItems: 'center',
@@ -5634,74 +7469,123 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
-    zIndex: 4,
+  },
+  publicFoodSortSectionCompact: {
+    minHeight: 104,
+    flexWrap: 'wrap',
+    alignContent: 'center',
+    paddingVertical: 4,
+  },
+  publicFoodSortSectionFilterOpen: {
+    minHeight: 172,
+    alignItems: 'flex-start',
+    paddingTop: 4,
+  },
+  publicFoodSortSectionCompactFilterOpen: {
+    minHeight: 220,
+    alignContent: 'flex-start',
   },
   publicFoodSortLeft: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 22,
+    gap: 20,
+  },
+  publicFoodSortLeftCompact: {
+    width: '100%',
+    flexBasis: '100%',
+    justifyContent: 'space-between',
+    gap: 8,
   },
   publicFoodSortItem: {
-    minHeight: 44,
+    minWidth: 48,
+    minHeight: 48,
+    alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
   },
   publicFoodSortText: {
     color: colors.textSecondary,
     fontSize: 14,
+    lineHeight: 20,
     fontWeight: '700',
   },
   publicFoodSortTextActive: {
-    color: colors.brand,
-    fontWeight: '800',
+    color: colors.brandDark,
+    fontWeight: '900',
   },
   publicFoodSortUnderline: {
     position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 6,
-    height: 2,
-    borderRadius: 1,
+    left: 8,
+    right: 8,
+    bottom: 3,
+    height: 3,
+    borderRadius: 2,
     backgroundColor: colors.brand,
   },
   publicFoodFilterButton: {
-    minHeight: 30,
-    paddingHorizontal: 10,
-    borderRadius: 8,
+    minWidth: 86,
+    minHeight: 48,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: '#edf1ef',
+    borderRadius: 12,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-    backgroundColor: '#f9fafb',
+    justifyContent: 'center',
+    gap: 7,
+    backgroundColor: '#f8faf9',
   },
-  publicFoodFilterIcon: {
-    color: colors.textSecondary,
-    fontSize: 12,
-    fontWeight: '900',
+  publicFoodFilterButtonCompact: {
+    marginLeft: 'auto',
+  },
+  publicFoodFilterButtonActive: {
+    borderColor: 'rgba(92,184,150,0.32)',
+    backgroundColor: '#eef8f4',
+  },
+  publicFoodFilterButtonActiveDark: {
+    borderColor: 'rgba(110,231,183,0.30)',
+    backgroundColor: '#20352d',
   },
   publicFoodFilterText: {
     color: colors.textSecondary,
-    fontSize: 13,
-    fontWeight: '700',
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '800',
+  },
+  publicFoodFilterTextActive: {
+    color: colors.brandDark,
   },
   publicFoodFilterPanel: {
     position: 'absolute',
     right: 16,
-    top: 50,
-    minWidth: 166,
-    borderRadius: 12,
-    padding: 10,
+    top: 58,
+    minWidth: 212,
+    borderWidth: 1,
+    borderColor: '#edf1ef',
+    borderRadius: 16,
+    padding: 12,
     backgroundColor: colors.surface,
-    shadowColor: '#000',
-    shadowOpacity: 0.12,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 4,
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.16,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 10,
+  },
+  publicFoodFilterPanelCompact: {
+    top: 106,
+  },
+  publicFoodFilterPanelDark: {
+    borderColor: '#303b37',
+    backgroundColor: '#18211f',
+    shadowOpacity: 0.36,
   },
   publicFoodFilterLabel: {
     color: colors.textSecondary,
     fontSize: 13,
+    lineHeight: 19,
     fontWeight: '800',
-    marginBottom: 8,
+    marginBottom: 10,
   },
   publicFoodFilterOptions: {
     flexDirection: 'row',
@@ -5709,27 +7593,36 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   publicFoodFilterOption: {
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
+    minHeight: 48,
+    borderRadius: 22,
+    paddingHorizontal: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: colors.surfaceMuted,
+  },
+  publicFoodFilterOptionDark: {
+    backgroundColor: '#222c29',
   },
   publicFoodFilterOptionActive: {
     backgroundColor: colors.brandSoft,
   },
+  publicFoodFilterOptionActiveDark: {
+    backgroundColor: '#20352d',
+  },
   publicFoodFilterOptionText: {
     color: colors.textSecondary,
     fontSize: 13,
+    lineHeight: 18,
     fontWeight: '700',
   },
   publicFoodFilterOptionTextActive: {
     color: colors.brandDark,
-    fontWeight: '800',
+    fontWeight: '900',
   },
   publicFoodAppliedFilters: {
+    minHeight: 52,
     paddingHorizontal: 16,
-    paddingTop: 10,
-    paddingBottom: 8,
+    paddingVertical: 6,
     flexDirection: 'row',
     flexWrap: 'wrap',
     alignItems: 'center',
@@ -5738,48 +7631,101 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
+  publicFoodAppliedChip: {
+    minHeight: 36,
+    borderRadius: 18,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.brandSoft,
+  },
+  publicFoodAppliedChipDark: {
+    backgroundColor: '#20352d',
+  },
+  publicFoodAppliedChipText: {
+    color: colors.brandDark,
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '800',
+  },
+  publicFoodClearFilterButton: {
+    minWidth: 52,
+    minHeight: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   publicFoodClearFilter: {
     color: colors.textSecondary,
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '800',
+    textDecorationLine: 'underline',
   },
   publicFoodListScroll: {
     flex: 1,
   },
   publicFoodListScrollerContent: {
     flexGrow: 1,
-  },
-  publicFoodListContent: {
     paddingHorizontal: 16,
     paddingTop: 12,
   },
+  publicFoodListScrollerEmpty: {
+    justifyContent: 'center',
+  },
+  publicFoodListContent: {
+    width: '100%',
+  },
+  publicFoodLoadingState: {
+    minHeight: 240,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   publicFoodCard: {
     marginBottom: 12,
-    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#edf1ef',
+    borderRadius: 14,
     overflow: 'hidden',
     backgroundColor: colors.surface,
-    shadowColor: '#000',
+    shadowColor: '#0f172a',
     shadowOpacity: 0.05,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 9,
+    shadowOffset: { width: 0, height: 3 },
     elevation: 1,
   },
+  publicFoodCardDark: {
+    borderColor: '#28332f',
+    backgroundColor: '#18211f',
+    shadowOpacity: 0.24,
+  },
   publicFoodCardPressed: {
-    opacity: 0.86,
+    opacity: 0.84,
   },
   publicFoodCardMain: {
+    minHeight: 134,
     flexDirection: 'row',
-    gap: 10,
+    gap: 12,
     padding: 12,
+  },
+  publicFoodCardMainCompact: {
+    minHeight: 120,
+    gap: 10,
+    padding: 10,
   },
   publicFoodImageWrap: {
     width: 110,
     height: 110,
-    borderRadius: 8,
+    borderRadius: 10,
     overflow: 'hidden',
     flexShrink: 0,
     position: 'relative',
     backgroundColor: colors.brandSoft,
+  },
+  publicFoodImageWrapCompact: {
+    width: 96,
+    height: 96,
+  },
+  publicFoodImageWrapDark: {
+    backgroundColor: '#1f3b33',
   },
   publicFoodImage: {
     width: '100%',
@@ -5789,29 +7735,33 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 6,
     backgroundColor: colors.brandSoft,
+  },
+  publicFoodImageFallbackDark: {
+    backgroundColor: '#1f3b33',
   },
   publicFoodImageFallbackText: {
     color: colors.textMuted,
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '700',
   },
   publicFoodLatestBadge: {
     position: 'absolute',
     top: 6,
     left: 6,
-    borderRadius: 5,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
+    borderRadius: 6,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
     backgroundColor: colors.brand,
   },
   publicFoodFatLossBadge: {
     position: 'absolute',
     top: 6,
     right: 6,
-    borderRadius: 5,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
+    borderRadius: 6,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
     backgroundColor: colors.brand,
   },
   publicFoodCampusBadge: {
@@ -5819,159 +7769,244 @@ const styles = StyleSheet.create({
     right: 6,
     bottom: 6,
     borderRadius: 999,
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    backgroundColor: 'rgba(20, 184, 166, 0.92)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    backgroundColor: 'rgba(20,184,166,0.92)',
   },
   publicFoodBadgeText: {
     color: '#fff',
     fontSize: 10,
-    fontWeight: '800',
+    lineHeight: 14,
+    fontWeight: '900',
   },
   publicFoodInfo: {
     flex: 1,
     minWidth: 0,
     position: 'relative',
-    paddingBottom: 18,
+    paddingBottom: 24,
   },
   publicFoodTitle: {
     color: colors.text,
-    fontSize: 15,
-    lineHeight: 21,
-    fontWeight: '800',
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: '900',
   },
   publicFoodDesc: {
     marginTop: 4,
     color: colors.textSecondary,
     fontSize: 13,
-    lineHeight: 18,
+    lineHeight: 19,
   },
   publicFoodMerchant: {
     alignSelf: 'flex-start',
+    minHeight: 28,
     marginTop: 'auto',
-    borderRadius: 6,
+    borderRadius: 7,
     paddingHorizontal: 8,
-    paddingVertical: 3,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
     backgroundColor: colors.brandSoft,
   },
+  publicFoodMerchantDark: {
+    backgroundColor: '#20352d',
+  },
   publicFoodMerchantText: {
+    maxWidth: 150,
     color: colors.brandDark,
     fontSize: 11,
+    lineHeight: 16,
     fontWeight: '800',
   },
   publicFoodCampusMeta: {
-    marginTop: 6,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignItems: 'center',
-    gap: 5,
+    flex: 1,
+    marginTop: 5,
   },
   publicFoodCampusLocation: {
-    width: '100%',
     color: colors.textSecondary,
     fontSize: 11,
-    lineHeight: 15,
+    lineHeight: 16,
+  },
+  publicFoodCampusSummary: {
+    marginTop: 'auto',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   publicFoodCampusChip: {
-    borderRadius: 5,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
+    borderRadius: 6,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
     color: '#047857',
     backgroundColor: '#ecfdf5',
     fontSize: 11,
-    fontWeight: '800',
+    lineHeight: 16,
+    fontWeight: '900',
+  },
+  publicFoodCampusChipDark: {
+    color: '#6ee7b7',
+    backgroundColor: '#20352d',
+  },
+  publicFoodCampusCalories: {
+    marginLeft: 'auto',
+    color: colors.brandDark,
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '900',
   },
   publicFoodCalories: {
     position: 'absolute',
     right: 0,
     bottom: 0,
-    color: colors.brand,
+    color: colors.brandDark,
     fontSize: 14,
-    fontWeight: '800',
+    lineHeight: 20,
+    fontWeight: '900',
   },
   publicFoodFooter: {
-    minHeight: 44,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    minHeight: 58,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
     borderTopWidth: 1,
     borderTopColor: colors.border,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 8,
+    gap: 4,
+  },
+  publicFoodFooterCompact: {
+    flexWrap: 'wrap',
+    alignItems: 'stretch',
   },
   publicFoodAuthor: {
     flex: 1,
-    minWidth: 0,
+    minWidth: 42,
+    minHeight: 48,
+    borderRadius: 10,
+    paddingHorizontal: 4,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 7,
+    gap: 6,
+  },
+  publicFoodAuthorCompact: {
+    flexBasis: '100%',
+    minWidth: '100%',
   },
   publicFoodAuthorAvatar: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     backgroundColor: colors.surfaceMuted,
   },
   publicFoodAuthorAvatarFallback: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.brandSoft,
   },
-  publicFoodAuthorAvatarText: {
-    color: colors.brandDark,
-    fontSize: 11,
-    fontWeight: '900',
+  publicFoodAuthorAvatarFallbackDark: {
+    backgroundColor: '#20352d',
   },
   publicFoodAuthorName: {
     flex: 1,
     color: colors.textSecondary,
     fontSize: 12,
+    lineHeight: 17,
     fontWeight: '700',
+  },
+  publicFoodAuthorNameOfficial: {
+    fontWeight: '900',
   },
   publicFoodStats: {
+    flexShrink: 0,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    justifyContent: 'flex-end',
+    gap: 4,
   },
-  publicFoodStatText: {
-    color: colors.textMuted,
-    fontSize: 11,
-    fontWeight: '700',
+  publicFoodStatsCompact: {
+    width: '100%',
+    justifyContent: 'flex-end',
   },
-  publicFoodEmpty: {
-    minHeight: 220,
+  publicFoodStatAction: {
+    minWidth: 48,
+    height: 48,
+    borderRadius: 24,
+    paddingHorizontal: 5,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 20,
+    gap: 3,
   },
-  publicFoodEmptyIcon: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    textAlign: 'center',
-    textAlignVertical: 'center',
-    color: colors.brandDark,
-    backgroundColor: colors.brandSoft,
-    fontSize: 22,
+  publicFoodStatDisplay: {
+    minWidth: 48,
+    height: 48,
+    paddingHorizontal: 5,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 3,
+  },
+  publicFoodStatActionLiked: {
+    backgroundColor: '#fff1f2',
+  },
+  publicFoodStatActionLikedDark: {
+    backgroundColor: '#3d2028',
+  },
+  publicFoodStatActionCollected: {
+    backgroundColor: '#fffbeb',
+  },
+  publicFoodStatActionCollectedDark: {
+    backgroundColor: '#3a2e17',
+  },
+  publicFoodStatCount: {
+    color: colors.textMuted,
+    fontSize: 10,
+    lineHeight: 14,
+    fontWeight: '800',
+  },
+  publicFoodStatCountLiked: {
+    color: '#e11d48',
+  },
+  publicFoodRatingCount: {
+    color: '#b45309',
+    fontSize: 10,
+    lineHeight: 14,
     fontWeight: '900',
-    overflow: 'hidden',
+  },
+  publicFoodEmpty: {
+    minHeight: 280,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  publicFoodEmptyIconWrap: {
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.brandSoft,
+  },
+  publicFoodEmptyIconWrapDark: {
+    backgroundColor: '#20352d',
   },
   publicFoodEmptyText: {
-    marginTop: 12,
+    maxWidth: 280,
+    marginTop: 14,
     color: colors.textSecondary,
     fontSize: 14,
-    lineHeight: 20,
+    lineHeight: 21,
     textAlign: 'center',
   },
   publicFoodEmptyButton: {
-    marginTop: 14,
-    minHeight: 36,
-    borderRadius: 10,
-    paddingHorizontal: 18,
+    marginTop: 16,
+    minWidth: 112,
+    minHeight: 48,
+    borderRadius: 12,
+    paddingHorizontal: 20,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.brand,
@@ -5979,60 +8014,626 @@ const styles = StyleSheet.create({
   publicFoodEmptyButtonText: {
     color: '#fff',
     fontSize: 14,
-    fontWeight: '800',
+    fontWeight: '900',
   },
   publicFoodSkeletonCard: {
     marginBottom: 12,
-    borderRadius: 12,
+    borderRadius: 14,
     overflow: 'hidden',
     backgroundColor: colors.surface,
   },
+  publicFoodSkeletonCardDark: {
+    backgroundColor: '#18211f',
+  },
   publicFoodSkeletonMain: {
+    minHeight: 134,
     flexDirection: 'row',
-    gap: 10,
+    gap: 12,
     padding: 12,
   },
   publicFoodSkeletonImage: {
     width: 110,
     height: 110,
-    borderRadius: 8,
+    borderRadius: 10,
     backgroundColor: colors.surfaceMuted,
   },
   publicFoodSkeletonLine: {
     marginBottom: 10,
-    borderRadius: 5,
+    borderRadius: 6,
     backgroundColor: colors.surfaceMuted,
   },
+  publicFoodSkeletonPlaceholderDark: {
+    backgroundColor: '#27322e',
+  },
   publicFoodSkeletonFooter: {
-    minHeight: 44,
+    minHeight: 54,
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderTopWidth: 1,
     borderTopColor: colors.border,
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
   },
   publicFoodFab: {
     position: 'absolute',
-    right: 20,
+    right: 18,
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.brand,
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.22,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 8,
+  },
+  publicFoodFabPressed: {
+    opacity: 0.78,
+  },
+  publicFoodDetailScreenDark: {
+    backgroundColor: '#0f1412',
+  },
+  publicFoodDetailScrollDark: {
+    backgroundColor: '#0f1412',
+  },
+  publicFoodDetailImageSectionDark: {
+    backgroundColor: '#171d1a',
+  },
+  publicFoodDetailImageSlideDark: {
+    backgroundColor: '#171d1a',
+  },
+  publicFoodDetailImagePressed: {
+    opacity: 0.86,
+  },
+  publicFoodDetailImageExpandBadge: {
+    position: 'absolute',
+    right: 16,
+    bottom: 14,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.56)',
+  },
+  publicFoodDetailImagePlaceholderDark: {
+    backgroundColor: '#171d1a',
+  },
+  publicFoodDetailContributionIcon: {
     width: 54,
     height: 54,
     borderRadius: 27,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.brand,
-    shadowColor: '#000',
-    shadowOpacity: 0.16,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 6,
+    marginBottom: 12,
+    backgroundColor: '#e8f8f2',
   },
-  publicFoodFabText: {
+  publicFoodDetailContributionIconDark: {
+    backgroundColor: '#20352d',
+  },
+  publicFoodDetailContributionTitle: {
+    color: colors.text,
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: '800',
+  },
+  publicFoodDetailContributionHint: {
+    marginTop: 4,
+    marginBottom: 14,
+    color: colors.textSecondary,
+    fontSize: 13,
+    lineHeight: 19,
+    textAlign: 'center',
+  },
+  publicFoodDetailContributionButton: {
+    minHeight: 48,
+    borderRadius: 24,
+    paddingHorizontal: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: colors.brand,
+  },
+  publicFoodDetailContributionButtonText: {
     color: '#fff',
-    fontSize: 28,
-    lineHeight: 30,
-    fontWeight: '600',
-    marginTop: -2,
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  publicFoodDetailActionDisabled: {
+    opacity: 0.48,
+  },
+  publicFoodDetailInfoCardDark: {
+    backgroundColor: '#171d1a',
+    shadowOpacity: 0.22,
+  },
+  publicFoodDetailTitleDark: {
+    color: '#f1f5f3',
+  },
+  publicFoodDetailCaloriesBadgeDark: {
+    backgroundColor: '#20352d',
+  },
+  publicFoodDetailCaloriesTextDark: {
+    color: '#7dd3b0',
+  },
+  publicFoodDetailTextSecondaryDark: {
+    color: '#b3bdb8',
+  },
+  publicFoodDetailTextPrimaryDark: {
+    color: '#f1f5f3',
+  },
+  publicFoodDetailInsightDark: {
+    color: '#c6cfcb',
+  },
+  publicFoodDetailCampusSummary: {
+    marginTop: 4,
+    marginBottom: 14,
+    borderRadius: 12,
+    padding: 12,
+    gap: 10,
+    backgroundColor: '#f8faf9',
+  },
+  publicFoodDetailCampusSummaryDark: {
+    backgroundColor: '#1d2521',
+  },
+  publicFoodDetailCampusLocationRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+  },
+  publicFoodDetailPriceDark: {
+    color: '#7dd3b0',
+  },
+  publicFoodDetailAnalysisTipDark: {
+    color: '#fdba74',
+    backgroundColor: '#3a2418',
+  },
+  publicFoodDetailAnalysisTipErrorDark: {
+    color: '#fca5a5',
+    backgroundColor: '#3b1d20',
+  },
+  publicFoodDetailNutrientsDark: {
+    borderColor: '#2a342f',
+  },
+  publicFoodDetailNutrientDividerDark: {
+    borderRightColor: '#2a342f',
+  },
+  publicFoodDetailMicronutrients: {
+    marginBottom: 16,
+    borderRadius: 14,
+    padding: 14,
+    backgroundColor: '#f8faf9',
+  },
+  publicFoodDetailMicronutrientsDark: {
+    backgroundColor: '#1d2521',
+  },
+  publicFoodDetailMicronutrientsHeader: {
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  publicFoodDetailMicronutrientsTitle: {
+    flex: 1,
+    color: colors.text,
+    fontSize: 15,
+    lineHeight: 21,
+    fontWeight: '900',
+  },
+  publicFoodDetailMicronutrientsStatus: {
+    color: '#b45309',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  publicFoodDetailMicronutrientsStatusReady: {
+    color: '#047857',
+  },
+  publicFoodDetailMicronutrientsToggle: {
+    minWidth: 48,
+    minHeight: 48,
+    borderRadius: 24,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 2,
+  },
+  publicFoodDetailMicronutrientsToggleText: {
+    color: colors.brand,
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  publicFoodDetailMicronutrientsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: 6,
+  },
+  publicFoodDetailMicronutrientCell: {
+    minHeight: 58,
+    borderTopWidth: 1,
+    borderColor: '#e5e7eb',
+    paddingVertical: 10,
+    paddingHorizontal: 6,
+  },
+  publicFoodDetailMicronutrientCellDark: {
+    borderColor: '#2a342f',
+  },
+  publicFoodDetailMicronutrientLabel: {
+    color: colors.textSecondary,
+    fontSize: 11,
+    lineHeight: 16,
+    fontWeight: '700',
+  },
+  publicFoodDetailMicronutrientValue: {
+    marginTop: 3,
+    color: colors.text,
+    fontSize: 14,
+    lineHeight: 19,
+    fontWeight: '900',
+  },
+  publicFoodDetailAvatarFallbackDark: {
+    backgroundColor: '#20352d',
+  },
+  publicFoodDetailCardDark: {
+    backgroundColor: '#171d1a',
+    shadowOpacity: 0.18,
+  },
+  publicFoodDetailTagDark: {
+    color: '#7dd3b0',
+    backgroundColor: '#20352d',
+  },
+  publicFoodDetailCommentCountDark: {
+    color: '#b3bdb8',
+    backgroundColor: '#252d29',
+  },
+  publicFoodDetailQuickCommentDark: {
+    borderColor: '#2a342f',
+    backgroundColor: '#1d2521',
+  },
+  publicFoodDetailQuickPlaceholder: {
+    flex: 1,
+    color: colors.textMuted,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  publicFoodDetailEmptyCommentsDark: {
+    color: '#7f8c87',
+    backgroundColor: '#1d2521',
+  },
+  publicFoodDetailCommentRowDark: {
+    borderBottomColor: '#2a342f',
+  },
+  publicFoodDetailReplyRowDark: {
+    borderLeftColor: '#315c4b',
+    backgroundColor: '#1d2521',
+  },
+  publicFoodDetailCommentNameDark: {
+    color: '#f1f5f3',
+  },
+  publicFoodDetailRatingStars: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 1,
+  },
+  publicFoodDetailMutedTextDark: {
+    color: '#7f8c87',
+  },
+  publicFoodDetailCommentContentDark: {
+    color: '#d7dfdb',
+  },
+  publicFoodDetailTextActionTextDark: {
+    color: '#b3bdb8',
+  },
+  publicFoodDetailBottomBarDark: {
+    borderColor: '#2a342f',
+    backgroundColor: 'rgba(23,29,26,0.97)',
+  },
+  publicFoodDetailIconActionLikedDark: {
+    backgroundColor: '#3d2028',
+  },
+  publicFoodDetailIconActionCollectedDark: {
+    backgroundColor: '#3a2e17',
+  },
+  publicFoodDetailActionBadgeDark: {
+    color: '#b3bdb8',
+  },
+  publicFoodDetailCorrectionButton: {
+    minHeight: 44,
+    minWidth: 72,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  publicFoodDetailPreviewModal: {
+    flex: 1,
+    backgroundColor: '#000',
+  },
+  publicFoodDetailPreviewHeader: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 3,
+    minHeight: 72,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: 'rgba(0,0,0,0.46)',
+  },
+  publicFoodDetailPreviewTitle: {
+    flex: 1,
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  publicFoodDetailPreviewCounter: {
+    marginHorizontal: 12,
+    color: '#d1d5db',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  publicFoodDetailPreviewClose: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.12)',
+  },
+  publicFoodDetailPreviewPressed: {
+    opacity: 0.62,
+  },
+  publicFoodDetailPreviewScroller: {
+    flex: 1,
+  },
+  publicFoodDetailPreviewSlide: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#000',
+  },
+  publicFoodDetailPreviewImage: {
+    width: '100%',
+    height: '100%',
+  },
+  publicFoodDetailPreviewControls: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 3,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+  },
+  publicFoodDetailPreviewControl: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.16)',
+  },
+  publicFoodDetailPreviewControlDisabled: {
+    opacity: 0.28,
+  },
+  publicFoodDetailModalRoot: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  publicFoodDetailModalBackdrop: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0,0,0,0.58)',
+  },
+  publicFoodDetailComposerSheet: {
+    maxHeight: '84%',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 18,
+    paddingTop: 10,
+    backgroundColor: '#fff',
+  },
+  publicFoodDetailComposerSheetDark: {
+    backgroundColor: '#171d1a',
+  },
+  publicFoodDetailSheetHandle: {
+    width: 42,
+    height: 5,
+    borderRadius: 3,
+    alignSelf: 'center',
+    marginBottom: 12,
+    backgroundColor: '#d1d5db',
+  },
+  publicFoodDetailSheetHandleDark: {
+    backgroundColor: '#47534d',
+  },
+  publicFoodDetailComposerHeader: {
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  publicFoodDetailComposerTitle: {
+    flex: 1,
+    color: colors.text,
+    fontSize: 19,
+    lineHeight: 26,
+    fontWeight: '900',
+  },
+  publicFoodDetailSheetClose: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  publicFoodDetailRatingRow: {
+    marginTop: 10,
+    marginBottom: 12,
+  },
+  publicFoodDetailRatingLabel: {
+    color: colors.textSecondary,
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  publicFoodDetailRatingButtons: {
+    marginTop: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  publicFoodDetailRatingButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f8faf9',
+  },
+  publicFoodDetailRatingButtonDark: {
+    backgroundColor: '#1d2521',
+  },
+  publicFoodDetailComposerInput: {
+    minHeight: 132,
+    maxHeight: 220,
+    borderWidth: 1,
+    borderColor: '#dce3df',
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    color: colors.text,
+    backgroundColor: '#f8faf9',
+    fontSize: 15,
+    lineHeight: 22,
+  },
+  publicFoodDetailComposerInputDark: {
+    borderColor: '#2a342f',
+    color: '#f1f5f3',
+    backgroundColor: '#1d2521',
+  },
+  publicFoodDetailComposerSubmit: {
+    minHeight: 52,
+    borderRadius: 14,
+    marginTop: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.brand,
+  },
+  publicFoodDetailComposerSubmitText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  publicFoodDetailComposerHint: {
+    marginTop: 3,
+    color: colors.textSecondary,
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  publicFoodDetailActionSheet: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    backgroundColor: '#f3f4f6',
+  },
+  publicFoodDetailActionSheetDark: {
+    backgroundColor: '#111714',
+  },
+  publicFoodDetailSheetTitle: {
+    minHeight: 48,
+    color: colors.text,
+    fontSize: 19,
+    lineHeight: 26,
+    fontWeight: '900',
+    textAlign: 'center',
+    textAlignVertical: 'center',
+  },
+  publicFoodDetailSheetAction: {
+    minHeight: 54,
+    borderRadius: 14,
+    marginBottom: 8,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: '#fff',
+  },
+  publicFoodDetailSheetActionDark: {
+    backgroundColor: '#1d2521',
+  },
+  publicFoodDetailSheetActionDanger: {
+    marginTop: 2,
+  },
+  publicFoodDetailSheetActionText: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  publicFoodDetailSheetActionTextDark: {
+    color: '#f1f5f3',
+  },
+  publicFoodDetailSheetCancel: {
+    minHeight: 54,
+    borderRadius: 14,
+    marginTop: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fff',
+  },
+  publicFoodDetailSheetCancelDark: {
+    backgroundColor: '#1d2521',
+  },
+  publicFoodDetailSheetCancelText: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: '900',
+  },
+  publicFoodDetailSkeletonPlaceholderDark: {
+    backgroundColor: '#252d29',
+  },
+  publicFoodDetailEmptyIconWrap: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    marginBottom: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#e8f8f2',
+  },
+  publicFoodDetailInfoCellDark: {
+    borderColor: '#2a342f',
+    backgroundColor: '#1d2521',
+  },
+  publicFoodDetailInfoRow: {
+    minHeight: 48,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eef2f0',
+    paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  publicFoodDetailInfoRowDark: {
+    borderBottomColor: '#2a342f',
+  },
+  publicFoodDetailInfoRowLabel: {
+    width: 88,
+    color: colors.textSecondary,
+    fontSize: 13,
+    lineHeight: 20,
+    fontWeight: '700',
+  },
+  publicFoodDetailInfoRowValue: {
+    flex: 1,
+    color: colors.text,
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '800',
+    textAlign: 'right',
   },
   publicFoodDetailScreen: {
     flex: 1,
@@ -6115,6 +8716,7 @@ const styles = StyleSheet.create({
   },
   publicFoodDetailInfoHeader: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
     gap: 12,
@@ -6532,7 +9134,8 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   publicFoodDetailTextAction: {
-    minHeight: 28,
+    minHeight: 44,
+    minWidth: 44,
     justifyContent: 'center',
   },
   publicFoodDetailTextActionText: {
@@ -6572,8 +9175,8 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   publicFoodDetailQuickRecord: {
-    minWidth: 88,
-    height: 36,
+    minWidth: 96,
+    minHeight: 48,
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
@@ -6593,21 +9196,22 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'flex-end',
-    gap: 12,
+    gap: 4,
   },
   publicFoodDetailIconAction: {
-    minWidth: 30,
-    height: 30,
+    minWidth: 48,
+    height: 48,
+    borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
   },
   publicFoodDetailIconActionLiked: {
-    borderRadius: 15,
+    borderRadius: 24,
     backgroundColor: '#fff1f2',
   },
   publicFoodDetailIconActionCollected: {
-    borderRadius: 15,
+    borderRadius: 24,
     backgroundColor: '#fffbeb',
   },
   publicFoodDetailIconText: {
@@ -6632,7 +9236,8 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   publicFoodDetailCorrectionBar: {
-    marginTop: 4,
+    minHeight: 44,
+    marginTop: 2,
     flexDirection: 'row',
     justifyContent: 'center',
     gap: 4,

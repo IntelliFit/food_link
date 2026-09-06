@@ -1,9 +1,28 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ActivityIndicator, Image, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
+import {
+  AccessibilityInfo,
+  ActivityIndicator,
+  Image,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+  type GestureResponderEvent,
+} from 'react-native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { CommonActions, useNavigation, useRoute, type RouteProp } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import {
+  Apple, BookOpenText, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp,
+  Coffee, Cookie, Edit3, Minus, MoonStar, Plus, Scale, Soup, Sparkles,
+  Sun, Sunrise, Trash2, Upload, X, type LucideIcon,
+} from 'lucide-react-native'
 import {
   buildSaveFoodRecordRequestFromTask,
   type AnalyzeCorrectionItem,
@@ -13,14 +32,15 @@ import {
   getMealTypeLabel,
   type FoodItem,
   type FoodRecordItemPayload,
+  type MealType,
   type Nutrients,
   type PrecisionReferenceObjectInput,
 } from '@food-link/core'
 import { apiClient } from '../api'
 import { EatingMoodPicker } from '../components/EatingMoodPicker'
 import type { RootStackParamList } from '../navigation/types'
+import { useColorScheme } from '../providers/ColorSchemeProvider'
 import { useAppDialog } from '../providers/DialogProvider'
-import { colors } from '../theme'
 import { userFacingErrorMessage } from '../utils/errors'
 import { emitHomeIntakeDataChangedEvent } from '../utils/home-events'
 
@@ -44,43 +64,111 @@ type EditableResultItem = {
   packageWeightApplied?: boolean
   packageWeightSource?: string
   packageWeightReason?: string
+  grossWeight?: number
+  ediblePortionRatio?: number
+  ediblePortionReason?: string
 }
 
-const ratioOptions = [25, 50, 75, 100]
+type SelectableMealType = Exclude<MealType, 'snack'>
+type ResultFoodEditorDraft = {
+  itemIndex: number
+  name: string
+  weight: string
+  calories: string
+  protein: string
+  carbs: string
+  fat: string
+  waterMl: string
+}
+
+type ResultPalette = {
+  page: string
+  card: string
+  cardSoft: string
+  cardElevated: string
+  input: string
+  border: string
+  text: string
+  textSecondary: string
+  textMuted: string
+  brand: string
+  brandStrong: string
+  brandSoft: string
+  brandBorder: string
+  hero: string
+  heroPattern: string
+  heroOverlay: string
+  blue: string
+  blueSoft: string
+  orange: string
+  orangeSoft: string
+  purple: string
+  purpleSoft: string
+  red: string
+  redSoft: string
+  warning: string
+  warningSoft: string
+  track: string
+  scrim: string
+  white: string
+  shadow: string
+}
+
+function createResultPalette(isDark: boolean): ResultPalette {
+  return isDark
+    ? {
+        page: '#0b0f0e', card: '#151b19', cardSoft: '#202927', cardElevated: '#1a221f', input: '#1c2421',
+        border: 'rgba(255,255,255,0.12)', text: '#f3f7f5', textSecondary: '#a9b7b1', textMuted: '#7f918a',
+        brand: '#7dd3b0', brandStrong: '#49b98e', brandSoft: '#18332a', brandBorder: 'rgba(125,211,176,0.32)',
+        hero: '#101816', heroPattern: '#294239', heroOverlay: 'rgba(11,15,14,0.64)',
+        blue: '#79b7ef', blueSoft: '#1f2c38', orange: '#f2ae6f', orangeSoft: '#33261d',
+        purple: '#c49ae9', purpleSoft: '#2a2235', red: '#ff938f', redSoft: '#351f1e',
+        warning: '#f8bf61', warningSoft: '#332a19', track: 'rgba(0,0,0,0.28)',
+        scrim: 'rgba(0,0,0,0.76)', white: '#ffffff', shadow: '#000000',
+      }
+    : {
+        page: '#f8fafc', card: '#ffffff', cardSoft: '#f1f5f9', cardElevated: '#ffffff', input: '#ffffff',
+        border: '#e2e8f0', text: '#0f172a', textSecondary: '#475569', textMuted: '#64748b',
+        brand: '#00bc7d', brandStrong: '#059669', brandSoft: '#ecfdf5', brandBorder: 'rgba(0,188,125,0.28)',
+        hero: '#dbe4ee', heroPattern: '#cbd5e1', heroOverlay: 'rgba(15,23,42,0.34)',
+        blue: '#3b82f6', blueSoft: '#eff6ff', orange: '#f97316', orangeSoft: '#fff7ed',
+        purple: '#a855f7', purpleSoft: '#faf5ff', red: '#dc2626', redSoft: '#fef2f2',
+        warning: '#d97706', warningSoft: '#fffbeb', track: '#e2e8f0',
+        scrim: 'rgba(15,23,42,0.62)', white: '#ffffff', shadow: '#0f172a',
+      }
+}
+
+type ResultStyles = ReturnType<typeof createResultStyles>
+
+const mealOptions: Array<{ value: SelectableMealType; label: string; Icon: LucideIcon }> = [
+  { value: 'breakfast', label: '早餐', Icon: Sunrise },
+  { value: 'morning_snack', label: '早加餐', Icon: Apple },
+  { value: 'lunch', label: '午餐', Icon: Sun },
+  { value: 'afternoon_snack', label: '午加餐', Icon: Cookie },
+  { value: 'dinner', label: '晚餐', Icon: Soup },
+  { value: 'evening_snack', label: '晚加餐', Icon: MoonStar },
+]
+
+const NUTRIENT_DETAIL_META = [
+  ['fiber', '膳食纤维', 'g'], ['sugar', '糖', 'g'], ['saturatedFat', '饱和脂肪', 'g'],
+  ['cholesterolMg', '胆固醇', 'mg'], ['sodiumMg', '钠', 'mg'], ['potassiumMg', '钾', 'mg'],
+  ['calciumMg', '钙', 'mg'], ['ironMg', '铁', 'mg'], ['magnesiumMg', '镁', 'mg'], ['zincMg', '锌', 'mg'],
+  ['vitaminARaeMcg', '维生素A', 'mcg'], ['vitaminCMg', '维生素C', 'mg'], ['vitaminDMcg', '维生素D', 'mcg'],
+  ['vitaminEMg', '维生素E', 'mg'], ['vitaminKMcg', '维生素K', 'mcg'], ['thiaminMg', '维生素B1', 'mg'],
+  ['riboflavinMg', '维生素B2', 'mg'], ['niacinMg', '烟酸', 'mg'], ['vitaminB6Mg', '维生素B6', 'mg'],
+  ['folateMcg', '叶酸', 'mcg'], ['vitaminB12Mcg', '维生素B12', 'mcg'],
+] as const
 const HEALTH_PROFILE_PROMPT_SHOWN_KEY = 'food_link_mobile_analysis_health_profile_prompt_shown'
 
-type ScoreTone = 'positive' | 'neutral' | 'warning' | 'danger'
-
-function scoreToTone(score: number): ScoreTone {
-  if (score >= 78) return 'positive'
-  if (score >= 60) return 'neutral'
-  if (score >= 42) return 'warning'
-  return 'danger'
-}
-
-function scoreToLabel(score: number): string {
-  if (score >= 78) return '偏保护'
-  if (score >= 60) return '基本中性'
-  if (score >= 42) return '需要关注'
-  return '重点关注'
-}
-
-const scoreToneColors: Record<ScoreTone, { bg: string; text: string }> = {
-  positive: { bg: '#dcfce7', text: '#166534' },
-  neutral: { bg: '#e0f2fe', text: '#075985' },
-  warning: { bg: '#fef3c7', text: '#92400e' },
-  danger: { bg: '#fee2e2', text: '#991b1b' },
-}
-
-function clampScorePercent(value: number): number {
-  return Math.min(100, Math.max(0, value))
-}
 
 export function ResultScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const route = useRoute<ResultRoute>()
   const dialog = useAppDialog()
   const insets = useSafeAreaInsets()
+  const { isDark } = useColorScheme()
+  const palette = useMemo(() => createResultPalette(isDark), [isDark])
+  const styles = useMemo(() => createResultStyles(palette), [palette])
   const { task, imageUri, mealType, date } = route.params
   const foodItems = task.result?.items || []
   const [items, setItems] = useState<EditableResultItem[]>(() => buildEditableItems(foodItems))
@@ -100,7 +188,20 @@ export function ResultScreen() {
   const [referenceWidth, setReferenceWidth] = useState('')
   const [referenceHeight, setReferenceHeight] = useState('')
   const [referencePlacement, setReferencePlacement] = useState('')
-  const [continuingPrecision, setContinuingPrecision] = useState(false)
+const [continuingPrecision, setContinuingPrecision] = useState(false)
+  const [showMealSelector, setShowMealSelector] = useState(false)
+  const [selectedMealType, setSelectedMealType] = useState<SelectableMealType>(() => normalizeSelectableMealType(mealType))
+  const [insightCollapsed, setInsightCollapsed] = useState(false)
+  const [foodEditor, setFoodEditor] = useState<ResultFoodEditorDraft | null>(null)
+  const [foodEditorError, setFoodEditorError] = useState('')
+  const [expandedNutritionDetailIds, setExpandedNutritionDetailIds] = useState<Record<string, boolean>>({})
+  const [quickRatioVisible, setQuickRatioVisible] = useState(false)
+  const [currentImageIndex, setCurrentImageIndex] = useState(0)
+  const [previewImageIndex, setPreviewImageIndex] = useState<number | null>(null)
+  const [reduceMotion, setReduceMotion] = useState(false)
+  const ratioWidthsRef = useRef<Record<string, number>>({})
+  const heroGestureStartXRef = useRef(0)
+  const heroGestureMovedRef = useRef(false)
   const recipeSaveInFlightRef = useRef(false)
   const correctionInFlightRef = useRef(false)
   const feedbackInFlightRef = useRef(false)
@@ -110,7 +211,28 @@ export function ResultScreen() {
     setEatingMood(null)
     setSavedRecipeId(null)
     setReferenceObjects(taskReferenceObjects(task))
+    setInsightCollapsed(false)
+    setFoodEditor(null)
+    setExpandedNutritionDetailIds({})
+    setCurrentImageIndex(0)
+    setPreviewImageIndex(null)
   }, [task.id, foodItems.length])
+
+useEffect(() => {
+    setSelectedMealType(normalizeSelectableMealType(mealType))
+  }, [mealType])
+
+  useEffect(() => {
+    let active = true
+    void AccessibilityInfo.isReduceMotionEnabled().then((enabled) => {
+      if (active) setReduceMotion(enabled)
+    })
+    const subscription = AccessibilityInfo.addEventListener('reduceMotionChanged', setReduceMotion)
+    return () => {
+      active = false
+      subscription.remove()
+    }
+  }, [])
 
   useEffect(() => {
     let active = true
@@ -145,23 +267,24 @@ export function ResultScreen() {
   }, [dialog, navigation, task.id])
 
   const totals = useMemo(() => calculateTotals(items), [items])
-  const imageSource = imageUri || stringOrUndefined(task.image_url) || firstImage(task.image_paths)
-  const mealLabel = getMealTypeLabel(mealType)
+  const imageSources = useMemo(() => uniqueImageSources([imageUri, stringOrUndefined(task.image_url), ...(task.image_paths || [])]), [imageUri, task.image_url, task.image_paths])
+  const imageSource = imageSources[0]
+  const mealLabel = getMealTypeLabel(selectedMealType)
   const heroHeight = imageSource ? 292 : 246
   const macroMax = Math.max(totals.protein, totals.carbs, totals.fat, 1)
   const resultDescription = String(task.result?.description || '食物分析已完成')
   const executionMode = taskExecutionMode(task)
+  const analysisEngine = taskAnalysisEngine(task)
   const precisionSessionId = taskPrecisionSessionId(task)
 
-  const scoreEnabled = Boolean(task.result?.score_enabled)
-  const finalScore = scoreEnabled ? Number(task.result?.final_score ?? NaN) : NaN
-  const micronutrientScore = scoreEnabled ? Number(task.result?.micronutrient_score ?? NaN) : NaN
-  const macroBalanceScore = scoreEnabled ? Number(task.result?.macro_balance_score ?? NaN) : NaN
-  const calorieScore = scoreEnabled ? Number(task.result?.calorie_score ?? NaN) : NaN
 
-  const saveRecord = async () => {
+  const saveRecord = async (confirmedMealType: SelectableMealType) => {
     if (items.length === 0) {
       void dialog.alert('无法保存', '当前识别结果没有可保存的食物明细', 'warning')
+      return
+    }
+    if (items.some(isPackagedChoicePending)) {
+      void dialog.alert('请先确认包装规格', '选择正确的包装规格后，才能计算总量并保存记录。', 'warning')
       return
     }
 
@@ -173,7 +296,7 @@ export function ResultScreen() {
 
     setSaving(true)
     try {
-      const payload = buildCurrentRecordPayload(task, items, mealType, date, totals)
+      const payload = buildCurrentRecordPayload(task, items, confirmedMealType, date, totals)
       if (eatingMood) payload.eating_mood = eatingMood
 
       const pfcRatioComment = stringOrUndefined(task.result?.pfc_ratio_comment)
@@ -227,6 +350,10 @@ export function ResultScreen() {
       await dialog.alert('无法收藏', '当前识别结果没有可收藏的食物明细。', 'warning')
       return
     }
+    if (items.some(isPackagedChoicePending)) {
+      await dialog.alert('请先确认包装规格', '选择正确的包装规格后，才能计算总量并收藏餐食。', 'warning')
+      return
+    }
     const invalidItem = items.find((item) => !isEditableItemValid(item))
     if (invalidItem) {
       await dialog.alert('无法收藏', '请确认每项食物都有名称、重量；手动新增项还需要填写每100g热量。', 'warning')
@@ -268,33 +395,10 @@ export function ResultScreen() {
   }
 
   const addManualItem = () => {
-    setItems((current) => [
-      ...current,
-      {
-        clientId: `manual-${Date.now()}-${current.length}`,
-        sourceIndex: -1,
-        isManual: true,
-        name: '',
-        weightText: '100',
-        ratio: 100,
-        baseWeight: 100,
-        baseNutrients: normalizeNutrients({ calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0, sugar: 0 }),
-      },
-    ])
+    setFoodEditor({ itemIndex: items.length, name: '', weight: '100', calories: '0', protein: '0', carbs: '0', fat: '0', waterMl: '0' })
+    setFoodEditorError('')
   }
 
-  const updateManualNutrient = (index: number, key: 'calories' | 'protein' | 'carbs' | 'fat', value: string) => {
-    const parsed = Number(value.replace(',', '.'))
-    setItems((current) => current.map((item, itemIndex) => itemIndex === index
-      ? {
-        ...item,
-        baseNutrients: {
-          ...item.baseNutrients,
-          [key]: Number.isFinite(parsed) && parsed >= 0 ? parsed : 0,
-        },
-      }
-      : item))
-  }
 
   const addPresetReference = (reference: PrecisionReferenceObjectInput) => {
     setReferenceObjects((current) => current.some((item) => item.reference_name === reference.reference_name)
@@ -378,8 +482,151 @@ export function ResultScreen() {
     setItems((current) => current.map((item) => ({ ...item, ratio })))
   }
 
-  const applyCustomPeopleRatio = () => {
+const applyCustomPeopleRatio = () => {
     applyPeopleRatio(Number(customPeople))
+    setQuickRatioVisible(false)
+  }
+
+  const openMealSelector = () => {
+    if (saving || items.length === 0) return
+    if (items.some(isPackagedChoicePending)) {
+      void dialog.alert('请先确认包装规格', '还有包装食品规格待选择，确认后才能记录。', 'warning')
+      return
+    }
+    setSelectedMealType(normalizeSelectableMealType(mealType))
+    setShowMealSelector(true)
+  }
+
+  const confirmMealTypeAndSave = () => {
+    setShowMealSelector(false)
+    void saveRecord(selectedMealType)
+  }
+
+  const adjustWeight = (index: number, delta: number) => {
+    setItems((current) => current.map((item, itemIndex) => itemIndex === index
+      ? { ...item, weightText: formatInputNumber(Math.max(1, editableWeight(item) + delta)) }
+      : item))
+  }
+
+  const updateRatio = (index: number, nextRatio: number) => {
+    updateItem(index, { ratio: clampRatio(Math.round(nextRatio / 5) * 5) })
+  }
+
+  const updateRatioFromPress = (index: number, itemKey: string, event: GestureResponderEvent) => {
+    const width = ratioWidthsRef.current[itemKey] || 0
+    if (width <= 20) return
+    updateRatio(index, (event.nativeEvent.locationX - 10) / (width - 20) * 100)
+  }
+
+  const openFoodEditor = (itemIndex: number) => {
+    const item = items[itemIndex]
+    if (!item) return
+    const weight = editableWeight(item)
+    const nutrients = scaledNutrients(item.baseNutrients, weight, item.baseWeight)
+    setFoodEditor({
+      itemIndex,
+      name: item.name,
+      weight: formatInputNumber(weight),
+      calories: formatInputNumberAllowZero(numberFrom(nutrients.calories)),
+      protein: formatInputNumberAllowZero(numberFrom(nutrients.protein)),
+      carbs: formatInputNumberAllowZero(numberFrom(nutrients.carbs)),
+      fat: formatInputNumberAllowZero(numberFrom(nutrients.fat)),
+      waterMl: formatInputNumberAllowZero(numberFrom(nutrients.waterMl ?? nutrients.water_ml)),
+    })
+    setFoodEditorError('')
+  }
+
+  const closeFoodEditor = () => {
+    setFoodEditor(null)
+    setFoodEditorError('')
+  }
+
+  const updateFoodEditorField = (field: keyof Omit<ResultFoodEditorDraft, 'itemIndex'>, value: string) => {
+    setFoodEditor((current) => {
+      if (!current) return current
+      const nextValue = field === 'name' ? value : sanitizeNumberText(value)
+      const next = { ...current, [field]: nextValue }
+      if (field === 'protein' || field === 'carbs' || field === 'fat') {
+        const protein = Number(next.protein)
+        const carbs = Number(next.carbs)
+        const fat = Number(next.fat)
+        if ([protein, carbs, fat].every((number) => Number.isFinite(number) && number >= 0)) {
+          next.calories = formatInputNumberAllowZero(protein * 4 + carbs * 4 + fat * 9)
+        }
+      }
+      return next
+    })
+    if (foodEditorError) setFoodEditorError('')
+  }
+
+  const saveFoodEditor = () => {
+    if (!foodEditor) return
+    const name = foodEditor.name.trim()
+    const weight = Number(foodEditor.weight)
+    const protein = Number(foodEditor.protein)
+    const carbs = Number(foodEditor.carbs)
+    const fat = Number(foodEditor.fat)
+    const waterMl = Number(foodEditor.waterMl || 0)
+    const parsedCalories = Number(foodEditor.calories)
+    if (!name) {
+      setFoodEditorError('食物名称不能为空')
+      return
+    }
+    if (!Number.isFinite(weight) || weight <= 0) {
+      setFoodEditorError('估算重量必须大于 0')
+      return
+    }
+    if ([protein, carbs, fat, waterMl].some((value) => !Number.isFinite(value) || value < 0)) {
+      setFoodEditorError('营养数值不能小于 0')
+      return
+    }
+    const calories = Number.isFinite(parsedCalories) && parsedCalories >= 0
+      ? parsedCalories
+      : protein * 4 + carbs * 4 + fat * 9
+    const isNewItem = !items[foodEditor.itemIndex]
+    if (isNewItem && calories <= 0) {
+      setFoodEditorError('新增食物的整份热量必须大于 0')
+      return
+    }
+    setItems((current) => {
+      const nutrients = normalizeNutrients({
+        calories: round1Number(calories),
+        protein: round1Number(protein),
+        carbs: round1Number(carbs),
+        fat: round1Number(fat),
+        fiber: 0,
+        sugar: 0,
+        waterMl: round1Number(Math.min(waterMl, weight)),
+        water_ml: round1Number(Math.min(waterMl, weight)),
+      })
+      if (!current[foodEditor.itemIndex]) {
+        return [...current, {
+          clientId: `manual-${Date.now()}-${foodEditor.itemIndex}`,
+          sourceIndex: -1,
+          isManual: true,
+          name,
+          weightText: formatInputNumber(weight),
+          ratio: 100,
+          baseWeight: weight,
+          baseNutrients: nutrients,
+        }]
+      }
+      return current.map((item, itemIndex) => itemIndex === foodEditor.itemIndex
+        ? {
+          ...item,
+          name,
+          weightText: formatInputNumber(weight),
+          baseWeight: weight,
+          baseNutrients: { ...item.baseNutrients, ...nutrients },
+        }
+        : item)
+    })
+    closeFoodEditor()
+    AccessibilityInfo.announceForAccessibility('食物信息已更新')
+  }
+
+  const toggleNutritionDetails = (itemKey: string) => {
+    setExpandedNutritionDetailIds((current) => ({ ...current, [itemKey]: !current[itemKey] }))
   }
 
   const submitCorrection = async () => {
@@ -529,52 +776,98 @@ export function ResultScreen() {
     })
   }
 
+  const hasInsights = Boolean(
+    resultDescription
+    || stringOrUndefined(task.result?.insight)
+    || stringOrUndefined(task.result?.pfc_ratio_comment)
+    || stringOrUndefined(task.result?.absorption_notes)
+    || stringOrUndefined(task.result?.context_advice),
+  )
+  const pendingPackagedChoiceCount = items.filter(isPackagedChoicePending).length
+
   return (
     <View style={styles.page}>
-      <View style={[styles.hero, { height: heroHeight + insets.top }]}>
-        {imageSource ? (
-          <Image source={{ uri: imageSource }} style={styles.heroImage} resizeMode="cover" />
-        ) : (
-          <View style={styles.heroPlaceholder}>
-            <View style={styles.heroPlaceholderIcon}>
-              <Text style={styles.heroPlaceholderIconText}>AI</Text>
-            </View>
-            <Text style={styles.heroPlaceholderText}>{resultDescription}</Text>
-          </View>
-        )}
-        <View style={styles.heroShade} />
-        <View style={[styles.heroCopy, { paddingTop: insets.top + 18 }]}>
-          <Text style={styles.heroKicker}>识别结果</Text>
-          <Text style={styles.heroTitle}>{mealLabel}</Text>
-          <Text style={styles.heroMeta}>{date} · 已识别 {items.length} 项</Text>
-        </View>
-      </View>
-
       <ScrollView
         style={styles.resultScroll}
-        contentContainerStyle={[
-          styles.resultScrollInner,
-          { paddingTop: heroHeight + insets.top - 28, paddingBottom: 188 + insets.bottom },
-        ]}
+        contentContainerStyle={[styles.resultScrollInner, { paddingBottom: 246 + insets.bottom }]}
+        keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
+        <View style={[styles.hero, { height: heroHeight + insets.top }]}>
+          {imageSources.length > 0 ? (
+            <Pressable
+              style={[styles.heroImagePage, { height: heroHeight + insets.top }]}
+              onTouchStart={(event) => {
+                heroGestureStartXRef.current = event.nativeEvent.pageX
+                heroGestureMovedRef.current = false
+              }}
+              onTouchMove={(event) => {
+                if (Math.abs(event.nativeEvent.pageX - heroGestureStartXRef.current) > 12) heroGestureMovedRef.current = true
+              }}
+              onTouchEnd={(event) => {
+                const deltaX = event.nativeEvent.pageX - heroGestureStartXRef.current
+                if (imageSources.length > 1 && Math.abs(deltaX) >= 50) {
+                  setCurrentImageIndex((current) => deltaX < 0
+                    ? Math.min(imageSources.length - 1, current + 1)
+                    : Math.max(0, current - 1))
+                }
+              }}
+              onTouchCancel={() => { heroGestureMovedRef.current = false }}
+              onPress={() => {
+                if (!heroGestureMovedRef.current) setPreviewImageIndex(currentImageIndex)
+                heroGestureMovedRef.current = false
+              }}
+              accessibilityRole="imagebutton"
+              accessibilityLabel={`分析原图 ${currentImageIndex + 1}，共 ${imageSources.length} 张`}
+              accessibilityHint={imageSources.length > 1 ? '双击全屏查看，左右滑动切换图片' : '双击全屏查看'}
+              accessibilityActions={imageSources.length > 1 ? [{ name: 'increment', label: '下一张' }, { name: 'decrement', label: '上一张' }] : undefined}
+              onAccessibilityAction={(event) => {
+                if (event.nativeEvent.actionName === 'increment') setCurrentImageIndex((current) => Math.min(imageSources.length - 1, current + 1))
+                if (event.nativeEvent.actionName === 'decrement') setCurrentImageIndex((current) => Math.max(0, current - 1))
+              }}
+            >
+              <Image source={{ uri: imageSources[currentImageIndex] }} style={styles.heroImage} resizeMode="cover" />
+            </Pressable>
+          ) : (
+            <View style={[styles.heroPlaceholder, { paddingTop: insets.top }]}>
+              <View style={styles.heroPlaceholderIcon}><BookOpenText size={30} color={palette.brand} /></View>
+              <Text style={styles.heroPlaceholderText}>未提供实物照片</Text>
+            </View>
+          )}
+          <View style={styles.heroShade} pointerEvents="none" />
+          {imageSources.length > 1 ? (
+            <View style={[styles.imageCounter, { top: insets.top + 14 }]} pointerEvents="none">
+              <Text style={styles.imageCounterText}>{currentImageIndex + 1}/{imageSources.length}</Text>
+            </View>
+          ) : null}
+        </View>
         <View style={styles.contentContainer}>
           <View style={styles.executionModeRow}>
             <View style={styles.executionModeLeft}>
-              <Text style={styles.executionModeTag}>{executionModeLabel(executionMode)}</Text>
-              <Text style={styles.executionModeText}>{mealLabel} · {date}</Text>
+              <View style={styles.modeTag}><Text style={styles.modeTagText}>{executionModeLabel(executionMode)}</Text></View>
+              <View style={styles.engineTag}><Text style={styles.engineTagText}>{analysisEngineLabel(analysisEngine)}</Text></View>
+              <Pressable
+                style={({ pressed }) => [styles.modeLink, pressed && styles.pressed]}
+                onPress={() => navigation.navigate('HealthProfileView')}
+                accessibilityRole="button"
+                accessibilityLabel="设置默认识别模式"
+              >
+                <Text style={styles.modeLinkText}>设为默认</Text>
+              </Pressable>
             </View>
-            <Pressable style={styles.modeHistoryButton} onPress={() => navigation.navigate('AnalyzeHistory')}>
-              <Text style={styles.modeHistoryText}>历史</Text>
-            </Pressable>
+            {imageSources.length > 0 ? (
+              <Pressable
+                style={({ pressed }) => [styles.uploadEntry, pressed && styles.pressed]}
+                onPress={() => navigation.navigate('FoodContribution', { focus: 'public' })}
+                accessibilityRole="button"
+                accessibilityLabel="上传公共食物库"
+              >
+                <Upload size={16} color={palette.brandStrong} />
+                <Text style={styles.uploadEntryText}>上传公共库</Text>
+                <ChevronRight size={16} color={palette.textMuted} />
+              </Pressable>
+            ) : null}
           </View>
-
-          <View style={styles.insightCard}>
-            <Text style={styles.eyebrow}>识别描述</Text>
-            <Text style={styles.description}>{resultDescription}</Text>
-          </View>
-
-          <EatingMoodPicker value={eatingMood} onChange={setEatingMood} />
 
           <View style={styles.nutritionOverviewCard}>
             <View style={styles.nutritionHeader}>
@@ -586,543 +879,370 @@ export function ResultScreen() {
                 </View>
               </View>
               <View style={styles.totalWeightBadge}>
-                <Text style={styles.weightText}>{Math.round(totals.weight)}g</Text>
+                <Scale size={17} color={palette.brandStrong} />
+                <Text style={styles.weightText}>约 {Math.round(totals.weight)}g</Text>
               </View>
             </View>
-
             <View style={styles.macroGrid}>
-              <View style={styles.macroItem}>
-                <View style={styles.macroBar}>
-                  <View
-                    style={[
-                      styles.macroProgress,
-                      styles.macroProgressProtein,
-                      { width: progressWidth(totals.protein, macroMax) },
-                    ]}
-                  />
+              {([
+                ['protein', '蛋白质', totals.protein, styles.macroProgressProtein, styles.macroLabelProtein],
+                ['carbs', '碳水', totals.carbs, styles.macroProgressCarbs, styles.macroLabelCarbs],
+                ['fat', '脂肪', totals.fat, styles.macroProgressFat, styles.macroLabelFat],
+              ] as const).map(([key, label, value, fillStyle, labelStyle]) => (
+                <View key={key} style={styles.macroItem}>
+                  <View style={styles.macroBar}><View style={[styles.macroProgress, fillStyle, { width: progressWidth(value, macroMax) }]} /></View>
+                  <Text style={styles.macroValue}>{round1(value)}<Text style={styles.macroUnit}>g</Text></Text>
+                  <Text style={[styles.macroLabel, labelStyle]}>{label}</Text>
                 </View>
-                <Text style={styles.macroValue}>{round1(totals.protein)}<Text style={styles.macroUnit}>g</Text></Text>
-                <Text style={[styles.macroLabel, styles.macroLabelProtein]}>蛋白质</Text>
-              </View>
-              <View style={styles.macroItem}>
-                <View style={styles.macroBar}>
-                  <View
-                    style={[
-                      styles.macroProgress,
-                      styles.macroProgressCarbs,
-                      { width: progressWidth(totals.carbs, macroMax) },
-                    ]}
-                  />
-                </View>
-                <Text style={styles.macroValue}>{round1(totals.carbs)}<Text style={styles.macroUnit}>g</Text></Text>
-                <Text style={[styles.macroLabel, styles.macroLabelCarbs]}>碳水</Text>
-              </View>
-              <View style={styles.macroItem}>
-                <View style={styles.macroBar}>
-                  <View
-                    style={[
-                      styles.macroProgress,
-                      styles.macroProgressFat,
-                      { width: progressWidth(totals.fat, macroMax) },
-                    ]}
-                  />
-                </View>
-                <Text style={styles.macroValue}>{round1(totals.fat)}<Text style={styles.macroUnit}>g</Text></Text>
-                <Text style={[styles.macroLabel, styles.macroLabelFat]}>脂肪</Text>
-              </View>
-            </View>
-
-            <View style={styles.peoplePanel}>
-              <View style={styles.peopleHeader}>
-                <Text style={styles.peopleTitle}>按人数分摊</Text>
-                <Text style={styles.peopleHint}>同步调整所有食物比例</Text>
-              </View>
-              <View style={styles.peopleRow}>
-                {[1, 2, 3, 4].map((people) => (
-                  <Pressable key={people} style={styles.peopleChip} onPress={() => applyPeopleRatio(people)}>
-                    <Text style={styles.peopleChipText}>{people}人</Text>
-                  </Pressable>
-                ))}
-              </View>
-              <View style={styles.customPeopleRow}>
-                <TextInput
-                  value={customPeople}
-                  onChangeText={setCustomPeople}
-                  keyboardType="number-pad"
-                  placeholder="自定义人数"
-                  placeholderTextColor={colors.textMuted}
-                  style={styles.customPeopleInput}
-                />
-                <Pressable style={styles.applyPeopleButton} onPress={applyCustomPeopleRatio}>
-                  <Text style={styles.applyPeopleText}>应用</Text>
-                </Pressable>
-              </View>
+              ))}
             </View>
           </View>
 
-          {scoreEnabled && Number.isFinite(finalScore) && (
-            <View style={styles.scoreCard}>
-              <View style={styles.scoreHeader}>
-                <View>
-                  <Text style={styles.scoreTitle}>本餐评分</Text>
-                  <View style={styles.scoreRow}>
-                    <Text style={styles.scoreValue}>{Math.round(finalScore)}</Text>
-                    <Text style={styles.scoreUnit}>/ 100</Text>
-                  </View>
-                </View>
-                <View style={[styles.scoreBadge, { backgroundColor: scoreToneColors[scoreToTone(finalScore)].bg }]}>
-                  <Text style={[styles.scoreBadgeText, { color: scoreToneColors[scoreToTone(finalScore)].text }]}>
-                    {scoreToLabel(finalScore)}
-                  </Text>
-                </View>
-              </View>
-              <View style={styles.scoreBreakdown}>
-                <ScoreMini label='微量元素' value={micronutrientScore} color='#5dbb8a' />
-                <ScoreMini label='宏量平衡' value={macroBalanceScore} color='#5c9ed4' />
-                <ScoreMini label='热量适配' value={calorieScore} color='#f0985c' />
-              </View>
+          {pendingPackagedChoiceCount > 0 ? (
+            <View style={styles.pendingBanner} accessible accessibilityRole="alert">
+              <Text style={styles.pendingBannerText}>{pendingPackagedChoiceCount} 个包装食品规格待确认，暂未计入总热量</Text>
             </View>
-          )}
+          ) : null}
+
+          {hasInsights ? (
+            <View style={styles.insightCard}>
+              <Pressable
+                style={({ pressed }) => [styles.cardHeaderToggle, pressed && styles.cardHeaderPressed]}
+                onPress={() => {
+                  const next = !insightCollapsed
+                  setInsightCollapsed(next)
+                  AccessibilityInfo.announceForAccessibility(next ? 'AI 饮食分析已收起' : 'AI 饮食分析已展开')
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="AI 饮食分析"
+                accessibilityHint={insightCollapsed ? '双击展开分析详情' : '双击收起分析详情'}
+                accessibilityState={{ expanded: !insightCollapsed }}
+              >
+                <View style={styles.cardHeaderTitleRow}>
+                  <Sparkles size={19} color={palette.brand} strokeWidth={2.2} />
+                  <Text style={styles.cardTitle}>AI 饮食分析</Text>
+                </View>
+                <View style={styles.insightToggle}>
+                  <Text style={styles.insightToggleText}>{insightCollapsed ? '展开' : '收起'}</Text>
+                  {insightCollapsed ? <ChevronDown size={18} color={palette.textSecondary} /> : <ChevronUp size={18} color={palette.textSecondary} />}
+                </View>
+              </Pressable>
+              {!insightCollapsed ? (
+                <View style={styles.insightItems}>
+                  <ResultInsightItem styles={styles} palette={palette} Icon={BookOpenText} value={resultDescription} />
+                  <ResultInsightItem styles={styles} palette={palette} Icon={Check} label="饮食比例建议" value={task.result?.insight} tone="highlight" />
+                  <ResultInsightItem styles={styles} palette={palette} Icon={Sparkles} label="营养比例" value={task.result?.pfc_ratio_comment} tone="ratio" />
+                  <ResultInsightItem styles={styles} palette={palette} Icon={Coffee} label="吸收与利用" value={task.result?.absorption_notes} tone="absorption" />
+                  <ResultInsightItem styles={styles} palette={palette} Icon={Sunrise} label="情境建议" value={task.result?.context_advice} />
+                </View>
+              ) : null}
+            </View>
+          ) : null}
 
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>食材明细</Text>
-            <View style={styles.sectionHeaderActions}>
-              <Text style={styles.sectionCount}>{items.length} 项</Text>
-              <Pressable accessibilityRole="button" style={styles.addItemButton} onPress={addManualItem}>
-                <Text style={styles.addItemButtonText}>+ 新增食物</Text>
-              </Pressable>
+            <View>
+              <View style={styles.sectionTitleRow}><Text style={styles.sectionTitle}>食物明细</Text><Text style={styles.sectionCount}>({items.length}种)</Text></View>
+              <Text style={styles.sectionHint}>每种食物可单独调整实际摄入比例</Text>
             </View>
+            <Pressable style={({ pressed }) => [styles.quickRatioButton, pressed && styles.pressed]} onPress={() => setQuickRatioVisible(true)} accessibilityRole="button" accessibilityLabel="快捷设置多人分摊比例"><Text style={styles.quickRatioButtonText}>快捷比例</Text></Pressable>
           </View>
 
           {items.length === 0 ? (
             <View style={styles.emptyCard}>
-              <Text style={styles.empty}>当前没有识别到可记录的食物</Text>
+              <View style={styles.emptyIconWrap}><BookOpenText size={24} color={palette.textMuted} /></View>
+              <Text style={styles.emptyTitle}>没有识别到食物</Text>
+              <Text style={styles.emptyDescription}>可以在纠错入口补充食物，或返回重新拍摄更清晰的照片。</Text>
             </View>
           ) : null}
-
           {items.map((item, index) => {
             const weight = editableWeight(item)
             const ratio = clampRatio(item.ratio)
             const nutrients = scaledNutrients(item.baseNutrients, weight, item.baseWeight)
+            const per100 = scaledNutrients(item.baseNutrients, 100, item.baseWeight)
             const actualWeight = weight * ratio / 100
             const itemCalories = numberFrom(nutrients.calories) * ratio / 100
+            const detailsExpanded = Boolean(expandedNutritionDetailIds[item.clientId])
+            const detailRows = NUTRIENT_DETAIL_META.map(([key, label, unit]) => ({ key, label, unit, value: numberFrom(nutrients[key]) * ratio / 100 }))
             const showSuggestedRatio = item.suggestedRatioSource === 'ai' && typeof item.suggestedRatio === 'number'
+            const ediblePortionHint = getEdiblePortionHint(item)
             return (
               <View key={item.clientId} style={styles.ingredientCard}>
-                <View style={styles.ingredientMain}>
-                  <View style={styles.rowBetween}>
-                    <TextInput
-                      value={item.name}
-                      onChangeText={(name) => updateItem(index, { name })}
-                      placeholder="食物名称"
-                      placeholderTextColor={colors.textMuted}
-                      style={styles.nameInput}
-                    />
-                    <View style={styles.ingredientHeaderActions}>
-                      <Text style={styles.kcal}>{Math.round(itemCalories)} kcal</Text>
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel={`删除${item.name || '食物'}`}
-                        hitSlop={8}
-                        style={({ pressed }) => [styles.deleteItemButton, pressed && styles.deleteItemButtonPressed]}
-                        onPress={() => void removeItem(index)}
-                      >
-                        <Text style={styles.deleteItemText}>删除</Text>
-                      </Pressable>
-                    </View>
+                <View style={styles.ingredientHeader}>
+                  <Pressable
+                    style={({ pressed }) => [styles.ingredientNameButton, pressed && styles.cardHeaderPressed]}
+                    onPress={() => openFoodEditor(index)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`编辑${item.name || '未命名食物'}`}
+                    accessibilityHint="双击修改名称、重量和营养"
+                  >
+                    <Text style={styles.ingredientName} numberOfLines={2}>{item.name || '未命名食物'}</Text>
+                    <View style={styles.editAffordance}><Edit3 size={15} color={palette.brandStrong} /><Text style={styles.editAffordanceText}>编辑</Text></View>
+                  </Pressable>
+                  <Pressable style={({ pressed }) => [styles.deleteButton, pressed && styles.deleteButtonPressed]} onPress={() => void removeItem(index)} accessibilityRole="button" accessibilityLabel={`删除${item.name || '食物'}`}><Trash2 size={18} color={palette.red} /></Pressable>
+                </View>
+                <Text style={styles.ingredientBasis}>当前整份营养（约 {Math.round(weight)}g）</Text>
+                <Text style={styles.ingredientPer100}>每100g参考：{Math.round(numberFrom(per100.calories))} kcal · 蛋白 {round1(numberFrom(per100.protein))}g · 碳水 {round1(numberFrom(per100.carbs))}g · 脂肪 {round1(numberFrom(per100.fat))}g</Text>
+                {ediblePortionHint ? <View style={styles.ediblePortionHint}><Text style={styles.ediblePortionHintText}>{ediblePortionHint}</Text></View> : null}
+
+                {isPackagedChoicePending(item) ? (
+                  <View style={styles.packagedChoiceCard}>
+                    <Text style={styles.packagedChoiceTitle}>请选择包装规格</Text>
+                    <Text style={styles.packagedChoiceHint}>图片未读到确定净含量，确认后才计入总热量。</Text>
+                    {(item.packagedCandidates || []).slice(0, 4).map((candidate, candidateIndex) => {
+                      const candidateName = candidateText(candidate, 'display_name', 'displayName', 'name') || `规格 ${candidateIndex + 1}`
+                      const netLabel = candidateNetContentLabel(candidate) || '规格待确认'
+                      const unit = candidateNutritionPer100(candidate)
+                      return (
+                        <Pressable key={`${item.clientId}-candidate-${candidateIndex}`} style={({ pressed }) => [styles.packagedChoiceOption, pressed && styles.cardHeaderPressed]} onPress={() => void applyPackagedCandidate(index, candidate)} accessibilityRole="button" accessibilityLabel={`选择${candidateName}${netLabel}`}>
+                          <View style={styles.packagedChoiceCopy}><Text style={styles.packagedChoiceName}>{candidateName}</Text><Text style={styles.packagedChoiceMeta}>{netLabel} · 每100g {Math.round(numberFrom(unit.calories))} kcal</Text></View>
+                          <Text style={styles.packagedChoiceAction}>选择</Text>
+                        </Pressable>
+                      )
+                    })}
                   </View>
-                  <Text style={styles.subtitle}>
-                    估算 {Math.round(weight)}g · 实际摄入 {Math.round(actualWeight)}g
-                  </Text>
+                ) : null}
+
+                <View style={styles.nutritionStrip}>
+                  {([
+                    ['热量', Math.round(itemCalories), 'kcal', styles.nutritionCal],
+                    ['蛋白质', round1(numberFrom(nutrients.protein) * ratio / 100), 'g', styles.nutritionProtein],
+                    ['碳水', round1(numberFrom(nutrients.carbs) * ratio / 100), 'g', styles.nutritionCarbs],
+                    ['脂肪', round1(numberFrom(nutrients.fat) * ratio / 100), 'g', styles.nutritionFat],
+                  ] as const).map(([label, value, unit, tone]) => (
+                    <View key={label} style={[styles.nutritionCell, tone]}><Text style={styles.nutritionCellLabel}>{label}</Text><Text style={styles.nutritionCellValue}>{value}<Text style={styles.nutritionCellUnit}>{unit}</Text></Text></View>
+                  ))}
                 </View>
 
-                <View style={styles.ingredientNutritionStrip}>
-                  <MiniStat label="热量" value={`${Math.round(itemCalories)}`} unit="kcal" tone="cal" />
-                  <MiniStat label="蛋白质" value={round1(numberFrom(nutrients.protein) * ratio / 100)} unit="g" tone="protein" />
-                  <MiniStat label="碳水" value={round1(numberFrom(nutrients.carbs) * ratio / 100)} unit="g" tone="carbs" />
-                  <MiniStat label="脂肪" value={round1(numberFrom(nutrients.fat) * ratio / 100)} unit="g" tone="fat" />
-                  <MiniStat label="摄入" value={`${Math.round(actualWeight)}`} unit="g" tone="weight" />
-                </View>
+                <Pressable style={({ pressed }) => [styles.nutritionDetailsToggle, pressed && styles.cardHeaderPressed]} onPress={() => toggleNutritionDetails(item.clientId)} accessibilityRole="button" accessibilityLabel={detailsExpanded ? `收起${item.name}更多营养` : `展开${item.name}更多营养`} accessibilityState={{ expanded: detailsExpanded }}>
+                  <Text style={styles.nutritionDetailsToggleText}>{detailsExpanded ? '收起更多营养' : '展开更多营养'}</Text>
+                  {detailsExpanded ? <ChevronUp size={18} color={palette.textSecondary} /> : <ChevronDown size={18} color={palette.textSecondary} />}
+                </Pressable>
+                {detailsExpanded ? (
+                  <View style={styles.nutritionDetailGrid}>{detailRows.map((row) => (
+                    <View key={row.key} style={styles.nutritionDetailCell}><Text style={styles.nutritionDetailLabel}>{row.label}</Text><Text style={styles.nutritionDetailValue}>{formatNutrientDetailValue(row.value)}<Text style={styles.nutritionDetailUnit}> {row.unit}</Text></Text></View>
+                  ))}</View>
+                ) : null}
 
                 <View style={styles.ingredientControls}>
-                  {isPackagedChoicePending(item) ? (
-                    <View style={styles.packagedChoiceCard}>
-                      <Text style={styles.packagedChoiceTitle}>请选择包装规格</Text>
-                      <Text style={styles.packagedChoiceHint}>图片未读到确定的净含量，选择后才会计入总热量。</Text>
-                      {(item.packagedCandidates || []).map((candidate, candidateIndex) => {
-                        const candidateName = candidateText(candidate, 'display_name', 'displayName', 'name') || item.name
-                        const netLabel = candidateNetContentLabel(candidate) || '净含量未知'
-                        const unit = candidateNutritionPer100(candidate)
-                        return (
-                          <Pressable
-                            key={`${candidateText(candidate, 'packaged_food_id', 'id') || candidateIndex}`}
-                            accessibilityRole="button"
-                            accessibilityLabel={`选择${candidateName}${netLabel}`}
-                            style={styles.packagedChoiceOption}
-                            onPress={() => void applyPackagedCandidate(index, candidate)}
-                          >
-                            <View style={styles.packagedChoiceCopy}>
-                              <Text style={styles.packagedChoiceName}>{candidateName}</Text>
-                              <Text style={styles.packagedChoiceMeta}>{netLabel} · 每100g {Math.round(numberFrom(unit.calories))} kcal</Text>
-                            </View>
-                            <Text style={styles.packagedChoiceAction}>选择</Text>
-                          </Pressable>
-                        )
-                      })}
+                  <View style={styles.weightControlRow}>
+                    <Text style={styles.controlLabel}>估算重量</Text>
+                    <View style={styles.weightAdjuster}>
+                      <Pressable style={({ pressed }) => [styles.adjustButton, weight <= 1 && styles.adjustButtonDisabled, pressed && weight > 1 && styles.adjustButtonPressed]} onPress={() => adjustWeight(index, -10)} disabled={weight <= 1} accessibilityRole="button" accessibilityLabel={`减少${item.name}重量10克`} accessibilityState={{ disabled: weight <= 1 }}><Minus size={18} color={weight <= 1 ? palette.textMuted : palette.textSecondary} /></Pressable>
+                      <View style={styles.weightDisplayWrap} accessible accessibilityLabel={`估算重量${round1(weight)}克`}><Text style={styles.weightDisplay}>{round1(weight)}</Text><Text style={styles.weightDisplayUnit}>g</Text></View>
+                      <Pressable style={({ pressed }) => [styles.adjustButton, pressed && styles.adjustButtonPressed]} onPress={() => adjustWeight(index, 10)} accessibilityRole="button" accessibilityLabel={`增加${item.name}重量10克`}><Plus size={18} color={palette.brandStrong} /></Pressable>
                     </View>
-                  ) : null}
+                  </View>
+
+                  <View style={styles.ratioHeader}><View><Text style={styles.controlLabel}>实际摄入</Text><Text style={styles.controlSubLabel}>约 {Math.round(actualWeight)}g</Text></View><Text style={styles.ratioValue}>{ratio}%</Text></View>
+                  <Pressable
+                    style={styles.ratioAdjustable}
+                    onLayout={(event) => { ratioWidthsRef.current[item.clientId] = event.nativeEvent.layout.width }}
+                    onPress={(event) => updateRatioFromPress(index, item.clientId, event)}
+                    accessibilityRole="adjustable"
+                    accessibilityLabel={`${item.name}实际摄入比例`}
+                    accessibilityValue={{ min: 0, max: 100, now: ratio, text: `${ratio}%` }}
+                    accessibilityActions={[{ name: 'increment', label: '增加5%' }, { name: 'decrement', label: '减少5%' }]}
+                    onAccessibilityAction={(event) => { if (event.nativeEvent.actionName === 'increment') updateRatio(index, ratio + 5); if (event.nativeEvent.actionName === 'decrement') updateRatio(index, ratio - 5) }}
+                  >
+                    <View style={styles.ratioRail} pointerEvents="none"><View style={[styles.ratioFill, { width: `${ratio}%` as any }]} /><View style={[styles.ratioKnob, { left: `${ratio}%` as any }]} /></View>
+                  </Pressable>
                   {showSuggestedRatio ? (
-                    <View style={styles.suggestionBox}>
-                      <View style={styles.suggestionTextWrap}>
-                        <Text style={styles.suggestionBadge}>AI建议 {item.suggestedRatio}%</Text>
-                        {item.suggestedRatioReason ? (
-                          <Text style={styles.suggestionReason}>{item.suggestedRatioReason}</Text>
-                        ) : null}
-                      </View>
-                      {item.suggestedRatio !== ratio ? (
-                        <Pressable
-                          style={styles.suggestionAction}
-                          onPress={() => updateItem(index, { ratio: item.suggestedRatio })}
-                        >
-                          <Text style={styles.suggestionActionText}>应用</Text>
-                        </Pressable>
-                      ) : null}
-                    </View>
+                    <Pressable style={({ pressed }) => [styles.suggestionRow, pressed && styles.cardHeaderPressed]} onPress={() => updateRatio(index, item.suggestedRatio || ratio)} accessibilityRole="button" accessibilityLabel={`应用AI建议比例${item.suggestedRatio}%`}>
+                      <View style={styles.suggestionCopy}><Text style={styles.suggestionTitle}>AI识别比例 {item.suggestedRatio}%</Text>{item.suggestedRatioReason ? <Text style={styles.suggestionReason}>{item.suggestedRatioReason}</Text> : null}</View><Text style={styles.suggestionAction}>一键应用</Text>
+                    </Pressable>
                   ) : null}
-
-                  <View style={styles.inputLine}>
-                    <Text style={styles.inputLabel}>估算重量</Text>
-                    <View style={styles.weightInputWrap}>
-                      <TextInput
-                        value={item.weightText}
-                        onChangeText={(weightText) => updateItem(index, { weightText })}
-                        keyboardType="decimal-pad"
-                        placeholder="0"
-                        placeholderTextColor={colors.textMuted}
-                        style={styles.weightInput}
-                      />
-                      <Text style={styles.inputUnit}>g</Text>
-                    </View>
-                  </View>
-
-                  {item.isManual ? (
-                    <View style={styles.manualNutritionCard}>
-                      <Text style={styles.manualNutritionTitle}>每100g 营养（手动填写）</Text>
-                      <View style={styles.manualNutritionGrid}>
-                        {([
-                          ['calories', '热量', 'kcal'],
-                          ['protein', '蛋白质', 'g'],
-                          ['carbs', '碳水', 'g'],
-                          ['fat', '脂肪', 'g'],
-                        ] as const).map(([key, label, unit]) => (
-                          <View key={key} style={styles.manualNutritionField}>
-                            <Text style={styles.manualNutritionLabel}>{label}</Text>
-                            <View style={styles.manualNutritionInputWrap}>
-                              <TextInput
-                                value={formatEditableNutrient(item.baseNutrients[key])}
-                                onChangeText={(value) => updateManualNutrient(index, key, value)}
-                                keyboardType="decimal-pad"
-                                placeholder="0"
-                                placeholderTextColor={colors.textMuted}
-                                style={styles.manualNutritionInput}
-                              />
-                              <Text style={styles.manualNutritionUnit}>{unit}</Text>
-                            </View>
-                          </View>
-                        ))}
-                      </View>
-                    </View>
-                  ) : null}
-
-                  <View style={styles.ratioHeader}>
-                    <Text style={styles.inputLabel}>食用比例</Text>
-                    <Text style={styles.ratioValue}>{ratio}%</Text>
-                  </View>
-                  <View style={styles.ratioRow}>
-                    {ratioOptions.map((option) => (
-                      <Pressable
-                        key={option}
-                        style={[styles.ratioChip, ratio === option && styles.ratioChipActive]}
-                        onPress={() => updateItem(index, { ratio: option })}
-                      >
-                        <Text style={[styles.ratioText, ratio === option && styles.ratioTextActive]}>{option}%</Text>
-                      </Pressable>
-                    ))}
-                  </View>
                 </View>
               </View>
             )
           })}
-
-          <View style={styles.insightCard}>
-            <Text style={styles.sectionTitle}>饮食建议</Text>
-            <AdviceLine title="建议" value={task.result?.insight} />
-            <AdviceLine title="搭配" value={task.result?.pfc_ratio_comment} />
-            <AdviceLine title="吸收" value={task.result?.absorption_notes} />
-            <AdviceLine title="上下文" value={task.result?.context_advice} />
-          </View>
-
           {precisionSessionId ? (
             <View style={styles.precisionCard}>
-              <Text style={styles.precisionTitle}>继续精准估计</Text>
-              <Text style={styles.precisionHint}>
-                {referenceObjects.length > 0
-                  ? `已保留 ${referenceObjects.length} 个参考物。补充疑问后可继续估计，也可以重拍一张更清晰的照片。`
-                  : '补充需要进一步确认的食物或重量，也可以重拍一张带参考物的照片。'}
-              </Text>
-              <TextInput
-                value={precisionContext}
-                onChangeText={setPrecisionContext}
-                placeholder="例如：右侧是银行卡，重点确认米饭和肉的重量"
-                placeholderTextColor={colors.textMuted}
-                multiline
-                maxLength={300}
-                style={styles.followupInput}
-              />
-              <Text style={styles.referenceSectionTitle}>参考物</Text>
+              <View style={styles.precisionTitleRow}><Scale size={19} color={palette.warning} /><Text style={styles.precisionTitle}>继续精准估计</Text></View>
+              <Text style={styles.precisionHint}>{referenceObjects.length > 0 ? `已保留 ${referenceObjects.length} 个参考物，可继续补充疑问或重拍。` : '补充需要进一步确认的食物或重量，也可以重拍带参考物的照片。'}</Text>
+              <Text style={styles.fieldLabel}>补充说明</Text>
+              <TextInput value={precisionContext} onChangeText={setPrecisionContext} placeholder="例如：右侧是银行卡，重点确认米饭和肉的重量" placeholderTextColor={palette.textMuted} multiline maxLength={300} style={styles.multilineInput} accessibilityLabel="精准估计补充说明" />
+              <Text style={styles.fieldLabel}>参考物</Text>
               <View style={styles.referencePresetRow}>
-                <Pressable
-                  style={styles.referencePresetButton}
-                  onPress={() => addPresetReference({
-                    reference_type: 'preset',
-                    reference_name: '银行卡',
-                    dimensions_mm: { length: 85.6, width: 54, height: 0.76 },
-                  })}
-                >
-                  <Text style={styles.referencePresetText}>+ 银行卡</Text>
-                </Pressable>
-                <Pressable
-                  style={styles.referencePresetButton}
-                  onPress={() => addPresetReference({
-                    reference_type: 'preset',
-                    reference_name: '一元硬币',
-                    dimensions_mm: { length: 25, width: 25, height: 1.85 },
-                  })}
-                >
-                  <Text style={styles.referencePresetText}>+ 一元硬币</Text>
-                </Pressable>
+                <Pressable style={({ pressed }) => [styles.referencePresetButton, pressed && styles.pressed]} onPress={() => addPresetReference({ reference_type: 'preset', reference_name: '银行卡', dimensions_mm: { length: 85.6, width: 54, height: 0.76 } })}><Text style={styles.referencePresetText}>银行卡</Text></Pressable>
+                <Pressable style={({ pressed }) => [styles.referencePresetButton, pressed && styles.pressed]} onPress={() => addPresetReference({ reference_type: 'preset', reference_name: '一元硬币', dimensions_mm: { length: 25, width: 25, height: 1.85 } })}><Text style={styles.referencePresetText}>一元硬币</Text></Pressable>
               </View>
-              {referenceObjects.length > 0 ? (
-                <View style={styles.referenceList}>
-                  {referenceObjects.map((reference, referenceIndex) => (
-                    <View key={`${reference.reference_name}-${referenceIndex}`} style={styles.referenceChip}>
-                      <Text style={styles.referenceChipText}>{reference.reference_name}</Text>
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel={`移除参考物${reference.reference_name}`}
-                        hitSlop={8}
-                        onPress={() => setReferenceObjects((current) => current.filter((_, index) => index !== referenceIndex))}
-                      >
-                        <Text style={styles.referenceRemoveText}>移除</Text>
-                      </Pressable>
-                    </View>
-                  ))}
-                </View>
-              ) : null}
+              {referenceObjects.length > 0 ? <View style={styles.referenceList}>{referenceObjects.map((reference, referenceIndex) => (
+                <View key={`${reference.reference_name}-${referenceIndex}`} style={styles.referenceChip}><Text style={styles.referenceChipText}>{reference.reference_name}</Text><Pressable style={styles.referenceRemove} onPress={() => setReferenceObjects((current) => current.filter((_, index) => index !== referenceIndex))} accessibilityRole="button" accessibilityLabel={`移除参考物${reference.reference_name}`}><X size={16} color={palette.red} /></Pressable></View>
+              ))}</View> : null}
               <View style={styles.customReferenceCard}>
-                <TextInput
-                  value={referenceName}
-                  onChangeText={setReferenceName}
-                  placeholder="自定义参考物名称"
-                  placeholderTextColor={colors.textMuted}
-                  style={styles.referenceNameInput}
-                />
-                <View style={styles.referenceDimensionsRow}>
-                  {[
-                    [referenceLength, setReferenceLength, '长 mm'],
-                    [referenceWidth, setReferenceWidth, '宽 mm'],
-                    [referenceHeight, setReferenceHeight, '高 mm'],
-                  ].map(([value, setter, placeholder]) => (
-                    <TextInput
-                      key={String(placeholder)}
-                      value={value as string}
-                      onChangeText={setter as (text: string) => void}
-                      keyboardType="decimal-pad"
-                      placeholder={placeholder as string}
-                      placeholderTextColor={colors.textMuted}
-                      style={styles.referenceDimensionInput}
-                    />
-                  ))}
-                </View>
-                <TextInput
-                  value={referencePlacement}
-                  onChangeText={setReferencePlacement}
-                  placeholder="摆放说明，例如：放在餐盘右侧并与桌面平行"
-                  placeholderTextColor={colors.textMuted}
-                  style={styles.referencePlacementInput}
-                />
-                <Pressable style={styles.addReferenceButton} onPress={() => void addCustomReference()}>
-                  <Text style={styles.addReferenceButtonText}>添加自定义参考物</Text>
-                </Pressable>
+                <Text style={styles.fieldLabel}>自定义参考物</Text>
+                <TextInput value={referenceName} onChangeText={setReferenceName} placeholder="参考物名称" placeholderTextColor={palette.textMuted} style={styles.textInput} accessibilityLabel="参考物名称" />
+                <View style={styles.referenceDimensionsRow}>{[[referenceLength, setReferenceLength, '长 mm'], [referenceWidth, setReferenceWidth, '宽 mm'], [referenceHeight, setReferenceHeight, '高 mm']].map(([value, setter, placeholder]) => (
+                  <TextInput key={String(placeholder)} value={value as string} onChangeText={setter as (text: string) => void} keyboardType="decimal-pad" placeholder={placeholder as string} placeholderTextColor={palette.textMuted} style={styles.referenceDimensionInput} accessibilityLabel={placeholder as string} />
+                ))}</View>
+                <TextInput value={referencePlacement} onChangeText={setReferencePlacement} placeholder="摆放说明，例如与食物在同一平面" placeholderTextColor={palette.textMuted} style={styles.textInput} accessibilityLabel="参考物摆放说明" />
+                <Pressable style={({ pressed }) => [styles.addReferenceButton, pressed && styles.pressed]} onPress={() => void addCustomReference()} accessibilityRole="button"><Text style={styles.addReferenceButtonText}>添加参考物</Text></Pressable>
               </View>
               <View style={styles.followupActions}>
-                <Pressable style={styles.followupSecondaryButton} onPress={retakePrecision}>
-                  <Text style={styles.followupSecondaryText}>重拍并保留会话</Text>
-                </Pressable>
-                <Pressable
-                  style={[styles.followupPrimaryButton, continuingPrecision && styles.primaryBtnDisabled]}
-                  disabled={continuingPrecision}
-                  onPress={() => void continuePrecision()}
-                >
-                  {continuingPrecision
-                    ? <ActivityIndicator color="#fff" />
-                    : <Text style={styles.followupPrimaryText}>继续估计</Text>}
-                </Pressable>
+                <Pressable style={({ pressed }) => [styles.secondaryAction, pressed && styles.pressed]} onPress={retakePrecision} accessibilityRole="button"><Text style={styles.secondaryActionText}>重新拍照继续</Text></Pressable>
+                <Pressable style={({ pressed }) => [styles.primaryAction, continuingPrecision && styles.disabled, pressed && !continuingPrecision && styles.primaryPressed]} disabled={continuingPrecision} onPress={() => void continuePrecision()} accessibilityRole="button" accessibilityState={{ busy: continuingPrecision, disabled: continuingPrecision }}>{continuingPrecision ? <ActivityIndicator color={palette.white} /> : <Text style={styles.primaryActionText}>提交补充信息</Text>}</Pressable>
               </View>
             </View>
           ) : null}
 
+          <EatingMoodPicker value={eatingMood} onChange={setEatingMood} />
           <View style={styles.correctionCard}>
-            <View style={styles.correctionCopy}>
-              <Text style={styles.correctionTitle}>结果和实际不一致？</Text>
-              <Text style={styles.correctionHint}>当前已修改的名称、重量、比例和删除项都会用于重新分析。</Text>
-            </View>
-            <Pressable style={styles.correctionOpenButton} onPress={() => setCorrectionVisible(true)}>
-              <Text style={styles.correctionOpenText}>反馈 / 纠错</Text>
-            </Pressable>
+            <View style={styles.correctionCopy}><Text style={styles.correctionTitle}>识别有误？</Text><Text style={styles.correctionHint}>名称、重量、比例和删除项都可以用于重新分析。</Text></View>
+            <Pressable style={({ pressed }) => [styles.correctionButton, pressed && styles.pressed]} onPress={() => setCorrectionVisible(true)} accessibilityRole="button" accessibilityLabel="打开识别纠错"><Text style={styles.correctionButtonText}>点击纠错</Text></Pressable>
           </View>
         </View>
       </ScrollView>
 
       <View style={[styles.footerActions, { paddingBottom: Math.max(insets.bottom, 12) }]}>
         <View style={styles.actionGrid}>
-          <Pressable
-            style={[styles.secondaryBtn, (savingRecipe || Boolean(savedRecipeId)) && styles.secondaryBtnDisabled]}
-            onPress={() => void saveAsRecipe()}
-            disabled={savingRecipe}
-          >
-            {savingRecipe
-              ? <ActivityIndicator color={colors.brandDark} />
-              : <Text style={styles.secondaryBtnText}>{savedRecipeId ? '已收藏' : '收藏餐食'}</Text>}
+          <Pressable style={({ pressed }) => [styles.secondaryBtn, (savingRecipe || Boolean(savedRecipeId)) && styles.secondaryBtnDisabled, pressed && !savingRecipe && styles.pressed]} onPress={() => void saveAsRecipe()} disabled={savingRecipe} accessibilityRole="button" accessibilityState={{ busy: savingRecipe, disabled: savingRecipe }}>
+            {savingRecipe ? <ActivityIndicator color={palette.brandStrong} /> : <Text style={styles.secondaryBtnText}>{savedRecipeId ? '已收藏' : '收藏餐食'}</Text>}
           </Pressable>
-          <Pressable
-            style={[styles.primaryBtn, saving && styles.primaryBtnDisabled]}
-            onPress={saveRecord}
-            disabled={saving}
-          >
-            {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>保存到当天饮食</Text>}
+          <Pressable style={({ pressed }) => [styles.primaryBtn, (saving || items.length === 0) && styles.disabled, pressed && !saving && items.length > 0 && styles.primaryPressed]} onPress={openMealSelector} disabled={saving || items.length === 0} accessibilityRole="button" accessibilityLabel={saving ? '正在保存饮食记录' : '记录'} accessibilityState={{ busy: saving, disabled: saving || items.length === 0 }}>
+            {saving ? <ActivityIndicator color={palette.white} /> : <Text style={styles.primaryBtnText}>记录</Text>}
           </Pressable>
         </View>
+        <Pressable style={({ pressed }) => [styles.footerCorrectionLink, pressed && styles.pressed]} onPress={() => setCorrectionVisible(true)} accessibilityRole="button"><Text style={styles.footerCorrectionText}>识别有误？点击纠错</Text></Pressable>
       </View>
 
-      <Modal
-        visible={correctionVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => {
-          if (!correcting && !feedbackSubmitting) setCorrectionVisible(false)
-        }}
-      >
-        <View style={styles.correctionModalBackdrop}>
-          <Pressable
-            style={StyleSheet.absoluteFill}
-            disabled={correcting || feedbackSubmitting}
-            onPress={() => setCorrectionVisible(false)}
-          />
-          <View style={styles.correctionModalCard}>
-            <Text style={styles.correctionModalTitle}>反馈并纠正分析</Text>
-            <Text style={styles.correctionModalHint}>说明哪里不准确。重新分析时会同时提交下方当前食物列表。</Text>
-            <View style={styles.correctionItemSummary}>
-              {items.slice(0, 6).map((item, index) => (
-                <Text key={`${item.sourceIndex}-${index}`} style={styles.correctionItemText} numberOfLines={1}>
-                  {index + 1}. {item.name.trim() || '未命名食物'} · {Math.round(editableWeight(item))}g · {clampRatio(item.ratio)}%
-                </Text>
-              ))}
-              {items.length > 6 ? <Text style={styles.correctionMoreText}>另有 {items.length - 6} 项</Text> : null}
-            </View>
-            <TextInput
-              value={correctionContext}
-              onChangeText={setCorrectionContext}
-              placeholder="例如：第二项不是鸡肉，是牛肉；米饭大约只有 120g"
-              placeholderTextColor={colors.textMuted}
-              multiline
-              maxLength={500}
-              autoFocus
-              style={styles.correctionInput}
-            />
-            <Pressable
-              disabled={correcting || feedbackSubmitting}
-              style={styles.feedbackOnlyButton}
-              onPress={() => void submitFeedbackOnly()}
-            >
-              {feedbackSubmitting
-                ? <ActivityIndicator color={colors.brandDark} />
-                : <Text style={styles.feedbackOnlyText}>仅提交反馈，不重新分析</Text>}
-            </Pressable>
-            <View style={styles.correctionModalActions}>
-              <Pressable
-                disabled={correcting || feedbackSubmitting}
-                style={styles.correctionCancelButton}
-                onPress={() => setCorrectionVisible(false)}
-              >
-                <Text style={styles.correctionCancelText}>取消</Text>
-              </Pressable>
-              <Pressable
-                disabled={correcting || feedbackSubmitting}
-                style={[styles.correctionSubmitButton, correcting && styles.primaryBtnDisabled]}
-                onPress={() => void submitCorrection()}
-              >
-                {correcting
-                  ? <ActivityIndicator color="#fff" />
-                  : <Text style={styles.correctionSubmitText}>按当前列表重新分析</Text>}
-              </Pressable>
-            </View>
+      <Modal visible={showMealSelector} transparent animationType={reduceMotion ? 'none' : 'fade'} statusBarTranslucent onRequestClose={() => setShowMealSelector(false)}>
+        <View style={styles.modalRoot}>
+          <Pressable style={styles.modalBackdrop} onPress={() => setShowMealSelector(false)} accessibilityRole="button" accessibilityLabel="关闭餐次选择" />
+          <View style={[styles.sheetCard, { paddingBottom: Math.max(insets.bottom, 18) }]}>
+            <View style={styles.sheetHeader}><Text style={styles.sheetTitle}>选择餐次</Text><Pressable style={styles.closeButton} onPress={() => setShowMealSelector(false)} accessibilityRole="button" accessibilityLabel="关闭"><X size={20} color={palette.textSecondary} /></Pressable></View>
+            <View style={styles.mealGrid}>{mealOptions.map((option) => { const active = selectedMealType === option.value; const MealIcon = option.Icon; return (
+              <Pressable key={option.value} style={({ pressed }) => [styles.mealOption, active && styles.mealOptionActive, pressed && styles.cardHeaderPressed]} onPress={() => setSelectedMealType(option.value)} accessibilityRole="radio" accessibilityLabel={option.label} accessibilityState={{ checked: active }}><View style={[styles.mealIconWrap, active && styles.mealIconWrapActive]}><MealIcon size={20} color={active ? palette.brand : palette.textSecondary} /></View><Text style={[styles.mealOptionLabel, active && styles.mealOptionLabelActive]}>{option.label}</Text></Pressable>
+            ) })}</View>
+            <View style={styles.sheetActions}><Pressable style={({ pressed }) => [styles.sheetCancel, pressed && styles.cardHeaderPressed]} onPress={() => setShowMealSelector(false)}><Text style={styles.sheetCancelText}>取消</Text></Pressable><Pressable style={({ pressed }) => [styles.sheetConfirm, pressed && styles.primaryPressed]} onPress={confirmMealTypeAndSave}><Text style={styles.sheetConfirmText}>保存记录</Text></Pressable></View>
           </View>
+        </View>
+      </Modal>
+
+      <Modal visible={Boolean(foodEditor)} transparent animationType={reduceMotion ? 'none' : 'fade'} statusBarTranslucent onRequestClose={closeFoodEditor}>
+        <KeyboardAvoidingView style={styles.editorKeyboard} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <Pressable style={styles.modalBackdrop} onPress={closeFoodEditor} accessibilityRole="button" accessibilityLabel="关闭食物编辑" />
+          <View style={[styles.editorCard, { paddingBottom: Math.max(insets.bottom, 18) }]}>
+            <View style={styles.sheetHeader}><Text style={styles.sheetTitle}>修改食物</Text><Pressable style={styles.closeButton} onPress={closeFoodEditor} accessibilityRole="button" accessibilityLabel="关闭"><X size={20} color={palette.textSecondary} /></Pressable></View>
+            <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={styles.editorScroll}>
+              <Text style={styles.editorSectionTitle}>基础信息</Text>
+              <Text style={styles.fieldLabel}>名称</Text><TextInput value={foodEditor?.name || ''} onChangeText={(value) => updateFoodEditorField('name', value)} placeholder="食物名称" placeholderTextColor={palette.textMuted} style={styles.textInput} accessibilityLabel="食物名称" />
+              <Text style={styles.fieldLabel}>估算重量（g）</Text><TextInput value={foodEditor?.weight || ''} onChangeText={(value) => updateFoodEditorField('weight', value)} keyboardType="decimal-pad" placeholder="重量" placeholderTextColor={palette.textMuted} style={styles.textInput} accessibilityLabel="估算重量" />
+              <Text style={styles.editorSectionTitle}>整份营养</Text>
+              <View style={styles.editorGrid}>{([['calories', '热量', 'kcal'], ['protein', '蛋白质', 'g'], ['carbs', '碳水', 'g'], ['fat', '脂肪', 'g'], ['waterMl', '含水量', 'ml']] as const).map(([field, label, unit]) => (
+                <View key={field} style={[styles.editorField, field === 'waterMl' && styles.editorFieldWide]}><Text style={styles.fieldLabel}>{label}</Text><View style={styles.inputWithUnit}><TextInput value={foodEditor?.[field] || ''} onChangeText={(value) => updateFoodEditorField(field, value)} keyboardType="decimal-pad" placeholder="0" placeholderTextColor={palette.textMuted} style={styles.inputWithUnitControl} accessibilityLabel={label} /><Text style={styles.inputUnit}>{unit}</Text></View></View>
+              ))}</View>
+              {foodEditorError ? <Text style={styles.editorError} accessibilityRole="alert">{foodEditorError}</Text> : null}
+            </ScrollView>
+            <View style={styles.sheetActions}><Pressable style={({ pressed }) => [styles.sheetCancel, pressed && styles.cardHeaderPressed]} onPress={closeFoodEditor}><Text style={styles.sheetCancelText}>取消</Text></Pressable><Pressable style={({ pressed }) => [styles.sheetConfirm, pressed && styles.primaryPressed]} onPress={saveFoodEditor}><Text style={styles.sheetConfirmText}>保存修改</Text></Pressable></View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+      <Modal visible={quickRatioVisible} transparent animationType={reduceMotion ? 'none' : 'fade'} statusBarTranslucent onRequestClose={() => setQuickRatioVisible(false)}>
+        <View style={styles.modalRoot}>
+          <Pressable style={styles.modalBackdrop} onPress={() => setQuickRatioVisible(false)} accessibilityRole="button" accessibilityLabel="关闭快捷比例" />
+          <View style={[styles.sheetCard, { paddingBottom: Math.max(insets.bottom, 18) }]}>
+            <View style={styles.sheetHeader}><Text style={styles.sheetTitle}>快捷比例</Text><Pressable style={styles.closeButton} onPress={() => setQuickRatioVisible(false)} accessibilityRole="button" accessibilityLabel="关闭"><X size={20} color={palette.textSecondary} /></Pressable></View>
+            {[2, 3, 4].map((people) => <Pressable key={people} style={({ pressed }) => [styles.quickRatioOption, pressed && styles.cardHeaderPressed]} onPress={() => { applyPeopleRatio(people); setQuickRatioVisible(false) }} accessibilityRole="button" accessibilityLabel={`${people}人聚餐，每人${Math.round(100 / people)}%`}><Text style={styles.quickRatioOptionTitle}>{people === 2 ? '两人聚餐' : people === 3 ? '三人聚餐' : '四人聚餐'}</Text><Text style={styles.quickRatioOptionHint}>每人 {Math.round(100 / people)}%</Text></Pressable>)}
+            <View style={styles.customPeopleRow}><TextInput value={customPeople} onChangeText={(value) => setCustomPeople(sanitizeIntegerText(value))} keyboardType="number-pad" placeholder="自定义人数 1-99" placeholderTextColor={palette.textMuted} style={styles.customPeopleInput} accessibilityLabel="自定义人数" /><Pressable style={({ pressed }) => [styles.applyPeopleButton, pressed && styles.primaryPressed]} onPress={applyCustomPeopleRatio}><Text style={styles.applyPeopleText}>应用</Text></Pressable></View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={correctionVisible} transparent animationType={reduceMotion ? 'none' : 'fade'} statusBarTranslucent onRequestClose={() => { if (!correcting && !feedbackSubmitting) setCorrectionVisible(false) }}>
+        <KeyboardAvoidingView style={styles.editorKeyboard} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <Pressable style={styles.modalBackdrop} disabled={correcting || feedbackSubmitting} onPress={() => setCorrectionVisible(false)} accessibilityRole="button" accessibilityLabel="关闭纠错" />
+          <View style={[styles.correctionModalCard, { paddingBottom: Math.max(insets.bottom, 18) }]}>
+            <View style={styles.sheetHeader}><Text style={styles.sheetTitle}>二次分析纠正</Text><Pressable style={styles.closeButton} disabled={correcting || feedbackSubmitting} onPress={() => setCorrectionVisible(false)} accessibilityRole="button" accessibilityLabel="关闭"><X size={20} color={palette.textSecondary} /></Pressable></View>
+            <Text style={styles.correctionModalHint}>名称和营养请先在食物卡片中编辑；这里补充上一轮哪里不对、这次应该怎样理解。</Text>
+            <View style={styles.correctionItemSummary}>{items.slice(0, 6).map((item, index) => <Text key={`${item.clientId}-${index}`} style={styles.correctionItemText} numberOfLines={1}>{index + 1}. {item.name.trim() || '未命名食物'} · {Math.round(editableWeight(item))}g · {clampRatio(item.ratio)}%</Text>)}{items.length > 6 ? <Text style={styles.correctionMoreText}>另有 {items.length - 6} 项</Text> : null}</View>
+            <Pressable style={({ pressed }) => [styles.correctionAddButton, pressed && styles.cardHeaderPressed]} onPress={() => { setCorrectionVisible(false); addManualItem() }} accessibilityRole="button" accessibilityLabel="添加遗漏食物"><Plus size={18} color={palette.brandStrong} /><Text style={styles.correctionAddButtonText}>添加遗漏食物</Text></Pressable>
+            <Text style={styles.fieldLabel}>文字纠错说明</Text>
+            <TextInput value={correctionContext} onChangeText={setCorrectionContext} placeholder="例如：第二项不是鸡肉，是牛肉；米饭大约只有120g" placeholderTextColor={palette.textMuted} multiline maxLength={500} autoFocus style={styles.correctionInput} accessibilityLabel="文字纠错说明" />
+            <Pressable disabled={correcting || feedbackSubmitting} style={({ pressed }) => [styles.feedbackOnlyButton, (correcting || feedbackSubmitting) && styles.disabled, pressed && styles.cardHeaderPressed]} onPress={() => void submitFeedbackOnly()} accessibilityRole="button" accessibilityState={{ busy: feedbackSubmitting, disabled: correcting || feedbackSubmitting }}>{feedbackSubmitting ? <ActivityIndicator color={palette.brandStrong} /> : <Text style={styles.feedbackOnlyText}>仅提交反馈，不重新分析</Text>}</Pressable>
+            <View style={styles.sheetActions}><Pressable disabled={correcting || feedbackSubmitting} style={({ pressed }) => [styles.sheetCancel, pressed && styles.cardHeaderPressed]} onPress={() => setCorrectionVisible(false)}><Text style={styles.sheetCancelText}>取消</Text></Pressable><Pressable disabled={correcting || feedbackSubmitting} style={({ pressed }) => [styles.sheetConfirm, (correcting || feedbackSubmitting) && styles.disabled, pressed && styles.primaryPressed]} onPress={() => void submitCorrection()} accessibilityState={{ busy: correcting, disabled: correcting || feedbackSubmitting }}>{correcting ? <ActivityIndicator color={palette.white} /> : <Text style={styles.sheetConfirmText}>重新智能分析</Text>}</Pressable></View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      <Modal visible={previewImageIndex !== null} transparent animationType={reduceMotion ? 'none' : 'fade'} statusBarTranslucent onRequestClose={() => setPreviewImageIndex(null)}>
+        <View style={styles.previewRoot}>
+          <Pressable style={[styles.previewClose, { top: insets.top + 12 }]} onPress={() => setPreviewImageIndex(null)} accessibilityRole="button" accessibilityLabel="关闭图片预览"><X size={24} color={palette.white} /></Pressable>
+          {previewImageIndex !== null && imageSources[previewImageIndex] ? <Image source={{ uri: imageSources[previewImageIndex] }} style={styles.previewImage} resizeMode="contain" accessibilityLabel={`分析原图 ${previewImageIndex + 1}`} /> : null}
+          {imageSources.length > 1 && previewImageIndex !== null ? <><Pressable style={styles.previewPrevious} onPress={() => setPreviewImageIndex((current) => current === null ? null : (current - 1 + imageSources.length) % imageSources.length)} accessibilityRole="button" accessibilityLabel="上一张"><ChevronLeft size={26} color={palette.white} /></Pressable><Pressable style={styles.previewNext} onPress={() => setPreviewImageIndex((current) => current === null ? null : (current + 1) % imageSources.length)} accessibilityRole="button" accessibilityLabel="下一张"><ChevronRight size={26} color={palette.white} /></Pressable><Text style={[styles.previewCounter, { bottom: insets.bottom + 24 }]}>{previewImageIndex + 1}/{imageSources.length}</Text></> : null}
         </View>
       </Modal>
     </View>
   )
 }
 
-function MiniStat({
+function ResultInsightItem({
+  styles,
+  palette,
+  Icon,
   label,
   value,
-  unit,
-  tone,
+  tone = 'intro',
 }: {
-  label: string
-  value: string
-  unit: string
-  tone: 'cal' | 'protein' | 'carbs' | 'fat' | 'weight'
+  styles: ResultStyles
+  palette: ResultPalette
+  Icon: LucideIcon
+  label?: string
+  value: unknown
+  tone?: 'intro' | 'highlight' | 'ratio' | 'absorption'
 }) {
-  return (
-    <View style={[styles.miniStat, tone === 'cal' && styles.miniStatCal]}>
-      <Text style={[styles.miniStatValue, miniStatToneStyle(tone)]}>
-        {value}
-        <Text style={styles.miniStatUnit}>{unit}</Text>
-      </Text>
-      <Text style={styles.miniStatLabel}>{label}</Text>
-    </View>
-  )
-}
-
-function ScoreMini({ label, value, color }: { label: string; value: number; color: string }) {
-  const score = Number.isFinite(value) ? Math.round(value) : 0
-  return (
-    <View style={styles.scoreMini}>
-      <View style={styles.scoreMiniTop}>
-        <Text style={styles.scoreMiniValue}>{score}</Text>
-        <View style={[styles.scoreMiniDot, { backgroundColor: color }]} />
-      </View>
-      <Text style={styles.scoreMiniLabel}>{label}</Text>
-      <View style={styles.scoreMiniTrack}>
-        <View style={[styles.scoreMiniFill, { width: `${clampScorePercent(score)}%`, backgroundColor: color }]} />
-      </View>
-    </View>
-  )
-}
-
-function AdviceLine({ title, value }: { title: string; value: unknown }) {
   const text = stringOrUndefined(value)
   if (!text) return null
+  const toneStyle = tone === 'highlight'
+    ? styles.insightItemHighlight
+    : tone === 'ratio'
+      ? styles.insightItemRatio
+      : tone === 'absorption'
+        ? styles.insightItemAbsorption
+        : styles.insightItemIntro
+  const iconColor = tone === 'ratio'
+    ? palette.orange
+    : tone === 'absorption'
+      ? palette.purple
+      : palette.brandStrong
   return (
-    <View style={styles.adviceLine}>
-      <Text style={styles.adviceTitle}>{title}</Text>
-      <Text style={styles.adviceText}>{text}</Text>
+    <View style={[styles.insightItem, toneStyle]}>
+      <View style={styles.insightIconWrap}><Icon size={17} color={iconColor} strokeWidth={2.1} /></View>
+      <View style={styles.insightBody}>
+        {label ? <Text style={styles.insightLabel}>{label}</Text> : null}
+        <Text style={styles.insightContent}>{text}</Text>
+      </View>
     </View>
   )
 }
+const EDIBLE_PORTION_HINT_KEYWORDS = [
+  '虾', '小龙虾', '龙虾', '蟹', '螃蟹', '贝', '蛤', '蛏', '蚝', '扇贝',
+  '鸡爪', '凤爪', '鸡翅', '鸡腿', '鸭脖', '鸭掌', '鸭翅', '鸭腿', '鹅胗', '鹅翅',
+  '排骨', '骨', '猪蹄', '鱼', '荔枝', '龙眼', '龙贡果', '龙宫果', '山竹', '榴莲',
+  '柚子', '橙', '橘', '香蕉', '芒果', '菠萝', '玉米',
+]
 
+function getEdiblePortionHint(item: EditableResultItem): string | null {
+  const ratio = item.ediblePortionRatio
+  if (typeof ratio === 'number' && ratio > 0 && ratio < 99) {
+    const reason = item.ediblePortionReason ? `：${item.ediblePortionReason}` : ''
+    return `可食部 ${Math.round(ratio)}%，原始约 ${Math.round(item.grossWeight || editableWeight(item))}g，计入 ${Math.round(editableWeight(item))}g${reason}`
+  }
+  if (EDIBLE_PORTION_HINT_KEYWORDS.some((keyword) => item.name.includes(keyword))) {
+    return '重量按可食部估算：去壳、去骨、去皮或去核部分未计入营养。'
+  }
+  return null
+}
+
+function normalizeEdiblePortionRatio(value: unknown): number | undefined {
+  const ratio = Number(value)
+  if (!Number.isFinite(ratio) || ratio <= 0) return undefined
+  return ratio <= 1 ? ratio * 100 : ratio
+}
+
+function numberOrUndefined(value: unknown): number | undefined {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined
+}
 function buildEditableItems(foodItems: FoodItem[]): EditableResultItem[] {
   return foodItems.map((item, sourceIndex) => {
     const baseWeight = foodWeight(item)
@@ -1143,6 +1263,9 @@ function buildEditableItems(foodItems: FoodItem[]): EditableResultItem[] {
       packageWeightApplied: item.packageWeightApplied ?? item.package_weight_applied,
       packageWeightSource: stringOrUndefined(item.packageWeightSource ?? item.package_weight_source),
       packageWeightReason: stringOrUndefined(item.packageWeightReason ?? item.package_weight_reason),
+      grossWeight: numberOrUndefined(item.grossWeightGrams ?? item.gross_weight_grams),
+      ediblePortionRatio: normalizeEdiblePortionRatio(item.ediblePortionRatio ?? item.edible_portion_ratio),
+      ediblePortionReason: stringOrUndefined(item.ediblePortionReason ?? item.edible_portion_reason),
     }
   })
 }
@@ -1284,7 +1407,10 @@ function taskCorrectionRootId(task: ResultRoute['params']['task']): string {
 }
 
 function taskAnalysisEngine(task: ResultRoute['params']['task']): AnalysisEngine {
-  return task.payload?.analysis_engine === 'legacy_direct' ? 'legacy_direct' : 'db_first'
+  const value = task.payload?.analysis_engine || task.result?.analysis_engine
+  if (value === 'ai_direct' || value === 'ai_then_db_exact' || value === 'db_candidates_ai') return value
+  if (value === 'legacy_direct') return 'ai_direct'
+  return isPrecisionExecutionMode(taskExecutionMode(task)) ? 'db_candidates_ai' : 'ai_direct'
 }
 
 function feedbackPayloadSnapshot(
@@ -1301,8 +1427,17 @@ function feedbackPayloadSnapshot(
   }
 }
 
-function taskReferenceObjects(task: ResultRoute['params']['task']): PrecisionReferenceObjectInput[] {
-  const raw = task.payload?.reference_objects || task.result?.reference_objects
+function isPrecisionExecutionMode(mode: ExecutionMode): boolean {
+  return mode === 'strict' || mode === 'strict_separate' || mode === 'strict_web_search'
+}
+
+function analysisEngineLabel(engine: AnalysisEngine): string {
+  if (engine === 'ai_then_db_exact') return '标准库校准'
+  if (engine === 'db_candidates_ai' || engine === 'db_first') return '数据库候选'
+  return 'AI估算'
+}
+
+function taskReferenceObjects(task: ResultRoute['params']['task']): PrecisionReferenceObjectInput[] {  const raw = task.payload?.reference_objects || task.result?.reference_objects
   if (!Array.isArray(raw)) return []
   return raw.flatMap((value) => {
     if (!value || typeof value !== 'object') return []
@@ -1444,7 +1579,7 @@ function candidateNutritionPer100(candidate: Record<string, unknown>): Nutrients
 }
 
 function calculateTotals(items: EditableResultItem[]) {
-  return items.reduce(
+  return items.filter((item) => !isPackagedChoicePending(item)).reduce(
     (acc, item) => {
       const weight = editableWeight(item)
       const ratio = clampRatio(item.ratio) / 100
@@ -1601,22 +1736,12 @@ function formatInputNumber(value: number): string {
   return round1(value)
 }
 
-function formatEditableNutrient(value: unknown): string {
-  return formatInputNumber(numberFrom(value))
-}
 
 function progressWidth(value: number, max: number): `${number}%` {
   const percentage = max > 0 ? Math.round(value / max * 100) : 0
   return `${Math.max(6, Math.min(100, percentage))}%`
 }
 
-function miniStatToneStyle(tone: 'cal' | 'protein' | 'carbs' | 'fat' | 'weight') {
-  if (tone === 'protein') return styles.miniStatValueProtein
-  if (tone === 'carbs') return styles.miniStatValueCarbs
-  if (tone === 'fat') return styles.miniStatValueFat
-  if (tone === 'weight') return styles.miniStatValueWeight
-  return styles.miniStatValueCal
-}
 
 function stringOrUndefined(value: unknown): string | undefined {
   const text = typeof value === 'string' ? value.trim() : ''
@@ -1627,1150 +1752,279 @@ function firstImage(images: string[] | null | undefined): string | undefined {
   return Array.isArray(images) ? images.find((image) => Boolean(stringOrUndefined(image))) : undefined
 }
 
-const styles = StyleSheet.create({
-  page: {
-    flex: 1,
-    backgroundColor: '#f8fafc',
-  },
-  hero: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 0,
-    overflow: 'hidden',
-    backgroundColor: '#0f172a',
-  },
-  heroImage: {
-    width: '100%',
-    height: '100%',
-  },
-  heroPlaceholder: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 36,
-    backgroundColor: '#dcfce7',
-  },
-  heroPlaceholderIcon: {
-    width: 78,
-    height: 78,
-    borderRadius: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.92)',
-  },
-  heroPlaceholderIconText: {
-    color: colors.brandDark,
-    fontSize: 22,
-    fontWeight: '900',
-  },
-  heroPlaceholderText: {
-    marginTop: 12,
-    color: '#475569',
-    fontSize: 13,
-    fontWeight: '700',
-    lineHeight: 19,
-    textAlign: 'center',
-  },
-  heroShade: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    height: '58%',
-    backgroundColor: 'rgba(15,23,42,0.46)',
-  },
-  heroCopy: {
-    position: 'absolute',
-    left: 18,
-    right: 18,
-    top: 0,
-  },
-  heroKicker: {
-    color: 'rgba(255,255,255,0.76)',
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  heroTitle: {
-    marginTop: 4,
-    color: '#fff',
-    fontSize: 28,
-    fontWeight: '900',
-  },
-  heroMeta: {
-    marginTop: 4,
-    color: 'rgba(255,255,255,0.82)',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  resultScroll: {
-    flex: 1,
-    zIndex: 1,
-  },
-  resultScrollInner: {
-    minHeight: '100%',
-  },
-  contentContainer: {
-    gap: 16,
-    paddingHorizontal: 16,
-    paddingTop: 18,
-    paddingBottom: 24,
-    borderTopLeftRadius: 22,
-    borderTopRightRadius: 22,
-    backgroundColor: '#f8fafc',
-  },
-  executionModeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 10,
-    paddingHorizontal: 2,
-  },
-  executionModeLeft: {
-    flex: 1,
-    minWidth: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  executionModeTag: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 9,
-    overflow: 'hidden',
-    backgroundColor: '#f1f5f9',
-    color: '#475569',
-    fontSize: 12,
-    fontWeight: '900',
-  },
-  executionModeText: {
-    flex: 1,
-    color: '#64748b',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  modeHistoryButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 999,
-    backgroundColor: '#ecfdf5',
-  },
-  modeHistoryText: {
-    color: colors.brandDark,
-    fontSize: 12,
-    fontWeight: '900',
-  },
-  insightCard: {
-    borderRadius: 16,
-    padding: 16,
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: 'rgba(226,232,240,0.9)',
-  },
-  eyebrow: {
-    color: colors.brandDark,
-    fontSize: 12,
-    fontWeight: '900',
-    marginBottom: 8,
-  },
-  description: {
-    color: colors.text,
-    fontSize: 14,
-    lineHeight: 21,
-  },
-  nutritionOverviewCard: {
-    borderRadius: 18,
-    padding: 18,
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.72)',
-  },
-  nutritionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 18,
-  },
-  caloriesMain: {
-    flex: 1,
-  },
-  caloriesValue: {
-    color: '#0f172a',
-    fontSize: 42,
-    fontWeight: '900',
-    lineHeight: 46,
-  },
-  caloriesUnitRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: 8,
-  },
-  caloriesUnit: {
-    color: '#0f172a',
-    fontSize: 16,
-    fontWeight: '900',
-  },
-  caloriesLabel: {
-    color: '#64748b',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  totalWeightBadge: {
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    backgroundColor: '#f1f5f9',
-  },
-  weightText: {
-    color: '#475569',
-    fontSize: 12,
-    fontWeight: '900',
-  },
-  macroGrid: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  macroItem: {
-    flex: 1,
-    gap: 7,
-  },
-  macroBar: {
-    height: 4,
-    borderRadius: 999,
-    overflow: 'hidden',
-    backgroundColor: '#e2e8f0',
-  },
-  macroProgress: {
-    height: '100%',
-    borderRadius: 999,
-  },
-  macroProgressProtein: {
-    backgroundColor: '#3b82f6',
-  },
-  macroProgressCarbs: {
-    backgroundColor: '#eab308',
-  },
-  macroProgressFat: {
-    backgroundColor: '#f97316',
-  },
-  macroValue: {
-    color: '#1e293b',
-    fontSize: 18,
-    fontWeight: '900',
-  },
-  macroUnit: {
-    color: '#64748b',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  macroLabel: {
-    fontSize: 11,
-    fontWeight: '900',
-  },
-  macroLabelProtein: {
-    color: '#3b82f6',
-  },
-  macroLabelCarbs: {
-    color: '#ca8a04',
-  },
-  macroLabelFat: {
-    color: '#f97316',
-  },
-  peoplePanel: {
-    marginTop: 18,
-    paddingTop: 14,
-    borderTopWidth: 1,
-    borderTopColor: '#e2e8f0',
-  },
-  peopleHeader: {
-    marginBottom: 10,
-  },
-  peopleTitle: {
-    color: '#0f172a',
-    fontSize: 14,
-    fontWeight: '900',
-  },
-  peopleHint: {
-    marginTop: 3,
-    color: '#64748b',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  peopleRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  peopleChip: {
-    flex: 1,
-    minHeight: 34,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#ecfdf5',
-  },
-  peopleChipText: {
-    color: colors.brandDark,
-    fontSize: 12,
-    fontWeight: '900',
-  },
-  customPeopleRow: {
-    marginTop: 9,
-    flexDirection: 'row',
-    gap: 9,
-  },
-  customPeopleInput: {
-    flex: 1,
-    minHeight: 38,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    color: colors.text,
-    fontSize: 13,
-    fontWeight: '800',
-    backgroundColor: '#fff',
-  },
-  applyPeopleButton: {
-    minWidth: 70,
-    minHeight: 38,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.brand,
-  },
-  applyPeopleText: {
-    color: '#fff',
-    fontSize: 13,
-    fontWeight: '900',
-  },
-  scoreCard: {
-    borderRadius: 20,
-    backgroundColor: '#fff',
-    padding: 18,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  scoreHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  scoreTitle: {
-    color: '#334155',
-    fontSize: 14,
-    fontWeight: '700',
-    marginBottom: 6,
-  },
-  scoreRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: 4,
-  },
-  scoreValue: {
-    color: '#0f172a',
-    fontSize: 48,
-    fontWeight: '800',
-    lineHeight: 52,
-  },
-  scoreUnit: {
-    color: '#94a3b8',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  scoreBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 14,
-  },
-  scoreBadgeText: {
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  scoreBreakdown: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  scoreMini: {
-    flex: 1,
-    gap: 6,
-  },
-  scoreMiniTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  scoreMiniValue: {
-    color: '#0f172a',
-    fontSize: 18,
-    fontWeight: '800',
-  },
-  scoreMiniDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  scoreMiniLabel: {
-    color: '#64748b',
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  scoreMiniTrack: {
-    height: 5,
-    borderRadius: 3,
-    backgroundColor: '#e2e8f0',
-    overflow: 'hidden',
-  },
-  scoreMiniFill: {
-    height: '100%',
-    borderRadius: 3,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 2,
-  },
-  sectionTitle: {
-    color: '#0f172a',
-    fontSize: 18,
-    fontWeight: '900',
-  },
-  sectionCount: {
-    color: '#64748b',
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  sectionHeaderActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  addItemButton: {
-    minHeight: 34,
-    paddingHorizontal: 11,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#ecfdf5',
-  },
-  addItemButtonText: {
-    color: colors.brandDark,
-    fontSize: 12,
-    fontWeight: '900',
-  },
-  emptyCard: {
-    borderRadius: 16,
-    padding: 18,
-    backgroundColor: '#fff',
-  },
-  empty: {
-    color: colors.textMuted,
-    textAlign: 'center',
-  },
-  ingredientCard: {
-    overflow: 'hidden',
-    borderRadius: 16,
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: 'rgba(226,232,240,0.85)',
-  },
-  ingredientMain: {
-    paddingHorizontal: 14,
-    paddingTop: 14,
-    paddingBottom: 11,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(226,232,240,0.65)',
-  },
-  rowBetween: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 10,
-  },
-  nameInput: {
-    flex: 1,
-    minHeight: 36,
-    color: colors.text,
-    fontSize: 17,
-    fontWeight: '900',
-    paddingVertical: 4,
-  },
-  kcal: {
-    color: colors.brandDark,
-    fontSize: 13,
-    fontWeight: '900',
-  },
-  ingredientHeaderActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  deleteItemButton: {
-    minHeight: 30,
-    paddingHorizontal: 8,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#fef2f2',
-  },
-  deleteItemButtonPressed: {
-    opacity: 0.68,
-  },
-  deleteItemText: {
-    color: '#dc2626',
-    fontSize: 11,
-    fontWeight: '900',
-  },
-  subtitle: {
-    color: '#64748b',
-    fontSize: 12,
-    fontWeight: '600',
-    lineHeight: 18,
-    marginTop: 4,
-  },
-  ingredientNutritionStrip: {
-    flexDirection: 'row',
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(226,232,240,0.65)',
-  },
-  miniStat: {
-    flex: 1,
-    minHeight: 62,
-    borderRadius: 13,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 4,
-    backgroundColor: 'rgba(248,250,252,0.95)',
-    borderWidth: 1,
-    borderColor: 'rgba(226,232,240,0.85)',
-  },
-  miniStatCal: {
-    borderColor: 'rgba(249,115,22,0.22)',
-  },
-  miniStatValue: {
-    fontSize: 14,
-    fontWeight: '900',
-  },
-  miniStatValueCal: {
-    color: '#0f172a',
-  },
-  miniStatValueProtein: {
-    color: '#3b82f6',
-  },
-  miniStatValueCarbs: {
-    color: '#eab308',
-  },
-  miniStatValueFat: {
-    color: '#f97316',
-  },
-  miniStatValueWeight: {
-    color: '#0ea5a4',
-  },
-  miniStatUnit: {
-    color: '#94a3b8',
-    fontSize: 9,
-    fontWeight: '700',
-  },
-  miniStatLabel: {
-    marginTop: 4,
-    color: '#64748b',
-    fontSize: 10,
-    fontWeight: '800',
-  },
-  ingredientControls: {
-    paddingHorizontal: 14,
-    paddingTop: 12,
-    paddingBottom: 14,
-  },
-  packagedChoiceCard: {
-    marginBottom: 12,
-    padding: 11,
-    borderWidth: 1,
-    borderColor: '#fed7aa',
-    borderRadius: 12,
-    backgroundColor: '#fff7ed',
-  },
-  packagedChoiceTitle: {
-    color: '#9a3412',
-    fontSize: 13,
-    fontWeight: '900',
-  },
-  packagedChoiceHint: {
-    marginTop: 3,
-    marginBottom: 8,
-    color: '#9a5b2a',
-    fontSize: 11,
-    lineHeight: 16,
-  },
-  packagedChoiceOption: {
-    minHeight: 48,
-    marginTop: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    backgroundColor: '#fff',
-  },
-  packagedChoiceCopy: {
-    flex: 1,
-    minWidth: 0,
-  },
-  packagedChoiceName: {
-    color: '#7c2d12',
-    fontSize: 12,
-    fontWeight: '900',
-  },
-  packagedChoiceMeta: {
-    marginTop: 2,
-    color: '#9a5b2a',
-    fontSize: 10,
-    lineHeight: 14,
-  },
-  packagedChoiceAction: {
-    color: colors.brandDark,
-    fontSize: 12,
-    fontWeight: '900',
-  },
-  suggestionBox: {
-    marginBottom: 12,
-    borderRadius: 12,
-    backgroundColor: '#ecfdf5',
-    padding: 11,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  suggestionTextWrap: {
-    flex: 1,
-  },
-  suggestionBadge: {
-    color: colors.brandDark,
-    fontSize: 12,
-    fontWeight: '900',
-  },
-  suggestionReason: {
-    marginTop: 3,
-    color: '#64748b',
-    lineHeight: 17,
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  suggestionAction: {
-    minHeight: 30,
-    borderRadius: 9,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 10,
-    backgroundColor: colors.brand,
-  },
-  suggestionActionText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '900',
-  },
-  inputLine: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  inputLabel: {
-    color: colors.text,
-    fontSize: 13,
-    fontWeight: '900',
-  },
-  weightInputWrap: {
-    width: 116,
-    minHeight: 36,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 10,
-    backgroundColor: '#fff',
-  },
-  weightInput: {
-    flex: 1,
-    color: colors.text,
-    fontSize: 13,
-    fontWeight: '900',
-    paddingVertical: 6,
-  },
-  inputUnit: {
-    color: '#64748b',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  manualNutritionCard: {
-    marginTop: 12,
-    padding: 11,
-    borderRadius: 12,
-    backgroundColor: '#f8fafc',
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-  },
-  manualNutritionTitle: {
-    color: '#475569',
-    fontSize: 12,
-    fontWeight: '900',
-  },
-  manualNutritionGrid: {
-    marginTop: 9,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  manualNutritionField: {
-    width: '48%',
-  },
-  manualNutritionLabel: {
-    marginBottom: 4,
-    color: '#64748b',
-    fontSize: 10,
-    fontWeight: '800',
-  },
-  manualNutritionInputWrap: {
-    minHeight: 38,
-    paddingHorizontal: 9,
-    borderWidth: 1,
-    borderColor: '#cbd5e1',
-    borderRadius: 9,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-  },
-  manualNutritionInput: {
-    flex: 1,
-    color: colors.text,
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  manualNutritionUnit: {
-    color: '#94a3b8',
-    fontSize: 10,
-    fontWeight: '700',
-  },
-  ratioHeader: {
-    marginTop: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  ratioValue: {
-    color: colors.brandDark,
-    fontSize: 13,
-    fontWeight: '900',
-  },
-  ratioRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 9,
-  },
-  ratioChip: {
-    flex: 1,
-    minHeight: 34,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#f1f5f9',
-  },
-  ratioChipActive: {
-    backgroundColor: colors.brand,
-  },
-  ratioText: {
-    color: '#64748b',
-    fontSize: 12,
-    fontWeight: '900',
-  },
-  ratioTextActive: {
-    color: '#fff',
-  },
-  adviceLine: {
-    paddingVertical: 9,
-    borderTopWidth: 1,
-    borderTopColor: '#e2e8f0',
-  },
-  adviceTitle: {
-    color: colors.text,
-    fontSize: 13,
-    fontWeight: '900',
-    marginBottom: 4,
-  },
-  adviceText: {
-    color: '#64748b',
-    fontSize: 13,
-    fontWeight: '600',
-    lineHeight: 20,
-  },
-  precisionCard: {
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#a7f3d0',
-    borderRadius: 16,
-    backgroundColor: '#ecfdf5',
-  },
-  precisionTitle: {
-    color: '#065f46',
-    fontSize: 15,
-    fontWeight: '900',
-  },
-  precisionHint: {
-    marginTop: 5,
-    color: '#047857',
-    fontSize: 12,
-    lineHeight: 18,
-  },
-  followupInput: {
-    minHeight: 82,
-    marginTop: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderWidth: 1,
-    borderColor: '#a7f3d0',
-    borderRadius: 12,
-    color: colors.text,
-    backgroundColor: '#fff',
-    fontSize: 13,
-    lineHeight: 19,
-    textAlignVertical: 'top',
-  },
-  referenceSectionTitle: {
-    marginTop: 13,
-    color: '#065f46',
-    fontSize: 13,
-    fontWeight: '900',
-  },
-  referencePresetRow: {
-    marginTop: 8,
-    flexDirection: 'row',
-    gap: 8,
-  },
-  referencePresetButton: {
-    minHeight: 34,
-    paddingHorizontal: 10,
-    borderRadius: 9,
-    borderWidth: 1,
-    borderColor: '#6ee7b7',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#fff',
-  },
-  referencePresetText: {
-    color: '#047857',
-    fontSize: 11,
-    fontWeight: '900',
-  },
-  referenceList: {
-    marginTop: 8,
-    gap: 6,
-  },
-  referenceChip: {
-    minHeight: 34,
-    paddingHorizontal: 10,
-    borderRadius: 9,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#d1fae5',
-  },
-  referenceChipText: {
-    flex: 1,
-    color: '#065f46',
-    fontSize: 11,
-    fontWeight: '800',
-  },
-  referenceRemoveText: {
-    color: '#b91c1c',
-    fontSize: 11,
-    fontWeight: '900',
-  },
-  customReferenceCard: {
-    marginTop: 9,
-    padding: 10,
-    borderRadius: 11,
-    borderWidth: 1,
-    borderColor: '#a7f3d0',
-    backgroundColor: 'rgba(255,255,255,0.72)',
-    gap: 8,
-  },
-  referenceNameInput: {
-    minHeight: 38,
-    paddingHorizontal: 10,
-    borderWidth: 1,
-    borderColor: '#a7f3d0',
-    borderRadius: 9,
-    color: colors.text,
-    backgroundColor: '#fff',
-    fontSize: 12,
-  },
-  referenceDimensionsRow: {
-    flexDirection: 'row',
-    gap: 7,
-  },
-  referenceDimensionInput: {
-    flex: 1,
-    minHeight: 38,
-    paddingHorizontal: 8,
-    borderWidth: 1,
-    borderColor: '#a7f3d0',
-    borderRadius: 9,
-    color: colors.text,
-    backgroundColor: '#fff',
-    fontSize: 11,
-  },
-  referencePlacementInput: {
-    minHeight: 42,
-    paddingHorizontal: 10,
-    borderWidth: 1,
-    borderColor: '#a7f3d0',
-    borderRadius: 9,
-    color: colors.text,
-    backgroundColor: '#fff',
-    fontSize: 11,
-  },
-  addReferenceButton: {
-    minHeight: 38,
-    borderRadius: 9,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#059669',
-  },
-  addReferenceButtonText: {
-    color: '#fff',
-    fontSize: 11,
-    fontWeight: '900',
-  },
-  followupActions: {
-    marginTop: 12,
-    flexDirection: 'row',
-    gap: 10,
-  },
-  followupSecondaryButton: {
-    flex: 1,
-    minHeight: 42,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#6ee7b7',
-    borderRadius: 11,
-    backgroundColor: '#fff',
-  },
-  followupSecondaryText: {
-    color: '#047857',
-    fontSize: 12,
-    fontWeight: '900',
-  },
-  followupPrimaryButton: {
-    flex: 1,
-    minHeight: 42,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 11,
-    backgroundColor: colors.brand,
-  },
-  followupPrimaryText: {
-    color: '#fff',
-    fontSize: 13,
-    fontWeight: '900',
-  },
-  correctionCard: {
-    minHeight: 76,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    borderRadius: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    backgroundColor: '#fff',
-  },
-  correctionCopy: {
-    flex: 1,
-  },
-  correctionTitle: {
-    color: colors.text,
-    fontSize: 14,
-    fontWeight: '900',
-  },
-  correctionHint: {
-    marginTop: 4,
-    color: '#64748b',
-    fontSize: 11,
-    lineHeight: 16,
-  },
-  correctionOpenButton: {
-    minHeight: 38,
-    paddingHorizontal: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 10,
-    backgroundColor: '#fff7ed',
-  },
-  correctionOpenText: {
-    color: '#c2410c',
-    fontSize: 12,
-    fontWeight: '900',
-  },
-  correctionModalBackdrop: {
-    flex: 1,
-    paddingHorizontal: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(15,23,42,0.52)',
-  },
-  correctionModalCard: {
-    width: '100%',
-    maxWidth: 420,
-    padding: 20,
-    borderRadius: 20,
-    backgroundColor: '#fff',
-  },
-  correctionModalTitle: {
-    color: colors.text,
-    fontSize: 19,
-    fontWeight: '900',
-  },
-  correctionModalHint: {
-    marginTop: 7,
-    color: '#64748b',
-    fontSize: 12,
-    lineHeight: 18,
-  },
-  correctionItemSummary: {
-    marginTop: 12,
-    padding: 10,
-    borderRadius: 11,
-    backgroundColor: '#f8fafc',
-  },
-  correctionItemText: {
-    color: '#475569',
-    fontSize: 11,
-    lineHeight: 17,
-  },
-  correctionMoreText: {
-    marginTop: 3,
-    color: colors.textMuted,
-    fontSize: 10,
-  },
-  correctionInput: {
-    minHeight: 108,
-    marginTop: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderWidth: 1,
-    borderColor: '#cbd5e1',
-    borderRadius: 12,
-    color: colors.text,
-    backgroundColor: '#fff',
-    fontSize: 13,
-    lineHeight: 19,
-    textAlignVertical: 'top',
-  },
-  feedbackOnlyButton: {
-    minHeight: 40,
-    marginTop: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  feedbackOnlyText: {
-    color: colors.brandDark,
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  correctionModalActions: {
-    marginTop: 8,
-    flexDirection: 'row',
-    gap: 10,
-  },
-  correctionCancelButton: {
-    flex: 1,
-    minHeight: 46,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 12,
-    backgroundColor: '#f1f5f9',
-  },
-  correctionCancelText: {
-    color: '#475569',
-    fontSize: 13,
-    fontWeight: '900',
-  },
-  correctionSubmitButton: {
-    flex: 2,
-    minHeight: 46,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 12,
-    backgroundColor: colors.brand,
-  },
-  correctionSubmitText: {
-    color: '#fff',
-    fontSize: 13,
-    fontWeight: '900',
-  },
-  footerActions: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    zIndex: 30,
-    paddingTop: 12,
-    paddingHorizontal: 16,
-    borderTopLeftRadius: 18,
-    borderTopRightRadius: 18,
-    backgroundColor: '#fff',
-    shadowColor: '#000',
-    shadowOpacity: 0.07,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: -4 },
-    elevation: 24,
-  },
-  actionGrid: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  secondaryBtn: {
-    flex: 1,
-    minHeight: 48,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#f1f5f9',
-  },
-  secondaryBtnText: {
-    color: '#475569',
-    fontSize: 14,
-    fontWeight: '900',
-  },
-  secondaryBtnDisabled: {
-    opacity: 0.72,
-  },
-  primaryBtn: {
-    flex: 2,
-    minHeight: 48,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.brand,
-  },
-  primaryBtnDisabled: {
-    opacity: 0.72,
-  },
-  primaryBtnText: {
-    color: '#fff',
-    fontSize: 15,
-    fontWeight: '900',
-  },
-})
+function normalizeSelectableMealType(value: MealType | string | undefined | null): SelectableMealType {
+  switch (value) {
+    case 'breakfast':
+    case 'morning_snack':
+    case 'lunch':
+    case 'afternoon_snack':
+    case 'dinner':
+    case 'evening_snack':
+      return value
+    default:
+      return 'lunch'
+  }
+}
+
+function uniqueImageSources(values: Array<string | null | undefined>): string[] {
+  const seen = new Set<string>()
+  return values.flatMap((value) => {
+    const uri = stringOrUndefined(value)
+    if (!uri || seen.has(uri)) return []
+    seen.add(uri)
+    return [uri]
+  })
+}
+
+function formatInputNumberAllowZero(value: number): string {
+  if (!Number.isFinite(value)) return '0'
+  const rounded = Math.round(Math.max(0, value) * 10) / 10
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1)
+}
+
+function sanitizeNumberText(value: string): string {
+  const normalized = value.replace(',', '.').replace(/[^0-9.]/g, '')
+  const dot = normalized.indexOf('.')
+  return dot < 0 ? normalized : normalized.slice(0, dot + 1) + normalized.slice(dot + 1).replace(/\./g, '')
+}
+
+function sanitizeIntegerText(value: string): string {
+  return value.replace(/[^0-9]/g, '').slice(0, 2)
+}
+
+function formatNutrientDetailValue(value: number): string {
+  if (value >= 10) return String(Math.round(value))
+  if (value >= 1) return String(Math.round(value * 10) / 10)
+  return String(Math.round(value * 100) / 100)
+}
+
+function createResultStyles(palette: ResultPalette) {
+  return StyleSheet.create({
+    page: { flex: 1, backgroundColor: palette.page },
+    hero: { overflow: 'hidden', backgroundColor: palette.hero },
+    heroImagePage: { width: '100%' },
+    heroImage: { width: '100%', height: '100%' },
+    heroPlaceholder: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, backgroundColor: palette.hero },
+    heroPlaceholderIcon: { width: 64, height: 64, borderRadius: 32, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.brandSoft, borderWidth: 1, borderColor: palette.brandBorder },
+    heroPlaceholderText: { color: palette.textSecondary, fontSize: 14, fontWeight: '700' },
+    heroShade: { ...StyleSheet.absoluteFill, backgroundColor: palette.heroOverlay },
+    imageCounter: { position: 'absolute', right: 16, minWidth: 48, height: 34, paddingHorizontal: 12, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.64)' },
+    imageCounterText: { color: palette.white, fontSize: 13, fontWeight: '800' },
+    resultScroll: { flex: 1 },
+    resultScrollInner: { flexGrow: 1 },
+    contentContainer: { marginTop: -26, marginHorizontal: 14, gap: 14 },
+    executionModeRow: { minHeight: 52, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, backgroundColor: palette.card, borderWidth: 1, borderColor: palette.border },
+    executionModeLeft: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 7, flexWrap: 'wrap' },
+    modeTag: { minHeight: 30, paddingHorizontal: 10, borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.brandSoft },
+    modeTagText: { color: palette.brandStrong, fontSize: 12, fontWeight: '900' },
+    engineTag: { minHeight: 30, paddingHorizontal: 10, borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.blueSoft },
+    engineTagText: { color: palette.blue, fontSize: 12, fontWeight: '800' },
+    modeLink: { minHeight: 44, paddingHorizontal: 6, alignItems: 'center', justifyContent: 'center' },
+    modeLinkText: { color: palette.textSecondary, fontSize: 12, fontWeight: '700' },
+    uploadEntry: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 4, paddingLeft: 8 },
+    uploadEntryText: { color: palette.brandStrong, fontSize: 12, fontWeight: '800' },
+    nutritionOverviewCard: { borderRadius: 22, padding: 20, backgroundColor: palette.card, borderWidth: 1, borderColor: palette.border, shadowColor: palette.shadow, shadowOpacity: 0.08, shadowRadius: 14, shadowOffset: { width: 0, height: 7 }, elevation: 3 },
+    nutritionHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 },
+    caloriesMain: { flexDirection: 'row', alignItems: 'flex-end', gap: 8 },
+    caloriesValue: { color: palette.text, fontSize: 42, lineHeight: 48, fontWeight: '900', fontVariant: ['tabular-nums'] },
+    caloriesUnitRow: { paddingBottom: 5, gap: 1 },
+    caloriesUnit: { color: palette.brandStrong, fontSize: 13, fontWeight: '900' },
+    caloriesLabel: { color: palette.textMuted, fontSize: 12, fontWeight: '700' },
+    totalWeightBadge: { minHeight: 40, paddingHorizontal: 12, borderRadius: 20, flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: palette.brandSoft },
+    weightText: { color: palette.brandStrong, fontSize: 13, fontWeight: '900', fontVariant: ['tabular-nums'] },
+    macroGrid: { marginTop: 22, flexDirection: 'row', gap: 10 },
+    macroItem: { flex: 1, minWidth: 0, borderRadius: 14, padding: 12, backgroundColor: palette.cardSoft },
+    macroBar: { height: 6, borderRadius: 3, overflow: 'hidden', backgroundColor: palette.track },
+    macroProgress: { height: 6, borderRadius: 3 },
+    macroProgressProtein: { backgroundColor: palette.blue },
+    macroProgressCarbs: { backgroundColor: palette.warning },
+    macroProgressFat: { backgroundColor: palette.orange },
+    macroValue: { marginTop: 10, color: palette.text, fontSize: 18, fontWeight: '900', fontVariant: ['tabular-nums'] },
+    macroUnit: { fontSize: 12, fontWeight: '800' },
+    macroLabel: { marginTop: 2, fontSize: 12, fontWeight: '800' },
+    macroLabelProtein: { color: palette.blue },
+    macroLabelCarbs: { color: palette.warning },
+    macroLabelFat: { color: palette.orange },
+    pendingBanner: { minHeight: 48, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 10, justifyContent: 'center', backgroundColor: palette.warningSoft, borderWidth: 1, borderColor: palette.warning },
+    pendingBannerText: { color: palette.warning, fontSize: 13, lineHeight: 19, fontWeight: '800' },
+    insightCard: { borderRadius: 20, overflow: 'hidden', backgroundColor: palette.card, borderWidth: 1, borderColor: palette.border },
+    cardHeaderToggle: { minHeight: 58, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+    cardHeaderPressed: { backgroundColor: palette.cardSoft },
+    cardHeaderTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    cardTitle: { color: palette.text, fontSize: 16, fontWeight: '900' },
+    insightToggle: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+    insightToggleText: { color: palette.textSecondary, fontSize: 12, fontWeight: '800' },
+    insightItems: { paddingHorizontal: 14, paddingBottom: 14, gap: 10 },
+    insightItem: { minHeight: 58, borderRadius: 14, padding: 12, flexDirection: 'row', alignItems: 'flex-start', gap: 10, borderWidth: 1 },
+    insightItemIntro: { backgroundColor: palette.cardSoft, borderColor: palette.border },
+    insightItemHighlight: { backgroundColor: palette.brandSoft, borderColor: palette.brandBorder },
+    insightItemRatio: { backgroundColor: palette.orangeSoft, borderColor: palette.orange },
+    insightItemAbsorption: { backgroundColor: palette.purpleSoft, borderColor: palette.purple },
+    insightIconWrap: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.card },
+    insightBody: { flex: 1, minWidth: 0, gap: 3 },
+    insightLabel: { color: palette.textSecondary, fontSize: 12, fontWeight: '900' },
+    insightContent: { color: palette.text, fontSize: 13, lineHeight: 20, fontWeight: '600' },
+    sectionHeader: { minHeight: 58, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, paddingHorizontal: 2 },
+    sectionTitleRow: { flexDirection: 'row', alignItems: 'baseline', gap: 5 },
+    sectionTitle: { color: palette.text, fontSize: 20, fontWeight: '900' },
+    sectionCount: { color: palette.textMuted, fontSize: 13, fontWeight: '700' },
+    sectionHint: { marginTop: 3, color: palette.textMuted, fontSize: 12, lineHeight: 18 },
+    quickRatioButton: { minHeight: 44, paddingHorizontal: 13, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.brandSoft },
+    quickRatioButtonText: { color: palette.brandStrong, fontSize: 13, fontWeight: '900' },
+    emptyCard: { minHeight: 170, borderRadius: 20, padding: 24, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.card, borderWidth: 1, borderColor: palette.border },
+    emptyIconWrap: { width: 52, height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.cardSoft },
+    emptyTitle: { marginTop: 12, color: palette.text, fontSize: 16, fontWeight: '900' },
+    emptyDescription: { marginTop: 6, maxWidth: 280, color: palette.textSecondary, fontSize: 13, lineHeight: 20, textAlign: 'center' },
+    ingredientCard: { borderRadius: 20, overflow: 'hidden', backgroundColor: palette.card, borderWidth: 1, borderColor: palette.border, shadowColor: palette.shadow, shadowOpacity: 0.06, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 2 },
+    ingredientHeader: { minHeight: 64, paddingLeft: 16, paddingRight: 10, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', gap: 8 },
+    ingredientNameButton: { flex: 1, minWidth: 0, minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, borderRadius: 12, paddingHorizontal: 4 },
+    ingredientName: { flex: 1, color: palette.text, fontSize: 17, lineHeight: 23, fontWeight: '900' },
+    editAffordance: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+    editAffordanceText: { color: palette.brandStrong, fontSize: 12, fontWeight: '800' },
+    deleteButton: { width: 48, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.redSoft },
+    deleteButtonPressed: { opacity: 0.72 },
+    ingredientBasis: { paddingHorizontal: 16, paddingBottom: 12, color: palette.textMuted, fontSize: 12, lineHeight: 18 },
+    ingredientPer100: { paddingHorizontal: 16, marginTop: -8, paddingBottom: 10, color: palette.textSecondary, fontSize: 11, lineHeight: 17, fontWeight: '600' },
+    ediblePortionHint: { marginHorizontal: 14, marginBottom: 12, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 9, backgroundColor: palette.brandSoft, borderWidth: 1, borderColor: palette.brandBorder },
+    ediblePortionHintText: { color: palette.brandStrong, fontSize: 12, lineHeight: 18, fontWeight: '700' },
+    packagedChoiceCard: { marginHorizontal: 14, marginBottom: 12, borderRadius: 14, padding: 12, gap: 8, backgroundColor: palette.warningSoft, borderWidth: 1, borderColor: palette.warning },
+    packagedChoiceTitle: { color: palette.text, fontSize: 14, fontWeight: '900' },
+    packagedChoiceHint: { color: palette.textSecondary, fontSize: 12, lineHeight: 18 },
+    packagedChoiceOption: { minHeight: 54, borderRadius: 12, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: palette.card, borderWidth: 1, borderColor: palette.border },
+    packagedChoiceCopy: { flex: 1, minWidth: 0 },
+    packagedChoiceName: { color: palette.text, fontSize: 13, fontWeight: '900' },
+    packagedChoiceMeta: { marginTop: 3, color: palette.textMuted, fontSize: 11, lineHeight: 16 },
+    packagedChoiceAction: { color: palette.brandStrong, fontSize: 12, fontWeight: '900' },
+    nutritionStrip: { marginHorizontal: 14, flexDirection: 'row', gap: 6 },
+    nutritionCell: { flex: 1, minWidth: 0, borderRadius: 12, paddingHorizontal: 8, paddingVertical: 10 },
+    nutritionCal: { backgroundColor: palette.brandSoft },
+    nutritionProtein: { backgroundColor: palette.blueSoft },
+    nutritionCarbs: { backgroundColor: palette.warningSoft },
+    nutritionFat: { backgroundColor: palette.orangeSoft },
+    nutritionCellLabel: { color: palette.textSecondary, fontSize: 10, fontWeight: '800' },
+    nutritionCellValue: { marginTop: 5, color: palette.text, fontSize: 15, fontWeight: '900', fontVariant: ['tabular-nums'] },
+    nutritionCellUnit: { fontSize: 9, fontWeight: '700' },
+    nutritionDetailsToggle: { minHeight: 48, marginHorizontal: 14, marginTop: 8, borderRadius: 12, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+    nutritionDetailsToggleText: { color: palette.textSecondary, fontSize: 13, fontWeight: '800' },
+    nutritionDetailGrid: { marginHorizontal: 14, padding: 10, borderRadius: 14, flexDirection: 'row', flexWrap: 'wrap', backgroundColor: palette.cardSoft },
+    nutritionDetailCell: { width: '50%', minHeight: 52, paddingHorizontal: 8, paddingVertical: 6, justifyContent: 'center' },
+    nutritionDetailLabel: { color: palette.textMuted, fontSize: 11, fontWeight: '700' },
+    nutritionDetailValue: { marginTop: 3, color: palette.text, fontSize: 14, fontWeight: '900', fontVariant: ['tabular-nums'] },
+    nutritionDetailUnit: { color: palette.textMuted, fontSize: 10, fontWeight: '700' },    ingredientControls: { marginTop: 12, padding: 14, gap: 10, backgroundColor: palette.cardSoft, borderTopWidth: 1, borderTopColor: palette.border },
+    weightControlRow: { minHeight: 58, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+    controlLabel: { color: palette.text, fontSize: 13, fontWeight: '900' },
+    controlSubLabel: { marginTop: 3, color: palette.textMuted, fontSize: 11, fontWeight: '600' },
+    weightAdjuster: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    adjustButton: { width: 48, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.card, borderWidth: 1, borderColor: palette.border },
+    adjustButtonDisabled: { opacity: 0.42 },
+    adjustButtonPressed: { backgroundColor: palette.brandSoft, borderColor: palette.brandBorder },
+    weightDisplayWrap: { minWidth: 76, height: 48, borderRadius: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 3, backgroundColor: palette.card },
+    weightDisplay: { color: palette.text, fontSize: 18, fontWeight: '900', fontVariant: ['tabular-nums'] },
+    weightDisplayUnit: { color: palette.textSecondary, fontSize: 12, fontWeight: '800' },
+    ratioHeader: { minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+    ratioValue: { color: palette.brandStrong, fontSize: 17, fontWeight: '900', fontVariant: ['tabular-nums'] },
+    ratioAdjustable: { minHeight: 48, justifyContent: 'center' },
+    ratioRail: { height: 8, marginHorizontal: 10, borderRadius: 4, backgroundColor: palette.track },
+    ratioFill: { height: 8, borderRadius: 4, backgroundColor: palette.brand },
+    ratioKnob: { position: 'absolute', top: -8, width: 24, height: 24, marginLeft: -12, borderRadius: 12, backgroundColor: palette.card, borderWidth: 4, borderColor: palette.brand, shadowColor: palette.shadow, shadowOpacity: 0.2, shadowRadius: 4, shadowOffset: { width: 0, height: 2 }, elevation: 3 },
+    suggestionRow: { minHeight: 52, borderRadius: 13, paddingHorizontal: 12, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: palette.brandSoft, borderWidth: 1, borderColor: palette.brandBorder },
+    suggestionCopy: { flex: 1, minWidth: 0 },
+    suggestionTitle: { color: palette.brandStrong, fontSize: 12, fontWeight: '900' },
+    suggestionReason: { marginTop: 3, color: palette.textSecondary, fontSize: 11, lineHeight: 16 },
+    suggestionAction: { color: palette.brandStrong, fontSize: 12, fontWeight: '900' },
+    precisionCard: { borderRadius: 20, padding: 16, gap: 10, backgroundColor: palette.warningSoft, borderWidth: 1, borderColor: palette.warning },
+    precisionTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    precisionTitle: { color: palette.text, fontSize: 16, fontWeight: '900' },
+    precisionHint: { color: palette.textSecondary, fontSize: 13, lineHeight: 20 },
+    fieldLabel: { color: palette.textSecondary, fontSize: 12, fontWeight: '800' },
+    multilineInput: { minHeight: 92, borderRadius: 14, paddingHorizontal: 13, paddingVertical: 12, color: palette.text, backgroundColor: palette.input, borderWidth: 1, borderColor: palette.border, fontSize: 14, lineHeight: 21, textAlignVertical: 'top' },
+    textInput: { minHeight: 48, borderRadius: 13, paddingHorizontal: 13, color: palette.text, backgroundColor: palette.input, borderWidth: 1, borderColor: palette.border, fontSize: 14 },
+    referencePresetRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+    referencePresetButton: { minHeight: 44, paddingHorizontal: 14, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.card, borderWidth: 1, borderColor: palette.border },
+    referencePresetText: { color: palette.textSecondary, fontSize: 13, fontWeight: '800' },
+    referenceList: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+    referenceChip: { minHeight: 44, paddingLeft: 12, paddingRight: 4, borderRadius: 12, flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: palette.card },
+    referenceChipText: { color: palette.text, fontSize: 12, fontWeight: '800' },
+    referenceRemove: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+    customReferenceCard: { borderRadius: 15, padding: 12, gap: 9, backgroundColor: palette.cardSoft },
+    referenceDimensionsRow: { flexDirection: 'row', gap: 8 },
+    referenceDimensionInput: { flex: 1, minWidth: 0, minHeight: 48, borderRadius: 12, paddingHorizontal: 10, color: palette.text, backgroundColor: palette.input, borderWidth: 1, borderColor: palette.border, fontSize: 13 },
+    addReferenceButton: { minHeight: 48, borderRadius: 13, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.brandSoft },
+    addReferenceButtonText: { color: palette.brandStrong, fontSize: 13, fontWeight: '900' },
+    followupActions: { flexDirection: 'row', gap: 10 },
+    secondaryAction: { flex: 1, minHeight: 50, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.card, borderWidth: 1, borderColor: palette.border },
+    secondaryActionText: { color: palette.textSecondary, fontSize: 13, fontWeight: '900', textAlign: 'center' },
+    primaryAction: { flex: 1, minHeight: 50, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.brand },
+    primaryActionText: { color: palette.white, fontSize: 13, fontWeight: '900', textAlign: 'center' },
+    correctionCard: { minHeight: 78, borderRadius: 18, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: palette.card, borderWidth: 1, borderColor: palette.border },
+    correctionCopy: { flex: 1, minWidth: 0 },
+    correctionTitle: { color: palette.text, fontSize: 14, fontWeight: '900' },
+    correctionHint: { marginTop: 4, color: palette.textMuted, fontSize: 11, lineHeight: 16 },
+    correctionButton: { minHeight: 44, paddingHorizontal: 13, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.orangeSoft },
+    correctionButtonText: { color: palette.orange, fontSize: 12, fontWeight: '900' },
+    footerActions: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingTop: 12, paddingHorizontal: 14, backgroundColor: palette.card, borderTopWidth: 1, borderTopColor: palette.border, shadowColor: palette.shadow, shadowOpacity: 0.12, shadowRadius: 14, shadowOffset: { width: 0, height: -5 }, elevation: 10 },
+    actionGrid: { flexDirection: 'row', gap: 10 },
+    secondaryBtn: { flex: 1, minHeight: 52, borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.cardSoft, borderWidth: 1, borderColor: palette.border },
+    secondaryBtnText: { color: palette.textSecondary, fontSize: 14, fontWeight: '900' },
+    secondaryBtnDisabled: { opacity: 0.66 },
+    primaryBtn: { flex: 1.5, minHeight: 52, borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.brand },
+    primaryBtnText: { color: palette.white, fontSize: 15, fontWeight: '900' },
+    footerCorrectionLink: { minHeight: 44, alignItems: 'center', justifyContent: 'center' },
+    footerCorrectionText: { color: palette.textMuted, fontSize: 12, fontWeight: '700' },
+    disabled: { opacity: 0.48 },
+    pressed: { opacity: 0.76 },
+    primaryPressed: { opacity: 0.84 },
+    modalRoot: { flex: 1, justifyContent: 'flex-end' },
+    modalBackdrop: { ...StyleSheet.absoluteFill, backgroundColor: palette.scrim },
+    sheetCard: { maxHeight: '88%', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 16, backgroundColor: palette.card, borderTopWidth: 1, borderColor: palette.border },
+    sheetHeader: { minHeight: 52, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+    sheetTitle: { color: palette.text, fontSize: 19, fontWeight: '900' },
+    closeButton: { width: 48, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.cardSoft },
+    mealGrid: { marginTop: 8, flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+    mealOption: { width: '31.5%', minHeight: 82, borderRadius: 15, padding: 10, alignItems: 'center', justifyContent: 'center', gap: 7, backgroundColor: palette.cardSoft, borderWidth: 1, borderColor: palette.border },
+    mealOptionActive: { backgroundColor: palette.brandSoft, borderColor: palette.brand },
+    mealIconWrap: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.card },
+    mealIconWrapActive: { backgroundColor: palette.cardElevated },
+    mealOptionLabel: { color: palette.textSecondary, fontSize: 13, fontWeight: '800' },
+    mealOptionLabelActive: { color: palette.brandStrong },
+    sheetActions: { marginTop: 14, flexDirection: 'row', gap: 10 },
+    sheetCancel: { flex: 1, minHeight: 50, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.cardSoft, borderWidth: 1, borderColor: palette.border },
+    sheetCancelText: { color: palette.textSecondary, fontSize: 14, fontWeight: '900' },
+    sheetConfirm: { flex: 1.3, minHeight: 50, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.brand },
+    sheetConfirmText: { color: palette.white, fontSize: 14, fontWeight: '900' },
+    editorKeyboard: { flex: 1, justifyContent: 'flex-end' },
+    editorCard: { maxHeight: '90%', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 16, backgroundColor: palette.card, borderTopWidth: 1, borderColor: palette.border },
+    editorScroll: { paddingBottom: 8, gap: 8 },
+    editorSectionTitle: { marginTop: 8, marginBottom: 2, color: palette.text, fontSize: 14, fontWeight: '900' },
+    editorGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+    editorField: { width: '48%' },
+    editorFieldWide: { width: '100%' },
+    inputWithUnit: { minHeight: 48, borderRadius: 13, flexDirection: 'row', alignItems: 'center', backgroundColor: palette.input, borderWidth: 1, borderColor: palette.border },
+    inputWithUnitControl: { flex: 1, minWidth: 0, minHeight: 48, paddingHorizontal: 12, color: palette.text, fontSize: 14 },
+    inputUnit: { paddingRight: 12, color: palette.textMuted, fontSize: 12, fontWeight: '800' },
+    editorError: { color: palette.red, fontSize: 12, lineHeight: 18, fontWeight: '800' },
+    quickRatioOption: { minHeight: 60, borderRadius: 14, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: palette.cardSoft, borderWidth: 1, borderColor: palette.border },
+    quickRatioOptionTitle: { color: palette.text, fontSize: 14, fontWeight: '900' },
+    quickRatioOptionHint: { color: palette.textMuted, fontSize: 12, fontWeight: '700' },
+    customPeopleRow: { marginTop: 10, flexDirection: 'row', gap: 8 },
+    customPeopleInput: { flex: 1, minHeight: 50, borderRadius: 13, paddingHorizontal: 13, color: palette.text, backgroundColor: palette.input, borderWidth: 1, borderColor: palette.border, fontSize: 14 },
+    applyPeopleButton: { width: 88, minHeight: 50, borderRadius: 13, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.brand },
+    applyPeopleText: { color: palette.white, fontSize: 14, fontWeight: '900' },
+    correctionModalCard: { maxHeight: '90%', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 16, backgroundColor: palette.card, borderTopWidth: 1, borderColor: palette.border },
+    correctionModalHint: { color: palette.textSecondary, fontSize: 13, lineHeight: 20 },
+    correctionItemSummary: { marginTop: 10, borderRadius: 14, padding: 12, gap: 5, backgroundColor: palette.cardSoft },
+    correctionItemText: { color: palette.textSecondary, fontSize: 12, lineHeight: 18 },
+    correctionMoreText: { color: palette.textMuted, fontSize: 11, fontWeight: '700' },
+    correctionAddButton: { marginTop: 10, minHeight: 48, borderRadius: 13, paddingHorizontal: 13, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, backgroundColor: palette.brandSoft, borderWidth: 1, borderColor: palette.brandBorder },
+    correctionAddButtonText: { color: palette.brandStrong, fontSize: 13, fontWeight: '900' },
+    correctionInput: { marginTop: 6, minHeight: 110, borderRadius: 14, paddingHorizontal: 13, paddingVertical: 12, color: palette.text, backgroundColor: palette.input, borderWidth: 1, borderColor: palette.border, fontSize: 14, lineHeight: 21, textAlignVertical: 'top' },
+    feedbackOnlyButton: { marginTop: 10, minHeight: 48, borderRadius: 13, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.brandSoft },
+    feedbackOnlyText: { color: palette.brandStrong, fontSize: 13, fontWeight: '900' },
+    previewRoot: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#000000' },
+    previewImage: { width: '100%', height: '100%' },
+    previewClose: { position: 'absolute', right: 14, zIndex: 3, width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.62)' },
+    previewPrevious: { position: 'absolute', left: 12, top: '47%', zIndex: 3, width: 52, height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.62)' },
+    previewNext: { position: 'absolute', right: 12, top: '47%', zIndex: 3, width: 52, height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.62)' },
+    previewCounter: { position: 'absolute', alignSelf: 'center', color: palette.white, fontSize: 14, fontWeight: '900' },
+  })
+}

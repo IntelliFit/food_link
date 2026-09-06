@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
-import { useFocusEffect, useNavigation } from '@react-navigation/native'
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native'
+import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
+import type { RouteProp } from '@react-navigation/native'
 import { fetch as expoFetch } from 'expo/fetch'
 import Svg, { Circle as SvgCircle, Defs, LinearGradient as SvgLinearGradient, Rect as SvgRect, Stop } from 'react-native-svg'
 import { PetChatStreamError, type PetChatStreamFetch } from '@food-link/api-client'
 import type {
+  DietRecommendationOption,
+  DietRecommendationResult,
   PetChatHistoryMessage,
   PetChatHistoryResponse,
   PetChatSessionSummary,
@@ -28,9 +31,11 @@ type ChatMessage = {
   text: string
   clues?: string[]
   actions?: string[]
+  recommendation?: DietRecommendationResult
 }
 
 const QUICK_QUESTIONS: Array<{ text: string; range: StatsRange }> = [
+  { text: '今天吃什么', range: 'week' },
   { text: '最近训练状态下滑了，帮我找原因', range: 'week' },
   { text: '帮我找最该优化的一点', range: 'week' },
   { text: '最近总饿，是不是吃法有问题', range: 'week' },
@@ -38,6 +43,7 @@ const QUICK_QUESTIONS: Array<{ text: string; range: StatsRange }> = [
 ]
 
 const FOLLOW_UPS = [
+  '今天吃什么',
   '能不能只看微量元素',
   '帮我安排训练日前一天怎么吃',
   '碳水是不是偏低',
@@ -63,6 +69,11 @@ function buildIntroMessage(petName: string): ChatMessage {
   }
 }
 
+function historyRecommendation(item: PetChatHistoryMessage): DietRecommendationResult | undefined {
+  const candidate = item.message_type === 'diet_recommendation' ? item.meta?.diet_recommendation : undefined
+  return candidate && typeof candidate === 'object' ? candidate as DietRecommendationResult : undefined
+}
+
 function mapHistoryMessage(item: PetChatHistoryMessage): ChatMessage {
   const meta = item.meta || {}
   return {
@@ -71,7 +82,50 @@ function mapHistoryMessage(item: PetChatHistoryMessage): ChatMessage {
     text: item.content || '',
     clues: Array.isArray(meta.clues) ? meta.clues.map(String) : undefined,
     actions: Array.isArray(meta.actions) ? meta.actions.map(String) : undefined,
+    recommendation: historyRecommendation(item),
   }
+}
+
+function isDietRecommendationQuestion(question: string): boolean {
+  const normalized = question.replace(/\s+/g, '')
+  return /吃什么|推荐(?:一道|一些|几个)?(?:菜|餐|食物)|食堂|校园餐|减脂餐|增肌餐/.test(normalized)
+}
+
+function isDietRecommendationContextQuestion(question: string, hasActiveRecommendation: boolean): boolean {
+  const normalized = question.replace(/\s+/g, '')
+  if (!hasActiveRecommendation) return isDietRecommendationQuestion(normalized)
+  const switchesTopic = /训练|运动|跑步|力量|睡眠|作息|喝水|补剂|体检|体重趋势/.test(normalized)
+    && !/吃|菜|餐|食堂|饮食/.test(normalized)
+  if (switchesTopic) return false
+  return isDietRecommendationQuestion(normalized)
+    || /还有|其他|再来|换一批|更多|刚才|前面|上面|这些|这几个|你推荐的|哪个更好|热量|蛋白|碳水|脂肪|价格|哪里|在哪/.test(normalized)
+}
+
+function recommendationLocation(option: DietRecommendationOption): string {
+  return [option.campus_name, option.canteen_name, option.floor, option.window_name]
+    .map((value) => String(value || '').trim())
+    .filter(Boolean)
+    .join(' · ')
+}
+
+function recommendationPrice(option: DietRecommendationOption): string {
+  const price = Number(option.price || 0)
+  if (!(price > 0)) return ''
+  const unit = String(option.price_unit || '').trim().replace(/^元\/?/, '')
+  return `¥${Number.isInteger(price) ? price : price.toFixed(1)}${unit ? `/${unit}` : ''}`
+}
+
+function recommendationSourceLabel(result: DietRecommendationResult): string {
+  if (result.ai_used) return `真实校园食物库 · Agent 核对 ${result.ai_rerank_count || 0} 道`
+  const hasCampusFood = (result.recommendations || []).some((option) => option.is_campus_food)
+  if (hasCampusFood) {
+    return result.generated_by === 'campus_agent_database_fallback'
+      ? '真实校园食物库 · 数据库兜底 · 未扣积分'
+      : '真实校园食物库 · 规则兜底'
+  }
+  return result.generated_by === 'campus_agent_database_fallback'
+    ? '真实校园食物库 · 当前条件无匹配 · 未扣积分'
+    : '本校暂无匹配菜品'
 }
 
 function sessionId(session?: PetChatSessionSummary | null): string {
@@ -155,11 +209,12 @@ function recoverPersistedPetAnswer(history: PetChatHistoryResponse | null | unde
 
 export function PetChatScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList, 'PetChat'>>()
+  const route = useRoute<RouteProp<RootStackParamList, 'PetChat'>>()
   const dialog = useAppDialog()
   const [petSummary, setPetSummary] = useState<PetSummary | null>(null)
   const [statsSummary, setStatsSummary] = useState<StatsSummary | null>(null)
   const [messages, setMessages] = useState<ChatMessage[]>([])
-  const [input, setInput] = useState('')
+  const [input, setInput] = useState(() => String(route.params?.starterQuestion || '').trim())
   const [activeRange, setActiveRange] = useState<StatsRange>('week')
   const [activeSessionId, setActiveSessionId] = useState('')
   const [sessions, setSessions] = useState<PetChatSessionSummary[]>([])
@@ -167,8 +222,13 @@ export function PetChatScreen() {
   const [loading, setLoading] = useState(false)
   const [historyLoading, setHistoryLoading] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [enableThinking, setEnableThinking] = useState(false)
+  const [estimatedCredits, setEstimatedCredits] = useState<number | null>(null)
+  const [estimatingCredits, setEstimatingCredits] = useState(false)
+  const [savedSchoolIds, setSavedSchoolIds] = useState<string[]>([])
   const [streamingMessageId, setStreamingMessageId] = useState('')
   const busyRef = useRef(false)
+  const estimateRequestRef = useRef(0)
   const historyLoadedRef = useRef(false)
   const chatScrollRef = useRef<ScrollView | null>(null)
   const activeRequestIdRef = useRef('')
@@ -177,6 +237,10 @@ export function PetChatScreen() {
 
   const petName = petSummary?.pet?.name || '成长伙伴'
   const hasAnalysis = useMemo(() => messages.some((item) => item.role === 'pet' && item.id !== 'intro'), [messages])
+  const latestRecommendation = useMemo(
+    () => [...messages].reverse().find((message) => message.recommendation)?.recommendation,
+    [messages],
+  )
 
   const showError = useCallback((title: string, error: unknown) => {
     void dialog.alert(title, userFacingErrorMessage(error), 'danger')
@@ -195,10 +259,17 @@ export function PetChatScreen() {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const [petData, statsData] = await Promise.all([
+      const [petData, statsData, healthProfile] = await Promise.all([
         apiClient.getPetSummary(),
         apiClient.getStatsSummary(activeRange).catch(() => null),
+        apiClient.getHealthProfile().catch(() => null),
       ])
+      const condition = healthProfile?.health_condition as Record<string, unknown> | undefined
+      const preference = condition?.campus_dining_preference as Record<string, unknown> | undefined
+      const savedSchoolId = String(preference?.school_id || '').trim()
+      if (savedSchoolId) setSavedSchoolIds((previous) => (
+        previous.includes(savedSchoolId) ? previous : [...previous, savedSchoolId]
+      ))
       setPetSummary(petData)
       setStatsSummary(statsData)
       if (!historyLoadedRef.current) {
@@ -238,6 +309,40 @@ export function PetChatScreen() {
     busyRef.current = false
   }, [])
 
+  useEffect(() => {
+    const question = input.trim()
+    const requestId = estimateRequestRef.current + 1
+    estimateRequestRef.current = requestId
+    if (!question) {
+      setEstimatedCredits(null)
+      setEstimatingCredits(false)
+      return
+    }
+    if (isDietRecommendationContextQuestion(question, Boolean(latestRecommendation))) {
+      setEstimatedCredits(1)
+      setEstimatingCredits(false)
+      return
+    }
+    setEstimatedCredits(null)
+    setEstimatingCredits(true)
+    const timer = setTimeout(() => {
+      void apiClient.estimatePetChat(question, /30|月|长期/.test(question) ? 'month' : activeRange, enableThinking)
+        .then((result) => {
+          if (estimateRequestRef.current !== requestId) return
+          setEstimatedCredits(Number(result.pricing?.credits_charged ?? result.estimated_credits ?? 0))
+        })
+        .catch((error) => {
+          if (estimateRequestRef.current !== requestId) return
+          const match = userFacingErrorMessage(error).match(/需要\s*(\d+)\s*积分/)
+          setEstimatedCredits(match ? Number(match[1]) : null)
+        })
+        .finally(() => {
+          if (estimateRequestRef.current === requestId) setEstimatingCredits(false)
+        })
+    }, 350)
+    return () => clearTimeout(timer)
+  }, [activeRange, enableThinking, input, latestRecommendation])
+
   const openHistory = useCallback(async () => {
     if (busyRef.current) return
     const nextOpen = !historyOpen
@@ -276,6 +381,36 @@ export function PetChatScreen() {
     setMessages([buildIntroMessage(petName)])
   }, [petName])
 
+  const openRecommendationDetail = useCallback((option: DietRecommendationOption) => {
+    const itemId = String(option.source_id || '').trim()
+    if (!itemId || option.source !== 'public_food_library') return
+    navigation.navigate('PublicFoodDetail', { itemId, isCampus: Boolean(option.is_campus_food) })
+  }, [navigation])
+
+  const saveCampusPreference = useCallback(async (result: DietRecommendationResult) => {
+    const school = result.resolved_school
+    if (!school?.id || savedSchoolIds.includes(school.id)) return
+    const confirmed = await dialog.confirm({
+      title: '设为常用学校',
+      message: `以后没有特别说明时，优先推荐${school.name}的校园餐。`,
+      cancelText: '暂不保存',
+      confirmText: '确认保存',
+    })
+    if (!confirmed) return
+    try {
+      await apiClient.updateHealthProfile({
+        campus_dining_preference: {
+          school_id: school.id,
+          campus_id: result.campus_id || undefined,
+        },
+      })
+      setSavedSchoolIds((previous) => previous.includes(school.id) ? previous : [...previous, school.id])
+      await dialog.alert('已设为常用学校', `之后会优先推荐${school.name}的校园餐。`, 'success')
+    } catch (error) {
+      showError('保存常用学校失败', error)
+    }
+  }, [dialog, savedSchoolIds, showError])
+
   const cancelGeneration = useCallback(() => {
     if (!busyRef.current) return
     const messageId = streamingMessageIdRef.current
@@ -306,6 +441,8 @@ export function PetChatScreen() {
     const streamingId = nextId('pet-stream')
     const abortController = new AbortController()
     let streamedText = ''
+    let dietRecommendation: DietRecommendationResult | undefined
+    let dietAnswer = ''
     let nextSummary = statsSummary?.range === range ? statsSummary : null
     let allowLateSummary = false
 
@@ -332,8 +469,9 @@ export function PetChatScreen() {
       updateStreamingMessage((message) => ({
         ...message,
         text: answer,
-        clues: buildClues(nextSummary, answer),
-        actions: buildActions(text),
+        clues: dietRecommendation ? undefined : buildClues(nextSummary, answer),
+        actions: dietRecommendation ? undefined : buildActions(text),
+        recommendation: dietRecommendation,
       }))
     }
     const failMessage = () => {
@@ -351,7 +489,7 @@ export function PetChatScreen() {
         setStatsSummary(summary)
         if (allowLateSummary) {
           setMessages((previous) => previous.map((message) => (
-            message.id === streamingId && message.text.trim() && !message.text.includes('（已停止生成）')
+            message.id === streamingId && message.text.trim() && !message.recommendation && !message.text.includes('（已停止生成）')
               ? { ...message, clues: buildClues(summary, message.text) }
               : message
           )))
@@ -367,21 +505,35 @@ export function PetChatScreen() {
         activeSessionId,
         !activeSessionId,
         {
+          onProgress: (progress) => {
+            if (!isActive() || streamedText) return
+            updateStreamingMessage((message) => ({ ...message, text: progress.label }))
+          },
+          onDietResult: (result) => {
+            if (!isActive()) return
+            dietRecommendation = result.recommendation
+            dietAnswer = result.answer || ''
+            updateStreamingMessage((message) => ({
+              ...message,
+              recommendation: result.recommendation,
+            }))
+          },
           onChunk: (chunk) => {
             if (!isActive() || !chunk) return
             streamedText += chunk
-            updateStreamingMessage((message) => ({ ...message, text: `${message.text}${chunk}` }))
+            updateStreamingMessage((message) => ({ ...message, text: streamedText }))
           },
         },
         {
           fetch: mobilePetChatStreamFetch,
           signal: abortController.signal,
           timeoutMs: 180000,
+          enableThinking,
         },
       )
       if (!isActive()) return
       if (meta.session_id) setActiveSessionId(meta.session_id)
-      const answer = streamedText || '我看完了，但这次没有生成足够明确的结论。可以先多记录几餐再试。'
+      const answer = streamedText || dietAnswer || '我看完了，但这次没有生成足够明确的结论。可以先多记录几餐再试。'
       finishMessage(answer)
     } catch (error) {
       if (!isActive()) return
@@ -411,7 +563,7 @@ export function PetChatScreen() {
           return
         }
 
-        const chat = await apiClient.generatePetChat(text, range, activeSessionId, !activeSessionId)
+        const chat = await apiClient.generatePetChat(text, range, activeSessionId, !activeSessionId, enableThinking)
         if (!isActive()) return
         if (chat.session_id) setActiveSessionId(chat.session_id)
         streamedText = chat.answer || ''
@@ -432,15 +584,17 @@ export function PetChatScreen() {
         setBusy(false)
       }
     }
-  }, [activeSessionId, petName, showError, statsSummary])
+  }, [activeSessionId, enableThinking, petName, showError, statsSummary])
 
   const send = useCallback(() => {
     const text = input.trim()
-    if (!text || busy) return
+    if (!text || busy || estimatingCredits || estimatedCredits === null) return
     setInput('')
     const range: StatsRange = /30|月|长期/.test(text) ? 'month' : activeRange
     void runAnalysis(text, range)
-  }, [activeRange, busy, input, runAnalysis])
+  }, [activeRange, busy, estimatedCredits, estimatingCredits, input, runAnalysis])
+
+  const canSend = Boolean(input.trim()) && !busy && !estimatingCredits && estimatedCredits !== null
 
   return (
     <View style={styles.page}>
@@ -463,7 +617,7 @@ export function PetChatScreen() {
       </View>
 
       <View style={styles.stage}>
-        <PetAvatar pet={petSummary?.pet} size={56} mood={petSummary?.status.mood} state={petSummary?.status.state} />
+        <PetAvatar pet={petSummary?.pet} size={56} mood={petSummary?.status.mood} state={petSummary?.status.state} mealState={petSummary?.status.meal_state} motion="companion" />
         <View style={styles.stageBubble}>
           <Text style={styles.stageTitle}>{petName}在读你的饮食记录</Text>
           <Text style={styles.stageCopy}>
@@ -520,13 +674,21 @@ export function PetChatScreen() {
         <View style={styles.messageList}>
           {messages.map((message) => (
             <View key={message.id} style={[styles.messageRow, message.role === 'user' && styles.messageRowUser]}>
-              {message.role === 'pet' ? <PetAvatar pet={petSummary?.pet} size={30} mood={petSummary?.status.mood} state={petSummary?.status.state} /> : null}
+              {message.role === 'pet' ? <PetAvatar pet={petSummary?.pet} size={30} mood={petSummary?.status.mood} state={petSummary?.status.state} mealState={petSummary?.status.meal_state} /> : null}
               <View style={[styles.bubble, message.role === 'user' ? styles.userBubble : styles.petBubble]}>
                 {busy && message.id === streamingMessageId && !message.text ? (
                   <ActivityIndicator color={colors.brand} />
                 ) : (
                   <Text style={[styles.messageText, message.role === 'user' && styles.userMessageText]}>{message.text}</Text>
                 )}
+                {message.role === 'pet' && message.recommendation ? (
+                  <DietRecommendationCards
+                    result={message.recommendation}
+                    savedSchoolIds={savedSchoolIds}
+                    onSave={(result) => void saveCampusPreference(result)}
+                    onOpen={openRecommendationDetail}
+                  />
+                ) : null}
                 {message.clues?.length ? (
                   <View style={styles.clueList}>
                     {message.clues.map((clue, index) => (
@@ -548,9 +710,24 @@ export function PetChatScreen() {
         </View>
       </ScrollView>
 
+      <View style={styles.thinkingRow}>
+        <View style={styles.thinkingCopy}>
+          <Text style={styles.thinkingTitle}>深度思考</Text>
+          <Text style={styles.thinkingNote}>更细致，回复会更慢</Text>
+        </View>
+        <Switch
+          accessibilityLabel="深度思考开关"
+          value={enableThinking}
+          disabled={busy}
+          onValueChange={setEnableThinking}
+          trackColor={{ false: '#d6e2da', true: '#85c9a9' }}
+          thumbColor={enableThinking ? colors.brandDark : '#ffffff'}
+        />
+      </View>
+
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.quickScroll} contentContainerStyle={styles.quickRow}>
         {(!hasAnalysis ? QUICK_QUESTIONS : FOLLOW_UPS.map((text) => ({ text, range: activeRange }))).map((item) => (
-          <MiniButton key={item.text} label={item.text} disabled={busy} onPress={() => void runAnalysis(item.text, item.range)} />
+          <MiniButton key={item.text} label={item.text} disabled={busy} onPress={() => setInput(item.text)} />
         ))}
       </ScrollView>
 
@@ -563,18 +740,101 @@ export function PetChatScreen() {
           returnKeyType="send"
           style={styles.input}
           onSubmitEditing={() => {
-            if (!busy) send()
+            if (canSend) send()
           }}
         />
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={busy ? '停止生成' : '发送消息'}
-          style={[styles.sendButton, busy && styles.stopButton, (!busy && !input.trim()) && styles.sendButtonDisabled]}
-          disabled={!busy && !input.trim()}
+          style={[styles.sendButton, busy && styles.stopButton, (!busy && !canSend) && styles.sendButtonDisabled]}
+          disabled={!busy && !canSend}
           onPress={busy ? cancelGeneration : send}
         >
           <Text style={[styles.sendText, busy && styles.stopText]}>{busy ? '停止' : '发送'}</Text>
         </Pressable>
+      </View>
+      {input.trim() ? (
+        <Text style={styles.creditCost}>
+          {estimatedCredits === null ? '预计消耗 -- 积分' : `预计消耗 ${estimatedCredits} 积分`}
+        </Text>
+      ) : null}
+    </View>
+  )
+}
+
+function DietRecommendationCards({
+  result,
+  savedSchoolIds,
+  onSave,
+  onOpen,
+}: {
+  result: DietRecommendationResult
+  savedSchoolIds: string[]
+  onSave: (result: DietRecommendationResult) => void
+  onOpen: (option: DietRecommendationOption) => void
+}) {
+  const school = result.resolved_school
+  const saved = Boolean(school?.id && savedSchoolIds.includes(school.id))
+  return (
+    <View style={styles.dietResult}>
+      {school ? (
+        <View style={styles.dietContext}>
+          <View style={styles.dietContextCopy}>
+            <Text style={styles.dietSchool}>{school.name}</Text>
+            <Text style={styles.dietSource}>{recommendationSourceLabel(result)}</Text>
+          </View>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={saved ? `${school.name}已设为常用学校` : `将${school.name}设为常用学校`}
+            disabled={saved}
+            onPress={() => onSave(result)}
+            style={[styles.schoolSave, saved && styles.schoolSaveSaved]}
+          >
+            <Text style={[styles.schoolSaveText, saved && styles.schoolSaveTextSaved]}>
+              {saved ? '已设为常用' : '设为常用学校'}
+            </Text>
+          </Pressable>
+        </View>
+      ) : null}
+      <View style={styles.dietOptions}>
+        {(result.recommendations || []).slice(0, 5).map((option, index) => {
+          const location = recommendationLocation(option)
+          const price = recommendationPrice(option)
+          const canOpen = option.source === 'public_food_library' && Boolean(option.source_id)
+          const estimated = option.nutrition_basis === 'library_estimate'
+          const portion = String(option.items?.[0]?.amount || '').trim()
+          const weightMethod = option.weight_method === 'visual_estimate'
+            ? '视觉估重'
+            : option.weight_method === 'ai_estimate' ? 'AI 估重' : ''
+          return (
+            <Pressable
+              key={`${option.source || 'option'}-${option.source_id || index}`}
+              accessibilityRole={canOpen ? 'button' : undefined}
+              accessibilityLabel={canOpen ? `查看${option.title}详情` : undefined}
+              disabled={!canOpen}
+              onPress={() => onOpen(option)}
+              style={({ pressed }) => [styles.dietCard, canOpen && styles.dietCardOpen, pressed && canOpen && styles.dietCardPressed]}
+            >
+              <View style={styles.dietCardHead}>
+                <Text style={styles.dietRank}>{index + 1}</Text>
+                <Text style={styles.dietCardTitle} numberOfLines={2}>{option.title}</Text>
+                {price ? <Text style={styles.dietPrice}>{price}</Text> : null}
+              </View>
+              {location ? <Text style={styles.dietLocation}>{location}</Text> : null}
+              <View style={styles.dietMacros}>
+                <Text style={styles.dietMacro}>{estimated ? '≈' : ''}{Math.round(option.calories || 0)} kcal</Text>
+                <Text style={styles.dietMacro}>蛋白 {estimated ? '≈' : ''}{Math.round(option.protein || 0)}g</Text>
+                <Text style={styles.dietMacro}>碳水 {estimated ? '≈' : ''}{Math.round(option.carbs || 0)}g</Text>
+                <Text style={styles.dietMacro}>脂肪 {estimated ? '≈' : ''}{Math.round(option.fat || 0)}g</Text>
+              </View>
+              <Text style={styles.dietEvidence}>
+                {estimated ? `库内估算${portion ? ` · 份量 ${portion}` : ''}${weightMethod ? ` · ${weightMethod}` : ''}${option.weight_confidence ? ` · 置信度 ${Math.round(option.weight_confidence * 100)}%` : ''}` : option.nutrition_basis === 'nutrition_label' ? '包装营养标签记录' : '校园库营养记录'}
+              </Text>
+              <Text style={styles.dietReason}>{option.reason}</Text>
+              {canOpen ? <Text style={styles.dietLink}>查看菜品详情 ›</Text> : null}
+            </Pressable>
+          )
+        })}
       </View>
     </View>
   )
@@ -648,7 +908,7 @@ const styles = StyleSheet.create({
   },
   miniButton: {
     maxWidth: 190,
-    minHeight: 32,
+    minHeight: 48,
     borderRadius: 999,
     paddingHorizontal: 12,
     paddingVertical: 6,
@@ -765,11 +1025,169 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '900',
   },
+  dietResult: {
+    marginTop: 10,
+    gap: 8,
+  },
+  dietContext: {
+    gap: 8,
+    padding: 10,
+    borderRadius: 12,
+    backgroundColor: 'rgba(232, 246, 238, 0.9)',
+  },
+  dietContextCopy: {
+    gap: 2,
+  },
+  dietSchool: {
+    color: '#1f4e3d',
+    fontSize: 14,
+    lineHeight: 19,
+    fontWeight: '900',
+  },
+  dietSource: {
+    color: '#6d8278',
+    fontSize: 10,
+    lineHeight: 15,
+  },
+  schoolSave: {
+    minHeight: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: 'rgba(47, 143, 111, 0.22)',
+  },
+  schoolSaveSaved: {
+    backgroundColor: 'rgba(47, 143, 111, 0.08)',
+  },
+  schoolSaveText: {
+    color: '#2f8f6f',
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  schoolSaveTextSaved: {
+    color: '#6f8178',
+  },
+  dietOptions: {
+    gap: 8,
+  },
+  dietCard: {
+    minHeight: 48,
+    padding: 10,
+    gap: 6,
+    borderRadius: 12,
+    backgroundColor: '#ffffff',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(68, 100, 84, 0.13)',
+  },
+  dietCardOpen: {
+    borderColor: 'rgba(47, 143, 111, 0.28)',
+  },
+  dietCardPressed: {
+    opacity: 0.7,
+    transform: [{ scale: 0.99 }],
+  },
+  dietCardHead: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 7,
+  },
+  dietRank: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    overflow: 'hidden',
+    textAlign: 'center',
+    color: '#ffffff',
+    backgroundColor: '#2f8f6f',
+    fontSize: 11,
+    lineHeight: 22,
+    fontWeight: '900',
+  },
+  dietCardTitle: {
+    flex: 1,
+    minWidth: 0,
+    color: '#244438',
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '900',
+  },
+  dietPrice: {
+    color: '#a66a16',
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: '900',
+  },
+  dietLocation: {
+    color: '#6d8278',
+    fontSize: 11,
+    lineHeight: 16,
+  },
+  dietMacros: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 5,
+  },
+  dietMacro: {
+    color: '#355247',
+    backgroundColor: 'rgba(232, 246, 238, 0.78)',
+    borderRadius: 8,
+    overflow: 'hidden',
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    fontSize: 10,
+    lineHeight: 14,
+    fontWeight: '800',
+  },
+  dietEvidence: {
+    color: '#809087',
+    fontSize: 10,
+    lineHeight: 15,
+  },
+  dietReason: {
+    color: '#405a50',
+    fontSize: 11,
+    lineHeight: 17,
+  },
+  dietLink: {
+    minHeight: 28,
+    color: '#2f8f6f',
+    fontSize: 11,
+    lineHeight: 28,
+    fontWeight: '900',
+  },
+  thinkingRow: {
+    zIndex: 1,
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 8,
+  },
+  thinkingCopy: {
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 8,
+  },
+  thinkingTitle: {
+    color: '#315044',
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '900',
+  },
+  thinkingNote: {
+    color: '#829188',
+    fontSize: 11,
+    lineHeight: 16,
+  },
   quickScroll: {
     zIndex: 1,
     flexShrink: 0,
     flexGrow: 0,
-    maxHeight: 34,
+    maxHeight: 48,
     marginTop: 2,
     marginBottom: 7,
   },
@@ -798,7 +1216,7 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
-    height: 36,
+    height: 48,
     borderRadius: 11,
     paddingHorizontal: 10,
     paddingVertical: 0,
@@ -809,7 +1227,7 @@ const styles = StyleSheet.create({
   },
   sendButton: {
     width: 56,
-    minHeight: 36,
+    minHeight: 48,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 11,
@@ -830,6 +1248,16 @@ const styles = StyleSheet.create({
   },
   stopText: {
     color: '#b45353',
+  },
+  creditCost: {
+    zIndex: 1,
+    alignSelf: 'flex-end',
+    minHeight: 24,
+    paddingTop: 3,
+    paddingHorizontal: 8,
+    color: '#6f8178',
+    fontSize: 10,
+    lineHeight: 16,
   },
   historyPanel: {
     position: 'absolute',

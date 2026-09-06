@@ -1,5 +1,6 @@
 import { useFonts } from 'expo-font'
 import { StatusBar } from 'expo-status-bar'
+import { useEffect } from 'react'
 import { ActivityIndicator, StyleSheet, View } from 'react-native'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { AuthProvider } from './src/providers/AuthProvider'
@@ -8,6 +9,7 @@ import { DialogProvider } from './src/providers/DialogProvider'
 import { RootNavigator } from './src/navigation/RootNavigator'
 import { installConsoleLogCapture } from './src/diagnostics/consoleLogBuffer'
 import { configureTextScaling } from './src/utils/textScaling'
+import { runNotificationSmokeTest } from './src/utils/pushNotifications'
 import { colors } from './src/theme'
 
 installConsoleLogCapture()
@@ -18,6 +20,10 @@ function AppContent() {
   const [fontsLoaded] = useFonts({
     iconfont: require('./assets/fonts/iconfont.ttf'),
   })
+
+  useEffect(() => {
+    void runNotificationSmokeTest()
+  }, [])
 
   if (!fontsLoaded) {
     return (

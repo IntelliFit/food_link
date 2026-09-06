@@ -5,5 +5,6 @@ declare const process: {
     EXPO_PUBLIC_APP_WECHAT_DEV_CODE?: string
     EXPO_PUBLIC_WECHAT_APP_ID?: string
     EXPO_PUBLIC_ENABLE_DEBUG_LOGIN?: string
+    EXPO_PUBLIC_NOTIFICATION_SMOKE_TEST?: string
   }
 }

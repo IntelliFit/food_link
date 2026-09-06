@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { ActivityIndicator, Image, ImageBackground, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Switch, Text, TextInput, View, type KeyboardTypeOptions, type StyleProp, type ViewStyle } from 'react-native'
+import { AccessibilityInfo, ActivityIndicator, Image, ImageBackground, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Switch, Text, TextInput, View, type KeyboardTypeOptions, type StyleProp, type ViewStyle } from 'react-native'
 import { Asset } from 'expo-asset'
 import * as FileSystem from 'expo-file-system/legacy'
 import * as ImagePicker from 'expo-image-picker'
@@ -8,7 +8,7 @@ import { CommonActions, useFocusEffect, useNavigation, useRoute, type RouteProp 
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import Svg, { Defs, Line as SvgLine, LinearGradient as SvgLinearGradient, Path as SvgPath, Rect as SvgRect, Stop } from 'react-native-svg'
-import { ChevronLeft, Flame, ImagePlus, Info, UserRound, X } from 'lucide-react-native'
+import { CalendarDays, Camera, ChevronLeft, Flame, ImagePlus, Images, Info, Plus, Sparkles, Trash2, UserRound, X, type LucideIcon } from 'lucide-react-native'
 import {
   normalizeInsightText,
   type AnalysisTask,
@@ -41,6 +41,7 @@ import { AppButton } from '../components/AppButton'
 import { InsightMarkdownView } from '../components/InsightMarkdownView'
 import { PetAvatar, petMoodLabel, petStateLabel } from '../components/PetAvatar'
 import { AppAlert as Alert } from '../providers/DialogProvider'
+import { useColorScheme } from '../providers/ColorSchemeProvider'
 import { emitFoodExpiryChangedEvent, emitHomeDashboardRefreshEvent } from '../utils/home-events'
 import type { LocationSelection, RootStackParamList } from '../navigation/types'
 import { colors } from '../theme'
@@ -1297,19 +1298,24 @@ export function StatsMetabolicScreen() {
 
 export function TrendDetailScreen() {
   const route = useRoute<RouteProp<RootStackParamList, 'TrendDetail'>>()
+  const insets = useSafeAreaInsets()
+  const { isDark } = useColorScheme()
   const targetDate = useMemo(() => normalizeTrendRouteDate(route.params.date), [route.params.date])
   const [summary, setSummary] = useState<BodyMetricsSummary | null>(null)
   const [exerciseLogs, setExerciseLogs] = useState<ExerciseLogItem[]>([])
   const [selectedWaterDate, setSelectedWaterDate] = useState(targetDate)
   const [mutatingId, setMutatingId] = useState('')
   const [loading, setLoading] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const kind = route.params.kind
-  const title = kind === 'weight' ? '体重趋势' : kind === 'water' ? '饮水趋势' : '运动趋势'
+  const title = kind === 'weight' ? '体重趋势' : kind === 'water' ? '喝水趋势' : '运动趋势'
   const rangeEndDate = todayKey()
   const dates = useMemo(() => buildTrendDateRange(30, rangeEndDate), [rangeEndDate])
 
-  const load = useCallback(async () => {
-    setLoading(true)
+  const load = useCallback(async (showInitial = true) => {
+    if (showInitial) setLoading(true)
+    setLoadError(null)
     try {
       const body = await apiClient.getBodyMetricsSummary('month')
       setSummary(body)
@@ -1318,15 +1324,21 @@ export function TrendDetailScreen() {
         setExerciseLogs(logs.logs || [])
       }
     } catch (error) {
-      showError(`获取${title}失败`, error)
+      setLoadError(userFacingErrorMessage(error, `获取${title}失败，请稍后重试`))
     } finally {
-      setLoading(false)
+      if (showInitial) setLoading(false)
     }
   }, [dates, kind, title])
 
   useFocusEffect(useCallback(() => {
-    void load()
+    void load(true)
   }, [load]))
+
+  const refresh = useCallback(async () => {
+    setRefreshing(true)
+    await load(false)
+    setRefreshing(false)
+  }, [load])
 
   const weightPoints = useMemo(() => buildWeightTrendPoints(summary, dates), [dates, summary])
   const weightGroups = useMemo(() => buildWeightMonthGroups(summary?.weight_entries || []), [summary?.weight_entries])
@@ -1382,7 +1394,7 @@ export function TrendDetailScreen() {
     try {
       await apiClient.deleteBodyWeightRecord(recordId)
       emitHomeDashboardRefreshEvent({ date: entry.date, force: true })
-      await load()
+      await load(false)
       Alert.alert('已删除', '体重记录已删除')
     } catch (error) {
       showError('删除体重记录失败', error)
@@ -1408,7 +1420,7 @@ export function TrendDetailScreen() {
     try {
       await apiClient.deleteBodyWaterLog(logId)
       emitHomeDashboardRefreshEvent({ date: log.date || selectedWaterDate, force: true })
-      await load()
+      await load(false)
       Alert.alert('已删除', '喝水记录已删除')
     } catch (error) {
       showError('删除喝水记录失败', error)
@@ -1434,7 +1446,7 @@ export function TrendDetailScreen() {
     try {
       await apiClient.deleteExerciseLog(logId)
       emitHomeDashboardRefreshEvent({ date: trendExerciseDate(log), force: true })
-      await load()
+      await load(false)
       Alert.alert('已删除', '运动记录已删除')
     } catch (error) {
       showError('删除运动记录失败', error)
@@ -1450,7 +1462,8 @@ export function TrendDetailScreen() {
     ])
   }
 
-  const theme = getTrendTheme(kind)
+  const theme = useMemo(() => getTrendTheme(kind, isDark), [isDark, kind])
+  const trendStyles = useMemo(() => createTrendStyles(theme), [theme])
   const heroValue = kind === 'weight'
     ? formatTrendWeight(latestWeight?.value)
     : kind === 'water'
@@ -1474,206 +1487,195 @@ export function TrendDetailScreen() {
       ]
 
   return (
-    <View style={[styles.trendRoot, { backgroundColor: theme.page }]}>
+    <View style={trendStyles.root}>
       <Svg pointerEvents="none" width="100%" height="100%" style={StyleSheet.absoluteFill}>
         <Defs>
           <SvgLinearGradient id="trendBg" x1="0" y1="0" x2="0" y2="1">
-            <Stop offset="0" stopColor={theme.accent} stopOpacity={0.1} />
+            <Stop offset="0" stopColor={theme.accent} stopOpacity={isDark ? 0.14 : 0.1} />
             <Stop offset="1" stopColor={theme.page} stopOpacity={1} />
           </SvgLinearGradient>
         </Defs>
         <SvgRect x="0" y="0" width="100%" height="100%" fill="url(#trendBg)" />
       </Svg>
       <ScrollView
-        style={styles.trendPage}
-        contentContainerStyle={styles.trendContent}
-        refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor={theme.accent} colors={[theme.accent]} />}
+        style={trendStyles.page}
+        contentContainerStyle={[trendStyles.content, { paddingBottom: Math.max(insets.bottom + 24, 40) }]}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={theme.accent} colors={[theme.accent]} progressBackgroundColor={theme.surface} />}
       >
-      <View style={styles.trendMiniHero}>
-        <View style={styles.flex}>
-          <Text style={[styles.trendMiniKicker, { color: theme.deep }]}>{targetDate}</Text>
-          <Text style={styles.trendMiniTitle}>{title}</Text>
-        </View>
-        <View style={styles.trendMiniHeroValueWrap}>
-          <Text
-            style={[
-              styles.trendMiniHeroValue,
-              kind === 'water' && styles.trendMiniHeroValueWater,
-              kind === 'exercise' && styles.trendMiniHeroValueExercise,
-            ]}
-          >
-            {heroValue}
-          </Text>
-          <Text style={styles.trendMiniHeroUnit}>{heroUnit}</Text>
-        </View>
-      </View>
-
-      <View style={styles.trendSummaryGrid}>
-        {summaryCards.map((item) => (
-          <View key={item.label} style={[styles.trendSummaryCard, kind === 'exercise' && styles.trendSummaryCardExercise]}>
-            <Text style={styles.trendSummaryLabel}>{item.label}</Text>
-            <Text
-              style={[
-                styles.trendSummaryValue,
-                item.tone === 'up' && styles.trendSummaryValueUp,
-                item.tone === 'down' && styles.trendSummaryValueDown,
-              ]}
-            >
-              {item.value}
-            </Text>
+        {loading && !summary ? (
+          <View style={trendStyles.stateCard} accessibilityRole="progressbar" accessibilityLabel={`正在获取${title}`}>
+            <ActivityIndicator size="large" color={theme.accent} />
           </View>
-        ))}
-      </View>
-
-      {kind === 'weight' ? (
-        <>
-          <View style={styles.trendMiniCard}>
-            <View style={styles.trendSectionTitleRow}>
-              <Text style={styles.trendSectionTitle}>近 30 天趋势</Text>
-              {loading ? <ActivityIndicator size="small" color={theme.accent} /> : null}
-            </View>
-            <TrendLineChart points={weightPoints} accent={theme.accent} emptyText="近 30 天还没有可展示的体重趋势" />
-            <Text style={styles.trendCardNote}>有体重数据的自然日：{weightRecordedDays} 天</Text>
+        ) : loadError && !summary ? (
+          <View style={trendStyles.stateCard} accessibilityRole="alert">
+            <Info size={24} color={theme.warning} strokeWidth={2.2} />
+            <Text style={trendStyles.stateTitle}>暂时无法获取趋势</Text>
+            <Text style={trendStyles.stateMessage}>{loadError}</Text>
+            <Pressable accessibilityRole="button" accessibilityLabel={`重新获取${title}`} style={({ pressed }) => [trendStyles.retryButton, pressed && trendStyles.pressed]} onPress={() => void load(true)}>
+              <Text style={trendStyles.retryButtonText}>重新加载</Text>
+            </Pressable>
           </View>
-
-          <View style={styles.trendMiniCard}>
-            <Text style={styles.trendSectionTitle}>历史记录</Text>
-            {weightGroups.length === 0 ? <Text style={styles.trendHistoryEmpty}>还没有体重记录</Text> : null}
-            {weightGroups.map((group) => (
-              <View key={group.key} style={styles.weightTrendMonthGroup}>
-                <View style={styles.weightTrendMonthHeader}>
-                  <Text style={styles.weightTrendMonthTitle}>{group.label}</Text>
-                  <Text style={styles.weightTrendMonthMeta}>总变化 {formatTrendSigned(group.totalChange, 1)}kg</Text>
-                </View>
-                {group.items.map((entry) => {
-                  const isDeleting = Boolean(entry.id && mutatingId === entry.id)
-                  return (
-                    <View key={`${entry.id || entry.date}-${entry.recorded_at || entry.value}`} style={[styles.weightTrendHistoryRow, isDeleting && styles.trendRowMuted]}>
-                      <View style={styles.flex}>
-                        <Text style={styles.weightTrendDate}>{formatTrendMonthDay(entry.date)}</Text>
-                        <Text style={styles.weightTrendDelta}>{formatTrendSigned(entry.delta, 1)}kg</Text>
-                      </View>
-                      <View style={styles.weightTrendHistorySide}>
-                        <Text style={styles.weightTrendValue}>{formatTrendWeight(entry.value)}kg</Text>
-                        <Pressable
-                          style={styles.trendDeletePill}
-                          disabled={isDeleting}
-                          onPress={() => confirmDeleteWeight(entry)}
-                        >
-                          {isDeleting ? <ActivityIndicator size="small" color={colors.danger} /> : <Text style={styles.trendDeleteText}>删除</Text>}
-                        </Pressable>
-                      </View>
-                    </View>
-                  )
-                })}
-              </View>
-            ))}
-          </View>
-        </>
-      ) : null}
-
-      {kind === 'water' ? (
-        <>
-          <View style={styles.trendMiniCard}>
-            <View style={styles.trendSectionTitleRow}>
-              <Text style={styles.trendSectionTitle}>近 30 天热力</Text>
-              {loading ? <ActivityIndicator size="small" color={theme.accent} /> : null}
-            </View>
-            <TrendHeatmap
-              points={waterPoints}
-              maxValue={Math.max(waterGoal, ...waterPoints.map((item) => item.value || 0), 1)}
-              selectedDate={selectedWaterDate}
-              onSelect={setSelectedWaterDate}
-              variant="water"
-            />
-            <Text style={styles.trendCardNote}>浅色表示少量记录，深色表示接近或达到目标</Text>
-          </View>
-
-          <View style={styles.trendMiniCard}>
-            <View style={styles.trendSectionTitleRow}>
-              <Text style={styles.trendSectionTitle}>最近喝水</Text>
-              {selectedWaterDay ? <Text style={[styles.trendSelectedDate, { color: theme.deep, backgroundColor: theme.soft }]}>{formatTrendMonthDay(selectedWaterDate)}</Text> : null}
-            </View>
-            {recentWaterDays.length === 0 ? <Text style={styles.trendHistoryEmpty}>还没有喝水记录</Text> : null}
-            {recentWaterDays.map((day) => (
-              <Pressable
-                key={day.date}
-                style={[styles.waterTrendHistoryRow, selectedWaterDate === day.date && styles.waterTrendHistoryRowSelected]}
-                onPress={() => setSelectedWaterDate(day.date)}
-              >
-                <Text style={styles.waterTrendDate}>{formatTrendMonthDay(day.date)}</Text>
-                <Text style={styles.waterTrendMain}>{Math.round(day.total || 0)} ml</Text>
-                <Text style={styles.waterTrendSub}>{getTrendWaterLogItems(day).length} 次</Text>
-              </Pressable>
-            ))}
-            {selectedWaterLogs.length > 0 ? (
-              <View style={styles.waterTrendDayDetail}>
-                <Text style={styles.waterTrendDetailTitle}>{formatTrendMonthDay(selectedWaterDate)} 明细</Text>
-                {selectedWaterLogs.map((log, index) => {
-                  const logKey = log.id || `${log.date}-${index}-${log.amount_ml}`
-                  const isDeleting = Boolean(log.id && mutatingId === log.id)
-                  return (
-                    <View key={logKey} style={[styles.waterTrendDetailRow, isDeleting && styles.trendRowMuted]}>
-                      <Text style={styles.waterTrendDetailAmount}>+{Math.round(log.amount_ml || 0)} ml</Text>
-                      <Pressable
-                        style={styles.trendDeletePill}
-                        disabled={isDeleting}
-                        onPress={() => confirmDeleteWater(log)}
-                      >
-                        {isDeleting ? <ActivityIndicator size="small" color={colors.danger} /> : <Text style={styles.trendDeleteText}>{log.id ? '删除' : '仅记录页清空'}</Text>}
-                      </Pressable>
-                    </View>
-                  )
-                })}
+        ) : (
+          <>
+            {loadError ? (
+              <View style={trendStyles.inlineError} accessibilityRole="alert">
+                <Text style={trendStyles.inlineErrorText} numberOfLines={2}>{loadError}</Text>
+                <Pressable accessibilityRole="button" accessibilityLabel={`重新获取${title}`} hitSlop={8} style={({ pressed }) => [trendStyles.inlineRetry, pressed && trendStyles.pressed]} onPress={() => void refresh()}>
+                  <Text style={trendStyles.inlineRetryText}>重试</Text>
+                </Pressable>
               </View>
             ) : null}
-          </View>
-        </>
-      ) : null}
 
-      {kind === 'exercise' ? (
-        <>
-          <View style={styles.trendMiniCard}>
-            <View style={styles.trendSectionTitleRow}>
-              <Text style={styles.trendSectionTitle}>近 30 天活跃</Text>
-              {loading ? <ActivityIndicator size="small" color={theme.accent} /> : null}
+            <View style={trendStyles.hero} accessibilityRole="summary">
+              <View style={trendStyles.flex}>
+                <Text style={trendStyles.kicker}>{targetDate}</Text>
+                <Text style={trendStyles.heroTitle}>{title}</Text>
+              </View>
+              <View style={trendStyles.heroValueWrap}>
+                <Text style={[trendStyles.heroValue, kind === 'water' && trendStyles.heroValueCompact]}>{heroValue}</Text>
+                <Text style={trendStyles.heroUnit}>{heroUnit}</Text>
+              </View>
             </View>
-            <TrendHeatmap
-              points={exerciseDays}
-              maxValue={Math.max(...exerciseDays.map((item) => item.value || 0), 1)}
-              variant="exercise"
-            />
-            <Text style={styles.trendCardNote}>深色表示当天运动消耗更高</Text>
-          </View>
 
-          <View style={styles.trendMiniCard}>
-            <Text style={styles.trendSectionTitle}>最近运动</Text>
-            {recentExerciseLogs.length === 0 ? <Text style={styles.trendHistoryEmpty}>还没有运动记录</Text> : null}
-            {recentExerciseLogs.map((log) => {
-              const isDeleting = Boolean(log.id && mutatingId === log.id)
-              return (
-                <View key={log.id || `${trendExerciseDate(log)}-${trendExerciseTitle(log)}`} style={[styles.exerciseTrendHistoryRow, isDeleting && styles.trendRowMuted]}>
-                  <View style={styles.flex}>
-                    <Text style={styles.exerciseTrendTitle} numberOfLines={2}>{trendExerciseTitle(log)}</Text>
-                    <Text style={styles.exerciseTrendDate}>{formatTrendMonthDay(trendExerciseDate(log))} · {Math.round(log.duration_min || 0)} 分钟</Text>
-                    {log.ai_reasoning ? <Text style={styles.exerciseTrendReason} numberOfLines={2}>{log.ai_reasoning}</Text> : null}
-                  </View>
-                  <View style={styles.exerciseTrendSide}>
-                    <Text style={[styles.exerciseTrendKcal, { color: theme.accent }]}>{Math.round(log.calories_burned || 0)} kcal</Text>
-                    <Pressable
-                      style={styles.trendDeletePill}
-                      disabled={isDeleting}
-                      onPress={() => confirmDeleteExercise(log)}
-                    >
-                      {isDeleting ? <ActivityIndicator size="small" color={colors.danger} /> : <Text style={styles.trendDeleteText}>删除</Text>}
-                    </Pressable>
-                  </View>
+            <View style={trendStyles.summaryGrid} accessibilityRole="summary">
+              {summaryCards.map((item) => (
+                <View key={item.label} style={trendStyles.summaryCard}>
+                  <Text style={trendStyles.summaryLabel}>{item.label}</Text>
+                  <Text style={[trendStyles.summaryValue, item.tone === 'up' && trendStyles.valueUp, item.tone === 'down' && trendStyles.valueDown]}>{item.value}</Text>
                 </View>
-              )
-            })}
-          </View>
-        </>
-      ) : null}
+              ))}
+            </View>
+
+            {kind === 'weight' ? (
+              <>
+                <View style={trendStyles.card}>
+                  <View style={trendStyles.sectionTitleRow}>
+                    <Text style={trendStyles.sectionTitle}>近 30 天趋势</Text>
+                    {loading ? <ActivityIndicator size="small" color={theme.accent} /> : null}
+                  </View>
+                  <TrendLineChart points={weightPoints} accent={theme.accent} emptyText="近 30 天还没有可展示的体重趋势" palette={theme} styleSheet={trendStyles} />
+                  <Text style={trendStyles.cardNote}>有体重数据的自然日：{weightRecordedDays} 天</Text>
+                </View>
+
+                <View style={trendStyles.card}>
+                  <Text style={trendStyles.sectionTitle}>历史记录</Text>
+                  {weightGroups.length === 0 ? <Text style={trendStyles.emptyText}>还没有体重记录</Text> : null}
+                  {weightGroups.map((group) => (
+                    <View key={group.key} style={trendStyles.monthGroup}>
+                      <View style={trendStyles.monthHeader}>
+                        <Text style={trendStyles.monthTitle}>{group.label}</Text>
+                        <Text style={trendStyles.monthMeta}>总变化 {formatTrendSigned(group.totalChange, 1)}kg</Text>
+                      </View>
+                      {group.items.map((entry) => {
+                        const isDeleting = Boolean(entry.id && mutatingId === entry.id)
+                        return (
+                          <View key={`${entry.id || entry.date}-${entry.recorded_at || entry.value}`} style={[trendStyles.historyRow, isDeleting && trendStyles.muted]}>
+                            <View style={trendStyles.flex}>
+                              <Text style={trendStyles.rowTitle}>{formatTrendMonthDay(entry.date)}</Text>
+                              <Text style={trendStyles.rowMeta}>{formatTrendSigned(entry.delta, 1)}kg</Text>
+                            </View>
+                            <View style={trendStyles.rowSide}>
+                              <Text style={trendStyles.rowValue}>{formatTrendWeight(entry.value)}kg</Text>
+                              <Pressable accessibilityRole="button" accessibilityLabel={`删除 ${formatTrendMonthDay(entry.date)} 的体重记录`} accessibilityState={{ busy: isDeleting, disabled: Boolean(mutatingId) }} style={({ pressed }) => [trendStyles.deleteButton, pressed && !mutatingId && trendStyles.pressed]} disabled={Boolean(mutatingId)} onPress={() => confirmDeleteWeight(entry)}>
+                                {isDeleting ? <ActivityIndicator size="small" color={theme.danger} /> : <><Trash2 size={14} color={theme.danger} /><Text style={trendStyles.deleteText}>删除</Text></>}
+                              </Pressable>
+                            </View>
+                          </View>
+                        )
+                      })}
+                    </View>
+                  ))}
+                </View>
+              </>
+            ) : null}
+
+            {kind === 'water' ? (
+              <>
+                <View style={trendStyles.card}>
+                  <View style={trendStyles.sectionTitleRow}>
+                    <Text style={trendStyles.sectionTitle}>近 30 天热力</Text>
+                    {loading ? <ActivityIndicator size="small" color={theme.accent} /> : null}
+                  </View>
+                  <TrendHeatmap points={waterPoints} maxValue={Math.max(waterGoal, ...waterPoints.map((item) => item.value || 0), 1)} selectedDate={selectedWaterDate} onSelect={setSelectedWaterDate} variant="water" palette={theme} styleSheet={trendStyles} />
+                  <Text style={trendStyles.cardNote}>浅色表示少量记录，深色表示接近或达到目标</Text>
+                </View>
+
+                <View style={trendStyles.card}>
+                  <View style={trendStyles.sectionTitleRow}>
+                    <Text style={trendStyles.sectionTitle}>最近喝水</Text>
+                    {selectedWaterDay ? <Text style={trendStyles.selectedDate}>{formatTrendMonthDay(selectedWaterDate)}</Text> : null}
+                  </View>
+                  {recentWaterDays.length === 0 ? <Text style={trendStyles.emptyText}>还没有喝水记录</Text> : null}
+                  {recentWaterDays.map((day) => {
+                    const selected = selectedWaterDate === day.date
+                    return (
+                      <Pressable key={day.date} accessibilityRole="button" accessibilityLabel={`${formatTrendMonthDay(day.date)}，${Math.round(day.total || 0)}毫升，${getTrendWaterLogItems(day).length}次`} accessibilityState={{ selected }} style={({ pressed }) => [trendStyles.waterHistoryRow, selected && trendStyles.waterHistoryRowSelected, pressed && trendStyles.pressed]} onPress={() => setSelectedWaterDate(day.date)}>
+                        <Text style={trendStyles.waterDate}>{formatTrendMonthDay(day.date)}</Text>
+                        <Text style={trendStyles.waterMain}>{Math.round(day.total || 0)} ml</Text>
+                        <Text style={trendStyles.waterSub}>{getTrendWaterLogItems(day).length} 次</Text>
+                      </Pressable>
+                    )
+                  })}
+                  {selectedWaterLogs.length > 0 ? (
+                    <View style={trendStyles.dayDetail}>
+                      <Text style={trendStyles.detailTitle}>{formatTrendMonthDay(selectedWaterDate)} 明细</Text>
+                      {selectedWaterLogs.map((log, index) => {
+                        const logKey = log.id || `${log.date}-${index}-${log.amount_ml}`
+                        const isDeleting = Boolean(log.id && mutatingId === log.id)
+                        return (
+                          <View key={logKey} style={[trendStyles.detailRow, isDeleting && trendStyles.muted]}>
+                            <Text style={trendStyles.detailAmount}>+{Math.round(log.amount_ml || 0)} ml</Text>
+                            {log.id ? (
+                              <Pressable accessibilityRole="button" accessibilityLabel={`删除 ${Math.round(log.amount_ml || 0)}毫升喝水记录`} accessibilityState={{ busy: isDeleting, disabled: Boolean(mutatingId) }} style={({ pressed }) => [trendStyles.deleteButton, pressed && !mutatingId && trendStyles.pressed]} disabled={Boolean(mutatingId)} onPress={() => confirmDeleteWater(log)}>
+                                {isDeleting ? <ActivityIndicator size="small" color={theme.danger} /> : <><Trash2 size={14} color={theme.danger} /><Text style={trendStyles.deleteText}>删除</Text></>}
+                              </Pressable>
+                            ) : <Text style={trendStyles.readonlyText}>可在记录页清空</Text>}
+                          </View>
+                        )
+                      })}
+                    </View>
+                  ) : null}
+                </View>
+              </>
+            ) : null}
+
+            {kind === 'exercise' ? (
+              <>
+                <View style={trendStyles.card}>
+                  <View style={trendStyles.sectionTitleRow}>
+                    <Text style={trendStyles.sectionTitle}>近 30 天活跃</Text>
+                    {loading ? <ActivityIndicator size="small" color={theme.accent} /> : null}
+                  </View>
+                  <TrendHeatmap points={exerciseDays} maxValue={Math.max(...exerciseDays.map((item) => item.value || 0), 1)} variant="exercise" palette={theme} styleSheet={trendStyles} />
+                  <Text style={trendStyles.cardNote}>深色表示当天运动消耗更高</Text>
+                </View>
+
+                <View style={trendStyles.card}>
+                  <Text style={trendStyles.sectionTitle}>最近运动</Text>
+                  {recentExerciseLogs.length === 0 ? <Text style={trendStyles.emptyText}>还没有运动记录</Text> : null}
+                  {recentExerciseLogs.map((log) => {
+                    const isDeleting = Boolean(log.id && mutatingId === log.id)
+                    return (
+                      <View key={log.id || `${trendExerciseDate(log)}-${trendExerciseTitle(log)}`} style={[trendStyles.historyRow, isDeleting && trendStyles.muted]}>
+                        <View style={trendStyles.flex}>
+                          <Text style={trendStyles.rowTitle} numberOfLines={2}>{trendExerciseTitle(log)}</Text>
+                          <Text style={trendStyles.rowMeta}>{formatTrendMonthDay(trendExerciseDate(log))} · {Math.round(log.duration_min || 0)} 分钟</Text>
+                          {log.ai_reasoning ? <Text style={trendStyles.rowReason} numberOfLines={2}>{log.ai_reasoning}</Text> : null}
+                        </View>
+                        <View style={trendStyles.rowSide}>
+                          <Text style={trendStyles.accentValue}>{Math.round(log.calories_burned || 0)} kcal</Text>
+                          <Pressable accessibilityRole="button" accessibilityLabel={`删除运动记录 ${trendExerciseTitle(log)}`} accessibilityState={{ busy: isDeleting, disabled: Boolean(mutatingId) }} style={({ pressed }) => [trendStyles.deleteButton, pressed && !mutatingId && trendStyles.pressed]} disabled={Boolean(mutatingId)} onPress={() => confirmDeleteExercise(log)}>
+                            {isDeleting ? <ActivityIndicator size="small" color={theme.danger} /> : <><Trash2 size={14} color={theme.danger} /><Text style={trendStyles.deleteText}>删除</Text></>}
+                          </Pressable>
+                        </View>
+                      </View>
+                    )
+                  })}
+                </View>
+              </>
+            ) : null}
+          </>
+        )}
       </ScrollView>
     </View>
   )
@@ -2277,10 +2279,17 @@ export function PackagedFoodTaskDetailScreen() {
 
   const packaged = task?.packaged_product || null
   const auto = packaged?.auto_ingest_result
+  const taskResult = task?.result && typeof task.result === 'object' ? task.result as Record<string, unknown> : undefined
+  const taskReward = taskResult?.reward && typeof taskResult.reward === 'object' ? taskResult.reward as Record<string, unknown> : undefined
+  const linkedPackagedFoodId = String(packaged?.packaged_food_id || auto?.packaged_food_id || taskReward?.packaged_food_id || '').trim()
   const nutrition = packaged?.unit_nutrition_per_100g || {}
   const imageUrls = packagedTaskImageUrls(task, packaged)
   const isRunning = ['pending', 'queued', 'processing', 'running'].includes(String(task?.status || ''))
-  const linkedPackagedFood = Boolean(packaged?.packaged_food_id || auto?.packaged_food_id || auto?.status === 'ingested')
+  const linkedPackagedFood = Boolean(linkedPackagedFoodId)
+  const openPackagedNextStep = () => {
+    if (linkedPackagedFoodId) navigation.navigate('PackagedFoodCorrection', { packagedFoodId: linkedPackagedFoodId })
+    else navigation.navigate('PackagedFoodEdit', { taskId: route.params.taskId })
+  }
 
   const insets = useSafeAreaInsets()
   const taskStatus = String(task?.status || '')
@@ -2311,7 +2320,7 @@ export function PackagedFoodTaskDetailScreen() {
           <View style={styles.packagedTaskHeroActions}>
             <View style={styles.packagedTaskHeroAction}><PackagedActionButton label="刷新" tone="ghost" loading={loading} onPress={load} /></View>
             {!isRunning ? <View style={styles.packagedTaskHeroAction}><PackagedActionButton label="重新上传" tone="ghost" onPress={() => navigation.navigate('PackagedFoodEdit')} /></View> : null}
-            {packaged ? <View style={styles.packagedTaskHeroAction}><PackagedActionButton label={linkedPackagedFood ? '核对商品' : '补充入库'} tone="ghost" onPress={() => navigation.navigate('PackagedFoodEdit', { taskId: route.params.taskId })} /></View> : null}
+            {packaged ? <View style={styles.packagedTaskHeroAction}><PackagedActionButton label={linkedPackagedFood ? '发起纠错' : '补充入库'} tone="ghost" onPress={openPackagedNextStep} /></View> : null}
           </View>
         </View>
 
@@ -2429,7 +2438,7 @@ export function PackagedFoodTaskDetailScreen() {
               <Text style={styles.packagedSectionSubtitle}>
                 {packaged
                   ? linkedPackagedFood
-                    ? '结果已关联包装食品库，需要修正时可回到补库表单。'
+                    ? '结果已关联包装食品库，如信息有误可提交带证据的纠错提案。'
                     : '用识别结果回填表单，核对后保存入库。'
                   : isRunning
                     ? '后台识别完成后会生成可回填的结构化结果。'
@@ -2439,7 +2448,7 @@ export function PackagedFoodTaskDetailScreen() {
           </View>
           <View style={styles.packagedAiButtonGrid}>
             <View style={styles.packagedAiButtonItem}><PackagedActionButton label="刷新结果" disabled={loading} onPress={load} /></View>
-            {packaged ? <View style={styles.packagedAiButtonItem}><PackagedActionButton label={linkedPackagedFood ? '核对并更新' : '用结果补库'} tone="primary" onPress={() => navigation.navigate('PackagedFoodEdit', { taskId: route.params.taskId })} /></View> : null}
+            {packaged ? <View style={styles.packagedAiButtonItem}><PackagedActionButton label={linkedPackagedFood ? '发起纠错' : '用结果补库'} tone="primary" onPress={openPackagedNextStep} /></View> : null}
             {!isRunning ? <View style={styles.packagedAiButtonItem}><PackagedActionButton label="重新上传" tone="ghost" onPress={() => navigation.navigate('PackagedFoodEdit')} /></View> : null}
           </View>
         </PackagedSection>
@@ -3084,7 +3093,7 @@ const MEMBERSHIP_AGREEMENT_SECTIONS = [
     paragraphs: [
       'Food Link 可能提供轻度版、标准版、进阶版等会员套餐。轻度版适合轻量记录；标准版适合日常饮食记录；进阶版适合高频记录或更精细的健康管理。',
       '标准版及以上套餐可能包含精准模式。精准模式会对食物照片进行更细的分项估算，适合有减脂、增肌或严格记录目标的用户；轻度版通常仅包含标准模式。',
-      '系统积分会按账号会员状态发放。邀请好友、生成分享等行为获得的奖励积分会按活动规则计入累计余额。',
+      '系统积分会按账号会员状态发放。邀请好友达标后获得的会员奖励会保存为待启用权益，分享等活动积分按活动规则计入累计余额。',
     ],
   },
   {
@@ -3115,7 +3124,7 @@ const MEMBERSHIP_AGREEMENT_SECTIONS = [
   {
     title: '六、奖励积分规则',
     paragraphs: [
-      '邀请好友：通过专属邀请码邀请的新用户，在规定时间内完成有效使用后，双方可按活动规则获得奖励积分。',
+      '邀请好友：通过专属邀请码邀请的新用户，在注册后 7 天内完成 2 个自然日有效使用后，邀请人得 7 天轻度版、新朋友得 3 天轻度版，奖励需手动启用。',
       '每日分享：将饮食分析结果生成分享内容并分享，每日首次分享可按规则获得奖励积分。',
       '积分消耗：运动记录、基础饮食记录、精准模式分析、AI 建议等功能可能消耗积分，具体消耗以页面提示和服务端结算为准。',
       '我们保留调整积分获取和消耗规则的权利；如涉及重大变更，会在产品内提前说明。',
@@ -3319,6 +3328,9 @@ export function FoodLibraryDetailScreen() {
   const baseFat = numberValue(item?.total_fat ?? item?.fat)
   const imageUri = manualFoodImageUri(item)
   const sourceLabel = manualFoodSourceLabel(item?.source)
+  const packagedFoodId = item?.source === 'packaged_food'
+    ? String(item.source_id || item.id || '').trim()
+    : ''
   const recordCalories = Math.round(baseCalories * scale)
   const portionText = String(item?.portion_label || `${defaultWeight}g`)
   const heroMeta = String(item?.subtitle || item?.recommend_reason || `默认 ${defaultWeight}g · 可直接记录到本餐`)
@@ -3447,6 +3459,16 @@ export function FoodLibraryDetailScreen() {
             <Text style={styles.manualFoodBottomTitle} numberOfLines={1}>{recordCalories} kcal</Text>
             <Text style={styles.manualFoodBottomSub} numberOfLines={1}>{mealTypeLabel(mealType)} · {recordWeight}g</Text>
           </View>
+          {packagedFoodId ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="纠正这条包装食品信息"
+              style={styles.manualFoodCorrectionButton}
+              onPress={() => navigation.navigate('PackagedFoodCorrection', { packagedFoodId })}
+            >
+              <Text style={styles.manualFoodCorrectionText}>纠错</Text>
+            </Pressable>
+          ) : null}
           <Pressable
             style={[styles.manualFoodSaveButton, loading && styles.manualFoodSaveButtonDisabled]}
             disabled={loading}
@@ -3460,12 +3482,51 @@ export function FoodLibraryDetailScreen() {
   )
 }
 
-export function ExpiryEditScreen() {
-  const route = useRoute<RouteProp<RootStackParamList, 'ExpiryEdit'>>()
-  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
-  const insets = useSafeAreaInsets()
-  const initialItem = route.params?.item
-  const draftFromItem = (nextItem: FoodExpiryItem): ExpiryDraft => ({
+type ExpiryEditPalette = {
+  background: string
+  surface: string
+  surfaceRaised: string
+  surfacePressed: string
+  border: string
+  text: string
+  textSecondary: string
+  textMuted: string
+  brand: string
+  brandStrong: string
+  brandSoft: string
+  danger: string
+  dangerSoft: string
+  warning: string
+  warningSoft: string
+  success: string
+  successSoft: string
+  disabled: string
+  disabledText: string
+  scrim: string
+}
+
+function createExpiryEditPalette(isDark: boolean): ExpiryEditPalette {
+  return isDark
+    ? {
+        background: '#0d1312', surface: '#16231f', surfaceRaised: '#1b2b26', surfacePressed: '#223630',
+        border: '#294037', text: '#f2f7f4', textSecondary: '#b7c7c0', textMuted: '#879991',
+        brand: '#6ee7b7', brandStrong: '#217a59', brandSoft: '#14382d',
+        danger: '#fda4af', dangerSoft: '#421f27', warning: '#fbbf24', warningSoft: '#3b3018',
+        success: '#86efac', successSoft: '#173a29', disabled: '#27332f', disabledText: '#74847d',
+        scrim: 'rgba(0, 0, 0, 0.62)',
+      }
+    : {
+        background: '#f6f8fa', surface: '#ffffff', surfaceRaised: '#f7faf8', surfacePressed: '#edf6f2',
+        border: '#dce9e4', text: '#16332a', textSecondary: '#526b62', textMuted: '#71847d',
+        brand: '#00a871', brandStrong: '#047857', brandSoft: '#e7faf3',
+        danger: '#be123c', dangerSoft: '#ffe4e6', warning: '#b45309', warningSoft: '#fff2df',
+        success: '#15803d', successSoft: '#dcfce7', disabled: '#e5e7eb', disabledText: '#7b8b84',
+        scrim: 'rgba(15, 23, 42, 0.52)',
+      }
+}
+
+function expiryDraftFromItem(nextItem: FoodExpiryItem): ExpiryDraft {
+  return {
     ...newExpiryDraft(),
     clientId: nextItem.id,
     foodName: nextItem.food_name || '',
@@ -3476,25 +3537,76 @@ export function ExpiryEditScreen() {
     storageType: nextItem.storage_type || 'refrigerated',
     note: nextItem.note || '',
     sourceType: nextItem.source_type || 'manual',
-  })
-  const [drafts, setDrafts] = useState<ExpiryDraft[]>(initialItem ? [draftFromItem(initialItem)] : [newExpiryDraft()])
+  }
+}
+
+function expiryDraftHasInput(draft: ExpiryDraft): boolean {
+  return Boolean(draft.foodName.trim() || draft.quantityNote.trim() || draft.note.trim() || draft.customCategory.trim() || draft.sourceType === 'ai')
+}
+
+function isValidExpiryDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
+  const date = new Date(`${value}T00:00:00`)
+  if (Number.isNaN(date.getTime())) return false
+  const normalized = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+  return normalized === value
+}
+
+function expiryDraftErrors(draft: ExpiryDraft, attempted: boolean) {
+  if (!attempted && !expiryDraftHasInput(draft)) return {}
+  const customCategory = !expiryCategoryOptions.includes(draft.category as typeof expiryCategoryOptions[number])
+  return {
+    foodName: !draft.foodName.trim() ? '请填写食物名称' : undefined,
+    category: customCategory && !draft.customCategory.trim() ? '请填写自定义分类' : undefined,
+    expireDate: !isValidExpiryDate(draft.expireDate) ? '请输入有效日期，例如 2026-09-05' : undefined,
+  }
+}
+
+export function ExpiryEditScreen() {
+  const route = useRoute<RouteProp<RootStackParamList, 'ExpiryEdit'>>()
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
+  const insets = useSafeAreaInsets()
+  const { isDark } = useColorScheme()
+  const palette = useMemo(() => createExpiryEditPalette(isDark), [isDark])
+  const expiryEditStyles = useMemo(() => createExpiryEditStyles(palette), [palette])
+  const initialItem = route.params?.item
+  const [drafts, setDrafts] = useState<ExpiryDraft[]>(initialItem ? [expiryDraftFromItem(initialItem)] : [newExpiryDraft()])
   const [images, setImages] = useState<ExpiryImageAsset[]>([])
   const [recognitionContext, setRecognitionContext] = useState('')
   const [recognizing, setRecognizing] = useState(false)
   const [lastRecognizedCount, setLastRecognizedCount] = useState(0)
-  const [loading, setLoading] = useState(false)
+  const [loadingItem, setLoadingItem] = useState(Boolean(route.params?.itemId && !initialItem))
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [formAttempted, setFormAttempted] = useState(false)
+  const [mediaSheetVisible, setMediaSheetVisible] = useState(false)
+  const [previewImageUri, setPreviewImageUri] = useState<string | null>(null)
+  const [reduceMotion, setReduceMotion] = useState(false)
+
+  useEffect(() => {
+    let mounted = true
+    AccessibilityInfo.isReduceMotionEnabled().then((enabled) => {
+      if (mounted) setReduceMotion(enabled)
+    }).catch(() => undefined)
+    const subscription = AccessibilityInfo.addEventListener('reduceMotionChanged', setReduceMotion)
+    return () => {
+      mounted = false
+      subscription.remove()
+    }
+  }, [])
 
   const load = useCallback(async () => {
     const id = String(route.params?.itemId || '').trim()
     if (!id) return
-    setLoading(true)
+    setLoadingItem(true)
+    setLoadError(null)
     try {
       const data = await apiClient.getFoodExpiryItem(id)
-      setDrafts([draftFromItem(data.item)])
+      setDrafts([expiryDraftFromItem(data.item)])
     } catch (error) {
-      showError('获取保质期条目失败', error)
+      setLoadError(userFacingErrorMessage(error, '网络或服务暂时不可用，请稍后重试'))
     } finally {
-      setLoading(false)
+      setLoadingItem(false)
     }
   }, [route.params?.itemId])
 
@@ -3503,8 +3615,9 @@ export function ExpiryEditScreen() {
   }, [load, route.params?.item, route.params?.itemId])
 
   const isEditing = Boolean(route.params?.itemId)
-  const filledDrafts = drafts.filter((draft) => draft.foodName.trim())
-  const saveDisabled = loading || filledDrafts.length === 0
+  const draftsToSave = drafts.filter(expiryDraftHasInput)
+  const namedDraftCount = drafts.filter((draft) => draft.foodName.trim()).length
+  const saveDisabled = saving || loadingItem || namedDraftCount === 0
 
   const updateDraft = (clientId: string, update: Partial<ExpiryDraft>) => {
     setDrafts((current) => current.map((draft) => draft.clientId === clientId ? { ...draft, ...update } : draft))
@@ -3521,10 +3634,18 @@ export function ExpiryEditScreen() {
   }
 
   const pickImages = async (camera = false) => {
+    setMediaSheetVisible(false)
     const remaining = 5 - images.length
     if (remaining <= 0) {
       Alert.alert('最多支持 5 张图片')
       return
+    }
+    if (camera) {
+      const permission = await ImagePicker.requestCameraPermissionsAsync()
+      if (!permission.granted) {
+        Alert.alert('需要相机权限', '请允许使用相机后再拍摄食物。')
+        return
+      }
     }
     const result = camera
       ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.82 })
@@ -3533,13 +3654,7 @@ export function ExpiryEditScreen() {
     setImages((current) => [...current, ...result.assets.slice(0, remaining)])
   }
 
-  const chooseImageSource = () => {
-    Alert.alert('拍照或上传食物', '最多支持 5 张图片一起识别', [
-      { text: '拍照', onPress: () => void pickImages(true) },
-      { text: '从相册选择', onPress: () => void pickImages(false) },
-      { text: '取消', style: 'cancel' },
-    ])
-  }
+  const chooseImageSource = () => setMediaSheetVisible(true)
 
   const recognize = async () => {
     if (!images.length) {
@@ -3581,26 +3696,35 @@ export function ExpiryEditScreen() {
       if (!recognized.length) throw new Error('没有识别到可录入的食物，请换个角度再试')
       setDrafts((current) => {
         const first = current[0]
-        const blank = current.length === 1 && !first.foodName.trim() && !first.quantityNote.trim() && !first.note.trim()
-        return blank ? recognized : [...current, ...recognized]
+        return current.length === 1 && !expiryDraftHasInput(first) ? recognized : [...current, ...recognized]
       })
       setLastRecognizedCount(recognized.length)
     } catch (error) {
-      showError('保质期识别失败', error)
+      Alert.alert('保质期识别失败', userFacingErrorMessage(error))
     } finally {
       setRecognizing(false)
     }
   }
 
   const save = async () => {
-    if (!filledDrafts.length) {
+    setFormAttempted(true)
+    if (!draftsToSave.length) {
       Alert.alert('请至少填写 1 项食物')
       return
     }
-    setLoading(true)
+    const firstInvalid = draftsToSave.find((draft) => {
+      const errors = expiryDraftErrors(draft, true)
+      return Boolean(errors.foodName || errors.category || errors.expireDate)
+    })
+    if (firstInvalid) {
+      Alert.alert('请检查填写内容', '请补全食物名称、自定义分类和有效到期日期。')
+      return
+    }
+
+    setSaving(true)
     try {
       if (route.params?.itemId) {
-        const draft = filledDrafts[0]
+        const draft = draftsToSave[0]
         await apiClient.updateFoodExpiryItem(route.params.itemId, {
           foodName: draft.foodName,
           category: draft.customCategory.trim() || draft.category,
@@ -3611,7 +3735,7 @@ export function ExpiryEditScreen() {
         })
         Alert.alert('已保存', '保质期记录已更新')
       } else {
-        for (const draft of filledDrafts) {
+        for (const draft of draftsToSave) {
           await apiClient.createFoodExpiryItem({
             foodName: draft.foodName,
             category: draft.customCategory.trim() || draft.category,
@@ -3622,177 +3746,163 @@ export function ExpiryEditScreen() {
             sourceType: draft.sourceType,
           })
         }
-        Alert.alert('已保存', `已创建 ${filledDrafts.length} 项提醒`)
+        Alert.alert('已保存', `已创建 ${draftsToSave.length} 项提醒`)
       }
       emitFoodExpiryChangedEvent({ force: true })
       navigation.goBack()
     } catch (error) {
-      showError('保存保质期失败', error)
+      Alert.alert('保存保质期失败', userFacingErrorMessage(error))
     } finally {
-      setLoading(false)
+      setSaving(false)
     }
   }
 
   return (
-    <View style={styles.expiryEditPage}>
+    <KeyboardAvoidingView style={expiryEditStyles.page} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView
-        style={styles.expiryEditScroll}
+        style={expiryEditStyles.scroll}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={[styles.expiryEditContent, { paddingBottom: 104 + insets.bottom }]}
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={[expiryEditStyles.content, { paddingBottom: 104 + insets.bottom }]}
       >
-        {loading && isEditing && drafts[0]?.foodName === '' ? (
-          <View style={styles.expiryEditLoading}>
-            <ActivityIndicator color="#00bc7d" />
+        {loadingItem ? (
+          <View style={expiryEditStyles.loading} accessibilityLabel="正在加载保质期条目"><ActivityIndicator color={palette.brand} /></View>
+        ) : loadError ? (
+          <View style={expiryEditStyles.loadError} accessibilityRole="alert">
+            <Info size={32} color={palette.warning} />
+            <Text style={expiryEditStyles.loadErrorTitle}>加载失败</Text>
+            <Text style={expiryEditStyles.loadErrorDesc}>{loadError}</Text>
+            <Pressable style={({ pressed }) => [expiryEditStyles.retryButton, pressed && expiryEditStyles.pressed]} onPress={() => void load()} accessibilityRole="button" accessibilityLabel="重新加载保质期条目"><Text style={expiryEditStyles.retryButtonText}>重试</Text></Pressable>
           </View>
-        ) : null}
-
-        {!isEditing ? (
-          <View style={styles.expiryAiPanel}>
-            <View style={styles.expiryAiHead}>
-              <View style={styles.flex}>
-                <Text style={styles.expiryEditBlockTitle}>拍照识别预填</Text>
-                <Text style={styles.expiryAiDesc}>支持一张图里识别多个食物，也支持多张图一起识别。AI 会先帮你填能看出来的信息，剩下的你再补。</Text>
-              </View>
-              <View style={styles.expiryAiCost}><Text style={styles.expiryAiCostText}>2 积分/次</Text></View>
-            </View>
-            {images.length ? (
-              <View style={styles.expiryImageGrid}>
-                {images.map((asset, index) => (
-                  <View key={`${asset.uri}-${index}`} style={styles.expiryImageItem}>
-                    <Image source={{ uri: asset.uri }} style={styles.expiryImageThumb} />
-                    <Pressable style={styles.expiryImageRemove} onPress={() => setImages((current) => current.filter((_, itemIndex) => itemIndex !== index))}>
-                      <X size={14} color="#fff" />
-                    </Pressable>
+        ) : (
+          <>
+            {!isEditing ? (
+              <View style={expiryEditStyles.aiPanel}>
+                <View style={expiryEditStyles.aiHead}>
+                  <View style={expiryEditStyles.flex}>
+                    <View style={expiryEditStyles.titleIconRow}><Sparkles size={20} color={palette.brand} /><Text style={expiryEditStyles.blockTitle}>拍照识别预填</Text></View>
+                    <Text style={expiryEditStyles.aiDesc}>支持一张图里识别多个食物，也支持多张图一起识别。AI 会先帮你填能看出来的信息，剩下的你再补。</Text>
                   </View>
-                ))}
-                {images.length < 5 ? <Pressable style={styles.expiryImageAdd} onPress={chooseImageSource}><ImagePlus size={22} color={colors.brand} /><Text style={styles.expiryImageAddText}>继续加图</Text></Pressable> : null}
+                  <View style={expiryEditStyles.aiCost}><Text style={expiryEditStyles.aiCostText}>2 积分/次</Text></View>
+                </View>
+
+                {images.length ? (
+                  <View style={expiryEditStyles.imageGrid}>
+                    {images.map((asset, index) => (
+                      <View key={`${asset.uri}-${index}`} style={expiryEditStyles.imageItem}>
+                        <Pressable onPress={() => setPreviewImageUri(asset.uri)} accessibilityRole="button" accessibilityLabel={`预览第 ${index + 1} 张食物图片`}><Image source={{ uri: asset.uri }} style={expiryEditStyles.imageThumb} /></Pressable>
+                        <Pressable style={({ pressed }) => [expiryEditStyles.imageRemove, pressed && expiryEditStyles.pressed]} hitSlop={10} onPress={() => setImages((current) => current.filter((_, itemIndex) => itemIndex !== index))} accessibilityRole="button" accessibilityLabel={`删除第 ${index + 1} 张食物图片`}><X size={16} color="#fff" /></Pressable>
+                      </View>
+                    ))}
+                    {images.length < 5 ? <Pressable style={({ pressed }) => [expiryEditStyles.imageAdd, pressed && expiryEditStyles.pressed]} onPress={chooseImageSource} accessibilityRole="button" accessibilityLabel="继续添加食物图片"><ImagePlus size={23} color={palette.brand} /><Text style={expiryEditStyles.imageAddText}>继续加图</Text></Pressable> : null}
+                  </View>
+                ) : (
+                  <Pressable style={({ pressed }) => [expiryEditStyles.uploadArea, pressed && expiryEditStyles.uploadAreaPressed]} onPress={chooseImageSource} accessibilityRole="button" accessibilityLabel="拍照或上传食物" accessibilityHint="最多选择五张图片">
+                    <View style={expiryEditStyles.uploadIconCircle}><ImagePlus size={28} color={palette.brand} /></View>
+                    <Text style={expiryEditStyles.uploadTitle}>拍照或上传食物</Text>
+                    <Text style={expiryEditStyles.uploadDesc}>例如冰箱里的牛奶、水果、熟食、剩菜，最多 5 张。</Text>
+                  </Pressable>
+                )}
+
+                <ExpiryEditField screenStyles={expiryEditStyles} palette={palette} label="识别补充说明" value={recognitionContext} onChangeText={setRecognitionContext} placeholder="例如：这些都是今晚刚买的 / 里面有已经开封的酸奶" multiline />
+                <View style={expiryEditStyles.aiActions}>
+                  <Pressable disabled={recognizing} style={({ pressed }) => [expiryEditStyles.aiGhost, recognizing && expiryEditStyles.controlDisabled, pressed && expiryEditStyles.pressed]} onPress={chooseImageSource} accessibilityRole="button" accessibilityLabel="重新选择食物图片" accessibilityState={{ disabled: recognizing }}><Text style={expiryEditStyles.aiGhostText}>重新选图</Text></Pressable>
+                  <Pressable disabled={recognizing} style={({ pressed }) => [expiryEditStyles.aiPrimary, recognizing && expiryEditStyles.controlDisabled, pressed && expiryEditStyles.pressed]} onPress={() => void recognize()} accessibilityRole="button" accessibilityLabel="识别并预填保质期" accessibilityState={{ disabled: recognizing, busy: recognizing }}>{recognizing ? <ActivityIndicator color="#fff" /> : <Text style={expiryEditStyles.aiPrimaryText}>识别并预填</Text>}</Pressable>
+                </View>
+                {lastRecognizedCount > 0 ? <Text style={expiryEditStyles.aiResult} accessibilityRole="alert">刚刚已预填 {lastRecognizedCount} 项，下面缺的信息继续补就行。</Text> : null}
               </View>
-            ) : (
-              <Pressable style={styles.expiryUploadArea} onPress={chooseImageSource}>
-                <Text style={styles.expiryUploadPlus}>＋</Text>
-                <Text style={styles.expiryUploadTitle}>拍照或上传食物</Text>
-                <Text style={styles.expiryUploadDesc}>例如冰箱里的牛奶、水果、熟食、剩菜，最多 5 张。</Text>
-              </Pressable>
-            )}
-            <ExpiryEditField
-              label="识别补充说明"
-              value={recognitionContext}
-              onChangeText={setRecognitionContext}
-              placeholder="例如：这些都是今晚刚买的 / 里面有已经开封的酸奶 / 左边那盒是冷冻水饺"
-              multiline
-            />
-            <View style={styles.expiryAiActions}>
-              <Pressable style={styles.expiryAiGhost} onPress={chooseImageSource}><Text style={styles.expiryAiGhostText}>重新选图</Text></Pressable>
-              <Pressable style={styles.expiryAiPrimary} onPress={() => void recognize()}>
-                {recognizing ? <ActivityIndicator color="#fff" /> : <Text style={styles.expiryAiPrimaryText}>识别并预填</Text>}
-              </Pressable>
-            </View>
-            {lastRecognizedCount > 0 ? <Text style={styles.expiryAiResult}>刚刚已预填 {lastRecognizedCount} 项，下面缺的信息继续补就行。</Text> : null}
-          </View>
-        ) : null}
+            ) : null}
 
-        {!isEditing && drafts.length === 1 && drafts[0].sourceType === 'manual' ? (
-          <View style={styles.expiryEditBlock}>
-            <Text style={styles.expiryEditBlockTitle}>常用模板</Text>
-            <View style={styles.expiryEditPresetList}>
-              {expiryEditPresets.map((preset) => (
-                <Pressable key={preset.name} style={styles.expiryEditPresetChip} onPress={() => applyPreset(drafts[0].clientId, preset)}>
-                  <Text style={styles.expiryEditPresetText}>{preset.name}</Text>
-                </Pressable>
-              ))}
-            </View>
-          </View>
-        ) : null}
+            {!isEditing && drafts.length === 1 && drafts[0].sourceType === 'manual' ? (
+              <View style={expiryEditStyles.block}>
+                <Text style={expiryEditStyles.blockTitle}>常用模板</Text>
+                <View style={expiryEditStyles.presetList}>
+                  {expiryEditPresets.map((preset) => <Pressable key={preset.name} style={({ pressed }) => [expiryEditStyles.presetChip, pressed && expiryEditStyles.pressed]} onPress={() => applyPreset(drafts[0].clientId, preset)} accessibilityRole="button" accessibilityLabel={`使用${preset.name}模板`}><Text style={expiryEditStyles.presetText}>{preset.name}</Text></Pressable>)}
+                </View>
+              </View>
+            ) : null}
 
-        {drafts.map((draft, index) => (
-          <ExpiryDraftCard
-            key={draft.clientId}
-            draft={draft}
-            index={index}
-            canRemove={!isEditing && drafts.length > 1}
-            onChange={(update) => updateDraft(draft.clientId, update)}
-            onRemove={() => setDrafts((current) => current.filter((item) => item.clientId !== draft.clientId))}
-          />
-        ))}
-        {!isEditing ? (
-          <Pressable style={styles.expiryAddItemBar} onPress={() => setDrafts((current) => [...current, newExpiryDraft()])}>
-            <Text style={styles.expiryAddItemText}>＋ 手动再加一项</Text>
-          </Pressable>
-        ) : null}
+            {drafts.map((draft, index) => (
+              <ExpiryDraftCard key={draft.clientId} draft={draft} index={index} attempted={formAttempted} canRemove={!isEditing && drafts.length > 1} palette={palette} screenStyles={expiryEditStyles} onChange={(update) => updateDraft(draft.clientId, update)} onRemove={() => setDrafts((current) => current.filter((item) => item.clientId !== draft.clientId))} />
+            ))}
+            {!isEditing ? <Pressable style={({ pressed }) => [expiryEditStyles.addItemBar, pressed && expiryEditStyles.pressed]} onPress={() => setDrafts((current) => [...current, newExpiryDraft()])} accessibilityRole="button" accessibilityLabel="手动再添加一项保质期提醒"><Plus size={19} color={palette.textSecondary} /><Text style={expiryEditStyles.addItemText}>手动再加一项</Text></Pressable> : null}
+          </>
+        )}
       </ScrollView>
 
-      <View style={[styles.expiryEditFooter, { paddingBottom: Math.max(insets.bottom, 12) }]}>
-        <Pressable
-          disabled={saveDisabled}
-          style={[styles.expiryEditSubmit, saveDisabled && styles.expiryEditSubmitDisabled]}
-          onPress={save}
-        >
-          {loading ? <ActivityIndicator color="#fff" /> : <Text style={[styles.expiryEditSubmitText, saveDisabled && styles.expiryEditSubmitTextDisabled]}>{isEditing ? '保存修改' : `保存 ${filledDrafts.length || 1} 项提醒`}</Text>}
+      <View style={[expiryEditStyles.footer, { paddingBottom: Math.max(insets.bottom, 12) }]}>
+        <Pressable disabled={saveDisabled} style={({ pressed }) => [expiryEditStyles.submit, saveDisabled && expiryEditStyles.submitDisabled, pressed && !saveDisabled && expiryEditStyles.pressed]} onPress={() => void save()} accessibilityRole="button" accessibilityLabel={isEditing ? '保存保质期修改' : `保存 ${namedDraftCount || 1} 项保质期提醒`} accessibilityState={{ disabled: saveDisabled, busy: saving }}>
+          {saving ? <ActivityIndicator color="#fff" /> : <Text style={[expiryEditStyles.submitText, saveDisabled && expiryEditStyles.submitTextDisabled]}>{isEditing ? '保存修改' : `保存 ${namedDraftCount || 1} 项提醒`}</Text>}
         </Pressable>
       </View>
-    </View>
+
+      <Modal transparent visible={mediaSheetVisible} animationType={reduceMotion ? 'none' : 'slide'} onRequestClose={() => setMediaSheetVisible(false)}>
+        <View style={expiryEditStyles.modalBackdrop}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setMediaSheetVisible(false)} accessibilityLabel="关闭图片来源选择" />
+          <View style={[expiryEditStyles.sheet, { paddingBottom: Math.max(insets.bottom, 14) }]} accessibilityViewIsModal>
+            <View style={expiryEditStyles.sheetHandle} />
+            <Text style={expiryEditStyles.sheetTitle}>拍照或上传食物</Text>
+            <Text style={expiryEditStyles.sheetDesc}>最多支持 5 张图片一起识别</Text>
+            <Pressable style={({ pressed }) => [expiryEditStyles.sheetAction, pressed && expiryEditStyles.surfacePressed]} onPress={() => void pickImages(true)} accessibilityRole="button" accessibilityLabel="使用相机拍摄食物"><View style={expiryEditStyles.sheetActionIcon}><Camera size={22} color={palette.brand} /></View><View style={expiryEditStyles.flex}><Text style={expiryEditStyles.sheetActionTitle}>拍照</Text><Text style={expiryEditStyles.sheetActionDesc}>现在拍摄冰箱或食物包装</Text></View></Pressable>
+            <Pressable style={({ pressed }) => [expiryEditStyles.sheetAction, pressed && expiryEditStyles.surfacePressed]} onPress={() => void pickImages(false)} accessibilityRole="button" accessibilityLabel="从手机相册选择食物图片"><View style={expiryEditStyles.sheetActionIcon}><Images size={22} color={palette.brand} /></View><View style={expiryEditStyles.flex}><Text style={expiryEditStyles.sheetActionTitle}>从手机相册选择</Text><Text style={expiryEditStyles.sheetActionDesc}>可一次选择多张图片</Text></View></Pressable>
+            <Pressable style={({ pressed }) => [expiryEditStyles.sheetCancel, pressed && expiryEditStyles.surfacePressed]} onPress={() => setMediaSheetVisible(false)} accessibilityRole="button" accessibilityLabel="取消选择图片"><Text style={expiryEditStyles.sheetCancelText}>取消</Text></Pressable>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal transparent visible={Boolean(previewImageUri)} animationType={reduceMotion ? 'none' : 'fade'} onRequestClose={() => setPreviewImageUri(null)}>
+        <View style={expiryEditStyles.previewBackdrop} accessibilityViewIsModal>
+          {previewImageUri ? <Image source={{ uri: previewImageUri }} style={expiryEditStyles.previewImage} resizeMode="contain" accessibilityLabel="食物图片预览" /> : null}
+          <Pressable style={({ pressed }) => [expiryEditStyles.previewClose, pressed && expiryEditStyles.pressed]} onPress={() => setPreviewImageUri(null)} accessibilityRole="button" accessibilityLabel="关闭图片预览"><X size={24} color="#fff" /></Pressable>
+        </View>
+      </Modal>
+    </KeyboardAvoidingView>
   )
 }
 
 function ExpiryDraftCard({
-  draft,
-  index,
-  canRemove,
-  onChange,
-  onRemove,
+  draft, index, attempted, canRemove, palette, screenStyles, onChange, onRemove,
 }: {
   draft: ExpiryDraft
   index: number
+  attempted: boolean
   canRemove: boolean
+  palette: ExpiryEditPalette
+  screenStyles: ReturnType<typeof createExpiryEditStyles>
   onChange: (update: Partial<ExpiryDraft>) => void
   onRemove: () => void
 }) {
   const customCategory = !expiryCategoryOptions.includes(draft.category as typeof expiryCategoryOptions[number])
+  const errors = expiryDraftErrors(draft, attempted)
   return (
-    <View style={styles.expiryDraftCard}>
-      <View style={styles.expiryDraftHead}>
-        <View>
-          <Text style={styles.expiryDraftTitle}>食物 {index + 1}</Text>
-          <Text style={styles.expiryDraftSubtitle}>{draft.sourceType === 'ai' ? 'AI 已预填，缺的信息继续补就可以' : '手动填写一项保质期提醒'}</Text>
-        </View>
-        <View style={styles.expiryDraftActions}>
-          {draft.sourceType === 'ai' ? <Text style={styles.expiryAiBadge}>{draft.confidence != null ? `AI ${Math.round(draft.confidence * 100)}%` : 'AI 识别'}</Text> : null}
-          {canRemove ? <Pressable onPress={onRemove}><Text style={styles.expiryDraftRemove}>删除</Text></Pressable> : null}
+    <View style={screenStyles.draftCard}>
+      <View style={screenStyles.draftHead}>
+        <View style={screenStyles.flex}><Text style={screenStyles.draftTitle}>食物 {index + 1}</Text><Text style={screenStyles.draftSubtitle}>{draft.sourceType === 'ai' ? 'AI 已预填，缺的信息继续补就可以' : '手动填写一项保质期提醒'}</Text></View>
+        <View style={screenStyles.draftActions}>
+          {draft.sourceType === 'ai' ? <Text style={screenStyles.aiBadge}>{draft.confidence != null ? `AI ${Math.round(draft.confidence * 100)}%` : 'AI 识别'}</Text> : null}
+          {canRemove ? <Pressable style={({ pressed }) => [screenStyles.removeButton, pressed && screenStyles.pressed]} onPress={onRemove} accessibilityRole="button" accessibilityLabel={`删除食物 ${index + 1}`}><Trash2 size={17} color={palette.danger} /><Text style={screenStyles.removeText}>删除</Text></Pressable> : null}
         </View>
       </View>
-      {draft.estimated ? <Text style={styles.expiryDraftTip}>到期日为 AI 建议值{draft.suggestedDays != null ? `（约 ${draft.suggestedDays} 天）` : ''}，建议确认包装日期后再保存。</Text> : null}
-      {draft.recognitionBasis ? <Text style={styles.expiryDraftTip}>{draft.recognitionBasis}</Text> : null}
-      {draft.missingFields?.length ? (
-        <View style={styles.expiryMissingRow}>
-          <Text style={styles.expiryMissingLabel}>还需确认</Text>
-          {draft.missingFields.map((field) => (
-            <View key={field} style={styles.expiryMissingChip}>
-              <Text style={styles.expiryMissingChipText}>{expiryMissingFieldLabel(field)}</Text>
-            </View>
-          ))}
+      {draft.estimated ? <Text style={screenStyles.draftTip}>到期日为 AI 建议值{draft.suggestedDays != null ? `（约 ${draft.suggestedDays} 天）` : ''}，建议确认包装日期后再保存。</Text> : null}
+      {draft.recognitionBasis ? <Text style={screenStyles.draftTip}>{draft.recognitionBasis}</Text> : null}
+      {draft.missingFields?.length ? <View style={screenStyles.missingRow}><Text style={screenStyles.missingLabel}>还需确认</Text>{draft.missingFields.map((field) => <View key={field} style={screenStyles.missingChip}><Text style={screenStyles.missingChipText}>{expiryMissingFieldLabel(field)}</Text></View>)}</View> : null}
+
+      <View style={screenStyles.draftInner}><ExpiryEditField screenStyles={screenStyles} palette={palette} label="食物名称" value={draft.foodName} onChangeText={(foodName) => onChange(confirmExpiryDraftField(draft, { foodName }, ['food_name']))} placeholder="例如 纯牛奶 / 苹果 / 昨晚剩菜" error={errors.foodName} /></View>
+      <View style={screenStyles.draftInner}>
+        <Text style={screenStyles.label}>分类</Text>
+        <View style={screenStyles.choiceList}>
+          {expiryCategoryOptions.map((option) => {
+            const selected = !customCategory && draft.category === option
+            return <Pressable key={option} style={({ pressed }) => [screenStyles.choiceChip, selected && screenStyles.choiceChipActive, pressed && screenStyles.pressed]} onPress={() => onChange(confirmExpiryDraftField(draft, { category: option, customCategory: '' }, ['category']))} accessibilityRole="radio" accessibilityState={{ checked: selected }} accessibilityLabel={option}><Text style={[screenStyles.choiceText, selected && screenStyles.choiceTextActive]}>{option}</Text></Pressable>
+          })}
+          <Pressable style={({ pressed }) => [screenStyles.choiceChip, customCategory && screenStyles.choiceChipActive, pressed && screenStyles.pressed]} onPress={() => onChange(confirmExpiryDraftField(draft, { category: draft.customCategory || '自定义' }, ['category']))} accessibilityRole="radio" accessibilityState={{ checked: customCategory }} accessibilityLabel="自定义分类"><Text style={[screenStyles.choiceText, customCategory && screenStyles.choiceTextActive]}>自定义</Text></Pressable>
         </View>
-      ) : null}
-      <View style={styles.expiryDraftInner}>
-        <ExpiryEditField label="食物名称" value={draft.foodName} onChangeText={(foodName) => onChange(confirmExpiryDraftField(draft, { foodName }, ['food_name']))} placeholder="例如 纯牛奶 / 苹果 / 昨晚剩菜" />
+        {customCategory ? <ExpiryEditField screenStyles={screenStyles} palette={palette} label="" value={draft.customCategory} onChangeText={(customCategoryValue) => onChange(confirmExpiryDraftField(draft, { customCategory: customCategoryValue, category: customCategoryValue || '自定义' }, ['category']))} placeholder="输入自定义分类" error={errors.category} /> : null}
       </View>
-      <View style={styles.expiryDraftInner}>
-        <Text style={styles.expiryEditLabel}>分类</Text>
-        <View style={styles.expiryEditChoiceList}>
-          {expiryCategoryOptions.map((option) => (
-            <Pressable key={option} style={[styles.expiryEditChoiceChip, !customCategory && draft.category === option && styles.expiryEditChoiceChipActive]} onPress={() => onChange(confirmExpiryDraftField(draft, { category: option, customCategory: '' }, ['category']))}>
-              <Text style={[styles.expiryEditChoiceText, !customCategory && draft.category === option && styles.expiryEditChoiceTextActive]}>{option}</Text>
-            </Pressable>
-          ))}
-          <Pressable style={[styles.expiryEditChoiceChip, customCategory && styles.expiryEditChoiceChipActive]} onPress={() => onChange(confirmExpiryDraftField(draft, { category: draft.customCategory || '自定义' }, ['category']))}>
-            <Text style={[styles.expiryEditChoiceText, customCategory && styles.expiryEditChoiceTextActive]}>自定义</Text>
-          </Pressable>
-        </View>
-        {customCategory ? <ExpiryEditField label="" value={draft.customCategory} onChangeText={(customCategoryValue) => onChange(confirmExpiryDraftField(draft, { customCategory: customCategoryValue, category: customCategoryValue || '自定义' }, ['category']))} placeholder="输入自定义分类" /> : null}
-      </View>
-      <View style={styles.expiryDraftInner}><StorageTypeSegment value={draft.storageType} onChange={(storageType) => onChange(confirmExpiryDraftField(draft, { storageType }, ['storage_type']))} /></View>
-      <View style={styles.expiryDraftInner}><ExpiryEditField label="数量说明" value={draft.quantityNote} onChangeText={(quantityNote) => onChange(confirmExpiryDraftField(draft, { quantityNote }, ['quantity_note']))} placeholder="例如 2 盒 / 半袋 / 3 个" /></View>
-      <View style={styles.expiryDraftInner}><ExpiryEditField label="到期日期" value={draft.expireDate} onChangeText={(expireDate) => onChange(confirmExpiryDraftField(draft, { expireDate }, ['expire_date']))} placeholder="YYYY-MM-DD" /></View>
-      <View style={styles.expiryDraftInner}><ExpiryEditField label="备注" value={draft.note} onChangeText={(note) => onChange(confirmExpiryDraftField(draft, { note }, ['note']))} placeholder="例如 已经开封、准备周末吃掉、放在冰箱第二层" multiline /></View>
+      <View style={screenStyles.draftInner}><StorageTypeSegment screenStyles={screenStyles} palette={palette} value={draft.storageType} onChange={(storageType) => onChange(confirmExpiryDraftField(draft, { storageType }, ['storage_type']))} /></View>
+      <View style={screenStyles.draftInner}><ExpiryEditField screenStyles={screenStyles} palette={palette} label="数量说明" value={draft.quantityNote} onChangeText={(quantityNote) => onChange(confirmExpiryDraftField(draft, { quantityNote }, ['quantity_note']))} placeholder="例如 2 盒 / 半袋 / 3 个" /></View>
+      <View style={screenStyles.draftInner}><ExpiryEditField screenStyles={screenStyles} palette={palette} label="到期日期" value={draft.expireDate} onChangeText={(expireDate) => onChange(confirmExpiryDraftField(draft, { expireDate }, ['expire_date']))} placeholder="YYYY-MM-DD" Icon={CalendarDays} error={errors.expireDate} /></View>
+      <View style={screenStyles.draftInner}><ExpiryEditField screenStyles={screenStyles} palette={palette} label="备注" value={draft.note} onChangeText={(note) => onChange(confirmExpiryDraftField(draft, { note }, ['note']))} placeholder="例如 已经开封、准备周末吃掉、放在冰箱第二层" multiline /></View>
     </View>
   )
 }
@@ -3829,6 +3939,10 @@ function ExpiryEditField({
   placeholder,
   keyboardType,
   multiline,
+  error,
+  Icon,
+  palette,
+  screenStyles,
 }: {
   label: string
   value: string
@@ -3836,20 +3950,30 @@ function ExpiryEditField({
   placeholder?: string
   keyboardType?: 'default' | 'decimal-pad' | 'number-pad'
   multiline?: boolean
+  error?: string
+  Icon?: LucideIcon
+  palette: ExpiryEditPalette
+  screenStyles: ReturnType<typeof createExpiryEditStyles>
 }) {
   return (
-    <View style={styles.expiryEditField}>
-      <Text style={styles.expiryEditLabel}>{label}</Text>
-      <TextInput
-        value={value}
-        onChangeText={onChangeText}
-        placeholder={placeholder}
-        placeholderTextColor={colors.textMuted}
-        keyboardType={keyboardType}
-        multiline={multiline}
-        textAlignVertical={multiline ? 'top' : 'center'}
-        style={[styles.expiryEditInput, multiline && styles.expiryEditTextarea]}
-      />
+    <View style={screenStyles.field}>
+      {label ? <Text style={screenStyles.label}>{label}</Text> : null}
+      <View style={[screenStyles.inputShell, multiline && screenStyles.inputShellMultiline, error && screenStyles.inputShellError]}>
+        {Icon ? <Icon size={19} color={error ? palette.danger : palette.textMuted} /> : null}
+        <TextInput
+          value={value}
+          onChangeText={onChangeText}
+          placeholder={placeholder}
+          placeholderTextColor={palette.textMuted}
+          keyboardType={keyboardType}
+          multiline={multiline}
+          textAlignVertical={multiline ? 'top' : 'center'}
+          style={[screenStyles.input, multiline && screenStyles.textarea]}
+          accessibilityLabel={label || placeholder || '输入内容'}
+          accessibilityHint={error}
+        />
+      </View>
+      {error ? <Text style={screenStyles.errorText} accessibilityRole="alert">{error}</Text> : null}
     </View>
   )
 }
@@ -4051,20 +4175,36 @@ function SegmentButton({ label, active, onPress }: { label: string; active: bool
   )
 }
 
-function StorageTypeSegment({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+function StorageTypeSegment({
+  value,
+  onChange,
+  palette,
+  screenStyles,
+}: {
+  value: string
+  onChange: (value: string) => void
+  palette: ExpiryEditPalette
+  screenStyles: ReturnType<typeof createExpiryEditStyles>
+}) {
   return (
-    <View style={styles.expiryEditField}>
-      <Text style={styles.expiryEditLabel}>储存方式</Text>
-      <View style={styles.expiryEditChoiceList}>
-        {expiryStorageOptions.map((option) => (
-          <Pressable
-            key={option.value}
-            style={[styles.expiryEditChoiceChip, value === option.value && styles.expiryEditChoiceChipActive]}
-            onPress={() => onChange(option.value)}
-          >
-            <Text style={[styles.expiryEditChoiceText, value === option.value && styles.expiryEditChoiceTextActive]}>{option.label}</Text>
-          </Pressable>
-        ))}
+    <View style={screenStyles.field}>
+      <Text style={screenStyles.label}>储存方式</Text>
+      <View style={screenStyles.choiceList}>
+        {expiryStorageOptions.map((option) => {
+          const selected = value === option.value
+          return (
+            <Pressable
+              key={option.value}
+              style={({ pressed }) => [screenStyles.choiceChip, selected && screenStyles.choiceChipActive, pressed && screenStyles.pressed]}
+              onPress={() => onChange(option.value)}
+              accessibilityRole="radio"
+              accessibilityState={{ checked: selected }}
+              accessibilityLabel={option.label}
+            >
+              <Text style={[screenStyles.choiceText, selected && screenStyles.choiceTextActive]}>{option.label}</Text>
+            </Pressable>
+          )
+        })}
       </View>
     </View>
   )
@@ -4860,32 +5000,50 @@ function trendExerciseTitle(log: ExerciseLogItem): string {
 
 type TrendKind = RootStackParamList['TrendDetail']['kind']
 type TrendHeatVariant = 'water' | 'exercise'
-
-function getTrendTheme(kind: TrendKind): { accent: string; deep: string; soft: string; page: string } {
-  if (kind === 'water') {
-    return {
-      accent: '#5c9ed4',
-      deep: '#3278ab',
-      soft: 'rgba(92, 158, 212, 0.1)',
-      page: '#eef4f7',
-    }
-  }
-  if (kind === 'exercise') {
-    return {
-      accent: '#f97316',
-      deep: '#f97316',
-      soft: 'rgba(249, 115, 22, 0.1)',
-      page: '#f8fafc',
-    }
-  }
-  return {
-    accent: '#5cb896',
-    deep: '#3f9474',
-    soft: 'rgba(92, 184, 150, 0.1)',
-    page: '#f0f3f6',
-  }
+type TrendPalette = {
+  page: string
+  surface: string
+  surfaceRaised: string
+  surfacePressed: string
+  border: string
+  text: string
+  textSecondary: string
+  textMuted: string
+  accent: string
+  deep: string
+  soft: string
+  danger: string
+  dangerSoft: string
+  warning: string
+  warningSoft: string
+  grid: string
+  heatEmpty: string
+  white: string
+  isDark: boolean
 }
 
+function getTrendTheme(kind: TrendKind, isDark: boolean): TrendPalette {
+  const base = isDark
+    ? {
+        page: '#0d1312', surface: '#16231f', surfaceRaised: '#1b2b26', surfacePressed: '#223630',
+        border: '#294037', text: '#f2f7f4', textSecondary: '#b7c7c0', textMuted: '#879991',
+        danger: '#fda4af', dangerSoft: '#421f27', warning: '#fbbf24', warningSoft: '#3b3018',
+        grid: '#294037', heatEmpty: '#26332f', white: '#ffffff', isDark: true,
+      }
+    : {
+        page: '#f3f7f5', surface: '#ffffff', surfaceRaised: '#f8fbf9', surfacePressed: '#edf6f2',
+        border: '#dce9e4', text: '#16332a', textSecondary: '#526b62', textMuted: '#71847d',
+        danger: '#be123c', dangerSoft: '#ffe4e6', warning: '#b45309', warningSoft: '#fff2df',
+        grid: '#e5efeb', heatEmpty: '#e8efec', white: '#ffffff', isDark: false,
+      }
+  if (kind === 'water') {
+    return { ...base, accent: isDark ? '#7cc4f2' : '#3f91ca', deep: isDark ? '#a8daf8' : '#276f9f', soft: isDark ? '#163447' : '#e5f4fc' }
+  }
+  if (kind === 'exercise') {
+    return { ...base, accent: isDark ? '#fb923c' : '#e9610b', deep: isDark ? '#fdba74' : '#c2410c', soft: isDark ? '#402515' : '#fff0e5' }
+  }
+  return { ...base, accent: isDark ? '#6ee7b7' : '#00a871', deep: isDark ? '#9af0cf' : '#047857', soft: isDark ? '#14382d' : '#e7faf3' }
+}
 function normalizeTrendRouteDate(value?: string): string {
   const raw = String(value || '').trim()
   const matched = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/)
@@ -4908,29 +5066,24 @@ function trendHeatLevel(value: number, maxValue: number): number {
   return 1
 }
 
-function trendHeatCellBackground(value: number, maxValue: number, variant: TrendHeatVariant): string {
+function trendHeatCellBackground(value: number, maxValue: number, variant: TrendHeatVariant, palette: TrendPalette): string {
   const level = trendHeatLevel(value, maxValue)
+  if (level === 0) return palette.heatEmpty
   if (variant === 'exercise') {
-    if (level === 0) return '#edf0f3'
-    if (level === 1) return 'rgba(249, 115, 22, 0.18)'
-    if (level === 2) return 'rgba(249, 115, 22, 0.34)'
-    if (level === 3) return 'rgba(249, 115, 22, 0.54)'
-    return '#f97316'
+    if (level === 1) return palette.isDark ? 'rgba(251, 146, 60, 0.24)' : 'rgba(233, 97, 11, 0.18)'
+    if (level === 2) return palette.isDark ? 'rgba(251, 146, 60, 0.42)' : 'rgba(233, 97, 11, 0.36)'
+    if (level === 3) return palette.isDark ? 'rgba(251, 146, 60, 0.66)' : 'rgba(233, 97, 11, 0.58)'
+    return palette.accent
   }
-  if (level === 0) return '#e8edf1'
-  if (level === 1) return 'rgba(92, 158, 212, 0.18)'
-  if (level === 2) return 'rgba(92, 158, 212, 0.34)'
-  if (level === 3) return 'rgba(92, 184, 150, 0.48)'
-  return '#5c9ed4'
+  if (level === 1) return palette.isDark ? 'rgba(124, 196, 242, 0.24)' : 'rgba(63, 145, 202, 0.18)'
+  if (level === 2) return palette.isDark ? 'rgba(124, 196, 242, 0.42)' : 'rgba(63, 145, 202, 0.36)'
+  if (level === 3) return palette.isDark ? 'rgba(124, 196, 242, 0.66)' : 'rgba(63, 145, 202, 0.58)'
+  return palette.accent
 }
 
-function TrendLineChart({ points, accent, emptyText }: { points: TrendPoint[]; accent: string; emptyText: string }) {
-  const values = points
-    .map((item) => item.value)
-    .filter((value): value is number => value != null && Number.isFinite(value))
-  if (values.length === 0) {
-    return <Text style={styles.trendHistoryEmpty}>{emptyText}</Text>
-  }
+function TrendLineChart({ points, accent, emptyText, palette, styleSheet }: { points: TrendPoint[]; accent: string; emptyText: string; palette: TrendPalette; styleSheet: ReturnType<typeof createTrendStyles> }) {
+  const values = points.map((item) => item.value).filter((value): value is number => value != null && Number.isFinite(value))
+  if (values.length === 0) return <Text style={styleSheet.emptyText}>{emptyText}</Text>
   const max = Math.max(...values)
   const min = Math.min(...values)
   const span = Math.max(max - min, 0.1)
@@ -4947,101 +5100,296 @@ function TrendLineChart({ points, accent, emptyText }: { points: TrendPoint[]; a
     const dx = item.x - previous.x
     const dy = item.y - previous.y
     const heightToWidthRatio = 0.42
-    return {
-      key: `${previous.date}-${item.date}`,
-      left: previous.x,
-      top: previous.y,
-      width: Math.sqrt(dx * dx + (dy * heightToWidthRatio) * (dy * heightToWidthRatio)),
-      angle: Math.atan2(dy * heightToWidthRatio, dx) * (180 / Math.PI),
-    }
+    return { key: `${previous.date}-${item.date}`, left: previous.x, top: previous.y, width: Math.sqrt(dx * dx + (dy * heightToWidthRatio) * (dy * heightToWidthRatio)), angle: Math.atan2(dy * heightToWidthRatio, dx) * (180 / Math.PI) }
   })
+  const changeText = first && latest ? `${formatTrendMonthDay(first.date)} 到 ${formatTrendMonthDay(latest.date)}，变化 ${formatTrendSigned(latest.value! - first.value!, 1)}千克` : emptyText
 
   return (
-    <View style={styles.weightLinePanel}>
-      <View style={styles.weightAxisRow}>
-        <View style={styles.weightAxisLabels}>
-          <Text style={styles.weightAxisLabel}>{formatTrendWeight(max)}</Text>
-          <Text style={styles.weightAxisLabel}>{formatTrendWeight(min)}</Text>
+    <View style={styleSheet.linePanel} accessible accessibilityRole="image" accessibilityLabel={`体重折线图，最高 ${formatTrendWeight(max)}千克，最低 ${formatTrendWeight(min)}千克，${changeText}`}>
+      <View style={styleSheet.axisRow}>
+        <View style={styleSheet.axisLabels}>
+          <Text style={styleSheet.axisLabel}>{formatTrendWeight(max)}</Text>
+          <Text style={styleSheet.axisLabel}>{formatTrendWeight(min)}</Text>
         </View>
-        <View style={styles.weightLinePlot}>
-          <View style={[styles.weightGridLine, styles.weightGridLineTop]} />
-          <View style={[styles.weightGridLine, styles.weightGridLineMid]} />
-          <View style={[styles.weightGridLine, styles.weightGridLineBottom]} />
+        <View style={styleSheet.linePlot}>
+          <View style={[styleSheet.gridLine, styleSheet.gridTop]} />
+          <View style={[styleSheet.gridLine, styleSheet.gridMid]} />
+          <View style={[styleSheet.gridLine, styleSheet.gridBottom]} />
           {segments.map((segment) => (
-            <View
-              key={segment.key}
-              style={[
-                styles.weightLineSegment,
-                {
-                  left: `${segment.left}%`,
-                  top: `${segment.top}%`,
-                  width: `${segment.width}%`,
-                  backgroundColor: accent,
-                  transform: [{ rotate: `${segment.angle}deg` }],
-                },
-              ]}
-            />
+            <View key={segment.key} style={[styleSheet.lineSegment, { left: `${segment.left}%`, top: `${segment.top}%`, width: `${segment.width}%`, backgroundColor: accent, transform: [{ rotate: `${segment.angle}deg` }] }]} />
           ))}
           {chartPoints.map((item, index) => (
-            <View
-              key={item.date}
-              style={[
-                styles.weightLineDot,
-                { left: `${item.x}%`, top: `${item.y}%`, backgroundColor: accent },
-                index === chartPoints.length - 1 && styles.weightLineDotLatest,
-              ]}
-            />
+            <View key={item.date} style={[styleSheet.lineDot, { left: `${item.x}%`, top: `${item.y}%`, backgroundColor: accent }, index === chartPoints.length - 1 && [styleSheet.lineDotLatest, { borderColor: palette.surface }]]} />
           ))}
         </View>
       </View>
-      <View style={styles.weightXAxis}>
-        <Text style={styles.weightXAxisLabel}>{first ? formatTrendMonthDay(first.date) : '--'}</Text>
-        <Text style={styles.weightXAxisLabel}>{points[Math.floor(points.length / 2)] ? formatTrendMonthDay(points[Math.floor(points.length / 2)].date) : '--'}</Text>
-        <Text style={styles.weightXAxisLabel}>{latest ? formatTrendMonthDay(latest.date) : '--'}</Text>
+      <View style={styleSheet.xAxis}>
+        <Text style={styleSheet.axisLabel}>{first ? formatTrendMonthDay(first.date) : '--'}</Text>
+        <Text style={styleSheet.axisLabel}>{points[Math.floor(points.length / 2)] ? formatTrendMonthDay(points[Math.floor(points.length / 2)].date) : '--'}</Text>
+        <Text style={styleSheet.axisLabel}>{latest ? formatTrendMonthDay(latest.date) : '--'}</Text>
       </View>
-      <Text style={styles.weightLineNote}>
-        {first && latest ? `${formatTrendMonthDay(first.date)} 到 ${formatTrendMonthDay(latest.date)}：${formatTrendSigned(latest.value! - first.value!, 1)}kg` : emptyText}
-      </Text>
+      <Text style={styleSheet.lineNote}>{first && latest ? `${formatTrendMonthDay(first.date)} 到 ${formatTrendMonthDay(latest.date)}：${formatTrendSigned(latest.value! - first.value!, 1)}kg` : emptyText}</Text>
     </View>
   )
 }
 
-function TrendHeatmap({
-  points,
-  maxValue,
-  selectedDate,
-  onSelect,
-  variant = 'water',
-}: {
-  points: TrendPoint[]
-  maxValue: number
-  selectedDate?: string
-  onSelect?: (date: string) => void
-  variant?: TrendHeatVariant
-}) {
+function TrendHeatmap({ points, maxValue, selectedDate, onSelect, variant = 'water', palette, styleSheet }: { points: TrendPoint[]; maxValue: number; selectedDate?: string; onSelect?: (date: string) => void; variant?: TrendHeatVariant; palette: TrendPalette; styleSheet: ReturnType<typeof createTrendStyles> }) {
+  const metricName = variant === 'water' ? '喝水' : '运动消耗'
   return (
-    <View style={styles.trendHeatmap}>
+    <View style={styleSheet.heatmap} accessibilityRole="summary" accessibilityLabel={`近30天${metricName}热力图`}>
       {points.map((item) => {
         const value = Number(item.value || 0)
         const level = trendHeatLevel(value, maxValue)
         const selected = selectedDate === item.date
+        const unit = variant === 'water' ? '毫升' : '千卡'
         return (
           <Pressable
             key={item.date}
-            style={[
-              styles.trendHeatCell,
-              { backgroundColor: trendHeatCellBackground(value, maxValue, variant) },
-              selected && styles.trendHeatCellSelected,
-            ]}
+            accessibilityRole={onSelect ? 'button' : 'text'}
+            accessibilityLabel={`${formatTrendMonthDay(item.date)}，${metricName}${Math.round(value)}${unit}`}
+            accessibilityState={onSelect ? { selected } : undefined}
+            style={({ pressed }) => [styleSheet.heatCell, { backgroundColor: trendHeatCellBackground(value, maxValue, variant, palette) }, selected && styleSheet.heatCellSelected, pressed && onSelect && styleSheet.pressed]}
             disabled={!onSelect}
             onPress={() => onSelect?.(item.date)}
           >
-            <Text style={[styles.trendHeatDay, level >= 2 && styles.trendHeatDayActive]}>{Number(item.date.slice(8, 10))}</Text>
+            <Text style={[styleSheet.heatDay, level >= 3 && styleSheet.heatDayActive]}>{Number(item.date.slice(8, 10))}</Text>
           </Pressable>
         )
       })}
     </View>
   )
+}
+
+function createTrendStyles(palette: TrendPalette) {
+  return StyleSheet.create({
+    root: { flex: 1, backgroundColor: palette.page },
+    page: { flex: 1 },
+    content: { paddingHorizontal: 14, paddingTop: 14 },
+    flex: { flex: 1, minWidth: 0 },
+    pressed: { opacity: 0.7 },
+    stateCard: { minHeight: 230, alignItems: 'center', justifyContent: 'center', padding: 24, borderRadius: 18, backgroundColor: palette.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: palette.border },
+    stateTitle: { marginTop: 14, color: palette.text, fontSize: 18, lineHeight: 24, fontWeight: '900', textAlign: 'center' },
+    stateMessage: { marginTop: 8, color: palette.textSecondary, fontSize: 13, lineHeight: 20, textAlign: 'center' },
+    retryButton: { minWidth: 132, minHeight: 48, alignItems: 'center', justifyContent: 'center', marginTop: 18, paddingHorizontal: 20, borderRadius: 14, backgroundColor: palette.accent },
+    retryButtonText: { color: palette.isDark ? palette.page : palette.white, fontSize: 14, fontWeight: '900' },
+    inlineError: { minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 14, backgroundColor: palette.warningSoft, borderWidth: StyleSheet.hairlineWidth, borderColor: palette.warning },
+    inlineErrorText: { flex: 1, color: palette.textSecondary, fontSize: 12, lineHeight: 18 },
+    inlineRetry: { minWidth: 48, minHeight: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 12, backgroundColor: palette.surface },
+    inlineRetryText: { color: palette.warning, fontSize: 13, fontWeight: '900' },
+    hero: { minHeight: 92, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 14, padding: 16, borderRadius: 18, backgroundColor: palette.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: palette.border, shadowColor: '#000000', shadowOpacity: palette.isDark ? 0.18 : 0.06, shadowRadius: 16, shadowOffset: { width: 0, height: 6 }, elevation: 2 },
+    kicker: { color: palette.deep, fontSize: 12, lineHeight: 16, fontWeight: '900', marginBottom: 5 },
+    heroTitle: { color: palette.text, fontSize: 23, lineHeight: 29, fontWeight: '900' },
+    heroValueWrap: { flexShrink: 0, alignItems: 'flex-end', minWidth: 96 },
+    heroValue: { color: palette.text, fontSize: 27, lineHeight: 33, fontWeight: '900' },
+    heroValueCompact: { fontSize: 23, lineHeight: 29 },
+    heroUnit: { color: palette.textMuted, fontSize: 11, lineHeight: 16, marginTop: 2, fontWeight: '800' },
+    summaryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 9, marginTop: 10 },
+    summaryCard: { flexGrow: 1, flexBasis: '30%', minWidth: 96, minHeight: 76, justifyContent: 'center', padding: 13, borderRadius: 16, backgroundColor: palette.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: palette.border },
+    summaryLabel: { color: palette.textSecondary, fontSize: 12, lineHeight: 17, marginBottom: 6 },
+    summaryValue: { color: palette.text, fontSize: 20, lineHeight: 25, fontWeight: '900' },
+    valueUp: { color: palette.danger },
+    valueDown: { color: palette.accent },
+    card: { marginTop: 10, padding: 14, borderRadius: 18, backgroundColor: palette.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: palette.border },
+    sectionTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
+    sectionTitle: { color: palette.text, fontSize: 16, lineHeight: 22, fontWeight: '900' },
+    cardNote: { color: palette.textSecondary, fontSize: 12, lineHeight: 18, marginTop: 10 },
+    emptyText: { color: palette.textMuted, fontSize: 13, lineHeight: 20, paddingVertical: 18, textAlign: 'center' },
+    monthGroup: { marginTop: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: palette.border },
+    monthHeader: { minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
+    monthTitle: { color: palette.text, fontSize: 14, lineHeight: 20, fontWeight: '900' },
+    monthMeta: { color: palette.textMuted, fontSize: 12, lineHeight: 17 },
+    historyRow: { minHeight: 64, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: palette.border, paddingVertical: 8 },
+    rowTitle: { color: palette.text, fontSize: 14, lineHeight: 20, fontWeight: '800' },
+    rowMeta: { color: palette.textMuted, fontSize: 12, lineHeight: 17, marginTop: 3 },
+    rowReason: { color: palette.textSecondary, fontSize: 11, lineHeight: 16, marginTop: 3 },
+    rowSide: { flexShrink: 0, alignItems: 'flex-end' },
+    rowValue: { color: palette.text, fontSize: 15, lineHeight: 20, fontWeight: '900' },
+    accentValue: { color: palette.accent, fontSize: 13, lineHeight: 18, fontWeight: '900' },
+    deleteButton: { minWidth: 72, minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, marginTop: 4, paddingHorizontal: 10, borderRadius: 13, backgroundColor: palette.dangerSoft },
+    deleteText: { color: palette.danger, fontSize: 12, lineHeight: 16, fontWeight: '900' },
+    readonlyText: { color: palette.textMuted, fontSize: 12, lineHeight: 17 },
+    muted: { opacity: 0.5 },
+    selectedDate: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999, color: palette.deep, backgroundColor: palette.soft, fontSize: 12, lineHeight: 16, fontWeight: '900' },
+    waterHistoryRow: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 9, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: palette.border, paddingHorizontal: 8, paddingVertical: 7, borderRadius: 10 },
+    waterHistoryRowSelected: { backgroundColor: palette.soft },
+    waterDate: { width: 50, color: palette.textMuted, fontSize: 12, lineHeight: 17 },
+    waterMain: { flex: 1, color: palette.text, fontSize: 14, lineHeight: 20, fontWeight: '800' },
+    waterSub: { color: palette.textSecondary, fontSize: 12, lineHeight: 17 },
+    dayDetail: { marginTop: 10, paddingTop: 9, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: palette.border },
+    detailTitle: { color: palette.text, fontSize: 13, lineHeight: 18, fontWeight: '900', marginBottom: 4 },
+    detailRow: { minHeight: 52, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+    detailAmount: { color: palette.text, fontSize: 13, lineHeight: 18, fontWeight: '800' },
+    linePanel: { marginTop: 14 },
+    axisRow: { flexDirection: 'row', alignItems: 'stretch', gap: 7 },
+    axisLabels: { width: 32, justifyContent: 'space-between', paddingTop: 2, paddingBottom: 4 },
+    axisLabel: { color: palette.textMuted, fontSize: 10, lineHeight: 14, fontWeight: '800' },
+    linePlot: { position: 'relative', flex: 1, height: 132, borderLeftWidth: StyleSheet.hairlineWidth, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: palette.border, overflow: 'visible' },
+    gridLine: { position: 'absolute', left: 0, right: 0, height: StyleSheet.hairlineWidth, backgroundColor: palette.grid },
+    gridTop: { top: '10%' }, gridMid: { top: '47%' }, gridBottom: { top: '84%' },
+    lineSegment: { position: 'absolute', height: 2, borderRadius: 999, transformOrigin: '0% 50%' },
+    lineDot: { position: 'absolute', width: 6, height: 6, marginLeft: -3, marginTop: -3, borderRadius: 99 },
+    lineDotLatest: { width: 11, height: 11, marginLeft: -5.5, marginTop: -5.5, borderWidth: 2 },
+    xAxis: { flexDirection: 'row', justifyContent: 'space-between', marginLeft: 39, marginTop: 6 },
+    lineNote: { color: palette.textSecondary, fontSize: 12, lineHeight: 18, marginTop: 9 },
+    heatmap: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 12 },
+    heatCell: { flexBasis: '12.1%', aspectRatio: 1, minWidth: 38, minHeight: 38, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
+    heatCellSelected: { borderWidth: 2, borderColor: palette.text },
+    heatDay: { color: palette.textSecondary, fontSize: 11, lineHeight: 14, fontWeight: '900' },
+    heatDayActive: { color: palette.white },
+  })
+}
+function createExpiryEditStyles(palette: ExpiryEditPalette) {
+  return StyleSheet.create({
+    page: { flex: 1, backgroundColor: palette.background },
+    scroll: { flex: 1, backgroundColor: palette.background },
+    content: { paddingHorizontal: 16, paddingTop: 16 },
+    flex: { flex: 1, minWidth: 0 },
+    pressed: { opacity: 0.72 },
+    surfacePressed: { backgroundColor: palette.surfacePressed },
+    loading: {
+      minHeight: 180, alignItems: 'center', justifyContent: 'center', borderRadius: 16,
+      backgroundColor: palette.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: palette.border,
+    },
+    loadError: {
+      minHeight: 210, alignItems: 'center', justifyContent: 'center', borderRadius: 16, padding: 22,
+      backgroundColor: palette.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: palette.warning,
+    },
+    loadErrorTitle: { marginTop: 12, color: palette.text, fontSize: 18, fontWeight: '900' },
+    loadErrorDesc: { marginTop: 8, color: palette.textSecondary, fontSize: 13, lineHeight: 20, textAlign: 'center' },
+    retryButton: {
+      minWidth: 132, minHeight: 48, alignItems: 'center', justifyContent: 'center', marginTop: 18,
+      borderRadius: 999, paddingHorizontal: 18, backgroundColor: palette.brandStrong,
+    },
+    retryButtonText: { color: '#fff', fontSize: 14, fontWeight: '900' },
+    aiPanel: {
+      padding: 14, borderRadius: 16, backgroundColor: palette.surface,
+      borderWidth: StyleSheet.hairlineWidth, borderColor: palette.border,
+    },
+    block: {
+      marginTop: 14, padding: 14, borderRadius: 16, backgroundColor: palette.surface,
+      borderWidth: StyleSheet.hairlineWidth, borderColor: palette.border,
+    },
+    aiHead: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 },
+    titleIconRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    blockTitle: { color: palette.text, fontSize: 16, lineHeight: 23, fontWeight: '900' },
+    aiDesc: { marginTop: 8, color: palette.textSecondary, fontSize: 12, lineHeight: 19 },
+    aiCost: { flexShrink: 0, borderRadius: 999, paddingHorizontal: 9, paddingVertical: 5, backgroundColor: palette.successSoft, borderWidth: StyleSheet.hairlineWidth, borderColor: palette.success },
+    aiCostText: { color: palette.success, fontSize: 11, fontWeight: '900' },
+    uploadArea: {
+      minHeight: 158, alignItems: 'center', justifyContent: 'center', marginTop: 14, borderRadius: 14,
+      paddingHorizontal: 18, paddingVertical: 18, backgroundColor: palette.surfaceRaised,
+      borderWidth: 1, borderStyle: 'dashed', borderColor: palette.brand,
+    },
+    uploadAreaPressed: { backgroundColor: palette.surfacePressed },
+    uploadIconCircle: { width: 54, height: 54, alignItems: 'center', justifyContent: 'center', borderRadius: 18, backgroundColor: palette.brandSoft },
+    uploadTitle: { marginTop: 10, color: palette.text, fontSize: 15, fontWeight: '900' },
+    uploadDesc: { marginTop: 7, color: palette.textSecondary, fontSize: 12, lineHeight: 18, textAlign: 'center' },
+    imageGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 14 },
+    imageItem: { width: 88, height: 88, overflow: 'visible', borderRadius: 12, backgroundColor: palette.surfaceRaised },
+    imageThumb: { width: 88, height: 88, borderRadius: 12, backgroundColor: palette.surfaceRaised },
+    imageRemove: {
+      position: 'absolute', top: -6, right: -6, width: 34, height: 34, alignItems: 'center', justifyContent: 'center',
+      borderRadius: 17, backgroundColor: 'rgba(15, 23, 42, 0.86)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.72)',
+    },
+    imageAdd: {
+      width: 88, height: 88, alignItems: 'center', justifyContent: 'center', borderRadius: 12,
+      backgroundColor: palette.surfaceRaised, borderWidth: 1, borderStyle: 'dashed', borderColor: palette.brand,
+    },
+    imageAddText: { marginTop: 4, color: palette.textSecondary, fontSize: 11, fontWeight: '800' },
+    aiActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 14 },
+    aiGhost: {
+      flexGrow: 1, flexBasis: 132, minHeight: 50, alignItems: 'center', justifyContent: 'center',
+      borderRadius: 999, paddingHorizontal: 14, backgroundColor: palette.surfaceRaised,
+      borderWidth: StyleSheet.hairlineWidth, borderColor: palette.border,
+    },
+    aiGhostText: { color: palette.textSecondary, fontSize: 14, fontWeight: '900' },
+    aiPrimary: {
+      flexGrow: 1, flexBasis: 132, minHeight: 50, alignItems: 'center', justifyContent: 'center',
+      borderRadius: 999, paddingHorizontal: 14, backgroundColor: palette.brandStrong,
+    },
+    aiPrimaryText: { color: '#fff', fontSize: 14, fontWeight: '900' },
+    controlDisabled: { opacity: 0.5 },
+    aiResult: { marginTop: 12, padding: 11, borderRadius: 10, color: palette.success, fontSize: 12, lineHeight: 18, backgroundColor: palette.successSoft },
+    presetList: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 },
+    presetChip: {
+      minHeight: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 999,
+      paddingHorizontal: 15, backgroundColor: palette.surfaceRaised, borderWidth: StyleSheet.hairlineWidth, borderColor: palette.border,
+    },
+    presetText: { color: palette.textSecondary, fontSize: 13, fontWeight: '900' },
+    draftCard: {
+      marginTop: 14, padding: 14, borderRadius: 16, backgroundColor: palette.surface,
+      borderWidth: StyleSheet.hairlineWidth, borderColor: palette.border,
+    },
+    draftHead: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, marginBottom: 4 },
+    draftTitle: { color: palette.text, fontSize: 17, lineHeight: 24, fontWeight: '900' },
+    draftSubtitle: { marginTop: 3, color: palette.textSecondary, fontSize: 11, lineHeight: 17 },
+    draftActions: { flexShrink: 0, flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 6 },
+    aiBadge: { overflow: 'hidden', borderRadius: 999, paddingHorizontal: 8, paddingVertical: 5, color: palette.success, fontSize: 10, fontWeight: '900', backgroundColor: palette.successSoft },
+    removeButton: {
+      minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5,
+      borderRadius: 12, paddingHorizontal: 10, backgroundColor: palette.dangerSoft,
+    },
+    removeText: { color: palette.danger, fontSize: 12, fontWeight: '900' },
+    draftTip: { marginTop: 10, padding: 10, borderRadius: 10, color: palette.warning, fontSize: 11, lineHeight: 17, backgroundColor: palette.warningSoft },
+    missingRow: { marginTop: 10, flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 },
+    missingLabel: { color: palette.warning, fontSize: 11, fontWeight: '900' },
+    missingChip: { borderRadius: 999, paddingHorizontal: 8, paddingVertical: 5, backgroundColor: palette.warningSoft, borderWidth: StyleSheet.hairlineWidth, borderColor: palette.warning },
+    missingChipText: { color: palette.warning, fontSize: 10, fontWeight: '900' },
+    draftInner: { marginTop: 10, padding: 12, borderRadius: 12, backgroundColor: palette.surfaceRaised, borderWidth: StyleSheet.hairlineWidth, borderColor: palette.border },
+    addItemBar: {
+      minHeight: 52, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7,
+      marginTop: 14, borderRadius: 999, backgroundColor: palette.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: palette.border,
+    },
+    addItemText: { color: palette.textSecondary, fontSize: 14, fontWeight: '900' },
+    field: { width: '100%' },
+    label: { marginBottom: 8, color: palette.text, fontSize: 14, lineHeight: 20, fontWeight: '900' },
+    inputShell: {
+      minHeight: 50, flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 11, paddingHorizontal: 12,
+      backgroundColor: palette.background, borderWidth: StyleSheet.hairlineWidth, borderColor: palette.border,
+    },
+    inputShellMultiline: { minHeight: 104, alignItems: 'flex-start', paddingTop: 12, paddingBottom: 12 },
+    inputShellError: { borderWidth: 1, borderColor: palette.danger, backgroundColor: palette.dangerSoft },
+    input: { flex: 1, minWidth: 0, minHeight: 48, paddingVertical: 10, color: palette.text, fontSize: 14, fontWeight: '700' },
+    textarea: { minHeight: 80, paddingTop: 0, paddingBottom: 0, lineHeight: 20 },
+    errorText: { marginTop: 7, color: palette.danger, fontSize: 12, lineHeight: 17, fontWeight: '700' },
+    choiceList: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+    choiceChip: {
+      minHeight: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 999,
+      paddingHorizontal: 15, backgroundColor: palette.background, borderWidth: StyleSheet.hairlineWidth, borderColor: palette.border,
+    },
+    choiceChipActive: { backgroundColor: palette.brandStrong, borderColor: palette.brand },
+    choiceText: { color: palette.textSecondary, fontSize: 13, fontWeight: '900' },
+    choiceTextActive: { color: '#fff' },
+    footer: {
+      position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 16, paddingTop: 12,
+      backgroundColor: palette.surface, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: palette.border,
+      shadowColor: '#000', shadowOffset: { width: 0, height: -2 }, shadowOpacity: 0.12, shadowRadius: 12, elevation: 8,
+    },
+    submit: { minHeight: 50, alignItems: 'center', justifyContent: 'center', borderRadius: 999, paddingHorizontal: 18, backgroundColor: palette.brandStrong },
+    submitDisabled: { backgroundColor: palette.disabled },
+    submitText: { color: '#fff', fontSize: 15, fontWeight: '900' },
+    submitTextDisabled: { color: palette.disabledText },
+    modalBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: palette.scrim },
+    sheet: {
+      maxHeight: '82%', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 16, paddingTop: 10,
+      backgroundColor: palette.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: palette.border,
+    },
+    sheetHandle: { width: 42, height: 5, alignSelf: 'center', marginBottom: 14, borderRadius: 999, backgroundColor: palette.border },
+    sheetTitle: { color: palette.text, fontSize: 19, lineHeight: 26, fontWeight: '900' },
+    sheetDesc: { marginTop: 4, marginBottom: 12, color: palette.textSecondary, fontSize: 13, lineHeight: 19 },
+    sheetAction: { minHeight: 68, flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 8, borderRadius: 14, padding: 10, backgroundColor: palette.surfaceRaised },
+    sheetActionIcon: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 15, backgroundColor: palette.brandSoft },
+    sheetActionTitle: { color: palette.text, fontSize: 15, fontWeight: '900' },
+    sheetActionDesc: { marginTop: 3, color: palette.textSecondary, fontSize: 12, lineHeight: 17 },
+    sheetCancel: { minHeight: 50, alignItems: 'center', justifyContent: 'center', marginTop: 10, borderRadius: 14, backgroundColor: palette.surfaceRaised },
+    sheetCancelText: { color: palette.textSecondary, fontSize: 15, fontWeight: '900' },
+    previewBackdrop: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#000' },
+    previewImage: { width: '100%', height: '100%' },
+    previewClose: {
+      position: 'absolute', top: 18, right: 18, width: 48, height: 48, alignItems: 'center', justifyContent: 'center',
+      borderRadius: 24, backgroundColor: 'rgba(15, 23, 42, 0.78)',
+    },
+  })
 }
 
 const styles = StyleSheet.create({
@@ -5431,6 +5779,23 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 5 },
     elevation: 2,
+  },
+  manualFoodCorrectionButton: {
+    minWidth: 72,
+    minHeight: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: 'rgba(92,184,150,0.45)',
+  },
+  manualFoodCorrectionText: {
+    color: colors.brandDark,
+    fontSize: 14,
+    lineHeight: 19,
+    fontWeight: '900',
   },
   manualFoodSaveButtonDisabled: {
     opacity: 0.72,
@@ -7322,441 +7687,6 @@ const styles = StyleSheet.create({
     fontSize: 28,
     lineHeight: 30,
     fontWeight: '300',
-  },
-  expiryEditPage: {
-    flex: 1,
-    backgroundColor: '#f6f8fa',
-  },
-  expiryEditScroll: {
-    flex: 1,
-  },
-  expiryEditContent: {
-    paddingTop: 16,
-    paddingHorizontal: 16,
-  },
-  expiryEditHero: {
-    borderRadius: 14,
-    padding: 16,
-    backgroundColor: '#e7faf3',
-  },
-  expiryEditKicker: {
-    color: '#5b7b71',
-    fontSize: 12,
-    lineHeight: 17,
-    fontWeight: '800',
-  },
-  expiryEditTitle: {
-    marginTop: 5,
-    color: '#16332a',
-    fontSize: 22,
-    lineHeight: 29,
-    fontWeight: '800',
-  },
-  expiryEditDesc: {
-    marginTop: 8,
-    color: '#61756d',
-    fontSize: 12,
-    lineHeight: 19,
-  },
-  expiryEditLoading: {
-    minHeight: 104,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 14,
-    borderRadius: 14,
-    backgroundColor: 'rgba(255, 255, 255, 0.94)',
-  },
-  expiryEditBlock: {
-    marginTop: 14,
-    borderRadius: 14,
-    padding: 14,
-    backgroundColor: 'rgba(255, 255, 255, 0.94)',
-    shadowColor: '#1f2937',
-    shadowOpacity: 0.06,
-    shadowRadius: 15,
-    shadowOffset: { width: 0, height: 5 },
-    elevation: 1,
-  },
-  expiryAiPanel: {
-    borderRadius: 14,
-    padding: 14,
-    backgroundColor: '#fff',
-    shadowColor: '#1f2937',
-    shadowOpacity: 0.06,
-    shadowRadius: 15,
-    shadowOffset: { width: 0, height: 5 },
-    elevation: 1,
-  },
-  expiryAiHead: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 10,
-  },
-  expiryAiDesc: {
-    marginTop: 5,
-    color: '#61756d',
-    fontSize: 12,
-    lineHeight: 19,
-  },
-  expiryAiCost: {
-    flexShrink: 0,
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    backgroundColor: '#e7faf3',
-  },
-  expiryAiCostText: {
-    color: '#2d9f78',
-    fontSize: 11,
-    fontWeight: '800',
-  },
-  expiryUploadArea: {
-    minHeight: 120,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 14,
-    paddingHorizontal: 16,
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    borderColor: '#9ee6cd',
-    borderRadius: 12,
-    backgroundColor: '#f4fcf9',
-  },
-  expiryUploadPlus: {
-    color: '#00bc7d',
-    fontSize: 26,
-    lineHeight: 30,
-  },
-  expiryUploadTitle: {
-    color: '#16332a',
-    fontSize: 15,
-    lineHeight: 22,
-    fontWeight: '800',
-  },
-  expiryUploadDesc: {
-    marginTop: 4,
-    color: '#7b8d86',
-    fontSize: 11,
-    lineHeight: 17,
-    textAlign: 'center',
-  },
-  expiryImageGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 9,
-    marginTop: 14,
-  },
-  expiryImageItem: {
-    position: 'relative',
-    width: 70,
-    height: 70,
-  },
-  expiryImageThumb: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 10,
-    backgroundColor: '#eef3f1',
-  },
-  expiryImageRemove: {
-    position: 'absolute',
-    top: -5,
-    right: -5,
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(15, 23, 42, 0.74)',
-  },
-  expiryImageAdd: {
-    width: 70,
-    height: 70,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    borderColor: '#9ee6cd',
-    borderRadius: 10,
-    backgroundColor: '#f4fcf9',
-  },
-  expiryImageAddText: {
-    marginTop: 3,
-    color: '#4b7668',
-    fontSize: 10,
-  },
-  expiryAiActions: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 14,
-  },
-  expiryAiGhost: {
-    flex: 1,
-    minHeight: 48,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 999,
-    backgroundColor: '#f3f7f5',
-  },
-  expiryAiGhostText: {
-    color: '#567168',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  expiryAiPrimary: {
-    flex: 1,
-    minHeight: 48,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 999,
-    backgroundColor: '#00bc7d',
-  },
-  expiryAiPrimaryText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  expiryAiResult: {
-    marginTop: 12,
-    padding: 10,
-    borderRadius: 9,
-    color: '#27765d',
-    fontSize: 12,
-    lineHeight: 18,
-    backgroundColor: '#e7faf3',
-  },
-  expiryDraftCard: {
-    marginTop: 14,
-    padding: 14,
-    borderRadius: 14,
-    backgroundColor: '#fff',
-    shadowColor: '#1f2937',
-    shadowOpacity: 0.06,
-    shadowRadius: 15,
-    shadowOffset: { width: 0, height: 5 },
-    elevation: 1,
-  },
-  expiryDraftHead: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: 10,
-    marginBottom: 12,
-  },
-  expiryDraftTitle: {
-    color: '#16332a',
-    fontSize: 17,
-    lineHeight: 24,
-    fontWeight: '900',
-  },
-  expiryDraftSubtitle: {
-    marginTop: 3,
-    color: '#71847d',
-    fontSize: 11,
-    lineHeight: 17,
-  },
-  expiryDraftActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  expiryAiBadge: {
-    overflow: 'hidden',
-    borderRadius: 999,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    color: '#27765d',
-    fontSize: 10,
-    fontWeight: '800',
-    backgroundColor: '#e7faf3',
-  },
-  expiryDraftRemove: {
-    color: '#ef4444',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  expiryDraftTip: {
-    marginBottom: 10,
-    padding: 9,
-    borderRadius: 8,
-    color: '#8a641b',
-    fontSize: 11,
-    lineHeight: 17,
-    backgroundColor: '#fff8e7',
-  },
-  expiryMissingRow: {
-    marginTop: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: 6,
-  },
-  expiryMissingLabel: {
-    color: '#92400e',
-    fontSize: 11,
-    fontWeight: '800',
-  },
-  expiryMissingChip: {
-    borderRadius: 999,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    backgroundColor: '#fff7ed',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#fed7aa',
-  },
-  expiryMissingChipText: {
-    color: '#9a3412',
-    fontSize: 10,
-    fontWeight: '800',
-  },
-  expiryDraftInner: {
-    marginTop: 10,
-    padding: 14,
-    borderRadius: 12,
-    backgroundColor: '#fff',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#edf1ef',
-    shadowColor: '#1f2937',
-    shadowOpacity: 0.035,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 3 },
-  },
-  expiryAddItemBar: {
-    minHeight: 52,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 14,
-    borderRadius: 999,
-    backgroundColor: '#f3f7f5',
-  },
-  expiryAddItemText: {
-    color: '#365a4e',
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  expiryEditBlockHead: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-    marginBottom: 10,
-  },
-  expiryEditBlockTitle: {
-    color: '#16332a',
-    fontSize: 16,
-    lineHeight: 22,
-    fontWeight: '800',
-  },
-  expiryEditBlockMeta: {
-    color: '#94a3b8',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  expiryEditPresetList: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  expiryEditPresetChip: {
-    minHeight: 34,
-    borderRadius: 999,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 12,
-    backgroundColor: '#f4f8f6',
-  },
-  expiryEditPresetText: {
-    color: '#314740',
-    fontSize: 13,
-    fontWeight: '800',
-  },
-  expiryEditField: {
-    marginTop: 14,
-  },
-  expiryEditLabel: {
-    marginBottom: 8,
-    color: '#16332a',
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  expiryEditInput: {
-    minHeight: 46,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    color: '#16332a',
-    fontSize: 14,
-    fontWeight: '700',
-    backgroundColor: '#f4f8f6',
-  },
-  expiryEditTextarea: {
-    minHeight: 96,
-    paddingTop: 12,
-    paddingBottom: 12,
-    lineHeight: 20,
-  },
-  expiryEditChoiceList: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  expiryEditChoiceChip: {
-    minHeight: 38,
-    borderRadius: 999,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 14,
-    backgroundColor: '#f4f8f6',
-  },
-  expiryEditChoiceChipActive: {
-    backgroundColor: '#00bc7d',
-  },
-  expiryEditChoiceText: {
-    color: '#314740',
-    fontSize: 13,
-    fontWeight: '800',
-  },
-  expiryEditChoiceTextActive: {
-    color: '#fff',
-  },
-  expiryEditFooter: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.98)',
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#e2e8f0',
-    shadowColor: '#0f172a',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 8,
-  },
-  expiryEditSubmit: {
-    minHeight: 48,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 999,
-    backgroundColor: '#00bc7d',
-    shadowColor: '#00bc7d',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.22,
-    shadowRadius: 14,
-    elevation: 3,
-  },
-  expiryEditSubmitDisabled: {
-    backgroundColor: '#e5e7eb',
-    shadowOpacity: 0,
-    elevation: 0,
-  },
-  expiryEditSubmitText: {
-    color: '#fff',
-    fontSize: 15,
-    fontWeight: '900',
-  },
-  expiryEditSubmitTextDisabled: {
-    color: '#9ca3af',
   },
   buttonRow: {
     flexDirection: 'row',

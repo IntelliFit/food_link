@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "155437632411",
+    "project_id": "foodlink-da5b3",
+    "storage_bucket": "foodlink-da5b3.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:155437632411:android:22a68ce36337527324af3e",
+        "android_client_info": {
+          "package_name": "cn.healthymax.foodlink"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDZmMqEmLCnZ4Fbry1Hb5-KVt6--MVF-TE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

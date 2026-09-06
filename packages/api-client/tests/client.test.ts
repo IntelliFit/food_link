@@ -1,4 +1,4 @@
-﻿import {
+import {
   createFoodLinkApiClient,
   type ApiClientAdapters,
   type ApiClientRequestOptions,
@@ -117,6 +117,78 @@ function createMockAdapters() {
       if (url.endsWith('/api/membership/rewards/share-poster/claim')) {
         return response({ code: 0, data: { claimed: true, credits: 1, message: '分享奖励 +1 积分' } })
       }
+      if (url.endsWith('/api/membership/rewards/login-check-in/claim')) {
+        return response({
+          code: 0,
+          data: {
+            applied: true,
+            claimed_today: true,
+            streak_days: 3,
+            reward_amount: 2,
+            today: '2026-09-01',
+            earned_credits_balance: 12,
+          },
+        })
+      }
+      if (url.includes('/api/vouchers/my?')) {
+        return response({
+          code: 0,
+          data: {
+            items: [{
+              id: 'voucher/1',
+              user_id: 'user-1',
+              voucher_type: 'registration_trial',
+              status: 'pending',
+              title: '新用户体验奖励',
+              source_type: 'registration',
+              source_key: 'registration:user-1',
+            }],
+            total: 1,
+          },
+        })
+      }
+      if (url.endsWith('/api/vouchers/voucher%2F1/use')) {
+        return response({ code: 0, data: { success: true } })
+      }
+      if (url.endsWith('/api/food-nutrition-contributions/mine')) {
+        return response({
+          code: 0,
+          data: {
+            items: [{
+              id: 'contribution-1',
+              user_id: 'user-1',
+              canonical_name: '熟鸡蛋',
+              normalized_name: '熟鸡蛋',
+              kcal_per_100g: 144,
+              protein_per_100g: 13.3,
+              carbs_per_100g: 2.8,
+              fat_per_100g: 8.8,
+              source_text: '中国食物成分表',
+              evidence_image_paths: [],
+              status: 'pending',
+              created_at: '2026-09-01T10:00:00Z',
+              updated_at: '2026-09-01T10:00:00Z',
+            }],
+          },
+        })
+      }
+      if (url.endsWith('/api/food-nutrition-contributions') && options?.method === 'POST') {
+        const body = options.body as Record<string, unknown>
+        return response({
+          code: 0,
+          data: {
+            item: {
+              id: 'contribution-2',
+              user_id: 'user-1',
+              normalized_name: '蒸南瓜',
+              status: 'pending',
+              created_at: '2026-09-01T11:00:00Z',
+              updated_at: '2026-09-01T11:00:00Z',
+              ...body,
+            },
+          },
+        })
+      }
       if (url.includes('/api/manual-food/custom')) {
         if (options?.method === 'POST') {
           const body = options.body as Record<string, unknown>
@@ -146,11 +218,24 @@ function createMockAdapters() {
       if (url.endsWith('/api/packaged-food')) {
         return response({ code: 0, data: { item: { id: 'packaged-1', product_name: '燕麦棒' } } })
       }
+      if (url.endsWith('/api/packaged-food/packaged%2F1')) {
+        return response({ code: 0, data: { item: { id: 'packaged/1', brand: '测试品牌', product_name: '燕麦棒', net_weight_g: 40, source_image_urls: ['https://cdn.example.com/original.jpg'] } } })
+      }
+      if (url.endsWith('/api/packaged-food/corrections') && options?.method === 'POST') {
+        return response({ code: 0, data: { id: 'correction-1', message: '已提交', item: options.body } })
+      }
+
       if (url.endsWith('/api/analyze/tasks/task-packaged-1')) {
         return response({ code: 0, data: { id: 'task-packaged-1', status: 'done', task_type: 'packaged_product_extract', result: { packaged_product: { product_name: '燕麦棒', unit_nutrition_per_100g: { calories: 420 } } } } })
       }
       if (url.endsWith('/api/analyze/tasks/retry')) {
         return response({ code: 0, data: { task_id: 'task-retry-1', message: '已重新提交' } })
+      }
+      if (url.endsWith('/api/analyze/tasks/task%2Fauto/auto-record')) {
+        return response({ code: 0, data: { enabled: true, meal_type: 'dinner', status: 'waiting_record' } })
+      }
+      if (url.endsWith('/api/user/last-seen-analyze-history')) {
+        return response({ code: 0, data: { success: true } })
       }
       if (url.endsWith('/api/food-record/record-1')) {
         if (options?.method === 'GET') {
@@ -265,6 +350,58 @@ function createMockAdapters() {
           },
         })
       }
+      if (url.endsWith('/api/community/health-leaderboard')) {
+        return response({
+          code: 0,
+          data: {
+            week_start: '2026-06-15',
+            week_end: '2026-06-21',
+            scoring_rule: {
+              label: '健康饮食分',
+              total_points: 100,
+              diet_quality_points: 75,
+              continuity_points: 15,
+              stability_points: 10,
+              minimum_recorded_days: 4,
+              continuity_description: '连续性按本周已过去天数计算',
+            },
+            list: [
+              {
+                rank: 2,
+                user_id: 'user-1',
+                nickname: 'Mobile',
+                avatar: 'https://cdn.example.com/avatar.jpg',
+                health_index: 86,
+                recorded_days: 5,
+                diet_quality_points: 63,
+                continuity_points: 14,
+                stability_points: 9,
+                is_me: true,
+              },
+            ],
+          },
+        })
+      }
+      if (url.includes('/api/community/food-nutrient-leaderboard?')) {
+        return response({
+          code: 0,
+          data: {
+            nutrient: 'protein',
+            label: '蛋白质',
+            unit: 'g',
+            basis: 'per_100g',
+            list: [
+              {
+                rank: 1,
+                food_id: 'food-1',
+                name: '鸡胸肉',
+                image_url: 'https://cdn.example.com/chicken.jpg',
+                value: 31.2,
+              },
+            ],
+          },
+        })
+      }
       if (url.endsWith('/api/community/posts')) {
         return response({ code: 0, data: { id: 'post-1' } })
       }
@@ -277,6 +414,7 @@ function createMockAdapters() {
         if (url.endsWith('/api/recipes/recipe-1/use')) return response({ code: 0, data: { message: 'ok', record_id: 'record-2' } })
       }
       if (url.includes('/api/public-food-library')) {
+        if (url.endsWith('/contribute-images')) return response({ code: 0, data: { image_paths: ['https://cdn.example.com/campus-1.jpg'], accepted: true } })
         if (url.includes('/comments')) return response({ code: 0, data: { comment: { id: 'pf-comment-1', content: 'good' } } })
         if (url.endsWith('/like') || url.endsWith('/collect')) return response({ code: 0, data: { message: 'ok' } })
         if (url.includes('/campus-detail') && url.includes('food-with-campus-related')) {
@@ -454,6 +592,57 @@ function createMockAdapters() {
       if (url.endsWith('/api/messages/unread-count')) {
         return response({ code: 0, data: { count: 3 } })
       }
+      if (url.includes('/api/supplements?status=')) {
+        return response({ code: 0, data: { items: [{ id: 'supp-1', name: '甘氨酸镁', brand: '', default_servings: 1, serving_label: '2粒', schedule_enabled: true, schedule_time: '21:00', schedule_days: [], components: [], status: 'active', created_at: '', updated_at: '' }] } })
+      }
+      if (url.includes('/api/supplements/catalog')) {
+        return response({ code: 0, data: { items: [{ id: 'catalog-1', name: '维生素D3', category: 'vitamin', description: '模板', brand: '', serving_label: '1粒', components: [], sort_order: 1, status: 'active' }] } })
+      }
+      if (url.endsWith('/api/supplements/label/recognize')) {
+        return response({ code: 0, data: { supplement: { name: '复合维生素', brand: '测试品牌', serving_label: '1粒', confidence: 0.9, components: [{ code: 'vitamin_d', name: '维生素D', category: 'nutrient', amount: 10, unit: 'mcg', nutrient_key: 'vitaminDMcg' }] } } })
+      }
+      if (url.endsWith('/api/supplements') && options?.method === 'POST') {
+        return response({ code: 0, data: { item: { id: 'supp-created', ...(options.body as object) } } })
+      }
+      if (url.endsWith('/api/supplements/supp%2F1') && options?.method === 'PUT') {
+        return response({ code: 0, data: { item: { id: 'supp/1', ...(options.body as object) } } })
+      }
+      if (url.includes('/api/supplements/dashboard')) {
+        return response({
+          code: 0,
+          data: {
+            date: '2026-06-14',
+            planned_count: 1,
+            completed_count: 0,
+            supplements: [],
+            intakes: [],
+            nutrient_totals: {},
+            functional_components: [],
+            additional_nutrients: [],
+            duplicate_components: [],
+          },
+        })
+      }
+      if (url.endsWith('/api/supplements/supp%2F1/intakes')) {
+        return response({
+          code: 0,
+          data: {
+            intake: {
+              id: 'intake-1',
+              supplement_id: 'supp/1',
+              supplement_name: '甘氨酸镁',
+              servings: 1,
+              serving_label: '2粒',
+              components: [],
+              taken_at: '2026-06-14T21:00:00Z',
+              source: 'quick_log',
+            },
+          },
+        })
+      }
+      if (url.endsWith('/api/supplement-intakes/intake%2F1')) {
+        return response({ code: 0, data: { message: '记录已删除' } })
+      }
       if (url.includes('/api/home/dashboard')) {
         return response({
           intakeData: {
@@ -472,6 +661,12 @@ function createMockAdapters() {
       if (url.endsWith('/api/analyze/submit')) {
         return response({ task_id: 'task-1', message: 'ok' })
       }
+      if (url.includes('/api/food-record/recommend-meal-type')) {
+        return response({ meal_type: 'dinner', generated_by: 'health_routine' })
+      }
+      if (url.endsWith('/api/analyze-text/submit')) {
+        return response({ task_id: 'text-task-1', message: 'ok' })
+      }
       if (url.endsWith('/api/precision-sessions/session%2F1/continue')) {
         return response({ code: 0, data: { task_id: 'precision-task-1', message: 'continued' } })
       }
@@ -488,6 +683,22 @@ function createMockAdapters() {
     },
     async uploadFile(input) {
       uploads.push(input)
+      if (input.url.endsWith('/api/upload-analyze-video-file')) {
+        input.onProgress?.(56)
+        return response({
+          capture_protocol: 'video_keyframes_v1',
+          video_id: 'video-1',
+          duration_ms: 6200,
+          width: 1080,
+          height: 1920,
+          size_bytes: 7340032,
+          keyframes: [1, 2, 3, 4, 5].map((index) => ({
+            role: `video_keyframe_${index}`,
+            image_url: `https://example.com/frame-${index}.jpg`,
+            timestamp_ms: index * 1000,
+          })),
+        })
+      }
       if (input.url.endsWith('/api/community/posts/upload-image')) {
         return response({ code: 0, data: { image_url: 'https://example.com/circle.jpg' } })
       }
@@ -570,6 +781,131 @@ describe('FoodLinkApiClient', () => {
     expect(uploads[0].url).toBe('https://api.example.com/api/upload-analyze-image-file')
     expect(uploads[0].headers?.Authorization).toBe('Bearer access-token')
     expect(submitted.task_id).toBe('task-1')
+  })
+
+  it('uploads a precision video and validates extracted keyframes', async () => {
+    const { adapters, uploads } = createMockAdapters()
+    const client = createFoodLinkApiClient({ baseUrl: 'https://api.example.com', adapters })
+    const progress: number[] = []
+    await client.debugImpersonateUser('user-1', 'password')
+
+    const uploaded = await client.uploadAnalyzeVideoFile({
+      fileUri: 'file:///meal.mp4',
+      fileName: 'meal.mp4',
+      mimeType: 'video/mp4',
+      onProgress: (value) => progress.push(value),
+    })
+
+    expect(uploads[0]).toMatchObject({
+      url: 'https://api.example.com/api/upload-analyze-video-file',
+      fieldName: 'file',
+      fileName: 'meal.mp4',
+      mimeType: 'video/mp4',
+      timeoutMs: 180000,
+      headers: { Authorization: 'Bearer access-token' },
+    })
+    expect(progress).toEqual([56, 100])
+    expect(uploaded.capture_protocol).toBe('video_keyframes_v1')
+    expect(uploaded.keyframes).toHaveLength(5)
+    expect(uploaded.keyframes[0]).toMatchObject({ role: 'video_keyframe_1', timestamp_ms: 1000 })
+  })
+
+  it('supports the complete supplement cabinet and multi-image label contract', async () => {
+    const { adapters, requests } = createMockAdapters()
+    const client = createFoodLinkApiClient({ baseUrl: 'https://api.example.com', adapters })
+    await client.debugImpersonateUser('user-1', 'password')
+
+    const cabinet = await client.listSupplements()
+    const catalog = await client.listSupplementCatalog(' 维生素 D ')
+    const recognized = await client.recognizeSupplementLabel([
+      ' https://cdn.example.com/front.jpg ',
+      'https://cdn.example.com/facts.jpg',
+      'https://cdn.example.com/ingredients.jpg',
+      'https://cdn.example.com/ignored.jpg',
+    ])
+    const payload = {
+      name: '甘氨酸镁',
+      brand: '',
+      image_url: 'https://cdn.example.com/front.jpg',
+      image_urls: ['https://cdn.example.com/front.jpg', 'https://cdn.example.com/facts.jpg'],
+      default_servings: 1,
+      serving_label: '2粒',
+      schedule_enabled: true,
+      schedule_time: '21:00',
+      schedule_days: [],
+      components: [{ code: 'magnesium', name: '镁', category: 'nutrient' as const, amount: 200, unit: 'mg', nutrient_key: 'magnesiumMg' }],
+      label_confirmed: true,
+      status: 'active',
+    }
+    await client.createSupplement(payload)
+    await client.updateSupplement('supp/1', payload)
+    const dashboard = await client.getSupplementDashboard('2026-06-14')
+    const intake = await client.recordSupplementIntake('supp/1', { servings: 1, source: 'quick_log', idempotency_key: 'key-1' })
+    await client.deleteSupplementIntake('intake/1')
+
+    expect(cabinet[0].name).toBe('甘氨酸镁')
+    expect(catalog[0].name).toBe('维生素D3')
+    expect(recognized.components[0].nutrient_key).toBe('vitaminDMcg')
+    expect(dashboard.planned_count).toBe(1)
+    expect(intake.id).toBe('intake-1')
+    expect(requests.find((entry) => entry.url.includes('/api/supplements/catalog'))?.url).toBe(
+      'https://api.example.com/api/supplements/catalog?q=%E7%BB%B4%E7%94%9F%E7%B4%A0%20D',
+    )
+    expect(requests.find((entry) => entry.url.endsWith('/api/supplements/label/recognize'))?.options).toMatchObject({
+      method: 'POST',
+      body: {
+        image_urls: [
+          'https://cdn.example.com/front.jpg',
+          'https://cdn.example.com/facts.jpg',
+          'https://cdn.example.com/ingredients.jpg',
+        ],
+      },
+    })
+    expect(requests.find((entry) => entry.url.endsWith('/api/supplements/supp%2F1'))?.options?.method).toBe('PUT')
+    expect(requests.find((entry) => entry.url.endsWith('/api/supplements/supp%2F1/intakes'))?.options?.body).toEqual({
+      servings: 1,
+      source: 'quick_log',
+      idempotency_key: 'key-1',
+    })
+    expect(requests.find((entry) => entry.url.endsWith('/api/supplement-intakes/intake%2F1'))?.options?.method).toBe('DELETE')
+  })
+
+  it('submits text analysis with the selected nutrition engine', async () => {
+    const { adapters, requests } = createMockAdapters()
+    const client = createFoodLinkApiClient({ baseUrl: 'https://api.example.com', adapters })
+
+    await client.debugImpersonateUser('user-1', 'password')
+    const recommended = await client.getRecommendedMealType('2026-06-15')
+    const submitted = await client.submitTextTask({
+      text: ' 一碗牛肉面 ',
+      mealType: 'lunch',
+      date: '20260615',
+      additionalContext: ' 少油 ',
+      executionMode: 'standard',
+      analysisEngine: 'ai_then_db_exact',
+      suggestRatioEnabled: true,
+      preciseMicronutrients: true,
+      dietGoal: 'muscle_gain',
+      activityTiming: 'post_workout',
+    })
+
+    const request = requests.find((entry) => entry.url.endsWith('/api/analyze-text/submit'))
+    expect(recommended).toEqual({ meal_type: 'dinner', generated_by: 'health_routine' })
+    expect(requests.some((entry) => entry.url.endsWith('/api/food-record/recommend-meal-type?date=2026-06-15'))).toBe(true)
+    expect(submitted.task_id).toBe('text-task-1')
+    expect(request?.options?.body).toMatchObject({
+      text: '一碗牛肉面',
+      text_input: '一碗牛肉面',
+      meal_type: 'lunch',
+      date: '20260615',
+      additionalContext: '少油',
+      execution_mode: 'standard',
+      analysis_engine: 'ai_then_db_exact',
+      suggest_ratio_enabled: true,
+      precise_micronutrients: true,
+      diet_goal: 'muscle_gain',
+      activity_timing: 'post_workout',
+    })
   })
 
   it('keeps correction and precision session fields across analyze APIs', async () => {
@@ -820,6 +1156,8 @@ describe('FoodLinkApiClient', () => {
     const calls: Array<{ url: string; init: Parameters<PetChatStreamFetch>[1] }> = []
     const encoded = new TextEncoder().encode([
       'data: {"type":"start"}\r\n\r\n',
+      'data: {"type":"progress","progress":{"agent_run_id":"run-1","step":1,"label":"正在核对校园食物库","status":"running"}}\n\n',
+      'data: {"type":"diet_result","diet_result":{"agent_run_id":"run-1","answer":"推荐两道菜","recommendation":{"resolved_school":{"id":"school-1","name":"测试大学"},"recommendations":[{"title":"鸡胸饭","reason":"蛋白质充足","source":"public_food_library","source_id":"food-1","calories":520,"protein":42,"carbs":58,"fat":12}]},"evidence":[],"tool_trace":[],"agent_used":true,"tool_count":2}}\n\n',
       'data: {"type":"chunk","text":"先补"}\n\n',
       'data: {"type":"chunk","text":"蛋白质🥚"}\n\n',
       'data: {"type":"done","meta":{"session_id":"session-1","range":"week","range_label":"最近 7 天","recorded_days":5,"credits_charged":2,"billing_status":"actual_usage_charged"}}\n\n',
@@ -837,6 +1175,8 @@ describe('FoodLinkApiClient', () => {
       return { status: 200, ok: true, body: stream, async text() { return '' } }
     }
     const chunks: string[] = []
+    const progressLabels: string[] = []
+    const recommendationTitles: string[] = []
     let starts = 0
 
     const meta = await client.streamGeneratePetChat(
@@ -846,12 +1186,16 @@ describe('FoodLinkApiClient', () => {
       false,
       {
         onStart: () => { starts += 1 },
+        onProgress: (progress) => progressLabels.push(progress.label),
+        onDietResult: (result) => recommendationTitles.push(result.recommendation.recommendations?.[0]?.title || ''),
         onChunk: (text) => chunks.push(text),
       },
-      { fetch: fetcher },
+      { fetch: fetcher, enableThinking: true },
     )
 
     expect(chunks).toEqual(['先补', '蛋白质🥚'])
+    expect(progressLabels).toEqual(['正在核对校园食物库'])
+    expect(recommendationTitles).toEqual(['鸡胸饭'])
     expect(starts).toBe(1)
     expect(meta).toMatchObject({ session_id: 'session-1', range: 'week', recorded_days: 5, credits_charged: 2 })
     expect(calls).toHaveLength(1)
@@ -866,6 +1210,7 @@ describe('FoodLinkApiClient', () => {
       range: 'week',
       session_id: 'session-0',
       new_session: false,
+      enable_thinking: true,
     })
   })
 
@@ -1089,6 +1434,44 @@ describe('FoodLinkApiClient', () => {
     expect(task.packaged_product?.unit_nutrition_per_100g?.calories).toBe(420)
   })
 
+  it('loads packaged food and submits a reviewable correction proposal', async () => {
+    const { adapters, requests } = createMockAdapters()
+    const client = createFoodLinkApiClient({ baseUrl: 'https://api.example.com', adapters })
+
+    await client.loginWithAppWechat({ code: 'expo-go-dev-wechat-code' })
+    const item = await client.getPackagedFoodItem('packaged/1')
+    const result = await client.submitPackagedFoodCorrection({
+      packagedFoodId: 'packaged/1',
+      reasonType: 'nutrition_wrong',
+      comment: '营养表显示能量为每 40g 168 kcal',
+      productName: '燕麦棒',
+      brand: '测试品牌',
+      sourceImageUrls: [' https://cdn.example.com/original.jpg ', 'https://cdn.example.com/new-label.jpg'],
+      specText: '40g',
+      netWeightG: 40,
+      servingWeightG: 40,
+      nutritionBasisUnit: '40g',
+      energyUnitRaw: 'kcal',
+      kcalPer100g: 420,
+      proteinPer100g: 8,
+      carbsPer100g: 66,
+      fatPer100g: 12,
+      ingestMethod: 'user_correction_submission',
+      reviewStatus: 'pending',
+      conversionStatus: 'converted',
+      rawLabelPayload: { entry_source: 'packaged_food_correction' },
+    })
+
+    const request = requests.find((entry) => entry.url.endsWith('/api/packaged-food/corrections'))
+    expect(item.id).toBe('packaged/1')
+    expect(result.id).toBe('correction-1')
+    expect(request?.options?.body).toMatchObject({
+      packaged_food_id: 'packaged/1', reason_type: 'nutrition_wrong', product_name: '燕麦棒',
+      source_image_urls: ['https://cdn.example.com/original.jpg', 'https://cdn.example.com/new-label.jpg'],
+      nutrition_basis_unit: '40g', kcal_per_100g: 420, review_status: 'pending',
+    })
+  })
+
   it('retries analyze tasks with the original task id', async () => {
     const { adapters, requests } = createMockAdapters()
     const client = createFoodLinkApiClient({ baseUrl: 'https://api.example.com', adapters })
@@ -1201,6 +1584,33 @@ describe('FoodLinkApiClient', () => {
     expect(requests.some((entry) => entry.url.endsWith('/api/public-food-library/food-with-campus-related/campus-detail'))).toBe(true)
   })
 
+  it('contributes up to five images to an existing campus food', async () => {
+    const { adapters, requests } = createMockAdapters()
+    const client = createFoodLinkApiClient({ baseUrl: 'https://api.example.com', adapters })
+
+    await client.loginWithAppWechat({ code: 'expo-go-dev-wechat-code' })
+    const result = await client.contributeCampusFoodImages(' campus-1 ', [
+      ' https://cdn.example.com/1.jpg ',
+      'https://cdn.example.com/2.jpg',
+      'https://cdn.example.com/3.jpg',
+      'https://cdn.example.com/4.jpg',
+      'https://cdn.example.com/5.jpg',
+      'https://cdn.example.com/6.jpg',
+    ])
+
+    const request = requests.find((entry) => entry.url.endsWith('/api/public-food-library/campus-1/contribute-images'))
+    expect(request?.options?.method).toBe('POST')
+    expect(request?.options?.body).toEqual({
+      image_paths: [
+        'https://cdn.example.com/1.jpg',
+        'https://cdn.example.com/2.jpg',
+        'https://cdn.example.com/3.jpg',
+        'https://cdn.example.com/4.jpg',
+        'https://cdn.example.com/5.jpg',
+      ],
+    })
+    expect(result.accepted).toBe(true)
+  })
   it('replies to and deletes public food comments', async () => {
     const { adapters, requests } = createMockAdapters()
     const client = createFoodLinkApiClient({ baseUrl: 'https://api.example.com', adapters })
@@ -1261,7 +1671,12 @@ describe('FoodLinkApiClient', () => {
     await client.loginWithAppWechat({ code: 'expo-go-dev-wechat-code' })
     await client.uploadUserAvatar({ base64Image: 'data:image/jpeg;base64,avatar' })
     await client.uploadUserCoverImage({ base64Image: 'data:image/jpeg;base64,cover' })
-    await client.updateUserProfile({ nickname: '新昵称', motto: '长期主义', cover_image: 'https://cdn.example.com/cover.jpg' })
+    await client.updateUserProfile({
+      nickname: '新昵称',
+      motto: '长期主义',
+      cover_image: 'https://cdn.example.com/cover.jpg',
+      public_favorite_recipes: false,
+    })
     await client.getHealthProfile()
     await client.updateHealthProfile({
       gender: 'male',
@@ -1283,11 +1698,72 @@ describe('FoodLinkApiClient', () => {
 
     expect(requests.some((req) => req.url.endsWith('/api/user/upload-avatar') && (req.options?.body as any).base64Image.includes('avatar'))).toBe(true)
     expect(requests.some((req) => req.url.endsWith('/api/user/upload-cover') && (req.options?.body as any).base64Image.includes('cover'))).toBe(true)
-    expect(requests.some((req) => req.url.endsWith('/api/user/profile') && req.options?.method === 'PUT' && (req.options?.body as any).motto === '长期主义')).toBe(true)
+    expect(requests.some((req) => req.url.endsWith('/api/user/profile') && req.options?.method === 'PUT' && (req.options?.body as any).motto === '长期主义' && (req.options?.body as any).public_favorite_recipes === false)).toBe(true)
     expect(requests.some((req) => req.url.endsWith('/api/user/health-profile') && req.options?.method === 'PUT' && (req.options?.body as any).daily_life_activity_level === 'moderate')).toBe(true)
     expect(requests.some((req) => req.url.endsWith('/api/user/health-profile/upload-report-image') && (req.options?.body as any).base64Image.includes('report'))).toBe(true)
     expect(requests.some((req) => req.url.endsWith('/api/user/health-profile/submit-report-extraction-task') && (req.options?.body as any).imageUrls[0].includes('report.jpg'))).toBe(true)
     expect(requests.some((req) => req.url.endsWith('/api/user/account') && req.options?.method === 'DELETE')).toBe(true)
+  })
+
+  it('loads reward center add-ons and uses the exact check-in and voucher routes', async () => {
+    const { adapters, requests } = createMockAdapters()
+    const client = createFoodLinkApiClient({ baseUrl: 'https://api.example.com', adapters })
+
+    await client.loginWithAppWechat({ code: 'expo-go-dev-wechat-code' })
+    const claim = await client.claimLoginCheckIn()
+    const vouchers = await client.listMyVouchers(' pending ', -5, 200)
+    const activated = await client.useVoucher(' voucher/1 ')
+
+    expect(claim.reward_amount).toBe(2)
+    expect(vouchers.items[0]?.voucher_type).toBe('registration_trial')
+    expect(activated.success).toBe(true)
+    const listRequest = requests.find((req) => req.url.includes('/api/vouchers/my?'))
+    expect(listRequest).toBeTruthy()
+    const listParams = new URL(listRequest?.url || 'https://api.example.com').searchParams
+    expect(listParams.get('status')).toBe('pending')
+    expect(listParams.get('offset')).toBe('0')
+    expect(listParams.get('limit')).toBe('100')
+    expect(requests.some((req) => req.url.endsWith('/api/membership/rewards/login-check-in/claim') && req.options?.method === 'POST')).toBe(true)
+    expect(requests.some((req) => req.url.endsWith('/api/vouchers/voucher%2F1/use') && req.options?.method === 'POST')).toBe(true)
+    await expect(client.useVoucher('  ')).rejects.toThrow('缺少奖励 ID')
+  })
+
+  it('submits and lists standard food nutrition contributions with the mini-program contract', async () => {
+    const { adapters, requests } = createMockAdapters()
+    const client = createFoodLinkApiClient({ baseUrl: 'https://api.example.com', adapters })
+
+    await client.loginWithAppWechat({ code: 'expo-go-dev-wechat-code' })
+    const item = await client.createFoodNutritionContribution({
+      canonical_name: ' 蒸南瓜 ',
+      kcal_per_100g: 45,
+      protein_per_100g: 1.2,
+      carbs_per_100g: 10.1,
+      fat_per_100g: 0.1,
+      source_text: ' 中国食物成分表 ',
+      evidence_image_paths: [' https://cdn.example.com/label.jpg ', '', 'https://cdn.example.com/report.jpg'],
+    })
+    const mine = await client.listMyFoodNutritionContributions()
+
+    expect(item.canonical_name).toBe('蒸南瓜')
+    expect(mine[0]?.status).toBe('pending')
+    const submit = requests.find((req) => req.url.endsWith('/api/food-nutrition-contributions'))
+    expect(submit?.options).toMatchObject({
+      method: 'POST',
+      timeoutMs: 15000,
+      body: {
+        canonical_name: '蒸南瓜',
+        kcal_per_100g: 45,
+        protein_per_100g: 1.2,
+        carbs_per_100g: 10.1,
+        fat_per_100g: 0.1,
+        source_text: '中国食物成分表',
+        evidence_image_paths: ['https://cdn.example.com/label.jpg', 'https://cdn.example.com/report.jpg'],
+      },
+    })
+    expect(requests.some((req) => (
+      req.url.endsWith('/api/food-nutrition-contributions/mine') &&
+      req.options?.method === 'GET'
+    ))).toBe(true)
   })
 
   it('calls body metric and exercise mutation APIs with backend field names', async () => {
@@ -1302,6 +1778,23 @@ describe('FoodLinkApiClient', () => {
     await client.deleteBodyWeightRecord('weight-1')
     await client.createExerciseLog({ exerciseDesc: '慢跑30分钟', date: '2026-06-15' })
     await client.createExerciseLog({ exerciseDesc: '', date: '2026-06-15', imageUrl: 'https://cdn.example.com/exercise.jpg' })
+    await client.createExerciseLog({
+      exerciseDesc: '跑步和力量训练',
+      date: '2026-06-15',
+      estimationMode: 'precision',
+      totalDurationMin: 50,
+      intensity: 'high',
+      averageHeartRate: 148,
+      distanceKm: 5.2,
+      exerciseBreakdown: '跑步30分钟；深蹲4×12',
+    })
+    await client.updateExerciseLog({
+      logId: 'exercise-1',
+      exerciseDesc: '慢跑 35 分钟',
+      date: '2026-06-15',
+      imageUrl: 'https://cdn.example.com/exercise-updated.jpg',
+      caloriesBurned: 320,
+    })
     await client.deleteExerciseLog('exercise-1')
 
     expect(requests.some((req) => req.url.endsWith('/api/body-metrics/water') && req.options?.method === 'POST' && (req.options?.body as any).amount_ml === 250)).toBe(true)
@@ -1311,6 +1804,10 @@ describe('FoodLinkApiClient', () => {
     expect(requests.some((req) => req.url.endsWith('/api/body-metrics/weight/weight-1') && req.options?.method === 'DELETE')).toBe(true)
     expect(requests.some((req) => req.url.endsWith('/api/exercise-logs') && (req.options?.body as any).exercise_desc === '慢跑30分钟')).toBe(true)
     expect(requests.some((req) => req.url.endsWith('/api/exercise-logs') && (req.options?.body as any).image_url === 'https://cdn.example.com/exercise.jpg')).toBe(true)
+    expect(requests.some((req) => req.url.endsWith('/api/exercise-logs') && (req.options?.body as any).estimation_mode === 'precision' && (req.options?.body as any).total_duration_min === 50)).toBe(true)
+    expect(requests.some((req) => req.url.endsWith('/api/exercise-logs') && (req.options?.body as any).intensity === 'high' && (req.options?.body as any).average_heart_rate === 148)).toBe(true)
+    expect(requests.some((req) => req.url.endsWith('/api/exercise-logs') && (req.options?.body as any).distance_km === 5.2 && (req.options?.body as any).exercise_breakdown === '跑步30分钟；深蹲4×12')).toBe(true)
+    expect(requests.some((req) => req.url.endsWith('/api/exercise-logs/exercise-1') && req.options?.method === 'PUT' && (req.options?.body as any).exercise_desc === '慢跑 35 分钟' && (req.options?.body as any).calories_burned === 320)).toBe(true)
     expect(requests.some((req) => req.url.endsWith('/api/exercise-logs/exercise-1') && req.options?.method === 'DELETE')).toBe(true)
   })
 
@@ -1503,6 +2000,9 @@ describe('FoodLinkApiClient', () => {
     await client.saveManualFoodRecords({
       mealType: 'lunch',
       date: '2026-06-15',
+      dietGoal: 'muscle_gain',
+      activityTiming: 'post_workout',
+      entryType: 'public_food_library',
       items: [
         {
           weight: 200,
@@ -1515,7 +2015,7 @@ describe('FoodLinkApiClient', () => {
             total_protein: 2.6,
             total_carbs: 25.9,
             total_fat: 0.3,
-            nutrients_per_100g: { fiber: 0.3, sugar: 0.1, sodium_mg: 2 },
+            nutrients_per_100g: { fiber: 0.3, sugar: 0.1, sodium_mg: 2, potassiumMg: 12 },
           },
         },
         {
@@ -1540,7 +2040,9 @@ describe('FoodLinkApiClient', () => {
     expect(req?.options?.body).toMatchObject({
       meal_type: 'lunch',
       date: '2026-06-15',
-      entry_type: 'food_library',
+      diet_goal: 'muscle_gain',
+      activity_timing: 'post_workout',
+      entry_type: 'public_food_library',
       description: '手动记录：米饭、鸡蛋',
       insight: '手动记录，包含用户自定义营养数据',
       total_calories: 347.2,
@@ -1556,6 +2058,7 @@ describe('FoodLinkApiClient', () => {
             calories: 232,
             fiber: 0.6,
             sodium_mg: 4,
+            potassiumMg: 24,
           },
         },
         {
@@ -1588,6 +2091,8 @@ describe('FoodLinkApiClient', () => {
     await client.communityDeleteComment({ targetId: 'record-1', targetType: 'food_record', commentId: 'comment/1' })
     await client.communityReport({ targetId: 'record-1', targetType: 'food_record', reason: 'other', extraContent: 'bad' })
     const leaderboard = await client.communityGetCheckinLeaderboard()
+    const healthLeaderboard = await client.communityGetHealthLeaderboard()
+    const foodLeaderboard = await client.communityGetFoodNutrientLeaderboard('protein', 2)
     await client.createCirclePost({
       title: '训练餐',
       body: '鸡胸肉和米饭',
@@ -1667,6 +2172,11 @@ describe('FoodLinkApiClient', () => {
     expect(requests.some((req) => req.url.endsWith('/api/community/feed-targets/food_record/record-1/comments/comment%2F1') && req.options?.method === 'DELETE')).toBe(true)
     expect(leaderboard.list[0]?.checkin_count).toBe(5)
     expect(requests.some((req) => req.url.endsWith('/api/community/checkin-leaderboard'))).toBe(true)
+    expect(healthLeaderboard.list[0]?.health_index).toBe(86)
+    expect(healthLeaderboard.scoring_rule.minimum_recorded_days).toBe(4)
+    expect(requests.some((req) => req.url.endsWith('/api/community/health-leaderboard'))).toBe(true)
+    expect(foodLeaderboard.list[0]?.value).toBe(31.2)
+    expect(requests.some((req) => req.url.includes('/api/community/food-nutrient-leaderboard?') && req.url.includes('nutrient=protein') && req.url.includes('limit=2'))).toBe(true)
     expect(requests.some((req) => {
       const body = req.options?.body as any
       return req.url.endsWith('/api/community/posts') &&
@@ -1802,6 +2312,42 @@ describe('FoodLinkApiClient', () => {
     expect(reportReq?.options?.method).toBe('POST')
     expect(reportReq?.options?.body).toEqual({ reason: 'abuse', extra_content: '骚扰' })
     expect(requests.some((req) => req.url.endsWith('/api/messages/unread-count'))).toBe(true)
+  })
+
+  it('loads the food nutrient leaderboard without authentication', async () => {
+    const { adapters, requests } = createMockAdapters()
+    const client = createFoodLinkApiClient({ baseUrl: 'https://api.example.com', adapters })
+
+    const result = await client.communityGetFoodNutrientLeaderboard('protein', 2)
+
+    expect(result.list[0]?.value).toBe(31.2)
+    const request = requests.find((entry) => entry.url.includes('/api/community/food-nutrient-leaderboard?'))
+    expect(request?.options?.headers?.Authorization).toBeUndefined()
+  })
+
+  it('configures automatic recording for an analysis task', async () => {
+    const { adapters, requests } = createMockAdapters()
+    const client = createFoodLinkApiClient({ baseUrl: 'https://api.example.com', adapters })
+
+    await client.loginWithAppWechat({ code: 'expo-go-dev-wechat-code' })
+    const result = await client.setAnalyzeTaskAutoRecord(' task/auto ', true, 'dinner')
+
+    expect(result).toEqual({ enabled: true, meal_type: 'dinner', status: 'waiting_record' })
+    const request = requests.find((entry) => entry.url.endsWith('/api/analyze/tasks/task%2Fauto/auto-record'))
+    expect(request?.options?.method).toBe('PUT')
+    expect(request?.options?.body).toEqual({ enabled: true, meal_type: 'dinner' })
+  })
+
+  it('marks analysis history reminders as seen', async () => {
+    const { adapters, requests } = createMockAdapters()
+    const client = createFoodLinkApiClient({ baseUrl: 'https://api.example.com', adapters })
+
+    await client.loginWithAppWechat({ code: 'expo-go-dev-wechat-code' })
+    const result = await client.markAnalyzeHistorySeen()
+
+    expect(result).toEqual({ success: true })
+    const request = requests.find((entry) => entry.url.endsWith('/api/user/last-seen-analyze-history'))
+    expect(request?.options?.method).toBe('POST')
   })
 
   it('lists community notifications with tab filters and pagination', async () => {

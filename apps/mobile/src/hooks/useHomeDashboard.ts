@@ -63,22 +63,22 @@ const fallbackWeekStats: StatsSummary = {
 const blankDashboard: HomeDashboard = {
   intakeData: {
     current: 0,
-    target: 0,
+    target: 2000,
     progress: 0,
     macros: {
-      protein: { current: 0, target: 0 },
-      carbs: { current: 0, target: 0 },
-      fat: { current: 0, target: 0 },
+      protein: { current: 0, target: 120 },
+      carbs: { current: 0, target: 250 },
+      fat: { current: 0, target: 65 },
     },
   },
   meals: [],
 }
 
-export function useHomeDashboard(selectedDate?: string) {
+export function useHomeDashboard(selectedDate?: string, isAuthenticated = true) {
   const initialRecordDate = useMemo(todayKey, [])
   const recordDate = selectedDate || initialRecordDate
 
-  const [dashboard, setDashboard] = useState<HomeDashboard | null>(null)
+  const [dashboard, setDashboard] = useState<HomeDashboard | null>(isAuthenticated ? null : blankDashboard)
   const [petSummary, setPetSummary] = useState<PetSummary | null>(null)
   const [weekStats, setWeekStats] = useState<StatsSummary | null>(fallbackWeekStats)
   const [bodyMetrics, setBodyMetrics] = useState<BodyMetricsSummary | null>(null)
@@ -99,6 +99,7 @@ export function useHomeDashboard(selectedDate?: string) {
       achievement: snapshot.achievement,
       nutritionTarget: snapshot.nutritionTarget || null,
       expirySummary: snapshot.expirySummary,
+      supplementSummary: snapshot.supplementSummary || null,
     })
     setExerciseBurnedKcal(snapshot.exerciseBurnedKcal || 0)
     setError(null)
@@ -106,6 +107,21 @@ export function useHomeDashboard(selectedDate?: string) {
 
   const loadHome = useCallback(async (targetDate?: string, silent = false, force = false) => {
     const resolvedDate = targetDate && targetDate !== '' ? targetDate : recordDate
+
+    if (!isAuthenticated) {
+      loadDashboardSeqRef.current += 1
+      loadDashboardPendingRef.current = null
+      homeDataStaleRef.current = false
+      setDashboard(blankDashboard)
+      setPetSummary(null)
+      setWeekStats(fallbackWeekStats)
+      setBodyMetrics(null)
+      setExerciseBurnedKcal(0)
+      setLoading(false)
+      setSyncing(false)
+      setError(null)
+      return
+    }
 
     if (
       loadDashboardPendingRef.current &&
@@ -197,6 +213,7 @@ export function useHomeDashboard(selectedDate?: string) {
         exerciseBurnedKcal: nextExerciseBurnedKcal,
         achievement: dashboardData.achievement || { streak_days: 0, green_days: 0 },
         nutritionTarget: dashboardData.nutritionTarget || null,
+        supplementSummary: dashboardData.supplementSummary || null,
       })
     } catch (err) {
       if (seq !== loadDashboardSeqRef.current) return
@@ -217,9 +234,10 @@ export function useHomeDashboard(selectedDate?: string) {
         setSyncing(false)
       }
     }
-  }, [applySnapshot, recordDate])
+  }, [applySnapshot, isAuthenticated, recordDate])
 
   const markHomeStale = useCallback((date?: string, force = false) => {
+    if (!isAuthenticated) return
     const target = date || todayKey()
     const current = recordDate
     homeDataStaleRef.current = true
@@ -231,20 +249,20 @@ export function useHomeDashboard(selectedDate?: string) {
       return
     }
     void loadHome(current, true, false)
-  }, [loadHome, recordDate])
+  }, [isAuthenticated, loadHome, recordDate])
 
   useFocusEffect(
     useCallback(() => {
       void loadHome(recordDate, false)
-      void ensureHomeDashboardCache()
+      if (isAuthenticated) void ensureHomeDashboardCache()
       return () => {}
-    }, [loadHome, recordDate]),
+    }, [isAuthenticated, loadHome, recordDate]),
   )
 
   useFocusEffect(
     useCallback(() => {
-      void refreshHomeDashboardLocalSnapshotFromCloud(recordDate).catch(() => undefined)
-    }, [recordDate]),
+      if (isAuthenticated) void refreshHomeDashboardLocalSnapshotFromCloud(recordDate).catch(() => undefined)
+    }, [isAuthenticated, recordDate]),
   )
 
   useFocusEffect(

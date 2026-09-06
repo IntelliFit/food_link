@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { ActivityIndicator, Image, Modal, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native'
+import { ActivityIndicator, FlatList, Image, Modal, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native'
 import * as Clipboard from 'expo-clipboard'
 import * as ImagePicker from 'expo-image-picker'
 import qrcode from 'qrcode-generator'
@@ -10,7 +10,10 @@ import Svg, { Circle as SvgCircle, Defs, LinearGradient as SvgLinearGradient, Re
 import {
   getMealTypeLabel,
   type CheckinLeaderboardItem,
+  type FoodNutrientLeaderboardItem,
   type FollowUserItem,
+  type HealthLeaderboardItem,
+  type HealthLeaderboardScoringRule,
   type MealType,
   type MembershipPlan,
   type MembershipStatus,
@@ -28,9 +31,11 @@ import {
 } from '@food-link/core'
 import { apiClient } from '../api'
 import { AppButton } from '../components/AppButton'
-import { AppAlert as Alert } from '../providers/DialogProvider'
+import { IconfontText } from '../components/Iconfont'
+import { AppAlert as Alert, useAppDialog } from '../providers/DialogProvider'
 import {
   PetAvatar,
+  isSupportedBuiltinPetAvatar,
   petAccessoryLabel,
   petMoodLabel,
   petPatternLabel,
@@ -41,6 +46,7 @@ import {
 import type { RecipeInput as ApiRecipeInput } from '@food-link/api-client'
 import type { PublicFoodShareDraft, RootStackParamList } from '../navigation/types'
 import { colors } from '../theme'
+import { useColorScheme } from '../providers/ColorSchemeProvider'
 import { todayKey } from '../utils/date'
 import { userFacingErrorMessage } from '../utils/errors'
 import { getHomePetHidden, setHomePetHidden } from '../utils/petPreferences'
@@ -78,33 +84,244 @@ interface RecipeTotals {
   fat: number
 }
 
+type LeaderboardSection = 'user' | 'food'
+type UserRankingType = 'checkin' | 'health'
+
+type UserRankingRow = {
+  rank: number
+  userId: string
+  nickname: string
+  avatar?: string
+  value: number
+  detail: string
+  isMe: boolean
+  dietQualityPoints?: number
+  continuityPoints?: number
+  stabilityPoints?: number
+}
+
+type LeaderboardListItem =
+  | { kind: 'user'; row: UserRankingRow }
+  | { kind: 'food'; row: FoodNutrientLeaderboardItem }
+
+const leaderboardNutrientOptions = [
+  { key: 'protein', label: '蛋白质' },
+  { key: 'fiber', label: '膳食纤维' },
+  { key: 'calcium', label: '钙' },
+  { key: 'iron', label: '铁' },
+  { key: 'potassium', label: '钾' },
+  { key: 'magnesium', label: '镁' },
+  { key: 'zinc', label: '锌' },
+  { key: 'vitamin_a', label: '维生素A' },
+  { key: 'vitamin_c', label: '维生素C' },
+  { key: 'vitamin_d', label: '维生素D' },
+  { key: 'vitamin_e', label: '维生素E' },
+  { key: 'vitamin_k', label: '维生素K' },
+  { key: 'vitamin_b12', label: '维生素B12' },
+  { key: 'folate', label: '叶酸' },
+] as const
+
+function normalizeCheckinLeaderboardRows(list: CheckinLeaderboardItem[]): UserRankingRow[] {
+  return list.map((row, index) => ({
+    rank: row.rank || index + 1,
+    userId: row.user_id,
+    nickname: row.nickname || '食友',
+    avatar: row.avatar,
+    value: row.checkin_count ?? row.record_count ?? 0,
+    detail: `${row.checkin_count ?? row.record_count ?? 0}次饮食记录`,
+    isMe: Boolean(row.is_me),
+  }))
+}
+
+function normalizeHealthLeaderboardRows(list: HealthLeaderboardItem[]): UserRankingRow[] {
+  return list.map((row, index) => ({
+    rank: row.rank || index + 1,
+    userId: row.user_id,
+    nickname: row.nickname || '食友',
+    avatar: row.avatar,
+    value: row.health_index,
+    detail: `本周记录${row.recorded_days}天`,
+    isMe: Boolean(row.is_me),
+    dietQualityPoints: row.diet_quality_points,
+    continuityPoints: row.continuity_points,
+    stabilityPoints: row.stability_points,
+  }))
+}
+
+function formatFoodLeaderboardValue(value: number): string {
+  if (!Number.isFinite(value)) return '0'
+  if (value >= 100) return String(Math.round(value))
+  return String(Number(value.toFixed(1)))
+}
+
 export function CheckinLeaderboardScreen() {
+  const route = useRoute<RouteProp<RootStackParamList, 'CheckinLeaderboard'>>()
   const insets = useSafeAreaInsets()
-  const [items, setItems] = useState<CheckinLeaderboardItem[]>([])
-  const [range, setRange] = useState('')
-  const [loading, setLoading] = useState(false)
+  const section: LeaderboardSection = route.params?.section === 'food' ? 'food' : 'user'
+  const [userRankingType, setUserRankingType] = useState<UserRankingType>(route.params?.ranking === 'health' ? 'health' : 'checkin')
+  const [nutrient, setNutrient] = useState(route.params?.nutrient || 'protein')
+  const [userRows, setUserRows] = useState<UserRankingRow[]>([])
+  const [foodRows, setFoodRows] = useState<FoodNutrientLeaderboardItem[]>([])
+  const [weekStart, setWeekStart] = useState('')
+  const [weekEnd, setWeekEnd] = useState('')
+  const [foodUnit, setFoodUnit] = useState('g')
+  const [healthScoringRule, setHealthScoringRule] = useState<HealthLeaderboardScoringRule | null>(null)
+  const [loading, setLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const loadGenerationRef = useRef(0)
 
   const load = useCallback(async () => {
+    const generation = ++loadGenerationRef.current
     setLoading(true)
     setErrorMessage(null)
     try {
-      const data = await apiClient.communityGetCheckinLeaderboard()
-      setItems(data.list || [])
-      setRange(data.week_start && data.week_end ? `${data.week_start} ~ ${data.week_end}` : '')
-    } catch (error) {
+      if (section === 'food') {
+        const result = await apiClient.communityGetFoodNutrientLeaderboard(nutrient)
+        if (loadGenerationRef.current !== generation) return
+        setFoodRows(result.list || [])
+        setFoodUnit(result.unit || 'g')
+        return
+      }
+      if (userRankingType === 'health') {
+        const result = await apiClient.communityGetHealthLeaderboard()
+        if (loadGenerationRef.current !== generation) return
+        setUserRows(normalizeHealthLeaderboardRows(result.list || []))
+        setHealthScoringRule(result.scoring_rule || null)
+        setWeekStart(result.week_start || '')
+        setWeekEnd(result.week_end || '')
+        return
+      }
+      const result = await apiClient.communityGetCheckinLeaderboard()
+      if (loadGenerationRef.current !== generation) return
+      setUserRows(normalizeCheckinLeaderboardRows(result.list || []))
+      setWeekStart(result.week_start || '')
+      setWeekEnd(result.week_end || '')
+    } catch {
+      if (loadGenerationRef.current !== generation) return
       setErrorMessage('加载失败，请稍后重试')
-      setItems([])
-      showError('获取排行榜失败', error)
+      if (section === 'food') setFoodRows([])
+      else setUserRows([])
     } finally {
-      setLoading(false)
+      if (loadGenerationRef.current === generation) setLoading(false)
     }
-  }, [])
+  }, [nutrient, section, userRankingType])
 
   useFocusEffect(
     useCallback(() => {
       void load()
+      return () => { loadGenerationRef.current += 1 }
     }, [load]),
+  )
+
+  const isHealth = userRankingType === 'health'
+  const topUsers = useMemo(() => userRows.slice(0, 3), [userRows])
+  const me = useMemo(() => userRows.find(row => row.isMe), [userRows])
+  const selectedNutrient = leaderboardNutrientOptions.find(option => option.key === nutrient) || leaderboardNutrientOptions[0]
+  const listItems = useMemo<LeaderboardListItem[]>(
+    () => section === 'food'
+      ? foodRows.map(row => ({ kind: 'food', row }))
+      : userRows.slice(3).map(row => ({ kind: 'user', row })),
+    [foodRows, section, userRows],
+  )
+
+  const listHeader = (
+    <View>
+      <View style={styles.checkinLeaderboardHeader}>
+        <Text style={styles.checkinLeaderboardTitle}>{section === 'food' ? '食物排行榜' : '用户排行榜'}</Text>
+        {section === 'user' ? (
+          <View style={styles.checkinLeaderboardSegments}>
+            {([
+              ['checkin', '饮食记录榜'],
+              ['health', '健康饮食榜'],
+            ] as const).map(([value, label]) => {
+              const selected = userRankingType === value
+              return (
+                <Pressable
+                  key={value}
+                  accessibilityRole="tab"
+                  accessibilityLabel={label}
+                  accessibilityState={{ selected }}
+                  onPress={() => setUserRankingType(value)}
+                  style={({ pressed }) => [
+                    styles.checkinLeaderboardSegment,
+                    selected && styles.checkinLeaderboardSegmentActive,
+                    pressed && styles.checkinLeaderboardPressed,
+                  ]}
+                >
+                  <Text style={[styles.checkinLeaderboardSegmentText, selected && styles.checkinLeaderboardSegmentTextActive]}>{label}</Text>
+                </Pressable>
+              )
+            })}
+          </View>
+        ) : (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.checkinLeaderboardNutrients}>
+            {leaderboardNutrientOptions.map(option => {
+              const selected = nutrient === option.key
+              return (
+                <Pressable
+                  key={option.key}
+                  accessibilityRole="button"
+                  accessibilityLabel={`查看${option.label}排行榜`}
+                  accessibilityState={{ selected }}
+                  onPress={() => setNutrient(option.key)}
+                  style={({ pressed }) => [
+                    styles.checkinLeaderboardNutrient,
+                    selected && styles.checkinLeaderboardNutrientActive,
+                    pressed && styles.checkinLeaderboardPressed,
+                  ]}
+                >
+                  <Text style={[styles.checkinLeaderboardNutrientText, selected && styles.checkinLeaderboardNutrientTextActive]}>{option.label}</Text>
+                </Pressable>
+              )
+            })}
+          </ScrollView>
+        )}
+
+        <View style={styles.checkinLeaderboardPeriodRow}>
+          <IconfontText className="iconfont icon-rili" size={16} color={colors.brand} />
+          <Text style={styles.checkinLeaderboardRange}>
+            {section === 'food'
+              ? `${selectedNutrient.label} · 标准食物库 · 每100g`
+              : `${isHealth ? '好友' : '全体用户'} · 本周 ${weekStart}${weekEnd ? ` – ${weekEnd}` : ''}`}
+          </Text>
+        </View>
+
+        {section === 'user' && isHealth ? (
+          <View style={styles.healthScoreExplanation}>
+            <View style={styles.healthScoreExplanationHead}>
+              <Text style={styles.healthScoreExplanationTitle}>计分说明</Text>
+              <Text style={styles.healthScoreExplanationTotal}>满分{healthScoringRule?.total_points || 100}分</Text>
+            </View>
+            <Text style={styles.healthScoreFormula}>
+              饮食质量{healthScoringRule?.diet_quality_points || 75}分 + 记录连续性{healthScoringRule?.continuity_points || 15}分 + 日间稳定性{healthScoringRule?.stability_points || 10}分
+            </Text>
+            <Text style={styles.healthScoreRule}>
+              至少记录{healthScoringRule?.minimum_recorded_days || 4}天入榜；{healthScoringRule?.continuity_description || '连续性按本周已过去天数计算'}
+            </Text>
+            {me?.dietQualityPoints != null && me.continuityPoints != null && me.stabilityPoints != null ? (
+              <Text style={styles.healthScoreMine}>
+                我的得分：饮食质量 {me.dietQualityPoints}/{healthScoringRule?.diet_quality_points || 75} · 连续性 {me.continuityPoints}/{healthScoringRule?.continuity_points || 15} · 稳定性 {me.stabilityPoints}/{healthScoringRule?.stability_points || 10}
+              </Text>
+            ) : null}
+          </View>
+        ) : null}
+      </View>
+
+      {section === 'user' && !loading && !errorMessage && topUsers.length > 0 ? (
+        <View style={styles.checkinLeaderboardPodium}>
+          {[topUsers[1], topUsers[0], topUsers[2]].filter((row): row is UserRankingRow => Boolean(row)).map(row => (
+            <View key={row.userId} style={[styles.checkinLeaderboardPodiumItem, row.rank === 1 && styles.checkinLeaderboardPodiumFirst]}>
+              <Text style={[styles.checkinLeaderboardPodiumRank, row.rank === 1 && styles.checkinLeaderboardRankTop1, row.rank === 2 && styles.checkinLeaderboardRankTop2, row.rank === 3 && styles.checkinLeaderboardRankTop3]}>{row.rank}</Text>
+              <View style={[styles.checkinLeaderboardPodiumAvatarWrap, row.rank === 1 && styles.checkinLeaderboardPodiumAvatarFirst]}>
+                {row.avatar ? <Image source={{ uri: row.avatar }} style={styles.checkinLeaderboardAvatar} /> : <IconfontText className="iconfont icon-duoren" size={22} color={colors.brand} />}
+              </View>
+              <Text style={styles.checkinLeaderboardPodiumName} numberOfLines={1}>{row.nickname}</Text>
+              <Text style={styles.checkinLeaderboardPodiumValue}>{row.value}{isHealth ? '分' : '次'}</Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
+    </View>
   )
 
   return (
@@ -119,75 +336,83 @@ export function CheckinLeaderboardScreen() {
         </Defs>
         <SvgRect x="0" y="0" width="100%" height="100%" fill="url(#checkinLeaderboardBg)" />
       </Svg>
-      <View style={styles.checkinLeaderboardHeader}>
-        <Text style={styles.checkinLeaderboardTitle}>好友本周打卡</Text>
-        {range ? (
-          <Text style={styles.checkinLeaderboardRange}>统计周期 {range}（北京时间）</Text>
-        ) : null}
-      </View>
-
-      {loading ? (
-        <View style={styles.checkinLeaderboardState}>
-          <ActivityIndicator color={colors.brand} />
-        </View>
-      ) : errorMessage ? (
-        <View style={styles.checkinLeaderboardState}>
-          <Text style={styles.checkinLeaderboardStateText}>{errorMessage}</Text>
-          <Pressable style={styles.checkinLeaderboardRetry} onPress={load}>
-            <Text style={styles.checkinLeaderboardRetryText}>重试</Text>
-          </Pressable>
-        </View>
-      ) : items.length === 0 ? (
-        <View style={styles.checkinLeaderboardState}>
-          <Text style={styles.checkinLeaderboardStateText}>暂无数据</Text>
+      <FlatList
+        style={styles.checkinLeaderboardScroll}
+        contentContainerStyle={[styles.checkinLeaderboardList, { paddingBottom: 24 }]}
+        data={listItems}
+        keyExtractor={item => item.kind === 'user' ? `user-${item.row.userId}` : `food-${item.row.food_id}`}
+        ListHeaderComponent={listHeader}
+        ListEmptyComponent={loading ? (
+          <View style={styles.checkinLeaderboardState}>
+            <ActivityIndicator color={colors.brand} />
+          </View>
+        ) : errorMessage ? (
+          <View style={styles.checkinLeaderboardState}>
+            <Text style={styles.checkinLeaderboardStateText}>{errorMessage}</Text>
+            <Pressable accessibilityRole="button" accessibilityLabel="重新加载排行榜" style={({ pressed }) => [styles.checkinLeaderboardRetry, pressed && styles.checkinLeaderboardPressed]} onPress={load}>
+              <Text style={styles.checkinLeaderboardRetryText}>重试</Text>
+            </Pressable>
+          </View>
+        ) : section === 'user' && userRows.length > 0 ? null : (
+          <View style={styles.checkinLeaderboardState}>
+            <IconfontText className={`iconfont ${section === 'food' ? 'icon-shiwu' : 'icon-duoren'}`} size={34} color="#94a3b8" />
+            <Text style={styles.checkinLeaderboardStateTitle}>{section === 'food' ? '暂无食物数据' : isHealth ? '本周暂无满足条件的健康饮食分' : '本周暂无饮食记录'}</Text>
+            <Text style={styles.checkinLeaderboardStateText}>{section === 'food' ? '可以切换其他营养素看看' : '完成记录后，排名会在这里更新'}</Text>
+          </View>
+        )}
+        renderItem={({ item }) => {
+          if (item.kind === 'food') {
+            const row = item.row
+            return (
+              <View style={styles.checkinLeaderboardRow}>
+                <Text style={[styles.checkinLeaderboardRank, row.rank === 1 && styles.checkinLeaderboardRankTop1, row.rank === 2 && styles.checkinLeaderboardRankTop2, row.rank === 3 && styles.checkinLeaderboardRankTop3]}>{row.rank}</Text>
+                <View style={styles.checkinLeaderboardAvatarWrap}>
+                  {row.image_url ? <Image source={{ uri: row.image_url }} style={styles.checkinLeaderboardAvatar} /> : <IconfontText className="iconfont icon-shiwu" size={21} color={colors.brand} />}
+                </View>
+                <View style={styles.checkinLeaderboardMiddle}>
+                  <Text style={styles.checkinLeaderboardName} numberOfLines={2}>{row.name}</Text>
+                </View>
+                <View style={styles.checkinLeaderboardCount}>
+                  <Text style={styles.checkinLeaderboardCountNum}>{formatFoodLeaderboardValue(row.value)}</Text>
+                  <Text style={styles.checkinLeaderboardCountUnit}>{foodUnit}/100g</Text>
+                </View>
+              </View>
+            )
+          }
+          const row = item.row
+          return (
+            <View style={[styles.checkinLeaderboardRow, row.isMe && styles.checkinLeaderboardRowMine]}>
+              <Text style={styles.checkinLeaderboardRank}>{row.rank}</Text>
+              <View style={styles.checkinLeaderboardAvatarWrap}>
+                {row.avatar ? <Image source={{ uri: row.avatar }} style={styles.checkinLeaderboardAvatar} /> : <IconfontText className="iconfont icon-duoren" size={21} color={colors.brand} />}
+              </View>
+              <View style={styles.checkinLeaderboardMiddle}>
+                <View style={styles.checkinLeaderboardNameRow}>
+                  <Text style={styles.checkinLeaderboardName} numberOfLines={1}>{row.nickname}</Text>
+                  {row.isMe ? <Text style={styles.checkinLeaderboardMeTag}>我</Text> : null}
+                </View>
+                <Text style={styles.checkinLeaderboardDetail}>{row.detail}</Text>
+              </View>
+              <View style={styles.checkinLeaderboardCount}>
+                <Text style={styles.checkinLeaderboardCountNum}>{row.value}</Text>
+                <Text style={styles.checkinLeaderboardCountUnit}>{isHealth ? '分' : '次'}</Text>
+              </View>
+            </View>
+          )
+        }}
+        refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor={colors.brand} colors={[colors.brand]} />}
+        showsVerticalScrollIndicator={false}
+      />
+      {section === 'user' && !loading && !errorMessage && me ? (
+        <View style={[styles.checkinLeaderboardMeBar, { paddingBottom: Math.max(insets.bottom, 12) }]}>
+          <View style={styles.checkinLeaderboardMeAvatar}>
+            {me.avatar ? <Image source={{ uri: me.avatar }} style={styles.checkinLeaderboardAvatar} /> : <IconfontText className="iconfont icon-duoren" size={18} color={colors.brand} />}
+          </View>
+          <Text style={styles.checkinLeaderboardMeWord}>我</Text>
+          <Text style={styles.checkinLeaderboardMeSummary}>第{me.rank}名 · {me.value}{isHealth ? '分' : '次'}</Text>
         </View>
       ) : (
-        <ScrollView
-          style={styles.checkinLeaderboardScroll}
-          contentContainerStyle={[styles.checkinLeaderboardList, { paddingBottom: 24 + insets.bottom }]}
-          refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor={colors.brand} colors={[colors.brand]} />}
-          showsVerticalScrollIndicator={false}
-        >
-            {items.map((item, index) => {
-              const rank = item.rank || index + 1
-              const checkinCount = item.checkin_count ?? item.record_count ?? 0
-              const nickname = item.nickname || '食友'
-              return (
-                <View
-                  key={item.user_id}
-                  style={[styles.checkinLeaderboardRow, item.is_me ? styles.checkinLeaderboardRowMine : null]}
-                >
-                  <Text
-                    style={[
-                      styles.checkinLeaderboardRank,
-                      rank === 1 ? styles.checkinLeaderboardRankTop1 : null,
-                      rank === 2 ? styles.checkinLeaderboardRankTop2 : null,
-                      rank === 3 ? styles.checkinLeaderboardRankTop3 : null,
-                    ]}
-                  >
-                    {rank}
-                  </Text>
-                  <View style={styles.checkinLeaderboardAvatarWrap}>
-                    {item.avatar ? (
-                      <Image source={{ uri: item.avatar }} style={styles.checkinLeaderboardAvatar} />
-                    ) : (
-                      <Text style={styles.checkinLeaderboardAvatarText}>👤</Text>
-                    )}
-                  </View>
-                  <View style={styles.checkinLeaderboardMiddle}>
-                    <View style={styles.checkinLeaderboardNameRow}>
-                      <Text style={styles.checkinLeaderboardName} numberOfLines={1}>{nickname}</Text>
-                      {item.is_me ? <Text style={styles.checkinLeaderboardMeTag}>我</Text> : null}
-                    </View>
-                  </View>
-                  <View style={styles.checkinLeaderboardCount}>
-                    <Text style={styles.checkinLeaderboardCountNum}>{checkinCount}</Text>
-                    <Text style={styles.checkinLeaderboardCountUnit}>次打卡</Text>
-                  </View>
-                </View>
-              )
-            })}
-        </ScrollView>
+        <View style={{ height: insets.bottom }} />
       )}
     </View>
   )
@@ -333,7 +558,7 @@ export function InviteFriendsScreen() {
                 ? '把食探分享给新朋友'
                 : '加入食探并开始健康打卡'}
           </Text>
-          <Text style={styles.inviteSubtitle}>新用户 7 天内完成 2 个自然日有效记录，双方各得 15 积分，每月最多 10 人</Text>
+          <Text style={styles.inviteSubtitle}>新用户 7 天内完成 2 个自然日有效记录，邀请人得 7 天会员，新朋友得 3 天会员</Text>
         </View>
 
         <View style={[styles.inviteCard, styles.inviterCard]}>
@@ -363,7 +588,7 @@ export function InviteFriendsScreen() {
         <View style={[styles.inviteCard, styles.rulesCard]}>
           <InviteRuleItem index="01" text="必须是从未注册过食探的新用户" />
           <InviteRuleItem index="02" text="注册后 7 天内完成 2 个自然日饮食或运动记录" />
-          <InviteRuleItem index="03" text="达标后双方各得 15 积分，邀请人每月上限 10 人" />
+          <InviteRuleItem index="03" text="达标后邀请人得 7 天、新朋友得 3 天，邀请人每月上限 10 人" />
         </View>
 
         {isInviteOwner && inviteLink ? (
@@ -1448,6 +1673,83 @@ function RecipeEditField({
 
 export function PetHomeScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
+  const { isDark } = useColorScheme()
+  const petTheme = isDark
+    ? {
+        page: '#0d1312',
+        hero: '#18211f',
+        surface: 'rgba(24, 33, 31, 0.94)',
+        border: 'rgba(112, 196, 149, 0.16)',
+        shadow: '#000',
+        primaryText: '#f2f7f4',
+        secondaryText: 'rgba(214, 226, 220, 0.68)',
+        mutedText: 'rgba(214, 226, 220, 0.48)',
+        accent: '#6ee7b7',
+        arrow: 'rgba(214, 226, 220, 0.72)',
+        statSurface: 'rgba(27, 39, 35, 0.96)',
+        progressTrack: 'rgba(255, 255, 255, 0.1)',
+        actionSurface: 'rgba(255, 255, 255, 0.06)',
+        visibilitySurface: 'rgba(92, 184, 150, 0.1)',
+        candidateSurface: 'rgba(255, 255, 255, 0.06)',
+        candidateActive: 'rgba(92, 184, 150, 0.13)',
+        candidateActiveBorder: 'rgba(92, 184, 150, 0.42)',
+        candidateAction: '#5cb896',
+        toggleTrack: '#33413d',
+        toggleKnob: '#f2f7f4',
+        inputSurface: '#1b2522',
+        secondaryButton: 'rgba(255, 255, 255, 0.07)',
+        previewSurface: 'rgba(92, 184, 150, 0.14)',
+      }
+    : {
+        page: '#f4fbf6',
+        hero: 'rgba(255, 255, 255, 0.92)',
+        surface: 'rgba(255, 255, 255, 0.92)',
+        border: 'rgba(92, 184, 150, 0.12)',
+        shadow: '#0f172a',
+        primaryText: '#17212b',
+        secondaryText: '#657180',
+        mutedText: '#94a3b8',
+        accent: '#2f7f62',
+        arrow: '#5f6b66',
+        statSurface: 'rgba(250, 255, 252, 0.98)',
+        progressTrack: '#e6ebe7',
+        actionSurface: 'rgba(92, 184, 150, 0.08)',
+        visibilitySurface: 'rgba(92, 184, 150, 0.08)',
+        candidateSurface: '#f7fafc',
+        candidateActive: 'rgba(92, 184, 150, 0.09)',
+        candidateActiveBorder: 'rgba(92, 184, 150, 0.34)',
+        candidateAction: '#17212b',
+        toggleTrack: '#d9e2ea',
+        toggleKnob: '#fff',
+        inputSurface: '#f7fbf8',
+        secondaryButton: '#eef3f5',
+        previewSurface: 'rgba(92, 184, 150, 0.1)',
+      }
+  const petStyles = useMemo(() => ({
+    page: { backgroundColor: petTheme.page },
+    hero: { backgroundColor: petTheme.hero, borderColor: petTheme.border, shadowColor: petTheme.shadow },
+    surface: { backgroundColor: petTheme.surface, borderColor: petTheme.border, shadowColor: petTheme.shadow },
+    stat: { backgroundColor: petTheme.statSurface, borderColor: petTheme.border, shadowColor: petTheme.shadow },
+    primaryText: { color: petTheme.primaryText },
+    secondaryText: { color: petTheme.secondaryText },
+    mutedText: { color: petTheme.mutedText },
+    accentText: { color: petTheme.accent },
+    reward: { backgroundColor: isDark ? '#3aa77c' : colors.brand },
+    upgrade: { borderTopColor: petTheme.border },
+    progressTrack: { backgroundColor: petTheme.progressTrack },
+    candidate: { backgroundColor: petTheme.candidateSurface, borderColor: isDark ? 'rgba(255, 255, 255, 0.06)' : 'transparent' },
+    candidateActive: { backgroundColor: petTheme.candidateActive, borderColor: petTheme.candidateActiveBorder },
+    candidateAction: { backgroundColor: petTheme.candidateAction },
+    actionItem: { backgroundColor: petTheme.actionSurface },
+    visibilityActionItem: { backgroundColor: petTheme.visibilitySurface },
+    toggleTrack: { backgroundColor: petTheme.toggleTrack },
+    toggleKnob: { backgroundColor: petTheme.toggleKnob },
+    modalCard: { backgroundColor: petTheme.surface, borderColor: petTheme.border },
+    input: { color: petTheme.primaryText, backgroundColor: petTheme.inputSurface, borderColor: petTheme.candidateActiveBorder },
+    secondaryButton: { backgroundColor: petTheme.secondaryButton },
+    previewStage: { backgroundColor: petTheme.previewSurface },
+  }), [isDark, petTheme])
+
   const [summary, setSummary] = useState<PetSummary | null>(null)
   const [membership, setMembership] = useState<MembershipStatus | null>(null)
   const [homePetHidden, setHomePetHiddenState] = useState(false)
@@ -1455,6 +1757,10 @@ export function PetHomeScreen() {
   const [claiming, setClaiming] = useState(false)
   const [rerolling, setRerolling] = useState(false)
   const [selectingCandidateId, setSelectingCandidateId] = useState('')
+  const [pixelAvatarCustomizing, setPixelAvatarCustomizing] = useState(false)
+  const [pixelNaming, setPixelNaming] = useState(false)
+  const [pixelNameDraft, setPixelNameDraft] = useState('')
+  const [pixelAvatarPreview, setPixelAvatarPreview] = useState<PetSummary['pet'] | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -1494,17 +1800,12 @@ export function PetHomeScreen() {
           is_claimed: true,
         },
       } : current)
-      const earnedCreditsBalance = result.earned_credits_balance
-      if (typeof earnedCreditsBalance === 'number') {
-        setMembership((current) => current ? {
-          ...current,
-          earned_credits_balance: earnedCreditsBalance,
-          total_credits_available: (current.system_credits_remaining ?? 0) + earnedCreditsBalance,
-          daily_credits_remaining: (current.system_credits_remaining ?? 0) + earnedCreditsBalance,
-        } : current)
-      }
-      Alert.alert('已领取', `经验 +${result.exp_awarded || 0}，积分 +${result.credits_awarded || 0}`)
-      await load()
+      Alert.alert(
+        '领取成功',
+        result.credits_awarded > 0
+          ? `已领取 +${result.credits_awarded} 积分`
+          : `已领取 +${result.exp_awarded || 0} 经验`,
+      )
     } catch (error) {
       showError('领取失败', error)
     } finally {
@@ -1518,7 +1819,7 @@ export function PetHomeScreen() {
     try {
       await apiClient.selectPetAppearance(candidate.id)
       await load()
-      Alert.alert('已选择', '成长伙伴外观已更新。')
+      Alert.alert('宠物已选择', '成长伙伴外观已更新。')
     } catch (error) {
       showError('选择外观失败', error)
     } finally {
@@ -1526,33 +1827,65 @@ export function PetHomeScreen() {
     }
   }
 
-  const runReroll = async () => {
-    setRerolling(true)
+  const generatePixelAvatar = async (petName: string) => {
+    if (pixelAvatarCustomizing || !summary?.pet) return
     try {
-      await apiClient.rerollPetAppearance()
-      await load()
-      Alert.alert('外观已更新', '伙伴的颜色、体型、花纹和配饰已刷新。')
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync()
+      if (!permission.granted) {
+        Alert.alert('需要照片权限', '请允许访问照片，才能选择用于生成像素分身的人像。')
+        return
+      }
+      const picked = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.9 })
+      if (picked.canceled || !picked.assets[0]) return
+      const asset = picked.assets[0]
+      setPixelAvatarCustomizing(true)
+      const result = await apiClient.customizePetPixelAvatarFile({
+        fileUri: asset.uri,
+        petName,
+        fileName: asset.fileName || 'pet-avatar.jpg',
+        mimeType: asset.mimeType || 'image/jpeg',
+      })
+      setSummary((current) => current ? { ...current, pet: result.pet } : current)
+      setPixelAvatarPreview(result.pet)
     } catch (error) {
-      showError('随机换外观失败', error)
+      showError('生成像素分身失败', error)
     } finally {
-      setRerolling(false)
+      setPixelAvatarCustomizing(false)
     }
   }
 
-  const confirmReroll = () => {
-    if (!summary?.pet || rerolling) return
-    if (petEarnedCredits(membership) < 5) {
-      Alert.alert('奖励积分不足', '随机刷新外观需要 5 奖励积分。')
+  const openPixelAvatarNaming = () => {
+    if (pixelAvatarCustomizing) return
+    setPixelNameDraft(summary?.pet?.name || '')
+    setPixelNaming(true)
+  }
+
+  const confirmPixelAvatarName = () => {
+    const petName = pixelNameDraft.trim()
+    if (!petName) {
+      Alert.alert('请输入宠物名字', '宠物名字不能为空。')
       return
     }
+    if (Array.from(petName).length > 12) {
+      Alert.alert('宠物名字过长', '宠物名字最多 12 个字。')
+      return
+    }
+    setPixelNaming(false)
     Alert.alert(
-      '随机换外观',
-      '会消耗 5 奖励积分，伙伴名字和等级不变，只随机刷新颜色、体型、花纹和配饰。',
+      '生成像素分身',
+      '请选择一张清晰的单人人像。照片会发送给 AI 图像服务处理；使用他人照片前请先获得授权。',
       [
-        { text: '先看看', style: 'cancel' },
-        { text: '立即更换', onPress: () => void runReroll() },
+        { text: '暂不生成', style: 'cancel' },
+        { text: '继续选择', onPress: () => void generatePixelAvatar(petName) },
       ],
     )
+  }
+
+  const closePixelAvatarPreview = () => setPixelAvatarPreview(null)
+
+  const viewPixelAvatarOnHome = () => {
+    setPixelAvatarPreview(null)
+    navigation.navigate('MainTabs', { screen: 'HomeTab' })
   }
 
   const toggleHomePet = async () => {
@@ -1560,93 +1893,141 @@ export function PetHomeScreen() {
     setHomePetHiddenState(next)
     await setHomePetHidden(next)
     Alert.alert(
-      next ? '首页悬浮伙伴已隐藏' : '首页悬浮伙伴已显示',
-      next ? '首页不再显示可拖动的成长伙伴，成长数据仍会继续更新。' : '首页会重新显示可拖动的成长伙伴。',
+      next ? '首页宠物已隐藏' : '首页宠物已显示',
+      next ? '首页不再显示伙伴卡片，数据和成长仍会保留。' : '首页会重新在“伙伴”页展示成长状态、任务和聊天入口。',
+    )
+  }
+
+
+  const rerollAppearance = async () => {
+    if (!summary?.pet || rerolling) return
+    setRerolling(true)
+    try {
+      const result = await apiClient.rerollPetAppearance()
+      setSummary((current) => current ? { ...current, pet: result.pet } : current)
+      if (typeof result.earned_credits_balance === 'number') {
+        setMembership((current) => current ? {
+          ...current,
+          earned_credits_balance: result.earned_credits_balance,
+          total_credits_available: Math.max((current.total_credits_available ?? totalCredits) - result.credits_cost, 0),
+          daily_credits_remaining: Math.max((current.daily_credits_remaining ?? totalCredits) - result.credits_cost, 0),
+        } : current)
+      }
+      Alert.alert('外观已更新', '伙伴名字和等级已保留。')
+    } catch (error) {
+      showError('随机换外观失败', error)
+    } finally {
+      setRerolling(false)
+    }
+  }
+
+  const confirmRerollAppearance = () => {
+    if (earnedCredits < 5) {
+      Alert.alert('奖励积分不足', '随机换外观需要 5 奖励积分。')
+      return
+    }
+    Alert.alert(
+      '随机换外观',
+      '会消耗 5 奖励积分，宠物名字和等级不变，只随机刷新颜色、体型、花纹和配饰。',
+      [
+        { text: '先看看', style: 'cancel' },
+        { text: '立即更换', onPress: () => void rerollAppearance() },
+      ],
     )
   }
 
   const pet = summary?.pet
+  const earnedCredits = petEarnedCredits(membership)
+  const totalCredits = petTotalCredits(membership)
   const petMood = petMoodLabel(summary?.status.mood)
   const petState = petStateLabel(summary?.status.state)
   const petMoodStateText = petMood.endsWith(petState) ? petMood : `${petMood} · ${petState}`
   const nextLevelGap = Math.max((pet?.next_level_exp ?? 0) - (pet?.level_exp ?? 0), 0)
   const petEvent = summary?.event && !summary.event.is_claimed ? summary.event : null
   const candidates = pet?.selection_candidates || []
-  const showCandidates = candidates.length > 0 && Boolean(pet?.needs_selection || pet?.free_profile_rematch_available)
+  const commonCandidates = candidates.filter((candidate) => isSupportedBuiltinPetAvatar(candidate.builtin_avatar_id))
+  const matchedCandidates = candidates.filter((candidate) => !candidate.builtin_avatar_id)
+  const showMatchedCandidates = matchedCandidates.length > 0 && Boolean(pet?.needs_selection || pet?.free_profile_rematch_available)
+  const isCandidateCurrent = (candidate: PetAppearanceCandidate) => candidate.builtin_avatar_id
+    ? pet?.avatar_type === 'builtin_person' && candidate.builtin_avatar_id === pet?.builtin_avatar_id
+    : !pet?.builtin_avatar_id && candidate.pet_seed === pet?.pet_seed
   return (
-    <View style={styles.petHomePage}>
+    <View style={[styles.petHomePage, petStyles.page]}>
       <ScrollView
         style={styles.petHomeScroll}
         contentContainerStyle={styles.petHomeContent}
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor={colors.brand} colors={[colors.brand]} />}
+        refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor={petTheme.accent} colors={[petTheme.accent]} />}
       >
-        <View style={styles.petHomeHero}>
-          <PetAvatar pet={pet} size="large" mood={summary?.status.mood} state={summary?.status.state} />
-          <View style={styles.petHomeHeroCopy}>
-            <Text style={styles.petHomeName}>{pet?.name || '健康伙伴'}</Text>
-            <View style={styles.petHomeMetaRow}>
-              <Text style={styles.petHomeChip}>Lv.{pet?.level || 1}</Text>
-              <Text style={styles.petHomeChipMuted}>{petPersonalityLabel(pet?.personality)}</Text>
-              <Text style={styles.petHomeChipMuted}>{petArchetypeLabel(pet?.archetype)}</Text>
-              <Text style={styles.petHomeChipMuted}>{petMoodStateText}</Text>
+        <View style={[styles.petHomeHero, petStyles.hero]}>
+          <View style={styles.petHomeHeroMain}>
+            <View style={styles.petHomeHeroStage}>
+              <PetAvatar pet={pet} size={108} mood={summary?.status.mood} state={summary?.status.state} mealState={summary?.status.meal_state} motion="companion" />
+              <View style={[styles.petHomeStageStat, petStyles.stat, styles.petHomeStageStatLevel]}>
+                <Text style={[styles.petHomeStageStatLabel, petStyles.secondaryText]}>等级</Text>
+                <Text style={[styles.petHomeStageStatValue, petStyles.accentText]}>Lv.{pet?.level || 1}</Text>
+              </View>
+              <View style={[styles.petHomeStageStat, petStyles.stat, styles.petHomeStageStatCredits]}>
+                <Text style={[styles.petHomeStageStatLabel, petStyles.secondaryText]}>积分</Text>
+                <Text style={[styles.petHomeStageStatValue, petStyles.accentText]}>{totalCredits}</Text>
+              </View>
+              <View style={[styles.petHomeStageStat, petStyles.stat, styles.petHomeStageStatDays]}>
+                <Text style={[styles.petHomeStageStatLabel, petStyles.secondaryText]}>陪伴</Text>
+                <Text style={[styles.petHomeStageStatValue, petStyles.accentText]}>{pet?.total_events ?? 0}天</Text>
+              </View>
             </View>
-            <Text style={styles.petHomeMessage}>{summary?.status.message || '它正在安静陪你记录每一天。'}</Text>
+
+            <View style={styles.petHomeHeroCopy}>
+              <View style={styles.petHomeNameRow}>
+                <Pressable accessibilityRole="button" accessibilityLabel={`和${pet?.name || '健康伙伴'}聊天`} style={styles.petHomeNameLink} onPress={() => navigation.navigate('PetChat')}>
+                  <Text style={[styles.petHomeName, petStyles.primaryText]} numberOfLines={1}>{pet?.name || '健康伙伴'}</Text>
+                  <IconfontText className="icon-right" size={14} color={petTheme.arrow} />
+                </Pressable>
+              </View>
+              {petEvent?.can_claim ? (
+                <Pressable accessibilityRole="button" style={[styles.petHomeHeroReward, petStyles.reward]} disabled={claiming} onPress={() => void claim()}>
+                  {claiming ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.petHomeHeroRewardText}>领取 +{petEvent.exp_reward} 经验</Text>}
+                </Pressable>
+              ) : null}
+            </View>
+          </View>
+
+          <View style={[styles.petHomeUpgrade, petStyles.upgrade]}>
+            <View style={styles.petHomeUpgradeHead}>
+              <Text style={[styles.petHomeUpgradeLabel, petStyles.accentText]}>升级到 Lv.{(pet?.level || 1) + 1}</Text>
+              <Text style={[styles.petHomeUpgradeValue, petStyles.secondaryText]}>{pet?.level_exp ?? 0} / {pet?.next_level_exp ?? 0}</Text>
+            </View>
+            <View style={[styles.petHomeProgressTrack, petStyles.progressTrack]}>
+              <View style={[styles.petHomeProgressFill, { width: `${Math.max(0, Math.min(100, pet?.level_progress || 0))}%` }]} />
+            </View>
           </View>
         </View>
 
-        <View style={[styles.petHomeCard, styles.petHomeChatCard]}>
-          <View style={styles.petHomeCardHead}>
-            <Text style={styles.petHomeCardTitle}>问问{pet?.name || '伙伴'}</Text>
-            <Text style={styles.petHomeCardSide}>文本分析 demo</Text>
-          </View>
-          <Text style={styles.petHomeBodyText}>让它读取你已保存的饮食文字和营养数据，聊聊训练状态、减脂卡住、碳水和蛋白质分布。不读取图片。</Text>
-          <Pressable style={[styles.petHomeInlineAction, styles.petHomeInlineActionPrimary]} onPress={() => navigation.navigate('PetChat')}>
-            <Text style={styles.petHomeInlineActionText}>去问问它</Text>
-          </Pressable>
-        </View>
-
-        <View style={styles.petHomeCard}>
-          <View style={styles.petHomeCardHead}>
-            <Text style={styles.petHomeCardTitle}>为什么是它</Text>
-            <Text style={styles.petHomeCardSide}>{petArchetypeLabel(pet?.archetype)}</Text>
-          </View>
-          {(pet?.match_reasons?.length ? pet.match_reasons : ['它会根据你的健康目标、活动水平和记录习惯生成，不按性别粗暴分配。']).map((reason) => (
-            <View key={reason} style={styles.petHomeReasonItem}>
-              <Text style={styles.petHomeReasonDot}>•</Text>
-              <Text style={styles.petHomeReasonText}>{reason}</Text>
-            </View>
-          ))}
-          {(pet?.growth_unlocks || []).length ? (
-            <View style={styles.petHomeUnlockRow}>
-              {(pet?.growth_unlocks || []).map((unlock) => <Text key={unlock} style={styles.petHomeUnlockChip}>{growthUnlockLabel(unlock)}</Text>)}
-            </View>
-          ) : null}
-        </View>
-
-        {showCandidates ? (
-          <View style={styles.petHomeCard}>
+        {showMatchedCandidates ? (
+          <View style={[styles.petHomeCard, petStyles.surface]}>
             <View style={styles.petHomeCardHead}>
-              <Text style={styles.petHomeCardTitle}>{pet?.needs_selection ? '三选一伙伴' : '免费重新匹配'}</Text>
-              <Text style={styles.petHomeCardSide}>不消耗积分</Text>
+              <Text style={[styles.petHomeCardTitle, petStyles.primaryText]}>{pet?.needs_selection ? '三选一伙伴' : '免费重新匹配'}</Text>
+              <Text style={[styles.petHomeCardSide, petStyles.secondaryText]}>不消耗积分</Text>
             </View>
-            <Text style={styles.petHomeBodyText}>系统先默认使用候选，你可以在这里挑一个真正顺眼的伙伴。</Text>
+            <Text style={[styles.petHomeBodyText, petStyles.secondaryText]}>系统先默认使用第一个候选，首页不会被打断。你可以在这里挑一个真正顺眼的伙伴。</Text>
             <View style={styles.petHomeCandidateGrid}>
-              {candidates.map((candidate) => {
-                const isCurrent = candidate.pet_seed === pet?.pet_seed
-                const disabled = isCurrent || Boolean(selectingCandidateId)
+              {matchedCandidates.map((candidate) => {
+                const isCurrent = isCandidateCurrent(candidate)
                 return (
-                  <Pressable key={candidate.id} disabled={disabled} style={[styles.petHomeCandidateCard, isCurrent && styles.petHomeCandidateCardActive]} onPress={() => selectCandidate(candidate)}>
+                  <Pressable accessibilityRole="button" accessibilityLabel={`${isCurrent ? '当前伙伴' : '选择伙伴'}${candidate.name}`} key={candidate.id} disabled={isCurrent || Boolean(selectingCandidateId)}
+                    style={({ pressed }) => [
+                      styles.petHomeCandidateCard,
+                      petStyles.candidate,
+                      isCurrent && styles.petHomeCandidateCardActive,
+                      isCurrent && petStyles.candidateActive,
+                      pressed && !isCurrent && styles.petHomeActionItemPressed,
+                    ]}
+                    onPress={() => selectCandidate(candidate)}
+                  >
                     <PetAvatar pet={candidate} size="small" />
-                    <Text style={styles.petHomeCandidateName} numberOfLines={1}>{candidate.name}</Text>
-                    <Text style={styles.petHomeCandidateMeta} numberOfLines={2}>
-                      {candidateStyleLabel(candidate.style)}{typeof candidate.score === 'number' ? ` · ${candidate.score}` : ''}
-                    </Text>
-                    {selectingCandidateId === candidate.id ? (
-                      <ActivityIndicator color="#2f7f62" size="small" />
-                    ) : (
-                      <Text style={styles.petHomeCandidateAction}>{isCurrent ? '当前' : '选择'}</Text>
-                    )}
+                    <Text style={[styles.petHomeCandidateName, petStyles.primaryText]} numberOfLines={1}>{candidate.name}</Text>
+                    <Text style={[styles.petHomeCandidateMeta, petStyles.secondaryText]} numberOfLines={2}>{candidateStyleLabel(candidate.style)}{typeof candidate.score === 'number' ? ` · ${candidate.score}` : ''}</Text>
+                    {selectingCandidateId === candidate.id ? <ActivityIndicator color={petTheme.accent} size="small" /> : <Text style={[styles.petHomeCandidateAction, petStyles.candidateAction]}>{isCurrent ? '当前' : '选择'}</Text>}
                   </Pressable>
                 )
               })}
@@ -1654,89 +2035,155 @@ export function PetHomeScreen() {
           </View>
         ) : null}
 
-        <View style={styles.petHomeCard}>
-          <View style={styles.petHomeCardHead}>
-            <Text style={styles.petHomeCardTitle}>成长进度</Text>
-            <Text style={styles.petHomeCardSide}>{pet ? `${pet.level_exp || 0}/${pet.next_level_exp || 100}` : '--'}</Text>
+        {commonCandidates.length ? (
+          <View style={[styles.petHomeCard, petStyles.surface]}>
+            <View style={styles.petHomeCardHead}>
+              <Text style={[styles.petHomeCardTitle, petStyles.primaryText]}>常用形象</Text>
+              <Text style={[styles.petHomeCardSide, petStyles.secondaryText]}>内置 · 免费</Text>
+            </View>
+            <View style={styles.petHomeCandidateGrid}>
+              {commonCandidates.map((candidate) => {
+                const isCurrent = isCandidateCurrent(candidate)
+                return (
+                  <Pressable accessibilityRole="button" accessibilityLabel={`${isCurrent ? '当前伙伴' : '选择伙伴'}${candidate.name}`} key={candidate.id} disabled={isCurrent || Boolean(selectingCandidateId)}
+                    style={({ pressed }) => [
+                      styles.petHomeCandidateCard,
+                      styles.petHomeCommonCandidateCard,
+                      petStyles.candidate,
+                      isCurrent && styles.petHomeCandidateCardActive,
+                      isCurrent && petStyles.candidateActive,
+                      pressed && !isCurrent && styles.petHomeActionItemPressed,
+                    ]}
+                    onPress={() => selectCandidate(candidate)}
+                  >
+                    <PetAvatar pet={candidate} size="small" motion="companion" />
+                    <Text style={[styles.petHomeCandidateName, petStyles.primaryText]} numberOfLines={1}>{candidate.name}</Text>
+                    {selectingCandidateId === candidate.id ? <ActivityIndicator color={petTheme.accent} size="small" /> : <Text style={[styles.petHomeCandidateAction, petStyles.candidateAction]}>{isCurrent ? '当前' : '选择'}</Text>}
+                  </Pressable>
+                )
+              })}
+            </View>
           </View>
-          <View style={styles.petHomeProgressTrack}>
-            <View style={[styles.petHomeProgressFill, { width: `${Math.max(0, Math.min(100, pet?.level_progress || 0))}%` }]} />
-          </View>
-          <View style={styles.petHomeMetricGrid}>
-            <PetHomeMetric label="总经验" value={`${pet?.experience || 0}`} />
-            <PetHomeMetric label="距升级" value={`${nextLevelGap}`} />
-            <PetHomeMetric label="陪伴天数" value={`${pet?.total_events || 0}`} />
-          </View>
-        </View>
+        ) : null}
 
-        <View style={styles.petHomeCard}>
+        <View style={[styles.petHomeCard, petStyles.surface]}>
           <View style={styles.petHomeCardHead}>
-            <Text style={styles.petHomeCardTitle}>今日状态</Text>
-            <Text style={styles.petHomeCardSide}>习惯分 {summary?.today.habit_score || 0}</Text>
-          </View>
-          <View style={styles.petHomeScoreGrid}>
-            <PetHomeMetric label="今日经验" value={`+${summary?.today.exp_gained || 0}`} />
-            <PetHomeMetric label="奖励积分" value={`${petEarnedCredits(membership)}`} />
-            <PetHomeMetric label="总可用积分" value={`${petTotalCredits(membership)}`} />
-          </View>
-          <Text style={styles.petHomeTask}>{summary?.status.task_text || '继续保持记录，它会慢慢长大。'}</Text>
-        </View>
-
-        <View style={styles.petHomeCard}>
-          <View style={styles.petHomeCardHead}>
-            <Text style={styles.petHomeCardTitle}>离线小惊喜</Text>
-            <Text style={styles.petHomeCardSide}>{petEvent ? '未领取' : '已查看'}</Text>
-          </View>
-          <Text style={styles.petHomeEventTitle}>{petEvent?.title || '今天还没有新的离线惊喜'}</Text>
-          <Text style={styles.petHomeBodyText}>{petEvent?.message || '等你下一次回来时，它会带着整理好的复盘和一点小奖励出现。'}</Text>
-          {petEvent?.can_claim ? (
-            <Pressable style={[styles.petHomeInlineAction, styles.petHomeInlineActionPrimary]} disabled={claiming} onPress={claim}>
-              {claiming ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.petHomeInlineActionText}>领取奖励</Text>}
-            </Pressable>
-          ) : null}
-        </View>
-
-        <View style={styles.petHomeCard}>
-          <View style={styles.petHomeCardHead}>
-            <Text style={styles.petHomeCardTitle}>外观换装</Text>
-            <Text style={styles.petHomeCardSide}>统一角色体系</Text>
+            <Text style={[styles.petHomeCardTitle, petStyles.primaryText]}>外观换装</Text>
+            <Text style={[styles.petHomeCardSide, petStyles.secondaryText]}>统一角色体系</Text>
           </View>
           <View style={styles.petHomeActionList}>
-            <Pressable style={styles.petHomeActionItem} onPress={toggleHomePet}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={pixelAvatarCustomizing ? '正在生成专属像素分身' : '生成专属像素分身'}
+              accessibilityHint="选择一张清晰人像，生成同步到首页和聊天的像素伙伴"
+              accessibilityState={{ disabled: pixelAvatarCustomizing }}
+              style={({ pressed }) => [
+                styles.petHomeActionItem,
+                petStyles.actionItem,
+                pressed && !pixelAvatarCustomizing && styles.petHomeActionItemPressed,
+                pixelAvatarCustomizing && styles.petHomeActionItemDisabled,
+              ]}
+              disabled={pixelAvatarCustomizing}
+              onPress={openPixelAvatarNaming}
+            >
               <View style={styles.flex}>
-                <Text style={styles.petHomeActionTitle}>首页悬浮宠物</Text>
-                <Text style={styles.petHomeActionDesc}>{homePetHidden ? '当前首页不显示宠物，数据和成长仍会保留。' : '当前首页会显示可拖动的小宠物。'}</Text>
+                <Text style={[styles.petHomeActionTitle, petStyles.primaryText]}>专属像素分身</Text>
+                <Text style={[styles.petHomeActionDesc, petStyles.secondaryText]}>用一张清晰人像生成你的像素伙伴</Text>
               </View>
               <View style={styles.petHomeActionSide}>
-                <Text style={[styles.petHomeActionStatus, homePetHidden && styles.petHomeActionStatusMuted]}>{homePetHidden ? '已隐藏' : '显示中'}</Text>
-                <View style={[styles.petHomeToggle, !homePetHidden && styles.petHomeToggleActive]}>
-                  <View style={[styles.petHomeToggleKnob, !homePetHidden && styles.petHomeToggleKnobActive]} />
+                {pixelAvatarCustomizing ? <ActivityIndicator color={petTheme.accent} size="small" /> : <Text style={[styles.petHomeActionCost, petStyles.accentText]}>{pet?.pixel_avatar_url ? '重新生成' : '生成'}</Text>}
+                <IconfontText className="icon-right" size={14} color={petTheme.arrow} />
+              </View>
+            </Pressable>
+            <Pressable
+              accessibilityRole="switch"
+              accessibilityLabel="首页成长伙伴"
+              accessibilityHint={homePetHidden ? '让成长伙伴重新显示在首页问候区' : '隐藏首页问候区的成长伙伴'}
+              accessibilityState={{ checked: !homePetHidden }}
+              style={({ pressed }) => [styles.petHomeActionItem, petStyles.visibilityActionItem, pressed && styles.petHomeActionItemPressed]}
+              onPress={() => void toggleHomePet()}
+            >
+              <View style={styles.flex}>
+                <Text style={[styles.petHomeActionTitle, petStyles.primaryText]}>首页成长伙伴</Text>
+                <Text style={[styles.petHomeActionDesc, petStyles.secondaryText]}>{homePetHidden ? '当前首页不显示伙伴卡片，数据和成长仍会保留' : '当前首页会在“伙伴”页展示状态、任务和聊天入口'}</Text>
+              </View>
+              <View style={styles.petHomeActionSide}>
+                <Text style={[styles.petHomeActionStatus, petStyles.accentText, homePetHidden && styles.petHomeActionStatusMuted, homePetHidden && petStyles.mutedText]}>{homePetHidden ? '已隐藏' : '显示中'}</Text>
+                <View style={[styles.petHomeToggle, petStyles.toggleTrack, !homePetHidden && styles.petHomeToggleActive]}>
+                  <View style={[styles.petHomeToggleKnob, petStyles.toggleKnob, !homePetHidden && styles.petHomeToggleKnobActive]} />
                 </View>
               </View>
             </Pressable>
-            <Pressable style={styles.petHomeActionItem} disabled={rerolling} onPress={confirmReroll}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={rerolling ? '正在随机更换伙伴外观' : '随机换外观，消耗 5 奖励积分'}
+              accessibilityState={{ disabled: rerolling }}
+              style={({ pressed }) => [styles.petHomeActionItem, petStyles.actionItem, pressed && !rerolling && styles.petHomeActionItemPressed, rerolling && styles.petHomeActionItemDisabled]}
+              disabled={rerolling}
+              onPress={confirmRerollAppearance}
+            >
               <View style={styles.flex}>
-                <Text style={styles.petHomeActionTitle}>随机换外观</Text>
-                <Text style={styles.petHomeActionDesc}>保留名字和等级，随机刷新体型、花纹与配饰。</Text>
+                <Text style={[styles.petHomeActionTitle, petStyles.primaryText]}>随机换外观</Text>
+                <Text style={[styles.petHomeActionDesc, petStyles.secondaryText]}>保留名字和等级，随机刷新颜色、体型、花纹与配饰</Text>
               </View>
               <View style={styles.petHomeActionSide}>
-                {rerolling ? <ActivityIndicator color={colors.brand} size="small" /> : <Text style={styles.petHomeActionCost}>5 积分</Text>}
+                {rerolling ? <ActivityIndicator color={petTheme.accent} size="small" /> : <Text style={[styles.petHomeActionCost, petStyles.accentText]}>5 积分</Text>}
+                <IconfontText className="icon-right" size={14} color={petTheme.arrow} />
               </View>
             </Pressable>
-            <View style={styles.petHomeActionItem}>
-              <View style={styles.flex}>
-                <Text style={styles.petHomeActionTitle}>外观试验箱</Text>
-                <Text style={styles.petHomeActionDesc}>批量查看颜色、体型、动物特征、花纹与配饰组合。</Text>
-              </View>
-              <Text style={[styles.petHomeActionCost, styles.petHomeActionStatusMuted]}>即将开放</Text>
-            </View>
+
           </View>
         </View>
       </ScrollView>
+      <Modal visible={pixelNaming} transparent animationType="fade" onRequestClose={() => setPixelNaming(false)}>
+        <View style={styles.petHomeRenameBackdrop}>
+          <View style={[styles.petHomeRenameCard, petStyles.modalCard]}>
+            <Text style={[styles.petHomeRenameTitle, petStyles.primaryText]}>给像素伙伴取名</Text>
+            <Text style={[styles.petHomeRenameHint, petStyles.secondaryText]}>请输入宠物名字（最多 12 个字）</Text>
+            <TextInput
+              autoFocus
+              maxLength={12}
+              value={pixelNameDraft}
+              onChangeText={setPixelNameDraft}
+              placeholder="请输入宠物名字"
+              placeholderTextColor="#94a3b8"
+              style={[styles.petHomeRenameInput, petStyles.input]}
+              returnKeyType="done"
+              onSubmitEditing={confirmPixelAvatarName}
+            />
+            <View style={styles.petHomeRenameActions}>
+              <Pressable accessibilityRole="button" style={[styles.petHomeRenameButton, styles.petHomeRenameButtonSecondary, petStyles.secondaryButton]} onPress={() => setPixelNaming(false)}>
+                <Text style={[styles.petHomeRenameButtonSecondaryText, petStyles.secondaryText]}>暂不生成</Text>
+              </Pressable>
+              <Pressable accessibilityRole="button" style={[styles.petHomeRenameButton, styles.petHomeRenameButtonPrimary]} onPress={confirmPixelAvatarName}>
+                <Text style={styles.petHomeRenameButtonPrimaryText}>下一步</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+      <Modal visible={Boolean(pixelAvatarPreview)} transparent animationType="fade" onRequestClose={closePixelAvatarPreview}>
+        <View style={styles.petHomeRenameBackdrop}>
+          <View style={[styles.petHomeRenameCard, petStyles.modalCard, styles.petHomePreviewCard]}>
+            <Text style={[styles.petHomeRenameTitle, petStyles.primaryText]}>专属像素分身已生成</Text>
+            <Text style={[styles.petHomeRenameHint, petStyles.secondaryText, styles.petHomePreviewDescription]}>已经保存并同步到首页，这是你的新伙伴。</Text>
+            <View style={[styles.petHomePreviewStage, petStyles.previewStage]}>
+              {pixelAvatarPreview ? <PetAvatar pet={pixelAvatarPreview} size={156} motion="companion" /> : null}
+            </View>
+            <View style={[styles.petHomeRenameActions, styles.petHomePreviewActions]}>
+              <Pressable accessibilityRole="button" style={[styles.petHomeRenameButton, styles.petHomeRenameButtonSecondary, petStyles.secondaryButton]} onPress={closePixelAvatarPreview}>
+                <Text style={[styles.petHomeRenameButtonSecondaryText, petStyles.secondaryText]}>留在这里</Text>
+              </Pressable>
+              <Pressable accessibilityRole="button" style={[styles.petHomeRenameButton, styles.petHomeRenameButtonPrimary]} onPress={viewPixelAvatarOnHome}>
+                <Text style={styles.petHomeRenameButtonPrimaryText}>回首页看看</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   )
 }
-
 type PetLabVariant = PetAppearanceCandidate & {
   displayStyle: 'pretty' | 'quirky' | 'risky'
   sourceLabel: string
@@ -3020,7 +3467,7 @@ function buildInviteMessage(profile: Record<string, unknown> | null, inviteCode:
   const title = nickname ? `${nickname} 邀请你加入食探` : '邀请你加入食探'
   return [
     title,
-    '注册后 7 天内完成 2 个自然日有效记录，双方各得 15 积分。',
+    '注册后 7 天内完成 2 个自然日有效记录，你得 3 天轻度版会员，邀请人得 7 天。',
     code ? `邀请码：${code}` : '',
     inviteLink ? `打开链接自动带入：${inviteLink}` : '',
   ].filter(Boolean).join('\n')
@@ -5257,44 +5704,241 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   checkinLeaderboardHeader: {
-    paddingHorizontal: 20,
+    paddingHorizontal: 4,
     paddingTop: 20,
-    paddingBottom: 12,
+    paddingBottom: 16,
   },
   checkinLeaderboardTitle: {
     color: '#0f172a',
-    fontSize: 20,
-    lineHeight: 28,
+    fontSize: 24,
+    lineHeight: 32,
     fontWeight: '900',
   },
+  checkinLeaderboardSegments: {
+    marginTop: 16,
+    padding: 4,
+    borderRadius: 14,
+    backgroundColor: '#e8f6f0',
+    flexDirection: 'row',
+    gap: 4,
+  },
+  checkinLeaderboardSegment: {
+    flex: 1,
+    minHeight: 48,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkinLeaderboardSegmentActive: {
+    backgroundColor: '#fff',
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 1,
+  },
+  checkinLeaderboardSegmentText: {
+    color: '#527166',
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '700',
+  },
+  checkinLeaderboardSegmentTextActive: {
+    color: colors.brandDark,
+    fontWeight: '900',
+  },
+  checkinLeaderboardNutrients: {
+    paddingTop: 16,
+    paddingBottom: 4,
+    paddingRight: 8,
+    gap: 8,
+  },
+  checkinLeaderboardNutrient: {
+    minHeight: 48,
+    paddingHorizontal: 18,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: '#dce9e4',
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkinLeaderboardNutrientActive: {
+    borderColor: colors.brand,
+    backgroundColor: colors.brand,
+  },
+  checkinLeaderboardNutrientText: {
+    color: '#527166',
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '700',
+  },
+  checkinLeaderboardNutrientTextActive: {
+    color: '#fff',
+  },
+  checkinLeaderboardPressed: {
+    opacity: 0.72,
+  },
+  checkinLeaderboardPeriodRow: {
+    minHeight: 40,
+    marginTop: 12,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.72)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   checkinLeaderboardRange: {
-    marginTop: 6,
+    flex: 1,
     color: '#64748b',
     fontSize: 13,
+    lineHeight: 20,
+    fontWeight: '600',
+  },
+  healthScoreExplanation: {
+    marginTop: 12,
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#d8eee5',
+    backgroundColor: '#f4fbf8',
+    gap: 8,
+  },
+  healthScoreExplanationHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  healthScoreExplanationTitle: {
+    color: '#153e32',
+    fontSize: 15,
+    lineHeight: 22,
+    fontWeight: '900',
+  },
+  healthScoreExplanationTotal: {
+    color: colors.brandDark,
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: '800',
+  },
+  healthScoreFormula: {
+    color: '#365f52',
+    fontSize: 13,
+    lineHeight: 20,
+    fontWeight: '700',
+  },
+  healthScoreRule: {
+    color: '#647b73',
+    fontSize: 12,
     lineHeight: 19,
+  },
+  healthScoreMine: {
+    paddingTop: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#cbe4da',
+    color: '#176b50',
+    fontSize: 12,
+    lineHeight: 19,
+    fontWeight: '800',
   },
   checkinLeaderboardList: {
     paddingHorizontal: 16,
   },
+  checkinLeaderboardPodium: {
+    minHeight: 194,
+    marginBottom: 20,
+    paddingHorizontal: 8,
+    paddingTop: 18,
+    paddingBottom: 16,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#dff0e9',
+    backgroundColor: 'rgba(255,255,255,0.86)',
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-around',
+    gap: 6,
+    shadowColor: '#174d3c',
+    shadowOpacity: 0.08,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 2,
+  },
+  checkinLeaderboardPodiumItem: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: 136,
+    paddingHorizontal: 4,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+  },
+  checkinLeaderboardPodiumFirst: {
+    minHeight: 166,
+  },
+  checkinLeaderboardPodiumRank: {
+    marginBottom: 6,
+    color: '#64748b',
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: '900',
+    fontVariant: ['tabular-nums'],
+  },
+  checkinLeaderboardPodiumAvatarWrap: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    overflow: 'hidden',
+    borderWidth: 3,
+    borderColor: '#cbd5e1',
+    backgroundColor: '#eef8f4',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkinLeaderboardPodiumAvatarFirst: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    borderColor: '#f5c451',
+  },
+  checkinLeaderboardPodiumName: {
+    maxWidth: '100%',
+    marginTop: 10,
+    color: '#173f33',
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  checkinLeaderboardPodiumValue: {
+    marginTop: 3,
+    color: colors.brandDark,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '900',
+    fontVariant: ['tabular-nums'],
+  },
   checkinLeaderboardRow: {
-    minHeight: 72,
-    marginBottom: 10,
-    paddingHorizontal: 12,
+    minHeight: 76,
+    marginBottom: 12,
+    paddingHorizontal: 14,
     paddingVertical: 14,
-    borderRadius: 12,
+    borderRadius: 16,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#e2e8f0',
-    backgroundColor: '#fff',
+    borderColor: '#dfeae6',
+    backgroundColor: 'rgba(255,255,255,0.94)',
     flexDirection: 'row',
     alignItems: 'center',
     shadowColor: '#0f172a',
-    shadowOpacity: 0.06,
+    shadowOpacity: 0.05,
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
+    elevation: 1,
   },
   checkinLeaderboardRowMine: {
     borderColor: 'rgba(0, 188, 125, 0.36)',
+    backgroundColor: '#f2fbf7',
     shadowColor: colors.brand,
     shadowOpacity: 0.12,
   },
@@ -5305,6 +5949,7 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     fontWeight: '900',
     textAlign: 'center',
+    fontVariant: ['tabular-nums'],
   },
   checkinLeaderboardRankTop1: {
     color: '#d97706',
@@ -5318,22 +5963,17 @@ const styles = StyleSheet.create({
   checkinLeaderboardAvatarWrap: {
     width: 44,
     height: 44,
-    marginLeft: 8,
+    marginLeft: 6,
     marginRight: 12,
     borderRadius: 22,
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#e2e8f0',
+    backgroundColor: '#e8f6f0',
   },
   checkinLeaderboardAvatar: {
     width: '100%',
     height: '100%',
-  },
-  checkinLeaderboardAvatarText: {
-    color: '#64748b',
-    fontSize: 19,
-    lineHeight: 24,
   },
   checkinLeaderboardMiddle: {
     flex: 1,
@@ -5348,19 +5988,28 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     minWidth: 0,
     color: '#0f172a',
-    fontSize: 15,
-    lineHeight: 21,
+    fontSize: 14,
+    lineHeight: 20,
     fontWeight: '700',
   },
   checkinLeaderboardMeTag: {
     marginLeft: 6,
+    paddingHorizontal: 6,
+    borderRadius: 8,
+    backgroundColor: '#dff5eb',
     color: colors.brand,
     fontSize: 11,
     lineHeight: 16,
     fontWeight: '800',
   },
+  checkinLeaderboardDetail: {
+    marginTop: 3,
+    color: '#82928c',
+    fontSize: 11,
+    lineHeight: 16,
+  },
   checkinLeaderboardCount: {
-    minWidth: 60,
+    minWidth: 64,
     alignItems: 'flex-end',
   },
   checkinLeaderboardCountNum: {
@@ -5368,6 +6017,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     lineHeight: 24,
     fontWeight: '900',
+    fontVariant: ['tabular-nums'],
   },
   checkinLeaderboardCountUnit: {
     marginTop: 2,
@@ -5380,25 +6030,77 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 24,
+    gap: 8,
+  },
+  checkinLeaderboardStateTitle: {
+    marginTop: 4,
+    color: '#334155',
+    fontSize: 15,
+    lineHeight: 22,
+    fontWeight: '800',
+    textAlign: 'center',
   },
   checkinLeaderboardStateText: {
     color: '#64748b',
-    fontSize: 14,
+    fontSize: 13,
     lineHeight: 20,
     textAlign: 'center',
   },
   checkinLeaderboardRetry: {
-    marginTop: 16,
+    minHeight: 48,
+    marginTop: 8,
     paddingHorizontal: 24,
-    paddingVertical: 8,
     borderRadius: 999,
     backgroundColor: colors.brand,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   checkinLeaderboardRetryText: {
     color: '#fff',
     fontSize: 14,
     lineHeight: 20,
     fontWeight: '800',
+  },
+  checkinLeaderboardMeBar: {
+    minHeight: 68,
+    paddingTop: 10,
+    paddingHorizontal: 20,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#d8e8e1',
+    backgroundColor: '#fff',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: -3 },
+    elevation: 6,
+  },
+  checkinLeaderboardMeAvatar: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: '#bce6d5',
+    backgroundColor: '#e8f6f0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkinLeaderboardMeWord: {
+    color: '#173f33',
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '900',
+  },
+  checkinLeaderboardMeSummary: {
+    marginLeft: 'auto',
+    color: colors.brandDark,
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '900',
+    fontVariant: ['tabular-nums'],
   },
   avatarFallback: {
     width: 42,
@@ -5504,12 +6206,11 @@ const styles = StyleSheet.create({
     paddingBottom: 26,
   },
   petHomeHero: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
     borderRadius: 18,
-    padding: 14,
-    marginBottom: 12,
+    paddingHorizontal: 11,
+    paddingTop: 8,
+    paddingBottom: 10,
+    marginBottom: 11,
     backgroundColor: 'rgba(255, 255, 255, 0.86)',
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: 'rgba(92, 184, 150, 0.12)',
@@ -5519,51 +6220,160 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     elevation: 1,
   },
-  petHomeHeroCopy: {
-    flex: 1,
+  petHomeHeroMain: {
+    width: '100%',
     minWidth: 0,
-  },
-  petHomeName: {
-    color: '#15212c',
-    fontSize: 21,
-    lineHeight: 29,
-    fontWeight: '900',
-  },
-  petHomeMetaRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    alignItems: 'flex-start',
     gap: 6,
-    marginTop: 7,
   },
-  petHomeChip: {
-    overflow: 'hidden',
-    borderRadius: 999,
-    paddingHorizontal: 9,
-    paddingVertical: 4,
-    color: '#2f7f62',
-    backgroundColor: 'rgba(92, 184, 150, 0.12)',
-    fontSize: 12,
-    lineHeight: 17,
-    fontWeight: '900',
+  petHomeHeroStage: {
+    position: 'relative',
+    width: 156,
+    height: 137,
+    flexShrink: 0,
+    alignItems: 'center',
+    justifyContent: 'flex-start',
   },
-  petHomeChipMuted: {
-    overflow: 'hidden',
+  petHomeStageStat: {
+    position: 'absolute',
+    zIndex: 2,
+    minHeight: 24,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(92, 184, 150, 0.2)',
     borderRadius: 999,
-    paddingHorizontal: 9,
-    paddingVertical: 4,
-    color: '#64748b',
-    backgroundColor: 'rgba(148, 163, 184, 0.1)',
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 3,
+    backgroundColor: 'rgba(250, 255, 252, 0.96)',
+    shadowColor: '#2f7057',
+    shadowOpacity: 0.1,
+    shadowRadius: 7,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 1,
+  },
+  petHomeStageStatLevel: {
+    left: 0,
+    top: 2,
+  },
+  petHomeStageStatCredits: {
+    right: 0,
+    top: 10,
+  },
+  petHomeStageStatDays: {
+    left: 4,
+    bottom: 1,
+  },
+  petHomeStageStatLabel: {
+    color: '#73837d',
+    fontSize: 10,
+    lineHeight: 15,
+  },
+  petHomeStageStatValue: {
+    color: '#2d8765',
     fontSize: 12,
     lineHeight: 17,
     fontWeight: '800',
   },
-  petHomeMessage: {
-    color: '#5f6b7a',
-    fontSize: 13,
-    lineHeight: 20,
-    marginTop: 7,
+  petHomeHeroCopy: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: 137,
+    paddingTop: 2,
+    alignItems: 'flex-end',
+    gap: 6,
   },
-  petHomeCard: {
+  petHomeNameRow: {
+    width: '100%',
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 6,
+  },
+  petHomeNameLink: {
+    minWidth: 0,
+    minHeight: 44,
+    flexShrink: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 4,
+    paddingVertical: 6,
+  },
+  petHomeName: {
+    minWidth: 0,
+    flexShrink: 1,
+    color: '#15212c',
+    fontSize: 18,
+    lineHeight: 25,
+    fontWeight: '800',
+  },
+  petHomeRenamePill: {
+    minWidth: 52,
+    minHeight: 44,
+    flexShrink: 0,
+    paddingHorizontal: 9,
+    borderRadius: 999,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(92, 184, 150, 0.12)',
+  },
+  petHomeRenamePillText: {
+    color: '#2f7f62',
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '800',
+  },
+  petHomeHeroReward: {
+    minWidth: 108,
+    minHeight: 44,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.brand,
+    shadowColor: colors.brand,
+    shadowOpacity: 0.18,
+    shadowRadius: 9,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 1,
+  },
+  petHomeHeroRewardText: {
+    color: '#fff',
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '800',
+  },
+  petHomeUpgrade: {
+    width: '100%',
+    paddingTop: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(92, 184, 150, 0.14)',
+  },
+  petHomeUpgradeHead: {
+    marginBottom: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  petHomeUpgradeLabel: {
+    color: '#2f7f62',
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '800',
+  },
+  petHomeUpgradeValue: {
+    color: '#66717d',
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '800',
+  },  petHomeCard: {
     borderRadius: 16,
     padding: 13,
     marginBottom: 10,
@@ -5670,6 +6480,7 @@ const styles = StyleSheet.create({
   },
   petHomeCandidateGrid: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 8,
     marginTop: 10,
   },
@@ -5683,6 +6494,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 10,
     backgroundColor: '#f7fafc',
+  },
+  petHomeCommonCandidateCard: {
+    flexBasis: '30%',
+    maxWidth: '32%',
   },
   petHomeCandidateCardActive: {
     borderColor: 'rgba(92, 184, 150, 0.34)',
@@ -5716,11 +6531,10 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
   petHomeProgressTrack: {
-    height: 8,
+    height: 7,
     borderRadius: 999,
     overflow: 'hidden',
-    backgroundColor: '#e8edf3',
-    marginBottom: 10,
+    backgroundColor: '#e6ebe7',
   },
   petHomeProgressFill: {
     height: '100%',
@@ -5783,6 +6597,13 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     backgroundColor: 'rgba(92, 184, 150, 0.08)',
   },
+  petHomeActionItemPressed: {
+    opacity: 0.88,
+    transform: [{ scale: 0.985 }],
+  },
+  petHomeActionItemDisabled: {
+    opacity: 0.5,
+  },
   petHomeActionTitle: {
     color: '#17212b',
     fontSize: 14,
@@ -5840,7 +6661,89 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     fontWeight: '900',
   },
-  petLabPage: {
+  petHomeRenameBackdrop: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 22,
+    backgroundColor: 'rgba(15, 23, 42, 0.42)',
+  },
+  petHomeRenameCard: {
+    width: '100%',
+    maxWidth: 420,
+    borderRadius: 20,
+    padding: 18,
+    backgroundColor: '#fff',
+  },
+  petHomeRenameTitle: {
+    color: '#17212b',
+    fontSize: 19,
+    lineHeight: 26,
+    fontWeight: '900',
+  },
+  petHomeRenameHint: {
+    color: '#697586',
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: 4,
+  },
+  petHomeRenameInput: {
+    minHeight: 50,
+    borderWidth: 1,
+    borderColor: 'rgba(92, 184, 150, 0.34)',
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    marginTop: 16,
+    color: '#17212b',
+    backgroundColor: '#f7fbf8',
+    fontSize: 16,
+  },
+  petHomeRenameActions: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 16,
+  },
+  petHomeRenameButton: {
+    flex: 1,
+    minHeight: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 14,
+  },
+  petHomeRenameButtonSecondary: {
+    backgroundColor: '#eef3f5',
+  },
+  petHomeRenameButtonPrimary: {
+    backgroundColor: colors.brand,
+  },
+  petHomeRenameButtonSecondaryText: {
+    color: '#52606d',
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  petHomeRenameButtonPrimaryText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  petHomePreviewCard: {
+    alignItems: 'center',
+  },
+  petHomePreviewDescription: {
+    textAlign: 'center',
+  },
+  petHomePreviewStage: {
+    width: 190,
+    height: 190,
+    marginTop: 14,
+    borderRadius: 95,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(92, 184, 150, 0.1)',
+  },
+  petHomePreviewActions: {
+    width: '100%',
+  },  petLabPage: {
     flex: 1,
     backgroundColor: '#f4fbf6',
   },

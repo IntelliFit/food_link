@@ -68,7 +68,7 @@ export function ProfileScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const insets = useSafeAreaInsets()
   const dialog = useAppDialog()
-  const { logout } = useAuth()
+  const { isAuthenticated, logout } = useAuth()
   const { isDark } = useColorScheme()
   const [profile, setProfile] = useState<UserInfo | null>(null)
   const [membership, setMembership] = useState<MembershipStatus | null>(null)
@@ -78,7 +78,29 @@ export function ProfileScreen() {
   const [friendRequestCount, setFriendRequestCount] = useState(0)
   const [loading, setLoading] = useState(false)
 
+  const openLogin = useCallback(() => {
+    navigation.getParent()?.navigate('Login', { redirectTab: 'ProfileTab' })
+  }, [navigation])
+
+  const privateAction = useCallback((action: () => void) => () => {
+    if (!isAuthenticated) {
+      openLogin()
+      return
+    }
+    action()
+  }, [isAuthenticated, openLogin])
+
   const load = useCallback(async () => {
+    if (!isAuthenticated) {
+      setProfile(null)
+      setMembership(null)
+      setExpiry(null)
+      setRecordDays(0)
+      setCounts({ analyze: 0, friends: 0, favorites: 0 })
+      setFriendRequestCount(0)
+      setLoading(false)
+      return
+    }
     setLoading(true)
     try {
       const [
@@ -115,7 +137,7 @@ export function ProfileScreen() {
     } finally {
       setLoading(false)
     }
-  }, [dialog])
+  }, [dialog, isAuthenticated])
 
   useFocusEffect(
     useCallback(() => {
@@ -130,8 +152,12 @@ export function ProfileScreen() {
   }, [dialog, profile?.id])
 
   const openPublicProfile = useCallback(() => {
+    if (!isAuthenticated) {
+      openLogin()
+      return
+    }
     navigation.navigate('ProfileSettings')
-  }, [navigation])
+  }, [isAuthenticated, navigation, openLogin])
 
   const clearCache = useCallback(async () => {
     try {
@@ -165,10 +191,14 @@ export function ProfileScreen() {
   }, [dialog, logout])
 
   const openHealthProfile = () => {
+    if (!isAuthenticated) {
+      openLogin()
+      return
+    }
     navigation.navigate(profile?.onboarding_completed ? 'HealthProfileView' : 'HealthProfile')
   }
 
-  const expiryText = expiry ? `${expiry.active_count || 0} 样保鲜中，${expiry.soon_count || 0} 样临期` : '管理临期食物'
+  const expiryText = !isAuthenticated ? '登录后管理临期食物' : expiry ? `${expiry.active_count || 0} 样保鲜中，${expiry.soon_count || 0} 样临期` : '管理临期食物'
   const expiryBadge = expiry ? (expiry.expired_count || 0) + (expiry.today_count || 0) + (expiry.soon_count || 0) : 0
   const systemMax = membership?.daily_credits_max ?? membership?.daily_limit ?? 0
   const systemUsed = membership?.daily_credits_used ?? membership?.daily_used ?? 0
@@ -190,18 +220,18 @@ export function ProfileScreen() {
 
   const serviceItems: MenuEntry[] = [
     { title: '健康档案', subtitle: '生理指标、日常消耗、病史与饮食偏好', iconClass: 'icon-shentinianling', tone: 'green', onPress: openHealthProfile },
-    { title: '食物保质期', subtitle: expiryText, iconClass: 'icon-guoqi1', tone: 'gold', badgeCount: expiryBadge, onPress: () => navigation.navigate('Expiry') },
-    { title: '我的宠物', subtitle: `奖励积分 ${earnedBalance}，去看看你的健康伙伴`, iconClass: 'icon-good', tone: 'purple', onPress: () => navigation.navigate('PetHome') },
-    { title: '赚积分', subtitle: '查看今天还能做哪些任务、每项上限和当前进度', iconClass: 'icon-zengji', tone: 'slate', onPress: () => navigation.navigate('RewardCenter') },
-    { title: '公共食物库', subtitle: '浏览公共食物营养数据', iconClass: 'icon-foodshop', tone: 'blue', onPress: () => navigation.navigate('PublicFood', { mode: 'all' }) },
-    { title: '校园食堂', subtitle: '查食堂菜品热量、价格和蛋白质', iconClass: 'icon-dizhi', tone: 'slate', onPress: () => navigation.navigate('CampusCanteen') },
-    { title: '加入用户群', subtitle: '反馈问题、提建议，一起共创食探', iconClass: 'icon-pengyouquan', tone: 'purple', onPress: () => navigation.navigate('UserGroup') },
-    { title: '意见反馈', subtitle: '提交问题或建议，并自动附带最近请求诊断', iconClass: 'icon-pinglun', tone: 'green', onPress: () => navigation.navigate('AboutFeedback') },
+    { title: '食物保质期', subtitle: expiryText, iconClass: 'icon-guoqi1', tone: 'gold', badgeCount: expiryBadge, onPress: privateAction(() => navigation.navigate('Expiry')) },
+    { title: '我的宠物', subtitle: isAuthenticated ? `奖励积分 ${earnedBalance}，去看看你的健康伙伴` : '登录后查看你的健康伙伴', iconClass: 'icon-good', tone: 'purple', onPress: privateAction(() => navigation.navigate('PetHome')) },
+    { title: '签到打卡 · 上传食物赚积分', subtitle: '每日签到、分享打卡或上传真实食物都能赚积分', iconClass: 'icon-zengji', tone: 'slate', onPress: privateAction(() => navigation.navigate('RewardCenter')) },
+    { title: '公共食物库', subtitle: '浏览公共食物营养数据', iconClass: 'icon-foodshop', tone: 'blue', onPress: privateAction(() => navigation.navigate('PublicFood', { mode: 'all' })) },
+    { title: '校园食堂', subtitle: '查食堂菜品热量、价格和蛋白质', iconClass: 'icon-dizhi', tone: 'slate', onPress: privateAction(() => navigation.navigate('CampusCanteen')) },
+    { title: '加入用户群', subtitle: '反馈问题、提建议，一起共创食探', iconClass: 'icon-pengyouquan', tone: 'purple', onPress: privateAction(() => navigation.navigate('UserGroup')) },
+    { title: '意见反馈', subtitle: '提交问题或建议，并自动附带最近请求诊断', iconClass: 'icon-pinglun', tone: 'green', onPress: privateAction(() => navigation.navigate('AboutFeedback')) },
   ]
 
   const settingsItems: MenuEntry[] = [
-    { title: '账号安全', subtitle: '手机号密码与备用登录方式', iconClass: 'icon-user', tone: 'blue', onPress: () => navigation.navigate('AccountSecurity') },
-    { title: '隐私设置', subtitle: '搜索可见性和公开记录', iconClass: 'icon-jiesuo', tone: 'green', onPress: () => navigation.navigate('PrivacySettings') },
+    { title: '账号安全', subtitle: '手机号密码与备用登录方式', iconClass: 'icon-user', tone: 'blue', onPress: privateAction(() => navigation.navigate('AccountSecurity')) },
+    { title: '隐私设置', subtitle: '搜索可见性和公开记录', iconClass: 'icon-jiesuo', tone: 'green', onPress: privateAction(() => navigation.navigate('PrivacySettings')) },
     { title: '关于我们', subtitle: '应用说明、协议和联系方式', iconClass: 'icon-all', tone: 'gold', onPress: () => navigation.navigate('About') },
   ]
 
@@ -234,7 +264,7 @@ export function ProfileScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.profileHeaderSection}>
-          <Pressable style={({ pressed }) => [styles.userCard, pressed && styles.pressed]} onPress={() => navigation.navigate('ProfileSettings')}>
+          <Pressable accessibilityRole="button" accessibilityLabel={isAuthenticated ? '打开个人主页' : '点击登录'} style={({ pressed }) => [styles.userCard, pressed && styles.pressed]} onPress={isAuthenticated ? () => navigation.navigate('ProfileSettings') : openLogin}>
             {profile?.avatar ? (
               <Image source={{ uri: profile.avatar }} style={styles.userAvatar} />
             ) : (
@@ -244,40 +274,49 @@ export function ProfileScreen() {
             )}
             <View style={styles.userInfoMain}>
               <View style={styles.userNameRow}>
-                <Text style={[styles.userName, { color: profileTextPrimary }]} numberOfLines={1}>{profile?.nickname || '用户昵称'}</Text>
-                <View style={styles.userNameActions}>
-                  <View style={[styles.userDaysPill, { backgroundColor: profileDaysPillBg, borderColor: profileDaysPillBorder }]}>
-                    <Text style={[styles.userDaysPillText, { color: profileDaysPillText }]}>已记录 {recordDays} 天</Text>
+                <Text style={[styles.userName, { color: profileTextPrimary }]} numberOfLines={1}>{isAuthenticated ? profile?.nickname || '用户昵称' : '点击登录'}</Text>
+                {isAuthenticated ? (
+                  <View style={styles.userNameActions}>
+                    <View style={[styles.userDaysPill, { backgroundColor: profileDaysPillBg, borderColor: profileDaysPillBorder }]}>
+                      <Text style={[styles.userDaysPillText, { color: profileDaysPillText }]}>已记录 {recordDays} 天</Text>
+                    </View>
+                    {profile?.id ? (
+                      <Pressable style={({ pressed }) => [styles.userIdChip, { backgroundColor: profileIdChipBg }, pressed && styles.pressed]} onPress={copyUserId}>
+                        <Text style={[styles.userIdChipText, { color: profileIdChipText }]}>复制ID</Text>
+                      </Pressable>
+                    ) : null}
                   </View>
-                  {profile?.id ? (
-                    <Pressable style={({ pressed }) => [styles.userIdChip, { backgroundColor: profileIdChipBg }, pressed && styles.pressed]} onPress={copyUserId}>
-                      <Text style={[styles.userIdChipText, { color: profileIdChipText }]}>复制ID</Text>
-                    </Pressable>
-                  ) : null}
-                </View>
+                ) : null}
               </View>
-              <Pressable style={({ pressed }) => [styles.userMetaRow, pressed && styles.pressed]} onPress={openPublicProfile}>
-                <Text style={[styles.userMetaText, { color: profileDark ? '#9ca3af' : '#9ca3af' }]}>个人主页</Text>
-                <ChevronRight size={15} color="#9ca3af" strokeWidth={2.3} />
-              </Pressable>
+              {isAuthenticated ? (
+                <Pressable style={({ pressed }) => [styles.userMetaRow, pressed && styles.pressed]} onPress={openPublicProfile}>
+                  <Text style={[styles.userMetaText, { color: '#9ca3af' }]}>个人主页</Text>
+                  <ChevronRight size={15} color="#9ca3af" strokeWidth={2.3} />
+                </Pressable>
+              ) : (
+                <Text style={[styles.userMetaText, { color: profileTextSecondary }]}>登录后同步饮食与健康数据</Text>
+              )}
             </View>
           </Pressable>
 
-          <View style={[styles.quickActions, { borderTopColor: profileBorder }]}>
+          {isAuthenticated ? (
+            <View style={[styles.quickActions, { borderTopColor: profileBorder }]}>
             <QuickAction title="识别记录" value={formatCount(counts.analyze)} textColor={profileTextPrimary} subColor={profileTextSecondary} onPress={() => navigation.navigate('AnalyzeHistory')} />
             <QuickAction title="好友管理" value={formatCount(counts.friends)} badgeCount={friendRequestCount} textColor={profileTextPrimary} subColor={profileTextSecondary} onPress={() => navigation.navigate('Friends')} />
             <QuickAction title="我的收藏" value={formatCount(counts.favorites)} textColor={profileTextPrimary} subColor={profileTextSecondary} onPress={() => navigation.navigate('Recipes')} />
-          </View>
+            </View>
+          ) : null}
         </View>
 
-        {profile && profile.onboarding_completed === false ? (
+        {isAuthenticated && profile && profile.onboarding_completed === false ? (
           <Pressable style={({ pressed }) => [styles.onboardingCard, { backgroundColor: profileOnboardingBg, borderColor: profileOnboardingBorder }, pressed && styles.pressed]} onPress={() => navigation.navigate('HealthProfile')}>
             <Text style={[styles.onboardingText, { color: profileOnboardingText }]}>完善健康档案，获取个性化饮食建议</Text>
             <ChevronRight size={18} color={profileOnboardingText} strokeWidth={2.4} />
           </Pressable>
         ) : null}
 
-        <Pressable
+        {isAuthenticated ? (
+          <Pressable
           style={({ pressed }) => [
             styles.memberCard,
             membership?.is_pro ? styles.memberCardPro : styles.memberCardFree,
@@ -327,7 +366,8 @@ export function ProfileScreen() {
             </View>
           </View>
           {founderBenefitText ? <Text style={styles.memberBenefit} numberOfLines={1}>{founderBenefitText}</Text> : null}
-        </Pressable>
+          </Pressable>
+        ) : null}
 
         <View style={[styles.listCard, { backgroundColor: profileCardBg }]}>
           {serviceItems.map((item, index) => (
@@ -340,8 +380,8 @@ export function ProfileScreen() {
           <Text style={[styles.toolText, profileDark && { color: '#94a3b8' }]}>清除缓存</Text>
         </Pressable>
 
-        <Pressable style={({ pressed }) => [styles.toolCard, { backgroundColor: profileCardBg }, pressed && styles.pressed]} onPress={confirmLogout}>
-          <Text style={styles.toolTextLogout}>退出登录</Text>
+        <Pressable style={({ pressed }) => [styles.toolCard, { backgroundColor: profileCardBg }, pressed && styles.pressed]} onPress={isAuthenticated ? confirmLogout : openLogin}>
+          <Text style={isAuthenticated ? styles.toolTextLogout : styles.toolTextLogin}>{isAuthenticated ? '退出登录' : '登录'}</Text>
         </Pressable>
 
         <Text style={[styles.profileVersion, profileDark && { color: 'rgba(214,226,220,0.4)' }]}>版本号 v{APP_VERSION}</Text>
@@ -553,6 +593,13 @@ const styles = StyleSheet.create({
     color: '#9ca3af',
     fontSize: 12,
     lineHeight: 17,
+  },
+  toolTextLogin: {
+    color: colors.brandDark,
+    fontSize: 15,
+    lineHeight: 21,
+    fontWeight: '700',
+    textAlign: 'center',
   },
   quickActions: {
     flexDirection: 'row',

@@ -25,7 +25,7 @@ type DockSide = 'left' | 'right'
 
 const EXPANDED_WIDTH = 236
 const EXPANDED_HEIGHT = 108
-const COLLAPSED_SIZE = 72
+const COLLAPSED_SIZE = 52
 const EDGE_MARGIN = 14
 const DRAG_THRESHOLD = 5
 const RECENT_DRAG_GUARD_MS = 220
@@ -208,7 +208,7 @@ export function FloatingPetCompanion({
           ) : (
             <ChevronRight size={16} color={colors.brandDark} strokeWidth={2.8} style={styles.collapsedChevron} />
           )}
-          <PetAvatar pet={pet} size="small" mood={summary.status?.mood} state={summary.status?.state} />
+          <PetAvatar pet={pet} size={collapsed ? 38 : "small"} mood={summary.status?.mood} state={summary.status?.state} mealState={summary.status?.meal_state} motion="companion" />
           <View style={[styles.miniHint, canClaim && styles.rewardHint]}>
             <Text style={styles.miniHintText}>{canClaim ? '奖' : '聊'}</Text>
           </View>
@@ -221,7 +221,7 @@ export function FloatingPetCompanion({
             style={({ pressed }) => [styles.cardMain, pressed && styles.pressed]}
             onPress={openChat}
           >
-            <PetAvatar pet={pet} size="small" mood={summary.status?.mood} state={summary.status?.state} />
+            <PetAvatar pet={pet} size={collapsed ? 38 : "small"} mood={summary.status?.mood} state={summary.status?.state} mealState={summary.status?.meal_state} motion="companion" />
             <View style={styles.copy}>
               <View style={styles.headerRow}>
                 <Text numberOfLines={1} style={styles.name}>{pet?.name || '成长伙伴'}</Text>
@@ -451,8 +451,8 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: 2,
     top: 2,
-    width: 20,
-    height: 20,
+    width: 18,
+    height: 18,
     borderRadius: 999,
     alignItems: 'center',
     justifyContent: 'center',
@@ -463,7 +463,7 @@ const styles = StyleSheet.create({
   },
   miniHintText: {
     color: colors.surface,
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: '900',
     lineHeight: 13,
   },

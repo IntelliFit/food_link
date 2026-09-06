@@ -161,6 +161,9 @@ export const apiClient = createFoodLinkApiClient({
     async uploadFile(input: UploadFileInput) {
       const startedAt = Date.now()
       const formData = new FormData()
+      for (const [key, value] of Object.entries(input.formFields || {})) {
+        formData.append(key, value)
+      }
       formData.append(input.fieldName, {
         uri: input.fileUri,
         name: input.fileName || 'food.jpg',
@@ -213,9 +216,15 @@ function uploadMultipartWithXHR(input: UploadFileInput, formData: FormData): Pro
         headers,
       })
     }
-    xhr.onerror = () => reject(new Error('图片上传失败，请检查网络后重试'))
-    xhr.ontimeout = () => reject(new Error('图片上传超时，请稍后重试'))
-    xhr.onabort = () => reject(new Error('图片上传已取消'))
+    if (xhr.upload && input.onProgress) {
+      xhr.upload.onprogress = (event) => {
+        if (!event.lengthComputable || event.total <= 0) return
+        input.onProgress?.(Math.max(1, Math.min(99, Math.round((event.loaded / event.total) * 100))))
+      }
+    }
+    xhr.onerror = () => reject(new Error('文件上传失败，请检查网络后重试'))
+    xhr.ontimeout = () => reject(new Error('文件上传超时，请稍后重试'))
+    xhr.onabort = () => reject(new Error('文件上传已取消'))
     xhr.send(formData)
   })
 }

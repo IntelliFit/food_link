@@ -1,11 +1,18 @@
 import type {
   AnalysisTask,
+  AnalysisEngine,
   AnalysisFeedbackRequest,
+  AnalyzeTaskAutoRecordResult,
   AnalyzeTaskStatusCount,
+  AnalyzeVideoUploadResult,
   AnalyzeTaskSubmitParams,
   BodyMetricsSummary,
+  CampusDietAgentProgress,
+  CampusDietAgentResult,
   CampusFoodDetail,
   CheckinLeaderboardItem,
+  FoodNutrientLeaderboardResult,
+  HealthLeaderboardResult,
   CommunityNotificationItem,
   CommunityFeedContext,
   CommunityFeedItem,
@@ -16,14 +23,20 @@ import type {
   ConversationSummary,
   ContinuePrecisionSessionParams,
   DietRecommendationResult,
+  DietGoal,
   ExecutionMode,
+  ActivityTiming,
   ExerciseLogItem,
   FeedCommentItem,
   FollowListResponse,
+  CreateFoodNutritionContributionRequest,
+  FoodNutritionContribution,
+  FoodNutritionContributionListResponse,
   FollowStats,
   FoodExpiryDashboard,
   FoodExpiryItem,
   FoodRecord,
+  FoodRecordEntryType,
   FoodRecordItemPayload,
   HealthProfile,
   HealthReportExtract,
@@ -34,7 +47,14 @@ import type {
   FriendRequestItem,
   FriendUserItem,
   HomeDashboard,
+  LoginCheckInClaimResponse,
   LoginResponse,
+  SupplementCatalogItem,
+  SupplementDashboard,
+  SupplementIntake,
+  SupplementLabelRecognition,
+  UpsertSupplementPayload,
+  UserSupplement,
   ManualFoodBrowseResult,
   ManualFoodCatalogResult,
   ManualFoodItem,
@@ -43,6 +63,7 @@ import type {
   MembershipPlan,
   MembershipStatus,
   MealType,
+  Nutrients,
   LocationSearchResult,
   PackagedFoodItem,
   PackagedProductExtractResult,
@@ -66,6 +87,7 @@ import type {
   StatsSummary,
   UpdateFoodRecordRequest,
   UserInfo,
+  VoucherListResponse,
 } from '@food-link/core'
 
 export interface ApiClientResponse<T = unknown> {
@@ -88,7 +110,9 @@ export interface UploadFileInput {
   fileName?: string
   mimeType?: string
   headers?: Record<string, string>
+  formFields?: Record<string, string>
   timeoutMs?: number
+  onProgress?: (progress: number) => void
 }
 
 export interface TokenStorage {
@@ -127,6 +151,13 @@ type UploadAnalyzeImageResponse = {
   url?: string
 }
 
+type UploadAnalyzeVideoResponse = Partial<AnalyzeVideoUploadResult> & {
+  captureProtocol?: unknown
+  videoId?: unknown
+  durationMs?: unknown
+  sizeBytes?: unknown
+}
+
 const DEFAULT_SHARE_BASE_URL = 'https://healthymax.cn'
 
 function normalizeBaseUrl(value: string): string {
@@ -137,6 +168,8 @@ type PetChatSSEEvent = {
   type?: unknown
   text?: unknown
   error?: unknown
+  progress?: unknown
+  diet_result?: unknown
   meta?: unknown
 }
 
@@ -218,6 +251,16 @@ async function readPetChatSSEStream(
       if (event.type === 'chunk' && typeof event.text === 'string') {
         markStarted()
         if (event.text) callbacks.onChunk(event.text)
+        continue
+      }
+      if (event.type === 'progress' && event.progress && typeof event.progress === 'object') {
+        markStarted()
+        callbacks.onProgress?.(event.progress as CampusDietAgentProgress)
+        continue
+      }
+      if (event.type === 'diet_result' && event.diet_result && typeof event.diet_result === 'object') {
+        markStarted()
+        callbacks.onDietResult?.(event.diet_result as CampusDietAgentResult)
         continue
       }
       if (event.type === 'error') {
@@ -383,6 +426,8 @@ export type PetChatStreamFetch = (url: string, init: PetChatStreamFetchInit) => 
 
 export interface PetChatStreamCallbacks {
   onStart?: () => void
+  onProgress?: (progress: CampusDietAgentProgress) => void
+  onDietResult?: (result: CampusDietAgentResult) => void
   onChunk: (text: string) => void
 }
 
@@ -390,6 +435,7 @@ export interface PetChatStreamOptions {
   fetch?: PetChatStreamFetch
   signal?: AbortSignal
   timeoutMs?: number
+  enableThinking?: boolean
 }
 
 export interface AppWechatLoginInput {
@@ -403,6 +449,16 @@ export interface SubmitTextTaskInput {
   date?: string
   additionalContext?: string
   executionMode?: ExecutionMode
+  analysisEngine?: AnalysisEngine
+  suggestRatioEnabled?: boolean
+  preciseMicronutrients?: boolean
+  dietGoal?: DietGoal
+  activityTiming?: ActivityTiming
+}
+
+export interface RecommendedMealType {
+  meal_type: MealType
+  generated_by: string
 }
 
 export interface ManualFoodRecordInput {
@@ -421,6 +477,9 @@ export interface ManualFoodRecordsInput {
   items: ManualFoodRecordItemInput[]
   mealType: MealType
   date?: string
+  dietGoal?: DietGoal
+  activityTiming?: ActivityTiming
+  entryType?: FoodRecordEntryType
 }
 
 export interface ManualFoodSearchOptions {
@@ -491,6 +550,8 @@ export interface UpdateExpiryItemInput {
 }
 
 export interface HealthProfileInput {
+  onboarding_status?: 'pending' | 'completed' | 'skipped'
+  onboarding_draft_step?: number
   gender?: string
   birthday?: string
   height?: number
@@ -512,6 +573,10 @@ export interface HealthProfileInput {
   report_extract?: HealthReportExtract
   report_image_url?: string
   precision_reference_defaults?: Record<string, unknown>
+  campus_dining_preference?: {
+    school_id: string
+    campus_id?: string
+  }
 }
 
 export interface UploadBase64ImageInput {
@@ -654,6 +719,8 @@ export interface CommunityNotificationListParams {
 export interface CommunityNotificationListResult {
   list: CommunityNotificationItem[]
   unread_count: number
+  like_count?: number
+  comment_count?: number
   has_more?: boolean
 }
 
@@ -758,6 +825,20 @@ export interface PackagedFoodInput {
   vitaminB6MgPer100g?: number
   folateMcgPer100g?: number
   vitaminB12McgPer100g?: number
+}
+
+export type PackagedFoodCorrectionReasonType =
+  | 'nutrition_wrong'
+  | 'barcode_wrong'
+  | 'name_wrong'
+  | 'spec_wrong'
+  | 'duplicate'
+  | 'other'
+
+export interface PackagedFoodCorrectionInput extends PackagedFoodInput {
+  packagedFoodId: string
+  reasonType: PackagedFoodCorrectionReasonType
+  comment?: string
 }
 
 export interface DietRecommendationInput {
@@ -940,6 +1021,85 @@ export class FoodLinkApiClient {
     })
   }
 
+  async listSupplements(status = 'active'): Promise<UserSupplement[]> {
+    const normalized = status.trim() || 'active'
+    const data = await this.authenticatedRequest<{ items: UserSupplement[] }>(
+      `/api/supplements?status=${encodeURIComponent(normalized)}`,
+      { method: 'GET', timeoutMs: 10000 },
+    )
+    return data.items || []
+  }
+
+  async listSupplementCatalog(query = ''): Promise<SupplementCatalogItem[]> {
+    const normalized = query.trim()
+    const suffix = normalized ? `?q=${encodeURIComponent(normalized)}` : ''
+    const data = await this.authenticatedRequest<{ items: SupplementCatalogItem[] }>(
+      `/api/supplements/catalog${suffix}`,
+      { method: 'GET', timeoutMs: 10000 },
+    )
+    return data.items || []
+  }
+
+  async recognizeSupplementLabel(imageUrls: string[]): Promise<SupplementLabelRecognition> {
+    const normalized = imageUrls.map((url) => url.trim()).filter(Boolean).slice(0, 3)
+    if (!normalized.length) throw new Error('请至少上传一张补剂标签图片')
+    const data = await this.authenticatedRequest<{ supplement: SupplementLabelRecognition }>(
+      '/api/supplements/label/recognize',
+      { method: 'POST', body: { image_urls: normalized }, timeoutMs: 90000 },
+    )
+    return data.supplement
+  }
+
+  async createSupplement(payload: UpsertSupplementPayload): Promise<UserSupplement> {
+    const data = await this.authenticatedRequest<{ item: UserSupplement }>('/api/supplements', {
+      method: 'POST',
+      body: payload,
+      timeoutMs: 15000,
+    })
+    return data.item
+  }
+
+  async updateSupplement(itemId: string, payload: UpsertSupplementPayload): Promise<UserSupplement> {
+    const id = itemId.trim()
+    if (!id) throw new Error('缺少补剂编号')
+    const data = await this.authenticatedRequest<{ item: UserSupplement }>(
+      `/api/supplements/${encodeURIComponent(id)}`,
+      { method: 'PUT', body: payload, timeoutMs: 15000 },
+    )
+    return data.item
+  }
+
+  async getSupplementDashboard(date?: string): Promise<SupplementDashboard> {
+    const apiDate = mapCalendarDateToApi(date)
+    const query = apiDate ? `?date=${encodeURIComponent(apiDate)}` : ''
+    return this.authenticatedRequest<SupplementDashboard>(`/api/supplements/dashboard${query}`, {
+      method: 'GET',
+      timeoutMs: 10000,
+    })
+  }
+
+  async recordSupplementIntake(
+    itemId: string,
+    payload: { servings?: number; taken_at?: string; note?: string; source?: string; idempotency_key?: string } = {},
+  ): Promise<SupplementIntake> {
+    const id = itemId.trim()
+    if (!id) throw new Error('缺少补剂编号')
+    const data = await this.authenticatedRequest<{ intake: SupplementIntake }>(
+      `/api/supplements/${encodeURIComponent(id)}/intakes`,
+      { method: 'POST', body: payload, timeoutMs: 10000 },
+    )
+    return data.intake
+  }
+
+  async deleteSupplementIntake(intakeId: string): Promise<void> {
+    const id = intakeId.trim()
+    if (!id) throw new Error('缺少补剂记录编号')
+    await this.authenticatedRequest<{ message?: string }>(
+      `/api/supplement-intakes/${encodeURIComponent(id)}`,
+      { method: 'DELETE', timeoutMs: 10000 },
+    )
+  }
+
   async getMyMembership(date?: string): Promise<MembershipStatus> {
     const key = (date || '').trim()
     const query = key ? `?date=${encodeURIComponent(key)}` : ''
@@ -949,6 +1109,14 @@ export class FoodLinkApiClient {
     })
   }
 
+  async getRecommendedMealType(date?: string): Promise<RecommendedMealType> {
+    const key = (date || '').trim()
+    const query = key ? `?date=${encodeURIComponent(key)}` : ''
+    return this.authenticatedRequest<RecommendedMealType>(`/api/food-record/recommend-meal-type${query}`, {
+      method: 'GET',
+      timeoutMs: 10000,
+    })
+  }
   async listMembershipPlans(): Promise<{ list: MembershipPlan[] }> {
     return this.publicRequest<{ list: MembershipPlan[] }>('/api/membership/plans', {
       method: 'GET',
@@ -997,6 +1165,11 @@ export class FoodLinkApiClient {
         date: mapCalendarDateToApi(input.date),
         additionalContext,
         execution_mode: input.executionMode,
+        analysis_engine: input.analysisEngine,
+        suggest_ratio_enabled: input.suggestRatioEnabled,
+        precise_micronutrients: input.preciseMicronutrients,
+        diet_goal: input.dietGoal,
+        activity_timing: input.activityTiming,
       },
       timeoutMs: 10000,
     })
@@ -1032,6 +1205,50 @@ export class FoodLinkApiClient {
       throw new Error('服务器未返回图片地址')
     }
     return { imageUrl }
+  }
+
+  async uploadAnalyzeVideoFile(input: {
+    fileUri: string
+    fileName?: string
+    mimeType?: string
+    onProgress?: (progress: number) => void
+  }): Promise<AnalyzeVideoUploadResult> {
+    const token = await this.adapters.tokenStorage.getAccessToken()
+    if (!token) throw new Error('请先登录')
+
+    const res = await this.adapters.uploadFile({
+      url: `${this.baseUrl}/api/upload-analyze-video-file`,
+      fileUri: input.fileUri,
+      fieldName: 'file',
+      fileName: input.fileName || 'food-video.mp4',
+      mimeType: input.mimeType || 'video/mp4',
+      timeoutMs: 180000,
+      onProgress: input.onProgress,
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    })
+    this.assertOk(res, '视频处理失败')
+    const data = this.unwrapResponseData<UploadAnalyzeVideoResponse>(res.data)
+    const captureProtocol = String(data.capture_protocol || data.captureProtocol || '').trim()
+    const keyframes = Array.isArray(data.keyframes) ? data.keyframes.map((frame) => ({
+      role: frame.role,
+      image_url: String(frame.image_url || '').trim(),
+      timestamp_ms: Number(frame.timestamp_ms || 0),
+    })).filter((frame) => frame.image_url) : []
+    if (captureProtocol !== 'video_keyframes_v1' || keyframes.length < 3) {
+      throw new Error('视频处理失败：服务端未返回足够关键帧')
+    }
+    input.onProgress?.(100)
+    return {
+      capture_protocol: 'video_keyframes_v1',
+      video_id: String(data.video_id || data.videoId || '').trim(),
+      duration_ms: Number(data.duration_ms || data.durationMs || 0),
+      width: Number(data.width || 0),
+      height: Number(data.height || 0),
+      size_bytes: Number(data.size_bytes || data.sizeBytes || 0),
+      keyframes,
+    }
   }
 
   async uploadCirclePostImageFile(input: {
@@ -1132,6 +1349,19 @@ export class FoodLinkApiClient {
     })
   }
 
+  async setAnalyzeTaskAutoRecord(taskId: string, enabled: boolean, mealType?: MealType): Promise<AnalyzeTaskAutoRecordResult> {
+    const id = taskId.trim()
+    if (!id) throw new Error('缺少识别任务编号')
+    return this.authenticatedRequest<AnalyzeTaskAutoRecordResult>(`/api/analyze/tasks/${encodeURIComponent(id)}/auto-record`, {
+      method: 'PUT',
+      body: {
+        enabled,
+        meal_type: mealType || '',
+      },
+      timeoutMs: 10000,
+    })
+  }
+
   async saveFoodRecord(payload: SaveFoodRecordRequest): Promise<{ id: string; message: string; already_saved?: boolean }> {
     return this.authenticatedRequest<{ id: string; message: string; already_saved?: boolean }>('/api/food-record/save', {
       method: 'POST',
@@ -1227,6 +1457,13 @@ export class FoodLinkApiClient {
       timeoutMs: 10000,
     })
   }
+  async markAnalyzeHistorySeen(): Promise<{ success: boolean }> {
+    return this.authenticatedRequest<{ success: boolean }>('/api/user/last-seen-analyze-history', {
+      method: 'POST',
+      timeoutMs: 10000,
+    })
+  }
+
 
   async getAnalyzeTaskCount(): Promise<{ count: number }> {
     return this.authenticatedRequest<{ count: number }>('/api/analyze/tasks/count', {
@@ -1498,16 +1735,46 @@ export class FoodLinkApiClient {
     )
   }
 
-  async createExerciseLog(input: { exerciseDesc: string; date?: string; imageUrl?: string }): Promise<Record<string, unknown>> {
+  async createExerciseLog(input: {
+    exerciseDesc: string
+    date?: string
+    imageUrl?: string
+    estimationMode?: 'standard' | 'precision'
+    totalDurationMin?: number
+    intensity?: 'low' | 'moderate' | 'high'
+    averageHeartRate?: number
+    distanceKm?: number
+    exerciseBreakdown?: string
+  }): Promise<Record<string, unknown>> {
     const exerciseDesc = input.exerciseDesc.trim()
     const imageUrl = input.imageUrl?.trim()
     if (!exerciseDesc && !imageUrl) throw new Error('请输入运动内容或上传运动截图')
+    const precision = input.estimationMode === 'precision'
+    if (precision && (!Number.isFinite(input.totalDurationMin) || Number(input.totalDurationMin) < 1 || Number(input.totalDurationMin) > 480)) {
+      throw new Error('精准估算请填写 1 到 480 分钟的总时长')
+    }
+    if (precision && input.averageHeartRate != null && (!Number.isFinite(input.averageHeartRate) || input.averageHeartRate < 30 || input.averageHeartRate > 250)) {
+      throw new Error('平均心率应在 30 到 250 次/分钟之间')
+    }
+    if (precision && input.distanceKm != null && (!Number.isFinite(input.distanceKm) || input.distanceKm <= 0 || input.distanceKm > 1000)) {
+      throw new Error('运动距离应大于 0 且不超过 1000 公里')
+    }
+    const exerciseBreakdown = input.exerciseBreakdown?.trim() || undefined
+    if (precision && exerciseBreakdown && Array.from(exerciseBreakdown).length > 1000) {
+      throw new Error('动作分配说明不能超过 1000 个字符')
+    }
     return this.authenticatedRequest<Record<string, unknown>>('/api/exercise-logs', {
       method: 'POST',
       body: {
         exercise_desc: exerciseDesc,
         date: mapCalendarDateToApi(input.date),
         image_url: imageUrl,
+        estimation_mode: input.estimationMode || 'standard',
+        total_duration_min: precision ? input.totalDurationMin : undefined,
+        intensity: precision ? (input.intensity || 'moderate') : undefined,
+        average_heart_rate: precision ? input.averageHeartRate : undefined,
+        distance_km: precision ? input.distanceKm : undefined,
+        exercise_breakdown: precision ? exerciseBreakdown : undefined,
       },
       timeoutMs: 20000,
     })
@@ -1529,6 +1796,36 @@ export class FoodLinkApiClient {
     return this.authenticatedRequest<{ message: string }>(
       `/api/exercise-logs/${encodeURIComponent(id)}`,
       { method: 'DELETE', timeoutMs: 10000 },
+    )
+  }
+
+  async updateExerciseLog(input: {
+    logId: string
+    exerciseDesc: string
+    date?: string
+    imageUrl?: string
+    caloriesBurned?: number
+  }): Promise<{ message: string }> {
+    const logId = input.logId.trim()
+    const exerciseDesc = input.exerciseDesc.trim()
+    const imageUrl = input.imageUrl?.trim() || ''
+    if (!logId) throw new Error('缺少运动记录 ID')
+    if (!exerciseDesc && !imageUrl) throw new Error('运动描述和图片不能同时为空')
+    if (input.caloriesBurned != null && (!Number.isFinite(input.caloriesBurned) || input.caloriesBurned < 0 || input.caloriesBurned > 5000)) {
+      throw new Error('运动消耗应在 0 到 5000 千卡之间')
+    }
+    return this.authenticatedRequest<{ message: string }>(
+      `/api/exercise-logs/${encodeURIComponent(logId)}`,
+      {
+        method: 'PUT',
+        body: {
+          exercise_desc: exerciseDesc,
+          date: mapCalendarDateToApi(input.date),
+          image_url: imageUrl,
+          calories_burned: input.caloriesBurned,
+        },
+        timeoutMs: 10000,
+      },
     )
   }
 
@@ -1616,6 +1913,28 @@ export class FoodLinkApiClient {
     return this.authenticatedRequest<{ item: PackagedFoodItem }>('/api/packaged-food', {
       method: 'POST',
       body: packagedFoodPayload(input),
+      timeoutMs: 15000,
+    })
+  }
+
+  async getPackagedFoodItem(foodId: string): Promise<PackagedFoodItem> {
+    const id = foodId.trim()
+    if (!id) throw new Error('缺少包装食品 ID')
+    const data = await this.authenticatedRequest<{ item: PackagedFoodItem }>(
+      `/api/packaged-food/${encodeURIComponent(id)}`,
+      { timeoutMs: 10000 },
+    )
+    return data.item
+  }
+
+  async submitPackagedFoodCorrection(input: PackagedFoodCorrectionInput): Promise<{ id: string; message: string; item: Record<string, unknown> }> {
+    const packagedFoodId = input.packagedFoodId.trim()
+    if (!packagedFoodId) throw new Error('缺少包装食品 ID')
+    if (!input.productName.trim()) throw new Error('请输入商品名称')
+    if (!input.sourceImageUrls.map((url) => url.trim()).filter(Boolean).length) throw new Error('请至少填写一张包装图片地址')
+    return this.authenticatedRequest<{ id: string; message: string; item: Record<string, unknown> }>('/api/packaged-food/corrections', {
+      method: 'POST',
+      body: { ...packagedFoodPayload(input), packaged_food_id: packagedFoodId, reason_type: input.reasonType, comment: input.comment?.trim() || undefined },
       timeoutMs: 15000,
     })
   }
@@ -1714,6 +2033,26 @@ export class FoodLinkApiClient {
   async communityGetCheckinLeaderboard(): Promise<{ week_start: string; week_end: string; list: CheckinLeaderboardItem[] }> {
     return this.authenticatedRequest<{ week_start: string; week_end: string; list: CheckinLeaderboardItem[] }>(
       '/api/community/checkin-leaderboard',
+      { method: 'GET', timeoutMs: 10000 },
+    )
+  }
+
+  async communityGetHealthLeaderboard(): Promise<HealthLeaderboardResult> {
+    return this.authenticatedRequest<HealthLeaderboardResult>(
+      '/api/community/health-leaderboard',
+      { method: 'GET', timeoutMs: 10000 },
+    )
+  }
+
+  async communityGetFoodNutrientLeaderboard(
+    nutrient: string,
+    limit = 50,
+  ): Promise<FoodNutrientLeaderboardResult> {
+    const q = new URLSearchParams()
+    q.set('nutrient', nutrient.trim() || 'protein')
+    q.set('limit', String(Math.min(100, Math.max(1, Math.floor(limit)))))
+    return this.publicRequest<FoodNutrientLeaderboardResult>(
+      `/api/community/food-nutrient-leaderboard?${q.toString()}`,
       { method: 'GET', timeoutMs: 10000 },
     )
   }
@@ -1856,6 +2195,63 @@ export class FoodLinkApiClient {
       method: 'GET',
       timeoutMs: 10000,
     })
+  }
+
+  async claimLoginCheckIn(): Promise<LoginCheckInClaimResponse> {
+    return this.authenticatedRequest<LoginCheckInClaimResponse>('/api/membership/rewards/login-check-in/claim', {
+      method: 'POST',
+      timeoutMs: 10000,
+    })
+  }
+
+  async listMyVouchers(status = '', offset = 0, limit = 20): Promise<VoucherListResponse> {
+    const query = new URLSearchParams()
+    if (status.trim()) query.set('status', status.trim())
+    query.set('offset', String(Math.max(0, Math.floor(offset))))
+    query.set('limit', String(Math.min(100, Math.max(1, Math.floor(limit)))))
+    return this.authenticatedRequest<VoucherListResponse>('/api/vouchers/my?' + query.toString(), {
+      method: 'GET',
+      timeoutMs: 10000,
+    })
+  }
+
+  async useVoucher(voucherId: string): Promise<{ success: boolean }> {
+    const id = voucherId.trim()
+    if (!id) throw new Error('缺少奖励 ID')
+    return this.authenticatedRequest<{ success: boolean }>('/api/vouchers/' + encodeURIComponent(id) + '/use', {
+      method: 'POST',
+      timeoutMs: 10000,
+    })
+  }
+
+  async createFoodNutritionContribution(
+    input: CreateFoodNutritionContributionRequest,
+  ): Promise<FoodNutritionContribution> {
+    const evidenceImagePaths = (input.evidence_image_paths || [])
+      .map((value) => value.trim())
+      .filter(Boolean)
+    const result = await this.authenticatedRequest<{ item: FoodNutritionContribution }>(
+      '/api/food-nutrition-contributions',
+      {
+        method: 'POST',
+        body: {
+          ...input,
+          canonical_name: input.canonical_name.trim(),
+          source_text: input.source_text?.trim() || '',
+          evidence_image_paths: evidenceImagePaths,
+        },
+        timeoutMs: 15000,
+      },
+    )
+    return result.item
+  }
+
+  async listMyFoodNutritionContributions(): Promise<FoodNutritionContribution[]> {
+    const result = await this.authenticatedRequest<FoodNutritionContributionListResponse>(
+      '/api/food-nutrition-contributions/mine',
+      { method: 'GET', timeoutMs: 10000 },
+    )
+    return Array.isArray(result.items) ? result.items : []
   }
 
   async getFoodExpiryDashboard(): Promise<FoodExpiryDashboard> {
@@ -2075,6 +2471,20 @@ export class FoodLinkApiClient {
     })
   }
 
+  async contributeCampusFoodImages(itemId: string, imagePaths: string[]): Promise<{ image_paths: string[]; accepted: boolean }> {
+    const id = itemId.trim()
+    const paths = imagePaths.map((path) => path.trim()).filter(Boolean).slice(0, 5)
+    if (!id) throw new Error('缺少校园菜品 ID')
+    if (!paths.length) throw new Error('请至少选择一张图片')
+    return this.authenticatedRequest<{ image_paths: string[]; accepted: boolean }>(
+      `/api/public-food-library/${encodeURIComponent(id)}/contribute-images`,
+      {
+        method: 'POST',
+        body: { image_paths: paths },
+        timeoutMs: 15000,
+      },
+    )
+  }
   async createPublicFood(input: CreatePublicFoodInput): Promise<{ id: string; message: string }> {
     const foodName = input.foodName.trim()
     if (!foodName) throw new Error('请输入食物名称')
@@ -2382,6 +2792,40 @@ export class FoodLinkApiClient {
     })
   }
 
+  async updatePetName(name: string): Promise<{ pet: PetSummary['pet'] }> {
+    const petName = name.trim()
+    if (!petName || Array.from(petName).length > 12) throw new Error('宠物名字需为 1–12 个字')
+    return this.authenticatedRequest<{ pet: PetSummary['pet'] }>('/api/pet/name', {
+      method: 'PUT',
+      body: { name: petName },
+      timeoutMs: 10000,
+    })
+  }
+
+  async customizePetPixelAvatarFile(input: {
+    fileUri: string
+    petName: string
+    fileName?: string
+    mimeType?: string
+  }): Promise<{ pet: PetSummary['pet'] }> {
+    const petName = input.petName.trim()
+    if (!petName || Array.from(petName).length > 12) throw new Error('宠物名字需为 1–12 个字')
+    const token = await this.adapters.tokenStorage.getAccessToken()
+    if (!token) throw new Error('请先登录')
+    const res = await this.adapters.uploadFile({
+      url: `${this.baseUrl}/api/pet/pixel-avatar`,
+      fileUri: input.fileUri,
+      fieldName: 'file',
+      fileName: input.fileName || 'pet-avatar.jpg',
+      mimeType: input.mimeType || 'image/jpeg',
+      formFields: { name: petName },
+      timeoutMs: 120000,
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    this.assertOk(res, '生成像素分身失败')
+    return this.unwrapResponseData<{ pet: PetSummary['pet'] }>(res.data)
+  }
+
   async claimPetEvent(eventId: string): Promise<PetClaimResult> {
     const id = eventId.trim()
     if (!id) throw new Error('缺少事件 ID')
@@ -2408,22 +2852,22 @@ export class FoodLinkApiClient {
     })
   }
 
-  async estimatePetChat(question: string, range: StatsRange = 'week'): Promise<PetChatEstimateResponse> {
+  async estimatePetChat(question: string, range: StatsRange = 'week', enableThinking = false): Promise<PetChatEstimateResponse> {
     const text = question.trim()
     if (!text) throw new Error('请输入想问伙伴的问题')
     return this.authenticatedRequest<PetChatEstimateResponse>('/api/pet/chat/estimate', {
       method: 'POST',
-      body: { question: text, range },
+      body: { question: text, range, enable_thinking: enableThinking },
       timeoutMs: 10000,
     })
   }
 
-  async generatePetChat(question: string, range: StatsRange = 'week', sessionId = '', newSession = false): Promise<PetChatResponse> {
+  async generatePetChat(question: string, range: StatsRange = 'week', sessionId = '', newSession = false, enableThinking = false): Promise<PetChatResponse> {
     const text = question.trim()
     if (!text) throw new Error('请输入想问伙伴的问题')
     return this.authenticatedRequest<PetChatResponse>('/api/pet/chat', {
       method: 'POST',
-      body: { question: text, range, session_id: sessionId.trim(), new_session: newSession },
+      body: { question: text, range, session_id: sessionId.trim(), new_session: newSession, enable_thinking: enableThinking },
       timeoutMs: 90000,
     })
   }
@@ -2472,6 +2916,7 @@ export class FoodLinkApiClient {
           range,
           session_id: sessionId.trim(),
           new_session: newSession,
+          enable_thinking: Boolean(options.enableThinking),
         }),
         signal: controller.signal,
       })
@@ -2806,9 +3251,11 @@ function buildManualFoodRecordsPayload(input: ManualFoodRecordsInput, keepSingle
   return {
     meal_type: input.mealType,
     date: mapCalendarDateToApi(input.date),
+    diet_goal: input.dietGoal,
+    activity_timing: input.activityTiming,
     description: keepSingleDescription && titles.length === 1 ? titles[0] : `手动记录：${titles.join('、')}`,
     insight: items.some((item) => item.manual_source === 'custom') ? '手动记录，包含用户自定义营养数据' : '手动记录，数据来自食物词典',
-    entry_type: 'food_library',
+    entry_type: input.entryType || 'food_library',
     items,
     total_calories: totalCalories,
     total_protein: totalProtein,
@@ -2826,6 +3273,10 @@ function buildManualFoodRecordItemPayload(item: ManualFoodItem, inputWeight?: nu
   const protein = normalizeNumber(item.total_protein ?? item.protein) * ratio
   const carbs = normalizeNumber(item.total_carbs ?? item.carbs) * ratio
   const fat = normalizeNumber(item.total_fat ?? item.fat) * ratio
+  const per100g = item.extra_nutrients || item.nutrients_per_100g || {}
+  const nutrients = Object.fromEntries(
+    Object.entries(per100g).map(([key, value]) => [key, normalizePer100gNutrient(value, weight)]),
+  ) as Nutrients
   return {
     name: manualFoodTitle(item),
     weight,
@@ -2833,15 +3284,7 @@ function buildManualFoodRecordItemPayload(item: ManualFoodItem, inputWeight?: nu
     intake: weight,
     image_path: manualFoodImagePath(item),
     image_paths: manualFoodImagePaths(item),
-    nutrients: {
-      calories,
-      protein,
-      carbs,
-      fat,
-      fiber: normalizePer100gNutrient(item.nutrients_per_100g?.fiber, weight),
-      sugar: normalizePer100gNutrient(item.nutrients_per_100g?.sugar, weight),
-      sodium_mg: normalizePer100gNutrient(item.nutrients_per_100g?.sodium_mg, weight),
-    },
+    nutrients: { ...nutrients, calories, protein, carbs, fat },
     manual_source: manualFoodSource(item),
     manual_source_id: String(item.source_id || item.id || ''),
     manual_source_title: manualFoodTitle(item),

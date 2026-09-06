@@ -1,4 +1,5 @@
-import type { AnalysisTask, CommunityFeedTargetType, ExecutionMode, FoodExpiryItem, ManualFoodItem, MealType, PrecisionReferenceObjectInput } from '@food-link/core'
+import type { AnalysisTask, CommunityFeedTargetType, ExecutionMode, FoodExpiryItem, ManualFoodItem, MealType, PrecisionOptionsInput, PrecisionReferenceObjectInput } from '@food-link/core'
+import type { NavigatorScreenParams } from '@react-navigation/native'
 
 export type ManualRecordSourceChannel = 'recommended' | 'campus' | 'favorites' | 'custom'
 
@@ -58,14 +59,23 @@ export type LocationSelection = {
 }
 
 export type RootStackParamList = {
-  Login: undefined
-  MainTabs: undefined
+  Login: {
+    inviteCode?: string
+    fi?: string
+    redirectTo?: 'InviteFriends' | 'CirclePostEdit'
+    redirectTab?: keyof MainTabParamList
+  } | undefined
+  MainTabs: NavigatorScreenParams<MainTabParamList> | undefined
   Analyze: {
     source?: 'camera' | 'library'
     mealType?: MealType
     date?: string
     precisionSessionId?: string
     referenceObjects?: PrecisionReferenceObjectInput[]
+    precisionImageUris?: string[]
+    precisionOptions?: PrecisionOptionsInput
+    precisionCaptureMode?: 'photos' | 'video'
+    precisionRetakeRoles?: Array<'top_down' | 'oblique_45' | 'both' | 'video'>
   } | undefined
   GooseDuckChicken: undefined
   AnalyzeLoading: { taskId?: string; imageUri?: string; imageUris?: string[]; mealType: MealType; date: string; task?: AnalysisTask; taskType?: 'food' | 'food_text' | 'exercise'; executionMode?: ExecutionMode } | undefined
@@ -80,6 +90,7 @@ export type RootStackParamList = {
   DayRecord: { date?: string } | undefined
   RecordDetail: { recordId: string; initialAction?: 'edit' | 'share' | 'delete' }
   AnalyzeHistory: undefined
+  PrecisionConfirm: { taskId: string; mealType: MealType; date: string }
   StatsMetabolic: undefined
   TrendDetail: { kind: 'weight' | 'water' | 'exercise'; date?: string }
   HealthProfile: undefined
@@ -87,9 +98,13 @@ export type RootStackParamList = {
   ProfileSettings: { userId?: string; action?: 'delete-account' } | undefined
   AccountSecurity: undefined
   BodyMetricRecord: { type: 'weight' | 'water' | 'exercise'; date?: string }
+  ExerciseLogEdit: { logId: string; date: string }
   Expiry: undefined
   ExpiryEdit: { itemId?: string; item?: FoodExpiryItem } | undefined
   RewardCenter: undefined
+  StandardFoodContribution: { source?: 'reward_center' } | undefined
+  FoodContribution: { focus?: 'standard' | 'packaged' | 'public' } | undefined
+  RecordSettings: undefined
   MembershipCenter: undefined
   Recipes: undefined
   RecipeDetail: { recipeId: string }
@@ -108,6 +123,7 @@ export type RootStackParamList = {
   BodyTrends: { tab?: 'weight' | 'water' | 'exercise' } | undefined
   PackagedFoodEdit: { taskId?: string } | undefined
   PackagedFoodTaskDetail: { taskId: string }
+  PackagedFoodCorrection: { packagedFoodId: string }
   LocationSearch:
     | { returnTo?: 'PublicFoodShare'; editId?: string; mode?: 'campus' | 'public'; draft?: PublicFoodShareDraft }
     | undefined
@@ -115,15 +131,31 @@ export type RootStackParamList = {
   PrivacySettings: undefined
   MembershipAgreement: undefined
   UserGroup: undefined
-  CheckinLeaderboard: undefined
-  InviteFriends: { inviteCode?: string; invite_code?: string; fi?: string } | undefined
+  CheckinLeaderboard:
+    | {
+        section?: 'user' | 'food'
+        ranking?: 'checkin' | 'health'
+        nutrient?: string
+      }
+    | undefined
+  InviteFriends: {
+    inviteCode?: string
+    invite_code?: string
+    fi?: string
+    fromUserId?: string
+    from_user_id?: string
+    section?: 'rewards'
+  } | undefined
   PetHome: undefined
-  PetChat: undefined
+  PetChat: { starterQuestion?: string } | undefined
+  Supplements: undefined
+  SupplementEdit: { itemId?: string } | undefined
+  SupplementCatalog: undefined
   Agreements: undefined
   PrivacyPolicy: undefined
   AutoRenewAudit: undefined
   CirclePostEdit: { postId?: string } | undefined
-  Friends: undefined
+  Friends: { initialTab?: 'friends' | 'received' | 'sent' | 'blocks' } | undefined
   Notifications: undefined
   About: undefined
   AboutFeedback: undefined

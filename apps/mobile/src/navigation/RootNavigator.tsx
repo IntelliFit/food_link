@@ -9,55 +9,61 @@ import { CommunityScreen } from '../screens/CommunityScreen'
 import { CommunitySearchScreen } from '../screens/CommunitySearchScreen'
 import { ProfileScreen } from '../screens/ProfileScreen'
 import { ProfileSettingsScreen } from '../screens/ProfileSettingsScreen'
-import { AccountSecurityScreen } from '../screens/AccountSecurityScreen'
+import { AccountSecurityScreen } from '../screens/AccountSecuritySettingsScreen'
+import { PrivacySettingsScreen } from '../screens/PrivacySettingsScreen'
 import { HealthProfileViewScreen } from '../screens/HealthProfileViewScreen'
 import { PetChatScreen } from '../screens/PetChatScreen'
 import { LoginScreen } from '../screens/LoginScreen'
 import { AnalyzeScreen } from '../screens/AnalyzeScreen'
 import { GooseDuckChickenScreen } from '../screens/GooseDuckChickenScreen'
 import { AnalyzeLoadingScreen } from '../screens/AnalyzeLoadingScreen'
+import { PrecisionConfirmScreen } from '../screens/PrecisionConfirmScreen'
 import { ResultScreen } from '../screens/ResultScreen'
 import { TextResultScreen } from '../screens/TextResultScreen'
-import { RecipeDetailScreen } from '../screens/RecipeDetailScreen'
+import { TextRecordScreen } from '../screens/TextRecordScreen'
+import { ManualRecordScreen } from '../screens/ManualRecordScreen'
+import { RecipeDetailScreen, RecipesScreen } from '../screens/RecipeDetailScreen'
+import { RecipeEditScreen } from '../screens/RecipeEditScreen'
+import { SupplementCatalogScreen, SupplementEditScreen, SupplementsScreen } from '../screens/SupplementScreens'
+import { StandardFoodContributionScreen } from '../screens/StandardFoodContributionScreen'
+import { FoodContributionScreen } from '../screens/FoodContributionScreen'
+import { RecordSettingsScreen } from '../screens/RecordSettingsScreen'
+import { PackagedFoodCorrectionScreen } from '../screens/PackagedFoodCorrectionScreen'
 import {
   AboutScreen,
   AboutFeedbackScreen,
   AnalyzeHistoryScreen,
   BodyMetricRecordScreen,
-  CirclePostEditScreen,
   DayRecordScreen,
   ExpiryScreen,
   FoodLibraryScreen,
-  FriendsScreen,
   HealthProfileScreen,
-  ManualRecordScreen,
-  NotificationsScreen,
   RecordDetailScreen,
   RewardCenterScreen,
-  TextRecordScreen,
 } from '../screens/DetailScreens'
+import { FriendsScreen } from '../screens/FriendsScreen'
+import { NotificationsScreen } from '../screens/NotificationsScreen'
+import { ConversationsScreen, PrivateChatScreen } from '../screens/MessagingScreens'
 import {
   BodyTrendsScreen,
   CommunityFeedDetailScreen,
-  ConversationsScreen,
   MembershipCenterScreen,
-  PrivateChatScreen,
   PublicFoodDetailScreen,
   PublicFoodScreen,
   PublicProfileScreen,
-  RecipesScreen,
 } from '../screens/MigrationScreens'
 import {
   AgreementsScreen,
   AutoRenewAuditScreen,
   CheckinLeaderboardScreen,
-  FollowListScreen,
-  InviteFriendsScreen,
   PetHomeScreen,
   PrivacyPolicyScreen,
   PublicFoodShareScreen,
-  RecipeEditScreen,
 } from '../screens/SecondaryMigrationScreens'
+import { InviteFriendsScreen } from '../screens/InviteFriendsScreen'
+import { FollowListScreen } from '../screens/FollowListScreen'
+import { ExerciseLogEditScreen } from '../screens/ExerciseLogEditScreen'
+import { CirclePostEditScreen } from '../screens/CirclePostEditScreen'
 import {
   CampusCanteenScreen,
   ExpiryEditScreen,
@@ -66,13 +72,13 @@ import {
   MembershipAgreementScreen,
   PackagedFoodEditScreen,
   PackagedFoodTaskDetailScreen,
-  PrivacySettingsScreen,
   StatsMetabolicScreen,
   TrendDetailScreen,
   UserGroupScreen,
 } from '../screens/TertiaryMigrationScreens'
 import { useAuth } from '../providers/AuthProvider'
 import { useColorScheme } from '../providers/ColorSchemeProvider'
+import { takePendingAuthDestination } from '../utils/pendingAuthNavigation'
 import { colors } from '../theme'
 import { CustomTabBar } from './CustomTabBar'
 import type { MainTabParamList, RootStackParamList } from './types'
@@ -81,7 +87,7 @@ const Tab = createBottomTabNavigator<MainTabParamList>()
 const Stack = createNativeStackNavigator<RootStackParamList>()
 const navigationRef = createNavigationContainerRef<RootStackParamList>()
 
-type StaticDeepLinkRoute = 'About' | 'Expiry' | 'RewardCenter'
+type StaticDeepLinkRoute = 'About' | 'Expiry' | 'RewardCenter' | 'HealthProfileView' | 'AnalyzeHistory' | 'Recipes'
 
 function MainTabs() {
   return (
@@ -112,6 +118,7 @@ export function RootNavigator() {
     },
   }
   const pendingInviteCodeRef = useRef<string | null>(null)
+  const initialUrlHandledRef = useRef(false)
   const pendingPrivateChatRef = useRef<{ userId: string; nickname?: string } | null>(null)
   const pendingProfileUserIdRef = useRef<string | null>(null)
   const pendingStaticRouteRef = useRef<StaticDeepLinkRoute | null>(null)
@@ -120,10 +127,9 @@ export function RootNavigator() {
   useEffect(() => {
     const navigateToInvite = (code: string) => {
       pendingInviteCodeRef.current = code
-      if (!isAuthenticated) return
       if (!navigationRef.isReady()) return
       navigationRef.navigate('InviteFriends', { fi: code })
-      pendingInviteCodeRef.current = null
+      if (isAuthenticated) pendingInviteCodeRef.current = null
     }
 
     const navigateToPrivateChat = (params: { userId: string; nickname?: string }) => {
@@ -150,16 +156,29 @@ export function RootNavigator() {
       pendingRecordIdRef.current = null
     }
 
-    const navigateToStaticRoute = (routeName: StaticDeepLinkRoute) => {
+    const navigateToStaticRoute = (routeName: StaticDeepLinkRoute, readyAttempts = 0) => {
       pendingStaticRouteRef.current = routeName
       if (routeName !== 'About' && !isAuthenticated) return
-      if (!navigationRef.isReady()) return
+      if (!navigationRef.isReady()) {
+        if (readyAttempts < 20) {
+          setTimeout(() => {
+            if (pendingStaticRouteRef.current === routeName) navigateToStaticRoute(routeName, readyAttempts + 1)
+          }, 250)
+        }
+        return
+      }
       if (routeName === 'About') {
         navigationRef.navigate('About')
       } else if (routeName === 'Expiry') {
         navigationRef.navigate('Expiry')
-      } else {
+      } else if (routeName === 'RewardCenter') {
         navigationRef.navigate('RewardCenter')
+      } else if (routeName === 'HealthProfileView') {
+        navigationRef.navigate('HealthProfileView')
+      } else if (routeName === 'Recipes') {
+        navigationRef.navigate('Recipes')
+      } else {
+        navigationRef.navigate('AnalyzeHistory')
       }
       pendingStaticRouteRef.current = null
     }
@@ -170,7 +189,7 @@ export function RootNavigator() {
         navigateToStaticRoute(staticRoute)
       }
       const code = pendingInviteCodeRef.current
-      if (code && isAuthenticated) navigateToInvite(code)
+      if (code) navigateToInvite(code)
       const privateChat = pendingPrivateChatRef.current
       if (privateChat && isAuthenticated) navigateToPrivateChat(privateChat)
       const profileUserId = pendingProfileUserIdRef.current
@@ -193,9 +212,29 @@ export function RootNavigator() {
     }
 
     flushPendingRoutes()
-    Linking.getInitialURL().then(handleIncomingUrl).catch(() => undefined)
+    if (!initialUrlHandledRef.current) {
+      initialUrlHandledRef.current = true
+      Linking.getInitialURL().then(handleIncomingUrl).catch(() => undefined)
+    }
     const subscription = Linking.addEventListener('url', ({ url }) => handleIncomingUrl(url))
     return () => subscription.remove()
+  }, [isAuthenticated])
+
+  useEffect(() => {
+    if (!isAuthenticated || !navigationRef.isReady()) return undefined
+    const destination = takePendingAuthDestination()
+    if (!destination) return undefined
+    const timer = setTimeout(() => {
+      if (!navigationRef.isReady()) return
+      if (destination.kind === 'tab') {
+        navigationRef.navigate('MainTabs', { screen: destination.tab })
+      } else if (destination.kind === 'circle-post-edit') {
+        navigationRef.navigate('CirclePostEdit', destination.params)
+      } else {
+        navigationRef.navigate('InviteFriends', destination.params)
+      }
+    }, 0)
+    return () => clearTimeout(timer)
   }, [isAuthenticated])
 
   if (isBootstrapping) {
@@ -212,9 +251,9 @@ export function RootNavigator() {
       theme={navigationTheme}
       onReady={() => {
         const code = pendingInviteCodeRef.current
-        if (code && isAuthenticated && navigationRef.isReady()) {
+        if (code && navigationRef.isReady()) {
           navigationRef.navigate('InviteFriends', { fi: code })
-          pendingInviteCodeRef.current = null
+          if (isAuthenticated) pendingInviteCodeRef.current = null
         }
         const privateChat = pendingPrivateChatRef.current
         if (privateChat && isAuthenticated && navigationRef.isReady()) {
@@ -237,8 +276,14 @@ export function RootNavigator() {
             navigationRef.navigate('About')
           } else if (staticRoute === 'Expiry') {
             navigationRef.navigate('Expiry')
-          } else {
+          } else if (staticRoute === 'RewardCenter') {
             navigationRef.navigate('RewardCenter')
+          } else if (staticRoute === 'HealthProfileView') {
+            navigationRef.navigate('HealthProfileView')
+          } else if (staticRoute === 'Recipes') {
+            navigationRef.navigate('Recipes')
+          } else {
+            navigationRef.navigate('AnalyzeHistory')
           }
           pendingStaticRouteRef.current = null
         }
@@ -246,29 +291,33 @@ export function RootNavigator() {
     >
       <Stack.Navigator
         screenOptions={{
-          headerTintColor: colors.brandDark,
-          headerTitleStyle: { color: colors.text },
-          contentStyle: { backgroundColor: colors.background },
+          headerTintColor: isDark ? '#6ee7b7' : colors.brandDark,
+          headerTitleStyle: { color: isDark ? '#f2f7f4' : colors.text },
+          contentStyle: { backgroundColor: isDark ? '#0d1312' : colors.background },
         }}
       >
+        <Stack.Screen name="MainTabs" component={MainTabs} options={{ headerShown: false }} />
         {isAuthenticated ? (
           <>
-            <Stack.Screen name="MainTabs" component={MainTabs} options={{ headerShown: false }} />
             <Stack.Screen name="PetChat" component={PetChatScreen} options={{ title: '问问宠物' }} />
+            <Stack.Screen name="Supplements" component={SupplementsScreen} options={{ title: '我的补剂柜' }} />
+            <Stack.Screen name="SupplementEdit" component={SupplementEditScreen} options={({ route }) => ({ title: route.params?.itemId ? '编辑补剂' : '添加补剂' })} />
+            <Stack.Screen name="SupplementCatalog" component={SupplementCatalogScreen} options={{ title: '公共补剂库' }} />
             <Stack.Screen name="Analyze" component={AnalyzeScreen} options={{ title: '图片分析' }} />
             <Stack.Screen name="GooseDuckChicken" component={GooseDuckChickenScreen} options={{ title: '鹅鸭鸡识别' }} />
             <Stack.Screen name="AnalyzeLoading" component={AnalyzeLoadingScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="PrecisionConfirm" component={PrecisionConfirmScreen} options={{ title: '精准确认' }} />
             <Stack.Screen name="Result" component={ResultScreen} options={{ title: '识别结果' }} />
             <Stack.Screen name="TextResult" component={TextResultScreen} options={{ title: '文字记录分析' }} />
             <Stack.Screen name="TextRecord" component={TextRecordScreen} options={{ title: '文字记录' }} />
             <Stack.Screen name="ManualRecord" component={ManualRecordScreen} options={{ title: '手动记录' }} />
             <Stack.Screen name="FoodLibrary" component={FoodLibraryScreen} options={{ title: '食物库' }} />
             <Stack.Screen name="FoodLibraryDetail" component={FoodLibraryDetailScreen} options={{ title: '食物详情' }} />
-            <Stack.Screen name="DayRecord" component={DayRecordScreen} options={{ title: '单日记录' }} />
-            <Stack.Screen name="RecordDetail" component={RecordDetailScreen} options={{ title: '记录详情' }} />
+            <Stack.Screen name="DayRecord" component={DayRecordScreen} options={{ title: '当天饮食记录', headerTitleAlign: 'center' }} />
+            <Stack.Screen name="RecordDetail" component={RecordDetailScreen} options={{ title: '识别记录详情', headerTitleAlign: 'center' }} />
             <Stack.Screen name="AnalyzeHistory" component={AnalyzeHistoryScreen} options={{ title: '识别记录' }} />
             <Stack.Screen name="StatsMetabolic" component={StatsMetabolicScreen} options={{ headerShown: false }} />
-            <Stack.Screen name="TrendDetail" component={TrendDetailScreen} options={({ route }) => ({ title: route.params.kind === 'weight' ? '体重趋势' : route.params.kind === 'water' ? '饮水趋势' : '运动趋势' })} />
+            <Stack.Screen name="TrendDetail" component={TrendDetailScreen} options={({ route }) => ({ title: route.params.kind === 'weight' ? '体重趋势' : route.params.kind === 'water' ? '喝水趋势' : '运动趋势' })} />
             <Stack.Screen name="HealthProfile" component={HealthProfileScreen} options={{ title: '健康档案' }} />
             <Stack.Screen name="HealthProfileView" component={HealthProfileViewScreen} options={{ title: '健康档案详情' }} />
             <Stack.Screen name="ProfileSettings" component={ProfileSettingsScreen} options={{ title: '个人主页' }} />
@@ -280,21 +329,24 @@ export function RootNavigator() {
                 title: route.params?.type === 'water' ? '记录喝水' : route.params?.type === 'exercise' ? '记录运动' : '记录体重',
               })}
             />
+            <Stack.Screen name="ExerciseLogEdit" component={ExerciseLogEditScreen} options={{ title: '编辑运动记录', headerTitleAlign: 'center' }} />
             <Stack.Screen name="Expiry" component={ExpiryScreen} options={{ title: '食物保质期' }} />
             <Stack.Screen
               name="ExpiryEdit"
               component={ExpiryEditScreen}
               options={({ route }) => ({ title: route.params?.itemId ? '编辑保质期' : '新增保质期' })}
             />
-            <Stack.Screen name="RewardCenter" component={RewardCenterScreen} options={{ title: '赚积分' }} />
+            <Stack.Screen name="RewardCenter" component={RewardCenterScreen} options={{ title: '签到打卡赚积分' }} />
+            <Stack.Screen name="FoodContribution" component={FoodContributionScreen} options={{ title: '贡献食物数据' }} />
+            <Stack.Screen name="StandardFoodContribution" component={StandardFoodContributionScreen} options={{ title: '贡献标准食物' }} />
             <Stack.Screen
               name="MembershipCenter"
               component={MembershipCenterScreen}
               options={{
                 title: '食探会员',
-                headerStyle: { backgroundColor: '#f0fdf4' },
-                headerTintColor: '#0f172a',
-                headerTitleStyle: { color: '#0f172a', fontWeight: '700' },
+                headerStyle: { backgroundColor: isDark ? '#121d1a' : '#f0fdf4' },
+                headerTintColor: isDark ? '#eef4f1' : '#0f172a',
+                headerTitleStyle: { color: isDark ? '#eef4f1' : '#0f172a', fontWeight: '700' },
               }}
             />
             <Stack.Screen name="Recipes" component={RecipesScreen} options={{ title: '收藏食谱' }} />
@@ -315,20 +367,32 @@ export function RootNavigator() {
             <Stack.Screen name="CommunityFeedDetail" component={CommunityFeedDetailScreen} options={{ title: '动态详情' }} />
             <Stack.Screen name="CommunitySearch" component={CommunitySearchScreen} options={{ title: '圈子搜索' }} />
             <Stack.Screen name="PublicProfile" component={PublicProfileScreen} options={{ headerShown: false }} />
-            <Stack.Screen name="FollowList" component={FollowListScreen} options={{ title: '关注列表' }} />
+            <Stack.Screen
+              name="FollowList"
+              component={FollowListScreen}
+              options={{
+                title: '关注列表',
+                headerTitleAlign: 'center',
+                headerStyle: { backgroundColor: isDark ? '#18211e' : '#ffffff' },
+                headerTintColor: isDark ? '#f2f7f4' : '#17211d',
+                headerTitleStyle: { color: isDark ? '#f2f7f4' : '#17211d', fontWeight: '800' },
+              }}
+            />
             <Stack.Screen name="Conversations" component={ConversationsScreen} options={{ title: '私信' }} />
             <Stack.Screen name="PrivateChat" component={PrivateChatScreen} options={({ route }) => ({ title: route.params.nickname || '私信' })} />
             <Stack.Screen name="BodyTrends" component={BodyTrendsScreen} options={{ headerShown: false }} />
             <Stack.Screen name="PackagedFoodEdit" component={PackagedFoodEditScreen} options={{ title: '包装食品' }} />
             <Stack.Screen name="PackagedFoodTaskDetail" component={PackagedFoodTaskDetailScreen} options={{ title: '包装识别任务' }} />
+            <Stack.Screen name="PackagedFoodCorrection" component={PackagedFoodCorrectionScreen} options={{ title: '包装食品纠错' }} />
             <Stack.Screen name="LocationSearch" component={LocationSearchScreen} options={{ title: '定位搜索' }} />
             <Stack.Screen name="CampusCanteen" component={CampusCanteenScreen} options={{ title: '校园食堂' }} />
             <Stack.Screen name="PrivacySettings" component={PrivacySettingsScreen} options={{ title: '隐私设置' }} />
+            <Stack.Screen name="RecordSettings" component={RecordSettingsScreen} options={{ title: '记录设置' }} />
             <Stack.Screen name="MembershipAgreement" component={MembershipAgreementScreen} options={{ title: '会员协议' }} />
             <Stack.Screen name="UserGroup" component={UserGroupScreen} options={{ title: '用户群' }} />
-            <Stack.Screen name="CheckinLeaderboard" component={CheckinLeaderboardScreen} options={{ title: '打卡排行榜' }} />
-            <Stack.Screen name="InviteFriends" component={InviteFriendsScreen} options={{ title: '邀请好友' }} />
-            <Stack.Screen name="PetHome" component={PetHomeScreen} options={{ title: '成长伙伴' }} />
+            <Stack.Screen name="CheckinLeaderboard" component={CheckinLeaderboardScreen} options={{ title: '排行榜' }} />
+            <Stack.Screen name="InviteFriends" component={InviteFriendsScreen} options={{ title: '邀请好友得会员' }} />
+            <Stack.Screen name="PetHome" component={PetHomeScreen} options={{ title: '我的宠物' }} />
             <Stack.Screen name="Agreements" component={AgreementsScreen} options={{ title: '用户协议' }} />
             <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} options={{ title: '隐私政策' }} />
             <Stack.Screen
@@ -345,7 +409,13 @@ export function RootNavigator() {
             <Stack.Screen
               name="Friends"
               component={FriendsScreen}
-              options={{ title: '好友管理', headerTitleAlign: 'center' }}
+              options={{
+                title: '好友管理',
+                headerTitleAlign: 'center',
+                headerStyle: { backgroundColor: isDark ? '#18211e' : '#ffffff' },
+                headerTintColor: isDark ? '#f2f7f4' : '#17211d',
+                headerTitleStyle: { color: isDark ? '#f2f7f4' : '#17211d', fontWeight: '800' },
+              }}
             />
             <Stack.Screen name="Notifications" component={NotificationsScreen} options={{ title: '互动消息' }} />
             <Stack.Screen name="About" component={AboutScreen} options={{ title: '关于' }} />
@@ -354,9 +424,28 @@ export function RootNavigator() {
         ) : (
           <>
             <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
+            <Stack.Screen
+              name="MembershipCenter"
+              component={MembershipCenterScreen}
+              options={{
+                title: '食探会员',
+                headerStyle: { backgroundColor: isDark ? '#121d1a' : '#f0fdf4' },
+                headerTintColor: isDark ? '#eef4f1' : '#0f172a',
+                headerTitleStyle: { color: isDark ? '#eef4f1' : '#0f172a', fontWeight: '700' },
+              }}
+            />
+            <Stack.Screen name="PublicFood" component={PublicFoodScreen} options={{ title: '公共食物库' }} />
+            <Stack.Screen name="PublicFoodDetail" component={PublicFoodDetailScreen} options={{ title: '食物详情' }} />
+            <Stack.Screen name="CommunityFeedDetail" component={CommunityFeedDetailScreen} options={{ title: '动态详情' }} />
+            <Stack.Screen name="CommunitySearch" component={CommunitySearchScreen} options={{ title: '圈子搜索' }} />
+            <Stack.Screen name="PublicProfile" component={PublicProfileScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="CampusCanteen" component={CampusCanteenScreen} options={{ title: '校园食堂' }} />
+            <Stack.Screen name="UserGroup" component={UserGroupScreen} options={{ title: '用户群' }} />
+            <Stack.Screen name="CheckinLeaderboard" component={CheckinLeaderboardScreen} options={{ title: '排行榜' }} />
             <Stack.Screen name="Agreements" component={AgreementsScreen} options={{ title: '用户协议' }} />
             <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} options={{ title: '隐私政策' }} />
             <Stack.Screen name="MembershipAgreement" component={MembershipAgreementScreen} options={{ title: '会员协议' }} />
+            <Stack.Screen name="InviteFriends" component={InviteFriendsScreen} options={{ title: '邀请好友得会员' }} />
             <Stack.Screen name="About" component={AboutScreen} options={{ title: '关于' }} />
           </>
         )}
@@ -369,6 +458,19 @@ function extractStaticDeepLinkRoute(url?: string | null): StaticDeepLinkRoute | 
   if (!url) return null
   const normalized = url.toLowerCase()
   if (normalized.includes('about')) return 'About'
+  if (normalized.includes('://recipes') || normalized.includes('/recipes') || normalized.includes('favorite-recipes')) return 'Recipes'
+  if (
+    normalized.includes('analyze-history')
+    || normalized.includes('analyze_history')
+    || normalized.includes('analysis-history')
+    || normalized.includes('analysis_history')
+  ) return 'AnalyzeHistory'
+  if (
+    normalized.includes('health-profile-view')
+    || normalized.includes('health_profile_view')
+    || normalized.includes('://health-profile')
+    || normalized.includes('/health-profile')
+  ) return 'HealthProfileView'
   if (
     normalized.includes('reward-center')
     || normalized.includes('reward_center')

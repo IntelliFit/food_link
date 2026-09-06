@@ -1,18 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react'
 import AsyncStorage from '@react-native-async-storage/async-storage'
-import { ActivityIndicator, Image, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Switch, Text, TextInput, View } from 'react-native'
+import { AccessibilityInfo, ActivityIndicator, Image, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Switch, Text, TextInput, useWindowDimensions, View } from 'react-native'
 import * as Clipboard from 'expo-clipboard'
 import * as ImagePicker from 'expo-image-picker'
 import qrcode from 'qrcode-generator'
 import { CommonActions, useFocusEffect, useNavigation, useRoute, type RouteProp } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
-import { Apple, Check, Coffee, Cookie, Dumbbell, ImagePlus, Inbox, Link2, MessageCircle, Moon, MoreHorizontal, MoreVertical, Plus, QrCode, RefreshCw, Search, Send, Share2, Soup, Trash2, Undo2, UserPlus, Users, Utensils, X, type LucideIcon } from 'lucide-react-native'
+import { Apple, Armchair, BarChart3, BriefcaseBusiness, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, CircleAlert, Clock3, Coffee, Cookie, Dumbbell, Edit3, Egg, Fish, Flame, Footprints, Gift, Image as ImageIcon, ImagePlus, Inbox, Leaf, Link2, MessageCircle, Milk, Moon, MoreHorizontal, MoreVertical, Nut, Plus, QrCode, RefreshCw, Scale, Search, Send, Share2, Soup, Sprout, Target, Trash2, Undo2, UserPlus, Users, Utensils, WheatOff, X, type LucideIcon } from 'lucide-react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
   buildSaveFoodRecordRequestFromTask,
   getMealTypeLabel,
   inferDefaultMealTypeFromLocalTime,
   type AnalysisTask,
+  type AnalysisEngine,
   type BodyMetricWeightEntry,
   type BodyMetricsSummary,
   type CommunityFeedTargetType,
@@ -33,6 +34,8 @@ import {
   type MembershipStatus,
   type Nutrients,
   type RewardCenterResponse,
+  type RewardCenterTask,
+  type VoucherItem,
 } from '@food-link/core'
 import { apiClient, getRecentRequestTraces, RECENT_REQUEST_TRACE_LIMIT } from '../api'
 import { AppButton } from '../components/AppButton'
@@ -43,9 +46,11 @@ import { IconfontText } from '../components/Iconfont'
 import type { RootStackParamList } from '../navigation/types'
 import { isNativeWechatShareAvailable, shareWebpageToWechat } from '../native/wechatAuth'
 import { useAppDialog } from '../providers/DialogProvider'
+import { useColorScheme } from '../providers/ColorSchemeProvider'
 import { colors } from '../theme'
 import { formatDateTime, formatShortDate, todayKey } from '../utils/date'
 import { userFacingErrorMessage, userFacingMessage } from '../utils/errors'
+import { readImageAsBase64DataUrl } from '../utils/image'
 import {
   emitFoodExpiryChangedEvent,
   emitHomeDashboardRefreshEvent,
@@ -53,6 +58,7 @@ import {
 } from '../utils/home-events'
 import { refreshHomeDashboardLocalSnapshotFromCloud } from '../utils/home-dashboard-local-cache'
 import { markFoodExpiryBadgeSeen, markFriendRequestsBadgeSeen } from '../utils/profileTabBadge'
+import { needsPrecisionUserAction } from '../utils/precisionTask'
 
 const appIcon = require('../../assets/icon.png')
 
@@ -64,7 +70,18 @@ type ViewShotModule = typeof import('react-native-view-shot')
 const notificationPageSize = 20
 const analyzeHistoryPageSize = 20
 const commonTextFoods = ['米饭', '面条', '鸡蛋', '鸡胸肉', '苹果', '香蕉', '牛奶', '面包']
-type TextRecordDietGoal = 'fat_loss' | 'muscle_gain' | 'maintain' | 'none'
+const TEXT_ANALYSIS_ENGINE_STORAGE_KEY = 'mobile_analysis_engine_v1'
+const textAnalysisEngineOptions: Array<{ value: AnalysisEngine; label: string; description: string }> = [
+  { value: 'ai_direct', label: 'AI估算', description: '速度最快，完整理解描述，不套标准食物库' },
+  { value: 'ai_then_db_exact', label: '标准库校准', description: '命中标准食物时，营养和微量元素更稳定' },
+  { value: 'db_candidates_ai', label: '数据库候选', description: 'AI复核候选，复杂食物会更慢一些' },
+]
+
+function normalizeTextAnalysisEngine(value: unknown): AnalysisEngine {
+  if (value === 'ai_direct' || value === 'ai_then_db_exact' || value === 'db_candidates_ai') return value
+  if (value === 'legacy_direct') return 'ai_direct'
+  return 'ai_direct'
+}type TextRecordDietGoal = 'fat_loss' | 'muscle_gain' | 'maintain' | 'none'
 type TextRecordActivityTiming = 'post_workout' | 'daily' | 'before_sleep' | 'none'
 const textRecordMealOptions: Array<{ id: MealType; name: string; iconClass: string }> = [
   { id: 'breakfast', name: '早餐', iconClass: 'icon-zaocan' },
@@ -86,23 +103,26 @@ const textRecordActivityTimingOptions: Array<{ value: TextRecordActivityTiming; 
   { value: 'before_sleep', label: '睡前' },
   { value: 'none', label: '无' },
 ]
-const healthProfileSteps = ['gender', 'age', 'height', 'weight', 'goal', 'activity', 'routine', 'medical', 'diet', 'allergy', 'notes'] as const
+const healthProfileSteps = ['gender', 'age', 'height', 'weight', 'goal', 'activity', 'routine', 'medical', 'diet', 'allergy', 'notes', 'report'] as const
 type HealthProfileStep = (typeof healthProfileSteps)[number]
+const healthMedicalPresetValues = new Set(['diabetes', 'hypertension', 'gout', 'hyperlipidemia', 'thyroid', 'none'])
+const healthAllergyPresetValues = new Set(['seafood', 'peanut', 'milk', 'egg', 'mango', 'alcohol', 'spicy', 'none'])
+const maxHealthReportImageCount = 9
 const healthGenderOptions = [
   { value: 'male', label: '男' },
   { value: 'female', label: '女' },
   { value: 'other', label: '其他' },
 ] as const
 const healthActivityOptions = [
-  { value: 'sedentary', label: '久坐办公', desc: '大部分时间坐着，日常走动少', icon: '🛋️' },
-  { value: 'light', label: '日常走动', desc: '通勤、家务或走路较多', icon: '🚶' },
-  { value: 'moderate', label: '经常站立', desc: '工作中站立、来回走动较多', icon: '🏃' },
-  { value: 'active', label: '体力劳动', desc: '搬运、巡店、户外等体力消耗明显', icon: '💪' },
+  { value: 'sedentary', label: '久坐办公', desc: '大部分时间坐着，日常走动少', icon: Armchair },
+  { value: 'light', label: '日常走动', desc: '通勤、家务或走路较多', icon: Footprints },
+  { value: 'moderate', label: '经常站立', desc: '工作中站立、来回走动较多', icon: BriefcaseBusiness },
+  { value: 'active', label: '体力劳动', desc: '搬运、巡店、户外等体力消耗明显', icon: Dumbbell },
 ] as const
 const healthDietGoalOptions = [
-  { value: 'fat_loss', label: '减重', desc: '健康瘦身', icon: '🔥' },
-  { value: 'maintain', label: '保持', desc: '维持当前体重', icon: '⚖️' },
-  { value: 'muscle_gain', label: '增重', desc: '增加肌肉/体重', icon: '💪' },
+  { value: 'fat_loss', label: '减重', desc: '健康瘦身', icon: Flame },
+  { value: 'maintain', label: '保持', desc: '维持当前体重', icon: Scale },
+  { value: 'muscle_gain', label: '增重', desc: '增加肌肉/体重', icon: Dumbbell },
 ] as const
 const healthMedicalOptions = [
   { value: 'diabetes', label: '糖尿病' },
@@ -113,22 +133,22 @@ const healthMedicalOptions = [
   { value: 'none', label: '无' },
 ] as const
 const healthDietPreferenceOptions = [
-  { value: 'keto', label: '生酮', icon: '🥑' },
-  { value: 'vegetarian', label: '素食', icon: '🥬' },
-  { value: 'vegan', label: '纯素', icon: '🌱' },
-  { value: 'low_salt', label: '低盐', icon: '🧂' },
-  { value: 'gluten_free', label: '无麸质', icon: '🌾' },
-  { value: 'none', label: '无', icon: '✨' },
+  { value: 'keto', label: '生酮', icon: Flame },
+  { value: 'vegetarian', label: '素食', icon: Leaf },
+  { value: 'vegan', label: '纯素', icon: Sprout },
+  { value: 'low_salt', label: '低盐', icon: Soup },
+  { value: 'gluten_free', label: '无麸质', icon: WheatOff },
+  { value: 'none', label: '无', icon: Check },
 ] as const
 const healthAllergyOptions = [
-  { value: 'seafood', label: '海鲜', icon: '🦐' },
-  { value: 'peanut', label: '花生', icon: '🥜' },
-  { value: 'milk', label: '牛奶', icon: '🥛' },
-  { value: 'egg', label: '鸡蛋', icon: '🥚' },
-  { value: 'mango', label: '芒果', icon: '🥭' },
-  { value: 'alcohol', label: '酒精', icon: '🍺' },
-  { value: 'spicy', label: '辣', icon: '🌶️' },
-  { value: 'none', label: '无', icon: '' },
+  { value: 'seafood', label: '海鲜', icon: Fish },
+  { value: 'peanut', label: '花生', icon: Nut },
+  { value: 'milk', label: '牛奶', icon: Milk },
+  { value: 'egg', label: '鸡蛋', icon: Egg },
+  { value: 'mango', label: '芒果', icon: Apple },
+  { value: 'alcohol', label: '酒精', icon: Coffee },
+  { value: 'spicy', label: '辣', icon: Flame },
+  { value: 'none', label: '无', icon: Check },
 ] as const
 const expiryStorageOptions = [
   { value: 'refrigerated', label: '冷藏' },
@@ -142,6 +162,36 @@ function dateKeyFromDateTime(value?: string | null): string | undefined {
 }
 const waterPresets = [150, 250, 350, 500]
 const exercisePresets = ['跑步30分钟', '游泳45分钟', '瑜伽1小时', '骑车20分钟', '健身40分钟', '跳绳15分钟', '散步45分钟', 'HIIT20分钟']
+type ExerciseEstimationMode = 'standard' | 'precision'
+type ExerciseIntensity = 'low' | 'moderate' | 'high'
+type ExercisePrecisionTouched = Record<'duration' | 'heartRate' | 'distance', boolean>
+
+const exerciseIntensityOptions: Array<{ value: ExerciseIntensity; label: string }> = [
+  { value: 'low', label: '轻松' },
+  { value: 'moderate', label: '中等' },
+  { value: 'high', label: '吃力' },
+]
+
+function exerciseDurationError(value: string): string {
+  const duration = Number(value)
+  if (!value.trim()) return '请填写整次训练的总时长'
+  if (!Number.isFinite(duration) || duration < 1 || duration > 480) return '总时长应在 1–480 分钟之间'
+  return ''
+}
+
+function exerciseHeartRateError(value: string): string {
+  if (!value.trim()) return ''
+  const heartRate = Number(value)
+  if (!Number.isFinite(heartRate) || heartRate < 30 || heartRate > 250) return '平均心率应在 30–250 次/分之间'
+  return ''
+}
+
+function exerciseDistanceError(value: string): string {
+  if (!value.trim()) return ''
+  const distance = Number(value)
+  if (!Number.isFinite(distance) || distance <= 0 || distance > 1000) return '距离应大于 0 且不超过 1000 公里'
+  return ''
+}
 const CIRCLE_POST_MAX_IMAGES = 3
 const CIRCLE_POST_TITLE_MAX_LENGTH = 120
 const CIRCLE_POST_BODY_MAX_LENGTH = 2000
@@ -654,7 +704,7 @@ function FoodRecordPosterModal({
                     <Text style={styles.foodPosterFooterTitle} numberOfLines={1}>
                       {posterProfile?.nickname ? `${posterProfile.nickname} 的饮食分享` : '智健食探'}
                     </Text>
-                    <Text style={styles.foodPosterFooterHint} numberOfLines={1}>扫码注册食探，达标后各得15积分</Text>
+                    <Text style={styles.foodPosterFooterHint} numberOfLines={1}>扫码注册食探，达标双方得会员</Text>
                   </View>
                   <RecordShareQrCode value={share?.shareUrl || ''} />
                 </View>
@@ -818,12 +868,67 @@ const defaultExpireDate = () => {
   return todayKey(nextWeek)
 }
 
+type DayRecordPalette = {
+  page: string
+  wash: string
+  surface: string
+  surfaceAlt: string
+  border: string
+  text: string
+  secondary: string
+  muted: string
+  subtle: string
+  accent: string
+  accentSoft: string
+  danger: string
+  dangerSoft: string
+  placeholder: string
+  shadow: string
+}
+
 export function DayRecordScreen() {
   const route = useRoute<RouteProp<RootStackParamList, 'DayRecord'>>()
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const dialog = useAppDialog()
   const insets = useSafeAreaInsets()
+  const { isDark } = useColorScheme()
+  const { width: viewportWidth } = useWindowDimensions()
   const date = route.params?.date || todayKey()
+  const dayPalette: DayRecordPalette = isDark
+    ? {
+      page: '#0d1312',
+      wash: '#111d19',
+      surface: '#181f1d',
+      surfaceAlt: '#202a27',
+      border: 'rgba(148, 163, 184, 0.17)',
+      text: '#f2f7f4',
+      secondary: '#c7d2ce',
+      muted: '#9aaba4',
+      subtle: '#7d8d87',
+      accent: '#7dd3b0',
+      accentSoft: '#15372d',
+      danger: '#fda4af',
+      dangerSoft: '#40242a',
+      placeholder: '#202a27',
+      shadow: '#000000',
+    }
+    : {
+      page: '#ffffff',
+      wash: '#f6fbf8',
+      surface: '#ffffff',
+      surfaceAlt: '#f8fafc',
+      border: '#e8edf2',
+      text: '#0f172a',
+      secondary: '#475569',
+      muted: '#64748b',
+      subtle: '#94a3b8',
+      accent: colors.brand,
+      accentSoft: 'rgba(0, 188, 125, 0.10)',
+      danger: '#dc2626',
+      dangerSoft: '#fee2e2',
+      placeholder: '#f1f5f9',
+      shadow: '#0f172a',
+    }
   const [records, setRecords] = useState<FoodRecord[]>([])
   const [targetCalories, setTargetCalories] = useState(2000)
   const [homeDashboard, setHomeDashboard] = useState<HomeDashboard | null>(null)
@@ -833,6 +938,9 @@ export function DayRecordScreen() {
   const [dailyPosterImageUri, setDailyPosterImageUri] = useState('')
   const [dailyPosterCapturing, setDailyPosterCapturing] = useState(false)
   const [dailyPosterBusyAction, setDailyPosterBusyAction] = useState<'share' | 'save' | null>(null)
+  const [previewImages, setPreviewImages] = useState<string[]>([])
+  const [previewImageIndex, setPreviewImageIndex] = useState(0)
+  const [imagePreviewVisible, setImagePreviewVisible] = useState(false)
   const dailyPosterRef = useRef<View>(null)
   const [errorMessage, setErrorMessage] = useState('')
   const [loading, setLoading] = useState(false)
@@ -1062,61 +1170,85 @@ export function DayRecordScreen() {
   }
 
   return (
-    <View style={styles.dayRecordPage}>
-      <View style={styles.dayRecordTopWash} />
+    <View style={[styles.dayRecordPage, { backgroundColor: dayPalette.page }]}>
+      <View style={[styles.dayRecordTopWash, { backgroundColor: dayPalette.wash }]} />
       <ScrollView
         style={styles.dayRecordScroll}
-        contentContainerStyle={[styles.dayRecordContent, { paddingTop: Math.max(insets.top, 0) + 16, paddingBottom: Math.max(insets.bottom, 0) + 28 }]}
-        refreshControl={<RefreshControl refreshing={loading && records.length > 0} onRefresh={load} tintColor={colors.brand} colors={[colors.brand]} />}
+        contentContainerStyle={[styles.dayRecordContent, { paddingTop: 16, paddingBottom: Math.max(insets.bottom, 0) + 28 }]}
+        refreshControl={<RefreshControl refreshing={loading && records.length > 0} onRefresh={load} tintColor={dayPalette.accent} colors={[colors.brand]} />}
       >
         <View style={styles.dayRecordTop}>
-          <Text style={styles.dayRecordDateLine}>{formatDayRecordDate(date)}</Text>
+          <Text style={[styles.dayRecordDateLine, { color: dayPalette.text }]}>{formatDayRecordDate(date)}</Text>
           {records.length > 0 ? (
-            <Pressable style={styles.dayRecordShareButton} onPress={() => void openDailyPoster()}>
-              <Text style={styles.dayRecordShareIcon}>↗</Text>
-              <Text style={styles.dayRecordShareText}>分享今日饮食</Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="分享今日饮食"
+              style={({ pressed }) => [
+                styles.dayRecordShareButton,
+                { backgroundColor: dayPalette.surface, borderColor: dayPalette.border, shadowColor: dayPalette.shadow },
+                pressed && styles.dayRecordPressed,
+              ]}
+              onPress={() => void openDailyPoster()}
+            >
+              <Share2 size={17} color={dayPalette.accent} strokeWidth={2.2} />
+              <Text style={[styles.dayRecordShareText, { color: dayPalette.accent }]}>分享今日饮食</Text>
             </Pressable>
           ) : null}
         </View>
 
-        <View style={styles.dayRecordSummary}>
-          <View style={styles.dayRecordSummaryCard}>
-            <Text style={styles.dayRecordSummaryLabel}>总摄入</Text>
-            <Text style={styles.dayRecordSummaryValue}>{formatDisplayNumber(totalKcal)} kcal</Text>
+        <View style={styles.dayRecordSummary} accessibilityLabel={'总摄入 ' + formatDisplayNumber(totalKcal) + ' 千卡，目标 ' + formatDisplayNumber(targetCalories) + ' 千卡，记录 ' + records.length + ' 条'}>
+          <View style={[styles.dayRecordSummaryCard, { backgroundColor: dayPalette.surface, borderColor: dayPalette.border, shadowColor: dayPalette.shadow }]}>
+            <Text style={[styles.dayRecordSummaryLabel, { color: dayPalette.subtle }]}>总摄入</Text>
+            <Text style={[styles.dayRecordSummaryValue, { color: dayPalette.text }]}>{formatDisplayNumber(totalKcal)} kcal</Text>
           </View>
-          <View style={styles.dayRecordSummaryCard}>
-            <Text style={styles.dayRecordSummaryLabel}>目标</Text>
-            <Text style={styles.dayRecordSummaryValue}>{formatDisplayNumber(targetCalories)} kcal</Text>
+          <View style={[styles.dayRecordSummaryCard, { backgroundColor: dayPalette.surface, borderColor: dayPalette.border, shadowColor: dayPalette.shadow }]}>
+            <Text style={[styles.dayRecordSummaryLabel, { color: dayPalette.subtle }]}>目标</Text>
+            <Text style={[styles.dayRecordSummaryValue, { color: dayPalette.text }]}>{formatDisplayNumber(targetCalories)} kcal</Text>
           </View>
-          <View style={styles.dayRecordSummaryCard}>
-            <Text style={styles.dayRecordSummaryLabel}>记录数</Text>
-            <Text style={styles.dayRecordSummaryValue}>{records.length} 条</Text>
+          <View style={[styles.dayRecordSummaryCard, { backgroundColor: dayPalette.surface, borderColor: dayPalette.border, shadowColor: dayPalette.shadow }]}>
+            <Text style={[styles.dayRecordSummaryLabel, { color: dayPalette.subtle }]}>记录数</Text>
+            <Text style={[styles.dayRecordSummaryValue, { color: dayPalette.text }]}>{records.length} 条</Text>
           </View>
         </View>
 
         {initialLoading ? (
           <View style={styles.dayRecordState}>
-            <ActivityIndicator color={colors.brand} size="small" />
+            <ActivityIndicator color={dayPalette.accent} size="small" />
           </View>
         ) : null}
 
         {!initialLoading && errorMessage ? (
           <View style={styles.dayRecordEmpty}>
-            <View style={styles.dayRecordEmptyIcon}>
-              <Text style={styles.dayRecordEmptyIconText}>!</Text>
+            <View style={[styles.dayRecordEmptyIcon, { backgroundColor: dayPalette.surface, borderColor: dayPalette.border }]}>
+              <CircleAlert size={32} color={dayPalette.danger} strokeWidth={1.9} />
             </View>
-            <Text style={styles.dayRecordEmptyTitle}>{errorMessage}</Text>
+            <Text style={[styles.dayRecordEmptyTitle, { color: dayPalette.text }]}>{errorMessage}</Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="重新加载当天饮食记录"
+              style={({ pressed }) => [styles.dayRecordRetryButton, { backgroundColor: dayPalette.accentSoft }, pressed && styles.dayRecordPressed]}
+              onPress={() => void load()}
+            >
+              <RefreshCw size={17} color={dayPalette.accent} strokeWidth={2.2} />
+              <Text style={[styles.dayRecordRetryText, { color: dayPalette.accent }]}>重新加载</Text>
+            </Pressable>
           </View>
         ) : null}
 
         {!initialLoading && !errorMessage && records.length === 0 ? (
           <View style={styles.dayRecordEmpty}>
-            <View style={styles.dayRecordEmptyIcon}>
-              <IconfontText className="iconfont icon-shiwu" size={32} color={colors.brand} />
+            <View style={[styles.dayRecordEmptyIcon, { backgroundColor: dayPalette.surface, borderColor: dayPalette.border }]}>
+              <Utensils size={32} color={dayPalette.accent} strokeWidth={1.9} />
             </View>
-            <Text style={styles.dayRecordEmptyTitle}>这一天还没有饮食记录</Text>
-            <Text style={styles.dayRecordEmptyDesc}>通过首页记录弹窗拍照或文字录入后，这里就会展示当天明细。</Text>
-            <Pressable style={styles.dayRecordEmptyButton} onPress={() => navigation.navigate('ManualRecord', { date })}>
+            <Text style={[styles.dayRecordEmptyTitle, { color: dayPalette.text }]}>这一天还没有饮食记录</Text>
+            <Text style={[styles.dayRecordEmptyDesc, { color: dayPalette.muted }]}>通过首页记录弹窗拍照或文字录入后，这里就会展示当天明细。</Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="去记录一餐"
+              style={({ pressed }) => [styles.dayRecordEmptyButton, pressed && styles.dayRecordPressed]}
+              onPress={() => navigation.navigate('ManualRecord', { date })}
+            >
+              <Plus size={18} color="#ffffff" strokeWidth={2.4} />
               <Text style={styles.dayRecordEmptyButtonText}>去记录</Text>
             </Pressable>
           </View>
@@ -1126,15 +1258,36 @@ export function DayRecordScreen() {
           <View style={styles.dayRecordList}>
             {dayCards.map(({ record, imageUrls, foods }) => {
               const mealTone = mealToneStyles(record.meal_type)
+              const mealVisual = recordMealVisual(record.meal_type)
+              const MealIcon = mealVisual.Icon
+              const openDetail = () => navigation.navigate('RecordDetail', { recordId: record.id })
               return (
-                <Pressable key={record.id} style={({ pressed }) => [styles.dayRecordCard, pressed && styles.dayRecordCardPressed]} onPress={() => navigation.navigate('RecordDetail', { recordId: record.id })}>
-                  <View style={styles.dayRecordCardHeader}>
+                <View key={record.id} style={[styles.dayRecordCard, { backgroundColor: dayPalette.surface, borderColor: dayPalette.border, shadowColor: dayPalette.shadow }]}>
+                  <View style={[styles.dayRecordCardHeader, { borderBottomColor: dayPalette.border }]}>
                     <View style={styles.dayRecordCardMain}>
-                      <View style={[styles.dayRecordThumb, imageUrls.length === 0 && styles.dayRecordThumbPlaceholder]}>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={imageUrls.length ? '预览' + getMealTypeLabel(record.meal_type) + '餐食照片，共' + imageUrls.length + '张' : '打开' + getMealTypeLabel(record.meal_type) + '记录详情'}
+                        style={({ pressed }) => [
+                          styles.dayRecordThumb,
+                          { backgroundColor: dayPalette.placeholder, borderColor: dayPalette.border },
+                          imageUrls.length === 0 && styles.dayRecordThumbPlaceholder,
+                          pressed && styles.dayRecordPressed,
+                        ]}
+                        onPress={() => {
+                          if (!imageUrls.length) {
+                            openDetail()
+                            return
+                          }
+                          setPreviewImages(imageUrls)
+                          setPreviewImageIndex(0)
+                          setImagePreviewVisible(true)
+                        }}
+                      >
                         {imageUrls[0] ? (
-                          <Image source={{ uri: imageUrls[0] }} style={styles.dayRecordThumbImage} resizeMode="cover" />
+                          <Image source={{ uri: imageUrls[0] }} style={styles.dayRecordThumbImage} resizeMode="cover" accessibilityLabel={getMealTypeLabel(record.meal_type) + '餐食照片'} />
                         ) : (
-                          <IconfontText className="iconfont icon-shiwu" size={26} color={colors.brand} />
+                          <ImageIcon size={25} color={dayPalette.accent} strokeWidth={1.9} />
                         )}
                         {imageUrls.length === 0 ? (
                           <View style={[styles.dayRecordThumbBadge, styles.dayRecordThumbBadgePlaceholder]}>
@@ -1145,78 +1298,149 @@ export function DayRecordScreen() {
                             <Text style={styles.dayRecordThumbBadgeText}>{imageUrls.length} 张</Text>
                           </View>
                         ) : null}
-                      </View>
-                      <View style={[styles.dayRecordMealIcon, mealTone.icon]}>
-                        <Text style={[styles.dayRecordMealIconText, mealTone.text]}>{manualMealIcons[record.meal_type] || '食'}</Text>
-                      </View>
-                      <View style={styles.dayRecordCardCopy}>
-                        <Text style={styles.dayRecordCardName}>{getMealTypeLabel(record.meal_type)}</Text>
-                        <Text style={styles.dayRecordCardTime}>{formatRecordClock(record.record_time)}</Text>
-                      </View>
+                      </Pressable>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={getMealTypeLabel(record.meal_type) + '，' + formatRecordClock(record.record_time) + '，查看记录详情'}
+                        style={({ pressed }) => [styles.dayRecordCardIdentity, pressed && styles.dayRecordPressed]}
+                        onPress={openDetail}
+                      >
+                        <View style={[styles.dayRecordMealIcon, mealTone.icon]}>
+                          <MealIcon size={17} color={mealVisual.color} strokeWidth={2.25} />
+                        </View>
+                        <View style={styles.dayRecordCardCopy}>
+                          <Text style={[styles.dayRecordCardName, { color: dayPalette.text }]}>{getMealTypeLabel(record.meal_type)}</Text>
+                          <Text style={[styles.dayRecordCardTime, { color: dayPalette.muted }]}>{formatRecordClock(record.record_time)}</Text>
+                        </View>
+                      </Pressable>
                     </View>
                     <View style={styles.dayRecordCardActions}>
-                      <Text style={styles.dayRecordCardCalorie}>{formatDisplayNumber(record.total_calories || 0)} kcal</Text>
+                      <Text style={[styles.dayRecordCardCalorie, { color: dayPalette.text }]}>{formatDisplayNumber(record.total_calories || 0)} kcal</Text>
                       <Pressable
-                        hitSlop={8}
-                        style={styles.dayRecordDeleteButton}
-                        onPress={(event) => {
-                          event.stopPropagation()
-                          void removeRecord(record.id)
-                        }}
+                        accessibilityRole="button"
+                        accessibilityLabel={'删除' + getMealTypeLabel(record.meal_type) + '记录'}
+                        hitSlop={4}
+                        style={({ pressed }) => [
+                          styles.dayRecordDeleteButton,
+                          { backgroundColor: pressed ? dayPalette.dangerSoft : dayPalette.surfaceAlt, borderColor: dayPalette.border },
+                        ]}
+                        onPress={() => void removeRecord(record.id)}
                       >
-                        <Trash2 size={17} color="#94a3b8" strokeWidth={2.1} />
+                        <Trash2 size={18} color={dayPalette.danger} strokeWidth={2.1} />
                       </Pressable>
                     </View>
                   </View>
 
                   <View style={styles.dayRecordFoodList}>
                     {foods.map((food, index) => (
-                      <View key={`${record.id}-${food.name}-${index}`} style={styles.dayRecordFoodItem}>
-                        <View style={styles.dayRecordFoodMain}>
-                          <Text style={styles.dayRecordFoodName} numberOfLines={1}>{food.name}</Text>
-                          <Text style={styles.dayRecordFoodAmount}>{formatDisplayNumber(food.intake)}g</Text>
-                          <Text style={styles.dayRecordFoodRatio}>{formatDisplayNumber(food.ratio)}%</Text>
-                        </View>
-                        <View style={styles.dayRecordFoodSide}>
-                          <Text style={styles.dayRecordFoodCalorie}>{formatDisplayNumber(food.calories)} kcal</Text>
-                          <Pressable
-                            hitSlop={8}
-                            style={styles.dayRecordFoodDelete}
-                            onPress={(event) => {
-                              event.stopPropagation()
-                              void removeFoodItem(record, index)
-                            }}
-                          >
-                            <Trash2 size={14} color="#94a3b8" strokeWidth={2.1} />
-                          </Pressable>
-                        </View>
-                        <View style={styles.dayRecordFoodMacros}>
-                          <Text style={styles.dayRecordFoodMacro}>蛋白质 <Text style={styles.dayRecordFoodProtein}>{Math.round(food.protein)}g</Text></Text>
-                          <Text style={styles.dayRecordFoodMacro}>碳水 <Text style={styles.dayRecordFoodCarbs}>{Math.round(food.carbs)}g</Text></Text>
-                          <Text style={styles.dayRecordFoodMacro}>脂肪 <Text style={styles.dayRecordFoodFat}>{Math.round(food.fat)}g</Text></Text>
-                        </View>
+                      <View key={record.id + '-' + food.name + '-' + index} style={[styles.dayRecordFoodItem, { borderBottomColor: dayPalette.border }]}>
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={food.name + '，' + formatDisplayNumber(food.intake) + '克，' + formatDisplayNumber(food.calories) + '千卡，查看记录详情'}
+                          style={({ pressed }) => [styles.dayRecordFoodContent, pressed && styles.dayRecordPressed]}
+                          onPress={openDetail}
+                        >
+                          <View style={styles.dayRecordFoodMain}>
+                            <Text style={[styles.dayRecordFoodName, { color: dayPalette.secondary }]} numberOfLines={2}>{food.name}</Text>
+                            <Text style={[styles.dayRecordFoodAmount, { color: dayPalette.muted, backgroundColor: dayPalette.surfaceAlt }]}>{formatDisplayNumber(food.intake)}g</Text>
+                            <Text style={[styles.dayRecordFoodRatio, { color: dayPalette.muted, backgroundColor: dayPalette.surfaceAlt }]}>{formatDisplayNumber(food.ratio)}%</Text>
+                          </View>
+                          <View style={styles.dayRecordFoodSide}>
+                            <Text style={[styles.dayRecordFoodCalorie, { color: dayPalette.secondary }]}>{formatDisplayNumber(food.calories)} kcal</Text>
+                          </View>
+                          <View style={styles.dayRecordFoodMacros}>
+                            <Text style={[styles.dayRecordFoodMacro, { color: dayPalette.secondary }]}>蛋白质 <Text style={styles.dayRecordFoodProtein}>{Math.round(food.protein)}g</Text></Text>
+                            <Text style={[styles.dayRecordFoodMacro, { color: dayPalette.secondary }]}>碳水 <Text style={styles.dayRecordFoodCarbs}>{Math.round(food.carbs)}g</Text></Text>
+                            <Text style={[styles.dayRecordFoodMacro, { color: dayPalette.secondary }]}>脂肪 <Text style={styles.dayRecordFoodFat}>{Math.round(food.fat)}g</Text></Text>
+                          </View>
+                        </Pressable>
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={'删除食物' + food.name}
+                          hitSlop={4}
+                          style={({ pressed }) => [
+                            styles.dayRecordFoodDelete,
+                            { backgroundColor: pressed ? dayPalette.dangerSoft : dayPalette.surfaceAlt, borderColor: dayPalette.border },
+                          ]}
+                          onPress={() => void removeFoodItem(record, index)}
+                        >
+                          <Trash2 size={17} color={dayPalette.danger} strokeWidth={2.1} />
+                        </Pressable>
                       </View>
                     ))}
                   </View>
-                </Pressable>
+                </View>
               )
             })}
           </View>
         ) : null}
-
-        {records.length > 0 ? (
-          <View style={styles.dayRecordMacroFooter}>
-            <Text style={styles.dayRecordMacroFooterText}>
-              蛋白质 {formatDisplayNumber(totalProtein)}g · 碳水 {formatDisplayNumber(totalCarbs)}g · 脂肪 {formatDisplayNumber(totalFat)}g
-            </Text>
-          </View>
-        ) : null}
       </ScrollView>
+
+      <Modal visible={imagePreviewVisible && previewImages.length > 0} animationType="fade" onRequestClose={() => setImagePreviewVisible(false)}>
+        <View style={styles.recordImagePreviewRoot}>
+          <ScrollView
+            key={'day-record-preview-' + previewImageIndex}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            contentOffset={{ x: previewImageIndex * viewportWidth, y: 0 }}
+            onMomentumScrollEnd={(event) => {
+              const nextIndex = Math.round(event.nativeEvent.contentOffset.x / viewportWidth)
+              setPreviewImageIndex(Math.max(0, Math.min(previewImages.length - 1, nextIndex)))
+            }}
+          >
+            {previewImages.map((uri, index) => (
+              <View key={uri + '-day-preview-' + index} style={[styles.recordImagePreviewPage, { width: viewportWidth }]}>
+                <Image source={{ uri }} style={styles.recordImagePreviewImage} resizeMode="contain" accessibilityLabel={'第 ' + (index + 1) + ' 张餐食照片，全屏预览'} />
+              </View>
+            ))}
+          </ScrollView>
+          <View style={[styles.recordImagePreviewTop, { paddingTop: Math.max(insets.top, 12) }]} pointerEvents="box-none">
+            <Text style={styles.recordImagePreviewCount}>{previewImageIndex + 1}/{previewImages.length}</Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="关闭图片预览"
+              hitSlop={8}
+              style={({ pressed }) => [styles.recordImagePreviewClose, pressed && styles.recordImagePreviewPressed]}
+              onPress={() => setImagePreviewVisible(false)}
+            >
+              <X size={24} color="#ffffff" strokeWidth={2.3} />
+            </Pressable>
+          </View>
+          {previewImages.length > 1 ? (
+            <View style={styles.recordImagePreviewNavigation} pointerEvents="box-none">
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="上一张照片"
+                accessibilityState={{ disabled: previewImageIndex === 0 }}
+                disabled={previewImageIndex === 0}
+                style={({ pressed }) => [styles.recordImagePreviewNavButton, previewImageIndex === 0 && styles.recordImagePreviewNavDisabled, pressed && styles.recordImagePreviewPressed]}
+                onPress={() => setPreviewImageIndex((index) => Math.max(0, index - 1))}
+              >
+                <ChevronLeft size={27} color="#ffffff" strokeWidth={2.2} />
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="下一张照片"
+                accessibilityState={{ disabled: previewImageIndex === previewImages.length - 1 }}
+                disabled={previewImageIndex === previewImages.length - 1}
+                style={({ pressed }) => [styles.recordImagePreviewNavButton, previewImageIndex === previewImages.length - 1 && styles.recordImagePreviewNavDisabled, pressed && styles.recordImagePreviewPressed]}
+                onPress={() => setPreviewImageIndex((index) => Math.min(previewImages.length - 1, index + 1))}
+              >
+                <ChevronRight size={27} color="#ffffff" strokeWidth={2.2} />
+              </Pressable>
+            </View>
+          ) : null}
+        </View>
+      </Modal>
+
       <DailySummaryPosterModal
         visible={dailyPosterVisible}
         data={dailyPosterData}
         posterRef={dailyPosterRef}
+        topInset={insets.top}
         bottomInset={insets.bottom}
+        isDark={isDark}
         capturing={dailyPosterCapturing}
         busyAction={dailyPosterBusyAction}
         onClose={() => {
@@ -1233,7 +1457,9 @@ function DailySummaryPosterModal({
   visible,
   data,
   posterRef,
+  topInset,
   bottomInset,
+  isDark,
   capturing,
   busyAction,
   onClose,
@@ -1243,7 +1469,9 @@ function DailySummaryPosterModal({
   visible: boolean
   data: DailySummaryPosterData
   posterRef: RefObject<View | null>
+  topInset: number
   bottomInset: number
+  isDark: boolean
   capturing: boolean
   busyAction: 'share' | 'save' | null
   onClose: () => void
@@ -1251,31 +1479,79 @@ function DailySummaryPosterModal({
   onSave: () => void
 }) {
   const busy = capturing || Boolean(busyAction)
+  const headerSurface = isDark ? '#111827' : '#ffffff'
+  const headerText = isDark ? '#f8fafc' : '#111827'
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+    <Modal visible={visible} animationType="fade" statusBarTranslucent onRequestClose={onClose}>
       <View style={styles.dailyPosterBackdrop}>
-        <View style={[styles.dailyPosterSheet, { paddingBottom: Math.max(bottomInset, 14) + 14 }]}>
-          <View style={styles.dailyPosterHeader}>
-            <Text style={styles.dailyPosterHeaderTitle}>分享今日卡片</Text>
-            <Pressable hitSlop={10} style={styles.foodShareCloseButton} disabled={busy} onPress={onClose}>
-              <X size={22} color="#374151" strokeWidth={2.4} />
-            </Pressable>
+        <View style={styles.dailyPosterSheet}>
+          <View style={[styles.dailyPosterHeader, { paddingTop: Math.max(topInset, 12), backgroundColor: headerSurface }]}>
+            <Text style={[styles.dailyPosterHeaderTitle, { color: headerText }]}>分享饮食记录</Text>
           </View>
-          <ScrollView style={styles.dailyPosterScroll} contentContainerStyle={styles.dailyPosterScrollContent} showsVerticalScrollIndicator={false}>
-            <DailySummaryPoster ref={posterRef} data={data} />
-          </ScrollView>
-          <View style={styles.dailyPosterActions}>
-            <Pressable disabled={busy} style={[styles.dailyPosterPrimaryAction, busy && styles.foodShareActionDisabled]} onPress={onShare}>
-              {capturing || busyAction === 'share' ? <ActivityIndicator size="small" color="#ffffff" /> : <><Share2 size={18} color="#ffffff" strokeWidth={2.4} /><Text style={styles.dailyPosterPrimaryActionText}>分享图片</Text></>}
-            </Pressable>
-            <Pressable disabled={busy} style={[styles.dailyPosterSecondaryAction, busy && styles.foodShareActionDisabled]} onPress={onSave}>
-              {capturing || busyAction === 'save' ? <ActivityIndicator size="small" color={colors.brand} /> : <><IconfontText className="iconfont icon-download" size={18} color={colors.brandDark} /><Text style={styles.dailyPosterSecondaryActionText}>保存图片</Text></>}
-            </Pressable>
+          <View style={styles.dailyPosterBody}>
+            <View style={styles.dailyPosterCloseRow}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="关闭分享饮食记录"
+                accessibilityState={{ disabled: busy }}
+                disabled={busy}
+                style={({ pressed }) => [styles.dailyPosterCloseButton, pressed && styles.dailyPosterPressed]}
+                onPress={onClose}
+              >
+                <X size={27} color="#ffffff" strokeWidth={2.1} />
+              </Pressable>
+            </View>
+            <ScrollView style={styles.dailyPosterScroll} contentContainerStyle={styles.dailyPosterScrollContent} showsVerticalScrollIndicator={false}>
+              <View style={styles.dailyPosterCardWrap}>
+                <DailySummaryPoster ref={posterRef} data={data} />
+              </View>
+            </ScrollView>
+            <View style={[styles.dailyPosterActions, { paddingBottom: Math.max(bottomInset, 14) + 14 }]}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="分享今日饮食图片"
+                accessibilityState={{ disabled: busy, busy: capturing || busyAction === 'share' }}
+                disabled={busy}
+                style={({ pressed }) => [styles.dailyPosterChannel, pressed && styles.dailyPosterPressed, busy && styles.foodShareActionDisabled]}
+                onPress={onShare}
+              >
+                <View style={[styles.dailyPosterChannelIcon, styles.dailyPosterShareChannelIcon]}>
+                  {capturing || busyAction === 'share' ? <ActivityIndicator size="small" color="#ffffff" /> : <Share2 size={25} color="#ffffff" strokeWidth={2.3} />}
+                </View>
+                <Text style={styles.dailyPosterChannelLabel}>分享</Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="保存今日饮食图片"
+                accessibilityState={{ disabled: busy, busy: capturing || busyAction === 'save' }}
+                disabled={busy}
+                style={({ pressed }) => [styles.dailyPosterChannel, pressed && styles.dailyPosterPressed, busy && styles.foodShareActionDisabled]}
+                onPress={onSave}
+              >
+                <View style={[styles.dailyPosterChannelIcon, styles.dailyPosterSaveChannelIcon]}>
+                  {capturing || busyAction === 'save' ? <ActivityIndicator size="small" color="#ffffff" /> : <IconfontText className="iconfont icon-download" size={24} color="#ffffff" />}
+                </View>
+                <Text style={styles.dailyPosterChannelLabel}>保存图片</Text>
+              </Pressable>
+            </View>
           </View>
         </View>
       </View>
     </Modal>
   )
+}
+type RecordDetailPalette = {
+  page: string
+  surface: string
+  surfaceAlt: string
+  border: string
+  text: string
+  secondary: string
+  muted: string
+  placeholder: string
+  accentSoft: string
+  input: string
+  dangerSoft: string
 }
 
 export function RecordDetailScreen() {
@@ -1283,6 +1559,8 @@ export function RecordDetailScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const dialog = useAppDialog()
   const insets = useSafeAreaInsets()
+  const { isDark } = useColorScheme()
+  const { width: viewportWidth } = useWindowDimensions()
   const { shareFoodRecord, shareSheet } = useFoodRecordShareSheet(dialog)
   const [record, setRecord] = useState<FoodRecord | null>(null)
   const [loading, setLoading] = useState(false)
@@ -1292,7 +1570,38 @@ export function RecordDetailScreen() {
   const [editDescription, setEditDescription] = useState('')
   const [editItems, setEditItems] = useState<EditableRecordItem[]>([])
   const [expandedNutrients, setExpandedNutrients] = useState<Record<string, boolean>>({})
+  const [currentImageIndex, setCurrentImageIndex] = useState(0)
+  const [previewImageIndex, setPreviewImageIndex] = useState(0)
+  const [imagePreviewVisible, setImagePreviewVisible] = useState(false)
   const handledInitialActionRef = useRef('')
+  const heroWidth = Math.max(280, viewportWidth - 40)
+  const recordPalette: RecordDetailPalette = isDark
+    ? {
+      page: '#0d1312',
+      surface: '#181f1d',
+      surfaceAlt: '#202a27',
+      border: 'rgba(148, 163, 184, 0.18)',
+      text: '#f2f7f4',
+      secondary: '#aab8b2',
+      muted: '#82918a',
+      placeholder: '#163328',
+      accentSoft: '#17392f',
+      input: '#111a18',
+      dangerSoft: '#3b2023',
+    }
+    : {
+      page: '#f9fafb',
+      surface: '#ffffff',
+      surfaceAlt: '#f8fafc',
+      border: '#e5e7eb',
+      text: '#1e293b',
+      secondary: '#475569',
+      muted: '#64748b',
+      placeholder: '#d1fae5',
+      accentSoft: '#ecfdf5',
+      input: '#ffffff',
+      dangerSoft: '#fef2f2',
+    }
 
   const syncEditor = useCallback((next: FoodRecord) => {
     setEditMealType(next.meal_type)
@@ -1321,9 +1630,18 @@ export function RecordDetailScreen() {
 
   const imageUrls = recordImageUrls(record)
   const editTotals = useMemo(() => summarizeEditableRecordItems(editItems), [editItems])
-  const mealTone = record ? mealToneStyles(record.meal_type) : null
   const contextTags = record ? recordContextTags(record) : []
   const detailBlocks = record ? recordDetailBlocks(record) : []
+  const totalFiber = record ? recordNutrientTotal(record.items || [], 'fiber') : 0
+  const totalSugar = record ? recordNutrientTotal(record.items || [], 'sugar') : 0
+  const mealVisual = record ? recordMealVisual(record.meal_type) : { Icon: Utensils, color: colors.brand }
+  const MealIcon = mealVisual.Icon
+
+  useEffect(() => {
+    setCurrentImageIndex(0)
+    setPreviewImageIndex(0)
+    setImagePreviewVisible(false)
+  }, [record?.id])
 
   const shareRecord = async () => {
     if (!record) return
@@ -1433,53 +1751,86 @@ export function RecordDetailScreen() {
   }, [loading, navigation, record, route.params.initialAction, route.params.recordId])
 
   return (
-    <View style={styles.recordDetailRoot}>
+    <View style={[styles.recordDetailRoot, { backgroundColor: recordPalette.page }]}>
       <ScrollView
-        style={styles.recordDetailScroll}
+        style={[styles.recordDetailScroll, { backgroundColor: recordPalette.page }]}
         contentContainerStyle={[styles.recordDetailContent, { paddingTop: Math.max(insets.top, 0) + 16, paddingBottom: Math.max(insets.bottom, 0) + 36 }]}
-        refreshControl={<RefreshControl refreshing={loading && !!record} onRefresh={load} tintColor={colors.brand} colors={[colors.brand]} />}
+        refreshControl={<RefreshControl refreshing={loading && !!record} onRefresh={load} tintColor={isDark ? '#7dd3b0' : colors.brand} colors={[colors.brand]} />}
         keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
       >
         {loading && !record ? (
-          <View style={styles.recordDetailLoading}>
-            <ActivityIndicator color={colors.brand} size="small" />
+          <View style={styles.recordDetailLoading} accessibilityRole="progressbar" accessibilityLabel="正在获取记录详情">
+            <ActivityIndicator color={isDark ? '#7dd3b0' : colors.brand} size="small" />
           </View>
         ) : null}
 
         {!loading && !record ? (
-          <View style={styles.recordDetailEmpty}>
-            <IconfontText className="iconfont icon-shiwu" size={34} color={colors.brand} />
-            <Text style={styles.recordDetailEmptyText}>暂无记录详情</Text>
+          <View style={styles.recordDetailEmpty} accessibilityRole="summary">
+            <Utensils size={34} color={isDark ? '#7dd3b0' : colors.brand} strokeWidth={1.8} />
+            <Text style={[styles.recordDetailEmptyText, { color: recordPalette.muted }]}>暂无记录详情</Text>
           </View>
         ) : null}
 
-        {record && !editing ? (
+        {record ? (
           <View style={styles.recordDetailBody}>
-            <View style={styles.recordDetailHeader}>
+            <View style={[styles.recordDetailHeader, { borderBottomColor: recordPalette.border }]}>
               <View style={styles.recordDetailMealBadge}>
-                <View style={[styles.recordDetailMealIcon, mealTone?.icon]}>
-                  <Text style={[styles.recordDetailMealIconText, mealTone?.text]}>{manualMealIcons[record.meal_type] || '食'}</Text>
+                <View style={[styles.recordDetailMealIcon, { backgroundColor: `${mealVisual.color}20` }]}>
+                  <MealIcon size={21} color={mealVisual.color} strokeWidth={2.3} />
                 </View>
                 <View style={styles.recordDetailMealText}>
-                  <Text style={styles.recordDetailMealName}>{getMealTypeLabel(record.meal_type)}</Text>
-                  <Text style={styles.recordDetailMealTime}>{formatRecordDetailTime(record.record_time)}</Text>
+                  <Text style={[styles.recordDetailMealName, { color: recordPalette.text }]}>{getMealTypeLabel(record.meal_type)}</Text>
+                  <Text style={[styles.recordDetailMealTime, { color: recordPalette.muted }]}>{formatRecordDetailTime(record.record_time)}</Text>
                 </View>
               </View>
-              <View style={styles.recordDetailCalorieBox}>
+              <View style={styles.recordDetailCalorieBox} accessibilityLabel={`总热量 ${formatDisplayNumber(record.total_calories || 0)} 千卡`}>
                 <Text style={styles.recordDetailCalorie}>{formatDisplayNumber(record.total_calories || 0)}</Text>
-                <Text style={styles.recordDetailCalorieUnit}>kcal</Text>
+                <Text style={[styles.recordDetailCalorieUnit, { color: recordPalette.muted }]}>kcal</Text>
               </View>
             </View>
 
-            <View style={[styles.recordDetailImage, imageUrls.length === 0 && styles.recordDetailImagePlaceholder]}>
-              {imageUrls[0] ? (
-                <Image source={{ uri: imageUrls[0] }} style={styles.recordDetailHeroImage} resizeMode="cover" />
+            <View style={[styles.recordDetailImage, { width: heroWidth, backgroundColor: imageUrls.length ? recordPalette.surfaceAlt : recordPalette.placeholder }, imageUrls.length === 0 && styles.recordDetailImagePlaceholder]}>
+              {imageUrls.length ? (
+                <>
+                  <ScrollView
+                    horizontal
+                    pagingEnabled
+                    nestedScrollEnabled
+                    directionalLockEnabled
+                    showsHorizontalScrollIndicator={false}
+                    onMomentumScrollEnd={(event) => {
+                      const nextIndex = Math.round(event.nativeEvent.contentOffset.x / heroWidth)
+                      setCurrentImageIndex(Math.max(0, Math.min(imageUrls.length - 1, nextIndex)))
+                    }}
+                  >
+                    {imageUrls.map((uri, index) => (
+                      <Pressable
+                        key={`${uri}-${index}`}
+                        accessibilityRole="button"
+                        accessibilityLabel={`查看第 ${index + 1} 张餐食照片，全屏预览`}
+                        style={{ width: heroWidth, height: '100%' }}
+                        onPress={() => {
+                          setPreviewImageIndex(index)
+                          setImagePreviewVisible(true)
+                        }}
+                      >
+                        <Image source={{ uri }} style={styles.recordDetailHeroImage} resizeMode="cover" accessibilityLabel={`第 ${index + 1} 张餐食照片`} />
+                      </Pressable>
+                    ))}
+                  </ScrollView>
+                  {imageUrls.length > 1 ? (
+                    <View style={styles.recordDetailImageCounter} pointerEvents="none">
+                      <Text style={styles.recordDetailImageCounterText}>{currentImageIndex + 1}/{imageUrls.length}</Text>
+                    </View>
+                  ) : null}
+                </>
               ) : (
                 <>
-                  <View style={styles.recordDetailImageIconWrap}>
-                    <Image source={appIcon} style={styles.recordDetailImageIcon} resizeMode="contain" />
+                  <View style={[styles.recordDetailImageIconWrap, { backgroundColor: isDark ? '#203f35' : 'rgba(255,255,255,0.9)' }]}>
+                    <ImageIcon size={38} color={isDark ? '#7dd3b0' : colors.brand} strokeWidth={1.8} />
                   </View>
-                  <Text style={styles.recordDetailImageHint}>文字记录，未提供实物照片</Text>
+                  <Text style={[styles.recordDetailImageHint, { color: recordPalette.muted }]}>文字记录，未提供实物照片</Text>
                 </>
               )}
             </View>
@@ -1496,6 +1847,9 @@ export function RecordDetailScreen() {
                         : tag.tone === 'mood'
                           ? styles.recordDetailMoodTag
                           : styles.recordDetailTimingTag,
+                      isDark && {
+                        backgroundColor: tag.tone === 'goal' ? '#17392f' : tag.tone === 'mood' ? '#3a3020' : '#1c3045',
+                      },
                     ]}
                   >
                     <Text style={styles.recordDetailContextTagIcon}>{tag.icon}</Text>
@@ -1507,6 +1861,7 @@ export function RecordDetailScreen() {
                           : tag.tone === 'mood'
                             ? styles.recordDetailMoodTagText
                             : styles.recordDetailTimingTagText,
+                        isDark && { color: tag.tone === 'goal' ? '#7dd3b0' : tag.tone === 'mood' ? '#fcd34d' : '#93c5fd' },
                       ]}
                     >
                       {tag.label}
@@ -1516,62 +1871,103 @@ export function RecordDetailScreen() {
               </View>
             ) : null}
 
-            {detailBlocks.map((block) => (
-              <View key={block.title} style={styles.recordDetailInfoBlock}>
-                <Text style={styles.recordDetailInfoTitle}>{block.icon} {block.title}</Text>
-                <Text style={styles.recordDetailInfoText}>{block.text}</Text>
-              </View>
-            ))}
+            {detailBlocks.map((block) => {
+              const BlockIcon = block.icon
+              return (
+                <View key={block.title} style={[styles.recordDetailInfoBlock, { borderBottomColor: recordPalette.border }]}>
+                  <View style={styles.recordDetailInfoTitleRow}>
+                    <BlockIcon size={17} color={isDark ? '#7dd3b0' : colors.brandDark} strokeWidth={2.2} />
+                    <Text style={[styles.recordDetailInfoTitle, { color: recordPalette.text }]}>{block.title}</Text>
+                  </View>
+                  <Text style={[styles.recordDetailInfoText, { color: recordPalette.secondary }]}>{block.text}</Text>
+                </View>
+              )
+            })}
 
             <View style={styles.recordDetailActions}>
-              <Pressable style={styles.recordDetailSecondaryAction} onPress={openEdit}>
-                <Text style={styles.recordDetailSecondaryActionText}>修改记录</Text>
-              </Pressable>
-              <Pressable style={styles.recordDetailPrimaryAction} onPress={() => void shareRecord()}>
-                <Text style={styles.recordDetailPrimaryActionText}>分享这餐</Text>
-              </Pressable>
-              <View style={styles.recordDetailActionRow}>
-                <Pressable style={styles.recordDetailPlainAction} onPress={openCommunityDetail}>
-                  <Text style={styles.recordDetailPlainActionText}>圈子详情</Text>
+              <View style={styles.recordDetailMainActionRow}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="修改这条饮食记录"
+                  style={({ pressed }) => [styles.recordDetailSecondaryAction, { backgroundColor: recordPalette.surfaceAlt, borderColor: recordPalette.border }, pressed && styles.recordDetailActionPressed]}
+                  onPress={openEdit}
+                >
+                  <Edit3 size={18} color={recordPalette.text} strokeWidth={2.2} />
+                  <Text style={[styles.recordDetailSecondaryActionText, { color: recordPalette.text }]}>修改记录</Text>
                 </Pressable>
-                <Pressable style={styles.recordDetailPlainAction} onPress={remove}>
-                  <Text style={styles.recordDetailDangerActionText}>删除记录</Text>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="生成这餐的分享卡片"
+                  style={({ pressed }) => [styles.recordDetailPrimaryAction, pressed && styles.recordDetailActionPressed]}
+                  onPress={() => void shareRecord()}
+                >
+                  <Share2 size={18} color="#ffffff" strokeWidth={2.3} />
+                  <Text style={styles.recordDetailPrimaryActionText}>生成分享卡片</Text>
+                </Pressable>
+              </View>
+              <View style={styles.recordDetailActionRow}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="查看这条记录的圈子动态"
+                  style={({ pressed }) => [styles.recordDetailPlainAction, { backgroundColor: recordPalette.surface, borderColor: recordPalette.border }, pressed && styles.recordDetailActionPressed]}
+                  onPress={openCommunityDetail}
+                >
+                  <MessageCircle size={17} color={recordPalette.muted} strokeWidth={2.2} />
+                  <Text style={[styles.recordDetailPlainActionText, { color: recordPalette.muted }]}>圈子详情</Text>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="删除这条饮食记录"
+                  style={({ pressed }) => [styles.recordDetailPlainAction, { backgroundColor: recordPalette.dangerSoft, borderColor: isDark ? '#64363b' : '#fecaca' }, pressed && styles.recordDetailActionPressed]}
+                  onPress={remove}
+                >
+                  <Trash2 size={17} color={isDark ? '#fda4af' : '#ef4444'} strokeWidth={2.2} />
+                  <Text style={[styles.recordDetailDangerActionText, { color: isDark ? '#fda4af' : '#ef4444' }]}>删除记录</Text>
                 </Pressable>
               </View>
             </View>
 
-            <Text style={styles.recordDetailFoodTitle}>食物明细</Text>
+            <Text style={[styles.recordDetailFoodTitle, { color: recordPalette.text, borderTopColor: recordPalette.border, borderBottomColor: recordPalette.border }]}>食物明细</Text>
             {(record.items || []).length ? (record.items || []).map((item, index) => {
               const detailKey = `${record.id}-${index}`
               const detailsExpanded = Boolean(expandedNutrients[detailKey])
               const nutrientRows = recordItemNutrientRows(item)
+              const sourceLabel = recordItemSourceLabel(item)
+              const ratio = recordItemRatio(item)
               return (
-                <View key={`${item.name}-${index}`} style={styles.recordDetailFoodItem}>
+                <View key={`${item.name}-${index}`} style={[styles.recordDetailFoodItem, { borderBottomColor: recordPalette.border }]}>
                   <View style={styles.recordDetailFoodInfo}>
-                    <Text style={styles.recordDetailFoodName}>{item.name || '未命名食物'}</Text>
-                    <Text style={styles.recordDetailFoodMeta}>摄入 {formatDisplayNumber(recordItemIntake(item))}g</Text>
-                    <View style={styles.recordDetailRatioBadge}>
-                      <Text style={styles.recordDetailRatioText}>摄入比例 {formatDisplayNumber(recordItemRatio(item))}%</Text>
+                    <Text style={[styles.recordDetailFoodName, { color: recordPalette.text }]}>{item.name || '未命名食物'}</Text>
+                    <Text style={[styles.recordDetailFoodMeta, { color: recordPalette.muted }]}>摄入 {formatDisplayNumber(recordItemIntake(item))}g</Text>
+                    {sourceLabel ? <Text style={[styles.recordDetailFoodSource, { color: recordPalette.secondary }]}>来源 {sourceLabel}</Text> : null}
+                    <View style={[styles.recordDetailRatioBadge, ratio > 100 && styles.recordDetailRatioBadgeOver, isDark && { backgroundColor: ratio > 100 ? '#43232b' : '#282243' }]}>
+                      <BarChart3 size={14} color={ratio > 100 ? (isDark ? '#fda4af' : '#dc2626') : (isDark ? '#c4b5fd' : '#7c3aed')} strokeWidth={2.2} />
+                      <Text style={[styles.recordDetailRatioText, ratio > 100 && styles.recordDetailRatioTextOver, isDark && { color: ratio > 100 ? '#fda4af' : '#c4b5fd' }]}>摄入比例 {formatDisplayNumber(ratio)}%</Text>
                     </View>
                     <View style={styles.recordDetailFoodNutrients}>
-                      <Text style={styles.recordDetailFoodNutrient}>蛋白 {formatDisplayNumber(recordItemMacro(item, 'protein'))}g</Text>
-                      <Text style={styles.recordDetailFoodNutrient}>碳水 {formatDisplayNumber(recordItemMacro(item, 'carbs'))}g</Text>
-                      <Text style={styles.recordDetailFoodNutrient}>脂肪 {formatDisplayNumber(recordItemMacro(item, 'fat'))}g</Text>
-                      <Text style={styles.recordDetailFoodNutrient}>含水 {Math.round(recordItemWaterMl(item))}ml</Text>
+                      <Text style={[styles.recordDetailFoodNutrient, { color: recordPalette.muted }]}>蛋白 {formatDisplayNumber(recordItemMacro(item, 'protein'))}g</Text>
+                      <Text style={[styles.recordDetailFoodNutrient, { color: recordPalette.muted }]}>碳水 {formatDisplayNumber(recordItemMacro(item, 'carbs'))}g</Text>
+                      <Text style={[styles.recordDetailFoodNutrient, { color: recordPalette.muted }]}>脂肪 {formatDisplayNumber(recordItemMacro(item, 'fat'))}g</Text>
+                      <Text style={[styles.recordDetailFoodNutrient, { color: recordPalette.muted }]}>含水 {Math.round(recordItemWaterMl(item))}ml</Text>
                     </View>
                     <Pressable
-                      style={styles.recordDetailNutrientToggle}
+                      accessibilityRole="button"
+                      accessibilityLabel={`${detailsExpanded ? '收起' : '展开'}${item.name || '这项食物'}的更多营养`}
+                      accessibilityState={{ expanded: detailsExpanded }}
+                      style={({ pressed }) => [styles.recordDetailNutrientToggle, pressed && styles.recordDetailActionPressed]}
                       onPress={() => setExpandedNutrients((current) => ({ ...current, [detailKey]: !detailsExpanded }))}
                     >
-                      <Text style={styles.recordDetailNutrientToggleText}>{detailsExpanded ? '收起更多营养' : '展开更多营养'}</Text>
-                      <Text style={styles.recordDetailNutrientToggleIcon}>{detailsExpanded ? '⌃' : '⌄'}</Text>
+                      <Text style={[styles.recordDetailNutrientToggleText, { color: recordPalette.muted }]}>{detailsExpanded ? '收起更多营养' : '展开更多营养'}</Text>
+                      {detailsExpanded
+                        ? <ChevronUp size={17} color={recordPalette.muted} strokeWidth={2.2} />
+                        : <ChevronDown size={17} color={recordPalette.muted} strokeWidth={2.2} />}
                     </Pressable>
                     {detailsExpanded ? (
                       <View style={styles.recordDetailNutrientGrid}>
                         {nutrientRows.map((row) => (
-                          <View key={row.key} style={styles.recordDetailNutrientCell}>
-                            <Text style={styles.recordDetailNutrientLabel}>{row.label}</Text>
-                            <Text style={styles.recordDetailNutrientValue}>{formatDisplayNumber(row.value)} <Text style={styles.recordDetailNutrientUnit}>{row.unit}</Text></Text>
+                          <View key={row.key} style={[styles.recordDetailNutrientCell, { flexBasis: viewportWidth < 390 ? '47%' : '31%', backgroundColor: recordPalette.surfaceAlt, borderColor: recordPalette.border }]}>
+                            <Text style={[styles.recordDetailNutrientLabel, { color: recordPalette.muted }]}>{row.label}</Text>
+                            <Text style={[styles.recordDetailNutrientValue, { color: recordPalette.text }]}>{formatDisplayNumber(row.value)} <Text style={[styles.recordDetailNutrientUnit, { color: recordPalette.muted }]}>{row.unit}</Text></Text>
                           </View>
                         ))}
                       </View>
@@ -1584,89 +1980,270 @@ export function RecordDetailScreen() {
               )
             }) : (
               <View style={styles.recordDetailEmptyLine}>
-                <Text style={styles.recordDetailEmptyLineText}>暂无食物明细</Text>
+                <Text style={[styles.recordDetailEmptyLineText, { color: recordPalette.muted }]}>暂无食物明细</Text>
               </View>
             )}
 
-            <View style={styles.recordDetailSummarySection}>
-              <Text style={styles.recordDetailSummaryTitle}>营养汇总</Text>
+            <View style={[styles.recordDetailSummarySection, { borderTopColor: recordPalette.border }]}>
+              <Text style={[styles.recordDetailSummaryTitle, { color: recordPalette.text }]}>营养汇总</Text>
               <View style={styles.recordDetailSummaryGrid}>
-                <RecordDetailSummaryCell label="总热量" value={formatDisplayNumber(record.total_calories || 0)} unit="kcal" highlight />
-                <RecordDetailSummaryCell label="总重量" value={formatDisplayNumber(record.total_weight_grams || 0)} unit="g" />
-                <RecordDetailSummaryCell label="蛋白质" value={formatDisplayNumber(record.total_protein || 0)} unit="g" />
-                <RecordDetailSummaryCell label="碳水" value={formatDisplayNumber(record.total_carbs || 0)} unit="g" />
-                <RecordDetailSummaryCell label="脂肪" value={formatDisplayNumber(record.total_fat || 0)} unit="g" />
+                <RecordDetailSummaryCell label="总热量" value={formatDisplayNumber(record.total_calories || 0)} unit="kcal" highlight palette={recordPalette} />
+                <RecordDetailSummaryCell label="总重量" value={formatDisplayNumber(record.total_weight_grams || 0)} unit="g" palette={recordPalette} />
+                <RecordDetailSummaryCell label="蛋白质" value={formatDisplayNumber(record.total_protein || 0)} unit="g" palette={recordPalette} />
+                <RecordDetailSummaryCell label="碳水" value={formatDisplayNumber(record.total_carbs || 0)} unit="g" palette={recordPalette} />
+                <RecordDetailSummaryCell label="脂肪" value={formatDisplayNumber(record.total_fat || 0)} unit="g" palette={recordPalette} />
+                {totalFiber > 0 ? <RecordDetailSummaryCell label="膳食纤维" value={formatDisplayNumber(totalFiber)} unit="g" palette={recordPalette} /> : null}
+                {totalSugar > 0 ? <RecordDetailSummaryCell label="糖分" value={formatDisplayNumber(totalSugar)} unit="g" palette={recordPalette} /> : null}
               </View>
-            </View>
-          </View>
-        ) : null}
-
-        {record && editing ? (
-          <View style={styles.recordDetailEditPanel}>
-            <Text style={styles.recordDetailEditTitle}>编辑记录</Text>
-            <MealPicker value={editMealType} onChange={setEditMealType} />
-            <Field label="记录描述" value={editDescription} onChangeText={setEditDescription} multiline placeholder="这餐吃了什么" />
-            <View style={styles.recordDetailEditSummary}>
-              <RecordDetailSummaryCell label="热量" value={formatDisplayNumber(editTotals.total_calories)} unit="kcal" highlight />
-              <RecordDetailSummaryCell label="蛋白质" value={formatDisplayNumber(editTotals.total_protein)} unit="g" />
-              <RecordDetailSummaryCell label="碳水" value={formatDisplayNumber(editTotals.total_carbs)} unit="g" />
-              <RecordDetailSummaryCell label="脂肪" value={formatDisplayNumber(editTotals.total_fat)} unit="g" />
-            </View>
-            {editItems.map((item, index) => (
-              <View key={`${item.source.name}-${index}`} style={styles.recordDetailEditItem}>
-                <View style={styles.rowBetween}>
-                  <Text style={styles.itemName}>食物 {index + 1}</Text>
-                  <SmallButton label="移除" danger onPress={() => removeEditItem(index)} />
-                </View>
-                <Field label="名称" value={item.name} onChangeText={(value) => updateEditItem(index, { name: value })} />
-                <Field label="估算重量 g" value={item.weight} onChangeText={(value) => updateEditItem(index, { weight: value })} keyboardType="decimal-pad" />
-                <Field label="摄入比例 %" value={item.ratio} onChangeText={(value) => updateEditItem(index, { ratio: value })} keyboardType="decimal-pad" />
-                <View style={styles.ratioGrid}>
-                  {[25, 50, 75, 100].map((ratio) => (
-                    <Pressable
-                      key={ratio}
-                      style={[styles.ratioButton, Math.round(editableItemRatio(item)) === ratio && styles.ratioButtonActive]}
-                      onPress={() => updateEditItem(index, { ratio: String(ratio) })}
-                    >
-                      <Text style={[styles.ratioButtonText, Math.round(editableItemRatio(item)) === ratio && styles.ratioButtonTextActive]}>
-                        {ratio}%
-                      </Text>
-                    </Pressable>
-                  ))}
-                </View>
-                <Text style={styles.itemMeta}>
-                  实际摄入 {round1(editableItemIntake(item))}g · 热量 {round1(editableItemScaledNutrient(item, 'calories'))} kcal
-                </Text>
-                <View style={styles.nutritionGrid}>
-                  <Field label="热量 kcal" value={item.calories} onChangeText={(value) => updateEditItem(index, { calories: value })} keyboardType="decimal-pad" />
-                  <Field label="蛋白质 g" value={item.protein} onChangeText={(value) => updateEditItem(index, { protein: value })} keyboardType="decimal-pad" />
-                  <Field label="碳水 g" value={item.carbs} onChangeText={(value) => updateEditItem(index, { carbs: value })} keyboardType="decimal-pad" />
-                  <Field label="脂肪 g" value={item.fat} onChangeText={(value) => updateEditItem(index, { fat: value })} keyboardType="decimal-pad" />
-                  <Field label="膳食纤维 g" value={item.fiber} onChangeText={(value) => updateEditItem(index, { fiber: value })} keyboardType="decimal-pad" />
-                  <Field label="糖 g" value={item.sugar} onChangeText={(value) => updateEditItem(index, { sugar: value })} keyboardType="decimal-pad" />
-                  <Field label="饮水 ml" value={item.waterMl} onChangeText={(value) => updateEditItem(index, { waterMl: value })} keyboardType="decimal-pad" />
-                  <Field label="钠 mg" value={item.sodiumMg} onChangeText={(value) => updateEditItem(index, { sodiumMg: value })} keyboardType="decimal-pad" />
-                </View>
-              </View>
-            ))}
-            <View style={styles.buttonRow}>
-              <AppButton label="保存修改" loading={saving} onPress={saveEdit} />
-              <AppButton label="取消" variant="secondary" onPress={() => setEditing(false)} />
             </View>
           </View>
         ) : null}
       </ScrollView>
+
+      <Modal visible={imagePreviewVisible && imageUrls.length > 0} animationType="fade" onRequestClose={() => setImagePreviewVisible(false)}>
+        <View style={styles.recordImagePreviewRoot}>
+          <ScrollView
+            key={`record-preview-${previewImageIndex}`}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            contentOffset={{ x: previewImageIndex * viewportWidth, y: 0 }}
+            onMomentumScrollEnd={(event) => {
+              const nextIndex = Math.round(event.nativeEvent.contentOffset.x / viewportWidth)
+              setPreviewImageIndex(Math.max(0, Math.min(imageUrls.length - 1, nextIndex)))
+            }}
+          >
+            {imageUrls.map((uri, index) => (
+              <View key={`${uri}-preview-${index}`} style={[styles.recordImagePreviewPage, { width: viewportWidth }]}>
+                <Image source={{ uri }} style={styles.recordImagePreviewImage} resizeMode="contain" accessibilityLabel={`第 ${index + 1} 张餐食照片，全屏预览`} />
+              </View>
+            ))}
+          </ScrollView>
+          <View style={[styles.recordImagePreviewTop, { paddingTop: Math.max(insets.top, 12) }]} pointerEvents="box-none">
+            <Text style={styles.recordImagePreviewCount}>{previewImageIndex + 1}/{imageUrls.length}</Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="关闭图片预览"
+              hitSlop={8}
+              style={({ pressed }) => [styles.recordImagePreviewClose, pressed && styles.recordImagePreviewPressed]}
+              onPress={() => setImagePreviewVisible(false)}
+            >
+              <X size={24} color="#ffffff" strokeWidth={2.3} />
+            </Pressable>
+          </View>
+          {imageUrls.length > 1 ? (
+            <View style={styles.recordImagePreviewNavigation} pointerEvents="box-none">
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="上一张照片"
+                accessibilityState={{ disabled: previewImageIndex === 0 }}
+                disabled={previewImageIndex === 0}
+                style={({ pressed }) => [styles.recordImagePreviewNavButton, previewImageIndex === 0 && styles.recordImagePreviewNavDisabled, pressed && styles.recordImagePreviewPressed]}
+                onPress={() => setPreviewImageIndex((index) => Math.max(0, index - 1))}
+              >
+                <ChevronLeft size={27} color="#ffffff" strokeWidth={2.2} />
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="下一张照片"
+                accessibilityState={{ disabled: previewImageIndex === imageUrls.length - 1 }}
+                disabled={previewImageIndex === imageUrls.length - 1}
+                style={({ pressed }) => [styles.recordImagePreviewNavButton, previewImageIndex === imageUrls.length - 1 && styles.recordImagePreviewNavDisabled, pressed && styles.recordImagePreviewPressed]}
+                onPress={() => setPreviewImageIndex((index) => Math.min(imageUrls.length - 1, index + 1))}
+              >
+                <ChevronRight size={27} color="#ffffff" strokeWidth={2.2} />
+              </Pressable>
+            </View>
+          ) : null}
+        </View>
+      </Modal>
+
+      <Modal visible={Boolean(record && editing)} transparent animationType="slide" onRequestClose={() => { if (!saving) setEditing(false) }}>
+        <KeyboardAvoidingView style={styles.recordEditBackdrop} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <View style={[styles.recordEditSheet, { maxHeight: viewportWidth < 390 ? '94%' : '90%', paddingBottom: Math.max(insets.bottom, 12), backgroundColor: recordPalette.surface }]}>
+            <View style={[styles.recordEditHeader, { borderBottomColor: recordPalette.border }]}>
+              <View style={styles.recordEditHeaderTitleRow}>
+                <Edit3 size={20} color={isDark ? '#7dd3b0' : colors.brandDark} strokeWidth={2.3} />
+                <Text style={[styles.recordDetailEditTitle, { color: recordPalette.text }]}>编辑记录</Text>
+              </View>
+              <Pressable accessibilityRole="button" accessibilityLabel="关闭编辑记录" disabled={saving} hitSlop={8} style={({ pressed }) => [styles.recordEditClose, pressed && styles.recordDetailActionPressed]} onPress={() => setEditing(false)}>
+                <X size={22} color={recordPalette.muted} strokeWidth={2.3} />
+              </Pressable>
+            </View>
+            <ScrollView contentContainerStyle={styles.recordEditContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+              <Text style={[styles.recordEditSectionLabel, { color: recordPalette.muted }]}>餐次</Text>
+              <MealPicker value={editMealType} onChange={setEditMealType} palette={recordPalette} />
+              <Field label="记录描述" value={editDescription} onChangeText={setEditDescription} multiline placeholder="这餐吃了什么" palette={recordPalette} />
+              <View style={[styles.recordDetailEditSummary, { backgroundColor: recordPalette.surfaceAlt, borderColor: recordPalette.border }]}>
+                <RecordDetailSummaryCell label="热量" value={formatDisplayNumber(editTotals.total_calories)} unit="kcal" highlight palette={recordPalette} />
+                <RecordDetailSummaryCell label="蛋白质" value={formatDisplayNumber(editTotals.total_protein)} unit="g" palette={recordPalette} />
+                <RecordDetailSummaryCell label="碳水" value={formatDisplayNumber(editTotals.total_carbs)} unit="g" palette={recordPalette} />
+                <RecordDetailSummaryCell label="脂肪" value={formatDisplayNumber(editTotals.total_fat)} unit="g" palette={recordPalette} />
+              </View>
+              {editItems.map((item, index) => (
+                <View key={`${item.source.name}-${index}`} style={[styles.recordDetailEditItem, { backgroundColor: recordPalette.surfaceAlt, borderColor: recordPalette.border }]}>
+                  <View style={styles.rowBetween}>
+                    <Text style={[styles.itemName, { color: recordPalette.text }]}>食物 {index + 1}</Text>
+                    <Pressable accessibilityRole="button" accessibilityLabel={`移除食物 ${index + 1}`} style={({ pressed }) => [styles.recordEditRemove, { backgroundColor: recordPalette.dangerSoft }, pressed && styles.recordDetailActionPressed]} onPress={() => removeEditItem(index)}>
+                      <Trash2 size={16} color={isDark ? '#fda4af' : '#ef4444'} strokeWidth={2.2} />
+                      <Text style={[styles.recordDetailDangerActionText, { color: isDark ? '#fda4af' : '#ef4444' }]}>移除</Text>
+                    </Pressable>
+                  </View>
+                  <Field label="名称" value={item.name} onChangeText={(value) => updateEditItem(index, { name: value })} palette={recordPalette} />
+                  <Field label="估算重量 g" value={item.weight} onChangeText={(value) => updateEditItem(index, { weight: value })} keyboardType="decimal-pad" palette={recordPalette} />
+                  <Field label="摄入比例 %" value={item.ratio} onChangeText={(value) => updateEditItem(index, { ratio: value })} keyboardType="decimal-pad" palette={recordPalette} />
+                  <View style={styles.ratioGrid} accessibilityRole="radiogroup">
+                    {[25, 50, 75, 100].map((ratio) => {
+                      const active = Math.round(editableItemRatio(item)) === ratio
+                      return (
+                        <Pressable
+                          accessibilityRole="radio"
+                          accessibilityState={{ checked: active }}
+                          key={ratio}
+                          style={({ pressed }) => [styles.ratioButton, { backgroundColor: recordPalette.input, borderColor: recordPalette.border }, active && styles.ratioButtonActive, pressed && styles.recordDetailActionPressed]}
+                          onPress={() => updateEditItem(index, { ratio: String(ratio) })}
+                        >
+                          <Text style={[styles.ratioButtonText, { color: recordPalette.muted }, active && styles.ratioButtonTextActive]}>{ratio}%</Text>
+                        </Pressable>
+                      )
+                    })}
+                  </View>
+                  <Text style={[styles.itemMeta, { color: recordPalette.secondary }]}>实际摄入 {round1(editableItemIntake(item))}g · 热量 {round1(editableItemScaledNutrient(item, 'calories'))} kcal</Text>
+                  <View style={styles.nutritionGrid}>
+                    <Field label="热量 kcal" value={item.calories} onChangeText={(value) => updateEditItem(index, { calories: value })} keyboardType="decimal-pad" palette={recordPalette} />
+                    <Field label="蛋白质 g" value={item.protein} onChangeText={(value) => updateEditItem(index, { protein: value })} keyboardType="decimal-pad" palette={recordPalette} />
+                    <Field label="碳水 g" value={item.carbs} onChangeText={(value) => updateEditItem(index, { carbs: value })} keyboardType="decimal-pad" palette={recordPalette} />
+                    <Field label="脂肪 g" value={item.fat} onChangeText={(value) => updateEditItem(index, { fat: value })} keyboardType="decimal-pad" palette={recordPalette} />
+                    <Field label="膳食纤维 g" value={item.fiber} onChangeText={(value) => updateEditItem(index, { fiber: value })} keyboardType="decimal-pad" palette={recordPalette} />
+                    <Field label="糖 g" value={item.sugar} onChangeText={(value) => updateEditItem(index, { sugar: value })} keyboardType="decimal-pad" palette={recordPalette} />
+                    <Field label="饮水 ml" value={item.waterMl} onChangeText={(value) => updateEditItem(index, { waterMl: value })} keyboardType="decimal-pad" palette={recordPalette} />
+                    <Field label="钠 mg" value={item.sodiumMg} onChangeText={(value) => updateEditItem(index, { sodiumMg: value })} keyboardType="decimal-pad" palette={recordPalette} />
+                  </View>
+                </View>
+              ))}
+              <View style={styles.recordEditActions}>
+                <Pressable accessibilityRole="button" accessibilityLabel="取消修改" disabled={saving} style={({ pressed }) => [styles.recordEditCancel, { backgroundColor: recordPalette.surfaceAlt, borderColor: recordPalette.border }, pressed && styles.recordDetailActionPressed]} onPress={() => setEditing(false)}>
+                  <Text style={[styles.recordEditCancelText, { color: recordPalette.text }]}>取消</Text>
+                </Pressable>
+                <Pressable accessibilityRole="button" accessibilityLabel="保存记录修改" accessibilityState={{ busy: saving, disabled: saving }} disabled={saving} style={({ pressed }) => [styles.recordEditSave, saving && styles.recordEditSaveDisabled, pressed && styles.recordDetailActionPressed]} onPress={() => void saveEdit()}>
+                  {saving ? <ActivityIndicator size="small" color="#ffffff" /> : <><Check size={18} color="#ffffff" strokeWidth={2.4} /><Text style={styles.recordEditSaveText}>保存修改</Text></>}
+                </Pressable>
+              </View>
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
       {shareSheet}
     </View>
   )
 }
 
+type AnalyzeHistoryPalette = {
+  page: string
+  surface: string
+  surfaceRaised: string
+  surfaceMuted: string
+  pressed: string
+  text: string
+  textSecondary: string
+  textMuted: string
+  border: string
+  divider: string
+  brand: string
+  brandStrong: string
+  brandSoft: string
+  input: string
+  iconSurface: string
+  handle: string
+  danger: string
+  dangerSoft: string
+  scrim: string
+  shadow: string
+}
+
+function createAnalyzeHistoryPalette(isDark: boolean): AnalyzeHistoryPalette {
+  return isDark
+    ? {
+        page: '#0d1312',
+        surface: '#181f1d',
+        surfaceRaised: '#1b2421',
+        surfaceMuted: '#202a27',
+        pressed: 'rgba(110,231,183,0.10)',
+        text: '#f2f7f4',
+        textSecondary: '#b7c5bf',
+        textMuted: '#83938c',
+        border: '#2d3a35',
+        divider: 'rgba(255,255,255,0.08)',
+        brand: '#6ee7b7',
+        brandStrong: '#217a59',
+        brandSoft: '#203a31',
+        input: '#202a27',
+        iconSurface: '#252f2c',
+        handle: '#45554f',
+        danger: '#fda4af',
+        dangerSoft: '#43272c',
+        scrim: 'rgba(0,0,0,0.62)',
+        shadow: '#000000',
+      }
+    : {
+        page: '#eef3f1',
+        surface: '#ffffff',
+        surfaceRaised: '#ffffff',
+        surfaceMuted: '#f8fafc',
+        pressed: '#f1f5f9',
+        text: '#10211a',
+        textSecondary: '#4e6a5d',
+        textMuted: '#6b7280',
+        border: 'rgba(92,184,150,0.16)',
+        divider: '#eef2f7',
+        brand: '#2f7f62',
+        brandStrong: '#047857',
+        brandSoft: '#d8f5e4',
+        input: '#ffffff',
+        iconSurface: '#f3f4f6',
+        handle: '#d7dfdc',
+        danger: '#c53030',
+        dangerSoft: '#fef8f8',
+        scrim: 'rgba(15,23,42,0.52)',
+        shadow: '#0f172a',
+      }
+}
+
+type AnalyzeHistoryStatusKind = 'processing' | 'done' | 'recorded' | 'waiting' | 'retry' | 'failed' | 'default'
+
+function analyzeHistoryStatusVisual(kind: AnalyzeHistoryStatusKind, isDark: boolean) {
+  const dark = {
+    processing: { backgroundColor: '#172554', borderColor: '#1d4ed8', color: '#93c5fd' },
+    done: { backgroundColor: '#12382d', borderColor: '#166534', color: '#6ee7b7' },
+    recorded: { backgroundColor: '#12382d', borderColor: '#166534', color: '#6ee7b7' },
+    waiting: { backgroundColor: '#3d2f16', borderColor: '#92400e', color: '#fbbf24' },
+    retry: { backgroundColor: '#3a2418', borderColor: '#9a3412', color: '#fdba74' },
+    failed: { backgroundColor: '#43272c', borderColor: '#9f1239', color: '#fda4af' },
+    default: { backgroundColor: '#252f2c', borderColor: '#475569', color: '#cbd5e1' },
+  }
+  const light = {
+    processing: { backgroundColor: '#dbeafe', borderColor: '#93c5fd', color: '#2563eb' },
+    done: { backgroundColor: '#d1fae5', borderColor: '#86efac', color: '#047857' },
+    recorded: { backgroundColor: '#d1fae5', borderColor: '#86efac', color: '#00a871' },
+    waiting: { backgroundColor: '#fef3c7', borderColor: '#fcd34d', color: '#b45309' },
+    retry: { backgroundColor: '#fff7ed', borderColor: '#fed7aa', color: '#c2410c' },
+    failed: { backgroundColor: '#fef2f2', borderColor: '#fecaca', color: '#c53030' },
+    default: { backgroundColor: '#f3f4f6', borderColor: '#e5e7eb', color: '#4b5563' },
+  }
+  return (isDark ? dark : light)[kind]
+}
 export function AnalyzeHistoryScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const dialog = useAppDialog()
+  const insets = useSafeAreaInsets()
+  const { isDark } = useColorScheme()
+  const palette = useMemo(() => createAnalyzeHistoryPalette(isDark), [isDark])
+  const historyStyles = useMemo(() => createAnalyzeHistoryStyles(palette), [palette])
+  const [reduceMotion, setReduceMotion] = useState(false)
   const [tasks, setTasks] = useState<AnalysisTask[]>([])
   const [searchKeyword, setSearchKeyword] = useState('')
   const [loading, setLoading] = useState(false)
+  const [loadError, setLoadError] = useState('')
   const [loadingMore, setLoadingMore] = useState(false)
   const [hasMore, setHasMore] = useState(false)
   const [retryingTaskId, setRetryingTaskId] = useState<string | null>(null)
@@ -1684,10 +2261,21 @@ export function AnalyzeHistoryScreen() {
   const loadingMoreRef = useRef(false)
   const loadSeqRef = useRef(0)
 
+  useEffect(() => {
+    let mounted = true
+    void AccessibilityInfo.isReduceMotionEnabled().then((enabled) => mounted && setReduceMotion(enabled))
+    const subscription = AccessibilityInfo.addEventListener('reduceMotionChanged', setReduceMotion)
+    return () => {
+      mounted = false
+      subscription.remove()
+    }
+  }, [])
+
   const load = useCallback(async (keyword = '', append = false) => {
     if (append && (!hasMoreRef.current || loadingMoreRef.current)) return
     const seq = append ? loadSeqRef.current : ++loadSeqRef.current
     const offset = append ? nextOffsetRef.current : 0
+    setLoadError('')
     if (append) {
       loadingMoreRef.current = true
       setLoadingMore(true)
@@ -1713,9 +2301,10 @@ export function AnalyzeHistoryScreen() {
       nextOffsetRef.current = nextOffset
       hasMoreRef.current = nextHasMore
       setHasMore(nextHasMore)
+      setLoadError('')
     } catch (error) {
       if (seq !== loadSeqRef.current) return
-      await showError(dialog, '获取识别历史失败', error)
+      setLoadError(userFacingErrorMessage(error, '网络或服务暂时不可用，请稍后重试'))
     } finally {
       if (seq === loadSeqRef.current) {
         if (append) {
@@ -1726,7 +2315,7 @@ export function AnalyzeHistoryScreen() {
         }
       }
     }
-  }, [dialog])
+  }, [])
 
   const refresh = useCallback(() => load(searchKeyword), [load, searchKeyword])
   const hasKeyword = searchKeyword.trim().length > 0
@@ -1841,6 +2430,10 @@ export function AnalyzeHistoryScreen() {
     const date = analyzeHistoryDate(task)
     if (task.status === 'done' && taskType === 'food_text') {
       navigation.navigate('TextResult', { task, mealType, date })
+      return
+    }
+    if (task.status === 'done' && needsPrecisionUserAction(task)) {
+      navigation.navigate('PrecisionConfirm', { taskId: task.id, mealType, date })
       return
     }
     if (task.status === 'done') {
@@ -2007,36 +2600,63 @@ export function AnalyzeHistoryScreen() {
   }, [load, searchKeyword])
 
   const initialLoading = loading && tasks.length === 0
+  const initialError = Boolean(loadError && tasks.length === 0 && !initialLoading)
   const menuTaskRetryable = menuTask ? isAnalyzeRetryable(menuTask) : false
   const menuTaskDone = Boolean(menuTask?.status === 'done' && menuTask.result && !isPackagedAnalyzeHistoryTask(menuTask))
   const menuTaskQuickRecordable = Boolean(menuTaskDone && menuTask?.is_recorded !== true)
   const menuTaskBusy = menuTask ? retryingTaskId === menuTask.id || deletingTaskId === menuTask.id || recordingTaskId === menuTask.id || savingRecipeTaskId === menuTask.id : false
+  const modalAnimationType = reduceMotion ? 'none' : 'fade'
 
   return (
-    <View style={styles.analyzeHistoryPage}>
-      <View style={styles.analyzeHistorySearchBar}>
-        <View style={styles.analyzeHistorySearchInputWrap}>
-          <Search size={16} color="#9ca3af" strokeWidth={2.4} />
+    <View style={historyStyles.page}>
+      <View style={historyStyles.searchBar}>
+        <View style={historyStyles.searchInputWrap}>
+          <Search size={18} color={palette.textMuted} strokeWidth={2.2} accessibilityElementsHidden />
           <TextInput
             value={searchKeyword}
             onChangeText={setSearchKeyword}
             placeholder="搜索食物名称"
-            placeholderTextColor="#9ca3af"
+            placeholderTextColor={palette.textMuted}
             returnKeyType="search"
             onSubmitEditing={() => void load(searchKeyword)}
-            style={styles.analyzeHistorySearchInput}
+            style={historyStyles.searchInput}
+            accessibilityLabel="搜索识别记录"
+            accessibilityHint="输入食物名称筛选历史记录"
           />
           {hasKeyword ? (
-            <Pressable hitSlop={10} style={styles.analyzeHistorySearchClear} disabled={loading} onPress={clearSearch}>
-              <X size={14} color="#9ca3af" strokeWidth={2.6} />
+            <Pressable
+              style={({ pressed }) => [historyStyles.searchClear, pressed && historyStyles.pressed]}
+              disabled={loading}
+              onPress={clearSearch}
+              accessibilityRole="button"
+              accessibilityLabel="清除搜索关键词"
+              accessibilityState={{ disabled: loading }}
+            >
+              <X size={17} color={palette.textMuted} strokeWidth={2.5} />
             </Pressable>
           ) : null}
         </View>
       </View>
 
+      {loadError && tasks.length > 0 ? (
+        <View style={historyStyles.inlineErrorBanner} accessibilityRole="alert">
+          <CircleAlert size={18} color={palette.danger} strokeWidth={2.2} />
+          <Text style={historyStyles.inlineErrorText} numberOfLines={2}>{loadError}</Text>
+          <Pressable
+            style={({ pressed }) => [historyStyles.inlineRetry, pressed && historyStyles.pressed]}
+            onPress={() => void refresh()}
+            accessibilityRole="button"
+            accessibilityLabel="重新加载识别记录"
+          >
+            <RefreshCw size={16} color={palette.brand} strokeWidth={2.3} />
+            <Text style={historyStyles.inlineRetryText}>重试</Text>
+          </Pressable>
+        </View>
+      ) : null}
+
       <ScrollView
-        style={styles.analyzeHistoryScroll}
-        contentContainerStyle={styles.analyzeHistoryList}
+        style={historyStyles.scroll}
+        contentContainerStyle={[historyStyles.list, { paddingBottom: Math.max(insets.bottom + 28, 36) }]}
         keyboardShouldPersistTaps="handled"
         scrollEventThrottle={200}
         onScroll={({ nativeEvent }) => {
@@ -2044,31 +2664,57 @@ export function AnalyzeHistoryScreen() {
             >= nativeEvent.contentSize.height - 160
           if (hasMore && nearBottom) void load(searchKeyword, true)
         }}
-        refreshControl={<RefreshControl refreshing={loading && tasks.length > 0} onRefresh={refresh} tintColor={colors.brand} colors={[colors.brand]} />}
+        refreshControl={<RefreshControl refreshing={loading && tasks.length > 0} onRefresh={refresh} tintColor={palette.brand} colors={[palette.brand]} />}
       >
         {initialLoading ? (
-          <View style={styles.analyzeHistoryLoading}>
-            <ActivityIndicator color={colors.brand} size="small" />
+          <View style={historyStyles.loading} accessibilityLabel="正在加载识别记录">
+            <ActivityIndicator color={palette.brand} size="small" />
           </View>
         ) : null}
 
-        {!initialLoading && tasks.length === 0 ? (
-          <View style={styles.analyzeHistoryEmptyCard}>
-            <View style={styles.analyzeHistoryEmptyIcon}>
-              <ImagePlus size={30} color={colors.brand} strokeWidth={1.9} />
+        {initialError ? (
+          <View style={historyStyles.errorCard} accessibilityRole="alert">
+            <View style={historyStyles.errorIcon}>
+              <CircleAlert size={29} color={palette.danger} strokeWidth={2} />
             </View>
-            <Text style={styles.analyzeHistoryEmptyTitle}>{hasKeyword ? '没有找到匹配的记录' : '暂时没有记录，快去拍一张吧~'}</Text>
-            <Text style={styles.analyzeHistoryEmptyDesc}>{hasKeyword ? '换个食物名称试试，或清除关键词查看全部。' : '拍照、相册上传和文字记录完成后都会出现在这里。'}</Text>
+            <Text style={historyStyles.errorTitle}>记录加载失败</Text>
+            <Text style={historyStyles.errorDesc}>{loadError}</Text>
+            <Pressable
+              style={({ pressed }) => [historyStyles.errorRetryButton, pressed && historyStyles.pressed]}
+              onPress={() => void refresh()}
+              accessibilityRole="button"
+              accessibilityLabel="重新加载识别记录"
+            >
+              <RefreshCw size={17} color="#ffffff" strokeWidth={2.3} />
+              <Text style={historyStyles.errorRetryText}>重新加载</Text>
+            </Pressable>
+          </View>
+        ) : null}
+
+        {!initialLoading && !loadError && tasks.length === 0 ? (
+          <View style={historyStyles.emptyCard} accessibilityRole="summary">
+            <View style={historyStyles.emptyIcon}>
+              <ImagePlus size={30} color={palette.brand} strokeWidth={1.9} />
+            </View>
+            <Text style={historyStyles.emptyTitle}>{hasKeyword ? '没有找到匹配的记录' : '暂时没有记录，快去拍一张吧~'}</Text>
+            <Text style={historyStyles.emptyDesc}>{hasKeyword ? '换个食物名称试试，或清除关键词查看全部。' : '拍照、相册上传和文字记录完成后都会出现在这里。'}</Text>
           </View>
         ) : null}
 
         {!initialLoading && tasks.length > 0 ? (
-          <View style={styles.analyzeHistoryListHeader}>
+          <View style={historyStyles.listHeader}>
             <View style={styles.flex} />
             {discardableTasks.length > 0 ? (
-              <Pressable disabled={bulkDeleting} style={styles.analyzeHistoryBulkDelete} onPress={() => void deleteUnrecordedTasks()}>
-                {bulkDeleting ? <ActivityIndicator size="small" color="#2f7f62" /> : <Trash2 size={13} color="#5cb896" strokeWidth={2.4} />}
-                <Text style={styles.analyzeHistoryBulkDeleteText}>一键删除未记录</Text>
+              <Pressable
+                disabled={bulkDeleting}
+                style={({ pressed }) => [historyStyles.bulkDelete, pressed && !bulkDeleting && historyStyles.pressed, bulkDeleting && historyStyles.disabled]}
+                onPress={() => void deleteUnrecordedTasks()}
+                accessibilityRole="button"
+                accessibilityLabel={`一键删除 ${discardableTasks.length} 条未记录任务`}
+                accessibilityState={{ disabled: bulkDeleting, busy: bulkDeleting }}
+              >
+                {bulkDeleting ? <ActivityIndicator size="small" color={palette.brand} /> : <Trash2 size={16} color={palette.brand} strokeWidth={2.3} />}
+                <Text style={historyStyles.bulkDeleteText}>一键删除未记录</Text>
               </Pressable>
             ) : null}
           </View>
@@ -2077,247 +2723,235 @@ export function AnalyzeHistoryScreen() {
         {!initialLoading && tasks.map((task) => {
           const imageUrl = analyzeHistoryImageUrl(task)
           const calories = analyzeHistoryCalories(task)
-          const statusTone = analyzeHistoryStatusTone(task)
+          const statusKind = analyzeHistoryStatusTone(task)
+          const statusVisual = analyzeHistoryStatusVisual(statusKind, isDark)
           const modeLabel = analyzeHistoryModeLabel(task)
+          const taskTitle = analyzeHistoryTitle(task)
+          const statusLabel = analyzeHistoryStatusLabel(task)
           const retrying = retryingTaskId === task.id
           const deleting = deletingTaskId === task.id
           const recording = recordingTaskId === task.id
           const savingRecipe = savingRecipeTaskId === task.id
           const busy = retrying || deleting || recording || savingRecipe
           return (
-            <Pressable key={task.id} style={({ pressed }) => [styles.analyzeHistoryTaskWrapper, pressed && styles.analyzeHistoryPressed]} onPress={() => openTask(task)}>
-              <View style={[styles.analyzeHistoryTaskCard, task.status === 'violated' && styles.analyzeHistoryTaskCardViolated]}>
-                <View style={styles.analyzeHistoryThumb}>
+            <View key={task.id} style={[historyStyles.taskCard, task.status === 'violated' && historyStyles.taskCardViolated]}>
+              <Pressable
+                style={({ pressed }) => [historyStyles.taskMain, pressed && historyStyles.pressed]}
+                onPress={() => openTask(task)}
+                disabled={busy}
+                accessibilityRole="button"
+                accessibilityLabel={`${taskTitle}，${calories > 0 ? `${Math.round(calories)} 千卡` : '暂无热量'}，${statusLabel}`}
+                accessibilityHint={isAnalyzeRetryable(task) ? '打开重新识别确认' : '打开识别记录详情'}
+                accessibilityState={{ disabled: busy, busy }}
+              >
+                <View style={historyStyles.thumb}>
                   {imageUrl ? (
-                    <Image source={{ uri: imageUrl }} style={styles.analyzeHistoryThumbImage} />
+                    <Image source={{ uri: imageUrl }} style={historyStyles.thumbImage} accessibilityLabel={`${taskTitle}的识别图片`} />
                   ) : (
-                    <View style={[styles.analyzeHistoryThumbFallback, isTextAnalysisTask(task) && styles.analyzeHistoryThumbFallbackText]}>
-                      <Text style={styles.analyzeHistoryThumbText}>{analyzeHistoryAvatarText(task)}</Text>
+                    <View style={[historyStyles.thumbFallback, isTextAnalysisTask(task) && historyStyles.thumbFallbackText]} accessibilityElementsHidden>
+                      <Text style={historyStyles.thumbText}>{analyzeHistoryAvatarText(task)}</Text>
                     </View>
                   )}
                 </View>
-                <View style={styles.analyzeHistoryBody}>
-                  <View style={styles.analyzeHistoryMainRow}>
-                    <View style={styles.analyzeHistoryLeftContent}>
-                      <Text style={styles.analyzeHistoryHeadline} numberOfLines={1}>{analyzeHistoryTitle(task)}</Text>
-                      <Text style={styles.analyzeHistoryCalories}>{calories > 0 ? `${Math.round(calories)} kcal` : '-- kcal'}</Text>
-                      <Text style={styles.analyzeHistoryMeta} numberOfLines={1}>{analyzeHistoryCompactMeta(task)}</Text>
-                      {task.status === 'violated' ? (
-                        <Text style={styles.analyzeHistoryViolationReason} numberOfLines={2}>{analyzeHistoryMeta(task)}</Text>
-                      ) : null}
-                      <View style={styles.analyzeHistoryTimeRow}>
-                        <Text style={styles.analyzeHistoryTime} numberOfLines={1}>{formatAnalyzeHistoryTime(task.created_at)}</Text>
-                        <View style={[styles.analyzeHistoryStatusBadge, statusTone.style]}>
-                          {busy ? <ActivityIndicator size="small" color={statusTone.color} /> : <Text style={[styles.analyzeHistoryStatusText, { color: statusTone.color }]}>{analyzeHistoryStatusLabel(task)}</Text>}
-                        </View>
-                      </View>
-                      {modeLabel ? (
-                        <View style={styles.analyzeHistoryTagRow}>
-                          <View style={styles.analyzeHistoryModeTag}>
-                            <Text style={styles.analyzeHistoryModeTagText}>{modeLabel}</Text>
-                          </View>
-                        </View>
-                      ) : null}
-                    </View>
-                    <View style={styles.analyzeHistoryRightContent}>
-                      <Pressable
-                        hitSlop={8}
-                        disabled={busy}
-                        style={styles.analyzeHistoryMoreButton}
-                        onPress={(event) => {
-                          event.stopPropagation?.()
-                          openTaskMenu(task)
-                        }}
-                      >
-                        <MoreVertical size={18} color="#6b7280" strokeWidth={2.8} />
-                      </Pressable>
+                <View style={historyStyles.body}>
+                  <Text style={historyStyles.headline} numberOfLines={2}>{taskTitle}</Text>
+                  <Text style={historyStyles.calories}>{calories > 0 ? `${Math.round(calories)} kcal` : '--'}</Text>
+                  <Text style={historyStyles.meta} numberOfLines={2}>{analyzeHistoryCompactMeta(task)}</Text>
+                  {task.status === 'violated' ? (
+                    <Text style={historyStyles.violationReason} numberOfLines={2}>{analyzeHistoryMeta(task)}</Text>
+                  ) : null}
+                  <View style={historyStyles.timeRow}>
+                    <Text style={historyStyles.time} numberOfLines={1}>{formatAnalyzeHistoryTime(task.created_at)}</Text>
+                    <View style={[historyStyles.statusBadge, { backgroundColor: statusVisual.backgroundColor, borderColor: statusVisual.borderColor }]}>
+                      {busy ? <ActivityIndicator size="small" color={statusVisual.color} /> : <Text style={[historyStyles.statusText, { color: statusVisual.color }]}>{statusLabel}</Text>}
                     </View>
                   </View>
+                  {modeLabel ? (
+                    <View style={historyStyles.tagRow}>
+                      <View style={historyStyles.modeTag}>
+                        <Text style={historyStyles.modeTagText}>{modeLabel}</Text>
+                      </View>
+                    </View>
+                  ) : null}
                 </View>
-              </View>
-            </Pressable>
+              </Pressable>
+              <Pressable
+                disabled={busy}
+                style={({ pressed }) => [historyStyles.moreButton, pressed && !busy && historyStyles.pressed, busy && historyStyles.disabled]}
+                onPress={() => openTaskMenu(task)}
+                accessibilityRole="button"
+                accessibilityLabel={`更多操作，${taskTitle}`}
+                accessibilityState={{ disabled: busy, busy }}
+              >
+                <MoreVertical size={20} color={palette.textSecondary} strokeWidth={2.5} />
+              </Pressable>
+            </View>
           )
         })}
         {loadingMore ? (
-          <View style={styles.analyzeHistoryLoadingMore}>
-            <ActivityIndicator color={colors.brand} size="small" />
+          <View style={historyStyles.loadingMore} accessibilityLabel="正在加载更多识别记录">
+            <ActivityIndicator color={palette.brand} size="small" />
           </View>
         ) : null}
       </ScrollView>
 
-      <Modal visible={Boolean(menuTask)} transparent animationType="fade" onRequestClose={closeTaskMenu}>
-        <Pressable style={styles.analyzeHistoryMenuBackdrop} onPress={closeTaskMenu}>
-          <Pressable style={styles.analyzeHistoryMenuSheet} onPress={(event) => event.stopPropagation?.()}>
-            <View style={styles.analyzeHistoryMenuHandle} />
-            <Text style={styles.analyzeHistoryMenuTitle}>识别记录操作</Text>
-            <Text style={styles.analyzeHistoryMenuSubtitle} numberOfLines={1}>
-              {menuTask ? analyzeHistoryTitle(menuTask) : ''}
-            </Text>
+      <Modal visible={Boolean(menuTask)} transparent animationType={modalAnimationType} onRequestClose={closeTaskMenu} statusBarTranslucent>
+        <Pressable style={historyStyles.menuBackdrop} onPress={closeTaskMenu} accessible={false}>
+          <Pressable
+            style={[historyStyles.menuSheet, { paddingBottom: Math.max(insets.bottom, 12) + 12 }]}
+            onPress={(event) => event.stopPropagation?.()}
+            accessibilityViewIsModal
+          >
+            <View style={historyStyles.menuHandle} />
+            <Text style={historyStyles.menuTitle}>识别记录操作</Text>
+            <Text style={historyStyles.menuSubtitle} numberOfLines={1}>{menuTask ? analyzeHistoryTitle(menuTask) : ''}</Text>
 
-            <View style={styles.analyzeHistoryMenuActions}>
+            <View style={historyStyles.menuActions}>
               <Pressable
                 disabled={!menuTaskQuickRecordable || menuTaskBusy}
-                style={({ pressed }) => [
-                  styles.analyzeHistoryMenuAction,
-                  pressed && styles.analyzeHistoryMenuActionPressed,
-                  (!menuTaskQuickRecordable || menuTaskBusy) && styles.analyzeHistoryMenuActionDisabled,
-                ]}
+                style={({ pressed }) => [historyStyles.menuAction, pressed && historyStyles.menuActionPressed, (!menuTaskQuickRecordable || menuTaskBusy) && historyStyles.disabled]}
                 onPress={() => menuTask && startQuickRecord(menuTask)}
+                accessibilityRole="button"
+                accessibilityLabel={`快速记录到${menuTask ? getMealTypeLabel(analyzeHistoryMealType(menuTask)) : '餐食'}`}
+                accessibilityState={{ disabled: !menuTaskQuickRecordable || menuTaskBusy, busy: Boolean(recordingTaskId) }}
               >
-                <View style={[styles.analyzeHistoryMenuActionIcon, styles.analyzeHistoryMenuActionIconRecord]}>
-                  <IconfontText className="iconfont icon-canciguanli" size={17} color="#10b981" style={styles.analyzeHistoryMenuIconGlyph} />
-                </View>
-                <View style={styles.analyzeHistoryMenuActionCopy}>
-                  <Text style={styles.analyzeHistoryMenuActionText}>
-                    快速记录到{menuTask ? getMealTypeLabel(analyzeHistoryMealType(menuTask)) : '餐食'}
-                  </Text>
-                  <Text style={styles.analyzeHistoryMenuActionHint}>选择餐次后直接写入饮食记录</Text>
+                <View style={[historyStyles.menuActionIcon, historyStyles.actionIconRecord]}><Utensils size={19} color="#34d399" strokeWidth={2.2} /></View>
+                <View style={historyStyles.menuActionCopy}>
+                  <Text style={historyStyles.menuActionText}>快速记录到{menuTask ? getMealTypeLabel(analyzeHistoryMealType(menuTask)) : '餐食'}</Text>
+                  <Text style={historyStyles.menuActionHint}>选择餐次后直接写入饮食记录</Text>
                 </View>
               </Pressable>
 
               <Pressable
                 disabled={!menuTaskRetryable || menuTaskBusy}
-                style={({ pressed }) => [
-                  styles.analyzeHistoryMenuAction,
-                  pressed && styles.analyzeHistoryMenuActionPressed,
-                  (!menuTaskRetryable || menuTaskBusy) && styles.analyzeHistoryMenuActionDisabled,
-                ]}
+                style={({ pressed }) => [historyStyles.menuAction, pressed && historyStyles.menuActionPressed, (!menuTaskRetryable || menuTaskBusy) && historyStyles.disabled]}
                 onPress={selectMenuRetryTask}
+                accessibilityRole="button"
+                accessibilityLabel={menuTask && isTextAnalysisTask(menuTask) ? '用原文字重新识别' : '用原图重新识别'}
+                accessibilityState={{ disabled: !menuTaskRetryable || menuTaskBusy, busy: Boolean(retryingTaskId) }}
               >
-                <View style={[
-                  styles.analyzeHistoryMenuActionIcon,
-                  menuTaskRetryable ? styles.analyzeHistoryMenuActionIconRetry : styles.analyzeHistoryMenuActionIconDisabled,
-                ]}>
-                  <IconfontText
-                    className="iconfont icon-paizhao-xianxing"
-                    size={17}
-                    color={menuTaskRetryable ? '#f97316' : '#9ca3af'}
-                    style={styles.analyzeHistoryMenuIconGlyph}
-                  />
-                </View>
-                <View style={styles.analyzeHistoryMenuActionCopy}>
-                  <Text style={styles.analyzeHistoryMenuActionText}>
-                    {menuTask && isTextAnalysisTask(menuTask) ? '用原文字重新识别' : '用原图重新识别'}
-                  </Text>
-                  <Text style={styles.analyzeHistoryMenuActionHint}>失败或超时的记录可重新提交</Text>
+                <View style={[historyStyles.menuActionIcon, menuTaskRetryable ? historyStyles.actionIconRetry : historyStyles.actionIconDisabled]}><RefreshCw size={19} color={menuTaskRetryable ? '#fb923c' : palette.textMuted} strokeWidth={2.2} /></View>
+                <View style={historyStyles.menuActionCopy}>
+                  <Text style={historyStyles.menuActionText}>{menuTask && isTextAnalysisTask(menuTask) ? '用原文字重新识别' : '用原图重新识别'}</Text>
+                  <Text style={historyStyles.menuActionHint}>失败或超时的记录可重新提交</Text>
                 </View>
               </Pressable>
 
               <Pressable
                 disabled={!menuTaskDone || menuTaskBusy}
-                style={({ pressed }) => [
-                  styles.analyzeHistoryMenuAction,
-                  pressed && styles.analyzeHistoryMenuActionPressed,
-                  (!menuTaskDone || menuTaskBusy) && styles.analyzeHistoryMenuActionDisabled,
-                ]}
+                style={({ pressed }) => [historyStyles.menuAction, pressed && historyStyles.menuActionPressed, (!menuTaskDone || menuTaskBusy) && historyStyles.disabled]}
                 onPress={() => menuTask && startSaveRecipe(menuTask)}
+                accessibilityRole="button"
+                accessibilityLabel="收藏到我的餐食"
+                accessibilityState={{ disabled: !menuTaskDone || menuTaskBusy, busy: Boolean(savingRecipeTaskId) }}
               >
-                <View style={[styles.analyzeHistoryMenuActionIcon, styles.analyzeHistoryMenuActionIconFavorite]}>
-                  <IconfontText className="iconfont icon-collection_fill" size={17} color="#5cb896" style={styles.analyzeHistoryMenuIconGlyph} />
-                </View>
-                <View style={styles.analyzeHistoryMenuActionCopy}>
-                  <Text style={styles.analyzeHistoryMenuActionText}>收藏到我的餐食</Text>
-                  <Text style={styles.analyzeHistoryMenuActionHint}>保存后可直接复用到餐食记录</Text>
+                <View style={[historyStyles.menuActionIcon, historyStyles.actionIconFavorite]}><Leaf size={19} color={palette.brandStrong} strokeWidth={2.2} /></View>
+                <View style={historyStyles.menuActionCopy}>
+                  <Text style={historyStyles.menuActionText}>收藏到我的餐食</Text>
+                  <Text style={historyStyles.menuActionHint}>保存后可直接复用到餐食记录</Text>
                 </View>
               </Pressable>
 
               <Pressable
                 disabled={!menuTaskDone || menuTaskBusy}
-                style={({ pressed }) => [
-                  styles.analyzeHistoryMenuAction,
-                  pressed && styles.analyzeHistoryMenuActionPressed,
-                  (!menuTaskDone || menuTaskBusy) && styles.analyzeHistoryMenuActionDisabled,
-                ]}
+                style={({ pressed }) => [historyStyles.menuAction, pressed && historyStyles.menuActionPressed, (!menuTaskDone || menuTaskBusy) && historyStyles.disabled]}
                 onPress={() => menuTask && shareToPublicFoodLibrary(menuTask)}
+                accessibilityRole="button"
+                accessibilityLabel="分享到公共食物库"
+                accessibilityState={{ disabled: !menuTaskDone || menuTaskBusy }}
               >
-                <View style={[styles.analyzeHistoryMenuActionIcon, styles.analyzeHistoryMenuActionIconLibrary]}>
-                  <IconfontText className="iconfont icon-shiwu" size={17} color="#f97316" style={styles.analyzeHistoryMenuIconGlyph} />
-                </View>
-                <View style={styles.analyzeHistoryMenuActionCopy}>
-                  <Text style={styles.analyzeHistoryMenuActionText}>分享到公共食物库</Text>
-                  <Text style={styles.analyzeHistoryMenuActionHint}>带入图片和营养信息后继续完善</Text>
+                <View style={[historyStyles.menuActionIcon, historyStyles.actionIconLibrary]}><Share2 size={19} color="#fb923c" strokeWidth={2.2} /></View>
+                <View style={historyStyles.menuActionCopy}>
+                  <Text style={historyStyles.menuActionText}>分享到公共食物库</Text>
+                  <Text style={historyStyles.menuActionHint}>带入图片和营养信息后继续完善</Text>
                 </View>
               </Pressable>
 
               <Pressable
                 disabled={!menuTask || menuTaskBusy}
-                style={({ pressed }) => [
-                  styles.analyzeHistoryMenuAction,
-                  pressed && styles.analyzeHistoryMenuActionPressed,
-                  (!menuTask || menuTaskBusy) && styles.analyzeHistoryMenuActionDisabled,
-                ]}
+                style={({ pressed }) => [historyStyles.menuAction, historyStyles.menuActionLast, pressed && historyStyles.menuActionPressed, (!menuTask || menuTaskBusy) && historyStyles.disabled]}
                 onPress={selectMenuDeleteTask}
+                accessibilityRole="button"
+                accessibilityLabel="删除识别记录"
+                accessibilityState={{ disabled: !menuTask || menuTaskBusy, busy: Boolean(deletingTaskId) }}
               >
-                <View style={[styles.analyzeHistoryMenuActionIcon, styles.analyzeHistoryMenuActionIconDanger]}>
-                  <IconfontText className="iconfont icon-shanchu" size={17} color="#ef4444" style={styles.analyzeHistoryMenuIconGlyph} />
-                </View>
-                <View style={styles.analyzeHistoryMenuActionCopy}>
-                  <Text style={[styles.analyzeHistoryMenuActionText, styles.analyzeHistoryMenuActionTextDanger]}>删除识别记录</Text>
-                  <Text style={styles.analyzeHistoryMenuActionHint}>只删除历史，不影响已保存饮食</Text>
+                <View style={[historyStyles.menuActionIcon, historyStyles.actionIconDanger]}><Trash2 size={19} color={palette.danger} strokeWidth={2.2} /></View>
+                <View style={historyStyles.menuActionCopy}>
+                  <Text style={[historyStyles.menuActionText, historyStyles.menuActionTextDanger]}>删除识别记录</Text>
+                  <Text style={historyStyles.menuActionHint}>只删除历史，不影响已保存饮食</Text>
                 </View>
               </Pressable>
             </View>
 
-            <Pressable style={({ pressed }) => [styles.analyzeHistoryMenuCancel, pressed && styles.analyzeHistoryMenuActionPressed]} onPress={closeTaskMenu}>
-              <Text style={styles.analyzeHistoryMenuCancelText}>取消</Text>
+            <Pressable style={({ pressed }) => [historyStyles.menuCancel, pressed && historyStyles.menuActionPressed]} onPress={closeTaskMenu} accessibilityRole="button" accessibilityLabel="取消识别记录操作">
+              <Text style={historyStyles.menuCancelText}>取消</Text>
             </Pressable>
           </Pressable>
         </Pressable>
       </Modal>
 
-      <Modal visible={Boolean(quickRecordTask)} transparent animationType="fade" onRequestClose={() => setQuickRecordTask(null)}>
-        <Pressable style={styles.analyzeHistoryDialogBackdrop} onPress={() => setQuickRecordTask(null)}>
-          <Pressable style={styles.analyzeHistoryDialogCard} onPress={(event) => event.stopPropagation?.()}>
-            <Text style={styles.analyzeHistoryDialogTitle}>选择记录餐次</Text>
-            <Text style={styles.analyzeHistoryDialogDesc}>确认后会直接写入当天饮食记录</Text>
-            <View style={styles.analyzeHistoryMealGrid}>
-              {mealOptions.map((mealType) => (
-                <Pressable
-                  key={mealType}
-                  style={[styles.analyzeHistoryMealOption, quickRecordMealType === mealType && styles.analyzeHistoryMealOptionActive]}
-                  onPress={() => setQuickRecordMealType(mealType)}
-                >
-                  <Text style={[styles.analyzeHistoryMealOptionText, quickRecordMealType === mealType && styles.analyzeHistoryMealOptionTextActive]}>
-                    {getMealTypeLabel(mealType)}
-                  </Text>
-                </Pressable>
-              ))}
+      <Modal visible={Boolean(quickRecordTask)} transparent animationType={modalAnimationType} onRequestClose={() => setQuickRecordTask(null)} statusBarTranslucent>
+        <Pressable style={historyStyles.dialogBackdrop} onPress={() => setQuickRecordTask(null)} accessible={false}>
+          <Pressable style={historyStyles.dialogCard} onPress={(event) => event.stopPropagation?.()} accessibilityViewIsModal>
+            <Text style={historyStyles.dialogTitle}>选择记录餐次</Text>
+            <Text style={historyStyles.dialogDesc}>确认后会直接写入当天饮食记录</Text>
+            <View style={historyStyles.mealGrid} accessibilityRole="radiogroup">
+              {mealOptions.map((mealType) => {
+                const active = quickRecordMealType === mealType
+                return (
+                  <Pressable
+                    key={mealType}
+                    style={({ pressed }) => [historyStyles.mealOption, active && historyStyles.mealOptionActive, pressed && historyStyles.pressed]}
+                    onPress={() => setQuickRecordMealType(mealType)}
+                    accessibilityRole="radio"
+                    accessibilityLabel={getMealTypeLabel(mealType)}
+                    accessibilityState={{ checked: active }}
+                  >
+                    <Text style={[historyStyles.mealOptionText, active && historyStyles.mealOptionTextActive]}>{getMealTypeLabel(mealType)}</Text>
+                  </Pressable>
+                )
+              })}
             </View>
-            <View style={styles.analyzeHistoryDialogButtons}>
-              <Pressable style={styles.analyzeHistoryDialogCancel} onPress={() => setQuickRecordTask(null)}>
-                <Text style={styles.analyzeHistoryDialogCancelText}>取消</Text>
+            <View style={historyStyles.dialogButtons}>
+              <Pressable style={({ pressed }) => [historyStyles.dialogCancel, pressed && historyStyles.pressed]} onPress={() => setQuickRecordTask(null)} accessibilityRole="button" accessibilityLabel="取消快速记录">
+                <Text style={historyStyles.dialogCancelText}>取消</Text>
               </Pressable>
-              <Pressable style={styles.analyzeHistoryDialogConfirm} onPress={() => void confirmQuickRecord()}>
-                <Text style={styles.analyzeHistoryDialogConfirmText}>确认记录</Text>
+              <Pressable style={({ pressed }) => [historyStyles.dialogConfirm, pressed && historyStyles.pressed]} onPress={() => void confirmQuickRecord()} accessibilityRole="button" accessibilityLabel="确认记录到所选餐次">
+                <Text style={historyStyles.dialogConfirmText}>确认记录</Text>
               </Pressable>
             </View>
           </Pressable>
         </Pressable>
       </Modal>
 
-      <Modal visible={Boolean(recipeTask)} transparent animationType="fade" onRequestClose={() => setRecipeTask(null)}>
-        <Pressable style={styles.analyzeHistoryDialogBackdrop} onPress={() => setRecipeTask(null)}>
-          <Pressable style={styles.analyzeHistoryDialogCard} onPress={(event) => event.stopPropagation?.()}>
-            <Text style={styles.analyzeHistoryDialogTitle}>收藏餐食</Text>
-            <Text style={styles.analyzeHistoryDialogDesc}>填写一个方便下次查找的名称</Text>
-            <TextInput
-              value={recipeName}
-              onChangeText={setRecipeName}
-              maxLength={50}
-              placeholder="例如：工作日晚餐"
-              placeholderTextColor="#94a3b8"
-              style={styles.analyzeHistoryRecipeInput}
-            />
-            <View style={styles.analyzeHistoryDialogButtons}>
-              <Pressable style={styles.analyzeHistoryDialogCancel} onPress={() => setRecipeTask(null)}>
-                <Text style={styles.analyzeHistoryDialogCancelText}>取消</Text>
-              </Pressable>
-              <Pressable style={styles.analyzeHistoryDialogConfirm} onPress={() => void confirmSaveRecipe()}>
-                <Text style={styles.analyzeHistoryDialogConfirmText}>确认收藏</Text>
-              </Pressable>
-            </View>
+      <Modal visible={Boolean(recipeTask)} transparent animationType={modalAnimationType} onRequestClose={() => setRecipeTask(null)} statusBarTranslucent>
+        <KeyboardAvoidingView style={historyStyles.dialogKeyboard} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <Pressable style={historyStyles.dialogBackdrop} onPress={() => setRecipeTask(null)} accessible={false}>
+            <Pressable style={historyStyles.dialogCard} onPress={(event) => event.stopPropagation?.()} accessibilityViewIsModal>
+              <Text style={historyStyles.dialogTitle}>收藏餐食</Text>
+              <Text style={historyStyles.dialogDesc}>填写一个方便下次查找的名称</Text>
+              <TextInput
+                value={recipeName}
+                onChangeText={setRecipeName}
+                maxLength={50}
+                placeholder="例如：工作日晚餐"
+                placeholderTextColor={palette.textMuted}
+                style={historyStyles.recipeInput}
+                returnKeyType="done"
+                accessibilityLabel="收藏餐食名称"
+                accessibilityHint="最多 50 个字符"
+              />
+              <View style={historyStyles.dialogButtons}>
+                <Pressable style={({ pressed }) => [historyStyles.dialogCancel, pressed && historyStyles.pressed]} onPress={() => setRecipeTask(null)} accessibilityRole="button" accessibilityLabel="取消收藏餐食">
+                  <Text style={historyStyles.dialogCancelText}>取消</Text>
+                </Pressable>
+                <Pressable style={({ pressed }) => [historyStyles.dialogConfirm, pressed && historyStyles.pressed]} onPress={() => void confirmSaveRecipe()} accessibilityRole="button" accessibilityLabel="确认收藏餐食">
+                  <Text style={historyStyles.dialogConfirmText}>确认收藏</Text>
+                </Pressable>
+              </View>
+            </Pressable>
           </Pressable>
-        </Pressable>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   )
@@ -2334,6 +2968,7 @@ export function TextRecordScreen() {
   const [mealType, setMealType] = useState<MealType>(route.params?.mealType || inferDefaultMealTypeFromLocalTime())
   const [dietGoal, setDietGoal] = useState<TextRecordDietGoal>('none')
   const [activityTiming, setActivityTiming] = useState<TextRecordActivityTiming>('none')
+  const [analysisEngine, setAnalysisEngine] = useState<AnalysisEngine>('ai_direct')
   const [membership, setMembership] = useState<MembershipStatus | null>(null)
   const [loading, setLoading] = useState(false)
 
@@ -2345,8 +2980,16 @@ export function TextRecordScreen() {
   useFocusEffect(
     useCallback(() => {
       void refreshMembership()
+      void AsyncStorage.getItem(TEXT_ANALYSIS_ENGINE_STORAGE_KEY).then((value) => {
+        setAnalysisEngine(normalizeTextAnalysisEngine(value))
+      }).catch(() => undefined)
     }, [refreshMembership]),
   )
+
+  const selectTextAnalysisEngine = (nextEngine: AnalysisEngine) => {
+    setAnalysisEngine(nextEngine)
+    void AsyncStorage.setItem(TEXT_ANALYSIS_ENGINE_STORAGE_KEY, nextEngine)
+  }
 
   const creditSummary = useMemo(() => {
     const max = Number(membership?.daily_credits_max ?? membership?.daily_limit ?? 0)
@@ -2393,6 +3036,9 @@ export function TextRecordScreen() {
         additionalContext: contextLines.join('\n') || undefined,
         mealType,
         date,
+        analysisEngine,
+        suggestRatioEnabled: true,
+        preciseMicronutrients: true,
       })
       navigation.navigate('AnalyzeLoading', { taskId: data.task_id, mealType, date, taskType: 'food_text' })
     } catch (error) {
@@ -2471,6 +3117,32 @@ export function TextRecordScreen() {
           </View>
         </View>
 
+        <View style={styles.textRecordInputSection}>
+          <Text style={styles.textRecordSectionTitle}>营养计算方式</Text>
+          <View style={styles.textRecordEngineRow} accessibilityRole="radiogroup">
+            {textAnalysisEngineOptions.map((option) => {
+              const active = analysisEngine === option.value
+              return (
+                <Pressable
+                  key={option.value}
+                  accessibilityRole="radio"
+                  accessibilityState={{ checked: active }}
+                  accessibilityLabel={`${option.label}，${option.description}`}
+                  style={({ pressed }) => [
+                    styles.textRecordEngineOption,
+                    active && styles.textRecordEngineOptionActive,
+                    pressed && styles.textRecordPressed,
+                  ]}
+                  onPress={() => selectTextAnalysisEngine(option.value)}
+                >
+                  <Text style={[styles.textRecordEngineLabel, active && styles.textRecordEngineLabelActive]}>{option.label}</Text>
+                  <Text style={styles.textRecordEngineDescription}>{option.description}</Text>
+                </Pressable>
+              )
+            })}
+          </View>
+          <Text style={styles.textRecordEngineNote}>默认使用速度最快的 AI 估算；数据库方式会慢一些，但命中兼容数据时结果更稳定。</Text>
+        </View>
         <View style={styles.textRecordInputSection}>
           <Text style={styles.textRecordSectionTitle}>记录日期</Text>
           <View style={[styles.textRecordInputCard, styles.textRecordDateCard]}>
@@ -3325,6 +3997,7 @@ export function HealthProfileScreen() {
   const dialog = useAppDialog()
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const insets = useSafeAreaInsets()
+  const { isDark } = useColorScheme()
   const [currentStep, setCurrentStep] = useState(0)
   const [profile, setProfile] = useState<HealthProfile | null>(null)
   const [age, setAge] = useState('25')
@@ -3338,6 +4011,15 @@ export function HealthProfileScreen() {
   const [dietPreference, setDietPreference] = useState<string[]>([])
   const [allergyList, setAllergyList] = useState<string[]>([])
   const [sleepHour, setSleepHour] = useState('23')
+  const [customMedicalInput, setCustomMedicalInput] = useState('')
+  const [customMedicalOptions, setCustomMedicalOptions] = useState<string[]>([])
+  const [editingMedical, setEditingMedical] = useState('')
+  const [customAllergyInput, setCustomAllergyInput] = useState('')
+  const [customAllergyOptions, setCustomAllergyOptions] = useState<string[]>([])
+  const [editingAllergy, setEditingAllergy] = useState('')
+  const [reportImageUrls, setReportImageUrls] = useState<string[]>([])
+  const [reportSourceVisible, setReportSourceVisible] = useState(false)
+  const [draftSaving, setDraftSaving] = useState(false)
   const [wakeHour, setWakeHour] = useState('7')
   const [healthNotes, setHealthNotes] = useState('')
   const [calorieTarget, setCalorieTarget] = useState('')
@@ -3357,6 +4039,7 @@ export function HealthProfileScreen() {
       setProfile(profileData)
       setHeight(stringFrom(profileData.height) || '170')
       setWeight(stringFrom(profileData.weight) || '60')
+      setCurrentStep(profileData.onboarding_status === 'pending' && Number.isInteger(profileData.onboarding_draft_step) ? Math.max(0, Math.min(Number(profileData.onboarding_draft_step) - 1, healthProfileSteps.length - 1)) : 0)
       const nextBirthday = stringFrom(profileData.birthday)
       setBirthday(nextBirthday)
       setAge(ageFromBirthday(nextBirthday) || '25')
@@ -3367,6 +4050,8 @@ export function HealthProfileScreen() {
       setMedicalHistory(stringArrayFrom(condition.medical_history))
       setDietPreference(stringArrayFrom(condition.diet_preference))
       setAllergyList(stringArrayFrom(condition.allergies))
+      setCustomMedicalOptions(stringArrayFrom(condition.medical_history).filter((value) => !healthMedicalPresetValues.has(value)))
+      setCustomAllergyOptions(stringArrayFrom(condition.allergies).filter((value) => !healthAllergyPresetValues.has(value)))
       const routine = parseHealthRoutine(condition.routine_type)
       setSleepHour(stringFrom(condition.routine_sleep_hour) || routine.sleep || '23')
       setWakeHour(stringFrom(condition.routine_wake_hour) || routine.wake || '7')
@@ -3431,13 +4116,180 @@ export function HealthProfileScreen() {
     setAllergyList((current) => toggleHealthSelection(current, value))
   }, [])
 
-  const goNext = () => {
-    if (!canProceed) return
-    setCurrentStep((step) => Math.min(step + 1, healthProfileSteps.length - 1))
+  const buildHealthDraftInput = (serverStep: number) => ({
+    onboarding_status: 'pending' as const,
+    onboarding_draft_step: serverStep,
+    gender: gender.trim() || undefined,
+    birthday: birthdayFromAge(age) || birthday.trim() || undefined,
+    height: isHeightValid ? heightNumber : undefined,
+    weight: isWeightValid ? weightNumber : undefined,
+    activity_level: activityLevel.trim() || undefined,
+    daily_life_activity_level: activityLevel.trim() || undefined,
+    diet_goal: dietGoal.trim() || undefined,
+    medical_history: healthListForSubmit(medicalHistory),
+    diet_preference: healthListForSubmit(dietPreference),
+    allergies: healthListForSubmit(allergyList),
+    routine_type: isRoutineValid ? formatHealthRoutine(sleepHour, wakeHour) : undefined,
+    routine_sleep_hour: isRoutineValid ? sleepNumber : undefined,
+    routine_wake_hour: isRoutineValid ? wakeNumber : undefined,
+    health_notes: healthNotes.trim() || undefined,
+  })
+
+  const saveDraftAt = async (mobileStep: number) => {
+    await apiClient.updateHealthProfile(buildHealthDraftInput(Math.max(1, Math.min(mobileStep + 1, 12))))
+  }
+
+  const goNext = async () => {
+    if (!canProceed || draftSaving) return
+    const nextStep = Math.min(currentStep + 1, healthProfileSteps.length - 1)
+    setDraftSaving(true)
+    try {
+      await saveDraftAt(nextStep)
+      setCurrentStep(nextStep)
+    } catch (error) {
+      await dialog.alert('保存草稿失败', userFacingErrorMessage(error), 'danger')
+    } finally {
+      setDraftSaving(false)
+    }
   }
 
   const goPrev = () => {
     setCurrentStep((step) => Math.max(step - 1, 0))
+  }
+
+  const saveDraftAndExit = async () => {
+    if (saving || draftSaving) return
+    setDraftSaving(true)
+    try {
+      await saveDraftAt(currentStep)
+      await dialog.alert('已保存', '当前进度已保存，可稍后继续填写。', 'success')
+      navigation.navigate('MainTabs', { screen: 'HomeTab' })
+    } catch (error) {
+      await dialog.alert('保存草稿失败', userFacingErrorMessage(error), 'danger')
+    } finally {
+      setDraftSaving(false)
+    }
+  }
+
+  const saveCustomMedical = async () => {
+    const nextValue = customMedicalInput.trim()
+    if (!nextValue) {
+      await dialog.alert('请输入病史名称', undefined, 'warning')
+      return
+    }
+    if (medicalHistory.includes(nextValue) && editingMedical !== nextValue) {
+      await dialog.alert('该病史已添加', undefined, 'warning')
+      return
+    }
+    setCustomMedicalOptions((current) => {
+      if (!editingMedical) return [...current, nextValue]
+      return current.map((value) => value === editingMedical ? nextValue : value)
+    })
+    setMedicalHistory((current) => {
+      const withoutNone = current.filter((value) => value !== 'none')
+      if (!editingMedical) return [...withoutNone, nextValue]
+      return withoutNone.map((value) => value === editingMedical ? nextValue : value)
+    })
+    setCustomMedicalInput('')
+    setEditingMedical('')
+  }
+
+  const removeCustomMedical = async (value: string) => {
+    const confirmed = await dialog.confirm({
+      title: '删除确认',
+      message: `确定要删除「${value}」吗？`,
+      confirmText: '删除',
+      cancelText: '取消',
+      kind: 'danger',
+    })
+    if (!confirmed) return
+    setMedicalHistory((current) => current.filter((item) => item !== value))
+    setCustomMedicalOptions((current) => current.filter((item) => item !== value))
+    if (editingMedical === value) {
+      setEditingMedical('')
+      setCustomMedicalInput('')
+    }
+  }
+
+  const saveCustomAllergy = async () => {
+    const nextValue = customAllergyInput.trim()
+    if (!nextValue) {
+      await dialog.alert('请输入过敏源名称', undefined, 'warning')
+      return
+    }
+    if (allergyList.includes(nextValue) && editingAllergy !== nextValue) {
+      await dialog.alert('该过敏源已添加', undefined, 'warning')
+      return
+    }
+    setCustomAllergyOptions((current) => {
+      if (!editingAllergy) return [...current, nextValue]
+      return current.map((value) => value === editingAllergy ? nextValue : value)
+    })
+    setAllergyList((current) => {
+      const withoutNone = current.filter((value) => value !== 'none')
+      if (!editingAllergy) return [...withoutNone, nextValue]
+      return withoutNone.map((value) => value === editingAllergy ? nextValue : value)
+    })
+    setCustomAllergyInput('')
+    setEditingAllergy('')
+  }
+
+  const removeCustomAllergy = async (value: string) => {
+    const confirmed = await dialog.confirm({
+      title: '删除确认',
+      message: `确定要删除「${value}」吗？`,
+      confirmText: '删除',
+      cancelText: '取消',
+      kind: 'danger',
+    })
+    if (!confirmed) return
+    setAllergyList((current) => current.filter((item) => item !== value))
+    setCustomAllergyOptions((current) => current.filter((item) => item !== value))
+    if (editingAllergy === value) {
+      setEditingAllergy('')
+      setCustomAllergyInput('')
+    }
+  }
+
+  const uploadReportAssets = async (assets: ImagePicker.ImagePickerAsset[]) => {
+    if (!assets.length) return
+    setSaving(true)
+    try {
+      const urls: string[] = []
+      for (const asset of assets.slice(0, maxHealthReportImageCount)) {
+        const base64Image = await readImageAsBase64DataUrl(asset.uri, asset.mimeType || 'image/jpeg')
+        const uploaded = await apiClient.uploadHealthReportImage({ base64Image })
+        urls.push(uploaded.imageUrl)
+      }
+      setReportImageUrls(urls)
+      await dialog.alert('上传成功', `已上传 ${urls.length} 张报告图片，保存档案后开始分析。`, 'success')
+    } catch (error) {
+      await dialog.alert('上传报告失败', userFacingErrorMessage(error), 'danger')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const pickHealthReportFromAlbum = async () => {
+    setReportSourceVisible(false)
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsMultipleSelection: true,
+      selectionLimit: maxHealthReportImageCount,
+      quality: 0.86,
+    })
+    if (!result.canceled) await uploadReportAssets(result.assets)
+  }
+
+  const takeHealthReportPhoto = async () => {
+    setReportSourceVisible(false)
+    const permission = await ImagePicker.requestCameraPermissionsAsync()
+    if (!permission.granted) {
+      await dialog.alert('需要相机权限', '请允许使用相机拍摄体检报告或病例。', 'warning')
+      return
+    }
+    const result = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.86 })
+    if (!result.canceled) await uploadReportAssets(result.assets)
   }
 
   const save = async () => {
@@ -3447,8 +4299,8 @@ export function HealthProfileScreen() {
     }
     const confirmed = await dialog.confirm({
       title: '确认保存',
-      message: '确定将当前填写的健康信息保存到个人档案吗？',
-      confirmText: '保存档案',
+      message: reportImageUrls.length ? '确定保存健康档案吗？体检报告将在后台自动识别，完成后会更新到档案中。' : '确定将当前填写的健康信息保存到个人档案吗？',
+      confirmText: reportImageUrls.length ? '保存并分析' : '直接完成',
       cancelText: '取消',
       kind: 'info',
     })
@@ -3473,6 +4325,7 @@ export function HealthProfileScreen() {
         routine_sleep_hour: Number(sleepHour),
         routine_wake_hour: Number(wakeHour),
         health_notes: healthNotes.trim() || undefined,
+        report_image_url: reportImageUrls[0] || undefined,
       })
       if (calorieTarget || proteinTarget || carbsTarget || fatTarget) {
         await apiClient.updateDashboardTargets({
@@ -3483,8 +4336,15 @@ export function HealthProfileScreen() {
           target_date: todayKey(),
         })
       }
+      if (reportImageUrls.length) {
+        void apiClient.submitReportExtractionTask({
+          imageUrl: reportImageUrls[0],
+          imageUrls: reportImageUrls,
+        }).catch(() => undefined)
+      }
       await load()
-      await dialog.alert('已保存', '健康档案已更新', 'success')
+      await dialog.alert('已保存', reportImageUrls.length ? '健康档案已更新，报告正在后台分析。' : '健康档案已更新', 'success')
+      navigation.navigate('MainTabs', { screen: 'ProfileTab' })
     } catch (error) {
       await dialog.alert('保存失败', userFacingErrorMessage(error), 'danger')
     } finally {
@@ -3516,7 +4376,7 @@ export function HealthProfileScreen() {
           <>
             <HealthProfileStepHeader title="基础信息" subtitle="选择你的年龄，让我们更了解你。" />
             <HealthProfileNumberCard value={age} unit="岁" min="1" max="100" onChange={setAge} />
-            <Text style={styles.healthProfileSkipHint}>保存时会按年龄换算为生日，用于能量与营养建议。</Text>
+            <Text style={[styles.healthProfileSkipHint, isDark && healthProfileDarkStyles.secondaryText]}>保存时会按年龄换算为生日，用于能量与营养建议。</Text>
           </>
         )
       case 'height':
@@ -3524,7 +4384,7 @@ export function HealthProfileScreen() {
           <>
             <HealthProfileStepHeader title="身体数据" subtitle="你的身高是多少？" />
             <HealthProfileNumberCard value={height} unit="cm" min="100" max="250" onChange={setHeight} />
-            <Text style={styles.healthProfileSkipHint}>建议填写 100-250 cm 之间的身高。</Text>
+            <Text style={[styles.healthProfileSkipHint, isDark && healthProfileDarkStyles.secondaryText]}>建议填写 100-250 cm 之间的身高。</Text>
           </>
         )
       case 'weight':
@@ -3532,7 +4392,7 @@ export function HealthProfileScreen() {
           <>
             <HealthProfileStepHeader title="身体数据" subtitle="你的体重是多少？" />
             <HealthProfileNumberCard value={weight} unit="kg" min="30" max="200" onChange={setWeight} />
-            <Text style={styles.healthProfileSkipHint}>建议填写 30-200 kg 之间的体重。</Text>
+            <Text style={[styles.healthProfileSkipHint, isDark && healthProfileDarkStyles.secondaryText]}>建议填写 30-200 kg 之间的体重。</Text>
           </>
         )
       case 'goal':
@@ -3579,15 +4439,15 @@ export function HealthProfileScreen() {
               <HealthProfileRoutineField label="入睡" value={sleepHour} onChange={setSleepHour} />
               <HealthProfileRoutineField label="起床" value={wakeHour} onChange={setWakeHour} />
             </View>
-            <View style={styles.healthProfileInputCard}>
-              <Text style={styles.healthProfileInputHint}>常见示例：23 点睡，7 点起。只填 0-23 的小时数字。</Text>
+            <View style={[styles.healthProfileInputCard, isDark && healthProfileDarkStyles.inputCardSurface]}>
+              <Text style={[styles.healthProfileInputHint, isDark && healthProfileDarkStyles.secondaryText]}>常见示例：23 点睡，7 点起。只填 0-23 的小时数字。</Text>
             </View>
           </>
         )
       case 'medical':
         return (
           <>
-            <HealthProfileStepHeader title="既往病史" subtitle="是否有以下病史？（可多选）" />
+            <HealthProfileStepHeader title="既往病史" subtitle="是否有以下病史？（可多选，也可补充自己的情况）" />
             <View style={styles.healthProfileOptionGrid}>
               {healthMedicalOptions.map((option) => (
                 <HealthProfileChoiceCard
@@ -3595,9 +4455,52 @@ export function HealthProfileScreen() {
                   label={option.label}
                   active={medicalHistory.includes(option.value)}
                   size="small"
+                  multiple
                   onPress={() => toggleMedical(option.value)}
                 />
               ))}
+              {customMedicalOptions.map((item) => (
+                <View key={item} style={styles.healthProfileCustomOptionRow}>
+                  <View style={styles.healthProfileCustomOptionCard}>
+                    <HealthProfileChoiceCard label={item} active={medicalHistory.includes(item)} size="small" multiple onPress={() => toggleMedical(item)} />
+                  </View>
+                  <Pressable
+                    style={[styles.healthProfileCustomIconButton, isDark && healthProfileDarkStyles.secondaryButton]}
+                    onPress={() => { setEditingMedical(item); setCustomMedicalInput(item) }}
+                    accessibilityRole="button"
+                    accessibilityLabel={`编辑病史${item}`}
+                  >
+                    <Edit3 size={18} color={isDark ? '#d6e0db' : '#475569'} />
+                  </Pressable>
+                  <Pressable
+                    style={[styles.healthProfileCustomIconButton, isDark && healthProfileDarkStyles.secondaryButton]}
+                    onPress={() => void removeCustomMedical(item)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`删除病史${item}`}
+                  >
+                    <Trash2 size={18} color="#e05252" />
+                  </Pressable>
+                </View>
+              ))}
+            </View>
+            <View style={[styles.healthProfileCustomInputRow, isDark && healthProfileDarkStyles.inputCardSurface]}>
+              <TextInput
+                value={customMedicalInput}
+                onChangeText={setCustomMedicalInput}
+                placeholder="输入自定义病史"
+                placeholderTextColor={isDark ? '#7f8c87' : '#94a3b8'}
+                style={[styles.healthProfileCustomInput, isDark && healthProfileDarkStyles.inputText]}
+                maxLength={40}
+                accessibilityLabel="自定义病史名称"
+              />
+              {editingMedical ? (
+                <Pressable style={styles.healthProfileCustomCancelButton} onPress={() => { setEditingMedical(''); setCustomMedicalInput('') }} accessibilityRole="button" accessibilityLabel="取消编辑病史">
+                  <X size={18} color={isDark ? '#a9b6b0' : '#64748b'} />
+                </Pressable>
+              ) : null}
+              <Pressable style={styles.healthProfileCustomAddButton} onPress={() => void saveCustomMedical()} accessibilityRole="button" accessibilityLabel={editingMedical ? '保存病史修改' : '添加自定义病史'}>
+                {editingMedical ? <Check size={19} color="#ffffff" /> : <Plus size={19} color="#ffffff" />}
+              </Pressable>
             </View>
           </>
         )
@@ -3613,6 +4516,7 @@ export function HealthProfileScreen() {
                   icon={option.icon}
                   active={dietPreference.includes(option.value)}
                   size="small"
+                  multiple
                   onPress={() => toggleDietPreference(option.value)}
                 />
               ))}
@@ -3622,7 +4526,7 @@ export function HealthProfileScreen() {
       case 'allergy':
         return (
           <>
-            <HealthProfileStepHeader title="过敏源" subtitle="有过敏源吗？（可多选）" />
+            <HealthProfileStepHeader title="过敏源" subtitle="有过敏源吗？（可多选，也可补充自己的情况）" />
             <View style={styles.healthProfileOptionGrid}>
               {healthAllergyOptions.map((option) => (
                 <HealthProfileChoiceCard
@@ -3631,53 +4535,142 @@ export function HealthProfileScreen() {
                   icon={option.icon}
                   active={allergyList.includes(option.value)}
                   size="small"
+                  multiple
                   onPress={() => toggleAllergy(option.value)}
                 />
               ))}
+              {customAllergyOptions.map((item) => (
+                <View key={item} style={styles.healthProfileCustomOptionRow}>
+                  <View style={styles.healthProfileCustomOptionCard}>
+                    <HealthProfileChoiceCard label={item} active={allergyList.includes(item)} size="small" multiple onPress={() => toggleAllergy(item)} />
+                  </View>
+                  <Pressable
+                    style={[styles.healthProfileCustomIconButton, isDark && healthProfileDarkStyles.secondaryButton]}
+                    onPress={() => { setEditingAllergy(item); setCustomAllergyInput(item) }}
+                    accessibilityRole="button"
+                    accessibilityLabel={`编辑过敏源${item}`}
+                  >
+                    <Edit3 size={18} color={isDark ? '#d6e0db' : '#475569'} />
+                  </Pressable>
+                  <Pressable
+                    style={[styles.healthProfileCustomIconButton, isDark && healthProfileDarkStyles.secondaryButton]}
+                    onPress={() => void removeCustomAllergy(item)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`删除过敏源${item}`}
+                  >
+                    <Trash2 size={18} color="#e05252" />
+                  </Pressable>
+                </View>
+              ))}
+            </View>
+            <View style={[styles.healthProfileCustomInputRow, isDark && healthProfileDarkStyles.inputCardSurface]}>
+              <TextInput
+                value={customAllergyInput}
+                onChangeText={setCustomAllergyInput}
+                placeholder="输入自定义过敏源"
+                placeholderTextColor={isDark ? '#7f8c87' : '#94a3b8'}
+                style={[styles.healthProfileCustomInput, isDark && healthProfileDarkStyles.inputText]}
+                maxLength={40}
+                accessibilityLabel="自定义过敏源名称"
+              />
+              {editingAllergy ? (
+                <Pressable style={styles.healthProfileCustomCancelButton} onPress={() => { setEditingAllergy(''); setCustomAllergyInput('') }} accessibilityRole="button" accessibilityLabel="取消编辑过敏源">
+                  <X size={18} color={isDark ? '#a9b6b0' : '#64748b'} />
+                </Pressable>
+              ) : null}
+              <Pressable style={styles.healthProfileCustomAddButton} onPress={() => void saveCustomAllergy()} accessibilityRole="button" accessibilityLabel={editingAllergy ? '保存过敏源修改' : '添加自定义过敏源'}>
+                {editingAllergy ? <Check size={19} color="#ffffff" /> : <Plus size={19} color="#ffffff" />}
+              </Pressable>
             </View>
           </>
         )
       case 'notes':
-      default:
         return (
           <>
             <HealthProfileStepHeader title="补充信息" subtitle="有其他特殊情况需要补充吗？（选填）" />
-            <View style={styles.healthProfileInputCard}>
+            <View style={[styles.healthProfileInputCard, isDark && healthProfileDarkStyles.inputCardSurface]}>
               <TextInput
                 value={healthNotes}
                 onChangeText={setHealthNotes}
                 multiline
                 maxLength={500}
                 placeholder="例如：孕期、哺乳期、手术恢复期等"
-                placeholderTextColor="#94a3b8"
+                placeholderTextColor={isDark ? '#7f8c87' : '#94a3b8'}
                 textAlignVertical="top"
-                style={styles.healthProfileTextarea}
+                style={[styles.healthProfileTextarea, isDark && healthProfileDarkStyles.inputText]}
               />
             </View>
-            <Text style={styles.healthProfileSkipHint}>记录身体的特殊情况，让分析更准确（没有可留空）</Text>
+            <Text style={[styles.healthProfileSkipHint, isDark && healthProfileDarkStyles.secondaryText]}>记录身体的特殊情况，让分析更准确（没有可留空）</Text>
 
-            <View style={styles.healthProfileTargetPanel}>
-              <Text style={styles.healthProfileTargetTitle}>首页目标</Text>
-              <Text style={styles.healthProfileTargetSubtitle}>同步首页热量和三大营养素目标。</Text>
+            <View style={[styles.healthProfileTargetPanel, isDark && healthProfileDarkStyles.targetPanel]}>
+              <Text style={[styles.healthProfileTargetTitle, isDark && healthProfileDarkStyles.primaryText]}>首页目标</Text>
+              <Text style={[styles.healthProfileTargetSubtitle, isDark && healthProfileDarkStyles.secondaryText]}>同步首页热量和三大营养素目标。</Text>
               <View style={styles.healthProfileTargetGrid}>
                 <HealthProfileTargetField label="热量" unit="kcal" value={calorieTarget} onChange={setCalorieTarget} />
                 <HealthProfileTargetField label="蛋白质" unit="g" value={proteinTarget} onChange={setProteinTarget} />
                 <HealthProfileTargetField label="碳水" unit="g" value={carbsTarget} onChange={setCarbsTarget} />
                 <HealthProfileTargetField label="脂肪" unit="g" value={fatTarget} onChange={setFatTarget} />
               </View>
-              <Pressable style={styles.healthProfileReportLink} onPress={() => navigation.navigate('HealthProfileView')}>
-                <Text style={styles.healthProfileReportLinkText}>体检报告与详情在档案详情页继续管理</Text>
-                <Text style={styles.healthProfileReportLinkArrow}>›</Text>
-              </Pressable>
             </View>
           </>
         )
+      case 'report':
+        return (
+          <>
+            <View style={styles.healthProfileReportHero}>
+              <View style={styles.healthProfileReportHeroIcon}>
+                <ImagePlus size={30} color="#00bc7d" accessibilityElementsHidden />
+              </View>
+              <HealthProfileStepHeader title="体检报告" subtitle="上传体检报告，AI 深度分析关键指标，定制专属方案。" />
+            </View>
+            <Pressable
+              style={[styles.healthProfileReportUpload, isDark && healthProfileDarkStyles.inputCard, reportImageUrls.length > 0 && styles.healthProfileReportUploadFilled]}
+              onPress={() => setReportSourceVisible(true)}
+              disabled={saving}
+              accessibilityRole="button"
+              accessibilityLabel={reportImageUrls.length ? `已选择 ${reportImageUrls.length} 张报告图片，点击重新上传` : '上传体检报告图片'}
+              accessibilityState={{ disabled: saving, busy: saving }}
+            >
+              {saving ? (
+                <ActivityIndicator color={colors.brand} size="small" />
+              ) : reportImageUrls.length ? (
+                <>
+                  <View style={styles.healthProfileReportGrid}>
+                    {reportImageUrls.map((url, index) => (
+                      <View key={`${url}-${index}`} style={styles.healthProfileReportPreview}>
+                        <Image source={{ uri: url }} resizeMode="cover" style={styles.healthProfileReportImage} accessibilityLabel={`第 ${index + 1} 张体检报告`} />
+                        <View style={styles.healthProfileReportIndex}><Text style={styles.healthProfileReportIndexText}>{index + 1}</Text></View>
+                      </View>
+                    ))}
+                  </View>
+                  <Text style={[styles.healthProfileReportUploadTitle, isDark && healthProfileDarkStyles.primaryText]}>点击重新选择报告</Text>
+                </>
+              ) : (
+                <>
+                  <ImagePlus size={34} color="#00bc7d" accessibilityElementsHidden />
+                  <Text style={[styles.healthProfileReportUploadTitle, isDark && healthProfileDarkStyles.primaryText]}>拍摄或从相册选择</Text>
+                  <Text style={[styles.healthProfileReportUploadHint, isDark && healthProfileDarkStyles.secondaryText]}>最多 9 张，支持体检单和病例图片</Text>
+                </>
+              )}
+            </Pressable>
+            <View style={[styles.healthProfileReportBenefits, isDark && healthProfileDarkStyles.targetPanel]}>
+              {['识别关键体检指标', '结合健康档案生成建议', '分析在后台完成，可稍后查看'].map((label) => (
+                <View key={label} style={styles.healthProfileReportBenefitRow}>
+                  <View style={styles.healthProfileReportBenefitIcon}><Check size={14} color="#ffffff" /></View>
+                  <Text style={[styles.healthProfileReportBenefitText, isDark && healthProfileDarkStyles.secondaryText]}>{label}</Text>
+                </View>
+              ))}
+            </View>
+          </>
+        )
+      default:
+        return null
     }
   }
 
   if (loading && !profile) {
     return (
-      <View style={styles.healthProfilePage}>
+      <View style={[styles.healthProfilePage, isDark && healthProfileDarkStyles.page]}>
         <View style={styles.healthProfileLoading}>
           <ActivityIndicator color={colors.brand} size="small" />
         </View>
@@ -3686,7 +4679,7 @@ export function HealthProfileScreen() {
   }
 
   return (
-    <View style={styles.healthProfilePage}>
+    <View style={[styles.healthProfilePage, isDark && healthProfileDarkStyles.page]}>
       <View style={styles.healthProfileProgressWrap}>
         <View style={styles.healthProfileProgressDots}>
           {healthProfileSteps.map((step, index) => (
@@ -3694,13 +4687,14 @@ export function HealthProfileScreen() {
               key={step}
               style={[
                 styles.healthProfileProgressDot,
+                isDark && healthProfileDarkStyles.progressDot,
                 index <= currentStep && styles.healthProfileProgressDotActive,
                 index === currentStep && styles.healthProfileProgressDotCurrent,
               ]}
             />
           ))}
         </View>
-        <Text style={styles.healthProfileProgressText}>{currentStep + 1} / {healthProfileSteps.length}</Text>
+        <Text style={[styles.healthProfileProgressText, isDark && healthProfileDarkStyles.secondaryText]} accessibilityRole="text" accessibilityLabel={`第 ${currentStep + 1} 步，共 ${healthProfileSteps.length} 步`} numberOfLines={1}>{currentStep + 1} / {healthProfileSteps.length}</Text>
       </View>
 
       <ScrollView
@@ -3712,29 +4706,67 @@ export function HealthProfileScreen() {
         {renderStep()}
         <View style={[styles.healthProfileFooter, currentStep === 0 && styles.healthProfileFooterSingle]}>
           {currentStep > 0 ? (
-            <Pressable style={styles.healthProfilePrevButton} disabled={saving} onPress={goPrev}>
-              <Text style={styles.healthProfilePrevText}>‹ 上一步</Text>
+            <Pressable style={[styles.healthProfilePrevButton, isDark && healthProfileDarkStyles.secondaryButton]} disabled={saving || draftSaving} onPress={goPrev} accessibilityRole="button" accessibilityLabel="上一步">
+              <Text style={[styles.healthProfilePrevText, isDark && healthProfileDarkStyles.secondaryButtonText]}>‹ 上一步</Text>
             </Pressable>
           ) : null}
           <Pressable
             style={[
               styles.healthProfileNextButton,
               !canProceed && styles.healthProfileNextButtonDisabled,
+              !canProceed && isDark && healthProfileDarkStyles.disabledButton,
               isLastStep && styles.healthProfileNextButtonReady,
             ]}
-            disabled={!canProceed || saving}
-            onPress={isLastStep ? () => void save() : goNext}
+            disabled={!canProceed || saving || draftSaving}
+            onPress={isLastStep ? () => void save() : () => void goNext()}
+            accessibilityRole="button"
+            accessibilityState={{ disabled: !canProceed || saving || draftSaving, busy: saving || draftSaving }}
           >
-            {saving ? (
+            {saving || draftSaving ? (
               <ActivityIndicator color="#ffffff" size="small" />
             ) : (
-              <Text style={[styles.healthProfileNextText, (!canProceed && !isLastStep) && styles.healthProfileNextTextDisabled]}>
-                {isLastStep ? '保存档案' : '下一步 ›'}
+              <Text style={[styles.healthProfileNextText, (!canProceed && !isLastStep) && styles.healthProfileNextTextDisabled, !canProceed && isDark && healthProfileDarkStyles.disabledButtonText]}>
+                {isLastStep ? (reportImageUrls.length ? '确认并开启分析' : '以后再说，直接完成') : '下一步 ›'}
               </Text>
             )}
           </Pressable>
         </View>
+        {!isLastStep ? (
+          <Pressable
+            style={styles.healthProfileSaveExitButton}
+            onPress={() => void saveDraftAndExit()}
+            disabled={saving || draftSaving}
+            accessibilityRole="button"
+            accessibilityLabel="保存并稍后继续"
+            accessibilityState={{ disabled: saving || draftSaving, busy: draftSaving }}
+          >
+            <Text style={[styles.healthProfileSaveExitText, isDark && healthProfileDarkStyles.secondaryText]}>保存并稍后继续</Text>
+          </Pressable>
+        ) : null}
       </ScrollView>
+      <Modal visible={reportSourceVisible} transparent animationType="fade" onRequestClose={() => setReportSourceVisible(false)}>
+        <Pressable style={styles.healthProfileSourceBackdrop} onPress={() => setReportSourceVisible(false)}>
+          <Pressable
+            style={[styles.healthProfileSourceSheet, isDark && healthProfileDarkStyles.sourceSheet, { paddingBottom: Math.max(insets.bottom, 16) + 14 }]}
+            onPress={(event) => event.stopPropagation?.()}
+          >
+            <View style={[styles.healthProfileSourceHandle, isDark && healthProfileDarkStyles.sourceHandle]} />
+            <Text style={[styles.healthProfileSourceTitle, isDark && healthProfileDarkStyles.primaryText]}>上传体检/病例报告</Text>
+            <Text style={[styles.healthProfileSourceSubtitle, isDark && healthProfileDarkStyles.secondaryText]}>请选择图片来源，拍摄时才会申请相机权限。</Text>
+            <Pressable style={styles.healthProfileSourcePrimary} onPress={() => void takeHealthReportPhoto()} accessibilityRole="button" accessibilityLabel="拍摄体检报告">
+              <ImagePlus size={20} color="#ffffff" />
+              <Text style={styles.healthProfileSourcePrimaryText}>拍摄</Text>
+            </Pressable>
+            <Pressable style={[styles.healthProfileSourceSecondary, isDark && healthProfileDarkStyles.secondaryButton]} onPress={() => void pickHealthReportFromAlbum()} accessibilityRole="button" accessibilityLabel="从手机相册选择体检报告">
+              <ImageIcon size={20} color={isDark ? '#d6e0db' : '#475569'} />
+              <Text style={[styles.healthProfileSourceSecondaryText, isDark && healthProfileDarkStyles.secondaryButtonText]}>从手机相册选择</Text>
+            </Pressable>
+            <Pressable style={styles.healthProfileSourceCancel} onPress={() => setReportSourceVisible(false)} accessibilityRole="button" accessibilityLabel="取消上传体检报告">
+              <Text style={[styles.healthProfileSourceCancelText, isDark && healthProfileDarkStyles.secondaryText]}>取消</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   )
 }
@@ -3743,6 +4775,8 @@ export function BodyMetricRecordScreen() {
   const route = useRoute<RouteProp<RootStackParamList, 'BodyMetricRecord'>>()
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const dialog = useAppDialog()
+  const { isDark } = useColorScheme()
+  const { width: viewportWidth } = useWindowDimensions()
   const type = route.params?.type || 'weight'
   const initialDate = normalizeRouteDate(route.params?.date)
   const [summary, setSummary] = useState<BodyMetricsSummary | null>(null)
@@ -3752,6 +4786,16 @@ export function BodyMetricRecordScreen() {
   const [exerciseDesc, setExerciseDesc] = useState('')
   const [exerciseImageUri, setExerciseImageUri] = useState('')
   const [exerciseImageUrl, setExerciseImageUrl] = useState('')
+  const [exerciseEstimationMode, setExerciseEstimationMode] = useState<ExerciseEstimationMode>('standard')
+  const [exerciseDuration, setExerciseDuration] = useState('')
+  const [exerciseIntensity, setExerciseIntensity] = useState<ExerciseIntensity>('moderate')
+  const [exerciseHeartRate, setExerciseHeartRate] = useState('')
+  const [exerciseDistance, setExerciseDistance] = useState('')
+  const [exerciseBreakdown, setExerciseBreakdown] = useState('')
+  const [exercisePrecisionTouched, setExercisePrecisionTouched] = useState<ExercisePrecisionTouched>({ duration: false, heartRate: false, distance: false })
+  const exerciseDurationRef = useRef<TextInput>(null)
+  const exerciseHeartRateRef = useRef<TextInput>(null)
+  const exerciseDistanceRef = useRef<TextInput>(null)
   const [exerciseTask, setExerciseTask] = useState<{ taskId: string; desc: string; status: string; errorMessage?: string } | null>(null)
   const [exercisePolling, setExercisePolling] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -3797,6 +4841,24 @@ export function BodyMetricRecordScreen() {
   const waterRemaining = Math.max(0, waterGoal - currentWaterTotal)
 
   const save = async (overrideValue?: number) => {
+    if (type === 'exercise' && exerciseEstimationMode === 'precision') {
+      setExercisePrecisionTouched({ duration: true, heartRate: true, distance: true })
+      const durationError = exerciseDurationError(exerciseDuration)
+      const heartRateError = exerciseHeartRateError(exerciseHeartRate)
+      const distanceError = exerciseDistanceError(exerciseDistance)
+      if (durationError) {
+        exerciseDurationRef.current?.focus()
+        return
+      }
+      if (heartRateError) {
+        exerciseHeartRateRef.current?.focus()
+        return
+      }
+      if (distanceError) {
+        exerciseDistanceRef.current?.focus()
+        return
+      }
+    }
     setLoading(true)
     try {
       if (type === 'weight') {
@@ -3816,7 +4878,18 @@ export function BodyMetricRecordScreen() {
         await apiClient.addBodyWaterLog(Math.round(amount), date)
         emitHomeDashboardRefreshEvent({ date, force: true })
       } else {
-        const result = await apiClient.createExerciseLog({ exerciseDesc, date, imageUrl: exerciseImageUrl })
+        const precisionEnabled = exerciseEstimationMode === 'precision'
+        const result = await apiClient.createExerciseLog({
+          exerciseDesc,
+          date,
+          imageUrl: exerciseImageUrl,
+          estimationMode: exerciseEstimationMode,
+          totalDurationMin: precisionEnabled ? Number(exerciseDuration) : undefined,
+          intensity: precisionEnabled ? exerciseIntensity : undefined,
+          averageHeartRate: precisionEnabled && exerciseHeartRate.trim() ? Number(exerciseHeartRate) : undefined,
+          distanceKm: precisionEnabled && exerciseDistance.trim() ? Number(exerciseDistance) : undefined,
+          exerciseBreakdown: precisionEnabled ? exerciseBreakdown : undefined,
+        })
         const taskId = String(result.task_id || result.taskId || '').trim()
         if (taskId) {
           const desc = exerciseDesc || '运动图片识别'
@@ -3826,6 +4899,11 @@ export function BodyMetricRecordScreen() {
         setExerciseDesc('')
         setExerciseImageUri('')
         setExerciseImageUrl('')
+        setExerciseDuration('')
+        setExerciseHeartRate('')
+        setExerciseDistance('')
+        setExerciseBreakdown('')
+        setExercisePrecisionTouched({ duration: false, heartRate: false, distance: false })
       }
       await load()
       await dialog.alert(type === 'exercise' ? '已提交' : '已保存', type === 'exercise' ? '后台运动分析已提交，完成后会写入当天记录。' : '记录已更新', 'success')
@@ -4026,7 +5104,28 @@ export function BodyMetricRecordScreen() {
   const routeDateLabel = date === todayKey() ? '今天' : formatShortDate(date)
   const accent = isWater ? '#5c9ed4' : isExercise ? '#f97316' : '#5cb896'
   const accentDeep = isWater ? '#3278ab' : isExercise ? '#ea580c' : '#3f9474'
-  const pageBackground = isWater ? '#eef4f7' : isExercise ? '#f8fafc' : '#f0f3f6'
+  const exerciseTheme = isDark ? {
+    page: '#0f172a',
+    surface: '#111827',
+    surfaceMuted: '#1f2937',
+    border: '#374151',
+    text: '#f8fafc',
+    muted: '#cbd5e1',
+    subtle: '#94a3b8',
+    orangeSoft: '#431c0d',
+    input: '#111827',
+  } : {
+    page: '#f8fafc',
+    surface: '#ffffff',
+    surfaceMuted: '#f8fafc',
+    border: '#e5e7eb',
+    text: '#111827',
+    muted: '#6b7280',
+    subtle: '#9ca3af',
+    orangeSoft: '#fff7ed',
+    input: '#ffffff',
+  }
+  const pageBackground = isWater ? '#eef4f7' : isExercise ? exerciseTheme.page : '#f0f3f6'
   const exerciseTotalCalories = logs.reduce((sum, log) => sum + Math.round(log.calories_burned || 0), 0)
   const waterProgress = waterGoal > 0 ? Math.min(100, Math.round((currentWaterTotal / waterGoal) * 100)) : 0
   const latestWeightChange = summary?.latest_weight && summary?.previous_weight
@@ -4036,9 +5135,14 @@ export function BodyMetricRecordScreen() {
     ? `最近一次 ${summary.latest_weight.value}kg${Number.isFinite(Number(latestWeightChange)) ? `，较上次 ${Number(latestWeightChange) >= 0 ? '+' : ''}${Number(latestWeightChange).toFixed(1)}kg` : ''}`
     : '保存后会同步更新首页和健康档案体重'
   const canSubmitExercise = Boolean(exerciseDesc.trim() || exerciseImageUrl)
+  const precisionEnabled = exerciseEstimationMode === 'precision'
+  const durationValidation = precisionEnabled && exercisePrecisionTouched.duration ? exerciseDurationError(exerciseDuration) : ''
+  const heartRateValidation = precisionEnabled && exercisePrecisionTouched.heartRate ? exerciseHeartRateError(exerciseHeartRate) : ''
+  const distanceValidation = precisionEnabled && exercisePrecisionTouched.distance ? exerciseDistanceError(exerciseDistance) : ''
+  const exercisePrecisionInline = viewportWidth >= 400
 
   return (
-    <View style={[styles.bodyRecordPage, { backgroundColor: pageBackground }]}>
+    <KeyboardAvoidingView style={[styles.bodyRecordPage, { backgroundColor: pageBackground }]} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView
         style={styles.bodyRecordScroll}
         contentContainerStyle={[styles.bodyRecordContent, { paddingTop: Math.max(insets.top + 12, 24), paddingBottom: insets.bottom + 96 }]}
@@ -4047,18 +5151,18 @@ export function BodyMetricRecordScreen() {
       >
         {isExercise ? (
           <View style={styles.exerciseStatsWrap}>
-            <View style={styles.exerciseStatsCard}>
+            <View style={[styles.exerciseStatsCard, { backgroundColor: exerciseTheme.surface }]}>
               <View style={styles.exerciseStatsIcon}>
                 <Dumbbell size={22} color="#07c160" />
               </View>
               <View style={styles.flex}>
-                <Text style={styles.exerciseStatsLabel}>{routeDateLabel}运动消耗</Text>
+                <Text style={[styles.exerciseStatsLabel, { color: exerciseTheme.muted }]}>{routeDateLabel}运动消耗</Text>
                 <View style={styles.exerciseStatsValueRow}>
-                  <Text style={styles.exerciseStatsValue}>{exerciseTotalCalories}</Text>
+                  <Text style={[styles.exerciseStatsValue, { color: exerciseTheme.text }]}>{exerciseTotalCalories}</Text>
                   <Text style={styles.exerciseStatsUnit}>kcal</Text>
                 </View>
               </View>
-              <Text style={styles.exerciseStatsCount}>{logs.length} 次记录</Text>
+              <Text style={[styles.exerciseStatsCount, { backgroundColor: exerciseTheme.orangeSoft }]}>{logs.length} 次记录</Text>
             </View>
           </View>
         ) : (
@@ -4200,20 +5304,190 @@ export function BodyMetricRecordScreen() {
 
         {isExercise ? (
           <>
-            <View style={styles.exerciseInputSection}>
+            <View style={[styles.exerciseInputSection, { backgroundColor: exerciseTheme.surface }]}>
               <View style={styles.exerciseComposeHeader}>
                 <View style={styles.flex}>
                   <Text style={styles.exerciseComposeKicker}>{routeDateLabel}</Text>
-                  <Text style={styles.exerciseComposeTitle}>记录运动</Text>
+                  <Text style={[styles.exerciseComposeTitle, { color: exerciseTheme.text }]}>记录运动</Text>
                 </View>
-                <Pressable style={styles.exerciseTrendLink} onPress={() => navigation.navigate('TrendDetail', { kind: trendKind, date })}>
+                <Pressable accessibilityRole="button" accessibilityLabel="查看运动趋势" style={({ pressed }) => [styles.exerciseTrendLink, { backgroundColor: exerciseTheme.orangeSoft }, pressed && styles.exercisePressed]} onPress={() => navigation.navigate('TrendDetail', { kind: trendKind, date })}>
                   <Text style={styles.exerciseTrendText}>查看趋势</Text>
                 </Pressable>
               </View>
-              <Text style={styles.exerciseQuickTitle}>试试这样说：</Text>
+              <Text style={[styles.exerciseComposeCost, { color: exerciseTheme.subtle }]}>消耗 1 积分</Text>
+              <View
+                style={[styles.exerciseModeSwitch, { backgroundColor: exerciseTheme.surfaceMuted, borderColor: exerciseTheme.border }]}
+                accessibilityRole="tablist"
+              >
+                <Pressable
+                  accessibilityRole="tab"
+                  accessibilityState={{ selected: exerciseEstimationMode === 'standard' }}
+                  accessibilityLabel="标准估算"
+                  accessibilityHint="只根据运动描述或图片估算"
+                  style={({ pressed }) => [
+                    styles.exerciseModeOption,
+                    exerciseEstimationMode === 'standard' && [styles.exerciseModeOptionActive, { backgroundColor: exerciseTheme.surface }],
+                    pressed && styles.exercisePressed,
+                  ]}
+                  onPress={() => setExerciseEstimationMode('standard')}
+                >
+                  <Text style={[styles.exerciseModeOptionTitle, { color: exerciseTheme.text }, exerciseEstimationMode === 'standard' && styles.exerciseModeOptionTitleActive]}>标准估算</Text>
+                  <Text style={[styles.exerciseModeOptionDesc, { color: exerciseTheme.subtle }]}>快速记录</Text>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="tab"
+                  accessibilityState={{ selected: exerciseEstimationMode === 'precision' }}
+                  accessibilityLabel="精准估算"
+                  accessibilityHint="补充时长、强度等信息以减少猜测"
+                  style={({ pressed }) => [
+                    styles.exerciseModeOption,
+                    exerciseEstimationMode === 'precision' && [styles.exerciseModeOptionActive, { backgroundColor: exerciseTheme.surface }],
+                    pressed && styles.exercisePressed,
+                  ]}
+                  onPress={() => setExerciseEstimationMode('precision')}
+                >
+                  <Text style={[styles.exerciseModeOptionTitle, { color: exerciseTheme.text }, exerciseEstimationMode === 'precision' && styles.exerciseModeOptionTitleActive]}>精准估算</Text>
+                  <Text style={[styles.exerciseModeOptionDesc, { color: exerciseTheme.subtle }]}>补充关键数据</Text>
+                </Pressable>
+              </View>
+
+              {precisionEnabled ? (
+                <View style={[styles.exercisePrecisionPanel, { backgroundColor: exerciseTheme.surfaceMuted, borderColor: exerciseTheme.border }]}>
+                  <View style={styles.exercisePrecisionHeading}>
+                    <Text style={[styles.exercisePrecisionTitle, { color: exerciseTheme.text }]}>补充信息，减少猜测</Text>
+                    <Text style={[styles.exercisePrecisionTip, { color: exerciseTheme.muted }]}>总时长只用于整次训练，不会复制给每个动作。</Text>
+                  </View>
+
+                  <View style={styles.exercisePrecisionField}>
+                    <Text style={[styles.exercisePrecisionLabel, { color: exerciseTheme.text }]}>总时长 <Text style={styles.exerciseRequired}>*</Text></Text>
+                    <View style={[
+                      styles.exercisePrecisionInputWrap,
+                      { backgroundColor: exerciseTheme.input, borderColor: durationValidation ? '#ef4444' : exerciseTheme.border },
+                    ]}>
+                      <TextInput
+                        ref={exerciseDurationRef}
+                        value={exerciseDuration}
+                        onChangeText={setExerciseDuration}
+                        onBlur={() => setExercisePrecisionTouched((current) => ({ ...current, duration: true }))}
+                        keyboardType="number-pad"
+                        returnKeyType="next"
+                        placeholder="例如 50"
+                        placeholderTextColor={exerciseTheme.subtle}
+                        style={[styles.exercisePrecisionInput, { color: exerciseTheme.text }]}
+                        accessibilityLabel="总时长，必填，单位分钟"
+                        accessibilityHint="请输入 1 到 480"
+                      />
+                      <Text style={[styles.exercisePrecisionUnit, { color: exerciseTheme.muted }]}>分钟</Text>
+                    </View>
+                    {durationValidation ? <Text style={styles.exercisePrecisionError} accessibilityLiveRegion="polite">{durationValidation}</Text> : null}
+                  </View>
+
+                  <View style={styles.exercisePrecisionField}>
+                    <Text style={[styles.exercisePrecisionLabel, { color: exerciseTheme.text }]}>运动强度</Text>
+                    <View style={styles.exerciseIntensityRow}>
+                      {exerciseIntensityOptions.map((option) => {
+                        const selected = exerciseIntensity === option.value
+                        return (
+                          <Pressable
+                            key={option.value}
+                            accessibilityRole="radio"
+                            accessibilityState={{ selected }}
+                            accessibilityLabel={`运动强度，${option.label}`}
+                            style={({ pressed }) => [
+                              styles.exerciseIntensityOption,
+                              { backgroundColor: exerciseTheme.input, borderColor: exerciseTheme.border },
+                              selected && styles.exerciseIntensityOptionActive,
+                              pressed && styles.exercisePressed,
+                            ]}
+                            onPress={() => setExerciseIntensity(option.value)}
+                          >
+                            <Text style={[styles.exerciseIntensityText, { color: exerciseTheme.muted }, selected && styles.exerciseIntensityTextActive]}>{option.label}</Text>
+                          </Pressable>
+                        )
+                      })}
+                    </View>
+                  </View>
+
+                  <View style={[styles.exercisePrecisionInline, !exercisePrecisionInline && styles.exercisePrecisionInlineStacked]}>
+                    <View style={[styles.exercisePrecisionField, exercisePrecisionInline && styles.exercisePrecisionHalf]}>
+                      <Text style={[styles.exercisePrecisionLabel, { color: exerciseTheme.text }]}>平均心率 <Text style={[styles.exerciseOptional, { color: exerciseTheme.subtle }]}>选填</Text></Text>
+                      <View style={[
+                        styles.exercisePrecisionInputWrap,
+                        { backgroundColor: exerciseTheme.input, borderColor: heartRateValidation ? '#ef4444' : exerciseTheme.border },
+                      ]}>
+                        <TextInput
+                          ref={exerciseHeartRateRef}
+                          value={exerciseHeartRate}
+                          onChangeText={setExerciseHeartRate}
+                          onBlur={() => setExercisePrecisionTouched((current) => ({ ...current, heartRate: true }))}
+                          keyboardType="number-pad"
+                          returnKeyType="next"
+                          placeholder="例如 148"
+                          placeholderTextColor={exerciseTheme.subtle}
+                          style={[styles.exercisePrecisionInput, { color: exerciseTheme.text }]}
+                          accessibilityLabel="平均心率，选填，单位次每分钟"
+                          accessibilityHint="请输入 30 到 250"
+                        />
+                        <Text style={[styles.exercisePrecisionUnit, { color: exerciseTheme.muted }]}>次/分</Text>
+                      </View>
+                      {heartRateValidation ? <Text style={styles.exercisePrecisionError} accessibilityLiveRegion="polite">{heartRateValidation}</Text> : null}
+                    </View>
+
+                    <View style={[styles.exercisePrecisionField, exercisePrecisionInline && styles.exercisePrecisionHalf]}>
+                      <Text style={[styles.exercisePrecisionLabel, { color: exerciseTheme.text }]}>运动距离 <Text style={[styles.exerciseOptional, { color: exerciseTheme.subtle }]}>选填</Text></Text>
+                      <View style={[
+                        styles.exercisePrecisionInputWrap,
+                        { backgroundColor: exerciseTheme.input, borderColor: distanceValidation ? '#ef4444' : exerciseTheme.border },
+                      ]}>
+                        <TextInput
+                          ref={exerciseDistanceRef}
+                          value={exerciseDistance}
+                          onChangeText={setExerciseDistance}
+                          onBlur={() => setExercisePrecisionTouched((current) => ({ ...current, distance: true }))}
+                          keyboardType="decimal-pad"
+                          returnKeyType="done"
+                          placeholder="例如 5.2"
+                          placeholderTextColor={exerciseTheme.subtle}
+                          style={[styles.exercisePrecisionInput, { color: exerciseTheme.text }]}
+                          accessibilityLabel="运动距离，选填，单位公里"
+                          accessibilityHint="请输入大于 0 且不超过 1000 的数值"
+                        />
+                        <Text style={[styles.exercisePrecisionUnit, { color: exerciseTheme.muted }]}>公里</Text>
+                      </View>
+                      {distanceValidation ? <Text style={styles.exercisePrecisionError} accessibilityLiveRegion="polite">{distanceValidation}</Text> : null}
+                    </View>
+                  </View>
+
+                  <View style={[styles.exercisePrecisionField, styles.exercisePrecisionFieldLast]}>
+                    <View style={styles.exerciseBreakdownLabelRow}>
+                      <Text style={[styles.exercisePrecisionLabel, { color: exerciseTheme.text }]}>动作拆分 <Text style={[styles.exerciseOptional, { color: exerciseTheme.subtle }]}>选填</Text></Text>
+                      <Text style={[styles.exerciseBreakdownCount, { color: exerciseTheme.subtle }]}>{exerciseBreakdown.length}/1000</Text>
+                    </View>
+                    <TextInput
+                      value={exerciseBreakdown}
+                      onChangeText={setExerciseBreakdown}
+                      multiline
+                      maxLength={1000}
+                      textAlignVertical="top"
+                      placeholder={'例如：跑步 30 分钟\n力量训练 20 分钟'}
+                      placeholderTextColor={exerciseTheme.subtle}
+                      style={[styles.exerciseBreakdownInput, { color: exerciseTheme.text, backgroundColor: exerciseTheme.input, borderColor: exerciseTheme.border }]}
+                      accessibilityLabel="动作拆分，选填"
+                    />
+                  </View>
+                </View>
+              ) : null}
+
+              <Text style={[styles.exerciseQuickTitle, { color: exerciseTheme.muted }]}>试试这样说：</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.exerciseQuickRow}>
                 {exercisePresets.map((preset) => (
-                  <Pressable key={preset} style={styles.exerciseQuickChip} onPress={() => setExerciseDesc(preset)}>
+                  <Pressable
+                    key={preset}
+                    accessibilityRole="button"
+                    accessibilityLabel={`填入示例：${preset}`}
+                    style={({ pressed }) => [styles.exerciseQuickChip, { backgroundColor: exerciseTheme.orangeSoft }, pressed && styles.exercisePressed]}
+                    onPress={() => setExerciseDesc(preset)}
+                  >
                     <Text style={styles.exerciseQuickChipText}>{preset}</Text>
                   </Pressable>
                 ))}
@@ -4221,13 +5495,13 @@ export function BodyMetricRecordScreen() {
               {exerciseImageUri ? (
                 <View style={styles.exerciseImagePreviewWrap}>
                   <Image source={{ uri: exerciseImageUri }} style={styles.exerciseImagePreview} />
-                  <Pressable style={styles.exerciseImageRemove} onPress={() => { setExerciseImageUri(''); setExerciseImageUrl('') }}>
+                  <Pressable accessibilityRole="button" accessibilityLabel="移除运动图片" hitSlop={9} style={({ pressed }) => [styles.exerciseImageRemove, pressed && styles.exercisePressed]} onPress={() => { setExerciseImageUri(''); setExerciseImageUrl('') }}>
                     <X size={16} color="#ffffff" />
                   </Pressable>
                 </View>
               ) : null}
-              <View style={styles.exerciseInputWrap}>
-                <Pressable style={styles.exerciseImageButton} onPress={() => void pickExerciseImage()}>
+              <View style={[styles.exerciseInputWrap, { backgroundColor: exerciseTheme.surfaceMuted, borderColor: exerciseTheme.border }]}>
+                <Pressable accessibilityRole="button" accessibilityLabel="添加运动图片" style={({ pressed }) => [styles.exerciseImageButton, { backgroundColor: exerciseTheme.surface }, pressed && styles.exercisePressed]} onPress={() => void pickExerciseImage()}>
                   <ImagePlus size={17} color="#6b7280" />
                 </Pressable>
                 <TextInput
@@ -4236,11 +5510,13 @@ export function BodyMetricRecordScreen() {
                   multiline
                   maxLength={2000}
                   placeholder={exerciseImageUri ? '补充描述（可选）' : '今天做了什么运动？'}
-                  placeholderTextColor="#9ca3af"
+                  placeholderTextColor={exerciseTheme.subtle}
                   textAlignVertical="top"
-                  style={styles.exerciseTextInput}
+                  style={[styles.exerciseTextInput, { color: exerciseTheme.text }]}
                 />
                 <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="提交运动记录"
                   style={[styles.exerciseSendButton, (!canSubmitExercise || loading) && styles.exerciseSendButtonDisabled]}
                   disabled={!canSubmitExercise || loading}
                   onPress={() => save()}
@@ -4251,18 +5527,18 @@ export function BodyMetricRecordScreen() {
             </View>
 
             {exerciseTask ? (
-              <View style={[styles.exerciseRecordCard, exerciseTask.status === 'failed' && styles.exerciseRecordCardFailed]}>
+              <View style={[styles.exerciseRecordCard, { backgroundColor: exerciseTheme.surface }, exerciseTask.status === 'failed' && styles.exerciseRecordCardFailed]}>
                 <View style={styles.exerciseRecordTop}>
-                  <Text style={styles.exerciseRecordTitle}>{exerciseTask.desc}</Text>
+                  <Text style={[styles.exerciseRecordTitle, { color: exerciseTheme.text }]}>{exerciseTask.desc}</Text>
                   <Pill text={exerciseTaskStatusLabel(exerciseTask.status)} />
                 </View>
-                <View style={styles.exerciseRecordDivider} />
+                <View style={[styles.exerciseRecordDivider, { backgroundColor: exerciseTheme.border }]} />
                 <View style={styles.exerciseRecordBottom}>
                   <View style={styles.exercisePendingRow}>
                     {isTaskRunningStatus(exerciseTask.status) || exercisePolling ? <ActivityIndicator size="small" color="#f97316" /> : null}
-                    <Text style={styles.exercisePendingText}>{exerciseTaskMessage(exerciseTask.status)}</Text>
+                    <Text style={[styles.exercisePendingText, { color: exerciseTheme.muted }]}>{exerciseTaskMessage(exerciseTask.status)}</Text>
                   </View>
-                  <Pressable style={styles.exerciseRefreshLink} disabled={exercisePolling} onPress={() => void refreshExerciseTask()}>
+                  <Pressable accessibilityRole="button" accessibilityLabel="刷新运动分析结果" style={[styles.exerciseRefreshLink, { backgroundColor: exerciseTheme.orangeSoft }]} disabled={exercisePolling} onPress={() => void refreshExerciseTask()}>
                     <Text style={styles.exerciseRefreshText}>刷新结果</Text>
                   </Pressable>
                 </View>
@@ -4272,34 +5548,34 @@ export function BodyMetricRecordScreen() {
 
             {logs.length === 0 && !exerciseTask ? (
               <View style={styles.exerciseEmptyState}>
-                <View style={styles.exerciseEmptyIcon}>
+                <View style={[styles.exerciseEmptyIcon, { backgroundColor: exerciseTheme.surface }]}>
                   <Dumbbell size={36} color="#d1d5db" />
                 </View>
-                <Text style={styles.exerciseEmptyTitle}>{routeDateLabel}还没有运动记录</Text>
-                <Text style={styles.exerciseEmptyDesc}>上方输入运动内容或添加图片，系统会估算消耗。</Text>
+                <Text style={[styles.exerciseEmptyTitle, { color: exerciseTheme.muted }]}>{routeDateLabel}还没有运动记录</Text>
+                <Text style={[styles.exerciseEmptyDesc, { color: exerciseTheme.subtle }]}>上方输入运动内容或添加图片，系统会估算消耗。</Text>
               </View>
             ) : null}
 
             {logs.length > 0 ? (
               <View style={styles.exerciseRecordsList}>
                 {logs.map((log) => (
-                  <View key={log.id} style={styles.exerciseRecordCard}>
+                  <View key={log.id} style={[styles.exerciseRecordCard, { backgroundColor: exerciseTheme.surface }]}>
                     {log.image_url ? <Image source={{ uri: log.image_url }} style={styles.exerciseImagePreview} /> : null}
                     <View style={styles.exerciseRecordTop}>
-                      <Text style={styles.exerciseRecordTitle}>{log.exercise_desc || log.exercise_type || '运动'}</Text>
+                      <Text style={[styles.exerciseRecordTitle, { color: exerciseTheme.text }]}>{log.exercise_desc || log.exercise_type || '运动'}</Text>
                       <Pressable disabled={mutatingId === log.id} onPress={() => void confirmDeleteExercise(log)}>
                         {mutatingId === log.id ? <ActivityIndicator color="#9ca3af" size="small" /> : <Text style={styles.exerciseDeleteText}>删除</Text>}
                       </Pressable>
                     </View>
-                    <View style={styles.exerciseRecordDivider} />
+                    <View style={[styles.exerciseRecordDivider, { backgroundColor: exerciseTheme.border }]} />
                     <View style={styles.exerciseRecordBottom}>
                       <View style={styles.exerciseKcalRow}>
                         <Text style={styles.exerciseKcalValue}>{Math.round(log.calories_burned || 0)}</Text>
                         <Text style={styles.exerciseKcalUnit}>kcal</Text>
                       </View>
-                      <Text style={styles.exerciseRecordTime}>{log.duration_min || 0} 分钟</Text>
+                      <Text style={[styles.exerciseRecordTime, { color: exerciseTheme.muted }]}>{log.duration_min || 0} 分钟</Text>
                     </View>
-                    {log.ai_reasoning ? <Text style={styles.exerciseReasoning}>{log.ai_reasoning}</Text> : null}
+                    {log.ai_reasoning ? <Text style={[styles.exerciseReasoning, { color: exerciseTheme.muted }]}>{log.ai_reasoning}</Text> : null}
                   </View>
                 ))}
               </View>
@@ -4316,23 +5592,98 @@ export function BodyMetricRecordScreen() {
           </View>
         ) : null}
       </ScrollView>
-    </View>
+    </KeyboardAvoidingView>
   )
+}
+
+type ExpiryPalette = {
+  background: string
+  hero: string
+  surface: string
+  surfacePressed: string
+  border: string
+  text: string
+  textSecondary: string
+  textMuted: string
+  brand: string
+  brandStrong: string
+  brandSoft: string
+  danger: string
+  dangerSoft: string
+  warning: string
+  warningSoft: string
+  success: string
+  successSoft: string
+  disabled: string
+  disabledText: string
+  scrim: string
+}
+
+function createExpiryPalette(isDark: boolean): ExpiryPalette {
+  return isDark
+    ? {
+        background: '#0d1312',
+        hero: '#10241d',
+        surface: '#16231f',
+        surfacePressed: '#1d302a',
+        border: '#294037',
+        text: '#f2f7f4',
+        textSecondary: '#b7c7c0',
+        textMuted: '#879991',
+        brand: '#6ee7b7',
+        brandStrong: '#217a59',
+        brandSoft: '#14382d',
+        danger: '#fda4af',
+        dangerSoft: '#421f27',
+        warning: '#fbbf24',
+        warningSoft: '#3b3018',
+        success: '#86efac',
+        successSoft: '#173a29',
+        disabled: '#27332f',
+        disabledText: '#74847d',
+        scrim: 'rgba(0, 0, 0, 0.58)',
+      }
+    : {
+        background: '#f6f8fa',
+        hero: '#e7faf3',
+        surface: '#ffffff',
+        surfacePressed: '#f2f8f5',
+        border: '#dce9e4',
+        text: '#16332a',
+        textSecondary: '#526b62',
+        textMuted: '#71847d',
+        brand: '#00a871',
+        brandStrong: '#047857',
+        brandSoft: '#e7faf3',
+        danger: '#be123c',
+        dangerSoft: '#ffe4e6',
+        warning: '#b45309',
+        warningSoft: '#fff2df',
+        success: '#15803d',
+        successSoft: '#dcfce7',
+        disabled: '#e5e7eb',
+        disabledText: '#7b8b84',
+        scrim: 'rgba(15, 23, 42, 0.48)',
+      }
 }
 
 export function ExpiryScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const dialog = useAppDialog()
   const insets = useSafeAreaInsets()
+  const { isDark } = useColorScheme()
+  const palette = useMemo(() => createExpiryPalette(isDark), [isDark])
+  const expiryStyles = useMemo(() => createExpiryStyles(palette), [palette])
   const [dashboard, setDashboard] = useState<FoodExpiryDashboard | null>(null)
   const [items, setItems] = useState<FoodExpiryItem[]>([])
   const [loading, setLoading] = useState(false)
-  const [fetchFailed, setFetchFailed] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [mutatingId, setMutatingId] = useState<string | null>(null)
   const [processedExpanded, setProcessedExpanded] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
-    setFetchFailed(false)
+    setLoadError(null)
     try {
       const [dashboardData, itemData] = await Promise.all([
         apiClient.getFoodExpiryDashboard(),
@@ -4341,14 +5692,11 @@ export function ExpiryScreen() {
       setDashboard(dashboardData)
       setItems(itemData.items || [])
     } catch (error) {
-      setFetchFailed(true)
-      setDashboard(null)
-      setItems([])
-      await dialog.alert('获取保质期失败', userFacingErrorMessage(error), 'danger')
+      setLoadError(userFacingErrorMessage(error, '网络或服务暂时不可用，请稍后重试'))
     } finally {
       setLoading(false)
     }
-  }, [dialog])
+  }, [])
 
   useFocusEffect(useCallback(() => {
     void markFoodExpiryBadgeSeen()
@@ -4365,7 +5713,7 @@ export function ExpiryScreen() {
       kind: status === 'discarded' ? 'danger' : 'warning',
     })
     if (!confirmed) return
-    setLoading(true)
+    setMutatingId(item.id)
     try {
       await apiClient.updateFoodExpiryStatus(item.id, status)
       emitFoodExpiryChangedEvent({ force: true })
@@ -4373,111 +5721,127 @@ export function ExpiryScreen() {
     } catch (error) {
       await dialog.alert('更新失败', userFacingErrorMessage(error), 'danger')
     } finally {
-      setLoading(false)
+      setMutatingId(null)
     }
   }
 
   const grouped = useMemo(() => groupFoodExpiryItems(items), [items])
   const previewItems = dashboard?.preview_items?.length ? dashboard.preview_items : grouped.urgent.slice(0, 3)
+  const openCreate = () => navigation.navigate('ExpiryEdit')
 
   return (
-    <View style={styles.expiryPage}>
+    <View style={expiryStyles.page}>
       <ScrollView
-        style={styles.expiryScroll}
+        style={expiryStyles.scroll}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={[styles.expiryContent, { paddingBottom: 28 + insets.bottom }]}
+        refreshControl={<RefreshControl refreshing={loading && items.length > 0} onRefresh={() => void load()} tintColor={palette.brand} colors={[palette.brandStrong]} />}
+        contentContainerStyle={[expiryStyles.content, { paddingBottom: 28 + insets.bottom }]}
       >
-        <View style={styles.expiryHero}>
+        <View style={expiryStyles.hero}>
           <View style={styles.flex}>
-            <Text style={styles.expiryHeroKicker}>我的食物管理</Text>
-            <Text style={styles.expiryHeroTitle}>保质期提醒</Text>
+            <Text style={expiryStyles.heroKicker}>我的食物管理</Text>
+            <Text style={expiryStyles.heroTitle}>保质期提醒</Text>
           </View>
-          <Pressable style={styles.expiryHeroAdd} onPress={() => navigation.navigate('ExpiryEdit')}>
-            <Plus size={16} color="#fff" strokeWidth={2.4} />
-            <Text style={styles.expiryHeroAddText}>新增</Text>
+          <Pressable
+            style={({ pressed }) => [expiryStyles.heroAdd, pressed && expiryStyles.pressed]}
+            onPress={openCreate}
+            accessibilityRole="button"
+            accessibilityLabel="新增保质期提醒"
+            accessibilityHint="打开新增食物保质期页面"
+          >
+            <Plus size={18} color="#fff" strokeWidth={2.4} />
+            <Text style={expiryStyles.heroAddText}>新增</Text>
           </Pressable>
         </View>
 
-        <View style={styles.expirySummaryGrid}>
-          <ExpirySummaryCard label="今天优先吃" value={dashboard?.today_count ?? 0} />
-          <ExpirySummaryCard label="即将过期" value={dashboard?.soon_count ?? 0} />
-          <ExpirySummaryCard label="已过期" value={dashboard?.expired_count ?? 0} />
-          <ExpirySummaryCard label="保鲜中" value={dashboard?.active_count ?? 0} />
+        <View style={expiryStyles.summaryGrid} accessibilityLabel="保质期概览">
+          <ExpirySummaryCard label="今天优先吃" value={dashboard?.today_count ?? 0} Icon={Utensils} palette={palette} cardStyles={expiryStyles} />
+          <ExpirySummaryCard label="即将过期" value={dashboard?.soon_count ?? 0} Icon={Clock3} palette={palette} cardStyles={expiryStyles} />
+          <ExpirySummaryCard label="已过期" value={dashboard?.expired_count ?? 0} Icon={CircleAlert} palette={palette} cardStyles={expiryStyles} />
+          <ExpirySummaryCard label="保鲜中" value={dashboard?.active_count ?? 0} Icon={Leaf} palette={palette} cardStyles={expiryStyles} />
         </View>
 
         {previewItems.length ? (
-          <View style={styles.expiryPreviewPanel}>
-            <Text style={styles.expirySectionTitle}>最需要先处理</Text>
-            {previewItems.map((item) => (
-              <Pressable key={item.id} style={styles.expiryPreviewRow} onPress={() => navigation.navigate('ExpiryEdit', { itemId: item.id })}>
-                <Text style={styles.expiryPreviewName} numberOfLines={1}>{item.food_name}</Text>
-                <Text style={styles.expiryPreviewHint} numberOfLines={1}>{formatExpiryHint(item)}</Text>
+          <View style={expiryStyles.previewPanel}>
+            <Text style={expiryStyles.sectionTitle}>最需要先处理</Text>
+            {previewItems.map((item, index) => (
+              <Pressable
+                key={item.id}
+                style={({ pressed }) => [expiryStyles.previewRow, index > 0 && expiryStyles.previewRowBorder, pressed && expiryStyles.previewRowPressed]}
+                onPress={() => navigation.navigate('ExpiryEdit', { itemId: item.id, item })}
+                accessibilityRole="button"
+                accessibilityLabel={`${item.food_name}，${formatExpiryHint(item)}`}
+                accessibilityHint="打开编辑保质期"
+              >
+                <Text style={expiryStyles.previewName} numberOfLines={2}>{item.food_name}</Text>
+                <Text style={expiryStyles.previewHint} numberOfLines={2}>{formatExpiryHint(item)}</Text>
+                <ChevronRight size={18} color={palette.textMuted} />
               </Pressable>
             ))}
           </View>
         ) : null}
 
-        {loading && items.length === 0 ? (
-          <View style={styles.expiryEmptyCard}>
-            <ActivityIndicator color="#00bc7d" />
+        {loadError && items.length > 0 ? (
+          <View style={expiryStyles.inlineError} accessibilityRole="alert">
+            <CircleAlert size={20} color={palette.warning} />
+            <View style={styles.flex}>
+              <Text style={expiryStyles.inlineErrorTitle}>刷新失败，已保留当前内容</Text>
+              <Text style={expiryStyles.inlineErrorDesc}>{loadError}</Text>
+            </View>
+            <Pressable style={({ pressed }) => [expiryStyles.inlineRetry, pressed && expiryStyles.pressed]} onPress={() => void load()} accessibilityRole="button" accessibilityLabel="重新刷新保质期">
+              <RefreshCw size={18} color={palette.brand} />
+            </Pressable>
           </View>
-        ) : fetchFailed ? (
-          <View style={[styles.expiryEmptyCard, styles.expiryFailedCard]}>
-            <Text style={styles.expiryEmptyTitle}>加载失败</Text>
-            <Text style={styles.expiryEmptyDesc}>网络或服务异常，请稍后重试。</Text>
-            <Pressable style={styles.expiryRetryButton} onPress={() => void load()}>
-              <Text style={styles.expiryRetryText}>重试</Text>
+        ) : null}
+
+        {loading && items.length === 0 ? (
+          <View style={expiryStyles.emptyCard} accessibilityLabel="正在加载保质期记录">
+            <ActivityIndicator color={palette.brand} />
+          </View>
+        ) : loadError && items.length === 0 ? (
+          <View style={[expiryStyles.emptyCard, expiryStyles.failedCard]} accessibilityRole="alert">
+            <CircleAlert size={34} color={palette.warning} />
+            <Text style={expiryStyles.emptyTitle}>加载失败</Text>
+            <Text style={expiryStyles.emptyDesc}>{loadError}</Text>
+            <Pressable style={({ pressed }) => [expiryStyles.retryButton, pressed && expiryStyles.pressed]} onPress={() => void load()} accessibilityRole="button" accessibilityLabel="重新加载保质期记录">
+              <RefreshCw size={18} color="#fff" />
+              <Text style={expiryStyles.retryText}>重试</Text>
             </Pressable>
           </View>
         ) : items.length === 0 ? (
-          <View style={styles.expiryEmptyCard}>
-            <Text style={styles.expiryEmptyTitle}>还没有记录食物保质期</Text>
-            <Text style={styles.expiryEmptyDesc}>先把家里的牛奶、水果、剩菜记进来，快到期时这里会提醒你。</Text>
+          <View style={expiryStyles.emptyCard}>
+            <View style={expiryStyles.emptyIcon}><Inbox size={32} color={palette.brand} /></View>
+            <Text style={expiryStyles.emptyTitle}>还没有记录食物保质期</Text>
+            <Text style={expiryStyles.emptyDesc}>先把家里的牛奶、水果、剩菜记进来，快到期时这里会提醒你。</Text>
+            <Pressable style={({ pressed }) => [expiryStyles.emptyAction, pressed && expiryStyles.pressed]} onPress={openCreate} accessibilityRole="button" accessibilityLabel="添加第一项保质期提醒">
+              <Plus size={18} color="#fff" />
+              <Text style={expiryStyles.emptyActionText}>添加第一项</Text>
+            </Pressable>
           </View>
         ) : (
           <>
             {grouped.urgent.length ? (
-              <View style={styles.expirySection}>
-                <Text style={styles.expirySectionTitle}>优先处理</Text>
-                {grouped.urgent.map((item) => (
-                  <ExpiryItemCard
-                    key={item.id}
-                    item={item}
-                    onPress={() => navigation.navigate('ExpiryEdit', { itemId: item.id, item })}
-                    onUpdateStatus={updateStatus}
-                  />
-                ))}
+              <View style={expiryStyles.section}>
+                <Text style={expiryStyles.sectionTitle}>优先处理</Text>
+                {grouped.urgent.map((item) => <ExpiryItemCard key={item.id} item={item} busy={mutatingId === item.id} palette={palette} cardStyles={expiryStyles} onPress={() => navigation.navigate('ExpiryEdit', { itemId: item.id, item })} onUpdateStatus={updateStatus} />)}
               </View>
             ) : null}
-
             {grouped.fresh.length ? (
-              <View style={styles.expirySection}>
-                <Text style={styles.expirySectionTitle}>保鲜中</Text>
-                {grouped.fresh.map((item) => (
-                  <ExpiryItemCard
-                    key={item.id}
-                    item={item}
-                    onPress={() => navigation.navigate('ExpiryEdit', { itemId: item.id, item })}
-                    onUpdateStatus={updateStatus}
-                  />
-                ))}
+              <View style={expiryStyles.section}>
+                <Text style={expiryStyles.sectionTitle}>保鲜中</Text>
+                {grouped.fresh.map((item) => <ExpiryItemCard key={item.id} item={item} busy={mutatingId === item.id} palette={palette} cardStyles={expiryStyles} onPress={() => navigation.navigate('ExpiryEdit', { itemId: item.id, item })} onUpdateStatus={updateStatus} />)}
               </View>
             ) : null}
-
             {grouped.processed.length ? (
-              <View style={styles.expirySection}>
-                <Pressable style={styles.expirySectionHeader} onPress={() => setProcessedExpanded((value) => !value)}>
-                  <Text style={styles.expirySectionTitleNoMargin}>已处理 ({grouped.processed.length})</Text>
-                  <Text style={styles.expirySectionToggle}>{processedExpanded ? '收起' : '展开'}</Text>
+              <View style={expiryStyles.section}>
+                <Pressable style={({ pressed }) => [expiryStyles.sectionHeader, pressed && expiryStyles.pressed]} onPress={() => setProcessedExpanded((value) => !value)} accessibilityRole="button" accessibilityLabel={`已处理，共 ${grouped.processed.length} 项`} accessibilityState={{ expanded: processedExpanded }}>
+                  <Text style={expiryStyles.sectionTitleNoMargin}>已处理 ({grouped.processed.length})</Text>
+                  <View style={expiryStyles.sectionToggleRow}>
+                    <Text style={expiryStyles.sectionToggle}>{processedExpanded ? '收起' : '展开'}</Text>
+                    {processedExpanded ? <ChevronUp size={18} color={palette.textMuted} /> : <ChevronDown size={18} color={palette.textMuted} />}
+                  </View>
                 </Pressable>
-                {processedExpanded ? grouped.processed.map((item) => (
-                  <ExpiryItemCard
-                    key={item.id}
-                    item={item}
-                    onPress={() => navigation.navigate('ExpiryEdit', { itemId: item.id, item })}
-                    onUpdateStatus={updateStatus}
-                  />
-                )) : null}
+                {processedExpanded ? grouped.processed.map((item) => <ExpiryItemCard key={item.id} item={item} busy={mutatingId === item.id} palette={palette} cardStyles={expiryStyles} onPress={() => navigation.navigate('ExpiryEdit', { itemId: item.id, item })} onUpdateStatus={updateStatus} />) : null}
               </View>
             ) : null}
           </>
@@ -4491,18 +5855,37 @@ export function RewardCenterScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const dialog = useAppDialog()
   const insets = useSafeAreaInsets()
+  const { isDark } = useColorScheme()
   const [reward, setReward] = useState<RewardCenterResponse | null>(null)
-  const [loading, setLoading] = useState(false)
+  const [vouchers, setVouchers] = useState<VoucherItem[]>([])
+  const [loading, setLoading] = useState(true)
+  const [checkingIn, setCheckingIn] = useState(false)
+  const [activatingVoucherId, setActivatingVoucherId] = useState('')
+
+  const pageBackground = isDark ? '#0d1312' : '#f6f7fb'
+  const cardBackground = isDark ? '#181f1d' : '#ffffff'
+  const cardBorder = isDark ? 'rgba(148, 163, 184, 0.16)' : '#e8edf2'
+  const primaryText = isDark ? '#f2f7f4' : '#172033'
+  const secondaryText = isDark ? '#aab8b2' : '#64748b'
+  const mutedSurface = isDark ? '#202a27' : '#f6fdf9'
 
   const load = useCallback(async () => {
     setLoading(true)
-    try {
-      setReward(await apiClient.getRewardCenter())
-    } catch (error) {
-      await showError(dialog, '获取积分失败', error)
-    } finally {
-      setLoading(false)
+    const [centerResult, voucherResult] = await Promise.allSettled([
+      apiClient.getRewardCenter(),
+      apiClient.listMyVouchers('pending'),
+    ])
+    if (centerResult.status === 'fulfilled') {
+      setReward(centerResult.value)
+    } else {
+      await showError(dialog, '获取积分失败', centerResult.reason)
     }
+    if (voucherResult.status === 'fulfilled') {
+      setVouchers((voucherResult.value.items || []).filter((item) => item.voucher_type !== 'invite_light_week'))
+    } else {
+      setVouchers([])
+    }
+    setLoading(false)
   }, [dialog])
 
   useFocusEffect(
@@ -4511,19 +5894,70 @@ export function RewardCenterScreen() {
     }, [load]),
   )
 
+  const handleCheckIn = useCallback(async () => {
+    if (checkingIn || reward?.check_in?.claimed_today) return
+    setCheckingIn(true)
+    try {
+      const result = await apiClient.claimLoginCheckIn()
+      await dialog.alert('签到成功', '连续签到第 ' + result.streak_days + ' 天，+' + result.reward_amount + ' 积分', 'success')
+      await load()
+    } catch (error) {
+      await showError(dialog, '签到失败', error)
+    } finally {
+      setCheckingIn(false)
+    }
+  }, [checkingIn, dialog, load, reward?.check_in?.claimed_today])
+
+  const handleActivateVoucher = useCallback(async (voucher: VoucherItem) => {
+    if (voucher.status !== 'pending' || activatingVoucherId) return
+    const confirmed = await dialog.confirm({
+      title: '现在启用奖励？',
+      message: '启用后奖励会立即到账。你也可以取消，留到以后再启用。',
+      confirmText: '现在启用',
+      cancelText: '以后再用',
+    })
+    if (!confirmed) return
+    setActivatingVoucherId(voucher.id)
+    try {
+      await apiClient.useVoucher(voucher.id)
+      await dialog.alert('奖励已启用', undefined, 'success')
+      await load()
+    } catch (error) {
+      await showError(dialog, '启用失败', error)
+    } finally {
+      setActivatingVoucherId('')
+    }
+  }, [activatingVoucherId, dialog, load])
+
+  const handleTaskPress = useCallback((task: RewardCenterTask) => {
+    if (isRewardTaskDisabled(task)) return
+    if (task.action_type === 'login_check_in') {
+      void handleCheckIn()
+      return
+    }
+    navigateRewardTask(navigation, task)
+  }, [handleCheckIn, navigation])
+
   const tasks = reward?.tasks || []
-  const quickTasks = tasks.filter(isRewardTaskAvailable).slice(0, 2)
+  const usageItems: Array<{ key: string; cost: string; title: string; path: string; Icon: LucideIcon }> = [
+    { key: 'exercise', cost: '1积分', title: '记录运动', path: '主页 → 今日记录 → 运动', Icon: Dumbbell },
+    { key: 'standard', cost: '2积分', title: '普通食物分析', path: '主页拍照 → 选择普通模式', Icon: Apple },
+    { key: 'precision', cost: '4积分', title: '精准食物分析', path: '主页拍照 → 选择精准模式', Icon: Target },
+  ]
 
   return (
-    <View style={styles.rewardPage}>
+    <View style={[styles.rewardPage, { backgroundColor: pageBackground }]}>
       <ScrollView
         refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor="#0f9f6e" colors={['#0f9f6e']} />}
-        contentContainerStyle={[styles.rewardPageContent, { paddingBottom: Math.max(insets.bottom, 12) + 20 }]}
+        contentContainerStyle={[styles.rewardPageContent, { paddingBottom: Math.max(insets.bottom, 12) + 24 }]}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.rewardHero}>
-          <Text style={styles.rewardHeroTitle}>奖励积分</Text>
-          <Text style={styles.rewardHeroSubtitle}>把今天能拿的积分都集中看清楚</Text>
+          <View style={styles.rewardHeroTitleRow}>
+            <Gift size={22} color="#ffffff" strokeWidth={2.4} />
+            <Text style={styles.rewardHeroTitle}>签到打卡赚积分</Text>
+          </View>
+          <Text style={styles.rewardHeroSubtitle}>奖励积分长期保留，不会每日清零</Text>
           <View style={styles.rewardHeroStats}>
             <View style={styles.rewardStat}>
               <Text style={styles.rewardStatValue}>{reward?.earned_credits_balance ?? 0}</Text>
@@ -4536,78 +5970,142 @@ export function RewardCenterScreen() {
           </View>
         </View>
 
-        {!loading && quickTasks.length ? (
-          <View style={styles.rewardQuickSection}>
-            <View style={styles.rewardQuickHead}>
-              <Text style={styles.rewardQuickTitle}>最快拿分</Text>
-              <Text style={styles.rewardQuickHint}>做完就能继续用奖励积分</Text>
+        <View style={[styles.rewardQuickSection, { backgroundColor: cardBackground, borderColor: cardBorder }]}>
+          <View style={styles.rewardQuickHead}>
+            <View style={styles.rewardSectionHeading}>
+              <View style={styles.rewardHeadingIcon}>
+                <Flame size={18} color="#0f9f6e" strokeWidth={2.4} />
+              </View>
+              <Text style={[styles.rewardQuickTitle, { color: primaryText }]}>最快拿分</Text>
             </View>
-            <View style={styles.rewardQuickList}>
-              {quickTasks.map((task) => (
-                <Pressable
-                  key={rewardTaskKey(task)}
-                  style={({ pressed }) => [styles.rewardQuickCard, pressed ? styles.pressed : null]}
-                  onPress={() => navigateRewardTask(navigation, task)}
-                >
+            {!loading ? (
+              <Text style={[styles.rewardQuickHint, { color: secondaryText }]}>
+                今日完成 {reward?.today_task_overview?.completed_count ?? 0}/{reward?.today_task_overview?.total_count ?? 0}
+              </Text>
+            ) : null}
+          </View>
+
+          {loading ? (
+            <View style={styles.rewardLoading} accessibilityRole="progressbar">
+              <ActivityIndicator color={colors.brand} />
+            </View>
+          ) : tasks.length > 0 ? (
+            <View style={styles.rewardTaskList}>
+              {tasks.map((task) => {
+                const disabled = isRewardTaskDisabled(task)
+                const busy = task.action_type === 'login_check_in' && checkingIn
+                const actionLabel = task.action_type === 'login_check_in'
+                  ? (busy ? '签到中' : disabled ? '已签到' : '签到')
+                  : (disabled ? '今日已满' : '去完成')
+                return (
+                  <Pressable
+                    key={rewardTaskKey(task)}
+                    style={({ pressed }) => [
+                      styles.rewardTaskCard,
+                      { backgroundColor: mutedSurface, borderColor: cardBorder },
+                      disabled ? styles.rewardTaskCardDisabled : null,
+                      pressed && !disabled && !busy ? styles.pressed : null,
+                    ]}
+                    disabled={disabled || busy}
+                    onPress={() => handleTaskPress(task)}
+                    accessibilityRole="button"
+                    accessibilityLabel={rewardTaskName(task) + '，' + actionLabel}
+                    accessibilityState={{ disabled, busy }}
+                  >
+                    <View style={styles.rewardTaskIcon}>
+                      <RewardTaskIcon task={task} />
+                    </View>
+                    <View style={styles.flex}>
+                      <View style={styles.rewardTaskTitleRow}>
+                        <Text style={[styles.rewardTaskName, { color: primaryText }]} numberOfLines={2}>{rewardTaskName(task)}</Text>
+                        <Text style={styles.rewardTaskReward}>+{task.reward_amount}积分</Text>
+                      </View>
+                      <Text style={[styles.rewardTaskDescription, { color: secondaryText }]} numberOfLines={2}>
+                        {task.description || formatRewardTaskProgress(task)}
+                      </Text>
+                    </View>
+                    <View style={[styles.rewardTaskAction, disabled ? styles.rewardTaskActionDisabled : null]}>
+                      {busy ? <ActivityIndicator size="small" color="#ffffff" /> : <Text style={styles.rewardTaskActionText}>{actionLabel}</Text>}
+                    </View>
+                  </Pressable>
+                )
+              })}
+            </View>
+          ) : (
+            <EmptyState text="暂时没有可完成的任务" />
+          )}
+
+          <View style={[styles.rewardUseGuide, { borderTopColor: cardBorder }]}>
+            <View style={styles.rewardSectionHeading}>
+              <View style={styles.rewardHeadingIcon}>
+                <Gift size={18} color="#0f9f6e" strokeWidth={2.4} />
+              </View>
+              <Text style={[styles.rewardQuickTitle, { color: primaryText }]}>积分怎么用</Text>
+            </View>
+            <View style={styles.rewardUseGuideList}>
+              {usageItems.map(({ key, cost, title, path, Icon }) => (
+                <View key={key} style={[styles.rewardUseGuideItem, { backgroundColor: mutedSurface, borderColor: cardBorder }]}>
+                  <View style={styles.rewardUseGuideIcon}><Icon size={18} color="#0f9f6e" strokeWidth={2.3} /></View>
                   <View style={styles.flex}>
-                    <Text style={styles.rewardQuickName} numberOfLines={2}>{rewardTaskName(task)}</Text>
-                    <Text style={styles.rewardQuickDesc} numberOfLines={1}>
-                      {formatRewardTaskProgress(task)} · +{task.reward_amount} 积分
-                    </Text>
+                    <View style={styles.rewardUseGuideTitleRow}>
+                      <Text style={styles.rewardUseGuideCost}>{cost}</Text>
+                      <Text style={[styles.rewardUseGuideTitle, { color: primaryText }]}>{title}</Text>
+                    </View>
+                    <Text style={[styles.rewardUseGuidePath, { color: secondaryText }]}>{path}</Text>
                   </View>
-                  <Text style={styles.rewardQuickButton}>去完成</Text>
-                </Pressable>
+                </View>
               ))}
             </View>
           </View>
-        ) : null}
+        </View>
 
-        <View style={styles.rewardSection}>
-          <Text style={styles.rewardSectionTitle}>
-            今日进度 {reward?.today_task_overview?.completed_count ?? 0}/{reward?.today_task_overview?.total_count ?? 0}
-          </Text>
-          {loading ? (
-            <View style={styles.rewardLoading}>
-              <ActivityIndicator color={colors.brand} />
-            </View>
-          ) : (
-            <View style={styles.rewardTaskList}>
-              {tasks.length === 0 ? <EmptyState text="暂无奖励任务" /> : null}
-              {tasks.map((task) => {
-                const disabled = isRewardTaskDisabled(task)
+        {!loading && vouchers.length > 0 ? (
+          <View style={styles.rewardSection}>
+            <Text style={[styles.rewardSectionTitle, { color: primaryText }]}>可用奖励</Text>
+            <Text style={[styles.rewardSectionHint, { color: secondaryText }]}>已获得的奖励可以留到需要时再启用</Text>
+            <View style={styles.rewardVoucherList}>
+              {vouchers.map((voucher) => {
+                const activating = activatingVoucherId === voucher.id
                 return (
-                  <View key={rewardTaskKey(task)} style={styles.rewardTaskCard}>
-                    <View style={styles.rewardTaskHead}>
-                      <View style={styles.flex}>
-                        <Text style={styles.rewardTaskName} numberOfLines={2}>{rewardTaskName(task)}</Text>
-                        <Text style={styles.rewardTaskReward}>完成一次 +{task.reward_amount} 奖励积分</Text>
-                      </View>
-                      <Text style={styles.rewardTaskStatus} numberOfLines={1}>{rewardTaskStatus(task)}</Text>
-                    </View>
-                    <View style={styles.rewardTaskMeta}>
-                      <Text style={styles.rewardTaskMetaText}>{formatRewardTaskMetaProgress(task)}</Text>
-                      <Text style={styles.rewardTaskMetaText}>{formatRewardTaskLimit(task)}</Text>
+                  <View key={voucher.id} style={[styles.rewardVoucherCard, { backgroundColor: cardBackground, borderColor: cardBorder }]}>
+                    <View style={styles.flex}>
+                      <Text style={[styles.rewardVoucherTitle, { color: primaryText }]}>{voucher.title}</Text>
+                      {voucher.description ? <Text style={[styles.rewardVoucherDescription, { color: secondaryText }]}>{voucher.description}</Text> : null}
+                      <Text style={styles.rewardVoucherNote}>{rewardActivationNote(voucher)}</Text>
                     </View>
                     <Pressable
-                      style={({ pressed }) => [
-                        styles.rewardTaskButton,
-                        disabled ? styles.rewardTaskButtonDisabled : null,
-                        pressed && !disabled ? styles.pressed : null,
-                      ]}
-                      disabled={disabled || !task.action_path}
-                      onPress={() => navigateRewardTask(navigation, task)}
+                      style={({ pressed }) => [styles.rewardVoucherButton, pressed && !activating ? styles.pressed : null]}
+                      disabled={activating}
+                      onPress={() => void handleActivateVoucher(voucher)}
+                      accessibilityRole="button"
+                      accessibilityLabel={'启用' + voucher.title}
+                      accessibilityState={{ busy: activating }}
                     >
-                      <Text style={styles.rewardTaskButtonText}>{disabled ? '今日已满' : '去完成'}</Text>
+                      {activating ? <ActivityIndicator size="small" color="#ffffff" /> : <Text style={styles.rewardVoucherButtonText}>现在启用</Text>}
                     </Pressable>
                   </View>
                 )
               })}
             </View>
-          )}
-        </View>
+          </View>
+        ) : null}
       </ScrollView>
     </View>
   )
+}
+
+function RewardTaskIcon({ task }: { task: RewardCenterTask }) {
+  const props = { size: 18, color: '#0f9f6e', strokeWidth: 2.3 }
+  if (task.action_type === 'login_check_in') return <Check {...props} />
+  if (task.action_type === 'share_poster') return <Share2 {...props} />
+  if (task.action_type === 'packaged_food_upload') return <ImagePlus {...props} />
+  if (task.action_type === 'public_food_upload') return <Soup {...props} />
+  return <Apple {...props} />
+}
+
+function rewardActivationNote(reward: VoucherItem): string {
+  if (reward.voucher_type === 'registration_trial') return '未启用前不会开始计算会员天数'
+  return '未启用前奖励不会计入当前余额'
 }
 
 export function CirclePostEditScreen() {
@@ -5753,11 +7251,86 @@ export function AboutScreen() {
   )
 }
 
+const healthProfileDarkStyles = StyleSheet.create({
+  page: {
+    backgroundColor: '#0d1312',
+  },
+  progressDot: {
+    backgroundColor: '#33413c',
+  },
+  primaryText: {
+    color: '#f2f7f4',
+  },
+  secondaryText: {
+    color: '#a9b6b0',
+  },
+  card: {
+    borderColor: '#2a3733',
+    backgroundColor: '#181f1d',
+  },
+  cardActive: {
+    borderColor: '#00bc7d',
+    backgroundColor: '#122a22',
+  },
+  choiceMark: {
+    borderColor: '#65716c',
+    backgroundColor: '#181f1d',
+  },
+  inputCard: {
+    borderColor: '#3a4944',
+    backgroundColor: '#181f1d',
+  },
+  inputText: {
+    color: '#f2f7f4',
+  },
+  inputCardSurface: {
+    borderColor: '#2a3733',
+    backgroundColor: '#181f1d',
+  },
+  mutedText: {
+    color: '#a9b6b0',
+  },
+  targetPanel: {
+    borderColor: '#2a3733',
+    backgroundColor: '#181f1d',
+  },
+  targetField: {
+    backgroundColor: '#111816',
+  },
+  reportLink: {
+    backgroundColor: '#123328',
+  },
+  reportLinkText: {
+    color: '#77e0b4',
+  },
+  secondaryButton: {
+    borderColor: '#3a4944',
+    backgroundColor: '#181f1d',
+  },
+  secondaryButtonText: {
+    color: '#d6e0db',
+  },
+  disabledButton: {
+    borderColor: '#2a3733',
+    backgroundColor: '#25302d',
+  },
+  disabledButtonText: {
+    color: '#7f8c87',
+  },
+  sourceSheet: {
+    backgroundColor: '#181f1d',
+  },
+  sourceHandle: {
+    backgroundColor: '#52615b',
+  },
+})
+
 function HealthProfileStepHeader({ title, subtitle }: { title: string; subtitle: string }) {
+  const { isDark } = useColorScheme()
   return (
     <View>
-      <Text style={styles.healthProfileStepTitle}>{title}</Text>
-      <Text style={styles.healthProfileStepSubtitle}>{subtitle}</Text>
+      <Text style={[styles.healthProfileStepTitle, isDark && healthProfileDarkStyles.primaryText]}>{title}</Text>
+      <Text style={[styles.healthProfileStepSubtitle, isDark && healthProfileDarkStyles.secondaryText]}>{subtitle}</Text>
     </View>
   )
 }
@@ -5768,32 +7341,42 @@ function HealthProfileChoiceCard({
   icon,
   active,
   size,
+  multiple = false,
   onPress,
 }: {
   label: string
   desc?: string
-  icon?: string
+  icon?: LucideIcon
   active: boolean
   size?: 'big' | 'small'
+  multiple?: boolean
   onPress: () => void
 }) {
+  const { isDark } = useColorScheme()
+  const Icon = icon
   return (
     <Pressable
       style={[
         styles.healthProfileOptionCard,
+        isDark && healthProfileDarkStyles.card,
         size === 'big' && styles.healthProfileOptionCardBig,
         size === 'small' && styles.healthProfileOptionCardSmall,
         active && styles.healthProfileOptionCardActive,
+        active && isDark && healthProfileDarkStyles.cardActive,
       ]}
       onPress={onPress}
+      accessibilityRole={multiple ? 'checkbox' : 'radio'}
+      accessibilityLabel={desc ? `${label}，${desc}` : label}
+      accessibilityState={{ checked: active }}
+      hitSlop={4}
     >
-      <View style={[styles.healthProfileChoiceMark, active && styles.healthProfileChoiceMarkActive]}>
+      <View style={[styles.healthProfileChoiceMark, isDark && healthProfileDarkStyles.choiceMark, active && styles.healthProfileChoiceMarkActive]}>
         {active ? <View style={styles.healthProfileChoiceMarkInner} /> : null}
       </View>
-      {icon ? <Text style={[styles.healthProfileOptionIcon, size === 'small' && styles.healthProfileOptionIconSmall]}>{icon}</Text> : null}
+      {Icon ? <Icon size={size === 'small' ? 19 : 23} strokeWidth={2} color="#00bc7d" accessibilityElementsHidden /> : null}
       <View style={styles.healthProfileOptionCopy}>
-        <Text style={[styles.healthProfileOptionLabel, active && styles.healthProfileOptionLabelActive]} numberOfLines={1}>{label}</Text>
-        {desc ? <Text style={styles.healthProfileOptionDesc} numberOfLines={2}>{desc}</Text> : null}
+        <Text style={[styles.healthProfileOptionLabel, active && styles.healthProfileOptionLabelActive, isDark && healthProfileDarkStyles.primaryText]} numberOfLines={1}>{label}</Text>
+        {desc ? <Text style={[styles.healthProfileOptionDesc, isDark && healthProfileDarkStyles.secondaryText]} numberOfLines={2}>{desc}</Text> : null}
       </View>
     </Pressable>
   )
@@ -5812,36 +7395,40 @@ function HealthProfileNumberCard({
   max: string
   onChange: (value: string) => void
 }) {
+  const { isDark } = useColorScheme()
   return (
-    <View style={styles.healthProfileNumberCard}>
+    <View style={[styles.healthProfileNumberCard, isDark && healthProfileDarkStyles.inputCard]}>
       <TextInput
         value={value}
         onChangeText={onChange}
         keyboardType="number-pad"
         placeholder={min}
-        placeholderTextColor="#cbd5e1"
-        style={styles.healthProfileNumberInput}
+        placeholderTextColor={isDark ? '#65716c' : '#cbd5e1'}
+        style={[styles.healthProfileNumberInput, isDark && healthProfileDarkStyles.inputText]}
         maxLength={3}
+        accessibilityLabel={`${unit}输入，范围 ${min} 到 ${max}`}
       />
       <Text style={styles.healthProfileNumberUnit}>{unit}</Text>
-      <Text style={styles.healthProfileNumberRange}>{min} - {max}</Text>
+      <Text style={[styles.healthProfileNumberRange, isDark && healthProfileDarkStyles.secondaryText]}>{min} - {max}</Text>
     </View>
   )
 }
 
 function HealthProfileRoutineField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+  const { isDark } = useColorScheme()
   return (
-    <View style={styles.healthProfileRoutineField}>
-      <Text style={styles.healthProfileRoutineLabel}>{label}</Text>
+    <View style={[styles.healthProfileRoutineField, isDark && healthProfileDarkStyles.card]}>
+      <Text style={[styles.healthProfileRoutineLabel, isDark && healthProfileDarkStyles.secondaryText]}>{label}</Text>
       <View style={styles.healthProfileRoutineInputRow}>
         <TextInput
           value={value}
           onChangeText={onChange}
           keyboardType="number-pad"
           placeholder="0"
-          placeholderTextColor="#cbd5e1"
-          style={styles.healthProfileRoutineInput}
+          placeholderTextColor={isDark ? '#65716c' : '#cbd5e1'}
+          style={[styles.healthProfileRoutineInput, isDark && healthProfileDarkStyles.inputText]}
           maxLength={2}
+          accessibilityLabel={`${label}小时`}
         />
         <Text style={styles.healthProfileRoutineUnit}>点</Text>
       </View>
@@ -5860,20 +7447,22 @@ function HealthProfileTargetField({
   value: string
   onChange: (value: string) => void
 }) {
+  const { isDark } = useColorScheme()
   return (
-    <View style={styles.healthProfileTargetField}>
-      <Text style={styles.healthProfileTargetLabel}>{label}</Text>
+    <View style={[styles.healthProfileTargetField, isDark && healthProfileDarkStyles.targetField]}>
+      <Text style={[styles.healthProfileTargetLabel, isDark && healthProfileDarkStyles.secondaryText]}>{label}</Text>
       <View style={styles.healthProfileTargetInputRow}>
         <TextInput
           value={value}
           onChangeText={onChange}
           keyboardType="number-pad"
           placeholder="--"
-          placeholderTextColor="#cbd5e1"
-          style={styles.healthProfileTargetInput}
+          placeholderTextColor={isDark ? '#65716c' : '#cbd5e1'}
+          style={[styles.healthProfileTargetInput, isDark && healthProfileDarkStyles.inputText]}
           maxLength={5}
+          accessibilityLabel={`${label}目标，单位 ${unit}`}
         />
-        <Text style={styles.healthProfileTargetUnit}>{unit}</Text>
+        <Text style={[styles.healthProfileTargetUnit, isDark && healthProfileDarkStyles.secondaryText]}>{unit}</Text>
       </View>
     </View>
   )
@@ -5890,6 +7479,7 @@ function Field({
   maxLength,
   returnKeyType,
   onSubmitEditing,
+  palette,
 }: {
   label: string
   rightLabel?: string
@@ -5901,36 +7491,37 @@ function Field({
   maxLength?: number
   returnKeyType?: 'done' | 'go' | 'next' | 'search' | 'send'
   onSubmitEditing?: () => void
+  palette?: RecordDetailPalette
 }) {
   return (
     <View style={styles.field}>
       <View style={styles.fieldLabelRow}>
-        <Text style={styles.fieldLabel}>{label}</Text>
-        {rightLabel ? <Text style={styles.fieldMeta}>{rightLabel}</Text> : null}
+        <Text style={[styles.fieldLabel, palette && { color: palette.text }]}>{label}</Text>
+        {rightLabel ? <Text style={[styles.fieldMeta, palette && { color: palette.muted }]}>{rightLabel}</Text> : null}
       </View>
       <TextInput
         value={value}
         onChangeText={onChangeText}
         placeholder={placeholder}
-        placeholderTextColor={colors.textMuted}
+        placeholderTextColor={palette?.muted || colors.textMuted}
         keyboardType={keyboardType}
         multiline={multiline}
         maxLength={maxLength}
         returnKeyType={returnKeyType}
         onSubmitEditing={onSubmitEditing}
         textAlignVertical={multiline ? 'top' : 'center'}
-        style={[styles.input, multiline && styles.textarea]}
+        style={[styles.input, multiline && styles.textarea, palette && { color: palette.text, backgroundColor: palette.input, borderColor: palette.border }]}
       />
     </View>
   )
 }
 
-function MealPicker({ value, onChange }: { value: MealType; onChange: (value: MealType) => void }) {
+function MealPicker({ value, onChange, palette }: { value: MealType; onChange: (value: MealType) => void; palette?: RecordDetailPalette }) {
   return (
     <View style={styles.segment}>
       {mealOptions.map((meal) => (
-        <Pressable key={meal} style={[styles.segmentItem, value === meal && styles.segmentItemActive]} onPress={() => onChange(meal)}>
-          <Text style={[styles.segmentText, value === meal && styles.segmentTextActive]}>{getMealTypeLabel(meal)}</Text>
+        <Pressable accessibilityRole="radio" accessibilityState={{ checked: value === meal }} key={meal} style={[styles.segmentItem, palette && { backgroundColor: palette.surfaceAlt, borderColor: palette.border }, value === meal && styles.segmentItemActive]} onPress={() => onChange(meal)}>
+          <Text style={[styles.segmentText, palette && { color: palette.muted }, value === meal && styles.segmentTextActive]}>{getMealTypeLabel(meal)}</Text>
         </Pressable>
       ))}
     </View>
@@ -6342,12 +7933,12 @@ function SummaryCell({ title, value, unit }: { title: string; value: number | st
   )
 }
 
-function RecordDetailSummaryCell({ label, value, unit, highlight }: { label: string; value: string; unit: string; highlight?: boolean }) {
+function RecordDetailSummaryCell({ label, value, unit, highlight, palette }: { label: string; value: string; unit: string; highlight?: boolean; palette?: RecordDetailPalette }) {
   return (
-    <View style={styles.recordDetailSummaryItem}>
-      <Text style={styles.recordDetailSummaryLabel}>{label}</Text>
-      <Text style={[styles.recordDetailSummaryValue, highlight && styles.recordDetailSummaryValueHighlight]}>{value}</Text>
-      <Text style={styles.recordDetailSummaryUnit}>{unit}</Text>
+    <View style={styles.recordDetailSummaryItem} accessibilityLabel={`${label} ${value} ${unit}`}>
+      <Text style={[styles.recordDetailSummaryLabel, palette && { color: palette.muted }]}>{label}</Text>
+      <Text style={[styles.recordDetailSummaryValue, palette && { color: palette.text }, highlight && styles.recordDetailSummaryValueHighlight]}>{value}</Text>
+      <Text style={[styles.recordDetailSummaryUnit, palette && { color: palette.muted }]}>{unit}</Text>
     </View>
   )
 }
@@ -6560,113 +8151,138 @@ function Pill({ text }: { text: string }) {
   )
 }
 
-function ExpirySummaryCard({ label, value }: { label: string; value: number }) {
+function ExpirySummaryCard({
+  label,
+  value,
+  Icon,
+  palette,
+  cardStyles,
+}: {
+  label: string
+  value: number
+  Icon: LucideIcon
+  palette: ExpiryPalette
+  cardStyles: ReturnType<typeof createExpiryStyles>
+}) {
   return (
-    <View style={styles.expirySummaryCard}>
-      <Text style={styles.expirySummaryValue}>{value}</Text>
-      <Text style={styles.expirySummaryLabel}>{label}</Text>
+    <View style={cardStyles.summaryCard} accessible accessibilityLabel={`${label} ${value} 项`}>
+      <View style={cardStyles.summaryIcon}><Icon size={18} color={palette.brand} strokeWidth={2.2} /></View>
+      <Text style={cardStyles.summaryValue}>{value}</Text>
+      <Text style={cardStyles.summaryLabel}>{label}</Text>
     </View>
   )
 }
 
+function expiryBadgeVisual(item: Pick<FoodExpiryItem, 'status' | 'urgency'>, palette: ExpiryPalette) {
+  const tone = expiryBadgeTone(item)
+  if (tone === 'expired') return { backgroundColor: palette.dangerSoft, borderColor: palette.danger, color: palette.danger }
+  if (tone === 'today' || tone === 'soon') return { backgroundColor: palette.warningSoft, borderColor: palette.warning, color: palette.warning }
+  if (tone === 'discarded') return { backgroundColor: palette.disabled, borderColor: palette.border, color: palette.disabledText }
+  return { backgroundColor: palette.successSoft, borderColor: palette.success, color: palette.success }
+}
+
 function ExpiryItemCard({
   item,
+  busy,
+  palette,
+  cardStyles,
   onPress,
   onUpdateStatus,
 }: {
   item: FoodExpiryItem
+  busy: boolean
+  palette: ExpiryPalette
+  cardStyles: ReturnType<typeof createExpiryStyles>
   onPress: () => void
   onUpdateStatus: (item: FoodExpiryItem, status: 'active' | 'consumed' | 'discarded') => Promise<void>
 }) {
-  const badgeTone = expiryBadgeTone(item)
-  const badgeStyle =
-    badgeTone === 'expired' ? styles.expiryItemBadge_expired
-      : badgeTone === 'today' ? styles.expiryItemBadge_today
-        : badgeTone === 'soon' ? styles.expiryItemBadge_soon
-          : badgeTone === 'consumed' ? styles.expiryItemBadge_consumed
-            : badgeTone === 'discarded' ? styles.expiryItemBadge_discarded
-              : styles.expiryItemBadge_fresh
-  const badgeTextStyle =
-    badgeTone === 'expired' ? styles.expiryItemBadgeText_expired
-      : badgeTone === 'today' ? styles.expiryItemBadgeText_today
-        : badgeTone === 'soon' ? styles.expiryItemBadgeText_soon
-          : badgeTone === 'consumed' ? styles.expiryItemBadgeText_consumed
-            : badgeTone === 'discarded' ? styles.expiryItemBadgeText_discarded
-              : styles.expiryItemBadgeText_fresh
+  const visual = expiryBadgeVisual(item, palette)
+  const statusLabel = item.status === 'active' ? item.urgency_label || formatExpiryHint(item) : expiryStatusLabel(item.status)
   return (
-    <Pressable style={styles.expiryItemCard} onPress={onPress}>
-      <View style={styles.expiryItemHead}>
-        <View style={styles.expiryItemTitleWrap}>
-          <Text style={styles.expiryItemTitle} numberOfLines={1}>{item.food_name}</Text>
-          {item.category ? (
-            <View style={styles.expiryItemCategory}>
-              <Text style={styles.expiryItemCategoryText} numberOfLines={1}>{item.category}</Text>
-            </View>
-          ) : null}
+    <View style={cardStyles.itemCard}>
+      <Pressable
+        disabled={busy}
+        style={({ pressed }) => [cardStyles.itemMain, pressed && cardStyles.itemMainPressed]}
+        onPress={onPress}
+        accessibilityRole="button"
+        accessibilityLabel={`${item.food_name}，${statusLabel}，到期日 ${formatExpiryDate(item.expire_date)}，${expiryStorageLabel(item.storage_type)}`}
+        accessibilityHint="打开编辑保质期"
+        accessibilityState={{ disabled: busy, busy }}
+      >
+        <View style={cardStyles.itemHead}>
+          <View style={cardStyles.itemTitleWrap}>
+            <Text style={cardStyles.itemTitle} numberOfLines={2}>{item.food_name}</Text>
+            {item.category ? (
+              <View style={cardStyles.itemCategory}>
+                <Text style={cardStyles.itemCategoryText} numberOfLines={1}>{item.category}</Text>
+              </View>
+            ) : null}
+          </View>
+          <View style={[cardStyles.itemBadge, { backgroundColor: visual.backgroundColor, borderColor: visual.borderColor }]}>
+            <Text style={[cardStyles.itemBadgeText, { color: visual.color }]} numberOfLines={2}>{statusLabel}</Text>
+          </View>
         </View>
-        <View style={[styles.expiryItemBadge, badgeStyle]}>
-          <Text style={[styles.expiryItemBadgeText, badgeTextStyle]} numberOfLines={1}>
-            {item.status === 'active' ? item.urgency_label || formatExpiryHint(item) : expiryStatusLabel(item.status)}
-          </Text>
+
+        <View style={cardStyles.itemMeta}>
+          <Text style={cardStyles.itemMetaText}>到期日 {formatExpiryDate(item.expire_date)}</Text>
+          <Text style={cardStyles.itemMetaText}>{expiryStorageLabel(item.storage_type)}</Text>
+          {item.quantity_note ? <Text style={cardStyles.itemMetaText}>{item.quantity_note}</Text> : null}
         </View>
-      </View>
+        <Text style={cardStyles.itemHint}>{formatExpiryHint(item)}</Text>
+        {item.note ? <Text style={cardStyles.itemNote} numberOfLines={3}>{item.note}</Text> : null}
+      </Pressable>
 
-      <View style={styles.expiryItemMeta}>
-        <Text style={styles.expiryItemMetaText}>到期日 {formatExpiryDate(item.expire_date)}</Text>
-        <Text style={styles.expiryItemMetaText}>{expiryStorageLabel(item.storage_type)}</Text>
-        {item.quantity_note ? <Text style={styles.expiryItemMetaText}>{item.quantity_note}</Text> : null}
-      </View>
-
-      <Text style={styles.expiryItemHint}>{formatExpiryHint(item)}</Text>
-      {item.note ? <Text style={styles.expiryItemNote} numberOfLines={2}>{item.note}</Text> : null}
-
-      <View style={styles.expiryItemActions}>
-        {item.status === 'active' ? (
+      <View style={cardStyles.itemActions}>
+        {busy ? (
+          <View style={cardStyles.actionBusy} accessibilityLabel="正在更新保质期状态">
+            <ActivityIndicator color={palette.brand} size="small" />
+            <Text style={cardStyles.actionBusyText}>正在更新</Text>
+          </View>
+        ) : item.status === 'active' ? (
           <>
             <Pressable
-              style={styles.expiryActionGhost}
-              onPress={(event) => {
-                event.stopPropagation()
-                void onUpdateStatus(item, 'consumed')
-              }}
+              style={({ pressed }) => [cardStyles.actionGhost, pressed && cardStyles.pressed]}
+              onPress={() => void onUpdateStatus(item, 'consumed')}
+              accessibilityRole="button"
+              accessibilityLabel={`将${item.food_name}标记为已吃完`}
             >
-              <Check size={14} color="#314740" strokeWidth={2.4} />
-              <Text style={styles.expiryActionGhostText}>已吃完</Text>
+              <Check size={17} color={palette.textSecondary} strokeWidth={2.4} />
+              <Text style={cardStyles.actionGhostText}>已吃完</Text>
             </Pressable>
             <Pressable
-              style={styles.expiryActionGhost}
-              onPress={(event) => {
-                event.stopPropagation()
-                void onUpdateStatus(item, 'discarded')
-              }}
+              style={({ pressed }) => [cardStyles.actionGhost, pressed && cardStyles.pressed]}
+              onPress={() => void onUpdateStatus(item, 'discarded')}
+              accessibilityRole="button"
+              accessibilityLabel={`将${item.food_name}标记为已丢弃`}
             >
-              <Trash2 size={14} color="#314740" strokeWidth={2.2} />
-              <Text style={styles.expiryActionGhostText}>已丢弃</Text>
+              <Trash2 size={17} color={palette.textSecondary} strokeWidth={2.2} />
+              <Text style={cardStyles.actionGhostText}>已丢弃</Text>
             </Pressable>
           </>
         ) : (
           <Pressable
-            style={styles.expiryActionGhost}
-            onPress={(event) => {
-              event.stopPropagation()
-              void onUpdateStatus(item, 'active')
-            }}
+            style={({ pressed }) => [cardStyles.actionGhost, pressed && cardStyles.pressed]}
+            onPress={() => void onUpdateStatus(item, 'active')}
+            accessibilityRole="button"
+            accessibilityLabel={`恢复${item.food_name}的保质期提醒`}
           >
-            <Undo2 size={14} color="#314740" strokeWidth={2.2} />
-            <Text style={styles.expiryActionGhostText}>恢复提醒</Text>
+            <Undo2 size={17} color={palette.textSecondary} strokeWidth={2.2} />
+            <Text style={cardStyles.actionGhostText}>恢复提醒</Text>
           </Pressable>
         )}
-        <Pressable
-          style={styles.expiryActionPrimary}
-          onPress={(event) => {
-            event.stopPropagation()
-            onPress()
-          }}
-        >
-          <Text style={styles.expiryActionPrimaryText}>编辑</Text>
-        </Pressable>
+        {!busy ? (
+          <Pressable
+            style={({ pressed }) => [cardStyles.actionPrimary, pressed && cardStyles.pressed]}
+            onPress={onPress}
+            accessibilityRole="button"
+            accessibilityLabel={`编辑${item.food_name}`}
+          >
+            <Edit3 size={17} color="#fff" strokeWidth={2.2} />
+            <Text style={cardStyles.actionPrimaryText}>编辑</Text>
+          </Pressable>
+        ) : null}
       </View>
-    </Pressable>
+    </View>
   )
 }
 
@@ -6730,8 +8346,10 @@ function rewardTaskKey(task: { code?: string; action_type?: string; name?: strin
 }
 
 function rewardTaskName(task: { name?: string; action_type?: string }): string {
-  if (task.action_type === 'public_food_upload') return '上传公共食物/校园食堂菜品'
-  if (task.action_type === 'packaged_food_upload') return '预包装零食/食物上传'
+  if (task.action_type === 'login_check_in') return '每日签到'
+  if (task.action_type === 'public_food_upload') return '上传公共餐食'
+  if (task.action_type === 'packaged_food_upload') return '上传包装食品'
+  if (task.action_type === 'standard_food_upload') return '贡献标准食物'
   if (task.action_type === 'share_poster') return '每日分享打卡'
   return task.name || '积分任务'
 }
@@ -6740,8 +8358,8 @@ function isRewardTaskDisabled(task: { daily_limit?: number | null; today_count?:
   return typeof task.daily_limit === 'number' && task.daily_limit > 0 && Number(task.today_count || 0) >= task.daily_limit
 }
 
-function isRewardTaskAvailable(task: { action_path?: string | null; daily_limit?: number | null; today_count?: number }): boolean {
-  return Boolean(task.action_path) && !isRewardTaskDisabled(task)
+function isRewardTaskAvailable(task: { action_type?: string; action_path?: string | null; daily_limit?: number | null; today_count?: number }): boolean {
+  return (task.action_type === 'login_check_in' || Boolean(task.action_path)) && !isRewardTaskDisabled(task)
 }
 
 function rewardTaskStatus(task: { status?: string; daily_limit?: number | null; today_count?: number }): string {
@@ -6774,16 +8392,19 @@ function navigateRewardTask(
   navigation: NativeStackNavigationProp<RootStackParamList>,
   task: { action_type?: string; action_path?: string | null; daily_limit?: number | null; today_count?: number },
 ) {
-  if (isRewardTaskDisabled(task) || !task.action_path) return
+  if (isRewardTaskDisabled(task) || (task.action_type !== 'login_check_in' && !task.action_path)) return
   switch (task.action_type) {
     case 'share_poster':
       navigation.navigate('DayRecord', { date: todayKey() })
+      return
+    case 'standard_food_upload':
+      navigation.navigate('StandardFoodContribution', { source: 'reward_center' })
       return
     case 'packaged_food_upload':
       navigation.navigate('PackagedFoodEdit')
       return
     case 'public_food_upload':
-      navigation.navigate('PublicFoodShare', { mode: 'campus' })
+      navigation.navigate('PublicFoodShare', { mode: 'public' })
       return
     default:
       navigation.navigate('RewardCenter')
@@ -7164,10 +8785,25 @@ const eatingMoodLabels: Record<string, { emoji: string; label: string }> = {
 const recordNutrientMeta: Array<{ key: string; label: string; unit: string; altKey?: string }> = [
   { key: 'fiber', label: '膳食纤维', unit: 'g' },
   { key: 'sugar', label: '糖', unit: 'g' },
+  { key: 'saturatedFat', altKey: 'saturated_fat', label: '饱和脂肪', unit: 'g' },
+  { key: 'cholesterolMg', altKey: 'cholesterol_mg', label: '胆固醇', unit: 'mg' },
   { key: 'sodiumMg', altKey: 'sodium_mg', label: '钠', unit: 'mg' },
   { key: 'potassiumMg', altKey: 'potassium_mg', label: '钾', unit: 'mg' },
   { key: 'calciumMg', altKey: 'calcium_mg', label: '钙', unit: 'mg' },
   { key: 'ironMg', altKey: 'iron_mg', label: '铁', unit: 'mg' },
+  { key: 'magnesiumMg', altKey: 'magnesium_mg', label: '镁', unit: 'mg' },
+  { key: 'zincMg', altKey: 'zinc_mg', label: '锌', unit: 'mg' },
+  { key: 'vitaminARaeMcg', altKey: 'vitamin_a_rae_mcg', label: '维生素A', unit: 'mcg' },
+  { key: 'vitaminCMg', altKey: 'vitamin_c_mg', label: '维生素C', unit: 'mg' },
+  { key: 'vitaminDMcg', altKey: 'vitamin_d_mcg', label: '维生素D', unit: 'mcg' },
+  { key: 'vitaminEMg', altKey: 'vitamin_e_mg', label: '维生素E', unit: 'mg' },
+  { key: 'vitaminKMcg', altKey: 'vitamin_k_mcg', label: '维生素K', unit: 'mcg' },
+  { key: 'thiaminMg', altKey: 'thiamin_mg', label: '维生素B1', unit: 'mg' },
+  { key: 'riboflavinMg', altKey: 'riboflavin_mg', label: '维生素B2', unit: 'mg' },
+  { key: 'niacinMg', altKey: 'niacin_mg', label: '烟酸', unit: 'mg' },
+  { key: 'vitaminB6Mg', altKey: 'vitamin_b6_mg', label: '维生素B6', unit: 'mg' },
+  { key: 'folateMcg', altKey: 'folate_mcg', label: '叶酸', unit: 'mcg' },
+  { key: 'vitaminB12Mcg', altKey: 'vitamin_b12_mcg', label: '维生素B12', unit: 'mcg' },
 ]
 
 function formatDisplayNumber(value: unknown): string {
@@ -7258,14 +8894,28 @@ function recordContextTags(record: FoodRecord): Array<{ label: string; icon: str
   return tags
 }
 
-function recordDetailBlocks(record: FoodRecord): Array<{ title: string; icon: string; text: string }> {
+function recordDetailBlocks(record: FoodRecord): Array<{ title: string; icon: LucideIcon; text: string }> {
   return [
-    { title: '识别描述', icon: '食', text: String(record.description || '').trim() },
-    { title: 'AI 健康建议', icon: '叶', text: String(record.insight || '').trim() },
-    { title: 'PFC 比例分析', icon: '比', text: recordExtraText(record, 'pfc_ratio_comment') },
-    { title: '吸收与利用', icon: '热', text: recordExtraText(record, 'absorption_notes') },
-    { title: '情境建议', icon: '时', text: recordExtraText(record, 'context_advice') },
+    { title: '识别描述', icon: Utensils, text: String(record.description || '').trim() },
+    { title: 'AI 健康建议', icon: Leaf, text: String(record.insight || '').trim() },
+    { title: 'PFC 比例分析', icon: BarChart3, text: recordExtraText(record, 'pfc_ratio_comment') },
+    { title: '吸收与利用', icon: Flame, text: recordExtraText(record, 'absorption_notes') },
+    { title: '情境建议', icon: Clock3, text: recordExtraText(record, 'context_advice') },
   ].filter((item) => item.text)
+}
+
+function recordItemSourceLabel(item: FoodRecord['items'][number]): string {
+  const source = String(item.manual_source_title || item.nutrition_source || '').trim()
+  const portion = String(item.manual_portion_label || '').trim()
+  return [source, portion].filter(Boolean).join(' · ')
+}
+
+function recordNutrientTotal(items: FoodRecord['items'], key: string, altKey?: string): number {
+  return items.reduce((sum, item) => {
+    const ratio = recordItemRatio(item) / 100
+    const value = numberFrom(item.nutrients?.[key] ?? (altKey ? item.nutrients?.[altKey] : undefined), 0)
+    return sum + value * ratio
+  }, 0)
 }
 
 function recordItemWaterMl(item: FoodRecord['items'][number]): number {
@@ -7281,6 +8931,25 @@ function recordItemNutrientRows(item: FoodRecord['items'][number]): Array<{ key:
     value: numberFrom(item.nutrients?.[meta.key] ?? (meta.altKey ? item.nutrients?.[meta.altKey] : undefined), 0) * ratio,
     unit: meta.unit,
   }))
+}
+
+function recordMealVisual(mealType: MealType): { Icon: LucideIcon; color: string } {
+  switch (mealType) {
+    case 'breakfast':
+      return { Icon: Coffee, color: '#ff6900' }
+    case 'morning_snack':
+      return { Icon: Cookie, color: '#7b61ff' }
+    case 'afternoon_snack':
+    case 'snack':
+      return { Icon: Cookie, color: '#ad46ff' }
+    case 'dinner':
+      return { Icon: Soup, color: '#2b7fff' }
+    case 'evening_snack':
+      return { Icon: Cookie, color: '#5b21b6' }
+    case 'lunch':
+    default:
+      return { Icon: Soup, color: '#00c950' }
+  }
 }
 
 function mealToneStyles(mealType: MealType): {
@@ -7765,21 +9434,18 @@ function formatAnalyzeHistoryTime(value?: string | null): string {
   return `${date} ${period}${time}`
 }
 
-function analyzeHistoryStatusTone(task: AnalysisTask) {
+function analyzeHistoryStatusTone(task: AnalysisTask): AnalyzeHistoryStatusKind {
   const status = String(task.status || '')
-  if (status === 'pending' || status === 'queued' || status === 'processing' || status === 'running') {
-    return { style: styles.analyzeHistoryStatusProcessing, color: '#2563eb' }
-  }
+  if (status === 'pending' || status === 'queued' || status === 'processing' || status === 'running') return 'processing'
   if (status === 'done') {
-    if (task.is_recorded === true) return { style: styles.analyzeHistoryStatusRecorded, color: '#00bc7d' }
-    if (task.is_recorded === false) return { style: styles.analyzeHistoryStatusWaiting, color: '#d97706' }
-    return { style: styles.analyzeHistoryStatusDone, color: '#00bc7d' }
+    if (task.is_recorded === true) return 'recorded'
+    if (task.is_recorded === false) return 'waiting'
+    return 'done'
   }
-  if (status === 'failed' || status === 'timed_out') return { style: styles.analyzeHistoryStatusRetry, color: '#c2410c' }
-  if (status === 'violated') return { style: styles.analyzeHistoryStatusFailed, color: '#c53030' }
-  return { style: styles.analyzeHistoryStatusDefault, color: '#4b5563' }
+  if (status === 'failed' || status === 'timed_out') return 'retry'
+  if (status === 'violated') return 'failed'
+  return 'default'
 }
-
 function notificationTabApiType(tab: NotificationTab): string | undefined {
   if (tab === 'like') return 'like_received'
   if (tab === 'comment') return 'comment_received'
@@ -7907,6 +9573,829 @@ function friendRequestTimeLabel(request: FriendRequestItem): string {
 function formatBadgeCount(count: number): string {
   return count > 99 ? '99+' : String(count)
 }
+function createAnalyzeHistoryStyles(palette: AnalyzeHistoryPalette) {
+  return StyleSheet.create({
+    page: {
+      flex: 1,
+      backgroundColor: palette.page,
+    },
+    searchBar: {
+      paddingHorizontal: 12,
+      paddingTop: 8,
+      paddingBottom: 8,
+    },
+    searchInputWrap: {
+      minHeight: 52,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      borderWidth: 1,
+      borderColor: palette.border,
+      borderRadius: 14,
+      paddingLeft: 14,
+      backgroundColor: palette.input,
+      shadowColor: palette.shadow,
+      shadowOpacity: 0.06,
+      shadowRadius: 8,
+      shadowOffset: { width: 0, height: 2 },
+      elevation: 1,
+    },
+    searchInput: {
+      flex: 1,
+      minWidth: 0,
+      minHeight: 50,
+      paddingVertical: 0,
+      color: palette.text,
+      fontSize: 15,
+      lineHeight: 21,
+      fontWeight: '500',
+    },
+    searchClear: {
+      width: 48,
+      height: 48,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: 14,
+      backgroundColor: palette.iconSurface,
+    },
+    inlineErrorBanner: {
+      minHeight: 56,
+      marginHorizontal: 12,
+      marginBottom: 8,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 9,
+      paddingLeft: 12,
+      paddingRight: 6,
+      paddingVertical: 6,
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: palette.danger,
+      backgroundColor: palette.dangerSoft,
+    },
+    inlineErrorText: {
+      flex: 1,
+      minWidth: 0,
+      color: palette.textSecondary,
+      fontSize: 13,
+      lineHeight: 19,
+    },
+    inlineRetry: {
+      minWidth: 72,
+      minHeight: 48,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+      paddingHorizontal: 10,
+      borderRadius: 12,
+    },
+    inlineRetryText: {
+      color: palette.brand,
+      fontSize: 13,
+      fontWeight: '800',
+    },
+    scroll: {
+      flex: 1,
+    },
+    list: {
+      paddingHorizontal: 12,
+      paddingTop: 6,
+    },
+    loading: {
+      minHeight: 240,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    loadingMore: {
+      minHeight: 56,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    errorCard: {
+      minHeight: 300,
+      marginTop: 20,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: 24,
+      paddingVertical: 28,
+      borderRadius: 18,
+      borderWidth: 1,
+      borderColor: palette.border,
+      backgroundColor: palette.surface,
+    },
+    errorIcon: {
+      width: 64,
+      height: 64,
+      marginBottom: 14,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: 32,
+      backgroundColor: palette.dangerSoft,
+    },
+    errorTitle: {
+      color: palette.text,
+      fontSize: 17,
+      lineHeight: 24,
+      fontWeight: '900',
+      textAlign: 'center',
+    },
+    errorDesc: {
+      marginTop: 8,
+      maxWidth: 300,
+      color: palette.textSecondary,
+      fontSize: 14,
+      lineHeight: 21,
+      textAlign: 'center',
+    },
+    errorRetryButton: {
+      minWidth: 142,
+      minHeight: 50,
+      marginTop: 20,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      paddingHorizontal: 18,
+      borderRadius: 14,
+      backgroundColor: palette.brandStrong,
+    },
+    errorRetryText: {
+      color: '#ffffff',
+      fontSize: 15,
+      fontWeight: '900',
+    },
+    emptyCard: {
+      minHeight: 280,
+      marginTop: 24,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: 28,
+    },
+    emptyIcon: {
+      width: 68,
+      height: 68,
+      marginBottom: 14,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: 34,
+      borderWidth: 1,
+      borderColor: palette.border,
+      backgroundColor: palette.surface,
+    },
+    emptyTitle: {
+      color: palette.text,
+      fontSize: 17,
+      lineHeight: 24,
+      fontWeight: '900',
+      textAlign: 'center',
+    },
+    emptyDesc: {
+      marginTop: 8,
+      maxWidth: 310,
+      color: palette.textSecondary,
+      fontSize: 14,
+      lineHeight: 21,
+      textAlign: 'center',
+    },
+    listHeader: {
+      minHeight: 52,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 8,
+      paddingHorizontal: 2,
+    },
+    bulkDelete: {
+      minHeight: 48,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 7,
+      paddingHorizontal: 14,
+      borderRadius: 24,
+      borderWidth: 1,
+      borderColor: palette.border,
+      backgroundColor: palette.surface,
+      shadowColor: palette.shadow,
+      shadowOpacity: 0.08,
+      shadowRadius: 8,
+      shadowOffset: { width: 0, height: 2 },
+      elevation: 1,
+    },
+    bulkDeleteText: {
+      color: palette.brand,
+      fontSize: 13,
+      fontWeight: '800',
+    },
+    taskCard: {
+      minHeight: 124,
+      marginBottom: 10,
+      flexDirection: 'row',
+      alignItems: 'center',
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: palette.border,
+      backgroundColor: palette.surface,
+      overflow: 'hidden',
+      shadowColor: palette.shadow,
+      shadowOpacity: 0.06,
+      shadowRadius: 14,
+      shadowOffset: { width: 0, height: 5 },
+      elevation: 2,
+    },
+    taskCardViolated: {
+      borderColor: palette.danger,
+      backgroundColor: palette.dangerSoft,
+    },
+    taskMain: {
+      flex: 1,
+      minWidth: 0,
+      minHeight: 124,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      paddingLeft: 12,
+      paddingVertical: 12,
+    },
+    thumb: {
+      width: 60,
+      height: 60,
+      flexShrink: 0,
+      borderRadius: 12,
+      overflow: 'hidden',
+      borderWidth: 1,
+      borderColor: palette.border,
+      backgroundColor: palette.surfaceMuted,
+    },
+    thumbImage: {
+      width: '100%',
+      height: '100%',
+    },
+    thumbFallback: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: palette.brandSoft,
+    },
+    thumbFallbackText: {
+      backgroundColor: '#123327',
+    },
+    thumbText: {
+      paddingHorizontal: 6,
+      color: '#ecfff5',
+      fontSize: 13,
+      lineHeight: 18,
+      fontWeight: '900',
+      textAlign: 'center',
+    },
+    body: {
+      flex: 1,
+      minWidth: 0,
+      gap: 3,
+    },
+    headline: {
+      color: palette.text,
+      fontSize: 15,
+      lineHeight: 21,
+      fontWeight: '900',
+    },
+    calories: {
+      color: palette.text,
+      fontSize: 22,
+      lineHeight: 28,
+      fontWeight: '900',
+      fontVariant: ['tabular-nums'],
+    },
+    meta: {
+      color: palette.textSecondary,
+      fontSize: 12,
+      lineHeight: 18,
+      fontWeight: '600',
+    },
+    violationReason: {
+      marginTop: 2,
+      color: palette.danger,
+      fontSize: 12,
+      lineHeight: 18,
+    },
+    timeRow: {
+      minWidth: 0,
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 7,
+      marginTop: 3,
+    },
+    time: {
+      flexShrink: 1,
+      color: palette.textMuted,
+      fontSize: 11,
+      lineHeight: 17,
+      fontVariant: ['tabular-nums'],
+    },
+    tagRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      flexWrap: 'wrap',
+      gap: 6,
+      marginTop: 3,
+    },
+    modeTag: {
+      minHeight: 26,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 13,
+      borderWidth: 1,
+      borderColor: palette.brandStrong,
+      backgroundColor: palette.brandSoft,
+    },
+    modeTagText: {
+      color: palette.brand,
+      fontSize: 10,
+      lineHeight: 16,
+      fontWeight: '900',
+    },
+    statusBadge: {
+      minWidth: 72,
+      minHeight: 32,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: 16,
+      borderWidth: 1,
+      paddingHorizontal: 10,
+    },
+    statusText: {
+      fontSize: 11,
+      lineHeight: 15,
+      fontWeight: '900',
+    },
+    moreButton: {
+      width: 48,
+      height: 48,
+      marginHorizontal: 7,
+      flexShrink: 0,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: 14,
+      backgroundColor: palette.iconSurface,
+    },
+    menuBackdrop: {
+      flex: 1,
+      justifyContent: 'flex-end',
+      paddingHorizontal: 12,
+      backgroundColor: palette.scrim,
+    },
+    menuSheet: {
+      maxHeight: '90%',
+      borderTopLeftRadius: 24,
+      borderTopRightRadius: 24,
+      borderWidth: 1,
+      borderBottomWidth: 0,
+      borderColor: palette.border,
+      paddingTop: 10,
+      paddingHorizontal: 14,
+      backgroundColor: palette.surfaceRaised,
+      shadowColor: palette.shadow,
+      shadowOpacity: 0.2,
+      shadowRadius: 20,
+      shadowOffset: { width: 0, height: -6 },
+      elevation: 20,
+    },
+    menuHandle: {
+      alignSelf: 'center',
+      width: 42,
+      height: 4,
+      marginBottom: 12,
+      borderRadius: 2,
+      backgroundColor: palette.handle,
+    },
+    menuTitle: {
+      color: palette.text,
+      fontSize: 18,
+      lineHeight: 24,
+      fontWeight: '900',
+      textAlign: 'center',
+    },
+    menuSubtitle: {
+      marginTop: 4,
+      color: palette.textSecondary,
+      fontSize: 13,
+      lineHeight: 19,
+      textAlign: 'center',
+    },
+    menuActions: {
+      marginTop: 14,
+      borderRadius: 16,
+      overflow: 'hidden',
+      borderWidth: 1,
+      borderColor: palette.divider,
+      backgroundColor: palette.surface,
+    },
+    menuAction: {
+      minHeight: 64,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      paddingHorizontal: 14,
+      paddingVertical: 10,
+      borderBottomWidth: 1,
+      borderBottomColor: palette.divider,
+    },
+    menuActionLast: {
+      borderBottomWidth: 0,
+    },
+    menuActionPressed: {
+      backgroundColor: palette.pressed,
+    },
+    menuActionIcon: {
+      width: 38,
+      height: 38,
+      flexShrink: 0,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: 19,
+    },
+    actionIconRecord: {
+      backgroundColor: 'rgba(16,185,129,0.14)',
+    },
+    actionIconRetry: {
+      backgroundColor: 'rgba(249,115,22,0.14)',
+    },
+    actionIconFavorite: {
+      backgroundColor: 'rgba(92,184,150,0.14)',
+    },
+    actionIconLibrary: {
+      backgroundColor: 'rgba(249,115,22,0.14)',
+    },
+    actionIconDisabled: {
+      backgroundColor: 'rgba(156,163,175,0.12)',
+    },
+    actionIconDanger: {
+      backgroundColor: 'rgba(239,68,68,0.14)',
+    },
+    menuActionCopy: {
+      flex: 1,
+      minWidth: 0,
+    },
+    menuActionText: {
+      color: palette.text,
+      fontSize: 15,
+      lineHeight: 21,
+      fontWeight: '800',
+    },
+    menuActionTextDanger: {
+      color: palette.danger,
+    },
+    menuActionHint: {
+      marginTop: 2,
+      color: palette.textMuted,
+      fontSize: 12,
+      lineHeight: 17,
+    },
+    menuCancel: {
+      minHeight: 50,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginTop: 10,
+      borderRadius: 14,
+      backgroundColor: palette.surfaceMuted,
+    },
+    menuCancelText: {
+      color: palette.textSecondary,
+      fontSize: 15,
+      lineHeight: 21,
+      fontWeight: '800',
+    },
+    dialogKeyboard: {
+      flex: 1,
+    },
+    dialogBackdrop: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: 20,
+      paddingVertical: 24,
+      backgroundColor: palette.scrim,
+    },
+    dialogCard: {
+      width: '100%',
+      maxWidth: 400,
+      maxHeight: '88%',
+      borderRadius: 22,
+      borderWidth: 1,
+      borderColor: palette.border,
+      padding: 20,
+      backgroundColor: palette.surfaceRaised,
+      shadowColor: palette.shadow,
+      shadowOpacity: 0.22,
+      shadowRadius: 22,
+      shadowOffset: { width: 0, height: 8 },
+      elevation: 20,
+    },
+    dialogTitle: {
+      color: palette.text,
+      fontSize: 19,
+      lineHeight: 26,
+      fontWeight: '900',
+      textAlign: 'center',
+    },
+    dialogDesc: {
+      marginTop: 5,
+      color: palette.textSecondary,
+      fontSize: 13,
+      lineHeight: 19,
+      textAlign: 'center',
+    },
+    mealGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+      marginTop: 18,
+    },
+    mealOption: {
+      width: '31%',
+      minHeight: 50,
+      flexGrow: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: 13,
+      borderWidth: 1,
+      borderColor: palette.border,
+      backgroundColor: palette.surfaceMuted,
+      paddingHorizontal: 6,
+    },
+    mealOptionActive: {
+      borderColor: palette.brandStrong,
+      backgroundColor: palette.brandSoft,
+    },
+    mealOptionText: {
+      color: palette.textSecondary,
+      fontSize: 13,
+      lineHeight: 19,
+      fontWeight: '700',
+      textAlign: 'center',
+    },
+    mealOptionTextActive: {
+      color: palette.brand,
+      fontWeight: '900',
+    },
+    recipeInput: {
+      minHeight: 52,
+      marginTop: 18,
+      borderWidth: 1,
+      borderColor: palette.border,
+      borderRadius: 13,
+      paddingHorizontal: 14,
+      color: palette.text,
+      fontSize: 15,
+      backgroundColor: palette.input,
+    },
+    dialogButtons: {
+      flexDirection: 'row',
+      gap: 10,
+      marginTop: 18,
+    },
+    dialogCancel: {
+      flex: 1,
+      minHeight: 50,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: 13,
+      backgroundColor: palette.surfaceMuted,
+    },
+    dialogCancelText: {
+      color: palette.textSecondary,
+      fontSize: 14,
+      fontWeight: '800',
+    },
+    dialogConfirm: {
+      flex: 1,
+      minHeight: 50,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: 13,
+      backgroundColor: palette.brandStrong,
+    },
+    dialogConfirmText: {
+      color: '#ffffff',
+      fontSize: 14,
+      fontWeight: '900',
+    },
+    pressed: {
+      opacity: 0.72,
+    },
+    disabled: {
+      opacity: 0.45,
+    },
+  })
+}
+function createExpiryStyles(palette: ExpiryPalette) {
+  return StyleSheet.create({
+    page: { flex: 1, backgroundColor: palette.background },
+    scroll: { flex: 1, backgroundColor: palette.background },
+    content: { paddingTop: 0 },
+    hero: {
+      minHeight: 104,
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      justifyContent: 'space-between',
+      gap: 16,
+      paddingHorizontal: 16,
+      paddingTop: 22,
+      paddingBottom: 14,
+      backgroundColor: palette.hero,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: palette.border,
+    },
+    heroKicker: { marginBottom: 5, color: palette.textSecondary, fontSize: 12, lineHeight: 18, fontWeight: '700' },
+    heroTitle: { color: palette.text, fontSize: 24, lineHeight: 32, fontWeight: '900' },
+    heroAdd: {
+      minWidth: 84,
+      minHeight: 48,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+      borderRadius: 999,
+      paddingHorizontal: 16,
+      backgroundColor: palette.brandStrong,
+    },
+    pressed: { opacity: 0.72 },
+    heroAddText: { color: '#fff', fontSize: 14, fontWeight: '900' },
+    summaryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, paddingHorizontal: 16, paddingTop: 14 },
+    summaryCard: {
+      flexGrow: 1,
+      flexBasis: '47%',
+      minHeight: 112,
+      justifyContent: 'center',
+      borderRadius: 16,
+      paddingHorizontal: 14,
+      paddingVertical: 13,
+      backgroundColor: palette.surface,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: palette.border,
+      shadowColor: '#000',
+      shadowOpacity: palette.background === '#0d1312' ? 0.18 : 0.06,
+      shadowRadius: 12,
+      shadowOffset: { width: 0, height: 4 },
+      elevation: 1,
+    },
+    summaryIcon: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center', borderRadius: 12, backgroundColor: palette.brandSoft },
+    summaryValue: { marginTop: 8, color: palette.text, fontSize: 27, lineHeight: 33, fontWeight: '900', fontVariant: ['tabular-nums'] },
+    summaryLabel: { marginTop: 2, color: palette.textSecondary, fontSize: 12, lineHeight: 18, fontWeight: '700' },
+    previewPanel: {
+      marginHorizontal: 16,
+      marginTop: 12,
+      borderRadius: 16,
+      padding: 14,
+      backgroundColor: palette.surface,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: palette.border,
+    },
+    previewRow: {
+      minHeight: 50,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      paddingVertical: 10,
+      paddingHorizontal: 4,
+    },
+    previewRowBorder: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: palette.border },
+    previewRowPressed: { backgroundColor: palette.surfacePressed, borderRadius: 10 },
+    previewName: { flex: 1, color: palette.text, fontSize: 14, lineHeight: 20, fontWeight: '800' },
+    previewHint: { maxWidth: '38%', color: palette.warning, fontSize: 12, lineHeight: 18, fontWeight: '800', textAlign: 'right' },
+    inlineError: {
+      minHeight: 64,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      marginHorizontal: 16,
+      marginTop: 12,
+      borderRadius: 14,
+      padding: 12,
+      backgroundColor: palette.warningSoft,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: palette.warning,
+    },
+    inlineErrorTitle: { color: palette.text, fontSize: 13, lineHeight: 18, fontWeight: '800' },
+    inlineErrorDesc: { marginTop: 2, color: palette.textSecondary, fontSize: 11, lineHeight: 16 },
+    inlineRetry: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 14, backgroundColor: palette.surface },
+    section: { paddingHorizontal: 16, paddingTop: 18 },
+    sectionTitle: { marginBottom: 10, color: palette.textSecondary, fontSize: 15, lineHeight: 21, fontWeight: '900' },
+    sectionTitleNoMargin: { color: palette.textSecondary, fontSize: 15, lineHeight: 21, fontWeight: '900' },
+    sectionHeader: { minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, borderRadius: 12 },
+    sectionToggleRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+    sectionToggle: { color: palette.textMuted, fontSize: 13, fontWeight: '800' },
+    itemCard: {
+      overflow: 'hidden',
+      borderRadius: 16,
+      marginBottom: 12,
+      backgroundColor: palette.surface,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: palette.border,
+    },
+    itemMain: { padding: 14 },
+    itemMainPressed: { backgroundColor: palette.surfacePressed },
+    itemHead: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 },
+    itemTitleWrap: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 },
+    itemTitle: { flexShrink: 1, color: palette.text, fontSize: 16, lineHeight: 23, fontWeight: '900' },
+    itemCategory: { maxWidth: 108, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 4, backgroundColor: palette.brandSoft },
+    itemCategoryText: { color: palette.textSecondary, fontSize: 11, lineHeight: 15, fontWeight: '800' },
+    itemBadge: { maxWidth: 112, flexShrink: 0, borderRadius: 999, paddingHorizontal: 9, paddingVertical: 5, borderWidth: StyleSheet.hairlineWidth },
+    itemBadgeText: { fontSize: 11, lineHeight: 15, fontWeight: '900', textAlign: 'center' },
+    itemMeta: { flexDirection: 'row', flexWrap: 'wrap', gap: 9, marginTop: 10 },
+    itemMetaText: { color: palette.textSecondary, fontSize: 12, lineHeight: 18, fontWeight: '700' },
+    itemHint: { marginTop: 9, color: palette.text, fontSize: 13, lineHeight: 19, fontWeight: '900' },
+    itemNote: { marginTop: 6, color: palette.textSecondary, fontSize: 12, lineHeight: 18 },
+    itemActions: {
+      minHeight: 64,
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      alignItems: 'center',
+      gap: 8,
+      padding: 8,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: palette.border,
+      backgroundColor: palette.background,
+    },
+    actionGhost: {
+      flexGrow: 1,
+      flexBasis: 88,
+      minHeight: 48,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+      borderRadius: 12,
+      paddingHorizontal: 10,
+      backgroundColor: palette.surface,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: palette.border,
+    },
+    actionGhostText: { color: palette.textSecondary, fontSize: 12, fontWeight: '900' },
+    actionPrimary: {
+      flexGrow: 1,
+      flexBasis: 88,
+      minHeight: 48,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+      borderRadius: 12,
+      paddingHorizontal: 10,
+      backgroundColor: palette.brandStrong,
+    },
+    actionPrimaryText: { color: '#fff', fontSize: 12, fontWeight: '900' },
+    actionBusy: { flex: 1, minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+    actionBusyText: { color: palette.textSecondary, fontSize: 12, fontWeight: '800' },
+    emptyCard: {
+      minHeight: 190,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginHorizontal: 16,
+      marginTop: 16,
+      borderRadius: 16,
+      paddingHorizontal: 20,
+      paddingVertical: 28,
+      backgroundColor: palette.surface,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: palette.border,
+    },
+    failedCard: { borderColor: palette.warning },
+    emptyIcon: { width: 64, height: 64, alignItems: 'center', justifyContent: 'center', marginBottom: 14, borderRadius: 22, backgroundColor: palette.brandSoft },
+    emptyTitle: { marginTop: 10, color: palette.text, fontSize: 17, lineHeight: 24, fontWeight: '900', textAlign: 'center' },
+    emptyDesc: { marginTop: 8, color: palette.textSecondary, fontSize: 13, lineHeight: 20, textAlign: 'center' },
+    retryButton: {
+      minWidth: 136,
+      minHeight: 48,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 7,
+      marginTop: 18,
+      borderRadius: 999,
+      paddingHorizontal: 18,
+      backgroundColor: palette.brandStrong,
+    },
+    retryText: { color: '#fff', fontSize: 14, fontWeight: '900' },
+    emptyAction: {
+      minWidth: 156,
+      minHeight: 48,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 7,
+      marginTop: 18,
+      borderRadius: 999,
+      paddingHorizontal: 18,
+      backgroundColor: palette.brandStrong,
+    },
+    emptyActionText: { color: '#fff', fontSize: 14, fontWeight: '900' },
+  })
+}
+
 const styles = StyleSheet.create({
   flex: {
     flex: 1,
@@ -8378,6 +10867,8 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 7,
     backgroundColor: '#ffffff',
     borderWidth: 1,
     borderColor: '#d1d5db',
@@ -8403,7 +10894,7 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    height: 132,
+    height: 148,
     backgroundColor: '#f6fbf8',
   },
   dayRecordScroll: {
@@ -8414,9 +10905,9 @@ const styles = StyleSheet.create({
     paddingBottom: 28,
   },
   dayRecordTop: {
-    minHeight: 48,
+    minHeight: 56,
     paddingHorizontal: 16,
-    paddingBottom: 10,
+    paddingBottom: 12,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -8431,50 +10922,55 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   dayRecordShareButton: {
-    minHeight: 34,
-    borderRadius: 17,
-    paddingHorizontal: 12,
+    minHeight: 48,
+    borderRadius: 24,
+    paddingHorizontal: 14,
+    borderWidth: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 5,
-    backgroundColor: 'rgba(0, 188, 125, 0.1)',
-  },
-  dayRecordShareIcon: {
-    color: colors.brand,
-    fontSize: 14,
-    lineHeight: 18,
-    fontWeight: '900',
+    gap: 7,
+    backgroundColor: '#ffffff',
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 2,
   },
   dayRecordShareText: {
     color: colors.brand,
-    fontSize: 12,
-    lineHeight: 16,
+    fontSize: 13,
+    lineHeight: 18,
     fontWeight: '800',
+  },
+  dayRecordPressed: {
+    opacity: 0.72,
   },
   dayRecordSummary: {
     flexDirection: 'row',
     gap: 8,
     paddingHorizontal: 16,
-    paddingBottom: 14,
+    paddingBottom: 16,
   },
   dayRecordSummaryCard: {
     flex: 1,
-    minHeight: 70,
-    borderRadius: 11,
+    minWidth: 0,
+    minHeight: 76,
+    borderRadius: 12,
     paddingHorizontal: 10,
-    paddingVertical: 11,
-    backgroundColor: 'rgba(255,255,255,0.96)',
+    paddingVertical: 12,
+    borderWidth: 1,
+    backgroundColor: '#ffffff',
     shadowColor: '#0f172a',
-    shadowOpacity: 0.06,
-    shadowRadius: 13,
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
     shadowOffset: { width: 0, height: 4 },
     elevation: 1,
   },
   dayRecordSummaryLabel: {
     color: '#94a3b8',
-    fontSize: 11,
-    lineHeight: 16,
+    fontSize: 12,
+    lineHeight: 17,
     fontWeight: '700',
   },
   dayRecordSummaryValue: {
@@ -8483,6 +10979,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 21,
     fontWeight: '800',
+    flexShrink: 1,
   },
   dayRecordState: {
     minHeight: 260,
@@ -8490,32 +10987,25 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   dayRecordEmpty: {
-    minHeight: 270,
+    minHeight: 290,
     paddingHorizontal: 32,
     alignItems: 'center',
     justifyContent: 'center',
   },
   dayRecordEmptyIcon: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#ffffff',
     borderWidth: 1,
-    borderColor: 'rgba(0, 188, 125, 0.14)',
-    marginBottom: 14,
-  },
-  dayRecordEmptyIconText: {
-    color: colors.brand,
-    fontSize: 26,
-    lineHeight: 32,
-    fontWeight: '900',
+    marginBottom: 16,
   },
   dayRecordEmptyTitle: {
     color: '#0f172a',
     fontSize: 16,
-    lineHeight: 22,
+    lineHeight: 23,
     fontWeight: '900',
     textAlign: 'center',
   },
@@ -8528,44 +11018,64 @@ const styles = StyleSheet.create({
   },
   dayRecordEmptyButton: {
     marginTop: 18,
-    minWidth: 114,
-    height: 42,
-    borderRadius: 21,
+    minWidth: 122,
+    minHeight: 48,
+    borderRadius: 24,
+    paddingHorizontal: 20,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 7,
     backgroundColor: colors.brand,
+    shadowColor: colors.brand,
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
   },
   dayRecordEmptyButtonText: {
     color: '#ffffff',
     fontSize: 14,
     fontWeight: '900',
   },
+  dayRecordRetryButton: {
+    marginTop: 18,
+    minHeight: 48,
+    borderRadius: 24,
+    paddingHorizontal: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+  },
+  dayRecordRetryText: {
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '800',
+  },
   dayRecordList: {
     paddingHorizontal: 16,
   },
   dayRecordCard: {
-    marginBottom: 10,
-    borderRadius: 13,
+    marginBottom: 12,
+    borderRadius: 14,
     paddingHorizontal: 12,
     paddingVertical: 14,
-    backgroundColor: 'rgba(255,255,255,0.98)',
+    borderWidth: 1,
+    backgroundColor: '#ffffff',
     shadowColor: '#0f172a',
     shadowOpacity: 0.06,
     shadowRadius: 16,
     shadowOffset: { width: 0, height: 5 },
     elevation: 2,
   },
-  dayRecordCardPressed: {
-    opacity: 0.86,
-  },
   dayRecordCardHeader: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
     gap: 8,
-    paddingBottom: 11,
+    paddingBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#eef2f7',
   },
   dayRecordCardMain: {
     flex: 1,
@@ -8582,12 +11092,11 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
     backgroundColor: '#f1f5f9',
   },
   dayRecordThumbPlaceholder: {
     backgroundColor: '#f8fafc',
-    borderWidth: 1,
-    borderColor: 'rgba(148, 163, 184, 0.12)',
   },
   dayRecordThumbImage: {
     width: '100%',
@@ -8600,28 +11109,31 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     paddingHorizontal: 5,
     paddingVertical: 2,
-    backgroundColor: 'rgba(15, 23, 42, 0.74)',
+    backgroundColor: 'rgba(15, 23, 42, 0.78)',
   },
   dayRecordThumbBadgePlaceholder: {
-    backgroundColor: 'rgba(100, 116, 139, 0.76)',
+    backgroundColor: 'rgba(100, 116, 139, 0.82)',
   },
   dayRecordThumbBadgeText: {
     color: '#ffffff',
-    fontSize: 9,
-    lineHeight: 12,
+    fontSize: 10,
+    lineHeight: 13,
     fontWeight: '800',
   },
+  dayRecordCardIdentity: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   dayRecordMealIcon: {
-    width: 28,
-    height: 28,
-    borderRadius: 8,
+    width: 32,
+    height: 32,
+    borderRadius: 9,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  dayRecordMealIconText: {
-    fontSize: 13,
-    lineHeight: 17,
-    fontWeight: '900',
   },
   mealToneBreakfast: {
     backgroundColor: '#ffedd4',
@@ -8679,7 +11191,7 @@ const styles = StyleSheet.create({
     flexShrink: 0,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
   },
   dayRecordCardCalorie: {
     color: '#0f172a',
@@ -8688,9 +11200,10 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   dayRecordDeleteButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -8698,18 +11211,27 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   dayRecordFoodItem: {
+    minHeight: 64,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderBottomWidth: 1,
+  },
+  dayRecordFoodContent: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: 64,
+    paddingVertical: 10,
     flexDirection: 'row',
     flexWrap: 'wrap',
     alignItems: 'flex-start',
     gap: 8,
-    paddingVertical: 9,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f1f5f9',
   },
   dayRecordFoodMain: {
     flex: 1,
-    minWidth: 0,
+    minWidth: 150,
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     gap: 6,
   },
@@ -8723,147 +11245,172 @@ const styles = StyleSheet.create({
   dayRecordFoodAmount: {
     flexShrink: 0,
     borderRadius: 999,
-    paddingHorizontal: 6,
+    paddingHorizontal: 7,
     paddingVertical: 2,
     color: '#64748b',
-    fontSize: 11,
-    lineHeight: 16,
+    fontSize: 12,
+    lineHeight: 17,
     backgroundColor: '#f8fafc',
   },
   dayRecordFoodRatio: {
     flexShrink: 0,
     borderRadius: 999,
-    paddingHorizontal: 6,
+    paddingHorizontal: 7,
     paddingVertical: 2,
     color: '#64748b',
-    fontSize: 11,
-    lineHeight: 16,
+    fontSize: 12,
+    lineHeight: 17,
     fontWeight: '700',
     backgroundColor: '#f8fafc',
   },
   dayRecordFoodSide: {
     flexShrink: 0,
+    minHeight: 24,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'flex-end',
-    gap: 7,
   },
   dayRecordFoodCalorie: {
     color: '#475569',
     fontSize: 13,
-    lineHeight: 18,
+    lineHeight: 19,
     fontWeight: '800',
   },
   dayRecordFoodDelete: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#f8fafc',
     borderWidth: 1,
-    borderColor: '#eef2f7',
   },
   dayRecordFoodMacros: {
     width: '100%',
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-    paddingTop: 3,
+    gap: 10,
+    paddingTop: 2,
   },
   dayRecordFoodMacro: {
     color: '#1e293b',
-    fontSize: 10,
-    lineHeight: 14,
+    fontSize: 12,
+    lineHeight: 17,
     fontWeight: '700',
   },
   dayRecordFoodProtein: {
     color: '#5c9ed4',
   },
   dayRecordFoodCarbs: {
-    color: '#00bc7d',
+    color: '#d4ac52',
   },
   dayRecordFoodFat: {
-    color: '#ff6900',
-  },
-  dayRecordMacroFooter: {
-    paddingHorizontal: 16,
-    paddingTop: 4,
-  },
-  dayRecordMacroFooterText: {
-    color: '#94a3b8',
-    fontSize: 12,
-    lineHeight: 18,
-    textAlign: 'center',
+    color: '#f0985c',
   },
   dailyPosterBackdrop: {
     flex: 1,
-    justifyContent: 'flex-end',
-    backgroundColor: 'rgba(7, 18, 15, 0.68)',
+    backgroundColor: '#0a0a0a',
   },
   dailyPosterSheet: {
-    height: '94%',
-    borderTopLeftRadius: 26,
-    borderTopRightRadius: 26,
-    paddingTop: 12,
-    paddingHorizontal: 14,
-    backgroundColor: '#eef5f2',
+    flex: 1,
+    backgroundColor: '#0a0a0a',
   },
   dailyPosterHeader: {
-    minHeight: 44,
-    paddingHorizontal: 2,
-    flexDirection: 'row',
+    minHeight: 72,
+    paddingHorizontal: 24,
+    paddingBottom: 16,
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-end',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(15, 23, 42, 0.10)',
   },
   dailyPosterHeaderTitle: {
-    color: '#183b31',
+    color: '#111827',
     fontSize: 17,
-    fontWeight: '900',
+    lineHeight: 23,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  dailyPosterBody: {
+    flex: 1,
+    minHeight: 0,
+    backgroundColor: '#0a0a0a',
+  },
+  dailyPosterCloseRow: {
+    minHeight: 58,
+    paddingHorizontal: 16,
+    paddingTop: 6,
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+  },
+  dailyPosterCloseButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.10)',
   },
   dailyPosterScroll: {
     flex: 1,
   },
   dailyPosterScrollContent: {
-    paddingVertical: 8,
-    alignItems: 'stretch',
+    flexGrow: 1,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dailyPosterCardWrap: {
+    width: '100%',
+    maxWidth: 520,
+    overflow: 'hidden',
+    borderRadius: 12,
+    shadowColor: '#000000',
+    shadowOpacity: 0.56,
+    shadowRadius: 28,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 8,
   },
   dailyPosterActions: {
-    marginTop: 10,
+    minHeight: 116,
+    paddingTop: 14,
+    paddingHorizontal: 28,
     flexDirection: 'row',
-    gap: 10,
+    justifyContent: 'space-around',
+    alignItems: 'flex-start',
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.07)',
+    backgroundColor: '#000000',
   },
-  dailyPosterPrimaryAction: {
-    flex: 1,
-    minHeight: 48,
-    borderRadius: 15,
-    flexDirection: 'row',
+  dailyPosterChannel: {
+    minWidth: 96,
+    minHeight: 90,
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    gap: 9,
+  },
+  dailyPosterChannelIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 7,
-    backgroundColor: colors.brand,
   },
-  dailyPosterPrimaryActionText: {
-    color: '#ffffff',
+  dailyPosterShareChannelIcon: {
+    backgroundColor: '#07c160',
+  },
+  dailyPosterSaveChannelIcon: {
+    backgroundColor: '#2563eb',
+  },
+  dailyPosterChannelLabel: {
+    color: 'rgba(255,255,255,0.92)',
     fontSize: 13,
-    fontWeight: '900',
+    lineHeight: 18,
+    fontWeight: '700',
   },
-  dailyPosterSecondaryAction: {
-    flex: 1,
-    minHeight: 48,
-    borderRadius: 15,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 7,
-    backgroundColor: '#dff0e9',
-  },
-  dailyPosterSecondaryActionText: {
-    color: colors.brandDark,
-    fontSize: 13,
-    fontWeight: '900',
-  },
-  recordDetailRoot: {
+  dailyPosterPressed: {
+    opacity: 0.66,
+  },  recordDetailRoot: {
     flex: 1,
     backgroundColor: '#f9fafb',
   },
@@ -8959,8 +11506,8 @@ const styles = StyleSheet.create({
   },
   recordDetailImage: {
     width: '100%',
-    height: 190,
-    borderRadius: 8,
+    height: 210,
+    borderRadius: 12,
     overflow: 'hidden',
     marginBottom: 10,
     backgroundColor: '#f8fafc',
@@ -9058,16 +11605,19 @@ const styles = StyleSheet.create({
     lineHeight: 25,
   },
   recordDetailActions: {
-    paddingTop: 10,
+    paddingTop: 12,
     gap: 10,
   },
   recordDetailSecondaryAction: {
-    height: 44,
-    borderRadius: 22,
+    flex: 1,
+    minHeight: 48,
+    borderRadius: 24,
     borderWidth: 1,
     borderColor: '#e2e8f0',
     alignItems: 'center',
     justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 7,
     backgroundColor: '#f1f5f9',
   },
   recordDetailSecondaryActionText: {
@@ -9076,10 +11626,13 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   recordDetailPrimaryAction: {
-    height: 44,
-    borderRadius: 22,
+    flex: 1.2,
+    minHeight: 48,
+    borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 7,
     backgroundColor: colors.brand,
   },
   recordDetailPrimaryActionText: {
@@ -9093,10 +11646,12 @@ const styles = StyleSheet.create({
   },
   recordDetailPlainAction: {
     flex: 1,
-    minHeight: 38,
-    borderRadius: 19,
+    minHeight: 48,
+    borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 7,
     backgroundColor: '#ffffff',
     borderWidth: 1,
     borderColor: '#e5e7eb',
@@ -9151,10 +11706,13 @@ const styles = StyleSheet.create({
   },
   recordDetailRatioBadge: {
     alignSelf: 'flex-start',
-    minHeight: 28,
+    minHeight: 30,
     borderRadius: 8,
     paddingHorizontal: 8,
     justifyContent: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
     backgroundColor: '#f5f3ff',
   },
   recordDetailRatioText: {
@@ -9175,7 +11733,7 @@ const styles = StyleSheet.create({
   },
   recordDetailNutrientToggle: {
     alignSelf: 'flex-start',
-    minHeight: 28,
+    minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
@@ -9318,6 +11876,9 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 8,
     paddingVertical: 8,
+    borderWidth: 1,
+    borderRadius: 12,
+    marginTop: 10,
   },
   recordDetailEditItem: {
     borderRadius: 12,
@@ -9326,6 +11887,201 @@ const styles = StyleSheet.create({
     padding: 10,
     marginTop: 10,
     backgroundColor: '#f8fafc',
+  },
+  recordDetailImageCounter: {
+    position: 'absolute',
+    right: 10,
+    bottom: 10,
+    minWidth: 44,
+    minHeight: 28,
+    paddingHorizontal: 9,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(15, 23, 42, 0.76)',
+  },
+  recordDetailImageCounterText: {
+    color: '#ffffff',
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '800',
+  },
+  recordDetailInfoTitleRow: {
+    minHeight: 24,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    marginBottom: 6,
+  },
+  recordDetailMainActionRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  recordDetailActionPressed: {
+    opacity: 0.72,
+  },
+  recordDetailFoodSource: {
+    fontSize: 11,
+    lineHeight: 17,
+  },
+  recordDetailRatioBadgeOver: {
+    backgroundColor: '#fef2f2',
+  },
+  recordDetailRatioTextOver: {
+    color: '#dc2626',
+  },
+  recordImagePreviewRoot: {
+    flex: 1,
+    backgroundColor: '#000000',
+  },
+  recordImagePreviewPage: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#000000',
+  },
+  recordImagePreviewImage: {
+    width: '100%',
+    height: '100%',
+  },
+  recordImagePreviewTop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    minHeight: 72,
+    paddingHorizontal: 16,
+    paddingBottom: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: 'rgba(0,0,0,0.42)',
+  },
+  recordImagePreviewCount: {
+    color: '#ffffff',
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '800',
+  },
+  recordImagePreviewClose: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.16)',
+  },
+  recordImagePreviewNavigation: {
+    position: 'absolute',
+    left: 12,
+    right: 12,
+    top: '48%',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  recordImagePreviewNavButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.54)',
+  },
+  recordImagePreviewNavDisabled: {
+    opacity: 0.2,
+  },
+  recordImagePreviewPressed: {
+    opacity: 0.68,
+  },
+  recordEditBackdrop: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(2, 6, 23, 0.58)',
+  },
+  recordEditSheet: {
+    width: '100%',
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    overflow: 'hidden',
+  },
+  recordEditHeader: {
+    minHeight: 64,
+    paddingLeft: 18,
+    paddingRight: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderBottomWidth: 1,
+  },
+  recordEditHeaderTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  recordEditClose: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  recordEditContent: {
+    paddingHorizontal: 14,
+    paddingTop: 14,
+    paddingBottom: 28,
+  },
+  recordEditSectionLabel: {
+    marginBottom: 7,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '800',
+  },
+  recordEditRemove: {
+    minWidth: 78,
+    minHeight: 44,
+    paddingHorizontal: 12,
+    borderRadius: 22,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  recordEditActions: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 16,
+  },
+  recordEditCancel: {
+    flex: 1,
+    minHeight: 50,
+    borderRadius: 25,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  recordEditCancelText: {
+    fontSize: 15,
+    lineHeight: 20,
+    fontWeight: '800',
+  },
+  recordEditSave: {
+    flex: 1.25,
+    minHeight: 50,
+    borderRadius: 25,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+    backgroundColor: colors.brand,
+  },
+  recordEditSaveDisabled: {
+    opacity: 0.58,
+  },
+  recordEditSaveText: {
+    color: '#ffffff',
+    fontSize: 15,
+    lineHeight: 20,
+    fontWeight: '900',
   },
   friendsPage: {
     flex: 1,
@@ -9708,546 +12464,6 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 8,
     marginTop: 10,
-  },
-  analyzeHistoryPage: {
-    flex: 1,
-    backgroundColor: '#eef3f1',
-  },
-  analyzeHistorySearchBar: {
-    paddingHorizontal: 12,
-    paddingTop: 8,
-    paddingBottom: 8,
-    backgroundColor: 'transparent',
-  },
-  analyzeHistorySearchInputWrap: {
-    flex: 1,
-    minHeight: 42,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(92, 184, 150, 0.12)',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    backgroundColor: '#ffffff',
-    shadowColor: '#0f172a',
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 1 },
-    elevation: 1,
-  },
-  analyzeHistorySearchInput: {
-    flex: 1,
-    minHeight: 40,
-    paddingVertical: 0,
-    color: '#1f2937',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  analyzeHistorySearchClear: {
-    width: 26,
-    height: 26,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 13,
-    backgroundColor: '#f3f4f6',
-  },
-  analyzeHistoryScroll: {
-    flex: 1,
-  },
-  analyzeHistoryList: {
-    paddingHorizontal: 12,
-    paddingTop: 6,
-    paddingBottom: 28,
-  },
-  analyzeHistoryLoading: {
-    minHeight: 220,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  analyzeHistoryLoadingMore: {
-    height: 52,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  analyzeHistoryEmptyCard: {
-    minHeight: 240,
-    marginTop: 42,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 28,
-  },
-  analyzeHistoryEmptyIcon: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 14,
-    backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: 'rgba(92, 184, 150, 0.16)',
-  },
-  analyzeHistoryEmptyTitle: {
-    color: '#10211a',
-    fontSize: 16,
-    fontWeight: '900',
-    textAlign: 'center',
-  },
-  analyzeHistoryEmptyDesc: {
-    marginTop: 8,
-    color: '#6b7280',
-    fontSize: 13,
-    lineHeight: 19,
-    textAlign: 'center',
-  },
-  analyzeHistoryListHeader: {
-    minHeight: 32,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-    paddingHorizontal: 2,
-  },
-  analyzeHistoryBulkDelete: {
-    minHeight: 32,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 5,
-    paddingHorizontal: 12,
-    borderRadius: 999,
-    backgroundColor: 'rgba(255, 255, 255, 0.94)',
-    shadowColor: '#0f172a',
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
-  },
-  analyzeHistoryBulkDeleteText: {
-    color: '#2f7f62',
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  analyzeHistoryTaskWrapper: {
-    marginBottom: 10,
-  },
-  analyzeHistoryPressed: {
-    opacity: 0.84,
-  },
-  analyzeHistoryTaskCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 11,
-    minHeight: 116,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(92, 184, 150, 0.14)',
-    backgroundColor: '#ffffff',
-    padding: 12,
-    shadowColor: '#0f172a',
-    shadowOpacity: 0.06,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 2,
-  },
-  analyzeHistoryTaskCardViolated: {
-    borderColor: '#f5d4d4',
-    backgroundColor: '#fef8f8',
-  },
-  analyzeHistoryThumb: {
-    width: 56,
-    height: 56,
-    borderRadius: 11,
-    overflow: 'hidden',
-    backgroundColor: '#f3f4f6',
-    borderWidth: 1,
-    borderColor: 'rgba(92, 184, 150, 0.2)',
-  },
-  analyzeHistoryThumbImage: {
-    width: '100%',
-    height: '100%',
-  },
-  analyzeHistoryThumbFallback: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#d8f5e4',
-  },
-  analyzeHistoryThumbFallbackText: {
-    backgroundColor: '#123327',
-  },
-  analyzeHistoryThumbText: {
-    color: '#ecfff5',
-    fontSize: 13,
-    lineHeight: 18,
-    fontWeight: '900',
-    textAlign: 'center',
-    paddingHorizontal: 6,
-  },
-  analyzeHistoryBody: {
-    flex: 1,
-    minWidth: 0,
-  },
-  analyzeHistoryMainRow: {
-    flexDirection: 'row',
-    alignItems: 'stretch',
-    justifyContent: 'space-between',
-    gap: 8,
-  },
-  analyzeHistoryLeftContent: {
-    flex: 1,
-    minWidth: 0,
-    gap: 3,
-  },
-  analyzeHistoryRightContent: {
-    alignItems: 'flex-end',
-    justifyContent: 'center',
-  },
-  analyzeHistoryHeadline: {
-    color: '#10211a',
-    fontSize: 14,
-    lineHeight: 19,
-    fontWeight: '900',
-  },
-  analyzeHistoryCalories: {
-    color: '#1f2937',
-    fontSize: 22,
-    lineHeight: 25,
-    fontWeight: '900',
-  },
-  analyzeHistoryMeta: {
-    color: '#4e6a5d',
-    fontSize: 12,
-    lineHeight: 17,
-    fontWeight: '600',
-  },
-  analyzeHistoryViolationReason: {
-    color: '#c53030',
-    fontSize: 12,
-    lineHeight: 17,
-    marginTop: 2,
-  },
-  analyzeHistoryTagRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: 6,
-    marginTop: 2,
-  },
-  analyzeHistoryTimeRow: {
-    minWidth: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 6,
-    marginTop: 2,
-  },
-  analyzeHistoryTime: {
-    color: '#6b7280',
-    fontSize: 11,
-    lineHeight: 16,
-  },
-  analyzeHistoryModeTag: {
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: '#a7f3d0',
-    backgroundColor: '#ecfdf5',
-  },
-  analyzeHistoryModeTagText: {
-    color: '#047857',
-    fontSize: 10,
-    fontWeight: '800',
-  },
-  analyzeHistoryStatusBadge: {
-    minWidth: 68,
-    minHeight: 30,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 999,
-    borderWidth: 1,
-    paddingHorizontal: 10,
-    backgroundColor: '#f3f4f6',
-    borderColor: 'transparent',
-  },
-  analyzeHistoryStatusText: {
-    fontSize: 11,
-    lineHeight: 14,
-    fontWeight: '900',
-  },
-  analyzeHistoryStatusProcessing: {
-    backgroundColor: '#dbeafe',
-    borderColor: '#93c5fd',
-  },
-  analyzeHistoryStatusDone: {
-    backgroundColor: '#d1fae5',
-    borderColor: '#86efac',
-  },
-  analyzeHistoryStatusRecorded: {
-    backgroundColor: '#d1fae5',
-    borderColor: '#86efac',
-  },
-  analyzeHistoryStatusWaiting: {
-    backgroundColor: '#fef3c7',
-    borderColor: '#fcd34d',
-  },
-  analyzeHistoryStatusRetry: {
-    backgroundColor: '#fff7ed',
-    borderColor: '#fed7aa',
-  },
-  analyzeHistoryStatusFailed: {
-    backgroundColor: '#fef2f2',
-    borderColor: '#fecaca',
-  },
-  analyzeHistoryStatusDefault: {
-    backgroundColor: '#f3f4f6',
-    borderColor: '#e5e7eb',
-  },
-  analyzeHistoryMoreButton: {
-    width: 34,
-    height: 34,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 17,
-    backgroundColor: 'rgba(0, 0, 0, 0.04)',
-  },
-  analyzeHistoryMenuBackdrop: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    paddingHorizontal: 12,
-    paddingBottom: 12,
-    backgroundColor: 'rgba(15, 23, 42, 0.36)',
-  },
-  analyzeHistoryMenuSheet: {
-    borderRadius: 20,
-    backgroundColor: '#ffffff',
-    paddingTop: 10,
-    paddingHorizontal: 12,
-    paddingBottom: 12,
-    shadowColor: '#0f172a',
-    shadowOpacity: 0.18,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: -6 },
-    elevation: 20,
-  },
-  analyzeHistoryMenuHandle: {
-    alignSelf: 'center',
-    width: 40,
-    height: 4,
-    borderRadius: 999,
-    backgroundColor: '#e5e7eb',
-    marginBottom: 12,
-  },
-  analyzeHistoryMenuTitle: {
-    color: '#0f172a',
-    fontSize: 16,
-    lineHeight: 22,
-    fontWeight: '900',
-    textAlign: 'center',
-  },
-  analyzeHistoryMenuSubtitle: {
-    marginTop: 3,
-    color: '#64748b',
-    fontSize: 12,
-    lineHeight: 17,
-    textAlign: 'center',
-  },
-  analyzeHistoryMenuActions: {
-    marginTop: 12,
-    borderRadius: 14,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: '#eef2f7',
-    backgroundColor: '#ffffff',
-  },
-  analyzeHistoryMenuAction: {
-    minHeight: 62,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eef2f7',
-  },
-  analyzeHistoryMenuActionPressed: {
-    backgroundColor: '#f8fafc',
-  },
-  analyzeHistoryMenuActionDisabled: {
-    opacity: 0.42,
-  },
-  analyzeHistoryMenuActionIcon: {
-    width: 34,
-    height: 34,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 17,
-    backgroundColor: 'rgba(92, 184, 150, 0.12)',
-  },
-  analyzeHistoryMenuIconGlyph: {
-    width: 20,
-    height: 20,
-    lineHeight: 20,
-    textAlign: 'center',
-    textAlignVertical: 'center',
-    includeFontPadding: false,
-  },
-  analyzeHistoryMenuActionIconRecord: {
-    backgroundColor: 'rgba(16, 185, 129, 0.1)',
-  },
-  analyzeHistoryMenuActionIconRetry: {
-    backgroundColor: 'rgba(249, 115, 22, 0.1)',
-  },
-  analyzeHistoryMenuActionIconFavorite: {
-    backgroundColor: 'rgba(92, 184, 150, 0.1)',
-  },
-  analyzeHistoryMenuActionIconLibrary: {
-    backgroundColor: 'rgba(249, 115, 22, 0.1)',
-  },
-  analyzeHistoryMenuActionIconDisabled: {
-    backgroundColor: 'rgba(156, 163, 175, 0.1)',
-  },
-  analyzeHistoryMenuActionIconDanger: {
-    backgroundColor: 'rgba(239, 68, 68, 0.1)',
-  },
-  analyzeHistoryMenuActionCopy: {
-    flex: 1,
-    minWidth: 0,
-  },
-  analyzeHistoryMenuActionText: {
-    color: '#111827',
-    fontSize: 15,
-    lineHeight: 20,
-    fontWeight: '800',
-  },
-  analyzeHistoryMenuActionTextDanger: {
-    color: '#ef4444',
-  },
-  analyzeHistoryMenuActionHint: {
-    marginTop: 2,
-    color: '#94a3b8',
-    fontSize: 11,
-    lineHeight: 15,
-  },
-  analyzeHistoryMenuCancel: {
-    minHeight: 48,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 10,
-    borderRadius: 14,
-    backgroundColor: '#f8fafc',
-  },
-  analyzeHistoryMenuCancelText: {
-    color: '#475569',
-    fontSize: 15,
-    lineHeight: 20,
-    fontWeight: '800',
-  },
-  analyzeHistoryDialogBackdrop: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 24,
-    backgroundColor: 'rgba(15, 23, 42, 0.42)',
-  },
-  analyzeHistoryDialogCard: {
-    width: '100%',
-    maxWidth: 380,
-    borderRadius: 20,
-    padding: 20,
-    backgroundColor: '#ffffff',
-    shadowColor: '#0f172a',
-    shadowOpacity: 0.2,
-    shadowRadius: 20,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 20,
-  },
-  analyzeHistoryDialogTitle: {
-    color: '#0f172a',
-    fontSize: 18,
-    lineHeight: 24,
-    fontWeight: '900',
-    textAlign: 'center',
-  },
-  analyzeHistoryDialogDesc: {
-    marginTop: 5,
-    color: '#64748b',
-    fontSize: 12,
-    lineHeight: 18,
-    textAlign: 'center',
-  },
-  analyzeHistoryMealGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginTop: 18,
-  },
-  analyzeHistoryMealOption: {
-    width: '31%',
-    minHeight: 42,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    backgroundColor: '#f8fafc',
-  },
-  analyzeHistoryMealOptionActive: {
-    borderColor: colors.brand,
-    backgroundColor: 'rgba(92, 184, 150, 0.12)',
-  },
-  analyzeHistoryMealOptionText: {
-    color: '#475569',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  analyzeHistoryMealOptionTextActive: {
-    color: '#2f7f62',
-    fontWeight: '900',
-  },
-  analyzeHistoryRecipeInput: {
-    minHeight: 46,
-    marginTop: 18,
-    borderWidth: 1,
-    borderColor: '#dbe5e1',
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    color: '#10211a',
-    fontSize: 15,
-    backgroundColor: '#f8fbfa',
-  },
-  analyzeHistoryDialogButtons: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 18,
-  },
-  analyzeHistoryDialogCancel: {
-    flex: 1,
-    minHeight: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 12,
-    backgroundColor: '#f1f5f9',
-  },
-  analyzeHistoryDialogCancelText: {
-    color: '#64748b',
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  analyzeHistoryDialogConfirm: {
-    flex: 1,
-    minHeight: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 12,
-    backgroundColor: colors.brand,
-  },
-  analyzeHistoryDialogConfirmText: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '900',
   },
   manualRecordPage: {
     flex: 1,
@@ -12543,7 +14759,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   bodyMetricSectionHead: {
-    minHeight: 28,
+    minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -12826,8 +15042,8 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
   exerciseTrendLink: {
-    minHeight: 32,
-    borderRadius: 16,
+    minHeight: 48,
+    borderRadius: 24,
     paddingHorizontal: 11,
     alignItems: 'center',
     justifyContent: 'center',
@@ -12838,6 +15054,176 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 17,
     fontWeight: '800',
+  },
+  exerciseComposeCost: {
+    marginTop: -2,
+    fontSize: 11,
+    lineHeight: 16,
+    fontWeight: '700',
+  },
+  exerciseModeSwitch: {
+    minHeight: 64,
+    marginTop: 12,
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 4,
+    flexDirection: 'row',
+    gap: 4,
+  },
+  exerciseModeOption: {
+    flex: 1,
+    minHeight: 54,
+    borderWidth: 1,
+    borderColor: 'transparent',
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  exerciseModeOptionActive: {
+    borderColor: '#fb923c',
+  },
+  exerciseModeOptionTitle: {
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '900',
+  },
+  exerciseModeOptionTitleActive: {
+    color: '#ea580c',
+  },
+  exerciseModeOptionDesc: {
+    marginTop: 1,
+    fontSize: 11,
+    lineHeight: 16,
+    fontWeight: '700',
+  },
+  exercisePrecisionPanel: {
+    marginTop: 12,
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 12,
+  },
+  exercisePrecisionHeading: {
+    marginBottom: 14,
+  },
+  exercisePrecisionTitle: {
+    fontSize: 15,
+    lineHeight: 21,
+    fontWeight: '900',
+  },
+  exercisePrecisionTip: {
+    marginTop: 4,
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  exercisePrecisionField: {
+    marginBottom: 14,
+  },
+  exercisePrecisionFieldLast: {
+    marginBottom: 0,
+  },
+  exercisePrecisionLabel: {
+    marginBottom: 6,
+    fontSize: 13,
+    lineHeight: 19,
+    fontWeight: '800',
+  },
+  exerciseRequired: {
+    color: '#ef4444',
+  },
+  exerciseOptional: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  exercisePrecisionInputWrap: {
+    minHeight: 48,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  exercisePrecisionInput: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: 46,
+    paddingVertical: 9,
+    paddingHorizontal: 0,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  exercisePrecisionUnit: {
+    marginLeft: 8,
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: '700',
+  },
+  exercisePrecisionError: {
+    marginTop: 5,
+    color: '#ef4444',
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: '700',
+  },
+  exerciseIntensityRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  exerciseIntensityOption: {
+    flex: 1,
+    minHeight: 48,
+    borderWidth: 1,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  exerciseIntensityOptionActive: {
+    borderColor: '#f97316',
+    backgroundColor: '#fff7ed',
+  },
+  exerciseIntensityText: {
+    fontSize: 13,
+    lineHeight: 19,
+    fontWeight: '800',
+  },
+  exerciseIntensityTextActive: {
+    color: '#ea580c',
+  },
+  exercisePrecisionInline: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  exercisePrecisionInlineStacked: {
+    flexDirection: 'column',
+    gap: 0,
+  },
+  exercisePrecisionHalf: {
+    flex: 1,
+    minWidth: 0,
+  },
+  exerciseBreakdownLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  exerciseBreakdownCount: {
+    fontSize: 11,
+    lineHeight: 16,
+    fontWeight: '700',
+  },
+  exerciseBreakdownInput: {
+    minHeight: 92,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingTop: 11,
+    paddingBottom: 11,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  exercisePressed: {
+    opacity: 0.72,
   },
   exerciseQuickTitle: {
     marginTop: 6,
@@ -12853,8 +15239,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   exerciseQuickChip: {
-    minHeight: 34,
-    borderRadius: 17,
+    minHeight: 48,
+    borderRadius: 24,
     paddingHorizontal: 12,
     alignItems: 'center',
     justifyContent: 'center',
@@ -12890,6 +15276,7 @@ const styles = StyleSheet.create({
   exerciseInputWrap: {
     minHeight: 74,
     marginTop: 12,
+    borderWidth: 1,
     borderRadius: 14,
     padding: 8,
     flexDirection: 'row',
@@ -12898,9 +15285,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#f8fafc',
   },
   exerciseImageButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#ffffff',
@@ -12916,9 +15303,9 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   exerciseSendButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#f97316',
@@ -12981,8 +15368,8 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   exerciseRefreshLink: {
-    minHeight: 30,
-    borderRadius: 15,
+    minHeight: 44,
+    borderRadius: 22,
     paddingHorizontal: 10,
     alignItems: 'center',
     justifyContent: 'center',
@@ -13083,8 +15470,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   rewardHero: {
-    borderRadius: 14,
-    padding: 14,
+    borderRadius: 18,
+    padding: 18,
     backgroundColor: '#0f9f6e',
     shadowColor: '#10b981',
     shadowOpacity: 0.18,
@@ -13092,134 +15479,263 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 8 },
     elevation: 2,
   },
+  rewardHeroTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 9,
+  },
   rewardHeroTitle: {
     color: '#ffffff',
-    fontSize: 16,
-    lineHeight: 22,
-    fontWeight: '700',
+    fontSize: 18,
+    lineHeight: 25,
+    fontWeight: '800',
   },
   rewardHeroSubtitle: {
-    marginTop: 5,
+    marginTop: 7,
     color: 'rgba(255,255,255,0.88)',
     fontSize: 13,
-    lineHeight: 19,
+    lineHeight: 20,
   },
   rewardHeroStats: {
     flexDirection: 'row',
-    gap: 9,
-    marginTop: 12,
+    gap: 10,
+    marginTop: 16,
   },
   rewardStat: {
     flex: 1,
-    minHeight: 62,
-    borderRadius: 10,
-    padding: 10,
+    minHeight: 68,
+    borderRadius: 12,
+    padding: 11,
     backgroundColor: 'rgba(255,255,255,0.14)',
   },
   rewardStatValue: {
     color: '#ffffff',
-    fontSize: 20,
-    lineHeight: 26,
+    fontSize: 22,
+    lineHeight: 28,
     fontWeight: '800',
   },
   rewardStatLabel: {
-    marginTop: 4,
+    marginTop: 3,
     color: 'rgba(255,255,255,0.88)',
     fontSize: 12,
-    lineHeight: 17,
+    lineHeight: 18,
   },
   rewardQuickSection: {
     marginTop: 14,
     padding: 14,
-    borderRadius: 14,
-    backgroundColor: '#172033',
-    shadowColor: '#0f172a',
-    shadowOpacity: 0.12,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 7 },
-    elevation: 2,
+    borderRadius: 16,
+    borderWidth: 1,
   },
   rewardQuickHead: {
+    minHeight: 32,
     flexDirection: 'row',
-    alignItems: 'flex-end',
+    alignItems: 'center',
     justifyContent: 'space-between',
     gap: 8,
   },
+  rewardSectionHeading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  rewardHeadingIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#e9fbf3',
+  },
   rewardQuickTitle: {
-    color: '#ffffff',
     fontSize: 16,
     lineHeight: 22,
     fontWeight: '800',
   },
   rewardQuickHint: {
     flexShrink: 1,
-    color: 'rgba(255,255,255,0.68)',
     fontSize: 12,
     lineHeight: 18,
     textAlign: 'right',
   },
-  rewardQuickList: {
-    gap: 8,
-    marginTop: 10,
+  rewardLoading: {
+    minHeight: 112,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  rewardQuickCard: {
-    minHeight: 56,
+  rewardTaskList: {
+    gap: 9,
+    marginTop: 12,
+  },
+  rewardTaskCard: {
+    minHeight: 76,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
+    gap: 10,
+    borderRadius: 13,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.14)',
-    borderRadius: 11,
-    paddingVertical: 9,
-    paddingLeft: 12,
-    paddingRight: 9,
-    backgroundColor: 'rgba(255,255,255,0.12)',
+    padding: 10,
   },
-  rewardQuickName: {
-    color: '#ffffff',
+  rewardTaskCardDisabled: {
+    opacity: 0.58,
+  },
+  rewardTaskIcon: {
+    width: 38,
+    height: 38,
+    flexShrink: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 13,
+    backgroundColor: '#e9fbf3',
+  },
+  rewardTaskTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  rewardTaskName: {
+    flexShrink: 1,
     fontSize: 14,
     lineHeight: 20,
     fontWeight: '800',
   },
-  rewardQuickDesc: {
-    marginTop: 2,
-    color: 'rgba(255,255,255,0.72)',
-    fontSize: 12,
-    lineHeight: 17,
-  },
-  rewardQuickButton: {
-    flexShrink: 0,
-    overflow: 'hidden',
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: '#ffffff',
+  rewardTaskReward: {
     color: '#0f9f6e',
     fontSize: 12,
     lineHeight: 18,
     fontWeight: '800',
   },
-  rewardSection: {
-    marginTop: 14,
+  rewardTaskDescription: {
+    marginTop: 3,
+    fontSize: 12,
+    lineHeight: 18,
   },
-  rewardSectionTitle: {
-    color: '#172033',
-    fontSize: 16,
-    lineHeight: 22,
-    fontWeight: '700',
-  },
-  rewardLoading: {
+  rewardTaskAction: {
+    minWidth: 66,
+    minHeight: 48,
+    flexShrink: 0,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 36,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    backgroundColor: '#0f9f6e',
   },
-  rewardTaskList: {
+  rewardTaskActionDisabled: {
+    backgroundColor: '#94a3b8',
+  },
+  rewardTaskActionText: {
+    color: '#ffffff',
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: '800',
+  },
+  rewardUseGuide: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+  },
+  rewardUseGuideList: {
+    gap: 8,
+    marginTop: 12,
+  },
+  rewardUseGuideItem: {
+    minHeight: 62,
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 10,
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 10,
+  },
+  rewardUseGuideIcon: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 12,
+    backgroundColor: '#e9fbf3',
+  },
+  rewardUseGuideTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+  },
+  rewardUseGuideCost: {
+    color: '#0f9f6e',
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: '800',
+  },
+  rewardUseGuideTitle: {
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '800',
+  },
+  rewardUseGuidePath: {
+    marginTop: 2,
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  rewardSection: {
+    marginTop: 18,
+  },
+  rewardSectionTitle: {
+    fontSize: 17,
+    lineHeight: 24,
+    fontWeight: '800',
+  },
+  rewardSectionHint: {
+    marginTop: 3,
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  rewardVoucherList: {
+    gap: 9,
     marginTop: 10,
   },
+  rewardVoucherCard: {
+    minHeight: 96,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 12,
+  },
+  rewardVoucherTitle: {
+    fontSize: 15,
+    lineHeight: 21,
+    fontWeight: '800',
+  },
+  rewardVoucherDescription: {
+    marginTop: 3,
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  rewardVoucherNote: {
+    marginTop: 5,
+    color: '#0f9f6e',
+    fontSize: 11,
+    lineHeight: 17,
+  },
+  rewardVoucherButton: {
+    minWidth: 84,
+    minHeight: 48,
+    flexShrink: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    backgroundColor: '#0f9f6e',
+  },
+  rewardVoucherButtonText: {
+    color: '#ffffff',
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: '800',
+  },
   rewardEmptyState: {
-    minHeight: 72,
+    minHeight: 86,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 12,
@@ -13228,6 +15744,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#f6fdf9',
     paddingHorizontal: 14,
     paddingVertical: 14,
+    marginTop: 12,
   },
   rewardEmptyText: {
     color: colors.textMuted,
@@ -13235,74 +15752,6 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     fontWeight: '700',
     textAlign: 'center',
-  },
-  rewardTaskCard: {
-    borderRadius: 12,
-    padding: 12,
-    backgroundColor: colors.surface,
-    shadowColor: '#0f172a',
-    shadowOpacity: 0.06,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 5 },
-    elevation: 1,
-  },
-  rewardTaskHead: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: 10,
-  },
-  rewardTaskName: {
-    color: '#172033',
-    fontSize: 16,
-    lineHeight: 22,
-    fontWeight: '700',
-  },
-  rewardTaskReward: {
-    marginTop: 4,
-    color: '#0f9f6e',
-    fontSize: 12,
-    lineHeight: 18,
-  },
-  rewardTaskStatus: {
-    flexShrink: 0,
-    overflow: 'hidden',
-    borderRadius: 999,
-    paddingHorizontal: 9,
-    paddingVertical: 4,
-    backgroundColor: '#ecfdf5',
-    color: '#0f9f6e',
-    fontSize: 11,
-    lineHeight: 16,
-  },
-  rewardTaskMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
-    marginTop: 10,
-  },
-  rewardTaskMetaText: {
-    flexShrink: 1,
-    color: '#64748b',
-    fontSize: 12,
-    lineHeight: 18,
-  },
-  rewardTaskButton: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 42,
-    marginTop: 12,
-    borderRadius: 10,
-    backgroundColor: '#0f9f6e',
-  },
-  rewardTaskButtonDisabled: {
-    backgroundColor: '#cbd5e1',
-  },
-  rewardTaskButtonText: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '700',
   },
   editItemBox: {
     marginTop: 12,
@@ -13674,6 +16123,251 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     fontWeight: '600',
   },
+  healthProfileCustomOptionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  healthProfileCustomOptionCard: {
+    flex: 1,
+    minWidth: 0,
+  },
+  healthProfileCustomIconButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ffffff',
+  },
+  healthProfileCustomInputRow: {
+    minHeight: 56,
+    marginTop: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    paddingLeft: 14,
+    paddingRight: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#ffffff',
+  },
+  healthProfileCustomInput: {
+    flex: 1,
+    minWidth: 0,
+    color: '#1a1a1a',
+    fontSize: 15,
+    lineHeight: 21,
+  },
+  healthProfileCustomCancelButton: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  healthProfileCustomAddButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#00bc7d',
+  },
+  healthProfileReportHero: {
+    alignItems: 'center',
+  },
+  healthProfileReportHeroIcon: {
+    width: 62,
+    height: 62,
+    marginBottom: 12,
+    borderRadius: 31,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#e8fff6',
+  },
+  healthProfileReportUpload: {
+    minHeight: 190,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: '#92dbc0',
+    padding: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ffffff',
+  },
+  healthProfileReportUploadFilled: {
+    borderStyle: 'solid',
+  },
+  healthProfileReportGrid: {
+    width: '100%',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  healthProfileReportPreview: {
+    width: 76,
+    height: 92,
+    borderRadius: 10,
+    overflow: 'hidden',
+    backgroundColor: '#e2e8f0',
+  },
+  healthProfileReportImage: {
+    width: '100%',
+    height: '100%',
+  },
+  healthProfileReportIndex: {
+    position: 'absolute',
+    right: 5,
+    bottom: 5,
+    minWidth: 22,
+    height: 22,
+    paddingHorizontal: 5,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.68)',
+  },
+  healthProfileReportIndexText: {
+    color: '#ffffff',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  healthProfileReportUploadTitle: {
+    marginTop: 12,
+    color: '#1a1a1a',
+    fontSize: 15,
+    lineHeight: 21,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  healthProfileReportUploadHint: {
+    marginTop: 6,
+    color: '#64748b',
+    fontSize: 12,
+    lineHeight: 18,
+    textAlign: 'center',
+  },
+  healthProfileReportBenefits: {
+    marginTop: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#d9eee5',
+    padding: 14,
+    gap: 11,
+    backgroundColor: '#f4fcf8',
+  },
+  healthProfileReportBenefitRow: {
+    minHeight: 28,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  healthProfileReportBenefitIcon: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#00bc7d',
+  },
+  healthProfileReportBenefitText: {
+    flex: 1,
+    color: '#475569',
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  healthProfileSaveExitButton: {
+    minHeight: 48,
+    marginTop: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  healthProfileSaveExitText: {
+    color: '#64748b',
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '700',
+  },
+  healthProfileSourceBackdrop: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0,0,0,0.46)',
+  },
+  healthProfileSourceSheet: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    backgroundColor: '#ffffff',
+  },
+  healthProfileSourceHandle: {
+    width: 42,
+    height: 4,
+    marginBottom: 18,
+    borderRadius: 2,
+    alignSelf: 'center',
+    backgroundColor: '#cbd5e1',
+  },
+  healthProfileSourceTitle: {
+    color: '#1a1a1a',
+    fontSize: 20,
+    lineHeight: 27,
+    fontWeight: '800',
+  },
+  healthProfileSourceSubtitle: {
+    marginTop: 5,
+    marginBottom: 18,
+    color: '#64748b',
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  healthProfileSourcePrimary: {
+    minHeight: 52,
+    borderRadius: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 9,
+    backgroundColor: '#00bc7d',
+  },
+  healthProfileSourcePrimaryText: {
+    color: '#ffffff',
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  healthProfileSourceSecondary: {
+    minHeight: 52,
+    marginTop: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 9,
+    backgroundColor: '#ffffff',
+  },
+  healthProfileSourceSecondaryText: {
+    color: '#475569',
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  healthProfileSourceCancel: {
+    minHeight: 48,
+    marginTop: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  healthProfileSourceCancelText: {
+    color: '#64748b',
+    fontSize: 14,
+    fontWeight: '700',
+  },
   healthProfileFooter: {
     marginTop: 'auto',
     paddingTop: 24,
@@ -13687,7 +16381,7 @@ const styles = StyleSheet.create({
   },
   healthProfilePrevButton: {
     flex: 1,
-    height: 46,
+    minHeight: 48,
     borderRadius: 23,
     borderWidth: 1,
     borderColor: '#e2e8f0',
@@ -13702,7 +16396,7 @@ const styles = StyleSheet.create({
   },
   healthProfileNextButton: {
     flex: 1,
-    height: 46,
+    minHeight: 48,
     borderRadius: 23,
     borderWidth: 1,
     borderColor: '#00bc7d',
@@ -13731,357 +16425,6 @@ const styles = StyleSheet.create({
   },
   healthProfileNextTextDisabled: {
     color: '#94a3b8',
-  },
-  expiryPage: {
-    flex: 1,
-    backgroundColor: '#f6f8fa',
-  },
-  expiryScroll: {
-    flex: 1,
-    backgroundColor: '#f6f8fa',
-  },
-  expiryContent: {
-    paddingTop: 16,
-  },
-  expiryHero: {
-    minHeight: 86,
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: 16,
-    paddingHorizontal: 16,
-    paddingTop: 18,
-    paddingBottom: 8,
-    backgroundColor: '#e7faf3',
-  },
-  expiryHeroKicker: {
-    marginBottom: 5,
-    color: '#5b7b71',
-    fontSize: 12,
-    lineHeight: 17,
-    fontWeight: '700',
-  },
-  expiryHeroTitle: {
-    color: '#16332a',
-    fontSize: 22,
-    lineHeight: 29,
-    fontWeight: '800',
-  },
-  expiryHeroAdd: {
-    minWidth: 72,
-    height: 38,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-    borderRadius: 999,
-    backgroundColor: '#00bc7d',
-    shadowColor: '#00bc7d',
-    shadowOpacity: 0.2,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 2,
-  },
-  expiryHeroAddText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  expirySummaryGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-    paddingHorizontal: 16,
-    paddingTop: 12,
-  },
-  expirySummaryCard: {
-    flexGrow: 1,
-    flexBasis: '47%',
-    minHeight: 86,
-    justifyContent: 'center',
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.94)',
-    shadowColor: '#1f2937',
-    shadowOpacity: 0.06,
-    shadowRadius: 15,
-    shadowOffset: { width: 0, height: 5 },
-    elevation: 1,
-  },
-  expirySummaryValue: {
-    color: '#16332a',
-    fontSize: 26,
-    lineHeight: 32,
-    fontWeight: '800',
-  },
-  expirySummaryLabel: {
-    marginTop: 5,
-    color: '#61756d',
-    fontSize: 12,
-    lineHeight: 17,
-    fontWeight: '700',
-  },
-  expiryPreviewPanel: {
-    marginHorizontal: 16,
-    marginTop: 12,
-    borderRadius: 14,
-    padding: 14,
-    backgroundColor: 'rgba(255, 255, 255, 0.94)',
-    shadowColor: '#1f2937',
-    shadowOpacity: 0.06,
-    shadowRadius: 15,
-    shadowOffset: { width: 0, height: 5 },
-    elevation: 1,
-  },
-  expiryPreviewRow: {
-    minHeight: 38,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-    paddingTop: 10,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#eef2f1',
-  },
-  expiryPreviewName: {
-    flex: 1,
-    color: '#16332a',
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  expiryPreviewHint: {
-    flexShrink: 0,
-    color: '#ff7a00',
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  expirySection: {
-    paddingHorizontal: 16,
-    paddingTop: 16,
-  },
-  expirySectionTitle: {
-    marginBottom: 10,
-    color: '#314740',
-    fontSize: 15,
-    lineHeight: 21,
-    fontWeight: '800',
-  },
-  expirySectionTitleNoMargin: {
-    color: '#314740',
-    fontSize: 15,
-    lineHeight: 21,
-    fontWeight: '800',
-  },
-  expirySectionHeader: {
-    minHeight: 36,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  expirySectionToggle: {
-    color: '#94a3b8',
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  expiryItemCard: {
-    borderRadius: 14,
-    padding: 14,
-    marginBottom: 10,
-    backgroundColor: 'rgba(255, 255, 255, 0.96)',
-    shadowColor: '#1f2937',
-    shadowOpacity: 0.06,
-    shadowRadius: 15,
-    shadowOffset: { width: 0, height: 5 },
-    elevation: 1,
-  },
-  expiryItemHead: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: 10,
-  },
-  expiryItemTitleWrap: {
-    flex: 1,
-    minWidth: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: 6,
-  },
-  expiryItemTitle: {
-    maxWidth: '100%',
-    color: '#16332a',
-    fontSize: 16,
-    lineHeight: 22,
-    fontWeight: '800',
-  },
-  expiryItemCategory: {
-    maxWidth: 92,
-    borderRadius: 999,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    backgroundColor: '#eef8f4',
-  },
-  expiryItemCategoryText: {
-    color: '#4f6b62',
-    fontSize: 11,
-    fontWeight: '800',
-  },
-  expiryItemBadge: {
-    maxWidth: 96,
-    flexShrink: 0,
-    borderRadius: 999,
-    paddingHorizontal: 9,
-    paddingVertical: 4,
-  },
-  expiryItemBadge_expired: {
-    backgroundColor: '#ffe7e7',
-  },
-  expiryItemBadge_today: {
-    backgroundColor: '#fff2df',
-  },
-  expiryItemBadge_soon: {
-    backgroundColor: '#fff7db',
-  },
-  expiryItemBadge_fresh: {
-    backgroundColor: '#ecfdf5',
-  },
-  expiryItemBadge_consumed: {
-    backgroundColor: '#ecfdf5',
-  },
-  expiryItemBadge_discarded: {
-    backgroundColor: '#f3f4f6',
-  },
-  expiryItemBadgeText: {
-    fontSize: 11,
-    lineHeight: 15,
-    fontWeight: '800',
-  },
-  expiryItemBadgeText_expired: {
-    color: '#d9485f',
-  },
-  expiryItemBadgeText_today: {
-    color: '#ff7a00',
-  },
-  expiryItemBadgeText_soon: {
-    color: '#b7791f',
-  },
-  expiryItemBadgeText_fresh: {
-    color: '#15803d',
-  },
-  expiryItemBadgeText_consumed: {
-    color: '#15803d',
-  },
-  expiryItemBadgeText_discarded: {
-    color: '#6b7280',
-  },
-  expiryItemMeta: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 9,
-    marginTop: 9,
-  },
-  expiryItemMetaText: {
-    color: '#61756d',
-    fontSize: 12,
-    lineHeight: 17,
-    fontWeight: '700',
-  },
-  expiryItemHint: {
-    marginTop: 8,
-    color: '#16332a',
-    fontSize: 13,
-    lineHeight: 19,
-    fontWeight: '800',
-  },
-  expiryItemNote: {
-    marginTop: 6,
-    color: '#61756d',
-    fontSize: 12,
-    lineHeight: 18,
-  },
-  expiryItemActions: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 12,
-  },
-  expiryActionGhost: {
-    flex: 1,
-    minHeight: 38,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-    borderRadius: 9,
-    backgroundColor: '#f3f7f5',
-  },
-  expiryActionGhostText: {
-    color: '#314740',
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  expiryActionPrimary: {
-    flex: 1,
-    minHeight: 38,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 9,
-    backgroundColor: '#00bc7d',
-  },
-  expiryActionPrimaryText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '900',
-  },
-  expiryEmptyCard: {
-    minHeight: 132,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginHorizontal: 16,
-    marginTop: 16,
-    borderRadius: 14,
-    paddingHorizontal: 16,
-    paddingVertical: 24,
-    backgroundColor: 'rgba(255, 255, 255, 0.94)',
-    shadowColor: '#1f2937',
-    shadowOpacity: 0.06,
-    shadowRadius: 15,
-    shadowOffset: { width: 0, height: 5 },
-    elevation: 1,
-  },
-  expiryFailedCard: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#fed7aa',
-  },
-  expiryEmptyTitle: {
-    color: '#16332a',
-    fontSize: 16,
-    lineHeight: 22,
-    fontWeight: '800',
-    textAlign: 'center',
-  },
-  expiryEmptyDesc: {
-    marginTop: 7,
-    color: '#61756d',
-    fontSize: 12,
-    lineHeight: 19,
-    textAlign: 'center',
-  },
-  expiryRetryButton: {
-    minWidth: 116,
-    minHeight: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 16,
-    borderRadius: 999,
-    backgroundColor: '#00bc7d',
-  },
-  expiryRetryText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '800',
   },
   sectionTitle: {
     color: colors.text,
@@ -14299,6 +16642,45 @@ const styles = StyleSheet.create({
     lineHeight: 21,
     fontWeight: '800',
   },
+  textRecordEngineRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  textRecordEngineOption: {
+    flex: 1,
+    minHeight: 102,
+    paddingHorizontal: 9,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 188, 125, 0.14)',
+    backgroundColor: '#ffffff',
+  },
+  textRecordEngineOptionActive: {
+    borderColor: '#00bc7d',
+    backgroundColor: '#effdf7',
+  },
+  textRecordEngineLabel: {
+    color: '#334155',
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '900',
+  },
+  textRecordEngineLabelActive: {
+    color: '#008f61',
+  },
+  textRecordEngineDescription: {
+    marginTop: 5,
+    color: '#64748b',
+    fontSize: 10,
+    lineHeight: 15,
+  },
+  textRecordEngineNote: {
+    marginTop: 8,
+    color: '#64748b',
+    fontSize: 11,
+    lineHeight: 17,
+  },
   textRecordMealGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -14339,7 +16721,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   textRecordOption: {
-    minHeight: 42,
+    minHeight: 44,
     minWidth: 76,
     alignItems: 'center',
     justifyContent: 'center',

@@ -4,6 +4,8 @@ import type { BottomTabBarProps } from '@react-navigation/bottom-tabs'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { IconfontText } from '../components/Iconfont'
 import { useColorScheme } from '../providers/ColorSchemeProvider'
+import { getStoredUserId } from '../api'
+import { DEFAULT_HOME_EXPERIENCE_CONFIG, getStoredHomeExperienceConfig, onHomeExperienceModeChanged } from '../utils/homeExperience'
 import { colors, radius, shadow } from '../theme'
 import { requestHomeRecordMenu } from '../utils/home-record-menu'
 import {
@@ -26,6 +28,7 @@ export function CustomTabBar({ state, navigation }: BottomTabBarProps) {
   const bottomInset = Math.max(insets.bottom, 8)
   const { isDark } = useColorScheme()
   const [profileBadgeCount, setProfileBadgeCount] = useState(0)
+  const [homeExperienceMode, setHomeExperienceMode] = useState(DEFAULT_HOME_EXPERIENCE_CONFIG.mode)
   const leftRoutes = state.routes.slice(0, 2)
   const rightRoutes = state.routes.slice(2)
 
@@ -48,6 +51,27 @@ export function CustomTabBar({ state, navigation }: BottomTabBarProps) {
     }
   }, [state.index])
 
+  useEffect(() => {
+    let active = true
+    const refreshMode = async () => {
+      const userId = await getStoredUserId().catch(() => '')
+      const config = await getStoredHomeExperienceConfig(userId || '')
+      if (active) setHomeExperienceMode(config.mode)
+    }
+    void refreshMode()
+    const unsubscribe = onHomeExperienceModeChanged((mode) => {
+      if (active) setHomeExperienceMode(mode)
+    })
+    return () => {
+      active = false
+      unsubscribe()
+    }
+  }, [state.index])
+
+  const wellnessActive = homeExperienceMode === 'wellness'
+  const activeColor = wellnessActive ? '#eed6a2' : TAB_SELECTED_COLOR
+  const inactiveColor = wellnessActive ? '#b7c6b8' : isDark ? '#6b7280' : '#9ca3af'
+
   const openHomeRecordMenu = () => {
     navigation.navigate('HomeTab')
     void requestHomeRecordMenu()
@@ -62,6 +86,7 @@ export function CustomTabBar({ state, navigation }: BottomTabBarProps) {
       <Pressable
         key={route.key}
         accessibilityRole="button"
+        accessibilityLabel={meta.label}
         accessibilityState={focused ? { selected: true } : {}}
         onPress={() => navigation.navigate(route.name)}
         style={({ pressed }) => [styles.tab, pressed && styles.pressed]}
@@ -70,15 +95,11 @@ export function CustomTabBar({ state, navigation }: BottomTabBarProps) {
           <IconfontText
             className={meta.iconClass}
             size={21}
-            color={focused ? TAB_SELECTED_COLOR : isDark ? 'rgba(255,255,255,0.55)' : '#9ca3af'}
+            color={focused ? activeColor : inactiveColor}
           />
-          {route.name === 'ProfileTab' && profileBadgeCount > 0 ? (
-            <View style={styles.badge}>
-              <Text style={styles.badgeText}>{profileBadgeCount > 99 ? '99+' : profileBadgeCount}</Text>
-            </View>
-          ) : null}
+          {route.name === 'ProfileTab' && profileBadgeCount > 0 ? <View style={styles.badge} /> : null}
         </View>
-        <Text style={[styles.tabText, focused && styles.tabTextActive, isDark && styles.tabTextDark]} numberOfLines={1}>{meta.label}</Text>
+        <Text style={[styles.tabText, { color: focused ? activeColor : inactiveColor }, focused && styles.tabTextActive]} numberOfLines={1}>{meta.label}</Text>
       </Pressable>
     )
   }
@@ -86,15 +107,19 @@ export function CustomTabBar({ state, navigation }: BottomTabBarProps) {
   return (
     <>
       <View style={styles.wrap}>
-        <View style={[styles.bar, { minHeight: 66 + bottomInset, paddingBottom: bottomInset, backgroundColor: isDark ? '#181f1d' : colors.surface }]}>
+        <View style={[styles.bar, { minHeight: 66 + bottomInset, paddingBottom: bottomInset, backgroundColor: wellnessActive ? '#15382a' : isDark ? '#1a2220' : colors.surface }]}>
           <View style={styles.side}>{leftRoutes.map(renderTab)}</View>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="记录一餐"
-            style={({ pressed }) => [styles.centerButton, pressed && styles.pressed]}
+            style={({ pressed }) => [
+              styles.centerButton,
+              wellnessActive && styles.centerButtonWellness,
+              pressed && styles.pressed,
+            ]}
             onPress={() => openHomeRecordMenu()}
           >
-            <IconfontText className="iconfont icon-paizhao-xianxing" size={29} color="#fff" />
+            <IconfontText className="iconfont icon-paizhao-xianxing" size={29} color={wellnessActive ? '#285c40' : '#fff'} />
           </Pressable>
           <View style={styles.side}>{rightRoutes.map(renderTab)}</View>
         </View>
@@ -155,21 +180,12 @@ const styles = StyleSheet.create({
   },
   badge: {
     position: 'absolute',
-    top: -7,
-    left: 13,
-    minWidth: 17,
-    height: 17,
-    paddingHorizontal: 4,
-    borderRadius: 9,
-    alignItems: 'center',
-    justifyContent: 'center',
+    top: -3,
+    right: -5,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
     backgroundColor: '#ef4444',
-  },
-  badgeText: {
-    color: '#fff',
-    fontSize: 9,
-    lineHeight: 11,
-    fontWeight: '800',
   },
   centerButton: {
     width: 56,
@@ -185,6 +201,12 @@ const styles = StyleSheet.create({
     shadowRadius: 14,
     shadowOffset: { width: 0, height: 6 },
     elevation: 6,
+  },
+  centerButtonWellness: {
+    backgroundColor: '#f4ead4',
+    shadowColor: '#16392d',
+    borderWidth: 1,
+    borderColor: 'rgba(216, 189, 130, 0.52)',
   },
   centerIcon: {
     width: 34,

@@ -49,6 +49,54 @@ export interface PrecisionReferenceObjectInput {
   applies_to_items?: string[]
 }
 
+export interface PrecisionOptionsInput {
+  interactive: boolean
+  separate: boolean
+  web_search: boolean
+}
+
+export type PrecisionCaptureRole =
+  | 'top_down'
+  | 'oblique_45'
+  | 'video_keyframe_1'
+  | 'video_keyframe_2'
+  | 'video_keyframe_3'
+  | 'video_keyframe_4'
+  | 'video_keyframe_5'
+
+export interface PrecisionCaptureViewInput {
+  role: PrecisionCaptureRole
+  image_url: string
+  timestamp_ms?: number
+}
+
+export interface PrecisionCaptureReferenceInput {
+  presence: 'present' | 'absent'
+  kind?: string
+  shape?: 'rectangle' | 'circle' | 'box' | 'custom'
+  dimensions_mm?: Record<string, number>
+  placement_note?: string
+}
+
+export interface PrecisionAnswerInput {
+  question_id: string
+  value: string | string[]
+}
+
+export interface AnalyzeVideoUploadResult {
+  capture_protocol: 'video_keyframes_v1'
+  video_id: string
+  duration_ms: number
+  width: number
+  height: number
+  size_bytes: number
+  keyframes: PrecisionCaptureViewInput[]
+}
+
+export type AnalyzeVideoCaptureMetadata = Omit<AnalyzeVideoUploadResult, 'capture_protocol' | 'keyframes'> & {
+  source_retained: false
+}
+
 export interface Nutrients {
   calories: number
   protein: number
@@ -299,6 +347,114 @@ export interface HomeDashboard {
   achievement?: HomeAchievement | null
   nutritionTarget?: HomeNutritionTarget | null
   expirySummary?: HomeFoodExpirySummary | null
+  supplementSummary?: SupplementDashboardSummary | null
+}
+
+export type SupplementComponentCategory = 'nutrient' | 'functional' | 'blend'
+
+export interface SupplementComponent {
+  code: string
+  name: string
+  category: SupplementComponentCategory
+  amount: number
+  unit: string
+  nutrient_key?: string
+  form?: string
+}
+
+export interface UserSupplement {
+  id: string
+  name: string
+  brand: string
+  barcode?: string | null
+  image_url?: string | null
+  image_urls?: string[]
+  default_servings: number
+  serving_label: string
+  schedule_enabled: boolean
+  schedule_time?: string | null
+  schedule_days: number[]
+  components: SupplementComponent[]
+  label_confirmed_at?: string | null
+  status: 'active' | 'archived' | string
+  created_at: string
+  updated_at: string
+}
+
+export interface SupplementCatalogItem {
+  id: string
+  name: string
+  category: 'vitamin' | 'mineral' | 'sports' | 'wellness' | string
+  description: string
+  brand: string
+  image_url?: string | null
+  serving_label: string
+  components: SupplementComponent[]
+  sort_order: number
+  status: string
+}
+
+export interface SupplementIntake {
+  id: string
+  supplement_id: string
+  supplement_name: string
+  servings: number
+  serving_label: string
+  components: SupplementComponent[]
+  taken_at: string
+  source: string
+  note?: string | null
+}
+
+export interface SupplementComponentTotal {
+  code: string
+  name: string
+  category: SupplementComponentCategory
+  amount: number
+  unit: string
+  form?: string
+}
+
+export interface SupplementDashboardSummary {
+  date?: string
+  planned_count: number
+  completed_count: number
+  pending_supplement?: UserSupplement | null
+  functional_components: SupplementComponentTotal[]
+  additional_nutrients: SupplementComponentTotal[]
+  duplicate_components: string[]
+}
+
+export interface SupplementDashboard extends SupplementDashboardSummary {
+  date: string
+  supplements: UserSupplement[]
+  intakes: SupplementIntake[]
+  nutrient_totals: Record<string, number>
+}
+
+export interface UpsertSupplementPayload {
+  name: string
+  brand?: string
+  barcode?: string | null
+  image_url?: string | null
+  image_urls?: string[]
+  default_servings?: number
+  serving_label?: string
+  schedule_enabled?: boolean
+  schedule_time?: string | null
+  schedule_days?: number[]
+  components: SupplementComponent[]
+  label_confirmed?: boolean
+  status?: string
+}
+
+export interface SupplementLabelRecognition {
+  name: string
+  brand: string
+  serving_label: string
+  components: SupplementComponent[]
+  confidence: number
+  raw_text?: string
 }
 
 export interface HomeAchievement {
@@ -480,6 +636,11 @@ export interface AnalyzeTaskSubmitParams {
   correction_root_task_id?: string
   precision_session_id?: string
   reference_objects?: PrecisionReferenceObjectInput[]
+  capture_protocol?: 'dual_angle_v1' | 'video_keyframes_v1'
+  precision_options?: PrecisionOptionsInput
+  capture_views?: PrecisionCaptureViewInput[]
+  video_capture?: AnalyzeVideoCaptureMetadata
+  reference_object?: PrecisionCaptureReferenceInput
   correctionItems?: AnalyzeCorrectionItem[]
 }
 
@@ -517,10 +678,19 @@ export interface ContinuePrecisionSessionParams {
   user_goal?: string
   remaining_calories?: number
   suggest_ratio_enabled?: boolean
+  analysis_engine?: AnalysisEngine
+  precise_micronutrients?: boolean
   is_multi_view?: boolean
   previousResult?: NonNullable<AnalysisTask['result']>
   correctionItems?: AnalyzeCorrectionItem[]
   reference_objects?: PrecisionReferenceObjectInput[]
+  capture_protocol?: 'dual_angle_v1' | 'video_keyframes_v1'
+  precision_options?: PrecisionOptionsInput
+  capture_views?: PrecisionCaptureViewInput[]
+  video_capture?: AnalyzeVideoCaptureMetadata
+  reference_object?: PrecisionCaptureReferenceInput
+  answers?: PrecisionAnswerInput[]
+  continue_with_uncertainty?: boolean
 }
 
 export type AnalysisFeedbackType =
@@ -605,9 +775,25 @@ export interface AnalyzeTaskStatusCount {
   processing: number
   done: number
   failed: number
+  recognizing?: number
+  waiting_record?: number
+  recorded?: number
+  has_unseen_waiting_record?: boolean
+  latest_recognizing_task_id?: string
+  latest_waiting_record_task_id?: string
+  latest_auto_recorded_task_id?: string
+  latest_auto_recorded_record_id?: string
+  has_unseen_auto_recorded?: boolean
   violated?: number
   timed_out?: number
   cancelled?: number
+}
+
+export interface AnalyzeTaskAutoRecordResult {
+  enabled: boolean
+  meal_type?: string
+  status: string
+  record_id?: string
 }
 
 export interface UserInfo {
@@ -632,9 +818,12 @@ export interface UserInfo {
   bmr?: number | null
   tdee?: number | null
   onboarding_completed?: boolean
+  onboarding_status?: 'pending' | 'completed' | 'skipped'
+  onboarding_draft_step?: number | null
   execution_mode?: ExecutionMode | null
   searchable?: boolean
   public_records?: boolean
+  public_favorite_recipes?: boolean
 }
 
 export interface HealthReportIndicator {
@@ -707,20 +896,113 @@ export interface StatsCustomFocusResult {
   custom_focus_remaining_today?: number
 }
 
+export interface DietRecommendationFoodItem {
+  name: string
+  amount: string
+  source?: string
+  source_id?: string
+}
+
+export interface DietRecommendationOption {
+  title: string
+  reason: string
+  foods?: string[]
+  source?: string
+  source_id?: string
+  calories: number
+  protein: number
+  carbs: number
+  fat: number
+  items?: DietRecommendationFoodItem[]
+  tips?: string[]
+  alternatives?: string[]
+  is_campus_food?: boolean
+  school_id?: string
+  school_name?: string
+  campus_id?: string
+  campus_name?: string
+  canteen_id?: string
+  canteen_name?: string
+  window_id?: string
+  window_name?: string
+  floor?: string
+  price?: number
+  price_unit?: string
+  image_path?: string
+  nutrition_basis?: 'library_record' | 'library_estimate' | 'nutrition_label' | string
+  nutrition_source_category?: string
+  weight_method?: string
+  weight_confidence?: number
+  uncertainty_level?: string
+  [key: string]: unknown
+}
+
 export interface DietRecommendationResult {
+  scene?: string
   title?: string
   summary?: string
-  recommendations?: Array<{
-    title?: string
-    reason?: string
-    foods?: string[]
-    calories?: number
-    protein?: number
-    carbs?: number
-    fat?: number
-    [key: string]: unknown
-  }>
+  calorie_remaining?: number
+  macro_gaps?: Record<string, number>
+  recommendations?: DietRecommendationOption[]
+  generated_by?: string
+  ai_used?: boolean
+  candidate_count?: number
+  ai_rerank_count?: number
+  resolved_school?: { id: string; name: string }
+  campus_id?: string
+  campus_name?: string
+  session_id?: string
+  user_message_id?: string
+  assistant_message_id?: string
+  agent_constraints?: {
+    goal?: string
+    max_calories?: number
+    max_price?: number
+    min_protein?: number
+    max_fat?: number
+    sort_by?: string
+  }
   [key: string]: unknown
+}
+
+export interface CampusDietAgentProgress {
+  agent_run_id: string
+  step: number
+  label: string
+  tool_name?: string
+  status: 'running' | 'success' | 'failed' | string
+  result_count?: number
+}
+
+export interface CampusDietAgentEvidence {
+  source_id: string
+  food_name: string
+  calories: number
+  protein: number
+  carbs: number
+  fat: number
+  nutrition_basis: string
+  weight_method?: string
+  weight_confidence?: number
+  uncertainty_level?: string
+}
+
+export interface CampusDietAgentToolTrace {
+  tool_name: string
+  status: string
+  result_count?: number
+  duration_ms: number
+}
+
+export interface CampusDietAgentResult {
+  agent_run_id: string
+  answer: string
+  recommendation: DietRecommendationResult
+  evidence: CampusDietAgentEvidence[]
+  tool_trace: CampusDietAgentToolTrace[]
+  agent_used: boolean
+  tool_count: number
+  fallback_reason?: string
 }
 
 export interface BodyMetricWeightEntry {
@@ -945,6 +1227,52 @@ export interface CheckinLeaderboardItem {
   rank?: number
 }
 
+export interface HealthLeaderboardItem {
+  rank: number
+  user_id: string
+  nickname: string
+  avatar?: string
+  health_index: number
+  recorded_days: number
+  diet_quality_points?: number
+  continuity_points?: number
+  stability_points?: number
+  is_me?: boolean
+}
+
+export interface HealthLeaderboardScoringRule {
+  label: string
+  total_points: number
+  diet_quality_points: number
+  continuity_points: number
+  stability_points: number
+  minimum_recorded_days: number
+  continuity_description: string
+}
+
+export interface HealthLeaderboardResult {
+  week_start: string
+  week_end: string
+  scoring_rule: HealthLeaderboardScoringRule
+  list: HealthLeaderboardItem[]
+}
+
+export interface FoodNutrientLeaderboardItem {
+  rank: number
+  food_id: string
+  name: string
+  image_url?: string
+  value: number
+}
+
+export interface FoodNutrientLeaderboardResult {
+  nutrient: string
+  label: string
+  unit: string
+  basis: string
+  list: FoodNutrientLeaderboardItem[]
+}
+
 export interface FollowUserItem {
   id?: string
   user_id?: string
@@ -994,6 +1322,45 @@ export interface RewardCenterTask {
   status?: string
   action_path?: string | null
   completed?: boolean
+  streak_days?: number
+  claimed_today?: boolean
+}
+
+export interface LoginCheckInStatus {
+  claimed_today: boolean
+  streak_days: number
+  reward_amount: number
+  today: string
+}
+
+export interface LoginCheckInClaimResponse extends LoginCheckInStatus {
+  applied: boolean
+  earned_credits_balance: number
+}
+
+export type VoucherType = 'registration_trial' | 'invite_light_week' | 'admin_points'
+export type VoucherStatus = 'pending' | 'used' | 'expired' | 'cancelled'
+
+export interface VoucherItem {
+  id: string
+  user_id: string
+  voucher_type: VoucherType
+  status: VoucherStatus
+  title: string
+  description?: string | null
+  reward_payload?: Record<string, unknown>
+  source_type: string
+  source_key: string
+  valid_start_at?: string | null
+  valid_end_at?: string | null
+  used_at?: string | null
+  created_at?: string | null
+  updated_at?: string | null
+}
+
+export interface VoucherListResponse {
+  items: VoucherItem[]
+  total: number
 }
 
 export type InviteRewardRole = 'invitee' | 'inviter'
@@ -1070,7 +1437,45 @@ export interface RewardCenterResponse {
     total_count: number
   }
   tasks: RewardCenterTask[]
+  check_in: LoginCheckInStatus
   invite_reward?: InviteRewardCenterSummary | null
+}
+
+export type FoodNutritionContributionStatus = 'pending' | 'approved' | 'rejected'
+
+export interface FoodNutritionContribution {
+  id: string
+  user_id: string
+  canonical_name: string
+  normalized_name: string
+  kcal_per_100g: number
+  protein_per_100g: number
+  carbs_per_100g: number
+  fat_per_100g: number
+  source_text: string
+  evidence_image_paths: string[]
+  extra_nutrients?: Record<string, unknown>
+  status: FoodNutritionContributionStatus
+  review_action?: 'approve_new' | 'merge_existing' | 'reject'
+  review_note?: string
+  target_food_id?: string
+  rewarded_at?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface CreateFoodNutritionContributionRequest {
+  canonical_name: string
+  kcal_per_100g: number
+  protein_per_100g: number
+  carbs_per_100g: number
+  fat_per_100g: number
+  source_text?: string
+  evidence_image_paths?: string[]
+}
+
+export interface FoodNutritionContributionListResponse {
+  items: FoodNutritionContribution[]
 }
 
 export interface FoodExpiryDashboard {
@@ -1487,6 +1892,10 @@ export interface PrivateMessageItem {
   image_url?: string
   ContentType?: string
   content_type?: string
+  ActionText?: string
+  action_text?: string
+  ExtraData?: Record<string, unknown>
+  extra_data?: Record<string, unknown>
   IsRead?: boolean
   is_read?: boolean
   CreatedAt?: string
@@ -1641,6 +2050,14 @@ export interface PetSummary {
   today: PetDailyScore
   status: PetStatus
   event?: PetEvent
+  meal_prompt?: {
+    kind: 'meal_recommendation'
+    meal_type: 'breakfast' | 'lunch' | 'dinner'
+    scheduled_time: string
+    schedule_source: 'default' | 'learned'
+    text: string
+    starter_question: string
+  } | null
   rewards: {
     daily_credit_cap: number
   }
@@ -1657,7 +2074,15 @@ export interface PetClaimResult {
 export interface PetChatEstimateResponse {
   question: string
   range: StatsRange
-  estimated_credits: number
+  range_label?: string
+  recorded_days?: number
+  estimated_usage?: {
+    input_tokens: number
+    output_tokens: number
+    total_tokens: number
+  }
+  pricing?: { credits_charged?: number; [key: string]: unknown }
+  estimated_credits?: number
   balance?: number
   can_afford?: boolean
 }
@@ -1667,6 +2092,14 @@ export interface PetChatResponse {
   question: string
   range: StatsRange
   session_id?: string
+  user_message_id?: string
+  assistant_message_id?: string
+  range_label?: string
+  recorded_days?: number
+  credits_charged?: number
+  billing_status?: string
+  ai_usage_pricing?: Record<string, unknown>
+  estimated_pricing?: Record<string, unknown>
   credits_used?: number
   remaining_balance?: number
 }

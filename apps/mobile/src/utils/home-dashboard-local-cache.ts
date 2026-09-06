@@ -8,6 +8,7 @@ import {
   type HomeMealItem,
   type HomeMealRecordEntry,
   type HomeNutritionTarget,
+  type SupplementDashboardSummary,
 } from '@food-link/core'
 import { apiClient } from '../api'
 
@@ -23,6 +24,7 @@ export interface HomeDashboardLocalSnapshot {
   exerciseBurnedKcal: number
   achievement: HomeAchievement
   nutritionTarget?: HomeNutritionTarget | null
+  supplementSummary?: SupplementDashboardSummary | null
 }
 
 function parseExerciseBurnedKcal(raw: unknown): number {
@@ -137,6 +139,7 @@ export async function refreshHomeDashboardLocalSnapshotFromCloud(
       exerciseBurnedKcal,
       achievement: data.achievement || { streak_days: 0, green_days: 0 },
       nutritionTarget: data.nutritionTarget || null,
+      supplementSummary: data.supplementSummary || null,
     })
     return true
   } catch {

@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Image, Modal, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native'
+import { ActivityIndicator, Image, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native'
 import * as Clipboard from 'expo-clipboard'
 import * as ImagePicker from 'expo-image-picker'
-import { Image as ImageIcon, Moon, Pencil, Share2, Sun, X } from 'lucide-react-native'
+import { Beef, Droplets, Flame, Heart, Image as ImageIcon, MoreHorizontal, Moon, Pencil, RotateCcw, Share2, Sun, Wheat, X } from 'lucide-react-native'
 import { useFocusEffect, useNavigation, useRoute, type RouteProp } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -19,12 +19,97 @@ import { useAppDialog } from '../providers/DialogProvider'
 import { userFacingErrorMessage } from '../utils/errors'
 
 type ProfileTab = 'feed' | 'collections'
+type ReportReason = 'spam' | 'inappropriate' | 'false_information' | 'harassment' | 'other'
+type ReportTarget = { targetId: string; targetType: CommunityFeedTargetType; title: string }
+type NutritionEntry = { kind: 'calories' | 'protein' | 'carbs' | 'fat'; text: string; color: string }
+
+const PROFILE_FEED_PAGE_SIZE = 15
+const REPORT_REASON_OPTIONS: Array<{ value: ReportReason; label: string }> = [
+  { value: 'spam', label: '广告或垃圾信息' },
+  { value: 'inappropriate', label: '不友善或不当内容' },
+  { value: 'false_information', label: '虚假信息' },
+  { value: 'harassment', label: '骚扰或人身攻击' },
+  { value: 'other', label: '其他' },
+]
+
+type ProfileVisualTheme = {
+  page: string
+  drawer: string
+  card: string
+  primaryText: string
+  secondaryText: string
+  mutedText: string
+  border: string
+  input: string
+  surfaceMuted: string
+  accent: string
+  accentSurface: string
+  accentBorder: string
+  topEditSurface: string
+  topIconSurface: string
+  topActionBorder: string
+  topEditText: string
+  topIconText: string
+  scrim: string
+  shadowOpacity: number
+  danger: string
+  cancelSurface: string
+}
+
+const PROFILE_LIGHT_THEME: ProfileVisualTheme = {
+  page: colors.background,
+  drawer: colors.surface,
+  card: '#f9fafb',
+  primaryText: colors.text,
+  secondaryText: colors.textSecondary,
+  mutedText: colors.textMuted,
+  border: colors.border,
+  input: '#fff',
+  surfaceMuted: colors.surfaceMuted,
+  accent: colors.brandDark,
+  accentSurface: colors.brandSoft,
+  accentBorder: '#bbf7d0',
+  topEditSurface: 'rgba(255, 255, 255, 0.92)',
+  topIconSurface: 'rgba(255, 255, 255, 0.16)',
+  topActionBorder: 'rgba(255, 255, 255, 0.22)',
+  topEditText: '#374151',
+  topIconText: '#fff',
+  scrim: 'rgba(15, 23, 42, 0.48)',
+  shadowOpacity: 0.06,
+  danger: colors.danger,
+  cancelSurface: colors.surfaceMuted,
+}
+
+const PROFILE_DARK_THEME: ProfileVisualTheme = {
+  page: '#0d1312',
+  drawer: '#181f1d',
+  card: '#1e2624',
+  primaryText: '#f2f7f4',
+  secondaryText: 'rgba(214, 226, 220, 0.76)',
+  mutedText: '#64748b',
+  border: 'rgba(255, 255, 255, 0.08)',
+  input: '#1e2624',
+  surfaceMuted: '#2a3330',
+  accent: '#6ee7b7',
+  accentSurface: 'rgba(0, 188, 125, 0.14)',
+  accentBorder: 'rgba(0, 188, 125, 0.24)',
+  topEditSurface: 'rgba(24, 31, 29, 0.9)',
+  topIconSurface: 'rgba(24, 31, 29, 0.9)',
+  topActionBorder: 'rgba(255, 255, 255, 0.08)',
+  topEditText: '#f2f7f4',
+  topIconText: '#f2f7f4',
+  scrim: 'rgba(0, 0, 0, 0.6)',
+  shadowOpacity: 0.2,
+  danger: '#f87171',
+  cancelSurface: '#2a3330',
+}
 
 export function ProfileSettingsScreen() {
   const route = useRoute<RouteProp<RootStackParamList, 'ProfileSettings'>>()
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const { logout } = useAuth()
   const { isDark, toggleScheme } = useColorScheme()
+  const profileTheme = isDark ? PROFILE_DARK_THEME : PROFILE_LIGHT_THEME
   const dialog = useAppDialog()
   const insets = useSafeAreaInsets()
   const targetUserId = route.params?.userId
@@ -42,6 +127,15 @@ export function ProfileSettingsScreen() {
   const [coverImage, setCoverImage] = useState('')
   const [blockStatus, setBlockStatus] = useState<FriendBlockStatus | null>(null)
   const [loading, setLoading] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [hasMoreFeed, setHasMoreFeed] = useState(false)
+  const [profileLoadError, setProfileLoadError] = useState('')
+  const [isDeletedUser, setIsDeletedUser] = useState(false)
+  const [followBusy, setFollowBusy] = useState(false)
+  const [reportTarget, setReportTarget] = useState<ReportTarget | null>(null)
+  const [reportReason, setReportReason] = useState<ReportReason | null>(null)
+  const [reportExtra, setReportExtra] = useState('')
+  const [reporting, setReporting] = useState(false)
   const [saving, setSaving] = useState(false)
   const [deleteConfirmVisible, setDeleteConfirmVisible] = useState(false)
   const [deleteConfirmation, setDeleteConfirmation] = useState('')
@@ -62,17 +156,27 @@ export function ProfileSettingsScreen() {
 
   const load = useCallback(async () => {
     setLoading(true)
+    setProfileLoadError('')
+    setIsDeletedUser(false)
     try {
       if (isOwner) {
         setBlockStatus(null)
-        const [profileData, feedData, recipeData] = await Promise.all([
-          apiClient.getUserProfile(),
-          apiClient.communityGetFeed({ limit: 20, includeComments: false }).catch(() => ({ list: [] })),
+        const profileData = await apiClient.getUserProfile()
+        const ownerUserId = String(profileData.id || currentUserId || '').trim()
+        const [feedData, recipeData, followStats] = await Promise.all([
+          apiClient.communityGetFeed({
+            offset: 0,
+            limit: PROFILE_FEED_PAGE_SIZE,
+            includeComments: false,
+            params: ownerUserId ? { author_id: ownerUserId, sort_by: 'latest' } : undefined,
+          }).catch(() => ({ list: [], has_more: false })),
           apiClient.listRecipes({ isFavorite: true }).catch(() => ({ recipes: [] })),
+          ownerUserId ? apiClient.getFollowStats(ownerUserId).catch(() => null) : Promise.resolve(null),
         ])
-        applyProfile(profileData)
+        applyProfile({ ...profileData, ...(followStats || {}) } as UserInfo & PublicProfile)
         setPublicFavoriteRecipes(true)
         setFeed(feedData.list || [])
+        setHasMoreFeed(feedData.has_more ?? (feedData.list || []).length >= PROFILE_FEED_PAGE_SIZE)
         setRecipes(recipeData.recipes || [])
       } else {
         const userId = targetUserId || ''
@@ -91,29 +195,56 @@ export function ProfileSettingsScreen() {
           } as UserInfo & PublicProfile)
           setFeed([])
           setRecipes([])
+          setHasMoreFeed(false)
           return
         }
-        const [profileData, feedData, recipeData, followStats] = await Promise.all([
-          apiClient.getPublicProfile(userId),
+
+        const profileData = await apiClient.getPublicProfile(userId)
+        const canSeeFavorites = (profileData as PublicProfile & { public_favorite_recipes?: boolean }).public_favorite_recipes === true
+        const [feedData, recipeData, followStats] = await Promise.all([
           apiClient.communityGetPublicFeed({
-            limit: 20,
+            offset: 0,
+            limit: PROFILE_FEED_PAGE_SIZE,
             includeComments: false,
             params: { author_id: userId, sort_by: 'latest' },
-          }).catch(() => ({ list: [] })),
-          apiClient.getUserFavoriteRecipes(userId).catch(() => ({ recipes: [] })),
+          }).catch(() => ({ list: [], has_more: false })),
+          canSeeFavorites
+            ? apiClient.getUserFavoriteRecipes(userId).catch(() => ({ recipes: [] }))
+            : Promise.resolve({ recipes: [] }),
           apiClient.getFollowStats(userId).catch(() => null),
         ])
         applyProfile({ ...profileData, ...(followStats || {}) } as UserInfo & PublicProfile)
-        setPublicFavoriteRecipes((profileData as PublicProfile & { public_favorite_recipes?: boolean }).public_favorite_recipes !== false)
+        setPublicFavoriteRecipes(canSeeFavorites)
+        setActiveTab((previous) => canSeeFavorites || previous === 'feed' ? previous : 'feed')
         setFeed(feedData.list || [])
+        setHasMoreFeed(feedData.has_more ?? (feedData.list || []).length >= PROFILE_FEED_PAGE_SIZE)
         setRecipes(recipeData.recipes || [])
       }
     } catch (error) {
-      showError('获取主页失败', error)
+      const missingUser = !isOwner && [404, 410].includes(apiErrorStatus(error))
+      if (missingUser) {
+        const userId = targetUserId || ''
+        setIsDeletedUser(true)
+        applyProfile({
+          id: userId,
+          nickname: '用户已注销',
+          avatar: '',
+          cover_image: '',
+          record_days: 0,
+          followers_count: 0,
+          following_count: 0,
+          is_following: false,
+        } as UserInfo & PublicProfile)
+        setFeed([])
+        setRecipes([])
+        setHasMoreFeed(false)
+      } else {
+        setProfileLoadError(userFacingErrorMessage(error))
+      }
     } finally {
       setLoading(false)
     }
-  }, [isOwner, showError, targetUserId])
+  }, [currentUserId, isOwner, targetUserId])
 
   useFocusEffect(
     useCallback(() => {
@@ -180,9 +311,10 @@ export function ProfileSettingsScreen() {
   }
 
   const toggleFollow = async () => {
-    if (!targetUserId || !profile) return
+    if (!targetUserId || !profile || followBusy) return
     const previous = profile
     const nextFollowing = !profile.is_following
+    setFollowBusy(true)
     setProfile({
       ...profile,
       is_following: nextFollowing,
@@ -193,6 +325,8 @@ export function ProfileSettingsScreen() {
     } catch (error) {
       setProfile(previous)
       await showError('关注失败', error)
+    } finally {
+      setFollowBusy(false)
     }
   }
 
@@ -298,18 +432,106 @@ export function ProfileSettingsScreen() {
     navigation.navigate('CommunityFeedDetail', { targetId, targetType })
   }
 
+  const loadMoreFeed = async () => {
+    const userId = String(profile?.id || targetUserId || currentUserId || '').trim()
+    if (!userId || loading || loadingMore || !hasMoreFeed || isDeletedUser || blockStatus?.blocked_either) return
+    setLoadingMore(true)
+    try {
+      const options = {
+        offset: feed.length,
+        limit: PROFILE_FEED_PAGE_SIZE,
+        includeComments: false,
+        params: { author_id: userId, sort_by: 'latest' as const },
+      }
+      const data = isOwner
+        ? await apiClient.communityGetFeed(options)
+        : await apiClient.communityGetPublicFeed(options)
+      const nextItems = data.list || []
+      setFeed((previous) => mergeFeedItems(previous, nextItems))
+      setHasMoreFeed(data.has_more ?? nextItems.length >= PROFILE_FEED_PAGE_SIZE)
+    } catch (error) {
+      await showError('加载动态失败', error)
+    } finally {
+      setLoadingMore(false)
+    }
+  }
+
+  const openReport = (item: CommunityFeedItem) => {
+    const targetId = String(item.target_id || item.record?.id || '').trim()
+    if (!targetId) return
+    setReportReason(null)
+    setReportExtra('')
+    setReportTarget({
+      targetId,
+      targetType: normalizeTargetType(item.target_type || item.record?.feed_type),
+      title: feedTitle(item),
+    })
+  }
+
+  const closeReport = () => {
+    if (reporting) return
+    setReportTarget(null)
+    setReportReason(null)
+    setReportExtra('')
+  }
+
+  const submitReport = async () => {
+    if (!reportTarget || !reportReason || reporting) return
+    setReporting(true)
+    try {
+      await apiClient.communityReport({
+        targetId: reportTarget.targetId,
+        targetType: reportTarget.targetType,
+        reason: reportReason,
+        extraContent: reportExtra,
+      })
+      setReportTarget(null)
+      setReportReason(null)
+      setReportExtra('')
+      await dialog.alert('举报已提交', '感谢你的反馈，我们会尽快处理。', 'success')
+    } catch (error) {
+      await showError('举报失败', error)
+    } finally {
+      setReporting(false)
+    }
+  }
+
   const resolvedProfileId = String(profile?.id || targetUserId || '').trim()
   const shortProfileId = formatShortUserId(resolvedProfileId)
   const canOpenFollowList = Boolean(profile?.id)
 
+  if (loading && !profile) {
+    return (
+      <View style={[styles.fullState, { backgroundColor: profileTheme.page }]} accessibilityLabel="正在加载个人主页">
+        <ActivityIndicator color={profileTheme.accent} size="small" />
+      </View>
+    )
+  }
+
+  if (profileLoadError && !profile) {
+    return (
+      <View style={[styles.fullState, { backgroundColor: profileTheme.page }]}>
+        <View style={[styles.errorIcon, { backgroundColor: profileTheme.accentSurface }]}>
+          <RotateCcw size={22} color={profileTheme.accent} />
+        </View>
+        <Text style={[styles.fullStateTitle, { color: profileTheme.primaryText }]}>个人主页加载失败</Text>
+        <Text style={[styles.fullStateDescription, { color: profileTheme.secondaryText }]}>{profileLoadError}</Text>
+        <Pressable accessibilityRole="button" accessibilityLabel="重试加载个人主页" onPress={() => void load()} style={({ pressed }) => [styles.retryButton, { backgroundColor: profileTheme.accent }, pressed && styles.topActionPressed]}>
+          <RotateCcw size={16} color={isDark ? '#0d1312' : '#fff'} />
+          <Text style={[styles.retryButtonText, { color: isDark ? '#0d1312' : '#fff' }]}>重新加载</Text>
+        </Pressable>
+      </View>
+    )
+  }
   return (
     <ScrollView
-      style={styles.profileScroll}
+      style={[styles.profileScroll, { backgroundColor: profileTheme.page }]}
       contentContainerStyle={[
         styles.profileContent,
+        { backgroundColor: profileTheme.page },
         { paddingTop: 0, paddingBottom: insets.bottom + 104 },
       ]}
-      refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor={colors.brand} />}
+      refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor={profileTheme.accent} />}
     >
       <View style={styles.profileTopSection}>
         <View style={styles.coverBackground}>
@@ -323,28 +545,28 @@ export function ProfileSettingsScreen() {
 
         <View style={styles.topActions}>
           {isOwner ? (
-            <Pressable onPress={() => setEditing(true)} style={styles.topEditButton}>
-              <Pencil size={13} strokeWidth={2.4} color="#374151" />
-              <Text style={styles.topEditButtonText}>编辑资料</Text>
+            <Pressable accessibilityRole="button" accessibilityLabel="编辑个人资料" onPress={() => setEditing(true)} style={({ pressed }) => [styles.topEditButton, { backgroundColor: profileTheme.topEditSurface, borderColor: profileTheme.topActionBorder }, pressed && styles.topActionPressed]}>
+              <Pencil size={13} strokeWidth={2.4} color={profileTheme.topEditText} />
+              <Text style={[styles.topEditButtonText, { color: profileTheme.topEditText }]}>编辑资料</Text>
             </Pressable>
           ) : null}
           {isOwner ? (
-            <Pressable onPress={toggleScheme} style={styles.topIconButton}>
-              {isDark ? <Sun size={16} color="#fff" /> : <Moon size={16} color="#fff" />}
+            <Pressable accessibilityRole="button" accessibilityLabel={isDark ? '切换到浅色模式' : '切换到深色模式'} onPress={toggleScheme} style={({ pressed }) => [styles.topIconButton, { backgroundColor: profileTheme.topIconSurface, borderColor: profileTheme.topActionBorder }, pressed && styles.topActionPressed]}>
+              {isDark ? <Sun size={16} color={profileTheme.topIconText} /> : <Moon size={16} color={profileTheme.topIconText} />}
             </Pressable>
           ) : null}
-          <Pressable onPress={() => void shareProfile()} style={styles.topIconButton}>
-            <Share2 size={16} color="#fff" />
+          <Pressable accessibilityRole="button" accessibilityLabel="分享个人主页" onPress={() => void shareProfile()} style={({ pressed }) => [styles.topIconButton, { backgroundColor: profileTheme.topIconSurface, borderColor: profileTheme.topActionBorder }, pressed && styles.topActionPressed]}>
+            <Share2 size={16} color={profileTheme.topIconText} />
           </Pressable>
         </View>
 
         <View style={styles.profileRow}>
-          {avatar ? <Image source={{ uri: avatar }} style={styles.avatar} /> : <View style={styles.avatarFallback} />}
+          {avatar ? <Image source={{ uri: avatar }} style={[styles.avatar, { backgroundColor: profileTheme.surfaceMuted }]} /> : <View style={[styles.avatarFallback, { backgroundColor: profileTheme.surfaceMuted }]} />}
           <View style={styles.flex}>
             <Text style={styles.topName} numberOfLines={1}>{profile?.nickname || 'Food Link 用户'}</Text>
             <View style={styles.profileIdRow}>
               <Text style={styles.topIdText} selectable>ID: {shortProfileId || '-'}</Text>
-              <Pressable onPress={() => void copyUserId()} style={styles.inlineCopyButton}>
+              <Pressable accessibilityRole="button" accessibilityLabel="复制用户 ID" hitSlop={12} onPress={() => void copyUserId()} style={styles.inlineCopyButton}>
                 <Text style={styles.inlineCopyButtonText}>复制ID</Text>
               </Pressable>
             </View>
@@ -358,6 +580,8 @@ export function ProfileSettingsScreen() {
           </View>
           <Text style={styles.profileStatDivider}>|</Text>
           <Pressable
+            accessibilityRole="button"
+            hitSlop={12}
             style={styles.profileStatItem}
             onPress={() => canOpenFollowList && profile?.id ? navigation.navigate('FollowList', { userId: profile.id, type: 'followers' }) : undefined}
           >
@@ -366,6 +590,8 @@ export function ProfileSettingsScreen() {
           </Pressable>
           <Text style={styles.profileStatDivider}>|</Text>
           <Pressable
+            accessibilityRole="button"
+            hitSlop={12}
             style={styles.profileStatItem}
             onPress={() => canOpenFollowList && profile?.id ? navigation.navigate('FollowList', { userId: profile.id, type: 'following' }) : undefined}
           >
@@ -375,17 +601,17 @@ export function ProfileSettingsScreen() {
         </View>
 
         {profile?.motto || isOwner ? (
-          <Pressable style={styles.mottoRow} onPress={isOwner ? () => setEditing(true) : undefined}>
+          <Pressable accessibilityRole={isOwner ? "button" : undefined} accessibilityLabel={isOwner ? "编辑座右铭" : undefined} style={({ pressed }) => [styles.mottoRow, pressed && isOwner && styles.topActionPressed]} onPress={isOwner ? () => setEditing(true) : undefined}>
             <Text style={[styles.mottoText, !profile?.motto && styles.mottoTextEmpty]} numberOfLines={2}>
               {profile?.motto || '点击编辑资料添加座右铭'}
             </Text>
           </Pressable>
         ) : null}
 
-        {!isOwner ? (
+        {!isOwner && !isDeletedUser ? (
           <View style={styles.profileActionRow}>
             {blockStatus?.is_blocked_by_me ? (
-              <Pressable style={styles.profileActionButtonLight} onPress={() => void unblockUser()}>
+              <Pressable accessibilityRole="button" accessibilityLabel="解除拉黑" style={({ pressed }) => [styles.profileActionButtonLight, pressed && styles.topActionPressed]} onPress={() => void unblockUser()}>
                 <Text style={styles.profileActionButtonLightText}>解除拉黑</Text>
               </Pressable>
             ) : blockStatus?.blocked_either ? (
@@ -394,15 +620,15 @@ export function ProfileSettingsScreen() {
               </View>
             ) : (
               <>
-                <Pressable style={[styles.profileActionButton, profile?.is_following && styles.profileActionButtonGhost]} onPress={toggleFollow}>
-                  <Text style={styles.profileActionButtonText}>{profile?.is_following ? '已关注' : '+ 关注'}</Text>
+                <Pressable accessibilityRole="button" accessibilityLabel={profile?.is_following ? "取消关注" : "关注用户"} accessibilityState={{ busy: followBusy, disabled: followBusy }} disabled={followBusy} style={({ pressed }) => [styles.profileActionButton, profile?.is_following && styles.profileActionButtonGhost, followBusy && styles.actionDisabled, pressed && styles.topActionPressed]} onPress={() => void toggleFollow()}>
+                  {followBusy ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.profileActionButtonText}>{profile?.is_following ? '已关注' : '+ 关注'}</Text>}
                 </Pressable>
                 {targetUserId ? (
-                  <Pressable style={styles.profileActionButtonLight} onPress={() => navigation.navigate('PrivateChat', { userId: targetUserId, nickname: profile?.nickname })}>
+                  <Pressable accessibilityRole="button" accessibilityLabel="发送私信" style={({ pressed }) => [styles.profileActionButtonLight, pressed && styles.topActionPressed]} onPress={() => navigation.navigate('PrivateChat', { userId: targetUserId, nickname: profile?.nickname })}>
                     <Text style={styles.profileActionButtonLightText}>私信</Text>
                   </Pressable>
                 ) : null}
-                <Pressable style={styles.profileBlockButton} onPress={() => void blockUser()}>
+                <Pressable accessibilityRole="button" accessibilityLabel="拉黑用户" style={({ pressed }) => [styles.profileBlockButton, pressed && styles.topActionPressed]} onPress={() => void blockUser()}>
                   <Text style={styles.profileBlockButtonText}>拉黑</Text>
                 </Pressable>
               </>
@@ -411,64 +637,111 @@ export function ProfileSettingsScreen() {
         ) : null}
       </View>
 
-      <View style={styles.bottomDrawer}>
-        <View style={styles.drawerHandle} />
+      <View style={[styles.bottomDrawer, { backgroundColor: profileTheme.drawer, shadowOpacity: profileTheme.shadowOpacity }]}>
+        <View style={[styles.drawerHandle, { backgroundColor: profileTheme.border }]} />
 
-        <View style={styles.segment}>
-          <SegmentButton label="最新动态" active={activeTab === 'feed'} onPress={() => setActiveTab('feed')} />
+        <View style={[styles.segment, { borderBottomColor: profileTheme.border }]}>
+          <SegmentButton theme={profileTheme} label="最新动态" active={activeTab === 'feed'} onPress={() => setActiveTab('feed')} />
           {(isOwner || publicFavoriteRecipes) ? (
-            <SegmentButton label="食物收藏" active={activeTab === 'collections'} onPress={() => setActiveTab('collections')} />
+            <SegmentButton theme={profileTheme} label="食物收藏" active={activeTab === 'collections'} onPress={() => setActiveTab('collections')} />
           ) : null}
         </View>
 
         <View style={styles.contentBody}>
-          {blockStatus?.blocked_either ? (
-            <EmptyState text="内容不可见" />
+          {profileLoadError ? (
+            <View style={[styles.inlineError, { backgroundColor: profileTheme.accentSurface, borderColor: profileTheme.accentBorder }]}>
+              <Text style={[styles.inlineErrorText, { color: profileTheme.secondaryText }]} numberOfLines={2}>{profileLoadError}</Text>
+              <Pressable accessibilityRole="button" accessibilityLabel="重试加载个人主页" onPress={() => void load()} style={({ pressed }) => [styles.inlineRetry, pressed && styles.topActionPressed]}>
+                <RotateCcw size={15} color={profileTheme.accent} />
+                <Text style={[styles.inlineRetryText, { color: profileTheme.accent }]}>重试</Text>
+              </Pressable>
+            </View>
+          ) : null}
+          {isDeletedUser ? (
+            <EmptyState theme={profileTheme} text={activeTab === 'feed' ? '该用户已注销，动态不可见' : '该用户已注销，食物收藏不可见'} />
+          ) : loading && !profile ? (
+            <View style={styles.contentEmpty} accessibilityLabel="正在加载个人主页">
+              <ActivityIndicator color={profileTheme.accent} size="small" />
+            </View>
+          ) : blockStatus?.blocked_either ? (
+            <EmptyState theme={profileTheme} text="内容不可见" />
           ) : activeTab === 'feed' ? (
             <>
-              {feed.length === 0 ? <EmptyState text="暂无动态" /> : null}
+              {feed.length === 0 ? <EmptyState theme={profileTheme} text="暂无动态" /> : null}
               {feed.map((item, index) => (
-                <Pressable key={`${item.target_type || item.record?.feed_type}-${item.target_id || item.record?.id || index}`} onPress={() => openFeed(item)}>
-                  <View style={styles.feedCard}>
-                    <Text style={styles.profileFeedTime}>{feedSubtitle(item)}</Text>
-                    <Text style={styles.profileFeedTitle} numberOfLines={2}>{feedTitle(item)}</Text>
+                <View key={`${item.target_type || item.record?.feed_type}-${item.target_id || item.record?.id || index}`}>
+                  <View style={[styles.feedCard, { backgroundColor: profileTheme.card }]}>
+                    <View style={styles.feedCardHeader}>
+                      <Text style={[styles.profileFeedTime, styles.flex, { color: profileTheme.secondaryText }]}>{feedSubtitle(item)}</Text>
+                      {!isOwner ? (
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel="更多动态操作"
+                          hitSlop={8}
+                          onPress={(event) => {
+                            event.stopPropagation()
+                            openReport(item)
+                          }}
+                          style={({ pressed }) => [styles.feedMoreButton, pressed && styles.topActionPressed]}
+                        >
+                          <MoreHorizontal size={18} color={profileTheme.mutedText} />
+                        </Pressable>
+                      ) : null}
+                    </View>
+                    <Pressable accessibilityRole="button" accessibilityLabel={'查看动态：' + feedTitle(item)} onPress={() => openFeed(item)} style={({ pressed }) => [styles.feedCardBody, pressed && styles.cardPressed]}>
+                      <Text style={[styles.profileFeedTitle, { color: profileTheme.primaryText }]} numberOfLines={2}>{feedTitle(item)}</Text>
                     {shouldShowCompactFoodCard(item) ? (
-                      <CompactFoodCard item={item} />
+                      <CompactFoodCard theme={profileTheme} item={item} />
                     ) : feedImages(item).length ? (
                       <View style={styles.feedImageGrid}>
                         {feedImages(item).slice(0, 3).map((url, imageIndex) => (
-                          <Image key={`${url}-${imageIndex}`} source={{ uri: url }} style={styles.feedImage} />
+                          <Image key={`${url}-${imageIndex}`} source={{ uri: url }} style={[styles.feedImage, { backgroundColor: profileTheme.surfaceMuted }]} />
                         ))}
                       </View>
                     ) : null}
                     <View style={styles.feedFooter}>
                       <View style={styles.nutritionRow}>
                         {feedNutrition(item).map((entry) => (
-                          <Text key={entry.text} style={[styles.nutritionText, { color: entry.color }]}>{entry.text}</Text>
+                          <NutritionMetric key={entry.kind} entry={entry} />
                         ))}
                       </View>
-                      <Text style={styles.likeText}>❤ {item.like_count || 0}</Text>
+                      <View style={styles.likeMetric}>
+                        <Heart size={14} color={profileTheme.mutedText} />
+                        <Text style={[styles.likeText, { color: profileTheme.mutedText }]}>{item.like_count || 0}</Text>
+                      </View>
                     </View>
+                    </Pressable>
                   </View>
-                </Pressable>
+                </View>
               ))}
+              {feed.length > 0 ? (
+                <View style={styles.feedPagination}>
+                  {hasMoreFeed ? (
+                    <Pressable accessibilityRole="button" accessibilityLabel="加载更多动态" accessibilityState={{ busy: loadingMore }} disabled={loadingMore} onPress={() => void loadMoreFeed()} style={({ pressed }) => [styles.loadMoreButton, { borderColor: profileTheme.border, backgroundColor: profileTheme.input }, pressed && styles.topActionPressed]}>
+                      {loadingMore ? <ActivityIndicator size="small" color={profileTheme.accent} /> : <Text style={[styles.loadMoreText, { color: profileTheme.secondaryText }]}>加载更多</Text>}
+                    </Pressable>
+                  ) : (
+                    <Text style={[styles.feedEndText, { color: profileTheme.mutedText }]}>没有更多了</Text>
+                  )}
+                </View>
+              ) : null}
             </>
           ) : (
             <>
-              {recipes.length === 0 ? <EmptyState text="暂无食物收藏" /> : null}
+              {recipes.length === 0 ? <EmptyState theme={profileTheme} text="暂无食物收藏" /> : null}
               {recipes.map((recipe) => (
-                <Pressable key={recipe.id} onPress={() => navigation.navigate('RecipeDetail', { recipeId: recipe.id })}>
-                  <View style={styles.collectionCard}>
+                <Pressable accessibilityRole="button" accessibilityLabel={`查看收藏食谱：${recipe.recipe_name || '未命名食谱'}`} key={recipe.id} onPress={() => navigation.navigate('RecipeDetail', { recipeId: recipe.id })} style={({ pressed }) => pressed && styles.cardPressed}>
+                  <View style={[styles.collectionCard, { backgroundColor: profileTheme.card }]}>
                     <View style={styles.collectionMain}>
-                      <Text style={styles.itemName}>{recipe.recipe_name || '未命名食谱'}</Text>
+                      <Text style={[styles.itemName, { color: profileTheme.primaryText }]}>{recipe.recipe_name || '未命名食谱'}</Text>
                       <View style={styles.collectionNutrition}>
-                        {recipe.total_calories > 0 ? <Text style={styles.nutritionKcal}>◉ {Math.round(recipe.total_calories)}</Text> : null}
-                        {recipe.total_protein > 0 ? <Text style={styles.nutritionProtein}>● {Math.round(recipe.total_protein)}g</Text> : null}
-                        {(recipe.total_carbs || 0) > 0 ? <Text style={styles.nutritionCarbs}>● {Math.round(recipe.total_carbs || 0)}g</Text> : null}
-                        {(recipe.total_fat || 0) > 0 ? <Text style={styles.nutritionFat}>● {Math.round(recipe.total_fat || 0)}g</Text> : null}
+                        {recipe.total_calories > 0 ? <NutritionMetric entry={{ kind: 'calories', text: String(Math.round(recipe.total_calories)), color: '#00a873' }} /> : null}
+                        {recipe.total_protein > 0 ? <NutritionMetric entry={{ kind: 'protein', text: String(Math.round(recipe.total_protein)) + 'g', color: '#5c9ed4' }} /> : null}
+                        {(recipe.total_carbs || 0) > 0 ? <NutritionMetric entry={{ kind: 'carbs', text: String(Math.round(recipe.total_carbs || 0)) + 'g', color: '#b88930' }} /> : null}
+                        {(recipe.total_fat || 0) > 0 ? <NutritionMetric entry={{ kind: 'fat', text: String(Math.round(recipe.total_fat || 0)) + 'g', color: '#e17e41' }} /> : null}
                       </View>
                     </View>
-                    {recipe.image_path ? <Image source={{ uri: recipe.image_path }} style={styles.collectionImage} /> : null}
+                    {recipe.image_path ? <Image source={{ uri: recipe.image_path }} style={[styles.collectionImage, { backgroundColor: profileTheme.surfaceMuted }]} /> : null}
                   </View>
                 </Pressable>
               ))}
@@ -478,66 +751,136 @@ export function ProfileSettingsScreen() {
       </View>
 
       <Modal visible={editing && isOwner} transparent animationType="slide" onRequestClose={() => setEditing(false)}>
-        <Pressable style={styles.editSheetMask} onPress={() => setEditing(false)}>
-          <Pressable style={[styles.editSheet, { paddingBottom: insets.bottom + 20 }]} onPress={(event) => event.stopPropagation()}>
+        <Pressable style={[styles.editSheetMask, { backgroundColor: profileTheme.scrim }]} onPress={() => setEditing(false)}>
+          <Pressable style={[styles.editSheet, { paddingBottom: insets.bottom + 20, backgroundColor: profileTheme.drawer }]} onPress={(event) => event.stopPropagation()}>
             <ScrollView showsVerticalScrollIndicator={false}>
-              <View style={styles.drawerHandle} />
+              <View style={[styles.drawerHandle, { backgroundColor: profileTheme.border }]} />
               <View style={styles.editSheetHeader}>
-                <Text style={styles.sectionTitle}>编辑资料</Text>
-                <Pressable onPress={() => setEditing(false)} style={styles.editSheetClose}>
-                  <X size={20} color={colors.text} />
+                <Text style={[styles.sectionTitle, { color: profileTheme.primaryText }]}>编辑资料</Text>
+                <Pressable accessibilityRole="button" accessibilityLabel="关闭编辑资料" onPress={() => setEditing(false)} style={({ pressed }) => [styles.editSheetClose, { backgroundColor: profileTheme.border }, pressed && styles.topActionPressed]}>
+                  <X size={20} color={profileTheme.primaryText} />
                 </Pressable>
               </View>
-              <Pressable style={styles.editAvatarWrap} onPress={() => void pickProfileImage('avatar')}>
-                {avatar ? <Image source={{ uri: avatar }} style={styles.editAvatar} /> : <View style={styles.editAvatar} />}
+              <Pressable accessibilityRole="button" accessibilityLabel="更换头像" style={({ pressed }) => [styles.editAvatarWrap, pressed && styles.topActionPressed]} onPress={() => void pickProfileImage('avatar')}>
+                {avatar ? <Image source={{ uri: avatar }} style={[styles.editAvatar, { backgroundColor: profileTheme.surfaceMuted }]} /> : <View style={[styles.editAvatar, { backgroundColor: profileTheme.surfaceMuted }]} />}
               </Pressable>
-              <Text style={styles.fieldLabel}>主页背景图</Text>
-              <Pressable style={styles.editCover} onPress={() => void pickProfileImage('cover')}>
+              <Text style={[styles.fieldLabel, { color: profileTheme.secondaryText }]}>主页背景图</Text>
+              <Pressable accessibilityRole="button" accessibilityLabel="更换主页背景图" style={({ pressed }) => [styles.editCover, { backgroundColor: profileTheme.card, borderColor: profileTheme.border }, pressed && styles.topActionPressed]} onPress={() => void pickProfileImage('cover')}>
                 {coverImage ? <Image source={{ uri: coverImage }} style={styles.editCoverImage} /> : (
                   <View style={styles.editCoverPlaceholder}>
-                    <ImageIcon size={24} color={colors.textMuted} />
-                    <Text style={styles.editCoverPlaceholderText}>点击选择背景图</Text>
+                    <ImageIcon size={24} color={profileTheme.mutedText} />
+                    <Text style={[styles.editCoverPlaceholderText, { color: profileTheme.mutedText }]}>点击选择背景图</Text>
                   </View>
                 )}
               </Pressable>
-              <Field label="昵称" value={nickname} onChangeText={setNickname} placeholder="请输入昵称" />
-              <Field label="座右铭" value={motto} onChangeText={setMotto} placeholder="写一句你的座右铭（最多30字）" maxLength={30} />
+              <Field theme={profileTheme} label="昵称" value={nickname} onChangeText={setNickname} placeholder="请输入昵称" />
+              <Field theme={profileTheme} label="座右铭" value={motto} onChangeText={setMotto} placeholder="写一句你的座右铭（最多30字）" maxLength={30} />
               {resolvedProfileId ? (
                 <View style={styles.field}>
-                  <Text style={styles.fieldLabel}>用户ID</Text>
-                  <View style={styles.editIdRow}>
-                    <Text style={[styles.editIdValue, styles.flex]} selectable>{resolvedProfileId}</Text>
-                    <SmallButton label="复制" onPress={() => void copyUserId()} />
+                  <Text style={[styles.fieldLabel, { color: profileTheme.secondaryText }]}>用户ID</Text>
+                  <View style={[styles.editIdRow, { backgroundColor: profileTheme.card, borderColor: profileTheme.border }]}>
+                    <Text style={[styles.editIdValue, styles.flex, { color: profileTheme.secondaryText }]} selectable>{resolvedProfileId}</Text>
+                    <SmallButton theme={profileTheme} label="复制" onPress={() => void copyUserId()} />
                   </View>
                 </View>
               ) : null}
               <AppButton label="保存" loading={saving} onPress={saveProfile} />
-              <Pressable onPress={() => void confirmDeleteAccount()} style={styles.deleteAccount}>
-                <Text style={styles.deleteText}>注销账号</Text>
+              <Pressable accessibilityRole="button" accessibilityLabel="注销账号" onPress={() => void confirmDeleteAccount()} style={({ pressed }) => [styles.deleteAccount, pressed && styles.topActionPressed]}>
+                <Text style={[styles.deleteText, { color: profileTheme.danger }]}>注销账号</Text>
               </Pressable>
             </ScrollView>
           </Pressable>
         </Pressable>
       </Modal>
+      <Modal visible={Boolean(reportTarget)} transparent animationType="slide" onRequestClose={closeReport}>
+        <KeyboardAvoidingView style={styles.modalKeyboardAvoider} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <Pressable style={[styles.editSheetMask, { backgroundColor: profileTheme.scrim }]} onPress={closeReport}>
+          <Pressable style={[styles.reportSheet, { paddingBottom: insets.bottom + 20, backgroundColor: profileTheme.drawer }]} onPress={(event) => event.stopPropagation()}>
+            <View style={[styles.drawerHandle, { backgroundColor: profileTheme.border }]} />
+            <View style={styles.editSheetHeader}>
+              <View style={styles.flex}>
+                <Text style={[styles.sectionTitle, { color: profileTheme.primaryText }]}>举报动态</Text>
+                <Text style={[styles.reportTargetTitle, { color: profileTheme.secondaryText }]} numberOfLines={1}>{reportTarget?.title}</Text>
+              </View>
+              <Pressable accessibilityRole="button" accessibilityLabel="关闭举报" disabled={reporting} onPress={closeReport} style={({ pressed }) => [styles.editSheetClose, { backgroundColor: profileTheme.border }, pressed && styles.topActionPressed]}>
+                <X size={20} color={profileTheme.primaryText} />
+              </Pressable>
+            </View>
+            <ScrollView
+              style={styles.reportContentScroll}
+              contentContainerStyle={styles.reportContentContainer}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
+              <View accessibilityRole="radiogroup" style={styles.reportReasonList}>
+              {REPORT_REASON_OPTIONS.map((option) => {
+                const selected = reportReason === option.value
+                return (
+                  <Pressable
+                    key={option.value}
+                    accessibilityRole="radio"
+                    accessibilityState={{ checked: selected }}
+                    accessibilityLabel={option.label}
+                    disabled={reporting}
+                    onPress={() => setReportReason(option.value)}
+                    style={({ pressed }) => [styles.reportReason, { borderColor: selected ? profileTheme.accent : profileTheme.border, backgroundColor: selected ? profileTheme.accentSurface : profileTheme.card }, pressed && styles.topActionPressed]}
+                  >
+                    <View style={[styles.reportRadio, { borderColor: selected ? profileTheme.accent : profileTheme.mutedText }]}>
+                      {selected ? <View style={[styles.reportRadioDot, { backgroundColor: profileTheme.accent }]} /> : null}
+                    </View>
+                    <Text style={[styles.reportReasonText, { color: profileTheme.primaryText }]}>{option.label}</Text>
+                  </Pressable>
+                )
+              })}
+            </View>
+            {reportReason === 'other' ? (
+              <TextInput
+                value={reportExtra}
+                onChangeText={setReportExtra}
+                accessibilityLabel="补充举报说明"
+                placeholder="补充说明（选填，最多 120 字）"
+                placeholderTextColor={profileTheme.mutedText}
+                maxLength={120}
+                multiline
+                textAlignVertical="top"
+                style={[styles.input, styles.reportInput, { color: profileTheme.primaryText, backgroundColor: profileTheme.input, borderColor: profileTheme.border }]}
+              />
+            ) : null}
+            </ScrollView>
+            <View style={styles.reportActions}>
+              <Pressable accessibilityRole="button" accessibilityLabel="取消举报" disabled={reporting} onPress={closeReport} style={({ pressed }) => [styles.reportCancel, { backgroundColor: profileTheme.cancelSurface }, pressed && styles.topActionPressed]}>
+                <Text style={[styles.reportCancelText, { color: profileTheme.secondaryText }]}>取消</Text>
+              </Pressable>
+              <Pressable accessibilityRole="button" accessibilityLabel="提交举报" accessibilityState={{ disabled: !reportReason, busy: reporting }} disabled={!reportReason || reporting} onPress={() => void submitReport()} style={({ pressed }) => [styles.reportSubmit, (!reportReason || reporting) && styles.actionDisabled, pressed && styles.topActionPressed]}>
+                {reporting ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.reportSubmitText}>提交举报</Text>}
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+        </KeyboardAvoidingView>
+      </Modal>
       <Modal visible={deleteConfirmVisible} transparent animationType="fade" onRequestClose={() => setDeleteConfirmVisible(false)}>
-        <Pressable style={styles.deleteDialogMask} onPress={() => setDeleteConfirmVisible(false)}>
-          <Pressable style={styles.deleteDialog} onPress={(event) => event.stopPropagation()}>
-            <Text style={styles.deleteDialogTitle}>确认注销账号</Text>
-            <Text style={styles.deleteDialogDescription}>这是不可恢复的操作。请输入“注销账号”后继续。</Text>
-            <Text style={styles.fieldLabel}>确认文案</Text>
+        <Pressable style={[styles.deleteDialogMask, { backgroundColor: profileTheme.scrim }]} onPress={() => setDeleteConfirmVisible(false)}>
+          <Pressable style={[styles.deleteDialog, { backgroundColor: profileTheme.drawer }]} onPress={(event) => event.stopPropagation()}>
+            <Text style={[styles.deleteDialogTitle, { color: profileTheme.primaryText }]}>确认注销账号</Text>
+            <Text style={[styles.deleteDialogDescription, { color: profileTheme.secondaryText }]}>这是不可恢复的操作。请输入“注销账号”后继续。</Text>
+            <Text style={[styles.fieldLabel, { color: profileTheme.secondaryText }]}>确认文案</Text>
             <TextInput
               value={deleteConfirmation}
               onChangeText={setDeleteConfirmation}
               placeholder="注销账号"
-              placeholderTextColor={colors.textMuted}
+              placeholderTextColor={profileTheme.mutedText}
+              accessibilityLabel="输入注销账号确认文案"
               maxLength={8}
-              style={styles.input}
+              style={[styles.input, { color: profileTheme.primaryText, backgroundColor: profileTheme.input, borderColor: profileTheme.border }]}
             />
             <View style={styles.deleteDialogActions}>
-              <Pressable style={styles.deleteDialogCancel} disabled={saving} onPress={() => setDeleteConfirmVisible(false)}>
-                <Text style={styles.deleteDialogCancelText}>取消</Text>
+              <Pressable accessibilityRole="button" accessibilityLabel="取消注销" style={[styles.deleteDialogCancel, { backgroundColor: profileTheme.cancelSurface }]} disabled={saving} onPress={() => setDeleteConfirmVisible(false)}>
+                <Text style={[styles.deleteDialogCancelText, { color: profileTheme.secondaryText }]}>取消</Text>
               </Pressable>
               <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="确认注销账号"
                 style={[styles.deleteDialogConfirm, deleteConfirmation.trim() !== '注销账号' && styles.deleteDialogConfirmDisabled]}
                 disabled={saving || deleteConfirmation.trim() !== '注销账号'}
                 onPress={() => void deleteAccount()}
@@ -553,6 +896,7 @@ export function ProfileSettingsScreen() {
 }
 
 function Field({
+  theme,
   label,
   value,
   onChangeText,
@@ -560,6 +904,7 @@ function Field({
   multiline,
   maxLength,
 }: {
+  theme: ProfileVisualTheme
   label: string
   value: string
   onChangeText: (value: string) => void
@@ -569,61 +914,78 @@ function Field({
 }) {
   return (
     <View style={styles.field}>
-      <Text style={styles.fieldLabel}>{label}</Text>
+      <Text style={[styles.fieldLabel, { color: theme.secondaryText }]}>{label}</Text>
       <TextInput
         value={value}
         onChangeText={onChangeText}
         placeholder={placeholder}
-        placeholderTextColor={colors.textMuted}
+        accessibilityLabel={label}
+        placeholderTextColor={theme.mutedText}
         multiline={multiline}
         maxLength={maxLength}
         textAlignVertical={multiline ? 'top' : 'center'}
-        style={[styles.input, multiline && styles.textarea]}
+        style={[styles.input, { color: theme.primaryText, backgroundColor: theme.input, borderColor: theme.border }, multiline && styles.textarea]}
       />
     </View>
   )
 }
 
-function SegmentButton({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
+function SegmentButton({ theme, label, active, onPress }: { theme: ProfileVisualTheme; label: string; active: boolean; onPress: () => void }) {
   return (
-    <Pressable style={[styles.segmentItem, active && styles.segmentItemActive]} onPress={onPress}>
-      <Text style={[styles.segmentText, active && styles.segmentTextActive]}>{label}</Text>
-      {active ? <View style={styles.segmentIndicator} /> : null}
+    <Pressable accessibilityRole="tab" accessibilityState={{ selected: active }} style={({ pressed }) => [styles.segmentItem, active && styles.segmentItemActive, pressed && styles.topActionPressed]} onPress={onPress}>
+      <Text style={[styles.segmentText, { color: active ? theme.primaryText : theme.secondaryText }, active && styles.segmentTextActive]}>{label}</Text>
+      {active ? <View style={[styles.segmentIndicator, { backgroundColor: theme.accent }]} /> : null}
     </Pressable>
   )
 }
 
-function SmallButton({ label, onPress }: { label: string; onPress: () => void }) {
+function SmallButton({ theme, label, onPress }: { theme: ProfileVisualTheme; label: string; onPress: () => void }) {
   return (
-    <Pressable onPress={onPress} style={styles.smallButton}>
-      <Text style={styles.smallButtonText}>{label}</Text>
+    <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} style={({ pressed }) => [styles.smallButton, { backgroundColor: theme.accentSurface, borderColor: theme.accentBorder }, pressed && styles.topActionPressed]}>
+      <Text style={[styles.smallButtonText, { color: theme.accent }]}>{label}</Text>
     </Pressable>
   )
 }
 
-function EmptyState({ text }: { text: string }) {
+function EmptyState({ theme, text }: { theme: ProfileVisualTheme; text: string }) {
   return (
     <View style={styles.contentEmpty}>
-      <Text style={styles.empty}>{text}</Text>
+      <Text style={[styles.empty, { color: theme.mutedText }]}>{text}</Text>
     </View>
   )
 }
 
-function CompactFoodCard({ item }: { item: CommunityFeedItem }) {
+function NutritionMetric({ entry }: { entry: NutritionEntry }) {
+  const Icon = entry.kind === 'calories'
+    ? Flame
+    : entry.kind === 'protein'
+      ? Beef
+      : entry.kind === 'carbs'
+        ? Wheat
+        : Droplets
+  return (
+    <View style={styles.nutritionMetric}>
+      <Icon size={13} strokeWidth={2.2} color={entry.color} />
+      <Text style={[styles.nutritionText, { color: entry.color }]}>{entry.text}</Text>
+    </View>
+  )
+}
+
+function CompactFoodCard({ theme, item }: { theme: ProfileVisualTheme; item: CommunityFeedItem }) {
   const record = item.record
   const recipeId = (record as typeof record & { recipe_id?: string }).recipe_id
   const firstFood = record.items?.[0]
   const imageUrl = String(firstFood?.image_path || record.image_path || '').trim()
   const calories = numberFrom(firstFood?.nutrients?.calories) || numberFrom(record.total_calories)
   return (
-    <View style={styles.compactFoodCard}>
-      {imageUrl ? <Image source={{ uri: imageUrl }} style={styles.compactFoodImage} /> : <View style={styles.compactFoodImage} />}
+    <View style={[styles.compactFoodCard, { backgroundColor: theme.input, borderColor: theme.border }]}>
+      {imageUrl ? <Image source={{ uri: imageUrl }} style={[styles.compactFoodImage, { backgroundColor: theme.surfaceMuted }]} /> : <View style={[styles.compactFoodImage, { backgroundColor: theme.surfaceMuted }]} />}
       <View style={styles.compactFoodMain}>
-        <Text style={styles.compactFoodName} numberOfLines={1}>{firstFood?.name || record.description || '食物记录'}</Text>
+        <Text style={[styles.compactFoodName, { color: theme.primaryText }]} numberOfLines={1}>{firstFood?.name || record.description || '食物记录'}</Text>
         {calories > 0 ? <Text style={styles.compactFoodKcal}>{Math.round(calories)} kcal</Text> : null}
       </View>
-      <View style={styles.compactFoodBadge}>
-        <Text style={styles.compactFoodBadgeText}>{recipeId ? '收藏' : '常用食物'}</Text>
+      <View style={[styles.compactFoodBadge, { backgroundColor: theme.accentSurface, borderColor: theme.accentBorder }]}>
+        <Text style={[styles.compactFoodBadgeText, { color: theme.accent }]}>{recipeId ? '收藏' : '常用食物'}</Text>
       </View>
     </View>
   )
@@ -635,18 +997,17 @@ function shouldShowCompactFoodCard(item: CommunityFeedItem): boolean {
   return type === 'food_record' && Boolean(item.record.items?.length || recipeId)
 }
 
-function feedNutrition(item: CommunityFeedItem): Array<{ text: string; color: string }> {
+function feedNutrition(item: CommunityFeedItem): NutritionEntry[] {
   const record = item.record
   const type = normalizeTargetType(item.target_type || record.feed_type)
-  const entries: Array<{ text: string; color: string }> = []
+  const entries: NutritionEntry[] = []
   const calories = type === 'exercise_log' ? numberFrom(record.calories_burned) : numberFrom(record.total_calories)
-  if (calories > 0) entries.push({ text: type === 'exercise_log' ? `● 消耗 ${Math.round(calories)}` : `● ${Math.round(calories)}`, color: '#00a873' })
-  if (numberFrom(record.total_protein) > 0) entries.push({ text: `● ${Math.round(numberFrom(record.total_protein))}g`, color: '#5c9ed4' })
-  if (numberFrom(record.total_carbs) > 0) entries.push({ text: `● ${Math.round(numberFrom(record.total_carbs))}g`, color: '#b88930' })
-  if (numberFrom(record.total_fat) > 0) entries.push({ text: `● ${Math.round(numberFrom(record.total_fat))}g`, color: '#e17e41' })
+  if (calories > 0) entries.push({ kind: 'calories', text: type === 'exercise_log' ? '消耗 ' + Math.round(calories) : String(Math.round(calories)), color: '#00a873' })
+  if (numberFrom(record.total_protein) > 0) entries.push({ kind: 'protein', text: String(Math.round(numberFrom(record.total_protein))) + 'g', color: '#5c9ed4' })
+  if (numberFrom(record.total_carbs) > 0) entries.push({ kind: 'carbs', text: String(Math.round(numberFrom(record.total_carbs))) + 'g', color: '#b88930' })
+  if (numberFrom(record.total_fat) > 0) entries.push({ kind: 'fat', text: String(Math.round(numberFrom(record.total_fat))) + 'g', color: '#e17e41' })
   return entries
 }
-
 function feedTitle(item: CommunityFeedItem): string {
   const record = item.record
   const type = normalizeTargetType(item.target_type || record?.feed_type)
@@ -727,6 +1088,26 @@ function compactRepeatedText(value: string): string {
   return text.replace(/(.{2,80})\1+/g, '$1').trim()
 }
 
+function feedItemKey(item: CommunityFeedItem): string {
+  return [item.target_type || item.record?.feed_type, item.target_id || item.record?.id].filter(Boolean).join(':')
+}
+
+function mergeFeedItems(previous: CommunityFeedItem[], nextItems: CommunityFeedItem[]): CommunityFeedItem[] {
+  const seen = new Set(previous.map(feedItemKey).filter(Boolean))
+  return [...previous, ...nextItems.filter((item) => {
+    const key = feedItemKey(item)
+    if (!key || seen.has(key)) return false
+    seen.add(key)
+    return true
+  })]
+}
+
+function apiErrorStatus(error: unknown): number {
+  if (!error || typeof error !== 'object') return 0
+  const value = Number((error as { status?: unknown }).status)
+  return Number.isFinite(value) ? value : 0
+}
+
 function normalizeTargetType(value: unknown): CommunityFeedTargetType {
   if (value === 'circle_post' || value === 'exercise_log' || value === 'campus_food') {
     return value
@@ -782,7 +1163,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   topEditButton: {
-    minHeight: 30,
+    minHeight: 44,
+    borderWidth: 1,
     borderRadius: 999,
     paddingHorizontal: 12,
     alignItems: 'center',
@@ -797,14 +1179,20 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   topIconButton: {
-    width: 30,
-    height: 30,
+    width: 44,
+    height: 44,
     borderRadius: 999,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(255, 255, 255, 0.16)',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.22)',
+  },
+  topActionPressed: {
+    opacity: 0.72,
+  },
+  cardPressed: {
+    opacity: 0.78,
   },
   profileRow: {
     flexDirection: 'row',
@@ -917,7 +1305,7 @@ const styles = StyleSheet.create({
   },
   profileActionButton: {
     flex: 1,
-    minHeight: 32,
+    minHeight: 44,
     borderRadius: 999,
     alignItems: 'center',
     justifyContent: 'center',
@@ -936,7 +1324,7 @@ const styles = StyleSheet.create({
   },
   profileActionButtonLight: {
     flex: 1,
-    minHeight: 32,
+    minHeight: 44,
     borderRadius: 999,
     alignItems: 'center',
     justifyContent: 'center',
@@ -949,7 +1337,7 @@ const styles = StyleSheet.create({
   },
   profileBlockButton: {
     flex: 1,
-    minHeight: 32,
+    minHeight: 44,
     borderRadius: 999,
     alignItems: 'center',
     justifyContent: 'center',
@@ -964,7 +1352,7 @@ const styles = StyleSheet.create({
   },
   profileBlockedPill: {
     flex: 1,
-    minHeight: 32,
+    minHeight: 44,
     borderRadius: 999,
     alignItems: 'center',
     justifyContent: 'center',
@@ -1051,8 +1439,10 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   deleteAccount: {
+    minHeight: 44,
     alignItems: 'center',
-    paddingTop: 10,
+    justifyContent: 'center',
+    paddingTop: 6,
   },
   deleteText: {
     color: colors.danger,
@@ -1251,7 +1641,8 @@ const styles = StyleSheet.create({
     marginTop: 3,
   },
   smallButton: {
-    minHeight: 34,
+    minHeight: 44,
+    borderWidth: 1,
     borderRadius: 999,
     paddingHorizontal: 12,
     alignItems: 'center',
@@ -1283,9 +1674,9 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   editSheetClose: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(15, 23, 42, 0.06)',
@@ -1380,6 +1771,223 @@ const styles = StyleSheet.create({
   },
   deleteDialogConfirmText: {
     color: '#fff',
+    fontWeight: '800',
+  },
+  fullState: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 28,
+    gap: 12,
+  },
+  errorIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  fullStateTitle: {
+    fontSize: 18,
+    lineHeight: 26,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  fullStateDescription: {
+    maxWidth: 320,
+    fontSize: 14,
+    lineHeight: 21,
+    textAlign: 'center',
+  },
+  retryButton: {
+    minHeight: 48,
+    marginTop: 4,
+    paddingHorizontal: 20,
+    borderRadius: 24,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  retryButtonText: {
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  actionDisabled: {
+    opacity: 0.48,
+  },
+  inlineError: {
+    minHeight: 52,
+    marginBottom: 8,
+    paddingLeft: 14,
+    paddingRight: 6,
+    borderWidth: 1,
+    borderRadius: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  inlineErrorText: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  inlineRetry: {
+    minWidth: 64,
+    minHeight: 44,
+    paddingHorizontal: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+  },
+  inlineRetryText: {
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  feedCardBody: {
+    minHeight: 48,
+  },
+  feedCardHeader: {
+    minHeight: 32,
+    marginBottom: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  feedMoreButton: {
+    width: 44,
+    height: 44,
+    marginTop: -6,
+    marginRight: -8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 22,
+  },
+  nutritionMetric: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  likeMetric: {
+    flexShrink: 0,
+    minHeight: 28,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  feedPagination: {
+    minHeight: 56,
+    paddingVertical: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadMoreButton: {
+    minWidth: 128,
+    minHeight: 44,
+    paddingHorizontal: 18,
+    borderWidth: 1,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadMoreText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  feedEndText: {
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  modalKeyboardAvoider: {
+    flex: 1,
+  },
+  reportSheet: {
+    width: '100%',
+    maxHeight: '92%',
+    overflow: 'hidden',
+    paddingTop: 7,
+    paddingHorizontal: 16,
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+  },
+  reportContentScroll: {
+    flexShrink: 1,
+    minHeight: 0,
+  },
+  reportContentContainer: {
+    paddingBottom: 2,
+  },  reportTargetTitle: {
+    marginTop: 3,
+    paddingRight: 12,
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  reportReasonList: {
+    gap: 8,
+  },
+  reportReason: {
+    minHeight: 48,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  reportRadio: {
+    width: 20,
+    height: 20,
+    borderWidth: 1.5,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  reportRadioDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  reportReasonText: {
+    flex: 1,
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '600',
+  },
+  reportInput: {
+    minHeight: 88,
+    marginTop: 10,
+    paddingTop: 12,
+    paddingBottom: 12,
+  },
+  reportActions: {
+    marginTop: 16,
+    flexDirection: 'row',
+    gap: 10,
+  },
+  reportCancel: {
+    flex: 1,
+    minHeight: 48,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  reportCancelText: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  reportSubmit: {
+    flex: 1,
+    minHeight: 48,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.danger,
+  },
+  reportSubmitText: {
+    color: '#fff',
+    fontSize: 14,
     fontWeight: '800',
   },
 })

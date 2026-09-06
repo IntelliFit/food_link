@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ActivityIndicator, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
+import { ActivityIndicator, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native'
 import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import Svg, { Circle } from 'react-native-svg'
@@ -14,15 +14,30 @@ import {
   type StatsSummary,
 } from '@food-link/core'
 import {
+  BrainCircuit,
+  ChartColumn,
+  Check,
+  ChevronDown,
+  ChevronUp,
+  CircleAlert,
+  Flame,
+  GlassWater,
+  HeartPulse,
+  LogIn,
+  Scale,
   Sparkles,
+  Target,
+  TrendingUp,
+  Utensils,
   type LucideIcon,
 } from 'lucide-react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { apiClient } from '../api'
-import { IconfontText } from '../components/Iconfont'
 import { InsightMarkdownView } from '../components/InsightMarkdownView'
 import type { RootStackParamList } from '../navigation/types'
 import { useAppDialog } from '../providers/DialogProvider'
+import { useAuth } from '../providers/AuthProvider'
+import { useColorScheme } from '../providers/ColorSchemeProvider'
 import { colors, compactFont, radius } from '../theme'
 import { userFacingErrorMessage } from '../utils/errors'
 
@@ -95,6 +110,78 @@ const mealColors: Record<MealKey, string> = {
   evening_snack: '#f0985c',
 }
 
+type StatsPalette = {
+  page: string
+  topWash: string
+  surface: string
+  surfaceRaised: string
+  surfaceMuted: string
+  border: string
+  text: string
+  textSecondary: string
+  textMuted: string
+  brand: string
+  brandText: string
+  brandSoft: string
+  blue: string
+  blueSoft: string
+  warning: string
+  warningSoft: string
+  danger: string
+  dangerSoft: string
+  chartTrack: string
+  scrim: string
+  shadow: string
+}
+
+const statsLightPalette: StatsPalette = {
+  page: colors.background,
+  topWash: 'rgba(92,184,150,0.08)',
+  surface: '#ffffff',
+  surfaceRaised: '#ffffff',
+  surfaceMuted: '#f8fafc',
+  border: 'rgba(148,163,184,0.18)',
+  text: '#1e2939',
+  textSecondary: '#64748b',
+  textMuted: '#94a3b8',
+  brand: colors.brand,
+  brandText: colors.brandDark,
+  brandSoft: colors.brandSoft,
+  blue: '#3d6b94',
+  blueSoft: 'rgba(92,158,212,0.12)',
+  warning: '#a6602c',
+  warningSoft: 'rgba(245,196,154,0.35)',
+  danger: '#b45353',
+  dangerSoft: '#fef2f2',
+  chartTrack: '#eef2f6',
+  scrim: 'rgba(0,0,0,0.52)',
+  shadow: '#0f172a',
+}
+
+const statsDarkPalette: StatsPalette = {
+  page: '#0d1312',
+  topWash: 'rgba(92,184,150,0.05)',
+  surface: '#181f1d',
+  surfaceRaised: '#1d2623',
+  surfaceMuted: '#202a27',
+  border: 'rgba(255,255,255,0.10)',
+  text: '#f2f7f4',
+  textSecondary: '#aab8b2',
+  textMuted: '#84958e',
+  brand: '#7dd3b0',
+  brandText: '#9fe3c5',
+  brandSoft: 'rgba(92,184,150,0.14)',
+  blue: '#93c5fd',
+  blueSoft: 'rgba(92,158,212,0.14)',
+  warning: '#f6c177',
+  warningSoft: 'rgba(240,152,92,0.14)',
+  danger: '#fda4af',
+  dangerSoft: 'rgba(239,68,68,0.12)',
+  chartTrack: 'rgba(255,255,255,0.10)',
+  scrim: 'rgba(0,0,0,0.64)',
+  shadow: '#000000',
+}
+
 function insightContent(result: StatsInsightResult): string {
   return normalizeInsightText(String(result.analysis_summary || result.content || ''))
 }
@@ -103,11 +190,14 @@ export function StatsScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const insets = useSafeAreaInsets()
   const dialog = useAppDialog()
+  const { isDark, palette, styles } = useStatsTheme()
+  const { isAuthenticated } = useAuth()
   const [range, setRange] = useState<StatsRange>('week')
   const [rangeSheetOpen, setRangeSheetOpen] = useState(false)
   const [panel, setPanel] = useState<AnalysisPanel>('health')
   const [summary, setSummary] = useState<ExtendedStatsSummary | null>(null)
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(isAuthenticated)
+  const [loadError, setLoadError] = useState('')
   const [insightLoading, setInsightLoading] = useState(false)
   const [insightError, setInsightError] = useState('')
   const [selectedRisk, setSelectedRisk] = useState<ExtendedRiskCard | null>(null)
@@ -122,16 +212,24 @@ export function StatsScreen() {
   const [customFocusNotice, setCustomFocusNotice] = useState('')
 
   const load = useCallback(async () => {
+    if (!isAuthenticated) {
+      setSummary(null)
+      setLoading(false)
+      setLoadError('')
+      setInsightError('')
+      return
+    }
     setLoading(true)
+    setLoadError('')
     setInsightError('')
     try {
       setSummary(await apiClient.getStatsSummary(range))
     } catch (error) {
-      void dialog.alert('获取分析失败', userFacingErrorMessage(error), 'danger')
+      setLoadError(userFacingErrorMessage(error, '饮食统计加载失败，请稍后重试。'))
     } finally {
       setLoading(false)
     }
-  }, [dialog, range])
+  }, [dialog, isAuthenticated, range])
 
   useEffect(() => {
     void load()
@@ -404,17 +502,77 @@ export function StatsScreen() {
     }
   }, [customFocusRemovingKey, dialog, selectedRisk?.key])
 
+  if (!isAuthenticated) {
+    return (
+      <View style={styles.page}>
+        <View style={styles.topWash} pointerEvents="none" />
+        <View style={[styles.guestWrap, { paddingTop: Math.max(insets.top + 72, 96), paddingBottom: insets.bottom + 110 }]}>
+          <View style={styles.guestCard} accessibilityRole="summary">
+            <View style={styles.guestIcon}>
+              <LogIn size={25} color={palette.brandText} strokeWidth={2.2} />
+            </View>
+            <Text style={styles.guestTitle}>登录后查看饮食分析</Text>
+            <Text style={styles.guestDesc}>可先浏览首页热量与营养概览，需要账号同步时再登录</Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="去登录查看饮食分析"
+              style={({ pressed }) => [styles.guestButton, pressed && styles.pressed]}
+              onPress={() => navigation.getParent()?.navigate('Login', { redirectTab: 'StatsTab' })}
+            >
+              <Text style={styles.guestButtonText}>去登录</Text>
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    )
+  }
+
+  if (loading && !summary) {
+    return (
+      <View style={styles.page}>
+        <View style={styles.topWash} pointerEvents="none" />
+        <View style={[styles.pageStateWrap, { paddingTop: insets.top + 64, paddingBottom: insets.bottom + 100 }]} accessibilityLabel="正在加载饮食统计">
+          <ActivityIndicator size="small" color={palette.brand} />
+        </View>
+      </View>
+    )
+  }
+
+  if (loadError && !summary) {
+    return (
+      <View style={styles.page}>
+        <View style={styles.topWash} pointerEvents="none" />
+        <View style={[styles.pageStateWrap, { paddingTop: insets.top + 64, paddingBottom: insets.bottom + 100 }]}>
+          <View style={styles.pageErrorCard} accessibilityRole="alert">
+            <View style={styles.pageErrorIcon}><CircleAlert size={28} color={palette.danger} strokeWidth={2} /></View>
+            <Text style={styles.pageErrorText}>{loadError}</Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="重新加载饮食统计"
+              style={({ pressed }) => [styles.pageRetryButton, pressed && styles.pressed]}
+              onPress={() => void load()}
+            >
+              <Text style={styles.pageRetryText}>重试</Text>
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    )
+  }
+
   return (
     <View style={styles.page}>
       <View style={styles.topWash} pointerEvents="none" />
       <Pressable
-        style={[styles.rangeDropdown, { top: Math.max(insets.top + 8, 18) }, loading && styles.rangeDropdownLoading]}
+        accessibilityRole="button"
+        accessibilityLabel={`统计周期，当前${range === 'week' ? '近一周' : '近一个月'}`}
+        accessibilityState={{ disabled: loading, expanded: rangeSheetOpen }}
+        disabled={loading}
+        style={({ pressed }) => [styles.rangeDropdown, { top: Math.max(insets.top + 8, 18) }, loading && styles.rangeDropdownLoading, pressed && !loading && styles.pressed]}
         onPress={() => setRangeSheetOpen(true)}
       >
         <Text style={styles.rangeDropdownLabel}>{range === 'week' ? '近一周' : '近一个月'}</Text>
-        <View style={{ transform: [{ rotate: '90deg' }] }}>
-          <IconfontText className="iconfont icon-right-arrow" size={14} color="#475569" />
-        </View>
+        <ChevronDown size={17} color={palette.textSecondary} strokeWidth={2.2} />
       </Pressable>
 
       <ScrollView
@@ -427,8 +585,17 @@ export function StatsScreen() {
           },
         ]}
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor={colors.brand} colors={[colors.brand]} />}
+        refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor={palette.brand} colors={[palette.brand]} progressBackgroundColor={palette.surface} />}
       >
+        {loadError ? (
+          <View style={styles.inlineErrorBanner} accessibilityRole="alert">
+            <CircleAlert size={20} color={palette.danger} strokeWidth={2.1} />
+            <Text style={styles.inlineErrorText}>{loadError}</Text>
+            <Pressable accessibilityRole="button" accessibilityLabel="重新加载饮食统计" style={({ pressed }) => [styles.inlineRetryButton, pressed && styles.pressed]} onPress={() => void load()}>
+              <Text style={styles.inlineRetryText}>重试</Text>
+            </Pressable>
+          </View>
+        ) : null}
         {hasEnoughHealthData ? (
           <>
             <View style={styles.riskOverviewCard}>
@@ -437,7 +604,7 @@ export function StatsScreen() {
                   <Text style={styles.riskOverviewTitle}>关注综合分</Text>
                   <Text style={styles.riskOverviewSubtitle}>当前周期 · {range === 'week' ? '最近 7 天' : '最近 30 天'}</Text>
                 </View>
-                <View style={[styles.riskOverviewBadge, toneBadgeStyle(scoreToTone(healthScore))]}>
+                <View style={[styles.riskOverviewBadge, toneBadgeStyle(scoreToTone(healthScore), isDark)]}>
                   <Text style={styles.riskOverviewBadgeText}>{scoreToLabel(healthScore)}</Text>
                 </View>
               </View>
@@ -467,7 +634,7 @@ export function StatsScreen() {
           </>
         ) : (
           <DataGateCard
-            iconClass="icon-shangzhang"
+            icon={TrendingUp}
             title="连续记录两天后显示健康指数"
             desc={`当前已记录 ${recordedDays} 天。请连续记录两天以上，我们会基于更稳定的饮食趋势展示你的健康参考指数。`}
           />
@@ -483,8 +650,12 @@ export function StatsScreen() {
             {analysisTabs.map((item) => (
               <Pressable
                 key={item.key}
-                style={({ pressed }) => [styles.segmentItem, panel === item.key && styles.segmentItemActive, pressed && styles.pressed]}
-                onPress={() => !loading && setPanel(item.key)}
+                accessibilityRole="tab"
+                accessibilityLabel={item.label}
+                accessibilityState={{ selected: panel === item.key, disabled: loading }}
+                disabled={loading}
+                style={({ pressed }) => [styles.segmentItem, panel === item.key && styles.segmentItemActive, pressed && !loading && styles.pressed]}
+                onPress={() => setPanel(item.key)}
               >
                 <Text style={[styles.segmentText, panel === item.key && styles.segmentTextActive]}>{item.label}</Text>
               </Pressable>
@@ -526,7 +697,7 @@ export function StatsScreen() {
         <View style={styles.moreCard}>
           <View style={styles.cardHeader}>
             <View style={styles.cardTitleGroup}>
-              <Sparkles size={19} color={colors.brandDark} strokeWidth={2.4} />
+              <Sparkles size={19} color={palette.brandText} strokeWidth={2.4} />
               <View>
                 <Text style={styles.cardTitle}>更多分析</Text>
                 <Text style={styles.cardSubtitle}>代谢和身体趋势</Text>
@@ -534,8 +705,8 @@ export function StatsScreen() {
             </View>
           </View>
           <View style={styles.toolGrid}>
-            <AnalysisTool iconClass="icon-shentinianling" label="代谢分析" onPress={() => navigation.navigate('StatsMetabolic')} />
-            <AnalysisTool iconClass="icon-shangzhang" label="身体趋势" onPress={() => navigation.navigate('BodyTrends')} />
+            <AnalysisTool icon={BrainCircuit} label="代谢分析" onPress={() => navigation.navigate('StatsMetabolic')} />
+            <AnalysisTool icon={TrendingUp} label="身体趋势" onPress={() => navigation.navigate('BodyTrends')} />
           </View>
         </View>
       </ScrollView>
@@ -591,6 +762,7 @@ function HealthPanel({
   onSelectRisk: (card: ExtendedRiskCard) => void
   onOpenFocus: () => void
 }) {
+  const { palette, styles } = useStatsTheme()
   return (
     <>
       <View style={styles.riskSectionHeader}>
@@ -601,7 +773,7 @@ function HealthPanel({
           style={({ pressed }) => [styles.riskFocusEditBtn, pressed && styles.pressed]}
           onPress={onOpenFocus}
         >
-          <IconfontText className="iconfont icon-target" size={14} color={colors.brandDark} />
+          <Target size={17} color={palette.brandText} strokeWidth={2.2} />
           <Text style={styles.riskFocusEditText}>我的关注</Text>
         </Pressable>
       </View>
@@ -635,19 +807,25 @@ function HealthPanel({
 }
 
 function RiskTile({ card, onPress }: { card: ExtendedRiskCard; onPress: () => void }) {
-  const iconClass = riskIconClass(card.key)
+  const { isDark, styles } = useStatsTheme()
+  const RiskIcon = riskIconComponent(card.key)
   return (
-    <Pressable style={({ pressed }) => [styles.riskTile, { backgroundColor: riskBgColor(card.key) }, pressed && styles.pressed]} onPress={onPress}>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${card.title}，${Math.round(card.score)}分，${card.brief || card.summary}`}
+      style={({ pressed }) => [styles.riskTile, { backgroundColor: riskBgColor(card.key, isDark) }, pressed && styles.pressed]}
+      onPress={onPress}
+    >
       <View style={styles.riskTileTop}>
-        <View style={[styles.riskIconCircle, { backgroundColor: riskIconBgColor(card.key) }]}>
-          <IconfontText className={`iconfont ${iconClass}`} size={19} color={riskIconColor(card.key)} />
+        <View style={[styles.riskIconCircle, { backgroundColor: riskIconBgColor(card.key, isDark) }]}>
+          <RiskIcon size={20} color={riskIconColor(card.key, isDark)} strokeWidth={2.1} />
         </View>
         <View style={styles.riskScoreWrap}>
           <Text style={styles.riskScore}>{Math.round(card.score)}</Text>
           <Text style={styles.riskScoreUnit}>分</Text>
         </View>
       </View>
-      <Text style={styles.riskTileTitle} numberOfLines={1}>{card.title}</Text>
+      <Text style={styles.riskTileTitle} numberOfLines={2}>{card.title}</Text>
       {card.is_custom ? (
         <View style={styles.riskTileAiRow}>
           <Text style={styles.riskTileAiBadge}>AI</Text>
@@ -676,12 +854,13 @@ function AiPanel({
   canUseStatsInsight: boolean
   onGenerate: () => void
 }) {
+  const { palette, styles } = useStatsTheme()
   const canGenerate = canUseStatsInsight && !insightLoading
   return (
     <View style={styles.aiCard}>
       <View style={styles.aiCardTop}>
         <View style={styles.cardTitleGroup}>
-          <IconfontText className="iconfont icon-yiliaohangyedeICON-" size={19} color="#3d6b94" />
+          <BrainCircuit size={20} color={palette.blue} strokeWidth={2.1} />
           <View style={styles.cardTitleCopy}>
             <Text style={styles.aiTitle}>AI 风险解读</Text>
             <Text style={styles.cardSubtitle}>按当前周期生成深度洞察</Text>
@@ -725,6 +904,9 @@ function AiPanel({
       )}
 
       <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={insightText ? '更新本周期 AI 风险解读' : '生成本周期 AI 风险解读'}
+        accessibilityState={{ disabled: !canGenerate, busy: insightLoading }}
         style={({ pressed }) => [styles.analysisAction, !canGenerate && styles.analysisActionDisabled, pressed && canGenerate && styles.pressed]}
         onPress={onGenerate}
         disabled={!canGenerate}
@@ -742,6 +924,9 @@ function AiPanel({
 }
 
 function StructurePanel({ summary, hasAnyDietData }: { summary: StatsSummary | null; hasAnyDietData: boolean }) {
+  const { palette, styles } = useStatsTheme()
+  const [expandedSections, setExpandedSections] = useState({ calories: true, macro: true, meals: true, body: true })
+  const [showCalories, setShowCalories] = useState(false)
   const chartDays = useMemo(() => {
     const days = summary?.range === 'month' ? 14 : 7
     return (summary?.daily_calories || []).slice(-days)
@@ -750,11 +935,14 @@ function StructurePanel({ summary, hasAnyDietData }: { summary: StatsSummary | n
   const macroPercent = buildMacroPercent(summary)
   const totalCalories = Math.max(0, Number(summary?.total_calories || 0))
   const byMeal = buildMealValues(summary)
+  const toggleSection = (key: keyof typeof expandedSections) => {
+    setExpandedSections((previous) => ({ ...previous, [key]: !previous[key] }))
+  }
 
   if (!hasAnyDietData) {
     return (
       <DataGateCard
-        iconClass="icon-rice"
+        icon={Utensils}
         title="记录饮食后查看营养结构"
         desc="当前统计周期还没有饮食记录。先记录一餐后，这里会展示热量趋势、宏量营养占比和餐次分布。"
       />
@@ -764,87 +952,137 @@ function StructurePanel({ summary, hasAnyDietData }: { summary: StatsSummary | n
   return (
     <>
       <View style={styles.statsCard}>
-        <View style={styles.collapsibleHeader}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="热量摄入趋势"
+          accessibilityState={{ expanded: expandedSections.calories }}
+          style={({ pressed }) => [styles.collapsibleHeader, !expandedSections.calories && styles.collapsibleHeaderCollapsed, pressed && styles.pressed]}
+          onPress={() => toggleSection('calories')}
+        >
           <View style={styles.cardTitleGroup}>
-            <IconfontText className="iconfont icon-huore" size={19} color={colors.brandDark} />
+            <Flame size={20} color={palette.brandText} strokeWidth={2.1} />
             <View style={styles.cardTitleCopy}>
               <Text style={styles.cardTitle}>热量摄入趋势</Text>
               <Text style={styles.cardSubtitle}>{summary?.range === 'month' ? '最近 14 天' : '最近 7 天'}摄入变化和超标情况</Text>
             </View>
           </View>
-          <IconfontText className="iconfont icon-right-arrow" size={18} color="#94a3b8" />
-        </View>
-        <View style={styles.barChartContainer}>
-          {chartDays.length > 0 ? chartDays.map((item) => (
-            <View key={item.date} style={styles.chartCol}>
-              <Text style={styles.barCalorieText} numberOfLines={1}>{Math.round(item.calories)}</Text>
-              <View style={styles.barWrapper}>
-                <View
-                  style={[
-                    styles.barFill,
-                    item.calories > (summary?.tdee || 0) && styles.barFillOver,
-                    { height: `${Math.max((Number(item.calories || 0) / maxDailyCalories) * 100, 10)}%` },
-                  ]}
-                />
-              </View>
-              <Text style={styles.barLabel}>{item.date.slice(5)}</Text>
+          {expandedSections.calories ? <ChevronUp size={21} color={palette.textMuted} /> : <ChevronDown size={21} color={palette.textMuted} />}
+        </Pressable>
+        {expandedSections.calories ? (
+          <View style={styles.collapsibleBody}>
+            <View style={styles.chartSwitchRow}>
+              <Text style={styles.chartSwitchLabel}>显示数值</Text>
+              <Switch
+                accessibilityLabel="显示热量数值"
+                value={showCalories}
+                onValueChange={setShowCalories}
+                trackColor={{ false: palette.chartTrack, true: palette.brandSoft }}
+                thumbColor={showCalories ? palette.brand : palette.textMuted}
+              />
             </View>
-          )) : (
-            <Text style={styles.emptyText}>暂无数据</Text>
-          )}
-        </View>
+            <View style={styles.barChartContainer} accessibilityLabel={`热量趋势，共 ${chartDays.length} 天`}>
+              {chartDays.length > 0 ? chartDays.map((item) => (
+                <View key={item.date} style={styles.chartCol} accessibilityLabel={`${item.date}，${Math.round(item.calories)}千卡`}>
+                  {showCalories ? <Text style={styles.barCalorieText} numberOfLines={1}>{Math.round(item.calories)}</Text> : null}
+                  <View style={styles.barWrapper}>
+                    <View
+                      style={[
+                        styles.barFill,
+                        item.calories > (summary?.tdee || 0) && styles.barFillOver,
+                        { height: `${Math.max((Number(item.calories || 0) / maxDailyCalories) * 100, 10)}%` },
+                      ]}
+                    />
+                  </View>
+                  <Text style={styles.barLabel}>{item.date.slice(5)}</Text>
+                </View>
+              )) : (
+                <Text style={styles.emptyText}>暂无数据</Text>
+              )}
+            </View>
+          </View>
+        ) : null}
       </View>
 
       <View style={styles.statsCard}>
-        <View style={styles.collapsibleHeader}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="宏量营养结构"
+          accessibilityState={{ expanded: expandedSections.macro }}
+          style={({ pressed }) => [styles.collapsibleHeader, !expandedSections.macro && styles.collapsibleHeaderCollapsed, pressed && styles.pressed]}
+          onPress={() => toggleSection('macro')}
+        >
           <View style={styles.cardTitleGroup}>
-            <IconfontText className="iconfont icon-zhuzhuangtu" size={19} color={colors.brandDark} />
+            <ChartColumn size={20} color={palette.brandText} strokeWidth={2.1} />
             <View style={styles.cardTitleCopy}>
               <Text style={styles.cardTitle}>宏量营养结构</Text>
               <Text style={styles.cardSubtitle}>蛋白质、碳水和脂肪的摄入占比</Text>
             </View>
           </View>
-          <IconfontText className="iconfont icon-right-arrow" size={18} color="#94a3b8" />
-        </View>
-        <MacroStat label="蛋白质" value={Math.round(summary?.total_protein || 0)} percent={macroPercent.protein} color="#5c9ed4" />
-        <MacroStat label="碳水化合物" value={Math.round(summary?.total_carbs || 0)} percent={macroPercent.carbs} color="#d4ac52" />
-        <MacroStat label="脂肪" value={Math.round(summary?.total_fat || 0)} percent={macroPercent.fat} color="#f0985c" />
+          {expandedSections.macro ? <ChevronUp size={21} color={palette.textMuted} /> : <ChevronDown size={21} color={palette.textMuted} />}
+        </Pressable>
+        {expandedSections.macro ? (
+          <View style={styles.collapsibleBody}>
+            <MacroStat label="蛋白质" value={Math.round(summary?.total_protein || 0)} percent={macroPercent.protein} color="#5c9ed4" />
+            <MacroStat label="碳水化合物" value={Math.round(summary?.total_carbs || 0)} percent={macroPercent.carbs} color="#d4ac52" />
+            <MacroStat label="脂肪" value={Math.round(summary?.total_fat || 0)} percent={macroPercent.fat} color="#f0985c" />
+          </View>
+        ) : null}
       </View>
 
       <View style={styles.statsCard}>
-        <View style={styles.collapsibleHeader}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="餐次热量分布"
+          accessibilityState={{ expanded: expandedSections.meals }}
+          style={({ pressed }) => [styles.collapsibleHeader, !expandedSections.meals && styles.collapsibleHeaderCollapsed, pressed && styles.pressed]}
+          onPress={() => toggleSection('meals')}
+        >
           <View style={styles.cardTitleGroup}>
-            <IconfontText className="iconfont icon-tubiao-zhuzhuangtu" size={19} color={colors.brandDark} />
+            <Utensils size={20} color={palette.brandText} strokeWidth={2.1} />
             <View style={styles.cardTitleCopy}>
               <Text style={styles.cardTitle}>餐次热量分布</Text>
               <Text style={styles.cardSubtitle}>早餐、午餐、晚餐和加餐的热量占比</Text>
             </View>
           </View>
-          <IconfontText className="iconfont icon-right-arrow" size={18} color="#94a3b8" />
-        </View>
-        <View style={styles.mealGaugeGrid}>
-          {mealOrder.map((key) => {
-            const calories = byMeal[key]
-            const percent = totalCalories > 0 ? (calories / totalCalories) * 100 : 0
-            return (
-              <MealGauge
-                key={key}
-                label={mealNames[key]}
-                calories={calories}
-                percent={percent}
-                color={mealColors[key]}
-              />
-            )
-          })}
-        </View>
+          {expandedSections.meals ? <ChevronUp size={21} color={palette.textMuted} /> : <ChevronDown size={21} color={palette.textMuted} />}
+        </Pressable>
+        {expandedSections.meals ? (
+          <View style={[styles.collapsibleBody, styles.mealGaugeGrid]}>
+            {mealOrder.map((key) => {
+              const calories = byMeal[key]
+              const percent = totalCalories > 0 ? (calories / totalCalories) * 100 : 0
+              return (
+                <MealGauge
+                  key={key}
+                  label={mealNames[key]}
+                  calories={calories}
+                  percent={percent}
+                  color={mealColors[key]}
+                />
+              )
+            })}
+          </View>
+        ) : null}
       </View>
 
-      <BodyMetricsCard bodyMetrics={summary?.body_metrics || null} />
+      <BodyMetricsCard
+        bodyMetrics={summary?.body_metrics || null}
+        expanded={expandedSections.body}
+        onToggle={() => toggleSection('body')}
+      />
     </>
   )
 }
-
-function BodyMetricsCard({ bodyMetrics }: { bodyMetrics: BodyMetricsSummary | null }) {
+function BodyMetricsCard({
+  bodyMetrics,
+  expanded,
+  onToggle,
+}: {
+  bodyMetrics: BodyMetricsSummary | null
+  expanded: boolean
+  onToggle: () => void
+}) {
+  const { palette, styles } = useStatsTheme()
   const latestWeight = bodyMetrics?.latest_weight || null
   const previousWeight = bodyMetrics?.previous_weight || null
   const weightChange = typeof bodyMetrics?.weight_change === 'number' ? bodyMetrics.weight_change : null
@@ -853,67 +1091,77 @@ function BodyMetricsCard({ bodyMetrics }: { bodyMetrics: BodyMetricsSummary | nu
 
   return (
     <View style={styles.statsCard}>
-      <View style={styles.collapsibleHeader}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="长期健康指标"
+        accessibilityState={{ expanded }}
+        style={({ pressed }) => [styles.collapsibleHeader, !expanded && styles.collapsibleHeaderCollapsed, pressed && styles.pressed]}
+        onPress={onToggle}
+      >
         <View style={styles.cardTitleGroup}>
-          <IconfontText className="iconfont icon-shangzhang" size={19} color={colors.brandDark} />
+          <TrendingUp size={20} color={palette.brandText} strokeWidth={2.1} />
           <View style={styles.cardTitleCopy}>
             <Text style={styles.cardTitle}>长期健康指标</Text>
             <Text style={styles.cardSubtitle}>体重趋势和喝水趋势</Text>
           </View>
         </View>
-        <IconfontText className="iconfont icon-right-arrow" size={18} color="#94a3b8" />
-      </View>
+        {expanded ? <ChevronUp size={21} color={palette.textMuted} /> : <ChevronDown size={21} color={palette.textMuted} />}
+      </Pressable>
 
-      <View style={styles.bodyMetricPanel}>
-        <View style={styles.bodyMetricPanelHeader}>
-          <View style={styles.bodyMetricTitleRow}>
-            <IconfontText className="iconfont icon-weight-scale" size={18} color={colors.brandDark} />
-            <Text style={styles.bodyMetricTitle}>体重趋势</Text>
-          </View>
-          {latestWeight ? (
-            <Text style={styles.bodyMetricMain}>{Number(latestWeight.value).toFixed(1)} kg</Text>
-          ) : (
-            <Text style={styles.bodyMetricEmpty}>还没有云端体重记录</Text>
-          )}
-        </View>
-        {latestWeight ? (
-          <Text style={styles.bodyMetricSub}>
-            {previousWeight && weightChange !== null
-              ? `${weightChange > 0 ? '+' : ''}${weightChange.toFixed(1)} kg，较上次`
-              : '已开始累计体重趋势'}
-          </Text>
-        ) : null}
-      </View>
-
-      <View style={[styles.bodyMetricPanel, styles.waterPanel]}>
-        <View style={styles.bodyMetricPanelHeader}>
-          <View style={styles.bodyMetricTitleRow}>
-            <IconfontText className="iconfont icon-drink" size={18} color="#5c9ed4" />
-            <Text style={styles.bodyMetricTitle}>喝水趋势</Text>
-          </View>
-          <Text style={styles.bodyMetricMain}>{Math.round(bodyMetrics?.avg_daily_water_ml || 0)} ml</Text>
-        </View>
-        <Text style={styles.bodyMetricSub}>
-          日均 {Math.round(bodyMetrics?.avg_daily_water_ml || 0)} ml，目标 {bodyMetrics?.water_goal_ml || 2000} ml，累计 {Math.round(bodyMetrics?.total_water_ml || 0)} ml
-        </Text>
-        {waterTrend.length > 0 ? (
-          <View style={styles.waterTrendChart}>
-            {waterTrend.map((item) => (
-              <View key={item.date} style={styles.waterTrendCol}>
-                <View style={styles.waterTrendBarWrap}>
-                  <View style={[styles.waterTrendBar, { height: `${Math.max((Number(item.total || 0) / maxWaterValue) * 100, 8)}%` }]} />
-                </View>
-                <Text style={styles.waterTrendLabel}>{item.date.slice(5)}</Text>
+      {expanded ? (
+        <View style={styles.collapsibleBody}>
+          <View style={styles.bodyMetricPanel} accessibilityLabel={latestWeight ? `当前体重 ${Number(latestWeight.value).toFixed(1)} 千克` : '还没有云端体重记录'}>
+            <View style={styles.bodyMetricPanelHeader}>
+              <View style={styles.bodyMetricTitleRow}>
+                <Scale size={19} color={palette.brandText} strokeWidth={2.1} />
+                <Text style={styles.bodyMetricTitle}>体重趋势</Text>
               </View>
-            ))}
+              {latestWeight ? (
+                <Text style={styles.bodyMetricMain}>{Number(latestWeight.value).toFixed(1)} kg</Text>
+              ) : (
+                <Text style={styles.bodyMetricEmpty}>还没有云端体重记录</Text>
+              )}
+            </View>
+            {latestWeight ? (
+              <Text style={styles.bodyMetricSub}>
+                {previousWeight && weightChange !== null
+                  ? `${weightChange > 0 ? '+' : ''}${weightChange.toFixed(1)} kg，较上次`
+                  : '已开始累计体重趋势'}
+              </Text>
+            ) : null}
           </View>
-        ) : null}
-      </View>
+
+          <View style={[styles.bodyMetricPanel, styles.waterPanel]} accessibilityLabel={`日均饮水 ${Math.round(bodyMetrics?.avg_daily_water_ml || 0)} 毫升`}>
+            <View style={styles.bodyMetricPanelHeader}>
+              <View style={styles.bodyMetricTitleRow}>
+                <GlassWater size={19} color={palette.blue} strokeWidth={2.1} />
+                <Text style={styles.bodyMetricTitle}>喝水趋势</Text>
+              </View>
+              <Text style={styles.bodyMetricMain}>{Math.round(bodyMetrics?.avg_daily_water_ml || 0)} ml</Text>
+            </View>
+            <Text style={styles.bodyMetricSub}>
+              日均 {Math.round(bodyMetrics?.avg_daily_water_ml || 0)} ml，目标 {bodyMetrics?.water_goal_ml || 2000} ml，累计 {Math.round(bodyMetrics?.total_water_ml || 0)} ml
+            </Text>
+            {waterTrend.length > 0 ? (
+              <View style={styles.waterTrendChart}>
+                {waterTrend.map((item) => (
+                  <View key={item.date} style={styles.waterTrendCol} accessibilityLabel={`${item.date}，${Math.round(Number(item.total || 0))} 毫升`}>
+                    <View style={styles.waterTrendBarWrap}>
+                      <View style={[styles.waterTrendBar, { height: `${Math.max((Number(item.total || 0) / maxWaterValue) * 100, 8)}%` }]} />
+                    </View>
+                    <Text style={styles.waterTrendLabel}>{item.date.slice(5)}</Text>
+                  </View>
+                ))}
+              </View>
+            ) : null}
+          </View>
+        </View>
+      ) : null}
     </View>
   )
 }
-
 function MacroStat({ label, value, percent, color }: { label: string; value: number; percent: number; color: string }) {
+  const { styles } = useStatsTheme()
   return (
     <View style={styles.macroRow}>
       <View style={styles.macroInfo}>
@@ -928,11 +1176,12 @@ function MacroStat({ label, value, percent, color }: { label: string; value: num
 }
 
 function MealGauge({ label, calories, percent, color }: { label: string; calories: number; percent: number; color: string }) {
+  const { styles } = useStatsTheme()
   return (
     <View style={styles.mealGaugeItem}>
       <View style={styles.mealGaugeLeft}>
         <View style={[styles.mealGaugeIconWrap, { backgroundColor: `${color}18` }]}>
-          <IconfontText className="iconfont icon-rice" size={14} color={color} />
+          <Utensils size={15} color={color} strokeWidth={2.1} />
         </View>
         <Text style={styles.mealGaugeLabel}>{label}</Text>
         <Text style={[styles.mealGaugePercent, { color }]}>{percent.toFixed(1)}%</Text>
@@ -948,6 +1197,7 @@ function MealGauge({ label, calories, percent, color }: { label: string; calorie
 }
 
 function RingProgress({ progress, color }: { progress: number; color: string }) {
+  const { palette } = useStatsTheme()
   const size = 58
   const stroke = 7
   const r = (size - stroke) / 2
@@ -955,7 +1205,7 @@ function RingProgress({ progress, color }: { progress: number; color: string }) 
   const safeProgress = Math.max(0, Math.min(1, Number.isFinite(progress) ? progress : 0))
   return (
     <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-      <Circle cx={size / 2} cy={size / 2} r={r} stroke="#f0f0f0" strokeWidth={stroke} fill="none" />
+      <Circle cx={size / 2} cy={size / 2} r={r} stroke={palette.chartTrack} strokeWidth={stroke} fill="none" />
       <Circle
         cx={size / 2}
         cy={size / 2}
@@ -973,11 +1223,12 @@ function RingProgress({ progress, color }: { progress: number; color: string }) 
   )
 }
 
-function DataGateCard({ iconClass, title, desc }: { iconClass: string; title: string; desc: string }) {
+function DataGateCard({ icon: Icon, title, desc }: { icon: LucideIcon; title: string; desc: string }) {
+  const { palette, styles } = useStatsTheme()
   return (
-    <View style={styles.dataGateCard}>
+    <View style={styles.dataGateCard} accessibilityRole="summary">
       <View style={styles.dataGateIcon}>
-        <IconfontText className={`iconfont ${iconClass}`} size={24} color="#5c9ed4" />
+        <Icon size={25} color={palette.blue} strokeWidth={2} />
       </View>
       <View style={styles.dataGateCopy}>
         <Text style={styles.dataGateTitle}>{title}</Text>
@@ -987,10 +1238,11 @@ function DataGateCard({ iconClass, title, desc }: { iconClass: string; title: st
   )
 }
 
-function AnalysisTool({ iconClass, label, onPress }: { iconClass: string; label: string; onPress: () => void }) {
+function AnalysisTool({ icon: Icon, label, onPress }: { icon: LucideIcon; label: string; onPress: () => void }) {
+  const { palette, styles } = useStatsTheme()
   return (
-    <Pressable style={({ pressed }) => [styles.toolChip, pressed && styles.pressed]} onPress={onPress}>
-      <IconfontText className={`iconfont ${iconClass}`} size={17} color={colors.brandDark} />
+    <Pressable accessibilityRole="button" accessibilityLabel={label} style={({ pressed }) => [styles.toolChip, pressed && styles.pressed]} onPress={onPress}>
+      <Icon size={18} color={palette.brandText} strokeWidth={2.1} />
       <Text style={styles.toolChipText}>{label}</Text>
     </Pressable>
   )
@@ -1008,6 +1260,7 @@ function RangeSheet({
   onSelect: (range: StatsRange) => void
 }) {
   const insets = useSafeAreaInsets()
+  const { palette, styles } = useStatsTheme()
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable style={styles.sheetBackdrop} onPress={onClose}>
@@ -1018,6 +1271,9 @@ function RangeSheet({
             {rangeOptions.map((item) => (
               <Pressable
                 key={item.key}
+                accessibilityRole="radio"
+                accessibilityLabel={`${item.label}，${item.helper}`}
+                accessibilityState={{ checked: current === item.key }}
                 style={({ pressed }) => [styles.rangeSheetRow, current === item.key && styles.rangeSheetRowActive, pressed && styles.pressed]}
                 onPress={() => onSelect(item.key)}
               >
@@ -1025,7 +1281,7 @@ function RangeSheet({
                   <Text style={[styles.rangeSheetLabel, current === item.key && styles.rangeSheetLabelActive]}>{item.label}</Text>
                   <Text style={styles.rangeSheetHelper}>{item.helper}</Text>
                 </View>
-                {current === item.key ? <Text style={styles.rangeSheetCheck}>已选</Text> : null}
+                {current === item.key ? <View style={styles.rangeSheetCheckWrap}><Check size={17} color={palette.brandText} strokeWidth={2.4} /><Text style={styles.rangeSheetCheck}>已选</Text></View> : null}
               </Pressable>
             ))}
           </View>
@@ -1069,6 +1325,7 @@ function RiskFocusSheet({
   onClose: () => void
 }) {
   const insets = useSafeAreaInsets()
+  const { palette, styles } = useStatsTheme()
   const canSubmit = Boolean(customFocusInput.trim()) && !customFocusAdding
 
   return (
@@ -1097,7 +1354,7 @@ function RiskFocusSheet({
               value={customFocusInput}
               maxLength={12}
               placeholder="添加你关心的方向，如控尿酸"
-              placeholderTextColor="#94a3b8"
+              placeholderTextColor={palette.textMuted}
               returnKeyType="done"
               editable={!customFocusAdding}
               onChangeText={onInputChange}
@@ -1161,11 +1418,11 @@ function RiskFocusSheet({
                   }}
                 >
                   <View style={styles.riskFocusChipTitleRow}>
-                    <Text style={[styles.riskFocusChipTitle, active && styles.riskFocusChipTitleActive]} numberOfLines={1}>
+                    <Text style={[styles.riskFocusChipTitle, active && styles.riskFocusChipTitleActive]} numberOfLines={2}>
                       {option.title}
                     </Text>
                     {option.is_custom ? <Text style={styles.riskFocusChipAi}>AI</Text> : null}
-                    {removing ? <ActivityIndicator size="small" color={colors.brandDark} /> : null}
+                    {removing ? <ActivityIndicator size="small" color={palette.brandText} /> : null}
                   </View>
                   <Text style={styles.riskFocusChipAction}>
                     {option.is_custom
@@ -1177,7 +1434,7 @@ function RiskFocusSheet({
             })}
           </ScrollView>
 
-          <Pressable style={({ pressed }) => [styles.riskFocusDoneButton, pressed && styles.pressed]} onPress={onClose}>
+          <Pressable accessibilityRole="button" accessibilityLabel="完成健康关注选择" style={({ pressed }) => [styles.riskFocusDoneButton, pressed && styles.pressed]} onPress={onClose}>
             <Text style={styles.riskFocusDoneText}>完成</Text>
           </Pressable>
         </Pressable>
@@ -1198,6 +1455,7 @@ function RiskDetailSheet({
   onClose: () => void
 }) {
   const insets = useSafeAreaInsets()
+  const { isDark, palette, styles } = useStatsTheme()
   return (
     <Modal visible={Boolean(card)} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable style={styles.sheetBackdrop} onPress={onClose}>
@@ -1213,7 +1471,7 @@ function RiskDetailSheet({
                 <View style={styles.riskDetailScoreRow}>
                   <Text style={styles.riskDetailScore}>{Math.round(card.score)}</Text>
                   <Text style={styles.riskDetailScoreUnit}>分</Text>
-                  <View style={[styles.riskDetailBadge, toneBadgeStyle(card.tone)]}>
+                  <View style={[styles.riskDetailBadge, toneBadgeStyle(card.tone, isDark)]}>
                     <Text style={styles.riskDetailBadgeText}>{scoreToLabel(card.score)}</Text>
                   </View>
                 </View>
@@ -1244,13 +1502,13 @@ function RiskDetailSheet({
                   onPress={() => onRefresh(card)}
                 >
                   {refreshing ? (
-                    <ActivityIndicator size="small" color={colors.brandDark} />
+                    <ActivityIndicator size="small" color={palette.brandText} />
                   ) : (
                     <Text style={styles.riskDetailRefreshText}>手动更新 AI 卡片</Text>
                   )}
                 </Pressable>
               ) : null}
-              <Pressable style={({ pressed }) => [styles.riskDetailCloseBtn, pressed && styles.pressed]} onPress={onClose}>
+              <Pressable accessibilityRole="button" accessibilityLabel="关闭健康指标详情" style={({ pressed }) => [styles.riskDetailCloseBtn, pressed && styles.pressed]} onPress={onClose}>
                 <Text style={styles.riskDetailCloseText}>知道了</Text>
               </Pressable>
             </>
@@ -1451,15 +1709,22 @@ function clampPercent(value: number): number {
   return Math.max(0, Math.min(100, Number.isFinite(value) ? value : 0))
 }
 
-function riskIconClass(key: string): string {
-  if (key.includes('diabetes') || key.includes('sugar')) return 'icon-zhuzhuangtu'
-  if (key.includes('cardio') || key.includes('heart')) return 'icon-yiliaohangyedeICON-'
-  if (key.includes('weight')) return 'icon-weight-scale'
-  if (key.includes('protein') || key.includes('calorie')) return 'icon-huore'
-  return 'icon-target'
+function riskIconComponent(key: string): LucideIcon {
+  if (key.includes('diabetes') || key.includes('sugar')) return ChartColumn
+  if (key.includes('cardio') || key.includes('heart') || key.includes('hypertension')) return HeartPulse
+  if (key.includes('weight')) return Scale
+  if (key.includes('protein') || key.includes('calorie')) return Flame
+  return Target
 }
 
-function riskBgColor(key: string): string {
+function riskBgColor(key: string, isDark: boolean): string {
+  if (isDark) {
+    if (key.includes('hypertension')) return 'rgba(196,92,92,0.13)'
+    if (key.includes('diabetes')) return 'rgba(90,155,199,0.13)'
+    if (key.includes('cardio')) return 'rgba(201,150,92,0.13)'
+    if (key.includes('weight')) return 'rgba(90,168,110,0.13)'
+    return 'rgba(92,184,150,0.12)'
+  }
   if (key.includes('hypertension')) return '#fff7f7'
   if (key.includes('diabetes')) return '#f4f8fe'
   if (key.includes('cardio')) return '#fff8ef'
@@ -1467,7 +1732,14 @@ function riskBgColor(key: string): string {
   return '#f4fbf8'
 }
 
-function riskIconBgColor(key: string): string {
+function riskIconBgColor(key: string, isDark: boolean): string {
+  if (isDark) {
+    if (key.includes('hypertension')) return 'rgba(248,113,113,0.18)'
+    if (key.includes('diabetes')) return 'rgba(96,165,250,0.18)'
+    if (key.includes('cardio')) return 'rgba(251,191,36,0.17)'
+    if (key.includes('weight')) return 'rgba(74,222,128,0.17)'
+    return 'rgba(125,211,176,0.16)'
+  }
   if (key.includes('hypertension')) return '#fbe4e4'
   if (key.includes('diabetes')) return '#e2effb'
   if (key.includes('cardio')) return '#ffecd8'
@@ -1475,25 +1747,130 @@ function riskIconBgColor(key: string): string {
   return '#dff4ed'
 }
 
-function riskIconColor(key: string): string {
-  if (key.includes('hypertension')) return '#c45c5c'
-  if (key.includes('diabetes')) return '#5a9bc7'
-  if (key.includes('cardio')) return '#c9965c'
-  if (key.includes('weight')) return '#5aa86e'
-  return colors.brandDark
+function riskIconColor(key: string, isDark: boolean): string {
+  if (key.includes('hypertension')) return isDark ? '#fca5a5' : '#c45c5c'
+  if (key.includes('diabetes')) return isDark ? '#93c5fd' : '#5a9bc7'
+  if (key.includes('cardio')) return isDark ? '#f6c177' : '#c9965c'
+  if (key.includes('weight')) return isDark ? '#86efac' : '#5aa86e'
+  return isDark ? '#9fe3c5' : colors.brandDark
 }
 
-function toneBadgeStyle(tone: RiskCard['tone']) {
-  if (tone === 'danger') return styles.toneDanger
-  if (tone === 'warning') return styles.toneWarning
-  if (tone === 'positive') return styles.tonePositive
-  return styles.toneNeutral
+function toneBadgeStyle(tone: RiskCard['tone'], isDark: boolean) {
+  if (tone === 'danger') return { backgroundColor: isDark ? 'rgba(248,113,113,0.18)' : 'rgba(248,113,113,0.18)' }
+  if (tone === 'warning') return { backgroundColor: isDark ? 'rgba(251,191,36,0.20)' : 'rgba(251,191,36,0.20)' }
+  if (tone === 'positive') return { backgroundColor: isDark ? 'rgba(74,222,128,0.18)' : 'rgba(134,239,172,0.18)' }
+  return { backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(148,163,184,0.12)' }
 }
-
-const styles = StyleSheet.create({
+function createStatsStyles(palette: StatsPalette, isDark: boolean) {
+  return StyleSheet.create({
   page: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: palette.page,
+  },
+  pageStateWrap: {
+    flex: 1,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pageErrorCard: {
+    width: '100%',
+    maxWidth: 520,
+    alignItems: 'center',
+    paddingHorizontal: 22,
+    paddingVertical: 28,
+    borderRadius: 20,
+    backgroundColor: palette.surface,
+    borderWidth: 1,
+    borderColor: palette.border,
+  },
+  pageErrorIcon: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: palette.dangerSoft,
+  },
+  pageErrorText: {
+    marginTop: 14,
+    color: palette.textSecondary,
+    fontSize: compactFont(14, 13),
+    lineHeight: 21,
+    textAlign: 'center',
+  },
+  pageRetryButton: {
+    minWidth: 132,
+    minHeight: 48,
+    marginTop: 20,
+    paddingHorizontal: 22,
+    borderRadius: radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.brand,
+  },
+  pageRetryText: {
+    color: '#fff',
+    fontSize: compactFont(14, 13),
+    fontWeight: '900',
+  },
+  guestWrap: {
+    flex: 1,
+    paddingHorizontal: 20,
+    justifyContent: 'flex-start',
+  },
+  guestCard: {
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 34,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(92,184,150,0.2)',
+    backgroundColor: palette.surface,
+    shadowColor: palette.shadow,
+    shadowOpacity: 0.06,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 7 },
+    elevation: 2,
+  },
+  guestIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 18,
+    backgroundColor: palette.brandSoft,
+  },
+  guestTitle: {
+    color: palette.text,
+    fontSize: 20,
+    lineHeight: 28,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  guestDesc: {
+    marginTop: 9,
+    color: palette.textSecondary,
+    fontSize: 14,
+    lineHeight: 21,
+    textAlign: 'center',
+  },
+  guestButton: {
+    minWidth: 136,
+    minHeight: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 24,
+    paddingHorizontal: 24,
+    borderRadius: radius.pill,
+    backgroundColor: colors.brand,
+  },
+  guestButtonText: {
+    color: '#fff',
+    fontSize: 15,
+    lineHeight: 20,
+    fontWeight: '800',
   },
   topWash: {
     position: 'absolute',
@@ -1501,7 +1878,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     height: 260,
-    backgroundColor: 'rgba(92,184,150,0.08)',
+    backgroundColor: palette.topWash,
   },
   scroll: {
     flex: 1,
@@ -1513,18 +1890,18 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 16,
     zIndex: 30,
-    minWidth: 78,
-    height: 32,
+    minWidth: 96,
+    height: 48,
     paddingHorizontal: 12,
     borderRadius: radius.pill,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 5,
-    backgroundColor: 'rgba(255,255,255,0.78)',
+    backgroundColor: palette.surfaceRaised,
     borderWidth: 1,
-    borderColor: 'rgba(148,163,184,0.18)',
-    shadowColor: '#0f172a',
+    borderColor: palette.border,
+    shadowColor: palette.shadow,
     shadowOpacity: 0.06,
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 4 },
@@ -1537,7 +1914,41 @@ const styles = StyleSheet.create({
     fontSize: compactFont(14, 13),
     lineHeight: 18,
     fontWeight: '800',
-    color: '#1e2939',
+    color: palette.text,
+  },
+  inlineErrorBanner: {
+    marginHorizontal: 16,
+    marginBottom: 12,
+    minHeight: 56,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 9,
+    backgroundColor: palette.dangerSoft,
+    borderWidth: 1,
+    borderColor: isDark ? 'rgba(253,164,175,0.24)' : 'rgba(245,212,212,0.90)',
+  },
+  inlineErrorText: {
+    flex: 1,
+    color: palette.danger,
+    fontSize: compactFont(12, 11),
+    lineHeight: 18,
+  },
+  inlineRetryButton: {
+    minWidth: 64,
+    minHeight: 48,
+    paddingHorizontal: 12,
+    borderRadius: radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: palette.surfaceRaised,
+  },
+  inlineRetryText: {
+    color: palette.danger,
+    fontSize: compactFont(12, 11),
+    fontWeight: '900',
   },
   riskOverviewCard: {
     marginHorizontal: 16,
@@ -1617,11 +2028,13 @@ const styles = StyleSheet.create({
   },
   riskOverviewChipRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 10,
     marginTop: 15,
   },
   riskOverviewChip: {
-    flex: 1,
+    flexGrow: 1,
+    flexBasis: '46%',
     minWidth: 0,
   },
   riskOverviewChipLabel: {
@@ -1646,7 +2059,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: 'rgba(92,184,150,0.12)',
+    backgroundColor: palette.brandSoft,
     borderWidth: 1,
     borderColor: 'rgba(92,184,150,0.20)',
   },
@@ -1658,7 +2071,7 @@ const styles = StyleSheet.create({
   },
   disclaimerText: {
     flex: 1,
-    color: '#2f7f62',
+    color: palette.brandText,
     fontSize: compactFont(12, 11),
     lineHeight: 17,
     fontWeight: '800',
@@ -1681,7 +2094,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 12,
-    backgroundColor: '#fff',
+    backgroundColor: palette.surface,
     borderWidth: 1,
     borderColor: 'rgba(92,184,150,0.16)',
   },
@@ -1691,21 +2104,21 @@ const styles = StyleSheet.create({
     borderRadius: 13,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(92,158,212,0.12)',
+    backgroundColor: palette.blueSoft,
   },
   dataGateCopy: {
     flex: 1,
     minWidth: 0,
   },
   dataGateTitle: {
-    color: colors.text,
+    color: palette.text,
     fontSize: compactFont(16, 15),
     lineHeight: 21,
     fontWeight: '800',
     marginBottom: 6,
   },
   dataGateDesc: {
-    color: '#64748b',
+    color: palette.textSecondary,
     fontSize: compactFont(13, 12),
     lineHeight: 19,
   },
@@ -1720,9 +2133,9 @@ const styles = StyleSheet.create({
     gap: 4,
     borderRadius: 14,
     padding: 4,
-    backgroundColor: 'rgba(255,255,255,0.62)',
+    backgroundColor: palette.surfaceMuted,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.60)',
+    borderColor: palette.border,
   },
   segmentedLoading: {
     opacity: 0.88,
@@ -1735,26 +2148,26 @@ const styles = StyleSheet.create({
   },
   segmentItem: {
     flex: 1,
-    minHeight: 36,
+    minHeight: 48,
     borderRadius: 11,
     alignItems: 'center',
     justifyContent: 'center',
   },
   segmentItemActive: {
-    backgroundColor: '#fff',
-    shadowColor: '#0f172a',
+    backgroundColor: palette.surface,
+    shadowColor: palette.shadow,
     shadowOpacity: 0.05,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 3 },
     elevation: 1,
   },
   segmentText: {
-    color: '#64748b',
+    color: palette.textSecondary,
     fontSize: compactFont(13, 12),
     fontWeight: '800',
   },
   segmentTextActive: {
-    color: colors.brandDark,
+    color: palette.brandText,
   },
   riskSectionHeader: {
     marginHorizontal: 16,
@@ -1764,27 +2177,28 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   riskSectionTitle: {
-    color: '#1e2939',
+    color: palette.text,
     fontSize: compactFont(17, 16),
     lineHeight: 22,
     fontWeight: '900',
   },
   riskFocusEditBtn: {
+    minHeight: 48,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
     paddingHorizontal: 11,
     paddingVertical: 7,
     borderRadius: radius.pill,
-    backgroundColor: '#fff',
-    shadowColor: '#0f172a',
+    backgroundColor: palette.surface,
+    shadowColor: palette.shadow,
     shadowOpacity: 0.05,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 3 },
     elevation: 1,
   },
   riskFocusEditText: {
-    color: colors.brandDark,
+    color: palette.brandText,
     fontSize: compactFont(12, 11),
     fontWeight: '900',
   },
@@ -1802,8 +2216,8 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 13,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.82)',
-    shadowColor: '#0f172a',
+    borderColor: palette.border,
+    shadowColor: palette.shadow,
     shadowOpacity: 0.04,
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 4 },
@@ -1828,18 +2242,18 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   riskScore: {
-    color: '#1e2939',
+    color: palette.text,
     fontSize: 24,
     lineHeight: 28,
     fontWeight: '900',
   },
   riskScoreUnit: {
-    color: '#64748b',
+    color: palette.textSecondary,
     fontSize: 11,
     fontWeight: '800',
   },
   riskTileTitle: {
-    color: '#1e2939',
+    color: palette.text,
     fontSize: compactFont(14, 13),
     lineHeight: 18,
     fontWeight: '900',
@@ -1862,14 +2276,14 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
   riskTileRefreshHint: {
-    color: '#c07840',
+    color: palette.warning,
     fontSize: compactFont(10, 9),
     lineHeight: 14,
     fontWeight: '800',
   },
   riskTileSummary: {
     marginTop: 7,
-    color: '#64748b',
+    color: palette.textSecondary,
     fontSize: compactFont(12, 11),
     lineHeight: 17,
   },
@@ -1878,23 +2292,23 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     padding: 16,
     borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.94)',
+    backgroundColor: palette.surface,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.80)',
-    shadowColor: '#0f172a',
+    borderColor: palette.border,
+    shadowColor: palette.shadow,
     shadowOpacity: 0.04,
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 4 },
     elevation: 1,
   },
   emptyTitle: {
-    color: colors.text,
+    color: palette.text,
     fontSize: compactFont(15, 14),
     fontWeight: '900',
     marginBottom: 5,
   },
   emptyText: {
-    color: '#64748b',
+    color: palette.textSecondary,
     fontSize: compactFont(13, 12),
     lineHeight: 18,
   },
@@ -1903,12 +2317,12 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     padding: 16,
     borderRadius: 16,
-    backgroundColor: '#fff',
+    backgroundColor: palette.surface,
     borderWidth: 1,
     borderColor: 'rgba(92,184,150,0.16)',
   },
   actionPlanTitle: {
-    color: colors.text,
+    color: palette.text,
     fontSize: compactFont(15, 14),
     fontWeight: '900',
     marginBottom: 8,
@@ -1925,14 +2339,14 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     textAlign: 'center',
     lineHeight: 21,
-    color: colors.brandDark,
-    backgroundColor: colors.brandSoft,
+    color: palette.brandText,
+    backgroundColor: palette.brandSoft,
     fontSize: 11,
     fontWeight: '900',
   },
   actionPlanText: {
     flex: 1,
-    color: '#64748b',
+    color: palette.textSecondary,
     fontSize: compactFont(13, 12),
     lineHeight: 19,
   },
@@ -1941,7 +2355,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     padding: 16,
     borderRadius: 16,
-    backgroundColor: '#fff',
+    backgroundColor: palette.surface,
     borderWidth: 1,
     borderColor: 'rgba(92,158,212,0.14)',
   },
@@ -1964,20 +2378,20 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   aiTitle: {
-    color: '#3d6b94',
+    color: palette.blue,
     fontSize: compactFont(16, 15),
     lineHeight: 21,
     fontWeight: '900',
   },
   cardTitle: {
-    color: '#1e2939',
+    color: palette.text,
     fontSize: compactFont(16, 15),
     lineHeight: 21,
     fontWeight: '900',
   },
   cardSubtitle: {
     marginTop: 3,
-    color: '#94a3b8',
+    color: palette.textMuted,
     fontSize: compactFont(11, 10),
     lineHeight: 15,
     fontWeight: '700',
@@ -1988,8 +2402,8 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
     borderRadius: radius.pill,
     overflow: 'hidden',
-    color: '#3d6b94',
-    backgroundColor: 'rgba(92,158,212,0.12)',
+    color: palette.blue,
+    backgroundColor: palette.blueSoft,
     fontSize: 11,
     fontWeight: '900',
   },
@@ -1997,12 +2411,12 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     padding: 11,
     borderRadius: 12,
-    backgroundColor: 'rgba(245,196,154,0.35)',
+    backgroundColor: palette.warningSoft,
     borderWidth: 1,
     borderColor: 'rgba(240,152,92,0.22)',
   },
   analysisStatusText: {
-    color: '#475569',
+    color: palette.textSecondary,
     fontSize: compactFont(12, 11),
     lineHeight: 17,
   },
@@ -2010,12 +2424,12 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     padding: 11,
     borderRadius: 12,
-    backgroundColor: 'rgba(254,248,248,0.96)',
+    backgroundColor: palette.dangerSoft,
     borderWidth: 1,
     borderColor: 'rgba(245,212,212,0.90)',
   },
   analysisErrorText: {
-    color: '#b45353',
+    color: palette.danger,
     fontSize: compactFont(12, 11),
     lineHeight: 17,
   },
@@ -2027,14 +2441,14 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(92,158,212,0.14)',
   },
   analysisEmptyTitle: {
-    color: '#1e2939',
+    color: palette.text,
     fontSize: compactFont(14, 13),
     lineHeight: 19,
     fontWeight: '900',
     marginBottom: 6,
   },
   analysisEmptyText: {
-    color: '#475569',
+    color: palette.textSecondary,
     fontSize: compactFont(13, 12),
     lineHeight: 19,
   },
@@ -2068,7 +2482,7 @@ const styles = StyleSheet.create({
   },
   analysisAction: {
     marginTop: 14,
-    minHeight: 42,
+    minHeight: 48,
     borderRadius: radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
@@ -2083,11 +2497,31 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
   collapsibleHeader: {
+    minHeight: 48,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 10,
     marginBottom: 15,
+  },
+  collapsibleHeaderCollapsed: {
+    marginBottom: 0,
+  },
+  collapsibleBody: {
+    gap: 2,
+  },
+  chartSwitchRow: {
+    minHeight: 48,
+    marginBottom: 10,
+    paddingHorizontal: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  chartSwitchLabel: {
+    color: palette.textSecondary,
+    fontSize: compactFont(13, 12),
+    fontWeight: '800',
   },
   barChartContainer: {
     minHeight: 168,
@@ -2103,7 +2537,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   barCalorieText: {
-    color: '#64748b',
+    color: palette.textSecondary,
     fontSize: 10,
     lineHeight: 13,
     fontWeight: '800',
@@ -2115,7 +2549,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     padding: 3,
     borderRadius: 14,
-    backgroundColor: 'rgba(226,232,240,0.50)',
+    backgroundColor: palette.chartTrack,
   },
   barFill: {
     width: '100%',
@@ -2126,7 +2560,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#e57373',
   },
   barLabel: {
-    color: '#94a3b8',
+    color: palette.textMuted,
     fontSize: 10,
     lineHeight: 13,
   },
@@ -2141,12 +2575,12 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   macroName: {
-    color: '#64748b',
+    color: palette.textSecondary,
     fontSize: compactFont(13, 12),
     fontWeight: '800',
   },
   macroDetail: {
-    color: '#1e2939',
+    color: palette.text,
     fontSize: compactFont(13, 12),
     fontWeight: '900',
   },
@@ -2154,7 +2588,7 @@ const styles = StyleSheet.create({
     height: 9,
     borderRadius: radius.pill,
     overflow: 'hidden',
-    backgroundColor: '#f1f5f9',
+    backgroundColor: palette.chartTrack,
   },
   progressFill: {
     height: '100%',
@@ -2171,9 +2605,9 @@ const styles = StyleSheet.create({
     minHeight: 92,
     padding: 11,
     borderRadius: 14,
-    backgroundColor: '#fff',
+    backgroundColor: palette.surface,
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.03)',
+    borderColor: palette.border,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -2192,7 +2626,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   mealGaugeLabel: {
-    color: '#334155',
+    color: palette.text,
     fontSize: compactFont(12, 11),
     fontWeight: '900',
   },
@@ -2219,13 +2653,13 @@ const styles = StyleSheet.create({
   bodyMetricPanel: {
     padding: 13,
     borderRadius: 16,
-    backgroundColor: '#f8fafc',
+    backgroundColor: palette.surfaceMuted,
     borderWidth: 1,
-    borderColor: 'rgba(148,163,184,0.12)',
+    borderColor: palette.border,
     marginBottom: 10,
   },
   waterPanel: {
-    backgroundColor: '#f6fbfd',
+    backgroundColor: isDark ? '#18252a' : '#f6fbfd',
     marginBottom: 0,
   },
   bodyMetricPanelHeader: {
@@ -2240,24 +2674,24 @@ const styles = StyleSheet.create({
     gap: 7,
   },
   bodyMetricTitle: {
-    color: '#0f172a',
+    color: palette.text,
     fontSize: compactFont(14, 13),
     fontWeight: '900',
   },
   bodyMetricMain: {
-    color: '#111827',
+    color: palette.text,
     fontSize: compactFont(18, 17),
     fontWeight: '900',
   },
   bodyMetricEmpty: {
-    color: '#94a3b8',
+    color: palette.textMuted,
     fontSize: compactFont(12, 11),
     lineHeight: 17,
     fontWeight: '700',
   },
   bodyMetricSub: {
     marginTop: 7,
-    color: '#64748b',
+    color: palette.textSecondary,
     fontSize: compactFont(12, 11),
     lineHeight: 17,
   },
@@ -2281,7 +2715,7 @@ const styles = StyleSheet.create({
     height: 74,
     padding: 4,
     borderRadius: 13,
-    backgroundColor: 'rgba(226,232,240,0.50)',
+    backgroundColor: palette.chartTrack,
     justifyContent: 'flex-end',
   },
   waterTrendBar: {
@@ -2290,7 +2724,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#5c9ed4',
   },
   waterTrendLabel: {
-    color: '#94a3b8',
+    color: palette.textMuted,
     fontSize: 9,
     lineHeight: 12,
   },
@@ -2299,7 +2733,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     padding: 16,
     borderRadius: 16,
-    backgroundColor: '#fff',
+    backgroundColor: palette.surface,
     borderWidth: 1,
     borderColor: 'rgba(92,184,150,0.14)',
   },
@@ -2312,22 +2746,22 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   toolChip: {
-    minHeight: 36,
+    minHeight: 48,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     borderRadius: radius.pill,
     paddingHorizontal: 11,
-    backgroundColor: colors.brandSoft,
+    backgroundColor: palette.brandSoft,
   },
   toolChipText: {
-    color: colors.brandDark,
+    color: palette.brandText,
     fontSize: compactFont(13, 12),
     fontWeight: '900',
   },
   sheetBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.45)',
+    backgroundColor: palette.scrim,
     justifyContent: 'flex-end',
   },
   rangeSheet: {
@@ -2335,18 +2769,18 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     paddingHorizontal: 14,
     paddingTop: 14,
-    backgroundColor: '#fff',
+    backgroundColor: palette.surface,
   },
   sheetHandle: {
     width: 36,
     height: 4,
     borderRadius: 2,
-    backgroundColor: '#d1d5db',
+    backgroundColor: isDark ? 'rgba(255,255,255,0.18)' : '#d1d5db',
     alignSelf: 'center',
     marginBottom: 14,
   },
   sheetTitle: {
-    color: '#1e2939',
+    color: palette.text,
     fontSize: compactFont(16, 15),
     lineHeight: 21,
     fontWeight: '900',
@@ -2358,7 +2792,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     paddingHorizontal: 15,
     paddingTop: 14,
-    backgroundColor: '#fff',
+    backgroundColor: palette.surface,
   },
   riskFocusHeader: {
     flexDirection: 'row',
@@ -2371,14 +2805,14 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   riskFocusTitle: {
-    color: '#1e2939',
+    color: palette.text,
     fontSize: compactFont(18, 17),
     lineHeight: 24,
     fontWeight: '900',
   },
   riskFocusSubtitle: {
     marginTop: 3,
-    color: '#64748b',
+    color: palette.textSecondary,
     fontSize: compactFont(12, 11),
     lineHeight: 17,
   },
@@ -2388,14 +2822,14 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
     borderRadius: radius.pill,
     overflow: 'hidden',
-    color: colors.brandDark,
-    backgroundColor: colors.brandSoft,
+    color: palette.brandText,
+    backgroundColor: palette.brandSoft,
     fontSize: compactFont(11, 10),
     fontWeight: '900',
   },
   riskFocusSummary: {
     marginTop: 10,
-    color: '#475569',
+    color: palette.textSecondary,
     fontSize: compactFont(12, 11),
     lineHeight: 18,
   },
@@ -2408,19 +2842,19 @@ const styles = StyleSheet.create({
   customFocusInput: {
     flex: 1,
     minWidth: 0,
-    minHeight: 44,
+    minHeight: 48,
     borderRadius: 13,
     paddingHorizontal: 12,
     paddingVertical: 9,
-    color: '#1e2939',
-    backgroundColor: '#f8fafc',
+    color: palette.text,
+    backgroundColor: palette.surfaceMuted,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: palette.border,
     fontSize: compactFont(13, 12),
   },
   customFocusAddButton: {
     minWidth: 94,
-    minHeight: 44,
+    minHeight: 48,
     paddingHorizontal: 13,
     borderRadius: 13,
     alignItems: 'center',
@@ -2437,7 +2871,7 @@ const styles = StyleSheet.create({
   },
   customFocusMeta: {
     marginTop: 9,
-    color: '#64748b',
+    color: palette.textSecondary,
     fontSize: compactFont(11, 10),
     lineHeight: 16,
   },
@@ -2446,8 +2880,8 @@ const styles = StyleSheet.create({
     padding: 9,
     borderRadius: 10,
     overflow: 'hidden',
-    color: '#b45353',
-    backgroundColor: '#fef2f2',
+    color: palette.danger,
+    backgroundColor: palette.dangerSoft,
     fontSize: compactFont(11, 10),
     lineHeight: 16,
   },
@@ -2456,8 +2890,8 @@ const styles = StyleSheet.create({
     padding: 9,
     borderRadius: 10,
     overflow: 'hidden',
-    color: '#2f7f62',
-    backgroundColor: colors.brandSoft,
+    color: palette.brandText,
+    backgroundColor: palette.brandSoft,
     fontSize: compactFont(11, 10),
     lineHeight: 16,
   },
@@ -2479,12 +2913,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 11,
     paddingVertical: 9,
     borderRadius: 13,
-    backgroundColor: '#f8fafc',
+    backgroundColor: palette.surfaceMuted,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: palette.border,
   },
   riskFocusChipActive: {
-    backgroundColor: colors.brandSoft,
+    backgroundColor: palette.brandSoft,
     borderColor: 'rgba(92,184,150,0.45)',
   },
   riskFocusChipCustom: {
@@ -2498,13 +2932,13 @@ const styles = StyleSheet.create({
   riskFocusChipTitle: {
     flex: 1,
     minWidth: 0,
-    color: '#334155',
+    color: palette.text,
     fontSize: compactFont(13, 12),
     lineHeight: 18,
     fontWeight: '900',
   },
   riskFocusChipTitleActive: {
-    color: colors.brandDark,
+    color: palette.brandText,
   },
   riskFocusChipAi: {
     flexShrink: 0,
@@ -2520,13 +2954,13 @@ const styles = StyleSheet.create({
   },
   riskFocusChipAction: {
     marginTop: 6,
-    color: '#64748b',
+    color: palette.textSecondary,
     fontSize: compactFont(10, 9),
     lineHeight: 14,
   },
   riskFocusDoneButton: {
     marginTop: 13,
-    minHeight: 44,
+    minHeight: 48,
     borderRadius: radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
@@ -2547,29 +2981,34 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#f8fafc',
+    backgroundColor: palette.surfaceMuted,
     borderWidth: 1,
     borderColor: 'transparent',
   },
   rangeSheetRowActive: {
-    backgroundColor: colors.brandSoft,
+    backgroundColor: palette.brandSoft,
     borderColor: 'rgba(92,184,150,0.28)',
   },
   rangeSheetLabel: {
-    color: '#1e2939',
+    color: palette.text,
     fontSize: compactFont(15, 14),
     fontWeight: '900',
   },
   rangeSheetLabelActive: {
-    color: colors.brandDark,
+    color: palette.brandText,
   },
   rangeSheetHelper: {
-    color: '#64748b',
+    color: palette.textSecondary,
     fontSize: compactFont(11, 10),
     marginTop: 3,
   },
+  rangeSheetCheckWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
   rangeSheetCheck: {
-    color: colors.brandDark,
+    color: palette.brandText,
     fontSize: compactFont(12, 11),
     fontWeight: '900',
   },
@@ -2578,7 +3017,7 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     paddingHorizontal: 15,
     paddingTop: 14,
-    backgroundColor: '#fff',
+    backgroundColor: palette.surface,
   },
   riskDetailHeader: {
     gap: 8,
@@ -2591,7 +3030,7 @@ const styles = StyleSheet.create({
   },
   riskDetailTitle: {
     flexShrink: 1,
-    color: '#1e2939',
+    color: palette.text,
     fontSize: compactFont(18, 17),
     lineHeight: 23,
     fontWeight: '900',
@@ -2614,13 +3053,13 @@ const styles = StyleSheet.create({
     gap: 5,
   },
   riskDetailScore: {
-    color: '#1e2939',
+    color: palette.text,
     fontSize: 32,
     lineHeight: 36,
     fontWeight: '900',
   },
   riskDetailScoreUnit: {
-    color: '#64748b',
+    color: palette.textSecondary,
     fontSize: compactFont(12, 11),
     fontWeight: '800',
   },
@@ -2631,18 +3070,18 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
   },
   riskDetailBadgeText: {
-    color: '#1e2939',
+    color: palette.text,
     fontSize: 11,
     fontWeight: '900',
   },
   riskDetailLabel: {
-    color: '#1e2939',
+    color: palette.text,
     fontSize: compactFont(13, 12),
     fontWeight: '900',
     marginBottom: 5,
   },
   riskDetailBodyText: {
-    color: '#475569',
+    color: palette.textSecondary,
     fontSize: compactFont(13, 12),
     lineHeight: 19,
   },
@@ -2651,34 +3090,34 @@ const styles = StyleSheet.create({
     padding: 10,
     borderRadius: 11,
     overflow: 'hidden',
-    color: '#64748b',
-    backgroundColor: '#f8fafc',
+    color: palette.textSecondary,
+    backgroundColor: palette.surfaceMuted,
     fontSize: compactFont(11, 10),
     lineHeight: 16,
   },
   riskDetailDivider: {
     height: 1,
-    backgroundColor: '#eef2f7',
+    backgroundColor: palette.border,
     marginVertical: 11,
   },
   riskDetailDelta: {
     marginTop: 12,
     padding: 11,
     borderRadius: 13,
-    backgroundColor: colors.brandSoft,
+    backgroundColor: palette.brandSoft,
   },
   riskDetailDeltaText: {
-    color: colors.brandDark,
+    color: palette.brandText,
     fontSize: compactFont(13, 12),
     fontWeight: '900',
   },
   riskDetailRefreshBtn: {
     marginTop: 12,
-    minHeight: 42,
+    minHeight: 48,
     borderRadius: radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.brandSoft,
+    backgroundColor: palette.brandSoft,
     borderWidth: 1,
     borderColor: 'rgba(92,184,150,0.28)',
   },
@@ -2686,13 +3125,13 @@ const styles = StyleSheet.create({
     opacity: 0.62,
   },
   riskDetailRefreshText: {
-    color: colors.brandDark,
+    color: palette.brandText,
     fontSize: compactFont(13, 12),
     fontWeight: '900',
   },
   riskDetailCloseBtn: {
     marginTop: 14,
-    minHeight: 42,
+    minHeight: 48,
     borderRadius: radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
@@ -2718,4 +3157,17 @@ const styles = StyleSheet.create({
   pressed: {
     opacity: 0.72,
   },
-})
+  })
+}
+
+const lightStatsStyles = createStatsStyles(statsLightPalette, false)
+const darkStatsStyles = createStatsStyles(statsDarkPalette, true)
+
+function useStatsTheme() {
+  const { isDark } = useColorScheme()
+  return {
+    isDark,
+    palette: isDark ? statsDarkPalette : statsLightPalette,
+    styles: isDark ? darkStatsStyles : lightStatsStyles,
+  }
+}

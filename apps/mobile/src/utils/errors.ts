@@ -1,4 +1,4 @@
-const technicalErrorPattern = /(api error|request id|request_id|invalidparameter|while downloading|status code|image_url|task_id|task id|任务编号|缺少.*id|缺少.*ID|sqlstate|internal server error|panic|stack trace|doubao|openai|resource not found|invalid character|unexpected token|beginning of value|json parse|syntaxerror)/i
+const technicalErrorPattern = /(api error|request id|request_id|invalidparameter|while downloading|status code|image_url|task_id|task id|任务编号|缺少.*id|缺少.*ID|sqlstate|internal server error|panic|stack trace|doubao|openai|resource not found|invalid character|unexpected token|beginning of value|json parse|syntaxerror|fetch failed|network request failed|unknownserviceexception|cleartext|network security policy|java\.net|unable to resolve host|connectexception|sockettimeoutexception)/i
 
 export function userFacingErrorMessage(error: unknown, fallback = '请稍后重试'): string {
   return userFacingMessage(rawErrorMessage(error), fallback)

@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ActivityIndicator, Image, Keyboard, KeyboardAvoidingView, Linking, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
-import { useNavigation } from '@react-navigation/native'
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
+import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { AppButton } from '../components/AppButton'
 import { apiClient } from '../api'
@@ -11,13 +10,15 @@ import { useAuth } from '../providers/AuthProvider'
 import { useAppDialog } from '../providers/DialogProvider'
 import { colors } from '../theme'
 import { userFacingErrorMessage } from '../utils/errors'
+import { clearPendingFriendInviteCode, readPendingFriendInviteCode, writePendingFriendInviteCode } from '../utils/pendingFriendInvite'
+import { rememberPendingAuthDestination } from '../utils/pendingAuthNavigation'
 
 const DEFAULT_SMS_COOLDOWN_SECONDS = 30
 const appIcon = require('../../assets/icon.png')
+type Props = NativeStackScreenProps<RootStackParamList, 'Login'>
 
-export function LoginScreen() {
+export function LoginScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets()
-  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const dialog = useAppDialog()
   const {
     loginWithWechat,
@@ -38,22 +39,57 @@ export function LoginScreen() {
   const [smsSending, setSmsSending] = useState(false)
   const [smsCooldownSeconds, setSmsCooldownSeconds] = useState(0)
   const [agreementAccepted, setAgreementAccepted] = useState(false)
-  const [inviteCode, setInviteCode] = useState('')
+  const [inviteCode, setInviteCode] = useState(() => normalizeInviteCode(route.params?.inviteCode || route.params?.fi))
   const [userId, setUserId] = useState('')
   const [debugPassword, setDebugPassword] = useState('')
   const [keyboardHeight, setKeyboardHeight] = useState(0)
   const scrollRef = useRef<ScrollView>(null)
 
   useEffect(() => {
+    if (route.params?.redirectTo === 'InviteFriends') {
+      rememberPendingAuthDestination({
+        kind: 'invite-friends',
+        params: { fi: route.params.fi, inviteCode: route.params.inviteCode },
+      })
+      return
+    }
+    if (route.params?.redirectTo === 'CirclePostEdit') {
+      rememberPendingAuthDestination({ kind: 'circle-post-edit' })
+      return
+    }
+    if (route.params?.redirectTab) {
+      rememberPendingAuthDestination({ kind: 'tab', tab: route.params.redirectTab })
+      return
+    }
+    rememberPendingAuthDestination(null)
+  }, [route.params?.fi, route.params?.inviteCode, route.params?.redirectTab, route.params?.redirectTo])
+
+  useEffect(() => {
     const applyInviteCodeFromUrl = (url?: string | null) => {
       const code = extractInviteCode(url)
-      if (code) setInviteCode(code)
+      if (code) {
+        setInviteCode(code)
+        void writePendingFriendInviteCode(code, 'login_deep_link')
+      }
     }
 
     Linking.getInitialURL().then(applyInviteCodeFromUrl).catch(() => undefined)
     const subscription = Linking.addEventListener('url', ({ url }) => applyInviteCodeFromUrl(url))
     return () => subscription.remove()
   }, [])
+
+  useEffect(() => {
+    const routeCode = normalizeInviteCode(route.params?.inviteCode || route.params?.fi)
+    if (routeCode) {
+      setInviteCode(routeCode)
+      void writePendingFriendInviteCode(routeCode, 'invite_login_handoff')
+      return
+    }
+    if (route.params?.redirectTo !== 'InviteFriends') return
+    void readPendingFriendInviteCode().then((storedCode) => {
+      if (storedCode) setInviteCode(storedCode)
+    })
+  }, [route.params?.fi, route.params?.inviteCode, route.params?.redirectTo])
 
   useEffect(() => {
     if (smsCooldownSeconds <= 0) return undefined
@@ -90,6 +126,15 @@ export function LoginScreen() {
     try {
       console.log('[mobile] login action started')
       await fn()
+      if (inviteCode) {
+        try {
+          await apiClient.acceptInvite(inviteCode)
+        } catch (error) {
+          console.log('[mobile] invite handoff failed without blocking login', error instanceof Error ? error.message : error)
+        } finally {
+          await clearPendingFriendInviteCode()
+        }
+      }
       console.log('[mobile] login action succeeded')
     } catch (error) {
       console.log('[mobile] login action failed', error instanceof Error ? error.message : error)
@@ -236,6 +281,13 @@ export function LoginScreen() {
         <Text style={styles.brand}>智健食探</Text>
         <Text style={styles.tagline}>记录饮食，连接健康</Text>
       </View>
+
+      {inviteCode ? (
+        <View style={styles.inviteHandoff} accessibilityLabel="好友邀请已保留，登录后将自动承接">
+          <Text style={styles.inviteHandoffTitle}>好友邀请已保留</Text>
+          <Text style={styles.inviteHandoffText}>登录或注册后会自动处理邀请，并返回会员活动页。</Text>
+        </View>
+      ) : null}
 
       <View style={styles.form}>
         {passwordResetMode ? (
@@ -440,6 +492,10 @@ export function LoginScreen() {
   )
 }
 
+function normalizeInviteCode(value?: string): string {
+  return String(value || '').trim()
+}
+
 function extractInviteCode(url?: string | null): string {
   if (!url) return ''
   const query = url.includes('?') ? url.slice(url.indexOf('?') + 1) : url
@@ -512,6 +568,27 @@ const styles = StyleSheet.create({
   },
   form: {
     gap: 0,
+  },
+  inviteHandoff: {
+    marginTop: -70,
+    marginBottom: 28,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#cdeee0',
+    backgroundColor: '#f0fdf6',
+  },
+  inviteHandoffTitle: {
+    color: colors.brandDark,
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  inviteHandoffText: {
+    marginTop: 3,
+    color: colors.textSecondary,
+    fontSize: 12,
+    lineHeight: 18,
   },
   resetHeader: {
     alignItems: 'center',

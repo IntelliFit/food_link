@@ -6,6 +6,7 @@ const EXACT_CACHE_KEYS = new Set([
   'homeRecordMenuDate',
   'home_pet_companion_collapsed_v1',
   'home_pet_companion_float_position_v1',
+  'home_pet_meal_prompt_seen_v1',
   'mobile_community_search_history',
   'food_link_mobile_analysis_health_profile_prompt_shown',
   'mobile_profile_tab_badge_count',
@@ -28,6 +29,8 @@ const CACHE_KEY_PREFIXES = [
   'healthProfileReminderSnoozedUntil:',
   'home_backfill_hint_dismissed_dates_v1:',
   'onboarding_home_record_guide_v1:user:',
+  'home_experience_config_v1:',
+  'home_experience_config_v2:',
 ]
 
 /**
