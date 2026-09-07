@@ -25,7 +25,7 @@ type OCRService struct {
 
 const (
 	defaultHealthReportOCRModel = "doubao-seed-2-0-lite-260428"
-	wanjieHealthReportOCRModel  = "qwen3.6-flash"
+	wanjieHealthReportOCRModel  = "qwen3.8-flash"
 )
 
 func healthReportOCRModelForBaseURL(baseURL string) string {
@@ -82,8 +82,9 @@ func (s *OCRService) callDoubao(ctx context.Context, imageURL string) (map[strin
 	if baseURL == "" {
 		baseURL = "https://ark.cn-beijing.volces.com/api/v3"
 	}
+	model := healthReportOCRModelForBaseURL(baseURL)
 	payload := map[string]any{
-		"model": healthReportOCRModelForBaseURL(baseURL),
+		"model": model,
 		"messages": []map[string]any{
 			{
 				"role": "user",
@@ -94,7 +95,10 @@ func (s *OCRService) callDoubao(ctx context.Context, imageURL string) (map[strin
 			},
 		},
 		"temperature":      0.3,
-		"reasoning_effort": "minimal",
+		"reasoning_effort": "low",
+	}
+	if model == wanjieHealthReportOCRModel {
+		payload["preserve_thinking"] = false
 	}
 	body, _ := json.Marshal(payload)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/chat/completions", bytes.NewReader(body))

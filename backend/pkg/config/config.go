@@ -102,32 +102,38 @@ type StorageConfig struct {
 }
 
 type ExternalConfig struct {
-	AppID                        string `mapstructure:"appid"`
-	Secret                       string `mapstructure:"secret"`
-	SupabaseURL                  string `mapstructure:"supabase_url"`
-	SupabaseKey                  string `mapstructure:"supabase_service_role_key"`
-	TiandituTK                   string `mapstructure:"tianditu_tk"`
-	OfoxAIAPIKey                 string `mapstructure:"ofoxai_api_key"`
-	OfoxAIBaseURL                string `mapstructure:"ofoxai_base_url"`
-	Gemini35APIKey               string `mapstructure:"gemini35_api_key"`
-	Gemini35BaseURL              string `mapstructure:"gemini35_base_url"`
-	Gemini35Model                string `mapstructure:"gemini35_model"`
-	LLMProvider                  string `mapstructure:"llm_provider"`
-	DeepSeekAPIKey               string `mapstructure:"deepseek_api_key"`
-	DeepSeekBaseURL              string `mapstructure:"deepseek_base_url"`
-	PixelAvatarAPIKey            string `mapstructure:"pixel_avatar_api_key"`
-	PixelAvatarBaseURL           string `mapstructure:"pixel_avatar_base_url"`
-	PixelAvatarModel             string `mapstructure:"pixel_avatar_model"`
-	DoubaoAPIKey                 string `mapstructure:"doubao_api_key"`
-	DoubaoWebSearchAPIKey        string `mapstructure:"doubao_web_search_api_key"`
-	DoubaoBaseURL                string `mapstructure:"doubao_base_url"`
-	DashScopeAPIKey              string `mapstructure:"dashscope_api_key"`
-	DashScopeBaseURL             string `mapstructure:"dashscope_base_url"`
-	NutritionEmbeddingEnabled    bool   `mapstructure:"nutrition_embedding_enabled"`
-	NutritionEmbeddingAPIKey     string `mapstructure:"nutrition_embedding_api_key"`
-	NutritionEmbeddingBaseURL    string `mapstructure:"nutrition_embedding_base_url"`
-	NutritionEmbeddingModel      string `mapstructure:"nutrition_embedding_model"`
-	NutritionEmbeddingDimensions int    `mapstructure:"nutrition_embedding_dimensions"`
+	AppID                         string `mapstructure:"appid"`
+	Secret                        string `mapstructure:"secret"`
+	SupabaseURL                   string `mapstructure:"supabase_url"`
+	SupabaseKey                   string `mapstructure:"supabase_service_role_key"`
+	TiandituTK                    string `mapstructure:"tianditu_tk"`
+	OfoxAIAPIKey                  string `mapstructure:"ofoxai_api_key"`
+	OfoxAIBaseURL                 string `mapstructure:"ofoxai_base_url"`
+	Gemini35APIKey                string `mapstructure:"gemini35_api_key"`
+	Gemini35BaseURL               string `mapstructure:"gemini35_base_url"`
+	Gemini35Model                 string `mapstructure:"gemini35_model"`
+	OpenLuxAPIKey                 string `mapstructure:"openlux_api_key"`
+	OpenLuxBaseURL                string `mapstructure:"openlux_base_url"`
+	OpenLuxOrdinaryGeminiPercent  int    `mapstructure:"openlux_ordinary_gemini_traffic_percent"`
+	OpenLuxPrecisionGeminiPercent int    `mapstructure:"openlux_precision_gemini_traffic_percent"`
+	LLMProvider                   string `mapstructure:"llm_provider"`
+	DeepSeekAPIKey                string `mapstructure:"deepseek_api_key"`
+	DeepSeekBaseURL               string `mapstructure:"deepseek_base_url"`
+	PixelAvatarAPIKey             string `mapstructure:"pixel_avatar_api_key"`
+	PixelAvatarBaseURL            string `mapstructure:"pixel_avatar_base_url"`
+	PixelAvatarModel              string `mapstructure:"pixel_avatar_model"`
+	DoubaoAPIKey                  string `mapstructure:"doubao_api_key"`
+	DoubaoWebSearchAPIKey         string `mapstructure:"doubao_web_search_api_key"`
+	DoubaoBaseURL                 string `mapstructure:"doubao_base_url"`
+	DashScopeAPIKey               string `mapstructure:"dashscope_api_key"`
+	DashScopeBaseURL              string `mapstructure:"dashscope_base_url"`
+	Qwen38OrdinaryTrafficPercent  int    `mapstructure:"qwen38_ordinary_traffic_percent"`
+	Qwen38PrecisionTrafficPercent int    `mapstructure:"qwen38_precision_traffic_percent"`
+	NutritionEmbeddingEnabled     bool   `mapstructure:"nutrition_embedding_enabled"`
+	NutritionEmbeddingAPIKey      string `mapstructure:"nutrition_embedding_api_key"`
+	NutritionEmbeddingBaseURL     string `mapstructure:"nutrition_embedding_base_url"`
+	NutritionEmbeddingModel       string `mapstructure:"nutrition_embedding_model"`
+	NutritionEmbeddingDimensions  int    `mapstructure:"nutrition_embedding_dimensions"`
 }
 
 type AppAuthConfig struct {
@@ -527,6 +533,12 @@ func applyLocalConfigOverrides(v *viper.Viper) error {
 	if fileCfg.External.DashScopeBaseURL != "" {
 		v.Set("external.dashscope_base_url", fileCfg.External.DashScopeBaseURL)
 	}
+	if fileV.IsSet("external.qwen38_ordinary_traffic_percent") {
+		v.Set("external.qwen38_ordinary_traffic_percent", fileCfg.External.Qwen38OrdinaryTrafficPercent)
+	}
+	if fileV.IsSet("external.qwen38_precision_traffic_percent") {
+		v.Set("external.qwen38_precision_traffic_percent", fileCfg.External.Qwen38PrecisionTrafficPercent)
+	}
 	if fileCfg.External.OfoxAIAPIKey != "" {
 		v.Set("external.ofoxai_api_key", fileCfg.External.OfoxAIAPIKey)
 	}
@@ -538,6 +550,18 @@ func applyLocalConfigOverrides(v *viper.Viper) error {
 	}
 	if fileCfg.External.Gemini35Model != "" {
 		v.Set("external.gemini35_model", fileCfg.External.Gemini35Model)
+	}
+	if fileCfg.External.OpenLuxAPIKey != "" {
+		v.Set("external.openlux_api_key", fileCfg.External.OpenLuxAPIKey)
+	}
+	if fileCfg.External.OpenLuxBaseURL != "" {
+		v.Set("external.openlux_base_url", fileCfg.External.OpenLuxBaseURL)
+	}
+	if fileV.IsSet("external.openlux_ordinary_gemini_traffic_percent") {
+		v.Set("external.openlux_ordinary_gemini_traffic_percent", fileCfg.External.OpenLuxOrdinaryGeminiPercent)
+	}
+	if fileV.IsSet("external.openlux_precision_gemini_traffic_percent") {
+		v.Set("external.openlux_precision_gemini_traffic_percent", fileCfg.External.OpenLuxPrecisionGeminiPercent)
 	}
 	if fileCfg.External.DeepSeekAPIKey != "" {
 		v.Set("external.deepseek_api_key", fileCfg.External.DeepSeekAPIKey)
@@ -1032,106 +1056,112 @@ func configKeyForSecret(secretKey string) string {
 }
 
 var cloudConfigKeyAliases = map[string]string{
-	"PORT":                                    "app.port",
-	"APPID":                                   "external.appid",
-	"SECRET":                                  "external.secret",
-	"WECHAT_MINI_PROGRAM_APP_ID":              "wechat.mini_program.app_id",
-	"WECHAT_MINI_PROGRAM_APP_SECRET":          "wechat.mini_program.app_secret",
-	"WECHAT_MINIPROGRAM_APP_ID":               "wechat.mini_program.app_id",
-	"WECHAT_MINIPROGRAM_APP_SECRET":           "wechat.mini_program.app_secret",
-	"WECHAT_MOBILE_APP_ID":                    "wechat.mobile_app.app_id",
-	"WECHAT_MOBILE_APP_SECRET":                "wechat.mobile_app.app_secret",
-	"WECHAT_MOBILE_APP_DEVELOPMENT_MOCK_CODE": "wechat.mobile_app.development_mock_code",
-	"APP_WECHAT_APP_ID":                       "app_auth.wechat_app_id",
-	"APP_WECHAT_APP_SECRET":                   "app_auth.wechat_app_secret",
-	"WECHAT_OPEN_APP_ID":                      "app_auth.wechat_app_id",
-	"WECHAT_OPEN_APP_SECRET":                  "app_auth.wechat_app_secret",
-	"APP_AUTH_DEVELOPMENT_MOCK_LOGIN":         "app_auth.development_mock_login",
-	"APP_AUTH_DEVELOPMENT_MOCK_WECHAT_CODE":   "app_auth.development_mock_wechat_code",
-	"JWT_SECRET_KEY":                          "jwt.secret",
-	"SUPABASE_URL":                            "external.supabase_url",
-	"SUPABASE_SERVICE_ROLE_KEY":               "external.supabase_service_role_key",
-	"TIANDITU_TK":                             "external.tianditu_tk",
-	"OFOXAI_API_KEY":                          "external.ofoxai_api_key",
-	"OFOXAI_BASE_URL":                         "external.ofoxai_base_url",
-	"OFOX_BASE_URL":                           "external.ofoxai_base_url",
-	"GEMINI35_API_KEY":                        "external.gemini35_api_key",
-	"GEMINI35_BASE_URL":                       "external.gemini35_base_url",
-	"GEMINI35_MODEL":                          "external.gemini35_model",
-	"LLM_PROVIDER":                            "external.llm_provider",
-	"DEEPSEEK_API_KEY":                        "external.deepseek_api_key",
-	"DEEPSEEK_BASE_URL":                       "external.deepseek_base_url",
-	"PIXEL_AVATAR_API_KEY":                    "external.pixel_avatar_api_key",
-	"PIXEL_AVATAR_BASE_URL":                   "external.pixel_avatar_base_url",
-	"PIXEL_AVATAR_MODEL":                      "external.pixel_avatar_model",
-	"DOUBAO_API_KEY":                          "external.doubao_api_key",
-	"DOUBAO_WEB_SEARCH_API_KEY":               "external.doubao_web_search_api_key",
-	"DOUBAO_BASE_URL":                         "external.doubao_base_url",
-	"DASHSCOPE_API_KEY":                       "external.dashscope_api_key",
-	"DASHSCOPE_BASE_URL":                      "external.dashscope_base_url",
-	"NUTRITION_EMBEDDING_ENABLED":             "external.nutrition_embedding_enabled",
-	"NUTRITION_EMBEDDING_API_KEY":             "external.nutrition_embedding_api_key",
-	"NUTRITION_EMBEDDING_BASE_URL":            "external.nutrition_embedding_base_url",
-	"NUTRITION_EMBEDDING_MODEL":               "external.nutrition_embedding_model",
-	"NUTRITION_EMBEDDING_DIMENSIONS":          "external.nutrition_embedding_dimensions",
-	"WECHAT_PAY_APP_PAY_APP_ID":               "wechat.pay.app_pay_app_id",
-	"WECHAT_PAY_APP_ID":                       "wechat.pay.app_id",
-	"WECHAT_PAY_MCHID":                        "wechat.pay.mchid",
-	"WECHAT_PAY_NOTIFY_URL":                   "wechat.pay.notify_url",
-	"WECHAT_PAY_OPEN_API_NOTIFY_URL":          "wechat.pay.open_api_notify_url",
-	"WECHAT_PAY_SERIAL_NO":                    "wechat.pay.serial_no",
-	"WECHAT_PAY_API_V3_KEY":                   "wechat.pay.api_v3_key",
-	"WECHAT_PAY_API_V2_KEY":                   "wechat.pay.api_v2_key",
-	"WECHAT_PAY_PRIVATE_KEY":                  "wechat.pay.private_key",
-	"WECHAT_PAY_PUBLIC_KEY":                   "wechat.pay.public_key",
-	"WECHAT_PAY_PAPAY_SIGN_NOTIFY_URL":        "wechat.pay.papay_sign_notify_url",
-	"WECHAT_PAY_PAPAY_PAY_NOTIFY_URL":         "wechat.pay.papay_pay_notify_url",
-	"EXPIRY_SUBSCRIBE_TEMPLATE_ID":            "wechat.pay.expiry_subscribe_template_id",
-	"ANALYSIS_SUBSCRIBE_TEMPLATE_ID":          "wechat.pay.analysis_subscribe_template_id",
-	"WECHAT_XPAY_OFFER_ID":                    "wechat.xpay.offer_id",
-	"WECHAT_XPAY_APP_KEY":                     "wechat.xpay.app_key",
-	"WECHAT_XPAY_SANDBOX":                     "wechat.xpay.sandbox",
-	"WECHAT_XPAY_MESSAGE_TOKEN":               "wechat.xpay.message_token",
-	"COS_REGION":                              "storage.cos_region",
-	"COS_SECRET_ID":                           "storage.cos_secret_id",
-	"COS_SECRET_KEY":                          "storage.cos_secret_key",
-	"COS_FOOD_IMAGES_BUCKET":                  "storage.food_images_bucket",
-	"COS_HEALTH_REPORTS_BUCKET":               "storage.health_reports_bucket",
-	"COS_USER_AVATARS_BUCKET":                 "storage.user_avatars_bucket",
-	"COS_ICON_BUCKET":                         "storage.icon_bucket",
-	"CDN_FOOD_IMAGES_BASE_URL":                "storage.food_images_cdn_base_url",
-	"CDN_USER_AVATARS_BASE_URL":               "storage.user_avatars_cdn_base_url",
-	"CDN_HEALTH_REPORTS_BASE_URL":             "storage.health_reports_cdn_base_url",
-	"CDN_ICON_BASE_URL":                       "storage.icon_cdn_base_url",
-	"POSTGRESQL_HOST":                         "database.host",
-	"POSTGRESQL_PORT":                         "database.port",
-	"POSTGRESQL_USER":                         "database.user",
-	"POSTGRESQL_PASSWORD":                     "database.password",
-	"POSTGRESQL_DATABASE":                     "database.name",
-	"POSTGRESQL_SSLMODE":                      "database.sslmode",
-	"POSTGRESQL_SCHEMA":                       "database.schema",
-	"WORKER_COUNT":                            "worker.count",
-	"WORKER_POLL_INTERVAL_SECONDS":            "worker.poll_interval_seconds",
-	"TASK_QUEUE_DRIVER":                       "task_queue.driver",
-	"TASK_QUEUE_BUFFER_SIZE":                  "task_queue.buffer_size",
-	"TASK_QUEUE_TOPIC":                        "task_queue.topic",
-	"TASK_QUEUE_BROKERS":                      "task_queue.brokers",
-	"TASK_QUEUE_CONSUMER_GROUP":               "task_queue.consumer_group",
-	"OTEL_ENABLED":                            "otel.enabled",
-	"OTEL_TRACES_ENABLED":                     "otel.traces_enabled",
-	"OTEL_METRICS_ENABLED":                    "otel.metrics_enabled",
-	"OTEL_COLLECTOR_ENDPOINT":                 "otel.collector_endpoint",
-	"OTEL_INSECURE":                           "otel.insecure",
-	"OTEL_METRIC_EXPORT_INTERVAL_SECONDS":     "otel.metric_export_interval_seconds",
-	"FEISHU_FEEDBACK_WEBHOOK_URL":             "feishu.feedback_webhook_url",
-	"FEISHU_FEEDBACK_WEBHOOK_SECRET":          "feishu.feedback_webhook_secret",
-	"FEISHU_REPORT_WEBHOOK_URL":               "feishu.report_webhook_url",
-	"FEISHU_REPORT_WEBHOOK_SECRET":            "feishu.report_webhook_secret",
-	"FEEDBACK_BOT_ENABLED":                    "feedback_bot.enabled",
-	"FEEDBACK_BOT_BASE_URL":                   "feedback_bot.base_url",
-	"FEEDBACK_BOT_AUTH_TOKEN":                 "feedback_bot.auth_token",
-	"FEEDBACK_BOT_PROJECT_KEY":                "feedback_bot.project_key",
-	"FEEDBACK_BOT_TIMEOUT_SECONDS":            "feedback_bot.timeout_seconds",
+	"PORT":                                     "app.port",
+	"APPID":                                    "external.appid",
+	"SECRET":                                   "external.secret",
+	"WECHAT_MINI_PROGRAM_APP_ID":               "wechat.mini_program.app_id",
+	"WECHAT_MINI_PROGRAM_APP_SECRET":           "wechat.mini_program.app_secret",
+	"WECHAT_MINIPROGRAM_APP_ID":                "wechat.mini_program.app_id",
+	"WECHAT_MINIPROGRAM_APP_SECRET":            "wechat.mini_program.app_secret",
+	"WECHAT_MOBILE_APP_ID":                     "wechat.mobile_app.app_id",
+	"WECHAT_MOBILE_APP_SECRET":                 "wechat.mobile_app.app_secret",
+	"WECHAT_MOBILE_APP_DEVELOPMENT_MOCK_CODE":  "wechat.mobile_app.development_mock_code",
+	"APP_WECHAT_APP_ID":                        "app_auth.wechat_app_id",
+	"APP_WECHAT_APP_SECRET":                    "app_auth.wechat_app_secret",
+	"WECHAT_OPEN_APP_ID":                       "app_auth.wechat_app_id",
+	"WECHAT_OPEN_APP_SECRET":                   "app_auth.wechat_app_secret",
+	"APP_AUTH_DEVELOPMENT_MOCK_LOGIN":          "app_auth.development_mock_login",
+	"APP_AUTH_DEVELOPMENT_MOCK_WECHAT_CODE":    "app_auth.development_mock_wechat_code",
+	"JWT_SECRET_KEY":                           "jwt.secret",
+	"SUPABASE_URL":                             "external.supabase_url",
+	"SUPABASE_SERVICE_ROLE_KEY":                "external.supabase_service_role_key",
+	"TIANDITU_TK":                              "external.tianditu_tk",
+	"OFOXAI_API_KEY":                           "external.ofoxai_api_key",
+	"OFOXAI_BASE_URL":                          "external.ofoxai_base_url",
+	"OFOX_BASE_URL":                            "external.ofoxai_base_url",
+	"GEMINI35_API_KEY":                         "external.gemini35_api_key",
+	"GEMINI35_BASE_URL":                        "external.gemini35_base_url",
+	"GEMINI35_MODEL":                           "external.gemini35_model",
+	"OPENLUX_API_KEY":                          "external.openlux_api_key",
+	"OPENLUX_BASE_URL":                         "external.openlux_base_url",
+	"OPENLUX_ORDINARY_GEMINI_TRAFFIC_PERCENT":  "external.openlux_ordinary_gemini_traffic_percent",
+	"OPENLUX_PRECISION_GEMINI_TRAFFIC_PERCENT": "external.openlux_precision_gemini_traffic_percent",
+	"LLM_PROVIDER":                             "external.llm_provider",
+	"DEEPSEEK_API_KEY":                         "external.deepseek_api_key",
+	"DEEPSEEK_BASE_URL":                        "external.deepseek_base_url",
+	"PIXEL_AVATAR_API_KEY":                     "external.pixel_avatar_api_key",
+	"PIXEL_AVATAR_BASE_URL":                    "external.pixel_avatar_base_url",
+	"PIXEL_AVATAR_MODEL":                       "external.pixel_avatar_model",
+	"DOUBAO_API_KEY":                           "external.doubao_api_key",
+	"DOUBAO_WEB_SEARCH_API_KEY":                "external.doubao_web_search_api_key",
+	"DOUBAO_BASE_URL":                          "external.doubao_base_url",
+	"DASHSCOPE_API_KEY":                        "external.dashscope_api_key",
+	"DASHSCOPE_BASE_URL":                       "external.dashscope_base_url",
+	"QWEN38_ORDINARY_TRAFFIC_PERCENT":          "external.qwen38_ordinary_traffic_percent",
+	"QWEN38_PRECISION_TRAFFIC_PERCENT":         "external.qwen38_precision_traffic_percent",
+	"NUTRITION_EMBEDDING_ENABLED":              "external.nutrition_embedding_enabled",
+	"NUTRITION_EMBEDDING_API_KEY":              "external.nutrition_embedding_api_key",
+	"NUTRITION_EMBEDDING_BASE_URL":             "external.nutrition_embedding_base_url",
+	"NUTRITION_EMBEDDING_MODEL":                "external.nutrition_embedding_model",
+	"NUTRITION_EMBEDDING_DIMENSIONS":           "external.nutrition_embedding_dimensions",
+	"WECHAT_PAY_APP_PAY_APP_ID":                "wechat.pay.app_pay_app_id",
+	"WECHAT_PAY_APP_ID":                        "wechat.pay.app_id",
+	"WECHAT_PAY_MCHID":                         "wechat.pay.mchid",
+	"WECHAT_PAY_NOTIFY_URL":                    "wechat.pay.notify_url",
+	"WECHAT_PAY_OPEN_API_NOTIFY_URL":           "wechat.pay.open_api_notify_url",
+	"WECHAT_PAY_SERIAL_NO":                     "wechat.pay.serial_no",
+	"WECHAT_PAY_API_V3_KEY":                    "wechat.pay.api_v3_key",
+	"WECHAT_PAY_API_V2_KEY":                    "wechat.pay.api_v2_key",
+	"WECHAT_PAY_PRIVATE_KEY":                   "wechat.pay.private_key",
+	"WECHAT_PAY_PUBLIC_KEY":                    "wechat.pay.public_key",
+	"WECHAT_PAY_PAPAY_SIGN_NOTIFY_URL":         "wechat.pay.papay_sign_notify_url",
+	"WECHAT_PAY_PAPAY_PAY_NOTIFY_URL":          "wechat.pay.papay_pay_notify_url",
+	"EXPIRY_SUBSCRIBE_TEMPLATE_ID":             "wechat.pay.expiry_subscribe_template_id",
+	"ANALYSIS_SUBSCRIBE_TEMPLATE_ID":           "wechat.pay.analysis_subscribe_template_id",
+	"WECHAT_XPAY_OFFER_ID":                     "wechat.xpay.offer_id",
+	"WECHAT_XPAY_APP_KEY":                      "wechat.xpay.app_key",
+	"WECHAT_XPAY_SANDBOX":                      "wechat.xpay.sandbox",
+	"WECHAT_XPAY_MESSAGE_TOKEN":                "wechat.xpay.message_token",
+	"COS_REGION":                               "storage.cos_region",
+	"COS_SECRET_ID":                            "storage.cos_secret_id",
+	"COS_SECRET_KEY":                           "storage.cos_secret_key",
+	"COS_FOOD_IMAGES_BUCKET":                   "storage.food_images_bucket",
+	"COS_HEALTH_REPORTS_BUCKET":                "storage.health_reports_bucket",
+	"COS_USER_AVATARS_BUCKET":                  "storage.user_avatars_bucket",
+	"COS_ICON_BUCKET":                          "storage.icon_bucket",
+	"CDN_FOOD_IMAGES_BASE_URL":                 "storage.food_images_cdn_base_url",
+	"CDN_USER_AVATARS_BASE_URL":                "storage.user_avatars_cdn_base_url",
+	"CDN_HEALTH_REPORTS_BASE_URL":              "storage.health_reports_cdn_base_url",
+	"CDN_ICON_BASE_URL":                        "storage.icon_cdn_base_url",
+	"POSTGRESQL_HOST":                          "database.host",
+	"POSTGRESQL_PORT":                          "database.port",
+	"POSTGRESQL_USER":                          "database.user",
+	"POSTGRESQL_PASSWORD":                      "database.password",
+	"POSTGRESQL_DATABASE":                      "database.name",
+	"POSTGRESQL_SSLMODE":                       "database.sslmode",
+	"POSTGRESQL_SCHEMA":                        "database.schema",
+	"WORKER_COUNT":                             "worker.count",
+	"WORKER_POLL_INTERVAL_SECONDS":             "worker.poll_interval_seconds",
+	"TASK_QUEUE_DRIVER":                        "task_queue.driver",
+	"TASK_QUEUE_BUFFER_SIZE":                   "task_queue.buffer_size",
+	"TASK_QUEUE_TOPIC":                         "task_queue.topic",
+	"TASK_QUEUE_BROKERS":                       "task_queue.brokers",
+	"TASK_QUEUE_CONSUMER_GROUP":                "task_queue.consumer_group",
+	"OTEL_ENABLED":                             "otel.enabled",
+	"OTEL_TRACES_ENABLED":                      "otel.traces_enabled",
+	"OTEL_METRICS_ENABLED":                     "otel.metrics_enabled",
+	"OTEL_COLLECTOR_ENDPOINT":                  "otel.collector_endpoint",
+	"OTEL_INSECURE":                            "otel.insecure",
+	"OTEL_METRIC_EXPORT_INTERVAL_SECONDS":      "otel.metric_export_interval_seconds",
+	"FEISHU_FEEDBACK_WEBHOOK_URL":              "feishu.feedback_webhook_url",
+	"FEISHU_FEEDBACK_WEBHOOK_SECRET":           "feishu.feedback_webhook_secret",
+	"FEISHU_REPORT_WEBHOOK_URL":                "feishu.report_webhook_url",
+	"FEISHU_REPORT_WEBHOOK_SECRET":             "feishu.report_webhook_secret",
+	"FEEDBACK_BOT_ENABLED":                     "feedback_bot.enabled",
+	"FEEDBACK_BOT_BASE_URL":                    "feedback_bot.base_url",
+	"FEEDBACK_BOT_AUTH_TOKEN":                  "feedback_bot.auth_token",
+	"FEEDBACK_BOT_PROJECT_KEY":                 "feedback_bot.project_key",
+	"FEEDBACK_BOT_TIMEOUT_SECONDS":             "feedback_bot.timeout_seconds",
 }
 
 func applyConfigFileOnlyValues(v *viper.Viper, cfg *Config) error {
@@ -1199,6 +1229,8 @@ func trimExternalConfig(cfg *ExternalConfig) {
 	cfg.Gemini35APIKey = strings.TrimSpace(cfg.Gemini35APIKey)
 	cfg.Gemini35BaseURL = strings.TrimSpace(cfg.Gemini35BaseURL)
 	cfg.Gemini35Model = strings.TrimSpace(cfg.Gemini35Model)
+	cfg.OpenLuxAPIKey = strings.TrimSpace(cfg.OpenLuxAPIKey)
+	cfg.OpenLuxBaseURL = strings.TrimRight(strings.TrimSpace(cfg.OpenLuxBaseURL), "/")
 	cfg.LLMProvider = strings.TrimSpace(cfg.LLMProvider)
 	cfg.DeepSeekAPIKey = strings.TrimSpace(cfg.DeepSeekAPIKey)
 	cfg.DeepSeekBaseURL = strings.TrimSpace(cfg.DeepSeekBaseURL)
@@ -1469,6 +1501,11 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("feedback_bot.project_key", "foodlink")
 	v.SetDefault("feedback_bot.timeout_seconds", 5)
 	v.SetDefault("external.nutrition_embedding_enabled", false)
+	v.SetDefault("external.qwen38_ordinary_traffic_percent", 50)
+	v.SetDefault("external.qwen38_precision_traffic_percent", 20)
+	v.SetDefault("external.openlux_base_url", "https://api.openlux.ai/v1")
+	v.SetDefault("external.openlux_ordinary_gemini_traffic_percent", 50)
+	v.SetDefault("external.openlux_precision_gemini_traffic_percent", 50)
 	v.SetDefault("external.nutrition_embedding_base_url", "https://yunwu.ai/v1")
 	v.SetDefault("external.nutrition_embedding_model", "text-embedding-3-large")
 	v.SetDefault("external.nutrition_embedding_dimensions", 1024)
@@ -1518,6 +1555,10 @@ func bindLegacyEnv(v *viper.Viper) {
 	_ = v.BindEnv("external.gemini35_api_key", "GEMINI35_API_KEY")
 	_ = v.BindEnv("external.gemini35_base_url", "GEMINI35_BASE_URL")
 	_ = v.BindEnv("external.gemini35_model", "GEMINI35_MODEL")
+	_ = v.BindEnv("external.openlux_api_key", "OPENLUX_API_KEY")
+	_ = v.BindEnv("external.openlux_base_url", "OPENLUX_BASE_URL")
+	_ = v.BindEnv("external.openlux_ordinary_gemini_traffic_percent", "OPENLUX_ORDINARY_GEMINI_TRAFFIC_PERCENT")
+	_ = v.BindEnv("external.openlux_precision_gemini_traffic_percent", "OPENLUX_PRECISION_GEMINI_TRAFFIC_PERCENT")
 	_ = v.BindEnv("external.llm_provider", "LLM_PROVIDER")
 	_ = v.BindEnv("external.deepseek_api_key", "DEEPSEEK_API_KEY")
 	_ = v.BindEnv("external.deepseek_base_url", "DEEPSEEK_BASE_URL")
@@ -1529,6 +1570,8 @@ func bindLegacyEnv(v *viper.Viper) {
 	_ = v.BindEnv("external.doubao_base_url", "DOUBAO_BASE_URL")
 	_ = v.BindEnv("external.dashscope_api_key", "DASHSCOPE_API_KEY")
 	_ = v.BindEnv("external.dashscope_base_url", "DASHSCOPE_BASE_URL")
+	_ = v.BindEnv("external.qwen38_ordinary_traffic_percent", "QWEN38_ORDINARY_TRAFFIC_PERCENT")
+	_ = v.BindEnv("external.qwen38_precision_traffic_percent", "QWEN38_PRECISION_TRAFFIC_PERCENT")
 	_ = v.BindEnv("external.nutrition_embedding_enabled", "NUTRITION_EMBEDDING_ENABLED")
 	_ = v.BindEnv("external.nutrition_embedding_api_key", "NUTRITION_EMBEDDING_API_KEY")
 	_ = v.BindEnv("external.nutrition_embedding_base_url", "NUTRITION_EMBEDDING_BASE_URL")

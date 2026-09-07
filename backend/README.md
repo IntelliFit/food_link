@@ -78,7 +78,7 @@ flowchart LR
 2. **拉取任务**：按用户食物记录引用次数降序优先处理，再按 `limit`/`offset`、`--food-id`、`--food-ids` 或断点状态筛选食物。
 3. **Bing 搜图**（默认 `--image-search bing`）：见下文「Bing 取图逻辑」。
 4. **下载候选**：每张图带 `Referer`（优先来源页 `purl`，否则 Bing 搜索页）。
-5. **视觉判定**：DashScope OpenAI 兼容接口，默认自动选用 `qwen3.5-flash`；需 `food_match`、`no_watermark` 且 `confidence >= threshold`（默认 0.72）。
+5. **视觉判定**：DashScope OpenAI 兼容接口，默认自动选用 `qwen3.8-flash`，并关闭思考以控制批处理延迟与成本；需 `food_match`、`no_watermark` 且 `confidence >= threshold`（默认 0.72）。
 6. **落库/上传**：仅 `--apply` 时上传 COS 并 `UPDATE`；默认 `--dry-run` 只输出 `dry_run_match`。
 7. **断点续跑**：`--output-dir` 下 `state.json`、`results.jsonl`、`failed.jsonl` 记录进度。
 
@@ -129,7 +129,7 @@ go run ./cmd/standard-food-image-backfill --config-dir . \
   --search-query-limit 1 \
   --force-reprocess \
   --timing \
-  --vision-model qwen3.5-flash
+  --vision-model qwen3.8-flash
 
 # 指定多条
 go run ./cmd/standard-food-image-backfill --config-dir . \
@@ -142,7 +142,7 @@ go run ./cmd/standard-food-image-backfill --config-dir . \
   --limit 100 \
   --apply \
   --workers 4 \
-  --vision-model qwen3.5-flash
+  --vision-model qwen3.8-flash
 
 # API 连通性验证（Bing + 视觉判定）
 go run ./cmd/standard-food-image-backfill --config-dir . --test-api
@@ -155,7 +155,7 @@ go run ./cmd/standard-food-image-backfill --config-dir . --test-api
 | `--dry-run` | true | 为 true 时不传 COS、不 UPDATE |
 | `--apply` | false | 与 dry-run 互斥；开启后写库 |
 | `--max-candidates` | 8 | 每条食物最多下载判定张数 |
-| `--vision-model` | `qwen3.5-flash` | DashScope 模型（空则自动从 /models 选取） |
+| `--vision-model` | `qwen3.8-flash` | DashScope 模型（空则自动从 /models 选取） |
 | `--threshold` | 0.72 | 视觉判定置信度下限 |
 | `--output-dir` | `tmp/standard-food-image-backfill` | 状态与结果目录 |
 | `--force-reprocess` | false | 忽略 state 中已完成记录 |

@@ -77,7 +77,7 @@ type exerciseJSONLLMConfig struct {
 
 const (
 	defaultDoubaoExerciseModel = "doubao-seed-2-0-lite-260428"
-	wanjieExerciseModel        = "qwen3.6-flash"
+	wanjieExerciseModel        = "qwen3.8-flash"
 )
 
 func exerciseModelForBaseURL(baseURL string) string {
@@ -1094,6 +1094,9 @@ func (s *ExerciseService) estimateExerciseCaloriesWithLLM(ctx context.Context, d
 		"max_tokens":       320,
 		"reasoning_effort": "medium",
 	}
+	if model == wanjieExerciseModel {
+		body["preserve_thinking"] = false
+	}
 	bodyBytes, _ := json.Marshal(body)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/chat/completions", bytes.NewReader(bodyBytes))
 	if err != nil {
@@ -1241,6 +1244,9 @@ func (s *ExerciseService) callExerciseJSONLLMOnce(ctx context.Context, llmConfig
 	if llmConfig.Provider == "gemini" {
 		body["response_format"] = map[string]string{"type": "json_object"}
 		delete(body, "reasoning_effort")
+	}
+	if llmConfig.Model == wanjieExerciseModel {
+		body["preserve_thinking"] = false
 	}
 	bodyBytes, _ := json.Marshal(body)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, llmConfig.BaseURL+"/chat/completions", bytes.NewReader(bodyBytes))

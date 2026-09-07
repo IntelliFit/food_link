@@ -29,14 +29,22 @@ external:
   ofoxai_api_key: "<新平台 OpenAI key>"
   ofoxai_base_url: "https://maas-openapi.wanjiedata.com/api/v1"
 
-  # Gemini 3.5 精准识别和运动长文本备用链路。
+  # 万界 Gemini 3.5：精准模式的第一备用链路，也供营养标签等既有功能使用。
   gemini35_api_key: "<新平台 OpenAI key>"
   gemini35_base_url: "https://maas-openapi.wanjiedata.com/api/v1"
   gemini35_model: "gemini-3.5-flash"
 
+  # OpenLux：精准模式固定使用 gemini-3.6-flash；普通模式作为 Gemini 第二上游。
+  openlux_api_key: "<OpenLux key>"
+  openlux_base_url: "https://api.openlux.ai/v1"
+  # 仅控制普通模式命中 Gemini 后的上游比例。
+  openlux_ordinary_gemini_traffic_percent: 50
+
   # Qwen/DashScope 兼容链路。
   dashscope_api_key: "<新平台 OpenAI key>"
   dashscope_base_url: "https://maas-openapi.wanjiedata.com/api/v1"
+  # 普通模式同一图片稳定命中同一模型；0=全 Gemini，100=全 Qwen。
+  qwen38_ordinary_traffic_percent: 50
 
   # DeepSeek 文本链路：文字记餐、营养补全、统计洞察、宠物对话、
   # 自定义关注卡、今天吃什么推荐与可食比例判断。
@@ -48,10 +56,33 @@ external:
 
 ## 模型名和协议边界
 
-- `gemini35_model` 已可在 Apollo 中调整。其他运行时默认模型由当前业务路由决定，例如 `deepseek-v4-pro`、`deepseek-v4-flash`、`gemini-3-flash-preview`、`qwen3.6-flash` 和 `doubao-seed-2-0-lite-260428`。
+- `gemini35_model` 保留给万界 Gemini 3.5 备用链路和既有标签功能。精准食物图片主模型由代码固定为 OpenLux `gemini-3.6-flash`；快速模式固定为 `qwen3.8-flash`。
 - 切换前必须在新平台模型列表中逐个确认这些模型名可用；新平台不支持的模型不能只换 key，需要再调整对应模型路由或默认模型配置。
 - 当前服务端调用的是 OpenAI-compatible 格式；不要把 Anthropic 地址 `https://maas-openapi.wanjiedata.com/api/anthropic` 填入任何 `*_base_url`。项目目前没有 Anthropic `/v1/messages` 客户端，接 Claude 的 Anthropic 协议需要单独开发。
 - `doubao_web_search_api_key` 对应 `/responses` 的原生联网搜索能力。新平台是否支持同样的工具参数需要先验证；不支持时先留空或关闭该能力，普通 `/chat/completions` 不受影响。
+
+## Qwen3.8 思考参数
+
+项目通过 HTTP 直接调用 OpenAI-compatible `chat/completions`，所以思考参数与 `model`、`messages` 同级放在请求体顶层，不需要 Python SDK 示例中的 `extra_body`：
+
+```json
+{
+  "model": "qwen3.8-flash",
+  "messages": [{"role": "user", "content": "..."}],
+  "enable_thinking": true,
+  "reasoning_effort": "medium",
+  "preserve_thinking": false
+}
+```
+
+- `reasoning_effort` 原生档位为 `low`、`medium`、`xhigh`；Qwen3.8 默认 `xhigh`。`high`/`max` 会映射为 `xhigh`，`minimal` 映射为 `low`，`none` 等价于关闭思考。
+- 不思考时传 `enable_thinking: false`，并且不要同时传一个非 `none` 的 `reasoning_effort`。
+- `reasoning_effort` 与 `thinking_budget` 二选一，Qwen3.8 同时传入会报错。
+- 当前业务策略：普通质量型Qwen单轮调用和用户开启深度思考的宠物问答使用`medium`；快速图片识别、Gemini故障回退、联网搜索、校园工具调用和离线批处理关闭思考；健康报告OCR使用`low`。精准图片主链路使用OpenLux Gemini 3.6，不再抽样进入Qwen深度思考规划。
+- 当前服务没有保存并回传 `reasoning_content`，因此显式传 `preserve_thinking: false`，避免 Qwen3.8 默认开启历史思考保留后引入额外上下文成本。
+- 模型路由：快速模式始终使用Qwen3.8 Flash并关闭思考；普通模式默认50% Qwen3.8/50% Gemini 3 Flash，仍使用稳定哈希；精准模式固定使用OpenLux Gemini 3.6 Flash，不再按比例抽中Qwen。
+- 精准首选OpenLux Gemini 3.6遇到临时错误、超时或JSON解析失败时，先回退万界Gemini 3.5；仍失败才关闭思考回退Qwen3.8。万界实时模型目录没有`gemini-3.6-flash`，因此备用链路不能伪装成同模型双上游。
+- 历史配置`qwen38_precision_traffic_percent`和`openlux_precision_gemini_traffic_percent`继续允许存在于旧Apollo namespace以兼容回滚，但当前精准路由不再读取它们。
 
 ## 验证顺序
 

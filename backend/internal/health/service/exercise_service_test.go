@@ -192,8 +192,9 @@ func TestExerciseService_EstimateImageUsesQwenOnWanjie(t *testing.T) {
 		assert.Equal(t, "https://maas-openapi.wanjiedata.com/api/v1/chat/completions", req.URL.String())
 		var body map[string]any
 		require.NoError(t, json.NewDecoder(req.Body).Decode(&body))
-		assert.Equal(t, "qwen3.6-flash", body["model"])
+		assert.Equal(t, "qwen3.8-flash", body["model"])
 		assert.Equal(t, "medium", body["reasoning_effort"])
+		assert.Equal(t, false, body["preserve_thinking"])
 		responseBody := `{"choices":[{"message":{"content":"{\"exercise_type\":\"跑步机慢跑\",\"reasoning\":\"图片显示跑步机慢跑\",\"calories_kcal\":180}"}}]}`
 		return &http.Response{
 			StatusCode: http.StatusOK,

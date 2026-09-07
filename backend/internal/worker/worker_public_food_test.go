@@ -437,20 +437,21 @@ func TestWorkerProcessPrecisionPlanRelinksCampusPublicFoodToAggregateTask(t *tes
 	}
 	require.NoError(t, taskRepo.CreateTask(ctx, planTask))
 	require.NoError(t, publicFood.LinkAnalysisTask(ctx, item.ID, planTask.ID))
+	analyze := &fakeWorkerAnalyzeRunner{selectedModel: "qwen3.8-flash", result: map[string]any{
+		"precisionStatus":      "ready_for_estimate",
+		"splitStrategy":        "single_shot",
+		"detectedItemsSummary": []any{"米饭", "牛肉"},
+		"itemsToEstimate": []any{
+			map[string]any{"item_key": "rice", "item_name": "米饭", "item_hint": "只估计米饭", "requires_reference": false, "uncertainty_level": "medium"},
+			map[string]any{"item_key": "beef", "item_name": "牛肉", "item_hint": "只估计牛肉", "requires_reference": false, "uncertainty_level": "medium"},
+		},
+	}}
 	runner := &Runner{
 		tasks:      taskRepo,
 		precision:  precisionRepo,
 		publicFood: publicFood,
 		queue:      publisher,
-		analyze: &fakeWorkerAnalyzeRunner{result: map[string]any{
-			"precisionStatus":      "ready_for_estimate",
-			"splitStrategy":        "single_shot",
-			"detectedItemsSummary": []any{"米饭", "牛肉"},
-			"itemsToEstimate": []any{
-				map[string]any{"item_key": "rice", "item_name": "米饭", "item_hint": "只估计米饭", "requires_reference": false, "uncertainty_level": "medium"},
-				map[string]any{"item_key": "beef", "item_name": "牛肉", "item_hint": "只估计牛肉", "requires_reference": false, "uncertainty_level": "medium"},
-			},
-		}},
+		analyze:    analyze,
 	}
 
 	require.NoError(t, runner.processPrecisionPlan(ctx, planTask))
@@ -466,12 +467,16 @@ func TestWorkerProcessPrecisionPlanRelinksCampusPublicFoodToAggregateTask(t *tes
 	require.Equal(t, item.ID, aggregateTask.Payload["public_food_item_id"])
 	require.Equal(t, "campus_public_food", aggregateTask.Payload["public_food_source_type"])
 	require.Equal(t, true, aggregateTask.Payload["micronutrient_analysis_required"])
+	require.Equal(t, "qwen3.8-flash", aggregateTask.Payload["modelName"])
 	require.Len(t, publisher.messages, 2)
 	childTask, err := taskRepo.GetTaskByID(ctx, publisher.messages[0].TaskID)
 	require.NoError(t, err)
 	require.NotNil(t, childTask)
 	require.Equal(t, "campus_public_food", childTask.Payload["public_food_source_type"])
 	require.Equal(t, true, childTask.Payload["micronutrient_analysis_required"])
+	require.Equal(t, "qwen3.8-flash", childTask.Payload["modelName"])
+	require.Equal(t, []string{"qwen3.8-flash"}, analyze.precisionModels)
+	require.Equal(t, 1, analyze.precisionPlanRuns)
 	require.Equal(t, aggregateTask.ID, publisher.messages[1].TaskID)
 }
 

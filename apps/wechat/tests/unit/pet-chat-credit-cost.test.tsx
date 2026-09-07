@@ -136,7 +136,7 @@ describe('pet chat credit cost', () => {
           calorie_remaining: 600,
           macro_gaps: { calories: 600, protein: 40, carbs: 80, fat: 20 },
           recommendations,
-          generated_by: 'qwen3.6-flash',
+          generated_by: 'qwen3.8-flash',
           ai_used: true,
           ai_rerank_count: 20,
           resolved_school: { id: 'thu-id', name: '清华大学' },

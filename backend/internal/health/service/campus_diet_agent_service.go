@@ -23,7 +23,7 @@ import (
 )
 
 const (
-	campusDietAgentModel             = "qwen3.6-flash"
+	campusDietAgentModel             = "qwen3.8-flash"
 	campusDietAgentMaxRounds         = 4
 	campusDietAgentMaxToolCalls      = 6
 	campusDietAgentDefaultResultSize = 5
@@ -521,7 +521,7 @@ func (s *StatsService) requestCampusDietAgentCompletion(ctx context.Context, llm
 	body := map[string]any{
 		"model": campusDietAgentModel, "messages": messages, "tools": tools,
 		"tool_choice": toolChoice, "parallel_tool_calls": true,
-		"enable_thinking": false, "temperature": 0.2, "max_tokens": 1000, "stream": false,
+		"enable_thinking": false, "preserve_thinking": false, "temperature": 0.2, "max_tokens": 1000, "stream": false,
 	}
 	encoded, _ := json.Marshal(body)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(llm.BaseURL, "/")+"/chat/completions", bytes.NewReader(encoded))

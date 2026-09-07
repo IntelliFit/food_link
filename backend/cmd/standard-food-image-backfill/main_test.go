@@ -58,14 +58,14 @@ func TestHydrateVisionRuntimeConfigPreservesExplicitValues(t *testing.T) {
 }
 
 func TestPickQwenFlashModel(t *testing.T) {
-	models := []string{"qwen-max", "qwen3.5-flash-2026-02-23", "qwen-turbo"}
+	models := []string{"qwen-max", "qwen3.8-flash", "qwen-turbo"}
 	got, err := pickQwenFlashModel(models, "")
 	require.NoError(t, err)
-	assert.Equal(t, "qwen3.5-flash-2026-02-23", got)
+	assert.Equal(t, "qwen3.8-flash", got)
 
-	got, err = pickQwenFlashModel(models, "qwen3.5-flash")
+	got, err = pickQwenFlashModel(models, "qwen3.8-flash")
 	require.NoError(t, err)
-	assert.Equal(t, "qwen3.5-flash", got)
+	assert.Equal(t, "qwen3.8-flash", got)
 }
 
 func TestIsPlaceholderAPIKey(t *testing.T) {

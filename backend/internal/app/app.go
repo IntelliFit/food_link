@@ -226,6 +226,7 @@ func New(cfg *config.Config) (*App, error) {
 	doubaoClient := analyzeservice.NewDoubaoClient(cfg.External.DoubaoAPIKey, "", cfg.External.DoubaoBaseURL)
 	ofoxAIClient := analyzeservice.NewOfoxAIClient(cfg.External.OfoxAIAPIKey, "gemini-3-flash-preview", cfg.External.OfoxAIBaseURL)
 	analyzeSvc := analyzeservice.NewAnalyzeService(doubaoClient, ofoxAIClient, userRepo, analyzeNutritionRepo)
+	analyzeSvc.ConfigureOpenLuxGeminiClients(cfg.External.OpenLuxAPIKey, cfg.External.OpenLuxBaseURL)
 	analyzeSvc.ConfigureDoubaoClient(cfg.External.DoubaoAPIKey, cfg.External.DoubaoBaseURL, "")
 	var dashscopeClient *analyzeservice.OfoxAIClient
 	if strings.TrimSpace(cfg.External.DashScopeAPIKey) != "" {
@@ -247,6 +248,14 @@ func New(cfg *config.Config) (*App, error) {
 		analyzeSvc.ConfigureDoubaoWebSearchClient(cfg.External.DoubaoWebSearchAPIKey, cfg.External.DoubaoBaseURL, "")
 	}
 	analyzeSvc.ConfigureImageProvider(cfg.External.LLMProvider)
+	analyzeSvc.ConfigureImageModelTraffic(
+		cfg.External.Qwen38OrdinaryTrafficPercent,
+		cfg.External.Qwen38PrecisionTrafficPercent,
+	)
+	analyzeSvc.ConfigureGeminiUpstreamTraffic(
+		cfg.External.OpenLuxOrdinaryGeminiPercent,
+		cfg.External.OpenLuxPrecisionGeminiPercent,
+	)
 	analyzeSvc.ConfigureDeepSeekFallback(cfg.External.DeepSeekAPIKey, cfg.External.DeepSeekBaseURL)
 	var nutritionEmbeddingMaintainer *foodrecordservice.NutritionEmbeddingMaintainer
 	if cfg.External.NutritionEmbeddingEnabled &&

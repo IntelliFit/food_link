@@ -16,12 +16,16 @@ import (
 )
 
 type fakeWorkerAnalyzeRunner struct {
-	userID      string
-	input       analyzeservice.AnalyzeInput
-	result      map[string]any
-	err         error
-	preciseErr  error
-	preciseRuns int
+	userID            string
+	input             analyzeservice.AnalyzeInput
+	result            map[string]any
+	err               error
+	preciseErr        error
+	preciseRuns       int
+	precisionLLMRuns  int
+	precisionPlanRuns int
+	selectedModel     string
+	precisionModels   []string
 }
 
 func (f *fakeWorkerAnalyzeRunner) Analyze(ctx context.Context, userID string, input analyzeservice.AnalyzeInput) (map[string]any, error) {
@@ -37,7 +41,27 @@ func (f *fakeWorkerAnalyzeRunner) AnalyzeText(ctx context.Context, userID string
 }
 
 func (f *fakeWorkerAnalyzeRunner) RunPrecisionJSONWithImages(ctx context.Context, sourceType, prompt string, imageURLs []string, modelName string) (map[string]any, error) {
+	f.precisionLLMRuns++
+	f.precisionModels = append(f.precisionModels, modelName)
 	return f.result, f.err
+}
+
+func (f *fakeWorkerAnalyzeRunner) RunPrecisionPlanJSONWithImages(ctx context.Context, sourceType, prompt string, imageURLs []string, modelName string) (map[string]any, error) {
+	f.precisionPlanRuns++
+	f.precisionModels = append(f.precisionModels, modelName)
+	return f.result, f.err
+}
+
+func (f *fakeWorkerAnalyzeRunner) SelectFoodImageModel(executionMode, routingKey string) string {
+	return f.selectedModel
+}
+
+func TestSelectPrecisionModelUsesConfiguredStableSelector(t *testing.T) {
+	analyze := &fakeWorkerAnalyzeRunner{selectedModel: "qwen3.8-flash"}
+
+	require.Equal(t, "qwen3.8-flash", selectPrecisionModel(analyze, "session-1"))
+	analyze.selectedModel = ""
+	require.Equal(t, precisionPlanModelName, selectPrecisionModel(analyze, "session-1"))
 }
 
 func (f *fakeWorkerAnalyzeRunner) RunPrecisionJSONWithImagesNoFallback(ctx context.Context, sourceType, prompt string, imageURLs []string, modelName string) (map[string]any, error) {
@@ -370,10 +394,12 @@ func TestAnalyzeInputFromTaskPreservesModeSuggestRatioAndCorrectionPayload(t *te
 		ImageURL:   &imageURL,
 		ImagePaths: []string{"https://example.com/mixed-meal.jpg", "https://example.com/package-label.jpg"},
 		Payload: map[string]any{
-			"execution_mode":        "strict_separate",
-			"suggest_ratio_enabled": true,
-			"remaining_calories":    520.5,
-			"additionalContext":     "面包只吃半包，米饭吃完",
+			"execution_mode":          "strict_separate",
+			"recorded_on":             "2026-09-03",
+			"timezone_offset_minutes": -480,
+			"suggest_ratio_enabled":   true,
+			"remaining_calories":      520.5,
+			"additionalContext":       "面包只吃半包，米饭吃完",
 			"previousResult": map[string]any{
 				"items": []any{
 					map[string]any{"name": "桃李豆沙小饼面包", "estimatedWeightGrams": 55.0},
@@ -403,6 +429,12 @@ func TestAnalyzeInputFromTaskPreservesModeSuggestRatioAndCorrectionPayload(t *te
 	}
 	if !input.SuggestRatioEnabled {
 		t.Fatal("suggest ratio flag should be preserved")
+	}
+	if input.RecordedOn != "2026-09-03" {
+		t.Fatalf("recorded date not preserved: %s", input.RecordedOn)
+	}
+	if input.TimezoneOffsetMinutes == nil || *input.TimezoneOffsetMinutes != -480 {
+		t.Fatalf("timezone offset not preserved: %#v", input.TimezoneOffsetMinutes)
 	}
 	if input.RemainingCalories == nil || *input.RemainingCalories != 520.5 {
 		t.Fatalf("remaining calories not preserved: %#v", input.RemainingCalories)

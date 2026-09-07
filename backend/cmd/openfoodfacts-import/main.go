@@ -38,7 +38,7 @@ const (
 	openFoodFactsSource  = "open_food_facts_odbl_20260731"
 	openFoodFactsIngest  = "open_food_facts_strict_bulk"
 	openFoodFactsLicense = "ODbL 1.0; product images CC BY-SA"
-	qwenModel            = "qwen3.6-flash"
+	qwenModel            = "qwen3.8-flash"
 )
 
 var requestedFields = strings.Join([]string{

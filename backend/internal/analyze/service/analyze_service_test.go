@@ -68,6 +68,21 @@ type multiImageLLMClient struct {
 	prompts       []string
 }
 
+type modelAwareLLMClient struct {
+	result map[string]any
+	err    error
+	models []string
+}
+
+func (m *modelAwareLLMClient) Analyze(ctx context.Context, prompt, imageURL string) (map[string]any, error) {
+	return m.result, m.err
+}
+
+func (m *modelAwareLLMClient) AnalyzeWithImagesAndTemperatureModel(ctx context.Context, prompt string, imageURLs []string, temperature float64, modelName string) (map[string]any, error) {
+	m.models = append(m.models, modelName)
+	return m.result, m.err
+}
+
 func (m *multiImageLLMClient) Analyze(ctx context.Context, prompt, imageURL string) (map[string]any, error) {
 	m.imageURLCalls = append(m.imageURLCalls, imageURL)
 	return m.result, m.err
@@ -396,13 +411,20 @@ func TestNormalizeExecutionMode(t *testing.T) {
 
 func TestBuildPromptGemini35Modes(t *testing.T) {
 	input := AnalyzeInput{
+		RecordedOn:        "2026-09-03",
 		MealType:          "lunch",
-		AdditionalContext: "包装上可能有鹅胗",
+		Province:          "广东",
+		City:              "广州",
+		AdditionalContext: "红色包装文字有些模糊",
 	}
 	prompt := buildPrompt(input, nil, "gemini35_flash")
-	assert.Contains(t, prompt, "Gemini 3.5 Flash 直接识别")
+	assert.Contains(t, prompt, "记录日期:2026-09-03；餐次:午餐；位置:广东 广州")
+	assert.Contains(t, prompt, "仅作弱先验")
 	assert.Contains(t, prompt, "包装食品")
-	assert.Contains(t, prompt, "鹅胗/鹅肫/鹅珍")
+	assert.NotContains(t, prompt, "鹅胗/鹅肫/鹅珍")
+	assert.NotContains(t, prompt, "龙宫果/龙贡果")
+	assert.NotContains(t, prompt, "Gemini 3.5 Flash")
+	assert.Less(t, len([]rune(prompt)), 4000)
 
 	groupedPrompt := buildPrompt(input, nil, "gemini35_flash_grouped")
 	assert.Contains(t, groupedPrompt, "第一阶段")
@@ -511,9 +533,13 @@ func TestResolveModelConfig(t *testing.T) {
 	assert.Equal(t, "gemini", p)
 	assert.Equal(t, "gemini-3.5-flash", m)
 
+	p, m = resolveModelConfig("qwen3.8-flash")
+	assert.Equal(t, "qwen", p)
+	assert.Equal(t, "qwen3.8-flash", m)
+
 	p, m = resolveModelConfig("qwen3.6-flash")
 	assert.Equal(t, "qwen", p)
-	assert.Equal(t, "qwen3.6-flash", m)
+	assert.Equal(t, "qwen3.8-flash", m)
 
 	p, m = resolveModelConfig("gpt-5.4-mini:stable")
 	assert.Equal(t, "openai", p)
@@ -527,9 +553,203 @@ func TestResolveModelConfig(t *testing.T) {
 	assert.Equal(t, "openai", p)
 	assert.Equal(t, "openai/gpt-4.1-nano", m)
 
+	p, m = resolveModelConfig(openLuxGemini3Route)
+	assert.Equal(t, "gemini", p)
+	assert.Equal(t, gemini3FlashModel, m)
+
+	p, m = resolveModelConfig(precisionGeminiFlashModel)
+	assert.Equal(t, "gemini", p)
+	assert.Equal(t, precisionGeminiFlashModel, m)
+
+	p, m = resolveModelConfig(openLuxPrecisionGeminiRoute)
+	assert.Equal(t, "gemini", p)
+	assert.Equal(t, precisionGeminiFlashModel, m)
+
 	p, m = resolveModelConfig("unknown-model")
 	assert.Equal(t, "gemini", p)
 	assert.Equal(t, "gemini-3-flash-preview", m)
+}
+
+func TestAnalyzeService_SelectFoodImageModelUsesStableConfiguredTraffic(t *testing.T) {
+	qwenClient := &mockLLMClient{}
+	svc := NewAnalyzeService(nil, &mockLLMClient{}, nil)
+	svc.gemini35Client = &mockLLMClient{}
+	svc.ConfigureDashScopeLLMClient(qwenClient)
+
+	svc.ConfigureImageModelTraffic(100, 100)
+	assert.Equal(t, qwen38FlashModel, svc.SelectFoodImageModel(fastExecutionMode, "task-1"))
+	assert.Equal(t, qwen38FlashModel, svc.SelectFoodImageModel(defaultExecutionMode, "task-1"))
+	assert.Equal(t, gemini35FlashModel, svc.SelectFoodImageModel(precisionExecutionMode, "session-1"))
+
+	svc.ConfigureImageModelTraffic(0, 0)
+	assert.Equal(t, qwen38FlashModel, svc.SelectFoodImageModel(fastExecutionMode, "task-1"))
+	assert.Equal(t, gemini3FlashModel, svc.SelectFoodImageModel(defaultExecutionMode, "task-1"))
+	assert.Equal(t, gemini35FlashModel, svc.SelectFoodImageModel(precisionExecutionMode, "session-1"))
+
+	svc.ConfigureImageModelTraffic(50, 20)
+	assert.Equal(t,
+		svc.SelectFoodImageModel(defaultExecutionMode, "same-image"),
+		svc.SelectFoodImageModel(defaultExecutionMode, "same-image"),
+	)
+}
+
+func TestAnalyzeService_ConfigureOpenLuxGeminiClientsUsesGemini36ForPrecision(t *testing.T) {
+	svc := NewAnalyzeService(nil, nil, nil)
+	svc.ConfigureOpenLuxGeminiClients("sk-test", "https://api.openlux.ai/v1")
+
+	ordinaryClient, ok := svc.openLuxGemini3Client.(*OfoxAIClient)
+	require.True(t, ok)
+	assert.Equal(t, gemini3FlashModel, ordinaryClient.Model)
+	precisionClient, ok := svc.openLuxPrecisionGeminiClient.(*OfoxAIClient)
+	require.True(t, ok)
+	assert.Equal(t, precisionGeminiFlashModel, precisionClient.Model)
+}
+
+func TestAnalyzeService_SelectFoodImageModelUsesStableOrdinaryTrafficAndFixedPrecisionGemini36(t *testing.T) {
+	svc := NewAnalyzeService(nil, &mockLLMClient{}, nil)
+	svc.gemini35Client = &mockLLMClient{}
+	svc.ConfigureOpenLuxGeminiLLMClients(&mockLLMClient{}, &mockLLMClient{})
+	svc.ConfigureImageModelTraffic(0, 0)
+
+	svc.ConfigureGeminiUpstreamTraffic(100, 100)
+	assert.Equal(t, openLuxGemini3Route, svc.SelectFoodImageModel(defaultExecutionMode, "image-1"))
+	assert.Equal(t, openLuxPrecisionGeminiRoute, svc.SelectFoodImageModel(precisionExecutionMode, "session-1"))
+
+	svc.ConfigureGeminiUpstreamTraffic(0, 0)
+	assert.Equal(t, gemini3FlashModel, svc.SelectFoodImageModel(defaultExecutionMode, "image-1"))
+	assert.Equal(t, openLuxPrecisionGeminiRoute, svc.SelectFoodImageModel(precisionExecutionMode, "session-1"))
+
+	svc.ConfigureGeminiUpstreamTraffic(50, 50)
+	assert.Equal(t,
+		svc.SelectFoodImageModel(defaultExecutionMode, "same-image"),
+		svc.SelectFoodImageModel(defaultExecutionMode, "same-image"),
+	)
+	ordinaryOpenLux := 0
+	for i := 0; i < 1000; i++ {
+		routingKey := fmt.Sprintf("route-%d", i)
+		if svc.SelectFoodImageModel(defaultExecutionMode, routingKey) == openLuxGemini3Route {
+			ordinaryOpenLux++
+		}
+		assert.Equal(t, openLuxPrecisionGeminiRoute, svc.SelectFoodImageModel(precisionExecutionMode, routingKey))
+	}
+	assert.InDelta(t, 500, ordinaryOpenLux, 75)
+}
+
+func TestAnalyzeService_RunPrecisionJSONUsesSelectedOpenLuxGemini36Client(t *testing.T) {
+	primaryClient := &mockLLMClient{result: map[string]any{"description": "unexpected primary", "items": []any{}}}
+	openLuxClient := &modelAwareLLMClient{result: map[string]any{"description": "openlux precision", "items": []any{}}}
+	svc := NewAnalyzeService(nil, nil, nil)
+	svc.ConfigureGemini35LLMClient(primaryClient)
+	svc.ConfigureOpenLuxGeminiLLMClients(nil, openLuxClient)
+
+	result, err := svc.RunPrecisionJSONWithImagesNoFallback(context.Background(), "image", "prompt", []string{"https://example.com/food.jpg"}, openLuxPrecisionGeminiRoute)
+
+	require.NoError(t, err)
+	assert.Equal(t, "openlux precision", result["description"])
+	assert.Equal(t, []string{precisionGeminiFlashModel}, openLuxClient.models)
+	assert.Equal(t, 0, primaryClient.calls)
+}
+
+func TestAnalyzeService_RunPrecisionJSONFallsBackAcrossGeminiUpstreamsBeforeQwen(t *testing.T) {
+	primaryClient := &modelAwareLLMClient{err: errors.New("net/http: TLS handshake timeout")}
+	openLuxClient := &modelAwareLLMClient{result: map[string]any{"description": "openlux fallback", "items": []any{}}}
+	qwenClient := &mockLLMClient{result: map[string]any{"description": "unexpected qwen", "items": []any{}}}
+	svc := NewAnalyzeService(nil, nil, nil)
+	svc.ConfigureGemini35LLMClient(primaryClient)
+	svc.ConfigureOpenLuxGeminiLLMClients(nil, openLuxClient)
+	svc.ConfigureDashScopeLLMClient(qwenClient)
+
+	result, err := svc.RunPrecisionJSONWithImages(context.Background(), "image", "prompt", []string{"https://example.com/food.jpg"}, gemini35FlashModel)
+
+	require.NoError(t, err)
+	assert.Equal(t, "openlux fallback", result["description"])
+	assert.Equal(t, []string{gemini35FlashModel}, primaryClient.models)
+	assert.Equal(t, []string{precisionGeminiFlashModel}, openLuxClient.models)
+	assert.Equal(t, 0, qwenClient.calls)
+}
+
+func TestAnalyzeService_RunPrecisionJSONOpenLuxFallsBackToPrimaryGemini(t *testing.T) {
+	primaryClient := &modelAwareLLMClient{result: map[string]any{"description": "primary fallback", "items": []any{}}}
+	openLuxClient := &modelAwareLLMClient{err: errors.New("context deadline exceeded")}
+	qwenClient := &mockLLMClient{result: map[string]any{"description": "unexpected qwen", "items": []any{}}}
+	svc := NewAnalyzeService(nil, nil, nil)
+	svc.ConfigureGemini35LLMClient(primaryClient)
+	svc.ConfigureOpenLuxGeminiLLMClients(nil, openLuxClient)
+	svc.ConfigureDashScopeLLMClient(qwenClient)
+
+	result, err := svc.RunPrecisionJSONWithImages(context.Background(), "image", "prompt", []string{"https://example.com/food.jpg"}, openLuxPrecisionGeminiRoute)
+
+	require.NoError(t, err)
+	assert.Equal(t, "primary fallback", result["description"])
+	assert.Equal(t, []string{precisionGeminiFlashModel}, openLuxClient.models)
+	assert.Equal(t, []string{gemini35FlashModel}, primaryClient.models)
+	assert.Equal(t, 0, qwenClient.calls)
+}
+
+func TestAnalyzeService_AnalyzeImageFallsBackAcrossGeminiUpstreamsBeforeQwen(t *testing.T) {
+	primaryClient := &multiImageLLMClient{err: errors.New("net/http: TLS handshake timeout")}
+	openLuxClient := &multiImageLLMClient{result: map[string]any{
+		"description": "openlux ordinary fallback",
+		"items":       []any{},
+	}}
+	qwenClient := &multiImageLLMClient{result: map[string]any{"description": "unexpected qwen", "items": []any{}}}
+	executionMode := defaultExecutionMode
+	svc := NewAnalyzeService(nil, primaryClient, nil)
+	svc.ConfigureOpenLuxGeminiLLMClients(openLuxClient, nil)
+	svc.ConfigureDashScopeLLMClient(qwenClient)
+
+	result, err := svc.Analyze(context.Background(), "", AnalyzeInput{
+		ImageURL:      "https://example.com/food.jpg",
+		ModelName:     gemini3FlashModel,
+		ExecutionMode: &executionMode,
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, "openlux ordinary fallback", result["description"])
+	require.Len(t, primaryClient.imageSetCalls, 1)
+	require.Len(t, openLuxClient.imageSetCalls, 1)
+	assert.Empty(t, qwenClient.imageSetCalls)
+	meta := result["hybrid_review"].(map[string]any)
+	assert.Equal(t, geminiPrimaryUpstream, meta["primary_upstream"])
+	assert.Equal(t, geminiOpenLuxUpstream, meta["base_upstream"])
+	assert.Equal(t, true, meta["gemini_upstream_fallback_used"])
+	assert.Equal(t, true, meta["fallback_used"])
+}
+
+func TestAnalyzeService_RunPrecisionJSONUsesSelectedQwenClient(t *testing.T) {
+	doubaoClient := &mockLLMClient{result: map[string]any{"description": "unexpected", "items": []any{}}}
+	qwenClient := &multiImageLLMClient{result: map[string]any{"description": "qwen precision", "items": []any{}}}
+	svc := NewAnalyzeService(doubaoClient, nil, nil)
+	svc.ConfigureDashScopeLLMClient(qwenClient)
+
+	result, err := svc.RunPrecisionJSONWithImages(context.Background(), "image", "prompt", []string{"https://example.com/food.jpg"}, qwen38FlashModel)
+
+	require.NoError(t, err)
+	assert.Equal(t, "qwen precision", result["description"])
+	require.Len(t, qwenClient.imageSetCalls, 1)
+	assert.Equal(t, 0, doubaoClient.calls)
+}
+
+func TestAnalyzeService_AnalyzeImageOrdinaryTrafficCanRouteToQwen(t *testing.T) {
+	geminiClient := &multiImageLLMClient{result: map[string]any{"description": "unexpected gemini", "items": []any{}}}
+	qwenClient := &multiImageLLMClient{result: map[string]any{
+		"description": "qwen ordinary",
+		"items":       []any{map[string]any{"name": "米饭", "estimatedWeightGrams": 100.0}},
+	}}
+	svc := NewAnalyzeService(nil, geminiClient, nil)
+	svc.ConfigureDashScopeLLMClient(qwenClient)
+	svc.ConfigureImageModelTraffic(100, 0)
+	svc.ConfigureNutritionResolver(newFakeAnalyzeNutritionResolver())
+
+	result, err := svc.Analyze(context.Background(), "user-1", AnalyzeInput{ImageURL: "https://example.com/rice.jpg"})
+
+	require.NoError(t, err)
+	assert.Equal(t, "qwen ordinary", result["description"])
+	require.Len(t, qwenClient.imageSetCalls, 1)
+	assert.Empty(t, geminiClient.imageSetCalls)
+	meta := result["hybrid_review"].(map[string]any)
+	assert.Equal(t, "qwen", meta["base_provider"])
+	assert.Equal(t, qwen38FlashModel, meta["base_model"])
 }
 
 func TestParseLLMJSON(t *testing.T) {
@@ -585,7 +805,7 @@ func TestBuildPromptStandardMode(t *testing.T) {
 	assert.Contains(t, prompt, "文字证据优先级高于包装正面插画")
 	assert.Contains(t, prompt, "只露出很小一角、只有色块/封边/局部花纹")
 	assert.Contains(t, prompt, "快速物理空间标定")
-	assert.Contains(t, prompt, "严禁凭 Logo 或颜色脑补品牌")
+	assert.Contains(t, prompt, "严禁凭 Logo、颜色或几何图案脑补品牌")
 	assert.Contains(t, prompt, "260g")
 }
 
@@ -595,16 +815,16 @@ func TestBuildPromptStrictModeUsesDBFirstPrompt(t *testing.T) {
 		UserGoal: "fat_loss",
 	}
 	prompt := buildPrompt(input, nil, "strict")
-	assert.Contains(t, prompt, "Gemini 3.5 Flash 直接识别")
-	assert.Contains(t, prompt, "营养由后端数据库统一查表补充")
+	assert.Contains(t, prompt, "弱先验")
+	assert.Contains(t, prompt, "营养由后端数据库统一计算")
 	assert.Contains(t, prompt, "配料表")
 	assert.Contains(t, prompt, "营养成分表")
-	assert.Contains(t, prompt, "最终名称优先采用包装文字和配料证据")
-	assert.Contains(t, prompt, "只露出很小一角、只有色块/封边/局部花纹")
-	assert.Contains(t, prompt, "OCR 强覆盖规则")
+	assert.Contains(t, prompt, "可靠文字与视觉冲突时")
+	assert.Contains(t, prompt, "仅露出色块、封边或局部花纹")
+	assert.Contains(t, prompt, "净含量/规格清晰时")
 	assert.Contains(t, prompt, "空间标定")
-	assert.Contains(t, prompt, "禁止凭 Logo 图案盲猜品牌")
-	assert.Contains(t, prompt, "grossWeightGrams 必须与 weightEvidence 完全吻合")
+	assert.Contains(t, prompt, "不得凭 Logo、颜色或几何图案猜品牌")
+	assert.Contains(t, prompt, "weightEvidence 简述重量依据")
 }
 
 func TestBuildStandardImageHybridReviewPromptRejectsTinyPackageCorners(t *testing.T) {
@@ -772,7 +992,7 @@ func TestBuildDBFirstPromptIncludesCorrectionContext(t *testing.T) {
 
 func TestBuildDBFirstPromptsUseEdibleNetWeight(t *testing.T) {
 	imagePrompt := buildImageDBFirstPrompt(AnalyzeInput{ImageURL: "https://example.com/shrimp.jpg"}, nil)
-	for _, expected := range []string{"grossWeightGrams", "原始可见总重量", "hasInedibleParts", "视觉初估字段会进入现有第二步文本模型复核"} {
+	for _, expected := range []string{"grossWeightGrams", "原始可见总重量", "hasInedibleParts", "不得只按食物名称套固定比例"} {
 		assert.Contains(t, imagePrompt, expected)
 	}
 
@@ -790,11 +1010,13 @@ func TestImageDBFirstPromptsSeparateWeightFromSuggestedRatio(t *testing.T) {
 	}
 	standardPrompt := buildImageDBFirstPrompt(input, nil)
 	strictPrompt := buildPrompt(input, nil, "strict")
+	assert.Contains(t, standardPrompt, "不能改变重量本身")
+	assert.Contains(t, standardPrompt, "不能反向影响 estimatedWeightGrams")
+	assert.Contains(t, strictPrompt, "suggestedRatio 只表示建议摄入比例")
+	assert.Contains(t, strictPrompt, "不得反向修改重量")
 	for _, prompt := range []string{standardPrompt, strictPrompt} {
 		assert.Contains(t, prompt, "原始")
-		assert.Contains(t, prompt, "文本模型")
-		assert.Contains(t, prompt, "不能改变重量本身")
-		assert.Contains(t, prompt, "不能反向影响 estimatedWeightGrams")
+		assert.Contains(t, prompt, "estimatedWeightGrams")
 		assert.Contains(t, prompt, "grossWeightGrams")
 	}
 }
@@ -1208,7 +1430,7 @@ func TestAnalyzeService_AnalyzeImageStandardIgnoresExplicitDoubaoAndUsesGemini3F
 	assert.Equal(t, 1, gemini3Client.calls)
 }
 
-func TestAnalyzeService_AnalyzeImageFastKeepsExplicitQwen36Model(t *testing.T) {
+func TestAnalyzeService_AnalyzeImageFastKeepsExplicitQwen38Model(t *testing.T) {
 	doubaoClient := &mockLLMClient{result: map[string]any{"description": "doubao image", "items": []any{}}}
 	gemini3Client := &mockLLMClient{err: assert.AnError}
 	qwenClient := &mockLLMClient{result: map[string]any{"description": "qwen fast image", "items": []any{}}}
@@ -1569,7 +1791,7 @@ func TestAnalyzeService_AnalyzeImageStrictUsesGemini35SinglePass(t *testing.T) {
 	assert.Equal(t, "包装文字显示鸡胸肉", items[0]["recognitionEvidence"])
 	require.Empty(t, doubaoClient.imageSetCalls)
 	require.Len(t, gemini35Client.imageSetCalls, 1)
-	assert.Contains(t, gemini35Client.prompts[0], "Gemini 3.5 Flash 直接识别")
+	assert.Contains(t, gemini35Client.prompts[0], "上下文（仅作弱先验")
 }
 
 func TestAnalyzeService_AnalyzeImageStrictDoesNotFallbackToDoubaoWhenGemini35Fails(t *testing.T) {
@@ -1625,7 +1847,7 @@ func TestAnalyzeService_AnalyzeImageStandardUsesGemini3FlashDefault(t *testing.T
 	assert.Empty(t, doubaoClient.imageURL)
 }
 
-func TestAnalyzeService_AnalyzeImageCorrectionUsesQwen36FlashDefault(t *testing.T) {
+func TestAnalyzeService_AnalyzeImageCorrectionUsesQwen38FlashDefault(t *testing.T) {
 	doubaoClient := &mockLLMClient{err: assert.AnError}
 	gemini3Client := &mockLLMClient{err: assert.AnError}
 	qwenClient := &multiImageLLMClient{result: map[string]any{
@@ -1650,7 +1872,7 @@ func TestAnalyzeService_AnalyzeImageCorrectionUsesQwen36FlashDefault(t *testing.
 	assert.Equal(t, "qwen_db_first", result["food_image_strategy"])
 	meta := result["hybrid_review"].(map[string]any)
 	assert.Equal(t, "qwen", meta["base_provider"])
-	assert.Equal(t, qwen36FlashModel, meta["base_model"])
+	assert.Equal(t, qwen38FlashModel, meta["base_model"])
 	require.Len(t, qwenClient.imageSetCalls, 1)
 	assert.Equal(t, 0, doubaoClient.calls)
 	assert.Equal(t, 0, gemini3Client.calls)
@@ -1707,7 +1929,7 @@ func TestAnalyzeService_AnalyzeImageRespectsExplicitModelNameInStandardMode(t *t
 
 	result, err := svc.Analyze(context.Background(), "", AnalyzeInput{
 		ImageURL:  "https://example.com/durian.jpg",
-		ModelName: qwen36FlashModel,
+		ModelName: qwen38FlashModel,
 	})
 
 	require.NoError(t, err)
@@ -1721,29 +1943,30 @@ func TestAnalyzeService_AnalyzeImageRespectsExplicitModelNameInStandardMode(t *t
 func TestBuildStandardImageHybridReviewPromptIncludesIndependentReviewAndSearchEvidence(t *testing.T) {
 	prompt := buildStandardImageHybridReviewPrompt(AnalyzeInput{
 		MealType:          "snack",
-		AdditionalContext: "用户说可能是龙宫果和鹅胗",
+		AdditionalContext: "用户说这是进口水果和包装肉制品",
 	}, map[string]any{
 		"description": "盘子里有水果和包装零食",
 		"items": []any{
-			map[string]any{"name": "无花果", "estimatedWeightGrams": 125.0, "waterMl": 80.0},
+			map[string]any{"name": "热带水果", "estimatedWeightGrams": 125.0, "waterMl": 80.0},
 		},
 	}, []WebSearchEvidence{{
-		Query: "龙宫果 外观 营养",
+		Query: "进口水果 包装文字 外观",
 		Results: []WebSearchResult{{
-			Title:   "龙宫果/Longkong 外观",
-			Snippet: "龙宫果常呈浅黄褐色圆形，成串或多个摆放。",
-			URL:     "https://example.com/longkong",
+			Title:   "进口水果包装文字说明",
+			Snippet: "应结合包装文字与果实外观判断具体品种。",
+			URL:     "https://example.com/imported-fruit",
 		}},
 	}})
 
 	assert.Contains(t, prompt, "必须先独立观察图片和 OCR 信息")
 	assert.Contains(t, prompt, "倒置")
-	assert.Contains(t, prompt, "鹅胗/鹅肫/鹅珍")
+	assert.Contains(t, prompt, "形近字要结合完整词语")
+	assert.NotContains(t, prompt, "鹅胗/鹅肫/鹅珍")
 	assert.Contains(t, prompt, "不要把低置信度 OCR 片段直接当作食物名")
 	assert.Contains(t, prompt, "不要被 Doubao 的单一候选锚定")
 	assert.Contains(t, prompt, "webSearchEvidence")
-	assert.Contains(t, prompt, "龙宫果/Longkong 外观")
-	assert.Contains(t, prompt, "用户说可能是龙宫果和鹅胗")
+	assert.Contains(t, prompt, "进口水果包装文字说明")
+	assert.Contains(t, prompt, "用户说这是进口水果和包装肉制品")
 }
 
 func TestParseDuckDuckGoHTMLResults(t *testing.T) {
@@ -2858,7 +3081,7 @@ func TestAnalyzeService_FinalizeFastDatabaseModeUsesOnlyQwenPostprocessing(t *te
 			"estimatedWeightGrams": 30.0,
 			"grossWeightGrams":     30.0,
 		}},
-	}, AnalyzeInput{SuggestRatioEnabled: true, RemainingCalories: floatPtr(10), AnalysisEngine: analysisEngineLegacyDBFirst}, fastExecutionMode, "qwen", qwen36FlashModel, 6000)
+	}, AnalyzeInput{SuggestRatioEnabled: true, RemainingCalories: floatPtr(10), AnalysisEngine: analysisEngineLegacyDBFirst}, fastExecutionMode, "qwen", qwen38FlashModel, 6000)
 	require.NoError(t, err)
 
 	assert.Equal(t, int32(0), deepseekCalls.Load())
@@ -3755,8 +3978,9 @@ func TestImageAnalysisPromptsSplitIndependentlyConsumableMealComponents(t *testi
 	for name, prompt := range prompts {
 		t.Run(name, func(t *testing.T) {
 			assert.Contains(t, prompt, "可独立吃完或剩余")
-			assert.Contains(t, prompt, "牛肉、菜心、米饭")
+			assert.Contains(t, prompt, "主食、蛋白质、蔬菜等主要组成拆分")
 			assert.Contains(t, prompt, "分别输出为独立 item")
+			assert.NotContains(t, prompt, "牛肉、菜心、米饭")
 			assert.NotContains(t, prompt, "混合菜无法可靠拆分时，作为一道常见菜名输出")
 		})
 	}

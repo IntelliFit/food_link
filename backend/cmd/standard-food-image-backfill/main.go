@@ -302,7 +302,7 @@ func parseFlags() options {
 	flag.IntVar(&opts.maxCandidates, "max-candidates", 8, "max downloaded image candidates per food")
 	flag.StringVar(&opts.foodID, "food-id", "", "process only one food id")
 	flag.StringVar(&opts.keyPrefix, "key-prefix", "standard-food/backfill", "COS object key prefix")
-	flag.StringVar(&opts.model, "vision-model", dashScopeModelHint, "DashScope vision model (empty=auto pick qwen3.5-flash from /models)")
+	flag.StringVar(&opts.model, "vision-model", dashScopeModelHint, "DashScope vision model (empty=auto pick qwen3.8-flash from /models)")
 	flag.Float64Var(&opts.threshold, "threshold", 0.72, "minimum vision model confidence to accept")
 	flag.BoolVar(&opts.apply, "apply", false, "upload image and update database")
 	flag.BoolVar(&opts.dryRun, "dry-run", true, "run without uploading or updating database")

@@ -39,8 +39,8 @@ import (
 )
 
 const (
-	precisionPlanModelName     = "gemini-3.5-flash"
-	precisionWeightModelName   = "gemini-3.5-flash"
+	precisionPlanModelName     = analyzeservice.PrecisionGeminiFlashRoute
+	precisionWeightModelName   = analyzeservice.PrecisionGeminiFlashRoute
 	strictSeparateModeName     = "strict_separate"
 	dualAngleCaptureProtocol   = "dual_angle_v1"
 	videoCaptureProtocol       = "video_keyframes_v1"
@@ -110,11 +110,23 @@ type Runner struct {
 type analyzeRunner interface {
 	Analyze(context.Context, string, analyzeservice.AnalyzeInput) (map[string]any, error)
 	AnalyzeText(context.Context, string, analyzeservice.AnalyzeInput) (map[string]any, error)
+	RunPrecisionPlanJSONWithImages(context.Context, string, string, []string, string) (map[string]any, error)
 	RunPrecisionJSONWithImages(context.Context, string, string, []string, string) (map[string]any, error)
 	RunPrecisionJSONWithImagesNoFallback(context.Context, string, string, []string, string) (map[string]any, error)
 	RunPrecisionJSONWithImagesTemperatureNoFallback(context.Context, string, string, []string, string, float64) (map[string]any, error)
 	ApplyDBFirstToItems(context.Context, []map[string]any, string) []map[string]any
 	ApplyDBFirstToItemsWithPreciseMicronutrients(context.Context, []map[string]any, string) ([]map[string]any, error)
+}
+
+func selectPrecisionModel(analyze analyzeRunner, routingKey string) string {
+	if selector, ok := analyze.(interface {
+		SelectFoodImageModel(string, string) string
+	}); ok {
+		if model := strings.TrimSpace(selector.SelectFoodImageModel("strict", routingKey)); model != "" {
+			return model
+		}
+	}
+	return precisionPlanModelName
 }
 
 type CreditGuard interface {
@@ -1413,7 +1425,7 @@ func (r *Runner) completeCorrectionTask(ctx context.Context, task *domain.Analys
 		correctionItems = input.CorrectionItems
 	}
 	input.AnalysisEngine = "db_first"
-	input.ModelName = precisionPlanModelName
+	input.ModelName = selectPrecisionModel(r.analyze, sessionID)
 	standardMode := "standard"
 	input.ExecutionMode = &standardMode
 
@@ -1485,6 +1497,9 @@ func applyLatestInputsToAnalyzeInput(input *analyzeservice.AnalyzeInput, latestI
 	}
 	if strings.TrimSpace(input.Text) == "" {
 		input.Text = firstNonEmptyString(latestInputs, "text", "text_input")
+	}
+	if input.RecordedOn == "" {
+		input.RecordedOn = firstNonEmptyString(latestInputs, "recorded_on", "date")
 	}
 	if input.MealType == "" {
 		input.MealType = firstNonEmptyString(latestInputs, "meal_type")
@@ -2369,7 +2384,14 @@ func (r *Runner) processPrecisionPlan(ctx context.Context, task *domain.Analysis
 		captureProtocol = stringFromMap(task.Payload, "capture_protocol")
 	}
 	planContext := map[string]any{
-		"precision_options":         options,
+		"precision_options": options,
+		"food_context": map[string]any{
+			"recorded_on": firstNonEmptyString(latestInputs, "recorded_on", "date"),
+			"meal_type":   firstNonEmptyString(latestInputs, "meal_type"),
+			"province":    firstNonEmptyString(latestInputs, "province"),
+			"city":        firstNonEmptyString(latestInputs, "city"),
+			"district":    firstNonEmptyString(latestInputs, "district"),
+		},
 		"capture_protocol":          captureProtocol,
 		"capture_views":             firstNonNil(latestInputs["capture_views"], task.Payload["capture_views"]),
 		"video_capture":             firstNonNil(latestInputs["video_capture"], task.Payload["video_capture"]),
@@ -2381,7 +2403,8 @@ func (r *Runner) processPrecisionPlan(ctx context.Context, task *domain.Analysis
 		planContext["web_search_precheck"] = r.runPrecisionWebSearchPrecheck(ctx, task, imageURLs, additionalContext, referenceObjects)
 	}
 	prompt := buildPrecisionPlanPrompt(sourceType, rawInput, additionalContext, referenceObjects, previousRounds, strictSeparateMode, planContext)
-	result, err := r.analyze.RunPrecisionJSONWithImages(ctx, sourceType, prompt, imageURLs, precisionPlanModelName)
+	selectedModelName := selectPrecisionModel(r.analyze, sessionID)
+	result, err := r.analyze.RunPrecisionPlanJSONWithImages(ctx, sourceType, prompt, imageURLs, selectedModelName)
 	if err != nil {
 		return err
 	}
@@ -2447,6 +2470,7 @@ func (r *Runner) processPrecisionPlan(ctx context.Context, task *domain.Analysis
 		slog.String("split_strategy", splitStrategy),
 		slog.Int("items", len(plannedItems)),
 		slog.Int("groups", len(groups)),
+		slog.String("model", selectedModelName),
 		slog.String("detail", formatPrecisionGroups(groups)),
 	)
 	childTaskIDs := make([]string, 0, len(groups))
@@ -2463,8 +2487,8 @@ func (r *Runner) processPrecisionPlan(ctx context.Context, task *domain.Analysis
 			"image_url":            imageURL,
 			"image_urls":           imageURLs,
 			"text":                 firstNonEmptyString(latestInputs, "text"),
-			"modelName":            precisionWeightModelName,
-			"planner_modelName":    precisionPlanModelName,
+			"modelName":            selectedModelName,
+			"planner_modelName":    selectedModelName,
 		}
 		copyPrecisionPlanningPayload(latestInputs, groupPayload)
 		if strictSeparateMode {
@@ -2535,6 +2559,7 @@ func (r *Runner) processPrecisionPlan(ctx context.Context, task *domain.Analysis
 		"split_strategy":       splitStrategy,
 		"child_task_ids":       childTaskIDs,
 		"source_type":          sourceType,
+		"modelName":            selectedModelName,
 	}
 	copyPrecisionPlanningPayload(latestInputs, aggregatePayload)
 	copyCampusPublicFoodPayload(task.Payload, aggregatePayload)
@@ -2643,7 +2668,11 @@ func (r *Runner) processPrecisionItemEstimate(ctx context.Context, task *domain.
 		}
 		return err
 	}
-	parsed, err := r.analyze.RunPrecisionJSONWithImagesNoFallback(ctx, sourceType, prompt, imageURLs, precisionWeightModelName)
+	modelName := firstNonEmptyString(task.Payload, "modelName")
+	if modelName == "" {
+		modelName = selectPrecisionModel(r.analyze, stringFromMap(task.Payload, "precision_session_id"))
+	}
+	parsed, err := r.analyze.RunPrecisionJSONWithImages(ctx, sourceType, prompt, imageURLs, modelName)
 	if err != nil {
 		if estimate != nil {
 			_ = r.precision.UpdateItemEstimate(ctx, estimate.ID, map[string]any{"status": "failed", "error_message": err.Error()})
@@ -2667,7 +2696,7 @@ func (r *Runner) processPrecisionItemEstimate(ctx context.Context, task *domain.
 	}
 	initialWeights := precisionWeightSnapshot(parsedItems)
 	refinedNotes := []string{}
-	refinedItems, notes, refineErr := r.maybeRefinePrecisionWeights(ctx, sourceType, parsedItems, plannedItems, rawInputForRefine, additionalContext, referenceObjects, imageURLs, precisionWeightModelName)
+	refinedItems, notes, refineErr := r.maybeRefinePrecisionWeights(ctx, sourceType, parsedItems, plannedItems, rawInputForRefine, additionalContext, referenceObjects, imageURLs, modelName)
 	if refineErr != nil {
 		r.warn(ctx, "精确模式复核已跳过",
 			slog.String("task_id", task.ID),
@@ -3813,10 +3842,11 @@ func buildPrecisionPlanPrompt(sourceType, rawInput, additionalContext string, re
 最近几轮历史（如有）：
 %s
 
-本轮结构化上下文（包含 precision_options、采集协议/画面槽位、参考物、历史回答以及联网预检）：
+本轮结构化上下文（包含 food_context、precision_options、采集协议/画面槽位、参考物、历史回答以及联网预检）：
 %s
 
 %s要求：
+- food_context 中的记录日期、餐次和地点只能作为地域菜系、时段习惯和份量的弱先验；与图片、可靠 OCR 或用户明确说明冲突时，以直接证据为准。
 - dual_angle_v1 必须核对两张照片是否为同一餐、top_down 与 oblique_45 角度是否明显不同、主体是否完整、是否模糊或严重遮挡；任一拍摄门槛不合格时返回 needs_retake，并在 retakeRequirements 中明确对应 role 和重拍方法。即使 interactive=false，也不能绕过画面质量门槛。
 - video_keyframes_v1 表示同一段短视频抽出的连续关键帧。用户可能自然横扫、逐项靠近或先局部后全景，不能仅因没有严格按俯视到 45° 的标准轨迹拍摄就要求重拍。必须综合全部关键帧互补取证：某个食物无需在每一帧都出现；连续视频中先后出现的清晰局部、容器边缘、高度视角和任一全景都可以共同支撑判断。
 - 视频中各食物只要在至少一个关键帧清晰出现，并能通过时间连续性确认属于同一餐，即使没有一帧同时完整包含所有食物，也可 ready_for_estimate，并按实际缺失的尺度/高度信息写入 uncertaintyNotes 和 referenceQuality。没有已知尺寸参考物本身不是重拍理由。
@@ -3833,7 +3863,7 @@ func buildPrecisionPlanPrompt(sourceType, rawInput, additionalContext string, re
 - 餐碗中已经煮好、泡好或可直接食用的米粉/米线/面条/粉条等，estimatedWeightGrams 是当前熟制湿重，必须使用 foodState=cooked、weightBasis=as_served；只有用户明确给出下锅前干重或画面明确是干料时，才使用 foodState=dry、weightBasis=dry。
 - 不得把当前食用状态的湿重与干料每100g营养口径混用；不确定时依据画面中的汤汁、柔软度、膨胀状态和所在餐碗判断，并写入 basisEvidence。
 - 候选筛选必须看具体视觉证据：切法、形状、边缘/皮、是否有馅、颜色、纹理、菜梗/叶片比例、包裹方式、烹饪方式和所在区域；不要只按常见菜名猜。
-- 对容易混淆的食物必须显式区分：莴苣/莴笋片 vs 青菜/小白菜，百叶包/千张包/豆皮包 vs 蒸饺/馄饨，鱼块 vs 鸡块，豆干 vs 肉块。
+- 对容易混淆的食物，必须比较形状、边缘、纹理、原料结构、包装文字和烹饪方式后再选择，不在提示词中预设具体食物对。
 - 如果不构成关键歧义，item_name 填最可能名称，candidate_names 保留 2-3 个候选，alternative_name 填次可能名称，visual_evidence 写选择依据；构成关键歧义且可交互时必须提问，不要静默猜。
 - 如果缺比例尺且会显著影响估重，请把 referenceObjectNeeded 设为 true；用户明确选择无参考物时允许继续并标记尺度不足。
 - itemsToEstimate 中每个主体必须给 item_key、item_name、candidate_names、visual_evidence、foodState、weightBasis、basisEvidence、uncertainty_level，可选 item_hint / alternative_name。
@@ -5606,6 +5636,7 @@ func analyzeInputFromTask(task *domain.AnalysisTask) analyzeservice.AnalyzeInput
 		ImageURLs:             task.ImagePaths,
 		Text:                  "",
 		AdditionalContext:     stringFromMap(payload, "additionalContext"),
+		RecordedOn:            firstNonEmptyString(payload, "recorded_on", "date"),
 		MealType:              stringFromMap(payload, "meal_type"),
 		Province:              stringFromMap(payload, "province"),
 		City:                  stringFromMap(payload, "city"),
@@ -5635,6 +5666,10 @@ func analyzeInputFromTask(task *domain.AnalysisTask) analyzeservice.AnalyzeInput
 	}
 	if remaining, ok := floatFromAny(payload["remaining_calories"]); ok {
 		input.RemainingCalories = &remaining
+	}
+	if rawOffset, ok := payload["timezone_offset_minutes"]; ok {
+		offset := intFromAny(rawOffset)
+		input.TimezoneOffsetMinutes = &offset
 	}
 	return input
 }

@@ -53,7 +53,7 @@ func TestAIDirectKeepsContextualNutritionWithoutStandardFoodLookup(t *testing.T)
 	svc.ConfigureNutritionResolver(newFakeAnalyzeNutritionResolver())
 	resp, err := svc.finalizeAnalyzeResponse(context.Background(), "", analysisEngineParsedItem("白米饭", "cooked", 210, 4, 44, 2), AnalyzeInput{
 		Text: "我吃的是加了油的炒饭，不是白米饭", AnalysisEngine: analysisEngineAIDirect,
-	}, defaultExecutionMode, "qwen", qwen36FlashModel, 1)
+	}, defaultExecutionMode, "qwen", qwen38FlashModel, 1)
 	require.NoError(t, err)
 	item := toItems(resp["items"])[0]
 	assert.Equal(t, analysisEngineAIDirect, resp["analysis_engine"])
@@ -67,7 +67,7 @@ func TestAIDirectDoesNotUsePackagedFoodDatabase(t *testing.T) {
 	svc.ConfigureNutritionResolver(newFakeAnalyzeNutritionResolver())
 	resp, err := svc.finalizeAnalyzeResponse(context.Background(), "", mixedMealWithPackagedFoodParsed(), AnalyzeInput{
 		AnalysisEngine: analysisEngineAIDirect,
-	}, defaultExecutionMode, "qwen", qwen36FlashModel, 1)
+	}, defaultExecutionMode, "qwen", qwen38FlashModel, 1)
 	require.NoError(t, err)
 
 	items := toItems(resp["items"])
@@ -149,7 +149,7 @@ func TestAIThenExactDBRejectsWeightBasisMismatch(t *testing.T) {
 }
 
 func sApplyExactForTest(svc *AnalyzeService, parsed map[string]any) map[string]any {
-	resp := buildAnalyzeResponse(parsed, defaultExecutionMode, "qwen", qwen36FlashModel, 1)
+	resp := buildAnalyzeResponse(parsed, defaultExecutionMode, "qwen", qwen38FlashModel, 1)
 	return svc.applyAIThenExactDBNutrition(context.Background(), resp, AnalyzeInput{Text: "完整描述", AnalysisEngine: analysisEngineAIThenDBExact})
 }
 

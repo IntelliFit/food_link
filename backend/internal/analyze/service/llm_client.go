@@ -70,7 +70,10 @@ type OfoxAIClient struct {
 	imageClient *http.Client
 }
 
-const llmTLSHandshakeTimeout = 4 * time.Second
+const (
+	llmTLSHandshakeTimeout                    = 4 * time.Second
+	qwenUseDefaultReasoningEffortInternalFlag = "__qwen_use_default_reasoning_effort"
+)
 
 var sharedLLMTransport = &http.Transport{
 	Proxy:                 http.ProxyFromEnvironment,
@@ -89,7 +92,7 @@ func NewDashScopeClient(apiKey string, baseURLs ...string) *OfoxAIClient {
 	if len(baseURLs) > 0 && strings.TrimSpace(baseURLs[0]) != "" {
 		baseURL = strings.TrimRight(strings.TrimSpace(baseURLs[0]), "/")
 	}
-	return NewOfoxAIClient(apiKey, "qwen3.6-flash", baseURL)
+	return NewOfoxAIClient(apiKey, "qwen3.8-flash", baseURL)
 }
 
 func NewOfoxAIClient(apiKey, model string, baseURLs ...string) *OfoxAIClient {
@@ -130,6 +133,16 @@ func (c *OfoxAIClient) AnalyzeWithImagesAndTemperature(ctx context.Context, prom
 
 func (c *OfoxAIClient) AnalyzeWithImagesAndTemperatureModel(ctx context.Context, prompt string, imageURLs []string, temperature float64, modelName string) (map[string]any, error) {
 	return c.analyzeWithImagesAndTemperature(ctx, prompt, imageURLs, temperature, modelName, nil)
+}
+
+// AnalyzeWithImagesUsingQwenDefaultReasoningModel leaves reasoning_effort
+// unset so Qwen3.8 can use its model-level default (currently xhigh). This is
+// reserved for precision planning; ordinary quality calls still use medium.
+func (c *OfoxAIClient) AnalyzeWithImagesUsingQwenDefaultReasoningModel(ctx context.Context, prompt string, imageURLs []string, temperature float64, modelName string) (map[string]any, error) {
+	return c.analyzeWithImagesAndTemperature(ctx, prompt, imageURLs, temperature, modelName, map[string]any{
+		"enable_thinking":                         true,
+		qwenUseDefaultReasoningEffortInternalFlag: true,
+	})
 }
 
 func (c *OfoxAIClient) AnalyzeWithoutThinking(ctx context.Context, prompt, imageURL string) (map[string]any, error) {
@@ -268,11 +281,31 @@ func (c *OfoxAIClient) analyzeWithImagesAndTemperatureMeta(ctx context.Context, 
 		"response_format": map[string]string{"type": "json_object"},
 		"temperature":     temperature,
 	}
-	if isDashScopeQwenModel(model, c.BaseURL) {
-		body["enable_thinking"] = true
-	}
+	useQwenDefaultReasoningEffort := false
 	for key, value := range extras {
+		if key == qwenUseDefaultReasoningEffortInternalFlag {
+			useQwenDefaultReasoningEffort, _ = value.(bool)
+			continue
+		}
 		body[key] = value
+	}
+	if isDashScopeQwenModel(model, c.BaseURL) {
+		enableThinking, explicitlyConfigured := body["enable_thinking"].(bool)
+		if !explicitlyConfigured {
+			enableThinking = true
+			body["enable_thinking"] = true
+		}
+		// Qwen3.8 defaults to xhigh reasoning. Keep quality-oriented calls at a
+		// predictable latency/cost level while fast paths can still opt out.
+		if enableThinking && !useQwenDefaultReasoningEffort {
+			if _, exists := body["reasoning_effort"]; !exists {
+				body["reasoning_effort"] = "medium"
+			}
+		} else {
+			delete(body, "reasoning_effort")
+		}
+		// Current callers do not persist reasoning_content across turns.
+		body["preserve_thinking"] = false
 	}
 	return c.doRequest(ctx, c.BaseURL+"/chat/completions", body)
 }

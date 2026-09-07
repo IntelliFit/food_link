@@ -1790,12 +1790,30 @@ func removeRetryIncompatiblePayload(payload map[string]any) {
 	if payload == nil {
 		return
 	}
-	delete(payload, "credit_usage")
-	delete(payload, "credit_group_id")
-	delete(payload, "retry_source_task_id")
-	delete(payload, "is_retry")
-	delete(payload, "precision_session_id")
-	delete(payload, "round_index")
+	for _, key := range []string{
+		"credit_usage",
+		"credit_group_id",
+		"retry_source_task_id",
+		"is_retry",
+		"precision_session_id",
+		"round_index",
+		// Precision item/aggregate tasks contain orchestration state that only
+		// belongs to the failed session. A user retry must start again from the
+		// original image/text and precision options, not reuse stale children.
+		"group_index",
+		"child_task_ids",
+		"items_to_estimate",
+		"split_strategy",
+		"item_key",
+		"item_name",
+		"item_hint",
+		"requires_reference",
+		"uncertainty_level",
+		"uncertainty_reason",
+		"planner_modelName",
+	} {
+		delete(payload, key)
+	}
 }
 
 func precisionOptionsInputFromAny(value any) *PrecisionOptionsInput {

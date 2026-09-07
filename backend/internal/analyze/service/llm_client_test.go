@@ -259,14 +259,16 @@ func TestOfoxAIClient_AnalyzeWithImagesAndTemperatureModel_OverridesRequestModel
 	assert.Equal(t, "duck", result["species"])
 }
 
-func TestDashScopeClient_Analyze_UsesQwen36FlashThinking(t *testing.T) {
+func TestDashScopeClient_Analyze_UsesQwen38FlashMediumThinking(t *testing.T) {
 	client := NewDashScopeClient("fake-key")
 	client.client = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		assert.Equal(t, "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions", req.URL.String())
 		var payload map[string]any
 		assert.NoError(t, json.NewDecoder(req.Body).Decode(&payload))
-		assert.Equal(t, "qwen3.6-flash", payload["model"])
+		assert.Equal(t, "qwen3.8-flash", payload["model"])
 		assert.Equal(t, true, payload["enable_thinking"])
+		assert.Equal(t, "medium", payload["reasoning_effort"])
+		assert.Equal(t, false, payload["preserve_thinking"])
 		assert.NotContains(t, payload, "enable_search")
 		body := `{"choices":[{"message":{"content":"{\"description\":\"快速识别\",\"items\":[{\"name\":\"米饭\",\"estimatedWeightGrams\":100}]}"}}]}`
 		return &http.Response{
@@ -281,12 +283,41 @@ func TestDashScopeClient_Analyze_UsesQwen36FlashThinking(t *testing.T) {
 	assert.Equal(t, "快速识别", result["description"])
 }
 
+func TestDashScopeClient_PrecisionPlanUsesQwen38ModelDefaultReasoning(t *testing.T) {
+	client := NewDashScopeClient("fake-key", "https://maas-openapi.wanjiedata.com/api/v1")
+	client.client = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		assert.Equal(t, "https://maas-openapi.wanjiedata.com/api/v1/chat/completions", req.URL.String())
+		var payload map[string]any
+		assert.NoError(t, json.NewDecoder(req.Body).Decode(&payload))
+		assert.Equal(t, "qwen3.8-flash", payload["model"])
+		assert.Equal(t, true, payload["enable_thinking"])
+		assert.NotContains(t, payload, "reasoning_effort")
+		assert.NotContains(t, payload, qwenUseDefaultReasoningEffortInternalFlag)
+		assert.Equal(t, false, payload["preserve_thinking"])
+		body := `{"choices":[{"message":{"content":"{\"precisionStatus\":\"ready_for_estimate\",\"itemsToEstimate\":[]}"}}]}`
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(bytes.NewBufferString(body)),
+			Header:     make(http.Header),
+		}, nil
+	})}
+
+	svc := NewAnalyzeService(nil, nil, nil)
+	svc.ConfigureDashScopeLLMClient(client)
+	result, err := svc.RunPrecisionPlanJSONWithImages(context.Background(), "image", "precision plan", []string{"https://example.com/img.jpg"}, "qwen3.8-flash")
+
+	assert.NoError(t, err)
+	assert.Equal(t, "ready_for_estimate", result["precisionStatus"])
+}
+
 func TestDashScopeClient_AnalyzeWithoutThinking_DisablesThinking(t *testing.T) {
 	client := NewDashScopeClient("fake-key")
 	client.client = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		var payload map[string]any
 		assert.NoError(t, json.NewDecoder(req.Body).Decode(&payload))
 		assert.Equal(t, false, payload["enable_thinking"])
+		assert.NotContains(t, payload, "reasoning_effort")
+		assert.Equal(t, false, payload["preserve_thinking"])
 		body := `{"choices":[{"message":{"content":"{\"items\":[]}"}}]}`
 		return &http.Response{
 			StatusCode: http.StatusOK,
@@ -320,7 +351,7 @@ func TestDashScopeClient_AnalyzeWithImagesDashScopeWebSearch(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "快速联网", result["description"])
 	assert.Equal(t, true, meta["native_search"])
-	assert.Equal(t, "qwen3.6-flash", meta["model"])
+	assert.Equal(t, "qwen3.8-flash", meta["model"])
 }
 
 func TestOfoxAIClient_Analyze_HTMLResponse(t *testing.T) {

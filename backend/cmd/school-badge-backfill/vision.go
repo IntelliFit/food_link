@@ -18,7 +18,7 @@ import (
 
 const (
 	dashScopeDefaultBaseURL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
-	dashScopeModelHint      = "qwen3.5-flash"
+	dashScopeModelHint      = "qwen3.8-flash"
 )
 
 type badgeDecision struct {
@@ -118,8 +118,7 @@ func pickQwenFlashModel(models []string, requested string) (string, error) {
 		return requested, nil
 	}
 	preferred := []string{
-		"qwen3.5-flash",
-		"qwen3.5-flash-2026-02-23",
+		"qwen3.8-flash",
 	}
 	for _, want := range preferred {
 		for _, id := range models {
@@ -131,7 +130,7 @@ func pickQwenFlashModel(models []string, requested string) (string, error) {
 	var flash []string
 	for _, id := range models {
 		lower := strings.ToLower(id)
-		if strings.Contains(lower, "qwen3.5") && strings.Contains(lower, "flash") {
+		if strings.Contains(lower, "qwen3.8") && strings.Contains(lower, "flash") {
 			flash = append(flash, id)
 		}
 	}
@@ -139,7 +138,7 @@ func pickQwenFlashModel(models []string, requested string) (string, error) {
 		return flash[0], nil
 	}
 	if len(models) > 0 {
-		return "", fmt.Errorf("模型列表中未找到 qwen3.5-flash，共 %d 个模型；请用 --vision-model 指定", len(models))
+		return "", fmt.Errorf("模型列表中未找到 qwen3.8-flash，共 %d 个模型；请用 --vision-model 指定", len(models))
 	}
 	return dashScopeModelHint, nil
 }
@@ -196,6 +195,10 @@ func (c *visionClient) classifyBadgeWithAlt(ctx context.Context, schoolName, alt
 				{"type": "image_url", "image_url": map[string]any{"url": "data:" + contentType + ";base64," + base64.StdEncoding.EncodeToString(data)}},
 			},
 		}},
+	}
+	if strings.HasPrefix(strings.ToLower(strings.TrimSpace(model)), "qwen") {
+		payload["enable_thinking"] = false
+		payload["preserve_thinking"] = false
 	}
 	body, _ := json.Marshal(payload)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/chat/completions", bytes.NewReader(body))

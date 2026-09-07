@@ -73,6 +73,7 @@ func TestCampusDietAgentFunctionCallingQueriesContextAndFiveRealFoods(t *testing
 	require.Len(t, requests, 3)
 	assert.Equal(t, campusDietAgentModel, requests[0]["model"])
 	assert.Equal(t, false, requests[0]["enable_thinking"])
+	assert.Equal(t, false, requests[0]["preserve_thinking"])
 	forcedChoice := requests[0]["tool_choice"].(map[string]any)
 	assert.Equal(t, "get_meal_context", forcedChoice["function"].(map[string]any)["name"])
 	assert.Equal(t, "required", requests[1]["tool_choice"])

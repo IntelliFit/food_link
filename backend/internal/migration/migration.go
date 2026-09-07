@@ -26,6 +26,8 @@ var officialHigherEducation2026Data string
 
 var identifierPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
+const precisionSessionExecutionModeCheckExpression = `execution_mode = ANY (ARRAY['standard'::text,'standard_web_search'::text,'fast'::text,'fast_web_search'::text,'strict'::text,'strict_separate'::text,'strict_web_search'::text,'experimental'::text,'gemini35_flash'::text,'gemini35_flash_grouped'::text])`
+
 var growthPerformanceIndexes = []struct {
 	name       string
 	table      string
@@ -1038,7 +1040,7 @@ func ensureConstraints(ctx context.Context, db *gorm.DB) error {
 		dropAndAddCheck("user_food_records", "user_food_records_entry_type_check", `entry_type = ANY (ARRAY['food_image'::text,'food_text'::text,'food_library'::text,'favorite_recipe'::text,'analyze_history'::text,'campus_canteen'::text,'public_food_library'::text,'unknown'::text])`),
 		dropAndAddCheck("user_food_records", "user_food_records_eating_mood_check", `eating_mood IS NULL OR eating_mood = ANY (ARRAY['happy'::text,'calm'::text,'stressed'::text,'tired'::text,'bored'::text,'treat'::text])`),
 		dropAndAddCheck("precision_sessions", "precision_sessions_source_type_check", `source_type = ANY (ARRAY['image'::text,'text'::text])`),
-		dropAndAddCheck("precision_sessions", "precision_sessions_execution_mode_check", `execution_mode = ANY (ARRAY['standard'::text,'standard_web_search'::text,'fast'::text,'fast_web_search'::text,'strict'::text,'strict_web_search'::text,'experimental'::text,'gemini35_flash'::text,'gemini35_flash_grouped'::text])`),
+		dropAndAddCheck("precision_sessions", "precision_sessions_execution_mode_check", precisionSessionExecutionModeCheckExpression),
 		dropAndAddCheck("precision_sessions", "precision_sessions_status_check", `status = ANY (ARRAY['collecting'::text,'estimating'::text,'needs_user_input'::text,'needs_retake'::text,'done'::text,'cancelled'::text,'failed'::text])`),
 		dropAndAddCheck("precision_sessions", "precision_sessions_round_index_check", `round_index >= 1`),
 		dropAndAddCheck("precision_session_rounds", "precision_session_rounds_actor_role_check", `actor_role = ANY (ARRAY['user'::text,'assistant'::text,'system'::text])`),

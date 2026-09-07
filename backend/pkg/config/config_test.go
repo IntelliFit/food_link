@@ -307,6 +307,8 @@ func TestLoadTrimsExternalSecrets(t *testing.T) {
 	t.Setenv("GEMINI35_API_KEY", "\tsk-gemini35\n")
 	t.Setenv("GEMINI35_BASE_URL", "\thttps://yunwu.ai/v1\n")
 	t.Setenv("GEMINI35_MODEL", "\tgemini-3.5-flash\n")
+	t.Setenv("OPENLUX_API_KEY", "\tsk-openlux\n")
+	t.Setenv("OPENLUX_BASE_URL", "\thttps://api.openlux.ai/v1/\n")
 	t.Setenv("DEEPSEEK_API_KEY", " deepseek-key ")
 	t.Setenv("DEEPSEEK_BASE_URL", "\thttps://deepseek.example.com/v1/\n")
 
@@ -343,11 +345,45 @@ worker:
 	if cfg.External.Gemini35Model != "gemini-3.5-flash" {
 		t.Fatalf("expected trimmed gemini35 model, got %q", cfg.External.Gemini35Model)
 	}
+	if cfg.External.OpenLuxAPIKey != "sk-openlux" {
+		t.Fatalf("expected trimmed OpenLux key, got %q", cfg.External.OpenLuxAPIKey)
+	}
+	if cfg.External.OpenLuxBaseURL != "https://api.openlux.ai/v1" {
+		t.Fatalf("expected trimmed OpenLux base URL, got %q", cfg.External.OpenLuxBaseURL)
+	}
 	if cfg.External.DeepSeekAPIKey != "deepseek-key" {
 		t.Fatalf("expected trimmed deepseek key, got %q", cfg.External.DeepSeekAPIKey)
 	}
 	if cfg.External.DeepSeekBaseURL != "https://deepseek.example.com/v1/" {
 		t.Fatalf("expected trimmed deepseek base URL, got %q", cfg.External.DeepSeekBaseURL)
+	}
+}
+
+func TestLoadQwen38ImageTrafficPercentagesFromEnv(t *testing.T) {
+	t.Setenv("QWEN38_ORDINARY_TRAFFIC_PERCENT", "60")
+	t.Setenv("QWEN38_PRECISION_TRAFFIC_PERCENT", "25")
+	t.Setenv("OPENLUX_ORDINARY_GEMINI_TRAFFIC_PERCENT", "50")
+	t.Setenv("OPENLUX_PRECISION_GEMINI_TRAFFIC_PERCENT", "80")
+	dir := writeTestConfig(t, `
+worker:
+  count: 1
+`)
+
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if cfg.External.Qwen38OrdinaryTrafficPercent != 60 {
+		t.Fatalf("expected ordinary Qwen traffic 60, got %d", cfg.External.Qwen38OrdinaryTrafficPercent)
+	}
+	if cfg.External.Qwen38PrecisionTrafficPercent != 25 {
+		t.Fatalf("expected precision Qwen traffic 25, got %d", cfg.External.Qwen38PrecisionTrafficPercent)
+	}
+	if cfg.External.OpenLuxOrdinaryGeminiPercent != 50 {
+		t.Fatalf("expected ordinary OpenLux Gemini traffic 50, got %d", cfg.External.OpenLuxOrdinaryGeminiPercent)
+	}
+	if cfg.External.OpenLuxPrecisionGeminiPercent != 80 {
+		t.Fatalf("expected precision OpenLux Gemini traffic 80, got %d", cfg.External.OpenLuxPrecisionGeminiPercent)
 	}
 }
 

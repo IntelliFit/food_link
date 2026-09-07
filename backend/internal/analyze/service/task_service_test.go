@@ -456,7 +456,7 @@ func TestBuildSubmitTaskPayloadPreservesIntegratedPackagedCorrectionFields(t *te
 		RemainingCalories:     &remaining,
 		SuggestRatioEnabled:   true,
 		AdditionalContext:     "桃李面包只吃半包",
-		ModelName:             "qwen3.6-flash",
+		ModelName:             "qwen3.8-flash",
 		AnalysisEngine:        "db_first",
 		TimezoneOffsetMinutes: &offset,
 		IsMultiView:           true,

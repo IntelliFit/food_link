@@ -771,7 +771,7 @@ func isValidExecutionMode(mode string) bool {
 func modeToDefaultModel(mode string) string {
 	switch mode {
 	case "fast", "fast_web_search":
-		return "qwen3.6-flash"
+		return "qwen3.8-flash"
 	case "standard", "standard_web_search":
 		return "gemini-3-flash-preview"
 	case "strict", "strict_web_search", "gemini35_flash_grouped":

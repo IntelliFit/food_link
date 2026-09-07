@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"hash/fnv"
 	"html"
 	"io"
 	"log/slog"
@@ -29,6 +30,11 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 )
 
+// PrecisionGeminiFlashRoute is the fixed primary route for FoodLink precision
+// image recognition. OpenLux currently exposes Gemini 3.6 Flash while the
+// Wanjie catalogue does not, so provider and model must travel together.
+const PrecisionGeminiFlashRoute = "openlux:gemini-3.6-flash"
+
 const (
 	defaultExecutionMode            = "standard"
 	standardWebSearchMode           = "standard_web_search"
@@ -45,8 +51,14 @@ const (
 	gemini3FlashModel               = "gemini-3-flash-preview"
 	gemini31FlashLiteModel          = "gemini-3.1-flash-lite"
 	gemini35FlashModel              = "gemini-3.5-flash"
-	qwen36FlashModel                = "qwen3.6-flash"
-	visionPrimaryTimeout            = 45 * time.Second
+	precisionGeminiFlashModel       = "gemini-3.6-flash"
+	openLuxGemini3Route             = "openlux:gemini-3-flash-preview"
+	openLuxPrecisionGeminiRoute     = PrecisionGeminiFlashRoute
+	geminiPrimaryUpstream           = "primary"
+	geminiOpenLuxUpstream           = "openlux"
+	qwen38FlashModel                = "qwen3.8-flash"
+	visionPrimaryTimeout            = 30 * time.Second
+	visionAlternateProviderTimeout  = 15 * time.Second
 	visionFallbackTimeout           = 12 * time.Second
 	maxLLMJSONParseRetries          = 3
 	maxLLMTransientRetries          = 2
@@ -78,22 +90,26 @@ const realtimeVisionTransientRetries = 0
 const packagedFoodResolveEnabled = true
 
 type AnalyzeService struct {
-	ofoxAIClient          LLMClient
-	gemini31LiteClient    LLMClient
-	gemini35Client        LLMClient
-	doubaoClient          LLMClient
-	dashscopeClient       LLMClient
-	doubaoWebSearchClient interface {
+	ofoxAIClient                 LLMClient
+	gemini31LiteClient           LLMClient
+	gemini35Client               LLMClient
+	openLuxGemini3Client         LLMClient
+	openLuxPrecisionGeminiClient LLMClient
+	doubaoClient                 LLMClient
+	dashscopeClient              LLMClient
+	doubaoWebSearchClient        interface {
 		AnalyzeWithImagesWebSearch(context.Context, string, []string, DoubaoWebSearchOptions) (map[string]any, map[string]any, error)
 	}
-	imageProvider     string
-	users             *authrepo.UserRepo
-	nutrition         NutritionResolver
-	nutritionSemantic NutritionSemanticRetriever
-	deepseek          *DeepSeekNutritionEstimator
-	nutritionAI       nutritionFallbackEstimator
-	storage           *storage.Client
-	webSearcher       WebSearcher
+	imageProvider              string
+	users                      *authrepo.UserRepo
+	nutrition                  NutritionResolver
+	nutritionSemantic          NutritionSemanticRetriever
+	deepseek                   *DeepSeekNutritionEstimator
+	nutritionAI                nutritionFallbackEstimator
+	storage                    *storage.Client
+	webSearcher                WebSearcher
+	ordinaryQwenTrafficPercent int
+	ordinaryOpenLuxPercent     int
 }
 
 type NutritionResolver interface {
@@ -163,6 +179,162 @@ func (s *AnalyzeService) ConfigureImageProvider(provider string) {
 	s.imageProvider = normalizeImageProviderPreference(provider)
 }
 
+func (s *AnalyzeService) ConfigureImageModelTraffic(ordinaryQwenPercent, precisionQwenPercent int) {
+	s.ordinaryQwenTrafficPercent = clampTrafficPercent(ordinaryQwenPercent)
+	logger.Info(context.Background(), "食物图片模型混合路由已配置",
+		slog.Int("qwen38_ordinary_traffic_percent", s.ordinaryQwenTrafficPercent),
+		slog.Int("qwen38_precision_traffic_percent_ignored", clampTrafficPercent(precisionQwenPercent)),
+		slog.String("precision_primary_model", precisionGeminiFlashModel),
+	)
+}
+
+func (s *AnalyzeService) ConfigureOpenLuxGeminiClients(apiKey, baseURL string) {
+	apiKey = strings.TrimSpace(apiKey)
+	baseURL = strings.TrimSpace(baseURL)
+	if apiKey == "" || baseURL == "" {
+		logger.Info(context.Background(), "OpenLux Gemini 双上游路由未启用")
+		return
+	}
+	s.openLuxGemini3Client = NewOfoxAIClient(apiKey, gemini3FlashModel, baseURL)
+	s.openLuxPrecisionGeminiClient = NewOfoxAIClient(apiKey, precisionGeminiFlashModel, baseURL)
+	logger.Info(context.Background(), "OpenLux Gemini 客户端初始化完成", slog.String("base_url", baseURL))
+}
+
+func (s *AnalyzeService) ConfigureOpenLuxGeminiLLMClients(gemini3Client, precisionGeminiClient LLMClient) {
+	s.openLuxGemini3Client = gemini3Client
+	s.openLuxPrecisionGeminiClient = precisionGeminiClient
+}
+
+func (s *AnalyzeService) ConfigureGeminiUpstreamTraffic(ordinaryOpenLuxPercent, precisionOpenLuxPercent int) {
+	s.ordinaryOpenLuxPercent = clampTrafficPercent(ordinaryOpenLuxPercent)
+	logger.Info(context.Background(), "Gemini 双上游混合路由已配置",
+		slog.Int("openlux_ordinary_gemini_traffic_percent", s.ordinaryOpenLuxPercent),
+		slog.Int("openlux_precision_gemini_traffic_percent_ignored", clampTrafficPercent(precisionOpenLuxPercent)),
+		slog.String("precision_primary_upstream", geminiOpenLuxUpstream),
+		slog.String("precision_primary_model", precisionGeminiFlashModel),
+	)
+}
+
+// SelectFoodImageModel returns a deterministic provider choice for one image
+// task or precision session. The same routing key always lands in the same
+// bucket, so retries do not randomly switch providers.
+func (s *AnalyzeService) SelectFoodImageModel(executionMode, routingKey string) string {
+	mode := normalizeExecutionMode(&executionMode)
+	if isFastExecutionMode(mode) {
+		return qwen38FlashModel
+	}
+	if isPrecisionLikeExecutionMode(mode) || isGemini35ExecutionMode(mode) {
+		if s.openLuxPrecisionGeminiClient != nil {
+			return openLuxPrecisionGeminiRoute
+		}
+		return gemini35FlashModel
+	}
+	if mode == defaultExecutionMode || mode == standardWebSearchMode || isPackagedExperimentExecutionMode(mode) {
+		if s.dashscopeClient != nil && stableTrafficHit("ordinary", routingKey, s.ordinaryQwenTrafficPercent) {
+			return qwen38FlashModel
+		}
+		if s.openLuxGemini3Client != nil && stableTrafficHit("ordinary_gemini_openlux", routingKey, s.ordinaryOpenLuxPercent) {
+			return openLuxGemini3Route
+		}
+		return gemini3FlashModel
+	}
+	return gemini3FlashModel
+}
+
+func clampTrafficPercent(value int) int {
+	if value < 0 {
+		return 0
+	}
+	if value > 100 {
+		return 100
+	}
+	return value
+}
+
+func stableTrafficHit(namespace, routingKey string, percent int) bool {
+	percent = clampTrafficPercent(percent)
+	if percent <= 0 {
+		return false
+	}
+	if percent >= 100 {
+		return true
+	}
+	hasher := fnv.New32a()
+	_, _ = io.WriteString(hasher, namespace)
+	_, _ = io.WriteString(hasher, "\x00")
+	_, _ = io.WriteString(hasher, routingKey)
+	return int(hasher.Sum32()%100) < percent
+}
+
+func isOpenLuxGeminiRoute(modelName string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(modelName))
+	return normalized == openLuxGemini3Route || normalized == openLuxPrecisionGeminiRoute
+}
+
+func geminiRouteName(model, upstream string) string {
+	if upstream != geminiOpenLuxUpstream {
+		return model
+	}
+	if model == precisionGeminiFlashModel {
+		return openLuxPrecisionGeminiRoute
+	}
+	return openLuxGemini3Route
+}
+
+func (s *AnalyzeService) geminiClientForRoute(model, requestedModel string) (LLMClient, string) {
+	if isOpenLuxGeminiRoute(requestedModel) {
+		if model == precisionGeminiFlashModel {
+			return s.openLuxPrecisionGeminiClient, geminiOpenLuxUpstream
+		}
+		return s.openLuxGemini3Client, geminiOpenLuxUpstream
+	}
+	if model == precisionGeminiFlashModel {
+		return s.openLuxPrecisionGeminiClient, geminiOpenLuxUpstream
+	}
+	if model == gemini35FlashModel {
+		return s.gemini35Client, geminiPrimaryUpstream
+	}
+	if strings.EqualFold(model, gemini31FlashLiteModel) && s.gemini31LiteClient != nil {
+		return s.gemini31LiteClient, geminiPrimaryUpstream
+	}
+	return s.ofoxAIClient, geminiPrimaryUpstream
+}
+
+func (s *AnalyzeService) alternateGeminiClient(model, primaryUpstream string) (LLMClient, string, string) {
+	if primaryUpstream == geminiOpenLuxUpstream {
+		if model == precisionGeminiFlashModel {
+			return s.gemini35Client, geminiPrimaryUpstream, gemini35FlashModel
+		}
+		return s.ofoxAIClient, geminiPrimaryUpstream, model
+	}
+	if model == gemini35FlashModel {
+		return s.openLuxPrecisionGeminiClient, geminiOpenLuxUpstream, precisionGeminiFlashModel
+	}
+	if model == gemini3FlashModel {
+		return s.openLuxGemini3Client, geminiOpenLuxUpstream, model
+	}
+	return nil, "", ""
+}
+
+func tryGeminiVisionCall(ctx context.Context, stage, upstream, model, prompt string, imageURLs []string, temperature float64, timeout time.Duration, client LLMClient) (map[string]any, error) {
+	if client == nil {
+		return nil, fmt.Errorf("Gemini 上游 %s 未配置", upstream)
+	}
+	callCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	call := newAnalyzeWithImagesTemperatureModelCall(client, prompt, imageURLs, temperature, model)
+	return analyzeWithJSONParseRetryPolicy(callCtx, stage, "gemini", model, realtimeVisionRetryPolicy, call)
+}
+
+func foodImageModelRoutingKey(userID string, input AnalyzeInput) string {
+	hasher := fnv.New32a()
+	for _, value := range append([]string{userID, input.ImageURL, input.Text, input.AdditionalContext, input.Base64Image}, input.ImageURLs...) {
+		_, _ = io.WriteString(hasher, "\x00")
+		_, _ = io.WriteString(hasher, value)
+	}
+	return fmt.Sprintf("%08x", hasher.Sum32())
+}
+
 func (s *AnalyzeService) ConfigureDeepSeekFallback(apiKey string, baseURLs ...string) {
 	baseURL := ""
 	if len(baseURLs) > 0 {
@@ -194,7 +366,7 @@ func (s *AnalyzeService) ConfigureDashScopeClient(apiKey, baseURL string) {
 	if strings.TrimSpace(apiKey) != "" {
 		s.dashscopeClient = NewDashScopeClient(apiKey, baseURL)
 		s.refreshNutritionFallbackEstimator()
-		logger.Info(context.Background(), "百炼客户端初始化完成", slog.String("base_url", baseURL), slog.String("model", qwen36FlashModel))
+		logger.Info(context.Background(), "百炼客户端初始化完成", slog.String("base_url", baseURL), slog.String("model", qwen38FlashModel))
 		return
 	}
 	logger.Warn(context.Background(), "百炼客户端未初始化：密钥为空")
@@ -241,7 +413,7 @@ func (s *AnalyzeService) refreshNutritionFallbackEstimator() {
 
 func (s *AnalyzeService) runtimePostprocessClient() (LLMClient, string, string) {
 	if s != nil && s.dashscopeClient != nil {
-		return s.dashscopeClient, "qwen", qwen36FlashModel
+		return s.dashscopeClient, "qwen", qwen38FlashModel
 	}
 	if s != nil && s.deepseek != nil && strings.TrimSpace(s.deepseek.APIKey) != "" {
 		model := strings.TrimSpace(s.deepseek.Model)
@@ -262,7 +434,7 @@ func (s *AnalyzeService) ediblePortionPostprocessClient() (LLMClient, string, st
 		return s.deepseek, "deepseek", model
 	}
 	if s != nil && s.dashscopeClient != nil {
-		return s.dashscopeClient, "qwen", qwen36FlashModel
+		return s.dashscopeClient, "qwen", qwen38FlashModel
 	}
 	return nil, "", ""
 }
@@ -337,19 +509,26 @@ func (s *AnalyzeService) RunPrecisionJSONWithImages(ctx context.Context, sourceT
 	return s.RunPrecisionJSONWithImagesTemperature(ctx, sourceType, prompt, imageURLs, modelName, 0)
 }
 
+// RunPrecisionPlanJSONWithImages lets Qwen3.8 use its model-level default
+// reasoning depth for the planning stage. Estimate and fallback calls keep
+// their existing medium/fast policies.
+func (s *AnalyzeService) RunPrecisionPlanJSONWithImages(ctx context.Context, sourceType, prompt string, imageURLs []string, modelName string) (map[string]any, error) {
+	return s.runPrecisionJSONWithImagesTemperature(ctx, sourceType, prompt, imageURLs, modelName, 0, true, true)
+}
+
 func (s *AnalyzeService) RunPrecisionJSONWithImagesTemperature(ctx context.Context, sourceType, prompt string, imageURLs []string, modelName string, temperature float64) (map[string]any, error) {
-	return s.runPrecisionJSONWithImagesTemperature(ctx, sourceType, prompt, imageURLs, modelName, temperature, true)
+	return s.runPrecisionJSONWithImagesTemperature(ctx, sourceType, prompt, imageURLs, modelName, temperature, true, false)
 }
 
 func (s *AnalyzeService) RunPrecisionJSONWithImagesTemperatureNoFallback(ctx context.Context, sourceType, prompt string, imageURLs []string, modelName string, temperature float64) (map[string]any, error) {
-	return s.runPrecisionJSONWithImagesTemperature(ctx, sourceType, prompt, imageURLs, modelName, temperature, false)
+	return s.runPrecisionJSONWithImagesTemperature(ctx, sourceType, prompt, imageURLs, modelName, temperature, false, false)
 }
 
 func (s *AnalyzeService) RunPrecisionJSONWithImagesNoFallback(ctx context.Context, sourceType, prompt string, imageURLs []string, modelName string) (map[string]any, error) {
 	return s.RunPrecisionJSONWithImagesTemperatureNoFallback(ctx, sourceType, prompt, imageURLs, modelName, 0)
 }
 
-func (s *AnalyzeService) runPrecisionJSONWithImagesTemperature(ctx context.Context, sourceType, prompt string, imageURLs []string, modelName string, temperature float64, allowFallback bool) (map[string]any, error) {
+func (s *AnalyzeService) runPrecisionJSONWithImagesTemperature(ctx context.Context, sourceType, prompt string, imageURLs []string, modelName string, temperature float64, allowFallback, useQwenDefaultReasoning bool) (map[string]any, error) {
 	sourceType = strings.TrimSpace(sourceType)
 	timeout := 60 * time.Second
 	if sourceType == "image" {
@@ -379,6 +558,7 @@ func (s *AnalyzeService) runPrecisionJSONWithImagesTemperature(ctx context.Conte
 		attribute.Int("analysis.image_count", len(nonEmptyStrings(imageURLs))),
 	)
 	var client LLMClient
+	geminiUpstream := ""
 	switch provider {
 	case "deepseek":
 		if s.deepseek == nil || strings.TrimSpace(s.deepseek.APIKey) == "" {
@@ -388,11 +568,9 @@ func (s *AnalyzeService) runPrecisionJSONWithImagesTemperature(ctx context.Conte
 	case "doubao":
 		client = s.doubaoClient
 	case "gemini":
-		if model == gemini35FlashModel && s.gemini35Client != nil {
-			client = s.gemini35Client
-		} else {
-			client = s.ofoxAIClient
-		}
+		client, geminiUpstream = s.geminiClientForRoute(model, modelName)
+	case "qwen":
+		client = s.dashscopeClient
 	case "openai":
 		client = s.ofoxAIClient
 	default:
@@ -411,10 +589,14 @@ func (s *AnalyzeService) runPrecisionJSONWithImagesTemperature(ctx context.Conte
 	apm.AddEvent(ctx, "精准模式大模型调用开始",
 		attribute.String("analysis.source_type", sourceType),
 		attribute.String("analysis.provider", provider),
+		attribute.String("analysis.gemini_upstream", geminiUpstream),
 		attribute.Int("analysis.image_count", len(imageURLs)),
 		attribute.Float64("analysis.temperature", temperature),
 	)
 	primaryCall := newAnalyzeWithImagesTemperatureModelCall(client, prompt, imageURLs, temperature, model)
+	if provider == "qwen" && useQwenDefaultReasoning {
+		primaryCall = newAnalyzeWithImagesUsingQwenDefaultReasoningModelCall(client, prompt, imageURLs, temperature, model)
+	}
 	policy := defaultLLMRetryPolicy
 	if provider == "gemini" && len(imageURLs) > 0 {
 		policy = realtimeVisionRetryPolicy
@@ -428,14 +610,42 @@ func (s *AnalyzeService) runPrecisionJSONWithImagesTemperature(ctx context.Conte
 		defer attemptCancel()
 		return primaryCall(attemptCtx)
 	})
-	if allowFallback && err != nil && provider == "gemini" && len(imageURLs) > 0 && (isTransientLLMError(err) || IsLLMJSONParseError(err)) && s.dashscopeClient != nil {
+	if allowFallback && err != nil && provider == "gemini" && len(imageURLs) > 0 && (isTransientLLMError(err) || IsLLMJSONParseError(err)) {
+		primaryErr := err
+		alternateClient, alternateUpstream, alternateModel := s.alternateGeminiClient(model, geminiUpstream)
+		if alternateClient != nil && alternateClient != client {
+			alternateParsed, alternateErr := tryGeminiVisionCall(callCtx, "precision_gemini_upstream_fallback", alternateUpstream, alternateModel, prompt, imageURLs, temperature, visionAlternateProviderTimeout, alternateClient)
+			if alternateErr == nil {
+				logger.Warn(ctx, "精准模式 Gemini 首选上游失败，已切换备用 Gemini 上游",
+					logger.NamedErr("primary_error", primaryErr),
+					slog.String("primary_upstream", geminiUpstream),
+					slog.String("primary_model", model),
+					slog.String("fallback_upstream", alternateUpstream),
+					slog.String("fallback_model", alternateModel),
+					slog.Int("image_count", len(imageURLs)),
+				)
+				return alternateParsed, nil
+			}
+			err = fmt.Errorf("Gemini 首选上游 %s 失败: %v；备用上游 %s 失败: %w", geminiUpstream, primaryErr, alternateUpstream, alternateErr)
+			logger.Warn(ctx, "精准模式两个 Gemini 上游均失败",
+				logger.NamedErr("primary_error", primaryErr),
+				logger.NamedErr("alternate_error", alternateErr),
+				slog.String("primary_upstream", geminiUpstream),
+				slog.String("primary_model", model),
+				slog.String("alternate_upstream", alternateUpstream),
+				slog.String("alternate_model", alternateModel),
+			)
+		}
+		if s.dashscopeClient == nil {
+			return nil, err
+		}
 		fallbackCtx, fallbackCancel := context.WithTimeout(callCtx, visionFallbackTimeout)
-		fallbackCall := newAnalyzeWithImagesWithoutThinkingModelCall(s.dashscopeClient, prompt, imageURLs, qwen36FlashModel)
-		fallbackParsed, fallbackErr := analyzeWithJSONParseRetryPolicy(fallbackCtx, "precision_fallback", "qwen", qwen36FlashModel, postprocessRetryPolicy, fallbackCall)
+		fallbackCall := newAnalyzeWithImagesWithoutThinkingModelCall(s.dashscopeClient, prompt, imageURLs, qwen38FlashModel)
+		fallbackParsed, fallbackErr := analyzeWithJSONParseRetryPolicy(fallbackCtx, "precision_fallback", "qwen", qwen38FlashModel, postprocessRetryPolicy, fallbackCall)
 		fallbackCancel()
 		if fallbackErr == nil {
-			logger.Warn(ctx, "精准模式 Gemini 视觉模型临时失败，回退 Qwen 3.6 Flash",
-				logger.Err(err),
+			logger.Warn(ctx, "精准模式 Gemini 双上游不可用，回退 Qwen 3.8 Flash",
+				logger.NamedErr("gemini_error", err),
 				slog.Int("image_count", len(imageURLs)),
 			)
 			apm.AddEvent(ctx, "精准模式大模型回退完成",
@@ -446,7 +656,7 @@ func (s *AnalyzeService) runPrecisionJSONWithImagesTemperature(ctx context.Conte
 			)
 			return fallbackParsed, nil
 		}
-		logger.Warn(ctx, "精准模式 Qwen 3.6 Flash 回退失败",
+		logger.Warn(ctx, "精准模式 Qwen 3.8 Flash 回退失败",
 			logger.NamedErr("fallback_error", fallbackErr),
 			logger.Err(err),
 			slog.Int("image_count", len(imageURLs)),
@@ -706,6 +916,17 @@ func newAnalyzeWithImagesTemperatureModelCall(client LLMClient, prompt string, i
 	}
 }
 
+func newAnalyzeWithImagesUsingQwenDefaultReasoningModelCall(client LLMClient, prompt string, imageURLs []string, temperature float64, modelName string) func(context.Context) (map[string]any, error) {
+	if reasoningClient, ok := client.(interface {
+		AnalyzeWithImagesUsingQwenDefaultReasoningModel(context.Context, string, []string, float64, string) (map[string]any, error)
+	}); ok {
+		return func(ctx context.Context) (map[string]any, error) {
+			return reasoningClient.AnalyzeWithImagesUsingQwenDefaultReasoningModel(ctx, prompt, imageURLs, temperature, modelName)
+		}
+	}
+	return newAnalyzeWithImagesTemperatureModelCall(client, prompt, imageURLs, temperature, modelName)
+}
+
 func newAnalyzeWithImagesWithoutThinkingModelCall(client LLMClient, prompt string, imageURLs []string, modelName string) func(context.Context) (map[string]any, error) {
 	if fastClient, ok := client.(interface {
 		AnalyzeWithImagesWithoutThinkingModel(context.Context, string, []string, string) (map[string]any, error)
@@ -908,6 +1129,7 @@ type AnalyzeInput struct {
 	ImageURLs             []string         `json:"image_urls"`
 	Text                  string           `json:"text"`
 	AdditionalContext     string           `json:"additionalContext"`
+	RecordedOn            string           `json:"recorded_on"`
 	MealType              string           `json:"meal_type"`
 	TimezoneOffsetMinutes *int             `json:"timezone_offset_minutes"`
 	Province              string           `json:"province"`
@@ -1278,6 +1500,9 @@ JSON:
 
 func buildContextTags(input AnalyzeInput, user *authrepo.User) []string {
 	tags := []string{}
+	if recordedOn := strings.TrimSpace(input.RecordedOn); recordedOn != "" {
+		tags = append(tags, "记录日期:"+recordedOn)
+	}
 	if input.MealType != "" {
 		tags = append(tags, fmt.Sprintf("餐次:%s", mealName(input.MealType, input.TimezoneOffsetMinutes)))
 	}
@@ -1308,22 +1533,18 @@ func buildContextTags(input AnalyzeInput, user *authrepo.User) []string {
 
 func imageEdiblePortionPromptRules() string {
 	return `通用可食部分估算规则（适用于所有食物，不按食物名称套固定比例）：
-- 先判断图片中的呈现状态：完整/购买态、带皮带壳带骨带核，还是已经去皮、去壳、去骨、切块、装盘的可食状态；只扣除原图中实际存在的不可食部分
-- hasInedibleParts 表示原图这份食物是否仍包含不可食结构；已经去皮、去壳、去骨、去核且可直接食用的部分通常填 false，ediblePortionRatio 填 100
-- 对仍有不可食结构的完整食物，必须根据原图估计外皮/壳/骨/核/硬芯的厚度、体积占比和与可食组织的密度差异，再得到 ediblePortionRatio；不能因为不确定就习惯性填 50，也不能只按食物名称查一个固定常数
-- 估算证据优先级：包装净含量或称重/OCR > 可见数量与单体尺寸 > 原图几何体积、厚度、密度和容器比例尺 > 同状态食物的常见出成率；常见出成率只能辅助校验，不能覆盖原图呈现状态
-- grossWeightGrams 是原图中这份食物连同实际存在的不可食结构的毛重；estimatedWeightGrams 是可食净重，必须严格等于 grossWeightGrams × ediblePortionRatio / 100
-- ediblePortionReason 用一句短语说明原图中扣除了什么结构、依据是什么；比例为 100 时说明已是可直接食用状态或没有可见不可食结构
-- 这些视觉初估字段会进入现有第二步文本模型复核；第二步只做校验和有依据的修正，因此本轮必须先给出完整、可自洽的初估，不能只填毛重`
+- 只扣除原图中实际存在的皮、壳、骨、核、硬芯等不可食结构；已经处理成可直接食用状态时，hasInedibleParts=false、ediblePortionRatio=100
+- 比例依据依次为：包装净含量/称重/OCR、可见数量与尺寸、几何体积与密度、同状态食物常见出成率；不得只按食物名称套固定比例
+- grossWeightGrams 是含原图可见不可食结构的毛重；estimatedWeightGrams 必须等于 grossWeightGrams × ediblePortionRatio / 100
+- ediblePortionReason 简述扣除了什么及依据；所有字段必须自洽，不能只填毛重`
 }
 
 func imageMealComponentSeparationRules() string {
 	return `组合餐食拆分规则（拆分标准是用户能否分别吃完或剩余）：
 - 同一餐盒、碗、盘或菜品名称不代表只能输出一个食物项；只要主要组成在图片中可见、可区分，而且用户可能可独立吃完或剩余，就必须分别输出为独立 item
-- 例如菜心牛肉饭应把牛肉、菜心、米饭分别输出为独立 item；另有肉卷、鸡蛋、饮料等也各自单列，不能合并成“菜心牛肉饭配肉卷”一个 item
-- 盖饭、拼盘、便当、沙拉、火锅、麻辣烫等组合餐，优先按可见的主食、肉类、蔬菜、蛋类和其它可独立夹取/保留的主要组成拆分；每项分别估算重量和营养
-- 不要为了拆分而猜测图片中看不见的配料；油、盐、酱汁、调味料及无法从成品中独立食用的少量辅料，仍计入对应菜品，不机械拆成 item
-- 边界或重量不够确定时，可以给出保守估计并在 evidence/assumptions 中说明，但不能因此把清楚可见、可独立吃完或剩余的主要组成重新合并成整餐一个 item`
+- 组合餐按可见、可独立夹取或保留的主食、蛋白质、蔬菜等主要组成拆分；相同食物合并
+- 不猜测看不见的配料；油、盐、酱汁和无法独立食用的少量辅料计入所属菜品
+- 边界不确定时给保守估计并写入证据，但不能合并清楚可见的主要组成`
 }
 
 func buildImageDBFirstPrompt(input AnalyzeInput, user *authrepo.User) string {
@@ -1351,9 +1572,9 @@ func buildImageDBFirstPrompt(input AnalyzeInput, user *authrepo.User) string {
 - 零食、点心、饼干、肉干、坚果、糖果、糕点、酸奶、饮料等预包装食品，优先读取包装袋/杯/盒上的品牌、品名、口味、配料表、营养成分表、净含量、规格、独立小包数量；这些文字证据优先级高于包装正面插画或模型对外观的猜测
 - 如果能看到配料表或营养成分表，即使字较小、倾斜、倒置、反光，也要尝试读取关键字段；用配料表判断食物类型和主要原料，用净含量/规格判断重量
 - 如果 OCR 明确读到净含量或规格，例如 260g、250ml、独立小包 20g，则 grossWeightGrams 优先采用该数值或按可见食用数量换算；除非画面明显显示包装已开封且食物已被消耗，才按剩余比例扣减
-- 对零食/包装食品，不能只根据图片图案猜成“阿胶糕/无花果干/普通饼干”等；若包装文字、配料表或营养成分表与视觉图案冲突，最终名称优先采用包装文字和配料证据，并在 evidence 中说明
+- 对零食/包装食品，不能只根据包装插画或外观猜名称；可靠包装文字、配料表和营养标签的优先级更高，证据冲突时在 evidence 中说明
 - 若包装食品的配料表和营养成分表可被读取，请在对应 item 的 "ingredients" 字段输出：原始配料文本 ingredientsText、每份规格 servingSize、每100g关键营养 nutritionPer100g（能量/蛋白质/脂肪/碳水/钠）；energyKj 表示包装原文的千焦，calories 必须表示千卡(kcal)。若标签只写 kJ，按 calories = energyKj / 4.184 换算，严禁把 kJ 数字直接填入 calories；未识别到时省略该字段，不要编造
-- 严禁凭 Logo 或颜色脑补品牌：不要仅凭标志颜色、圆形图案、包装主色等断定品牌；只有读到明确品牌文字时才写品牌，否则使用客观品名，例如“草莓酸奶”“草莓风味发酵乳”
+- 严禁凭 Logo、颜色或几何图案脑补品牌；只有读到明确品牌文字时才写品牌，否则使用客观食品名称
 - 如果包装只露出很小一角、只有色块/封边/局部花纹，读不到可靠文字，也无法确认完整包装归属，不要猜成具体零食或品牌；这类对象不计入
 - 不输出餐具、空包装、桌面、骨头、壳、果核、签子等不可食或非食物部分
 - 对仅在边缘露出少量、无法确认种类或份量的食物，不计入
@@ -1366,7 +1587,7 @@ func buildImageDBFirstPrompt(input AnalyzeInput, user *authrepo.User) string {
 - grossWeightGrams 必须是数字，单位克，表示图片中可见食物的原始可见总重量；带壳、带骨、带核时先估整份原始重量，不要扣壳/骨/核
 - estimatedWeightGrams 必须是本次视觉识别直接估算的可食净重，不再交给文本模型按食物名称二次猜测
 - 多个可独立计数的同类食物（水果、鸡蛋、包子等）必须先数清 itemCount，再估 estimatedUnitWeightGrams，并按 itemCount × estimatedUnitWeightGrams 得到 grossWeightGrams；三个字段必须严格自洽
-- 掌心大小鲜桃单枚按常见重量保守估算，无电子秤或明确超大尺寸证据时不得超过180g；苹果、梨、柑橘等其它鲜果单枚超过250g也必须有强证据，不能只因近景透视而放大
+- 单体重量显著偏离同状态食物常见范围时，必须有称重、包装规格或清晰比例尺等强证据；不能只因近景透视而放大
 - 必须区分食物状态 foodState 与重量口径 weightBasis：泡发/泡开的燕麦、木耳、银耳等，如果用户明确说“60g干燕麦”则按60g干重并填 weightBasis=dry；否则按泡发后的实际湿重并填 weightBasis=as_served，名称也要保留“泡发/粥”等状态，严禁用湿重配干态食物名
 - 不要因为减脂、控糖、剩余热量不足或健康建议而下调 grossWeightGrams 或 estimatedWeightGrams；饮食控制只能体现在 suggestedRatio，不能改变重量本身
 - 综合可见面积、厚度、高度、容器、餐具、手掌、包装等参照物估算
@@ -1459,7 +1680,7 @@ func buildLiteImageDBFirstPrompt(input AnalyzeInput, user *authrepo.User) string
 - 不确定 OCR 不能直接当食物名；若 OCR 与视觉冲突，把冲突写进 recognitionEvidence 和 alternativeNames
 - 小众水果/进口零食/不确定包装食品可使用 web_search，搜索关键词要围绕可见包装文字、品牌、品名或用户补充信息，避免用泛泛描述搜索
 - grossWeightGrams 是图中可见原始总重量；estimatedWeightGrams 是视觉模型按原图呈现状态直接估算的可食净重
-- 多枚同类水果、鸡蛋、包子等必须输出 itemCount 和 estimatedUnitWeightGrams，并令 grossWeightGrams = itemCount × estimatedUnitWeightGrams；掌心大小鲜桃无秤时单枚不超过180g，其它桃/苹果/梨/柑橘单枚超过250g必须有强比例尺证据
+- 多个可独立计数的同类食物必须输出 itemCount 和 estimatedUnitWeightGrams，并令 grossWeightGrams = itemCount × estimatedUnitWeightGrams；单体重量显著偏离常见范围时必须有强比例尺证据
 - 输出 foodState（fresh/dry/hydrated/cooked/liquid/packaged）和 weightBasis（dry/as_served/package_net）。泡发燕麦若用户明确提供干重则沿用干重；否则必须按湿重并把名称写成“泡发燕麦/燕麦粥”，不得用湿重套干态名称
 - waterMl 表示该食物/饮品本身可计入饮水参考的水量；无法判断填 0
 
@@ -1517,68 +1738,56 @@ func buildGemini35ImageDBFirstPrompt(input AnalyzeInput, user *authrepo.User, ex
 	if executionMode == gemini35GroupedExecutionMode {
 		return buildGemini35GroupedPlanPrompt(input, user)
 	}
-	tagBlock := ""
+	contextLine := "无"
 	if tags := buildContextTags(input, user); len(tags) > 0 {
-		tagBlock = strings.Join(tags, "\n") + "\n"
+		contextLine = strings.Join(tags, "；")
 	}
-	additionalLine := ""
+	additionalLine := "无"
 	if input.AdditionalContext != "" {
-		additionalLine = fmt.Sprintf("用户补充背景信息:\n%s\n请优先使用用户明确补充的食物名、品牌、包装文字、份量信息。", input.AdditionalContext)
+		additionalLine = strings.TrimSpace(input.AdditionalContext)
 	}
 	imageInputHint := buildImageInputHint(input)
-	groupLine := "本通道为 Gemini 3.5 Flash 直接识别：一次性输出完整食物清单。"
-	prompt := fmt.Sprintf(`你是专业的食物图像识别与可食部重量估算助手。请基于图片直接识别食物；营养由后端数据库统一查表补充，你不需要输出任何营养数值。
-%s%s%s
-%s
+	if imageInputHint == "" {
+		imageInputHint = "单张图片，按一个画面分析。"
+	}
+	prompt := fmt.Sprintf(`你是专业的食物图像识别与可食部重量估算助手。请直接识别图片中的食物并估算份量；营养由后端数据库统一计算，不要自行估算营养数值。包装上清晰可见的营养标签可以原样转录。
+
+上下文（仅作弱先验，不能替代图像证据）：%s
+用户补充（作为线索；与图像冲突时说明，不机械照抄）：%s
+图片关系：%s
 
 `+imageMealComponentSeparationRules()+`
 
-深度识别与多模态对齐规则：
+证据优先级：可靠的包装文字/配料表/净含量 > 清晰视觉特征 > 用户补充 > 时间、餐次和地点。低优先级线索不得推翻清晰的高优先级证据。
+
+识别与 OCR：
 - 必须逐区扫描画面：左侧、中央、右侧、下方、背景/被遮挡处
-- 在输出 grossWeightGrams 之前，必须先在脑中完成 recognitionEvidence 和 weightEvidence 的逻辑闭环：先说明为什么认定它是什么，再说明为什么原始可见重量是这个数
-- 物理尺寸与空间标定：先定位标准化工业品或天然比例尺，例如标准 330ml/500ml 易拉罐、常见手机、餐具，或包装上印有净含量的食品；再以这些参照物推算砂锅、大盘、深碗、杯盒的真实口径、高度和体积；最后结合食物堆积高度估算可食部重量
-- 绝对禁止在没有进行空间标定的情况下直接套用市面均值小分量；例如不要把与大砂锅/大盘对比明显很大的 260g 酸奶杯，盲目猜测为 130g 均值杯
-- 包装食品、袋装食品、盒装食品、被部分遮挡但仍能确认是完整独立食品包装的对象，才作为独立食物项输出
-- 包装本身不是食物，但包装代表的可食内容要输出为食物项；name 写包装上的品名/可判断食品名，不要输出“包装袋”
-- OCR 绝对优先与 mentally rotate：包装文字可能横排、竖排、倒置、旋转、反光或被遮挡；请 mentally rotate 后重读，优先提取品牌、品名、口味、规格、配料表、营养成分表、净含量，例如 XX克/XXg/XXml
-- OCR 强覆盖规则：如果 OCR 明确识别到包装净含量或规格，例如“260g”“Net 250g”“250ml”，grossWeightGrams 必须优先采用该包装标明重量/容量或按可见食用数量换算；除非视觉证据极明显显示包装已拆封且食物被消耗，此时必须在 weightEvidence 中写明扣减比例
-- 零食、点心、饼干、肉干、坚果、糖果、糕点等预包装食品，优先读取包装袋上的品牌、品名、口味、配料表、营养成分表、净含量、规格、独立小包数量；这些文字证据优先级高于包装正面插画或模型对外观的猜测
-- 如果能看到配料表或营养成分表，即使字较小、倾斜、倒置、反光，也要尝试读取关键字段；用配料表判断食物类型和主要原料，用净含量/规格判断重量
-- 对零食包装，不能只根据图片图案猜成“阿胶糕/无花果干/普通饼干”等；若包装文字、配料表或营养成分表与视觉图案冲突，最终名称优先采用包装文字和配料证据，并在 recognitionEvidence 中说明
-- 若包装食品的配料表和营养成分表可被读取，请在对应 item 的 "ingredients" 字段输出：原始配料文本 ingredientsText、每份规格 servingSize、每100g关键营养 nutritionPer100g（能量/蛋白质/脂肪/碳水/钠）；energyKj 表示包装原文的千焦，calories 必须表示千卡(kcal)。若标签只写 kJ，按 calories = energyKj / 4.184 换算，严禁把 kJ 数字直接填入 calories；未识别到时省略该字段，不要编造
-- 禁止凭 Logo 图案盲猜品牌：不要仅凭标志颜色或几何外形，例如只看到红色圆圈，就猜成某品牌；必须通过 OCR 确认中文字符或清晰品牌文本。若字迹反光无法看清，直接用客观品名命名，并在 recognitionEvidence 中说明“包装文字模糊，未检测到明确品牌文本，不进行品牌猜测”
-- 若包装只露出很小一角、只有色块/封边/局部花纹，读不到可靠文字，也无法确认是一个完整独立包装，不要猜成具体零食名；这类对象不计入
-- 重点区分相近字：鹅胗/鹅肫/鹅珍 与 阿胶；龙宫果/龙贡果/longkong 与 无花果/无花果干
-- 相同食物合并为一项，明显不同食物分开；不要因为一个物体在背景或被其它包装压住就漏掉
-- 不输出餐具、空包装、桌面、骨头、壳、果核、签子等不可食或非食物部分
-- 对仅在边缘露出少量、无法确认种类或份量的食物，不计入
+- 每个清晰可见的可食对象都给出最可能的具体名称；低置信度时仍给主名称，并把次选放入 alternativeNames
+- 只有能确认是完整独立食品的包装才列项；name 写食品本身。仅露出色块、封边或局部花纹且无法确认归属的对象不计入
+- 检查横排、竖排、倒置、旋转、反光和遮挡文字，读取品牌、品名、口味、规格、配料表、营养成分表和净含量
+- 包装插画不能单独决定食物名；低置信度 OCR 也不能单独定名。可靠文字与视觉冲突时，以文字/配料证据为主并在 recognitionEvidence 说明
+- 不得凭 Logo、颜色或几何图案猜品牌；没有可靠文字时使用客观食品名称
+- 净含量/规格清晰时，grossWeightGrams 优先采用标签数值或按可见食用数量换算；已开封或有剩余变化时在 weightEvidence 说明比例
+- ingredients 仅在确实读到标签时输出，不得编造。energyKj 保留千焦原值，calories 表示 kcal；只有标签仅给 kJ 时才按 energyKj / 4.184 换算
+- 不输出餐具、空包装、桌面及其它不可食对象
 
 重量规则：
-- grossWeightGrams 是图中可见食物原始总重量，单位克，必须是数字；带壳、带骨、带核时先估整份原始重量，不要扣壳/骨/核
-- estimatedWeightGrams 是本次视觉识别按原图呈现状态直接估算的可食净重
-- 多个可独立计数的同类食物必须先输出 itemCount 与 estimatedUnitWeightGrams，再令 grossWeightGrams = itemCount × estimatedUnitWeightGrams；三个字段不得互相矛盾
-- 掌心大小鲜桃无电子秤或明显超大尺寸证据时单枚不得超过180g；其它桃/苹果/梨/柑橘等鲜果单枚超过250g时，必须在 weightEvidence 中给出电子秤、包装规格或明显超大尺寸等强证据；近景透视本身不能作为放大重量的理由
-- 输出 foodState（fresh/dry/hydrated/cooked/liquid/packaged）和 weightBasis（dry/as_served/package_net）。泡发燕麦若用户明确给出干重则采用干重；否则采用湿重且名称必须保留泡发/粥状态，禁止把湿重与干燕麦营养口径混用
-- 不要因为减脂、控糖、剩余热量不足或健康建议而下调 grossWeightGrams 或 estimatedWeightGrams；饮食控制只能体现在 suggestedRatio，不能改变重量本身
-- 不把餐具、空包装计入重量；不可食部分由本次视觉识别按下面的通用物理规则扣除
-- 包装食品如果只能看到独立小包，按该小包通常净含量/可见体积估算；如果看得到净含量文字，优先参考净含量
-- grossWeightGrams 必须与 weightEvidence 完全吻合；如果 weightEvidence 写明包装净含量 260g 且未开封，则重量不能输出 130g 或其它均值猜测
-- waterMl 表示该食物/饮品本身含有的水量，单位毫升，必须是数字；无法判断填 0
-- suggestedRatio 只是结果页“实际摄入比例”滑块的建议值，不能反向影响 estimatedWeightGrams、waterMl 或营养计算基础；默认100
+- 先用包装规格、已知尺寸物体、餐具、容器和透视关系做空间标定，再结合面积、厚度、高度、数量与密度估重；不能直接套典型份量
+- recognitionEvidence 简述身份依据，weightEvidence 简述重量依据；两者必须与结果一致
+- grossWeightGrams 是图中可见原始总重量；estimatedWeightGrams 是可食净重
+- 可计数的同类食物先给 itemCount 和 estimatedUnitWeightGrams，并保证 grossWeightGrams = itemCount × estimatedUnitWeightGrams
+- 单体重量显著偏离同状态食物常见范围时，必须有称重、包装规格或清晰比例尺等强证据；近景透视本身不是放大依据
+- foodState 使用 fresh/dry/hydrated/cooked/liquid/packaged；weightBasis 使用 dry/as_served/package_net，名称、状态和重量口径必须一致
+- suggestedRatio 只表示建议摄入比例，默认100，不得反向修改重量或 waterMl；waterMl 无法判断时填0
 
 %s
 
 输出要求：
-- 只返回 JSON，不要输出 Markdown
-- 简体中文
-- description <= 16字
-- insight <= 32字，必须结合本餐具体食物，不要写泛话
-- pfc_ratio_comment 必须点名本餐里应优先保留或控制的食物类别；不得提到 items 中不存在的奶茶、蔬果、甜饮、甜点或其它食物
-- eating_order_advice 必须是本餐进食顺序建议；只能使用 items 中真实存在的食物组织顺序，不得套用“蔬菜/汤水/奶茶/甜饮”等模板词
-- absorption_notes 只写吸收率/生物利用度/消化节奏，不要再写进食顺序
-- context_advice 必须结合用户目标、餐次、剩余热量或健康档案中的一个关键点给出细致建议，无信息时空字符串
-- 每个 item 都给出 recognitionEvidence 和 weightEvidence，便于排查
-- ocrText 放你从图片中读到的关键包装文字；不确定的文字可放 alternativeNames 或 evidence 中说明
+- 只返回简体中文 JSON，不要 Markdown
+- type：包装零食用 snack，其它预包装食品用 packaged，其余用 normal
+- description <= 16字；insight <= 32字
+- pfc_ratio_comment、eating_order_advice、absorption_notes、context_advice 只能基于本次 items 和已有上下文，不得虚构食物或营养数值
+- 每个 item 提供 recognitionEvidence、weightEvidence 和 confidence；ocrText 只放实际读到的关键文字
 
 JSON:
 {
@@ -1626,7 +1835,7 @@ JSON:
   "ocrText":[]
 }
 
-注意：ingredients 为可选字段，仅当该 item 识别到配料表/营养成分表时才输出；未识别到时请省略或置 null。`, tagBlock, imageInputHint, additionalLine, groupLine, imageEdiblePortionPromptRules())
+ingredients 为可选字段；没有可靠标签文字时省略或置 null。`, contextLine, additionalLine, imageInputHint, imageEdiblePortionPromptRules())
 	if analysisEngineProducesNutrition(input.AnalysisEngine) {
 		prompt += `
 
@@ -1638,11 +1847,11 @@ JSON:
 func buildGemini35GroupedPlanPrompt(input AnalyzeInput, user *authrepo.User) string {
 	tagBlock := ""
 	if tags := buildContextTags(input, user); len(tags) > 0 {
-		tagBlock = strings.Join(tags, "\n") + "\n"
+		tagBlock = "上下文（仅作弱先验，不能替代图像证据）：" + strings.Join(tags, "；") + "\n"
 	}
 	additionalLine := ""
 	if input.AdditionalContext != "" {
-		additionalLine = fmt.Sprintf("用户补充背景信息:\n%s\n请优先使用用户明确补充的食物名、品牌、包装文字、份量信息。", input.AdditionalContext)
+		additionalLine = fmt.Sprintf("用户补充线索：\n%s\n请与图像和 OCR 交叉验证；冲突时说明，不要机械照抄。", input.AdditionalContext)
 	}
 	imageInputHint := buildImageInputHint(input)
 	return fmt.Sprintf(`你是专业的食物图像识别规划助手。当前任务只做第一阶段：看清楚图片里有哪些独立食物/包装食品，并按空间、遮挡和包装归属分成最多 2 组；不要把主要精力放在精确估重上。
@@ -1663,7 +1872,7 @@ func buildGemini35GroupedPlanPrompt(input AnalyzeInput, user *authrepo.User) str
 - 零食/预包装食品要重点读取配料表、营养成分表、口味、规格、净含量和独立小包数量；这些文字证据优先级高于包装正面插画或模型对外观的猜测
 - 若包装食品的配料表和营养成分表可被读取，请在对应 item 的 "ingredients" 字段输出：原始配料文本 ingredientsText、每份规格 servingSize、每100g关键营养 nutritionPer100g（能量/蛋白质/脂肪/碳水/钠）；energyKj 表示包装原文的千焦，calories 必须表示千卡(kcal)。若标签只写 kJ，按 calories = energyKj / 4.184 换算，严禁把 kJ 数字直接填入 calories；未识别到时省略该字段，不要编造
 - 如果包装只露出很小一角、只有色块/封边/局部花纹，读不到可靠文字，也无法确认完整包装归属，不要猜成具体零食或品牌，也不要列入第一阶段食物清单
-- 重点区分相近字：鹅胗/鹅肫/鹅珍 与 阿胶；龙宫果/龙贡果/longkong 与 无花果/无花果干
+- 对形近字和低置信度 OCR，结合完整词语、配料、包装品类和可见内容交叉验证；不要在提示词中预设具体食品答案
 - 相同食物合并为一项，明显不同食物分开；不要因为一个物体在背景或被其它包装压住就漏掉
 - 不输出餐具、空包装、桌面、骨头、壳、果核、签子等不可食或非食物部分
 - 对仅在边缘露出少量、无法确认种类或份量的食物，不计入
@@ -2063,8 +2272,8 @@ func resolveModelConfig(modelName string) (provider, model string) {
 	if strings.HasPrefix(normalized, "doubao") {
 		return "doubao", raw
 	}
-	if normalized == "qwen" || normalized == "qwen-flash" || normalized == qwen36FlashModel {
-		return "qwen", qwen36FlashModel
+	if normalized == "qwen" || normalized == "qwen-flash" || normalized == "qwen3.5-flash" || normalized == "qwen3.6-flash" || normalized == qwen38FlashModel {
+		return "qwen", qwen38FlashModel
 	}
 	if strings.HasPrefix(normalized, "qwen") {
 		return "qwen", raw
@@ -2082,6 +2291,9 @@ func resolveModelConfig(modelName string) (provider, model string) {
 		normalized == "gemini-3-flash-preview" || normalized == "google/gemini-3-flash-preview" {
 		return "gemini", gemini3FlashModel
 	}
+	if normalized == openLuxGemini3Route {
+		return "gemini", gemini3FlashModel
+	}
 	if normalized == gemini31FlashLiteModel || normalized == "gemini31-flash-lite" || normalized == "gemini31_flash_lite" {
 		return "gemini", gemini31FlashLiteModel
 	}
@@ -2090,6 +2302,12 @@ func resolveModelConfig(modelName string) (provider, model string) {
 	}
 	if normalized == gemini35FlashModel || normalized == "gemini35-flash" || normalized == "gemini35_flash" {
 		return "gemini", gemini35FlashModel
+	}
+	if normalized == precisionGeminiFlashModel || normalized == "gemini36-flash" || normalized == "gemini36_flash" {
+		return "gemini", precisionGeminiFlashModel
+	}
+	if normalized == openLuxPrecisionGeminiRoute {
+		return "gemini", precisionGeminiFlashModel
 	}
 	if strings.HasPrefix(normalized, "ofox-gemini:") {
 		return "gemini", strings.TrimSpace(strings.TrimPrefix(raw, "ofox-gemini:"))
@@ -2186,21 +2404,12 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 	if strings.TrimSpace(input.ModelName) == "" {
 		if isCorrection {
 			if isPrecisionLikeExecutionMode(executionMode) || executionMode == gemini35FlashExecutionMode || executionMode == gemini35GroupedExecutionMode {
-				input.ModelName = gemini35FlashModel
+				input.ModelName = s.SelectFoodImageModel(executionMode, foodImageModelRoutingKey(userID, input))
 			} else {
-				input.ModelName = qwen36FlashModel
+				input.ModelName = qwen38FlashModel
 			}
-		} else if executionMode == defaultExecutionMode || executionMode == standardWebSearchMode || isPackagedExperimentExecutionMode(executionMode) {
-			input.ModelName = gemini3FlashModel
-		} else if isFastExecutionMode(executionMode) {
-			input.ModelName = qwen36FlashModel
-		} else if isPrecisionLikeExecutionMode(executionMode) || executionMode == gemini35FlashExecutionMode {
-			input.ModelName = gemini35FlashModel
-		} else if executionMode != validExecutionMode {
-			input.ModelName = gemini3FlashModel
-		}
-		if executionMode == gemini35GroupedExecutionMode {
-			input.ModelName = gemini35FlashModel
+		} else {
+			input.ModelName = s.SelectFoodImageModel(executionMode, foodImageModelRoutingKey(userID, input))
 		}
 	}
 
@@ -2214,19 +2423,14 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 
 	provider, model := s.resolveImageModelConfig(input.ModelName)
 	var client LLMClient
+	geminiUpstream := ""
 	switch provider {
 	case "doubao":
 		client = s.doubaoClient
 	case "qwen":
 		client = s.dashscopeClient
 	case "gemini":
-		if isPrecisionLikeExecutionMode(executionMode) || isGemini35ExecutionMode(executionMode) {
-			client = s.gemini35Client
-		} else if strings.EqualFold(model, gemini31FlashLiteModel) && s.gemini31LiteClient != nil {
-			client = s.gemini31LiteClient
-		} else {
-			client = s.ofoxAIClient
-		}
+		client, geminiUpstream = s.geminiClientForRoute(model, input.ModelName)
 	case "openai":
 		client = s.ofoxAIClient
 	case "deepseek":
@@ -2239,7 +2443,7 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 	}
 	if client == nil {
 		if isPrecisionLikeExecutionMode(executionMode) || isGemini35ExecutionMode(executionMode) {
-			return nil, fmt.Errorf("Gemini 3.5 Flash 图片识别 client 未初始化，请配置 gemini35_api_key")
+			return nil, fmt.Errorf("精准图片识别客户端未初始化，请配置 OpenLux；万界 Gemini 3.5 可作为备用")
 		}
 		return nil, fmt.Errorf("图片识别大模型客户端未初始化")
 	}
@@ -2252,11 +2456,13 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 	start := time.Now()
 	primaryProvider := provider
 	primaryModel := model
+	primaryGeminiUpstream := geminiUpstream
 	imageCount := len(imageURLs)
 	ctx, span := apm.StartSpan(ctx, "analysis.food_image",
 		attribute.String("analysis.user_id", userID),
 		attribute.String("analysis.provider", provider),
 		attribute.String("analysis.model", model),
+		attribute.String("analysis.gemini_upstream", geminiUpstream),
 		attribute.String("analysis.primary_provider", primaryProvider),
 		attribute.String("analysis.primary_model", primaryModel),
 		attribute.String("analysis.requested_model", strings.TrimSpace(input.ModelName)),
@@ -2279,6 +2485,7 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 		slog.String("user_id", userID),
 		slog.String("provider", provider),
 		slog.String("model", model),
+		slog.String("gemini_upstream", geminiUpstream),
 		slog.String("requested_model", strings.TrimSpace(input.ModelName)),
 		slog.String("execution_mode", executionMode),
 		slog.String("analysis_engine", strings.TrimSpace(input.AnalysisEngine)),
@@ -2337,11 +2544,47 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 		return primaryImageCall(attemptCtx)
 	})
 	fallbackUsed := false
+	geminiUpstreamFallbackUsed := false
+	if err != nil && provider == "gemini" && len(imageURLs) > 0 && (isTransientLLMError(err) || IsLLMJSONParseError(err)) {
+		primaryErr := err
+		alternateClient, alternateUpstream, alternateModel := s.alternateGeminiClient(model, geminiUpstream)
+		if alternateClient != nil && alternateClient != client {
+			alternateParsed, alternateErr := tryGeminiVisionCall(ctx, "food_image_gemini_upstream_fallback", alternateUpstream, alternateModel, prompt, imageURLs, 0, visionAlternateProviderTimeout, alternateClient)
+			if alternateErr == nil {
+				parsed = alternateParsed
+				err = nil
+				fallbackUsed = true
+				geminiUpstreamFallbackUsed = true
+				client = alternateClient
+				logger.Warn(ctx, "食物图片 Gemini 首选上游失败，已切换备用 Gemini 上游",
+					logger.NamedErr("primary_error", primaryErr),
+					slog.String("primary_upstream", geminiUpstream),
+					slog.String("primary_model", model),
+					slog.String("fallback_upstream", alternateUpstream),
+					slog.String("fallback_model", alternateModel),
+					slog.Int("image_count", len(imageURLs)),
+				)
+				geminiUpstream = alternateUpstream
+				model = alternateModel
+				input.ModelName = geminiRouteName(alternateModel, alternateUpstream)
+			} else {
+				err = fmt.Errorf("Gemini 首选上游 %s 失败: %v；备用上游 %s 失败: %w", geminiUpstream, primaryErr, alternateUpstream, alternateErr)
+				logger.Warn(ctx, "食物图片两个 Gemini 上游均失败",
+					logger.NamedErr("primary_error", primaryErr),
+					logger.NamedErr("alternate_error", alternateErr),
+					slog.String("primary_upstream", geminiUpstream),
+					slog.String("primary_model", model),
+					slog.String("alternate_upstream", alternateUpstream),
+					slog.String("alternate_model", alternateModel),
+				)
+			}
+		}
+	}
 	if err != nil && provider == "gemini" && len(imageURLs) > 0 && (isTransientLLMError(err) || IsLLMJSONParseError(err)) && s.dashscopeClient != nil {
 		primaryErr := err
 		fallbackCtx, fallbackCancel := context.WithTimeout(ctx, visionFallbackTimeout)
-		fallbackCall := newAnalyzeWithImagesWithoutThinkingModelCall(s.dashscopeClient, prompt, imageURLs, qwen36FlashModel)
-		fallbackParsed, fallbackErr := analyzeWithJSONParseRetryPolicy(fallbackCtx, "food_image_fallback", "qwen", qwen36FlashModel, postprocessRetryPolicy, fallbackCall)
+		fallbackCall := newAnalyzeWithImagesWithoutThinkingModelCall(s.dashscopeClient, prompt, imageURLs, qwen38FlashModel)
+		fallbackParsed, fallbackErr := analyzeWithJSONParseRetryPolicy(fallbackCtx, "food_image_fallback", "qwen", qwen38FlashModel, postprocessRetryPolicy, fallbackCall)
 		fallbackCancel()
 		if fallbackErr == nil {
 			parsed = fallbackParsed
@@ -2349,7 +2592,7 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 			fallbackUsed = true
 			client = s.dashscopeClient
 			provider = "qwen"
-			model = qwen36FlashModel
+			model = qwen38FlashModel
 			logger.Warn(ctx, "食物图片 Gemini 临时失败，已快速回退千问",
 				logger.NamedErr("primary_error", primaryErr),
 				slog.Int("image_count", len(imageURLs)),
@@ -2418,6 +2661,7 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 		"strategy":        provider + "_db_first",
 		"base_provider":   provider,
 		"base_model":      model,
+		"base_upstream":   geminiUpstream,
 		"review_provider": nil,
 		"review_model":    nil,
 	}
@@ -2435,7 +2679,7 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 	if isFastExecutionMode(executionMode) {
 		hybridMeta = map[string]any{
 			"status":          "applied",
-			"strategy":        executionMode + "_qwen36_flash_db_first",
+			"strategy":        executionMode + "_qwen38_flash_db_first",
 			"base_provider":   provider,
 			"base_model":      model,
 			"review_provider": nil,
@@ -2443,7 +2687,7 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 		}
 		if executionMode == fastWebSearchMode {
 			hybridMeta["web_search"] = qwenNativeSearchMeta
-			hybridMeta["strategy"] = "fast_web_search_qwen36_flash_native_search_db_first"
+			hybridMeta["strategy"] = "fast_web_search_qwen38_flash_native_search_db_first"
 		}
 	}
 	if isPrecisionLikeExecutionMode(executionMode) || isGemini35ExecutionMode(executionMode) {
@@ -2499,6 +2743,15 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 	}
 	hybridMeta["primary_provider"] = primaryProvider
 	hybridMeta["primary_model"] = primaryModel
+	if primaryGeminiUpstream != "" {
+		hybridMeta["primary_upstream"] = primaryGeminiUpstream
+	}
+	if provider == "gemini" && geminiUpstream != "" {
+		hybridMeta["base_upstream"] = geminiUpstream
+	}
+	if geminiUpstreamFallbackUsed {
+		hybridMeta["gemini_upstream_fallback_used"] = true
+	}
 	hybridMeta["fallback_used"] = fallbackUsed
 	durationMs = float64(time.Since(start).Milliseconds())
 	apm.SetAttributes(ctx,
@@ -2800,17 +3053,20 @@ func (s *AnalyzeService) refineImageWithLowCostWebSearch(ctx context.Context, in
 }
 
 func (s *AnalyzeService) refineGemini35GroupedEstimate(ctx context.Context, input AnalyzeInput, plan map[string]any, imageURLs []string) (map[string]any, map[string]any) {
-	modelName := "gemini-3.5-flash"
-	if client, ok := s.gemini35Client.(*OfoxAIClient); ok && strings.TrimSpace(client.Model) != "" {
-		modelName = client.Model
+	modelName := precisionGeminiFlashModel
+	client, upstream := s.geminiClientForRoute(modelName, input.ModelName)
+	if configuredClient, ok := client.(*OfoxAIClient); ok && strings.TrimSpace(configuredClient.Model) != "" {
+		modelName = configuredClient.Model
 	}
 	meta := map[string]any{
 		"status":          "skipped",
 		"strategy":        "gemini35_flash_grouped_db_first",
 		"base_provider":   "gemini",
 		"base_model":      modelName,
+		"base_upstream":   upstream,
 		"review_provider": "gemini",
 		"review_model":    modelName,
+		"review_upstream": upstream,
 	}
 	planItems := parseItems(plan)
 	if baseItems := compactHybridDebugItems(planItems, 8); len(baseItems) > 0 {
@@ -2820,9 +3076,9 @@ func (s *AnalyzeService) refineGemini35GroupedEstimate(ctx context.Context, inpu
 	if groups := normalizeGemini35Groups(plan["groups"]); len(groups) > 0 {
 		meta["plan_groups"] = groups
 	}
-	if s.gemini35Client == nil {
+	if client == nil {
 		meta["status"] = "unavailable"
-		meta["error"] = "gemini 3.5 flash client is not configured"
+		meta["error"] = "precision gemini client is not configured"
 		return nil, meta
 	}
 	imageURLs = nonEmptyStrings(imageURLs)
@@ -2838,10 +3094,10 @@ func (s *AnalyzeService) refineGemini35GroupedEstimate(ctx context.Context, inpu
 	callCtx, cancel := context.WithTimeout(ctx, standardHybridTimeout)
 	defer cancel()
 	weightResult, err := analyzeWithJSONParseRetry(callCtx, "gemini35_grouped_weight", "gemini", modelName, func(retryCtx context.Context) (map[string]any, error) {
-		return analyzeWithImagesTemperature(retryCtx, s.gemini35Client, prompt, imageURLs, 0)
+		return analyzeWithImagesTemperature(retryCtx, client, prompt, imageURLs, 0)
 	})
 	if err != nil {
-		logger.Warn(ctx, "Gemini 3.5 分组重量估算失败",
+		logger.Warn(ctx, "精准 Gemini 分组重量估算失败",
 			logger.Err(err),
 			slog.Int("image_count", len(imageURLs)),
 		)
@@ -2874,7 +3130,7 @@ func (s *AnalyzeService) refineGemini35GroupedEstimate(ctx context.Context, inpu
 	if ocrText := stringSliceFromAny(reviewed["ocrText"]); len(ocrText) > 0 {
 		meta["ocr_text"] = limitStrings(ocrText, 8)
 	}
-	logger.Info(ctx, "Gemini 3.5 分组估算已应用",
+	logger.Info(ctx, "精准 Gemini 分组估算已应用",
 		slog.Int("image_count", len(imageURLs)),
 		slog.Int("item_count", len(parseItems(reviewed))),
 		slog.Any("hybrid_review", meta),
@@ -3774,7 +4030,7 @@ func buildStandardImageHybridReviewPrompt(input AnalyzeInput, doubaoParsed map[s
 		"rules": []string{
 			"只返回 JSON，不要输出解释性正文。",
 			"必须先独立观察图片和 OCR 信息，再参考 Doubao 候选；不要先假设 Doubao 正确。",
-			"OCR 必须检查横向、竖排、倒置、旋转、被遮挡和反光文字；如果文字疑似倒置或旋转，要在 mentally rotate 后重读，尤其区分形近的“鹅胗/鹅肫/鹅珍”和“阿胶”等。",
+			"OCR 必须检查横向、竖排、倒置、旋转、被遮挡和反光文字；对形近字要结合完整词语、配料、包装品类和可见内容交叉验证。",
 			"不要把低置信度 OCR 片段直接当作食物名；包装食品最终名称必须同时满足 OCR 文字、包装图案、品牌/品类和可见食物逻辑一致。",
 			"如果 OCR 字样与视觉食物或包装图案不一致，必须在 recognitionEvidence 中说明冲突，并把可能误读的文字放入 alternativeNames，而不是直接定名。",
 			"优先利用包装文字、品牌名、品名、净含量、营养成分表、规格、份数、已食用比例等文字证据；包装食品不要只靠外观猜。",
@@ -4513,7 +4769,7 @@ func (s *AnalyzeService) AnalyzeText(ctx context.Context, userID string, input A
 	if strings.TrimSpace(input.ModelName) == "" {
 		if s.dashscopeClient != nil {
 			provider = "qwen"
-			model = qwen36FlashModel
+			model = qwen38FlashModel
 			client = s.dashscopeClient
 		} else if s.deepseek != nil && strings.TrimSpace(s.deepseek.APIKey) != "" {
 			provider = "deepseek"
@@ -4533,7 +4789,7 @@ func (s *AnalyzeService) AnalyzeText(ctx context.Context, userID string, input A
 			return nil, fmt.Errorf("文字输入模式使用千问时，请配置 DASHSCOPE_API_KEY")
 		}
 		client = s.dashscopeClient
-		model = qwen36FlashModel
+		model = qwen38FlashModel
 	} else if provider == "doubao" {
 		client = s.doubaoClient
 	} else if provider == "gemini" || provider == "openai" {

@@ -62,7 +62,7 @@ func (r *Recognizer) Recognize(ctx context.Context, input RecognizeInput) (*Reco
 	}
 	parsed, err := r.client.RunPrecisionJSONWithImagesTemperature(ctx, "image", prompt, imageURLs, r.model, 0.2)
 	if err != nil {
-		return nil, expiryRecognitionUpstreamError(ctx, fmt.Sprintf("保质期识别模型调用失败 primary_model=%s fallback_model=qwen3.6-flash: %v", r.model, err))
+		return nil, expiryRecognitionUpstreamError(ctx, fmt.Sprintf("保质期识别模型调用失败 primary_model=%s fallback_model=qwen3.8-flash: %v", r.model, err))
 	}
 	rawItems := extractMapItems(parsed["items"])
 	items := make([]map[string]any, 0, len(rawItems))
