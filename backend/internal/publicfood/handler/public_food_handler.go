@@ -45,6 +45,7 @@ func NewPublicFoodHandler(svc PublicFoodService) *PublicFoodHandler {
 
 func (h *PublicFoodHandler) Create(c *gin.Context) {
 	var body struct {
+		ClientBatchKey     *string          `json:"client_batch_key"`
 		ImagePath          *string          `json:"image_path"`
 		ImagePaths         []string         `json:"image_paths"`
 		SourceRecordID     *string          `json:"source_record_id"`
@@ -92,6 +93,7 @@ func (h *PublicFoodHandler) Create(c *gin.Context) {
 		return
 	}
 	id, err := h.svc.Create(c.Request.Context(), c.GetString(authmw.ContextUserIDKey), service.CreateInput{
+		ClientBatchKey:     body.ClientBatchKey,
 		ImagePath:          body.ImagePath,
 		ImagePaths:         body.ImagePaths,
 		SourceRecordID:     body.SourceRecordID,

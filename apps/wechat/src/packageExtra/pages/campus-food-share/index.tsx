@@ -17,19 +17,16 @@ import FloorPicker from "../../../components/FloorPicker";
 import { applyThemeNavigationBar } from "../../../utils/theme-navigation-bar";
 import {
   createPublicFoodLibraryItem,
+  correctCampusFood,
   getCanteenFloors,
-  getMyMembership,
   getPublicFoodLibraryItem,
-  imageToBase64,
   showUnifiedApiError,
   type CreatePublicFoodLibraryRequest,
-  type MembershipStatus,
   type PublicFoodLibraryItem,
   type SchoolCampusItem,
   type SchoolCanteenItem,
   type SchoolItem,
-  updatePublicFoodLibraryItem,
-  uploadAnalyzeImage,
+  uploadCampusFoodImageFile,
 } from "../../../utils/api";
 import { extraPkgUrl } from "../../../utils/subpackage-extra";
 import {
@@ -37,7 +34,6 @@ import {
   isPrivacyAuthorizeError,
   showPrivacyAuthorizeFailure,
 } from "../../../utils/weapp-privacy";
-import CampusMembershipGate from "../../../components/CampusMembershipGate";
 import "./index.scss";
 
 const MAX_IMAGES = 5;
@@ -77,8 +73,12 @@ function CampusFoodSharePage() {
   const { scheme } = useAppColorScheme();
   const routerParams = Taro.getCurrentInstance().router?.params;
   const editId = routerParams?.edit_id || "";
-  const isEditMode = Boolean(editId);
-  const [loadingEdit, setLoadingEdit] = useState(isEditMode);
+  const correctionId = routerParams?.correct_id || "";
+  const targetItemId = correctionId || editId;
+  const isEditMode = Boolean(targetItemId);
+  const isCorrectionMode = Boolean(correctionId);
+  const [baseVersion, setBaseVersion] = useState(0);
+  const [clientBatchKey, setClientBatchKey] = useState(newCampusClientKey);
   const [imagePaths, setImagePaths] = useState<string[]>([]);
   const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [imageUrl, setImageUrl] = useState("");
@@ -103,6 +103,7 @@ function CampusFoodSharePage() {
     new Date().toISOString().slice(0, 10),
   );
   const [portionDescription, setPortionDescription] = useState("");
+  const [availabilityStatus, setAvailabilityStatus] = useState<"available" | "temporarily_unavailable" | "discontinued" | "unknown">("available");
   const [suitableForFatLoss, setSuitableForFatLoss] = useState(false);
   const [userTags, setUserTags] = useState<string[]>([]);
   const [customTag, setCustomTag] = useState("");
@@ -113,16 +114,13 @@ function CampusFoodSharePage() {
   const [showFloorPicker, setShowFloorPicker] = useState(false);
   const [showPriceTypeSheet, setShowPriceTypeSheet] = useState(false);
   const [showPriceDateSheet, setShowPriceDateSheet] = useState(false);
-  const [membershipStatus, setMembershipStatus] =
-    useState<MembershipStatus | null>(null);
-  const [membershipLoading, setMembershipLoading] = useState(false);
+  const [uploadingImages, setUploadingImages] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const isCampusMember = !!membershipStatus?.is_pro;
   const areaLabel = "校区";
 
   const handleChooseImage = async () => {
     const remain = MAX_IMAGES - imageUrls.length;
-    if (remain <= 0) return;
+    if (remain <= 0 || uploadingImages) return;
 
     try {
       const res = await chooseImageWithPrivacy({
@@ -136,13 +134,12 @@ function CampusFoodSharePage() {
       const prevPaths = imagePaths;
       const prevUrls = imageUrls;
       setImagePaths((prev) => [...prev, ...tempPaths]);
-      Taro.showLoading({ title: "上传中...", mask: true });
+      setUploadingImages(true);
 
       try {
         const newUrls: string[] = [];
         for (const tempPath of tempPaths) {
-          const base64 = await imageToBase64(tempPath);
-          const uploadRes = await uploadAnalyzeImage(base64);
+          const uploadRes = await uploadCampusFoodImageFile(tempPath);
           newUrls.push(uploadRes.imageUrl);
         }
 
@@ -156,7 +153,7 @@ function CampusFoodSharePage() {
         setImageUrl(prevUrls[0] || "");
         await showUnifiedApiError(e, "上传失败");
       } finally {
-        Taro.hideLoading();
+        setUploadingImages(false);
       }
     } catch (e) {
       if ((e as any)?.errMsg?.includes("cancel")) return;
@@ -257,6 +254,10 @@ function CampusFoodSharePage() {
       Taro.showToast({ title: "请选择学校", icon: "none" });
       return;
     }
+    if (!selectedCampus?.id) {
+      Taro.showToast({ title: "请选择校区", icon: "none" });
+      return;
+    }
     if (!selectedCanteen?.id) {
       Taro.showToast({ title: "请选择已审核食堂", icon: "none" });
       return;
@@ -271,8 +272,8 @@ function CampusFoodSharePage() {
     const { confirm } = await Taro.showModal({
       title: isEditMode ? "确认保存" : "确认提交",
       content: isEditMode
-        ? "确定保存对这份校园食堂菜品的修改吗？"
-        : "确定提交这份校园食堂菜品吗？提交后会在后台分析营养信息，并显示在校园食堂分区。",
+        ? "修改会立即成为菜品的新版本，并保留更新记录。营养相关变化会在后台重新计算。"
+        : "提交后菜品资料会立即进入校园食堂分区，营养信息在后台补充。",
       confirmText: isEditMode ? "保存" : "确定提交",
       cancelText: "取消",
     });
@@ -284,6 +285,7 @@ function CampusFoodSharePage() {
   const buildPayload = (
     finalFoodName: string,
   ): CreatePublicFoodLibraryRequest => ({
+    client_batch_key: clientBatchKey,
     image_path: imageUrl || undefined,
     image_paths: imageUrls.length > 0 ? imageUrls : undefined,
     food_name: finalFoodName,
@@ -318,18 +320,46 @@ function CampusFoodSharePage() {
     portion_description: portionDescription.trim() || undefined,
   });
 
+  const buildCorrectionPatch = (finalFoodName: string) => ({
+    name: finalFoodName,
+    image_paths: imageUrls,
+    school_id: schoolId || selectedSchool?.id || "",
+    campus_id: selectedCampus?.id || "",
+    canteen_id: selectedCanteen?.id || "",
+    floor: floor.trim(),
+    window_name: windowName.trim(),
+    price_type: priceType,
+    price: priceType !== "range" && price ? Number(price) : null,
+    price_min: priceType === "range" && priceMin ? Number(priceMin) : null,
+    price_max: priceType === "range" && priceMax ? Number(priceMax) : null,
+    price_unit: priceUnit.trim(),
+    price_collected_at: priceCollectedAt ? `${priceCollectedAt}T00:00:00+08:00` : null,
+    portion_description: portionDescription.trim(),
+    availability_status: availabilityStatus,
+  });
+
   const doSubmit = async (finalFoodName: string) => {
     setSubmitting(true);
     try {
       if (isEditMode) {
-        await updatePublicFoodLibraryItem(editId, buildPayload(finalFoodName));
-        Taro.showToast({ title: "已保存", icon: "success" });
+        if (!baseVersion) {
+          Taro.showToast({ title: "请刷新后重试", icon: "none" });
+          return;
+        }
+        await correctCampusFood(targetItemId, {
+          base_version: baseVersion,
+          patch: buildCorrectionPatch(finalFoodName),
+          evidence_image_paths: imageUrls,
+          reason: isCorrectionMode ? "用户修正校园菜品信息" : "上传者编辑校园菜品信息",
+        });
+        Taro.showToast({ title: "已更新为新版本", icon: "success" });
         Taro.setStorageSync("food_library_need_refresh", "1");
         setTimeout(() => {
           Taro.navigateBack();
         }, 1200);
       } else {
         await createPublicFoodLibraryItem(buildPayload(finalFoodName));
+        setClientBatchKey(newCampusClientKey());
         Taro.showToast({
           title: "已提交，后台分析中",
           icon: "none",
@@ -347,7 +377,7 @@ function CampusFoodSharePage() {
     }
   };
 
-  const canSubmit = imageUrls.length > 0 && !submitting;
+  const canSubmit = imageUrls.length > 0 && !uploadingImages && !submitting;
   const isDark = scheme === "dark";
 
   useDidShow(() => {
@@ -355,14 +385,6 @@ function CampusFoodSharePage() {
       lightBackground: "#f9fafb",
       darkBackground: "#07110f",
     });
-    setMembershipLoading(true);
-    getMyMembership(undefined, { forceRefresh: true })
-      .then(setMembershipStatus)
-      .catch((e) => {
-        console.error("获取校园菜品分享会员状态失败:", e);
-        setMembershipStatus(null);
-      })
-      .finally(() => setMembershipLoading(false));
   });
 
   useEffect(() => {
@@ -374,10 +396,9 @@ function CampusFoodSharePage() {
 
   // 编辑模式：加载已有数据回填
   useEffect(() => {
-    if (!editId || !isCampusMember) return;
+    if (!targetItemId) return;
     let cancelled = false;
-    setLoadingEdit(true);
-    getPublicFoodLibraryItem(editId)
+    getPublicFoodLibraryItem(targetItemId)
       .then((data: PublicFoodLibraryItem) => {
         if (cancelled) return;
         if (data.type !== "campus" && !data.is_campus_food) {
@@ -393,6 +414,7 @@ function CampusFoodSharePage() {
         setImageUrls(imgs);
         setImageUrl(imgs[0] || "");
         setFoodName(data.food_name || "");
+        setBaseVersion(Number(data.content_version || 1));
         setSchoolId(data.school_id || "");
         setSchoolName(data.school_name || "");
         setSelectedSchool(
@@ -427,6 +449,7 @@ function CampusFoodSharePage() {
         setUserTags(data.user_tags || []);
         setUserNotes(data.user_notes || "");
         setPortionDescription(data.portion_description || "");
+        setAvailabilityStatus(data.availability_status || "available");
         const pt = data.price_type || "fixed";
         setPriceType(pt);
         setPriceUnit(data.price_unit || PRICE_TYPE_UNITS[pt] || "元/份");
@@ -452,40 +475,10 @@ function CampusFoodSharePage() {
         if (cancelled) return;
         await showUnifiedApiError(e, "加载失败");
       })
-      .finally(() => {
-        if (!cancelled) setLoadingEdit(false);
-      });
     return () => {
       cancelled = true;
     };
-  }, [editId, isCampusMember]);
-
-  if (membershipLoading) {
-    return (
-      <>
-        <PageMeta
-          backgroundColor={isDark ? "#07110f" : "#f9fafb"}
-          pageStyle={`background-color: ${isDark ? "#07110f" : "#f9fafb"};`}
-        />
-        <CampusMembershipGate loading />
-      </>
-    );
-  }
-
-  if (!isCampusMember) {
-    return (
-      <>
-        <PageMeta
-          backgroundColor={isDark ? "#07110f" : "#f9fafb"}
-          pageStyle={`background-color: ${isDark ? "#07110f" : "#f9fafb"};`}
-        />
-        <CampusMembershipGate
-          title='分享校园菜品需开通会员'
-          subtitle='校园食堂菜品分享、食堂绑定和申请新增食堂目前仅向食探会员开放。'
-        />
-      </>
-    );
-  }
+  }, [targetItemId]);
 
   return (
     <>
@@ -498,10 +491,10 @@ function CampusFoodSharePage() {
       >
         <View className='campus-share-hero'>
           <Text className='campus-share-hero__title'>
-            {isEditMode ? "编辑校园食堂菜品" : "分享校园食堂菜品"}
+            {isCorrectionMode ? "修正校园食堂菜品" : isEditMode ? "编辑校园食堂菜品" : "分享校园食堂菜品"}
           </Text>
           <Text className='campus-share-hero__subtitle'>
-            补充学校、食堂和窗口信息，帮助同学更快找到好吃的一餐。
+            {isEditMode ? "修改通过基础校验后立即生效；每次更新都会保留版本记录。" : "人人都能贡献菜品；学校、校区、食堂、菜名和清晰照片为必要信息。"}
           </Text>
         </View>
 
@@ -535,18 +528,16 @@ function CampusFoodSharePage() {
               ))}
               {imageUrls.length < MAX_IMAGES && (
                 <View
-                  className='share-grid-item share-add-btn'
-                  onClick={handleChooseImage}
+                  className={`share-grid-item share-add-btn ${uploadingImages ? "disabled" : ""}`}
+                  onClick={uploadingImages ? undefined : handleChooseImage}
                 >
-                  <Text className='share-add-icon'>+</Text>
-                  <Text className='share-add-text'>添加</Text>
+                  {uploadingImages ? <View className='btn-spinner' /> : <><Text className='share-add-icon'>+</Text><Text className='share-add-text'>添加</Text></>}
                 </View>
               )}
             </View>
           ) : (
-            <View className='image-upload-area' onClick={handleChooseImage}>
-              <Text className='upload-icon iconfont icon-paizhao-xianxing' />
-              <Text className='upload-text'>点击上传菜品图片（最多 5 张）</Text>
+            <View className={`image-upload-area ${uploadingImages ? "disabled" : ""}`} onClick={uploadingImages ? undefined : handleChooseImage}>
+              {uploadingImages ? <View className='btn-spinner' /> : <><Text className='upload-icon iconfont icon-paizhao-xianxing' /><Text className='upload-text'>点击上传菜品图片（最多 5 张）</Text></>}
             </View>
           )}
         </View>
@@ -582,7 +573,9 @@ function CampusFoodSharePage() {
               </View>
             </View>
             <View className='form-item directory-form-item'>
-              <Text className='form-label'>{areaLabel}</Text>
+              <Text className='form-label'>
+                {areaLabel} <Text className='required'>*</Text>
+              </Text>
               <View
                 className='form-input picker-display'
                 onClick={() => {
@@ -755,6 +748,25 @@ function CampusFoodSharePage() {
               onInput={(e) => setPortionDescription(e.detail.value)}
             />
           </View>
+          <View className='form-item'>
+            <Text className='form-label'>当前供应状态</Text>
+            <View className='quick-tags'>
+              {[
+                { value: "available", label: "正常供应" },
+                { value: "temporarily_unavailable", label: "暂时无售" },
+                { value: "discontinued", label: "已停售" },
+                { value: "unknown", label: "不确定" },
+              ].map((option) => (
+                <View
+                  key={option.value}
+                  className={`quick-tag ${availabilityStatus === option.value ? "selected" : ""}`}
+                  onClick={() => setAvailabilityStatus(option.value as typeof availabilityStatus)}
+                >
+                  {option.label}
+                </View>
+              ))}
+            </View>
+          </View>
         </View>
 
         <View className='campus-share-section'>
@@ -824,9 +836,9 @@ function CampusFoodSharePage() {
             {submitting ? (
               <View className='btn-spinner' />
             ) : isEditMode ? (
-              "保存修改"
+              "保存为新版本"
             ) : (
-              "提交并后台分析"
+              "立即发布并后台分析"
             )}
           </View>
         </View>
@@ -988,3 +1000,8 @@ function CampusFoodSharePage() {
 }
 
 export default withAuth(CampusFoodSharePage);
+
+function newCampusClientKey(): string {
+  const cryptoObject = globalThis.crypto as (Crypto & { randomUUID?: () => string }) | undefined;
+  return cryptoObject?.randomUUID?.call(cryptoObject) || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}

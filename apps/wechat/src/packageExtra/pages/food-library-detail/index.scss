@@ -1599,6 +1599,125 @@ $campus-detail-font-title: 36rpx;
 $campus-detail-font-body: 28rpx;
 $campus-detail-font-meta: 24rpx;
 
+.campus-community-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10rpx;
+  margin-top: 16rpx;
+}
+
+.campus-availability,
+.campus-version,
+.campus-verified-at {
+  padding: 6rpx 12rpx;
+  border-radius: 999rpx;
+  background: #f1f5f3;
+  color: #64746d;
+  font-size: 22rpx;
+}
+
+.campus-availability--available {
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.campus-availability--temporarily_unavailable,
+.campus-availability--unknown {
+  background: #fff7ed;
+  color: #c2410c;
+}
+
+.campus-availability--discontinued {
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.campus-community-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12rpx;
+  margin-top: 18rpx;
+}
+
+.campus-community-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8rpx;
+  min-height: 64rpx;
+  padding: 0 20rpx;
+  border: 2rpx solid #dbe6e1;
+  border-radius: 16rpx;
+  background: #fff;
+  color: #246b54;
+  font-size: 24rpx;
+
+  &.disabled {
+    opacity: 0.55;
+    pointer-events: none;
+  }
+}
+
+.campus-revision-list {
+  margin-top: 18rpx;
+  overflow: hidden;
+  border: 2rpx solid #e7ece9;
+  border-radius: 18rpx;
+  background: #fafcfb;
+}
+
+.campus-revision-item {
+  padding: 18rpx 20rpx;
+
+  & + & {
+    border-top: 2rpx solid #e7ece9;
+  }
+}
+
+.campus-revision-heading {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+}
+
+.campus-revision-version {
+  color: #047857;
+  font-weight: 700;
+}
+
+.campus-revision-actor,
+.campus-revision-time,
+.campus-revision-reason,
+.campus-revision-empty {
+  color: #89958f;
+  font-size: 22rpx;
+}
+
+.campus-revision-time {
+  margin-left: auto;
+}
+
+.campus-revision-summary,
+.campus-revision-reason {
+  display: block;
+  margin-top: 8rpx;
+  line-height: 34rpx;
+}
+
+.campus-revision-summary {
+  color: #35443e;
+  font-size: 24rpx;
+}
+
+.campus-revision-loading,
+.campus-revision-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100rpx;
+}
+
 .food-detail-page--campus {
   background: #f7f8f7;
 
@@ -1854,8 +1973,23 @@ $campus-detail-font-meta: 24rpx;
     .micronutrient-cell,
     .quick-comment-bar,
     .comments-empty,
-    .comment-replies {
+    .comment-replies,
+    .campus-revision-list,
+    .campus-community-action,
+    .campus-availability,
+    .campus-version,
+    .campus-verified-at {
       background: rgb(255 255 255 / 6%);
+    }
+
+    .campus-community-action,
+    .campus-revision-list,
+    .campus-revision-item + .campus-revision-item {
+      border-color: rgb(255 255 255 / 8%);
+    }
+
+    .campus-revision-summary {
+      color: #d6e2dc;
     }
   }
 }

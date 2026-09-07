@@ -847,6 +847,26 @@
   z-index: 100;
 }
 
+.collector-channel-button {
+  position: fixed;
+  right: 144rpx;
+  bottom: 60rpx;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 140rpx;
+  height: 68rpx;
+  padding: 0 22rpx;
+  border: 2rpx solid rgb(92 184 150 / 45%);
+  border-radius: 34rpx;
+  background: rgb(255 255 255 / 94%);
+  box-shadow: 0 6rpx 18rpx rgb(23 84 63 / 14%);
+  color: #167355;
+  font-size: 25rpx;
+  font-weight: 600;
+}
+
 .fab-icon {
   font-size: 48rpx;
   color: #fff;
@@ -877,6 +897,12 @@
 }
 
 .fl-page-theme-root--dark {
+  .collector-channel-button {
+    border-color: rgb(110 231 183 / 22%);
+    background: rgb(24 33 31 / 94%);
+    color: #6ee7b7;
+  }
+
   .campus-canteen-page {
     background: linear-gradient(180deg, #101715 0%, #0d1312 100%);
   }

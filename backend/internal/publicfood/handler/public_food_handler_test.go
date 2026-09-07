@@ -179,6 +179,7 @@ func TestPublicFoodHandlerCreateMapsCampusUploadFields(t *testing.T) {
 	svc := &mockPublicFoodService{}
 	r := setupPublicFoodHandlerRouter(svc)
 	body, _ := json.Marshal(map[string]any{
+		"client_batch_key":    "user-submit-1",
 		"is_campus_food":      true,
 		"food_name":           "鸡胸肉套餐",
 		"school_name":         "北京大学",
@@ -202,6 +203,7 @@ func TestPublicFoodHandlerCreateMapsCampusUploadFields(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, w.Code)
 	require.True(t, svc.createInput.IsCampusFood)
+	require.Equal(t, "user-submit-1", *svc.createInput.ClientBatchKey)
 	require.Equal(t, "鸡胸肉套餐", *svc.createInput.FoodName)
 	require.Equal(t, "北京大学", *svc.createInput.SchoolName)
 	require.Equal(t, "燕园校区", *svc.createInput.CampusName)

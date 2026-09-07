@@ -1,0 +1,55 @@
+.collector-page {
+  min-height: 100vh;
+  padding: 24rpx 24rpx calc(36rpx + env(safe-area-inset-bottom));
+  box-sizing: border-box;
+  background: #f7faf8;
+  color: #1f3029;
+}
+
+.collector-hero { padding: 22rpx 8rpx 28rpx; }
+.collector-title { display: block; font-size: 40rpx; font-weight: 750; }
+.collector-subtitle { display: block; margin-top: 12rpx; color: #687970; font-size: 25rpx; line-height: 40rpx; }
+.collector-scroll { height: calc(100vh - 190rpx); }
+.collector-card { margin-bottom: 20rpx; padding: 28rpx; border: 2rpx solid #e5ece8; border-radius: 24rpx; background: #fff; }
+.collector-card-heading { display: flex; align-items: center; justify-content: space-between; gap: 16rpx; margin-bottom: 18rpx; }
+.collector-card-title { display: block; font-size: 30rpx; font-weight: 700; }
+.collector-card-desc, .collector-empty { display: block; margin: 14rpx 0 22rpx; color: #74837b; font-size: 24rpx; line-height: 38rpx; }
+.collector-status-row { display: flex; gap: 12rpx; align-items: center; margin-top: 22rpx; padding: 20rpx; border-radius: 16rpx; background: #fff7ed; color: #9a4b12; font-size: 24rpx; }
+.collector-status-dot { width: 14rpx; height: 14rpx; border-radius: 50%; background: #f59e0b; }
+.collector-scope-badge { padding: 6rpx 12rpx; border-radius: 999rpx; background: #ecfdf5; color: #047857; font-size: 22rpx; }
+.collector-field { display: flex; align-items: center; min-height: 86rpx; border-bottom: 2rpx solid #edf1ef; }
+.collector-label { flex: 0 0 190rpx; color: #53635b; font-size: 25rpx; }
+.collector-value { flex: 1; text-align: right; color: #1f3029; font-size: 26rpx; }
+.collector-inline { display: flex; gap: 20rpx; }
+.collector-field--half { flex: 1; min-width: 0; }
+.collector-field--half .collector-label { flex-basis: auto; margin-right: 12rpx; }
+.collector-input { flex: 1; text-align: right; font-size: 26rpx; }
+.collector-textarea { width: 100%; min-height: 140rpx; margin-top: 22rpx; padding: 20rpx; box-sizing: border-box; border-radius: 16rpx; background: #f6f9f7; font-size: 25rpx; }
+.collector-primary { display: flex; align-items: center; justify-content: center; height: 88rpx; margin-top: 24rpx; border-radius: 20rpx; background: #14815d; color: #fff; font-size: 28rpx; font-weight: 650; }
+.collector-submit { margin: 8rpx 0 0; }
+.collector-primary.disabled, .collector-add.disabled { opacity: .5; pointer-events: none; }
+.collector-add { display: flex; align-items: center; justify-content: center; min-height: 58rpx; padding: 0 18rpx; border: 2rpx solid #bcd9cc; border-radius: 16rpx; color: #0f7754; font-size: 23rpx; }
+.collector-entry { position: relative; display: flex; gap: 18rpx; padding: 20rpx 0; border-top: 2rpx solid #edf1ef; }
+.collector-entry-image { flex: 0 0 132rpx; width: 132rpx; height: 132rpx; border-radius: 16rpx; background: #edf2ef; }
+.collector-entry-fields { flex: 1; min-width: 0; }
+.collector-entry-name { height: 58rpx; border-bottom: 2rpx solid #dfe7e3; font-size: 27rpx; }
+.collector-entry-inline { display: flex; gap: 12rpx; margin-top: 14rpx; }
+.collector-entry-input { flex: 1; min-width: 0; height: 52rpx; padding: 0 12rpx; border-radius: 10rpx; background: #f5f8f6; font-size: 22rpx; }
+.collector-entry-remove { position: absolute; top: 10rpx; right: 0; width: 42rpx; height: 42rpx; text-align: center; color: #a66; font-size: 32rpx; line-height: 42rpx; }
+.collector-loading { display: flex; align-items: center; justify-content: center; min-height: 300rpx; }
+.collector-spinner { width: 30rpx; height: 30rpx; border: 4rpx solid rgb(20 129 93 / 20%); border-top-color: #14815d; border-radius: 50%; animation: collector-spin .8s linear infinite; }
+.collector-spinner--light { border-color: rgb(255 255 255 / 30%); border-top-color: #fff; }
+.collector-safe-area { height: calc(30rpx + env(safe-area-inset-bottom)); }
+
+.collector-page--dark {
+  background: #0d1512;
+  color: #edf7f2;
+  .collector-subtitle, .collector-card-desc, .collector-empty { color: rgb(222 239 231 / 58%); }
+  .collector-card { border-color: rgb(255 255 255 / 8%); background: #151f1b; }
+  .collector-field, .collector-entry { border-color: rgb(255 255 255 / 8%); }
+  .collector-label { color: rgb(222 239 231 / 62%); }
+  .collector-value, .collector-input, .collector-entry-name { color: #edf7f2; }
+  .collector-textarea, .collector-entry-input { background: rgb(255 255 255 / 6%); color: #edf7f2; }
+}
+
+@keyframes collector-spin { to { transform: rotate(360deg); } }

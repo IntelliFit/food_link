@@ -169,6 +169,18 @@ func (s *CatalogService) GetAnalysisProgress(ctx context.Context) (*domain.Analy
 }
 
 func (s *CatalogService) UploadImage(ctx context.Context, adminID, sourceFilename, contentType string, data []byte) (string, error) {
+	return s.uploadCatalogImage(ctx, "admin_id", adminID, "campus-food", sourceFilename, contentType, data)
+}
+
+func (s *CatalogService) UploadCommunityImage(ctx context.Context, userID, sourceFilename, contentType string, data []byte) (string, error) {
+	userID = strings.TrimSpace(userID)
+	if userID == "" {
+		return "", commonerrors.ErrUnauthorized
+	}
+	return s.uploadCatalogImage(ctx, "user_id", userID, "campus-food/users/"+userID, sourceFilename, contentType, data)
+}
+
+func (s *CatalogService) uploadCatalogImage(ctx context.Context, actorField, actorID, keyPrefix, sourceFilename, contentType string, data []byte) (string, error) {
 	if s.storage == nil {
 		return "", appError("食堂采集图片存储未配置")
 	}
@@ -180,11 +192,11 @@ func (s *CatalogService) UploadImage(ctx context.Context, adminID, sourceFilenam
 	if ext == "" {
 		return "", badRequest("仅支持 JPG、PNG、WebP、HEIC 图片")
 	}
-	key := fmt.Sprintf("campus-food/%s/%s%s", time.Now().Format("2006/01"), uuid.NewString(), ext)
+	key := fmt.Sprintf("%s/%s/%s%s", strings.TrimRight(keyPrefix, "/"), time.Now().Format("2006/01"), uuid.NewString(), ext)
 	imageURL, err := s.storage.UploadBytes("food-images", key, data, contentType)
 	if err != nil {
 		logger.Error(ctx, "上传食堂采集图片失败", err,
-			slog.String("admin_id", adminID),
+			slog.String(actorField, strings.TrimSpace(actorID)),
 			slog.String("object_key", key),
 			slog.Int("bytes", len(data)),
 		)
@@ -194,6 +206,39 @@ func (s *CatalogService) UploadImage(ctx context.Context, adminID, sourceFilenam
 }
 
 func (s *CatalogService) CreateBatch(ctx context.Context, adminID string, input CreateBatchInput) (*CreateBatchResult, error) {
+	return s.createBatch(ctx, batchActor{AdminID: strings.TrimSpace(adminID), SourceChannel: "admin_batch"}, input)
+}
+
+type batchActor struct {
+	AdminID       string
+	UserID        string
+	SourceChannel string
+	RequireScope  bool
+}
+
+type communityBatchRepository interface {
+	communityRepository
+	CreateCommunityBatchWithItems(ctx context.Context, batch *domain.CollectionBatch, items []domain.CatalogItem, revisions []domain.Revision) error
+}
+
+func (s *CatalogService) CreateUserSingle(ctx context.Context, userID string, input CreateBatchInput) (*CreateBatchResult, error) {
+	if strings.TrimSpace(userID) == "" {
+		return nil, commonerrors.ErrUnauthorized
+	}
+	if len(input.Entries) != 1 {
+		return nil, badRequest("单菜上传每次只能提交一道菜")
+	}
+	return s.createBatch(ctx, batchActor{UserID: strings.TrimSpace(userID), SourceChannel: "user_single"}, input)
+}
+
+func (s *CatalogService) CreateCollectorBatch(ctx context.Context, userID string, input CreateBatchInput) (*CreateBatchResult, error) {
+	if strings.TrimSpace(userID) == "" {
+		return nil, commonerrors.ErrUnauthorized
+	}
+	return s.createBatch(ctx, batchActor{UserID: strings.TrimSpace(userID), SourceChannel: "collector_batch", RequireScope: true}, input)
+}
+
+func (s *CatalogService) createBatch(ctx context.Context, actor batchActor, input CreateBatchInput) (*CreateBatchResult, error) {
 	clientKey := strings.TrimSpace(input.ClientBatchKey)
 	if clientKey == "" {
 		return nil, badRequest("采集批次标识不能为空")
@@ -201,6 +246,9 @@ func (s *CatalogService) CreateBatch(ctx context.Context, adminID string, input 
 	if existing, err := s.repo.FindBatchByClientKey(ctx, clientKey); err != nil {
 		return nil, err
 	} else if existing != nil {
+		if actor.UserID != "" && (existing.ContributorUserID == nil || strings.TrimSpace(*existing.ContributorUserID) != actor.UserID) {
+			return nil, &commonerrors.AppError{Code: 10003, Message: "该批次标识已被其他采集者使用", HTTPStatus: 409}
+		}
 		items, listErr := s.repo.ListItemsByBatch(ctx, existing.ID)
 		if listErr != nil {
 			return nil, listErr
@@ -218,6 +266,41 @@ func (s *CatalogService) CreateBatch(ctx context.Context, adminID string, input 
 	canteenName := strings.TrimSpace(input.CanteenName)
 	if organizationName == "" || canteenName == "" {
 		return nil, badRequest("请填写学校或园区名称以及食堂名称")
+	}
+	if actor.UserID != "" {
+		communityRepo, ok := s.repo.(communityBatchRepository)
+		if !ok {
+			return nil, appError("校园菜品共建服务未配置")
+		}
+		schoolID, campusID, canteenID := pointerValue(input.SchoolID), pointerValue(input.CampusID), pointerValue(input.CanteenID)
+		if schoolID == "" || campusID == "" || canteenID == "" {
+			return nil, badRequest("请选择已启用的学校、校区和食堂")
+		}
+		ref, refErr := communityRepo.GetCampusDirectoryRef(ctx, schoolID, campusID, canteenID, pointerValue(input.DefaultWindowID))
+		if refErr != nil {
+			return nil, refErr
+		}
+		if ref == nil || ref.SchoolID == "" || ref.CampusID == "" || ref.CanteenID == "" {
+			return nil, badRequest("请选择同一学校下已启用的校区和食堂")
+		}
+		input.SchoolID, input.CampusID, input.CanteenID = stringPointer(ref.SchoolID), stringPointer(ref.CampusID), stringPointer(ref.CanteenID)
+		input.OrganizationName, input.AreaName, input.CanteenName = ref.SchoolName, ref.CampusName, ref.CanteenName
+		if ref.WindowID != "" {
+			input.DefaultWindowID, input.DefaultWindowName = stringPointer(ref.WindowID), ref.WindowName
+			if input.DefaultFloor == "" {
+				input.DefaultFloor = ref.Floor
+			}
+		}
+		organizationName, canteenName = input.OrganizationName, input.CanteenName
+		if actor.RequireScope {
+			allowed, scopeErr := communityRepo.HasActiveCollectorScope(ctx, actor.UserID, ref.SchoolID, ref.CampusID, ref.CanteenID, time.Now())
+			if scopeErr != nil {
+				return nil, scopeErr
+			}
+			if !allowed {
+				return nil, &commonerrors.AppError{Code: 20003, Message: "尚未获得该学校的批量采集权限", HTTPStatus: 403}
+			}
+		}
 	}
 	if len(input.Entries) == 0 {
 		return nil, badRequest("请至少添加一条食堂采集记录")
@@ -240,7 +323,7 @@ func (s *CatalogService) CreateBatch(ctx context.Context, adminID string, input 
 
 	now := time.Now()
 	batchID := uuid.NewString()
-	adminID = strings.TrimSpace(adminID)
+	adminID := strings.TrimSpace(actor.AdminID)
 	batchName := strings.TrimSpace(input.BatchName)
 	if batchName == "" {
 		batchName = strings.Join(nonEmptyStrings(organizationName, canteenName, now.Format("2006-01-02")), "-")
@@ -267,6 +350,8 @@ func (s *CatalogService) CreateBatch(ctx context.Context, adminID string, input 
 		SourceNote:          strings.TrimSpace(input.SourceNote),
 		Status:              "submitted",
 		CreatedByAdminID:    trimStringPtr(&adminID),
+		ContributorUserID:   stringPointer(actor.UserID),
+		SourceChannel:       actor.SourceChannel,
 		CreatedAt:           &now,
 		UpdatedAt:           &now,
 		ItemCount:           len(input.Entries),
@@ -278,15 +363,47 @@ func (s *CatalogService) CreateBatch(ctx context.Context, adminID string, input 
 		if itemErr != nil {
 			return nil, itemErr
 		}
+		if actor.UserID != "" {
+			if strings.TrimSpace(item.Name) == "" || len(item.ImagePaths) == 0 {
+				return nil, badRequest(fmt.Sprintf("第 %d 条必须包含菜品名称和至少一张清晰照片", index+1))
+			}
+			item.Status = "published"
+			item.PublishedAt = &now
+			item.LastVerifiedAt = &now
+		}
 		items = append(items, item)
 	}
-	if err := s.repo.CreateBatchWithItems(ctx, &batch, items); err != nil {
-		logger.Error(ctx, "保存食堂采集批次失败", err,
+	var saveErr error
+	if actor.UserID == "" {
+		saveErr = s.repo.CreateBatchWithItems(ctx, &batch, items)
+	} else {
+		communityRepo := s.repo.(communityBatchRepository)
+		revisions := make([]domain.Revision, 0, len(items))
+		for index := range items {
+			revisions = append(revisions, domain.Revision{
+				ID: uuid.NewString(), CatalogItemID: items[index].ID, BaseVersion: 0, ResultVersion: 1,
+				ActorType: "user", ActorUserID: stringPointer(actor.UserID), ActionType: "create",
+				BeforeSnapshot: map[string]any{}, ProposedPatch: catalogEditableSnapshot(items[index]), AfterSnapshot: catalogEditableSnapshot(items[index]),
+				ChangedFields: changedSnapshotFields(map[string]any{}, catalogEditableSnapshot(items[index])), EvidenceImagePaths: append([]string{}, items[index].ImagePaths...),
+				CreatedAt: &now,
+			})
+		}
+		saveErr = communityRepo.CreateCommunityBatchWithItems(ctx, &batch, items, revisions)
+	}
+	if saveErr != nil {
+		logger.Error(ctx, "保存食堂采集批次失败", saveErr,
 			slog.String("admin_id", adminID),
+			slog.String("user_id", actor.UserID),
 			slog.String("batch_id", batch.ID),
 			slog.Int("item_count", len(items)),
 		)
-		return nil, err
+		return nil, saveErr
+	}
+	if actor.UserID != "" {
+		communityRepo := s.repo.(communityBatchRepository)
+		for index := range items {
+			s.queueCommunityNutritionRefresh(ctx, communityRepo, actor.UserID, &items[index])
+		}
 	}
 	resultItems := append([]domain.CatalogItem(nil), items...)
 	s.resolveItemImages(resultItems)
@@ -437,20 +554,33 @@ func (s *CatalogService) UpdateItem(ctx context.Context, adminID, itemID string,
 	updated.PublishedAt = current.PublishedAt
 	updated.PublishedByAdminID = current.PublishedByAdminID
 	updated.ContributorUserID = current.ContributorUserID
+	updated.LastContributorID = current.LastContributorID
 	updated.CreatedByAdminID = current.CreatedByAdminID
+	updated.Version = current.Version
+	updated.SourceChannel = current.SourceChannel
+	updated.NutritionVersion = current.NutritionVersion
+	updated.NutritionStatus = current.NutritionStatus
+	updated.AvailabilityStatus = current.AvailabilityStatus
+	updated.LastVerifiedAt = current.LastVerifiedAt
 	updated.CreatedAt = current.CreatedAt
 	updated.UpdatedAt = &now
 	if updated.SourceFilename == "" {
 		updated.SourceFilename = current.SourceFilename
 	}
 
-	if err := s.repo.UpdateItem(ctx, &updated); err != nil {
-		logger.Error(ctx, "更新食堂采集条目失败", err,
+	var updateErr error
+	if communityRepo, ok := s.repo.(communityRepository); ok {
+		updateErr = s.applyAdminCatalogUpdate(ctx, communityRepo, strings.TrimSpace(adminID), current, &updated)
+	} else {
+		updateErr = s.repo.UpdateItem(ctx, &updated)
+	}
+	if updateErr != nil {
+		logger.Error(ctx, "更新食堂采集条目失败", updateErr,
 			slog.String("admin_id", strings.TrimSpace(adminID)),
 			slog.String("item_id", itemID),
 			slog.String("batch_id", current.BatchID),
 		)
-		return nil, err
+		return nil, updateErr
 	}
 	logger.Info(ctx, "食堂采集条目字段更新完成",
 		slog.String("admin_id", strings.TrimSpace(adminID)),
@@ -544,6 +674,9 @@ func (s *CatalogService) PublishItem(ctx context.Context, adminID, itemID string
 		"canteen_name":                    item.CanteenName,
 		"floor":                           item.Floor,
 		"window_name":                     item.WindowName,
+	}
+	if item.Version > 0 {
+		extraPayload["campus_content_version"] = item.Version
 	}
 	contextText := catalogAnalysisContext(item)
 	input := analyzeservice.SubmitTaskInput{
@@ -1040,7 +1173,14 @@ func (s *CatalogService) buildCatalogItem(batch domain.CollectionBatch, input Cr
 		CompletenessStatus: completeness,
 		Status:             "draft",
 		CapturedAt:         batch.CapturedAt,
+		ContributorUserID:  batch.ContributorUserID,
+		LastContributorID:  batch.ContributorUserID,
 		CreatedByAdminID:   trimStringPtr(&adminID),
+		Version:            1,
+		SourceChannel:      firstNonEmpty(batch.SourceChannel, "admin_batch"),
+		NutritionVersion:   0,
+		NutritionStatus:    "pending",
+		AvailabilityStatus: "available",
 		CreatedAt:          &now,
 		UpdatedAt:          &now,
 	}, nil

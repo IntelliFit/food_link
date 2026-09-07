@@ -40,6 +40,7 @@ const extraSubpackagePages = [
   'pages/food-library-detail/index',
   'pages/campus-canteen/index',
   'pages/campus-food-share/index',
+  'pages/campus-food-collector/index',
   'pages/feedback/index',
   'pages/reward-center/index',
   'pages/food-contribution/index',

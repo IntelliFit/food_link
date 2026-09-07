@@ -1,6 +1,15 @@
 package domain
 
-import "time"
+import (
+	"errors"
+	"time"
+)
+
+var (
+	ErrVersionConflict            = errors.New("campus food version conflict")
+	ErrStaleAnalysisResult        = errors.New("campus food analysis result targets an old version")
+	ErrCollectorApplicationAbsent = errors.New("campus collector application not found")
+)
 
 // CollectionBatch records one on-site collection session. It deliberately keeps
 // location names alongside optional directory IDs so office parks and other
@@ -27,6 +36,8 @@ type CollectionBatch struct {
 	SourceNote          string     `gorm:"column:source_note" json:"source_note,omitempty"`
 	Status              string     `gorm:"column:status" json:"status"`
 	CreatedByAdminID    *string    `gorm:"column:created_by_admin_id" json:"created_by_admin_id,omitempty"`
+	ContributorUserID   *string    `gorm:"column:contributor_user_id" json:"contributor_user_id,omitempty"`
+	SourceChannel       string     `gorm:"column:source_channel" json:"source_channel"`
 	CreatedAt           *time.Time `gorm:"column:created_at" json:"created_at,omitempty"`
 	UpdatedAt           *time.Time `gorm:"column:updated_at" json:"updated_at,omitempty"`
 	ItemCount           int        `gorm:"column:item_count;->" json:"item_count"`
@@ -82,7 +93,14 @@ type CatalogItem struct {
 	PublishedByAdminID  *string        `gorm:"column:published_by_admin_id" json:"published_by_admin_id,omitempty"`
 	CapturedAt          *time.Time     `gorm:"column:captured_at" json:"captured_at,omitempty"`
 	ContributorUserID   *string        `gorm:"column:contributor_user_id" json:"contributor_user_id,omitempty"`
+	LastContributorID   *string        `gorm:"column:last_contributor_user_id" json:"last_contributor_user_id,omitempty"`
 	CreatedByAdminID    *string        `gorm:"column:created_by_admin_id" json:"created_by_admin_id,omitempty"`
+	Version             int64          `gorm:"column:version" json:"version"`
+	SourceChannel       string         `gorm:"column:source_channel" json:"source_channel"`
+	NutritionVersion    int64          `gorm:"column:nutrition_source_version" json:"nutrition_source_version"`
+	NutritionStatus     string         `gorm:"column:nutrition_status" json:"nutrition_status"`
+	AvailabilityStatus  string         `gorm:"column:availability_status" json:"availability_status"`
+	LastVerifiedAt      *time.Time     `gorm:"column:last_verified_at" json:"last_verified_at,omitempty"`
 	CreatedAt           *time.Time     `gorm:"column:created_at" json:"created_at,omitempty"`
 	UpdatedAt           *time.Time     `gorm:"column:updated_at" json:"updated_at,omitempty"`
 	TotalCalories       *float64       `gorm:"column:total_calories;->;-:migration" json:"total_calories,omitempty"`
@@ -93,6 +111,84 @@ type CatalogItem struct {
 }
 
 func (CatalogItem) TableName() string { return "campus_food_catalog_items" }
+
+// Revision records every accepted community change. It is append-only: a
+// rollback is represented by another revision that points at the reverted one.
+type Revision struct {
+	ID                 string         `gorm:"column:id" json:"id"`
+	CatalogItemID      string         `gorm:"column:catalog_item_id" json:"catalog_item_id"`
+	BaseVersion        int64          `gorm:"column:base_version" json:"base_version"`
+	ResultVersion      int64          `gorm:"column:result_version" json:"result_version"`
+	ActorType          string         `gorm:"column:actor_type" json:"actor_type"`
+	ActorUserID        *string        `gorm:"column:actor_user_id" json:"actor_user_id,omitempty"`
+	ActorAdminID       *string        `gorm:"column:actor_admin_id" json:"actor_admin_id,omitempty"`
+	ActionType         string         `gorm:"column:action_type" json:"action_type"`
+	BeforeSnapshot     map[string]any `gorm:"column:before_snapshot;serializer:json" json:"before_snapshot"`
+	ProposedPatch      map[string]any `gorm:"column:proposed_patch;serializer:json" json:"proposed_patch"`
+	AfterSnapshot      map[string]any `gorm:"column:after_snapshot;serializer:json" json:"after_snapshot"`
+	ChangedFields      []string       `gorm:"column:changed_fields;serializer:json" json:"changed_fields"`
+	EvidenceImagePaths []string       `gorm:"column:evidence_image_paths;serializer:json" json:"evidence_image_paths"`
+	Reason             string         `gorm:"column:reason" json:"reason,omitempty"`
+	RevertsRevisionID  *string        `gorm:"column:reverts_revision_id" json:"reverts_revision_id,omitempty"`
+	CreatedAt          *time.Time     `gorm:"column:created_at" json:"created_at,omitempty"`
+}
+
+func (Revision) TableName() string { return "campus_food_revisions" }
+
+type CollectorApplication struct {
+	ID            string     `gorm:"column:id" json:"id"`
+	UserID        string     `gorm:"column:user_id" json:"user_id"`
+	SchoolID      string     `gorm:"column:school_id" json:"school_id"`
+	CampusID      *string    `gorm:"column:campus_id" json:"campus_id,omitempty"`
+	CanteenID     *string    `gorm:"column:canteen_id" json:"canteen_id,omitempty"`
+	ApplicantNote string     `gorm:"column:applicant_note" json:"applicant_note,omitempty"`
+	Status        string     `gorm:"column:status" json:"status"`
+	ReviewNote    string     `gorm:"column:review_note" json:"review_note,omitempty"`
+	ReviewedBy    *string    `gorm:"column:reviewed_by" json:"reviewed_by,omitempty"`
+	ReviewedAt    *time.Time `gorm:"column:reviewed_at" json:"reviewed_at,omitempty"`
+	CreatedAt     *time.Time `gorm:"column:created_at" json:"created_at,omitempty"`
+	UpdatedAt     *time.Time `gorm:"column:updated_at" json:"updated_at,omitempty"`
+	UserNickname  string     `gorm:"column:user_nickname;->;-:migration" json:"user_nickname,omitempty"`
+	UserTelephone string     `gorm:"column:user_telephone;->;-:migration" json:"user_telephone,omitempty"`
+	SchoolName    string     `gorm:"column:school_name;->;-:migration" json:"school_name,omitempty"`
+	CampusName    string     `gorm:"column:campus_name;->;-:migration" json:"campus_name,omitempty"`
+	CanteenName   string     `gorm:"column:canteen_name;->;-:migration" json:"canteen_name,omitempty"`
+}
+
+func (CollectorApplication) TableName() string { return "campus_collector_applications" }
+
+type CollectorScope struct {
+	ID               string     `gorm:"column:id" json:"id"`
+	UserID           string     `gorm:"column:user_id" json:"user_id"`
+	ApplicationID    *string    `gorm:"column:application_id" json:"application_id,omitempty"`
+	SchoolID         string     `gorm:"column:school_id" json:"school_id"`
+	CampusID         *string    `gorm:"column:campus_id" json:"campus_id,omitempty"`
+	CanteenID        *string    `gorm:"column:canteen_id" json:"canteen_id,omitempty"`
+	Status           string     `gorm:"column:status" json:"status"`
+	GrantedByAdminID string     `gorm:"column:granted_by_admin_id" json:"granted_by_admin_id"`
+	ExpiresAt        *time.Time `gorm:"column:expires_at" json:"expires_at,omitempty"`
+	RevokedAt        *time.Time `gorm:"column:revoked_at" json:"revoked_at,omitempty"`
+	RevokedByAdminID *string    `gorm:"column:revoked_by_admin_id" json:"revoked_by_admin_id,omitempty"`
+	CreatedAt        *time.Time `gorm:"column:created_at" json:"created_at,omitempty"`
+	UpdatedAt        *time.Time `gorm:"column:updated_at" json:"updated_at,omitempty"`
+	SchoolName       string     `gorm:"column:school_name;->;-:migration" json:"school_name,omitempty"`
+	CampusName       string     `gorm:"column:campus_name;->;-:migration" json:"campus_name,omitempty"`
+	CanteenName      string     `gorm:"column:canteen_name;->;-:migration" json:"canteen_name,omitempty"`
+}
+
+func (CollectorScope) TableName() string { return "campus_collector_scopes" }
+
+type DirectoryRef struct {
+	SchoolID    string
+	SchoolName  string
+	CampusID    string
+	CampusName  string
+	CanteenID   string
+	CanteenName string
+	WindowID    string
+	WindowName  string
+	Floor       string
+}
 
 type CatalogItemFilter struct {
 	BatchID   string

@@ -501,7 +501,7 @@ func TestUpdateItemRejectsChangesWhileAnalysisIsPending(t *testing.T) {
 func TestPublishItemAllowsMissingImageAndUsesExistingTextAnalysis(t *testing.T) {
 	price := 12.0
 	repo := &fakeCatalogRepo{existingItem: &domain.CatalogItem{
-		ID: "item-1", BatchID: "batch-1", Status: "draft", EntryType: "dish", Name: "番茄炒饭",
+		ID: "item-1", BatchID: "batch-1", Status: "draft", EntryType: "dish", Name: "番茄炒饭", Version: 1,
 		OrganizationName: "清华大学", CanteenName: "紫荆园", PriceType: "fixed", Price: &price,
 		MissingFields: []string{"image"}, CompletenessStatus: "incomplete", RawText: "番茄炒饭 12 元/份",
 	}}
@@ -612,7 +612,7 @@ func TestPublishItemRejectsStallOverview(t *testing.T) {
 func TestPublishItemQueuesExistingFoodAnalysisBeforePublishing(t *testing.T) {
 	price := 12.0
 	repo := &fakeCatalogRepo{existingItem: &domain.CatalogItem{
-		ID: "item-1", BatchID: "batch-1", Status: "draft", EntryType: "dish", Name: "番茄炒饭",
+		ID: "item-1", BatchID: "batch-1", Status: "draft", EntryType: "dish", Name: "番茄炒饭", Version: 1,
 		OrganizationName: "清华大学", CanteenName: "紫荆园", ImagePaths: []string{"campus-food/rice.jpg"},
 		PriceType: "fixed", Price: &price, CompletenessStatus: "complete",
 	}}
@@ -631,6 +631,7 @@ func TestPublishItemQueuesExistingFoodAnalysisBeforePublishing(t *testing.T) {
 	require.Equal(t, "standard", *submitter.input.ExecutionMode)
 	require.Equal(t, "campus_public_food", submitter.input.ExtraPayload["public_food_source_type"])
 	require.Equal(t, "item-1", submitter.input.ExtraPayload["campus_catalog_item_id"])
+	require.EqualValues(t, 1, submitter.input.ExtraPayload["campus_content_version"])
 	require.Equal(t, true, submitter.input.ExtraPayload["micronutrient_analysis_required"])
 	require.Equal(t, "image", submitter.input.SourceType)
 	require.Empty(t, submitter.input.CaptureProtocol)

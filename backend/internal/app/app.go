@@ -410,10 +410,18 @@ func New(cfg *config.Config) (*App, error) {
 
 	// Public food library module DI
 	publicFoodRepo := publicfoodrepo.NewPublicFoodRepo(db)
+	campusCatalogRepo := campuscatalogrepo.NewCatalogRepo(db)
+	campusCatalogSvc := campuscatalogservice.NewCatalogService(campusCatalogRepo, storageClient)
+	campusCatalogSvc.ConfigureAnalysis(
+		analyzeTaskSvc,
+		campuscatalogservice.NewInternalAnalysisUserResolver(userRepo),
+	)
+	campusCommunityHandler := campuscataloghandler.NewCommunityHandler(campusCatalogSvc)
 	publicFoodSvc := publicfoodservice.NewPublicFoodService(publicFoodRepo, storageClient)
 	publicFoodSvc.ConfigureTaskPublisher(taskQueue)
 	publicFoodSvc.ConfigureCampusAnalyzeTaskSubmitter(analyzeTaskSvc)
 	publicFoodSvc.ConfigureCampusMembershipChecker(membershipSvc)
+	publicFoodSvc.ConfigureCampusCatalogWriter(campusCatalogAdapter{catalog: campusCatalogSvc})
 	publicFoodSvc.ConfigureRewardTaskAwarder(membershipSvc)
 	publicFoodSvc.ConfigureBlockChecker(friendSvc)
 	publicFoodHandler := publicfoodhandler.NewPublicFoodHandler(publicFoodSvc)
@@ -477,7 +485,7 @@ func New(cfg *config.Config) (*App, error) {
 		shutdownLog:   logShutdown,
 		taskQueue:     taskQueue,
 	}
-	app.startEmbeddedWorker(cfg, analyzeTaskRepo, analyzePrecisionRepo, publicFoodRepo, campuscatalogrepo.NewCatalogRepo(db), analyzeSvc, ocrSvc, healthDocRepo, userRepo, expiryRecognizer, expiryNotifier, exerciseSvc, frNutritionSvc, frSvc, membershipSvc, taskQueue, storageClient)
+	app.startEmbeddedWorker(cfg, analyzeTaskRepo, analyzePrecisionRepo, publicFoodRepo, campusCatalogRepo, analyzeSvc, ocrSvc, healthDocRepo, userRepo, expiryRecognizer, expiryNotifier, exerciseSvc, frNutritionSvc, frSvc, membershipSvc, taskQueue, storageClient)
 	if os.Getenv("FOOD_LINK_DISABLE_BACKGROUND_MAINTENANCE") != "1" {
 		app.startOpenPlatformReconciliation(openPlatformSvc)
 		app.startNutritionEmbeddingMaintenance(nutritionEmbeddingMaintainer)
@@ -731,6 +739,12 @@ func New(cfg *config.Config) (*App, error) {
 	engine.POST("/api/public-food-library/:item_id/collect", authmw.RequireJWT(jwtSvc), publicFoodHandler.Collect)
 	engine.DELETE("/api/public-food-library/:item_id/collect", authmw.RequireJWT(jwtSvc), publicFoodHandler.Uncollect)
 	engine.POST("/api/public-food-library/:item_id/contribute-images", authmw.RequireJWT(jwtSvc), publicFoodHandler.ContributeCampusImages)
+	engine.POST("/api/public-food-library/:item_id/corrections", authmw.RequireJWT(jwtSvc), campusCommunityHandler.Correct)
+	engine.GET("/api/public-food-library/:item_id/revisions", authmw.RequireJWT(jwtSvc), campusCommunityHandler.Revisions)
+	engine.POST("/api/campus-food-collection/images", authmw.RequireJWT(jwtSvc), campusCommunityHandler.UploadImage)
+	engine.POST("/api/campus-food-collectors/applications", authmw.RequireJWT(jwtSvc), campusCommunityHandler.ApplyCollector)
+	engine.GET("/api/campus-food-collectors/profile", authmw.RequireJWT(jwtSvc), campusCommunityHandler.CollectorProfile)
+	engine.POST("/api/campus-food-collection/batches", authmw.RequireJWT(jwtSvc), campusCommunityHandler.CreateCollectorBatch)
 	engine.PUT("/api/public-food-library/:item_id", authmw.RequireJWT(jwtSvc), publicFoodHandler.Update)
 	engine.DELETE("/api/public-food-library/:item_id", authmw.RequireJWT(jwtSvc), publicFoodHandler.Delete)
 	engine.GET("/api/public-food-library/:item_id/comments", authmw.RequireJWT(jwtSvc), publicFoodHandler.Comments)
@@ -845,13 +859,8 @@ func New(cfg *config.Config) (*App, error) {
 	adminAuthSvc := adminservice.NewAuthService(adminAccountRepo)
 	adminAuthHandler := adminhandler.NewAuthHandler(adminAuthSvc)
 	adminCampusDirectoryHandler := adminhandler.NewCampusDirectoryHandler(db)
-	adminCampusCatalogRepo := campuscatalogrepo.NewCatalogRepo(db)
-	adminCampusCatalogSvc := campuscatalogservice.NewCatalogService(adminCampusCatalogRepo, storageClient)
-	adminCampusCatalogSvc.ConfigureAnalysis(
-		analyzeTaskSvc,
-		campuscatalogservice.NewInternalAnalysisUserResolver(userRepo),
-	)
-	app.campusCatalogService = adminCampusCatalogSvc
+	adminCampusCatalogSvc := campusCatalogSvc
+	app.campusCatalogService = campusCatalogSvc
 	if os.Getenv("FOOD_LINK_DISABLE_BACKGROUND_MAINTENANCE") != "1" {
 		app.startCampusCatalogNutritionBackfill(adminCampusCatalogSvc)
 	}
@@ -922,11 +931,15 @@ func New(cfg *config.Config) (*App, error) {
 	adminAPI.POST("/campus-directory/imports", adminAuth, adminCampusDirectoryHandler.CreateImport)
 	adminAPI.PATCH("/campus-directory/imports/:import_id", adminAuth, adminCampusDirectoryHandler.UpdateImport)
 	adminAPI.POST("/campus-food-collection/images", adminAuth, adminCampusCatalogHandler.UploadImage)
+	adminAPI.GET("/campus-food-collectors/applications", adminAuth, campusCommunityHandler.AdminListCollectorApplications)
+	adminAPI.PATCH("/campus-food-collectors/applications/:application_id", adminAuth, campusCommunityHandler.AdminReviewCollectorApplication)
 	adminAPI.POST("/campus-food-collection/batches", adminAuth, adminCampusCatalogHandler.CreateBatch)
 	adminAPI.GET("/campus-food-collection/batches", adminAuth, adminCampusCatalogHandler.ListBatches)
 	adminAPI.GET("/campus-food-collection/items", adminAuth, adminCampusCatalogHandler.ListItems)
 	adminAPI.GET("/campus-food-collection/analysis-progress", adminAuth, adminCampusCatalogHandler.GetAnalysisProgress)
 	adminAPI.PATCH("/campus-food-collection/items/:item_id", adminAuth, adminCampusCatalogHandler.UpdateItem)
+	adminAPI.GET("/campus-food-collection/items/:item_id/revisions", adminAuth, campusCommunityHandler.Revisions)
+	adminAPI.POST("/campus-food-collection/items/:item_id/revisions/:revision_id/rollback", adminAuth, campusCommunityHandler.AdminRollbackRevision)
 	adminAPI.POST("/campus-food-collection/items/:item_id/publish", adminAuth, adminCampusCatalogHandler.PublishItem)
 	adminAPI.DELETE("/campus-food-collection/items/:item_id", adminAuth, adminCampusCatalogHandler.DeleteItem)
 	adminAPI.GET("/exercise-energy-library", adminAuth, adminExerciseEnergyHandler.List)

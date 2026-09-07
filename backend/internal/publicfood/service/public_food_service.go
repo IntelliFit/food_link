@@ -28,6 +28,7 @@ type PublicFoodService struct {
 	rewards      RewardTaskAwarder
 	blockChecker BlockChecker
 	membership   CampusMembershipChecker
+	campusWriter CampusCatalogWriter
 }
 
 type RewardTaskAwarder interface {
@@ -44,6 +45,12 @@ type CampusAnalyzeTaskSubmitter interface {
 
 type CampusMembershipChecker interface {
 	IsCampusPublishingAllowed(ctx context.Context, userID string) (bool, error)
+}
+
+type CampusCatalogWriter interface {
+	CreateCampusFood(ctx context.Context, userID string, input CreateInput) (string, error)
+	AppendCampusFoodImages(ctx context.Context, userID, itemID string, imagePaths []string) ([]string, error)
+	UpdateCampusFood(ctx context.Context, userID, itemID string, input CreateInput) error
 }
 
 const (
@@ -83,7 +90,12 @@ func (s *PublicFoodService) ConfigureCampusMembershipChecker(checker CampusMembe
 	s.membership = checker
 }
 
+func (s *PublicFoodService) ConfigureCampusCatalogWriter(writer CampusCatalogWriter) {
+	s.campusWriter = writer
+}
+
 type CreateInput struct {
+	ClientBatchKey     *string
 	ImagePath          *string
 	ImagePaths         []string
 	SourceRecordID     *string
@@ -142,7 +154,10 @@ type CampusImageContributionResult struct {
 
 func (s *PublicFoodService) Create(ctx context.Context, userID string, input CreateInput) (string, error) {
 	normalizePublicFoodTypeInput(&input)
-	if input.IsCampusFood {
+	// The versioned campus catalog is open to every authenticated user. Keep
+	// the historical membership gate only as a fail-closed fallback when that
+	// canonical writer was not wired (for old binaries or isolated tools).
+	if input.IsCampusFood && s.campusWriter == nil {
 		if err := s.ensureCampusPublishingAllowed(ctx, userID); err != nil {
 			return "", err
 		}
@@ -203,6 +218,11 @@ func (s *PublicFoodService) Create(ctx context.Context, userID string, input Cre
 		} else {
 			firstPath = &resolved
 		}
+	}
+	if input.IsCampusFood && s.campusWriter != nil {
+		input.ImagePath = firstPath
+		input.ImagePaths = imagePaths
+		return s.campusWriter.CreateCampusFood(ctx, userID, input)
 	}
 
 	items := firstItems(input.Items, src)
@@ -575,6 +595,13 @@ func (s *PublicFoodService) ContributeCampusImages(ctx context.Context, userID, 
 	if len(imagePaths) > maxCampusContributionImages {
 		return nil, &commonerrors.AppError{Code: 10002, Message: "一次最多补充 5 张菜品照片", HTTPStatus: 400}
 	}
+	if s.campusWriter != nil {
+		updatedPaths, err := s.campusWriter.AppendCampusFoodImages(ctx, userID, itemID, imagePaths)
+		if err != nil {
+			return nil, err
+		}
+		return &CampusImageContributionResult{ImagePaths: updatedPaths, Accepted: true}, nil
+	}
 	item, accepted, err := s.repo.SetMissingCampusImages(ctx, itemID, imagePaths)
 	if err != nil {
 		logger.Error(ctx, "保存校园菜品共建图片失败", err,
@@ -609,13 +636,16 @@ func (s *PublicFoodService) Update(ctx context.Context, userID, itemID string, i
 	if item.UserID != userID {
 		return commonerrors.ErrForbidden
 	}
-	if input.IsCampusFood || isCampusPublicFood(item) {
+	if (input.IsCampusFood || isCampusPublicFood(item)) && s.campusWriter == nil {
 		if err := s.ensureCampusPublishingAllowed(ctx, userID); err != nil {
 			return err
 		}
 	}
 	if err := s.applyCampusDirectoryRef(ctx, &input); err != nil {
 		return err
+	}
+	if isCampusPublicFood(item) && s.campusWriter != nil {
+		return s.campusWriter.UpdateCampusFood(ctx, userID, itemID, input)
 	}
 
 	updates := map[string]any{

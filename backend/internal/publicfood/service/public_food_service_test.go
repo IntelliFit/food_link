@@ -35,6 +35,29 @@ type mockCampusMembershipChecker struct {
 	err     error
 }
 
+type recordingCampusCatalogWriter struct {
+	createdUserID string
+	createdInput  CreateInput
+	appendItemID  string
+	appendPaths   []string
+	updatedItemID string
+}
+
+func (w *recordingCampusCatalogWriter) CreateCampusFood(_ context.Context, userID string, input CreateInput) (string, error) {
+	w.createdUserID, w.createdInput = userID, input
+	return "catalog-item-1", nil
+}
+
+func (w *recordingCampusCatalogWriter) AppendCampusFoodImages(_ context.Context, _ string, itemID string, imagePaths []string) ([]string, error) {
+	w.appendItemID, w.appendPaths = itemID, append([]string{}, imagePaths...)
+	return append([]string{"old.jpg"}, imagePaths...), nil
+}
+
+func (w *recordingCampusCatalogWriter) UpdateCampusFood(_ context.Context, _ string, itemID string, _ CreateInput) error {
+	w.updatedItemID = itemID
+	return nil
+}
+
 func (m *mockCampusMembershipChecker) IsCampusPublishingAllowed(context.Context, string) (bool, error) {
 	return m.allowed, m.err
 }
@@ -58,6 +81,29 @@ func TestPublicFoodServiceCreateCampusFoodRejectsNonMember(t *testing.T) {
 	require.ErrorAs(t, err, &appErr)
 	require.Equal(t, 403, appErr.HTTPStatus)
 	require.Equal(t, "校园食物发布仅限会员", appErr.Message)
+}
+
+func TestPublicFoodServiceDelegatesCampusCreateWithoutMembershipGate(t *testing.T) {
+	db := setupPublicFoodServiceTestDB(t)
+	schoolID, campusID, canteenID := seedCampusDirectoryForPublicFoodTest(t, db, "示例大学", "主校区", "第一食堂")
+	foodName, schoolName, campusName, canteenName := "宫保鸡丁", "示例大学", "主校区", "第一食堂"
+	image := "campus-food/users/u1/dish.jpg"
+	writer := &recordingCampusCatalogWriter{}
+	svc := NewPublicFoodService(repo.NewPublicFoodRepo(db))
+	svc.ConfigureCampusMembershipChecker(&mockCampusMembershipChecker{allowed: false})
+	svc.ConfigureCampusCatalogWriter(writer)
+
+	itemID, err := svc.Create(context.Background(), "user-1", CreateInput{
+		IsCampusFood: true, FoodName: &foodName, ImagePath: &image,
+		SchoolID: &schoolID, CampusID: &campusID, CanteenID: &canteenID,
+		SchoolName: &schoolName, CampusName: &campusName, CanteenName: &canteenName,
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, "catalog-item-1", itemID)
+	require.Equal(t, "user-1", writer.createdUserID)
+	require.True(t, writer.createdInput.IsCampusFood)
+	require.Equal(t, []string{image}, writer.createdInput.ImagePaths)
 }
 
 type recordingPublicFoodTaskPublisher struct {

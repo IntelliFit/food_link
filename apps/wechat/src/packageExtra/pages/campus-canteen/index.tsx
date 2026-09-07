@@ -11,14 +11,12 @@ import Taro, { useDidShow } from "@tarojs/taro";
 import { withAuth } from "../../../utils/withAuth";
 import {
   getAccessToken,
-  getMyMembership,
   getPublicFoodLibraryList,
   getSchoolCampuses,
   getSchoolCanteens,
   showUnifiedApiError,
   submitStructuredFeedback,
   type FeedbackSource,
-  type MembershipStatus,
   type PublicFoodLibraryItem,
   type CanteenWindowItem,
   type SchoolCampusItem,
@@ -35,7 +33,6 @@ import CampusPicker from "../../../components/CampusPicker";
 import CanteenPicker from "../../../components/CanteenPicker";
 import FloorPicker from "../../../components/FloorPicker";
 import WindowPicker from "../../../components/WindowPicker";
-import CampusMembershipGate from "../../../components/CampusMembershipGate";
 import { CAFETERIA_HERO_BG_URL } from "../../../utils/static-asset-cdn-url";
 
 type SortBy = "hot" | "high_protein" | "low_calorie" | "value";
@@ -86,7 +83,7 @@ function getCampusTags(item: PublicFoodLibraryItem): string[] {
 
 function isAnalyzingItem(item: PublicFoodLibraryItem): boolean {
   const status = normalizeText(item.analysis_status);
-  return status === "pending" || status === "processing";
+  return status === "pending" || status === "processing" || status === "stale";
 }
 
 function isAnalysisFailedItem(item: PublicFoodLibraryItem): boolean {
@@ -118,7 +115,9 @@ function needsNutritionUpdate(item: PublicFoodLibraryItem): boolean {
 function isClientReadyCampusItem(item: PublicFoodLibraryItem): boolean {
   const publicationStatus = normalizeText(item.status);
   if (publicationStatus && publicationStatus !== "published") return false;
-  return !isAnalyzingItem(item) && !isAnalysisFailedItem(item) && hasNutrition(item);
+  // 社区资料先发布，营养状态独立推进；pending/stale/failed 也必须可见，
+  // 否则用户刚上传或刚纠错的菜会像“消失”一样。
+  return Boolean(item.food_name);
 }
 
 function sortCampusItemsByPopularity(
@@ -175,29 +174,8 @@ function CampusCanteenPage() {
   const [showCanteenPicker, setShowCanteenPicker] = useState(false);
   const [showFloorPicker, setShowFloorPicker] = useState(false);
   const [showWindowPicker, setShowWindowPicker] = useState(false);
-  const [membershipStatus, setMembershipStatus] =
-    useState<MembershipStatus | null>(null);
-  const [membershipLoading, setMembershipLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const lastRefreshTime = useRef<number>(0);
-  const isCampusMember = !!membershipStatus?.is_pro;
-
-  const loadMembership = useCallback(async (forceRefresh = false) => {
-    if (!getAccessToken()) {
-      setMembershipStatus(null);
-      return;
-    }
-    setMembershipLoading(true);
-    try {
-      const membership = await getMyMembership(undefined, { forceRefresh });
-      setMembershipStatus(membership);
-    } catch (e) {
-      console.error("获取校园食堂会员状态失败:", e);
-      setMembershipStatus(null);
-    } finally {
-      setMembershipLoading(false);
-    }
-  }, []);
 
   const fetchReadyCampusItems = useCallback(
     async (keyword = appliedSearchKeyword) => {
@@ -258,7 +236,6 @@ function CampusCanteenPage() {
       keyword = appliedSearchKeyword,
     ) => {
       if (!getAccessToken()) return;
-      if (!membershipStatus?.is_pro) return;
       const now = Date.now();
       if (!force && now - lastRefreshTime.current < 30000) return;
       if (!silent) setLoading(true);
@@ -275,22 +252,13 @@ function CampusCanteenPage() {
         setRefreshing(false);
       }
     },
-    [
-      fetchReadyCampusItems,
-      membershipStatus?.is_pro,
-      appliedSearchKeyword,
-    ],
+    [fetchReadyCampusItems, appliedSearchKeyword],
   );
 
   useDidShow(() => {
     applyThemeNavigationBar(scheme);
     const hasToken = !!getAccessToken();
     setLoggedIn(hasToken);
-    if (!hasToken) {
-      setMembershipStatus(null);
-      return;
-    }
-    loadMembership(true);
   });
 
   useEffect(() => {
@@ -298,12 +266,11 @@ function CampusCanteenPage() {
   }, [scheme]);
 
   useEffect(() => {
-    if (loggedIn && isCampusMember) {
+    if (loggedIn) {
       loadList(false, true);
     }
   }, [
     loggedIn,
-    isCampusMember,
     sortBy,
     selectedSchool,
     selectedCampus,
@@ -316,7 +283,7 @@ function CampusCanteenPage() {
   useEffect(() => {
     let cancelled = false;
     const schoolId = selectedSchool?.id;
-    if (!loggedIn || !isCampusMember || !schoolId) {
+    if (!loggedIn || !schoolId) {
       setDirectoryCampuses([]);
       setDirectoryCanteens([]);
       setDirectoryLoading(false);
@@ -348,7 +315,7 @@ function CampusCanteenPage() {
     return () => {
       cancelled = true;
     };
-  }, [isCampusMember, loggedIn, selectedSchool?.id]);
+  }, [loggedIn, selectedSchool?.id]);
 
   const handleRefresherRefresh = useCallback(() => {
     if (!getAccessToken()) {
@@ -361,7 +328,6 @@ function CampusCanteenPage() {
 
   const handleSearch = () => {
     const kw = searchKeyword.trim();
-    if (!isCampusMember) return;
     lastRefreshTime.current = 0;
     if (kw === appliedSearchKeyword) {
       void loadList(false, true, kw);
@@ -378,7 +344,6 @@ function CampusCanteenPage() {
   };
 
   const handleLocationFeedback = async () => {
-    if (!isCampusMember) return;
     const modalResult = await Taro.showModal({
       title: "校区/食堂信息纠错",
       content: "",
@@ -427,13 +392,11 @@ function CampusCanteenPage() {
   };
 
   const goUpload = () => {
-    if (!isCampusMember) {
-      Taro.navigateTo({
-        url: `${extraPkgUrl("/pages/pro-membership/index")}?source=campus_canteen`,
-      });
-      return;
-    }
     Taro.navigateTo({ url: extraPkgUrl("/pages/campus-food-share/index") });
+  };
+
+  const goCollector = () => {
+    Taro.navigateTo({ url: extraPkgUrl("/pages/campus-food-collector/index") });
   };
 
   const openCanteenPicker = () => {
@@ -748,22 +711,6 @@ function CampusCanteenPage() {
             </Button>
           </View>
         </View>
-      </FlPageThemeRoot>
-    );
-  }
-
-  if (membershipLoading) {
-    return (
-      <FlPageThemeRoot>
-        <CampusMembershipGate loading />
-      </FlPageThemeRoot>
-    );
-  }
-
-  if (!isCampusMember) {
-    return (
-      <FlPageThemeRoot>
-        <CampusMembershipGate />
       </FlPageThemeRoot>
     );
   }
@@ -1084,6 +1031,9 @@ function CampusCanteenPage() {
         </ScrollView>
 
         {/* 浮动上传按钮 */}
+        <View className='collector-channel-button' onClick={goCollector}>
+          批量采集
+        </View>
         <View className='fab-button' onClick={goUpload}>
           <Text className='fab-icon'>+</Text>
         </View>

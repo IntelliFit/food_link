@@ -3023,7 +3023,10 @@ function unwrapUploadAnalyzePayload(parsedData: Record<string, any> | null): Rec
   return parsedData
 }
 
-export async function uploadAnalyzeImageFile(localPath: string): Promise<{ imageUrl: string }> {
+export async function uploadAnalyzeImageFile(
+  localPath: string,
+  uploadPath = '/api/upload-analyze-image-file'
+): Promise<{ imageUrl: string }> {
   // 开发者工具 webview 渲染会返回 http://tmp 或 http://usr；它们虽然长得像
   // HTTP URL，实际是 uploadFile 可读取的本地虚拟路径，必须保留原样。
   const filePath = String(localPath || '').trim()
@@ -3032,7 +3035,7 @@ export async function uploadAnalyzeImageFile(localPath: string): Promise<{ image
   }
 
   const token = getAccessToken()
-  const uploadUrl = `${API_BASE_URL}/api/upload-analyze-image-file`
+  const uploadUrl = `${API_BASE_URL}${uploadPath}`
   const startedAt = Date.now()
   let response: any
   try {
@@ -7934,6 +7937,99 @@ export interface PublicFoodLibraryItem {
   protein_per_yuan?: number
   /** 每 100 kcal 价格（元/100kcal） */
   price_per_100_kcal?: number
+  /** 当前可编辑内容版本，用于防止旧表单覆盖新纠错 */
+  content_version?: number
+  /** 当前营养快照对应的内容版本 */
+  nutrition_source_version?: number
+  /** 营养状态：pending/current/stale/failed */
+  nutrition_status?: 'pending' | 'current' | 'stale' | 'failed'
+  /** 菜品供应状态 */
+  availability_status?: 'available' | 'temporarily_unavailable' | 'discontinued' | 'unknown'
+  /** 最近一次社区核实时间 */
+  last_verified_at?: string | null
+}
+
+/** 校园菜品专用图片上传；服务端按用户隔离对象路径并执行图片类型/大小校验。 */
+export async function uploadCampusFoodImageFile(localPath: string): Promise<{ imageUrl: string }> {
+  return uploadAnalyzeImageFile(localPath, '/api/campus-food-collection/images')
+}
+
+export interface CampusFoodCorrectionPatch {
+  name?: string
+  description?: string
+  school_id?: string
+  campus_id?: string
+  canteen_id?: string
+  window_id?: string | null
+  floor?: string
+  window_name?: string
+  price_type?: string
+  price?: number | null
+  price_min?: number | null
+  price_max?: number | null
+  price_unit?: string
+  price_collected_at?: string | null
+  portion_description?: string
+  image_paths?: string[]
+  append_image_paths?: string[]
+  availability_status?: 'available' | 'temporarily_unavailable' | 'discontinued' | 'unknown'
+  meal_periods?: string[]
+  available_weekdays?: string[]
+  availability_note?: string
+  service_mode?: string
+}
+
+export interface CampusFoodRevision {
+  id: string
+  catalog_item_id: string
+  base_version: number
+  result_version: number
+  actor_type: 'user' | 'admin' | 'system'
+  action_type: 'create' | 'update' | 'rollback' | 'merge'
+  before_snapshot: Record<string, unknown>
+  proposed_patch: Record<string, unknown>
+  after_snapshot: Record<string, unknown>
+  changed_fields: string[]
+  evidence_image_paths: string[]
+  reason?: string
+  reverts_revision_id?: string | null
+  created_at?: string
+}
+
+export interface CampusFoodCorrectionResult {
+  item: PublicFoodLibraryItem
+  revision: CampusFoodRevision
+  reanalysis_queued: boolean
+}
+
+export interface CampusCollectorApplication {
+  id: string
+  user_id: string
+  school_id: string
+  campus_id?: string | null
+  canteen_id?: string | null
+  applicant_note?: string
+  status: 'pending' | 'approved' | 'rejected' | 'withdrawn'
+  review_note?: string
+  created_at?: string
+}
+
+export interface CampusCollectorScope {
+  id: string
+  school_id: string
+  school_name?: string
+  campus_id?: string | null
+  campus_name?: string
+  canteen_id?: string | null
+  canteen_name?: string
+  status: 'active' | 'revoked' | 'expired'
+  expires_at?: string | null
+}
+
+export interface CampusCollectorProfile {
+  applications: CampusCollectorApplication[]
+  active_scopes: CampusCollectorScope[]
+  can_batch: boolean
 }
 
 /** 校园详情页性价比指标 */
@@ -7989,6 +8085,7 @@ export interface PublicFoodLibraryComment {
 
 /** 创建公共食物库条目请求 */
 export interface CreatePublicFoodLibraryRequest {
+  client_batch_key?: string
   image_path?: string
   /** 多图 URL 列表，优先于 image_path */
   image_paths?: string[]
@@ -8147,7 +8244,7 @@ export async function getCampusFoodDetail(itemId: string): Promise<CampusFoodDet
   return response.data as CampusFoodDetailResponse
 }
 
-/** 为缺图的已上线校园菜品补充共建照片；首个有效贡献生效。 */
+/** 为已上线校园菜品追加共建照片；通过版本化纠错链路即时生效。 */
 export async function contributeCampusFoodImages(
   itemId: string,
   imagePaths: string[]
@@ -8161,6 +8258,98 @@ export async function contributeCampusFoodImages(
     throw new Error((response.data as any)?.detail || '补充照片失败')
   }
   return response.data as { image_paths: string[]; accepted: boolean }
+}
+
+/** 结构化纠错：校验通过后立即生成新版本。 */
+export async function correctCampusFood(
+  itemId: string,
+  input: {
+    base_version: number
+    patch: CampusFoodCorrectionPatch
+    evidence_image_paths?: string[]
+    reason?: string
+  }
+): Promise<CampusFoodCorrectionResult> {
+  const response = await authenticatedRequest(`/api/public-food-library/${encodeURIComponent(itemId)}/corrections`, {
+    method: 'POST',
+    data: input,
+    timeout: 15000,
+  })
+  return response.data as CampusFoodCorrectionResult
+}
+
+export async function getCampusFoodRevisions(
+  itemId: string,
+  page = 1,
+  limit = 20
+): Promise<{ items: CampusFoodRevision[]; page: number; limit: number; total: number }> {
+  const response = await authenticatedRequest(
+    `/api/public-food-library/${encodeURIComponent(itemId)}/revisions?page=${page}&limit=${limit}`,
+    { method: 'GET', timeout: 10000 }
+  )
+  return response.data as { items: CampusFoodRevision[]; page: number; limit: number; total: number }
+}
+
+export async function applyCampusCollector(input: {
+  school_id: string
+  campus_id?: string
+  canteen_id?: string
+  applicant_note?: string
+}): Promise<{ application: CampusCollectorApplication }> {
+  const response = await authenticatedRequest('/api/campus-food-collectors/applications', {
+    method: 'POST', data: input, timeout: 10000,
+  })
+  return response.data as { application: CampusCollectorApplication }
+}
+
+export async function getCampusCollectorProfile(): Promise<CampusCollectorProfile> {
+  const response = await authenticatedRequest('/api/campus-food-collectors/profile', { method: 'GET', timeout: 10000 })
+  return response.data as CampusCollectorProfile
+}
+
+export interface CampusCollectorBatchInput {
+  client_batch_key: string
+  batch_name?: string
+  venue_type: 'university'
+  school_id: string
+  campus_id: string
+  canteen_id: string
+  default_window_id?: string
+  organization_name: string
+  area_name?: string
+  canteen_name: string
+  default_floor?: string
+  default_window_name?: string
+  default_window_layout?: string
+  default_service_mode?: string
+  captured_at?: string
+  collector_name?: string
+  source_note?: string
+  entries: Array<{
+    entry_type?: string
+    name: string
+    image_paths: string[]
+    floor?: string
+    window_name?: string
+    price_type?: string
+    price?: number
+    price_min?: number
+    price_max?: number
+    price_unit?: string
+    portion_description?: string
+    notes?: string
+  }>
+}
+
+export async function createCampusCollectorBatch(input: CampusCollectorBatchInput): Promise<{
+  batch: { id: string }
+  items: Array<{ id: string; version: number; nutrition_status: string }>
+  idempotent: boolean
+}> {
+  const response = await authenticatedRequest('/api/campus-food-collection/batches', {
+    method: 'POST', data: input, timeout: 30000,
+  })
+  return response.data
 }
 
 /** 点赞公共食物库条目 */

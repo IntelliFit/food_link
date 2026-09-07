@@ -2,7 +2,6 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import * as Taro from '@tarojs/taro'
 import CampusCanteenPage from '../../src/packageExtra/pages/campus-canteen/index'
 import {
-  getMyMembership,
   getPublicFoodLibraryList,
   getSchoolCampuses,
   getSchoolCanteens,
@@ -20,10 +19,6 @@ jest.mock('../../src/components/FlPageThemeRoot', () => ({
   FlPageThemeRoot: ({ children }: any) => children,
 }))
 
-jest.mock('../../src/components/CampusMembershipGate', () => ({
-  __esModule: true,
-  default: () => null,
-}))
 jest.mock('../../src/components/CampusPicker', () => ({ __esModule: true, default: () => null }))
 jest.mock('../../src/components/CanteenPicker', () => ({ __esModule: true, default: () => null }))
 jest.mock('../../src/components/FloorPicker', () => ({ __esModule: true, default: () => null }))
@@ -57,7 +52,6 @@ jest.mock('../../src/utils/static-asset-cdn-url', () => ({
 
 jest.mock('../../src/utils/api', () => ({
   getAccessToken: jest.fn(() => 'test-token'),
-  getMyMembership: jest.fn(),
   getPublicFoodLibraryList: jest.fn(),
   getSchoolCampuses: jest.fn(),
   getSchoolCanteens: jest.fn(),
@@ -71,7 +65,6 @@ describe('campus canteen directory', () => {
     ;(Taro.useDidShow as jest.Mock)
       .mockImplementationOnce((callback) => callback())
       .mockImplementation(() => {})
-    ;(getMyMembership as jest.Mock).mockResolvedValue({ is_pro: true })
     ;(getPublicFoodLibraryList as jest.Mock).mockResolvedValue({ list: [] })
     ;(getSchoolCampuses as jest.Mock).mockResolvedValue([
       {
@@ -97,7 +90,7 @@ describe('campus canteen directory', () => {
   it('shows imported canteens even when no analyzed dishes are published yet', async () => {
     render(<CampusCanteenPage />)
 
-    await waitFor(() => expect(getMyMembership).toHaveBeenCalled())
+    await waitFor(() => expect(getPublicFoodLibraryList).toHaveBeenCalled())
     fireEvent.click(screen.getByText('选择学校'))
     fireEvent.click(screen.getByText('选择上海中医药大学'))
 
@@ -115,7 +108,7 @@ describe('campus canteen directory', () => {
   it('uses the selected canteen id without conflicting parent filters', async () => {
     render(<CampusCanteenPage />)
 
-    await waitFor(() => expect(getMyMembership).toHaveBeenCalled())
+    await waitFor(() => expect(getPublicFoodLibraryList).toHaveBeenCalled())
     fireEvent.click(screen.getByText('选择学校'))
     fireEvent.click(screen.getByText('选择上海中医药大学'))
     await waitFor(() => expect(screen.getByText('学生食堂')).toBeInTheDocument())
@@ -134,7 +127,7 @@ describe('campus canteen directory', () => {
     })
   })
 
-  it('never renders pending or failed AI dishes in the client list', async () => {
+  it('keeps published nutrition failures visible but hides unpublished dishes', async () => {
     ;(getPublicFoodLibraryList as jest.Mock).mockResolvedValue({
       list: [
         { id: 'ready', food_name: '已分析鸡肉饭', status: 'published', analysis_status: '', total_calories: 520, total_protein: 32, total_carbs: 60, total_fat: 14, items: [] },
@@ -146,9 +139,9 @@ describe('campus canteen directory', () => {
     render(<CampusCanteenPage />)
 
     await waitFor(() => expect(screen.getAllByText('已分析鸡肉饭').length).toBeGreaterThan(0))
-    expect(screen.queryByText('失败菜品')).not.toBeInTheDocument()
+    expect(screen.getAllByText('失败菜品').length).toBeGreaterThan(0)
     expect(screen.queryByText('分析中菜品')).not.toBeInTheDocument()
-    expect(screen.queryByText('分析失败，稍后重试')).not.toBeInTheDocument()
+    expect(screen.getByText('分析失败，稍后重试')).toBeInTheDocument()
   })
 
   it('falls back to ready campus dishes when the initial hot page is empty', async () => {

@@ -718,6 +718,11 @@ type PublicFoodItemDO struct {
 	PortionDescription *string    `gorm:"column:portion_description;type:text"`
 	IsCampusHighlight  bool       `gorm:"column:is_campus_highlight;type:boolean;not null;default:false"`
 	CampusLocationText *string    `gorm:"column:campus_location_text;type:text"`
+	ContentVersion     int64      `gorm:"column:content_version;type:bigint;not null;default:1;index:idx_public_food_library_content_version"`
+	NutritionVersion   int64      `gorm:"column:nutrition_source_version;type:bigint;not null;default:0"`
+	NutritionStatus    string     `gorm:"column:nutrition_status;type:text;not null;default:'pending';index:idx_public_food_library_nutrition_status"`
+	AvailabilityStatus string     `gorm:"column:availability_status;type:text;not null;default:'available';index:idx_public_food_library_availability_status"`
+	LastVerifiedAt     *time.Time `gorm:"column:last_verified_at;type:timestamptz"`
 }
 
 func (PublicFoodItemDO) TableName() string { return "public_food_library" }
@@ -1623,6 +1628,8 @@ type CampusFoodCollectionBatchDO struct {
 	SourceNote          *string    `gorm:"column:source_note;type:text"`
 	Status              string     `gorm:"column:status;type:text;not null;default:'submitted';index:idx_campus_food_collection_batches_status"`
 	CreatedByAdminID    *string    `gorm:"column:created_by_admin_id;type:uuid;index:idx_campus_food_collection_batches_admin"`
+	ContributorUserID   *string    `gorm:"column:contributor_user_id;type:uuid;index:idx_campus_food_collection_batches_contributor"`
+	SourceChannel       string     `gorm:"column:source_channel;type:text;not null;default:'admin_batch';index:idx_campus_food_collection_batches_source_channel"`
 	CreatedAt           *time.Time `gorm:"column:created_at;type:timestamptz;default:now();index:idx_campus_food_collection_batches_created_at,sort:desc"`
 	UpdatedAt           *time.Time `gorm:"column:updated_at;type:timestamptz;default:now()"`
 }
@@ -1675,12 +1682,77 @@ type CampusFoodCatalogItemDO struct {
 	PublishedByAdminID  *string        `gorm:"column:published_by_admin_id;type:uuid;index:idx_campus_food_catalog_items_published_by_admin"`
 	CapturedAt          *time.Time     `gorm:"column:captured_at;type:timestamptz;index:idx_campus_food_catalog_items_captured_at"`
 	ContributorUserID   *string        `gorm:"column:contributor_user_id;type:uuid;index:idx_campus_food_catalog_items_contributor"`
+	LastContributorID   *string        `gorm:"column:last_contributor_user_id;type:uuid;index:idx_campus_food_catalog_items_last_contributor"`
 	CreatedByAdminID    *string        `gorm:"column:created_by_admin_id;type:uuid;index:idx_campus_food_catalog_items_admin"`
+	Version             int64          `gorm:"column:version;type:bigint;not null;default:1"`
+	SourceChannel       string         `gorm:"column:source_channel;type:text;not null;default:'admin_batch';index:idx_campus_food_catalog_items_source_channel"`
+	NutritionVersion    int64          `gorm:"column:nutrition_source_version;type:bigint;not null;default:0"`
+	NutritionStatus     string         `gorm:"column:nutrition_status;type:text;not null;default:'pending';index:idx_campus_food_catalog_items_nutrition_status"`
+	AvailabilityStatus  string         `gorm:"column:availability_status;type:text;not null;default:'available';index:idx_campus_food_catalog_items_availability_status"`
+	LastVerifiedAt      *time.Time     `gorm:"column:last_verified_at;type:timestamptz"`
 	CreatedAt           *time.Time     `gorm:"column:created_at;type:timestamptz;default:now();index:idx_campus_food_catalog_items_created_at,sort:desc"`
 	UpdatedAt           *time.Time     `gorm:"column:updated_at;type:timestamptz;default:now()"`
 }
 
 func (CampusFoodCatalogItemDO) TableName() string { return "campus_food_catalog_items" }
+
+// CampusFoodRevisionDO is an immutable audit event. Corrections and rollbacks
+// append a new row; historical rows are never rewritten.
+type CampusFoodRevisionDO struct {
+	ID                 string         `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	CatalogItemID      string         `gorm:"column:catalog_item_id;type:uuid;not null;uniqueIndex:uk_campus_food_revisions_item_version,priority:1;index:idx_campus_food_revisions_item_created,priority:1"`
+	BaseVersion        int64          `gorm:"column:base_version;type:bigint;not null"`
+	ResultVersion      int64          `gorm:"column:result_version;type:bigint;not null;uniqueIndex:uk_campus_food_revisions_item_version,priority:2"`
+	ActorType          string         `gorm:"column:actor_type;type:text;not null;index:idx_campus_food_revisions_actor_type"`
+	ActorUserID        *string        `gorm:"column:actor_user_id;type:uuid;index:idx_campus_food_revisions_actor_user"`
+	ActorAdminID       *string        `gorm:"column:actor_admin_id;type:uuid;index:idx_campus_food_revisions_actor_admin"`
+	ActionType         string         `gorm:"column:action_type;type:text;not null;index:idx_campus_food_revisions_action_type"`
+	BeforeSnapshot     map[string]any `gorm:"column:before_snapshot;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
+	ProposedPatch      map[string]any `gorm:"column:proposed_patch;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
+	AfterSnapshot      map[string]any `gorm:"column:after_snapshot;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
+	ChangedFields      []string       `gorm:"column:changed_fields;type:jsonb;serializer:json;not null;default:'[]'::jsonb"`
+	EvidenceImagePaths []string       `gorm:"column:evidence_image_paths;type:jsonb;serializer:json;not null;default:'[]'::jsonb"`
+	Reason             *string        `gorm:"column:reason;type:text"`
+	RevertsRevisionID  *string        `gorm:"column:reverts_revision_id;type:uuid;index:idx_campus_food_revisions_reverts"`
+	CreatedAt          *time.Time     `gorm:"column:created_at;type:timestamptz;not null;default:now();index:idx_campus_food_revisions_item_created,priority:2,sort:desc"`
+}
+
+func (CampusFoodRevisionDO) TableName() string { return "campus_food_revisions" }
+
+type CampusCollectorApplicationDO struct {
+	ID            string     `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	UserID        string     `gorm:"column:user_id;type:uuid;not null;index:idx_campus_collector_applications_user"`
+	SchoolID      string     `gorm:"column:school_id;type:uuid;not null;index:idx_campus_collector_applications_school"`
+	CampusID      *string    `gorm:"column:campus_id;type:uuid;index:idx_campus_collector_applications_campus"`
+	CanteenID     *string    `gorm:"column:canteen_id;type:uuid;index:idx_campus_collector_applications_canteen"`
+	ApplicantNote *string    `gorm:"column:applicant_note;type:text"`
+	Status        string     `gorm:"column:status;type:text;not null;default:'pending';index:idx_campus_collector_applications_status"`
+	ReviewNote    *string    `gorm:"column:review_note;type:text"`
+	ReviewedBy    *string    `gorm:"column:reviewed_by;type:uuid"`
+	ReviewedAt    *time.Time `gorm:"column:reviewed_at;type:timestamptz"`
+	CreatedAt     *time.Time `gorm:"column:created_at;type:timestamptz;not null;default:now();index:idx_campus_collector_applications_created_at,sort:desc"`
+	UpdatedAt     *time.Time `gorm:"column:updated_at;type:timestamptz;not null;default:now()"`
+}
+
+func (CampusCollectorApplicationDO) TableName() string { return "campus_collector_applications" }
+
+type CampusCollectorScopeDO struct {
+	ID               string     `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	UserID           string     `gorm:"column:user_id;type:uuid;not null;index:idx_campus_collector_scopes_user_status,priority:1"`
+	ApplicationID    *string    `gorm:"column:application_id;type:uuid;index:idx_campus_collector_scopes_application"`
+	SchoolID         string     `gorm:"column:school_id;type:uuid;not null;index:idx_campus_collector_scopes_school"`
+	CampusID         *string    `gorm:"column:campus_id;type:uuid;index:idx_campus_collector_scopes_campus"`
+	CanteenID        *string    `gorm:"column:canteen_id;type:uuid;index:idx_campus_collector_scopes_canteen"`
+	Status           string     `gorm:"column:status;type:text;not null;default:'active';index:idx_campus_collector_scopes_user_status,priority:2"`
+	GrantedByAdminID string     `gorm:"column:granted_by_admin_id;type:uuid;not null;index:idx_campus_collector_scopes_granted_by"`
+	ExpiresAt        *time.Time `gorm:"column:expires_at;type:timestamptz"`
+	RevokedAt        *time.Time `gorm:"column:revoked_at;type:timestamptz"`
+	RevokedByAdminID *string    `gorm:"column:revoked_by_admin_id;type:uuid"`
+	CreatedAt        *time.Time `gorm:"column:created_at;type:timestamptz;not null;default:now()"`
+	UpdatedAt        *time.Time `gorm:"column:updated_at;type:timestamptz;not null;default:now()"`
+}
+
+func (CampusCollectorScopeDO) TableName() string { return "campus_collector_scopes" }
 
 type CampusCanteenApplicationDO struct {
 	ID                   string     `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
@@ -1998,6 +2070,9 @@ func AllModels() []any {
 		&CanteenWindowDO{},
 		&CampusFoodCollectionBatchDO{},
 		&CampusFoodCatalogItemDO{},
+		&CampusFoodRevisionDO{},
+		&CampusCollectorApplicationDO{},
+		&CampusCollectorScopeDO{},
 		&CampusCanteenApplicationDO{},
 		&CampusDirectorySourceDO{},
 		&UserFoodPhotoAnnotationDO{},

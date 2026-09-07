@@ -19,6 +19,7 @@ import (
 	analyzerepo "food_link/backend/internal/analyze/repo"
 	analyzeservice "food_link/backend/internal/analyze/service"
 	authrepo "food_link/backend/internal/auth/repo"
+	campuscatalogdomain "food_link/backend/internal/campuscatalog/domain"
 	campuscatalogrepo "food_link/backend/internal/campuscatalog/repo"
 	expiryservice "food_link/backend/internal/expiry/service"
 	foodrecorddomain "food_link/backend/internal/foodrecord/domain"
@@ -1083,7 +1084,14 @@ func (r *Runner) writeBackCampusPublicFood(ctx context.Context, task *domain.Ana
 		return nil
 	}
 	if catalogItemID := stringFromMap(task.Payload, "campus_catalog_item_id"); catalogItemID != "" && r.campusCatalog != nil {
-		return r.campusCatalog.CompleteAnalyzedItem(ctx, catalogItemID, task.ID, result, time.Now())
+		targetVersion := int64(intFromMap(task.Payload, "campus_content_version"))
+		err := r.campusCatalog.CompleteAnalyzedItemForVersion(ctx, catalogItemID, task.ID, targetVersion, result, time.Now())
+		if errors.Is(err, campuscatalogdomain.ErrStaleAnalysisResult) {
+			r.info(ctx, "旧版本校园菜品营养结果已丢弃",
+				slog.String("task_id", task.ID), slog.String("item_id", catalogItemID), slog.Int64("target_version", targetVersion))
+			return nil
+		}
+		return err
 	}
 	if r.publicFood == nil {
 		return nil
@@ -1100,8 +1108,18 @@ func (r *Runner) linkCampusPublicFoodAnalysisTask(ctx context.Context, payload m
 		return nil
 	}
 	if catalogItemID := stringFromMap(payload, "campus_catalog_item_id"); catalogItemID != "" && r.campusCatalog != nil {
-		if err := r.campusCatalog.LinkAnalysisTask(ctx, catalogItemID, taskID); err != nil {
-			return err
+		if targetVersion := int64(intFromMap(payload, "campus_content_version")); targetVersion > 0 {
+			linked, err := r.campusCatalog.LinkCommunityAnalysisTask(ctx, catalogItemID, targetVersion, taskID, time.Now())
+			if err != nil {
+				return err
+			}
+			if !linked {
+				return campuscatalogdomain.ErrStaleAnalysisResult
+			}
+		} else {
+			if err := r.campusCatalog.LinkAnalysisTask(ctx, catalogItemID, taskID); err != nil {
+				return err
+			}
 		}
 	}
 	if r.publicFood == nil {
@@ -1181,6 +1199,9 @@ func copyCampusPublicFoodPayload(from, to map[string]any) {
 	}
 	if itemID := stringFromMap(from, "campus_catalog_item_id"); itemID != "" {
 		to["campus_catalog_item_id"] = itemID
+	}
+	if version := intFromMap(from, "campus_content_version"); version > 0 {
+		to["campus_content_version"] = version
 	}
 	if adminID := stringFromMap(from, "published_by_admin_id"); adminID != "" {
 		to["published_by_admin_id"] = adminID
@@ -5331,9 +5352,15 @@ func (r *Runner) failTask(ctx context.Context, task *domain.AnalysisTask, taskEr
 	task.ErrorMessage = &msg
 	if r.campusCatalog != nil {
 		if itemID := stringFromMap(task.Payload, "campus_catalog_item_id"); itemID != "" {
-			if err := r.campusCatalog.MarkAnalysisFailed(ctx, itemID, msg, time.Now()); err != nil {
+			var campusErr error
+			if targetVersion := int64(intFromMap(task.Payload, "campus_content_version")); targetVersion > 0 {
+				campusErr = r.campusCatalog.MarkCommunityAnalysisFailed(ctx, itemID, targetVersion, msg, time.Now())
+			} else {
+				campusErr = r.campusCatalog.MarkAnalysisFailed(ctx, itemID, msg, time.Now())
+			}
+			if campusErr != nil {
 				r.warn(ctx, "回写校园菜品 AI 分析失败状态失败",
-					slog.String("task_id", task.ID), slog.String("item_id", itemID), logger.Err(err))
+					slog.String("task_id", task.ID), slog.String("item_id", itemID), logger.Err(campusErr))
 			}
 		}
 	}

@@ -175,6 +175,9 @@ func AutoMigrate(ctx context.Context, db *gorm.DB, schema string) error {
 	if err := ensurePublicFoodCampusDirectoryBackfill(ctx, db); err != nil {
 		return err
 	}
+	if err := ensureCampusCommunityBackfill(ctx, db); err != nil {
+		return err
+	}
 	if err := ensureMottoColumn(ctx, db); err != nil {
 		return err
 	}
@@ -637,14 +640,21 @@ func MigrateOnboardingStatus(ctx context.Context, db *gorm.DB, schema string) er
 	return nil
 }
 
-// MigrateCampusCatalogPublishing applies only the additive schema needed by
-// the admin draft-to-publication workflow. It deliberately excludes every
-// historical seed and data backfill in AutoMigrate.
+// MigrateCampusCatalogPublishing applies only the additive schema and
+// idempotent compatibility backfill needed by the versioned campus catalog.
+// It deliberately excludes unrelated application seeds.
 func MigrateCampusCatalogPublishing(ctx context.Context, db *gorm.DB, schema string) error {
 	if err := prepareSchema(ctx, db, schema); err != nil {
 		return err
 	}
-	if err := db.WithContext(ctx).AutoMigrate(&migrationdo.CampusFoodCatalogItemDO{}); err != nil {
+	if err := db.WithContext(ctx).AutoMigrate(
+		&migrationdo.PublicFoodItemDO{},
+		&migrationdo.CampusFoodCollectionBatchDO{},
+		&migrationdo.CampusFoodCatalogItemDO{},
+		&migrationdo.CampusFoodRevisionDO{},
+		&migrationdo.CampusCollectorApplicationDO{},
+		&migrationdo.CampusCollectorScopeDO{},
+	); err != nil {
 		return fmt.Errorf("auto migrate campus catalog publishing: %w", err)
 	}
 	if !db.Migrator().HasTable(&migrationdo.PublicFoodItemDO{}) {
@@ -652,6 +662,191 @@ func MigrateCampusCatalogPublishing(ctx context.Context, db *gorm.DB, schema str
 	}
 	if err := db.WithContext(ctx).Exec(`ALTER TABLE public_food_library ALTER COLUMN user_id DROP NOT NULL`).Error; err != nil {
 		return fmt.Errorf("allow official public food author: %w", err)
+	}
+	if err := ensureCampusCommunityConstraints(ctx, db); err != nil {
+		return err
+	}
+	if err := ensureCampusCommunityBackfill(ctx, db); err != nil {
+		return err
+	}
+	return nil
+}
+
+func ensureCampusCommunityConstraints(ctx context.Context, db *gorm.DB) error {
+	statements := []string{
+		dropAndAddCheck("public_food_library", "public_food_library_content_version_check", `content_version >= 1`),
+		dropAndAddCheck("public_food_library", "public_food_library_nutrition_version_check", `nutrition_source_version >= 0 AND nutrition_source_version <= content_version`),
+		dropAndAddCheck("public_food_library", "public_food_library_nutrition_status_check", `nutrition_status = ANY (ARRAY['pending'::text,'current'::text,'stale'::text,'failed'::text])`),
+		dropAndAddCheck("public_food_library", "public_food_library_availability_status_check", `availability_status = ANY (ARRAY['available'::text,'temporarily_unavailable'::text,'discontinued'::text,'unknown'::text])`),
+		dropAndAddCheck("campus_food_collection_batches", "campus_food_collection_batches_source_channel_check", `source_channel = ANY (ARRAY['admin_batch'::text,'user_single'::text,'collector_batch'::text,'legacy_public'::text,'import'::text])`),
+		dropAndAddCheck("campus_food_catalog_items", "campus_food_catalog_items_version_check", `version >= 1`),
+		dropAndAddCheck("campus_food_catalog_items", "campus_food_catalog_items_nutrition_version_check", `nutrition_source_version >= 0 AND nutrition_source_version <= version`),
+		dropAndAddCheck("campus_food_catalog_items", "campus_food_catalog_items_source_channel_check", `source_channel = ANY (ARRAY['admin_batch'::text,'user_single'::text,'collector_batch'::text,'legacy_public'::text,'import'::text])`),
+		dropAndAddCheck("campus_food_catalog_items", "campus_food_catalog_items_nutrition_status_check", `nutrition_status = ANY (ARRAY['pending'::text,'current'::text,'stale'::text,'failed'::text])`),
+		dropAndAddCheck("campus_food_catalog_items", "campus_food_catalog_items_availability_status_check", `availability_status = ANY (ARRAY['available'::text,'temporarily_unavailable'::text,'discontinued'::text,'unknown'::text])`),
+		dropAndAddCheck("campus_food_revisions", "campus_food_revisions_version_check", `base_version >= 0 AND result_version = base_version + 1`),
+		dropAndAddCheck("campus_food_revisions", "campus_food_revisions_actor_type_check", `actor_type = ANY (ARRAY['user'::text,'admin'::text,'system'::text])`),
+		dropAndAddCheck("campus_food_revisions", "campus_food_revisions_actor_check", `(actor_type = 'user' AND actor_admin_id IS NULL) OR (actor_type = 'admin' AND actor_user_id IS NULL) OR (actor_type = 'system' AND actor_user_id IS NULL AND actor_admin_id IS NULL)`),
+		dropAndAddCheck("campus_food_revisions", "campus_food_revisions_action_type_check", `action_type = ANY (ARRAY['create'::text,'update'::text,'rollback'::text,'merge'::text])`),
+		dropAndAddCheck("campus_collector_applications", "campus_collector_applications_status_check", `status = ANY (ARRAY['pending'::text,'approved'::text,'rejected'::text,'withdrawn'::text])`),
+		dropAndAddCheck("campus_collector_scopes", "campus_collector_scopes_status_check", `status = ANY (ARRAY['active'::text,'revoked'::text,'expired'::text])`),
+		addFK("campus_food_collection_batches_contributor_user_id_fkey", "campus_food_collection_batches", "contributor_user_id", "weapp_user", "id", "SET NULL"),
+		addFK("campus_food_catalog_items_batch_id_fkey", "campus_food_catalog_items", "batch_id", "campus_food_collection_batches", "id", "CASCADE"),
+		addFK("campus_food_catalog_items_contributor_user_id_fkey", "campus_food_catalog_items", "contributor_user_id", "weapp_user", "id", "SET NULL"),
+		addFK("campus_food_catalog_items_last_contributor_user_id_fkey", "campus_food_catalog_items", "last_contributor_user_id", "weapp_user", "id", "SET NULL"),
+		addFK("campus_food_revisions_catalog_item_id_fkey", "campus_food_revisions", "catalog_item_id", "campus_food_catalog_items", "id", "CASCADE"),
+		addFK("campus_food_revisions_actor_user_id_fkey", "campus_food_revisions", "actor_user_id", "weapp_user", "id", "SET NULL"),
+		addFK("campus_food_revisions_actor_admin_id_fkey", "campus_food_revisions", "actor_admin_id", "admin_accounts", "id", "SET NULL"),
+		addFK("campus_food_revisions_reverts_revision_id_fkey", "campus_food_revisions", "reverts_revision_id", "campus_food_revisions", "id", "SET NULL"),
+		addFK("campus_collector_applications_user_id_fkey", "campus_collector_applications", "user_id", "weapp_user", "id", "CASCADE"),
+		addFK("campus_collector_applications_school_id_fkey", "campus_collector_applications", "school_id", "schools", "id", "CASCADE"),
+		addFK("campus_collector_applications_campus_id_fkey", "campus_collector_applications", "campus_id", "school_campuses", "id", "SET NULL"),
+		addFK("campus_collector_applications_canteen_id_fkey", "campus_collector_applications", "canteen_id", "school_canteens", "id", "SET NULL"),
+		addFK("campus_collector_applications_reviewed_by_fkey", "campus_collector_applications", "reviewed_by", "admin_accounts", "id", "SET NULL"),
+		addFK("campus_collector_scopes_user_id_fkey", "campus_collector_scopes", "user_id", "weapp_user", "id", "CASCADE"),
+		addFK("campus_collector_scopes_application_id_fkey", "campus_collector_scopes", "application_id", "campus_collector_applications", "id", "SET NULL"),
+		addFK("campus_collector_scopes_school_id_fkey", "campus_collector_scopes", "school_id", "schools", "id", "CASCADE"),
+		addFK("campus_collector_scopes_campus_id_fkey", "campus_collector_scopes", "campus_id", "school_campuses", "id", "SET NULL"),
+		addFK("campus_collector_scopes_canteen_id_fkey", "campus_collector_scopes", "canteen_id", "school_canteens", "id", "SET NULL"),
+		addFK("campus_collector_scopes_granted_by_admin_id_fkey", "campus_collector_scopes", "granted_by_admin_id", "admin_accounts", "id", "RESTRICT"),
+		addFK("campus_collector_scopes_revoked_by_admin_id_fkey", "campus_collector_scopes", "revoked_by_admin_id", "admin_accounts", "id", "SET NULL"),
+		`CREATE UNIQUE INDEX IF NOT EXISTS uk_campus_collector_scopes_active_scope ON campus_collector_scopes (user_id, school_id, COALESCE(campus_id, '00000000-0000-0000-0000-000000000000'::uuid), COALESCE(canteen_id, '00000000-0000-0000-0000-000000000000'::uuid)) WHERE status = 'active'`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS uk_campus_collector_applications_pending_scope ON campus_collector_applications (user_id, school_id, COALESCE(campus_id, '00000000-0000-0000-0000-000000000000'::uuid), COALESCE(canteen_id, '00000000-0000-0000-0000-000000000000'::uuid)) WHERE status = 'pending'`,
+	}
+	for _, statement := range statements {
+		if err := db.WithContext(ctx).Exec(statement).Error; err != nil {
+			return fmt.Errorf("apply campus community constraint: %w", err)
+		}
+	}
+	return nil
+}
+
+func ensureCampusCommunityBackfill(ctx context.Context, db *gorm.DB) error {
+	statements := []string{
+		`UPDATE campus_food_collection_batches SET source_channel = 'admin_batch' WHERE source_channel IS NULL OR trim(source_channel) = ''`,
+		`UPDATE campus_food_catalog_items
+SET version = GREATEST(COALESCE(version, 1), 1),
+    source_channel = COALESCE(NULLIF(trim(source_channel), ''), 'admin_batch'),
+    nutrition_source_version = CASE
+      WHEN status = 'published' AND COALESCE(nutrition_source_version, 0) = 0 THEN GREATEST(COALESCE(version, 1), 1)
+      ELSE LEAST(GREATEST(COALESCE(nutrition_source_version, 0), 0), GREATEST(COALESCE(version, 1), 1))
+    END,
+    nutrition_status = CASE
+      WHEN status = 'published' THEN 'current'
+      WHEN status = 'analysis_failed' THEN 'failed'
+      WHEN COALESCE(NULLIF(trim(nutrition_status), ''), 'pending') IN ('pending','current','stale','failed') THEN COALESCE(NULLIF(trim(nutrition_status), ''), 'pending')
+      ELSE 'pending'
+    END,
+    availability_status = CASE
+      WHEN COALESCE(NULLIF(trim(availability_status), ''), 'available') IN ('available','temporarily_unavailable','discontinued','unknown') THEN COALESCE(NULLIF(trim(availability_status), ''), 'available')
+      ELSE 'unknown'
+    END`,
+		`UPDATE public_food_library
+SET content_version = GREATEST(COALESCE(content_version, 1), 1),
+    nutrition_source_version = CASE
+      WHEN status = 'published' AND analysis_task_id IS NOT NULL AND COALESCE(nutrition_source_version, 0) = 0 THEN GREATEST(COALESCE(content_version, 1), 1)
+      ELSE LEAST(GREATEST(COALESCE(nutrition_source_version, 0), 0), GREATEST(COALESCE(content_version, 1), 1))
+    END,
+    nutrition_status = CASE
+      WHEN status = 'published' AND analysis_task_id IS NOT NULL THEN 'current'
+      WHEN COALESCE(NULLIF(trim(nutrition_status), ''), 'pending') IN ('pending','current','stale','failed') THEN COALESCE(NULLIF(trim(nutrition_status), ''), 'pending')
+      ELSE 'pending'
+    END,
+    availability_status = CASE
+      WHEN COALESCE(NULLIF(trim(availability_status), ''), 'available') IN ('available','temporarily_unavailable','discontinued','unknown') THEN COALESCE(NULLIF(trim(availability_status), ''), 'available')
+      ELSE 'unknown'
+    END
+WHERE is_campus_food = true`,
+		`INSERT INTO campus_food_collection_batches (
+  id, client_batch_key, batch_name, venue_type, school_id, campus_id, canteen_id,
+  organization_name, area_name, canteen_name, captured_at, collector_name,
+  source_note, status, contributor_user_id, source_channel, created_at, updated_at
+)
+SELECT gen_random_uuid(), 'legacy-public:' || p.id::text, '历史校园菜品', 'university',
+       p.school_id, p.campus_id, p.canteen_id,
+       COALESCE(NULLIF(trim(p.school_name), ''), '历史学校'), NULLIF(trim(p.campus_name), ''),
+       COALESCE(NULLIF(trim(p.canteen_name), ''), '历史食堂'),
+       COALESCE(p.price_collected_at, p.published_at, p.created_at, now()), '历史数据迁移',
+       '由 public_food_library 自动建立可纠错主记录', 'submitted', p.user_id,
+       'legacy_public', COALESCE(p.created_at, now()), COALESCE(p.updated_at, p.created_at, now())
+FROM public_food_library p
+WHERE p.is_campus_food = true
+  AND NOT EXISTS (SELECT 1 FROM campus_food_catalog_items c WHERE c.id = p.id)
+  AND NOT EXISTS (SELECT 1 FROM campus_food_collection_batches b WHERE b.client_batch_key = 'legacy-public:' || p.id::text)`,
+		`INSERT INTO campus_food_catalog_items (
+  id, batch_id, entry_type, name, description, school_id, campus_id, canteen_id, window_id,
+  organization_name, area_name, canteen_name, floor, window_name, window_layout,
+  meal_periods, available_weekdays, service_mode, price_type, price, price_min, price_max,
+  price_unit, portion_description, image_paths, image_kind, missing_fields, completeness_status,
+  status, analysis_task_id, analysis_completed_at, published_at, captured_at,
+  contributor_user_id, last_contributor_user_id, version, source_channel,
+  nutrition_source_version, nutrition_status, availability_status, last_verified_at,
+  created_at, updated_at
+)
+SELECT p.id, b.id, 'dish', p.food_name, p.description, p.school_id, p.campus_id, p.canteen_id, p.window_id,
+       COALESCE(NULLIF(trim(p.school_name), ''), '历史学校'), NULLIF(trim(p.campus_name), ''),
+       COALESCE(NULLIF(trim(p.canteen_name), ''), '历史食堂'), p.floor, p.window_name, 'unknown',
+       '[]'::jsonb, '[]'::jsonb, 'unknown', COALESCE(NULLIF(trim(p.price_type), ''), 'unknown'),
+       p.price, p.price_min, p.price_max, p.price_unit, p.portion_description,
+       CASE
+         WHEN jsonb_array_length(COALESCE(p.image_paths, '[]'::jsonb)) > 0 THEN p.image_paths
+         WHEN p.image_path IS NOT NULL AND trim(p.image_path) <> '' THEN jsonb_build_array(p.image_path)
+         ELSE '[]'::jsonb
+       END,
+       'dish', '[]'::jsonb,
+       CASE WHEN NULLIF(trim(p.food_name), '') IS NOT NULL THEN 'complete' ELSE 'incomplete' END,
+       CASE WHEN p.status = 'published' THEN 'published' ELSE 'draft' END,
+       p.analysis_task_id, CASE WHEN p.analysis_task_id IS NOT NULL THEN COALESCE(p.updated_at, p.published_at) ELSE NULL END,
+       p.published_at, COALESCE(p.price_collected_at, p.published_at, p.created_at),
+       p.user_id, p.user_id, GREATEST(COALESCE(p.content_version, 1), 1), 'legacy_public',
+       LEAST(GREATEST(COALESCE(p.nutrition_source_version, 0), 0), GREATEST(COALESCE(p.content_version, 1), 1)),
+       p.nutrition_status, p.availability_status, p.last_verified_at,
+       COALESCE(p.created_at, now()), COALESCE(p.updated_at, p.created_at, now())
+FROM public_food_library p
+JOIN campus_food_collection_batches b ON b.client_batch_key = 'legacy-public:' || p.id::text
+WHERE p.is_campus_food = true
+  AND NOT EXISTS (SELECT 1 FROM campus_food_catalog_items c WHERE c.id = p.id)`,
+		`INSERT INTO campus_food_revisions (
+  id, catalog_item_id, base_version, result_version, actor_type, actor_user_id, actor_admin_id,
+  action_type, before_snapshot, proposed_patch, after_snapshot, changed_fields,
+  evidence_image_paths, reason, created_at
+)
+SELECT gen_random_uuid(), c.id, GREATEST(c.version - 1, 0), c.version,
+       CASE WHEN c.contributor_user_id IS NOT NULL THEN 'user' WHEN c.created_by_admin_id IS NOT NULL THEN 'admin' ELSE 'system' END,
+       c.contributor_user_id, CASE WHEN c.contributor_user_id IS NULL THEN c.created_by_admin_id ELSE NULL END,
+       'create', '{}'::jsonb,
+       jsonb_build_object(
+         'name', c.name, 'description', c.description,
+         'school_id', c.school_id, 'campus_id', c.campus_id, 'canteen_id', c.canteen_id, 'window_id', c.window_id,
+         'school_name', c.organization_name, 'campus_name', c.area_name, 'canteen_name', c.canteen_name,
+         'floor', c.floor, 'window_name', c.window_name, 'meal_periods', c.meal_periods,
+         'available_weekdays', c.available_weekdays, 'availability_note', c.availability_note,
+         'service_mode', c.service_mode, 'price_type', c.price_type, 'price', c.price,
+         'price_min', c.price_min, 'price_max', c.price_max, 'price_unit', c.price_unit,
+         'portion_description', c.portion_description, 'image_paths', c.image_paths,
+         'price_collected_at', c.captured_at, 'availability_status', c.availability_status
+       ),
+       jsonb_build_object(
+         'name', c.name, 'description', c.description,
+         'school_id', c.school_id, 'campus_id', c.campus_id, 'canteen_id', c.canteen_id, 'window_id', c.window_id,
+         'school_name', c.organization_name, 'campus_name', c.area_name, 'canteen_name', c.canteen_name,
+         'floor', c.floor, 'window_name', c.window_name, 'meal_periods', c.meal_periods,
+         'available_weekdays', c.available_weekdays, 'availability_note', c.availability_note,
+         'service_mode', c.service_mode, 'price_type', c.price_type, 'price', c.price,
+         'price_min', c.price_min, 'price_max', c.price_max, 'price_unit', c.price_unit,
+         'portion_description', c.portion_description, 'image_paths', c.image_paths,
+         'price_collected_at', c.captured_at, 'availability_status', c.availability_status
+       ),
+       '["name","description","school_id","campus_id","canteen_id","window_id","school_name","campus_name","canteen_name","floor","window_name","meal_periods","available_weekdays","availability_note","service_mode","price_type","price","price_min","price_max","price_unit","portion_description","image_paths","price_collected_at","availability_status"]'::jsonb,
+       COALESCE(c.image_paths, '[]'::jsonb), '迁移前数据的版本化基线', COALESCE(c.created_at, now())
+FROM campus_food_catalog_items c
+WHERE c.status <> 'deleted'
+  AND NOT EXISTS (SELECT 1 FROM campus_food_revisions r WHERE r.catalog_item_id = c.id)`,
+	}
+	for _, statement := range statements {
+		if err := db.WithContext(ctx).Exec(statement).Error; err != nil {
+			return fmt.Errorf("backfill campus community data: %w", err)
+		}
 	}
 	return nil
 }
@@ -1074,7 +1269,7 @@ func ensureConstraints(ctx context.Context, db *gorm.DB) error {
 			return fmt.Errorf("apply constraint/index statement: %w", err)
 		}
 	}
-	return nil
+	return ensureCampusCommunityConstraints(ctx, db)
 }
 
 func ensureNicknameUniqueIndex(ctx context.Context, db *gorm.DB) error {

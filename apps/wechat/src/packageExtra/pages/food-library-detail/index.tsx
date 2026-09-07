@@ -1,9 +1,10 @@
 import { withAuth } from '../../../utils/withAuth'
 import { View, Text, ScrollView, Image, Textarea, Swiper, SwiperItem } from '@tarojs/components'
 import { useState, useEffect, useCallback, useRef } from 'react'
-import Taro, { useRouter, useShareAppMessage } from '@tarojs/taro'
+import Taro, { useDidShow, useRouter, useShareAppMessage } from '@tarojs/taro'
 import {
   getCampusFoodDetail,
+  getCampusFoodRevisions,
   getPublicFoodLibraryItem,
   likePublicFoodLibraryItem,
   unlikePublicFoodLibraryItem,
@@ -15,6 +16,7 @@ import {
   type Nutrients,
   type PublicFoodLibraryItem,
   type PublicFoodLibraryComment,
+  type CampusFoodRevision,
   collectPublicFoodLibraryItem,
   uncollectPublicFoodLibraryItem,
   deletePublicFoodLibraryItem,
@@ -77,7 +79,7 @@ function normalizeStatus(value?: string | null): string {
 
 function isAnalyzingItem(item: PublicFoodLibraryItem): boolean {
   const status = normalizeStatus(item.analysis_status)
-  return status === 'pending' || status === 'processing'
+  return status === 'pending' || status === 'processing' || status === 'stale'
 }
 
 function isAnalysisFailedItem(item: PublicFoodLibraryItem): boolean {
@@ -162,6 +164,26 @@ function formatDateOnly(timeStr: string | null | undefined): string {
   return formatTime(timeStr).split(' ')[0] || '待补充'
 }
 
+const REVISION_FIELD_LABELS: Record<string, string> = {
+  name: '菜品名称', image_paths: '菜品照片', school_id: '学校', campus_id: '校区', canteen_id: '食堂',
+  window_id: '窗口', floor: '楼层', window_name: '窗口名称', price: '价格', price_min: '最低价', price_max: '最高价',
+  price_type: '计价方式', price_unit: '价格单位', price_collected_at: '采集日期', portion_description: '份量说明',
+  availability_status: '供应状态', description: '菜品说明', meal_periods: '供应餐时', available_weekdays: '供应日期',
+}
+
+function revisionSummary(revision: CampusFoodRevision): string {
+  if (revision.action_type === 'create') return '创建菜品资料'
+  if (revision.action_type === 'rollback') return '管理员回滚错误更新'
+  const labels = (revision.changed_fields || []).map(field => REVISION_FIELD_LABELS[field] || field)
+  return labels.length > 0 ? `更新${labels.slice(0, 4).join('、')}${labels.length > 4 ? '等' : ''}` : '更新菜品资料'
+}
+
+function availabilityLabel(status?: PublicFoodLibraryItem['availability_status']): string {
+  return ({
+    available: '正常供应', temporarily_unavailable: '暂时无售', discontinued: '已停售', unknown: '供应状态待确认',
+  } as Record<string, string>)[status || 'unknown'] || '供应状态待确认'
+}
+
 function FoodLibraryDetailPage() {
   const router = useRouter()
   const itemId = router.params.id || ''
@@ -181,6 +203,10 @@ function FoodLibraryDetailPage() {
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
   const [showMicronutrients, setShowMicronutrients] = useState(false)
   const [contributingImages, setContributingImages] = useState(false)
+  const [showRevisions, setShowRevisions] = useState(false)
+  const [revisionLoading, setRevisionLoading] = useState(false)
+  const [revisions, setRevisions] = useState<CampusFoodRevision[]>([])
+  const [revisionTotal, setRevisionTotal] = useState(0)
   const pollTimerRef = useRef<NodeJS.Timeout | null>(null)
   const sceneRef = useRef(router.params.scene || '')
 
@@ -247,6 +273,15 @@ function FoodLibraryDetailPage() {
       setLoading(false)
     }
   }, [itemId])
+
+  useDidShow(() => {
+    if (Taro.getStorageSync('food_library_need_refresh') === '1') {
+      Taro.removeStorageSync('food_library_need_refresh')
+      setRevisions([])
+      setRevisionTotal(0)
+      void loadDetail()
+    }
+  })
 
   const loadComments = async () => {
     try {
@@ -363,6 +398,10 @@ function FoodLibraryDetailPage() {
   // 提交修正
   const handleCorrection = async () => {
     if (!item) return
+    if (isCampusFoodItem(item)) {
+      Taro.navigateTo({ url: `${extraPkgUrl('/pages/campus-food-share/index')}?correct_id=${encodeURIComponent(item.id)}` })
+      return
+    }
     const modalResult = await Taro.showModal({
       title: '修正食物信息',
       content: '',
@@ -403,7 +442,7 @@ function FoodLibraryDetailPage() {
     if (!item || contributingImages || !isCampusFoodItem(item)) return
     try {
       const selection = await Taro.chooseMedia({
-        count: 5,
+        count: Math.max(1, Math.min(5, 6 - (item.image_paths?.length || (item.image_path ? 1 : 0)))),
         mediaType: ['image'],
         sourceType: ['album', 'camera'],
         sizeType: ['compressed']
@@ -425,14 +464,32 @@ function FoodLibraryDetailPage() {
         setItem({ ...item, image_path: nextImages[0], image_paths: nextImages })
         setCurrentImageIndex(0)
       }
+      await loadDetail()
       Taro.setStorageSync('food_library_need_refresh', '1')
-      Taro.showToast({ title: result.accepted ? '感谢共建，照片已补充' : '该菜品已有用户补图', icon: 'success' })
+      Taro.showToast({ title: '照片已加入新版本', icon: 'success' })
     } catch (e: any) {
       if (!String(e?.errMsg || e?.message || '').includes('cancel')) {
         await showUnifiedApiError(e, '补充照片失败')
       }
     } finally {
       setContributingImages(false)
+    }
+  }
+
+  const handleToggleRevisions = async () => {
+    const nextVisible = !showRevisions
+    setShowRevisions(nextVisible)
+    if (!nextVisible || revisions.length > 0 || revisionLoading || !item) return
+    setRevisionLoading(true)
+    try {
+      const result = await getCampusFoodRevisions(item.id, 1, 20)
+      setRevisions(result.items || [])
+      setRevisionTotal(result.total || 0)
+    } catch (e: any) {
+      setShowRevisions(false)
+      await showUnifiedApiError(e, '获取更新记录失败')
+    } finally {
+      setRevisionLoading(false)
     }
   }
 
@@ -784,9 +841,53 @@ function FoodLibraryDetailPage() {
               <Text className='campus-portion'>{item.portion_description || '约 1 份'}</Text>
             </View>
             <Text className='campus-price-date'>价格更新于 {formatDateOnly(item.price_collected_at)}</Text>
+            <View className='campus-community-meta'>
+              <Text className={`campus-availability campus-availability--${item.availability_status || 'unknown'}`}>
+                {availabilityLabel(item.availability_status)}
+              </Text>
+              <Text className='campus-version'>当前版本 v{item.content_version || 1}</Text>
+              {item.last_verified_at && <Text className='campus-verified-at'>核实于 {formatDateOnly(item.last_verified_at)}</Text>}
+            </View>
+            <View className='campus-community-actions'>
+              {(imageList.length < 6) && (
+                <View
+                  className={`campus-community-action ${contributingImages ? 'disabled' : ''}`}
+                  onClick={() => void handleContributeImages()}
+                >
+                  {contributingImages ? <View className='image-contribution-spinner' /> : <Text className='iconfont icon-camera' />}
+                  {!contributingImages && <Text>追加实拍</Text>}
+                </View>
+              )}
+              <View className='campus-community-action' onClick={() => void handleCorrection()}>
+                <Text className='iconfont icon-edit' />
+                <Text>修正资料</Text>
+              </View>
+              <View className='campus-community-action' onClick={() => void handleToggleRevisions()}>
+                <Text>{showRevisions ? '收起记录' : `更新记录${revisionTotal > 0 ? ` · ${revisionTotal}` : ''}`}</Text>
+              </View>
+            </View>
+            {showRevisions && (
+              <View className='campus-revision-list'>
+                {revisionLoading ? (
+                  <View className='campus-revision-loading'><View className='btn-spinner' /></View>
+                ) : revisions.length === 0 ? (
+                  <Text className='campus-revision-empty'>还没有更新记录</Text>
+                ) : revisions.map(revision => (
+                  <View key={revision.id} className='campus-revision-item'>
+                    <View className='campus-revision-heading'>
+                      <Text className='campus-revision-version'>v{revision.result_version}</Text>
+                      <Text className='campus-revision-actor'>{revision.actor_type === 'admin' ? '管理员' : revision.actor_type === 'user' ? '用户共建' : '系统迁移'}</Text>
+                      <Text className='campus-revision-time'>{formatTime(revision.created_at)}</Text>
+                    </View>
+                    <Text className='campus-revision-summary'>{revisionSummary(revision)}</Text>
+                    {!!revision.reason && <Text className='campus-revision-reason'>{revision.reason}</Text>}
+                  </View>
+                ))}
+              </View>
+            )}
             {analyzing && <Text className='campus-analysis-tip'>营养信息正在精确分析，完成后自动更新。</Text>}
             {nutritionPending && <Text className='campus-analysis-tip'>营养信息待更新，暂不建议一键记录。</Text>}
-            {analysisFailed && <Text className='campus-analysis-tip campus-analysis-tip--error'>营养分析失败，可通过纠错入口反馈。</Text>}
+            {analysisFailed && <Text className='campus-analysis-tip campus-analysis-tip--error'>菜品资料已生效，但营养重算失败；稍后可重试或继续修正。</Text>}
           </View>
         )}
         <View className='nutrients-row'>

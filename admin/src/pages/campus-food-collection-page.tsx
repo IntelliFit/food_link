@@ -72,6 +72,42 @@ type CatalogItem = {
   analysis_started_at?: string
   analysis_completed_at?: string
   published_at?: string
+  version?: number
+  nutrition_source_version?: number
+  nutrition_status?: string
+  availability_status?: string
+  last_verified_at?: string
+}
+
+type CollectorApplication = {
+  id: string
+  user_id: string
+  user_nickname?: string
+  user_telephone?: string
+  school_id: string
+  school_name?: string
+  campus_id?: string
+  campus_name?: string
+  canteen_id?: string
+  canteen_name?: string
+  applicant_note?: string
+  status: 'pending' | 'approved' | 'rejected' | 'withdrawn' | string
+  review_note?: string
+  reviewed_at?: string
+  created_at?: string
+}
+
+type CatalogRevision = {
+  id: string
+  catalog_item_id: string
+  base_version: number
+  result_version: number
+  actor_type: 'user' | 'admin' | 'system' | string
+  action_type: 'create' | 'update' | 'rollback' | string
+  changed_fields?: string[]
+  reason?: string
+  reverts_revision_id?: string
+  created_at?: string
 }
 
 type CatalogItemEditDraft = {
@@ -239,6 +275,17 @@ export function CampusFoodCollectionPage({ onLogout, onMenuChange }: CampusFoodC
   const [batchPublishing, setBatchPublishing] = useState(false)
   const [batchPublishDone, setBatchPublishDone] = useState(0)
   const [batchPublishTotal, setBatchPublishTotal] = useState(0)
+  const [collectorStatus, setCollectorStatus] = useState('pending')
+  const [collectorApplications, setCollectorApplications] = useState<CollectorApplication[]>([])
+  const [collectorTotal, setCollectorTotal] = useState(0)
+  const [collectorBusy, setCollectorBusy] = useState(false)
+  const [reviewingApplicationId, setReviewingApplicationId] = useState('')
+  const [collectorReviewNotes, setCollectorReviewNotes] = useState<Record<string, string>>({})
+  const [collectorExpiryDates, setCollectorExpiryDates] = useState<Record<string, string>>({})
+  const [revisionItem, setRevisionItem] = useState<CatalogItem | null>(null)
+  const [revisions, setRevisions] = useState<CatalogRevision[]>([])
+  const [revisionBusy, setRevisionBusy] = useState(false)
+  const [rollingBackRevisionId, setRollingBackRevisionId] = useState('')
 
   const isUniversity = venueType === 'university'
   const apiBase = displayApiBase()
@@ -259,6 +306,7 @@ export function CampusFoodCollectionPage({ onLogout, onMenuChange }: CampusFoodC
   useEffect(() => {
     void searchSchools('清华大学', true)
     void loadBatches()
+    void loadCollectorApplications('pending')
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -335,6 +383,76 @@ export function CampusFoodCollectionPage({ onLogout, onMenuChange }: CampusFoodC
       toast.error(error instanceof Error ? error.message : '采集批次读取失败')
     } finally {
       setHistoryBusy(false)
+    }
+  }
+
+  async function loadCollectorApplications(status = collectorStatus) {
+    setCollectorBusy(true)
+    try {
+      const data = await adminRequest<ListResponse<CollectorApplication>>(`/api/admin/campus-food-collectors/applications?status=${encodeURIComponent(status)}&page=1&limit=50`)
+      setCollectorApplications(data.items || [])
+      setCollectorTotal(data.total || 0)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '采集员申请读取失败')
+    } finally {
+      setCollectorBusy(false)
+    }
+  }
+
+  async function reviewCollectorApplication(application: CollectorApplication, status: 'approved' | 'rejected') {
+    const verb = status === 'approved' ? '通过并授予批量上传范围' : '拒绝'
+    if (!window.confirm(`确定${verb}这条申请吗？`)) return
+    setReviewingApplicationId(application.id)
+    try {
+      const expiryDate = collectorExpiryDates[application.id]
+      await adminRequest(`/api/admin/campus-food-collectors/applications/${encodeURIComponent(application.id)}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          status,
+          note: (collectorReviewNotes[application.id] || '').trim(),
+          expires_at: status === 'approved' && expiryDate ? new Date(`${expiryDate}T23:59:59`).toISOString() : undefined,
+        }),
+      })
+      toast.success(status === 'approved' ? '已授权批量上传范围' : '申请已拒绝')
+      await loadCollectorApplications(collectorStatus)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '采集员申请处理失败')
+    } finally {
+      setReviewingApplicationId('')
+    }
+  }
+
+  async function openRevisionHistory(item: CatalogItem) {
+    setRevisionItem(item)
+    setRevisions([])
+    setRevisionBusy(true)
+    try {
+      const data = await adminRequest<ListResponse<CatalogRevision>>(`/api/admin/campus-food-collection/items/${encodeURIComponent(item.id)}/revisions?page=1&limit=100`)
+      setRevisions(data.items || [])
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '版本记录读取失败')
+    } finally {
+      setRevisionBusy(false)
+    }
+  }
+
+  async function rollbackRevision(revision: CatalogRevision) {
+    if (!revisionItem?.version || rollingBackRevisionId) return
+    if (!window.confirm(`将“${revisionItem.name || '该菜品'}”恢复到版本 ${revision.base_version} 的内容？系统会创建一个新的回滚版本，历史记录不会删除。`)) return
+    setRollingBackRevisionId(revision.id)
+    try {
+      const data = await adminRequest<{ item: CatalogItem }>(`/api/admin/campus-food-collection/items/${encodeURIComponent(revisionItem.id)}/revisions/${encodeURIComponent(revision.id)}/rollback`, {
+        method: 'POST',
+        body: JSON.stringify({ base_version: revisionItem.version, reason: `后台确认版本 ${revision.result_version} 存在错误` }),
+      })
+      setRevisionItem(data.item)
+      setSelectedBatchItems((current) => current.map((item) => (item.id === data.item.id ? data.item : item)))
+      toast.success(`已创建版本 ${data.item.version}，错误更新已回滚`)
+      await openRevisionHistory(data.item)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '版本回滚失败')
+    } finally {
+      setRollingBackRevisionId('')
     }
   }
 
@@ -801,6 +919,80 @@ export function CampusFoodCollectionPage({ onLogout, onMenuChange }: CampusFoodC
         <section className='detail-panel space-y-5 p-6'>
           <div className='editor-header'>
             <div>
+              <h2>校园代理批量通道</h2>
+              <p>这里只审核人员与采集范围。普通用户单菜上传和已授权代理的菜品会即时生效，不逐条预审。</p>
+            </div>
+            <div className='actions' style={{ marginTop: 0 }}>
+              <select value={collectorStatus} onChange={(event) => {
+                const status = event.target.value
+                setCollectorStatus(status)
+                void loadCollectorApplications(status)
+              }}>
+                <option value='pending'>待处理</option>
+                <option value='approved'>已通过</option>
+                <option value='rejected'>已拒绝</option>
+                <option value='all'>全部</option>
+              </select>
+              <button type='button' onClick={() => void loadCollectorApplications()} disabled={collectorBusy}>
+                {collectorBusy ? <span className='spinner small' /> : '刷新'}
+              </button>
+            </div>
+          </div>
+          <div className='flex flex-wrap items-center gap-2 text-sm'>
+            <span className='pill active'>{collectorTotal} 条申请</span>
+            <span className='muted'>授权可精确到学校、校区或食堂；到期时间留空表示长期有效。</span>
+          </div>
+          {collectorApplications.length ? (
+            <div className='grid gap-3'>
+              {collectorApplications.map((application) => (
+                <article key={application.id} className='rounded-xl border p-4'>
+                  <div className='flex flex-wrap items-start justify-between gap-3'>
+                    <div>
+                      <div className='flex flex-wrap items-center gap-2'>
+                        <strong>{application.user_nickname || application.user_telephone || `用户 ${shortID(application.user_id)}`}</strong>
+                        <span className={`pill ${application.status === 'approved' ? 'active' : application.status === 'pending' ? 'warning' : 'inactive'}`}>
+                          {collectorApplicationStatusLabel(application.status)}
+                        </span>
+                      </div>
+                      <p className='mt-1 text-sm'>{[application.school_name || shortID(application.school_id), application.campus_name, application.canteen_name].filter(Boolean).join(' · ')}</p>
+                      <p className='muted mt-1 text-xs'>申请于 {formatDateTime(application.created_at)} · 用户 {shortID(application.user_id)}</p>
+                      {application.applicant_note ? <p className='mt-2 text-sm'>申请说明：{application.applicant_note}</p> : null}
+                      {application.review_note ? <p className='muted mt-1 text-sm'>审核说明：{application.review_note}</p> : null}
+                    </div>
+                  </div>
+                  {application.status === 'pending' ? (
+                    <div className='mt-4 grid gap-3 border-t pt-4 md:grid-cols-[minmax(0,1fr)_180px_auto]'>
+                      <input
+                        value={collectorReviewNotes[application.id] || ''}
+                        onChange={(event) => setCollectorReviewNotes((current) => ({ ...current, [application.id]: event.target.value }))}
+                        placeholder='审核说明（可选）'
+                      />
+                      <input
+                        type='date'
+                        value={collectorExpiryDates[application.id] || ''}
+                        min={todayInputValue()}
+                        onChange={(event) => setCollectorExpiryDates((current) => ({ ...current, [application.id]: event.target.value }))}
+                        aria-label='授权到期日期'
+                      />
+                      <div className='actions' style={{ marginTop: 0 }}>
+                        <button type='button' onClick={() => void reviewCollectorApplication(application, 'rejected')} disabled={reviewingApplicationId === application.id}>拒绝</button>
+                        <button className='primary' type='button' onClick={() => void reviewCollectorApplication(application, 'approved')} disabled={reviewingApplicationId === application.id}>
+                          {reviewingApplicationId === application.id ? <span className='spinner small' /> : '通过授权'}
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
+                </article>
+              ))}
+            </div>
+          ) : (
+            <div className='empty-band'>{collectorBusy ? <span className='spinner' /> : '当前筛选下没有采集员申请'}</div>
+          )}
+        </section>
+
+        <section className='detail-panel space-y-5 p-6'>
+          <div className='editor-header'>
+            <div>
               <h2>1. 本批次公共信息</h2>
               <p>同一食堂、楼层或窗口的一组照片建议放在一个批次。</p>
             </div>
@@ -1050,7 +1242,11 @@ export function CampusFoodCollectionPage({ onLogout, onMenuChange }: CampusFoodC
                           <td className='p-3'>
                             {item.image_paths?.[0] ? <img className='h-16 w-20 rounded-lg object-cover' src={item.image_paths[0]} alt={item.name || '食堂采集图片'} /> : <span className='pill warning'>待用户共建补图</span>}
                           </td>
-                          <td className='p-3'><strong>{item.name || '待补名称'}</strong><div className='muted'>{labelOf(entryTypeOptions, item.entry_type)} · {labelOf(imageKindOptions, item.image_kind)}</div></td>
+                          <td className='p-3'>
+                            <strong>{item.name || '待补名称'}</strong>
+                            <div className='muted'>{labelOf(entryTypeOptions, item.entry_type)} · {labelOf(imageKindOptions, item.image_kind)}</div>
+                            {item.version ? <div className='muted mt-1'>内容版本 v{item.version} · 营养 {nutritionStatusLabel(item.nutrition_status)}</div> : null}
+                          </td>
                           <td className='p-3'>{[item.floor, item.window_name].filter(Boolean).join(' · ') || '-'}<div className='muted'>{(item.meal_periods || []).map((value) => labelOf(mealOptions, value)).join(' / ') || '餐时待确认'}</div></td>
                           <td className='p-3'>
                             {labelOf(serviceOptions, item.service_mode)}
@@ -1073,6 +1269,7 @@ export function CampusFoodCollectionPage({ onLogout, onMenuChange }: CampusFoodC
                           <td className='p-3 text-right'>
                             <div className='collection-item-actions'>
                               <button type='button' className='min-h-8 px-3' onClick={() => openItemEditor(item)} disabled={publishingItemId === item.id || batchPublishing || item.status === 'analysis_pending'}>编辑补充</button>
+                              {item.version ? <button type='button' className='min-h-8 px-3' onClick={() => void openRevisionHistory(item)}>版本记录</button> : null}
                               <button
                                 type='button'
                                 className={`${item.status === 'published' ? '' : 'primary'} min-h-8 px-3`}
@@ -1110,6 +1307,48 @@ export function CampusFoodCollectionPage({ onLogout, onMenuChange }: CampusFoodC
           onCancel={closeItemEditor}
           onSave={() => void saveEditingItem()}
         />
+      ) : null}
+      {revisionItem ? (
+        <div className='modal-overlay' role='presentation' onMouseDown={(event) => {
+          if (event.target === event.currentTarget && !rollingBackRevisionId) setRevisionItem(null)
+        }}>
+          <section className='modal-panel max-w-3xl' role='dialog' aria-modal='true' aria-labelledby='catalog-revision-title'>
+            <div className='editor-header'>
+              <div>
+                <h2 id='catalog-revision-title'>{revisionItem.name || '校园菜品'} · 更新记录</h2>
+                <p>当前为 v{revisionItem.version || 1}。每次用户修正都会即时生效并保留记录；回滚也会创建新版本。</p>
+              </div>
+              <button type='button' onClick={() => setRevisionItem(null)} disabled={Boolean(rollingBackRevisionId)}>关闭</button>
+            </div>
+            <div className='mt-5 max-h-[65vh] space-y-3 overflow-y-auto pr-1'>
+              {revisionBusy ? <div className='empty-band'><span className='spinner' /></div> : revisions.length ? revisions.map((revision) => (
+                <article key={revision.id} className='rounded-xl border p-4'>
+                  <div className='flex flex-wrap items-start justify-between gap-3'>
+                    <div>
+                      <strong>v{revision.result_version} · {revisionActionLabel(revision.action_type)}</strong>
+                      <p className='muted mt-1 text-xs'>{actorLabel(revision.actor_type)} · {formatDateTime(revision.created_at)}</p>
+                    </div>
+                    {revision.action_type !== 'create' ? (
+                      <button
+                        type='button'
+                        onClick={() => void rollbackRevision(revision)}
+                        disabled={Boolean(rollingBackRevisionId)}
+                        title='恢复到这次更新发生前的内容，并新增一条回滚记录'
+                      >
+                        {rollingBackRevisionId === revision.id ? <span className='spinner small' /> : `撤销 v${revision.result_version}`}
+                      </button>
+                    ) : null}
+                  </div>
+                  <div className='mt-3 flex flex-wrap gap-1'>
+                    {(revision.changed_fields || []).map((field) => <span key={field} className='pill inactive'>{revisionFieldLabel(field)}</span>)}
+                  </div>
+                  {revision.reason ? <p className='mt-2 text-sm'>说明：{revision.reason}</p> : null}
+                  {revision.reverts_revision_id ? <p className='muted mt-1 text-xs'>此版本由回滚操作生成</p> : null}
+                </article>
+              )) : <div className='empty-band'>暂无更新记录</div>}
+            </div>
+          </section>
+        </div>
       ) : null}
     </div>
   )
@@ -1530,6 +1769,54 @@ function formatDate(value?: string): string {
   if (!value) return '-'
   const date = new Date(value)
   return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString('zh-CN')
+}
+
+function formatDateTime(value?: string): string {
+  if (!value) return '-'
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString('zh-CN', { hour12: false })
+}
+
+function shortID(value: string): string {
+  return value.length > 12 ? `${value.slice(0, 8)}…` : value
+}
+
+function collectorApplicationStatusLabel(status: string): string {
+  if (status === 'pending') return '待处理'
+  if (status === 'approved') return '已通过'
+  if (status === 'rejected') return '已拒绝'
+  if (status === 'withdrawn') return '已撤回'
+  return status
+}
+
+function nutritionStatusLabel(status?: string): string {
+  if (status === 'current') return '最新'
+  if (status === 'pending') return '待分析'
+  if (status === 'stale') return '待更新'
+  if (status === 'failed') return '更新失败'
+  return '未知'
+}
+
+function revisionActionLabel(action: string): string {
+  if (action === 'create') return '首次创建'
+  if (action === 'rollback') return '回滚纠错'
+  return '资料更新'
+}
+
+function actorLabel(actor: string): string {
+  if (actor === 'admin') return '管理员'
+  if (actor === 'system') return '系统迁移'
+  return '用户贡献'
+}
+
+function revisionFieldLabel(field: string): string {
+  const labels: Record<string, string> = {
+    name: '菜名', description: '说明', school_id: '学校', campus_id: '校区', canteen_id: '食堂', window_id: '目录窗口',
+    floor: '楼层', window_name: '窗口', meal_periods: '餐时', available_weekdays: '供应星期', availability_note: '供应说明',
+    service_mode: '售卖形式', price_type: '计价方式', price: '价格', price_min: '最低价', price_max: '最高价', price_unit: '价格单位',
+    portion_description: '份量', image_paths: '图片', price_collected_at: '价格日期', availability_status: '供应状态',
+  }
+  return labels[field] || field
 }
 
 function priceSummary(item: CatalogItem): string {

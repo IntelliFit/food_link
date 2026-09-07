@@ -138,9 +138,9 @@ func (r *PublicFoodRepo) ListPublished(ctx context.Context, f ListFilter) ([]dom
 		Table("public_food_library AS p").
 		Select(`p.*,
 			CASE WHEN COALESCE(p.type, '') = 'campus' OR COALESCE(p.is_campus_food, false) = true
-				THEN '' ELSE COALESCE(rt.status, t.status, '') END AS analysis_status,
+				THEN COALESCE(p.nutrition_status, 'pending') ELSE COALESCE(rt.status, t.status, '') END AS analysis_status,
 			CASE WHEN COALESCE(p.type, '') = 'campus' OR COALESCE(p.is_campus_food, false) = true
-				THEN '' ELSE COALESCE(rt.error_message, t.error_message, '') END AS analysis_error,
+				THEN CASE WHEN p.nutrition_status = 'failed' THEN COALESCE(t.error_message, '') ELSE '' END ELSE COALESCE(rt.error_message, t.error_message, '') END AS analysis_error,
 			s.logo_url AS school_logo_url`).
 		Joins("LEFT JOIN analysis_tasks t ON t.id = p.analysis_task_id").
 		Joins("LEFT JOIN analysis_tasks rt ON CAST(rt.id AS TEXT) = (t.result ->> 'redirectTaskId')").
@@ -364,7 +364,8 @@ func validPublishedCampusNutritionSQL(alias string) string {
 		"SELECT 1 FROM jsonb_array_elements(" + safeItems + ") AS campus_item " +
 		"WHERE COALESCE(campus_item ->> 'micronutrient_analysis', '') <> 'ai_precise_v1'))"
 	campusItem := "(COALESCE(" + prefix + "type, '') = 'campus' OR COALESCE(" + prefix + "is_campus_food, false) = true)"
-	return "(NOT " + campusItem + " OR (COALESCE(" + prefix + "total_calories, 0) > 0 AND " + preciseItems + "))"
+	nutritionWaiting := "COALESCE(" + prefix + "nutrition_status, 'pending') = ANY (ARRAY['pending'::text,'stale'::text,'failed'::text])"
+	return "(NOT " + campusItem + " OR " + nutritionWaiting + " OR (COALESCE(" + prefix + "total_calories, 0) > 0 AND " + preciseItems + "))"
 }
 
 // ListCampusHighlights 查询精选校园内容，用于圈子默认流混入
@@ -485,9 +486,9 @@ func (r *PublicFoodRepo) GetItem(ctx context.Context, itemID string) (*domain.Pu
 		Table("public_food_library AS p").
 		Select(`p.*,
 			CASE WHEN p.status = 'published' AND (COALESCE(p.type, '') = 'campus' OR COALESCE(p.is_campus_food, false) = true)
-				THEN '' ELSE COALESCE(rt.status, t.status, '') END AS analysis_status,
+				THEN COALESCE(p.nutrition_status, 'pending') ELSE COALESCE(rt.status, t.status, '') END AS analysis_status,
 			CASE WHEN p.status = 'published' AND (COALESCE(p.type, '') = 'campus' OR COALESCE(p.is_campus_food, false) = true)
-				THEN '' ELSE COALESCE(rt.error_message, t.error_message, '') END AS analysis_error,
+				THEN CASE WHEN p.nutrition_status = 'failed' THEN COALESCE(t.error_message, '') ELSE '' END ELSE COALESCE(rt.error_message, t.error_message, '') END AS analysis_error,
 			s.logo_url AS school_logo_url`).
 		Joins("LEFT JOIN analysis_tasks t ON t.id = p.analysis_task_id").
 		Joins("LEFT JOIN analysis_tasks rt ON CAST(rt.id AS TEXT) = (t.result ->> 'redirectTaskId')").

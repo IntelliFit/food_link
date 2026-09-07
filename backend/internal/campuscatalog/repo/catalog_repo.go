@@ -612,6 +612,11 @@ type publishedCatalogItem struct {
 	PriceCollectedAt   *time.Time       `gorm:"column:price_collected_at"`
 	PortionDescription string           `gorm:"column:portion_description"`
 	CampusLocationText string           `gorm:"column:campus_location_text"`
+	ContentVersion     int64            `gorm:"column:content_version"`
+	NutritionVersion   int64            `gorm:"column:nutrition_source_version"`
+	NutritionStatus    string           `gorm:"column:nutrition_status"`
+	AvailabilityStatus string           `gorm:"column:availability_status"`
+	LastVerifiedAt     *time.Time       `gorm:"column:last_verified_at"`
 }
 
 func (publishedCatalogItem) TableName() string { return "public_food_library" }
@@ -652,13 +657,21 @@ func resolvePublicationVenue(tx *gorm.DB, item *domain.CatalogItem) (publication
 }
 
 func (r *CatalogRepo) CompleteAnalyzedItem(ctx context.Context, itemID, taskID string, result map[string]any, completedAt time.Time) error {
+	return r.CompleteAnalyzedItemForVersion(ctx, itemID, taskID, 0, result, completedAt)
+}
+
+func (r *CatalogRepo) CompleteAnalyzedItemForVersion(ctx context.Context, itemID, taskID string, targetVersion int64, result map[string]any, completedAt time.Time) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var item domain.CatalogItem
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
 			Where("id = ? AND status <> ?", strings.TrimSpace(itemID), "deleted").First(&item).Error; err != nil {
 			return err
 		}
-		if item.Status != "analysis_pending" {
+		if targetVersion > 0 && item.Version != targetVersion {
+			return domain.ErrStaleAnalysisResult
+		}
+		communityRefresh := item.Status == "published" && (item.NutritionStatus == "pending" || item.NutritionStatus == "stale" || item.NutritionStatus == "failed")
+		if item.Status != "analysis_pending" && !communityRefresh {
 			return fmt.Errorf("catalog item %s is not waiting for analysis", item.ID)
 		}
 		if item.AnalysisTaskID != nil && strings.TrimSpace(*item.AnalysisTaskID) != "" && strings.TrimSpace(*item.AnalysisTaskID) != strings.TrimSpace(taskID) {
@@ -701,12 +714,15 @@ func (r *CatalogRepo) CompleteAnalyzedItem(ctx context.Context, itemID, taskID s
 			Floor: venue.Floor, WindowName: venue.WindowName, Price: item.Price, PriceType: publicPriceType(item.PriceType),
 			PriceMin: item.PriceMin, PriceMax: item.PriceMax, PriceUnit: item.PriceUnit,
 			PriceCollectedAt: item.CapturedAt, PortionDescription: item.PortionDescription, CampusLocationText: venue.CampusLocationText,
+			ContentVersion: item.Version, NutritionVersion: item.Version, NutritionStatus: "current",
+			AvailabilityStatus: item.AvailabilityStatus, LastVerifiedAt: item.LastVerifiedAt,
 		}
 		columns := []string{
 			"user_id", "image_path", "image_paths", "analysis_task_id", "total_calories", "total_protein", "total_carbs", "total_fat", "items",
 			"description", "insight", "food_name", "merchant_name", "merchant_address", "detail_address", "status", "type", "published_at", "updated_at",
 			"is_campus_food", "school_id", "campus_id", "canteen_id", "window_id", "school_name", "campus_name", "canteen_name", "floor", "window_name",
 			"price", "price_type", "price_min", "price_max", "price_unit", "price_collected_at", "portion_description", "campus_location_text",
+			"content_version", "nutrition_source_version", "nutrition_status", "availability_status", "last_verified_at",
 		}
 		if err := tx.Clauses(clause.OnConflict{
 			Columns: []clause.Column{{Name: "id"}}, DoUpdates: clause.AssignmentColumns(columns),
@@ -715,7 +731,7 @@ func (r *CatalogRepo) CompleteAnalyzedItem(ctx context.Context, itemID, taskID s
 		}
 		return tx.Model(&domain.CatalogItem{}).Where("id = ? AND status <> ?", item.ID, "deleted").Updates(map[string]any{
 			"status": "published", "analysis_task_id": taskID, "analysis_error": "", "analysis_completed_at": completedAt,
-			"published_at": completedAt, "updated_at": completedAt,
+			"published_at": completedAt, "nutrition_source_version": item.Version, "nutrition_status": "current", "updated_at": completedAt,
 		}).Error
 	})
 }

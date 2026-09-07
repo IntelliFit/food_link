@@ -59,6 +59,11 @@ type PublicFoodItem struct {
 	PortionDescription string     `gorm:"column:portion_description" json:"portion_description,omitempty"`
 	IsCampusHighlight  bool       `gorm:"column:is_campus_highlight" json:"is_campus_highlight"`
 	CampusLocationText string     `gorm:"column:campus_location_text" json:"campus_location_text,omitempty"`
+	ContentVersion     int64      `gorm:"column:content_version" json:"content_version"`
+	NutritionVersion   int64      `gorm:"column:nutrition_source_version" json:"nutrition_source_version"`
+	NutritionStatus    string     `gorm:"column:nutrition_status" json:"nutrition_status"`
+	AvailabilityStatus string     `gorm:"column:availability_status" json:"availability_status"`
+	LastVerifiedAt     *time.Time `gorm:"column:last_verified_at" json:"last_verified_at,omitempty"`
 	SchoolLogoURL      string     `gorm:"column:school_logo_url;->" json:"school_logo_url,omitempty"`
 	AnalysisStatus     string     `gorm:"column:analysis_status;->" json:"analysis_status,omitempty"`
 	AnalysisError      string     `gorm:"column:analysis_error;->" json:"analysis_error,omitempty"`
