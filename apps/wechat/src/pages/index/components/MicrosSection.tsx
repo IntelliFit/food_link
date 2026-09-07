@@ -1,31 +1,11 @@
 import { View, Text } from '@tarojs/components'
 import { useMemo, useState } from 'react'
-import { type HomeIntakeData, type Nutrients, type SupplementDashboardSummary } from '../../../utils/api'
+import { type HomeIntakeData, type SupplementDashboardSummary } from '../../../utils/api'
 import { formatDisplayNumber } from '../utils/helpers'
-
-type HomeMicronutrientKey = keyof Pick<Nutrients,
-  'fiber' |
-  'sugar' |
-  'saturatedFat' |
-  'cholesterolMg' |
-  'sodiumMg' |
-  'potassiumMg' |
-  'calciumMg' |
-  'ironMg' |
-  'magnesiumMg' |
-  'zincMg' |
-  'vitaminARaeMcg' |
-  'vitaminCMg' |
-  'vitaminDMcg' |
-  'vitaminEMg' |
-  'vitaminKMcg' |
-  'thiaminMg' |
-  'riboflavinMg' |
-  'niacinMg' |
-  'vitaminB6Mg' |
-  'folateMcg' |
-  'vitaminB12Mcg'
->
+import {
+  MICRONUTRIENT_PREFERENCE_CONFIGS,
+  type HomeMicronutrientKey,
+} from '../utils/micronutrientPreferences'
 
 type MicronutrientCard = {
   key: HomeMicronutrientKey
@@ -38,35 +18,6 @@ type MicronutrientCard = {
   target: number
   progress: number
 }
-
-const MICRONUTRIENT_CONFIGS: Array<{
-  key: HomeMicronutrientKey
-  label: string
-  unit: string
-  accent: string
-}> = [
-  { key: 'fiber', label: '膳食纤维', unit: 'g', accent: '#5dbb8a' },
-  { key: 'sugar', label: '糖', unit: 'g', accent: '#e88cb8' },
-  { key: 'saturatedFat', label: '饱和脂肪', unit: 'g', accent: '#d4a373' },
-  { key: 'cholesterolMg', label: '胆固醇', unit: 'mg', accent: '#bc8f8f' },
-  { key: 'sodiumMg', label: '钠', unit: 'mg', accent: '#ef8b73' },
-  { key: 'potassiumMg', label: '钾', unit: 'mg', accent: '#57a99a' },
-  { key: 'calciumMg', label: '钙', unit: 'mg', accent: '#6aa7d8' },
-  { key: 'ironMg', label: '铁', unit: 'mg', accent: '#d88d5a' },
-  { key: 'magnesiumMg', label: '镁', unit: 'mg', accent: '#7eb8da' },
-  { key: 'zincMg', label: '锌', unit: 'mg', accent: '#a8a4ce' },
-  { key: 'vitaminARaeMcg', label: '维A', unit: 'mcg', accent: '#e0a14a' },
-  { key: 'vitaminCMg', label: '维C', unit: 'mg', accent: '#71c16f' },
-  { key: 'vitaminDMcg', label: '维D', unit: 'mcg', accent: '#8a7be0' },
-  { key: 'vitaminEMg', label: '维E', unit: 'mg', accent: '#c0a46e' },
-  { key: 'vitaminKMcg', label: '维K', unit: 'mcg', accent: '#8fbc8f' },
-  { key: 'thiaminMg', label: '维B1', unit: 'mg', accent: '#d4a5a5' },
-  { key: 'riboflavinMg', label: '维B2', unit: 'mg', accent: '#9fb4cc' },
-  { key: 'niacinMg', label: '烟酸', unit: 'mg', accent: '#b8a9c9' },
-  { key: 'vitaminB6Mg', label: '维B6', unit: 'mg', accent: '#a3c4a3' },
-  { key: 'folateMcg', label: '叶酸', unit: 'mcg', accent: '#d8b4a0' },
-  { key: 'vitaminB12Mcg', label: '维B12', unit: 'mcg', accent: '#9ecae1' },
-]
 
 function parseMicronutrientValue(raw: unknown): { current: number; foodCurrent: number; supplementCurrent: number; target: number; progress: number } {
   if (raw && typeof raw === 'object') {
@@ -104,13 +55,17 @@ function formatMicronutrientValue(value: number): string {
   return formatDisplayNumber(rounded)
 }
 
-function useMicronutrients(intakeData: HomeIntakeData) {
+function useMicronutrients(intakeData: HomeIntakeData, hiddenMicronutrientKeys: readonly HomeMicronutrientKey[]) {
   return useMemo<MicronutrientCard[]>(() => (
-    MICRONUTRIENT_CONFIGS
+    MICRONUTRIENT_PREFERENCE_CONFIGS
+      .filter((item) => !hiddenMicronutrientKeys.includes(item.nutrientKey))
       .map((item) => {
-        const parsed = parseMicronutrientValue(intakeData.micros?.[item.key])
+        const parsed = parseMicronutrientValue(intakeData.micros?.[item.nutrientKey])
         return {
-          ...item,
+          key: item.nutrientKey,
+          label: item.label,
+          unit: item.unit,
+          accent: item.accent,
           current: parsed.current,
           foodCurrent: parsed.foodCurrent,
           supplementCurrent: parsed.supplementCurrent,
@@ -118,7 +73,7 @@ function useMicronutrients(intakeData: HomeIntakeData) {
           progress: parsed.progress,
         }
       })
-  ), [intakeData.micros])
+  ), [hiddenMicronutrientKeys, intakeData.micros])
 }
 
 export interface MicrosSectionProps {
@@ -126,6 +81,8 @@ export interface MicrosSectionProps {
   dashboardBusy: boolean
   isGuest: boolean
   supplementSummary?: SupplementDashboardSummary
+  hiddenMicronutrientKeys: HomeMicronutrientKey[]
+  onManageMicronutrients: () => void
 }
 
 export function MicrosSection({
@@ -133,9 +90,11 @@ export function MicrosSection({
   dashboardBusy,
   isGuest,
   supplementSummary,
+  hiddenMicronutrientKeys,
+  onManageMicronutrients,
 }: MicrosSectionProps) {
   const [sourceDetailKey, setSourceDetailKey] = useState<HomeMicronutrientKey | null>(null)
-  const micronutrients = useMicronutrients(intakeData)
+  const micronutrients = useMicronutrients(intakeData, hiddenMicronutrientKeys)
   const hasMicros = micronutrients.length > 0
   const sourceDetail = sourceDetailKey
     ? micronutrients.find((item) => item.key === sourceDetailKey) || null
@@ -157,18 +116,25 @@ export function MicrosSection({
         <View className='micros-preview-copy'>
           <Text className='micros-preview-kicker'>微量营养</Text>
         </View>
-        <View className='micros-preview-status'>
-          <Text className='micros-preview-status-text'>{statusText}</Text>
+        <View className='micros-preview-head-actions'>
+          <View className='micros-preview-status'>
+            <Text className='micros-preview-status-text'>{statusText}</Text>
+          </View>
+          <View className='micros-preview-manage' onClick={onManageMicronutrients}>
+            <Text className='micros-preview-manage-text'>管理</Text>
+          </View>
         </View>
       </View>
-      <View className='micros-source-legend'>
-        <View><View className='micros-source-dot food' /><Text>食物</Text></View>
-        <View><View className='micros-source-dot supplement' /><Text>补剂</Text></View>
-      </View>
+      {hasMicros && (
+        <View className='micros-source-legend'>
+          <View><View className='micros-source-dot food' /><Text>食物</Text></View>
+          <View><View className='micros-source-dot supplement' /><Text>补剂</Text></View>
+        </View>
+      )}
 
       {dashboardBusy ? (
         <View className='micros-preview-grid'>
-          {Array.from({ length: MICRONUTRIENT_CONFIGS.length }).map((_, index) => (
+          {Array.from({ length: micronutrients.length }).map((_, index) => (
             <View key={index} className='micros-preview-card micros-preview-card--loading'>
               <View className='micros-skeleton micros-skeleton--label' />
               <View className='micros-skeleton micros-skeleton--value' />
@@ -230,7 +196,9 @@ export function MicrosSection({
       ) : (
         <View className='micros-preview-empty'>
           <Text className='micros-preview-empty-text'>
-            {isGuest ? '登录后显示微量营养' : '记录饮食后显示微量营养'}
+            {hiddenMicronutrientKeys.length === MICRONUTRIENT_PREFERENCE_CONFIGS.length
+              ? '已隐藏全部微量元素，点击“管理”可添加回来'
+              : isGuest ? '登录后显示微量营养' : '记录饮食后显示微量营养'}
           </Text>
         </View>
       )}

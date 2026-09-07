@@ -141,6 +141,11 @@ import {
   type AnalyzeTaskReminderState,
 } from '../../utils/analyze-task-reminder'
 import { openAnalyzeTaskFromReminder } from '../../utils/open-analyze-task'
+import {
+  getMicronutrientPreferenceStorageKey,
+  normalizeHiddenMicronutrientKeys,
+  type HomeMicronutrientKey,
+} from './utils/micronutrientPreferences'
 
 const BACKFILL_HINT_DISMISSED_DATES_KEY = 'home_backfill_hint_dismissed_dates_v1'
 const DEFAULT_SUPPLEMENT_SUMMARY: SupplementDashboardSummary = {
@@ -157,6 +162,29 @@ const HOME_PET_MEAL_PROMPT_SEEN_KEY = 'home_pet_meal_prompt_seen_v1'
 const CANVAS_ICON_FONT_SOURCE = __ICON_CDN_BASE_URL__
   ? `url("${__ICON_CDN_BASE_URL__.replace(/\/+$/, '')}/iconfont.ttf")`
   : ''
+
+function getStoredHiddenMicronutrientKeys(): HomeMicronutrientKey[] {
+  try {
+    const userId = Taro.getStorageSync('user_id')
+    return normalizeHiddenMicronutrientKeys(
+      Taro.getStorageSync(getMicronutrientPreferenceStorageKey(userId))
+    )
+  } catch {
+    return []
+  }
+}
+
+function saveHiddenMicronutrientKeys(hiddenKeys: readonly HomeMicronutrientKey[]) {
+  try {
+    const userId = Taro.getStorageSync('user_id')
+    Taro.setStorageSync(
+      getMicronutrientPreferenceStorageKey(userId),
+      normalizeHiddenMicronutrientKeys(hiddenKeys)
+    )
+  } catch {
+    // 偏好写入失败不阻断目标设置与首页使用。
+  }
+}
 
 function isValidHomeDate(date?: string): date is string {
   return typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)
@@ -836,6 +864,7 @@ const MACRO_CONFIGS: Array<{
 function IndexPage() {
   const { scheme } = useAppColorScheme()
   const [homeExperienceConfig, setHomeExperienceConfig] = React.useState(getStoredHomeExperienceConfig)
+  const [hiddenMicronutrientKeys, setHiddenMicronutrientKeys] = React.useState<HomeMicronutrientKey[]>(getStoredHiddenMicronutrientKeys)
   const initialSelectedDate = formatDateKey(new Date())
   const initialHomeSelectedDate = initialSelectedDate
   const initialLocalSnapshot = getStoredHomeDashboardSnapshotByDate(initialHomeSelectedDate)
@@ -1339,6 +1368,7 @@ function IndexPage() {
     homeVisibleRef.current = true
     clearHomeAuxiliaryTimers()
     setPetHidden(getStoredPetHidden())
+    setHiddenMicronutrientKeys(getStoredHiddenMicronutrientKeys())
     if (getAccessToken()) {
       scheduleHomeAuxiliaryTask(async () => {
         await getHealthProfile()
@@ -1648,6 +1678,16 @@ function IndexPage() {
     targetScaleBaseMacrosRef.current = getMacroTargetsFromIntake(intakeData)
     setTargetForm(createTargetForm(intakeData))
     setShowTargetEditor(true)
+  }
+
+  const handleToggleMicronutrientVisibility = (key: HomeMicronutrientKey) => {
+    setHiddenMicronutrientKeys((current) => {
+      const next = current.includes(key)
+        ? current.filter((item) => item !== key)
+        : normalizeHiddenMicronutrientKeys([...current, key])
+      saveHiddenMicronutrientKeys(next)
+      return next
+    })
   }
 
   const handleTargetInput = (key: keyof TargetFormState, value: string) => {
@@ -3199,7 +3239,14 @@ function IndexPage() {
               </View>
               {nutritionExpanded && (
                 <View className='nutrition-expanded-body wellness-nutrition-expanded-body'>
-                  <MicrosSection intakeData={intakeData} dashboardBusy={dashboardBusy} isGuest={isGuest} supplementSummary={supplementSummary} />
+                  <MicrosSection
+                    intakeData={intakeData}
+                    dashboardBusy={dashboardBusy}
+                    isGuest={isGuest}
+                    supplementSummary={supplementSummary}
+                    hiddenMicronutrientKeys={hiddenMicronutrientKeys}
+                    onManageMicronutrients={openTargetEditor}
+                  />
                 </View>
               )}
             </View>
@@ -3356,6 +3403,8 @@ function IndexPage() {
                   dashboardBusy={dashboardBusy}
                   isGuest={isGuest}
                   supplementSummary={supplementSummary}
+                  hiddenMicronutrientKeys={hiddenMicronutrientKeys}
+                  onManageMicronutrients={openTargetEditor}
                 />
               </View>
             )}
@@ -3780,6 +3829,8 @@ function IndexPage() {
         onSave={handleSaveTargets}
         onApplyCalibration={handleApplyCalibrationSuggestion}
         onDismissCalibration={handleDismissCalibrationSuggestion}
+        hiddenMicronutrientKeys={hiddenMicronutrientKeys}
+        onToggleMicronutrientVisibility={handleToggleMicronutrientVisibility}
         onClose={() => setShowTargetEditor(false)}
       />
 

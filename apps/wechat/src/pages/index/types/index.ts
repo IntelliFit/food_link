@@ -1,4 +1,5 @@
 import { type HomeIntakeData, type HomeMealItem, type BodyMetricWaterDay, type HomeTargetCalibrationSuggestion } from '../../../utils/api'
+import { type HomeMicronutrientKey } from '../utils/micronutrientPreferences'
 
 export interface WeightRecordEntry {
   id?: string
@@ -85,6 +86,8 @@ export interface TargetEditorProps {
   onSave: () => void
   onApplyCalibration?: (suggestion: HomeTargetCalibrationSuggestion) => void
   onDismissCalibration?: () => void
+  hiddenMicronutrientKeys: HomeMicronutrientKey[]
+  onToggleMicronutrientVisibility: (key: HomeMicronutrientKey) => void
   onClose: () => void
 }
 
