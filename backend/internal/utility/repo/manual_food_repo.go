@@ -468,6 +468,7 @@ func (r *ManualFoodRepo) listGlobalFrequentRecordItems(ctx context.Context, cate
 			FROM user_food_records
 			CROSS JOIN LATERAL jsonb_array_elements(items) item
 			WHERE trim(COALESCE(NULLIF(item->>'manual_source_title', ''), NULLIF(item->>'name', ''))) <> ''
+				AND COALESCE(item->>'manual_source', '') <> 'packaged_food'
 				AND COALESCE(item->'nutrients'->>'calories', item->>'calories') ~ '^[0-9]+([.][0-9]+){0,1}$'
 		)
 		SELECT
@@ -536,6 +537,7 @@ func (r *ManualFoodRepo) searchCatalogItems(ctx context.Context, userID string, 
 			FROM user_food_records
 			CROSS JOIN LATERAL jsonb_array_elements(items) item
 			WHERE trim(COALESCE(NULLIF(item->>'manual_source_title', ''), NULLIF(item->>'name', ''))) <> ''
+				AND COALESCE(item->>'manual_source', '') <> 'packaged_food'
 				AND COALESCE(item->'nutrients'->>'calories', item->>'calories') ~ '^[0-9]+([.][0-9]+){0,1}$'
 				%s
 		)

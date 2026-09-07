@@ -27,7 +27,7 @@ func main() {
 	onlyCampusDirectoryReviewed := flag.Bool("only-campus-directory-reviewed", false, "only publish the reviewed Beijing campus dining directory")
 	onlyCampusDirectoryPending := flag.Bool("only-campus-directory-pending", false, "only import pending-review campus dining research in one transaction")
 	onlyFoodRecordMood := flag.Bool("only-food-record-mood", false, "only add the optional food-record eating mood column and constraint")
-	onlyManualFoodSausage := flag.Bool("only-manual-food-sausage", false, "only normalize Taiwanese grilled sausage nutrition and historical records")
+	onlyManualFoodSausage := flag.Bool("only-manual-food-sausage", false, "only reclassify Taiwanese grilled sausage as an independently packaged 38g food and relink historical records")
 	onlyCampusCatalogPublishing := flag.Bool("only-campus-catalog-publishing", false, "only add campus catalog publishing schema")
 	onlySupplements := flag.Bool("only-supplements", false, "only add supplement catalog, cabinet, intake schema, and catalog seeds")
 	onlyGrowthPerformanceIndexes := flag.Bool("only-growth-performance-indexes", false, "only create growth-sensitive feed, notification, and body-summary indexes")
@@ -46,6 +46,19 @@ func main() {
 	if err != nil {
 		log.Fatalf("加载配置失败: %v", err)
 	}
+	schema := cfg.Database.Schema
+	if schema == "" {
+		schema = "public"
+	}
+	log.Printf(
+		"数据库迁移目标: config_source=%s app_env=%s host=%s port=%d database=%s schema=%s",
+		cfg.ConfigSource,
+		cfg.App.Env,
+		cfg.Database.Host,
+		cfg.Database.Port,
+		cfg.Database.Name,
+		schema,
+	)
 
 	db, err := database.Open(cfg.Database)
 	if err != nil {
@@ -109,10 +122,6 @@ func main() {
 	if migrateErr != nil {
 		log.Fatalf("自动迁移失败: %v", migrateErr)
 	}
-	schema := cfg.Database.Schema
-	if schema == "" {
-		schema = "public"
-	}
 	if *onlyPapay {
 		log.Printf("微信自动续费迁移完成: config_dir=%s schema=%s", resolvedDir, schema)
 		return
@@ -142,7 +151,7 @@ func main() {
 		return
 	}
 	if *onlyManualFoodSausage {
-		log.Printf("台式烤香肠数据迁移完成: config_dir=%s schema=%s", resolvedDir, schema)
+		log.Printf("台式烤香肠包装食品数据迁移完成: config_dir=%s schema=%s", resolvedDir, schema)
 		return
 	}
 	if *onlyCampusCatalogPublishing {

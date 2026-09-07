@@ -26,6 +26,8 @@ func TestMigrateManualFoodSausageIsIdempotentAndRecalculatesRecords(t *testing.T
 			quality_tier text NOT NULL DEFAULT 'unreviewed',
 			quality_evidence jsonb NOT NULL DEFAULT '{}'::jsonb,
 			quality_reviewed_at timestamptz,
+			image_path text,
+			image_paths jsonb NOT NULL DEFAULT '[]'::jsonb,
 			updated_at timestamptz NOT NULL DEFAULT now()
 		);
 		CREATE TABLE food_nutrition_aliases (
@@ -36,6 +38,49 @@ func TestMigrateManualFoodSausageIsIdempotentAndRecalculatesRecords(t *testing.T
 			match_status text NOT NULL DEFAULT 'candidate_only',
 			approval_evidence jsonb NOT NULL DEFAULT '{}'::jsonb,
 			reviewed_at timestamptz,
+			updated_at timestamptz NOT NULL DEFAULT now()
+		);
+		CREATE TABLE packaged_food_library (
+			id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+			brand text NOT NULL DEFAULT '',
+			product_name text NOT NULL,
+			normalized_name text NOT NULL,
+			product_key text NOT NULL DEFAULT '',
+			display_name text NOT NULL DEFAULT '',
+			search_text text NOT NULL DEFAULT '',
+			product_family_key text NOT NULL DEFAULT '',
+			spec_text text,
+			package_category text,
+			source_image_urls jsonb NOT NULL DEFAULT '[]'::jsonb,
+			nutrition_basis_unit text,
+			raw_label_payload jsonb NOT NULL DEFAULT '{}'::jsonb,
+			conversion_status text,
+			extract_confidence numeric NOT NULL DEFAULT 0,
+			field_confidence jsonb NOT NULL DEFAULT '{}'::jsonb,
+			ingest_method text,
+			net_content_value numeric NOT NULL DEFAULT 0,
+			net_content_unit text,
+			unit_count numeric NOT NULL DEFAULT 0,
+			unit_content_value numeric NOT NULL DEFAULT 0,
+			unit_content_unit text,
+			review_status text NOT NULL DEFAULT 'active',
+			net_weight_g numeric NOT NULL DEFAULT 0,
+			serving_weight_g numeric NOT NULL DEFAULT 0,
+			kcal_per_100g numeric NOT NULL DEFAULT 0,
+			protein_per_100g numeric NOT NULL DEFAULT 0,
+			carbs_per_100g numeric NOT NULL DEFAULT 0,
+			fat_per_100g numeric NOT NULL DEFAULT 0,
+			source_url text,
+			source text,
+			is_active boolean NOT NULL DEFAULT true,
+			updated_at timestamptz NOT NULL DEFAULT now()
+		);
+		CREATE TABLE packaged_food_aliases (
+			id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+			food_id uuid NOT NULL,
+			alias_name text NOT NULL,
+			normalized_alias text NOT NULL,
+			created_at timestamptz NOT NULL DEFAULT now(),
 			updated_at timestamptz NOT NULL DEFAULT now()
 		);
 		CREATE TABLE user_food_records (
@@ -55,6 +100,10 @@ func TestMigrateManualFoodSausageIsIdempotentAndRecalculatesRecords(t *testing.T
 			('generic-sausage', '香肠', '香肠', 300, 14, 10, 24, true),
 			('taiwan-sausage', '台式烤香肠', '台式烤香肠', 0, 0, 0, 0, false),
 			('legacy-taiwan-sausage', '台湾烤肠', '台湾烤肠', 280, 12, 10, 21, true);
+		UPDATE food_nutrition_library
+		SET image_path = 'standard-food/taiwan-sausage-front.jpg',
+			image_paths = '["standard-food/taiwan-sausage-front.jpg","standard-food/taiwan-sausage-label.jpg"]'::jsonb
+		WHERE id = 'taiwan-sausage';
 		INSERT INTO food_nutrition_aliases (
 			id, food_id, alias_name, normalized_alias
 		) VALUES
@@ -99,8 +148,48 @@ func TestMigrateManualFoodSausageIsIdempotentAndRecalculatesRecords(t *testing.T
 	assert.InDelta(t, 17, nutrition.ProteinPer100g, 0.01)
 	assert.InDelta(t, 6, nutrition.CarbsPer100g, 0.01)
 	assert.InDelta(t, 28, nutrition.FatPer100g, 0.01)
-	assert.True(t, nutrition.IsActive)
+	assert.False(t, nutrition.IsActive)
 	assert.Equal(t, "legacy_curated", nutrition.QualityTier)
+
+	var packaged struct {
+		ProductName      string  `gorm:"column:product_name"`
+		DisplayName      string  `gorm:"column:display_name"`
+		SpecText         string  `gorm:"column:spec_text"`
+		NetWeightG       float64 `gorm:"column:net_weight_g"`
+		ServingWeightG   float64 `gorm:"column:serving_weight_g"`
+		UnitCount        float64 `gorm:"column:unit_count"`
+		UnitContentValue float64 `gorm:"column:unit_content_value"`
+		KcalPer100g      float64 `gorm:"column:kcal_per_100g"`
+		SourceImageURLs  []byte  `gorm:"column:source_image_urls"`
+		IsActive         bool    `gorm:"column:is_active"`
+	}
+	require.NoError(t, db.Raw(`
+		SELECT product_name, display_name, spec_text, net_weight_g,
+			serving_weight_g, unit_count, unit_content_value,
+			kcal_per_100g, source_image_urls, is_active
+		FROM packaged_food_library
+		WHERE id = ?
+	`, taiwanSausagePackagedID).Scan(&packaged).Error)
+	assert.Equal(t, taiwanSausageCanonicalName, packaged.ProductName)
+	assert.Equal(t, taiwanSausageCanonicalName, packaged.DisplayName)
+	assert.Equal(t, "38g", packaged.SpecText)
+	assert.InDelta(t, 38, packaged.NetWeightG, 0.01)
+	assert.InDelta(t, 38, packaged.ServingWeightG, 0.01)
+	assert.InDelta(t, 1, packaged.UnitCount, 0.01)
+	assert.InDelta(t, 38, packaged.UnitContentValue, 0.01)
+	assert.InDelta(t, 350, packaged.KcalPer100g, 0.01)
+	assert.InDelta(t, 133, packaged.ServingWeightG*packaged.KcalPer100g/100, 0.01)
+	assert.JSONEq(t, `["standard-food/taiwan-sausage-front.jpg","standard-food/taiwan-sausage-label.jpg"]`, string(packaged.SourceImageURLs))
+	assert.True(t, packaged.IsActive)
+
+	var packagedAliasCount int64
+	require.NoError(t, db.Raw(`
+		SELECT COUNT(*)
+		FROM packaged_food_aliases
+		WHERE food_id = ?
+			AND normalized_alias IN ('台式烤香肠', '台湾烤香肠', '台湾烤肠', '烤香肠')
+	`, taiwanSausagePackagedID).Scan(&packagedAliasCount).Error)
+	assert.EqualValues(t, 4, packagedAliasCount)
 
 	var aliasCount int64
 	require.NoError(t, db.Raw(`
@@ -147,9 +236,12 @@ func TestMigrateManualFoodSausageIsIdempotentAndRecalculatesRecords(t *testing.T
 		{
 			"name":"台式烤香肠",
 			"intake":60,
-			"manual_source":"nutrition_library",
-			"manual_source_id":"taiwan-sausage",
+			"manual_source":"packaged_food",
+			"manual_source_id":"f1000000-0000-4000-8000-000000000038",
 			"manual_source_title":"台式烤香肠",
+			"manual_portion_label":"38g",
+			"packaged_food_id":"f1000000-0000-4000-8000-000000000038",
+			"nutrition_source":"packaged_food_library",
 			"nutrients":{"calories":210,"protein":10.2,"carbs":3.6,"fat":16.8}
 		},
 		{"name":"鸡蛋","intake":50,"nutrients":{"calories":72,"protein":6,"carbs":0,"fat":5}}
