@@ -207,7 +207,7 @@ func TestHealthLeaderboard(t *testing.T) {
 	mockSvc := &mockCommunityService{healthLeaderboard: &service.HealthLeaderboardResult{
 		WeekStart: "2024-01-01",
 		ScoringRule: service.HealthLeaderboardScoringRule{
-			Label: "本周健康饮食分", TotalPoints: 100, MinimumRecordedDays: 4,
+			Label: "本周健康饮食分", TotalPoints: 100, MinimumRecordedDays: 3,
 		},
 		List: []service.HealthLeaderboardItem{{Rank: 1, HealthIndex: 88}},
 	}}
@@ -220,7 +220,7 @@ func TestHealthLeaderboard(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, w.Code)
 	assert.Contains(t, w.Body.String(), `"scoring_rule"`)
-	assert.Contains(t, w.Body.String(), `"minimum_recorded_days":4`)
+	assert.Contains(t, w.Body.String(), `"minimum_recorded_days":3`)
 	var payload struct {
 		Data struct {
 			List []map[string]any `json:"list"`

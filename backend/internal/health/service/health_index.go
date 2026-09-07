@@ -176,6 +176,10 @@ func computeMicronutrientScore(comp *statsComputation) (int, string, string, str
 }
 
 func computeHealthIndex(comp *statsComputation, statsRange string) *HealthIndex {
+	return computeHealthIndexWithMinimumRecordedDays(comp, statsRange, healthIndexMinRecordedDays)
+}
+
+func computeHealthIndexWithMinimumRecordedDays(comp *statsComputation, statsRange string, minimumRecordedDays int) *HealthIndex {
 	totalCalories := comp.TotalCalories
 	tdee := float64(comp.TDEE)
 	avgCaloriesPerDay := comp.AvgCaloriesPerDay
@@ -187,7 +191,7 @@ func computeHealthIndex(comp *statsComputation, statsRange string) *HealthIndex 
 	dietGoal := healthIndexDietGoal(comp)
 	weightReferenceCalories, weightReferenceLabel := healthIndexWeightReferenceCalories(tdee, dietGoal)
 
-	if recordedDays < healthIndexMinRecordedDays {
+	if recordedDays < minimumRecordedDays {
 		return &HealthIndex{
 			HasEnoughData:     false,
 			OverallScore:      0,
@@ -482,7 +486,7 @@ func computeHealthIndex(comp *statsComputation, statsRange string) *HealthIndex 
 	}
 
 	return &HealthIndex{
-		HasEnoughData:     recordedDays >= healthIndexMinRecordedDays,
+		HasEnoughData:     recordedDays >= minimumRecordedDays,
 		OverallScore:      overallRiskScore,
 		ProjectedScore:    projectedOverallScore,
 		OverallTrendLabel: overallTrendLabel,

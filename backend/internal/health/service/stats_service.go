@@ -79,7 +79,7 @@ const (
 	defaultDeepSeekBaseURL     = "https://api.deepseek.com"
 	defaultDashScopeBaseURL    = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 	statsInsightDeepSeekModel  = "deepseek-v4-pro"
-	statsInsightPreferredModel = "qwen3.6-flash"
+	statsInsightPreferredModel = "qwen3.8-flash"
 	statsInsightDailyLimit     = 3
 	statsInsightCreditCost     = 1
 	statsInsightMaxTokens      = 4096
@@ -450,7 +450,7 @@ func (s *StatsService) GetSummary(ctx context.Context, userID string, statsRange
 	}, nil
 }
 
-const healthLeaderboardMinRecordedDays = 4
+const healthLeaderboardQualificationConsecutiveDays = 3
 
 type weeklyHealthLeaderboardScore struct {
 	Score             float64
@@ -461,7 +461,7 @@ type weeklyHealthLeaderboardScore struct {
 	Eligible          bool
 }
 
-func computeWeeklyHealthLeaderboardScore(comp *statsComputation, overallScore int, now time.Time) weeklyHealthLeaderboardScore {
+func computeWeeklyHealthLeaderboardScore(comp *statsComputation, overallScore int, now time.Time, historicallyQualified bool) weeklyHealthLeaderboardScore {
 	if comp == nil {
 		return weeklyHealthLeaderboardScore{}
 	}
@@ -496,8 +496,52 @@ func computeWeeklyHealthLeaderboardScore(comp *statsComputation, overallScore in
 		DietQualityPoints: dietQualityPoints,
 		ContinuityPoints:  continuityPoints,
 		StabilityPoints:   stabilityPoints,
-		Eligible:          comp.RecordedDays >= healthLeaderboardMinRecordedDays,
+		Eligible:          comp.RecordedDays > 0 && historicallyQualified,
 	}
+}
+
+func hasConsecutiveRecordedDays(dates []string, minimumDays int) bool {
+	if minimumDays <= 0 {
+		return true
+	}
+	if len(dates) < minimumDays {
+		return false
+	}
+
+	dateSet := make(map[string]struct{}, len(dates))
+	for _, rawDate := range dates {
+		date, err := time.ParseInLocation("2006-01-02", strings.TrimSpace(rawDate), chinaTZ)
+		if err != nil {
+			continue
+		}
+		dateSet[date.Format("2006-01-02")] = struct{}{}
+	}
+	for dateKey := range dateSet {
+		date, _ := time.ParseInLocation("2006-01-02", dateKey, chinaTZ)
+		consecutive := true
+		for offset := 1; offset < minimumDays; offset++ {
+			if _, ok := dateSet[date.AddDate(0, 0, offset).Format("2006-01-02")]; !ok {
+				consecutive = false
+				break
+			}
+		}
+		if consecutive {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *StatsService) hasHistoricalHealthLeaderboardQualification(ctx context.Context, userID string, now time.Time) (bool, error) {
+	endDate, err := parseChinaDate(now.In(chinaTZ).AddDate(0, 0, 1).Format("2006-01-02"))
+	if err != nil {
+		return false, err
+	}
+	dates, err := s.repo.GetRecentFoodRecordDates(ctx, userID, time.Unix(0, 0).UTC(), endDate.UTC())
+	if err != nil {
+		return false, err
+	}
+	return hasConsecutiveRecordedDays(dates, healthLeaderboardQualificationConsecutiveDays), nil
 }
 
 // GetWeeklyHealthLeaderboardScore keeps 75% of the existing dietary-quality
@@ -508,8 +552,16 @@ func (s *StatsService) GetWeeklyHealthLeaderboardScore(ctx context.Context, user
 	if err != nil {
 		return 0, 0, 0, 0, 0, false, err
 	}
-	index := computeHealthIndex(comp, "calendar_week")
-	result := computeWeeklyHealthLeaderboardScore(comp, index.OverallScore, time.Now())
+	now := time.Now()
+	historicallyQualified := false
+	if comp.RecordedDays > 0 {
+		historicallyQualified, err = s.hasHistoricalHealthLeaderboardQualification(ctx, userID, now)
+		if err != nil {
+			return 0, 0, 0, 0, 0, false, err
+		}
+	}
+	index := computeHealthIndexWithMinimumRecordedDays(comp, "calendar_week", 1)
+	result := computeWeeklyHealthLeaderboardScore(comp, index.OverallScore, now, historicallyQualified)
 	return result.Score, result.RecordedDays, result.DietQualityPoints, result.ContinuityPoints, result.StabilityPoints, result.Eligible, nil
 }
 
@@ -1584,6 +1636,13 @@ func (s *StatsService) requestNutritionInsightOnce(ctx context.Context, baseURL,
 			body[key] = value
 		}
 	}
+	if strings.EqualFold(strings.TrimSpace(model), statsInsightPreferredModel) {
+		enableThinking, explicitlyConfigured := body["enable_thinking"].(bool)
+		if !explicitlyConfigured {
+			enableThinking = true
+		}
+		applyQwen38ThinkingOptions(body, enableThinking)
+	}
 	bodyBytes, _ := json.Marshal(body)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/chat/completions", bytes.NewReader(bodyBytes))
 	if err != nil {
@@ -1686,6 +1745,9 @@ func (s *StatsService) streamNutritionInsight(ctx context.Context, baseURL, apiK
 		"stream":          true,
 		"enable_thinking": enableThinking,
 	}
+	if strings.EqualFold(strings.TrimSpace(model), statsInsightPreferredModel) {
+		applyQwen38ThinkingOptions(body, enableThinking)
+	}
 	bodyBytes, _ := json.Marshal(body)
 	var resp *http.Response
 	var lastErr error
@@ -1776,6 +1838,16 @@ func (s *StatsService) streamNutritionInsight(ctx context.Context, baseURL, apiK
 		}
 	}()
 	return textChan, nil
+}
+
+func applyQwen38ThinkingOptions(body map[string]any, enableThinking bool) {
+	body["enable_thinking"] = enableThinking
+	body["preserve_thinking"] = false
+	if enableThinking {
+		body["reasoning_effort"] = "medium"
+		return
+	}
+	delete(body, "reasoning_effort")
 }
 
 func estimateChineseTokens(content string) int {

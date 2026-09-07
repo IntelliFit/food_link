@@ -33,7 +33,8 @@ describe('community leaderboard redesign', () => {
     expect(leaderboardSource).toContain('饮食质量')
     expect(leaderboardSource).toContain('记录连续性')
     expect(leaderboardSource).toContain('日间稳定性')
-    expect(leaderboardSource).toContain('至少记录')
+    expect(leaderboardSource).toContain('历史连续记录3天后长期有效')
+    expect(leaderboardSource).toContain('本周按已有记录计算')
   })
 
   it('provides nutrient rankings on a per-100g basis', () => {

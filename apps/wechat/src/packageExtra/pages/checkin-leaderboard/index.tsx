@@ -274,8 +274,7 @@ function CheckinLeaderboardPage() {
               {' + '}日间稳定性{healthScoringRule?.stability_points || 10}分
             </Text>
             <Text className='health-score-rule'>
-              至少记录{healthScoringRule?.minimum_recorded_days || 4}天入榜；
-              {healthScoringRule?.continuity_description || '连续性按本周已过去天数计算'}
+              {healthScoringRule?.continuity_description || '历史连续记录3天后长期有效；本周按已有记录计算'}
             </Text>
             {me?.dietQualityPoints != null && me.continuityPoints != null && me.stabilityPoints != null ? (
               <Text className='health-score-my-breakdown'>

@@ -1198,8 +1198,8 @@ func (s *CommunityService) HealthLeaderboard(ctx context.Context, viewerUserID s
 			DietQualityPoints:     75,
 			ContinuityPoints:      15,
 			StabilityPoints:       10,
-			MinimumRecordedDays:   4,
-			ContinuityDescription: "按本周已过去天数计算",
+			MinimumRecordedDays:   3,
+			ContinuityDescription: "历史连续记录3天后长期有效；本周按已有记录计算",
 		},
 		List: items,
 	}

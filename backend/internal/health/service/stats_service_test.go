@@ -58,7 +58,7 @@ func TestComputeWeeklyHealthLeaderboardScoreUsesCalibratedWeights(t *testing.T) 
 		},
 	}
 
-	result := computeWeeklyHealthLeaderboardScore(comp, 90, now)
+	result := computeWeeklyHealthLeaderboardScore(comp, 90, now, true)
 
 	assert.True(t, result.Eligible)
 	assert.Equal(t, 4, result.RecordedDays)
@@ -68,7 +68,7 @@ func TestComputeWeeklyHealthLeaderboardScoreUsesCalibratedWeights(t *testing.T) 
 	assert.InDelta(t, 87.5, result.Score, 0.001)
 }
 
-func TestComputeWeeklyHealthLeaderboardScoreRequiresFourRecordedDays(t *testing.T) {
+func TestComputeWeeklyHealthLeaderboardScoreRequiresHistoricalQualification(t *testing.T) {
 	now := time.Date(2026, 8, 22, 12, 0, 0, 0, chinaTZ)
 	comp := &statsComputation{
 		RecordedDays: 3,
@@ -79,12 +79,61 @@ func TestComputeWeeklyHealthLeaderboardScoreRequiresFourRecordedDays(t *testing.
 		},
 	}
 
-	result := computeWeeklyHealthLeaderboardScore(comp, 92, now)
+	result := computeWeeklyHealthLeaderboardScore(comp, 92, now, false)
 
 	assert.False(t, result.Eligible)
 	assert.InDelta(t, 69.0, result.DietQualityPoints, 0.001)
 	assert.InDelta(t, 7.5, result.ContinuityPoints, 0.001)
 	assert.InDelta(t, 8.4, result.StabilityPoints, 0.001)
+}
+
+func TestComputeWeeklyHealthLeaderboardScoreKeepsQualifiedUserEligibleWithOneCurrentWeekDay(t *testing.T) {
+	now := time.Date(2026, 8, 31, 12, 0, 0, 0, chinaTZ) // Monday.
+	comp := &statsComputation{
+		RecordedDays: 1,
+		RecordedDaily: []DailyCalories{
+			{Date: "2026-08-31", Calories: 1000},
+		},
+	}
+
+	result := computeWeeklyHealthLeaderboardScore(comp, 85, now, true)
+
+	assert.True(t, result.Eligible)
+	assert.Equal(t, 1, result.RecordedDays)
+	assert.InDelta(t, 63.8, result.DietQualityPoints, 0.001)
+	assert.InDelta(t, 15.0, result.ContinuityPoints, 0.001)
+	assert.InDelta(t, 10.0, result.StabilityPoints, 0.001)
+	assert.InDelta(t, 88.8, result.Score, 0.001)
+}
+
+func TestHasConsecutiveRecordedDaysFindsHistoricalThreeDayQualification(t *testing.T) {
+	assert.True(t, hasConsecutiveRecordedDays([]string{"2026-08-12", "2026-08-10", "2026-08-11", "2026-09-01"}, 3))
+	assert.False(t, hasConsecutiveRecordedDays([]string{"2026-08-10", "2026-08-12", "2026-09-01"}, 3))
+}
+
+func TestStatsServiceGetWeeklyHealthLeaderboardScoreKeepsHistoricalQualification(t *testing.T) {
+	now := time.Now().In(chinaTZ)
+	repo := &mockStatsRepo{
+		records: []domain.FoodRecord{{
+			UserID: "u1", MealType: "lunch", TotalCalories: 680,
+			TotalProtein: 35, TotalCarbs: 80, TotalFat: 22, RecordTime: &now,
+		}},
+		recordDates: []string{
+			now.AddDate(0, 0, -12).Format("2006-01-02"),
+			now.AddDate(0, 0, -11).Format("2006-01-02"),
+			now.AddDate(0, 0, -10).Format("2006-01-02"),
+			now.Format("2006-01-02"),
+		},
+	}
+
+	score, recordedDays, dietQualityPoints, _, _, eligible, err := NewStatsService(repo, nil).
+		GetWeeklyHealthLeaderboardScore(context.Background(), "u1")
+
+	require.NoError(t, err)
+	assert.True(t, eligible)
+	assert.Equal(t, 1, recordedDays)
+	assert.Greater(t, dietQualityPoints, 0.0)
+	assert.Greater(t, score, 25.0)
 }
 
 func TestComputeWeeklyHealthLeaderboardScoreUsesDailyCoefficientOfVariation(t *testing.T) {
@@ -99,7 +148,7 @@ func TestComputeWeeklyHealthLeaderboardScoreUsesDailyCoefficientOfVariation(t *t
 		},
 	}
 
-	result := computeWeeklyHealthLeaderboardScore(comp, 90, now)
+	result := computeWeeklyHealthLeaderboardScore(comp, 90, now, true)
 
 	assert.InDelta(t, 9.3, result.StabilityPoints, 0.001)
 	assert.InDelta(t, 86.8, result.Score, 0.001)
@@ -591,17 +640,20 @@ func TestStatsServicePreferredTextLLMUsesQwenBeforeDeepSeek(t *testing.T) {
 
 	llm := svc.preferredTextLLM()
 	assert.Equal(t, "qwen", llm.Provider)
-	assert.Equal(t, "qwen3.6-flash", llm.Model)
+	assert.Equal(t, "qwen3.8-flash", llm.Model)
 	assert.Equal(t, "qwen-key", llm.APIKey)
 	assert.Equal(t, "https://qwen.example.com/api/v1", llm.BaseURL)
-	assert.Equal(t, "qwen3.6-flash", svc.petChatModel())
+	assert.Equal(t, "qwen3.8-flash", svc.petChatModel())
 }
 
 func TestStatsServiceGenerateInsightUsesPreferredQwenModel(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var body map[string]any
 		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
-		assert.Equal(t, "qwen3.6-flash", body["model"])
+		assert.Equal(t, "qwen3.8-flash", body["model"])
+		assert.Equal(t, true, body["enable_thinking"])
+		assert.Equal(t, "medium", body["reasoning_effort"])
+		assert.Equal(t, false, body["preserve_thinking"])
 		assert.Equal(t, "Bearer qwen-key", r.Header.Get("Authorization"))
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"总体结论\n本期饮食结构稳定，下一步优先补足蛋白质。"},"finish_reason":"stop"}]}`))
@@ -721,6 +773,43 @@ func TestStatsService_StreamNutritionInsightRetriesTransientUpstreamFailure(t *t
 	}
 	assert.Equal(t, 2, requestCount)
 	assert.Equal(t, "先补足蛋白质", content.String())
+}
+
+func TestStatsService_StreamNutritionInsightMapsQwenThinkingStrength(t *testing.T) {
+	for _, tc := range []struct {
+		name           string
+		enableThinking bool
+		expectEffort   bool
+	}{
+		{name: "enabled uses medium", enableThinking: true, expectEffort: true},
+		{name: "disabled omits effort", enableThinking: false, expectEffort: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				var body map[string]any
+				require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+				assert.Equal(t, tc.enableThinking, body["enable_thinking"])
+				assert.Equal(t, false, body["preserve_thinking"])
+				if tc.expectEffort {
+					assert.Equal(t, "medium", body["reasoning_effort"])
+				} else {
+					assert.NotContains(t, body, "reasoning_effort")
+				}
+				w.Header().Set("Content-Type", "text/event-stream")
+				_, _ = w.Write([]byte("data: {\"choices\":[{\"delta\":{\"content\":\"ok\"},\"finish_reason\":\"\"}]}\n\ndata: [DONE]\n\n"))
+			}))
+			defer server.Close()
+
+			svc := NewStatsService(&mockStatsRepo{}, &mockBodyMetricsProvider{})
+			textChan, err := svc.streamNutritionInsight(context.Background(), server.URL, "test-key", statsInsightPreferredModel, "test prompt", statsInsightMaxTokens, tc.enableThinking)
+			require.NoError(t, err)
+			var content strings.Builder
+			for chunk := range textChan {
+				content.WriteString(chunk)
+			}
+			assert.Equal(t, "ok", content.String())
+		})
+	}
 }
 
 func TestStatsService_GenerateDietRecommendationUsesConfiguredDeepSeekBaseURL(t *testing.T) {
