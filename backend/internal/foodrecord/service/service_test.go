@@ -1135,7 +1135,7 @@ func TestFoodRecordService_List_RepoError(t *testing.T) {
 	svc := NewFoodRecordService(r, tr, ur)
 	ctx := context.Background()
 
-	patches := ApplyMethod(reflect.TypeOf(r), "ListByUser", func(_ *foodrepo.FoodRecordRepo, _ context.Context, _, _ string, _ int) ([]domain.FoodRecord, error) {
+	patches := ApplyMethod(reflect.TypeOf(r), "ListByUserPage", func(_ *foodrepo.FoodRecordRepo, _ context.Context, _, _ string, _, _ int) ([]domain.FoodRecord, error) {
 		return nil, errors.New("db error")
 	})
 	defer patches.Reset()

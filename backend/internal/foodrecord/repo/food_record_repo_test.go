@@ -182,6 +182,28 @@ func TestFoodRecordRepo_ListByUser_LimitZero(t *testing.T) {
 	assert.Len(t, list, 1)
 }
 
+func TestFoodRecordRepo_ListByUserPageUsesStableOffset(t *testing.T) {
+	db := setupTestDB(t)
+	r := NewFoodRecordRepo(db)
+	ctx := context.Background()
+	base := time.Date(2026, 9, 10, 8, 0, 0, 0, time.UTC)
+	for index, mealType := range []string{"breakfast", "lunch", "dinner"} {
+		recordedAt := base.Add(time.Duration(index) * time.Hour)
+		require.NoError(t, r.Create(ctx, &domain.FoodRecord{UserID: "u1", MealType: mealType, RecordTime: &recordedAt}))
+	}
+
+	first, err := r.ListByUserPage(ctx, "u1", "", 2, 0)
+	require.NoError(t, err)
+	require.Len(t, first, 2)
+	assert.Equal(t, "dinner", first[0].MealType)
+	assert.Equal(t, "lunch", first[1].MealType)
+
+	second, err := r.ListByUserPage(ctx, "u1", "", 2, 2)
+	require.NoError(t, err)
+	require.Len(t, second, 1)
+	assert.Equal(t, "breakfast", second[0].MealType)
+}
+
 func TestFoodRecordRepo_ListByUser_InvalidDate(t *testing.T) {
 	db := setupTestDB(t)
 	r := NewFoodRecordRepo(db)

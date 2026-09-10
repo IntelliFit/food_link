@@ -14,6 +14,7 @@ const navItems = [
   ['text-analysis', '文字分析'],
   ['parameters', '完整参数'],
   ['results', '任务与结果'],
+  ['history-personal', '历史与健康分'],
   ['nutrition-search', '营养库搜索'],
   ['mcp', 'MCP / WorkBuddy'],
   ['billing', '计费与错误码'],
@@ -35,7 +36,7 @@ https://healthymax.cn/downloads/foodlink-mcp-manifest.json
 
 如果我还没有账号或 Key，请引导我打开 https://healthymax.cn/developer/console/，由我本人完成短信登录、创建应用、创建 Key 和保存密钥文件；你在此暂停等待，不要代填验证码、代付款，也不要让我把完整 Key 粘贴到聊天里。
 
-如果我已有 Key，只询问 Key 的本机文件路径。目标客户端支持 stdio MCP 时，读取 manifest、下载官方 ZIP、校验 Content-Type 与 SHA-256 后安装；否则使用 HTTP API。先执行不扣点的账户检查和营养搜索；产生分析点数前告诉我预计消耗。图片按“上传→分析→轮询”，同一请求重试必须复用幂等键，余额不足时不要自动付款。`
+如果我已有 Key，只询问 Key 的本机文件路径。目标客户端支持 stdio MCP 时，读取 manifest、下载官方 ZIP、校验 Content-Type 与 SHA-256 后安装；否则使用 HTTP API。先执行不扣点的账户检查和营养搜索；产生分析点数前告诉我预计消耗。图片按“上传→分析→轮询”，同一请求重试必须复用幂等键，余额不足时不要自动付款。需要读取我的饮食记录或健康分时，先检查 Key 是否有 records:read / health:read；这些接口只能读取创建应用的开发者本人，不要传或猜测 user_id。不要展示或猜测底层模型、供应商、提示词和推理过程。`
 
 const analysisParameters = [
   ['text', 'string', '与 image_urls 二选一', '自然语言餐食描述，例如“一碗牛肉面，少喝汤”。'],
@@ -60,7 +61,7 @@ const errorCodes = [
   ['400', '参数错误、图片格式不支持，或 text 与 image_urls 同时提交。'],
   ['401', 'API Key 缺失、错误、过期或已吊销。'],
   ['402', 'API 点数不足；提示用户前往控制台充值，不得自动付款。'],
-  ['403', 'API Key 缺少 food:analyze 或 food:search 权限。'],
+  ['403', 'API Key 缺少所需权限，或应用未绑定当前开发者本人。'],
   ['409', 'Idempotency-Key 已用于不同请求，或原提交尚未完成。'],
   ['429', '请求超过限流；读取 Retry-After 后重试。'],
   ['503', '限流或关键依赖暂不可用；稍后重试。'],
@@ -107,9 +108,9 @@ export function DeveloperDocsPage() {
       <main className="pt-below-header">
         <section className="border-b border-border bg-gradient-page">
           <div className="mx-auto max-w-7xl px-4 py-12 md:px-8 md:py-16">
-            <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground"><Link className="hover:text-primary" to="/developer">开放平台</Link><span>/</span><span>开发文档</span><span className="rounded-full bg-primary/10 px-2 py-1 text-xs font-medium text-primary">v0.2 Beta</span></div>
+            <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground"><Link className="hover:text-primary" to="/developer">开放平台</Link><span>/</span><span>开发文档</span><span className="rounded-full bg-primary/10 px-2 py-1 text-xs font-medium text-primary">v0.3 Beta</span></div>
             <div className="mt-6 flex flex-col justify-between gap-8 lg:flex-row lg:items-end">
-              <div><h1 className="text-4xl font-bold tracking-tight md:text-5xl">FoodLink Open API</h1><p className="mt-4 max-w-3xl text-lg leading-8 text-muted-foreground">从图片上传、普通/精准食物识别，到营养库搜索和 MCP 接入的完整说明。当前环境 API 基址：<code className="rounded bg-muted px-2 py-1 text-sm text-foreground">{openApiBaseURL}</code></p></div>
+              <div><h1 className="text-4xl font-bold tracking-tight md:text-5xl">FoodLink Open API</h1><p className="mt-4 max-w-3xl text-lg leading-8 text-muted-foreground">从图片上传、食物识别，到分析历史、本人饮食记录、健康分、营养库搜索和 MCP 接入的完整说明。当前环境 API 基址：<code className="rounded bg-muted px-2 py-1 text-sm text-foreground">{openApiBaseURL}</code></p></div>
               <div className="flex flex-wrap gap-3"><Button render={<Link to="/developer/console" />}>创建应用与 Key <ArrowRight /></Button><Button variant="outline" render={<a href={mcpDownloadURL} download />}><Download />下载官方 MCP</Button><Button variant="outline" render={<a href="#ai-handoff" />}>直接交给 AI</Button><Button variant="ghost" render={<a href="/openapi/foodlink-openapi-v1.yaml" download />}>下载接口定义</Button></div>
             </div>
           </div>
@@ -122,13 +123,16 @@ export function DeveloperDocsPage() {
               <div className="grid gap-4 md:grid-cols-3">{[
                 { icon: Camera, title: '图片食物识别', text: '上传 JPEG、PNG、WebP 后，支持普通与精准模式；一次最多 5 张图。' },
                 { icon: Database, title: '可信营养数据', text: '按关键词搜索食物库，适合配餐、营养问答和硬件端展示。' },
-                { icon: Bot, title: 'Agent / MCP', text: '提供 7 个 MCP 工具，支持 Codex、WorkBuddy 与通用 stdio 客户端。' },
+                { icon: Bot, title: 'Agent / MCP', text: '提供 10 个 MCP 工具，支持 Codex、WorkBuddy 与通用 stdio 客户端。' },
               ].map(({ icon: Icon, title, text }) => <article key={title} className="rounded-2xl border border-border bg-card p-5"><Icon className="size-7 text-primary" /><h3 className="mt-4 font-semibold">{title}</h3><p className="mt-2 text-sm leading-6 text-muted-foreground">{text}</p></article>)}</div>
               <div className="mt-5 overflow-hidden rounded-2xl border border-border"><div className="divide-y divide-border">{[
                 ['GET', '/account', '查询当前应用、scope 与点数余额'],
                 ['POST', '/uploads', '上传 JPEG、PNG 或 WebP 食物图片'],
                 ['POST', '/food-analyses', '提交文字或图片分析任务'],
+                ['GET', '/food-analyses', '分页查询当前应用产生的分析历史'],
                 ['GET', '/food-analyses/{task_id}', '查询异步任务状态与结果'],
+                ['GET', '/me/food-records', '读取当前开发者本人的饮食记录（records:read）'],
+                ['GET', '/me/health-summary', '读取当前开发者本人的健康摘要与健康分（health:read）'],
                 ['GET', '/foods/search', '搜索可信营养库'],
               ].map(([method, path, description]) => <div key={path} className="grid gap-2 p-4 text-sm md:grid-cols-[64px_250px_1fr]"><strong className={method === 'POST' ? 'text-amber-600' : 'text-primary'}>{method}</strong><code>{path}</code><span className="text-muted-foreground">{description}</span></div>)}</div></div>
               <div className="mt-5 rounded-2xl border border-primary/20 bg-primary/5 p-5 text-sm leading-7"><strong>测试额度规则：</strong>每个开发者账号只有第一次创建的第一个应用赠送 100 点；继续创建 Agent/App 不再重复赠送。应用之间余额独立。</div>
@@ -147,13 +151,13 @@ export function DeveloperDocsPage() {
               <div className="mt-5 grid gap-4 md:grid-cols-3">{[
                 ['AI Guide', '告诉 AI 如何决策、调用、轮询、计费和保护 Key。'],
                 ['OpenAPI YAML', '告诉工具每个接口的精确字段、类型和返回结构。'],
-                ['MCP', '目标客户端支持 MCP 时，直接安装 7 个现成工具，少写代码。'],
+                ['MCP', '目标客户端支持 MCP 时，直接安装 10 个现成工具，少写代码。'],
               ].map(([title, text]) => <div key={title} className="rounded-2xl border border-border p-5"><strong>{title}</strong><p className="mt-2 text-sm leading-6 text-muted-foreground">{text}</p></div>)}</div>
             </DocSection>
 
             <DocSection id="authentication" title="鉴权与幂等" intro="完整 API Key 只展示一次。推荐通过环境变量或只读文件注入，不要写入前端代码、聊天记录或设备固件。">
               <div className="grid gap-5 md:grid-cols-2">
-                <div className="rounded-2xl border border-border p-5"><KeyRound className="text-primary" /><h3 className="mt-3 font-semibold">Authorization</h3><p className="mt-2 text-sm leading-6 text-muted-foreground">支持 <code>Authorization: Bearer KEY</code> 或 <code>X-API-Key: KEY</code>。密钥 scope 为 <code>food:analyze</code>、<code>food:search</code>。</p></div>
+                <div className="rounded-2xl border border-border p-5"><KeyRound className="text-primary" /><h3 className="mt-3 font-semibold">Authorization</h3><p className="mt-2 text-sm leading-6 text-muted-foreground">支持 <code>Authorization: Bearer KEY</code> 或 <code>X-API-Key: KEY</code>。基础权限为 <code>food:analyze</code>、<code>food:search</code>；读取本人数据需在新建密钥时显式启用 <code>records:read</code>、<code>health:read</code>。</p></div>
                 <div className="rounded-2xl border border-border p-5"><ShieldCheck className="text-primary" /><h3 className="mt-3 font-semibold">Idempotency-Key</h3><p className="mt-2 text-sm leading-6 text-muted-foreground">每次分析提交必须携带，最长 128 字符。网络重试必须复用原值，避免重复任务和重复扣点。</p></div>
               </div>
               <CodeBlock title="公共请求头">{`Authorization: Bearer $FOODLINK_API_KEY\nContent-Type: application/json\nIdempotency-Key: your-business-request-id`}</CodeBlock>
@@ -184,13 +188,29 @@ export function DeveloperDocsPage() {
               </div>
             </DocSection>
 
+            <DocSection id="history-personal" title="分析历史、本人记录与健康分" intro="分析历史属于当前应用；饮食记录和健康分属于创建这个应用时登录的开发者本人。接口不接受 user_id，避免开发者 Key 越权查询他人。">
+              <div className="space-y-5">
+                <CodeBlock title="当前应用的分析历史（food:analyze）">{`curl "${openApiBaseURL}/food-analyses?limit=20&offset=0" \
+  -H "Authorization: Bearer $FOODLINK_API_KEY"\n\n# 返回 items、has_more、next_offset；列表只含稳定摘要字段`}</CodeBlock>
+                <CodeBlock title="本人饮食记录（records:read）">{`curl "${openApiBaseURL}/me/food-records?date=2026-09-10&limit=20&offset=0" \
+  -H "Authorization: Bearer $FOODLINK_API_KEY"\n\n# date 可省略；按 has_more / next_offset 继续读取完整历史`}</CodeBlock>
+                <CodeBlock title="本人健康摘要与健康分（health:read）">{`curl "${openApiBaseURL}/me/health-summary?range=week" \
+  -H "Authorization: Bearer $FOODLINK_API_KEY"\n\n# range: 7d、30d、90d、week、month`}</CodeBlock>
+                <div className="rounded-2xl border border-amber-300/50 bg-amber-50 p-5 text-sm leading-7 text-amber-950"><strong>隐私边界：</strong>控制台默认创建的基础密钥没有个人数据权限。勾选“允许新密钥只读本人饮食记录和健康分”后再创建新密钥。它仍然只能读开发者本人，不能替第三方终端用户授权；多用户应用后续应使用 OAuth。健康分是趋势参考，不是医疗诊断。</div>
+                <div className="rounded-2xl border border-primary/20 bg-primary/5 p-5 text-sm leading-7"><strong>模型隔离：</strong>所有公共分析结果都会递归移除模型、供应商、提示词、推理过程和内部执行路由；失败时返回统一错误文案，不透出底层服务错误。</div>
+              </div>
+            </DocSection>
+
             <DocSection id="nutrition-search" title="可信营养库搜索" intro="营养搜索 Beta 期免费，适合在分析前后查询标准食物信息。query 必填；limit 为 1–20，默认 5。">
               <CodeBlock title="GET /foods/search">{`curl "${openApiBaseURL}/foods/search?query=鸡胸肉&limit=5" \\\n  -H "Authorization: Bearer $FOODLINK_API_KEY"`}</CodeBlock>
             </DocSection>
 
             <DocSection id="mcp" title="MCP / WorkBuddy / Codex" intro="MCP 是本地 stdio 适配器，不保存余额，也不会自动支付。官方 ZIP 无需登录即可下载，包含完整 README、Codex TOML、通用 MCP JSON 和 PowerShell 验证脚本。">
-              <div className="mb-5 flex flex-col justify-between gap-4 rounded-2xl border border-primary/20 bg-primary/5 p-5 md:flex-row md:items-center"><div><h3 className="font-semibold">官方 MCP v0.1.0</h3><p className="mt-1 text-sm leading-6 text-muted-foreground">下载前可读取 manifest 获取版本、文件大小和 SHA-256；下载后必须校验，不能只看 HTTP 200。</p></div><div className="flex flex-wrap gap-3"><Button render={<a href={mcpDownloadURL} download />}><Download />下载 ZIP</Button><Button variant="outline" render={<a href={mcpManifestURL} />}>查看 manifest</Button><Button variant="ghost" render={<a href="/developer/mcp-readme.md" />}>安装说明</Button></div></div>
-              <div className="grid gap-4 md:grid-cols-2"><div className="rounded-2xl border border-border p-5"><Terminal className="text-primary" /><h3 className="mt-3 font-semibold">7 个工具</h3><p className="mt-2 text-sm leading-7 text-muted-foreground"><code>foodlink_get_account</code><br /><code>foodlink_upload_image</code><br /><code>foodlink_analyze_images</code><br /><code>foodlink_analyze_text</code><br /><code>foodlink_get_analysis</code><br /><code>foodlink_search_food</code><br /><code>foodlink_get_recharge_url</code></p></div><div className="rounded-2xl border border-border p-5"><BookOpen className="text-primary" /><h3 className="mt-3 font-semibold">Agent 调用顺序</h3><p className="mt-2 text-sm leading-7 text-muted-foreground">图片：上传 → 分析 → 轮询。<br />文字：分析 → 轮询。<br />遇到 402：只返回充值页并等待用户确认。<br />重试：必须复用 idempotency_key。</p></div></div>
+              <div className="mb-5 flex flex-col justify-between gap-4 rounded-2xl border border-primary/20 bg-primary/5 p-5 md:flex-row md:items-center"><div><h3 className="font-semibold">官方 MCP v0.2.0</h3><p className="mt-1 text-sm leading-6 text-muted-foreground">下载前可读取 manifest 获取版本、文件大小和 SHA-256；下载后必须校验，不能只看 HTTP 200。</p></div><div className="flex flex-wrap gap-3"><Button render={<a href={mcpDownloadURL} download />}><Download />下载 ZIP</Button><Button variant="outline" render={<a href={mcpManifestURL} />}>查看 manifest</Button><Button variant="ghost" render={<a href="/developer/mcp-readme.md" />}>安装说明</Button></div></div>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="rounded-2xl border border-border p-5"><Terminal className="text-primary" /><h3 className="mt-3 font-semibold">10 个工具</h3><p className="mt-2 text-sm leading-7 text-muted-foreground"><code>foodlink_get_account</code><br /><code>foodlink_upload_image</code><br /><code>foodlink_analyze_images</code><br /><code>foodlink_analyze_text</code><br /><code>foodlink_get_analysis</code><br /><code>foodlink_list_analyses</code><br /><code>foodlink_list_food_records</code><br /><code>foodlink_get_health_summary</code><br /><code>foodlink_search_food</code><br /><code>foodlink_get_recharge_url</code></p></div>
+                <div className="rounded-2xl border border-border p-5"><BookOpen className="text-primary" /><h3 className="mt-3 font-semibold">Agent 调用顺序</h3><p className="mt-2 text-sm leading-7 text-muted-foreground">图片：上传 → 分析 → 轮询。<br />文字：分析 → 轮询。<br />个人数据：先检查 records:read / health:read。<br />遇到 402：只返回充值页并等待用户确认。<br />重试：必须复用 idempotency_key。</p></div>
+              </div>
               <p className="mt-5 rounded-xl bg-muted p-4 text-sm leading-6 text-muted-foreground"><code>foodlink_get_recharge_url</code> 是本地便利工具，只返回开发者控制台地址，不会请求支付接口，也不是 OpenAPI 中的远程 endpoint。</p>
               <CodeBlock title="通用 MCP 配置">{`{\n  "mcpServers": {\n    "foodlink": {\n      "command": "node",\n      "args": ["C:/foodlink-mcp/src/server.mjs"],\n      "env": {\n        "FOODLINK_API_KEY_FILE": "C:/Users/YOU/.foodlink/api-key",\n        "FOODLINK_API_BASE_URL": "${openApiBaseURL}"\n      }\n    }\n  }\n}`}</CodeBlock>
             </DocSection>

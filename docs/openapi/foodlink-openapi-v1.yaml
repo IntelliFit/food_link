@@ -1,11 +1,12 @@
 openapi: 3.1.0
 info:
   title: FoodLink Open API
-  version: 0.2.1-beta
+  version: 0.3.0-beta
   description: |
     食探开放平台封闭测试 API。API 点数与小程序会员积分独立。
     所有写请求必须使用 HTTPS；分析提交必须携带 Idempotency-Key。
     所有接口使用分布式固定窗口限流，并通过 X-RateLimit-* 响应头返回额度；超限返回 429。
+    公共响应不会返回底层模型、供应商、提示词、推理过程或内部执行路由。
 externalDocs:
   description: 食探开放平台完整开发文档
   url: https://healthymax.cn/developer/docs
@@ -25,6 +26,11 @@ x-foodlink-mcp:
   local_only_tools:
     - name: foodlink_get_recharge_url
       description: 本地返回开发者控制台地址，不对应远程 HTTP endpoint，也不会发起支付。
+x-foodlink-scopes:
+  food:analyze: 上传图片、提交分析、查询单个结果和当前应用的分析历史
+  food:search: 搜索可信营养库
+  records:read: 只读当前开发者账号本人的饮食记录，不接受 user_id
+  health:read: 只读当前开发者账号本人的健康摘要与健康分，不接受 user_id
 servers:
   - url: https://dev.api.healthymax.cn
     description: 开发/封闭测试环境
@@ -83,6 +89,36 @@ paths:
         "429":
           $ref: "#/components/responses/RateLimited"
   /open/v1/food-analyses:
+    get:
+      summary: 分页查询当前应用产生的分析历史
+      operationId: listFoodAnalyses
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        "200":
+          description: 成功；只返回稳定摘要字段，不返回底层模型或内部执行参数
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnalysisHistoryResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
     post:
       summary: 提交食物图片或文字分析
       operationId: createFoodAnalysis
@@ -155,6 +191,73 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+  /open/v1/me/food-records:
+    get:
+      summary: 返回当前开发者账号本人的饮食记录
+      description: |
+        需要 records:read。身份固定来自创建应用时登录的开发者账号，调用方不能传 user_id，
+        因此不能用开发者 Key 读取其他用户。每页最多 100 条；可用 date 精确筛选某一天，或通过 offset 读取完整历史。
+      operationId: listMyFoodRecords
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: date
+          in: query
+          schema:
+            type: string
+            format: date
+          description: 可选，YYYY-MM-DD
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FoodRecordListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+  /open/v1/me/health-summary:
+    get:
+      summary: 返回当前开发者账号本人的营养统计与健康分
+      description: |
+        需要 health:read。身份固定来自创建应用时登录的开发者账号，不接受 user_id。
+        健康分仅基于食探中已有的饮食、运动与身体数据，是趋势参考而不是医疗诊断。
+      operationId: getMyHealthSummary
+      parameters:
+        - name: range
+          in: query
+          schema:
+            type: string
+            enum: [7d, 30d, 90d, week, month]
+            default: week
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthSummaryResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "429":
           $ref: "#/components/responses/RateLimited"
   /open/v1/foods/search:
@@ -384,6 +487,7 @@ components:
               enum: [queued, processing, requires_action, completed, failed]
             result:
               type: object
+              description: 业务分析结果；服务端递归移除底层模型、供应商、提示词、推理和内部路由字段
               additionalProperties: true
             error_message:
               type: string
@@ -400,3 +504,205 @@ components:
             updated_at:
               type: string
               format: date-time
+    AnalysisHistoryResponse:
+      type: object
+      required: [code, message, data]
+      properties:
+        code: { const: 0 }
+        message: { const: ok }
+        data:
+          type: object
+          required: [items, has_more, next_offset]
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/AnalysisHistoryItem"
+            has_more: { type: boolean }
+            next_offset: { type: integer, minimum: 0 }
+    AnalysisHistoryItem:
+      type: object
+      required: [task_id, status, input_type]
+      properties:
+        task_id: { type: string, format: uuid }
+        status:
+          type: string
+          enum: [queued, processing, requires_action, completed, failed]
+        input_type:
+          type: string
+          enum: [text, image]
+        text_preview: { type: string }
+        image_url: { type: string, format: uri }
+        image_urls:
+          type: array
+          items: { type: string, format: uri }
+        meal_type:
+          type: string
+          enum: [breakfast, morning_snack, lunch, afternoon_snack, dinner, evening_snack]
+        recorded_on: { type: string, format: date }
+        result_summary:
+          type: object
+          properties:
+            first_item_name: { type: string }
+            item_count: { type: integer }
+            total_calories: { type: number }
+            recognition_outcome: { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    FoodRecordListResponse:
+      type: object
+      required: [code, message, data]
+      properties:
+        code: { const: 0 }
+        message: { const: ok }
+        data:
+          type: object
+          required: [records, has_more, next_offset]
+          properties:
+            records:
+              type: array
+              items:
+                $ref: "#/components/schemas/FoodRecord"
+            has_more: { type: boolean }
+            next_offset: { type: integer, minimum: 0 }
+    FoodRecord:
+      type: object
+      required: [id, meal_type, items, total_calories, total_protein, total_carbs, total_fat, total_weight_grams]
+      properties:
+        id: { type: string, format: uuid }
+        meal_type: { type: string }
+        image_urls:
+          type: array
+          items: { type: string, format: uri }
+        description: { type: string }
+        insight: { type: string }
+        items:
+          type: array
+          items:
+            type: object
+            required: [name, weight, ratio, intake, nutrients]
+            properties:
+              name: { type: string }
+              weight: { type: number, description: 原始份量克数 }
+              ratio: { type: number, description: 实际摄入比例 }
+              intake: { type: number, description: 实际摄入克数 }
+              gross_weight_grams: { type: number }
+              edible_portion_ratio: { type: number }
+              suggested_ratio: { type: number }
+              water_ml: { type: number }
+              nutrients:
+                $ref: "#/components/schemas/Nutrients"
+        total_calories: { type: number }
+        total_protein: { type: number }
+        total_carbs: { type: number }
+        total_fat: { type: number }
+        total_weight_grams: { type: integer }
+        diet_goal: { type: string }
+        activity_timing: { type: string }
+        eating_mood: { type: string }
+        pfc_ratio_comment: { type: string }
+        absorption_notes: { type: string }
+        context_advice: { type: string }
+        record_time: { type: string, format: date-time }
+        created_at: { type: string, format: date-time }
+    Nutrients:
+      type: object
+      required: [calories, protein, carbs, fat]
+      properties:
+        calories: { type: number }
+        protein: { type: number }
+        carbs: { type: number }
+        fat: { type: number }
+        fiber: { type: number }
+        sugar: { type: number }
+        saturatedFat: { type: number }
+        cholesterolMg: { type: number }
+        sodiumMg: { type: number }
+        potassiumMg: { type: number }
+        calciumMg: { type: number }
+        ironMg: { type: number }
+        magnesiumMg: { type: number }
+        zincMg: { type: number }
+        vitaminARaeMcg: { type: number }
+        vitaminCMg: { type: number }
+        vitaminDMcg: { type: number }
+    HealthSummaryResponse:
+      type: object
+      required: [code, message, data]
+      properties:
+        code: { const: 0 }
+        message: { const: ok }
+        data:
+          type: object
+          required: [range, start_date, end_date, recorded_days, total_calories, avg_calories_per_day, health_index]
+          properties:
+            range: { type: string }
+            start_date: { type: string, format: date }
+            end_date: { type: string, format: date }
+            tdee: { type: integer }
+            streak_days: { type: integer }
+            recorded_days: { type: integer }
+            total_calories: { type: number }
+            avg_calories_per_day: { type: number }
+            cal_surplus_deficit: { type: number }
+            total_protein: { type: number }
+            total_carbs: { type: number }
+            total_fat: { type: number }
+            by_meal:
+              type: object
+              additionalProperties: { type: number }
+            daily_calories:
+              type: array
+              items:
+                type: object
+                additionalProperties: true
+            macro_percent:
+              type: object
+              additionalProperties: { type: number }
+            analysis_summary: { type: string }
+            body_metrics:
+              type: object
+              additionalProperties: true
+            health_index:
+              $ref: "#/components/schemas/HealthIndex"
+    HealthIndex:
+      type: object
+      required: [has_enough_data, overall_score, projected_score, risk_cards, top_issues, action_list]
+      properties:
+        has_enough_data: { type: boolean }
+        overall_score: { type: integer, minimum: 0, maximum: 100 }
+        projected_score: { type: integer, minimum: 0, maximum: 100 }
+        overall_trend_label: { type: string }
+        overview_copy: { type: string }
+        signal_chips:
+          type: array
+          items:
+            type: object
+            properties:
+              label: { type: string }
+              value: { type: string }
+        risk_cards:
+          type: array
+          items:
+            type: object
+            required: [key, title, score]
+            properties:
+              key: { type: string }
+              title: { type: string }
+              score: { type: integer, minimum: 0, maximum: 100 }
+              brief: { type: string }
+              summary: { type: string }
+              basis: { type: string }
+              action: { type: string }
+              delta: { type: integer }
+        top_issues:
+          type: array
+          items:
+            type: object
+            properties:
+              title: { type: string }
+              detail: { type: string }
+        action_list:
+          type: array
+          items: { type: string }
+        show_disclaimer: { type: boolean }

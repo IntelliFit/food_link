@@ -42,8 +42,11 @@ func (h *Handler) RegisterRoutes(engine *gin.Engine) {
 	group.GET("/account", h.Account)
 	group.POST("/uploads", h.Upload)
 	group.POST("/food-analyses", h.SubmitAnalysis)
+	group.GET("/food-analyses", h.ListAnalyses)
 	group.GET("/food-analyses/:task_id", h.GetAnalysis)
 	group.GET("/foods/search", h.SearchNutrition)
+	group.GET("/me/food-records", h.ListOwnerFoodRecords)
+	group.GET("/me/health-summary", h.GetOwnerHealthSummary)
 }
 
 func (h *Handler) RegisterDeveloperRoutes(engine *gin.Engine, requireJWT gin.HandlerFunc) {
@@ -333,6 +336,68 @@ func (h *Handler) GetAnalysis(c *gin.Context) {
 	response.Success(c, result)
 }
 
+func (h *Handler) ListAnalyses(c *gin.Context) {
+	principal, ok := principalFromContext(c)
+	if !ok {
+		response.Error(c, commonerrors.ErrUnauthorized)
+		return
+	}
+	limit, err := nonNegativeQueryInt(c, "limit", 20)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	offset, err := nonNegativeQueryInt(c, "offset", 0)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	result, err := h.service.ListAnalyses(c.Request.Context(), principal, limit, offset)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, result)
+}
+
+func (h *Handler) ListOwnerFoodRecords(c *gin.Context) {
+	principal, ok := principalFromContext(c)
+	if !ok {
+		response.Error(c, commonerrors.ErrUnauthorized)
+		return
+	}
+	limit, err := nonNegativeQueryInt(c, "limit", 20)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	offset, err := nonNegativeQueryInt(c, "offset", 0)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	page, err := h.service.ListOwnerFoodRecords(c.Request.Context(), principal, c.Query("date"), limit, offset)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, page)
+}
+
+func (h *Handler) GetOwnerHealthSummary(c *gin.Context) {
+	principal, ok := principalFromContext(c)
+	if !ok {
+		response.Error(c, commonerrors.ErrUnauthorized)
+		return
+	}
+	summary, err := h.service.GetOwnerHealthSummary(c.Request.Context(), principal, c.Query("range"))
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, summary)
+}
+
 func (h *Handler) SearchNutrition(c *gin.Context) {
 	principal, ok := principalFromContext(c)
 	if !ok {
@@ -359,4 +424,16 @@ func principalFromContext(c *gin.Context) (*domain.Principal, bool) {
 
 func writeSuccess(c *gin.Context, status int, data any) {
 	c.JSON(status, gin.H{"code": 0, "message": "ok", "data": data})
+}
+
+func nonNegativeQueryInt(c *gin.Context, name string, fallback int) (int, error) {
+	raw := strings.TrimSpace(c.Query(name))
+	if raw == "" {
+		return fallback, nil
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil || value < 0 {
+		return 0, &commonerrors.AppError{Code: 50002, Message: name + " 必须是非负整数", HTTPStatus: http.StatusBadRequest}
+	}
+	return value, nil
 }

@@ -37,6 +37,8 @@ Expand-Archive -LiteralPath $zipPath -DestinationPath (Join-Path $env:USERPROFIL
 3. 立即保存完整 Key；页面只展示一次，服务端只保存哈希。
 4. 下载并校验官方 ZIP，或把本目录复制到需要使用的电脑。
 
+默认密钥只有 `food:analyze`、`food:search`。如果 Agent 还要读取当前开发者本人的饮食记录或健康分，请在控制台勾选“允许新密钥只读本人饮食记录和健康分”后创建一把新 Key；它会增加 `records:read`、`health:read`，但仍不能读取其他用户。
+
 每个开发者账号仅第一个应用赠送 100 点；继续创建应用不会重复获得赠送点数，各应用余额独立。
 
 推荐把 Key 单独保存为只读文件，而不是写进 JSON、TOML 或聊天记录：
@@ -119,6 +121,9 @@ mcporter call --stdio "node C:/foodlink-mcp/src/server.mjs" foodlink_get_account
 | `foodlink_upload_image` | 上传本机食物图片 | 提交分析前置步骤 |
 | `foodlink_analyze_images` | 分析已上传图片 | 是 |
 | `foodlink_get_analysis` | 查询异步任务状态和结果 | 否 |
+| `foodlink_list_analyses` | 分页查询当前应用产生的分析历史 | 否 |
+| `foodlink_list_food_records` | 查询当前开发者本人的饮食记录（需 `records:read`） | 否 |
+| `foodlink_get_health_summary` | 查询当前开发者本人的健康摘要与健康分（需 `health:read`） | 否 |
 | `foodlink_get_recharge_url` | 返回用户可主动打开的充值页 | 否，不会付款 |
 
 建议直接对 Agent 说：
@@ -126,6 +131,8 @@ mcporter call --stdio "node C:/foodlink-mcp/src/server.mjs" foodlink_get_account
 - “用食探搜索 100 克牛肉的营养信息。”
 - “用食探分析这张餐食照片，等结果完成后告诉我热量和蛋白质。”
 - “检查食探 API 余额；如果不足，只告诉我充值地址，不要替我付款。”
+- “列出这个应用最近 20 条食物分析历史。”
+- “读取我本周的饮食记录和健康分；如果权限不足，告诉我需要哪两个 scope。”
 
 图片流程必须是 `foodlink_upload_image` → `foodlink_analyze_images` → `foodlink_get_analysis`。文字和图片分析都是异步任务；状态为 `queued` 或 `processing` 时继续轮询，直到 `completed` 或 `failed`。
 

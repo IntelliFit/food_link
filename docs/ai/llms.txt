@@ -28,7 +28,10 @@ If the user has no FoodLink developer account or API key, direct them to the dev
 - GET /account
 - POST /uploads
 - POST /food-analyses
+- GET /food-analyses?limit=...&offset=...
 - GET /food-analyses/{task_id}
+- GET /me/food-records?date=...
+- GET /me/health-summary?range=...
 - GET /foods/search?query=...&limit=...
 
 ## Analysis inputs
@@ -42,5 +45,7 @@ If the user has no FoodLink developer account or API key, direct them to the dev
 For images: upload -> analyze -> poll. For text: analyze -> poll. Poll queued/processing tasks with backoff until completed, requires_action, or failed.
 
 Do not expose or invent underlying model, provider, prompt, reasoning, or internal API parameters. Food analysis is an estimate, not medical diagnosis.
+
+Personal data scopes are explicit: records:read and health:read. These endpoints are bound to the developer who created the app and never accept user_id. A normal food:analyze/food:search key must receive 403 for personal data. Multi-user products require a future user OAuth flow; never work around this boundary.
 
 For MCP, read the manifest, require application/zip, verify SHA-256, then extract the package. foodlink_get_recharge_url is a local helper that only returns the console URL; it is not a remote OpenAPI endpoint.

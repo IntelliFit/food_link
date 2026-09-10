@@ -41,5 +41,20 @@ export class FoodLinkClient {
     return this.request('/food-analyses', { method: 'POST', headers: { 'Idempotency-Key': idempotency_key }, body: JSON.stringify({ image_urls, mode, meal_type, additional_context, date }) })
   }
   getAnalysis(taskId) { return this.request(`/food-analyses/${encodeURIComponent(taskId)}`) }
+  listAnalyses(limit = 20, offset = 0) {
+    const normalizedLimit = Math.max(1, Math.min(100, Number(limit) || 20))
+    const normalizedOffset = Math.max(0, Number(offset) || 0)
+    return this.request(`/food-analyses?limit=${normalizedLimit}&offset=${normalizedOffset}`)
+  }
+  listFoodRecords(date = '', limit = 20, offset = 0) {
+    const normalizedLimit = Math.max(1, Math.min(100, Number(limit) || 20))
+    const normalizedOffset = Math.max(0, Number(offset) || 0)
+    const query = new URLSearchParams({ limit: String(normalizedLimit), offset: String(normalizedOffset) })
+    if (String(date || '').trim()) query.set('date', String(date).trim())
+    return this.request(`/me/food-records?${query}`)
+  }
+  getHealthSummary(range = 'week') {
+    return this.request(`/me/health-summary?range=${encodeURIComponent(String(range || 'week'))}`)
+  }
   searchFood(query, limit = 5) { return this.request(`/foods/search?query=${encodeURIComponent(query)}&limit=${Math.max(1, Math.min(20, Number(limit) || 5))}`) }
 }

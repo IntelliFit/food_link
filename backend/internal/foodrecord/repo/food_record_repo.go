@@ -46,6 +46,10 @@ func (r *FoodRecordRepo) GetByUserSourceTaskID(ctx context.Context, userID, sour
 }
 
 func (r *FoodRecordRepo) ListByUser(ctx context.Context, userID, date string, limit int) ([]domain.FoodRecord, error) {
+	return r.ListByUserPage(ctx, userID, date, limit, 0)
+}
+
+func (r *FoodRecordRepo) ListByUserPage(ctx context.Context, userID, date string, limit, offset int) ([]domain.FoodRecord, error) {
 	var rows []domain.FoodRecord
 	q := r.db.WithContext(ctx).Where("user_id = ?", userID)
 	if date != "" {
@@ -57,6 +61,9 @@ func (r *FoodRecordRepo) ListByUser(ctx context.Context, userID, date string, li
 	}
 	if limit > 0 {
 		q = q.Limit(limit)
+	}
+	if offset > 0 {
+		q = q.Offset(offset)
 	}
 	err := q.Order("record_time desc").Find(&rows).Error
 	return rows, err

@@ -371,6 +371,7 @@ func New(cfg *config.Config) (*App, error) {
 	exerciseSvc.ConfigureStorage(storageClient)
 	statsSvc := healthservice.NewStatsService(statsRepo, bodyMetricsSvc, cfg)
 	communitySvc.ConfigureHealthScoreProvider(statsSvc)
+	openPlatformSvc.ConfigureUserData(frSvc, statsSvc)
 	healthHandler := healthhandler.NewHealthHandler(bodyMetricsSvc, exerciseSvc, statsSvc)
 
 	// Membership module DI

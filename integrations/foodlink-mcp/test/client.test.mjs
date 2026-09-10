@@ -23,3 +23,19 @@ test('402 exposes recharge URL without initiating payment', async () => {
     return true
   })
 })
+
+test('history and personal read tools use documented owner-scoped endpoints', async () => {
+  const urls = []
+  const client = new FoodLinkClient({ apiKey: 'flk_beta_test', baseURL: 'https://example.test/open/v1', fetchImpl: async (url) => {
+    urls.push(url)
+    return new Response(JSON.stringify({ code: 0, data: {} }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+  } })
+  await client.listAnalyses(25, 50)
+  await client.listFoodRecords('2026-09-10', 30, 60)
+  await client.getHealthSummary('30d')
+  assert.deepEqual(urls, [
+    'https://example.test/open/v1/food-analyses?limit=25&offset=50',
+    'https://example.test/open/v1/me/food-records?limit=30&offset=60&date=2026-09-10',
+    'https://example.test/open/v1/me/health-summary?range=30d',
+  ])
+})

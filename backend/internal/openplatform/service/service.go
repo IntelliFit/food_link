@@ -19,6 +19,8 @@ import (
 	analyzeservice "food_link/backend/internal/analyze/service"
 	authrepo "food_link/backend/internal/auth/repo"
 	commonerrors "food_link/backend/internal/common/errors"
+	foodrecorddomain "food_link/backend/internal/foodrecord/domain"
+	healthservice "food_link/backend/internal/health/service"
 	"food_link/backend/internal/openplatform/domain"
 	openrepo "food_link/backend/internal/openplatform/repo"
 	"food_link/backend/pkg/logger"
@@ -32,6 +34,8 @@ import (
 const (
 	ScopeFoodAnalyze = "food:analyze"
 	ScopeFoodSearch  = "food:search"
+	ScopeRecordsRead = "records:read"
+	ScopeHealthRead  = "health:read"
 
 	OperationFoodAnalysis = "food.analysis"
 
@@ -45,10 +49,19 @@ type AnalyzeTaskService interface {
 	SubmitOpenAnalyzeTask(ctx context.Context, userID string, input analyzeservice.SubmitTaskInput) (string, error)
 	SubmitOpenTextTask(ctx context.Context, userID string, input analyzeservice.SubmitTaskInput) (string, error)
 	GetTask(ctx context.Context, taskID, userID string) (*analyzedomain.AnalysisTask, error)
+	ListTaskSummariesPage(ctx context.Context, userID, status, search string, limit, offset int) (analyzeservice.TaskSummaryListPage, error)
 }
 
 type NutritionService interface {
 	Search(ctx context.Context, query string, limit int) ([]map[string]any, error)
+}
+
+type FoodRecordReader interface {
+	ListPage(ctx context.Context, userID, date string, limit, offset int) ([]foodrecorddomain.FoodRecord, bool, int, error)
+}
+
+type StatsSummaryReader interface {
+	GetSummary(ctx context.Context, userID string, statsRange string, tdee int, streakDays int) (*healthservice.StatsSummary, error)
 }
 
 type Service struct {
@@ -56,6 +69,8 @@ type Service struct {
 	tasks     AnalyzeTaskService
 	nutrition NutritionService
 	storage   *storage.Client
+	records   FoodRecordReader
+	stats     StatsSummaryReader
 	payment   NativePaymentGateway
 	payConfig PaymentConfig
 }
@@ -83,6 +98,11 @@ func New(repo *openrepo.Repository, tasks AnalyzeTaskService, nutrition Nutritio
 func (s *Service) ConfigurePayment(gateway NativePaymentGateway, cfg PaymentConfig) {
 	s.payment = gateway
 	s.payConfig = cfg
+}
+
+func (s *Service) ConfigureUserData(records FoodRecordReader, stats StatsSummaryReader) {
+	s.records = records
+	s.stats = stats
 }
 
 func (s *Service) ReconcileUsage(ctx context.Context, limit int) (ReconciliationSummary, error) {
@@ -312,7 +332,7 @@ func (s *Service) GetAnalysis(ctx context.Context, principal *domain.Principal, 
 		UpdatedAt: task.UpdatedAt,
 	}
 	if task.ErrorMessage != nil {
-		result.ErrorMessage = *task.ErrorMessage
+		result.ErrorMessage = "分析任务处理失败"
 	}
 	if isRefundableTaskStatus(task.Status) {
 		balance, refunded, refundErr := s.repo.Refund(ctx, request.ID, "分析任务未成功完成")
@@ -323,6 +343,186 @@ func (s *Service) GetAnalysis(ctx context.Context, principal *domain.Principal, 
 		result.Refunded = refunded || request.Status == domain.RequestStatusRefunded
 	}
 	return result, nil
+}
+
+type AnalysisHistoryItem struct {
+	TaskID        string                            `json:"task_id"`
+	Status        string                            `json:"status"`
+	InputType     string                            `json:"input_type"`
+	TextPreview   string                            `json:"text_preview,omitempty"`
+	ImageURL      *string                           `json:"image_url,omitempty"`
+	ImageURLs     []string                          `json:"image_urls,omitempty"`
+	MealType      string                            `json:"meal_type,omitempty"`
+	RecordedOn    string                            `json:"recorded_on,omitempty"`
+	ResultSummary *analyzeservice.TaskResultSummary `json:"result_summary,omitempty"`
+	CreatedAt     *time.Time                        `json:"created_at,omitempty"`
+	UpdatedAt     *time.Time                        `json:"updated_at,omitempty"`
+}
+
+type AnalysisHistoryPage struct {
+	Items      []AnalysisHistoryItem `json:"items"`
+	HasMore    bool                  `json:"has_more"`
+	NextOffset int                   `json:"next_offset"`
+}
+
+func (s *Service) ListAnalyses(ctx context.Context, principal *domain.Principal, limit, offset int) (*AnalysisHistoryPage, error) {
+	if err := RequireScope(principal, ScopeFoodAnalyze); err != nil {
+		return nil, err
+	}
+	if limit <= 0 {
+		limit = 20
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	if offset < 0 {
+		return nil, &commonerrors.AppError{Code: 50002, Message: "offset 必须是非负整数", HTTPStatus: http.StatusBadRequest}
+	}
+	page, err := s.tasks.ListTaskSummariesPage(ctx, principal.App.ServiceUserID, "", "", limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	items := make([]AnalysisHistoryItem, 0, len(page.Tasks))
+	for _, task := range page.Tasks {
+		inputType := "image"
+		if strings.HasPrefix(task.TaskType, "food_text") || task.SourceType == "text" {
+			inputType = "text"
+		}
+		items = append(items, AnalysisHistoryItem{
+			TaskID: task.ID, Status: publicTaskSummaryStatus(task), InputType: inputType,
+			TextPreview: task.TextPreview, ImageURL: task.ImageURL, ImageURLs: task.ImagePaths,
+			MealType: task.MealType, RecordedOn: task.RecordedOn, ResultSummary: task.ResultSummary,
+			CreatedAt: task.CreatedAt, UpdatedAt: task.UpdatedAt,
+		})
+	}
+	logger.Info(ctx, "开放平台查询分析历史完成",
+		slog.String("open_api.app_id", principal.App.ID),
+		slog.Int("returned_count", len(items)),
+		slog.Int("next_offset", page.NextOffset),
+		slog.Bool("has_more", page.HasMore),
+	)
+	return &AnalysisHistoryPage{Items: items, HasMore: page.HasMore, NextOffset: page.NextOffset}, nil
+}
+
+type PublicFoodItem struct {
+	Name               string                             `json:"name"`
+	Weight             float64                            `json:"weight"`
+	Ratio              float64                            `json:"ratio"`
+	Intake             float64                            `json:"intake"`
+	GrossWeightGrams   float64                            `json:"gross_weight_grams,omitempty"`
+	EdiblePortionRatio float64                            `json:"edible_portion_ratio,omitempty"`
+	SuggestedRatio     *float64                           `json:"suggested_ratio,omitempty"`
+	WaterML            float64                            `json:"water_ml,omitempty"`
+	Nutrients          foodrecorddomain.FoodItemNutrients `json:"nutrients"`
+}
+
+type PublicFoodRecord struct {
+	ID               string           `json:"id"`
+	MealType         string           `json:"meal_type"`
+	ImageURLs        []string         `json:"image_urls,omitempty"`
+	Description      *string          `json:"description,omitempty"`
+	Insight          *string          `json:"insight,omitempty"`
+	Items            []PublicFoodItem `json:"items"`
+	TotalCalories    float64          `json:"total_calories"`
+	TotalProtein     float64          `json:"total_protein"`
+	TotalCarbs       float64          `json:"total_carbs"`
+	TotalFat         float64          `json:"total_fat"`
+	TotalWeightGrams int              `json:"total_weight_grams"`
+	DietGoal         *string          `json:"diet_goal,omitempty"`
+	ActivityTiming   *string          `json:"activity_timing,omitempty"`
+	EatingMood       *string          `json:"eating_mood,omitempty"`
+	PFCRatioComment  *string          `json:"pfc_ratio_comment,omitempty"`
+	AbsorptionNotes  *string          `json:"absorption_notes,omitempty"`
+	ContextAdvice    *string          `json:"context_advice,omitempty"`
+	RecordTime       *time.Time       `json:"record_time"`
+	CreatedAt        *time.Time       `json:"created_at"`
+}
+
+type PublicFoodRecordPage struct {
+	Records    []PublicFoodRecord `json:"records"`
+	HasMore    bool               `json:"has_more"`
+	NextOffset int                `json:"next_offset"`
+}
+
+func (s *Service) ListOwnerFoodRecords(ctx context.Context, principal *domain.Principal, occupancyDate string, limit, offset int) (*PublicFoodRecordPage, error) {
+	if err := RequireScope(principal, ScopeRecordsRead); err != nil {
+		return nil, err
+	}
+	ownerUserID, err := ownerUserID(principal)
+	if err != nil {
+		return nil, err
+	}
+	if s.records == nil {
+		return nil, openAPIUnavailable("饮食记录服务暂不可用")
+	}
+	if limit <= 0 {
+		limit = 20
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	if offset < 0 {
+		return nil, &commonerrors.AppError{Code: 50002, Message: "offset 必须是非负整数", HTTPStatus: http.StatusBadRequest}
+	}
+	records, hasMore, nextOffset, err := s.records.ListPage(ctx, ownerUserID, strings.TrimSpace(occupancyDate), limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]PublicFoodRecord, 0, len(records))
+	for _, record := range records {
+		imageURLs := append([]string(nil), record.ImagePaths...)
+		if len(imageURLs) == 0 && record.ImagePath != nil && strings.TrimSpace(*record.ImagePath) != "" {
+			imageURLs = []string{*record.ImagePath}
+		}
+		items := make([]PublicFoodItem, 0, len(record.Items))
+		for _, item := range record.Items {
+			items = append(items, PublicFoodItem{
+				Name: item.Name, Weight: item.Weight, Ratio: item.Ratio, Intake: item.Intake,
+				GrossWeightGrams: item.GrossWeightGrams, EdiblePortionRatio: item.EdiblePortionRatio,
+				SuggestedRatio: item.SuggestedRatio, WaterML: item.WaterMl, Nutrients: item.Nutrients,
+			})
+		}
+		result = append(result, PublicFoodRecord{
+			ID: record.ID, MealType: record.MealType, ImageURLs: imageURLs,
+			Description: record.Description, Insight: record.Insight, Items: items,
+			TotalCalories: record.TotalCalories, TotalProtein: record.TotalProtein,
+			TotalCarbs: record.TotalCarbs, TotalFat: record.TotalFat,
+			TotalWeightGrams: record.TotalWeightGrams, DietGoal: record.DietGoal,
+			ActivityTiming: record.ActivityTiming, EatingMood: record.EatingMood,
+			PFCRatioComment: record.PFCRatioComment, AbsorptionNotes: record.AbsorptionNotes,
+			ContextAdvice: record.ContextAdvice, RecordTime: record.RecordTime, CreatedAt: record.CreatedAt,
+		})
+	}
+	logger.Info(ctx, "开放平台查询本人饮食记录完成",
+		slog.String("open_api.app_id", principal.App.ID),
+		slog.String("user_id", ownerUserID),
+		slog.Int("returned_count", len(result)),
+	)
+	return &PublicFoodRecordPage{Records: result, HasMore: hasMore, NextOffset: nextOffset}, nil
+}
+
+func (s *Service) GetOwnerHealthSummary(ctx context.Context, principal *domain.Principal, statsRange string) (*healthservice.StatsSummary, error) {
+	if err := RequireScope(principal, ScopeHealthRead); err != nil {
+		return nil, err
+	}
+	ownerUserID, err := ownerUserID(principal)
+	if err != nil {
+		return nil, err
+	}
+	if s.stats == nil {
+		return nil, openAPIUnavailable("健康统计服务暂不可用")
+	}
+	statsRange = normalizeStatsRange(statsRange)
+	summary, err := s.stats.GetSummary(ctx, ownerUserID, statsRange, 2000, 0)
+	if err != nil {
+		return nil, err
+	}
+	logger.Info(ctx, "开放平台查询本人健康摘要完成",
+		slog.String("open_api.app_id", principal.App.ID),
+		slog.String("user_id", ownerUserID),
+		slog.String("stats.range", statsRange),
+	)
+	return summary, nil
 }
 
 func (s *Service) SearchNutrition(ctx context.Context, principal *domain.Principal, query string, limit int) ([]map[string]any, error) {
@@ -691,7 +891,12 @@ func (s *Service) requireOwnedApp(ctx context.Context, ownerUserID, appID string
 }
 
 func allowedScopes(values []string) []string {
-	allowed := map[string]bool{ScopeFoodAnalyze: true, ScopeFoodSearch: true}
+	allowed := map[string]bool{
+		ScopeFoodAnalyze: true,
+		ScopeFoodSearch:  true,
+		ScopeRecordsRead: true,
+		ScopeHealthRead:  true,
+	}
 	result := make([]string, 0, len(values))
 	for _, value := range normalizeStrings(values) {
 		if allowed[value] {
@@ -819,6 +1024,47 @@ func publicTaskStatus(task *analyzedomain.AnalysisTask) string {
 	}
 }
 
+func publicTaskSummaryStatus(task analyzeservice.TaskSummary) string {
+	switch task.Status {
+	case "pending":
+		return "queued"
+	case "processing":
+		return "processing"
+	case "done":
+		if task.UserActionRequired || task.PrecisionStatus == "needs_user_input" || task.PrecisionStatus == "needs_retake" {
+			return "requires_action"
+		}
+		return "completed"
+	default:
+		return "failed"
+	}
+}
+
+func ownerUserID(principal *domain.Principal) (string, error) {
+	if principal == nil {
+		return "", commonerrors.ErrUnauthorized
+	}
+	if principal.App.OwnerUserID == nil || strings.TrimSpace(*principal.App.OwnerUserID) == "" {
+		return "", &commonerrors.AppError{
+			Code: 50003, Message: "该应用未绑定开发者本人，不能读取个人健康数据", HTTPStatus: http.StatusForbidden,
+		}
+	}
+	return strings.TrimSpace(*principal.App.OwnerUserID), nil
+}
+
+func normalizeStatsRange(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "7d", "30d", "90d", "week", "month":
+		return strings.ToLower(strings.TrimSpace(value))
+	default:
+		return "week"
+	}
+}
+
+func openAPIUnavailable(message string) error {
+	return &commonerrors.AppError{Code: 50010, Message: message, HTTPStatus: http.StatusServiceUnavailable}
+}
+
 func sanitizeResult(input map[string]any) map[string]any {
 	if input == nil {
 		return nil
@@ -832,13 +1078,10 @@ func sanitizeResultValue(value any) any {
 	case map[string]any:
 		result := make(map[string]any, len(typed))
 		for key, item := range typed {
-			normalizedKey := strings.NewReplacer("-", "_", ".", "_").Replace(strings.ToLower(strings.TrimSpace(key)))
-			switch normalizedKey {
-			case "debug", "raw_response", "prompt", "prompt_version", "provider", "provider_metadata", "model", "model_name", "modelname", "analysis_engine", "analysisengine", "llm_metadata", "llm_provider", "llm_model", "fallback_provider", "fallback_model", "reasoning", "reasoning_content", "edible_portion_source", "edibleportionsource", "micronutrient_source":
+			if shouldRedactResultKey(key) {
 				continue
-			default:
-				result[key] = sanitizeResultValue(item)
 			}
+			result[key] = sanitizeResultValue(item)
 		}
 		return result
 	case []any:
@@ -857,6 +1100,27 @@ func sanitizeResultValue(value any) any {
 	default:
 		return value
 	}
+}
+
+func shouldRedactResultKey(key string) bool {
+	canonical := strings.Map(func(r rune) rune {
+		if r >= 'a' && r <= 'z' || r >= '0' && r <= '9' {
+			return r
+		}
+		if r >= 'A' && r <= 'Z' {
+			return r + ('a' - 'A')
+		}
+		return -1
+	}, strings.TrimSpace(key))
+	if canonical == "debug" || canonical == "rawresponse" || canonical == "edibleportionsource" || canonical == "micronutrientsource" {
+		return true
+	}
+	for _, fragment := range []string{"model", "provider", "prompt", "reasoning", "analysisengine", "llm"} {
+		if strings.Contains(canonical, fragment) {
+			return true
+		}
+	}
+	return false
 }
 
 func isRefundableTaskStatus(status string) bool {

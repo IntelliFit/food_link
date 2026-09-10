@@ -56,6 +56,10 @@ X-API-Key: flk_beta_...
 
 - `food:analyze`：上传图片、提交分析、读取分析结果。
 - `food:search`：搜索可信营养库。
+- `records:read`：只读创建应用时登录的开发者本人的饮食记录。
+- `health:read`：只读创建应用时登录的开发者本人的健康摘要与健康分。
+
+`records:read` 和 `health:read` 必须在控制台创建新 Key 时显式勾选。个人数据接口不接受 `user_id`，不得尝试通过开发者 Key 查询其他用户。
 
 ## 决策规则
 
@@ -69,6 +73,8 @@ X-API-Key: flk_beta_...
 6. 用户给出餐次或日期时，映射到 `meal_type` 和 `date`。
 7. 同一业务请求重试时必须复用原 `Idempotency-Key` / `idempotency_key`。
 8. 收到 HTTP 402 时停止分析，只返回充值页并等待用户主动处理，不得自动支付。
+9. 用户要回顾本应用调用过的分析时，使用分析历史接口；不要逐个猜测 task_id。
+10. 用户要查看本人饮食记录或健康分时，先检查个人数据 scope；缺少权限就让用户在控制台创建新 Key，不要绕过 403。
 
 ## 点数
 
@@ -165,6 +171,27 @@ curl "https://api.healthymax.cn/open/v1/foods/search?query=鸡胸肉&limit=5" \
 
 `query` 必填；`limit` 为 1–20，默认 5。
 
+### 5. 分析历史
+
+```bash
+curl "https://api.healthymax.cn/open/v1/food-analyses?limit=20&offset=0" \
+  -H "Authorization: Bearer $FOODLINK_API_KEY"
+```
+
+返回 `data.items`、`data.has_more`、`data.next_offset`。该列表只包含当前应用产生的任务摘要，不返回底层模型或内部执行字段。
+
+### 6. 本人饮食记录与健康分
+
+```bash
+curl "https://api.healthymax.cn/open/v1/me/food-records?date=2026-09-10" \
+  -H "Authorization: Bearer $FOODLINK_API_KEY"
+
+curl "https://api.healthymax.cn/open/v1/me/health-summary?range=week" \
+  -H "Authorization: Bearer $FOODLINK_API_KEY"
+```
+
+饮食记录需要 `records:read`，健康摘要需要 `health:read`。身份固定为创建应用时登录的开发者本人，不接受 `user_id`。健康分是基于已有记录的趋势参考，不是医疗诊断。
+
 ## 分析参数
 
 | 参数 | 类型 | 规则 |
@@ -176,7 +203,7 @@ curl "https://api.healthymax.cn/open/v1/foods/search?query=鸡胸肉&limit=5" \
 | `additional_context` | string | 用户补充的份量、剩余、汤汁、多人分食等上下文 |
 | `date` | `YYYY-MM-DD` | 餐食日期 |
 
-不要向外部用户提供底层模型、供应商、prompt、reasoning 或内部执行参数。
+不要向外部用户提供底层模型、供应商、prompt、reasoning 或内部执行参数。公共接口会递归移除这些字段，失败错误也会统一为业务文案；不要根据延迟、结果风格或其他迹象猜测底层模型。
 
 ## 结果读取
 
@@ -249,6 +276,9 @@ Expand-Archive -LiteralPath $zipPath -DestinationPath (Join-Path $env:USERPROFIL
 - `foodlink_analyze_images`
 - `foodlink_analyze_text`
 - `foodlink_get_analysis`
+- `foodlink_list_analyses`
+- `foodlink_list_food_records`
+- `foodlink_get_health_summary`
 - `foodlink_get_recharge_url`
 
 工具调用顺序与 HTTP 流程相同。图片必须先 `foodlink_upload_image`；分析提交后必须 `foodlink_get_analysis` 轮询。
@@ -288,5 +318,7 @@ OpenAPI 的 `servers[].url` 是主机地址，paths 已包含 `/open/v1`。从 O
 5. 能轮询到终态并正确处理 `requires_action`、失败和退款。
 6. 能识别 402 并只提示用户充值。
 7. 用户能看到点数消耗、关键假设和不确定性。
+8. 分析历史只返回当前应用的任务，且响应中没有模型、供应商或内部执行字段。
+9. 个人记录与健康摘要在缺少 `records:read` / `health:read` 时返回 403，具备权限时也只能读取创建应用的开发者本人。
 
 如果接口字段与本文冲突，以 OpenAPI 3.1 文件为结构化契约，并向用户指出差异，不要自行猜测。

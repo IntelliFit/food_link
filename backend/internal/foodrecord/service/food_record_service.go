@@ -561,9 +561,27 @@ func (s *FoodRecordService) activateInviteReward(ctx context.Context, userID, ac
 }
 
 func (s *FoodRecordService) List(ctx context.Context, userID, date string) ([]domain.FoodRecord, error) {
-	records, err := s.recordRepo.ListByUser(ctx, userID, date, 100)
+	records, _, _, err := s.ListPage(ctx, userID, date, 100, 0)
+	return records, err
+}
+
+func (s *FoodRecordService) ListPage(ctx context.Context, userID, date string, limit, offset int) ([]domain.FoodRecord, bool, int, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	records, err := s.recordRepo.ListByUserPage(ctx, userID, date, limit+1, offset)
 	if err != nil {
-		return nil, err
+		return nil, false, offset, err
+	}
+	hasMore := len(records) > limit
+	if hasMore {
+		records = records[:limit]
 	}
 
 	// Bulk hydrate image_paths
@@ -590,7 +608,7 @@ func (s *FoodRecordService) List(ctx context.Context, userID, date string) ([]do
 		s.hydrateRecordImages(ctx, &records[i])
 		s.hydrateRecordNutrientsFromTask(ctx, &records[i])
 	}
-	return records, nil
+	return records, hasMore, offset + len(records), nil
 }
 
 type EntryDistributionItem struct {

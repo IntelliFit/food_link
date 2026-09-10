@@ -9,12 +9,17 @@ describe('developer docs page', () => {
     for (const expected of [
       '/open/v1/uploads',
       '/open/v1/food-analyses',
+      '/me/food-records',
+      '/me/health-summary',
       'image_urls',
       'additional_context',
       'meal_type',
       'precision',
       '/open/v1/foods/search',
       'foodlink_analyze_images',
+      'foodlink_list_analyses',
+      'foodlink_list_food_records',
+      'foodlink_get_health_summary',
       'Idempotency-Key',
       'HTTP 402',
       '第一个应用赠送 100 点',
@@ -28,6 +33,9 @@ describe('developer docs page', () => {
       '下载官方 MCP',
       '不是 OpenAPI 中的远程 endpoint',
       '文字请求无论 mode 均固定 2 点',
+      'records:read',
+      'health:read',
+      '模型隔离',
     ]) expect(html).toContain(expected)
     expect(html).not.toContain('查看机器可读 OpenAPI')
   })
