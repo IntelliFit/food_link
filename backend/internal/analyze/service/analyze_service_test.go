@@ -539,7 +539,7 @@ func TestResolveModelConfig(t *testing.T) {
 
 	p, m = resolveModelConfig("qwen3.6-flash")
 	assert.Equal(t, "qwen", p)
-	assert.Equal(t, "qwen3.8-flash", m)
+	assert.Equal(t, "qwen3.6-flash", m)
 
 	p, m = resolveModelConfig("gpt-5.4-mini:stable")
 	assert.Equal(t, "openai", p)
@@ -4196,6 +4196,50 @@ func TestApplyDBFirstToItemsFallsBackToLibraryWhenNoIngredientLabel(t *testing.T
 	assert.Equal(t, "database", items[0]["nutrition_source_category"])
 	nutrients := items[0]["nutrients"].(map[string]any)
 	assert.Equal(t, 104.0, nutrients["calories"])
+}
+
+func TestCalibrateCountedProduceUnitWeightCapsPlainPeachWithoutStrongEvidence(t *testing.T) {
+	tests := []struct {
+		name       string
+		foodName   string
+		unitWeight float64
+		item       map[string]any
+		wantWeight float64
+		wantCapped bool
+	}{
+		{
+			name:       "plain peach is capped",
+			foodName:   "水蜜桃",
+			unitWeight: 260,
+			item:       map[string]any{"weightEvidence": "根据图片目测"},
+			wantWeight: 180,
+			wantCapped: true,
+		},
+		{
+			name:       "scale evidence keeps measured peach weight",
+			foodName:   "桃子",
+			unitWeight: 260,
+			item:       map[string]any{"weightEvidence": "电子秤显示260g"},
+			wantWeight: 260,
+			wantCapped: false,
+		},
+		{
+			name:       "kiwifruit is not treated as peach",
+			foodName:   "猕猴桃",
+			unitWeight: 220,
+			item:       map[string]any{},
+			wantWeight: 220,
+			wantCapped: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotWeight, gotCapped := calibrateCountedProduceUnitWeight(tt.foodName, tt.unitWeight, tt.item)
+			assert.Equal(t, tt.wantWeight, gotWeight)
+			assert.Equal(t, tt.wantCapped, gotCapped)
+		})
+	}
 }
 
 func floatPtr(v float64) *float64 {

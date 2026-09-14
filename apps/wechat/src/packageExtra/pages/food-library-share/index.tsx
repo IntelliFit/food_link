@@ -87,6 +87,7 @@ function FoodLibrarySharePage() {
   const sourceRecordId = routerParams?.source_record_id;
   const quickUploadMode = routerParams?.quick_upload === "1";
   const campusMode = routerParams?.campus_mode === "1";
+  const mapLightingMode = routerParams?.map_light === "1";
   const editId = routerParams?.edit_id || "";
   const isEditMode = Boolean(editId);
 
@@ -793,6 +794,13 @@ function FoodLibrarySharePage() {
     if (finalFoodName !== foodName.trim()) {
       setFoodName(finalFoodName);
     }
+    if (
+      mapLightingMode &&
+      (isHomemade || latitude == null || longitude == null)
+    ) {
+      Taro.showToast({ title: "请先选择商家位置", icon: "none" });
+      return;
+    }
     if (isCampusFood) {
       if (!isCampusMember) {
         Taro.showToast({ title: "校园食堂为会员专属", icon: "none" });
@@ -832,6 +840,8 @@ function FoodLibrarySharePage() {
         ? "确定保存对这份食物的修改吗？"
         : isCampusFood
           ? "确定发布这份校园食堂菜品吗？提交后会自动出现在校园食堂分区。"
+          : mapLightingMode
+            ? "确定点亮这家美食吗？发布后，其他用户可以在美食地图上发现它。"
           : quickUploadMode
             ? "确定上传到公共食物库吗？审核通过后其他用户即可查看。"
             : "确定要将该食物分享到公共食物库吗？提交后需经系统审核，通过后其他用户可查看。",
@@ -1005,6 +1015,15 @@ function FoodLibrarySharePage() {
           </Text>
         </View>
       )}
+      {mapLightingMode && (
+        <View className='map-lighting-tip'>
+          <View className='map-lighting-tip__icon'><Text>✦</Text></View>
+          <View className='map-lighting-tip__copy'>
+            <Text className='map-lighting-tip__title'>点亮一家真实吃过的美食</Text>
+            <Text className='map-lighting-tip__subtitle'>上传餐食并选择商家位置，它就会出现在附近美食地图上。</Text>
+          </View>
+        </View>
+      )}
 
       {/* 选择来源 */}
       {!quickUploadMode && !sourceRecordId && !isEditMode && (
@@ -1120,12 +1139,14 @@ function FoodLibrarySharePage() {
         <View className='form-item'>
           <Text className='form-label'>餐食来源</Text>
           <View className='source-tag-row'>
-            <View
-              className={`source-tag-chip ${isHomemade ? "active" : ""}`}
-              onClick={() => handleSetHomemade(true)}
-            >
-              自制
-            </View>
+            {!mapLightingMode && (
+              <View
+                className={`source-tag-chip ${isHomemade ? "active" : ""}`}
+                onClick={() => handleSetHomemade(true)}
+              >
+                自制
+              </View>
+            )}
             <View
               className={`source-tag-chip ${!isHomemade ? "active" : ""}`}
               onClick={() => handleSetHomemade(false)}
@@ -1412,7 +1433,7 @@ function FoodLibrarySharePage() {
       <View className='location-section'>
         <View className='location-title-row'>
           <Text className='section-title'>
-            {isHomemade ? "所在地区（可选）" : "商家地址（可选）"}
+            {isHomemade ? "所在地区（可选）" : mapLightingMode ? "商家位置（点亮地图必填）" : "商家地址（可选）"}
           </Text>
           {!isHomemade && (
             <View
@@ -1436,7 +1457,9 @@ function FoodLibrarySharePage() {
                   ? locatingHomemadeCity
                     ? "正在定位所在城市..."
                     : "可选填所在省市"
-                  : "可选择城市/区域，也可直接跳过"}
+                  : mapLightingMode
+                    ? "请点击右上角“搜索地址”选择位置"
+                    : "可选择城市/区域，也可直接跳过"}
             </Text>
           </View>
         </View>
@@ -1479,6 +1502,8 @@ function FoodLibrarySharePage() {
             <View className='btn-spinner' />
           ) : isEditMode ? (
             "保存修改"
+          ) : mapLightingMode ? (
+            "点亮这家美食"
           ) : (
             "分享到公共库"
           )}

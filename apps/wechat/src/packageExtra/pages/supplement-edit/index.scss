@@ -16,6 +16,8 @@
 .supplement-field:last-child { border-bottom: none; }
 .supplement-field-label { width: 132rpx; flex-shrink: 0; font-size: 24rpx; color: #65746f; }
 .supplement-field input { flex: 1; font-size: 26rpx; text-align: right; }
+.supplement-field-unit { flex-shrink: 0; font-size: 24rpx; color: #65746f; }
+.supplement-dose-preview { display: block; margin-top: 18rpx; padding: 16rpx 18rpx; border-radius: 16rpx; font-size: 22rpx; line-height: 34rpx; color: #34745f; background: #edf8f4; }
 .supplement-section-head, .supplement-switch-row { display: flex; align-items: center; justify-content: space-between; }
 .supplement-switch-copy { min-width: 0; flex: 1; padding-right: 20rpx; }
 .supplement-count { padding: 6rpx 12rpx; border-radius: 999rpx; font-size: 21rpx; color: #398267; background: #edf7f3; }
@@ -45,4 +47,5 @@
 @keyframes supplementSpin { to { transform: rotate(360deg); } }
 .fl-d .supplement-edit-page { color: #eef7f3; background: #111b18; }
 .fl-d .supplement-form-card, .fl-d .supplement-component-card, .fl-d .supplement-picker, .fl-d .supplement-inline-field, .fl-d .supplement-amount-row input { background: #1c2925; }
+.fl-d .supplement-dose-preview { color: #7ed5b5; background: #233a32; }
 .fl-d .supplement-save-dock { background: rgb(17 27 24 / 94%); }

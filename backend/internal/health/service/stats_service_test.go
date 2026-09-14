@@ -262,6 +262,13 @@ func (m *mockStatsRepo) CountInsightGenerationsToday(ctx context.Context, userID
 }
 
 func (m *mockStatsRepo) UpsertCustomFocusCard(ctx context.Context, card domain.CustomFocusCard) error {
+	for i := range m.customFocusCards {
+		if m.customFocusCards[i].UserID == card.UserID && m.customFocusCards[i].RangeType == card.RangeType && m.customFocusCards[i].FocusID == card.FocusID {
+			m.customFocusCards[i] = card
+			return nil
+		}
+	}
+	m.customFocusCards = append(m.customFocusCards, card)
 	return nil
 }
 
@@ -270,6 +277,12 @@ func (m *mockStatsRepo) GetCustomFocusCards(ctx context.Context, userID, rangeTy
 }
 
 func (m *mockStatsRepo) GetCustomFocusCard(ctx context.Context, userID, rangeType, focusID string) (*domain.CustomFocusCard, error) {
+	for i := range m.customFocusCards {
+		card := &m.customFocusCards[i]
+		if card.UserID == userID && card.RangeType == rangeType && card.FocusID == focusID {
+			return card, nil
+		}
+	}
 	return nil, nil
 }
 
@@ -812,6 +825,77 @@ func TestStatsService_StreamNutritionInsightMapsQwenThinkingStrength(t *testing.
 	}
 }
 
+func TestStatsService_StreamNutritionInsightBuildsMultimodalQwenRequest(t *testing.T) {
+	imageURL := "https://cdn-food-images.example.com/pet-chat/meal.jpg"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+		assert.Equal(t, true, body["vl_high_resolution_images"])
+		messages, ok := body["messages"].([]any)
+		require.True(t, ok)
+		require.Len(t, messages, 1)
+		message, ok := messages[0].(map[string]any)
+		require.True(t, ok)
+		content, ok := message["content"].([]any)
+		require.True(t, ok)
+		require.Len(t, content, 2)
+		imagePart, ok := content[0].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "image_url", imagePart["type"])
+		imagePayload, ok := imagePart["image_url"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, imageURL, imagePayload["url"])
+		textPart, ok := content[1].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "text", textPart["type"])
+		assert.Equal(t, "看看这顿饭", textPart["text"])
+
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("data: {\"choices\":[{\"delta\":{\"content\":\"看到了\"},\"finish_reason\":\"\"}]}\n\ndata: [DONE]\n\n"))
+	}))
+	defer server.Close()
+
+	svc := NewStatsService(&mockStatsRepo{}, &mockBodyMetricsProvider{})
+	textChan, err := svc.streamNutritionInsight(context.Background(), server.URL, "test-key", statsInsightPreferredModel, "看看这顿饭", petChatMaxTokens, false, imageURL)
+	require.NoError(t, err)
+	var content strings.Builder
+	for chunk := range textChan {
+		content.WriteString(chunk)
+	}
+	assert.Equal(t, "看到了", content.String())
+}
+
+func TestStatsService_NormalizePetChatInputAcceptsOwnedImageAndDefaultsQuestion(t *testing.T) {
+	svc := NewStatsService(&mockStatsRepo{}, &mockBodyMetricsProvider{}, &config.Config{
+		Storage: config.StorageConfig{CDNFoodImagesBaseURL: "https://cdn-food-images.example.com/uploads"},
+	})
+
+	input, err := svc.normalizePetChatInput(PetChatInput{
+		ImageURLs: []string{
+			"https://cdn-food-images.example.com/uploads/user-1/meal.jpg",
+			"https://cdn-food-images.example.com/uploads/user-1/meal.jpg",
+		},
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, petChatDefaultImageQuestion, input.Question)
+	assert.Equal(t, []string{"https://cdn-food-images.example.com/uploads/user-1/meal.jpg"}, input.ImageURLs)
+}
+
+func TestStatsService_NormalizePetChatInputRejectsForeignImage(t *testing.T) {
+	svc := NewStatsService(&mockStatsRepo{}, &mockBodyMetricsProvider{}, &config.Config{
+		Storage: config.StorageConfig{CDNFoodImagesBaseURL: "https://cdn-food-images.example.com"},
+	})
+
+	_, err := svc.normalizePetChatInput(PetChatInput{
+		Question:  "看看这张图",
+		ImageURLs: []string{"https://foreign.example.com/meal.jpg"},
+	})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "图片地址无效")
+}
+
 func TestStatsService_GenerateDietRecommendationUsesConfiguredDeepSeekBaseURL(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/chat/completions", r.URL.Path)
@@ -929,7 +1013,7 @@ func TestBuildPetChatPromptIncludesExerciseContext(t *testing.T) {
 				{Date: "06-13", Title: "跑步机慢跑", DurationMin: 40, CaloriesBurned: 320},
 			},
 		},
-	}, "我最近健身状态为什么有点掉", nil)
+	}, "我最近健身状态为什么有点掉", nil, 0)
 
 	assert.Contains(t, prompt, "训练/运动记录")
 	assert.Contains(t, prompt, "共记录 3 次训练，分布在 2 天")
@@ -949,7 +1033,7 @@ func TestBuildPetChatPromptRequiresGentleTone(t *testing.T) {
 			Personality: "沉稳专注、表达清楚，重视长期规律",
 			Feature:     "重视阴阳平衡、动静结合",
 		},
-	}, "给我一个明天能执行的小目标", nil)
+	}, "给我一个明天能执行的小目标", nil, 0)
 
 	assert.Contains(t, prompt, "你的名字：\n太极小子")
 	assert.Contains(t, prompt, "沉稳专注、表达清楚")
@@ -1145,6 +1229,42 @@ func TestStatsService_GeneratePetChatRetriesTransientUpstreamFailure(t *testing.
 	assert.Contains(t, result.Answer, "明天午餐")
 }
 
+func TestStatsService_GeneratePetChatPersistsMultimodalMessageMetadata(t *testing.T) {
+	imageURL := "https://cdn-food-images.example.com/pet-chat/user-1/meal.jpg"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+		assert.Equal(t, statsInsightPreferredModel, body["model"])
+		messages, ok := body["messages"].([]any)
+		require.True(t, ok)
+		first, ok := messages[0].(map[string]any)
+		require.True(t, ok)
+		_, isMultimodal := first["content"].([]any)
+		assert.True(t, isMultimodal)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"这是一份有主食和蔬菜的午餐，可以再确认蛋白质份量。"},"finish_reason":"stop"}]}`))
+	}))
+	defer server.Close()
+
+	recordTime := time.Date(2026, 9, 8, 12, 0, 0, 0, time.Local)
+	repo := &mockStatsRepo{records: []domain.FoodRecord{{
+		UserID: "u1", MealType: "lunch", TotalCalories: 500, TotalProtein: 20, TotalCarbs: 60, TotalFat: 15, RecordTime: &recordTime,
+	}}}
+	svc := NewStatsService(repo, &mockBodyMetricsProvider{}, &config.Config{
+		External: config.ExternalConfig{DashScopeAPIKey: "qwen-key", DashScopeBaseURL: server.URL},
+		Storage:  config.StorageConfig{CDNFoodImagesBaseURL: "https://cdn-food-images.example.com"},
+	})
+
+	result, err := svc.GeneratePetChat(context.Background(), "u1", PetChatInput{
+		Range: "week", Question: "这顿饭搭配得怎么样？", ImageURLs: []string{imageURL},
+	})
+
+	require.NoError(t, err)
+	assert.Contains(t, result.Answer, "主食和蔬菜")
+	require.Len(t, repo.petChatMessages, 2)
+	assert.Equal(t, []string{imageURL}, repo.petChatMessages[0].Meta["image_urls"])
+}
+
 func TestStatsService_GenerateInsightReturnsErrorWhenDeepSeekTruncates(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var body map[string]any
@@ -1329,7 +1449,7 @@ func TestStatsService_GetSummaryUsesCachedInsightFingerprint(t *testing.T) {
 			UserID:          "u1",
 			RangeType:       "week",
 			GeneratedDate:   time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, chinaTZ),
-			DataFingerprint: "500_500.0_1_17.6_52.7_29.7_fiber=0.0|sodiumMg=0.0|potassiumMg=0.0|calciumMg=0.0|ironMg=0.0|vitaminARaeMcg=0.0|vitaminCMg=0.0|vitaminDMcg=0.0_profile:none_exercise:none",
+			DataFingerprint: "500_500.0_1_17.6_52.7_29.7_fiber=0.0|sodiumMg=0.0|potassiumMg=0.0|calciumMg=0.0|ironMg=0.0|vitaminARaeMcg=0.0|vitaminCMg=0.0|vitaminDMcg=0.0_profile:none_body:none_exercise:none",
 			InsightText:     "cached insight",
 		}},
 	}
@@ -1359,9 +1479,13 @@ func TestStatsHealthProfileIncludesRoutineLabelAndCustomText(t *testing.T) {
 	text := formatStatsHealthProfile(user, nil)
 	assert.Contains(t, text, "作息习惯：标准作息")
 	assert.Contains(t, text, "23:00")
+	previousFingerprint := statsProfileFingerprint(user)
 
 	user.HealthCondition["routine_type"] = "00:30 睡，08:30 起"
 	text = formatStatsHealthProfile(user, nil)
 	assert.Contains(t, text, "作息习惯：00:30 睡，08:30 起")
-	assert.Contains(t, statsProfileFingerprint(user), "00:30 睡")
+	currentFingerprint := statsProfileFingerprint(user)
+	assert.NotEqual(t, previousFingerprint, currentFingerprint)
+	assert.NotContains(t, currentFingerprint, "00:30 睡")
+	assert.Contains(t, currentFingerprint, "profile:")
 }

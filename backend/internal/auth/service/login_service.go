@@ -27,6 +27,7 @@ const (
 	loginEarlyUserTop500Limit     = 500
 	loginEarlyUserTop500TrialDays = 60
 	loginEarlyUserTrialDays       = 30
+	wechatUpstreamRequestTimeout  = 4 * time.Second
 
 	defaultUserAvatarKey        = "_system/default_avatar.jpg"
 	defaultWechatNicknamePrefix = "微信用户_"
@@ -77,6 +78,7 @@ type ResetPasswordInput struct {
 var (
 	ErrPasswordResetFailed      = errors.New("手机号或验证码错误，无法重置密码")
 	ErrPasswordResetUnavailable = errors.New("密码重置暂时不可用，请稍后重试")
+	ErrWechatLoginUnavailable   = errors.New("微信登录服务暂时繁忙，请稍后重试")
 )
 
 type LoginOutput struct {
@@ -98,6 +100,7 @@ type LoginService struct {
 	users             *repo.UserRepo
 	jwt               *JWTService
 	phoneCodeVerifier PhoneCodeVerifier
+	wechatHTTPClient  *http.Client
 }
 
 type PhoneCodeVerifier interface {
@@ -105,7 +108,12 @@ type PhoneCodeVerifier interface {
 }
 
 func NewLoginService(cfg *config.Config, users *repo.UserRepo, jwt *JWTService) *LoginService {
-	return &LoginService{cfg: cfg, users: users, jwt: jwt}
+	return &LoginService{
+		cfg:              cfg,
+		users:            users,
+		jwt:              jwt,
+		wechatHTTPClient: &http.Client{Timeout: wechatUpstreamRequestTimeout},
+	}
 }
 
 func (s *LoginService) ConfigurePhoneCodeVerifier(verifier PhoneCodeVerifier) {
@@ -113,6 +121,11 @@ func (s *LoginService) ConfigurePhoneCodeVerifier(verifier PhoneCodeVerifier) {
 }
 
 func (s *LoginService) Login(ctx context.Context, input LoginInput) (*LoginOutput, error) {
+	startedAt := time.Now()
+	logger.Info(ctx, "微信小程序登录开始",
+		slog.Bool("phone_code_present", strings.TrimSpace(input.PhoneCode) != ""),
+		slog.Bool("invite_code_present", strings.TrimSpace(input.InviteCode) != ""),
+	)
 	var openID, unionID string
 	testOpenID := strings.TrimSpace(input.TestOpenID)
 	if testOpenID != "" && s.cfg.App.Env == "development" {
@@ -120,10 +133,21 @@ func (s *LoginService) Login(ctx context.Context, input LoginInput) (*LoginOutpu
 	} else {
 		oid, uid, err := s.users.ExchangeCode(ctx, s.cfg.WechatMiniProgramAppID(), s.cfg.WechatMiniProgramAppSecret(), strings.TrimSpace(input.Code))
 		if err != nil {
+			logger.Warn(ctx, "微信小程序登录换取会话失败",
+				slog.Int64("duration_ms", time.Since(startedAt).Milliseconds()),
+				slog.Bool("upstream_unavailable", errors.Is(err, repo.ErrWechatUpstreamUnavailable)),
+			)
+			if errors.Is(err, repo.ErrWechatUpstreamUnavailable) {
+				return nil, ErrWechatLoginUnavailable
+			}
 			return nil, err
 		}
 		openID = oid
 		unionID = uid
+		logger.Info(ctx, "微信小程序登录会话换取完成",
+			slog.Int64("duration_ms", time.Since(startedAt).Milliseconds()),
+			slog.Bool("has_unionid", strings.TrimSpace(unionID) != ""),
+		)
 	}
 
 	loginMethod := "wechat_miniprogram"
@@ -148,7 +172,16 @@ func (s *LoginService) Login(ctx context.Context, input LoginInput) (*LoginOutpu
 		}
 	}
 
-	return s.issueLoginOutput(user, openID, unionID)
+	out, err := s.issueLoginOutput(user, openID, unionID)
+	if err != nil {
+		return nil, err
+	}
+	logger.Info(ctx, "微信小程序登录完成",
+		slog.String("user_id", out.UserID),
+		slog.Int64("duration_ms", time.Since(startedAt).Milliseconds()),
+		slog.Bool("has_phone_number", out.PurePhoneNumber != nil || out.PhoneNumber != nil),
+	)
+	return out, nil
 }
 
 func (s *LoginService) LoginWithAppWechat(ctx context.Context, input AppWechatLoginInput) (*LoginOutput, error) {
@@ -713,7 +746,7 @@ func (s *LoginService) resolvePhoneNumber(ctx context.Context, phoneCode string)
 		return nil
 	}
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := s.wechatClient().Do(req)
 	if err != nil {
 		return nil
 	}
@@ -742,7 +775,7 @@ func (s *LoginService) getWechatAccessToken(ctx context.Context) (string, error)
 		return "", err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := s.wechatClient().Do(req)
 	if err != nil {
 		return "", err
 	}
@@ -755,6 +788,13 @@ func (s *LoginService) getWechatAccessToken(ctx context.Context) (string, error)
 		return token, nil
 	}
 	return "", fmt.Errorf("access_token empty")
+}
+
+func (s *LoginService) wechatClient() *http.Client {
+	if s != nil && s.wechatHTTPClient != nil {
+		return s.wechatHTTPClient
+	}
+	return &http.Client{Timeout: wechatUpstreamRequestTimeout}
 }
 
 func (s *LoginService) ensureRegistrationInviteCode(ctx context.Context, userID string) error {

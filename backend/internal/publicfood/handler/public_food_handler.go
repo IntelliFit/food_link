@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"log/slog"
 	"strconv"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 	"food_link/backend/internal/publicfood/domain"
 	"food_link/backend/internal/publicfood/repo"
 	"food_link/backend/internal/publicfood/service"
+	"food_link/backend/pkg/logger"
 
 	"github.com/gin-gonic/gin"
 )
@@ -144,6 +146,8 @@ func (h *PublicFoodHandler) Create(c *gin.Context) {
 }
 
 func (h *PublicFoodHandler) List(c *gin.Context) {
+	ctx := c.Request.Context()
+	userID := c.GetString(authmw.ContextUserIDKey)
 	filter := repo.ListFilter{
 		City:         c.Query("city"),
 		Keyword:      c.Query("keyword"),
@@ -166,6 +170,11 @@ func (h *PublicFoodHandler) List(c *gin.Context) {
 			filter.SuitableForFatLoss = &v
 		}
 	}
+	if raw := c.Query("has_location"); raw != "" {
+		if v, err := strconv.ParseBool(raw); err == nil {
+			filter.HasLocation = &v
+		}
+	}
 	if raw := c.Query("is_campus_food"); raw != "" {
 		if v, err := strconv.ParseBool(raw); err == nil {
 			filter.IsCampusFood = &v
@@ -186,11 +195,23 @@ func (h *PublicFoodHandler) List(c *gin.Context) {
 			filter.MaxCalories = &v
 		}
 	}
-	items, err := h.svc.List(c.Request.Context(), c.GetString(authmw.ContextUserIDKey), filter)
+	requestAttrs := []slog.Attr{
+		slog.String("user_id", userID),
+		slog.String("food.type", filter.Type),
+		slog.String("sort_by", filter.SortBy),
+		slog.Int("limit", filter.Limit),
+		slog.Bool("has_keyword", filter.Keyword != ""),
+	}
+	if filter.HasLocation != nil {
+		requestAttrs = append(requestAttrs, slog.Bool("has_location", *filter.HasLocation))
+	}
+	logger.Info(ctx, "收到公共食物库查询请求", requestAttrs...)
+	items, err := h.svc.List(ctx, userID, filter)
 	if err != nil {
 		response.Error(c, err)
 		return
 	}
+	logger.Info(ctx, "公共食物库查询完成", append(requestAttrs, slog.Int("item_count", len(items)))...)
 	response.Success(c, gin.H{"list": items})
 }
 

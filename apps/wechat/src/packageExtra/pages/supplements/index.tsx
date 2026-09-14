@@ -11,6 +11,7 @@ import {
 } from '../../../utils/api'
 import { HOME_DASHBOARD_REFRESH_EVENT } from '../../../utils/home-events'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
+import { formatSupplementDose } from '../../../utils/supplements'
 import { FlPageThemeRoot } from '../../../components/FlPageThemeRoot'
 
 import './index.scss'
@@ -140,7 +141,7 @@ export default function SupplementsPage() {
                       <View className='supplement-bottle'><Text className='iconfont icon-yiliaohangyedeICON-' /></View>
                       <View className='supplement-copy'>
                         <Text className='supplement-name'>{item.name}</Text>
-                        <Text className='supplement-meta'>{item.serving_label} · {scheduleText(item)}</Text>
+                        <Text className='supplement-meta'>每次 {formatSupplementDose(item.default_servings, item.serving_label)} · {scheduleText(item)} · 可调整</Text>
                         <Text className='supplement-components'>{item.components.slice(0, 3).map((c) => c.name).join(' · ') || '待补充成分'}</Text>
                       </View>
                     </View>
@@ -164,7 +165,7 @@ export default function SupplementsPage() {
                 <View key={item.id} className='supplement-history-card'>
                   <View>
                     <Text className='supplement-name'>{item.supplement_name}</Text>
-                    <Text className='supplement-meta'>{item.servings} × {item.serving_label} · {new Date(item.taken_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</Text>
+                    <Text className='supplement-meta'>{formatSupplementDose(item.servings, item.serving_label)} · {new Date(item.taken_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</Text>
                   </View>
                   <View className='supplement-delete' onClick={() => void removeIntake(item.id)}><Text>删除</Text></View>
                 </View>

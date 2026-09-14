@@ -53,6 +53,7 @@ type StatsService interface {
 	GenerateInsight(ctx context.Context, userID string, dateRange string, tdee int, streakDays int) (map[string]any, error)
 	SaveInsight(ctx context.Context, userID string, content string, dateRange string) error
 	GenerateCustomFocusCard(ctx context.Context, userID, statsRange, focusID string) (*service.RiskCard, map[string]any, error)
+	StartCustomFocusCardGeneration(ctx context.Context, userID, statsRange, focusID string) (*service.CustomFocusGenerationTask, error)
 	GenerateDietRecommendation(ctx context.Context, userID string, input service.DietRecommendationInput) (*service.DietRecommendationResult, error)
 }
 
@@ -348,17 +349,66 @@ func (h *HealthHandler) GenerateCustomFocusCard(c *gin.Context) {
 		return
 	}
 	userID := c.GetString(authmw.ContextUserIDKey)
+	logger.Info(c.Request.Context(), "兼容版自定义健康关注更新请求进入",
+		logger.UserID(userID),
+		slog.String("focus_id", strings.TrimSpace(body.FocusID)),
+		slog.String("range", strings.TrimSpace(body.Range)),
+	)
 	card, meta, err := h.stats.GenerateCustomFocusCard(c.Request.Context(), userID, body.Range, body.FocusID)
 	if err != nil {
+		logger.Warn(c.Request.Context(), "兼容版自定义健康关注更新失败",
+			logger.UserID(userID),
+			slog.String("focus_id", strings.TrimSpace(body.FocusID)),
+			logger.Err(err),
+		)
 		response.Error(c, err)
 		return
 	}
+	logger.Info(c.Request.Context(), "兼容版自定义健康关注更新完成",
+		logger.UserID(userID),
+		slog.String("focus_id", strings.TrimSpace(body.FocusID)),
+		slog.Int("score", card.Score),
+	)
 	response.Success(c, gin.H{
 		"card":                         card,
 		"custom_focus_daily_limit":     meta["custom_focus_daily_limit"],
 		"custom_focus_used_today":      meta["custom_focus_used_today"],
 		"custom_focus_remaining_today": meta["custom_focus_remaining_today"],
 	})
+}
+
+// POST /api/stats/custom-focus/tasks
+func (h *HealthHandler) StartCustomFocusCardGeneration(c *gin.Context) {
+	var body struct {
+		Range   string `json:"range"`
+		FocusID string `json:"focus_id"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		response.Error(c, err)
+		return
+	}
+	userID := c.GetString(authmw.ContextUserIDKey)
+	logger.Info(c.Request.Context(), "自定义健康关注更新请求进入",
+		logger.UserID(userID),
+		slog.String("focus_id", strings.TrimSpace(body.FocusID)),
+		slog.String("range", strings.TrimSpace(body.Range)),
+	)
+	task, err := h.stats.StartCustomFocusCardGeneration(c.Request.Context(), userID, body.Range, body.FocusID)
+	if err != nil {
+		logger.Warn(c.Request.Context(), "自定义健康关注更新任务提交失败",
+			logger.UserID(userID),
+			slog.String("focus_id", strings.TrimSpace(body.FocusID)),
+			logger.Err(err),
+		)
+		response.Error(c, err)
+		return
+	}
+	logger.Info(c.Request.Context(), "自定义健康关注更新任务提交完成",
+		logger.UserID(userID),
+		slog.String("task_id", task.TaskID),
+		slog.String("focus_id", strings.TrimSpace(body.FocusID)),
+	)
+	response.Success(c, task)
 }
 
 // POST /api/diet/recommendations

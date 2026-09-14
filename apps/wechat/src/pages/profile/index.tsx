@@ -533,6 +533,7 @@ function ProfilePage() {
 
           // 健康指数免责声明已读标记
           Taro.removeStorageSync('health_disclaimer_dismissed')
+          Taro.removeStorageSync('stats_custom_focus_pending_tasks_v1')
 
           // 底部导航栏 badge 计数
           Taro.removeStorageSync('profile_tab_badge_count')

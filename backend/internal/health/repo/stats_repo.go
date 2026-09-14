@@ -11,6 +11,7 @@ import (
 	"food_link/backend/internal/health/domain"
 
 	"github.com/google/uuid"
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -598,12 +599,16 @@ func normalizeDietRecommendationItems(items []map[string]any, source string, sou
 }
 
 func (r *StatsRepo) UpsertCustomFocusCard(ctx context.Context, card domain.CustomFocusCard) error {
+	meta := card.Meta
+	if meta == nil {
+		meta = map[string]any{}
+	}
 	row := map[string]any{
 		"id":               card.ID,
 		"user_id":          card.UserID,
 		"focus_id":         card.FocusID,
 		"range_type":       card.RangeType,
-		"generated_date":   card.GeneratedDate,
+		"generated_date":   card.GeneratedDate.In(time.FixedZone("Asia/Shanghai", 8*60*60)).Format("2006-01-02"),
 		"data_fingerprint": card.DataFingerprint,
 		"focus_label":      card.FocusLabel,
 		"score":            card.Score,
@@ -611,6 +616,7 @@ func (r *StatsRepo) UpsertCustomFocusCard(ctx context.Context, card domain.Custo
 		"summary":          card.Summary,
 		"basis":            card.Basis,
 		"action":           card.Action,
+		"meta":             datatypes.JSONMap(meta),
 		"created_at":       time.Now().UTC(),
 	}
 	if card.ID == "" {
@@ -625,7 +631,7 @@ func (r *StatsRepo) UpsertCustomFocusCard(ctx context.Context, card domain.Custo
 				{Name: "focus_id"},
 			},
 			DoUpdates: clause.AssignmentColumns([]string{
-				"generated_date", "data_fingerprint", "focus_label", "score", "brief", "summary", "basis", "action", "created_at",
+				"generated_date", "data_fingerprint", "focus_label", "score", "brief", "summary", "basis", "action", "meta", "created_at",
 			}),
 		}).
 		Create(row).Error

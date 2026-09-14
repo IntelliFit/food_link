@@ -3,6 +3,7 @@ package handler
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -73,6 +74,13 @@ func TestLoginHandler_LoginBindError(t *testing.T) {
 	var resp map[string]any
 	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	assert.Equal(t, "请求参数无效", resp["detail"])
+}
+
+func TestLoginHandlerWechatUnavailableResponse(t *testing.T) {
+	status, detail := loginErrorResponse(fmt.Errorf("code2session: %w", service.ErrWechatLoginUnavailable))
+
+	assert.Equal(t, http.StatusServiceUnavailable, status)
+	assert.Equal(t, "微信登录服务暂时繁忙，请稍后重试", detail)
 }
 
 func TestLoginHandler_ResetPasswordBindError(t *testing.T) {

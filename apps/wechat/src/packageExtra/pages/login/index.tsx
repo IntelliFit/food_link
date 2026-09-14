@@ -25,6 +25,7 @@ import { shouldShowProfileFormFromApiUser } from '../../../utils/new-user-onboar
 import { resolveRegistrationNickname, buildDefaultWechatNickname } from '../../../utils/default-user-profile'
 import { LOGIN_LOGO_URL } from '../../../utils/static-asset-cdn-url'
 import { clearPendingFriendInviteCode, readPendingFriendInviteCode } from '../../../utils/pending-friend-invite'
+import { loginWithFreshWechatCodeRetry } from '../../../utils/wechat-login-retry'
 import './index.scss'
 
 const { useEffect, useRef, useState } = React
@@ -481,7 +482,17 @@ export default function LoginPage() {
                 finalInviteCode: inviteCode,
                 routerParams: router.params,
             })
-            const loginData: LoginResponse = await login(loginRes.code, phoneCode, inviteCode)
+            const loginData: LoginResponse = await loginWithFreshWechatCodeRetry({
+                initialCode: loginRes.code,
+                request: (code) => login(code, phoneCode, inviteCode),
+                getFreshCode: async () => {
+                    logLoginStage('api-login-retry-start', {
+                        duration_ms: Date.now() - loadingStartedAtRef.current,
+                    })
+                    const retryLoginRes = await Taro.login()
+                    return retryLoginRes.code || ''
+                },
+            })
             logLoginStage('api-login-resolved', {
                 duration_ms: Date.now() - loadingStartedAtRef.current,
                 has_phone_number: Boolean(loginData.purePhoneNumber || loginData.phoneNumber),

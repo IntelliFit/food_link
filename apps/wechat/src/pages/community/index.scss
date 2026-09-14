@@ -1962,7 +1962,7 @@ $feed-body-font-size: 30rpx;
 }
 
 .feed-image {
-  background: linear-gradient(152.3deg, #d1fae5 0%, #a7f3d0 50%, #6ee7b7 100%);
+  background: #111827;
   border-radius: 8rpx;
   height: 384rpx;
   display: flex;
@@ -2261,6 +2261,31 @@ $comment-body-font-size: 28rpx;
   font-size: 20rpx;
   color: #6b7280;
   background: rgb(0 0 0 / 5%);
+}
+
+.comment-delete-action {
+  flex: 0 0 auto;
+  min-width: 64rpx;
+  min-height: 44rpx;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-left: 12rpx;
+}
+
+.comment-delete-text {
+  font-size: 22rpx;
+  line-height: 34rpx;
+  color: #ef4444;
+}
+
+.comment-delete-spinner {
+  width: 24rpx;
+  height: 24rpx;
+  border: 3rpx solid rgb(239 68 68 / 22%);
+  border-top-color: #ef4444;
+  border-radius: 50%;
+  animation: community-comment-spin 0.85s linear infinite;
 }
 
 .feed-comments-more {
@@ -2825,7 +2850,7 @@ $comment-body-font-size: 28rpx;
   height: 220rpx;
   border-radius: 16rpx;
   overflow: hidden;
-  background: #f3f4f6;
+  background: #111827;
 }
 
 .feed-circle-post-image {

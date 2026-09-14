@@ -117,6 +117,26 @@ describe('streamGeneratePetChat', () => {
     expect(onDone).toHaveBeenCalledWith(expect.objectContaining({ session_id: 'session-campus' }))
   })
 
+  it('includes uploaded image URLs in the multimodal stream request', () => {
+    request.mockReturnValue({
+      onChunkReceived: jest.fn(),
+      abort: jest.fn(),
+    })
+    const imageURLs = ['https://cdn-food-images.example.com/pet-chat/meal.jpg']
+
+    streamGeneratePetChat('看看这顿饭', 'week', 'session-1', false, {
+      onChunk: jest.fn(),
+      onDone: jest.fn(),
+      onError: jest.fn(),
+    }, false, imageURLs)
+
+    expect(request.mock.calls[0][0].data).toEqual(expect.objectContaining({
+      question: '看看这顿饭',
+      session_id: 'session-1',
+      image_urls: imageURLs,
+    }))
+  })
+
   it('reports a synchronous request initialization failure instead of throwing', () => {
     request.mockImplementation(() => {
       throw new Error('request init failed')

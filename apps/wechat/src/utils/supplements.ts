@@ -11,6 +11,14 @@ export function cloneCatalogComponents(item: SupplementCatalogItem): SupplementC
   return (item.components || []).map((component) => ({ ...component }))
 }
 
+export function formatSupplementDose(defaultServings: number, servingLabel: string): string {
+  const servings = Number(defaultServings)
+  const normalizedServings = Number.isFinite(servings) && servings > 0 ? servings : 1
+  const normalizedLabel = servingLabel.trim() || '1份'
+  if (normalizedServings === 1) return normalizedLabel
+  return `${Number(normalizedServings.toFixed(3))} × ${normalizedLabel}`
+}
+
 export const SUPPLEMENT_NUTRIENT_OPTIONS = [
   { key: 'fiber', label: '膳食纤维', unit: 'g', ocr: 'fiber_per_100g' },
   { key: 'sugar', label: '糖', unit: 'g', ocr: 'sugar_per_100g' },

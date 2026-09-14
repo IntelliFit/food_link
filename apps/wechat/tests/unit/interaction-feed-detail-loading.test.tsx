@@ -1,10 +1,11 @@
-import { act, render } from '@testing-library/react'
+import { act, fireEvent, render } from '@testing-library/react'
 import Taro from '@tarojs/taro'
 
 import { InteractionFeedDetailPage } from '../../src/packageExtra/pages/interaction-feed-detail'
 import {
   communityGetComments,
   communityGetFeedContext,
+  communityDeleteComment,
   type CommunityFeedItem,
 } from '../../src/utils/api'
 
@@ -16,6 +17,7 @@ jest.mock('../../src/utils/withAuth', () => ({
 jest.mock('../../src/utils/api', () => ({
   communityGetComments: jest.fn(),
   communityGetFeedContext: jest.fn(),
+  communityDeleteComment: jest.fn(),
   communityLike: jest.fn(),
   communityPostComment: jest.fn(),
   communityUnlike: jest.fn(),
@@ -91,6 +93,10 @@ describe('InteractionFeedDetailPage loading', () => {
     ;(Taro.useDidShow as jest.Mock).mockImplementation(() => {})
     ;(communityGetFeedContext as jest.Mock).mockResolvedValue({ item: feedItem })
     ;(communityGetComments as jest.Mock).mockImplementation(() => new Promise(() => {}))
+    ;(communityDeleteComment as jest.Mock).mockResolvedValue({ deleted: 1 })
+    ;(Taro.getStorageSync as jest.Mock).mockImplementation((key: string) => key === 'user_id' ? 'user-2' : '')
+    ;(Taro.showModal as jest.Mock).mockResolvedValue({ confirm: true })
+    ;(Taro as any).previewImage = jest.fn()
   })
 
   afterEach(() => {
@@ -118,5 +124,64 @@ describe('InteractionFeedDetailPage loading', () => {
     expect(view.getByText('烤脆骨肉筋串')).toBeInTheDocument()
     expect(communityGetComments).toHaveBeenCalledWith('record-1', 'food_record')
     expect(view.container.querySelector('.interaction-feed-detail-loading-spinner')).not.toBeInTheDocument()
+  })
+
+  it('previews the selected image from a multi-image food record', async () => {
+    ;(communityGetFeedContext as jest.Mock).mockResolvedValue({
+      item: {
+        ...feedItem,
+        record: {
+          ...feedItem.record,
+          image_path: 'https://cdn.example.com/first.jpg',
+          image_paths: [
+            'https://cdn.example.com/first.jpg',
+            'https://cdn.example.com/second.jpg',
+          ],
+        },
+      },
+    })
+    const view = render(<InteractionFeedDetailPage />)
+
+    await act(async () => {
+      loadPage?.({ targetType: 'food_record', targetId: 'record-1', recordId: 'record-1' })
+      await Promise.resolve()
+    })
+    await act(async () => {
+      jest.advanceTimersByTime(80)
+      await Promise.resolve()
+    })
+
+    const images = view.container.querySelectorAll('.feed-circle-post-image')
+    expect(images).toHaveLength(2)
+    fireEvent.click(images[1].parentElement!)
+    expect((Taro as any).previewImage).toHaveBeenCalledWith({
+      current: 'https://cdn.example.com/second.jpg',
+      urls: [
+        'https://cdn.example.com/first.jpg',
+        'https://cdn.example.com/second.jpg',
+      ],
+    })
+  })
+
+  it('lets the comment author delete a comment from the detail page', async () => {
+    const view = render(<InteractionFeedDetailPage />)
+
+    await act(async () => {
+      loadPage?.({ targetType: 'food_record', targetId: 'record-1', recordId: 'record-1' })
+      await Promise.resolve()
+    })
+    await act(async () => {
+      jest.advanceTimersByTime(80)
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      fireEvent.click(view.getByText('删除'))
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(communityDeleteComment).toHaveBeenCalledWith('record-1', 'comment-1', 'food_record')
+    expect(view.queryByText('看着真香')).not.toBeInTheDocument()
   })
 })

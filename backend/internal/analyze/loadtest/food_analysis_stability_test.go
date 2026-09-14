@@ -73,6 +73,7 @@ type requestResult struct {
 	totalDuration       time.Duration
 	processingStartedAt *time.Time
 	completedAt         *time.Time
+	itemCount           int
 	calories            float64
 	err                 error
 }
@@ -267,6 +268,7 @@ func runFoodAnalysisOnce(ctx context.Context, cfg loadConfig, imageURL string, i
 	}
 	task := pollResult.task
 	result.status = task.Status
+	result.itemCount = extractItemCount(task.Result)
 	result.calories = extractCalories(task.Result)
 	result.processingStartedAt = pollResult.processingStartedAt
 	result.completedAt = task.UpdatedAt
@@ -282,10 +284,18 @@ func runFoodAnalysisOnce(ctx context.Context, cfg loadConfig, imageURL string, i
 			result.processDuration = 0
 		}
 	}
-	if task.Status != "done" {
-		result.err = fmt.Errorf("task ended with status=%s error=%s", task.Status, task.ErrorMessage)
-	}
+	result.err = validateCompletedAnalysisTask(task)
 	return result
+}
+
+func validateCompletedAnalysisTask(task analysisTaskResponse) error {
+	if task.Status != "done" {
+		return fmt.Errorf("task ended with status=%s error=%s", task.Status, task.ErrorMessage)
+	}
+	if extractItemCount(task.Result) == 0 {
+		return fmt.Errorf("task ended with status=done but result.items is empty")
+	}
+	return nil
 }
 
 func uploadAnalyzeImageFile(ctx context.Context, baseURL, token string, imageBytes []byte, filename string) (string, error) {
@@ -610,8 +620,8 @@ func summarizeFoodAnalysisLoad(t *testing.T, results []requestResult, sharedUplo
 				result.index+1, result.userTokenIndex+1, result.status, result.taskID, result.submitDuration, result.queueDuration, result.processDuration, result.taskDuration, result.totalDuration, result.err)
 			continue
 		}
-		t.Logf("#%02d token=%02d status=%s task=%s submit=%s queue=%s processing=%s task_wait=%s total=%s calories=%.1f",
-			result.index+1, result.userTokenIndex+1, result.status, result.taskID, result.submitDuration, result.queueDuration, result.processDuration, result.taskDuration, result.totalDuration, result.calories)
+		t.Logf("#%02d token=%02d status=%s task=%s submit=%s queue=%s processing=%s task_wait=%s total=%s items=%d calories=%.1f",
+			result.index+1, result.userTokenIndex+1, result.status, result.taskID, result.submitDuration, result.queueDuration, result.processDuration, result.taskDuration, result.totalDuration, result.itemCount, result.calories)
 	}
 }
 
@@ -725,6 +735,42 @@ func extractCalories(result map[string]any) float64 {
 		return total
 	}
 	return 0
+}
+
+func extractItemCount(result map[string]any) int {
+	items, ok := result["items"].([]any)
+	if !ok {
+		return 0
+	}
+	count := 0
+	for _, item := range items {
+		if _, ok := item.(map[string]any); ok {
+			count++
+		}
+	}
+	return count
+}
+
+func TestFoodAnalysisResultContractRejectsEmptyDoneTask(t *testing.T) {
+	tests := []struct {
+		name    string
+		task    analysisTaskResponse
+		wantErr bool
+	}{
+		{name: "missing items", task: analysisTaskResponse{Status: "done", Result: map[string]any{}}, wantErr: true},
+		{name: "empty items", task: analysisTaskResponse{Status: "done", Result: map[string]any{"items": []any{}}}, wantErr: true},
+		{name: "invalid item type", task: analysisTaskResponse{Status: "done", Result: map[string]any{"items": []any{"rice"}}}, wantErr: true},
+		{name: "valid item", task: analysisTaskResponse{Status: "done", Result: map[string]any{"items": []any{map[string]any{"name": "米饭"}}}}, wantErr: false},
+		{name: "failed task", task: analysisTaskResponse{Status: "failed", ErrorMessage: "模型失败"}, wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateCompletedAnalysisTask(tt.task)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("validateCompletedAnalysisTask() error=%v, wantErr=%t", err, tt.wantErr)
+			}
+		})
+	}
 }
 
 func toFloat64(value any) (float64, bool) {

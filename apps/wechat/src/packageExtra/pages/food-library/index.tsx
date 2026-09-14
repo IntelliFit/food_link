@@ -1,5 +1,5 @@
-import { View, Text, ScrollView, Image, Input, Button } from '@tarojs/components'
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { View, Text, ScrollView, Image, Input, Button, Map } from '@tarojs/components'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import Taro, { useDidShow, useRouter } from '@tarojs/taro'
 import { withAuth } from '../../../utils/withAuth'
 import {
@@ -21,6 +21,11 @@ import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
 import { FlPageThemeRoot } from '../../../components/FlPageThemeRoot'
+import {
+  buildFoodMapSpots,
+  formatFoodMapDistance,
+  type FoodMapLocation,
+} from './food-map'
 
 // 缓存键名常量
 const CACHE_KEYS = {
@@ -33,7 +38,10 @@ const CACHE_KEYS = {
 const CACHE_DURATION = 5 * 60 * 1000
 
 type TabMode = 'all' | 'campus' | 'collections' | 'mine'
+type ViewMode = 'map' | 'list'
 const RECORD_TEXT_LIBRARY_SELECTION_KEY = 'record_text_library_selection'
+const DEFAULT_MAP_LOCATION: FoodMapLocation = { latitude: 39.9042, longitude: 116.4074 }
+const FOOD_MAP_MARKER_ICON = '/assets/icons/food-map-marker.png'
 
 function campusLocation(item: PublicFoodLibraryItem): string {
   const parts = item.campus_location_text
@@ -57,14 +65,46 @@ function isCampusFoodItem(item: PublicFoodLibraryItem): boolean {
   return item.type === 'campus' || !!item.is_campus_food
 }
 
+function foodMapTitle(item: PublicFoodLibraryItem): string {
+  return item.food_name || item.description || '一份好味道'
+}
+
+function foodMapPlace(item: PublicFoodLibraryItem): string {
+  return item.merchant_name
+    || item.canteen_name
+    || item.campus_location_text
+    || item.detail_address
+    || item.merchant_address
+    || 'FoodLink 用户点亮'
+}
+
+function foodMapAddress(item: PublicFoodLibraryItem): string {
+  return item.detail_address
+    || item.merchant_address
+    || item.campus_location_text
+    || [item.city, item.district, item.merchant_name].filter(Boolean).join(' ')
+}
+
+function foodMapImage(item: PublicFoodLibraryItem): string {
+  return item.image_path || item.image_paths?.[0] || ''
+}
+
 function FoodLibraryPage() {
   const { scheme } = useAppColorScheme()
   const router = useRouter()
   const fromRecord = router.params.from === 'record'
   const [loggedIn, setLoggedIn] = useState(!!getAccessToken())
   const [tabMode, setTabMode] = useState<TabMode>('all')
+  const [viewMode, setViewMode] = useState<ViewMode>(fromRecord ? 'list' : 'map')
   const [loading, setLoading] = useState(false)
   const [list, setList] = useState<PublicFoodLibraryItem[]>([])
+  const [mapList, setMapList] = useState<PublicFoodLibraryItem[]>([])
+  const [mapLoading, setMapLoading] = useState(false)
+  const [mapLocating, setMapLocating] = useState(false)
+  const [mapCenter, setMapCenter] = useState<FoodMapLocation>(DEFAULT_MAP_LOCATION)
+  const [mapScale, setMapScale] = useState(14)
+  const [userLocation, setUserLocation] = useState<FoodMapLocation | null>(null)
+  const [selectedMapSpotKey, setSelectedMapSpotKey] = useState('')
   const [campusList, setCampusList] = useState<PublicFoodLibraryItem[]>([])
   const [campusLoading, setCampusLoading] = useState(false)
   const [collectionList, setCollectionList] = useState<PublicFoodLibraryItem[]>([])
@@ -82,9 +122,43 @@ function FoodLibraryPage() {
   const [isFirstLoad, setIsFirstLoad] = useState(true)
   const [showSkeleton, setShowSkeleton] = useState(false)
   const lastRefreshTime = useRef<number>(0)
+  const mapLoadedRef = useRef(false)
   const touchStartX = useRef(0)
   const touchStartY = useRef(0)
   const currentUserId = String(Taro.getStorageSync('user_id') || '').trim()
+  const mapSpots = useMemo(() => buildFoodMapSpots(mapList, userLocation), [mapList, userLocation])
+  const selectedMapSpot = useMemo(
+    () => mapSpots.find(spot => spot.key === selectedMapSpotKey) || null,
+    [mapSpots, selectedMapSpotKey],
+  )
+  const nearbySpotCount = useMemo(
+    () => mapSpots.filter(spot => spot.distanceKm != null && spot.distanceKm <= 10).length,
+    [mapSpots],
+  )
+  const mapMarkers = useMemo(() => mapSpots.map((spot, index) => ({
+    id: index + 1,
+    latitude: spot.latitude,
+    longitude: spot.longitude,
+    iconPath: FOOD_MAP_MARKER_ICON,
+    width: selectedMapSpotKey === spot.key ? 52 : 44,
+    height: selectedMapSpotKey === spot.key ? 52 : 44,
+    zIndex: selectedMapSpotKey === spot.key ? 10 : 2,
+    anchor: { x: 0.5, y: 1 },
+    callout: {
+      content: `${foodMapPlace(spot.featuredItem)}${spot.items.length > 1 ? ` · ${spot.items.length} 道` : ''}`,
+      color: '#153129',
+      fontSize: 12,
+      anchorX: 0,
+      anchorY: -4,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: '#d5eee4',
+      bgColor: '#ffffff',
+      padding: 8,
+      display: selectedMapSpotKey === spot.key ? 'ALWAYS' as const : 'BYCLICK' as const,
+      textAlign: 'center' as const,
+    },
+  })), [mapSpots, selectedMapSpotKey])
 
   /**
    * 从缓存加载数据
@@ -263,6 +337,65 @@ function FoodLibraryPage() {
     }
   }, [])
 
+  /** 加载可上图的公共餐食，并同时尝试定位到用户附近。 */
+  const loadMapList = useCallback(async (force = false) => {
+    if (!getAccessToken()) return
+    if (!force && mapLoadedRef.current) return
+    mapLoadedRef.current = true
+    setMapLoading(true)
+    setMapLocating(true)
+    try {
+      const [foodResult, locationResult] = await Promise.allSettled([
+        getPublicFoodLibraryList({ has_location: true, sort_by: 'hot', limit: 100 }),
+        Taro.getLocation({ type: 'gcj02' }),
+      ])
+
+      if (foodResult.status === 'rejected') throw foodResult.reason
+      const mappedItems = foodResult.value.list || []
+      setMapList(mappedItems)
+
+      if (locationResult.status === 'fulfilled') {
+        const location = {
+          latitude: locationResult.value.latitude,
+          longitude: locationResult.value.longitude,
+        }
+        setUserLocation(location)
+        setMapCenter(location)
+        setMapScale(15)
+      } else {
+        const firstMappedItem = mappedItems.find(item => item.latitude != null && item.longitude != null)
+        if (firstMappedItem) {
+          setMapCenter({
+            latitude: Number(firstMappedItem.latitude),
+            longitude: Number(firstMappedItem.longitude),
+          })
+        }
+      }
+    } catch (e: any) {
+      mapLoadedRef.current = false
+      await showUnifiedApiError(e, '获取美食地图失败')
+    } finally {
+      setMapLoading(false)
+      setMapLocating(false)
+    }
+  }, [])
+
+  const locateMapAroundMe = useCallback(async () => {
+    setMapLocating(true)
+    try {
+      const result = await Taro.getLocation({ type: 'gcj02' })
+      const location = { latitude: result.latitude, longitude: result.longitude }
+      setUserLocation(location)
+      setMapCenter(location)
+      setMapScale(16)
+      setSelectedMapSpotKey('')
+    } catch (e: any) {
+      await showUnifiedApiError(e, '无法获取当前位置')
+    } finally {
+      setMapLocating(false)
+    }
+  }, [])
+
   /** 加载我的上传列表 */
   const loadMineList = useCallback(async (force = false) => {
     if (!getAccessToken()) return
@@ -296,6 +429,8 @@ function FoodLibraryPage() {
         loadCampusList(true)
       } else if (tabMode === 'mine') {
         loadMineList(true)
+      } else if (viewMode === 'map') {
+        loadMapList(true)
       } else {
         loadList(true, true)
       }
@@ -312,6 +447,10 @@ function FoodLibraryPage() {
     }
     if (tabMode === 'mine') {
       loadMineList(true)
+      return
+    }
+    if (viewMode === 'map') {
+      loadMapList(false)
       return
     }
 
@@ -347,14 +486,18 @@ function FoodLibraryPage() {
   useEffect(() => {
     if (!loggedIn) return
     if (tabMode === 'all') {
-      clearCache()
-      loadList(false, true)
+      if (viewMode === 'map') {
+        loadMapList(false)
+      } else {
+        clearCache()
+        loadList(false, true)
+      }
     } else if (tabMode === 'campus') {
       loadCampusList(false)
     } else if (tabMode === 'mine') {
       loadMineList(false)
     }
-  }, [loggedIn, tabMode])
+  }, [loggedIn, tabMode, viewMode])
 
   // 下拉刷新处理
   const handleRefresherRefresh = useCallback(() => {
@@ -499,6 +642,54 @@ function FoodLibraryPage() {
     Taro.navigateTo({ url: `${extraPkgUrl('/pages/food-library-detail/index')}?id=${itemId}` })
   }
 
+  const selectMapSpot = (markerId: number | string) => {
+    const spot = mapSpots[Number(markerId) - 1]
+    if (!spot) return
+    setSelectedMapSpotKey(spot.key)
+    setMapCenter({ latitude: spot.latitude, longitude: spot.longitude })
+    setMapScale(17)
+  }
+
+  const focusNearestMapSpot = () => {
+    const spot = mapSpots[0]
+    if (!spot) return
+    setSelectedMapSpotKey(spot.key)
+    setMapCenter({ latitude: spot.latitude, longitude: spot.longitude })
+    setMapScale(17)
+  }
+
+  const navigateToMapFood = async (item: PublicFoodLibraryItem) => {
+    if (item.latitude == null || item.longitude == null) return
+    try {
+      await Taro.openLocation({
+        latitude: Number(item.latitude),
+        longitude: Number(item.longitude),
+        name: foodMapPlace(item),
+        address: foodMapAddress(item),
+        scale: 18,
+      })
+    } catch (e: any) {
+      await showUnifiedApiError(e, '无法打开导航')
+    }
+  }
+
+  const searchMapFoodDelivery = async (item: PublicFoodLibraryItem) => {
+    const keyword = [item.merchant_name || item.canteen_name, foodMapTitle(item)]
+      .filter(Boolean)
+      .join(' ')
+    try {
+      await Taro.setClipboardData({ data: keyword })
+      await Taro.showModal({
+        title: '外卖关键词已复制',
+        content: `可打开常用外卖平台搜索“${keyword}”。后续接入官方跳转后，可以从这里直接下单。`,
+        showCancel: false,
+        confirmText: '知道了',
+      })
+    } catch (e: any) {
+      await showUnifiedApiError(e, '复制外卖关键词失败')
+    }
+  }
+
   const pickForRecord = (item: PublicFoodLibraryItem) => {
     const pickedText = item.food_name
       || item.description
@@ -517,6 +708,10 @@ function FoodLibraryPage() {
   // 跳转分享页
   const goShare = () => {
     Taro.navigateTo({ url: extraPkgUrl('/pages/food-contribution/index?focus=public') })
+  }
+
+  const goLightFood = () => {
+    Taro.navigateTo({ url: extraPkgUrl('/pages/food-library-share/index?task_mode=contribution&map_light=1') })
   }
 
   // 提交反馈
@@ -629,8 +824,32 @@ function FoodLibraryPage() {
         </View>
       </View>
 
+      {tabMode === 'all' && !fromRecord && (
+        <View className='discovery-header'>
+          <View className='discovery-copy'>
+            <Text className='discovery-eyebrow'>FOOD MAP</Text>
+            <Text className='discovery-title'>点亮美食</Text>
+            <Text className='discovery-subtitle'>看看附近被真实吃过的好味道</Text>
+          </View>
+          <View className='view-mode-switch'>
+            <View
+              className={`view-mode-option ${viewMode === 'map' ? 'active' : ''}`}
+              onClick={() => setViewMode('map')}
+            >
+              地图
+            </View>
+            <View
+              className={`view-mode-option ${viewMode === 'list' ? 'active' : ''}`}
+              onClick={() => setViewMode('list')}
+            >
+              列表
+            </View>
+          </View>
+        </View>
+      )}
+
       {/* 筛选区（仅全部时显示） */}
-      {tabMode === 'all' && (
+      {tabMode === 'all' && viewMode === 'list' && (
         <View className='filter-section'>
           <View className='search-row'>
             <View className='search-input-wrap'>
@@ -649,7 +868,7 @@ function FoodLibraryPage() {
       )}
 
       {/* 排序区（仅全部时显示） */}
-      {tabMode === 'all' && (
+      {tabMode === 'all' && viewMode === 'list' && (
         <View className='sort-section'>
           <View className='sort-left'>
             <View
@@ -679,7 +898,7 @@ function FoodLibraryPage() {
       )}
 
       {/* 筛选下拉面板 */}
-      {tabMode === 'all' && showFilterPanel && (
+      {tabMode === 'all' && viewMode === 'list' && showFilterPanel && (
         <View className='filter-dropdown-panel'>
           <View className='filter-dropdown-row'>
             <Text className='filter-dropdown-label'>类型</Text>
@@ -701,7 +920,106 @@ function FoodLibraryPage() {
         </View>
       )}
 
-      {/* 列表 */}
+      {tabMode === 'all' && viewMode === 'map' && !fromRecord ? (
+        <View className='food-map-experience'>
+          <View className='map-summary-bar'>
+            <View className='map-summary-copy'>
+              <Text className='map-summary-title'>
+                {userLocation ? `附近 ${nearbySpotCount} 个点亮地点` : `已点亮 ${mapSpots.length} 个地点`}
+              </Text>
+              <Text className='map-summary-meta'>全图共 {mapSpots.length} 个 · 点击标记看美食</Text>
+            </View>
+            <View className='map-locate-button' onClick={() => void locateMapAroundMe()}>
+              {mapLocating ? <View className='map-locate-spinner' /> : <Text className='iconfont icon-dizhi' />}
+              <Text>我附近</Text>
+            </View>
+          </View>
+          <View className='food-map-wrap'>
+            <Map
+              className='food-map'
+              latitude={mapCenter.latitude}
+              longitude={mapCenter.longitude}
+              scale={mapScale}
+              markers={mapMarkers}
+              showLocation
+              enableRotate={false}
+              enableOverlooking={false}
+              onMarkerTap={e => selectMapSpot(e.detail.markerId)}
+              onCallOutTap={e => selectMapSpot(e.detail.markerId)}
+              onError={() => {}}
+            />
+            {mapLoading && (
+              <View className='map-loading-mask'>
+                <View className='loading-spinner-md' />
+              </View>
+            )}
+
+            {!mapLoading && selectedMapSpot && (
+              <View className='map-food-sheet' onClick={() => goDetail(selectedMapSpot.featuredItem.id)}>
+                <View className='map-food-sheet-main'>
+                  <View className='map-food-sheet-image-wrap'>
+                    {foodMapImage(selectedMapSpot.featuredItem) ? (
+                      <Image className='map-food-sheet-image' src={foodMapImage(selectedMapSpot.featuredItem)} mode='aspectFill' />
+                    ) : (
+                      <View className='map-food-sheet-placeholder'><Text className='iconfont icon-shiwu' /></View>
+                    )}
+                    {selectedMapSpot.items.length > 1 && (
+                      <Text className='map-food-count'>{selectedMapSpot.items.length} 道</Text>
+                    )}
+                  </View>
+                  <View className='map-food-sheet-copy'>
+                    <Text className='map-food-sheet-title'>{foodMapTitle(selectedMapSpot.featuredItem)}</Text>
+                    <Text className='map-food-sheet-place'>{foodMapPlace(selectedMapSpot.featuredItem)}</Text>
+                    <View className='map-food-sheet-meta'>
+                      {selectedMapSpot.distanceKm != null && (
+                        <Text className='map-food-distance'>距你 {formatFoodMapDistance(selectedMapSpot.distanceKm)}</Text>
+                      )}
+                      <Text>{selectedMapSpot.featuredItem.total_calories.toFixed(0)} kcal</Text>
+                    </View>
+                  </View>
+                </View>
+                <View className='map-food-sheet-actions'>
+                  <View
+                    className='map-food-action map-food-action--secondary'
+                    onClick={(e) => { e.stopPropagation(); void searchMapFoodDelivery(selectedMapSpot.featuredItem) }}
+                  >
+                    搜外卖
+                  </View>
+                  <View
+                    className='map-food-action map-food-action--primary'
+                    onClick={(e) => { e.stopPropagation(); void navigateToMapFood(selectedMapSpot.featuredItem) }}
+                  >
+                    <Text className='iconfont icon-dizhi' />
+                    导航去吃
+                  </View>
+                </View>
+              </View>
+            )}
+
+            {!mapLoading && !selectedMapSpot && (
+              <View className='map-discovery-sheet'>
+                <View className='map-discovery-icon'><Text>✦</Text></View>
+                <View className='map-discovery-copy'>
+                  <Text className='map-discovery-title'>
+                    {mapSpots.length > 0 && (!userLocation || nearbySpotCount > 0)
+                      ? '点一个标记，看看这里有什么好吃的'
+                      : '附近还没有被点亮的美食'}
+                  </Text>
+                  <Text className='map-discovery-subtitle'>
+                    {mapSpots.length > 0 ? '可以看看已点亮地点，或成为第一个分享的人' : '拍下你吃过的一餐，让这张地图从这里亮起来'}
+                  </Text>
+                </View>
+                {mapSpots.length > 0 ? (
+                  <View className='map-discovery-button' onClick={focusNearestMapSpot}>看已点亮</View>
+                ) : (
+                  <View className='map-discovery-button' onClick={goLightFood}>点亮一家</View>
+                )}
+              </View>
+            )}
+          </View>
+        </View>
+      ) : (
+      /* 列表 */
       <ScrollView
         className='list-scroll'
         scrollY
@@ -886,10 +1204,18 @@ function FoodLibraryPage() {
           )}
         </View>
       </ScrollView>
+      )}
 
       {/* 浮动分享按钮 */}
-      <View className='fab-button' onClick={goShare}>
-        <Text className='fab-icon'>+</Text>
+      <View
+        className={`fab-button ${viewMode === 'map' && tabMode === 'all' && !fromRecord ? 'fab-button--map' : ''}`}
+        onClick={viewMode === 'map' && tabMode === 'all' && !fromRecord ? goLightFood : goShare}
+      >
+        {viewMode === 'map' && tabMode === 'all' && !fromRecord ? (
+          <><Text className='fab-spark'>✦</Text><Text className='fab-map-text'>点亮一家</Text></>
+        ) : (
+          <Text className='fab-icon'>+</Text>
+        )}
       </View>
     </View>
     </FlPageThemeRoot>

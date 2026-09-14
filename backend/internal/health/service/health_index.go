@@ -42,18 +42,26 @@ type SignalChip struct {
 
 // RiskCard 风险卡片
 type RiskCard struct {
-	Key          string `json:"key"`
-	Title        string `json:"title"`
-	Score        int    `json:"score"`
-	Tone         string `json:"tone"`
-	Brief        string `json:"brief"`
-	Summary      string `json:"summary"`
-	Basis        string `json:"basis"`
-	Action       string `json:"action"`
-	Delta        int    `json:"delta"`
-	IsCustom     bool   `json:"is_custom,omitempty"`
-	NeedsRefresh bool   `json:"needs_refresh,omitempty"`
-	FocusLabel   string `json:"focus_label,omitempty"`
+	Key             string   `json:"key"`
+	Title           string   `json:"title"`
+	Score           int      `json:"score"`
+	Tone            string   `json:"tone"`
+	Brief           string   `json:"brief"`
+	Summary         string   `json:"summary"`
+	Basis           string   `json:"basis"`
+	Action          string   `json:"action"`
+	Delta           int      `json:"delta"`
+	IsCustom        bool     `json:"is_custom,omitempty"`
+	NeedsRefresh    bool     `json:"needs_refresh,omitempty"`
+	FocusLabel      string   `json:"focus_label,omitempty"`
+	ScoreKind       string   `json:"score_kind,omitempty"`
+	Confidence      string   `json:"confidence,omitempty"`
+	ScoreReason     string   `json:"score_reason,omitempty"`
+	PreviousScore   *int     `json:"previous_score,omitempty"`
+	ScoreChange     *int     `json:"score_change,omitempty"`
+	ChangeReason    string   `json:"change_reason,omitempty"`
+	Evidence        []string `json:"evidence,omitempty"`
+	MissingEvidence []string `json:"missing_evidence,omitempty"`
 }
 
 // RiskOption 风险选项

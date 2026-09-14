@@ -1157,19 +1157,20 @@ type StatsInsightDO struct {
 func (StatsInsightDO) TableName() string { return "ai_stats_insights" }
 
 type CustomFocusCardDO struct {
-	ID              string     `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
-	UserID          string     `gorm:"column:user_id;type:uuid;not null;index:idx_ai_custom_focus_cards_user_range_focus,priority:1"`
-	FocusID         string     `gorm:"column:focus_id;type:text;not null;index:idx_ai_custom_focus_cards_user_range_focus,priority:3"`
-	RangeType       string     `gorm:"column:range_type;type:text;not null;index:idx_ai_custom_focus_cards_user_range_focus,priority:2"`
-	GeneratedDate   time.Time  `gorm:"column:generated_date;type:date;not null"`
-	DataFingerprint string     `gorm:"column:data_fingerprint;type:text;not null;default:''"`
-	FocusLabel      string     `gorm:"column:focus_label;type:text;not null;default:''"`
-	Score           int        `gorm:"column:score;type:integer;not null;default:0"`
-	Brief           string     `gorm:"column:brief;type:text;not null;default:''"`
-	Summary         string     `gorm:"column:summary;type:text;not null;default:''"`
-	Basis           string     `gorm:"column:basis;type:text;not null;default:''"`
-	Action          string     `gorm:"column:action;type:text;not null;default:''"`
-	CreatedAt       *time.Time `gorm:"column:created_at;type:timestamptz;default:now()"`
+	ID              string         `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	UserID          string         `gorm:"column:user_id;type:uuid;not null;index:idx_ai_custom_focus_cards_user_range_focus,priority:1"`
+	FocusID         string         `gorm:"column:focus_id;type:text;not null;index:idx_ai_custom_focus_cards_user_range_focus,priority:3"`
+	RangeType       string         `gorm:"column:range_type;type:text;not null;index:idx_ai_custom_focus_cards_user_range_focus,priority:2"`
+	GeneratedDate   time.Time      `gorm:"column:generated_date;type:date;not null"`
+	DataFingerprint string         `gorm:"column:data_fingerprint;type:text;not null;default:''"`
+	FocusLabel      string         `gorm:"column:focus_label;type:text;not null;default:''"`
+	Score           int            `gorm:"column:score;type:integer;not null;default:0"`
+	Brief           string         `gorm:"column:brief;type:text;not null;default:''"`
+	Summary         string         `gorm:"column:summary;type:text;not null;default:''"`
+	Basis           string         `gorm:"column:basis;type:text;not null;default:''"`
+	Action          string         `gorm:"column:action;type:text;not null;default:''"`
+	Meta            map[string]any `gorm:"column:meta;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
+	CreatedAt       *time.Time     `gorm:"column:created_at;type:timestamptz;default:now()"`
 }
 
 func (CustomFocusCardDO) TableName() string { return "ai_custom_focus_cards" }

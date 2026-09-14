@@ -18,6 +18,17 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestShouldUseCampusDietAgentSkipsMultimodalPetChat(t *testing.T) {
+	svc := NewStatsService(&mockStatsRepo{}, &mockBodyMetricsProvider{})
+
+	useAgent := svc.shouldUseCampusDietAgent(context.Background(), "user-1", PetChatInput{
+		Question:  "这张图里的午餐适合减脂吗？",
+		ImageURLs: []string{"https://cdn-food-images.example.com/pet-chat/meal.jpg"},
+	})
+
+	assert.False(t, useAgent)
+}
+
 func TestCampusDietAgentFunctionCallingQueriesContextAndFiveRealFoods(t *testing.T) {
 	candidates := campusDietAgentTestCandidates(6)
 	repo := &mockStatsRepo{

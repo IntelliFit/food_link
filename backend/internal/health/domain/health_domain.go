@@ -135,19 +135,20 @@ func (StatsInsight) TableName() string { return "ai_stats_insights" }
 
 // CustomFocusCard — table: ai_custom_focus_cards
 type CustomFocusCard struct {
-	ID              string     `gorm:"column:id"`
-	UserID          string     `gorm:"column:user_id"`
-	FocusID         string     `gorm:"column:focus_id"`
-	RangeType       string     `gorm:"column:range_type"`
-	GeneratedDate   time.Time  `gorm:"column:generated_date"`
-	DataFingerprint string     `gorm:"column:data_fingerprint"`
-	FocusLabel      string     `gorm:"column:focus_label"`
-	Score           int        `gorm:"column:score"`
-	Brief           string     `gorm:"column:brief"`
-	Summary         string     `gorm:"column:summary"`
-	Basis           string     `gorm:"column:basis"`
-	Action          string     `gorm:"column:action"`
-	CreatedAt       *time.Time `gorm:"column:created_at"`
+	ID              string         `gorm:"column:id"`
+	UserID          string         `gorm:"column:user_id"`
+	FocusID         string         `gorm:"column:focus_id"`
+	RangeType       string         `gorm:"column:range_type"`
+	GeneratedDate   time.Time      `gorm:"column:generated_date"`
+	DataFingerprint string         `gorm:"column:data_fingerprint"`
+	FocusLabel      string         `gorm:"column:focus_label"`
+	Score           int            `gorm:"column:score"`
+	Brief           string         `gorm:"column:brief"`
+	Summary         string         `gorm:"column:summary"`
+	Basis           string         `gorm:"column:basis"`
+	Action          string         `gorm:"column:action"`
+	Meta            map[string]any `gorm:"column:meta;serializer:json"`
+	CreatedAt       *time.Time     `gorm:"column:created_at"`
 }
 
 func (CustomFocusCard) TableName() string { return "ai_custom_focus_cards" }

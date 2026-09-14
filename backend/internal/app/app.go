@@ -370,6 +370,7 @@ func New(cfg *config.Config) (*App, error) {
 	exerciseSvc.ConfigureTaskPublisher(taskQueue)
 	exerciseSvc.ConfigureStorage(storageClient)
 	statsSvc := healthservice.NewStatsService(statsRepo, bodyMetricsSvc, cfg)
+	statsSvc.ConfigureCustomFocusTasks(analyzeTaskRepo, taskQueue)
 	communitySvc.ConfigureHealthScoreProvider(statsSvc)
 	openPlatformSvc.ConfigureUserData(frSvc, statsSvc)
 	healthHandler := healthhandler.NewHealthHandler(bodyMetricsSvc, exerciseSvc, statsSvc)
@@ -495,7 +496,7 @@ func New(cfg *config.Config) (*App, error) {
 		shutdownLog:   logShutdown,
 		taskQueue:     taskQueue,
 	}
-	app.startEmbeddedWorker(cfg, analyzeTaskRepo, analyzePrecisionRepo, publicFoodRepo, campusCatalogRepo, analyzeSvc, ocrSvc, healthDocRepo, userRepo, expiryRecognizer, expiryNotifier, exerciseSvc, frNutritionSvc, frSvc, membershipSvc, taskQueue, storageClient)
+	app.startEmbeddedWorker(cfg, analyzeTaskRepo, analyzePrecisionRepo, publicFoodRepo, campusCatalogRepo, analyzeSvc, ocrSvc, healthDocRepo, userRepo, expiryRecognizer, expiryNotifier, exerciseSvc, statsSvc, frNutritionSvc, frSvc, membershipSvc, taskQueue, storageClient)
 	if os.Getenv("FOOD_LINK_DISABLE_BACKGROUND_MAINTENANCE") != "1" {
 		app.startOpenPlatformReconciliation(openPlatformSvc)
 		app.startNutritionEmbeddingMaintenance(nutritionEmbeddingMaintainer)
@@ -685,6 +686,7 @@ func New(cfg *config.Config) (*App, error) {
 	engine.GET("/api/stats/summary", authmw.RequireJWT(jwtSvc), healthHandler.GetStatsSummary)
 	engine.GET("/api/stats/calendar", authmw.RequireJWT(jwtSvc), healthHandler.GetStatsCalendar)
 	engine.POST("/api/stats/custom-focus/generate", authmw.RequireJWT(jwtSvc), healthHandler.GenerateCustomFocusCard)
+	engine.POST("/api/stats/custom-focus/tasks", authmw.RequireJWT(jwtSvc), healthHandler.StartCustomFocusCardGeneration)
 	engine.POST("/api/stats/insight/generate", authmw.RequireJWT(jwtSvc), healthHandler.GenerateStatsInsight)
 	engine.POST("/api/stats/insight/save", authmw.RequireJWT(jwtSvc), healthHandler.SaveStatsInsight)
 	engine.POST("/api/diet/recommendations", authmw.RequireJWT(jwtSvc), healthHandler.GenerateDietRecommendation)
@@ -1049,6 +1051,7 @@ func (a *App) startEmbeddedWorker(
 	expiryRecognizer *expiryservice.Recognizer,
 	expiryNotifier *expiryservice.NotificationWorker,
 	exerciseSvc *healthservice.ExerciseService,
+	statsSvc *healthservice.StatsService,
 	nutritionSvc *foodrecordservice.FoodNutritionService,
 	foodRecordSvc *foodrecordservice.FoodRecordService,
 	membershipSvc *membershipservice.MembershipService,
@@ -1087,6 +1090,7 @@ func (a *App) startEmbeddedWorker(
 	runner.ConfigureCreditGuard(membershipSvc)
 	runner.ConfigureCampusCatalog(campusCatalogRepo)
 	runner.ConfigureAutoRecorder(foodRecordSvc)
+	runner.ConfigureCustomFocusProcessor(statsSvc)
 
 	workerCtx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})

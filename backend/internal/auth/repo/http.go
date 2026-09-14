@@ -3,12 +3,25 @@ package repo
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
+	"time"
+)
+
+const wechatUpstreamRequestTimeout = 4 * time.Second
+
+var (
+	ErrWechatUpstreamUnavailable = errors.New("微信服务暂时不可用")
+	wechatUpstreamHTTPClient     = &http.Client{Timeout: wechatUpstreamRequestTimeout}
 )
 
 func simpleJSONGet(ctx context.Context, endpoint string, params map[string]string, target any) error {
+	return simpleJSONGetWithClient(ctx, wechatUpstreamHTTPClient, endpoint, params, target)
+}
+
+func simpleJSONGetWithClient(ctx context.Context, client *http.Client, endpoint string, params map[string]string, target any) error {
 	reqURL, err := url.Parse(endpoint)
 	if err != nil {
 		return err
@@ -22,13 +35,19 @@ func simpleJSONGet(ctx context.Context, endpoint string, params map[string]strin
 	if err != nil {
 		return err
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
-		return err
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return ctxErr
+		}
+		return fmt.Errorf("%w: 网络请求失败", ErrWechatUpstreamUnavailable)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("unexpected status: %d", resp.StatusCode)
+		return fmt.Errorf("%w: HTTP %d", ErrWechatUpstreamUnavailable, resp.StatusCode)
 	}
-	return json.NewDecoder(resp.Body).Decode(target)
+	if err := json.NewDecoder(resp.Body).Decode(target); err != nil {
+		return fmt.Errorf("%w: 响应解析失败", ErrWechatUpstreamUnavailable)
+	}
+	return nil
 }

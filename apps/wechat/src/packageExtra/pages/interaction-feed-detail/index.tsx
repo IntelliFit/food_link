@@ -4,6 +4,7 @@ import Taro from '@tarojs/taro'
 import {
   communityGetComments,
   communityGetFeedContext,
+  communityDeleteComment,
   communityLike,
   communityPostComment,
   communityUnlike,
@@ -32,6 +33,8 @@ import {
   shouldRenderManualFoodCards,
   type ManualFoodSourceItem
 } from '../../../utils/manual-food-source'
+import { collectFoodDisplayImageUrls } from '../../../utils/food-display-image'
+import { formatFeedTime } from '../../../utils/feed-time'
 
 import './index.scss'
 
@@ -78,21 +81,6 @@ const DIET_GOAL_NAMES: Record<string, string> = {
   maintain: '维持'
 }
 
-function formatFeedTime(recordTime: string): string {
-  if (!recordTime) return ''
-  try {
-    const d = new Date(recordTime)
-    const now = new Date()
-    const diff = now.getTime() - d.getTime()
-    if (diff < 60000) return '刚刚'
-    if (diff < 3600000) return `${Math.floor(diff / 60000)}分钟前`
-    if (diff < 86400000) return `${Math.floor(diff / 3600000)}小时前`
-    return d.toLocaleDateString()
-  } catch {
-    return recordTime.slice(0, 16).replace('T', ' ')
-  }
-}
-
 type RouteOptions = Record<string, string | undefined>
 
 function pickRecordId(options: RouteOptions): string {
@@ -124,6 +112,20 @@ function isCirclePostFeed(item: CommunityFeedItem | null | undefined): boolean {
 
 function isCampusFoodFeed(item: CommunityFeedItem | null | undefined): boolean {
   return getFeedTargetType(item) === 'campus_food'
+}
+
+function buildCommentSubtreeIds(comments: FeedCommentItem[], rootId: string): Set<string> {
+  const ids = new Set<string>()
+  const stack = [rootId]
+  while (stack.length > 0) {
+    const id = stack.pop()!
+    if (ids.has(id)) continue
+    ids.add(id)
+    for (const comment of comments) {
+      if (String(comment.parent_comment_id || '') === id) stack.push(comment.id)
+    }
+  }
+  return ids
 }
 
 type MicroNutrientKey =
@@ -254,6 +256,7 @@ export function InteractionFeedDetailPage() {
   const [feedTextExpanded, setFeedTextExpanded] = useState<Record<string, boolean>>({})
   const [microsExpanded, setMicrosExpanded] = useState(false)
   const [manualFoodsExpanded, setManualFoodsExpanded] = useState(false)
+  const [deletingCommentIds, setDeletingCommentIds] = useState<Set<string>>(() => new Set())
   const likePendingRef = useRef(false)
   const INITIAL_VISIBLE_MANUAL_FOODS = 3
   const routeInitializationRef = useRef('')
@@ -465,6 +468,53 @@ export function InteractionFeedDetailPage() {
     }
   }, [feedItem, commentContent, submitting, replyTargetComment, closeComposer, loadDetail])
 
+  const handleDeleteComment = useCallback(async (comment: FeedCommentItem) => {
+    if (!feedItem || deletingCommentIds.has(comment.id)) return
+    const currentUserId = String(Taro.getStorageSync('user_id') || '')
+    if ((!currentUserId || comment.user_id !== currentUserId) && !feedItem.is_mine) return
+
+    const { confirm } = await Taro.showModal({
+      title: '删除评论',
+      content: '该评论及其回复将一并删除，删除后无法恢复',
+      confirmText: '删除',
+      cancelText: '取消',
+      confirmColor: '#ef4444',
+    })
+    if (!confirm) return
+
+    setDeletingCommentIds((current) => new Set(current).add(comment.id))
+    try {
+      const deletion = await communityDeleteComment(getFeedTargetId(feedItem), comment.id, getFeedTargetType(feedItem))
+      setFeedItem((current) => {
+        if (!current) return current
+        const comments = current.comments || []
+        const subtreeIds = buildCommentSubtreeIds(comments, comment.id)
+        const nextComments = comments.filter((row) => !subtreeIds.has(row.id))
+        return {
+          ...current,
+          comments: nextComments,
+          comment_count: Math.max(
+            0,
+            Number(current.comment_count || 0) - Math.max(comments.length - nextComments.length, Number(deletion.deleted || 0))
+          ),
+        }
+      })
+      setReplyTargetComment((current) => {
+        if (!current) return current
+        return buildCommentSubtreeIds(feedItem.comments || [], comment.id).has(current.id) ? null : current
+      })
+      Taro.showToast({ title: '已删除', icon: 'success' })
+    } catch (error) {
+      await showUnifiedApiError(error, '删除失败')
+    } finally {
+      setDeletingCommentIds((current) => {
+        const next = new Set(current)
+        next.delete(comment.id)
+        return next
+      })
+    }
+  }, [deletingCommentIds, feedItem])
+
   const highlightCommentId = useMemo(() => targetCommentId.trim(), [targetCommentId])
 
   const handleViewDetail = useCallback((id: string) => {
@@ -615,6 +665,9 @@ export function InteractionFeedDetailPage() {
 	                const manualFoodItems = isManualRecord ? extractManualFoodDisplayItems(feedItem.record.items) : []
 	                const useExerciseActivityCards = exercise && hasExerciseActivityCards(feedItem.record.exercise_items)
 	                const visibleManualFoodItems = manualFoodsExpanded ? manualFoodItems : manualFoodItems.slice(0, INITIAL_VISIBLE_MANUAL_FOODS)
+                    const detailImagePaths = !isManualRecord && !useExerciseActivityCards
+                      ? collectFoodDisplayImageUrls(feedItem.record)
+                      : []
                 return (
                   <View
                     id={`feed-card-${getFeedTargetType(feedItem)}-${getFeedTargetId(feedItem)}`}
@@ -668,25 +721,29 @@ export function InteractionFeedDetailPage() {
   onItemClick={() => handleViewDetail(feedItem.record.id)}
 	                      />
 	                    )}
-                    {feedItem.record.image_path && !isCirclePost ? (
-                      <View className='feed-image feed-tap-to-detail' onClick={() => handleViewDetail(feedItem.record.id)}>
-                        <Image src={feedItem.record.image_path} mode='aspectFill' className='feed-image-content' />
+                    {detailImagePaths.length === 1 ? (
+                      <View
+                        className='feed-image'
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          Taro.previewImage({ current: detailImagePaths[0], urls: detailImagePaths })
+                        }}
+                      >
+                        <Image src={detailImagePaths[0]} mode='aspectFit' className='feed-image-content' />
                       </View>
                     ) : null}
-                    {isCirclePost && (feedItem.record.image_paths || []).length > 0 && (
+                    {detailImagePaths.length > 1 && (
                       <View className='feed-circle-post-images'>
-                        {(feedItem.record.image_paths || []).map((url, idx) => (
+                        {detailImagePaths.map((url, idx) => (
                           <View
                             key={`detail-img-${idx}`}
                             className='feed-circle-post-image-item'
-                            onClick={() => {
-                              Taro.previewImage({
-                                current: url,
-                                urls: feedItem.record.image_paths || []
-                              })
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              Taro.previewImage({ current: url, urls: detailImagePaths })
                             }}
                           >
-                            <Image src={url} mode='aspectFill' className='feed-circle-post-image' />
+                            <Image src={url} mode='aspectFit' className='feed-circle-post-image' />
                           </View>
                         ))}
                       </View>
@@ -860,6 +917,24 @@ export function InteractionFeedDetailPage() {
                               </View>
                               <Text className='comment-content-text'>{c.content}</Text>
                             </View>
+                            {(() => {
+                              const currentUserId = String(Taro.getStorageSync('user_id') || '')
+                              const canDelete = (Boolean(currentUserId) && c.user_id === currentUserId) || Boolean(feedItem.is_mine)
+                              if (!canDelete) return null
+                              return (
+                                <View
+                                  className='comment-delete-action'
+                                  onClick={(event) => {
+                                    event.stopPropagation()
+                                    void handleDeleteComment(c)
+                                  }}
+                                >
+                                  {deletingCommentIds.has(c.id)
+                                    ? <View className='comment-delete-spinner' />
+                                    : <Text className='comment-delete-text'>删除</Text>}
+                                </View>
+                              )
+                            })()}
                           </View>
                         ))}
                       </View>

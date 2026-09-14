@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	stderrors "errors"
 	"fmt"
 	"hash/fnv"
 	"html"
@@ -35,6 +36,11 @@ import (
 // Wanjie catalogue does not, so provider and model must travel together.
 const PrecisionGeminiFlashRoute = "openlux:gemini-3.6-flash"
 
+// ErrEmptyFoodAnalysisResult marks a syntactically valid model response that
+// contains no usable food item. It must never cross the task boundary as done,
+// otherwise the client renders a misleading 0 kcal card.
+var ErrEmptyFoodAnalysisResult = stderrors.New("食物识别未返回有效食物，请重试")
+
 const (
 	defaultExecutionMode            = "standard"
 	standardWebSearchMode           = "standard_web_search"
@@ -56,6 +62,7 @@ const (
 	openLuxPrecisionGeminiRoute     = PrecisionGeminiFlashRoute
 	geminiPrimaryUpstream           = "primary"
 	geminiOpenLuxUpstream           = "openlux"
+	qwen36FlashModel                = "qwen3.6-flash"
 	qwen38FlashModel                = "qwen3.8-flash"
 	visionPrimaryTimeout            = 30 * time.Second
 	visionAlternateProviderTimeout  = 15 * time.Second
@@ -324,6 +331,28 @@ func tryGeminiVisionCall(ctx context.Context, stage, upstream, model, prompt str
 	defer cancel()
 	call := newAnalyzeWithImagesTemperatureModelCall(client, prompt, imageURLs, temperature, model)
 	return analyzeWithJSONParseRetryPolicy(callCtx, stage, "gemini", model, realtimeVisionRetryPolicy, call)
+}
+
+func isOrdinaryFoodImageMode(executionMode string) bool {
+	return executionMode == defaultExecutionMode ||
+		executionMode == standardWebSearchMode ||
+		isPackagedExperimentExecutionMode(executionMode)
+}
+
+func validateNonEmptyFoodAnalysisResult(parsed map[string]any) error {
+	if len(parseItems(parsed)) == 0 {
+		return ErrEmptyFoodAnalysisResult
+	}
+	return nil
+}
+
+func foodAnalysisResultKeys(parsed map[string]any) []string {
+	keys := make([]string, 0, len(parsed))
+	for key := range parsed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 func foodImageModelRoutingKey(userID string, input AnalyzeInput) string {
@@ -847,6 +876,9 @@ func ValidatePreciseMicronutrientItems(items []map[string]any) error {
 // ValidateResolvedNutritionItems prevents unresolved zero placeholders from
 // crossing a task boundary as a successful analysis result.
 func ValidateResolvedNutritionItems(items []map[string]any) error {
+	if len(items) == 0 {
+		return ErrEmptyFoodAnalysisResult
+	}
 	names := make([]string, 0)
 	for _, item := range items {
 		if !boolFromAny(item["is_unresolved"]) &&
@@ -2272,8 +2304,11 @@ func resolveModelConfig(modelName string) (provider, model string) {
 	if strings.HasPrefix(normalized, "doubao") {
 		return "doubao", raw
 	}
-	if normalized == "qwen" || normalized == "qwen-flash" || normalized == "qwen3.5-flash" || normalized == "qwen3.6-flash" || normalized == qwen38FlashModel {
+	if normalized == "qwen" || normalized == "qwen-flash" || normalized == "qwen3.5-flash" || normalized == qwen38FlashModel {
 		return "qwen", qwen38FlashModel
+	}
+	if normalized == qwen36FlashModel {
+		return "qwen", qwen36FlashModel
 	}
 	if strings.HasPrefix(normalized, "qwen") {
 		return "qwen", raw
@@ -2543,7 +2578,21 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 		}
 		return primaryImageCall(attemptCtx)
 	})
+	if err == nil && provider == "qwen" && isOrdinaryFoodImageMode(executionMode) {
+		err = validateNonEmptyFoodAnalysisResult(parsed)
+		if stderrors.Is(err, ErrEmptyFoodAnalysisResult) {
+			logger.Warn(ctx, "食物图片千问返回业务空结果",
+				slog.String("provider", provider),
+				slog.String("model", model),
+				slog.Any("result_keys", foodAnalysisResultKeys(parsed)),
+				slog.Int("item_count", len(parseItems(parsed))),
+				slog.Bool("has_description", strings.TrimSpace(stringFromAny(parsed["description"])) != ""),
+				slog.Int("image_count", len(imageURLs)),
+			)
+		}
+	}
 	fallbackUsed := false
+	fallbackReason := ""
 	geminiUpstreamFallbackUsed := false
 	if err != nil && provider == "gemini" && len(imageURLs) > 0 && (isTransientLLMError(err) || IsLLMJSONParseError(err)) {
 		primaryErr := err
@@ -2603,6 +2652,57 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 				logger.NamedErr("fallback_error", fallbackErr),
 				slog.Int("image_count", len(imageURLs)),
 			)
+		}
+	}
+	if err != nil && provider == "qwen" && len(imageURLs) > 0 && stderrors.Is(err, ErrEmptyFoodAnalysisResult) {
+		primaryErr := err
+		fallbackClient := s.dashscopeClient
+		fallbackModel := qwen36FlashModel
+		if fallbackClient != nil && model != fallbackModel {
+			logger.Warn(ctx, "食物图片千问返回空结果，准备切换千问备用模型",
+				slog.String("primary_provider", provider),
+				slog.String("primary_model", model),
+				slog.String("fallback_model", fallbackModel),
+				slog.Int("image_count", len(imageURLs)),
+			)
+			apm.AddEvent(ctx, "食物图片空结果触发千问备用模型",
+				attribute.String("analysis.primary_provider", provider),
+				attribute.String("analysis.primary_model", model),
+				attribute.String("analysis.fallback_model", fallbackModel),
+			)
+			fallbackCtx, fallbackCancel := context.WithTimeout(ctx, visionFallbackTimeout)
+			fallbackCall := newAnalyzeWithImagesWithoutThinkingModelCall(fallbackClient, prompt, imageURLs, fallbackModel)
+			fallbackParsed, fallbackErr := analyzeWithJSONParseRetryPolicy(fallbackCtx, "food_image_empty_fallback", "qwen", fallbackModel, postprocessRetryPolicy, fallbackCall)
+			fallbackCancel()
+			if fallbackErr == nil {
+				fallbackErr = validateNonEmptyFoodAnalysisResult(fallbackParsed)
+			}
+			if fallbackErr == nil {
+				parsed = fallbackParsed
+				err = nil
+				fallbackUsed = true
+				fallbackReason = "empty_food_result"
+				client = fallbackClient
+				provider = "qwen"
+				model = fallbackModel
+				logger.Warn(ctx, "食物图片千问空结果已由千问备用模型恢复",
+					slog.String("primary_provider", primaryProvider),
+					slog.String("primary_model", primaryModel),
+					slog.String("fallback_model", fallbackModel),
+					slog.Int("image_count", len(imageURLs)),
+				)
+			} else {
+				err = fmt.Errorf("%w；千问备用模型仍未返回有效结果：%v", primaryErr, fallbackErr)
+				logger.Warn(ctx, "食物图片千问主模型与备用模型均未返回有效食物",
+					slog.String("primary_provider", primaryProvider),
+					slog.String("primary_model", primaryModel),
+					slog.String("fallback_model", fallbackModel),
+					slog.Any("fallback_result_keys", foodAnalysisResultKeys(fallbackParsed)),
+					slog.Int("fallback_item_count", len(parseItems(fallbackParsed))),
+					slog.Int("image_count", len(imageURLs)),
+					logger.NamedErr("fallback_error", fallbackErr),
+				)
+			}
 		}
 	}
 	if err != nil {
@@ -2753,6 +2853,9 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 		hybridMeta["gemini_upstream_fallback_used"] = true
 	}
 	hybridMeta["fallback_used"] = fallbackUsed
+	if fallbackReason != "" {
+		hybridMeta["fallback_reason"] = fallbackReason
+	}
 	durationMs = float64(time.Since(start).Milliseconds())
 	apm.SetAttributes(ctx,
 		attribute.String("analysis.provider", provider),

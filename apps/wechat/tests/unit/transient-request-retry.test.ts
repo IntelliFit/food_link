@@ -33,4 +33,9 @@ describe('withTransientRequestRetry', () => {
     expect(request).toHaveBeenCalledTimes(1)
     expect(isTransientRequestError(error)).toBe(false)
   })
+
+  it('recognizes localized login transport errors', () => {
+    expect(isTransientRequestError(new Error('请求超时，请稍后重试'))).toBe(true)
+    expect(isTransientRequestError(new Error('微信登录服务暂时繁忙，请稍后重试'))).toBe(true)
+  })
 })

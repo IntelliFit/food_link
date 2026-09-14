@@ -147,6 +147,9 @@ var (
 )
 
 func (s *StatsService) shouldUseCampusDietAgent(ctx context.Context, userID string, input PetChatInput) bool {
+	if len(input.ImageURLs) > 0 {
+		return false
+	}
 	question := normalizePetChatQuestion(input.Question)
 	if question == "" || s == nil || s.repo == nil {
 		return false

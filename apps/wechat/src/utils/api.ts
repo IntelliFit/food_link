@@ -1609,6 +1609,14 @@ export interface RiskCard {
   is_custom?: boolean
   needs_refresh?: boolean
   focus_label?: string
+  score_kind?: 'diet_and_record_support' | string
+  confidence?: 'low' | 'medium' | 'high' | string
+  score_reason?: string
+  previous_score?: number
+  score_change?: number
+  change_reason?: string
+  evidence?: string[]
+  missing_evidence?: string[]
 }
 
 export interface RiskOption {
@@ -4768,10 +4776,10 @@ export async function generateStatsInsight(range: 'week' | 'month'): Promise<{
   }>(res)
 }
 
-export async function estimatePetChat(question: string, range: 'week' | 'month', enableThinking = false): Promise<PetChatEstimateResponse> {
+export async function estimatePetChat(question: string, range: 'week' | 'month', enableThinking = false, imageUrls: string[] = []): Promise<PetChatEstimateResponse> {
   const res = await authenticatedRequest('/api/pet/chat/estimate', {
     method: 'POST',
-    data: { question, range, enable_thinking: enableThinking },
+    data: { question, range, enable_thinking: enableThinking, image_urls: imageUrls },
     timeout: 30000
   })
   if (res.statusCode !== 200) {
@@ -4780,10 +4788,10 @@ export async function estimatePetChat(question: string, range: 'week' | 'month',
   return unwrapResponse<PetChatEstimateResponse>(res)
 }
 
-export async function generatePetChat(question: string, range: 'week' | 'month', sessionId = '', newSession = false, enableThinking = false): Promise<PetChatResponse> {
+export async function generatePetChat(question: string, range: 'week' | 'month', sessionId = '', newSession = false, enableThinking = false, imageUrls: string[] = []): Promise<PetChatResponse> {
   const res = await authenticatedRequest('/api/pet/chat', {
     method: 'POST',
-    data: { question, range, session_id: sessionId, new_session: newSession, enable_thinking: enableThinking },
+    data: { question, range, session_id: sessionId, new_session: newSession, enable_thinking: enableThinking, image_urls: imageUrls },
     timeout: 90000
   })
   if (res.statusCode !== 200) {
@@ -4807,7 +4815,8 @@ export function streamGeneratePetChat(
   sessionId = '',
   newSession = false,
   callbacks: StreamGeneratePetChatCallbacks,
-  enableThinking = false
+  enableThinking = false,
+  imageUrls: string[] = []
 ): () => void {
   const token = getAccessToken()
   if (!token) {
@@ -4887,7 +4896,7 @@ export function streamGeneratePetChat(
         'Content-Type': 'application/json',
         'Accept': 'text/event-stream',
       }),
-      data: { question, range, session_id: sessionId, new_session: newSession, enable_thinking: enableThinking },
+      data: { question, range, session_id: sessionId, new_session: newSession, enable_thinking: enableThinking, image_urls: imageUrls },
       enableChunked: true,
       timeout: 180000,
       success: (res) => {
@@ -5061,24 +5070,34 @@ export async function generateCustomFocusCard(
   range: 'week' | 'month',
   focusId: string,
 ): Promise<{
-  card: RiskCard
-  custom_focus_daily_limit?: number
-  custom_focus_used_today?: number
-  custom_focus_remaining_today?: number
+  task_id?: string
+  status: 'pending' | 'processing' | 'done'
+  card?: RiskCard
 }> {
-  const res = await authenticatedRequest('/api/stats/custom-focus/generate', {
+  const res = await authenticatedRequest('/api/stats/custom-focus/tasks', {
     method: 'POST',
     data: { range, focus_id: focusId },
-    timeout: 90000,
+    timeout: 10000,
   })
+  if (res.statusCode === 404) {
+    const legacy = await authenticatedRequest('/api/stats/custom-focus/generate', {
+      method: 'POST',
+      data: { range, focus_id: focusId },
+      timeout: 90000,
+    })
+    if (legacy.statusCode !== 200) {
+      throwHttpErrorWithStatus(legacy.statusCode, legacy.data, '生成 AI 关注卡片失败', legacy.header as Record<string, any> | undefined)
+    }
+    const legacyData = unwrapResponse<{ card: RiskCard }>(legacy)
+    return { status: 'done', card: legacyData.card }
+  }
   if (res.statusCode !== 200) {
     throwHttpErrorWithStatus(res.statusCode, res.data, '生成 AI 关注卡片失败', res.header as Record<string, any> | undefined)
   }
   return unwrapResponse<{
-    card: RiskCard
-    custom_focus_daily_limit?: number
-    custom_focus_used_today?: number
-    custom_focus_remaining_today?: number
+    task_id?: string
+    status: 'pending' | 'processing' | 'done'
+    card?: RiskCard
   }>(res)
 }
 
@@ -5106,6 +5125,7 @@ export function saveTokens(accessToken: string, refreshToken: string, user_id: s
     const previousUserId = String(Taro.getStorageSync('user_id') || '').trim()
     if (previousUserId && previousUserId !== String(user_id || '').trim()) {
       clearMembershipMemoryCache()
+      Taro.removeStorageSync('stats_custom_focus_pending_tasks_v1')
     }
     Taro.setStorageSync('access_token', accessToken)
     Taro.setStorageSync('refresh_token', refreshToken)
@@ -5124,6 +5144,7 @@ export function clearTokens() {
     Taro.removeStorageSync('access_token')
     Taro.removeStorageSync('refresh_token')
     Taro.removeStorageSync('user_id')
+    Taro.removeStorageSync('stats_custom_focus_pending_tasks_v1')
   } catch (error) {
     console.error('清除 token 失败:', error)
   }
@@ -5149,6 +5170,7 @@ export function clearAllStorage() {
     Taro.removeStorageSync('stats_page_bundle_v1')
     Taro.removeStorageSync('home_dashboard_local_cache')
     Taro.removeStorageSync('body_metrics_storage')
+    Taro.removeStorageSync('stats_custom_focus_pending_tasks_v1')
 
     // 清除业务数据（可选，根据需求决定是否清除）
     // Taro.removeStorageSync('analyzeImagePath')
@@ -5315,7 +5337,7 @@ export async function login(code: string, phoneCode?: string, inviteCode?: strin
         'Content-Type': 'application/json'
       }),
       data: requestData,
-      timeout: 10000 // 10秒超时
+      timeout: 15000 // 为微信上游短超时和一次新 code 重试留出余量
     })
     console.log('[invite-debug][api] login 响应状态', {
       statusCode: response.statusCode,
@@ -5354,8 +5376,8 @@ export async function login(code: string, phoneCode?: string, inviteCode?: strin
   } catch (error: any) {
     console.error('登录API调用失败:', error)
     console.error('错误详情:', JSON.stringify(error))
-    // 如果是上游已包装过的错误（含 traceId / 用户友好文案），直接透传给页面统一弹窗处理
-    if (error instanceof Error && (error as ErrorLike).message) {
+    // 如果是 HTTP 层已包装过的错误（含 statusCode / traceId），保留状态供登录页判断是否重试。
+    if (error instanceof Error && ((error as ErrorLike).statusCode || (error as ErrorLike).traceId)) {
       throw error
     }
     // 提取更有意义的错误信息
@@ -5366,6 +5388,9 @@ export async function login(code: string, phoneCode?: string, inviteCode?: strin
       throw new Error('请求超时，请稍后重试')
     } else if (errMsg.includes('fail')) {
       throw new Error('网络请求失败，请稍后重试')
+    }
+    if (error instanceof Error && error.message) {
+      throw error
     }
     throw new Error('登录失败，请稍后重试')
   }
@@ -8137,6 +8162,8 @@ export interface PublicFoodLibraryListParams {
   city?: string
   /** 搜索菜名、学校/校区/食堂、楼层/窗口及地址 */
   keyword?: string
+  /** 只返回可展示在地图上的有效经纬度条目 */
+  has_location?: boolean
   suitable_for_fat_loss?: boolean
   merchant_name?: string
   min_calories?: number
@@ -8179,6 +8206,7 @@ export async function getPublicFoodLibraryList(
   const q = new URLSearchParams()
   if (params?.city) q.set('city', params.city)
   if (params?.keyword) q.set('keyword', params.keyword)
+  if (params?.has_location !== undefined) q.set('has_location', String(params.has_location))
   if (params?.suitable_for_fat_loss !== undefined) q.set('suitable_for_fat_loss', String(params.suitable_for_fat_loss))
   if (params?.merchant_name) q.set('merchant_name', params.merchant_name)
   if (params?.min_calories !== undefined) q.set('min_calories', String(params.min_calories))

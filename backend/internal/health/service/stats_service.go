@@ -4,12 +4,14 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"math"
 	"net/http"
+	"net/url"
 	"reflect"
 	"regexp"
 	"runtime/debug"
@@ -18,11 +20,13 @@ import (
 	"strings"
 	"time"
 
+	analyzerepo "food_link/backend/internal/analyze/repo"
 	"food_link/backend/internal/billing"
 	commonerrors "food_link/backend/internal/common/errors"
 	"food_link/backend/internal/health/domain"
 	"food_link/backend/internal/nutritionagg"
 	petdomain "food_link/backend/internal/pet/domain"
+	"food_link/backend/internal/taskqueue"
 	"food_link/backend/pkg/config"
 	"food_link/backend/pkg/logger"
 
@@ -66,13 +70,15 @@ type PetChatCompanionProvider interface {
 }
 
 type StatsService struct {
-	repo            StatsRepo
-	bodyMetrics     BodyMetricsSummaryProvider
-	petCompanion    PetChatCompanionProvider
-	creditGuard     CreditGuard
-	cfg             *config.Config
-	client          *http.Client
-	deepSeekBaseURL string
+	repo             StatsRepo
+	bodyMetrics      BodyMetricsSummaryProvider
+	petCompanion     PetChatCompanionProvider
+	creditGuard      CreditGuard
+	customFocusTasks *analyzerepo.TaskRepo
+	customFocusQueue taskqueue.Publisher
+	cfg              *config.Config
+	client           *http.Client
+	deepSeekBaseURL  string
 }
 
 const (
@@ -84,6 +90,8 @@ const (
 	statsInsightCreditCost     = 1
 	statsInsightMaxTokens      = 4096
 	petChatMaxTokens           = 1200
+	petChatMaxImages           = 3
+	petChatImageEstimateTokens = 1200
 	statsInsightMinRecordDays  = 1
 	statsInsightMaxAttempts    = 2
 	// The default Go transport gives TLS negotiation only 10 seconds. The
@@ -92,6 +100,11 @@ const (
 	statsInsightHTTPTimeout         = 90 * time.Second
 	statsInsightNetworkMaxAttempts  = 2
 	statsInsightNetworkRetryDelay   = 300 * time.Millisecond
+)
+
+const (
+	petChatDefaultImageQuestion      = "请结合图片内容，告诉我其中与饮食和健康有关的重点。"
+	petChatImageURLsRequestOptionKey = "_pet_chat_image_urls"
 )
 
 var statsInsightForbiddenIdentityTerms = []string{
@@ -178,6 +191,22 @@ func (s *StatsService) preferredTextLLM() textLLMRuntimeConfig {
 		}
 		if apiKey := strings.TrimSpace(s.cfg.External.DeepSeekAPIKey); apiKey != "" {
 			return textLLMRuntimeConfig{BaseURL: s.deepSeekChatBaseURL(), APIKey: apiKey, Model: statsInsightDeepSeekModel, Provider: "deepseek"}
+		}
+	}
+	return textLLMRuntimeConfig{BaseURL: defaultDashScopeBaseURL, Model: statsInsightPreferredModel, Provider: "qwen"}
+}
+
+func (s *StatsService) preferredPetChatLLM(hasImages bool) textLLMRuntimeConfig {
+	if !hasImages {
+		return s.preferredTextLLM()
+	}
+	if s != nil && s.cfg != nil {
+		if apiKey := strings.TrimSpace(s.cfg.External.DashScopeAPIKey); apiKey != "" {
+			baseURL := strings.TrimRight(strings.TrimSpace(s.cfg.External.DashScopeBaseURL), "/")
+			if baseURL == "" {
+				baseURL = defaultDashScopeBaseURL
+			}
+			return textLLMRuntimeConfig{BaseURL: baseURL, APIKey: apiKey, Model: statsInsightPreferredModel, Provider: "qwen"}
 		}
 	}
 	return textLLMRuntimeConfig{BaseURL: defaultDashScopeBaseURL, Model: statsInsightPreferredModel, Provider: "qwen"}
@@ -289,11 +318,12 @@ type statsInsightGeneration struct {
 }
 
 type PetChatInput struct {
-	Question       string `json:"question"`
-	Range          string `json:"range"`
-	SessionID      string `json:"session_id"`
-	NewSession     bool   `json:"new_session"`
-	EnableThinking bool   `json:"enable_thinking"`
+	Question       string   `json:"question"`
+	Range          string   `json:"range"`
+	SessionID      string   `json:"session_id"`
+	NewSession     bool     `json:"new_session"`
+	EnableThinking bool     `json:"enable_thinking"`
+	ImageURLs      []string `json:"image_urls,omitempty"`
 }
 
 type PetChatEstimateResult struct {
@@ -708,16 +738,22 @@ func hasEnoughStatsInsightData(comp *statsComputation) bool {
 }
 
 func (s *StatsService) EstimatePetChat(ctx context.Context, userID string, input PetChatInput) (*PetChatEstimateResult, error) {
+	var err error
+	input, err = s.normalizePetChatInput(input)
+	if err != nil {
+		return nil, err
+	}
 	estimate, _, err := s.preparePetChat(ctx, userID, input)
 	return estimate, err
 }
 
 func (s *StatsService) preparePetChat(ctx context.Context, userID string, input PetChatInput) (*PetChatEstimateResult, *statsComputation, error) {
-	question := normalizePetChatQuestion(input.Question)
-	if question == "" {
-		return nil, nil, &commonerrors.AppError{Code: 10002, Message: "question 不能为空", HTTPStatus: 400}
+	normalizedInput, err := s.normalizePetChatInput(input)
+	if err != nil {
+		return nil, nil, err
 	}
-	comp, err := s.buildStatsComputation(ctx, userID, input.Range, 2000, 0)
+	question := normalizedInput.Question
+	comp, err := s.buildStatsComputation(ctx, userID, normalizedInput.Range, 2000, 0)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -725,9 +761,9 @@ func (s *StatsService) preparePetChat(ctx context.Context, userID string, input 
 		return nil, nil, &commonerrors.AppError{Code: 10002, Message: "当前统计周期还没有饮食记录，先记录一餐后再问小食探", HTTPStatus: 400}
 	}
 	comp.PetCompanion = s.resolvePetChatCompanion(ctx, userID)
-	prompt := buildPetChatPrompt(comp, question, nil)
-	usage := estimatePetChatTokenUsage(prompt, comp.StatsRange)
-	pricing := billing.PriceTokenUsage(billing.PricingInput{Model: s.petChatModel(), Usage: usage}, s.aiUsagePricingConfig())
+	prompt := buildPetChatPrompt(comp, question, nil, len(normalizedInput.ImageURLs))
+	usage := estimatePetChatTokenUsage(prompt, comp.StatsRange, len(normalizedInput.ImageURLs))
+	pricing := billing.PriceTokenUsage(billing.PricingInput{Model: s.preferredPetChatLLM(len(normalizedInput.ImageURLs) > 0).Model, Usage: usage}, s.aiUsagePricingConfig())
 	if s.creditGuard != nil && strings.TrimSpace(userID) != "" {
 		if _, err := s.creditGuard.ValidateUsageCredits(ctx, userID, pricing.CreditsCharged, "小食探对话"); err != nil {
 			return nil, nil, err
@@ -845,6 +881,11 @@ func petChatMetaString(meta map[string]any, key string) string {
 }
 
 func (s *StatsService) GeneratePetChat(ctx context.Context, userID string, input PetChatInput) (*PetChatResult, error) {
+	var err error
+	input, err = s.normalizePetChatInput(input)
+	if err != nil {
+		return nil, err
+	}
 	estimate, comp, err := s.preparePetChat(ctx, userID, input)
 	if err != nil {
 		return nil, err
@@ -863,7 +904,7 @@ func (s *StatsService) GeneratePetChat(ctx context.Context, userID string, input
 		)
 		historyMessages = nil
 	}
-	generation, err := s.generatePetChatAnswer(ctx, comp, estimate.Question, historyMessages, input.EnableThinking)
+	generation, err := s.generatePetChatAnswer(ctx, comp, estimate.Question, historyMessages, input.EnableThinking, input.ImageURLs)
 	if err != nil {
 		logger.Warn(ctx, "宠物对话大模型生成失败",
 			logger.UserID(userID),
@@ -903,7 +944,7 @@ func (s *StatsService) GeneratePetChat(ctx context.Context, userID string, input
 			billingStatus = "actual_usage_unmetered"
 		}
 	}
-	userMessageID, assistantMessageID := s.persistPetChatExchange(ctx, userID, session.ID, estimate.Range, estimate.Question, generation.Content, creditsCharged, actualPricing, &estimate.Pricing, billingStatus)
+	userMessageID, assistantMessageID := s.persistPetChatExchange(ctx, userID, session.ID, estimate.Range, estimate.Question, generation.Content, creditsCharged, actualPricing, &estimate.Pricing, billingStatus, input.ImageURLs)
 	return &PetChatResult{
 		Question:           estimate.Question,
 		SessionID:          session.ID,
@@ -921,6 +962,11 @@ func (s *StatsService) GeneratePetChat(ctx context.Context, userID string, input
 }
 
 func (s *StatsService) GeneratePetChatStream(ctx context.Context, userID string, input PetChatInput) (<-chan PetChatStreamChunk, error) {
+	var err error
+	input, err = s.normalizePetChatInput(input)
+	if err != nil {
+		return nil, err
+	}
 	if s.shouldUseCampusDietAgent(ctx, userID, input) {
 		return s.GenerateCampusDietAgentStream(ctx, userID, input)
 	}
@@ -947,8 +993,13 @@ func (s *StatsService) GeneratePetChatStream(ctx context.Context, userID string,
 		slog.String("session_id", session.ID),
 		slog.String("range", estimate.Range),
 		slog.Int("recorded_days", estimate.RecordedDays),
+		slog.Int("image_count", len(input.ImageURLs)),
 		slog.Int64("prepare_duration_ms", time.Since(requestStarted).Milliseconds()),
 	)
+	llm := s.preferredPetChatLLM(len(input.ImageURLs) > 0)
+	if len(input.ImageURLs) > 0 && strings.TrimSpace(llm.APIKey) == "" {
+		return nil, &commonerrors.AppError{Code: 10000, Message: "图片对话服务暂不可用，请稍后重试", HTTPStatus: http.StatusServiceUnavailable}
+	}
 
 	chunkChan := make(chan PetChatStreamChunk, 32)
 	go func() {
@@ -956,7 +1007,6 @@ func (s *StatsService) GeneratePetChatStream(ctx context.Context, userID string,
 		chunkChan <- PetChatStreamChunk{Type: "start"}
 		fullAnswer := &strings.Builder{}
 		var streamErr error
-		llm := s.preferredTextLLM()
 		apiKey := llm.APIKey
 		baseURL := llm.BaseURL
 		model := llm.Model
@@ -965,9 +1015,9 @@ func (s *StatsService) GeneratePetChatStream(ctx context.Context, userID string,
 			fullAnswer.WriteString(fallback)
 			chunkChan <- PetChatStreamChunk{Type: "chunk", Text: fallback}
 		} else {
-			prompt := buildPetChatPrompt(comp, estimate.Question, historyMessages)
+			prompt := buildPetChatPrompt(comp, estimate.Question, historyMessages, len(input.ImageURLs))
 			modelStarted := time.Now()
-			textChan, err := s.streamNutritionInsight(ctx, baseURL, apiKey, model, prompt, petChatMaxTokens, input.EnableThinking)
+			textChan, err := s.streamNutritionInsight(ctx, baseURL, apiKey, model, prompt, petChatMaxTokens, input.EnableThinking, input.ImageURLs...)
 			if err != nil {
 				streamErr = err
 			} else {
@@ -1058,7 +1108,7 @@ func (s *StatsService) GeneratePetChatStream(ctx context.Context, userID string,
 			}
 		}
 
-		userMessageID, assistantMessageID := s.persistPetChatExchange(ctx, userID, session.ID, estimate.Range, estimate.Question, content, creditsCharged, actualPricing, &estimate.Pricing, billingStatus)
+		userMessageID, assistantMessageID := s.persistPetChatExchange(ctx, userID, session.ID, estimate.Range, estimate.Question, content, creditsCharged, actualPricing, &estimate.Pricing, billingStatus, input.ImageURLs)
 		logger.Info(ctx, "宠物对话流式生成完成",
 			logger.UserID(userID),
 			slog.String("session_id", session.ID),
@@ -1205,7 +1255,13 @@ func (s *StatsService) resolvePetChatSession(ctx context.Context, userID string,
 	})
 }
 
-func (s *StatsService) persistPetChatExchange(ctx context.Context, userID, sessionID, statsRange, question, answer string, creditsCharged int, actualPricing *billing.PricingResult, estimatedPricing *billing.PricingResult, billingStatus string) (string, string) {
+func (s *StatsService) persistPetChatExchange(ctx context.Context, userID, sessionID, statsRange, question, answer string, creditsCharged int, actualPricing *billing.PricingResult, estimatedPricing *billing.PricingResult, billingStatus string, imageURLs []string) (string, string) {
+	userMeta := map[string]any{
+		"billing_status": billingStatus,
+	}
+	if len(imageURLs) > 0 {
+		userMeta["image_urls"] = append([]string(nil), imageURLs...)
+	}
 	userMsg, err := s.repo.AddPetChatMessage(ctx, domain.PetChatMessage{
 		SessionID:   sessionID,
 		UserID:      userID,
@@ -1213,9 +1269,7 @@ func (s *StatsService) persistPetChatExchange(ctx context.Context, userID, sessi
 		Content:     question,
 		MessageType: "question",
 		RangeType:   statsRange,
-		Meta: map[string]any{
-			"billing_status": billingStatus,
-		},
+		Meta:        userMeta,
 	})
 	if err != nil {
 		logger.Warn(ctx, "保存宠物对话用户消息失败",
@@ -1329,20 +1383,24 @@ func (s *StatsService) SaveInsight(ctx context.Context, userID string, content s
 	return s.repo.UpsertInsightCache(ctx, userID, comp.StatsRange, today, comp.DataFingerprint, sanitizeStatsInsightText(content))
 }
 
-func (s *StatsService) generatePetChatAnswer(ctx context.Context, comp *statsComputation, question string, historyMessages []domain.PetChatMessage, enableThinking bool) (statsInsightGeneration, error) {
-	llm := s.preferredTextLLM()
+func (s *StatsService) generatePetChatAnswer(ctx context.Context, comp *statsComputation, question string, historyMessages []domain.PetChatMessage, enableThinking bool, imageURLs []string) (statsInsightGeneration, error) {
+	llm := s.preferredPetChatLLM(len(imageURLs) > 0)
 	apiKey := llm.APIKey
 	baseURL := llm.BaseURL
 	model := llm.Model
 	if apiKey == "" {
+		if len(imageURLs) > 0 {
+			return statsInsightGeneration{}, &commonerrors.AppError{Code: 10000, Message: "图片对话服务暂不可用，请稍后重试", HTTPStatus: http.StatusServiceUnavailable}
+		}
 		return statsInsightGeneration{Content: fallbackPetChatAnswer(comp, question), Model: model}, nil
 	}
-	prompt := buildPetChatPrompt(comp, question, historyMessages)
+	prompt := buildPetChatPrompt(comp, question, historyMessages, len(imageURLs))
 	var lastErr error
 	var retryFeedback string
 	for attempt := 0; attempt < statsInsightMaxAttempts; attempt++ {
 		generation, err := s.requestNutritionInsight(ctx, baseURL, apiKey, model, prompt, retryFeedback, petChatMaxTokens, map[string]any{
-			"enable_thinking": enableThinking,
+			"enable_thinking":                enableThinking,
+			petChatImageURLsRequestOptionKey: imageURLs,
 		})
 		if err != nil {
 			lastErr = err
@@ -1474,7 +1532,7 @@ func (s *StatsService) buildStatsComputation(ctx context.Context, userID string,
 	macroPercent := map[string]float64{"protein": pctP, "carbs": pctC, "fat": pctF}
 	micronutrientDaily := buildStatsMicronutrientDailyAverage(totalMicronutrients, recordedDays)
 	exerciseSummary := buildStatsExerciseSummary(exerciseLogs)
-	dataFingerprint := fmt.Sprintf("%.0f_%.1f_%d_%.1f_%.1f_%.1f_%s_%s_%s",
+	dataFingerprint := fmt.Sprintf("%.0f_%.1f_%d_%.1f_%.1f_%.1f_%s_%s_%s_%s",
 		totalCal,
 		avgCalPerDay,
 		recordedDays,
@@ -1483,6 +1541,7 @@ func (s *StatsService) buildStatsComputation(ctx context.Context, userID string,
 		pctF,
 		statsMicronutrientFingerprint(micronutrientDaily),
 		statsProfileFingerprint(user),
+		statsBodyMetricsFingerprint(bodyMetricsSummary),
 		statsExerciseFingerprint(exerciseSummary),
 	)
 
@@ -1618,12 +1677,11 @@ func (s *StatsService) requestNutritionInsight(ctx context.Context, baseURL, api
 }
 
 func (s *StatsService) requestNutritionInsightOnce(ctx context.Context, baseURL, apiKey, model, prompt, retryFeedback string, maxTokens int, extraBody ...map[string]any) (statsInsightGeneration, error) {
-	messages := []map[string]string{
-		{"role": "user", "content": prompt},
+	var imageURLs []string
+	if len(extraBody) > 0 {
+		imageURLs = stringSliceFromStatsInsightOption(extraBody[0][petChatImageURLsRequestOptionKey])
 	}
-	if strings.TrimSpace(retryFeedback) != "" {
-		messages = append(messages, map[string]string{"role": "user", "content": retryFeedback})
-	}
+	messages := buildStatsInsightMessages(prompt, retryFeedback, imageURLs)
 	body := map[string]any{
 		"model":       model,
 		"messages":    messages,
@@ -1633,8 +1691,14 @@ func (s *StatsService) requestNutritionInsightOnce(ctx context.Context, baseURL,
 	}
 	if len(extraBody) > 0 {
 		for key, value := range extraBody[0] {
+			if key == petChatImageURLsRequestOptionKey {
+				continue
+			}
 			body[key] = value
 		}
+	}
+	if len(imageURLs) > 0 {
+		body["vl_high_resolution_images"] = true
 	}
 	if strings.EqualFold(strings.TrimSpace(model), statsInsightPreferredModel) {
 		enableThinking, explicitlyConfigured := body["enable_thinking"].(bool)
@@ -1736,14 +1800,17 @@ func isTransientStatsInsightError(err error) bool {
 	return false
 }
 
-func (s *StatsService) streamNutritionInsight(ctx context.Context, baseURL, apiKey, model, prompt string, maxTokens int, enableThinking bool) (<-chan string, error) {
+func (s *StatsService) streamNutritionInsight(ctx context.Context, baseURL, apiKey, model, prompt string, maxTokens int, enableThinking bool, imageURLs ...string) (<-chan string, error) {
 	body := map[string]any{
 		"model":           model,
-		"messages":        []map[string]string{{"role": "user", "content": prompt}},
+		"messages":        buildStatsInsightMessages(prompt, "", imageURLs),
 		"temperature":     0.6,
 		"max_tokens":      maxTokens,
 		"stream":          true,
 		"enable_thinking": enableThinking,
+	}
+	if len(imageURLs) > 0 {
+		body["vl_high_resolution_images"] = true
 	}
 	if strings.EqualFold(strings.TrimSpace(model), statsInsightPreferredModel) {
 		applyQwen38ThinkingOptions(body, enableThinking)
@@ -1838,6 +1905,45 @@ func (s *StatsService) streamNutritionInsight(ctx context.Context, baseURL, apiK
 		}
 	}()
 	return textChan, nil
+}
+
+func buildStatsInsightMessages(prompt, retryFeedback string, imageURLs []string) []map[string]any {
+	content := any(prompt)
+	if len(imageURLs) > 0 {
+		parts := make([]map[string]any, 0, len(imageURLs)+1)
+		for _, imageURL := range imageURLs {
+			if value := strings.TrimSpace(imageURL); value != "" {
+				parts = append(parts, map[string]any{
+					"type":      "image_url",
+					"image_url": map[string]any{"url": value},
+				})
+			}
+		}
+		parts = append(parts, map[string]any{"type": "text", "text": prompt})
+		content = parts
+	}
+	messages := []map[string]any{{"role": "user", "content": content}}
+	if feedback := strings.TrimSpace(retryFeedback); feedback != "" {
+		messages = append(messages, map[string]any{"role": "user", "content": feedback})
+	}
+	return messages
+}
+
+func stringSliceFromStatsInsightOption(value any) []string {
+	switch typed := value.(type) {
+	case []string:
+		return append([]string(nil), typed...)
+	case []any:
+		out := make([]string, 0, len(typed))
+		for _, item := range typed {
+			if text, ok := item.(string); ok {
+				out = append(out, text)
+			}
+		}
+		return out
+	default:
+		return nil
+	}
 }
 
 func applyQwen38ThinkingOptions(body map[string]any, enableThinking bool) {
@@ -2135,7 +2241,7 @@ func buildNutritionInsightPrompt(comp *statsComputation) string {
 `, formatStatsHealthProfile(comp.User, latestWeightFromBodyMetrics(comp.BodyMetrics)), statsText, customFocusBlock)
 }
 
-func buildPetChatPrompt(comp *statsComputation, question string, historyMessages []domain.PetChatMessage) string {
+func buildPetChatPrompt(comp *statsComputation, question string, historyMessages []domain.PetChatMessage, imageCount int) string {
 	companion := comp.PetCompanion
 	if strings.TrimSpace(companion.Name) == "" {
 		companion = defaultPetChatCompanion()
@@ -2172,6 +2278,10 @@ func buildPetChatPrompt(comp *statsComputation, question string, historyMessages
 	exerciseBlock := buildPetChatExercisePromptBlock(comp)
 	historyBlock := buildPetChatHistoryPromptBlock(historyMessages)
 	customFocusBlock := buildPetChatCustomFocusPromptBlock(comp.User)
+	imageInstruction := "本轮没有附带图片。不要声称看到了图片。"
+	if imageCount > 0 {
+		imageInstruction = fmt.Sprintf("本轮用户附带了 %d 张图片。你必须先认真查看图片中的食物、包装文字、营养成分、份量线索或其他可见内容，再结合用户问题和健康记录回答；看不清的细节要说明不确定，不能编造。", imageCount)
+	}
 	return fmt.Sprintf(`你是「食探」小程序中的宠物伙伴。
 
 你的名字：
@@ -2183,7 +2293,10 @@ func buildPetChatPrompt(comp *statsComputation, question string, historyMessages
 你的特点：
 %s
 
-你需要像一个长期陪伴用户的伙伴，而不是一个营养分析工具。你只能基于系统提供的饮食记录、营养数据、运动记录、身体趋势、健康档案和历史聊天回答；不要声称看到了图片。
+你需要像一个长期陪伴用户的伙伴，而不是一个营养分析工具。你只能基于系统提供的饮食记录、营养数据、运动记录、身体趋势、健康档案、历史聊天和本轮实际提供的图片回答。
+
+图片说明：
+%s
 
 用户当前追问：
 %s
@@ -2237,6 +2350,7 @@ func buildPetChatPrompt(comp *statsComputation, question string, historyMessages
 		companion.Name,
 		companion.Personality,
 		companion.Feature,
+		imageInstruction,
 		question,
 		historyBlock,
 		rangeLabel,
@@ -2391,8 +2505,68 @@ func normalizePetChatQuestion(question string) string {
 	return question
 }
 
-func estimatePetChatTokenUsage(prompt string, statsRange string) billing.TokenUsage {
+func (s *StatsService) normalizePetChatInput(input PetChatInput) (PetChatInput, error) {
+	imageURLs, err := normalizePetChatImageURLs(input.ImageURLs, s)
+	if err != nil {
+		return PetChatInput{}, err
+	}
+	input.ImageURLs = imageURLs
+	input.Question = normalizePetChatQuestion(input.Question)
+	if input.Question == "" && len(input.ImageURLs) > 0 {
+		input.Question = petChatDefaultImageQuestion
+	}
+	if input.Question == "" {
+		return PetChatInput{}, &commonerrors.AppError{Code: 10002, Message: "question 不能为空", HTTPStatus: http.StatusBadRequest}
+	}
+	return input, nil
+}
+
+func normalizePetChatImageURLs(values []string, service *StatsService) ([]string, error) {
+	if len(values) == 0 {
+		return nil, nil
+	}
+	if len(values) > petChatMaxImages {
+		return nil, &commonerrors.AppError{Code: 10002, Message: fmt.Sprintf("最多上传 %d 张图片", petChatMaxImages), HTTPStatus: http.StatusBadRequest}
+	}
+	baseURL := ""
+	if service != nil && service.cfg != nil {
+		baseURL = strings.TrimSpace(service.cfg.Storage.CDNFoodImagesBaseURL)
+	}
+	base, err := url.Parse(baseURL)
+	if err != nil || base.Scheme == "" || base.Host == "" {
+		return nil, &commonerrors.AppError{Code: 10000, Message: "图片服务配置异常，请稍后重试", HTTPStatus: http.StatusServiceUnavailable}
+	}
+	basePath := strings.TrimRight(base.EscapedPath(), "/")
+	out := make([]string, 0, len(values))
+	seen := make(map[string]struct{}, len(values))
+	for _, raw := range values {
+		value := strings.TrimSpace(raw)
+		if value == "" {
+			continue
+		}
+		parsed, parseErr := url.Parse(value)
+		if parseErr != nil || parsed == nil {
+			return nil, &commonerrors.AppError{Code: 10002, Message: "图片地址无效，请重新上传", HTTPStatus: http.StatusBadRequest}
+		}
+		ownedPath := basePath == "" || basePath == "/" || parsed.EscapedPath() == basePath || strings.HasPrefix(parsed.EscapedPath(), basePath+"/")
+		if !strings.EqualFold(parsed.Scheme, base.Scheme) || !strings.EqualFold(parsed.Host, base.Host) || !ownedPath || parsed.User != nil || parsed.Fragment != "" {
+			return nil, &commonerrors.AppError{Code: 10002, Message: "图片地址无效，请重新上传", HTTPStatus: http.StatusBadRequest}
+		}
+		if _, exists := seen[value]; exists {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	if len(out) == 0 {
+		return nil, &commonerrors.AppError{Code: 10002, Message: "图片地址不能为空", HTTPStatus: http.StatusBadRequest}
+	}
+	return out, nil
+}
+
+func estimatePetChatTokenUsage(prompt string, statsRange string, imageCount int) billing.TokenUsage {
 	inputTokens := int(math.Ceil(float64(len([]rune(prompt))) / 1.4))
+	inputTokens += max(imageCount, 0) * petChatImageEstimateTokens
 	if normalizeStatsRange(statsRange) == "month" {
 		inputTokens += 800
 	} else {
@@ -2779,10 +2953,46 @@ func parseRoutineHoursFromHealthCondition(hc map[string]any) (sleepHour, wakeHou
 }
 
 func statsProfileFingerprint(user *domain.StatsUserProfile) string {
-	if user == nil || len(user.HealthCondition) == 0 {
+	if user == nil {
 		return "profile:none"
 	}
-	return "routine:" + statsRoutineText(user.HealthCondition["routine_type"])
+	healthCondition := map[string]any{}
+	for key, value := range user.HealthCondition {
+		if key == "custom_health_focuses" {
+			continue
+		}
+		healthCondition[key] = value
+	}
+	payload := map[string]any{
+		"gender":           user.Gender,
+		"height":           user.Height,
+		"weight":           user.Weight,
+		"birthday":         user.Birthday,
+		"activity_level":   user.ActivityLevel,
+		"bmr":              user.BMR,
+		"tdee":             user.TDEE,
+		"health_condition": healthCondition,
+	}
+	raw, _ := json.Marshal(payload)
+	hash := sha256.Sum256(raw)
+	return fmt.Sprintf("profile:%x", hash[:12])
+}
+
+func statsBodyMetricsFingerprint(summary *BodyMetricsSummary) string {
+	if summary == nil {
+		return "body:none"
+	}
+	payload := map[string]any{
+		"latest_weight":       summary.LatestWeight,
+		"previous_weight":     summary.PreviousWeight,
+		"weight_change":       summary.WeightChange,
+		"water_goal_ml":       summary.WaterGoalMl,
+		"avg_daily_water_ml":  round1(summary.AvgDailyWaterMl),
+		"water_recorded_days": summary.WaterRecordedDays,
+	}
+	raw, _ := json.Marshal(payload)
+	hash := sha256.Sum256(raw)
+	return fmt.Sprintf("body:%x", hash[:12])
 }
 
 func buildStatsExerciseSummary(logs []domain.ExerciseLog) *statsExerciseSummary {

@@ -1,7 +1,8 @@
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import Taro from '@tarojs/taro'
 import PetChatPage from '../../src/packageExtra/pages/pet-chat/index'
-import { estimatePetChat, streamGeneratePetChat } from '../../src/utils/api'
+import { compressImagePathForUpload, estimatePetChat, streamGeneratePetChat, uploadAnalyzeImageFile } from '../../src/utils/api'
+import { chooseImageWithPrivacy } from '../../src/utils/weapp-privacy'
 
 jest.mock('../../src/utils/withAuth', () => ({
   withAuth: (Component: any) => Component,
@@ -9,6 +10,7 @@ jest.mock('../../src/utils/withAuth', () => ({
 
 jest.mock('../../src/utils/api', () => ({
   estimatePetChat: jest.fn(),
+  compressImagePathForUpload: jest.fn(),
   getPetChatSession: jest.fn(),
   getLatestPetChatSession: jest.fn(),
   getPetSummary: jest.fn(),
@@ -16,7 +18,14 @@ jest.mock('../../src/utils/api', () => ({
   listPetChatSessions: jest.fn(),
   showUnifiedApiError: jest.fn(),
   streamGeneratePetChat: jest.fn(),
+  uploadAnalyzeImageFile: jest.fn(),
   updateHealthProfile: jest.fn(),
+}))
+
+jest.mock('../../src/utils/weapp-privacy', () => ({
+  chooseImageWithPrivacy: jest.fn(),
+  isPrivacyAuthorizeError: jest.fn(() => false),
+  showPrivacyAuthorizeFailure: jest.fn(),
 }))
 
 jest.mock('../../src/components/AppColorSchemeContext', () => ({
@@ -38,6 +47,8 @@ describe('pet chat credit cost', () => {
     ;(Taro.useDidShow as jest.Mock).mockImplementation(() => {})
     ;(Taro as typeof Taro & { setNavigationBarTitle: jest.Mock }).setNavigationBarTitle = jest.fn()
     ;(estimatePetChat as jest.Mock).mockResolvedValue({ pricing: { credits_charged: 3 } })
+    ;(compressImagePathForUpload as jest.Mock).mockImplementation(async (path: string) => path)
+    ;(uploadAnalyzeImageFile as jest.Mock).mockResolvedValue({ imageUrl: 'https://cdn-food-images.example.com/pet-chat/meal.jpg' })
   })
 
   afterEach(() => {
@@ -57,7 +68,7 @@ describe('pet chat credit cost', () => {
       await Promise.resolve()
     })
 
-    expect(estimatePetChat).toHaveBeenCalledWith('推荐食谱', 'week', false)
+    expect(estimatePetChat).toHaveBeenCalledWith('推荐食谱', 'week', false, [])
     expect(screen.getByText('预计消耗 3 积分')).toBeInTheDocument()
 
     fireEvent.click(screen.getByText('发送'))
@@ -68,6 +79,7 @@ describe('pet chat credit cost', () => {
       true,
       expect.any(Object),
       false,
+      [],
     )
   })
 
@@ -83,7 +95,7 @@ describe('pet chat credit cost', () => {
       await Promise.resolve()
     })
 
-    expect(estimatePetChat).toHaveBeenCalledWith('推荐食谱', 'week', true)
+    expect(estimatePetChat).toHaveBeenCalledWith('推荐食谱', 'week', true, [])
     fireEvent.click(screen.getByText('发送'))
     expect(streamGeneratePetChat).toHaveBeenCalledWith(
       '推荐食谱',
@@ -92,6 +104,46 @@ describe('pet chat credit cost', () => {
       true,
       expect.any(Object),
       true,
+      [],
+    )
+  })
+
+  it('uploads a photo, estimates an image-only question, and sends the CDN URL', async () => {
+    ;(chooseImageWithPrivacy as jest.Mock).mockResolvedValue({ tempFilePaths: ['wxfile://meal.jpg'] })
+    const { container } = render(<PetChatPage />)
+
+    await act(async () => {
+      fireEvent.click(screen.getByText('照片'))
+      await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(container.querySelector('.pet-chat-image-draft-preview')).toBeInTheDocument()
+    expect(uploadAnalyzeImageFile).toHaveBeenCalledWith('wxfile://meal.jpg')
+
+    await act(async () => {
+      jest.advanceTimersByTime(350)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(estimatePetChat).toHaveBeenCalledWith(
+      '帮我看看这张图里与饮食和健康有关的重点',
+      'week',
+      false,
+      ['https://cdn-food-images.example.com/pet-chat/meal.jpg'],
+    )
+
+    fireEvent.click(screen.getByText('发送'))
+    expect(streamGeneratePetChat).toHaveBeenCalledWith(
+      '帮我看看这张图里与饮食和健康有关的重点',
+      'week',
+      '',
+      true,
+      expect.any(Object),
+      false,
+      ['https://cdn-food-images.example.com/pet-chat/meal.jpg'],
     )
   })
 

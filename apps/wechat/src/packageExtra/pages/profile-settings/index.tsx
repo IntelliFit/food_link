@@ -52,6 +52,9 @@ import { ManualFoodCards } from '../../../pages/community/components/ManualFoodC
 import { ExerciseActivityCards, hasExerciseActivityCards } from '../../../pages/community/components/ExerciseActivityCards'
 import { shouldRenderManualFoodCards } from '../../../utils/manual-food-source'
 import { LOGIN_LOGO_URL } from '../../../utils/static-asset-cdn-url'
+import { collectFoodDisplayImageUrls } from '../../../utils/food-display-image'
+import { formatFeedTime } from '../../../utils/feed-time'
+import { COMMUNITY_FEED_CHANGED_EVENT } from '../../../utils/home-events'
 import './index.scss'
 
 type TabKey = 'feed' | 'collections'
@@ -62,20 +65,6 @@ function formatShortId(userId: string): string {
   if (!userId) return '—'
   const parts = userId.split('-')
   return parts[0] || userId.slice(0, 8)
-}
-
-function formatFeedTime(recordTime: string): string {
-  if (!recordTime) return ''
-  const d = new Date(recordTime)
-  if (Number.isNaN(d.getTime())) return recordTime.slice(0, 16).replace('T', ' ')
-  const diff = Date.now() - d.getTime()
-  if (diff >= 0 && diff < 60000) return '刚刚'
-  if (diff >= 0 && diff < 3600000) return `${Math.floor(diff / 60000)}分钟前`
-  if (diff >= 0 && diff < 86400000) return `${Math.floor(diff / 3600000)}小时前`
-  const now = new Date()
-  const isToday = d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate()
-  if (isToday) return `今天 ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
-  return `${d.getMonth() + 1}月${d.getDate()}日`
 }
 
 const MEAL_NAMES: Record<string, string> = {
@@ -551,21 +540,47 @@ export default function ProfileSettingsPage() {
       return
     }
     setSaving(true)
-    Taro.showLoading({ title: '保存中...' })
     try {
-      await updateUserInfo({ nickname: editNickname, avatar: editAvatar, cover_image: editCoverImage, motto: editMotto })
-      const stored = Taro.getStorageSync('userInfo')
-      const newUserInfo = { avatar: editAvatar, name: editNickname, meta: stored?.meta || '', id: userId || currentUserId }
+      const updated = await updateUserInfo({ nickname: editNickname, avatar: editAvatar, cover_image: editCoverImage, motto: editMotto })
+      const storedRaw = Taro.getStorageSync('userInfo')
+      let stored: Record<string, unknown> = {}
+      try {
+        stored = typeof storedRaw === 'string' ? JSON.parse(storedRaw) : (storedRaw || {})
+      } catch {
+        stored = {}
+      }
+      const resolvedNickname = updated.nickname || editNickname
+      const resolvedAvatar = updated.avatar || editAvatar
+      const resolvedCoverImage = updated.cover_image ?? editCoverImage
+      const resolvedMotto = updated.motto ?? editMotto
+      const newUserInfo = {
+        ...stored,
+        ...updated,
+        id: updated.id || userId || currentUserId,
+        avatar: resolvedAvatar,
+        name: resolvedNickname,
+        nickname: resolvedNickname,
+        cover_image: resolvedCoverImage,
+        motto: resolvedMotto,
+      }
       Taro.setStorageSync('userInfo', newUserInfo)
-      setTempAvatar(editAvatar)
-      setTempNickname(editNickname)
-      setCoverImage(editCoverImage)
-      setMotto(editMotto)
-      Taro.hideLoading()
+      for (const key of [
+        'community_feed_cache',
+        'community_feed_timestamp',
+        'community_feed_cache_session_id_v1',
+        'community_friends_cache',
+        'community_friends_timestamp',
+      ]) {
+        Taro.removeStorageSync(key)
+      }
+      Taro.eventCenter.trigger(COMMUNITY_FEED_CHANGED_EVENT)
+      setTempAvatar(resolvedAvatar)
+      setTempNickname(resolvedNickname)
+      setCoverImage(resolvedCoverImage)
+      setMotto(resolvedMotto)
       Taro.showToast({ title: '保存成功', icon: 'success' })
       setShowEditSheet(false)
     } catch (err: any) {
-      Taro.hideLoading()
       await showUnifiedApiError(err, '保存失败')
     } finally {
       setSaving(false)
@@ -704,7 +719,7 @@ export default function ProfileSettingsPage() {
   }
 
   const handleGoDetail = (item: PublicFoodLibraryItem) => {
-    Taro.navigateTo({ url: `/pages/food-library-detail/index?id=${encodeURIComponent(item.id)}` })
+    Taro.navigateTo({ url: `${extraPkgUrl('/pages/food-library-detail/index')}?id=${encodeURIComponent(item.id)}` })
   }
 
   const handleGoRecipeDetail = (recipe: UserRecipe) => {
@@ -747,6 +762,7 @@ export default function ProfileSettingsPage() {
     const targetId = record.id
     const showReportMask = isCirclePost && reportMaskTarget?.targetType === targetType && reportMaskTarget?.targetId === targetId
     const feedTime = String(record.record_time || record.created_at || '')
+    const displayImagePaths = collectFoodDisplayImageUrls(record)
 
     return (
       <View
@@ -821,17 +837,30 @@ export default function ProfileSettingsPage() {
             items={record.exercise_items}
             onItemClick={() => handleGoFeedDetail(item)}
           />
-        ) : isCirclePost && (record.image_paths || []).length > 0 ? (
+        ) : displayImagePaths.length > 1 ? (
           <View className='profile-feed-image-grid'>
-            {(record.image_paths || []).map((url, idx) => (
-              <View key={`circle-img-${idx}`} className='profile-feed-image-grid-item' onClick={() => Taro.previewImage({ current: url, urls: record.image_paths || [] })}>
-                <Image className='profile-feed-image' src={url} mode='aspectFill' />
+            {displayImagePaths.map((url, idx) => (
+              <View
+                key={`feed-img-${idx}`}
+                className='profile-feed-image-grid-item'
+                onClick={(event) => {
+                  event.stopPropagation()
+                  Taro.previewImage({ current: url, urls: displayImagePaths })
+                }}
+              >
+                <Image className='profile-feed-image' src={url} mode='aspectFit' />
               </View>
             ))}
           </View>
-        ) : record.image_path ? (
-          <View className='profile-feed-image-wrap' onClick={() => handleGoFeedDetail(item)}>
-            <Image className='profile-feed-image' src={record.image_path} mode='aspectFill' />
+        ) : displayImagePaths.length === 1 ? (
+          <View
+            className='profile-feed-image-wrap'
+            onClick={(event) => {
+              event.stopPropagation()
+              Taro.previewImage({ current: displayImagePaths[0], urls: displayImagePaths })
+            }}
+          >
+            <Image className='profile-feed-image' src={displayImagePaths[0]} mode='aspectFit' />
           </View>
         ) : null}
 
@@ -1295,7 +1324,7 @@ export default function ProfileSettingsPage() {
 
               {/* 保存按钮 */}
               <Button className='edit-sheet-save' onClick={handleSaveEdit} disabled={saving}>
-                保存
+                {saving ? <View className='edit-sheet-save-spinner' /> : '保存'}
               </Button>
 
               {/* 注销账号 */}

@@ -44,7 +44,12 @@ describe('pet chat latest message', () => {
     ;(getLatestPetChatSession as jest.Mock).mockResolvedValue({
       session: { id: 'session-1', range_type: 'week' },
       messages: [
-        { id: 'message-old', role: 'user', content: '较早的问题' },
+        {
+          id: 'message-old',
+          role: 'user',
+          content: '较早的问题',
+          meta: { image_urls: ['https://cdn-food-images.example.com/pet-chat/history.jpg'] },
+        },
         { id: 'message-latest', role: 'assistant', content: '最近的回答' },
       ],
     })
@@ -62,6 +67,10 @@ describe('pet chat latest message', () => {
     const latestMessage = container.querySelector('#pet-chat-message-message-latest')
 
     expect(latestMessage).toHaveTextContent('最近的回答')
+    expect(container.querySelector('.pet-chat-message-image')).toHaveAttribute(
+      'src',
+      'https://cdn-food-images.example.com/pet-chat/history.jpg',
+    )
     await waitFor(() => {
       expect(scrollView).toHaveAttribute('scrollintoview', 'pet-chat-message-message-latest')
     })

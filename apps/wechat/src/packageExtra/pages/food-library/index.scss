@@ -135,6 +135,78 @@ $food-library-font-meta: 22rpx;
   }
 }
 
+.discovery-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24rpx;
+  padding: 24rpx 28rpx;
+  background:
+    radial-gradient(circle at 12% 18%, rgb(255 211 94 / 30%) 0, transparent 34%),
+    linear-gradient(135deg, #e7fbf2 0%, #f7fff9 58%, #fff8e5 100%);
+  border-bottom: 1rpx solid rgb(47 158 120 / 10%);
+}
+
+.discovery-copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.discovery-eyebrow,
+.discovery-title,
+.discovery-subtitle {
+  display: block;
+}
+
+.discovery-eyebrow {
+  margin-bottom: 2rpx;
+  color: #2f9e78;
+  font-size: 18rpx;
+  font-weight: 800;
+  letter-spacing: 3rpx;
+}
+
+.discovery-title {
+  color: #153129;
+  font-size: 34rpx;
+  font-weight: 800;
+  line-height: 44rpx;
+}
+
+.discovery-subtitle {
+  margin-top: 2rpx;
+  color: #688078;
+  font-size: $food-library-font-meta;
+  line-height: 30rpx;
+}
+
+.view-mode-switch {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  padding: 6rpx;
+  border: 1rpx solid rgb(47 158 120 / 12%);
+  border-radius: 999rpx;
+  background: rgb(255 255 255 / 76%);
+  box-shadow: 0 8rpx 20rpx rgb(28 91 69 / 7%);
+}
+
+.view-mode-option {
+  min-width: 74rpx;
+  padding: 12rpx 16rpx;
+  border-radius: 999rpx;
+  color: #698079;
+  font-size: $food-library-font-meta;
+  font-weight: 600;
+  text-align: center;
+
+  &.active {
+    color: #fff;
+    background: #2f9e78;
+    box-shadow: 0 6rpx 14rpx rgb(47 158 120 / 22%);
+  }
+}
+
 // 筛选区域
 .filter-section {
   background: #fff;
@@ -287,6 +359,293 @@ $food-library-font-meta: 22rpx;
   &:active {
     transform: scale(0.95);
   }
+}
+
+// ========== 点亮美食地图 ==========
+.food-map-experience {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 18rpx 20rpx 0;
+  background: #edf5f1;
+}
+
+.map-summary-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20rpx;
+  margin-bottom: 14rpx;
+  padding: 0 4rpx;
+}
+
+.map-summary-copy {
+  min-width: 0;
+}
+
+.map-summary-title,
+.map-summary-meta {
+  display: block;
+}
+
+.map-summary-title {
+  color: #18372d;
+  font-size: $food-library-font-body;
+  font-weight: 750;
+}
+
+.map-summary-meta {
+  margin-top: 4rpx;
+  color: #73867f;
+  font-size: $food-library-font-meta;
+}
+
+.map-locate-button {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8rpx;
+  min-width: 128rpx;
+  min-height: 56rpx;
+  padding: 0 18rpx;
+  border: 1rpx solid rgb(47 158 120 / 16%);
+  border-radius: 999rpx;
+  color: #247f62;
+  background: #fff;
+  font-size: $food-library-font-meta;
+  font-weight: 650;
+  box-shadow: 0 6rpx 18rpx rgb(35 101 78 / 8%);
+
+  .iconfont {
+    font-size: 26rpx;
+  }
+}
+
+.map-locate-spinner {
+  width: 22rpx;
+  height: 22rpx;
+  border: 3rpx solid rgb(47 158 120 / 18%);
+  border-top-color: #2f9e78;
+  border-radius: 50%;
+  animation: map-spinner 0.8s linear infinite;
+}
+
+@keyframes map-spinner {
+  to { transform: rotate(360deg); }
+}
+
+.food-map-wrap {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  margin-bottom: calc(18rpx + env(safe-area-inset-bottom));
+  border: 8rpx solid rgb(255 255 255 / 92%);
+  border-radius: 32rpx;
+  overflow: hidden;
+  background: #dfeae5;
+  box-shadow: 0 18rpx 50rpx rgb(29 77 60 / 14%);
+}
+
+.food-map {
+  width: 100%;
+  height: 100%;
+}
+
+.map-loading-mask {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgb(244 250 247 / 72%);
+  backdrop-filter: blur(4rpx);
+}
+
+.map-food-sheet,
+.map-discovery-sheet {
+  position: absolute;
+  left: 16rpx;
+  right: 16rpx;
+  bottom: 16rpx;
+  border: 1rpx solid rgb(255 255 255 / 90%);
+  border-radius: 26rpx;
+  background: rgb(255 255 255 / 96%);
+  box-shadow: 0 16rpx 44rpx rgb(13 55 41 / 22%);
+  backdrop-filter: blur(16rpx);
+}
+
+.map-food-sheet {
+  padding: 18rpx;
+}
+
+.map-food-sheet-main {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+}
+
+.map-food-sheet-image-wrap {
+  position: relative;
+  flex-shrink: 0;
+  width: 116rpx;
+  height: 116rpx;
+  overflow: hidden;
+  border-radius: 18rpx;
+  background: linear-gradient(135deg, #d8f4e8, #fff4ce);
+}
+
+.map-food-sheet-image,
+.map-food-sheet-placeholder {
+  width: 100%;
+  height: 100%;
+}
+
+.map-food-sheet-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #2f9e78;
+
+  .iconfont { font-size: 46rpx; }
+}
+
+.map-food-count {
+  position: absolute;
+  right: 6rpx;
+  bottom: 6rpx;
+  padding: 3rpx 9rpx;
+  border-radius: 999rpx;
+  color: #fff;
+  background: rgb(21 49 41 / 82%);
+  font-size: 18rpx;
+  font-weight: 700;
+}
+
+.map-food-sheet-copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.map-food-sheet-title,
+.map-food-sheet-place {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.map-food-sheet-title {
+  color: #142d25;
+  font-size: $food-library-font-large;
+  font-weight: 800;
+}
+
+.map-food-sheet-place {
+  margin-top: 7rpx;
+  color: #62766f;
+  font-size: $food-library-font-meta;
+}
+
+.map-food-sheet-meta {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  margin-top: 12rpx;
+  color: #5a6d66;
+  font-size: $food-library-font-meta;
+}
+
+.map-food-distance {
+  padding: 4rpx 10rpx;
+  border-radius: 999rpx;
+  color: #1e7f5d;
+  background: #e7f8f0;
+  font-weight: 700;
+}
+
+.map-food-sheet-actions {
+  display: flex;
+  gap: 12rpx;
+  margin-top: 16rpx;
+}
+
+.map-food-action {
+  flex: 1;
+  min-height: 66rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7rpx;
+  border-radius: 16rpx;
+  font-size: $food-library-font-body;
+  font-weight: 750;
+
+  &--secondary {
+    color: #28775e;
+    background: #eef8f4;
+  }
+
+  &--primary {
+    color: #fff;
+    background: linear-gradient(135deg, #2f9e78, #4ab68f);
+    box-shadow: 0 8rpx 18rpx rgb(47 158 120 / 22%);
+  }
+}
+
+.map-discovery-sheet {
+  display: flex;
+  align-items: center;
+  gap: 14rpx;
+  padding: 18rpx;
+}
+
+.map-discovery-icon {
+  flex-shrink: 0;
+  width: 58rpx;
+  height: 58rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 18rpx;
+  color: #9d7206;
+  background: linear-gradient(135deg, #fff0a9, #ffd96b);
+  font-size: 32rpx;
+  box-shadow: 0 8rpx 18rpx rgb(190 139 20 / 16%);
+}
+
+.map-discovery-copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.map-discovery-title,
+.map-discovery-subtitle {
+  display: block;
+}
+
+.map-discovery-title {
+  color: #17342a;
+  font-size: $food-library-font-body;
+  font-weight: 750;
+}
+
+.map-discovery-subtitle {
+  margin-top: 5rpx;
+  color: #71827c;
+  font-size: 20rpx;
+  line-height: 28rpx;
+}
+
+.map-discovery-button {
+  flex-shrink: 0;
+  padding: 15rpx 18rpx;
+  border-radius: 14rpx;
+  color: #fff;
+  background: #2f9e78;
+  font-size: $food-library-font-meta;
+  font-weight: 700;
 }
 
 // 列表区域
@@ -674,6 +1033,19 @@ $food-library-font-meta: 22rpx;
   }
 }
 
+.fab-button--map {
+  right: 40rpx;
+  bottom: calc(258rpx + env(safe-area-inset-bottom));
+  width: auto;
+  height: 72rpx;
+  padding: 0 24rpx;
+  gap: 8rpx;
+  border: 2rpx solid rgb(255 255 255 / 82%);
+  border-radius: 999rpx;
+  background: linear-gradient(135deg, #ffcc4a 0%, #f3a72d 100%);
+  box-shadow: 0 10rpx 28rpx rgb(151 96 9 / 28%);
+}
+
 .food-card.is-pick-mode {
   border: 2rpx solid rgb(0 188 125 / 14%);
 }
@@ -681,6 +1053,18 @@ $food-library-font-meta: 22rpx;
 .fab-icon {
   font-size: 52rpx;
   color: #fff;
+}
+
+.fab-spark {
+  color: #fff;
+  font-size: 30rpx;
+  line-height: 1;
+}
+
+.fab-map-text {
+  color: #fff;
+  font-size: $food-library-font-body;
+  font-weight: 750;
 }
 
 // 未登录提示
@@ -738,6 +1122,59 @@ $food-library-font-meta: 22rpx;
   .pick-mode-tip {
     background: linear-gradient(135deg, #153127 0%, #1a3328 100%);
     border-bottom-color: rgb(92 184 150 / 18%);
+  }
+
+  .discovery-header {
+    background:
+      radial-gradient(circle at 12% 18%, rgb(245 188 48 / 14%) 0, transparent 34%),
+      linear-gradient(135deg, #123026 0%, #13241f 64%, #282313 100%);
+    border-bottom-color: rgb(255 255 255 / 6%);
+  }
+
+  .discovery-title,
+  .map-summary-title,
+  .map-food-sheet-title,
+  .map-discovery-title {
+    color: #f1f8f5;
+  }
+
+  .discovery-subtitle,
+  .map-summary-meta,
+  .map-food-sheet-place,
+  .map-food-sheet-meta,
+  .map-discovery-subtitle {
+    color: rgb(214 226 220 / 62%);
+  }
+
+  .view-mode-switch,
+  .map-locate-button,
+  .map-food-sheet,
+  .map-discovery-sheet {
+    border-color: rgb(255 255 255 / 8%);
+    background: rgb(24 33 31 / 94%);
+  }
+
+  .view-mode-option {
+    color: rgb(214 226 220 / 68%);
+  }
+
+  .food-map-experience {
+    background: #101715;
+  }
+
+  .food-map-wrap {
+    border-color: #202a27;
+    background: #18211f;
+  }
+
+  .map-loading-mask {
+    background: rgb(16 23 21 / 76%);
+  }
+
+  .map-food-action--secondary,
+  .map-food-distance {
+    color: #77d9b4;
+    background: rgb(92 184 150 / 13%);
   }
 
   .pick-mode-title,

@@ -1,6 +1,6 @@
 import { View, Text, ScrollView, Input, Switch } from '@tarojs/components'
 import { useState, useEffect, useCallback, useRef } from 'react'
-import Taro, { useDidShow } from '@tarojs/taro'
+import Taro, { useDidHide, useDidShow } from '@tarojs/taro'
 import { readStatsPageCache, writeStatsPageCache } from '../../utils/stats-page-cache'
 import {
   getStatsSummary,
@@ -9,6 +9,7 @@ import {
   addHealthFocus,
   removeHealthFocus,
   generateCustomFocusCard,
+  getAnalyzeTask,
   showUnifiedApiError,
   type StatsSummary,
   type BodyMetricWeightEntry,
@@ -18,6 +19,13 @@ import {
   type RiskOption,
   type RiskTone,
 } from '../../utils/api'
+import {
+  customFocusCardFromTask,
+  readPendingCustomFocusTasks,
+  removePendingCustomFocusTask,
+  savePendingCustomFocusTask,
+  type PendingCustomFocusTask,
+} from '../../utils/custom-focus-task'
 import { IconBreakfast, IconLunch, IconDinner, IconSnack, IconExpand, IconCollapse } from '../../components/iconfont'
 import './index.scss'
 import { withAuth, redirectToLogin } from '../../utils/withAuth'
@@ -324,6 +332,22 @@ function scoreToLabel(score: number): string {
   return '重点关注'
 }
 
+function customFocusConfidenceLabel(confidence?: string): string {
+  switch (confidence) {
+    case 'high': return '高置信度'
+    case 'medium': return '中置信度'
+    case 'low': return '低置信度'
+    default: return '证据待补充'
+  }
+}
+
+function customFocusScoreChangeLabel(change?: number): string {
+  if (typeof change !== 'number' || !Number.isFinite(change)) return ''
+  if (change > 0) return `较上次 +${change}`
+  if (change < 0) return `较上次 ${change}`
+  return '与上次持平'
+}
+
 function scoreToFocusOverview(score: number, hasCustomFocus: boolean): string {
   if (score >= 78) {
     return hasCustomFocus
@@ -610,6 +634,18 @@ function StatsPage() {
   const fetchIdRef = useRef(0)
   const refreshPendingRef = useRef<Partial<Record<'week' | 'month', number>>>({})
   const statsFirstShowRef = useRef(true)
+  const statsPageVisibleRef = useRef(true)
+  const customFocusPollingTaskIdsRef = useRef<Set<string>>(new Set())
+
+  useDidShow(() => {
+    statsPageVisibleRef.current = true
+  })
+  useDidHide(() => {
+    statsPageVisibleRef.current = false
+  })
+  useEffect(() => () => {
+    statsPageVisibleRef.current = false
+  }, [])
 
   /**
    * 拉取分析页聚合数据；silent=true 时不顶掉界面（已有缓存时后台刷新并写盘）
@@ -839,6 +875,51 @@ function StatsPage() {
     })
   }, [range])
 
+  const pollCustomFocusTask = useCallback(async (pending: PendingCustomFocusTask) => {
+    if (customFocusPollingTaskIdsRef.current.has(pending.taskId)) return
+    customFocusPollingTaskIdsRef.current.add(pending.taskId)
+    if (statsPageVisibleRef.current) setCustomFocusRefreshingKey(pending.focusKey)
+    try {
+      for (let attempt = 0; attempt < 60; attempt++) {
+        if (!statsPageVisibleRef.current) return
+        const task = await getAnalyzeTask(pending.taskId)
+        if (task.status === 'done') {
+          const card = customFocusCardFromTask(task)
+          removePendingCustomFocusTask(pending.taskId)
+          if (!card) throw new Error('后台任务已完成，但没有返回关注卡片')
+          if (pending.range === rangeRef.current && statsPageVisibleRef.current) {
+            mergeCustomFocusCard(card)
+            setRiskDetailModal(prev => prev.card?.key === card.key ? { ...prev, card } : prev)
+            Taro.showToast({ title: '卡片已更新', icon: 'success' })
+          }
+          void refreshFromNetwork(pending.range, true)
+          return
+        }
+        if (task.status === 'failed' || task.status === 'timed_out' || task.status === 'cancelled') {
+          removePendingCustomFocusTask(pending.taskId)
+          throw new Error('后台更新失败，请稍后重试')
+        }
+        await new Promise(resolve => setTimeout(resolve, 2000))
+      }
+      if (statsPageVisibleRef.current) {
+        Taro.showToast({ title: '仍在后台更新，可稍后回来查看', icon: 'none' })
+      }
+    } catch (e: unknown) {
+      if (statsPageVisibleRef.current) {
+        await showUnifiedApiError(e, '刷新 AI 卡片失败')
+      }
+    } finally {
+      customFocusPollingTaskIdsRef.current.delete(pending.taskId)
+      setCustomFocusRefreshingKey(prev => prev === pending.focusKey ? null : prev)
+    }
+  }, [mergeCustomFocusCard, refreshFromNetwork])
+
+  useDidShow(() => {
+    readPendingCustomFocusTasks().forEach(task => {
+      void pollCustomFocusTask(task)
+    })
+  })
+
   const mergeCustomFocusOptions = useCallback((focuses: Array<{ id: string; label: string }>) => {
     setData(prev => {
       if (!prev?.health_index) return prev
@@ -879,8 +960,6 @@ function StatsPage() {
       mergeCustomFocusOptions(addRes.focuses)
       const focusId = addRes.focus_id || addRes.focuses.find(item => item.label === label)?.id
       if (!focusId) throw new Error('添加关注失败')
-      const genRes = await generateCustomFocusCard(range, focusId)
-      mergeCustomFocusCard(genRes.card)
       const customKey = `custom:${focusId}`
       setSelectedRiskKeys(prev => {
         const next = prev.includes(customKey) ? prev : [...prev, customKey]
@@ -891,17 +970,34 @@ function StatsPage() {
         }
         return next
       })
+      const genRes = await generateCustomFocusCard(range, focusId)
+      if (genRes.status === 'done' && genRes.card) {
+        mergeCustomFocusCard(genRes.card)
+        setCustomFocusInput('')
+        Taro.showToast({ title: 'AI 关注已添加', icon: 'success' })
+        return
+      }
+      if (!genRes.task_id) throw new Error('服务器未返回后台任务编号')
+      const pendingTask: PendingCustomFocusTask = {
+        taskId: genRes.task_id,
+        range,
+        focusId,
+        focusKey: customKey,
+        createdAt: Date.now(),
+      }
+      savePendingCustomFocusTask(pendingTask)
       setCustomFocusInput('')
       Taro.showToast({
-        title: addRes.already_exists ? 'AI 卡片已生成' : 'AI 关注已添加',
-        icon: 'success',
+        title: '已开始生成，可离开此页',
+        icon: 'none',
       })
+      void pollCustomFocusTask(pendingTask)
     } catch (e: unknown) {
       await showUnifiedApiError(e, '添加 AI 关注失败')
     } finally {
       setCustomFocusAdding(false)
     }
-  }, [customFocusAdding, customFocusInput, data, mergeCustomFocusCard, mergeCustomFocusOptions, range])
+  }, [customFocusAdding, customFocusInput, data, mergeCustomFocusCard, mergeCustomFocusOptions, pollCustomFocusTask, range])
 
   const handleRemoveCustomFocus = useCallback(async (focusId: string) => {
     if (!focusId) return
@@ -948,15 +1044,29 @@ function StatsPage() {
     setCustomFocusRefreshingKey(card.key)
     try {
       const genRes = await generateCustomFocusCard(range, focusId)
-      mergeCustomFocusCard(genRes.card)
-      setRiskDetailModal({ visible: true, card: genRes.card })
-      Taro.showToast({ title: '卡片已更新', icon: 'success' })
+      if (genRes.status === 'done' && genRes.card) {
+        mergeCustomFocusCard(genRes.card)
+        setRiskDetailModal({ visible: true, card: genRes.card })
+        setCustomFocusRefreshingKey(null)
+        Taro.showToast({ title: '卡片已更新', icon: 'success' })
+        return
+      }
+      if (!genRes.task_id) throw new Error('服务器未返回后台任务编号')
+      const pendingTask: PendingCustomFocusTask = {
+        taskId: genRes.task_id,
+        range,
+        focusId,
+        focusKey: card.key,
+        createdAt: Date.now(),
+      }
+      savePendingCustomFocusTask(pendingTask)
+      Taro.showToast({ title: '已在后台更新，可离开此页', icon: 'none' })
+      void pollCustomFocusTask(pendingTask)
     } catch (e: unknown) {
-      await showUnifiedApiError(e, '刷新 AI 卡片失败')
-    } finally {
       setCustomFocusRefreshingKey(null)
+      await showUnifiedApiError(e, '刷新 AI 卡片失败')
     }
-  }, [customFocusRefreshingKey, mergeCustomFocusCard, range])
+  }, [customFocusRefreshingKey, mergeCustomFocusCard, pollCustomFocusTask, range])
 
   // AI 洞察打字机效果：当 analysis_summary 从空变为非空时，按字符逐步显示
   useEffect(() => {
@@ -1343,8 +1453,11 @@ function StatsPage() {
               <Text className='risk-card-title'>{card.title}</Text>
               {card.is_custom ? (
                 <View className='risk-card-ai-badge-row'>
-                  <Text className='risk-card-ai-badge'>AI</Text>
-                  {card.needs_refresh ? (
+                  <Text className='risk-card-ai-badge'>饮食支持度</Text>
+                  <Text className='risk-card-ai-confidence'>{customFocusConfidenceLabel(card.confidence)}</Text>
+                  {customFocusRefreshingKey === card.key ? (
+                    <Text className='iconfont icon-jiazaixiao risk-card-ai-refresh-spinner' />
+                  ) : card.needs_refresh ? (
                     <Text className='risk-card-ai-refresh-hint'>待更新</Text>
                   ) : null}
                 </View>
@@ -1389,9 +1502,11 @@ function StatsPage() {
                     if (!customFocusAdding) void handleAddCustomFocus()
                   }}
                 >
-                  <Text className='risk-custom-focus-add-btn-text'>
-                    {customFocusAdding ? '生成中…' : `添加 · ${customFocusCost} 积分`}
-                  </Text>
+                  {customFocusAdding ? (
+                    <Text className='iconfont icon-jiazaixiao risk-custom-focus-add-spinner' />
+                  ) : (
+                    <Text className='risk-custom-focus-add-btn-text'>{`添加 · ${customFocusCost} 积分`}</Text>
+                  )}
                 </View>
               </View>
               {customFocusMeta ? (
@@ -1457,7 +1572,7 @@ function StatsPage() {
                 <View className='risk-detail-title-row'>
                   <Text className='risk-detail-title'>{riskDetailModal.card.title}</Text>
                   {riskDetailModal.card.is_custom ? (
-                    <Text className='risk-detail-ai-badge'>AI</Text>
+                    <Text className='risk-detail-ai-badge'>饮食支持度</Text>
                   ) : null}
                 </View>
                 <View className='risk-detail-score-row'>
@@ -1470,14 +1585,55 @@ function StatsPage() {
               </View>
               <View className='risk-detail-body'>
                 {riskDetailModal.card.is_custom ? (
-                  <Text className='risk-detail-ai-disclaimer'>
-                    基于饮食趋势的趋势性参考，不构成医学诊断或治疗建议。
-                  </Text>
+                  <>
+                    <Text className='risk-detail-ai-disclaimer'>
+                      基于饮食与记录证据的支持度，不代表真实力量、皮肤状态或医学诊断。
+                    </Text>
+                    <View className='risk-detail-meta-row'>
+                      <Text className={`risk-detail-confidence is-${riskDetailModal.card.confidence || 'unknown'}`}>
+                        {customFocusConfidenceLabel(riskDetailModal.card.confidence)}
+                      </Text>
+                      {customFocusScoreChangeLabel(riskDetailModal.card.score_change) ? (
+                        <Text className='risk-detail-score-change'>{customFocusScoreChangeLabel(riskDetailModal.card.score_change)}</Text>
+                      ) : null}
+                    </View>
+                  </>
                 ) : null}
                 <Text className='risk-detail-section-text'>{riskDetailModal.card.summary}</Text>
+                {riskDetailModal.card.is_custom && riskDetailModal.card.score_reason ? (
+                  <>
+                    <View className='risk-detail-divider' />
+                    <Text className='risk-detail-section-label'>评分方法</Text>
+                    <Text className='risk-detail-section-text'>{riskDetailModal.card.score_reason}</Text>
+                  </>
+                ) : null}
+                {riskDetailModal.card.is_custom && riskDetailModal.card.change_reason ? (
+                  <>
+                    <View className='risk-detail-divider' />
+                    <Text className='risk-detail-section-label'>与上次相比</Text>
+                    <Text className='risk-detail-section-text'>{riskDetailModal.card.change_reason}</Text>
+                  </>
+                ) : null}
                 <View className='risk-detail-divider' />
                 <Text className='risk-detail-section-label'>判断依据</Text>
                 <Text className='risk-detail-section-text'>{riskDetailModal.card.basis}</Text>
+                {riskDetailModal.card.is_custom && (riskDetailModal.card.evidence?.length || 0) > 0 ? (
+                  <View className='risk-detail-evidence-list'>
+                    {riskDetailModal.card.evidence!.map(item => (
+                      <View key={item} className='risk-detail-evidence-item'>
+                        <Text className='risk-detail-evidence-bullet'>•</Text>
+                        <Text className='risk-detail-evidence-text'>{item}</Text>
+                      </View>
+                    ))}
+                  </View>
+                ) : null}
+                {riskDetailModal.card.is_custom && (riskDetailModal.card.missing_evidence?.length || 0) > 0 ? (
+                  <>
+                    <View className='risk-detail-divider' />
+                    <Text className='risk-detail-section-label'>还缺哪些证据</Text>
+                    <Text className='risk-detail-section-text'>{riskDetailModal.card.missing_evidence!.join('、')}</Text>
+                  </>
+                ) : null}
                 <View className='risk-detail-divider' />
                 <Text className='risk-detail-section-label'>最小改善动作</Text>
                 <Text className='risk-detail-section-text'>{riskDetailModal.card.action}</Text>
@@ -1494,7 +1650,9 @@ function StatsPage() {
                     }}
                   >
                     <Text className='risk-detail-refresh-text'>
-                      {customFocusRefreshingKey === riskDetailModal.card.key ? '更新中…' : `更新 · ${customFocusCost} 积分`}
+                      {customFocusRefreshingKey === riskDetailModal.card.key ? (
+                        <><Text className='iconfont icon-jiazaixiao risk-detail-refresh-spinner' /> 可离开此页</>
+                      ) : `更新 · ${customFocusCost} 积分`}
                     </Text>
                   </View>
                 ) : null}

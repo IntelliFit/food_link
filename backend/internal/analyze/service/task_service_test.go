@@ -32,6 +32,17 @@ func (p *recordingTaskPublisher) PublishTask(ctx context.Context, msg taskqueue.
 	return nil
 }
 
+type recordingAutoRecordExecutor struct {
+	task     *analyzedomain.AnalysisTask
+	recordID string
+	saved    bool
+}
+
+func (r *recordingAutoRecordExecutor) AutoRecordCompletedTask(_ context.Context, task *analyzedomain.AnalysisTask) (string, bool, error) {
+	r.task = task
+	return r.recordID, r.saved, nil
+}
+
 type mockTaskCreditGuard struct {
 	earnedUnits   int
 	validateCalls []int
@@ -719,6 +730,37 @@ func TestTaskService_SubmitStrictSeparateCorrectionUsesPrecisionCorrectionCredit
 	usage := task.Payload["credit_usage"].(map[string]any)
 	assert.Equal(t, 2, intFromAny(usage["cost"]))
 	assert.Equal(t, true, task.Payload["is_correction"])
+}
+
+func TestTaskService_SetTaskAutoRecordPersistsPreferenceAndRecordsCompletedTask(t *testing.T) {
+	_, taskRepo, precisionRepo, userRepo := setupTaskServiceTestDB(t)
+	svc := NewTaskService(taskRepo, precisionRepo, userRepo)
+	autoRecorder := &recordingAutoRecordExecutor{recordID: "record-1", saved: true}
+	svc.ConfigureAutoRecorder(autoRecorder)
+	ctx := context.Background()
+	task := &analyzedomain.AnalysisTask{
+		UserID:   "user1",
+		TaskType: "food",
+		Status:   "done",
+		Payload:  map[string]any{},
+	}
+	require.NoError(t, taskRepo.CreateTask(ctx, task))
+
+	result, err := svc.SetTaskAutoRecord(ctx, task.ID, "user1", "snack", true)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.True(t, result.Enabled)
+	assert.Equal(t, "afternoon_snack", result.MealType)
+	assert.Equal(t, "recorded", result.Status)
+	assert.Equal(t, "record-1", result.RecordID)
+	require.NotNil(t, autoRecorder.task)
+	assert.Equal(t, true, autoRecorder.task.Payload["auto_record_requested"])
+	assert.Equal(t, "afternoon_snack", autoRecorder.task.Payload["auto_record_meal_type"])
+
+	persisted, err := taskRepo.GetTaskByID(ctx, task.ID)
+	require.NoError(t, err)
+	assert.Equal(t, true, persisted.Payload["auto_record_requested"])
+	assert.Equal(t, "afternoon_snack", persisted.Payload["auto_record_meal_type"])
 }
 
 func TestTaskService_CountTasks(t *testing.T) {

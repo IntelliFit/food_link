@@ -8,6 +8,7 @@ import {
 } from '../../../utils/api'
 import { HOME_DASHBOARD_REFRESH_EVENT } from '../../../utils/home-events'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
+import { formatSupplementDose } from '../../../utils/supplements'
 
 export interface TodaySupplementsSectionProps {
   summary: SupplementDashboardSummary
@@ -63,7 +64,7 @@ export function TodaySupplementsSection({ summary, canQuickRecord, onRecorded }:
         <View className='today-supplements-pending'>
           <View className='today-supplements-pill'><Text className='iconfont icon-yiliaohangyedeICON-' /></View>
           <View className='today-supplements-copy'>
-            <Text className='today-supplements-name'>{pending.name} · {pending.serving_label}</Text>
+            <Text className='today-supplements-name'>{pending.name} · {formatSupplementDose(pending.default_servings, pending.serving_label)}</Text>
             <Text className='today-supplements-meta'>{pending.schedule_time ? `计划 ${pending.schedule_time}` : '今日计划'}</Text>
           </View>
           <View className={`today-supplements-record${busy ? ' is-busy' : ''}`} onClick={() => void quickRecord()}><Text>{busy ? '记录中' : canQuickRecord ? '记录一次' : '查看'}</Text></View>

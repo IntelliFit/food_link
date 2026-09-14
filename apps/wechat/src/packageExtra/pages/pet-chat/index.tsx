@@ -1,4 +1,4 @@
-import { View, Text, Input, ScrollView, Switch } from '@tarojs/components'
+import { View, Text, Input, ScrollView, Switch, Image } from '@tarojs/components'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Taro, { useDidShow, useLoad } from '@tarojs/taro'
 import {
@@ -6,10 +6,12 @@ import {
   getLatestPetChatSession,
   getPetSummary,
   getStatsSummary,
+  compressImagePathForUpload,
   estimatePetChat,
   listPetChatSessions,
   showUnifiedApiError,
   streamGeneratePetChat,
+  uploadAnalyzeImageFile,
   updateHealthProfile,
   type DietRecommendationOption,
   type DietRecommendationResult,
@@ -25,6 +27,7 @@ import { openPetSettings } from '../../../utils/pet-navigation'
 import { PetAvatar } from '../../../components/PetAvatar'
 import { PetMarkdown } from './pet-markdown'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
+import { chooseImageWithPrivacy, isPrivacyAuthorizeError, showPrivacyAuthorizeFailure } from '../../../utils/weapp-privacy'
 import './index.scss'
 
 type ChatRole = 'pet' | 'user'
@@ -38,7 +41,18 @@ type ChatMessage = {
   clues?: string[]
   actions?: string[]
   recommendation?: DietRecommendationResult
+  imageUrls?: string[]
 }
+
+type PendingChatImage = {
+  id: string
+  localPath: string
+  remoteUrl?: string
+  uploading: boolean
+}
+
+const PET_CHAT_MAX_IMAGES = 3
+const DEFAULT_IMAGE_QUESTION = '帮我看看这张图里与饮食和健康有关的重点'
 
 const FOLLOW_UPS = [
   '今天吃什么',
@@ -166,6 +180,7 @@ function mapHistoryMessage(item: PetChatHistoryMessage): ChatMessage {
     clues: Array.isArray(meta.clues) ? meta.clues.map(String) : undefined,
     actions: Array.isArray(meta.actions) ? meta.actions.map(String) : undefined,
     recommendation,
+    imageUrls: Array.isArray(meta.image_urls) ? meta.image_urls.map(String).filter(Boolean).slice(0, PET_CHAT_MAX_IMAGES) : undefined,
   }
 }
 
@@ -230,6 +245,7 @@ function PetChatPage() {
   const [estimatedCredits, setEstimatedCredits] = useState<number | null>(null)
   const [estimatingCredits, setEstimatingCredits] = useState(false)
   const [enableThinking, setEnableThinking] = useState(false)
+  const [pendingImages, setPendingImages] = useState<PendingChatImage[]>([])
   const busyRef = useRef(false)
   const estimateRequestRef = useRef(0)
   const historyLoadedRef = useRef(false)
@@ -251,6 +267,12 @@ function PetChatPage() {
   const latestDietRecommendation = activeDietContext.latest
   const isEmptyConversation = !lastAnalysis && !sessionID && messages.length === 1 && messages[0]?.kind === 'intro'
   const latestMessageID = messages.length > 0 ? `pet-chat-message-${messages[messages.length - 1].id}` : ''
+  const imageUploading = pendingImages.some((item) => item.uploading)
+  const readyImageURLs = useMemo(
+    () => pendingImages.map((item) => item.remoteUrl).filter((value): value is string => Boolean(value)),
+    [pendingImages],
+  )
+  const draftQuestion = input.trim() || (readyImageURLs.length > 0 ? DEFAULT_IMAGE_QUESTION : '')
 
   useLoad((options) => {
     const rawStarter = typeof options?.starter === 'string' ? options.starter : ''
@@ -272,7 +294,7 @@ function PetChatPage() {
         historyLoadedRef.current = true
         const history = await getLatestPetChatSession().catch(() => null)
         if (!history?.messages?.length) return
-        const restored = history.messages.map(mapHistoryMessage).filter((item) => item.text.trim())
+        const restored = history.messages.map(mapHistoryMessage).filter((item) => item.text.trim() || item.imageUrls?.length)
         if (!restored.length) return
         const restoredSessionID = history.session?.id || history.session?.ID || ''
         setSessionID(restoredSessionID)
@@ -294,7 +316,7 @@ function PetChatPage() {
   }, [petName])
 
   useEffect(() => {
-    const question = input.trim()
+    const question = draftQuestion
     const requestID = estimateRequestRef.current + 1
     estimateRequestRef.current = requestID
     if (!question) {
@@ -302,7 +324,7 @@ function PetChatPage() {
       setEstimatingCredits(false)
       return
     }
-    if (classifyDietRecommendationIntent(question, Boolean(latestDietRecommendation))) {
+    if (readyImageURLs.length === 0 && classifyDietRecommendationIntent(question, Boolean(latestDietRecommendation))) {
       setEstimatedCredits(1)
       setEstimatingCredits(false)
       return
@@ -311,7 +333,7 @@ function PetChatPage() {
     setEstimatedCredits(null)
     setEstimatingCredits(true)
     const timer = setTimeout(() => {
-      void estimatePetChat(question, questionRange(question, activeRange), enableThinking)
+      void estimatePetChat(question, questionRange(question, activeRange), enableThinking, readyImageURLs)
         .then((result) => {
           if (estimateRequestRef.current !== requestID) return
           setEstimatedCredits(result.pricing.credits_charged)
@@ -326,7 +348,7 @@ function PetChatPage() {
     }, 350)
 
     return () => clearTimeout(timer)
-  }, [activeRange, enableThinking, input, latestDietRecommendation])
+  }, [activeRange, draftQuestion, enableThinking, latestDietRecommendation, readyImageURLs])
 
   const appendMessage = useCallback((message: ChatMessage) => {
     setMessages((prev) => [...prev, message])
@@ -340,6 +362,7 @@ function PetChatPage() {
     if (busyRef.current) return
     setHistoryOpen(false)
     setInput('')
+    setPendingImages([])
     setLastAnalysis(null)
     setSessionID('')
     setMessages([buildIntroMessage(petName)])
@@ -347,7 +370,7 @@ function PetChatPage() {
   }, [petName])
 
   const applyHistory = useCallback((history: Awaited<ReturnType<typeof getLatestPetChatSession>>) => {
-    const restored = history?.messages?.map(mapHistoryMessage).filter((item) => item.text.trim()) || []
+    const restored = history?.messages?.map(mapHistoryMessage).filter((item) => item.text.trim() || item.imageUrls?.length) || []
     if (!restored.length) return false
     const restoredSessionID = history?.session?.id || history?.session?.ID || ''
     setSessionID(restoredSessionID)
@@ -390,7 +413,7 @@ function PetChatPage() {
     }
   }, [applyHistory])
 
-  const runAnalysis = useCallback(async (question: string, range: RangeMode) => {
+  const runAnalysis = useCallback(async (question: string, range: RangeMode, imageUrls: string[]) => {
     if (busyRef.current) return
     busyRef.current = true
     setBusy(true)
@@ -398,7 +421,7 @@ function PetChatPage() {
     streamingDietRecommendationRef.current = null
 
     setActiveRange(range)
-    appendMessage({ id: nextID('user'), role: 'user', text: question })
+    appendMessage({ id: nextID('user'), role: 'user', text: question, imageUrls })
     const streamingMessageID = nextID('pet-stream')
     appendMessage({ id: streamingMessageID, role: 'pet', kind: 'analysis', text: '' })
 
@@ -474,8 +497,63 @@ function PetChatPage() {
         }))
         finish()
       },
-    }, enableThinking)
+    }, enableThinking, imageUrls)
   }, [appendMessage, enableThinking, petName, sessionID, summary, updateMessage])
+
+  const uploadChatImage = useCallback(async (image: PendingChatImage) => {
+    try {
+      const uploadPath = await compressImagePathForUpload(image.localPath, { maxLongEdge: 2048 })
+      const { imageUrl } = await uploadAnalyzeImageFile(uploadPath || image.localPath)
+      setEstimatedCredits(null)
+      setPendingImages((current) => current.map((item) => (
+        item.id === image.id ? { ...item, remoteUrl: imageUrl, uploading: false } : item
+      )))
+    } catch (error) {
+      setPendingImages((current) => current.filter((item) => item.id !== image.id))
+      await showUnifiedApiError(error, '图片上传失败')
+    }
+  }, [])
+
+  const handleChooseImages = useCallback(async () => {
+    if (busyRef.current) return
+    const remaining = PET_CHAT_MAX_IMAGES - pendingImages.length
+    if (remaining <= 0) {
+      Taro.showToast({ title: `最多添加 ${PET_CHAT_MAX_IMAGES} 张图片`, icon: 'none' })
+      return
+    }
+    try {
+      const chosen = await chooseImageWithPrivacy({
+        count: remaining,
+        sizeType: ['compressed'],
+        sourceType: ['album', 'camera'],
+      })
+      const additions = (chosen.tempFilePaths || []).slice(0, remaining).map((localPath) => ({
+        id: nextID('pet-image'),
+        localPath,
+        uploading: true,
+      }))
+      if (!additions.length) return
+      setEstimatedCredits(null)
+      setPendingImages((current) => [...current, ...additions].slice(0, PET_CHAT_MAX_IMAGES))
+      await Promise.all(additions.map(uploadChatImage))
+    } catch (error) {
+      if (isPrivacyAuthorizeError(error)) {
+        showPrivacyAuthorizeFailure(error)
+        return
+      }
+      await showUnifiedApiError(error, '选择图片失败')
+    }
+  }, [pendingImages.length, uploadChatImage])
+
+  const previewImage = useCallback((current: string, urls: string[]) => {
+    if (!current || !urls.length) return
+    void Taro.previewImage({ current, urls })
+  }, [])
+
+  const removePendingImage = useCallback((id: string) => {
+    setEstimatedCredits(null)
+    setPendingImages((current) => current.filter((item) => item.id !== id))
+  }, [])
 
   const openRecommendationDetail = useCallback((option: DietRecommendationOption) => {
     const itemID = String(option.source_id || '').trim()
@@ -509,14 +587,16 @@ function PetChatPage() {
   }, [savedSchoolIDs])
 
   const handleSend = useCallback(() => {
-    const text = input.trim()
-    if (!text || busy || busyRef.current || estimatingCredits || estimatedCredits === null) return
+    const text = draftQuestion
+    if (!text || busy || busyRef.current || imageUploading || estimatingCredits || estimatedCredits === null) return
+    const imageUrls = [...readyImageURLs]
     setInput('')
+    setPendingImages([])
     const range = questionRange(text, activeRange)
-    void runAnalysis(text, range)
-  }, [activeRange, busy, estimatedCredits, estimatingCredits, input, runAnalysis])
+    void runAnalysis(text, range, imageUrls)
+  }, [activeRange, busy, draftQuestion, estimatedCredits, estimatingCredits, imageUploading, readyImageURLs, runAnalysis])
 
-  const canSend = Boolean(input.trim()) && !busy && !estimatingCredits && estimatedCredits !== null
+  const canSend = Boolean(draftQuestion) && !busy && !imageUploading && !estimatingCredits && estimatedCredits !== null
 
   return (
     <View className={`pet-chat-page ${scheme === 'dark' ? 'pet-chat-page--dark' : ''}`}>
@@ -542,6 +622,19 @@ function PetChatPage() {
           {messages.map((message) => (
             <View id={`pet-chat-message-${message.id}`} key={message.id} className={`pet-chat-message ${message.role}`}>
               <View className='pet-chat-bubble'>
+                {message.role === 'user' && message.imageUrls?.length ? (
+                  <View className='pet-chat-message-images'>
+                    {message.imageUrls.map((url) => (
+                      <Image
+                        key={url}
+                        className='pet-chat-message-image'
+                        src={url}
+                        mode='aspectFill'
+                        onClick={() => previewImage(url, message.imageUrls || [])}
+                      />
+                    ))}
+                  </View>
+                ) : null}
                 {message.role === 'pet' ? (
                   message.text ? (
                     <PetMarkdown text={message.text} />
@@ -659,7 +752,35 @@ function PetChatPage() {
           </View>
         </ScrollView>
 
+        {pendingImages.length > 0 ? (
+          <ScrollView className='pet-chat-image-draft-scroll' scrollX enhanced showScrollbar={false}>
+            <View className='pet-chat-image-draft-list'>
+              {pendingImages.map((image) => (
+                <View key={image.id} className='pet-chat-image-draft'>
+                  <Image
+                    className='pet-chat-image-draft-preview'
+                    src={image.localPath}
+                    mode='aspectFill'
+                    onClick={() => previewImage(image.localPath, pendingImages.map((item) => item.localPath))}
+                  />
+                  {image.uploading ? (
+                    <View className='pet-chat-image-upload-mask' aria-label='图片正在上传'>
+                      <View className='pet-chat-image-upload-spinner' />
+                    </View>
+                  ) : null}
+                  <View className='pet-chat-image-remove' onClick={() => removePendingImage(image.id)}>
+                    <Text>×</Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+          </ScrollView>
+        ) : null}
+
         <View className='pet-chat-input-bar'>
+          <View className={`pet-chat-image-button ${busy || pendingImages.length >= PET_CHAT_MAX_IMAGES ? 'disabled' : ''}`} onClick={() => void handleChooseImages()}>
+            <Text>照片</Text>
+          </View>
           <Input
             className='pet-chat-input'
             value={input}
@@ -674,7 +795,7 @@ function PetChatPage() {
             <Text>发送</Text>
           </View>
         </View>
-        {input.trim() ? (
+        {draftQuestion ? (
           <Text className='pet-chat-credit-cost'>
             {estimatedCredits === null ? '预计消耗 -- 积分' : <>预计消耗 {estimatedCredits} 积分</>}
           </Text>

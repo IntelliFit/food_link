@@ -32,6 +32,7 @@ func NewPublicFoodRepo(db *gorm.DB) *PublicFoodRepo {
 type ListFilter struct {
 	City               string
 	Keyword            string
+	HasLocation        *bool
 	SuitableForFatLoss *bool
 	MerchantName       string
 	MinCalories        *float64
@@ -172,6 +173,18 @@ func (r *PublicFoodRepo) ListPublished(ctx context.Context, f ListFilter) ([]dom
 			OR p.district ILIKE ?
 			OR p.detail_address ILIKE ?
 		)`, like, like, like, like, like, like, like, like, like, like, like)
+	}
+	if f.HasLocation != nil {
+		validLocationSQL := `p.latitude IS NOT NULL
+			AND p.longitude IS NOT NULL
+			AND p.latitude BETWEEN -90 AND 90
+			AND p.longitude BETWEEN -180 AND 180
+			AND NOT (p.latitude = 0 AND p.longitude = 0)`
+		if *f.HasLocation {
+			q = q.Where(validLocationSQL)
+		} else {
+			q = q.Where("NOT (" + validLocationSQL + ")")
+		}
 	}
 	if f.MinCalories != nil {
 		q = q.Where("p.total_calories >= ?", *f.MinCalories)

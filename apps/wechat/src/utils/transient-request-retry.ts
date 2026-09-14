@@ -19,6 +19,10 @@ export function isTransientRequestError(error: unknown): boolean {
   return (
     message.includes('request:fail') ||
     message.includes('timeout') ||
+    message.includes('超时') ||
+    message.includes('网络请求失败') ||
+    message.includes('网络连接') ||
+    message.includes('服务暂时繁忙') ||
     message.includes('network') ||
     message.includes('connection') ||
     message.includes('socket') ||

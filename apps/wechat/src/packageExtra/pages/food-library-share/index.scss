@@ -27,6 +27,56 @@
   color: #065f46;
 }
 
+.map-lighting-tip {
+  display: flex;
+  align-items: center;
+  gap: 18rpx;
+  margin: 24rpx;
+  padding: 24rpx;
+  border: 2rpx solid rgb(47 158 120 / 14%);
+  border-radius: 22rpx;
+  background:
+    radial-gradient(circle at 12% 20%, rgb(255 210 78 / 28%) 0, transparent 36%),
+    linear-gradient(135deg, #e7fbf2, #fff9e7);
+}
+
+.map-lighting-tip__icon {
+  flex-shrink: 0;
+  width: 68rpx;
+  height: 68rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 20rpx;
+  color: #9b6f05;
+  background: linear-gradient(135deg, #ffe57f, #ffc844);
+  font-size: 36rpx;
+  box-shadow: 0 8rpx 20rpx rgb(173 118 8 / 16%);
+}
+
+.map-lighting-tip__copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.map-lighting-tip__title,
+.map-lighting-tip__subtitle {
+  display: block;
+}
+
+.map-lighting-tip__title {
+  color: #17362c;
+  font-size: 28rpx;
+  font-weight: 750;
+}
+
+.map-lighting-tip__subtitle {
+  margin-top: 6rpx;
+  color: #60766e;
+  font-size: 23rpx;
+  line-height: 34rpx;
+}
+
 // 图片区域
 .image-section {
   background: #fff;
@@ -697,6 +747,21 @@
 
   .quick-upload-subtitle {
     color: #9ca3a8;
+  }
+
+  .map-lighting-tip {
+    border-color: rgb(255 255 255 / 8%);
+    background:
+      radial-gradient(circle at 12% 20%, rgb(245 188 48 / 13%) 0, transparent 36%),
+      linear-gradient(135deg, #143128, #292413);
+  }
+
+  .map-lighting-tip__title {
+    color: #eef8f4;
+  }
+
+  .map-lighting-tip__subtitle {
+    color: #9cada6;
   }
 
   .image-section,

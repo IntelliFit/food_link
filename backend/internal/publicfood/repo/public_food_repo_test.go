@@ -450,6 +450,43 @@ func TestPublicFoodRepo_ListPublishedCampusSearchesFoodAndLocation(t *testing.T)
 	require.Equal(t, "campus-2", locationRows[0].ID)
 }
 
+func TestPublicFoodRepo_ListPublishedFiltersMapReadyLocations(t *testing.T) {
+	db := setupPublicFoodRepoTestDB(t)
+	now := time.Now().UTC()
+	latitude := 39.9097
+	longitude := 116.4174
+	require.NoError(t, db.Create(&[]domain.PublicFoodItem{
+		{
+			ID: "map-ready", UserID: "user-1", FoodName: "地图烤鸭", Type: "common",
+			Status: "published", Latitude: &latitude, Longitude: &longitude, PublishedAt: &now, CreatedAt: &now,
+		},
+		{
+			ID: "map-missing", UserID: "user-2", FoodName: "无坐标餐食", Type: "common",
+			Status: "published", PublishedAt: &now, CreatedAt: &now,
+		},
+	}).Error)
+
+	hasLocation := true
+	rows, err := NewPublicFoodRepo(db).ListPublished(context.Background(), ListFilter{
+		HasLocation: &hasLocation,
+		Limit:       10,
+	})
+
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, "map-ready", rows[0].ID)
+
+	hasLocation = false
+	rows, err = NewPublicFoodRepo(db).ListPublished(context.Background(), ListFilter{
+		HasLocation: &hasLocation,
+		Limit:       10,
+	})
+
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, "map-missing", rows[0].ID)
+}
+
 func TestPublicFoodRepo_ListPublishedCampusFiltersFloorAndWindow(t *testing.T) {
 	db := setupPublicFoodRepoTestDB(t)
 	seedPublicFoodItems(t, db)

@@ -148,7 +148,7 @@ export default defineAppConfig({
   },
   permission: {
     'scope.userLocation': {
-      desc: '你的位置信息将用于分享食物时标记商家位置',
+      desc: '你的位置信息将用于发现附近美食，以及分享食物时标记商家位置',
     },
   },
   // 微信当前只允许在 requiredPrivateInfos 中声明定位/地址类接口；

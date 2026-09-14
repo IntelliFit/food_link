@@ -18,6 +18,7 @@ import {
   SUPPLEMENT_CATALOG_SELECTION_KEY,
   cloneCatalogComponents,
   createEmptySupplementComponent,
+  formatSupplementDose,
   normalizeSupplementCode,
 } from '../../../utils/supplements'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
@@ -45,6 +46,7 @@ export default function SupplementEditPage() {
   const [imageUrl, setImageUrl] = useState('')
   const [labelImageUrls, setLabelImageUrls] = useState<string[]>([])
   const [servingLabel, setServingLabel] = useState('1粒')
+  const [defaultServings, setDefaultServings] = useState('1')
   const [scheduleEnabled, setScheduleEnabled] = useState(true)
   const [scheduleTime, setScheduleTime] = useState('08:00')
   const [components, setComponents] = useState<SupplementComponent[]>([createEmptySupplementComponent()])
@@ -66,6 +68,7 @@ export default function SupplementEditPage() {
       setImageUrl(persistedImageUrls[0] || '')
       setLabelImageUrls(persistedImageUrls)
       setServingLabel(item.serving_label || '1份')
+      setDefaultServings(String(item.default_servings > 0 ? item.default_servings : 1))
       setScheduleEnabled(item.schedule_enabled)
       setScheduleTime(item.schedule_time || '08:00')
       setComponents(item.components?.length ? item.components : [createEmptySupplementComponent()])
@@ -86,6 +89,7 @@ export default function SupplementEditPage() {
     setImageUrl(selected.image_url || '')
     setLabelImageUrls(selected.image_url ? [selected.image_url] : [])
     setServingLabel(selected.serving_label || '1份')
+    setDefaultServings('1')
     setComponents(cloneCatalogComponents(selected))
     setOcrHint('已从公共补剂库预填，请按照自己的瓶身标签核对含量。')
     setConfirmed(false)
@@ -201,6 +205,12 @@ export default function SupplementEditPage() {
       Taro.showToast({ title: '请填写补剂名称', icon: 'none' })
       return
     }
+    const normalizedDefaultServings = Number(defaultServings)
+    if (!Number.isFinite(normalizedDefaultServings) || normalizedDefaultServings <= 0 || normalizedDefaultServings > 100) {
+      setSaveError('每次服用份数应大于 0 且不超过 100')
+      Taro.showToast({ title: '请填写有效的服用份数', icon: 'none' })
+      return
+    }
     const normalized = components
       .filter((item) => item.name.trim() && Number(item.amount) > 0 && item.unit.trim())
       .map((item) => ({ ...item, code: normalizeSupplementCode(item.code || item.name), amount: Number(item.amount) }))
@@ -218,7 +228,7 @@ export default function SupplementEditPage() {
     try {
       const payload = {
         name: name.trim(), brand: brand.trim(), image_url: imageUrl || null, image_urls: labelImageUrls,
-        default_servings: 1, serving_label: servingLabel.trim() || '1份',
+        default_servings: normalizedDefaultServings, serving_label: servingLabel.trim() || '1份',
         schedule_enabled: scheduleEnabled, schedule_time: scheduleEnabled ? scheduleTime : null, schedule_days: [],
         components: normalized, label_confirmed: true, status: 'active',
       }
@@ -265,7 +275,9 @@ export default function SupplementEditPage() {
                 <Text className='supplement-form-title'>基本信息</Text>
                 <View className='supplement-field'><Text className='supplement-field-label'>名称</Text><Input value={name} placeholder='如：甘氨酸镁' onInput={(e) => setName(e.detail.value)} /></View>
                 <View className='supplement-field'><Text className='supplement-field-label'>品牌</Text><Input value={brand} placeholder='选填' onInput={(e) => setBrand(e.detail.value)} /></View>
-                <View className='supplement-field'><Text className='supplement-field-label'>一次用量</Text><Input value={servingLabel} placeholder='如：2粒 / 1勺' onInput={(e) => setServingLabel(e.detail.value)} /></View>
+                <View className='supplement-field'><Text className='supplement-field-label'>标签每份</Text><Input value={servingLabel} placeholder='如：2粒 / 1勺' onInput={(e) => { setServingLabel(e.detail.value); setConfirmed(false) }} /></View>
+                <View className='supplement-field'><Text className='supplement-field-label'>每次服用</Text><Input id='supplement-default-servings-input' type='digit' value={defaultServings} placeholder='如：0.5 / 1 / 2' onInput={(e) => { setDefaultServings(e.detail.value); setConfirmed(false) }} /><Text className='supplement-field-unit'>份</Text></View>
+                <Text className='supplement-dose-preview'>快速记录将按每次 {Number(defaultServings) > 0 ? formatSupplementDose(Number(defaultServings), servingLabel) : '—'} 计入营养统计</Text>
               </View>
 
               <View className='supplement-form-card supplement-plan-card'>
@@ -309,7 +321,7 @@ export default function SupplementEditPage() {
 
               <View className={`supplement-confirm${confirmed ? ' is-confirmed' : ''}`} onClick={() => setConfirmed(!confirmed)}>
                 <View className='supplement-confirm-box'><Text>{confirmed ? '✓' : ''}</Text></View>
-                <Text>我已核对名称、每次用量和全部标签成分</Text>
+                <Text>我已核对名称、标签每份用量、计划剂量和全部标签成分</Text>
               </View>
               <Text className='supplement-disclaimer'>本功能仅用于营养与成分记录，不提供诊断、处方或停药建议。</Text>
             </>

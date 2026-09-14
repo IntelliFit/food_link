@@ -34,10 +34,18 @@ func (h *LoginHandler) Login(c *gin.Context) {
 	}
 	out, err := h.service.Login(c.Request.Context(), input)
 	if err != nil {
-		c.JSON(500, gin.H{"detail": err.Error()})
+		status, detail := loginErrorResponse(err)
+		c.JSON(status, gin.H{"detail": detail})
 		return
 	}
 	c.JSON(200, out)
+}
+
+func loginErrorResponse(err error) (int, string) {
+	if errors.Is(err, service.ErrWechatLoginUnavailable) {
+		return http.StatusServiceUnavailable, service.ErrWechatLoginUnavailable.Error()
+	}
+	return http.StatusInternalServerError, err.Error()
 }
 
 func (h *LoginHandler) AppWechatLogin(c *gin.Context) {

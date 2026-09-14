@@ -1,3 +1,3 @@
 export default definePageConfig({
-  navigationBarTitleText: '公共食物库'
+  navigationBarTitleText: '点亮美食'
 })

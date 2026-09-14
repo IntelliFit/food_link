@@ -76,6 +76,7 @@ var supportedTaskTypes = []string{
 	"precision_aggregate",
 	"public_food_library_text",
 	"exercise",
+	"custom_focus",
 	"health_report",
 	"packaged_nutrition_label",
 	"packaged_product_extract",
@@ -99,6 +100,7 @@ type Runner struct {
 	expiry        *expiryservice.Recognizer
 	notifier      expiryNotificationProcessor
 	exercise      *healthservice.ExerciseService
+	customFocus   customFocusProcessor
 	nutrition     *foodrecordservice.FoodNutritionService
 	autoRecorder  analysisAutoRecorder
 	queue         taskqueue.Queue
@@ -135,6 +137,10 @@ type CreditGuard interface {
 
 type analysisAutoRecorder interface {
 	AutoRecordCompletedTask(context.Context, *domain.AnalysisTask) (string, bool, error)
+}
+
+type customFocusProcessor interface {
+	ProcessCustomFocusTask(ctx context.Context, userID, statsRange, focusID string) (map[string]any, error)
 }
 
 type expiryNotificationProcessor interface {
@@ -210,6 +216,10 @@ func (r *Runner) ConfigureCampusCatalog(repo *campuscatalogrepo.CatalogRepo) {
 
 func (r *Runner) ConfigureAutoRecorder(recorder analysisAutoRecorder) {
 	r.autoRecorder = recorder
+}
+
+func (r *Runner) ConfigureCustomFocusProcessor(processor customFocusProcessor) {
+	r.customFocus = processor
 }
 
 func (r *Runner) Run(ctx context.Context, opts Options) error {
@@ -937,6 +947,8 @@ func (r *Runner) process(ctx context.Context, workerID string, task *domain.Anal
 		err = r.processPublicFoodModeration(taskCtx, task)
 	case "exercise":
 		err = r.processExercise(taskCtx, task)
+	case "custom_focus":
+		err = r.processCustomFocus(taskCtx, task)
 	case "health_report":
 		err = r.processHealthReport(taskCtx, task)
 	case "packaged_nutrition_label":
@@ -5190,6 +5202,22 @@ func (r *Runner) processExercise(ctx context.Context, task *domain.AnalysisTask)
 	}
 	err = r.completeTask(ctx, task, result)
 	return err
+}
+
+func (r *Runner) processCustomFocus(ctx context.Context, task *domain.AnalysisTask) error {
+	if r.customFocus == nil {
+		return fmt.Errorf("custom focus worker dependencies are not initialized")
+	}
+	statsRange := stringFromMap(task.Payload, "range")
+	focusID := stringFromMap(task.Payload, "focus_id")
+	if focusID == "" {
+		return fmt.Errorf("custom focus task missing focus_id")
+	}
+	result, err := r.customFocus.ProcessCustomFocusTask(ctx, task.UserID, statsRange, focusID)
+	if err != nil {
+		return err
+	}
+	return r.completeTask(ctx, task, result)
 }
 
 func (r *Runner) processHealthReport(ctx context.Context, task *domain.AnalysisTask) error {

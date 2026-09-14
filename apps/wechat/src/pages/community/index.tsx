@@ -68,6 +68,7 @@ import { FlPageThemeRoot } from '../../components/FlPageThemeRoot'
 import { applyThemeNavigationBar } from '../../utils/theme-navigation-bar'
 import { CommunityFoodRecordEditSheet } from './components/CommunityFoodRecordEditSheet'
 import { appendBoundedUnique, getFeedPageRequest, getLatestFeedCursor, type LatestFeedCursor } from '../../utils/list-pagination'
+import { formatFeedTime } from '../../utils/feed-time'
 
 const MAX_FEED_WINDOW_ITEMS = 200
 
@@ -128,67 +129,6 @@ const FEED_GOAL_OPTIONS: Array<{ value: DietGoal | 'all'; label: string }> = [
   { value: 'muscle_gain', label: '增肌' },
   { value: 'maintain', label: '维持' },
 ]
-
-const CHINA_TIMEZONE_OFFSET_MS = 8 * 60 * 60 * 1000
-const ISO_TIMEZONE_SUFFIX_RE = /(Z|[+-]\d{2}:?\d{2})$/i
-const ISO_LOCAL_DATETIME_RE = /^(\d{4})-(\d{2})-(\d{2})[T\s](\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?$/
-
-function parseFeedRecordTime(recordTime: string): Date | null {
-  const raw = String(recordTime || '').trim()
-  if (!raw) return null
-  if (!ISO_TIMEZONE_SUFFIX_RE.test(raw)) {
-    const localMatch = raw.match(ISO_LOCAL_DATETIME_RE)
-    if (localMatch) {
-      const [, y, mo, d, h, mi, s = '0'] = localMatch
-      const utcMs = Date.UTC(
-        Number(y),
-        Number(mo) - 1,
-        Number(d),
-        Number(h),
-        Number(mi),
-        Number(s)
-      ) - CHINA_TIMEZONE_OFFSET_MS
-      return new Date(utcMs)
-    }
-  }
-  const parsed = new Date(raw)
-  return Number.isNaN(parsed.getTime()) ? null : parsed
-}
-
-function getChinaTimeParts(date: Date) {
-  const shifted = new Date(date.getTime() + CHINA_TIMEZONE_OFFSET_MS)
-  return {
-    year: shifted.getUTCFullYear(),
-    month: shifted.getUTCMonth() + 1,
-    day: shifted.getUTCDate(),
-    hour: shifted.getUTCHours(),
-    minute: shifted.getUTCMinutes(),
-  }
-}
-
-function formatChinaDateTime(date: Date): string {
-  const p = getChinaTimeParts(date)
-  const now = getChinaTimeParts(new Date())
-  const timeText = `${String(p.hour).padStart(2, '0')}:${String(p.minute).padStart(2, '0')}`
-  if (p.year === now.year && p.month === now.month && p.day === now.day) {
-    return `今天 ${timeText}`
-  }
-  if (p.year === now.year) {
-    return `${p.month}月${p.day}日 ${timeText}`
-  }
-  return `${p.year}-${String(p.month).padStart(2, '0')}-${String(p.day).padStart(2, '0')} ${timeText}`
-}
-
-function formatFeedTime(recordTime: string): string {
-  const d = parseFeedRecordTime(recordTime)
-  if (!d) return recordTime ? recordTime.slice(0, 16).replace('T', ' ') : ''
-  const diff = Date.now() - d.getTime()
-  if (diff < 0 && diff > -60000) return '刚刚'
-  if (diff >= 0 && diff < 60000) return '刚刚'
-  if (diff >= 0 && diff < 3600000) return `${Math.floor(diff / 60000)}分钟前`
-  if (diff >= 0 && diff < 86400000) return `${Math.floor(diff / 3600000)}小时前`
-  return formatChinaDateTime(d)
-}
 
 /** 与首页一致的细线搜索图标（替代「搜」字） */
 function FeedSearchGlyph() {
@@ -477,6 +417,8 @@ function CommunityPage() {
   const commentTapLockRef = useRef(false)
   /** 长按评论后忽略紧随其后的 tap，避免误触打开回复框 */
   const commentLongPressIgnoreRef = useRef(false)
+  const deletingCommentKeysRef = useRef(new Set<string>())
+  const [deletingCommentKeys, setDeletingCommentKeys] = useState<Set<string>>(() => new Set())
   const [commentInputFocus, setCommentInputFocus] = useState(false)
   const [replyTargetComment, setReplyTargetComment] = useState<FeedCommentItem | null>(null)
   const lastCommentSubmitRef = useRef<{ signature: string; timestamp: number }>({
@@ -1888,14 +1830,14 @@ function CommunityPage() {
   }, [getTempCommentsKey])
 
   const handleRemoveCommentLocally = useCallback(
-    (recordId: string, comment: FeedCommentItem, targetType: CommunityFeedTargetType = 'food_record') => {
+    (recordId: string, comment: FeedCommentItem, targetType: CommunityFeedTargetType = 'food_record', deletedCount?: number) => {
       const targetKey = `${targetType}:${recordId}`
       setFeedList((prev) => {
         const target = prev.find((i) => getFeedTargetKey(i) === targetKey)
         const comments = target?.comments || []
         const subtreeIds = buildCommentSubtreeIds(comments, comment.id)
         const nextComments = removeCommentSubtreeFromList(comments, comment.id)
-        const removedCount = comments.length - nextComments.length
+        const removedCount = Math.max(comments.length - nextComments.length, Number(deletedCount || 0))
         const next = prev.map((it) => {
           if (getFeedTargetKey(it) !== targetKey) return it
           return {
@@ -1920,8 +1862,10 @@ function CommunityPage() {
   )
 
   const handleCommentLongPress = useCallback(
-    (recordId: string, feedItem: CommunityFeedItem, comment: FeedCommentItem) => {
+    async (recordId: string, feedItem: CommunityFeedItem, comment: FeedCommentItem) => {
       const targetType = getFeedTargetType(feedItem)
+      const deletingKey = `${targetType}:${recordId}:${comment.id}`
+      if (deletingCommentKeysRef.current.has(deletingKey)) return
       commentLongPressIgnoreRef.current = true
       setTimeout(() => {
         commentLongPressIgnoreRef.current = false
@@ -1935,37 +1879,38 @@ function CommunityPage() {
       if (!canDelete) {
         return
       }
-      void Taro.showModal({
+      const res = await Taro.showModal({
         title: '删除评论',
-        content: '删除后无法恢复',
+        content: '该评论及其回复将一并删除，删除后无法恢复',
         confirmText: '删除',
-        cancelText: '取消'
-      }).then((res) => {
-        if (!res.confirm) return
-        if (comment._is_pending || comment.id.startsWith('pending_')) {
-          handleRemoveCommentLocally(recordId, comment, targetType)
-          Taro.showToast({ title: '已删除', icon: 'success' })
-          return
-        }
-        if (comment._is_temp) {
-          removeTempCommentFromStorage(recordId, comment, targetType)
-          handleRemoveCommentLocally(recordId, comment, targetType)
-          Taro.showToast({ title: '已删除', icon: 'success' })
-          return
-        }
-        Taro.showLoading({ title: '删除中...', mask: true })
-        void communityDeleteComment(recordId, comment.id, targetType)
-          .then(() => {
-            handleRemoveCommentLocally(recordId, comment, targetType)
-            Taro.showToast({ title: '已删除', icon: 'success' })
-          })
-          .catch(async (e: Error) => {
-            await showUnifiedApiError(e, '删除失败')
-          })
-          .finally(() => {
-            Taro.hideLoading()
-          })
+        cancelText: '取消',
+        confirmColor: '#ef4444',
       })
+      if (!res.confirm) return
+      if (comment._is_pending || comment.id.startsWith('pending_')) {
+        handleRemoveCommentLocally(recordId, comment, targetType)
+        Taro.showToast({ title: '已删除', icon: 'success' })
+        return
+      }
+      if (comment._is_temp) {
+        removeTempCommentFromStorage(recordId, comment, targetType)
+        handleRemoveCommentLocally(recordId, comment, targetType)
+        Taro.showToast({ title: '已删除', icon: 'success' })
+        return
+      }
+
+      deletingCommentKeysRef.current.add(deletingKey)
+      setDeletingCommentKeys(new Set(deletingCommentKeysRef.current))
+      try {
+        const deletion = await communityDeleteComment(recordId, comment.id, targetType)
+        handleRemoveCommentLocally(recordId, comment, targetType, deletion.deleted)
+        Taro.showToast({ title: '已删除', icon: 'success' })
+      } catch (error) {
+        await showUnifiedApiError(error, '删除失败')
+      } finally {
+        deletingCommentKeysRef.current.delete(deletingKey)
+        setDeletingCommentKeys(new Set(deletingCommentKeysRef.current))
+      }
     },
     [handleRemoveCommentLocally, removeTempCommentFromStorage]
   )
@@ -2623,7 +2568,7 @@ function CommunityPage() {
                                         <SwiperItem key={`${targetKey}-swiper-${index}`} className='feed-image-swiper-item'>
                                           <Image
                                             src={path}
-                                            mode='aspectFill'
+                                            mode='aspectFit'
                                             className='feed-image-swiper-image'
                                             onClick={(e) => {
                                               e.stopPropagation()
@@ -2641,8 +2586,8 @@ function CommunityPage() {
                                   </>
                                 ) : (
                                   <Image
-                                    src={item.record.image_path || ''}
-                                    mode='aspectFill'
+                                    src={feedImagePaths[0] || ''}
+                                    mode='aspectFit'
                                     className='feed-image-content'
                                   />
                                 )}
@@ -2662,7 +2607,7 @@ function CommunityPage() {
                                       })
                                     }}
                                   >
-                                    <Image src={url} mode='aspectFill' className='feed-circle-post-image' />
+                                    <Image src={url} mode='aspectFit' className='feed-circle-post-image' />
                                   </View>
                                 ))}
                               </View>
@@ -2853,6 +2798,25 @@ function CommunityPage() {
                                         <Text className='comment-status-badge'>审核中</Text>
                                       ) : null}
                                     </View>
+                                    {(() => {
+                                      const currentUserId = String(Taro.getStorageSync('user_id') || '')
+                                      const canDelete = (Boolean(currentUserId) && c.user_id === currentUserId) || Boolean(item.is_mine)
+                                      if (!canDelete) return null
+                                      const deletingKey = `${targetType}:${rid}:${c.id}`
+                                      return (
+                                        <View
+                                          className='comment-delete-action'
+                                          onClick={(event) => {
+                                            event.stopPropagation()
+                                            void handleCommentLongPress(rid, item, c)
+                                          }}
+                                        >
+                                          {deletingCommentKeys.has(deletingKey)
+                                            ? <View className='comment-delete-spinner' />
+                                            : <Text className='comment-delete-text'>删除</Text>}
+                                        </View>
+                                      )
+                                    })()}
                                   </View>
                                 ))}
                                 {foldedHiddenCount > 0 ? (

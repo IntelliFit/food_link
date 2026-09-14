@@ -51,6 +51,37 @@ func TestStatsRepo_FoodRecordsForDateRange(t *testing.T) {
 	assert.Equal(t, 500.0, records[0].TotalCalories)
 }
 
+func TestStatsRepo_CustomFocusCardPersistsExplainabilityMeta(t *testing.T) {
+	db := setupStatsTestDB(t)
+	require.NoError(t, db.AutoMigrate(&domain.CustomFocusCard{}))
+	require.NoError(t, db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS ai_custom_focus_cards_user_range_focus_unique ON ai_custom_focus_cards(user_id, range_type, focus_id)`).Error)
+	repo := NewStatsRepo(db)
+	ctx := context.Background()
+	generatedAt := time.Date(2026, 9, 14, 0, 0, 0, 0, time.FixedZone("Asia/Shanghai", 8*60*60))
+
+	require.NoError(t, repo.UpsertCustomFocusCard(ctx, domain.CustomFocusCard{
+		ID: "card-1", UserID: "user-1", FocusID: "focus-1", RangeType: "week",
+		GeneratedDate: generatedAt, DataFingerprint: "fingerprint-1", FocusLabel: "力量提升", Score: 64,
+		Brief: "brief", Summary: "summary", Basis: "basis", Action: "action",
+		Meta: map[string]any{
+			"score_kind":     "diet_and_record_support",
+			"confidence":     "medium",
+			"previous_score": 58,
+			"score_change":   6,
+			"evidence":       []string{"日均蛋白质 90g"},
+		},
+	}))
+
+	stored, err := repo.GetCustomFocusCard(ctx, "user-1", "week", "focus-1")
+	require.NoError(t, err)
+	require.NotNil(t, stored)
+	assert.Equal(t, "2026-09-14", stored.GeneratedDate.In(time.FixedZone("Asia/Shanghai", 8*60*60)).Format("2006-01-02"))
+	assert.Equal(t, "diet_and_record_support", stored.Meta["score_kind"])
+	assert.Equal(t, "medium", stored.Meta["confidence"])
+	assert.Equal(t, float64(58), stored.Meta["previous_score"])
+	assert.Equal(t, []any{"日均蛋白质 90g"}, stored.Meta["evidence"])
+}
+
 func TestStatsRepo_GetDietRecommendationCandidatesFiltersCampusSchool(t *testing.T) {
 	db := setupStatsTestDB(t)
 	require.NoError(t, db.Exec(`CREATE TABLE public_food_library (

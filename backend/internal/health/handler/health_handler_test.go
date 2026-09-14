@@ -88,12 +88,14 @@ func (m *mockExerciseSvc) UpdateLog(ctx context.Context, userID, logID, exercise
 }
 
 type mockStatsSvc struct {
-	summary       *service.StatsSummary
-	calendar      *service.CalendarMonthSummary
-	insightResult map[string]any
-	dietResult    *service.DietRecommendationResult
-	saveErr       error
-	err           error
+	summary         *service.StatsSummary
+	calendar        *service.CalendarMonthSummary
+	insightResult   map[string]any
+	customFocusTask *service.CustomFocusGenerationTask
+	customFocusCard *service.RiskCard
+	dietResult      *service.DietRecommendationResult
+	saveErr         error
+	err             error
 }
 
 func (m *mockStatsSvc) GetSummary(ctx context.Context, userID string, statsRange string, tdee int, streakDays int) (*service.StatsSummary, error) {
@@ -112,8 +114,12 @@ func (m *mockStatsSvc) SaveInsight(ctx context.Context, userID string, content s
 	return m.saveErr
 }
 
+func (m *mockStatsSvc) StartCustomFocusCardGeneration(ctx context.Context, userID, statsRange, focusID string) (*service.CustomFocusGenerationTask, error) {
+	return m.customFocusTask, m.err
+}
+
 func (m *mockStatsSvc) GenerateCustomFocusCard(ctx context.Context, userID, statsRange, focusID string) (*service.RiskCard, map[string]any, error) {
-	return nil, nil, m.err
+	return m.customFocusCard, map[string]any{}, m.err
 }
 
 func (m *mockStatsSvc) GenerateDietRecommendation(ctx context.Context, userID string, input service.DietRecommendationInput) (*service.DietRecommendationResult, error) {
@@ -138,6 +144,8 @@ func setupHealthRouter(h *HealthHandler) *gin.Engine {
 	r.GET("/api/stats/calendar", h.GetStatsCalendar)
 	r.POST("/api/stats/insight/generate", h.GenerateStatsInsight)
 	r.POST("/api/stats/insight/save", h.SaveStatsInsight)
+	r.POST("/api/stats/custom-focus/generate", h.GenerateCustomFocusCard)
+	r.POST("/api/stats/custom-focus/tasks", h.StartCustomFocusCardGeneration)
 	r.POST("/api/diet/recommendations", h.GenerateDietRecommendation)
 	r.GET("/api/exercise-calories/daily", h.GetExerciseCaloriesDaily)
 	r.GET("/api/exercise-logs", h.GetExerciseLogs)
@@ -320,6 +328,48 @@ func TestGenerateStatsInsight(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+func TestGenerateCustomFocusCardReturnsBackgroundTask(t *testing.T) {
+	mockSvc := &mockStatsSvc{
+		customFocusTask: &service.CustomFocusGenerationTask{TaskID: "task-1", Status: "pending"},
+	}
+	h := NewHealthHandler(nil, nil, mockSvc)
+	r := setupHealthRouter(h)
+
+	body, _ := json.Marshal(map[string]any{"range": "week", "focus_id": "focus-1"})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/stats/custom-focus/tasks", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	var resp map[string]any
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+	data := resp["data"].(map[string]any)
+	assert.Equal(t, "task-1", data["task_id"])
+	assert.Equal(t, "pending", data["status"])
+}
+
+func TestGenerateCustomFocusCardKeepsLegacySynchronousContract(t *testing.T) {
+	mockSvc := &mockStatsSvc{
+		customFocusCard: &service.RiskCard{Key: "custom:focus-1", Title: "力量提升", Score: 64, IsCustom: true},
+	}
+	h := NewHealthHandler(nil, nil, mockSvc)
+	r := setupHealthRouter(h)
+
+	body, _ := json.Marshal(map[string]any{"range": "week", "focus_id": "focus-1"})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/stats/custom-focus/generate", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	var resp map[string]any
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+	card := resp["data"].(map[string]any)["card"].(map[string]any)
+	assert.Equal(t, "custom:focus-1", card["key"])
+	assert.Equal(t, float64(64), card["score"])
 }
 
 func TestSaveStatsInsight(t *testing.T) {
