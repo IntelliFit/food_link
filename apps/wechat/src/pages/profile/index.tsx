@@ -1,3 +1,4 @@
+import { RecapDelivery } from '../../components/RecapDelivery'
 import { View, Text, Image, Navigator } from '@tarojs/components'
 import * as React from 'react'
 import Taro, { useDidShow } from '@tarojs/taro'
@@ -614,6 +615,7 @@ function ProfilePage() {
 
   return (
     <View className={`profile-page ${scheme === 'dark' ? 'profile-page--dark' : ''}`}>
+      <RecapDelivery archive />
       {/* 顶部用户信息区域（仿知乎风格） */}
       <View className='profile-header-section'>
         <View className='user-card'>

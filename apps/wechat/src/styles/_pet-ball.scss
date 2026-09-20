@@ -1,0 +1,6 @@
+@mixin surface {
+  background: radial-gradient(circle at 30% 25%, #ffe2aa, #eabb76 65%, #dba350);
+  border-color: #fff6dd;
+  border-style: solid;
+  border-radius: 50%;
+}

@@ -1,3 +1,4 @@
+/* stylelint-disable-next-line import-notation -- Sass variables require a compile-time import in the WeChat build. */
 @import '../../styles/tab-page-layout.scss';
 
 /* 与首页 `index.scss` 同源：时间轴绿 #5cb896、警示红 #e57373、页面渐变与三大营养素低饱和色 */
@@ -22,7 +23,6 @@ $stats-blue-soft: #7aa9ce;
     #f0f3f6 80%,
     #f0f3f6 100%
   );
-
   padding-top: $tab-page-content-top;
   padding-bottom: 200rpx;
   box-sizing: border-box;
@@ -46,6 +46,7 @@ $stats-blue-soft: #7aa9ce;
   .stats-guest-card,
   .health-index-gate-card,
   .stats-data-gate-card,
+  /* stylelint-disable-next-line selector-not-notation -- WeChat WXSS does not support a selector list inside :not(). */
   .stats-card:not(.hero-card):not(.risk-overview-card),
   .risk-detail-panel,
   .analysis-card,
@@ -121,7 +122,9 @@ $stats-blue-soft: #7aa9ce;
 
   .risk-overview-score-unit,
   .risk-overview-score-hint,
-  .risk-overview-chip-label {
+  .risk-overview-chip-label,
+  .risk-overview-subtitle,
+  .risk-score-gauge__projected {
     color: #668176;
   }
 
@@ -136,6 +139,47 @@ $stats-blue-soft: #7aa9ce;
 
   .risk-overview-badge-label {
     color: #356c55;
+  }
+
+  .risk-score-gauge {
+    background: conic-gradient(
+      from 225deg,
+      #58b78f 0 var(--risk-score-progress),
+      rgb(53 108 85 / 14%) var(--risk-score-progress) 75%,
+      transparent 75% 100%
+    );
+    filter: drop-shadow(0 10rpx 18rpx rgb(73 133 108 / 14%));
+  }
+
+  .risk-score-gauge__center {
+    background: #d9eee4;
+    box-shadow: inset 0 0 0 1rpx rgb(53 108 85 / 8%);
+  }
+
+  .risk-overview-chip,
+  .risk-score-explain {
+    background: rgb(255 255 255 / 50%);
+    border-color: rgb(53 108 85 / 10%);
+  }
+
+  .risk-score-explain__title,
+  .risk-score-factor__name,
+  .risk-score-factor__value {
+    color: #285c4a;
+  }
+
+  .risk-score-explain__action,
+  .risk-score-factor__brief,
+  .risk-score-explain__note {
+    color: #668176;
+  }
+
+  .risk-score-factor {
+    border-top-color: rgb(53 108 85 / 10%);
+  }
+
+  .risk-score-factor__track {
+    background: rgb(53 108 85 / 12%);
   }
 }
 
@@ -272,6 +316,64 @@ $stats-blue-soft: #7aa9ce;
   line-height: 1.55;
 }
 
+.health-index-preview-card {
+  padding: 18rpx 22rpx;
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  background: linear-gradient(135deg, rgb(235 249 244 / 96%) 0%, rgb(246 252 249 / 96%) 100%);
+  border: 1rpx solid rgb(92 184 150 / 22%);
+  box-shadow: 0 6rpx 20rpx rgb(56 133 105 / 6%);
+}
+
+.health-index-preview-badge {
+  min-width: 64rpx;
+  height: 40rpx;
+  padding: 0 12rpx;
+  border-radius: 999rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: $stats-primary;
+}
+
+.health-index-preview-badge-text {
+  font-size: 22rpx;
+  line-height: 1;
+  font-weight: 700;
+  color: #fff;
+}
+
+.health-index-preview-copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.health-index-preview-title {
+  display: block;
+  font-size: 25rpx;
+  line-height: 1.4;
+  font-weight: 700;
+  color: #285c4a;
+}
+
+.health-index-preview-desc {
+  display: block;
+  margin-top: 2rpx;
+  font-size: 21rpx;
+  line-height: 1.4;
+  color: #527064;
+}
+
+.health-index-preview-meta {
+  flex-shrink: 0;
+  font-size: 21rpx;
+  line-height: 30rpx;
+  color: #678579;
+  white-space: nowrap;
+}
+
 // 页面头部已移除
 
 // 日期选择器 - 首页风格
@@ -378,6 +480,15 @@ $stats-blue-soft: #7aa9ce;
   padding: 16rpx 32rpx 24rpx;
 }
 
+// 三个分析面板只在首次进入页面时创建。切换时保留节点，避免图表与富文本反复重建。
+.analysis-panel-content {
+  display: block;
+
+  &.is-hidden {
+    display: none;
+  }
+}
+
 .segmented-control {
   position: relative;
   display: flex;
@@ -444,7 +555,10 @@ $stats-blue-soft: #7aa9ce;
   color: #64748b;
   border-radius: 18rpx;
   font-weight: 500;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition:
+    background-color 0.14s ease,
+    color 0.14s ease,
+    box-shadow 0.14s ease;
 
   &.active {
     background: #fff;
@@ -639,10 +753,10 @@ $stats-blue-soft: #7aa9ce;
 
 .risk-overview-subtitle {
   display: block;
-  margin-top: 14rpx;
+  margin-top: 8rpx;
   font-size: 22rpx;
   line-height: 34rpx;
-  color: #64748b;
+  color: rgb(226 232 240 / 78%);
 }
 
 .risk-overview-badge {
@@ -711,27 +825,75 @@ $stats-blue-soft: #7aa9ce;
 .risk-overview-score-row {
   display: flex;
   align-items: baseline;
-  gap: 10rpx;
-  margin-top: 28rpx;
+  justify-content: center;
+  gap: 6rpx;
 }
 
 .risk-overview-score {
-  font-size: 96rpx;
+  font-size: 72rpx;
   line-height: 1;
   font-weight: 800;
-  letter-spacing: -2rpx;
+  letter-spacing: -1rpx;
   color: #fff;
 }
 
 .risk-overview-score-unit {
-  font-size: 28rpx;
-  line-height: 36rpx;
+  font-size: 22rpx;
+  line-height: 30rpx;
   color: rgb(255 255 255 / 78%);
+}
+
+.risk-overview-main {
+  display: flex;
+  align-items: center;
+  gap: 28rpx;
+  margin-top: 24rpx;
+}
+
+.risk-score-gauge {
+  --risk-score-progress: 0%;
+
+  position: relative;
+  width: 220rpx;
+  height: 220rpx;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: conic-gradient(
+    from 225deg,
+    #83d4b3 0 var(--risk-score-progress),
+    rgb(255 255 255 / 18%) var(--risk-score-progress) 75%,
+    transparent 75% 100%
+  );
+  filter: drop-shadow(0 10rpx 20rpx rgb(4 29 23 / 18%));
+}
+
+.risk-score-gauge__center {
+  position: absolute;
+  inset: 22rpx;
+  border-radius: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: #1b4e43;
+  box-shadow: inset 0 0 0 1rpx rgb(255 255 255 / 7%);
+}
+
+.risk-score-gauge__projected {
+  display: block;
+  margin-top: 8rpx;
+  font-size: 20rpx;
+  line-height: 28rpx;
+  color: rgb(226 232 240 / 78%);
+}
+
+.risk-overview-insight {
+  flex: 1;
+  min-width: 0;
 }
 
 .risk-overview-score-hint {
   display: block;
-  margin-top: 10rpx;
   font-size: 22rpx;
   line-height: 32rpx;
   color: rgb(226 232 240 / 82%);
@@ -739,21 +901,24 @@ $stats-blue-soft: #7aa9ce;
 
 .risk-overview-summary {
   display: block;
-  margin-top: 16rpx;
-  font-size: 28rpx;
-  line-height: 42rpx;
+  margin-top: 12rpx;
+  font-size: 24rpx;
+  line-height: 36rpx;
   color: #f8fafc;
 }
 
 .risk-overview-chip-row {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  column-gap: 18rpx;
-  margin-top: 26rpx;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12rpx;
+  margin-top: 18rpx;
 }
 
 .risk-overview-chip {
   min-width: 0;
+  padding: 12rpx 14rpx;
+  border-radius: 16rpx;
+  background: rgb(255 255 255 / 8%);
 }
 
 .risk-overview-chip-label {
@@ -765,14 +930,198 @@ $stats-blue-soft: #7aa9ce;
 
 .risk-overview-chip-value {
   display: block;
-  margin-top: 8rpx;
-  font-size: 26rpx;
-  line-height: 38rpx;
+  margin-top: 3rpx;
+  font-size: 23rpx;
+  line-height: 32rpx;
   font-weight: 700;
   color: #fff;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.risk-score-explain {
+  margin-top: 26rpx;
+  border-radius: 20rpx;
+  background: rgb(255 255 255 / 8%);
+  border: 1rpx solid rgb(255 255 255 / 10%);
+  overflow: hidden;
+
+  &:active {
+    background: rgb(255 255 255 / 12%);
+  }
+}
+
+.risk-score-explain__header {
+  min-height: 76rpx;
+  padding: 0 20rpx;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+}
+
+.risk-score-explain__title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  min-width: 0;
+}
+
+.risk-score-explain__icon {
+  flex-shrink: 0;
+  font-size: 24rpx;
+  color: #a7e2c9;
+}
+
+.risk-score-explain__title {
+  font-size: 24rpx;
+  line-height: 34rpx;
+  font-weight: 700;
+  color: #fff;
+}
+
+.risk-score-explain__action {
+  flex-shrink: 0;
+  font-size: 21rpx;
+  line-height: 30rpx;
+  color: rgb(226 232 240 / 78%);
+}
+
+.risk-score-explain__body {
+  padding: 2rpx 20rpx 22rpx;
+}
+
+.risk-score-factor {
+  padding: 16rpx 0;
+  border-top: 1rpx solid rgb(255 255 255 / 9%);
+}
+
+.risk-score-factor__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+}
+
+.risk-score-factor__name,
+.risk-score-factor__value {
+  font-size: 22rpx;
+  line-height: 30rpx;
+  color: #fff;
+}
+
+.risk-score-factor__value {
+  font-weight: 700;
+}
+
+.risk-score-factor__track {
+  height: 8rpx;
+  margin-top: 10rpx;
+  border-radius: 999rpx;
+  overflow: hidden;
+  background: rgb(255 255 255 / 12%);
+}
+
+.risk-score-factor__fill {
+  height: 100%;
+  border-radius: inherit;
+  background: #8dd3bf;
+
+  &.tone-warning {
+    background: #f0bd73;
+  }
+
+  &.tone-danger {
+    background: #ea8c8c;
+  }
+}
+
+.risk-score-factor__brief {
+  display: block;
+  margin-top: 8rpx;
+  font-size: 20rpx;
+  line-height: 30rpx;
+  color: rgb(226 232 240 / 72%);
+}
+
+.risk-score-explain__note {
+  display: block;
+  margin-top: 4rpx;
+  font-size: 19rpx;
+  line-height: 28rpx;
+  color: rgb(226 232 240 / 64%);
+}
+
+.health-next-action-card {
+  padding: 24rpx 26rpx;
+  display: flex;
+  align-items: center;
+  gap: 18rpx;
+  border-color: rgb(92 184 150 / 24%);
+  background: linear-gradient(135deg, rgb(255 255 255 / 96%) 0%, rgb(239 250 245 / 96%) 100%);
+}
+
+.health-next-action-icon {
+  width: 64rpx;
+  height: 64rpx;
+  border-radius: 20rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: rgb(92 184 150 / 13%);
+}
+
+.health-next-action-icon__glyph {
+  font-size: 30rpx;
+  color: $stats-primary-deep;
+}
+
+.health-next-action-copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.health-next-action-eyebrow {
+  display: block;
+  font-size: 20rpx;
+  line-height: 28rpx;
+  font-weight: 700;
+  color: $stats-primary-deep;
+}
+
+.health-next-action-title {
+  display: block;
+  margin-top: 4rpx;
+  font-size: 25rpx;
+  line-height: 36rpx;
+  font-weight: 600;
+  color: #1e3e34;
+}
+
+.health-next-action-btn {
+  min-width: 104rpx;
+  height: 62rpx;
+  padding: 0 18rpx;
+  border-radius: 999rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: $stats-primary;
+
+  &:active {
+    opacity: 0.82;
+    transform: scale(0.98);
+  }
+}
+
+.health-next-action-btn__text {
+  font-size: 22rpx;
+  line-height: 30rpx;
+  font-weight: 700;
+  color: #fff;
 }
 
 .risk-section-header {
@@ -1264,6 +1613,29 @@ $stats-blue-soft: #7aa9ce;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.risk-card-affordance {
+  margin-top: 14rpx;
+  padding-top: 12rpx;
+  border-top: 1rpx solid rgb(148 163 184 / 14%);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10rpx;
+}
+
+.risk-card-affordance__text {
+  font-size: 19rpx;
+  line-height: 28rpx;
+  font-weight: 600;
+  color: #628174;
+}
+
+.risk-card-affordance__icon {
+  flex-shrink: 0;
+  font-size: 18rpx;
+  color: #83a598;
 }
 
 /* ---------- 友好度详情底部弹窗（与首页编辑目标弹窗同款圆角底卡） ---------- */
@@ -3063,6 +3435,22 @@ $stats-blue-soft: #7aa9ce;
   .water-trend-bar-wrap {
     background: rgb(255 255 255 / 8%);
     box-shadow: inset 0 0 0 1rpx rgb(255 255 255 / 5%);
+  }
+
+  .health-index-preview-card,
+  .health-next-action-card {
+    background: linear-gradient(135deg, rgb(18 29 25 / 98%) 0%, rgb(20 38 31 / 98%) 100%);
+    border-color: rgb(92 184 150 / 22%);
+  }
+
+  .health-index-preview-title,
+  .health-next-action-title {
+    color: #f2f7f4;
+  }
+
+  .health-index-preview-desc,
+  .health-index-preview-meta {
+    color: rgb(214 226 220 / 68%);
   }
 }
 

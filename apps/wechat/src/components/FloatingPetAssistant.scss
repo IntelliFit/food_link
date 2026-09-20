@@ -1,0 +1,598 @@
+@use '../styles/pet-ball' as pet-ball;
+
+.pet-assistant-float {
+  position: fixed;
+  left: calc(50vw + 12rpx);
+  bottom: calc(154rpx + env(safe-area-inset-bottom));
+  z-index: 900;
+  width: 176rpx;
+  height: 256rpx;
+  pointer-events: none;
+  transform: translateX(calc(50vw - 212rpx));
+  transition: transform 5s linear;
+}
+
+.pet-assistant-float.is-roaming-near { transform: translateX(0); }
+
+.pet-assistant-companion {
+  position: absolute;
+  top: 84rpx;
+  height: 136rpx;
+  width: 176rpx;
+  pointer-events: auto;
+}
+
+.pet-assistant-float.is-welcoming .pet-assistant-companion {
+  animation: pet-assistant-settle-in 460ms cubic-bezier(.22, .78, .32, 1) both;
+}
+
+.pet-assistant-traveler {
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  left: 20rpx;
+  width: 136rpx;
+  height: 136rpx;
+  transition: transform 260ms ease-out;
+}
+
+.pet-assistant-facing { width: 136rpx; height: 136rpx; }
+.pet-assistant-float.is-walking.is-roaming-near .pet-assistant-facing { transform: scaleX(-1); }
+.pet-assistant-look { animation: pet-assistant-look 12s ease-in-out infinite; transform-origin: 50% 85%; }
+.pet-assistant-look .pet-avatar { width: 136rpx !important; height: 136rpx !important; }
+.pet-assistant-float.is-walking .pet-assistant-look { animation: pet-assistant-walk-step 420ms ease-in-out infinite; }
+.pet-assistant-ground { position: absolute; top: 124rpx; left: 52rpx; width: 76rpx; height: 14rpx; border-radius: 50%; background: rgba(48, 78, 60, .12); }
+.pet-assistant-toy { @include pet-ball.surface; position: absolute; width: 16rpx; height: 16rpx; right: -4rpx; bottom: 0; border-width: 4rpx; opacity: 0; animation: pet-assistant-ball 18s ease-in-out infinite; }
+
+.pet-assistant-ride {
+  position: absolute;
+  z-index: 0;
+  top: 112rpx;
+  left: 18rpx;
+  width: 142rpx;
+  height: 72rpx;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(12rpx) scale(.82);
+  transform-origin: 50% 50%;
+}
+
+.pet-assistant-ride__wheel {
+  position: absolute;
+  top: 27rpx;
+  width: 42rpx;
+  height: 42rpx;
+  box-sizing: border-box;
+  border: 5rpx solid #5f656c;
+  border-radius: 50%;
+  background:
+    linear-gradient(90deg, transparent 46%, rgb(111 119 129 / 46%) 47% 53%, transparent 54%),
+    linear-gradient(0deg, transparent 46%, rgb(111 119 129 / 46%) 47% 53%, transparent 54%),
+    rgb(248 249 250 / 88%);
+  box-shadow: 0 2rpx 6rpx rgb(60 66 74 / 18%);
+}
+
+.pet-assistant-ride__wheel--rear { left: 5rpx; }
+.pet-assistant-ride__wheel--front { right: 5rpx; }
+
+.pet-assistant-ride__hub {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 8rpx;
+  height: 8rpx;
+  margin: -4rpx 0 0 -4rpx;
+  border-radius: 50%;
+  background: #80868d;
+  box-shadow: 0 0 0 2rpx #f4f5f6;
+}
+
+.pet-assistant-ride__frame,
+.pet-assistant-ride__fork {
+  position: absolute;
+  z-index: 2;
+  height: 5rpx;
+  border-radius: 999rpx;
+  transform-origin: 0 50%;
+  background: #dce0e4;
+  box-shadow: 0 1rpx 0 rgb(255 255 255 / 55%);
+}
+
+.pet-assistant-ride__frame--chain { top: 46rpx; left: 25rpx; width: 43rpx; transform: rotate(0deg); }
+.pet-assistant-ride__frame--down { top: 46rpx; left: 65rpx; width: 44rpx; transform: rotate(0deg); }
+.pet-assistant-ride__frame--seat-stay { top: 46rpx; left: 25rpx; width: 43rpx; transform: rotate(-43deg); }
+.pet-assistant-ride__frame--seat-tube { top: 17rpx; left: 55rpx; width: 31rpx; transform: rotate(73deg); }
+.pet-assistant-ride__frame--top { top: 17rpx; left: 55rpx; width: 59rpx; transform: rotate(29deg); }
+
+.pet-assistant-ride__fork {
+  top: 8rpx;
+  left: 101rpx;
+  width: 43rpx;
+  transform: rotate(76deg);
+  background: #aeb5bd;
+}
+
+.pet-assistant-ride__seat {
+  position: absolute;
+  z-index: 3;
+  top: 9rpx;
+  left: 45rpx;
+  width: 27rpx;
+  height: 8rpx;
+  border-radius: 999rpx 999rpx 7rpx 7rpx;
+  background: #656b73;
+}
+
+.pet-assistant-ride__handle {
+  position: absolute;
+  z-index: 3;
+  top: 2rpx;
+  left: 94rpx;
+  width: 24rpx;
+  height: 8rpx;
+  box-sizing: border-box;
+  border-top: 4rpx solid #5f656c;
+  border-right: 4rpx solid #5f656c;
+  border-radius: 0 7rpx 0 0;
+}
+
+.pet-assistant-ride__pedal {
+  position: absolute;
+  z-index: 4;
+  top: 39rpx;
+  left: 59rpx;
+  width: 15rpx;
+  height: 15rpx;
+  box-sizing: border-box;
+  border: 3rpx solid #747c85;
+  border-radius: 50%;
+  background: #f4f5f6;
+}
+
+.pet-assistant-ride__pedal-arm {
+  position: absolute;
+  top: 4rpx;
+  left: 4rpx;
+  width: 17rpx;
+  height: 3rpx;
+  border-radius: 999rpx;
+  transform: rotate(32deg);
+  transform-origin: 0 50%;
+  background: #5f656c;
+}
+
+.pet-assistant-ride__shadow {
+  position: absolute;
+  top: 62rpx;
+  left: 14rpx;
+  width: 114rpx;
+  height: 9rpx;
+  border-radius: 50%;
+  background: rgb(60 66 74 / 14%);
+  filter: blur(4rpx);
+}
+
+.pet-assistant-ride__trail {
+  position: absolute;
+  top: 49rpx;
+  right: 126rpx;
+  width: 34rpx;
+  height: 4rpx;
+  border-radius: 999rpx;
+  opacity: .58;
+  background: linear-gradient(90deg, transparent, rgb(145 151 160 / 72%));
+}
+
+.pet-assistant-invitation {
+  position: absolute;
+  z-index: 2;
+  pointer-events: auto;
+  top: 8rpx;
+  left: 16rpx;
+  width: 144rpx;
+  box-sizing: border-box;
+  padding: 14rpx 20rpx;
+  border: 2rpx solid #d7e7d9;
+  border-radius: 28rpx;
+  background: #fffdf5;
+  color: #46705a;
+  box-shadow: 0 6rpx 28rpx rgba(37, 70, 53, .12);
+  font-size: 24rpx;
+  line-height: 32rpx;
+  text-align: center;
+  white-space: nowrap;
+}
+.pet-assistant-bubble-tail { position: absolute; left: 64rpx; bottom: -10rpx; width: 18rpx; height: 18rpx; transform: rotate(45deg); background: #fffdf5; border-right: 2rpx solid #d7e7d9; border-bottom: 2rpx solid #d7e7d9; }
+.pet-assistant-tuck { position: absolute; right: -10rpx; top: 88rpx; z-index: 2; pointer-events: auto; width: 64rpx; height: 64rpx; color: #6e8478; font-size: 46rpx; line-height: 60rpx; text-align: center; }
+.pet-assistant-edge-call {
+  position: absolute;
+  z-index: 4;
+  top: 82rpx;
+  left: 0;
+  display: flex;
+  width: 80rpx;
+  min-height: 112rpx;
+  box-sizing: border-box;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2rpx;
+  padding: 12rpx 10rpx;
+  border: 2rpx solid rgb(255 255 255 / 92%);
+  border-right: 0;
+  border-radius: 30rpx 0 0 30rpx;
+  color: #3c8069;
+  font-size: 21rpx;
+  font-weight: 800;
+  line-height: 28rpx;
+  letter-spacing: 1rpx;
+  pointer-events: auto;
+  background: rgb(239 249 245 / 96%);
+  box-shadow: -4rpx 8rpx 24rpx rgb(31 74 60 / 16%);
+
+  &.has-reminder {
+    color: #326b58;
+    background: #fff8ed;
+  }
+
+  &.is-leaving {
+    pointer-events: none;
+    animation: none;
+  }
+}
+.pet-assistant-edge-call__line { display: block; white-space: nowrap; }
+.pet-assistant-edge-call__badge {
+  position: absolute;
+  top: -10rpx;
+  left: -8rpx;
+  display: flex;
+  min-width: 34rpx;
+  height: 34rpx;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: 0 8rpx;
+  border: 2rpx solid #fff;
+  border-radius: 999rpx;
+  color: #fff;
+  font-size: 17rpx;
+  line-height: 1;
+  background: #e76b55;
+}
+.pet-assistant-daily-play {
+  position: absolute;
+  z-index: 3;
+  right: 2rpx;
+  bottom: 4rpx;
+  display: flex;
+  min-width: 76rpx;
+  height: 42rpx;
+  align-items: center;
+  justify-content: center;
+  gap: 7rpx;
+  padding: 0 12rpx;
+  border: 2rpx solid rgb(255 255 255 / 92%);
+  border-radius: 999rpx;
+  color: #5d715f;
+  font-size: 19rpx;
+  font-weight: 700;
+  pointer-events: auto;
+  background: #fffaf0;
+  box-shadow: 0 5rpx 16rpx rgb(54 83 61 / 14%);
+
+  &.is-ready {
+    color: #fff;
+    background: #47a882;
+  }
+}
+.pet-assistant-daily-play__ball {
+  @include pet-ball.surface;
+  width: 18rpx;
+  height: 18rpx;
+  border-width: 3rpx;
+}
+.pet-assistant-reward-badge {
+  position: absolute;
+  right: -2rpx;
+  bottom: 52rpx;
+  z-index: 3;
+  display: flex;
+  height: 34rpx;
+  align-items: center;
+  gap: 5rpx;
+  padding: 0 9rpx;
+  border: 2rpx solid rgb(255 255 255 / 92%);
+  border-radius: 999rpx;
+  color: #6f5421;
+  font-size: 16rpx;
+  font-weight: 700;
+  white-space: nowrap;
+  pointer-events: none;
+  background: linear-gradient(135deg, #fff8d9, #ffe49a);
+  box-shadow: 0 5rpx 16rpx rgb(116 79 27 / 16%);
+}
+.pet-assistant-reward-badge__star { color: #e3a92d; font-size: 20rpx; }
+.pet-assistant-reward-badge__streak { color: #9a7040; }
+.pet-assistant-reward-burst {
+  position: absolute;
+  right: 2rpx;
+  bottom: 36rpx;
+  z-index: 4;
+  width: 92rpx;
+  height: 92rpx;
+  color: #efb735;
+  font-size: 24rpx;
+  pointer-events: none;
+  animation: pet-assistant-reward-pop 1.15s ease-out both;
+
+  text:nth-child(1) { position: absolute; left: 4rpx; top: 28rpx; }
+  text:nth-child(2) { position: absolute; left: 36rpx; top: 0; color: #61b996; }
+  text:nth-child(3) { position: absolute; right: 2rpx; top: 34rpx; }
+}
+.pet-assistant-float.pet-assistant-float--running,
+.pet-assistant-float.pet-assistant-float--docked {
+  transform: translateX(calc(50vw - 96rpx));
+  transition-duration: 980ms;
+  transition-timing-function: cubic-bezier(.32, .02, .42, 1);
+}
+
+.pet-assistant-float--running .pet-assistant-companion {
+  animation: pet-assistant-ride-out 980ms cubic-bezier(.3, .02, .45, 1) both;
+}
+
+.pet-assistant-float--running .pet-assistant-look,
+.pet-assistant-float--returning .pet-assistant-look { animation: pet-assistant-rider-balance 680ms ease-in-out infinite; }
+
+.pet-assistant-float--running .pet-assistant-traveler,
+.pet-assistant-float--returning .pet-assistant-traveler { transform: translateY(-24rpx); }
+
+.pet-assistant-float--running .pet-assistant-ride,
+.pet-assistant-float--returning .pet-assistant-ride { opacity: 1; }
+
+.pet-assistant-float--running .pet-assistant-ride {
+  animation: pet-assistant-board-out 980ms ease both;
+}
+
+.pet-assistant-float--returning .pet-assistant-ride {
+  animation: pet-assistant-board-in 1180ms ease both;
+}
+
+.pet-assistant-float--running .pet-assistant-ride__wheel,
+.pet-assistant-float--returning .pet-assistant-ride__wheel,
+.pet-assistant-float--running .pet-assistant-ride__pedal,
+.pet-assistant-float--returning .pet-assistant-ride__pedal { animation: pet-assistant-wheel-spin 460ms linear infinite; }
+
+.pet-assistant-float--running .pet-assistant-invitation,
+.pet-assistant-float--running .pet-assistant-ground,
+.pet-assistant-float--running .pet-assistant-toy,
+.pet-assistant-float--docked .pet-assistant-invitation,
+.pet-assistant-float--docked .pet-assistant-ground,
+.pet-assistant-float--docked .pet-assistant-toy { display: none; }
+
+.pet-assistant-float--returning { transition-duration: 1180ms; transition-timing-function: cubic-bezier(.2, .72, .32, 1); }
+
+.pet-assistant-float--returning .pet-assistant-companion {
+  pointer-events: none;
+  animation: pet-assistant-ride-in 1180ms cubic-bezier(.2, .72, .32, 1) both;
+}
+
+.pet-assistant-float--returning .pet-assistant-edge-call { animation: pet-assistant-call-away 300ms ease-in both; }
+
+.pet-assistant-float--docked .pet-assistant-edge-call { animation: pet-assistant-call-in 360ms cubic-bezier(.22, .78, .32, 1) both; }
+
+.pet-assistant-float.has-full-body {
+  .pet-assistant-companion, .pet-assistant-traveler, .pet-assistant-facing { height: 156rpx; }
+  .pet-assistant-ground { top: 146rpx; left: 64rpx; width: 48rpx; height: 10rpx; }
+  .pet-assistant-ride { top: 134rpx; }
+  &.is-walking .pet-assistant-look { animation: pet-companion-sway 720ms ease-in-out infinite; }
+  .pet-assistant-toy { animation: none; opacity: 0; bottom: 0; right: 2rpx; }
+  &.pet-assistant-float--playing.is-kick .pet-assistant-toy { animation: pet-companion-kicked-ball 1.2s ease-out; }
+}
+@keyframes pet-companion-kicked-ball {
+  0%, 25% { opacity: 1; transform: translateX(-14rpx); }
+  40% { opacity: 1; transform: translate(18rpx, -16rpx) rotate(120deg); }
+  75% { opacity: 1; transform: translate(42rpx, 0) rotate(280deg); }
+  100% { opacity: 0; transform: translate(42rpx, 0) rotate(280deg); }
+}
+@keyframes pet-companion-sway { 0%, 50%, 100% { transform: translateY(0); } 25%, 75% { transform: translateY(-2rpx); } }
+
+@keyframes pet-assistant-settle-in {
+  0% { opacity: 0; transform: translateY(14rpx) scale(.94); }
+  72% { opacity: 1; transform: translateY(-2rpx) scale(1.01); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes pet-assistant-ride-out {
+  0% { opacity: 1; transform: translateY(0); }
+  12% { opacity: 1; transform: translateY(-6rpx); }
+  80% { opacity: 1; transform: translateY(-6rpx); }
+  100% { opacity: 0; transform: translate(18rpx, -5rpx) scale(.94); }
+}
+
+@keyframes pet-assistant-ride-in {
+  0% { opacity: 0; transform: translate(72rpx, -5rpx) scale(.92); }
+  18% { opacity: 1; }
+  76% { opacity: 1; transform: translate(0, -6rpx) scale(1); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes pet-assistant-board-out {
+  0% { opacity: 0; transform: translateY(12rpx) scale(.82); }
+  14% { opacity: 1; transform: translateY(0) scale(1); }
+  82% { opacity: 1; transform: translateY(0) scale(1); }
+  100% { opacity: 0; transform: translate(20rpx, 4rpx) scale(.9); }
+}
+
+@keyframes pet-assistant-board-in {
+  0% { opacity: 0; transform: translate(54rpx, 4rpx) scale(.88); }
+  18%, 78% { opacity: 1; transform: translateY(0) scale(1); }
+  100% { opacity: 0; transform: translateY(12rpx) scale(.82); }
+}
+
+@keyframes pet-assistant-wheel-spin { to { transform: rotate(360deg); } }
+
+@keyframes pet-assistant-rider-balance { 0%, 100% { transform: translateY(0) rotate(-1deg); } 50% { transform: translateY(-2rpx) rotate(1deg); } }
+
+@keyframes pet-assistant-call-away { to { opacity: 0; transform: translateX(24rpx) scale(.94); } }
+
+@keyframes pet-assistant-call-in {
+  0% { opacity: 0; transform: translateX(24rpx) scale(.94); }
+  100% { opacity: 1; transform: translateX(0) scale(1); }
+}
+
+.pet-assistant-reminder { position: absolute; z-index: 2; pointer-events: auto; right: 24rpx; bottom: 180rpx; width: 380rpx; box-sizing: border-box; border: 2rpx solid #d7e7d9; border-radius: 36rpx 36rpx 8rpx 36rpx; padding: 20rpx 26rpx; background: #fffdf5; color: #365a46; box-shadow: 0 8rpx 36rpx rgba(37, 70, 53, .08); font-size: 24rpx; line-height: 36rpx; }
+.pet-assistant-reminder__count { margin-left: 12rpx; color: #bc6846; }
+.pet-assistant-chat-layer { display: none; }
+.pet-assistant-chat-layer.is-open { display: block; }
+.pet-assistant-chat-mask { position: fixed; inset: 0; z-index: 12499; background: #f8faf8; }
+.pet-assistant-chat-window {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  max-height: 100vh;
+  box-sizing: border-box;
+  border-radius: 0;
+  overflow: hidden;
+  z-index: 12500;
+  box-shadow: none;
+  background: #f8faf8;
+}
+
+.pet-assistant--dark {
+  .pet-assistant-invitation, .pet-assistant-reminder { background: #25342d; border-color: #3e5448; color: #deebe1; }
+  .pet-assistant-bubble-tail { background: #25342d; border-color: #3e5448; }
+  .pet-assistant-chat-mask { background: rgba(0, 0, 0, .3); }
+  .pet-assistant-chat-mask { background: #1f2724; }
+  .pet-assistant-edge-call { border-color: #1f2d27; background: #29463a; color: #dcebe4; }
+  .pet-assistant-edge-call.has-reminder { background: #45382d; color: #ffe9c9; }
+  .pet-assistant-edge-call__badge { border-color: #1f2d27; }
+  .pet-assistant-daily-play { border-color: #344a40; background: #2a3831; color: #dcebe4; }
+  .pet-assistant-daily-play.is-ready { background: #3b8f6f; color: #fff; }
+  .pet-assistant-reward-badge { border-color: #574c31; background: linear-gradient(135deg, #55492c, #705c2c); color: #fff0b8; }
+  .pet-assistant-reward-badge__streak { color: #ead490; }
+}
+
+.pet-assistant-chat-window.has-keyboard {
+  .pet-chat-thinking-switch-row, .pet-chat-quick-row { display: none; }
+  .pet-chat-topbar { flex-shrink: 0; margin-bottom: 8rpx; padding-bottom: 8rpx; }
+  .pet-chat-bottom-dock { flex-shrink: 0; }
+}
+
+@keyframes pet-assistant-walk-step { 0%, 100% { transform: translateY(0) rotate(-3deg); } 50% { transform: translateY(-5rpx) rotate(3deg); } }
+@keyframes pet-assistant-look { 0%, 25%, 50%, 100% { transform: rotate(0); } 29%, 34% { transform: rotate(-7deg); } 39%, 43% { transform: rotate(6deg); } 73% { transform: scale(1.06, .94); } 77% { transform: scale(.98, 1.03); } }
+@keyframes pet-assistant-ball { 0%, 22%, 65%, 100% { opacity: 0; transform: translateX(0); } 28% { opacity: 1; transform: translateX(-10rpx); } 43% { opacity: 1; transform: translateX(32rpx) rotate(140deg); } 56% { opacity: 1; transform: translateX(0) rotate(-80deg); } }
+@keyframes pet-assistant-run { 0%, 100% { transform: translateY(0) rotate(-6deg); } 50% { transform: translateY(-10rpx) rotate(6deg); } }
+@keyframes pet-assistant-reward-pop {
+  0% { opacity: 0; transform: scale(.45) translateY(18rpx); }
+  28% { opacity: 1; transform: scale(1.12) translateY(-8rpx); }
+  72% { opacity: 1; transform: scale(1) translateY(-18rpx); }
+  100% { opacity: 0; transform: scale(.9) translateY(-32rpx); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pet-assistant-traveler, .pet-assistant-look, .pet-assistant-toy, .pet-assistant .pet-avatar__body { animation: none !important; }
+  .pet-assistant-float { transition-duration: 0ms !important; }
+  .pet-assistant-float.pet-assistant-float--playing { transform: translateX(calc(50vw - 212rpx)); }
+  .pet-assistant-float--returning .pet-assistant-companion { opacity: 1; transform: none; transition: none !important; }
+}
+
+// Riding uses a seated upper body and bent legs, never the walking sprite frames.
+.pet-assistant-rider-limbs { display: none; }
+.pet-assistant-float { --pet-rest-x: calc(50vw - 212rpx); }
+.pet-assistant-float.is-roaming-near { --pet-rest-x: 0rpx; }
+.pet-assistant-float--docked .pet-assistant-companion { visibility: hidden; pointer-events: none; }
+.pet-assistant-float.pet-assistant-float--returning {
+  transition: none;
+  animation: pet-cycle-arrive 1800ms cubic-bezier(.22, .38, .3, 1) both;
+}
+.pet-assistant-float.pet-assistant-float--running {
+  transition: none;
+  animation: pet-cycle-depart 980ms ease-in both;
+}
+.pet-assistant-float.pet-assistant-float--running, .pet-assistant-float.pet-assistant-float--returning {
+  .pet-assistant-companion { animation: none; opacity: 1; pointer-events: none; }
+  .pet-assistant-facing { transform: none !important; }
+  .pet-assistant-look { animation: none !important; }
+  .pet-assistant-traveler { transform: translate(-10rpx, 12rpx); transition: none; }
+  .pet-assistant-ride { top: 100rpx; opacity: 1; transform: none; animation: none; }
+  .pet-assistant-ground, .pet-assistant-toy { display: none; }
+  .pet-companion-sprite { height: 96rpx; }
+  .pet-companion-sprite__sheet { height: 156rpx; animation: none !important; transform: none !important; }
+  .pet-companion-sprite--jianwen .pet-companion-sprite__sheet { height: 312rpx; }
+  .pet-assistant-rider-limbs { display: block; position: absolute; top: 93rpx; left: 54rpx; z-index: 3; }
+}
+.pet-assistant-float--returning .pet-assistant-companion { transform: scaleX(-1); }
+.pet-assistant-float--returning .pet-assistant-edge-call { visibility: hidden; }
+.pet-assistant-rider-leg {
+  position: absolute; width: 31rpx; height: 12rpx; border-radius: 8rpx;
+  background: #bca58d; border: 1rpx solid #847565; transform-origin: 5rpx 6rpx;
+  animation: pet-cycle-knee 650ms ease-in-out infinite alternate;
+  > view { position: absolute; left: 23rpx; top: 3rpx; width: 12rpx; height: 30rpx; border-radius: 6rpx; background: inherit; transform: rotate(24deg); transform-origin: 6rpx 5rpx; }
+  > view::after { content: ''; position: absolute; bottom: -2rpx; left: -1rpx; width: 20rpx; height: 8rpx; border-radius: 5rpx; background: #52565c; }
+  &.is-far { opacity: .8; animation-delay: -650ms; }
+}
+.pet-assistant-rider-limbs.is-jianwen .pet-assistant-rider-leg { background: #676b72; border-color: #4d5158; }
+@keyframes pet-cycle-knee { from { transform: rotate(8deg); } to { transform: rotate(42deg); } }
+@keyframes pet-cycle-arrive {
+  from { transform: translateX(calc(50vw + 190rpx)); }
+  to { transform: translateX(calc(50vw - 212rpx)); }
+}
+@keyframes pet-cycle-depart {
+  from { transform: translateX(calc(50vw - 212rpx)); }
+  to { transform: translateX(calc(50vw + 190rpx)); }
+}
+
+// Keep rpx in keyframes: custom-property values do not resolve consistently in WXSS.
+.pet-assistant-float.pet-assistant-float--returning.is-roaming-near { animation-name: pet-cycle-arrive-near; }
+.pet-assistant-float.pet-assistant-float--running.is-roaming-near { animation-name: pet-cycle-depart-near; }
+@keyframes pet-cycle-arrive-near {
+  from { transform: translateX(calc(50vw + 190rpx)); }
+  to { transform: translateX(0); }
+}
+@keyframes pet-cycle-depart-near {
+  from { transform: translateX(0); }
+  to { transform: translateX(calc(50vw + 190rpx)); }
+}
+
+// Hands share the bicycle's coordinate space, including the return-direction flip.
+.pet-assistant-rider-arms { display: none; position: absolute; inset: 0; z-index: 5; pointer-events: none; }
+.pet-assistant-float.pet-assistant-float--running,
+.pet-assistant-float.pet-assistant-float--returning {
+  .pet-assistant-rider-arms { display: block; }
+  .pet-companion-sprite {
+    clip-path: polygon(0 0, 100% 0, 100% 76%, 66% 76%, 66% 100%, 36% 100%, 36% 76%, 0 76%);
+    transform: rotate(7deg);
+    transform-origin: 50% 100%;
+  }
+  .pet-companion-sprite--jianwen {
+    clip-path: polygon(0 0, 100% 0, 100% 76%, 68% 76%, 68% 100%, 35% 100%, 35% 76%, 0 76%);
+  }
+}
+.pet-assistant-rider-arm {
+  position: absolute; inset: 0;
+  &.is-far { transform: translate(-6rpx, -3rpx); z-index: -1; }
+}
+.pet-assistant-rider-arm__upper,
+.pet-assistant-rider-arm__forearm {
+  position: absolute; height: 10rpx; box-sizing: border-box; border: 1rpx solid #b58669;
+  border-radius: 7rpx; background: #efc29f; transform-origin: 5rpx 5rpx;
+}
+.pet-assistant-rider-arm__upper { left: 78rpx; top: 78rpx; width: 28rpx; transform: rotate(48deg); }
+.pet-assistant-rider-arm__forearm { left: 93rpx; top: 95rpx; width: 33rpx; transform: rotate(10deg); }
+.pet-assistant-rider-arm__hand {
+  position: absolute; left: 120rpx; top: 99rpx; width: 12rpx; height: 11rpx;
+  box-sizing: border-box; border: 2rpx solid #b58669; border-radius: 5rpx;
+  background: #efc29f;
+}
+.pet-assistant-rider-arms.is-jianwen {
+  .pet-assistant-rider-arm__upper, .pet-assistant-rider-arm__forearm { background: #cc3838; border-color: #7d252b; }
+}
+
+// Depart from the current interpolated walking position, avoiding a jump to an endpoint.
+.pet-assistant-float.pet-assistant-float--running,
+.pet-assistant-float.pet-assistant-float--running.is-roaming-near {
+  animation: none;
+  transform: translateX(calc(50vw + 190rpx));
+  transition: transform 980ms ease-in;
+}

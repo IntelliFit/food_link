@@ -45,6 +45,7 @@
     "iconfont": "iconfont-taro"
   },
   "dependencies": {
-    "@food-link/core": "0.0.0"
+    "@food-link/core": "0.0.0",
+    "lottie-miniprogram": "^1.0.12"
   }
 }

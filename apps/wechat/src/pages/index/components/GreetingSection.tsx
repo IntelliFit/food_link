@@ -12,7 +12,7 @@ interface GreetingSectionProps {
   onPetPress?: () => void
   petReminder?: {
     text: string
-    tone: 'recognizing' | 'waiting' | 'recorded' | 'meal'
+    tone: 'recognizing' | 'waiting' | 'recorded' | 'meal' | 'messages'
     count?: number
   }
   onPetReminderPress?: () => void
@@ -33,7 +33,7 @@ export function GreetingSection({ mode, onModeToggle, petAvatar, onPetPress, pet
         ) : null}
         {petReminder ? (
           <View
-            id='home-pet-analyze-reminder'
+            id={petReminder.tone === 'messages' ? 'home-pet-message-reminder' : 'home-pet-analyze-reminder'}
             className={`greeting-pet-reminder greeting-pet-reminder--${petReminder.tone}`}
             onClick={onPetReminderPress}
           >
