@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -284,4 +285,31 @@ func TestBodyMetricsService_SyncLocal(t *testing.T) {
 	assert.Equal(t, 2, result["imported_water_count"])
 	assert.NotNil(t, repo.settings)
 	assert.Equal(t, 2500, repo.settings.WaterGoalMl)
+}
+
+func TestResolveBodyMetricsAnnualRange(t *testing.T) {
+	now := time.Date(2025, 3, 2, 12, 0, 0, 0, chinaTZ)
+	start, end, err := resolveBodyMetricsRange("year:2024", now)
+	require.NoError(t, err)
+	assert.Equal(t, "2024-01-01", start)
+	assert.Equal(t, "2024-12-31", end)
+	start, end, err = resolveBodyMetricsRange("year:2025", now)
+	require.NoError(t, err)
+	assert.Equal(t, "2025-01-01", start)
+	assert.Equal(t, "2025-03-02", end)
+	for _, value := range []string{"year:2026", "year:2023", "year:", "year:no"} {
+		_, _, err = resolveBodyMetricsRange(value, now)
+		require.Error(t, err)
+	}
+}
+
+func TestBodyMetricsService_GetSummaryAnnualQueriesWholeYear(t *testing.T) {
+	repo := &mockBodyMetricsRepo{}
+	year := time.Now().In(chinaTZ).Year() - 1
+	summary, err := NewBodyMetricsService(repo).GetSummary(context.Background(), "u1", fmt.Sprintf("year:%d", year))
+	require.NoError(t, err)
+	assert.Equal(t, "year", summary.Range)
+	assert.Equal(t, fmt.Sprintf("%d-01-01", year), repo.waterStartDate)
+	assert.Equal(t, fmt.Sprintf("%d-12-31", year), repo.waterEndDate)
+	assert.GreaterOrEqual(t, len(summary.WaterDaily), 365)
 }

@@ -1,0 +1,79 @@
+.pet-companion-sprite {
+  position: relative;
+  width: 120rpx;
+  height: 156rpx;
+  margin: 0 auto;
+  overflow: hidden;
+  // Each 160 x 208 frame contains a complete body, including the feet.
+}
+
+.pet-companion-sprite__sheet {
+  display: block;
+  width: 400%;
+  height: 100%;
+  max-width: none;
+  transform: translateX(0);
+}
+
+.pet-assistant-float.is-walking .pet-companion-sprite__sheet {
+  animation: pet-companion-stride 720ms steps(4, end) infinite;
+}
+
+.pet-assistant-float--running .pet-companion-sprite__sheet,
+.pet-assistant-float--returning .pet-companion-sprite__sheet {
+  animation: pet-companion-stride 400ms steps(4, end) infinite;
+}
+
+.pet-assistant-float--docked .pet-companion-sprite__sheet { animation: none; }
+
+// Jianwen has eight complete poses in a four-column, two-row sheet.
+.pet-companion-sprite--jianwen .pet-companion-sprite__sheet { height: 200%; }
+.pet-companion-sprite--jianwen.is-blink .pet-companion-sprite__sheet { animation: pet-jianwen-blink 1.2s step-end; }
+.pet-companion-sprite--jianwen.is-wave .pet-companion-sprite__sheet { animation: pet-jianwen-wave 1.2s step-end; }
+.pet-companion-sprite--jianwen.is-kick .pet-companion-sprite__sheet { animation: pet-jianwen-kick 1.2s step-end; }
+.pet-companion-sprite--original.is-kick .pet-companion-sprite__sheet { animation: pet-original-kick 1.2s step-end; }
+.pet-assistant-float.is-walking .pet-companion-sprite--jianwen .pet-companion-sprite__sheet {
+  animation: pet-jianwen-stride 720ms step-end infinite;
+}
+.pet-assistant-float--running .pet-companion-sprite--jianwen .pet-companion-sprite__sheet,
+.pet-assistant-float--returning .pet-companion-sprite--jianwen .pet-companion-sprite__sheet {
+  animation: pet-jianwen-stride 400ms step-end infinite;
+}
+.pet-assistant-float--docked .pet-companion-sprite--jianwen .pet-companion-sprite__sheet {
+  animation: none;
+  transform: translate(-50%, -50%);
+}
+@keyframes pet-jianwen-stride {
+  0%, 100% { transform: translate(0, 0); }
+  25% { transform: translate(-50%, 0); }
+  50% { transform: translate(-75%, -50%); }
+  75% { transform: translate(-75%, 0); }
+}
+@keyframes pet-jianwen-blink {
+  0%, 28%, 100% { transform: translate(0, 0); }
+  15% { transform: translate(-25%, 0); }
+}
+@keyframes pet-jianwen-wave {
+  0%, 78%, 100% { transform: translate(0, 0); }
+  18%, 48% { transform: translate(-25%, -50%); }
+  38% { transform: translate(0, 0); }
+}
+@keyframes pet-jianwen-kick {
+  0%, 75%, 100% { transform: translate(0, 0); }
+  20% { transform: translate(-50%, 0); }
+  34% { transform: translate(0, -50%); }
+  60% { transform: translate(-75%, -50%); }
+}
+@keyframes pet-original-kick {
+  0%, 70%, 100% { transform: translateX(0); }
+  34% { transform: translateX(-25%); }
+}
+
+@keyframes pet-companion-stride {
+  from { transform: translateX(0); }
+  to { transform: translateX(-100%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pet-companion-sprite__sheet { animation: none !important; }
+}

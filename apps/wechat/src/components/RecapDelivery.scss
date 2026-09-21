@@ -1,0 +1,45 @@
+.recap-archive-entry { margin: 20rpx 24rpx; padding: 26rpx; border-radius: 26rpx; background: #edf7f1; color: #31544a; display: flex; align-items: center; justify-content: space-between; gap: 20rpx; }
+.recap-archive-entry > text + text { font-size: 23rpx; color: #657c71; }
+.recap-delivery-layer { position: fixed; inset: 0; z-index: 18000; display: flex; align-items: center; justify-content: center; padding: 48rpx; box-sizing: border-box; }
+.recap-delivery-mask { position: absolute; inset: 0; z-index: 0; background: rgba(30, 46, 40, 0.3); }
+.recap-celebration { position: absolute; inset: 0; z-index: 1; pointer-events: none; overflow: hidden; animation: recap-celebration-fade-in 180ms ease both; }
+.recap-celebration__canvas { width: 100%; height: 100%; pointer-events: none; }
+.recap-delivery { position: relative; z-index: 2; width: 100%; max-width: 620rpx; padding: 46rpx 36rpx 34rpx; box-sizing: border-box; border: 2rpx solid rgba(77, 153, 126, 0.2); border-radius: 36rpx; color: #31544a; background: linear-gradient(155deg, #fffdf7 0%, #f5fbf7 48%, #edf7f1 100%); box-shadow: 0 26rpx 76rpx rgba(36, 75, 62, 0.24); text-align: center; overflow: visible; }
+.recap-delivery::before { content: ''; position: absolute; inset: 12rpx; border: 2rpx solid rgba(190, 147, 86, 0.2); border-radius: 28rpx; pointer-events: none; }
+.recap-delivery--year { border-color: rgba(190, 147, 86, 0.42); background: linear-gradient(155deg, #fff9e9 0%, #f7fbf7 52%, #e8f5ee 100%); box-shadow: 0 28rpx 84rpx rgba(109, 79, 35, 0.25); }
+.recap-delivery text, .recap-reader__list text { display: block; line-height: 1.7; }
+.recap-delivery__eyebrow { position: relative; margin-bottom: 14rpx; color: #a4773f; font-size: 21rpx; font-weight: 700; letter-spacing: 5rpx; }
+.recap-delivery__spark { position: relative; width: 78rpx; height: 78rpx; margin: 0 auto 16rpx; border: 4rpx solid rgba(255, 255, 255, 0.72); border-radius: 50%; color: #fff; background: linear-gradient(145deg, #65b294, #357d65); box-shadow: 0 10rpx 26rpx rgba(58, 128, 103, 0.28); font-size: 38rpx; line-height: 78rpx !important; animation: recap-spark 1.8s ease-in-out 2 both; }
+.recap-delivery--year .recap-delivery__spark { background: linear-gradient(145deg, #d8ad68, #98703b); box-shadow: 0 10rpx 28rpx rgba(152, 112, 59, 0.3); }
+.recap-delivery__title { font-size: 34rpx; font-weight: 800; }
+.recap-delivery__dates { margin-top: 10rpx; color: #6c8379; font-size: 23rpx; }
+.recap-delivery__summary { margin: 20rpx 4rpx 30rpx; color: #526c61; font-size: 26rpx; }
+.recap-delivery__actions { display: flex; gap: 18rpx; }
+.recap-delivery__actions > view { flex: 1; min-height: 84rpx; border-radius: 24rpx; font-size: 27rpx; font-weight: 700; line-height: 84rpx; }
+.recap-delivery__later { color: #557268; background: #e8f1ed; }
+.recap-delivery__open { color: #fff; background: #438f74; box-shadow: 0 10rpx 24rpx rgba(67, 143, 116, 0.22); }
+.recap-delivery--year .recap-delivery__open { background: linear-gradient(135deg, #b78649, #8d6738); box-shadow: 0 10rpx 26rpx rgba(141, 103, 56, 0.25); }
+@keyframes recap-spark { 0%, 100% { transform: scale(1); } 45% { transform: scale(1.09) rotate(5deg); } }
+@keyframes recap-celebration-fade-in { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .recap-delivery__spark { animation: none; } }
+.recap-reader { position: fixed; inset: 0; z-index: 19000; background: #f6fbf8; color: #31544a; display: flex; flex-direction: column; padding-top: calc(env(safe-area-inset-top) + 90rpx); padding-bottom: env(safe-area-inset-bottom); box-sizing: border-box; }
+.recap-reader__bar { padding: 22rpx 32rpx; display: flex; align-items: center; justify-content: flex-start; gap: 22rpx; font-size: 30rpx; font-weight: 700; }
+.recap-reader__bar view:last-child { padding: 10rpx 20rpx; background: #e1eee6; border-radius: 22rpx; }
+.recap-reader__scroll { flex: 1; height: 0; }
+.recap-reader__list { padding: 30rpx; }
+.recap-reader__list > view { margin: 24rpx 0; padding: 28rpx; background: #fff; border-radius: 24rpx; }
+.recap-reader__list > text { color: #657c71; font-size: 26rpx; }
+.health-recap__footprints { flex-wrap: wrap; }
+.health-recap__footprints > view { min-width: 70rpx; }
+.recap-reader--story { background: #e9dcc3; }
+.recap-reader--year { background: #17273e; }
+.recap-reader--story .recap-reader__bar { position: absolute; top: calc(env(safe-area-inset-top) + 4rpx); left: 22rpx; z-index: 5; padding: 0; font-size: 24rpx; }
+.recap-reader--story .recap-reader__bar > text { display: none; }
+.recap-reader--story .recap-reader__bar view:last-child { padding: 16rpx 24rpx; background: #fff6e5; color: #634c30; }
+.recap-reader--story { padding-top: max(170rpx, calc(env(safe-area-inset-top) + 90rpx)); }
+.recap-reader--story .recap-reader__bar { top: max(92rpx, calc(env(safe-area-inset-top) + 12rpx)); }
+.health-recap__progress > view { box-sizing: content-box; height: 6rpx; border: 0; padding: 10rpx 0; background-clip: content-box; }
+
+.recap-reader--journal, .recap-reader--journal.recap-reader--story { padding: 0; background: #f5f0e6; }
+.recap-reader__close { position: absolute; z-index: 30; top: max(170rpx,calc(env(safe-area-inset-top) + 94rpx)); right: 24rpx; width: 66rpx; height: 66rpx; display: flex; align-items: center; justify-content: center; background: #f5f0e6bd; color: #806a50; border: 1rpx solid #c4a48466; border-radius: 50%; font-size: 31rpx; }
+.recap-bookshelf__light { top: max(265rpx,23%); }

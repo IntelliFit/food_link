@@ -17,6 +17,7 @@ import (
 )
 
 type mockBodyMetricsSvc struct {
+	lastRange      string
 	summary        *service.BodyMetricsSummary
 	syncResult     map[string]any
 	lastAmountMl   int
@@ -25,6 +26,7 @@ type mockBodyMetricsSvc struct {
 }
 
 func (m *mockBodyMetricsSvc) GetSummary(ctx context.Context, userID string, statsRange string) (*service.BodyMetricsSummary, error) {
+	m.lastRange = statsRange
 	return m.summary, m.err
 }
 
@@ -836,4 +838,15 @@ func TestGetBodyMetricsSummaryError(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestGetBodyMetricsSummaryAnnualPassesYear(t *testing.T) {
+	svc := &mockBodyMetricsSvc{summary: &service.BodyMetricsSummary{Range: "year", StartDate: "2025-01-01", EndDate: "2025-12-31"}}
+	router := setupHealthRouter(NewHealthHandler(svc, nil, nil))
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/api/body-metrics/summary?range=year&year=2025", nil)
+	router.ServeHTTP(response, request)
+	assert.Equal(t, http.StatusOK, response.Code)
+	assert.Equal(t, "year:2025", svc.lastRange)
+	assert.Contains(t, response.Body.String(), `"range":"year"`)
 }

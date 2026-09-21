@@ -93,10 +93,15 @@ func NewHealthHandler(
 func (h *HealthHandler) GetBodyMetricsSummary(c *gin.Context) {
 	userID := c.GetString(authmw.ContextUserIDKey)
 	statsRange := c.DefaultQuery("range", "month")
-	if statsRange != "week" && statsRange != "month" {
+	if statsRange != "week" && statsRange != "month" && statsRange != "year" {
 		statsRange = "month"
 	}
-	summary, err := h.bodyMetrics.GetSummary(c.Request.Context(), userID, statsRange)
+	serviceRange := statsRange
+	if statsRange == "year" {
+		serviceRange = "year:" + c.Query("year")
+	}
+	logger.Info(c.Request.Context(), "请求身体指标统计", slog.String("user_id", userID), slog.String("range", statsRange))
+	summary, err := h.bodyMetrics.GetSummary(c.Request.Context(), userID, serviceRange)
 	if err != nil {
 		response.Error(c, err)
 		return

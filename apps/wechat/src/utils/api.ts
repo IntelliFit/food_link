@@ -1683,7 +1683,7 @@ export interface BodyMetricWaterDay {
 }
 
 export interface BodyMetricsSummary {
-  range: 'week' | 'month'
+  range: 'week' | 'month' | 'year'
   start_date: string
   end_date: string
   weight_entries: BodyMetricWeightEntry[]
@@ -4654,9 +4654,9 @@ export interface MembershipPaymentSyncResponse {
   membership?: MembershipStatus
 }
 
-export async function getBodyMetricsSummary(range: 'week' | 'month' = 'month'): Promise<BodyMetricsSummary> {
+export async function getBodyMetricsSummary(range: 'week' | 'month' | 'year' = 'month', year?: number): Promise<BodyMetricsSummary> {
   const res = await authenticatedRequest(
-    `/api/body-metrics/summary?range=${encodeURIComponent(range)}`,
+    `/api/body-metrics/summary?range=${encodeURIComponent(range)}${range === 'year' ? `&year=${year ?? new Date().getFullYear()}` : ''}`,
     { method: 'GET', timeout: 30000 }
   )
   if (res.statusCode !== 200) {

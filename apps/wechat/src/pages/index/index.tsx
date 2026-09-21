@@ -1,7 +1,8 @@
-import { View, Text, Input, Image, Canvas, PageMeta, Swiper, SwiperItem, Button } from '@tarojs/components'
+import { RecapDelivery } from '../../components/RecapDelivery'
+import { View, Text, Input, Image, Canvas, PageMeta, Swiper, SwiperItem, Button, type ITouchEvent } from '@tarojs/components'
 import { CAFETERIA_HERO_BG_URL, GOOSE_DUCK_CHICKEN_BG_URL } from '../../utils/static-asset-cdn-url'
 import * as React from 'react'
-import Taro, { useDidHide, useDidShow, useShareAppMessage, useShareTimeline } from '@tarojs/taro'
+import Taro, { useDidHide, useDidShow, usePageScroll, useShareAppMessage, useShareTimeline } from '@tarojs/taro'
 import {
   getHomeDashboard,
   getStatsSummary,
@@ -108,7 +109,6 @@ import {
   TargetEditor,
   GreetingSection,
   DateSelector,
-  StatsEntry,
   RecordMenu,
   MealActionSheet,
   MealRecordsDialog,
@@ -116,10 +116,16 @@ import {
   MealRecordPosterModal,
   MicrosSection,
   TodaySupplementsSection,
+  HealthMetricsWheel,
+  HomeModuleFrame,
+  HomeModuleToolbar,
+  HomeToolboxSheet,
   type MealPosterSharePayload,
 } from './components'
 import OnboardingGuide from '../../components/OnboardingGuide'
-import { PetAvatar } from '../../components/PetAvatar'
+import { FloatingPetAssistant, type FloatingPetAssistantHandle } from '../../components/FloatingPetAssistant'
+import { useSocialInbox } from '../../hooks/useSocialInbox'
+import { requestSocialMenuOpen, socialInboxReminder } from '../../utils/social-inbox'
 import { isHealthProfileReminderSnoozed, snoozeHealthProfileReminder } from '../../utils/health-profile-reminder'
 import {
   ONBOARDING_HOME_RECORD_GUIDE_KEY,
@@ -128,6 +134,7 @@ import {
 } from '../../utils/onboarding-guide-storage'
 import { HOME_RECORD_ONBOARDING_STEPS } from './home-onboarding-steps'
 import { HOME_PET_PROFILE_CHANGED_EVENT } from '../../utils/pet-events'
+import { getHomeCompanionPreference, getHomeCompanionSpriteOverride, HOME_COMPANION_CHANGED_EVENT } from '../../utils/pet-companion-preference'
 import { buildFoodRecordFavoriteDraft } from '../../utils/food-record-flow'
 import { openPetChat } from '../../utils/pet-navigation'
 import {
@@ -146,6 +153,17 @@ import {
   normalizeHiddenMicronutrientKeys,
   type HomeMicronutrientKey,
 } from './utils/micronutrientPreferences'
+import {
+  DEFAULT_HOME_MODULE_LAYOUT,
+  HOME_MODULE_DEFINITIONS,
+  getHomeModuleDragClientY,
+  getHomeModuleLayoutStorageKey,
+  moveVisibleHomeModule,
+  normalizeHomeModuleLayout,
+  setHomeModuleVisibility,
+  type HomeModuleId,
+  type HomeModuleLayout,
+} from './utils/homeModuleLayout'
 
 const BACKFILL_HINT_DISMISSED_DATES_KEY = 'home_backfill_hint_dismissed_dates_v1'
 const DEFAULT_SUPPLEMENT_SUMMARY: SupplementDashboardSummary = {
@@ -183,6 +201,24 @@ function saveHiddenMicronutrientKeys(hiddenKeys: readonly HomeMicronutrientKey[]
     )
   } catch {
     // 偏好写入失败不阻断目标设置与首页使用。
+  }
+}
+
+function readHomeModuleLayout(): HomeModuleLayout {
+  try {
+    const userId = Taro.getStorageSync('user_id')
+    return normalizeHomeModuleLayout(Taro.getStorageSync(getHomeModuleLayoutStorageKey(userId)))
+  } catch {
+    return normalizeHomeModuleLayout(DEFAULT_HOME_MODULE_LAYOUT)
+  }
+}
+
+function persistHomeModuleLayout(layout: HomeModuleLayout) {
+  try {
+    const userId = Taro.getStorageSync('user_id')
+    Taro.setStorageSync(getHomeModuleLayoutStorageKey(userId), normalizeHomeModuleLayout(layout))
+  } catch {
+    // 首页布局偏好保存失败不应阻断首页其他功能。
   }
 }
 
@@ -863,8 +899,30 @@ const MACRO_CONFIGS: Array<{
 
 function IndexPage() {
   const { scheme } = useAppColorScheme()
+  const socialInbox = useSocialInbox()
   const [homeExperienceConfig, setHomeExperienceConfig] = React.useState(getStoredHomeExperienceConfig)
+  const [homeModuleLayout, setHomeModuleLayout] = React.useState<HomeModuleLayout>(readHomeModuleLayout)
+  const [homeModulesEditing, setHomeModulesEditing] = React.useState(false)
+  const [showHomeToolbox, setShowHomeToolbox] = React.useState(false)
+  const [draggingHomeModuleId, setDraggingHomeModuleId] = React.useState<HomeModuleId | null>(null)
+  const [homeModuleDragOffsetY, setHomeModuleDragOffsetY] = React.useState(0)
+  const homeModuleLayoutRef = React.useRef<HomeModuleLayout>(homeModuleLayout)
+  const homeModuleDragRef = React.useRef<{ id: HomeModuleId; anchorY: number; lastY: number; renderedY: number; lastSwapAt: number } | null>(null)
+  const homeModuleLongPressRef = React.useRef<{ id: HomeModuleId; startY: number; timer: ReturnType<typeof setTimeout> } | null>(null)
   const [hiddenMicronutrientKeys, setHiddenMicronutrientKeys] = React.useState<HomeMicronutrientKey[]>(getStoredHiddenMicronutrientKeys)
+
+  useDidShow(() => {
+    if (homeModuleLongPressRef.current) clearTimeout(homeModuleLongPressRef.current.timer)
+    homeModuleLongPressRef.current = null
+    const nextLayout = readHomeModuleLayout()
+    homeModuleLayoutRef.current = nextLayout
+    setHomeModuleLayout(nextLayout)
+    setHomeModulesEditing(false)
+    setShowHomeToolbox(false)
+    homeModuleDragRef.current = null
+    setDraggingHomeModuleId(null)
+    setHomeModuleDragOffsetY(0)
+  })
   const initialSelectedDate = formatDateKey(new Date())
   const initialHomeSelectedDate = initialSelectedDate
   const initialLocalSnapshot = getStoredHomeDashboardSnapshotByDate(initialHomeSelectedDate)
@@ -880,6 +938,10 @@ function IndexPage() {
   const [loading, setLoading] = React.useState(!initialLocalSnapshot)
   const [isSwitchingDate, setIsSwitchingDate] = React.useState(false)
   const [petHidden, setPetHidden] = React.useState(getStoredPetHidden)
+  const [homeCompanionPreference, setHomeCompanionPreference] = React.useState(getHomeCompanionPreference)
+  const floatingPetRef = React.useRef<FloatingPetAssistantHandle>(null)
+  const [petChatOpen, setPetChatOpen] = React.useState(false)
+  usePageScroll(({ scrollTop }) => floatingPetRef.current?.onPageScroll(scrollTop))
   const [petSummary, setPetSummary] = React.useState<PetSummary | null>(null)
   const [analyzeReminder, setAnalyzeReminder] = React.useState<AnalyzeTaskReminderState>(readAnalyzeTaskReminderState)
   const [membershipStatus, setMembershipStatus] = React.useState<MembershipStatus | null>(null)
@@ -1055,7 +1117,7 @@ function IndexPage() {
   const [mealActionRecord, setMealActionRecord] = React.useState<FoodRecord | null>(null)
   const mealFavoriteInFlightRef = React.useRef(false)
   const [showRecordEditModal, setShowRecordEditModal] = React.useState(false)
-  const homePageScrollLocked = showRecordEditModal || showHomeOnboardingGuide
+  const homePageScrollLocked = showRecordEditModal || showHomeOnboardingGuide || showHomeToolbox || petChatOpen
   const [showRecordPosterModal, setShowRecordPosterModal] = React.useState(false)
   /** 同一餐次多条记录时的选择面板 */
   const [mealRecordsDialogVisible, setMealRecordsDialogVisible] = React.useState(false)
@@ -1085,8 +1147,11 @@ function IndexPage() {
       setPetHidden(typeof hidden === 'boolean' ? hidden : getStoredPetHidden())
     }
     Taro.eventCenter.on(HOME_PET_HIDDEN_CHANGED_EVENT, handleHiddenChanged)
+    const handleAppearanceChanged = () => setHomeCompanionPreference(getHomeCompanionPreference())
+    Taro.eventCenter.on(HOME_COMPANION_CHANGED_EVENT, handleAppearanceChanged)
     return () => {
       Taro.eventCenter.off(HOME_PET_HIDDEN_CHANGED_EVENT, handleHiddenChanged)
+      Taro.eventCenter.off(HOME_COMPANION_CHANGED_EVENT, handleAppearanceChanged)
     }
   }, [])
 
@@ -1110,11 +1175,14 @@ function IndexPage() {
   }, [])
 
   useDidHide(() => {
+    if (homeModuleLongPressRef.current) clearTimeout(homeModuleLongPressRef.current.timer)
+    homeModuleLongPressRef.current = null
     homeVisibleRef.current = false
     clearHomeAuxiliaryTimers()
   })
 
   React.useEffect(() => () => {
+    if (homeModuleLongPressRef.current) clearTimeout(homeModuleLongPressRef.current.timer)
     homeVisibleRef.current = false
     clearHomeAuxiliaryTimers()
   }, [clearHomeAuxiliaryTimers])
@@ -2504,7 +2572,6 @@ function IndexPage() {
     [bodyMetrics, selectedDate, waterEditorDate]
   )
 
-  const waterProgress = calculateProgressPercent(todayWater.total, bodyMetrics.waterGoalMl)
 
   /** 三大营养素：用于圆环与中心克数缓动（与主热量条、喝水条一致，从 0/上一段插值到当前） */
   const proteinCur = normalizeDisplayNumber(intakeData.macros.protein.current)
@@ -2524,8 +2591,6 @@ function IndexPage() {
     waterInputFocused || (waterDraftMl != null && waterDraftMl > 0)
 
   // 喝水动画：切换日期时不播放动画，直接显示最终数字
-  const animatedWaterTotal = useAnimatedNumber(todayWater.total, 600, 0, dashboardAnimResetKey, true)
-  const animatedWaterProgress = useAnimatedProgress(waterProgress, 600, 0, dashboardAnimResetKey, true)
 
   /** 主热量进度条宽度（0～100），与上方 headline 数字同源缓动 */
   const animatedMainCalorieBarPct = useAnimatedProgress(
@@ -2544,8 +2609,6 @@ function IndexPage() {
   const animatedMacroFatRing = useAnimatedProgress(dashboardBusy ? 0 : fatRingPct, 600, 0, dashboardAnimResetKey)
 
   /** 运动消耗：切换日期时不播放动画，直接显示最终数字 */
-  const exerciseAnimTarget = dashboardBusy ? 0 : exerciseBurnedKcal
-  const animatedExerciseBurnedKcal = useAnimatedNumber(exerciseAnimTarget, 600, 0, dashboardAnimResetKey, true)
   const loadPetSummary = React.useCallback(async (date: string) => {
     if (!getAccessToken()) {
       setPetSummary(null)
@@ -2690,20 +2753,32 @@ function IndexPage() {
     }
   }, [petHidden, petSummary?.meal_prompt, selectedDate])
 
-  const petReminder = petAnalyzeReminder || petMealReminder
+  const petMessageReminder = React.useMemo(() => {
+    if (isGuest) return undefined
+    const text = socialInboxReminder(socialInbox)
+    return text ? { text, tone: 'messages' as const } : undefined
+  }, [isGuest, socialInbox])
+  const petReminder = petMessageReminder || petAnalyzeReminder || petMealReminder
 
-  React.useEffect(() => {
-    if (petAnalyzeReminder || !petMealReminder) return
+  const handlePetReminderShown = React.useCallback(() => {
+    if (petMessageReminder || petAnalyzeReminder || !petMealReminder) return
     markHomeMealPromptSeen(selectedDate, petMealReminder.mealType)
-  }, [petAnalyzeReminder, petMealReminder, selectedDate])
+  }, [petAnalyzeReminder, petMealReminder, petMessageReminder, selectedDate])
 
   const handlePetAnalyzeReminderPress = React.useCallback(() => {
+    if (petMessageReminder) {
+      requestSocialMenuOpen()
+      Taro.switchTab({ url: '/pages/community/index' })
+      return
+    }
     if (!petAnalyzeReminder && petMealReminder) {
-      openPetChat(petMealReminder.starterQuestion)
+      if (petHidden) openPetChat(petMealReminder.starterQuestion)
+      else floatingPetRef.current?.openChat(petMealReminder.starterQuestion)
       return
     }
     if (!analyzeReminder.taskId) {
-      openPetChat()
+      if (petHidden) openPetChat()
+      else floatingPetRef.current?.openChat()
       return
     }
     if (analyzeReminder.kind === 'waiting_record' || analyzeReminder.kind === 'auto_recorded') {
@@ -2714,7 +2789,7 @@ function IndexPage() {
     void openAnalyzeTaskFromReminder(analyzeReminder.taskId).finally(() => {
       setTimeout(() => void refreshAnalyzeReminder(), 600)
     })
-  }, [analyzeReminder.kind, analyzeReminder.taskId, petAnalyzeReminder, petMealReminder, refreshAnalyzeReminder])
+  }, [analyzeReminder.kind, analyzeReminder.taskId, petAnalyzeReminder, petHidden, petMealReminder, petMessageReminder, refreshAnalyzeReminder])
 
   const handleShareDailyPosterImage = React.useCallback(() => {
     if (!dailyPosterImageUrl) return
@@ -3063,11 +3138,187 @@ function IndexPage() {
     })
   }, [homeExperienceConfig.mode])
 
+  const visibleHomeModuleIds = React.useMemo(
+    () => homeModuleLayout.order.filter((id) => !homeModuleLayout.hidden.includes(id)),
+    [homeModuleLayout],
+  )
+
+  const commitHomeModuleLayout = React.useCallback((createNext: (current: HomeModuleLayout) => HomeModuleLayout) => {
+    const next = normalizeHomeModuleLayout(createNext(homeModuleLayoutRef.current))
+    homeModuleLayoutRef.current = next
+    setHomeModuleLayout(next)
+    persistHomeModuleLayout(next)
+  }, [])
+
+  const setHomeModuleVisible = React.useCallback((id: HomeModuleId, visible: boolean) => {
+    commitHomeModuleLayout((current) => setHomeModuleVisibility(current, id, visible))
+  }, [commitHomeModuleLayout])
+
+  const moveHomeModule = React.useCallback((id: HomeModuleId, direction: -1 | 1) => {
+    commitHomeModuleLayout((current) => moveVisibleHomeModule(current, id, direction))
+  }, [commitHomeModuleLayout])
+
+  const handleHomeModuleDragStart = React.useCallback((id: HomeModuleId, event: any) => {
+    if (!homeModulesEditing) return
+    const y = getHomeModuleDragClientY(event)
+    if (y == null) return
+    event?.stopPropagation?.()
+    homeModuleDragRef.current = { id, anchorY: y, lastY: y, renderedY: 0, lastSwapAt: 0 }
+    setDraggingHomeModuleId(id)
+    setHomeModuleDragOffsetY(0)
+  }, [homeModulesEditing])
+
+  const handleHomeModuleDragMove = React.useCallback((id: HomeModuleId, event: any) => {
+    const current = homeModuleDragRef.current
+    const y = getHomeModuleDragClientY(event)
+    if (!current || current.id !== id || y == null) return
+    event?.stopPropagation?.()
+    setDraggingHomeModuleId(id)
+    current.lastY = y
+    const delta = y - current.anchorY
+
+    // 明显拖过相邻卡片区域后再换位，并限制连续换位频率，避免轻微手抖导致卡片跳动。
+    // 这里只更新内存状态，避免在高频 touchmove 中同步写入 storage 造成模拟器卡顿。
+    const now = Date.now()
+    if (Math.abs(delta) >= 80 && now - current.lastSwapAt >= 180) {
+      const direction: -1 | 1 = delta > 0 ? 1 : -1
+      const next = moveVisibleHomeModule(homeModuleLayoutRef.current, id, direction)
+      const orderChanged = next.order.some((moduleId, index) => moduleId !== homeModuleLayoutRef.current.order[index])
+      if (orderChanged) {
+        homeModuleLayoutRef.current = next
+        setHomeModuleLayout(next)
+        current.anchorY = y
+        current.renderedY = 0
+        current.lastSwapAt = now
+        setHomeModuleDragOffsetY(0)
+        return
+      }
+    }
+
+    const offset = Math.max(-104, Math.min(104, delta))
+    if (Math.abs(offset - current.renderedY) < 10) return
+    current.renderedY = offset
+    setHomeModuleDragOffsetY(offset)
+  }, [])
+
+  const handleHomeModuleDragEnd = React.useCallback(() => {
+    const current = homeModuleDragRef.current
+    if (current) {
+      const delta = current.lastY - current.anchorY
+      if (Math.abs(delta) >= 80) {
+        const direction: -1 | 1 = delta > 0 ? 1 : -1
+        const next = moveVisibleHomeModule(homeModuleLayoutRef.current, current.id, direction)
+        homeModuleLayoutRef.current = next
+        setHomeModuleLayout(next)
+      }
+      persistHomeModuleLayout(homeModuleLayoutRef.current)
+    }
+    homeModuleDragRef.current = null
+    setDraggingHomeModuleId(null)
+    setHomeModuleDragOffsetY(0)
+  }, [])
+
+  const cancelHomeModuleLongPress = React.useCallback(() => {
+    if (!homeModuleLongPressRef.current) return
+    clearTimeout(homeModuleLongPressRef.current.timer)
+    homeModuleLongPressRef.current = null
+  }, [])
+
+  const handleHomeModuleHoldStart = React.useCallback((id: HomeModuleId, event: any) => {
+    if (homeModulesEditing) return
+    const y = getHomeModuleDragClientY(event)
+    if (y == null) return
+    cancelHomeModuleLongPress()
+    const timer = setTimeout(() => {
+      const pending = homeModuleLongPressRef.current
+      if (!pending || pending.id !== id) return
+      homeModuleLongPressRef.current = null
+      homeModuleDragRef.current = { id, anchorY: pending.startY, lastY: pending.startY, renderedY: 0, lastSwapAt: 0 }
+      setHomeModuleDragOffsetY(0)
+      setDraggingHomeModuleId(null)
+      setHomeModulesEditing(true)
+    }, 3000)
+    homeModuleLongPressRef.current = { id, startY: y, timer }
+  }, [cancelHomeModuleLongPress, homeModulesEditing])
+
+  const handleHomeModuleHoldMove = React.useCallback((id: HomeModuleId, event: any) => {
+    if (homeModuleDragRef.current?.id === id) {
+      handleHomeModuleDragMove(id, event)
+      return
+    }
+    const pending = homeModuleLongPressRef.current
+    const y = getHomeModuleDragClientY(event)
+    if (!pending || pending.id !== id || y == null) return
+    if (Math.abs(y - pending.startY) > 12) cancelHomeModuleLongPress()
+  }, [cancelHomeModuleLongPress, handleHomeModuleDragMove])
+
+  const handleHomeModuleHoldEnd = React.useCallback((id: HomeModuleId) => {
+    cancelHomeModuleLongPress()
+    if (homeModuleDragRef.current?.id === id) handleHomeModuleDragEnd()
+  }, [cancelHomeModuleLongPress, handleHomeModuleDragEnd])
+
+  const finishHomeModuleEditing = React.useCallback(() => {
+    cancelHomeModuleLongPress()
+    handleHomeModuleDragEnd()
+    setHomeModulesEditing(false)
+  }, [cancelHomeModuleLongPress, handleHomeModuleDragEnd])
+
+  const getHomeModuleFrameProps = React.useCallback((id: HomeModuleId) => {
+    const index = visibleHomeModuleIds.indexOf(id)
+    const definition = HOME_MODULE_DEFINITIONS.find((item) => item.id === id)
+    return {
+      moduleId: id,
+      label: definition?.label || id,
+      editing: homeModulesEditing,
+      dragging: draggingHomeModuleId === id,
+      dragOffsetY: draggingHomeModuleId === id ? homeModuleDragOffsetY : 0,
+      layoutOrder: index,
+      canMoveUp: index > 0,
+      canMoveDown: index >= 0 && index < visibleHomeModuleIds.length - 1,
+      onMoveUp: () => moveHomeModule(id, -1),
+      onMoveDown: () => moveHomeModule(id, 1),
+      onHide: () => setHomeModuleVisible(id, false),
+      onDragStart: (event: any) => handleHomeModuleDragStart(id, event),
+      onDragMove: (event: any) => handleHomeModuleDragMove(id, event),
+      onDragEnd: handleHomeModuleDragEnd,
+      onHoldStart: (event: any) => handleHomeModuleHoldStart(id, event),
+      onHoldMove: (event: any) => handleHomeModuleHoldMove(id, event),
+      onHoldEnd: () => handleHomeModuleHoldEnd(id),
+      onTapToFinish: finishHomeModuleEditing,
+    }
+  }, [draggingHomeModuleId, finishHomeModuleEditing, handleHomeModuleDragEnd, handleHomeModuleDragMove, handleHomeModuleDragStart, handleHomeModuleHoldEnd, handleHomeModuleHoldMove, handleHomeModuleHoldStart, homeModuleDragOffsetY, homeModulesEditing, moveHomeModule, setHomeModuleVisible, visibleHomeModuleIds])
+
+  const handleAddHomeModule = React.useCallback((id: HomeModuleId) => {
+    setHomeModuleVisible(id, true)
+    setShowHomeToolbox(false)
+    setHomeModulesEditing(true)
+    homeModuleDragRef.current = null
+    setDraggingHomeModuleId(null)
+    setHomeModuleDragOffsetY(0)
+  }, [setHomeModuleVisible])
+
+  const resetHomeModules = React.useCallback(() => {
+    const next = normalizeHomeModuleLayout(DEFAULT_HOME_MODULE_LAYOUT)
+    homeModuleLayoutRef.current = next
+    setHomeModuleLayout(next)
+    persistHomeModuleLayout(next)
+    Taro.showToast({ title: '已恢复默认布局', icon: 'none' })
+  }, [])
+
   const isWellnessMode = homeExperienceConfig.mode === 'wellness'
 
   return (
     <View
       className={`home-page home-page--mode-${homeExperienceConfig.mode} ${scheme === 'dark' ? 'home-page--dark' : ''} ${homePageScrollLocked ? 'home-page--modal-open' : ''}`}
+      onClick={homeModulesEditing ? finishHomeModuleEditing : undefined}
+      onTouchStart={(event) => {
+        const touch = (event as ITouchEvent).touches?.[0]
+        if (touch) floatingPetRef.current?.onTouchStart(touch.clientY)
+      }}
+      onTouchMove={(event) => {
+        const touch = (event as ITouchEvent).touches?.[0]
+        if (touch) floatingPetRef.current?.onTouchMove(touch.clientY)
+      }}
     >
       <PageMeta
         pageStyle={
@@ -3076,27 +3327,9 @@ function IndexPage() {
             : 'overflow: visible;'
         }
       />
+      <RecapDelivery />
       {/* 页面内容 */}
       <View className='page-content'>
-        {/* 问候区 */}
-        <GreetingSection
-          onSharePress={handleShareDailySummary}
-          mode={homeExperienceConfig.mode}
-          onModeToggle={handleHomeExperienceModeToggle}
-          petAvatar={petHidden ? undefined : (
-            <PetAvatar
-              pet={petSummary?.pet}
-              size={67}
-              mood={petMood}
-              state={petState}
-              className='greeting-pet__avatar'
-            />
-          )}
-          onPetPress={openPetChat}
-          petReminder={petReminder}
-          onPetReminderPress={handlePetAnalyzeReminderPress}
-        />
-
         {!getAccessToken() && (
           <View
             className='home-login-banner'
@@ -3111,7 +3344,6 @@ function IndexPage() {
           </View>
         )}
 
-        {/* 日期选择器 */}
         {showHealthProfilePrompt && !homeGuideTransitionPending && (
           <View className='home-health-profile-prompt'>
             <View className='home-health-profile-prompt__icon'>健</View>
@@ -3130,35 +3362,69 @@ function IndexPage() {
           </View>
         )}
 
-        <DateSelector
-          cells={weekHeatmapCells}
-          historyCells={calendarHistoryCells}
-          selectedDate={selectedDate}
-          onSelect={handleDateSelect}
-          onVisibleMonthChange={loadCalendarMonth}
-          monthLoading={calendarMonthLoading}
-          monthLoadError={calendarMonthLoadError}
+        <HomeModuleToolbar
+          editing={homeModulesEditing}
+          onOpenToolbox={() => {
+            cancelHomeModuleLongPress()
+            handleHomeModuleDragEnd()
+            setShowHomeToolbox(true)
+          }}
+          onFinishEditing={() => {
+            finishHomeModuleEditing()
+          }}
         />
-
-        {showBackfillHint && (
-          <View className='home-backfill-hint'>
-            <Text className='home-backfill-hint__dot' />
-            <View className='home-backfill-hint__copy'>
-              <Text className='home-backfill-hint__text'>可补录这一天的食物、体重、喝水和运动记录</Text>
-            </View>
-            <View className='home-backfill-hint__actions'>
-              <Text className='home-backfill-hint__action' onClick={openBackfillRecordMenu}>去补录</Text>
-              <Text className='home-backfill-hint__cancel' onClick={handleDismissBackfillHint}>取消</Text>
-            </View>
-          </View>
-        )}
 
         <View
           key={homeExperienceConfig.mode}
-          className={`home-experience-stage home-experience-stage--${homeExperienceConfig.mode}`}
+          className={`home-experience-stage home-module-list home-experience-stage--${homeExperienceConfig.mode}`}
         >
 
-        {/* 养生模式使用表盘；均衡模式保留横向热量卡。两者复用同一份营养数据。 */}
+        {visibleHomeModuleIds.includes('greeting') && (
+          <HomeModuleFrame {...getHomeModuleFrameProps('greeting')}>
+            <GreetingSection
+              onSharePress={handleShareDailySummary}
+              mode={homeExperienceConfig.mode}
+              onModeToggle={handleHomeExperienceModeToggle}
+              petReminder={petHidden ? petReminder : undefined}
+              onPetReminderPress={handlePetAnalyzeReminderPress}
+            />
+          </HomeModuleFrame>
+        )}
+
+        {visibleHomeModuleIds.includes('calendar') && (
+          <HomeModuleFrame {...getHomeModuleFrameProps('calendar')}>
+            <View className='home-calendar-module'>
+              <DateSelector
+                cells={weekHeatmapCells}
+                historyCells={calendarHistoryCells}
+                selectedDate={selectedDate}
+                onSelect={handleDateSelect}
+                onVisibleMonthChange={loadCalendarMonth}
+                monthLoading={calendarMonthLoading}
+                monthLoadError={calendarMonthLoadError}
+              />
+
+              {showBackfillHint && (
+                <View className='home-backfill-hint'>
+                  <Text className='home-backfill-hint__dot' />
+                  <View className='home-backfill-hint__copy'>
+                    <Text className='home-backfill-hint__text'>可补录这一天的食物、体重、喝水和运动记录</Text>
+                  </View>
+                  <View className='home-backfill-hint__actions'>
+                    <Text className='home-backfill-hint__action' onClick={openBackfillRecordMenu}>去补录</Text>
+                    <Text className='home-backfill-hint__cancel' onClick={handleDismissBackfillHint}>取消</Text>
+                  </View>
+                </View>
+              )}
+            </View>
+          </HomeModuleFrame>
+        )}
+
+        {/* 今日饮食进度：热量与营养合并为一张卡片 */}
+        {visibleHomeModuleIds.includes('diet') && (
+          <HomeModuleFrame {...getHomeModuleFrameProps('diet')}>
+            <View className='home-diet-progress home-experience-card'>
+              <View className='home-diet-progress__energy'>
         {isWellnessMode ? (
           <View className='wellness-overview-card home-experience-card'>
             <View className='wellness-overview-main'>
@@ -3192,63 +3458,7 @@ function IndexPage() {
                 <View className='wellness-total-progress'>
                   <View className={`wellness-total-progress__fill${isCalorieOver ? ' is-over' : ''}`} style={{ width: `${wellnessCaloriePct}%` }} />
                 </View>
-                <View className='wellness-macros'>
-                  {MACRO_CONFIGS.map(({ key, label, unit, iconClass }) => {
-                    const macro = intakeData.macros[key]
-                    const current = normalizeDisplayNumber(macro?.current)
-                    const target = normalizeDisplayNumber(macro?.target)
-                    const pct = Math.min(100, calculateProgressPercent(current, target))
-                    const isMacroOver = current > target && target > 0
-                    return (
-                      <View key={key} className='wellness-macro'>
-                        <View className='wellness-macro__title'>
-                          <Text className={`iconfont ${iconClass} wellness-macro__icon`} />
-                          <Text>{label}</Text>
-                        </View>
-                        <View className='wellness-macro__numbers'>
-                          <Text className={`wellness-macro__current${isMacroOver ? ' is-over' : ''}`}>{dashboardBusy || isGuest ? '--' : formatDisplayNumber(current)}</Text>
-                          <Text className='wellness-macro__target'> / {dashboardBusy || isGuest ? '--' : formatDisplayNumber(target)}{unit}</Text>
-                        </View>
-                        <View className='wellness-macro__track'>
-                          <View className={`wellness-macro__fill${isMacroOver ? ' is-over' : ''}`} style={{ width: `${pct}%` }} />
-                        </View>
-                      </View>
-                    )
-                  })}
-                </View>
               </View>
-            </View>
-
-            {!dashboardBusy && !isGuest && (
-              <TodaySupplementsSection
-                summary={supplementSummary}
-                canQuickRecord={isTodayRecordDate(selectedDate)}
-                onRecorded={setSupplementSummary}
-              />
-            )}
-
-            <View className={`nutrition-expand-shell wellness-nutrition-shell${nutritionExpanded ? ' is-expanded' : ''}`}>
-              <View className='nutrition-expand-main' onClick={() => setNutritionExpanded((value) => !value)}>
-                <View className='nutrition-expand-title-row'>
-                  <Text className='nutrition-expand-title'>营养概览</Text>
-                  <View className='nutrition-expand-affordance'>
-                    <Text className={`iconfont ${nutritionExpanded ? 'icon-collapse' : 'icon-expand'} nutrition-expand-affordance-icon`} />
-                    <Text className='nutrition-expand-affordance-text'>{nutritionExpanded ? '收起' : '展开更多'}</Text>
-                  </View>
-                </View>
-              </View>
-              {nutritionExpanded && (
-                <View className='nutrition-expanded-body wellness-nutrition-expanded-body'>
-                  <MicrosSection
-                    intakeData={intakeData}
-                    dashboardBusy={dashboardBusy}
-                    isGuest={isGuest}
-                    supplementSummary={supplementSummary}
-                    hiddenMicronutrientKeys={hiddenMicronutrientKeys}
-                    onManageMicronutrients={openTargetEditor}
-                  />
-                </View>
-              )}
             </View>
           </View>
         ) : (
@@ -3310,109 +3520,112 @@ function IndexPage() {
             </View>
           </View>
 
-          {!dashboardBusy && !isGuest && (
-            <TodaySupplementsSection
-              summary={supplementSummary}
-              canQuickRecord={isTodayRecordDate(selectedDate)}
-              onRecorded={setSupplementSummary}
-            />
-          )}
-
-          <View className={`nutrition-expand-shell${nutritionExpanded ? ' is-expanded' : ''}`}>
-            <View
-              className='nutrition-expand-main'
-              onClick={() => setNutritionExpanded((value) => !value)}
-            >
-              <View className='nutrition-expand-title-row'>
-                <Text className='nutrition-expand-title'>营养概览</Text>
-                <View className='nutrition-expand-affordance'>
-                  <Text className={`iconfont ${nutritionExpanded ? 'icon-collapse' : 'icon-expand'} nutrition-expand-affordance-icon`} />
-                  <Text className='nutrition-expand-affordance-text'>
-                    {nutritionExpanded ? '收起' : '展开更多'}
-                  </Text>
-                </View>
+        </View>
+        )}
               </View>
-
-              <View className='macros-section-horizontal'>
-                {MACRO_CONFIGS.map(({ key, label, color, unit, iconClass }) => {
-                  const macro = intakeData.macros[key]
-                  const targetValue = macro?.target || 0
-                  const currentRaw = normalizeDisplayNumber(macro?.current)
-                  const targetRaw = normalizeDisplayNumber(macro?.target)
-                  const macroPct = calculateProgressPercent(currentRaw, targetRaw)
-                  const isMacroOver = macroPct > 100
-                  const macroExcessG = isMacroOver
-                    ? Number((Math.max(0, currentRaw - targetRaw)).toFixed(1))
-                    : null
-                  const ringStrokeColor = isMacroOver ? HOME_WARNING_RED : color
-                  const intakeTextColor = isMacroOver ? HOME_WARNING_RED : color
-
-                  const ringAnimPct =
-                    key === 'protein'
+            <View className={`home-nutrition-module${nutritionExpanded ? ' is-expanded' : ''}`}>
+              <View className='nutrition-expand-main' onClick={() => setNutritionExpanded((value) => !value)}>
+                <View className='nutrition-expand-title-row'>
+                  <Text className='nutrition-expand-title'>营养概览</Text>
+                  <View className='nutrition-expand-affordance'>
+                    <Text className={`iconfont ${nutritionExpanded ? 'icon-collapse' : 'icon-expand'} nutrition-expand-affordance-icon`} />
+                    <Text className='nutrition-expand-affordance-text'>{nutritionExpanded ? '收起' : '展开更多'}</Text>
+                  </View>
+                </View>
+                <View className='macros-section-horizontal'>
+                  {MACRO_CONFIGS.map(({ key, label, color, unit, iconClass }) => {
+                    const macro = intakeData.macros[key]
+                    const currentRaw = normalizeDisplayNumber(macro?.current)
+                    const targetRaw = normalizeDisplayNumber(macro?.target)
+                    const macroPct = calculateProgressPercent(currentRaw, targetRaw)
+                    const isMacroOver = macroPct > 100
+                    const ringAnimPct = key === 'protein'
                       ? animatedMacroProteinRing
                       : key === 'carbs'
                         ? animatedMacroCarbsRing
                         : animatedMacroFatRing
-                  const intakeAnimNum =
-                    key === 'protein'
+                    const intakeAnimNum = key === 'protein'
                       ? animatedMacroProteinNum
                       : key === 'carbs'
                         ? animatedMacroCarbsNum
                         : animatedMacroFatNum
-
-                  return (
-                    <View key={key} className={`macro-card-horizontal ${isMacroOver ? 'is-warning' : ''}`}>
-                      <View className='macro-left-content'>
-                        <View className='macro-excess-slot'>
-                          {macroExcessG != null && macroExcessG > 0 && (
-                            <Text className='macro-over-hint'>+{formatDisplayNumber(macroExcessG)}{unit}</Text>
-                          )}
-                        </View>
-                        <View className='macro-title-row'>
-                          <Text className={`iconfont ${iconClass}`} style={{ color, marginRight: '6rpx', fontSize: '26rpx' }} />
-                          <Text className='macro-label-horizontal'>{label}</Text>
-                        </View>
-                        <View className='macro-value-row'>
-                          <Text className='macro-current-value-inline' style={{ color: intakeTextColor }}>
-                            {formatDisplayNumber(intakeAnimNum)}
-                          </Text>
-                          <Text className='macro-target-total'>
-                            / {formatDisplayNumber(targetValue)}{unit}
-                          </Text>
-                        </View>
-                        <View className='macro-progress-bar-bg'>
-                          <View
-                            className='macro-progress-bar-fill'
-                            style={{
-                              width: `${dashboardBusy ? 0 : Math.min(100, ringAnimPct)}%`,
-                              backgroundColor: ringStrokeColor
-                            }}
-                          />
+                    return (
+                      <View key={key} className={`macro-card-horizontal${isMacroOver ? ' is-warning' : ''}`}>
+                        <View className='macro-left-content'>
+                          <View className='macro-title-row'>
+                            <Text className={`iconfont ${iconClass}`} style={{ color, marginRight: '6rpx', fontSize: '26rpx' }} />
+                            <Text className='macro-label-horizontal'>{label}</Text>
+                          </View>
+                          <View className='macro-value-row'>
+                            <Text className='macro-current-value-inline' style={{ color: isMacroOver ? HOME_WARNING_RED : color }}>
+                              {dashboardBusy || isGuest ? '--' : formatDisplayNumber(intakeAnimNum)}
+                            </Text>
+                            <Text className='macro-target-total'> / {dashboardBusy || isGuest ? '--' : formatDisplayNumber(targetRaw)}{unit}</Text>
+                          </View>
+                          <View className='macro-progress-bar-bg'>
+                            <View
+                              className='macro-progress-bar-fill'
+                              style={{
+                                width: `${dashboardBusy || isGuest ? 0 : Math.min(100, ringAnimPct)}%`,
+                                backgroundColor: isMacroOver ? HOME_WARNING_RED : color,
+                              }}
+                            />
+                          </View>
                         </View>
                       </View>
-                    </View>
-                  )
-                })}
+                    )
+                  })}
+                </View>
               </View>
+              {nutritionExpanded && (
+                <View className='nutrition-expanded-body'>
+                  <MicrosSection
+                    intakeData={intakeData}
+                    dashboardBusy={dashboardBusy}
+                    isGuest={isGuest}
+                    supplementSummary={supplementSummary}
+                    hiddenMicronutrientKeys={hiddenMicronutrientKeys}
+                    onManageMicronutrients={openTargetEditor}
+                  />
+                </View>
+              )}
             </View>
-
-            {nutritionExpanded && (
-              <View className='nutrition-expanded-body'>
-                <MicrosSection
-                  intakeData={intakeData}
-                  dashboardBusy={dashboardBusy}
-                  isGuest={isGuest}
-                  supplementSummary={supplementSummary}
-                  hiddenMicronutrientKeys={hiddenMicronutrientKeys}
-                  onManageMicronutrients={openTargetEditor}
-                />
-              </View>
-            )}
-          </View>
-        </View>
+            </View>
+          </HomeModuleFrame>
         )}
 
-        {showRewardHint && (
+        {visibleHomeModuleIds.includes('supplements') && (
+          <HomeModuleFrame {...getHomeModuleFrameProps('supplements')}>
+            <View className='home-supplements-module home-experience-card'>
+              {dashboardBusy ? (
+                <View className='home-module-placeholder'>
+                  <View className='home-module-placeholder__copy'>
+                    <Text className='home-module-placeholder__title'>今日补剂</Text>
+                    <View className='loading-spinner' style={{ width: '24rpx', height: '24rpx', borderWidth: '3rpx', marginTop: '12rpx' }} />
+                  </View>
+                </View>
+              ) : isGuest ? (
+                <View className='home-module-placeholder'>
+                  <View className='home-module-placeholder__copy'>
+                    <Text className='home-module-placeholder__title'>今日补剂</Text>
+                    <Text className='home-module-placeholder__desc'>登录后管理补剂计划与每日打卡</Text>
+                  </View>
+                  <View className='home-module-placeholder__action' onClick={() => redirectToLogin()}><Text>去登录</Text></View>
+                </View>
+              ) : (
+                <TodaySupplementsSection
+                  summary={supplementSummary}
+                  canQuickRecord={isTodayRecordDate(selectedDate)}
+                  onRecorded={setSupplementSummary}
+                />
+              )}
+            </View>
+          </HomeModuleFrame>
+        )}
+
+        {visibleHomeModuleIds.includes('rewards') && (
+          <HomeModuleFrame {...getHomeModuleFrameProps('rewards')}>
+          {showRewardHint ? (
           <View className='home-reward-hint-swiper'>
             <Swiper
               className='home-reward-hint-swiper__track'
@@ -3461,109 +3674,23 @@ function IndexPage() {
               ))}
             </View>
           </View>
+          ) : (
+            <View className='home-supplements-module home-experience-card'>
+              <View className='home-module-placeholder'>
+                <View className='home-module-placeholder__copy'>
+                  <Text className='home-module-placeholder__title'>精选功能</Text>
+                  <Text className='home-module-placeholder__desc'>登录后查看奖励任务与更多推荐</Text>
+                </View>
+                <View className='home-module-placeholder__action' onClick={() => redirectToLogin()}><Text>去登录</Text></View>
+              </View>
+            </View>
+          )}
+          </HomeModuleFrame>
         )}
 
-        {/* 体重/喝水状态卡片 */}
-        <View className='body-status-section home-experience-card'>
-          {/* 体重卡片 */}
-          <View className='body-status-card weight-card' onClick={() => openBodyMetricRecord('weight')} onLongPress={openWeightEditor}>
-            <View className='body-status-header'>
-              <View className='body-status-title-wrap'>
-                <Text className='iconfont icon-weight-scale' style={{ marginRight: '6rpx', fontSize: '26rpx', color: '#6b7280' }} />
-                <Text className='body-status-title'>体重</Text>
-              </View>
-            </View>
-            <View className='body-status-content'>
-              {dashboardBusy ? (
-                <View style={{ display: 'flex', alignItems: 'center', gap: '12rpx', minHeight: '52rpx' }}>
-                  <Text className='body-status-value' style={{ color: '#9ca3af' }}>--</Text>
-                  <View className='loading-spinner' style={{ width: '22rpx', height: '22rpx', borderWidth: '3rpx' }} />
-                </View>
-              ) : isGuest ? (
-                <Text className='body-status-value' style={{ color: '#9ca3af' }}>--</Text>
-              ) : weightSummary.latestWeight ? (
-                <>
-                  <Text className='body-status-value'>{weightSummary.latestWeight.value.toFixed(1)}</Text>
-                  <Text className='body-status-unit'>kg</Text>
-                  {weightSummary.weightChange !== null && (
-                    <Text className={`body-status-change ${weightSummary.weightChange > 0 ? 'up' : 'down'}`}>
-                      {weightSummary.weightChange > 0 ? '+' : ''}{weightSummary.weightChange.toFixed(1)}
-                    </Text>
-                  )}
-                </>
-              ) : (
-                <Text className='body-status-empty'>点击记录</Text>
-              )}
-            </View>
-            <Text className='body-status-hint'>
-              {isGuest
-                ? '记录体重，追踪变化'
-                : weightSummary.latestWeight
-                  ? `上次记录: ${weightSummary.latestWeight.date.slice(5)}`
-                  : '点击记录体重'}
-            </Text>
-          </View>
-
-          {/* 喝水卡片 */}
-          <View className='body-status-card water-card' onClick={() => openBodyMetricRecord('water')} onLongPress={openWaterEditor}>
-            <View className='body-status-header'>
-              <View className='body-status-title-wrap'>
-                <Text className='iconfont icon-drink' style={{ marginRight: '6rpx', fontSize: '26rpx', color: '#5c9ed4' }} />
-                <Text className='body-status-title'>喝水</Text>
-              </View>
-            </View>
-            <View className='body-status-content'>
-              {dashboardBusy ? (
-                <View style={{ display: 'flex', alignItems: 'center', gap: '12rpx', minHeight: '52rpx' }}>
-                  <Text className='body-status-value' style={{ color: '#9ca3af' }}>--</Text>
-                  <View className='loading-spinner' style={{ width: '22rpx', height: '22rpx', borderWidth: '3rpx' }} />
-                </View>
-              ) : isGuest ? (
-                <Text className='body-status-value' style={{ color: '#9ca3af' }}>--</Text>
-              ) : (
-                <>
-                  <Text className='body-status-value'>{Math.round(animatedWaterTotal)}</Text>
-                  <Text className='body-status-unit'>ml</Text>
-                </>
-              )}
-            </View>
-            <Text className='body-status-hint'>
-              {dashboardBusy || isGuest ? '点击记录喝水' : `${Math.round(animatedWaterProgress)}% / 目标 ${bodyMetrics.waterGoalMl}ml`}
-            </Text>
-          </View>
-
-          {/* 运动卡片 */}
-          <View className='body-status-card exercise-card' onClick={() => openBodyMetricRecord('exercise')} onLongPress={openExerciseRecord}>
-            <View className='body-status-header'>
-              <View className='body-status-title-wrap'>
-                <Text className='iconfont icon-dumbbell' style={{ marginRight: '6rpx', fontSize: '26rpx', color: '#f0985c' }} />
-                <Text className='body-status-title'>运动</Text>
-              </View>
-            </View>
-            <View className='body-status-content'>
-              {dashboardBusy ? (
-                <View style={{ display: 'flex', alignItems: 'center', gap: '12rpx', minHeight: '52rpx' }}>
-                  <Text className='body-status-value' style={{ color: '#9ca3af' }}>--</Text>
-                  <View className='loading-spinner' style={{ width: '22rpx', height: '22rpx', borderWidth: '3rpx' }} />
-                </View>
-              ) : isGuest ? (
-                <Text className='body-status-value' style={{ color: '#9ca3af' }}>--</Text>
-              ) : (
-                <>
-                  <Text className='body-status-value'>
-                    {Math.round(animatedExerciseBurnedKcal)}
-                  </Text>
-                  <Text className='body-status-unit'>kcal</Text>
-                </>
-              )}
-            </View>
-            <Text className='body-status-hint'>
-              点击记录运动
-            </Text>
-          </View>
-        </View>
-
         {/* 今日餐食区域 */}
+        {visibleHomeModuleIds.includes('meals') && (
+          <HomeModuleFrame {...getHomeModuleFrameProps('meals')}>
         <View className='meals-section home-experience-card'>
           <View className='section-header'>
             <View className='meals-title-wrap'>
@@ -3720,9 +3847,36 @@ function IndexPage() {
             )}
           </View>
         </View>
+          </HomeModuleFrame>
+        )}
+
+        {/* 健康日常：体重、喝水和运动合并为一张卡片 */}
+        {visibleHomeModuleIds.includes('health') && (
+          <HomeModuleFrame {...getHomeModuleFrameProps('health')}>
+            <HealthMetricsWheel
+              date={selectedDate}
+              weight={weightSummary.latestWeight}
+              waterMl={todayWater.total}
+              waterGoalMl={bodyMetrics.waterGoalMl}
+              exerciseKcal={exerciseBurnedKcal}
+              busy={dashboardBusy}
+              guest={isGuest}
+              dark={scheme === 'dark'}
+              wellness={isWellnessMode}
+              onOpen={openBodyMetricRecord}
+              onQuickRecord={(kind) => {
+                if (kind === 'weight') openWeightEditor()
+                else if (kind === 'water') openWaterEditor()
+                else openExerciseRecord()
+              }}
+            />
+          </HomeModuleFrame>
+        )}
 
         {/* 食物保质期：快到期提醒（数据来自首页 dashboard） */}
-        {showFoodExpiryBlock && (
+        {visibleHomeModuleIds.includes('expiry') && (
+          <HomeModuleFrame {...getHomeModuleFrameProps('expiry')}>
+          {showFoodExpiryBlock ? (
           <View className='expiry-section home-experience-card'>
             <View className='section-header'>
               <View className='meals-title-wrap'>
@@ -3806,18 +3960,51 @@ function IndexPage() {
               )}
             </View>
           </View>
+          ) : (
+            <View className='home-supplements-module home-experience-card'>
+              <View className='home-module-placeholder'>
+                <View className='home-module-placeholder__copy'>
+                  <Text className='home-module-placeholder__title'>食物保质期</Text>
+                  <Text className='home-module-placeholder__desc'>登录后添加家中食物并接收到期提醒</Text>
+                </View>
+                <View className='home-module-placeholder__action' onClick={() => redirectToLogin()}><Text>去登录</Text></View>
+              </View>
+            </View>
+          )}
+          </HomeModuleFrame>
         )}
-
-        {/* 查看统计入口 */}
-        <View className='home-experience-card'>
-          <StatsEntry onClick={openDayRecordForSelectedDate} />
-        </View>
 
         </View>
 
         {/* 底部留白 */}
         <View className='bottom-spacer' />
       </View>
+
+      <HomeToolboxSheet
+        visible={showHomeToolbox}
+        visibleIds={visibleHomeModuleIds}
+        onAdd={handleAddHomeModule}
+        onHide={(id) => setHomeModuleVisible(id, false)}
+        onReset={resetHomeModules}
+        onClose={() => setShowHomeToolbox(false)}
+      />
+
+      {!petHidden ? (
+        <FloatingPetAssistant
+          key={String(Taro.getStorageSync('user_id') || 'guest')}
+          ref={floatingPetRef}
+          pet={petSummary?.pet}
+          companionSpriteOverride={getHomeCompanionSpriteOverride(homeCompanionPreference)}
+          mood={petMood}
+          state={petState}
+          dark={scheme === 'dark'}
+          suppressed={homeModulesEditing || showHomeToolbox || showTargetEditor || showWeightEditor || showWaterEditor || showRecordMenu || showHomeOnboardingGuide || showDailyPosterModal || showRecordPosterModal || showRecordEditModal || mealRecordsDialogVisible || mealActionSheetVisible}
+          reminder={petReminder}
+          onReminderPress={handlePetAnalyzeReminderPress}
+          onReminderShown={handlePetReminderShown}
+          onChatOpenChange={setPetChatOpen}
+        />
+      ) : null}
 
       {/* 目标编辑弹窗 */}
       <TargetEditor

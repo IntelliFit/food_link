@@ -3,7 +3,9 @@ package service
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"math"
+	"strconv"
 	"strings"
 	"time"
 
@@ -11,6 +13,7 @@ import (
 	commonerrors "food_link/backend/internal/common/errors"
 	"food_link/backend/internal/health/domain"
 	usersvc "food_link/backend/internal/user/service"
+	"food_link/backend/pkg/logger"
 )
 
 var chinaTZ = time.FixedZone("Asia/Shanghai", 8*60*60)
@@ -82,7 +85,11 @@ type BodyMetricsSummary struct {
 }
 
 func (s *BodyMetricsService) GetSummary(ctx context.Context, userID string, statsRange string) (*BodyMetricsSummary, error) {
-	startDate, endDate := resolveStatsRangeDates(statsRange)
+	startDate, endDate, err := resolveBodyMetricsRange(statsRange, time.Now().In(chinaTZ))
+	if err != nil {
+		return nil, err
+	}
+	logger.Info(ctx, "读取身体指标统计", slog.String("user_id", userID), slog.String("start_date", startDate), slog.String("end_date", endDate))
 	extendedStart := time.Now().In(chinaTZ).AddDate(-2, 0, 0).Format("2006-01-02")
 	extendedEnd := time.Now().In(chinaTZ).Format("2006-01-02")
 
@@ -93,6 +100,7 @@ func (s *BodyMetricsService) GetSummary(ctx context.Context, userID string, stat
 
 	waterLogs, err := s.repo.GetWaterLogsByDate(ctx, userID, startDate, endDate)
 	if err != nil {
+		logger.Error(ctx, "读取历史饮水记录失败", err, slog.String("user_id", userID))
 		return nil, err
 	}
 
@@ -136,6 +144,10 @@ func (s *BodyMetricsService) GetSummary(ctx context.Context, userID string, stat
 		}
 	}
 
+	if strings.HasPrefix(statsRange, "year:") {
+		statsRange = "year"
+	}
+	logger.Info(ctx, "身体指标统计完成", slog.String("user_id", userID), slog.Int("water_recorded_days", recordedDays))
 	return &BodyMetricsSummary{
 		Range:             statsRange,
 		StartDate:         startDate,
@@ -616,4 +628,22 @@ func aggregateWaterDaily(rows []domain.BodyWaterLog, startDate, endDate string) 
 
 func round1(v float64) float64 {
 	return math.Round(v*10) / 10
+}
+
+// Annual recaps are limited to this year and last year, matching retained weight history.
+func resolveBodyMetricsRange(value string, now time.Time) (string, string, error) {
+	if !strings.HasPrefix(value, "year:") {
+		start, end := resolveStatsRangeDates(value)
+		return start, end, nil
+	}
+	year, err := strconv.Atoi(strings.TrimPrefix(value, "year:"))
+	if err != nil || year < now.Year()-1 || year > now.Year() {
+		return "", "", &commonerrors.AppError{Code: 10002, Message: "年份须为今年或去年", HTTPStatus: 400}
+	}
+	start := time.Date(year, 1, 1, 0, 0, 0, 0, chinaTZ)
+	end := time.Date(year, 12, 31, 0, 0, 0, 0, chinaTZ)
+	if year == now.Year() {
+		end = now.In(chinaTZ)
+	}
+	return start.Format("2006-01-02"), end.Format("2006-01-02"), nil
 }

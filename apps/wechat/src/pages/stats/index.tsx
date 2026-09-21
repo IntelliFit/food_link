@@ -1,5 +1,5 @@
 import { View, Text, ScrollView, Input, Switch } from '@tarojs/components'
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, type CSSProperties } from 'react'
 import Taro, { useDidHide, useDidShow } from '@tarojs/taro'
 import { readStatsPageCache, writeStatsPageCache } from '../../utils/stats-page-cache'
 import {
@@ -298,9 +298,182 @@ type AnalysisPanelKey = 'health' | 'nutrition' | 'structure'
 
 const ANALYSIS_PANEL_TABS: Array<{ key: AnalysisPanelKey; label: string }> = [
   { key: 'health', label: '健康指数' },
-  { key: 'nutrition', label: 'AI分析' },
+  { key: 'nutrition', label: 'AI方案' },
   { key: 'structure', label: '热量分布' },
 ]
+
+// 本地界面验收期间临时开启：无记录时展示健康指数、AI 方案和热量分布完整形态。
+// 交付验收前将此值恢复为 false，即可重新启用正式的数据门槛。
+const ANALYSIS_PREVIEW_MODE = true
+const HEALTH_INDEX_PREVIEW_MODE = ANALYSIS_PREVIEW_MODE
+
+const ANALYSIS_PREVIEW_INSIGHT = `### 示例解读
+
+近一周的示例趋势显示，热量摄入整体接近目标，但不同日期之间仍有波动。宏量营养结构以碳水为主，蛋白质基本稳定，脂肪占比可以继续留意。
+
+### 三点观察
+
+- 周中有两天热量偏高，主要改善空间在晚餐和加工食品。
+- 蛋白质分布较稳定，可以继续保持每餐都有优质蛋白。
+- 早餐占比偏低，上午更容易出现饥饿或临时加餐。
+
+### 建议先做
+
+- 下一餐增加一份深色蔬菜。
+- 点餐时优先选择少盐、少酱汁。
+- 连续记录后再根据真实趋势调整目标。`
+
+function previewDate(offsetDays: number): string {
+  const date = new Date()
+  date.setDate(date.getDate() + offsetDays)
+  return formatLocalDate(date)
+}
+
+function buildAnalysisPreviewSample(range: 'week' | 'month'): Partial<StatsSummary> {
+  const weekCalories = [1680, 1920, 1760, 2050, 1810, 1740, 1880]
+  const dayCount = range === 'week' ? 7 : 14
+  const calories = Array.from({ length: dayCount }, (_, index) => weekCalories[index % weekCalories.length] + (index >= 7 ? 40 : 0))
+  const dates = Array.from({ length: dayCount }, (_, index) => previewDate(index - dayCount + 1))
+  const dailyCalories = dates.map((date, index) => ({ date, calories: calories[index] }))
+  const totalCalories = calories.reduce((sum, value) => sum + value, 0)
+  const multiplier = dayCount / 7
+  const weightValues = [63.8, 63.7, 63.6, 63.7, 63.5, 63.4, 63.4]
+  const waterValues = [1600, 1800, 1450, 2100, 1750, 1900, 2000]
+  const weightEntries = dates.slice(-7).map((date, index) => ({ date, value: weightValues[index] }))
+  const waterDaily = dates.slice(-7).map((date, index) => ({
+    date,
+    total: waterValues[index],
+    logs: [waterValues[index]],
+  }))
+
+  return {
+    start_date: dates[0],
+    end_date: dates[dates.length - 1],
+    tdee: 1850,
+    streak_days: 5,
+    recorded_days: dayCount,
+    total_calories: totalCalories,
+    avg_calories_per_day: totalCalories / dayCount,
+    cal_surplus_deficit: totalCalories - 1850 * dayCount,
+    total_protein: 490 * multiplier,
+    total_carbs: 1360 * multiplier,
+    total_fat: 350 * multiplier,
+    by_meal: {
+      breakfast: 2380 * multiplier,
+      morning_snack: 560 * multiplier,
+      lunch: 3940 * multiplier,
+      afternoon_snack: 620 * multiplier,
+      dinner: 4480 * multiplier,
+      evening_snack: 860 * multiplier,
+      snack: 620 * multiplier,
+    },
+    daily_calories: dailyCalories,
+    macro_percent: { protein: 24, carbs: 48, fat: 28 },
+    analysis_summary: ANALYSIS_PREVIEW_INSIGHT,
+    analysis_summary_generated_date: formatLocalDate(),
+    analysis_summary_needs_refresh: false,
+    body_metrics: {
+      range,
+      start_date: dates[0],
+      end_date: dates[dates.length - 1],
+      weight_entries: weightEntries,
+      latest_weight: weightEntries[weightEntries.length - 1],
+      previous_weight: weightEntries[weightEntries.length - 2],
+      weight_change: -0.1,
+      water_goal_ml: 2000,
+      today_water: waterDaily[waterDaily.length - 1],
+      water_daily: waterDaily,
+      total_water_ml: waterValues.reduce((sum, value) => sum + value, 0),
+      avg_daily_water_ml: waterValues.reduce((sum, value) => sum + value, 0) / waterValues.length,
+      water_recorded_days: waterDaily.length,
+    },
+  }
+}
+
+const HEALTH_INDEX_PREVIEW_SAMPLE: HealthIndex = {
+  has_enough_data: true,
+  overall_score: 72,
+  projected_score: 80,
+  overall_trend_label: '界面示例',
+  overview_copy: '示例数据用于查看健康指数的布局与交互，实际结果会根据你的饮食和健康记录重新计算。',
+  signal_chips: [
+    { label: '记录趋势', value: '逐步稳定' },
+    { label: '改善空间', value: '8 分' },
+  ],
+  risk_cards: [
+    {
+      key: 'hypertension',
+      title: '血压友好度',
+      score: 68,
+      tone: 'neutral',
+      brief: '留意盐分与加工食品频率',
+      summary: '当前卡片为界面示例，用于呈现健康关注项的说明方式。',
+      basis: '正式结果会结合连续饮食记录和个人健康资料生成。',
+      action: '从下一餐开始，优先选择少盐、少加工的食物。',
+      delta: 3,
+    },
+    {
+      key: 'diabetes',
+      title: '血糖友好度',
+      score: 74,
+      tone: 'neutral',
+      brief: '主食搭配仍有优化空间',
+      summary: '当前卡片为界面示例，用于呈现健康关注项的说明方式。',
+      basis: '正式结果会结合连续饮食记录和个人健康资料生成。',
+      action: '主食搭配蔬菜和优质蛋白，减少单一精制碳水。',
+      delta: 2,
+    },
+    {
+      key: 'cardio',
+      title: '心血管友好度',
+      score: 76,
+      tone: 'neutral',
+      brief: '整体平稳，可继续保持',
+      summary: '当前卡片为界面示例，用于呈现健康关注项的说明方式。',
+      basis: '正式结果会结合连续饮食记录和个人健康资料生成。',
+      action: '保持规律运动，并增加鱼类、坚果等优质脂肪来源。',
+      delta: 1,
+    },
+    {
+      key: 'weight',
+      title: '体重管理',
+      score: 70,
+      tone: 'neutral',
+      brief: '关注总量与进餐节奏',
+      summary: '当前卡片为界面示例，用于呈现健康关注项的说明方式。',
+      basis: '正式结果会结合连续饮食记录和个人健康资料生成。',
+      action: '先保证三餐规律，再根据饱腹感调整份量。',
+      delta: 2,
+    },
+    {
+      key: 'micronutrient',
+      title: '营养均衡度',
+      score: 71,
+      tone: 'neutral',
+      brief: '食物种类可以更丰富',
+      summary: '当前卡片为界面示例，用于呈现健康关注项的说明方式。',
+      basis: '正式结果会结合连续饮食记录和个人健康资料生成。',
+      action: '每天增加一种不同颜色的蔬果。',
+      delta: 2,
+    },
+  ],
+  all_risk_options: [
+    { key: 'hypertension', title: '血压友好度', short: '血压' },
+    { key: 'diabetes', title: '血糖友好度', short: '血糖' },
+    { key: 'cardio', title: '心血管友好度', short: '心血管' },
+    { key: 'weight', title: '体重管理', short: '体重' },
+    { key: 'micronutrient', title: '营养均衡度', short: '营养均衡' },
+  ],
+  top_issues: [
+    { title: '蔬果种类偏少', detail: '示例：本周颜色和种类还可以更丰富。' },
+    { title: '部分餐次盐分偏高', detail: '示例：加工食品和外卖频率值得关注。' },
+  ],
+  action_list: [
+    '下一餐先增加一份深色蔬菜',
+    '点餐时优先选择少盐、少酱汁',
+    '保持记录，正式指数会随数据逐步更新',
+  ],
+}
 
 const DEFAULT_RISK_KEYS = ['hypertension', 'diabetes', 'cardio', 'weight', 'micronutrient']
 const RISK_PREF_STORAGE_KEY = 'stats_risk_focus_keys'
@@ -561,7 +734,9 @@ function hasAuthToken(): boolean {
 function StatsPage() {
   const { scheme } = useAppColorScheme()
   const [range, setRange] = useState<'week' | 'month'>('week')
-  const [analysisPanel, setAnalysisPanel] = useState<AnalysisPanelKey>('health')
+  const [analysisPanel, setAnalysisPanel] = useState<AnalysisPanelKey>(
+    ANALYSIS_PREVIEW_MODE ? 'nutrition' : 'health'
+  )
   const rangeRef = useRef(range)
   rangeRef.current = range
   const [riskDetailModal, setRiskDetailModal] = useState<{ visible: boolean; card: RiskCard | null }>({ visible: false, card: null })
@@ -1161,27 +1336,36 @@ function StatsPage() {
     )
   }
 
-  const d = data!
+  const sourceData = data!
+  const sourceRecordedDays = Math.max(0, toSafeNumber(sourceData.recorded_days, 0))
+  const isStatsDataPreview = ANALYSIS_PREVIEW_MODE && sourceRecordedDays === 0
+  const previewStats = isStatsDataPreview ? buildAnalysisPreviewSample(range) : null
+  const d: StatsSummary = previewStats
+    ? { ...sourceData, ...previewStats, health_index: sourceData.health_index }
+    : sourceData
   const totalCalories = toSafeNumber(d.total_calories)
   const tdee = toSafeNumber(d.tdee)
   const avgCaloriesPerDay = toSafeNumber(d.avg_calories_per_day)
   const totalProtein = toSafeNumber(d.total_protein)
   const totalCarbs = toSafeNumber(d.total_carbs)
   const totalFat = toSafeNumber(d.total_fat)
-  const hasInsight = Boolean(d.analysis_summary?.trim())
-  const insightGeneratedDate = d.analysis_summary_generated_date || ''
-  const insightNeedsRefresh = Boolean(d.analysis_summary_needs_refresh)
-  const insightDailyLimit = Math.max(1, toSafeNumber(d.analysis_summary_daily_limit, 3))
-  const insightUsedToday = Math.max(0, toSafeNumber(d.analysis_summary_used_today, 0))
+  const hasInsight = Boolean(sourceData.analysis_summary?.trim())
+  const insightGeneratedDate = sourceData.analysis_summary_generated_date || ''
+  const insightNeedsRefresh = Boolean(sourceData.analysis_summary_needs_refresh)
+  const insightDailyLimit = Math.max(1, toSafeNumber(sourceData.analysis_summary_daily_limit, 3))
+  const insightUsedToday = Math.max(0, toSafeNumber(sourceData.analysis_summary_used_today, 0))
   const insightRemainingToday = Math.max(0, insightDailyLimit - insightUsedToday)
-  const recordedDays = Math.max(0, toSafeNumber(d.recorded_days, 0))
+  const recordedDays = sourceRecordedDays
   const hasAnyDietData = recordedDays > 0
   const canUseStatsInsight = hasAnyDietData
+  const canDisplayStatsInsight = canUseStatsInsight || isStatsDataPreview
   const canGenerateInsight = canUseStatsInsight && insightRemainingToday > 0
-  const normalizedInsightText = normalizeInsightText(d.analysis_summary || '')
-  const displayInsightText = canUseStatsInsight
-    ? normalizeInsightText(aiDisplayText || (hasInsight && !isTyping ? normalizedInsightText : ''))
-    : ''
+  const normalizedInsightText = normalizeInsightText(sourceData.analysis_summary || '')
+  const displayInsightText = isStatsDataPreview
+    ? normalizeInsightText(ANALYSIS_PREVIEW_INSIGHT)
+    : canUseStatsInsight
+      ? normalizeInsightText(aiDisplayText || (hasInsight && !isTyping ? normalizedInsightText : ''))
+      : ''
   const bodyMetrics = d.body_metrics
   const macroPercent = {
     protein: toSafeNumber(d.macro_percent?.protein),
@@ -1247,18 +1431,21 @@ function StatsPage() {
       state: !hasRecord ? 'none' : delta > 0 ? 'surplus' : 'deficit'
     }
   })
-  const healthIndex = d.health_index
+  const healthIndex = sourceData.health_index
   const hasEnoughHealthIndexData = healthIndex?.has_enough_data ?? false
-  const overallRiskScore = healthIndex?.overall_score ?? 0
-  const projectedOverallScore = healthIndex?.projected_score ?? 0
-  const signalChips = healthIndex?.signal_chips ?? []
-  const riskCards = healthIndex?.risk_cards ?? []
-  const customRiskCards = healthIndex?.custom_risk_cards ?? []
+  const isHealthIndexPreview = HEALTH_INDEX_PREVIEW_MODE && !hasEnoughHealthIndexData
+  const displayHealthIndex = isHealthIndexPreview ? HEALTH_INDEX_PREVIEW_SAMPLE : healthIndex
+  const canShowHealthIndex = Boolean(displayHealthIndex) && (hasEnoughHealthIndexData || HEALTH_INDEX_PREVIEW_MODE)
+  const overallRiskScore = displayHealthIndex?.overall_score ?? 0
+  const projectedOverallScore = displayHealthIndex?.projected_score ?? 0
+  const signalChips = displayHealthIndex?.signal_chips ?? []
+  const riskCards = displayHealthIndex?.risk_cards ?? []
+  const customRiskCards = displayHealthIndex?.custom_risk_cards ?? []
   const allDisplayRiskCards = [...riskCards, ...customRiskCards]
-  const customFocusMeta = healthIndex?.custom_focus_meta
+  const customFocusMeta = displayHealthIndex?.custom_focus_meta
   const customFocusCost = customFocusMeta?.generate_cost ?? 1
   const allRiskOptions = (() => {
-    const base = healthIndex?.all_risk_options ?? []
+    const base = displayHealthIndex?.all_risk_options ?? []
     const seen = new Set<string>()
     const merged: RiskOption[] = []
     base.forEach(item => {
@@ -1289,16 +1476,23 @@ function StatsPage() {
       return option?.is_custom ? pendingCustomRiskCardFromOption(option) : null
     })
     .filter((card): card is RiskCard => Boolean(card))
+  const scoreBasisCards = [...visibleRiskCards]
+    .sort((a, b) => a.score - b.score)
+    .slice(0, 3)
   const hasVisibleCustomFocus = visibleRiskCards.some(card => card.is_custom)
   const focusOverallScore = overallRiskScore
   const focusProjectedScore = projectedOverallScore
-  const focusOverviewCopy = scoreToFocusOverview(focusOverallScore, hasVisibleCustomFocus)
-  const focusScoreHint = hasVisibleCustomFocus
-    ? '按全部核心指标与自定义 AI 指标综合计算'
-    : '按全部核心关注指标综合计算'
+  const focusOverviewCopy = isHealthIndexPreview
+    ? (displayHealthIndex?.overview_copy ?? '')
+    : scoreToFocusOverview(focusOverallScore, hasVisibleCustomFocus)
+  const focusScoreHint = isHealthIndexPreview
+    ? '示例分数，仅用于查看界面呈现'
+    : hasVisibleCustomFocus
+      ? '按全部核心指标与自定义 AI 指标综合计算'
+      : '按全部核心关注指标综合计算'
   const selectedRiskSummary = selectedRiskItems.map(item => item.short).join('、')
-  const topIssues = healthIndex?.top_issues ?? []
-  const actionList = healthIndex?.action_list ?? []
+  const topIssues = displayHealthIndex?.top_issues ?? []
+  const actionList = displayHealthIndex?.action_list ?? []
   const toggleSection = (key: string) => {
     setExpandedSections(prev => ({
       ...prev,
@@ -1347,51 +1541,6 @@ function StatsPage() {
         <Text className='iconfont icon-right-arrow stats-range-dropdown__arrow' />
       </View>
       <ScrollView className='scroll-wrap' scrollY enhanced showScrollbar={false}>
-        {!hasEnoughHealthIndexData ? (
-          <View className='stats-card health-index-gate-card'>
-            <View className='health-index-gate-icon'>
-              <Text className='iconfont icon-shangzhang health-index-gate-icon-text' />
-            </View>
-            <View className='health-index-gate-copy'>
-              <Text className='health-index-gate-title'>连续记录两天后显示健康指数</Text>
-              <Text className='health-index-gate-desc'>
-                当前已记录 {d.recorded_days ?? 0} 天。请连续记录两天以上，我们会基于更稳定的饮食趋势展示你的健康参考指数。
-              </Text>
-            </View>
-          </View>
-        ) : (
-          <>
-            <View className='stats-card risk-overview-card'>
-              <View className='risk-overview-top'>
-                <View className='risk-overview-copy'>
-                  <Text className='risk-overview-title'>关注综合分</Text>
-                </View>
-                <View className='risk-overview-actions'>
-                  <View className={`risk-overview-badge tone-${scoreToTone(focusOverallScore)}`}>
-                    <Text className='risk-overview-badge-label'>{scoreToLabel(focusOverallScore)}</Text>
-                  </View>
-                </View>
-              </View>
-
-              <View className='risk-overview-score-row'>
-                <Text className='risk-overview-score'>{focusOverallScore}</Text>
-                <Text className='risk-overview-score-unit'>/ 100</Text>
-              </View>
-              <Text className='risk-overview-score-hint'>{focusScoreHint}</Text>
-
-              <Text className='risk-overview-summary'>{focusOverviewCopy}</Text>
-
-              <View className='risk-overview-chip-row'>
-                {signalChips.map((chip) => (
-                  <View key={chip.label} className='risk-overview-chip'>
-                    <Text className='risk-overview-chip-label'>{chip.label}</Text>
-                    <Text className='risk-overview-chip-value'>{chip.value}</Text>
-                  </View>
-                ))}
-              </View>
-            </View>
-          </>
-        )}
         <View className='analysis-tabs-container'>
           <View className={`segmented-control analysis-panel-control ${loading ? 'is-loading' : ''}`}>
             {loading && (
@@ -1403,7 +1552,9 @@ function StatsPage() {
               <View
                 key={item.key}
                 className={`segment-item ${analysisPanel === item.key ? 'active' : ''}`}
-                onClick={() => !loading && setAnalysisPanel(item.key)}
+                onClick={() => {
+                  if (!loading && analysisPanel !== item.key) setAnalysisPanel(item.key)
+                }}
               >
                 <Text>{item.label}</Text>
               </View>
@@ -1411,8 +1562,141 @@ function StatsPage() {
           </View>
         </View>
 
-        {analysisPanel === 'health' && hasEnoughHealthIndexData ? (
-          <>
+        <View className={`analysis-panel-content${analysisPanel === 'health' ? ' is-active' : ' is-hidden'}`}>
+        {
+          !canShowHealthIndex ? (
+            <View className='stats-card health-index-gate-card'>
+              <View className='health-index-gate-icon'>
+                <Text className='iconfont icon-shangzhang health-index-gate-icon-text' />
+              </View>
+              <View className='health-index-gate-copy'>
+                <Text className='health-index-gate-title'>连续记录两天后显示健康指数</Text>
+                <Text className='health-index-gate-desc'>
+                  当前已记录 {sourceRecordedDays} 天。请连续记录两天以上，我们会基于更稳定的饮食趋势展示你的健康参考指数。
+                </Text>
+              </View>
+            </View>
+          ) : (
+            <>
+              {isHealthIndexPreview ? (
+                <View className='stats-card health-index-preview-card'>
+                  <View className='health-index-preview-badge'>
+                    <Text className='health-index-preview-badge-text'>预览</Text>
+                  </View>
+                  <View className='health-index-preview-copy'>
+                    <Text className='health-index-preview-title'>当前为界面示例</Text>
+                    <Text className='health-index-preview-desc'>不代表你的真实健康状态</Text>
+                  </View>
+                  <Text className='health-index-preview-meta'>{sourceRecordedDays} 天记录</Text>
+                </View>
+              ) : null}
+
+              <View className='stats-card risk-overview-card'>
+                <View className='risk-overview-top'>
+                  <View className='risk-overview-copy'>
+                    <Text className='risk-overview-title'>健康指数</Text>
+                    <Text className='risk-overview-subtitle'>
+                      {isHealthIndexPreview
+                        ? '示例数据 · 用于查看完整呈现'
+                        : `${range === 'week' ? '近一周' : '近一个月'} · 已记录 ${sourceRecordedDays} 天`}
+                    </Text>
+                  </View>
+                  <View className='risk-overview-actions'>
+                    <View className={`risk-overview-badge tone-${scoreToTone(focusOverallScore)}`}>
+                      <Text className='risk-overview-badge-label'>
+                        {isHealthIndexPreview ? '示例状态' : scoreToLabel(focusOverallScore)}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+
+                <View className='risk-overview-main'>
+                  <View
+                    className='risk-score-gauge'
+                    style={{ '--risk-score-progress': `${clampPercent(focusOverallScore) * 0.75}%` } as CSSProperties}
+                  >
+                    <View className='risk-score-gauge__center'>
+                      <View className='risk-overview-score-row'>
+                        <Text className='risk-overview-score'>{focusOverallScore}</Text>
+                        <Text className='risk-overview-score-unit'>分</Text>
+                      </View>
+                      <Text className='risk-score-gauge__projected'>改善后 {focusProjectedScore}</Text>
+                    </View>
+                  </View>
+
+                  <View className='risk-overview-insight'>
+                    <Text className='risk-overview-score-hint'>{focusScoreHint}</Text>
+                    <Text className='risk-overview-summary'>{focusOverviewCopy}</Text>
+                    <View className='risk-overview-chip-row'>
+                      {signalChips.map((chip) => (
+                        <View key={chip.label} className='risk-overview-chip'>
+                          <Text className='risk-overview-chip-label'>{chip.label}</Text>
+                          <Text className='risk-overview-chip-value'>{chip.value}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+                </View>
+
+                <View
+                  className={`risk-score-explain${expandedSections.scoreBasis ? ' is-expanded' : ''}`}
+                  onClick={() => toggleSection('scoreBasis')}
+                >
+                  <View className='risk-score-explain__header'>
+                    <View className='risk-score-explain__title-wrap'>
+                      <Text className='iconfont icon-target risk-score-explain__icon' />
+                      <Text className='risk-score-explain__title'>为什么是 {focusOverallScore} 分</Text>
+                    </View>
+                    <Text className='risk-score-explain__action'>
+                      {expandedSections.scoreBasis ? '收起' : '查看依据'}
+                    </Text>
+                  </View>
+                  {expandedSections.scoreBasis ? (
+                    <View className='risk-score-explain__body'>
+                      {scoreBasisCards.map(card => (
+                        <View key={card.key} className='risk-score-factor'>
+                          <View className='risk-score-factor__head'>
+                            <Text className='risk-score-factor__name'>{card.title}</Text>
+                            <Text className='risk-score-factor__value'>{card.score} 分</Text>
+                          </View>
+                          <View className='risk-score-factor__track'>
+                            <View
+                              className={`risk-score-factor__fill tone-${scoreToTone(card.score)}`}
+                              style={{ width: `${clampPercent(card.score)}%` }}
+                            />
+                          </View>
+                          <Text className='risk-score-factor__brief'>{card.brief}</Text>
+                        </View>
+                      ))}
+                      <Text className='risk-score-explain__note'>健康指数用于趋势参考，不构成医学诊断。</Text>
+                    </View>
+                  ) : null}
+                </View>
+              </View>
+            </>
+          )
+        }
+        </View>
+
+        {canShowHealthIndex ? (
+          <View className={`analysis-panel-content${analysisPanel === 'health' ? ' is-active' : ' is-hidden'}`}>
+        {actionList[0] ? (
+          <View className='stats-card health-next-action-card'>
+            <View className='health-next-action-icon'>
+              <Text className='iconfont icon-target health-next-action-icon__glyph' />
+            </View>
+            <View className='health-next-action-copy'>
+              <Text className='health-next-action-eyebrow'>今天优先完成</Text>
+              <Text className='health-next-action-title'>{actionList[0]}</Text>
+            </View>
+            <View
+              className='health-next-action-btn'
+              onClick={() => Taro.switchTab({ url: '/pages/index/index' })}
+            >
+              <Text className='health-next-action-btn__text'>去记录</Text>
+            </View>
+          </View>
+        ) : null}
         <View className='risk-section-header'>
           <Text className='risk-section-title'>健康指标关注</Text>
           <View
@@ -1463,6 +1747,10 @@ function StatsPage() {
                 </View>
               ) : null}
               <Text className='risk-card-summary'>{card.brief}</Text>
+              <View className='risk-card-affordance'>
+                <Text className='risk-card-affordance__text'>查看依据与建议</Text>
+                <Text className='iconfont icon-right-arrow risk-card-affordance__icon' />
+              </View>
             </View>
           ))}
         </View>
@@ -1707,15 +1995,27 @@ function StatsPage() {
             <Text className='action-score-delta__text'>如果完成修改，综合健康分约为 {overallRiskScore} → {projectedOverallScore}</Text>
           </View>
 
-          </>
+          </View>
         ) : null}
 
-        {analysisPanel === 'nutrition' ? (
-          <>
+        <View className={`analysis-panel-content${analysisPanel === 'nutrition' ? ' is-active' : ' is-hidden'}`}>
+
+        {isStatsDataPreview ? (
+          <View className='stats-card health-index-preview-card analysis-preview-card'>
+            <View className='health-index-preview-badge'>
+              <Text className='health-index-preview-badge-text'>预览</Text>
+            </View>
+            <View className='health-index-preview-copy'>
+              <Text className='health-index-preview-title'>AI 方案界面示例</Text>
+              <Text className='health-index-preview-desc'>示例内容不会调用模型或消耗积分</Text>
+            </View>
+            <Text className='health-index-preview-meta'>{sourceRecordedDays} 天记录</Text>
+          </View>
+        ) : null}
         <View className='stats-card ai-insight-card'>
           <View className='ai-insight-card-top'>
             <View className='ai-insight-card-title-wrap'>
-              <Text className='ai-insight-card-title'>AI 风险解读</Text>
+                <Text className='ai-insight-card-title'>AI 饮食分析</Text>
             </View>
           </View>
           <View className='ai-insight-card-body'>
@@ -1757,7 +2057,7 @@ function StatsPage() {
                 <Text className='analysis-error-text'>{insightError}</Text>
               </View>
             ) : null}
-            {!canUseStatsInsight ? (
+            {!canDisplayStatsInsight ? (
               <View className='analysis-empty analysis-empty--gate'>
                 <Text className='analysis-empty-title'>先记录饮食后再生成 AI 风险解读</Text>
                 <Text className='analysis-empty-text'>当前统计周期还没有饮食记录，暂时无法判断热量、餐次和宏量营养趋势。记录至少一餐后，这里会基于真实数据生成解读。</Text>
@@ -1808,12 +2108,24 @@ function StatsPage() {
           </View>
         </View>
 
-          </>
-        ) : null}
+        </View>
 
-        {analysisPanel === 'structure' ? (
-          hasAnyDietData ? (
+        <View className={`analysis-panel-content${analysisPanel === 'structure' ? ' is-active' : ' is-hidden'}`}>
+        {
+          hasAnyDietData || isStatsDataPreview ? (
             <>
+        {isStatsDataPreview ? (
+          <View className='stats-card health-index-preview-card analysis-preview-card'>
+            <View className='health-index-preview-badge'>
+              <Text className='health-index-preview-badge-text'>预览</Text>
+            </View>
+            <View className='health-index-preview-copy'>
+              <Text className='health-index-preview-title'>热量分布界面示例</Text>
+              <Text className='health-index-preview-desc'>下方图表为示例数据，不会写入饮食记录</Text>
+            </View>
+            <Text className='health-index-preview-meta'>{sourceRecordedDays} 天记录</Text>
+          </View>
+        ) : null}
         <View className='stats-card chart-card evidence-card'>
           <View className='card-header chart-card-header card-header--collapsible' onClick={() => toggleSection('calories')}>
             <View className='chart-title-group'>
@@ -2097,7 +2409,8 @@ function StatsPage() {
               </View>
             </View>
           )
-        ) : null}
+        }
+        </View>
 
         <View className='stats-page-disclaimer'>
           <Text className='stats-page-disclaimer__text'>结果仅供参考，不代替医学判断</Text>

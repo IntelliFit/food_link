@@ -7,7 +7,6 @@ import {
   friendSearch,
   friendBlockUser,
   friendSendRequest,
-  friendGetRequests,
   friendGetList,
   friendCleanupDuplicates,
   communityGetFeed,
@@ -17,20 +16,17 @@ import {
   communityGetComments,
   communityGetFeedContext,
   communityGetCommentTasks,
-  communityGetNotifications,
   communityPostComment,
   communityDeleteComment,
   communityGetCheckinLeaderboard,
   communityGetFoodNutrientLeaderboard,
   communityHideFeed,
-  getUnreadMessageCount,
   deleteCirclePost,
   deleteFoodRecord,
   deleteExerciseLog,
   deletePublicFoodLibraryItem,
   showUnifiedApiError,
   type FriendSearchUser,
-  type FriendRequestItem,
   type FriendListItem,
   type CommunityFeedItem,
   type CommunityFeedSortBy,
@@ -69,6 +65,9 @@ import { applyThemeNavigationBar } from '../../utils/theme-navigation-bar'
 import { CommunityFoodRecordEditSheet } from './components/CommunityFoodRecordEditSheet'
 import { appendBoundedUnique, getFeedPageRequest, getLatestFeedCursor, type LatestFeedCursor } from '../../utils/list-pagination'
 import { formatFeedTime } from '../../utils/feed-time'
+import { SocialFloatingMenu, type SocialMenuAction } from '../../components/SocialFloatingMenu'
+import { useSocialInbox } from '../../hooks/useSocialInbox'
+import { refreshSocialInbox } from '../../utils/social-inbox'
 
 const MAX_FEED_WINDOW_ITEMS = 200
 
@@ -167,7 +166,6 @@ function removeCommentSubtreeFromList(comments: FeedCommentItem[], rootId: strin
 const CACHE_KEYS = {
   FEED: 'community_feed_cache',
   FRIENDS: 'community_friends_cache',
-  REQUESTS: 'community_requests_cache',
   FEED_TIMESTAMP: 'community_feed_timestamp',
   FRIENDS_TIMESTAMP: 'community_friends_timestamp',
   FEED_FILTERS: 'community_feed_filters_v4',
@@ -379,6 +377,7 @@ function isCommunityFeedItem(value: CommunityFeedItem | CommunityFeedItem['recor
 
 function CommunityPage() {
   const { scheme } = useAppColorScheme()
+  const socialInbox = useSocialInbox()
   const [loggedIn, setLoggedIn] = useState(!!getAccessToken())
 
   useEffect(() => {
@@ -386,7 +385,6 @@ function CommunityPage() {
   }, [scheme])
 
   const [friends, setFriends] = useState<FriendListItem[]>([])
-  const [requests, setRequests] = useState<FriendRequestItem[]>([])
   const [feedList, setFeedList] = useState<CommunityFeedItem[]>([])
   const feedListRef = useRef<CommunityFeedItem[]>([])
   const feedCursorRef = useRef<LatestFeedCursor | null>(null)
@@ -425,8 +423,6 @@ function CommunityPage() {
     signature: '',
     timestamp: 0
   })
-  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0)
-  const [unreadMessageCount, setUnreadMessageCount] = useState(0)
   const [feedScrollIntoView, setFeedScrollIntoView] = useState('')
   /** 动态卡片内评论：超过 3 条时默认只展示 2 条，点此展开/收起（仿微信朋友圈） */
   const [feedCommentPreviewExpanded, setFeedCommentPreviewExpanded] = useState<Record<string, boolean>>({})
@@ -545,32 +541,6 @@ function CommunityPage() {
     }
   }, [])
 
-  const loadInteractionNotificationsBadge = useCallback(async () => {
-    if (!getAccessToken()) {
-      setUnreadNotificationCount(0)
-      return
-    }
-    try {
-      const res = await communityGetNotifications(20)
-      setUnreadNotificationCount(res.unread_count || 0)
-    } catch (e) {
-      console.error('加载互动消息失败:', e)
-    }
-  }, [])
-
-  const loadUnreadMessageCount = useCallback(async () => {
-    if (!getAccessToken()) {
-      setUnreadMessageCount(0)
-      return
-    }
-    try {
-      const res = await getUnreadMessageCount()
-      setUnreadMessageCount(res.count || 0)
-    } catch (e) {
-      console.error('加载私信未读数失败:', e)
-    }
-  }, [])
-
   /**
    * 从缓存加载数据（立即展示，无等待）
    */
@@ -579,7 +549,6 @@ function CommunityPage() {
       const feedCacheFromCurrentSession = isCommunityFeedCacheFromCurrentSession()
       const cachedFeed = Taro.getStorageSync(CACHE_KEYS.FEED)
       const cachedFriends = Taro.getStorageSync(CACHE_KEYS.FRIENDS)
-      const cachedRequests = Taro.getStorageSync(CACHE_KEYS.REQUESTS)
       const cachedFeedFilters = Taro.getStorageSync(CACHE_KEYS.FEED_FILTERS)
 
       let hasCache = false
@@ -634,17 +603,6 @@ function CommunityPage() {
         }
       }
 
-      if (cachedRequests) {
-        try {
-          const parsed = JSON.parse(cachedRequests)
-          if (Array.isArray(parsed)) {
-            setRequests(parsed)
-          }
-        } catch (e) {
-          console.error('解析请求缓存失败:', e)
-        }
-      }
-
       return hasCache
     } catch (e) {
       console.error('加载缓存失败:', e)
@@ -655,7 +613,7 @@ function CommunityPage() {
   /**
    * 保存数据到缓存
    */
-  const saveToCache = useCallback((feedData?: CommunityFeedItem[], friendsData?: FriendListItem[], requestsData?: FriendRequestItem[]) => {
+  const saveToCache = useCallback((feedData?: CommunityFeedItem[], friendsData?: FriendListItem[]) => {
     try {
       if (feedData) {
         // 乐观评论未落库，不写入缓存，避免冷启动出现幽灵评论
@@ -684,9 +642,6 @@ function CommunityPage() {
       if (friendsData !== undefined) {
         Taro.setStorageSync(CACHE_KEYS.FRIENDS, JSON.stringify(friendsData))
         Taro.setStorageSync(CACHE_KEYS.FRIENDS_TIMESTAMP, Date.now().toString())
-      }
-      if (requestsData !== undefined) {
-        Taro.setStorageSync(CACHE_KEYS.REQUESTS, JSON.stringify(requestsData))
       }
     } catch (e) {
       console.error('保存缓存失败:', e)
@@ -809,23 +764,17 @@ function CommunityPage() {
     })
   }, [getTempCommentsKey])
 
-  const loadFriendsAndRequests = useCallback(async (silent = false) => {
+  const loadFriends = useCallback(async (silent = false) => {
     if (!getAccessToken()) return
     if (!silent) setLoadingFriends(true)
     try {
       // 先清理可能存在的重复好友记录
       await friendCleanupDuplicates().catch(() => { })
 
-      const [listRes, reqRes] = await Promise.all([
-        friendGetList(),
-        friendGetRequests()
-      ])
-
+      const listRes = await friendGetList()
       const friendsList = listRes.list || []
-      const requestsList = reqRes.list || []
 
       setFriends(friendsList)
-      setRequests(requestsList)
       setPriorityAuthorIds((prev) => {
         const allowed = prev.filter((id) => friendsList.some((friend) => friend.id === id))
         if (allowed.length !== prev.length) {
@@ -835,7 +784,7 @@ function CommunityPage() {
       })
 
       // 保存到缓存
-      saveToCache(undefined, friendsList, requestsList)
+      saveToCache(undefined, friendsList)
 
       // 更新刷新时间
       lastFriendsRefreshTime.current = Date.now()
@@ -845,25 +794,6 @@ function CommunityPage() {
       }
     } finally {
       if (!silent) setLoadingFriends(false)
-    }
-  }, [saveToCache])
-
-  /**
-   * 仅同步「收到的待处理好友申请」列表（轻量），每次进入圈子页调用，
-   * 避免好友页处理完后仍沿用 5 分钟缓存导致角标不消失。
-   */
-  const syncPendingFriendRequests = useCallback(async () => {
-    if (!getAccessToken()) {
-      setRequests([])
-      return
-    }
-    try {
-      const reqRes = await friendGetRequests()
-      const requestsList = reqRes.list || []
-      setRequests(requestsList)
-      saveToCache(undefined, undefined, requestsList)
-    } catch (e) {
-      console.error('同步好友申请失败:', e)
     }
   }, [saveToCache])
 
@@ -1012,13 +942,12 @@ function CommunityPage() {
     setRefreshing(true)
     const tasks: Promise<void>[] = [refreshFeed(false, true)]
     if (getAccessToken()) {
-      tasks.push(loadFriendsAndRequests(false))
+      tasks.push(loadFriends(false))
       tasks.push(loadRankingPreview(false))
-      tasks.push(loadInteractionNotificationsBadge())
-      tasks.push(loadUnreadMessageCount())
+      tasks.push(refreshSocialInbox(true).then(() => undefined))
     }
     Promise.all(tasks)
-  }, [loadFriendsAndRequests, refreshFeed, loadRankingPreview, loadInteractionNotificationsBadge, loadUnreadMessageCount])
+  }, [loadFriends, refreshFeed, loadRankingPreview])
 
   // 评论栏弹出后延迟聚焦，等滑入动画完成
   useEffect(() => {
@@ -1164,22 +1093,13 @@ function CommunityPage() {
     )
 
     if (token) {
-      // Feed 是首屏关键请求。排行榜、消息角标和好友申请稍后再拉，
-      // 避免与 Feed/好友列表同时抢占后端仅 10 个数据库连接。
+      // Feed 是首屏关键请求；排行榜稍后拉取，未读数由可见页面的共享消息订阅刷新。
       setTimeout(() => {
         void loadRankingPreview(true)
-        void loadInteractionNotificationsBadge()
-        void loadUnreadMessageCount()
-        if (!needRefreshFriends) {
-          void syncPendingFriendRequests()
-        }
       }, 300)
     } else {
       setLbPreviewTop([])
       setFoodRankingPreview([])
-      setUnreadNotificationCount(0)
-      setUnreadMessageCount(0)
-      setRequests([])
     }
 
     // 已有 Feed 时不再走下方冷启动，但仍需按需拉取好友（否则仅从缓存恢复 Feed 时会 early return，永远不请求 /api/friend/list）
@@ -1194,7 +1114,7 @@ function CommunityPage() {
           .catch((e) => console.error('同步临时评论状态失败:', e))
       }
       if (needRefreshFriends) {
-        loadFriendsAndRequests(true)
+        loadFriends(true)
       }
       if (now - lastFeedRefreshTime.current > CACHE_DURATION) {
         refreshFeed(true, false)
@@ -1214,11 +1134,11 @@ function CommunityPage() {
       if (hasCache || !isFirstLoad) {
         if (hasCache) setIsFirstLoad(false)
         if (needRefreshFeed) refreshFeed(true, false)
-        if (needRefreshFriends) loadFriendsAndRequests(true)
+        if (needRefreshFriends) loadFriends(true)
       } else {
         setShowSkeleton(true)
         refreshFeed(false, true)
-        if (token) loadFriendsAndRequests(false)
+        if (token) loadFriends(false)
         setIsFirstLoad(false)
       }
     }
@@ -1923,6 +1843,23 @@ function CommunityPage() {
     Taro.navigateTo({ url: extraPkgUrl('/pages/interaction-notifications/index') })
   }
 
+  const handleSocialAction = (action: SocialMenuAction) => {
+    if (!getAccessToken()) {
+      redirectToLogin()
+      return
+    }
+    if (action === 'interactions') {
+      handleOpenNotifications()
+    } else if (action === 'messages') {
+      Taro.navigateTo({ url: extraPkgUrl('/pages/private-conversations/index') })
+    } else if (action === 'friends') {
+      const path = extraPkgUrl('/pages/friends/index')
+      Taro.navigateTo({ url: socialInbox.friendRequests > 0 ? `${path}?tab=received` : path })
+    } else {
+      setShowAddFriend(true)
+    }
+  }
+
   const submitComment = async () => {
     if (!expandedCommentRecordId) return
     const trimmed = commentContent.trim()
@@ -2210,67 +2147,6 @@ function CommunityPage() {
                 </View>
               </View>
             </View>
-
-            {/* 快捷入口：三键等分；有待处理申请时在「好友管理」右上角绝对定位角标（不占流），点击进入「收到的请求」 */}
-            {loggedIn && (
-              <View className='friends-quick-bar' onClick={(e) => e.stopPropagation()}>
-                <View className='friends-quick-grid'>
-                  <View className='friends-quick-cell' onClick={handleOpenNotifications}>
-                    <Text className='friends-quick-cell-icon iconfont icon-pinglun' />
-                    <Text className='friends-quick-cell-label'>互动消息</Text>
-                    {unreadNotificationCount > 0 ? (
-                      <View className='friends-quick-cell-badge'>
-                        <Text className='friends-quick-cell-badge-text'>
-                          {unreadNotificationCount > 99 ? '99+' : String(unreadNotificationCount)}
-                        </Text>
-                      </View>
-                    ) : null}
-                  </View>
-                  <View
-                    className='friends-quick-cell'
-                    onClick={() => {
-                      if (!getAccessToken()) {
-                        Taro.showToast({ title: '请先登录', icon: 'none' })
-                        return
-                      }
-                      Taro.navigateTo({ url: extraPkgUrl('/pages/private-conversations/index') })
-                    }}
-                  >
-                    <Text className='friends-quick-cell-icon iconfont icon-comment' />
-                    <Text className='friends-quick-cell-label'>私信</Text>
-                    {unreadMessageCount > 0 ? (
-                      <View className='friends-quick-cell-badge'>
-                        <Text className='friends-quick-cell-badge-text'>
-                          {unreadMessageCount > 99 ? '99+' : String(unreadMessageCount)}
-                        </Text>
-                      </View>
-                    ) : null}
-                  </View>
-                  <View
-                    className='friends-quick-cell'
-                    onClick={() => {
-                      const url =
-                        requests.length > 0 ? `${extraPkgUrl('/pages/friends/index')}?tab=received` : extraPkgUrl('/pages/friends/index')
-                      Taro.navigateTo({ url })
-                    }}
-                  >
-                    <Text className='friends-quick-cell-icon iconfont icon-duoren' />
-                    <Text className='friends-quick-cell-label'>好友管理</Text>
-                    {requests.length > 0 ? (
-                      <View className='friends-quick-cell-badge'>
-                        <Text className='friends-quick-cell-badge-text'>
-                          {requests.length > 99 ? '99+' : String(requests.length)}
-                        </Text>
-                      </View>
-                    ) : null}
-                  </View>
-                  <View className='friends-quick-cell' onClick={() => setShowAddFriend(true)}>
-                    <Text className='friends-quick-cell-icon iconfont icon-tianjiahaoyou' />
-                    <Text className='friends-quick-cell-label'>添加好友</Text>
-                  </View>
-                </View>
-              </View>
-            )}
 
             {/* 未登录提示条 */}
             {!loggedIn && (
@@ -3044,6 +2920,16 @@ function CommunityPage() {
       ) : null}
 
       {/* 添加好友弹窗 */}
+      {loggedIn ? (
+        <SocialFloatingMenu
+          key={String(Taro.getStorageSync('user_id') || 'guest')}
+          inbox={socialInbox}
+          dark={scheme === 'dark'}
+          suppressed={showAddFriend || feedFilterExpanded || editSheetVisible || Boolean(expandedCommentRecordId || feedActionSheet || reportTarget || reportMaskTarget)}
+          onAction={handleSocialAction}
+        />
+      ) : null}
+
       {showAddFriend && (
         <View className='modal-mask' onClick={() => setShowAddFriend(false)}>
           <View className='modal-box add-friend-modal' onClick={e => e.stopPropagation()}>
