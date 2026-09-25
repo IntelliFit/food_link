@@ -11,6 +11,7 @@ import { writePendingFriendInviteCode } from './utils/pending-friend-invite'
 import { AppColorSchemeProvider } from './components/AppColorSchemeContext'
 import { PrivacyAuthorizationModal } from './components/PrivacyAuthorizationModal'
 import { cleanupGeneratedUserFiles } from './utils/weapp-user-files'
+import { parseMarketingCodeFromLaunchOptions } from './utils/marketing-qr'
 
 import './app.scss'
 
@@ -67,6 +68,18 @@ function handleDeepLink(options?: any) {
       },
     })
   }
+}
+
+function handleMarketingScene(options?: any): boolean {
+  const code = parseMarketingCodeFromLaunchOptions(options)
+  if (!code) return false
+  Taro.navigateTo({
+    url: `${extraPkgUrl('/pages/marketing-landing/index')}?code=${encodeURIComponent(code)}`,
+    fail: (error) => {
+      console.error('[app] 二维码落地页跳转失败', { code, error })
+    },
+  })
+  return true
 }
 
 function handleInviteScene(options?: any) {
@@ -135,8 +148,10 @@ function App({ children }: PropsWithChildren<any>) {
     console.log('App launched.')
     resetPreviousCommunityFeedSession()
     cleanupGeneratedUserFiles().catch(() => { /* ignore startup cleanup errors */ })
-    handleInviteScene(options)
-    handleDeepLink(options)
+    if (!handleMarketingScene(options)) {
+      handleInviteScene(options)
+      handleDeepLink(options)
+    }
   })
 
   useEffect(() => {
@@ -150,8 +165,10 @@ function App({ children }: PropsWithChildren<any>) {
     }
     const onShow = (options: any) => {
       console.log('[app] onAppShow, options:', options)
-      handleInviteScene(options)
-      handleDeepLink(options)
+      if (!handleMarketingScene(options)) {
+        handleInviteScene(options)
+        handleDeepLink(options)
+      }
     }
     const onHide = () => {
       flushRecentRequestTraces()

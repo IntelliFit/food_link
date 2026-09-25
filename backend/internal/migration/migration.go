@@ -207,6 +207,21 @@ func AutoMigrate(ctx context.Context, db *gorm.DB, schema string) error {
 	return ensurePapayContractIndexes(ctx, db)
 }
 
+// MigrateMarketingQR applies only the additive tables needed by the offline
+// product and takeaway QR attribution funnel.
+func MigrateMarketingQR(ctx context.Context, db *gorm.DB, schema string) error {
+	if err := prepareSchema(ctx, db, schema); err != nil {
+		return err
+	}
+	if err := db.WithContext(ctx).AutoMigrate(
+		&migrationdo.MarketingQRAttributionDO{},
+		&migrationdo.MarketingQREventDO{},
+	); err != nil {
+		return fmt.Errorf("auto migrate marketing qr: %w", err)
+	}
+	return nil
+}
+
 // ensureOnboardingStatus verifies the additive lifecycle column exists. It must
 // not backfill existing rows: nil is intentionally interpreted from the legacy
 // boolean so this migration never changes user data.

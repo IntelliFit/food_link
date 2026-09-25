@@ -5298,6 +5298,58 @@ export async function authenticatedRequest(
     res.data = parsed.data
   }
 
+	return res
+}
+
+/** 允许匿名访问的请求；若本地已有 token 会附带，但不会因 401 跳转登录页。 */
+export async function publicRequest(
+  url: string,
+  options: Omit<Taro.request.Option, 'url'> = {}
+): Promise<any> {
+  const token = getAccessToken()
+  const startedAt = Date.now()
+  let res: Taro.request.SuccessCallbackResult<any>
+  try {
+    res = await Taro.request({
+      url: `${API_BASE_URL}${url}`,
+      ...options,
+      header: withNgrokBypassHeaders({
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(options.header || {}),
+      }),
+    })
+    recordResponseTrace({
+      url,
+      method: String(options.method || 'GET'),
+      startedAt,
+      response: res,
+    })
+  } catch (error) {
+    recordResponseTrace({
+      url,
+      method: String(options.method || 'GET'),
+      startedAt,
+      error,
+    })
+    throw error
+  }
+  if (res.statusCode < 200 || res.statusCode >= 300) {
+    throwHttpErrorWithStatus(
+      res.statusCode,
+      res.data,
+      '请求失败，请稍后重试',
+      res.header as Record<string, any> | undefined,
+      url
+    )
+  }
+  const parsed = normalizeTaroResponseJson(res.data)
+  if (parsed && typeof parsed.code === 'number') {
+    if (parsed.code !== 0) {
+      throw new Error(typeof parsed.message === 'string' ? parsed.message : '请求失败')
+    }
+    res.data = parsed.data
+  }
   return res
 }
 
@@ -7861,6 +7913,65 @@ export async function updateExerciseLog(
 }
 
 // ---------- 公共食物库 ----------
+
+export interface MarketingQRNutrition {
+  calories_kcal: number
+  protein_g: number
+  carbs_g: number
+  fat_g: number
+}
+
+export interface MarketingQRLanding {
+  code: string
+  kind: 'product' | 'takeout'
+  title: string
+  subtitle: string
+  category?: string
+  merchant_name?: string
+  branch_name?: string
+  address?: string
+  latitude?: number
+  longitude?: number
+  location_is_estimated: boolean
+  image_url?: string
+  price_min?: number
+  price_max?: number
+  portion_description?: string
+  nutrition?: MarketingQRNutrition
+  nutrition_notice?: string
+  data_version: string
+  call_to_action: string
+  public_food_item_id?: string
+}
+
+export async function getMarketingQRLanding(code: string): Promise<MarketingQRLanding> {
+  const response = await publicRequest(`/api/marketing-qr/${encodeURIComponent(code)}`, {
+    method: 'GET',
+    timeout: 10000,
+  })
+  return response.data as MarketingQRLanding
+}
+
+export async function trackMarketingQREvent(
+  code: string,
+  visitorId: string,
+  eventType: 'landing_view' | 'register_click',
+  metadata: Record<string, unknown> = {}
+): Promise<void> {
+  await publicRequest(`/api/marketing-qr/${encodeURIComponent(code)}/events`, {
+    method: 'POST',
+    data: { visitor_id: visitorId, event_type: eventType, metadata },
+    timeout: 10000,
+  })
+}
+
+export async function bindMarketingQRUser(code: string, visitorId: string): Promise<void> {
+  await authenticatedRequest(`/api/marketing-qr/${encodeURIComponent(code)}/bind`, {
+    method: 'POST',
+    data: { visitor_id: visitorId },
+    timeout: 10000,
+  })
+}
 
 export type PublicFoodLibraryType = 'common' | 'campus'
 

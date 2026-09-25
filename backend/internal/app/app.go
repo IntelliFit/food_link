@@ -57,6 +57,9 @@ import (
 	homerepo "food_link/backend/internal/home/repo"
 	homeservice "food_link/backend/internal/home/service"
 	locationhandler "food_link/backend/internal/location/handler"
+	marketingqrhandler "food_link/backend/internal/marketingqr/handler"
+	marketingqrrepo "food_link/backend/internal/marketingqr/repo"
+	marketingqrservice "food_link/backend/internal/marketingqr/service"
 	membershiphandler "food_link/backend/internal/membership/handler"
 	membershiprepo "food_link/backend/internal/membership/repo"
 	membershipservice "food_link/backend/internal/membership/service"
@@ -436,6 +439,9 @@ func New(cfg *config.Config) (*App, error) {
 	publicFoodSvc.ConfigureRewardTaskAwarder(membershipSvc)
 	publicFoodSvc.ConfigureBlockChecker(friendSvc)
 	publicFoodHandler := publicfoodhandler.NewPublicFoodHandler(publicFoodSvc)
+	marketingQRRepo := marketingqrrepo.NewMarketingQRRepo(db)
+	marketingQRSvc := marketingqrservice.NewMarketingQRService(marketingQRRepo, storageClient)
+	marketingQRHandler := marketingqrhandler.NewMarketingQRHandler(marketingQRSvc)
 	foodContributionRepo := foodcontributionrepo.NewContributionRepo(db)
 	foodContributionSvc := foodcontributionservice.NewContributionService(foodContributionRepo, membershipSvc, storageClient)
 	foodContributionHandler := foodcontributionhandler.NewContributionHandler(foodContributionSvc)
@@ -763,6 +769,9 @@ func New(cfg *config.Config) (*App, error) {
 	engine.POST("/api/public-food-library/:item_id/comments", authmw.RequireJWT(jwtSvc), publicFoodHandler.AddComment)
 	engine.DELETE("/api/public-food-library/:item_id/comments/:comment_id", authmw.RequireJWT(jwtSvc), publicFoodHandler.DeleteComment)
 	engine.GET("/api/user/:user_id/collections", authmw.RequireJWT(jwtSvc), publicFoodHandler.UserCollections)
+	engine.GET("/api/marketing-qr/:code", authmw.OptionalJWT(jwtSvc), marketingQRHandler.Landing)
+	engine.POST("/api/marketing-qr/:code/events", authmw.OptionalJWT(jwtSvc), marketingQRHandler.Track)
+	engine.POST("/api/marketing-qr/:code/bind", authmw.RequireJWT(jwtSvc), marketingQRHandler.BindUser)
 
 	// Recipe routes
 	engine.GET("/api/recipes", authmw.RequireJWT(jwtSvc), recipeHandler.List)
@@ -912,6 +921,7 @@ func New(cfg *config.Config) (*App, error) {
 	adminAPI.POST("/public-food-library", adminAuth, adminPublicFoodHandler.Create)
 	adminAPI.PATCH("/public-food-library/:item_id", adminAuth, adminPublicFoodHandler.Update)
 	adminAPI.DELETE("/public-food-library/:item_id", adminAuth, adminPublicFoodHandler.Delete)
+	adminAPI.GET("/marketing-qr/summary", adminAuth, marketingQRHandler.Summary)
 	adminAPI.GET("/user-food-photos", adminAuth, adminUserFoodPhotoHandler.List)
 	adminAPI.PUT("/user-food-photos/annotation", adminAuth, adminUserFoodPhotoHandler.SaveAnnotation)
 	adminAPI.GET("/campus-directory/schools", adminAuth, adminCampusDirectoryHandler.ListSchools)

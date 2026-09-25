@@ -1,0 +1,376 @@
+.marketing-landing-scroll {
+  min-height: 100vh;
+  background: #f5f2e9;
+}
+
+.marketing-landing {
+  box-sizing: border-box;
+  min-height: 100vh;
+  padding: 34rpx 32rpx calc(52rpx + env(safe-area-inset-bottom));
+  color: #173f35;
+  background:
+    radial-gradient(circle at 92% 4%, rgba(239, 164, 71, 0.18), transparent 30%),
+    linear-gradient(180deg, #fbfaf5 0%, #f2efe4 100%);
+}
+
+.landing-brand {
+  margin-bottom: 30rpx;
+  font-size: 24rpx;
+  font-weight: 700;
+  letter-spacing: 1.5rpx;
+  color: #38665a;
+}
+
+.landing-product-visual {
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+  height: 590rpx;
+  border-radius: 34rpx;
+  background: linear-gradient(145deg, #f2b45d, #f8dc9b);
+  box-shadow: 0 24rpx 64rpx rgba(42, 67, 52, 0.14);
+}
+
+.landing-product-image {
+  width: 100%;
+  height: 100%;
+}
+
+.landing-product-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  font-size: 64rpx;
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.94);
+  letter-spacing: 8rpx;
+}
+
+.landing-estimate-badge {
+  position: absolute;
+  right: 20rpx;
+  bottom: 20rpx;
+  padding: 10rpx 18rpx;
+  border: 1rpx solid rgba(255, 255, 255, 0.7);
+  border-radius: 999rpx;
+  color: #fff;
+  font-size: 22rpx;
+  font-weight: 700;
+  background: rgba(20, 63, 51, 0.78);
+  backdrop-filter: blur(12rpx);
+}
+
+.landing-heading-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20rpx;
+  padding: 34rpx 4rpx 26rpx;
+}
+
+.landing-heading-copy {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.landing-category {
+  margin-bottom: 8rpx;
+  color: #d07b2a;
+  font-size: 24rpx;
+  font-weight: 700;
+}
+
+.landing-title {
+  font-size: 48rpx;
+  font-weight: 800;
+  line-height: 1.2;
+  color: #143f34;
+}
+
+.landing-subtitle {
+  margin-top: 10rpx;
+  color: #728078;
+  font-size: 24rpx;
+}
+
+.landing-price {
+  flex: none;
+  color: #d4552d;
+  font-size: 34rpx;
+  font-weight: 800;
+}
+
+.landing-nutrition-card {
+  display: flex;
+  align-items: stretch;
+  padding: 28rpx;
+  border: 1rpx solid rgba(31, 83, 68, 0.1);
+  border-radius: 28rpx;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 14rpx 38rpx rgba(37, 70, 56, 0.08);
+}
+
+.landing-calorie {
+  display: flex;
+  flex: 0 0 178rpx;
+  flex-direction: column;
+  justify-content: center;
+  border-right: 1rpx solid #e3e8e2;
+}
+
+.landing-calorie-value {
+  font-size: 58rpx;
+  font-weight: 800;
+  line-height: 1;
+  color: #1e6c55;
+}
+
+.landing-calorie-unit {
+  margin-top: 10rpx;
+  font-size: 21rpx;
+  color: #77847d;
+}
+
+.landing-macros {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: space-around;
+  gap: 10rpx;
+  padding-left: 22rpx;
+}
+
+.landing-macro {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8rpx;
+  font-size: 21rpx;
+  color: #829087;
+}
+
+.landing-macro text:first-child {
+  color: #173f35;
+  font-size: 32rpx;
+  font-weight: 750;
+}
+
+.landing-notice,
+.landing-store-card {
+  margin-top: 22rpx;
+  padding: 24rpx 26rpx;
+  border-radius: 24rpx;
+}
+
+.landing-notice {
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+  background: #fff5e2;
+}
+
+.landing-notice-title {
+  color: #9c5d1d;
+  font-size: 23rpx;
+  font-weight: 700;
+}
+
+.landing-notice-copy {
+  color: #78644e;
+  font-size: 22rpx;
+  line-height: 1.65;
+}
+
+.landing-store-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24rpx;
+  background: #e8f1ec;
+}
+
+.landing-store-card > view:first-child {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 7rpx;
+}
+
+.landing-store-name {
+  font-size: 25rpx;
+  font-weight: 750;
+  color: #204d40;
+}
+
+.landing-store-address,
+.landing-location-note {
+  font-size: 21rpx;
+  line-height: 1.5;
+  color: #6b7c73;
+}
+
+.landing-location-note {
+  color: #9b6d38;
+}
+
+.landing-store-action {
+  flex: none;
+  color: #22725a;
+  font-size: 23rpx;
+  font-weight: 700;
+}
+
+.landing-primary-action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 98rpx;
+  margin-top: 30rpx;
+  border-radius: 24rpx;
+  color: #fff;
+  font-size: 30rpx;
+  font-weight: 750;
+  background: linear-gradient(135deg, #235f4e, #168761);
+  box-shadow: 0 16rpx 34rpx rgba(27, 112, 82, 0.25);
+}
+
+.landing-footnote {
+  display: block;
+  margin-top: 20rpx;
+  text-align: center;
+  color: #929a95;
+  font-size: 20rpx;
+}
+
+.marketing-landing--takeout {
+  display: flex;
+  flex-direction: column;
+}
+
+.takeout-hero {
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 860rpx;
+  overflow: hidden;
+  padding: 48rpx;
+  border-radius: 42rpx;
+  background: linear-gradient(160deg, #15493d 0%, #197054 58%, #e29b42 160%);
+  box-shadow: 0 28rpx 70rpx rgba(27, 70, 57, 0.25);
+}
+
+.takeout-orbit {
+  position: absolute;
+  border: 2rpx solid rgba(255, 255, 255, 0.18);
+  border-radius: 50%;
+}
+
+.takeout-orbit--one {
+  top: -120rpx;
+  right: -180rpx;
+  width: 580rpx;
+  height: 580rpx;
+}
+
+.takeout-orbit--two {
+  right: -60rpx;
+  bottom: 20rpx;
+  width: 280rpx;
+  height: 280rpx;
+}
+
+.takeout-kicker,
+.takeout-title,
+.takeout-subtitle {
+  position: relative;
+  z-index: 1;
+}
+
+.takeout-kicker {
+  color: #f6bd6f;
+  font-size: 24rpx;
+  font-weight: 700;
+  letter-spacing: 4rpx;
+}
+
+.takeout-title {
+  width: 560rpx;
+  margin-top: 22rpx;
+  color: #fff;
+  font-size: 58rpx;
+  font-weight: 850;
+  line-height: 1.22;
+}
+
+.takeout-subtitle {
+  width: 540rpx;
+  margin-top: 30rpx;
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 27rpx;
+  line-height: 1.75;
+}
+
+.takeout-features {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  gap: 14rpx;
+  margin-top: 48rpx;
+}
+
+.takeout-features text {
+  padding: 12rpx 18rpx;
+  border: 1rpx solid rgba(255, 255, 255, 0.34);
+  border-radius: 999rpx;
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 22rpx;
+}
+
+.marketing-landing--error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18rpx;
+}
+
+.landing-error-title {
+  font-size: 38rpx;
+  font-weight: 800;
+}
+
+.landing-error-copy {
+  color: #7d8982;
+  font-size: 25rpx;
+}
+
+.landing-retry {
+  margin-top: 16rpx;
+  padding: 20rpx 38rpx;
+  border-radius: 20rpx;
+  color: #fff;
+  background: #1d7055;
+}
+
+.landing-skeleton {
+  border-radius: 24rpx;
+  background: linear-gradient(100deg, #ecebe5 20%, #f7f6f1 38%, #ecebe5 58%);
+  background-size: 220% 100%;
+  animation: landing-shimmer 1.4s infinite linear;
+}
+
+.landing-skeleton--hero { height: 590rpx; }
+.landing-skeleton--title { width: 56%; height: 54rpx; margin-top: 36rpx; }
+.landing-skeleton--line { width: 78%; height: 28rpx; margin-top: 18rpx; }
+.landing-skeleton--card { height: 190rpx; margin-top: 34rpx; }
+
+@keyframes landing-shimmer {
+  0% { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}

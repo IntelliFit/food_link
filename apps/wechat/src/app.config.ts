@@ -38,6 +38,7 @@ const extraSubpackagePages = [
   'pages/record-detail/index',
   'pages/food-library/index',
   'pages/food-library-detail/index',
+  'pages/marketing-landing/index',
   'pages/campus-canteen/index',
   'pages/campus-food-share/index',
   'pages/campus-food-collector/index',

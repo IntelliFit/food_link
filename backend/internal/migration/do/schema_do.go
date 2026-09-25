@@ -768,6 +768,32 @@ type PublicFoodFeedbackDO struct {
 
 func (PublicFoodFeedbackDO) TableName() string { return "public_food_library_feedback" }
 
+type MarketingQRAttributionDO struct {
+	ID           string     `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	CampaignCode string     `gorm:"column:campaign_code;type:text;not null;uniqueIndex:uidx_marketing_qr_attribution_visitor,priority:1"`
+	VisitorID    string     `gorm:"column:visitor_id;type:text;not null;uniqueIndex:uidx_marketing_qr_attribution_visitor,priority:2"`
+	UserID       *string    `gorm:"column:user_id;type:uuid;uniqueIndex:uidx_marketing_qr_attribution_user,where:user_id IS NOT NULL"`
+	FirstSeenAt  time.Time  `gorm:"column:first_seen_at;type:timestamptz;not null;index:idx_marketing_qr_attribution_first_seen"`
+	LastSeenAt   time.Time  `gorm:"column:last_seen_at;type:timestamptz;not null"`
+	BoundAt      *time.Time `gorm:"column:bound_at;type:timestamptz"`
+	CreatedAt    time.Time  `gorm:"column:created_at;type:timestamptz;not null;default:now()"`
+	UpdatedAt    time.Time  `gorm:"column:updated_at;type:timestamptz;not null;default:now()"`
+}
+
+func (MarketingQRAttributionDO) TableName() string { return "marketing_qr_attributions" }
+
+type MarketingQREventDO struct {
+	ID           string         `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	CampaignCode string         `gorm:"column:campaign_code;type:text;not null;index:idx_marketing_qr_events_campaign_created,priority:1"`
+	VisitorID    string         `gorm:"column:visitor_id;type:text;not null;index:idx_marketing_qr_events_visitor"`
+	UserID       *string        `gorm:"column:user_id;type:uuid;index:idx_marketing_qr_events_user"`
+	EventType    string         `gorm:"column:event_type;type:text;not null;index:idx_marketing_qr_events_type"`
+	Metadata     map[string]any `gorm:"column:metadata;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
+	CreatedAt    time.Time      `gorm:"column:created_at;type:timestamptz;not null;default:now();index:idx_marketing_qr_events_campaign_created,priority:2,sort:desc"`
+}
+
+func (MarketingQREventDO) TableName() string { return "marketing_qr_events" }
+
 type RewardTaskUploadDO struct {
 	ID               string         `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
 	UserID           string         `gorm:"column:user_id;type:uuid;not null;index:idx_reward_task_uploads_user_date,priority:1"`
@@ -2022,6 +2048,8 @@ func AllModels() []any {
 		&PublicFoodCollectionDO{},
 		&PublicFoodCommentDO{},
 		&PublicFoodFeedbackDO{},
+		&MarketingQRAttributionDO{},
+		&MarketingQREventDO{},
 		&FeedLikeDO{},
 		&FeedCommentDO{},
 		&FeedInteractionNotificationDO{},
