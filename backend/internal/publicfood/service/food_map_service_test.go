@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"food_link/backend/internal/publicfood/repo"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestMapSpotFromCandidateUsesDirectMerchantLocation(t *testing.T) {
@@ -39,4 +41,53 @@ func TestMapSpotFromCandidateRejectsMissingLocation(t *testing.T) {
 	if _, ok := mapSpotFromCandidate(repo.MapFoodCandidate{ID: "food-3"}); ok {
 		t.Fatal("无坐标条目不应进入地图")
 	}
+}
+
+func TestMapSpotFromCandidatePrefersDirectThenCanteenThenCampusThenSchool(t *testing.T) {
+	directLatitude, directLongitude := 31.2, 121.5
+	canteenLatitude, canteenLongitude := 39.995, 116.315
+	campusLatitude, campusLongitude := 39.99, 116.31
+	schoolLatitude, schoolLongitude := 40.0, 116.32
+	candidate := repo.MapFoodCandidate{
+		ID: "food-1", FoodName: "测试套餐", MerchantName: "测试食堂",
+		DirectLatitude: &directLatitude, DirectLongitude: &directLongitude,
+		DirectoryCanteenID: "canteen-1", DirectoryCanteen: "勺园食堂", CanteenLocation: "燕园校区",
+		CanteenLatitude: &canteenLatitude, CanteenLongitude: &canteenLongitude,
+		DirectoryCampusID: "campus-1", DirectoryCampus: "燕园校区", CampusAddress: "颐和园路5号",
+		CampusLatitude: &campusLatitude, CampusLongitude: &campusLongitude,
+		DirectorySchoolID: "school-1", DirectorySchool: "北京大学",
+		SchoolLatitude: &schoolLatitude, SchoolLongitude: &schoolLongitude,
+	}
+
+	spot, ok := mapSpotFromCandidate(candidate)
+	require.True(t, ok)
+	require.Equal(t, "food", spot.LocationLevel)
+	require.Equal(t, "测试食堂", spot.LocationName)
+	require.Equal(t, directLatitude, spot.Latitude)
+
+	candidate.DirectLatitude, candidate.DirectLongitude = nil, nil
+	spot, ok = mapSpotFromCandidate(candidate)
+	require.True(t, ok)
+	require.Equal(t, "canteen", spot.LocationLevel)
+	require.Equal(t, "北京大学 · 勺园食堂", spot.LocationName)
+	require.Equal(t, canteenLatitude, spot.Latitude)
+
+	candidate.CanteenLatitude, candidate.CanteenLongitude = nil, nil
+	spot, ok = mapSpotFromCandidate(candidate)
+	require.True(t, ok)
+	require.Equal(t, "campus", spot.LocationLevel)
+	require.Equal(t, "北京大学 · 燕园校区", spot.LocationName)
+	require.Equal(t, campusLatitude, spot.Latitude)
+
+	candidate.CampusLatitude, candidate.CampusLongitude = nil, nil
+	spot, ok = mapSpotFromCandidate(candidate)
+	require.True(t, ok)
+	require.Equal(t, "school", spot.LocationLevel)
+	require.Equal(t, "北京大学", spot.LocationName)
+	require.Equal(t, schoolLatitude, spot.Latitude)
+}
+
+func TestMapSpotFromCandidateRejectsMissingCoordinates(t *testing.T) {
+	_, ok := mapSpotFromCandidate(repo.MapFoodCandidate{ID: "food-1", DirectorySchoolID: "school-1"})
+	require.False(t, ok)
 }

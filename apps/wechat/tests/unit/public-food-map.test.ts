@@ -77,6 +77,28 @@ describe('public food map helpers', () => {
     expect(spots[0].featuredItem.id).toBe('fresh-juice')
   })
 
+  it('uses server-aggregated university locations and preserves their food counts', () => {
+    const payload: PublicFoodMapSpotPayload = {
+      key: 'canteen:thu-zijing',
+      latitude: 40.003,
+      longitude: 116.326,
+      location_level: 'canteen',
+      location_name: '清华大学 · 紫荆园',
+      address: '清华园校区',
+      food_count: 614,
+      featured_item: food({ id: 'thu-food', food_name: '紫荆园套餐' }),
+    }
+
+    const spots = buildFoodMapSpotsFromPayload([payload], { latitude: 40, longitude: 116.32 })
+
+    expect(spots).toHaveLength(1)
+    expect(spots[0].locationName).toBe('清华大学 · 紫荆园')
+    expect(spots[0].locationLevel).toBe('canteen')
+    expect(spots[0].foodCount).toBe(614)
+    expect(spots[0].featuredItem.id).toBe('thu-food')
+    expect(spots[0].distanceKm).toBeDefined()
+  })
+
   it('rejects missing, invalid, and zero coordinates', () => {
     expect(hasValidFoodCoordinates(food({ latitude: null, longitude: null }))).toBe(false)
     expect(hasValidFoodCoordinates(food({ latitude: 91, longitude: 116 }))).toBe(false)

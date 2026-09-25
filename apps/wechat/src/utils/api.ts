@@ -8356,7 +8356,7 @@ export async function getPublicFoodLibraryList(
   return response.data as { list: PublicFoodLibraryItem[] }
 }
 
-/** 获取服务端聚合的美食地图地点，避免只展示热度前 100 条餐食。 */
+/** 获取服务端全量聚合的美食地图地点，避免热门截断并包含校园层级继承坐标。 */
 export async function getPublicFoodMapSpots(): Promise<{ spots: PublicFoodMapSpotPayload[] }> {
   const response = await authenticatedRequest('/api/public-food-library/map-spots', {
     method: 'GET',

@@ -1544,53 +1544,65 @@ type SchoolDO struct {
 	Is211                 *bool      `gorm:"column:is_211;type:boolean;default:false"`
 	Status                string     `gorm:"column:status;type:text;not null;default:'active'"`
 	LogoURL               *string    `gorm:"column:logo_url;type:text"`
+	Latitude              *float64   `gorm:"column:latitude;type:numeric"`
+	Longitude             *float64   `gorm:"column:longitude;type:numeric"`
+	CoordinateSource      *string    `gorm:"column:coordinate_source;type:text"`
+	CoordinateUpdatedAt   *time.Time `gorm:"column:coordinate_updated_at;type:timestamptz"`
 	CreatedAt             *time.Time `gorm:"column:created_at;type:timestamptz;default:now()"`
 }
 
 func (SchoolDO) TableName() string { return "schools" }
 
 type SchoolCampusDO struct {
-	ID         string     `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
-	SchoolID   string     `gorm:"column:school_id;type:uuid;not null;index:idx_school_campuses_school_id"`
-	Name       string     `gorm:"column:name;type:text;not null;index:idx_school_campuses_name"`
-	Aliases    []string   `gorm:"column:aliases;type:jsonb;serializer:json;not null;default:'[]'::jsonb"`
-	Address    *string    `gorm:"column:address;type:text"`
-	CampusType *string    `gorm:"column:campus_type;type:text"`
-	SourceURL  *string    `gorm:"column:source_url;type:text"`
-	Status     string     `gorm:"column:status;type:text;not null;default:'pending_review';index:idx_school_campuses_status"`
-	SortOrder  int        `gorm:"column:sort_order;type:integer;not null;default:0"`
-	CreatedAt  *time.Time `gorm:"column:created_at;type:timestamptz;default:now()"`
-	UpdatedAt  *time.Time `gorm:"column:updated_at;type:timestamptz;default:now()"`
+	ID                  string     `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	SchoolID            string     `gorm:"column:school_id;type:uuid;not null;index:idx_school_campuses_school_id"`
+	Name                string     `gorm:"column:name;type:text;not null;index:idx_school_campuses_name"`
+	Aliases             []string   `gorm:"column:aliases;type:jsonb;serializer:json;not null;default:'[]'::jsonb"`
+	Address             *string    `gorm:"column:address;type:text"`
+	CampusType          *string    `gorm:"column:campus_type;type:text"`
+	SourceURL           *string    `gorm:"column:source_url;type:text"`
+	Latitude            *float64   `gorm:"column:latitude;type:numeric"`
+	Longitude           *float64   `gorm:"column:longitude;type:numeric"`
+	CoordinateSource    *string    `gorm:"column:coordinate_source;type:text"`
+	CoordinateUpdatedAt *time.Time `gorm:"column:coordinate_updated_at;type:timestamptz"`
+	Status              string     `gorm:"column:status;type:text;not null;default:'pending_review';index:idx_school_campuses_status"`
+	SortOrder           int        `gorm:"column:sort_order;type:integer;not null;default:0"`
+	CreatedAt           *time.Time `gorm:"column:created_at;type:timestamptz;default:now()"`
+	UpdatedAt           *time.Time `gorm:"column:updated_at;type:timestamptz;default:now()"`
 }
 
 func (SchoolCampusDO) TableName() string { return "school_campuses" }
 
 type SchoolCanteenDO struct {
-	ID               string     `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
-	SchoolID         string     `gorm:"column:school_id;type:uuid;not null;index:idx_school_canteens_school_id"`
-	CampusID         *string    `gorm:"column:campus_id;type:uuid;index:idx_school_canteens_campus_id"`
-	Name             string     `gorm:"column:name;type:text;not null;index:idx_school_canteens_name"`
-	Aliases          []string   `gorm:"column:aliases;type:jsonb;serializer:json;not null;default:'[]'::jsonb"`
-	LocationText     *string    `gorm:"column:location_text;type:text"`
-	BuildingOrFloor  *string    `gorm:"column:building_or_floor;type:text"`
-	ServiceType      *string    `gorm:"column:service_type;type:text"`
-	Audience         *string    `gorm:"column:audience;type:text"`
-	MealPeriods      []string   `gorm:"column:meal_periods;type:jsonb;serializer:json;not null;default:'[]'::jsonb"`
-	OpeningHoursRaw  *string    `gorm:"column:opening_hours_raw;type:text"`
-	PaymentMethods   []string   `gorm:"column:payment_methods;type:jsonb;serializer:json;not null;default:'[]'::jsonb"`
-	HalalOrEthnic    *bool      `gorm:"column:halal_or_ethnic;type:boolean"`
-	VisitorAvailable *bool      `gorm:"column:visitor_available;type:boolean"`
-	SourceURL        *string    `gorm:"column:source_url;type:text"`
-	SourceOrg        *string    `gorm:"column:source_org;type:text"`
-	SourceType       *string    `gorm:"column:source_type;type:text"`
-	ConfidenceLevel  *string    `gorm:"column:confidence_level;type:text"`
-	Status           string     `gorm:"column:status;type:text;not null;default:'pending_review';index:idx_school_canteens_status"`
-	ReviewNote       *string    `gorm:"column:review_note;type:text"`
-	ReviewedBy       *string    `gorm:"column:reviewed_by;type:uuid"`
-	ReviewedAt       *time.Time `gorm:"column:reviewed_at;type:timestamptz"`
-	SortOrder        int        `gorm:"column:sort_order;type:integer;not null;default:0"`
-	CreatedAt        *time.Time `gorm:"column:created_at;type:timestamptz;default:now()"`
-	UpdatedAt        *time.Time `gorm:"column:updated_at;type:timestamptz;default:now()"`
+	ID                  string     `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	SchoolID            string     `gorm:"column:school_id;type:uuid;not null;index:idx_school_canteens_school_id"`
+	CampusID            *string    `gorm:"column:campus_id;type:uuid;index:idx_school_canteens_campus_id"`
+	Name                string     `gorm:"column:name;type:text;not null;index:idx_school_canteens_name"`
+	Aliases             []string   `gorm:"column:aliases;type:jsonb;serializer:json;not null;default:'[]'::jsonb"`
+	LocationText        *string    `gorm:"column:location_text;type:text"`
+	BuildingOrFloor     *string    `gorm:"column:building_or_floor;type:text"`
+	Latitude            *float64   `gorm:"column:latitude;type:numeric"`
+	Longitude           *float64   `gorm:"column:longitude;type:numeric"`
+	CoordinateSource    *string    `gorm:"column:coordinate_source;type:text"`
+	CoordinateUpdatedAt *time.Time `gorm:"column:coordinate_updated_at;type:timestamptz"`
+	ServiceType         *string    `gorm:"column:service_type;type:text"`
+	Audience            *string    `gorm:"column:audience;type:text"`
+	MealPeriods         []string   `gorm:"column:meal_periods;type:jsonb;serializer:json;not null;default:'[]'::jsonb"`
+	OpeningHoursRaw     *string    `gorm:"column:opening_hours_raw;type:text"`
+	PaymentMethods      []string   `gorm:"column:payment_methods;type:jsonb;serializer:json;not null;default:'[]'::jsonb"`
+	HalalOrEthnic       *bool      `gorm:"column:halal_or_ethnic;type:boolean"`
+	VisitorAvailable    *bool      `gorm:"column:visitor_available;type:boolean"`
+	SourceURL           *string    `gorm:"column:source_url;type:text"`
+	SourceOrg           *string    `gorm:"column:source_org;type:text"`
+	SourceType          *string    `gorm:"column:source_type;type:text"`
+	ConfidenceLevel     *string    `gorm:"column:confidence_level;type:text"`
+	Status              string     `gorm:"column:status;type:text;not null;default:'pending_review';index:idx_school_canteens_status"`
+	ReviewNote          *string    `gorm:"column:review_note;type:text"`
+	ReviewedBy          *string    `gorm:"column:reviewed_by;type:uuid"`
+	ReviewedAt          *time.Time `gorm:"column:reviewed_at;type:timestamptz"`
+	SortOrder           int        `gorm:"column:sort_order;type:integer;not null;default:0"`
+	CreatedAt           *time.Time `gorm:"column:created_at;type:timestamptz;default:now()"`
+	UpdatedAt           *time.Time `gorm:"column:updated_at;type:timestamptz;default:now()"`
 }
 
 func (SchoolCanteenDO) TableName() string { return "school_canteens" }

@@ -335,7 +335,7 @@ function FoodLibraryPage() {
     }
   }, [])
 
-  /** 加载服务端聚合的地点，并同时尝试定位到用户附近。 */
+  /** 加载服务端全量聚合的地点（含餐食/食堂/校区/学校继承坐标），并尝试定位到用户附近。 */
   const loadMapList = useCallback(async (force = false) => {
     if (!getAccessToken()) return
     if (!force && mapLoadedRef.current) return

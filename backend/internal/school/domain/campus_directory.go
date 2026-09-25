@@ -3,68 +3,80 @@ package domain
 import "time"
 
 type School struct {
-	ID                    string  `gorm:"column:id" json:"id"`
-	Name                  string  `gorm:"column:name" json:"name"`
-	LocationType          string  `gorm:"column:location_type" json:"location_type"`
-	OfficialCode          string  `gorm:"column:official_code" json:"official_code,omitempty"`
-	Authority             string  `gorm:"column:authority" json:"authority,omitempty"`
-	OfficialSourceVersion string  `gorm:"column:official_source_version" json:"official_source_version,omitempty"`
-	InstitutionKind       string  `gorm:"column:institution_kind" json:"institution_kind,omitempty"`
-	Province              string  `gorm:"column:province" json:"province,omitempty"`
-	City                  string  `gorm:"column:city" json:"city,omitempty"`
-	Level                 string  `gorm:"column:level" json:"level,omitempty"`
-	Is985                 bool    `gorm:"column:is_985" json:"is_985"`
-	Is211                 bool    `gorm:"column:is_211" json:"is_211"`
-	Status                string  `gorm:"column:status" json:"status"`
-	LogoURL               *string `gorm:"column:logo_url" json:"logo_url,omitempty"`
+	ID                    string     `gorm:"column:id" json:"id"`
+	Name                  string     `gorm:"column:name" json:"name"`
+	LocationType          string     `gorm:"column:location_type" json:"location_type"`
+	OfficialCode          string     `gorm:"column:official_code" json:"official_code,omitempty"`
+	Authority             string     `gorm:"column:authority" json:"authority,omitempty"`
+	OfficialSourceVersion string     `gorm:"column:official_source_version" json:"official_source_version,omitempty"`
+	InstitutionKind       string     `gorm:"column:institution_kind" json:"institution_kind,omitempty"`
+	Province              string     `gorm:"column:province" json:"province,omitempty"`
+	City                  string     `gorm:"column:city" json:"city,omitempty"`
+	Level                 string     `gorm:"column:level" json:"level,omitempty"`
+	Is985                 bool       `gorm:"column:is_985" json:"is_985"`
+	Is211                 bool       `gorm:"column:is_211" json:"is_211"`
+	Status                string     `gorm:"column:status" json:"status"`
+	LogoURL               *string    `gorm:"column:logo_url" json:"logo_url,omitempty"`
+	Latitude              *float64   `gorm:"column:latitude" json:"latitude,omitempty"`
+	Longitude             *float64   `gorm:"column:longitude" json:"longitude,omitempty"`
+	CoordinateSource      string     `gorm:"column:coordinate_source" json:"coordinate_source,omitempty"`
+	CoordinateUpdatedAt   *time.Time `gorm:"column:coordinate_updated_at" json:"coordinate_updated_at,omitempty"`
 }
 
 func (School) TableName() string { return "schools" }
 
 type SchoolCampus struct {
-	ID         string     `gorm:"column:id" json:"id"`
-	SchoolID   string     `gorm:"column:school_id" json:"school_id"`
-	Name       string     `gorm:"column:name" json:"name"`
-	Aliases    []string   `gorm:"column:aliases;serializer:json" json:"aliases"`
-	Address    string     `gorm:"column:address" json:"address,omitempty"`
-	CampusType string     `gorm:"column:campus_type" json:"campus_type,omitempty"`
-	SourceURL  string     `gorm:"column:source_url" json:"source_url,omitempty"`
-	Status     string     `gorm:"column:status" json:"status"`
-	SortOrder  int        `gorm:"column:sort_order" json:"sort_order"`
-	CreatedAt  *time.Time `gorm:"column:created_at" json:"created_at,omitempty"`
-	UpdatedAt  *time.Time `gorm:"column:updated_at" json:"updated_at,omitempty"`
+	ID                  string     `gorm:"column:id" json:"id"`
+	SchoolID            string     `gorm:"column:school_id" json:"school_id"`
+	Name                string     `gorm:"column:name" json:"name"`
+	Aliases             []string   `gorm:"column:aliases;serializer:json" json:"aliases"`
+	Address             string     `gorm:"column:address" json:"address,omitempty"`
+	CampusType          string     `gorm:"column:campus_type" json:"campus_type,omitempty"`
+	SourceURL           string     `gorm:"column:source_url" json:"source_url,omitempty"`
+	Latitude            *float64   `gorm:"column:latitude" json:"latitude,omitempty"`
+	Longitude           *float64   `gorm:"column:longitude" json:"longitude,omitempty"`
+	CoordinateSource    string     `gorm:"column:coordinate_source" json:"coordinate_source,omitempty"`
+	CoordinateUpdatedAt *time.Time `gorm:"column:coordinate_updated_at" json:"coordinate_updated_at,omitempty"`
+	Status              string     `gorm:"column:status" json:"status"`
+	SortOrder           int        `gorm:"column:sort_order" json:"sort_order"`
+	CreatedAt           *time.Time `gorm:"column:created_at" json:"created_at,omitempty"`
+	UpdatedAt           *time.Time `gorm:"column:updated_at" json:"updated_at,omitempty"`
 }
 
 func (SchoolCampus) TableName() string { return "school_campuses" }
 
 type SchoolCanteen struct {
-	ID               string     `gorm:"column:id" json:"id"`
-	SchoolID         string     `gorm:"column:school_id" json:"school_id"`
-	CampusID         *string    `gorm:"column:campus_id" json:"campus_id,omitempty"`
-	CampusName       string     `gorm:"column:campus_name;->" json:"campus_name,omitempty"`
-	Name             string     `gorm:"column:name" json:"name"`
-	Aliases          []string   `gorm:"column:aliases;serializer:json" json:"aliases"`
-	LocationText     string     `gorm:"column:location_text" json:"location_text,omitempty"`
-	BuildingOrFloor  string     `gorm:"column:building_or_floor" json:"building_or_floor,omitempty"`
-	ServiceType      string     `gorm:"column:service_type" json:"service_type,omitempty"`
-	Audience         string     `gorm:"column:audience" json:"audience,omitempty"`
-	MealPeriods      []string   `gorm:"column:meal_periods;serializer:json" json:"meal_periods"`
-	OpeningHoursRaw  string     `gorm:"column:opening_hours_raw" json:"opening_hours_raw,omitempty"`
-	PaymentMethods   []string   `gorm:"column:payment_methods;serializer:json" json:"payment_methods"`
-	HalalOrEthnic    *bool      `gorm:"column:halal_or_ethnic" json:"halal_or_ethnic,omitempty"`
-	VisitorAvailable *bool      `gorm:"column:visitor_available" json:"visitor_available,omitempty"`
-	SourceURL        string     `gorm:"column:source_url" json:"source_url,omitempty"`
-	SourceOrg        string     `gorm:"column:source_org" json:"source_org,omitempty"`
-	SourceType       string     `gorm:"column:source_type" json:"source_type,omitempty"`
-	ConfidenceLevel  *string    `gorm:"column:confidence_level" json:"confidence_level,omitempty"`
-	Status           string     `gorm:"column:status" json:"status"`
-	ReviewNote       string     `gorm:"column:review_note" json:"review_note,omitempty"`
-	ReviewedBy       *string    `gorm:"column:reviewed_by" json:"reviewed_by,omitempty"`
-	ReviewedAt       *time.Time `gorm:"column:reviewed_at" json:"reviewed_at,omitempty"`
-	SortOrder        int        `gorm:"column:sort_order" json:"sort_order"`
-	SourceCount      int        `gorm:"column:source_count;->" json:"source_count,omitempty"`
-	CreatedAt        *time.Time `gorm:"column:created_at" json:"created_at,omitempty"`
-	UpdatedAt        *time.Time `gorm:"column:updated_at" json:"updated_at,omitempty"`
+	ID                  string     `gorm:"column:id" json:"id"`
+	SchoolID            string     `gorm:"column:school_id" json:"school_id"`
+	CampusID            *string    `gorm:"column:campus_id" json:"campus_id,omitempty"`
+	CampusName          string     `gorm:"column:campus_name;->" json:"campus_name,omitempty"`
+	Name                string     `gorm:"column:name" json:"name"`
+	Aliases             []string   `gorm:"column:aliases;serializer:json" json:"aliases"`
+	LocationText        string     `gorm:"column:location_text" json:"location_text,omitempty"`
+	BuildingOrFloor     string     `gorm:"column:building_or_floor" json:"building_or_floor,omitempty"`
+	Latitude            *float64   `gorm:"column:latitude" json:"latitude,omitempty"`
+	Longitude           *float64   `gorm:"column:longitude" json:"longitude,omitempty"`
+	CoordinateSource    string     `gorm:"column:coordinate_source" json:"coordinate_source,omitempty"`
+	CoordinateUpdatedAt *time.Time `gorm:"column:coordinate_updated_at" json:"coordinate_updated_at,omitempty"`
+	ServiceType         string     `gorm:"column:service_type" json:"service_type,omitempty"`
+	Audience            string     `gorm:"column:audience" json:"audience,omitempty"`
+	MealPeriods         []string   `gorm:"column:meal_periods;serializer:json" json:"meal_periods"`
+	OpeningHoursRaw     string     `gorm:"column:opening_hours_raw" json:"opening_hours_raw,omitempty"`
+	PaymentMethods      []string   `gorm:"column:payment_methods;serializer:json" json:"payment_methods"`
+	HalalOrEthnic       *bool      `gorm:"column:halal_or_ethnic" json:"halal_or_ethnic,omitempty"`
+	VisitorAvailable    *bool      `gorm:"column:visitor_available" json:"visitor_available,omitempty"`
+	SourceURL           string     `gorm:"column:source_url" json:"source_url,omitempty"`
+	SourceOrg           string     `gorm:"column:source_org" json:"source_org,omitempty"`
+	SourceType          string     `gorm:"column:source_type" json:"source_type,omitempty"`
+	ConfidenceLevel     *string    `gorm:"column:confidence_level" json:"confidence_level,omitempty"`
+	Status              string     `gorm:"column:status" json:"status"`
+	ReviewNote          string     `gorm:"column:review_note" json:"review_note,omitempty"`
+	ReviewedBy          *string    `gorm:"column:reviewed_by" json:"reviewed_by,omitempty"`
+	ReviewedAt          *time.Time `gorm:"column:reviewed_at" json:"reviewed_at,omitempty"`
+	SortOrder           int        `gorm:"column:sort_order" json:"sort_order"`
+	SourceCount         int        `gorm:"column:source_count;->" json:"source_count,omitempty"`
+	CreatedAt           *time.Time `gorm:"column:created_at" json:"created_at,omitempty"`
+	UpdatedAt           *time.Time `gorm:"column:updated_at" json:"updated_at,omitempty"`
 }
 
 func (SchoolCanteen) TableName() string { return "school_canteens" }

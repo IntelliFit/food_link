@@ -35,6 +35,7 @@ func setupPublicFoodRepoTestDB(t *testing.T) *gorm.DB {
 	require.NoError(t, db.Exec(`CREATE TABLE schools (
 		id TEXT PRIMARY KEY,
 		name TEXT NOT NULL,
+		location_type TEXT NOT NULL DEFAULT 'university',
 		province TEXT,
 		city TEXT,
 		level TEXT,
@@ -42,13 +43,27 @@ func setupPublicFoodRepoTestDB(t *testing.T) *gorm.DB {
 		is_211 INTEGER,
 		status TEXT NOT NULL DEFAULT 'active',
 		logo_url TEXT,
+		latitude NUMERIC,
+		longitude NUMERIC,
 		created_at TEXT
+	)`).Error)
+	require.NoError(t, db.Exec(`CREATE TABLE school_campuses (
+		id TEXT PRIMARY KEY,
+		school_id TEXT NOT NULL,
+		name TEXT NOT NULL,
+		address TEXT,
+		latitude NUMERIC,
+		longitude NUMERIC,
+		status TEXT NOT NULL DEFAULT 'active'
 	)`).Error)
 	require.NoError(t, db.Exec(`CREATE TABLE school_canteens (
 		id TEXT PRIMARY KEY,
 		school_id TEXT NOT NULL,
 		campus_id TEXT,
 		name TEXT NOT NULL,
+		location_text TEXT,
+		latitude NUMERIC,
+		longitude NUMERIC,
 		status TEXT NOT NULL DEFAULT 'active'
 	)`).Error)
 	return db
@@ -486,6 +501,45 @@ func TestPublicFoodRepo_ListPublishedFiltersMapReadyLocations(t *testing.T) {
 	require.Len(t, rows, 1)
 	require.Equal(t, "map-missing", rows[0].ID)
 }
+
+func TestPublicFoodRepo_ListPublishedMapCandidatesInheritsCampusAndSchoolCoordinates(t *testing.T) {
+	db := setupPublicFoodRepoTestDB(t)
+	now := time.Now().UTC()
+	campusLatitude, campusLongitude := 39.9928, 116.3109
+	canteenLatitude, canteenLongitude := 39.9951, 116.3152
+	schoolLatitude, schoolLongitude := 40.0030, 116.3260
+	directLatitude, directLongitude := 31.2749, 121.5423
+	require.NoError(t, db.Exec(`INSERT INTO schools (id, name, location_type, province, city, status, latitude, longitude) VALUES
+		('school-campus', '北京大学', 'university', '北京市', '北京市', 'active', NULL, NULL),
+		('school-fallback', '清华大学', 'university', '北京市', '北京市', 'active', ?, ?)`, schoolLatitude, schoolLongitude).Error)
+	require.NoError(t, db.Exec(`INSERT INTO school_campuses (id, school_id, name, address, latitude, longitude, status)
+		VALUES ('campus-yan-yuan', 'school-campus', '燕园校区', '北京市海淀区颐和园路5号', ?, ?, 'active')`, campusLatitude, campusLongitude).Error)
+	require.NoError(t, db.Exec(`INSERT INTO school_canteens (id, school_id, campus_id, name, location_text, latitude, longitude, status) VALUES
+		('canteen-pku', 'school-campus', 'campus-yan-yuan', '学一食堂', '燕园校区', ?, ?, 'active'),
+		('canteen-thu', 'school-fallback', NULL, '紫荆园', '', NULL, NULL, 'active')`, canteenLatitude, canteenLongitude).Error)
+	items := preciseCampusItemsForTest()
+	require.NoError(t, db.Create(&[]domain.PublicFoodItem{
+		{ID: "campus-food", UserID: "user-1", FoodName: "燕园套餐", Type: "campus", IsCampusFood: true, SchoolID: stringPtr("school-campus"), CanteenID: stringPtr("canteen-pku"), SchoolName: "北京大学", CanteenName: "学一食堂", Status: "published", Items: items, NutritionStatus: "current", TotalCalories: 420, PublishedAt: &now, CreatedAt: &now, UpdatedAt: &now},
+		{ID: "school-food", UserID: "user-2", FoodName: "紫荆套餐", Type: "campus", IsCampusFood: true, SchoolID: stringPtr("school-fallback"), CanteenID: stringPtr("canteen-thu"), SchoolName: "清华大学", CanteenName: "紫荆园", Status: "published", Items: items, NutritionStatus: "current", TotalCalories: 420, PublishedAt: &now, CreatedAt: &now, UpdatedAt: &now},
+		{ID: "direct-food", UserID: "user-3", FoodName: "上电套餐", Type: "common", MerchantName: "上电食堂", Latitude: &directLatitude, Longitude: &directLongitude, Status: "published", PublishedAt: &now, CreatedAt: &now, UpdatedAt: &now},
+	}).Error)
+
+	rows, err := NewPublicFoodRepo(db).ListPublishedMapCandidates(context.Background(), "viewer-1")
+	require.NoError(t, err)
+	require.Len(t, rows, 3)
+	byID := make(map[string]MapFoodCandidate, len(rows))
+	for _, row := range rows {
+		byID[row.ID] = row
+	}
+	require.Equal(t, campusLatitude, *byID["campus-food"].CampusLatitude)
+	require.Equal(t, canteenLatitude, *byID["campus-food"].CanteenLatitude)
+	require.Equal(t, "学一食堂", byID["campus-food"].DirectoryCanteen)
+	require.Equal(t, "燕园校区", byID["campus-food"].DirectoryCampus)
+	require.Equal(t, schoolLatitude, *byID["school-food"].SchoolLatitude)
+	require.Equal(t, directLatitude, *byID["direct-food"].DirectLatitude)
+}
+
+func stringPtr(value string) *string { return &value }
 
 func TestPublicFoodRepo_ListPublishedCampusFiltersFloorAndWindow(t *testing.T) {
 	db := setupPublicFoodRepoTestDB(t)
