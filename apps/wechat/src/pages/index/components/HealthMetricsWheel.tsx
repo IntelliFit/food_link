@@ -30,6 +30,7 @@ export function HealthMetricsWheel({ dark = false, wellness = false, onOpen, onQ
             aria-label={`${metric.title} ${metric.value} ${metric.unit}，${metric.hint}，点击查看记录`}
             onClick={() => onOpen(metric.kind)}
           >
+            {wellness && metric.kind !== 'weight' && <Text className='ink-health-eyebrow'>{metric.kind === 'water' ? '静养' : '动养'}</Text>}
             <View className='health-wheel__metric-title'><Text className={`iconfont ${metric.icon}`} /><Text>{metric.title}</Text></View>
             <View className='health-wheel__reading'><Text className='health-wheel__value'>{metric.value}</Text><Text className='health-wheel__unit'>{metric.unit}</Text></View>
             {metric.hint ? <Text className='health-wheel__hint'>{metric.hint}</Text> : null}

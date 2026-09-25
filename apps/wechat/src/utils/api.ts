@@ -9187,3 +9187,19 @@ export async function submitStructuredFeedback(input: SubmitStructuredFeedbackRe
     ...input,
   })
 }
+
+export async function getLoginCheckInWeek(start: string): Promise<Array<{ date: string; checked: boolean }>> {
+  const result = await authenticatedRequest(`/api/membership/rewards/login-check-in/week?start=${encodeURIComponent(start)}`, { method: 'GET', timeout: 10000 })
+  if (result.statusCode !== 200) throw new Error('签到记录暂未取回')
+  const data = result.data as { days?: Array<{ date: string; checked: boolean }> }
+  if (!Array.isArray(data.days) || data.days.length !== 7 || data.days.some(day => typeof day.checked !== 'boolean')) throw new Error('签到记录不完整')
+  return data.days
+}
+
+export async function claimWeeklyCheckInReward(start: string): Promise<{ applied: boolean; reward_amount: number }> {
+  const result = await authenticatedRequest('/api/membership/rewards/login-check-in/week/claim', { method: 'POST', data: { start }, timeout: 10000 })
+  if (result.statusCode !== 200) throw new Error('奖励暂未领取，请重试')
+  const data = result.data as { applied: boolean; reward_amount: number }
+  if (typeof data.applied !== 'boolean' || data.reward_amount !== 7) throw new Error('奖励结果待确认')
+  return data
+}

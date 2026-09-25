@@ -7,17 +7,25 @@
 .recap-bookshelf__heading > text:first-child { font-size: 44rpx; }
 .recap-bookshelf__heading > text:last-child { font-size: 23rpx; margin-top: 12rpx; }
 .recap-bookshelf__light { position: absolute; top: max(185rpx,17%); right: 5%; width: 72rpx; height: 72rpx; border-radius: 50%; display: flex; justify-content: center; align-items: center; background: #f5f0e6c9; font-size: 42rpx; }
-.recap-bookshelf__row { position: absolute; left: 5%; width: 90%; height: 24%; white-space: nowrap; }
-.recap-bookshelf__row--0 { bottom: 50%; }.recap-bookshelf__row--1 { bottom: 29%; }
-.recap-bookshelf__books { display: inline-flex; height: 100%; align-items: flex-end; padding: 0 15rpx; gap: 16rpx; }
+.recap-bookshelf__shelf { position: absolute; left: 5%; width: 90%; height: 24%; }
+.recap-bookshelf__shelf--0 { bottom: 50%; }.recap-bookshelf__shelf--1 { bottom: 29%; }
+.recap-bookshelf__row-label { position: absolute; z-index: 2; top: 0; left: 16rpx; padding: 5rpx 14rpx; border-radius: 999rpx; color: #6f5942; background: #f5f0e6d9; font-size: 19rpx; letter-spacing: 2rpx; }
+.recap-bookshelf__row { position: absolute; left: 0; right: 0; bottom: 0; height: calc(100% - 34rpx); white-space: nowrap; }
+.recap-bookshelf__books { display: inline-flex; min-width: 100%; height: 100%; align-items: flex-end; padding: 0 15rpx; gap: 16rpx; box-sizing: border-box; }
 .recap-book { position: relative; box-sizing: border-box; flex-shrink: 0; width: 88rpx; height: 76%; min-height: 205rpx; padding: 15rpx 8rpx; background: #b98f72; border-left: 9rpx solid #78553e; border-right: 5rpx solid #debd96; border-radius: 6rpx 4rpx 3rpx 6rpx; box-shadow: 8rpx 5rpx 8rpx #39271855, inset 3rpx 0 5rpx #fff4d626; color: #fff3db; text-align: center; white-space: normal; transition: transform .6s, opacity .6s; }
 .recap-book:nth-child(2n) { height: 85%; transform: rotate(3deg); transform-origin: bottom; }
 .recap-book--1 { background: #8d9a78; border-left-color: #5c694c; }.recap-book--2 { background: #bf927e; }.recap-book--3 { background: #b99f6a; }.recap-book--4 { background: #667786; border-left-color: #465662; }
+.recap-book--spring { background: #8fa482; border-left-color: #64765a; }
+.recap-book--summer { background: #69958a; border-left-color: #466b61; }
+.recap-book--autumn { background: #b78762; border-left-color: #815c43; }
+.recap-book--winter { background: #738797; border-left-color: #4f6474; }
+.recap-book--year { width: 104rpx; background: #9a7448; border-left-color: #64482e; border-right-color: #d9b97b; box-shadow: 8rpx 5rpx 8rpx #39271855, inset 0 0 0 3rpx #e8ca8b52; }
 .recap-book__number { font-size: 16rpx; border-bottom: 1rpx solid #ead5b570; padding-bottom: 9rpx; }
 .recap-book__title { font-size: 20rpx; line-height: 1.25; margin: 18rpx auto 0; writing-mode: vertical-rl; height: 185rpx; white-space: nowrap; }
 .recap-book__brand { font-size: 20rpx; position: absolute; left: 0; right: 0; bottom: 12rpx; }
 .recap-book__stamp { position: absolute; right: -14rpx; bottom: 44rpx; width: 55rpx; height: 55rpx; padding: 7rpx; box-sizing: border-box; border: 3rpx double #efc8ab; border-radius: 50%; background: #b96d52; color: #fff0d8; font-size: 16rpx; transform: rotate(-14deg); line-height: 1.15; }
 .is-night .recap-book { box-shadow: 0 0 24rpx #efc17c20, 8rpx 5rpx 8rpx #201a1755; }
+.is-night .recap-bookshelf__row-label { color: #f1dab5; background: #243044d9; }
 .recap-book.is-pulled { transform: translateY(-40rpx) rotate(-9deg); opacity: 0; }
 .recap-bookshelf__hint { position: absolute; bottom: 9%; left: 18%; right: 18%; text-align: center; padding: 15rpx; background: #f5f0e6dc; color: #8a7054; font-size: 22rpx; border-radius: 40rpx; }
 .recap-bookshelf__empty { position: absolute; top: 40%; left: 10%; right: 10%; padding: 20rpx; text-align: center; background: #f5f0e6e8; font-size: 30rpx; line-height: 1.8; }
@@ -37,3 +45,24 @@
 @keyframes shelf-reader-close { to { transform: scale(.6) rotateY(65deg); opacity: 0; } }
 @keyframes shelf-stamp { 0% { transform: scale(1.35) rotate(-12deg); opacity: .5; } 75% { transform: scale(.94) rotate(-8deg); } 100% { transform: scale(1) rotate(-8deg); opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .recap-book-focus, .recap-bookmark__stamps > .is-stamped, .recap-reader.is-closing .health-recap { animation-duration: .01s; } .recap-bookshelf__background, .recap-book { transition: none; } }
+
+/* Linen-bound journals with paper labels, aligned to the wooden shelf. */
+.recap-book { width: 104rpx; height: 82%; min-height: 230rpx; border-left-width: 7rpx; border-right: 0; border-radius: 7rpx 10rpx 5rpx 7rpx; background-image: repeating-linear-gradient(0deg,#fff5d909 0 1rpx,transparent 1rpx 4rpx),repeating-linear-gradient(91deg,#503e2510 0 1rpx,transparent 1rpx 5rpx); box-shadow: 6rpx 4rpx 10rpx #39271835,inset 3rpx 0 6rpx #fff4d632; }
+.recap-book__page-edge { position: absolute; top: 6rpx; bottom: 3rpx; right: -7rpx; width: 8rpx; background: repeating-linear-gradient(90deg,#e4d7bb 0 2rpx,#fff3d8 2rpx 3rpx); border-radius: 0 5rpx 4rpx 0; z-index: -1; }
+.recap-book__number { color: #f4ebd6; border-bottom: 0; font-size: 16rpx; padding: 3rpx 0 8rpx; }
+.recap-book__title { color: #675741; background: #f2e8d2; border: 1rpx solid #dac9a7; padding: 12rpx 5rpx; height: auto; max-height: 65%; margin-top: 8rpx; font-size: 22rpx; box-shadow: 1rpx 2rpx 3rpx #46331d20; }
+.recap-book__brand { font-size: 17rpx; letter-spacing: 3rpx; opacity: .85; }
+.recap-book__ribbon { position: absolute; right: 12rpx; top: -2rpx; width: 14rpx; height: 32rpx; background: #9d624e; clip-path: polygon(0 0,100% 0,100% 100%,50% 78%,0 100%); }
+.recap-book__botanical { display: none; }
+.has-single-book .recap-bookshelf__books { padding-left: 28rpx; }
+.has-single-book .recap-book { width: 205rpx; height: 83%; min-height: 245rpx; padding: 16rpx 20rpx 20rpx 29rpx; background-color: #a5b093; border-left-color: #7a896b; transform: rotate(-3deg); transform-origin: bottom center; }
+.has-single-book .recap-book::before { content: ''; position: absolute; top: 0; bottom: 0; left: 8rpx; width: 3rpx; border-left: 1rpx solid #e3e0c480; border-right: 1rpx solid #69785b55; }
+.has-single-book .recap-book__title { writing-mode: horizontal-tb; white-space: normal; margin-top: 10rpx; padding: 18rpx 8rpx; font-size: 25rpx; line-height: 1.7; border-radius: 1rpx 4rpx 2rpx 3rpx; }
+.has-single-book .recap-book__number { text-align: left; letter-spacing: 2rpx; font-size: 16rpx; }
+.has-single-book .recap-book__brand { bottom: 14rpx; color: #f8f1de; }
+.has-single-book .recap-book__botanical { display: block; position: absolute; bottom: 44rpx; left: 52%; height: 45rpx; width: 1rpx; background: #62774ea6; transform: rotate(14deg); }
+.recap-book__botanical > view { position: absolute; top: 2rpx; left: 0; width: 15rpx; height: 8rpx; border-radius: 0 90% 0 90%; background: #e0d1a6bb; transform: rotate(-35deg); }
+.recap-book__botanical > view:nth-child(2) { top: 14rpx; left: -14rpx; transform: rotate(30deg); }
+.recap-book__botanical > view:nth-child(3) { top: 25rpx; }
+.has-single-book .recap-book.is-pulled { transform: translateY(-40rpx) rotate(-9deg); }
+.recap-bookshelf__row-label { top: -12rpx; font-size: 17rpx; background: #f5f0e6a8; }

@@ -1,11 +1,16 @@
 import { View, Text } from '@tarojs/components'
 import type { ReactNode } from 'react'
 import type { HomeExperienceMode } from '../../../utils/home-experience'
+import { InkHomeHero } from '../../../components/InkWellness'
 import { getGreeting } from '../utils/helpers'
 
 interface GreetingSectionProps {
   /** 保留既有今日小结能力，当前问候区不展示分享入口。 */
   onSharePress?: () => void
+  current?: number
+  target?: number
+  date?: string
+  onTarget?: () => void
   mode: HomeExperienceMode
   onModeToggle: () => void
   petAvatar?: ReactNode
@@ -18,12 +23,14 @@ interface GreetingSectionProps {
   onPetReminderPress?: () => void
 }
 
-export function GreetingSection({ mode, onModeToggle, petAvatar, onPetPress, petReminder, onPetReminderPress }: GreetingSectionProps) {
+export function GreetingSection({ current, target, date, onTarget, mode, onModeToggle, petAvatar, onPetPress, petReminder, onPetReminderPress }: GreetingSectionProps) {
   const { text, iconClass } = getGreeting()
   const isWellness = mode === 'wellness'
 
+  if (isWellness) return <InkHomeHero current={current} target={target} date={date} onTarget={onTarget} onModeToggle={onModeToggle} reminder={petReminder?.text} onReminder={onPetReminderPress} />
+
   return (
-    <View className='greeting-section'>
+    <View className={`greeting-section${isWellness ? ' greeting-section--taiji' : ''}`}>
       <View className='greeting-main'>
         {petAvatar ? (
           <View id='home-greeting-pet' className='greeting-pet' onClick={onPetPress}>
@@ -48,7 +55,7 @@ export function GreetingSection({ mode, onModeToggle, petAvatar, onPetPress, pet
               <Text className={`iconfont ${iconClass} greeting-title-icon`} />
               <Text>{text}</Text>
             </View>
-            <Text className='greeting-subtitle'>今天也要健康饮食哦</Text>
+            <Text className='greeting-subtitle'>{isWellness ? '三餐有节，起居有常' : '今天也要健康饮食哦'}</Text>
           </View>
         )}
       </View>

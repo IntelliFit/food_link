@@ -360,3 +360,11 @@ func TestMembershipHandler_ErrorPaths(t *testing.T) {
 	unauth.ServeHTTP(w, req)
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
 }
+
+func (m *mockMembershipService) GetLoginCheckInWeek(ctx context.Context, userID, start string) ([]map[string]any, error) {
+	return nil, nil
+}
+
+func (m *mockMembershipService) ClaimWeeklyCheckInReward(ctx context.Context, userID, start string) (map[string]any, error) {
+	return map[string]any{"reward_amount": 7, "applied": true}, nil
+}

@@ -1,3 +1,4 @@
+import { InkMasthead, useInkWellness } from '../../components/InkWellness'
 import { View, Text, ScrollView, Image, Input, Button, Swiper, SwiperItem } from '@tarojs/components'
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import Taro, { useShareAppMessage, useShareTimeline } from '@tarojs/taro'
@@ -376,6 +377,8 @@ function isCommunityFeedItem(value: CommunityFeedItem | CommunityFeedItem['recor
 }
 
 function CommunityPage() {
+  const ink = useInkWellness()
+  const [inkRankingOpen, setInkRankingOpen] = useState(false)
   const { scheme } = useAppColorScheme()
   const socialInbox = useSocialInbox()
   const [loggedIn, setLoggedIn] = useState(!!getAccessToken())
@@ -2021,7 +2024,7 @@ function CommunityPage() {
   return (
     <FlPageThemeRoot>
       <View
-        className='community-page'
+        className={`community-page${ink ? ' ink-page' : ''}`}
         style={pageHeight ? { height: `${pageHeight}px` } : undefined}
       >
       <View className='community-scroll-wrap'>
@@ -2045,8 +2048,16 @@ function CommunityPage() {
               if (expandedCommentRecordId) closeCommentModal()
             }}
           >
+            {ink && <>
+              <InkMasthead title='烟火人间' subtitle='一餐一味，彼此相伴' />
+              <View className='ink-feed-tabs'>
+                {([{ key: 'public', label: '发现' }, { key: 'all', label: '好友' }, { key: 'priority', label: '关注' }] as const).map(tab => <View key={tab.key} role='button' className={`ink-feed-tabs__tab${feedAuthorScope === tab.key ? ' is-active' : ''}`} onClick={() => { if (tab.key !== 'public' && !loggedIn) { redirectToLogin(); return }; setFeedAuthorScope(tab.key) }}>{tab.label}</View>)}
+                <View className='ink-feed-tabs__publish' role='button' onClick={handlePublishPost}>＋ 发布</View>
+              </View>
+              <View className='ink-ranking-toggle' role='button' onClick={() => setInkRankingOpen(value => !value)}>{inkRankingOpen ? '收起榜单' : '看看本周榜单'} ›</View>
+            </>}
             {/* 排行榜：左侧用户榜，右侧食物营养榜 */}
-            <View className='ranking-banner' onClick={(e) => e.stopPropagation()}>
+            <View className='ranking-banner' style={ink && !inkRankingOpen ? { display: 'none' } : undefined} onClick={(e) => e.stopPropagation()}>
               <View className='ranking-head'>
                 <View className='ranking-icon-wrap'>
                   <IconTrendingUp size={34} color='rgb(255 255 255 / 95%)' />

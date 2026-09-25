@@ -15,34 +15,28 @@ describe('home module layout', () => {
       hidden: ['stats', 'removed-module', 'stats'],
     })
 
-    expect(result.order.slice(0, 2)).toEqual(['meals', 'calories'])
+    expect(result.order.slice(0, 3)).toEqual(['meals', 'health', 'diet'])
     expect(result.order).toHaveLength(DEFAULT_HOME_MODULE_ORDER.length)
     expect(new Set(result.order).size).toBe(DEFAULT_HOME_MODULE_ORDER.length)
-    expect(result.hidden).toEqual(['stats'])
+    expect(result.hidden).toEqual([])
   })
 
   it('moves only visible modules and keeps hidden modules available', () => {
     const hidden = setHomeModuleVisibility(normalizeHomeModuleLayout(null), 'rewards', false)
     const moved = moveVisibleHomeModule(hidden, 'meals', -1)
 
-    expect(moved.hidden).toEqual(['rewards'])
+    expect(moved.hidden).toEqual(['supplements', 'expiry', 'rewards'])
     expect(moved.order.filter((id) => !moved.hidden.includes(id))).toEqual([
       'greeting',
       'calendar',
-      'calories',
-      'nutrition',
-      'supplements',
-      'weight',
-      'water',
       'meals',
-      'exercise',
-      'expiry',
-      'stats',
+      'diet',
+      'health',
     ])
-    expect(setHomeModuleVisibility(moved, 'rewards', true).hidden).toEqual([])
+    expect(setHomeModuleVisibility(moved, 'rewards', true).hidden).toEqual(['supplements', 'expiry'])
 
     const movedAcrossTwo = moveVisibleHomeModuleBySteps(moved, 'meals', -2)
-    expect(movedAcrossTwo.order.filter((id) => !movedAcrossTwo.hidden.includes(id)).indexOf('meals')).toBe(5)
+    expect(movedAcrossTwo.order.filter((id) => !movedAcrossTwo.hidden.includes(id)).indexOf('meals')).toBe(0)
   })
 
   it('isolates guest and account storage keys', () => {

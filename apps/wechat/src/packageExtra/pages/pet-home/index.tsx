@@ -24,6 +24,12 @@ import {
 } from '../../../utils/weapp-privacy'
 import { HOME_PET_PROFILE_CHANGED_EVENT } from '../../../utils/pet-events'
 import { openPetChat } from '../../../utils/pet-navigation'
+import {
+  PET_DAILY_PLAY_GOAL,
+  readPetDailyPlayCount,
+  readPetPlayRewardSummary,
+  type PetPlayRewardSummary,
+} from '../../../utils/pet-play-reward'
 import './index.scss'
 
 const HOME_PET_HIDDEN_KEY = 'home_pet_companion_hidden_v1'
@@ -68,6 +74,8 @@ function PetHomePage() {
   const [renamingPet, setRenamingPet] = useState(false)
   const [petSummary, setPetSummary] = useState<PetSummary | null>(null)
   const [homePetHidden, setHomePetHidden] = useState(getStoredHomePetHidden)
+  const [dailyPlayCount, setDailyPlayCount] = useState(readPetDailyPlayCount)
+  const [playReward, setPlayReward] = useState<PetPlayRewardSummary>(readPetPlayRewardSummary)
   const pixelAvatarCustomizingRef = useRef(false)
   const renamingPetRef = useRef(false)
 
@@ -87,6 +95,8 @@ function PetHomePage() {
   useDidShow(() => {
     applyThemeNavigationBar(scheme)
     setHomePetHidden(getStoredHomePetHidden())
+    setDailyPlayCount(readPetDailyPlayCount())
+    setPlayReward(readPetPlayRewardSummary())
     void loadData()
   })
 
@@ -261,6 +271,20 @@ function PetHomePage() {
     })
   }, [])
 
+  const openHomePlay = useCallback(() => {
+    Taro.switchTab({
+      url: '/pages/index/index',
+      success: () => Taro.showToast({ title: '去首页找它玩球吧', icon: 'none' }),
+    })
+  }, [])
+
+  const openDailyExploration = useCallback(() => {
+    const rewardContext = playReward.totalStars > 0
+      ? `我和健康伙伴已经收集了 ${playReward.totalStars} 颗陪伴星，当前徽章是“${playReward.badge}”。`
+      : ''
+    openPetChat(`${rewardContext}请结合我今天已有的饮食、喝水、运动和身体记录，设计一个三分钟内能完成、轻松有趣且不带评判的健康探索。`)
+  }, [playReward])
+
   return (
     <View className={`pet-home-page ${scheme === 'dark' ? 'pet-home-page--dark' : ''}`}>
       <View className='pet-home-shell'>
@@ -327,6 +351,41 @@ function PetHomePage() {
                 className='pet-home-upgrade-progress-fill'
                 style={{ width: `${petSummary?.pet?.level_progress ?? 0}%` }}
               />
+            </View>
+          </View>
+        </View>
+
+        <View className='pet-home-card pet-home-playground'>
+          <View className='pet-home-card-head'>
+            <View>
+              <Text className='pet-home-card-title'>陪伴乐园</Text>
+              <Text className='pet-home-playground-subtitle'>轻互动、收集陪伴星，再一起完成健康探索</Text>
+            </View>
+            <Text className='pet-home-card-side'>{playReward.badge}</Text>
+          </View>
+          <View className='pet-home-playground-progress'>
+            <View className='pet-home-playground-progress-copy'>
+              <Text>今日陪伴</Text>
+              <Text>{dailyPlayCount}/{PET_DAILY_PLAY_GOAL}</Text>
+            </View>
+            <View className='pet-home-playground-track'>
+              {Array.from({ length: PET_DAILY_PLAY_GOAL }, (_, index) => (
+                <View key={index} className={index < dailyPlayCount ? 'is-lit' : ''}><Text>★</Text></View>
+              ))}
+            </View>
+            <View className='pet-home-playground-stats'>
+              <Text>共 {playReward.totalStars} 颗陪伴星</Text>
+              <Text>连续 {playReward.streak} 天</Text>
+            </View>
+          </View>
+          <View className='pet-home-playground-actions'>
+            <View className='pet-home-playground-action is-play' onClick={openHomePlay}>
+              <Text className='pet-home-playground-action-icon'>⚽</Text>
+              <View><Text>陪它玩球</Text><Text>回到首页互动</Text></View>
+            </View>
+            <View className='pet-home-playground-action is-explore' onClick={openDailyExploration}>
+              <Text className='pet-home-playground-action-icon'>✦</Text>
+              <View><Text>今日探索</Text><Text>生成专属小任务</Text></View>
             </View>
           </View>
         </View>

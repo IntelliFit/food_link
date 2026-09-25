@@ -93,6 +93,47 @@
   overflow: hidden;
 }
 
+.profile-section {
+  margin-bottom: 30rpx;
+}
+
+.profile-section-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  margin: 0 34rpx 14rpx;
+}
+
+.profile-section-title,
+.profile-section-hint {
+  display: block;
+}
+
+.profile-section-title {
+  color: #20332d;
+  font-size: 28rpx;
+  font-weight: 800;
+}
+
+.profile-section-hint {
+  margin-top: 4rpx;
+  color: #84928d;
+  font-size: 20rpx;
+}
+
+.profile-section-mark {
+  color: #c59b5f;
+  font-size: 34rpx;
+}
+
+.profile-recap-section {
+  margin-top: 2rpx;
+
+  .recap-archive-entry {
+    margin: 0 24rpx;
+  }
+}
+
 // 顶部用户信息区域（仿知乎风格，无白色背景）
 .profile-header-section {
   margin: 0 24rpx 24rpx;
@@ -680,11 +721,31 @@
     box-shadow: inset 0 0 0 1rpx rgb(255 255 255 / 42%);
   }
 
-  .list-title {
+  .list-copy {
+    display: flex;
+    min-width: 0;
     flex: 1;
+    flex-direction: column;
+  }
+
+  .list-title {
     font-size: 30rpx;
     color: #1f2937;
     line-height: 44rpx;
+  }
+
+  .list-desc {
+    display: block;
+    margin-top: 2rpx;
+    color: #89948f;
+    font-size: 21rpx;
+    line-height: 31rpx;
+  }
+
+  .list-arrow {
+    flex-shrink: 0;
+    color: #b0bbb6;
+    font-size: 24rpx;
   }
 
   .list-extra {
@@ -882,4 +943,29 @@
       color: #6ee7b7;
     }
   }
+
+  .profile-section-title,
+  .list-item .list-title {
+    color: #edf4f0;
+  }
+
+  .profile-section-hint,
+  .list-item .list-desc {
+    color: #91a19a;
+  }
+
+  .profile-recap-section .recap-archive-entry {
+    border-color: rgb(217 183 126 / 18%);
+    color: #edf4f0;
+    background: linear-gradient(145deg, #2d2a24 0%, #20332d 100%);
+  }
+
+  .profile-recap-section .recap-archive-entry > text + text {
+    color: #b4c4bc;
+  }
 }
+
+.profile-section-heading.is-toggle { min-height: 76rpx; align-items: center; padding: 8rpx 0; }
+.profile-section-chevron { flex-shrink: 0; width: 13rpx; height: 13rpx; margin: 0 10rpx 7rpx 24rpx; border-right: 3rpx solid #84928d; border-bottom: 3rpx solid #84928d; transform: rotate(45deg); transition: transform .2s ease; }
+.profile-section-chevron.is-expanded { transform: rotate(225deg); margin-bottom: 0; }
+@media (prefers-reduced-motion: reduce) { .profile-section-chevron { transition: none; } }

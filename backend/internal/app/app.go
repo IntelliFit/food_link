@@ -701,6 +701,8 @@ func New(cfg *config.Config) (*App, error) {
 	engine.GET("/api/membership/plans", authmw.OptionalJWT(jwtSvc), membershipHandler.ListPlans)
 	engine.GET("/api/membership/me", authmw.RequireJWT(jwtSvc), membershipHandler.GetMyMembership)
 	engine.GET("/api/membership/reward-center", authmw.RequireJWT(jwtSvc), membershipHandler.GetRewardCenter)
+	engine.GET("/api/membership/rewards/login-check-in/week", authmw.RequireJWT(jwtSvc), membershipHandler.GetLoginCheckInWeek)
+	engine.POST("/api/membership/rewards/login-check-in/week/claim", authmw.RequireJWT(jwtSvc), membershipHandler.ClaimWeeklyCheckInReward)
 	engine.POST("/api/membership/rewards/login-check-in/claim", authmw.RequireJWT(jwtSvc), membershipHandler.ClaimLoginCheckIn)
 	engine.GET("/api/membership/invite-reward-status", authmw.RequireJWT(jwtSvc), membershipHandler.GetInviteRewardStatus)
 	engine.POST("/api/membership/pay/create", authmw.RequireJWT(jwtSvc), membershipHandler.CreatePayment)

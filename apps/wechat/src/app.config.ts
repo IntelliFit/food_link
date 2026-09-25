@@ -76,8 +76,11 @@ const extraSubpackagePages = [
 ]
 
 export default defineAppConfig({
-  // 按需注入：仅注入当前页面所需自定义组件，降低启动时 JS 注入量与内存占用（基础库 >= 2.11.1）
-  lazyCodeLoading: 'requiredComponents',
+  // 正式包按需注入组件以降低启动内存。本地开发模式关闭该能力：新版开发者工具
+  // 会偶发把 Taro 的递归根组件解析为 wx://not-found，表现为只剩底栏的白屏。
+  ...(process.env.NODE_ENV === 'production'
+    ? { lazyCodeLoading: 'requiredComponents' as const }
+    : {}),
   // 主题由应用内的 `AppColorSchemeContext` 手动控制，不能再让宿主按系统深色模式自动改色，
   // 否则会出现“应用仍是浅色态，但原生页面背景先变黑”的半黑半白混合态。
   darkmode: false,
@@ -111,6 +114,13 @@ export default defineAppConfig({
       root: 'packageFoodLibraryShare',
       name: 'food-library-share',
       pages: ['pages/food-library-share/index'],
+    },
+    {
+      // Immersive reports include their own reader code, illustrations and music.
+      // Isolating them keeps the tab-bar package within WeChat's 2 MB limit.
+      root: 'packageRecap',
+      name: 'recap',
+      pages: ['pages/recap/index'],
     },
   ],
   window: {

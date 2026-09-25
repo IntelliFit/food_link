@@ -976,10 +976,22 @@ func (r *MembershipRepo) ChangeEarnedCredits(ctx context.Context, userID string,
 		}
 	}
 	var entry *domain.UserEarnedCreditLedger
+	applied := false
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var user User
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ?", userID).First(&user).Error; err != nil {
 			return err
+		}
+		if sourceKey != "" {
+			var existing domain.UserEarnedCreditLedger
+			err := tx.Where("user_id = ? AND reason = ? AND source_key = ?", userID, reason, sourceKey).First(&existing).Error
+			if err == nil {
+				entry = &existing
+				return nil
+			}
+			if !errors.Is(err, gorm.ErrRecordNotFound) {
+				return err
+			}
 		}
 		next := user.EarnedCreditsBalance + delta
 		if next < 0 {
@@ -1009,9 +1021,10 @@ func (r *MembershipRepo) ChangeEarnedCredits(ctx context.Context, userID string,
 			return err
 		}
 		entry = row
+		applied = true
 		return nil
 	})
-	return entry, entry != nil, err
+	return entry, applied && err == nil, err
 }
 
 func (r *MembershipRepo) ChangeCreditsWithSystemUsage(ctx context.Context, userID string, earnedDelta int, earnedReason, earnedSourceKey, systemReason, systemSourceKey, relatedDate string, earnedMeta, systemMeta map[string]any) error {

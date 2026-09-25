@@ -291,3 +291,25 @@
   border-color: rgba(40, 92, 64, 0.28);
   border-top-color: #285c40;
 }
+
+/* Wellness navigation shares the ink / paper theme. */
+.custom-tab-bar--wellness::before { background: #222; border-color: #444; }
+.custom-tab-bar--wellness .tab-icon,
+.custom-tab-bar--wellness .tab-text { color: #aaa; }
+.custom-tab-bar--wellness .tab-item.selected .tab-icon,
+.custom-tab-bar--wellness .tab-item.selected .tab-text { color: #fff; }
+.custom-tab-bar--wellness .center-icon-wrapper { background: #f7f7f4; border-color: #222; box-shadow: 0 4rpx 16rpx #00000022; }
+.custom-tab-bar--wellness .center-icon { color: #222; }
+.custom-tab-bar--wellness .center-opening-spinner { border-color: #bbb; border-top-color: #222; }
+/* Approved ink theme: white paper navigation and an actual Taiji photo control. */
+.custom-tab-bar.custom-tab-bar--wellness::before { background: #f7f7f4; background-image: none; filter: none; border-top: 1rpx solid #ccc; }
+.custom-tab-bar.custom-tab-bar--wellness .tab-icon,
+.custom-tab-bar.custom-tab-bar--wellness .tab-text { color: #666; }
+.custom-tab-bar.custom-tab-bar--wellness .tab-item.selected .tab-icon,
+.custom-tab-bar.custom-tab-bar--wellness .tab-item.selected .tab-text { color: #111; }
+.custom-tab-bar.custom-tab-bar--wellness .tab-text { font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif; font-size: 24rpx; font-weight: 500; line-height: 1.4; }
+.custom-tab-bar.custom-tab-bar--wellness .center-icon-wrapper { background: white; border: 1rpx solid #aaa; width: 100rpx; height: 100rpx; position: relative; overflow: hidden; box-shadow: 0 0 0 7rpx #f7f7f4; }
+.center-taiji { position: absolute; width: 110%; height: 110%; left: -5%; top: -5%; border-radius: 50%; }
+.custom-tab-bar.custom-tab-bar--wellness .center-icon { position: relative; z-index: 1; font-size: 39rpx; color: white; background: #222; border: 2rpx solid #fff; border-radius: 12rpx; padding: 4rpx; }
+.custom-tab-bar.custom-tab-bar--wellness .center-item { gap: 9rpx; }
+.custom-tab-bar.custom-tab-bar--wellness .center-opening-spinner { position: relative; z-index: 2; border-top-color: #222; }

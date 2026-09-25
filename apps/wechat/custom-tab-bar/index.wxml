@@ -26,6 +26,7 @@
       </block>
       <block wx:elif="{{item.isCenter}}">
         <view class="center-icon-wrapper {{recordOpening ? 'is-opening' : ''}}">
+          <image wx:if="{{wellnessActive}}" class="center-taiji" src="./taiji.jpg" mode="aspectFit" />
           <view wx:if="{{recordOpening}}" class="center-opening-spinner"></view>
           <text wx:else class="iconfont icon-paizhao-xianxing center-icon"></text>
           <view
@@ -43,6 +44,6 @@
         </view>
       </block>
     </view>
-    <text class="tab-text" wx:if="{{!item.isCenter}}">{{item.text}}</text>
+    <text class="tab-text" wx:if="{{!item.isCenter || wellnessActive}}">{{item.isCenter ? '拍照' : item.text}}</text>
   </view>
 </view>

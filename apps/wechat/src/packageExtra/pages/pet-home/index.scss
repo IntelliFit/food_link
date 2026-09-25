@@ -473,6 +473,105 @@
   color: #8a94a3;
 }
 
+.pet-home-playground-subtitle {
+  display: block;
+  margin-top: 3rpx;
+  color: #7c8983;
+  font-size: 21rpx;
+  line-height: 30rpx;
+}
+
+.pet-home-playground-progress {
+  padding: 20rpx;
+  border: 1rpx solid rgb(197 155 95 / 18%);
+  border-radius: 22rpx;
+  background: linear-gradient(145deg, #fffaf0 0%, #f5fbf7 100%);
+}
+
+.pet-home-playground-progress-copy,
+.pet-home-playground-stats {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.pet-home-playground-progress-copy {
+  color: #31544a;
+  font-size: 24rpx;
+  font-weight: 800;
+}
+
+.pet-home-playground-track {
+  display: flex;
+  gap: 14rpx;
+  margin: 16rpx 0 13rpx;
+}
+
+.pet-home-playground-track > view {
+  display: flex;
+  height: 54rpx;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  border-radius: 16rpx;
+  color: #c5cec9;
+  background: #e8eeeb;
+
+  &.is-lit {
+    color: #fff5ce;
+    background: linear-gradient(145deg, #e0b15d, #c28a38);
+    box-shadow: 0 6rpx 16rpx rgb(181 127 45 / 18%);
+  }
+}
+
+.pet-home-playground-stats {
+  color: #788981;
+  font-size: 20rpx;
+}
+
+.pet-home-playground-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14rpx;
+  margin-top: 15rpx;
+}
+
+.pet-home-playground-action {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 12rpx;
+  padding: 18rpx;
+  border-radius: 20rpx;
+  background: #edf7f2;
+
+  &.is-explore {
+    background: #f8f0e3;
+  }
+
+  > view {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+  }
+
+  > view > text:first-child {
+    color: #28483f;
+    font-size: 23rpx;
+    font-weight: 800;
+  }
+
+  > view > text:last-child {
+    margin-top: 3rpx;
+    color: #819089;
+    font-size: 18rpx;
+  }
+}
+
+.pet-home-playground-action-icon {
+  font-size: 32rpx;
+}
+
 .pet-home-event-message {
   display: block;
   font-size: 24rpx;
@@ -680,8 +779,34 @@
   .pet-home-card-side,
   .pet-home-event-message,
   .pet-home-action-desc,
-  .pet-home-candidate-style {
+  .pet-home-candidate-style,
+  .pet-home-playground-subtitle {
     color: rgb(214 226 220 / 62%);
+  }
+
+  .pet-home-playground-progress {
+    border-color: rgb(255 255 255 / 8%);
+    background: linear-gradient(145deg, rgb(255 255 255 / 7%), rgb(92 184 150 / 8%));
+  }
+
+  .pet-home-playground-progress-copy,
+  .pet-home-playground-action > view > text:first-child {
+    color: #eef5f1;
+  }
+
+  .pet-home-playground-stats,
+  .pet-home-playground-action > view > text:last-child {
+    color: #91a19a;
+  }
+
+  .pet-home-playground-track > view {
+    color: #60706a;
+    background: rgb(255 255 255 / 8%);
+  }
+
+  .pet-home-playground-action,
+  .pet-home-playground-action.is-explore {
+    background: rgb(255 255 255 / 7%);
   }
 
   .pet-home-stage-stat {

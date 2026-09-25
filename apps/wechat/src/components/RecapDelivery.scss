@@ -1,5 +1,7 @@
-.recap-archive-entry { margin: 20rpx 24rpx; padding: 26rpx; border-radius: 26rpx; background: #edf7f1; color: #31544a; display: flex; align-items: center; justify-content: space-between; gap: 20rpx; }
-.recap-archive-entry > text + text { font-size: 23rpx; color: #657c71; }
+.recap-archive-entry { position: relative; margin: 20rpx 24rpx; padding: 30rpx 28rpx; border: 1rpx solid rgb(184 144 88 / 18%); border-radius: 26rpx; background: linear-gradient(145deg, #fff9ec 0%, #edf7f1 100%); color: #31544a; display: flex; align-items: center; justify-content: space-between; gap: 20rpx; overflow: hidden; box-shadow: 0 8rpx 22rpx rgb(66 91 78 / 7%); }
+.recap-archive-entry::after { content: '▥'; position: absolute; right: 20rpx; bottom: -28rpx; color: rgb(161 116 61 / 9%); font-size: 116rpx; transform: rotate(-7deg); }
+.recap-archive-entry > text { position: relative; z-index: 1; font-weight: 800; }
+.recap-archive-entry > text + text { font-size: 23rpx; color: #657c71; font-weight: 500; }
 .recap-delivery-layer { position: fixed; inset: 0; z-index: 18000; display: flex; align-items: center; justify-content: center; padding: 48rpx; box-sizing: border-box; }
 .recap-delivery-mask { position: absolute; inset: 0; z-index: 0; background: rgba(30, 46, 40, 0.3); }
 .recap-celebration { position: absolute; inset: 0; z-index: 1; pointer-events: none; overflow: hidden; animation: recap-celebration-fade-in 180ms ease both; }

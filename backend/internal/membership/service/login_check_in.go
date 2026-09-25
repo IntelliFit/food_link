@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	commonerrors "food_link/backend/internal/common/errors"
 	"log/slog"
 	"time"
 
@@ -119,4 +120,49 @@ func loginCheckInResult(status LoginCheckInStatus, balance int, applied bool) ma
 		"applied":                applied,
 		"earned_credits_balance": balance,
 	}
+}
+
+func (s *MembershipService) GetLoginCheckInWeek(ctx context.Context, userID, start string) ([]map[string]any, error) {
+	first, err := time.ParseInLocation("2006-01-02", start, chinaLocation())
+	if err != nil || first.After(time.Now()) {
+		return nil, commonerrors.ErrBadRequest
+	}
+	rows := make([]map[string]any, 0, 7)
+	for i := 0; i < 7; i++ {
+		date := first.AddDate(0, 0, i).Format("2006-01-02")
+		entry, err := s.repo.GetEarnedCreditLedgerBySource(ctx, userID, loginCheckInRewardReason, loginCheckInSourcePrefix+date)
+		if err != nil {
+			logger.Error(ctx, "读取签到记录失败", err, slog.String("user_id", userID))
+			return nil, err
+		}
+		rows = append(rows, map[string]any{"date": date, "checked": entry != nil})
+	}
+	logger.Info(ctx, "读取周报签到完成", slog.String("user_id", userID), slog.String("start", start))
+	return rows, nil
+}
+
+func (s *MembershipService) ClaimWeeklyCheckInReward(ctx context.Context, userID, start string) (map[string]any, error) {
+	first, err := time.ParseInLocation("2006-01-02", start, chinaLocation())
+	if err != nil || first.Weekday() != time.Monday || first.AddDate(0, 0, 7).After(time.Now()) {
+		return nil, commonerrors.ErrBadRequest
+	}
+	rows, err := s.GetLoginCheckInWeek(ctx, userID, start)
+	if err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		if row["checked"] != true {
+			return nil, commonerrors.ErrBadRequest
+		}
+	}
+	entry, applied, err := s.repo.ChangeEarnedCredits(ctx, userID, 7, "weekly_check_in_reward", "weekly_check_in:"+start, start, map[string]any{"week_start": start})
+	if err != nil {
+		logger.Error(ctx, "周签到奖励发放失败", err, slog.String("user_id", userID))
+		return nil, err
+	}
+	if entry == nil {
+		return nil, commonerrors.ErrBadRequest
+	}
+	logger.Info(ctx, "周签到奖励确认完成", slog.String("user_id", userID), slog.Bool("applied", applied))
+	return map[string]any{"reward_amount": 7, "applied": applied, "earned_credits_balance": entry.BalanceAfter}, nil
 }

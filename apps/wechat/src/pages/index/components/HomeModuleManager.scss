@@ -18,13 +18,29 @@
     flex: 0 0 92rpx;
     margin: 0;
   }
+
+  &:not(.is-editing) {
+    position: fixed;
+    z-index: 110;
+    top: max(240rpx, calc(env(safe-area-inset-top) + 150rpx));
+    right: 16rpx;
+    width: 104rpx;
+    height: 104rpx;
+    margin: 0;
+  }
 }
 
-.home-module-toolbar__chest {
+.home-module-toolbar__icon {
   display: block;
-  width: 90rpx;
-  height: 90rpx;
-  filter: drop-shadow(0 8rpx 8rpx rgb(118 83 35 / 20%));
+  width: 96rpx;
+  height: 96rpx;
+  filter: drop-shadow(0 1rpx 1rpx rgb(255 255 255 / 80%)) drop-shadow(0 3rpx 4rpx rgb(0 0 0 / 18%));
+}
+
+.home-module-toolbar:not(.is-editing) .home-module-toolbar__icon {
+  width: 100rpx;
+  height: 100rpx;
+  pointer-events: none;
 }
 
 .home-toolbox__item-copy,

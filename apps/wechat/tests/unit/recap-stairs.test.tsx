@@ -1,0 +1,100 @@
+import { act, fireEvent, render, screen } from '@testing-library/react'
+import { RecapStairs } from '../../src/components/RecapStairs'
+import { getLoginCheckInWeek, claimWeeklyCheckInReward } from '../../src/utils/api'
+
+jest.mock('../../src/utils/api', () => ({ getLoginCheckInWeek: jest.fn(), claimWeeklyCheckInReward: jest.fn() }))
+const days = Array.from({ length: 7 }, (_, i) => ({ date: `2026-09-${14 + i}`, has_record: false, calories: 0 }))
+
+test.each([true, false])('stairs use actual check-ins and automatically traverse seven steps: all=%s', async all => {
+  jest.useFakeTimers()
+  ;(getLoginCheckInWeek as jest.Mock).mockResolvedValue(days.map((day, i) => ({ date: day.date, checked: all || i !== 2 })))
+  const next = jest.fn()
+  const { container } = render(<RecapStairs days={days} active next={next} />)
+  await act(async () => { await Promise.resolve() })
+  expect(screen.queryByText('收起书签，走进花园 →')).not.toBeInTheDocument()
+  expect(container.querySelector('.recap-stairs__step')?.textContent).toBe('')
+  act(() => jest.advanceTimersByTime(22000))
+  expect(screen.getByText(all ? '七天的坚持，让你又向上了一程' : '很遗憾，这周有几天没能相遇')).toBeInTheDocument()
+  if (all) {
+    ;(claimWeeklyCheckInReward as jest.Mock).mockResolvedValue({ applied: true, reward_amount: 7 })
+    fireEvent.click(screen.getByText('领取全勤奖励 · 代币 +7'))
+    await act(async () => { await Promise.resolve() })
+    expect(screen.getByText('代币 +7 · 已到账')).toBeInTheDocument()
+  } else expect(screen.queryByText('领取全勤奖励 · 代币 +7')).not.toBeInTheDocument()
+  expect(next).not.toHaveBeenCalled()
+  fireEvent.click(screen.getByText('收起书签，走进花园 →'))
+  expect(next).not.toHaveBeenCalled()
+  act(() => jest.advanceTimersByTime(2200))
+  expect(next).toHaveBeenCalledTimes(1)
+  jest.useRealTimers()
+})
+
+test('failed history never marks days absent', async () => {
+  ;(getLoginCheckInWeek as jest.Mock).mockRejectedValue(new Error('offline'))
+  render(<RecapStairs days={days} active next={jest.fn()} />)
+  await act(async () => { await Promise.resolve() })
+  expect(screen.getByText('签到记录暂未取回，轻点重试')).toBeInTheDocument()
+  expect(screen.queryByText('未签到')).not.toBeInTheDocument()
+})
+
+
+test('missing server route offers continuation instead of an ineffective retry', async () => {
+  ;(getLoginCheckInWeek as jest.Mock).mockRejectedValue(Object.assign(new Error('not found'), { statusCode: 404 }))
+  const next = jest.fn()
+  render(<RecapStairs days={days} active next={next} />)
+  await act(async () => { await Promise.resolve() })
+  expect(screen.getByText('这周的签到回顾暂未开放')).toBeInTheDocument()
+  expect(screen.queryByText('签到记录暂未取回，轻点重试')).not.toBeInTheDocument()
+  expect(screen.queryByText('未签到')).not.toBeInTheDocument()
+  fireEvent.click(screen.getByText('先收好这一页 →'))
+  expect(next).toHaveBeenCalledTimes(1)
+})
+
+test('temporary failure retries and equivalent parent renders preserve the request', async () => {
+  ;(getLoginCheckInWeek as jest.Mock).mockReset().mockRejectedValueOnce(new Error('timeout')).mockResolvedValue(days.map(day => ({ date: day.date, checked: true })))
+  const next = jest.fn()
+  const { rerender } = render(<RecapStairs days={days} active next={next} />)
+  await act(async () => { await Promise.resolve() })
+  fireEvent.click(screen.getByText('签到记录暂未取回，轻点重试'))
+  await act(async () => { await Promise.resolve() })
+  expect(screen.queryByText('已签到')).not.toBeInTheDocument()
+  rerender(<RecapStairs days={days.map(day => ({ ...day }))} active next={next} />)
+  await act(async () => { await Promise.resolve() })
+  expect(getLoginCheckInWeek).toHaveBeenCalledTimes(2)
+})
+
+
+test('full-attendance sample traverses seven steady steps without fetching or awarding real credits', async () => {
+  jest.useFakeTimers()
+  ;(getLoginCheckInWeek as jest.Mock).mockClear()
+  ;(claimWeeklyCheckInReward as jest.Mock).mockClear()
+  const { container } = render(<RecapStairs days={days} active next={jest.fn()} sample />)
+  await act(async () => { await Promise.resolve() })
+  act(() => jest.advanceTimersByTime(20000))
+  expect(container.querySelectorAll('.recap-stairs__step.is-visited')).toHaveLength(7)
+  expect(screen.getByText('全勤奖励 +7 · 样本演示')).toBeInTheDocument()
+  expect(getLoginCheckInWeek).not.toHaveBeenCalled()
+  expect(claimWeeklyCheckInReward).not.toHaveBeenCalled()
+  jest.useRealTimers()
+})
+
+test('missed day pauses in shadow, resumes automatically and stops timers when hidden', async () => {
+  jest.useFakeTimers()
+  const next = jest.fn()
+  const { container, rerender, unmount } = render(<RecapStairs days={days} active next={next} sample />)
+  fireEvent.click(screen.getByRole('button', { name: '漏签一天' }))
+  await act(async () => { await Promise.resolve() })
+  act(() => jest.advanceTimersByTime(7350))
+  expect(container.querySelectorAll('.is-visited')).toHaveLength(2)
+  expect(container.querySelectorAll('.is-skipped')).toHaveLength(1)
+  expect(container.querySelector('.is-walking')).toBeNull()
+  act(() => jest.advanceTimersByTime(1000))
+  expect(container.querySelectorAll('.is-visited')).toHaveLength(2)
+  act(() => jest.advanceTimersByTime(12000))
+  expect(container.querySelectorAll('.is-visited')).toHaveLength(6)
+  expect(screen.queryByText('全勤奖励 +7 · 样本演示')).not.toBeInTheDocument()
+  rerender(<RecapStairs days={days} active={false} next={next} sample />)
+  unmount()
+  expect(jest.getTimerCount()).toBe(0)
+  jest.useRealTimers()
+})
