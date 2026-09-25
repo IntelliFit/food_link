@@ -6,9 +6,13 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	"github.com/google/uuid"
 )
 
 const TakeoutCode = "takeout"
+
+var publicFoodItemNamespace = uuid.MustParse("1f2ed734-020a-5a5e-8f9b-8cc142cc872b")
 
 //go:embed sanshengxiao.json
 var sanshengxiaoJSON []byte
@@ -86,6 +90,17 @@ func DatasetSnapshot() Dataset {
 func ProductByCode(code string) (Product, bool) {
 	product, ok := productsByID[NormalizeCode(code)]
 	return product, ok
+}
+
+// PublicFoodItemID returns the stable public-food-library ID owned by one
+// product QR code. Keeping the ID stable lets the public library become the
+// editable source of truth without breaking printed QR codes.
+func PublicFoodItemID(code string) (string, bool) {
+	code = NormalizeCode(code)
+	if _, ok := productsByID[code]; !ok {
+		return "", false
+	}
+	return uuid.NewSHA1(publicFoodItemNamespace, []byte("marketing-qr:"+code)).String(), true
 }
 
 func IsKnownCode(code string) bool {

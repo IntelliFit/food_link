@@ -5,6 +5,7 @@ import (
 	"errors"
 	"time"
 
+	"food_link/backend/internal/marketingqr/catalog"
 	"food_link/backend/internal/marketingqr/domain"
 	publicfooddomain "food_link/backend/internal/publicfood/domain"
 
@@ -21,12 +22,18 @@ func NewMarketingQRRepo(db *gorm.DB) *MarketingQRRepo {
 	return &MarketingQRRepo{db: db}
 }
 
-func (r *MarketingQRRepo) FindPublishedMerchantFood(ctx context.Context, merchantName, foodName string) (*publicfooddomain.PublicFoodItem, error) {
+func (r *MarketingQRRepo) FindPublishedCampaignFood(ctx context.Context, code, merchantName, foodName string) (*publicfooddomain.PublicFoodItem, error) {
 	var item publicfooddomain.PublicFoodItem
-	err := r.db.WithContext(ctx).
+	q := r.db.WithContext(ctx).
 		Table("public_food_library").
-		Where("status = ? AND merchant_name = ? AND food_name = ?", "published", merchantName, foodName).
-		Order("updated_at DESC NULLS LAST, created_at DESC NULLS LAST").
+		Where("status = ?", "published")
+	if itemID, ok := catalog.PublicFoodItemID(code); ok {
+		q = q.Where("id = ? OR (merchant_name = ? AND food_name = ?)", itemID, merchantName, foodName).
+			Order(gorm.Expr("CASE WHEN id = ? THEN 0 ELSE 1 END", itemID))
+	} else {
+		q = q.Where("merchant_name = ? AND food_name = ?", merchantName, foodName)
+	}
+	err := q.Order("updated_at DESC NULLS LAST, created_at DESC NULLS LAST").
 		First(&item).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil

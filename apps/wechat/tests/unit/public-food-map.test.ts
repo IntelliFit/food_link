@@ -1,10 +1,11 @@
 import {
   buildFoodMapSpots,
+  buildFoodMapSpotsFromPayload,
   foodMapDistanceKm,
   formatFoodMapDistance,
   hasValidFoodCoordinates,
 } from '../../src/packageExtra/pages/food-library/food-map'
-import type { PublicFoodLibraryItem } from '../../src/utils/api'
+import type { PublicFoodLibraryItem, PublicFoodMapSpotPayload } from '../../src/utils/api'
 import { existsSync, readFileSync } from 'fs'
 import { join } from 'path'
 
@@ -41,11 +42,12 @@ describe('public food map helpers', () => {
   )
 
   it('loads only map-ready foods and exposes honest navigation and delivery actions', () => {
-    expect(pageSource).toContain("getPublicFoodLibraryList({ has_location: true, sort_by: 'hot', limit: 100 })")
+    expect(pageSource).toContain('getPublicFoodMapSpots()')
     expect(pageSource).toContain("className='food-map'")
     expect(pageSource).toContain("'/assets/icons/food-map-marker.png'")
     expect(existsSync(join(process.cwd(), 'assets/icons/food-map-marker.png'))).toBe(true)
     expect(pageSource).toContain('导航去吃')
+    expect(pageSource).toContain('导航到食堂')
     expect(pageSource).toContain('搜外卖')
     expect(pageSource).toContain('外卖关键词已复制')
     expect(pageSource).toContain('点亮一家')
@@ -53,6 +55,26 @@ describe('public food map helpers', () => {
     expect(sharePageSource).toContain('商家位置（点亮地图必填）')
     expect(sharePageSource).toContain('请先选择商家位置')
     expect(sharePageSource).toContain('点亮这家美食')
+  })
+
+  it('uses server-aggregated locations and preserves their food counts', () => {
+    const payload: PublicFoodMapSpotPayload = {
+      key: 'food:43.89423:125.28066',
+      latitude: 43.894229,
+      longitude: 125.280655,
+      location_level: 'food',
+      location_name: '三生晓',
+      address: '吉林工商学院一食堂二楼',
+      food_count: 73,
+      featured_item: food({ id: 'fresh-juice', food_name: '鲜榨苹果汁' }),
+    }
+
+    const spots = buildFoodMapSpotsFromPayload([payload])
+
+    expect(spots).toHaveLength(1)
+    expect(spots[0].locationName).toBe('三生晓')
+    expect(spots[0].foodCount).toBe(73)
+    expect(spots[0].featuredItem.id).toBe('fresh-juice')
   })
 
   it('rejects missing, invalid, and zero coordinates', () => {

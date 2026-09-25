@@ -4,6 +4,7 @@ import Taro, { useDidShow, useRouter } from '@tarojs/taro'
 import { withAuth } from '../../../utils/withAuth'
 import {
   getAccessToken,
+  getPublicFoodMapSpots,
   getPublicFoodLibraryList,
   getPublicFoodLibraryCollections,
   getMyPublicFoodLibrary,
@@ -14,7 +15,8 @@ import {
   submitStructuredFeedback,
   deletePublicFoodLibraryItem,
   showUnifiedApiError,
-  type PublicFoodLibraryItem
+  type PublicFoodLibraryItem,
+  type PublicFoodMapSpotPayload,
 } from '../../../utils/api'
 import './index.scss'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
@@ -22,7 +24,7 @@ import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
 import { FlPageThemeRoot } from '../../../components/FlPageThemeRoot'
 import {
-  buildFoodMapSpots,
+  buildFoodMapSpotsFromPayload,
   formatFoodMapDistance,
   type FoodMapLocation,
 } from './food-map'
@@ -78,13 +80,6 @@ function foodMapPlace(item: PublicFoodLibraryItem): string {
     || 'FoodLink 用户点亮'
 }
 
-function foodMapAddress(item: PublicFoodLibraryItem): string {
-  return item.detail_address
-    || item.merchant_address
-    || item.campus_location_text
-    || [item.city, item.district, item.merchant_name].filter(Boolean).join(' ')
-}
-
 function foodMapImage(item: PublicFoodLibraryItem): string {
   return item.image_path || item.image_paths?.[0] || ''
 }
@@ -98,7 +93,7 @@ function FoodLibraryPage() {
   const [viewMode, setViewMode] = useState<ViewMode>(fromRecord ? 'list' : 'map')
   const [loading, setLoading] = useState(false)
   const [list, setList] = useState<PublicFoodLibraryItem[]>([])
-  const [mapList, setMapList] = useState<PublicFoodLibraryItem[]>([])
+  const [mapSpotPayloads, setMapSpotPayloads] = useState<PublicFoodMapSpotPayload[]>([])
   const [mapLoading, setMapLoading] = useState(false)
   const [mapLocating, setMapLocating] = useState(false)
   const [mapCenter, setMapCenter] = useState<FoodMapLocation>(DEFAULT_MAP_LOCATION)
@@ -126,7 +121,10 @@ function FoodLibraryPage() {
   const touchStartX = useRef(0)
   const touchStartY = useRef(0)
   const currentUserId = String(Taro.getStorageSync('user_id') || '').trim()
-  const mapSpots = useMemo(() => buildFoodMapSpots(mapList, userLocation), [mapList, userLocation])
+  const mapSpots = useMemo(
+    () => buildFoodMapSpotsFromPayload(mapSpotPayloads, userLocation),
+    [mapSpotPayloads, userLocation],
+  )
   const selectedMapSpot = useMemo(
     () => mapSpots.find(spot => spot.key === selectedMapSpotKey) || null,
     [mapSpots, selectedMapSpotKey],
@@ -145,7 +143,7 @@ function FoodLibraryPage() {
     zIndex: selectedMapSpotKey === spot.key ? 10 : 2,
     anchor: { x: 0.5, y: 1 },
     callout: {
-      content: `${foodMapPlace(spot.featuredItem)}${spot.items.length > 1 ? ` · ${spot.items.length} 道` : ''}`,
+      content: `${spot.locationName || foodMapPlace(spot.featuredItem)}${spot.foodCount > 1 ? ` · ${spot.foodCount} 道` : ''}`,
       color: '#153129',
       fontSize: 12,
       anchorX: 0,
@@ -337,7 +335,7 @@ function FoodLibraryPage() {
     }
   }, [])
 
-  /** 加载可上图的公共餐食，并同时尝试定位到用户附近。 */
+  /** 加载服务端聚合的地点，并同时尝试定位到用户附近。 */
   const loadMapList = useCallback(async (force = false) => {
     if (!getAccessToken()) return
     if (!force && mapLoadedRef.current) return
@@ -346,13 +344,13 @@ function FoodLibraryPage() {
     setMapLocating(true)
     try {
       const [foodResult, locationResult] = await Promise.allSettled([
-        getPublicFoodLibraryList({ has_location: true, sort_by: 'hot', limit: 100 }),
+        getPublicFoodMapSpots(),
         Taro.getLocation({ type: 'gcj02' }),
       ])
 
       if (foodResult.status === 'rejected') throw foodResult.reason
-      const mappedItems = foodResult.value.list || []
-      setMapList(mappedItems)
+      const mappedSpots = foodResult.value.spots || []
+      setMapSpotPayloads(mappedSpots)
 
       if (locationResult.status === 'fulfilled') {
         const location = {
@@ -363,11 +361,11 @@ function FoodLibraryPage() {
         setMapCenter(location)
         setMapScale(15)
       } else {
-        const firstMappedItem = mappedItems.find(item => item.latitude != null && item.longitude != null)
-        if (firstMappedItem) {
+        const firstMappedSpot = mappedSpots.find(spot => Number.isFinite(spot.latitude) && Number.isFinite(spot.longitude))
+        if (firstMappedSpot) {
           setMapCenter({
-            latitude: Number(firstMappedItem.latitude),
-            longitude: Number(firstMappedItem.longitude),
+            latitude: Number(firstMappedSpot.latitude),
+            longitude: Number(firstMappedSpot.longitude),
           })
         }
       }
@@ -658,14 +656,13 @@ function FoodLibraryPage() {
     setMapScale(17)
   }
 
-  const navigateToMapFood = async (item: PublicFoodLibraryItem) => {
-    if (item.latitude == null || item.longitude == null) return
+  const navigateToMapFood = async (spot: typeof mapSpots[number]) => {
     try {
       await Taro.openLocation({
-        latitude: Number(item.latitude),
-        longitude: Number(item.longitude),
-        name: foodMapPlace(item),
-        address: foodMapAddress(item),
+        latitude: spot.latitude,
+        longitude: spot.longitude,
+        name: spot.locationName || foodMapPlace(spot.featuredItem),
+        address: spot.address || spot.featuredItem.campus_location_text || spot.featuredItem.merchant_address || '',
         scale: 18,
       })
     } catch (e: any) {
@@ -963,13 +960,13 @@ function FoodLibraryPage() {
                     ) : (
                       <View className='map-food-sheet-placeholder'><Text className='iconfont icon-shiwu' /></View>
                     )}
-                    {selectedMapSpot.items.length > 1 && (
-                      <Text className='map-food-count'>{selectedMapSpot.items.length} 道</Text>
+                    {selectedMapSpot.foodCount > 1 && (
+                      <Text className='map-food-count'>{selectedMapSpot.foodCount} 道</Text>
                     )}
                   </View>
                   <View className='map-food-sheet-copy'>
                     <Text className='map-food-sheet-title'>{foodMapTitle(selectedMapSpot.featuredItem)}</Text>
-                    <Text className='map-food-sheet-place'>{foodMapPlace(selectedMapSpot.featuredItem)}</Text>
+                    <Text className='map-food-sheet-place'>{selectedMapSpot.locationName || foodMapPlace(selectedMapSpot.featuredItem)}</Text>
                     <View className='map-food-sheet-meta'>
                       {selectedMapSpot.distanceKm != null && (
                         <Text className='map-food-distance'>距你 {formatFoodMapDistance(selectedMapSpot.distanceKm)}</Text>
@@ -987,10 +984,16 @@ function FoodLibraryPage() {
                   </View>
                   <View
                     className='map-food-action map-food-action--primary'
-                    onClick={(e) => { e.stopPropagation(); void navigateToMapFood(selectedMapSpot.featuredItem) }}
+                    onClick={(e) => { e.stopPropagation(); void navigateToMapFood(selectedMapSpot) }}
                   >
                     <Text className='iconfont icon-dizhi' />
-                    导航去吃
+                    {selectedMapSpot.locationLevel === 'school'
+                      ? '导航到学校'
+                      : selectedMapSpot.locationLevel === 'canteen'
+                        ? '导航到食堂'
+                        : selectedMapSpot.locationLevel === 'campus'
+                          ? '导航到校区'
+                          : '导航去吃'}
                   </View>
                 </View>
               </View>

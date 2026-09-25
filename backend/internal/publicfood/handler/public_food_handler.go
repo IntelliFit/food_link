@@ -19,6 +19,7 @@ import (
 type PublicFoodService interface {
 	Create(ctx context.Context, userID string, input service.CreateInput) (string, error)
 	List(ctx context.Context, userID string, filter repo.ListFilter) ([]domain.PublicFoodView, error)
+	ListMapSpots(ctx context.Context, userID string) ([]domain.PublicFoodMapSpot, error)
 	Mine(ctx context.Context, userID string) ([]domain.PublicFoodItem, error)
 	Collections(ctx context.Context, userID string) ([]domain.PublicFoodView, error)
 	UserCollectionsForViewer(ctx context.Context, viewerUserID, targetUserID string) ([]domain.PublicFoodView, error)
@@ -213,6 +214,19 @@ func (h *PublicFoodHandler) List(c *gin.Context) {
 	}
 	logger.Info(ctx, "公共食物库查询完成", append(requestAttrs, slog.Int("item_count", len(items)))...)
 	response.Success(c, gin.H{"list": items})
+}
+
+func (h *PublicFoodHandler) ListMapSpots(c *gin.Context) {
+	ctx := c.Request.Context()
+	userID := c.GetString(authmw.ContextUserIDKey)
+	logger.Info(ctx, "收到公共美食地图查询请求", slog.String("user_id", userID))
+	spots, err := h.svc.ListMapSpots(ctx, userID)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	logger.Info(ctx, "公共美食地图查询完成", slog.String("user_id", userID), slog.Int("spot_count", len(spots)))
+	response.Success(c, gin.H{"spots": spots})
 }
 
 func (h *PublicFoodHandler) Mine(c *gin.Context) {

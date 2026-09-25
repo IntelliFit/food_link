@@ -66,6 +66,54 @@ type CampusDirectoryRef struct {
 	Floor       string
 }
 
+type MapFoodCandidate struct {
+	ID                 string     `gorm:"column:id"`
+	UserID             string     `gorm:"column:user_id"`
+	FoodName           string     `gorm:"column:food_name"`
+	Description        string     `gorm:"column:description"`
+	ImagePath          *string    `gorm:"column:image_path"`
+	TotalCalories      float64    `gorm:"column:total_calories"`
+	TotalProtein       float64    `gorm:"column:total_protein"`
+	TotalCarbs         float64    `gorm:"column:total_carbs"`
+	TotalFat           float64    `gorm:"column:total_fat"`
+	Type               string     `gorm:"column:type"`
+	IsCampusFood       bool       `gorm:"column:is_campus_food"`
+	LikeCount          int        `gorm:"column:like_count"`
+	CommentCount       int        `gorm:"column:comment_count"`
+	CollectionCount    int        `gorm:"column:collection_count"`
+	PublishedAt        *time.Time `gorm:"column:published_at"`
+	CreatedAt          *time.Time `gorm:"column:created_at"`
+	UpdatedAt          *time.Time `gorm:"column:updated_at"`
+	MerchantName       string     `gorm:"column:merchant_name"`
+	MerchantAddress    string     `gorm:"column:merchant_address"`
+	DetailAddress      string     `gorm:"column:detail_address"`
+	DirectLatitude     *float64   `gorm:"column:direct_latitude"`
+	DirectLongitude    *float64   `gorm:"column:direct_longitude"`
+	SchoolID           *string    `gorm:"column:school_id"`
+	CampusID           *string    `gorm:"column:campus_id"`
+	CanteenID          *string    `gorm:"column:canteen_id"`
+	SchoolName         string     `gorm:"column:school_name"`
+	CampusName         string     `gorm:"column:campus_name"`
+	CanteenName        string     `gorm:"column:canteen_name"`
+	CampusLocationText string     `gorm:"column:campus_location_text"`
+	DirectoryCanteenID string     `gorm:"column:directory_canteen_id"`
+	DirectoryCanteen   string     `gorm:"column:directory_canteen_name"`
+	CanteenLocation    string     `gorm:"column:canteen_location_text"`
+	CanteenLatitude    *float64   `gorm:"column:canteen_latitude"`
+	CanteenLongitude   *float64   `gorm:"column:canteen_longitude"`
+	DirectoryCampusID  string     `gorm:"column:directory_campus_id"`
+	DirectoryCampus    string     `gorm:"column:directory_campus_name"`
+	CampusAddress      string     `gorm:"column:campus_address"`
+	CampusLatitude     *float64   `gorm:"column:campus_latitude"`
+	CampusLongitude    *float64   `gorm:"column:campus_longitude"`
+	DirectorySchoolID  string     `gorm:"column:directory_school_id"`
+	DirectorySchool    string     `gorm:"column:directory_school_name"`
+	SchoolProvince     string     `gorm:"column:school_province"`
+	SchoolCity         string     `gorm:"column:school_city"`
+	SchoolLatitude     *float64   `gorm:"column:school_latitude"`
+	SchoolLongitude    *float64   `gorm:"column:school_longitude"`
+}
+
 func (r *PublicFoodRepo) CreateItem(ctx context.Context, item *domain.PublicFoodItem) error {
 	if item.ID == "" {
 		item.ID = uuid.New().String()
@@ -280,6 +328,64 @@ func (r *PublicFoodRepo) ListPublished(ctx context.Context, f ListFilter) ([]dom
 	}
 	err := q.Limit(f.Limit).Offset(f.Offset).Scan(&rows).Error
 	return rows, err
+}
+
+func (r *PublicFoodRepo) ListPublishedMapCandidates(ctx context.Context, viewerUserID string) ([]MapFoodCandidate, error) {
+	var rows []MapFoodCandidate
+	directLocation := validMapCoordinateSQL("p.latitude", "p.longitude")
+	canteenLocation := validMapCoordinateSQL("map_canteen.latitude", "map_canteen.longitude")
+	campusLocation := validMapCoordinateSQL("map_campus.latitude", "map_campus.longitude")
+	schoolLocation := validMapCoordinateSQL("map_school.latitude", "map_school.longitude")
+	q := r.db.WithContext(ctx).
+		Table("public_food_library AS p").
+		Select(`p.id, COALESCE(p.user_id::text, '') AS user_id, p.food_name, p.description, p.image_path,
+			p.total_calories, p.total_protein, p.total_carbs, p.total_fat,
+			p.type, p.is_campus_food, p.like_count, p.comment_count, p.collection_count,
+			p.published_at, p.created_at, p.updated_at,
+			p.merchant_name, p.merchant_address, p.detail_address,
+			p.latitude AS direct_latitude, p.longitude AS direct_longitude,
+			p.school_id, p.campus_id, p.canteen_id,
+			p.school_name, p.campus_name, p.canteen_name, p.campus_location_text,
+			COALESCE(map_canteen.id::text, '') AS directory_canteen_id,
+			COALESCE(map_canteen.name, '') AS directory_canteen_name,
+			COALESCE(map_canteen.location_text, '') AS canteen_location_text,
+			map_canteen.latitude AS canteen_latitude, map_canteen.longitude AS canteen_longitude,
+			COALESCE(map_campus.id::text, '') AS directory_campus_id,
+			COALESCE(map_campus.name, '') AS directory_campus_name,
+			COALESCE(map_campus.address, '') AS campus_address,
+			map_campus.latitude AS campus_latitude, map_campus.longitude AS campus_longitude,
+			COALESCE(map_school.id::text, '') AS directory_school_id,
+			COALESCE(map_school.name, '') AS directory_school_name,
+			COALESCE(map_school.province, '') AS school_province,
+			COALESCE(map_school.city, '') AS school_city,
+			map_school.latitude AS school_latitude, map_school.longitude AS school_longitude`).
+		Joins("LEFT JOIN school_canteens map_canteen ON map_canteen.id = p.canteen_id AND map_canteen.status = 'active'").
+		Joins("LEFT JOIN school_campuses map_campus ON map_campus.id = COALESCE(map_canteen.campus_id, p.campus_id) AND map_campus.status = 'active'").
+		Joins(`LEFT JOIN schools map_school ON map_school.status = 'active'
+			AND map_school.location_type = 'university'
+			AND (
+				map_school.id = COALESCE(map_campus.school_id, map_canteen.school_id, p.school_id)
+				OR (
+					COALESCE(map_campus.school_id, map_canteen.school_id, p.school_id) IS NULL
+					AND map_school.name = p.school_name
+				)
+			)`).
+		Where("p.status = ?", "published").
+		Where(validPublishedCampusNutritionSQL("p")).
+		Where("(" + directLocation + ") OR (" + canteenLocation + ") OR (" + campusLocation + ") OR (" + schoolLocation + ")")
+	q = visiblePublicFoodToViewer(q, "p.user_id", viewerUserID)
+	q = q.Order("CASE WHEN NULLIF(BTRIM(COALESCE(p.image_path, '')), '') IS NOT NULL THEN 0 ELSE 1 END ASC").
+		Order("(COALESCE(p.like_count, 0) * 3 + COALESCE(p.collection_count, 0) * 4 + COALESCE(p.comment_count, 0) * 2) DESC").
+		Order("p.published_at DESC NULLS LAST, p.id ASC").
+		Limit(5000)
+	return rows, q.Scan(&rows).Error
+}
+
+func validMapCoordinateSQL(latitudeColumn, longitudeColumn string) string {
+	return latitudeColumn + " IS NOT NULL AND " + longitudeColumn + " IS NOT NULL" +
+		" AND " + latitudeColumn + " BETWEEN -90 AND 90" +
+		" AND " + longitudeColumn + " BETWEEN -180 AND 180" +
+		" AND NOT (" + latitudeColumn + " = 0 AND " + longitudeColumn + " = 0)"
 }
 
 func campusImagePriorityOrder(dialect, alias string) string {

@@ -22,6 +22,7 @@ type mockPublicFoodService struct {
 	updateInput        service.CreateInput
 	updateItemID       string
 	listFilter         repo.ListFilter
+	mapSpots           []domain.PublicFoodMapSpot
 	campusDetailItemID string
 	commentInput       service.CommentInput
 	contributedPaths   []string
@@ -43,6 +44,10 @@ func (m *mockPublicFoodService) List(ctx context.Context, userID string, filter 
 			CanteenName:  filter.CanteenName,
 		},
 	}}, nil
+}
+
+func (m *mockPublicFoodService) ListMapSpots(context.Context, string) ([]domain.PublicFoodMapSpot, error) {
+	return m.mapSpots, nil
 }
 
 func (m *mockPublicFoodService) Mine(ctx context.Context, userID string) ([]domain.PublicFoodItem, error) {
@@ -130,12 +135,36 @@ func setupPublicFoodHandlerRouter(svc *mockPublicFoodService) *gin.Engine {
 	})
 	h := NewPublicFoodHandler(svc)
 	r.GET("/api/public-food-library", h.List)
+	r.GET("/api/public-food-library/map-spots", h.ListMapSpots)
 	r.POST("/api/public-food-library", h.Create)
 	r.GET("/api/public-food-library/:item_id/campus-detail", h.GetCampusDetail)
 	r.POST("/api/public-food-library/:item_id/contribute-images", h.ContributeCampusImages)
 	r.PUT("/api/public-food-library/:item_id", h.Update)
 	r.POST("/api/public-food-library/:item_id/comments", h.AddComment)
 	return r
+}
+
+func TestPublicFoodHandlerListsMapSpots(t *testing.T) {
+	svc := &mockPublicFoodService{mapSpots: []domain.PublicFoodMapSpot{{
+		Key: "food:43.89423:125.28065", Latitude: 43.894229, Longitude: 125.280655,
+		LocationLevel: "food", LocationName: "三生晓", FoodCount: 73,
+	}}}
+	router := setupPublicFoodHandlerRouter(svc)
+	req := httptest.NewRequest(http.MethodGet, "/api/public-food-library/map-spots", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	require.Equal(t, http.StatusOK, resp.Code)
+	var payload struct {
+		Data struct {
+			Spots []domain.PublicFoodMapSpot `json:"spots"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &payload))
+	require.Len(t, payload.Data.Spots, 1)
+	require.Equal(t, "三生晓", payload.Data.Spots[0].LocationName)
+	require.Equal(t, 73, payload.Data.Spots[0].FoodCount)
 }
 
 func TestContributeCampusImages(t *testing.T) {

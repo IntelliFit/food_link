@@ -744,6 +744,7 @@ func New(cfg *config.Config) (*App, error) {
 
 	// Public food library routes
 	engine.GET("/api/public-food-library", authmw.RequireJWT(jwtSvc), publicFoodHandler.List)
+	engine.GET("/api/public-food-library/map-spots", authmw.RequireJWT(jwtSvc), publicFoodHandler.ListMapSpots)
 	engine.POST("/api/food-nutrition-contributions", authmw.RequireJWT(jwtSvc), foodContributionHandler.Submit)
 	engine.GET("/api/food-nutrition-contributions/mine", authmw.RequireJWT(jwtSvc), foodContributionHandler.Mine)
 	engine.POST("/api/public-food-library", authmw.RequireJWT(jwtSvc), publicFoodHandler.Create)

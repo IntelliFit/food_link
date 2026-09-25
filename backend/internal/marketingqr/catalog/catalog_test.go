@@ -1,6 +1,10 @@
 package catalog
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/google/uuid"
+)
 
 func TestSanshengxiaoCatalog(t *testing.T) {
 	dataset := DatasetSnapshot()
@@ -36,5 +40,29 @@ func TestSanshengxiaoCatalog(t *testing.T) {
 	}
 	if !IsKnownCode(TakeoutCode) {
 		t.Fatal("统一外卖包装短码未注册")
+	}
+}
+
+func TestPublicFoodItemIDIsStableAndUnique(t *testing.T) {
+	seen := make(map[string]string, len(DatasetSnapshot().Products))
+	for _, product := range DatasetSnapshot().Products {
+		id, ok := PublicFoodItemID(product.Code)
+		if !ok {
+			t.Fatalf("商品 %s 未生成公共食物库 ID", product.Code)
+		}
+		if _, err := uuid.Parse(id); err != nil {
+			t.Fatalf("商品 %s 的公共食物库 ID 非法: %v", product.Code, err)
+		}
+		if previous, exists := seen[id]; exists {
+			t.Fatalf("公共食物库 ID 重复: %s 和 %s", previous, product.Code)
+		}
+		seen[id] = product.Code
+		second, _ := PublicFoodItemID(product.Code)
+		if second != id {
+			t.Fatalf("商品 %s 的公共食物库 ID 不稳定", product.Code)
+		}
+	}
+	if _, ok := PublicFoodItemID(TakeoutCode); ok {
+		t.Fatal("统一外卖包装码不应生成公共食物库商品")
 	}
 }

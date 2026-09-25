@@ -8085,6 +8085,17 @@ export interface PublicFoodLibraryItem {
   last_verified_at?: string | null
 }
 
+export interface PublicFoodMapSpotPayload {
+  key: string
+  latitude: number
+  longitude: number
+  location_level: 'food' | 'canteen' | 'campus' | 'school'
+  location_name: string
+  address?: string
+  food_count: number
+  featured_item: PublicFoodLibraryItem
+}
+
 /** 校园菜品专用图片上传；服务端按用户隔离对象路径并执行图片类型/大小校验。 */
 export async function uploadCampusFoodImageFile(localPath: string): Promise<{ imageUrl: string }> {
   return uploadAnalyzeImageFile(localPath, '/api/campus-food-collection/images')
@@ -8343,6 +8354,18 @@ export async function getPublicFoodLibraryList(
     throw new Error((response.data as any)?.detail || '获取列表失败')
   }
   return response.data as { list: PublicFoodLibraryItem[] }
+}
+
+/** 获取服务端聚合的美食地图地点，避免只展示热度前 100 条餐食。 */
+export async function getPublicFoodMapSpots(): Promise<{ spots: PublicFoodMapSpotPayload[] }> {
+  const response = await authenticatedRequest('/api/public-food-library/map-spots', {
+    method: 'GET',
+    timeout: 15000,
+  })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.detail || '获取美食地图失败')
+  }
+  return response.data as { spots: PublicFoodMapSpotPayload[] }
 }
 
 /** 获取当前用户上传/分享的公共食物库条目 */

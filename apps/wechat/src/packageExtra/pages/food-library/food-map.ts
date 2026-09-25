@@ -1,4 +1,4 @@
-import type { PublicFoodLibraryItem } from '../../../utils/api'
+import type { PublicFoodLibraryItem, PublicFoodMapSpotPayload } from '../../../utils/api'
 
 export interface FoodMapLocation {
   latitude: number
@@ -10,6 +10,10 @@ export interface FoodMapSpot extends FoodMapLocation {
   items: PublicFoodLibraryItem[]
   featuredItem: PublicFoodLibraryItem
   distanceKm?: number
+  foodCount: number
+  locationLevel: 'food' | 'canteen' | 'campus' | 'school'
+  locationName: string
+  address: string
 }
 
 const EARTH_RADIUS_KM = 6371
@@ -87,6 +91,10 @@ export function buildFoodMapSpots(
         items: orderedItems,
         featuredItem,
         distanceKm: userLocation ? foodMapDistanceKm(userLocation, location) : undefined,
+        foodCount: orderedItems.length,
+        locationLevel: 'food' as const,
+        locationName: '',
+        address: '',
       }
     })
     .sort((left, right) => {
@@ -94,5 +102,31 @@ export function buildFoodMapSpots(
         return left.distanceKm - right.distanceKm
       }
       return foodMapPopularity(right.featuredItem) - foodMapPopularity(left.featuredItem)
+    })
+}
+
+export function buildFoodMapSpotsFromPayload(
+  spots: PublicFoodMapSpotPayload[],
+  userLocation?: FoodMapLocation | null,
+): FoodMapSpot[] {
+  return spots
+    .filter(spot => hasValidFoodCoordinates(spot))
+    .map(spot => ({
+      key: spot.key,
+      latitude: Number(spot.latitude),
+      longitude: Number(spot.longitude),
+      items: [spot.featured_item],
+      featuredItem: spot.featured_item,
+      foodCount: Math.max(1, Number(spot.food_count) || 1),
+      locationLevel: spot.location_level,
+      locationName: spot.location_name,
+      address: spot.address || '',
+      distanceKm: userLocation
+        ? foodMapDistanceKm(userLocation, { latitude: Number(spot.latitude), longitude: Number(spot.longitude) })
+        : undefined,
+    }))
+    .sort((left, right) => {
+      if (left.distanceKm != null && right.distanceKm != null) return left.distanceKm - right.distanceKm
+      return right.foodCount - left.foodCount
     })
 }

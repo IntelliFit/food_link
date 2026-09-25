@@ -74,7 +74,7 @@ func (s *MarketingQRService) Landing(ctx context.Context, rawCode string) (*doma
 	}
 
 	if s.repo != nil {
-		override, err := s.repo.FindPublishedMerchantFood(ctx, dataset.MerchantName, product.Name)
+		override, err := s.repo.FindPublishedCampaignFood(ctx, product.Code, dataset.MerchantName, product.Name)
 		if err != nil {
 			logger.Warn(ctx, "读取二维码商品后台修订失败，继续使用临时估算数据",
 				slog.String("campaign_code", code),
@@ -182,7 +182,9 @@ func applyPublicFoodOverride(landing *domain.Landing, item *publicfooddomain.Pub
 	if item.Latitude != nil && item.Longitude != nil {
 		landing.Latitude = item.Latitude
 		landing.Longitude = item.Longitude
-		landing.LocationIsEstimated = false
+		if item.LastVerifiedAt != nil {
+			landing.LocationIsEstimated = false
+		}
 	}
 	if strings.TrimSpace(item.PortionDescription) != "" {
 		landing.PortionDescription = strings.TrimSpace(item.PortionDescription)
@@ -201,12 +203,10 @@ func applyPublicFoodOverride(landing *domain.Landing, item *publicfooddomain.Pub
 			CarbsG:       item.TotalCarbs,
 			FatG:         item.TotalFat,
 		}
-		if strings.EqualFold(strings.TrimSpace(item.NutritionStatus), "verified") {
+		if strings.EqualFold(strings.TrimSpace(item.NutritionStatus), "current") {
 			landing.NutritionNotice = "营养数据已由后台核验；糖度、冰量和加料仍可能改变实际摄入。"
-		} else {
-			landing.NutritionNotice = "营养数据来自当前后台版本，仍可能随配方、糖度、冰量和加料变化。"
+			landing.DataVersion = fmt.Sprintf("public-food-%d", item.NutritionVersion)
 		}
-		landing.DataVersion = fmt.Sprintf("public-food-%d", item.NutritionVersion)
 	}
 	if storageClient != nil {
 		if item.ImagePath != nil && strings.TrimSpace(*item.ImagePath) != "" {

@@ -130,6 +130,20 @@ type PublicFoodView struct {
 	RecommendReason string `json:"recommend_reason,omitempty"`
 }
 
+// PublicFoodMapSpot is a server-side aggregation. A spot may be backed by a
+// dish's exact coordinates, a canteen or campus directory location, or a
+// school-level fallback when older records lack a precise directory link.
+type PublicFoodMapSpot struct {
+	Key           string         `json:"key"`
+	Latitude      float64        `json:"latitude"`
+	Longitude     float64        `json:"longitude"`
+	LocationLevel string         `json:"location_level"`
+	LocationName  string         `json:"location_name"`
+	Address       string         `json:"address,omitempty"`
+	FoodCount     int            `json:"food_count"`
+	FeaturedItem  PublicFoodItem `json:"featured_item"`
+}
+
 type CampusFoodMetric struct {
 	ProteinPerYuan  float64 `json:"protein_per_yuan,omitempty"`
 	PricePer100Kcal float64 `json:"price_per_100_kcal,omitempty"`
