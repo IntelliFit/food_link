@@ -1,5 +1,5 @@
-import { journalBody, journalBookTitle, journalHealth, journalPhotos, journalSwipeTarget } from '../../src/utils/recap-journal'
-import type { BodyMetricsSummary, FoodRecord, StatsSummary } from '../../src/utils/api'
+import { journalBody, journalBookTitle, journalFeedPhotos, journalHealth, journalPhotos, journalSwipeTarget } from '../../src/utils/recap-journal'
+import type { BodyMetricsSummary, CommunityFeedItem, FoodRecord, StatsSummary } from '../../src/utils/api'
 
 test('photos count a China-day meal once, never library images or out-of-period photos', () => {
   const row = { id: 'one', record_time: '2026-09-07T23:30:00Z', meal_type: 'breakfast', image_path: 'https://example.com/food.jpg', entry_type: 'food_image' } as FoodRecord
@@ -22,6 +22,19 @@ test('photo preview reserves room for each meal instead of filling every slot wi
   const result = journalPhotos([...rows, { ...rows[0], id: 'lunch', meal_type: 'lunch', image_path: 'lunch.jpg' }], '2026-09-07', '2026-09-13')
   expect(result.images.some(photo => photo.meal === 'lunch')).toBe(true)
   expect(result.counts).toEqual({ breakfast: 1, lunch: 1, dinner: 0 })
+})
+
+test('circle flashbacks keep personal posts separate from public inspiration', () => {
+  const item = (id: string, author: string, mine: boolean, date: string, paths: string[]): CommunityFeedItem => ({
+    target_type: 'circle_post', target_id: id, is_mine: mine,
+    author: { id: author, nickname: mine ? '我' : '邻居', avatar: '' }, like_count: 0, liked: false,
+    record: { id, user_id: author, meal_type: 'lunch', image_paths: paths, items: [], total_calories: 0, total_protein: 0, total_carbs: 0, total_fat: 0, total_weight_grams: 0, record_time: `${date}T12:00:00+08:00`, created_at: `${date}T12:00:00+08:00` },
+  })
+  const rows = [item('mine', 'owner', true, '2026-09-09', ['mine.jpg']), item('public', 'other', false, '2026-09-10', ['public.jpg'])]
+  expect(journalFeedPhotos(rows, '2026-09-07', '2026-09-13', 'owner', 'personal').images.map(photo => photo.src)).toEqual(['mine.jpg'])
+  const inspiration = journalFeedPhotos(rows, '2026-09-07', '2026-09-13', 'owner', 'community')
+  expect(inspiration.images.map(photo => photo.src)).toEqual(['public.jpg'])
+  expect(inspiration.images[0].author).toBe('邻居')
 })
 
 test('a health score from a different period never becomes this book stars', () => {

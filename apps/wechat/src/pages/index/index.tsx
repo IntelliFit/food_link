@@ -174,6 +174,7 @@ const DEFAULT_SUPPLEMENT_SUMMARY: SupplementDashboardSummary = {
   duplicate_components: [],
 }
 const HOME_SELECTED_DATE_KEY = 'home_selected_date_v1'
+const HOME_CHECK_IN_SNOOZED_DATE_KEY = 'home_check_in_snoozed_date_v1'
 const HOME_PET_HIDDEN_KEY = 'home_pet_companion_hidden_v1'
 const HOME_PET_HIDDEN_CHANGED_EVENT = 'home_pet_companion_hidden_changed'
 const HOME_PET_MEAL_PROMPT_SEEN_KEY = 'home_pet_meal_prompt_seen_v1'
@@ -239,6 +240,27 @@ function getLastHomeSelectedDate(fallback: string): string {
     if (isValidHomeDate(stored)) return stored
   } catch (_) {}
   return isValidHomeDate(fallback) ? fallback : formatDateKey(new Date())
+}
+
+function getHomeCheckInSnoozeStorageKey(): string {
+  const userId = String(Taro.getStorageSync('user_id') || '').trim()
+  return `${HOME_CHECK_IN_SNOOZED_DATE_KEY}:${userId || 'guest'}`
+}
+
+function hasSnoozedHomeCheckIn(date: string): boolean {
+  try {
+    return Taro.getStorageSync(getHomeCheckInSnoozeStorageKey()) === date
+  } catch (_) {
+    return false
+  }
+}
+
+function snoozeHomeCheckIn(date: string): void {
+  try {
+    Taro.setStorageSync(getHomeCheckInSnoozeStorageKey(), date)
+  } catch (_) {
+    // 签到提醒偏好失败不应阻断首页使用。
+  }
 }
 
 function homeMealPromptSeenKey(date: string, mealType: string): string {
@@ -1071,7 +1093,12 @@ function IndexPage() {
 
   const promptLoginCheckIn = React.useCallback(async (center: RewardCenterResponse | null) => {
     const checkIn = center?.check_in
-    if (!checkIn || checkIn.claimed_today || promptedLoginCheckInDateRef.current === checkIn.today) return
+    if (
+      !checkIn
+      || checkIn.claimed_today
+      || promptedLoginCheckInDateRef.current === checkIn.today
+      || hasSnoozedHomeCheckIn(checkIn.today)
+    ) return
     promptedLoginCheckInDateRef.current = checkIn.today
     const { confirm } = await Taro.showModal({
       title: '每日签到',
@@ -1080,7 +1107,10 @@ function IndexPage() {
       cancelText: '稍后再签',
       confirmColor: '#0fb47c',
     })
-    if (!confirm) return
+    if (!confirm) {
+      snoozeHomeCheckIn(checkIn.today)
+      return
+    }
     try {
       const result = await claimLoginCheckIn()
       Taro.showToast({ title: `签到成功，+${result.reward_amount}积分`, icon: 'success' })
@@ -3382,6 +3412,10 @@ function IndexPage() {
         {visibleHomeModuleIds.includes('greeting') && (
           <HomeModuleFrame {...getHomeModuleFrameProps('greeting')}>
             <GreetingSection
+              current={dashboardBusy || isGuest ? undefined : totalCurrent}
+              target={dashboardBusy || isGuest ? undefined : totalTarget}
+              date={selectedDate}
+              onTarget={openTargetEditor}
               onSharePress={handleShareDailySummary}
               mode={homeExperienceConfig.mode}
               onModeToggle={handleHomeExperienceModeToggle}
@@ -3425,7 +3459,9 @@ function IndexPage() {
           <HomeModuleFrame {...getHomeModuleFrameProps('diet')}>
             <View className='home-diet-progress home-experience-card'>
               <View className='home-diet-progress__energy'>
-        {isWellnessMode ? (
+        {isWellnessMode && visibleHomeModuleIds.includes('greeting') ? (
+          <View className='ink-diet-summary' onClick={openTargetEditor}><Text>饮食有节 · 今日营养</Text><Text>目标 {dashboardBusy || isGuest ? '—' : Math.round(totalTarget)} 千卡 ›</Text></View>
+        ) : isWellnessMode ? (
           <View className='wellness-overview-card home-experience-card'>
             <View className='wellness-overview-main'>
               <View

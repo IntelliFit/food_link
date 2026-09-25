@@ -8,10 +8,10 @@ import type { JournalPhotos } from '../utils/recap-journal'
 import type { RecapKind } from '../utils/health-recap'
 import { isShowShareImageMenuCancel } from '../utils/weapp-share-image'
 
-type Props = { recipient?: string; cups?: number | null; photos?: JournalPhotos | null; onShelf?: () => void; kind: RecapKind; start: string; end: string; recorded: number; longest: number; journey: RecapJourney; title: string; onClose: () => void }
+type Props = { inline?: boolean; recipient?: string; cups?: number | null; photos?: JournalPhotos | null; onShelf?: () => void; kind: RecapKind; start: string; end: string; recorded: number; longest: number; journey: RecapJourney; title: string; onClose: () => void }
 type MiniCanvas = HTMLCanvasElement & { createImage: () => HTMLImageElement }
 
-export function RecapShare({ kind, recipient, cups, photos, onShelf, start, end, recorded, longest, journey, onClose }: Props) {
+export function RecapShare({ inline = false, kind, recipient, cups, photos, onShelf, start, end, recorded, longest, journey, onClose }: Props) {
   const [withQR, setWithQR] = useState(true)
   const [image, setImage] = useState('')
   const [busy, setBusy] = useState(false)
@@ -37,7 +37,7 @@ export function RecapShare({ kind, recipient, cups, photos, onShelf, start, end,
           item.onload = () => { clearTimeout(timeout); resolve(item) }; item.onerror = () => { clearTimeout(timeout); reject(new Error('海报图片未能打开，请重试。')) }; item.src = path
         })
       }
-      const background = await load(`/assets/recap-v5/${kind === 'year' ? 'annual-cover' : 'weekly-cover'}.jpg`)
+      const background = await load(`/packageRecap/assets/recap-v5/${kind === 'year' ? 'annual-cover' : 'weekly-cover'}.jpg`)
       let qr: HTMLImageElement | null = null
       if (withQR) {
         try {
@@ -105,10 +105,11 @@ export function RecapShare({ kind, recipient, cups, photos, onShelf, start, end,
     const timer = setTimeout(() => { generatedInput.current = input; void generate() }, 250)
     return () => clearTimeout(timer)
   }, [photos, cups, recipient, journey.letter, withQR, busy])
-  return <View className='recap-share journal-share' role='dialog' aria-label='生活纪念长图'>
-    <View className='recap-share__bar'><Text>{recipient?.trim() || '亲爱的朋友'}的{kind === 'year' ? '年报' : kind === 'month' ? '月报' : '周报'}</Text></View>
-    <View className='recap-share__preview'>{image ? <Image src={image} mode='aspectFit' showMenuByLongpress onLongPress={() => { void Taro.previewImage({ current: image, urls: [image] }) }} /> : busy ? <View className='recap-share__spinner' /> : <View role='button' onClick={generate}><Text>展开纪念长卷</Text></View>}</View>
-    <Text className='recap-share__note'>长按放大 · 邮戳二维码打开食探</Text>
+  return <View className={`recap-share journal-share${inline ? ' is-inline' : ''}`} role='dialog' aria-label='生活纪念长图'>
+    {!inline && <View className='recap-share__bar'><Text>{recipient?.trim() || '亲爱的朋友'}的{kind === 'year' ? '年报' : kind === 'month' ? '月报' : '周报'}</Text></View>}
+    {!inline && <View className='recap-share__preview'>{image ? <Image src={image} mode='aspectFit' showMenuByLongpress onLongPress={() => { void Taro.previewImage({ current: image, urls: [image] }) }} /> : busy ? <View className='recap-share__spinner' /> : <View role='button' onClick={generate}><Text>展开纪念长卷</Text></View>}</View>}
+    {!inline && <Text className='recap-share__note'>长按放大 · 邮戳二维码打开食探</Text>}
+    {inline && busy && <Text className='recap-share__note'>正在收好这一段回忆…</Text>}
     {error && <View className='recap-share__error'><Text>{error}</Text><View role='button' onClick={generate}>轻点重试</View>{withQR && <View role='button' onClick={() => { setWithQR(false); setError(''); setImage('') }}>先保存不含二维码的版本</View>}</View>}
     {image && <View className='recap-share__actions'><View role='button' onClick={save}>保存图片</View><View role='button' onClick={share}>分享给朋友</View></View>}
     <View role='button' className='journal-shelf-return' onClick={onShelf || onClose}>放入书架</View>

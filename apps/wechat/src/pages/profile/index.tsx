@@ -1,3 +1,4 @@
+import { InkMasthead, useInkWellness } from '../../components/InkWellness'
 import { RecapDelivery } from '../../components/RecapDelivery'
 import { View, Text, Image, Navigator } from '@tarojs/components'
 import * as React from 'react'
@@ -90,6 +91,8 @@ function ProfileListIcon({ name }: { name: string }) {
 }
 
 function ProfilePage() {
+  const ink = useInkWellness()
+  const [expandedGroups, setExpandedGroups] = React.useState<Record<string, boolean>>({})
   const { scheme } = useAppColorScheme()
   // 登录状态
   const [isLoggedIn, setIsLoggedIn] = React.useState(false)
@@ -337,11 +340,18 @@ function ProfilePage() {
 
   // 设置项
   const settings = [
-    { id: 1, iconClass: 'icon-user', title: '账号安全' },
-    { id: 6, iconClass: 'icon-paizhao-xianxing', title: '记录设置' },
-    { id: 3, iconClass: 'icon-jiesuo', title: '隐私设置' },
-    { id: 5, iconClass: 'icon-all', title: '关于我们' }
+    { id: 1, iconClass: 'icon-user', title: '账号安全', desc: '登录方式与账号保护' },
+    { id: 6, iconClass: 'icon-paizhao-xianxing', title: '记录设置', desc: '饮食记录与默认偏好' },
+    { id: 3, iconClass: 'icon-jiesuo', title: '隐私设置', desc: '分享范围与资料可见性' },
+    { id: 5, iconClass: 'icon-all', title: '关于我们', desc: '产品信息、协议与版本说明' }
   ]
+
+  const serviceGroups = [
+    { collapsible: true, title: '健康与记录', hint: '管理身体资料和日常记录', ids: [0, 2] },
+    { collapsible: true, title: '陪伴与奖励', hint: '和健康伙伴一起养成习惯', ids: [4, 6, 11] },
+    { collapsible: true, title: '食物工具', hint: '查找、贡献和管理食物数据', ids: [12, 5, 9] },
+    { collapsible: true, title: '社区支持', hint: '连接朋友、反馈问题和参与共创', ids: [8, 10] },
+  ].map(group => ({ ...group, items: group.ids.map(id => services.find(service => service.id === id)).filter(Boolean) as typeof services }))
 
   const handleServiceClick = (service: typeof services[0]) => {
     // 检查登录
@@ -614,9 +624,9 @@ function ProfilePage() {
   }
 
   return (
-    <View className={`profile-page ${scheme === 'dark' ? 'profile-page--dark' : ''}`}>
-      <RecapDelivery archive />
+    <View className={`profile-page ${ink ? 'ink-page' : ''} ${scheme === 'dark' ? 'profile-page--dark' : ''}`}>
       {/* 顶部用户信息区域（仿知乎风格） */}
+      {ink && <InkMasthead title='我的' compact />}
       <View className='profile-header-section'>
         <View className='user-card'>
           <View className={`user-avatar-wrapper ${!isLoggedIn ? 'no-border' : ''}`}>
@@ -769,32 +779,72 @@ function ProfilePage() {
         </View>
       )}
 
-      {/* 功能列表（合并为单个白色卡片） */}
-      <View className='profile-card list-card combined-list'>
-        {/* 核心功能 */}
-        {services.map((service) => (
-          <View key={service.id} className='list-item' onClick={() => handleServiceClick(service)}>
-            <View className='list-icon' style={getProfileListIconStyle(service.id, SERVICE_ICON_TONES, scheme)}>
-              <ProfileListIcon name={service.iconClass} />
+      {isLoggedIn && (
+        <View className='profile-section profile-recap-section'>
+          <View className='profile-section-heading'>
+            <View>
+              <Text className='profile-section-title'>阶段回顾</Text>
+              <Text className='profile-section-hint'>周报、月报和年报都收藏在这里</Text>
             </View>
-            <Text className='list-title'>{service.title}</Text>
-            {(service as any).badgeCount > 0 && (
-              <View className='list-badge'>
-                <Text className='list-badge-text'>{(service as any).badgeCount}</Text>
-              </View>
-            )}
+            <Text className='profile-section-mark'>✦</Text>
           </View>
-        ))}
+          <RecapDelivery archive ink={ink} />
+        </View>
+      )}
 
-        {/* 设置 */}
-        {settings.map((setting) => (
-          <View key={setting.id} className='list-item' onClick={() => handleSettingClick(setting)}>
-            <View className='list-icon' style={getProfileListIconStyle(setting.id, SETTING_ICON_TONES, scheme)}>
-              <ProfileListIcon name={setting.iconClass} />
+      {serviceGroups.map(group => (
+        <View className='profile-section' key={group.title}>
+          <View className={`profile-section-heading${group.collapsible ? ' is-toggle' : ''}`} role={group.collapsible ? 'button' : undefined} aria-expanded={group.collapsible ? Boolean(expandedGroups[group.title]) : undefined} aria-label={group.collapsible ? `${expandedGroups[group.title] ? '收起' : '展开'}${group.title}` : undefined} onClick={() => { if (group.collapsible) setExpandedGroups(previous => ({ ...previous, [group.title]: !previous[group.title] })) }}>
+            <View>
+              <Text className='profile-section-title'>{group.title}</Text>
+              <Text className='profile-section-hint'>{group.hint}</Text>
             </View>
-            <Text className='list-title'>{setting.title}</Text>
+            {group.collapsible && <View className={`profile-section-chevron${expandedGroups[group.title] ? ' is-expanded' : ''}`} />}
           </View>
-        ))}
+          {(!group.collapsible || expandedGroups[group.title]) && <View className='profile-card list-card'>
+            {group.items.map((service) => (
+              <View key={service.id} className='list-item' onClick={() => handleServiceClick(service)}>
+                <View className='list-icon' style={getProfileListIconStyle(service.id, SERVICE_ICON_TONES, scheme)}>
+                  <ProfileListIcon name={service.iconClass} />
+                </View>
+                <View className='list-copy'>
+                  <Text className='list-title'>{service.title}</Text>
+                  <Text className='list-desc'>{service.desc}</Text>
+                </View>
+                {(service as any).badgeCount > 0 && (
+                  <View className='list-badge'>
+                    <Text className='list-badge-text'>{(service as any).badgeCount}</Text>
+                  </View>
+                )}
+                <Text className='iconfont icon-right list-arrow' />
+              </View>
+            ))}
+          </View>}
+        </View>
+      ))}
+
+      <View className='profile-section'>
+        <View className='profile-section-heading is-toggle' role='button' aria-expanded={Boolean(expandedGroups.settings)} aria-label={`${expandedGroups.settings ? '收起' : '展开'}账户与通用设置`} onClick={() => setExpandedGroups(previous => ({ ...previous, settings: !previous.settings }))}>
+          <View>
+            <Text className='profile-section-title'>账户与通用设置</Text>
+            <Text className='profile-section-hint'>账号、记录、隐私和产品信息</Text>
+          </View>
+          <View className={`profile-section-chevron${expandedGroups.settings ? ' is-expanded' : ''}`} />
+        </View>
+        {expandedGroups.settings && <View className='profile-card list-card'>
+          {settings.map((setting) => (
+            <View key={setting.id} className='list-item' onClick={() => handleSettingClick(setting)}>
+              <View className='list-icon' style={getProfileListIconStyle(setting.id, SETTING_ICON_TONES, scheme)}>
+                <ProfileListIcon name={setting.iconClass} />
+              </View>
+              <View className='list-copy'>
+                <Text className='list-title'>{setting.title}</Text>
+                <Text className='list-desc'>{setting.desc}</Text>
+              </View>
+              <Text className='iconfont icon-right list-arrow' />
+            </View>
+          ))}
+        </View>}
       </View>
 
       {/* 清除缓存（独立工具卡片） */}

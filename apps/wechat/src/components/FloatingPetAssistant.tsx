@@ -11,6 +11,7 @@ import {
   completePetPlayReward,
   petDailyPlayStorageKey,
   PET_DAILY_PLAY_GOAL,
+  readPetDailyPlayCount,
   readPetPlayRewardSummary,
 } from '../utils/pet-play-reward'
 import './FloatingPetAssistant.scss'
@@ -19,14 +20,6 @@ type Phase = 'playing' | 'running' | 'docked' | 'returning'
 const DOCK_WITH_RIDE_MS = 980
 const RETURN_TO_DESK_MS = 1800
 
-function readDailyPlayCount(): number {
-  try {
-    const value = Number(Taro.getStorageSync(petDailyPlayStorageKey()))
-    return Number.isFinite(value) ? Math.max(0, Math.min(PET_DAILY_PLAY_GOAL, Math.floor(value))) : 0
-  } catch {
-    return 0
-  }
-}
 export interface FloatingPetAssistantHandle {
   onPageScroll: (scrollTop: number) => void
   onTouchStart: (clientY: number) => void
@@ -61,7 +54,7 @@ export const FloatingPetAssistant = forwardRef<FloatingPetAssistantHandle, Props
   const [starter, setStarter] = useState('')
   const [starterRequest, setStarterRequest] = useState(0)
   const [keyboardHeight, setKeyboardHeight] = useState(0)
-  const [dailyPlayCount, setDailyPlayCount] = useState(readDailyPlayCount)
+  const [dailyPlayCount, setDailyPlayCount] = useState(readPetDailyPlayCount)
   const [playReward, setPlayReward] = useState(readPetPlayRewardSummary)
   const [playBurst, setPlayBurst] = useState(0)
   const [rewardBurst, setRewardBurst] = useState(0)

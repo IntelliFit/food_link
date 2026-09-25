@@ -1,7 +1,7 @@
 import { Image, ScrollView, Text, View } from '@tarojs/components'
 import * as React from 'react'
 
-import treasureChestIcon from '../../../assets/icons/home-toolbox-treasure-chest.png'
+import toolboxGourdIcon from '../../../assets/icons/home-toolbox-gourd-golden.webp'
 import { HOME_MODULE_DEFINITIONS, type HomeModuleId } from '../utils/homeModuleLayout'
 
 import './HomeModuleManager.scss'
@@ -35,7 +35,7 @@ export function HomeModuleToolbar({ editing, onOpenToolbox, onFinishEditing }: H
             onOpenToolbox()
           }}
         >
-          <Image className='home-module-toolbar__chest' src={treasureChestIcon} mode='aspectFit' />
+          <Image className='home-module-toolbar__icon' src={toolboxGourdIcon} mode='aspectFit' />
         </View>
       </View>
     )
@@ -54,7 +54,7 @@ export function HomeModuleToolbar({ editing, onOpenToolbox, onFinishEditing }: H
         onOpenToolbox()
       }}
     >
-      <Image className='home-module-toolbar__chest' src={treasureChestIcon} mode='aspectFit' />
+      <Image className='home-module-toolbar__icon' src={toolboxGourdIcon} mode='aspectFit' />
     </View>
   )
 }
@@ -151,7 +151,7 @@ export function HomeToolboxSheet({ visible, visibleIds, onAdd, onHide, onReset, 
       <View className='home-toolbox__sheet'>
         <View className='home-toolbox__header'>
           <View className='home-toolbox__heading'>
-            <Image className='home-toolbox__heading-icon' src={treasureChestIcon} mode='aspectFit' />
+            <Image className='home-toolbox__heading-icon' src={toolboxGourdIcon} mode='aspectFit' />
             <View>
               <Text className='home-toolbox__title'>功能箱</Text>
               <Text className='home-toolbox__subtitle'>把常用模块放在首页，不常用的先收起来</Text>

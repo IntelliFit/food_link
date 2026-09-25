@@ -26,6 +26,15 @@ export function petDailyPlayStorageKey(date = new Date()): string {
   return `home_pet_daily_play_v1:${userId}:${petPlayDateKey(date)}`
 }
 
+export function readPetDailyPlayCount(date = new Date()): number {
+  try {
+    const value = Number(Taro.getStorageSync(petDailyPlayStorageKey(date)))
+    return Number.isFinite(value) ? Math.max(0, Math.min(PET_DAILY_PLAY_GOAL, Math.floor(value))) : 0
+  } catch {
+    return 0
+  }
+}
+
 function historyStorageKey(): string {
   const userId = String(Taro.getStorageSync('user_id') || 'guest').trim() || 'guest'
   return `home_pet_play_reward_v1:${userId}`

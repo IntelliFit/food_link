@@ -1,3 +1,4 @@
+import { InkMasthead, InkStatsOverview, useInkWellness } from '../../components/InkWellness'
 import { View, Text, ScrollView, Input, Switch } from '@tarojs/components'
 import { useState, useEffect, useCallback, useRef, type CSSProperties } from 'react'
 import Taro, { useDidHide, useDidShow } from '@tarojs/taro'
@@ -732,10 +733,11 @@ function hasAuthToken(): boolean {
 }
 
 function StatsPage() {
+  const ink = useInkWellness()
   const { scheme } = useAppColorScheme()
   const [range, setRange] = useState<'week' | 'month'>('week')
   const [analysisPanel, setAnalysisPanel] = useState<AnalysisPanelKey>(
-    ANALYSIS_PREVIEW_MODE ? 'nutrition' : 'health'
+    ink ? 'health' : ANALYSIS_PREVIEW_MODE ? 'nutrition' : 'health'
   )
   const rangeRef = useRef(range)
   rangeRef.current = range
@@ -1300,7 +1302,8 @@ function StatsPage() {
 
   if (guestBrowse) {
     return (
-      <View className={`stats-page stats-page--guest ${scheme === 'dark' ? 'stats-page--dark' : ''}`}>
+      <View className={`stats-page stats-page--guest ${ink ? 'ink-page' : ''} ${scheme === 'dark' ? 'stats-page--dark' : ''}`}>
+        {ink && <InkMasthead title='观照日常' subtitle='在起伏中，找到自己的节奏' />}
         <View className='stats-guest-card'>
           <Text className='stats-guest-title'>登录后查看饮食分析</Text>
           <Text className='stats-guest-desc'>可先浏览首页热量与营养概览，需要账号同步时再登录</Text>
@@ -1314,7 +1317,8 @@ function StatsPage() {
 
   if (loading && !data) {
     return (
-      <View className={`stats-page ${scheme === 'dark' ? 'stats-page--dark' : ''}`}>
+      <View className={`stats-page ${ink ? 'ink-page' : ''} ${scheme === 'dark' ? 'stats-page--dark' : ''}`}>
+        {ink && <InkMasthead title='观照日常' />}
         <View className='loading-wrap'>
           <View className='loading-spinner-md' />
         </View>
@@ -1324,7 +1328,8 @@ function StatsPage() {
 
   if (error && !data) {
     return (
-      <View className={`stats-page ${scheme === 'dark' ? 'stats-page--dark' : ''}`}>
+      <View className={`stats-page ${ink ? 'ink-page' : ''} ${scheme === 'dark' ? 'stats-page--dark' : ''}`}>
+        {ink && <InkMasthead title='观照日常' />}
         <View className='error-wrap'>
           <Text className='iconfont icon-jiesuo error-icon' />
           <Text className='error-text'>{error}</Text>
@@ -1532,7 +1537,9 @@ function StatsPage() {
   }
 
   return (
-    <View className={`stats-page ${scheme === 'dark' ? 'stats-page--dark' : ''}`}>
+    <View className={`stats-page ${ink ? 'ink-page' : ''} ${scheme === 'dark' ? 'stats-page--dark' : ''}`}>
+      <ScrollView className='scroll-wrap' scrollY enhanced showScrollbar={false}>
+        {ink && <InkMasthead title='观照日常' subtitle='在起伏中，找到自己的节奏' />}
       <View
         className={`stats-range-dropdown ${loading ? 'is-loading' : ''}`}
         onClick={openRangeSelector}
@@ -1540,7 +1547,6 @@ function StatsPage() {
         <Text className='stats-range-dropdown__label'>{range === 'week' ? '近一周' : '近一个月'}</Text>
         <Text className='iconfont icon-right-arrow stats-range-dropdown__arrow' />
       </View>
-      <ScrollView className='scroll-wrap' scrollY enhanced showScrollbar={false}>
         <View className='analysis-tabs-container'>
           <View className={`segmented-control analysis-panel-control ${loading ? 'is-loading' : ''}`}>
             {loading && (
@@ -1578,7 +1584,7 @@ function StatsPage() {
             </View>
           ) : (
             <>
-              {isHealthIndexPreview ? (
+              {isHealthIndexPreview && !ink ? (
                 <View className='stats-card health-index-preview-card'>
                   <View className='health-index-preview-badge'>
                     <Text className='health-index-preview-badge-text'>预览</Text>
@@ -1591,6 +1597,18 @@ function StatsPage() {
                 </View>
               ) : null}
 
+              {ink ? <InkStatsOverview
+                score={focusOverallScore}
+                label={isHealthIndexPreview ? '示例状态' : scoreToLabel(focusOverallScore)}
+                preview={isHealthIndexPreview || isStatsDataPreview}
+                factors={allDisplayRiskCards}
+                days={chartDays}
+                advice={actionList[0] || ''}
+                meals={[{ label: '早餐', value: byMeal.breakfast + byMeal.morning_snack }, { label: '午餐', value: byMeal.lunch + byMeal.afternoon_snack }, { label: '晚餐', value: byMeal.dinner + byMeal.evening_snack }]}
+                onPlan={() => setAnalysisPanel('nutrition')}
+                onStructure={() => setAnalysisPanel('structure')}
+                onFactor={(key) => { const card = allDisplayRiskCards.find(item => item.key === key); if (card) setRiskDetailModal({ visible: true, card }) }}
+              /> : <>
               <View className='stats-card risk-overview-card'>
                 <View className='risk-overview-top'>
                   <View className='risk-overview-copy'>
@@ -1673,6 +1691,7 @@ function StatsPage() {
                   ) : null}
                 </View>
               </View>
+              </>}
             </>
           )
         }

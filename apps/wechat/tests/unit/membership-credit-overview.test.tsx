@@ -99,6 +99,7 @@ describe('membership credit overview', () => {
   it('keeps the invite friends membership entry on the profile page', async () => {
     render(<ProfilePage />)
 
+    fireEvent.click(await screen.findByLabelText('展开陪伴与奖励'))
     const inviteEntry = await screen.findByText('邀请好友得会员')
     fireEvent.click(inviteEntry.closest('.list-item') as HTMLElement)
     expect(Taro.navigateTo).toHaveBeenCalledWith({

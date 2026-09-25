@@ -11,9 +11,12 @@ describe('home greeting pet layout', () => {
     'utf8',
   )
 
-  it('enlarges every greeting pet by about 20 percent', () => {
-    expect(pageSource).toContain("className='greeting-pet__avatar'")
-    expect(pageSource).toContain('size={67}')
+  it('keeps the home companion mounted as the floating assistant', () => {
+    expect(pageSource).toContain('<FloatingPetAssistant')
+    expect(pageSource).toContain('pet={petSummary?.pet}')
+  })
+
+  it('reserves a large uncropped greeting slot when a pet avatar is supplied', () => {
     expect(styleSource).toMatch(/\.greeting-pet__avatar\s*{[\s\S]*?width:\s*134rpx\s*!important;[\s\S]*?height:\s*134rpx\s*!important;/)
   })
 

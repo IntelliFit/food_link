@@ -72,3 +72,7 @@
 @keyframes recap-leaf-sweep { 0% { transform: translate(120%,100%) rotate(-25deg); } 45% { transform: translate(0,0) rotate(-10deg); } 100% { transform: translate(-130%,-120%) rotate(20deg); } }
 @keyframes recap-light-pass { 0% { opacity: 0; transform: translate(-35%,35%) scale(.6); } 45% { opacity: .9; } 100% { opacity: 0; transform: translate(35%,-35%) scale(1.25); } }
 @media (prefers-reduced-motion: reduce) { .health-recap__wipe { display: none; } .health-recap__scene.is-entering, .health-recap__scene.is-leaving, .health-recap__scene.is-entering .recap-stage__heading { animation-duration: .01s; animation-delay: 0s; } }
+
+.recap-music { position: absolute; z-index: 35; top: max(170rpx,calc(env(safe-area-inset-top) + 94rpx)); right: 106rpx; width: 66rpx; height: 66rpx; display: flex; align-items: center; justify-content: center; border-radius: 50%; border: 1rpx solid #c4a48466; background: #f5f0e6bd; color: #806a50; font-size: 31rpx; }
+.recap-music__slash { position: absolute; width: 32rpx; height: 2rpx; background: #806a50; transform: rotate(-45deg); }
+.recap-music__hint { position: absolute; top: 74rpx; white-space: nowrap; font-size: 18rpx; color: #806a50; }

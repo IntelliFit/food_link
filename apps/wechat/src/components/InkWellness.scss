@@ -1,0 +1,267 @@
+$ink: #202020;
+$paper: #f7f7f4;
+$serif: 'Songti SC', 'STSong', 'SimSun', 'Noto Serif CJK SC', serif;
+$reading: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif;
+
+.ink-brand { position: relative; display: flex; align-items: center; gap: 20rpx; color: $ink; height: 64rpx; font-family: $serif; z-index: 1; }
+.ink-brand__name { font-size: 44rpx; font-weight: 700; line-height: 1.2; }
+.ink-brand__mode { padding-left: 22rpx; border-left: 1rpx solid #999; font-size: 26rpx; }
+.ink-brand__taiji { width: 42rpx; height: 42rpx; border-radius: 50%; }
+.ink-mode-switch { display: flex; align-items: center; gap: 14rpx; padding: 8rpx 20rpx; font-size: 26rpx; border-left: 1rpx solid #999; }
+.ink-mode-switch image { width: 42rpx; height: 42rpx; border-radius: 50%; }
+.ink-masthead { position: relative; min-height: 320rpx; padding: 0 32rpx 36rpx; box-sizing: border-box; overflow: hidden; color: $ink; font-family: $serif; }
+.ink-masthead__art { position: absolute; width: 100%; height: 100%; left: 0; top: 0; opacity: 1; pointer-events: none; }
+.ink-masthead__title { position: relative; display: block; font-size: 58rpx; letter-spacing: 4rpx; margin-top: 36rpx; font-weight: 600; }
+.ink-masthead__subtitle { position: relative; display: block; margin-top: 18rpx; font-size: 26rpx; line-height: 1.8; }
+.ink-masthead--compact { min-height: 205rpx; padding-bottom: 18rpx; }
+.ink-masthead--compact .ink-masthead__title { font-size: 46rpx; margin-top: 22rpx; }
+.ink-home-hero { position: relative; height: 740rpx; color: $ink; font-family: $serif; margin: 0 -32rpx; padding: 0 32rpx; box-sizing: border-box; }
+.ink-home-hero__art { position: absolute; top: -110rpx; left: 0; width: 100%; height: 1000rpx; pointer-events: none; }
+.ink-home-hero__title { position: relative; display: block; white-space: pre-line; font-size: 54rpx; font-weight: 600; line-height: 1.5; letter-spacing: 3rpx; margin-top: 54rpx; }
+.ink-home-hero__date { position: relative; display: block; font-size: 24rpx; margin-top: 25rpx; letter-spacing: 2rpx; }
+.ink-home-hero__verse { position: relative; display: block; font-size: 24rpx; margin-top: 34rpx; }
+.ink-home-hero__intake, .ink-home-hero__remaining { position: absolute; display: flex; flex-direction: column; align-items: center; font-size: 24rpx; line-height: 1.8; }
+.ink-home-hero__intake { left: 56%; top: 200rpx; width: 40%; color: #fff; }
+.ink-home-hero__remaining { left: 35%; top: 449rpx; width: 34%; color: $ink; }
+.ink-home-hero__number { font-family: Georgia, $serif; font-size: 70rpx; line-height: 1.2; font-weight: 600; font-variant-numeric: tabular-nums; }
+.ink-home-hero__target { font-family: sans-serif; font-size: 20rpx; border-bottom: 1rpx solid #aaa; margin-top: 8rpx; }
+.ink-home-hero__reminder { position: absolute; left: 32rpx; bottom: 12rpx; max-width: 80%; padding: 12rpx 20rpx; font-size: 23rpx; background: $paper; border: 1rpx solid #aaa; border-radius: 8rpx; }
+.ink-shelf-entry { position: relative; height: 350rpx; margin: 0; color: $ink; font-family: $serif; overflow: hidden; }
+.ink-shelf-entry__art { position: absolute; width: 100%; height: 100%; }
+.ink-shelf-entry__copy { position: relative; padding: 40rpx 32rpx; display: flex; flex-direction: column; font-size: 25rpx; line-height: 1.8; white-space: pre-line; }
+.ink-shelf-entry__title { font-size: 42rpx; font-weight: 600; margin-bottom: 22rpx; }
+.ink-shelf-entry__link { margin-top: 26rpx; font-size: 25rpx; }
+.ink-shelf-entry__book { position: absolute; left: 80.5%; top: 112rpx; width: 22rpx; font-size: 21rpx; line-height: 1.15; }
+.ink-score-scene { position: relative; height: 430rpx; margin: 0 -32rpx; font-family: $serif; }
+.ink-score-scene__art { position: absolute; inset: 0; width: 100%; height: 100%; }
+.ink-score-scene__score { position: absolute; left: 8%; top: 65rpx; width: 34%; display: flex; align-items: center; flex-direction: column; gap: 10rpx; font-size: 29rpx; color: $ink; }
+.ink-score-scene__number { font-family: Georgia, serif; font-size: 112rpx; font-weight: 600; line-height: 1.1; }
+.ink-example { font-family: sans-serif; font-size: 19rpx; padding: 4rpx 12rpx; border: 1rpx solid #aaa; border-radius: 22rpx; color: #555; }
+.ink-score-scene__factors { position: absolute; right: 7%; top: 68rpx; width: 32%; color: #fff; }
+.ink-factor { padding: 10rpx 0; font-size: 22rpx; }
+.ink-factor__row { display: flex; align-items: center; gap: 12rpx; margin-top: 8rpx; font-size: 26rpx; }
+.ink-factor__track { height: 6rpx; flex: 1; background: #666; }
+.ink-factor__fill { height: 100%; background: white; }
+.ink-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 14rpx; font-family: $serif; font-size: 34rpx; padding: 28rpx 0; color: $ink; }
+.ink-caption { color: #666; font-family: sans-serif; font-size: 20rpx; font-weight: 400; }
+.ink-trend { padding: 0 0 22rpx; }
+.ink-trend__plot { display: flex; height: 210rpx; gap: 12rpx; align-items: flex-end; border-bottom: 1rpx solid #ccc; padding-bottom: 8rpx; }
+.ink-trend__day { display: flex; flex: 1; min-width: 0; height: 100%; flex-direction: column; align-items: center; }
+.ink-trend__value { font-size: 17rpx; color: #666; }
+.ink-trend__track { flex: 1; width: 14rpx; display: flex; align-items: flex-end; padding-top: 12rpx; }
+.ink-trend__bar { background: #333; width: 100%; border-radius: 8rpx 8rpx 0 0; }
+.ink-trend__date { font-size: 17rpx; color: #777; margin-top: 10rpx; white-space: nowrap; }
+.ink-plan { color: white; padding: 36rpx 28rpx; margin: 26rpx -32rpx 0; background: #242424 url('../assets/ink-wellness/quiet-active.jpg') right center / auto 100%; font-family: $serif; }
+.ink-plan__label, .ink-plan__title, .ink-plan__advice, .ink-plan__link { display: block; width: fit-content; max-width: 90%; padding: 3rpx 12rpx; background: #242424ed; }
+.ink-plan__label { font-size: 28rpx; }
+.ink-plan__title { font-size: 36rpx; margin-top: 18rpx; }
+.ink-plan__advice { font-size: 24rpx; line-height: 1.7; margin-top: 10rpx; }
+.ink-plan__link { border: 1rpx solid #aaa; border-radius: 40rpx; margin-top: 22rpx; padding: 12rpx 24rpx; font-size: 24rpx; }
+.ink-meal-distribution { margin-bottom: 32rpx; }
+.ink-meal-distribution__row { display: flex; gap: 22rpx; }
+.ink-meal-distribution__item { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10rpx; font-family: $serif; font-size: 22rpx; }
+.ink-meal-distribution__value { font-family: Georgia, serif; font-size: 32rpx; }
+.ink-meal-distribution__track { height: 7rpx; background: #ddd; }
+.ink-meal-distribution__track view { height: 100%; background: #333; }
+
+/* More specific than legacy wellness palettes, shared by all four live pages. */
+.fl-page-theme-root .ink-page.ink-page {
+  background: $paper; color: $ink;
+  --fl-primary: #242424; --fl-text-primary: #242424;
+  .ink-masthead { flex-shrink: 0; }
+  .section-title, .card-title, .stats-section-head__title, .profile-section-title { color: $ink; font-family: $serif; }
+}
+.fl-page-theme-root .profile-page.ink-page.ink-page {
+  display: flex; flex-direction: column; padding-bottom: 230rpx;
+  .ink-masthead { order: -4; min-height: 170rpx; }
+  .profile-header-section { order: -3; margin: 0; padding: 10rpx 32rpx 14rpx; background: transparent; }
+  .user-card { padding: 0; background: transparent; box-shadow: none; }
+  .user-avatar-wrapper { border: 2rpx solid #bbb; box-shadow: none; width: 105rpx; height: 105rpx; }
+  .user-name { color: $ink; font-family: $serif; font-size: 38rpx; }
+  .user-meta-text, .user-meta-arrow, .quick-action-text { color: #666; }
+  .user-days-pill, .user-id-chip { background: transparent; border-color: #aaa; }
+  .user-days-pill-text, .user-id-chip-text, .quick-action-num { color: $ink; }
+  .profile-quick-actions { border-top: 0; margin-top: 16rpx; padding: 12rpx 0 4rpx; background: transparent; }
+  .quick-action-num { font-family: Georgia, serif; font-size: 42rpx; }
+  .profile-recap-section { order: -2; margin: 0 0 20rpx; }
+  .ink-shelf-entry { height: 300rpx; }
+  .ink-shelf-entry__copy { padding-top: 24rpx; }
+  .ink-shelf-entry__book { top: 96rpx; }
+  .profile-recap-section > .profile-section-heading { display: none; }
+  .profile-section { margin-bottom: 0; }
+  .profile-section-heading { min-height: 88rpx; box-sizing: border-box; margin: 0 32rpx; padding: 20rpx 0; border-bottom: 1rpx solid #d1d1cc; }
+  .profile-section-title { font-size: 30rpx; font-weight: 400; }
+  .profile-section-hint { display: none; }
+  .profile-section-chevron { border-color: #333; }
+  .profile-card.list-card { background: #fff8; border: none; box-shadow: none; border-radius: 0; margin-bottom: 14rpx; }
+  .list-icon { filter: grayscale(1); background: transparent !important; }
+  .list-title, .list-arrow { color: $ink; }
+  .list-desc { color: #666; }
+  .member-card { order: 3; margin-top: 30rpx; background: #292929; border: 1rpx solid #888; box-shadow: none; }
+  .onboarding-card { order: 2; margin-top: 22rpx; color: #333; background: #eee; }
+  .tool-card, .profile-version { order: 4; }
+  .tool-card { background: transparent; box-shadow: none; border: 0; margin-top: 12rpx; }
+  .tool-text { color: #666; }
+}
+.fl-page-theme-root .community-page.ink-page.ink-page {
+  .community-scroll-content { padding-left: 32rpx; padding-right: 32rpx; }
+  .ink-masthead { margin: 0 -32rpx; min-height: 365rpx; }
+  .ranking-banner { background: #292929; border: none; box-shadow: none; }
+  .feed-section-header { margin-bottom: 4rpx; }
+  .feed-section-title { font-size: 26rpx; font-family: $serif; }
+  .feed-section-link, .feed-filter-summary, .feed-author, .feed-author-name, .post-user-name { color: $ink; }
+  .feed-card { background: transparent; border-bottom: 1rpx solid #ccc; padding: 26rpx 0; box-shadow: none; }
+  .feed-card-moments { display: block; position: relative; }
+  .feed-card-avatar-col { position: absolute; left: 0; top: 0; width: 70rpx; }
+  .feed-card-main-col { margin-left: 0; width: 100%; }
+  .feed-card-name-block { padding-left: 88rpx; min-height: 84rpx; margin-bottom: 20rpx; }
+  .feed-image, .feed-image-swiper { width: 100%; max-width: 100%; height: 420rpx; border-radius: 6rpx 28rpx 6rpx 28rpx; background: #ededeb; }
+  .feed-image image { width: 100%; height: 100%; }
+  .feed-content, .feed-circle-post-title { font-family: $serif; color: $ink; font-size: 28rpx; line-height: 1.8; }
+  .feed-actions, .feed-interaction-bar { background: transparent; }
+  .feed-tag-plain, .feed-tag-exercise, .feed-tag-campus { color: #555; background: #eee; }
+  .feed-filter-drawer, .feed-search-friends-panel { background: $paper; color: $ink; border-color: #bbb; }
+  .feed-filter-chip.active { background: #222; color: white; border-color: #222; }
+}
+.ink-feed-tabs { display: flex; gap: 28rpx; align-items: center; margin: 8rpx 0 18rpx; font-family: $serif; }
+.ink-feed-tabs__tab { padding: 14rpx 0; font-size: 29rpx; color: #777; border-bottom: 3rpx solid transparent; }
+.ink-feed-tabs__tab.is-active { color: #222; border-bottom-color: #222; font-weight: 600; }
+.ink-feed-tabs__publish { margin-left: auto; background: #222; color: white; padding: 12rpx 24rpx; border-radius: 40rpx; font-size: 24rpx; }
+.ink-ranking-toggle { color: #666; font-size: 21rpx; padding: 12rpx 0; text-align: right; }
+.fl-page-theme-root .stats-page.ink-page.ink-page {
+  .scroll-wrap { padding: 0 32rpx; box-sizing: border-box; }
+  .ink-masthead { margin: 0 -32rpx; min-height: 300rpx; }
+  .stats-range-dropdown { position: relative; top: auto; right: auto; margin: 6rpx 0 14rpx auto; width: fit-content; background: transparent; border: none; box-shadow: none; color: $ink; }
+  .stats-range-dropdown__label, .stats-range-dropdown__arrow { color: $ink; }
+  .analysis-tabs-container { margin: 0; }
+  .segmented-control { background: transparent; border: none; box-shadow: none; border-bottom: 1rpx solid #ccc; padding: 0; border-radius: 0; }
+  .segment-item { font-family: $serif; font-size: 29rpx; color: #555; padding: 20rpx 0; }
+  .segment-item.active { background: transparent; color: #111; border-radius: 0; box-shadow: none; border-bottom: 3rpx solid #222; }
+  .stats-card, .stats-card.risk-card, .analysis-card, .ai-insight-card { background: #fafaf7 !important; border: 1rpx solid #d1d1cc; border-radius: 8rpx; box-shadow: none; margin-left: 0; margin-right: 0; color: $ink; }
+  .risk-overview-card, .health-index-preview-card { color: $ink; }
+  .card-title, .risk-section-title, .risk-card-title, .risk-card-score, .ai-insight-card-title { color: $ink; }
+  .chart-title-icon, .macro-icon, .meal-gauge-icon-wrap, .meal-gauge-ring { filter: grayscale(1); }
+  .bar-fill, .bar-fill.over, .progress-fill, .water-trend-bar { background: #444; }
+  .meal-gauge-percent, .meal-gauge-cal { color: $ink !important; }
+  .risk-focus-edit-btn, .analysis-generate-btn, .health-next-action-btn { background: #222; color: white; border-color: #222; }
+  .risk-focus-edit-text, .risk-focus-edit-icon { color: white; }
+  .risk-detail-panel, .risk-picker-panel { background: $paper; color: $ink; }
+}
+.home-page.home-page--mode-wellness.home-page {
+  .ink-home-hero { margin-bottom: 0; }
+  .home-experience-stage { gap: 20rpx; }
+  .home-module-frame:not(.is-editing) { border: none; padding: 0; }
+  .home-calendar-module { background: transparent; border-bottom: none; padding: 0; }
+  .home-diet-progress.home-experience-card { border-radius: 0; background: transparent; border: 0; }
+  .home-diet-progress__energy { background: transparent; padding: 0; border-radius: 0; }
+  .ink-diet-summary { display: flex; align-items: center; justify-content: space-between; gap: 15rpx; border-bottom: 1rpx solid #ccc; padding: 20rpx 0; font-size: 23rpx; color: #555; }
+  .home-nutrition-module { padding: 20rpx 0; }
+  .meals-section { border: none; padding: 22rpx 0; background: transparent; border-radius: 0; }
+  .section-title { font-family: $serif; font-size: 34rpx; font-weight: 600; }
+  .health-wheel { padding: 20rpx 0; border: 0; border-radius: 0; background: transparent; }
+  .health-wheel__plot { gap: 0; background: url('../assets/ink-wellness/quiet-active.jpg') top center / 100% auto no-repeat; }
+  .health-wheel__metric--water, .health-wheel__metric--exercise { background: transparent; border: 0; border-radius: 0; min-height: 276rpx; }
+  .health-wheel__metric--water { color: #222; }
+  .health-wheel__metric--exercise { color: white; }
+  .health-wheel__metric-title { font-family: $serif; font-size: 30rpx; }
+  .health-wheel__value { font-family: Georgia, serif; font-weight: 500; }
+  .health-wheel__metric--weight { background: $paper; padding: 22rpx 0; flex-direction: row; gap: 16rpx; justify-content: space-between; flex-wrap: wrap; text-align: left; }
+  .health-wheel__note { text-align: left; }
+}
+.ink-trend__canvas { display: block; width: 100%; height: 190rpx; }
+.ink-trend__labels { display: flex; justify-content: space-between; gap: 6rpx; }
+.ink-trend__labels > view { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6rpx; font-size: 17rpx; color: #666; }
+.ink-health-eyebrow { display: block; font-family: 'Songti SC','SimSun',serif; font-size: 32rpx; margin-bottom: 10rpx; }
+.home-page.home-page--mode-wellness.home-page--dark { --wellness-paper: #f7f7f4; --wellness-ink: #222; --wellness-muted: #666; background: #f7f7f4; color: #222; }
+
+/* Keep editorial titles distinct; small UI text uses the device's readable sans.
+   Scope the roles to the ink UI so report handwriting and icon fonts stay intact. */
+@mixin ink-typography {
+  .ink-brand text, .ink-home-hero text, .ink-masthead text,
+  .ink-shelf-entry text, .ink-stats-overview text,
+  .ink-feed-tabs text, .ink-ranking-toggle,
+  .profile-header-section text:not(.iconfont),
+  .profile-section-heading text, .list-card text:not(.iconfont),
+  .feed-card text:not(.iconfont), .health-wheel text:not(.iconfont) {
+    font-family: $reading;
+    font-synthesis: none;
+  }
+  .ink-brand .ink-brand__name, .ink-home-hero .ink-home-hero__title,
+  .ink-masthead .ink-masthead__title, .ink-shelf-entry .ink-shelf-entry__title,
+  .ink-shelf-entry .ink-shelf-entry__book, .ink-section-heading > text:first-child,
+  .ink-plan .ink-plan__title, .health-wheel .ink-health-eyebrow,
+  .health-wheel .health-wheel__title, .meals-title {
+    font-family: $serif;
+    font-weight: 500;
+    letter-spacing: 1rpx;
+  }
+  .ink-brand__name { font-size: 40rpx; }
+  .ink-home-hero__title { font-size: 50rpx; line-height: 1.5; }
+  .ink-masthead__title { font-size: 52rpx; line-height: 1.4; letter-spacing: 2rpx; }
+  .ink-masthead--compact .ink-masthead__title { font-size: 44rpx; }
+  .ink-home-hero__number, .ink-score-scene__number, .quick-action-num,
+  .ink-meal-distribution__value, .health-wheel__value {
+    font-family: $reading;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums lining-nums;
+    letter-spacing: 0;
+  }
+  .ink-home-hero__number { font-size: 68rpx; line-height: 1.2; }
+  .ink-score-scene__number { font-size: 100rpx; line-height: 1.15; }
+  .ink-home-hero__target { font-size: 24rpx; line-height: 1.6; margin-top: 4rpx; }
+  .ink-home-hero__date { letter-spacing: .5rpx; }
+  .ink-shelf-entry__copy { font-size: 26rpx; line-height: 1.8; }
+  .ink-shelf-entry__title { font-size: 38rpx; }
+  .ink-shelf-entry__link, .ink-plan__link { font-size: 26rpx; font-weight: 500; }
+  .ink-example, .ink-caption, .ink-ranking-toggle { font-size: 24rpx; line-height: 1.5; }
+  .ink-factor { font-size: 24rpx; line-height: 1.4; }
+  .ink-factor__row { font-size: 28rpx; }
+  .ink-trend__labels > view { font-size: 22rpx; line-height: 1.5; }
+  .ink-plan__advice { font-size: 28rpx; line-height: 1.75; }
+  .profile-section-title { font-family: $reading; font-size: 30rpx; font-weight: 500; line-height: 1.5; }
+  .user-name, .feed-card-name-row text:not(.iconfont) { font-family: $reading; font-weight: 500; }
+  .segment-item { font-family: $reading; font-size: 28rpx; font-weight: 400; }
+  .segment-item.active { font-weight: 600; }
+  .health-wheel__metric-title { font-weight: 500; }
+  .health-wheel__hint, .health-wheel__detail, .health-wheel__note { font-size: 24rpx; line-height: 1.5; }
+}
+.fl-page-theme-root .ink-page.ink-page,
+.home-page.home-page--mode-wellness.home-page { @include ink-typography; }
+.fl-page-theme-root .ink-page.ink-page { background: #f7f7f4 !important; }
+.fl-page-theme-root .stats-page.ink-page.ink-page .ink-masthead { min-height: 260rpx; }
+.fl-page-theme-root .stats-page.ink-page.ink-page .health-index-preview-badge { background: #333; }
+.fl-page-theme-root .stats-page.ink-page.ink-page .health-index-preview-title,
+.fl-page-theme-root .stats-page.ink-page.ink-page .health-index-preview-desc,
+.fl-page-theme-root .stats-page.ink-page.ink-page .health-index-preview-meta { color: #555; }
+.fl-page-theme-root .community-page.ink-page.ink-page {
+  .feed-publish-btn { display: none; }
+  .feed-filter-panel { border-color: #bbb; }
+  .feed-search-input, .feed-search-box { background: #ffffff77; border-color: #bbb; }
+  .post-author, .post-nickname, .feed-user-name, .feed-card-name-row text { color: #222; }
+  .feed-pet-level-badge { color: #555; background: #eee; }
+}
+.home-page.home-page--mode-wellness.home-page {
+  .date-selector-section { background: transparent; box-shadow: none; }
+  .health-wheel__header, .home-calendar-module { position: relative; }
+  .home-nutrition-module { background: transparent; box-shadow: none; border: 0; border-radius: 0; }
+  .meals-section .section-header text { color: #222; }
+  .meals-title { font-family: 'Songti SC','STSong','SimSun',serif; }
+}
+.fl-page-theme-root .profile-page.ink-page.ink-page {
+ .member-card text { color: #eee; }
+ .member-card .card-upgrade-text { color: #222; }
+}
+.fl-page-theme-root .community-page.ink-page.ink-page {
+ .social-menu__trigger { background: #222; box-shadow: 0 6rpx 18rpx #0002; }
+ .social-menu__ball { filter: grayscale(1); }
+ .social-menu__trigger-icon, .social-menu__trigger-label { color: white; }
+ .feed-author-level { color: #555; background: #e8e8e4; }
+}
+.fl-page-theme-root .stats-page--guest.ink-page.ink-page { flex-direction: column; padding-left: 32rpx; padding-right: 32rpx; }
+.fl-page-theme-root .stats-page.ink-page.ink-page .stats-guest-btn { background: #222; color: white; }
+.fl-page-theme-root .community-page.ink-page.ink-page {
+  .feed-card-main-col { display: flex; flex-direction: column; }
+  .feed-card-main-col > view, .feed-card-main-col > text { order: 2; }
+  .feed-card-main-col > .feed-card-name-block { order: 0; }
+  .feed-card-main-col > .feed-image { order: 1; margin-bottom: 24rpx; }
+}

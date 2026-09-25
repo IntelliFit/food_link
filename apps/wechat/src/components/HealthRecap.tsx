@@ -1,18 +1,18 @@
 import { Text, View } from '@tarojs/components'
 import { emptyJourney } from '../utils/recap-story'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { getAccessToken, getUserProfile, getBodyMetricsSummary, getFoodRecordList, getStatsSummary, getStatsCalendarMonth, type BodyMetricsSummary } from '../utils/api'
+import { communityGetFeed, getAccessToken, getUserProfile, getBodyMetricsSummary, getStatsSummary, getStatsCalendarMonth, normalizeCommunityFeedItem, type BodyMetricsSummary } from '../utils/api'
 import { localDay, recapPeriod, summarizeRecap, type RecapDay, type RecapKind } from '../utils/health-recap'
 import { JIANWEN_COMPANION_SRC } from '../utils/pet-companion-preference'
 import { redirectToLogin } from '../utils/withAuth'
 import { PetCompanionSprite } from './PetCompanionSprite'
 import { RecapShare } from './RecapShare'
+import { RecapMusic } from './RecapMusic'
 import { RecapJournalScene } from './RecapJournalScene'
-import { journalBody, journalHealth, journalPhotos, journalSwipeTarget, type JournalPhotos } from '../utils/recap-journal'
+import { journalBody, journalFeedPhotos, journalHealth, journalSwipeTarget, type JournalPhotos } from '../utils/recap-journal'
 import './HealthRecap.scss'
 
-type Report = { updatedAt: string; recipient?: string; health?: ReturnType<typeof journalHealth> } & ReturnType<typeof summarizeRecap> & { start: string; end: string; body?: BodyMetricsSummary; bodyUnavailable: boolean }
-
+type Report = { updatedAt: string; recipient?: string; ownerId?: string; health?: ReturnType<typeof journalHealth> } & ReturnType<typeof summarizeRecap> & { start: string; end: string; body?: BodyMetricsSummary; bodyUnavailable: boolean }
 
 export function HealthRecap({ active, selection, onShelf, onComplete }: { active: boolean; selection?: { kind: RecapKind; anchor: string }; onShelf?: () => void; onComplete?: () => void }) {
   const currentYear = new Date().getFullYear()
@@ -44,7 +44,7 @@ export function HealthRecap({ active, selection, onShelf, onComplete }: { active
 
   useEffect(() => {
     // Keep navigation locked until both scenes and their shared wipe settle.
-    const timer = setTimeout(() => { turning.current = false; setTransition(null); if (active && storyPage === 7) { setCompleted(true); completeCallback.current?.() } }, 950)
+    const timer = setTimeout(() => { turning.current = false; setTransition(null) }, 950)
     return () => clearTimeout(timer)
   }, [storyPage, active])
 
@@ -92,6 +92,7 @@ export function HealthRecap({ active, selection, onShelf, onComplete }: { active
           updatedAt: `${localDay(new Date())} ${new Date().toTimeString().slice(0, 5)}`,
           health: healthResult.status === 'fulfilled' ? journalHealth(healthResult.value, period.start, period.end) : null,
           recipient: profileResult.status === 'fulfilled' ? profileResult.value.nickname?.trim() : undefined,
+          ownerId: profileResult.status === 'fulfilled' ? profileResult.value.id : undefined,
           ...summarizeRecap(rows, period.dates), start: period.start, end: period.end,
           body: bodyResult.status === 'fulfilled' ? bodyResult.value : undefined,
           bodyUnavailable: bodyResult.status === 'rejected',
@@ -117,24 +118,20 @@ export function HealthRecap({ active, selection, onShelf, onComplete }: { active
     setPhotos(null); setPhotosError(false)
     if (!report || !active) { setPhotosBusy(false); return }
     let cancelled = false
-    const token = getAccessToken(), dates = report.days.filter(day => day.has_record).map(day => day.date)
+    const token = getAccessToken()
     setPhotosBusy(true)
     void (async () => {
-      const rows: Awaited<ReturnType<typeof getFoodRecordList>>['records'] = []
-      for (let i = 0; i < dates.length; i += 4) {
-        const batch = await Promise.all(dates.slice(i, i + 4).map(getFoodRecordList))
-        if (cancelled || token !== getAccessToken()) return
-        // A full page might be truncated: do not present an incomplete count as a total.
-        if (batch.some(item => item.records.length >= 100)) throw new Error('incomplete photo records')
-        batch.forEach(item => rows.push(...item.records))
-      }
-      if (!cancelled && token === getAccessToken()) setPhotos(journalPhotos(rows, report.start, report.end))
+      if (!report.ownerId) throw new Error('missing recap owner')
+      const response = await communityGetFeed(undefined, 0, 100, false, 0, { sort_by: 'latest', author_id: report.ownerId })
+      if (cancelled || token !== getAccessToken()) return
+      setPhotos(journalFeedPhotos((response.list || []).map(normalizeCommunityFeedItem), report.start, report.end, report.ownerId, 'personal'))
     })().catch(() => { if (!cancelled && token === getAccessToken()) setPhotosError(true) }).finally(() => { if (!cancelled) setPhotosBusy(false) })
     return () => { cancelled = true }
   }, [report, active, photoRetry])
-  const pageCount = 8
+  const pageCount = 6
   const go = (next: number) => {
-    const target = Math.max(0, Math.min(pageCount - 1, next))
+    const visibleNext = next === 3 ? (storyPage > 3 ? 2 : 4) : next
+    const target = Math.max(0, Math.min(pageCount - 1, visibleNext))
     if (turning.current || target === storyPage) return
     turning.current = true; setTransition({ from: storyPage, to: target, serial: ++transitionSerial.current }); setStoryPage(target)
   }
@@ -165,12 +162,13 @@ export function HealthRecap({ active, selection, onShelf, onComplete }: { active
       onTouchCancel={() => { gesture.current = null; setDrag(0) }}
       onTouchEnd={event => { const start = gesture.current; gesture.current = null; setDrag(0); const end = (event as unknown as { changedTouches?: { clientX: number; clientY: number }[] }).changedTouches?.[0]; if (completed && start && end) go(journalSwipeTarget(storyPage, end.clientX - start.x, end.clientY - start.y, pageCount)) }}
     >
+      {kind === 'week' && <RecapMusic active={active} />}
       {error && <Text className='health-recap__story-error'>{error}</Text>}
       {transition && <View key={transition.serial} className={`journal-turn-motif journal-turn-motif--${transitionMotifs[Math.min(transition.from, transitionMotifs.length - 1)]}`}><View /></View>}
       <View className={`health-recap__track journal-track${transition ? ' is-transitioning' : ''}${transition && transition.to < transition.from ? ' is-reversing' : ''}`} style={{ transform: `translateX(${drag}px)` }}>
-        {Array.from({ length: pageCount }, (_, chapter) => <View className={`health-recap__scene${chapter === storyPage ? ' is-visible' : ''}${transition?.from === chapter ? ' is-leaving' : ''}${transition?.to === chapter ? ' is-entering' : ''}`} key={`${kind}:${report.start}:${chapter}`} aria-hidden={chapter !== storyPage}>
-          <RecapJournalScene recipient={report.recipient} chapter={chapter} kind={kind} days={report.days} recorded={report.recorded} next={() => go(chapter + 1)} body={body} health={report.health} photos={photos} photosBusy={photosBusy} photosError={photosError} retryPhotos={() => setPhotoRetry(value => value + 1)} journey={journey} onJourney={change => setJourney(previous => ({ ...previous, ...change }))} active={active && storyPage === chapter} />
-          {chapter === 7 && storyPage === 7 && completed && <RecapShare kind={kind} recipient={report.recipient} start={report.start} end={report.end} recorded={report.recorded} longest={report.longest} journey={journey} title={report.title} cups={body.cups} photos={photos} onClose={() => go(6)} onShelf={onShelf} />}
+        {Array.from({ length: pageCount }, (_, chapter) => chapter).filter(chapter => chapter !== 3).map(chapter => <View className={`health-recap__scene${chapter === storyPage ? ' is-visible' : ''}${transition?.from === chapter ? ' is-leaving' : ''}${transition?.to === chapter ? ' is-entering' : ''}`} key={`${kind}:${report.start}:${chapter}`} aria-hidden={chapter !== storyPage}>
+          <RecapJournalScene onBound={() => { if (!completed) { setCompleted(true); completeCallback.current?.() } }} recipient={report.recipient} chapter={chapter} kind={kind} days={report.days} recorded={report.recorded} next={() => go(chapter + 1)} body={body} health={report.health} photos={photos} photosBusy={photosBusy} photosError={photosError} retryPhotos={() => setPhotoRetry(value => value + 1)} journey={journey} onJourney={change => setJourney(previous => ({ ...previous, ...change }))} active={active && storyPage === chapter} />
+          {chapter === 5 && storyPage === 5 && completed && <RecapShare inline kind={kind} recipient={report.recipient} start={report.start} end={report.end} recorded={report.recorded} longest={report.longest} journey={journey} title={report.title} cups={body.cups} photos={photos} onClose={() => go(5)} onShelf={onShelf} />}
         </View>)}
       </View>
     </View>

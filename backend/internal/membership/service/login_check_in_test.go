@@ -77,3 +77,35 @@ func TestMembershipService_ClaimLoginCheckInIsIdempotent(t *testing.T) {
 	assert.Equal(t, 11, second["earned_credits_balance"])
 	assert.Equal(t, 11, repo.user.EarnedCreditsBalance)
 }
+
+func TestWeeklyCheckInReward(t *testing.T) {
+	for _, all := range []bool{true, false} {
+		repo := &mockMembershipRepo{user: &membershiprepo.User{ID: "u1", EarnedCreditsBalance: 10}, ledgerByReasonSource: map[string]*domain.UserEarnedCreditLedger{}}
+		first, _ := time.ParseInLocation("2006-01-02", "2026-09-14", chinaLocation())
+		for i := 0; i < 7; i++ {
+			if !all && i == 2 {
+				continue
+			}
+			date := first.AddDate(0, 0, i).Format("2006-01-02")
+			repo.ledgerByReasonSource[loginCheckInRewardReason+"|"+loginCheckInSourcePrefix+date] = &domain.UserEarnedCreditLedger{UserID: "u1", Delta: 1}
+		}
+		svc := NewMembershipService(repo)
+		result, err := svc.ClaimWeeklyCheckInReward(context.Background(), "u1", "2026-09-14")
+		if !all {
+			require.Error(t, err)
+			assert.Equal(t, 10, repo.user.EarnedCreditsBalance)
+			continue
+		}
+		require.NoError(t, err)
+		assert.Equal(t, true, result["applied"])
+		assert.Equal(t, 17, repo.user.EarnedCreditsBalance)
+		again, err := svc.ClaimWeeklyCheckInReward(context.Background(), "u1", "2026-09-14")
+		require.NoError(t, err)
+		assert.Equal(t, false, again["applied"])
+		assert.Equal(t, 17, repo.user.EarnedCreditsBalance)
+		_, err = svc.ClaimWeeklyCheckInReward(context.Background(), "u1", "2026-09-15")
+		require.Error(t, err)
+		_, err = svc.ClaimWeeklyCheckInReward(context.Background(), "u1", "2099-01-05")
+		require.Error(t, err)
+	}
+}

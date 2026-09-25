@@ -20,6 +20,8 @@ import (
 const wechatPapayNotifyMaxBodyBytes = 1 << 20
 
 type MembershipService interface {
+	GetLoginCheckInWeek(ctx context.Context, userID, start string) ([]map[string]any, error)
+	ClaimWeeklyCheckInReward(ctx context.Context, userID, start string) (map[string]any, error)
 	ListPlans(ctx context.Context, userID string) ([]map[string]any, error)
 	GetMyMembership(ctx context.Context, userID string, date string) (map[string]any, error)
 	GetRewardCenter(ctx context.Context, userID string) (map[string]any, error)
@@ -450,4 +452,41 @@ func readLimitedNotifyBody(body io.Reader, maxBytes int64) ([]byte, error) {
 func writeWechatPapayXML(c *gin.Context, returnCode, returnMsg string) {
 	payload := []byte("<xml><return_code><![CDATA[" + returnCode + "]]></return_code><return_msg><![CDATA[" + returnMsg + "]]></return_msg></xml>")
 	c.Data(http.StatusOK, "application/xml; charset=utf-8", payload)
+}
+
+func (h *MembershipHandler) GetLoginCheckInWeek(c *gin.Context) {
+	userID := c.GetString(authmw.ContextUserIDKey)
+	if userID == "" {
+		response.Error(c, commonerrors.ErrUnauthorized)
+		return
+	}
+	logger.Info(c.Request.Context(), "请求周报签到记录", slog.String("user_id", userID))
+	rows, err := h.svc.GetLoginCheckInWeek(c.Request.Context(), userID, c.Query("start"))
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, gin.H{"days": rows})
+}
+
+func (h *MembershipHandler) ClaimWeeklyCheckInReward(c *gin.Context) {
+	userID := c.GetString(authmw.ContextUserIDKey)
+	if userID == "" {
+		response.Error(c, commonerrors.ErrUnauthorized)
+		return
+	}
+	var body struct {
+		Start string `json:"start"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		response.Error(c, commonerrors.ErrBadRequest)
+		return
+	}
+	logger.Info(c.Request.Context(), "请求周签到奖励", slog.String("user_id", userID))
+	result, err := h.svc.ClaimWeeklyCheckInReward(c.Request.Context(), userID, body.Start)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, result)
 }

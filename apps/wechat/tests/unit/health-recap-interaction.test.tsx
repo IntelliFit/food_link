@@ -1,3 +1,4 @@
+jest.mock('../../src/components/RecapMusic', () => ({ RecapMusic: () => null }))
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { HealthRecap } from '../../src/components/HealthRecap'
 import { getAccessToken, getStatsCalendarMonth, getBodyMetricsSummary, getFoodRecordList } from '../../src/utils/api'
@@ -22,7 +23,7 @@ test('active state changes preserve the story and account changes clear it', asy
   const { rerender } = render(<HealthRecap active />)
   fireEvent.click(screen.getByText('开始这段旅程'))
   expect(screen.queryByText('尊敬的测试用户：')).toBeNull()
-  fireEvent.click(await screen.findByRole('button', { name: '拆开我的周报' }))
+  fireEvent.click(await screen.findByRole('button', { name: '点击轻轻拆开我的周报' }))
   await screen.findByText('尊敬的测试用户：')
   expect(document.querySelector('.journal-v5--0.is-current .journal-v5__cover-letter')).not.toBeNull()
   expect(screen.getByRole('button', { name: '收下这封信，继续回忆' })).toBeInTheDocument()
@@ -43,7 +44,7 @@ test('a cross-year week requests both years instead of dropping January records'
   ;(getStatsCalendarMonth as jest.Mock).mockImplementation(async (month: string) => ({ days: period.dates.filter(date => date.startsWith(month)).map(date => ({ date, calories: 0, has_record: false })) }))
   ;(getBodyMetricsSummary as jest.Mock).mockImplementation(async (_range: string, year: number) => ({ start_date: `${year}-01-01`, end_date: `${year}-12-31`, water_daily: [], weight_entries: [] }))
   render(<HealthRecap active selection={{ kind: 'week', anchor: '2021-01-04' }} />)
-  await screen.findByRole('button', { name: '拆开我的周报' })
+  await screen.findByRole('button', { name: '点击轻轻拆开我的周报' })
   expect(getBodyMetricsSummary).toHaveBeenCalledWith('year', 2020)
   expect(getBodyMetricsSummary).toHaveBeenCalledWith('year', 2021)
 })
@@ -54,7 +55,7 @@ test('failed initial request offers retry rather than fabricating a report', asy
   fireEvent.click(screen.getByText('开始这段旅程'))
   await screen.findByText(/本次更新未完成/)
   fireEvent.click(screen.getByText('重新打开'))
-  await screen.findByRole('button', { name: '拆开我的周报' })
+  await screen.findByRole('button', { name: '点击轻轻拆开我的周报' })
 })
 
 test('switching report while a request runs prevents a late result from replacing the selected report', async () => {

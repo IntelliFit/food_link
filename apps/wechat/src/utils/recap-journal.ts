@@ -1,7 +1,15 @@
-import type { BodyMetricsSummary, FoodRecord, StatsSummary } from './api'
+import type { BodyMetricsSummary, CommunityFeedItem, FoodRecord, StatsSummary } from './api'
 import type { RecapDay, RecapKind } from './health-recap'
 
-export type JournalPhotos = { counts: { breakfast: number; lunch: number; dinner: number }; images: { src: string; meal: string; date: string }[] }
+export type JournalPhotoSource = 'personal' | 'community'
+export type JournalPhoto = { src: string; meal: string; date: string; author?: string; source?: JournalPhotoSource }
+export type JournalPhotos = { counts: { breakfast: number; lunch: number; dinner: number }; images: JournalPhoto[]; source?: JournalPhotoSource }
+
+function chinaNaturalDay(value: string | null | undefined): string {
+  const instant = new Date(value || '')
+  return Number.isFinite(instant.getTime()) ? new Date(instant.getTime() + 8 * 3600000).toISOString().slice(0, 10) : ''
+}
+
 export function journalHealth(summary: StatsSummary | null | undefined, start: string, end: string) {
   const score = summary?.health_index?.overall_score
   if (!summary || summary.start_date !== start || summary.end_date !== end || !Number.isFinite(score) || score! < 0 || score! > 100) return null
@@ -13,8 +21,7 @@ export function journalPhotos(records: FoodRecord[], start: string, end: string)
   const meals = new Set<string>()
   for (const record of new Map(records.map(row => [row.id, row])).values()) {
     // The API uses China natural days. Do not slice UTC timestamps at midnight.
-    const instant = new Date(record.record_time)
-    const date = Number.isFinite(instant.getTime()) ? new Date(instant.getTime() + 8 * 3600000).toISOString().slice(0, 10) : ''
+    const date = chinaNaturalDay(record.record_time)
     if (date < start || date > end || !['breakfast', 'lunch', 'dinner'].includes(record.meal_type)) continue
     if (!['food_image', 'analyze_history'].includes(record.entry_type || '') && !record.source_task_id) continue
     const src = record.image_paths?.find(Boolean) || record.image_path
@@ -24,6 +31,38 @@ export function journalPhotos(records: FoodRecord[], start: string, end: string)
     if (images.filter(image => image.meal === record.meal_type).length < 3) images.push({ src, meal: record.meal_type, date })
   }
   return { counts, images }
+}
+
+export function journalFeedPhotos(items: CommunityFeedItem[], start: string, end: string, ownerId: string, source: JournalPhotoSource): JournalPhotos {
+  const counts = { breakfast: 0, lunch: 0, dinner: 0 }
+  const images: JournalPhoto[] = []
+  const meals = new Set<string>()
+  const sources = new Set<string>()
+
+  for (const item of items) {
+    const targetType = item.target_type || item.record.feed_type || 'food_record'
+    const isMine = Boolean(item.is_mine || (ownerId && item.author?.id === ownerId))
+    if (targetType === 'exercise_log' || (source === 'personal' ? !isMine : isMine)) continue
+    const date = chinaNaturalDay(item.record.record_time || item.record.created_at)
+    if (!date || date < start || date > end) continue
+    const meal = item.record.meal_type || 'meal'
+    const urls = (item.record.image_paths?.length ? item.record.image_paths : [item.record.image_path]).filter((url): url is string => Boolean(url))
+    if (!urls.length) continue
+    if (meal in counts) {
+      const mealKey = `${date}:${meal}`
+      if (!meals.has(mealKey)) {
+        counts[meal as keyof typeof counts] += 1
+        meals.add(mealKey)
+      }
+    }
+    for (const src of urls) {
+      if (sources.has(src)) continue
+      sources.add(src)
+      images.push({ src, meal, date, author: item.author?.nickname || '', source })
+      if (images.length >= 12) return { counts, images, source }
+    }
+  }
+  return { counts, images, source }
 }
 
 export function journalBody(body: BodyMetricsSummary | undefined, start: string, end: string) {
