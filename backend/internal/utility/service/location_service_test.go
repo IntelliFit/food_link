@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -90,6 +91,41 @@ func TestLocationService_SearchAddress_Success(t *testing.T) {
 	assert.NotNil(t, result)
 }
 
+func TestLocationService_SearchAddress_V2StatusObjectSuccess(t *testing.T) {
+	cfg := &config.Config{External: config.ExternalConfig{TiandituTK: "mock-tk"}}
+	svc := NewLocationService(cfg)
+	svc.client.Transport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		body := `{"count":1,"pois":[{"name":"北京师范大学"}],"status":{"cndesc":"服务正常","infocode":1000}}`
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(bytes.NewBufferString(body)),
+			Header:     make(http.Header),
+		}, nil
+	})
+
+	result, err := svc.SearchAddress(context.Background(), "北京师范大学", 5, nil, nil, nil)
+	require.NoError(t, err)
+	assert.Equal(t, float64(1), result["count"])
+}
+
+func TestLocationService_SearchAddress_V2StatusObjectFailure(t *testing.T) {
+	cfg := &config.Config{External: config.ExternalConfig{TiandituTK: "mock-tk"}}
+	svc := NewLocationService(cfg)
+	svc.client.Transport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		body := `{"status":{"cndesc":"服务异常","infocode":3001}}`
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(bytes.NewBufferString(body)),
+			Header:     make(http.Header),
+		}, nil
+	})
+
+	_, err := svc.SearchAddress(context.Background(), "北京师范大学", 5, nil, nil, nil)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errLocationServiceUnavailable)
+	assert.Contains(t, err.Error(), "status=3001")
+}
+
 func TestLocationService_SearchAddress_UsesCenterRadiusAndCount(t *testing.T) {
 	cfg := &config.Config{External: config.ExternalConfig{TiandituTK: "mock-tk"}}
 	svc := NewLocationService(cfg)
@@ -143,6 +179,24 @@ func TestLocationService_SearchAddress_HTTPError(t *testing.T) {
 
 	_, err := svc.SearchAddress(ctx, "北京", 0, nil, nil, nil)
 	assert.Error(t, err)
+}
+
+func TestLocationService_SearchAddress_TransportErrorRedactsTK(t *testing.T) {
+	const tk = "super-secret-tianditu-tk"
+	cfg := &config.Config{
+		App:      config.AppConfig{Env: "production"},
+		External: config.ExternalConfig{TiandituTK: tk},
+	}
+	svc := NewLocationService(cfg)
+	svc.client.Transport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		return nil, context.DeadlineExceeded
+	})
+
+	_, err := svc.SearchAddress(context.Background(), "北京师范大学", 5, nil, nil, nil)
+	require.Error(t, err)
+	assert.NotContains(t, err.Error(), tk)
+	assert.False(t, strings.Contains(err.Error(), "tk="))
+	assert.ErrorIs(t, err, context.DeadlineExceeded)
 }
 
 func TestLocationService_SearchAddress_NonJSONProductionReturnsFriendlyAppError(t *testing.T) {

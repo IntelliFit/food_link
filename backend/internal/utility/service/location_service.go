@@ -73,7 +73,7 @@ func (s *LocationService) ReverseGeocode(ctx context.Context, lat, lng float64) 
 		if s.developmentFallbackEnabled() {
 			return developmentReverseGeocode(lat, lng), nil
 		}
-		return nil, err
+		return nil, sanitizeTiandituRequestError(err)
 	}
 	data, err := decodeTiandituJSON(resp)
 	if err != nil {
@@ -124,7 +124,7 @@ func (s *LocationService) SearchAddress(ctx context.Context, keyword string, cou
 		if s.developmentFallbackEnabled() {
 			return developmentSearchResult(keyword), nil
 		}
-		return nil, err
+		return nil, sanitizeTiandituRequestError(err)
 	}
 	data, err := decodeTiandituJSON(resp)
 	if err != nil {
@@ -212,12 +212,40 @@ func decodeTiandituJSON(resp *http.Response) (map[string]any, error) {
 	if err := json.Unmarshal(body, &data); err != nil {
 		return nil, errLocationServiceUnavailable
 	}
-	switch status := strings.TrimSpace(fmt.Sprint(data["status"])); status {
-	case "", "0", "101":
+	status, ok := tiandituStatus(data["status"])
+	if ok {
 		return data, nil
-	default:
-		return nil, fmt.Errorf("%w: status=%s", errLocationServiceUnavailable, status)
 	}
+	return nil, fmt.Errorf("%w: status=%s", errLocationServiceUnavailable, status)
+}
+
+func tiandituStatus(value any) (string, bool) {
+	if value == nil {
+		return "", true
+	}
+
+	if status, ok := value.(map[string]any); ok {
+		code := normalizedTiandituStatusCode(status["infocode"])
+		return code, code == "0" || code == "101" || code == "1000"
+	}
+
+	code := normalizedTiandituStatusCode(value)
+	return code, code == "" || code == "0" || code == "101" || code == "1000"
+}
+
+func normalizedTiandituStatusCode(value any) string {
+	if value == nil {
+		return ""
+	}
+	return strings.TrimSpace(fmt.Sprint(value))
+}
+
+func sanitizeTiandituRequestError(err error) error {
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) && urlErr.Err != nil {
+		return fmt.Errorf("天地图请求失败: %w", urlErr.Err)
+	}
+	return errors.New("天地图请求失败")
 }
 
 func (s *LocationService) developmentFallbackEnabled() bool {
