@@ -770,6 +770,118 @@
   &.bt-experience--profile .bt-water__pool { left: auto; right: -40rpx; }
 }
 
+/* 水之道：以真实水体、玻璃、黑石与一点橙色微光表达“随形而行”。 */
+.bt-experience--water {
+  min-height: 760rpx;
+  overflow: hidden;
+  color: #eaf4f7;
+  background: radial-gradient(circle at 50% 32%, #153447, #07131d 54%, #02070b 100%);
+  border: 1rpx solid rgb(168 211 229 / 36%);
+  border-radius: 18rpx;
+  box-shadow: inset 0 0 100rpx rgb(54 135 169 / 14%), 0 25rpx 52rpx rgb(0 0 0 / 40%);
+
+  &::before { content: ''; position: absolute; inset: 0; background: linear-gradient(96deg, transparent 0 46%, rgb(112 187 216 / 7%) 47% 48%, transparent 49%), radial-gradient(ellipse at 50% 100%, rgb(58 145 178 / 16%), transparent 60%); pointer-events: none; }
+  .bt-water__header { position: relative; z-index: 15; display: flex; justify-content: space-between; padding: 22rpx 28rpx 8rpx; }
+  .bt-water__header > view { display: flex; flex-direction: column; gap: 2rpx; }
+  .bt-water__header > view:first-child text:first-child { font-family: 'Songti SC', STSong, SimSun, serif; font-size: 42rpx; letter-spacing: 4rpx; }
+  .bt-water__header > view:first-child text:last-child { color: #8faab6; font-size: 14rpx; letter-spacing: 7rpx; }
+  .bt-water__header > view:last-child { align-items: flex-end; font-size: 15rpx; letter-spacing: 1rpx; }
+  .bt-water__title { position: relative; z-index: 15; display: grid; grid-template-columns: 1fr auto; gap: 3rpx 16rpx; margin: 8rpx 28rpx 0; }
+  .bt-water__title text:first-child { font-family: 'Songti SC', STSong, SimSun, serif; font-size: 39rpx; letter-spacing: 5rpx; }
+  .bt-water__title text:nth-child(2) { grid-row: 2; color: #b8cbd2; font-size: 18rpx; letter-spacing: 3rpx; }
+  .bt-water__title text:last-child { grid-row: 1 / 3; grid-column: 2; align-self: center; color: #d6e2e7; font-family: 'Songti SC', STSong, SimSun, serif; font-size: 18rpx; writing-mode: vertical-rl; letter-spacing: 3rpx; }
+  .bt-experience__hint { bottom: 16rpx; color: #b9d2dc; font-size: 15rpx; letter-spacing: 2rpx; }
+
+  .bt-water__home, .bt-water__stats, .bt-water__community, .bt-water__profile { position: absolute; inset: 160rpx 0 0; }
+  .bt-water__home > image { position: absolute; inset: 0; width: 100%; height: 100%; opacity: .35; filter: saturate(.8) contrast(1.2); }
+  .bt-water__home::after { content: ''; position: absolute; left: -12%; right: -12%; bottom: 118rpx; height: 145rpx; border: 3rpx solid rgb(135 210 237 / 34%); border-radius: 50%; box-shadow: 0 0 32rpx rgb(72 166 198 / 22%), inset 0 0 28rpx rgb(72 166 198 / 18%); transform: rotateX(62deg); pointer-events: none; }
+  .bt-water__vessel { position: absolute; z-index: 5; left: 50%; top: 52rpx; width: 350rpx; height: 330rpx; border: 7rpx solid rgb(181 224 241 / 58%); border-radius: 48% 52% 46% 54%; box-shadow: inset 0 0 26rpx rgb(184 230 247 / 20%), 0 0 34rpx rgb(84 168 201 / 25%); transform: translateX(-50%) rotate(2deg); }
+  .bt-water__vessel::before { content: ''; position: absolute; inset: 32rpx; background: radial-gradient(ellipse at 50% 78%, #c47145 0 5%, #617b58 6% 16%, #202a2b 17% 29%, transparent 30%); border-radius: 48%; box-shadow: 0 0 22rpx rgb(109 177 202 / 38%); }
+  .bt-water__drop { position: absolute; left: 50%; top: -45rpx; width: 32rpx; height: 42rpx; background: linear-gradient(145deg, #d8f2fb, #4d9ab7 68%, #d8f2fb); border-radius: 52% 48% 60% 40%; box-shadow: 0 0 18rpx rgb(126 209 240 / 65%); transform: translateX(-50%) rotate(45deg); transition: top 600ms ease, opacity 600ms ease; }
+  &.is-stage-1 .bt-water__drop { top: 60rpx; }
+  &.is-stage-2 .bt-water__drop { top: 160rpx; opacity: .25; }
+  .bt-water__dish { position: absolute; left: 50%; top: 102rpx; display: flex; flex-direction: column; align-items: center; width: 250rpx; color: #e7f1f4; transform: translateX(-50%); }
+  .bt-water__dish text:first-child { font-family: 'Songti SC', STSong, SimSun, serif; font-size: 25rpx; letter-spacing: 4rpx; }
+  .bt-water__dish text:last-child { margin-top: 11rpx; font-size: 17rpx; }
+  .bt-water__nutrition { position: absolute; z-index: 7; right: 22rpx; top: 86rpx; display: flex; flex-direction: column; gap: 17rpx; }
+  .bt-water__nutrition text { padding-left: 12rpx; color: #c3d4da; font-size: 16rpx; line-height: 1.35; border-left: 3rpx solid #e47d3c; }
+  .bt-water__orbs { position: absolute; z-index: 8; left: 36rpx; right: 36rpx; bottom: 74rpx; display: flex; justify-content: space-between; }
+  .bt-water__orbs view { display: flex; flex-direction: column; align-items: center; gap: 7rpx; color: #bcd0d8; transition: color 240ms ease, transform 240ms ease; }
+  .bt-water__orbs view.is-active { color: #fff; transform: translateY(-8rpx); }
+  .bt-water__orbs view > text:first-child { display: flex; align-items: center; justify-content: center; width: 75rpx; height: 75rpx; font-size: 27rpx; background: radial-gradient(circle at 35% 25%, rgb(255 255 255 / 45%), rgb(50 113 140 / 32%) 40%, rgb(2 10 15 / 66%) 72%); border: 2rpx solid rgb(184 224 241 / 55%); border-radius: 50%; box-shadow: inset 0 0 18rpx rgb(124 199 227 / 22%), 0 0 16rpx rgb(37 127 164 / 25%); }
+  .bt-water__orbs view.is-active > text:first-child { border-color: #f18a43; box-shadow: 0 0 22rpx rgb(241 138 67 / 55%); }
+  .bt-water__orbs view > text:last-child { font-size: 15rpx; }
+  .bt-water__philosophy { position: absolute; z-index: 8; left: 50%; bottom: 31rpx; color: #9fb5be; font-family: 'Songti SC', STSong, SimSun, serif; font-size: 17rpx; letter-spacing: 4rpx; transform: translateX(-50%); white-space: nowrap; }
+
+  .bt-water__stats { padding: 14rpx 26rpx 48rpx; }
+  .bt-water__stats-metrics { display: flex; justify-content: space-between; padding: 12rpx 0 18rpx; border-bottom: 1rpx solid rgb(165 204 219 / 26%); }
+  .bt-water__stats-metrics view { position: relative; display: flex; flex-direction: column; align-items: center; flex: 1; }
+  .bt-water__stats-metrics view::after { content: ''; position: absolute; right: 0; top: 8rpx; width: 1rpx; height: 46rpx; background: rgb(171 210 226 / 25%); }
+  .bt-water__stats-metrics view:last-child::after { display: none; }
+  .bt-water__stats-metrics text:first-child { font-family: 'Songti SC', STSong, SimSun, serif; font-size: 27rpx; }
+  .bt-water__stats-metrics text:last-child { margin-top: 3rpx; color: #8fa9b3; font-size: 13rpx; }
+  .bt-water__current { position: relative; height: 218rpx; margin-top: 12rpx; overflow: hidden; }
+  .bt-water__wave { position: absolute; left: -10%; right: -10%; bottom: 25rpx; height: 95rpx; border-top: 3rpx solid #83c5df; border-radius: 50%; box-shadow: 0 -8rpx 18rpx rgb(71 159 194 / 18%); transform: rotate(-2deg); }
+  .bt-water__wave view { position: absolute; left: 8%; right: 8%; height: 65rpx; border-top: 2rpx solid rgb(160 214 234 / 48%); border-radius: 50%; }
+  .bt-water__wave view:nth-child(1) { top: 18rpx; transform: rotate(4deg); }
+  .bt-water__wave view:nth-child(2) { top: 36rpx; transform: rotate(-3deg); }
+  .bt-water__wave view:nth-child(3) { top: 56rpx; }
+  .bt-water__day { position: absolute; z-index: 4; display: flex; flex-direction: column; align-items: center; gap: 3rpx; width: 68rpx; transition: bottom 440ms ease, transform 260ms ease; }
+  .bt-water__day--0 { left: 0; } .bt-water__day--1 { left: 14%; } .bt-water__day--2 { left: 28%; } .bt-water__day--3 { left: 42%; } .bt-water__day--4 { left: 56%; } .bt-water__day--5 { left: 70%; } .bt-water__day--6 { left: 84%; }
+  .bt-water__day view { width: 28rpx; height: 28rpx; background: radial-gradient(circle at 35% 28%, #fff, #8bc7dd 25%, #245a72 70%); border: 2rpx solid #c9e8f3; border-radius: 50%; box-shadow: 0 0 14rpx rgb(115 199 230 / 52%); }
+  .bt-water__day text { color: #a9bdc5; font-size: 12rpx; }
+  .bt-water__day text:last-child { color: #e0eaed; }
+  &.is-stage-0 .bt-water__day--0, &.is-stage-1 .bt-water__day--3, &.is-stage-2 .bt-water__day--6 { transform: translateY(-9rpx); }
+  &.is-stage-0 .bt-water__day--0 view, &.is-stage-1 .bt-water__day--3 view, &.is-stage-2 .bt-water__day--6 view { background: radial-gradient(circle at 35% 28%, #fff2d8, #f18a43 35%, #74381f 75%); border-color: #ffc08f; box-shadow: 0 0 20rpx rgb(241 138 67 / 72%); }
+  .bt-water__line-chart { display: flex; align-items: flex-end; gap: 5rpx; height: 90rpx; padding: 8rpx 13rpx; border: 1rpx solid rgb(156 198 214 / 22%); background: linear-gradient(rgb(50 113 139 / 11%), transparent); }
+  .bt-water__line-chart view { flex: 1; height: 30rpx; border-top: 2rpx solid #83c5df; transform: skewY(-14deg); }
+  .bt-water__line-chart view:nth-child(2), .bt-water__line-chart view:nth-child(5) { height: 56rpx; transform: skewY(12deg); }
+  .bt-water__line-chart view:nth-child(3), .bt-water__line-chart view:nth-child(6) { height: 38rpx; }
+  .bt-water__stats-note { display: grid; grid-template-columns: 92rpx 1fr 20rpx; align-items: center; gap: 10rpx; margin-top: 13rpx; padding: 13rpx 16rpx; background: rgb(21 43 55 / 82%); border: 1rpx solid rgb(149 195 213 / 26%); border-radius: 13rpx; }
+  .bt-water__stats-note text:first-child { font-size: 18rpx; font-weight: 800; }
+  .bt-water__stats-note text:nth-child(2) { color: #a9bdc5; font-size: 15rpx; line-height: 1.45; }
+  .bt-water__stats-note text:last-child { font-size: 27rpx; }
+
+  .bt-water__community { padding: 6rpx 26rpx 48rpx; }
+  .bt-water__tabs { display: flex; justify-content: space-between; padding: 9rpx 0 13rpx; border-bottom: 1rpx solid rgb(168 207 222 / 22%); }
+  .bt-water__tabs text { position: relative; color: #8ca5af; font-size: 16rpx; }
+  .bt-water__tabs text.is-active { color: #fff; }
+  .bt-water__tabs text.is-active::after { content: ''; position: absolute; left: 20%; right: 20%; bottom: -13rpx; height: 3rpx; background: #ef7e37; box-shadow: 0 0 8rpx #ef7e37; }
+  .bt-water__feature { position: relative; height: 235rpx; margin-top: 15rpx; overflow: hidden; border: 1rpx solid rgb(166 210 226 / 25%); border-radius: 13rpx; }
+  .bt-water__feature > image { width: 100%; height: 100%; filter: brightness(.58) saturate(.75) contrast(1.1); }
+  .bt-water__feature > view:nth-child(2) { position: absolute; left: 18rpx; top: 20rpx; display: flex; flex-direction: column; gap: 4rpx; font-family: 'Songti SC', STSong, SimSun, serif; font-size: 22rpx; letter-spacing: 2rpx; }
+  .bt-water__feature > view:nth-child(3) { position: absolute; left: 18rpx; right: 18rpx; bottom: 14rpx; display: flex; justify-content: space-between; color: #c5d6dc; font-size: 14rpx; }
+  .bt-water__stream-card { display: grid; grid-template-columns: 148rpx 1fr auto; align-items: center; gap: 14rpx; margin-top: 10rpx; padding-bottom: 10rpx; border-bottom: 1rpx solid rgb(157 198 214 / 18%); }
+  .bt-water__stream-card image { width: 148rpx; height: 76rpx; border-radius: 8rpx; filter: brightness(.68) saturate(.7); }
+  .bt-water__stream-card view { display: flex; flex-direction: column; gap: 5rpx; }
+  .bt-water__stream-card view text:first-child { font-family: 'Songti SC', STSong, SimSun, serif; font-size: 18rpx; }
+  .bt-water__stream-card view text:last-child, .bt-water__stream-card > text { color: #90a8b1; font-size: 14rpx; }
+  .bt-water__community-quote { display: block; margin-top: 11rpx; padding: 12rpx; color: #bacdd4; font-family: 'Songti SC', STSong, SimSun, serif; font-size: 16rpx; text-align: center; background: rgb(23 49 62 / 58%); border-radius: 10rpx; }
+
+  .bt-water__profile { padding: 8rpx 28rpx 48rpx; }
+  .bt-water__waterfall { position: absolute; right: -24rpx; top: 0; bottom: 0; width: 230rpx; background: linear-gradient(100deg, transparent, rgb(76 151 180 / 26%), rgb(196 231 243 / 52%) 64%, rgb(34 103 132 / 20%) 82%, transparent); border-radius: 48% 0 0 38%; transform: skewX(-8deg); }
+  .bt-water__waterfall view { position: absolute; top: 0; bottom: 0; width: 2rpx; background: linear-gradient(transparent, rgb(219 242 249 / 66%), transparent); }
+  .bt-water__waterfall view:nth-child(1) { left: 35%; } .bt-water__waterfall view:nth-child(2) { left: 55%; } .bt-water__waterfall view:nth-child(3) { left: 75%; }
+  .bt-water__avatar { position: relative; z-index: 5; display: flex; align-items: center; gap: 18rpx; }
+  .bt-water__avatar image { width: 100rpx; height: 100rpx; border: 3rpx solid rgb(196 230 242 / 55%); border-radius: 50%; box-shadow: inset 0 0 16rpx rgb(112 188 217 / 24%), 0 0 18rpx rgb(60 144 177 / 24%); }
+  .bt-water__avatar view { display: flex; flex-direction: column; gap: 5rpx; }
+  .bt-water__avatar text:first-child { font-family: 'Songti SC', STSong, SimSun, serif; font-size: 30rpx; }
+  .bt-water__avatar text:last-child { color: #9fb4bc; font-size: 16rpx; }
+  .bt-water__profile-metrics { position: relative; z-index: 5; display: flex; gap: 26rpx; margin: 20rpx 0; }
+  .bt-water__profile-metrics view { display: flex; flex-direction: column; align-items: center; }
+  .bt-water__profile-metrics text:first-child { font-size: 25rpx; }
+  .bt-water__profile-metrics text:last-child { color: #8da5ae; font-size: 13rpx; }
+  .bt-water__menu { position: relative; z-index: 5; display: flex; flex-direction: column; gap: 10rpx; width: 465rpx; }
+  .bt-water__menu > view { display: grid; grid-template-columns: 62rpx 1fr; align-items: center; gap: 15rpx; opacity: .74; transition: opacity 240ms ease, transform 240ms ease; }
+  .bt-water__menu > view.is-active { opacity: 1; transform: translateX(10rpx); }
+  .bt-water__menu > view > text { display: flex; align-items: center; justify-content: center; width: 58rpx; height: 58rpx; font-size: 21rpx; border: 2rpx solid rgb(171 215 232 / 48%); border-radius: 50%; background: radial-gradient(circle at 35% 25%, rgb(255 255 255 / 35%), rgb(32 82 104 / 28%) 55%, rgb(3 12 18 / 72%)); }
+  .bt-water__menu > view.is-active > text { border-color: #f18a43; box-shadow: 0 0 15rpx rgb(241 138 67 / 42%); }
+  .bt-water__menu > view > view { display: flex; flex-direction: column; gap: 3rpx; }
+  .bt-water__menu > view > view text:first-child { font-family: 'Songti SC', STSong, SimSun, serif; font-size: 20rpx; }
+  .bt-water__menu > view > view text:last-child { color: #8fa7b0; font-size: 14rpx; }
+  .bt-water__profile-quote { position: absolute; z-index: 5; left: 50%; bottom: 51rpx; width: 370rpx; padding: 10rpx 14rpx; color: #c2d4da; font-family: 'Songti SC', STSong, SimSun, serif; font-size: 15rpx; text-align: center; background: rgb(9 23 32 / 76%); border: 1rpx solid rgb(165 207 224 / 24%); transform: translateX(-50%); }
+}
+
 /* 四个业务页面在同一主题内也有不同的构图重心。 */
 .bt-experience--clarity.bt-experience--stats .bt-clarity__rail { background: #173eb5; }
 .bt-experience--clarity.bt-experience--community .bt-clarity__grid > view:nth-child(2) { background: #ecece5; }

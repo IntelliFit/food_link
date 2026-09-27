@@ -9,6 +9,7 @@ import clarityFood from '../assets/balanced-themes/clarity-food.webp'
 import naturalTable from '../assets/balanced-themes/natural-table.webp'
 import easternLandscape from '../assets/balanced-themes/eastern-landscape.webp'
 import picturebookArt from '../assets/balanced-themes/06-picturebook-companion-v2.webp'
+import wayOfWaterArt from '../assets/balanced-themes/08-way-of-water-v2.webp'
 
 export type BalancedThemeSurface = 'home' | 'stats' | 'community' | 'profile'
 
@@ -481,16 +482,50 @@ export function BalancedThemeExperience({ surface }: { surface: BalancedThemeSur
     )
   }
 
+  const waterDays = [42, 58, 51, 69, 62, 76, 66]
   return (
     <View {...commonProps} className={`bt-experience bt-experience--water bt-experience--${surface} is-stage-${stage}`}>
-      <View className='bt-water__pool'>
-        <View className='bt-water__ripple bt-water__ripple--one' />
-        <View className='bt-water__ripple bt-water__ripple--two' />
-        <View className='bt-water__ripple bt-water__ripple--three' />
-        <View className='bt-water__stone'><Text>{story.index}</Text></View>
-      </View>
-      <View className='bt-water__copy'><Text>{story.title}</Text><Text>{story.stages[stage]}</Text><Text>{story.subtitle}</Text></View>
-      <Text className='bt-experience__hint'>轻触水面</Text>
+      <View className='bt-water__header'><View><Text>食探</Text><Text>更 懂 自 己</Text></View><View><Text>2026-09-27</Text><Text>{story.index} · {label}</Text></View></View>
+      <View className='bt-water__title'><Text>{story.title}</Text><Text>{story.subtitle}</Text><Text>{story.stages[stage]}</Text></View>
+      {surface === 'home' && (
+        <View className='bt-water__home'>
+          <Image src={wayOfWaterArt} mode='aspectFill' />
+          <View className='bt-water__vessel'><View className='bt-water__drop' /><View className='bt-water__dish'><Text>午餐</Text><Text>香煎三文鱼藜麦碗</Text></View></View>
+          <View className='bt-water__nutrition'><Text>蛋白质<br />32 g</Text><Text>碳水<br />42 g</Text><Text>脂肪<br />18 g</Text></View>
+          <View className='bt-water__orbs'>{['记录饮食', '运动', '身心', '睡眠'].map((item, index) => <View key={item} className={index === stage ? 'is-active' : ''}><Text>{['♧', '⌁', '☘', '☾'][index]}</Text><Text>{item}</Text></View>)}</View>
+          <Text className='bt-water__philosophy'>水无定形　而能成为万物</Text>
+        </View>
+      )}
+      {surface === 'stats' && (
+        <View className='bt-water__stats'>
+          <View className='bt-water__stats-metrics'><View><Text>7</Text><Text>记录天数</Text></View><View><Text>1860</Text><Text>日均热量</Text></View><View><Text>72</Text><Text>蛋白质</Text></View><View><Text>8.2</Text><Text>生活评分</Text></View></View>
+          <View className='bt-water__current'>
+            <View className='bt-water__wave'><View /><View /><View /></View>
+            {waterDays.map((height, index) => <View key={index} className={`bt-water__day bt-water__day--${index}`} style={{ bottom: `${height + 62}rpx` }}><Text>{index === 6 ? '周日' : `周${['一', '二', '三', '四', '五', '六'][index]}`}</Text><View /><Text>{1720 + index * 28}</Text></View>)}
+          </View>
+          <View className='bt-water__line-chart'><View /><View /><View /><View /><View /><View /><View /></View>
+          <View className='bt-water__stats-note'><Text>本周洞察</Text><Text>晚餐热量下降，睡眠时长提升；你的节奏更加稳定。</Text><Text>›</Text></View>
+        </View>
+      )}
+      {surface === 'community' && (
+        <View className='bt-water__community'>
+          <View className='bt-water__tabs'><Text className={stage === 0 ? 'is-active' : ''}>推荐</Text><Text className={stage === 1 ? 'is-active' : ''}>饮食</Text><Text>运动</Text><Text>生活</Text><Text className={stage === 2 ? 'is-active' : ''}>灵感</Text></View>
+          <View className='bt-water__feature'><Image src={clarityFood} mode='aspectFill' /><View><Text>简单的食物</Text><Text>也能带来踏实的幸福</Text></View><View><Text>山间小禾</Text><Text>♡ 320　回声 56</Text></View></View>
+          <View className='bt-water__stream-card'><Image src={wayOfWaterArt} mode='aspectFill' /><View><Text>晨跑后的一杯温水</Text><Text>清风 · 5小时前</Text></View><Text>♡ 128</Text></View>
+          <View className='bt-water__stream-card'><Image src={naturalTable} mode='aspectFill' /><View><Text>在忙碌中保持平衡</Text><Text>Luna · 1天前</Text></View><Text>♡ 286</Text></View>
+          <Text className='bt-water__community-quote'>好的生活不是追逐，而是与自己相遇。</Text>
+        </View>
+      )}
+      {surface === 'profile' && (
+        <View className='bt-water__profile'>
+          <View className='bt-water__waterfall'><View /><View /><View /></View>
+          <View className='bt-water__avatar'><Image src={wayOfWaterArt} mode='aspectFill' /><View><Text>清川</Text><Text>在流动中，成为更好的自己</Text></View></View>
+          <View className='bt-water__profile-metrics'><View><Text>328</Text><Text>记录天数</Text></View><View><Text>7.8</Text><Text>生活评分</Text></View><View><Text>12</Text><Text>连续天数</Text></View></View>
+          <View className='bt-water__menu'>{[['▥', '我的数据', '饮食 · 运动 · 睡眠 · 心情'], ['♡', '我的收藏', '喜欢的食物 · 灵感内容'], ['♧', '我的圈子', '我的发布 · 互动 · 关注'], ['⚙', '设置', '账号 · 通知 · 隐私']].map((item, index) => <View key={item[1]} className={index === stage ? 'is-active' : ''}><Text>{item[0]}</Text><View><Text>{item[1]}</Text><Text>{item[2]}</Text></View></View>)}</View>
+          <Text className='bt-water__profile-quote'>汇聚每一次选择，流向更自在的自己</Text>
+        </View>
+      )}
+      <Text className='bt-experience__hint'>轻触水面，让光继续流动</Text>
     </View>
   )
 }
