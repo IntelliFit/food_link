@@ -136,7 +136,7 @@
 }
 
 .bt-experience--nature {
-  min-height: 420rpx;
+  min-height: 720rpx;
   color: #254533;
   background:
     radial-gradient(circle at 12% 20%, rgb(119 159 112 / 17%) 0 2rpx, transparent 3rpx),
@@ -169,6 +169,45 @@
   .bt-nature__copy text:last-child { max-width: 330rpx; font-size: 24rpx; line-height: 1.65; }
   .bt-nature__copy .bt-nature__tag { align-self: flex-start; margin-top: 2rpx; padding: 6rpx 12rpx; color: #f7f1df; font-size: 18rpx; background: #376b4d; border-radius: 999rpx; }
 
+  .bt-nature__scene { position: absolute; left: 28rpx; right: 28rpx; bottom: 34rpx; height: 396rpx; overflow: hidden; border: 2rpx solid rgb(37 69 51 / 44%); border-radius: 46% 8% 18% 12%; box-shadow: 0 12rpx 24rpx rgb(44 72 51 / 18%); }
+  .bt-nature__scene > image { display: block; width: 100%; height: 100%; filter: sepia(.12) saturate(.84); }
+  .bt-nature__scene::after { content: ''; position: absolute; inset: 0; background: linear-gradient(120deg, rgb(250 246 228 / 14%), transparent 48%, rgb(37 69 51 / 12%)); pointer-events: none; }
+  .bt-nature__leaf-note { position: absolute; z-index: 2; display: flex; flex-direction: column; gap: 5rpx; max-width: 220rpx; padding: 14rpx 18rpx; color: #254533; background: rgb(245 241 221 / 89%); border: 1rpx solid rgb(37 69 51 / 34%); border-radius: 70% 8% 70% 8%; backdrop-filter: blur(8rpx); }
+  .bt-nature__leaf-note text:first-child { font-family: 'Songti SC', STSong, SimSun, serif; font-size: 23rpx; font-weight: 800; }
+  .bt-nature__leaf-note text:last-child { font-size: 17rpx; line-height: 1.4; }
+  .bt-nature__leaf-note--meal { left: 22rpx; top: 22rpx; }
+  .bt-nature__leaf-note--water { right: 26rpx; top: 132rpx; }
+  .bt-nature__leaf-note--walk { left: 66rpx; bottom: 22rpx; }
+
+  .bt-nature__annual-ring { position: absolute; left: 50%; bottom: 40rpx; width: 430rpx; height: 430rpx; border: 24rpx double rgb(55 107 77 / 42%); border-radius: 50%; box-shadow: inset 0 0 0 28rpx rgb(246 241 223 / 68%), inset 0 0 0 31rpx rgb(55 107 77 / 26%); transform: translateX(-50%); }
+  .bt-nature__annual-ring-core { position: absolute; inset: 110rpx; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 4rpx; background: rgb(246 241 223 / 92%); border: 2rpx solid rgb(55 107 77 / 34%); border-radius: 50%; }
+  .bt-nature__annual-ring-core text:first-child { font-size: 33rpx; font-weight: 900; }
+  .bt-nature__annual-ring-core text:last-child { font-size: 18rpx; }
+  .bt-nature__season { position: absolute; display: flex; flex-direction: column; color: #254533; font-size: 18rpx; text-align: center; }
+  .bt-nature__season text:first-child { font-size: 23rpx; font-weight: 850; }
+  .bt-nature__season--spring { left: -48rpx; top: 48rpx; }
+  .bt-nature__season--summer { right: -52rpx; top: 50rpx; }
+  .bt-nature__season--autumn { right: -56rpx; bottom: 42rpx; }
+  .bt-nature__season--winter { left: -52rpx; bottom: 38rpx; }
+
+  .bt-nature__journal { position: absolute; left: 28rpx; right: 28rpx; bottom: 42rpx; height: 430rpx; padding: 16rpx; background: rgb(248 244 228 / 90%); border: 1rpx solid rgb(37 69 51 / 38%); box-shadow: 0 12rpx 0 #9f815d; transform: rotate(-1deg); }
+  .bt-nature__journal > image { display: block; width: 70%; height: 100%; filter: sepia(.15) saturate(.78); }
+  .bt-nature__journal-note { position: absolute; right: 12rpx; top: 52rpx; display: flex; width: 230rpx; flex-direction: column; gap: 12rpx; padding: 22rpx; background: #f1ead3; border: 1rpx solid rgb(93 75 52 / 28%); box-shadow: 6rpx 8rpx 0 rgb(93 75 52 / 15%); transform: rotate(3deg); }
+  .bt-nature__journal-note text:first-child { font-family: 'Songti SC', STSong, SimSun, serif; font-size: 25rpx; font-weight: 800; }
+  .bt-nature__journal-note text:last-child { font-size: 19rpx; line-height: 1.7; }
+  .bt-nature__journal-meta { position: absolute; right: 18rpx; bottom: 38rpx; display: flex; flex-direction: column; gap: 8rpx; align-items: flex-end; }
+  .bt-nature__journal-meta text { padding: 6rpx 12rpx; color: #f8f2df; font-size: 17rpx; background: #376b4d; border-radius: 999rpx; }
+
+  .bt-nature__specimens { position: absolute; left: 28rpx; right: 28rpx; bottom: 42rpx; display: grid; grid-template-columns: repeat(3, 1fr); gap: 14rpx; padding: 22rpx; background: rgb(248 244 228 / 82%); border: 1rpx solid rgb(37 69 51 / 32%); }
+  .bt-nature__specimens > view:not(.bt-nature__specimen-caption) { display: flex; min-height: 190rpx; align-items: center; justify-content: space-between; flex-direction: column; padding: 18rpx 8rpx; border: 1rpx solid rgb(37 69 51 / 24%); }
+  .bt-nature__specimens > view > text { font-size: 18rpx; }
+  .bt-nature__specimen-leaf { width: 88rpx; height: 124rpx; background: linear-gradient(135deg, #9db795, #315f43); border-radius: 100% 0; box-shadow: inset 0 0 0 2rpx rgb(255 255 255 / 24%); transform: rotate(-24deg); }
+  .bt-nature__specimen-leaf--two { background: linear-gradient(135deg, #c8b86e, #6f8650); transform: rotate(18deg); }
+  .bt-nature__specimen-leaf--three { width: 96rpx; height: 96rpx; background: radial-gradient(circle at 42% 42%, #d9d39a, #607956); border-radius: 48% 52% 42% 58%; transform: rotate(8deg); }
+  .bt-nature__specimen-caption { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; padding-top: 8rpx; border-top: 1rpx solid rgb(37 69 51 / 24%); }
+  .bt-nature__specimen-caption text:first-child { font-family: 'Songti SC', STSong, SimSun, serif; font-size: 24rpx; font-weight: 800; }
+  .bt-nature__specimen-caption text:last-child { color: #60705f; font-size: 17rpx; }
+
   &.is-stage-1 .bt-nature__leaf { transform: scale(.85); }
   &.is-stage-1 .bt-nature__leaf--two { transform: rotate(180deg) scale(.85); }
   &.is-stage-2 .bt-nature__leaf { transform: scale(1.18); }
@@ -176,20 +215,20 @@
   &.is-stage-2 .bt-nature__rings view:first-child { transform: scale(1.12); }
 
   &.bt-experience--stats { border-radius: 16rpx 88rpx; }
-  &.bt-experience--stats .bt-nature__rings { left: 50%; top: 106rpx; width: 300rpx; height: 300rpx; transform: translateX(-50%); }
+  &.bt-experience--stats .bt-nature__rings { display: none; }
   &.bt-experience--stats .bt-nature__copy { left: 34rpx; right: 34rpx; top: 30rpx; text-align: center; }
   &.bt-experience--stats .bt-nature__copy .bt-nature__tag { align-self: center; }
-  &.bt-experience--stats .bt-nature__stem { left: auto; right: 84rpx; height: 154rpx; transform: rotate(-18deg); }
+  &.bt-experience--stats .bt-nature__stem { display: none; }
 
   &.bt-experience--community { border-radius: 72rpx 16rpx 16rpx 72rpx; }
-  &.bt-experience--community .bt-nature__rings { left: auto; right: -94rpx; top: -40rpx; }
-  &.bt-experience--community .bt-nature__stem { left: 84rpx; height: 320rpx; }
-  &.bt-experience--community .bt-nature__copy { left: 238rpx; }
+  &.bt-experience--community .bt-nature__rings,
+  &.bt-experience--community .bt-nature__stem { display: none; }
+  &.bt-experience--community .bt-nature__copy { left: 38rpx; top: 30rpx; }
 
   &.bt-experience--profile { border-radius: 16rpx; }
-  &.bt-experience--profile .bt-nature__rings { left: 16rpx; top: 42rpx; width: 260rpx; height: 260rpx; }
-  &.bt-experience--profile .bt-nature__stem { left: 138rpx; height: 220rpx; }
-  &.bt-experience--profile .bt-nature__copy { left: 326rpx; }
+  &.bt-experience--profile .bt-nature__rings,
+  &.bt-experience--profile .bt-nature__stem { display: none; }
+  &.bt-experience--profile .bt-nature__copy { left: 38rpx; top: 30rpx; }
 }
 
 .bt-experience--eastern {

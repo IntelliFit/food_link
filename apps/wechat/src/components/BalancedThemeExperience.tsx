@@ -5,7 +5,8 @@ import { useBalancedTheme } from './BalancedThemeContext'
 import { type BalancedThemeId, getBalancedThemeDefinition } from '../utils/balanced-theme'
 
 import './BalancedThemeExperience.scss'
-import clarityFood from '../assets/wellness/food-scan-banner.jpg'
+import clarityFood from '../assets/balanced-themes/clarity-food.webp'
+import naturalTable from '../assets/balanced-themes/natural-table.webp'
 
 export type BalancedThemeSurface = 'home' | 'stats' | 'community' | 'profile'
 
@@ -187,6 +188,38 @@ export function BalancedThemeExperience({ surface }: { surface: BalancedThemeSur
           <View className='bt-nature__leaf bt-nature__leaf--three' />
         </View>
         <View className='bt-nature__copy'><Text>{story.title}</Text><Text>{story.subtitle}</Text><Text className='bt-nature__tag'>{story.tags[stage]} · {story.stages[stage]}</Text></View>
+        {surface === 'home' && (
+          <View className='bt-nature__scene'>
+            <Image src={naturalTable} mode='aspectFill' />
+            <View className='bt-nature__leaf-note bt-nature__leaf-note--meal'><Text>今日饮食</Text><Text>让一餐成为新的年轮</Text></View>
+            <View className='bt-nature__leaf-note bt-nature__leaf-note--water'><Text>饮水</Text><Text>再添一滴清泉</Text></View>
+            <View className='bt-nature__leaf-note bt-nature__leaf-note--walk'><Text>步行</Text><Text>沿自然慢慢舒展</Text></View>
+          </View>
+        )}
+        {surface === 'stats' && (
+          <View className='bt-nature__annual-ring'>
+            <View className='bt-nature__annual-ring-core'><Text>一周</Text><Text>共生轨迹</Text></View>
+            <View className='bt-nature__season bt-nature__season--spring'><Text>春启</Text><Text>清新</Text></View>
+            <View className='bt-nature__season bt-nature__season--summer'><Text>夏长</Text><Text>丰盛</Text></View>
+            <View className='bt-nature__season bt-nature__season--autumn'><Text>秋收</Text><Text>规律</Text></View>
+            <View className='bt-nature__season bt-nature__season--winter'><Text>冬藏</Text><Text>休息</Text></View>
+          </View>
+        )}
+        {surface === 'community' && (
+          <View className='bt-nature__journal'>
+            <Image src={naturalTable} mode='aspectFill' />
+            <View className='bt-nature__journal-note'><Text>秋日餐桌手记</Text><Text>简单的食材，也能有长大的幸福。</Text></View>
+            <View className='bt-nature__journal-meta'><Text>时令食材</Text><Text>自然生活</Text><Text>交换风景</Text></View>
+          </View>
+        )}
+        {surface === 'profile' && (
+          <View className='bt-nature__specimens'>
+            <View><View className='bt-nature__specimen-leaf bt-nature__specimen-leaf--one' /><Text>饮食叶</Text></View>
+            <View><View className='bt-nature__specimen-leaf bt-nature__specimen-leaf--two' /><Text>成长纹理</Text></View>
+            <View><View className='bt-nature__specimen-leaf bt-nature__specimen-leaf--three' /><Text>收藏花期</Text></View>
+            <View className='bt-nature__specimen-caption'><Text>我的自然标本</Text><Text>把认真生活的痕迹，收藏成册。</Text></View>
+          </View>
+        )}
         <Text className='bt-experience__hint'>轻触，让叶片生长</Text>
       </View>
     )
