@@ -26,7 +26,7 @@ type SurfaceStory = {
 
 const THEME_SURFACE_STORIES: Record<BalancedThemeId, Record<BalancedThemeSurface, SurfaceStory>> = {
   'clarity-order': {
-    home: { index: '01', title: '今日饮食', subtitle: '一餐清晰开始', action: '记录', tags: ['摄入', '目标', '建议'], stages: ['先看今天', '聚焦一餐', '开始记录'] },
+    home: { index: '01', title: '好好吃饭\n是更好的自己', subtitle: '清晰选择，让每一餐靠近理想的生活。', action: '记录饮食', tags: ['摄入', '目标', '建议'], stages: ['先看今天', '聚焦一餐', '开始记录'] },
     stats: { index: '02', title: '本周趋势', subtitle: '让变化一目了然', action: '查看', tags: ['周', '构成', '趋势'], stages: ['总览变化', '拆解构成', '找到重点'] },
     community: { index: '03', title: '饮食故事', subtitle: '真实分享，理性讨论', action: '阅读', tags: ['推荐', '关注', '话题'], stages: ['浏览故事', '聚焦作者', '参与讨论'] },
     profile: { index: '04', title: '个人档案', subtitle: '把记录归入秩序', action: '整理', tags: ['记录', '收藏', '设置'], stages: ['查看档案', '整理收藏', '管理偏好'] },
@@ -97,13 +97,24 @@ export function BalancedThemeExperience({ surface }: { surface: BalancedThemeSur
   if (theme === 'clarity-order') {
     return (
       <View {...commonProps} className={`bt-experience bt-experience--clarity bt-experience--${surface} is-stage-${stage}`}>
-        <View className='bt-clarity__rail'><Text>FL / {story.index}</Text><Text>{label}</Text></View>
-        <View className='bt-clarity__grid'>
-          <View className='bt-clarity__lead'><Text className='bt-clarity__number'>{story.title}</Text><Text>{story.subtitle}</Text></View>
-          <View><Text>{story.tags[stage]}</Text><Text>{story.stages[stage]}</Text></View>
-          <View><Text className='bt-clarity__focus'>{story.index}</Text><Text>{story.action}</Text></View>
+        <View className='bt-clarity__masthead'>
+          <Text className='bt-clarity__brand'>食探</Text>
+          <Text className='bt-clarity__promise'>{surface === 'home' ? '让食物回归清晰' : surface === 'stats' ? '数据，让选择更清晰' : surface === 'community' ? '真实分享，理性讨论' : '成为更清晰的自己'}</Text>
+          <View className='bt-clarity__meta'><Text>FL / {story.index}</Text><Text>{label}</Text></View>
         </View>
-        <Text className='bt-experience__hint'>轻触重排索引</Text>
+        <View className='bt-clarity__composition'>
+          <View className='bt-clarity__lead'>
+            {story.title.split('\n').map((line) => <Text key={line} className='bt-clarity__headline'>{line}</Text>)}
+            <Text className='bt-clarity__subtitle'>{story.subtitle}</Text>
+          </View>
+          <View className='bt-clarity__index-card'>
+            <Text className='bt-clarity__focus'>{String(stage + 1).padStart(2, '0')}</Text>
+            <Text>{story.tags[stage]}</Text>
+            <Text>{story.stages[stage]}</Text>
+          </View>
+        </View>
+        <View className='bt-clarity__action'><Text>{story.action}</Text><Text>→</Text></View>
+        <Text className='bt-experience__hint'>轻触切换重点</Text>
       </View>
     )
   }

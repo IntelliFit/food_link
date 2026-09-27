@@ -1305,6 +1305,7 @@ function StatsPage() {
     return (
       <View className={`stats-page stats-page--guest ${ink ? 'ink-page' : ''} ${scheme === 'dark' ? 'stats-page--dark' : ''}`}>
         {ink && <InkMasthead title='观照日常' subtitle='在起伏中，找到自己的节奏' />}
+        <BalancedThemeExperience surface='stats' />
         <View className='stats-guest-card'>
           <Text className='stats-guest-title'>登录后查看饮食分析</Text>
           <Text className='stats-guest-desc'>可先浏览首页热量与营养概览，需要账号同步时再登录</Text>
@@ -1320,6 +1321,7 @@ function StatsPage() {
     return (
       <View className={`stats-page ${ink ? 'ink-page' : ''} ${scheme === 'dark' ? 'stats-page--dark' : ''}`}>
         {ink && <InkMasthead title='观照日常' />}
+        <BalancedThemeExperience surface='stats' />
         <View className='loading-wrap'>
           <View className='loading-spinner-md' />
         </View>
@@ -1331,6 +1333,7 @@ function StatsPage() {
     return (
       <View className={`stats-page ${ink ? 'ink-page' : ''} ${scheme === 'dark' ? 'stats-page--dark' : ''}`}>
         {ink && <InkMasthead title='观照日常' />}
+        <BalancedThemeExperience surface='stats' />
         <View className='error-wrap'>
           <Text className='iconfont icon-jiesuo error-icon' />
           <Text className='error-text'>{error}</Text>

@@ -385,6 +385,77 @@
   .home-toolbox__item.is-visible { background: #17394c; }
 }
 
+/* V4 / 01 澄明秩序：逐页对照渲染图后的精修。 */
+.fl-balanced-theme--clarity-order:not(.fl-d) {
+  .home-page,
+  .stats-page,
+  .community-page,
+  .profile-page {
+    color: #111;
+    background: #f8f8f2;
+  }
+
+  .home-login-banner,
+  .stats-guest-card,
+  .feed-filter-panel,
+  .profile-card {
+    background: #f8f8f2;
+    border: 2rpx solid #111;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .home-login-banner-btn,
+  .stats-guest-btn,
+  .feed-publish-btn,
+  .home-backfill-hint__action,
+  .home-module-placeholder__action,
+  .empty-record-btn {
+    color: #111 !important;
+    background: #c8ff00 !important;
+    border: 2rpx solid #111 !important;
+    border-radius: 0 !important;
+    box-shadow: 5rpx 5rpx 0 #173eb5 !important;
+  }
+
+  .home-login-banner-btn-text,
+  .stats-guest-btn-text,
+  .feed-publish-text { color: #111 !important; font-weight: 850; }
+
+  .date-item.is-selected,
+  .month-calendar-cell.is-selected { color: #111 !important; background: #c8ff00 !important; border-radius: 0 !important; }
+
+  .date-item.is-selected .date-day-circle,
+  .month-calendar-cell.is-selected .date-day-circle { color: #111 !important; background: #c8ff00 !important; border-color: #111 !important; box-shadow: none !important; }
+
+  .home-backfill-hint,
+  .home-health-profile-prompt { background: #fff; border: 2rpx solid #111; border-radius: 0; }
+
+  .home-diet-progress,
+  .combined-card,
+  .meals-section,
+  .expiry-section,
+  .home-nutrition-module,
+  .stats-guest-card {
+    border-top: 3rpx solid #111;
+    border-bottom: 1rpx solid #111;
+    border-radius: 0;
+  }
+
+  .progress-bar-fill,
+  .macro-progress-bar-fill,
+  .wellness-total-progress__fill { background: #c8ff00 !important; }
+
+  .feed-filter-trigger-combined,
+  .feed-filter-funnel-btn,
+  .feed-search-wrap { border-color: #111; border-radius: 0; }
+
+  .profile-section-heading.is-toggle { min-height: 78rpx; }
+  .profile-section-chevron { border-color: #111; }
+  .list-icon { background: #fff !important; border: 1rpx solid #111; border-radius: 0; }
+  .list-arrow { color: #111; }
+}
+
 /* V3：四个业务页面不再共用同一套卡片骨架。 */
 
 /* 澄明秩序：首页是编辑版面，分析是数据报表，圈子是杂志流，我的是档案索引。 */

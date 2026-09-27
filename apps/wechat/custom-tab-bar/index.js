@@ -1,5 +1,6 @@
 const APP_COLOR_SCHEME_KEY = 'fl_app_color_scheme'
 const HOME_DISPLAY_MODE_KEY = 'home_display_mode_v1'
+const BALANCED_THEME_STORAGE_KEY = 'balanced_visual_theme_v1'
 const ANALYZE_TASK_REMINDER_STORAGE_KEY = 'analyze_task_reminder_state_v1'
 const ANALYZE_TASK_REMINDER_OPEN_KEY = 'analyze_task_reminder_open_task_v1'
 const ANALYZE_TASK_REMINDER_OPEN_EVENT = 'openAnalyzeTaskReminder'
@@ -62,6 +63,9 @@ Component({
     colorScheme: 'light',
     /** 养生模式使用全局墨绿导航配色，跨 Tab 保持直到切回均衡模式 */
     wellnessActive: false,
+    /** 均衡模式主题，底栏与四个主页面保持同一套视觉语言 */
+    balancedTheme: 'clarity-order',
+    balancedThemeClass: 'custom-tab-bar--theme-clarity-order',
     profileTabBadgeCount: 0,
     analyzeReminderKind: 'idle',
     analyzeReminderCount: 0,
@@ -125,6 +129,7 @@ Component({
       this.updateHidden()
       this.updateColorScheme()
       this.updateHomeMode()
+      this.updateBalancedTheme()
       this.updateWaitingBadge()
     },
 
@@ -223,6 +228,30 @@ Component({
       } catch (e) {
         if (this.data.wellnessActive) {
           this.setData({ wellnessActive: false })
+        }
+      }
+    },
+
+    updateBalancedTheme() {
+      try {
+        const allowed = [
+          'clarity-order',
+          'natural-symbiosis',
+          'eastern-salon',
+          'modern-gallery',
+          'miniature-world',
+          'picturebook-companion',
+          'clear-care',
+          'way-of-water',
+        ]
+        const stored = wx.getStorageSync(BALANCED_THEME_STORAGE_KEY)
+        const next = allowed.includes(stored) ? stored : 'clarity-order'
+        if (next !== this.data.balancedTheme) {
+          this.setData({ balancedTheme: next, balancedThemeClass: `custom-tab-bar--theme-${next}` })
+        }
+      } catch (e) {
+        if (this.data.balancedTheme !== 'clarity-order') {
+          this.setData({ balancedTheme: 'clarity-order', balancedThemeClass: 'custom-tab-bar--theme-clarity-order' })
         }
       }
     },

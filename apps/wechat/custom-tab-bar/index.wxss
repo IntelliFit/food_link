@@ -313,3 +313,171 @@
 .custom-tab-bar.custom-tab-bar--wellness .center-icon { position: relative; z-index: 1; font-size: 39rpx; color: white; background: #222; border: 2rpx solid #fff; border-radius: 12rpx; padding: 4rpx; }
 .custom-tab-bar.custom-tab-bar--wellness .center-item { gap: 9rpx; }
 .custom-tab-bar.custom-tab-bar--wellness .center-opening-spinner { position: relative; z-index: 2; border-top-color: #222; }
+
+/* Balanced mode: each visual theme owns the navigation material and capture control. */
+.custom-tab-bar[class*="custom-tab-bar--theme-"]::before {
+  background-image: none;
+  border-top: 1rpx solid transparent;
+  transition: background .45s ease, border-color .45s ease, filter .45s ease;
+}
+
+.custom-tab-bar[class*="custom-tab-bar--theme-"] .tab-text {
+  font-weight: 650;
+  letter-spacing: 1rpx;
+}
+
+.custom-tab-bar[class*="custom-tab-bar--theme-"] .center-icon-wrapper {
+  box-sizing: border-box;
+  transition: background .35s ease, border-radius .35s ease, box-shadow .35s ease, transform .35s ease;
+}
+
+/* 01 澄明秩序：黑白栅格与荧光黄绿操作块。 */
+.custom-tab-bar--theme-clarity-order::before {
+  background: #f8f8f2;
+  border-top: 4rpx solid #111 !important;
+  filter: drop-shadow(0 -8rpx 0 #c8ff00) !important;
+}
+.custom-tab-bar--theme-clarity-order .tab-icon,
+.custom-tab-bar--theme-clarity-order .tab-text { color: #73736e; }
+.custom-tab-bar--theme-clarity-order .tab-item.selected .tab-icon,
+.custom-tab-bar--theme-clarity-order .tab-item.selected .tab-text { color: #111; }
+.custom-tab-bar--theme-clarity-order .tab-item.selected::after {
+  content: ''; position: absolute; left: 24%; right: 24%; bottom: 12rpx; height: 7rpx; background: #c8ff00;
+}
+.custom-tab-bar--theme-clarity-order .center-icon-wrapper {
+  width: 104rpx; height: 104rpx; margin-left: -52rpx; margin-top: -52rpx;
+  color: #111; background: #c8ff00; border: 4rpx solid #111; border-radius: 4rpx;
+  box-shadow: 9rpx 9rpx 0 #173eb5;
+}
+.custom-tab-bar--theme-clarity-order .center-icon { color: #111; }
+
+/* 02 自然共生：植物纸、林叶绿与种荚形入口。 */
+.custom-tab-bar--theme-natural-symbiosis::before {
+  background: #f3efe2;
+  border-top-color: #718b71 !important;
+  filter: drop-shadow(0 -8rpx 24rpx rgba(49, 83, 58, .18)) !important;
+}
+.custom-tab-bar--theme-natural-symbiosis .tab-icon,
+.custom-tab-bar--theme-natural-symbiosis .tab-text { color: #7d806f; font-family: 'Kaiti SC', STKaiti, KaiTi, serif; }
+.custom-tab-bar--theme-natural-symbiosis .tab-item.selected .tab-icon,
+.custom-tab-bar--theme-natural-symbiosis .tab-item.selected .tab-text { color: #376b4d; }
+.custom-tab-bar--theme-natural-symbiosis .center-icon-wrapper {
+  width: 112rpx; height: 100rpx; margin-left: -56rpx; margin-top: -50rpx;
+  background: #376b4d; border: 3rpx solid #f3efe2; border-radius: 66% 34% 62% 38% / 58% 46% 54% 42%;
+  box-shadow: 0 9rpx 0 #9f815d, 0 14rpx 28rpx rgba(49, 83, 58, .28); transform: translateY(-18rpx) rotate(-6deg);
+}
+.custom-tab-bar--theme-natural-symbiosis .center-icon { transform: rotate(6deg); }
+
+/* 03 东方雅集：宣纸、墨线与朱砂印钮。 */
+.custom-tab-bar--theme-eastern-salon::before {
+  background: #eee9dc;
+  border-top-color: #292822 !important;
+  filter: drop-shadow(0 -5rpx 18rpx rgba(32, 31, 27, .18)) !important;
+}
+.custom-tab-bar--theme-eastern-salon .tab-icon,
+.custom-tab-bar--theme-eastern-salon .tab-text { color: #777264; font-family: 'Songti SC', STSong, SimSun, serif; }
+.custom-tab-bar--theme-eastern-salon .tab-item.selected .tab-icon,
+.custom-tab-bar--theme-eastern-salon .tab-item.selected .tab-text { color: #9f3328; }
+.custom-tab-bar--theme-eastern-salon .center-icon-wrapper {
+  width: 100rpx; height: 100rpx; margin-left: -50rpx; margin-top: -50rpx;
+  background: #1d1c18; border: 5rpx double #c9b787; border-radius: 8rpx;
+  box-shadow: 0 10rpx 18rpx rgba(31, 29, 23, .3); transform: translateY(-18rpx) rotate(45deg);
+}
+.custom-tab-bar--theme-eastern-salon .center-icon,
+.custom-tab-bar--theme-eastern-salon .center-opening-spinner { transform: rotate(-45deg); }
+
+/* 04 现代艺廊：原色、硬边和偏轴构图。 */
+.custom-tab-bar--theme-modern-gallery::before {
+  background: #fffefa;
+  border-top: 5rpx solid #111 !important;
+  filter: drop-shadow(0 -9rpx 0 #f2c500) !important;
+}
+.custom-tab-bar--theme-modern-gallery .tab-icon,
+.custom-tab-bar--theme-modern-gallery .tab-text { color: #111; font-weight: 850; }
+.custom-tab-bar--theme-modern-gallery .tab-item:nth-child(1).selected .tab-icon,
+.custom-tab-bar--theme-modern-gallery .tab-item:nth-child(1).selected .tab-text,
+.custom-tab-bar--theme-modern-gallery .tab-item:nth-child(4).selected .tab-icon,
+.custom-tab-bar--theme-modern-gallery .tab-item:nth-child(4).selected .tab-text { color: #173eb5; }
+.custom-tab-bar--theme-modern-gallery .tab-item:nth-child(2).selected .tab-icon,
+.custom-tab-bar--theme-modern-gallery .tab-item:nth-child(2).selected .tab-text,
+.custom-tab-bar--theme-modern-gallery .tab-item:nth-child(5).selected .tab-icon,
+.custom-tab-bar--theme-modern-gallery .tab-item:nth-child(5).selected .tab-text { color: #e33b25; }
+.custom-tab-bar--theme-modern-gallery .center-icon-wrapper {
+  width: 104rpx; height: 104rpx; margin-left: -52rpx; margin-top: -52rpx;
+  background: #e33b25; border: 5rpx solid #111; border-radius: 0;
+  box-shadow: 10rpx 10rpx 0 #173eb5; transform: translateY(-18rpx) rotate(11deg);
+}
+.custom-tab-bar--theme-modern-gallery .center-icon,
+.custom-tab-bar--theme-modern-gallery .center-opening-spinner { transform: rotate(-11deg); }
+
+/* 05 微缩世界：木质地台与青铜工具钮。 */
+.custom-tab-bar--theme-miniature-world::before {
+  background: #d6bd91;
+  border-top: 5rpx solid #674c37 !important;
+  filter: drop-shadow(0 -10rpx 0 #9b7651) drop-shadow(0 -14rpx 20rpx rgba(74, 51, 30, .22)) !important;
+}
+.custom-tab-bar--theme-miniature-world .tab-icon,
+.custom-tab-bar--theme-miniature-world .tab-text { color: #6b5540; }
+.custom-tab-bar--theme-miniature-world .tab-item.selected .tab-icon,
+.custom-tab-bar--theme-miniature-world .tab-item.selected .tab-text { color: #176d83; }
+.custom-tab-bar--theme-miniature-world .center-icon-wrapper {
+  width: 118rpx; height: 92rpx; margin-left: -59rpx; margin-top: -46rpx;
+  background: #287992; border: 4rpx solid #674c37; border-radius: 18rpx;
+  box-shadow: 0 12rpx 0 #674c37, 0 18rpx 26rpx rgba(74, 51, 30, .28);
+}
+
+/* 06 绘本陪伴：深蓝布脊和纸页签。 */
+.custom-tab-bar--theme-picturebook-companion::before {
+  background: #f0dfbf;
+  border-top: 5rpx solid #263746 !important;
+  filter: drop-shadow(0 -8rpx 20rpx rgba(53, 38, 28, .24)) !important;
+}
+.custom-tab-bar--theme-picturebook-companion .tab-icon,
+.custom-tab-bar--theme-picturebook-companion .tab-text { color: #6b5a4b; font-family: 'Kaiti SC', STKaiti, KaiTi, serif; }
+.custom-tab-bar--theme-picturebook-companion .tab-item.selected .tab-icon,
+.custom-tab-bar--theme-picturebook-companion .tab-item.selected .tab-text { color: #a75536; }
+.custom-tab-bar--theme-picturebook-companion .center-icon-wrapper {
+  width: 112rpx; height: 100rpx; margin-left: -56rpx; margin-top: -50rpx;
+  background: #263746; border: 4rpx solid #5b4637; border-radius: 8rpx 24rpx 24rpx 8rpx;
+  box-shadow: 9rpx 9rpx 0 #a75536;
+}
+
+/* 07 清朗关怀：高对比、大触控、明确状态。 */
+.custom-tab-bar--theme-clear-care::before {
+  background: #fff;
+  border-top: 5rpx solid #071b12 !important;
+  filter: none !important;
+}
+.custom-tab-bar--theme-clear-care .tab-item { gap: 8rpx; }
+.custom-tab-bar--theme-clear-care .tab-icon { color: #515b55; font-size: 45rpx; }
+.custom-tab-bar--theme-clear-care .tab-text { color: #39433e; font-size: 24rpx; font-weight: 850; }
+.custom-tab-bar--theme-clear-care .tab-item.selected .tab-icon,
+.custom-tab-bar--theme-clear-care .tab-item.selected .tab-text { color: #005b38; }
+.custom-tab-bar--theme-clear-care .center-icon-wrapper {
+  width: 126rpx; height: 102rpx; margin-left: -63rpx; margin-top: -51rpx;
+  background: #f5ad19; border: 5rpx solid #071b12; border-radius: 12rpx;
+  box-shadow: none;
+}
+.custom-tab-bar--theme-clear-care .center-icon { color: #071b12; }
+
+/* 08 水之道：深水玻璃、冷光水线与暖铜焦点。 */
+.custom-tab-bar--theme-way-of-water::before {
+  background: #07121b;
+  border-top-color: rgba(142, 213, 237, .46) !important;
+  filter: drop-shadow(0 -10rpx 28rpx rgba(0, 0, 0, .5)) !important;
+}
+.custom-tab-bar--theme-way-of-water .tab-icon,
+.custom-tab-bar--theme-way-of-water .tab-text { color: #77919d; }
+.custom-tab-bar--theme-way-of-water .tab-item.selected .tab-icon,
+.custom-tab-bar--theme-way-of-water .tab-item.selected .tab-text { color: #e8edf0; }
+.custom-tab-bar--theme-way-of-water .tab-item.selected::after {
+  content: ''; position: absolute; left: 36%; right: 36%; bottom: 11rpx; height: 4rpx; background: #d06f3f; border-radius: 999rpx; box-shadow: 0 0 14rpx #d06f3f;
+}
+.custom-tab-bar--theme-way-of-water .center-icon-wrapper {
+  width: 112rpx; height: 112rpx; margin-left: -56rpx; margin-top: -56rpx;
+  background: radial-gradient(circle at 34% 28%, #24536b, #0c2230 48%, #06111a 76%);
+  border: 2rpx solid rgba(142, 213, 237, .7); border-radius: 50%;
+  box-shadow: inset 0 0 28rpx rgba(90, 184, 216, .2), 0 0 0 6rpx rgba(208, 111, 63, .24), 0 12rpx 30rpx rgba(0, 0, 0, .5);
+}
+.custom-tab-bar--theme-way-of-water .center-icon { color: #e8edf0; }
+.custom-tab-bar--theme-way-of-water .center-task-badge { border-color: #07121b; }

@@ -29,8 +29,10 @@ $stats-blue-soft: #7aa9ce;
 
   &--guest {
     display: flex;
+    flex-direction: column;
     align-items: flex-start;
-    justify-content: center;
+    justify-content: flex-start;
+    gap: 24rpx;
     padding: $tab-page-content-top 48rpx 200rpx;
   }
 }

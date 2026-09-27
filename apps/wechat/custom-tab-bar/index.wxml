@@ -1,4 +1,4 @@
-<view class="custom-tab-bar {{hidden ? 'hidden' : ''}} {{colorScheme === 'dark' ? 'custom-tab-bar--dark' : ''}} {{wellnessActive ? 'custom-tab-bar--wellness' : ''}}">
+<view class="custom-tab-bar {{hidden ? 'hidden' : ''}} {{colorScheme === 'dark' ? 'custom-tab-bar--dark' : ''}} {{wellnessActive ? 'custom-tab-bar--wellness' : ''}} custom-tab-bar--theme-{{balancedTheme}}">
   <view 
     wx:for="{{tabList}}" 
     wx:key="index"
