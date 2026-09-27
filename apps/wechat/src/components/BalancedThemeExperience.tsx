@@ -8,6 +8,7 @@ import './BalancedThemeExperience.scss'
 import clarityFood from '../assets/balanced-themes/clarity-food.webp'
 import naturalTable from '../assets/balanced-themes/natural-table.webp'
 import easternLandscape from '../assets/balanced-themes/eastern-landscape.webp'
+import picturebookArt from '../assets/balanced-themes/06-picturebook-companion-v2.webp'
 
 export type BalancedThemeSurface = 'home' | 'stats' | 'community' | 'profile'
 
@@ -371,17 +372,63 @@ export function BalancedThemeExperience({ surface }: { surface: BalancedThemeSur
   }
 
   if (theme === 'picturebook-companion') {
+    const picturebookDays = ['9.21', '9.22', '9.23', '9.24', '9.25', '9.26', '9.27']
     return (
       <View {...commonProps} className={`bt-experience bt-experience--picturebook bt-experience--${surface} is-stage-${stage}`}>
         <View className='bt-picturebook__binding'><View /><View /><View /></View>
-        <View className='bt-picturebook__page bt-picturebook__page--front'>
-          <Text className='bt-picturebook__chapter'>{story.index}</Text>
-          <Text className='bt-picturebook__title'>{story.title}</Text>
-          <Text className='bt-picturebook__subtitle'>{story.subtitle}</Text>
-          <View className='bt-picturebook__frame'><View className='bt-picturebook__sun' /><View className='bt-picturebook__road' /></View>
-        </View>
-        <View className='bt-picturebook__page bt-picturebook__page--back'><Text>{story.stages[stage]}。{story.action}。</Text></View>
-        <Text className='bt-experience__hint'>轻触翻一页</Text>
+        <View className='bt-picturebook__header'><Text>食探</Text><Text>{story.index}</Text><Text>2026-09-27</Text></View>
+        {surface === 'home' && (
+          <View className='bt-picturebook__home'>
+            <Image src={picturebookArt} mode='aspectFill' />
+            <View className='bt-picturebook__home-title'><Text>{story.title}</Text><Text>{story.subtitle}</Text></View>
+            <View className='bt-picturebook__chapters'>
+              {[['☀', '早餐', '晨光里的第一口'], ['◉', '午餐', '城市中的温暖相遇'], ['☾', '晚餐', '夜色也替日子留了灯']].map((item, index) => (
+                <View key={item[1]} className={index === stage ? 'is-active' : ''}><Text>{item[0]} {item[1]}</Text><Text>{item[2]}</Text></View>
+              ))}
+            </View>
+            <View className='bt-picturebook__home-action'><Text>记录这一餐</Text><Text>不仅为了吃，也是为了记得。</Text></View>
+          </View>
+        )}
+        {surface === 'stats' && (
+          <View className='bt-picturebook__stats'>
+            <View className='bt-picturebook__stats-title'><Text>{story.title}</Text><Text>一周的三餐，拼成更好的自己。</Text></View>
+            <View className='bt-picturebook__filmstrip'>
+              {picturebookDays.map((day, index) => <View key={day} className={index === stage + 4 ? 'is-active' : ''}><Image src={index % 2 ? naturalTable : clarityFood} mode='aspectFill' /><Text>{day}</Text></View>)}
+            </View>
+            <View className='bt-picturebook__week-card'>
+              <View className='bt-picturebook__meal-ring'><Text>21</Text><Text>总餐数</Text></View>
+              <View className='bt-picturebook__meal-legend'><Text>☀ 早餐　7</Text><Text>◉ 午餐　8</Text><Text>☾ 晚餐　6</Text></View>
+            </View>
+            <View className='bt-picturebook__mood'><Text>一日三时 · 味道与心情</Text><View><View /><View /><View /><View /><View /></View><Text>好好吃饭，就是好好生活。</Text></View>
+          </View>
+        )}
+        {surface === 'community' && (
+          <View className='bt-picturebook__community'>
+            <View className='bt-picturebook__community-title'><Text>{story.title}</Text><Text>不同的食光，不同的自己。</Text></View>
+            {[
+              ['山与海', '转角遇到一条小面馆。', '食物是城市里最温柔的相遇。'],
+              ['一片叶子', '夜色里的晚餐。', '在烟火气里，找到生活的锚点。'],
+            ].map((item, index) => (
+              <View key={item[0]} className={`bt-picturebook__story-card ${index === stage % 2 ? 'is-active' : ''}`}>
+                <View><Text>{item[0]}</Text><Text>{index + 1}天前 · 故事来信</Text></View>
+                <Image src={index ? naturalTable : picturebookArt} mode='aspectFill' />
+                <View><Text>{item[1]}</Text><Text>{item[2]}</Text></View>
+                <Text>♡ {index ? 268 : 326}　回声 {index ? 36 : 48}</Text>
+              </View>
+            ))}
+          </View>
+        )}
+        {surface === 'profile' && (
+          <View className='bt-picturebook__profile'>
+            <View className='bt-picturebook__profile-hero'><Image src={picturebookArt} mode='aspectFill' /><View><Text>食探er</Text><Text>在三餐四季里，探寻更好的自己。</Text></View></View>
+            <View className='bt-picturebook__profile-counts'><View><Text>257</Text><Text>记录天数</Text></View><View><Text>613</Text><Text>收藏瞬间</Text></View><View><Text>42</Text><Text>关注</Text></View></View>
+            <View className='bt-picturebook__catalog'>
+              {['第一章　早餐', '第二章　午餐', '第三章　晚餐', '第四章　人与味'].map((item, index) => <View key={item} className={index === stage ? 'is-active' : ''}><Text>{item}</Text><Text>{32 - index * 5} 篇　›</Text></View>)}
+            </View>
+            <Text className='bt-picturebook__quote'>记录不是为了完成，而是为了记得那些真实的自己。</Text>
+          </View>
+        )}
+        <Text className='bt-experience__hint'>轻触翻到下一幕</Text>
       </View>
     )
   }

@@ -531,6 +531,101 @@
   &.is-stage-2 .bt-picturebook__page--front { opacity: 0; transform: rotateY(-82deg); }
 }
 
+/* 绘本陪伴：以电影分镜、手账纸片与夜读书桌组织四个页面。 */
+.bt-experience--picturebook {
+  display: block;
+  min-height: 760rpx;
+  overflow: hidden;
+  color: #f4e5c9;
+  background: linear-gradient(145deg, #172a36, #07131e 72%);
+  border: 5rpx solid #12212d;
+  border-radius: 10rpx;
+  box-shadow: 10rpx 14rpx 0 #8b4b32, 0 26rpx 44rpx rgb(18 18 18 / 38%);
+
+  &::before { content: ''; position: absolute; inset: 0; background: radial-gradient(circle at 78% 18%, rgb(226 151 67 / 22%) 0 2rpx, transparent 3rpx), radial-gradient(circle at 22% 34%, rgb(255 255 255 / 12%) 0 2rpx, transparent 3rpx); background-size: 42rpx 38rpx, 53rpx 47rpx; opacity: .55; pointer-events: none; }
+  .bt-picturebook__binding { position: absolute; z-index: 30; left: 0; top: 0; bottom: 0; display: flex; flex-direction: column; justify-content: space-around; width: 42rpx; padding: 34rpx 0; background: #0a1721; border-right: 3rpx solid #c79555; }
+  .bt-picturebook__binding view { width: 32rpx; height: 8rpx; margin-left: 5rpx; background: #e6d2ae; border-radius: 999rpx; box-shadow: 0 0 7rpx rgb(232 190 115 / 50%); }
+  .bt-picturebook__header { position: relative; z-index: 12; display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 22rpx; margin-left: 42rpx; padding: 22rpx 28rpx 14rpx; border-bottom: 2rpx solid rgb(229 209 177 / 22%); }
+  .bt-picturebook__header text:first-child { font-family: 'Kaiti SC', STKaiti, KaiTi, serif; font-size: 44rpx; font-weight: 900; }
+  .bt-picturebook__header text:nth-child(2) { padding: 7rpx 13rpx; color: #1b2b35; font-family: 'Kaiti SC', STKaiti, KaiTi, serif; font-size: 19rpx; background: #eadabd; transform: rotate(-2deg); }
+  .bt-picturebook__header text:last-child { font-size: 16rpx; letter-spacing: 1rpx; }
+  .bt-experience__hint { color: #ead6b4; }
+
+  .bt-picturebook__home { position: absolute; inset: 88rpx 0 0 42rpx; overflow: hidden; }
+  .bt-picturebook__home > image { position: absolute; inset: 0; width: 100%; height: 100%; opacity: .82; filter: saturate(.8) contrast(1.08); }
+  .bt-picturebook__home::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, rgb(7 16 24 / 18%), rgb(7 16 24 / 74%) 68%, rgb(7 16 24 / 92%)); pointer-events: none; }
+  .bt-picturebook__home-title { position: absolute; z-index: 5; left: 34rpx; top: 34rpx; display: flex; flex-direction: column; width: 290rpx; padding: 18rpx 22rpx; color: #1b2730; background: #ebd9b7; box-shadow: 8rpx 9rpx 0 rgb(0 0 0 / 28%); transform: rotate(-2deg); }
+  .bt-picturebook__home-title text:first-child { font-family: 'Kaiti SC', STKaiti, KaiTi, serif; font-size: 42rpx; font-weight: 900; }
+  .bt-picturebook__home-title text:last-child { margin-top: 7rpx; font-size: 19rpx; }
+  .bt-picturebook__chapters { position: absolute; z-index: 6; right: 24rpx; top: 40rpx; display: flex; flex-direction: column; gap: 18rpx; width: 280rpx; }
+  .bt-picturebook__chapters view { display: flex; flex-direction: column; gap: 5rpx; padding: 14rpx 18rpx; color: #2b2825; background: #eadabd; border-left: 8rpx solid #a65336; box-shadow: 7rpx 7rpx 0 rgb(0 0 0 / 28%); opacity: .76; transform: translateX(5rpx) rotate(1deg); transition: transform 300ms ease, opacity 300ms ease; }
+  .bt-picturebook__chapters view:nth-child(2) { border-left-color: #ce8d43; transform: rotate(-2deg); }
+  .bt-picturebook__chapters view:nth-child(3) { border-left-color: #39586a; }
+  .bt-picturebook__chapters view.is-active { opacity: 1; transform: translateX(-12rpx) rotate(-1deg); }
+  .bt-picturebook__chapters text:first-child { font-family: 'Kaiti SC', STKaiti, KaiTi, serif; font-size: 24rpx; font-weight: 900; }
+  .bt-picturebook__chapters text:last-child { font-size: 17rpx; line-height: 1.4; }
+  .bt-picturebook__home-action { position: absolute; z-index: 7; left: 34rpx; bottom: 62rpx; display: flex; flex-direction: column; width: 350rpx; padding: 16rpx 20rpx; color: #28241f; background: #eadabd; box-shadow: 7rpx 8rpx 0 rgb(0 0 0 / 34%); transform: rotate(1deg); }
+  .bt-picturebook__home-action text:first-child { font-family: 'Kaiti SC', STKaiti, KaiTi, serif; font-size: 27rpx; font-weight: 900; }
+  .bt-picturebook__home-action text:last-child { margin-top: 5rpx; font-size: 17rpx; }
+
+  .bt-picturebook__stats { position: absolute; inset: 88rpx 0 0 42rpx; padding: 22rpx 28rpx; background: linear-gradient(rgb(8 20 30 / 70%), rgb(8 20 30 / 94%)); }
+  .bt-picturebook__stats-title { display: flex; align-items: baseline; gap: 18rpx; }
+  .bt-picturebook__stats-title text:first-child { padding: 8rpx 18rpx; color: #1c2932; font-family: 'Kaiti SC', STKaiti, KaiTi, serif; font-size: 38rpx; font-weight: 900; background: #eadabd; transform: rotate(-2deg); }
+  .bt-picturebook__stats-title text:last-child { font-size: 18rpx; }
+  .bt-picturebook__filmstrip { position: relative; display: flex; gap: 7rpx; margin-top: 24rpx; padding: 20rpx 13rpx; background: #111; border-top: 8rpx dotted #cfb990; border-bottom: 8rpx dotted #cfb990; }
+  .bt-picturebook__filmstrip view { display: flex; flex: 1; flex-direction: column; gap: 6rpx; opacity: .66; transition: opacity 260ms ease, transform 260ms ease; }
+  .bt-picturebook__filmstrip view.is-active { opacity: 1; transform: translateY(-7rpx); }
+  .bt-picturebook__filmstrip image { width: 100%; height: 88rpx; filter: sepia(.25) saturate(.8); }
+  .bt-picturebook__filmstrip text { font-size: 14rpx; text-align: center; }
+  .bt-picturebook__week-card { display: flex; align-items: center; gap: 34rpx; margin-top: 22rpx; padding: 22rpx 30rpx; color: #27231f; background: #eadabd; box-shadow: 6rpx 7rpx 0 rgb(0 0 0 / 26%); transform: rotate(-1deg); }
+  .bt-picturebook__meal-ring { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 138rpx; height: 138rpx; border: 22rpx solid #c26942; border-top-color: #e4ad4f; border-right-color: #5d6f7b; border-radius: 50%; }
+  .bt-picturebook__meal-ring text:first-child { font-size: 34rpx; font-weight: 900; }
+  .bt-picturebook__meal-ring text:last-child { font-size: 15rpx; }
+  .bt-picturebook__meal-legend { display: flex; flex-direction: column; gap: 13rpx; font-size: 20rpx; }
+  .bt-picturebook__mood { margin-top: 18rpx; padding: 16rpx 20rpx; color: #2b2825; background: #eadabd; }
+  .bt-picturebook__mood > text:first-child { font-family: 'Kaiti SC', STKaiti, KaiTi, serif; font-size: 22rpx; font-weight: 900; }
+  .bt-picturebook__mood > view { display: flex; align-items: flex-end; gap: 4rpx; height: 60rpx; margin: 10rpx 0; border-bottom: 2rpx solid #715c4a; }
+  .bt-picturebook__mood > view view { flex: 1; height: 24rpx; background: #718392; border-radius: 50% 50% 0 0; }
+  .bt-picturebook__mood > view view:nth-child(2) { height: 38rpx; background: #ca6d45; }
+  .bt-picturebook__mood > view view:nth-child(3) { height: 52rpx; background: #e3aa4e; }
+  .bt-picturebook__mood > view view:nth-child(4) { height: 44rpx; background: #9f5b45; }
+  .bt-picturebook__mood > view view:nth-child(5) { height: 32rpx; }
+  .bt-picturebook__mood > text:last-child { display: block; font-size: 17rpx; text-align: center; }
+
+  .bt-picturebook__community { position: absolute; inset: 88rpx 0 0 42rpx; overflow: hidden; padding: 22rpx 28rpx; background: #dfcfb3; color: #25231f; }
+  .bt-picturebook__community::before { content: ''; position: absolute; inset: 0; background: linear-gradient(100deg, transparent, rgb(255 255 255 / 25%), transparent); pointer-events: none; }
+  .bt-picturebook__community-title { position: relative; display: flex; align-items: baseline; gap: 18rpx; margin-bottom: 16rpx; }
+  .bt-picturebook__community-title text:first-child { font-family: 'Kaiti SC', STKaiti, KaiTi, serif; font-size: 38rpx; font-weight: 900; }
+  .bt-picturebook__community-title text:last-child { font-size: 18rpx; }
+  .bt-picturebook__story-card { position: relative; display: grid; grid-template-columns: 1fr 250rpx; gap: 10rpx 18rpx; margin-top: 13rpx; padding: 16rpx; background: #f2e3c7; border-top: 2rpx solid #765d47; box-shadow: 7rpx 8rpx 0 rgb(70 48 35 / 18%); opacity: .78; transform: rotate(.5deg); transition: transform 280ms ease, opacity 280ms ease; }
+  .bt-picturebook__story-card.is-active { opacity: 1; transform: translateX(8rpx) rotate(-.5deg); }
+  .bt-picturebook__story-card > view:first-child { display: flex; flex-direction: column; }
+  .bt-picturebook__story-card > view:first-child text:first-child { font-size: 22rpx; font-weight: 900; }
+  .bt-picturebook__story-card > view:first-child text:last-child { margin-top: 5rpx; color: #7b6958; font-size: 15rpx; }
+  .bt-picturebook__story-card > image { grid-row: 1 / 4; grid-column: 2; width: 250rpx; height: 168rpx; filter: sepia(.18) saturate(.84); }
+  .bt-picturebook__story-card > view:nth-child(3) { display: flex; flex-direction: column; gap: 5rpx; }
+  .bt-picturebook__story-card > view:nth-child(3) text:first-child { font-family: 'Kaiti SC', STKaiti, KaiTi, serif; font-size: 21rpx; font-weight: 800; }
+  .bt-picturebook__story-card > view:nth-child(3) text:last-child { font-size: 16rpx; line-height: 1.45; }
+  .bt-picturebook__story-card > text:last-child { align-self: end; color: #765d47; font-size: 15rpx; }
+
+  .bt-picturebook__profile { position: absolute; inset: 88rpx 0 0 42rpx; overflow: hidden; padding: 24rpx 30rpx; background: linear-gradient(135deg, #132331, #080f17 70%); }
+  .bt-picturebook__profile-hero { display: flex; align-items: center; gap: 22rpx; }
+  .bt-picturebook__profile-hero image { width: 116rpx; height: 116rpx; border: 5rpx solid #d7ba88; border-radius: 50%; box-shadow: 0 0 24rpx rgb(229 170 88 / 22%); }
+  .bt-picturebook__profile-hero view { display: flex; flex-direction: column; gap: 6rpx; }
+  .bt-picturebook__profile-hero text:first-child { font-family: 'Kaiti SC', STKaiti, KaiTi, serif; font-size: 30rpx; font-weight: 900; }
+  .bt-picturebook__profile-hero text:last-child { width: 320rpx; color: #cbb898; font-size: 17rpx; }
+  .bt-picturebook__profile-counts { display: flex; justify-content: space-around; margin: 22rpx 0; padding: 16rpx 0; border-top: 1rpx solid rgb(234 215 183 / 28%); border-bottom: 1rpx solid rgb(234 215 183 / 28%); }
+  .bt-picturebook__profile-counts view { display: flex; flex-direction: column; align-items: center; gap: 4rpx; }
+  .bt-picturebook__profile-counts text:first-child { font-size: 27rpx; }
+  .bt-picturebook__profile-counts text:last-child { color: #b9a98e; font-size: 15rpx; }
+  .bt-picturebook__catalog { color: #29251f; background: #e4d2b5; border-left: 8rpx solid #9b5538; box-shadow: 8rpx 9rpx 0 rgb(0 0 0 / 30%); transform: rotate(-1deg); }
+  .bt-picturebook__catalog view { display: flex; justify-content: space-between; padding: 15rpx 18rpx; border-bottom: 1rpx solid #bda889; transition: background 260ms ease, padding 260ms ease; }
+  .bt-picturebook__catalog view.is-active { padding-left: 28rpx; background: #f0dfc1; }
+  .bt-picturebook__catalog text:first-child { font-family: 'Kaiti SC', STKaiti, KaiTi, serif; font-size: 20rpx; font-weight: 800; }
+  .bt-picturebook__catalog text:last-child { color: #7a6552; font-size: 16rpx; }
+  .bt-picturebook__quote { display: block; width: 440rpx; margin: 20rpx auto 0; color: #d7c5a6; font-family: 'Kaiti SC', STKaiti, KaiTi, serif; font-size: 20rpx; line-height: 1.6; text-align: center; }
+}
+
 .bt-experience--care {
   display: grid;
   grid-template: 98rpx 1fr / 132rpx 1fr 160rpx;
