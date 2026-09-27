@@ -199,6 +199,7 @@ export function BalancedThemeExperience({ surface }: { surface: BalancedThemeSur
   if (theme === 'clear-care') {
     return (
       <View {...commonProps} className={`bt-experience bt-experience--care bt-experience--${surface} is-stage-${stage}`}>
+        <View className='bt-care__brand'><Text>食探</Text><Text>清朗关怀</Text><Text>2026年 9月27日</Text></View>
         <View className='bt-care__number'><Text>{story.index}</Text></View>
         <View className='bt-care__copy'><Text>{story.title}</Text><Text>{story.stages[stage]}</Text><Text className='bt-care__tag'>{story.tags[stage]}</Text></View>
         <View className='bt-care__action'><Text>{story.action}</Text><Text>→</Text></View>

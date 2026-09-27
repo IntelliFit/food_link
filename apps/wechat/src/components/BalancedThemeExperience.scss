@@ -257,20 +257,24 @@
 
 .bt-experience--care {
   display: grid;
-  grid-template-columns: 120rpx 1fr 126rpx;
-  min-height: 268rpx;
+  grid-template: 98rpx 1fr / 132rpx 1fr 160rpx;
+  min-height: 386rpx;
   color: #071b12;
   background: #fff;
   border: 5rpx solid #071b12;
   border-radius: 16rpx;
 
-  .bt-care__number { display: flex; align-items: center; justify-content: center; color: #fff; font-size: 52rpx; font-weight: 900; background: #005b38; }
-  .bt-care__copy { display: flex; flex-direction: column; justify-content: center; gap: 10rpx; padding: 22rpx; }
-  .bt-care__copy text:first-child { font-size: 34rpx; font-weight: 900; }
-  .bt-care__copy text:last-child { font-size: 25rpx; line-height: 1.45; }
-  .bt-care__copy .bt-care__tag { align-self: flex-start; padding: 4rpx 10rpx; color: #005b38; font-size: 19rpx; background: #eef6f1; border: 2rpx solid #005b38; }
-  .bt-care__action { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8rpx; color: #071b12; font-size: 23rpx; font-weight: 800; background: #f5ad19; border-left: 4rpx solid #071b12; }
-  .bt-care__action text:last-child { font-size: 42rpx; }
+  .bt-care__brand { grid-column: 1 / -1; display: grid; grid-template-columns: auto auto 1fr; align-items: center; gap: 18rpx; padding: 0 24rpx; border-bottom: 4rpx solid #071b12; }
+  .bt-care__brand text:first-child { color: #005b38; font-size: 52rpx; font-weight: 950; letter-spacing: -4rpx; }
+  .bt-care__brand text:nth-child(2) { padding: 8rpx 14rpx; color: #fff; font-size: 22rpx; font-weight: 850; background: #005b38; border-radius: 14rpx; }
+  .bt-care__brand text:last-child { justify-self: end; max-width: 110rpx; font-size: 18rpx; line-height: 1.25; text-align: right; }
+  .bt-care__number { display: flex; align-items: center; justify-content: center; color: #fff; font-size: 60rpx; font-weight: 950; background: #005b38; }
+  .bt-care__copy { display: flex; flex-direction: column; justify-content: center; gap: 14rpx; padding: 28rpx; }
+  .bt-care__copy text:first-child { font-size: 44rpx; font-weight: 950; line-height: 1.1; }
+  .bt-care__copy text:last-child { font-size: 28rpx; line-height: 1.45; }
+  .bt-care__copy .bt-care__tag { align-self: flex-start; padding: 7rpx 13rpx; color: #005b38; font-size: 21rpx; background: #eef6f1; border: 3rpx solid #005b38; }
+  .bt-care__action { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12rpx; padding: 16rpx; color: #071b12; font-size: 27rpx; font-weight: 900; text-align: center; background: #f5ad19; border-left: 5rpx solid #071b12; }
+  .bt-care__action text:last-child { font-size: 52rpx; }
 }
 
 .bt-experience--water {

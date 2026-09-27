@@ -848,6 +848,86 @@
   .list-arrow { color: #a75536; }
 }
 
+/* V4 / 07 清朗关怀：大字号、强对比、单任务层级和低认知负担。 */
+.fl-balanced-theme--clear-care:not(.fl-d) {
+  .home-page,
+  .stats-page,
+  .community-page,
+  .profile-page { color: #071b12; background: #f4f6f4; }
+
+  .home-login-banner,
+  .stats-guest-card,
+  .home-health-profile-prompt {
+    background: #eef6f1;
+    border: 5rpx solid #071b12;
+    border-radius: 14rpx;
+    box-shadow: none;
+  }
+  .home-login-banner-text,
+  .stats-guest-title { color: #071b12; font-size: 30rpx; font-weight: 900; }
+  .stats-guest-desc { color: #273a31; font-size: 25rpx; line-height: 1.6; }
+  .home-login-banner-btn,
+  .stats-guest-btn,
+  .feed-publish-btn,
+  .home-backfill-hint__action,
+  .home-module-placeholder__action,
+  .empty-record-btn {
+    min-height: 70rpx;
+    color: #071b12 !important;
+    background: #f5ad19 !important;
+    border: 5rpx solid #071b12 !important;
+    border-radius: 12rpx !important;
+    box-shadow: none !important;
+  }
+  .home-login-banner-btn-text,
+  .stats-guest-btn-text,
+  .feed-publish-text { color: #071b12 !important; font-size: 26rpx; font-weight: 950; }
+
+  .date-item { min-width: 72rpx; min-height: 82rpx; }
+  .date-item.is-selected,
+  .month-calendar-cell.is-selected { color: #fff !important; background: #005b38 !important; border: 4rpx solid #071b12 !important; border-radius: 10rpx !important; }
+  .date-item.is-selected .date-day-circle { color: #fff !important; background: #005b38 !important; border-color: #071b12 !important; box-shadow: none !important; }
+
+  .home-calendar-module,
+  .home-experience-card,
+  .stats-card,
+  .analysis-card,
+  .feed-card,
+  .circle-card {
+    background: #fff;
+    border: 5rpx solid #071b12;
+    border-radius: 14rpx;
+    box-shadow: none;
+  }
+  .section-title,
+  .meals-title,
+  .nutrition-expand-title,
+  .card-label,
+  .card-title { color: #071b12; font-size: 32rpx; font-weight: 950; }
+  .progress-bar-fill,
+  .macro-progress-bar-fill,
+  .wellness-total-progress__fill { background: #005b38 !important; }
+
+  .ranking-banner { color: #071b12; background: #eef6f1; border-width: 5rpx; box-shadow: none; }
+  .feed-filter-panel { background: #fff; border: 5rpx solid #071b12; border-radius: 14rpx; }
+  .feed-search-wrap,
+  .feed-filter-trigger-combined { min-height: 72rpx; background: #eef6f1; border: 4rpx solid #071b12; border-radius: 10rpx; }
+  .feed-card { font-size: 27rpx; }
+  .feed-actions { min-height: 76rpx; }
+
+  .profile-header-section { background: #fff; border: 5rpx solid #071b12; border-radius: 14rpx; }
+  .user-name { color: #071b12; font-size: 40rpx; font-weight: 950; }
+  .profile-section { background: #fff; border: 5rpx solid #071b12; border-radius: 14rpx; }
+  .profile-section-heading { min-height: 94rpx; padding: 18rpx 22rpx; }
+  .profile-section-title { color: #071b12; font-size: 32rpx; font-weight: 950; }
+  .profile-section-hint { color: #35483e; font-size: 23rpx; }
+  .list-item { min-height: 118rpx; padding: 16rpx 22rpx; border-bottom: 3rpx solid #cbd7d0; }
+  .list-icon { width: 66rpx; height: 66rpx; color: #fff !important; background: #005b38 !important; border: 3rpx solid #071b12; border-radius: 50%; }
+  .list-title { color: #071b12; font-size: 30rpx; font-weight: 900; }
+  .list-desc { color: #35483e; font-size: 23rpx; }
+  .list-arrow { color: #071b12; font-size: 34rpx; }
+}
+
 /* V3：四个业务页面不再共用同一套卡片骨架。 */
 
 /* 澄明秩序：首页是编辑版面，分析是数据报表，圈子是杂志流，我的是档案索引。 */
