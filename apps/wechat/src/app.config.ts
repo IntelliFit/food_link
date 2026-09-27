@@ -86,6 +86,7 @@ export default defineAppConfig({
   darkmode: false,
   pages: mainPages,
   subpackages: [
+    { root: 'packageThemeScenes', name: 'theme-scenes', pages: ['pages/index/index'] },
     {
       root: 'packageExtra',
       name: 'extra',

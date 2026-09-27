@@ -2049,7 +2049,7 @@ function CommunityPage() {
               if (expandedCommentRecordId) closeCommentModal()
             }}
           >
-            <BalancedThemeExperience surface='community' />
+            <BalancedThemeExperience surface='community' onPublish={() => void handlePublishPost()} />
             {ink && <>
               <InkMasthead title='烟火人间' subtitle='一餐一味，彼此相伴' />
               <View className='ink-feed-tabs'>

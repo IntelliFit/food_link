@@ -1254,3 +1254,69 @@
   .profile-header-section .quick-action-text { color: #eef5f7; }
   .profile-section { background: #102432; border: 1rpx solid rgb(166 211 229 / 34%); border-radius: 48rpx 14rpx; }
 }
+/* V5: chapter headers end at the real content; keep the app's lists and forms in the same art direction. */
+.fl-balanced-theme--picturebook-companion {
+  --bt-page: #10222a;
+  --bt-surface: #f4e8d1;
+  --bt-surface-muted: #e6d7bb;
+  --bt-text: #27332e;
+  --bt-muted: #6e685b;
+}
+.fl-page-theme-root--balanced:not(.fl-d) {
+  .community-scroll-content { display: flex; flex-direction: column; }
+  .community-scroll-content > .bt-experience { order: 0; flex-shrink: 0; }
+  .community-scroll-content > .feed-section { order: 1; }
+  .community-scroll-content > .ranking-banner { order: 3; margin-top: 32rpx; }
+  .community-scroll-content > .my-circles-section { order: 2; }
+  .bt-experience--profile { margin-bottom: 0; }
+  .profile-header-section { margin-top: 0; }
+}
+.fl-balanced-theme--picturebook-companion:not(.fl-d) {
+  .home-page, .profile-page, .community-page, .stats-page { background: #10222a !important; }
+  .profile-header-section { color: #f2e8d1; background: #162b32; border: 0; box-shadow: none; }
+  .user-name, .quick-action-num, .quick-action-text, .user-meta-text { color: #f2e8d1; }
+  .feed-section-title, .section-title { color: #f2e8d1; }
+  .feed-card, .stats-card, .profile-card { box-shadow: none; border: 1rpx solid #c9b996; border-radius: 3rpx; }
+  .feed-content, .feed-author-name, .feed-card .section-title { color: #27332e; }
+  .profile-section { background: #f3e7ce; border: 1rpx solid #c9b996; border-radius: 3rpx; box-shadow: none; }
+  .profile-section-heading { background: #f3e7ce; }
+  .profile-section-heading .profile-section-title, .profile-section-heading .profile-section-hint { color: #27332e; }
+  .list-title { color: #27332e; }
+  .list-desc { color: #6e685b; }
+}
+.fl-balanced-theme--miniature-world:not(.fl-d) {
+  .home-page, .profile-page, .community-page, .stats-page { background: #e8e0ce !important; }
+  .home-module-frame:nth-child(even), .stats-card:nth-child(even), .feed-card:nth-child(even) { transform: none; }
+  .stats-card, .feed-card, .home-experience-card { border: 1rpx solid #bba582; border-bottom-width: 4rpx; box-shadow: 0 6rpx 16rpx #47371a12; }
+  .profile-header-section { background: #f4ecd9; border: 1rpx solid #bba582; border-bottom-width: 4rpx; box-shadow: none; border-radius: 0; }
+  .profile-header-section .user-name, .profile-header-section .user-meta-text, .profile-header-section .quick-action-num, .profile-header-section .quick-action-text { color: #382d20; }
+  .profile-section { background: #f1e4c9; border: 1rpx solid #b79d79; border-bottom-width: 5rpx; }
+  .profile-section .profile-section-title, .profile-section .profile-section-hint, .profile-section .list-title, .profile-section .list-desc { color: #382d20; }
+  .list-item { background: #fff7e4; border: 1rpx solid #cdb997; box-shadow: none; min-height: 118rpx; }
+}
+.fl-balanced-theme--clear-care:not(.fl-d) {
+  .user-name, .section-title, .list-title, .profile-section-title, .feed-author-name { font-size: 36rpx !important; }
+  .list-desc, .feed-content, .user-meta-text, .profile-section-hint { font-size: 28rpx !important; line-height: 1.65; }
+  .list-item { min-height: 140rpx; }
+  .profile-section { border: 1rpx solid #d7e3d9; border-radius: 18rpx; }
+  .stats-card, .feed-card { border: 1rpx solid #d7e3d9; }
+  .stats-guest-title, .error-text { font-size: 36rpx; }
+  .stats-guest-desc { font-size: 28rpx; }
+}
+.fl-balanced-theme--modern-gallery:not(.fl-d) {
+  .profile-section { background: #aa1d13; border: 2rpx solid #7f170f; border-radius: 0; box-shadow: 0 5rpx 0 #66150f; }
+  .profile-section-heading { background: #aa1d13; }
+  .profile-section-title, .profile-section-hint { color: #fff4dc; }
+  .profile-card { background: #f7f3e9; }
+}
+.fl-balanced-theme--way-of-water:not(.fl-d) {
+  .profile-header-section { background: #0c1a23; border: 1rpx solid #3f535c; box-shadow: none; }
+  .feed-card, .stats-card, .profile-card { background: #0f202a; border: 1rpx solid #3f535c; box-shadow: none; border-radius: 18rpx; }
+  .feed-section-title, .section-title, .feed-author-name, .feed-content, .stats-guest-title { color: #eaf0f1; }
+  .stats-guest-desc { color: #a9bdc6; }
+}
+/* The old theme wrappers used different gutters. Full-bleed art is centered in each one. */
+.fl-page-theme-root--balanced .bt-experience {
+  width: 100vw !important;
+  margin-left: calc((100% - 100vw) / 2) !important;
+}

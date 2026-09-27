@@ -1,5 +1,5 @@
 import { Image, ScrollView, Text, View } from '@tarojs/components'
-import React from 'react'
+import * as React from 'react'
 import { useBalancedTheme } from './BalancedThemeContext'
 import { BalancedThemeReveal } from './BalancedThemeReveal'
 import {

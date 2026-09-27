@@ -481,3 +481,11 @@
 }
 .custom-tab-bar--theme-way-of-water .center-icon { color: #e8edf0; }
 .custom-tab-bar--theme-way-of-water .center-task-badge { border-color: #07121b; }
+/* Match the dark literary chapter artwork across the native navigation surface. */
+.custom-tab-bar--theme-picturebook-companion::before { background: #10222a; border-top: 1rpx solid #52605d !important; }
+.custom-tab-bar--theme-picturebook-companion .tab-icon,
+.custom-tab-bar--theme-picturebook-companion .tab-text { color: #b6afa1; }
+.custom-tab-bar--theme-picturebook-companion .tab-item.selected .tab-icon,
+.custom-tab-bar--theme-picturebook-companion .tab-item.selected .tab-text { color: #efd292; }
+.custom-tab-bar--theme-picturebook-companion .center-icon-wrapper { background: #e4cd9d; border: 2rpx solid #213731; box-shadow: none; }
+.custom-tab-bar--theme-picturebook-companion .center-icon { color: #14272e; }

@@ -114,6 +114,8 @@ export default defineConfig<'vite'>(async (merge) => {
     },
     copy: {
       patterns: [
+        { from: 'src/packageThemeScenes/assets', to: 'packageThemeScenes/assets' },
+        { from: 'src/packageThemeScenes/ready.js', to: 'packageThemeScenes/ready.js' },
         { from: 'src/packageRecap/assets/recap', to: 'packageRecap/assets/recap' },
         { from: 'src/packageRecap/assets/recap-v5', to: 'packageRecap/assets/recap-v5' },
         {

@@ -5,6 +5,7 @@ import { useAppColorSchemeOptional } from './AppColorSchemeContext'
 import { useBalancedThemeOptional } from './BalancedThemeContext'
 import { HOME_DISPLAY_MODE_STORAGE_KEY } from '../utils/home-display-mode'
 import { getStoredBalancedTheme } from '../utils/balanced-theme'
+import { applyThemeNavigationBar } from '../utils/theme-navigation-bar'
 
 function readWellnessMode(): boolean {
   try {
@@ -24,6 +25,8 @@ export function FlPageThemeRoot({ children }: PropsWithChildren): React.ReactEle
   const dark = scheme === 'dark'
   const [wellness, setWellness] = React.useState(readWellnessMode)
   const balancedTheme = balancedThemeContext?.theme ?? getStoredBalancedTheme()
+
+  React.useEffect(() => { applyThemeNavigationBar(scheme) }, [scheme, balancedTheme, wellness])
 
   useDidShow(() => {
     setWellness(readWellnessMode())

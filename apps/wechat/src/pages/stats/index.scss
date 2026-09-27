@@ -231,6 +231,7 @@ $stats-blue-soft: #7aa9ce;
 }
 
 .stats-guest-card {
+  box-sizing: border-box;
   width: 100%;
   padding: 40rpx 36rpx;
   background: rgb(255 255 255 / 90%);

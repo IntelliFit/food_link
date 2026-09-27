@@ -3361,7 +3361,13 @@ function IndexPage() {
       <RecapDelivery />
       {/* 页面内容 */}
       <View className='page-content'>
-        <BalancedThemeExperience surface='home' />
+        <BalancedThemeExperience
+          surface='home'
+          home={{ date: selectedDate, mealCount: meals.filter(meal => Boolean(meal.primary_record_id || meal.primaryRecordId || meal.meal_record_entries?.length)).length, waterMl: todayWater.total, calories: totalCurrent, authenticated: Boolean(getAccessToken()), loading }}
+          onRecord={handleQuickRecord}
+          onWater={openWaterEditor}
+          onMeals={handleViewAllMeals}
+        />
         {!getAccessToken() && (
           <View
             className='home-login-banner'

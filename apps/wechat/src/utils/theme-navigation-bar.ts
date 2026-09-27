@@ -1,6 +1,7 @@
 import Taro from '@tarojs/taro'
 import type { AppColorScheme } from './app-color-scheme'
 import { HOME_DISPLAY_MODE_STORAGE_KEY } from './home-display-mode'
+import { getStoredBalancedTheme } from './balanced-theme'
 
 interface NavigationBarThemeOptions {
   lightBackground?: string
@@ -24,12 +25,20 @@ export function applyThemeNavigationBar(
     ? options?.wellnessBackground || '#f7f3e8'
     : options?.lightBackground || '#ffffff'
   const darkBackground = options?.darkBackground || '#101716'
-  const isDark = scheme === 'dark'
+  const pages = Taro.getCurrentPages()
+  const route = pages[pages.length - 1]?.route?.replace(/^\//, '')
+  const isBalancedTab = !isWellnessMode() && ['pages/index/index', 'pages/stats/index', 'pages/community/index', 'pages/profile/index'].includes(route || '')
+  const theme = getStoredBalancedTheme()
+  const darkArtTheme = isBalancedTab && (theme === 'way-of-water' || theme === 'picturebook-companion')
+  const isDark = scheme === 'dark' || darkArtTheme
+  const background = darkArtTheme && scheme !== 'dark'
+    ? (theme === 'picturebook-companion' ? '#10222a' : '#07111a')
+    : isDark ? darkBackground : lightBackground
 
   try {
     Taro.setNavigationBarColor({
       frontColor: isDark ? '#ffffff' : '#000000',
-      backgroundColor: isDark ? darkBackground : lightBackground,
+      backgroundColor: background,
       animation: {
         duration: 0,
         timingFunc: 'linear',
@@ -41,9 +50,9 @@ export function applyThemeNavigationBar(
 
   try {
     ;(Taro as any).setBackgroundColor?.({
-      backgroundColor: isDark ? darkBackground : lightBackground,
-      backgroundColorTop: isDark ? darkBackground : lightBackground,
-      backgroundColorBottom: isDark ? darkBackground : lightBackground,
+      backgroundColor: background,
+      backgroundColorTop: background,
+      backgroundColorBottom: background,
     })
   } catch {
     /* ignore */
