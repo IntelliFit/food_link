@@ -278,6 +278,35 @@ export function BalancedThemeExperience({ surface }: { surface: BalancedThemeSur
         <View className='bt-gallery__paper'><Text>{story.title}</Text><Text>{story.subtitle}</Text></View>
         <View className='bt-gallery__red'><Text>{story.action}</Text></View>
         <View className='bt-gallery__yellow' />
+        {surface === 'home' && (
+          <View className='bt-gallery__artwork'>
+            <Image src={clarityFood} mode='aspectFill' />
+            <View className='bt-gallery__paint bt-gallery__paint--red' />
+            <View className='bt-gallery__paint bt-gallery__paint--blue' />
+            <View className='bt-gallery__caption'><Text>今日作品 · 01</Text><Text>让一餐成为生活的创作</Text></View>
+          </View>
+        )}
+        {surface === 'stats' && (
+          <View className='bt-gallery__data-room'>
+            <View className='bt-gallery__donut'><View /><Text>一周</Text></View>
+            <View className='bt-gallery__legend'><Text>饮食构成</Text><Text>生活节奏</Text><Text>本周变化</Text></View>
+            <View className='bt-gallery__score'><Text>85</Text><Text>饮食评分</Text></View>
+          </View>
+        )}
+        {surface === 'community' && (
+          <View className='bt-gallery__exhibit'>
+            <Image src={clarityFood} mode='aspectFill' />
+            <View className='bt-gallery__exhibit-title'><Text>一碗面</Text><Text>也是一场旅行</Text></View>
+            <View className='bt-gallery__exhibit-meta'><Text>公共展场 03</Text><Text>观看 · 回应 · 收藏</Text></View>
+          </View>
+        )}
+        {surface === 'profile' && (
+          <View className='bt-gallery__drawers'>
+            <View><Text>我的记录</Text><Text>饮食日记 · 成长轨迹</Text><Text>▰</Text></View>
+            <View><Text>我的收藏</Text><Text>喜欢的作品 · 灵感库</Text><Text>▰</Text></View>
+            <View><Text>我的圈子</Text><Text>互动 · 点赞 · 评论</Text><Text>▰</Text></View>
+          </View>
+        )}
         <Text className='bt-experience__hint'>轻触重组这幅作品</Text>
       </View>
     )

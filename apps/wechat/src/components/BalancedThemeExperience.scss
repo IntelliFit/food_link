@@ -303,7 +303,7 @@
 }
 
 .bt-experience--gallery {
-  min-height: 438rpx;
+  min-height: 760rpx;
   color: #fff;
   background:
     linear-gradient(104deg, transparent 0 64%, rgb(255 255 255 / 8%) 65% 67%, transparent 68%),
@@ -322,6 +322,40 @@
   .bt-gallery__paper text:last-child { max-width: 350rpx; margin-top: 18rpx; color: #eee9df; font-family: 'Songti SC', STSong, SimSun, serif; font-size: 22rpx; font-weight: 650; line-height: 1.5; }
   .bt-gallery__red { right: -12rpx; bottom: 38rpx; display: flex; align-items: center; justify-content: center; width: 228rpx; height: 78rpx; color: #fff; font-size: 24rpx; font-weight: 800; background: #e33b25; transform: rotate(-4deg); }
   .bt-gallery__yellow { left: 214rpx; bottom: 54rpx; width: 134rpx; height: 62rpx; background: #f1c500; transform: rotate(8deg); }
+
+  .bt-gallery__artwork { left: 34rpx; right: 34rpx; top: 230rpx; bottom: 42rpx; z-index: 3; overflow: hidden; background: #eee9df; border: 8rpx solid #eee9df; box-shadow: 12rpx 12rpx 0 #173eb5; transform: rotate(-1deg); }
+  .bt-gallery__artwork > image { display: block; width: 100%; height: 100%; filter: contrast(1.06) saturate(.94); }
+  .bt-gallery__paint { position: absolute; z-index: 2; opacity: .92; mix-blend-mode: multiply; }
+  .bt-gallery__paint--red { left: -40rpx; bottom: 34rpx; width: 360rpx; height: 92rpx; background: #e33b25; transform: rotate(-7deg); clip-path: polygon(0 18%, 11% 4%, 26% 14%, 42% 0, 61% 12%, 78% 4%, 100% 20%, 96% 82%, 76% 100%, 53% 90%, 36% 100%, 17% 86%, 0 94%); }
+  .bt-gallery__paint--blue { right: -42rpx; top: 28rpx; width: 236rpx; height: 102rpx; background: #173eb5; transform: rotate(8deg); clip-path: polygon(0 10%, 24% 0, 41% 12%, 72% 2%, 100% 19%, 94% 84%, 64% 100%, 33% 89%, 5% 100%); }
+  .bt-gallery__caption { position: absolute; left: 22rpx; bottom: 28rpx; z-index: 4; display: flex; flex-direction: column; gap: 5rpx; padding: 14rpx 18rpx; color: #111; background: #eee9df; border: 3rpx solid #111; transform: rotate(2deg); }
+  .bt-gallery__caption text:first-child { font-size: 18rpx; font-weight: 900; }
+  .bt-gallery__caption text:last-child { font-family: 'Songti SC', STSong, SimSun, serif; font-size: 23rpx; font-weight: 800; }
+
+  .bt-gallery__data-room { left: 36rpx; right: 36rpx; top: 232rpx; bottom: 44rpx; z-index: 5; background: #ede9e1; border: 6rpx solid #111; box-shadow: 12rpx 12rpx 0 #173eb5; }
+  .bt-gallery__donut { position: absolute; left: 42rpx; top: 48rpx; display: flex; align-items: center; justify-content: center; width: 260rpx; height: 260rpx; background: conic-gradient(#e33b25 0 26%, #173eb5 26% 61%, #f1c500 61% 78%, #111 78% 100%); border-radius: 50%; transform: rotate(-8deg); }
+  .bt-gallery__donut > view { position: absolute; inset: 72rpx; background: #ede9e1; border-radius: 50%; }
+  .bt-gallery__donut > text { position: relative; z-index: 2; color: #111; font-size: 28rpx; font-weight: 950; transform: rotate(8deg); }
+  .bt-gallery__legend { position: absolute; right: 32rpx; top: 52rpx; display: flex; flex-direction: column; gap: 14rpx; }
+  .bt-gallery__legend text { padding: 10rpx 16rpx; color: #111; font-size: 19rpx; font-weight: 850; background: #fff; border-left: 16rpx solid #e33b25; }
+  .bt-gallery__legend text:nth-child(2) { border-color: #173eb5; }
+  .bt-gallery__legend text:nth-child(3) { border-color: #f1c500; }
+  .bt-gallery__score { position: absolute; left: 42rpx; right: 32rpx; bottom: 26rpx; display: flex; align-items: flex-end; justify-content: space-between; padding-top: 18rpx; color: #111; border-top: 5rpx solid #111; }
+  .bt-gallery__score text:first-child { font-size: 72rpx; font-weight: 950; line-height: .9; }
+  .bt-gallery__score text:last-child { font-size: 22rpx; font-weight: 900; }
+
+  .bt-gallery__exhibit { left: 34rpx; right: 34rpx; top: 230rpx; bottom: 44rpx; z-index: 5; overflow: hidden; background: #eee9df; border: 7rpx solid #eee9df; box-shadow: 12rpx 12rpx 0 #f1c500; }
+  .bt-gallery__exhibit > image { display: block; width: 100%; height: 100%; filter: contrast(1.1); }
+  .bt-gallery__exhibit::after { content: ''; position: absolute; left: -18%; right: 34%; top: 0; bottom: 0; background: linear-gradient(108deg, rgb(0 0 0 / 82%) 0 54%, transparent 55%); }
+  .bt-gallery__exhibit-title { position: absolute; left: 26rpx; top: 54rpx; z-index: 3; display: flex; flex-direction: column; font-size: 40rpx; font-weight: 950; line-height: 1.05; }
+  .bt-gallery__exhibit-meta { position: absolute; left: 22rpx; right: 22rpx; bottom: 22rpx; z-index: 4; display: flex; align-items: center; justify-content: space-between; padding: 13rpx 17rpx; color: #111; background: #eee9df; border: 3rpx solid #111; }
+  .bt-gallery__exhibit-meta text { font-size: 18rpx; font-weight: 850; }
+
+  .bt-gallery__drawers { left: 30rpx; right: 30rpx; top: 232rpx; bottom: 42rpx; z-index: 5; display: grid; gap: 12rpx; }
+  .bt-gallery__drawers > view { display: grid; grid-template-columns: 1fr 1.3fr 72rpx; align-items: center; gap: 12rpx; padding: 20rpx 24rpx; color: #fff; background: linear-gradient(90deg, #e33b25, #bb2418); border: 5rpx solid #111; box-shadow: inset 0 0 0 3rpx rgb(255 255 255 / 12%); }
+  .bt-gallery__drawers > view > text:first-child { font-size: 25rpx; font-weight: 950; }
+  .bt-gallery__drawers > view > text:nth-child(2) { font-size: 17rpx; line-height: 1.4; }
+  .bt-gallery__drawers > view > text:last-child { padding: 12rpx; color: #eee9df; font-size: 27rpx; text-align: center; background: #111; border: 2rpx solid #eee9df; }
 
   &.is-stage-1 .bt-gallery__blue { transform: translate(42rpx, -14rpx) rotate(7deg); }
   &.is-stage-1 .bt-gallery__paper { transform: translate(18rpx, 8rpx) rotate(-4deg); }
