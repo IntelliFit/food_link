@@ -20,6 +20,8 @@ export type BalancedThemeDefinition = {
   name: string
   subtitle: string
   audience: string
+  signature: string
+  interactionHint: string
   toolboxLabel: string
   toolboxIconClass: string
   swatches: readonly [string, string, string]
@@ -31,6 +33,8 @@ export const BALANCED_THEME_DEFINITIONS: readonly BalancedThemeDefinition[] = [
     name: '澄明秩序',
     subtitle: '清晰栅格 · 高效阅读',
     audience: '适合重视效率与数据层级的你',
+    signature: '瑞士栅格与可重排信息索引',
+    interactionHint: '轻触重排信息索引',
     toolboxLabel: '模块抽屉',
     toolboxIconClass: 'icon-all',
     swatches: ['#f7f7f3', '#111111', '#c8ff00'],
@@ -40,6 +44,8 @@ export const BALANCED_THEME_DEFINITIONS: readonly BalancedThemeDefinition[] = [
     name: '自然共生',
     subtitle: '植物纤维 · 四季生长',
     audience: '适合喜欢植物与轻疗愈体验的你',
+    signature: '会随触碰生长的叶脉年轮',
+    interactionHint: '轻触让叶片生长',
     toolboxLabel: '种子匣',
     toolboxIconClass: 'icon-a-144-lvye',
     swatches: ['#f3efe2', '#274f37', '#79a98a'],
@@ -49,6 +55,8 @@ export const BALANCED_THEME_DEFINITIONS: readonly BalancedThemeDefinition[] = [
     name: '东方雅集',
     subtitle: '宋式卷轴 · 瓷漆雅韵',
     audience: '适合偏爱含蓄东方审美的你',
+    signature: '可展开的宋式生活手卷',
+    interactionHint: '轻触展开生活手卷',
     toolboxLabel: '漆艺屉柜',
     toolboxIconClass: 'icon-foodshop',
     swatches: ['#eee9dc', '#151515', '#9aa99a'],
@@ -58,6 +66,8 @@ export const BALANCED_THEME_DEFINITIONS: readonly BalancedThemeDefinition[] = [
     name: '现代艺廊',
     subtitle: '撕纸拼贴 · 强烈表达',
     audience: '适合追求先锋艺术与个性的你',
+    signature: '可以重新组合的撕纸作品',
+    interactionHint: '轻触重组拼贴作品',
     toolboxLabel: '档案匣',
     toolboxIconClass: 'icon-picture',
     swatches: ['#f4f1e9', '#173eb5', '#e83b24'],
@@ -67,6 +77,8 @@ export const BALANCED_THEME_DEFINITIONS: readonly BalancedThemeDefinition[] = [
     name: '微缩世界',
     subtitle: '立体沙盘 · 探索路径',
     audience: '适合喜欢探索、收藏和空间故事的你',
+    signature: '可行走的立体饮食沙盘',
+    interactionHint: '轻触移动旅行标记',
     toolboxLabel: '旅行柜',
     toolboxIconClass: 'icon-dizhi',
     swatches: ['#ead8b7', '#4c7561', '#3687a6'],
@@ -76,6 +88,8 @@ export const BALANCED_THEME_DEFINITIONS: readonly BalancedThemeDefinition[] = [
     name: '绘本陪伴',
     subtitle: '电影分镜 · 日常叙事',
     audience: '适合重视情绪陪伴与生活故事的你',
+    signature: '一天一章的电影感翻页',
+    interactionHint: '轻触翻开下一章节',
     toolboxLabel: '帆布功能袋',
     toolboxIconClass: 'icon-shuben',
     swatches: ['#e8d6b8', '#24384a', '#a75536'],
@@ -85,6 +99,8 @@ export const BALANCED_THEME_DEFINITIONS: readonly BalancedThemeDefinition[] = [
     name: '清朗关怀',
     subtitle: '大字高对比 · 轻松操作',
     audience: '适合希望阅读直接、操作省力的你',
+    signature: '三段直达的大字专注界面',
+    interactionHint: '轻触切换阅读重点',
     toolboxLabel: '功能面板',
     toolboxIconClass: 'icon-juzhong',
     swatches: ['#ffffff', '#005b38', '#f5ad19'],
@@ -94,6 +110,8 @@ export const BALANCED_THEME_DEFINITIONS: readonly BalancedThemeDefinition[] = [
     name: '水之道',
     subtitle: '随形而行 · 静观变化',
     audience: '适合喜欢哲学、冥想与抽象艺术的你',
+    signature: '可触发涟漪的流动时间线',
+    interactionHint: '轻触水面观察变化',
     toolboxLabel: '流动匣',
     toolboxIconClass: 'icon-drink',
     swatches: ['#09131d', '#274b66', '#d06f3f'],

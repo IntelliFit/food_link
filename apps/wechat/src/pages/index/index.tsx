@@ -1,4 +1,5 @@
 import { RecapDelivery } from '../../components/RecapDelivery'
+import { BalancedThemeExperience } from '../../components/BalancedThemeExperience'
 import { View, Text, Input, Image, Canvas, PageMeta, Swiper, SwiperItem, Button, type ITouchEvent } from '@tarojs/components'
 import { CAFETERIA_HERO_BG_URL, GOOSE_DUCK_CHICKEN_BG_URL } from '../../utils/static-asset-cdn-url'
 import * as React from 'react'
@@ -3360,6 +3361,7 @@ function IndexPage() {
       <RecapDelivery />
       {/* 页面内容 */}
       <View className='page-content'>
+        <BalancedThemeExperience surface='home' />
         {!getAccessToken() && (
           <View
             className='home-login-banner'

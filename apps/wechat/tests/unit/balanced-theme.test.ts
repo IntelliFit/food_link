@@ -22,6 +22,8 @@ describe('balanced visual themes', () => {
     expect(BALANCED_THEME_DEFINITIONS).toHaveLength(8)
     expect(new Set(BALANCED_THEME_DEFINITIONS.map((theme) => theme.id)).size).toBe(8)
     expect(new Set(BALANCED_THEME_DEFINITIONS.map((theme) => theme.toolboxLabel)).size).toBe(8)
+    expect(new Set(BALANCED_THEME_DEFINITIONS.map((theme) => theme.signature)).size).toBe(8)
+    expect(new Set(BALANCED_THEME_DEFINITIONS.map((theme) => theme.interactionHint)).size).toBe(8)
     expect(BALANCED_THEME_DEFINITIONS.some((theme) => theme.toolboxLabel.includes('葫芦'))).toBe(false)
   })
 

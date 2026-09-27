@@ -1,4 +1,5 @@
 import { InkMasthead, useInkWellness } from '../../components/InkWellness'
+import { BalancedThemeExperience } from '../../components/BalancedThemeExperience'
 import { View, Text, ScrollView, Image, Input, Button, Swiper, SwiperItem } from '@tarojs/components'
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import Taro, { useShareAppMessage, useShareTimeline } from '@tarojs/taro'
@@ -2048,6 +2049,7 @@ function CommunityPage() {
               if (expandedCommentRecordId) closeCommentModal()
             }}
           >
+            <BalancedThemeExperience surface='community' />
             {ink && <>
               <InkMasthead title='烟火人间' subtitle='一餐一味，彼此相伴' />
               <View className='ink-feed-tabs'>

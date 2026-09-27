@@ -57,8 +57,10 @@
 .balanced-theme-option__selected { flex: none; padding: 4rpx 9rpx; color: var(--bt-accent-text, #fff); background: var(--bt-accent, #32775f); border-radius: 999rpx; font-size: 18rpx; }
 
 .balanced-theme-option__subtitle,
+.balanced-theme-option__signature,
 .balanced-theme-option__audience { display: block; }
 .balanced-theme-option__subtitle { margin-top: 7rpx; color: var(--bt-text, #20332d); font-size: 22rpx; font-weight: 650; }
+.balanced-theme-option__signature { margin-top: 8rpx; color: var(--bt-text, #20332d); font-size: 20rpx; font-weight: 750; line-height: 1.35; }
 .balanced-theme-option__audience { min-height: 60rpx; margin-top: 7rpx; color: var(--bt-muted, #77857f); font-size: 19rpx; line-height: 1.55; }
 .balanced-theme-option__meta { display: flex; align-items: center; justify-content: space-between; margin-top: 14rpx; color: var(--bt-muted, #77857f); font-size: 18rpx; }
 .balanced-theme-option__swatches { display: flex; }

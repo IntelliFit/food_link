@@ -1,4 +1,5 @@
 import { InkMasthead, InkStatsOverview, useInkWellness } from '../../components/InkWellness'
+import { BalancedThemeExperience } from '../../components/BalancedThemeExperience'
 import { View, Text, ScrollView, Input, Switch } from '@tarojs/components'
 import { useState, useEffect, useCallback, useRef, type CSSProperties } from 'react'
 import Taro, { useDidHide, useDidShow } from '@tarojs/taro'
@@ -1540,6 +1541,7 @@ function StatsPage() {
     <View className={`stats-page ${ink ? 'ink-page' : ''} ${scheme === 'dark' ? 'stats-page--dark' : ''}`}>
       <ScrollView className='scroll-wrap' scrollY enhanced showScrollbar={false}>
         {ink && <InkMasthead title='观照日常' subtitle='在起伏中，找到自己的节奏' />}
+        <BalancedThemeExperience surface='stats' />
       <View
         className={`stats-range-dropdown ${loading ? 'is-loading' : ''}`}
         onClick={openRangeSelector}

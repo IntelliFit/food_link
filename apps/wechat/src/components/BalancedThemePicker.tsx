@@ -80,7 +80,7 @@ export function BalancedThemePicker({ visible, wellnessActive, onClose }: Balanc
         <View className='balanced-theme-picker__header'>
           <View>
             <Text className='balanced-theme-picker__title'>选择均衡模式主题</Text>
-            <Text className='balanced-theme-picker__subtitle'>八种风格共用真实数据与功能，只改变视觉和阅读节奏</Text>
+            <Text className='balanced-theme-picker__subtitle'>八种独立构图与互动方式，共用同一份真实数据</Text>
           </View>
           <View className='balanced-theme-picker__done' onClick={onClose}><Text>完成</Text></View>
         </View>
@@ -109,6 +109,7 @@ export function BalancedThemePicker({ visible, wellnessActive, onClose }: Balanc
                       {selected && <Text className='balanced-theme-option__selected'>已选</Text>}
                     </View>
                     <Text className='balanced-theme-option__subtitle'>{item.subtitle}</Text>
+                    <Text className='balanced-theme-option__signature'>{item.signature}</Text>
                     <Text className='balanced-theme-option__audience'>{item.audience}</Text>
                     <View className='balanced-theme-option__meta'>
                       <View className='balanced-theme-option__swatches'>
