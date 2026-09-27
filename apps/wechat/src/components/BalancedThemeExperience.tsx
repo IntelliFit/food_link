@@ -313,18 +313,59 @@ export function BalancedThemeExperience({ surface }: { surface: BalancedThemeSur
   }
 
   if (theme === 'miniature-world') {
+    const miniatureMetrics = [
+      ['蛋白质', '90%'],
+      ['碳水', '80%'],
+      ['脂肪', '65%'],
+      ['维生素', '95%'],
+      ['矿物质', '78%'],
+    ]
     return (
       <View {...commonProps} className={`bt-experience bt-experience--miniature bt-experience--${surface} is-stage-${stage}`}>
-        <View className='bt-miniature__sky'><Text>{story.title}</Text><Text>{story.subtitle}</Text></View>
-        <View className='bt-miniature__island'>
-          <View className='bt-miniature__river' />
-          <View className='bt-miniature__path'><View /><View /><View /></View>
-          <View className='bt-miniature__tree bt-miniature__tree--one' />
-          <View className='bt-miniature__tree bt-miniature__tree--two' />
-          <View className='bt-miniature__traveler'><Text>●</Text></View>
+        <View className='bt-miniature__masthead'>
+          <View><Text className='bt-miniature__brand'>{surface === 'home' ? '食探' : surface === 'stats' ? '分析' : surface === 'community' ? '圈子' : '我的'}</Text><Text>微 缩 世 界</Text></View>
+          <View><Text>2026-09-27</Text><Text>{story.index} · {label}</Text></View>
         </View>
+        <View className='bt-miniature__intro'><Text>{story.title}</Text><Text>{story.subtitle}</Text></View>
+        {surface === 'home' && (
+          <View className='bt-miniature__garden'>
+            <View className='bt-miniature__greenhouse'><View /><View /><Text>饮食花园</Text></View>
+            <View className='bt-miniature__canal'><View /><View /><View /></View>
+            <View className='bt-miniature__market'><View /><View /><View /><Text>今日推荐</Text></View>
+            <View className='bt-miniature__garden-card bt-miniature__garden-card--record'><Text>今日已记录</Text><Text>2 / 3 餐</Text></View>
+            <View className='bt-miniature__garden-card bt-miniature__garden-card--water'><Text>营养河流</Text><Text>700 / 2000 ml</Text></View>
+            <View className='bt-miniature__traveler'><Text>●</Text></View>
+          </View>
+        )}
+        {surface === 'stats' && (
+          <View className='bt-miniature__waterfall'>
+            <View className='bt-miniature__weekly'><Text>本周营养总览</Text><Text>2026.09.21 — 09.27</Text></View>
+            <View className='bt-miniature__falls'><View /><View /><View /></View>
+            <View className='bt-miniature__metric-list'>
+              {miniatureMetrics.map(([name, value], index) => <View key={name} className={index === stage ? 'is-active' : ''}><Text>{name}</Text><Text>{value}</Text></View>)}
+            </View>
+            <Text className='bt-miniature__flow-copy'>营养的流动，汇成更大的改变</Text>
+          </View>
+        )}
+        {surface === 'community' && (
+          <View className='bt-miniature__plaza'>
+            <View className='bt-miniature__plaza-gate'><Text>邻里广场</Text><Text>好食物 · 让人相遇</Text></View>
+            <View className='bt-miniature__tables'>{[0, 1, 2, 3, 4].map((item) => <View key={item}><Text>●</Text><Text>●</Text><Text>●</Text></View>)}</View>
+            <View className='bt-miniature__topic'><Text>今日话题</Text><Text>秋天适合吃什么？</Text></View>
+            <View className='bt-miniature__plaza-post'><Text>山间小食</Text><Text>用当季南瓜做一份暖暖的浓汤，简单又治愈。</Text><Text>♡ 128　回声 24</Text></View>
+          </View>
+        )}
+        {surface === 'profile' && (
+          <View className='bt-miniature__desk'>
+            <View className='bt-miniature__passport'><Text>旅行者档案</Text><View><Text>食探旅人</Text><Text>与食物同行的第 168 天</Text></View><Text>{story.stages[stage]}</Text></View>
+            <View className='bt-miniature__cabinet'>
+              {['饮食记录', '营养分析', '收藏食谱', '圈子动态'].map((item, index) => <View key={item} className={index === stage ? 'is-active' : ''}><Text>{item}</Text><Text>▰</Text></View>)}
+            </View>
+            <View className='bt-miniature__notebook'><Text>好好吃饭</Text><Text>让每一天都值得探索</Text></View>
+          </View>
+        )}
         <View className='bt-miniature__signs'>{story.tags.map((tag, index) => <Text key={tag} className={index === stage ? 'is-active' : ''}>{tag}</Text>)}</View>
-        <Text className='bt-experience__hint'>轻触移动旅行标记</Text>
+        <Text className='bt-experience__hint'>轻触探索下一处</Text>
       </View>
     )
   }
