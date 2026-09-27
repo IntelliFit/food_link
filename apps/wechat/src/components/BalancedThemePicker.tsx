@@ -1,7 +1,7 @@
 import { Image, ScrollView, Text, View } from '@tarojs/components'
-import Taro from '@tarojs/taro'
 import React from 'react'
 import { useBalancedTheme } from './BalancedThemeContext'
+import { BalancedThemeReveal } from './BalancedThemeReveal'
 import {
   BALANCED_THEME_DEFINITIONS,
   type BalancedThemeId,
@@ -62,21 +62,29 @@ type BalancedThemePickerProps = {
 
 export function BalancedThemePicker({ visible, wellnessActive, onClose }: BalancedThemePickerProps): React.ReactElement | null {
   const { theme, setTheme } = useBalancedTheme()
+  const [revealTheme, setRevealTheme] = React.useState<BalancedThemeId | null>(null)
+  const [revealRevision, setRevealRevision] = React.useState(0)
+  const revealTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  React.useEffect(() => () => {
+    if (revealTimerRef.current) clearTimeout(revealTimerRef.current)
+  }, [])
+
   if (!visible) return null
 
   const selectTheme = (next: BalancedThemeId) => {
     setTheme(next)
-    const selected = getBalancedThemeDefinition(next)
-    Taro.showToast({
-      title: wellnessActive ? `已保存${selected.name}` : `已切换至${selected.name}`,
-      icon: 'none',
-    })
+    if (revealTimerRef.current) clearTimeout(revealTimerRef.current)
+    setRevealTheme(next)
+    setRevealRevision((value) => value + 1)
+    revealTimerRef.current = setTimeout(() => setRevealTheme(null), 1300)
   }
 
   return (
     <View className='balanced-theme-picker' catchMove>
       <View className='balanced-theme-picker__mask' onClick={onClose} />
       <View className='balanced-theme-picker__panel'>
+        <BalancedThemeReveal key={`${revealTheme}-${revealRevision}`} theme={revealTheme} savedOnly={wellnessActive} />
         <View className='balanced-theme-picker__header'>
           <View>
             <Text className='balanced-theme-picker__title'>选择均衡模式主题</Text>
