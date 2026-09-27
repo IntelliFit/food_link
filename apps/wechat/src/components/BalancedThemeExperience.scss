@@ -131,21 +131,37 @@
 .bt-experience--eastern {
   display: flex;
   align-items: stretch;
-  min-height: 282rpx;
+  min-height: 448rpx;
   padding: 0 28rpx;
   color: #171714;
+  background: #c9b998;
+  border: 1rpx solid #746850;
+  box-shadow: 0 14rpx 0 rgb(67 54 39 / 18%);
 
-  .bt-eastern__roller { width: 24rpx; background: linear-gradient(90deg, #1d1b18, #635646, #171614); border-radius: 999rpx; box-shadow: 0 8rpx 12rpx rgb(0 0 0 / 20%); }
-  .bt-eastern__paper { position: relative; flex: 1; width: 52%; padding: 24rpx 34rpx; overflow: hidden; background: linear-gradient(90deg, #d9d1bf, #f8f3e6 12%, #f8f3e6 88%, #d9d1bf); border-top: 1rpx solid #8e8a79; border-bottom: 1rpx solid #8e8a79; transition: width 560ms cubic-bezier(.2, .8, .2, 1), flex 560ms cubic-bezier(.2, .8, .2, 1); }
-  .bt-eastern__title { display: flex; gap: 18rpx; align-items: baseline; }
-  .bt-eastern__title text:first-child { font-size: 21rpx; letter-spacing: 6rpx; }
-  .bt-eastern__title text:last-child { font-family: 'Songti SC', STSong, SimSun, serif; font-size: 34rpx; font-weight: 700; }
-  .bt-eastern__verse { display: block; width: 18rpx; margin: 18rpx auto 0; font-family: 'Songti SC', STSong, SimSun, serif; font-size: 22rpx; line-height: 1.45; writing-mode: vertical-rl; }
-  .bt-eastern__subtitle { position: absolute; left: 34rpx; bottom: 24rpx; max-width: 210rpx; color: #6d6a60; font-size: 18rpx; letter-spacing: 2rpx; }
-  .bt-eastern__seal { position: absolute; right: 30rpx; bottom: 24rpx; display: flex; align-items: center; justify-content: center; width: 50rpx; height: 50rpx; color: #a33c2f; border: 3rpx solid #a33c2f; transform: rotate(-7deg); }
+  .bt-eastern__roller { z-index: 4; width: 24rpx; background: linear-gradient(90deg, #171713, #a69673 50%, #171713); border-radius: 999rpx; box-shadow: 0 8rpx 12rpx rgb(0 0 0 / 24%); }
+  .bt-eastern__paper { position: relative; flex: 1; width: 52%; padding: 38rpx 54rpx; overflow: hidden; background: linear-gradient(90deg, #d9d1bf, #f8f3e6 10%, #f8f3e6 90%, #d9d1bf); border-top: 1rpx solid #8e8a79; border-bottom: 1rpx solid #8e8a79; transition: width 560ms cubic-bezier(.2, .8, .2, 1), flex 560ms cubic-bezier(.2, .8, .2, 1); }
+  .bt-eastern__paper::before { content: ''; position: absolute; left: -8%; right: -8%; bottom: 0; height: 230rpx; background: linear-gradient(18deg, transparent 22%, rgb(43 48 42 / 12%) 23% 33%, transparent 34%), linear-gradient(-16deg, transparent 28%, rgb(43 48 42 / 17%) 29% 42%, transparent 43%), linear-gradient(9deg, transparent 44%, rgb(43 48 42 / 9%) 45% 55%, transparent 56%); opacity: .85; }
+  .bt-eastern__paper::after { content: ''; position: absolute; left: 0; right: 0; bottom: 78rpx; height: 3rpx; background: linear-gradient(90deg, transparent, rgb(55 91 78 / 45%), transparent); transform: rotate(-3deg); }
+  .bt-eastern__title { position: relative; z-index: 2; display: flex; gap: 18rpx; align-items: baseline; }
+  .bt-eastern__title text:first-child { color: #a23d31; font-size: 22rpx; font-weight: 750; letter-spacing: 6rpx; }
+  .bt-eastern__title text:last-child { font-family: 'Songti SC', STSong, SimSun, serif; font-size: 50rpx; font-weight: 700; letter-spacing: 7rpx; }
+  .bt-eastern__verse { position: absolute; z-index: 3; right: 58rpx; top: 54rpx; display: block; width: 22rpx; max-height: 150rpx; font-family: 'Songti SC', STSong, SimSun, serif; font-size: 22rpx; line-height: 1.5; letter-spacing: 5rpx; writing-mode: vertical-rl; }
+  .bt-eastern__subtitle { position: relative; z-index: 2; display: block; max-width: 310rpx; margin-top: 20rpx; color: #6d6a60; font-size: 22rpx; letter-spacing: 3rpx; }
+  .bt-eastern__seal { position: absolute; right: 32rpx; bottom: 28rpx; z-index: 4; display: flex; align-items: center; justify-content: center; width: 54rpx; height: 54rpx; color: #a33c2f; border: 3rpx solid #a33c2f; transform: rotate(-7deg); }
 
   &.is-stage-1 .bt-eastern__paper,
   &.is-stage-2 .bt-eastern__paper { flex: 1.45; }
+
+  &.bt-experience--stats { padding: 0; }
+  &.bt-experience--stats .bt-eastern__roller { width: 0; }
+  &.bt-experience--stats .bt-eastern__paper::after { bottom: 128rpx; height: 13rpx; background: linear-gradient(90deg, transparent, #688e80 18%, #afc3ad 52%, #557a70 82%, transparent); border-radius: 50%; transform: rotate(-8deg); }
+  &.bt-experience--community { padding: 0; box-shadow: none; }
+  &.bt-experience--community .bt-eastern__roller { width: 0; }
+  &.bt-experience--community .bt-eastern__paper { background: linear-gradient(135deg, #f7f1e4, #eee6d6); }
+  &.bt-experience--profile { color: #e9d9b9; background: #11110f; border-color: #8e7448; box-shadow: 0 14rpx 0 #8e7448; }
+  &.bt-experience--profile .bt-eastern__paper { color: #e9d9b9; background: radial-gradient(circle at 70% 30%, #24231e, #11110f 68%); }
+  &.bt-experience--profile .bt-eastern__paper::before { background: linear-gradient(18deg, transparent 22%, rgb(211 182 126 / 16%) 23% 33%, transparent 34%), linear-gradient(-16deg, transparent 28%, rgb(211 182 126 / 20%) 29% 42%, transparent 43%); }
+  &.bt-experience--profile .bt-eastern__subtitle { color: #c8b998; }
 }
 
 .bt-experience--gallery {

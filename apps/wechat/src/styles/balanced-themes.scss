@@ -537,6 +537,84 @@
   .list-arrow { color: #376b4d; }
 }
 
+/* V4 / 03 东方雅集：宣纸册页、山水长卷、题跋与黑漆金线。 */
+.fl-balanced-theme--eastern-salon:not(.fl-d) {
+  .home-page,
+  .stats-page,
+  .community-page { background: linear-gradient(180deg, #f5f0e4, #ebe4d3); }
+
+  .home-login-banner,
+  .stats-guest-card,
+  .home-health-profile-prompt {
+    background: #f8f3e7;
+    border: 1rpx solid #7f7868;
+    border-radius: 0;
+    box-shadow: inset 0 0 0 8rpx rgb(142 138 121 / 8%);
+  }
+
+  .home-login-banner-btn,
+  .stats-guest-btn,
+  .feed-publish-btn,
+  .home-backfill-hint__action,
+  .home-module-placeholder__action,
+  .empty-record-btn {
+    color: #ead8b5 !important;
+    background: #1c1b18 !important;
+    border: 2rpx solid #9a8258 !important;
+    border-radius: 5rpx !important;
+    box-shadow: inset 0 0 0 3rpx #1c1b18, inset 0 0 0 4rpx #9a8258 !important;
+  }
+  .home-login-banner-btn-text,
+  .stats-guest-btn-text,
+  .feed-publish-text { color: #ead8b5 !important; font-family: 'Songti SC', STSong, SimSun, serif; letter-spacing: 3rpx; }
+
+  .date-item.is-selected,
+  .month-calendar-cell.is-selected { color: #f7f2e6 !important; background: #283b31 !important; border-radius: 999rpx !important; }
+  .date-item.is-selected .date-day-circle { color: #f7f2e6 !important; background: #283b31 !important; border: 2rpx solid #a23d31 !important; box-shadow: 0 0 0 5rpx rgb(162 61 49 / 10%) !important; }
+
+  .home-calendar-module,
+  .home-experience-card,
+  .stats-card,
+  .analysis-card,
+  .feed-card,
+  .circle-card {
+    background: rgb(248 243 231 / 92%);
+    border: 1rpx solid #8e8a79;
+    border-radius: 0;
+    box-shadow: inset 0 0 0 7rpx rgb(142 138 121 / 7%);
+  }
+  .progress-bar-fill,
+  .macro-progress-bar-fill,
+  .wellness-total-progress__fill { background: linear-gradient(90deg, #6f9083, #283b31) !important; }
+
+  .feed-filter-panel { background: #f4ecdd; border-top: 1rpx solid #292822; border-bottom: 1rpx solid #292822; border-radius: 0; }
+  .feed-search-wrap,
+  .feed-filter-trigger-combined { background: #eee6d6; border-color: #8e8a79; border-radius: 0; }
+  .feed-card { position: relative; }
+  .feed-card::after { content: '食探'; position: absolute; right: 18rpx; bottom: 18rpx; padding: 3rpx; color: #a23d31; font-size: 16rpx; border: 2rpx solid #a23d31; transform: rotate(-7deg); }
+
+  .profile-page { color: #e7d5b2; background: #11110f; }
+  .profile-header-section,
+  .profile-section,
+  .profile-card,
+  .tool-card { color: #e7d5b2; background: #151511; border: 1rpx solid #8e7448; border-radius: 0; box-shadow: inset 0 0 0 5rpx rgb(142 116 72 / 9%); }
+  .profile-header-section .user-name,
+  .profile-header-section .user-meta-text,
+  .profile-header-section .quick-action-num,
+  .profile-header-section .quick-action-text,
+  .profile-section-title,
+  .profile-section-hint,
+  .list-title,
+  .list-desc,
+  .tool-text { color: #e7d5b2; }
+  .profile-section-heading { border-color: #8e7448; }
+  .list-item { min-height: 104rpx; border: 1rpx solid #8e7448; margin: 12rpx; padding: 0 20rpx; }
+  .list-icon { color: #e7d5b2 !important; background: transparent !important; border: 1rpx solid #8e7448; border-radius: 50%; }
+  .list-arrow,
+  .profile-section-chevron { color: #d8b56f; border-color: #d8b56f; }
+  .profile-version { color: #8f805f; }
+}
+
 /* V3：四个业务页面不再共用同一套卡片骨架。 */
 
 /* 澄明秩序：首页是编辑版面，分析是数据报表，圈子是杂志流，我的是档案索引。 */
