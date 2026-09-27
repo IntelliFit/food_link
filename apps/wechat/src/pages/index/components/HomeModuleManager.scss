@@ -37,6 +37,24 @@
   filter: drop-shadow(0 1rpx 1rpx rgb(255 255 255 / 80%)) drop-shadow(0 3rpx 4rpx rgb(0 0 0 / 18%));
 }
 
+.home-toolbox-theme-mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--bt-accent-text, #fff);
+  background: var(--bt-accent, #315f43);
+  border: var(--bt-border-width, 1rpx) solid var(--bt-border, rgb(49 95 67 / 20%));
+  border-radius: var(--bt-toolbox-radius, 24rpx);
+  box-shadow: var(--bt-toolbox-shadow, 0 8rpx 20rpx rgb(31 74 60 / 18%));
+  box-sizing: border-box;
+  filter: none;
+}
+
+.home-toolbox-theme-mark .iconfont {
+  font-size: 48rpx;
+  line-height: 1;
+}
+
 .home-module-toolbar:not(.is-editing) .home-module-toolbar__icon {
   width: 100rpx;
   height: 100rpx;
@@ -278,6 +296,10 @@
   height: 66rpx;
   flex: 0 0 66rpx;
   filter: drop-shadow(0 5rpx 6rpx rgb(118 83 35 / 16%));
+}
+
+.home-toolbox__heading-icon.home-toolbox-theme-mark .iconfont {
+  font-size: 34rpx;
 }
 
 .home-toolbox__title,

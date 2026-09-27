@@ -24,6 +24,7 @@ import {
 } from '../../utils/membership'
 import { extraPkgUrl } from '../../utils/subpackage-extra'
 import { useAppColorScheme } from '../../components/AppColorSchemeContext'
+import { BalancedThemeEntry, BalancedThemePicker } from '../../components/BalancedThemePicker'
 import { cleanupGeneratedUserFiles } from '../../utils/weapp-user-files'
 import { clearAllOnboardingGuides } from '../../utils/onboarding-guide-storage'
 import { clearRecentConsoleLogs } from '../../utils/console-log-buffer'
@@ -93,6 +94,7 @@ function ProfileListIcon({ name }: { name: string }) {
 function ProfilePage() {
   const ink = useInkWellness()
   const [expandedGroups, setExpandedGroups] = React.useState<Record<string, boolean>>({})
+  const [showBalancedThemePicker, setShowBalancedThemePicker] = React.useState(false)
   const { scheme } = useAppColorScheme()
   // 登录状态
   const [isLoggedIn, setIsLoggedIn] = React.useState(false)
@@ -704,6 +706,8 @@ function ProfilePage() {
         )}
       </View>
 
+      <BalancedThemeEntry onOpen={() => setShowBalancedThemePicker(true)} />
+
       {/* 引导横幅 */}
       {isLoggedIn && onboardingStatus !== 'completed' && (
         <View
@@ -866,6 +870,12 @@ function ProfilePage() {
       <View className='profile-version'>
         <Text>{`版本号 v${__APP_VERSION__}`}</Text>
       </View>
+
+      <BalancedThemePicker
+        visible={showBalancedThemePicker}
+        wellnessActive={ink}
+        onClose={() => setShowBalancedThemePicker(false)}
+      />
 
 
     </View>

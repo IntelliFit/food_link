@@ -1,0 +1,386 @@
+/*
+ * 均衡模式八套视觉主题。
+ * 业务组件和数据结构保持一致；通过统一令牌与少量结构规则改变阅读节奏。
+ * 阴阳、太极和黄色葫芦只属于养生模式，不在这里复用。
+ */
+
+.fl-page-theme-root--balanced {
+  --bt-page: #f2f5f3;
+  --bt-surface: #fff;
+  --bt-surface-muted: #edf6f2;
+  --bt-text: #20332d;
+  --bt-muted: #74847e;
+  --bt-accent: #397e66;
+  --bt-accent-text: #fff;
+  --bt-border: rgb(44 105 82 / 14%);
+  --bt-border-width: 1rpx;
+  --bt-radius: 24rpx;
+  --bt-control-radius: 999rpx;
+  --bt-shadow: 0 10rpx 30rpx rgb(28 75 58 / 8%);
+  --bt-toolbox-radius: 24rpx;
+  --bt-toolbox-shadow: 0 8rpx 20rpx rgb(31 74 60 / 18%);
+  --bt-selection-ring: rgb(57 126 102 / 16%);
+}
+
+.fl-balanced-theme--clarity-order {
+  --bt-page: #f4f4ef;
+  --bt-surface: #fff;
+  --bt-surface-muted: #ecece5;
+  --bt-text: #111;
+  --bt-muted: #555;
+  --bt-accent: #c8ff00;
+  --bt-accent-text: #111;
+  --bt-border: #111;
+  --bt-border-width: 2rpx;
+  --bt-radius: 4rpx;
+  --bt-control-radius: 2rpx;
+  --bt-shadow: none;
+  --bt-toolbox-radius: 2rpx;
+  --bt-toolbox-shadow: 8rpx 8rpx 0 #111;
+  --bt-selection-ring: rgb(200 255 0 / 28%);
+}
+
+.fl-balanced-theme--natural-symbiosis {
+  --bt-page: #f3efe2;
+  --bt-surface: #fffdf6;
+  --bt-surface-muted: #e4edde;
+  --bt-text: #274233;
+  --bt-muted: #718073;
+  --bt-accent: #376b4d;
+  --bt-accent-text: #fffdf6;
+  --bt-border: rgb(71 111 79 / 22%);
+  --bt-radius: 38rpx 12rpx 38rpx 12rpx;
+  --bt-control-radius: 28rpx 8rpx 28rpx 8rpx;
+  --bt-shadow: 0 14rpx 34rpx rgb(54 86 61 / 12%);
+  --bt-toolbox-radius: 12rpx 30rpx 12rpx 30rpx;
+  --bt-toolbox-shadow: 0 10rpx 24rpx rgb(65 89 55 / 20%);
+  --bt-selection-ring: rgb(75 126 87 / 18%);
+}
+
+.fl-balanced-theme--eastern-salon {
+  --bt-page: #eee9dc;
+  --bt-surface: #f8f4e9;
+  --bt-surface-muted: #e3e4d8;
+  --bt-text: #171714;
+  --bt-muted: #6d6a60;
+  --bt-accent: #22211d;
+  --bt-accent-text: #f7f2e6;
+  --bt-border: #8e8a79;
+  --bt-border-width: 1rpx;
+  --bt-radius: 2rpx;
+  --bt-control-radius: 2rpx;
+  --bt-shadow: 0 12rpx 0 rgb(34 33 29 / 7%);
+  --bt-toolbox-radius: 2rpx;
+  --bt-toolbox-shadow: 0 10rpx 0 rgb(34 33 29 / 20%);
+  --bt-selection-ring: rgb(142 138 121 / 22%);
+}
+
+.fl-balanced-theme--modern-gallery {
+  --bt-page: #f1eee6;
+  --bt-surface: #fffefa;
+  --bt-surface-muted: #e9e4d9;
+  --bt-text: #0b0b0b;
+  --bt-muted: #4e4e4e;
+  --bt-accent: #e33b25;
+  --bt-accent-text: #fff;
+  --bt-border: #111;
+  --bt-border-width: 3rpx;
+  --bt-radius: 0;
+  --bt-control-radius: 0;
+  --bt-shadow: 12rpx 12rpx 0 #173eb5;
+  --bt-toolbox-radius: 0;
+  --bt-toolbox-shadow: 10rpx 10rpx 0 #173eb5;
+  --bt-selection-ring: rgb(232 59 36 / 22%);
+}
+
+.fl-balanced-theme--miniature-world {
+  --bt-page: #ead8b7;
+  --bt-surface: #fff7e8;
+  --bt-surface-muted: #dbe4cc;
+  --bt-text: #342b21;
+  --bt-muted: #776555;
+  --bt-accent: #287992;
+  --bt-accent-text: #fff;
+  --bt-border: #987453;
+  --bt-border-width: 1rpx;
+  --bt-radius: 18rpx;
+  --bt-control-radius: 12rpx;
+  --bt-shadow: 0 12rpx 0 #b88e5e, 0 18rpx 34rpx rgb(74 51 30 / 14%);
+  --bt-toolbox-radius: 14rpx;
+  --bt-toolbox-shadow: 0 9rpx 0 #805c3f;
+  --bt-selection-ring: rgb(40 121 146 / 18%);
+}
+
+.fl-balanced-theme--picturebook-companion {
+  --bt-page: #e8d6b8;
+  --bt-surface: #f8ecd6;
+  --bt-surface-muted: #dac8a9;
+  --bt-text: #24313d;
+  --bt-muted: #6e6256;
+  --bt-accent: #a75536;
+  --bt-accent-text: #fff8eb;
+  --bt-border: #5b4637;
+  --bt-border-width: 1rpx;
+  --bt-radius: 8rpx;
+  --bt-control-radius: 8rpx;
+  --bt-shadow: 7rpx 9rpx 0 rgb(69 49 34 / 18%);
+  --bt-toolbox-radius: 8rpx 8rpx 22rpx 22rpx;
+  --bt-toolbox-shadow: 0 9rpx 0 #674c37;
+  --bt-selection-ring: rgb(167 85 54 / 18%);
+}
+
+.fl-balanced-theme--clear-care {
+  --bt-page: #fff;
+  --bt-surface: #fff;
+  --bt-surface-muted: #eef6f1;
+  --bt-text: #071b12;
+  --bt-muted: #3d5148;
+  --bt-accent: #005b38;
+  --bt-accent-text: #fff;
+  --bt-border: #0d2a1d;
+  --bt-border-width: 4rpx;
+  --bt-radius: 16rpx;
+  --bt-control-radius: 12rpx;
+  --bt-shadow: none;
+  --bt-toolbox-radius: 12rpx;
+  --bt-toolbox-shadow: none;
+  --bt-selection-ring: rgb(0 91 56 / 18%);
+}
+
+.fl-balanced-theme--way-of-water {
+  --bt-page: #07111a;
+  --bt-surface: #102432;
+  --bt-surface-muted: #17394c;
+  --bt-text: #eef5f7;
+  --bt-muted: #a9bdc6;
+  --bt-accent: #d06f3f;
+  --bt-accent-text: #fff;
+  --bt-border: rgb(166 211 229 / 34%);
+  --bt-border-width: 1rpx;
+  --bt-radius: 34rpx;
+  --bt-control-radius: 999rpx;
+  --bt-shadow: 0 18rpx 48rpx rgb(0 0 0 / 34%);
+  --bt-toolbox-radius: 50%;
+  --bt-toolbox-shadow: 0 0 28rpx rgb(90 184 216 / 30%);
+  --bt-selection-ring: rgb(208 111 63 / 24%);
+}
+
+.fl-page-theme-root--balanced:not(.fl-d) {
+  background: var(--bt-page);
+  color: var(--bt-text);
+
+  .home-page,
+  .stats-page,
+  .community-page,
+  .profile-page {
+    color: var(--bt-text);
+    background: var(--bt-page) !important;
+  }
+
+  .profile-card,
+  .home-experience-card,
+  .home-calendar-module,
+  .home-supplements-module,
+  .home-nutrition-module,
+  .main-card,
+  .macro-card,
+  .micros-preview-card,
+  .stats-card,
+  .analysis-card,
+  .hero-card,
+  .health-index-preview-card,
+  .health-index-gate-card,
+  .meal-structure-card,
+  .ai-insight-card,
+  .action-plan-panel,
+  .feed-card,
+  .circle-card,
+  .library-feed-card,
+  .library-mix-card {
+    color: var(--bt-text);
+    background-color: var(--bt-surface);
+    border: var(--bt-border-width) solid var(--bt-border);
+    border-radius: var(--bt-radius);
+    box-shadow: var(--bt-shadow);
+  }
+
+  .profile-section-title,
+  .user-name,
+  .list-title,
+  .home-toolbox__title,
+  .home-toolbox__item-title,
+  .feed-section-title,
+  .stats-section-head__title {
+    color: var(--bt-text);
+  }
+
+  .profile-section-hint,
+  .list-desc,
+  .home-toolbox__subtitle,
+  .home-toolbox__item-desc,
+  .feed-section-link,
+  .stats-section-head__subtitle {
+    color: var(--bt-muted);
+  }
+
+  .home-toolbox,
+  .home-toolbox__sheet {
+    color: var(--bt-text);
+    background: var(--bt-page);
+  }
+
+  .home-toolbox__item {
+    background: var(--bt-surface);
+    border: var(--bt-border-width) solid var(--bt-border);
+    border-radius: var(--bt-radius);
+    box-shadow: var(--bt-shadow);
+  }
+
+  .home-toolbox__item.is-visible,
+  .home-toolbox__summary text,
+  .home-toolbox__reset,
+  .home-toolbox__close {
+    color: var(--bt-text);
+    background: var(--bt-surface-muted);
+    border-color: var(--bt-border);
+  }
+
+  .home-toolbox__item-action {
+    color: var(--bt-accent-text);
+    background: var(--bt-accent);
+    border-radius: var(--bt-control-radius);
+  }
+
+  .home-toolbox__item-action.is-remove {
+    color: var(--bt-text);
+    background: var(--bt-surface-muted);
+  }
+}
+
+/* 瑞士信息设计：硬边、编号感和醒目荧光操作。 */
+.fl-balanced-theme--clarity-order:not(.fl-d) {
+  .home-module-frame,
+  .profile-section,
+  .feed-section,
+  .stats-section-head { border-top: 3rpx solid #111; padding-top: 14rpx; }
+
+  .balanced-theme-entry__eyebrow,
+  .profile-section-hint { text-transform: uppercase; letter-spacing: 2rpx; }
+  .home-toolbox__grid { gap: 8rpx; }
+}
+
+/* 植物纤维：有机边缘、舒展留白。 */
+.fl-balanced-theme--natural-symbiosis:not(.fl-d) {
+  .profile-page,
+  .home-page,
+  .stats-page,
+  .community-page { font-family: 'Kaiti SC', STKaiti, KaiTi, serif; }
+
+  .home-module-frame:nth-child(even) .home-experience-card,
+  .feed-card:nth-child(even) { border-radius: 12rpx 42rpx; }
+  .profile-section-heading { padding-left: 18rpx; border-left: 8rpx solid #79a98a; }
+}
+
+/* 宋式雅集：宋体、细线装裱和规整卷轴段落。 */
+.fl-balanced-theme--eastern-salon:not(.fl-d) {
+  .profile-page,
+  .home-page,
+  .stats-page,
+  .community-page { font-family: 'Songti SC', STSong, SimSun, serif; }
+
+  .profile-card,
+  .home-experience-card,
+  .stats-card,
+  .feed-card { border-top: 2rpx solid #292822; border-bottom: 2rpx solid #292822; }
+  .profile-section-heading { align-items: center; padding: 12rpx 0; border-top: 1rpx solid #8e8a79; border-bottom: 1rpx solid #8e8a79; }
+}
+
+/* 现代艺廊：非对称边条与原色硬阴影。 */
+.fl-balanced-theme--modern-gallery:not(.fl-d) {
+  .profile-section:nth-of-type(3n + 1),
+  .feed-card:nth-child(3n + 1),
+  .stats-card:nth-child(3n + 1),
+  .home-module-frame:nth-child(3n + 1) { border-left: 14rpx solid #173eb5; }
+
+  .profile-section:nth-of-type(3n + 2),
+  .feed-card:nth-child(3n + 2),
+  .stats-card:nth-child(3n + 2),
+  .home-module-frame:nth-child(3n + 2) { border-left: 14rpx solid #f2c500; }
+
+  .profile-section-title,
+  .home-toolbox__title { font-weight: 950; letter-spacing: -1rpx; }
+}
+
+/* 微缩沙盘：厚底座、路径式分段。 */
+.fl-balanced-theme--miniature-world:not(.fl-d) {
+  .profile-card,
+  .home-experience-card,
+  .stats-card,
+  .feed-card { border-bottom-width: 8rpx; }
+  .profile-section-heading { padding: 12rpx 18rpx; background: rgb(255 247 232 / 74%); border: 1rpx solid #987453; border-radius: 12rpx; }
+  .home-toolbox__grid { gap: 20rpx; }
+}
+
+/* 成人绘本：章节书页与深色装订边。 */
+.fl-balanced-theme--picturebook-companion:not(.fl-d) {
+  .profile-page,
+  .home-page,
+  .stats-page,
+  .community-page { font-family: 'Kaiti SC', STKaiti, KaiTi, serif; }
+
+  .profile-card,
+  .home-experience-card,
+  .stats-card,
+  .feed-card { border-left-width: 10rpx; }
+  .profile-section-heading { margin-left: 24rpx; padding: 10rpx 16rpx; background: #24384a; border-radius: 4rpx; }
+
+  .profile-section-heading .profile-section-title,
+  .profile-section-heading .profile-section-hint { color: #fff6e8; }
+}
+
+/* 清朗关怀：大字、大触区、高对比，不保留装饰阴影。 */
+.fl-balanced-theme--clear-care:not(.fl-d) {
+  .profile-section-title,
+  .feed-section-title,
+  .stats-section-head__title { font-size: 34rpx; }
+
+  .profile-section-hint,
+  .list-desc,
+  .home-toolbox__item-desc { font-size: 24rpx; line-height: 1.55; }
+  .list-item { min-height: 104rpx; }
+  .home-toolbox__item { min-height: 210rpx; }
+  .home-toolbox__item-action { padding: 14rpx 20rpx; font-size: 25rpx; }
+}
+
+/* 水之道：深色流动空间与橙色汇流节点。 */
+.fl-balanced-theme--way-of-water:not(.fl-d) {
+  .profile-page,
+  .home-page,
+  .stats-page,
+  .community-page { color: #eef5f7; }
+
+  .profile-card,
+  .home-experience-card,
+  .home-calendar-module,
+  .stats-card,
+  .analysis-card,
+  .feed-card,
+  .circle-card { background: #102432; }
+  .profile-section-heading { padding-bottom: 12rpx; border-bottom: 1rpx solid rgb(166 211 229 / 34%); }
+
+  .user-name,
+  .quick-action-num,
+  .profile-section-title,
+  .list-title,
+  .home-toolbox__title,
+  .home-toolbox__item-title { color: #eef5f7; }
+
+  .user-meta-text,
+  .quick-action-text,
+  .profile-section-hint,
+  .list-desc { color: #a9bdc6; }
+  .list-item { border-bottom-color: rgb(166 211 229 / 18%); }
+  .profile-version { color: #77919d; }
+  .home-toolbox__item { background: #102432; }
+  .home-toolbox__item.is-visible { background: #17394c; }
+}

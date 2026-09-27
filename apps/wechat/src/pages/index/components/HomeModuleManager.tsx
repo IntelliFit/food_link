@@ -2,6 +2,9 @@ import { Image, ScrollView, Text, View } from '@tarojs/components'
 import * as React from 'react'
 
 import toolboxGourdIcon from '../../../assets/icons/home-toolbox-gourd-golden.webp'
+import { useInkWellness } from '../../../components/InkWellness'
+import { useBalancedTheme } from '../../../components/BalancedThemeContext'
+import { getBalancedThemeDefinition } from '../../../utils/balanced-theme'
 import { HOME_MODULE_DEFINITIONS, type HomeModuleId } from '../utils/homeModuleLayout'
 
 import './HomeModuleManager.scss'
@@ -10,6 +13,23 @@ type HomeModuleToolbarProps = {
   editing: boolean
   onOpenToolbox: () => void
   onFinishEditing: () => void
+}
+
+function ToolboxMark({ heading = false }: { heading?: boolean }) {
+  const wellness = useInkWellness()
+  const { theme } = useBalancedTheme()
+  const themeDefinition = getBalancedThemeDefinition(theme)
+  const className = heading ? 'home-toolbox__heading-icon' : 'home-module-toolbar__icon'
+
+  if (wellness) {
+    return <Image className={className} src={toolboxGourdIcon} mode='aspectFit' ariaLabel='养生功能箱' />
+  }
+
+  return (
+    <View className={`${className} home-toolbox-theme-mark`} ariaLabel={`${themeDefinition.toolboxLabel}功能箱`}>
+      <Text className={`iconfont ${themeDefinition.toolboxIconClass}`} />
+    </View>
+  )
 }
 
 export function HomeModuleToolbar({ editing, onOpenToolbox, onFinishEditing }: HomeModuleToolbarProps) {
@@ -35,7 +55,7 @@ export function HomeModuleToolbar({ editing, onOpenToolbox, onFinishEditing }: H
             onOpenToolbox()
           }}
         >
-          <Image className='home-module-toolbar__icon' src={toolboxGourdIcon} mode='aspectFit' />
+          <ToolboxMark />
         </View>
       </View>
     )
@@ -54,7 +74,7 @@ export function HomeModuleToolbar({ editing, onOpenToolbox, onFinishEditing }: H
         onOpenToolbox()
       }}
     >
-      <Image className='home-module-toolbar__icon' src={toolboxGourdIcon} mode='aspectFit' />
+      <ToolboxMark />
     </View>
   )
 }
@@ -142,6 +162,9 @@ type HomeToolboxSheetProps = {
 }
 
 export function HomeToolboxSheet({ visible, visibleIds, onAdd, onHide, onReset, onClose }: HomeToolboxSheetProps) {
+  const wellness = useInkWellness()
+  const { theme } = useBalancedTheme()
+  const themeDefinition = getBalancedThemeDefinition(theme)
   if (!visible) return null
   const visibleSet = new Set(visibleIds)
 
@@ -151,9 +174,9 @@ export function HomeToolboxSheet({ visible, visibleIds, onAdd, onHide, onReset, 
       <View className='home-toolbox__sheet'>
         <View className='home-toolbox__header'>
           <View className='home-toolbox__heading'>
-            <Image className='home-toolbox__heading-icon' src={toolboxGourdIcon} mode='aspectFit' />
+            <ToolboxMark heading />
             <View>
-              <Text className='home-toolbox__title'>功能箱</Text>
+              <Text className='home-toolbox__title'>{wellness ? '养生功能箱' : themeDefinition.toolboxLabel}</Text>
               <Text className='home-toolbox__subtitle'>把常用模块放在首页，不常用的先收起来</Text>
             </View>
           </View>

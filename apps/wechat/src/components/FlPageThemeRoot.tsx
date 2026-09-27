@@ -2,7 +2,9 @@ import { View } from '@tarojs/components'
 import Taro, { useDidShow } from '@tarojs/taro'
 import React, { type PropsWithChildren } from 'react'
 import { useAppColorSchemeOptional } from './AppColorSchemeContext'
+import { useBalancedThemeOptional } from './BalancedThemeContext'
 import { HOME_DISPLAY_MODE_STORAGE_KEY } from '../utils/home-display-mode'
+import { getStoredBalancedTheme } from '../utils/balanced-theme'
 
 function readWellnessMode(): boolean {
   try {
@@ -17,9 +19,11 @@ function readWellnessMode(): boolean {
  */
 export function FlPageThemeRoot({ children }: PropsWithChildren): React.ReactElement {
   const ctx = useAppColorSchemeOptional()
+  const balancedThemeContext = useBalancedThemeOptional()
   const scheme = ctx?.scheme ?? 'light'
   const dark = scheme === 'dark'
   const [wellness, setWellness] = React.useState(readWellnessMode)
+  const balancedTheme = balancedThemeContext?.theme ?? getStoredBalancedTheme()
 
   useDidShow(() => {
     setWellness(readWellnessMode())
@@ -27,7 +31,7 @@ export function FlPageThemeRoot({ children }: PropsWithChildren): React.ReactEle
 
   return (
     <View
-      className={`fl-page-theme-root${dark ? ' fl-d' : ''}${wellness ? ' fl-page-theme-root--wellness' : ' fl-page-theme-root--balanced'}`}
+      className={`fl-page-theme-root${dark ? ' fl-d' : ''}${wellness ? ' fl-page-theme-root--wellness' : ` fl-page-theme-root--balanced fl-balanced-theme--${balancedTheme}`}`}
       style={{ minHeight: '100vh', width: '100%', boxSizing: 'border-box' }}
     >
       {children}

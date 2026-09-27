@@ -9,6 +9,7 @@ import { flushRecentRequestTraces, getAccessToken } from './utils/api'
 import { extraPkgUrl } from './utils/subpackage-extra'
 import { writePendingFriendInviteCode } from './utils/pending-friend-invite'
 import { AppColorSchemeProvider } from './components/AppColorSchemeContext'
+import { BalancedThemeProvider } from './components/BalancedThemeContext'
 import { PrivacyAuthorizationModal } from './components/PrivacyAuthorizationModal'
 import { cleanupGeneratedUserFiles } from './utils/weapp-user-files'
 
@@ -192,7 +193,16 @@ function App({ children }: PropsWithChildren<any>) {
   }, [])
 
   // children 为当前页面；Provider 供全站主题与「我的」页切换
-  return createElement(AppColorSchemeProvider, null, createElement(PrivacyAuthorizationModal), children)
+  return createElement(
+    AppColorSchemeProvider,
+    null,
+    createElement(
+      BalancedThemeProvider,
+      null,
+      createElement(PrivacyAuthorizationModal),
+      children,
+    ),
+  )
 }
 
 export default App
