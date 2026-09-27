@@ -928,6 +928,90 @@
   .list-arrow { color: #071b12; font-size: 34rpx; }
 }
 
+/* V4 / 08 水之道：深水空间、玻璃水泡、橙色汇流节点与流动路径。 */
+.fl-balanced-theme--way-of-water:not(.fl-d) {
+  .home-page,
+  .stats-page,
+  .community-page,
+  .profile-page {
+    color: #edf5f7;
+    background:
+      radial-gradient(circle at 50% -10%, rgb(59 126 154 / 22%), transparent 45%),
+      linear-gradient(180deg, #06111a, #02070b 88%);
+  }
+
+  .home-login-banner,
+  .stats-guest-card,
+  .home-health-profile-prompt {
+    color: #edf5f7;
+    background: rgb(16 36 50 / 88%);
+    border: 1rpx solid rgb(142 213 237 / 42%);
+    border-radius: 52rpx 14rpx;
+    box-shadow: inset 0 0 40rpx rgb(90 184 216 / 12%), 0 18rpx 40rpx rgb(0 0 0 / 34%);
+  }
+  .home-login-banner-text,
+  .stats-guest-title,
+  .stats-guest-desc { color: #edf5f7; }
+  .home-login-banner-btn,
+  .stats-guest-btn,
+  .feed-publish-btn,
+  .home-backfill-hint__action,
+  .home-module-placeholder__action,
+  .empty-record-btn {
+    color: #fff !important;
+    background: #d06f3f !important;
+    border: 2rpx solid #ffc3a3 !important;
+    border-radius: 999rpx !important;
+    box-shadow: 0 0 24rpx rgb(208 111 63 / 46%) !important;
+  }
+
+  .date-item.is-selected,
+  .month-calendar-cell.is-selected { color: #fff !important; background: #d06f3f !important; border-radius: 999rpx !important; box-shadow: 0 0 22rpx rgb(208 111 63 / 46%) !important; }
+  .date-item.is-selected .date-day-circle { color: #fff !important; background: #d06f3f !important; border: 2rpx solid #ffc3a3 !important; box-shadow: 0 0 20rpx rgb(208 111 63 / 52%) !important; }
+
+  .home-calendar-module,
+  .home-experience-card,
+  .stats-card,
+  .analysis-card,
+  .feed-card,
+  .circle-card {
+    color: #edf5f7;
+    background: linear-gradient(145deg, rgb(19 47 63 / 94%), rgb(8 24 34 / 96%));
+    border: 1rpx solid rgb(142 213 237 / 32%);
+    border-radius: 56rpx 14rpx;
+    box-shadow: inset 0 0 46rpx rgb(90 184 216 / 9%), 0 20rpx 48rpx rgb(0 0 0 / 38%);
+  }
+  .section-title,
+  .meals-title,
+  .nutrition-expand-title,
+  .card-label,
+  .card-title,
+  .macro-label-horizontal,
+  .meal-desc { color: #edf5f7; }
+  .progress-bar-bg,
+  .macro-progress-bar-bg,
+  .wellness-total-progress { background: rgb(166 211 229 / 14%) !important; }
+  .progress-bar-fill,
+  .macro-progress-bar-fill,
+  .wellness-total-progress__fill { background: linear-gradient(90deg, #6db5cf, #d06f3f) !important; box-shadow: 0 0 18rpx rgb(109 181 207 / 36%); }
+
+  .ranking-banner { color: #edf5f7; background: #102432; box-shadow: inset 0 0 40rpx rgb(90 184 216 / 12%), 0 18rpx 46rpx rgb(0 0 0 / 42%); }
+  .feed-filter-panel { color: #edf5f7; background: #0b1c27; border: 1rpx solid rgb(142 213 237 / 34%); border-radius: 999rpx; }
+  .feed-search-wrap,
+  .feed-filter-trigger-combined { color: #a9bdc6; background: #102432; border-color: rgb(142 213 237 / 28%); }
+
+  .profile-header-section { color: #edf5f7; background: linear-gradient(145deg, #112a3a, #07141e); border: 1rpx solid rgb(142 213 237 / 42%); border-radius: 70rpx 16rpx; box-shadow: inset 0 0 54rpx rgb(90 184 216 / 12%), 0 22rpx 50rpx rgb(0 0 0 / 42%); }
+  .profile-section { position: relative; margin-left: 64rpx; color: #edf5f7; background: #0d202c; border: 1rpx solid rgb(142 213 237 / 34%); border-radius: 999rpx 18rpx 18rpx 999rpx; }
+  .profile-section::before { content: ''; position: absolute; left: -56rpx; top: 50%; width: 66rpx; height: 66rpx; background: radial-gradient(circle at 35% 28%, #2f5e74, #102432 58%, #06111a); border: 2rpx solid rgb(182 226 241 / 64%); border-radius: 50%; box-shadow: inset 0 0 16rpx rgb(255 255 255 / 12%), 0 0 18rpx rgb(90 184 216 / 24%); transform: translateY(-50%); }
+  .profile-section .profile-section-title,
+  .profile-section .profile-section-hint,
+  .profile-section .list-title,
+  .profile-section .list-desc { color: #edf5f7; }
+  .list-item { border-bottom-color: rgb(166 211 229 / 18%); }
+  .list-icon { color: #edf5f7 !important; background: transparent !important; border: 1rpx solid rgb(142 213 237 / 38%); border-radius: 50%; }
+  .list-arrow { color: #d06f3f; }
+}
+
 /* V3：四个业务页面不再共用同一套卡片骨架。 */
 
 /* 澄明秩序：首页是编辑版面，分析是数据报表，圈子是杂志流，我的是档案索引。 */

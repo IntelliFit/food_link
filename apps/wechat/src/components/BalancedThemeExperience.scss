@@ -278,27 +278,38 @@
 }
 
 .bt-experience--water {
-  min-height: 292rpx;
+  min-height: 458rpx;
   color: #e9f3f7;
-  background: radial-gradient(circle at 28% 52%, #173b4f 0, #0c2230 42%, #06111a 76%);
+  background:
+    radial-gradient(circle at 28% 52%, #173b4f 0, #0c2230 38%, #06111a 70%),
+    linear-gradient(135deg, #07111a, #02070b);
   border: 1rpx solid rgb(166 211 229 / 38%);
-  border-radius: 56rpx 14rpx;
-  box-shadow: inset 0 0 60rpx rgb(65 147 178 / 14%), 0 20rpx 42rpx rgb(0 0 0 / 28%);
+  border-radius: 72rpx 16rpx;
+  box-shadow: inset 0 0 90rpx rgb(65 147 178 / 16%), 0 24rpx 52rpx rgb(0 0 0 / 38%);
 
-  .bt-water__pool { position: absolute; left: 18rpx; top: 8rpx; width: 290rpx; height: 210rpx; }
+  .bt-water__pool { position: absolute; left: 2rpx; top: 12rpx; width: 430rpx; height: 410rpx; }
   .bt-water__ripple { position: absolute; left: 50%; top: 50%; border: 2rpx solid rgb(142 213 237 / 50%); border-radius: 50%; opacity: .38; transform: translate(-50%, -50%) scale(.72); transition: transform 680ms ease, opacity 680ms ease; }
-  .bt-water__ripple--one { width: 92rpx; height: 46rpx; }
-  .bt-water__ripple--two { width: 178rpx; height: 86rpx; }
-  .bt-water__ripple--three { width: 270rpx; height: 134rpx; }
-  .bt-water__stone { position: absolute; left: 50%; top: 50%; display: flex; align-items: center; justify-content: center; width: 46rpx; height: 46rpx; color: #fff; background: #d06f3f; border-radius: 50%; box-shadow: 0 0 20rpx rgb(208 111 63 / 40%); transform: translate(-50%, -50%); }
-  .bt-water__copy { position: absolute; right: 34rpx; top: 54rpx; display: flex; flex-direction: column; align-items: flex-end; gap: 14rpx; }
-  .bt-water__copy text:first-child { font-size: 22rpx; letter-spacing: 3rpx; }
+  .bt-water__ripple--one { width: 142rpx; height: 72rpx; }
+  .bt-water__ripple--two { width: 274rpx; height: 136rpx; }
+  .bt-water__ripple--three { width: 410rpx; height: 206rpx; }
+  .bt-water__stone { position: absolute; left: 50%; top: 50%; display: flex; align-items: center; justify-content: center; width: 72rpx; height: 72rpx; color: #fff; background: radial-gradient(circle at 35% 28%, #ffad75, #d06f3f 55%, #74351f); border: 2rpx solid #ffd2b8; border-radius: 50%; box-shadow: 0 0 36rpx rgb(208 111 63 / 58%), inset 0 0 12rpx rgb(255 255 255 / 30%); transform: translate(-50%, -50%); }
+  .bt-water__copy { position: absolute; z-index: 4; right: 36rpx; top: 62rpx; display: flex; flex-direction: column; align-items: flex-end; gap: 18rpx; }
+  .bt-water__copy text:first-child { font-family: 'Songti SC', STSong, SimSun, serif; font-size: 44rpx; letter-spacing: 5rpx; }
   .bt-water__copy text:last-child { font-family: 'Songti SC', STSong, SimSun, serif; font-size: 36rpx; }
-  .bt-water__copy text:nth-child(2) { font-family: 'Songti SC', STSong, SimSun, serif; font-size: 36rpx; }
-  .bt-water__copy text:nth-child(3) { max-width: 290rpx; color: #a9bdc6; font-size: 18rpx; text-align: right; line-height: 1.45; }
+  .bt-water__copy text:nth-child(2) { padding-bottom: 12rpx; color: #e8edf0; font-family: 'Songti SC', STSong, SimSun, serif; font-size: 26rpx; border-bottom: 2rpx solid #d06f3f; }
+  .bt-water__copy text:nth-child(3) { max-width: 300rpx; color: #a9bdc6; font-size: 20rpx; text-align: right; line-height: 1.65; }
 
   &.is-stage-1 .bt-water__ripple { opacity: .72; transform: translate(-50%, -50%) scale(.92); }
   &.is-stage-2 .bt-water__ripple { opacity: .18; transform: translate(-50%, -50%) scale(1.16); }
+
+  &.bt-experience--stats .bt-water__pool { left: 50%; top: 112rpx; width: 560rpx; height: 310rpx; transform: translateX(-50%); }
+  &.bt-experience--stats .bt-water__copy { left: 38rpx; right: auto; align-items: flex-start; }
+  &.bt-experience--stats .bt-water__copy text:nth-child(3) { text-align: left; }
+  &.bt-experience--community .bt-water__pool { left: auto; right: -100rpx; }
+  &.bt-experience--community .bt-water__copy { left: 38rpx; right: auto; align-items: flex-start; }
+  &.bt-experience--community .bt-water__copy text:nth-child(3) { text-align: left; }
+  &.bt-experience--profile { border-radius: 16rpx 72rpx; }
+  &.bt-experience--profile .bt-water__pool { left: auto; right: -40rpx; }
 }
 
 /* 四个业务页面在同一主题内也有不同的构图重心。 */
