@@ -384,3 +384,246 @@
   .home-toolbox__item { background: #102432; }
   .home-toolbox__item.is-visible { background: #17394c; }
 }
+
+/* V3：四个业务页面不再共用同一套卡片骨架。 */
+
+/* 澄明秩序：首页是编辑版面，分析是数据报表，圈子是杂志流，我的是档案索引。 */
+.fl-balanced-theme--clarity-order:not(.fl-d) {
+  .page-content,
+  .scroll-wrap,
+  .community-scroll-content,
+  .profile-page { padding-left: 18rpx; padding-right: 18rpx; }
+
+  .home-experience-stage { gap: 10rpx; }
+  .home-module-frame { margin-bottom: 10rpx; padding: 0; border-top-width: 4rpx; }
+  .home-module-frame:nth-child(3n + 1) { border-top-color: #173eb5; }
+  .home-module-frame:nth-child(3n + 2) { border-top-color: #c8ff00; }
+  .home-experience-card,
+  .home-calendar-module,
+  .home-nutrition-module { border-left: 0; border-right: 0; }
+
+  .stats-range-dropdown,
+  .analysis-tabs-container { border: 2rpx solid #111; border-radius: 0; box-shadow: 7rpx 7rpx 0 #c8ff00; }
+  .analysis-panel-control .segment-item { border-radius: 0; }
+  .analysis-panel-control .segment-item.active { color: #111; background: #c8ff00; }
+  .stats-card { border-left: 0; border-right: 0; }
+
+  .ranking-banner { color: #fff; background: #111; border: 0; border-radius: 0; box-shadow: 9rpx 9rpx 0 #c8ff00; }
+  .feed-card,
+  .circle-card { border-left: 0; border-right: 0; }
+  .feed-card image { border-radius: 0 !important; }
+
+  .profile-header-section { padding: 24rpx 0; border-top: 4rpx solid #111; border-bottom: 2rpx solid #111; }
+  .profile-quick-actions { border-top: 2rpx solid #111; border-radius: 0; }
+  .profile-section { margin-top: 18rpx; }
+  .list-item { border-bottom: 2rpx solid #111; border-radius: 0; }
+}
+
+/* 自然共生：模块像叶片沿茎生长，分析回到年轮，社交像观察手记。 */
+.fl-balanced-theme--natural-symbiosis:not(.fl-d) {
+  .page-content,
+  .scroll-wrap,
+  .community-scroll-content,
+  .profile-page { padding-left: 24rpx; padding-right: 24rpx; }
+
+  .home-experience-stage { position: relative; padding-left: 18rpx; border-left: 4rpx solid #79a98a; }
+  .home-module-frame:nth-child(odd) { margin-right: 26rpx; }
+  .home-module-frame:nth-child(even) { margin-left: 26rpx; }
+  .home-module-frame { position: relative; }
+
+  .stats-range-dropdown { color: #f7f1df; background: #376b4d; border-radius: 999rpx; }
+  .analysis-tabs-container { padding: 8rpx; background: #e4edde; border-radius: 40rpx 12rpx; }
+  .analysis-panel-control .segment-item.active { color: #fffdf6; background: #376b4d; border-radius: 30rpx 8rpx; }
+  .stats-card:nth-child(odd) { border-radius: 44rpx 12rpx; }
+  .stats-card:nth-child(even) { border-radius: 12rpx 44rpx; }
+
+  .ranking-banner { background: #dce8d8; border: 1rpx solid #718b71; border-radius: 52rpx 14rpx; }
+  .feed-card:nth-child(odd) { margin-right: 20rpx; }
+  .feed-card:nth-child(even) { margin-left: 20rpx; }
+  .feed-card image { border-radius: 42rpx 10rpx !important; }
+
+  .profile-header-section { background: #fffdf6; border: 1rpx solid #718b71; border-radius: 52rpx 14rpx; }
+  .profile-section { padding-left: 18rpx; border-left: 3rpx solid #79a98a; }
+  .profile-section:nth-of-type(even) { border-left-color: #9f815d; }
+}
+
+/* 东方雅集：四页分别对应册页、山水长卷、题跋雅集与黑漆屉柜。 */
+.fl-balanced-theme--eastern-salon:not(.fl-d) {
+  .page-content,
+  .scroll-wrap,
+  .community-scroll-content,
+  .profile-page { padding-left: 26rpx; padding-right: 26rpx; }
+
+  .home-experience-stage { padding: 0 10rpx; border-left: 2rpx solid #8e8a79; border-right: 2rpx solid #8e8a79; }
+  .home-module-frame { margin-bottom: 24rpx; }
+  .home-module-frame + .home-module-frame { border-top: 1rpx solid #8e8a79; }
+  .home-experience-card,
+  .home-calendar-module { box-shadow: 0 9rpx 0 rgb(34 33 29 / 9%); }
+
+  .stats-range-dropdown { justify-content: center; letter-spacing: 8rpx; border-top: 1rpx solid #8e8a79; border-bottom: 1rpx solid #8e8a79; border-radius: 0; }
+  .analysis-tabs-container { border-top: 1rpx solid #8e8a79; border-bottom: 1rpx solid #8e8a79; }
+  .analysis-panel-control .segment-item.active { color: #f7f2e6; background: #22211d; border-radius: 0; }
+  .stats-card { box-shadow: inset 0 0 0 1rpx rgb(142 138 121 / 24%); }
+
+  .ranking-banner { background: #e3e4d8; border: 1rpx solid #8e8a79; border-radius: 0; }
+  .feed-card { padding: 24rpx; border-top: 1rpx solid #292822; border-bottom: 1rpx solid #292822; }
+  .feed-card image { border-radius: 2rpx !important; }
+
+  .profile-header-section { color: #f7f2e6; background: #171714; border: 1rpx solid #8e8a79; }
+  .profile-header-section .user-name,
+  .profile-header-section .user-meta-text,
+  .profile-header-section .quick-action-num,
+  .profile-header-section .quick-action-text { color: #f7f2e6; }
+  .profile-section { background: #f8f4e9; border: 1rpx solid #8e8a79; }
+}
+
+/* 现代艺廊：四页采用展签、作品墙、公共展场与红色典藏抽屉。 */
+.fl-balanced-theme--modern-gallery:not(.fl-d) {
+  .page-content,
+  .scroll-wrap,
+  .community-scroll-content,
+  .profile-page { padding-left: 14rpx; padding-right: 14rpx; }
+
+  .home-experience-stage { gap: 24rpx; }
+  .home-module-frame:nth-child(odd) { margin-right: 34rpx; transform: rotate(-.5deg); }
+  .home-module-frame:nth-child(even) { margin-left: 34rpx; transform: rotate(.5deg); }
+  .home-module-frame:nth-child(4n + 1) { box-shadow: 12rpx 12rpx 0 #e33b25; }
+  .home-module-frame:nth-child(4n + 2) { box-shadow: 12rpx 12rpx 0 #173eb5; }
+
+  .stats-range-dropdown { color: #fff; background: #111; border-radius: 0; }
+  .analysis-tabs-container { background: #f2c500; border: 3rpx solid #111; border-radius: 0; box-shadow: 10rpx 10rpx 0 #173eb5; }
+  .analysis-panel-control .segment-item.active { color: #fff; background: #e33b25; border-radius: 0; }
+  .stats-card:nth-child(odd) { transform: rotate(-.35deg); }
+  .stats-card:nth-child(even) { transform: rotate(.35deg); }
+
+  .ranking-banner { color: #fff; background: #173eb5; border: 3rpx solid #111; border-radius: 0; box-shadow: 12rpx 12rpx 0 #f2c500; }
+  .feed-card:nth-child(odd) { transform: translateX(-8rpx) rotate(-.4deg); }
+  .feed-card:nth-child(even) { transform: translateX(8rpx) rotate(.4deg); }
+  .feed-card image { border-radius: 0 !important; }
+
+  .profile-header-section { background: #fffefa; border: 3rpx solid #111; box-shadow: 12rpx 12rpx 0 #173eb5; }
+  .profile-section { background: #e33b25; border: 3rpx solid #111; box-shadow: 10rpx 10rpx 0 #111; }
+  .profile-section .profile-section-title,
+  .profile-section .profile-section-hint,
+  .profile-section .list-title,
+  .profile-section .list-desc { color: #fff; }
+  .profile-section .list-item { border-bottom-color: rgb(255 255 255 / 42%); }
+}
+
+/* 微缩世界：页面像四个相连的沙盘场景，卡片形成地台与路径。 */
+.fl-balanced-theme--miniature-world:not(.fl-d) {
+  .page-content,
+  .scroll-wrap,
+  .community-scroll-content,
+  .profile-page { padding-left: 20rpx; padding-right: 20rpx; }
+
+  .home-experience-stage { padding: 22rpx 14rpx; background: #dbe4cc; border: 1rpx solid #987453; border-radius: 18rpx; }
+  .home-module-frame { margin-bottom: 28rpx; transform: perspective(900rpx) rotateX(1.2deg); }
+  .home-module-frame:nth-child(even) { margin-left: 26rpx; }
+  .home-module-frame:nth-child(odd) { margin-right: 26rpx; }
+
+  .stats-range-dropdown { color: #fff; background: #287992; border: 2rpx solid #674c37; border-radius: 12rpx; box-shadow: 0 8rpx 0 #674c37; }
+  .analysis-tabs-container { background: #dbe4cc; border: 1rpx solid #987453; box-shadow: 0 8rpx 0 #b88e5e; }
+  .analysis-panel-control .segment-item.active { color: #fff; background: #287992; }
+  .stats-card { border-bottom-width: 10rpx; }
+
+  .ranking-banner { background: #dbe4cc; border: 2rpx solid #987453; border-bottom-width: 10rpx; border-radius: 18rpx; }
+  .feed-card { border-bottom-width: 10rpx; }
+  .feed-card:nth-child(even) { margin-left: 18rpx; }
+
+  .profile-header-section { background: #fff7e8; border: 2rpx solid #987453; border-bottom-width: 10rpx; border-radius: 18rpx; }
+  .profile-section { background: #8b633f; border: 2rpx solid #5d3f2c; border-bottom-width: 10rpx; }
+  .profile-section .profile-section-title,
+  .profile-section .profile-section-hint,
+  .profile-section .list-title,
+  .profile-section .list-desc { color: #fff7e8; }
+}
+
+/* 绘本陪伴：一页一章，分析采用胶片节奏，圈子与我的变成故事目录。 */
+.fl-balanced-theme--picturebook-companion:not(.fl-d) {
+  .page-content,
+  .scroll-wrap,
+  .community-scroll-content,
+  .profile-page { padding-left: 22rpx; padding-right: 22rpx; }
+
+  .home-experience-stage { padding: 22rpx 18rpx 22rpx 34rpx; background: #263746; border-radius: 8rpx; }
+  .home-module-frame { margin-bottom: 26rpx; background: #f8ecd6; border-left: 12rpx solid #263746; box-shadow: 7rpx 9rpx 0 rgb(69 49 34 / 18%); }
+
+  .stats-range-dropdown { color: #fff8eb; background: #263746; border-radius: 4rpx; }
+  .analysis-tabs-container { background: #dac8a9; border: 2rpx solid #5b4637; border-radius: 4rpx; }
+  .analysis-panel-control .segment-item.active { color: #fff8eb; background: #a75536; border-radius: 3rpx; }
+  .stats-card { border-left-width: 12rpx; }
+
+  .ranking-banner { color: #fff8eb; background: #263746; border: 2rpx solid #5b4637; border-radius: 4rpx; }
+  .feed-card { border-left-width: 12rpx; }
+  .feed-card:nth-child(3n + 1) { border-left-color: #a75536; }
+  .feed-card:nth-child(3n + 2) { border-left-color: #33535c; }
+  .feed-card image { border-radius: 3rpx !important; }
+
+  .profile-header-section { color: #fff8eb; background: #263746; border: 2rpx solid #5b4637; box-shadow: 7rpx 9rpx 0 rgb(69 49 34 / 22%); }
+  .profile-header-section .user-name,
+  .profile-header-section .user-meta-text,
+  .profile-header-section .quick-action-num,
+  .profile-header-section .quick-action-text { color: #fff8eb; }
+  .profile-section { background: #f8ecd6; border-left: 12rpx solid #263746; }
+}
+
+/* 清朗关怀：每页只突出一个主要结论，触控目标显著增大。 */
+.fl-balanced-theme--clear-care:not(.fl-d) {
+  .page-content,
+  .scroll-wrap,
+  .community-scroll-content,
+  .profile-page { padding-left: 22rpx; padding-right: 22rpx; }
+
+  .home-experience-stage { gap: 20rpx; }
+  .home-module-frame { margin-bottom: 20rpx; }
+  .home-experience-card,
+  .home-calendar-module,
+  .home-nutrition-module { padding: 30rpx; }
+
+  .stats-range-dropdown { min-height: 88rpx; padding: 0 26rpx; color: #fff; font-size: 30rpx; background: #005b38; border: 4rpx solid #071b12; border-radius: 12rpx; }
+  .analysis-tabs-container { padding: 10rpx; border: 4rpx solid #071b12; border-radius: 12rpx; }
+  .analysis-panel-control .segment-item { min-height: 76rpx; font-size: 28rpx; }
+  .analysis-panel-control .segment-item.active { color: #071b12; background: #f5ad19; border-radius: 8rpx; }
+  .stats-card { padding: 30rpx; border-width: 4rpx; }
+
+  .ranking-banner { background: #eef6f1; border: 4rpx solid #071b12; border-radius: 12rpx; }
+  .feed-card { padding: 28rpx; border-width: 4rpx; }
+  .feed-card image { border-radius: 10rpx !important; }
+
+  .profile-header-section { padding: 32rpx 26rpx; background: #eef6f1; border: 4rpx solid #071b12; border-radius: 12rpx; }
+  .profile-section { border: 4rpx solid #071b12; border-radius: 12rpx; }
+  .quick-action-item { min-height: 92rpx; }
+}
+
+/* 水之道：四页由水线串联，首页聚焦、分析汇流、圈子相遇、我的归档。 */
+.fl-balanced-theme--way-of-water:not(.fl-d) {
+  .page-content,
+  .scroll-wrap,
+  .community-scroll-content,
+  .profile-page { padding-left: 20rpx; padding-right: 20rpx; }
+
+  .home-experience-stage { position: relative; padding: 16rpx; border-left: 1rpx solid rgb(166 211 229 / 28%); border-right: 1rpx solid rgb(166 211 229 / 28%); }
+  .home-module-frame { margin-bottom: 26rpx; }
+  .home-module-frame:nth-child(odd) { margin-right: 24rpx; }
+  .home-module-frame:nth-child(even) { margin-left: 24rpx; }
+  .home-experience-card,
+  .home-calendar-module,
+  .home-nutrition-module { border-radius: 42rpx 12rpx; box-shadow: inset 0 0 40rpx rgb(90 184 216 / 10%), 0 18rpx 48rpx rgb(0 0 0 / 34%); }
+
+  .stats-range-dropdown { color: #07111a; background: #e8edf0; border-radius: 999rpx; }
+  .analysis-tabs-container { background: #102432; border: 1rpx solid rgb(166 211 229 / 34%); border-radius: 999rpx; }
+  .analysis-panel-control .segment-item.active { color: #fff; background: #d06f3f; border-radius: 999rpx; }
+  .stats-card { border-radius: 48rpx 14rpx; }
+
+  .ranking-banner { color: #eef5f7; background: #102432; border: 1rpx solid rgb(166 211 229 / 34%); border-radius: 58rpx 14rpx; }
+  .feed-card { border-radius: 52rpx 14rpx; box-shadow: inset 0 0 36rpx rgb(90 184 216 / 8%), 0 18rpx 48rpx rgb(0 0 0 / 34%); }
+  .feed-card image { border-radius: 46rpx 10rpx !important; }
+
+  .profile-header-section { color: #eef5f7; background: #102432; border: 1rpx solid rgb(166 211 229 / 34%); border-radius: 60rpx 16rpx; box-shadow: inset 0 0 46rpx rgb(90 184 216 / 10%); }
+  .profile-header-section .user-name,
+  .profile-header-section .user-meta-text,
+  .profile-header-section .quick-action-num,
+  .profile-header-section .quick-action-text { color: #eef5f7; }
+  .profile-section { background: #102432; border: 1rpx solid rgb(166 211 229 / 34%); border-radius: 48rpx 14rpx; }
+}

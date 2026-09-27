@@ -488,3 +488,38 @@ final result: passed
 - 自定义 TabBar JS 语法、TypeScript、21 个 Jest 套件（78 条）与 `git diff --check` 通过。
 
 final result: passed
+
+---
+
+# Balanced themes V3 design QA
+
+final result: passed
+
+## Scope
+
+- Visual targets: `docs/design/balanced-themes-v3-20260927/*.png`
+- Runtime: WeChat DevTools development build, iPhone 12/13 simulator
+- Surfaces: 首页、分析、圈子、我的
+- Themes: 澄明秩序、自然共生、东方雅集、现代艺廊、微缩世界、绘本陪伴、清朗关怀、水之道
+
+## Verified
+
+- All eight themes render without TypeScript or runtime compilation errors.
+- 首页 and 我的 were captured for every theme at the same simulator viewport.
+- 圈子 was checked in both the light, grid-led 澄明秩序 state and the dark, fluid 水之道 state.
+- Theme switching, reveal animation, page navigation and theme persistence continue to work.
+- Each theme changes page structure, spacing, container geometry, typography, information grouping and interaction language in addition to color.
+- The four surfaces use page-specific story titles and controls inside each theme.
+- 清朗关怀 retains large targets and high contrast; 水之道 remains part of balanced mode and does not use yin-yang or gourd imagery.
+
+## Validation
+
+- `npm --workspace apps/wechat run typecheck`: passed.
+- Component ESLint check: passed.
+- WeChat development build: passed.
+- Production Taro compilation and WXSS optimization: passed.
+- The repository's package-size gate still reports the existing main-package overage (`2761.5KB > 2048KB`); this remains a release-level repository issue.
+
+## P3 follow-up
+
+- Analysis content could only be inspected at its logged-out gate in the current test account. Its theme masthead, tabs and card rules compiled successfully; repeat the signed-in visual pass when a test session is available.
