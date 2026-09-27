@@ -234,7 +234,7 @@
 .bt-experience--eastern {
   display: flex;
   align-items: stretch;
-  min-height: 448rpx;
+  min-height: 760rpx;
   padding: 0 28rpx;
   color: #171714;
   background: #c9b998;
@@ -252,6 +252,40 @@
   .bt-eastern__subtitle { position: relative; z-index: 2; display: block; max-width: 310rpx; margin-top: 20rpx; color: #6d6a60; font-size: 22rpx; letter-spacing: 3rpx; }
   .bt-eastern__seal { position: absolute; right: 32rpx; bottom: 28rpx; z-index: 4; display: flex; align-items: center; justify-content: center; width: 54rpx; height: 54rpx; color: #a33c2f; border: 3rpx solid #a33c2f; transform: rotate(-7deg); }
 
+  .bt-eastern__meal-scroll { position: absolute; left: 84rpx; right: 84rpx; top: 206rpx; bottom: 50rpx; z-index: 5; padding: 22rpx; background: rgb(249 244 232 / 94%); border: 4rpx double #8c7b5f; box-shadow: 0 12rpx 22rpx rgb(46 38 28 / 18%); }
+  .bt-eastern__meal-scroll > image { display: block; width: 78%; height: 330rpx; filter: sepia(.28) saturate(.72); border: 1rpx solid #8c7b5f; }
+  .bt-eastern__meal-name { position: absolute; right: 24rpx; top: 36rpx; display: flex; width: 104rpx; flex-direction: row-reverse; gap: 15rpx; writing-mode: vertical-rl; }
+  .bt-eastern__meal-name text:first-child { font-family: 'Songti SC', STSong, SimSun, serif; font-size: 30rpx; font-weight: 800; letter-spacing: 5rpx; }
+  .bt-eastern__meal-name text:last-child { color: #615a4e; font-size: 18rpx; letter-spacing: 3rpx; }
+  .bt-eastern__meal-metrics { display: grid; grid-template-columns: repeat(3, 1fr); margin-top: 17rpx; border-top: 1rpx solid #8c7b5f; border-bottom: 1rpx solid #8c7b5f; }
+  .bt-eastern__meal-metrics text { padding: 13rpx 0; font-family: 'Songti SC', STSong, SimSun, serif; font-size: 21rpx; text-align: center; border-right: 1rpx solid #8c7b5f; }
+  .bt-eastern__meal-metrics text:last-child { border-right: 0; }
+
+  .bt-eastern__food-sequence { position: absolute; left: 36rpx; right: 36rpx; top: 186rpx; bottom: 48rpx; z-index: 5; overflow: hidden; border: 1rpx solid rgb(77 87 75 / 34%); }
+  .bt-eastern__food-sequence > image { display: block; width: 100%; height: 100%; opacity: .78; filter: sepia(.12) saturate(.65); }
+  .bt-eastern__river-path { position: absolute; left: 60rpx; right: 60rpx; bottom: 144rpx; display: flex; align-items: center; justify-content: space-between; height: 80rpx; border-bottom: 15rpx solid rgb(67 112 98 / 58%); border-radius: 0 0 50% 50%; transform: rotate(-4deg); }
+  .bt-eastern__river-path view { width: 25rpx; height: 25rpx; background: #f2ecdd; border: 5rpx solid #587f72; border-radius: 50%; box-shadow: 0 0 0 4rpx rgb(242 236 221 / 74%); }
+  .bt-eastern__river-path view:nth-child(7) { width: 34rpx; height: 34rpx; border-color: #a33c2f; }
+  .bt-eastern__sequence-caption { position: absolute; left: 24rpx; bottom: 22rpx; display: flex; align-items: flex-end; gap: 18rpx; padding: 13rpx 18rpx; background: rgb(248 243 231 / 86%); }
+  .bt-eastern__sequence-caption text:first-child { font-family: 'Songti SC', STSong, SimSun, serif; font-size: 28rpx; font-weight: 800; }
+  .bt-eastern__sequence-caption text:last-child { color: #5f6259; font-size: 18rpx; }
+
+  .bt-eastern__salon-card { position: absolute; left: 42rpx; right: 42rpx; top: 198rpx; bottom: 46rpx; z-index: 5; padding: 18rpx; background: rgb(249 244 232 / 94%); border: 1rpx solid #96896f; }
+  .bt-eastern__salon-card > image { display: block; width: calc(100% - 98rpx); height: 320rpx; filter: sepia(.22) saturate(.72); }
+  .bt-eastern__salon-verse { position: absolute; right: 26rpx; top: 34rpx; display: flex; flex-direction: row-reverse; gap: 10rpx; font-family: 'Songti SC', STSong, SimSun, serif; writing-mode: vertical-rl; }
+  .bt-eastern__salon-verse text { font-size: 23rpx; letter-spacing: 4rpx; }
+  .bt-eastern__salon-meta { display: flex; align-items: center; justify-content: space-between; padding: 20rpx 8rpx 0; }
+  .bt-eastern__salon-meta text:first-child { font-size: 22rpx; font-weight: 850; }
+  .bt-eastern__salon-meta text:last-child { color: #6d685d; font-size: 18rpx; }
+
+  .bt-eastern__cabinet { position: absolute; left: 48rpx; right: 48rpx; top: 216rpx; bottom: 48rpx; z-index: 5; display: grid; gap: 15rpx; }
+  .bt-eastern__cabinet > view { display: grid; grid-template-columns: 56rpx 1fr 28rpx; align-items: center; gap: 18rpx; padding: 20rpx 24rpx; color: #e8d5af; background: linear-gradient(100deg, #181714, #26231c); border: 2rpx solid #977b4b; box-shadow: inset 0 0 0 4rpx #111, inset 0 0 0 5rpx rgb(151 123 75 / 48%); }
+  .bt-eastern__cabinet > view > text:first-child { font-size: 35rpx; text-align: center; }
+  .bt-eastern__cabinet > view > text:last-child { font-size: 30rpx; }
+  .bt-eastern__cabinet > view > view { display: flex; flex-direction: column; gap: 7rpx; }
+  .bt-eastern__cabinet > view > view text:first-child { font-family: 'Songti SC', STSong, SimSun, serif; font-size: 25rpx; font-weight: 800; letter-spacing: 4rpx; }
+  .bt-eastern__cabinet > view > view text:last-child { color: #af9c78; font-size: 17rpx; letter-spacing: 2rpx; }
+
   &.is-stage-1 .bt-eastern__paper,
   &.is-stage-2 .bt-eastern__paper { flex: 1.45; }
 
@@ -265,6 +299,7 @@
   &.bt-experience--profile .bt-eastern__paper { color: #e9d9b9; background: radial-gradient(circle at 70% 30%, #24231e, #11110f 68%); }
   &.bt-experience--profile .bt-eastern__paper::before { background: linear-gradient(18deg, transparent 22%, rgb(211 182 126 / 16%) 23% 33%, transparent 34%), linear-gradient(-16deg, transparent 28%, rgb(211 182 126 / 20%) 29% 42%, transparent 43%); }
   &.bt-experience--profile .bt-eastern__subtitle { color: #c8b998; }
+  &.bt-experience--profile .bt-eastern__seal { bottom: 30rpx; }
 }
 
 .bt-experience--gallery {

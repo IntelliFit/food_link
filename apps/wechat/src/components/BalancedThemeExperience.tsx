@@ -7,6 +7,7 @@ import { type BalancedThemeId, getBalancedThemeDefinition } from '../utils/balan
 import './BalancedThemeExperience.scss'
 import clarityFood from '../assets/balanced-themes/clarity-food.webp'
 import naturalTable from '../assets/balanced-themes/natural-table.webp'
+import easternLandscape from '../assets/balanced-themes/eastern-landscape.webp'
 
 export type BalancedThemeSurface = 'home' | 'stats' | 'community' | 'profile'
 
@@ -235,6 +236,34 @@ export function BalancedThemeExperience({ surface }: { surface: BalancedThemeSur
           <Text className='bt-eastern__subtitle'>{story.subtitle}</Text>
           <View className='bt-eastern__seal'><Text>食探</Text></View>
         </View>
+        {surface === 'home' && (
+          <View className='bt-eastern__meal-scroll'>
+            <Image src={clarityFood} mode='aspectFill' />
+            <View className='bt-eastern__meal-name'><Text>山药百合时蔬</Text><Text>温养脾胃 · 四时皆宜</Text></View>
+            <View className='bt-eastern__meal-metrics'><Text>清</Text><Text>和</Text><Text>有节</Text></View>
+          </View>
+        )}
+        {surface === 'stats' && (
+          <View className='bt-eastern__food-sequence'>
+            <Image src={easternLandscape} mode='aspectFill' />
+            <View className='bt-eastern__river-path'><View /><View /><View /><View /><View /><View /><View /></View>
+            <View className='bt-eastern__sequence-caption'><Text>一周食序</Text><Text>清淡有度 · 浓淡相宜</Text></View>
+          </View>
+        )}
+        {surface === 'community' && (
+          <View className='bt-eastern__salon-card'>
+            <Image src={clarityFood} mode='aspectFill' />
+            <View className='bt-eastern__salon-verse'><Text>食无华</Text><Text>自有清欢</Text></View>
+            <View className='bt-eastern__salon-meta'><Text>江南食客</Text><Text>以食会友 · 以文记味</Text></View>
+          </View>
+        )}
+        {surface === 'profile' && (
+          <View className='bt-eastern__cabinet'>
+            <View><Text>◯</Text><View><Text>我的记录</Text><Text>饮食 · 活动 · 心境</Text></View><Text>›</Text></View>
+            <View><Text>□</Text><View><Text>我的收藏</Text><Text>食材 · 食谱 · 文章</Text></View><Text>›</Text></View>
+            <View><Text>◇</Text><View><Text>我的计划</Text><Text>定下目标 · 持续前行</Text></View><Text>›</Text></View>
+          </View>
+        )}
         <View className='bt-eastern__roller bt-eastern__roller--right' />
         <Text className='bt-experience__hint'>轻触展卷</Text>
       </View>
