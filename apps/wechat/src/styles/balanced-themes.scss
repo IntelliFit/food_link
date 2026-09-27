@@ -456,6 +456,87 @@
   .list-arrow { color: #111; }
 }
 
+/* V4 / 02 自然共生：纸纤维、植物标本、年轮与木质档案。 */
+.fl-balanced-theme--natural-symbiosis:not(.fl-d) {
+  .home-page,
+  .stats-page,
+  .community-page,
+  .profile-page {
+    color: #243d2d;
+    background:
+      radial-gradient(circle at 10% 10%, rgb(83 123 78 / 8%) 0 2rpx, transparent 3rpx),
+      radial-gradient(circle at 80% 40%, rgb(151 124 87 / 8%) 0 1rpx, transparent 2rpx),
+      linear-gradient(180deg, #f2eddd 0%, #e9eddf 100%);
+    background-size: 43rpx 47rpx, 31rpx 37rpx, auto;
+  }
+
+  .home-login-banner,
+  .stats-guest-card,
+  .home-health-profile-prompt {
+    color: #294b35;
+    background: rgb(255 253 246 / 76%);
+    border: 1rpx solid #718b71;
+    border-radius: 42rpx 12rpx;
+    box-shadow: 0 8rpx 0 rgb(159 129 93 / 26%);
+  }
+
+  .home-login-banner-btn,
+  .stats-guest-btn,
+  .feed-publish-btn,
+  .home-backfill-hint__action,
+  .home-module-placeholder__action,
+  .empty-record-btn {
+    color: #f8f2df !important;
+    background: #376b4d !important;
+    border: 1rpx solid #294b35 !important;
+    border-radius: 999rpx 30rpx 999rpx 30rpx !important;
+    box-shadow: none !important;
+  }
+
+  .home-login-banner-btn-text,
+  .stats-guest-btn-text,
+  .feed-publish-text { color: #f8f2df !important; }
+
+  .date-item.is-selected,
+  .month-calendar-cell.is-selected { color: #f8f2df !important; background: #376b4d !important; border-radius: 54rpx 18rpx !important; }
+  .date-item.is-selected .date-day-circle { color: #f8f2df !important; background: #376b4d !important; box-shadow: inset 0 0 0 4rpx rgb(248 242 223 / 32%) !important; }
+
+  .home-calendar-module,
+  .home-experience-card,
+  .stats-card,
+  .analysis-card,
+  .feed-card,
+  .circle-card {
+    background: rgb(255 253 246 / 78%);
+    border-color: rgb(64 103 70 / 35%);
+    box-shadow: 0 9rpx 0 rgb(159 129 93 / 18%);
+  }
+
+  .home-module-frame:nth-child(odd) .home-experience-card,
+  .stats-card:nth-child(odd),
+  .feed-card:nth-child(odd) { border-radius: 56rpx 14rpx; }
+  .home-module-frame:nth-child(even) .home-experience-card,
+  .stats-card:nth-child(even),
+  .feed-card:nth-child(even) { border-radius: 14rpx 56rpx; }
+
+  .progress-bar-fill,
+  .macro-progress-bar-fill,
+  .wellness-total-progress__fill { background: linear-gradient(90deg, #9ab68e, #376b4d) !important; }
+
+  .ranking-banner { box-shadow: 0 10rpx 0 #9f815d; }
+  .feed-filter-panel { background: rgb(250 246 234 / 82%); border: 1rpx solid #718b71; border-radius: 52rpx 14rpx; }
+  .feed-search-wrap,
+  .feed-filter-trigger-combined { background: #f8f2df; border-color: #718b71; }
+
+  .profile-header-section { position: relative; overflow: hidden; box-shadow: 0 12rpx 0 #9f815d; }
+  .profile-header-section::after { content: '一叶知味'; position: absolute; right: 24rpx; bottom: 18rpx; color: rgb(55 107 77 / 24%); font-family: 'Kaiti SC', STKaiti, KaiTi, serif; font-size: 52rpx; transform: rotate(-8deg); }
+  .profile-section { background: rgb(242 231 207 / 82%); border: 1rpx solid #8b7359; box-shadow: inset 0 -6rpx 0 rgb(124 91 60 / 16%); }
+  .profile-section-heading { background: transparent; }
+  .list-item { min-height: 92rpx; border-bottom-color: rgb(78 91 61 / 28%); }
+  .list-icon { background: #e2dbc3 !important; border: 1rpx solid #8b7359; border-radius: 48% 12%; }
+  .list-arrow { color: #376b4d; }
+}
+
 /* V3：四个业务页面不再共用同一套卡片骨架。 */
 
 /* 澄明秩序：首页是编辑版面，分析是数据报表，圈子是杂志流，我的是档案索引。 */
