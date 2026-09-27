@@ -165,25 +165,37 @@
 }
 
 .bt-experience--gallery {
-  min-height: 292rpx;
-  color: #090909;
-  background: #efeadf;
-  border: 3rpx solid #111;
+  min-height: 438rpx;
+  color: #fff;
+  background:
+    linear-gradient(104deg, transparent 0 64%, rgb(255 255 255 / 8%) 65% 67%, transparent 68%),
+    radial-gradient(circle at 30% 20%, #292929 0 1rpx, transparent 2rpx),
+    #0a0a0a;
+  background-size: auto, 22rpx 24rpx, auto;
+  border: 5rpx solid #111;
+  box-shadow: 12rpx 12rpx 0 #e33b25;
 
   > view { position: absolute; transition: transform 420ms cubic-bezier(.2, .9, .2, 1); }
-  .bt-gallery__blue { left: 18rpx; top: 18rpx; display: flex; flex-direction: column; justify-content: space-between; width: 142rpx; height: 104rpx; padding: 12rpx; color: #fff; font-weight: 800; background: #173eb5; transform: rotate(-3deg); }
+  .bt-gallery__blue { left: -20rpx; top: 244rpx; display: flex; flex-direction: column; justify-content: space-between; width: 228rpx; height: 120rpx; padding: 18rpx 26rpx; color: #fff; font-weight: 800; background: #173eb5; transform: rotate(-5deg); }
   .bt-gallery__blue text:first-child { font-size: 18rpx; }
   .bt-gallery__blue text:last-child { font-size: 25rpx; }
-  .bt-gallery__black { right: 24rpx; top: 16rpx; display: flex; align-items: center; justify-content: center; width: 122rpx; height: 56rpx; color: #fff; background: #111; transform: rotate(4deg); }
-  .bt-gallery__paper { left: 188rpx; top: 54rpx; display: flex; flex-direction: column; width: 260rpx; padding: 20rpx; font-size: 32rpx; font-weight: 950; line-height: 1.02; background: #fff; border: 3rpx solid #111; box-shadow: 8rpx 8rpx 0 #f1c500; transform: rotate(2deg); }
-  .bt-gallery__paper text:last-child { margin-top: 10rpx; font-size: 18rpx; font-weight: 650; line-height: 1.35; }
-  .bt-gallery__red { right: 24rpx; bottom: 28rpx; display: flex; align-items: center; justify-content: center; width: 108rpx; height: 54rpx; color: #fff; font-size: 21rpx; background: #e33b25; }
-  .bt-gallery__yellow { left: 82rpx; bottom: 26rpx; width: 70rpx; height: 42rpx; background: #f1c500; transform: rotate(8deg); }
+  .bt-gallery__black { right: 30rpx; top: 28rpx; display: flex; align-items: center; justify-content: center; width: 150rpx; height: 70rpx; color: #fff; border: 2rpx solid #fff; background: #111; transform: rotate(4deg); }
+  .bt-gallery__paper { left: 34rpx; top: 42rpx; z-index: 4; display: flex; flex-direction: column; width: 430rpx; padding: 18rpx 0; color: #fff; font-size: 68rpx; font-weight: 950; line-height: .96; background: transparent; border: 0; box-shadow: none; transform: rotate(-1deg); }
+  .bt-gallery__paper text:last-child { max-width: 350rpx; margin-top: 18rpx; color: #eee9df; font-family: 'Songti SC', STSong, SimSun, serif; font-size: 22rpx; font-weight: 650; line-height: 1.5; }
+  .bt-gallery__red { right: -12rpx; bottom: 38rpx; display: flex; align-items: center; justify-content: center; width: 228rpx; height: 78rpx; color: #fff; font-size: 24rpx; font-weight: 800; background: #e33b25; transform: rotate(-4deg); }
+  .bt-gallery__yellow { left: 214rpx; bottom: 54rpx; width: 134rpx; height: 62rpx; background: #f1c500; transform: rotate(8deg); }
 
-  &.is-stage-1 .bt-gallery__blue { transform: translate(34rpx, 54rpx) rotate(7deg); }
-  &.is-stage-1 .bt-gallery__paper { transform: translate(-70rpx, -18rpx) rotate(-4deg); }
-  &.is-stage-2 .bt-gallery__black { transform: translate(-120rpx, 128rpx) rotate(-5deg); }
-  &.is-stage-2 .bt-gallery__paper { transform: translate(32rpx, 8rpx) rotate(5deg); }
+  &.is-stage-1 .bt-gallery__blue { transform: translate(42rpx, -14rpx) rotate(7deg); }
+  &.is-stage-1 .bt-gallery__paper { transform: translate(18rpx, 8rpx) rotate(-4deg); }
+  &.is-stage-2 .bt-gallery__black { transform: translate(-120rpx, 150rpx) rotate(-5deg); }
+  &.is-stage-2 .bt-gallery__paper { transform: translate(28rpx, 12rpx) rotate(3deg); }
+
+  &.bt-experience--stats { box-shadow: 12rpx 12rpx 0 #173eb5; }
+  &.bt-experience--stats .bt-gallery__red { width: 300rpx; }
+  &.bt-experience--community { box-shadow: 12rpx 12rpx 0 #f1c500; }
+  &.bt-experience--community .bt-gallery__blue { left: auto; right: -20rpx; }
+  &.bt-experience--profile .bt-gallery__paper { width: 500rpx; }
+  &.bt-experience--profile .bt-gallery__red { height: 150rpx; }
 }
 
 .bt-experience--miniature {
