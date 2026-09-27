@@ -765,6 +765,89 @@
   .list-arrow { color: #f4d8a6; }
 }
 
+/* V4 / 06 绘本陪伴：夜色章节、胶片边框、手写纸条和故事目录。 */
+.fl-balanced-theme--picturebook-companion:not(.fl-d) {
+  .home-page,
+  .stats-page,
+  .community-page,
+  .profile-page {
+    color: #f4e4c8;
+    background:
+      radial-gradient(circle at 18% 12%, rgb(255 255 255 / 12%) 0 2rpx, transparent 3rpx),
+      linear-gradient(180deg, #142534, #09141e 78%);
+    background-size: 43rpx 47rpx, auto;
+  }
+
+  .home-login-banner,
+  .stats-guest-card,
+  .home-health-profile-prompt {
+    color: #263746;
+    background: #f3e3c6;
+    border: 3rpx solid #5b4637;
+    border-radius: 3rpx;
+    box-shadow: 9rpx 9rpx 0 #a75536;
+    transform: rotate(-.4deg);
+  }
+  .home-login-banner-btn,
+  .stats-guest-btn,
+  .feed-publish-btn,
+  .home-backfill-hint__action,
+  .home-module-placeholder__action,
+  .empty-record-btn {
+    color: #f9ecd4 !important;
+    background: #263746 !important;
+    border: 2rpx solid #e0c79f !important;
+    border-radius: 3rpx !important;
+    box-shadow: 6rpx 6rpx 0 #a75536 !important;
+  }
+
+  .date-item.is-selected,
+  .month-calendar-cell.is-selected { color: #fff4dd !important; background: #a75536 !important; border-radius: 4rpx !important; }
+  .date-item.is-selected .date-day-circle { color: #fff4dd !important; background: #a75536 !important; border: 3rpx solid #263746 !important; box-shadow: 5rpx 5rpx 0 #d6a954 !important; }
+
+  .home-calendar-module,
+  .home-experience-card,
+  .stats-card,
+  .analysis-card,
+  .feed-card,
+  .circle-card {
+    color: #263746;
+    background: #f4e6cc;
+    border: 3rpx solid #5b4637;
+    border-left-width: 14rpx;
+    border-radius: 4rpx;
+    box-shadow: 8rpx 10rpx 0 rgb(69 49 34 / 28%);
+  }
+  .home-module-frame:nth-child(3n + 1) .home-experience-card,
+  .stats-card:nth-child(3n + 1),
+  .feed-card:nth-child(3n + 1) { border-left-color: #a75536; }
+  .home-module-frame:nth-child(3n + 2) .home-experience-card,
+  .stats-card:nth-child(3n + 2),
+  .feed-card:nth-child(3n + 2) { border-left-color: #d6a954; }
+  .progress-bar-fill,
+  .macro-progress-bar-fill,
+  .wellness-total-progress__fill { background: linear-gradient(90deg, #526a63, #a75536, #d6a954) !important; }
+
+  .ranking-banner { background: #263746; box-shadow: 8rpx 10rpx 0 #a75536; }
+  .feed-filter-panel { color: #263746; background: #f4e6cc; border: 3rpx solid #5b4637; border-radius: 4rpx; }
+  .feed-search-wrap,
+  .feed-filter-trigger-combined { background: #e8d4b3; border-color: #5b4637; border-radius: 3rpx; }
+
+  .profile-header-section { color: #f4e4c8; background: #142534; border: 3rpx solid #d6a954; border-radius: 3rpx; box-shadow: 10rpx 10rpx 0 #a75536; }
+  .profile-header-section .user-name,
+  .profile-header-section .user-meta-text,
+  .profile-header-section .quick-action-num,
+  .profile-header-section .quick-action-text { color: #f4e4c8; }
+  .profile-section { color: #263746; background: #f4e6cc; border: 3rpx solid #5b4637; border-left: 14rpx solid #263746; border-radius: 3rpx; box-shadow: 8rpx 9rpx 0 rgb(0 0 0 / 26%); }
+  .profile-section .profile-section-title,
+  .profile-section .profile-section-hint,
+  .profile-section .list-title,
+  .profile-section .list-desc { color: #263746; }
+  .list-item { min-height: 98rpx; border-bottom-color: #b8a382; }
+  .list-icon { background: #d9c6a7 !important; border: 2rpx solid #5b4637; border-radius: 3rpx; }
+  .list-arrow { color: #a75536; }
+}
+
 /* V3：四个业务页面不再共用同一套卡片骨架。 */
 
 /* 澄明秩序：首页是编辑版面，分析是数据报表，圈子是杂志流，我的是档案索引。 */

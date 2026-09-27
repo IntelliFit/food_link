@@ -228,23 +228,28 @@
 
 .bt-experience--picturebook {
   display: flex;
-  min-height: 286rpx;
-  color: #263746;
-  background: #d8c09c;
-  border: 2rpx solid #5b4637;
-  box-shadow: 8rpx 10rpx 0 rgb(69 49 34 / 22%);
+  min-height: 456rpx;
+  color: #f3e1c2;
+  background:
+    radial-gradient(circle at 78% 18%, rgb(244 187 91 / 36%) 0 3rpx, transparent 4rpx),
+    radial-gradient(circle at 18% 34%, rgb(255 255 255 / 18%) 0 2rpx, transparent 3rpx),
+    linear-gradient(135deg, #1a2c3c, #0b1722 72%);
+  background-size: 47rpx 43rpx, 39rpx 37rpx, auto;
+  border: 4rpx solid #182838;
+  box-shadow: 10rpx 12rpx 0 #a75536, 0 22rpx 34rpx rgb(32 24 19 / 32%);
 
-  .bt-picturebook__binding { display: flex; z-index: 5; flex-direction: column; justify-content: space-around; width: 46rpx; padding: 20rpx 0; background: #27394a; }
-  .bt-picturebook__binding view { width: 30rpx; height: 7rpx; margin-left: 8rpx; background: #e8d6b8; border-radius: 999rpx; }
-  .bt-picturebook__page { position: relative; flex: 1; padding: 24rpx 28rpx; transform-origin: left center; transition: transform 620ms cubic-bezier(.2, .8, .2, 1), opacity 300ms ease; }
-  .bt-picturebook__page--front { z-index: 3; background: #f4e6cc; }
-  .bt-picturebook__page--back { position: absolute; inset: 0 0 0 46rpx; z-index: 2; display: flex; align-items: center; padding: 42rpx; font-family: 'Kaiti SC', STKaiti, KaiTi, serif; font-size: 28rpx; line-height: 1.6; background: #f0ddbc; }
-  .bt-picturebook__chapter { display: block; font-size: 18rpx; letter-spacing: 3rpx; }
-  .bt-picturebook__title { display: block; margin-top: 7rpx; font-family: 'Kaiti SC', STKaiti, KaiTi, serif; font-size: 34rpx; font-weight: 700; }
-  .bt-picturebook__subtitle { display: block; max-width: 340rpx; margin-top: 7rpx; color: #6e6256; font-size: 19rpx; line-height: 1.45; }
-  .bt-picturebook__frame { position: absolute; right: 24rpx; bottom: 20rpx; width: 190rpx; height: 88rpx; overflow: hidden; background: #b5c5bb; border: 2rpx solid #263746; }
-  .bt-picturebook__sun { position: absolute; right: 20rpx; top: 12rpx; width: 26rpx; height: 26rpx; background: #d58245; border-radius: 50%; }
-  .bt-picturebook__road { position: absolute; left: 24rpx; bottom: -40rpx; width: 130rpx; height: 100rpx; background: #a75536; border-radius: 50%; transform: rotate(-14deg); }
+  .bt-picturebook__binding { display: flex; z-index: 5; flex-direction: column; justify-content: space-around; width: 54rpx; padding: 20rpx 0; background: #101c28; border-right: 3rpx solid #d1a25e; }
+  .bt-picturebook__binding view { width: 36rpx; height: 8rpx; margin-left: 8rpx; background: #e8d6b8; border-radius: 999rpx; box-shadow: 0 0 8rpx rgb(235 191 112 / 48%); }
+  .bt-picturebook__page { position: relative; flex: 1; padding: 34rpx 38rpx; transform-origin: left center; transition: transform 620ms cubic-bezier(.2, .8, .2, 1), opacity 300ms ease; }
+  .bt-picturebook__page--front { z-index: 3; background: transparent; }
+  .bt-picturebook__page--front::before { content: ''; position: absolute; left: 24rpx; top: 28rpx; width: 390rpx; height: 170rpx; background: #f2dfbd; box-shadow: 8rpx 8rpx 0 rgb(0 0 0 / 24%); transform: rotate(-2deg); }
+  .bt-picturebook__page--back { position: absolute; inset: 0 0 0 54rpx; z-index: 2; display: flex; align-items: center; padding: 52rpx; color: #263746; font-family: 'Kaiti SC', STKaiti, KaiTi, serif; font-size: 32rpx; line-height: 1.7; background: #f0ddbc; }
+  .bt-picturebook__chapter { position: relative; z-index: 2; display: block; color: #6e4f38; font-size: 20rpx; letter-spacing: 4rpx; }
+  .bt-picturebook__title { position: relative; z-index: 2; display: block; margin-top: 10rpx; color: #182838; font-family: 'Kaiti SC', STKaiti, KaiTi, serif; font-size: 46rpx; font-weight: 800; }
+  .bt-picturebook__subtitle { position: relative; z-index: 2; display: block; max-width: 350rpx; margin-top: 10rpx; color: #6e6256; font-size: 22rpx; line-height: 1.55; }
+  .bt-picturebook__frame { position: absolute; right: 34rpx; bottom: 26rpx; width: 300rpx; height: 152rpx; overflow: hidden; background: linear-gradient(#d49b62 0 35%, #526a63 35% 100%); border: 4rpx solid #e4cda8; box-shadow: 8rpx 8rpx 0 rgb(0 0 0 / 34%); }
+  .bt-picturebook__sun { position: absolute; right: 34rpx; top: 20rpx; width: 42rpx; height: 42rpx; background: #d58245; border-radius: 50%; box-shadow: 0 0 26rpx rgb(245 180 91 / 56%); }
+  .bt-picturebook__road { position: absolute; left: 34rpx; bottom: -50rpx; width: 210rpx; height: 150rpx; background: #a75536; border-radius: 50%; transform: rotate(-14deg); }
 
   &.is-stage-1 .bt-picturebook__page--front,
   &.is-stage-2 .bt-picturebook__page--front { opacity: 0; transform: rotateY(-82deg); }
