@@ -648,6 +648,93 @@
   .bt-care__action text:last-child { font-size: 52rpx; }
 }
 
+/* 清朗关怀：大字号、高对比、单屏单任务，面向需要更低操作负担的人群。 */
+.bt-experience--care {
+  display: block;
+  min-height: 760rpx;
+  overflow: hidden;
+  color: #071b12;
+  background: #fff;
+  border: 5rpx solid #092a1d;
+  border-radius: 18rpx;
+  box-shadow: 0 18rpx 32rpx rgb(11 54 36 / 14%);
+
+  .bt-care__brand { position: relative; z-index: 5; display: grid; grid-template-columns: auto auto 1fr; align-items: center; gap: 16rpx; height: 95rpx; padding: 0 24rpx; border-bottom: 4rpx solid #092a1d; }
+  .bt-care__brand text:first-child { color: #005b38; font-size: 52rpx; font-weight: 950; letter-spacing: -4rpx; }
+  .bt-care__brand text:nth-child(2) { padding: 8rpx 15rpx; color: #fff; font-size: 21rpx; font-weight: 900; background: #005b38; border-radius: 14rpx; }
+  .bt-care__brand text:last-child { justify-self: end; font-size: 16rpx; font-weight: 700; line-height: 1.25; text-align: right; }
+  .bt-experience__hint { bottom: 13rpx; color: #075534; font-size: 16rpx; font-weight: 800; }
+
+  .bt-care__home, .bt-care__stats, .bt-care__community, .bt-care__profile { position: absolute; inset: 95rpx 0 0; padding: 22rpx 24rpx 44rpx; background: #fff; }
+  .bt-care__greeting { display: flex; flex-direction: column; gap: 5rpx; }
+  .bt-care__greeting text:first-child { font-size: 42rpx; font-weight: 950; }
+  .bt-care__greeting text:last-child { font-size: 24rpx; font-weight: 700; }
+  .bt-care__home-actions { display: flex; flex-direction: column; gap: 14rpx; margin-top: 20rpx; }
+  .bt-care__home-actions > view { display: grid; grid-template-columns: 72rpx 1fr 34rpx; align-items: center; min-height: 112rpx; padding: 12rpx 18rpx; color: #fff; background: #075b38; border: 4rpx solid #073d29; border-radius: 17rpx; box-shadow: 0 6rpx 0 #073d29; transition: transform 220ms ease, box-shadow 220ms ease; }
+  .bt-care__home-actions > view:nth-child(2) { color: #111; background: #ffb81c; border-color: #d88e00; box-shadow: 0 6rpx 0 #d88e00; }
+  .bt-care__home-actions > view.is-active { transform: translateY(-5rpx); box-shadow: 0 11rpx 0 #073d29; }
+  .bt-care__home-actions > view:nth-child(2).is-active { box-shadow: 0 11rpx 0 #d88e00; }
+  .bt-care__home-actions > view > text:first-child { font-size: 43rpx; text-align: center; }
+  .bt-care__home-actions > view > view { display: flex; flex-direction: column; gap: 5rpx; }
+  .bt-care__home-actions > view > view text:first-child { font-size: 30rpx; font-weight: 950; }
+  .bt-care__home-actions > view > view text:last-child { font-size: 18rpx; font-weight: 650; }
+  .bt-care__home-actions > view > text:last-child { font-size: 42rpx; font-weight: 900; }
+  .bt-care__summary { display: grid; grid-template-columns: 1fr auto; gap: 5rpx; margin-top: 18rpx; padding: 14rpx 18rpx; background: #eaf4ec; border-radius: 13rpx; }
+  .bt-care__summary > text:first-child { color: #315d46; font-size: 18rpx; font-weight: 800; }
+  .bt-care__summary > text:nth-child(2) { grid-row: 2; font-size: 25rpx; font-weight: 850; }
+  .bt-care__summary > text:nth-child(2) text { font-size: 38rpx; }
+  .bt-care__summary > text:last-child { grid-row: 2; color: #315d46; font-size: 18rpx; align-self: end; }
+
+  .bt-care__stats-heading, .bt-care__community-heading, .bt-care__profile-heading { display: flex; align-items: flex-start; justify-content: space-between; }
+  .bt-care__stats-heading > view { display: flex; flex-direction: column; gap: 3rpx; }
+  .bt-care__stats-heading > view text:first-child, .bt-care__community-heading text:first-child, .bt-care__profile-heading text:first-child { font-size: 40rpx; font-weight: 950; }
+  .bt-care__stats-heading > view text:last-child, .bt-care__community-heading text:last-child, .bt-care__profile-heading text:last-child { font-size: 21rpx; font-weight: 650; }
+  .bt-care__stats-heading > text { padding: 12rpx 17rpx; color: #075b38; font-size: 20rpx; font-weight: 900; background: #e3f1e6; border-radius: 14rpx; }
+  .bt-care__metric { margin-top: 17rpx; padding: 18rpx 20rpx; background: linear-gradient(135deg, #ecf5ee, #fff); border: 2rpx solid #d9e9de; border-radius: 16rpx; }
+  .bt-care__metric > text:first-child { font-size: 19rpx; font-weight: 750; }
+  .bt-care__metric > view { display: flex; align-items: baseline; gap: 10rpx; }
+  .bt-care__metric > view text:first-child { font-size: 54rpx; font-weight: 950; letter-spacing: -2rpx; }
+  .bt-care__metric > view text:last-child { font-size: 27rpx; font-weight: 800; }
+  .bt-care__metric > text:last-child { font-size: 19rpx; }
+  .bt-care__metric > text:last-child text { color: #ef5b22; font-size: 25rpx; font-weight: 900; }
+  .bt-care__bars { display: flex; align-items: flex-end; gap: 7rpx; height: 196rpx; margin-top: 12rpx; padding: 9rpx 10rpx 12rpx; background: #f4f8f5; border-radius: 13rpx; }
+  .bt-care__bars > view { display: flex; flex: 1; flex-direction: column; align-items: center; justify-content: flex-end; gap: 4rpx; height: 100%; }
+  .bt-care__bars > view > text { font-size: 13rpx; font-weight: 700; }
+  .bt-care__bars > view > view { width: 100%; max-height: 96rpx; background: #075b38; border-radius: 5rpx 5rpx 0 0; }
+  .bt-care__bars > view:last-child > view { background: #ffb81c; }
+  .bt-care__advice { display: flex; flex-direction: column; gap: 5rpx; margin-top: 12rpx; padding: 14rpx 18rpx; font-size: 18rpx; line-height: 1.45; background: #eaf4ec; border-radius: 13rpx; }
+  .bt-care__advice text:first-child { font-weight: 900; }
+
+  .bt-care__community-heading, .bt-care__profile-heading { flex-direction: column; gap: 1rpx; }
+  .bt-care__author { display: grid; grid-template-columns: 70rpx 1fr auto; align-items: center; gap: 12rpx; margin-top: 16rpx; }
+  .bt-care__author > view:first-child { display: flex; align-items: center; justify-content: center; width: 64rpx; height: 64rpx; color: #fff; font-size: 28rpx; font-weight: 900; background: #a96c40; border-radius: 50%; }
+  .bt-care__author > view:nth-child(2) { display: flex; flex-direction: column; gap: 2rpx; }
+  .bt-care__author > view:nth-child(2) text:first-child { font-size: 23rpx; font-weight: 900; }
+  .bt-care__author > view:nth-child(2) text:last-child { color: #66716b; font-size: 16rpx; }
+  .bt-care__author > text { padding: 9rpx 15rpx; color: #075b38; font-size: 19rpx; font-weight: 900; background: #e3f1e6; border-radius: 13rpx; }
+  .bt-care__post-copy { display: block; margin: 12rpx 0; font-size: 22rpx; font-weight: 750; line-height: 1.45; }
+  .bt-care__post-image { width: 100%; height: 235rpx; border-radius: 14rpx; }
+  .bt-care__reactions { display: flex; justify-content: space-between; margin-top: 10rpx; padding: 8rpx 12rpx; font-size: 20rpx; font-weight: 850; }
+  .bt-care__reactions text:first-child { color: #ef4d2f; }
+  .bt-care__post-tip { display: block; padding: 12rpx 16rpx; color: #254c38; font-size: 19rpx; background: #eaf4ec; border-radius: 12rpx; }
+
+  .bt-care__person { display: grid; grid-template-columns: 78rpx 1fr 30rpx; align-items: center; gap: 13rpx; margin-top: 16rpx; padding: 14rpx; border: 2rpx solid #dce5df; border-radius: 15rpx; }
+  .bt-care__person > view:first-child { display: flex; align-items: center; justify-content: center; width: 70rpx; height: 70rpx; color: #fff; font-size: 29rpx; font-weight: 900; background: #62886b; border-radius: 50%; }
+  .bt-care__person > view:nth-child(2) { display: flex; flex-direction: column; gap: 3rpx; }
+  .bt-care__person > view:nth-child(2) text:first-child { font-size: 26rpx; font-weight: 900; }
+  .bt-care__person > view:nth-child(2) text:last-child { font-size: 18rpx; }
+  .bt-care__person > text:last-child { font-size: 38rpx; font-weight: 900; }
+  .bt-care__settings { margin-top: 14rpx; border: 2rpx solid #dce5df; border-radius: 15rpx; }
+  .bt-care__settings > view { display: grid; grid-template-columns: 62rpx 1fr 28rpx; align-items: center; gap: 10rpx; padding: 13rpx 16rpx; border-bottom: 1rpx solid #e1e7e3; transition: padding 220ms ease, background 220ms ease; }
+  .bt-care__settings > view:last-child { border-bottom: 0; }
+  .bt-care__settings > view.is-active { padding-left: 24rpx; background: #edf6ef; }
+  .bt-care__settings > view > text:first-child { color: #075b38; font-size: 27rpx; font-weight: 900; text-align: center; }
+  .bt-care__settings > view > view { display: flex; flex-direction: column; gap: 2rpx; }
+  .bt-care__settings > view > view text:first-child { font-size: 22rpx; font-weight: 900; }
+  .bt-care__settings > view > view text:last-child { color: #64716a; font-size: 16rpx; }
+  .bt-care__settings > view > text:last-child { font-size: 31rpx; }
+}
+
 .bt-experience--water {
   min-height: 458rpx;
   color: #e9f3f7;

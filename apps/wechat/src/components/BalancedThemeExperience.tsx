@@ -434,12 +434,49 @@ export function BalancedThemeExperience({ surface }: { surface: BalancedThemeSur
   }
 
   if (theme === 'clear-care') {
+    const careBars = [64, 72, 82, 88, 79, 84, 78]
     return (
       <View {...commonProps} className={`bt-experience bt-experience--care bt-experience--${surface} is-stage-${stage}`}>
-        <View className='bt-care__brand'><Text>食探</Text><Text>清朗关怀</Text><Text>2026年 9月27日</Text></View>
-        <View className='bt-care__number'><Text>{story.index}</Text></View>
-        <View className='bt-care__copy'><Text>{story.title}</Text><Text>{story.stages[stage]}</Text><Text className='bt-care__tag'>{story.tags[stage]}</Text></View>
-        <View className='bt-care__action'><Text>{story.action}</Text><Text>→</Text></View>
+        <View className='bt-care__brand'><Text>食探</Text><Text>清朗关怀</Text><Text>2026年<br />9月27日<br />星期日</Text></View>
+        {surface === 'home' && (
+          <View className='bt-care__home'>
+            <View className='bt-care__greeting'><Text>早上好！</Text><Text>好好吃饭，就是照顾自己。</Text></View>
+            <View className='bt-care__home-actions'>
+              <View className={stage === 0 ? 'is-active' : ''}><Text>◉</Text><View><Text>今天吃什么</Text><Text>简单推荐　吃得健康</Text></View><Text>›</Text></View>
+              <View className={stage === 1 ? 'is-active' : ''}><Text>▤</Text><View><Text>记录一餐</Text><Text>拍照或手动记录</Text></View><Text>›</Text></View>
+              <View className={stage === 2 ? 'is-active' : ''}><Text>▥</Text><View><Text>查看今日</Text><Text>看看吃了什么　营养够不够</Text></View><Text>›</Text></View>
+            </View>
+            <View className='bt-care__summary'><Text>今日小结</Text><Text>已记录 <Text>2</Text> 餐</Text><Text>饮食均衡，继续保持！</Text></View>
+          </View>
+        )}
+        {surface === 'stats' && (
+          <View className='bt-care__stats'>
+            <View className='bt-care__stats-heading'><View><Text>{story.title}</Text><Text>一眼看懂　吃得更好</Text></View><Text>🔊 朗读</Text></View>
+            <View className='bt-care__metric'><Text>本周每日平均摄入</Text><View><Text>1,680</Text><Text>千卡</Text></View><Text>比上周 +120 千卡　<Text>↗ +8%</Text></Text></View>
+            <View className='bt-care__bars'>{careBars.map((height, index) => <View key={index}><Text>{[1520, 1610, 1690, 1730, 1680, 1700, 1680][index]}</Text><View style={{ height: `${height}rpx` }} /><Text>{index === 6 ? '今天' : `周${['一', '二', '三', '四', '五', '六'][index]}`}</Text></View>)}</View>
+            <View className='bt-care__advice'><Text>和上周相比，</Text><Text>你这周的平均摄入增加了120千卡，营养更充足了，继续保持！</Text></View>
+          </View>
+        )}
+        {surface === 'community' && (
+          <View className='bt-care__community'>
+            <View className='bt-care__community-heading'><Text>{story.title}</Text><Text>看大家怎么吃　互相鼓励</Text></View>
+            <View className='bt-care__author'><View><Text>阿</Text></View><View><Text>王阿姨</Text><Text>今天 08:12</Text></View><Text>＋ 关注</Text></View>
+            <Text className='bt-care__post-copy'>今天的早餐：燕麦粥、水煮蛋和新鲜水果。简单又营养，心情也变好了！</Text>
+            <Image className='bt-care__post-image' src={clarityFood} mode='aspectFill' />
+            <View className='bt-care__reactions'><Text>♥ 128</Text><Text>◯ 24</Text><Text>⌯ 分享</Text></View>
+            <Text className='bt-care__post-tip'>健康的早餐，开启美好的一天！</Text>
+          </View>
+        )}
+        {surface === 'profile' && (
+          <View className='bt-care__profile'>
+            <View className='bt-care__profile-heading'><Text>{story.title}</Text><Text>简单清晰　用得安心</Text></View>
+            <View className='bt-care__person'><View><Text>张</Text></View><View><Text>张建国</Text><Text>70岁　男性</Text></View><Text>›</Text></View>
+            <View className='bt-care__settings'>
+              {[['●●', '家人联系', '让家人一起关心我的饮食'], ['◆', '隐私与安全', '我的数据我做主'], ['✹', '使用设置', '字体大小、语音朗读等'], ['?', '帮助与反馈', '有问题随时联系我们']].map((item, index) => <View key={item[1]} className={index === stage ? 'is-active' : ''}><Text>{item[0]}</Text><View><Text>{item[1]}</Text><Text>{item[2]}</Text></View><Text>›</Text></View>)}
+            </View>
+          </View>
+        )}
+        <Text className='bt-experience__hint'>轻触查看下一项</Text>
       </View>
     )
   }
