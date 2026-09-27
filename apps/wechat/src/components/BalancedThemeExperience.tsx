@@ -1,10 +1,11 @@
-import { Text, View } from '@tarojs/components'
+import { Image, Text, View } from '@tarojs/components'
 import React from 'react'
 import { useInkWellness } from './InkWellness'
 import { useBalancedTheme } from './BalancedThemeContext'
 import { type BalancedThemeId, getBalancedThemeDefinition } from '../utils/balanced-theme'
 
 import './BalancedThemeExperience.scss'
+import clarityFood from '../assets/wellness/food-scan-banner.jpg'
 
 export type BalancedThemeSurface = 'home' | 'stats' | 'community' | 'profile'
 
@@ -95,6 +96,7 @@ export function BalancedThemeExperience({ surface }: { surface: BalancedThemeSur
   } as const
 
   if (theme === 'clarity-order') {
+    const clarityBars = [54, 72, 48, 62, 58, 78, 66]
     return (
       <View {...commonProps} className={`bt-experience bt-experience--clarity bt-experience--${surface} is-stage-${stage}`}>
         <View className='bt-clarity__masthead'>
@@ -102,17 +104,73 @@ export function BalancedThemeExperience({ surface }: { surface: BalancedThemeSur
           <Text className='bt-clarity__promise'>{surface === 'home' ? '让食物回归清晰' : surface === 'stats' ? '数据，让选择更清晰' : surface === 'community' ? '真实分享，理性讨论' : '成为更清晰的自己'}</Text>
           <View className='bt-clarity__meta'><Text>FL / {story.index}</Text><Text>{label}</Text></View>
         </View>
-        <View className='bt-clarity__composition'>
-          <View className='bt-clarity__lead'>
-            {story.title.split('\n').map((line) => <Text key={line} className='bt-clarity__headline'>{line}</Text>)}
-            <Text className='bt-clarity__subtitle'>{story.subtitle}</Text>
+        {surface === 'home' && (
+          <>
+            <View className='bt-clarity__composition'>
+              <View className='bt-clarity__lead'>
+                {story.title.split('\n').map((line) => <Text key={line} className='bt-clarity__headline'>{line}</Text>)}
+                <Text className='bt-clarity__subtitle'>{story.subtitle}</Text>
+              </View>
+              <View className='bt-clarity__index-card'>
+                <Text className='bt-clarity__focus'>{String(stage + 1).padStart(2, '0')}</Text>
+                <Text>{story.tags[stage]}</Text>
+                <Text>{story.stages[stage]}</Text>
+              </View>
+            </View>
+            <View className='bt-clarity__food-frame'>
+              <Image src={clarityFood} mode='aspectFill' />
+              <View><Text>今日推荐</Text><Text>清爽谷物时蔬碗</Text></View>
+            </View>
+            <View className='bt-clarity__summary-strip'>
+              <View><Text>饮食记录</Text><Text>清晰整理</Text></View>
+              <View><Text>营养构成</Text><Text>一眼可见</Text></View>
+              <View><Text>今日建议</Text><Text>专注一件事</Text></View>
+            </View>
+          </>
+        )}
+
+        {surface === 'stats' && (
+          <View className='bt-clarity__surface-body bt-clarity__surface-body--stats'>
+            <View className='bt-clarity__surface-title'><Text>{story.title}</Text><Text>{story.subtitle}</Text></View>
+            <View className='bt-clarity__tabs'><Text className='is-active'>周</Text><Text>月</Text><Text>年</Text></View>
+            <View className='bt-clarity__chart'>
+              {clarityBars.map((height, index) => (
+                <View key={height + index} className='bt-clarity__bar-column'>
+                  <View className='bt-clarity__bar' style={{ height: `${height}%` }}><View /><View /><View /></View>
+                  <Text>{index + 1}</Text>
+                </View>
+              ))}
+            </View>
+            <View className='bt-clarity__insight'><Text>本周趋势</Text><Text>规律正在形成，继续保持。</Text></View>
           </View>
-          <View className='bt-clarity__index-card'>
-            <Text className='bt-clarity__focus'>{String(stage + 1).padStart(2, '0')}</Text>
-            <Text>{story.tags[stage]}</Text>
-            <Text>{story.stages[stage]}</Text>
+        )}
+
+        {surface === 'community' && (
+          <View className='bt-clarity__surface-body bt-clarity__surface-body--community'>
+            <View className='bt-clarity__surface-title'><Text>{story.title}</Text><Text>{story.subtitle}</Text></View>
+            <View className='bt-clarity__tabs'><Text className='is-active'>推荐</Text><Text>关注</Text><Text>话题</Text></View>
+            <View className='bt-clarity__story-card'>
+              <Image src={clarityFood} mode='aspectFill' />
+              <View className='bt-clarity__story-copy'><Text>一份简单而干净的午餐</Text><Text>食物连接生活，也连接有趣的人。</Text></View>
+            </View>
           </View>
-        </View>
+        )}
+
+        {surface === 'profile' && (
+          <View className='bt-clarity__surface-body bt-clarity__surface-body--profile'>
+            <View className='bt-clarity__surface-title'><Text>{story.title}</Text><Text>{story.subtitle}</Text></View>
+            <View className='bt-clarity__profile-card'>
+              <View className='bt-clarity__avatar'>FL</View>
+              <View><Text>我的饮食档案</Text><Text>把每一次认真生活收进这里</Text></View>
+              <Text>→</Text>
+            </View>
+            <View className='bt-clarity__file-list'>
+              <View><Text>饮食记录</Text><Text>查看每日整理 →</Text></View>
+              <View><Text>收藏内容</Text><Text>继续探索灵感 →</Text></View>
+              <View><Text>目标与偏好</Text><Text>管理个人选择 →</Text></View>
+            </View>
+          </View>
+        )}
         <View className='bt-clarity__action'><Text>{story.action}</Text><Text>→</Text></View>
         <Text className='bt-experience__hint'>轻触切换重点</Text>
       </View>

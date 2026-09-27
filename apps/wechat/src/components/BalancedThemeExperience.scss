@@ -28,7 +28,7 @@
   border-top: 2rpx solid #111;
   border-bottom: 4rpx solid #111;
   box-shadow: 10rpx 10rpx 0 #c8ff00;
-  min-height: 398rpx;
+  min-height: 640rpx;
 
   .bt-clarity__masthead {
     display: flex;
@@ -57,6 +57,69 @@
   .bt-clarity__focus { display: inline-flex; align-items: center; justify-content: center; width: 62rpx; height: 62rpx; margin-bottom: 5rpx; color: #111; font-size: 32rpx; font-weight: 950; background: #c8ff00; }
   .bt-clarity__action { display: flex; align-items: center; justify-content: space-between; width: 214rpx; min-height: 48rpx; margin-top: 12rpx; padding: 0 16rpx; color: #111; font-size: 19rpx; font-weight: 850; background: #c8ff00; border: 2rpx solid #111; }
 
+  .bt-clarity__food-frame {
+    position: relative;
+    height: 300rpx;
+    margin-top: 24rpx;
+    overflow: hidden;
+    border: 2rpx solid #111;
+
+    image { display: block; width: 100%; height: 100%; }
+    > view { position: absolute; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: space-between; padding: 17rpx 20rpx; color: #fff; background: linear-gradient(90deg, rgb(0 0 0 / 88%), rgb(0 0 0 / 38%)); }
+    text:first-child { font-size: 18rpx; letter-spacing: 3rpx; }
+    text:last-child { font-size: 27rpx; font-weight: 900; }
+  }
+
+  .bt-clarity__summary-strip {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    margin-top: 14rpx;
+    border: 2rpx solid #111;
+
+    > view { display: flex; flex-direction: column; gap: 4rpx; padding: 16rpx; border-right: 2rpx solid #111; }
+    > view:last-child { border-right: 0; }
+    text:first-child { font-size: 18rpx; font-weight: 900; }
+    text:last-child { color: #686863; font-size: 17rpx; }
+  }
+
+  .bt-clarity__surface-body { display: flex; flex: 1; flex-direction: column; padding-top: 24rpx; }
+  .bt-clarity__surface-title { display: flex; align-items: flex-end; justify-content: space-between; gap: 20rpx; }
+  .bt-clarity__surface-title text:first-child { font-size: 58rpx; font-weight: 950; letter-spacing: -3rpx; }
+  .bt-clarity__surface-title text:last-child { max-width: 260rpx; padding-bottom: 6rpx; color: #5d5d57; font-size: 20rpx; text-align: right; }
+  .bt-clarity__tabs { display: grid; grid-template-columns: repeat(3, 1fr); margin-top: 22rpx; background: #ecece8; border: 2rpx solid #111; }
+  .bt-clarity__tabs text { padding: 13rpx 0; font-size: 20rpx; font-weight: 850; text-align: center; border-right: 2rpx solid #111; }
+  .bt-clarity__tabs text:last-child { border-right: 0; }
+  .bt-clarity__tabs .is-active { background: #c8ff00; }
+
+  .bt-clarity__chart { display: flex; align-items: flex-end; justify-content: space-between; height: 252rpx; margin-top: 26rpx; padding: 24rpx 18rpx 0; border-left: 2rpx solid #111; border-bottom: 2rpx solid #111; }
+  .bt-clarity__bar-column { display: flex; align-items: center; flex-direction: column; justify-content: flex-end; width: 10%; height: 100%; }
+  .bt-clarity__bar-column > text { margin-top: 8rpx; font-size: 17rpx; }
+  .bt-clarity__bar { display: flex; flex-direction: column; justify-content: flex-end; width: 100%; min-height: 32rpx; }
+  .bt-clarity__bar view { flex: 1; background: #c8ff00; border: 1rpx solid #111; }
+  .bt-clarity__bar view:nth-child(2) { background: #111; }
+  .bt-clarity__bar view:nth-child(3) { background: #d9d9d4; }
+  .bt-clarity__insight { display: flex; align-items: center; justify-content: space-between; margin-top: 18rpx; padding: 16rpx 18rpx; background: #ecece8; border-left: 10rpx solid #173eb5; }
+  .bt-clarity__insight text:first-child { font-size: 21rpx; font-weight: 900; }
+  .bt-clarity__insight text:last-child { color: #5d5d57; font-size: 19rpx; }
+
+  .bt-clarity__story-card { position: relative; height: 326rpx; margin-top: 24rpx; overflow: hidden; border: 2rpx solid #111; }
+  .bt-clarity__story-card image { display: block; width: 100%; height: 100%; }
+  .bt-clarity__story-copy { position: absolute; left: 0; right: 0; bottom: 0; display: flex; flex-direction: column; gap: 5rpx; padding: 18rpx 20rpx; color: #fff; background: linear-gradient(transparent, rgb(0 0 0 / 88%)); }
+  .bt-clarity__story-copy text:first-child { font-size: 29rpx; font-weight: 900; }
+  .bt-clarity__story-copy text:last-child { font-size: 19rpx; }
+
+  .bt-clarity__profile-card { display: grid; grid-template-columns: 82rpx 1fr 30rpx; align-items: center; gap: 18rpx; margin-top: 24rpx; padding: 22rpx; border: 2rpx solid #111; }
+  .bt-clarity__profile-card > view:nth-child(2) { display: flex; flex-direction: column; gap: 6rpx; }
+  .bt-clarity__profile-card > view:nth-child(2) text:first-child { font-size: 27rpx; font-weight: 900; }
+  .bt-clarity__profile-card > view:nth-child(2) text:last-child { color: #64645f; font-size: 18rpx; }
+  .bt-clarity__profile-card > text { font-size: 28rpx; font-weight: 900; }
+  .bt-clarity__avatar { display: flex; align-items: center; justify-content: center; width: 82rpx; height: 82rpx; color: #111; font-size: 24rpx; font-weight: 950; background: #c8ff00; border: 2rpx solid #111; border-radius: 50%; }
+  .bt-clarity__file-list { display: grid; grid-template-columns: repeat(3, 1fr); margin-top: 18rpx; border: 2rpx solid #111; }
+  .bt-clarity__file-list > view { display: flex; min-height: 118rpx; flex-direction: column; justify-content: space-between; padding: 16rpx; border-right: 2rpx solid #111; }
+  .bt-clarity__file-list > view:last-child { border-right: 0; }
+  .bt-clarity__file-list text:first-child { font-size: 20rpx; font-weight: 900; }
+  .bt-clarity__file-list text:last-child { color: #5d5d57; font-size: 16rpx; line-height: 1.4; }
+
   &.is-stage-1 .bt-clarity__index-card,
   &.is-stage-2 .bt-clarity__index-card { color: #fff; background: #173eb5; transform: translateY(-7rpx); }
   &.is-stage-1 .bt-clarity__focus,
@@ -69,6 +132,7 @@
   &.bt-experience--community { box-shadow: 10rpx 10rpx 0 #173eb5; }
   &.bt-experience--community .bt-clarity__action { background: #f2c500; }
   &.bt-experience--profile .bt-clarity__index-card { color: #fff; background: #111; }
+  &.bt-experience--profile { min-height: 600rpx; }
 }
 
 .bt-experience--nature {
