@@ -135,6 +135,62 @@
   &.bt-experience--profile { min-height: 600rpx; }
 }
 
+/*
+ * 均衡模式主题是页面的第一视觉层，而不是普通业务卡片。
+ * 首屏铺满内容区，原有业务模块保留在下滑之后继续使用。
+ */
+.fl-page-theme-root--balanced .bt-experience {
+  left: 50%;
+  width: 100vw;
+  min-height: calc(100vh - 272rpx);
+  margin: 0 0 28rpx;
+  border-right: 0;
+  border-left: 0;
+  border-radius: 0;
+  box-shadow: none;
+  transform: translateX(-50%);
+}
+
+.fl-balanced-theme--clarity-order .home-page,
+.fl-balanced-theme--clarity-order .stats-page,
+.fl-balanced-theme--clarity-order .community-page,
+.fl-balanced-theme--clarity-order .profile-page { background: #f7f7f2; }
+
+.fl-balanced-theme--natural-symbiosis .home-page,
+.fl-balanced-theme--natural-symbiosis .stats-page,
+.fl-balanced-theme--natural-symbiosis .community-page,
+.fl-balanced-theme--natural-symbiosis .profile-page { background: #edf0e4; }
+
+.fl-balanced-theme--eastern-salon .home-page,
+.fl-balanced-theme--eastern-salon .stats-page,
+.fl-balanced-theme--eastern-salon .community-page,
+.fl-balanced-theme--eastern-salon .profile-page { background: #eee8dc; }
+
+.fl-balanced-theme--modern-gallery .home-page,
+.fl-balanced-theme--modern-gallery .stats-page,
+.fl-balanced-theme--modern-gallery .community-page,
+.fl-balanced-theme--modern-gallery .profile-page { background: #f4f0e7; }
+
+.fl-balanced-theme--miniature-world .home-page,
+.fl-balanced-theme--miniature-world .stats-page,
+.fl-balanced-theme--miniature-world .community-page,
+.fl-balanced-theme--miniature-world .profile-page { background: #dfcba5; }
+
+.fl-balanced-theme--picturebook-companion .home-page,
+.fl-balanced-theme--picturebook-companion .stats-page,
+.fl-balanced-theme--picturebook-companion .community-page,
+.fl-balanced-theme--picturebook-companion .profile-page { background: #0c1822; }
+
+.fl-balanced-theme--clear-care .home-page,
+.fl-balanced-theme--clear-care .stats-page,
+.fl-balanced-theme--clear-care .community-page,
+.fl-balanced-theme--clear-care .profile-page { background: #fff; }
+
+.fl-balanced-theme--way-of-water .home-page,
+.fl-balanced-theme--way-of-water .stats-page,
+.fl-balanced-theme--way-of-water .community-page,
+.fl-balanced-theme--way-of-water .profile-page { background: #03090e; }
+
 .bt-experience--nature {
   min-height: 720rpx;
   color: #254533;
