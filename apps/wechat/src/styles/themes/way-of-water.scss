@@ -1,0 +1,36 @@
+.fl-balanced-theme--way-of-water {
+  .bt-experience:not(.bt-experience--home) { min-height: 0; padding-bottom: 28rpx; }
+  .theme-chapter--way-of-water .tc-brand { font-size: 49rpx; }
+  .theme-chapter--way-of-water .tc-imprint { margin-bottom: 46rpx; }
+  .theme-chapter--way-of-water .tc-title { font: 54rpx 'Songti SC', STSong, SimSun, serif; letter-spacing: 5rpx; }
+  .theme-chapter--way-of-water .tc-marginal { font-size: 22rpx; color: #b5c6cb; }
+  .theme-chapter--way-of-water .tc-subtitle { font-size: 24rpx; color: #c7d2d4; }
+  .bt-experience--home .bt-masthead__brand { font-size: 50rpx; }
+  .bt-experience--home .bt-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 20rpx; }
+  .bt-experience--home .bt-heading__title { font-size: 54rpx; }
+  .bt-experience--home .bt-heading__subtitle { width: 175rpx; margin-top: 0; font-size: 22rpx; }
+  .bt-experience--home .bt-water-today { top: 335rpx; right: 28rpx; max-width: 170rpx; background: transparent; padding: 0 0 0 20rpx; }
+  .bt-experience--home .bt-water-today text:nth-child(4) { font-size: 30rpx; color: #ecf2f4; }
+  .bt-experience--home .bt-water-today text:nth-child(3) { margin-top: 30rpx; }
+  .bt-experience--profile .bt-integrated-content { margin-top: 60rpx; }
+  .bt-experience--profile .user-card { display: flex; flex-direction: column; align-items: flex-start; gap: 30rpx; }
+  .bt-experience--profile .user-info-main { width: 70%; }
+  .bt-experience--profile .profile-header-section { background: transparent; border: 0; padding-left: 0; padding-right: 0; }
+  .theme-profile-sections { padding: 8rpx 4rpx; }
+  .tp-section { border: 0; margin: 0 0 12rpx; }
+  .tp-section .profile-section-heading { padding: 25rpx 0; gap: 26rpx; }
+  .tp-section .tp-section__mark { width: 96rpx; height: 96rpx; }
+  .tp-section .profile-section-title { font-size: 32rpx; letter-spacing: 3rpx; }
+  .tp-section .profile-section-hint { font-size: 23rpx; }
+  .theme-feed-entry--photo .feed-card-main-col { display: grid; grid-template-columns: 39% minmax(0, 1fr); gap: 16rpx 22rpx; }
+  .theme-feed-entry--photo .feed-card-main-col > * { grid-column: 1 / -1; }
+  .theme-feed-entry--photo .feed-image { grid-column: 1; grid-row: 2; margin: 0; height: 260rpx; }
+  .theme-feed-entry--photo .feed-content { grid-column: 2; grid-row: 2; font: 29rpx/1.85 'Songti SC', SimSun, serif; margin: 0; }
+  .theme-feed-entry--photo .feed-image-content { height: 260rpx; }
+  .theme-feed-entry--photo:first-child .feed-card-main-col { display: flex; flex-direction: column; }
+  .theme-feed-entry--photo:first-child .feed-card-name-block { order: 0; }
+  .theme-feed-entry--photo:first-child .feed-image { order: 1; height: 440rpx; }
+  .theme-feed-entry--photo:first-child .feed-image-content { height: 440rpx; }
+  .theme-feed-entry--photo:first-child .feed-content { order: 2; padding: 22rpx 0; }
+  .theme-feed-entry--photo:first-child .feed-meta, .theme-feed-entry--photo:first-child .feed-actions { order: 3; }
+}

@@ -1,0 +1,22 @@
+.fl-balanced-theme--natural-symbiosis:not(.fl-d) {
+  .bt-experience:not(.bt-experience--home) { min-height: 280rpx; }
+  .theme-chapter--natural-symbiosis { display: flex; justify-content: space-between; gap: 18rpx; }
+  .theme-chapter--natural-symbiosis .tc-title { font: 56rpx 'Kaiti SC', KaiTi, serif; }
+  .theme-chapter--natural-symbiosis .tc-marginal { margin-top: 76rpx; }
+  .bt-experience--home .bt-heading { width: 45%; margin-top: 64rpx; }
+  .bt-experience--home .bt-heading__title { font-size: 52rpx; }
+  .bt-experience--home .bt-heading__subtitle { max-width: 250rpx; }
+  .bt-experience--home .bt-leaf-note { width: 300rpx; }
+  .theme-profile-sections { padding: 18rpx 20rpx 30rpx; border-top: 1rpx solid #9cae8b; }
+  .tp-section { margin: 0 0 16rpx; border-radius: 2rpx; border-width: 0 0 1rpx; background: #f7f0dd; }
+  .tp-section .profile-section-heading { padding: 26rpx 18rpx; }
+  .tp-section .tp-section__mark { color: #456b4d; width: 90rpx; height: 92rpx; }
+  .tp-section .tp-section__mark > text { font-size: 56rpx; }
+  .tp-section .profile-section-title { font-size: 34rpx; letter-spacing: 4rpx; }
+  .theme-feed-entry--photo .feed-card-main-col { display: grid; grid-template-columns: 58% minmax(0, 1fr); gap: 16rpx 20rpx; }
+  .theme-feed-entry--photo .feed-card-main-col > * { grid-column: 1 / -1; }
+  .theme-feed-entry--photo .feed-image { grid-column: 1; grid-row: 2; margin: 0; height: 330rpx; }
+  .theme-feed-entry--photo .feed-content { grid-column: 2; grid-row: 2; font: 27rpx/1.9 'Kaiti SC', KaiTi, serif; margin: 0; }
+  .theme-feed-entry--photo .feed-image-content { height: 330rpx; }
+  .feed-card { border: 0; background: #fffdf2; padding: 24rpx 18rpx; border-bottom: 1rpx solid #a8b49a; }
+}

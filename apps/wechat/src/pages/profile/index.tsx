@@ -1,5 +1,6 @@
 import { InkMasthead, useInkWellness } from '../../components/InkWellness'
 import { BalancedThemeExperience } from '../../components/BalancedThemeExperience'
+import { ThemeProfileSection } from '../../components/ThemeProfileSection'
 import { RecapDelivery } from '../../components/RecapDelivery'
 import { View, Text, Image, Navigator } from '@tarojs/components'
 import * as React from 'react'
@@ -799,16 +800,10 @@ function ProfilePage() {
         </View>
       )}
 
-      {serviceGroups.map(group => (
-        <View className='profile-section' key={group.title}>
-          <View className={`profile-section-heading${group.collapsible ? ' is-toggle' : ''}`} role={group.collapsible ? 'button' : undefined} aria-expanded={group.collapsible ? Boolean(expandedGroups[group.title]) : undefined} aria-label={group.collapsible ? `${expandedGroups[group.title] ? '收起' : '展开'}${group.title}` : undefined} onClick={() => { if (group.collapsible) setExpandedGroups(previous => ({ ...previous, [group.title]: !previous[group.title] })) }}>
-            <View>
-              <Text className='profile-section-title'>{group.title}</Text>
-              <Text className='profile-section-hint'>{group.hint}</Text>
-            </View>
-            {group.collapsible && <View className={`profile-section-chevron${expandedGroups[group.title] ? ' is-expanded' : ''}`} />}
-          </View>
-          {(!group.collapsible || expandedGroups[group.title]) && <View className='profile-card list-card'>
+      <View className='theme-profile-sections'>
+      {serviceGroups.map((group, index) => (
+        <ThemeProfileSection key={group.title} title={group.title} hint={group.hint} index={index + 1} icon={group.items[0]?.iconClass || 'icon-all'} expanded={Boolean(expandedGroups[group.title])} onToggle={() => setExpandedGroups(previous => ({ ...previous, [group.title]: !previous[group.title] }))}>
+          <View className='profile-card list-card'>
             {group.items.map((service) => (
               <View key={service.id} className='list-item' onClick={() => handleServiceClick(service)}>
                 <View className='list-icon' style={getProfileListIconStyle(service.id, SERVICE_ICON_TONES, scheme)}>
@@ -826,19 +821,12 @@ function ProfilePage() {
                 <Text className='iconfont icon-right list-arrow' />
               </View>
             ))}
-          </View>}
-        </View>
+          </View>
+        </ThemeProfileSection>
       ))}
 
-      <View className='profile-section'>
-        <View className='profile-section-heading is-toggle' role='button' aria-expanded={Boolean(expandedGroups.settings)} aria-label={`${expandedGroups.settings ? '收起' : '展开'}账户与通用设置`} onClick={() => setExpandedGroups(previous => ({ ...previous, settings: !previous.settings }))}>
-          <View>
-            <Text className='profile-section-title'>账户与通用设置</Text>
-            <Text className='profile-section-hint'>账号、记录、隐私和产品信息</Text>
-          </View>
-          <View className={`profile-section-chevron${expandedGroups.settings ? ' is-expanded' : ''}`} />
-        </View>
-        {expandedGroups.settings && <View className='profile-card list-card'>
+      <ThemeProfileSection title='账户与通用设置' hint='账号、记录、隐私和产品信息' index={serviceGroups.length + 1} icon='icon-all' expanded={Boolean(expandedGroups.settings)} onToggle={() => setExpandedGroups(previous => ({ ...previous, settings: !previous.settings }))}>
+        <View className='profile-card list-card'>
           {settings.map((setting) => (
             <View key={setting.id} className='list-item' onClick={() => handleSettingClick(setting)}>
               <View className='list-icon' style={getProfileListIconStyle(setting.id, SETTING_ICON_TONES, scheme)}>
@@ -851,7 +839,8 @@ function ProfilePage() {
               <Text className='iconfont icon-right list-arrow' />
             </View>
           ))}
-        </View>}
+        </View>
+      </ThemeProfileSection>
       </View>
 
       {/* 清除缓存（独立工具卡片） */}

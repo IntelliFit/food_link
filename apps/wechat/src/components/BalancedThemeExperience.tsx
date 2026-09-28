@@ -3,6 +3,7 @@ import Taro from '@tarojs/taro'
 import * as React from 'react'
 import { useInkWellness } from './InkWellness'
 import { useBalancedTheme } from './BalancedThemeContext'
+import { ThemeChapterHeader } from './ThemeChapterHeader'
 import { getBalancedThemeDefinition } from '../utils/balanced-theme'
 import { extraPkgUrl } from '../utils/subpackage-extra'
 import clarityFood from '../assets/balanced-themes/clarity-food.webp'
@@ -94,8 +95,7 @@ export function BalancedThemeExperience({ surface, home, children, onRecord, onW
       : theme === 'modern-gallery' ? galleryCollage : undefined
     return <View id={`balanced-theme-experience-${surface}`} className={rootClass}>
       {art && <Image className='bt-scene bt-scene--chapter' src={art} mode='aspectFill' />}
-      <View className='bt-chapter-heading'>{masthead}{heading}</View>{sceneRetry}
-      {theme === 'way-of-water' && <Text className='bt-water-chapter-verse'>{surface === 'stats' ? '点滴汇聚，看见自己的节奏。' : surface === 'community' ? '不同的选择，也有回响。' : '每一次照顾自己，都留下痕迹。'}</Text>}
+      <ThemeChapterHeader theme={theme} title={title} surfaceName={SURFACE_NAME[surface]} date={date.replace(/-/g, '.')} />{sceneRetry}
       {children && <View className='bt-integrated-content'>{children}</View>}
       {surface === 'community' && onPublish && <View className='bt-publish'>{action('publish', '分享我的一餐', '', 'icon-paizhao-xianxing', onPublish)}</View>}
     </View>
@@ -115,7 +115,7 @@ export function BalancedThemeExperience({ surface, home, children, onRecord, onW
     </>}
     {theme === 'way-of-water' && <>
       {waterVessel && <Image className='bt-scene' src={waterVessel} mode='aspectFill' />}{masthead}{heading}
-      <View className='bt-water-today' role='button' aria-label='查看今日饮食记录' onClick={meals}><Text>今日食记</Text><Text>{value(home?.mealCount, ' 餐')}</Text><Text>{home?.authenticated ? '点此回看' : '从第一餐开始'}</Text></View>
+      <View className='bt-water-today' role='button' aria-label='查看今日饮食记录' onClick={meals}><Text>今日食记</Text><Text>{value(home?.mealCount, ' 餐')}</Text><Text>今日摄入</Text><Text>{value(home?.calories, ' kcal')}</Text><Text>{home?.authenticated ? '点此回看' : '从第一餐开始'}</Text></View>
       <Text className='bt-water-motto'>水无定形 · 因势而行</Text>
       <View className='bt-water-actions'>{action('record', '记录饮食', '', 'icon-paizhao-xianxing', record)}{action('water', '饮水', value(home?.waterMl, ' ml'), 'icon-drink', water)}{action('stats', '观其流变', '', 'icon-shangzhang', stats)}</View>
     </>}

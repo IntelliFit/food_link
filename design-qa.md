@@ -523,3 +523,18 @@ final result: passed
 ## P3 follow-up
 
 - Analysis content could only be inspected at its logged-out gate in the current test account. Its theme masthead, tabs and card rules compiled successfully; repeat the signed-in visual pass when a test session is available.
+
+---
+
+# 2026-09-28 八主题独立结构 V7
+
+- 目标：balanced-themes-v3-20260927 八张四页参照图；本轮均已打开查看。
+- 本轮有效实拍：.local-state/theme-qa-v8/natural-symbiosis-stats.png（14:55，430×933，真实无记录状态）。
+- 参照含完整示例记录，当前账号为空记录；不评价示例数值差异，不伪造数据补齐。
+- 观察到自然共生的新年轮构图和日期详情已显示，右边距需修正；已在 scroll-wrap 增加 border-box，待最终实拍复核。
+- 八主题新增独立页头、分析组合、个人分类目录和单图动态编排。未完成全部四页逐图对照，不宣称复刻通过。
+- 阻塞：微信自动化截图/连接间歇性超时；当前缺少其余主题的最终同状态截图。
+- P2 待核对：画面材质、部分字体、木质抽屉与水面空间层次；八主题长文本和窄屏适配。
+- 单测/类型检查不能替代视觉验收；具体实现及边界见 docs/design/balanced-themes-v7-individual-20260928/README.md。
+
+final result: blocked

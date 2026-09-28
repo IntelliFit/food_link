@@ -1,0 +1,21 @@
+.fl-balanced-theme--clear-care:not(.fl-d) {
+  .bt-experience:not(.bt-experience--home) { min-height: 0; }
+  .theme-chapter--clear-care .tc-imprint { justify-content: flex-start; margin-bottom: 34rpx; }
+  .theme-chapter--clear-care .tc-brand { font: 800 78rpx sans-serif; letter-spacing: -3rpx; }
+  .theme-chapter--clear-care .tc-badge { padding: 12rpx 20rpx; background: #005630; color: #fff; font-size: 32rpx; border-radius: 18rpx; }
+  .theme-chapter--clear-care .tc-title { font: 800 60rpx sans-serif; letter-spacing: 0; }
+  .theme-chapter--clear-care .tc-subtitle { font-size: 31rpx; }
+  .bt-experience--home .bt-care-actions .bt-action { min-height: 182rpx; }
+  .bt-experience--profile .bt-integrated-content { margin-top: 30rpx; }
+  .theme-profile-sections { border: 2rpx solid #d2ded3; border-radius: 20rpx; padding: 0 22rpx; background: #fff; }
+  .tp-section { margin: 0; border: 0; border-bottom: 1rpx solid #d2ded3; box-shadow: none; }
+  .tp-section .profile-section-heading { min-height: 160rpx; padding: 28rpx 0; }
+  .tp-section .profile-section-title { font-size: 37rpx; font-weight: 700; }
+  .tp-section .profile-section-hint { font-size: 28rpx; color: #365940; }
+  .tp-section .tp-section__mark > text { font-size: 55rpx; color: #005630; }
+  .tp-section .list-title { font-size: 34rpx; }
+  .tp-section .list-desc { font-size: 27rpx; }
+  .feed-card .feed-content { font-size: 35rpx; line-height: 1.85; font-weight: 500; }
+  .feed-card .feed-image { margin-top: 28rpx; }
+  .feed-card .feed-actions { min-height: 100rpx; }
+}

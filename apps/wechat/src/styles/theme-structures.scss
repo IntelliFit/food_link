@@ -1,0 +1,34 @@
+@use './themes/clarity-order';
+@use './themes/natural-symbiosis';
+@use './themes/eastern-salon';
+@use './themes/modern-gallery';
+@use './themes/miniature-world';
+@use './themes/picturebook-companion';
+@use './themes/clear-care';
+@use './themes/way-of-water';
+
+.theme-chapter {
+  position: relative; z-index: 1;
+  text { display: block; }
+  .tc-title { font-size: 52rpx; font-weight: 500; line-height: 1.35; letter-spacing: 3rpx; }
+  .tc-brand { font: 62rpx 'Songti SC', STSong, SimSun, serif; letter-spacing: 7rpx; }
+  .tc-imprint { display: flex; justify-content: space-between; align-items: center; gap: 18rpx; margin-bottom: 38rpx; }
+  .tc-subtitle { margin-top: 18rpx; font-size: 26rpx; line-height: 1.8; letter-spacing: 2rpx; white-space: pre-line; }
+  .tc-date { font-size: 22rpx; letter-spacing: 1rpx; }
+  .tc-marginal { font-size: 23rpx; white-space: pre-line; line-height: 1.9; letter-spacing: 4rpx; }
+  .tc-scroll-heading { display: flex; align-items: center; justify-content: space-between; gap: 18rpx; }
+}
+.fl-page-theme-root--balanced {
+  .stats-page .scroll-wrap { width: 100%; box-sizing: border-box; }
+  .theme-feed-entry--photo .feed-card-main-col > .feed-comments { order: 4; }
+  .theme-profile-sections .tp-section::before, .theme-profile-sections .tp-section::after { content: none; }
+  .tp-section .profile-section-heading { display: flex; align-items: center; gap: 24rpx; }
+  .tp-section__copy { min-width: 0; flex: 1; }
+  .tp-section__mark { position: relative; flex-shrink: 0; width: 76rpx; height: 76rpx; display: flex; align-items: center; justify-content: center; }
+  .tp-section__mark > image { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .tp-section__mark > text { position: relative; font-size: 39rpx; }
+  .tp-section__mark .tp-section__number { font: 42rpx Georgia, serif; }
+  .tp-section .profile-section-title { display: block; }
+  .tp-section .profile-section-hint { display: block; line-height: 1.65; }
+  .tp-section .profile-section-chevron { flex-shrink: 0; }
+}

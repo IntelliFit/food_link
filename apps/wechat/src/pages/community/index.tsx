@@ -2340,7 +2340,7 @@ function CommunityPage() {
                       : []
                     const showReportMask = isCirclePost && reportMaskTarget?.targetType === targetType && reportMaskTarget?.targetId === targetId
                     return (
-                      <View key={targetKey}>
+                      <View key={targetKey} className={`theme-feed-entry${feedImagePaths.length === 1 && !exercise && !isCirclePost && item.record.description?.trim() ? ' theme-feed-entry--photo' : ''}`}>
                         <View
                           id={`feed-card-${targetType}-${targetId}`}
                           className={`feed-card${(item.record.description?.trim() || exerciseDesc || circlePostText.trim()) && !item.record.image_path && !useManualFoodCards && !useExerciseActivityCards ? ' feed-card-text-only' : ''} ${exercise ? 'feed-card-exercise' : ''} ${isCirclePost ? 'feed-card-circle-post' : ''}`}

@@ -1,0 +1,27 @@
+.fl-balanced-theme--picturebook-companion:not(.fl-d) {
+  .bt-experience:not(.bt-experience--home) { min-height: 235rpx; }
+  .theme-chapter--picturebook-companion { display: flex; gap: 24rpx; align-items: center; }
+  .theme-chapter--picturebook-companion .tc-title { flex-shrink: 0; padding: 14rpx 20rpx; background: #f3e7cf; color: #222d29; font: 50rpx 'Kaiti SC', KaiTi, serif; letter-spacing: 3rpx; }
+  .theme-chapter--picturebook-companion .tc-subtitle { font-size: 23rpx; color: #eadab8; margin-top: 0; }
+  .bt-experience--profile .bt-integrated-content { margin-top: 220rpx; }
+  .bt-experience--profile .profile-header-section { border: 0; padding: 24rpx 0; background: #101e27d9; }
+  .bt-experience--home .bt-chapter-label { border: 0; box-shadow: none; padding: 16rpx 26rpx; }
+  .bt-experience--home .bt-chapter-label--morning { max-width: 265rpx; top: 40%; }
+  .bt-experience--home .bt-chapter-label--noon { max-width: 245rpx; top: 66%; }
+  .theme-profile-sections { background: #f2e5cb; padding: 16rpx 22rpx; color: #29332c; }
+  .tp-section { margin: 0; background: transparent; border: 0; border-bottom: 1rpx solid #b5a588; border-radius: 0; box-shadow: none; }
+  .tp-section .profile-section-heading { background: transparent; padding: 25rpx 4rpx; }
+  .tp-section .profile-section-title { font: 34rpx 'Kaiti SC', KaiTi, serif; color: #29332c; }
+  .tp-section .profile-section-hint { color: #655e4c; }
+  .tp-section .tp-section__mark { width: 65rpx; height: 80rpx; border-right: 1rpx solid #b8a383; }
+  .tp-section .tp-section__number { color: #93764d; }
+  .tp-section .list-card, .tp-section .list-item { background: #f2e5cb; }
+  .tp-section .list-title { color: #29332c; }
+  .tp-section .list-desc { color: #655e4c; }
+  .feed-card { margin-bottom: 26rpx; padding: 24rpx 22rpx; }
+  .theme-feed-entry--photo .feed-card-main-col { display: flex; flex-direction: column; }
+  .theme-feed-entry--photo .feed-card-name-block { order: 0; }
+  .theme-feed-entry--photo .feed-image { order: 1; border: 7rpx solid #25312f; padding: 0; }
+  .theme-feed-entry--photo .feed-content { order: 2; font: 30rpx/1.85 'Kaiti SC', KaiTi, serif; padding: 20rpx 12rpx; margin: 0; }
+  .theme-feed-entry--photo .feed-meta, .theme-feed-entry--photo .feed-actions { order: 3; }
+}

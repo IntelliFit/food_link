@@ -1,0 +1,25 @@
+.fl-balanced-theme--modern-gallery:not(.fl-d) {
+  .bt-experience:not(.bt-experience--home) { min-height: 300rpx; padding: 24rpx 30rpx 38rpx; }
+  .theme-chapter--modern-gallery { display: flex; justify-content: space-between; align-items: flex-start; }
+  .theme-chapter--modern-gallery .tc-display { font: 144rpx/1.1 'Songti SC', SimSun, serif; letter-spacing: -8rpx; }
+  .theme-chapter--modern-gallery .tc-title { font: 45rpx 'Songti SC', SimSun, serif; margin-top: 20rpx; }
+  .theme-chapter--modern-gallery .tc-caption { max-width: 165rpx; padding-top: 16rpx; font-size: 23rpx; line-height: 1.7; letter-spacing: 3rpx; white-space: pre-line; }
+  .theme-chapter--modern-gallery .tc-caption text + text { font: 20rpx/1.4 Georgia, serif; margin-top: 20rpx; }
+  .bt-experience--home .bt-gallery-bottom { background: #f8f1e3; left: 0; right: 0; bottom: 0; padding: 18rpx 32rpx 28rpx; }
+  .bt-experience--home .bt-gallery-bottom .bt-live-summary text + text { font: 44rpx Georgia, serif; }
+  .bt-integrated-content .profile-header-section { background: #f5eddf; border-left-width: 8rpx; }
+  .theme-profile-sections { border: 5rpx solid #3a231e; padding: 6rpx; background: #201a17; }
+  .tp-section { margin: 0 0 5rpx; border: 0; background: #a8221b; box-shadow: none; }
+  .tp-section .profile-section-heading { background: #a8221b; color: #fff4de; padding: 26rpx 22rpx; }
+  .tp-section .profile-section-title, .tp-section .profile-section-hint { color: #fff4de; }
+  .tp-section .profile-section-title { font: 35rpx 'Songti SC', SimSun, serif; }
+  .tp-section .tp-section__mark { width: 90rpx; height: 100rpx; border: 1rpx solid #b5a68c; background: #191a17; }
+  .tp-section .tp-section__number { font-size: 52rpx; }
+  .tp-section .list-card { margin: 0; padding: 12rpx; background: #f7efdf; }
+  .feed-card { border-top: 0; padding: 22rpx 0; border-bottom: 2rpx solid #171717; }
+  .theme-feed-entry--photo .feed-card-main-col { display: flex; flex-direction: column; }
+  .theme-feed-entry--photo .feed-card-name-block { order: 0; }
+  .theme-feed-entry--photo .feed-image { order: 1; background: #151614; padding: 8rpx 8rpx 8rpx 20rpx; border-left: 10rpx solid #d62d22; }
+  .theme-feed-entry--photo .feed-content { order: 2; font: 34rpx/1.6 'Songti SC', SimSun, serif; margin-top: 24rpx; }
+  .theme-feed-entry--photo .feed-meta, .theme-feed-entry--photo .feed-actions { order: 3; }
+}

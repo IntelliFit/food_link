@@ -1,0 +1,27 @@
+.fl-balanced-theme--miniature-world:not(.fl-d) {
+  .theme-chapter--miniature-world .tc-display { font: 86rpx 'Songti SC', SimSun, serif; }
+  .theme-chapter--miniature-world .tc-imprint { margin-bottom: 12rpx; align-items: baseline; }
+  .theme-chapter--miniature-world .tc-date { font-size: 21rpx; }
+  .theme-chapter--miniature-world .tc-sign { display: inline-block; margin-top: 36rpx; padding: 16rpx 28rpx; background: #f2e3c8; color: #362b1e; border: 4rpx double #8c714c; font: 36rpx 'Songti SC', SimSun, serif; }
+  .bt-experience--profile .bt-integrated-content { margin-top: 50rpx; }
+  .bt-experience--profile.bt-experience--integrated { min-height: 720rpx; }
+  .bt-experience--profile .user-card { flex-direction: column; align-items: flex-start; gap: 22rpx; }
+  .bt-experience--profile .profile-header-section { width: 91%; padding: 28rpx; }
+  .bt-experience--home .bt-garden-sign--meals { left: 32rpx; top: 34%; }
+  .bt-experience--home .bt-garden-sign--water { right: 32rpx; top: 61%; }
+  .theme-profile-sections { display: grid; grid-template-columns: 1fr 1fr; gap: 16rpx; padding: 20rpx 0; }
+  .tp-section { margin: 0; background: #ead8b7; border: 4rpx double #7c6344; border-radius: 3rpx; box-shadow: 0 6rpx 0 #8e7552; }
+  .tp-section .profile-section-heading { flex-direction: column; align-items: flex-start; padding: 22rpx; min-height: 215rpx; position: relative; }
+  .tp-section .tp-section__mark { width: 52rpx; height: 55rpx; }
+  .tp-section .profile-section-title { font-size: 31rpx; }
+  .tp-section .profile-section-hint { font-size: 22rpx; }
+  .tp-section .profile-section-chevron { position: absolute; top: 36rpx; right: 28rpx; }
+  .tp-section--open { grid-column: 1 / -1; }
+  .tp-section--open .profile-section-heading { flex-direction: row; align-items: center; min-height: 120rpx; padding-right: 60rpx; }
+  .feed-card { padding: 22rpx; }
+  .theme-feed-entry--photo .feed-card-main-col { display: grid; grid-template-columns: minmax(0, 1fr) 42%; gap: 16rpx; }
+  .theme-feed-entry--photo .feed-card-main-col > * { grid-column: 1 / -1; }
+  .theme-feed-entry--photo .feed-content { grid-column: 1; grid-row: 2; font-size: 27rpx; margin: 0; }
+  .theme-feed-entry--photo .feed-image { grid-column: 2; grid-row: 2; margin: 0; height: 290rpx; }
+  .theme-feed-entry--photo .feed-image-content { height: 290rpx; }
+}

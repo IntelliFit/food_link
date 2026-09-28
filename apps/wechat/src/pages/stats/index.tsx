@@ -1,7 +1,7 @@
 import { InkMasthead, InkStatsOverview, useInkWellness } from '../../components/InkWellness'
 import { BalancedThemeExperience } from '../../components/BalancedThemeExperience'
 import { useBalancedTheme } from '../../components/BalancedThemeContext'
-import { WaterDailyFlow } from '../../components/WaterDailyFlow'
+import { ThemeDailyReview } from '../../components/ThemeDailyReview'
 import { View, Text, ScrollView, Input, Switch } from '@tarojs/components'
 import { useState, useEffect, useCallback, useRef, type CSSProperties } from 'react'
 import Taro, { useDidHide, useDidShow } from '@tarojs/taro'
@@ -738,7 +738,6 @@ function hasAuthToken(): boolean {
 function StatsPage() {
   const ink = useInkWellness()
   const { theme } = useBalancedTheme()
-  const waterTheme = !ink && theme === 'way-of-water'
   const { scheme } = useAppColorScheme()
   const [range, setRange] = useState<'week' | 'month'>('week')
   const [analysisPanel, setAnalysisPanel] = useState<AnalysisPanelKey>(
@@ -1310,7 +1309,7 @@ function StatsPage() {
       <View className={`stats-page stats-page--guest ${ink ? 'ink-page' : ''} ${scheme === 'dark' ? 'stats-page--dark' : ''}`}>
         {ink && <InkMasthead title='观照日常' subtitle='在起伏中，找到自己的节奏' />}
         <BalancedThemeExperience surface='stats' />
-        {waterTheme ? <WaterDailyFlow endDate={formatLocalDate()} guest onRecord={() => redirectToLogin()} /> : <View className='stats-guest-card'>
+        {!ink ? <ThemeDailyReview theme={theme} endDate={formatLocalDate()} guest onRecord={() => redirectToLogin()} /> : <View className='stats-guest-card'>
           <Text className='stats-guest-title'>登录后查看饮食分析</Text>
           <Text className='stats-guest-desc'>可先浏览首页热量与营养概览，需要账号同步时再登录</Text>
           <View className='stats-guest-btn' onClick={() => redirectToLogin()}>
@@ -1549,7 +1548,7 @@ function StatsPage() {
       <ScrollView className='scroll-wrap' scrollY enhanced showScrollbar={false}>
         {ink && <InkMasthead title='观照日常' subtitle='在起伏中，找到自己的节奏' />}
         <BalancedThemeExperience surface='stats' />
-        {waterTheme && <WaterDailyFlow endDate={sourceData.end_date} days={sourceData.daily_calories} water={sourceData.body_metrics?.water_daily} onRecord={() => { void Taro.switchTab({ url: '/pages/index/index' }) }} />}
+        {!ink && <ThemeDailyReview theme={theme} endDate={sourceData.end_date} days={sourceData.daily_calories} water={sourceData.body_metrics?.water_daily} onRecord={() => { void Taro.switchTab({ url: '/pages/index/index' }) }} />}
       <View
         className={`stats-range-dropdown ${loading ? 'is-loading' : ''}`}
         onClick={openRangeSelector}

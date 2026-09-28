@@ -1,0 +1,21 @@
+.fl-balanced-theme--eastern-salon:not(.fl-d) {
+  .bt-experience:not(.bt-experience--home) { min-height: 300rpx; }
+  .theme-chapter--eastern-salon .tc-brand { padding-bottom: 44rpx; }
+  .theme-chapter--eastern-salon .tc-title { font: 57rpx 'Songti SC', STSong, SimSun, serif; letter-spacing: 5rpx; }
+  .theme-chapter--eastern-salon .tc-marginal { font-size: 22rpx; }
+  .bt-experience--home .bt-scroll { border-width: 4rpx 10rpx; padding: 28rpx 24rpx; }
+  .bt-experience--home .bt-scroll__plate > view { align-items: flex-start; }
+  .profile-page .bt-integrated-content .profile-header-section { border: 0; padding: 0 0 28rpx; background: transparent; }
+  .profile-page .theme-profile-sections { padding: 12rpx 4rpx; }
+  .profile-page .tp-section { margin: 0 0 18rpx; background: #191d19; border: 4rpx double #96815e; }
+  .profile-page .tp-section .profile-section-heading { background: transparent; padding: 30rpx 22rpx; }
+  .profile-page .tp-section .tp-section__mark { width: 80rpx; height: 112rpx; overflow: hidden; border: 1rpx solid #9c8863; }
+  .profile-page .tp-section .tp-section__mark > image { opacity: .42; }
+  .profile-page .tp-section .tp-section__mark > text { color: #f2d7a3; }
+  .profile-page .tp-section .profile-section-title { font-size: 32rpx; letter-spacing: 5rpx; }
+  .theme-feed-entry--photo .feed-card-main-col { display: grid; grid-template-columns: minmax(0, 1fr) 132rpx; gap: 20rpx; }
+  .theme-feed-entry--photo .feed-card-main-col > * { grid-column: 1 / -1; }
+  .theme-feed-entry--photo .feed-image { grid-column: 1; grid-row: 2; padding: 0; border: 0; margin: 0; height: 345rpx; }
+  .theme-feed-entry--photo .feed-content { grid-column: 2; grid-row: 2; font: 29rpx/1.8 'Songti SC', SimSun, serif; margin: 0; letter-spacing: 3rpx; }
+  .theme-feed-entry--photo .feed-image-content { height: 345rpx; }
+}
