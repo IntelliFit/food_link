@@ -31,4 +31,11 @@
   .tp-section .profile-section-title { display: block; }
   .tp-section .profile-section-hint { display: block; line-height: 1.65; }
   .tp-section .profile-section-chevron { flex-shrink: 0; }
+  .profile-page .member-card {
+    background: var(--bt-surface); color: var(--bt-text); border: 1rpx solid var(--bt-border); box-shadow: none;
+    .card-title, .credit-overview__value, .credit-overview__label { color: var(--bt-text); text-shadow: none; }
+    .credit-overview__unit, .credit-overview__meta, .card-benefit { color: var(--bt-muted); text-shadow: none; }
+    .card-badge { background: var(--bt-surface-muted); color: var(--bt-text); box-shadow: none; }
+    .credit-overview__item + .credit-overview__item { border-left-color: var(--bt-border); }
+  }
 }

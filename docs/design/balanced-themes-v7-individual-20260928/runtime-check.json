@@ -1,0 +1,218 @@
+[
+  {
+    "theme": "modern-gallery",
+    "surface": "home",
+    "correctTheme": true,
+    "hero": true
+  },
+  {
+    "theme": "modern-gallery",
+    "surface": "stats",
+    "correctTheme": true,
+    "hero": true,
+    "daySelected": true
+  },
+  {
+    "theme": "modern-gallery",
+    "surface": "community",
+    "correctTheme": true,
+    "hero": true
+  },
+  {
+    "theme": "modern-gallery",
+    "surface": "profile",
+    "correctTheme": true,
+    "hero": true,
+    "expanded": true,
+    "collapsed": true
+  },
+  {
+    "theme": "miniature-world",
+    "surface": "home",
+    "correctTheme": true,
+    "hero": true
+  },
+  {
+    "theme": "miniature-world",
+    "surface": "stats",
+    "correctTheme": true,
+    "hero": true,
+    "daySelected": true
+  },
+  {
+    "theme": "miniature-world",
+    "surface": "community",
+    "correctTheme": true,
+    "hero": true
+  },
+  {
+    "theme": "miniature-world",
+    "surface": "profile",
+    "correctTheme": true,
+    "hero": true,
+    "expanded": true,
+    "collapsed": true
+  },
+  {
+    "theme": "picturebook-companion",
+    "surface": "home",
+    "correctTheme": true,
+    "hero": true
+  },
+  {
+    "theme": "picturebook-companion",
+    "surface": "stats",
+    "correctTheme": true,
+    "hero": true,
+    "daySelected": true
+  },
+  {
+    "theme": "picturebook-companion",
+    "surface": "community",
+    "correctTheme": true,
+    "hero": true
+  },
+  {
+    "theme": "picturebook-companion",
+    "surface": "profile",
+    "correctTheme": true,
+    "hero": true,
+    "expanded": true,
+    "collapsed": true
+  },
+  {
+    "theme": "clear-care",
+    "surface": "home",
+    "correctTheme": true,
+    "hero": true
+  },
+  {
+    "theme": "clear-care",
+    "surface": "stats",
+    "correctTheme": true,
+    "hero": true,
+    "daySelected": true
+  },
+  {
+    "theme": "clear-care",
+    "surface": "community",
+    "correctTheme": true,
+    "hero": true
+  },
+  {
+    "theme": "clear-care",
+    "surface": "profile",
+    "correctTheme": true,
+    "hero": true,
+    "expanded": true,
+    "collapsed": true
+  },
+  {
+    "theme": "way-of-water",
+    "surface": "home",
+    "correctTheme": true,
+    "hero": true
+  },
+  {
+    "theme": "way-of-water",
+    "surface": "stats",
+    "correctTheme": true,
+    "hero": true,
+    "daySelected": true
+  },
+  {
+    "theme": "way-of-water",
+    "surface": "community",
+    "correctTheme": true,
+    "hero": true
+  },
+  {
+    "theme": "way-of-water",
+    "surface": "profile",
+    "correctTheme": true,
+    "hero": true,
+    "expanded": true,
+    "collapsed": true
+  },
+  {
+    "theme": "clarity-order",
+    "surface": "home",
+    "correctTheme": true,
+    "hero": true
+  },
+  {
+    "theme": "clarity-order",
+    "surface": "stats",
+    "correctTheme": true,
+    "hero": true,
+    "daySelected": true
+  },
+  {
+    "theme": "clarity-order",
+    "surface": "community",
+    "correctTheme": true,
+    "hero": true
+  },
+  {
+    "theme": "clarity-order",
+    "surface": "profile",
+    "correctTheme": true,
+    "hero": true,
+    "expanded": true,
+    "collapsed": true
+  },
+  {
+    "theme": "natural-symbiosis",
+    "surface": "home",
+    "correctTheme": true,
+    "hero": true
+  },
+  {
+    "theme": "natural-symbiosis",
+    "surface": "stats",
+    "correctTheme": true,
+    "hero": true,
+    "daySelected": true
+  },
+  {
+    "theme": "natural-symbiosis",
+    "surface": "community",
+    "correctTheme": true,
+    "hero": true
+  },
+  {
+    "theme": "natural-symbiosis",
+    "surface": "profile",
+    "correctTheme": true,
+    "hero": true,
+    "expanded": true,
+    "collapsed": true
+  },
+  {
+    "theme": "eastern-salon",
+    "surface": "home",
+    "correctTheme": true,
+    "hero": true
+  },
+  {
+    "theme": "eastern-salon",
+    "surface": "stats",
+    "correctTheme": true,
+    "hero": true,
+    "daySelected": true
+  },
+  {
+    "theme": "eastern-salon",
+    "surface": "community",
+    "correctTheme": true,
+    "hero": true
+  },
+  {
+    "theme": "eastern-salon",
+    "surface": "profile",
+    "correctTheme": true,
+    "hero": true,
+    "expanded": true,
+    "collapsed": true
+  }
+]
