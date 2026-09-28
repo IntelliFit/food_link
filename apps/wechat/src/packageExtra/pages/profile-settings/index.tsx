@@ -50,6 +50,7 @@ import { FeedReportSheet } from '../../../pages/community/components/FeedReportS
 import { FeedActionSheet } from '../../../pages/community/components/FeedActionSheet'
 import { ManualFoodCards } from '../../../pages/community/components/ManualFoodCards'
 import { ExerciseActivityCards, hasExerciseActivityCards } from '../../../pages/community/components/ExerciseActivityCards'
+import { FeedImageGrid } from '../../../pages/community/components/FeedImageGrid'
 import { shouldRenderManualFoodCards } from '../../../utils/manual-food-source'
 import { LOGIN_LOGO_URL } from '../../../utils/static-asset-cdn-url'
 import { collectFoodDisplayImageUrls } from '../../../utils/food-display-image'
@@ -837,31 +838,8 @@ export default function ProfileSettingsPage() {
             items={record.exercise_items}
             onItemClick={() => handleGoFeedDetail(item)}
           />
-        ) : displayImagePaths.length > 1 ? (
-          <View className='profile-feed-image-grid'>
-            {displayImagePaths.map((url, idx) => (
-              <View
-                key={`feed-img-${idx}`}
-                className='profile-feed-image-grid-item'
-                onClick={(event) => {
-                  event.stopPropagation()
-                  Taro.previewImage({ current: url, urls: displayImagePaths })
-                }}
-              >
-                <Image className='profile-feed-image' src={url} mode='aspectFit' />
-              </View>
-            ))}
-          </View>
-        ) : displayImagePaths.length === 1 ? (
-          <View
-            className='profile-feed-image-wrap'
-            onClick={(event) => {
-              event.stopPropagation()
-              Taro.previewImage({ current: displayImagePaths[0], urls: displayImagePaths })
-            }}
-          >
-            <Image className='profile-feed-image' src={displayImagePaths[0]} mode='aspectFit' />
-          </View>
+        ) : displayImagePaths.length > 0 ? (
+          <FeedImageGrid urls={displayImagePaths} />
         ) : null}
 
         {/* 营养/数据 */}

@@ -451,36 +451,6 @@
   display: block;
 }
 
-.profile-feed-image-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12rpx;
-  margin-bottom: 16rpx;
-}
-
-.profile-feed-image-grid-item {
-  width: 200rpx;
-  height: 200rpx;
-  border-radius: 16rpx;
-  overflow: hidden;
-  background: #111827;
-}
-
-.profile-feed-image-wrap {
-  width: 100%;
-  height: 320rpx;
-  border-radius: 16rpx;
-  overflow: hidden;
-  margin-bottom: 16rpx;
-  background: #111827;
-}
-
-.profile-feed-image {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-}
-
 /* 收藏食谱卡片（与个人主页收藏 tab 风格一致） */
 .profile-feed-collection-card {
   display: flex;
@@ -1447,8 +1417,7 @@
   }
 
   /* 动态图片占位背景 */
-  .profile-feed-image-grid-item,
-  .profile-feed-image-wrap {
+  .feed-photo-grid-item {
     background: #1e2624;
   }
 

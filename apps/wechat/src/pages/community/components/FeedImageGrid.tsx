@@ -1,6 +1,8 @@
 import { Image, Text, View } from '@tarojs/components'
 import Taro from '@tarojs/taro'
 
+import './FeedImageGrid.scss'
+
 type FeedImageGridProps = {
   urls: string[]
   onImageClick?: (url: string, index: number, urls: string[]) => void

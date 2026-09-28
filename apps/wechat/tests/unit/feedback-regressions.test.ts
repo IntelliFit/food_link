@@ -11,12 +11,12 @@ describe('feedback regression contracts', () => {
     expect(source).toContain("`${extraPkgUrl('/pages/food-library-detail/index')}?id=")
   })
 
-  it('renders and previews every profile feed image without cropping', () => {
+  it('reuses the moments image grid on the profile feed', () => {
     const source = readSource('packageExtra/pages/profile-settings/index.tsx')
     expect(source).toContain('collectFoodDisplayImageUrls(record)')
-    expect(source).toContain('urls: displayImagePaths')
-    expect(source).toContain("mode='aspectFit'")
-    expect(source).toContain('event.stopPropagation()')
+    expect(source).toContain('<FeedImageGrid urls={displayImagePaths} />')
+    expect(source).not.toContain('profile-feed-image-wrap')
+    expect(source).not.toContain('profile-feed-image-grid-item')
   })
 
   it('merges the returned user profile into the existing local cache', () => {
