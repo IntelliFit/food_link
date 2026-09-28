@@ -552,3 +552,6 @@ final result: blocked
 - Verification: focused lifecycle/preference/scene tests passed. Native transform sampling and four-surface coverage are being recorded in the V9 runtime report. Screenshots alone are not evidence of motion.
 - Full fidelity/performance status: not certified. Need device frame-rate/energy measurements and high-resolution reference comparisons; remaining static-theme differences are still open.
 - V9 native result: 32 surfaces mounted/active, 8 distinct animations changed transform; pointer-events none. Static toggle verified play-state paused + frozen transform after fixing WXSS unsupported universal-child selectors. Tab-hidden inspection unavailable (old page destroyed), unit lifecycle coverage passes.
+
+## 2026-09-28 原画视频纠正
+- V9叠加动效被用户否定，改为即梦图生视频。当前等用户登录；真实视频尚未生成。播放器/静态回退准备不代表动态效果完成。见 docs/design/balanced-themes-scene-video-20260928.md。

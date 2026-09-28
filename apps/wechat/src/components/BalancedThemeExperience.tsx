@@ -4,8 +4,9 @@ import * as React from 'react'
 import { useInkWellness } from './InkWellness'
 import { useBalancedTheme } from './BalancedThemeContext'
 import { ThemeChapterHeader } from './ThemeChapterHeader'
-import { ThemeAmbientMotion } from './ThemeAmbientMotion'
+import { ThemeSceneBackground } from './ThemeSceneBackground'
 import { useThemeMotion } from './ThemeMotion'
+import { getThemeSceneVideo } from '../utils/theme-scene-videos'
 import { getBalancedThemeDefinition } from '../utils/balanced-theme'
 import { extraPkgUrl } from '../utils/subpackage-extra'
 import clarityFood from '../assets/balanced-themes/clarity-food.webp'
@@ -52,6 +53,7 @@ export function BalancedThemeExperience({ surface, home, children, onRecord, onW
   const wellness = useInkWellness()
   const { theme } = useBalancedTheme()
   const motion = useThemeMotion()
+  const sceneVideo = getThemeSceneVideo(theme, surface)
   const [scenesReady, setScenesReady] = React.useState(false)
   const [sceneError, setSceneError] = React.useState(false)
   React.useEffect(() => {
@@ -98,44 +100,44 @@ export function BalancedThemeExperience({ surface, home, children, onRecord, onW
       : theme === 'eastern-salon' ? easternLandscape : theme === 'way-of-water' ? waterRock
       : theme === 'modern-gallery' ? galleryCollage : undefined
     return <View id={`balanced-theme-experience-${surface}`} className={rootClass}>
-      {art && <Image className='bt-scene bt-scene--chapter' src={art} mode='aspectFill' />}
-      <ThemeAmbientMotion theme={theme} scenesReady={scenesReady} />
+      <ThemeSceneBackground className='bt-scene bt-scene--chapter' poster={art} src={sceneVideo} active={motion.active} />
       <ThemeChapterHeader theme={theme} title={title} surfaceName={SURFACE_NAME[surface]} date={date.replace(/-/g, '.')} />{sceneRetry}
       {children && <View className='bt-integrated-content'>{children}</View>}
       {surface === 'community' && onPublish && <View className='bt-publish'>{action('publish', '分享我的一餐', '', 'icon-paizhao-xianxing', onPublish)}</View>}
     </View>
   }
-  return <View id='balanced-theme-experience-home' className={rootClass}>{sceneRetry}<ThemeAmbientMotion theme={theme} scenesReady={scenesReady} />
+  return <View id='balanced-theme-experience-home' className={rootClass}>{sceneRetry}
+    {(theme === 'clarity-order' || theme === 'clear-care') && <ThemeSceneBackground src={sceneVideo} active={motion.active} />}
     {theme === 'miniature-world' && <>
-      {miniatureGarden && <Image className='bt-scene' src={miniatureGarden} mode='aspectFill' />}{masthead}{heading}
+      <ThemeSceneBackground poster={miniatureGarden} src={sceneVideo} active={motion.active} />{masthead}{heading}
       <View className='bt-garden-sign bt-garden-sign--meals'>{action('meals', '饮食花园', value(home?.mealCount, ' 餐 · 查看记录'), 'icon-foodshop', meals)}</View>
       <View className='bt-garden-sign bt-garden-sign--water'>{action('water', '营养河流', value(home?.waterMl, ' ml · 记录饮水'), 'icon-drink', water)}</View>
       <View className='bt-scene-footer'>{action('record', '拍下这一餐', '记录此刻的生活', 'icon-paizhao-xianxing', record)}</View>
     </>}
     {theme === 'picturebook-companion' && <>
-      {picturebookDay && <Image className='bt-scene' src={picturebookDay} mode='aspectFill' />}{masthead}{heading}
+      <ThemeSceneBackground poster={picturebookDay} src={sceneVideo} active={motion.active} />{masthead}{heading}
       <View className='bt-chapter-label bt-chapter-label--morning'><Text>晨光开篇</Text><Text>好好吃早餐，是对自己的温柔。</Text></View>
       <View className='bt-chapter-label bt-chapter-label--noon' role='button' onClick={meals}><Text>午间相遇</Text><Text>{value(home?.mealCount, ' 餐已记下')} · 查看</Text></View>
       <View className='bt-scene-footer'>{action('record', '记录这一餐', '把日常，写成自己的故事', 'icon-paizhao-xianxing', record)}</View>
     </>}
     {theme === 'way-of-water' && <>
-      {waterVessel && <Image className='bt-scene' src={waterVessel} mode='aspectFill' />}{masthead}{heading}
+      <ThemeSceneBackground poster={waterVessel} src={sceneVideo} active={motion.active} />{masthead}{heading}
       <View className='bt-water-today' role='button' aria-label='查看今日饮食记录' onClick={meals}><Text>今日食记</Text><Text>{value(home?.mealCount, ' 餐')}</Text><Text>今日摄入</Text><Text>{value(home?.calories, ' kcal')}</Text><Text>{home?.authenticated ? '点此回看' : '从第一餐开始'}</Text></View>
       <Text className='bt-water-motto'>水无定形 · 因势而行</Text>
       <View className='bt-water-actions'>{action('record', '记录饮食', '', 'icon-paizhao-xianxing', record)}{action('water', '饮水', value(home?.waterMl, ' ml'), 'icon-drink', water)}{action('stats', '观其流变', '', 'icon-shangzhang', stats)}</View>
     </>}
     {theme === 'natural-symbiosis' && <>
-      {naturalLeaves && <Image className='bt-scene' src={naturalLeaves} mode='aspectFill' />}{masthead}{heading}
+      <ThemeSceneBackground poster={naturalLeaves} src={sceneVideo} active={motion.active} />{masthead}{heading}
       <View className='bt-leaf-note bt-leaf-note--meals'>{action('meals', '今日饮食', value(home?.mealCount, ' 餐'), 'icon-foodshop', meals)}</View>
       <View className='bt-leaf-note bt-leaf-note--water'>{action('water', '再来一杯', value(home?.waterMl, ' ml'), 'icon-drink', water)}</View>
       <View className='bt-scene-footer'>{action('record', '种下一餐', '让更好的自己慢慢生长', 'icon-paizhao-xianxing', record)}</View>
     </>}
     {theme === 'eastern-salon' && <>
-      <Image className='bt-eastern-landscape' src={easternLandscape} mode='aspectFill' />{masthead}{heading}
+      <ThemeSceneBackground className='bt-eastern-landscape' poster={easternLandscape} src={sceneVideo} active={motion.active} />{masthead}{heading}
       <View className='bt-scroll'><View className='bt-scroll__plate'>{easternSoup && <Image src={easternSoup} mode='aspectFill' />}<View><Text>一盏清汤</Text><Text>四时皆宜 · 日常有味</Text><Text className='bt-art-caption'>食物灵感</Text></View></View>{summary}<Text className='bt-scroll__verse'>食养身心 · 自有节奏</Text>{action('record', '记一膳', '', 'icon-paizhao-xianxing', record)}</View>
     </>}
     {theme === 'modern-gallery' && <>
-      {galleryCollage && <Image className='bt-scene' src={galleryCollage} mode='aspectFill' />}{masthead}{heading}
+      <ThemeSceneBackground poster={galleryCollage} src={sceneVideo} active={motion.active} />{masthead}{heading}
       <View className='bt-gallery-caption'><Text>一餐，也是作品。</Text><Text>食物灵感 / 日常的创作</Text></View>
       <View className='bt-gallery-bottom'>{summary}{action('record', '记录这餐', '', 'icon-paizhao-xianxing', record)}</View>
     </>}

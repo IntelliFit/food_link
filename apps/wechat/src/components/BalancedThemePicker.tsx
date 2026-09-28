@@ -3,7 +3,7 @@ import * as React from 'react'
 import { useBalancedTheme } from './BalancedThemeContext'
 import { BalancedThemeReveal } from './BalancedThemeReveal'
 import { useThemeMotion } from './ThemeMotion'
-import { THEME_MOTION_LABELS } from './ThemeAmbientMotion'
+import { hasThemeSceneVideo } from '../utils/theme-scene-videos'
 import {
   BALANCED_THEME_DEFINITIONS,
   type BalancedThemeId,
@@ -95,10 +95,10 @@ export function BalancedThemePicker({ visible, wellnessActive, onClose }: Balanc
           </View>
           <View className='balanced-theme-picker__done' onClick={onClose}><Text>完成</Text></View>
         </View>
-        <View className='balanced-theme-motion-setting'>
-          <View><Text>动态背景</Text><Text>{THEME_MOTION_LABELS[theme]} · 可随时切换为静态</Text></View>
+        {hasThemeSceneVideo(theme) && <View className='balanced-theme-motion-setting'>
+          <View><Text>动态背景</Text><Text>画面随时间流动 · 可随时切换为静态</Text></View>
           <View id='balanced-theme-motion-toggle' role='switch' aria-label='动态背景' aria-checked={motion.enabled} className={`balanced-theme-motion-toggle${motion.enabled ? ' is-on' : ''}`} onClick={() => motion.setEnabled(!motion.enabled)}><Text>{motion.enabled ? '已开启' : '已关闭'}</Text></View>
-        </View>
+        </View>}
         {wellnessActive && (
           <View className='balanced-theme-picker__notice'>
             <Text>当前处于养生模式，选择会先保存；切回均衡模式后生效。</Text>
@@ -125,7 +125,7 @@ export function BalancedThemePicker({ visible, wellnessActive, onClose }: Balanc
                     </View>
                     <Text className='balanced-theme-option__subtitle'>{item.subtitle}</Text>
                     <Text className='balanced-theme-option__signature'>{item.signature}</Text>
-                    <Text className='balanced-theme-option__motion'>{THEME_MOTION_LABELS[item.id]}</Text>
+                    {hasThemeSceneVideo(item.id) && <Text className='balanced-theme-option__motion'>实景动态</Text>}
                     <Text className='balanced-theme-option__audience'>{item.audience}</Text>
                     <View className='balanced-theme-option__meta'>
                       <View className='balanced-theme-option__swatches'>
