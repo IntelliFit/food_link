@@ -47,7 +47,10 @@ export function openPetChat(input?: unknown): void {
   const query = params.length
     ? `?${params.map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`).join('&')}`
     : ''
-  openWithoutStacking(`${extraPkgUrl('/pages/pet-chat/index')}${query}`)
+  const url = `${extraPkgUrl('/pages/pet-chat/index')}${query}`
+  // A newly selected meal must reach onLoad; navigating back discards its context.
+  if (context?.source === 'home_next_meal') Taro.navigateTo({ url })
+  else openWithoutStacking(url)
 }
 
 export function openPetSettings(): void {

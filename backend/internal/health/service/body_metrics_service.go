@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"math"
 	"strings"
 	"time"
@@ -11,6 +12,7 @@ import (
 	commonerrors "food_link/backend/internal/common/errors"
 	"food_link/backend/internal/health/domain"
 	usersvc "food_link/backend/internal/user/service"
+	"food_link/backend/pkg/logger"
 )
 
 var chinaTZ = time.FixedZone("Asia/Shanghai", 8*60*60)
@@ -29,17 +31,25 @@ type BodyMetricsRepo interface {
 	DeleteWaterLogByID(ctx context.Context, userID string, logID string) (int64, error)
 	GetBodyMetricSettings(ctx context.Context, userID string) (*domain.BodyMetricSettings, error)
 	UpsertBodyMetricSettings(ctx context.Context, settings *domain.BodyMetricSettings) error
-	SumWaterByDate(ctx context.Context, userID string, recordedOn string) (int64, error)
 	GetUserProfile(ctx context.Context, userID string) (*domain.BodyMetricUserProfile, error)
 	UpdateUserProfileMetrics(ctx context.Context, userID string, updates map[string]any) error
 }
 
 type BodyMetricsService struct {
-	repo BodyMetricsRepo
+	repo              BodyMetricsRepo
+	foodWaterProvider FoodWaterProvider
+}
+
+type FoodWaterProvider interface {
+	ListDerivedFoodWaterLogs(ctx context.Context, userID, startDate, endDate string) ([]domain.BodyWaterLog, error)
 }
 
 func NewBodyMetricsService(repo BodyMetricsRepo) *BodyMetricsService {
 	return &BodyMetricsService{repo: repo}
+}
+
+func (s *BodyMetricsService) ConfigureFoodWaterProvider(provider FoodWaterProvider) {
+	s.foodWaterProvider = provider
 }
 
 type WeightEntry struct {
@@ -61,6 +71,7 @@ type WaterLogEntry struct {
 	ID         string  `json:"id,omitempty"`
 	Date       string  `json:"date"`
 	AmountMl   int     `json:"amount_ml"`
+	SourceType string  `json:"source_type"`
 	RecordedAt *string `json:"recorded_at,omitempty"`
 }
 
@@ -94,6 +105,27 @@ func (s *BodyMetricsService) GetSummary(ctx context.Context, userID string, stat
 	waterLogs, err := s.repo.GetWaterLogsByDate(ctx, userID, startDate, endDate)
 	if err != nil {
 		return nil, err
+	}
+	editableWaterLogs := make([]domain.BodyWaterLog, 0, len(waterLogs))
+	for _, log := range waterLogs {
+		if !domain.IsEditableWaterSource(log.SourceType) {
+			continue
+		}
+		editableWaterLogs = append(editableWaterLogs, log)
+	}
+	waterLogs = editableWaterLogs
+	if s.foodWaterProvider != nil {
+		derivedLogs, providerErr := s.foodWaterProvider.ListDerivedFoodWaterLogs(ctx, userID, startDate, endDate)
+		if providerErr != nil {
+			logger.Warn(ctx, "读取饮食含水记录失败",
+				slog.String("user_id", userID),
+				slog.String("start_date", startDate),
+				slog.String("end_date", endDate),
+				logger.Err(providerErr),
+			)
+		} else {
+			waterLogs = append(waterLogs, derivedLogs...)
+		}
 	}
 
 	settings, _ := s.repo.GetBodyMetricSettings(ctx, userID)
@@ -175,6 +207,7 @@ type LocalWaterDay struct {
 func (s *BodyMetricsService) SyncLocal(ctx context.Context, userID string, input SyncLocalInput) (map[string]any, error) {
 	importedWeightCount := 0
 	importedWaterCount := 0
+	waterImportSkipped := false
 
 	if input.WaterGoalMl != nil && *input.WaterGoalMl > 0 {
 		_ = s.repo.UpsertBodyMetricSettings(ctx, &domain.BodyMetricSettings{
@@ -234,59 +267,25 @@ func (s *BodyMetricsService) SyncLocal(ctx context.Context, userID string, input
 		}
 	}
 
-	if len(input.WaterByDate) > 0 {
-		waterDates := make([]string, 0, len(input.WaterByDate))
-		for dateKey := range input.WaterByDate {
-			if _, err := parseChinaDate(dateKey); err == nil {
-				waterDates = append(waterDates, dateKey)
-			}
+	validWaterDateCount := 0
+	for dateKey := range input.WaterByDate {
+		if _, err := parseChinaDate(dateKey); err == nil {
+			validWaterDateCount++
 		}
-		if len(waterDates) > 0 {
-			existingWaterLogs, _ := s.repo.GetWaterLogsByDate(ctx, userID, waterDates[0], waterDates[len(waterDates)-1])
-			existingDates := make(map[string]bool)
-			for _, log := range existingWaterLogs {
-				if log.RecordedOn != nil {
-					existingDates[log.RecordedOn.Format("2006-01-02")] = true
-				}
-			}
-			for dateKey, day := range input.WaterByDate {
-				if _, err := parseChinaDate(dateKey); err != nil {
-					continue
-				}
-				if existingDates[dateKey] {
-					continue
-				}
-				logs := make([]int, 0)
-				for _, amount := range day.Logs {
-					if amount > 0 {
-						logs = append(logs, amount)
-					}
-				}
-				if len(logs) == 0 && day.Total > 0 {
-					logs = []int{day.Total}
-				}
-				for _, amount := range logs {
-					now := time.Now().UTC()
-					recordedOn, _ := parseChinaDate(dateKey)
-					log := &domain.BodyWaterLog{
-						UserID:     userID,
-						AmountMl:   amount,
-						RecordedOn: &recordedOn,
-						SourceType: "imported",
-						CreatedAt:  &now,
-					}
-					if err := s.repo.CreateWaterLog(ctx, log); err == nil {
-						importedWaterCount++
-					}
-				}
-			}
-		}
+	}
+	if validWaterDateCount > 0 {
+		waterImportSkipped = true
+		logger.Warn(ctx, "旧版同步水量缺少来源信息，已跳过饮水同步",
+			slog.String("user_id", userID),
+			slog.Int("valid_date_count", validWaterDateCount),
+		)
 	}
 
 	return map[string]any{
 		"message":               "本地身体指标已同步",
 		"imported_weight_count": importedWeightCount,
 		"imported_water_count":  importedWaterCount,
+		"water_import_skipped":  waterImportSkipped,
 	}, nil
 }
 
@@ -304,7 +303,7 @@ func (s *BodyMetricsService) AddWaterLog(ctx context.Context, userID string, amo
 		UserID:     userID,
 		AmountMl:   amountMl,
 		RecordedOn: &recordedDate,
-		SourceType: "manual",
+		SourceType: domain.ManualWaterSourceType,
 		CreatedAt:  &now,
 	}
 	if err := s.repo.CreateWaterLog(ctx, log); err != nil {
@@ -313,9 +312,10 @@ func (s *BodyMetricsService) AddWaterLog(ctx context.Context, userID string, amo
 	return map[string]any{
 		"message": "喝水已记录",
 		"item": map[string]any{
-			"id":        log.ID,
-			"date":      normalizedDate,
-			"amount_ml": amountMl,
+			"id":          log.ID,
+			"date":        normalizedDate,
+			"amount_ml":   amountMl,
+			"source_type": log.SourceType,
 		},
 	}, nil
 }
@@ -330,7 +330,7 @@ func (s *BodyMetricsService) ResetWaterLogs(ctx context.Context, userID string, 
 		return nil, err
 	}
 	return map[string]any{
-		"message":       "已清空当日喝水记录",
+		"message":       "已清空当日手动饮水记录",
 		"deleted_count": deletedCount,
 		"date":          normalizedDate,
 	}, nil
@@ -583,9 +583,10 @@ func aggregateWaterDaily(rows []domain.BodyWaterLog, startDate, endDate string) 
 		}
 		dateKey := row.RecordedOn.Format("2006-01-02")
 		entry := WaterLogEntry{
-			ID:       row.ID,
-			Date:     dateKey,
-			AmountMl: row.AmountMl,
+			ID:         row.ID,
+			Date:       dateKey,
+			AmountMl:   row.AmountMl,
+			SourceType: row.SourceType,
 		}
 		if row.CreatedAt != nil {
 			recordedAt := row.CreatedAt.In(chinaTZ).Format(time.RFC3339)

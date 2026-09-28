@@ -5,7 +5,7 @@ import { getUserRecipes, deleteUserRecipe, applyUserRecipe, updateUserRecipe, sh
 import { withAuth } from '../../../utils/withAuth'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { HOME_INTAKE_DATA_CHANGED_EVENT } from '../../../utils/home-events'
-import { addWaterToBodyMetricsStorage, calculateFoodRecordItemsWaterMl, refreshHomeDashboardLocalSnapshotFromCloud } from '../../../utils/home-dashboard-local-cache'
+import { refreshHomeDashboardLocalSnapshotFromCloud } from '../../../utils/home-dashboard-local-cache'
 import { getStoredRecordTargetDate } from '../../../utils/record-date'
 import { returnHomeAfterFoodRecord } from '../../../utils/food-record-flow'
 import './index.scss'
@@ -299,7 +299,6 @@ function RecipesPage() {
       Taro.showLoading({ title: '记录中...', mask: true })
       await applyUserRecipe(recipe.id, selectedMealType, 'favorite_recipe')
       Taro.hideLoading()
-      addWaterToBodyMetricsStorage(targetDate, calculateFoodRecordItemsWaterMl(recipe.items || []))
       try {
         Taro.eventCenter.trigger(HOME_INTAKE_DATA_CHANGED_EVENT, { date: targetDate, force: true })
       } catch {

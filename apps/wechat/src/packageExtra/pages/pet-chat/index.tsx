@@ -2,6 +2,7 @@ import { View, Text, Input, ScrollView, Switch, Image } from '@tarojs/components
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Taro, { useDidShow, useLoad } from '@tarojs/taro'
 import {
+  getAccessToken,
   getPetChatSession,
   getLatestPetChatSession,
   getPetSummary,
@@ -31,7 +32,7 @@ import { PetAvatar } from '../../../components/PetAvatar'
 import { PetMarkdown } from './pet-markdown'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { chooseImageWithPrivacy, ensureWeappPrivacyAuthorized, isPrivacyAuthorizeError, showPrivacyAuthorizeFailure } from '../../../utils/weapp-privacy'
-import { freshMealLocation } from '../../../utils/meal-location'
+import { currentMealLocation, rememberMealLocation } from '../../../utils/meal-location'
 import './index.scss'
 
 type ChatRole = 'pet' | 'user'
@@ -210,7 +211,7 @@ function buildHomeMealIntroMessage(context: HomeMealChatContext): ChatMessage {
     id: 'home-meal-intro',
     role: 'pet',
     kind: 'intro',
-    text: `先按首页的基础建议来：${context.basic_advice || '均衡搭配这一餐'}。你还可以补充刚训练完、在食堂或想吃清淡，我再把${context.meal_label}方案调得更具体。`,
+    text: `你从首页带来的餐食：${context.basic_advice || '结合附近和历史餐食选一餐'}。可以补充刚训练完、预算或忌口，我会核对来源，再调整${context.meal_label}选择。`,
   }
 }
 
@@ -299,7 +300,7 @@ function PetChatPage() {
   const historyLoadedRef = useRef(false)
   const routeLoadedRef = useRef(false)
   const [activeRange, setActiveRange] = useState<RangeMode>('week')
-  const [mealLocation, setMealLocation] = useState<PetChatLocation>()
+  const [mealLocation, setMealLocation] = useState<PetChatLocation | undefined>(() => currentMealLocation(getAccessToken() || ''))
   const [locatingMeal, setLocatingMeal] = useState(false)
   const [lastAnalysis, setLastAnalysis] = useState<ChatMessage | null>(null)
   const [sessionID, setSessionID] = useState('')
@@ -351,7 +352,7 @@ function PetChatPage() {
   })
 
   useDidShow(() => {
-    setMealLocation((current) => freshMealLocation(current))
+    setMealLocation(currentMealLocation(getAccessToken() || ''))
     applyThemeNavigationBar(scheme)
     void Promise.all([
       getStatsSummary('week').then(setSummary).catch(() => null),
@@ -405,7 +406,7 @@ function PetChatPage() {
       return
     }
     if (readyImageURLs.length === 0 && classifyDietRecommendationIntent(question, Boolean(latestDietRecommendation))) {
-      setEstimatedCredits(homeMealContext && mealUnlocked ? 0 : 1)
+      setEstimatedCredits(homeMealContext || latestDietRecommendation?.generated_by === 'foodlink-grounded-meals-v1' ? 0 : 1)
       setEstimatingCredits(false)
       return
     }
@@ -583,7 +584,7 @@ function PetChatPage() {
         finish()
       },
     }
-    const location = freshMealLocation(mealLocation)
+    const location = currentMealLocation(getAccessToken() || '')
     if (mealLocation && !location) setMealLocation(undefined)
     streamGeneratePetChat(question, range, sessionID, !sessionID, callbacks, enableThinking, imageUrls, homeMealContext || undefined, location)
   }, [appendMessage, enableThinking, homeMealContext, mealLocation, petName, sessionID, summary, updateMessage])
@@ -591,14 +592,17 @@ function PetChatPage() {
   const locateForMeal = useCallback(async () => {
     if (busyRef.current || locatingMeal) return
     setLocatingMeal(true)
+    const owner = getAccessToken() || ''
     try {
       await ensureWeappPrivacyAuthorized()
       const fix = await Taro.getLocation({ type: 'gcj02' })
-      const location = freshMealLocation({ latitude: fix.latitude, longitude: fix.longitude, accuracy_m: fix.accuracy, captured_at: Date.now(), coordinate_type: 'gcj02' })
+      if (owner !== getAccessToken()) return
+      const location = rememberMealLocation(owner, { latitude: fix.latitude, longitude: fix.longitude, accuracy_m: fix.accuracy, captured_at: Date.now(), coordinate_type: 'gcj02' })
       if (!location) throw new Error('定位精度不足，请重新定位或直接输入学校和校区')
       setMealLocation(location)
       setInput((current) => current.trim() || '帮我结合近期饮食和当前目标，选一下附近这餐吃什么')
     } catch (error) {
+      rememberMealLocation(owner)
       setMealLocation(undefined)
       await showUnifiedApiError(error, '无法获取位置，也可以直接输入学校和校区')
     } finally {
@@ -746,7 +750,7 @@ function PetChatPage() {
             <Text className='pet-chat-home-context__source'>来自首页 · 下一餐建议</Text>
             <Text className='pet-chat-home-context__advice'>基础建议：{homeMealContext.basic_advice || '均衡搭配这一餐'}</Text>
           </View>
-          <Text className='pet-chat-home-context__status'>{mealUnlocked ? '本餐已解锁' : '具体方案 1 积分'}</Text>
+          <Text className='pet-chat-home-context__status'>真实餐食参考免费 · 深入分析按积分</Text>
         </View>
       ) : null}
 
@@ -840,21 +844,23 @@ function PetChatPage() {
                               <Text className='pet-chat-diet-card-title'>{option.title}</Text>
                               {price ? <Text className='pet-chat-diet-card-price'>{price}</Text> : null}
                             </View>
+                            {option.source_label ? <Text className='pet-chat-diet-card-location'>{option.source_label}</Text> : null}
                             {location ? <Text className='pet-chat-diet-card-location'>{location}</Text> : null}
                             {typeof option.distance_km === 'number' ? (
                               <Text className='pet-chat-diet-card-location'>约 {option.distance_km.toFixed(1)} km · {option.location_level === 'campus' || option.location_level === 'school' ? '按校区位置估算' : '直线距离'}</Text>
                             ) : null}
-                            <View className='pet-chat-diet-card-macros'>
+                            {option.nutrition_basis === 'unavailable' ? <Text className='pet-chat-diet-note'>营养数据待补充，不按 0 热量计算</Text> : <View className='pet-chat-diet-card-macros'>
                               <Text>{isEstimated ? '≈' : ''}{Math.round(option.calories || 0)} kcal</Text>
                               <Text>蛋白 {isEstimated ? '≈' : ''}{Math.round(option.protein || 0)}g</Text>
                               <Text>碳水 {isEstimated ? '≈' : ''}{Math.round(option.carbs || 0)}g</Text>
                               <Text>脂肪 {isEstimated ? '≈' : ''}{Math.round(option.fat || 0)}g</Text>
-                            </View>
+                            </View>}
                             <Text className='pet-chat-diet-card-evidence'>
                               {isEstimated
                                 ? `库内估算${portion ? ` · 份量 ${portion}` : ''}${weightMethod ? ` · ${weightMethod}` : ''}${option.weight_confidence ? ` · 置信度 ${Math.round(option.weight_confidence * 100)}%` : ''}`
-                                : option.nutrition_basis === 'nutrition_label' ? '包装营养标签记录' : '餐食库营养记录'}
+                                : option.source === 'food_record' ? '本人历史摄入记录 · 非当前在售证明' : option.nutrition_basis === 'unavailable' ? '已收录商家餐食 · 营养和份量待确认' : option.nutrition_basis === 'nutrition_label' ? '包装营养标签记录' : '餐食库营养记录'}
                             </Text>
+                            {option.source === 'food_record' ? <Text className='pet-chat-diet-note'>{option.items.map(item => `${item.name} ${item.amount}`).join(' + ')}</Text> : null}
                             <Text className='pet-chat-diet-card-reason'>{option.reason}</Text>
                             {option.decision_score ? (
                               <Text className='pet-chat-diet-card-score'>该取向匹配度 {Math.round(option.decision_score)} 分</Text>
@@ -879,7 +885,7 @@ function PetChatPage() {
           <View className='pet-chat-location-button' onClick={() => void locateForMeal()}>
             {locatingMeal ? <View className='pet-chat-location-spinner' /> : <Text>{mealLocation ? '已使用当前位置 · 更新' : '使用当前位置'}</Text>}
           </View>
-          {mealLocation ? <Text className='pet-chat-location-clear' onClick={() => setMealLocation(undefined)}>取消定位</Text> : <Text className='pet-chat-location-hint'>查附近餐食，也可直接说学校</Text>}
+          {mealLocation ? <Text className='pet-chat-location-clear' onClick={() => { rememberMealLocation(getAccessToken() || ''); setMealLocation(undefined) }}>取消定位</Text> : <Text className='pet-chat-location-hint'>可先选历史餐食，定位后加入附近</Text>}
         </View>
         <View className='pet-chat-thinking-switch-row'>
           <View className='pet-chat-thinking-switch-copy'>

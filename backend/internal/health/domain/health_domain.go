@@ -1,6 +1,24 @@
 package domain
 
-import "time"
+import (
+	"strings"
+	"time"
+)
+
+const (
+	FoodRecordWaterSourcePrefix = "ai_food_record:"
+	LegacyFoodWaterSourceType   = "ai"
+	ManualWaterSourceType       = "manual"
+	ImportedWaterSourceType     = "imported"
+)
+
+func IsFoodDerivedWaterSource(sourceType string) bool {
+	return sourceType == LegacyFoodWaterSourceType || strings.HasPrefix(sourceType, FoodRecordWaterSourcePrefix)
+}
+
+func IsEditableWaterSource(sourceType string) bool {
+	return sourceType == ManualWaterSourceType || sourceType == ImportedWaterSourceType
+}
 
 // BodyWeightRecord — table: user_weight_records
 type BodyWeightRecord struct {
@@ -219,25 +237,26 @@ type DietRecommendationScope struct {
 }
 
 type CampusDietSearchFilter struct {
-	ViewerID         string
-	Location         *DietLocation
-	RadiusKM         float64
-	MerchantOnly     bool
-	CampusOnly       bool
-	SchoolID         string
-	CampusID         string
-	Keyword          string
-	CanteenName      string
-	IncludeSourceIDs []string
-	ExcludeSourceIDs []string
-	MaxCalories      *float64
-	MinProtein       *float64
-	MaxFat           *float64
-	MaxPrice         *float64
-	TargetCalories   *float64
-	SortBy           string
-	Limit            int
-	Offset           int
+	AllowUnknownNutrition bool
+	ViewerID              string
+	Location              *DietLocation
+	RadiusKM              float64
+	MerchantOnly          bool
+	CampusOnly            bool
+	SchoolID              string
+	CampusID              string
+	Keyword               string
+	CanteenName           string
+	IncludeSourceIDs      []string
+	ExcludeSourceIDs      []string
+	MaxCalories           *float64
+	MinProtein            *float64
+	MaxFat                *float64
+	MaxPrice              *float64
+	TargetCalories        *float64
+	SortBy                string
+	Limit                 int
+	Offset                int
 }
 
 type DietRecommendationSchool struct {

@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	healthdomain "food_link/backend/internal/health/domain"
 	membershipdomain "food_link/backend/internal/membership/domain"
 	petdomain "food_link/backend/internal/pet/domain"
 	"food_link/backend/internal/pet/repo"
@@ -26,6 +27,21 @@ type fakePetRepo struct {
 	createEventCalls int
 	balance          int
 	nextID           int
+}
+
+type fakeFoodWaterProvider struct {
+	logs      []healthdomain.BodyWaterLog
+	err       error
+	callCount int
+	startDate string
+	endDate   string
+}
+
+func (f *fakeFoodWaterProvider) ListDerivedFoodWaterLogs(_ context.Context, _, startDate, endDate string) ([]healthdomain.BodyWaterLog, error) {
+	f.callCount++
+	f.startDate = startDate
+	f.endDate = endDate
+	return f.logs, f.err
 }
 
 func newFakePetRepo() *fakePetRepo {
@@ -173,7 +189,7 @@ func (f *fakePetRepo) GetLatestFoodRecordDate(ctx context.Context, userID string
 	return latest, nil
 }
 
-func (f *fakePetRepo) SumWaterByDate(ctx context.Context, userID, date string) (int, error) {
+func (f *fakePetRepo) SumEditableWaterByDate(ctx context.Context, userID, date string) (int, error) {
 	return f.waterByDate[date], nil
 }
 
@@ -356,6 +372,38 @@ func TestSummaryCreatesStablePetAndSingleOfflineEvent(t *testing.T) {
 	assert.Equal(t, first.Pet.ID, second.Pet.ID)
 	assert.Equal(t, 1, fake.createPetCalls)
 	assert.Equal(t, 1, fake.createEventCalls)
+}
+
+func TestCalculateDailyScoreCombinesEditableAndCanonicalFoodWater(t *testing.T) {
+	fake := newFakePetRepo()
+	fake.waterByDate["2026-09-28"] = 1200
+	provider := &fakeFoodWaterProvider{logs: []healthdomain.BodyWaterLog{
+		{ID: "food-water:record-1", AmountMl: 180, SourceType: healthdomain.FoodRecordWaterSourcePrefix + "record-1"},
+		{ID: "food-water:record-2", AmountMl: 140, SourceType: healthdomain.FoodRecordWaterSourcePrefix + "record-2"},
+	}}
+	svc := NewService(fake)
+	svc.ConfigureFoodWaterProvider(provider)
+
+	score := svc.calculateDailyScore(context.Background(), "user-1", "2026-09-28")
+
+	assert.Equal(t, 1520, score.Details["water_ml"])
+	assert.Equal(t, true, score.Details["water_good"])
+	assert.Equal(t, 1, provider.callCount)
+	assert.Equal(t, "2026-09-28", provider.startDate)
+	assert.Equal(t, "2026-09-28", provider.endDate)
+}
+
+func TestCalculateDailyScoreKeepsEditableWaterWhenCanonicalProviderFails(t *testing.T) {
+	fake := newFakePetRepo()
+	fake.waterByDate["2026-09-28"] = 900
+	provider := &fakeFoodWaterProvider{err: errors.New("food water unavailable")}
+	svc := NewService(fake)
+	svc.ConfigureFoodWaterProvider(provider)
+
+	score := svc.calculateDailyScore(context.Background(), "user-1", "2026-09-28")
+
+	assert.Equal(t, 900, score.Details["water_ml"])
+	assert.NotContains(t, score.Details, "water_good")
 }
 
 func TestSummaryShowsLowPowerWhenFoodRecordsStop(t *testing.T) {

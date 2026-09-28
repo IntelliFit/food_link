@@ -5,15 +5,18 @@ import (
 	"errors"
 	"fmt"
 	"hash/fnv"
+	"log/slog"
 	"math"
 	"sort"
 	"strings"
 	"time"
 	"unicode/utf8"
 
+	healthdomain "food_link/backend/internal/health/domain"
 	membershipdomain "food_link/backend/internal/membership/domain"
 	petdomain "food_link/backend/internal/pet/domain"
 	"food_link/backend/internal/pet/repo"
+	"food_link/backend/pkg/logger"
 )
 
 const (
@@ -45,7 +48,7 @@ type PetRepo interface {
 	ListFoodRecordsByDate(ctx context.Context, userID, date string) ([]repo.FoodRecord, error)
 	ListRecentFoodRecords(ctx context.Context, userID string, start, end time.Time) ([]repo.FoodRecord, error)
 	GetLatestFoodRecordDate(ctx context.Context, userID string, beforeOrOn string) (string, error)
-	SumWaterByDate(ctx context.Context, userID, date string) (int, error)
+	SumEditableWaterByDate(ctx context.Context, userID, date string) (int, error)
 	SumExerciseByDate(ctx context.Context, userID, date string) (int, error)
 	GetDailyScore(ctx context.Context, userID, date string) (*petdomain.UserPetDailyScore, error)
 	CreateDailyScore(ctx context.Context, row *petdomain.UserPetDailyScore) (bool, error)
@@ -63,6 +66,7 @@ type Service struct {
 	repo                 PetRepo
 	storage              PetAvatarStorage
 	pixelAvatarGenerator PixelAvatarGenerator
+	foodWaterProvider    FoodWaterProvider
 	now                  func() time.Time
 }
 
@@ -79,12 +83,20 @@ type PixelAvatarGenerator interface {
 	GeneratePixelAvatar(ctx context.Context, source []byte) ([]byte, error)
 }
 
+type FoodWaterProvider interface {
+	ListDerivedFoodWaterLogs(ctx context.Context, userID, startDate, endDate string) ([]healthdomain.BodyWaterLog, error)
+}
+
 func (s *Service) ConfigureStorage(storage PetAvatarStorage) {
 	s.storage = storage
 }
 
 func (s *Service) ConfigurePixelAvatarGenerator(generator PixelAvatarGenerator) {
 	s.pixelAvatarGenerator = generator
+}
+
+func (s *Service) ConfigureFoodWaterProvider(provider FoodWaterProvider) {
+	s.foodWaterProvider = provider
 }
 
 type Summary struct {
@@ -721,7 +733,7 @@ type calculatedScore struct {
 
 func (s *Service) calculateDailyScore(ctx context.Context, userID, date string) calculatedScore {
 	records, _ := s.repo.ListFoodRecordsByDate(ctx, userID, date)
-	waterMl, _ := s.repo.SumWaterByDate(ctx, userID, date)
+	waterMl := s.totalWaterByDate(ctx, userID, date)
 	exerciseKcal, _ := s.repo.SumExerciseByDate(ctx, userID, date)
 	totalCalories, totalProtein := 0.0, 0.0
 	mealTypes := map[string]struct{}{}
@@ -773,6 +785,36 @@ func (s *Service) calculateDailyScore(ctx context.Context, userID, date string) 
 		exp = 5
 	}
 	return calculatedScore{HabitScore: score, ExpGained: exp, Details: details}
+}
+
+func (s *Service) totalWaterByDate(ctx context.Context, userID, date string) int {
+	total, err := s.repo.SumEditableWaterByDate(ctx, userID, date)
+	if err != nil {
+		logger.Warn(ctx, "读取宠物手动饮水量失败",
+			slog.String("user_id", userID),
+			slog.String("date", date),
+			logger.Err(err),
+		)
+		total = 0
+	}
+	if s.foodWaterProvider == nil {
+		return total
+	}
+	derivedLogs, err := s.foodWaterProvider.ListDerivedFoodWaterLogs(ctx, userID, date, date)
+	if err != nil {
+		logger.Warn(ctx, "读取宠物饮食含水量失败",
+			slog.String("user_id", userID),
+			slog.String("date", date),
+			logger.Err(err),
+		)
+		return total
+	}
+	for _, log := range derivedLogs {
+		if log.AmountMl > 0 {
+			total += log.AmountMl
+		}
+	}
+	return total
 }
 
 type petAppearance struct {

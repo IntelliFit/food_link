@@ -25,7 +25,7 @@ import {
 } from '../../../utils/food-display-image'
 import { withAuth } from '../../../utils/withAuth'
 import { HOME_INTAKE_DATA_CHANGED_EVENT } from '../../../utils/home-events'
-import { addWaterToBodyMetricsStorage, calculateFoodRecordItemsWaterMl, refreshHomeDashboardLocalSnapshotFromCloud } from '../../../utils/home-dashboard-local-cache'
+import { refreshHomeDashboardLocalSnapshotFromCloud } from '../../../utils/home-dashboard-local-cache'
 import {
   getRecommendedMealTypeWithFallback,
   inferDefaultMealTypeFromLocalTime,
@@ -1159,9 +1159,6 @@ function RecordManualPage() {
       })
 
       const targetDate = getStoredRecordTargetDate()
-      if (!saveResult.already_saved) {
-        addWaterToBodyMetricsStorage(targetDate, calculateFoodRecordItemsWaterMl(items))
-      }
       try {
         Taro.removeStorageSync('campus_quick_record_source')
       } catch {

@@ -20,4 +20,10 @@ describe('home greeting pet layout', () => {
   it('keeps tall ears and headwear outside the crop boundary', () => {
     expect(styleSource).toMatch(/\.greeting-pet\s*{[\s\S]*?height:\s*116rpx;[\s\S]*?overflow:\s*visible;/)
   })
+
+  it('keeps one pet entry in the greeting instead of adding a second floating pet after scrolling', () => {
+    expect(pageSource).toContain('<GreetingSection')
+    expect(pageSource).toContain('petAvatar={petHidden ? undefined : (')
+    expect(pageSource).not.toContain('FloatingPetEntry')
+  })
 })

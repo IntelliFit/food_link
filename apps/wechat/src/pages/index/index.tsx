@@ -1,5 +1,6 @@
 import SleepCard from './components/SleepCard'
-import { View, Text, Input, Image, Canvas, PageMeta, Swiper, SwiperItem, Button } from '@tarojs/components'
+import NextMealRecommendations from './components/NextMealRecommendations'
+import { View, Text, Input, Image, Canvas, PageMeta, Swiper, SwiperItem, Button, ScrollView } from '@tarojs/components'
 import { CAFETERIA_HERO_BG_URL, GOOSE_DUCK_CHICKEN_BG_URL } from '../../utils/static-asset-cdn-url'
 import * as React from 'react'
 import Taro, { useDidHide, useDidShow, useShareAppMessage, useShareTimeline } from '@tarojs/taro'
@@ -15,6 +16,7 @@ import {
   getUnlimitedQRCode,
   getFriendInviteProfile,
   getHealthProfile,
+  type DietRecommendationOption,
   getSharedFoodRecord,
   getFoodRecordById,
   getPetSummary,
@@ -40,6 +42,7 @@ import {
   type PetProfile,
   type BodyMetricWeightEntry,
   type BodyMetricWaterDay,
+  type BodyMetricWaterLogItem,
   type HomeFoodExpiryItem,
   type HomeFoodExpirySummary,
   type SupplementDashboardSummary,
@@ -120,12 +123,11 @@ import {
   type MealPosterSharePayload,
 } from './components'
 import OnboardingGuide from '../../components/OnboardingGuide'
-import { FloatingPetEntry } from '../../components/FloatingPetEntry'
 import { WeeklyRecapEntry } from '../../components/WeeklyRecapEntry'
 import { useSocialInbox } from '../../hooks/useSocialInbox'
 import { socialInboxTotal } from '../../utils/social-inbox'
 import { HomeModule, HomeModuleManager } from './components/HomeModuleManager'
-import { homeLayoutOwner, homeModuleLocks, readHomeModuleLayout, saveHomeModuleLayout } from './utils/home-module-layout'
+import { homeLayoutOwner, homeModuleLocks, isHomeQuickStatVisible, readHomeModuleLayout, saveHomeModuleLayout } from './utils/home-module-layout'
 import { PetAvatar } from '../../components/PetAvatar'
 import { isHealthProfileReminderSnoozed, snoozeHealthProfileReminder } from '../../utils/health-profile-reminder'
 import {
@@ -155,7 +157,6 @@ import {
   type HomeMicronutrientKey,
 } from './utils/micronutrientPreferences'
 import {
-  buildNextMealGuidance,
   nextMealLabel,
   normalizeNextMainMeal,
 } from './utils/next-meal-guidance'
@@ -579,6 +580,7 @@ function normalizeBodyMetricsStorageKeys(metrics: BodyMetricsStorage): BodyMetri
     } else {
       const pick = merged.total >= v.total ? merged : { ...v, date: nk }
       nextWater[nk] = {
+        ...pick,
         date: nk,
         total: Math.max(merged.total, v.total),
         logs: pick.logs,
@@ -668,13 +670,18 @@ function applyCloudBodyMetrics(storage: BodyMetricsStorage, cloud: {
       const d = bmDateKey(day.date)
       const cloudTotal = Math.max(0, Number(day.total) || 0)
       const cloudLogs = (day.logs || []).map((value) => Math.max(0, Number(value) || 0))
-      const local = next.waterByDate[d]
-      const localTotal = Math.max(0, Number(local?.total) || 0)
-      const useLocal = localTotal > cloudTotal
       next.waterByDate[d] = {
+        ...day,
         date: d,
-        total: useLocal ? localTotal : cloudTotal,
-        logs: useLocal ? (local?.logs || []) : cloudLogs
+        total: cloudTotal,
+        logs: cloudLogs,
+        log_items: Array.isArray(day.log_items)
+          ? day.log_items.map(item => ({
+              ...item,
+              date: bmDateKey(item.date || day.date),
+              amount_ml: Math.max(0, Number(item.amount_ml) || 0),
+            }))
+          : undefined,
       }
     }
   }
@@ -687,76 +694,34 @@ function getTodayWater(metrics: BodyMetricsStorage, date: string): BodyMetricWat
   return metrics.waterByDate[d] || metrics.waterByDate[date] || { date, total: 0, logs: [] }
 }
 
-function normalizeMetricNumber(value: unknown): number {
-  const n = Number(value)
-  return Number.isFinite(n) ? n : 0
+function isEditableWaterItem(item: BodyMetricWaterLogItem): boolean {
+  return item.source_type === 'manual' || item.source_type === 'imported'
 }
 
-function foodRecordItemWaterMl(item: FoodRecord['items'][number]): number {
-  const waterMl = normalizeMetricNumber(item.water_ml ?? item.waterMl ?? item.nutrients?.water_ml ?? item.nutrients?.waterMl)
-  if (waterMl <= 0) return 0
-  const weight = normalizeMetricNumber(item.weight)
-  const cappedWaterMl = weight > 0 ? Math.min(waterMl, weight) : waterMl
-  const ratio = normalizeMetricNumber(item.ratio)
-  if (ratio > 0) return cappedWaterMl * ratio / 100
-  const intake = normalizeMetricNumber(item.intake)
-  if (intake > 0 && weight > 0) return cappedWaterMl * intake / weight
-  if (intake === 0 && weight === 0) return cappedWaterMl
-  return 0
+function editableWaterTotal(day: BodyMetricWaterDay): number {
+  if (!Array.isArray(day.log_items)) return 0
+  return day.log_items
+    .filter(isEditableWaterItem)
+    .reduce((sum, item) => sum + Math.max(0, Number(item.amount_ml) || 0), 0)
 }
 
-function calculateFoodRecordWaterMl(record: FoodRecord | null | undefined): number {
-  const total = (record?.items || []).reduce((sum, item) => sum + foodRecordItemWaterMl(item), 0)
-  return Math.max(0, Math.round(total))
-}
-
-function reduceWaterForDate(metrics: BodyMetricsStorage, date: string, amount: number, expectedMaxTotal?: number): BodyMetricsStorage {
-  const amountMl = Math.max(0, Math.round(amount))
+function addWaterToMetrics(metrics: BodyMetricsStorage, date: string, item: BodyMetricWaterLogItem): BodyMetricsStorage {
   const key = bmDateKey(date)
   const current = getTodayWater(metrics, date)
-  const currentTotal = Math.max(0, Number(current.total) || 0)
-  const targetTotal = Math.max(0, Math.min(
-    typeof expectedMaxTotal === 'number' && Number.isFinite(expectedMaxTotal)
-      ? expectedMaxTotal
-      : currentTotal - amountMl,
-    currentTotal
-  ))
-  const delta = currentTotal - targetTotal
-  if (delta <= 0) return metrics
-
-  let remaining = delta
-  const logs = [...(current.logs || [])]
-  for (let i = logs.length - 1; i >= 0 && remaining > 0; i--) {
-    const value = Math.max(0, Number(logs[i]) || 0)
-    if (value <= remaining) {
-      remaining -= value
-      logs.splice(i, 1)
-    } else {
-      logs[i] = value - remaining
-      remaining = 0
-    }
-  }
-
-  return {
-    ...metrics,
-    waterByDate: {
-      ...metrics.waterByDate,
-      [key]: {
+  const amount = Math.max(0, Math.round(Number(item.amount_ml) || 0))
+  const currentItems = Array.isArray(current.log_items)
+    ? current.log_items
+    : (current.logs || []).map((value, index) => ({
+        id: `local-water-${key}-${index}`,
         date: key,
-        total: targetTotal,
-        logs
-      }
-    }
-  }
-}
-
-function addWaterToMetrics(metrics: BodyMetricsStorage, date: string, amount: number): BodyMetricsStorage {
-  const key = bmDateKey(date)
-  const current = getTodayWater(metrics, date)
+        amount_ml: Math.max(0, Number(value) || 0),
+        source_type: 'manual',
+      }))
   const updated: BodyMetricWaterDay = {
     date: key,
     total: current.total + amount,
-    logs: [...current.logs, amount]
+    logs: [...current.logs, amount],
+    log_items: [...currentItems, { ...item, date: key, amount_ml: amount, source_type: item.source_type || 'manual' }],
   }
   return {
     ...metrics,
@@ -767,11 +732,24 @@ function addWaterToMetrics(metrics: BodyMetricsStorage, date: string, amount: nu
   }
 }
 
-function clearWaterForDate(metrics: BodyMetricsStorage, date: string): BodyMetricsStorage {
-  const next = { ...metrics, waterByDate: { ...metrics.waterByDate } }
-  delete next.waterByDate[bmDateKey(date)]
-  delete next.waterByDate[date]
-  return next
+function clearEditableWaterForDate(metrics: BodyMetricsStorage, date: string): BodyMetricsStorage {
+  const key = bmDateKey(date)
+  const current = getTodayWater(metrics, date)
+  if (!Array.isArray(current.log_items)) return metrics
+  const readonlyItems = current.log_items.filter(item => !isEditableWaterItem(item))
+  const readonlyLogs = readonlyItems.map(item => Math.max(0, Math.round(Number(item.amount_ml) || 0)))
+  return {
+    ...metrics,
+    waterByDate: {
+      ...metrics.waterByDate,
+      [key]: {
+        date: key,
+        total: readonlyLogs.reduce((sum, amount) => sum + amount, 0),
+        logs: readonlyLogs,
+        log_items: readonlyItems,
+      },
+    },
+  }
 }
 
 function getDismissedBackfillDates(): string[] {
@@ -875,6 +853,7 @@ function IndexPage() {
   const [isSwitchingDate, setIsSwitchingDate] = React.useState(false)
   const [petHidden, setPetHidden] = React.useState(getStoredPetHidden)
   const [petSummary, setPetSummary] = React.useState<PetSummary | null>(null)
+  const mealGuidanceRequestSeq = React.useRef(0)
   const [analyzeReminder, setAnalyzeReminder] = React.useState<AnalyzeTaskReminderState>(readAnalyzeTaskReminderState)
   const [membershipStatus, setMembershipStatus] = React.useState<MembershipStatus | null>(null)
   const [rewardCenter, setRewardCenter] = React.useState<RewardCenterResponse | null>(null)
@@ -1368,16 +1347,17 @@ function IndexPage() {
     clearHomeAuxiliaryTimers()
     setPetHidden(getStoredPetHidden())
     setHiddenMicronutrientKeys(getStoredHiddenMicronutrientKeys())
-    if (getAccessToken()) {
+    const guidanceOwner = getAccessToken()
+    const guidanceSeq = ++mealGuidanceRequestSeq.current
+    if (guidanceOwner) {
       scheduleHomeAuxiliaryTask(async () => {
-        await getHealthProfile()
-          .then((profile) => {
-            const status = profile.onboarding_status || (profile.onboarding_completed === true ? 'completed' : 'pending')
-            setShowHealthProfilePrompt(status !== 'completed' && !isHealthProfileReminderSnoozed())
-          })
-          .catch(() => {
-            // 档案提示为增强信息，读取失败不影响首页主链路。
-          })
+        const [profileResult] = await Promise.allSettled([getHealthProfile()])
+        if (guidanceOwner !== getAccessToken() || guidanceSeq !== mealGuidanceRequestSeq.current) return
+        const profile = profileResult.status === 'fulfilled' ? profileResult.value : null
+        if (profile) {
+          const status = profile.onboarding_status || (profile.onboarding_completed === true ? 'completed' : 'pending')
+          setShowHealthProfilePrompt(status !== 'completed' && !isHealthProfileReminderSnoozed())
+        }
       }, 180)
     } else {
       setShowHealthProfilePrompt(false)
@@ -1608,8 +1588,6 @@ function IndexPage() {
       setHomeAchievement(localSnapshot.achievement || { streak_days: 0, green_days: 0 })
       setTargetForm(createTargetForm(localSnapshot.intakeData || DEFAULT_INTAKE))
       setWeekHeatmapCells(buildWeekHeatmapCellsFromStorage())
-      // 从 storage 重新加载身体指标，使饮食记录保存后的乐观饮水更新立即生效
-      setBodyMetrics(getStoredBodyMetrics())
       if (payload?.force) {
         void loadDashboard(changedDate, true, true)
       }
@@ -2083,7 +2061,6 @@ function IndexPage() {
   const handleMealDelete = async () => {
     if (!mealActionRecordId) return
     const currentDate = selectedDateRef.current || formatDateKey(new Date())
-    const waterTotalBeforeDelete = getTodayWater(bodyMetrics, currentDate).total
     const { confirm } = await Taro.showModal({
       title: '确认删除',
       content: '确定要删除这条饮食记录吗？删除后不可恢复。',
@@ -2094,16 +2071,6 @@ function IndexPage() {
 
     Taro.showLoading({ title: '删除中...', mask: true })
     try {
-      let deletedWaterMl = calculateFoodRecordWaterMl(getCachedMealFullRecord(mealActionRecordId))
-      if (deletedWaterMl <= 0) {
-        try {
-          const res = await getFoodRecordById(mealActionRecordId)
-          deletedWaterMl = calculateFoodRecordWaterMl(res.record)
-        } catch {
-          deletedWaterMl = 0
-        }
-      }
-
       await deleteFoodRecord(mealActionRecordId)
 
       // 先从当前 meals 中移除被删记录，做乐观更新
@@ -2124,14 +2091,7 @@ function IndexPage() {
 
       // 重新从后端拉取当日 dashboard，确保能量、宏量等数据准确
       await syncDashboardForDate(currentDate)
-      if (deletedWaterMl > 0) {
-        const expectedMaxWaterTotal = Math.max(0, waterTotalBeforeDelete - deletedWaterMl)
-        setBodyMetrics(prev => {
-          const next = reduceWaterForDate(prev, currentDate, deletedWaterMl, expectedMaxWaterTotal)
-          saveBodyMetrics(next)
-          return next
-        })
-      }
+      await refreshBodyMetrics()
 
       try {
         Taro.eventCenter.trigger(HOME_INTAKE_DATA_CHANGED_EVENT)
@@ -2151,7 +2111,7 @@ function IndexPage() {
   const handleRecordEditSuccess = () => {
     setShowRecordEditModal(false)
     const raw = selectedDateRef.current || formatDateKey(new Date())
-    syncDashboardForDate(raw)
+    void Promise.all([syncDashboardForDate(raw), refreshBodyMetrics()])
   }
 
   const openFoodExpiryList = () => {
@@ -2390,10 +2350,10 @@ function IndexPage() {
 
     setSavingWater(true)
     try {
-      await addBodyWaterLog(amount, recordDate)
+      const response = await addBodyWaterLog(amount, recordDate)
 
       setBodyMetrics(prev => {
-        const next = addWaterToMetrics(prev, recordDate, amount)
+        const next = addWaterToMetrics(prev, recordDate, response.item)
         saveBodyMetrics(next)
         return next
       })
@@ -2430,14 +2390,15 @@ function IndexPage() {
       await resetBodyWaterLogs(recordDate)
 
       setBodyMetrics(prev => {
-        const next = clearWaterForDate(prev, recordDate)
+        const next = clearEditableWaterForDate(prev, recordDate)
         saveBodyMetrics(next)
         return next
       })
+      void refreshBodyMetrics()
 
       setShowWaterEditor(false)
       setWaterInputFocused(false)
-      Taro.showToast({ title: '已清空今日喝水记录', icon: 'success' })
+      Taro.showToast({ title: '已清空手动饮水', icon: 'success' })
     } catch (error) {
       await showUnifiedApiError(error, '清空失败')
     }
@@ -2502,6 +2463,10 @@ function IndexPage() {
     getTodayWater(bodyMetrics, waterEditorDate || selectedDate),
     [bodyMetrics, selectedDate, waterEditorDate]
   )
+  const waterEditorEditableTotal = React.useMemo(
+    () => editableWaterTotal(waterEditorWater),
+    [waterEditorWater]
+  )
 
   const waterProgress = calculateProgressPercent(todayWater.total, bodyMetrics.waterGoalMl)
 
@@ -2522,32 +2487,18 @@ function IndexPage() {
     petSummary?.meal_prompt?.meal_type || inferDefaultMealTypeFromLocalTime()
   )
   const nextMealName = nextMealLabel(nextMealType)
-  const nextMealGuidance = React.useMemo(() => buildNextMealGuidance({
-    calories: { current: totalCurrent, target: totalTarget },
-    protein: { current: proteinCur, target: proteinTargetRaw },
-    carbs: { current: carbsCur, target: carbsTargetRaw },
-    fat: { current: fatCur, target: fatTargetRaw },
-  }), [
-    carbsCur,
-    carbsTargetRaw,
-    fatCur,
-    fatTargetRaw,
-    proteinCur,
-    proteinTargetRaw,
-    totalCurrent,
-    totalTarget,
-  ])
   const showNextMealGuidance = !isGuest && isTodayRecordDate(selectedDate)
-  const openNextMealGuidance = React.useCallback(() => {
+  const openNextMealGuidance = React.useCallback((option?: DietRecommendationOption) => {
+    const detail = option ? option.items.map(item => `${item.name} ${item.amount}`).join(' + ') : ''
     openPetChat({
       source: 'home_next_meal',
       date: selectedDate,
       mealType: nextMealType,
       mealLabel: nextMealName,
-      basicAdvice: nextMealGuidance.title,
-      starterQuestion: `今天${nextMealName}吃什么？请按“${nextMealGuidance.title}”先给我一个具体方案，我还可以补充训练和用餐场景。`,
+      basicAdvice: option ? `${option.source_label}：${detail}` : '结合附近和本人历史餐食选一餐',
+      starterQuestion: option ? `帮我调整今天的${nextMealName}。我选的首页餐食：${detail}；来源：${option.source_label}；餐食ID：${option.source_id}。请先核对这份餐食，再结合我补充的需求调整。` : `请综合当前位置和我历史吃过的餐食，为${nextMealName}选2–3个真实方案。`,
     })
-  }, [nextMealGuidance.title, nextMealName, nextMealType, selectedDate])
+  }, [nextMealName, nextMealType, selectedDate])
 
   const waterDraftMl = parseCompleteNumber(waterInput)
   const showWaterAddFooter =
@@ -3071,7 +3022,7 @@ function IndexPage() {
   }, [homeExperienceConfig.mode])
 
   const isWellnessMode = homeExperienceConfig.mode === 'wellness'
-  const moduleLocks = homeModuleLocks(supplementSummary.planned_count > 0, expirySummary.items.some(item => ['overdue', 'today', 'soon'].includes(item.urgency_level)))
+  const moduleLocks = homeModuleLocks(expirySummary.items.some(item => ['overdue', 'today', 'soon'].includes(item.urgency_level)))
 
   return (
     <View
@@ -3173,31 +3124,7 @@ function IndexPage() {
 
         <HomeModule id='nextMeal' layout={moduleLayout} locks={moduleLocks}>
         {showNextMealGuidance && (
-          <View
-            className={`next-meal-guidance${dashboardBusy ? ' is-loading' : ''}`}
-            onClick={dashboardBusy ? undefined : openNextMealGuidance}
-          >
-            {dashboardBusy ? (
-              <View className='next-meal-guidance__skeleton' aria-label='正在准备下一餐建议'>
-                <View className='next-meal-guidance__skeleton-short' />
-                <View className='next-meal-guidance__skeleton-long' />
-                <View className='next-meal-guidance__skeleton-medium' />
-              </View>
-            ) : (
-              <>
-                <View className='next-meal-guidance__head'>
-                  <Text className='next-meal-guidance__kicker'>下一餐 · {nextMealName}</Text>
-                  <Text className='next-meal-guidance__badge'>基础建议</Text>
-                </View>
-                <Text className='next-meal-guidance__title'>{nextMealGuidance.title}</Text>
-                <Text className='next-meal-guidance__detail'>{nextMealGuidance.detail}</Text>
-                <View className='next-meal-guidance__footer'>
-                  <Text className='next-meal-guidance__cost'>具体方案 1 积分</Text>
-                  <Text className='next-meal-guidance__action'>查看并调整 ›</Text>
-                </View>
-              </>
-            )}
-          </View>
+          <NextMealRecommendations mealType={nextMealType} mealName={nextMealName} refreshKey={`${selectedDate}:${totalCurrent}:${proteinCur}:${carbsCur}:${fatCur}`} onAdjust={openNextMealGuidance} />
         )}
 
         </HomeModule>
@@ -3502,10 +3429,17 @@ function IndexPage() {
         </HomeModule>
 
         <HomeModule id='body' layout={moduleLayout} locks={moduleLocks}>
-        {/* 体重/喝水状态卡片 */}
-        <View className='body-status-section home-experience-card'>
+        {/* 体重、喝水、运动与睡眠快捷卡片 */}
+        <ScrollView
+          className={`body-status-scroll body-status-scroll--count-${moduleLayout.quickStats.length}`}
+          scrollX={moduleLayout.quickStats.length === 4}
+          enhanced
+          showScrollbar={false}
+        >
+        <View className={`body-status-section home-experience-card body-status-section--count-${moduleLayout.quickStats.length}`}>
           {/* 体重卡片 */}
-          <View className='body-status-card weight-card' onClick={() => openBodyMetricRecord('weight')} onLongPress={openWeightEditor}>
+          {isHomeQuickStatVisible(moduleLayout, 'weight') && (
+          <View className='body-status-card weight-card' role='button' aria-label='记录体重' onClick={() => openBodyMetricRecord('weight')} onLongPress={openWeightEditor}>
             <View className='body-status-header'>
               <View className='body-status-title-wrap'>
                 <Text className='iconfont icon-weight-scale' style={{ marginRight: '6rpx', fontSize: '26rpx', color: '#6b7280' }} />
@@ -3542,9 +3476,11 @@ function IndexPage() {
                   : '点击记录体重'}
             </Text>
           </View>
+          )}
 
           {/* 喝水卡片 */}
-          <View className='body-status-card water-card' onClick={() => openBodyMetricRecord('water')} onLongPress={openWaterEditor}>
+          {isHomeQuickStatVisible(moduleLayout, 'water') && (
+          <View className='body-status-card water-card' role='button' aria-label='记录喝水' onClick={() => openBodyMetricRecord('water')} onLongPress={openWaterEditor}>
             <View className='body-status-header'>
               <View className='body-status-title-wrap'>
                 <Text className='iconfont icon-drink' style={{ marginRight: '6rpx', fontSize: '26rpx', color: '#5c9ed4' }} />
@@ -3570,9 +3506,11 @@ function IndexPage() {
               {dashboardBusy || isGuest ? '点击记录喝水' : `${Math.round(animatedWaterProgress)}% / 目标 ${bodyMetrics.waterGoalMl}ml`}
             </Text>
           </View>
+          )}
 
           {/* 运动卡片 */}
-          <View className='body-status-card exercise-card' onClick={() => openBodyMetricRecord('exercise')} onLongPress={openExerciseRecord}>
+          {isHomeQuickStatVisible(moduleLayout, 'exercise') && (
+          <View className='body-status-card exercise-card' role='button' aria-label='记录运动' onClick={() => openBodyMetricRecord('exercise')} onLongPress={openExerciseRecord}>
             <View className='body-status-header'>
               <View className='body-status-title-wrap'>
                 <Text className='iconfont icon-dumbbell' style={{ marginRight: '6rpx', fontSize: '26rpx', color: '#f0985c' }} />
@@ -3600,12 +3538,14 @@ function IndexPage() {
               点击记录运动
             </Text>
           </View>
+          )}
+
+          {isHomeQuickStatVisible(moduleLayout, 'sleep') && (
+            <SleepCard key={`${selectedDate}:${isGuest}`} date={selectedDate} guest={isGuest} compact />
+          )}
         </View>
+        </ScrollView>
 
-        </HomeModule>
-
-        <HomeModule id='sleep' layout={moduleLayout} locks={moduleLocks}>
-          <SleepCard key={`${selectedDate}:${isGuest}`} date={selectedDate} guest={isGuest} />
         </HomeModule>
 
         <HomeModule id='meals' layout={moduleLayout} locks={moduleLocks}>
@@ -3880,10 +3820,6 @@ function IndexPage() {
         catch { void Taro.showToast({ title: '布局未能保存，请重试', icon: 'none' }) }
       }}
       />}
-      {!petHidden && !isGuest && <FloatingPetEntry pet={petSummary?.pet} mood={petMood} state={petState} reminder={petAnalyzeReminder} onReminderPress={handlePetAnalyzeReminderPress}
-        suppressed={homePageScrollLocked || showTargetEditor || showWeightEditor || showWaterEditor || showRecordMenu || showDailyPosterModal || showRecordPosterModal || mealActionSheetVisible || mealRecordsDialogVisible}
-      />}
-
       {/* 目标编辑弹窗 */}
       <TargetEditor
         visible={showTargetEditor}
@@ -3965,7 +3901,7 @@ function IndexPage() {
             <View className='target-modal-header'>
               <Text className='target-modal-title'>记录喝水</Text>
               <Text className='target-modal-desc'>{waterEditorDate} 已喝 {waterEditorWater.total} ml</Text>
-              {waterEditorWater.total > 0 ? (
+              {waterEditorEditableTotal > 0 ? (
                 <Text
                   className='water-modal-clear-link'
                   onClick={(e) => {
@@ -3973,7 +3909,7 @@ function IndexPage() {
                     if (!savingWater) void clearTodayWater()
                   }}
                 >
-                  清空今日记录
+                  清空手动饮水
                 </Text>
               ) : null}
             </View>
@@ -4021,11 +3957,11 @@ function IndexPage() {
               </View>
             </View>
 
-            {waterEditorWater.logs.length > 0 ? (
-              <Text className='water-modal-records-hint'>
-                已记录 {waterEditorWater.logs.length} 次，共 {waterEditorWater.total} ml
-              </Text>
-            ) : null}
+              {waterEditorWater.logs.length > 0 ? (
+                <Text className='water-modal-records-hint'>
+                  共 {waterEditorWater.logs.length} 项，合计 {waterEditorWater.total} ml
+                </Text>
+              ) : null}
 
             {showWaterAddFooter ? (
               <View className='target-modal-actions water-modal-actions-single'>

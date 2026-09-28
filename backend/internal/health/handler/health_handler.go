@@ -412,6 +412,33 @@ func (h *HealthHandler) StartCustomFocusCardGeneration(c *gin.Context) {
 }
 
 // POST /api/diet/recommendations
+// Preview is deliberately separate: reading the home card never generates a paid chat.
+func (h *HealthHandler) PreviewMeals(c *gin.Context) {
+	var body service.MealPreviewInput
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(400, gin.H{"error": "请求参数无效"})
+		return
+	}
+	svc, ok := h.stats.(interface {
+		PreviewMeals(context.Context, string, service.MealPreviewInput) (*service.DietRecommendationResult, error)
+	})
+	if !ok {
+		c.JSON(503, gin.H{"error": "餐食推荐暂不可用"})
+		return
+	}
+	userID := c.GetString(authmw.ContextUserIDKey)
+	logger.Info(c.Request.Context(), "首页餐食推荐请求进入", slog.String("user_id", userID))
+	result, err := svc.PreviewMeals(c.Request.Context(), userID, body)
+	if err != nil {
+		logger.Error(c.Request.Context(), "首页餐食推荐失败", err, slog.String("user_id", userID))
+		response.Error(c, err)
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+	logger.Info(c.Request.Context(), "首页餐食推荐请求完成", slog.String("user_id", userID), slog.Int("result_count", len(result.Recommendations)))
+	response.Success(c, result)
+}
+
 func (h *HealthHandler) GenerateDietRecommendation(c *gin.Context) {
 	var body service.DietRecommendationInput
 	if err := c.ShouldBindJSON(&body); err != nil {

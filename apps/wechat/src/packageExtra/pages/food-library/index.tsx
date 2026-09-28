@@ -2,6 +2,7 @@ import { View, Text, ScrollView, Image, Input, Button, Map } from '@tarojs/compo
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import Taro, { useDidShow, useRouter } from '@tarojs/taro'
 import { withAuth } from '../../../utils/withAuth'
+import { rememberMealLocation } from '../../../utils/meal-location'
 import {
   getAccessToken,
   getPublicFoodMapSpots,
@@ -338,6 +339,7 @@ function FoodLibraryPage() {
   /** 加载服务端全量聚合的地点（含餐食/食堂/校区/学校继承坐标），并尝试定位到用户附近。 */
   const loadMapList = useCallback(async (force = false) => {
     if (!getAccessToken()) return
+    const locationOwner = getAccessToken() || ''
     if (!force && mapLoadedRef.current) return
     mapLoadedRef.current = true
     setMapLoading(true)
@@ -353,6 +355,8 @@ function FoodLibraryPage() {
       setMapSpotPayloads(mappedSpots)
 
       if (locationResult.status === 'fulfilled') {
+        if (locationOwner !== getAccessToken()) return
+        rememberMealLocation(locationOwner, { latitude: locationResult.value.latitude, longitude: locationResult.value.longitude, accuracy_m: locationResult.value.accuracy, captured_at: Date.now(), coordinate_type: 'gcj02' })
         const location = {
           latitude: locationResult.value.latitude,
           longitude: locationResult.value.longitude,
@@ -380,8 +384,11 @@ function FoodLibraryPage() {
 
   const locateMapAroundMe = useCallback(async () => {
     setMapLocating(true)
+    const locationOwner = getAccessToken() || ''
     try {
       const result = await Taro.getLocation({ type: 'gcj02' })
+      if (locationOwner !== getAccessToken()) return
+      rememberMealLocation(locationOwner, { latitude: result.latitude, longitude: result.longitude, accuracy_m: result.accuracy, captured_at: Date.now(), coordinate_type: 'gcj02' })
       const location = { latitude: result.latitude, longitude: result.longitude }
       setUserLocation(location)
       setMapCenter(location)

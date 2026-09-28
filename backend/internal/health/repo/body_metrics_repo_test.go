@@ -100,10 +100,6 @@ func TestBodyMetricsRepo_WaterCRUD(t *testing.T) {
 	assert.Len(t, logs, 1)
 	assert.Equal(t, 250, logs[0].AmountMl)
 
-	total, err := r.SumWaterByDate(ctx, "user-1", "2024-06-15")
-	require.NoError(t, err)
-	assert.Equal(t, int64(250), total)
-
 	deleted, err := r.DeleteWaterLogByID(ctx, "user-1", log.ID)
 	require.NoError(t, err)
 	assert.Equal(t, int64(1), deleted)
@@ -120,41 +116,36 @@ func TestBodyMetricsRepo_WaterCRUD(t *testing.T) {
 	assert.Equal(t, int64(1), deleted)
 }
 
-func TestBodyMetricsRepo_ReduceWaterLogsByDateSource(t *testing.T) {
+func TestBodyMetricsRepo_DerivedFoodWaterCannotBeDeleted(t *testing.T) {
 	db := setupBodyMetricsTestDB(t)
 	r := NewBodyMetricsRepo(db)
 	ctx := context.Background()
-
 	now := time.Now().UTC()
-	recordedOn := time.Date(2024, 6, 15, 0, 0, 0, 0, time.UTC)
-	manualSource := "manual"
-	require.NoError(t, r.CreateWaterLog(ctx, &domain.BodyWaterLog{UserID: "user-1", AmountMl: 100, RecordedOn: &recordedOn, SourceType: manualSource, CreatedAt: &now}))
-	require.NoError(t, r.CreateWaterLog(ctx, &domain.BodyWaterLog{UserID: "user-1", AmountMl: 80, RecordedOn: &recordedOn, SourceType: "ai", CreatedAt: &now}))
-	require.NoError(t, r.CreateWaterLog(ctx, &domain.BodyWaterLog{UserID: "user-1", AmountMl: 150, RecordedOn: &recordedOn, SourceType: "ai", CreatedAt: &now}))
-
-	reduced, err := r.ReduceWaterLogsByDateSource(ctx, "user-1", "2024-06-15", "ai", 200)
-
-	require.NoError(t, err)
-	assert.Equal(t, 200, reduced)
-	logs, err := r.GetWaterLogsByExactDate(ctx, "user-1", "2024-06-15")
-	require.NoError(t, err)
-	total := 0
-	manualTotal := 0
-	for _, log := range logs {
-		total += log.AmountMl
-		if log.SourceType == manualSource {
-			manualTotal += log.AmountMl
-		}
+	recordedOn := time.Date(2026, 9, 28, 0, 0, 0, 0, time.UTC)
+	logs := []*domain.BodyWaterLog{
+		{ID: "manual-water", UserID: "user-1", AmountMl: 250, RecordedOn: &recordedOn, SourceType: domain.ManualWaterSourceType, CreatedAt: &now},
+		{ID: "imported-water", UserID: "user-1", AmountMl: 120, RecordedOn: &recordedOn, SourceType: domain.ImportedWaterSourceType, CreatedAt: &now},
+		{ID: "food-water", UserID: "user-1", AmountMl: 180, RecordedOn: &recordedOn, SourceType: domain.FoodRecordWaterSourcePrefix + "0dcfe550-8093-4edf-8e62-025484567f48", CreatedAt: &now},
+		{ID: "legacy-food-water", UserID: "user-1", AmountMl: 90, RecordedOn: &recordedOn, SourceType: domain.LegacyFoodWaterSourceType, CreatedAt: &now},
 	}
-	assert.Equal(t, 130, total)
-	assert.Equal(t, 100, manualTotal)
+	for _, log := range logs {
+		require.NoError(t, r.CreateWaterLog(ctx, log))
+	}
 
-	reduced, err = r.ReduceWaterLogsByDateSource(ctx, "user-1", "2024-06-15", "ai", 999)
+	deleted, err := r.DeleteWaterLogByID(ctx, "user-1", "food-water")
 	require.NoError(t, err)
-	assert.Equal(t, 30, reduced)
-	sum, err := r.SumWaterByDate(ctx, "user-1", "2024-06-15")
+	assert.Equal(t, int64(0), deleted)
+	deleted, err = r.DeleteWaterLogByID(ctx, "user-1", "legacy-food-water")
 	require.NoError(t, err)
-	assert.Equal(t, int64(100), sum)
+	assert.Equal(t, int64(0), deleted)
+
+	deleted, err = r.DeleteWaterLogsByDate(ctx, "user-1", "2026-09-28")
+	require.NoError(t, err)
+	assert.Equal(t, int64(2), deleted)
+	remaining, err := r.GetWaterLogsByExactDate(ctx, "user-1", "2026-09-28")
+	require.NoError(t, err)
+	require.Len(t, remaining, 2)
+	assert.ElementsMatch(t, []string{"food-water", "legacy-food-water"}, []string{remaining[0].ID, remaining[1].ID})
 }
 
 func TestBodyMetricsRepo_Settings(t *testing.T) {

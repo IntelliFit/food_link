@@ -1439,13 +1439,13 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   position: relative;
   overflow: hidden;
   box-sizing: border-box;
-  min-height: 184rpx;
+  min-height: 172rpx;
   margin: 0 0 18rpx;
-  padding: 22rpx 24rpx 18rpx;
-  border: 1rpx solid rgb(92 184 150 / 22%);
+  padding: 20rpx 22rpx;
+  border: 1rpx solid rgb(77 111 83 / 14%);
   border-radius: 24rpx;
-  background: linear-gradient(135deg, rgb(244 252 248 / 96%), rgb(255 255 255 / 92%));
-  box-shadow: 0 10rpx 26rpx rgb(47 143 111 / 8%);
+  background: rgb(255 253 247 / 96%);
+  box-shadow: 0 8rpx 26rpx rgb(55 72 58 / 7%);
 
   &:active:not(.is-loading) {
     transform: scale(0.99);
@@ -1462,18 +1462,18 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 }
 
 .next-meal-guidance__kicker {
-  color: #28795c;
+  color: #477353;
   font-size: 23rpx;
   line-height: 32rpx;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .next-meal-guidance__badge {
   flex-shrink: 0;
   padding: 4rpx 12rpx;
   border-radius: 999rpx;
-  background: rgb(92 184 150 / 12%);
-  color: #43876d;
+  background: rgb(91 130 91 / 8%);
+  color: #647866;
   font-size: 20rpx;
   line-height: 28rpx;
   font-weight: 700;
@@ -1486,23 +1486,21 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 
 .next-meal-guidance__title {
   margin-top: 8rpx;
-  color: #203b31;
-  font-size: 29rpx;
-  line-height: 40rpx;
-  font-weight: 900;
+  color: #294635;
+  font-size: 27rpx;
+  line-height: 38rpx;
+  font-weight: 700;
 }
 
 .next-meal-guidance__detail {
   margin-top: 3rpx;
-  color: #687a72;
-  font-size: 23rpx;
-  line-height: 34rpx;
+  color: #7d897f;
+  font-size: 22rpx;
+  line-height: 32rpx;
 }
 
 .next-meal-guidance__footer {
-  margin-top: 12rpx;
-  padding-top: 11rpx;
-  border-top: 1rpx solid rgb(92 184 150 / 13%);
+  margin-top: 10rpx;
 }
 
 .next-meal-guidance__cost {
@@ -1512,9 +1510,12 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 }
 
 .next-meal-guidance__action {
-  color: #2f8f6f;
-  font-size: 22rpx;
-  line-height: 30rpx;
+  padding: 5rpx 11rpx;
+  border-radius: 999rpx;
+  background: rgb(91 130 91 / 9%);
+  color: #477353;
+  font-size: 21rpx;
+  line-height: 29rpx;
   font-weight: 800;
 }
 
@@ -4084,17 +4085,34 @@ $sheet-float-max-height: calc(100vh - #{$sheet-float-gap-top} - env(safe-area-in
   }
 }
 
-// 体重/喝水卡片 - 新设计
+// 体重/喝水/运动/睡眠快捷卡片
+.body-status-scroll {
+  width: 100%;
+  margin-bottom: 24rpx;
+  white-space: nowrap;
+}
+
 .body-status-section {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  display: flex;
   gap: 16rpx;
-  margin-bottom: 24rpx; // 增加间距
+  width: 100%;
+  margin-bottom: 0;
+  box-sizing: border-box;
+}
+
+.body-status-section--count-4 {
+  width: 872rpx;
+
+  .body-status-card {
+    flex: 0 0 206rpx;
+    width: 206rpx;
+  }
 }
 
 .body-status-card {
   flex: 1;
   min-width: 0;
+  box-sizing: border-box;
   background: #ffffff;
   border-radius: 24rpx;
   padding: 20rpx;
@@ -4103,6 +4121,11 @@ $sheet-float-max-height: calc(100vh - #{$sheet-float-gap-top} - env(safe-area-in
   &:active {
     transform: scale(0.98);
   }
+}
+
+.sleep-quick-card .body-status-value {
+  font-size: 34rpx;
+  white-space: nowrap;
 }
 
 .body-status-header {
@@ -4179,9 +4202,13 @@ $sheet-float-max-height: calc(100vh - #{$sheet-float-gap-top} - env(safe-area-in
 }
 
 .body-status-hint {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
   font-size: 20rpx;
   color: $text-tertiary;
   line-height: 30rpx;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -6539,12 +6566,36 @@ button.poster-share-channel--btn {
     box-shadow: none;
   }
 
+  .body-status-title,
+  .body-status-value,
+  .body-status-empty {
+    color: #edf5ef;
+  }
+
+  .body-status-unit,
+  .body-status-hint {
+    color: #9caaa3;
+  }
+
+  .body-status-progress-bg,
+  .sleep-quick-card__skeleton {
+    background: #3a4741;
+  }
+
+  .sleep-quick-card__icon {
+    border-left-color: #b7a8dc;
+    border-bottom-color: #b7a8dc;
+  }
+
+  .sleep-quick-card__error {
+    color: #e5a59c;
+  }
 }
 
 .home-page--dark {
   .next-meal-guidance {
-    border-color: rgb(112 196 149 / 16%);
-    background: linear-gradient(135deg, rgb(27 43 36 / 96%), rgb(24 35 31 / 92%));
+    border-color: rgb(112 196 149 / 14%);
+    background: #222f29;
     box-shadow: none;
   }
 
@@ -6556,12 +6607,13 @@ button.poster-share-channel--btn {
     color: rgb(225 239 229 / 64%);
   }
 
-  .next-meal-guidance__footer {
-    border-top-color: rgb(112 196 149 / 12%);
-  }
-
   .next-meal-guidance__cost {
     color: rgb(154 215 188 / 52%);
+  }
+
+  .next-meal-guidance__action,
+  .next-meal-guidance__badge {
+    background: rgb(112 196 149 / 10%);
   }
 }
 

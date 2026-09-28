@@ -14,7 +14,7 @@ import {
 } from '../../../utils/infer-default-meal-type'
 import { getAiInsightCollapsed, setAiInsightCollapsed } from '../../../utils/ai-insight-collapsed'
 import { HOME_INTAKE_DATA_CHANGED_EVENT } from '../../../utils/home-events'
-import { addWaterToBodyMetricsStorage, calculateFoodRecordItemsWaterMl, refreshHomeDashboardLocalSnapshotFromCloud } from '../../../utils/home-dashboard-local-cache'
+import { refreshHomeDashboardLocalSnapshotFromCloud } from '../../../utils/home-dashboard-local-cache'
 import { formatDateKey } from '../../../pages/index/utils/helpers'
 import { returnHomeAfterFoodRecord } from '../../../utils/food-record-flow'
 import { getStoredRecordTargetDate, persistRecordTargetDate } from '../../../utils/record-date'
@@ -447,9 +447,6 @@ function ResultTextPage() {
       }
       const saveResult = await saveFoodRecord(payload)
       const targetDate = payload.date || getStoredRecordTargetDate() || formatDateKey(new Date())
-      if (!saveResult.already_saved) {
-        addWaterToBodyMetricsStorage(targetDate, calculateFoodRecordItemsWaterMl(payload.items || []))
-      }
       try {
         Taro.eventCenter.trigger(HOME_INTAKE_DATA_CHANGED_EVENT, { date: targetDate })
       } catch {

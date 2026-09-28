@@ -6,10 +6,8 @@ import (
 	"log/slog"
 	"math"
 	"strings"
-	"time"
 
 	commonerrors "food_link/backend/internal/common/errors"
-	healthdomain "food_link/backend/internal/health/domain"
 	"food_link/backend/internal/recipe/domain"
 	"food_link/backend/internal/recipe/repo"
 	"food_link/backend/pkg/logger"
@@ -21,7 +19,6 @@ import (
 type RecipeService struct {
 	repo                            *repo.RecipeRepo
 	storage                         *storage.Client
-	waterLogs                       WaterLogRecorder
 	blockChecker                    BlockChecker
 	favoriteRecipeVisibilityChecker FavoriteRecipeVisibilityChecker
 }
@@ -34,20 +31,12 @@ func NewRecipeService(repo *repo.RecipeRepo, storageClient ...*storage.Client) *
 	return &RecipeService{repo: repo, storage: client}
 }
 
-type WaterLogRecorder interface {
-	CreateWaterLog(ctx context.Context, log *healthdomain.BodyWaterLog) error
-}
-
 type BlockChecker interface {
 	IsBlockedEither(ctx context.Context, userA, userB string) (bool, error)
 }
 
 type FavoriteRecipeVisibilityChecker interface {
 	FavoriteRecipesVisible(ctx context.Context, userID string) (bool, error)
-}
-
-func (s *RecipeService) ConfigureWaterLogRecorder(recorder WaterLogRecorder) {
-	s.waterLogs = recorder
 }
 
 func (s *RecipeService) ConfigureBlockChecker(checker BlockChecker) {
@@ -312,51 +301,8 @@ func (s *RecipeService) Use(ctx context.Context, userID, recipeID string, mealTy
 	if err := s.repo.InsertFoodRecord(ctx, record); err != nil {
 		return "", err
 	}
-	if err := s.recordFoodWaterIntake(ctx, userID, record); err != nil {
-		// Food water is a derived side effect. Keep recipe reuse successful even
-		// if water-log schema/config is temporarily out of sync.
-		logger.Error(ctx, "记录食谱饮水量失败", err,
-			slog.String("user_id", userID),
-			slog.String("record_id", record.ID),
-		)
-	}
 	_ = s.repo.MarkUsed(ctx, recipeID, userID, recipe.UseCount)
 	return record.ID, nil
-}
-
-func (s *RecipeService) recordFoodWaterIntake(ctx context.Context, userID string, record *domain.FoodRecord) error {
-	if s.waterLogs == nil || record == nil || strings.TrimSpace(userID) == "" {
-		return nil
-	}
-	amountMl := totalRecipeFoodWaterIntakeMl(record.Items)
-	if amountMl <= 0 {
-		return nil
-	}
-	recordedOn := time.Now().In(chinaTZ)
-	if record.RecordTime != nil {
-		recordedOn = record.RecordTime.In(chinaTZ)
-	}
-	// 用 UTC 午夜存储，避免 Postgres date 列按会话时区转换导致日期错位
-	recordedDate := time.Date(recordedOn.Year(), recordedOn.Month(), recordedOn.Day(), 0, 0, 0, 0, time.UTC)
-	now := time.Now().UTC()
-	sourceType := foodWaterSourceType(record.ID)
-	if sourceType == "" {
-		return nil
-	}
-	logger.Info(ctx, "记录食谱饮水量",
-		slog.String("user_id", userID),
-		slog.String("record_id", record.ID),
-		slog.Int("amount_ml", amountMl),
-		slog.String("recorded_on", recordedDate.Format("2006-01-02")),
-		slog.String("source_type", sourceType),
-	)
-	return s.waterLogs.CreateWaterLog(ctx, &healthdomain.BodyWaterLog{
-		UserID:     userID,
-		AmountMl:   amountMl,
-		RecordedOn: &recordedDate,
-		SourceType: sourceType,
-		CreatedAt:  &now,
-	})
 }
 
 func (s *RecipeService) ensureUserVisible(ctx context.Context, viewerUserID, ownerUserID string) error {
@@ -490,49 +436,6 @@ func normalizeRecipeItemsForFoodRecord(items []map[string]any, recipe *domain.Re
 		out = append(out, normalized)
 	}
 	return out
-}
-
-var chinaTZ = time.FixedZone("Asia/Shanghai", 8*60*60)
-
-func foodWaterSourceType(recordID string) string {
-	recordID = strings.TrimSpace(recordID)
-	if recordID == "" {
-		return ""
-	}
-	return "ai_food_record:" + recordID
-}
-
-func totalRecipeFoodWaterIntakeMl(items []map[string]any) int {
-	total := 0.0
-	for _, item := range items {
-		waterMl := firstNumberFromMap(item, "water_ml", "waterMl")
-		if waterMl <= 0 {
-			if nutrients, ok := item["nutrients"].(map[string]any); ok {
-				waterMl = firstNumberFromMap(nutrients, "water_ml", "waterMl")
-			}
-		}
-		if waterMl <= 0 {
-			continue
-		}
-		ratio := firstNumberFromMap(item, "ratio")
-		if ratio > 0 {
-			total += waterMl * ratio / 100
-			continue
-		}
-		intake := firstNumberFromMap(item, "intake")
-		weight := firstNumberFromMap(item, "weight", "estimatedWeightGrams", "estimated_weight_grams")
-		if intake > 0 && weight > 0 {
-			total += waterMl * intake / weight
-			continue
-		}
-		if intake == 0 && weight == 0 {
-			total += waterMl
-		}
-	}
-	if total <= 0 {
-		return 0
-	}
-	return int(math.Round(total))
 }
 
 func normalizeRecipeItemNutrients(item map[string]any) map[string]any {

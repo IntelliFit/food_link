@@ -105,6 +105,7 @@ func (s *StatsService) loadMealHarnessContext(ctx context.Context, state *campus
 	}
 	meal.Remaining = DietRecommendationMacro{Calories: math.Max(0, meal.CalorieTarget-meal.Current.Calories), Protein: math.Max(0, protein-meal.Current.Protein), Carbs: math.Max(0, carbs-meal.Current.Carbs), Fat: math.Max(0, fat-meal.Current.Fat)}
 	state.MealContext, state.PersonalContext, state.MealContextLoaded = meal, personal, true
+	state.HistoryRecords = records
 	return nil
 }
 

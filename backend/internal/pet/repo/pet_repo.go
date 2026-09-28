@@ -6,6 +6,7 @@ import (
 	"errors"
 	"time"
 
+	healthdomain "food_link/backend/internal/health/domain"
 	"food_link/backend/internal/membership/domain"
 	petdomain "food_link/backend/internal/pet/domain"
 
@@ -219,12 +220,13 @@ func (r *PetRepo) GetLatestFoodRecordDate(ctx context.Context, userID string, be
 	return row.RecordTime.In(loc).Format("2006-01-02"), nil
 }
 
-func (r *PetRepo) SumWaterByDate(ctx context.Context, userID, date string) (int, error) {
+func (r *PetRepo) SumEditableWaterByDate(ctx context.Context, userID, date string) (int, error) {
 	var total int
 	err := r.db.WithContext(ctx).
 		Table("user_water_logs").
 		Select("COALESCE(SUM(amount_ml), 0)").
 		Where("user_id = ? AND recorded_on = ?", userID, date).
+		Where("source_type IN ?", []string{healthdomain.ManualWaterSourceType, healthdomain.ImportedWaterSourceType}).
 		Scan(&total).Error
 	return total, err
 }

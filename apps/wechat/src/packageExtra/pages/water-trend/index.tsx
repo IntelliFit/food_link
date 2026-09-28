@@ -10,6 +10,7 @@ import {
   type BodyMetricsSummary,
 } from '../../../utils/api'
 import { HOME_DASHBOARD_REFRESH_EVENT } from '../../../utils/home-events'
+import { removeWaterFromBodyMetricsStorage } from '../../../utils/home-dashboard-local-cache'
 import { withAuth } from '../../../utils/withAuth'
 import {
   buildDateRange,
@@ -17,6 +18,8 @@ import {
   formatChineseMonthDay,
   formatMonthDay,
   getWaterLogItems,
+  isEditableWaterLog,
+  isFoodDerivedWaterLog,
   normalizeRouteDate,
   type TrendPoint,
 } from '../body-metrics-shared'
@@ -118,6 +121,7 @@ function WaterTrendPage() {
   }, [recentDays, selectedDate, summary, targetDate, waterDayByDate])
 
   const deleteWaterLog = (item: BodyMetricWaterLogItem) => {
+    if (!isEditableWaterLog(item)) return
     const logId = String(item.id || '').trim()
     if (!logId) {
       Taro.showToast({ title: '这条旧记录只能在记录页清空当天', icon: 'none' })
@@ -133,6 +137,7 @@ function WaterTrendPage() {
         setDeletingLogId(logId)
         try {
           await deleteBodyWaterLog(logId)
+          removeWaterFromBodyMetricsStorage(item)
           Taro.eventCenter.trigger(HOME_DASHBOARD_REFRESH_EVENT)
           Taro.showToast({ title: '已删除', icon: 'success' })
           await loadData()
@@ -186,7 +191,7 @@ function WaterTrendPage() {
           <View key={item.date} className={`water-history-row ${selectedDate === item.date ? 'is-selected' : ''}`} onClick={() => setSelectedDate(item.date)}>
             <Text className='water-history-date'>{formatMonthDay(item.date)}</Text>
             <Text className='water-history-main'>{Math.round(item.total)} ml</Text>
-            <Text className='water-history-sub'>{getWaterLogItems(item).length} 次</Text>
+            <Text className='water-history-sub'>{getWaterLogItems(item).length} 项</Text>
           </View>
         )) : (
           <Text className='history-empty'>还没有喝水记录</Text>
@@ -197,10 +202,16 @@ function WaterTrendPage() {
             {selectedLogs.map((item, index) => {
               const logId = item.id || `${item.date}-${index}-${item.amount_ml}`
               const isDeleting = item.id && deletingLogId === item.id
+              const isDerived = isFoodDerivedWaterLog(item)
+              const isEditable = isEditableWaterLog(item)
               return (
-                <View key={logId} className={`water-detail-row ${isDeleting ? 'is-deleting' : ''}`}>
+                <View key={logId} className={`water-detail-row ${isDeleting ? 'is-deleting' : ''} ${isDerived ? 'is-derived' : ''}`}>
                   <Text className='water-detail-amount'>+{Math.round(item.amount_ml)} ml</Text>
-                  <Text className='water-detail-delete' onClick={() => !isDeleting && deleteWaterLog(item)}>删除</Text>
+                  {isEditable ? (
+                    <Text className='water-detail-delete' onClick={() => !isDeleting && deleteWaterLog(item)}>删除</Text>
+                  ) : (
+                    <Text className='water-detail-derived'>{isDerived ? '饮食含水' : '只读记录'}</Text>
+                  )}
                 </View>
               )
             })}

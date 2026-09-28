@@ -205,6 +205,7 @@ $water-faint: #9ca3af;
   color: #d45c5c;
   font-size: 23rpx;
   font-weight: 600;
+  white-space: nowrap;
 }
 
 .water-log-list {
@@ -238,6 +239,15 @@ $water-faint: #9ca3af;
   border-radius: 999rpx;
   background: rgb(212 92 92 / 9%);
   color: #d45c5c;
+  font-size: 21rpx;
+  font-weight: 700;
+}
+
+.water-log-derived {
+  padding: 4rpx 10rpx;
+  border-radius: 999rpx;
+  background: rgb(92 158 212 / 12%);
+  color: $water-deep;
   font-size: 21rpx;
   font-weight: 700;
 }

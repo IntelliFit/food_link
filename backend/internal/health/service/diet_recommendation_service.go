@@ -60,6 +60,7 @@ type DietRecommendationMeal struct {
 }
 
 type DietRecommendationResult struct {
+	LocationHint          *domain.MealArea                     `json:"location_hint,omitempty"`
 	HarnessVersion        string                               `json:"harness_version,omitempty"`
 	SearchScope           string                               `json:"search_scope,omitempty"`
 	ContextSummary        []string                             `json:"context_summary,omitempty"`
@@ -104,6 +105,8 @@ type CampusDietRecommendationConstraints struct {
 }
 
 type DietRecommendationOption struct {
+	HistoryDate             string                        `json:"history_date,omitempty"`
+	SourceLabel             string                        `json:"source_label,omitempty"`
 	MealComponents          []DietRecommendationCandidate `json:"meal_components,omitempty"`
 	DistanceKM              *float64                      `json:"distance_km,omitempty"`
 	LocationLevel           string                        `json:"location_level,omitempty"`

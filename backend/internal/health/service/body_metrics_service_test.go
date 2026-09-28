@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -19,7 +20,34 @@ type mockBodyMetricsRepo struct {
 	profileUpdate    map[string]any
 	waterStartDate   string
 	waterEndDate     string
+	waterListErr     error
+	createWaterErr   error
 	dailyWeightCalls int
+}
+
+type mockFoodWaterProvider struct {
+	logs      []domain.BodyWaterLog
+	callCount int
+	err       error
+}
+
+func (m *mockFoodWaterProvider) ListDerivedFoodWaterLogs(ctx context.Context, userID, startDate, endDate string) ([]domain.BodyWaterLog, error) {
+	m.callCount++
+	if m.err != nil {
+		return nil, m.err
+	}
+	recordedOn, err := time.Parse("2006-01-02", endDate)
+	if err != nil {
+		return nil, err
+	}
+	logs := make([]domain.BodyWaterLog, len(m.logs))
+	copy(logs, m.logs)
+	for index := range logs {
+		if logs[index].RecordedOn == nil {
+			logs[index].RecordedOn = &recordedOn
+		}
+	}
+	return logs, nil
 }
 
 func (m *mockBodyMetricsRepo) CreateWeightRecord(ctx context.Context, record *domain.BodyWeightRecord) error {
@@ -58,6 +86,9 @@ func (m *mockBodyMetricsRepo) DeleteWeightRecordByID(ctx context.Context, userID
 }
 
 func (m *mockBodyMetricsRepo) CreateWaterLog(ctx context.Context, log *domain.BodyWaterLog) error {
+	if m.createWaterErr != nil {
+		return m.createWaterErr
+	}
 	m.waterLogs = append(m.waterLogs, *log)
 	return nil
 }
@@ -65,6 +96,9 @@ func (m *mockBodyMetricsRepo) CreateWaterLog(ctx context.Context, log *domain.Bo
 func (m *mockBodyMetricsRepo) GetWaterLogsByDate(ctx context.Context, userID string, startDate, endDate string) ([]domain.BodyWaterLog, error) {
 	m.waterStartDate = startDate
 	m.waterEndDate = endDate
+	if m.waterListErr != nil {
+		return nil, m.waterListErr
+	}
 	return m.waterLogs, nil
 }
 
@@ -72,7 +106,7 @@ func (m *mockBodyMetricsRepo) DeleteWaterLogsByDate(ctx context.Context, userID 
 	filtered := make([]domain.BodyWaterLog, 0)
 	deleted := int64(0)
 	for _, log := range m.waterLogs {
-		if log.RecordedOn != nil && log.RecordedOn.Format("2006-01-02") == recordedOn {
+		if log.RecordedOn != nil && log.RecordedOn.Format("2006-01-02") == recordedOn && domain.IsEditableWaterSource(log.SourceType) {
 			deleted++
 		} else {
 			filtered = append(filtered, log)
@@ -86,7 +120,7 @@ func (m *mockBodyMetricsRepo) DeleteWaterLogByID(ctx context.Context, userID str
 	filtered := make([]domain.BodyWaterLog, 0)
 	deleted := int64(0)
 	for _, log := range m.waterLogs {
-		if log.UserID == userID && log.ID == logID {
+		if log.UserID == userID && log.ID == logID && domain.IsEditableWaterSource(log.SourceType) {
 			deleted++
 			continue
 		}
@@ -103,16 +137,6 @@ func (m *mockBodyMetricsRepo) GetBodyMetricSettings(ctx context.Context, userID 
 func (m *mockBodyMetricsRepo) UpsertBodyMetricSettings(ctx context.Context, settings *domain.BodyMetricSettings) error {
 	m.settings = settings
 	return nil
-}
-
-func (m *mockBodyMetricsRepo) SumWaterByDate(ctx context.Context, userID string, recordedOn string) (int64, error) {
-	var total int64
-	for _, log := range m.waterLogs {
-		if log.RecordedOn != nil && log.RecordedOn.Format("2006-01-02") == recordedOn {
-			total += int64(log.AmountMl)
-		}
-	}
-	return total, nil
 }
 
 func (m *mockBodyMetricsRepo) GetUserProfile(ctx context.Context, userID string) (*domain.BodyMetricUserProfile, error) {
@@ -154,6 +178,45 @@ func TestBodyMetricsService_GetSummary(t *testing.T) {
 	assert.Equal(t, summary.EndDate, repo.waterEndDate)
 }
 
+func TestBodyMetricsService_GetSummaryUsesCanonicalFoodWaterAndIgnoresPersistedDerivedRows(t *testing.T) {
+	today, err := time.Parse("2006-01-02", time.Now().In(chinaTZ).Format("2006-01-02"))
+	require.NoError(t, err)
+	repo := &mockBodyMetricsRepo{waterLogs: []domain.BodyWaterLog{
+		{ID: "manual-water", UserID: "u1", AmountMl: 250, RecordedOn: &today, SourceType: "manual"},
+		{ID: "legacy-food-water", UserID: "u1", AmountMl: 555, RecordedOn: &today, SourceType: domain.LegacyFoodWaterSourceType},
+		{ID: "stale-food-water", UserID: "u1", AmountMl: 999, RecordedOn: &today, SourceType: "ai_food_record:record-1"},
+		{ID: "duplicate-food-water", UserID: "u1", AmountMl: 999, RecordedOn: &today, SourceType: "ai_food_record:record-1"},
+		{ID: "orphan-food-water", UserID: "u1", AmountMl: 777, RecordedOn: &today, SourceType: "ai_food_record:deleted-record"},
+	}}
+	provider := &mockFoodWaterProvider{logs: []domain.BodyWaterLog{{
+		ID: "food-water:record-1", UserID: "u1", AmountMl: 180, SourceType: "ai_food_record:record-1",
+	}}}
+	svc := NewBodyMetricsService(repo)
+	svc.ConfigureFoodWaterProvider(provider)
+
+	summary, err := svc.GetSummary(context.Background(), "u1", "week")
+	require.NoError(t, err)
+	assert.Equal(t, 1, provider.callCount)
+	assert.Equal(t, 430, summary.TodayWater.Total)
+	require.Len(t, summary.TodayWater.LogItems, 2)
+	assert.Equal(t, "manual-water", summary.TodayWater.LogItems[0].ID)
+	assert.Equal(t, "food-water:record-1", summary.TodayWater.LogItems[1].ID)
+	assert.Equal(t, "ai_food_record:record-1", summary.TodayWater.LogItems[1].SourceType)
+}
+
+func TestBodyMetricsService_GetSummaryContinuesWhenFoodWaterProviderFails(t *testing.T) {
+	repo := &mockBodyMetricsRepo{}
+	provider := &mockFoodWaterProvider{err: errors.New("database unavailable")}
+	svc := NewBodyMetricsService(repo)
+	svc.ConfigureFoodWaterProvider(provider)
+
+	summary, err := svc.GetSummary(context.Background(), "u1", "week")
+	require.NoError(t, err)
+	require.NotNil(t, summary)
+	assert.Equal(t, 1, provider.callCount)
+	assert.Equal(t, 0, summary.TodayWater.Total)
+}
+
 func TestBodyMetricsService_GetSummaryUsesLatestWeightForSameDate(t *testing.T) {
 	repo := &mockBodyMetricsRepo{}
 	svc := NewBodyMetricsService(repo)
@@ -191,6 +254,9 @@ func TestBodyMetricsService_AddWaterLog(t *testing.T) {
 	result, err := svc.AddWaterLog(ctx, "u1", 300, "2024-06-15")
 	require.NoError(t, err)
 	assert.Equal(t, "喝水已记录", result["message"])
+	item, ok := result["item"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "manual", item["source_type"])
 	assert.Len(t, repo.waterLogs, 1)
 	assert.Equal(t, 300, repo.waterLogs[0].AmountMl)
 	require.NotNil(t, repo.waterLogs[0].RecordedOn)
@@ -205,13 +271,17 @@ func TestBodyMetricsService_ResetWaterLogs(t *testing.T) {
 	now := time.Now().UTC()
 	recordedOn := time.Date(2024, 6, 15, 0, 0, 0, 0, time.UTC)
 	repo.waterLogs = []domain.BodyWaterLog{
-		{UserID: "u1", AmountMl: 250, RecordedOn: &recordedOn, CreatedAt: &now},
+		{ID: "manual-water", UserID: "u1", AmountMl: 250, RecordedOn: &recordedOn, SourceType: "manual", CreatedAt: &now},
+		{ID: "food-water", UserID: "u1", AmountMl: 180, RecordedOn: &recordedOn, SourceType: "ai_food_record:record-1", CreatedAt: &now},
+		{ID: "legacy-food-water", UserID: "u1", AmountMl: 90, RecordedOn: &recordedOn, SourceType: domain.LegacyFoodWaterSourceType, CreatedAt: &now},
 	}
 
 	result, err := svc.ResetWaterLogs(ctx, "u1", "2024-06-15")
 	require.NoError(t, err)
 	assert.Equal(t, int64(1), result["deleted_count"])
-	assert.Len(t, repo.waterLogs, 0)
+	assert.Equal(t, "已清空当日手动饮水记录", result["message"])
+	require.Len(t, repo.waterLogs, 2)
+	assert.ElementsMatch(t, []string{"food-water", "legacy-food-water"}, []string{repo.waterLogs[0].ID, repo.waterLogs[1].ID})
 }
 
 func TestBodyMetricsService_DeleteWaterLog(t *testing.T) {
@@ -221,15 +291,25 @@ func TestBodyMetricsService_DeleteWaterLog(t *testing.T) {
 
 	recordedOn := time.Date(2024, 6, 15, 0, 0, 0, 0, time.UTC)
 	repo.waterLogs = []domain.BodyWaterLog{
-		{ID: "wl1", UserID: "u1", AmountMl: 250, RecordedOn: &recordedOn},
-		{ID: "wl2", UserID: "u1", AmountMl: 500, RecordedOn: &recordedOn},
+		{ID: "wl1", UserID: "u1", AmountMl: 250, RecordedOn: &recordedOn, SourceType: "manual"},
+		{ID: "wl2", UserID: "u1", AmountMl: 500, RecordedOn: &recordedOn, SourceType: domain.ImportedWaterSourceType},
+		{ID: "food-water", UserID: "u1", AmountMl: 180, RecordedOn: &recordedOn, SourceType: "ai_food_record:record-1"},
+		{ID: "legacy-food-water", UserID: "u1", AmountMl: 90, RecordedOn: &recordedOn, SourceType: domain.LegacyFoodWaterSourceType},
 	}
 
 	result, err := svc.DeleteWaterLog(ctx, "u1", "wl1")
 	require.NoError(t, err)
 	assert.Equal(t, "喝水记录已删除", result["message"])
-	assert.Len(t, repo.waterLogs, 1)
+	assert.Len(t, repo.waterLogs, 3)
 	assert.Equal(t, "wl2", repo.waterLogs[0].ID)
+
+	_, err = svc.DeleteWaterLog(ctx, "u1", "food-water")
+	require.Error(t, err)
+	assert.Len(t, repo.waterLogs, 3)
+
+	_, err = svc.DeleteWaterLog(ctx, "u1", "legacy-food-water")
+	require.Error(t, err)
+	assert.Len(t, repo.waterLogs, 3)
 }
 
 func TestBodyMetricsService_SaveWeightRecord(t *testing.T) {
@@ -281,7 +361,46 @@ func TestBodyMetricsService_SyncLocal(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, 1, result["imported_weight_count"])
-	assert.Equal(t, 2, result["imported_water_count"])
+	assert.Equal(t, 0, result["imported_water_count"])
+	assert.Equal(t, true, result["water_import_skipped"])
+	assert.Empty(t, repo.waterLogs)
 	assert.NotNil(t, repo.settings)
 	assert.Equal(t, 2500, repo.settings.WaterGoalMl)
+}
+
+func TestBodyMetricsService_SyncLocalAlwaysSkipsLegacyAggregatedWater(t *testing.T) {
+	repo := &mockBodyMetricsRepo{
+		waterListErr:   errors.New("water lookup must not run"),
+		createWaterErr: errors.New("water create must not run"),
+	}
+	provider := &mockFoodWaterProvider{err: errors.New("food water provider must not run")}
+	svc := NewBodyMetricsService(repo)
+	svc.ConfigureFoodWaterProvider(provider)
+
+	result, err := svc.SyncLocal(context.Background(), "u1", SyncLocalInput{WaterByDate: map[string]LocalWaterDay{
+		"2026-09-28": {Total: 250, Logs: []int{250}},
+		"invalid":    {Total: 300, Logs: []int{300}},
+	}})
+
+	require.NoError(t, err)
+	assert.Equal(t, 0, result["imported_water_count"])
+	assert.Equal(t, true, result["water_import_skipped"])
+	assert.Equal(t, 0, provider.callCount)
+	assert.Empty(t, repo.waterStartDate)
+	assert.Empty(t, repo.waterEndDate)
+	assert.Empty(t, repo.waterLogs)
+}
+
+func TestBodyMetricsService_SyncLocalDoesNotMarkSkipForInvalidWaterDatesOnly(t *testing.T) {
+	repo := &mockBodyMetricsRepo{}
+	svc := NewBodyMetricsService(repo)
+
+	result, err := svc.SyncLocal(context.Background(), "u1", SyncLocalInput{WaterByDate: map[string]LocalWaterDay{
+		"invalid": {Total: 250, Logs: []int{250}},
+	}})
+
+	require.NoError(t, err)
+	assert.Equal(t, 0, result["imported_water_count"])
+	assert.Equal(t, false, result["water_import_skipped"])
+	assert.Empty(t, repo.waterLogs)
 }

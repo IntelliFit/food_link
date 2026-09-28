@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react'
 import Taro from '@tarojs/taro'
 import PetChatPage from '../../src/packageExtra/pages/pet-chat/index'
 import { compressImagePathForUpload, estimatePetChat, streamGeneratePetChat, uploadAnalyzeImageFile } from '../../src/utils/api'
+import { rememberMealLocation } from '../../src/utils/meal-location'
 import { chooseImageWithPrivacy } from '../../src/utils/weapp-privacy'
 
 jest.mock('../../src/utils/withAuth', () => ({
@@ -9,6 +10,7 @@ jest.mock('../../src/utils/withAuth', () => ({
 }))
 
 jest.mock('../../src/utils/api', () => ({
+  getAccessToken: jest.fn(() => 'test-access-token'),
   estimatePetChat: jest.fn(),
   compressImagePathForUpload: jest.fn(),
   getPetChatSession: jest.fn(),
@@ -45,6 +47,7 @@ describe('pet chat credit cost', () => {
   beforeEach(() => {
     jest.useFakeTimers()
     jest.clearAllMocks()
+    rememberMealLocation('test-access-token')
     ;(Taro.useDidShow as jest.Mock).mockImplementation(() => {})
     ;(Taro as typeof Taro & { setNavigationBarTitle: jest.Mock }).setNavigationBarTitle = jest.fn()
     ;(estimatePetChat as jest.Mock).mockResolvedValue({ pricing: { credits_charged: 3 } })

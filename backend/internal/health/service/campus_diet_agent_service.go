@@ -86,6 +86,7 @@ type campusDietAgentMealContext struct {
 }
 
 type campusDietAgentRunState struct {
+	HistoryRecords    []domain.FoodRecord
 	Location          *domain.DietLocation
 	History           []domain.PetChatMessage
 	PersonalContext   mealPersonalContext
@@ -166,7 +167,7 @@ func (s *StatsService) shouldUseCampusDietAgent(ctx context.Context, userID stri
 	if question == "" || s == nil || s.repo == nil {
 		return false
 	}
-	if regexp.MustCompile(`自己做|自炊|家里做|食谱|菜谱`).MatchString(question) {
+	if !mealHistoryQuestion(question) && regexp.MustCompile(`自己做|自炊|家里做|食谱|菜谱`).MatchString(question) {
 		return false
 	}
 	var history []domain.PetChatMessage
@@ -176,6 +177,9 @@ func (s *StatsService) shouldUseCampusDietAgent(ctx context.Context, userID stri
 	active, _ := activeCampusDietRecommendation(history)
 	if campusDietAgentExplicitTopicSwitch(question) {
 		return false
+	}
+	if mealHistoryQuestion(question) || (active != nil && active.GeneratedBy == hybridMealVersion && regexp.MustCompile(`核对|来源|日期|份量|换一份`).MatchString(question)) {
+		return true
 	}
 	if active != nil {
 		if school, _ := s.repo.ResolveDietRecommendationSchool(ctx, question); school != nil {
@@ -216,7 +220,7 @@ func campusDietAgentContextualQuestion(question string) bool {
 func campusDietAgentIntent(question string, active *DietRecommendationResult) string {
 	normalized := strings.ReplaceAll(strings.TrimSpace(question), " ", "")
 	switch {
-	case regexp.MustCompile(`还有|其他|换一批|再来|再推荐|更多|别的`).MatchString(normalized):
+	case regexp.MustCompile(`还有|其他|换一批|换一份|换一餐|再来|再推荐|更多|别的`).MatchString(normalized):
 		return "more"
 	case regexp.MustCompile(`在哪|在哪里|哪里|哪个食堂|位置|几楼|楼层|窗口|档口`).MatchString(normalized):
 		return "location"
@@ -470,8 +474,8 @@ func (s *StatsService) GenerateCampusDietAgentStream(ctx context.Context, userID
 
 func (s *StatsService) runCampusDietAgent(ctx context.Context, state *campusDietAgentRunState) *CampusDietAgentResult {
 	initializeMealAccess(state)
-	if mealHarnessScope(state) == "unknown" {
-		return mealHarnessEmptyResult(state, "location_required")
+	if mealHistoryQuestion(state.Question) || state.EntryContext != nil || (state.ActiveResult != nil && state.ActiveResult.GeneratedBy == hybridMealVersion) || mealHarnessScope(state) == "unknown" {
+		return s.runHybridMealRecommendation(ctx, state)
 	}
 	if state.Location == nil && state.School.ID != "" && !slices.Contains(state.Constraints.AllowedSchoolIDs, state.School.ID) {
 		state.Constraints.PendingSchool = &state.School

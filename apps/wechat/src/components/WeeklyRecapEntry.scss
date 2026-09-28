@@ -1,7 +1,139 @@
-.weekly-recap-entry { margin: 20rpx 0 28rpx; display: flex; align-items: center; gap: 20rpx; padding: 26rpx; border: 1rpx solid #e4ece5; border-radius: 24rpx; background: #f7faf6; }
-.weekly-recap-entry__mark { flex: none; width: 66rpx; line-height: 74rpx; text-align: center; border-radius: 10rpx 18rpx 18rpx 10rpx; background: #e0ecdb; color: #4c704f; font-size: 30rpx; }
-.weekly-recap-entry__copy { flex: 1; }
-.weekly-recap-entry__title { display: block; font-size: 29rpx; font-weight: 600; color: #34553d; }
-.weekly-recap-entry__description { display: block; font-size: 23rpx; margin-top: 8rpx; color: #7d8b7e; }
-.weekly-recap-entry__arrow { color: #7d8b7e; font-size: 34rpx; }
-.home-page--dark, .profile-page--dark { .weekly-recap-entry { background: #233126; border-color: #354839; } .weekly-recap-entry__title { color: #e2eddf; } .weekly-recap-entry__mark { background: #374e37; color: #d4e6c9; } }
+.weekly-recap-entry {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 18rpx;
+  min-height: 126rpx;
+  box-sizing: border-box;
+  margin: 16rpx 0 28rpx;
+  padding: 22rpx 20rpx;
+  overflow: hidden;
+  border: 1rpx solid rgb(77 111 83 / 14%);
+  border-radius: 24rpx;
+  background: rgb(255 253 247 / 96%);
+  box-shadow: 0 8rpx 26rpx rgb(55 72 58 / 7%);
+
+  &::after {
+    content: '';
+    position: absolute;
+    top: -46rpx;
+    right: -30rpx;
+    width: 138rpx;
+    height: 138rpx;
+    border-radius: 50%;
+    background: rgb(116 157 113 / 7%);
+    pointer-events: none;
+  }
+
+  &:active {
+    opacity: 0.86;
+    transform: scale(0.995);
+  }
+}
+
+.weekly-recap-entry__icon {
+  position: relative;
+  z-index: 1;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 66rpx;
+  height: 66rpx;
+  border-radius: 22rpx;
+  background: #e8f1e5;
+  color: #477353;
+}
+
+.weekly-recap-entry__copy {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  min-width: 0;
+}
+
+.weekly-recap-entry__heading {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8rpx 12rpx;
+}
+
+.weekly-recap-entry__title {
+  display: block;
+  color: #294635;
+  font-size: 29rpx;
+  font-weight: 700;
+  line-height: 40rpx;
+}
+
+.weekly-recap-entry__period {
+  display: block;
+  padding: 3rpx 10rpx;
+  border-radius: 999rpx;
+  background: rgb(91 130 91 / 8%);
+  color: #708072;
+  font-size: 19rpx;
+  line-height: 28rpx;
+}
+
+.weekly-recap-entry__description {
+  display: block;
+  margin-top: 5rpx;
+  overflow: hidden;
+  color: #7d897f;
+  font-size: 22rpx;
+  line-height: 31rpx;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.weekly-recap-entry__action {
+  position: relative;
+  z-index: 1;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48rpx;
+  height: 48rpx;
+  border-radius: 50%;
+  background: rgb(91 130 91 / 9%);
+  color: #557560;
+}
+
+.profile-page > .weekly-recap-entry {
+  margin: 0 24rpx 28rpx;
+}
+
+.home-page--dark,
+.profile-page--dark {
+  .weekly-recap-entry {
+    border-color: rgb(112 196 149 / 14%);
+    background: #222f29;
+    box-shadow: none;
+
+    &::after {
+      background: rgb(112 196 149 / 6%);
+    }
+  }
+
+  .weekly-recap-entry__icon,
+  .weekly-recap-entry__action {
+    background: rgb(112 196 149 / 12%);
+    color: #afd0b8;
+  }
+
+  .weekly-recap-entry__title {
+    color: #e2eddf;
+  }
+
+  .weekly-recap-entry__period {
+    background: rgb(112 196 149 / 9%);
+    color: rgb(214 230 218 / 64%);
+  }
+
+  .weekly-recap-entry__description {
+    color: rgb(214 230 218 / 58%);
+  }
+}

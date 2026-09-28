@@ -304,7 +304,6 @@ func New(cfg *config.Config) (*App, error) {
 	bodyMetricsRepo := healthrepo.NewBodyMetricsRepo(db)
 	frSvc := foodrecordservice.NewFoodRecordService(frRepo, frTaskRepo, userRepo, storageClient)
 	analyzeTaskSvc.ConfigureAutoRecorder(frSvc)
-	frSvc.ConfigureWaterLogRecorder(bodyMetricsRepo)
 	frUploadSvc := foodrecordservice.NewUploadService(storageClient)
 	frNutritionSvc := foodrecordservice.NewFoodNutritionService(frNutritionRepo)
 	if gemini35Client != nil {
@@ -370,6 +369,7 @@ func New(cfg *config.Config) (*App, error) {
 	statsRepo := healthrepo.NewStatsRepo(db)
 	sleepHandler := healthhandler.NewSleepHandler(healthservice.NewSleepService(healthrepo.NewSleepRepo(db)))
 	bodyMetricsSvc := healthservice.NewBodyMetricsService(bodyMetricsRepo)
+	bodyMetricsSvc.ConfigureFoodWaterProvider(frSvc)
 	exerciseSvc := healthservice.NewExerciseService(exerciseRepo, cfg)
 	exerciseSvc.ConfigureTaskPublisher(taskQueue)
 	exerciseSvc.ConfigureStorage(storageClient)
@@ -410,6 +410,7 @@ func New(cfg *config.Config) (*App, error) {
 	statsSvc.ConfigurePetChatCompanionProvider(petRepo)
 	petSvc := petservice.NewService(petRepo)
 	petSvc.ConfigureStorage(storageClient)
+	petSvc.ConfigureFoodWaterProvider(frSvc)
 	pixelAvatarAPIKey := resolvePixelAvatarAPIKey(cfg.External)
 	if strings.TrimSpace(cfg.External.PixelAvatarAPIKey) == "" && pixelAvatarAPIKey != "" {
 		logger.Info(context.Background(), "像素分身复用万界大模型凭证")
@@ -450,7 +451,6 @@ func New(cfg *config.Config) (*App, error) {
 	// Recipe module DI
 	recipeRepo := reciperepo.NewRecipeRepo(db)
 	recipeSvc := recipeservice.NewRecipeService(recipeRepo, storageClient)
-	recipeSvc.ConfigureWaterLogRecorder(bodyMetricsRepo)
 	recipeSvc.ConfigureBlockChecker(friendSvc)
 	recipeSvc.ConfigureFavoriteRecipeVisibilityChecker(userSvc)
 	recipeHandler := recipehandler.NewRecipeHandler(recipeSvc)
@@ -700,6 +700,7 @@ func New(cfg *config.Config) (*App, error) {
 	engine.POST("/api/stats/insight/generate", authmw.RequireJWT(jwtSvc), healthHandler.GenerateStatsInsight)
 	engine.POST("/api/stats/insight/save", authmw.RequireJWT(jwtSvc), healthHandler.SaveStatsInsight)
 	engine.POST("/api/diet/recommendations", authmw.RequireJWT(jwtSvc), healthHandler.GenerateDietRecommendation)
+	engine.POST("/api/diet/recommendations/preview", authmw.RequireJWT(jwtSvc), healthHandler.PreviewMeals)
 	engine.GET("/api/exercise-calories/daily", authmw.RequireJWT(jwtSvc), healthHandler.GetExerciseCaloriesDaily)
 	engine.GET("/api/exercise-logs", authmw.RequireJWT(jwtSvc), healthHandler.GetExerciseLogs)
 	engine.POST("/api/exercise-logs", authmw.RequireJWT(jwtSvc), healthHandler.CreateExerciseLog)

@@ -115,6 +115,15 @@ export function getWaterLogItems(day: BodyMetricWaterDay | null | undefined): Bo
     } as BodyMetricWaterLogItem & { _fallback_index: number }))
 }
 
+export function isFoodDerivedWaterLog(item: BodyMetricWaterLogItem): boolean {
+  const sourceType = String(item.source_type || '')
+  return sourceType === 'ai' || sourceType.startsWith('ai_food_record:')
+}
+
+export function isEditableWaterLog(item: BodyMetricWaterLogItem): boolean {
+  return item.source_type === 'manual' || item.source_type === 'imported'
+}
+
 export function buildWeightTrend(summary: BodyMetricsSummary | null, dates: string[]): TrendPoint[] {
   const daily = summary?.weight_trend_daily || []
   if (daily.length > 0) {

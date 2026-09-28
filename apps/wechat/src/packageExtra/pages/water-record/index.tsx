@@ -22,6 +22,8 @@ import {
   getRouteDateLabel,
   getWaterDay,
   getWaterLogItems,
+  isEditableWaterLog,
+  isFoodDerivedWaterLog,
   normalizeRouteDate,
 } from '../body-metrics-shared'
 
@@ -65,6 +67,11 @@ function WaterRecordPage() {
   const waterGoal = summary?.water_goal_ml || 2000
   const currentDay = useMemo(() => getWaterDay(summary, recordDate), [summary, recordDate])
   const currentLogs = useMemo(() => getWaterLogItems(currentDay), [currentDay])
+  const editableLogs = useMemo(() => currentLogs.filter(isEditableWaterLog), [currentLogs])
+  const editableTotal = useMemo(
+    () => editableLogs.reduce((sum, item) => sum + Math.max(0, Number(item.amount_ml) || 0), 0),
+    [editableLogs]
+  )
   const currentTotal = currentDay.total || 0
   const progress = waterGoal > 0 ? Math.round((currentTotal / waterGoal) * 100) : 0
   const remaining = Math.max(0, waterGoal - currentTotal)
@@ -98,10 +105,10 @@ function WaterRecordPage() {
   }
 
   const clearWater = () => {
-    if (currentTotal <= 0) return
+    if (editableTotal <= 0) return
     Taro.showModal({
-      title: '清空喝水记录',
-      content: `确定清空 ${routeDateLabel} 的 ${Math.round(currentTotal)}ml 喝水记录吗？`,
+      title: '清空手动饮水',
+      content: `确定清空 ${routeDateLabel} 手动记录的 ${Math.round(editableTotal)}ml 吗？饮食含水会保留。`,
       confirmText: '清空',
       confirmColor: '#d45c5c',
       success: async (res) => {
@@ -115,10 +122,10 @@ function WaterRecordPage() {
             force: true,
             bodyMetricsOnly: true,
           })
-          Taro.showToast({ title: '已清空', icon: 'success' })
+          Taro.showToast({ title: '已清空手动饮水', icon: 'success' })
           await loadData()
         } catch (err) {
-          await showUnifiedApiError(err, '清空喝水记录失败')
+          await showUnifiedApiError(err, '清空手动饮水失败')
         } finally {
           setClearing(false)
         }
@@ -127,6 +134,7 @@ function WaterRecordPage() {
   }
 
   const deleteWaterLog = (item: BodyMetricWaterLogItem) => {
+    if (!isEditableWaterLog(item)) return
     const logId = String(item.id || '').trim()
     if (!logId) {
       Taro.showToast({ title: '这条旧记录只能清空当天', icon: 'none' })
@@ -224,9 +232,9 @@ function WaterRecordPage() {
       <View className='water-day-card'>
         <View className='section-title-row'>
           <Text className='section-title'>{routeDateLabel}记录</Text>
-          {currentTotal > 0 ? (
+          {editableTotal > 0 ? (
             <Text className={`water-clear-link ${clearing ? 'is-disabled' : ''}`} onClick={() => !clearing && clearWater()}>
-              清空
+              清空手动饮水
             </Text>
           ) : null}
         </View>
@@ -235,10 +243,16 @@ function WaterRecordPage() {
             {currentLogs.map((item, index) => {
               const logId = item.id || `${index}-${item.amount_ml}`
               const isDeleting = item.id && deletingLogId === item.id
+              const isDerived = isFoodDerivedWaterLog(item)
+              const isEditable = isEditableWaterLog(item)
               return (
-              <View key={logId} className={`water-log-chip ${isDeleting ? 'is-deleting' : ''}`}>
+              <View key={logId} className={`water-log-chip ${isDeleting ? 'is-deleting' : ''} ${isDerived ? 'is-derived' : ''}`}>
                 <Text className='water-log-chip-text'>+{Math.round(item.amount_ml)}ml</Text>
-                <Text className='water-log-delete' onClick={() => !isDeleting && deleteWaterLog(item)}>删除</Text>
+                {isEditable ? (
+                  <Text className='water-log-delete' onClick={() => !isDeleting && deleteWaterLog(item)}>删除</Text>
+                ) : (
+                  <Text className='water-log-derived'>{isDerived ? '饮食含水' : '只读记录'}</Text>
+                )}
               </View>
               )
             })}

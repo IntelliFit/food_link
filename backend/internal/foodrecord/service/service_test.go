@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"reflect"
 	"testing"
 	"time"
@@ -13,7 +14,6 @@ import (
 	commonerrors "food_link/backend/internal/common/errors"
 	"food_link/backend/internal/foodrecord/domain"
 	foodrepo "food_link/backend/internal/foodrecord/repo"
-	healthdomain "food_link/backend/internal/health/domain"
 	"food_link/backend/pkg/config"
 	"food_link/backend/pkg/storage"
 
@@ -25,64 +25,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 )
-
-type mockWaterLogRecorder struct {
-	logs []healthdomain.BodyWaterLog
-	err  error
-}
-
-func (m *mockWaterLogRecorder) CreateWaterLog(ctx context.Context, log *healthdomain.BodyWaterLog) error {
-	if m.err != nil {
-		return m.err
-	}
-	m.logs = append(m.logs, *log)
-	return nil
-}
-
-func (m *mockWaterLogRecorder) ReduceWaterLogsByDateSource(ctx context.Context, userID string, recordedOn string, sourceType string, amountMl int) (int, error) {
-	if m.err != nil {
-		return 0, m.err
-	}
-	if amountMl <= 0 {
-		return 0, nil
-	}
-	targetDate, err := time.ParseInLocation("2006-01-02", recordedOn, chinaTZ)
-	if err != nil {
-		return 0, err
-	}
-	reduced := 0
-	nextLogs := make([]healthdomain.BodyWaterLog, 0, len(m.logs))
-	for _, log := range m.logs {
-		if reduced >= amountMl || log.UserID != userID || log.SourceType != sourceType || log.RecordedOn == nil || log.RecordedOn.In(chinaTZ).Format("2006-01-02") != targetDate.Format("2006-01-02") {
-			nextLogs = append(nextLogs, log)
-			continue
-		}
-		remaining := amountMl - reduced
-		if log.AmountMl <= remaining {
-			reduced += log.AmountMl
-			continue
-		}
-		log.AmountMl -= remaining
-		reduced += remaining
-		nextLogs = append(nextLogs, log)
-	}
-	m.logs = nextLogs
-	return reduced, nil
-}
-
-func (m *mockWaterLogRecorder) SumWaterByDateSource(ctx context.Context, userID string, recordedOn string, sourceType string) (int64, error) {
-	if m.err != nil {
-		return 0, m.err
-	}
-	total := int64(0)
-	for _, log := range m.logs {
-		if log.UserID != userID || log.SourceType != sourceType || log.RecordedOn == nil || log.RecordedOn.In(chinaTZ).Format("2006-01-02") != recordedOn {
-			continue
-		}
-		total += int64(log.AmountMl)
-	}
-	return total, nil
-}
 
 func setupServiceTestDB(t *testing.T) *gorm.DB {
 	db := testdb.New(t)
@@ -464,130 +406,6 @@ func TestFoodRecordService_Save_WithDate(t *testing.T) {
 	assert.Equal(t, dateStr, record.RecordTime.In(chinaTZ).Format("2006-01-02"))
 }
 
-func TestFoodRecordService_Save_AddsFoodWaterToBodyWater(t *testing.T) {
-	db := setupServiceTestDB(t)
-	r := foodrepo.NewFoodRecordRepo(db)
-	tr := foodrepo.NewAnalysisTaskRepo(db)
-	ur := repo.NewUserRepo(db)
-	waterRecorder := &mockWaterLogRecorder{}
-	svc := NewFoodRecordService(r, tr, ur)
-	svc.ConfigureWaterLogRecorder(waterRecorder)
-	ctx := context.Background()
-
-	dateStr := time.Now().In(chinaTZ).AddDate(0, 0, -1).Format("2006-01-02")
-	record, err := svc.Save(ctx, "u1", SaveFoodRecordInput{
-		MealType: "lunch",
-		Date:     &dateStr,
-		Items: []domain.FoodItem{
-			{Name: "粥", Weight: 300, Ratio: 50, Intake: 150, WaterMl: 240},
-			{Name: "苹果", Weight: 100, Ratio: 100, Intake: 100, WaterMl: 85},
-			{Name: "炸物", Weight: 80, Ratio: 100, Intake: 80, WaterMl: 0},
-		},
-		TotalCalories: 500,
-	})
-
-	require.NoError(t, err)
-	require.NotNil(t, record)
-	require.Len(t, waterRecorder.logs, 1)
-	assert.Equal(t, "u1", waterRecorder.logs[0].UserID)
-	assert.Equal(t, 205, waterRecorder.logs[0].AmountMl)
-	assert.Equal(t, "ai_food_record:"+record.ID, waterRecorder.logs[0].SourceType)
-	require.NotNil(t, waterRecorder.logs[0].RecordedOn)
-	assert.Equal(t, dateStr, waterRecorder.logs[0].RecordedOn.In(chinaTZ).Format("2006-01-02"))
-}
-
-func TestFoodRecordService_Update_AdjustsFoodWaterDiff(t *testing.T) {
-	db := setupServiceTestDB(t)
-	r := foodrepo.NewFoodRecordRepo(db)
-	tr := foodrepo.NewAnalysisTaskRepo(db)
-	ur := repo.NewUserRepo(db)
-	waterRecorder := &mockWaterLogRecorder{}
-	svc := NewFoodRecordService(r, tr, ur)
-	svc.ConfigureWaterLogRecorder(waterRecorder)
-	ctx := context.Background()
-
-	recordTime := time.Now().In(chinaTZ)
-	record := &domain.FoodRecord{
-		UserID:     "u1",
-		MealType:   "lunch",
-		RecordTime: &recordTime,
-		Items: []domain.FoodItem{
-			{Name: "粥", Weight: 300, Ratio: 50, Intake: 150, WaterMl: 240},
-			{Name: "苹果", Weight: 100, Ratio: 100, Intake: 100, WaterMl: 85},
-		},
-	}
-	require.NoError(t, r.Create(ctx, record))
-	recordedOn := foodRecordWaterDate(record.RecordTime)
-	require.NoError(t, svc.recordFoodWaterAmount(ctx, "u1", record.ID, recordedOn, 205))
-
-	_, err := svc.Update(ctx, "u1", record.ID, UpdateFoodRecordInput{
-		Items: []domain.FoodItem{{Name: "苹果", Weight: 100, Ratio: 100, Intake: 100, WaterMl: 85}},
-	})
-
-	require.NoError(t, err)
-	require.Len(t, waterRecorder.logs, 1)
-	assert.Equal(t, 85, waterRecorder.logs[0].AmountMl)
-}
-
-func TestFoodRecordService_Delete_ReducesFoodWater(t *testing.T) {
-	db := setupServiceTestDB(t)
-	r := foodrepo.NewFoodRecordRepo(db)
-	tr := foodrepo.NewAnalysisTaskRepo(db)
-	ur := repo.NewUserRepo(db)
-	waterRecorder := &mockWaterLogRecorder{}
-	svc := NewFoodRecordService(r, tr, ur)
-	svc.ConfigureWaterLogRecorder(waterRecorder)
-	ctx := context.Background()
-
-	recordTime := time.Now().In(chinaTZ)
-	record := &domain.FoodRecord{
-		UserID:     "u1",
-		MealType:   "lunch",
-		RecordTime: &recordTime,
-		Items:      []domain.FoodItem{{Name: "粥", Weight: 300, Ratio: 50, Intake: 150, WaterMl: 240}},
-	}
-	require.NoError(t, r.Create(ctx, record))
-	recordedOn := foodRecordWaterDate(record.RecordTime)
-	require.NoError(t, svc.recordFoodWaterAmount(ctx, "u1", record.ID, recordedOn, 50))
-
-	err := svc.Delete(ctx, "u1", record.ID)
-
-	require.NoError(t, err)
-	assert.Empty(t, waterRecorder.logs)
-}
-
-func TestFoodRecordService_Delete_DoesNotReduceUnrelatedLegacyAIWater(t *testing.T) {
-	db := setupServiceTestDB(t)
-	r := foodrepo.NewFoodRecordRepo(db)
-	tr := foodrepo.NewAnalysisTaskRepo(db)
-	ur := repo.NewUserRepo(db)
-	recordTime := time.Now().In(chinaTZ)
-	waterRecorder := &mockWaterLogRecorder{logs: []healthdomain.BodyWaterLog{{
-		UserID:     "u1",
-		AmountMl:   900,
-		RecordedOn: &recordTime,
-		SourceType: "ai",
-	}}}
-	svc := NewFoodRecordService(r, tr, ur)
-	svc.ConfigureWaterLogRecorder(waterRecorder)
-	ctx := context.Background()
-
-	record := &domain.FoodRecord{
-		UserID:     "u1",
-		MealType:   "afternoon_snack",
-		RecordTime: &recordTime,
-		Items:      []domain.FoodItem{{Name: "冰淇淋", Weight: 130, Ratio: 100, Intake: 130, WaterMl: 72}},
-	}
-	require.NoError(t, r.Create(ctx, record))
-
-	err := svc.Delete(ctx, "u1", record.ID)
-
-	require.NoError(t, err)
-	require.Len(t, waterRecorder.logs, 1)
-	assert.Equal(t, 900, waterRecorder.logs[0].AmountMl)
-	assert.Equal(t, "ai", waterRecorder.logs[0].SourceType)
-}
-
 func TestTotalFoodWaterIntakeMl(t *testing.T) {
 	assert.Equal(t, 0, totalFoodWaterIntakeMl(nil))
 	assert.Equal(t, 150, totalFoodWaterIntakeMl([]domain.FoodItem{{WaterMl: 300, Ratio: 50, Weight: 300, Intake: 150}}))
@@ -598,6 +416,90 @@ func TestTotalFoodWaterIntakeMl(t *testing.T) {
 	items := normalizeFoodItems([]domain.FoodItem{{WaterMl: 180, Weight: 100}})
 	require.Len(t, items, 1)
 	assert.Equal(t, 100.0, items[0].WaterMl)
+}
+
+func TestFoodWaterFallsBackToReliableMassBalance(t *testing.T) {
+	yogurt := domain.FoodItem{
+		Name:   "燕麦黄桃酸奶",
+		Weight: 250,
+		Ratio:  100,
+		Intake: 250,
+		Nutrients: domain.FoodItemNutrients{
+			Calories: 242,
+			Protein:  7.3,
+			Carbs:    33.8,
+			Fat:      8.5,
+			Fiber:    2,
+		},
+	}
+	assert.Equal(t, 198, totalFoodWaterIntakeMl([]domain.FoodItem{yogurt}))
+
+	normalized := normalizeFoodItems([]domain.FoodItem{yogurt})
+	require.Len(t, normalized, 1)
+	assert.Equal(t, 198.4, normalized[0].WaterMl)
+	yogurt.Ratio = 50
+	yogurt.Intake = 125
+	assert.Equal(t, 99, totalFoodWaterIntakeMl([]domain.FoodItem{yogurt}))
+	yogurt.Ratio = 0
+	assert.Equal(t, 99, totalFoodWaterIntakeMl([]domain.FoodItem{yogurt}))
+
+	unknown := domain.FoodItem{Name: "未知食物", Weight: 250, Ratio: 100, Intake: 250}
+	assert.Equal(t, 0, totalFoodWaterIntakeMl([]domain.FoodItem{unknown}))
+	caloriesOnly := domain.FoodItem{
+		Name: "营养缺失食物", Weight: 250, Ratio: 100, Intake: 250,
+		Nutrients: domain.FoodItemNutrients{Calories: 200},
+	}
+	assert.Equal(t, 0, totalFoodWaterIntakeMl([]domain.FoodItem{caloriesOnly}))
+	inconsistent := domain.FoodItem{
+		Name: "营养异常食物", Weight: 250, Ratio: 100, Intake: 250,
+		Nutrients: domain.FoodItemNutrients{Calories: 800, Protein: 1},
+	}
+	assert.Equal(t, 0, totalFoodWaterIntakeMl([]domain.FoodItem{inconsistent}))
+	invalidExplicit := domain.FoodItem{Name: "异常水分", Ratio: 100, WaterMl: math.NaN()}
+	assert.Equal(t, 0, totalFoodWaterIntakeMl([]domain.FoodItem{invalidExplicit}))
+	assert.Equal(t, 250, totalFoodWaterIntakeMl([]domain.FoodItem{{Name: "矿泉水", Weight: 250, Ratio: 100, Intake: 250}}))
+}
+
+func TestFoodRecordService_ListDerivedFoodWaterLogsUsesCurrentRecords(t *testing.T) {
+	db := setupServiceTestDB(t)
+	r := foodrepo.NewFoodRecordRepo(db)
+	tr := foodrepo.NewAnalysisTaskRepo(db)
+	ur := repo.NewUserRepo(db)
+	svc := NewFoodRecordService(r, tr, ur)
+	ctx := context.Background()
+
+	recordedAt := time.Now().In(chinaTZ).AddDate(0, 0, -1)
+	date := recordedAt.Format("2006-01-02")
+	record := &domain.FoodRecord{
+		UserID:     "u1",
+		MealType:   "dinner",
+		RecordTime: &recordedAt,
+		Items: []domain.FoodItem{{
+			Name: "白米饭", Weight: 200, Ratio: 74, Intake: 148,
+			Nutrients: domain.FoodItemNutrients{Calories: 302, Protein: 5.4, Carbs: 66.2, Fat: 0.6, Fiber: 1},
+		}},
+	}
+	require.NoError(t, r.Create(ctx, record))
+
+	logs, err := svc.ListDerivedFoodWaterLogs(ctx, "u1", date, date)
+	require.NoError(t, err)
+	require.Len(t, logs, 1)
+	assert.Equal(t, 94, logs[0].AmountMl)
+	assert.Equal(t, "food-water:"+record.ID, logs[0].ID)
+	assert.Equal(t, "ai_food_record:"+record.ID, logs[0].SourceType)
+
+	updatedItems := []domain.FoodItem{{Name: "白米饭", Weight: 200, Ratio: 74, Intake: 148, WaterMl: 50}}
+	_, err = r.Update(ctx, "u1", record.ID, map[string]any{"items": updatedItems})
+	require.NoError(t, err)
+	logs, err = svc.ListDerivedFoodWaterLogs(ctx, "u1", date, date)
+	require.NoError(t, err)
+	require.Len(t, logs, 1)
+	assert.Equal(t, 37, logs[0].AmountMl)
+
+	require.NoError(t, svc.Delete(ctx, "u1", record.ID))
+	logs, err = svc.ListDerivedFoodWaterLogs(ctx, "u1", date, date)
+	require.NoError(t, err)
+	assert.Empty(t, logs)
 }
 
 func TestFoodRecordService_Save_WithSourceTaskID(t *testing.T) {
@@ -655,47 +557,6 @@ func TestFoodRecordService_Save_SourceTaskIDIsIdempotent(t *testing.T) {
 	var count int64
 	require.NoError(t, db.Model(&domain.FoodRecord{}).Where("user_id = ? AND source_task_id = ?", "u1", task.ID).Count(&count).Error)
 	assert.Equal(t, int64(1), count)
-}
-
-func TestFoodRecordService_Save_SourceTaskIDBackfillsMissingWater(t *testing.T) {
-	db := setupServiceTestDB(t)
-	r := foodrepo.NewFoodRecordRepo(db)
-	tr := foodrepo.NewAnalysisTaskRepo(db)
-	ur := repo.NewUserRepo(db)
-	waterRecorder := &mockWaterLogRecorder{}
-	svc := NewFoodRecordService(r, tr, ur)
-	svc.ConfigureWaterLogRecorder(waterRecorder)
-	ctx := context.Background()
-
-	task := &analyzedomain.AnalysisTask{ID: uuid.New().String(), UserID: "u1", TaskType: "food"}
-	require.NoError(t, db.Create(task).Error)
-
-	first, err := svc.Save(ctx, "u1", SaveFoodRecordInput{
-		MealType:     "dinner",
-		SourceTaskID: &task.ID,
-		Items: []domain.FoodItem{
-			{Name: "咖啡", Weight: 900, Ratio: 100, Intake: 900, WaterMl: 900},
-		},
-		TotalCalories: 18,
-	})
-	require.NoError(t, err)
-	require.Len(t, waterRecorder.logs, 1)
-	waterRecorder.logs = nil
-
-	second, err := svc.Save(ctx, "u1", SaveFoodRecordInput{
-		MealType:     "dinner",
-		SourceTaskID: &task.ID,
-		Items: []domain.FoodItem{
-			{Name: "咖啡", Weight: 900, Ratio: 100, Intake: 900, WaterMl: 900},
-		},
-		TotalCalories: 18,
-	})
-	require.NoError(t, err)
-	assert.True(t, second.AlreadySaved)
-	assert.Equal(t, first.ID, second.ID)
-	require.Len(t, waterRecorder.logs, 1)
-	assert.Equal(t, 900, waterRecorder.logs[0].AmountMl)
-	assert.Equal(t, "ai_food_record:"+first.ID, waterRecorder.logs[0].SourceType)
 }
 
 func TestFoodRecordService_List(t *testing.T) {

@@ -269,16 +269,17 @@ export function removeWeightFromBodyMetricsStorage(item: BodyMetricWeightEntry):
   saveBodyMetricsStorage({ ...stored, weightEntries: nextEntries })
 }
 
-/**
- * 饮食记录保存成功后，把食物含水量乐观添加到本机 body_metrics_storage，
- * 让首页饮水进度无需等云端身体指标接口即可立即更新。
- */
+function isEditableWaterLogItem(item: BodyMetricWaterLogItem): boolean {
+  return item.source_type === 'manual' || item.source_type === 'imported'
+}
+
+/** 手动饮水接口成功后，把带来源的日志同步到首页本地缓存。 */
 export function addWaterToBodyMetricsStorage(
   calendarDate: string,
   amountMl: number,
-  logItem?: BodyMetricWaterLogItem
+  logItem: BodyMetricWaterLogItem
 ): void {
-  if (amountMl <= 0) return
+  if (amountMl <= 0 || !isEditableWaterLogItem(logItem)) return
   const apiDate = mapCalendarDateToApi(calendarDate) || calendarDate
   const stored = getWritableBodyMetricsStorage()
   if (!stored) return
@@ -289,15 +290,14 @@ export function addWaterToBodyMetricsStorage(
     date: apiDate,
     total: Math.max(0, Number(current.total) || 0) + roundedAmount,
     logs: [...(current.logs || []), roundedAmount],
-    log_items: logItem
-      ? [...(current.log_items || []), { ...logItem, date: apiDate, amount_ml: roundedAmount }]
-      : current.log_items,
+    log_items: [...(current.log_items || []), { ...logItem, date: apiDate, amount_ml: roundedAmount }],
   }
   saveBodyMetricsStorage(stored)
 }
 
 /** 删除一条喝水记录后同步扣减首页缓存。 */
 export function removeWaterFromBodyMetricsStorage(item: BodyMetricWaterLogItem): void {
+  if (!isEditableWaterLogItem(item)) return
   const stored = getWritableBodyMetricsStorage()
   if (!stored) return
   const apiDate = mapCalendarDateToApi(item.date) || item.date
@@ -320,12 +320,21 @@ export function removeWaterFromBodyMetricsStorage(item: BodyMetricWaterLogItem):
   saveBodyMetricsStorage(stored)
 }
 
-/** 清空某天喝水记录后立即清空首页缓存。 */
+/** 清空某天可编辑饮水后，保留由饮食记录计算出的只读含水量。 */
 export function clearWaterFromBodyMetricsStorage(calendarDate: string): void {
   const stored = getWritableBodyMetricsStorage()
   if (!stored) return
   const apiDate = mapCalendarDateToApi(calendarDate) || calendarDate
-  stored.waterByDate[apiDate] = { date: apiDate, total: 0, logs: [], log_items: [] }
+  const current = stored.waterByDate[apiDate]
+  if (!current || !Array.isArray(current.log_items)) return
+  const readonlyItems = current.log_items.filter((item) => !isEditableWaterLogItem(item))
+  const readonlyLogs = readonlyItems.map((item) => Math.max(0, Math.round(Number(item.amount_ml) || 0)))
+  stored.waterByDate[apiDate] = {
+    date: apiDate,
+    total: readonlyLogs.reduce((sum, amount) => sum + amount, 0),
+    logs: readonlyLogs,
+    log_items: readonlyItems,
+  }
   saveBodyMetricsStorage(stored)
 }
 

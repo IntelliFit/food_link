@@ -41,17 +41,10 @@ type FoodRecordService struct {
 	userRepo   *authrepo.UserRepo
 	storage    *storage.Client
 	rewards    InviteRewardActivator
-	waterLogs  WaterLogRecorder
 }
 
 type InviteRewardActivator interface {
 	ActivatePendingInviteReferralOnFirstValidUse(ctx context.Context, inviteeUserID, effectiveAction string) (*membershipdomain.UserInviteReferral, error)
-}
-
-type WaterLogRecorder interface {
-	CreateWaterLog(ctx context.Context, log *healthdomain.BodyWaterLog) error
-	ReduceWaterLogsByDateSource(ctx context.Context, userID string, recordedOn string, sourceType string, amountMl int) (int, error)
-	SumWaterByDateSource(ctx context.Context, userID string, recordedOn string, sourceType string) (int64, error)
 }
 
 func NewFoodRecordService(
@@ -74,10 +67,6 @@ func NewFoodRecordService(
 
 func (s *FoodRecordService) ConfigureInviteRewardActivator(rewards InviteRewardActivator) {
 	s.rewards = rewards
-}
-
-func (s *FoodRecordService) ConfigureWaterLogRecorder(recorder WaterLogRecorder) {
-	s.waterLogs = recorder
 }
 
 type SaveFoodRecordInput struct {
@@ -139,7 +128,6 @@ func (s *FoodRecordService) Save(ctx context.Context, userID string, input SaveF
 				return nil, err
 			}
 			if existing != nil {
-				s.ensureExistingFoodWaterIntake(ctx, userID, existing)
 				existing.AlreadySaved = true
 				return existing, nil
 			}
@@ -231,20 +219,11 @@ func (s *FoodRecordService) Save(ctx context.Context, userID string, input SaveF
 				return nil, lookupErr
 			}
 			if existing != nil {
-				s.ensureExistingFoodWaterIntake(ctx, userID, existing)
 				existing.AlreadySaved = true
 				return existing, nil
 			}
 		}
 		return nil, err
-	}
-	if err := s.recordFoodWaterIntake(ctx, userID, record); err != nil {
-		// Food water is a derived side effect. A schema/config drift in water logs
-		// must not make the primary food record fail after it has been created.
-		logger.Error(ctx, "记录食物饮水量失败", err,
-			slog.String("user_id", userID),
-			slog.String("record_id", record.ID),
-		)
 	}
 	s.activateInviteReward(ctx, userID, "food_record")
 	return record, nil
@@ -258,104 +237,34 @@ func isDuplicateRecordError(err error) bool {
 	return strings.Contains(msg, "duplicate") || strings.Contains(msg, "unique") || strings.Contains(msg, "23505")
 }
 
-func (s *FoodRecordService) recordFoodWaterIntake(ctx context.Context, userID string, record *domain.FoodRecord) error {
-	if s.waterLogs == nil || record == nil || strings.TrimSpace(userID) == "" {
-		return nil
+// ListDerivedFoodWaterLogs builds the canonical read-only water entries from
+// current food records. Historical persisted derived rows are intentionally
+// ignored so updates and deletes are reflected immediately without a cache.
+func (s *FoodRecordService) ListDerivedFoodWaterLogs(ctx context.Context, userID, startDate, endDate string) ([]healthdomain.BodyWaterLog, error) {
+	if s == nil || s.recordRepo == nil || strings.TrimSpace(userID) == "" {
+		return []healthdomain.BodyWaterLog{}, nil
 	}
-	amountMl := totalFoodWaterIntakeMl(record.Items)
-	if amountMl <= 0 {
-		return nil
-	}
-	return s.recordFoodWaterAmount(ctx, userID, record.ID, foodRecordWaterDate(record.RecordTime), amountMl)
-}
-
-func (s *FoodRecordService) ensureExistingFoodWaterIntake(ctx context.Context, userID string, record *domain.FoodRecord) {
-	if s.waterLogs == nil || record == nil || strings.TrimSpace(userID) == "" {
-		return
-	}
-	amountMl := totalFoodWaterIntakeMl(record.Items)
-	if amountMl <= 0 {
-		return
-	}
-	sourceType := foodWaterSourceType(record.ID)
-	if sourceType == "" {
-		return
-	}
-	recordedDate := foodRecordWaterDate(record.RecordTime)
-	existingMl, err := s.waterLogs.SumWaterByDateSource(ctx, userID, recordedDate.Format("2006-01-02"), sourceType)
+	records, err := s.recordRepo.ListByUserDateRange(ctx, userID, startDate, endDate, 0)
 	if err != nil {
-		logger.Warn(ctx, "补齐食物饮水量时查询已有饮水失败",
-			slog.String("user_id", userID),
-			slog.String("record_id", record.ID),
-			slog.String("source_type", sourceType),
-			logger.Err(err),
-		)
-		return
+		return nil, err
 	}
-	missingMl := amountMl - int(existingMl)
-	if missingMl <= 0 {
-		return
-	}
-	if err := s.recordFoodWaterAmount(ctx, userID, record.ID, recordedDate, missingMl); err != nil {
-		logger.Warn(ctx, "补齐食物饮水量失败",
-			slog.String("user_id", userID),
-			slog.String("record_id", record.ID),
-			slog.Int("missing_ml", missingMl),
-			logger.Err(err),
-		)
-	}
-}
-
-func (s *FoodRecordService) adjustFoodRecordWaterIntake(ctx context.Context, userID string, recordID string, recordTime *time.Time, deltaMl int) error {
-	if s.waterLogs == nil || strings.TrimSpace(userID) == "" || deltaMl == 0 {
-		return nil
-	}
-	recordedDate := foodRecordWaterDate(recordTime)
-	if deltaMl > 0 {
-		return s.recordFoodWaterAmount(ctx, userID, recordID, recordedDate, deltaMl)
-	}
-	sourceType := foodWaterSourceType(recordID)
-	if sourceType == "" {
-		return nil
-	}
-	_, err := s.waterLogs.ReduceWaterLogsByDateSource(ctx, userID, recordedDate.Format("2006-01-02"), sourceType, -deltaMl)
-	return err
-}
-
-func (s *FoodRecordService) recordFoodWaterAmount(ctx context.Context, userID string, recordID string, recordedDate time.Time, amountMl int) error {
-	if s.waterLogs == nil || amountMl <= 0 {
-		return nil
-	}
-	sourceType := foodWaterSourceType(recordID)
-	if sourceType == "" {
-		return nil
-	}
-	logger.Info(ctx, "记录食物饮水量",
-		slog.String("user_id", userID),
-		slog.String("record_id", recordID),
-		slog.Int("amount_ml", amountMl),
-		slog.String("recorded_on", recordedDate.Format("2006-01-02")),
-		slog.String("source_type", sourceType),
-	)
-	for amountMl > 0 {
-		chunk := amountMl
-		if chunk > 5000 {
-			chunk = 5000
+	logs := make([]healthdomain.BodyWaterLog, 0, len(records))
+	for index := range records {
+		amountMl := totalFoodWaterIntakeMl(records[index].Items)
+		if amountMl <= 0 {
+			continue
 		}
-		now := time.Now().UTC()
-		log := &healthdomain.BodyWaterLog{
+		recordedOn := foodRecordWaterDate(records[index].RecordTime)
+		logs = append(logs, healthdomain.BodyWaterLog{
+			ID:         "food-water:" + records[index].ID,
 			UserID:     userID,
-			AmountMl:   chunk,
-			RecordedOn: &recordedDate,
-			SourceType: sourceType,
-			CreatedAt:  &now,
-		}
-		if err := s.waterLogs.CreateWaterLog(ctx, log); err != nil {
-			return err
-		}
-		amountMl -= chunk
+			AmountMl:   amountMl,
+			RecordedOn: &recordedOn,
+			SourceType: foodWaterSourceType(records[index].ID),
+			CreatedAt:  records[index].CreatedAt,
+		})
 	}
-	return nil
+	return logs, nil
 }
 
 func foodWaterSourceType(recordID string) string {
@@ -363,7 +272,7 @@ func foodWaterSourceType(recordID string) string {
 	if recordID == "" {
 		return ""
 	}
-	return "ai_food_record:" + recordID
+	return healthdomain.FoodRecordWaterSourcePrefix + recordID
 }
 
 func foodRecordWaterDate(recordTime *time.Time) time.Time {
@@ -392,9 +301,7 @@ func normalizeFoodItems(items []domain.FoodItem) []domain.FoodItem {
 		if items[i].WaterMl < 0 {
 			items[i].WaterMl = 0
 		}
-		if items[i].Weight > 0 && items[i].WaterMl > items[i].Weight {
-			items[i].WaterMl = items[i].Weight
-		}
+		items[i].WaterMl = foodItemWaterMl(items[i])
 	}
 	return items
 }
@@ -518,7 +425,7 @@ func isKnownZeroNutritionFoodName(name string) bool {
 func totalFoodWaterIntakeMl(items []domain.FoodItem) int {
 	total := 0.0
 	for _, item := range items {
-		waterMl := item.WaterMl
+		waterMl := foodItemWaterMl(item)
 		if waterMl <= 0 {
 			continue
 		}
@@ -545,6 +452,71 @@ func totalFoodWaterIntakeMl(items []domain.FoodItem) int {
 		return 0
 	}
 	return int(math.Round(total))
+}
+
+func foodItemWaterMl(item domain.FoodItem) float64 {
+	waterMl := item.WaterMl
+	if waterMl <= 0 || math.IsNaN(waterMl) || math.IsInf(waterMl, 0) {
+		waterMl = estimateFoodItemWaterMl(item)
+	}
+	if math.IsNaN(waterMl) || math.IsInf(waterMl, 0) || waterMl <= 0 {
+		return 0
+	}
+	if item.Weight > 0 && !math.IsNaN(item.Weight) && !math.IsInf(item.Weight, 0) && waterMl > item.Weight {
+		return item.Weight
+	}
+	if item.Weight <= 0 && waterMl > 5000 {
+		return 0
+	}
+	return waterMl
+}
+
+// estimateFoodItemWaterMl uses a conservative mass balance when the upstream
+// recognizer cannot provide waterMl. Protein, carbohydrate, fat and fibre are
+// the measured solid mass available on every saved item; the remaining edible
+// mass is the best local estimate of food moisture. Completely unknown
+// nutrition is not guessed, except for known zero-energy drinks such as water.
+func estimateFoodItemWaterMl(item domain.FoodItem) float64 {
+	const maxEstimatableWeightGrams = 5000
+	if item.Weight <= 0 || item.Weight > maxEstimatableWeightGrams || math.IsNaN(item.Weight) || math.IsInf(item.Weight, 0) {
+		return 0
+	}
+	if isKnownZeroNutritionFoodName(item.Name) && allFoodItemCoreNutritionZero(item.Nutrients) {
+		return item.Weight
+	}
+	values := []float64{
+		item.Nutrients.Calories,
+		item.Nutrients.Protein,
+		item.Nutrients.Carbs,
+		item.Nutrients.Fat,
+		item.Nutrients.Fiber,
+	}
+	for _, value := range values {
+		if value < 0 || math.IsNaN(value) || math.IsInf(value, 0) {
+			return 0
+		}
+	}
+	if item.Nutrients.Calories <= 0 {
+		return 0
+	}
+	protein := item.Nutrients.Protein
+	carbs := item.Nutrients.Carbs
+	fat := item.Nutrients.Fat
+	fiber := item.Nutrients.Fiber
+	solidMass := protein + carbs + fat + fiber
+	if solidMass < item.Weight*0.005 || solidMass >= item.Weight {
+		return 0
+	}
+	macroCalories := protein*4 + carbs*4 + fat*9
+	calorieTolerance := math.Max(30, item.Nutrients.Calories*0.35)
+	if macroCalories <= 0 || math.Abs(macroCalories-item.Nutrients.Calories) > calorieTolerance {
+		return 0
+	}
+	waterMl := item.Weight - solidMass
+	if waterMl <= 0 {
+		return 0
+	}
+	return math.Round(waterMl*10) / 10
 }
 
 func (s *FoodRecordService) activateInviteReward(ctx context.Context, userID, action string) {
@@ -692,8 +664,6 @@ func (s *FoodRecordService) Get(ctx context.Context, userID, recordID string) (*
 }
 
 func (s *FoodRecordService) Update(ctx context.Context, userID, recordID string, input UpdateFoodRecordInput) (*domain.FoodRecord, error) {
-	var previousWaterMl int
-	var previousRecordTime *time.Time
 	var existing *domain.FoodRecord
 	nutritionUpdate := input.Items != nil || input.TotalCalories != nil || input.TotalProtein != nil || input.TotalCarbs != nil || input.TotalFat != nil
 	if nutritionUpdate {
@@ -707,10 +677,6 @@ func (s *FoodRecordService) Update(ctx context.Context, userID, recordID string,
 		}
 		if existing.UserID != userID {
 			return nil, commonerrors.ErrNotFound
-		}
-		if input.Items != nil {
-			previousWaterMl = totalFoodWaterIntakeMl(existing.Items)
-			previousRecordTime = existing.RecordTime
 		}
 	}
 
@@ -781,12 +747,6 @@ func (s *FoodRecordService) Update(ctx context.Context, userID, recordID string,
 	if record == nil {
 		return nil, commonerrors.ErrNotFound
 	}
-	if input.Items != nil {
-		nextWaterMl := totalFoodWaterIntakeMl(record.Items)
-		if err := s.adjustFoodRecordWaterIntake(ctx, userID, record.ID, previousRecordTime, nextWaterMl-previousWaterMl); err != nil {
-			return nil, err
-		}
-	}
 	record = s.hydrateRecordWithContext(ctx, record)
 	record.MealType = normalizeMealType(record.MealType, record.RecordTime)
 	return record, nil
@@ -800,25 +760,11 @@ func existingItems(record *domain.FoodRecord) []domain.FoodItem {
 }
 
 func (s *FoodRecordService) Delete(ctx context.Context, userID, recordID string) error {
-	record, err := s.recordRepo.GetByID(ctx, recordID)
-	if err != nil {
-		return err
-	}
-	if record == nil {
-		return commonerrors.ErrNotFound
-	}
-	if record.UserID != userID {
-		return commonerrors.ErrNotFound
-	}
-	waterMl := totalFoodWaterIntakeMl(record.Items)
 	if err := s.recordRepo.Delete(ctx, userID, recordID); err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return commonerrors.ErrNotFound
 		}
 		return err
-	}
-	if waterMl > 0 {
-		return s.adjustFoodRecordWaterIntake(ctx, userID, record.ID, record.RecordTime, -waterMl)
 	}
 	return nil
 }

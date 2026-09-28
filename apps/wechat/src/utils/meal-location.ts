@@ -1,6 +1,22 @@
 import type { PetChatLocation } from './api'
 
-// Kept only in page memory; stale fixes are dropped before every request.
+// Account-scoped session memory only: no coordinates in storage or navigation URLs.
+let sharedFix: { owner: string; location: PetChatLocation } | undefined
+
+export function rememberMealLocation(owner: string, location?: PetChatLocation): PetChatLocation | undefined {
+  const fresh = freshMealLocation(location)
+  sharedFix = owner && fresh ? { owner, location: { ...fresh } } : undefined
+  return fresh
+}
+
+export function currentMealLocation(owner: string): PetChatLocation | undefined {
+  if (!owner || sharedFix?.owner !== owner || !freshMealLocation(sharedFix.location)) {
+    sharedFix = undefined
+    return undefined
+  }
+  return { ...sharedFix.location }
+}
+
 export function freshMealLocation(location: PetChatLocation | undefined, now = Date.now()): PetChatLocation | undefined {
   if (!location || location.coordinate_type !== 'gcj02') return undefined
   if (!Number.isFinite(location.latitude) || !Number.isFinite(location.longitude)) return undefined

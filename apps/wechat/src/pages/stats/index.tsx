@@ -682,16 +682,23 @@ function StatsPage() {
         ? bodyMetricsRes.water_daily
           .filter((entry): entry is BodyMetricWaterDay => Boolean(entry && typeof entry.date === 'string'))
           .map(entry => ({
+            ...entry,
             date: entry.date,
             total: toSafeNumber(entry.total),
             logs: Array.isArray(entry.logs)
               ? entry.logs.map(log => toSafeNumber(log, NaN)).filter(log => Number.isFinite(log))
               : [],
+            log_items: Array.isArray(entry.log_items)
+              ? entry.log_items.map(item => ({
+                  ...item,
+                  amount_ml: toSafeNumber(item.amount_ml),
+                }))
+              : undefined,
           }))
         : []
 
       const hasCloudWeight = cloudWeightEntries.length > 0
-      const hasCloudWater = cloudWaterDaily.some(d => toSafeNumber(d.total) > 0)
+      const hasCloudWater = Boolean(bodyMetricsRes && Array.isArray(bodyMetricsRes.water_daily))
 
       const storedMetrics =
         !hasCloudWeight || !hasCloudWater ? getStoredBodyMetrics() : null
@@ -724,7 +731,7 @@ function StatsPage() {
           ? Math.round((latestWeight.value - previousWeight.value) * 10) / 10
           : null
 
-      if (weightEntries.length > 0 || waterDaily.length > 0) {
+      if (bodyMetricsRes || weightEntries.length > 0 || waterDaily.length > 0) {
         statsRes.body_metrics = {
           range: r,
           start_date: bodyMetricsRes?.start_date ?? '',

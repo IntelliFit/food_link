@@ -8,5 +8,9 @@
 .sleep-card__note { margin-top: 12rpx; }
 .sleep-card__footnote { display: block; margin-top: 18rpx; color: #96a19a; font-size: 21rpx; }
 .sleep-card__skeleton { height: 72rpx; border-radius: 14rpx; background: #eef3f0; animation: sleep-shimmer 1.2s ease-in-out infinite alternate; }
+.sleep-quick-card__icon { width: 19rpx; height: 19rpx; margin-right: 7rpx; border: 4rpx solid #806fa4; border-top-color: transparent; border-right-color: transparent; border-radius: 50%; transform: rotate(-18deg); }
+.sleep-quick-card__skeleton { width: 76%; height: 42rpx; border-radius: 10rpx; background: #e8eeea; animation: sleep-shimmer 1.2s ease-in-out infinite alternate; }
+.sleep-quick-card__error { color: #b56a5f; }
+
 @keyframes sleep-shimmer { to { opacity: .4; } }
 .home-page--dark .sleep-card { background: #1c2822; color: #edf5ef; }

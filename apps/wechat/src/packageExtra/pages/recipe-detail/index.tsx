@@ -12,8 +12,6 @@ import {
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { HOME_INTAKE_DATA_CHANGED_EVENT } from '../../../utils/home-events'
 import {
-  addWaterToBodyMetricsStorage,
-  calculateFoodRecordItemsWaterMl,
   refreshHomeDashboardLocalSnapshotFromCloud
 } from '../../../utils/home-dashboard-local-cache'
 import { getStoredRecordTargetDate } from '../../../utils/record-date'
@@ -70,7 +68,6 @@ function RecipeDetailPage() {
       const mealType = recipe.meal_type || 'afternoon_snack'
       await applyUserRecipe(recipe.id, mealType, 'favorite_recipe')
       const targetDate = getStoredRecordTargetDate()
-      addWaterToBodyMetricsStorage(targetDate, calculateFoodRecordItemsWaterMl(recipe.items || []))
       try {
         await refreshHomeDashboardLocalSnapshotFromCloud(targetDate)
       } catch (_) {}

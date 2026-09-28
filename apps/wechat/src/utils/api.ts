@@ -1,4 +1,5 @@
 import Taro from '@tarojs/taro'
+import { rememberMealLocation } from './meal-location'
 
 import { getRecentConsoleLogs } from './console-log-buffer'
 import { resolveApiBaseUrl } from './api-base-url'
@@ -1321,6 +1322,8 @@ export interface DietRecommendationFoodItem {
 }
 
 export interface DietRecommendationOption {
+  history_date?: string
+  source_label?: string
   meal_components?: DietRecommendationOption[]
   distance_km?: number
   location_level?: 'food' | 'canteen' | 'campus' | 'school'
@@ -1370,7 +1373,8 @@ export interface DietRecommendationOption {
 
 export interface DietRecommendationResult {
   harness_version?: string
-  search_scope?: 'nearby' | 'school' | 'unknown'
+  search_scope?: 'nearby' | 'school' | 'unknown' | 'history' | 'nearby_and_history'
+  location_hint?: { province: string; city: string; district: string; recorded_at: string }
   context_summary?: string[]
   data_notes?: string[]
   needs_clarification?: boolean
@@ -1716,6 +1720,7 @@ export interface BodyMetricWaterLogItem {
   id?: string
   date: string
   amount_ml: number
+  source_type?: string
   recorded_at?: string | null
 }
 
@@ -4641,6 +4646,11 @@ export async function getStatsCalendarMonth(month: string): Promise<StatsCalenda
   return res.data as StatsCalendarMonth
 }
 
+export async function previewMeals(payload: { meal_type: string; location?: PetChatLocation }): Promise<DietRecommendationResult> {
+  const res = await authenticatedRequest('/api/diet/recommendations/preview', { method: 'POST', data: payload, timeout: 15000 })
+  return res.data as DietRecommendationResult
+}
+
 export async function generateDietRecommendation(
   payload: DietRecommendationRequest
 ): Promise<DietRecommendationResult> {
@@ -4775,7 +4785,12 @@ export async function deleteBodyWaterLog(logId: string): Promise<{ message: stri
   return res.data as { message: string; deleted_count: number; id: string }
 }
 
-export async function syncLocalBodyMetrics(snapshot: BodyMetricsLocalSnapshot): Promise<{ message: string; imported_weight_count: number; imported_water_count: number }> {
+export async function syncLocalBodyMetrics(snapshot: BodyMetricsLocalSnapshot): Promise<{
+  message: string
+  imported_weight_count: number
+  imported_water_count: number
+  water_import_skipped: boolean
+}> {
   const res = await authenticatedRequest('/api/body-metrics/sync-local', {
     method: 'POST',
     data: snapshot,
@@ -4785,7 +4800,12 @@ export async function syncLocalBodyMetrics(snapshot: BodyMetricsLocalSnapshot): 
     const msg = (res.data as any)?.detail || '同步身体指标失败'
     throw new Error(msg)
   }
-  return res.data as { message: string; imported_weight_count: number; imported_water_count: number }
+  return res.data as {
+    message: string
+    imported_weight_count: number
+    imported_water_count: number
+    water_import_skipped: boolean
+  }
 }
 
 /**
@@ -5177,6 +5197,7 @@ export function getAccessToken(): string | null {
  */
 export function saveTokens(accessToken: string, refreshToken: string, user_id: string) {
   try {
+    if (getAccessToken() !== accessToken) rememberMealLocation('')
     const previousUserId = String(Taro.getStorageSync('user_id') || '').trim()
     if (previousUserId && previousUserId !== String(user_id || '').trim()) {
       clearMembershipMemoryCache()
@@ -5194,6 +5215,7 @@ export function saveTokens(accessToken: string, refreshToken: string, user_id: s
  * 清除 token
  */
 export function clearTokens() {
+  rememberMealLocation('')
   try {
     clearMembershipMemoryCache()
     Taro.removeStorageSync('access_token')
@@ -5209,6 +5231,7 @@ export function clearTokens() {
  * 清除所有本地存储数据（退出登录时使用）
  */
 export function clearAllStorage() {
+  rememberMealLocation('')
   try {
     // 清除 token 相关
     clearTokens()

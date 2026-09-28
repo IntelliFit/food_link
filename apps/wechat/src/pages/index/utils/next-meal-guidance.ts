@@ -32,8 +32,7 @@ export function nextMealLabel(mealType: MainMealType): string {
 }
 
 /**
- * 首页只给不收费的方向性建议，不重复展示热量和宏量数字。
- * 具体菜品、份量和场景约束留给宠物对话继续确认。
+ * Legacy direction helper; the home card now retrieves grounded meals from the server.
  */
 export function buildNextMealGuidance(snapshot: MacroSnapshot): NextMealGuidance {
   const calorieRemaining = safeRatioRemaining(snapshot.calories.current, snapshot.calories.target)

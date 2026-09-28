@@ -101,7 +101,7 @@ func mealFoodTokens(value string) []string {
 		for _, suffix := range []string{"了", "的", "一些", "一点"} {
 			token = strings.TrimSuffix(token, suffix)
 		}
-		if token == "" || regexp.MustCompile(`食堂|学校|校内|校外|外卖|商家|方案|推荐|建议|换菜|地点|位置|预算|记录|营养|主食|只|单个|更多|保持|不变|条件|限制|编|胡说|瞎猜`).MatchString(token) {
+		if token == "" || regexp.MustCompile(`食堂|学校|校内|校外|外卖|商家|方案|推荐|建议|搭配|没吃过|说成|食谱|历史|来源|查不到|换菜|地点|位置|预算|记录|营养|主食|只|单个|更多|保持|不变|条件|限制|编|胡说|瞎猜`).MatchString(token) {
 			continue
 		}
 		if !slices.Contains(out, token) {

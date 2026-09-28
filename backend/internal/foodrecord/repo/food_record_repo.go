@@ -69,6 +69,29 @@ func (r *FoodRecordRepo) ListByUserPage(ctx context.Context, userID, date string
 	return rows, err
 }
 
+func (r *FoodRecordRepo) ListByUserDateRange(ctx context.Context, userID, startDate, endDate string, limit int) ([]domain.FoodRecord, error) {
+	start, _, err := chinaDateWindow(startDate)
+	if err != nil {
+		return nil, err
+	}
+	_, end, err := chinaDateWindow(endDate)
+	if err != nil {
+		return nil, err
+	}
+	if !start.Before(end) {
+		return []domain.FoodRecord{}, nil
+	}
+	var rows []domain.FoodRecord
+	query := r.db.WithContext(ctx).
+		Where("user_id = ? AND record_time >= ? AND record_time < ?", userID, start, end).
+		Order("record_time asc, id asc")
+	if limit > 0 {
+		query = query.Limit(limit)
+	}
+	err = query.Find(&rows).Error
+	return rows, err
+}
+
 func (r *FoodRecordRepo) GetByID(ctx context.Context, recordID string) (*domain.FoodRecord, error) {
 	var row domain.FoodRecord
 	if err := r.db.WithContext(ctx).Where("id = ?", recordID).First(&row).Error; err != nil {

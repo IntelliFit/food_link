@@ -15,6 +15,14 @@ type DietLocation struct {
 	CoordinateType string  `json:"coordinate_type"`
 }
 
+// MealArea is a historical area hint, never a current GPS fix or distance origin.
+type MealArea struct {
+	Province   string    `json:"province"`
+	City       string    `json:"city"`
+	District   string    `json:"district"`
+	RecordedAt time.Time `json:"recorded_at"`
+}
+
 func (l *DietLocation) Valid(now time.Time) bool {
 	return l != nil && l.CoordinateType == "gcj02" &&
 		!math.IsNaN(l.Latitude) && !math.IsNaN(l.Longitude) &&

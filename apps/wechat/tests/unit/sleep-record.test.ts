@@ -1,5 +1,5 @@
 import { buildSleepInput, shiftSleepDate, sleepDurationLabel, sleepLocalParts } from '../../src/utils/sleep-record'
-import { defaultHomeModuleLayout, isHomeModuleVisible, moveHomeModule, normalizeHomeModuleLayout } from '../../src/pages/index/utils/home-module-layout'
+import { defaultHomeModuleLayout, isHomeModuleVisible, isHomeQuickStatVisible, normalizeHomeModuleLayout, toggleHomeQuickStat } from '../../src/pages/index/utils/home-module-layout'
 
 describe('manual sleep records', () => {
   const now = new Date('2026-09-28T12:00:00+08:00')
@@ -20,11 +20,12 @@ describe('manual sleep records', () => {
       ['2026-02-30', '2026-02-29', '23:00', '07:00'],
     ]) expect(() => buildSleepInput(date, bedDate, bed, wake, '', '', now)).toThrow()
   })
-  it('adds sleep to old layouts and allows hiding and ordering it', () => {
+  it('migrates sleep into the quick row and allows hiding it independently', () => {
     const old = normalizeHomeModuleLayout({ order: ['diet', 'body'], hidden: [] })
-    expect(old.order).toContain('sleep')
-    expect(isHomeModuleVisible({ ...old, hidden: ['sleep'] }, 'sleep')).toBe(false)
-    const moved = moveHomeModule(defaultHomeModuleLayout(), 'sleep', -1)
-    expect(moved.order.indexOf('sleep')).toBe(defaultHomeModuleLayout().order.indexOf('sleep') - 1)
+    expect(old.quickStats).toContain('sleep')
+    const withoutSleep = toggleHomeQuickStat(old, 'sleep', false)
+    expect(isHomeQuickStatVisible(withoutSleep, 'sleep')).toBe(false)
+    expect(isHomeModuleVisible(withoutSleep, 'body')).toBe(true)
+    expect(defaultHomeModuleLayout().quickStats).toContain('sleep')
   })
 })
