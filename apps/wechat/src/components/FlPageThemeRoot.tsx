@@ -2,9 +2,8 @@ import { View } from '@tarojs/components'
 import Taro, { useDidShow } from '@tarojs/taro'
 import React, { type PropsWithChildren } from 'react'
 import { useAppColorSchemeOptional } from './AppColorSchemeContext'
-import { useBalancedThemeOptional } from './BalancedThemeContext'
+import { useBalancedTheme } from './BalancedThemeContext'
 import { HOME_DISPLAY_MODE_STORAGE_KEY } from '../utils/home-display-mode'
-import { getStoredBalancedTheme } from '../utils/balanced-theme'
 import { applyThemeNavigationBar } from '../utils/theme-navigation-bar'
 
 function readWellnessMode(): boolean {
@@ -20,11 +19,10 @@ function readWellnessMode(): boolean {
  */
 export function FlPageThemeRoot({ children }: PropsWithChildren): React.ReactElement {
   const ctx = useAppColorSchemeOptional()
-  const balancedThemeContext = useBalancedThemeOptional()
+  const { theme: balancedTheme } = useBalancedTheme()
   const scheme = ctx?.scheme ?? 'light'
   const dark = scheme === 'dark'
   const [wellness, setWellness] = React.useState(readWellnessMode)
-  const balancedTheme = balancedThemeContext?.theme ?? getStoredBalancedTheme()
 
   React.useEffect(() => { applyThemeNavigationBar(scheme) }, [scheme, balancedTheme, wellness])
 

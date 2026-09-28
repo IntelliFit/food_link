@@ -1,5 +1,5 @@
-import Taro from '@tarojs/taro'
-import React, { createContext, type PropsWithChildren, useCallback, useContext, useMemo, useState } from 'react'
+import Taro, { useDidShow } from '@tarojs/taro'
+import React, { createContext, type PropsWithChildren, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import {
   type BalancedThemeId,
   getStoredBalancedTheme,
@@ -17,6 +17,12 @@ const BalancedThemeContext = createContext<BalancedThemeContextValue | null>(nul
 
 export function BalancedThemeProvider({ children }: PropsWithChildren): React.ReactElement {
   const [theme, setThemeState] = useState<BalancedThemeId>(() => getStoredBalancedTheme())
+
+  useEffect(() => {
+    const sync = () => setThemeState(getStoredBalancedTheme())
+    Taro.eventCenter.on(BALANCED_THEME_EVENT, sync)
+    return () => { Taro.eventCenter.off(BALANCED_THEME_EVENT, sync) }
+  }, [])
 
   const setTheme = useCallback((next: BalancedThemeId): void => {
     setThemeState(next)
@@ -36,9 +42,21 @@ export function BalancedThemeProvider({ children }: PropsWithChildren): React.Re
 export function useBalancedTheme(): BalancedThemeContextValue {
   const context = useContext(BalancedThemeContext)
   const [fallbackTheme, setFallbackTheme] = useState<BalancedThemeId>(() => getStoredBalancedTheme())
+  useEffect(() => {
+    const sync = () => setFallbackTheme(getStoredBalancedTheme())
+    Taro.eventCenter.on(BALANCED_THEME_EVENT, sync)
+    return () => { Taro.eventCenter.off(BALANCED_THEME_EVENT, sync) }
+  }, [])
+  // Cached tab pages can miss a context update while hidden. Reconcile on return.
+  useDidShow(() => {
+    const stored = getStoredBalancedTheme()
+    if (stored !== fallbackTheme) setFallbackTheme(stored)
+    if (context && stored !== context.theme) context.setTheme(stored)
+  })
   const setFallback = useCallback((next: BalancedThemeId) => {
     setFallbackTheme(next)
     setStoredBalancedTheme(next)
+    Taro.eventCenter.trigger(BALANCED_THEME_EVENT, { theme: next })
   }, [])
   const fallback = useMemo(() => ({ theme: fallbackTheme, setTheme: setFallback }), [fallbackTheme, setFallback])
   return context ?? fallback

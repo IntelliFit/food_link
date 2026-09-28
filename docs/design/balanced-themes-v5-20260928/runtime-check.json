@@ -1,0 +1,270 @@
+[
+  {
+    "theme": "clarity-order",
+    "surface": "home",
+    "integrated": false,
+    "record": {
+      "left": 15.5,
+      "top": 608.5729370117188,
+      "width": 274,
+      "height": 49
+    },
+    "pet": {
+      "left": 298,
+      "top": 548,
+      "width": 94,
+      "height": 137
+    },
+    "overlap": false
+  },
+  {
+    "theme": "clarity-order",
+    "surface": "stats",
+    "integrated": false
+  },
+  {
+    "theme": "clarity-order",
+    "surface": "community",
+    "integrated": false
+  },
+  {
+    "theme": "clarity-order",
+    "surface": "profile",
+    "integrated": true
+  },
+  {
+    "theme": "natural-symbiosis",
+    "surface": "home",
+    "integrated": false,
+    "record": {
+      "left": 15.5,
+      "top": 587.6041870117188,
+      "width": 274,
+      "height": 65
+    },
+    "pet": {
+      "left": 298,
+      "top": 548,
+      "width": 94,
+      "height": 137
+    },
+    "overlap": false
+  },
+  {
+    "theme": "natural-symbiosis",
+    "surface": "stats",
+    "integrated": false
+  },
+  {
+    "theme": "natural-symbiosis",
+    "surface": "community",
+    "integrated": false
+  },
+  {
+    "theme": "natural-symbiosis",
+    "surface": "profile",
+    "integrated": true
+  },
+  {
+    "theme": "eastern-salon",
+    "surface": "home",
+    "integrated": false,
+    "record": {
+      "left": 34.5,
+      "top": 599.8958740234375,
+      "width": 236,
+      "height": 49
+    },
+    "pet": {
+      "left": 298,
+      "top": 548,
+      "width": 94,
+      "height": 137
+    },
+    "overlap": false
+  },
+  {
+    "theme": "eastern-salon",
+    "surface": "stats",
+    "integrated": false
+  },
+  {
+    "theme": "eastern-salon",
+    "surface": "community",
+    "integrated": false
+  },
+  {
+    "theme": "eastern-salon",
+    "surface": "profile",
+    "integrated": true
+  },
+  {
+    "theme": "modern-gallery",
+    "surface": "home",
+    "integrated": false,
+    "record": {
+      "left": 26.5,
+      "top": 629,
+      "width": 252,
+      "height": 49
+    },
+    "pet": {
+      "left": 298,
+      "top": 548,
+      "width": 94,
+      "height": 137
+    },
+    "overlap": false
+  },
+  {
+    "theme": "modern-gallery",
+    "surface": "stats",
+    "integrated": false
+  },
+  {
+    "theme": "modern-gallery",
+    "surface": "community",
+    "integrated": false
+  },
+  {
+    "theme": "modern-gallery",
+    "surface": "profile",
+    "integrated": true
+  },
+  {
+    "theme": "miniature-world",
+    "surface": "home",
+    "integrated": false,
+    "record": {
+      "left": 15.5,
+      "top": 616.9375,
+      "width": 274,
+      "height": 68
+    },
+    "pet": {
+      "left": 298,
+      "top": 548,
+      "width": 94,
+      "height": 137
+    },
+    "overlap": false
+  },
+  {
+    "theme": "miniature-world",
+    "surface": "stats",
+    "integrated": false
+  },
+  {
+    "theme": "miniature-world",
+    "surface": "community",
+    "integrated": false
+  },
+  {
+    "theme": "miniature-world",
+    "surface": "profile",
+    "integrated": true
+  },
+  {
+    "theme": "picturebook-companion",
+    "surface": "home",
+    "integrated": false,
+    "record": {
+      "left": 15.5,
+      "top": 662.6041870117188,
+      "width": 274,
+      "height": 65
+    },
+    "pet": {
+      "left": 298,
+      "top": 548,
+      "width": 94,
+      "height": 137
+    },
+    "overlap": false
+  },
+  {
+    "theme": "picturebook-companion",
+    "surface": "stats",
+    "integrated": false
+  },
+  {
+    "theme": "picturebook-companion",
+    "surface": "community",
+    "integrated": false
+  },
+  {
+    "theme": "picturebook-companion",
+    "surface": "profile",
+    "integrated": true
+  },
+  {
+    "theme": "clear-care",
+    "surface": "home",
+    "integrated": false,
+    "record": {
+      "left": 16.5,
+      "top": 374.3333435058594,
+      "width": 368,
+      "height": 93
+    },
+    "pet": {
+      "left": 298,
+      "top": 548,
+      "width": 94,
+      "height": 137
+    },
+    "overlap": false
+  },
+  {
+    "theme": "clear-care",
+    "surface": "stats",
+    "integrated": false
+  },
+  {
+    "theme": "clear-care",
+    "surface": "community",
+    "integrated": false
+  },
+  {
+    "theme": "clear-care",
+    "surface": "profile",
+    "integrated": true
+  },
+  {
+    "theme": "way-of-water",
+    "surface": "home",
+    "integrated": false,
+    "record": {
+      "left": 11.5,
+      "top": 589.3854370117188,
+      "width": 89,
+      "height": 84
+    },
+    "pet": {
+      "left": 298,
+      "top": 548,
+      "width": 94,
+      "height": 137
+    },
+    "overlap": false
+  },
+  {
+    "theme": "way-of-water",
+    "surface": "stats",
+    "integrated": false
+  },
+  {
+    "theme": "way-of-water",
+    "surface": "community",
+    "integrated": false
+  },
+  {
+    "theme": "way-of-water",
+    "surface": "profile",
+    "integrated": true
+  },
+  {
+    "interaction": "record",
+    "destination": "packageExtra/pages/login/index"
+  }
+]

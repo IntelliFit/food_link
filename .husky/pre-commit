@@ -98,7 +98,7 @@ if [ -n "$WECHAT_FILES" ]; then
   fi
 
   echo "[pre-commit] 微信端测试..."
-  (cd "$SNAPSHOT_ROOT" && npm test -- --runInBand) || exit 1
+  (cd "$SNAPSHOT_ROOT" && npm --workspace apps/wechat run test -- --runInBand) || exit 1
 fi
 
 ADMIN_FILES="$(printf '%s\n' "$STAGED_FILES" | grep -E '^admin/|^(package\.json|package-lock\.json)$' || true)"

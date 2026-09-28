@@ -630,7 +630,7 @@ function ProfilePage() {
     <View className={`profile-page ${ink ? 'ink-page' : ''} ${scheme === 'dark' ? 'profile-page--dark' : ''}`}>
       {/* 顶部用户信息区域（仿知乎风格） */}
       {ink && <InkMasthead title='我的' compact />}
-      <BalancedThemeExperience surface='profile' />
+      <BalancedThemeExperience surface='profile'>
       <View className='profile-header-section'>
         <View className='user-card'>
           <View className={`user-avatar-wrapper ${!isLoggedIn ? 'no-border' : ''}`}>
@@ -708,6 +708,7 @@ function ProfilePage() {
         )}
       </View>
 
+      </BalancedThemeExperience>
       <BalancedThemeEntry onOpen={() => setShowBalancedThemePicker(true)} />
 
       {/* 引导横幅 */}

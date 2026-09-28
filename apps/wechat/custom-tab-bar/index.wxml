@@ -1,4 +1,4 @@
-<view class="custom-tab-bar {{hidden ? 'hidden' : ''}} {{colorScheme === 'dark' ? 'custom-tab-bar--dark' : ''}} {{wellnessActive ? 'custom-tab-bar--wellness' : ''}} custom-tab-bar--theme-{{balancedTheme}}">
+<view class="custom-tab-bar {{hidden ? 'hidden' : ''}} {{colorScheme === 'dark' ? 'custom-tab-bar--dark' : ''}} {{wellnessActive ? 'custom-tab-bar--wellness' : 'custom-tab-bar--balanced'}} custom-tab-bar--theme-{{balancedTheme}}">
   <view 
     wx:for="{{tabList}}" 
     wx:key="index"
@@ -44,6 +44,6 @@
         </view>
       </block>
     </view>
-    <text class="tab-text" wx:if="{{!item.isCenter || wellnessActive}}">{{item.isCenter ? '拍照' : item.text}}</text>
+    <text class="tab-text">{{item.isCenter ? '拍照' : item.text}}</text>
   </view>
 </view>

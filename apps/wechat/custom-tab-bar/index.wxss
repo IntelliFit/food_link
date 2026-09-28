@@ -489,3 +489,42 @@
 .custom-tab-bar--theme-picturebook-companion .tab-item.selected .tab-text { color: #efd292; }
 .custom-tab-bar--theme-picturebook-companion .center-icon-wrapper { background: #e4cd9d; border: 2rpx solid #213731; box-shadow: none; }
 .custom-tab-bar--theme-picturebook-companion .center-icon { color: #14272e; }
+
+/* Balanced themes keep capture in the same navigation rhythm as the four tabs. */
+.custom-tab-bar--balanced {
+  --nav-paper: #fafaf7;
+  --nav-ink: #222;
+  --nav-muted: #666;
+  --nav-accent: #c8ff00;
+  --nav-line: #b9b9b1;
+  --nav-radius: 0rpx;
+  padding-left: 16rpx;
+  padding-right: 16rpx;
+}
+.custom-tab-bar--balanced::before {
+  background: var(--nav-paper) !important;
+  border-top: 1rpx solid var(--nav-line) !important;
+  border-radius: var(--nav-radius) var(--nav-radius) 0 0;
+  filter: none !important;
+}
+.custom-tab-bar--balanced .tab-item { height: 112rpx; justify-content: center; gap: 9rpx; padding-bottom: 0; }
+.custom-tab-bar--balanced .tab-item.center-item .icon-wrapper { width: 48rpx; height: 48rpx; }
+.custom-tab-bar--balanced .center-icon-wrapper {
+  position: relative; left: auto; top: auto; width: 48rpx; height: 48rpx;
+  margin: 0; padding: 0; transform: none; background: transparent; border: 0; border-radius: 0; box-shadow: none;
+}
+.custom-tab-bar--balanced .tab-icon, .custom-tab-bar--balanced .center-icon { color: var(--nav-muted); font-size: 39rpx; }
+.custom-tab-bar--balanced .tab-text { color: var(--nav-muted); font-size: 23rpx; }
+.custom-tab-bar--balanced .tab-item.selected .tab-icon, .custom-tab-bar--balanced .tab-item.selected .tab-text { color: var(--nav-ink); }
+.custom-tab-bar--balanced .tab-item.selected .icon-wrapper { transform: none; }
+.custom-tab-bar--balanced .tab-item.selected::after { background: var(--nav-accent); height: 3rpx; left: 30%; right: 30%; bottom: 5rpx; box-shadow: none; }
+.custom-tab-bar--balanced .center-opening-spinner { width: 36rpx; height: 36rpx; border-color: var(--nav-line); border-top-color: var(--nav-ink); }
+.custom-tab-bar--balanced.custom-tab-bar--theme-natural-symbiosis { --nav-paper: #f4f1e2; --nav-ink: #254830; --nav-muted: #71816c; --nav-accent: #56795b; --nav-line: #afbaa0; --nav-radius: 18rpx; }
+.custom-tab-bar--balanced.custom-tab-bar--theme-eastern-salon { --nav-paper: #eee7d8; --nav-ink: #292d28; --nav-muted: #7b7d71; --nav-accent: #98734b; --nav-line: #9e9582; }
+.custom-tab-bar--balanced.custom-tab-bar--theme-modern-gallery { --nav-paper: #f4eddc; --nav-ink: #b0261b; --nav-muted: #292929; --nav-accent: #1748aa; --nav-line: #111; }
+.custom-tab-bar--balanced.custom-tab-bar--theme-miniature-world { --nav-paper: #e5d1b0; --nav-ink: #493321; --nav-muted: #82715c; --nav-accent: #493321; --nav-line: #9e8059; --nav-radius: 18rpx; }
+.custom-tab-bar--balanced.custom-tab-bar--theme-picturebook-companion { --nav-paper: #10222a; --nav-ink: #efd292; --nav-muted: #b6afa1; --nav-accent: #efd292; --nav-line: #52605d; }
+.custom-tab-bar--balanced.custom-tab-bar--theme-clear-care { --nav-paper: #fff; --nav-ink: #005b38; --nav-muted: #53605a; --nav-accent: #005b38; --nav-line: #d2dfd6; }
+.custom-tab-bar--balanced.custom-tab-bar--theme-clear-care .tab-text { font-size: 27rpx; font-weight: 600; }
+.custom-tab-bar--balanced.custom-tab-bar--theme-way-of-water { --nav-paper: #07121b; --nav-ink: #e6f1f4; --nav-muted: #829eaa; --nav-accent: #d2a482; --nav-line: #455e6b; --nav-radius: 22rpx; }
+.custom-tab-bar--balanced.custom-tab-bar--dark { --nav-paper: #101716; --nav-ink: #f1f4ef; --nav-muted: #a4b0aa; --nav-line: #40504a; }

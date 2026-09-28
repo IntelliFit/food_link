@@ -17,6 +17,7 @@ export type BalancedThemeHomeData = {
 }
 type Props = {
   surface: BalancedThemeSurface; home?: BalancedThemeHomeData
+  children?: React.ReactNode
   onRecord?: () => void; onWater?: () => void; onMeals?: () => void; onPublish?: () => void
 }
 const TITLES = {
@@ -43,7 +44,7 @@ const SURFACE_INDEX = { home: 0, stats: 1, community: 2, profile: 3 } as const
 const SURFACE_NAME = { home: '首页', stats: '分析', community: '圈子', profile: '我的' }
 
 /** Scene artwork is decorative. Metrics and actions belong to the live business page. */
-export function BalancedThemeExperience({ surface, home, onRecord, onWater, onMeals, onPublish }: Props): React.ReactElement | null {
+export function BalancedThemeExperience({ surface, home, children, onRecord, onWater, onMeals, onPublish }: Props): React.ReactElement | null {
   const wellness = useInkWellness()
   const { theme } = useBalancedTheme()
   const [scenesReady, setScenesReady] = React.useState(false)
@@ -55,7 +56,7 @@ export function BalancedThemeExperience({ surface, home, onRecord, onWater, onMe
     }
     return () => { active = false }
   }, [theme, wellness])
-  if (wellness) return null
+  if (wellness) return children ? <>{children}</> : null
   const { miniatureGarden, miniatureDesk, miniatureSquare, picturebookDay, picturebookDesk, waterVessel, naturalLeaves, easternSoup, galleryCollage } = scenesReady ? BALANCED_SCENES : {} as Partial<typeof BALANCED_SCENES>
   const retryScene = () => { setSceneError(false); loadBalancedScenes().then(() => setScenesReady(true)).catch(() => setSceneError(true)) }
   const sceneRetry = sceneError && <View className='bt-scene-retry' role='button' onClick={retryScene}>场景未能打开，轻触重试</View>
@@ -76,14 +77,14 @@ export function BalancedThemeExperience({ surface, home, onRecord, onWater, onMe
       <Text className='iconfont icon-right bt-action__arrow' />
     </View>
   )
-  const masthead = <View className='bt-masthead'><View><Text className='bt-masthead__brand'>{theme === 'modern-gallery' ? SURFACE_NAME[surface] : '食探'}</Text><Text className='bt-masthead__edition'>{definition.name}</Text></View><Text className='bt-masthead__date'>{date.replace(/-/g, '.')}</Text></View>
+  const masthead = <View className='bt-masthead'><View><Text className='bt-masthead__brand'>{surface !== 'home' || theme === 'modern-gallery' ? SURFACE_NAME[surface] : '食探'}</Text><Text className='bt-masthead__edition'>{definition.name}</Text></View><Text className='bt-masthead__date'>{date.replace(/-/g, '.')}</Text></View>
   const heading = <View className='bt-heading'><Text className='bt-heading__title'>{title}</Text><Text className='bt-heading__subtitle'>{PHILOSOPHY[theme]}</Text></View>
   const summary = <View className='bt-live-summary'>
     <View role='button' aria-label='查看当日餐食' onClick={meals}><Text>饮食记录</Text><Text>{value(home?.mealCount, ' 餐')}</Text></View>
     <View role='button' aria-label='记录饮水' onClick={water}><Text>饮水</Text><Text>{value(home?.waterMl, ' ml')}</Text></View>
     <View role='button' aria-label='查看营养分析' onClick={stats}><Text>今日摄入</Text><Text>{value(home?.calories, ' kcal')}</Text></View>
   </View>
-  const rootClass = `bt-experience bt-experience--${theme} bt-experience--${surface}`
+  const rootClass = `bt-experience bt-experience--${theme} bt-experience--${surface}${children ? ' bt-experience--integrated' : ''}`
   if (surface !== 'home') {
     const art = theme === 'miniature-world' ? (surface === 'profile' ? miniatureDesk : surface === 'community' ? miniatureSquare : miniatureGarden)
       : theme === 'picturebook-companion' ? picturebookDesk : theme === 'natural-symbiosis' ? naturalLeaves
@@ -92,6 +93,7 @@ export function BalancedThemeExperience({ surface, home, onRecord, onWater, onMe
     return <View id={`balanced-theme-experience-${surface}`} className={rootClass}>
       {art && <Image className='bt-scene bt-scene--chapter' src={art} mode='aspectFill' />}
       <View className='bt-chapter-heading'>{masthead}{heading}</View>{sceneRetry}
+      {children && <View className='bt-integrated-content'>{children}</View>}
       {surface === 'community' && onPublish && <View className='bt-publish'>{action('publish', '分享我的一餐', '', 'icon-paizhao-xianxing', onPublish)}</View>}
     </View>
   }

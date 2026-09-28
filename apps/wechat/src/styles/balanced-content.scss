@@ -1,0 +1,135 @@
+/* Real business content follows the selected art direction, including empty states.
+   Keep all navigation, numbers, images and actions owned by their existing pages. */
+.fl-page-theme-root--balanced:not(.fl-d) {
+  .bt-experience--profile.bt-experience--integrated { height: auto; min-height: 0; padding-bottom: 28rpx; }
+  .bt-integrated-content { margin-top: 36rpx; }
+  .bt-integrated-content .profile-header-section { margin: 0; padding: 28rpx; box-sizing: border-box; }
+  .bt-integrated-content .user-name { overflow-wrap: anywhere; }
+  .bt-integrated-content .user-info-main { min-width: 0; }
+  .bt-integrated-content .user-name-row { flex-wrap: wrap; gap: 16rpx; }
+  .bt-integrated-content .profile-quick-actions { margin-top: 24rpx; }
+  .stats-range-dropdown { border: 1rpx solid var(--bt-border); color: var(--bt-text); background: var(--bt-surface); box-shadow: none; }
+  .analysis-panel-control { border-color: var(--bt-border); background: var(--bt-surface-muted); box-shadow: none; }
+  .analysis-panel-control .segment-item { color: var(--bt-muted); }
+  .analysis-panel-control .segment-item.active { color: var(--bt-accent-text); background: var(--bt-accent); }
+  .stats-guest-card { color: var(--bt-text); background: var(--bt-surface); border: 1rpx solid var(--bt-border); border-radius: var(--bt-radius); box-shadow: none; }
+  .stats-guest-title, .stats-card .card-title, .stats-card .macro-name { color: var(--bt-text); }
+  .stats-guest-desc, .stats-card .card-subtitle, .stats-card .macro-detail, .stats-card .bar-label { color: var(--bt-muted); }
+  .stats-card .bar-fill { background: var(--bt-accent); }
+  .stats-card .bar-fill.over { background: #bd7455; }
+  .feed-filter-panel { background: var(--bt-surface); border: 1rpx solid var(--bt-border); box-shadow: none; border-radius: var(--bt-control-radius); }
+  .feed-search-wrap { background: transparent; }
+  .feed-filter-summary, .feed-search-placeholder-text { color: var(--bt-muted); }
+  .feed-publish-btn { background: var(--bt-accent); color: var(--bt-accent-text); border-radius: var(--bt-control-radius); }
+  .feed-card { padding: 28rpx; overflow: hidden; }
+  .feed-card .feed-card-moments { display: block; position: relative; }
+  .feed-card .feed-card-avatar-col { position: absolute; top: 0; left: 0; width: 76rpx; }
+  .feed-card .feed-card-main-col { width: 100%; min-width: 0; }
+  .feed-card .feed-card-name-block { padding-left: 96rpx; min-height: 86rpx; box-sizing: border-box; margin-bottom: 20rpx; }
+  .feed-card .user-avatar { width: 72rpx; height: 72rpx; }
+  .feed-card .user-name, .feed-card .feed-content { color: var(--bt-text); }
+  .feed-card .post-time, .feed-card .feed-sub-meta-row { color: var(--bt-muted); }
+  .feed-card .feed-content { line-height: 1.85; }
+  .feed-card .feed-image { width: 100%; margin-left: 0; }
+  .home-module-toolbar:not(.is-editing) { box-shadow: none; border: 1rpx solid var(--bt-border); background: var(--bt-surface); border-radius: var(--bt-control-radius); }
+  .home-module-toolbar:not(.is-editing) .home-toolbox-theme-mark { background: transparent; color: var(--bt-text); box-shadow: none; border: 0; }
+  /* Keep the companion's interactive area above the primary action row. */
+  .pet-assistant-float--playing { left: auto; right: 20rpx; bottom: calc(290rpx + env(safe-area-inset-bottom)); transform: none; }
+  .bt-experience--home .bt-scene-footer, .bt-experience--home .bt-water-actions { right: 210rpx; }
+  .bt-experience--home .bt-gallery-bottom > .bt-action { margin-right: 180rpx; }
+  .bt-experience--clarity-order.bt-experience--home > .bt-action,
+  .bt-experience--eastern-salon.bt-experience--home .bt-scroll > .bt-action { margin-right: 180rpx; }
+}
+
+.fl-balanced-theme--clarity-order:not(.fl-d) {
+  .bt-integrated-content .profile-header-section { border: 0; border-top: 3rpx solid #111; padding: 28rpx 0; background: transparent; }
+  .profile-section { border: 0; border-top: 2rpx solid #111; border-radius: 0; box-shadow: none; }
+  .profile-section-heading { padding: 28rpx 0; }
+  .feed-card { border: 0; border-top: 2rpx solid #111; border-radius: 0; box-shadow: none; }
+  .feed-card .feed-image image { border-radius: 0 !important; }
+  .stats-card { border: 1rpx solid #111; border-radius: 0; box-shadow: none; }
+  .stats-card .card-title { font-weight: 800; font-size: 34rpx; }
+  .stats-card .bar-fill { border-radius: 0; background: #262a24; border-top: 8rpx solid #c8ff00; }
+  .analysis-panel-control { border-radius: 0; }
+}
+.fl-balanced-theme--natural-symbiosis:not(.fl-d) {
+  .bt-integrated-content .profile-header-section { border: 1rpx solid #93a78c; border-radius: 44rpx 8rpx; background: #fffdf2ed; }
+  .profile-section, .feed-card { border: 1rpx solid #a8b49a; border-radius: 30rpx 6rpx; box-shadow: none; background: #fffdf5; }
+  .feed-card .feed-image image { border-radius: 24rpx 6rpx !important; }
+  .stats-card { background: #fffdf5; border: 1rpx solid #a8b49a; border-radius: 34rpx 8rpx; box-shadow: none; }
+  .stats-card .card-title, .profile-section-title { font-family: 'Kaiti SC', KaiTi, serif; font-size: 35rpx; }
+  .stats-card .bar-fill { background: #66896b; border-radius: 24rpx 5rpx 0 0; }
+}
+.fl-balanced-theme--eastern-salon:not(.fl-d) {
+  .bt-integrated-content .profile-header-section { background: #f7f2e8ed; border: 6rpx double #948975; border-radius: 0; }
+  .feed-card, .stats-card, .profile-section { background: #f6f0e4; border: 1rpx solid #b9ae9b; border-radius: 0; box-shadow: none; }
+  .feed-card { margin-top: 32rpx; padding: 32rpx; border-top: 7rpx double #8f826b; }
+  .feed-card .feed-image { padding: 12rpx; border: 1rpx solid #b9ae9b; box-sizing: border-box; }
+  .feed-card .feed-image image { border-radius: 0 !important; }
+  .stats-card .card-title, .profile-section-title { font-family: 'Songti SC', SimSun, serif; letter-spacing: 4rpx; }
+  .stats-card .bar-fill { background: #596b61; border-radius: 0; }
+  .analysis-panel-control { border-radius: 0; border-top: 1rpx solid #8f826b; border-bottom: 1rpx solid #8f826b; }
+  .profile-page { background: #1c1d18 !important; --bt-page: #1c1d18; --bt-text: #e7ddc4; --bt-muted: #b3aa95; --bt-surface: #24251f; --bt-border: #74674e; }
+  .profile-page .bt-experience--profile { background: #1c1d18; color: #e7ddc4; }
+  .profile-page .bt-integrated-content .profile-header-section { background: #22231ded; border: 4rpx double #887959; }
+  .profile-page .profile-section { background: #22231d; border: 4rpx double #887959; }
+  .profile-page .profile-section-heading { background: #22231d; }
+  .profile-page .profile-card, .profile-page .list-item { background: #22231d; }
+  .profile-page .user-name, .profile-page .quick-action-num, .profile-page .quick-action-text, .profile-page .list-title, .profile-page .profile-section-title { color: #e7ddc4; }
+  .profile-page .user-meta-text, .profile-page .list-desc, .profile-page .profile-section-hint { color: #b3aa95; }
+}
+.fl-balanced-theme--modern-gallery:not(.fl-d) {
+  .bt-integrated-content .profile-header-section { background: #f5eddf; color: #111; border: 0; border-left: 16rpx solid #1748aa; border-radius: 0; box-shadow: none; }
+  .bt-integrated-content .profile-header-section .user-name, .bt-integrated-content .profile-header-section .quick-action-text, .bt-integrated-content .profile-header-section .quick-action-num { color: #111; }
+  .feed-card { border: 0; border-top: 16rpx solid #161616; border-radius: 0; background: #f7f0df; box-shadow: none; }
+  .feed-card .user-name { font-weight: 800; font-size: 34rpx; }
+  .feed-card .feed-image { padding: 12rpx; background: #173eb5; box-sizing: border-box; }
+  .feed-card .feed-image image { border-radius: 0 !important; }
+  .stats-card { border: 2rpx solid #111; border-radius: 0; box-shadow: 7rpx 7rpx 0 #111; }
+  .stats-card .card-title { font-size: 36rpx; font-weight: 800; }
+  .stats-card .bar-fill { background: #173eb5; border-radius: 0; }
+}
+.fl-balanced-theme--miniature-world:not(.fl-d) {
+  .bt-experience--profile .bt-scene { opacity: 1; }
+  .bt-experience--profile .bt-integrated-content { margin-top: 120rpx; }
+  .bt-integrated-content .profile-header-section { background: #fff4dded; border: 6rpx double #947449; border-radius: 5rpx; }
+  .profile-section { border-radius: 5rpx; background: #e9d7b6; box-shadow: 0 5rpx 0 #99805d; }
+  .profile-section-heading { background: #e9d7b6; }
+  .feed-card { background: #fff5e5; border: 1rpx solid #bea57e; border-radius: 10rpx; box-shadow: 0 5rpx 0 #b3956c; }
+  .feed-card .feed-image { padding: 9rpx; background: #e4d1b0; box-sizing: border-box; }
+  .feed-card .feed-image image { border-radius: 6rpx !important; }
+  .stats-card { background: #fff5e5; border: 4rpx double #a78a60; border-radius: 7rpx; }
+  .stats-card .bar-fill { background: #447b73; }
+}
+.fl-balanced-theme--picturebook-companion:not(.fl-d) {
+  .bt-experience--profile .bt-scene { opacity: 1; }
+  .bt-experience--profile .bt-integrated-content { margin-top: 170rpx; }
+  .bt-integrated-content .profile-header-section { background: #10222aed; border: 1rpx solid #a99878; border-radius: 3rpx; }
+  .feed-card { background: #f4e8d1; border: 1rpx solid #b8a68a; border-radius: 2rpx; box-shadow: none; padding: 26rpx; }
+  .feed-card .feed-image { padding: 10rpx; background: #273534; box-sizing: border-box; }
+  .feed-card .feed-image image { border-radius: 0 !important; }
+  .feed-card .user-name, .feed-card .feed-content { color: #27332e; }
+  .stats-card { background: #f4e8d1; border: 1rpx solid #b8a68a; border-radius: 3rpx; box-shadow: none; }
+  .stats-card .bar-fill { background: #c49b50; border-radius: 2rpx; }
+  .profile-section-title, .stats-card .card-title { font-family: 'Kaiti SC', KaiTi, serif; font-size: 35rpx; }
+}
+.fl-balanced-theme--clear-care:not(.fl-d) {
+  .bt-experience--profile .bt-heading { display: none; }
+  .bt-integrated-content .profile-header-section { border: 2rpx solid #d1dfd5; background: #fff; border-radius: 18rpx; }
+  .profile-section-heading { min-height: 120rpx; box-sizing: border-box; }
+  .feed-card { border: 2rpx solid #d1dfd5; border-radius: 18rpx; box-shadow: none; background: #fff; }
+  .feed-card .feed-content { font-size: 32rpx; }
+  .feed-card .user-name { font-size: 36rpx; }
+  .feed-card .post-time, .feed-search-placeholder-text, .feed-filter-summary { font-size: 26rpx; }
+  .analysis-panel-control .segment-item { min-height: 86rpx; font-size: 30rpx; }
+  .stats-card .bar-fill { background: #005b38; }
+}
+.fl-balanced-theme--way-of-water:not(.fl-d) {
+  .bt-integrated-content .profile-header-section { background: #0d2029e8; border: 1rpx solid #66838a; border-radius: 28rpx; }
+  .feed-card { background: #10222d; border: 1rpx solid #526c79; border-radius: 26rpx; box-shadow: none; }
+  .feed-card .feed-image { padding: 0; }
+  .feed-card .feed-image image { border-radius: 18rpx !important; }
+  .stats-card { border: 1rpx solid #526c79; border-radius: 26rpx; background: #10222d; }
+  .stats-card .bar-fill { background: #7fabb7; }
+  .stats-card .bar-fill.over { background: #cc9a79; }
+}

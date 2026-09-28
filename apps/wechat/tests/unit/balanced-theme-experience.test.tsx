@@ -57,4 +57,18 @@ describe('balanced theme live experiences', () => {
     expect(container).toBeEmptyDOMElement()
     expect(loadBalancedScenes).not.toHaveBeenCalled()
   })
+  it('keeps the real profile actions usable when embedded in a scene or switched to wellness', async () => {
+    mockTheme = 'miniature-world'
+    const login = jest.fn()
+    const content = <button onClick={login}>真实资料入口</button>
+    const { rerender } = render(<BalancedThemeExperience surface='profile'>{content}</BalancedThemeExperience>)
+    fireEvent.click(screen.getByText('真实资料入口'))
+    expect(login).toHaveBeenCalledTimes(1)
+    mockWellness = true
+    rerender(<BalancedThemeExperience surface='profile'>{content}</BalancedThemeExperience>)
+    fireEvent.click(screen.getByText('真实资料入口'))
+    expect(login).toHaveBeenCalledTimes(2)
+    expect(screen.queryByText('旅行者档案')).not.toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('真实资料入口')).toBeInTheDocument())
+  })
 })
