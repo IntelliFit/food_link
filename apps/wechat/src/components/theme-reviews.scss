@@ -28,12 +28,13 @@
 }
 .theme-review--natural-symbiosis {
   .tr-botanical { position: relative; }
-  .tr-rings { width: 88%; position: relative; }
-  .tr-chart--rings { height: 510rpx; }
-  .tr-rings__center { position: absolute; top: 43%; left: 34%; width: 32%; text-align: center; pointer-events: none; }
+  .tr-rings { width: 100%; position: relative; }
+  .tr-rings__wood { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .tr-chart--rings { position: relative; height: 600rpx; }
+  .tr-rings__center { position: absolute; top: 50%; left: 34%; width: 32%; transform: translateY(-50%); text-align: center; pointer-events: none; color: #294b35; }
   .tr-rings__center text { display: block; font-size: 23rpx; }
   .tr-rings__center text:first-child { font-size: 42rpx; font-family: serif; }
-  .tr-botanical__note { position: absolute; right: 6rpx; top: 22rpx; font-size: 28rpx; line-height: 2; letter-spacing: 4rpx; white-space: pre-line; }
+  .tr-botanical__note { display: block; text-align: center; margin-top: 18rpx; font-size: 26rpx; line-height: 1.8; letter-spacing: 5rpx; white-space: normal; }
   .tr-average { padding-top: 24rpx; }
   .tr-record { border-radius: 36rpx 4rpx; background: #385541; color: #fffdf2; }
 }

@@ -5,6 +5,8 @@ import { useAppColorSchemeOptional } from './AppColorSchemeContext'
 import { useBalancedTheme } from './BalancedThemeContext'
 import { HOME_DISPLAY_MODE_STORAGE_KEY } from '../utils/home-display-mode'
 import { applyThemeNavigationBar } from '../utils/theme-navigation-bar'
+import { BALANCED_SCENES } from '../utils/balanced-theme-scenes'
+import { ThemeSceneImage } from './ThemeSceneImage'
 
 function readWellnessMode(): boolean {
   try {
@@ -35,6 +37,7 @@ export function FlPageThemeRoot({ children }: PropsWithChildren): React.ReactEle
       className={`fl-page-theme-root${dark ? ' fl-d' : ''}${wellness ? ' fl-page-theme-root--wellness' : ` fl-page-theme-root--balanced fl-balanced-theme--${balancedTheme}`}`}
       style={{ minHeight: '100vh', width: '100%', boxSizing: 'border-box' }}
     >
+      {!dark && !wellness && balancedTheme === 'natural-symbiosis' && <ThemeSceneImage className='natural-page-paper' src={BALANCED_SCENES.naturalPaper} />}
       {children}
     </View>
   )

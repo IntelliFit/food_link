@@ -5,6 +5,7 @@ import type { BalancedThemeId } from '../utils/balanced-theme'
 import { BALANCED_SCENES, loadBalancedScenes } from '../utils/balanced-theme-scenes'
 import { waterFlowDays, WaterDailyFlow } from './WaterDailyFlow'
 import easternLandscape from '../assets/balanced-themes/eastern-landscape.webp'
+import { ThemeSceneImage } from './ThemeSceneImage'
 import './theme-reviews.scss'
 
 type Props = {
@@ -52,7 +53,7 @@ function ReviewChart({ days, kind, selected, dark = false }: { days: Day[]; kind
           const length = kind === 'rings' ? (day.calories || 0) / max * Math.PI * 2 : total ? (day.calories || 0) / total * Math.PI * 2 : 0
           ctx.lineWidth = kind === 'rings' ? radius / 15 : radius * .38
           if (kind === 'rings' || total === 0) {
-            ctx.strokeStyle = quiet; ctx.globalAlpha = .35; ctx.beginPath(); ctx.arc(centerX, centerY, r, 0, Math.PI * 2); ctx.stroke(); ctx.globalAlpha = 1
+            ctx.strokeStyle = quiet; ctx.globalAlpha = kind === 'rings' ? .16 : .35; ctx.beginPath(); ctx.arc(centerX, centerY, r, 0, Math.PI * 2); ctx.stroke(); ctx.globalAlpha = 1
           }
           if (length > 0) {
             ctx.strokeStyle = kind === 'rings' ? (day.date === selected ? '#b08247' : ink) : colors[i]
@@ -134,7 +135,7 @@ export function ThemeDailyReview({ theme, endDate, days, water, guest, onRecord 
   if (theme === 'way-of-water') return <View className='theme-review theme-review--way-of-water'><WaterDailyFlow endDate={endDate} days={days} water={water} guest={guest} onRecord={onRecord} />{chart('water', true)}<Text className='tr-caption'>饮食摄入 · 千卡 · 未记录的日期留空</Text></View>
   return <View id='theme-daily-review' className={`theme-review theme-review--${theme}`}>
     {theme === 'clarity-order' && <><View className='tr-editorial-title'><Text>07 / DAILY</Text><Text>记录，让变化可见。</Text></View>{average}{chart('columns')}{caption}{dates()}{detail}</>}
-    {theme === 'natural-symbiosis' && <><View className='tr-botanical'><View className='tr-rings'>{chart('rings')}<View className='tr-rings__center'><Text>{summary.count}</Text><Text>天已记录</Text></View></View><Text className='tr-botanical__note'>一日一圈{ '\n' }慢慢生长</Text></View><Text className='tr-caption'>由外到内对应七日，弧长表示当日摄入；留白表示未记录</Text>{caption}{dates()}{detail}{average}</>}
+    {theme === 'natural-symbiosis' && <>{caption}<View className='tr-botanical'><View className='tr-rings'><ThemeSceneImage className='tr-rings__wood' src={BALANCED_SCENES.naturalRings} mode='aspectFit' />{chart('rings')}<View className='tr-rings__center'><Text>{summary.count}</Text><Text>天已记录</Text></View></View><Text className='tr-botanical__note'>一日一圈{ '\n' }慢慢生长</Text></View><Text className='tr-caption'>由外到内对应七日，最长弧线为七日最高摄入；未记录处留白。</Text>{dates()}{detail}{average}</>}
     {theme === 'eastern-salon' && <><View className='tr-landscape'><Image src={easternLandscape} mode='aspectFill' aria-hidden /><View className='tr-landscape__title'><Text>以食为线 · 见山河</Text><Text>每日摄入 / 千卡</Text></View>{chart('river')}</View>{caption}{dates()}{detail}<Text className='tr-verse'>一餐一饮，自有节序。</Text></>}
     {theme === 'modern-gallery' && <><View className='tr-exhibition'><View>{chart('donut')}<Text className='tr-caption'>七日摄入分布 · 按日期</Text></View>{average}</View>{caption}{dates()}{detail}<Text className='tr-gallery-note'>日常，也是作品。</Text></>}
     {theme === 'miniature-world' && <><View className='tr-diorama'>{artReady && <Image className='tr-scene' src={BALANCED_SCENES.miniatureGarden} mode='aspectFill' aria-hidden />}<View className='tr-diorama__sign'>{average}</View><View className='tr-diorama__river'>{chart('river', true)}<Text>七日饮食河流 · 千卡</Text></View></View>{caption}{dates()}{detail}</>}

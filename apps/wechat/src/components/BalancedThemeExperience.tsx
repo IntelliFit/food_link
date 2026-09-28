@@ -75,6 +75,7 @@ export function BalancedThemeExperience({ surface, home, children, onRecord, onW
   const action = (id: string, text: string, detail: string, icon: string, onClick: () => void) => (
     <View id={`bt-action-${id}`} className={`bt-action bt-action--${id}`} role='button' aria-label={text} hoverClass='bt-action--pressed' onClick={onClick}>
       {theme === 'way-of-water' && <Image className='bt-action__water-drop' src={waterDrop} mode='aspectFit' />}
+      {theme === 'natural-symbiosis' && id === 'record' && scenesReady && <Image className='bt-action__specimen' src={BALANCED_SCENES.naturalDrawer} mode='scaleToFill' aria-hidden />}
       <Text className={`iconfont ${icon} bt-action__icon`} />
       <View className='bt-action__copy'><Text>{text}</Text>{detail && <Text>{detail}</Text>}</View>
       <Text className='iconfont icon-right bt-action__arrow' />
@@ -90,7 +91,7 @@ export function BalancedThemeExperience({ surface, home, children, onRecord, onW
   const rootClass = `bt-experience bt-experience--${theme} bt-experience--${surface}${children ? ' bt-experience--integrated' : ''}`
   if (surface !== 'home') {
     const art = theme === 'miniature-world' ? (surface === 'profile' ? miniatureDesk : surface === 'community' ? miniatureSquare : miniatureGarden)
-      : theme === 'picturebook-companion' ? picturebookDesk : theme === 'natural-symbiosis' ? naturalLeaves
+      : theme === 'picturebook-companion' ? picturebookDesk
       : theme === 'eastern-salon' ? easternLandscape : theme === 'way-of-water' ? waterRock
       : theme === 'modern-gallery' ? galleryCollage : undefined
     return <View id={`balanced-theme-experience-${surface}`} className={rootClass}>

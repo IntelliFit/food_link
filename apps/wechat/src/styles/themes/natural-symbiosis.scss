@@ -1,4 +1,11 @@
 .fl-balanced-theme--natural-symbiosis:not(.fl-d) {
+  position: relative;
+  .natural-page-paper { position: fixed; inset: 0; width: 100%; height: 100vh; pointer-events: none; }
+  .home-page, .stats-page, .community-page, .profile-page { position: relative; background: transparent !important; }
+  .bt-experience:not(.bt-experience--home) { background: transparent; margin-bottom: 0; }
+  .bt-integrated-content .profile-header-section { background: transparent; border: 0; border-radius: 0; box-shadow: none; padding: 24rpx 0; }
+  .profile-header-section::after { content: none; }
+  .profile-quick-actions { border-top: 1rpx solid #a1ac8e; border-bottom: 1rpx solid #a1ac8e; padding: 24rpx 0; }
   .bt-experience:not(.bt-experience--home) { min-height: 280rpx; }
   .theme-chapter--natural-symbiosis { display: flex; justify-content: space-between; gap: 18rpx; }
   .theme-chapter--natural-symbiosis .tc-title { font: 56rpx 'Kaiti SC', KaiTi, serif; }
@@ -7,10 +14,15 @@
   .bt-experience--home .bt-heading__title { font-size: 52rpx; }
   .bt-experience--home .bt-heading__subtitle { max-width: 250rpx; }
   .bt-experience--home .bt-leaf-note { width: 300rpx; }
-  .theme-profile-sections { padding: 18rpx 20rpx 30rpx; border-top: 1rpx solid #9cae8b; }
-  .tp-section { margin: 0 0 16rpx; border-radius: 2rpx; border-width: 0 0 1rpx; background: #f7f0dd; }
-  .tp-section .profile-section-heading { padding: 26rpx 18rpx; }
-  .tp-section .tp-section__mark { color: #456b4d; width: 90rpx; height: 92rpx; }
+  .theme-profile-sections { padding: 24rpx 0 30rpx; border-top: 1rpx solid #9cae8b; }
+  .tp-section { margin: 0 0 12rpx; padding: 0; border-radius: 2rpx; border: 0; background: #eee4ce; box-shadow: none; }
+  .tp-section .profile-section-heading { position: relative; min-height: 192rpx; padding: 34rpx 38rpx 34rpx 104rpx; box-sizing: border-box; border: 0; }
+  .tp-section .tp-section__drawer { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .tp-section .tp-section__copy, .tp-section .profile-section-chevron { position: relative; }
+  .tp-section .tp-section__mark { display: none; }
+  .tp-section .profile-section-hint { color: #635a45; font-size: 23rpx; }
+  .tp-section .profile-section-title { color: #2c3c2e; }
+  .tp-section--open .profile-card { background: #fbf6e9; margin: 0 12rpx 12rpx; border: 0; border-radius: 0; }
   .tp-section .tp-section__mark > text { font-size: 56rpx; }
   .tp-section .profile-section-title { font-size: 34rpx; letter-spacing: 4rpx; }
   .theme-feed-entry--photo .feed-card-main-col { display: grid; grid-template-columns: 58% minmax(0, 1fr); gap: 16rpx 20rpx; }
@@ -18,5 +30,18 @@
   .theme-feed-entry--photo .feed-image { grid-column: 1; grid-row: 2; margin: 0; height: 330rpx; }
   .theme-feed-entry--photo .feed-content { grid-column: 2; grid-row: 2; font: 27rpx/1.9 'Kaiti SC', KaiTi, serif; margin: 0; }
   .theme-feed-entry--photo .feed-image-content { height: 330rpx; }
-  .feed-card { border: 0; background: #fffdf2; padding: 24rpx 18rpx; border-bottom: 1rpx solid #a8b49a; }
+  .feed-card, .feed-card:nth-child(odd), .feed-card:nth-child(even) { border: 0; border-radius: 0; background: transparent; margin-left: 0; margin-right: 0; padding: 28rpx 0; border-bottom: 1rpx solid #a8b49a; box-shadow: none; }
+  .feed-card .feed-image image { border-radius: 3rpx !important; }
+  .theme-feed-entry--photo .feed-content { padding: 14rpx 10rpx; background: #fffdf38c; border-bottom: 1rpx solid #d4cbb7; }
+  .feed-filter-panel { border: 0; border-radius: 0; background: transparent; border-bottom: 1rpx solid #a8b49a; }
+  .bt-experience--home .bt-action--record { position: relative; min-height: 166rpx; padding: 28rpx 28rpx 28rpx 80rpx; background: #efe4cd; border: 0; border-radius: 0; box-shadow: none; }
+  .bt-action__specimen { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .bt-action--record .bt-action__copy, .bt-action--record .bt-action__arrow { position: relative; }
+  .bt-action--record .bt-action__icon { display: none; }
+  .bt-experience--home .bt-leaf-note--meals { right: 30rpx; top: 38%; }
+  .bt-experience--home .bt-leaf-note--water { left: 28rpx; top: 62%; }
+  .bt-leaf-note .bt-action { min-height: 155rpx; padding: 24rpx; background: #fffff3cf; border: 2rpx solid #f8f7e7; box-shadow: 0 5rpx 18rpx #29462e1a; }
 }
+
+/* Paper art belongs to the light herbarium; dark mode keeps its readable palette. */
+.fl-balanced-theme--natural-symbiosis.fl-d .tp-section__drawer { display: none; }

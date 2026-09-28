@@ -538,3 +538,10 @@ final result: passed
 - 单测/类型检查不能替代视觉验收；具体实现及边界见 docs/design/balanced-themes-v7-individual-20260928/README.md。
 
 final result: blocked
+
+## 2026-09-28 V8 / 自然共生材质精修
+- Reference: V3 natural-symbiosis four-surfaces.
+- Implemented: continuous handmade paper, alpha wood-ring substrate with accurate live Canvas arcs, specimen-drawer profile toggles, wood-paper home CTA, borderless botanical feed.
+- Native runtime: four surfaces present; date selection and profile expand/collapse passed. Screenshot review caught background occlusion and stretched tree slice, both corrected.
+- Local screenshots: natural-symbiosis-stats and drawer/home captures, 224×488 simulator output; community checked separately. Account/feed captures stay local.
+- Status: full visual fidelity still blocked. Font/material detail and populated-data/device-size comparisons remain, despite functional checks. Do not label all eight themes visually complete.

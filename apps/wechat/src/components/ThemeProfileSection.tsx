@@ -4,6 +4,8 @@ import { useBalancedTheme } from './BalancedThemeContext'
 import { useInkWellness } from './InkWellness'
 import waterDrop from '../assets/balanced-themes/water-drop-v6.webp'
 import easternLandscape from '../assets/balanced-themes/eastern-landscape.webp'
+import { BALANCED_SCENES } from '../utils/balanced-theme-scenes'
+import { ThemeSceneImage } from './ThemeSceneImage'
 
 type Props = { title: string; hint: string; index: number; icon: string; expanded: boolean; onToggle: () => void; children: React.ReactNode }
 
@@ -12,6 +14,7 @@ export function ThemeProfileSection({ title, hint, index, icon, expanded, onTogg
   const ink = useInkWellness()
   return <View className={`profile-section${ink ? '' : ` tp-section tp-section--${theme}`}${expanded ? ' tp-section--open' : ''}`}>
     <View className='profile-section-heading is-toggle' role='button' aria-expanded={expanded} aria-label={`${expanded ? '收起' : '展开'}${title}`} onClick={onToggle}>
+      {!ink && theme === 'natural-symbiosis' && <ThemeSceneImage className='tp-section__drawer' src={BALANCED_SCENES.naturalDrawer} />}
       {!ink && <View className='tp-section__mark' aria-hidden>
         {theme === 'way-of-water' && <Image src={waterDrop} mode='aspectFit' />}
         {theme === 'eastern-salon' && <Image src={easternLandscape} mode='aspectFill' />}
