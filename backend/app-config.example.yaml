@@ -51,11 +51,12 @@ external:
   gemini35_api_key: ""
   gemini35_base_url: ""
   gemini35_model: "gemini-3.5-flash"
-  # Gemini 第二上游。普通模式按比例稳定分流；精准模式固定走这里的 Gemini 3.6 Flash。
+  # Gemini 独立第二上游。下列比例只决定首选上游；即使比例为 0，主源 10 秒未返回有效结果时仍可能调用 OpenLux 对冲。
   openlux_api_key: ""
   openlux_base_url: "https://api.openlux.ai/v1"
   openlux_ordinary_gemini_traffic_percent: 50
-  # 普通图片任务命中 Qwen3.8 的第一层稳定分流比例。
+  openlux_precision_gemini_traffic_percent: 50
+  # 旧兼容字段；普通模式主识别固定 Gemini，且 Gemini 失败时不回退 Qwen。
   qwen38_ordinary_traffic_percent: 50
   deepseek_api_key: ""
   # OpenAI-compatible endpoint prefix. This service appends /chat/completions.

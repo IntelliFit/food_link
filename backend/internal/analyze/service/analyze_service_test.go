@@ -74,6 +74,15 @@ type modelAwareLLMClient struct {
 	models []string
 }
 
+type delayedModelAwareLLMClient struct {
+	result   map[string]any
+	err      error
+	delay    time.Duration
+	calls    atomic.Int32
+	started  chan struct{}
+	canceled chan struct{}
+}
+
 func (m *modelAwareLLMClient) Analyze(ctx context.Context, prompt, imageURL string) (map[string]any, error) {
 	return m.result, m.err
 }
@@ -81,6 +90,38 @@ func (m *modelAwareLLMClient) Analyze(ctx context.Context, prompt, imageURL stri
 func (m *modelAwareLLMClient) AnalyzeWithImagesAndTemperatureModel(ctx context.Context, prompt string, imageURLs []string, temperature float64, modelName string) (map[string]any, error) {
 	m.models = append(m.models, modelName)
 	return m.result, m.err
+}
+
+func (m *delayedModelAwareLLMClient) Analyze(ctx context.Context, prompt, imageURL string) (map[string]any, error) {
+	return m.wait(ctx)
+}
+
+func (m *delayedModelAwareLLMClient) AnalyzeWithImagesAndTemperatureModel(ctx context.Context, prompt string, imageURLs []string, temperature float64, modelName string) (map[string]any, error) {
+	return m.wait(ctx)
+}
+
+func (m *delayedModelAwareLLMClient) wait(ctx context.Context) (map[string]any, error) {
+	m.calls.Add(1)
+	notifyTestChannel(m.started)
+	timer := time.NewTimer(m.delay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		notifyTestChannel(m.canceled)
+		return nil, ctx.Err()
+	case <-timer.C:
+		return m.result, m.err
+	}
+}
+
+func notifyTestChannel(ch chan struct{}) {
+	if ch == nil {
+		return
+	}
+	select {
+	case ch <- struct{}{}:
+	default:
+	}
 }
 
 func (m *multiImageLLMClient) Analyze(ctx context.Context, prompt, imageURL string) (map[string]any, error) {
@@ -605,7 +646,7 @@ func TestAnalyzeService_ConfigureOpenLuxGeminiClientsUsesGemini36ForPrecision(t 
 	assert.Equal(t, precisionGeminiFlashModel, precisionClient.Model)
 }
 
-func TestAnalyzeService_SelectFoodImageModelUsesStableOrdinaryTrafficAndFixedPrecisionGemini36(t *testing.T) {
+func TestAnalyzeService_SelectFoodImageModelUsesStableOrdinaryAndPrecisionTraffic(t *testing.T) {
 	svc := NewAnalyzeService(nil, &mockLLMClient{}, nil)
 	svc.gemini35Client = &mockLLMClient{}
 	svc.ConfigureOpenLuxGeminiLLMClients(&mockLLMClient{}, &mockLLMClient{})
@@ -617,7 +658,7 @@ func TestAnalyzeService_SelectFoodImageModelUsesStableOrdinaryTrafficAndFixedPre
 
 	svc.ConfigureGeminiUpstreamTraffic(0, 0)
 	assert.Equal(t, gemini3FlashModel, svc.SelectFoodImageModel(defaultExecutionMode, "image-1"))
-	assert.Equal(t, openLuxPrecisionGeminiRoute, svc.SelectFoodImageModel(precisionExecutionMode, "session-1"))
+	assert.Equal(t, gemini35FlashModel, svc.SelectFoodImageModel(precisionExecutionMode, "session-1"))
 
 	svc.ConfigureGeminiUpstreamTraffic(50, 50)
 	assert.Equal(t,
@@ -625,14 +666,218 @@ func TestAnalyzeService_SelectFoodImageModelUsesStableOrdinaryTrafficAndFixedPre
 		svc.SelectFoodImageModel(defaultExecutionMode, "same-image"),
 	)
 	ordinaryOpenLux := 0
+	precisionOpenLux := 0
 	for i := 0; i < 1000; i++ {
 		routingKey := fmt.Sprintf("route-%d", i)
 		if svc.SelectFoodImageModel(defaultExecutionMode, routingKey) == openLuxGemini3Route {
 			ordinaryOpenLux++
 		}
-		assert.Equal(t, openLuxPrecisionGeminiRoute, svc.SelectFoodImageModel(precisionExecutionMode, routingKey))
+		if svc.SelectFoodImageModel(precisionExecutionMode, routingKey) == openLuxPrecisionGeminiRoute {
+			precisionOpenLux++
+		}
 	}
 	assert.InDelta(t, 500, ordinaryOpenLux, 75)
+	assert.InDelta(t, 500, precisionOpenLux, 75)
+}
+
+func TestAnalyzeService_HedgedGeminiVisionReturnsFastPrimaryWithoutStartingAlternate(t *testing.T) {
+	primary := &delayedModelAwareLLMClient{
+		result: map[string]any{"items": []any{map[string]any{"name": "米饭"}}},
+		delay:  time.Millisecond,
+	}
+	alternate := &delayedModelAwareLLMClient{
+		result:  map[string]any{"items": []any{map[string]any{"name": "面条"}}},
+		delay:   time.Millisecond,
+		started: make(chan struct{}, 1),
+	}
+	svc := NewAnalyzeService(nil, primary, nil)
+	svc.ConfigureOpenLuxGeminiLLMClients(alternate, nil)
+	svc.visionHedgePolicy = visionHedgePolicy{
+		delay:                  30 * time.Millisecond,
+		overallTimeout:         200 * time.Millisecond,
+		primaryUpstreamTimeout: 100 * time.Millisecond,
+		openLuxUpstreamTimeout: 100 * time.Millisecond,
+	}
+
+	outcome, err := svc.runHedgedGeminiVision(
+		context.Background(),
+		"test_food_image",
+		geminiPrimaryUpstream,
+		gemini3FlashModel,
+		"prompt",
+		[]string{"https://example.com/food.jpg"},
+		0,
+		primary,
+		validateNonEmptyFoodAnalysisResult,
+	)
+
+	require.NoError(t, err)
+	assert.Equal(t, geminiPrimaryUpstream, outcome.upstream)
+	assert.False(t, outcome.hedgeLaunched)
+	assert.False(t, outcome.alternateWon)
+	assert.Equal(t, int32(1), primary.calls.Load())
+	assert.Equal(t, int32(0), alternate.calls.Load())
+}
+
+func TestAnalyzeService_HedgedGeminiVisionStartsAlternateAfterDelayAndUsesFirstValidResult(t *testing.T) {
+	primaryCanceled := make(chan struct{}, 1)
+	primary := &delayedModelAwareLLMClient{
+		result:   map[string]any{"items": []any{map[string]any{"name": "慢主源"}}},
+		delay:    200 * time.Millisecond,
+		canceled: primaryCanceled,
+	}
+	alternate := &delayedModelAwareLLMClient{
+		result: map[string]any{"items": []any{map[string]any{"name": "快速备用源"}}},
+		delay:  5 * time.Millisecond,
+	}
+	svc := NewAnalyzeService(nil, primary, nil)
+	svc.ConfigureOpenLuxGeminiLLMClients(alternate, nil)
+	svc.visionHedgePolicy = visionHedgePolicy{
+		delay:                  10 * time.Millisecond,
+		overallTimeout:         300 * time.Millisecond,
+		primaryUpstreamTimeout: 250 * time.Millisecond,
+		openLuxUpstreamTimeout: 100 * time.Millisecond,
+	}
+
+	startedAt := time.Now()
+	outcome, err := svc.runHedgedGeminiVision(
+		context.Background(),
+		"test_food_image",
+		geminiPrimaryUpstream,
+		gemini3FlashModel,
+		"prompt",
+		[]string{"https://example.com/food.jpg"},
+		0,
+		primary,
+		validateNonEmptyFoodAnalysisResult,
+	)
+
+	require.NoError(t, err)
+	assert.Equal(t, geminiOpenLuxUpstream, outcome.upstream)
+	assert.True(t, outcome.hedgeLaunched)
+	assert.True(t, outcome.alternateWon)
+	assert.Less(t, time.Since(startedAt), 100*time.Millisecond)
+	select {
+	case <-primaryCanceled:
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("备用源获胜后主源没有被取消")
+	}
+}
+
+func TestAnalyzeService_HedgedGeminiVisionRejectsEmptyPrimaryAndStartsAlternateImmediately(t *testing.T) {
+	primary := &delayedModelAwareLLMClient{
+		result: map[string]any{"description": "没有识别到食物", "items": []any{}},
+		delay:  time.Millisecond,
+	}
+	alternate := &delayedModelAwareLLMClient{
+		result: map[string]any{"items": []any{map[string]any{"name": "鸡蛋"}}},
+		delay:  time.Millisecond,
+	}
+	svc := NewAnalyzeService(nil, primary, nil)
+	svc.ConfigureOpenLuxGeminiLLMClients(alternate, nil)
+	svc.visionHedgePolicy = visionHedgePolicy{
+		delay:                  200 * time.Millisecond,
+		overallTimeout:         300 * time.Millisecond,
+		primaryUpstreamTimeout: 100 * time.Millisecond,
+		openLuxUpstreamTimeout: 100 * time.Millisecond,
+	}
+
+	startedAt := time.Now()
+	outcome, err := svc.runHedgedGeminiVision(
+		context.Background(),
+		"test_food_image",
+		geminiPrimaryUpstream,
+		gemini3FlashModel,
+		"prompt",
+		[]string{"https://example.com/food.jpg"},
+		0,
+		primary,
+		validateNonEmptyFoodAnalysisResult,
+	)
+
+	require.NoError(t, err)
+	assert.True(t, outcome.alternateWon)
+	assert.Less(t, time.Since(startedAt), 100*time.Millisecond)
+	assert.Equal(t, int32(1), alternate.calls.Load())
+}
+
+func TestAnalyzeService_HedgedGeminiVisionKeepsIndependentUpstreamTimeouts(t *testing.T) {
+	primary := &delayedModelAwareLLMClient{
+		result: map[string]any{"items": []any{map[string]any{"name": "超时主源"}}},
+		delay:  100 * time.Millisecond,
+	}
+	alternate := &delayedModelAwareLLMClient{
+		result: map[string]any{"items": []any{map[string]any{"name": "备用源成功"}}},
+		delay:  15 * time.Millisecond,
+	}
+	svc := NewAnalyzeService(nil, primary, nil)
+	svc.ConfigureOpenLuxGeminiLLMClients(alternate, nil)
+	svc.visionHedgePolicy = visionHedgePolicy{
+		delay:                  time.Millisecond,
+		overallTimeout:         100 * time.Millisecond,
+		primaryUpstreamTimeout: 5 * time.Millisecond,
+		openLuxUpstreamTimeout: 50 * time.Millisecond,
+	}
+
+	outcome, err := svc.runHedgedGeminiVision(
+		context.Background(),
+		"test_food_image",
+		geminiPrimaryUpstream,
+		gemini3FlashModel,
+		"prompt",
+		[]string{"https://example.com/food.jpg"},
+		0,
+		primary,
+		validateNonEmptyFoodAnalysisResult,
+	)
+
+	require.NoError(t, err)
+	assert.Equal(t, geminiOpenLuxUpstream, outcome.upstream)
+	assert.True(t, outcome.alternateWon)
+	assert.ErrorIs(t, outcome.primaryError, context.DeadlineExceeded)
+}
+
+func TestAnalyzeService_HedgedGeminiVisionCanStillUsePrimaryAfterHedgeStarts(t *testing.T) {
+	alternateCanceled := make(chan struct{}, 1)
+	primary := &delayedModelAwareLLMClient{
+		result: map[string]any{"items": []any{map[string]any{"name": "主源最终成功"}}},
+		delay:  15 * time.Millisecond,
+	}
+	alternate := &delayedModelAwareLLMClient{
+		result:   map[string]any{"items": []any{map[string]any{"name": "更慢备用源"}}},
+		delay:    100 * time.Millisecond,
+		canceled: alternateCanceled,
+	}
+	svc := NewAnalyzeService(nil, primary, nil)
+	svc.ConfigureOpenLuxGeminiLLMClients(alternate, nil)
+	svc.visionHedgePolicy = visionHedgePolicy{
+		delay:                  5 * time.Millisecond,
+		overallTimeout:         200 * time.Millisecond,
+		primaryUpstreamTimeout: 100 * time.Millisecond,
+		openLuxUpstreamTimeout: 100 * time.Millisecond,
+	}
+
+	outcome, err := svc.runHedgedGeminiVision(
+		context.Background(),
+		"test_food_image",
+		geminiPrimaryUpstream,
+		gemini3FlashModel,
+		"prompt",
+		[]string{"https://example.com/food.jpg"},
+		0,
+		primary,
+		validateNonEmptyFoodAnalysisResult,
+	)
+
+	require.NoError(t, err)
+	assert.Equal(t, geminiPrimaryUpstream, outcome.upstream)
+	assert.True(t, outcome.hedgeLaunched)
+	assert.False(t, outcome.alternateWon)
+	select {
+	case <-alternateCanceled:
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("主源获胜后备用源没有被取消")
+	}
 }
 
 func TestAnalyzeService_RunPrecisionJSONUsesSelectedOpenLuxGemini36Client(t *testing.T) {
@@ -690,7 +935,7 @@ func TestAnalyzeService_AnalyzeImageFallsBackAcrossGeminiUpstreamsBeforeQwen(t *
 	primaryClient := &multiImageLLMClient{err: errors.New("net/http: TLS handshake timeout")}
 	openLuxClient := &multiImageLLMClient{result: map[string]any{
 		"description": "openlux ordinary fallback",
-		"items":       []any{},
+		"items":       []any{map[string]any{"name": "米饭", "estimatedWeightGrams": 100.0}},
 	}}
 	qwenClient := &multiImageLLMClient{result: map[string]any{"description": "unexpected qwen", "items": []any{}}}
 	executionMode := defaultExecutionMode
@@ -712,8 +957,35 @@ func TestAnalyzeService_AnalyzeImageFallsBackAcrossGeminiUpstreamsBeforeQwen(t *
 	meta := result["hybrid_review"].(map[string]any)
 	assert.Equal(t, geminiPrimaryUpstream, meta["primary_upstream"])
 	assert.Equal(t, geminiOpenLuxUpstream, meta["base_upstream"])
+	assert.Equal(t, true, meta["gemini_upstream_hedge_launched"])
 	assert.Equal(t, true, meta["gemini_upstream_fallback_used"])
 	assert.Equal(t, true, meta["fallback_used"])
+}
+
+func TestAnalyzeService_AnalyzeImageStandardDoesNotFallBackToQwenAfterBothGeminiUpstreamsFail(t *testing.T) {
+	primaryClient := &multiImageLLMClient{err: errors.New("context deadline exceeded")}
+	openLuxClient := &multiImageLLMClient{err: errors.New("net/http: TLS handshake timeout")}
+	qwenClient := &multiImageLLMClient{result: map[string]any{
+		"description": "unexpected qwen fallback",
+		"items":       []any{map[string]any{"name": "鸡蛋", "estimatedWeightGrams": 60.0}},
+	}}
+	svc := NewAnalyzeService(nil, primaryClient, nil)
+	svc.ConfigureOpenLuxGeminiLLMClients(openLuxClient, nil)
+	svc.ConfigureDashScopeLLMClient(qwenClient)
+	svc.ConfigureNutritionResolver(newFakeAnalyzeNutritionResolver())
+	executionMode := defaultExecutionMode
+
+	_, err := svc.Analyze(context.Background(), "", AnalyzeInput{
+		ImageURL:      "https://example.com/food.jpg",
+		ModelName:     gemini3FlashModel,
+		ExecutionMode: &executionMode,
+	})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "Gemini")
+	require.Len(t, primaryClient.imageSetCalls, 1)
+	require.Len(t, openLuxClient.imageSetCalls, 1)
+	assert.Empty(t, qwenClient.imageSetCalls)
 }
 
 func TestAnalyzeService_RunPrecisionJSONUsesSelectedQwenClient(t *testing.T) {
@@ -1336,7 +1608,7 @@ func TestAnalyzeService_Analyze(t *testing.T) {
 }
 
 func TestAnalyzeService_AnalyzeUsesSingleLLMRequestForMultipleImages(t *testing.T) {
-	client := &multiImageLLMClient{result: map[string]any{"description": "multi", "items": []any{}}}
+	client := &multiImageLLMClient{result: map[string]any{"description": "multi", "items": []any{map[string]any{"name": "米饭", "estimatedWeightGrams": 100.0}}}}
 	svc := NewAnalyzeService(nil, client, nil)
 	svc.ConfigureNutritionResolver(newFakeAnalyzeNutritionResolver())
 
@@ -1380,7 +1652,7 @@ func TestAnalyzeService_AnalyzeTextRequiresConfiguredTextModel(t *testing.T) {
 
 func TestAnalyzeService_AnalyzeImageGeminiAliasUsesGemini3FlashInStandardMode(t *testing.T) {
 	doubaoClient := &mockLLMClient{err: assert.AnError}
-	gemini3Client := &mockLLMClient{result: map[string]any{"description": "gemini3 image", "items": []any{}}}
+	gemini3Client := &mockLLMClient{result: map[string]any{"description": "gemini3 image", "items": []any{map[string]any{"name": "米饭", "estimatedWeightGrams": 100.0}}}}
 	svc := NewAnalyzeService(doubaoClient, gemini3Client, nil)
 	svc.ConfigureWebSearcher(nil)
 	svc.ConfigureNutritionResolver(newFakeAnalyzeNutritionResolver())
@@ -1398,7 +1670,7 @@ func TestAnalyzeService_AnalyzeImageGeminiAliasUsesGemini3FlashInStandardMode(t 
 
 func TestAnalyzeService_AnalyzeImageStandardUsesGemini3Flash(t *testing.T) {
 	doubaoClient := &mockLLMClient{err: assert.AnError}
-	gemini3Client := &mockLLMClient{result: map[string]any{"description": "gemini3 image", "items": []any{}}}
+	gemini3Client := &mockLLMClient{result: map[string]any{"description": "gemini3 image", "items": []any{map[string]any{"name": "米饭", "estimatedWeightGrams": 100.0}}}}
 	svc := NewAnalyzeService(doubaoClient, gemini3Client, nil)
 	svc.ConfigureImageProvider("gemini")
 	svc.ConfigureWebSearcher(nil)
@@ -1416,7 +1688,7 @@ func TestAnalyzeService_AnalyzeImageStandardUsesGemini3Flash(t *testing.T) {
 
 func TestAnalyzeService_AnalyzeImageStandardIgnoresExplicitDoubaoAndUsesGemini3Flash(t *testing.T) {
 	doubaoClient := &mockLLMClient{result: map[string]any{"description": "doubao image", "items": []any{}}}
-	gemini3Client := &mockLLMClient{result: map[string]any{"description": "gemini3 image", "items": []any{}}}
+	gemini3Client := &mockLLMClient{result: map[string]any{"description": "gemini3 image", "items": []any{map[string]any{"name": "米饭", "estimatedWeightGrams": 100.0}}}}
 	svc := NewAnalyzeService(doubaoClient, gemini3Client, nil)
 	svc.ConfigureImageProvider("gemini")
 	svc.ConfigureWebSearcher(nil)
@@ -2746,7 +3018,7 @@ func TestAnalyzeService_FinalizeAnalyzeResponseGeneratesNutritionWhenPackagedAnd
 	assert.Equal(t, 1, meta["fallback_count"])
 }
 
-func TestAnalyzeService_FinalizeAnalyzeResponseFallsBackToQwenWhenDeepSeekFails(t *testing.T) {
+func TestAnalyzeService_FinalizeAnalyzeResponseUsesQwenWhenParallelDeepSeekFails(t *testing.T) {
 	resolver := newFakeAnalyzeNutritionResolver()
 	deepseekFallback := &fakeNutritionFallbackEstimator{err: errors.New("deepseek timeout")}
 	qwenFallback := &fakeNutritionFallbackEstimator{
@@ -2779,7 +3051,6 @@ func TestAnalyzeService_FinalizeAnalyzeResponseFallsBackToQwenWhenDeepSeekFails(
 	}, AnalyzeInput{AnalysisEngine: analysisEngineLegacyDBFirst}, defaultExecutionMode, "fake", "fake-model", 12)
 	require.NoError(t, err)
 
-	require.Len(t, deepseekFallback.candidates, 1)
 	require.Len(t, qwenFallback.candidates, 1)
 	items := toItems(resp["items"])
 	require.Len(t, items, 1)

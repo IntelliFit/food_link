@@ -65,7 +65,9 @@ const (
 	qwen36FlashModel                = "qwen3.6-flash"
 	qwen38FlashModel                = "qwen3.8-flash"
 	visionPrimaryTimeout            = 30 * time.Second
-	visionAlternateProviderTimeout  = 15 * time.Second
+	visionOpenLuxTimeout            = 25 * time.Second
+	visionHedgeDelay                = 10 * time.Second
+	visionHedgeOverallTimeout       = 35 * time.Second
 	visionFallbackTimeout           = 12 * time.Second
 	maxLLMJSONParseRetries          = 3
 	maxLLMTransientRetries          = 2
@@ -107,15 +109,35 @@ type AnalyzeService struct {
 	doubaoWebSearchClient        interface {
 		AnalyzeWithImagesWebSearch(context.Context, string, []string, DoubaoWebSearchOptions) (map[string]any, map[string]any, error)
 	}
-	imageProvider          string
-	users                  *authrepo.UserRepo
-	nutrition              NutritionResolver
-	nutritionSemantic      NutritionSemanticRetriever
-	deepseek               *DeepSeekNutritionEstimator
-	nutritionAI            nutritionFallbackEstimator
-	storage                *storage.Client
-	webSearcher            WebSearcher
-	ordinaryOpenLuxPercent int
+	imageProvider           string
+	users                   *authrepo.UserRepo
+	nutrition               NutritionResolver
+	nutritionSemantic       NutritionSemanticRetriever
+	deepseek                *DeepSeekNutritionEstimator
+	nutritionAI             nutritionFallbackEstimator
+	storage                 *storage.Client
+	webSearcher             WebSearcher
+	ordinaryOpenLuxPercent  int
+	precisionOpenLuxPercent int
+	visionHedgePolicy       visionHedgePolicy
+}
+
+type visionHedgePolicy struct {
+	delay                  time.Duration
+	overallTimeout         time.Duration
+	primaryUpstreamTimeout time.Duration
+	openLuxUpstreamTimeout time.Duration
+}
+
+type geminiVisionHedgeOutcome struct {
+	parsed         map[string]any
+	client         LLMClient
+	upstream       string
+	model          string
+	hedgeLaunched  bool
+	alternateWon   bool
+	primaryError   error
+	alternateError error
 }
 
 type NutritionResolver interface {
@@ -160,6 +182,12 @@ func NewAnalyzeService(doubaoClient, ofoxAIClient LLMClient, users *authrepo.Use
 		users:                 users,
 		nutrition:             nutritionRepo,
 		webSearcher:           NewMultiWebSearcher(NewSo360WebSearcher(), NewSogouWebSearcher(), NewBingWebSearcher(), NewDuckDuckGoWebSearcher()),
+		visionHedgePolicy: visionHedgePolicy{
+			delay:                  visionHedgeDelay,
+			overallTimeout:         visionHedgeOverallTimeout,
+			primaryUpstreamTimeout: visionPrimaryTimeout,
+			openLuxUpstreamTimeout: visionOpenLuxTimeout,
+		},
 	}
 }
 
@@ -213,11 +241,12 @@ func (s *AnalyzeService) ConfigureOpenLuxGeminiLLMClients(gemini3Client, precisi
 
 func (s *AnalyzeService) ConfigureGeminiUpstreamTraffic(ordinaryOpenLuxPercent, precisionOpenLuxPercent int) {
 	s.ordinaryOpenLuxPercent = clampTrafficPercent(ordinaryOpenLuxPercent)
+	s.precisionOpenLuxPercent = clampTrafficPercent(precisionOpenLuxPercent)
 	logger.Info(context.Background(), "Gemini 双上游混合路由已配置",
 		slog.Int("openlux_ordinary_gemini_traffic_percent", s.ordinaryOpenLuxPercent),
-		slog.Int("openlux_precision_gemini_traffic_percent_ignored", clampTrafficPercent(precisionOpenLuxPercent)),
-		slog.String("precision_primary_upstream", geminiOpenLuxUpstream),
-		slog.String("precision_primary_model", precisionGeminiFlashModel),
+		slog.Int("openlux_precision_gemini_traffic_percent", s.precisionOpenLuxPercent),
+		slog.Duration("vision_hedge_delay", s.visionHedgePolicy.delay),
+		slog.Duration("vision_hedge_overall_timeout", s.visionHedgePolicy.overallTimeout),
 	)
 }
 
@@ -230,7 +259,7 @@ func (s *AnalyzeService) SelectFoodImageModel(executionMode, routingKey string) 
 		return qwen38FlashModel
 	}
 	if isPrecisionLikeExecutionMode(mode) || isGemini35ExecutionMode(mode) {
-		if s.openLuxPrecisionGeminiClient != nil {
+		if s.openLuxPrecisionGeminiClient != nil && stableTrafficHit("precision_gemini_openlux", routingKey, s.precisionOpenLuxPercent) {
 			return openLuxPrecisionGeminiRoute
 		}
 		return gemini35FlashModel
@@ -325,8 +354,256 @@ func tryGeminiVisionCall(ctx context.Context, stage, upstream, model, prompt str
 	}
 	callCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
+	attemptStage := stage
+	if strings.TrimSpace(upstream) != "" {
+		attemptStage += "_" + upstream
+	}
+	start := time.Now()
+	apm.AddEvent(ctx, "Gemini 上游调用开始",
+		attribute.String("analysis.stage", stage),
+		attribute.String("analysis.gemini_upstream", upstream),
+		attribute.String("analysis.model", model),
+		attribute.Int("analysis.image_count", len(imageURLs)),
+		attribute.Int64("analysis.timeout_ms", timeout.Milliseconds()),
+	)
 	call := newAnalyzeWithImagesTemperatureModelCall(client, prompt, imageURLs, temperature, model)
-	return analyzeWithJSONParseRetryPolicy(callCtx, stage, "gemini", model, realtimeVisionRetryPolicy, call)
+	parsed, err := analyzeWithJSONParseRetryPolicy(callCtx, attemptStage, "gemini", model, realtimeVisionRetryPolicy, call)
+	status := "success"
+	if err != nil {
+		status = "failed"
+		if stderrors.Is(err, context.Canceled) {
+			status = "canceled"
+		} else if stderrors.Is(err, context.DeadlineExceeded) || isTransientLLMError(err) {
+			status = "transient_error"
+		} else if IsLLMJSONParseError(err) {
+			status = "json_parse_error"
+		}
+	}
+	apm.AddEvent(ctx, "Gemini 上游调用结束",
+		attribute.String("analysis.stage", stage),
+		attribute.String("analysis.gemini_upstream", upstream),
+		attribute.String("analysis.model", model),
+		attribute.String("analysis.status", status),
+		apm.DurationMS("analysis.duration_ms", time.Since(start)),
+	)
+	return parsed, err
+}
+
+func (s *AnalyzeService) normalizedVisionHedgePolicy() visionHedgePolicy {
+	policy := s.visionHedgePolicy
+	if policy.delay <= 0 {
+		policy.delay = visionHedgeDelay
+	}
+	if policy.overallTimeout <= 0 {
+		policy.overallTimeout = visionHedgeOverallTimeout
+	}
+	if policy.primaryUpstreamTimeout <= 0 {
+		policy.primaryUpstreamTimeout = visionPrimaryTimeout
+	}
+	if policy.openLuxUpstreamTimeout <= 0 {
+		policy.openLuxUpstreamTimeout = visionOpenLuxTimeout
+	}
+	return policy
+}
+
+func (s *AnalyzeService) geminiVisionTimeout(upstream string) time.Duration {
+	policy := s.normalizedVisionHedgePolicy()
+	if upstream == geminiOpenLuxUpstream {
+		return policy.openLuxUpstreamTimeout
+	}
+	return policy.primaryUpstreamTimeout
+}
+
+// geminiVisionRouteContext applies the shared end-to-end model deadline only
+// when two independent Gemini upstreams are available. With a single source,
+// keep that upstream's own timeout; ordinary mode fails instead of accepting a
+// lower-quality Qwen recognition result.
+func (s *AnalyzeService) geminiVisionRouteContext(ctx context.Context, model, primaryUpstream string, primaryClient LLMClient) (context.Context, context.CancelFunc) {
+	alternateClient, _, _ := s.alternateGeminiClient(model, primaryUpstream)
+	if alternateClient == nil || alternateClient == primaryClient {
+		return ctx, func() {}
+	}
+	return context.WithTimeout(ctx, s.normalizedVisionHedgePolicy().overallTimeout)
+}
+
+type geminiVisionAttemptResult struct {
+	parsed    map[string]any
+	err       error
+	client    LLMClient
+	upstream  string
+	model     string
+	alternate bool
+}
+
+// runHedgedGeminiVision starts the selected Gemini upstream immediately. If it
+// has not produced a usable result by the hedge delay, the independent Gemini
+// upstream starts without cancelling the first one. The first response that
+// passes JSON parsing and the caller's business validator wins; the losing
+// request is cancelled to cap latency and duplicate cost.
+func (s *AnalyzeService) runHedgedGeminiVision(
+	ctx context.Context,
+	stage string,
+	primaryUpstream string,
+	primaryModel string,
+	prompt string,
+	imageURLs []string,
+	temperature float64,
+	primaryClient LLMClient,
+	validate func(map[string]any) error,
+) (geminiVisionHedgeOutcome, error) {
+	policy := s.normalizedVisionHedgePolicy()
+	hedgeCtx, hedgeCancel := context.WithTimeout(ctx, policy.overallTimeout)
+	defer hedgeCancel()
+
+	alternateClient, alternateUpstream, alternateModel := s.alternateGeminiClient(primaryModel, primaryUpstream)
+	hasAlternate := alternateClient != nil && alternateClient != primaryClient
+	if !hasAlternate {
+		parsed, err := tryGeminiVisionCall(
+			hedgeCtx,
+			stage,
+			primaryUpstream,
+			primaryModel,
+			prompt,
+			imageURLs,
+			temperature,
+			s.geminiVisionTimeout(primaryUpstream),
+			primaryClient,
+		)
+		if err == nil && validate != nil {
+			err = validate(parsed)
+		}
+		return geminiVisionHedgeOutcome{
+			parsed:       parsed,
+			client:       primaryClient,
+			upstream:     primaryUpstream,
+			model:        primaryModel,
+			primaryError: err,
+		}, err
+	}
+
+	results := make(chan geminiVisionAttemptResult, 2)
+	launch := func(client LLMClient, upstream, model string, alternate bool) {
+		go func() {
+			parsed, err := tryGeminiVisionCall(
+				hedgeCtx,
+				stage,
+				upstream,
+				model,
+				prompt,
+				imageURLs,
+				temperature,
+				s.geminiVisionTimeout(upstream),
+				client,
+			)
+			if err == nil && validate != nil {
+				err = validate(parsed)
+			}
+			results <- geminiVisionAttemptResult{
+				parsed:    parsed,
+				err:       err,
+				client:    client,
+				upstream:  upstream,
+				model:     model,
+				alternate: alternate,
+			}
+		}()
+	}
+
+	launch(primaryClient, primaryUpstream, primaryModel, false)
+	pending := 1
+	alternateStarted := false
+	timer := time.NewTimer(policy.delay)
+	defer timer.Stop()
+	outcome := geminiVisionHedgeOutcome{
+		client:   primaryClient,
+		upstream: primaryUpstream,
+		model:    primaryModel,
+	}
+
+	startAlternate := func(reason string) {
+		if alternateStarted {
+			return
+		}
+		alternateStarted = true
+		outcome.hedgeLaunched = true
+		pending++
+		logger.Info(ctx, "Gemini 首选上游尚未返回有效结果，启动跨来源对冲",
+			slog.String("stage", stage),
+			slog.String("reason", reason),
+			slog.String("primary_upstream", primaryUpstream),
+			slog.String("primary_model", primaryModel),
+			slog.String("alternate_upstream", alternateUpstream),
+			slog.String("alternate_model", alternateModel),
+			slog.Duration("hedge_delay", policy.delay),
+		)
+		apm.AddEvent(ctx, "Gemini 跨来源对冲已启动",
+			attribute.String("analysis.stage", stage),
+			attribute.String("analysis.primary_upstream", primaryUpstream),
+			attribute.String("analysis.alternate_upstream", alternateUpstream),
+			attribute.String("analysis.hedge_reason", reason),
+		)
+		launch(alternateClient, alternateUpstream, alternateModel, true)
+	}
+
+	for {
+		select {
+		case attempt := <-results:
+			pending--
+			if attempt.err == nil {
+				outcome.parsed = attempt.parsed
+				outcome.client = attempt.client
+				outcome.upstream = attempt.upstream
+				outcome.model = attempt.model
+				outcome.alternateWon = attempt.alternate
+				hedgeCancel()
+				if alternateStarted {
+					logger.Info(ctx, "Gemini 跨来源对冲返回有效结果",
+						slog.String("stage", stage),
+						slog.String("winning_upstream", attempt.upstream),
+						slog.String("winning_model", attempt.model),
+						slog.Bool("alternate_won", attempt.alternate),
+					)
+				}
+				return outcome, nil
+			}
+			if attempt.alternate {
+				outcome.alternateError = attempt.err
+			} else {
+				outcome.primaryError = attempt.err
+				startAlternate("primary_invalid_or_failed")
+			}
+			if alternateStarted && pending == 0 {
+				combinedErr := stderrors.Join(outcome.primaryError, outcome.alternateError)
+				err := fmt.Errorf(
+					"Gemini 首选上游 %s 与备用上游 %s 均失败: %w",
+					primaryUpstream,
+					alternateUpstream,
+					combinedErr,
+				)
+				return outcome, err
+			}
+		case <-timer.C:
+			startAlternate("hedge_delay_elapsed")
+		case <-hedgeCtx.Done():
+			if outcome.primaryError == nil {
+				outcome.primaryError = hedgeCtx.Err()
+			}
+			if alternateStarted && outcome.alternateError == nil {
+				outcome.alternateError = hedgeCtx.Err()
+			}
+			if !alternateStarted {
+				return outcome, outcome.primaryError
+			}
+			combinedErr := stderrors.Join(outcome.primaryError, outcome.alternateError)
+			err := fmt.Errorf(
+				"Gemini 跨来源对冲超过总截止时间：首选上游 %s，备用上游 %s: %w",
+				primaryUpstream,
+				alternateUpstream,
+				combinedErr,
+			)
+			return outcome, err
+		}
+	}
 }
 
 func isOrdinaryFoodImageMode(executionMode string) bool {
@@ -340,6 +617,12 @@ func validateNonEmptyFoodAnalysisResult(parsed map[string]any) error {
 		return ErrEmptyFoodAnalysisResult
 	}
 	return nil
+}
+
+func shouldFallbackGeminiVision(err error) bool {
+	return err != nil && (isTransientLLMError(err) ||
+		IsLLMJSONParseError(err) ||
+		stderrors.Is(err, ErrEmptyFoodAnalysisResult))
 }
 
 func foodAnalysisResultKeys(parsed map[string]any) []string {
@@ -622,49 +905,55 @@ func (s *AnalyzeService) runPrecisionJSONWithImagesTemperature(ctx context.Conte
 	if provider == "qwen" && useQwenDefaultReasoning {
 		primaryCall = newAnalyzeWithImagesUsingQwenDefaultReasoningModelCall(client, prompt, imageURLs, temperature, model)
 	}
-	policy := defaultLLMRetryPolicy
-	if provider == "gemini" && len(imageURLs) > 0 {
-		policy = realtimeVisionRetryPolicy
-	}
-	parsed, err := analyzeWithJSONParseRetryPolicy(callCtx, "precision", provider, model, policy, func(retryCtx context.Context) (map[string]any, error) {
-		attemptCtx := retryCtx
-		attemptCancel := func() {}
+	var parsed map[string]any
+	var err error
+	geminiRouteCtx := callCtx
+	geminiRouteCancel := func() {}
+	if allowFallback && provider == "gemini" && len(imageURLs) > 0 {
+		geminiRouteCtx, geminiRouteCancel = s.geminiVisionRouteContext(callCtx, model, geminiUpstream, client)
+		defer geminiRouteCancel()
+		outcome, hedgeErr := s.runHedgedGeminiVision(
+			geminiRouteCtx,
+			"precision_gemini_hedge",
+			geminiUpstream,
+			model,
+			prompt,
+			imageURLs,
+			temperature,
+			client,
+			func(result map[string]any) error {
+				if len(result) == 0 {
+					return fmt.Errorf("精准模式未返回有效 JSON 内容")
+				}
+				return nil
+			},
+		)
+		parsed, err = outcome.parsed, hedgeErr
+		if err == nil {
+			client = outcome.client
+			geminiUpstream = outcome.upstream
+			model = outcome.model
+		}
+	} else {
+		policy := defaultLLMRetryPolicy
 		if provider == "gemini" && len(imageURLs) > 0 {
-			attemptCtx, attemptCancel = context.WithTimeout(retryCtx, visionPrimaryTimeout)
+			policy = realtimeVisionRetryPolicy
 		}
-		defer attemptCancel()
-		return primaryCall(attemptCtx)
-	})
-	if allowFallback && err != nil && provider == "gemini" && len(imageURLs) > 0 && (isTransientLLMError(err) || IsLLMJSONParseError(err)) {
-		primaryErr := err
-		alternateClient, alternateUpstream, alternateModel := s.alternateGeminiClient(model, geminiUpstream)
-		if alternateClient != nil && alternateClient != client {
-			alternateParsed, alternateErr := tryGeminiVisionCall(callCtx, "precision_gemini_upstream_fallback", alternateUpstream, alternateModel, prompt, imageURLs, temperature, visionAlternateProviderTimeout, alternateClient)
-			if alternateErr == nil {
-				logger.Warn(ctx, "精准模式 Gemini 首选上游失败，已切换备用 Gemini 上游",
-					logger.NamedErr("primary_error", primaryErr),
-					slog.String("primary_upstream", geminiUpstream),
-					slog.String("primary_model", model),
-					slog.String("fallback_upstream", alternateUpstream),
-					slog.String("fallback_model", alternateModel),
-					slog.Int("image_count", len(imageURLs)),
-				)
-				return alternateParsed, nil
+		parsed, err = analyzeWithJSONParseRetryPolicy(callCtx, "precision", provider, model, policy, func(retryCtx context.Context) (map[string]any, error) {
+			attemptCtx := retryCtx
+			attemptCancel := func() {}
+			if provider == "gemini" && len(imageURLs) > 0 {
+				attemptCtx, attemptCancel = context.WithTimeout(retryCtx, visionPrimaryTimeout)
 			}
-			err = fmt.Errorf("Gemini 首选上游 %s 失败: %v；备用上游 %s 失败: %w", geminiUpstream, primaryErr, alternateUpstream, alternateErr)
-			logger.Warn(ctx, "精准模式两个 Gemini 上游均失败",
-				logger.NamedErr("primary_error", primaryErr),
-				logger.NamedErr("alternate_error", alternateErr),
-				slog.String("primary_upstream", geminiUpstream),
-				slog.String("primary_model", model),
-				slog.String("alternate_upstream", alternateUpstream),
-				slog.String("alternate_model", alternateModel),
-			)
-		}
+			defer attemptCancel()
+			return primaryCall(attemptCtx)
+		})
+	}
+	if allowFallback && err != nil && provider == "gemini" && len(imageURLs) > 0 && shouldFallbackGeminiVision(err) {
 		if s.dashscopeClient == nil {
 			return nil, err
 		}
-		fallbackCtx, fallbackCancel := context.WithTimeout(callCtx, visionFallbackTimeout)
+		fallbackCtx, fallbackCancel := context.WithTimeout(geminiRouteCtx, visionFallbackTimeout)
 		fallbackCall := newAnalyzeWithImagesWithoutThinkingModelCall(s.dashscopeClient, prompt, imageURLs, qwen38FlashModel)
 		fallbackParsed, fallbackErr := analyzeWithJSONParseRetryPolicy(fallbackCtx, "precision_fallback", "qwen", qwen38FlashModel, postprocessRetryPolicy, fallbackCall)
 		fallbackCancel()
@@ -1046,6 +1335,8 @@ func analyzeWithJSONParseRetryPolicy(ctx context.Context, stage, provider, model
 		attemptStatus := "success"
 		if err != nil {
 			switch {
+			case stderrors.Is(err, context.Canceled):
+				attemptStatus = "canceled"
 			case IsLLMJSONParseError(err):
 				attemptStatus = "json_parse_error"
 			case isTransientLLMError(err):
@@ -1075,6 +1366,13 @@ func analyzeWithJSONParseRetryPolicy(ctx context.Context, stage, provider, model
 			retryNumber = transientRetries
 			maxRetries = policy.maxTransientRetries
 		default:
+			if stderrors.Is(err, context.Canceled) {
+				logger.Info(ctx, "大模型调用已取消",
+					logger.Stage(stage),
+					logger.ProviderModel(provider, model),
+				)
+				return parsed, err
+			}
 			logger.Warn(ctx, "大模型调用最终失败",
 				logger.Stage(stage),
 				logger.ProviderModel(provider, model),
@@ -2522,49 +2820,75 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 		analysisCallCtx, analysisCallCancel = context.WithTimeout(ctx, fastVisionAnalysisTimeout)
 	}
 	defer analysisCallCancel()
-	primaryImageCall := newAnalyzeWithImagesTemperatureModelCall(client, prompt, imageURLs, 0, model)
-	if isFastExecutionMode(executionMode) {
-		primaryImageCall = newAnalyzeWithImagesWithoutThinkingModelCall(client, prompt, imageURLs, model)
-	}
-	visionPolicy := defaultLLMRetryPolicy
+	fallbackUsed := false
+	fallbackReason := ""
+	geminiUpstreamFallbackUsed := false
+	geminiUpstreamHedgeLaunched := false
+	var parsed map[string]any
+	var err error
+	geminiRouteCtx := analysisCallCtx
+	geminiRouteCancel := func() {}
 	if provider == "gemini" && len(imageURLs) > 0 {
-		visionPolicy = realtimeVisionRetryPolicy
-	}
-	parsed, err := analyzeWithJSONParseRetryPolicy(analysisCallCtx, "food_image", provider, model, visionPolicy, func(callCtx context.Context) (map[string]any, error) {
-		attemptCtx := callCtx
-		attemptCancel := func() {}
-		if provider == "gemini" && len(imageURLs) > 0 {
-			attemptCtx, attemptCancel = context.WithTimeout(callCtx, visionPrimaryTimeout)
+		geminiRouteCtx, geminiRouteCancel = s.geminiVisionRouteContext(analysisCallCtx, model, geminiUpstream, client)
+		defer geminiRouteCancel()
+		outcome, hedgeErr := s.runHedgedGeminiVision(
+			geminiRouteCtx,
+			"food_image_gemini_hedge",
+			geminiUpstream,
+			model,
+			prompt,
+			imageURLs,
+			0,
+			client,
+			validateNonEmptyFoodAnalysisResult,
+		)
+		parsed, err = outcome.parsed, hedgeErr
+		geminiUpstreamHedgeLaunched = outcome.hedgeLaunched
+		if err == nil {
+			client = outcome.client
+			geminiUpstream = outcome.upstream
+			model = outcome.model
+			input.ModelName = geminiRouteName(outcome.model, outcome.upstream)
+			if outcome.alternateWon {
+				fallbackUsed = true
+				geminiUpstreamFallbackUsed = true
+			}
 		}
-		defer attemptCancel()
-		if executionMode == liteExecutionMode {
-			if webClient := s.doubaoWebSearchClient; webClient != nil {
-				lightParsed, meta, webErr := webClient.AnalyzeWithImagesWebSearch(attemptCtx, prompt, imageURLs, DoubaoWebSearchOptions{
-					MaxKeyword:   2,
-					Limit:        5,
-					MaxToolCalls: 1,
+	} else {
+		primaryImageCall := newAnalyzeWithImagesTemperatureModelCall(client, prompt, imageURLs, 0, model)
+		if isFastExecutionMode(executionMode) {
+			primaryImageCall = newAnalyzeWithImagesWithoutThinkingModelCall(client, prompt, imageURLs, model)
+		}
+		parsed, err = analyzeWithJSONParseRetryPolicy(analysisCallCtx, "food_image", provider, model, defaultLLMRetryPolicy, func(callCtx context.Context) (map[string]any, error) {
+			if executionMode == liteExecutionMode {
+				if webClient := s.doubaoWebSearchClient; webClient != nil {
+					lightParsed, meta, webErr := webClient.AnalyzeWithImagesWebSearch(callCtx, prompt, imageURLs, DoubaoWebSearchOptions{
+						MaxKeyword:   2,
+						Limit:        5,
+						MaxToolCalls: 1,
+					})
+					lightweightMeta = meta
+					return lightParsed, webErr
+				}
+				return nil, fmt.Errorf("lite food image mode requires Doubao Responses web search client; configure doubao_web_search_api_key")
+			}
+			if executionMode == fastWebSearchMode {
+				qwenSearchClient, ok := client.(interface {
+					AnalyzeWithImagesDashScopeWebSearch(context.Context, string, []string, DashScopeWebSearchOptions) (map[string]any, map[string]any, error)
 				})
-				lightweightMeta = meta
-				return lightParsed, webErr
+				if !ok {
+					return nil, fmt.Errorf("fast web search mode requires DashScope qwen client")
+				}
+				fastParsed, meta, fastErr := qwenSearchClient.AnalyzeWithImagesDashScopeWebSearch(callCtx, prompt, imageURLs, DashScopeWebSearchOptions{
+					ForcedSearch:   true,
+					SearchStrategy: "turbo",
+				})
+				qwenNativeSearchMeta = meta
+				return fastParsed, fastErr
 			}
-			return nil, fmt.Errorf("lite food image mode requires Doubao Responses web search client; configure doubao_web_search_api_key")
-		}
-		if executionMode == fastWebSearchMode {
-			qwenSearchClient, ok := client.(interface {
-				AnalyzeWithImagesDashScopeWebSearch(context.Context, string, []string, DashScopeWebSearchOptions) (map[string]any, map[string]any, error)
-			})
-			if !ok {
-				return nil, fmt.Errorf("fast web search mode requires DashScope qwen client")
-			}
-			fastParsed, meta, fastErr := qwenSearchClient.AnalyzeWithImagesDashScopeWebSearch(attemptCtx, prompt, imageURLs, DashScopeWebSearchOptions{
-				ForcedSearch:   true,
-				SearchStrategy: "turbo",
-			})
-			qwenNativeSearchMeta = meta
-			return fastParsed, fastErr
-		}
-		return primaryImageCall(attemptCtx)
-	})
+			return primaryImageCall(callCtx)
+		})
+	}
 	if err == nil && provider == "qwen" && isOrdinaryFoodImageMode(executionMode) {
 		err = validateNonEmptyFoodAnalysisResult(parsed)
 		if stderrors.Is(err, ErrEmptyFoodAnalysisResult) {
@@ -2578,54 +2902,31 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 			)
 		}
 	}
-	fallbackUsed := false
-	fallbackReason := ""
-	geminiUpstreamFallbackUsed := false
-	if err != nil && provider == "gemini" && len(imageURLs) > 0 && (isTransientLLMError(err) || IsLLMJSONParseError(err)) {
-		primaryErr := err
-		alternateClient, alternateUpstream, alternateModel := s.alternateGeminiClient(model, geminiUpstream)
-		if alternateClient != nil && alternateClient != client {
-			alternateParsed, alternateErr := tryGeminiVisionCall(ctx, "food_image_gemini_upstream_fallback", alternateUpstream, alternateModel, prompt, imageURLs, 0, visionAlternateProviderTimeout, alternateClient)
-			if alternateErr == nil {
-				parsed = alternateParsed
-				err = nil
-				fallbackUsed = true
-				geminiUpstreamFallbackUsed = true
-				client = alternateClient
-				logger.Warn(ctx, "食物图片 Gemini 首选上游失败，已切换备用 Gemini 上游",
-					logger.NamedErr("primary_error", primaryErr),
-					slog.String("primary_upstream", geminiUpstream),
-					slog.String("primary_model", model),
-					slog.String("fallback_upstream", alternateUpstream),
-					slog.String("fallback_model", alternateModel),
-					slog.Int("image_count", len(imageURLs)),
-				)
-				geminiUpstream = alternateUpstream
-				model = alternateModel
-				input.ModelName = geminiRouteName(alternateModel, alternateUpstream)
-			} else {
-				err = fmt.Errorf("Gemini 首选上游 %s 失败: %v；备用上游 %s 失败: %w", geminiUpstream, primaryErr, alternateUpstream, alternateErr)
-				logger.Warn(ctx, "食物图片两个 Gemini 上游均失败",
-					logger.NamedErr("primary_error", primaryErr),
-					logger.NamedErr("alternate_error", alternateErr),
-					slog.String("primary_upstream", geminiUpstream),
-					slog.String("primary_model", model),
-					slog.String("alternate_upstream", alternateUpstream),
-					slog.String("alternate_model", alternateModel),
-				)
-			}
-		}
+	if err != nil && provider == "gemini" && len(imageURLs) > 0 && shouldFallbackGeminiVision(err) && isOrdinaryFoodImageMode(executionMode) {
+		logger.Warn(ctx, "普通模式 Gemini 识别失败，按质量策略不回退千问",
+			logger.NamedErr("gemini_error", err),
+			slog.String("execution_mode", executionMode),
+			slog.Int("image_count", len(imageURLs)),
+		)
+		apm.AddEvent(ctx, "普通模式已禁止千问回退",
+			attribute.String("analysis.execution_mode", executionMode),
+			attribute.String("analysis.fallback_policy", "gemini_only"),
+		)
 	}
-	if err != nil && provider == "gemini" && len(imageURLs) > 0 && (isTransientLLMError(err) || IsLLMJSONParseError(err)) && s.dashscopeClient != nil {
+	if err != nil && provider == "gemini" && len(imageURLs) > 0 && shouldFallbackGeminiVision(err) && !isOrdinaryFoodImageMode(executionMode) && s.dashscopeClient != nil {
 		primaryErr := err
-		fallbackCtx, fallbackCancel := context.WithTimeout(ctx, visionFallbackTimeout)
+		fallbackCtx, fallbackCancel := context.WithTimeout(geminiRouteCtx, visionFallbackTimeout)
 		fallbackCall := newAnalyzeWithImagesWithoutThinkingModelCall(s.dashscopeClient, prompt, imageURLs, qwen38FlashModel)
 		fallbackParsed, fallbackErr := analyzeWithJSONParseRetryPolicy(fallbackCtx, "food_image_fallback", "qwen", qwen38FlashModel, postprocessRetryPolicy, fallbackCall)
 		fallbackCancel()
 		if fallbackErr == nil {
+			fallbackErr = validateNonEmptyFoodAnalysisResult(fallbackParsed)
+		}
+		if fallbackErr == nil {
 			parsed = fallbackParsed
 			err = nil
 			fallbackUsed = true
+			fallbackReason = "gemini_upstreams_failed"
 			client = s.dashscopeClient
 			provider = "qwen"
 			model = qwen38FlashModel
@@ -2743,12 +3044,16 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 		attribute.String("analysis.items", summarizeAnalyzeItemsForTrace(rawItems, 12)),
 		apm.DurationMS("analysis.duration_ms", time.Since(start)),
 	)
+	baseUpstream := ""
+	if provider == "gemini" {
+		baseUpstream = geminiUpstream
+	}
 	hybridMeta := map[string]any{
 		"status":          "skipped",
 		"strategy":        provider + "_db_first",
 		"base_provider":   provider,
 		"base_model":      model,
-		"base_upstream":   geminiUpstream,
+		"base_upstream":   baseUpstream,
 		"review_provider": nil,
 		"review_model":    nil,
 	}
@@ -2838,6 +3143,9 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 	}
 	if geminiUpstreamFallbackUsed {
 		hybridMeta["gemini_upstream_fallback_used"] = true
+	}
+	if geminiUpstreamHedgeLaunched {
+		hybridMeta["gemini_upstream_hedge_launched"] = true
 	}
 	hybridMeta["fallback_used"] = fallbackUsed
 	if fallbackReason != "" {
